@@ -6,3 +6,11 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+cad-kernel.workspace = true
+glam.workspace = true
+png = "0.17"
+
+[dev-dependencies]
+cad-engine.workspace = true
+cad-ir.workspace = true
+kernel-smlib.workspace = true
