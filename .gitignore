@@ -6,3 +6,4 @@ node_modules
 /third_party
 *.log
 /reports/tmp
+/.claude/worktrees
