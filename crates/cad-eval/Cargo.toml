@@ -6,3 +6,8 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+glam.workspace = true
+serde.workspace = true
+cad-syntax.workspace = true
+cad-ir.workspace = true
+cad-kernel.workspace = true
