@@ -10,6 +10,21 @@
 //! Shapes are reference-counted handles into the facade's handle table; dropping the last
 //! clone releases the SMLib Brep. Face tags (provenance) are SMLib attributes carried through
 //! operations; see `smlib/facade/sc_facade.cpp` ("Provenance").
+//!
+//! Interpretation of the trait where it leaves room:
+//! * `chamfer(d)`: equal-distance chamfer, setback `d` on both faces of a 90° edge (SMLib
+//!   constant-radius solver with a linear cross section), corners bevelled.
+//! * `fillet`/`chamfer` silently skip selected edges SMLib cannot blend (seams and other
+//!   tangent-continuous edges); fail if none is left.
+//! * `extrude`: `twist` turns the profile counter-clockwise (right-handed about +z of the
+//!   profile frame); twist/scale are built as a loft through intermediate sections (bicubic
+//!   for twist, ruled for pure scale). Non-uniform scale of a circle is unsupported.
+//! * `sweep`: the profile's x axis at the path start is global X projected into the normal
+//!   plane (global Y if the start tangent is nearly parallel to X). SMLib sweeps the profile's
+//!   bounding-box centre along the path, so profiles not centred on their origin are only
+//!   supported on straight paths (`Unsupported` otherwise). Linear paths with corners must be
+//!   planar (mitered joints); non-planar paths need `PathInterp::Spline`.
+//! * `bounds` is SMLib's tight box; `mass_props` of an open surface has volume 0.
 
 use std::rc::Rc;
 

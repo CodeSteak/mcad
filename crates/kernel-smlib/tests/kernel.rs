@@ -284,6 +284,51 @@ fn fillet_too_large_fails_cleanly() {
     assert!(volume(&mut k, &f) < 1000.0);
     // bad edge ids
     assert!(matches!(k.fillet(&b, &[99], 1.0, 1), Err(KernelError::InvalidInput(_))));
+    // radius exactly half the box: SMLib reports the failing edge
+    match k.fillet(&b, &all, 5.0, T_FIL) {
+        Err(KernelError::Failed { edges, .. }) => assert!(!edges.is_empty()),
+        other => panic!("expected Failed, got {other:?}"),
+    }
+    // SMLib silently returns the unchanged box for a too large chamfer: detected
+    match k.chamfer(&b, &all, 6.0, T_FIL) {
+        Err(KernelError::Failed { msg, .. }) => assert!(msg.contains("unchanged"), "{msg}"),
+        other => panic!("expected Failed, got {other:?}"),
+    }
+}
+
+#[test]
+fn fillet_cylinder_rims_skips_seam() {
+    let mut k = k();
+    let c = k.make_cylinder(10.0, 3.0, 3.0, 1).unwrap();
+    // all edges, including the seam of the lateral face (which cannot be blended)
+    let all: Vec<u32> = (0..k.edge_count(&c) as u32).collect();
+    let f = k.fillet(&c, &all, 1.0, T_FIL).unwrap();
+    // Pappus: each rim removes the region r^2 (1 - pi/4) at centroid radius R - r (10 - 3 pi) / (12 - 3 pi)
+    let r: f64 = 1.0;
+    let a = r * r * (1.0 - PI_ / 4.0);
+    let rho = 3.0 - r * (10.0 - 3.0 * PI_) / (12.0 - 3.0 * PI_);
+    let want = PI_ * 9.0 * 10.0 - 2.0 * 2.0 * PI_ * rho * a;
+    assert_approx("rounded cylinder", volume(&mut k, &f), want, 1e-4);
+    assert_eq!(k.faces(&f, 1).unwrap().iter().filter(|f| f.tag == T_FIL).count(), 2);
+}
+
+#[test]
+fn invalid_profiles_fail_cleanly() {
+    let mut k = k();
+    // bow-tie polygon
+    let bow = vec![DVec2::new(0.0, 0.0), DVec2::new(2.0, 2.0), DVec2::new(2.0, 0.0), DVec2::new(0.0, 2.0)];
+    let r = k.extrude(&placed(Loop::Polygon(bow), DMat4::IDENTITY), 1.0, 0.0, DVec2::ONE, 3);
+    assert!(matches!(r, Err(KernelError::Failed { .. })), "{r:?}");
+    // profile crossing the revolve axis
+    let rect = vec![DVec2::new(-1.0, 0.0), DVec2::new(1.0, 0.0), DVec2::new(1.0, 1.0), DVec2::new(-1.0, 1.0)];
+    let r = k.revolve(&placed(Loop::Polygon(rect), DMat4::from_rotation_x(PI_ / 2.0)), PI_, 3);
+    assert!(matches!(r, Err(KernelError::InvalidInput(_))), "{r:?}");
+    // degenerate input
+    assert!(matches!(k.make_box(DVec3::ZERO, DVec3::new(1.0, 0.0, 1.0), 1), Err(KernelError::InvalidInput(_))));
+    assert!(matches!(k.make_sphere(-1.0, 1), Err(KernelError::InvalidInput(_))));
+    // too thick shell
+    let b = cube(&mut k, 10.0, T_BOX);
+    assert!(matches!(k.shell(&b, 6.0, &[0], 3), Err(KernelError::Failed { .. })));
 }
 
 // ---------------------------------------------------------------- queries

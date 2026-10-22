@@ -10,6 +10,7 @@
 #
 # Flags (see smlib/CMakeLists.txt): -O3 -fwasm-exceptions, MODULARIZE, EXPORT_ES6,
 # ALLOW_MEMORY_GROWTH, no threads, ENVIRONMENT=worker,web,node, 8 MiB stack.
+# Env: SMLIB_WASM_OPT (default -O3, e.g. -Oz), SMLIB_WASM_BUILD (build dir), JOBS (default 4).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -42,7 +43,7 @@ if command -v ninja >/dev/null 2>&1; then GEN=(-G Ninja); fi
 start=$(date +%s)
 emcmake cmake -S "$HERE" -B "$BUILD" "${GEN[@]}" \
   -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
-  -DCMAKE_CXX_FLAGS_RELEASE="-O3 -DNDEBUG" \
+  -DCMAKE_CXX_FLAGS_RELEASE="${SMLIB_WASM_OPT:--O3} -DNDEBUG" \
   -DCMAKE_CXX_FLAGS_RELWITHDEBINFO="-O2 -g -DNDEBUG" \
   -DSMLIB_SRC="$SRC" \
   -DSC_BUILD_FACADE=ON \
@@ -65,6 +66,11 @@ for f in "$OUT/smlib.wasm" "$OUT/smlib.js"; do
   if command -v brotli >/dev/null 2>&1; then
     br=$(brotli -q 11 -c "$f" | wc -c)
     line="$line, brotli -q 11 $br B"
+  elif command -v node >/dev/null 2>&1; then
+    br=$(node -e 'const z=require("zlib"),b=require("fs").readFileSync(process.argv[1]);
+      console.log(z.brotliCompressSync(b,{params:{[z.constants.BROTLI_PARAM_QUALITY]:11,
+      [z.constants.BROTLI_PARAM_SIZE_HINT]:b.length}}).length)' "$f")
+    line="$line, brotli q11 (node zlib) $br B"
   fi
   echo "$line"
 done

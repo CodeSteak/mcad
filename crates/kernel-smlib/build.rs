@@ -10,6 +10,7 @@
 //! Nothing is built for the `wasm` feature: smlib.wasm comes from `smlib/build-wasm.sh`.
 
 use std::env;
+#[cfg(feature = "native")]
 use std::path::{Path, PathBuf};
 
 fn main() {

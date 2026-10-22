@@ -21,15 +21,15 @@
 
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #if defined(__EMSCRIPTEN__)
 #include <emscripten/emscripten.h>
 #define SC_API EMSCRIPTEN_KEEPALIVE
 #else
 #define SC_API __attribute__((visibility("default")))
+#endif
+
+#ifdef __cplusplus
+extern "C" {
 #endif
 
 /* status codes */

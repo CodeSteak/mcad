@@ -504,8 +504,9 @@ std::vector<FaceBox> face_boxes(const std::vector<const SmBrep*>& inputs,
 }
 
 // See "Provenance" at the top of this file.
-void resolve_tags(SmBrep* result, const std::vector<const SmBrep*>& inputs, uint32_t op_tag,
-                  bool verify, const std::vector<const SmFace*>& exclude = {}) {
+size_t resolve_tags(SmBrep* result, const std::vector<const SmBrep*>& inputs, uint32_t op_tag,
+                    bool verify, const std::vector<const SmFace*>& exclude = {}) {
+  size_t fresh = 0;
   std::vector<FaceBox> boxes;
   bool boxes_ready = false;
   double tol = 1e-6;
@@ -518,7 +519,10 @@ void resolve_tags(SmBrep* result, const std::vector<const SmBrep*>& inputs, uint
     if (has && !verify) continue;
     V3 p, n;
     if (!face_sample(f, p, n)) {
-      if (!has) set_face_tag(f, op_tag);
+      if (!has) {
+        set_face_tag(f, op_tag);
+        fresh++;
+      }
       continue;
     }
     if (!boxes_ready) {
@@ -528,6 +532,7 @@ void resolve_tags(SmBrep* result, const std::vector<const SmBrep*>& inputs, uint
     double best = 1e300;
     uint32_t best_tag = op_tag;
     bool attr_confirmed = false;
+    bool on_input = false;
     for (const FaceBox& fb : boxes) {
       if (!fb.has_tag) continue;
       if (p.x < fb.mn.x - tol || p.y < fb.mn.y - tol || p.z < fb.mn.z - tol ||
@@ -535,6 +540,7 @@ void resolve_tags(SmBrep* result, const std::vector<const SmBrep*>& inputs, uint
         continue;
       double d = face_distance(fb.f, p);
       if (d > tol) continue;
+      on_input = true;
       if (has && fb.tag == t) {
         attr_confirmed = true;
         break;
@@ -545,8 +551,10 @@ void resolve_tags(SmBrep* result, const std::vector<const SmBrep*>& inputs, uint
       }
     }
     if (attr_confirmed) continue;
+    if (!on_input) fresh++;
     set_face_tag(f, best_tag);
   }
+  return fresh;
 }
 
 // ------------------------------------------------------------------ profiles
@@ -723,6 +731,17 @@ void require_result(SmBrep* b, const char* what) {
   if (!b) throw fail(SC_FAILED, std::string(what) + " produced no result");
 }
 
+void require_solid(SmBrep* b, const char* what) {
+  require_result(b, what);
+  if (b->GetNumFaces() == 0 || !b->IsManifoldSolid())
+    throw fail(SC_FAILED, std::string(what) +
+                              " did not produce a closed solid (self-intersecting or open profile?)");
+  double v = 0;
+  if (SmApiBrepComputeVolume(b, 1e-3, v) != SM_SUCCESS || !(v > 0))
+    throw fail(SC_FAILED, std::string(what) + " produced an invalid solid (volume " +
+                              std::to_string(v) + ")");
+}
+
 void check_valid(SmBrep* b, const char* what, std::vector<uint32_t> edges = {}) {
   auto bad = invalid_faces(b);
   if (!bad.empty())
@@ -807,18 +826,25 @@ uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, u
   if (all.size() != in_all.size()) throw fail(SC_FAILED, "Brep copy changed the edge count");
   SmTArray<SmEdge*> sel;
   std::vector<uint32_t> sel_ids;
+  std::vector<SmEdge*> kept_in;
+  std::vector<uint32_t> skipped;
   for (SmEdge* e : in_sel) {
     uint32_t i = edge_index(in_all, e);
+    // GetBlendEdgeuse() is NULL for edges SMLib cannot blend: seams and other
+    // tangent-continuous edges, lamina edges. Nothing to round there: skip them.
+    if (all[i]->GetBlendEdgeuse() == nullptr) {
+      skipped.push_back(i);
+      continue;
+    }
     sel.Add(all[i]);
     sel_ids.push_back(i);
+    kept_in.push_back(e);
   }
-  for (ULONG k = 0; k < sel.GetSize(); k++) {
-    SmEdge* e = sel[k];
-    if (e->GetBlendEdgeuse() == nullptr)
-      throw fail(SC_FAILED, std::string(what) + ": edge " + std::to_string(edge_index(all, e)) +
-                                " cannot be blended (not a manifold edge between two faces)",
-                 {edge_index(all, e)});
-  }
+  in_sel = kept_in;
+  if (sel.GetSize() == 0)
+    throw fail(SC_FAILED,
+               std::string(what) + ": none of the edges can be blended (smooth, seam or open edges)",
+               skipped);
 
   SmFilletExecutive ex(*ctx(), b.get());
   ex.SetDoGlobalMerge(TRUE);
@@ -857,7 +883,12 @@ uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, u
                    std::to_string(r) + " too large for the adjacent faces?)",
                e);
   }
-  resolve_tags(b.get(), {in}, tag, true);
+  size_t fresh = resolve_tags(b.get(), {in}, tag, true);
+  if (fresh == 0)
+    throw fail(SC_FAILED,
+               std::string(what) + " failed: SMLib returned the shape unchanged (size " +
+                   std::to_string(r) + " too large?)",
+               sel_ids);
   return put(std::move(b));
 }
 
@@ -1293,6 +1324,7 @@ uint32_t sc_extrude(const double* loop, uint32_t len_, double height, double twi
       for (auto& s : secs) ptrs.push_back(&s);
       b = skin(ptrs, k == 1 ? 1 : 3, "extrude (skin)");
     }
+    require_solid(b.get(), "extrude");
     if (!is_identity(l.frame)) apply_matrix(b.get(), l.frame);
     tag_all(b.get(), tag);
     _res = put(std::move(b));
@@ -1307,6 +1339,21 @@ uint32_t sc_revolve(const double* loop, uint32_t len_, double angle, uint32_t ta
     double deg = angle * 180.0 / M_PI;
     if (deg > 360.0) deg = 360.0;
     if (deg < -360.0) deg = -360.0;
+    {
+      // the profile must stay on one side of the z axis (x >= 0 after its frame)
+      const Loop& l = loops[0];
+      double scale = std::max(1.0, len(l.frame.col(0)) + len(l.frame.col(1)));
+      double tol = 1e-9 * scale;
+      double minx = 1e300;
+      if (l.kind == SC_LOOP_CIRCLE) {
+        double s;
+        if (similarity(l.frame, s)) minx = l.frame.point(v3(l.cx, l.cy, 0)).x - l.r * s;
+      } else {
+        for (V3 p : l.pts) minx = std::min(minx, l.frame.point(p).x);
+      }
+      if (minx < -tol)
+        throw fail(SC_INVALID, "revolve: the profile crosses the axis (x < 0 after its frame)");
+    }
     CurveList cl;
     loop_curves(loops[0], false, false, cl);
     SmBrep* r = nullptr;
@@ -1314,8 +1361,8 @@ uint32_t sc_revolve(const double* loop, uint32_t len_, double angle, uint32_t ta
                                         SmVector3d(0, 0, deg > 0 ? 1 : -1), std::fabs(deg), TRUE,
                                         r),
              "SmApiCreateRotationalSweep");
-    require_result(r, "revolve");
     BrepPtr b(r);
+    require_solid(r, "revolve");
     tag_all(b.get(), tag);
     _res = put(std::move(b));
   })
@@ -1335,6 +1382,7 @@ uint32_t sc_loft(const double* data, uint32_t len_, uint32_t n_sections, int32_t
     for (auto& s : secs) ptrs.push_back(&s);
     ULONG degree = ruled ? 1 : (ULONG)std::min<size_t>(3, loops.size() - 1);
     BrepPtr b = skin(ptrs, degree, "SmApiCreateSkinPrimitive");
+    require_solid(b.get(), "loft");
     tag_all(b.get(), tag);
     _res = put(std::move(b));
   })
@@ -1454,8 +1502,8 @@ uint32_t sc_sweep(const double* loop, uint32_t len_, const double* path, uint32_
                                      nullptr),
                "SmApiCreateCurveSweep");
     }
-    require_result(r, "sweep");
     BrepPtr b(r);
+    require_solid(r, "sweep");
     if (!centred) {
       M4 t = identity();
       t.m[12] = off.x;
