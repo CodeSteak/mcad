@@ -1,91 +1,177 @@
-//! Lexical environments with lazily evaluated assignments.
+//! Lexical environments with lazily evaluated assignments, and the dynamic chain of
+//! `$` variables.
+//!
+//! Cycles: an environment can only be reached back from a value through a function
+//! literal (closure → captured environment). The evaluator registers every captured
+//! environment and clears it at the end of an evaluation, so nothing leaks.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
-use cad_syntax::Span;
 use cad_syntax::ast::{Expr, FunctionDef, ModuleDef};
 
-use crate::value::Val;
+use crate::value::{InstId, Val};
+
+/// Instance id for scopes that belong to no module instance (the file scope while a
+/// module is the context, enclosing modules of a nested context module).
+pub const NO_INST: InstId = u32::MAX;
 
 #[derive(Debug, Clone)]
-pub enum Binding {
-    /// Not yet evaluated: expression + the environment it is evaluated in.
-    Lazy { expr: Rc<Expr>, name_span: Span },
+pub enum Binding<'a> {
+    /// Not yet evaluated; evaluated in the scope that holds the binding.
+    Lazy(&'a Expr),
     /// Being evaluated (cycle detection).
     InProgress,
-    Done(Val),
+    Done(Val<'a>),
 }
 
-#[derive(Debug, Default)]
-pub struct Scope {
-    pub vars: HashMap<String, Binding>,
-    pub funcs: HashMap<String, Rc<FunctionDef>>,
-    pub modules: HashMap<String, Rc<ModuleDef>>,
-    pub parent: Option<Env>,
+#[derive(Debug)]
+pub struct Scope<'a> {
+    pub vars: Vec<(&'a str, Binding<'a>)>,
+    pub funcs: Vec<(&'a str, &'a FunctionDef)>,
+    pub modules: Vec<(&'a str, &'a ModuleDef)>,
+    pub parent: Option<Env<'a>>,
+    /// `$` variables in effect for code of this scope (used to force lazy bindings).
+    pub dyn_: Dyn<'a>,
+    /// Module instance whose code this scope belongs to.
+    pub inst: InstId,
+    /// Top scope of a module instance (or of the file): grids and named instances of
+    /// `inst` are visible below it, before the definition environment.
+    pub module_root: bool,
 }
 
 /// Shared, mutable scope chain.
-#[derive(Debug, Clone, Default)]
-pub struct Env(pub Rc<RefCell<Scope>>);
+#[derive(Debug, Clone)]
+pub struct Env<'a>(pub Rc<RefCell<Scope<'a>>>);
 
-impl Env {
-    pub fn root() -> Self {
-        Env::default()
+impl<'a> Env<'a> {
+    #[inline(never)]
+    pub fn new(parent: Option<&Env<'a>>, dyn_: Dyn<'a>, inst: InstId, module_root: bool) -> Self {
+        Env(Rc::new(RefCell::new(Scope {
+            vars: Vec::new(),
+            funcs: Vec::new(),
+            modules: Vec::new(),
+            parent: parent.cloned(),
+            dyn_,
+            inst,
+            module_root,
+        })))
     }
 
-    pub fn child(&self) -> Self {
-        Env(Rc::new(RefCell::new(Scope { parent: Some(self.clone()), ..Default::default() })))
+    /// Plain nested scope (block, loop body, let, function call) of the same instance.
+    pub fn child(&self, dyn_: Dyn<'a>) -> Self {
+        let inst = self.inst();
+        Env::new(Some(self), dyn_, inst, false)
     }
 
-    pub fn set(&self, name: &str, v: Val) {
-        self.0.borrow_mut().vars.insert(name.to_string(), Binding::Done(v));
+    pub fn inst(&self) -> InstId {
+        self.0.borrow().inst
     }
 
-    pub fn set_lazy(&self, name: &str, expr: Rc<Expr>, name_span: Span) {
-        self.0.borrow_mut().vars.insert(name.to_string(), Binding::Lazy { expr, name_span });
+    pub fn set(&self, name: &'a str, v: Val<'a>) {
+        let mut s = self.0.borrow_mut();
+        if let Some(e) = s.vars.iter_mut().rev().find(|(n, _)| *n == name) {
+            e.1 = Binding::Done(v);
+        } else {
+            s.vars.push((name, Binding::Done(v)));
+        }
+    }
+
+    /// Adds a lazy binding; returns `true` if the name was already bound in this scope
+    /// (the new definition replaces the old one).
+    pub fn set_lazy(&self, name: &'a str, expr: &'a Expr) -> bool {
+        let mut s = self.0.borrow_mut();
+        if let Some(e) = s.vars.iter_mut().find(|(n, _)| *n == name) {
+            e.1 = Binding::Lazy(expr);
+            true
+        } else {
+            s.vars.push((name, Binding::Lazy(expr)));
+            false
+        }
     }
 
     pub fn has_local(&self, name: &str) -> bool {
-        self.0.borrow().vars.contains_key(name)
+        self.0.borrow().vars.iter().any(|(n, _)| *n == name)
     }
 
-    /// Finds the scope that binds `name`.
-    pub fn find_var(&self, name: &str) -> Option<Env> {
+    pub fn set_dyn(&self, d: Dyn<'a>) {
+        self.0.borrow_mut().dyn_ = d;
+    }
+
+    pub fn dyn_(&self) -> Dyn<'a> {
+        self.0.borrow().dyn_.clone()
+    }
+
+    pub fn find_func(&self, name: &str) -> Option<(&'a FunctionDef, Env<'a>)> {
         let mut cur = Some(self.clone());
         while let Some(e) = cur {
-            if e.0.borrow().vars.contains_key(name) {
-                return Some(e);
-            }
-            cur = e.0.borrow().parent.clone();
+            let next = {
+                let s = e.0.borrow();
+                if let Some((_, f)) = s.funcs.iter().rev().find(|(n, _)| *n == name) {
+                    return Some((*f, e.clone()));
+                }
+                s.parent.clone()
+            };
+            cur = next;
         }
         None
     }
 
-    pub fn find_func(&self, name: &str) -> Option<(Rc<FunctionDef>, Env)> {
+    pub fn find_module(&self, name: &str) -> Option<(&'a ModuleDef, Env<'a>)> {
         let mut cur = Some(self.clone());
         while let Some(e) = cur {
-            if let Some(f) = e.0.borrow().funcs.get(name) {
-                return Some((f.clone(), e.clone()));
-            }
-            cur = e.0.borrow().parent.clone();
+            let next = {
+                let s = e.0.borrow();
+                if let Some((_, m)) = s.modules.iter().rev().find(|(n, _)| *n == name) {
+                    return Some((*m, e.clone()));
+                }
+                s.parent.clone()
+            };
+            cur = next;
         }
         None
     }
 
-    pub fn find_module(&self, name: &str) -> Option<(Rc<ModuleDef>, Env)> {
-        let mut cur = Some(self.clone());
-        while let Some(e) = cur {
-            if let Some(m) = e.0.borrow().modules.get(name) {
-                return Some((m.clone(), e.clone()));
-            }
-            cur = e.0.borrow().parent.clone();
-        }
-        None
+    pub fn weak(&self) -> Weak<RefCell<Scope<'a>>> {
+        Rc::downgrade(&self.0)
     }
 
-    pub fn ptr_eq(&self, other: &Env) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
+    /// Drops all values of a scope (breaks closure cycles at the end of an evaluation).
+    pub fn clear_weak(w: &Weak<RefCell<Scope<'a>>>) {
+        if let Some(rc) = w.upgrade()
+            && let Ok(mut s) = rc.try_borrow_mut()
+        {
+            s.vars.clear();
+            s.dyn_ = None;
+            s.parent = None;
+        }
     }
+}
+
+/// One frame of `$` variables (a scope with `$` assignments or a call with `$`
+/// arguments). Values are evaluated eagerly.
+#[derive(Debug)]
+pub struct DynFrame<'a> {
+    pub vars: Vec<(&'a str, Val<'a>)>,
+    pub parent: Dyn<'a>,
+}
+
+pub type Dyn<'a> = Option<Rc<DynFrame<'a>>>;
+
+pub fn dyn_lookup<'a>(d: &Dyn<'a>, name: &str) -> Option<Val<'a>> {
+    let mut cur = d.as_ref();
+    while let Some(f) = cur {
+        if let Some((_, v)) = f.vars.iter().rev().find(|(n, _)| *n == name) {
+            return Some(v.clone());
+        }
+        cur = f.parent.as_ref();
+    }
+    None
+}
+
+pub fn dyn_push<'a>(d: &Dyn<'a>, vars: Vec<(&'a str, Val<'a>)>) -> Dyn<'a> {
+    if vars.is_empty() {
+        return d.clone();
+    }
+    Some(Rc::new(DynFrame { vars, parent: d.clone() }))
 }

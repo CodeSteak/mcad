@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 pub type NodeIdx = u32;
 
+/// `Node::stmt` of nodes without a statement (the synthetic root of a file context).
+pub const NO_STMT: StmtId = u32::MAX;
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Tree {
     pub nodes: Vec<Node>,
@@ -48,7 +51,7 @@ pub struct Node {
     /// Display colour from `color()`.
     pub color: Option<[f32; 4]>,
     /// Stable identity across evaluations: hash of the statement and instance path
-    /// (call sites and loop indices).
+    /// (call sites and loop indices). Below 2^53 (exact in JavaScript numbers).
     pub inst_key: u64,
 }
 

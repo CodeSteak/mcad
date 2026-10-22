@@ -11,3 +11,6 @@ serde.workspace = true
 cad-syntax.workspace = true
 cad-ir.workspace = true
 cad-kernel.workspace = true
+
+[dev-dependencies]
+serde.workspace = true
