@@ -28,10 +28,10 @@ fn arithmetic() {
 fn undefined_operations_warn() {
     let out = run("echo(\"x\" * 2, undef + 1, true + 1, 1 + [1]);");
     assert_eq!(echoes(&out), ["undef, undef, undef, undef"]);
-    assert!(has_warning(&out, "undefined operation (string * number)"));
-    assert!(has_warning(&out, "undefined operation (undefined + number)"));
-    assert!(has_warning(&out, "undefined operation (bool + number)"));
-    assert!(has_warning(&out, "undefined operation (number + vector)"));
+    assert!(has_warning(&out, "undefinierte Operation (String * Zahl)"));
+    assert!(has_warning(&out, "undefinierte Operation (undef + Zahl)"));
+    assert!(has_warning(&out, "undefinierte Operation (Bool + Zahl)"));
+    assert!(has_warning(&out, "undefinierte Operation (Zahl + Vektor)"));
 }
 
 #[test]
@@ -79,8 +79,8 @@ fn math_functions() {
     assert_eq!(ev("min(5), max([5]), norm([])"), "5, 5, 0");
     let out = run("echo(min([]), max(1, \"a\"), len(5), norm(5));");
     assert_eq!(echoes(&out), ["undef, undef, undef, undef"]);
-    assert!(has_warning(&out, "min() parameter could not be converted"));
-    assert!(has_warning(&out, "len() parameter could not be converted"));
+    assert!(has_warning(&out, "min(): Argumente sind weder Zahlen noch ein Vektor"));
+    assert!(has_warning(&out, "len(): Argument ist weder Vektor noch String"));
 }
 
 #[test]
@@ -138,7 +138,7 @@ fn ranges() {
     );
     let out = run("echo([for (i=[3:1]) i]);");
     assert_eq!(echoes(&out), ["[1, 2, 3]"]);
-    assert!(has_warning(&out, "deprecated"));
+    assert!(has_warning(&out, "veraltet"));
 }
 
 #[test]
@@ -196,21 +196,21 @@ fn variables_are_lazy_and_last_assignment_wins() {
     assert_eq!(echoes(&out), ["5"]);
     let out = run("x = 1;\necho(x);\nx = 2;");
     assert_eq!(echoes(&out), ["2"]);
-    assert!(has_warning(&out, "`x` was assigned on line 1 but is overwritten on line 3"));
+    assert!(has_warning(&out, "`x` aus Zeile 1 wird in Zeile 3 überschrieben"));
 }
 
 #[test]
 fn recursive_definition_is_detected() {
     let out = run("a = b + 1; b = a + 1; echo(a);");
-    assert!(has_warning(&out, "recursive definition"));
+    assert!(has_warning(&out, "rekursive Definition"));
 }
 
 #[test]
 fn unknown_names_warn() {
     let out = run("echo(nope, f(1));");
     assert_eq!(echoes(&out), ["undef, undef"]);
-    assert!(has_warning(&out, "unknown variable `nope`"));
-    assert!(has_warning(&out, "unknown function `f`"));
+    assert!(has_warning(&out, "unbekannte Variable `nope`"));
+    assert!(has_warning(&out, "unbekannte Funktion `f`"));
 }
 
 #[test]
@@ -221,12 +221,16 @@ fn block_scopes_shadow() {
 
 #[test]
 fn module_parameters_and_defaults() {
-    let src = "module m(a = 1, b = a * 2) { echo(a, b); } m(); m(5); m(b = 3); m(1, 2);";
+    let src = "module m(a = 1, b = 2) { echo(a, b); } m(); m(5); m(b = 3); m(1, 2);";
     let out = clean(src);
-    assert_eq!(echoes(&out), ["1, 2", "5, 10", "1, 3", "1, 2"]);
+    assert_eq!(echoes(&out), ["1, 2", "5, 2", "1, 3", "1, 2"]);
+    // As in OpenSCAD, a default is evaluated where the module is defined: it does not
+    // see the other parameters (`b = a * 2` uses the file's `a`).
+    let out = run("a = 10; module m(a, b = a * 2) echo(b = b); m(1);");
+    assert_eq!(echoes(&out), ["b = 20"]);
     let out = run("module m(a) { echo(a); } m(1, 2); m(c = 3);");
-    assert!(has_warning(&out, "too many arguments"));
-    assert!(has_warning(&out, "has no parameter `c`"));
+    assert!(has_warning(&out, "zu viele Argumente"));
+    assert!(has_warning(&out, "hat keinen Parameter `c`"));
 }
 
 #[test]
@@ -287,7 +291,7 @@ fn rands_is_deterministic() {
 fn assert_failure_aborts() {
     let out = run("x = 1; assert(x == 2, \"x must be 2\"); echo(\"after\");");
     assert!(out.aborted);
-    assert!(has_error(&out, "assertion 'x == 2' failed: x must be 2"));
+    assert!(has_error(&out, "assert 'x == 2' fehlgeschlagen: x must be 2"));
     assert!(echoes(&out).is_empty());
     let out = clean("v = assert(true) 3; echo(v);");
     assert_eq!(echoes(&out), ["3"]);

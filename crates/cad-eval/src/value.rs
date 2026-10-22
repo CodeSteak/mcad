@@ -80,7 +80,8 @@ pub struct Range {
 }
 
 impl Range {
-    /// Number of values, following OpenSCAD (`floor((end - start) / step) + 1`).
+    /// Number of values, following OpenSCAD 2021 (`floor((end - start) / step) + 1`,
+    /// with the quotient moved up by one ulp first, so `[0 : 0.1 : 0.3]` has 4 values).
     pub fn count(&self) -> f64 {
         let Range { start, step, end } = *self;
         if !(start.is_finite() && step.is_finite() && end.is_finite()) || step == 0.0 {
@@ -89,7 +90,7 @@ impl Range {
         if (step > 0.0 && start > end) || (step < 0.0 && start < end) {
             return 0.0;
         }
-        ((end - start) / step).floor() + 1.0
+        ((end - start) / step).next_up().floor() + 1.0
     }
 
     pub fn at(&self, i: usize) -> f64 {
@@ -225,12 +226,12 @@ impl<'a> Val<'a> {
         Some(DVec2::new(l[0].as_num()?, l[1].as_num()?))
     }
 
-    /// OpenSCAD truthiness.
+    /// OpenSCAD truthiness (`nan` is true there).
     pub fn truthy(&self) -> bool {
         match &self.v {
             Value::Undef => false,
             Value::Bool(b) => *b,
-            Value::Num(n) => *n != 0.0 && !n.is_nan(),
+            Value::Num(n) => *n != 0.0,
             Value::Str(s) => !s.is_empty(),
             Value::List(l) => !l.is_empty(),
             Value::Range(_) => true,
@@ -262,6 +263,25 @@ impl<'a> Val<'a> {
             },
             Value::PlaneRef { .. } => "number",
             Value::Instance(_) => "instance",
+        }
+    }
+
+    /// Type name for messages.
+    pub fn type_de(&self) -> &'static str {
+        match &self.v {
+            Value::Undef => "undef",
+            Value::Bool(_) => "Bool",
+            Value::Num(_) | Value::PlaneRef { .. } => "Zahl",
+            Value::Str(_) => "String",
+            Value::List(_) => "Vektor",
+            Value::Range(_) => "Bereich",
+            Value::Func(_) => "Funktion",
+            Value::Grid(_) => "Raster",
+            Value::GridSel { sel, .. } => match sel.iter().filter(|s| **s == Sel::Wild).count() {
+                1 => "Rasterlinie",
+                _ => "Rasterebene",
+            },
+            Value::Instance(_) => "Instanz",
         }
     }
 }
@@ -314,7 +334,8 @@ impl PValue {
 }
 
 /// Formats a number like OpenSCAD 2021 (6 significant digits, exponent form outside
-/// 1e-5 ..< 1e6, e.g. `1.23457e+6`, `1e-7`).
+/// 1e-5 ..< 1e6, e.g. `1.23457e+6`, `1e-7`). Exact ties round away from zero as in
+/// OpenSCAD (`123456.5` → `123457`), not to even.
 pub fn fmt_num(n: f64) -> String {
     if n.is_nan() {
         return "nan".into();
@@ -325,6 +346,7 @@ pub fn fmt_num(n: f64) -> String {
     if n == 0.0 {
         return "0".into();
     }
+    let n = if is_tie6(n) { if n > 0.0 { n.next_up() } else { n.next_down() } } else { n };
     let s = format!("{n:.5e}");
     let (mant, exp) = s.split_once('e').unwrap_or((&s, "0"));
     let x: i32 = exp.parse().unwrap_or(0);
@@ -335,6 +357,16 @@ pub fn fmt_num(n: f64) -> String {
         let decimals = (5 - x) as usize;
         trim_zeros(&format!("{n:.decimals$}"))
     }
+}
+
+/// The exact decimal value of `n` lies exactly halfway between two 6-digit values.
+fn is_tie6(n: f64) -> bool {
+    // A double that is not a tie differs from one within far fewer than 40 digits.
+    let s = format!("{:.40e}", n.abs());
+    let mant = s.split_once('e').map_or(s.as_str(), |(m, _)| m);
+    let digits = mant.as_bytes();
+    // "d.ddddd" are the 6 kept digits; index 7 is the 7th significant digit.
+    digits.get(7) == Some(&b'5') && digits[8..].iter().all(|&c| c == b'0')
 }
 
 fn trim_zeros(s: &str) -> String {
@@ -407,13 +439,7 @@ pub fn display(v: &Val, out: &mut String, top: bool, o: DisplayOpts) {
         Value::Range(r) => {
             let _ = write!(out, "[{} : {} : {}]", fmt_num(r.start), fmt_num(r.step), fmt_num(r.end));
         }
-        Value::Func(c) => {
-            let _ = write!(
-                out,
-                "function({})",
-                c.params.iter().map(|p| p.name.name.as_str()).collect::<Vec<_>>().join(", ")
-            );
-        }
+        Value::Func(c) => crate::print::function(c.params, c.body, out),
         Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_) => out.push_str(v.type_name()),
     }
 }

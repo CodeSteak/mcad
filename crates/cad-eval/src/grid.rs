@@ -22,18 +22,18 @@ enum Item<'a> {
 impl<'a> Ev<'a> {
     pub(crate) fn grid_stmt(&mut self, s: &'a Stmt, g: &'a GridDecl, ctx: &Ctx<'a>) -> R<()> {
         if ctx.in_loop {
-            self.error(g.name.span, "grids are not allowed inside for loops");
+            self.error(g.name.span, "Raster sind in for-Schleifen nicht erlaubt");
             return Ok(());
         }
         if ctx.in_children {
-            self.error(g.name.span, "grids are not allowed in the children of a module call");
+            self.error(g.name.span, "Raster sind in den Kindern eines Modulaufrufs nicht erlaubt");
             return Ok(());
         }
         if crate::math::uniform_scale(&ctx.xf.mod_local).is_none() {
             self.error(
                 g.name.span,
                 format!(
-                    "grid `{}` is placed under a non-uniform scale (only uniform scale is allowed before a grid)",
+                    "Raster `{}` liegt unter ungleichmäßiger Skalierung (vor einem Raster nur gleichmäßige Skalierung)",
                     g.name.name
                 ),
             );
@@ -47,12 +47,12 @@ impl<'a> Ev<'a> {
                 let line = self.line(*first);
                 self.error(
                     pd.name.span,
-                    format!("plane name `{}` is already used in grid `{}` (line {line})", pd.name.name, g.name.name),
+                    format!("Ebenenname `{}` in Raster `{}` schon vergeben (Zeile {line})", pd.name.name, g.name.name),
                 );
                 continue;
             }
             if pd.name.name == "_" {
-                self.error(pd.name.span, "`_` is reserved for the implicit plane of a missing axis");
+                self.error(pd.name.span, "`_` ist für die implizite Ebene einer fehlenden Achse reserviert");
                 continue;
             }
             taken.push((&pd.name.name, pd.name.span));
@@ -72,15 +72,15 @@ impl<'a> Ev<'a> {
                             ));
                         }
                         None => {
-                            self.error(pd.value.span, format!("plane `{}[{i}]` is not a number", pd.name.name));
+                            self.error(pd.value.span, format!("Ebene `{}[{i}]` ist keine Zahl", pd.name.name));
                         }
                     }
                 }
             } else {
-                let t = v.type_name();
+                let t = v.type_de();
                 self.error(
                     pd.value.span,
-                    format!("plane `{}` must be a number or a list of numbers, found {t}", pd.name.name),
+                    format!("Ebene `{}` muss Zahl oder Zahlenliste sein, ist {t}", pd.name.name),
                 );
             }
         }
@@ -160,7 +160,7 @@ impl<'a> Ev<'a> {
         if !(items.len() == 3 || (items.len() == 2 && z_implicit)) {
             self.error(
                 e.span,
-                format!("grid access `{gname}[…]` needs one plane per axis (x, y, z), found {}", items.len()),
+                format!("Rasterzugriff `{gname}[…]` braucht eine Ebene pro Achse (x, y, z), hat {}", items.len()),
             );
             return Ok(undef);
         }
@@ -186,7 +186,7 @@ impl<'a> Ev<'a> {
         }
         let wild = sel.iter().filter(|s| **s == Sel::Wild).count();
         if wild == 3 {
-            self.error(e.span, "`[*, *, *]` selects the whole grid; use at most two `*`");
+            self.error(e.span, "`[*, *, *]` wählt das ganze Raster; höchstens zwei `*`");
             return Ok(undef);
         }
         if self.is_in_context(env) {
@@ -249,7 +249,7 @@ impl<'a> Ev<'a> {
                     self.error(
                         x.span,
                         format!(
-                            "axis {} of grid `{gname}` has planes; `_` only stands for a missing axis",
+                            "Achse {} von Raster `{gname}` hat Ebenen; `_` steht nur für eine fehlende Achse",
                             AXES[axis as usize]
                         ),
                     );
@@ -262,7 +262,7 @@ impl<'a> Ev<'a> {
         if named.is_empty() {
             // Not a plane of this grid: a coordinate expression (`t` in the spec example).
             if matches!(x.kind, ExprKind::Ident(_)) && self.lookup(name, env)?.is_none() {
-                self.error(x.span, format!("grid `{gname}` has no plane `{name}`"));
+                self.error(x.span, format!("Raster `{gname}` hat keine Ebene `{name}`"));
                 return Ok(Item::Bad);
             }
             return self.coord_item(x, env, dy);
@@ -274,7 +274,7 @@ impl<'a> Ev<'a> {
                 match iv.as_num() {
                     Some(i) if i >= 0.0 && i.fract() == 0.0 => Some(i as u32),
                     _ => {
-                        self.error(ie.span, "plane index must be a non-negative integer");
+                        self.error(ie.span, "Ebenenindex muss eine ganze Zahl ≥ 0 sein");
                         return Ok(Item::Bad);
                     }
                 }
@@ -288,7 +288,7 @@ impl<'a> Ev<'a> {
                 self.error(
                     x.span,
                     format!(
-                        "plane `{pname}` lies on axis {}, but position {} of `{gname}[…]` needs an {} plane",
+                        "Ebene `{pname}` liegt auf Achse {}, Position {} von `{gname}[…]` braucht eine {}-Ebene",
                         AXES[pa as usize],
                         axis + 1,
                         AXES[axis as usize]
@@ -300,9 +300,9 @@ impl<'a> Ev<'a> {
         }
         let count = named.iter().filter(|&&i| planes[i].index.is_some()).count();
         let msg = match (idx, count) {
-            (None, c) if c > 0 => format!("`{name}` is a list of planes in grid `{gname}`; use `{name}[i]`"),
-            (Some(i), c) if c > 0 => format!("plane index {i} out of range: `{name}` has {c} planes"),
-            _ => format!("plane `{name}` of grid `{gname}` is not a list"),
+            (None, c) if c > 0 => format!("`{name}` ist eine Ebenenliste in Raster `{gname}`; `{name}[i]` verwenden"),
+            (Some(i), c) if c > 0 => format!("Ebenenindex {i} außerhalb: `{name}` hat {c} Ebenen"),
+            _ => format!("Ebene `{name}` von Raster `{gname}` ist keine Liste"),
         };
         self.error(x.span, msg);
         Ok(Item::Bad)
@@ -313,8 +313,8 @@ impl<'a> Ev<'a> {
         if v.as_num().is_some() {
             Ok(Item::Coord(v))
         } else {
-            let t = v.type_name();
-            self.error(x.span, format!("grid access item must be a plane name or a number, found {t}"));
+            let t = v.type_de();
+            self.error(x.span, format!("Rasterzugriff: Ebenenname oder Zahl erwartet, ist {t}"));
             Ok(Item::Bad)
         }
     }
@@ -334,7 +334,7 @@ impl<'a> Ev<'a> {
         let undef = Val { def: Some(span), ..Val::undef() };
         match found.as_slice() {
             [] => {
-                self.error(name.span, format!("grid `{gname}` has no plane `{}`", name.name));
+                self.error(name.span, format!("Raster `{gname}` hat keine Ebene `{}`", name.name));
                 undef
             }
             [(i, None, v)] => {
@@ -360,7 +360,7 @@ impl<'a> Ev<'a> {
         let info = &self.insts[inst as usize];
         let Some(ai) = info.anchors.iter().position(|a| a.name == name.name) else {
             let (label, module) = (info.label.clone().unwrap_or_default(), info.module.clone());
-            self.error(name.span, format!("instance `{label}` (module `{module}`) has no anchor `{}`", name.name));
+            self.error(name.span, format!("Instanz `{label}` (Modul `{module}`) hat keinen Anker `{}`", name.name));
             return Val { def: Some(span), ..Val::undef() };
         };
         let p = info.matrix.transform_point3(info.anchors[ai].point);
@@ -375,7 +375,7 @@ impl<'a> Ev<'a> {
     /// `dir(k.name)`.
     pub(crate) fn anchor_dir(&mut self, v: &Val<'a>, span: Span) -> Val<'a> {
         let Origin::AnchorRef { inst, anchor, .. } = v.origin else {
-            self.error(span, "dir() expects an anchor of a named instance (`k.name`)");
+            self.error(span, "dir() erwartet einen Anker einer benannten Instanz (`k.name`)");
             return Val::undef();
         };
         let info = &self.insts[inst as usize];
@@ -386,7 +386,7 @@ impl<'a> Ev<'a> {
                 Val::list((0..3).map(|i| Val::num(clean(d[i]))).collect())
             }
             None => {
-                let msg = format!("anchor `{}` has no direction", a.name);
+                let msg = format!("Anker `{}` hat keine Richtung", a.name);
                 self.error(span, msg);
                 Val::undef()
             }

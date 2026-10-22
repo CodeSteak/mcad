@@ -20,6 +20,10 @@ pub const NO_INST: InstId = u32::MAX;
 pub enum Binding<'a> {
     /// Not yet evaluated; evaluated in the scope that holds the binding.
     Lazy(&'a Expr),
+    /// Parameter default, not yet evaluated. As in OpenSCAD it is evaluated in the
+    /// definition environment (it does not see the other parameters) with the `$`
+    /// variables of the caller (without the call's own `$` arguments).
+    Default(&'a Expr, Env<'a>, Dyn<'a>),
     /// Being evaluated (cycle detection).
     InProgress,
     Done(Val<'a>),
@@ -87,6 +91,17 @@ impl<'a> Env<'a> {
         } else {
             s.vars.push((name, Binding::Lazy(expr)));
             false
+        }
+    }
+
+    /// Binds a parameter default (see [`Binding::Default`]).
+    pub fn set_default(&self, name: &'a str, expr: &'a Expr, def_env: Env<'a>, dyn_: Dyn<'a>) {
+        let b = Binding::Default(expr, def_env, dyn_);
+        let mut s = self.0.borrow_mut();
+        if let Some(e) = s.vars.iter_mut().rev().find(|(n, _)| *n == name) {
+            e.1 = b;
+        } else {
+            s.vars.push((name, b));
         }
     }
 
@@ -163,6 +178,18 @@ pub fn dyn_lookup<'a>(d: &Dyn<'a>, name: &str) -> Option<Val<'a>> {
     while let Some(f) = cur {
         if let Some((_, v)) = f.vars.iter().rev().find(|(n, _)| *n == name) {
             return Some(v.clone());
+        }
+        cur = f.parent.as_ref();
+    }
+    None
+}
+
+/// The innermost frame that sets `name`.
+pub fn dyn_frame<'x, 'a>(d: &'x Dyn<'a>, name: &str) -> Option<&'x DynFrame<'a>> {
+    let mut cur = d.as_ref();
+    while let Some(f) = cur {
+        if f.vars.iter().any(|(n, _)| *n == name) {
+            return Some(f);
         }
         cur = f.parent.as_ref();
     }

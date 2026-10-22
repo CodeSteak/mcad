@@ -66,7 +66,7 @@ impl<'a> Ev<'a> {
                 {
                     self.error(
                         span,
-                        format!("type error: {msg}; grids, grid lines/planes and instances are not values"),
+                        format!("Typfehler: {msg}; Raster, Rasterlinien/-ebenen und Instanzen sind keine Werte"),
                     );
                     return Ok(Val::undef());
                 }
@@ -137,15 +137,18 @@ impl<'a> Ev<'a> {
 
     #[inline(never)]
     pub(crate) fn echo(&mut self, span: Span, a: &Args<'a>, env: &Env<'a>) {
-        let parts: Vec<String> = a
-            .list
-            .iter()
-            .map(|x| match x.name {
+        let mut parts: Vec<String> = Vec::with_capacity(a.list.len() + a.dyn_vars.len());
+        let mut dyn_vars = a.dyn_vars.iter().zip(&a.dyn_at).peekable();
+        for (i, x) in a.list.iter().enumerate() {
+            while let Some(((n, v), _)) = dyn_vars.next_if(|(_, at)| **at <= i) {
+                parts.push(format!("{n} = {}", to_display(v)));
+            }
+            parts.push(match x.name {
                 Some(n) => format!("{} = {}", n.name, to_display(&x.val)),
                 None => to_display(&x.val),
-            })
-            .chain(a.dyn_vars.iter().map(|(n, v)| format!("{n} = {}", to_display(v))))
-            .collect();
+            });
+        }
+        parts.extend(dyn_vars.map(|((n, v), _)| format!("{n} = {}", to_display(v))));
         let in_context = self.is_in_context(env);
         self.echoes.push(Echo { stmt: self.cur_stmt, span, text: parts.join(", "), in_context });
     }
@@ -171,7 +174,7 @@ impl<'a> Ev<'a> {
                 "$preview" => Val::bool(self.opts.preview),
                 "$tol" | "$vpr" | "$vpt" | "$vpd" | "$vpf" | "$parent_modules" => Val::undef(),
                 _ => {
-                    self.warn(span, format!("unknown variable `{name}`"));
+                    self.warn(span, format!("unbekannte Variable `{name}`"));
                     Val::undef()
                 }
             });
@@ -179,7 +182,7 @@ impl<'a> Ev<'a> {
         match self.lookup(name, env)? {
             Some(v) => Ok(v),
             None => {
-                self.warn(span, format!("unknown variable `{name}`"));
+                self.warn(span, format!("unbekannte Variable `{name}`"));
                 Ok(Val { def: Some(span), ..Val::undef() })
             }
         }
@@ -191,6 +194,7 @@ impl<'a> Ev<'a> {
         enum Hit<'a> {
             Done(Val<'a>),
             Lazy(&'a Expr),
+            Default(&'a Expr, Env<'a>, Dyn<'a>),
             Cycle,
             Miss,
         }
@@ -205,6 +209,7 @@ impl<'a> Ev<'a> {
                 let hit = match sc.vars.iter().rev().find(|(n, _)| *n == name) {
                     Some((_, Binding::Done(v))) => Hit::Done(v.clone()),
                     Some((_, Binding::Lazy(e))) => Hit::Lazy(e),
+                    Some((_, Binding::Default(e, de, dd))) => Hit::Default(e, de.clone(), dd.clone()),
                     Some((_, Binding::InProgress)) => Hit::Cycle,
                     None => Hit::Miss,
                 };
@@ -212,10 +217,14 @@ impl<'a> Ev<'a> {
             };
             match hit {
                 Hit::Done(v) => return Ok(Some(v)),
-                Hit::Lazy(e) => return self.force(&cur, name, e).map(Some),
+                Hit::Lazy(e) => {
+                    let dy = cur.dyn_();
+                    return self.force(&cur, name, e, &cur, &dy).map(Some);
+                }
+                Hit::Default(e, de, dd) => return self.force(&cur, name, e, &de, &dd).map(Some),
                 Hit::Cycle => {
                     let sp = self.cur_span;
-                    self.warn(sp, format!("recursive definition of `{name}`"));
+                    self.warn(sp, format!("rekursive Definition von `{name}`"));
                     return Ok(Some(Val::undef()));
                 }
                 Hit::Miss => {}
@@ -243,7 +252,8 @@ impl<'a> Ev<'a> {
     }
 
     #[inline(never)]
-    fn force(&mut self, env: &Env<'a>, name: &str, e: &'a Expr) -> R<Val<'a>> {
+    /// Evaluates the lazy binding `name` of `env` in `eval_env` / `dy` and stores it.
+    fn force(&mut self, env: &Env<'a>, name: &str, e: &'a Expr, eval_env: &Env<'a>, dy: &Dyn<'a>) -> R<Val<'a>> {
         let set = |env: &Env<'a>, b: Binding<'a>| {
             let mut s = env.0.borrow_mut();
             if let Some(slot) = s.vars.iter_mut().rev().find(|(n, _)| *n == name) {
@@ -251,8 +261,7 @@ impl<'a> Ev<'a> {
             }
         };
         set(env, Binding::InProgress);
-        let dy = env.dyn_();
-        let r = self.expr(e, env, &dy);
+        let r = self.expr(e, eval_env, dy);
         match r {
             Ok(v) => {
                 set(env, Binding::Done(v.clone()));
@@ -301,7 +310,7 @@ impl<'a> Ev<'a> {
             if let Some(v) = self.builtin_fn(name, &a, e, env)? {
                 return Ok(v);
             }
-            self.warn(callee.span, format!("unknown function `{name}`"));
+            self.warn(callee.span, format!("unbekannte Funktion `{name}`"));
             return Ok(Val::undef());
         }
         let f = self.expr(callee, env, dy)?;
@@ -312,8 +321,8 @@ impl<'a> Ev<'a> {
                 self.call_fn(c.params, c.body, c.env.clone(), c.name, a, e.span, dy)
             }
             _ => {
-                let t = f.type_name();
-                self.warn(callee.span, format!("cannot call a value of type {t}"));
+                let t = f.type_de();
+                self.warn(callee.span, format!("{t} ist nicht aufrufbar"));
                 Ok(Val::undef())
             }
         }
@@ -332,11 +341,11 @@ impl<'a> Ev<'a> {
         dy: &Dyn<'a>,
     ) -> R<Val<'a>> {
         if self.fn_depth >= self.opts.max_function_depth {
-            return self.too_deep(span, "function", name.unwrap_or("function literal"), self.opts.max_function_depth);
+            return self.too_deep(span, "function", name.unwrap_or("Funktionsliteral"), self.opts.max_function_depth);
         }
         self.check_stack(span)?;
         self.fn_depth += 1;
-        let r = self.call_loop(params, body, fenv, name, args, span, dy.clone());
+        let r = self.call_loop(params, body, fenv, name, args, dy.clone());
         self.fn_depth -= 1;
         r
     }
@@ -350,13 +359,12 @@ impl<'a> Ev<'a> {
         mut fenv: Env<'a>,
         mut name: Option<&'a str>,
         mut args: Args<'a>,
-        span: Span,
         mut dy: Dyn<'a>,
     ) -> R<Val<'a>> {
         loop {
             let fdy = dyn_push(&dy, std::mem::take(&mut args.dyn_vars));
             let env = Env::new(Some(&fenv), fdy.clone(), fenv.inst(), false);
-            self.bind_params(params, std::mem::take(&mut args.list), &env, name.unwrap_or("function"), span);
+            self.bind_params(params, std::mem::take(&mut args.list), &env, &fenv, &dy, name.unwrap_or("function"));
             match self.tail(body, &env, &fdy)? {
                 Tail::Val(mut v) => {
                     v.def = None;
@@ -439,7 +447,7 @@ impl<'a> Ev<'a> {
     fn push_checked(&mut self, out: &mut Vec<Val<'a>>, v: Val<'a>, span: Span) -> R<()> {
         if out.len() >= self.opts.max_list_len {
             let max = self.opts.max_list_len;
-            return self.fatal(span, format!("list has more than {max} elements"));
+            return self.fatal(span, format!("Liste hat mehr als {max} Elemente"));
         }
         out.push(v);
         Ok(())
@@ -521,6 +529,8 @@ impl<'a> Ev<'a> {
                                 self.push_checked(out, x, *sp)?;
                             }
                         }
+                        // `each undef` adds nothing.
+                        Value::Undef => {}
                         _ => self.push_checked(out, v, *sp)?,
                     }
                 }
@@ -572,20 +582,20 @@ impl<'a> Ev<'a> {
         };
         let en = self.expr(end, env, dy)?;
         let (Some(mut a), Some(mut b)) = (s.as_num(), en.as_num()) else {
-            self.warn(e.span, "range bounds must be numbers");
+            self.warn(e.span, "Bereichsgrenzen müssen Zahlen sein");
             return Ok(Val::undef());
         };
         let stepv = match &st {
             Some(v) => match v.as_num() {
                 Some(n) => n,
                 None => {
-                    self.warn(e.span, "range step must be a number");
+                    self.warn(e.span, "Bereichsschritt muss eine Zahl sein");
                     return Ok(Val::undef());
                 }
             },
             None => {
                 if a > b {
-                    self.warn(e.span, "ranges of the form [begin:end] with begin greater than end are deprecated");
+                    self.warn(e.span, "[Anfang:Ende] mit Anfang > Ende ist veraltet, wird vertauscht");
                     std::mem::swap(&mut a, &mut b);
                 }
                 1.0
@@ -613,11 +623,11 @@ impl<'a> Ev<'a> {
         let item = match items {
             [IndexItem::Expr(x)] => x,
             [IndexItem::Wild(sp)] => {
-                self.error(*sp, "`*` is only allowed in grid access");
+                self.error(*sp, "`*` nur in Rasterzugriffen erlaubt");
                 return Ok(undef);
             }
             _ => {
-                self.warn(e.span, "only one index allowed");
+                self.warn(e.span, "nur ein Index erlaubt");
                 return Ok(undef);
             }
         };
@@ -625,6 +635,8 @@ impl<'a> Ev<'a> {
         let Some(i) = iv.as_num() else {
             return Ok(undef);
         };
+        // OpenSCAD truncates the index toward zero first (`v[-0.5]` is `v[0]`).
+        let i = i.trunc();
         if !i.is_finite() || i < 0.0 {
             return Ok(undef);
         }
