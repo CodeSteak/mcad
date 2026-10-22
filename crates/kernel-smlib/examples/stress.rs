@@ -132,6 +132,38 @@ fn main() {
             let r = k.loft(&[a, c], false, 3);
             report(&mut k, "loft_square_circle smooth", r, |k, s| vol(k, &s));
         }
+        "shell_revolved" => {
+            let prof = vec![DVec2::new(2.0, 0.0), DVec2::new(4.0, 0.0), DVec2::new(3.0, 3.0), DVec2::new(2.0, 3.0)];
+            let p = PlacedLoop { lp: Loop::Spline(prof), frame: DMat4::from_rotation_x(PI / 2.0) };
+            let r = k.revolve(&p, 2.0 * PI, 3).unwrap();
+            let t0 = std::time::Instant::now();
+            let s = k.shell(&r, 0.2, &[], 4);
+            report(&mut k, &case, s, |k, s| vol(k, &s));
+            println!("  took {:?}", t0.elapsed());
+        }
+        "shell_sphere_cyl" => {
+            let s = k.make_sphere(5.0, 1).unwrap();
+            let r = k.shell(&s, 0.5, &[], 4);
+            report(&mut k, "shell sphere", r, |k, s| vol(k, &s));
+            let c = k.make_cylinder(10.0, 3.0, 3.0, 1).unwrap();
+            let r = k.shell(&c, 0.5, &[1], 4);
+            report(&mut k, "shell cylinder open", r, |k, s| vol(k, &s));
+        }
+        "boolean_many" => {
+            let t0 = std::time::Instant::now();
+            let mut acc = k.make_box(DVec3::ZERO, DVec3::new(100.0, 100.0, 5.0), 1).unwrap();
+            for i in 0..10 {
+                for j in 0..10 {
+                    let c = k.make_cylinder(7.0, 2.0, 2.0, 2).unwrap();
+                    let c = k.transform(&c, &DMat4::from_translation(DVec3::new(5.0 + 10.0 * i as f64, 5.0 + 10.0 * j as f64, -1.0))).unwrap();
+                    acc = k.boolean(BoolOp::Difference, &[acc, c], 3).unwrap();
+                }
+            }
+            println!("{case}: 100 holes in {:?}; {}", t0.elapsed(), vol(&mut k, &acc));
+            let t1 = std::time::Instant::now();
+            let m = k.tessellate(&acc, 0.05).unwrap();
+            println!("  tessellate {} tris in {:?}", m.triangle_count(), t1.elapsed());
+        }
         "tessellate_torus_fine" => {
             let t = k.make_torus(10.0, 1.0, 1).unwrap();
             let t0 = std::time::Instant::now();
