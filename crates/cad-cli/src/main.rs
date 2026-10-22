@@ -1,1 +1,750 @@
-fn main() {}
+//! `cad`: command line interface for the CAD language (native SMLib kernel).
+//!
+//! Commands (Plan section 8): `check`, `eval`, `inspect --line n`, `render -o bild.png`,
+//! `export -o teil.stl|teil.3mf`. Every command prints readable text, or with `--json` one
+//! JSON object (schema below). The evaluation runs in a thread with a 256 MiB stack.
+//!
+//! Exit codes: 0 ok, 1 diagnostics with severity error (syntax, evaluation or a failed kernel
+//! operation), 2 usage error (arguments, unreadable file), 3 kernel/internal error
+//! (tessellation or export failed, panic).
+//!
+//! JSON schema (`schema_version` = `cad_session::PROTOCOL_VERSION`, currently 1). Types such
+//! as `Diagnostic`, `Scene`, `SrcRange`, `Hint`, `Handle` are the protocol types documented in
+//! `web/src/engine/protocol.ts` (lines/columns 1-based, offsets UTF-16):
+//!
+//! ```text
+//! common:  { schema_version, command, file, ok, exit_code, context: string|null,
+//!            diagnostics: Diagnostic[], error?: string }
+//! check:   + { errors: number, warnings: number }
+//! eval:    + { scene: Scene|null }
+//! inspect: + { line, nodes: InspectNode[], hints: Hint[], handles: Handle[], echoes: Echo[] }
+//!          InspectNode = { idx, label, instance, range, status, dim, flags, subtracted,
+//!                          world_bounds: {min,max}|null, volume|null, area|null,
+//!                          selected_edges, opened_faces, hints, messages, cached }
+//! render:  + { output, width, height, view, line|null, highlighted: number[], triangles }
+//! export:  + { output, format: "stl"|"3mf", bytes, triangles, volume|null }
+//! ```
+
+mod render;
+
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+
+use cad_session::protocol::{self as p, FromEngine, ToEngine};
+use cad_session::{PROTOCOL_VERSION, Session, SessionOptions, std_clock};
+use clap::{Args, Parser, Subcommand};
+use glam::{DMat4, DVec3};
+use kernel_smlib::SmlibKernel;
+use serde_json::{Value as Json, json};
+
+#[derive(Parser)]
+#[command(name = "cad", version, about = "Parametrisches CAD: prüfen, auswerten, ansehen, exportieren")]
+struct Cli {
+    #[command(subcommand)]
+    cmd: Cmd,
+}
+
+#[derive(Args, Clone)]
+struct Common {
+    /// Quelldatei (`-` = stdin).
+    file: PathBuf,
+    /// Ausgabe als JSON (festes Schema, siehe `cad --help`/Skill).
+    #[arg(long)]
+    json: bool,
+    /// Modul als Kontext (wie Cursor in der Moduldefinition), auch `aussen::innen`.
+    #[arg(long, short = 'm')]
+    module: Option<String>,
+    /// Parameter des Kontextmoduls überschreiben, z. B. `-D w=60`, `-D p=[1,2,3]`.
+    #[arg(short = 'D', value_name = "NAME=WERT")]
+    define: Vec<String>,
+}
+
+#[derive(Subcommand)]
+enum Cmd {
+    /// Diagnosen mit Zeile und Spalte.
+    Check {
+        #[command(flatten)]
+        c: Common,
+        /// Nur Syntax und Sprachauswertung, ohne Kernel.
+        #[arg(long)]
+        no_kernel: bool,
+    },
+    /// Baum, Werte, Inline-Hinweise, Raster, Anker.
+    Eval {
+        #[command(flatten)]
+        c: Common,
+    },
+    /// Was eine Zeile erzeugt: Knoten, Hülle, Volumen, ausgewählte Kanten, Meldungen.
+    Inspect {
+        #[command(flatten)]
+        c: Common,
+        /// Zeile (1-basiert).
+        #[arg(long)]
+        line: u32,
+        /// Dateikontext behalten, auch wenn die Zeile in einer Moduldefinition liegt.
+        #[arg(long)]
+        whole_file: bool,
+    },
+    /// Bild des Modells (PNG), optional mit hervorgehobener Zeile wie im Editor.
+    Render {
+        #[command(flatten)]
+        c: Common,
+        #[arg(short, long)]
+        output: PathBuf,
+        /// iso, front, back, top, bottom, left, right
+        #[arg(long, default_value = "iso")]
+        view: String,
+        /// Knoten dieser Zeile voll, Rest gedimmt.
+        #[arg(long)]
+        line: Option<u32>,
+        /// Bildgröße BxH.
+        #[arg(long, default_value = "1024x768")]
+        size: String,
+        /// Dateikontext behalten, auch wenn die Zeile in einer Moduldefinition liegt.
+        #[arg(long)]
+        whole_file: bool,
+        /// Kein Achsenkreuz.
+        #[arg(long)]
+        no_axes: bool,
+    },
+    /// Exportdatei (STL binär oder 3MF, nach Endung oder --format).
+    Export {
+        #[command(flatten)]
+        c: Common,
+        #[arg(short, long)]
+        output: PathBuf,
+        /// stl oder 3mf (Standard: aus der Endung).
+        #[arg(long)]
+        format: Option<String>,
+    },
+}
+
+/// Failure that ends a command without a regular result.
+enum Fail {
+    Usage(String),
+    Kernel(String),
+}
+
+struct Outcome {
+    json: Json,
+    text: String,
+    /// Exit code 1 (diagnostics with errors).
+    errors: bool,
+}
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let json_mode = match &cli.cmd {
+        Cmd::Check { c, .. }
+        | Cmd::Eval { c }
+        | Cmd::Inspect { c, .. }
+        | Cmd::Render { c, .. }
+        | Cmd::Export { c, .. } => c.json,
+    };
+    let name = command_name(&cli.cmd);
+    let worker = std::thread::Builder::new().stack_size(256 << 20).name("cad-eval".into()).spawn(move || run(&cli.cmd));
+    let result = match worker {
+        Ok(h) => h.join().unwrap_or_else(|e| {
+            let msg = e
+                .downcast_ref::<String>()
+                .cloned()
+                .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
+                .unwrap_or_else(|| "Panik".into());
+            Err(Fail::Kernel(format!("interner Fehler: {msg}")))
+        }),
+        Err(e) => Err(Fail::Kernel(format!("Thread: {e}"))),
+    };
+    match result {
+        Ok(o) => {
+            let code = if o.errors { 1 } else { 0 };
+            if json_mode {
+                let mut j = o.json;
+                j["exit_code"] = json!(code);
+                j["ok"] = json!(code == 0);
+                println!("{}", serde_json::to_string_pretty(&j).unwrap());
+            } else {
+                print!("{}", o.text);
+            }
+            ExitCode::from(code)
+        }
+        Err(f) => {
+            let (code, msg) = match f {
+                Fail::Usage(m) => (2u8, m),
+                Fail::Kernel(m) => (3u8, m),
+            };
+            if json_mode {
+                let j = json!({
+                    "schema_version": PROTOCOL_VERSION,
+                    "command": name,
+                    "ok": false,
+                    "exit_code": code,
+                    "error": msg,
+                });
+                println!("{}", serde_json::to_string_pretty(&j).unwrap());
+            } else {
+                eprintln!("cad {name}: {msg}");
+            }
+            ExitCode::from(code)
+        }
+    }
+}
+
+fn command_name(c: &Cmd) -> &'static str {
+    match c {
+        Cmd::Check { .. } => "check",
+        Cmd::Eval { .. } => "eval",
+        Cmd::Inspect { .. } => "inspect",
+        Cmd::Render { .. } => "render",
+        Cmd::Export { .. } => "export",
+    }
+}
+
+fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
+    match cmd {
+        Cmd::Check { c, no_kernel } => check(c, !no_kernel),
+        Cmd::Eval { c } => eval(c),
+        Cmd::Inspect { c, line, whole_file } => inspect(c, *line, *whole_file),
+        Cmd::Render { c, output, view, line, size, whole_file, no_axes } => {
+            render::command(c, output, view, *line, size, *whole_file, !*no_axes)
+        }
+        Cmd::Export { c, output, format } => export(c, output, format.as_deref()),
+    }
+}
+
+// ------------------------------------------------------------------------------------------
+// loading
+// ------------------------------------------------------------------------------------------
+
+pub(crate) struct Model {
+    pub session: Session<SmlibKernel>,
+    pub file: String,
+    pub text: String,
+    /// Finished scene (`None` on syntax errors).
+    pub scene: Option<p::Scene>,
+    pub diagnostics: Vec<p::Diagnostic>,
+    /// Context module name, `None` for the file.
+    pub context: Option<String>,
+}
+
+impl Model {
+    pub fn has_errors(&self) -> bool {
+        self.diagnostics.iter().any(|d| d.severity == p::Severity::Error)
+    }
+
+    /// Fields every JSON answer has.
+    pub fn base_json(&self, command: &str) -> Json {
+        json!({
+            "schema_version": PROTOCOL_VERSION,
+            "command": command,
+            "file": self.file,
+            "ok": !self.has_errors(),
+            "exit_code": 0,
+            "context": self.context,
+            "diagnostics": self.diagnostics,
+        })
+    }
+
+    pub fn diagnostics_text(&self) -> String {
+        let mut s = String::new();
+        for d in &self.diagnostics {
+            let sev = match d.severity {
+                p::Severity::Error => "Fehler",
+                p::Severity::Warning => "Warnung",
+                p::Severity::Info => "Info",
+            };
+            let src = match d.source {
+                p::DiagSource::Syntax => "Syntax",
+                p::DiagSource::Eval => "Auswertung",
+                p::DiagSource::Kernel => "Kernel",
+            };
+            s.push_str(&format!("{}:{}:{}: {sev} ({src}): {}\n", self.file, d.range.line, d.range.col, d.message));
+        }
+        s
+    }
+
+    /// Source line `n` (1-based), trimmed.
+    pub fn line_text(&self, n: u32) -> &str {
+        self.text.lines().nth(n.saturating_sub(1) as usize).unwrap_or("").trim()
+    }
+}
+
+fn parse_define(d: &str) -> Result<(String, p::Value), Fail> {
+    let (k, v) = d.split_once('=').ok_or_else(|| Fail::Usage(format!("-D {d}: erwartet NAME=WERT")))?;
+    let k = k.trim();
+    if k.is_empty() {
+        return Err(Fail::Usage(format!("-D {d}: Name fehlt")));
+    }
+    let v = v.trim();
+    let val = serde_json::from_str::<p::Value>(v).unwrap_or_else(|_| p::Value::Str(v.to_string()));
+    Ok((k.to_string(), val))
+}
+
+fn read_source(path: &Path) -> Result<(String, String), Fail> {
+    if path.as_os_str() == "-" {
+        let mut s = String::new();
+        std::io::stdin().read_to_string(&mut s).map_err(|e| Fail::Usage(format!("stdin: {e}")))?;
+        return Ok(("<stdin>".into(), s));
+    }
+    let s = std::fs::read_to_string(path).map_err(|e| Fail::Usage(format!("{}: {e}", path.display())))?;
+    Ok((path.display().to_string(), s))
+}
+
+fn last_diagnostics(msgs: &[FromEngine]) -> Option<Vec<p::Diagnostic>> {
+    msgs.iter().rev().find_map(|m| match m {
+        FromEngine::Diagnostics { items, .. } => Some(items.clone()),
+        _ => None,
+    })
+}
+
+fn last_scene(msgs: &[FromEngine]) -> Option<p::Scene> {
+    msgs.iter().rev().find_map(|m| match m {
+        FromEngine::Scene(s) => Some(s.clone()),
+        _ => None,
+    })
+}
+
+/// Module path name for `SetContext` (`outer::inner`).
+fn module_context_name(m: &p::Module) -> String {
+    let mut parts = m.path.clone();
+    parts.push(m.name.clone());
+    parts.join("::")
+}
+
+/// Innermost module definition whose body contains line `line`.
+fn module_at_line(scene: &p::Scene, line: u32) -> Option<&p::Module> {
+    scene
+        .modules
+        .iter()
+        .filter(|m| m.range.line <= line && line <= m.range.end_line)
+        .min_by_key(|m| m.range.to - m.range.from)
+}
+
+/// Parses, evaluates and (with `kernel`) runs the kernel job.
+pub(crate) fn load(c: &Common, line: Option<u32>, whole_file: bool, kernel: bool) -> Result<Model, Fail> {
+    let (file, text) = read_source(&c.file)?;
+    let defines = c.define.iter().map(|d| parse_define(d)).collect::<Result<Vec<_>, _>>()?;
+    let mut opts = SessionOptions { auto_root_mesh: false, ..Default::default() };
+    opts.eval.max_stack_bytes = 192 << 20;
+    let mut s = Session::new(SmlibKernel::new(), opts, std_clock());
+    let mut module = c.module.clone();
+    if module.is_none()
+        && !whole_file
+        && let Some(line) = line
+    {
+        // Cursor in a module definition: that module is the context (Spec: UI-Modell).
+        let first = s.post(ToEngine::SetSource { text: text.clone(), version: 1 });
+        module = last_scene(&first).and_then(|sc| module_at_line(&sc, line).map(module_context_name));
+        s.post(ToEngine::Cancel);
+    }
+    if module.is_none() && !defines.is_empty() {
+        return Err(Fail::Usage("-D braucht einen Modulkontext (--module oder --line in einem Modul)".into()));
+    }
+    if module.is_some() {
+        s.post(ToEngine::SetContext { module: module.clone(), overrides: defines.into_iter().collect() });
+    }
+    let mut msgs = s.post(ToEngine::SetSource { text: text.clone(), version: 1 });
+    if kernel {
+        msgs.extend(s.run_to_idle());
+    } else {
+        s.post(ToEngine::Cancel);
+    }
+    let diagnostics = last_diagnostics(&msgs).unwrap_or_default();
+    let scene = if kernel { s.done().map(|d| d.scene.clone()) } else { last_scene(&msgs) };
+    Ok(Model { session: s, file, text, scene, diagnostics, context: module })
+}
+
+// ------------------------------------------------------------------------------------------
+// formatting helpers
+// ------------------------------------------------------------------------------------------
+
+pub(crate) fn num(v: f64) -> String {
+    let r = (v * 1e4).round() / 1e4;
+    let s = format!("{r:.4}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0".into() } else { s.to_string() }
+}
+
+pub(crate) fn vec3(v: &p::Vec3) -> String {
+    format!("[{}, {}, {}]", num(v.0[0]), num(v.0[1]), num(v.0[2]))
+}
+
+pub(crate) fn mat(m: &p::Mat4) -> DMat4 {
+    DMat4::from_cols_array(&m.0)
+}
+
+/// Axis-aligned world bounds of node-system bounds under `m`.
+pub(crate) fn world_bounds(b: &p::Bounds, m: &DMat4) -> p::Bounds {
+    let (lo, hi) = (DVec3::from_array(b.min.0), DVec3::from_array(b.max.0));
+    let mut wlo = DVec3::splat(f64::INFINITY);
+    let mut whi = DVec3::splat(f64::NEG_INFINITY);
+    for i in 0..8 {
+        let c = DVec3::new(
+            if i & 1 == 0 { lo.x } else { hi.x },
+            if i & 2 == 0 { lo.y } else { hi.y },
+            if i & 4 == 0 { lo.z } else { hi.z },
+        );
+        let w = m.transform_point3(c);
+        wlo = wlo.min(w);
+        whi = whi.max(w);
+    }
+    p::Bounds { min: p::Vec3(wlo.to_array()), max: p::Vec3(whi.to_array()) }
+}
+
+fn status_text(s: p::NodeStatus) -> &'static str {
+    match s {
+        p::NodeStatus::Ok => "ok",
+        p::NodeStatus::Warning => "Warnung",
+        p::NodeStatus::Error => "Fehler",
+        p::NodeStatus::Skipped => "übersprungen",
+        p::NodeStatus::Pending => "offen",
+    }
+}
+
+fn context_text(m: &Model) -> String {
+    let Some(sc) = &m.scene else { return String::new() };
+    match &sc.context.module {
+        None => "Kontext: Datei\n".into(),
+        Some(name) => {
+            let params: Vec<String> = sc
+                .context
+                .params
+                .iter()
+                .map(|pv| {
+                    format!("{} = {}{}", pv.name, value_text(&pv.value), if pv.overridden { " (-D)" } else { "" })
+                })
+                .collect();
+            format!("Kontext: Modul {name}({})\n", params.join(", "))
+        }
+    }
+}
+
+pub(crate) fn value_text(v: &p::Value) -> String {
+    match v {
+        p::Value::Undef => "undef".into(),
+        p::Value::Bool(b) => b.to_string(),
+        p::Value::Num(n) => num(*n),
+        p::Value::Str(s) => format!("{s:?}"),
+        p::Value::List(l) => format!("[{}]", l.iter().map(value_text).collect::<Vec<_>>().join(", ")),
+        p::Value::Range { start, step, end } => format!("[{} : {} : {}]", num(*start), num(*step), num(*end)),
+        p::Value::Opaque { opaque } => format!("<{opaque}>"),
+    }
+}
+
+// ------------------------------------------------------------------------------------------
+// commands
+// ------------------------------------------------------------------------------------------
+
+fn check(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
+    let m = load(c, None, true, kernel)?;
+    let errors = m.diagnostics.iter().filter(|d| d.severity == p::Severity::Error).count();
+    let warnings = m.diagnostics.iter().filter(|d| d.severity == p::Severity::Warning).count();
+    let mut j = m.base_json("check");
+    j["errors"] = json!(errors);
+    j["warnings"] = json!(warnings);
+    let mut text = m.diagnostics_text();
+    text.push_str(&format!("{}: {errors} Fehler, {warnings} Warnungen\n", m.file));
+    Ok(Outcome { json: j, text, errors: m.has_errors() })
+}
+
+fn eval(c: &Common) -> Result<Outcome, Fail> {
+    let m = load(c, None, true, true)?;
+    let mut j = m.base_json("eval");
+    j["scene"] = serde_json::to_value(&m.scene).unwrap();
+    let mut t = String::new();
+    if let Some(sc) = &m.scene {
+        t.push_str(&context_text(&m));
+        t.push_str("Baum:\n");
+        if let Some(root) = sc.root {
+            tree_text(sc, root, 1, &mut t);
+        }
+        if !sc.hints.is_empty() {
+            t.push_str("Werte:\n");
+            for h in sc.hints.iter().filter(|h| h.in_context) {
+                t.push_str(&format!("  Z.{:<4} {}  → {}\n", h.range.line, m.line_text(h.range.line), h.text));
+            }
+        }
+        if !sc.grids.is_empty() {
+            t.push_str("Raster:\n");
+            for g in &sc.grids {
+                let module = &sc.instances.get(g.module_inst as usize).map(|i| i.module.as_str()).unwrap_or("");
+                t.push_str(&format!(
+                    "  {} (Z.{}, {}{}):\n",
+                    g.name,
+                    g.range.line,
+                    if module.is_empty() { "Datei".to_string() } else { format!("Modul {module}") },
+                    if g.in_context { "" } else { ", nicht im Kontext" }
+                ));
+                for axis in 0..3u8 {
+                    let planes: Vec<String> = g
+                        .planes
+                        .iter()
+                        .filter(|pl| pl.axis == axis)
+                        .map(|pl| {
+                            let kind = if pl.implicit {
+                                ""
+                            } else if pl.literal.is_some() {
+                                " (Literal)"
+                            } else if pl.is_ref {
+                                " (Referenz)"
+                            } else {
+                                " (Ausdruck)"
+                            };
+                            format!("{} = {}{kind}", pl.name, num(pl.value))
+                        })
+                        .collect();
+                    t.push_str(&format!("    {}: {}\n", ["x", "y", "z"][axis as usize], planes.join(", ")));
+                }
+            }
+        }
+        if !sc.anchors.is_empty() {
+            t.push_str("Anker (Kontextkoordinaten):\n");
+            for a in &sc.anchors {
+                let name = a.text.clone().unwrap_or_else(|| {
+                    let module = sc.instances.get(a.inst as usize).map(|i| i.module.clone()).unwrap_or_default();
+                    format!("{module}#{}.{}", a.inst, a.name)
+                });
+                let dir = a.dir.as_ref().map(|d| format!(", dir {}", vec3(d))).unwrap_or_default();
+                t.push_str(&format!("  {name} = {}{dir}  (Z.{})\n", vec3(&a.point), a.range.line));
+            }
+        }
+        if !sc.echoes.is_empty() {
+            t.push_str("Echo:\n");
+            for e in &sc.echoes {
+                t.push_str(&format!("  Z.{}: ECHO: {}\n", e.range.line, e.text));
+            }
+        }
+        t.push_str(&format!(
+            "Statistik: {} Knoten, {} aus dem Cache, {} Kernel-Aufrufe, Auswertung {} ms, Kernel {} ms\n",
+            sc.stats.nodes,
+            sc.stats.cache_hits,
+            sc.stats.kernel_calls,
+            num(sc.stats.eval_ms),
+            num(sc.stats.kernel_ms)
+        ));
+    }
+    t.push_str(&m.diagnostics_text());
+    Ok(Outcome { json: j, text: t, errors: m.has_errors() })
+}
+
+fn tree_text(sc: &p::Scene, n: u32, depth: usize, out: &mut String) {
+    let node = &sc.nodes[n as usize];
+    let mut line = format!("{}[{}] {}", "  ".repeat(depth), node.idx, node.label);
+    if let Some(i) = &node.instance {
+        line = format!("{line} ({i})");
+    }
+    if node.stmt.is_some() {
+        line.push_str(&format!("  Z.{}", node.range.line));
+    }
+    let mut flags = Vec::new();
+    if node.flags.highlight {
+        flags.push("#");
+    }
+    if node.flags.background {
+        flags.push("%");
+    }
+    if node.flags.disabled {
+        flags.push("*");
+    }
+    if node.flags.zone {
+        flags.push("Zone");
+    }
+    if node.subtracted {
+        flags.push("abgezogen");
+    }
+    if !flags.is_empty() {
+        line.push_str(&format!("  [{}]", flags.join(", ")));
+    }
+    line.push_str(&format!("  {}", status_text(node.status)));
+    if let Some(b) = &node.bounds {
+        let wb = world_bounds(b, &mat(&node.display_world));
+        line.push_str(&format!("  Hülle {}–{}", vec3(&wb.min), vec3(&wb.max)));
+    }
+    for h in &node.hints {
+        line.push_str(&format!("  „{h}“"));
+    }
+    for msg in &node.messages {
+        line.push_str(&format!("  ! {}", msg.message));
+    }
+    out.push_str(&line);
+    out.push('\n');
+    for &c in &node.children {
+        tree_text(sc, c, depth + 1, out);
+    }
+}
+
+/// Nodes a line produces: statements starting on the line, otherwise the innermost
+/// statements containing it.
+pub(crate) fn nodes_at_line(sc: &p::Scene, line: u32) -> Vec<u32> {
+    let starts: Vec<u32> =
+        sc.nodes.iter().filter(|n| n.stmt.is_some() && n.range.line == line).map(|n| n.idx).collect();
+    if !starts.is_empty() {
+        return starts;
+    }
+    let containing: Vec<&p::SceneNode> =
+        sc.nodes.iter().filter(|n| n.stmt.is_some() && n.range.line <= line && line <= n.range.end_line).collect();
+    let Some(min) = containing.iter().map(|n| n.range.to - n.range.from).min() else { return Vec::new() };
+    containing.iter().filter(|n| n.range.to - n.range.from == min).map(|n| n.idx).collect()
+}
+
+fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
+    let mut m = load(c, Some(line), whole_file, true)?;
+    let mut j = m.base_json("inspect");
+    j["line"] = json!(line);
+    let mut t = String::new();
+    let Some(sc) = m.scene.clone() else {
+        j["nodes"] = json!([]);
+        t.push_str(&m.diagnostics_text());
+        return Ok(Outcome { json: j, text: t, errors: m.has_errors() });
+    };
+    t.push_str(&context_text(&m));
+    t.push_str(&format!("Z.{line}: {}\n", m.line_text(line)));
+    let ids = nodes_at_line(&sc, line);
+    let mut nodes = Vec::new();
+    for &i in &ids {
+        let n = &sc.nodes[i as usize];
+        let wb = n.bounds.as_ref().map(|b| world_bounds(b, &mat(&n.display_world)));
+        let (volume, area) = if n.dim == Some(p::Dim::Three) && n.status != p::NodeStatus::Skipped {
+            match m.session.mass_props(i) {
+                Ok(mp) => (Some(mp.volume), Some(mp.area)),
+                Err(e) => return Err(Fail::Kernel(e)),
+            }
+        } else {
+            (None, None)
+        };
+        let mut l = format!("  [{}] {}", n.idx, n.label);
+        if let Some(inst) = &n.instance {
+            l.push_str(&format!(" ({inst})"));
+        }
+        l.push_str(&format!(
+            "  Z.{}:{}–{}:{}  {}",
+            n.range.line,
+            n.range.col,
+            n.range.end_line,
+            n.range.end_col,
+            status_text(n.status)
+        ));
+        if n.flags.zone {
+            l.push_str("  [Zone]");
+        }
+        if n.subtracted {
+            l.push_str("  [abgezogen]");
+        }
+        t.push_str(&l);
+        t.push('\n');
+        if let Some(b) = &wb {
+            t.push_str(&format!("      Hülle {} – {}\n", vec3(&b.min), vec3(&b.max)));
+        }
+        if let (Some(v), Some(a)) = (volume, area) {
+            t.push_str(&format!("      Volumen {} mm³, Fläche {} mm²\n", num(v), num(a)));
+        }
+        if !n.selected_edges.is_empty() {
+            t.push_str(&format!("      ausgewählte Kanten: {}\n", n.selected_edges.len()));
+        }
+        if n.opened_faces > 0 {
+            t.push_str(&format!("      geöffnete Flächen: {}\n", n.opened_faces));
+        }
+        for h in &n.hints {
+            t.push_str(&format!("      Hinweis: {h}\n"));
+        }
+        for msg in &n.messages {
+            let sev = if msg.severity == p::Severity::Error { "Fehler" } else { "Warnung" };
+            t.push_str(&format!("      {sev}: {}\n", msg.message));
+        }
+        nodes.push(json!({
+            "idx": n.idx,
+            "label": n.label,
+            "instance": n.instance,
+            "range": n.range,
+            "status": n.status,
+            "dim": n.dim,
+            "flags": n.flags,
+            "subtracted": n.subtracted,
+            "world_bounds": wb,
+            "volume": volume,
+            "area": area,
+            "selected_edges": n.selected_edges.len(),
+            "opened_faces": n.opened_faces,
+            "hints": n.hints,
+            "messages": n.messages.iter().map(|x| json!({"severity": x.severity, "message": x.message})).collect::<Vec<_>>(),
+            "cached": n.cached,
+        }));
+    }
+    if ids.is_empty() {
+        t.push_str("  keine Geometrie\n");
+    }
+    let hints: Vec<&p::Hint> = sc.hints.iter().filter(|h| h.range.line == line).collect();
+    for h in &hints {
+        t.push_str(&format!("  Wert: {}{}\n", h.text, if h.literal.is_some() { " (Literal, ziehbar)" } else { "" }));
+    }
+    let handles: Vec<&p::Handle> = sc.handles.iter().filter(|h| h.range.line == line).collect();
+    for h in &handles {
+        let editable = h.comps.iter().filter(|c| c.is_some()).count();
+        let what = if editable > 0 {
+            format!("{editable} Literal(e)")
+        } else if h.has_ref {
+            "Referenz".into()
+        } else {
+            "gesperrt".into()
+        };
+        t.push_str(&format!(
+            "  Griff {:?} #{}: Wert {:?} bei {} ({what})\n",
+            h.kind,
+            h.index,
+            h.value.iter().map(|v| num(*v)).collect::<Vec<_>>(),
+            vec3(&h.world_pos)
+        ));
+    }
+    let echoes: Vec<&p::Echo> = sc.echoes.iter().filter(|e| e.range.line == line).collect();
+    for e in &echoes {
+        t.push_str(&format!("  ECHO: {}\n", e.text));
+    }
+    let line_diags: Vec<&p::Diagnostic> =
+        m.diagnostics.iter().filter(|d| d.range.line <= line && line <= d.range.end_line).collect();
+    for d in &line_diags {
+        t.push_str(&format!("  {:?}: {}\n", d.severity, d.message));
+    }
+    j["nodes"] = json!(nodes);
+    j["hints"] = json!(hints);
+    j["handles"] = json!(handles);
+    j["echoes"] = json!(echoes);
+    let errors = m.has_errors();
+    m.scene = Some(sc);
+    Ok(Outcome { json: j, text: t, errors })
+}
+
+fn export(c: &Common, output: &Path, format: Option<&str>) -> Result<Outcome, Fail> {
+    let fmt = match format
+        .map(|s| s.to_ascii_lowercase())
+        .or_else(|| output.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()))
+    {
+        Some(f) if f == "stl" => p::ExportFormat::Stl,
+        Some(f) if f == "3mf" => p::ExportFormat::ThreeMf,
+        Some(f) => return Err(Fail::Usage(format!("unbekanntes Exportformat: {f} (stl oder 3mf)"))),
+        None => return Err(Fail::Usage("Exportformat fehlt (Endung .stl/.3mf oder --format)".into())),
+    };
+    let mut m = load(c, None, true, true)?;
+    let mut j = m.base_json("export");
+    if m.scene.is_none() {
+        let t = m.diagnostics_text();
+        return Ok(Outcome { json: j, text: t, errors: true });
+    }
+    let (bytes, triangles) = m.session.export_bytes(fmt).map_err(Fail::Kernel)?;
+    std::fs::write(output, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
+    let root = m.scene.as_ref().and_then(|s| s.root);
+    let volume = root.and_then(|r| m.session.mass_props(r).ok()).map(|mp| mp.volume);
+    j["output"] = json!(output.display().to_string());
+    j["format"] = json!(fmt);
+    j["bytes"] = json!(bytes.len());
+    j["triangles"] = json!(triangles);
+    j["volume"] = json!(volume);
+    let mut t = m.diagnostics_text();
+    t.push_str(&format!(
+        "{}: {} Dreiecke, {} Bytes{}\n",
+        output.display(),
+        triangles,
+        bytes.len(),
+        volume.map(|v| format!(", Volumen {} mm³", num(v))).unwrap_or_default()
+    ));
+    Ok(Outcome { json: j, text: t, errors: m.has_errors() })
+}
