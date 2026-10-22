@@ -9,3 +9,4 @@ node_modules
 *.log
 /reports/tmp
 /.claude/worktrees
+__pycache__/

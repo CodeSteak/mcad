@@ -1,0 +1,887 @@
+{
+ "files": {
+  "01_cube_variants.scad": {
+   "source_fnv1a64": "01966c84c0512f84",
+   "class": "polygonal",
+   "round_features": [],
+   "defines": [],
+   "volume": 3208.0,
+   "area": 2260.0,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     54.0,
+     28.0,
+     12.0
+    ]
+   },
+   "triangles": 60,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "02_sphere_variants.scad": {
+   "source_fnv1a64": "3d1955a8726e7e1e",
+   "class": "rounded",
+   "round_features": [
+    "sphere"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 1016.8542298043917,
+   "area": 741.0436287935523,
+   "bounds": {
+    "min": [
+     -4.99849,
+     -4.99849,
+     -4.99849
+    ],
+    "max": [
+     32.9991,
+     17.9991,
+     5.9991
+    ]
+   },
+   "triangles": 65520,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "03_cylinder_variants.scad": {
+   "source_fnv1a64": "41b6c6bf621ccb48",
+   "class": "rounded",
+   "round_features": [
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 2104.025139774403,
+   "area": 1589.369089186169,
+   "bounds": {
+    "min": [
+     -5.0,
+     -5.0,
+     -10.0
+    ],
+    "max": [
+     33.0,
+     19.0,
+     12.0
+    ]
+   },
+   "triangles": 2540,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "04_cone_variants.scad": {
+   "source_fnv1a64": "f36514b5cd1be010",
+   "class": "rounded",
+   "round_features": [
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 1341.9679170957065,
+   "area": 1116.7139879320034,
+   "bounds": {
+    "min": [
+     -6.0,
+     -6.0,
+     -3.0
+    ],
+    "max": [
+     35.0,
+     19.0,
+     10.0
+    ]
+   },
+   "triangles": 1778,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "05_nested_booleans.scad": {
+   "source_fnv1a64": "3e91fee5a6657bd0",
+   "class": "rounded",
+   "round_features": [
+    "cylinder",
+    "sphere"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 8310.299917451606,
+   "area": 4454.366455507956,
+   "bounds": {
+    "min": [
+     -10.0,
+     -10.0,
+     -10.0
+    ],
+    "max": [
+     50.0,
+     20.0,
+     10.0
+    ]
+   },
+   "triangles": 9592,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "06_hole_grid.scad": {
+   "source_fnv1a64": "f85417af0808e681",
+   "class": "rounded",
+   "round_features": [
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 6295.5766994412015,
+   "area": 5701.742994786694,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     60.0,
+     40.0,
+     3.0
+    ]
+   },
+   "triangles": 12396,
+   "echo": [
+    "holes = 24"
+   ],
+   "openscad_warnings": []
+  },
+  "07_crown_ring.scad": {
+   "source_fnv1a64": "5dcdd965accc7750",
+   "class": "rounded",
+   "round_features": [
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 2160.736434784,
+   "area": 2149.3434145236233,
+   "bounds": {
+    "min": [
+     -18.5,
+     -18.5,
+     0.0
+    ],
+    "max": [
+     18.5,
+     18.5,
+     5.0
+    ]
+   },
+   "triangles": 1088,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "08_module_children.scad": {
+   "source_fnv1a64": "d5e1abac2938e8ef",
+   "class": "rounded",
+   "round_features": [
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 6172.525211055722,
+   "area": 5958.517663092274,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     -6.0
+    ],
+    "max": [
+     50.0,
+     60.0,
+     3.0
+    ]
+   },
+   "triangles": 4120,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "09_rotate_mirror.scad": {
+   "source_fnv1a64": "58f8e4289781fe7d",
+   "class": "rounded",
+   "round_features": [
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 1460.0532901825427,
+   "area": 1681.917468940118,
+   "bounds": {
+    "min": [
+     -25.0,
+     -3.0,
+     -13.0
+    ],
+    "max": [
+     25.0,
+     25.0,
+     22.0
+    ]
+   },
+   "triangles": 580,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "10_scale_multmatrix.scad": {
+   "source_fnv1a64": "954384bcd2c77c86",
+   "class": "polygonal",
+   "round_features": [],
+   "defines": [],
+   "volume": 3400.0,
+   "area": 2287.129249821263,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     55.0,
+     40.0,
+     10.0
+    ]
+   },
+   "triangles": 48,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "11_linear_extrude_basic.scad": {
+   "source_fnv1a64": "3327cd19846f1fdb",
+   "class": "polygonal",
+   "round_features": [],
+   "defines": [],
+   "volume": 1513.0,
+   "area": 1243.0832691319597,
+   "bounds": {
+    "min": [
+     0.0,
+     -3.0,
+     -4.0
+    ],
+    "max": [
+     33.0,
+     30.0,
+     5.0
+    ]
+   },
+   "triangles": 32,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "12_linear_extrude_twist.scad": {
+   "source_fnv1a64": "a306fac476d63aa1",
+   "class": "rounded",
+   "round_features": [
+    "linear_extrude(twist)"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 2688.883754309728,
+   "area": 1799.6524286449305,
+   "bounds": {
+    "min": [
+     -5.83013,
+     -6.0,
+     -6.0
+    ],
+    "max": [
+     31.0,
+     28.8309,
+     20.0
+    ]
+   },
+   "triangles": 452,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "13_rotate_extrude_ring.scad": {
+   "source_fnv1a64": "2147e477cd343623",
+   "class": "rounded",
+   "round_features": [
+    "circle",
+    "rotate_extrude"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 1307.0902082339828,
+   "area": 1342.0938348883099,
+   "bounds": {
+    "min": [
+     -12.0,
+     -12.0,
+     -2.0
+    ],
+    "max": [
+     37.0,
+     12.0,
+     5.0
+    ]
+   },
+   "triangles": 33792,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "14_pipe_bend.scad": {
+   "source_fnv1a64": "7b2a3191f6a1a28a",
+   "class": "rounded",
+   "round_features": [
+    "circle",
+    "rotate_extrude"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 1573.873477218697,
+   "area": 2160.5604874401192,
+   "bounds": {
+    "min": [
+     -10.0,
+     -10.0,
+     -4.0
+    ],
+    "max": [
+     24.0,
+     24.0,
+     4.0
+    ]
+   },
+   "triangles": 17920,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "15_vase.scad": {
+   "source_fnv1a64": "ec836f0358866cad",
+   "class": "rounded",
+   "round_features": [
+    "rotate_extrude"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 6362.296042560606,
+   "area": 6497.506000653498,
+   "bounds": {
+    "min": [
+     -15.0,
+     -15.0,
+     0.0
+    ],
+    "max": [
+     15.0,
+     15.0,
+     40.0
+    ]
+   },
+   "triangles": 2560,
+   "echo": [
+    "points = 12, top = [11, 40]"
+   ],
+   "openscad_warnings": []
+  },
+  "16_polygon_holes.scad": {
+   "source_fnv1a64": "abe41f51cb0511ab",
+   "class": "polygonal",
+   "round_features": [],
+   "defines": [],
+   "volume": 2318.0,
+   "area": 2889.2455532033673,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     70.0,
+     25.0,
+     3.0
+    ]
+   },
+   "triangles": 80,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "17_polyhedron.scad": {
+   "source_fnv1a64": "40784ffff11f5b37",
+   "class": "polygonal",
+   "round_features": [],
+   "defines": [],
+   "volume": 626.6666666666666,
+   "area": 675.9235780123602,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     35.0,
+     10.0,
+     8.0
+    ]
+   },
+   "triangles": 14,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "18_functions_let.scad": {
+   "source_fnv1a64": "3392e43e67d5855c",
+   "class": "polygonal",
+   "round_features": [],
+   "defines": [],
+   "volume": 7040.0,
+   "area": 3008.0,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     48.0,
+     10.0,
+     32.0
+    ]
+   },
+   "triangles": 52,
+   "echo": [
+    "steps = [3, 3, 4, 5, 7, 10], heights = [3, 6, 10, 15, 22, 32], total = 32",
+    "[3, 9], 42, [4, 10]"
+   ],
+   "openscad_warnings": []
+  },
+  "19_hex_nut.scad": {
+   "source_fnv1a64": "e4591b524ad3f8f1",
+   "class": "rounded",
+   "round_features": [
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 264.685666207839,
+   "area": 481.9823064724675,
+   "bounds": {
+    "min": [
+     -4.6188,
+     -5.0,
+     0.0
+    ],
+    "max": [
+     20.0,
+     5.0,
+     4.0
+    ]
+   },
+   "triangles": 1064,
+   "echo": [
+    "eckmass = 9.2376"
+   ],
+   "openscad_warnings": []
+  },
+  "20_box_with_lid.scad": {
+   "source_fnv1a64": "3f2cdbd34d918844",
+   "class": "rounded",
+   "round_features": [
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 20574.760999421113,
+   "area": 21033.017527883752,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     60.0,
+     90.0,
+     25.0
+    ]
+   },
+   "triangles": 6108,
+   "echo": [
+    "inner = [56, 36, 23]"
+   ],
+   "openscad_warnings": []
+  },
+  "21_angle_bracket.scad": {
+   "source_fnv1a64": "0feaf7292bc82de6",
+   "class": "rounded",
+   "round_features": [
+    "circle",
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 10407.966608685994,
+   "area": 6358.648089413673,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     40.0,
+     30.0,
+     40.0
+    ]
+   },
+   "triangles": 2112,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "22_gear.scad": {
+   "source_fnv1a64": "4a6daf3e78bce372",
+   "class": "rounded",
+   "round_features": [
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 6943.828205774182,
+   "area": 4276.77285807177,
+   "bounds": {
+    "min": [
+     -21.9756,
+     -21.9756,
+     0.0
+    ],
+    "max": [
+     21.9756,
+     21.9756,
+     6.0
+    ]
+   },
+   "triangles": 2896,
+   "echo": [
+    "teeth = 20, r_tip = 22, points = 80"
+   ],
+   "openscad_warnings": []
+  },
+  "23_shelf_holder.scad": {
+   "source_fnv1a64": "f00b8cd0d51ddf6e",
+   "class": "rounded",
+   "round_features": [
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 10423.77200972444,
+   "area": 4747.964121625051,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     50.0,
+     20.0,
+     40.0
+    ]
+   },
+   "triangles": 2336,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "24_modifiers.scad": {
+   "source_fnv1a64": "56b73f7c55882744",
+   "class": "rounded",
+   "round_features": [
+    "cylinder",
+    "sphere"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 3622.547474788002,
+   "area": 1900.8115624562017,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     35.0,
+     20.0,
+     10.0
+    ]
+   },
+   "triangles": 540,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "25_root_modifier.scad": {
+   "source_fnv1a64": "e30231b8290ec126",
+   "class": "rounded",
+   "round_features": [
+    "cylinder",
+    "sphere"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 346.5487956978334,
+   "area": 343.8095777432772,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     10.0,
+     10.0,
+     7.0
+    ]
+   },
+   "triangles": 524,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "26_if_else_variants.scad": {
+   "source_fnv1a64": "0939a56d39eb96cf",
+   "class": "rounded",
+   "round_features": [
+    "cylinder",
+    "sphere"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 1661.626798560657,
+   "area": 1380.2804701075274,
+   "bounds": {
+    "min": [
+     -5.0,
+     -5.0,
+     -3.99879
+    ],
+    "max": [
+     48.9988,
+     5.0,
+     6.0
+    ]
+   },
+   "triangles": 17944,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "27_spacers_2d.scad": {
+   "source_fnv1a64": "18af3c53451e21fb",
+   "class": "rounded",
+   "round_features": [
+    "circle"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 2961.526305473253,
+   "area": 2601.2342757476413,
+   "bounds": {
+    "min": [
+     -4.0,
+     -8.0,
+     0.0
+    ],
+    "max": [
+     68.0,
+     30.0,
+     5.0
+    ]
+   },
+   "triangles": 4368,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "28_cable_clip.scad": {
+   "source_fnv1a64": "576a8f1caed67d94",
+   "class": "rounded",
+   "round_features": [
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 560.9153337470804,
+   "area": 791.4465535511476,
+   "bounds": {
+    "min": [
+     -14.0,
+     -6.0,
+     0.0
+    ],
+    "max": [
+     6.0,
+     5.46736,
+     8.0
+    ]
+   },
+   "triangles": 1460,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "29_assert_strings.scad": {
+   "source_fnv1a64": "051a797d55bddcc0",
+   "class": "rounded",
+   "round_features": [
+    "cylinder"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 1907.4386551791988,
+   "area": 2248.56889480512,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     64.0,
+     15.0,
+     2.0
+    ]
+   },
+   "triangles": 1044,
+   "echo": [
+    "\"Schild Werkstatt: 64 x 15 mm\"",
+    "chars = [\"W\", \"e\", \"r\", \"k\", \"s\", \"t\", \"a\", \"t\", \"t\"], upper_first = true"
+   ],
+   "openscad_warnings": []
+  },
+  "30_each_ranges.scad": {
+   "source_fnv1a64": "3557ea7950295071",
+   "class": "polygonal",
+   "round_features": [],
+   "defines": [],
+   "volume": 832.0,
+   "area": 1264.0,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     34.0,
+     4.0,
+     18.0
+    ]
+   },
+   "triangles": 116,
+   "echo": [
+    "xs = [0, 4, 8, 12, 16, 24, 30], hs = [4, 6, 8, 10, 12, 14, 16], pairs = [[0, 0], [0, 1], [0, 2], [1, 1], [1, 2]]",
+    "r = [0 : 0.5 : 2], rev = [3, 2, 1, 0]"
+   ],
+   "openscad_warnings": []
+  },
+  "31_phone_stand.scad": {
+   "source_fnv1a64": "d51f8f0caa97f08e",
+   "class": "polygonal",
+   "round_features": [],
+   "defines": [],
+   "volume": 40840.227309306654,
+   "area": 21582.074041442054,
+   "bounds": {
+    "min": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "max": [
+     60.0,
+     70.0,
+     72.5046
+    ]
+   },
+   "triangles": 84,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "32_low_fn_shapes.scad": {
+   "source_fnv1a64": "9bceb81a824cfe63",
+   "class": "polygonal",
+   "round_features": [],
+   "defines": [],
+   "volume": 1199.0343194793331,
+   "area": 1198.8848054426894,
+   "bounds": {
+    "min": [
+     -5.0,
+     -5.19615,
+     -2.0
+    ],
+    "max": [
+     50.0,
+     20.0,
+     8.0
+    ]
+   },
+   "triangles": 102,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "33_global_fn.scad": {
+   "source_fnv1a64": "df4d3cbe7d30bfbb",
+   "class": "rounded",
+   "round_features": [
+    "cylinder",
+    "sphere"
+   ],
+   "defines": [],
+   "volume": 1625.564778478174,
+   "area": 1518.9319636822304,
+   "bounds": {
+    "min": [
+     -8.0,
+     -8.0,
+     0.0
+    ],
+    "max": [
+     24.994,
+     8.0,
+     10.0
+    ]
+   },
+   "triangles": 4600,
+   "echo": [],
+   "openscad_warnings": []
+  }
+ },
+ "openscad_version": "OpenSCAD version 2021.01",
+ "fn_rule": "-D $fn=128 if the file has round features and no top-level $fn/$fa/$fs assignment; $fn at a call always wins in OpenSCAD",
+ "units": "mm, mm^2, mm^3"
+}
