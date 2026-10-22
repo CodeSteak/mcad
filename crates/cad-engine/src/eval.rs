@@ -541,7 +541,9 @@ where
                     return Ok(Vec::new());
                 }
                 let z0 = if *center { -h / 2.0 } else { 0.0 };
-                let mode = LiftMode::Extrude { h: *h, twist: twist.to_radians(), scale: *scale, z0 };
+                // OpenSCAD: positive twist turns clockwise seen from above; the kernel's twist is
+                // counter-clockwise.
+                let mode = LiftMode::Extrude { h: *h, twist: -twist.to_radians(), scale: *scale, z0 };
                 self.lifted(&mode)
             }
             Op::RotateExtrude { angle } => {

@@ -21,6 +21,12 @@
 //!   operation (fillet → body without fillet), with an error diagnostic at the node; the
 //!   evaluation continues.
 //!
+//! Known limits: the tag interning table only grows (one entry per distinct node content
+//! seen by this engine); edges between faces of two equal-content children count as old
+//! edges (same tag); a node's evaluation is the unit of caching (a step may stop inside a
+//! node, its finished calls are replayed, not cached); circles under non-uniform 2D scale are
+//! approximated by splines; the 2D display uses Catmull–Rom splines, not the kernel's curve.
+//!
 //! 2D subtrees under `linear_extrude`/`rotate_extrude`/`sweep` are "lifted": every leaf profile
 //! becomes a solid with its accumulated 2D frame and the 2D booleans are rebuilt as 3D booleans
 //! (see `profile.rs`). 2D nodes on their own are shown as filled polygons
@@ -70,7 +76,7 @@ impl Default for EngineConfig {
         EngineConfig {
             cache_entries: 4096,
             mesh_cache_bytes: 256 << 20,
-            edge_samples: 8,
+            edge_samples: 16,
             face_samples: 4,
             default_tol: DEFAULT_TOL,
         }
