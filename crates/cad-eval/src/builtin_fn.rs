@@ -13,7 +13,14 @@ fn nums(v: &Val) -> Option<Vec<f64>> {
 
 impl<'a> Ev<'a> {
     /// Calls a built-in function; `None` if `name` is not one.
-    pub(crate) fn builtin_fn(&mut self, name: &str, a: &Args<'a>, call: &'a Expr, _env: &Env<'a>) -> R<Option<Val<'a>>> {
+    #[inline(never)]
+    pub(crate) fn builtin_fn(
+        &mut self,
+        name: &str,
+        a: &Args<'a>,
+        call: &'a Expr,
+        _env: &Env<'a>,
+    ) -> R<Option<Val<'a>>> {
         let span = call.span;
         let pos: Vec<&Val<'a>> = a.positional().map(|x| &x.val).collect();
         let arg = |i: usize, n: &str| a.get(i, n).map(|x| &x.val);
@@ -25,7 +32,15 @@ impl<'a> Ev<'a> {
         };
         let v = match name {
             "abs" => num1(f64::abs),
-            "sign" => num1(|x| if x > 0.0 { 1.0 } else if x < 0.0 { -1.0 } else { 0.0 }),
+            "sign" => num1(|x| {
+                if x > 0.0 {
+                    1.0
+                } else if x < 0.0 {
+                    -1.0
+                } else {
+                    0.0
+                }
+            }),
             "sin" => num1(sin_deg),
             "cos" => num1(cos_deg),
             "tan" => num1(tan_deg),
@@ -119,7 +134,8 @@ impl<'a> Ev<'a> {
                 fn add(v: &Val, s: &mut String) {
                     match &v.v {
                         Value::Num(n) => {
-                            if let Some(c) = (*n >= 0.0 && n.fract() == 0.0).then(|| char::from_u32(*n as u32)).flatten()
+                            if let Some(c) =
+                                (*n >= 0.0 && n.fract() == 0.0).then(|| char::from_u32(*n as u32)).flatten()
                                 && c != '\0'
                             {
                                 s.push(c);
@@ -139,13 +155,10 @@ impl<'a> Ev<'a> {
                 Val::str(&s)
             }
             "ord" => match pos.first().map(|v| &v.v) {
-                Some(Value::Str(s)) => {
-                    let mut it = s.chars();
-                    match (it.next(), it.next()) {
-                        (Some(c), None) => Val::num(c as u32 as f64),
-                        _ => Val::undef(),
-                    }
-                }
+                Some(Value::Str(s)) => match s.chars().next() {
+                    Some(c) => Val::num(c as u32 as f64),
+                    None => Val::undef(),
+                },
                 Some(_) => {
                     self.warn(span, "ord() argument is not a string");
                     Val::undef()
@@ -297,11 +310,12 @@ fn lookup<'a>(key: Option<&Val<'a>>, table: Option<&Val<'a>>) -> Val<'a> {
             high = (tp, tv);
         }
     }
+    // Outside the table one of the two stays at the first entry (as in OpenSCAD).
     if p <= low.0 {
-        return Val::num(low.1);
+        return Val::num(high.1);
     }
     if p >= high.0 {
-        return Val::num(high.1);
+        return Val::num(low.1);
     }
     let f = (p - low.0) / (high.0 - low.0);
     Val::num(high.1 * f + low.1 * (1.0 - f))

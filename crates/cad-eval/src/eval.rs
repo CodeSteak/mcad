@@ -1,9 +1,9 @@
 //! Statement evaluation: scopes, module instantiation, control flow, grids, anchors,
 //! named instances, and building the geometry tree.
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
 use std::rc::{Rc, Weak};
-use std::cell::RefCell;
 
 use cad_ir::{Flags, Node, NodeIdx, Op, Tree};
 use cad_kernel::BoolOp;
@@ -48,11 +48,7 @@ impl<'a> Args<'a> {
 
     /// Named argument `name`, else the `i`-th positional argument.
     pub fn get(&self, i: usize, name: &str) -> Option<&ArgV<'a>> {
-        self.list
-            .iter()
-            .rev()
-            .find(|a| a.name.is_some_and(|n| n.name == name))
-            .or_else(|| self.positional().nth(i))
+        self.list.iter().rev().find(|a| a.name.is_some_and(|n| n.name == name)).or_else(|| self.positional().nth(i))
     }
 
     pub fn dyn_num(&self, name: &str) -> Option<f64> {
@@ -81,12 +77,8 @@ pub(crate) struct Ctx<'a> {
     pub env: Env<'a>,
     pub dyn_: Dyn<'a>,
     pub frame: Rc<Frame<'a>>,
-    /// Current system → context root.
-    pub world: DMat4,
-    /// Transformation the parent node applies (local of nodes created here).
-    pub local: DMat4,
-    /// Current system → current module system.
-    pub mod_local: DMat4,
+    /// Coordinate systems (shared: contexts are cloned often and sit on the stack).
+    pub xf: Rc<Xf>,
     pub parent: Option<NodeIdx>,
     /// Key of the parent (instance path hash).
     pub key: u64,
@@ -94,6 +86,33 @@ pub(crate) struct Ctx<'a> {
     /// Inside children of a user module call.
     pub in_children: bool,
     pub color: Option<[f32; 4]>,
+}
+
+pub(crate) struct Xf {
+    /// Current system → context root.
+    pub world: DMat4,
+    /// Transformation the parent node applies (local of nodes created here).
+    pub local: DMat4,
+    /// Current system → current module system.
+    pub mod_local: DMat4,
+}
+
+impl Xf {
+    pub fn identity() -> Rc<Xf> {
+        Rc::new(Xf { world: DMat4::IDENTITY, local: DMat4::IDENTITY, mod_local: DMat4::IDENTITY })
+    }
+
+    /// System after applying `m` (children of a transform).
+    #[inline(never)]
+    pub fn child(&self, m: &DMat4) -> Rc<Xf> {
+        Rc::new(Xf { world: self.world * *m, local: *m, mod_local: self.mod_local * *m })
+    }
+
+    /// Same place, new local system with module system `mod_local`.
+    #[inline(never)]
+    pub fn rebase(&self, mod_local: &DMat4) -> Rc<Xf> {
+        Rc::new(Xf { world: self.world, local: DMat4::IDENTITY, mod_local: *mod_local })
+    }
 }
 
 impl Ctx<'_> {
@@ -127,6 +146,8 @@ pub(crate) struct Ev<'a> {
     pub hints: BTreeMap<StmtId, HintAcc>,
     pub handles: Vec<Handle>,
     pub handle_ids: HashSet<u64>,
+    /// Handles per (statement, kind, index): loops repeat a statement many times.
+    pub handle_count: std::collections::HashMap<(StmtId, u64, u32), u32>,
     pub echoes: Vec<Echo>,
     pub refs: Vec<RefInfo>,
     refs_seen: HashSet<(u32, u32)>,
@@ -152,7 +173,11 @@ fn stack_addr() -> usize {
 pub(crate) fn is_geometric(s: &Stmt) -> bool {
     !matches!(
         s.kind,
-        StmtKind::Assign { .. } | StmtKind::Module(_) | StmtKind::Function(_) | StmtKind::Empty | StmtKind::Include { .. }
+        StmtKind::Assign { .. }
+            | StmtKind::Module(_)
+            | StmtKind::Function(_)
+            | StmtKind::Empty
+            | StmtKind::Include { .. }
     )
 }
 
@@ -178,8 +203,12 @@ impl<'a> Ev<'a> {
         let mut default_spans = Vec::new();
         for s in &file.stmts {
             s.walk(&mut |s| match &s.kind {
-                StmtKind::Module(m) => default_spans.extend(m.params.iter().filter_map(|p| p.default.as_ref().map(|d| d.span))),
-                StmtKind::Function(f) => default_spans.extend(f.params.iter().filter_map(|p| p.default.as_ref().map(|d| d.span))),
+                StmtKind::Module(m) => {
+                    default_spans.extend(m.params.iter().filter_map(|p| p.default.as_ref().map(|d| d.span)))
+                }
+                StmtKind::Function(f) => {
+                    default_spans.extend(f.params.iter().filter_map(|p| p.default.as_ref().map(|d| d.span)))
+                }
                 _ => {}
             });
         }
@@ -199,6 +228,7 @@ impl<'a> Ev<'a> {
             hints: BTreeMap::new(),
             handles: Vec::new(),
             handle_ids: HashSet::new(),
+            handle_count: std::collections::HashMap::new(),
             echoes: Vec::new(),
             refs: Vec::new(),
             refs_seen: HashSet::new(),
@@ -217,24 +247,29 @@ impl<'a> Ev<'a> {
 
     // ------------------------------------------------------------ diagnostics
 
+    #[inline(never)]
     pub(crate) fn diag(&mut self, d: Diagnostic) {
         if self.seen.insert((d.span.start, d.span.end, d.message.clone())) {
             self.diags.push(d);
         }
     }
 
+    #[inline(never)]
     pub(crate) fn warn(&mut self, span: Span, msg: impl Into<String>) {
         self.diag(Diagnostic::warning(span, msg));
     }
 
+    #[inline(never)]
     pub(crate) fn error(&mut self, span: Span, msg: impl Into<String>) {
         self.diag(Diagnostic::error(span, msg));
     }
 
+    #[inline(never)]
     pub(crate) fn info(&mut self, span: Span, msg: impl Into<String>) {
         self.diag(Diagnostic::info(span, msg));
     }
 
+    #[inline(never)]
     pub(crate) fn fatal<T>(&mut self, span: Span, msg: impl Into<String>) -> R<T> {
         self.error(span, msg);
         self.aborted = true;
@@ -245,18 +280,40 @@ impl<'a> Ev<'a> {
     pub(crate) fn step(&mut self, span: Span) -> R<()> {
         self.steps += 1;
         if self.steps > self.opts.max_steps {
-            let max = self.opts.max_steps;
-            return self.fatal(span, format!("evaluation aborted: more than {max} steps (endless loop?)"));
+            return self.steps_exceeded(span);
         }
         Ok(())
     }
 
+    #[cold]
+    #[inline(never)]
+    fn steps_exceeded(&mut self, span: Span) -> R<()> {
+        let max = self.opts.max_steps;
+        self.fatal(span, format!("evaluation aborted: more than {max} steps (endless loop?)"))
+    }
+
+    #[inline]
     pub(crate) fn check_stack(&mut self, span: Span) -> R<()> {
-        let used = self.stack_base.abs_diff(stack_addr());
-        if used > self.opts.max_stack_bytes {
-            return self.fatal(span, "recursion too deep: evaluation stack exhausted");
+        if self.stack_base.abs_diff(stack_addr()) > self.opts.max_stack_bytes {
+            return self.stack_exceeded(span);
         }
         Ok(())
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn stack_exceeded(&mut self, span: Span) -> R<()> {
+        self.fatal(span, "recursion too deep: evaluation stack exhausted")
+    }
+
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn too_deep<T>(&mut self, span: Span, what: &str, name: &str, max: u32) -> R<T> {
+        let msg = match what {
+            "module" => format!("recursion too deep: module `{name}` nested more than {max} levels"),
+            _ => format!("recursion too deep: function `{name}` called more than {max} levels deep"),
+        };
+        self.fatal(span, msg)
     }
 
     pub(crate) fn text(&self, span: Span) -> &'a str {
@@ -279,6 +336,7 @@ impl<'a> Ev<'a> {
 
     // ------------------------------------------------------------ nodes
 
+    #[inline(never)]
     pub(crate) fn node(&mut self, s: &Stmt, op: Op, ctx: &Ctx<'a>) -> NodeIdx {
         let idx = self.nodes.len() as NodeIdx;
         let inst_key = mix(mix(ctx.key, s.id as u64), 0x6e6f6465) & MASK53;
@@ -297,8 +355,8 @@ impl<'a> Ev<'a> {
             op,
             children: Vec::new(),
             parent: ctx.parent,
-            local: ctx.local,
-            world: ctx.world,
+            local: ctx.xf.local,
+            world: ctx.xf.world,
             flags,
             module_inst: ctx.frame.inst,
             blend: None,
@@ -320,11 +378,10 @@ impl<'a> Ev<'a> {
     }
 
     /// Context for the children of `node`, transformed by `m`.
-    pub(crate) fn sub(&self, ctx: &Ctx<'a>, node: NodeIdx, m: DMat4) -> Ctx<'a> {
+    #[inline(never)]
+    pub(crate) fn sub(&self, ctx: &Ctx<'a>, node: NodeIdx, m: &DMat4) -> Ctx<'a> {
         let mut c = ctx.clone();
-        c.world = ctx.world * m;
-        c.local = m;
-        c.mod_local = ctx.mod_local * m;
+        c.xf = if *m == DMat4::IDENTITY && ctx.xf.local == DMat4::IDENTITY { ctx.xf.clone() } else { ctx.xf.child(m) };
         c.parent = Some(node);
         c.key = self.nodes[node as usize].inst_key;
         c
@@ -334,6 +391,7 @@ impl<'a> Ev<'a> {
 
     /// Hoists definitions and lazy assignments of a statement list into `env` and
     /// evaluates its `$` assignments. Returns the `$` chain for the list.
+    #[inline(never)]
     pub(crate) fn hoist(&mut self, stmts: &'a [Stmt], env: &Env<'a>, dy: &Dyn<'a>) -> R<Dyn<'a>> {
         let mut dollar = Vec::new();
         let mut first: Vec<(&'a str, Span)> = Vec::new();
@@ -383,6 +441,7 @@ impl<'a> Ev<'a> {
     }
 
     /// Evaluates a statement list as one scope (block, children of a call).
+    #[inline(never)]
     pub(crate) fn scope_list(&mut self, stmts: &'a [Stmt], ctx: &Ctx<'a>) -> R<()> {
         if needs_scope(stmts) {
             let env = ctx.env.child(ctx.dyn_.clone());
@@ -400,10 +459,11 @@ impl<'a> Ev<'a> {
     }
 
     /// Children of a builtin operation: evaluated as one scope under `node`.
+    #[inline(never)]
     pub(crate) fn eval_children(
         &mut self,
         node: NodeIdx,
-        m: DMat4,
+        m: &DMat4,
         children: &'a [Stmt],
         ctx: &Ctx<'a>,
         dy: &Dyn<'a>,
@@ -415,6 +475,7 @@ impl<'a> Ev<'a> {
 
     // ------------------------------------------------------------ entry points
 
+    #[inline(never)]
     fn new_instance(&mut self, info: InstanceInfo) -> InstId {
         let id = self.insts.len() as InstId;
         self.insts.push(InstanceInfo { id, ..info });
@@ -427,9 +488,7 @@ impl<'a> Ev<'a> {
             env,
             dyn_: dy,
             frame: Rc::new(Frame { inst: 0, children: None, body_end }),
-            world: DMat4::IDENTITY,
-            local: DMat4::IDENTITY,
-            mod_local: DMat4::IDENTITY,
+            xf: Xf::identity(),
             parent: Some(0),
             key,
             in_loop: false,
@@ -606,6 +665,7 @@ impl<'a> Ev<'a> {
 
     // ------------------------------------------------------------ statements
 
+    #[inline(never)]
     pub(crate) fn stmt(&mut self, s: &'a Stmt, ctx: &Ctx<'a>) -> R<()> {
         if s.modifiers.contains(&Modifier::Disable) {
             return Ok(());
@@ -620,6 +680,7 @@ impl<'a> Ev<'a> {
         r
     }
 
+    #[inline(never)]
     fn stmt_inner(&mut self, s: &'a Stmt, ctx: &Ctx<'a>) -> R<()> {
         match &s.kind {
             StmtKind::Empty | StmtKind::Module(_) | StmtKind::Function(_) | StmtKind::Error => Ok(()),
@@ -629,39 +690,49 @@ impl<'a> Ev<'a> {
                 Ok(())
             }
             StmtKind::Assign { name, value } => self.assign_stmt(s, name, value, ctx),
-            StmtKind::Block(stmts) => {
-                let n = self.node(s, Op::Group, ctx);
-                let c = self.sub(ctx, n, DMat4::IDENTITY);
-                self.scope_list(stmts, &c)
-            }
+            StmtKind::Block(stmts) => self.block_stmt(s, stmts, ctx),
             StmtKind::Anchor { name, point, dir } => self.anchor_stmt(s, name, point, dir.as_ref(), ctx),
             StmtKind::Grid(g) => self.grid_stmt(s, g, ctx),
             StmtKind::Named { name, inst } => self.named_stmt(s, name, inst, ctx),
-            StmtKind::Call { name, args, children, .. } => self.call_stmt(s, name, args, children, ctx, None).map(|_| ()),
+            StmtKind::Call { name, args, children, .. } => {
+                self.call_stmt(s, name, args, children, ctx, None).map(|_| ())
+            }
             StmtKind::For { vars, body, intersection } => self.for_stmt(s, vars, body, *intersection, ctx),
-            StmtKind::Let { vars, body } => {
-                let n = self.node(s, Op::Group, ctx);
-                let (env, dy) = self.let_env(vars, &ctx.env, &ctx.dyn_)?;
-                let mut c = self.sub(ctx, n, DMat4::IDENTITY);
-                c.env = env;
-                c.dyn_ = dy;
-                self.stmt(body, &c)
-            }
-            StmtKind::If { cond, then, els } => {
-                let n = self.node(s, Op::Group, ctx);
-                let cv = self.expr(cond, &ctx.env, &ctx.dyn_)?;
-                let c = self.sub(ctx, n, DMat4::IDENTITY);
-                if cv.truthy() {
-                    self.stmt(then, &c)
-                } else if let Some(e) = els {
-                    self.stmt(e, &c)
-                } else {
-                    Ok(())
-                }
-            }
+            StmtKind::Let { vars, body } => self.let_stmt(s, vars, body, ctx),
+            StmtKind::If { cond, then, els } => self.if_stmt(s, cond, then, els.as_deref(), ctx),
         }
     }
 
+    #[inline(never)]
+    fn block_stmt(&mut self, s: &'a Stmt, stmts: &'a [Stmt], ctx: &Ctx<'a>) -> R<()> {
+        let n = self.node(s, Op::Group, ctx);
+        let c = self.sub(ctx, n, &DMat4::IDENTITY);
+        self.scope_list(stmts, &c)
+    }
+
+    #[inline(never)]
+    fn let_stmt(&mut self, s: &'a Stmt, vars: &'a [Assignment], body: &'a Stmt, ctx: &Ctx<'a>) -> R<()> {
+        let n = self.node(s, Op::Group, ctx);
+        let (env, dy) = self.let_env(vars, &ctx.env, &ctx.dyn_)?;
+        let mut c = self.sub(ctx, n, &DMat4::IDENTITY);
+        c.env = env;
+        c.dyn_ = dy;
+        self.stmt(body, &c)
+    }
+
+    #[inline(never)]
+    fn if_stmt(&mut self, s: &'a Stmt, cond: &'a Expr, then: &'a Stmt, els: Option<&'a Stmt>, ctx: &Ctx<'a>) -> R<()> {
+        let n = self.node(s, Op::Group, ctx);
+        let t = self.expr(cond, &ctx.env, &ctx.dyn_)?.truthy();
+        let c = self.sub(ctx, n, &DMat4::IDENTITY);
+        match (t, els) {
+            (true, _) => self.stmt(then, &c),
+            (false, Some(e)) => self.stmt(e, &c),
+            (false, None) => Ok(()),
+        }
+    }
+
+    #[inline(never)]
     pub(crate) fn hint(&mut self, s: &Stmt, v: &Val<'a>, in_ctx: bool) {
         let text = to_hint(v);
         let literal = match (&v.v, v.origin) {
@@ -686,6 +757,7 @@ impl<'a> Ev<'a> {
         }
     }
 
+    #[inline(never)]
     fn assign_stmt(&mut self, s: &'a Stmt, name: &'a Ident, value: &'a Expr, ctx: &Ctx<'a>) -> R<()> {
         if name.name.starts_with('$') {
             return Ok(());
@@ -709,7 +781,7 @@ impl<'a> Ev<'a> {
                 node: None,
                 kind: HandleKind::Point,
                 index: 0,
-                frame: ctx.world,
+                frame: ctx.xf.world,
                 pos,
                 axis: None,
                 base: None,
@@ -724,6 +796,7 @@ impl<'a> Ev<'a> {
         Ok(())
     }
 
+    #[inline(never)]
     pub(crate) fn let_env(&mut self, vars: &'a [Assignment], env: &Env<'a>, dy: &Dyn<'a>) -> R<(Env<'a>, Dyn<'a>)> {
         let e = env.child(dy.clone());
         let mut d = dy.clone();
@@ -739,10 +812,11 @@ impl<'a> Ev<'a> {
         Ok((e, d))
     }
 
+    #[inline(never)]
     fn for_stmt(&mut self, s: &'a Stmt, vars: &'a [Assignment], body: &'a Stmt, inter: bool, ctx: &Ctx<'a>) -> R<()> {
         let op = if inter { Op::Boolean { op: BoolOp::Intersection, fillet: None, chamfer: None } } else { Op::Group };
         let n = self.node(s, op, ctx);
-        let mut base = self.sub(ctx, n, DMat4::IDENTITY);
+        let mut base = self.sub(ctx, n, &DMat4::IDENTITY);
         base.in_loop = true;
         let mut counter = 0u64;
         self.for_rec(vars, 0, body, &base, ctx.env.clone(), &mut counter)
@@ -804,6 +878,7 @@ impl<'a> Ev<'a> {
 
     // ------------------------------------------------------------ calls
 
+    #[inline(never)]
     pub(crate) fn eval_args(&mut self, args: &'a [Arg], env: &Env<'a>, dy: &Dyn<'a>) -> R<Args<'a>> {
         let mut out = Args::default();
         for a in args {
@@ -818,7 +893,15 @@ impl<'a> Ev<'a> {
 
     /// Binds call arguments to parameters in `env` (named first, then positional;
     /// missing ones get their default lazily, or `undef`).
-    pub(crate) fn bind_params(&mut self, params: &'a [Param], args: Vec<ArgV<'a>>, env: &Env<'a>, what: &str, span: Span) {
+    #[inline(never)]
+    pub(crate) fn bind_params(
+        &mut self,
+        params: &'a [Param],
+        args: Vec<ArgV<'a>>,
+        env: &Env<'a>,
+        what: &str,
+        span: Span,
+    ) {
         let mut pos = Vec::new();
         let mut named: Vec<ArgV<'a>> = Vec::new();
         for a in args {
@@ -854,6 +937,7 @@ impl<'a> Ev<'a> {
         }
     }
 
+    #[inline(never)]
     pub(crate) fn call_stmt(
         &mut self,
         s: &'a Stmt,
@@ -875,6 +959,7 @@ impl<'a> Ev<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[inline(never)]
     fn user_module(
         &mut self,
         s: &'a Stmt,
@@ -886,17 +971,31 @@ impl<'a> Ev<'a> {
         label: Option<&'a Ident>,
     ) -> R<InstId> {
         if self.mod_depth >= self.opts.max_module_depth {
-            let max = self.opts.max_module_depth;
-            return self.fatal(
-                s.span,
-                format!("recursion too deep: module `{}` nested more than {max} levels", def.name.name),
-            );
+            return self.too_deep(s.span, "module", &def.name.name, self.opts.max_module_depth);
         }
-        let node = self.node(
-            s,
-            Op::ModuleCall { name: def.name.name.clone(), instance: label.map(|l| l.name.clone()) },
-            ctx,
-        );
+        let (id, node, env, dy, frame) = self.enter_module(s, def, denv, args, children, ctx, label);
+        self.mod_depth += 1;
+        let r = self.module_body(def, &env, dy, frame, node, ctx);
+        self.mod_depth -= 1;
+        r?;
+        Ok(id)
+    }
+
+    /// Creates the call node, the instance and the module environment.
+    #[inline(never)]
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    fn enter_module(
+        &mut self,
+        s: &'a Stmt,
+        def: &'a ModuleDef,
+        denv: Env<'a>,
+        args: Args<'a>,
+        children: &'a [Stmt],
+        ctx: &Ctx<'a>,
+        label: Option<&'a Ident>,
+    ) -> (InstId, NodeIdx, Env<'a>, Dyn<'a>, Rc<Frame<'a>>) {
+        let node =
+            self.node(s, Op::ModuleCall { name: def.name.name.clone(), instance: label.map(|l| l.name.clone()) }, ctx);
         let depth = self.insts[ctx.frame.inst as usize].depth + 1;
         let id = self.new_instance(InstanceInfo {
             id: 0,
@@ -908,8 +1007,8 @@ impl<'a> Ev<'a> {
             def_span: Some(def.span),
             node: Some(node),
             parent: Some(ctx.frame.inst),
-            matrix: ctx.mod_local,
-            world: ctx.world,
+            matrix: ctx.xf.mod_local,
+            world: ctx.xf.world,
             anchors: Vec::new(),
             visible: None,
             depth,
@@ -927,18 +1026,15 @@ impl<'a> Ev<'a> {
                 stmts: children,
                 env: ctx.env.clone(),
                 frame: ctx.frame.clone(),
-                mod_local: ctx.mod_local,
+                mod_local: ctx.xf.mod_local,
                 in_loop: ctx.in_loop,
             }),
             body_end: def.body_span.end,
         });
-        self.mod_depth += 1;
-        let r = self.module_body(def, &env, dy, frame, node, ctx);
-        self.mod_depth -= 1;
-        r?;
-        Ok(id)
+        (id, node, env, dy, frame)
     }
 
+    #[inline(never)]
     fn module_body(
         &mut self,
         def: &'a ModuleDef,
@@ -953,9 +1049,7 @@ impl<'a> Ev<'a> {
             env: env.clone(),
             dyn_: body_dy,
             frame,
-            world: ctx.world,
-            local: DMat4::IDENTITY,
-            mod_local: DMat4::IDENTITY,
+            xf: ctx.xf.rebase(&DMat4::IDENTITY),
             parent: Some(node),
             key: self.nodes[node as usize].inst_key,
             in_loop: false,
@@ -969,6 +1063,7 @@ impl<'a> Ev<'a> {
     }
 
     /// `children(…)` inside a module body.
+    #[inline(never)]
     pub(crate) fn children_stmt(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>) -> R<()> {
         let frame = ctx.frame.clone();
         let Some(ch) = frame.children.as_ref() else {
@@ -1005,14 +1100,13 @@ impl<'a> Ev<'a> {
         let env = ch.env.child(ctx.dyn_.clone());
         let dy = self.hoist(ch.stmts, &env, &ctx.dyn_)?;
         let base_key = self.nodes[node as usize].inst_key;
+        let xf = ctx.xf.rebase(&(ch.mod_local * ctx.xf.mod_local));
         for (k, i) in sel.into_iter().enumerate() {
             let c = Ctx {
                 env: env.clone(),
                 dyn_: dy.clone(),
                 frame: ch.frame.clone(),
-                world: ctx.world,
-                local: DMat4::IDENTITY,
-                mod_local: ch.mod_local * ctx.mod_local,
+                xf: xf.clone(),
                 parent: Some(node),
                 key: mix(base_key, k as u64) & MASK53,
                 in_loop: ch.in_loop,
@@ -1054,7 +1148,15 @@ impl<'a> Ev<'a> {
         false
     }
 
-    fn anchor_stmt(&mut self, s: &'a Stmt, name: &'a Ident, point: &'a Expr, dir: Option<&'a Expr>, ctx: &Ctx<'a>) -> R<()> {
+    #[inline(never)]
+    fn anchor_stmt(
+        &mut self,
+        s: &'a Stmt,
+        name: &'a Ident,
+        point: &'a Expr,
+        dir: Option<&'a Expr>,
+        ctx: &Ctx<'a>,
+    ) -> R<()> {
         if ctx.in_loop {
             self.error(s.span, "anchors are not allowed inside for loops");
             return Ok(());
@@ -1077,7 +1179,7 @@ impl<'a> Ev<'a> {
             Some(de) => {
                 let dv = self.expr(de, &ctx.env, &ctx.dyn_)?;
                 match dv.as_vec3() {
-                    Some(d) if d.length() > 0.0 => Some(crate::math::transform_dir(&ctx.mod_local, d)),
+                    Some(d) if d.length() > 0.0 => Some(crate::math::transform_dir(&ctx.xf.mod_local, d)),
                     _ => {
                         self.error(de.span, "anchor direction must be a non-zero vector");
                         None
@@ -1094,7 +1196,7 @@ impl<'a> Ev<'a> {
             name: name.name.clone(),
             stmt: s.id,
             span: s.span,
-            point: ctx.mod_local.transform_point3(p),
+            point: ctx.xf.mod_local.transform_point3(p),
             dir: d,
         });
         if pv.as_list().is_some() {
@@ -1106,7 +1208,7 @@ impl<'a> Ev<'a> {
                 node: None,
                 kind: HandleKind::Point,
                 index: 0,
-                frame: ctx.world,
+                frame: ctx.xf.world,
                 pos: p,
                 axis: None,
                 base: None,
@@ -1121,6 +1223,7 @@ impl<'a> Ev<'a> {
         Ok(())
     }
 
+    #[inline(never)]
     fn named_stmt(&mut self, s: &'a Stmt, name: &'a Ident, inst: &'a Stmt, ctx: &Ctx<'a>) -> R<()> {
         if inst.modifiers.contains(&Modifier::Disable) {
             return Ok(());

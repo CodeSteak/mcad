@@ -18,45 +18,78 @@ enum Tail<'a> {
 }
 
 impl<'a> Ev<'a> {
+    /// Evaluates an expression. Kept small (rare cases are out of line) because it is
+    /// on every recursion path: its stack frame limits the recursion depth.
     pub(crate) fn expr(&mut self, e: &'a Expr, env: &Env<'a>, dy: &Dyn<'a>) -> R<Val<'a>> {
         self.step(e.span)?;
         let mut v = match &e.kind {
             ExprKind::Number(n) => Val::with_origin(Value::Num(*n), Origin::Literal(e.span)),
+            ExprKind::Ident(name) => return self.ident(name, e.span, env, dy),
+            ExprKind::Ternary(c, a, b) => {
+                let t = self.cond(c, env, dy)?;
+                return self.expr(if t { a } else { b }, env, dy);
+            }
+            ExprKind::Call { callee, args } => self.call_expr(e, callee, args, env, dy)?,
+            ExprKind::Binary(op, a, b) => self.binary_expr(*op, a, b, e.span, env, dy)?,
+            ExprKind::Index { base, items } => return self.index_expr(e, base, items, env, dy),
+            ExprKind::Member { base, name } => return self.member_expr(e, base, name, env, dy),
+            _ => return self.expr_other(e, env, dy),
+        };
+        v.def = Some(e.span);
+        Ok(v)
+    }
+
+    #[inline(never)]
+    fn cond(&mut self, c: &'a Expr, env: &Env<'a>, dy: &Dyn<'a>) -> R<bool> {
+        Ok(self.expr(c, env, dy)?.truthy())
+    }
+
+    #[inline(never)]
+    fn binary_expr(
+        &mut self,
+        op: BinOp,
+        a: &'a Expr,
+        b: &'a Expr,
+        span: Span,
+        env: &Env<'a>,
+        dy: &Dyn<'a>,
+    ) -> R<Val<'a>> {
+        Ok(match op {
+            BinOp::And => Val::bool(self.cond(a, env, dy)? && self.cond(b, env, dy)?),
+            BinOp::Or => Val::bool(self.cond(a, env, dy)? || self.cond(b, env, dy)?),
+            _ => {
+                let l = self.expr(a, env, dy)?;
+                let r = self.expr(b, env, dy)?;
+                let res = binop(op, &l, &r);
+                if let Err(msg) = &res
+                    && (l.is_special() || r.is_special())
+                {
+                    self.error(
+                        span,
+                        format!("type error: {msg}; grids, grid lines/planes and instances are not values"),
+                    );
+                    return Ok(Val::undef());
+                }
+                self.op_result(res, span)
+            }
+        })
+    }
+
+    #[inline(never)]
+    fn expr_other(&mut self, e: &'a Expr, env: &Env<'a>, dy: &Dyn<'a>) -> R<Val<'a>> {
+        let mut v = match &e.kind {
             ExprKind::Bool(b) => Val::with_origin(Value::Bool(*b), Origin::Literal(e.span)),
             ExprKind::Str(s) => Val::str(s),
-            ExprKind::Undef => Val::undef(),
-            ExprKind::Ident(name) => return self.ident(name, e.span, env, dy),
             ExprKind::Unary(op, x) => {
                 if let (UnOp::Neg | UnOp::Plus, ExprKind::Number(n)) = (op, &x.kind) {
                     let n = if *op == UnOp::Neg { -*n } else { *n };
                     Val::with_origin(Value::Num(n), Origin::Literal(e.span))
                 } else {
                     let a = self.expr(x, env, dy)?;
-                    self.op_result(unop(*op, &a), e.span)
+                    let res = unop(*op, &a);
+                    self.op_result(res, e.span)
                 }
             }
-            ExprKind::Binary(op, a, b) => match op {
-                BinOp::And => {
-                    let l = self.expr(a, env, dy)?;
-                    Val::bool(l.truthy() && self.expr(b, env, dy)?.truthy())
-                }
-                BinOp::Or => {
-                    let l = self.expr(a, env, dy)?;
-                    Val::bool(l.truthy() || self.expr(b, env, dy)?.truthy())
-                }
-                _ => {
-                    let l = self.expr(a, env, dy)?;
-                    let r = self.expr(b, env, dy)?;
-                    self.op_result(binop(*op, &l, &r), e.span)
-                }
-            },
-            ExprKind::Ternary(c, a, b) => {
-                let c = self.expr(c, env, dy)?;
-                return if c.truthy() { self.expr(a, env, dy) } else { self.expr(b, env, dy) };
-            }
-            ExprKind::Call { callee, args } => self.call_expr(e, callee, args, env, dy)?,
-            ExprKind::Index { base, items } => return self.index_expr(e, base, items, env, dy),
-            ExprKind::Member { base, name } => return self.member_expr(e, base, name, env, dy),
             ExprKind::Vector(elems) => {
                 let mut out = Vec::with_capacity(elems.len());
                 self.vec_elems(elems, env, dy, &mut out, e.span)?;
@@ -86,7 +119,7 @@ impl<'a> Ev<'a> {
                     None => Val::undef(),
                 }
             }
-            ExprKind::Error => Val::undef(),
+            _ => Val::undef(),
         };
         v.def = Some(e.span);
         Ok(v)
@@ -102,6 +135,7 @@ impl<'a> Ev<'a> {
         }
     }
 
+    #[inline(never)]
     pub(crate) fn echo(&mut self, span: Span, a: &Args<'a>, env: &Env<'a>) {
         let parts: Vec<String> = a
             .list
@@ -116,11 +150,13 @@ impl<'a> Ev<'a> {
         self.echoes.push(Echo { stmt: self.cur_stmt, span, text: parts.join(", "), in_context });
     }
 
+    #[inline(never)]
     pub(crate) fn assert_check(&mut self, span: Span, args: &'a [Arg], env: &Env<'a>, dy: &Dyn<'a>) -> R<()> {
         let a = self.eval_args(args, env, dy)?;
         self.assert_args(span, &a)
     }
 
+    #[inline(never)]
     fn ident(&mut self, name: &'a str, span: Span, env: &Env<'a>, dy: &Dyn<'a>) -> R<Val<'a>> {
         if name.starts_with('$') {
             if let Some(v) = dyn_lookup(dy, name) {
@@ -150,6 +186,7 @@ impl<'a> Ev<'a> {
     }
 
     /// Looks up a variable (forcing lazy bindings), grid or named instance.
+    #[inline(never)]
     pub(crate) fn lookup(&mut self, name: &str, env: &Env<'a>) -> R<Option<Val<'a>>> {
         enum Hit<'a> {
             Done(Val<'a>),
@@ -158,6 +195,10 @@ impl<'a> Ev<'a> {
             Miss,
         }
         let mut cur = env.clone();
+        // Grids and named instances are only visible in the module instance the code
+        // belongs to (the first module root on the chain), not through definition
+        // environments of enclosing modules or the file.
+        let mut names_checked = false;
         loop {
             let (hit, inst, root, parent) = {
                 let sc = cur.0.borrow();
@@ -179,7 +220,9 @@ impl<'a> Ev<'a> {
                 }
                 Hit::Miss => {}
             }
-            if root
+            let check_names = root && !names_checked;
+            names_checked |= root;
+            if check_names
                 && inst != NO_INST
                 && let Some((_, r)) = self.names_of(inst).iter().rev().find(|(n, _)| *n == name)
             {
@@ -199,6 +242,7 @@ impl<'a> Ev<'a> {
         Ok(None)
     }
 
+    #[inline(never)]
     fn force(&mut self, env: &Env<'a>, name: &str, e: &'a Expr) -> R<Val<'a>> {
         let set = |env: &Env<'a>, b: Binding<'a>| {
             let mut s = env.0.borrow_mut();
@@ -223,12 +267,28 @@ impl<'a> Ev<'a> {
 
     // ------------------------------------------------------------ calls
 
+    #[inline(never)]
     fn call_expr(&mut self, e: &'a Expr, callee: &'a Expr, args: &'a [Arg], env: &Env<'a>, dy: &Dyn<'a>) -> R<Val<'a>> {
+        // Fast path (user functions) first: this frame is on every recursion.
+        if let ExprKind::Ident(name) = &callee.kind
+            && let Some((f, fenv)) = env.find_func(name)
+        {
+            let a = self.eval_args(args, env, dy)?;
+            return self.call_fn(&f.params, &f.body, fenv, Some(&f.name.name), a, e.span, dy);
+        }
+        self.call_expr_other(e, callee, args, env, dy)
+    }
+
+    #[inline(never)]
+    fn call_expr_other(
+        &mut self,
+        e: &'a Expr,
+        callee: &'a Expr,
+        args: &'a [Arg],
+        env: &Env<'a>,
+        dy: &Dyn<'a>,
+    ) -> R<Val<'a>> {
         if let ExprKind::Ident(name) = &callee.kind {
-            if let Some((f, fenv)) = env.find_func(name) {
-                let a = self.eval_args(args, env, dy)?;
-                return self.call_fn(&f.params, &f.body, fenv, Some(&f.name.name), a, e.span, dy);
-            }
             if !name.starts_with('$')
                 && let Some(v) = self.lookup(name, env)?
                 && let Value::Func(c) = &v.v
@@ -260,6 +320,7 @@ impl<'a> Ev<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[inline(never)]
     fn call_fn(
         &mut self,
         params: &'a [Param],
@@ -271,9 +332,7 @@ impl<'a> Ev<'a> {
         dy: &Dyn<'a>,
     ) -> R<Val<'a>> {
         if self.fn_depth >= self.opts.max_function_depth {
-            let max = self.opts.max_function_depth;
-            let n = name.unwrap_or("function literal");
-            return self.fatal(span, format!("recursion too deep: function `{n}` called more than {max} levels deep"));
+            return self.too_deep(span, "function", name.unwrap_or("function literal"), self.opts.max_function_depth);
         }
         self.check_stack(span)?;
         self.fn_depth += 1;
@@ -283,6 +342,7 @@ impl<'a> Ev<'a> {
     }
 
     #[allow(clippy::too_many_arguments)]
+    #[inline(never)]
     fn call_loop(
         &mut self,
         mut params: &'a [Param],
@@ -344,7 +404,13 @@ impl<'a> Ev<'a> {
                     if let Some((f, fenv)) = env.find_func(name) {
                         self.step(e.span)?;
                         let a = self.eval_args(args, env, dy)?;
-                        return Ok(Tail::Call { params: &f.params, body: &f.body, env: fenv, name: Some(&f.name.name), args: a });
+                        return Ok(Tail::Call {
+                            params: &f.params,
+                            body: &f.body,
+                            env: fenv,
+                            name: Some(&f.name.name),
+                            args: a,
+                        });
                     }
                     if !name.starts_with('$')
                         && let Some(v) = self.lookup(name, env)?
@@ -353,7 +419,13 @@ impl<'a> Ev<'a> {
                         self.step(e.span)?;
                         let c = c.clone();
                         let a = self.eval_args(args, env, dy)?;
-                        return Ok(Tail::Call { params: c.params, body: c.body, env: c.env.clone(), name: Some(name), args: a });
+                        return Ok(Tail::Call {
+                            params: c.params,
+                            body: c.body,
+                            env: c.env.clone(),
+                            name: Some(name),
+                            args: a,
+                        });
                     }
                 }
                 Ok(Tail::Val(self.expr(e, env, dy)?))
@@ -373,7 +445,15 @@ impl<'a> Ev<'a> {
         Ok(())
     }
 
-    fn vec_elems(&mut self, elems: &'a [VecElem], env: &Env<'a>, dy: &Dyn<'a>, out: &mut Vec<Val<'a>>, span: Span) -> R<()> {
+    #[inline(never)]
+    fn vec_elems(
+        &mut self,
+        elems: &'a [VecElem],
+        env: &Env<'a>,
+        dy: &Dyn<'a>,
+        out: &mut Vec<Val<'a>>,
+        span: Span,
+    ) -> R<()> {
         for el in elems {
             self.vec_elem(el, env, dy, out, span)?;
         }
@@ -395,18 +475,17 @@ impl<'a> Ev<'a> {
                         break;
                     }
                     self.vec_elem(body, &e, &d, out, *sp)?;
+                    // Loop variables carry over; updates are applied in order (each
+                    // sees the previous ones, as in OpenSCAD).
                     let next = env.child(d.clone());
-                    for a in update {
-                        let v = self.expr(&a.value, &e, &d)?;
-                        next.set(&a.name.name, v);
-                    }
-                    // Variables not updated keep their values.
                     for a in init {
-                        if !next.has_local(&a.name.name)
-                            && let Some(v) = self.lookup(&a.name.name, &e)?
-                        {
+                        if let Some(v) = self.lookup(&a.name.name, &e)? {
                             next.set(&a.name.name, v);
                         }
+                    }
+                    for a in update {
+                        let v = self.expr(&a.value, &next, &d)?;
+                        next.set(&a.name.name, v);
                     }
                     e = next;
                 }
@@ -476,6 +555,7 @@ impl<'a> Ev<'a> {
         Ok(())
     }
 
+    #[inline(never)]
     fn range_expr(
         &mut self,
         e: &'a Expr,
@@ -505,10 +585,7 @@ impl<'a> Ev<'a> {
             },
             None => {
                 if a > b {
-                    self.warn(
-                        e.span,
-                        "ranges of the form [begin:end] with begin greater than end are deprecated",
-                    );
+                    self.warn(e.span, "ranges of the form [begin:end] with begin greater than end are deprecated");
                     std::mem::swap(&mut a, &mut b);
                 }
                 1.0
@@ -519,7 +596,15 @@ impl<'a> Ev<'a> {
 
     // ------------------------------------------------------------ index / member
 
-    fn index_expr(&mut self, e: &'a Expr, base: &'a Expr, items: &'a [IndexItem], env: &Env<'a>, dy: &Dyn<'a>) -> R<Val<'a>> {
+    #[inline(never)]
+    fn index_expr(
+        &mut self,
+        e: &'a Expr,
+        base: &'a Expr,
+        items: &'a [IndexItem],
+        env: &Env<'a>,
+        dy: &Dyn<'a>,
+    ) -> R<Val<'a>> {
         let b = self.expr(base, env, dy)?;
         if let Value::Grid(g) = b.v {
             return self.grid_access(e, g, items, env, dy);
@@ -569,6 +654,7 @@ impl<'a> Ev<'a> {
         })
     }
 
+    #[inline(never)]
     fn member_expr(&mut self, e: &'a Expr, base: &'a Expr, name: &'a Ident, env: &Env<'a>, dy: &Dyn<'a>) -> R<Val<'a>> {
         let b = self.expr(base, env, dy)?;
         let in_ctx = self.is_in_context(env);

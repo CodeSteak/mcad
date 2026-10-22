@@ -29,10 +29,13 @@ impl<'a> Ev<'a> {
             self.error(g.name.span, "grids are not allowed in the children of a module call");
             return Ok(());
         }
-        if crate::math::uniform_scale(&ctx.mod_local).is_none() {
+        if crate::math::uniform_scale(&ctx.xf.mod_local).is_none() {
             self.error(
                 g.name.span,
-                format!("grid `{}` is placed under a non-uniform scale (only uniform scale is allowed before a grid)", g.name.name),
+                format!(
+                    "grid `{}` is placed under a non-uniform scale (only uniform scale is allowed before a grid)",
+                    g.name.name
+                ),
             );
         }
         let in_ctx = ctx.in_context();
@@ -42,7 +45,10 @@ impl<'a> Ev<'a> {
         for pd in &g.planes {
             if let Some((_, first)) = taken.iter().find(|(n, _)| *n == pd.name.name) {
                 let line = self.line(*first);
-                self.error(pd.name.span, format!("plane name `{}` is already used in grid `{}` (line {line})", pd.name.name, g.name.name));
+                self.error(
+                    pd.name.span,
+                    format!("plane name `{}` is already used in grid `{}` (line {line})", pd.name.name, g.name.name),
+                );
                 continue;
             }
             if pd.name.name == "_" {
@@ -59,7 +65,11 @@ impl<'a> Ev<'a> {
                     match e.as_num() {
                         Some(n) => {
                             let span = e.def.unwrap_or(pd.value.span);
-                            planes.push((plane(axis, &pd.name.name, Some(i as u32), n, e, span), Some(e.clone()), span));
+                            planes.push((
+                                plane(axis, &pd.name.name, Some(i as u32), n, e, span),
+                                Some(e.clone()),
+                                span,
+                            ));
                         }
                         None => {
                             self.error(pd.value.span, format!("plane `{}[{i}]` is not a number", pd.name.name));
@@ -68,7 +78,10 @@ impl<'a> Ev<'a> {
                 }
             } else {
                 let t = v.type_name();
-                self.error(pd.value.span, format!("plane `{}` must be a number or a list of numbers, found {t}", pd.name.name));
+                self.error(
+                    pd.value.span,
+                    format!("plane `{}` must be a number or a list of numbers, found {t}", pd.name.name),
+                );
             }
         }
         for axis in 0..3u8 {
@@ -100,8 +113,8 @@ impl<'a> Ev<'a> {
             name_span: g.name.span,
             module_inst: ctx.frame.inst,
             in_context: in_ctx,
-            frame: ctx.world,
-            frame_module: ctx.mod_local,
+            frame: ctx.xf.world,
+            frame_module: ctx.xf.mod_local,
             planes: planes.iter().map(|(p, _, _)| p.clone()).collect(),
             visible: Span { start: s.span.end, end: ctx.frame.body_end },
         };
@@ -118,7 +131,7 @@ impl<'a> Ev<'a> {
                 node: None,
                 kind: HandleKind::Plane { axis: p.axis },
                 index: i as u32,
-                frame: ctx.world,
+                frame: ctx.xf.world,
                 pos: axis * p.value,
                 axis: Some(axis),
                 base: Some(DVec3::ZERO),
@@ -133,12 +146,22 @@ impl<'a> Ev<'a> {
         Ok(())
     }
 
-    pub(crate) fn grid_access(&mut self, e: &'a Expr, g: GridId, items: &'a [IndexItem], env: &Env<'a>, dy: &Dyn<'a>) -> R<Val<'a>> {
+    pub(crate) fn grid_access(
+        &mut self,
+        e: &'a Expr,
+        g: GridId,
+        items: &'a [IndexItem],
+        env: &Env<'a>,
+        dy: &Dyn<'a>,
+    ) -> R<Val<'a>> {
         let undef = Val { def: Some(e.span), ..Val::undef() };
         let gname = self.grids[g as usize].name.clone();
         let z_implicit = self.grids[g as usize].planes.iter().any(|p| p.axis == 2 && p.implicit);
         if !(items.len() == 3 || (items.len() == 2 && z_implicit)) {
-            self.error(e.span, format!("grid access `{gname}[…]` needs one plane per axis (x, y, z), found {}", items.len()));
+            self.error(
+                e.span,
+                format!("grid access `{gname}[…]` needs one plane per axis (x, y, z), found {}", items.len()),
+            );
             return Ok(undef);
         }
         let mut sel = [Sel::Wild; 3];
@@ -170,7 +193,7 @@ impl<'a> Ev<'a> {
             self.add_ref(e.span, RefTarget::Grid { grid: g, sel });
         }
         if wild > 0 {
-            return Ok(Val { def: Some(e.span), ..Val::new(Value::GridSel { grid: g, sel }) });
+            return Ok(Val { def: Some(e.span), ..Val::new(Value::GridSel { grid: g, sel: std::rc::Rc::new(sel) }) });
         }
         let (p, _) = self.sel_point(g, &sel);
         let identity = self.grids[g as usize].frame_module == glam::DMat4::IDENTITY;
@@ -225,7 +248,10 @@ impl<'a> Ev<'a> {
                 None => {
                     self.error(
                         x.span,
-                        format!("axis {} of grid `{gname}` has planes; `_` only stands for a missing axis", AXES[axis as usize]),
+                        format!(
+                            "axis {} of grid `{gname}` has planes; `_` only stands for a missing axis",
+                            AXES[axis as usize]
+                        ),
                     );
                     Item::Bad
                 }

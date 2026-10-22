@@ -120,6 +120,6 @@ pub fn approx3(a: glam::DVec3, b: [f64; 3]) -> bool {
     approx(a.x, b[0]) && approx(a.y, b[1]) && approx(a.z, b[2])
 }
 
-pub fn span_text<'s>(src: &'s str, s: cad_syntax::Span) -> &'s str {
+pub fn span_text(src: &str, s: cad_syntax::Span) -> &str {
     &src[s.start as usize..s.end as usize]
 }

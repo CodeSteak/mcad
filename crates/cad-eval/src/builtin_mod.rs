@@ -15,16 +15,66 @@ use crate::output::HandleKind;
 use crate::value::{Sel, Val, Value};
 
 pub(crate) const BUILTIN_MODULES: &[&str] = &[
-    "cube", "box", "sphere", "cylinder", "torus", "polyhedron", "square", "rect", "circle", "polygon", "spline",
-    "translate", "rotate", "scale", "mirror", "multmatrix", "resize", "color", "union", "difference",
-    "intersection", "fillet", "chamfer", "zone", "linear_extrude", "rotate_extrude", "loft", "sweep",
-    "surface", "thicken", "shell", "children", "echo", "assert", "render", "group", "hull", "minkowski",
-    "offset", "projection", "text", "import",
+    "cube",
+    "box",
+    "sphere",
+    "cylinder",
+    "torus",
+    "polyhedron",
+    "square",
+    "rect",
+    "circle",
+    "polygon",
+    "spline",
+    "translate",
+    "rotate",
+    "scale",
+    "mirror",
+    "multmatrix",
+    "resize",
+    "color",
+    "union",
+    "difference",
+    "intersection",
+    "fillet",
+    "chamfer",
+    "zone",
+    "linear_extrude",
+    "rotate_extrude",
+    "loft",
+    "sweep",
+    "surface",
+    "thicken",
+    "shell",
+    "children",
+    "echo",
+    "assert",
+    "render",
+    "group",
+    "hull",
+    "minkowski",
+    "offset",
+    "projection",
+    "text",
+    "import",
 ];
 
 const LEAVES: &[&str] = &[
-    "cube", "box", "sphere", "cylinder", "torus", "polyhedron", "square", "rect", "circle", "polygon", "spline",
-    "surface", "zone", "text", "import",
+    "cube",
+    "box",
+    "sphere",
+    "cylinder",
+    "torus",
+    "polyhedron",
+    "square",
+    "rect",
+    "circle",
+    "polygon",
+    "spline",
+    "surface",
+    "zone",
+    "text",
+    "import",
 ];
 
 type Slots<'x, 'a> = Vec<Option<&'x ArgV<'a>>>;
@@ -51,6 +101,16 @@ impl<'a> Ev<'a> {
                 }
             }
         }
+        // Grids, lines, planes and instances only where explicitly accepted.
+        for (i, slot) in slots.iter_mut().enumerate() {
+            if let Some(arg) = *slot
+                && arg.val.is_special()
+                && !matches!((what, names[i]), ("mirror", "v") | ("zone", "target"))
+            {
+                self.special_misuse(arg, names[i]);
+                *slot = None;
+            }
+        }
         slots
     }
 
@@ -59,7 +119,9 @@ impl<'a> Ev<'a> {
         match a.val.as_num() {
             Some(n) => Some(n),
             None => {
-                if !a.val.is_undef() {
+                if a.val.is_special() {
+                    self.special_misuse(a, what);
+                } else if !a.val.is_undef() {
                     let t = a.val.type_name();
                     self.warn(a.expr.span, format!("`{what}` must be a number, found {t}"));
                 }
@@ -73,11 +135,26 @@ impl<'a> Ev<'a> {
         match a.val.as_vec3() {
             Some(v) => Some(v),
             None => {
-                let t = a.val.type_name();
-                self.warn(a.expr.span, format!("`{what}` must be a vector [x, y, z], found {t}"));
+                if a.val.is_special() {
+                    self.special_misuse(a, what);
+                } else {
+                    let t = a.val.type_name();
+                    self.warn(a.expr.span, format!("`{what}` must be a vector [x, y, z], found {t}"));
+                }
                 None
             }
         }
+    }
+
+    /// A grid, grid line/plane or instance where a number or point is expected.
+    fn special_misuse(&mut self, a: &ArgV<'a>, what: &str) {
+        let t = a.val.type_name();
+        let hint = match a.val.v {
+            Value::GridSel { .. } => "; lines and planes are only accepted by zone() and mirror()",
+            Value::Instance(_) => "; use an anchor `k.name`",
+            _ => "; use a grid point `g[x, y, z]` or plane `g.name`",
+        };
+        self.error(a.expr.span, format!("type error: `{what}` expects a number or point, found {t}{hint}"));
     }
 
     /// 2D point; a z component other than 0 is projected away with a warning.
@@ -95,7 +172,8 @@ impl<'a> Ev<'a> {
 
     fn set_blend(&mut self, n: NodeIdx, dy: &Dyn<'a>) {
         let get = |name: &str| dyn_lookup(dy, name).and_then(|v| v.as_num()).filter(|x| *x > 0.0);
-        let blend = get("$fillet").map(|r| (BlendKind::Fillet, r)).or_else(|| get("$chamfer").map(|r| (BlendKind::Chamfer, r)));
+        let blend =
+            get("$fillet").map(|r| (BlendKind::Fillet, r)).or_else(|| get("$chamfer").map(|r| (BlendKind::Chamfer, r)));
         let tol = get("$tol");
         let node = &mut self.nodes[n as usize];
         node.blend = blend;
@@ -133,6 +211,7 @@ impl<'a> Ev<'a> {
         None
     }
 
+    #[inline(never)]
     pub(crate) fn builtin_module(
         &mut self,
         s: &'a Stmt,
@@ -142,33 +221,71 @@ impl<'a> Ev<'a> {
         ctx: &Ctx<'a>,
     ) -> R<()> {
         let n = name.name.as_str();
-        let dy = dyn_push(&ctx.dyn_, a.dyn_vars.clone());
         if LEAVES.contains(&n) && children.iter().any(crate::eval::is_geometric) {
             self.warn(name.span, format!("`{n}()` does not take children"));
         }
-        let wctx;
-        let ctx = if a.dyn_vars.is_empty() {
-            ctx
+        if a.dyn_vars.is_empty() {
+            let dy = ctx.dyn_.clone();
+            self.dispatch(s, name, &a, children, ctx, &dy)
         } else {
-            wctx = Ctx { dyn_: dy.clone(), ..ctx.clone() };
-            &wctx
-        };
+            let dy = dyn_push(&ctx.dyn_, a.dyn_vars.clone());
+            let c = Ctx { dyn_: dy.clone(), ..ctx.clone() };
+            self.dispatch(s, name, &a, children, &c, &dy)
+        }
+    }
+
+    fn dispatch(
+        &mut self,
+        s: &'a Stmt,
+        name: &'a Ident,
+        a: &Args<'a>,
+        children: &'a [Stmt],
+        ctx: &Ctx<'a>,
+        dy: &Dyn<'a>,
+    ) -> R<()> {
+        let n = name.name.as_str();
         match n {
-            "cube" => self.m_cube(s, &a, ctx, &dy),
-            "box" => self.m_box(s, &a, ctx, &dy),
-            "sphere" => self.m_sphere(s, &a, ctx, &dy),
-            "cylinder" => self.m_cylinder(s, &a, ctx, &dy),
-            "torus" => self.m_torus(s, &a, ctx, &dy),
-            "polyhedron" => self.m_polyhedron(s, &a, ctx, &dy),
-            "square" => self.m_square(s, &a, ctx, &dy),
-            "rect" => self.m_rect(s, &a, ctx, &dy),
-            "circle" => self.m_circle(s, &a, ctx, &dy),
-            "polygon" | "spline" => self.m_polygon(s, n, &a, ctx, &dy),
+            "cube" => self.m_cube(s, a, ctx, dy),
+            "box" => self.m_box(s, a, ctx, dy),
+            "sphere" => self.m_sphere(s, a, ctx, dy),
+            "cylinder" => self.m_cylinder(s, a, ctx, dy),
+            "torus" => self.m_torus(s, a, ctx, dy),
+            "polyhedron" => self.m_polyhedron(s, a, ctx, dy),
+            "square" => self.m_square(s, a, ctx, dy),
+            "rect" => self.m_rect(s, a, ctx, dy),
+            "circle" => self.m_circle(s, a, ctx, dy),
+            "polygon" | "spline" => self.m_polygon(s, n, a, ctx, dy),
             "translate" | "rotate" | "scale" | "mirror" | "multmatrix" => {
-                self.m_transform(s, n, &a, children, ctx, &dy)?
+                return self.m_transform(s, n, a, children, ctx, dy);
             }
+            "color" => return self.m_color(s, a, children, ctx, dy),
+            "fillet" | "chamfer" | "shell" => return self.m_blend(s, n, a, children, ctx, dy),
+            "zone" => self.m_zone(s, a, ctx),
+            "linear_extrude" | "rotate_extrude" | "loft" | "sweep" | "thicken" | "resize" => {
+                return self.m_profile_op(s, n, a, children, ctx, dy);
+            }
+            "surface" => self.m_surface(s, a, ctx, dy),
+            "children" => return self.children_stmt(s, a, ctx),
+            _ => return self.m_group_like(s, name, a, children, ctx, dy),
+        }
+        Ok(())
+    }
+
+    /// Booleans, groups, echo/assert with children, unsupported operations.
+    #[inline(never)]
+    fn m_group_like(
+        &mut self,
+        s: &'a Stmt,
+        name: &'a Ident,
+        a: &Args<'a>,
+        children: &'a [Stmt],
+        ctx: &Ctx<'a>,
+        dy: &Dyn<'a>,
+    ) -> R<()> {
+        let n = name.name.as_str();
+        let op = match n {
             "union" | "difference" | "intersection" => {
-                let p = self.bind(n, &a, &["fillet", "chamfer"], 0);
+                let p = self.bind(n, a, &["fillet", "chamfer"], 0);
                 let fillet = self.blend_param(p[0], "fillet");
                 let chamfer = self.blend_param(p[1], "chamfer");
                 let op = match n {
@@ -176,44 +293,35 @@ impl<'a> Ev<'a> {
                     "difference" => BoolOp::Difference,
                     _ => BoolOp::Intersection,
                 };
-                let node = self.node(s, Op::Boolean { op, fillet, chamfer }, ctx);
-                self.eval_children(node, DMat4::IDENTITY, children, ctx, &dy)?;
+                Op::Boolean { op, fillet, chamfer }
             }
-            "group" | "render" => {
-                let node = self.node(s, Op::Group, ctx);
-                self.eval_children(node, DMat4::IDENTITY, children, ctx, &dy)?;
-            }
-            "color" => self.m_color(s, &a, children, ctx, &dy)?,
-            "fillet" | "chamfer" | "shell" => self.m_blend(s, n, &a, children, ctx, &dy)?,
-            "zone" => self.m_zone(s, &a, ctx),
-            "linear_extrude" | "rotate_extrude" | "loft" | "sweep" | "thicken" | "resize" => {
-                self.m_profile_op(s, n, &a, children, ctx, &dy)?
-            }
-            "surface" => self.m_surface(s, &a, ctx, &dy),
-            "children" => self.children_stmt(s, &a, ctx)?,
-            "echo" => {
-                self.echo(s.span, &a, &ctx.env);
-                if !children.is_empty() {
-                    let node = self.node(s, Op::Group, ctx);
-                    self.eval_children(node, DMat4::IDENTITY, children, ctx, &dy)?;
+            "group" | "render" => Op::Group,
+            "echo" | "assert" => {
+                if n == "echo" {
+                    self.echo(s.span, a, &ctx.env);
+                } else {
+                    self.assert_args(s.span, a)?;
                 }
-            }
-            "assert" => {
-                self.assert_args(s.span, &a)?;
-                if !children.is_empty() {
-                    let node = self.node(s, Op::Group, ctx);
-                    self.eval_children(node, DMat4::IDENTITY, children, ctx, &dy)?;
+                if children.is_empty() {
+                    return Ok(());
                 }
+                Op::Group
             }
             "hull" | "minkowski" | "offset" | "projection" => {
                 self.warn(name.span, format!("`{n}()` is not supported; its children are shown unchanged"));
-                let node = self.node(s, Op::Empty, ctx);
-                self.eval_children(node, DMat4::IDENTITY, children, ctx, &dy)?;
+                Op::Empty
             }
-            "text" | "import" => self.warn(name.span, format!("`{n}()` is not supported")),
-            _ => self.warn(name.span, format!("unknown module `{n}`")),
-        }
-        Ok(())
+            "text" | "import" => {
+                self.warn(name.span, format!("`{n}()` is not supported"));
+                return Ok(());
+            }
+            _ => {
+                self.warn(name.span, format!("unknown module `{n}`"));
+                return Ok(());
+            }
+        };
+        let node = self.node(s, op, ctx);
+        self.eval_children(node, &DMat4::IDENTITY, children, ctx, dy)
     }
 
     fn blend_param(&mut self, a: Option<&ArgV<'a>>, what: &str) -> Option<f64> {
@@ -227,6 +335,7 @@ impl<'a> Ev<'a> {
 
     // ------------------------------------------------------------ 3D primitives
 
+    #[inline(never)]
     fn m_cube(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("cube", a, &["size", "center"], 2);
         let center = p[1].is_some_and(|x| x.val.truthy());
@@ -251,6 +360,7 @@ impl<'a> Ev<'a> {
         }
     }
 
+    #[inline(never)]
     fn m_box(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("box", a, &["a", "b"], 2);
         let pa = self.vec3_of(p[0], "a");
@@ -268,6 +378,7 @@ impl<'a> Ev<'a> {
         }
     }
 
+    #[inline(never)]
     fn m_sphere(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("sphere", a, &["r", "d"], 1);
         let (r, src, scale) = if let Some(r) = self.num_of(p[0], "r") {
@@ -289,7 +400,20 @@ impl<'a> Ev<'a> {
         };
         if let Some(x) = src {
             let w = self.nodes[node as usize].world;
-            self.scalar_handle(s, ctx, node, HandleKind::Radius, 0, &x.val, x.expr.span, r, scale, w, DVec3::ZERO, DVec3::X);
+            self.scalar_handle(
+                s,
+                ctx,
+                node,
+                HandleKind::Radius,
+                0,
+                &x.val,
+                x.expr.span,
+                r,
+                scale,
+                w,
+                DVec3::ZERO,
+                DVec3::X,
+            );
         }
     }
 
@@ -317,6 +441,7 @@ impl<'a> Ev<'a> {
         (bottom, top)
     }
 
+    #[inline(never)]
     fn m_cylinder(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let pos: Vec<&ArgV<'a>> = a.positional().collect();
         let named = |n: &str| a.list.iter().any(|x| x.name.is_some_and(|i| i.name == n));
@@ -339,29 +464,65 @@ impl<'a> Ev<'a> {
                 let (points, faces) = prism(n, h, r1, r2, z0);
                 self.prim(s, Prim::Polyhedron { points, faces }, DMat4::IDENTITY, ctx, dy)
             }
-            None => self.prim(
-                s,
-                Prim::Cylinder { h, r1, r2 },
-                DMat4::from_translation(DVec3::new(0.0, 0.0, z0)),
-                ctx,
-                dy,
-            ),
+            None => {
+                self.prim(s, Prim::Cylinder { h, r1, r2 }, DMat4::from_translation(DVec3::new(0.0, 0.0, z0)), ctx, dy)
+            }
         };
         let w = self.nodes[node as usize].world;
         if let Some(x) = p[0] {
             let (v, sc) = if center { (h / 2.0, 2.0) } else { (h, 1.0) };
-            self.scalar_handle(s, ctx, node, HandleKind::Height, 0, &x.val, x.expr.span, v, sc, w, DVec3::ZERO, DVec3::Z);
+            self.scalar_handle(
+                s,
+                ctx,
+                node,
+                HandleKind::Height,
+                0,
+                &x.val,
+                x.expr.span,
+                v,
+                sc,
+                w,
+                DVec3::ZERO,
+                DVec3::Z,
+            );
         }
         if let Some((x, sc)) = s1 {
-            self.scalar_handle(s, ctx, node, HandleKind::Radius, 0, &x.val, x.expr.span, r1, sc, w, DVec3::new(0.0, 0.0, z0), DVec3::X);
+            self.scalar_handle(
+                s,
+                ctx,
+                node,
+                HandleKind::Radius,
+                0,
+                &x.val,
+                x.expr.span,
+                r1,
+                sc,
+                w,
+                DVec3::new(0.0, 0.0, z0),
+                DVec3::X,
+            );
         }
         if let Some((x, sc)) = s2
             && !s1.is_some_and(|(y, _)| std::ptr::eq(x, y))
         {
-            self.scalar_handle(s, ctx, node, HandleKind::Radius, 1, &x.val, x.expr.span, r2, sc, w, DVec3::new(0.0, 0.0, z0 + h), DVec3::X);
+            self.scalar_handle(
+                s,
+                ctx,
+                node,
+                HandleKind::Radius,
+                1,
+                &x.val,
+                x.expr.span,
+                r2,
+                sc,
+                w,
+                DVec3::new(0.0, 0.0, z0 + h),
+                DVec3::X,
+            );
         }
     }
 
+    #[inline(never)]
     fn m_cylinder_points(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("cylinder", a, &["a", "b", "r", "r1", "r2", "d", "d1", "d2"], 3);
         let pa = self.vec3_of(p[0], "a");
@@ -396,6 +557,7 @@ impl<'a> Ev<'a> {
         }
     }
 
+    #[inline(never)]
     fn m_torus(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("torus", a, &["R", "r"], 2);
         let big = self.num_of(p[0], "R");
@@ -410,20 +572,48 @@ impl<'a> Ev<'a> {
         let node = self.prim(s, Prim::Torus { big_r, r }, DMat4::IDENTITY, ctx, dy);
         let w = self.nodes[node as usize].world;
         if let Some(x) = p[0] {
-            self.scalar_handle(s, ctx, node, HandleKind::Radius, 0, &x.val, x.expr.span, big_r, 1.0, w, DVec3::ZERO, DVec3::X);
+            self.scalar_handle(
+                s,
+                ctx,
+                node,
+                HandleKind::Radius,
+                0,
+                &x.val,
+                x.expr.span,
+                big_r,
+                1.0,
+                w,
+                DVec3::ZERO,
+                DVec3::X,
+            );
         }
         if let Some(x) = p[1] {
-            self.scalar_handle(s, ctx, node, HandleKind::Radius, 1, &x.val, x.expr.span, r, 1.0, w, DVec3::new(big_r, 0.0, 0.0), DVec3::Z);
+            self.scalar_handle(
+                s,
+                ctx,
+                node,
+                HandleKind::Radius,
+                1,
+                &x.val,
+                x.expr.span,
+                r,
+                1.0,
+                w,
+                DVec3::new(big_r, 0.0, 0.0),
+                DVec3::Z,
+            );
         }
     }
 
+    #[inline(never)]
     fn m_polyhedron(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("polyhedron", a, &["points", "faces", "convexity", "triangles"], 3);
         let Some(pts_arg) = p[0] else {
             self.error(s.span, "polyhedron() needs `points`");
             return;
         };
-        let Some(points) = pts_arg.val.as_list().and_then(|l| l.iter().map(|v| v.as_vec3()).collect::<Option<Vec<_>>>())
+        let Some(points) =
+            pts_arg.val.as_list().and_then(|l| l.iter().map(|v| v.as_vec3()).collect::<Option<Vec<_>>>())
         else {
             self.error(pts_arg.expr.span, "polyhedron points must be a list of [x, y, z]");
             return;
@@ -458,6 +648,7 @@ impl<'a> Ev<'a> {
 
     // ------------------------------------------------------------ 2D
 
+    #[inline(never)]
     fn m_square(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("square", a, &["size", "center"], 2);
         let center = p[1].is_some_and(|x| x.val.truthy());
@@ -479,6 +670,7 @@ impl<'a> Ev<'a> {
         }
     }
 
+    #[inline(never)]
     fn m_rect(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("rect", a, &["a", "b"], 2);
         let pa = p[0].and_then(|x| self.pt2(&x.val, x.expr.span));
@@ -495,6 +687,7 @@ impl<'a> Ev<'a> {
         }
     }
 
+    #[inline(never)]
     fn m_circle(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("circle", a, &["r", "d"], 1);
         let (r, src, scale) = if let Some(r) = self.num_of(p[0], "r") {
@@ -520,10 +713,24 @@ impl<'a> Ev<'a> {
         let node = self.profile(s, prof, ctx, dy);
         if let Some(x) = src {
             let w = self.nodes[node as usize].world;
-            self.scalar_handle(s, ctx, node, HandleKind::Radius, 0, &x.val, x.expr.span, r, scale, w, DVec3::ZERO, DVec3::X);
+            self.scalar_handle(
+                s,
+                ctx,
+                node,
+                HandleKind::Radius,
+                0,
+                &x.val,
+                x.expr.span,
+                r,
+                scale,
+                w,
+                DVec3::ZERO,
+                DVec3::X,
+            );
         }
     }
 
+    #[inline(never)]
     fn m_polygon(&mut self, s: &'a Stmt, what: &str, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let names: &[&str] = if what == "spline" { &["points", "closed"] } else { &["points", "paths", "convexity"] };
         let p = self.bind(what, a, names, names.len());
@@ -586,6 +793,7 @@ impl<'a> Ev<'a> {
 
     // ------------------------------------------------------------ transforms
 
+    #[inline(never)]
     fn m_transform(
         &mut self,
         s: &'a Stmt,
@@ -595,114 +803,73 @@ impl<'a> Ev<'a> {
         ctx: &Ctx<'a>,
         dy: &Dyn<'a>,
     ) -> R<()> {
-        let w = ctx.world;
-        let mut handles: Vec<Box<dyn FnOnce(&mut Self, NodeIdx) + '_>> = Vec::new();
-        let (kind, m) = match n {
+        let (kind, m) = self.transform_matrix(s, n, a);
+        let node = self.node(s, Op::Transform { kind, m }, ctx);
+        self.transform_handles(s, n, a, ctx, node);
+        self.eval_children(node, &m, children, ctx, dy)
+    }
+
+    #[inline(never)]
+    fn transform_matrix(&mut self, s: &'a Stmt, n: &str, a: &Args<'a>) -> (TransformKind, DMat4) {
+        match n {
             "translate" => {
                 let p = self.bind(n, a, &["v"], 1);
                 let v = self.vec3_of(p[0], "v").unwrap_or(DVec3::ZERO);
-                if let Some(x) = p[0] {
-                    let dims = x.val.as_list().map_or(3, |l| l.len().min(3));
-                    handles.push(Box::new(move |ev: &mut Self, node| ev.point_handle(s, ctx, node, 0, x, v, dims, 1.0)));
-                }
                 (TransformKind::Translate, DMat4::from_translation(v))
             }
             "rotate" => {
                 let p = self.bind(n, a, &["a", "v", "to"], 2);
                 if let Some(t) = p[2] {
                     let v = self.vec3_of(Some(t), "to").unwrap_or(DVec3::Z);
-                    (TransformKind::Rotate, math::rot_to(v))
-                } else {
-                    match p[0] {
-                        None => (TransformKind::Rotate, DMat4::IDENTITY),
-                        Some(x) => match (&x.val.v, x.val.as_num()) {
-                            (Value::List(l), _) => {
-                                let mut e = DVec3::ZERO;
-                                for (i, c) in l.iter().take(3).enumerate() {
-                                    e[i] = c.as_num().unwrap_or(0.0);
-                                }
-                                let frames = [w * math::rot_z(e.z) * math::rot_y(e.y), w * math::rot_z(e.z), w];
-                                let l = l.clone();
-                                handles.push(Box::new(move |ev: &mut Self, node| {
-                                    for (i, c) in l.iter().take(3).enumerate() {
-                                        let mut ax = DVec3::ZERO;
-                                        ax[i] = 1.0;
-                                        let span = c.def.unwrap_or(x.expr.span);
-                                        ev.scalar_handle(
-                                            s, ctx, node, HandleKind::Angle { axis: i as u8 }, i as u32, c, span, e[i], 1.0, frames[i], DVec3::ZERO, ax,
-                                        );
-                                    }
-                                }));
-                                (TransformKind::Rotate, math::rot_euler(e))
-                            }
-                            (_, Some(ang)) => match p[1].and_then(|v| v.val.as_vec3()) {
-                                Some(axis) => {
-                                    let ax = axis.normalize_or_zero();
-                                    handles.push(Box::new(move |ev: &mut Self, node| {
-                                        ev.scalar_handle(s, ctx, node, HandleKind::Angle { axis: 3 }, 0, &x.val, x.expr.span, ang, 1.0, w, DVec3::ZERO, ax)
-                                    }));
-                                    (TransformKind::Rotate, math::rot_axis(ang, axis))
-                                }
-                                None => {
-                                    handles.push(Box::new(move |ev: &mut Self, node| {
-                                        ev.scalar_handle(s, ctx, node, HandleKind::Angle { axis: 2 }, 0, &x.val, x.expr.span, ang, 1.0, w, DVec3::ZERO, DVec3::Z)
-                                    }));
-                                    (TransformKind::Rotate, math::rot_z(ang))
-                                }
-                            },
-                            _ => {
-                                self.warn(x.expr.span, "rotate angle must be a number or [x, y, z]");
-                                (TransformKind::Rotate, DMat4::IDENTITY)
-                            }
-                        },
-                    }
+                    return (TransformKind::Rotate, math::rot_to(v));
                 }
+                let m = match p[0] {
+                    None => DMat4::IDENTITY,
+                    Some(x) => match (&x.val.v, x.val.as_num()) {
+                        (Value::List(l), _) => math::rot_euler(euler_of(l)),
+                        (_, Some(ang)) => match p[1].and_then(|v| v.val.as_vec3()) {
+                            Some(axis) => math::rot_axis(ang, axis),
+                            None => math::rot_z(ang),
+                        },
+                        _ => {
+                            self.warn(x.expr.span, "rotate angle must be a number or [x, y, z]");
+                            DMat4::IDENTITY
+                        }
+                    },
+                };
+                (TransformKind::Rotate, m)
             }
             "scale" => {
                 let p = self.bind(n, a, &["v"], 1);
-                match p[0] {
-                    None => (TransformKind::Scale, DMat4::IDENTITY),
-                    Some(x) => match (x.val.as_num(), x.val.as_list()) {
-                        (Some(k), _) => {
-                            handles.push(Box::new(move |ev: &mut Self, node| {
-                                ev.scalar_handle(s, ctx, node, HandleKind::Scale { axis: None }, 0, &x.val, x.expr.span, k, 1.0, w, DVec3::ZERO, DVec3::ONE.normalize())
-                            }));
-                            (TransformKind::Scale, DMat4::from_scale(DVec3::splat(k)))
-                        }
-                        (_, Some(l)) if l.len() >= 2 && l.iter().take(3).all(|c| c.as_num().is_some()) => {
-                            let mut v = DVec3::ONE;
-                            for (i, c) in l.iter().take(3).enumerate() {
-                                v[i] = c.as_num().unwrap();
-                            }
+                let m = match p[0] {
+                    None => DMat4::IDENTITY,
+                    Some(x) => match (x.val.as_num(), scale_vec(&x.val)) {
+                        (Some(k), _) => DMat4::from_scale(DVec3::splat(k)),
+                        (_, Some(v)) => {
                             if !(v.x == v.y && v.y == v.z) {
                                 self.warn(
                                     s.span,
                                     "non-uniform scale distorts fillets, cylinders and wall thicknesses; prefer module parameters",
                                 );
                             }
-                            handles.push(Box::new(move |ev: &mut Self, node| {
-                                for (i, c) in l.iter().take(3).enumerate() {
-                                    let mut ax = DVec3::ZERO;
-                                    ax[i] = 1.0;
-                                    let span = c.def.unwrap_or(x.expr.span);
-                                    ev.scalar_handle(s, ctx, node, HandleKind::Scale { axis: Some(i as u8) }, i as u32, c, span, v[i], 1.0, w, DVec3::ZERO, ax);
-                                }
-                            }));
-                            (TransformKind::Scale, DMat4::from_scale(v))
+                            DMat4::from_scale(v)
                         }
                         _ => {
                             self.warn(x.expr.span, "scale must be a number or [x, y, z]");
-                            (TransformKind::Scale, DMat4::IDENTITY)
+                            DMat4::IDENTITY
                         }
                     },
-                }
+                };
+                (TransformKind::Scale, m)
             }
             "mirror" => {
                 let p = self.bind(n, a, &["v"], 1);
                 let m = match p[0] {
                     None => math::mirror(DVec3::X),
                     Some(x) => match &x.val.v {
-                        Value::PlaneRef { grid, plane, .. } => self.grid_plane(*grid, *plane).map_or(DMat4::IDENTITY, |(pt, nrm)| math::mirror_at(pt, nrm)),
+                        Value::PlaneRef { grid, plane, .. } => {
+                            self.grid_plane(*grid, *plane).map_or(DMat4::IDENTITY, |(pt, nrm)| math::mirror_at(pt, nrm))
+                        }
                         Value::GridSel { grid, sel } if sel.iter().filter(|s| **s == Sel::Wild).count() == 2 => {
                             let (pt, wild) = self.sel_point(*grid, sel);
                             let fixed = (0..3).find(|i| !wild.contains(i)).unwrap_or(0);
@@ -728,7 +895,8 @@ impl<'a> Ev<'a> {
             }
             _ => {
                 let p = self.bind(n, a, &["m"], 1);
-                let rows: Option<Vec<Vec<f64>>> = p[0].and_then(|x| x.val.as_list()).and_then(|l| l.iter().map(|r| r.as_nums()).collect());
+                let rows: Option<Vec<Vec<f64>>> =
+                    p[0].and_then(|x| x.val.as_list()).and_then(|l| l.iter().map(|r| r.as_nums()).collect());
                 match rows {
                     Some(r) if !r.is_empty() => (TransformKind::Matrix, math::from_rows(&r)),
                     _ => {
@@ -739,12 +907,96 @@ impl<'a> Ev<'a> {
                     }
                 }
             }
-        };
-        let node = self.node(s, Op::Transform { kind, m }, ctx);
-        for h in handles {
-            h(self, node);
         }
-        self.eval_children(node, m, children, ctx, dy)
+    }
+
+    /// Handles of `translate` (target point), `rotate` (angle per axis) and `scale`.
+    #[inline(never)]
+    fn transform_handles(&mut self, s: &'a Stmt, n: &str, a: &Args<'a>, ctx: &Ctx<'a>, node: NodeIdx) {
+        if !ctx.in_context() {
+            return;
+        }
+        let w = ctx.xf.world;
+        let first = |name: &str| a.get(0, name);
+        match n {
+            "translate" => {
+                if let Some(x) = first("v")
+                    && let Some(v) = x.val.as_vec3()
+                {
+                    let dims = x.val.as_list().map_or(3, |l| l.len().min(3));
+                    self.point_handle(s, ctx, node, 0, x, v, dims, 1.0);
+                }
+            }
+            "rotate" => {
+                if a.get(2, "to").is_some() {
+                    return;
+                }
+                let Some(x) = first("a") else { return };
+                match (&x.val.v, x.val.as_num()) {
+                    (Value::List(l), _) => {
+                        let e = euler_of(l);
+                        let frames = [w * math::rot_z(e.z) * math::rot_y(e.y), w * math::rot_z(e.z), w];
+                        for (i, c) in l.iter().take(3).enumerate() {
+                            let mut ax = DVec3::ZERO;
+                            ax[i] = 1.0;
+                            let span = c.def.unwrap_or(x.expr.span);
+                            let kind = HandleKind::Angle { axis: i as u8 };
+                            self.scalar_handle(
+                                s,
+                                ctx,
+                                node,
+                                kind,
+                                i as u32,
+                                c,
+                                span,
+                                e[i],
+                                1.0,
+                                frames[i],
+                                DVec3::ZERO,
+                                ax,
+                            );
+                        }
+                    }
+                    (_, Some(ang)) => {
+                        let (kind, ax) = match a.get(1, "v").and_then(|v| v.val.as_vec3()) {
+                            Some(axis) => (HandleKind::Angle { axis: 3 }, axis.normalize_or_zero()),
+                            None => (HandleKind::Angle { axis: 2 }, DVec3::Z),
+                        };
+                        self.scalar_handle(s, ctx, node, kind, 0, &x.val, x.expr.span, ang, 1.0, w, DVec3::ZERO, ax);
+                    }
+                    _ => {}
+                }
+            }
+            "scale" => {
+                let Some(x) = first("v") else { return };
+                if let Some(k) = x.val.as_num() {
+                    let kind = HandleKind::Scale { axis: None };
+                    self.scalar_handle(
+                        s,
+                        ctx,
+                        node,
+                        kind,
+                        0,
+                        &x.val,
+                        x.expr.span,
+                        k,
+                        1.0,
+                        w,
+                        DVec3::ZERO,
+                        DVec3::ONE.normalize(),
+                    );
+                } else if let (Some(v), Some(l)) = (scale_vec(&x.val), x.val.as_list()) {
+                    for (i, c) in l.iter().take(3).enumerate() {
+                        let mut ax = DVec3::ZERO;
+                        ax[i] = 1.0;
+                        let span = c.def.unwrap_or(x.expr.span);
+                        let kind = HandleKind::Scale { axis: Some(i as u8) };
+                        self.scalar_handle(s, ctx, node, kind, i as u32, c, span, v[i], 1.0, w, DVec3::ZERO, ax);
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     /// A grid plane as (point, normal) in its module's coordinates.
@@ -756,6 +1008,7 @@ impl<'a> Ev<'a> {
         Some((g.frame_module.transform_point3(axis * p.value), math::transform_dir(&g.frame_module, axis)))
     }
 
+    #[inline(never)]
     fn m_color(&mut self, s: &'a Stmt, a: &Args<'a>, children: &'a [Stmt], ctx: &Ctx<'a>, dy: &Dyn<'a>) -> R<()> {
         let p = self.bind("color", a, &["c", "alpha"], 2);
         let mut rgba = match p[0] {
@@ -784,7 +1037,7 @@ impl<'a> Ev<'a> {
             Some(c) => self.node(s, Op::Color { rgba: c }, ctx),
             None => self.node(s, Op::Group, ctx),
         };
-        let mut c = self.sub(ctx, node, DMat4::IDENTITY);
+        let mut c = self.sub(ctx, node, &DMat4::IDENTITY);
         c.dyn_ = dy.clone();
         if rgba.is_some() {
             c.color = rgba;
@@ -792,7 +1045,16 @@ impl<'a> Ev<'a> {
         self.scope_list(children, &c)
     }
 
-    fn m_blend(&mut self, s: &'a Stmt, n: &str, a: &Args<'a>, children: &'a [Stmt], ctx: &Ctx<'a>, dy: &Dyn<'a>) -> R<()> {
+    #[inline(never)]
+    fn m_blend(
+        &mut self,
+        s: &'a Stmt,
+        n: &str,
+        a: &Args<'a>,
+        children: &'a [Stmt],
+        ctx: &Ctx<'a>,
+        dy: &Dyn<'a>,
+    ) -> R<()> {
         let names: &[&str] = match n {
             "fillet" => &["r", "select"],
             "chamfer" => &["d", "select", "r"],
@@ -804,7 +1066,10 @@ impl<'a> Ev<'a> {
         let r = match main {
             Some(x) => self.blend_param(Some(x), what),
             None => {
-                self.error(s.span, format!("{n}() needs a {}", if n == "shell" { "wall thickness `t`" } else { "radius" }));
+                self.error(
+                    s.span,
+                    format!("{n}() needs a {}", if n == "shell" { "wall thickness `t`" } else { "radius" }),
+                );
                 None
             }
         };
@@ -826,7 +1091,7 @@ impl<'a> Ev<'a> {
             _ => Op::Shell { t: r, select },
         };
         let node = self.node(s, op, ctx);
-        self.eval_children(node, DMat4::IDENTITY, children, ctx, dy)?;
+        self.eval_children(node, &DMat4::IDENTITY, children, ctx, dy)?;
         let kids = self.nodes[node as usize].children.clone();
         if kids.is_empty() {
             self.warn(s.span, format!("{n}() has no body"));
@@ -843,6 +1108,7 @@ impl<'a> Ev<'a> {
         Ok(())
     }
 
+    #[inline(never)]
     fn m_zone(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>) {
         let p = self.bind("zone", a, &["target", "d"], 2);
         let Some(t) = p[0] else {
@@ -857,7 +1123,9 @@ impl<'a> Ev<'a> {
             }
         };
         let shape = match &t.val.v {
-            Value::PlaneRef { grid, plane, .. } => self.grid_plane(*grid, *plane).map(|(point, normal)| ZoneShape::Plane { point, normal, d }),
+            Value::PlaneRef { grid, plane, .. } => {
+                self.grid_plane(*grid, *plane).map(|(point, normal)| ZoneShape::Plane { point, normal, d })
+            }
             Value::GridSel { grid, sel } => {
                 let (point, wild) = self.sel_point(*grid, sel);
                 let g = &self.grids[*grid as usize];
@@ -908,7 +1176,16 @@ impl<'a> Ev<'a> {
         }
     }
 
-    fn m_profile_op(&mut self, s: &'a Stmt, n: &str, a: &Args<'a>, children: &'a [Stmt], ctx: &Ctx<'a>, dy: &Dyn<'a>) -> R<()> {
+    #[inline(never)]
+    fn m_profile_op(
+        &mut self,
+        s: &'a Stmt,
+        n: &str,
+        a: &Args<'a>,
+        children: &'a [Stmt],
+        ctx: &Ctx<'a>,
+        dy: &Dyn<'a>,
+    ) -> R<()> {
         let mut handle: Option<(HandleKind, &ArgV<'a>, f64, f64)> = None;
         let mut path_arg = None;
         let op = match n {
@@ -930,7 +1207,11 @@ impl<'a> Ev<'a> {
                     },
                 };
                 if let Some(x) = src {
-                    handle = Some(if center { (HandleKind::Height, x, h / 2.0, 2.0) } else { (HandleKind::Height, x, h, 1.0) });
+                    handle = Some(if center {
+                        (HandleKind::Height, x, h / 2.0, 2.0)
+                    } else {
+                        (HandleKind::Height, x, h, 1.0)
+                    });
                 }
                 Op::LinearExtrude { h, twist, scale, center }
             }
@@ -998,9 +1279,10 @@ impl<'a> Ev<'a> {
                 self.elem_handle(s, ctx, node, i as u32, pa, e, pt, dims, w);
             }
         }
-        self.eval_children(node, DMat4::IDENTITY, children, ctx, dy)
+        self.eval_children(node, &DMat4::IDENTITY, children, ctx, dy)
     }
 
+    #[inline(never)]
     fn m_surface(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("surface", a, &["points", "file", "center", "invert", "convexity"], 1);
         if p[1].is_some() {
@@ -1121,4 +1403,26 @@ fn prism(n: u32, h: f64, r1: f64, r2: f64, z0: f64) -> (Vec<DVec3>, Vec<Vec<u32>
         faces.push(f);
     }
     (pts, faces)
+}
+
+/// Euler angles of a `rotate([x, y, z])` list (missing components 0).
+fn euler_of(l: &[Val]) -> DVec3 {
+    let mut e = DVec3::ZERO;
+    for (i, c) in l.iter().take(3).enumerate() {
+        e[i] = c.as_num().unwrap_or(0.0);
+    }
+    e
+}
+
+/// Scale vector of a `scale([x, y(, z)])` list (z = 1 if missing).
+fn scale_vec(v: &Val) -> Option<DVec3> {
+    let l = v.as_list()?;
+    if l.len() < 2 {
+        return None;
+    }
+    let mut r = DVec3::ONE;
+    for (i, c) in l.iter().take(3).enumerate() {
+        r[i] = c.as_num()?;
+    }
+    Some(r)
 }

@@ -298,10 +298,19 @@ pub struct ContextInfo {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum RefTarget {
     /// Grid point / line / plane.
-    Grid { grid: GridId, sel: [Sel; 3] },
+    Grid {
+        grid: GridId,
+        sel: [Sel; 3],
+    },
     /// `g.name`.
-    Plane { grid: GridId, plane: u32 },
-    Anchor { inst: InstId, anchor: u32 },
+    Plane {
+        grid: GridId,
+        plane: u32,
+    },
+    Anchor {
+        inst: InstId,
+        anchor: u32,
+    },
 }
 
 /// A grid or anchor reference expression in the context module (hover highlight,

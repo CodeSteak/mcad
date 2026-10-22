@@ -43,9 +43,9 @@ fn addsub<'a>(a: &Val<'a>, b: &Val<'a>, sub: bool) -> Option<Val<'a>> {
         return Some(Val::num(if sub { x - y } else { x + y }));
     }
     match (&a.v, &b.v) {
-        (Value::List(x), Value::List(y)) => Some(list_of(
-            x.iter().zip(y.iter()).map(|(p, q)| addsub(p, q, sub).unwrap_or_else(Val::undef)).collect(),
-        )),
+        (Value::List(x), Value::List(y)) => {
+            Some(list_of(x.iter().zip(y.iter()).map(|(p, q)| addsub(p, q, sub).unwrap_or_else(Val::undef)).collect()))
+        }
         _ => None,
     }
 }
@@ -54,11 +54,7 @@ fn scale_list<'a>(l: &[Val<'a>], k: f64, div: bool, left: bool) -> Val<'a> {
     list_of(
         l.iter()
             .map(|e| match (&e.v, e.as_num()) {
-                (_, Some(n)) => Val::num(if div {
-                    if left { k / n } else { n / k }
-                } else {
-                    n * k
-                }),
+                (_, Some(n)) => Val::num(if div { if left { k / n } else { n / k } } else { n * k }),
                 (Value::List(inner), _) => scale_list(inner, k, div, left),
                 _ => Val::undef(),
             })
@@ -102,12 +98,16 @@ fn mul<'a>(a: &Val<'a>, b: &Val<'a>) -> Res<'a> {
                 return Ok(list_of(m.iter().map(|r| Val::num(r.iter().zip(&v).map(|(p, q)| p * q).sum())).collect()));
             }
             if let (Some(u), Some(m)) = (nums(x), matrix(y)) {
-                return Ok(vec_mat(&u, &m).map(|r| list_of(r.into_iter().map(Val::num).collect())).unwrap_or_else(Val::undef));
+                return Ok(vec_mat(&u, &m)
+                    .map(|r| list_of(r.into_iter().map(Val::num).collect()))
+                    .unwrap_or_else(Val::undef));
             }
             if let (Some(a), Some(b)) = (matrix(x), matrix(y)) {
                 let rows: Option<Vec<Vec<f64>>> = a.iter().map(|r| vec_mat(r, &b)).collect();
                 return Ok(match rows {
-                    Some(rows) => list_of(rows.into_iter().map(|r| list_of(r.into_iter().map(Val::num).collect())).collect()),
+                    Some(rows) => {
+                        list_of(rows.into_iter().map(|r| list_of(r.into_iter().map(Val::num).collect())).collect())
+                    }
                     None => Val::undef(),
                 });
             }
@@ -160,6 +160,7 @@ fn compare(a: &Val, b: &Val) -> Option<Option<Ordering>> {
     }
 }
 
+#[inline(never)]
 pub(crate) fn binop<'a>(op: BinOp, a: &Val<'a>, b: &Val<'a>) -> Res<'a> {
     let r = match op {
         BinOp::Add | BinOp::Sub => {
@@ -203,6 +204,7 @@ fn neg<'a>(a: &Val<'a>) -> Option<Val<'a>> {
     }
 }
 
+#[inline(never)]
 pub(crate) fn unop<'a>(op: UnOp, a: &Val<'a>) -> Res<'a> {
     match op {
         UnOp::Not => Ok(Val::bool(!a.truthy())),

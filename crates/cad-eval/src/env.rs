@@ -45,6 +45,7 @@ pub struct Scope<'a> {
 pub struct Env<'a>(pub Rc<RefCell<Scope<'a>>>);
 
 impl<'a> Env<'a> {
+    #[inline(never)]
     pub fn new(parent: Option<&Env<'a>>, dyn_: Dyn<'a>, inst: InstId, module_root: bool) -> Self {
         Env(Rc::new(RefCell::new(Scope {
             vars: Vec::new(),

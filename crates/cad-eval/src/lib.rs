@@ -23,9 +23,7 @@ mod output;
 mod sig;
 pub mod value;
 
-pub use edit::{
-    DragOptions, DragTarget, DragValue, SnapRef, SnapTarget, drag_edits, set_default_edit, snap_targets,
-};
+pub use edit::{DragOptions, DragTarget, DragValue, SnapRef, SnapTarget, drag_edits, set_default_edit, snap_targets};
 pub use eval::eval;
 pub use output::*;
 pub use value::{Origin, PValue, fmt_literal, fmt_num};

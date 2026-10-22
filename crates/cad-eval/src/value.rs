@@ -110,10 +110,17 @@ pub enum Value<'a> {
     Grid(GridId),
     /// `g[a, *, c]` / `g[*, *, c]`: a line (one wildcard) or plane (two wildcards).
     /// Points (no wildcard) evaluate to plain vectors with [`Origin::GridRef`].
-    GridSel { grid: GridId, sel: [Sel; 3] },
+    GridSel {
+        grid: GridId,
+        sel: Rc<[Sel; 3]>,
+    },
     /// `g.name`: a plane that converts to its coordinate (in the grid system) in
     /// arithmetic and to a plane where an argument accepts one (`mirror`, `zone`).
-    PlaneRef { grid: GridId, plane: u32, value: f64 },
+    PlaneRef {
+        grid: GridId,
+        plane: u32,
+        value: f64,
+    },
     /// Named module instance `k`.
     Instance(InstId),
 }
@@ -233,6 +240,12 @@ impl<'a> Val<'a> {
         }
     }
 
+    /// Grids, grid lines/planes and instances: only allowed where an argument
+    /// explicitly accepts them (a type error elsewhere).
+    pub fn is_special(&self) -> bool {
+        matches!(self.v, Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_))
+    }
+
     pub fn type_name(&self) -> &'static str {
         match &self.v {
             Value::Undef => "undefined",
@@ -261,7 +274,11 @@ pub enum PValue {
     Num(f64),
     Str(String),
     List(Vec<PValue>),
-    Range { start: f64, step: f64, end: f64 },
+    Range {
+        start: f64,
+        step: f64,
+        end: f64,
+    },
     Function,
     /// Grids, grid lines/planes, instances: shown by name only.
     Other(String),
@@ -391,7 +408,11 @@ pub fn display(v: &Val, out: &mut String, top: bool, o: DisplayOpts) {
             let _ = write!(out, "[{} : {} : {}]", fmt_num(r.start), fmt_num(r.step), fmt_num(r.end));
         }
         Value::Func(c) => {
-            let _ = write!(out, "function({})", c.params.iter().map(|p| p.name.name.as_str()).collect::<Vec<_>>().join(", "));
+            let _ = write!(
+                out,
+                "function({})",
+                c.params.iter().map(|p| p.name.name.as_str()).collect::<Vec<_>>().join(", ")
+            );
         }
         Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_) => out.push_str(v.type_name()),
     }

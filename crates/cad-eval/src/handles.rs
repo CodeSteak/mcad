@@ -10,6 +10,10 @@ use crate::output::{Comp, Handle, HandleKind};
 use crate::value::{Origin, Val, Value};
 use crate::{MASK53, mix};
 
+/// At most this many handles per statement, kind and index (loop iterations, several
+/// instances); all of them edit the same literals.
+pub(crate) const MAX_REPEATS: u32 = 32;
+
 pub(crate) struct HSpec<'x, 'a> {
     pub stmt: &'a Stmt,
     pub ctx: &'x Ctx<'a>,
@@ -72,6 +76,7 @@ fn contains(outer: Span, inner: Span) -> bool {
 }
 
 impl<'a> Ev<'a> {
+    #[inline(never)]
     pub(crate) fn add_handle(&mut self, h: HSpec<'_, 'a>) {
         if !h.ctx.in_context() {
             return;
@@ -79,18 +84,25 @@ impl<'a> Ev<'a> {
         if h.comps.iter().all(|c| c.is_none()) && !h.has_ref {
             return;
         }
+        let count = self.handle_count.entry((h.stmt.id, h.kind.tag(), h.index)).or_insert(0);
+        if *count >= MAX_REPEATS {
+            return;
+        }
+        *count += 1;
         let key = h.node.map_or(h.ctx.key, |n| self.nodes[n as usize].inst_key);
         let id = mix(mix(mix(key, h.stmt.id as u64), h.kind.tag()), h.index as u64) & MASK53;
         if !self.handle_ids.insert(id) {
             return;
         }
         let def_span = h.def_span.filter(|d| *d != h.expr_span);
-        let via_var = h.via_var || def_span.is_some() || h.comps.iter().flatten().any(|c| !contains(h.expr_span, c.span));
+        let via_var =
+            h.via_var || def_span.is_some() || h.comps.iter().flatten().any(|c| !contains(h.expr_span, c.span));
         let via_default = h.comps.iter().flatten().any(|c| self.default_spans.iter().any(|d| contains(*d, c.span)));
         let inst = h.ctx.frame.inst;
         let names = self.names_of(inst);
         let grids = names.iter().filter_map(|(_, r)| if let NameRef::Grid(g) = r { Some(*g) } else { None }).collect();
-        let instances = names.iter().filter_map(|(_, r)| if let NameRef::Inst(i) = r { Some(*i) } else { None }).collect();
+        let instances =
+            names.iter().filter_map(|(_, r)| if let NameRef::Inst(i) = r { Some(*i) } else { None }).collect();
         self.handles.push(Handle {
             id,
             stmt: h.stmt.id,
@@ -117,6 +129,7 @@ impl<'a> Ev<'a> {
 
     /// Point handle for a vector argument (`translate(v)`, box corners, …).
     #[allow(clippy::too_many_arguments)]
+    #[inline(never)]
     pub(crate) fn point_handle(
         &mut self,
         s: &'a Stmt,
@@ -151,6 +164,7 @@ impl<'a> Ev<'a> {
 
     /// Point handle for element `i` of a list argument (polygon points, paths).
     #[allow(clippy::too_many_arguments)]
+    #[inline(never)]
     pub(crate) fn elem_handle(
         &mut self,
         s: &'a Stmt,
@@ -187,6 +201,7 @@ impl<'a> Ev<'a> {
 
     /// 1D handle (radius, height, angle, scale) for a scalar argument.
     #[allow(clippy::too_many_arguments)]
+    #[inline(never)]
     pub(crate) fn scalar_handle(
         &mut self,
         s: &'a Stmt,

@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use cad_syntax::Span;
-use cad_syntax::ast::{File, StmtKind};
+use cad_syntax::ast::File;
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
 
@@ -73,12 +73,21 @@ fn step_for(h: &Handle, o: &DragOptions) -> f64 {
 }
 
 fn in_src(src: &str, s: Span) -> bool {
-    (s.end as usize) <= src.len() && s.start <= s.end && src.is_char_boundary(s.start as usize) && src.is_char_boundary(s.end as usize)
+    (s.end as usize) <= src.len()
+        && s.start <= s.end
+        && src.is_char_boundary(s.start as usize)
+        && src.is_char_boundary(s.end as usize)
 }
 
 /// Text edits for dragging handle `handle_id` to `target`. Empty if the handle does
 /// not exist or the target does not apply.
-pub fn drag_edits(out: &EvalOutput, src: &str, handle_id: u64, target: &DragTarget, opts: &DragOptions) -> Vec<TextEdit> {
+pub fn drag_edits(
+    out: &EvalOutput,
+    src: &str,
+    handle_id: u64,
+    target: &DragTarget,
+    opts: &DragOptions,
+) -> Vec<TextEdit> {
     let Some(h) = out.handle(handle_id) else {
         return Vec::new();
     };
@@ -86,7 +95,10 @@ pub fn drag_edits(out: &EvalOutput, src: &str, handle_id: u64, target: &DragTarg
         DragTarget::Free(v) => free_edits(h, *v, opts),
         DragTarget::Snap(r) => snap_edit(out, h, r).into_iter().collect(),
     };
-    edits.into_iter().filter(|e| in_src(src, e.span) && src[e.span.start as usize..e.span.end as usize] != e.text).collect()
+    edits
+        .into_iter()
+        .filter(|e| in_src(src, e.span) && src[e.span.start as usize..e.span.end as usize] != e.text)
+        .collect()
 }
 
 fn free_edits(h: &Handle, v: DragValue, opts: &DragOptions) -> Vec<TextEdit> {
@@ -241,13 +253,9 @@ pub fn set_default_edit(src: &str, file: &File, module: &str, param: &str, value
     let p = m.params.iter().find(|p| p.name.name == param)?;
     let edit = match &p.default {
         Some(d) => TextEdit { span: d.span, text: value_text.to_string() },
-        None => TextEdit { span: Span { start: p.name.span.end, end: p.name.span.end }, text: format!(" = {value_text}") },
+        None => {
+            TextEdit { span: Span { start: p.name.span.end, end: p.name.span.end }, text: format!(" = {value_text}") }
+        }
     };
     in_src(src, edit.span).then_some(edit)
-}
-
-/// Statement kinds are re-exported for callers that only hold a file.
-#[allow(dead_code)]
-fn is_module(k: &StmtKind) -> bool {
-    matches!(k, StmtKind::Module(_))
 }

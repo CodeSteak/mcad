@@ -80,32 +80,17 @@ pub fn tan_deg(x: f64) -> f64 {
 
 pub fn rot_x(a: f64) -> DMat4 {
     let (s, c) = (sin_deg(a), cos_deg(a));
-    DMat4::from_cols(
-        DVec4::new(1.0, 0.0, 0.0, 0.0),
-        DVec4::new(0.0, c, s, 0.0),
-        DVec4::new(0.0, -s, c, 0.0),
-        DVec4::W,
-    )
+    DMat4::from_cols(DVec4::new(1.0, 0.0, 0.0, 0.0), DVec4::new(0.0, c, s, 0.0), DVec4::new(0.0, -s, c, 0.0), DVec4::W)
 }
 
 pub fn rot_y(a: f64) -> DMat4 {
     let (s, c) = (sin_deg(a), cos_deg(a));
-    DMat4::from_cols(
-        DVec4::new(c, 0.0, -s, 0.0),
-        DVec4::new(0.0, 1.0, 0.0, 0.0),
-        DVec4::new(s, 0.0, c, 0.0),
-        DVec4::W,
-    )
+    DMat4::from_cols(DVec4::new(c, 0.0, -s, 0.0), DVec4::new(0.0, 1.0, 0.0, 0.0), DVec4::new(s, 0.0, c, 0.0), DVec4::W)
 }
 
 pub fn rot_z(a: f64) -> DMat4 {
     let (s, c) = (sin_deg(a), cos_deg(a));
-    DMat4::from_cols(
-        DVec4::new(c, s, 0.0, 0.0),
-        DVec4::new(-s, c, 0.0, 0.0),
-        DVec4::new(0.0, 0.0, 1.0, 0.0),
-        DVec4::W,
-    )
+    DMat4::from_cols(DVec4::new(c, s, 0.0, 0.0), DVec4::new(-s, c, 0.0, 0.0), DVec4::new(0.0, 0.0, 1.0, 0.0), DVec4::W)
 }
 
 /// OpenSCAD `rotate([ax, ay, az])` = Rz · Ry · Rx.

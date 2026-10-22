@@ -55,7 +55,11 @@ fn sig(src: &str, m: &ModuleDef, path: &[String]) -> ModuleSig {
                 ParamSig {
                     name: p.name.name.clone(),
                     span: p.span,
-                    default_text: p.default.as_ref().and_then(|d| src.get(d.span.start as usize..d.span.end as usize)).map(String::from),
+                    default_text: p
+                        .default
+                        .as_ref()
+                        .and_then(|d| src.get(d.span.start as usize..d.span.end as usize))
+                        .map(String::from),
                     default_span: p.default.as_ref().map(|d| d.span),
                     ty: default_value.as_ref().map_or(ParamType::Unknown, type_of),
                     default_value,
@@ -93,7 +97,9 @@ pub(crate) fn type_of(v: &PValue) -> ParamType {
         PValue::Num(_) => ParamType::Number,
         PValue::Bool(_) => ParamType::Bool,
         PValue::Str(_) => ParamType::String,
-        PValue::List(l) if (2..=3).contains(&l.len()) && l.iter().all(|x| matches!(x, PValue::Num(_))) => ParamType::Vector,
+        PValue::List(l) if (2..=3).contains(&l.len()) && l.iter().all(|x| matches!(x, PValue::Num(_))) => {
+            ParamType::Vector
+        }
         PValue::List(_) => ParamType::List,
         _ => ParamType::Unknown,
     }
