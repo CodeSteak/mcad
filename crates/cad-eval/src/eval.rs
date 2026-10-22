@@ -13,7 +13,7 @@ use glam::DMat4;
 
 use crate::env::{Dyn, Env, NO_INST, Scope, dyn_push};
 use crate::output::*;
-use crate::value::{InstId, Origin, PValue, Val, Value, to_hint};
+use crate::value::{InstId, Origin, PValue, Val, Value, fmt_num, to_hint};
 use crate::{MASK53, mix};
 
 /// Evaluation aborted (diagnostic already reported).
@@ -39,6 +39,8 @@ pub(crate) struct Args<'a> {
     pub list: Vec<ArgV<'a>>,
     /// `$name = value` arguments.
     pub dyn_vars: Vec<(&'a str, Val<'a>)>,
+    /// Per `$` argument: number of `list` arguments before it (source order for echo).
+    pub dyn_at: Vec<usize>,
 }
 
 impl<'a> Args<'a> {
@@ -289,7 +291,7 @@ impl<'a> Ev<'a> {
     #[inline(never)]
     fn steps_exceeded(&mut self, span: Span) -> R<()> {
         let max = self.opts.max_steps;
-        self.fatal(span, format!("evaluation aborted: more than {max} steps (endless loop?)"))
+        self.fatal(span, format!("Auswertung abgebrochen: mehr als {max} Schritte (Endlosschleife?)"))
     }
 
     #[inline]
@@ -303,15 +305,15 @@ impl<'a> Ev<'a> {
     #[cold]
     #[inline(never)]
     fn stack_exceeded(&mut self, span: Span) -> R<()> {
-        self.fatal(span, "recursion too deep: evaluation stack exhausted")
+        self.fatal(span, "Rekursion zu tief: Auswertungsstapel erschöpft")
     }
 
     #[cold]
     #[inline(never)]
     pub(crate) fn too_deep<T>(&mut self, span: Span, what: &str, name: &str, max: u32) -> R<T> {
         let msg = match what {
-            "module" => format!("recursion too deep: module `{name}` nested more than {max} levels"),
-            _ => format!("recursion too deep: function `{name}` called more than {max} levels deep"),
+            "module" => format!("Rekursion zu tief: Modul `{name}` mehr als {max} Ebenen verschachtelt"),
+            _ => format!("Rekursion zu tief: Funktion `{name}` mehr als {max} Ebenen tief aufgerufen"),
         };
         self.fatal(span, msg)
     }
@@ -371,7 +373,7 @@ impl<'a> Ev<'a> {
             if self.root_mod.is_none() {
                 self.root_mod = Some(idx);
             } else {
-                self.warn(s.span, "several `!` modifiers: only the first one is used");
+                self.warn(s.span, "mehrere `!`-Modifikatoren: nur der erste gilt");
             }
         }
         idx
@@ -409,7 +411,7 @@ impl<'a> Ev<'a> {
                             let (l1, l2) = (self.line(*sp), self.line(s.span));
                             self.warn(
                                 name.span,
-                                format!("`{}` was assigned on line {l1} but is overwritten on line {l2}", name.name),
+                                format!("`{}` aus Zeile {l1} wird in Zeile {l2} überschrieben", name.name),
                             );
                         }
                     } else {
@@ -542,7 +544,7 @@ impl<'a> Ev<'a> {
 
     fn run_module(&mut self, name: &str, overrides: &'a [(String, PValue)], info: &mut ContextInfo) -> R<()> {
         let Some(path) = find_module_path(&self.file.stmts, name) else {
-            return self.fatal(Span::default(), format!("module `{name}` not found"));
+            return self.fatal(Span::default(), format!("Modul `{name}` nicht gefunden"));
         };
         let def = *path.last().unwrap();
         info.module = Some(def.name.name.clone());
@@ -557,9 +559,7 @@ impl<'a> Ev<'a> {
             let e = Env::new(Some(&env), dy.clone(), NO_INST, true);
             for p in &anc.params {
                 match &p.default {
-                    Some(d) => {
-                        e.set_lazy(&p.name.name, d);
-                    }
+                    Some(d) => e.set_default(&p.name.name, d, env.clone(), dy.clone()),
                     None => e.set(&p.name.name, Val::undef()),
                 }
             }
@@ -602,14 +602,14 @@ impl<'a> Ev<'a> {
         let e = Env::new(Some(&env), None, 0, true);
         for (oname, _) in overrides {
             if !def.params.iter().any(|p| p.name.name == *oname) {
-                self.warn(def.name.span, format!("module `{}` has no parameter `{oname}`", def.name.name));
+                self.warn(def.name.span, format!("Modul `{}` hat keinen Parameter `{oname}`", def.name.name));
             }
         }
         for p in &def.params {
             if let Some((_, v)) = overrides.iter().rev().find(|(n, _)| *n == p.name.name) {
                 e.set(&p.name.name, v.to_val());
             } else if let Some(d) = &p.default {
-                e.set_lazy(&p.name.name, d);
+                e.set_default(&p.name.name, d, env.clone(), dy.clone());
             } else {
                 e.set(&p.name.name, Val::undef());
             }
@@ -686,7 +686,7 @@ impl<'a> Ev<'a> {
             StmtKind::Empty | StmtKind::Module(_) | StmtKind::Function(_) | StmtKind::Error => Ok(()),
             StmtKind::Include { is_use, .. } => {
                 let what = if *is_use { "use" } else { "include" };
-                self.warn(s.span, format!("`{what}` is not supported yet"));
+                self.warn(s.span, format!("`{what}` noch nicht unterstützt"));
                 Ok(())
             }
             StmtKind::Assign { name, value } => self.assign_stmt(s, name, value, ctx),
@@ -800,7 +800,12 @@ impl<'a> Ev<'a> {
     pub(crate) fn let_env(&mut self, vars: &'a [Assignment], env: &Env<'a>, dy: &Dyn<'a>) -> R<(Env<'a>, Dyn<'a>)> {
         let e = env.child(dy.clone());
         let mut d = dy.clone();
-        for a in vars {
+        for (i, a) in vars.iter().enumerate() {
+            // OpenSCAD keeps the first of several assignments to one name.
+            if vars[..i].iter().any(|b| b.name.name == a.name.name) {
+                self.warn(a.name.span, format!("doppelte Zuweisung an `{}` wird ignoriert", a.name.name));
+                continue;
+            }
             let v = self.expr(&a.value, &e, &d)?;
             if a.name.name.starts_with('$') {
                 d = dyn_push(&d, vec![(&a.name.name, v)]);
@@ -855,7 +860,7 @@ impl<'a> Ev<'a> {
             Value::Range(r) => {
                 let c = r.count();
                 if c > self.opts.max_list_len as f64 {
-                    return self.fatal(span, format!("range has too many elements ({c})"));
+                    return self.fatal(span, format!("Bereich hat zu viele Elemente ({c})"));
                 }
                 c as usize
             }
@@ -884,7 +889,10 @@ impl<'a> Ev<'a> {
         for a in args {
             let v = self.expr(&a.value, env, dy)?;
             match &a.name {
-                Some(n) if n.name.starts_with('$') => out.dyn_vars.push((&n.name, v)),
+                Some(n) if n.name.starts_with('$') => {
+                    out.dyn_at.push(out.list.len());
+                    out.dyn_vars.push((&n.name, v));
+                }
                 _ => out.list.push(ArgV { name: a.name.as_ref(), val: v, expr: &a.value }),
             }
         }
@@ -892,15 +900,18 @@ impl<'a> Ev<'a> {
     }
 
     /// Binds call arguments to parameters in `env` (named first, then positional;
-    /// missing ones get their default lazily, or `undef`).
+    /// missing ones get their default lazily, or `undef`). Defaults are evaluated as
+    /// in OpenSCAD: in the definition environment `def_env` with the caller's `$`
+    /// variables `caller_dy`, so they do not see the other parameters.
     #[inline(never)]
     pub(crate) fn bind_params(
         &mut self,
         params: &'a [Param],
         args: Vec<ArgV<'a>>,
         env: &Env<'a>,
+        def_env: &Env<'a>,
+        caller_dy: &Dyn<'a>,
         what: &str,
-        span: Span,
     ) {
         let mut pos = Vec::new();
         let mut named: Vec<ArgV<'a>> = Vec::new();
@@ -908,8 +919,11 @@ impl<'a> Ev<'a> {
             match a.name {
                 Some(n) => {
                     if !params.iter().any(|p| p.name.name == n.name) {
-                        self.warn(n.span, format!("`{what}` has no parameter `{}`", n.name));
+                        self.warn(n.span, format!("`{what}` hat keinen Parameter `{}`", n.name));
                         continue;
+                    }
+                    if named.iter().any(|b| b.name.is_some_and(|m| m.name == n.name)) {
+                        self.warn(n.span, format!("Argument `{}` mehrfach angegeben", n.name));
                     }
                     named.push(a);
                 }
@@ -918,9 +932,8 @@ impl<'a> Ev<'a> {
         }
         if pos.len() > params.len() {
             let sp = pos[params.len()].expr.span;
-            self.warn(sp, format!("too many arguments for `{what}` ({} given, {} expected)", pos.len(), params.len()));
+            self.warn(sp, format!("zu viele Argumente für `{what}` ({} statt {})", pos.len(), params.len()));
         }
-        let _ = span;
         let mut pos = pos.into_iter();
         for p in params {
             let nv = named.iter().rposition(|a| a.name.is_some_and(|n| n.name == p.name.name));
@@ -930,7 +943,7 @@ impl<'a> Ev<'a> {
             } else if let Some(a) = pv {
                 env.set(&p.name.name, a.val);
             } else if let Some(d) = &p.default {
-                env.set_lazy(&p.name.name, d);
+                env.set_default(&p.name.name, d, def_env.clone(), caller_dy.clone());
             } else {
                 env.set(&p.name.name, Val::undef());
             }
@@ -952,7 +965,7 @@ impl<'a> Ev<'a> {
             return self.user_module(s, def, denv, a, children, ctx, label).map(Some);
         }
         if label.is_some() {
-            self.error(name.span, format!("only user module calls can be named, `{}` is built in", name.name));
+            self.error(name.span, format!("nur Aufrufe eigener Module sind benennbar, `{}` ist eingebaut", name.name));
         }
         self.builtin_module(s, name, a, children, ctx)?;
         Ok(None)
@@ -1014,7 +1027,7 @@ impl<'a> Ev<'a> {
             depth,
         });
         let env = Env::new(Some(&denv), None, id, true);
-        self.bind_params(&def.params, args.list, &env, &def.name.name, s.span);
+        self.bind_params(&def.params, args.list, &env, &denv, &ctx.dyn_, &def.name.name);
         let nchildren = children.iter().filter(|c| is_geometric(c)).count();
         let mut dvars = args.dyn_vars;
         dvars.push(("$children", Val::num(nchildren as f64)));
@@ -1082,7 +1095,7 @@ impl<'a> Ev<'a> {
                         (0..n).map(|i| r.at(i)).collect()
                     }
                     _ => {
-                        self.warn(arg.expr.span, "children() index must be a number, list or range");
+                        self.warn(arg.expr.span, "children(): Index muss Zahl, Liste oder Bereich sein");
                         vec![]
                     }
                 };
@@ -1090,7 +1103,7 @@ impl<'a> Ev<'a> {
                     if v >= 0.0 && (v as usize) < geo.len() {
                         out.push(v as usize);
                     } else {
-                        self.warn(arg.expr.span, format!("children() index {v} out of range ({} children)", geo.len()));
+                        self.warn(arg.expr.span, format!("children(): Index {} außerhalb ({} Kinder)", fmt_num(v), geo.len()));
                     }
                 }
                 out
@@ -1122,11 +1135,11 @@ impl<'a> Ev<'a> {
 
     pub(crate) fn declare_name(&mut self, inst: InstId, name: &'a Ident, r: NameRef, ctx: &Ctx<'a>) -> bool {
         if self.names_of(inst).iter().any(|(n, _)| *n == name.name) {
-            self.error(name.span, format!("`{}` is already declared in this module", name.name));
+            self.error(name.span, format!("`{}` ist in diesem Modul schon deklariert", name.name));
             return false;
         }
         if ctx.env.has_local(&name.name) || self.module_scope_has_var(&ctx.env, &name.name) {
-            self.error(name.span, format!("`{}` is already a variable in this module", name.name));
+            self.error(name.span, format!("`{}` ist in diesem Modul schon eine Variable", name.name));
             return false;
         }
         self.names[inst as usize].push((&name.name, r));
@@ -1158,20 +1171,20 @@ impl<'a> Ev<'a> {
         ctx: &Ctx<'a>,
     ) -> R<()> {
         if ctx.in_loop {
-            self.error(s.span, "anchors are not allowed inside for loops");
+            self.error(s.span, "Anker sind in for-Schleifen nicht erlaubt");
             return Ok(());
         }
         if ctx.in_children {
-            self.error(s.span, "anchors are not allowed in the children of a module call");
+            self.error(s.span, "Anker sind in den Kindern eines Modulaufrufs nicht erlaubt");
             return Ok(());
         }
         if self.file_context && ctx.frame.inst == 0 {
-            self.warn(s.span, "anchor outside of a module has no effect");
+            self.warn(s.span, "Anker außerhalb eines Moduls ohne Wirkung");
         }
         let pv = self.expr(point, &ctx.env, &ctx.dyn_)?;
         let Some(p) = pv.as_vec3() else {
-            let what = pv.type_name();
-            self.error(point.span, format!("anchor needs a point, found {what}"));
+            let what = pv.type_de();
+            self.error(point.span, format!("Anker braucht einen Punkt, ist {what}"));
             return Ok(());
         };
         let d = match dir {
@@ -1181,7 +1194,7 @@ impl<'a> Ev<'a> {
                 match dv.as_vec3() {
                     Some(d) if d.length() > 0.0 => Some(crate::math::transform_dir(&ctx.xf.mod_local, d)),
                     _ => {
-                        self.error(de.span, "anchor direction must be a non-zero vector");
+                        self.error(de.span, "Ankerrichtung muss ein Vektor ≠ 0 sein");
                         None
                     }
                 }
@@ -1189,7 +1202,7 @@ impl<'a> Ev<'a> {
         };
         let inst = ctx.frame.inst as usize;
         if self.insts[inst].anchors.iter().any(|a| a.name == name.name) {
-            self.error(name.span, format!("anchor `{}` is already declared", name.name));
+            self.error(name.span, format!("Anker `{}` ist schon deklariert", name.name));
             return Ok(());
         }
         self.insts[inst].anchors.push(AnchorInfo {
@@ -1229,16 +1242,16 @@ impl<'a> Ev<'a> {
             return Ok(());
         }
         let StmtKind::Call { name: mname, args, children, .. } = &inst.kind else {
-            self.error(name.span, "only module calls can be named");
+            self.error(name.span, "nur Modulaufrufe sind benennbar");
             return self.stmt(inst, ctx);
         };
         if ctx.in_loop {
-            self.error(name.span, "named instances are not allowed inside for loops");
+            self.error(name.span, "benannte Instanzen sind in for-Schleifen nicht erlaubt");
             return self.stmt(inst, ctx);
         }
         if ctx.env.find_module(&mname.name).is_none() {
             if is_builtin_module(&mname.name) {
-                self.error(name.span, format!("only user module calls can be named, `{}` is built in", mname.name));
+                self.error(name.span, format!("nur Aufrufe eigener Module sind benennbar, `{}` ist eingebaut", mname.name));
             }
             return self.stmt(inst, ctx);
         }

@@ -1,11 +1,14 @@
 //! Built-in functions (OpenSCAD set plus `dir()`).
 
+use std::cmp::Ordering;
+
 use cad_syntax::ast::Expr;
 
 use crate::env::Env;
 use crate::eval::{Args, Ev, R};
 use crate::math::{cos_deg, sin_deg, tan_deg};
-use crate::value::{Val, Value, to_str, values_eq};
+use crate::ops::compare;
+use crate::value::{Val, Value, to_display, to_str, values_eq};
 
 fn nums(v: &Val) -> Option<Vec<f64>> {
     v.as_list()?.iter().map(|x| x.as_num()).collect()
@@ -66,34 +69,17 @@ impl<'a> Ev<'a> {
                 (Some(b), Some(e)) => Val::num(b.powf(e)),
                 _ => Val::undef(),
             },
-            "min" | "max" => {
-                let list: Option<Vec<f64>> = if pos.len() == 1 {
-                    match pos[0].as_num() {
-                        Some(n) => Some(vec![n]),
-                        None => nums(pos[0]),
-                    }
-                } else {
-                    pos.iter().map(|v| v.as_num()).collect()
-                };
-                match list {
-                    Some(l) if !l.is_empty() => {
-                        let r = if name == "min" {
-                            l.iter().copied().fold(f64::INFINITY, f64::min)
-                        } else {
-                            l.iter().copied().fold(f64::NEG_INFINITY, f64::max)
-                        };
-                        Val::num(r)
-                    }
-                    _ => {
-                        self.warn(span, format!("{name}() parameter could not be converted"));
-                        Val::undef()
-                    }
+            "min" | "max" => match min_max(&pos, name == "max") {
+                Some(v) => v,
+                None => {
+                    self.warn(span, format!("{name}(): Argumente sind weder Zahlen noch ein Vektor"));
+                    Val::undef()
                 }
-            }
+            },
             "norm" => match pos.first().and_then(|v| nums(v)) {
                 Some(l) => Val::num(l.iter().map(|x| x * x).sum::<f64>().sqrt()),
                 None => {
-                    self.warn(span, "incorrect arguments to norm()");
+                    self.warn(span, "norm(): Argument ist kein Zahlenvektor");
                     Val::undef()
                 }
             },
@@ -105,7 +91,7 @@ impl<'a> Ev<'a> {
                 ]),
                 (Some(x), Some(y)) if x.len() == 2 && y.len() == 2 => Val::num(x[0] * y[1] - x[1] * y[0]),
                 _ => {
-                    self.warn(span, "invalid arguments to cross()");
+                    self.warn(span, "cross(): braucht zwei Zahlenvektoren der Länge 2 oder 3");
                     Val::undef()
                 }
             },
@@ -113,7 +99,7 @@ impl<'a> Ev<'a> {
                 Some(Value::List(l)) => Val::num(l.len() as f64),
                 Some(Value::Str(s)) => Val::num(s.chars().count() as f64),
                 _ => {
-                    self.warn(span, "len() parameter could not be converted");
+                    self.warn(span, "len(): Argument ist weder Vektor noch String");
                     Val::undef()
                 }
             },
@@ -127,16 +113,24 @@ impl<'a> Ev<'a> {
                 }
                 Val::list(out)
             }
-            "lookup" => lookup(arg(0, "key"), arg(1, "table")),
+            "lookup" => match lookup(arg(0, "key"), arg(1, "table")) {
+                Ok(v) => v,
+                Err(msg) => {
+                    self.warn(span, msg);
+                    Val::undef()
+                }
+            },
             "str" => Val::str(&pos.iter().map(|v| to_str(v)).collect::<String>()),
             "chr" => {
                 let mut s = String::new();
                 fn add(v: &Val, s: &mut String) {
                     match &v.v {
+                        // OpenSCAD truncates (`chr(65.5)` is "A"); 0 and invalid code points
+                        // give nothing.
                         Value::Num(n) => {
-                            if let Some(c) =
-                                (*n >= 0.0 && n.fract() == 0.0).then(|| char::from_u32(*n as u32)).flatten()
-                                && c != '\0'
+                            let t = n.trunc();
+                            if (1.0..=u32::MAX as f64).contains(&t)
+                                && let Some(c) = char::from_u32(t as u32)
                             {
                                 s.push(c);
                             }
@@ -160,7 +154,7 @@ impl<'a> Ev<'a> {
                     None => Val::undef(),
                 },
                 Some(_) => {
-                    self.warn(span, "ord() argument is not a string");
+                    self.warn(span, "ord(): Argument ist kein String");
                     Val::undef()
                 }
                 None => Val::undef(),
@@ -172,10 +166,11 @@ impl<'a> Ev<'a> {
                     arg(1, "max_value").and_then(|v| v.as_num()),
                     arg(2, "value_count").and_then(|v| v.as_num()),
                 ) else {
-                    self.warn(span, "rands() needs min_value, max_value and value_count");
+                    self.warn(span, "rands() braucht `min_value`, `max_value` und `value_count`");
                     return Ok(Some(Val::undef()));
                 };
-                let n = n.max(0.0).min(self.opts.max_list_len as f64) as usize;
+                // OpenSCAD takes |value_count|, truncated.
+                let n = n.abs().min(self.opts.max_list_len as f64) as usize;
                 let seed = arg(3, "seed_value").and_then(|v| v.as_num());
                 let saved = self.rng;
                 if let Some(s) = seed {
@@ -201,7 +196,7 @@ impl<'a> Ev<'a> {
                     self.anchor_dir(&v, span)
                 }
                 None => {
-                    self.error(span, "dir() expects an anchor");
+                    self.error(span, "dir() erwartet einen Anker");
                     Val::undef()
                 }
             },
@@ -210,99 +205,156 @@ impl<'a> Ev<'a> {
         Ok(Some(v))
     }
 
+    /// OpenSCAD 2021 `search()`, including its quirks: a string searched in a list
+    /// compares each character with the first character of the entry's column (as
+    /// text), a list of match values searched in a string finds nothing, and an entry
+    /// too short for `index_col_num` ends a string search with an empty result.
     fn search(&mut self, a: &Args<'a>, span: cad_syntax::Span) -> Val<'a> {
         let (Some(m), Some(hay)) = (a.get(0, "match_value"), a.get(1, "string_or_vector")) else {
-            self.warn(span, "search() needs match_value and string_or_vector");
+            self.warn(span, "search() braucht `match_value` und `string_or_vector`");
             return Val::undef();
         };
-        let nret = a.get(2, "num_returns_per_match").and_then(|v| v.val.as_num()).unwrap_or(1.0) as usize;
-        let col = a.get(3, "index_col_num").and_then(|v| v.val.as_num()).unwrap_or(0.0) as usize;
-        let (m, hay) = (m.val.clone(), hay.val.clone());
-        // Candidate key of each haystack entry.
-        let keys: Vec<Option<Val<'a>>> = match &hay.v {
-            Value::Str(s) => s.chars().map(|c| Some(Val::str(&c.to_string()))).collect(),
-            Value::List(l) => l
-                .iter()
-                .map(|e| match &e.v {
-                    Value::List(r) => r.get(col).cloned(),
-                    _ if col == 0 => Some(e.clone()),
-                    _ => None,
-                })
-                .collect(),
-            _ => return Val::undef(),
+        // Given but not a number counts as 0 (OpenSCAD's `toDouble()`).
+        let count_arg = |i: usize, n: &str, dflt: f64| match a.get(i, n) {
+            None => dflt,
+            Some(v) => v.val.as_num().filter(|x| x.is_finite()).unwrap_or(0.0).max(0.0),
         };
-        let hay_is_str = matches!(hay.v, Value::Str(_));
-        let find = |key: &Val<'a>, max: usize| -> Vec<Val<'a>> {
-            let mut out = Vec::new();
-            for (i, k) in keys.iter().enumerate() {
-                if let Some(k) = k
-                    && values_eq(k, key)
-                {
-                    out.push(Val::num(i as f64));
-                    if max != 0 && out.len() >= max {
-                        break;
+        let nret = count_arg(2, "num_returns_per_match", 1.0) as usize;
+        let col = count_arg(3, "index_col_num", 0.0) as usize;
+        let (m, hay) = (m.val.clone(), hay.val.clone());
+        let table: &[Val<'a>] = hay.as_list().unwrap_or(&[]);
+        let full = |found: &[Val<'a>]| nret != 0 && found.len() >= nret;
+        // Entry `e` matches the number or list element `v`.
+        let matches = |v: &Val<'a>, e: &Val<'a>| {
+            (col == 0 && values_eq(v, e)) || e.as_list().and_then(|l| l.get(col)).is_some_and(|x| values_eq(v, x))
+        };
+        let mut out = Vec::new();
+        match &m.v {
+            Value::Num(_) | Value::PlaneRef { .. } => {
+                for (j, e) in table.iter().enumerate() {
+                    if matches(&m, e) {
+                        out.push(Val::num(j as f64));
+                        if full(&out) {
+                            break;
+                        }
                     }
                 }
             }
-            out
-        };
-        match &m.v {
-            Value::Num(_) | Value::Bool(_) | Value::Undef => Val::list(find(&m, nret)),
             Value::Str(s) => {
-                if !hay_is_str && hay.as_list().is_some_and(|l| l.iter().any(|e| e.as_list().is_none())) {
-                    self.warn(span, "invalid entry in search vector: entries must be lists");
-                    return Val::list(vec![]);
-                }
-                let mut out = Vec::new();
                 for c in s.chars() {
-                    let key = Val::str(&c.to_string());
-                    let r = find(&key, nret);
-                    if nret == 1 {
-                        match r.into_iter().next() {
-                            Some(i) => out.push(i),
-                            None => self.warn(span, format!("search term not found: \"{c}\"")),
+                    let mut found = Vec::new();
+                    if let Value::Str(t) = &hay.v {
+                        for (j, tc) in t.chars().enumerate() {
+                            if tc == c {
+                                found.push(Val::num(j as f64));
+                                if full(&found) {
+                                    break;
+                                }
+                            }
+                        }
+                        if found.is_empty() {
+                            self.warn(span, format!("search(): \"{c}\" nicht gefunden"));
                         }
                     } else {
-                        out.push(Val::list(r));
+                        for (j, e) in table.iter().enumerate() {
+                            let Some(x) = e.as_list().and_then(|l| l.get(col)) else {
+                                let (txt, k) = (to_display(e), col + 1);
+                                self.warn(span, format!("search(): Eintrag {j} ({txt}) hat weniger als {k} Werte"));
+                                return Val::list(vec![]);
+                            };
+                            if to_str(x).starts_with(c) {
+                                found.push(Val::num(j as f64));
+                                if full(&found) {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if nret == 1 {
+                        out.extend(found);
+                    } else {
+                        out.push(Val::list(found));
                     }
                 }
-                Val::list(out)
             }
             Value::List(l) => {
-                let mut out = Vec::new();
                 for key in l.iter() {
-                    let r = find(key, nret);
-                    if nret == 1 {
-                        out.push(r.into_iter().next().unwrap_or_else(|| Val::list(vec![])));
+                    let mut found = Vec::new();
+                    for (j, e) in table.iter().enumerate() {
+                        if matches(key, e) {
+                            found.push(Val::num(j as f64));
+                            if full(&found) {
+                                break;
+                            }
+                        }
+                    }
+                    if nret == 1 && !found.is_empty() {
+                        out.extend(found);
                     } else {
-                        out.push(Val::list(r));
+                        out.push(Val::list(found));
                     }
                 }
-                Val::list(out)
             }
-            _ => Val::undef(),
+            _ => {
+                let t = m.type_name();
+                self.warn(span, format!("search(): Suchwert vom Typ {t} nicht möglich"));
+                return Val::undef();
+            }
         }
+        Val::list(out)
     }
 }
 
-/// OpenSCAD `lookup()` (linear interpolation, clamped, unsorted tables allowed).
-fn lookup<'a>(key: Option<&Val<'a>>, table: Option<&Val<'a>>) -> Val<'a> {
-    let (Some(p), Some(t)) = (key.and_then(|k| k.as_num()), table.and_then(|t| t.as_list())) else {
-        return Val::undef();
-    };
-    let pair = |v: &Val| -> Option<(f64, f64)> {
-        let l = v.as_list()?;
-        if l.len() < 2 {
-            return None;
+/// OpenSCAD `min()` / `max()`: numbers only (anything else gives `undef`), or the
+/// smallest / largest element of a single non-empty vector by `<` / `>` (elements of
+/// different types never compare, so they are passed over). `None` = `undef`.
+fn min_max<'a>(pos: &[&Val<'a>], max: bool) -> Option<Val<'a>> {
+    let first = pos.first()?;
+    if pos.len() == 1
+        && let Some(l) = first.as_list()
+        && !l.is_empty()
+    {
+        let want = if max { Ordering::Greater } else { Ordering::Less };
+        let mut best = &l[0];
+        for v in &l[1..] {
+            if compare(v, best) == Some(Some(want)) {
+                best = v;
+            }
         }
-        Some((l[0].as_num()?, l[1].as_num()?))
+        return Some(Val::new(best.v.clone()));
+    }
+    let mut val = first.as_num()?;
+    for v in &pos[1..] {
+        let x = v.as_num()?;
+        if (max && x > val) || (!max && x < val) {
+            val = x;
+        }
+    }
+    Some(Val::num(val))
+}
+
+/// `[p, v]` with exactly two numbers (OpenSCAD `getVec2`).
+fn vec2(v: &Val) -> Option<(f64, f64)> {
+    match v.as_list()? {
+        [p, x] => Some((p.as_num()?, x.as_num()?)),
+        _ => None,
+    }
+}
+
+/// OpenSCAD `lookup()`: linear interpolation, clamped, unsorted tables allowed. The
+/// key must be finite and the first entry a `[p, v]` pair; later invalid entries are
+/// skipped.
+fn lookup<'a>(key: Option<&Val<'a>>, table: Option<&Val<'a>>) -> Result<Val<'a>, String> {
+    let Some(p) = key.and_then(|k| k.as_num()).filter(|p| p.is_finite()) else {
+        let k = key.map_or("undef".into(), to_display);
+        return Err(format!("lookup(): Schlüssel {k} ist keine Zahl"));
     };
-    let Some(first) = t.first().and_then(pair) else {
-        return Val::undef();
+    let Some(t) = table.and_then(|t| t.as_list()) else { return Ok(Val::undef()) };
+    let Some(first) = t.first().and_then(vec2) else {
+        return Ok(Val::undef());
     };
     let (mut low, mut high) = (first, first);
-    for e in &t[1..] {
-        let Some((tp, tv)) = pair(e) else { return Val::undef() };
+    for (tp, tv) in t[1..].iter().filter_map(vec2) {
         if tp <= p && (tp > low.0 || low.0 > p) {
             low = (tp, tv);
         }
@@ -312,11 +364,11 @@ fn lookup<'a>(key: Option<&Val<'a>>, table: Option<&Val<'a>>) -> Val<'a> {
     }
     // Outside the table one of the two stays at the first entry (as in OpenSCAD).
     if p <= low.0 {
-        return Val::num(high.1);
+        return Ok(Val::num(high.1));
     }
     if p >= high.0 {
-        return Val::num(low.1);
+        return Ok(Val::num(low.1));
     }
     let f = (p - low.0) / (high.0 - low.0);
-    Val::num(high.1 * f + low.1 * (1.0 - f))
+    Ok(Val::num(high.1 * f + low.1 * (1.0 - f)))
 }

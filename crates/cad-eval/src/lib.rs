@@ -20,6 +20,7 @@ mod handles;
 pub mod math;
 mod ops;
 mod output;
+mod print;
 mod sig;
 pub mod value;
 

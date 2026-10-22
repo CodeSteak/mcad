@@ -69,7 +69,7 @@ pub fn lex(src: &str, diags: &mut Vec<Diagnostic>) -> Vec<Token> {
             i += 2;
             loop {
                 if i + 1 >= b.len() {
-                    diags.push(Diagnostic::error(Span::new(start, b.len()), "unterminated comment"));
+                    diags.push(Diagnostic::error(Span::new(start, b.len()), "Kommentar nicht geschlossen"));
                     i = b.len();
                     break;
                 }
@@ -91,7 +91,7 @@ pub fn lex(src: &str, diags: &mut Vec<Diagnostic>) -> Vec<Token> {
             if i < b.len() && b[i] == b'>' {
                 i += 1;
             } else {
-                diags.push(Diagnostic::error(Span::new(start, i), "unterminated path, expected `>`"));
+                diags.push(Diagnostic::error(Span::new(start, i), "Pfad nicht geschlossen, `>` erwartet"));
             }
             out.push(Token { tok: Tok::Path(path), span: Span::new(start, i) });
             expect_path = false;
@@ -120,9 +120,20 @@ pub fn lex(src: &str, diags: &mut Vec<Diagnostic>) -> Vec<Token> {
                     }
                 }
             }
+            // As in OpenSCAD (longest match), a word starting with digits is an
+            // identifier when it is longer than the number: `2d`, `3x`, `0x1F`.
+            let mut w = start;
+            while w < b.len() && (b[w].is_ascii_alphanumeric() || b[w] == b'_') {
+                w += 1;
+            }
+            if c != b'.' && w > i {
+                out.push(Token { tok: Tok::Ident(src[start..w].to_string()), span: Span::new(start, w) });
+                i = w;
+                continue;
+            }
             let text = &src[start..i];
             let v = text.parse::<f64>().unwrap_or_else(|_| {
-                diags.push(Diagnostic::error(Span::new(start, i), "invalid number"));
+                diags.push(Diagnostic::error(Span::new(start, i), "ungültige Zahl"));
                 0.0
             });
             out.push(Token { tok: Tok::Number(v), span: Span::new(start, i) });
@@ -182,7 +193,7 @@ pub fn lex(src: &str, diags: &mut Vec<Diagnostic>) -> Vec<Token> {
                 i += ch.len_utf8();
             }
             if !closed {
-                diags.push(Diagnostic::error(Span::new(start, i), "unterminated string"));
+                diags.push(Diagnostic::error(Span::new(start, i), "String nicht geschlossen"));
             }
             out.push(Token { tok: Tok::Str(s), span: Span::new(start, i) });
             continue;
@@ -222,7 +233,7 @@ pub fn lex(src: &str, diags: &mut Vec<Diagnostic>) -> Vec<Token> {
                     let ch = src[i..].chars().next().unwrap();
                     diags.push(Diagnostic::error(
                         Span::new(i, i + ch.len_utf8()),
-                        format!("unexpected character `{ch}`"),
+                        format!("unerwartetes Zeichen `{ch}`"),
                     ));
                     i += ch.len_utf8();
                     continue;

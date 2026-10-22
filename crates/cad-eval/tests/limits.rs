@@ -21,7 +21,7 @@ fn module_recursion_limit() {
         assert!(out.aborted);
         errors(&out)
     });
-    assert!(msg.iter().any(|m| m.contains("module `r` nested more than 1000 levels")), "{msg:?}");
+    assert!(msg.iter().any(|m| m.contains("Modul `r` mehr als 1000 Ebenen verschachtelt")), "{msg:?}");
 }
 
 #[test]
@@ -31,7 +31,7 @@ fn function_recursion_limit() {
         assert!(out.aborted);
         errors(&out)
     });
-    assert!(msg.iter().any(|m| m.contains("function `f` called more than 2000 levels deep")), "{msg:?}");
+    assert!(msg.iter().any(|m| m.contains("Funktion `f` mehr als 2000 Ebenen tief aufgerufen")), "{msg:?}");
 }
 
 #[test]
@@ -49,10 +49,10 @@ fn stack_guard_reports_instead_of_overflowing() {
     // the depth limit) and reports an error.
     let out = run("function f(n) = 1 + f(n + 1); echo(f(0));");
     assert!(out.aborted);
-    assert!(errors(&out).iter().any(|m| m.contains("recursion too deep")), "{:?}", out.diagnostics);
+    assert!(errors(&out).iter().any(|m| m.contains("Rekursion zu tief")), "{:?}", out.diagnostics);
     let opts = EvalOptions { max_stack_bytes: 64 << 10, ..Default::default() };
     let out = run_with("module r(n) r(n + 1); r(0);", &opts);
-    assert!(has_error(&out, "evaluation stack exhausted"));
+    assert!(has_error(&out, "Auswertungsstapel erschöpft"));
 }
 
 #[test]
@@ -68,9 +68,9 @@ fn step_budget() {
     let opts = EvalOptions { max_steps: 100_000, ..Default::default() };
     let out = run_with("function f(n) = n == 0 ? 0 : f(n - 1); echo(f(1e9));", &opts);
     assert!(out.aborted);
-    assert!(has_error(&out, "more than 100000 steps"));
+    assert!(has_error(&out, "mehr als 100000 Schritte"));
     let out = run_with("for (i = [0:1e6]) cube(i);", &opts);
-    assert!(has_error(&out, "more than 100000 steps"));
+    assert!(has_error(&out, "mehr als 100000 Schritte"));
     let out = run_with("x = [for (i = 0; true; i = i + 1) i];", &opts);
     assert!(out.aborted);
     // The partial tree is still consistent.
@@ -86,10 +86,10 @@ fn step_budget() {
 #[test]
 fn huge_ranges_and_lists_are_rejected() {
     let out = run("x = [for (i = [0:1e9]) i];");
-    assert!(has_error(&out, "range has too many elements"));
+    assert!(has_error(&out, "Bereich hat zu viele Elemente"));
     let opts = EvalOptions { max_list_len: 1000, ..Default::default() };
     let out = run_with("x = [for (i = [0:500]) each [i, i]];", &opts);
-    assert!(has_error(&out, "list has more than 1000 elements"));
+    assert!(has_error(&out, "Liste hat mehr als 1000 Elemente"));
 }
 
 #[test]

@@ -150,6 +150,28 @@ fn stmt_ids_are_unique() {
 }
 
 #[test]
+fn identifiers_may_start_with_digits() {
+    // OpenSCAD's lexer takes the longest match: `2d` and `0x1F` are identifiers,
+    // `1e5` and `12` stay numbers.
+    use crate::lexer::Tok;
+    let mut d = Vec::new();
+    let toks: Vec<Tok> = crate::lexer::lex("2d 3x_1 0x1F 1e5 12 1.5 1e2x", &mut d).into_iter().map(|t| t.tok).collect();
+    assert!(d.is_empty(), "{d:?}");
+    let id = |s: &str| Tok::Ident(s.into());
+    let want = [id("2d"), id("3x_1"), id("0x1F"), Tok::Number(1e5), Tok::Number(12.0), Tok::Number(1.5), id("1e2x")];
+    assert_eq!(&toks[..7], &want);
+    ok("module 2d_profile() square(1); 2d_profile();");
+}
+
+#[test]
+fn messages_are_german() {
+    let (_, d) = parse("cube(1;");
+    assert!(d[0].message.contains("erwartet, gefunden"), "{d:?}");
+    let (_, d) = parse("a = \"x;");
+    assert!(d.iter().any(|d| d.message == "String nicht geschlossen"), "{d:?}");
+}
+
+#[test]
 fn line_index_utf16() {
     let src = "a = 1; // äö😀\nb = 2;";
     let li = LineIndex::new(src);

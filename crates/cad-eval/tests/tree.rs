@@ -193,7 +193,7 @@ fn small_fn_makes_polygons_like_openscad() {
     let Op::Profile(Profile::Polygon { loops }) = &n[3].op else { panic!() };
     assert_eq!(loops[0].len(), 4);
     assert!(matches!(n[4].op, Op::Prim { prim: Prim::Cylinder { .. }, .. }));
-    assert!(out.diagnostics.iter().any(|d| d.message.contains("`$fn` is ignored")));
+    assert!(out.diagnostics.iter().any(|d| d.message.contains("`$fn` ignoriert")));
     // A global $fn gives exact geometry and a hint.
     let out = run("$fn = 6; cylinder(h = 1, r = 1);");
     assert!(matches!(out.tree.nodes[1].op, Op::Prim { prim: Prim::Cylinder { .. }, .. }));
@@ -234,7 +234,7 @@ fn transforms() {
 #[test]
 fn nonuniform_scale_warns() {
     let out = run("scale([1, 2, 1]) cube(1);");
-    assert!(has_warning(&out, "non-uniform scale"));
+    assert!(has_warning(&out, "ungleichmäßige Skalierung"));
 }
 
 #[test]
@@ -293,8 +293,8 @@ teil();
 #[test]
 fn zone_outside_block_warns_and_bad_target_errors() {
     let out = run("grid g { z: a = 1; } zone(g.a, d = 1); fillet(1) { cube(1); zone([1, 2, 3], d = 1); }");
-    assert!(has_warning(&out, "zone() outside"));
-    assert!(has_error(&out, "zone() needs a grid line"));
+    assert!(has_warning(&out, "zone() außerhalb"));
+    assert!(has_error(&out, "zone() braucht Rasterlinie"));
 }
 
 #[test]
@@ -355,8 +355,8 @@ thicken(2) surface([[[0,0,0],[10,0,0]],[[0,10,0],[10,10,5]]]);
 #[test]
 fn surface_errors() {
     let out = run("surface(file = \"x.dat\"); surface([[[0,0,0],[1,0,0]],[[0,1,0]]]);");
-    assert!(has_warning(&out, "not supported"));
-    assert!(has_error(&out, "equal length"));
+    assert!(has_warning(&out, "nicht unterstützt"));
+    assert!(has_error(&out, "gleich lange Zeilen"));
 }
 
 #[test]
@@ -364,7 +364,7 @@ fn modifiers() {
     let out =
         run("#cube(1); %sphere(1); *cylinder(h = 1, r = 1); echo(\"x\"); !translate([1, 0, 0]) cube(2); !cube(3);");
     assert_eq!(dump(&out), "translate\n  box\n");
-    assert!(has_warning(&out, "several `!` modifiers"));
+    assert!(has_warning(&out, "mehrere `!`-Modifikatoren"));
     let all: Vec<String> = out.tree.nodes.iter().map(|n| n.op.label()).collect();
     assert_eq!(all, ["group", "box", "sphere", "translate", "box", "box"]);
     assert!(out.tree.nodes[1].flags.highlight);
@@ -379,16 +379,16 @@ fn modifiers() {
 fn unsupported_operations_keep_children() {
     let out = run("hull() { cube(1); sphere(1); } text(\"hi\"); import(\"a.stl\"); minkowski() cube(1);");
     assert_eq!(dump(&out), "group\n  empty\n    box\n    sphere\n  empty\n    box\n");
-    assert!(has_warning(&out, "`hull()` is not supported"));
-    assert!(has_warning(&out, "`text()` is not supported"));
+    assert!(has_warning(&out, "`hull()` nicht unterstützt"));
+    assert!(has_warning(&out, "`text()` nicht unterstützt"));
 }
 
 #[test]
 fn unknown_module_and_include() {
     let out = run("include <x.scad>\nfoo(1); cube(1) sphere(1);");
-    assert!(has_warning(&out, "`include` is not supported"));
-    assert!(has_warning(&out, "unknown module `foo`"));
-    assert!(has_warning(&out, "`cube()` does not take children"));
+    assert!(has_warning(&out, "`include` noch nicht unterstützt"));
+    assert!(has_warning(&out, "unbekanntes Modul `foo`"));
+    assert!(has_warning(&out, "`cube()` nimmt keine Kinder"));
 }
 
 #[test]
@@ -436,9 +436,9 @@ fn nested_module_context() {
     assert_eq!(prim(&out, b), &Prim::Box { min: DVec3::ZERO, max: DVec3::splat(9.0) });
     let out = run_module(src, "inner", vec![("b", PValue::Num(1.0)), ("zz", PValue::Num(1.0))]);
     assert_eq!(prim(&out, nodes_by_label(&out, "box")[0]), &Prim::Box { min: DVec3::ZERO, max: DVec3::splat(7.0) });
-    assert!(has_warning(&out, "has no parameter `zz`"));
+    assert!(has_warning(&out, "hat keinen Parameter `zz`"));
     let out = run_module(src, "missing", vec![]);
-    assert!(has_error(&out, "module `missing` not found"));
+    assert!(has_error(&out, "Modul `missing` nicht gefunden"));
 }
 
 #[test]

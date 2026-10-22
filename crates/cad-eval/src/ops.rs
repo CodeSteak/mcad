@@ -11,7 +11,7 @@ use crate::value::{Val, Value, values_eq};
 type Res<'a> = Result<Val<'a>, String>;
 
 fn undefined_op(op: &str, a: &Val, b: &Val) -> String {
-    format!("undefined operation ({} {op} {})", a.type_name(), b.type_name())
+    format!("undefinierte Operation ({} {op} {})", a.type_de(), b.type_de())
 }
 
 fn op_sym(op: BinOp) -> &'static str {
@@ -81,6 +81,9 @@ fn mul<'a>(a: &Val<'a>, b: &Val<'a>) -> Res<'a> {
         (Value::List(l), _) if b.as_num().is_some() => Ok(scale_list(l, b.as_num().unwrap(), false, false)),
         (_, Value::List(l)) if a.as_num().is_some() => Ok(scale_list(l, a.as_num().unwrap(), false, false)),
         (Value::List(x), Value::List(y)) => {
+            if x.is_empty() || y.is_empty() {
+                return Err("Multiplikation mit leerem Vektor ist undefiniert".into());
+            }
             if let (Some(u), Some(v)) = (nums(x), nums(y)) {
                 if u.len() != v.len() {
                     return Ok(Val::undef());
@@ -90,7 +93,7 @@ fn mul<'a>(a: &Val<'a>, b: &Val<'a>) -> Res<'a> {
             if let (Some(m), Some(v)) = (matrix(x), nums(y)) {
                 if m.iter().any(|r| r.len() != v.len()) {
                     return Err(format!(
-                        "matrix*vector requires matrix column count to match vector length ({} != {})",
+                        "Matrix * Vektor: Spaltenzahl der Matrix ≠ Länge des Vektors ({} ≠ {})",
                         m[0].len(),
                         v.len()
                     ));
@@ -140,7 +143,7 @@ fn div<'a>(a: &Val<'a>, b: &Val<'a>) -> Res<'a> {
 }
 
 /// Ordering for `<`, `>`, …: numbers, strings, bools, and vectors lexicographically.
-fn compare(a: &Val, b: &Val) -> Option<Option<Ordering>> {
+pub(crate) fn compare(a: &Val, b: &Val) -> Option<Option<Ordering>> {
     if let (Some(x), Some(y)) = (a.as_num(), b.as_num()) {
         return Some(x.partial_cmp(&y));
     }
@@ -208,11 +211,11 @@ fn neg<'a>(a: &Val<'a>) -> Option<Val<'a>> {
 pub(crate) fn unop<'a>(op: UnOp, a: &Val<'a>) -> Res<'a> {
     match op {
         UnOp::Not => Ok(Val::bool(!a.truthy())),
-        UnOp::Neg => neg(a).ok_or_else(|| format!("undefined operation (-{})", a.type_name())),
-        UnOp::Plus => match (&a.v, a.as_num()) {
-            (_, Some(x)) => Ok(Val::num(x)),
-            (Value::List(_), _) => Ok(Val::new(a.v.clone())),
-            _ => Err(format!("undefined operation (+{})", a.type_name())),
-        },
+        UnOp::Neg => neg(a).ok_or_else(|| format!("undefinierte Operation (-{})", a.type_de())),
+        // OpenSCAD: unary `+` returns its operand unchanged, whatever its type.
+        UnOp::Plus => Ok(match a.as_num() {
+            Some(x) => Val::num(x),
+            None => Val::new(a.v.clone()),
+        }),
     }
 }

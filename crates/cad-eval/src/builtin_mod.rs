@@ -8,11 +8,11 @@ use cad_syntax::ast::{Ident, Stmt};
 use glam::{DMat4, DVec2, DVec3};
 
 use crate::colors::parse_color;
-use crate::env::{Dyn, dyn_lookup, dyn_push};
+use crate::env::{Dyn, dyn_frame, dyn_lookup, dyn_push};
 use crate::eval::{ArgV, Args, Ctx, Ev, R};
 use crate::math::{self, cos_deg, sin_deg};
 use crate::output::HandleKind;
-use crate::value::{Sel, Val, Value};
+use crate::value::{Sel, Val, Value, fmt_num};
 
 pub(crate) const BUILTIN_MODULES: &[&str] = &[
     "cube",
@@ -90,14 +90,14 @@ impl<'a> Ev<'a> {
                 slots[pi] = Some(arg);
                 pi += 1;
             } else {
-                self.warn(arg.expr.span, format!("too many arguments for `{what}()`"));
+                self.warn(arg.expr.span, format!("zu viele Argumente für `{what}()`"));
             }
         }
         for arg in &a.list {
             if let Some(n) = arg.name {
                 match names.iter().position(|x| *x == n.name) {
                     Some(i) => slots[i] = Some(arg),
-                    None => self.warn(n.span, format!("`{what}()` has no parameter `{}`", n.name)),
+                    None => self.warn(n.span, format!("`{what}()` hat keinen Parameter `{}`", n.name)),
                 }
             }
         }
@@ -122,8 +122,8 @@ impl<'a> Ev<'a> {
                 if a.val.is_special() {
                     self.special_misuse(a, what);
                 } else if !a.val.is_undef() {
-                    let t = a.val.type_name();
-                    self.warn(a.expr.span, format!("`{what}` must be a number, found {t}"));
+                    let t = a.val.type_de();
+                    self.warn(a.expr.span, format!("`{what}` muss eine Zahl sein, ist {t}"));
                 }
                 None
             }
@@ -138,8 +138,8 @@ impl<'a> Ev<'a> {
                 if a.val.is_special() {
                     self.special_misuse(a, what);
                 } else {
-                    let t = a.val.type_name();
-                    self.warn(a.expr.span, format!("`{what}` must be a vector [x, y, z], found {t}"));
+                    let t = a.val.type_de();
+                    self.warn(a.expr.span, format!("`{what}` muss ein Vektor [x, y, z] sein, ist {t}"));
                 }
                 None
             }
@@ -148,13 +148,13 @@ impl<'a> Ev<'a> {
 
     /// A grid, grid line/plane or instance where a number or point is expected.
     fn special_misuse(&mut self, a: &ArgV<'a>, what: &str) {
-        let t = a.val.type_name();
+        let t = a.val.type_de();
         let hint = match a.val.v {
-            Value::GridSel { .. } => "; lines and planes are only accepted by zone() and mirror()",
-            Value::Instance(_) => "; use an anchor `k.name`",
-            _ => "; use a grid point `g[x, y, z]` or plane `g.name`",
+            Value::GridSel { .. } => "; Linien und Ebenen nur in zone() und mirror()",
+            Value::Instance(_) => "; Anker `k.name` verwenden",
+            _ => "; Rasterpunkt `g[x, y, z]` oder Ebene `g.name` verwenden",
         };
-        self.error(a.expr.span, format!("type error: `{what}` expects a number or point, found {t}{hint}"));
+        self.error(a.expr.span, format!("Typfehler: `{what}` erwartet Zahl oder Punkt, ist {t}{hint}"));
     }
 
     /// 2D point; a z component other than 0 is projected away with a warning.
@@ -165,7 +165,7 @@ impl<'a> Ev<'a> {
             && let Some(z) = l[2].as_num()
             && z != 0.0
         {
-            self.warn(span, "z coordinate ignored: 2D shapes lie in the xy-plane");
+            self.warn(span, "z-Koordinate ignoriert: 2D-Formen liegen in der xy-Ebene");
         }
         Some(p)
     }
@@ -186,27 +186,31 @@ impl<'a> Ev<'a> {
         n
     }
 
+    /// A primitive with invalid dimensions: OpenSCAD makes nothing. Empty node (it
+    /// keeps the handles) and a warning.
+    fn invalid_prim(&mut self, s: &Stmt, msg: &str, ctx: &Ctx<'a>) -> NodeIdx {
+        self.warn(s.span, format!("{msg}, kein Körper"));
+        self.node(s, Op::Empty, ctx)
+    }
+
     fn profile(&mut self, s: &Stmt, p: Profile, ctx: &Ctx<'a>, dy: &Dyn<'a>) -> NodeIdx {
         let n = self.node(s, Op::Profile(p), ctx);
         self.nodes[n as usize].tol = dyn_lookup(dy, "$tol").and_then(|v| v.as_num()).filter(|x| *x > 0.0);
         n
     }
 
-    /// `$fn` directly at the call between 3 and 12 → number of facets (OpenSCAD
-    /// polygon); otherwise exact geometry, with a hint if `$fn` is set.
+    /// `$fn` up to 12 directly at the call, or directly at an enclosing
+    /// `linear_extrude` / `rotate_extrude` call → number of facets (OpenSCAD polygon;
+    /// below 3 counts as 3 as in OpenSCAD). Otherwise exact geometry, with a hint if
+    /// `$fn` is set.
     fn facets(&mut self, s: &Stmt, a: &Args<'a>, dy: &Dyn<'a>) -> Option<u32> {
-        let direct = a.dyn_num("$fn");
-        if let Some(n) = direct
-            && (3.0..13.0).contains(&n)
-        {
-            return Some(n.floor() as u32);
+        let direct = a.dyn_num("$fn").or_else(|| extrude_fn(dy));
+        if let Some(n) = direct.and_then(facet_count) {
+            return Some(n);
         }
         let eff = direct.or_else(|| dyn_lookup(dy, "$fn").and_then(|v| v.as_num())).unwrap_or(0.0);
         if eff > 0.0 {
-            self.info(
-                s.span,
-                "`$fn` is ignored, the geometry is exact (only `$fn` = 3…12 directly at the call makes a polygon)",
-            );
+            self.info(s.span, "`$fn` ignoriert, Geometrie exakt (Polygon nur bei `$fn` ≤ 12 direkt am Aufruf)");
         }
         None
     }
@@ -222,13 +226,17 @@ impl<'a> Ev<'a> {
     ) -> R<()> {
         let n = name.name.as_str();
         if LEAVES.contains(&n) && children.iter().any(crate::eval::is_geometric) {
-            self.warn(name.span, format!("`{n}()` does not take children"));
+            self.warn(name.span, format!("`{n}()` nimmt keine Kinder"));
         }
         if a.dyn_vars.is_empty() {
             let dy = ctx.dyn_.clone();
             self.dispatch(s, name, &a, children, ctx, &dy)
         } else {
-            let dy = dyn_push(&ctx.dyn_, a.dyn_vars.clone());
+            let mut vars = a.dyn_vars.clone();
+            if matches!(n, "linear_extrude" | "rotate_extrude") && a.dyn_num("$fn").is_some() {
+                vars.push((EXTRUDE_FN, Val::bool(true)));
+            }
+            let dy = dyn_push(&ctx.dyn_, vars);
             let c = Ctx { dyn_: dy.clone(), ..ctx.clone() };
             self.dispatch(s, name, &a, children, &c, &dy)
         }
@@ -308,15 +316,15 @@ impl<'a> Ev<'a> {
                 Op::Group
             }
             "hull" | "minkowski" | "offset" | "projection" => {
-                self.warn(name.span, format!("`{n}()` is not supported; its children are shown unchanged"));
+                self.warn(name.span, format!("`{n}()` nicht unterstützt; Kinder werden unverändert gezeigt"));
                 Op::Empty
             }
             "text" | "import" => {
-                self.warn(name.span, format!("`{n}()` is not supported"));
+                self.warn(name.span, format!("`{n}()` nicht unterstützt"));
                 return Ok(());
             }
             _ => {
-                self.warn(name.span, format!("unknown module `{n}`"));
+                self.warn(name.span, format!("unbekanntes Modul `{n}`"));
                 return Ok(());
             }
         };
@@ -327,7 +335,7 @@ impl<'a> Ev<'a> {
     fn blend_param(&mut self, a: Option<&ArgV<'a>>, what: &str) -> Option<f64> {
         let a = a?;
         if matches!(a.val.v, Value::Func(_)) {
-            self.warn(a.expr.span, format!("variable `{what}` radius (function) is not supported yet"));
+            self.warn(a.expr.span, format!("variabler Radius `{what}` (Funktion) noch nicht unterstützt"));
             return None;
         }
         self.num_of(Some(a), what)
@@ -338,23 +346,24 @@ impl<'a> Ev<'a> {
     #[inline(never)]
     fn m_cube(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("cube", a, &["size", "center"], 2);
-        let center = p[1].is_some_and(|x| x.val.truthy());
+        let center = is_true(p[1]);
         let size = match p[0] {
             None => DVec3::ONE,
             Some(x) => match (x.val.as_num(), x.val.as_list()) {
                 (Some(n), _) => DVec3::splat(n),
                 (_, Some(l)) if l.len() == 3 && x.val.as_vec3().is_some() => x.val.as_vec3().unwrap(),
                 _ => {
-                    self.warn(x.expr.span, "cube size must be a number or [x, y, z]");
+                    self.warn(x.expr.span, "cube: Größe muss Zahl oder [x, y, z] sein");
                     DVec3::ONE
                 }
             },
         };
-        if size.min_element() < 0.0 {
-            self.warn(s.span, "cube size is negative");
-        }
         let (lo, hi) = if center { (-size / 2.0, size / 2.0) } else { (DVec3::ZERO, size) };
-        let node = self.prim(s, Prim::Box { min: lo.min(hi), max: lo.max(hi) }, DMat4::IDENTITY, ctx, dy);
+        let node = if positive(&size.to_array()) {
+            self.prim(s, Prim::Box { min: lo, max: hi }, DMat4::IDENTITY, ctx, dy)
+        } else {
+            self.invalid_prim(s, "cube: Größe muss positiv sein", ctx)
+        };
         if let Some(x) = p[0] {
             self.point_handle(s, ctx, node, 0, x, hi, 3, if center { 2.0 } else { 1.0 });
         }
@@ -366,7 +375,7 @@ impl<'a> Ev<'a> {
         let pa = self.vec3_of(p[0], "a");
         let pb = self.vec3_of(p[1], "b");
         let (Some(pa), Some(pb)) = (pa, pb) else {
-            self.error(s.span, "box() needs two corner points `a` and `b`");
+            self.error(s.span, "box() braucht zwei Eckpunkte `a` und `b`");
             return;
         };
         let node = self.prim(s, Prim::Box { min: pa.min(pb), max: pa.max(pb) }, DMat4::IDENTITY, ctx, dy);
@@ -378,20 +387,36 @@ impl<'a> Ev<'a> {
         }
     }
 
+    /// OpenSCAD `lookup_radius`: the diameter wins over the radius (with a warning if
+    /// both are given). Returns the radius, its argument and `literal / radius`.
+    fn radius<'x>(
+        &mut self,
+        r: Option<&'x ArgV<'a>>,
+        d: Option<&'x ArgV<'a>>,
+        rname: &str,
+        dname: &str,
+    ) -> Option<(f64, &'x ArgV<'a>, f64)> {
+        let rv = self.num_of(r, rname);
+        match (self.num_of(d, dname), d) {
+            (Some(dv), Some(darg)) => {
+                if let (Some(_), Some(rarg)) = (rv, r) {
+                    self.warn(rarg.expr.span, format!("`{rname}` ignoriert, da auch `{dname}` angegeben ist"));
+                }
+                Some((dv / 2.0, darg, 2.0))
+            }
+            _ => Some((rv?, r?, 1.0)),
+        }
+    }
+
     #[inline(never)]
     fn m_sphere(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("sphere", a, &["r", "d"], 1);
-        let (r, src, scale) = if let Some(r) = self.num_of(p[0], "r") {
-            (r, p[0], 1.0)
-        } else if let Some(d) = self.num_of(p[1], "d") {
-            (d / 2.0, p[1], 2.0)
-        } else {
-            (1.0, None, 1.0)
+        let (r, src, scale) = match self.radius(p[0], p[1], "r", "d") {
+            Some((r, x, sc)) => (r, Some(x), sc),
+            None => (1.0, None, 1.0),
         };
-        if r <= 0.0 {
-            self.warn(s.span, "sphere radius must be positive");
-        }
         let node = match self.facets(s, a, dy) {
+            _ if !positive(&[r]) => self.invalid_prim(s, "sphere: Radius muss positiv sein", ctx),
             Some(n) => {
                 let (points, faces) = sphere_poly(r, n);
                 self.prim(s, Prim::Polyhedron { points, faces }, DMat4::IDENTITY, ctx, dy)
@@ -417,10 +442,12 @@ impl<'a> Ev<'a> {
         }
     }
 
-    /// Bottom and top radius with their source arguments (`r1`, `d1`, `r`, `d`, …).
-    #[allow(clippy::type_complexity)]
+    /// Bottom and top radius with their source arguments, as in OpenSCAD: `d1`
+    /// before `r1`, then `d` before `r` (default 1).
+    #[allow(clippy::type_complexity, clippy::too_many_arguments)]
     fn radii<'x>(
         &mut self,
+        s: &Stmt,
         r1: Option<&'x ArgV<'a>>,
         r2: Option<&'x ArgV<'a>>,
         r: Option<&'x ArgV<'a>>,
@@ -428,17 +455,17 @@ impl<'a> Ev<'a> {
         d1: Option<&'x ArgV<'a>>,
         d2: Option<&'x ArgV<'a>>,
     ) -> ((f64, Option<(&'x ArgV<'a>, f64)>), (f64, Option<(&'x ArgV<'a>, f64)>)) {
-        let mut pick = |cands: [(Option<&'x ArgV<'a>>, f64, &str); 4]| {
-            for (c, scale, what) in cands {
-                if let Some(v) = self.num_of(c, what) {
-                    return (v / scale, Some((c.unwrap(), scale)));
-                }
-            }
-            (1.0, None)
+        let both = self.radius(r, d, "r", "d");
+        let bottom = self.radius(r1, d1, "r1", "d1");
+        let top = self.radius(r2, d2, "r2", "d2");
+        if both.is_some() && (bottom.is_some() || top.is_some()) {
+            self.warn(s.span, "mehrdeutige Zylinderparameter: `r`/`d` zusammen mit `r1`/`r2`/`d1`/`d2`");
+        }
+        let pick = |x: Option<(f64, &'x ArgV<'a>, f64)>| match x.or(both) {
+            Some((v, arg, sc)) => (v, Some((arg, sc))),
+            None => (1.0, None),
         };
-        let bottom = pick([(r1, 1.0, "r1"), (d1, 2.0, "d1"), (r, 1.0, "r"), (d, 2.0, "d")]);
-        let top = pick([(r2, 1.0, "r2"), (d2, 2.0, "d2"), (r, 1.0, "r"), (d, 2.0, "d")]);
-        (bottom, top)
+        (pick(bottom), pick(top))
     }
 
     #[inline(never)]
@@ -453,13 +480,14 @@ impl<'a> Ev<'a> {
         }
         let p = self.bind("cylinder", a, &["h", "r1", "r2", "center", "r", "d", "d1", "d2"], 4);
         let h = self.num_of(p[0], "h").unwrap_or(1.0);
-        let center = p[3].is_some_and(|x| x.val.truthy());
-        let ((r1, s1), (r2, s2)) = self.radii(p[1], p[2], p[4], p[5], p[6], p[7]);
-        if h < 0.0 || r1 < 0.0 || r2 < 0.0 || (r1 == 0.0 && r2 == 0.0) {
-            self.warn(s.span, "cylinder needs a positive height and at least one positive radius");
-        }
+        let center = is_true(p[3]);
+        let ((r1, s1), (r2, s2)) = self.radii(s, p[1], p[2], p[4], p[5], p[6], p[7]);
+        let valid = positive(&[h]) && r1.is_finite() && r2.is_finite() && r1 >= 0.0 && r2 >= 0.0 && r1 + r2 > 0.0;
         let z0 = if center { -h / 2.0 } else { 0.0 };
         let node = match self.facets(s, a, dy) {
+            _ if !valid => {
+                self.invalid_prim(s, "cylinder: braucht Höhe > 0 und Radien ≥ 0, nicht beide 0", ctx)
+            }
             Some(n) => {
                 let (points, faces) = prism(n, h, r1, r2, z0);
                 self.prim(s, Prim::Polyhedron { points, faces }, DMat4::IDENTITY, ctx, dy)
@@ -528,14 +556,14 @@ impl<'a> Ev<'a> {
         let pa = self.vec3_of(p[0], "a");
         let pb = self.vec3_of(p[1], "b");
         let (Some(pa), Some(pb)) = (pa, pb) else {
-            self.error(s.span, "cylinder(a, b, r) needs two points");
+            self.error(s.span, "cylinder(a, b, r) braucht zwei Punkte");
             return;
         };
-        let ((r1, s1), (r2, s2)) = self.radii(p[3], p[4], p[2], p[5], p[6], p[7]);
+        let ((r1, s1), (r2, s2)) = self.radii(s, p[3], p[4], p[2], p[5], p[6], p[7]);
         let d = pb - pa;
         let h = d.length();
         if h == 0.0 {
-            self.warn(s.span, "cylinder(a, b, r): both points are equal");
+            self.warn(s.span, "cylinder(a, b, r): beide Punkte gleich");
         }
         let place = DMat4::from_translation(pa) * math::rot_to(d);
         let node = self.prim(s, Prim::Cylinder { h, r1, r2 }, place, ctx, dy);
@@ -563,11 +591,11 @@ impl<'a> Ev<'a> {
         let big = self.num_of(p[0], "R");
         let small = self.num_of(p[1], "r");
         let (Some(big_r), Some(r)) = (big, small) else {
-            self.error(s.span, "torus() needs the radii `R` and `r`");
+            self.error(s.span, "torus() braucht die Radien `R` und `r`");
             return;
         };
         if r <= 0.0 || big_r <= 0.0 {
-            self.warn(s.span, "torus radii must be positive");
+            self.warn(s.span, "torus: Radien müssen positiv sein");
         }
         let node = self.prim(s, Prim::Torus { big_r, r }, DMat4::IDENTITY, ctx, dy);
         let w = self.nodes[node as usize].world;
@@ -609,17 +637,17 @@ impl<'a> Ev<'a> {
     fn m_polyhedron(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("polyhedron", a, &["points", "faces", "convexity", "triangles"], 3);
         let Some(pts_arg) = p[0] else {
-            self.error(s.span, "polyhedron() needs `points`");
+            self.error(s.span, "polyhedron() braucht `points`");
             return;
         };
         let Some(points) =
             pts_arg.val.as_list().and_then(|l| l.iter().map(|v| v.as_vec3()).collect::<Option<Vec<_>>>())
         else {
-            self.error(pts_arg.expr.span, "polyhedron points must be a list of [x, y, z]");
+            self.error(pts_arg.expr.span, "polyhedron: `points` muss eine Liste von [x, y, z] sein");
             return;
         };
         let Some(faces_arg) = p[1].or(p[3]) else {
-            self.error(s.span, "polyhedron() needs `faces`");
+            self.error(s.span, "polyhedron() braucht `faces`");
             return;
         };
         let n = points.len() as f64;
@@ -634,7 +662,7 @@ impl<'a> Ev<'a> {
                 .collect()
         });
         let Some(faces) = faces else {
-            self.error(faces_arg.expr.span, "polyhedron faces must be lists of point indices");
+            self.error(faces_arg.expr.span, "polyhedron: `faces` müssen Listen von Punktindizes sein");
             return;
         };
         let node = self.prim(s, Prim::Polyhedron { points: points.clone(), faces }, DMat4::IDENTITY, ctx, dy);
@@ -651,20 +679,24 @@ impl<'a> Ev<'a> {
     #[inline(never)]
     fn m_square(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("square", a, &["size", "center"], 2);
-        let center = p[1].is_some_and(|x| x.val.truthy());
+        let center = is_true(p[1]);
         let size = match p[0] {
             None => DVec2::ONE,
             Some(x) => match (x.val.as_num(), x.val.as_vec2()) {
                 (Some(n), _) => DVec2::splat(n),
                 (_, Some(v)) => v,
                 _ => {
-                    self.warn(x.expr.span, "square size must be a number or [x, y]");
+                    self.warn(x.expr.span, "square: Größe muss Zahl oder [x, y] sein");
                     DVec2::ONE
                 }
             },
         };
         let (lo, hi) = if center { (-size / 2.0, size / 2.0) } else { (DVec2::ZERO, size) };
-        let node = self.profile(s, Profile::Rect { min: lo.min(hi), max: lo.max(hi) }, ctx, dy);
+        let node = if positive(&size.to_array()) {
+            self.profile(s, Profile::Rect { min: lo, max: hi }, ctx, dy)
+        } else {
+            self.invalid_prim(s, "square: Größe muss positiv sein", ctx)
+        };
         if let Some(x) = p[0] {
             self.point_handle(s, ctx, node, 0, x, hi.extend(0.0), 2, if center { 2.0 } else { 1.0 });
         }
@@ -676,7 +708,7 @@ impl<'a> Ev<'a> {
         let pa = p[0].and_then(|x| self.pt2(&x.val, x.expr.span));
         let pb = p[1].and_then(|x| self.pt2(&x.val, x.expr.span));
         let (Some(pa), Some(pb)) = (pa, pb) else {
-            self.error(s.span, "rect() needs two corner points `a` and `b`");
+            self.error(s.span, "rect() braucht zwei Eckpunkte `a` und `b`");
             return;
         };
         let node = self.profile(s, Profile::Rect { min: pa.min(pb), max: pa.max(pb) }, ctx, dy);
@@ -690,15 +722,13 @@ impl<'a> Ev<'a> {
     #[inline(never)]
     fn m_circle(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("circle", a, &["r", "d"], 1);
-        let (r, src, scale) = if let Some(r) = self.num_of(p[0], "r") {
-            (r, p[0], 1.0)
-        } else if let Some(d) = self.num_of(p[1], "d") {
-            (d / 2.0, p[1], 2.0)
-        } else {
-            (1.0, None, 1.0)
+        let (r, src, scale) = match self.radius(p[0], p[1], "r", "d") {
+            Some((r, x, sc)) => (r, Some(x), sc),
+            None => (1.0, None, 1.0),
         };
         let prof = match self.facets(s, a, dy) {
-            Some(n) => Profile::Polygon {
+            _ if !positive(&[r]) => None,
+            Some(n) => Some(Profile::Polygon {
                 loops: vec![
                     (0..n)
                         .map(|i| {
@@ -707,10 +737,13 @@ impl<'a> Ev<'a> {
                         })
                         .collect(),
                 ],
-            },
-            None => Profile::Circle { r },
+            }),
+            None => Some(Profile::Circle { r }),
         };
-        let node = self.profile(s, prof, ctx, dy);
+        let node = match prof {
+            Some(prof) => self.profile(s, prof, ctx, dy),
+            None => self.invalid_prim(s, "circle: Radius muss positiv sein", ctx),
+        };
         if let Some(x) = src {
             let w = self.nodes[node as usize].world;
             self.scalar_handle(
@@ -735,11 +768,11 @@ impl<'a> Ev<'a> {
         let names: &[&str] = if what == "spline" { &["points", "closed"] } else { &["points", "paths", "convexity"] };
         let p = self.bind(what, a, names, names.len());
         let Some(pa) = p[0] else {
-            self.error(s.span, format!("{what}() needs `points`"));
+            self.error(s.span, format!("{what}() braucht `points`"));
             return;
         };
         let Some(list) = pa.val.as_list() else {
-            self.error(pa.expr.span, format!("{what} points must be a list of [x, y]"));
+            self.error(pa.expr.span, format!("{what}: `points` muss eine Liste von [x, y] sein"));
             return;
         };
         let mut pts = Vec::with_capacity(list.len());
@@ -747,7 +780,7 @@ impl<'a> Ev<'a> {
             match self.pt2(e, e.def.unwrap_or(pa.expr.span)) {
                 Some(v) => pts.push(v),
                 None => {
-                    self.error(pa.expr.span, format!("{what} points must be a list of [x, y]"));
+                    self.error(pa.expr.span, format!("{what}: `points` muss eine Liste von [x, y] sein"));
                     return;
                 }
             }
@@ -775,7 +808,7 @@ impl<'a> Ev<'a> {
                     match paths {
                         Some(p) => p,
                         None => {
-                            self.error(x.expr.span, "polygon paths must be lists of point indices");
+                            self.error(x.expr.span, "polygon: `paths` müssen Listen von Punktindizes sein");
                             return;
                         }
                     }
@@ -832,7 +865,7 @@ impl<'a> Ev<'a> {
                             None => math::rot_z(ang),
                         },
                         _ => {
-                            self.warn(x.expr.span, "rotate angle must be a number or [x, y, z]");
+                            self.warn(x.expr.span, "rotate: Winkel muss Zahl oder [x, y, z] sein");
                             DMat4::IDENTITY
                         }
                     },
@@ -849,13 +882,13 @@ impl<'a> Ev<'a> {
                             if !(v.x == v.y && v.y == v.z) {
                                 self.warn(
                                     s.span,
-                                    "non-uniform scale distorts fillets, cylinders and wall thicknesses; prefer module parameters",
+                                    "ungleichmäßige Skalierung verzerrt Verrundungen, Zylinder und Wandstärken; besser Modulparameter",
                                 );
                             }
                             DMat4::from_scale(v)
                         }
                         _ => {
-                            self.warn(x.expr.span, "scale must be a number or [x, y, z]");
+                            self.warn(x.expr.span, "scale: muss Zahl oder [x, y, z] sein");
                             DMat4::IDENTITY
                         }
                     },
@@ -879,13 +912,13 @@ impl<'a> Ev<'a> {
                             math::mirror_at(pt, math::transform_dir(&g.frame_module, ax))
                         }
                         Value::GridSel { .. } => {
-                            self.error(x.expr.span, "mirror() needs a plane, not a grid line");
+                            self.error(x.expr.span, "mirror() braucht eine Ebene, keine Rasterlinie");
                             DMat4::IDENTITY
                         }
                         _ => match x.val.as_vec3() {
                             Some(v) => math::mirror(v),
                             None => {
-                                self.warn(x.expr.span, "mirror() needs a normal vector or a grid plane");
+                                self.warn(x.expr.span, "mirror() braucht einen Normalenvektor oder eine Rasterebene");
                                 DMat4::IDENTITY
                             }
                         },
@@ -901,7 +934,7 @@ impl<'a> Ev<'a> {
                     Some(r) if !r.is_empty() => (TransformKind::Matrix, math::from_rows(&r)),
                     _ => {
                         if let Some(x) = p[0] {
-                            self.warn(x.expr.span, "multmatrix() needs a 4x4 or 3x4 matrix");
+                            self.warn(x.expr.span, "multmatrix() braucht eine 4×4- oder 3×4-Matrix");
                         }
                         (TransformKind::Matrix, DMat4::IDENTITY)
                     }
@@ -1017,7 +1050,7 @@ impl<'a> Ev<'a> {
                 (Value::Str(name), _) => {
                     let c = parse_color(name);
                     if c.is_none() {
-                        self.warn(x.expr.span, format!("unknown colour `{name}`"));
+                        self.warn(x.expr.span, format!("unbekannte Farbe `{name}`"));
                     }
                     c
                 }
@@ -1025,7 +1058,7 @@ impl<'a> Ev<'a> {
                     Some([v[0] as f32, v[1] as f32, v[2] as f32, v.get(3).copied().unwrap_or(1.0) as f32])
                 }
                 _ => {
-                    self.warn(x.expr.span, "colour must be a name or [r, g, b, a]");
+                    self.warn(x.expr.span, "Farbe muss Name oder [r, g, b, a] sein");
                     None
                 }
             },
@@ -1068,7 +1101,7 @@ impl<'a> Ev<'a> {
             None => {
                 self.error(
                     s.span,
-                    format!("{n}() needs a {}", if n == "shell" { "wall thickness `t`" } else { "radius" }),
+                    format!("{n}() braucht {}", if n == "shell" { "eine Wandstärke `t`" } else { "einen Radius" }),
                 );
                 None
             }
@@ -1079,7 +1112,7 @@ impl<'a> Ev<'a> {
                 Some("inside") => Select::Inside,
                 Some("touch") => Select::Touch,
                 _ => {
-                    self.warn(x.expr.span, "select must be \"inside\" or \"touch\"");
+                    self.warn(x.expr.span, "`select` muss \"inside\" oder \"touch\" sein");
                     Select::Inside
                 }
             },
@@ -1094,13 +1127,13 @@ impl<'a> Ev<'a> {
         self.eval_children(node, &DMat4::IDENTITY, children, ctx, dy)?;
         let kids = self.nodes[node as usize].children.clone();
         if kids.is_empty() {
-            self.warn(s.span, format!("{n}() has no body"));
+            self.warn(s.span, format!("{n}() ohne Körper"));
         }
         if let Some(&first) = kids.first()
             && matches!(self.nodes[first as usize].op, Op::Zone(_))
         {
             let sp = self.nodes[first as usize].span;
-            self.warn(sp, "the first child is the body; zones follow it");
+            self.warn(sp, "das erste Kind ist der Körper, Zonen folgen danach");
         }
         for &k in kids.iter().skip(1) {
             self.nodes[k as usize].flags.zone = true;
@@ -1112,13 +1145,13 @@ impl<'a> Ev<'a> {
     fn m_zone(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>) {
         let p = self.bind("zone", a, &["target", "d"], 2);
         let Some(t) = p[0] else {
-            self.error(s.span, "zone() needs a grid line or plane");
+            self.error(s.span, "zone() braucht eine Rasterlinie oder -ebene");
             return;
         };
         let d = match self.num_of(p[1], "d") {
             Some(d) => d,
             None => {
-                self.error(s.span, "zone() needs a diameter / thickness `d`");
+                self.error(s.span, "zone() braucht Durchmesser/Dicke `d`");
                 return;
             }
         };
@@ -1143,8 +1176,8 @@ impl<'a> Ev<'a> {
             _ => None,
         };
         let Some(shape) = shape else {
-            let ty = t.val.type_name();
-            self.error(t.expr.span, format!("zone() needs a grid line `g[a, *, c]` or plane `g.name`, found {ty}"));
+            let ty = t.val.type_de();
+            self.error(t.expr.span, format!("zone() braucht Rasterlinie `g[a, *, c]` oder Ebene `g.name`, ist {ty}"));
             return;
         };
         let mut ok = false;
@@ -1160,7 +1193,7 @@ impl<'a> Ev<'a> {
             }
         }
         if !ok {
-            self.warn(s.span, "zone() outside of a fillet/chamfer/shell block has no effect");
+            self.warn(s.span, "zone() außerhalb von fillet/chamfer/shell ohne Wirkung");
         }
         self.node(s, Op::Zone(shape), ctx);
     }
@@ -1170,7 +1203,7 @@ impl<'a> Ev<'a> {
         match l.and_then(|l| l.iter().map(|p| p.as_vec3()).collect::<Option<Vec<_>>>()) {
             Some(p) if p.len() >= 2 => Some(p),
             _ => {
-                self.error(x.expr.span, format!("{what} must be a list of at least two points"));
+                self.error(x.expr.span, format!("{what}: braucht eine Liste von mindestens zwei Punkten"));
                 None
             }
         }
@@ -1188,24 +1221,31 @@ impl<'a> Ev<'a> {
     ) -> R<()> {
         let mut handle: Option<(HandleKind, &ArgV<'a>, f64, f64)> = None;
         let mut path_arg = None;
+        // OpenSCAD produces nothing (zero height or angle): empty node, children unused.
+        let mut empty = false;
         let op = match n {
             "linear_extrude" => {
                 let p = self.bind(n, a, &["height", "center", "convexity", "twist", "slices", "scale", "h"], 6);
                 let src = p[0].or(p[6]);
                 let h = self.num_of(src, "height").unwrap_or(100.0);
-                let center = p[1].is_some_and(|x| x.val.truthy());
+                let center = is_true(p[1]);
                 let twist = self.num_of(p[3], "twist").unwrap_or(0.0);
-                let scale = match p[5] {
+                let mut scale = match p[5] {
                     None => DVec2::ONE,
                     Some(x) => match (x.val.as_num(), x.val.as_vec2()) {
                         (Some(k), _) => DVec2::splat(k),
                         (_, Some(v)) => v,
                         _ => {
-                            self.warn(x.expr.span, "scale must be a number or [x, y]");
+                            self.warn(x.expr.span, "scale: muss Zahl oder [x, y] sein");
                             DVec2::ONE
                         }
                     },
                 };
+                // OpenSCAD clamps negative scale factors to 0 (the top shrinks to a point).
+                if scale.min_element() < 0.0 {
+                    self.warn(s.span, "linear_extrude: negativer `scale` wird zu 0");
+                    scale = scale.max(DVec2::ZERO);
+                }
                 if let Some(x) = src {
                     handle = Some(if center {
                         (HandleKind::Height, x, h / 2.0, 2.0)
@@ -1213,13 +1253,34 @@ impl<'a> Ev<'a> {
                         (HandleKind::Height, x, h, 1.0)
                     });
                 }
+                if h.is_nan() || h <= 0.0 {
+                    self.warn(s.span, format!("linear_extrude: Höhe {} ≤ 0, kein Körper", fmt_num(h)));
+                    empty = true;
+                }
                 Op::LinearExtrude { h, twist, scale, center }
             }
             "rotate_extrude" => {
                 let p = self.bind(n, a, &["angle", "convexity"], 1);
-                let angle = self.num_of(p[0], "angle").unwrap_or(360.0);
+                let given = self.num_of(p[0], "angle");
+                let mut angle = given.unwrap_or(360.0);
+                // OpenSCAD: angles outside (-360, 360] become a full turn; negative
+                // angles turn clockwise.
+                if !(angle > -360.0 && angle <= 360.0) {
+                    self.warn(s.span, format!("rotate_extrude: Winkel {}° wird zu 360°", fmt_num(angle)));
+                    angle = 360.0;
+                }
+                if angle == 0.0 {
+                    self.warn(s.span, "rotate_extrude: Winkel 0°, kein Körper");
+                    empty = true;
+                }
                 if let Some(x) = p[0] {
                     handle = Some((HandleKind::Angle { axis: 2 }, x, angle, 1.0));
+                }
+                if let Some(f) = a.dyn_num("$fn").and_then(facet_count) {
+                    self.info(
+                        s.span,
+                        format!("rotate_extrude: Umlauf bleibt exakt rund; `$fn` = {f} gilt nur für Kreise im Profil"),
+                    );
                 }
                 Op::RotateExtrude { angle }
             }
@@ -1230,15 +1291,15 @@ impl<'a> Ev<'a> {
             "sweep" => {
                 let p = self.bind(n, a, &["path", "interp"], 2);
                 let Some(pa) = p[0] else {
-                    self.error(s.span, "sweep() needs a `path`");
+                    self.error(s.span, "sweep() braucht `path`");
                     return Ok(());
                 };
-                let Some(path) = self.path_points(pa, "sweep path") else { return Ok(()) };
+                let Some(path) = self.path_points(pa, "sweep-Pfad") else { return Ok(()) };
                 let interp = match p[1].map(|x| (x, x.val.as_str())) {
                     None | Some((_, Some("spline"))) => PathInterp::Spline,
                     Some((_, Some("linear"))) => PathInterp::Linear,
                     Some((x, _)) => {
-                        self.warn(x.expr.span, "interp must be \"linear\" or \"spline\"");
+                        self.warn(x.expr.span, "`interp` muss \"linear\" oder \"spline\" sein");
                         PathInterp::Spline
                     }
                 };
@@ -1248,7 +1309,7 @@ impl<'a> Ev<'a> {
             "thicken" => {
                 let p = self.bind(n, a, &["t"], 1);
                 let Some(t) = self.num_of(p[0], "t") else {
-                    self.error(s.span, "thicken() needs a thickness `t`");
+                    self.error(s.span, "thicken() braucht eine Dicke `t`");
                     return Ok(());
                 };
                 Op::Thicken { t }
@@ -1266,10 +1327,13 @@ impl<'a> Ev<'a> {
                 Op::Resize { size, auto }
             }
         };
-        let node = self.node(s, op, ctx);
+        let node = self.node(s, if empty { Op::Empty } else { op }, ctx);
         let w = self.nodes[node as usize].world;
         if let Some((kind, x, v, sc)) = handle {
             self.scalar_handle(s, ctx, node, kind, 0, &x.val, x.expr.span, v, sc, w, DVec3::ZERO, DVec3::Z);
+        }
+        if empty {
+            return Ok(());
         }
         if let Some((pa, path)) = path_arg
             && let Some(l) = pa.val.as_list()
@@ -1286,11 +1350,11 @@ impl<'a> Ev<'a> {
     fn m_surface(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind("surface", a, &["points", "file", "center", "invert", "convexity"], 1);
         if p[1].is_some() {
-            self.warn(s.span, "surface(file = …) (height maps) is not supported; use surface(points)");
+            self.warn(s.span, "surface(file = …) (Höhenkarten) nicht unterstützt; surface(points) verwenden");
             return;
         }
         let Some(pa) = p[0] else {
-            self.error(s.span, "surface() needs `points` (rows of control points)");
+            self.error(s.span, "surface() braucht `points` (Zeilen von Kontrollpunkten)");
             return;
         };
         let rows: Option<Vec<Vec<DVec3>>> = pa
@@ -1298,11 +1362,11 @@ impl<'a> Ev<'a> {
             .as_list()
             .and_then(|l| l.iter().map(|r| r.as_list()?.iter().map(|p| p.as_vec3()).collect()).collect());
         let Some(rows) = rows else {
-            self.error(pa.expr.span, "surface points must be a list of rows of [x, y, z]");
+            self.error(pa.expr.span, "surface: `points` muss eine Liste von Zeilen aus [x, y, z] sein");
             return;
         };
         if rows.len() < 2 || rows.iter().any(|r| r.len() != rows[0].len() || r.len() < 2) {
-            self.error(pa.expr.span, "surface points need at least 2 rows of equal length (at least 2)");
+            self.error(pa.expr.span, "surface: `points` braucht mindestens 2 gleich lange Zeilen mit mindestens 2 Punkten");
             return;
         }
         let cols = rows[0].len();
@@ -1322,18 +1386,47 @@ impl<'a> Ev<'a> {
 
     pub(crate) fn assert_args(&mut self, span: Span, a: &Args<'a>) -> R<()> {
         let Some(cond) = a.get(0, "condition") else {
-            return self.fatal(span, "assert() needs a condition");
+            return self.fatal(span, "assert() braucht eine Bedingung");
         };
         if cond.val.truthy() {
             return Ok(());
         }
         let text = self.text(cond.expr.span).to_string();
         let msg = match a.get(1, "message") {
-            Some(m) => format!("assertion '{text}' failed: {}", crate::value::to_str(&m.val)),
-            None => format!("assertion '{text}' failed"),
+            Some(m) => format!("assert '{text}' fehlgeschlagen: {}", crate::value::to_str(&m.val)),
+            None => format!("assert '{text}' fehlgeschlagen"),
         };
         self.fatal(span, msg)
     }
+}
+
+/// Marks the `$` frame of a `linear_extrude` / `rotate_extrude` call with `$fn`: its
+/// `$fn` counts as "directly at the call" for the circles in the profile. Not a valid
+/// identifier, so source code cannot set it.
+const EXTRUDE_FN: &str = "$ extrude $fn";
+
+/// `$fn` of the innermost frame that sets it, if that frame is an extrusion call.
+fn extrude_fn(dy: &Dyn) -> Option<f64> {
+    let f = dyn_frame(dy, "$fn")?;
+    if !f.vars.iter().any(|(n, _)| *n == EXTRUDE_FN) {
+        return None;
+    }
+    f.vars.iter().rev().find(|(n, _)| *n == "$fn").and_then(|(_, v)| v.as_num())
+}
+
+/// `center = true`: OpenSCAD only accepts the bool (`center = 1` does not center).
+fn is_true(a: Option<&ArgV>) -> bool {
+    a.is_some_and(|x| matches!(x.val.v, Value::Bool(true)))
+}
+
+/// All dimensions finite and > 0 (otherwise OpenSCAD creates nothing).
+fn positive(dims: &[f64]) -> bool {
+    dims.iter().all(|d| d.is_finite() && *d > 0.0)
+}
+
+/// Facets for a `$fn` that makes a polygon (0 < `$fn` < 13; OpenSCAD uses at least 3).
+fn facet_count(n: f64) -> Option<u32> {
+    (n > 0.0 && n < 13.0).then(|| (n.floor() as u32).max(3))
 }
 
 /// OpenSCAD sphere with `n` fragments: `(n + 1) / 2` rings.

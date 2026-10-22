@@ -24,7 +24,7 @@ fn declaration_planes_and_values() {
             y: v = t * 2;
         }
         echo(g.a, g.b + 1, g.loch, g.loch[1] * 2, g.v);
-        cube(g[b, v, _]);
+        cube(g[b, v, _] + [0, 0, 1]);
     ";
     let out = clean(src);
     assert_eq!(echoes(&out), ["0, 11, [5, 13, 21], 26, 4"]);
@@ -39,7 +39,7 @@ fn declaration_planes_and_values() {
     let v = g.planes.iter().find(|p| p.name == "v").unwrap();
     assert_eq!(v.literal, None);
     assert_eq!(v.origin, Origin::Computed);
-    assert_eq!(box_of(&out, 0), (DVec3::ZERO, DVec3::new(10.0, 4.0, 0.0)));
+    assert_eq!(box_of(&out, 0), (DVec3::ZERO, DVec3::new(10.0, 4.0, 1.0)));
 }
 
 #[test]
@@ -52,23 +52,23 @@ fn two_items_for_2d_grids() {
 #[test]
 fn grid_errors() {
     let cases: &[(&str, &str)] = &[
-        ("grid g { x: a = 0; y: a = 1; }", "plane name `a` is already used"),
-        ("grid g { x: a = 0; } cube(g[a, b, _]);", "has no plane `b`"),
-        ("grid g { x: a = 0; y: b = 0; } cube(g[b, a, _]);", "plane `b` lies on axis y"),
-        ("grid g { x: a = 0; y: b = 0; z: c = 0; } cube(g[a, b]);", "needs one plane per axis"),
-        ("grid g { x: a = 0; y: b = 0; z: c = 0; } cube(g[a, b, _]);", "`_` only stands for a missing axis"),
-        ("grid g { x: l = [1, 2]; } cube(g[l, _, _]);", "`l` is a list of planes"),
-        ("grid g { x: l = [1, 2]; } cube(g[l[5], _, _]);", "plane index 5 out of range"),
-        ("grid g { x: a = \"s\"; }", "must be a number or a list of numbers"),
-        ("grid g { x: a = 0; } grid g { x: b = 0; }", "already declared"),
-        ("g = 1; grid g { x: a = 0; }", "already a variable"),
-        ("grid g { x: a = 0; } x = g[*, *, *];", "selects the whole grid"),
-        ("scale([1, 2, 1]) grid g { x: a = 0; }", "non-uniform scale"),
-        ("for (i = [0:1]) grid g { x: a = i; }", "not allowed inside for loops"),
-        ("grid g { x: a = 0; } echo(g.zz);", "has no plane `zz`"),
-        ("grid g { x: a = 0; } cube(g[a, \"q\", _]);", "plane name or a number"),
-        ("x = [1, 2][*];", "only allowed in grid access"),
-        ("grid g { x: _ = 0; }", "reserved"),
+        ("grid g { x: a = 0; y: a = 1; }", "Ebenenname `a` in Raster `g` schon vergeben"),
+        ("grid g { x: a = 0; } cube(g[a, b, _]);", "hat keine Ebene `b`"),
+        ("grid g { x: a = 0; y: b = 0; } cube(g[b, a, _]);", "Ebene `b` liegt auf Achse y"),
+        ("grid g { x: a = 0; y: b = 0; z: c = 0; } cube(g[a, b]);", "braucht eine Ebene pro Achse"),
+        ("grid g { x: a = 0; y: b = 0; z: c = 0; } cube(g[a, b, _]);", "`_` steht nur für eine fehlende Achse"),
+        ("grid g { x: l = [1, 2]; } cube(g[l, _, _]);", "`l` ist eine Ebenenliste"),
+        ("grid g { x: l = [1, 2]; } cube(g[l[5], _, _]);", "Ebenenindex 5 außerhalb"),
+        ("grid g { x: a = \"s\"; }", "muss Zahl oder Zahlenliste sein"),
+        ("grid g { x: a = 0; } grid g { x: b = 0; }", "schon deklariert"),
+        ("g = 1; grid g { x: a = 0; }", "schon eine Variable"),
+        ("grid g { x: a = 0; } x = g[*, *, *];", "wählt das ganze Raster"),
+        ("scale([1, 2, 1]) grid g { x: a = 0; }", "ungleichmäßiger Skalierung"),
+        ("for (i = [0:1]) grid g { x: a = i; }", "in for-Schleifen nicht erlaubt"),
+        ("grid g { x: a = 0; } echo(g.zz);", "hat keine Ebene `zz`"),
+        ("grid g { x: a = 0; } cube(g[a, \"q\", _]);", "Ebenenname oder Zahl erwartet"),
+        ("x = [1, 2][*];", "nur in Rasterzugriffen erlaubt"),
+        ("grid g { x: _ = 0; }", "reserviert"),
     ];
     for (src, msg) in cases {
         let out = run(src);
@@ -81,12 +81,12 @@ fn lines_and_planes_are_not_values() {
     let out = run(
         "grid g { x: a = 1; y: b = 2; z: c = 3; } l = g[a, *, c]; echo(l + 1); translate(g[*, *, c]) cube(1); echo(g.c + 1, g[*, *, c] == g[*, *, c]);",
     );
-    assert!(has_error(&out, "type error: undefined operation (grid line + number)"));
-    assert!(has_error(&out, "`v` expects a number or point, found grid plane"));
+    assert!(has_error(&out, "Typfehler: undefinierte Operation (Rasterlinie + Zahl)"));
+    assert!(has_error(&out, "`v` erwartet Zahl oder Punkt, ist Rasterebene"));
     assert_eq!(echoes(&out).last().unwrap(), "4, true");
     let out = run("module p() {} k: p(); echo(k + 1); grid g { x: a = 1; } cube(g);");
-    assert!(has_error(&out, "(instance + number)"));
-    assert!(has_error(&out, "found grid; use a grid point"));
+    assert!(has_error(&out, "(Instanz + Zahl)"));
+    assert!(has_error(&out, "ist Raster; Rasterpunkt"));
 }
 
 #[test]
@@ -136,28 +136,28 @@ fn mirror_at_grid_plane() {
         assert!(approx3(m.transform_point3(DVec3::new(12.0, 1.0, 2.0)), [8.0, 1.0, 2.0]));
     }
     let out = run("grid g { x: m = 10; y: n = 0; } mirror(g[m, *, _]) cube(1);");
-    assert!(has_error(&out, "needs a plane, not a grid line"));
+    assert!(has_error(&out, "braucht eine Ebene, keine Rasterlinie"));
 }
 
 #[test]
 fn visibility_of_grids() {
     // Visible from the declaration to the end of the module, also in nested blocks.
-    let ok = "module m() { translate([1, 0, 0]) { grid g { x: a = 1; } } if (true) { cube(g[a, _, _]); } } m();";
+    let ok = "module m() { translate([1, 0, 0]) { grid g { x: a = 1; } } if (true) { translate(g[a, _, _]) cube(1); } } m();";
     clean(ok);
     // Not before the declaration.
     let out = run("cube(g[a, _, _]); grid g { x: a = 1; }");
-    assert!(has_warning(&out, "unknown variable `g`"));
+    assert!(has_warning(&out, "unbekannte Variable `g`"));
     let out = run("p = g.a; grid g { x: a = 1; }");
-    assert!(has_warning(&out, "unknown variable `g`"));
+    assert!(has_warning(&out, "unbekannte Variable `g`"));
     // Not in called modules.
     let out = run("module inner() cube(g[a, _, _]); grid g { x: a = 1; } inner();");
-    assert!(has_warning(&out, "unknown variable `g`"));
+    assert!(has_warning(&out, "unbekannte Variable `g`"));
     // Not in nested module definitions either.
     let out = run("module outer() { grid g { x: a = 1; } module inner() echo(g.a); inner(); } outer();");
-    assert!(has_warning(&out, "unknown variable `g`"));
+    assert!(has_warning(&out, "unbekannte Variable `g`"));
     // Not in the caller.
     let out = run("module m() { grid g { x: a = 1; } } m(); echo(g.a);");
-    assert!(has_warning(&out, "unknown variable `g`"));
+    assert!(has_warning(&out, "unbekannte Variable `g`"));
     // Children written in the caller see the caller's grids.
     let out = clean("module wrap() children(); grid g { x: a = 1; } wrap() echo(g.a);");
     assert_eq!(echoes(&out), ["1"]);
@@ -199,15 +199,15 @@ fn anchors_from_outside() {
 #[test]
 fn anchor_errors() {
     let cases: &[(&str, &str)] = &[
-        ("module p() { anchor a = [0, 0, 0]; } k: p(); echo(dir(k.a));", "has no direction"),
-        ("module p() { anchor a = [0, 0, 0]; } k: p(); echo(k.b);", "has no anchor `b`"),
-        ("echo(dir([1, 2, 3]));", "dir() expects an anchor"),
-        ("module p() { anchor a = 5; } p();", "anchor needs a point"),
-        ("module p() { anchor a = [0,0,0]; anchor a = [1,0,0]; } p();", "anchor `a` is already declared"),
-        ("module p() {} for (i = [0:1]) k: p();", "not allowed inside for loops"),
-        ("k: cube(1);", "only user module calls can be named"),
-        ("module p() {} k: p(); k: p();", "already declared"),
-        ("module p() { for (i = [0:1]) { anchor a = [i, 0, 0]; } } p();", "anchors are not allowed inside for loops"),
+        ("module p() { anchor a = [0, 0, 0]; } k: p(); echo(dir(k.a));", "hat keine Richtung"),
+        ("module p() { anchor a = [0, 0, 0]; } k: p(); echo(k.b);", "hat keinen Anker `b`"),
+        ("echo(dir([1, 2, 3]));", "dir() erwartet einen Anker"),
+        ("module p() { anchor a = 5; } p();", "Anker braucht einen Punkt"),
+        ("module p() { anchor a = [0,0,0]; anchor a = [1,0,0]; } p();", "Anker `a` ist schon deklariert"),
+        ("module p() {} for (i = [0:1]) k: p();", "in for-Schleifen nicht erlaubt"),
+        ("k: cube(1);", "nur Aufrufe eigener Module sind benennbar"),
+        ("module p() {} k: p(); k: p();", "schon deklariert"),
+        ("module p() { for (i = [0:1]) { anchor a = [i, 0, 0]; } } p();", "Anker sind in for-Schleifen nicht erlaubt"),
     ];
     for (src, msg) in cases {
         let out = run(src);
@@ -218,9 +218,9 @@ fn anchor_errors() {
 #[test]
 fn named_instance_visibility() {
     let out = run("echo(k.a); module p() { anchor a = [1, 0, 0]; } k: p();");
-    assert!(has_warning(&out, "unknown variable `k`"));
+    assert!(has_warning(&out, "unbekannte Variable `k`"));
     let out = run("module p() { anchor a = [1, 0, 0]; } module q() echo(k.a); k: p(); q();");
-    assert!(has_warning(&out, "unknown variable `k`"));
+    assert!(has_warning(&out, "unbekannte Variable `k`"));
     // A named instance is normal geometry in the tree.
     let out = clean("module p() cube(1); k: p();");
     assert_eq!(dump(&out), "group\n  k:p\n    box\n");
