@@ -515,6 +515,7 @@ impl<'a> Parser<'a> {
 
     // ---------------------------------------------------------------- expressions
 
+    #[allow(clippy::result_unit_err)]
     pub fn expr(&mut self) -> PResult<Expr> {
         let start = self.span().start;
         if self.at_ident("function") && self.peek_at(1) == &Tok::LParen {

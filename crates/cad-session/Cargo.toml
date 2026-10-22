@@ -1,0 +1,21 @@
+[package]
+name = "cad-session"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Session: source + version -> parse -> eval -> stepwise engine job -> scene; UI protocol"
+
+[dependencies]
+cad-syntax.workspace = true
+cad-eval.workspace = true
+cad-ir.workspace = true
+cad-kernel.workspace = true
+cad-engine.workspace = true
+glam.workspace = true
+serde.workspace = true
+ts-rs = { version = "12", default-features = false, features = ["serde-compat"] }
+
+[dev-dependencies]
+kernel-smlib.workspace = true
+serde_json.workspace = true

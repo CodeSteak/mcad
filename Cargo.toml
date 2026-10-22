@@ -23,6 +23,7 @@ kernel-mock = { path = "crates/kernel-mock" }
 kernel-smlib = { path = "crates/kernel-smlib" }
 cad-engine = { path = "crates/cad-engine" }
 cad-render = { path = "crates/cad-render" }
+cad-session = { path = "crates/cad-session" }
 
 [profile.release]
 opt-level = 3

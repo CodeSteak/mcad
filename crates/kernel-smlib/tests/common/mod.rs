@@ -50,6 +50,7 @@ pub fn mesh_closed(m: &Mesh) -> bool {
             (m.positions[i + 2] as f64 * s).round() as i64,
         )
     };
+    #[allow(clippy::type_complexity)]
     let mut count: HashMap<((i64, i64, i64), (i64, i64, i64)), i32> = HashMap::new();
     for t in m.indices.chunks_exact(3) {
         for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {

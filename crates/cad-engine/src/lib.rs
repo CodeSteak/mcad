@@ -338,6 +338,11 @@ impl<S> Job<S> {
         self.keys[n as usize]
     }
 
+    /// Face tag of a node of this job's tree (known before the node is evaluated).
+    pub fn tag(&self, n: NodeIdx) -> Tag {
+        self.tags[n as usize]
+    }
+
     pub fn tree(&self) -> &Tree {
         &self.tree
     }
