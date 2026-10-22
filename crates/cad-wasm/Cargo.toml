@@ -1,0 +1,8 @@
+[package]
+name = "cad-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
