@@ -2,7 +2,9 @@
 node_modules
 /web/dist
 /web/src/wasm-pkg
-/smlib/build*
+/smlib/build*/
+/web/public/smlib/*
+!/web/public/smlib/.gitkeep
 /third_party
 *.log
 /reports/tmp
