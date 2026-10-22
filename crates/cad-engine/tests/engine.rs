@@ -7,7 +7,7 @@ use std::f64::consts::PI;
 use cad_engine::builder::*;
 use cad_engine::{Budget, Engine, Status, Step};
 use cad_ir::{BlendKind, NodeIdx, Op, Select, Tree};
-use cad_kernel::PathInterp;
+use cad_kernel::{Kernel, PathInterp};
 use common::*;
 use glam::{DVec2, DVec3};
 
@@ -385,9 +385,78 @@ fn lifting_square_minus_circle() {
     let ev = e.evaluate(b.finish());
     assert_clean(&ev);
     // frustum-like: A(t) = 100 (1 - t/2)² → V = 10·100·(7/12)
-    assert_approx("twisted", root_volume(&mut e, &ev), 1000.0 * 7.0 / 12.0, 2e-2);
+    assert_approx("twisted", root_volume(&mut e, &ev), 1000.0 * 7.0 / 12.0, 1e-4);
     let (lo, hi) = ev.report(x).bounds.unwrap();
     assert!((lo.z + 5.0).abs() < 1e-6 && (hi.z - 5.0).abs() < 1e-6);
+}
+
+/// translate([0, 25, 0]) linear_extrude(height = 12, twist = -60, scale = [1, 0.5],
+/// center = true) square([10, 6], center = true) from 12_linear_extrude_twist.scad: OpenSCAD
+/// rotates each section by -twist·t and then scales it along x/y (bounds y ±3.8309; scaling
+/// first gave ±5.08). Mesh volume close to the exact 540.
+#[test]
+fn linear_extrude_twist_nonuniform_scale_like_openscad() {
+    let mut e = engine();
+    let mut b = TreeBuilder::new();
+    let x = b.root(Op::LinearExtrude { h: 12.0, twist: -60.0, scale: DVec2::new(1.0, 0.5), center: true });
+    b.child(x, rect(DVec2::new(-5.0, -3.0), DVec2::new(5.0, 3.0)));
+    let ev = e.evaluate(b.finish());
+    assert_clean(&ev);
+    assert_approx("volume", root_volume(&mut e, &ev), 540.0, 1e-4);
+    let (lo, hi) = ev.report(x).bounds.unwrap();
+    // exact extents (OpenSCAD with $fn = 128: 5.83013, 3.8309)
+    let want = v(34f64.sqrt(), 3.8309045, 6.0);
+    assert!((hi - want).abs().max_element() < 1e-3 && (lo + want).abs().max_element() < 1e-3, "{lo} {hi}");
+    let m = e.tessellate_root(&ev, Some(0.01)).unwrap();
+    assert_approx("mesh volume", mesh_volume(&m), 540.0, 5e-3);
+    // OpenSCAD's twist -60 turns counter-clockwise: at z = 0 (t = 1/2, 30°, sy = 0.75) the
+    // corner (5, 3) lies at (2.83, 3.82)
+    let c = e.kernel_mut().classify(&ev.parts(x)[0].shape, &[v(2.6, 3.5, 0.0), v(-2.6, 3.5, 0.0)]).unwrap();
+    assert_eq!(c, vec![cad_kernel::Class::Inside, cad_kernel::Class::Outside]);
+}
+
+/// union() { cylinder(h = 30, r = 4, center = true); rotate([90, 0, 0]) …; rotate([0, 90, 0]) …; }
+/// from 05_nested_booleans.scad: SMLib dropped the -x arm of the third cylinder (3237 mm³
+/// instead of 3800, OpenSCAD 3798). Flat and nested unions, and the cross bore subtracted
+/// from a cube.
+#[test]
+fn union_of_three_orthogonal_cylinders() {
+    let r = 4.0f64;
+    let cross = |l: f64| 3.0 * PI * r * r * l - 3.0 * 16.0 / 3.0 * r.powi(3) + 8.0 * (2.0 - 2f64.sqrt()) * r.powi(3);
+    let cyl = |b: &mut TreeBuilder, parent: NodeIdx, m: glam::DMat4| {
+        let t = b.child(parent, Op::Transform { kind: cad_ir::TransformKind::Rotate, m });
+        let c = b.child(t, translate(v(0.0, 0.0, -15.0)));
+        b.child(c, cylinder(30.0, r));
+    };
+    let rots = [glam::DMat4::IDENTITY, glam::DMat4::from_rotation_x(PI / 2.0), glam::DMat4::from_rotation_y(PI / 2.0)];
+    let mut e = engine();
+    for nested in [false, true] {
+        let mut b = TreeBuilder::new();
+        let u = b.root(union());
+        let inner = if nested { b.child(u, union()) } else { u };
+        cyl(&mut b, inner, rots[0]);
+        cyl(&mut b, inner, rots[1]);
+        cyl(&mut b, u, rots[2]);
+        let ev = e.evaluate(b.finish());
+        assert_clean(&ev);
+        assert_approx("union volume", root_volume(&mut e, &ev), cross(30.0), 1e-5);
+        let (lo, hi) = ev.report(u).bounds.unwrap();
+        assert!((lo + DVec3::splat(15.0)).abs().max_element() < 1e-3, "{lo}");
+        assert!((hi - DVec3::splat(15.0)).abs().max_element() < 1e-3, "{hi}");
+        let m = e.tessellate_root(&ev, Some(0.01)).unwrap();
+        assert_approx("mesh volume", mesh_volume(&m), cross(30.0), 3e-3);
+    }
+    // difference() { cube(20, center = true); union() { three cylinders } }
+    let mut b = TreeBuilder::new();
+    let d = b.root(difference());
+    b.child(d, boxed(DVec3::splat(-10.0), DVec3::splat(10.0)));
+    let u = b.child(d, union());
+    for m in rots {
+        cyl(&mut b, u, m);
+    }
+    let ev = e.evaluate(b.finish());
+    assert_clean(&ev);
+    assert_approx("cube minus cross", root_volume(&mut e, &ev), 8000.0 - cross(20.0), 1e-5);
 }
 
 fn tri_centroid(m: &cad_kernel::Mesh, i: usize) -> DVec3 {

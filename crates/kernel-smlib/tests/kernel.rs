@@ -312,6 +312,50 @@ fn fillet_cylinder_rims_skips_seam() {
     assert_eq!(k.faces(&f, 1).unwrap().iter().filter(|f| f.tag == T_FIL).count(), 2);
 }
 
+/// union() { cylinder(h=30, r=4, center=true); rotate([90,0,0]) …; rotate([0,90,0]) …; }
+/// (05_nested_booleans.scad). SMLib's (Z ∪ Y) ∪ X returns SM_SUCCESS but drops the -x arm of
+/// the X cylinder (volume 3237, bounds x ≥ -4); (Y ∪ X) ∪ Z fails with SM_ERR. Every operand
+/// order, n-ary and nested, must give the analytic volume
+/// 3·π·r²·h − 3·(16/3)·r³ + 8·(2 − √2)·r³.
+#[test]
+fn union_of_three_orthogonal_cylinders() {
+    let mut k = k();
+    let r = 4.0f64;
+    let want = 3.0 * PI_ * r * r * 30.0 - 3.0 * 16.0 / 3.0 * r.powi(3) + 8.0 * (2.0 - 2f64.sqrt()) * r.powi(3);
+    let c = k.make_cylinder(30.0, r, r, 1).unwrap();
+    let z = k.transform(&c, &translate(0.0, 0.0, -15.0)).unwrap();
+    let y = k.transform(&z, &DMat4::from_rotation_x(PI_ / 2.0)).unwrap();
+    let x = k.transform(&z, &DMat4::from_rotation_y(PI_ / 2.0)).unwrap();
+    let check = |k: &mut kernel_smlib::SmlibKernel, s: &kernel_smlib::Shape, what: &str| {
+        assert_approx(what, volume(k, s), want, 1e-5);
+        let (lo, hi) = k.bounds(s).unwrap().unwrap();
+        assert!((lo + DVec3::splat(15.0)).abs().max_element() < 1e-3, "{what}: {lo}");
+        assert!((hi - DVec3::splat(15.0)).abs().max_element() < 1e-3, "{what}: {hi}");
+    };
+    let orders = [[&z, &y, &x], [&z, &x, &y], [&y, &z, &x], [&y, &x, &z], [&x, &z, &y], [&x, &y, &z]];
+    for (i, o) in orders.iter().enumerate() {
+        let v: Vec<_> = o.iter().map(|s| (*s).clone()).collect();
+        let u = k.boolean(BoolOp::Union, &v, 9).unwrap();
+        check(&mut k, &u, &format!("order {i}"));
+        if i == 0 {
+            let m = k.tessellate(&u, 0.01).unwrap();
+            assert!(mesh_closed(&m));
+            assert_approx("mesh volume", mesh_volume(&m), want, 3e-3);
+        }
+    }
+    // nested: union(union(z, y), x) has no other order to try
+    let zy = k.boolean(BoolOp::Union, &[z.clone(), y.clone()], 9).unwrap();
+    let u = k.boolean(BoolOp::Union, &[zy.clone(), x.clone()], 9).unwrap();
+    check(&mut k, &u, "nested");
+    let u = k.boolean(BoolOp::Union, &[x.clone(), zy], 9).unwrap();
+    check(&mut k, &u, "nested, swapped");
+    // and as the tool of a difference (the cross bore of 05)
+    let b = k.make_box(DVec3::splat(-10.0), DVec3::splat(10.0), 2).unwrap();
+    let d = k.boolean(BoolOp::Difference, &[b, z, y, x], 9).unwrap();
+    let cross_in_box = 3.0 * PI_ * r * r * 20.0 - 3.0 * 16.0 / 3.0 * r.powi(3) + 8.0 * (2.0 - 2f64.sqrt()) * r.powi(3);
+    assert_approx("box minus cross", volume(&mut k, &d), 8000.0 - cross_in_box, 1e-5);
+}
+
 #[test]
 fn invalid_profiles_fail_cleanly() {
     let mut k = k();
@@ -524,11 +568,67 @@ fn extrude_with_twist_and_scale() {
         Err(e) => panic!("{e}"),
     }
     // twist: volume of a twisted square prism equals the untwisted one
-    match k.extrude(&p, 4.0, PI_ / 2.0, DVec2::ONE, 7) {
-        Ok(s) => assert_approx("twisted extrude", volume(&mut k, &s), 16.0, 2e-2),
-        Err(KernelError::Unsupported(_)) => {}
-        Err(e) => panic!("{e}"),
+    let s = k.extrude(&p, 4.0, PI_ / 2.0, DVec2::ONE, 7).unwrap();
+    assert_approx("twisted extrude", volume(&mut k, &s), 16.0, 1e-4);
+}
+
+/// Exact extent of a twisted, scaled polygon prism: section t is the profile rotated by
+/// twist·t, then scaled by lerp(1, scale, t) along x and y (OpenSCAD's order).
+fn twisted_extent(pts: &[DVec2], twist: f64, scale: DVec2) -> DVec2 {
+    let mut m = DVec2::ZERO;
+    for i in 0..=20000 {
+        let t = i as f64 / 20000.0;
+        let (s, c) = (twist * t).sin_cos();
+        let sc = DVec2::ONE + (scale - DVec2::ONE) * t;
+        for p in pts {
+            let q = DVec2::new(c * p.x - s * p.y, s * p.x + c * p.y) * sc;
+            m = m.max(q.abs());
+        }
     }
+    m
+}
+
+/// linear_extrude(height = 12, twist = -60, scale = [1, 0.5]) square([10, 6], center = true)
+/// (12_linear_extrude_twist.scad). The kernel's twist is counter-clockwise (the engine negates
+/// OpenSCAD's angle). Scaling before rotating gave y extent 5.08 instead of 3.83.
+#[test]
+fn twisted_extrude_with_nonuniform_scale_matches_openscad() {
+    let mut k = k();
+    let pts = vec![DVec2::new(-5.0, -3.0), DVec2::new(5.0, -3.0), DVec2::new(5.0, 3.0), DVec2::new(-5.0, 3.0)];
+    let twist = 60f64.to_radians();
+    let scale = DVec2::new(1.0, 0.5);
+    let s = k.extrude(&placed(Loop::Polygon(pts.clone()), DMat4::IDENTITY), 12.0, twist, scale, 7).unwrap();
+    // A(t) = 60 · sx · sy = 60 (1 - t/2)
+    assert_approx("volume", volume(&mut k, &s), 540.0, 1e-4);
+    let want = twisted_extent(&pts, twist, scale);
+    assert!((want - DVec2::new(34f64.sqrt(), 3.8309045)).abs().max_element() < 1e-5, "{want}");
+    let (lo, hi) = k.bounds(&s).unwrap().unwrap();
+    for (got, w) in [(hi.x, want.x), (-lo.x, want.x), (hi.y, want.y), (-lo.y, want.y)] {
+        assert!((got - w).abs() < 1e-3, "bounds {lo} {hi}, want ±{want}");
+    }
+    assert!(lo.z.abs() < 1e-9 && (hi.z - 12.0).abs() < 1e-9);
+    // direction: at mid height (30°, sy = 0.75) the corner (5, 3) has turned counter-clockwise
+    // to (2.83, 3.82); clockwise, the corner (-5, 3) would be there, mirrored
+    let c = k.classify(&s, &[DVec3::new(2.6, 3.5, 6.0), DVec3::new(-2.6, 3.5, 6.0)]).unwrap();
+    assert_eq!(c, vec![Class::Inside, Class::Outside]);
+}
+
+/// The export mesh of a twisted extrusion follows the surface: SMLib only bounds the chord
+/// height along triangle edges, the facade refines free-form faces until the triangle centres
+/// are within 2·tol (before: twisted 8 mm square, 90°: mesh volume 1317 instead of 1280).
+#[test]
+fn twisted_extrude_mesh_volume() {
+    let mut k = k();
+    let sq = vec![DVec2::new(-4.0, -4.0), DVec2::new(4.0, -4.0), DVec2::new(4.0, 4.0), DVec2::new(-4.0, 4.0)];
+    let s = k.extrude(&placed(Loop::Polygon(sq), DMat4::IDENTITY), 20.0, PI_ / 2.0, DVec2::ONE, 7).unwrap();
+    assert_approx("brep volume", volume(&mut k, &s), 1280.0, 1e-4);
+    let tol = 0.01;
+    let m = k.tessellate(&s, tol).unwrap();
+    assert!(mesh_closed(&m));
+    // volume error at most tolerance × area (≈ 7.8 mm³ = 0.6 %; before: 37 mm³)
+    let area = k.mass_props(&s).unwrap().area;
+    let err = (mesh_volume(&m) - 1280.0).abs();
+    assert!(err < tol * area, "mesh volume {} (error {err}, area {area})", mesh_volume(&m));
 }
 
 #[test]

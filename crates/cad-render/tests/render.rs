@@ -105,6 +105,54 @@ fn renders_zone_block_and_profile() {
     img.write_png(out_dir().join("profile_top.png")).unwrap();
 }
 
+/// Square [0, 10]² at height z, two triangles split along the diagonal (0,0)-(10,10) or, with
+/// `other_diagonal`, along (10,0)-(0,10).
+fn square_mesh(z: f32, other_diagonal: bool) -> cad_kernel::Mesh {
+    let mut m = cad_kernel::Mesh::default();
+    for (x, y) in [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)] {
+        m.positions.extend_from_slice(&[x, y, z]);
+        m.normals.extend_from_slice(&[0.0, 0.0, 1.0]);
+    }
+    m.indices = if other_diagonal { vec![0, 1, 3, 1, 2, 3] } else { vec![0, 1, 2, 0, 2, 3] };
+    m.tri_tags = vec![1, 1];
+    m.tri_faces = vec![0, 0];
+    m
+}
+
+/// Coplanar transparent faces of two meshes (a subtracted body over the cavity it leaves) and
+/// stacked transparent layers must blend to one uniform colour per region. Sorting whole
+/// triangles by centroid depth flipped the order along the triangle diagonals (diagonal bands
+/// in `cad render --line` of a subtracted box).
+#[test]
+fn transparent_coplanar_faces_have_no_diagonal_bands() {
+    let a = square_mesh(0.0, false);
+    let b = square_mesh(0.0, true);
+    let items =
+        vec![Item::new(&a, [0.78, 0.79, 0.82, 0.22]).with_edges(None), Item::new(&b, RED).with_edges(None)];
+    // iso: the plane is oblique, so the triangle centroids lie at different depths
+    let opts = RenderOptions { width: 240, height: 180, axes: false, ..Default::default() };
+    let img = render(&Scene { items, lines: vec![] }, &opts);
+    let bg = to_u8(opts.background);
+    let inside = |x: u32, y: u32| {
+        (-3i32..=3).all(|dy| (-3i32..=3).all(|dx| img.pixel((x as i32 + dx) as u32, (y as i32 + dy) as u32) != bg))
+    };
+    let mut colours = std::collections::BTreeSet::new();
+    let mut n = 0;
+    for y in 4..176 {
+        for x in 4..236 {
+            if inside(x, y) {
+                colours.insert(img.pixel(x, y));
+                n += 1;
+            }
+        }
+    }
+    assert!(n > 2000, "{n} interior pixels");
+    assert_eq!(colours.len(), 1, "coplanar transparent faces blend to {colours:?}");
+    // the red square is the later item: it ends on top of the coincident grey one
+    let c = *colours.iter().next().unwrap();
+    assert!(c[0] as i32 > c[2] as i32 + 20, "{c:?}");
+}
+
 #[test]
 fn empty_scene_is_background() {
     let opts = RenderOptions { width: 32, height: 16, axes: false, ..Default::default() };

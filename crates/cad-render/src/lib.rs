@@ -2,7 +2,7 @@
 //!
 //! Orthographic camera with standard views, fitted to the scene. Z-buffer, per-vertex Lambert
 //! shading (two-sided), edge lines from [`Mesh::edge_segments`] with depth test, colour per
-//! mesh, transparency (transparent triangles are sorted back to front and blended over the
+//! mesh, transparency (transparent fragments are sorted back to front per sample and blended over the
 //! opaque image), extra polylines (e.g. selected edges), optional axis triad.
 //! Anti-aliasing by supersampling. No GPU.
 
@@ -282,6 +282,82 @@ fn draw_line(t: &mut Target, a: (f64, f64, f64), b: (f64, f64, f64), width: f64,
     }
 }
 
+struct Tri {
+    v: [SV; 3],
+    color: [f32; 4],
+    /// Index of the scene item (orders coplanar transparent fragments).
+    item: u32,
+}
+
+/// One transparent sample: depth, triangle, interpolated shade.
+#[derive(Clone, Copy)]
+struct Frag {
+    z: f64,
+    tri: u32,
+    shade: f32,
+}
+
+/// Blends the transparent triangles over the opaque image, sorted back to front **per
+/// sample**. Sorting whole triangles by their centroid depth (as before) is wrong wherever
+/// triangles overlap in depth: large triangles of a box's faces, and above all coplanar faces
+/// of different meshes (a subtracted body and the cavity it leaves in the dimmed result).
+/// Their order then flips along triangle diagonals, which showed up as diagonal bands across
+/// the faces. Fragments closer in depth than `range * 1e-6` count as coplanar and are blended
+/// in scene item order (later items on top), so coincident faces get one consistent colour.
+fn blend_transparent(t: &mut Target, tris: &[Tri], range: f64) {
+    if tris.is_empty() {
+        return;
+    }
+    // two passes: count fragments per sample, then fill a flat array (counting sort by sample)
+    let mut count = vec![0u32; t.w * t.h];
+    for tri in tris {
+        raster_tri(t, tri.v, |i, z, _| {
+            if z < t.depth[i] {
+                count[i] += 1;
+            }
+        });
+    }
+    let mut start = vec![0usize; t.w * t.h + 1];
+    for i in 0..t.w * t.h {
+        start[i + 1] = start[i] + count[i] as usize;
+    }
+    let mut frags = vec![Frag { z: 0.0, tri: 0, shade: 0.0 }; start[t.w * t.h]];
+    let mut fill = start.clone();
+    for (k, tri) in tris.iter().enumerate() {
+        raster_tri(t, tri.v, |i, z, s| {
+            if z < t.depth[i] {
+                frags[fill[i]] = Frag { z, tri: k as u32, shade: s };
+                fill[i] += 1;
+            }
+        });
+    }
+    let eps = (range * 1e-6).max(1e-12);
+    for i in 0..t.w * t.h {
+        let f = &mut frags[start[i]..start[i + 1]];
+        if f.is_empty() {
+            continue;
+        }
+        // far to near; coplanar runs by item (lower item first, later items end on top)
+        f.sort_by(|a, b| b.z.partial_cmp(&a.z).unwrap_or(std::cmp::Ordering::Equal));
+        let mut a = 0;
+        while a < f.len() {
+            let mut b = a + 1;
+            while b < f.len() && f[b - 1].z - f[b].z < eps {
+                b += 1;
+            }
+            if b - a > 1 {
+                f[a..b].sort_by_key(|x| (tris[x.tri as usize].item, x.tri));
+            }
+            a = b;
+        }
+        for x in f.iter() {
+            let c = tris[x.tri as usize].color;
+            let s = x.shade;
+            t.blend(i, [c[0] * s, c[1] * s, c[2] * s], c[3]);
+        }
+    }
+}
+
 fn v3(p: &[f32]) -> DVec3 {
     DVec3::new(p[0] as f64, p[1] as f64, p[2] as f64)
 }
@@ -337,14 +413,9 @@ pub fn render(scene: &Scene, opts: &RenderOptions) -> Image {
     let light = (-dir * 0.8 + up * 0.6 - right * 0.35).normalize();
     let shade = |n: DVec3| -> f32 { (0.38 + 0.62 * n.dot(light).max(0.0)) as f32 };
 
-    struct Tri {
-        v: [SV; 3],
-        color: [f32; 4],
-        depth: f64,
-    }
     let mut transparent: Vec<Tri> = Vec::new();
     let mut opaque: Vec<Tri> = Vec::new();
-    for it in &scene.items {
+    for (item, it) in scene.items.iter().enumerate() {
         let m = &it.mesh;
         let nm = it.transform.inverse().transpose();
         let has_n = m.normals.len() == m.positions.len();
@@ -368,8 +439,7 @@ pub fn render(scene: &Scene, opts: &RenderOptions) -> Image {
                 let (x, y, z) = cam.project(p[k]);
                 SV { x, y, z, shade: shade(n) }
             });
-            let depth = (v[0].z + v[1].z + v[2].z) / 3.0;
-            let t = Tri { v, color: it.color, depth };
+            let t = Tri { v, color: it.color, item: item as u32 };
             if it.color[3] < 0.999 {
                 transparent.push(t);
             } else {
@@ -403,20 +473,7 @@ pub fn render(scene: &Scene, opts: &RenderOptions) -> Image {
             }
         }
     }
-    // Transparent triangles back to front, tested against the opaque depth.
-    transparent.sort_by(|a, b| b.depth.partial_cmp(&a.depth).unwrap_or(std::cmp::Ordering::Equal));
-    for tri in &transparent {
-        let c = tri.color;
-        let mut writes = Vec::new();
-        raster_tri(&t, tri.v, |i, z, s| {
-            if z < t.depth[i] {
-                writes.push((i, s));
-            }
-        });
-        for (i, s) in writes {
-            t.blend(i, [c[0] * s, c[1] * s, c[2] * s], c[3]);
-        }
-    }
+    blend_transparent(&mut t, &transparent, (zhi - zlo).abs());
     for it in scene.items.iter().filter(|i| i.color[3] < 0.999) {
         if let Some(ec) = it.edges {
             let ec = [ec[0], ec[1], ec[2], ec[3] * it.color[3].max(0.3)];
