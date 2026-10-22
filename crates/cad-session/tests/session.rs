@@ -34,7 +34,7 @@ fn session() -> Session<SmlibKernel> {
 fn scenes(msgs: &[FromEngine]) -> Vec<&Scene> {
     msgs.iter()
         .filter_map(|m| match m {
-            FromEngine::Scene(s) => Some(s),
+            FromEngine::Scene(s) => Some(s.as_ref()),
             _ => None,
         })
         .collect()

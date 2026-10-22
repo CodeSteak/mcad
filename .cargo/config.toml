@@ -1,0 +1,5 @@
+# Wasm has no guard page: a stack overflow silently corrupts memory. cad-wasm therefore
+# links with a 16 MiB stack; cad-eval stops at 12 MiB (EvalOptions::max_stack_bytes, set in
+# crates/cad-wasm).
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "link-arg=-zstack-size=16777216"]

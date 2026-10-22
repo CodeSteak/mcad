@@ -300,7 +300,7 @@ where
         };
         self.cur = Some(cur);
         self.running = Some(Running { job, version: self.version, kernel_ms: 0.0 });
-        vec![FromEngine::Diagnostics { version: self.version, items }, FromEngine::Scene(scene), progress]
+        vec![FromEngine::Diagnostics { version: self.version, items }, FromEngine::Scene(Box::new(scene)), progress]
     }
 
     fn snap_targets(&self, handle: u64) -> Vec<FromEngine> {
@@ -415,7 +415,8 @@ where
         });
         let mut items = cur.lang_diagnostics.clone();
         items.extend(convert::kernel_diagnostics(&cur.src, &ev));
-        let res = vec![FromEngine::Diagnostics { version: r.version, items }, FromEngine::Scene(scene.clone())];
+        let res =
+            vec![FromEngine::Diagnostics { version: r.version, items }, FromEngine::Scene(Box::new(scene.clone()))];
         let root = ev.root();
         self.done = Some(Done { version: r.version, ev, scene });
         if self.opts.auto_root_mesh

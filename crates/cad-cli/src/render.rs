@@ -201,7 +201,9 @@ pub(crate) fn command(
         .iter()
         .filter_map(|tn| tn.nodes.iter().find_map(|&n| sc.nodes[n as usize].color).map(|c| (tn.tag, c.0)))
         .collect();
-    let mut owned: Vec<(Mesh, [f32; 4], DMat4, Option<[f32; 4]>)> = Vec::new();
+    // (mesh, colour, placement, edge colour)
+    type Owned = (Mesh, [f32; 4], DMat4, Option<[f32; 4]>);
+    let mut owned: Vec<Owned> = Vec::new();
     let mut triangles = 0usize;
     for (mesh, d) in &meshes {
         let w = mat(&sc.nodes[d.node as usize].display_world);

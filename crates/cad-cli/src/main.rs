@@ -299,7 +299,7 @@ fn last_diagnostics(msgs: &[FromEngine]) -> Option<Vec<p::Diagnostic>> {
 
 fn last_scene(msgs: &[FromEngine]) -> Option<p::Scene> {
     msgs.iter().rev().find_map(|m| match m {
-        FromEngine::Scene(s) => Some(s.clone()),
+        FromEngine::Scene(s) => Some((**s).clone()),
         _ => None,
     })
 }

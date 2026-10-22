@@ -158,7 +158,7 @@ pub enum FromEngine {
     /// (`complete = false`: node status `pending`, no bounds/selected edges) and when the
     /// kernel job is done (`complete = true`). Not sent for sources with syntax errors (the
     /// last scene stays valid).
-    Scene(Scene),
+    Scene(Box<Scene>),
     /// Kernel job progress. `current`: node evaluated next (for the watchdog).
     Progress {
         version: u64,
