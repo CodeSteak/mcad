@@ -11,7 +11,7 @@ use glam::{DMat4, DQuat, DVec2, DVec3};
 
 use crate::key::{CacheKey, KeyHasher};
 use crate::profile::{self, Expr2, Leaf};
-use crate::{Diag, EngineConfig, NodeOutput, Part, Severity, excluded, is_profile_op};
+use crate::{Diag, EngineConfig, NodeOutput, Part, Severity, is_profile_op};
 
 /// The step budget is used up; the node is re-run (with replay) on the next step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -74,7 +74,6 @@ impl<K: Kernel> Run<'_, K> {
 
 pub(crate) struct Ctx<'a, S> {
     pub tree: &'a Tree,
-    pub keys: &'a [CacheKey],
     pub tags: &'a [Tag],
     pub outputs: &'a [Option<Rc<NodeOutput<S>>>],
     pub config: &'a EngineConfig,
@@ -869,7 +868,7 @@ where
     fn zone(&mut self, z: &ZoneShape) -> R<Vec<Part<K::Shape>>> {
         let tree = self.ctx.tree;
         let Some((_, body, path)) = zone_block(tree, self.idx) else {
-            self.error("zone() ist nur in fillet/chamfer/shell-Blöcken erlaubt");
+            self.warn("zone() außerhalb eines fillet/chamfer/shell-Blocks wird ignoriert");
             return Ok(Vec::new());
         };
         let Some(bb) = self.output(body).and_then(|o| o.bounds) else {
@@ -1132,7 +1131,7 @@ where
                     if approx {
                         warn.push("Kreis unter ungleichmäßiger Skalierung wird als Spline angenähert".into());
                     }
-                    sections.push(PlacedLoop { lp, frame });
+                    sections.push(PlacedLoop { lp: profile::loft_normalize(lp), frame });
                 }
                 _ => {
                     self.error(format!(

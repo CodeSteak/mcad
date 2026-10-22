@@ -26,6 +26,7 @@
 //! (see `profile.rs`). 2D nodes on their own are shown as filled polygons
 //! ([`Engine::tessellate`]).
 
+pub mod builder;
 mod cache;
 pub mod counting;
 mod eval;
@@ -188,6 +189,10 @@ pub struct NodeReport {
     pub parts: usize,
     /// Result came from the cache.
     pub cached: bool,
+    /// Where the UI places this node's mesh: `Node.world` relative to the evaluated root.
+    /// Equals `Node.world` unless a `!` modifier made a nested node the root, whose
+    /// enclosing transforms are ignored (as in OpenSCAD).
+    pub display_world: DMat4,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -220,6 +225,12 @@ pub struct Evaluation<S> {
 impl<S> Evaluation<S> {
     pub fn root(&self) -> Option<NodeIdx> {
         self.tree.root
+    }
+
+    /// `true` if the root is a nested node (`!` modifier): transforms above it are ignored
+    /// and [`NodeReport::display_world`] is relative to it.
+    pub fn root_is_subtree(&self) -> bool {
+        self.tree.root.is_some_and(|r| self.tree.node(r).parent.is_some())
     }
 
     pub fn report(&self, n: NodeIdx) -> &NodeReport {
@@ -360,7 +371,6 @@ impl<S: Clone + 'static> Job<S> {
                 };
                 let ctx = eval::Ctx {
                     tree: &self.tree,
-                    keys: &self.keys,
                     tags: &self.tags,
                     outputs: &self.outputs,
                     config: &e.config,
@@ -395,6 +405,7 @@ impl<S: Clone + 'static> Job<S> {
 
     fn finish(&self) -> Evaluation<S> {
         let tree = &self.tree;
+        let root_inv = tree.root.map(|r| tree.node(r).world.inverse()).unwrap_or(DMat4::IDENTITY);
         let mut reports = Vec::with_capacity(tree.nodes.len());
         let mut tag_nodes: BTreeMap<Tag, Vec<NodeRef>> = BTreeMap::new();
         for (i, n) in tree.nodes.iter().enumerate() {
@@ -442,6 +453,7 @@ impl<S: Clone + 'static> Job<S> {
                 dim: out.and_then(|o| o.dim),
                 parts: out.map(|o| o.parts.len()).unwrap_or(0),
                 cached: self.cached[i],
+                display_world: root_inv * n.world,
             });
         }
         Evaluation {
@@ -663,12 +675,6 @@ fn mesh_bytes(m: &Mesh) -> usize {
         + m.edge_segments.len()
         + m.edge_ids.len())
         + 64
-}
-
-/// `true` if a node takes no part in its parent's result (modifiers `*`, `%`, zones).
-pub fn excluded(tree: &Tree, n: NodeIdx) -> bool {
-    let f = tree.node(n).flags;
-    f.disabled || f.background || f.zone
 }
 
 /// `true` for nodes whose op is a profile operation (2D children).

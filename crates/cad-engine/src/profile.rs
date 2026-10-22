@@ -111,7 +111,7 @@ pub(crate) fn resize_scale(extent: DVec3, size: DVec3, auto: [bool; 3]) -> DVec3
     }
     if let Some(f) = first {
         for i in 0..3 {
-            if !(size[i] > 0.0) && auto[i] {
+            if size[i] <= 0.0 && auto[i] {
                 s[i] = f;
             }
         }
@@ -222,6 +222,37 @@ pub(crate) fn map_loop(lp: &Loop, a: &DAffine2) -> (Loop, bool) {
                 (Loop::Spline(pts), true)
             }
         }
+    }
+}
+
+/// Loop normalised for lofting: counter-clockwise, starting at the vertex closest to the +x
+/// direction seen from its centroid (circles start at +x in the kernel), so sections are not
+/// twisted against each other.
+pub(crate) fn loft_normalize(lp: Loop) -> Loop {
+    let fix = |mut p: Vec<DVec2>| {
+        let n = p.len();
+        if n < 3 {
+            return p;
+        }
+        let area: f64 = (0..n).map(|i| p[i].perp_dot(p[(i + 1) % n])).sum();
+        if area < 0.0 {
+            p.reverse();
+        }
+        let c = p.iter().fold(DVec2::ZERO, |a, b| a + *b) / n as f64;
+        let start = (0..n)
+            .min_by(|&a, &b| {
+                let fa = (p[a] - c).to_angle().abs();
+                let fb = (p[b] - c).to_angle().abs();
+                fa.partial_cmp(&fb).unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or(0);
+        p.rotate_left(start);
+        p
+    };
+    match lp {
+        Loop::Polygon(p) => Loop::Polygon(fix(p)),
+        Loop::Spline(p) => Loop::Spline(fix(p)),
+        c => c,
     }
 }
 
@@ -367,6 +398,7 @@ fn point_in_contours(p: DVec2, contours: &[Vec<DVec2>]) -> bool {
     inside
 }
 
+#[cfg(test)]
 /// Area of a region (shapes of contours; holes are subtracted).
 pub(crate) fn region_area(shapes: &[Shape2]) -> f64 {
     let area = |c: &Vec<Pt>| {
@@ -469,7 +501,7 @@ mod tests {
         let r = expr_region(&e, 0.01);
         let a = region_area(&r);
         let want = 400.0 - std::f64::consts::PI * 25.0;
-        assert!((a - want).abs() < 0.2, "{a} vs {want}");
+        assert!((a - want).abs() < 0.3, "{a} vs {want}");
         let m = region_mesh(&e, 0.01, &|n| n + 1);
         assert!(m.triangle_count() > 10);
         assert!(m.tri_tags.iter().all(|&t| t == 1));

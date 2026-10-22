@@ -13,3 +13,8 @@ glam.workspace = true
 serde.workspace = true
 blake3.workspace = true
 i_triangle = "0.50"
+
+[dev-dependencies]
+kernel-smlib.workspace = true
+cad-eval.workspace = true
+zip = { version = "2", default-features = false }
