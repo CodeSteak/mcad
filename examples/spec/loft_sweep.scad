@@ -1,0 +1,20 @@
+// Zweck: Profiloperationen – loft vom Kreis zum Quadrat (Trichter), sweep eines Kreises
+// entlang eines Spline-Pfads (Griffbügel) und eines linearen Pfads aus Rasterpunkten.
+grid g {
+    x: links = 0, mitte = 20, rechts = 40;
+    y: vorne = 0;
+    z: unten = 0, oben = 15;
+}
+
+loft() {
+    circle(10);
+    translate([0, 0, 15]) square(14, center = true);
+    translate([0, 0, 30]) circle(4);
+}
+
+translate([30, 0, 0])
+    sweep(path = [g[links, vorne, unten], g[mitte, vorne, oben], g[rechts, vorne, unten]], interp = "spline")
+        circle(2);
+
+translate([30, 20, 0])
+    sweep(path = [[0, 0, 0], [40, 0, 0], [40, 20, 0]], interp = "linear") square(3, center = true);

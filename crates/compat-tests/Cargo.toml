@@ -1,0 +1,15 @@
+[package]
+name = "compat-tests"
+description = "Comparison tests against OpenSCAD 2021.01 and checks of the spec example models (dev only)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dev-dependencies]
+cad-eval.workspace = true
+cad-ir.workspace = true
+cad-kernel.workspace = true
+cad-syntax.workspace = true
+serde_json.workspace = true
+glam.workspace = true
