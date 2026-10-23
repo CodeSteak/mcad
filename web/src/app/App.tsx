@@ -179,9 +179,18 @@ function vol(v: number | null | undefined): string {
 function PartsBar() {
   const shown = useCad((s) => s.complete ?? s.shown);
   const hidden = useCad((s) => s.hiddenParts);
-  const parts = shown?.context.module === null ? (shown?.parts ?? []) : [];
-  if (!parts.length) return null;
+  const fileContext = !shown || shown.context.module === null;
+  const parts = fileContext ? (shown?.parts ?? []) : [];
   const names = parts.map((p) => p.name);
+  // Always one row (the 3D view keeps its size when parts come and go).
+  if (!parts.length) {
+    return (
+      <div className="partsbar empty" data-testid="partsbar" aria-label="Bauteile">
+        <span className="ptitle">Bauteile</span>
+        <span className="pinfo">{fileContext ? "keine – benannte Instanzen auf oberster Ebene (deckel: deckel();) sind Bauteile" : "nur im Dateikontext"}</span>
+      </div>
+    );
+  }
   return (
     <div className="partsbar" data-testid="partsbar" aria-label="Bauteile">
       <span className="ptitle">Bauteile</span>

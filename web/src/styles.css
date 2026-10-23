@@ -797,10 +797,14 @@ input:checked + .cm-switch-knob::after {
 /* Parts (named instances at the top level) */
 .partsbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  white-space: nowrap;
+  height: 30px;
+  flex: none;
   align-items: center;
   gap: 4px 12px;
-  padding: 4px 10px;
+  padding: 0 10px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
   font-size: 12px;
