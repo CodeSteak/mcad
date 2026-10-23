@@ -173,6 +173,43 @@ pub fn is_subtracted(tree: &Tree, n: u32) -> bool {
     tree.solid_children(par).next() != Some(n)
 }
 
+fn select(s: cad_ir::Select) -> p::SelectMode {
+    match s {
+        cad_ir::Select::Inside => p::SelectMode::Inside,
+        cad_ir::Select::Touch => p::SelectMode::Touch,
+    }
+}
+
+/// Parameters the view needs to draw zone blocks, profile operations and surfaces.
+pub fn op_info(op: &Op) -> Option<p::OpInfo> {
+    Some(match op {
+        Op::Blend { kind, r, select: s } => {
+            p::OpInfo::Blend { chamfer: *kind == cad_ir::BlendKind::Chamfer, r: *r, select: select(*s) }
+        }
+        Op::Shell { t, select: s } => p::OpInfo::Shell { t: *t, select: select(*s) },
+        Op::Zone(z) => match *z {
+            cad_ir::ZoneShape::Line { point, dir, d } => p::OpInfo::Zone { line: true, point: v3(point), dir: v3(dir), d },
+            cad_ir::ZoneShape::Plane { point, normal, d } => {
+                p::OpInfo::Zone { line: false, point: v3(point), dir: v3(normal), d }
+            }
+        },
+        Op::LinearExtrude { h, twist, scale, center } => {
+            p::OpInfo::LinearExtrude { h: *h, center: *center, twist: *twist, scale: scale.to_array() }
+        }
+        Op::RotateExtrude { angle } => p::OpInfo::RotateExtrude { angle: *angle },
+        Op::Loft { ruled } => p::OpInfo::Loft { ruled: *ruled },
+        Op::Sweep { path, interp } => p::OpInfo::Sweep {
+            path: path.iter().map(|&q| v3(q)).collect(),
+            spline: *interp == cad_kernel::PathInterp::Spline,
+        },
+        Op::Surface { rows } => {
+            p::OpInfo::Surface { rows: rows.iter().map(|r| r.iter().map(|&q| v3(q)).collect()).collect() }
+        }
+        Op::Thicken { t } => p::OpInfo::Thicken { t: *t },
+        _ => return None,
+    })
+}
+
 /// Mesh key of a node: hex of its content key.
 pub fn mesh_key(k: &cad_engine::CacheKey) -> String {
     k.to_hex()
@@ -241,6 +278,7 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
                 tag: 0,
                 cached: false,
                 tol: n.tol,
+                op_info: op_info(&n.op),
             };
             match &kernel {
                 KernelInfo::Pending { keys, tags } => p::SceneNode {

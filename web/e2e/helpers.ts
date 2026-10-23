@@ -44,16 +44,22 @@ export interface CadState {
     hoverNodes: number[];
     plan: {
       base: string | null;
-      items: Array<{ node: number; mode: string; label: string; line: number; flat: boolean }>;
+      items: Array<{ node: number; mode: string; label: string; line: number; flat: boolean; why: string }>;
       edges: number;
       frames: number;
       anchors: number;
       activeAnchors: number;
       status: string | null;
+      guides: Record<string, number>;
+      guidePoints: Array<{ kind: string; points: Array<[number, number, number]> }>;
     };
     grid: { lines: number; dashed: number; points: number; highlight: string[] };
     missingMeshes: number;
     objects: number;
+    edgeKinds: Record<string, number>;
+    zoneEdges: { zone: number; inZone: number; total: number } | null;
+    openFaces: Array<{ shell: number; faces: number; engine: number }>;
+    camera: { autoFit: boolean; refitHint: boolean; distance: number; target: [number, number, number] };
   } | null;
   frames: number;
   restarts: number;
@@ -323,4 +329,142 @@ export async function waitDragDone(page: Page): Promise<CadState> {
 /** Lines `from`..`to` (1-based) of the editor text. */
 export function lines(text: string, from: number, to = from): string {
   return text.split("\n").slice(from - 1, to).join("\n");
+}
+
+// ---------------------------------------------------------------- Phase C (test report 4)
+
+/** Screenshots and measurements for test report 4 (tools/report/report4.mjs). */
+export const REPORT4_DIR = join(here, "../../reports/tmp/report4");
+
+/** Screenshot of the view column (default), the editor or the whole window for report 4. */
+export async function screenshotC(page: Page, name: string, area: "view" | "full" | "editor" = "view"): Promise<void> {
+  mkdirSync(join(REPORT4_DIR, "img"), { recursive: true });
+  const clip = area === "view" ? await page.locator("section.viewcol").boundingBox() : area === "editor" ? await page.locator("section.editorpane").boundingBox() : null;
+  await page.screenshot({ path: join(REPORT4_DIR, "img", `${name}.jpg`), type: "jpeg", quality: 82, ...(clip ? { clip } : {}) });
+}
+
+export interface ScenarioC {
+  id: string;
+  title: string;
+  caption: string;
+  /** Screenshots with a label each. */
+  images: Array<{ name: string; label: string }>;
+  /** Code excerpt shown next to the screenshots. */
+  code?: string;
+  /** Checked conditions (state or pixels). */
+  checks?: string[];
+}
+
+export function recordC(entry: ScenarioC): void {
+  mkdirSync(REPORT4_DIR, { recursive: true });
+  const f = join(REPORT4_DIR, "scenarios.json");
+  const all: ScenarioC[] = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
+  const i = all.findIndex((e) => e.id === entry.id);
+  if (i >= 0) all[i] = entry;
+  else all.push(entry);
+  writeFileSync(f, JSON.stringify(all, null, 2));
+}
+
+export function writeMetricsC(m: Record<string, unknown>): void {
+  mkdirSync(REPORT4_DIR, { recursive: true });
+  const f = join(REPORT4_DIR, "metrics.json");
+  const old = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
+  writeFileSync(f, JSON.stringify({ ...old, ...m }, null, 2));
+}
+
+/**
+ * Pixels of the 3D view whose colour is within `tol` (max channel difference) of a CSS
+ * variable's colour (e.g. `--view-selected-edge`), optionally only inside a client rectangle.
+ */
+export async function colorPixels(page: Page, cssVar: string, tol = 28, rect?: { x: number; y: number; width: number; height: number }): Promise<number> {
+  const canvas = page.getByTestId("viewport-canvas");
+  const box = (await canvas.boundingBox())!;
+  const png = await canvas.screenshot();
+  return page.evaluate(
+    async ([b64, name, t, r, bx, by]) => {
+      const col = getComputedStyle(document.documentElement).getPropertyValue(name as string).trim();
+      const c0 = document.createElement("canvas").getContext("2d")!;
+      c0.fillStyle = col;
+      const hex = c0.fillStyle as string;
+      const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      const img = new Image();
+      img.src = `data:image/png;base64,${b64}`;
+      await img.decode();
+      const c = document.createElement("canvas");
+      c.width = img.width;
+      c.height = img.height;
+      const g = c.getContext("2d")!;
+      g.drawImage(img, 0, 0);
+      const rr = r as { x: number; y: number; width: number; height: number } | null;
+      const x0 = rr ? Math.max(0, Math.floor(rr.x - (bx as number))) : 0;
+      const y0 = rr ? Math.max(0, Math.floor(rr.y - (by as number))) : 0;
+      const w = rr ? Math.min(c.width - x0, Math.ceil(rr.width)) : c.width;
+      const h = rr ? Math.min(c.height - y0, Math.ceil(rr.height)) : c.height;
+      if (w <= 0 || h <= 0) return 0;
+      const d = g.getImageData(x0, y0, w, h).data;
+      let n = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (Math.abs(d[i] - rgb[0]) <= (t as number) && Math.abs(d[i + 1] - rgb[1]) <= (t as number) && Math.abs(d[i + 2] - rgb[2]) <= (t as number)) n++;
+      }
+      return n;
+    },
+    [png.toString("base64"), cssVar, tol, rect ?? null, box.x, box.y] as const,
+  );
+}
+
+/**
+ * Pixel check of one drawn layer: canvas pixels that change (max channel difference > `tol`)
+ * when the objects whose name starts with `prefix` (`open-faces`, `guide:path`,
+ * `edge:selected`, `mode:profile`, …) are hidden. `found`: number of such objects.
+ */
+export async function layerPixels(page: Page, prefix: string, tol = 24): Promise<{ found: number; changed: number }> {
+  const canvas = page.getByTestId("viewport-canvas");
+  type W = { __cad: { setLayerVisible(p: string, v: boolean): number } };
+  const shown = await canvas.screenshot();
+  const found = await page.evaluate((p) => (window as unknown as W).__cad.setLayerVisible(p, false), prefix);
+  const hidden = await canvas.screenshot();
+  await page.evaluate((p) => (window as unknown as W).__cad.setLayerVisible(p, true), prefix);
+  const changed = await page.evaluate(
+    async ([a, b, t]) => {
+      const load = async (b64: string) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${b64}`;
+        await img.decode();
+        const c = document.createElement("canvas");
+        c.width = img.width;
+        c.height = img.height;
+        const g = c.getContext("2d")!;
+        g.drawImage(img, 0, 0);
+        return g.getImageData(0, 0, c.width, c.height).data;
+      };
+      const da = await load(a as string);
+      const db = await load(b as string);
+      let n = 0;
+      for (let i = 0; i < da.length; i += 4) {
+        if (Math.max(Math.abs(da[i] - db[i]), Math.abs(da[i + 1] - db[i + 1]), Math.abs(da[i + 2] - db[i + 2])) > (t as number)) n++;
+      }
+      return n;
+    },
+    [shown.toString("base64"), hidden.toString("base64"), tol] as const,
+  );
+  return { found, changed };
+}
+
+export interface NodeInfo {
+  idx: number;
+  label: string;
+  status: string;
+  hints: string[];
+  messages: Array<{ severity: string; message: string; edges: number }>;
+  selectedEdges: number;
+  openedFaces: number;
+  meshKey: string | null;
+  triangles: number | null;
+  op: string | null;
+  zone: boolean;
+}
+
+/** Nodes whose statement starts on a line (current document) with their engine data. */
+export function nodesOnLine(page: Page, line: number): Promise<NodeInfo[]> {
+  return page.evaluate((l) => (window as unknown as { __cad: { nodesOnLine(l: number): NodeInfo[] } }).__cad.nodesOnLine(l), line);
 }

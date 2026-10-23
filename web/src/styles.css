@@ -54,6 +54,9 @@
   --view-handle-ref: #0c8599;
   --view-handle-locked: #6b7280;
   --view-snap: #2b8a3e;
+  --view-profile: #0b7285;
+  --view-guide: #d6336c;
+  --view-open-face: #f08c00;
 }
 
 :root[data-theme="dark"] {
@@ -111,6 +114,9 @@
   --view-handle-ref: #3bc9db;
   --view-handle-locked: #a3aab4;
   --view-snap: #69db7c;
+  --view-profile: #3bc9db;
+  --view-guide: #f783ac;
+  --view-open-face: #ffa94d;
 }
 
 * {
@@ -648,6 +654,12 @@ input:checked + .cm-switch-knob::after {
 
 .viewtools button {
   padding: 2px 8px;
+}
+
+.viewtools button.refit {
+  border-color: var(--view-accent);
+  color: var(--view-accent);
+  font-weight: 600;
 }
 
 .viewtools .check {

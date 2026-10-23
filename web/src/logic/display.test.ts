@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { plan, type Plan } from "./display";
+import { plan, planNodes, type Plan } from "./display";
+import { apply } from "./math";
 import { SceneIndex } from "./sceneIndex";
 import { fixture, pos } from "./__fixtures__/load";
 
@@ -65,9 +66,88 @@ describe("Darstellungszustände", () => {
     expect(p.edges.every((e) => e.kind === "selected")).toBe(true);
   });
 
-  it("Cursor auf einer Zone: nur diese Zone blau", () => {
+  it("Cursor auf einer Zone: nur diese Zone blau, Kanten des Blocks zur Prüfung", () => {
     const { f, p } = planAt("fillet-modul", 17, 10);
     expect(modes(f, p)).toEqual(["blue:zone@17"]);
+    // The block's edges are not drawn as such; the viewer keeps those in this zone.
+    expect(p.edges).toEqual([]);
+    expect(p.zoneEdges?.edges.length).toBe(2);
+    expect(p.zoneEdges?.select).toBe("inside");
+    expect(planNodes(p)).toContain(p.zoneEdges!.zone);
+  });
+
+  it("Zone über translate: ohne Umriss und Koordinatenkreuze der Transformation", () => {
+    const { f, p } = planAt("fillet-modul", 18, 6);
+    expect(modes(f, p)).toEqual(["blue:translate@18"]);
+    expect(p.frames).toEqual([]);
+  });
+
+  it("select = touch kommt aus op_info", () => {
+    const { p } = planAt("fillet-modul", 25, 8);
+    expect(p.zoneEdges?.select).toBe("touch");
+    expect(p.zoneEdges?.edges.length).toBe(5);
+  });
+
+  it("linear_extrude: Profil als Umriss unten (center: auf −h/2)", () => {
+    const { f, p } = planAt("profile", 2, 3);
+    expect(modes(f, p)).toEqual(["full:linear_extrude@2", "profile:rect@2"]);
+    expect(p.items[1].matrix.slice(12, 15)).toEqual([0, 0, -5]);
+  });
+
+  it("rotate_extrude: Profil in der xz-Ebene, Drehachse als Linie", () => {
+    const { f, p } = planAt("profile", 3, 30);
+    expect(modes(f, p)).toEqual(["full:rotate_extrude@3", "profile:translate@3"]);
+    // Profile y → z: the matrix maps (x, y, 0) to (40 + x, 0, y).
+    const m = p.items[1].matrix;
+    const q = apply(m, [10, 12, 0]);
+    expect(q[0]).toBeCloseTo(50);
+    expect(q[1]).toBeCloseTo(0);
+    expect(q[2]).toBeCloseTo(12);
+    expect(p.guides).toEqual([expect.objectContaining({ kind: "axis", dashed: true })]);
+    const [a, b] = p.guides[0].points;
+    expect([a[0], a[1], b[0], b[1]]).toEqual([40, 0, 40, 0]);
+    expect(a[2]).toBeLessThan(0);
+    expect(b[2]).toBeGreaterThan(12);
+  });
+
+  it("loft: alle Profile als Umrisse an ihrer Lage, Ergebnis halbtransparent", () => {
+    const { f, p } = planAt("profile", 4, 24);
+    expect(modes(f, p)).toEqual(["translucent:loft@4", "profile:circle@5", "profile:rect@6"]);
+    expect(p.items[2].matrix.slice(12, 15)).toEqual([0, 40, 20]);
+  });
+
+  it("sweep: Pfad als Kurve, Profil am Startpunkt senkrecht zur Tangente", () => {
+    const { f, p } = planAt("profile", 8, 30);
+    expect(modes(f, p)).toEqual(["full:sweep@8", "profile:circle@8"]);
+    const path = p.guides.find((g) => g.kind === "path")!;
+    expect(path.points).toEqual([[40, 40, 0], [60, 40, 10], [80, 50, 10]]);
+    // Profile normal (z of its matrix) along the start tangent (2, 0, 1)/√5.
+    const m = p.items[1].matrix;
+    expect(m[8]).toBeCloseTo(2 / Math.sqrt(5));
+    expect(m[10]).toBeCloseTo(1 / Math.sqrt(5));
+    expect(m.slice(12, 15)).toEqual([40, 40, 0]);
+  });
+
+  it("surface und thicken: Kontrollnetz, Fläche als Umriss", () => {
+    let r = planAt("profile", 9, 25);
+    expect(modes(r.f, r.p)).toEqual(["full:thicken@9", "profile:surface@9"]);
+    r = planAt("profile", 9, 50);
+    expect(modes(r.f, r.p)).toEqual(["full:surface@9"]);
+    expect(r.p.guides.filter((g) => g.kind === "net")).toHaveLength(8);
+  });
+
+  it("shell: Zone blau, geöffnete Flächen zur Prüfung", () => {
+    const { f, p } = planAt("profile", 11, 30);
+    expect(modes(f, p)).toEqual(["full:shell@11", "blue:zone@13"]);
+    expect(p.openFaces).toHaveLength(1);
+    const q = p.openFaces[0];
+    expect(f.scene.nodes[q.body].label).toBe("box");
+    expect(q.zones.map((z) => f.scene.nodes[z].label)).toEqual(["zone"]);
+    expect(planNodes(p)).toEqual(expect.arrayContaining([q.body, ...q.zones]));
+    // Cursor on the zone: only this zone and its faces.
+    const z = planAt("profile", 13, 6);
+    expect(modes(z.f, z.p)).toEqual(["blue:zone@13"]);
+    expect(z.p.openFaces[0].zones).toEqual(q.zones);
   });
 
   it("Modifier: # rot, % grau, unabhängig vom Cursor", () => {

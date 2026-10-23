@@ -63,6 +63,8 @@ export interface DragInfo {
   alt: boolean;
   /** Live edits applied so far. */
   edits: number;
+  /** Axis lock of a point handle (0 = x, 1 = y, 2 = z of its local system). */
+  axis: number | null;
 }
 
 export interface CadState {
@@ -106,6 +108,8 @@ export interface CadState {
   drag: DragInfo | null;
   /** Handle under the mouse in the view (id). */
   hoverHandle: number | null;
+  /** The model changed its size clearly after the user moved the camera: offer a refit. */
+  refitHint: boolean;
 }
 
 function initialSettings(): Settings {
@@ -167,6 +171,7 @@ export const store = createStore<CadState>(() => ({
   paramOverrides: {},
   drag: null,
   hoverHandle: null,
+  refitHint: false,
 }));
 
 export function useCad<T>(sel: (s: CadState) => T): T {

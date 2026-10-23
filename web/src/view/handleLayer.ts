@@ -137,6 +137,11 @@ export function buildHandleLayer(group: THREE.Group, input: LayerInput): void {
     } else group.add(points([grip], color, size, "dot", 80, `handle:${g.handle.id}`));
   }
   if (preview) {
+    if (preview.axis) {
+      // Axis lock: line through the start position in the axis colour.
+      const ax = preview.axis;
+      segs([...ax.from, ...ax.to], AXIS_COLORS[ax.axis] ?? colors.literal, 1.8, true);
+    }
     if (preview.targets.length) {
       group.add(points(preview.targets.map((t) => t.world), colors.snap, 9, "ring", 75, "snap-targets"));
     }

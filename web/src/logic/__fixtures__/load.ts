@@ -8,6 +8,7 @@ import type { Diagnostic, Scene } from "../../engine/protocol";
 
 const FIXTURES: Record<string, { example: string; local?: boolean }> = {
   griffe: { example: "griffe.scad", local: true },
+  profile: { example: "profile.scad", local: true },
   gehaeuse: { example: "spec/gehaeuse.scad" },
   "gehaeuse-modul": { example: "spec/gehaeuse.scad" },
   modifiers: { example: "openscad-compat/24_modifiers.scad" },

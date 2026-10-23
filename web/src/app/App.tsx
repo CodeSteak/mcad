@@ -108,6 +108,7 @@ function ViewPane() {
   const ref = useRef<HTMLDivElement>(null);
   const [viewer, setV] = useState<Viewer | null>(null);
   const allGrids = useCad((s) => s.allGrids);
+  const refitHint = useCad((s) => s.refitHint);
   useEffect(() => {
     if (!ref.current) return;
     const v = new Viewer(ref.current, client, meshes);
@@ -124,6 +125,11 @@ function ViewPane() {
       <div className="viewport" ref={ref} data-testid="viewport" />
       <div className="viewtools" role="toolbar" aria-label="Ansicht">
         <button onClick={() => viewer?.fitAll()} title="Alles zeigen">Alles zeigen</button>
+        {refitHint && (
+          <button className="refit" onClick={() => viewer?.fitAll()} title="Das Modell hat seine Größe deutlich geändert: Ansicht neu einpassen" data-testid="refit">
+            Neu einpassen
+          </button>
+        )}
         <button onClick={() => view("iso")}>Iso</button>
         <button onClick={() => view("top")}>Oben</button>
         <button onClick={() => view("front")}>Vorne</button>
@@ -194,7 +200,8 @@ function StatusBar() {
       )}
       {drag && (
         <span className="st-note drag" data-testid="status-drag">
-          {drag.alt ? "Alt: frei ziehen (Zahlen)" : drag.snap ? `Snap: ${drag.snap}` : "Ziehen – Alt: ohne Snap, Esc: abbrechen"}
+          {drag.axis !== null ? `Achse ${"xyz"[drag.axis]} · ` : ""}
+          {drag.alt ? "Alt: frei ziehen (Zahlen)" : drag.snap ? `Snap: ${drag.snap}` : drag.axis !== null ? "Umschalt/X/Y/Z: Achse" : "Ziehen – Alt: ohne Snap, Umschalt: Achse, Esc: abbrechen"}
         </span>
       )}
       {notice && <span className="st-note" data-testid="status-notice">{notice}</span>}
