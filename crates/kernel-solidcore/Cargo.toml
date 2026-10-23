@@ -15,6 +15,6 @@ solidcore = ["dep:solidcore"]
 [dependencies]
 cad-kernel.workspace = true
 glam.workspace = true
-# tangency-labs/solidcore main @ 3a6a50b (2026-10-22), Apache-2.0. Builds with Rust 1.97
+# tangency-labs/solidcore main @ c9de85d (2026-10-23 19:10 UTC), Apache-2.0. Builds with Rust 1.97
 # (solidcore pins 1.98 in its own rust-toolchain.toml, which does not apply to dependents).
-solidcore = { git = "https://github.com/tangency-labs/solidcore", rev = "3a6a50b30a7829d00abcffbe9fa561d88ab37dc1", optional = true }
+solidcore = { git = "https://github.com/tangency-labs/solidcore", rev = "c9de85d6c908675cd129358cce8429fd74b26536", optional = true }

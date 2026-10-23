@@ -4,7 +4,8 @@
 //! Per node evaluated by SMLib: status, volume (relative 1e-6), number of faces and edges of its
 //! result, and the edges selected by fillet/chamfer (count and points, 1e-6 of the size).
 //! "Coverage" counts per operation (node label) how many nodes solidcore evaluated like SMLib.
-//! Verdicts: `same`; `unsupported` (solidcore reports the operation as not supported);
+//! Verdicts: `same`; `unsupported` (solidcore reports the operation, or a query of its result —
+//! faces, edges, volume —, as not supported);
 //! `blocked` (differs only because an input node is unsupported or failed); `differ`; `failed`
 //! (solidcore fails where SMLib succeeds); `skipped` (not evaluated by SMLib either).
 //!
@@ -100,20 +101,37 @@ where
             let mut faces = 0;
             let mut edges = 0;
             let mut ok = true;
+            // the first failed query; an unsupported query makes the node unsupported
+            let mut query_err: Option<String> = None;
             for part in &parts {
                 match (k.faces(&part.shape, 0), k.edges(&part.shape, 0)) {
                     (Ok(f), Ok(e)) => {
                         faces += f.len();
                         edges += e.len();
                     }
-                    _ => ok = false,
+                    (Err(e), _) | (_, Err(e)) => {
+                        ok = false;
+                        query_err.get_or_insert(format!("Abfrage Flächen/Kanten: {e}"));
+                    }
                 }
             }
             if ok && !parts.is_empty() {
                 m.faces = Some(faces);
                 m.edges = Some(edges);
             }
-            m.volume = s.mass_props(n.idx).ok().map(|mp| mp.volume);
+            match s.mass_props(n.idx) {
+                Ok(mp) => m.volume = Some(mp.volume),
+                Err(e) if !parts.is_empty() => {
+                    query_err.get_or_insert(format!("Abfrage Volumen: {e}"));
+                }
+                Err(_) => {}
+            }
+            if let Some(e) = query_err
+                && m.message.is_none()
+            {
+                m.unsupported = e.contains(UNSUPPORTED);
+                m.message = Some(e);
+            }
         }
         out.push(m);
     }

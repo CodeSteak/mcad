@@ -193,7 +193,7 @@ fn diff_kernels_needs_the_feature() {
     assert!(v["error"].as_str().unwrap().contains("--features solidcore"), "{v}");
 }
 
-/// `diff-kernels` over all examples: today mostly `Unsupported` on the solidcore side; it must
+/// `diff-kernels` over all examples: still mostly `Unsupported` on the solidcore side; it must
 /// answer for every file and node without crashing (exit 1 = not all nodes the same). Only with
 /// the feature `solidcore` (`cargo test -p cad-cli --features solidcore`).
 #[cfg(feature = "solidcore")]
@@ -229,8 +229,11 @@ fn diff_kernels_on_examples() {
         }
     }
     if v["solidcore_available"] == true {
-        // solidcore @ 3a6a50b builds no primitive yet
+        // solidcore @ c9de85d: cylinders, spheres, booleans and transforms are unsupported; boxes
+        // and plain extrusions agree with SMLib, nothing that answers differs
         assert!(s["unsupported"].as_u64().unwrap() > 100, "{s}");
+        assert!(s["same"].as_u64().unwrap() > 200, "{s}");
+        assert_eq!(s["differ"].as_u64().unwrap() + s["failed"].as_u64().unwrap(), 0, "{s}");
     }
     // 2D nodes need no kernel and agree
     assert!(s["same"].as_u64().unwrap() > 0, "{s}");
