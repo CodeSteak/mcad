@@ -16,6 +16,9 @@ serde_json.workspace = true
 notify = "8"
 similar = "2"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 kernel-smlib.workspace = true
 tempfile = "3"

@@ -602,6 +602,26 @@ impl Drop for Supervisor {
     }
 }
 
+/// Output for the engine process: a duplicate of stdout, while stdout itself is redirected
+/// to stderr so stray prints of the kernel cannot corrupt the frames.
+pub fn protocol_stdout() -> Box<dyn Write + Send> {
+    #[cfg(unix)]
+    {
+        use std::os::fd::FromRawFd;
+        // SAFETY: dup/dup2 on the process's own standard descriptors; the new descriptor is
+        // owned by the returned File.
+        unsafe {
+            let fd = libc::dup(1);
+            if fd >= 0 {
+                libc::dup2(2, 1);
+                return Box::new(std::io::BufWriter::with_capacity(1 << 20, std::fs::File::from_raw_fd(fd)));
+            }
+        }
+    }
+    #[allow(unreachable_code)]
+    Box::new(std::io::BufWriter::with_capacity(1 << 20, std::io::stdout()))
+}
+
 /// Header kind check used by readers of engine frames.
 pub fn is_batch(f: &Frame) -> bool {
     f.header.kind == Kind::Event && f.header.method == wire::OUT

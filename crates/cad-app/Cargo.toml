@@ -1,0 +1,22 @@
+[package]
+name = "cad-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Desktop app (Tauri 2): the React UI with the native engine process, real files, file watcher, git markers, control by `cad ui`"
+
+[lib]
+name = "cad_app"
+path = "src/lib.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+cad-desktop = { path = "../cad-desktop" }
+cad-ipc = { path = "../cad-ipc" }
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
