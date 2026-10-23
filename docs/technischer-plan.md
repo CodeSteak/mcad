@@ -524,7 +524,7 @@ Abhängigkeiten: M1 → M2 → M3 → M4 → M5. M6 hängt nur an M2. M8 hängt 
 
 ---
 
-## 15. Bekannte Grenzen (aus den Testberichten 1–11)
+## 15. Bekannte Grenzen (aus den Testberichten 1–12)
 
 Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1–F4 aus B4, behoben in B7).
 
@@ -588,6 +588,15 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 - Bambu Studio liest `project_settings.config` nur aus eigenen Dateien; die Filamentfarben setzt dort der Farbdialog für 3MF mit Farbgruppe (neuere Versionen) oder der Nutzer. OrcaSlicer übernimmt die Slots, nicht die Farben. Nicht im Container geprüft (kein Slicer mit Bambu-Importer verfügbar): die Zuordnung folgt dem Quellcode (`bbs_3mf.cpp`), geprüft mit einem Modell des Importers, lib3mf, trimesh und PrusaSlicer 2.7 (lädt sechs Objekte an der richtigen Stelle, ohne Slots).
 - Farbfehlsichtigkeit: 16 Farben lassen sich nicht für alle Formen gut trennen; kleinste ΔE_OK bei Deuteranopie 0,070 (red/green), Protanopie 0,052 (orange/green), Tritanopie 0,031 (teal/blue). Die UI zeigt Namen und Slot zu jeder Farbe.
 - Weiß auf hellem und Schwarz auf dunklem Hintergrund unterscheiden sich in der flachen Farbe kaum; Schattierung und Kantenlinien machen die Körper sichtbar, die Anzeige-Varianten (Weiß #e9e8e5 hell, Schwarz #3b3d41 dunkel) helfen etwas.
+
+**Korrekturen Farben und Daemon (B12)** – ersetzt die B11-Punkte zu 2D-Farben, Material außerhalb von Bauteilen und Farbdialog:
+
+- Die Ansicht zeigt die exakten Farbregionen erst, wenn sie gerechnet sind (Booleans je Farbknoten, gecacht; bei Modellen mit Farben immer angefragt); davor, beim Ziehen und für den hervorgehobenen Teilbaum gilt die genäherte Farbe je Fläche (Hüllen-Test bei Knoten gleichen Inhalts).
+- STEP teilt keine Flächen an Farbgrenzen; eine über die Grenze verschmolzene Fläche bekommt die Mehrheitsfarbe ihrer Abtastpunkte.
+- Gemischte Farben in einem 2D-Profil unter einer Extrusion werden nicht in Körper je Farbe geteilt (Warnung, Standard); eine einheitliche 2D-Farbe färbt die Extrusion.
+- Zufallsfarben, die im Modell ausweichen, hängen von den unbekannten Namen davor ab.
+- Ohne Farbgruppe zeigen Programme, die nur 3MF-Farben lesen, das Modell einfarbig (`--color-group` für sie; Bambu öffnet dann den Farbdialog). Bambu Studio/OrcaSlicer nicht am Programm geprüft (Quellcode, Modell des Importers).
+- Der Ersatz-Socket des Daemons liegt fest unter `/tmp/cad-<uid>/`.
 
 **solidcore (M8)**
 

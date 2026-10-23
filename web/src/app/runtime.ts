@@ -498,16 +498,18 @@ function syncRegions(): void {
   // the list needs volumes; the view draws the regions of a model with colours (Bericht 12)
   const want = c !== null && ((s.colorsOpen && (c.colors ?? []).length > 0) || (s.showRegions && hasFaceColors(c)));
   if (!want || !c) return;
-  const key = `${c.version}|${s.showRegions}`;
+  // meshes only where the view draws them (a model with colours): none for uncoloured models
+  const meshes = s.showRegions && hasFaceColors(c);
+  const key = `${c.version}|${meshes}`;
   if (key === regionsAsked) return;
-  if (s.regions && s.regions.version === c.version && (s.regions.meshes || !s.showRegions)) return;
+  if (s.regions && s.regions.version === c.version && (s.regions.meshes || !meshes)) return;
   regionsAsked = key;
   if (regionsTimer) clearTimeout(regionsTimer);
   // Small delay: while typing, several scenes follow each other.
   regionsTimer = setTimeout(() => {
     regionsTimer = null;
     const st = store.getState();
-    if (st.complete?.version === c.version) client.requestColorRegions(c.version, st.showRegions);
+    if (st.complete?.version === c.version) client.requestColorRegions(c.version, meshes);
   }, 120);
 }
 

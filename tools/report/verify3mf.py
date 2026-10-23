@@ -184,9 +184,13 @@ def bambu_import(path, out):
             vols[0]["extruder"] = obj_ext or "1"
         result.append({"object": oid, "name": (c or {}).get("meta", {}).get("name", o["name"]),
                        "extruder": obj_ext, "volumes": vols})
+    # Plater.cpp (Bericht 12): a foreign 3MF with a colour group and triangle colours opens the
+    # colour dialog, whose OK replaces the extruders; without it the slots stay.
+    dialog = bool(groups) and any(objects[s]["pid"] in groups for o in objects.values() for s in (o["components"] or []))
     out["bambu_model"] = {"application": app, "treated_as_bambu_project": is_bbl,
-                          "project_settings": "Metadata/project_settings.config" in names, "objects": result}
-    ok = all(v["extruder"] and v["color"] for o in result for v in o["volumes"]) and not is_bbl
+                          "project_settings": "Metadata/project_settings.config" in names,
+                          "color_dialog": dialog, "objects": result}
+    ok = all(v["extruder"] for o in result for v in o["volumes"]) and not is_bbl
     out["bambu_model"]["ok"] = ok
     return ok
 
@@ -233,7 +237,8 @@ def check_expect(expect_path, out):
                    "volume_mesh": mesh["volume"] if mesh else None,
                    "extruder_bambu": vol["extruder"] if vol else None, "color_3mf": mesh["color"] if mesh else None}
             good = (mesh is not None and vol is not None and str(r["filament"]) == str(vol["extruder"])
-                    and mesh["color"] == want_color and abs(mesh["volume"] - r["volume"]) <= 0.005 * r["volume"])
+                    and (mesh["color"] is None or mesh["color"] == want_color)
+                    and abs(mesh["volume"] - r["volume"]) <= 0.005 * r["volume"])
             row["ok"] = good
             ok &= good
             rows.append(row)

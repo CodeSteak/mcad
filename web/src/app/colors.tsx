@@ -148,9 +148,11 @@ export function ColorsPanel() {
           3MF einfarbig
         </button>
       </div>
-      <p className="pbnote">
-        Slot ändern schreibt <code>filament = n</code> bzw. <code>filament("Farbe", n);</code> in den Code. 3MF: ein Objekt je Bauteil, Material ohne Bauteil als
-        eigenes Objekt; ohne Farbgruppe, daher übernehmen Bambu Studio und OrcaSlicer die Slots ohne Farbdialog. Masse: PLA 1,24 g/cm³.
+      <p
+        className="pbnote"
+        title="Kommt die Farbe aus einem Parameter oder einer Schleife, schreibt die Auswahl filament(&quot;Farbe&quot;, n); an den Anfang der Datei. 3MF: ein Objekt je Bauteil (Rest: „ohne Bauteil“), ohne Farbgruppe – Bambu Studio und OrcaSlicer übernehmen die Slots ohne Farbdialog."
+      >
+        Slot ändern schreibt <code>filament = n</code> in den Code. Masse: PLA 1,24 g/cm³.
       </p>
     </aside>
   );
