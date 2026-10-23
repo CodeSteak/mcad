@@ -41,7 +41,9 @@ für die Desktop-UI reserviert und endet heute mit Exit 2 und einem Hinweis.
 
 Für viele kleine Schritte: `cad watch datei.scad --json --render /tmp/x.png --views all` in
 einem Hintergrundprozess laufen lassen – jede Dateiänderung ergibt eine JSON-Zeile und ein
-neues Bild in einigen 10 ms (der Kernel-Cache bleibt erhalten), statt 0,4–1 s pro Aufruf.
+neues Bild. Der Kernel-Cache bleibt erhalten: nur geänderte Knoten werden neu berechnet
+(Bericht 8: ~25 ms ohne Geometrieänderung, sonst die Kernelzeit der geänderten Knoten),
+statt 0,1–1,1 s für jeden einzelnen Aufruf (jeder Prozess beginnt mit leerem Cache).
 
 ## Befehle
 
