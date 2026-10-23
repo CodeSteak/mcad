@@ -349,7 +349,9 @@ function waitFor(pred: () => boolean, ms: number): Promise<boolean> {
 async function show(body: { file: string; line?: number | null; module?: string | null }): Promise<unknown> {
   let rel = relOf(body.file);
   if (!rel) {
-    // Another file: open it (as its own project).
+    // Another file: open it (as its own project) – never over unsaved changes.
+    const dirty = project.dirty();
+    if (dirty.length) throw new Error(`ungespeicherte Änderungen in ${dirty.join(", ")}: Datei nicht geöffnet`);
     openDisk(await desktop.openPath(body.file));
     rel = relOf(body.file);
   } else if (rel !== project.active) switchFile(rel);

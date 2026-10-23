@@ -470,7 +470,9 @@ async function main() {
     await sceneReady();
     await exec("window.__cad.setCursorLine(21, 18)");
     const keys = [];
-    const before = (await state()).metrics.editToScene.length;
+    const m0 = (await state()).metrics;
+    const before = m0.editToScene.length;
+    const beforeEval = m0.evalMs.length;
     for (let i = 0; i < 8; i++) {
       const id = await el(".cm-content");
       await wd("POST", `/session/${sid}/element/${id}/value`, { text: i % 2 ? "0" : "\uE003" });
@@ -480,6 +482,7 @@ async function main() {
     const s = await state();
     keys.push(...s.metrics.editToScene.slice(before));
     metrics.keystrokeToSceneNative = keys;
+    metrics.keystrokeEvalNative = s.metrics.evalMs.slice(beforeEval);
     check(keys.length > 0, `${keys.length} Messungen`);
   });
 

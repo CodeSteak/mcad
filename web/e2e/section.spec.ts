@@ -331,13 +331,16 @@ test("X07 Tastendruck → Szene im Browser (Wasm), gleiche Änderung wie in Taur
   await openApp(page);
   // after "w = 60" in `k: gehaeuse(w = 60);`: Backspace / digit, always a valid model
   await clickLine(page, 21, 18);
-  const before = (await cad(page)).metrics.editToScene.length;
+  const m0 = (await cad(page)).metrics;
+  const before = m0.editToScene.length;
+  const beforeEval = m0.evalMs.length;
   for (let i = 0; i < 8; i++) {
     await page.keyboard.press(i % 2 ? "0" : "Backspace");
     await page.waitForTimeout(250);
     await waitScene(page);
   }
-  const ms = (await cad(page)).metrics.editToScene.slice(before);
+  const m1 = (await cad(page)).metrics;
+  const ms = m1.editToScene.slice(before);
   expect(ms.length).toBeGreaterThan(0);
-  writeMetrics9({ keystrokeToSceneWasm: ms });
+  writeMetrics9({ keystrokeToSceneWasm: ms, keystrokeEvalWasm: m1.evalMs.slice(beforeEval) });
 });
