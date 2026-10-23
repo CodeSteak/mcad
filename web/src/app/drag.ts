@@ -12,7 +12,7 @@ import type { DragTarget, Edit, SnapTarget, Vec3 } from "../engine/protocol";
 import { mapEdits } from "../editor/applyEdits";
 import { EditGroup } from "../editor/editGroup";
 import { DragQueue, dragStep } from "../logic/drag";
-import type { HandleGeom, Ray, ScreenPoint } from "../logic/handles";
+import { type HandleGeom, type Ray, type ScreenPoint, alignTargets } from "../logic/handles";
 import { bridge } from "../state/bridge";
 import { store } from "../state/store";
 
@@ -48,7 +48,13 @@ interface Active {
   maxGap: number;
   raf: number;
   lastStep: { grip: Vec3; snap: SnapTarget | null } | null;
+  /** Source version whose scene the next drag message waits for. */
+  awaitVersion: number | null;
+  unsubScene: (() => void) | null;
 }
+
+/** Longest wait for the scene of a drag edit before the next position is sent. */
+const SCENE_WAIT_MS = 1500;
 
 export class DragController {
   private a: Active | null = null;
@@ -66,7 +72,7 @@ export class DragController {
     client.onEdits((v, e) => this.onEdits(v, e));
     client.onSnapTargets((h, _v, t) => {
       if (this.a && this.a.geom.handle.id === h) {
-        this.a.targets = t;
+        this.a.targets = alignTargets(this.a.geom, t);
         this.update();
       }
     });
@@ -106,8 +112,10 @@ export class DragController {
       maxGap: 0,
       raf: 0,
       lastStep: null,
+      awaitVersion: null,
+      unsubScene: null,
     };
-    store.setState({ drag: { handle: id, snap: null, alt: e.altKey, edits: 0 } });
+    store.setState({ drag: { handle: id, snap: null, alt: e.altKey, edits: 0 }, viewHover: null });
     this.client.post({ type: "DragStart", handle: id });
     this.listen("pointermove", (ev) => this.onMove(ev as PointerEvent));
     this.listen("pointerup", (ev) => this.onUp(ev as PointerEvent));
@@ -208,11 +216,49 @@ export class DragController {
       if (changes && this.group.apply(changes)) {
         // Send at once (no debounce): the next Drag must be computed on this text.
         this.sendSource();
-        bridge.dragTimes.set(store.getState().sentVersion, a.sentAt);
+        const v = store.getState().sentVersion;
+        bridge.dragTimes.set(v, a.sentAt);
         const d = store.getState().drag;
         if (d) store.setState({ drag: { ...d, edits: this.group.edits } });
+        // The next position waits for the scene of this text: a new source would abort the
+        // running kernel job, and with every move the model would never be shown.
+        this.awaitScene(a, v);
+        return;
       }
     }
+    this.release(a);
+  }
+
+  private awaitScene(a: Active, version: number): void {
+    a.awaitVersion = version;
+    const done = () => {
+      const st = store.getState();
+      if ((st.complete?.version ?? -1) >= version) return true;
+      // Syntax errors: no scene follows.
+      return st.diagnostics.version >= version && st.diagnostics.items.some((x) => x.source === "syntax" && x.severity === "error");
+    };
+    const check = () => {
+      if (this.a !== a || a.awaitVersion !== version || !done()) return;
+      this.release(a);
+    };
+    a.unsubScene?.();
+    const unsub = store.subscribe(check);
+    // Safety net: never block the drag for longer than this.
+    const timer = setTimeout(() => {
+      if (this.a === a && a.awaitVersion === version) this.release(a);
+    }, SCENE_WAIT_MS);
+    a.unsubScene = () => {
+      unsub();
+      clearTimeout(timer);
+    };
+    check();
+  }
+
+  /** The answer to the drag message in flight is complete: send the latest position. */
+  private release(a: Active): void {
+    a.awaitVersion = null;
+    a.unsubScene?.();
+    a.unsubScene = null;
     a.queue.answered();
     if (a.ending && !a.queue.busy) this.finish();
   }
@@ -245,6 +291,7 @@ export class DragController {
     if (!a) return;
     this.a = null;
     cancelAnimationFrame(a.raf);
+    a.unsubScene?.();
     this.unlisten();
     this.client.post({ type: "DragEnd", handle: a.geom.handle.id });
     const edits = this.group.edits;
@@ -269,8 +316,10 @@ export class DragController {
     if (!a) return;
     this.a = null;
     cancelAnimationFrame(a.raf);
+    a.unsubScene?.();
     this.unlisten();
-    if (a.queue.busy) this.stale++;
+    // An Edits answer is still on its way (not when only the scene was awaited).
+    if (a.queue.busy && a.awaitVersion === null) this.stale++;
     this.client.post({ type: "DragEnd", handle: a.geom.handle.id });
     this.group.cancel();
     this.sendSource();

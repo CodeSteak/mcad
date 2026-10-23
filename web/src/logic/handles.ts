@@ -4,7 +4,8 @@
 
 import type { Text } from "@codemirror/state";
 import type { Handle, Scene, SnapTarget, Vec3 } from "../engine/protocol";
-import { add, apply, applyDir, invertAffine, length, scale, sub } from "./math";
+import { gridBox } from "./grids";
+import { type Box3, add, apply, applyDir, invertAffine, length, scale, sub } from "./math";
 import type { CursorSelection, SceneIndex } from "./sceneIndex";
 
 export type HandleStyle = "literal" | "default" | "ref" | "locked";
@@ -137,8 +138,12 @@ function scaleCorner(scene: Scene, h: Handle): Vec3 | null {
   return Math.abs(m[0]) + Math.abs(m[1]) + Math.abs(m[2]) > 1e-9 ? m : null;
 }
 
-/** Display geometry of a handle. `ringRadius`: size of rotation rings (context units). */
-export function handleGeom(scene: Scene, h: Handle, ringRadius: number): HandleGeom {
+/**
+ * Display geometry of a handle. `ringRadius`: size of rotation rings (context units).
+ * `hull`: model bounds; grid plane grips sit on an edge of the grid's box (one edge per
+ * axis, so the grips of planes at 0 do not coincide).
+ */
+export function handleGeom(scene: Scene, h: Handle, ringRadius: number, hull: Box3 | null = null): HandleGeom {
   const style = handleStyle(h);
   const f = h.frame;
   if (h.kind.kind === "angle") {
@@ -157,6 +162,18 @@ export function handleGeom(scene: Scene, h: Handle, ringRadius: number): HandleG
   if (isLinear(h) && h.value.length === 1) {
     let baseL: Vec3 = h.base ?? [0, 0, 0];
     let dirL: Vec3 = h.axis ?? [1, 0, 0];
+    if (h.kind.kind === "plane") {
+      const g = scene.grids.find((x) => x.stmt === h.stmt && x.in_context);
+      if (g) {
+        const box = gridBox(g, hull);
+        const a = h.kind.axis;
+        const b = (a + 1) % 3;
+        const c = (a + 2) % 3;
+        baseL = [0, 0, 0];
+        baseL[b] = box.max[b];
+        baseL[c] = box.min[c];
+      }
+    }
     if (h.kind.kind === "scale") {
       // Grip at a corner of the hull of the scaled subtree (Spec: Griff an einer Ecke der Hülle).
       const c = scaleCorner(scene, h);
@@ -273,4 +290,22 @@ export function nearestSnap(targets: SnapTarget[], screen: (i: number) => Screen
 export function sameSnap(a: SnapTarget | null, b: SnapTarget | null): boolean {
   if (!a || !b) return a === b;
   return a.text === b.text;
+}
+
+/**
+ * Snap targets of a 1D handle moved onto the drawn handle line (plane grips sit on an edge of
+ * the grid box, not on the axis through the origin the engine uses).
+ */
+export function alignTargets(geom: HandleGeom, targets: SnapTarget[]): SnapTarget[] {
+  const h = geom.handle;
+  const l = geom.line;
+  if (!l || !h.axis || h.kind.kind === "scale") return targets;
+  const base = h.base ?? [0, 0, 0];
+  const aa = dot(h.axis, h.axis);
+  if (aa < 1e-18) return targets;
+  return targets.map((t) => {
+    const v = dot(sub(t.local, base), h.axis!) / aa;
+    const w = add(l.base, scale(l.dir, v));
+    return { ...t, world: w, result_world: w };
+  });
 }

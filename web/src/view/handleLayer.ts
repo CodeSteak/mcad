@@ -73,6 +73,8 @@ function points(pts: Vec3[], color: string, size: number, kind: "dot" | "ring", 
   return p;
 }
 
+const AXIS_COLORS = ["#e5484d", "#30a46c", "#2f80ed"];
+
 function styleColor(c: HandleColors, s: HandleStyle): string {
   return c[s];
 }
@@ -120,12 +122,19 @@ export function buildHandleLayer(group: THREE.Group, input: LayerInput): void {
         const p1 = add(r.center, add(scale(r.u, Math.cos(a1) * r.radius), scale(r.v, Math.sin(a1) * r.radius)));
         pos.push(...p0, ...p1);
       }
-      segs(pos, color, dragging ? 2.6 : 1.8, g.style === "locked");
+      // Rings in the axis colours (x red, y green, z blue); the grip shows the handle style.
+      const k = g.handle.kind.kind === "angle" ? g.handle.kind.axis : 3;
+      const ringColor = g.style === "locked" || k > 2 ? color : AXIS_COLORS[k];
+      segs(pos, ringColor, dragging ? 2.6 : 1.8, g.style === "locked");
       segs([...r.center, ...grip], color, 1.2, true);
     }
     const hovered = input.hovered === g.handle.id || dragging;
-    const size = g.style === "locked" ? 10 : hovered ? 17 : 13;
-    group.add(points([grip], color, size, g.style === "locked" ? "ring" : "dot", 80, `handle:${g.handle.id}`));
+    const size = hovered ? 17 : g.style === "locked" ? 15 : 13;
+    if (g.style === "locked") {
+      // Locked: grey ring on a white disc (shown, not draggable).
+      group.add(points([grip], "#ffffff", size - 2, "dot", 79, `handle-bg:${g.handle.id}`));
+      group.add(points([grip], color, size, "ring", 80, `handle:${g.handle.id}`));
+    } else group.add(points([grip], color, size, "dot", 80, `handle:${g.handle.id}`));
   }
   if (preview) {
     if (preview.targets.length) {

@@ -177,9 +177,16 @@ export function writeMetrics(m: Record<string, unknown>): void {
 /** Screenshots and measurements for test report 3 (tools/report/report3-ui.mjs). */
 export const REPORT3_DIR = join(here, "../../reports/tmp/report3");
 
-export async function screenshotB(page: Page, name: string): Promise<void> {
+/**
+ * Screenshot for report 3: by default only the view column (path bar, 3D view, parameter bar);
+ * the code is shown as text next to it in the report. `top`: the first editor lines (inline
+ * controls), `full`: the whole window.
+ */
+export async function screenshotB(page: Page, name: string, area: "view" | "top" | "full" = "view"): Promise<void> {
   mkdirSync(join(REPORT3_DIR, "img"), { recursive: true });
-  await page.screenshot({ path: join(REPORT3_DIR, "img", `${name}.jpg`), type: "jpeg", quality: 82 });
+  const vp = page.viewportSize() ?? { width: 1440, height: 900 };
+  const clip = area === "view" ? await page.locator("section.viewcol").boundingBox() : area === "top" ? { x: 0, y: 38, width: Math.min(vp.width, 664), height: 110 } : null;
+  await page.screenshot({ path: join(REPORT3_DIR, "img", `${name}.jpg`), type: "jpeg", quality: 82, ...(clip ? { clip } : {}) });
 }
 
 export interface ScenarioB {

@@ -87,6 +87,22 @@ test("B01 cube-Ecke ziehen: Literal live, Szene folgt, ein Undo", async ({ page 
   expect(b1.max.map((x) => Math.round(x))).toEqual(nums);
   expect(b1.max).not.toEqual(b0.max);
   await screenshotB(page, "b01-nachher");
+  // Measurements of a light model (UI and worker overhead without much kernel work).
+  await page.waitForFunction(() => (window as unknown as { __cad: { state(): { metrics: { dragEndToFine: number[] } } } }).__cad.state().metrics.dragEndToFine.length > 0);
+  const mm = (await cad(page)).metrics;
+  const lat = mm.dragToScene.filter((x) => x.coarse).map((x) => x.ms).sort((x, y) => x - y);
+  const fps0 = mm.dragFps.at(-1)!;
+  writeMetricsB({
+    dragCube: {
+      model: "cube([20, 20, 20])",
+      coarse: { n: lat.length, median: lat[Math.floor(lat.length / 2)], p95: lat[Math.min(lat.length - 1, Math.floor(lat.length * 0.95))], max: lat.at(-1) },
+      fine: { last: mm.dragEndToFine.at(-1) },
+      fps: fps0.fps,
+      maxGapMs: fps0.maxGapMs,
+      sent: fps0.sent,
+      dropped: fps0.dropped,
+    },
+  });
   // One undo step restores the text from before the drag.
   await hook(page, (c) => c.focusEditor());
   await page.keyboard.press("Control+z");
@@ -103,7 +119,7 @@ test("B01 cube-Ecke ziehen: Literal live, Szene folgt, ein Undo", async ({ page 
     after: "b01-nachher",
     codeBefore: src.trim(),
     codeAfter: after.trim(),
-    caption: `Griff an der Ecke gegenüber dem Ursprung mit der Maus gezogen: das Literal änderte sich live (${s.metrics.dragToScene.length} Zwischenstände mit grober Tessellierung), die Szene folgte. Ein Strg+Z stellte „${src.trim()}“ wieder her, Strg+Umschalt+Z wieder „${after.trim()}“.`,
+    caption: `Griff an der Ecke gegenüber dem Ursprung mit der Maus gezogen: das Literal änderte sich live (${s.metrics.dragToScene.length} Zwischenstände mit grober Tessellierung), die Szene folgte. Ein Strg+Z stellte „${src.trim()}“ wieder her, Strg+Y (Wiederholen) wieder „${after.trim()}“.`,
   });
 });
 
@@ -528,7 +544,7 @@ test("B12 Inline-Schieberegler und -Schalter", async ({ page }) => {
   const sl = page.getByTestId("inline-slider");
   await expect(sl).toBeVisible();
   await expect(sl).toHaveValue("3");
-  await screenshotB(page, "b12-vorher");
+  await screenshotB(page, "b12-vorher", "top");
   const box = (await sl.boundingBox())!;
   // Range 0..10: thumb at 30 %.
   await page.mouse.move(box.x + box.width * 0.3, box.y + box.height / 2);
@@ -545,7 +561,9 @@ test("B12 Inline-Schieberegler und -Schalter", async ({ page }) => {
     const b = (window as unknown as { __cad: { rootBounds(): { min: number[]; max: number[] } | null } }).__cad.rootBounds();
     return b !== null && Math.abs(b.max[0] - tv * 5) < 1e-6;
   }, t);
-  await screenshotB(page, "b12-nachher");
+  await hook(page, (c) => c.fitAll());
+  await frame(page);
+  await screenshotB(page, "b12-nachher", "top");
   await hook(page, (c) => c.focusEditor());
   await page.keyboard.press("Control+z");
   expect(await text(page)).toBe(src);
@@ -571,6 +589,7 @@ test("B12 Inline-Schieberegler und -Schalter", async ({ page }) => {
 test("B13 Strg+Klick auf Rasterausdruck springt zur Rasterdeklaration", async ({ page }) => {
   await openApp(page);
   // The references of a module are known once the cursor is in it (module context).
+  const src0 = await text(page);
   await clickLine(page, 11, 0);
   await waitScene(page, { context: "gehaeuse" });
   const p = await page.evaluate(() => (window as unknown as { __cad: { coordsOf(l: number, c: number): { x: number; y: number } | null } }).__cad.coordsOf(11, 14));
@@ -585,6 +604,8 @@ test("B13 Strg+Klick auf Rasterausdruck springt zur Rasterdeklaration", async ({
   recordB({
     id: "B13",
     title: "Sprung zur Rasterdeklaration",
+    codeBefore: `11: ${lines(src0, 11).trim()}`,
+    codeAfter: `4: ${lines(src0, 4).trim()}   ← Cursor`,
     caption: "Strg+Klick auf g[links, vorne, boden] (Zeile 11) setzt den Cursor auf die Deklaration grid g (Zeile 4); ein normaler Klick setzt weiter nur den Cursor.",
   });
 });

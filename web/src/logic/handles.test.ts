@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Handle, SnapTarget } from "../engine/protocol";
 import { fixture, pos } from "./__fixtures__/load";
-import { handleGeom, handleStyle, handlesForCursor, nearestSnap, pointDragPlane, pureRef, rayLineParam, rayPlane, ringAngle, toLocal } from "./handles";
+import { alignTargets, handleGeom, handleStyle, handlesForCursor, nearestSnap, pointDragPlane, pureRef, rayLineParam, rayPlane, ringAngle, toLocal } from "./handles";
 import { SceneIndex } from "./sceneIndex";
+import { modelHull } from "./grids";
 
 const f = fixture("griffe");
 const idx = new SceneIndex(f.scene);
@@ -71,6 +72,26 @@ describe("Darstellung der Griffe", () => {
     // Child cube(5): corner [5, 5, 5], factor 2 → [10, 10, 10].
     expect(close(gs.grip, [10, 10, 10])).toBe(true);
     expect(gs.line!.value).toBe(2);
+  });
+
+  it("Ebenengriffe auf je einer Kante der Rasterbox, Snap-Ziele auf der Griffachse", () => {
+    const hull = modelHull(f.scene);
+    const planes = at(4, 8).map((h) => handleGeom(f.scene, h, 10, hull));
+    const links = planes.find((g) => g.handle.kind.kind === "plane" && g.handle.kind.axis === 0 && g.handle.value[0] === 0)!;
+    const boden = planes.find((g) => g.handle.kind.kind === "plane" && g.handle.kind.axis === 2 && g.handle.value[0] === 0)!;
+    // Both planes are at 0, the grips are not at the same place.
+    expect(close(links.grip, boden.grip)).toBe(false);
+    expect(links.grip[0]).toBe(0);
+    expect(boden.grip[2]).toBe(0);
+    expect(close(links.line!.dir, [1, 0, 0])).toBe(true);
+    const deckel = planes.find((g) => g.handle.kind.kind === "plane" && g.handle.kind.axis === 2 && g.handle.value[0] === 20)!;
+    const t: SnapTarget = { text: "h.top", snap: { kind: "plane", grid: 1, plane: "top" }, local: [0, 0, 12], world: [0, 0, 12], result_world: [0, 0, 12] };
+    const [a] = alignTargets(deckel, [t]);
+    expect(a.world[2]).toBeCloseTo(12);
+    expect(close(a.world, [deckel.line!.base[0], deckel.line!.base[1], 12])).toBe(true);
+    // Point handles keep their targets.
+    const tr = handleGeom(f.scene, at(7, 0)[0], 10);
+    expect(alignTargets(tr, [t])[0]).toBe(t);
   });
 
   it("Punktgriff am Ziel", () => {

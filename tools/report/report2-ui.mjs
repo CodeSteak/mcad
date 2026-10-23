@@ -61,6 +61,8 @@ if (!pw) {
 
 /** Playwright tests flattened: { id, title, status, ms }. */
 function flatten(suite, acc = []) {
+  // Only the Phase A scenarios (web/e2e/ui.spec.ts); Phase B has its own report.
+  if (suite.file && !suite.file.endsWith("ui.spec.ts")) return acc;
   for (const s of suite.suites ?? []) flatten(s, acc);
   for (const spec of suite.specs ?? []) {
     for (const t of spec.tests ?? []) {

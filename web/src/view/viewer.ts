@@ -95,6 +95,8 @@ export class Viewer implements DragView {
   private unsub: () => void;
   private resizeObs: ResizeObserver;
   private lastFitKey = "";
+  /** The camera still shows the last automatic fit (refit when the viewport size changes). */
+  private autoFit = false;
   private lastShown: Scene | null = null;
   private pickedScene: Scene | null = null;
   private drawnVersions = new Set<string>();
@@ -132,6 +134,7 @@ export class Viewer implements DragView {
     this.controls.screenSpacePanning = true;
     this.controls.zoomToCursor = true;
     this.controls.addEventListener("change", () => this.requestRender());
+    this.controls.addEventListener("start", () => (this.autoFit = false));
 
     this.scene3.add(this.helpers, this.content, this.overlay, this.handleGroup);
     this.handleColors = readHandleColors();
@@ -227,6 +230,8 @@ export class Viewer implements DragView {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.materials.setResolution(w, h);
+    // The parameter bar appears with the module scene: keep the automatic fit.
+    if (this.autoFit) this.fitAll();
     this.requestRender();
   }
 
@@ -648,6 +653,7 @@ export class Viewer implements DragView {
     const fitH = radius / Math.sin(fov / 2);
     const fitW = radius / Math.sin(Math.atan(Math.tan(fov / 2) * this.camera.aspect));
     const dist = Math.max(fitH, fitW) * 1.08;
+    this.autoFit = true;
     this.controls.target.copy(center);
     this.camera.position.copy(center.clone().add(dir.multiplyScalar(dist)));
     this.camera.near = Math.max(0.01, dist / 1000);
@@ -672,7 +678,7 @@ export class Viewer implements DragView {
     const idx = bridge.index(scene);
     const hs = handlesForCursor(scene, idx, bridge.doc(), st.cursor, sel);
     const ring = Math.max(1, diag * 0.16);
-    const out = hs.map((h) => handleGeom(scene, h, ring));
+    const out = hs.map((h) => handleGeom(scene, h, ring, modelHull(scene)));
     // The dragged handle keeps its geometry from the drag start (its literal changes live).
     const dragId = this.drag?.handle ?? null;
     if (dragId !== null) {
