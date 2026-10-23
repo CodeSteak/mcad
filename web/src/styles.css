@@ -738,12 +738,14 @@ input:checked + .cm-switch-knob::after {
 .filebar .tabs {
   display: flex;
   gap: 2px;
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   overflow-x: auto;
+  scrollbar-width: thin;
 }
 
 .filebar .tab {
+  flex: none;
   border-radius: 4px 4px 0 0;
   border-bottom: none;
   padding: 3px 10px;

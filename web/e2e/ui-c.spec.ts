@@ -673,8 +673,9 @@ test("C19 Watchdog: hängender Knoten wird gesperrt, Zeile rot, Änderung hebt d
   // Five expensive nodes (difference with fillet), one per line: the evaluation takes several
   // steps, so a Progress with the current node arrives before the scene is complete.
   const row = (i: number, w: number, f: number, r: number) =>
-    `translate([${i * 40}, 0, 0]) difference(fillet = ${f}) { cube([${w}, 20, 5]); translate([8, 10, -1]) cylinder(h = 7, r = ${r}); translate([20, 10, -1]) cylinder(h = 7, r = ${r}); }`;
-  // Distinct values per line: cache keys are content keys, equal nodes share them (and a block).
+    `translate([${i * 40}, 0, 0]) difference(fillet = ${f}) { cube([${w}, 20, 5]); translate([8, 10, -1]) cylinder(h = 7, r = ${r}); translate([20, 10, -1]) cylinder(h = 7, r = ${+(r + 0.05).toFixed(2)}); }`;
+  // Distinct values per line and per node: cache keys are content keys, equal nodes share them
+  // (and a block; with two equal cylinders the test depended on which node hung).
   const src = [0, 1, 2, 3, 4].map((i) => row(i, 30 + i, +(0.8 + i * 0.05).toFixed(2), +(3 + i * 0.1).toFixed(1))).join("\n") + "\n";
   const v0 = (await cad(page)).sentVersion;
   // Hang the worker as soon as the first Progress with a current node arrives.

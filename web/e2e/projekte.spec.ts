@@ -228,7 +228,7 @@ test("P02 Ordner öffnen (File System Access API), ZIP hoch- und herunterladen",
     title: "Ordner öffnen, speichern, ZIP",
     images: [{ name: "p02-ordner", label: "Ordner „mein-projekt“ geöffnet, konstanten.scad geändert und gespeichert" }],
     caption:
-      "„Ordner öffnen…“ liest alle .scad-Dateien eines Ordners (File System Access API; im Test ein nachgebildeter Ordner mit einer .txt-Datei, die ignoriert wird) und wählt die Hauptdatei: die Datei der obersten Ebene, die keine andere einbindet. Strg+S schreibt alle Dateien zurück in den Ordner. „ZIP ↓“ lädt das Projekt als ZIP herunter, „ZIP öffnen…“ lädt dieses ZIP wieder hoch (gemeinsamer Ordner wird entfernt, Hauptdatei wieder gehaeuse.scad).",
+      "„Ordner…“ liest alle .scad-Dateien eines Ordners (File System Access API; im Test ein nachgebildeter Ordner mit einer .txt-Datei, die ignoriert wird) und wählt die Hauptdatei: die Datei der obersten Ebene, die keine andere einbindet. Strg+S schreibt alle Dateien zurück in den Ordner. „ZIP ↓“ lädt das Projekt als ZIP herunter, „ZIP laden…“ lädt dieses ZIP wieder hoch (gemeinsamer Ordner wird entfernt, Hauptdatei wieder gehaeuse.scad).",
     checks: ["3 Dateien, Hauptdatei gehaeuse.scad, notizen.txt ignoriert", "Strg+S schreibt 3 Dateien (konstanten.scad mit Änderung)", "ZIP mit 3 Einträgen; nach dem Hochladen gleiche Dateien und Bauteile"],
   });
 });

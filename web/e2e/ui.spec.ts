@@ -359,6 +359,8 @@ test("S16 Positionen alter Szenen werden beim Tippen weitergeführt", async ({ p
   await page.evaluate(() => (window as unknown as { __cad: { debugHang(ms: number): void } }).__cad.debugHang(1500));
   await clickLine(page, 1, 0);
   await page.keyboard.type("// a\n// b\n");
+  // The edit is sent after a short debounce; the engine is still blocked.
+  await page.waitForFunction(() => !(window as unknown as { __cad: { state(): { pendingSend: boolean } } }).__cad.state().pendingSend);
   const s = await cad(page);
   expect(s.shownVersion).toBeLessThan(s.sentVersion);
   // The old scene's node of `translate(k.ecke)` is now on line 24.

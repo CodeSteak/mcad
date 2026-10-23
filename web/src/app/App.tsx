@@ -121,7 +121,7 @@ function FileBar() {
             key={path}
             role="tab"
             aria-selected={path === p.active}
-            className={`tab${path === p.active ? " active" : ""}${path === p.main ? " main" : ""}`}
+            className={`tab${path === p.active ? " active" : ""}${path === p.main ? " is-main" : ""}`}
             data-testid={`tab-${path}`}
             title={path === p.main ? `${path} (Hauptdatei)` : path}
             onClick={() => switchFile(path)}

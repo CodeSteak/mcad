@@ -21,7 +21,7 @@
 //
 // `--run` reruns Vitest and the Phase D Playwright scenarios. The PDF is printed with Chromium.
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -99,7 +99,7 @@ function flatten(suite, file, acc = []) {
   return acc;
 }
 const e2e = flatten(pw, "projekte.spec.ts");
-const regression = [...flatten(pw, "/ui.spec.ts"), ...flatten(pw, "ui-b.spec.ts"), ...flatten(pw, "ui-c.spec.ts")];
+const regression = [...flatten(pw, "ui.spec.ts"), ...flatten(pw, "ui-b.spec.ts"), ...flatten(pw, "ui-c.spec.ts")];
 const passed = (l) => l.filter((t) => t.status === "passed").length;
 
 const unit = [];
@@ -195,12 +195,9 @@ const kib = (b) => `${(b / 1024).toFixed(0)} KiB`;
 
 const { chromium } = require("@playwright/test");
 const browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
-let oscVersion = "–";
-try {
-  oscVersion = execFileSync("openscad", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim() || "–";
-} catch (e) {
-  oscVersion = String(e.stderr ?? "").trim() || "nicht installiert";
-}
+// `openscad --version` prints to stderr.
+const ov = spawnSync("openscad", ["--version"], { encoding: "utf8" });
+const oscVersion = ov.error ? "nicht installiert" : `${ov.stdout ?? ""}${ov.stderr ?? ""}`.trim() || "–";
 const env = [
   ["Betriebssystem", `${os.type()} ${os.release()} (${os.arch()})`],
   ["CPU", `${os.cpus()[0]?.model ?? "–"} · ${os.cpus().length} Kerne`],
@@ -301,7 +298,7 @@ const html = `<!doctype html>
   code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 8pt; }
   pre { margin: 0; padding: 1.5mm 2mm; background: #f6f8fa; border: 1px solid var(--border); border-radius: 1mm; white-space: pre-wrap; word-break: break-word; }
   .sc { break-inside: avoid; page-break-inside: avoid; margin: 0 0 7mm; }
-  .shot img { width: 100%; height: auto; border: 1px solid var(--border); display: block; }
+  .shot img { max-width: 100%; max-height: 115mm; width: auto; height: auto; border: 1px solid var(--border); display: block; }
   .pair { display: flex; gap: 2mm; }
   .pair > div { flex: 1; min-width: 0; }
   .osc { break-inside: avoid; margin: 0 0 4mm; font-size: 9pt; }
