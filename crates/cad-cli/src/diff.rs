@@ -56,7 +56,10 @@ pub struct NodeDiff {
 const UNSUPPORTED: &str = "not supported by this kernel";
 
 /// Evaluates `text` with `kernel` and measures every node.
-fn evaluate<K: Kernel + 'static>(kernel: K, text: &str) -> (Vec<(u32, String, u32, Vec<u32>)>, Vec<Metrics>)
+/// (index, label, line, children) per scene node.
+type NodeRow = (u32, String, u32, Vec<u32>);
+
+fn evaluate<K: Kernel + 'static>(kernel: K, text: &str) -> (Vec<NodeRow>, Vec<Metrics>)
 where
     K::Shape: 'static,
 {
@@ -185,10 +188,7 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
         let src = std::fs::read_to_string(f).map_err(|e| Fail::Usage(format!("{}: {e}", f.display())))?;
         let (nodes, a) = evaluate(SmlibKernel::new(), &src);
         let solid = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| evaluate(SolidcoreKernel::new(), &src)));
-        let (nodes_b, b) = match solid {
-            Ok(r) => r,
-            Err(_) => (Vec::new(), Vec::new()),
-        };
+        let (nodes_b, b) = solid.unwrap_or_default();
         let mut diffs = Vec::new();
         let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
         // own verdict per node, then "blocked" where a descendant is unsupported or failed
@@ -205,7 +205,7 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
             own.push((verdict, mb, notes));
         }
         let pos: BTreeMap<u32, usize> = nodes.iter().enumerate().map(|(i, n)| (n.0, i)).collect();
-        fn broken(i: usize, nodes: &[(u32, String, u32, Vec<u32>)], pos: &BTreeMap<u32, usize>, own: &[(&str, Metrics, Vec<String>)]) -> bool {
+        fn broken(i: usize, nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, own: &[(&str, Metrics, Vec<String>)]) -> bool {
             nodes[i].3.iter().filter_map(|c| pos.get(c)).any(|&c| {
                 matches!(own[c].0, "unsupported" | "failed") || broken(c, nodes, pos, own)
             })

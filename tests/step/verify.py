@@ -12,7 +12,8 @@ writer wrote. The file is then read back with OCCT's STEP reader (not our code) 
   faces     number of faces equals the writer's
   volume    |V_occ - V_kernel| <= 1e-4 * V_kernel       (solids only; OCCT integrates
             adaptively to 1e-9, its default Gauss rule is off by up to 1e-4 on B-spline faces)
-  area      |A_occ - A_kernel| <= 1e-4 * A_kernel
+  area      |A_occ - A_kernel| <= 5e-4 * A_kernel  (SMLib's own area is only ~1e-4 accurate,
+            see AREA_REL)
   bounds    every coordinate of OCCT's optimal box within 1e-4 * diagonal of the kernel's
 
 Surface types are counted from OCCT's adaptor (GeomAbs_*) for the table.
@@ -36,17 +37,22 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 REL = 1e-4
+# SMLib integrates areas to about 1e-4 only (SmApiBrepComputeArea clamps its accuracy to
+# [1e-4, 1e-1]); measured: freiformdeckel kernel 6659.89, OCCT adaptive 6658.641, OCCT mesh
+# (0.002 mm) 6658.656, i.e. the kernel's area is the one that is off (1.9e-4).
+AREA_REL = 5e-4
 OCC_EPS = 1e-9
 
 try:
     from OCP.Bnd import Bnd_Box
     from OCP.BRep import BRep_Tool
-    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.BRepAdaptor import BRepAdaptor_Curve, BRepAdaptor_Surface
     from OCP.BRepBndLib import BRepBndLib
     from OCP.BRepCheck import BRepCheck_Analyzer
     from OCP.BRepGProp import BRepGProp
     from OCP.BRepMesh import BRepMesh_IncrementalMesh
     from OCP.GeomAbs import (
+        GeomAbs_Line,
         GeomAbs_BezierSurface,
         GeomAbs_BSplineSurface,
         GeomAbs_Cone,
@@ -62,7 +68,7 @@ try:
     from OCP.IFSelect import IFSelect_RetDone
     from OCP.STEPControl import STEPControl_Reader
     from OCP.StlAPI import StlAPI_Writer
-    from OCP.TopAbs import TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID
+    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID
     from OCP.TopExp import TopExp_Explorer
     from OCP.TopoDS import TopoDS
 except ImportError as e:  # pragma: no cover
@@ -162,7 +168,7 @@ def check(model: Path, cad: str, out: Path, stl_dir: Path | None) -> dict:
         checks["volume"] = rel_ok(res["occ_volume"], res["kernel_volume"])
     if res["kernel_area"] is not None:
         res["area_rel"] = abs(res["occ_area"] - res["kernel_area"]) / max(abs(res["kernel_area"]), 1e-12)
-        checks["area"] = rel_ok(res["occ_area"], res["kernel_area"])
+        checks["area"] = res["area_rel"] <= AREA_REL
     box = Bnd_Box()
     BRepBndLib.AddOptimal_s(shape, box, False, False)
     lo = box.CornerMin()
@@ -178,9 +184,24 @@ def check(model: Path, cad: str, out: Path, stl_dir: Path | None) -> dict:
         checks["bounds"] = dev <= REL * diag
     if stl_dir is not None:
         stl_dir.mkdir(parents=True, exist_ok=True)
-        BRepMesh_IncrementalMesh(shape, 0.01 * max(diag if kb else 1.0, 1.0), False, 0.2, True)
+        BRepMesh_IncrementalMesh(shape, 0.002 * max(diag if kb else 1.0, 1.0), False, 0.2, True)
         w = StlAPI_Writer()
         w.Write(shape, str(stl_dir / (model.stem + ".stl")))
+        # B-rep edges of the read-back shape as polylines (for renderings)
+        polys = []
+        for e in explore(shape, TopAbs_EDGE):
+            e = TopoDS.Edge(e)
+            if BRep_Tool.Degenerated_s(e):
+                continue
+            c = BRepAdaptor_Curve(e)
+            t0, t1 = c.FirstParameter(), c.LastParameter()
+            n = 1 if c.GetType() == GeomAbs_Line else 32
+            pts = []
+            for i in range(n + 1):
+                p = c.Value(t0 + (t1 - t0) * i / n)
+                pts.append([p.X(), p.Y(), p.Z()])
+            polys.append(pts)
+        (stl_dir / (model.stem + ".edges.json")).write_text(json.dumps(polys))
     res["checks"] = checks
     return res
 
@@ -219,7 +240,7 @@ def main() -> int:
               f"{r.get('occ_surfaces', '')} {r.get('error', '')} {' '.join(bad)}")
     report = a.json or a.out / "verify-report.json"
     report.parent.mkdir(parents=True, exist_ok=True)
-    report.write_text(json.dumps({"tolerance_rel": REL, "results": results}, indent=1))
+    report.write_text(json.dumps({"tolerance_rel": REL, "area_tolerance_rel": AREA_REL, "results": results}, indent=1))
     print(f"\n{len(results) - failed}/{len(results)} passed; report {report}")
     return 1 if failed else 0
 

@@ -340,6 +340,16 @@ fn find_span(knots: &[f64], degree: usize, n: usize, t: f64) -> usize {
     lo
 }
 
+/// `a >= b`, false if either is NaN.
+fn ge(a: f64, b: f64) -> bool {
+    matches!(a.partial_cmp(&b), Some(std::cmp::Ordering::Greater | std::cmp::Ordering::Equal))
+}
+
+/// `a > b`, false if either is NaN.
+fn gt(a: f64, b: f64) -> bool {
+    matches!(a.partial_cmp(&b), Some(std::cmp::Ordering::Greater))
+}
+
 /// De Boor on homogeneous 4D points.
 fn de_boor(knots: &[f64], degree: usize, pw: &[[f64; 4]], t: f64) -> [f64; 4] {
     let n = pw.len();
@@ -350,8 +360,9 @@ fn de_boor(knots: &[f64], degree: usize, pw: &[[f64; 4]], t: f64) -> [f64; 4] {
             let i = j + k - degree;
             let den = knots[i + degree + 1 - r] - knots[i];
             let a = if den.abs() > 0.0 { (t - knots[i]) / den } else { 0.0 };
-            for c in 0..4 {
-                d[j][c] = (1.0 - a) * d[j - 1][c] + a * d[j][c];
+            let prev = d[j - 1];
+            for (c, x) in d[j].iter_mut().enumerate() {
+                *x = (1.0 - a) * prev[c] + a * *x;
             }
         }
     }
@@ -384,11 +395,11 @@ impl BSplineCurve {
         if self.knots.len() != self.points.len() + p + 1 {
             return Err("B-spline curve: knot count".into());
         }
-        if self.knots.windows(2).any(|w| !(w[1] >= w[0])) || !(self.domain().1 > self.domain().0) {
+        if self.knots.windows(2).any(|w| !ge(w[1], w[0])) || !gt(self.domain().1, self.domain().0) {
             return Err("B-spline curve: knots not increasing".into());
         }
         if let Some(w) = &self.weights
-            && (w.len() != self.points.len() || w.iter().any(|w| !(*w > 0.0)))
+            && (w.len() != self.points.len() || w.iter().any(|w| !gt(*w, 0.0)))
         {
             return Err("B-spline curve: weights".into());
         }
@@ -435,7 +446,7 @@ impl BSplineCurve {
         for i in 0..=n {
             if i + p <= k {
                 q.push(pw[i]);
-            } else if i + s >= k + 1 {
+            } else if i + s > k {
                 q.push(pw[i - 1]);
             } else {
                 let a = (t - self.knots[i]) / (self.knots[i + p] - self.knots[i]);
@@ -519,16 +530,16 @@ impl BSplineSurface {
             return Err("B-spline surface: sizes".into());
         }
         for k in [&self.knots_u, &self.knots_v] {
-            if k.windows(2).any(|w| !(w[1] >= w[0])) || k.iter().any(|x| !x.is_finite()) {
+            if k.windows(2).any(|w| !ge(w[1], w[0])) || k.iter().any(|x| !x.is_finite()) {
                 return Err("B-spline surface: knots".into());
             }
         }
         let ((u0, u1), (v0, v1)) = self.domain();
-        if !(u1 > u0 && v1 > v0) {
+        if !(gt(u1, u0) && gt(v1, v0)) {
             return Err("B-spline surface: empty domain".into());
         }
         if let Some(w) = &self.weights
-            && (w.len() != self.points.len() || w.iter().any(|w| !(*w > 0.0)))
+            && (w.len() != self.points.len() || w.iter().any(|w| !gt(*w, 0.0)))
         {
             return Err("B-spline surface: weights".into());
         }
@@ -775,7 +786,7 @@ fn circle_through(a: DVec3, b: DVec3, c: DVec3) -> Option<(DVec3, DVec3, f64)> {
     let (u, v) = (b - a, c - a);
     let w = u.cross(v);
     let w2 = w.length_squared();
-    if !(w2 > 1e-24 * u.length_squared() * v.length_squared()) {
+    if !gt(w2, 1e-24 * u.length_squared() * v.length_squared()) {
         return None;
     }
     let centre = a + (w.cross(u) * v.length_squared() + v.cross(w) * u.length_squared()) / (2.0 * w2);

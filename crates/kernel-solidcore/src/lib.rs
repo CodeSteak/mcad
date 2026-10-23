@@ -16,6 +16,9 @@
 //! Feature `solidcore` (default): link solidcore (git dependency pinned to a commit). Without
 //! it the crate compiles without solidcore and every operation is `Unsupported`.
 
+// without solidcore the operations ignore their arguments
+#![cfg_attr(not(feature = "solidcore"), allow(unused_variables))]
+
 use cad_kernel::{
     BoolOp, Class, EdgeInfo, FaceId, FaceInfo, KResult, Kernel, KernelError, Loop, MassProps, Mesh, PathInterp,
     PlacedLoop, Tag,
