@@ -11,8 +11,9 @@ name = "cad"
 path = "src/main.rs"
 
 [features]
-default = ["solidcore"]
-# `diff-kernels` with solidcore linked (else it reports every operation as Unsupported).
+# Opt-in (`cargo build -p cad-cli --features solidcore`): links solidcore for `diff-kernels`.
+# Without it the CLI does not compile solidcore and `diff-kernels` explains how to build it.
+default = []
 solidcore = ["kernel-solidcore/solidcore"]
 
 [dependencies]

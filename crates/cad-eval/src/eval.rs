@@ -8,11 +8,12 @@ use std::rc::{Rc, Weak};
 use cad_ir::{Flags, Node, NodeIdx, Op, Tree};
 use cad_kernel::BoolOp;
 use cad_syntax::ast::*;
-use cad_syntax::{Diagnostic, LineIndex, Span};
+use cad_syntax::{Diagnostic, Span};
 use glam::DMat4;
 
 use crate::env::{Dyn, Env, NO_INST, Scope, dyn_push};
 use crate::output::*;
+use crate::project::Project;
 use crate::value::{InstId, Origin, PValue, Val, Value, fmt_num, to_hint};
 use crate::{MASK53, mix};
 
@@ -25,6 +26,8 @@ pub(crate) type R<T> = Result<T, Fatal>;
 pub(crate) enum NameRef {
     Grid(u32),
     Inst(InstId),
+    /// `k` of `k[i]: m();` (index into `Ev::families`).
+    Family(u32),
 }
 
 #[derive(Debug, Clone)]
@@ -132,10 +135,14 @@ pub(crate) struct HintAcc {
 }
 
 pub(crate) struct Ev<'a> {
-    pub src: &'a str,
+    pub proj: &'a Project,
     pub file: &'a File,
     pub opts: &'a EvalOptions,
-    pub lines: LineIndex,
+    /// File scopes of the used libraries (index = `Project::libs`).
+    pub lib_envs: Vec<Env<'a>>,
+    /// Families of indexed named instances (`k[i]: m();`): index → instance.
+    pub families: Vec<BTreeMap<i64, InstId>>,
+    pub parts: Vec<PartInfo>,
     pub steps: u64,
     pub aborted: bool,
     pub diags: Vec<Diagnostic>,
@@ -187,10 +194,13 @@ fn needs_scope(stmts: &[Stmt]) -> bool {
     stmts.iter().any(|s| matches!(s.kind, StmtKind::Assign { .. } | StmtKind::Module(_) | StmtKind::Function(_)))
 }
 
-/// Evaluates a parsed file.
-pub fn eval<'a>(src: &'a str, file: &'a File, opts: &'a EvalOptions) -> EvalOutput {
-    let mut ev = Ev::new(src, file, opts);
-    let modules = crate::sig::module_sigs(src, file);
+/// Evaluates a loaded project (its main file).
+pub fn eval<'a>(proj: &'a Project, opts: &'a EvalOptions) -> EvalOutput {
+    let mut ev = Ev::new(proj, opts);
+    let mut modules = crate::sig::module_sigs(proj, &proj.main);
+    for lib in &proj.libs {
+        modules.extend(crate::sig::module_sigs(proj, &lib.ast));
+    }
     let mut context = ContextInfo::default();
     let _ = match &opts.context {
         Context::File => ev.run_file(),
@@ -201,9 +211,10 @@ pub fn eval<'a>(src: &'a str, file: &'a File, opts: &'a EvalOptions) -> EvalOutp
 }
 
 impl<'a> Ev<'a> {
-    fn new(src: &'a str, file: &'a File, opts: &'a EvalOptions) -> Self {
+    fn new(proj: &'a Project, opts: &'a EvalOptions) -> Self {
+        let file = &proj.main;
         let mut default_spans = Vec::new();
-        for s in &file.stmts {
+        for s in file.stmts.iter().chain(proj.libs.iter().flat_map(|l| l.ast.stmts.iter())) {
             s.walk(&mut |s| match &s.kind {
                 StmtKind::Module(m) => {
                     default_spans.extend(m.params.iter().filter_map(|p| p.default.as_ref().map(|d| d.span)))
@@ -215,10 +226,12 @@ impl<'a> Ev<'a> {
             });
         }
         Ev {
-            src,
+            proj,
             file,
             opts,
-            lines: LineIndex::new(src),
+            lib_envs: Vec::new(),
+            families: Vec::new(),
+            parts: Vec::new(),
             steps: 0,
             aborted: false,
             diags: Vec::new(),
@@ -319,11 +332,33 @@ impl<'a> Ev<'a> {
     }
 
     pub(crate) fn text(&self, span: Span) -> &'a str {
-        self.src.get(span.start as usize..span.end as usize).unwrap_or("")
+        self.proj.text(span)
     }
 
     pub(crate) fn line(&self, span: Span) -> u32 {
-        self.lines.line_of(span.start) + 1
+        self.proj.line(span)
+    }
+
+    /// "Zeile n" or "Zeile n in `datei`" for messages about a position seen from `here`.
+    pub(crate) fn where_(&self, span: Span, here: Span) -> String {
+        let l = self.line(span);
+        if span.file() == here.file() { format!("Zeile {l}") } else { format!("Zeile {l} in `{}`", self.proj.path_of(span)) }
+    }
+
+    /// File scopes of the used libraries; `env` (a file root) sees the main file's libraries.
+    fn setup_libs(&mut self, env: &Env<'a>) -> R<()> {
+        let proj = self.proj;
+        self.lib_envs = proj.libs.iter().map(|_| Env::new(None, None, NO_INST, true)).collect();
+        for (i, lib) in proj.libs.iter().enumerate() {
+            let uses = lib.uses.iter().map(|&u| self.lib_envs[u].clone()).collect();
+            self.lib_envs[i].set_uses(uses);
+        }
+        env.set_uses(proj.main_uses.iter().map(|&u| self.lib_envs[u].clone()).collect());
+        for (i, lib) in proj.libs.iter().enumerate() {
+            let e = self.lib_envs[i].clone();
+            self.hoist(&lib.ast.stmts, &e, &None)?;
+        }
+        Ok(())
     }
 
     pub(crate) fn add_ref(&mut self, span: Span, target: RefTarget) {
@@ -408,11 +443,8 @@ impl<'a> Ev<'a> {
                     }
                     if env.set_lazy(&name.name, value) {
                         if let Some((_, sp)) = first.iter().find(|(n, _)| *n == name.name) {
-                            let (l1, l2) = (self.line(*sp), self.line(s.span));
-                            self.warn(
-                                name.span,
-                                format!("`{}` aus Zeile {l1} wird in Zeile {l2} überschrieben", name.name),
-                            );
+                            let (w1, w2) = (self.where_(*sp, s.span), self.where_(s.span, *sp));
+                            self.warn(name.span, format!("`{}` aus {w1} wird in {w2} überschrieben", name.name));
                         }
                     } else {
                         first.push((&name.name, s.span));
@@ -500,7 +532,7 @@ impl<'a> Ev<'a> {
     }
 
     fn run_file(&mut self) -> R<()> {
-        let end = self.src.len() as u32;
+        let end = self.proj.main_text().len() as u32;
         let key = mix(0x66696c65, 0) & MASK53;
         self.nodes.push(Node {
             stmt: cad_ir::NO_STMT,
@@ -534,6 +566,7 @@ impl<'a> Ev<'a> {
             depth: 0,
         });
         let env = Env::new(None, None, 0, true);
+        self.setup_libs(&env)?;
         let dy = self.hoist(&self.file.stmts, &env, &None)?;
         let ctx = self.root_ctx(env, dy, end, key);
         for s in &self.file.stmts {
@@ -543,7 +576,15 @@ impl<'a> Ev<'a> {
     }
 
     fn run_module(&mut self, name: &str, overrides: &'a [(String, PValue)], info: &mut ContextInfo) -> R<()> {
-        let Some(path) = find_module_path(&self.file.stmts, name) else {
+        // The main file's own modules first, then those of the used libraries (last `use`
+        // first, as their lookup).
+        let main_root = Env::new(None, None, NO_INST, true);
+        self.setup_libs(&main_root)?;
+        let proj = self.proj;
+        let found = find_module_path(&self.file.stmts, name).map(|p| (p, None)).or_else(|| {
+            proj.libs.iter().enumerate().rev().find_map(|(i, l)| find_module_path(&l.ast.stmts, name).map(|p| (p, Some(i))))
+        });
+        let Some((path, lib)) = found else {
             return self.fatal(Span::default(), format!("Modul `{name}` nicht gefunden"));
         };
         let def = *path.last().unwrap();
@@ -552,8 +593,17 @@ impl<'a> Ev<'a> {
         info.def_span = Some(def.span);
         info.path = path.iter().map(|m| m.name.name.clone()).collect();
 
-        let root = Env::new(None, None, NO_INST, true);
-        let mut dy = self.hoist(&self.file.stmts, &root, &None)?;
+        let (root, mut dy) = match lib {
+            None => {
+                let dy = self.hoist(&self.file.stmts, &main_root, &None)?;
+                (main_root, dy)
+            }
+            Some(i) => {
+                let e = self.lib_envs[i].clone();
+                let dy = e.dyn_();
+                (e, dy)
+            }
+        };
         let mut env = root;
         for anc in &path[..path.len() - 1] {
             let e = Env::new(Some(&env), dy.clone(), NO_INST, true);
@@ -651,6 +701,7 @@ impl<'a> Ev<'a> {
             tree: Tree { nodes: self.nodes, root },
             diagnostics: self.diags,
             hints,
+            parts: self.parts,
             grids: self.grids,
             instances: self.insts,
             handles: self.handles,
@@ -685,16 +736,14 @@ impl<'a> Ev<'a> {
     fn stmt_inner(&mut self, s: &'a Stmt, ctx: &Ctx<'a>) -> R<()> {
         match &s.kind {
             StmtKind::Empty | StmtKind::Module(_) | StmtKind::Function(_) | StmtKind::Error => Ok(()),
-            StmtKind::Include { is_use, .. } => {
-                let what = if *is_use { "use" } else { "include" };
-                self.warn(s.span, format!("`{what}` noch nicht unterstützt"));
-                Ok(())
-            }
+            // Resolved when the project is loaded (`project.rs`).
+            StmtKind::Include { .. } => Ok(()),
             StmtKind::Assign { name, value } => self.assign_stmt(s, name, value, ctx),
             StmtKind::Block(stmts) => self.block_stmt(s, stmts, ctx),
             StmtKind::Anchor { name, point, dir } => self.anchor_stmt(s, name, point, dir.as_ref(), ctx),
             StmtKind::Grid(g) => self.grid_stmt(s, g, ctx),
-            StmtKind::Named { name, inst } => self.named_stmt(s, name, inst, ctx),
+            StmtKind::Named { name, index, inst } => self.named_stmt(s, name, index.as_ref(), inst, ctx),
+
             StmtKind::Call { name, args, children, .. } => {
                 self.call_stmt(s, name, args, children, ctx, None).map(|_| ())
             }
@@ -959,7 +1008,7 @@ impl<'a> Ev<'a> {
         args: &'a [Arg],
         children: &'a [Stmt],
         ctx: &Ctx<'a>,
-        label: Option<&'a Ident>,
+        label: Option<String>,
     ) -> R<Option<InstId>> {
         let a = self.eval_args(args, &ctx.env, &ctx.dyn_)?;
         if let Some((def, denv)) = ctx.env.find_module(&name.name) {
@@ -982,7 +1031,7 @@ impl<'a> Ev<'a> {
         args: Args<'a>,
         children: &'a [Stmt],
         ctx: &Ctx<'a>,
-        label: Option<&'a Ident>,
+        label: Option<String>,
     ) -> R<InstId> {
         if self.mod_depth >= self.opts.max_module_depth {
             return self.too_deep(s.span, "module", &def.name.name, self.opts.max_module_depth);
@@ -1006,10 +1055,10 @@ impl<'a> Ev<'a> {
         args: Args<'a>,
         children: &'a [Stmt],
         ctx: &Ctx<'a>,
-        label: Option<&'a Ident>,
+        label: Option<String>,
     ) -> (InstId, NodeIdx, Env<'a>, Dyn<'a>, Rc<Frame<'a>>) {
         let node =
-            self.node(s, Op::ModuleCall { name: def.name.name.clone(), instance: label.map(|l| l.name.clone()) }, ctx);
+            self.node(s, Op::ModuleCall { name: def.name.name.clone(), instance: label }, ctx);
         let depth = self.insts[ctx.frame.inst as usize].depth + 1;
         let id = self.new_instance(InstanceInfo {
             id: 0,
@@ -1238,7 +1287,14 @@ impl<'a> Ev<'a> {
     }
 
     #[inline(never)]
-    fn named_stmt(&mut self, s: &'a Stmt, name: &'a Ident, inst: &'a Stmt, ctx: &Ctx<'a>) -> R<()> {
+    fn named_stmt(
+        &mut self,
+        s: &'a Stmt,
+        name: &'a Ident,
+        index: Option<&'a Expr>,
+        inst: &'a Stmt,
+        ctx: &Ctx<'a>,
+    ) -> R<()> {
         if inst.modifiers.contains(&Modifier::Disable) {
             return Ok(());
         }
@@ -1246,8 +1302,9 @@ impl<'a> Ev<'a> {
             self.error(name.span, "nur Modulaufrufe sind benennbar");
             return self.stmt(inst, ctx);
         };
-        if ctx.in_loop {
-            self.error(name.span, "benannte Instanzen sind in for-Schleifen nicht erlaubt");
+        if ctx.in_loop && index.is_none() {
+            let n = &name.name;
+            self.error(name.span, format!("benannte Instanzen sind in for-Schleifen nicht erlaubt (`{n}[i]: …` verwenden)"));
             return self.stmt(inst, ctx);
         }
         if ctx.env.find_module(&mname.name).is_none() {
@@ -1256,19 +1313,91 @@ impl<'a> Ev<'a> {
             }
             return self.stmt(inst, ctx);
         }
+        // `k[i]`: integer index, evaluated before the call.
+        let idx = match index {
+            None => None,
+            Some(e) => {
+                let v = self.expr(e, &ctx.env, &ctx.dyn_)?;
+                match v.as_num() {
+                    Some(n) if n.is_finite() && n.fract() == 0.0 && n.abs() < 1e15 => Some(n as i64),
+                    _ => {
+                        let shown = to_hint(&v);
+                        self.error(e.span, format!("Index einer benannten Instanz muss ganzzahlig sein, ist {shown}"));
+                        return self.stmt(inst, ctx);
+                    }
+                }
+            }
+        };
+        let label = match idx {
+            None => name.name.clone(),
+            Some(i) => format!("{}[{i}]", name.name),
+        };
         self.step(inst.span)?;
         let prev = self.cur_stmt.replace(inst.id);
-        let r = self.call_stmt(inst, mname, args, children, ctx, Some(name));
+        let r = self.call_stmt(inst, mname, args, children, ctx, Some(label.clone()));
         self.cur_stmt = prev;
         if let Some(id) = r? {
             let frame_inst = ctx.frame.inst;
-            if self.declare_name(frame_inst, name, NameRef::Inst(id), ctx) {
+            let ok = match idx {
+                None => self.declare_name(frame_inst, name, NameRef::Inst(id), ctx),
+                Some(i) => self.declare_member(frame_inst, name, i, id, ctx),
+            };
+            if ok {
+                let visible = self.visible_span(s.span, ctx.frame.body_end);
+                let node = self.insts[id as usize].node;
                 let i = &mut self.insts[id as usize];
-                i.label = Some(name.name.clone());
-                i.visible = Some(Span { start: s.span.end, end: ctx.frame.body_end });
+                i.label = Some(label.clone());
+                i.visible = Some(visible);
+                // Named instances at the top level of the file are the parts (Plan 12.9).
+                if self.file_context
+                    && frame_inst == 0
+                    && let Some(node) = node
+                {
+                    self.parts.push(PartInfo { name: label, inst: id, node, stmt: s.id, span: s.span });
+                }
             }
         }
         Ok(())
+    }
+
+    /// Visibility of a name declared by `decl` up to `body_end` of its module body. A name
+    /// declared in an included file is visible to the end of that file's text.
+    pub(crate) fn visible_span(&self, decl: Span, body_end: u32) -> Span {
+        let end = if cad_syntax::file_of(body_end) == decl.file() && body_end >= decl.end {
+            body_end
+        } else {
+            let len = self.proj.file_of(decl).map_or(0, |f| f.text.len() as u32);
+            cad_syntax::file_base(decl.file()) + len
+        };
+        Span { start: decl.end, end }
+    }
+
+    /// Declares `name[index]` (a member of an instance family).
+    fn declare_member(&mut self, inst: InstId, name: &'a Ident, index: i64, id: InstId, ctx: &Ctx<'a>) -> bool {
+        let existing = self.names_of(inst).iter().rev().find(|(n, _)| *n == name.name).map(|(_, r)| *r);
+        match existing {
+            Some(NameRef::Family(f)) => {
+                let fam = &mut self.families[f as usize];
+                if fam.contains_key(&index) {
+                    self.error(name.span, format!("`{}[{index}]` ist in diesem Modul schon deklariert", name.name));
+                    return false;
+                }
+                fam.insert(index, id);
+                true
+            }
+            Some(_) => {
+                self.error(name.span, format!("`{}` ist in diesem Modul schon deklariert", name.name));
+                false
+            }
+            None => {
+                let f = self.families.len() as u32;
+                if !self.declare_name(inst, name, NameRef::Family(f), ctx) {
+                    return false;
+                }
+                self.families.push(BTreeMap::from([(index, id)]));
+                true
+            }
+        }
     }
 
     pub(crate) fn rand(&mut self) -> f64 {

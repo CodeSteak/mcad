@@ -100,7 +100,7 @@ fn modifiers_and_control() {
 #[test]
 fn include_and_use() {
     let f = ok("include <foo/bar.scad>\nuse <lib.scad>;\ncube(1);");
-    assert!(matches!(&f.stmts[0].kind, StmtKind::Include { path, is_use: false } if path == "foo/bar.scad"));
+    assert!(matches!(&f.stmts[0].kind, StmtKind::Include { path, is_use: false, .. } if path == "foo/bar.scad"));
     assert!(matches!(&f.stmts[1].kind, StmtKind::Include { is_use: true, .. }));
 }
 
@@ -181,4 +181,36 @@ fn line_index_utf16() {
     assert_eq!(li.utf16_to_byte(b_u16), b_byte);
     assert_eq!(li.line_of(b_byte), 1);
     assert_eq!(li.line_col(b_byte + 2), (1, 2));
+}
+
+#[test]
+fn indexed_named_instance() {
+    let f = ok("for (i = [0:3]) k[i]: halter();\nk[2 * 1]: halter();");
+    let StmtKind::For { body, .. } = &f.stmts[0].kind else { panic!() };
+    let StmtKind::Named { name, index: Some(ix), inst } = &body.kind else { panic!("{:?}", body.kind) };
+    assert_eq!(name.name, "k");
+    assert_eq!(ix.kind, ExprKind::Ident("i".into()));
+    assert!(matches!(inst.kind, StmtKind::Call { .. }));
+    assert!(matches!(f.stmts[1].kind, StmtKind::Named { index: Some(_), .. }));
+}
+
+#[test]
+fn file_regions() {
+    let (f, d) = crate::parse_file("a = 1;\ncube(a);", 3);
+    assert!(d.is_empty());
+    let base = 3 << crate::FILE_SHIFT;
+    assert_eq!(f.stmts[0].span.start, base);
+    assert_eq!(f.stmts[0].span.file(), 3);
+    assert_eq!(f.stmts[1].span.local(), crate::Span::new(7, 15));
+    assert!(f.stmts.iter().all(|s| s.id >= 3 << crate::ID_SHIFT));
+    let (_, d) = crate::parse_file("cube(;", 2);
+    assert_eq!(d[0].span.file(), 2);
+}
+
+#[test]
+fn include_path_span() {
+    let src = "include <a/b.scad>\nuse <c.scad>;";
+    let f = ok(src);
+    let StmtKind::Include { path_span, .. } = &f.stmts[0].kind else { panic!() };
+    assert_eq!(&src[path_span.start as usize..path_span.end as usize], "<a/b.scad>");
 }

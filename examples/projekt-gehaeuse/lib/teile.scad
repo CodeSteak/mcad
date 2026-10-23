@@ -1,0 +1,37 @@
+// Bibliothek (mit use eingebunden): nur Module und Funktionen sind sichtbar, die Variablen
+// und die Geometrie dieser Datei nicht.
+spiel = 0.2;
+dom_r = 3;
+
+module schraubdom(h = 10) {
+    difference() {
+        cylinder(h = h, r = dom_r);
+        cylinder(h = h + 1, r = 1.2);
+    }
+    anchor oben = [0, 0, h], dir = [0, 0, 1];
+}
+
+module gehaeuse(w = 60, d = 40, h = 25, t = 2) {
+    grid g {
+        x: links = 0, innen_l = t, innen_r = w - t, rechts = w;
+        y: vorne = 0, innen_v = t, innen_h = d - t, hinten = d;
+        z: boden = 0, innen_b = t, oben = h;
+    }
+    difference() {
+        box(g[links, vorne, boden], g[rechts, hinten, oben]);
+        box(g[innen_l, innen_v, innen_b], g[innen_r, innen_h, oben]);
+    }
+    // Vier Schraubdome als benannte Instanzen in der Schleife: dom[0] … dom[3]
+    for (i = [0:3])
+        translate([i % 2 == 0 ? t + dom_r : w - t - dom_r, i < 2 ? t + dom_r : d - t - dom_r, t])
+            dom[i]: schraubdom(h = h - t - 4);
+    translate([w / 2, d / 2, t]) cylinder(h = 3, r = 2);
+    anchor deckel_mitte = g[innen_l, innen_v, oben], dir = [0, 0, 1];
+}
+
+module deckel(w = 60, d = 40, t = 2) {
+    cube([w, d, t]);
+    translate([t + spiel, t + spiel, t]) cube([w - 2 * (t + spiel), d - 2 * (t + spiel), 3]);
+}
+
+gehaeuse();

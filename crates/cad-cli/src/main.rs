@@ -25,9 +25,14 @@
 //! render:  + { output, width, height, view, line|null, highlighted: number[], triangles }
 //! export:  + { output, format: "stl"|"3mf"|"step", bytes, triangles, volume|null, area|null,
 //!            bounds: {min,max}|null, step?: StepStats }   (triangles 0 for STEP)
+//!          with --part/--all-parts: + { parts: [{ name, output, bytes, triangles, volume|null }] }
 //! ```
+//!
+//! Projects: `include <…>`/`use <…>` are read from the file system relative to the including
+//! file. Diagnostics of other files are printed with their path (`lib/teile.scad:3:5: …`).
 
 mod diff;
+mod parts;
 mod render;
 
 use std::io::Read;
@@ -123,6 +128,13 @@ enum Cmd {
         /// STEP-Schema: ap242 (Standard) oder ap214.
         #[arg(long, default_value = "ap242")]
         schema: String,
+        /// Nur dieses Bauteil (benannte Instanz auf oberster Ebene, z. B. `deckel`, `k[2]`);
+        /// mehrfach: alle in eine Datei (3MF: ein Objekt je Bauteil, STEP: ein Produkt).
+        #[arg(long = "part", value_name = "NAME")]
+        part: Vec<String>,
+        /// Jedes Bauteil als eigene Datei in den Ordner `-o` (Format: --format, Standard stl).
+        #[arg(long)]
+        all_parts: bool,
     },
     /// Vergleich SMLib ↔ solidcore je Knoten (Volumen, Flächen, Kanten, ausgewählte Kanten) und
     /// Abdeckung von solidcore (nur Entwicklung).
@@ -226,7 +238,13 @@ fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
         Cmd::Render { c, output, view, line, size, whole_file, no_axes } => {
             render::command(c, output, view, *line, size, *whole_file, !*no_axes)
         }
-        Cmd::Export { c, output, format, schema } => export(c, output, format.as_deref(), schema),
+        Cmd::Export { c, output, format, schema, part, all_parts } => {
+            if *all_parts || !part.is_empty() {
+                parts::export_parts(c, output, format.as_deref(), schema, part, *all_parts)
+            } else {
+                export(c, output, format.as_deref(), schema)
+            }
+        }
         Cmd::DiffKernels { files, .. } => diff::command(files),
     }
 }
@@ -238,6 +256,8 @@ fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
 pub(crate) struct Model {
     pub session: Session<SmlibKernel>,
     pub file: String,
+    /// Directory of the main file (paths of other project files are relative to it).
+    pub root: PathBuf,
     pub text: String,
     /// Finished scene (`None` on syntax errors).
     pub scene: Option<p::Scene>,
@@ -277,14 +297,41 @@ impl Model {
                 p::DiagSource::Eval => "Auswertung",
                 p::DiagSource::Kernel => "Kernel",
             };
-            s.push_str(&format!("{}:{}:{}: {sev} ({src}): {}\n", self.file, d.range.line, d.range.col, d.message));
+            let file = match &d.file {
+                Some(f) => self.file_display(f),
+                None => self.file.clone(),
+            };
+            s.push_str(&format!("{file}:{}:{}: {sev} ({src}): {}\n", d.range.line, d.range.col, d.message));
         }
         s
+    }
+
+    /// A project path as printed (relative to the main file's directory).
+    pub fn file_display(&self, path: &str) -> String {
+        if Path::new(path).is_absolute() || self.root.as_os_str().is_empty() {
+            path.to_string()
+        } else {
+            self.root.join(path).display().to_string()
+        }
     }
 
     /// Source line `n` (1-based), trimmed.
     pub fn line_text(&self, n: u32) -> &str {
         self.text.lines().nth(n.saturating_sub(1) as usize).unwrap_or("").trim()
+    }
+
+    /// "Z.n  text" of a range, with the file for ranges in other project files.
+    pub fn range_line(&self, r: &p::SrcRange) -> String {
+        match r.file {
+            None | Some(0) => format!("Z.{:<4} {}", r.line, self.line_text(r.line)),
+            Some(id) => {
+                let cur = self.session.current();
+                let f = cur.and_then(|c| c.proj.file(id));
+                let path = f.map(|f| f.path.clone()).unwrap_or_default();
+                let text = f.and_then(|f| f.text.lines().nth(r.line.saturating_sub(1) as usize)).unwrap_or("").trim();
+                format!("{path} Z.{} {text}", r.line)
+            }
+        }
     }
 }
 
@@ -346,6 +393,15 @@ pub(crate) fn load(c: &Common, line: Option<u32>, whole_file: bool, kernel: bool
     let mut opts = SessionOptions { auto_root_mesh: false, ..Default::default() };
     opts.eval.max_stack_bytes = 192 << 20;
     let mut s = Session::new(SmlibKernel::new(), opts, std_clock());
+    // Project files (`include`/`use`) relative to the main file's directory.
+    let (root, main_name) = if c.file.as_os_str() == "-" {
+        (PathBuf::new(), "stdin.scad".to_string())
+    } else {
+        let root = c.file.parent().map(Path::to_path_buf).unwrap_or_default();
+        (root, c.file.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_else(|| "main.scad".into()))
+    };
+    let fs_root = if root.as_os_str().is_empty() { PathBuf::from(".") } else { root.clone() };
+    s.set_resolver(Box::new(cad_session::FsResolver { root: fs_root }), &main_name);
     let mut module = c.module.clone();
     if module.is_none()
         && !whole_file
@@ -370,7 +426,7 @@ pub(crate) fn load(c: &Common, line: Option<u32>, whole_file: bool, kernel: bool
     }
     let diagnostics = last_diagnostics(&msgs).unwrap_or_default();
     let scene = if kernel { s.done().map(|d| d.scene.clone()) } else { last_scene(&msgs) };
-    Ok(Model { session: s, file, text, scene, diagnostics, context: module })
+    Ok(Model { session: s, file, root, text, scene, diagnostics, context: module })
 }
 
 // ------------------------------------------------------------------------------------------
@@ -408,6 +464,14 @@ pub(crate) fn world_bounds(b: &p::Bounds, m: &DMat4) -> p::Bounds {
         whi = whi.max(w);
     }
     p::Bounds { min: p::Vec3(wlo.to_array()), max: p::Vec3(whi.to_array()) }
+}
+
+/// "Z.n", with the file's path for ranges in other project files.
+pub(crate) fn zl(sc: &p::Scene, r: &p::SrcRange) -> String {
+    match r.file.and_then(|f| sc.files.get(f as usize)).filter(|f| f.id != 0) {
+        Some(f) => format!("{} Z.{}", f.path, r.line),
+        None => format!("Z.{}", r.line),
+    }
 }
 
 fn status_text(s: p::NodeStatus) -> &'static str {
@@ -480,7 +544,26 @@ fn eval(c: &Common) -> Result<Outcome, Fail> {
         if !sc.hints.is_empty() {
             t.push_str("Werte:\n");
             for h in sc.hints.iter().filter(|h| h.in_context) {
-                t.push_str(&format!("  Z.{:<4} {}  → {}\n", h.range.line, m.line_text(h.range.line), h.text));
+                t.push_str(&format!("  {}  → {}\n", m.range_line(&h.range), h.text));
+            }
+        }
+        if !sc.parts.is_empty() {
+            t.push_str("Bauteile:\n");
+            for pt in &sc.parts {
+                let b = pt.bounds.as_ref().map(|b| format!("  Hülle {}–{}", vec3(&b.min), vec3(&b.max))).unwrap_or_default();
+                let v = pt.volume.map(|v| format!("  Volumen {} mm³", num(v))).unwrap_or_default();
+                t.push_str(&format!("  {}  Z.{}{b}{v}\n", pt.name, pt.range.line));
+            }
+        }
+        if sc.files.len() > 1 {
+            t.push_str("Dateien:\n");
+            for f in &sc.files {
+                let role = match f.role {
+                    p::FileRole::Main => "Hauptdatei",
+                    p::FileRole::Include => "include",
+                    p::FileRole::Use => "use",
+                };
+                t.push_str(&format!("  {} ({role})\n", f.path));
             }
         }
         if !sc.grids.is_empty() {
@@ -488,9 +571,9 @@ fn eval(c: &Common) -> Result<Outcome, Fail> {
             for g in &sc.grids {
                 let module = &sc.instances.get(g.module_inst as usize).map(|i| i.module.as_str()).unwrap_or("");
                 t.push_str(&format!(
-                    "  {} (Z.{}, {}{}):\n",
+                    "  {} ({}, {}{}):\n",
                     g.name,
-                    g.range.line,
+                    zl(sc, &g.range),
                     if module.is_empty() { "Datei".to_string() } else { format!("Modul {module}") },
                     if g.in_context { "" } else { ", nicht im Kontext" }
                 ));
@@ -524,13 +607,13 @@ fn eval(c: &Common) -> Result<Outcome, Fail> {
                     format!("{module}#{}.{}", a.inst, a.name)
                 });
                 let dir = a.dir.as_ref().map(|d| format!(", dir {}", vec3(d))).unwrap_or_default();
-                t.push_str(&format!("  {name} = {}{dir}  (Z.{})\n", vec3(&a.point), a.range.line));
+                t.push_str(&format!("  {name} = {}{dir}  ({})\n", vec3(&a.point), zl(sc, &a.range)));
             }
         }
         if !sc.echoes.is_empty() {
             t.push_str("Echo:\n");
             for e in &sc.echoes {
-                t.push_str(&format!("  Z.{}: ECHO: {}\n", e.range.line, e.text));
+                t.push_str(&format!("  {}: ECHO: {}\n", zl(sc, &e.range), e.text));
             }
         }
         t.push_str(&format!(
@@ -553,7 +636,7 @@ fn tree_text(sc: &p::Scene, n: u32, depth: usize, out: &mut String) {
         line = format!("{line} ({i})");
     }
     if node.stmt.is_some() {
-        line.push_str(&format!("  Z.{}", node.range.line));
+        line.push_str(&format!("  {}", zl(sc, &node.range)));
     }
     let mut flags = Vec::new();
     if node.flags.highlight {
@@ -794,7 +877,7 @@ fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str) -> Resu
 }
 
 /// Current UTC time as ISO 8601 (STEP header).
-fn utc_timestamp() -> String {
+pub(crate) fn utc_timestamp() -> String {
     let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     let (days, rem) = (secs / 86400, secs % 86400);
     // civil from days (Howard Hinnant)

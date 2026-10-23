@@ -1,15 +1,38 @@
 // Application runtime: engine client, mesh cache, file actions, module context sync and the
 // test hook `window.__cad`.
 
+import type { EditorState } from "@codemirror/state";
 import { EngineClient } from "../engine/client";
-import type { ExportFormat } from "../engine/protocol";
+import type { Edit, ExportFormat } from "../engine/protocol";
 import { WorkerTransport } from "../engine/transport";
-import { replaceDocument } from "../editor/setup";
-import { EXAMPLES, type Example, baseName, download, forgetHandle, loadAutosave, openFile, saveAutosave, saveFile } from "../files/files";
+import type { EditTarget } from "../editor/editGroup";
+import { makeState } from "../editor/setup";
+import {
+  EXAMPLES,
+  type Example,
+  type ExampleProject,
+  type LoadedProject,
+  baseName,
+  download,
+  forgetHandle,
+  loadAutosave,
+  loadProjectAutosave,
+  openFile,
+  openFolder,
+  pickZip,
+  projectZip,
+  saveFile,
+  saveProjectAutosave,
+  saveToFolder,
+} from "../files/files";
 import { jumpUpTarget, moduleSpans } from "../logic/context";
+import { baseName as pathBase, normalizePath } from "../logic/files";
 import { modelHull } from "../logic/grids";
 import { transformBox } from "../logic/math";
+import { VersionMapper } from "../logic/positions";
+import { isOff } from "../logic/sceneIndex";
 import { bridge } from "../state/bridge";
+import { type DirHandle, project } from "../state/project";
 import { store } from "../state/store";
 import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
@@ -25,8 +48,92 @@ export const transport = new WorkerTransport({ watchdogMs });
 export const client = new EngineClient(transport, meshes);
 
 let viewerRef: Viewer | null = null;
+// ---------------------------------------------------------------- project files
+
+project.activeText = () => (bridge.view ? bridge.text() : null);
+
+/** Publishes the project's file list etc. to the store (tabs, path bar). */
+function publishProject(): void {
+  store.setState({
+    project: { name: project.name, main: project.main, active: project.active, paths: project.paths(), folder: project.dir !== null },
+    fileName: pathBase(project.main),
+  });
+}
+
+/** Editor state of a project file that is not shown (created on first use). */
+function fileState(path: string): EditorState {
+  let s = project.states.get(path);
+  if (!s) {
+    s = makeState(project.texts.get(path) ?? "");
+    project.states.set(path, s);
+  }
+  return s;
+}
+
+/** Edit target of a project file: the editor for the shown file, its saved state otherwise. */
+export function editTarget(path: string): EditTarget | null {
+  if (path === project.active) return bridge.view;
+  if (!project.has(path)) return null;
+  return {
+    get state() {
+      return fileState(path);
+    },
+    dispatch(tr) {
+      project.states.set(path, tr.state);
+      if (tr.docChanged) {
+        const text = tr.state.doc.toString();
+        project.texts.set(path, text);
+        client.setFile(path, text);
+        scheduleSave();
+      }
+    },
+  };
+}
+
+/** File an engine edit applies to. */
+export function editFile(e: Edit): string {
+  return e.file ? normalizePath(e.file) : project.main;
+}
+
+/** The mapper follows the editor document: after switching files, known versions start there. */
+function resetMapper(): void {
+  const len = bridge.doc().length;
+  bridge.mapper = new VersionMapper(len);
+  const st = store.getState();
+  for (const v of [st.scene?.version, st.complete?.version, st.shown?.version, st.diagnostics.version, st.sentVersion]) {
+    if (v !== undefined && v > 0) bridge.mapper.mark(v, len);
+  }
+}
+
+/** Shows a project file in the editor (keeps the other file's state and undo history). */
+export function switchFile(path: string, pos?: number): boolean {
+  const p = normalizePath(path);
+  const v = bridge.view;
+  if (!v || !project.has(p)) {
+    store.setState({ notice: `Datei ${p} gehört nicht zum Projekt` });
+    return false;
+  }
+  if (p !== project.active) {
+    flushActive();
+    project.states.set(project.active, v.state);
+    project.texts.set(project.active, v.state.doc.toString());
+    const next = fileState(p);
+    project.states.delete(p);
+    project.active = p;
+    v.setState(next);
+    resetMapper();
+    const st = store.getState();
+    store.setState({ docRevision: st.docRevision + 1, cursor: next.selection.main.head, editorHover: null, viewHover: null, viewHoverOther: null });
+    publishProject();
+    scheduleSave();
+  }
+  if (pos !== undefined) bridge.setCursor(pos);
+  else v.focus();
+  return true;
+}
+
 /** Handle drags (Spec: Griffe und Rückschreiben). */
-export const drag = new DragController(client, () => sendNow());
+export const drag = new DragController(client, () => sendNow(), { target: editTarget, fileOf: editFile, active: () => project.active });
 
 // Rounding steps of free drags (Einstellungen).
 {
@@ -41,7 +148,10 @@ let viewer: Viewer | null = null;
 export function setViewer(v: Viewer | null): void {
   viewer = v;
   viewerRef = v;
-  if (v) v.drag = drag;
+  if (v) {
+    v.drag = drag;
+    v.onOpenLocation = openLocation;
+  }
 }
 export function getViewer(): Viewer | null {
   return viewer;
@@ -59,25 +169,42 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 /** Editor callback: the document changed. */
 let lastEditAt = 0;
 
-export function onDocChange(text: string, _changes: number): void {
+/** The file in the editor is not the main file: the engine gets its text with `SetFile`. */
+function flushActive(): void {
+  if (project.active !== project.main && bridge.view) {
+    const t = bridge.text();
+    if (project.texts.get(project.active) !== t) {
+      project.texts.set(project.active, t);
+      client.setFile(project.active, t);
+    }
+  }
+}
+
+function scheduleSave(): void {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    void saveProjectAutosave(project.snapshot());
+  }, 400);
+}
+
+export function onDocChange(_text: string, _changes: number): void {
   lastEditAt = performance.now();
   if (sendTimer) clearTimeout(sendTimer);
   sendTimer = setTimeout(() => {
     sendTimer = null;
-    client.setSource(bridge.text(), lastEditAt);
+    flushActive();
+    client.setSource(bridge.mainText(), lastEditAt);
   }, 8);
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    saveTimer = null;
-    void saveAutosave({ name: store.getState().fileName, text, savedAt: Date.now() });
-  }, 400);
+  scheduleSave();
 }
 
 /** Sends the current document immediately (start, file opened). */
 export function sendNow(): void {
   if (sendTimer) clearTimeout(sendTimer);
   sendTimer = null;
-  client.setSource(bridge.text());
+  flushActive();
+  client.setSource(bridge.mainText());
 }
 
 /** Module context follows the cursor (Spec: Kontext: aktuelles Modul). */
@@ -105,21 +232,131 @@ export function jumpToLevel(level: number): void {
 
 // ---------------------------------------------------------------- files
 
-export async function initialDocument(): Promise<{ name: string; text: string }> {
-  const auto = await loadAutosave();
-  if (auto && auto.text.trim()) return { name: auto.name, text: auto.text };
+/** The project to start with: the autosaved one, else the default example. */
+export async function initialProject(): Promise<{ name: string; main: string; active: string; files: Record<string, string> }> {
+  const auto = await loadProjectAutosave();
+  if (auto && Object.values(auto.files).some((t) => t.trim())) return auto;
   const ex = EXAMPLES.find((e) => e.path === DEFAULT_EXAMPLE) ?? EXAMPLES[0];
-  return { name: ex ? ex.name : "unbenannt.scad", text: ex ? ex.text : "cube(10);\n" };
+  const name = ex ? ex.name : "unbenannt.scad";
+  return { name, main: name, active: name, files: { [name]: ex ? ex.text : "cube(10);\n" } };
+}
+
+/** Takes over a project after the editor exists (start). */
+export function startProject(p: { name: string; main: string; active?: string; files: Record<string, string> }): void {
+  project.reset(p);
+  publishProject();
+  client.setFiles(project.others(), project.main);
+}
+
+/**
+ * Opens a project: every file, the main file in the editor (or `active`). The editor's undo
+ * history starts fresh.
+ */
+export function loadProject(p: { name: string; main: string; active?: string; files: Record<string, string> }, dir: DirHandle | null = null): void {
+  const v = bridge.view;
+  if (!v) return;
+  project.reset(p, dir);
+  v.setState(makeState(project.texts.get(project.active) ?? ""));
+  resetMapper();
+  const st = store.getState();
+  store.setState({ notice: null, engineError: null, hiddenParts: [], viewHoverOther: null, docRevision: st.docRevision + 1, cursor: 0 });
+  publishProject();
+  client.setFiles(project.others(), project.main);
+  sendNow();
+  store.setState({ loadVersion: store.getState().sentVersion });
+  scheduleSave();
+  v.focus();
 }
 
 function loadText(name: string, text: string): void {
-  const v = bridge.view;
-  if (!v) return;
-  store.setState({ fileName: name, notice: null, engineError: null });
-  replaceDocument(v, text);
+  loadProject({ name, main: name, files: { [name]: text } });
+}
+
+export function openExampleProject(ex: ExampleProject): void {
+  forgetHandle();
+  loadProject({ name: ex.name, main: ex.main, files: { ...ex.files } });
+}
+
+function openLoaded(p: LoadedProject | null): void {
+  if (!p) return;
+  forgetHandle();
+  loadProject({ name: p.name, main: p.main, files: p.files }, p.dir);
+  store.setState({ notice: `Projekt ${p.name}: ${Object.keys(p.files).length} Dateien, Hauptdatei ${p.main}` });
+}
+
+/** Opens a folder (File System Access API), else a ZIP file. */
+export async function openFolderOrZip(): Promise<void> {
+  try {
+    const w = window as Window & { showDirectoryPicker?: unknown };
+    openLoaded(typeof w.showDirectoryPicker === "function" ? await openFolder() : await pickZip());
+  } catch (e) {
+    store.setState({ notice: `Öffnen fehlgeschlagen: ${(e as Error).message}` });
+  }
+}
+
+export async function openZip(): Promise<void> {
+  try {
+    openLoaded(await pickZip());
+  } catch (e) {
+    store.setState({ notice: `Öffnen fehlgeschlagen: ${(e as Error).message}` });
+  }
+}
+
+/** Downloads the project as a ZIP. */
+export function downloadProjectZip(): void {
+  flushActive();
+  const name = `${project.name.replace(/\.scad$/, "")}.zip`;
+  download(new Blob([projectZip(project.name.replace(/\.scad$/, ""), project.files()) as BlobPart], { type: "application/zip" }), name);
+  store.setState({ notice: `Heruntergeladen: ${name}` });
+}
+
+/** Adds a file to the project and shows it. */
+export function addProjectFile(path: string, text = ""): boolean {
+  const p = normalizePath(path.trim());
+  if (!p || p.startsWith("..") || p.startsWith("/")) {
+    store.setState({ notice: `Ungültiger Dateiname: ${path}` });
+    return false;
+  }
+  const name = p.endsWith(".scad") ? p : `${p}.scad`;
+  if (project.has(name)) return switchFile(name);
+  project.texts.set(name, text);
+  client.setFile(name, text);
+  publishProject();
+  switchFile(name);
+  sendNow();
+  return true;
+}
+
+/** Removes a file from the project (not the main file). */
+export function removeProjectFile(path: string): void {
+  if (path === project.main || !project.has(path)) return;
+  if (path === project.active) switchFile(project.main);
+  project.texts.delete(path);
+  project.states.delete(path);
+  client.setFile(path, null);
+  publishProject();
+  sendNow();
+  scheduleSave();
+}
+
+/** Makes a project file the main file (what is evaluated). */
+export function setMainFile(path: string): void {
+  if (!project.has(path) || path === project.main) return;
+  flushActive();
+  project.texts.set(project.active, bridge.text());
+  project.main = path;
+  store.setState({ hiddenParts: [] });
+  publishProject();
+  client.setFiles(project.others(), project.main);
   sendNow();
   store.setState({ loadVersion: store.getState().sentVersion });
-  v.focus();
+  scheduleSave();
+}
+
+/** Opens a position in a project file (scene range of another file, e.g. a face's line). */
+export function openLocation(path: string, pos: number): void {
+  if (path === project.active) bridge.setCursor(pos);
+  else switchFile(path, pos);
 }
 
 export function openExample(ex: Example): void {
@@ -143,24 +380,79 @@ export async function openFromDisk(): Promise<void> {
 
 export async function saveToDisk(saveAs = false): Promise<void> {
   try {
-    const name = await saveFile(store.getState().fileName, bridge.text(), saveAs);
-    if (name) store.setState({ fileName: name, notice: `Gespeichert: ${name}` });
+    flushActive();
+    if (project.dir && !saveAs) {
+      const n = await saveToFolder(project.dir, project.files());
+      store.setState({ notice: `Gespeichert: ${n} Dateien in ${project.dir.name}` });
+      return;
+    }
+    if (project.texts.size > 1 && !saveAs) {
+      downloadProjectZip();
+      return;
+    }
+    const name = await saveFile(pathBase(project.active), bridge.text(), saveAs);
+    if (name && project.texts.size === 1) {
+      // A single file renamed by "Speichern unter": the project follows.
+      if (name !== project.main) {
+        project.texts.delete(project.main);
+        project.states.delete(project.main);
+        project.main = project.active = name;
+        project.texts.set(name, bridge.text());
+        project.name = name;
+        client.setFiles({}, name);
+        publishProject();
+      }
+    }
+    if (name) store.setState({ notice: `Gespeichert: ${name}` });
   } catch (e) {
     store.setState({ notice: `Speichern fehlgeschlagen: ${(e as Error).message}` });
   }
 }
 
+const MIME: Record<ExportFormat, string> = { stl: "model/stl", "3mf": "model/3mf", step: "model/step" };
+
 export async function exportModel(format: ExportFormat): Promise<void> {
   store.setState({ notice: `Export ${format.toUpperCase()} …` });
   try {
     const r = await client.exportFile(format);
-    const type = format === "stl" ? "model/stl" : "model/3mf";
     const name = `${baseName(store.getState().fileName)}.${format}`;
-    download(new Blob([r.bytes as BlobPart], { type }), name);
-    store.setState({ notice: `Exportiert: ${name} (${r.triangles} Dreiecke)` });
+    download(new Blob([r.bytes as BlobPart], { type: MIME[format] }), name);
+    store.setState({ notice: `Exportiert: ${name} (${r.triangles ? `${r.triangles} Dreiecke` : `${r.bytes.length} Bytes`})` });
   } catch (e) {
     store.setState({ notice: `Export fehlgeschlagen: ${(e as Error).message}` });
   }
+}
+
+/** File name of a part (`k[2]` → `k_2.stl`, as the engine names ZIP entries). */
+export function partFileName(name: string, ext: string): string {
+  const s = name.replace(/[^A-Za-z0-9_.-]/g, "_").replace(/_+$/, "") || "teil";
+  return `${s}.${ext}`;
+}
+
+/**
+ * Exports parts: one part → one file; several → one file per part as a ZIP (`zip`), or one 3MF
+ * with an object per part.
+ */
+export async function exportParts(format: ExportFormat, parts: string[], zip: boolean): Promise<void> {
+  if (!parts.length) return;
+  store.setState({ notice: `Export ${format.toUpperCase()} (${parts.join(", ")}) …` });
+  try {
+    const single = parts.length === 1;
+    const r = await client.exportFile(format, parts, zip && !single);
+    const base = baseName(store.getState().fileName);
+    const name = single ? partFileName(parts[0], format) : zip ? `${base}-teile-${format}.zip` : `${base}-teile.${format}`;
+    const type = zip && !single ? "application/zip" : MIME[format];
+    download(new Blob([r.bytes as BlobPart], { type }), name);
+    store.setState({ notice: `Exportiert: ${name}${r.triangles ? ` (${r.triangles} Dreiecke)` : ""}` });
+  } catch (e) {
+    store.setState({ notice: `Export fehlgeschlagen: ${(e as Error).message}` });
+  }
+}
+
+/** Shows or hides a part in the view. */
+export function togglePart(name: string, visible: boolean): void {
+  const h = store.getState().hiddenParts;
+  store.setState({ hiddenParts: visible ? h.filter((x) => x !== name) : h.includes(name) ? h : [...h, name] });
 }
 
 // ---------------------------------------------------------------- test hook
@@ -250,7 +542,7 @@ window.__cad = {
     const idx = bridge.index(s);
     const doc = bridge.doc();
     return s.nodes
-      .filter((n) => n.stmt !== null && n.bounds && doc.lineAt(Math.min(idx.span(n.idx).from, doc.length)).number === line)
+      .filter((n) => n.stmt !== null && n.bounds && !isOff(idx.span(n.idx)) && doc.lineAt(Math.min(idx.span(n.idx).from, doc.length)).number === line)
       .map((n) => ({ label: n.label, ...transformBox(n.display_world, { min: n.bounds!.min, max: n.bounds!.max }) }));
   },
   /** Nodes whose statement starts on a line (current document) with their engine data. */
@@ -260,7 +552,7 @@ window.__cad = {
     const idx = bridge.index(s);
     const doc = bridge.doc();
     return s.nodes
-      .filter((n) => n.stmt !== null && doc.lineAt(Math.min(idx.span(n.idx).from, doc.length)).number === line)
+      .filter((n) => n.stmt !== null && !isOff(idx.span(n.idx)) && doc.lineAt(Math.min(idx.span(n.idx).from, doc.length)).number === line)
       .map((n) => {
         const m = meshes.get(n.mesh_key)?.data;
         return {
@@ -325,6 +617,28 @@ window.__cad = {
   autosave() {
     return loadAutosave();
   },
+  /** The open project: file list, main and active file. */
+  projectInfo() {
+    return { ...store.getState().project, files: project.files() };
+  },
+  /** Opens a project (tests). */
+  openProject(p: { name: string; main: string; files: Record<string, string>; active?: string }) {
+    loadProject(p);
+  },
+  switchFile(path: string, line?: number) {
+    const ok = switchFile(path);
+    if (ok && line !== undefined) bridge.setCursorLine(line);
+    return ok;
+  },
+  /** Parts of the latest complete scene. */
+  parts() {
+    const c = store.getState().complete;
+    return (c?.parts ?? []).map((p) => ({ name: p.name, node: p.node, line: p.range.line, volume: p.volume, bounds: p.bounds, hidden: store.getState().hiddenParts.includes(p.name) }));
+  },
+  autosaveProject() {
+    return loadProjectAutosave();
+  },
+
   /** Blocks the engine worker for `ms` (watchdog test). */
   debugHang(ms: number) {
     transport.send({ type: "__debugHang", ms } as unknown as Parameters<typeof transport.send>[0]);

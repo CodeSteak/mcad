@@ -9,16 +9,18 @@ use glam::{DMat4, DVec3};
 
 use crate::protocol as p;
 
-/// Source text with its line index: converts byte spans to [`p::SrcRange`].
-pub struct Source {
+/// One file of a project for position conversion.
+pub struct FileSrc {
+    pub path: String,
     pub text: String,
     pub lines: LineIndex,
+    pub role: p::FileRole,
 }
 
-impl Source {
-    pub fn new(text: String) -> Self {
+impl FileSrc {
+    fn new(path: String, text: String, role: p::FileRole) -> Self {
         let lines = LineIndex::new(&text);
-        Source { text, lines }
+        FileSrc { path, text, lines, role }
     }
 
     fn clamp(&self, b: u32) -> u32 {
@@ -29,7 +31,68 @@ impl Source {
         b
     }
 
-    /// 1-based (line, column in UTF-16 units) of a byte offset.
+    /// 1-based (line, column in UTF-16 units) of a local byte offset.
+    fn pos(&self, byte: u32) -> (u32, u32) {
+        let byte = self.clamp(byte);
+        let line = self.lines.line_of(byte);
+        let start = self.lines.line_start(line);
+        let col = self.lines.byte_to_utf16(byte) - self.lines.byte_to_utf16(start);
+        (line + 1, col + 1)
+    }
+
+    fn range(&self, s: Span, file: Option<u32>) -> p::SrcRange {
+        let (a, b) = (self.clamp(s.start), self.clamp(s.end.max(s.start)));
+        let (line, col) = self.pos(a);
+        let (end_line, end_col) = self.pos(b);
+        p::SrcRange {
+            from: self.lines.byte_to_utf16(a),
+            to: self.lines.byte_to_utf16(b),
+            line,
+            col,
+            end_line,
+            end_col,
+            file,
+        }
+    }
+}
+
+/// Source text(s) with line indices: converts (global) byte spans to [`p::SrcRange`]. `text`
+/// and `lines` are the main file's; the other files of a project are in `files` (index =
+/// file id, see `cad_syntax::FILE_SHIFT`).
+pub struct Source {
+    pub text: String,
+    pub lines: LineIndex,
+    /// All files (index = file id; file 0 = main). Empty for a plain single source.
+    pub files: Vec<FileSrc>,
+}
+
+impl Source {
+    pub fn new(text: String) -> Self {
+        let lines = LineIndex::new(&text);
+        Source { text, lines, files: Vec::new() }
+    }
+
+    /// All files of a loaded project (edits and diagnostics of the main file name no file).
+    pub fn from_project(proj: &cad_eval::Project) -> Self {
+        let role = |r: cad_eval::FileRole| match r {
+            cad_eval::FileRole::Main => p::FileRole::Main,
+            cad_eval::FileRole::Include => p::FileRole::Include,
+            cad_eval::FileRole::Use => p::FileRole::Use,
+        };
+        let files: Vec<FileSrc> =
+            proj.files.iter().map(|f| FileSrc::new(f.path.clone(), f.text.clone(), role(f.role))).collect();
+        Source { text: proj.main_text().to_string(), lines: files[0].lines.clone(), files }
+    }
+
+    fn clamp(&self, b: u32) -> u32 {
+        let mut b = b.min(self.text.len() as u32);
+        while !self.text.is_char_boundary(b as usize) {
+            b -= 1;
+        }
+        b
+    }
+
+    /// 1-based (line, column in UTF-16 units) of a byte offset in the main file.
     pub fn pos(&self, byte: u32) -> (u32, u32) {
         let byte = self.clamp(byte);
         let line = self.lines.line_of(byte);
@@ -38,21 +101,64 @@ impl Source {
         (line + 1, col + 1)
     }
 
+    /// File id and its source of a global span (`None` → main file of a plain source).
+    fn file_src(&self, s: Span) -> Option<(u32, &FileSrc)> {
+        let id = s.file();
+        if id == 0 {
+            return None;
+        }
+        self.files.get(id as usize).map(|f| (id, f))
+    }
+
     pub fn range(&self, s: Span) -> p::SrcRange {
+        if let Some((id, f)) = self.file_src(s) {
+            return f.range(s.local(), Some(id));
+        }
         let (a, b) = (self.clamp(s.start), self.clamp(s.end.max(s.start)));
         let (line, col) = self.pos(a);
         let (end_line, end_col) = self.pos(b);
-        p::SrcRange { from: self.lines.byte_to_utf16(a), to: self.lines.byte_to_utf16(b), line, col, end_line, end_col }
+        p::SrcRange {
+            from: self.lines.byte_to_utf16(a),
+            to: self.lines.byte_to_utf16(b),
+            line,
+            col,
+            end_line,
+            end_col,
+            file: None,
+        }
     }
 
-    /// Byte offset of a 1-based line start.
+    /// Path of a span's file (`None` for the main file).
+    pub fn path(&self, s: Span) -> Option<String> {
+        self.file_src(s).map(|(_, f)| f.path.clone())
+    }
+
+    /// Path of a file id (`None` for the main file or an unknown id).
+    pub fn path_of_id(&self, id: u32) -> Option<&str> {
+        if id == 0 { None } else { self.files.get(id as usize).map(|f| f.path.as_str()) }
+    }
+
+    /// Byte offset of a 1-based line start (main file).
     pub fn line_start(&self, line: u32) -> u32 {
         self.lines.line_start(line.saturating_sub(1))
     }
 
     pub fn edit(&self, e: &cad_eval::TextEdit) -> p::Edit {
         let r = self.range(e.span);
-        p::Edit { from: r.from, to: r.to, text: e.text.clone() }
+        p::Edit { from: r.from, to: r.to, text: e.text.clone(), file: self.path(e.span) }
+    }
+
+    /// The project's files for `Scene.files` (just the main file for a plain source).
+    pub fn file_infos(&self, main_path: &str) -> Vec<p::FileInfo> {
+        if self.files.is_empty() {
+            return
+ vec![p::FileInfo { id: 0, path: main_path.to_string(), role: p::FileRole::Main }];
+        }
+        self.files
+            .iter()
+            .enumerate()
+            .map(|(i, f)| p::FileInfo { id: i as u32, path: f.path.clone(), role: f.role })
+            .collect()
     }
 }
 
@@ -133,6 +239,7 @@ pub fn lang_diagnostics(src: &Source, diags: &[cad_syntax::Diagnostic], source: 
             range: src.range(d.span),
             source,
             node: None,
+            file: src.path(d.span),
         })
         .collect()
 }
@@ -145,6 +252,7 @@ pub fn kernel_diagnostics<S>(src: &Source, ev: &Evaluation<S>) -> Vec<p::Diagnos
             range: src.range(d.span),
             source: p::DiagSource::Kernel,
             node: Some(d.node),
+            file: src.path(d.span),
         })
         .collect()
 }
@@ -228,10 +336,62 @@ pub struct SceneInput<'a, S> {
     pub out: &'a EvalOutput,
     pub kernel: KernelInfo<'a, S>,
     pub stats: p::Stats,
+    /// Project files, include statements and part volumes (`None`: single source).
+    pub project: Option<ProjectInfo<'a>>,
+}
+
+/// Project data for a scene.
+pub struct ProjectInfo<'a> {
+    pub main_path: &'a str,
+    pub proj: &'a cad_eval::Project,
+    /// Volume per part (same order as `EvalOutput::parts`).
+    pub part_volumes: &'a [Option<f64>],
+}
+
+/// `include`/`use` statements of all project files.
+pub fn include_refs(src: &Source, proj: &cad_eval::Project) -> Vec<p::IncludeRef> {
+    use cad_syntax::ast::StmtKind;
+    let mut out = Vec::new();
+    let mut visit = |stmts: &[cad_syntax::ast::Stmt]| {
+        for s in stmts {
+            s.walk(&mut |s| {
+                if let StmtKind::Include { path, path_span, is_use } = &s.kind {
+                    let from = proj.path_of(*path_span);
+                    let target = cad_eval::resolve_path(from, path);
+                    let found = proj.files.iter().any(|f| f.path == target);
+                    out.push(p::IncludeRef { range: src.range(*path_span), target, is_use: *is_use, found });
+                }
+            });
+        }
+    };
+    visit(&proj.main.stmts);
+    for l in &proj.libs {
+        visit(&l.ast.stmts);
+    }
+    out.sort_by_key(|r| (r.range.file, r.range.from));
+    out.dedup();
+    out
+}
+
+/// World bounds of node-system bounds under `m`.
+fn world_bounds(lo: DVec3, hi: DVec3, m: &DMat4) -> p::Bounds {
+    let mut wlo = DVec3::splat(f64::INFINITY);
+    let mut whi = DVec3::splat(f64::NEG_INFINITY);
+    for i in 0..8 {
+        let c = DVec3::new(
+            if i & 1 == 0 { lo.x } else { hi.x },
+            if i & 2 == 0 { lo.y } else { hi.y },
+            if i & 4 == 0 { lo.z } else { hi.z },
+        );
+        let w = m.transform_point3(c);
+        wlo = wlo.min(w);
+        whi = whi.max(w);
+    }
+    p::Bounds { min: v3(wlo), max: v3(whi) }
 }
 
 pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
-    let SceneInput { version, src, out, kernel, stats } = i;
+    let SceneInput { version, src, out, kernel, stats, project } = i;
     let tree = &out.tree;
     let r = |s: Span| src.range(s);
     let ro = |s: Option<Span>| s.map(|s| src.range(s));
@@ -541,9 +701,34 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
         root_modifier: c.root_modifier,
     };
 
+    let parts = out
+        .parts
+        .iter()
+        .enumerate()
+        .map(|(k, pt)| {
+            let (bounds, volume) = match &kernel {
+                KernelInfo::Done(ev) => {
+                    let rep = ev.report(pt.node);
+                    let b = rep.bounds.map(|(lo, hi)| world_bounds(lo, hi, &rep.display_world));
+                    (b, project.as_ref().and_then(|pi| pi.part_volumes.get(k).copied().flatten()))
+                }
+                KernelInfo::Pending { .. } => (None, None),
+            };
+            p::Part { name: pt.name.clone(), node: pt.node, inst: pt.inst, range: r(pt.span), bounds, volume }
+        })
+        .collect();
+    let (files, includes) = match &project {
+        Some(pi) => (src.file_infos(pi.main_path), include_refs(src, pi.proj)),
+        None => (src.file_infos("main.scad"), Vec::new()),
+    };
+
     let root_is_subtree = tree.root.is_some_and(|r| tree.node(r).parent.is_some());
     p::Scene {
         version,
+        files,
+        includes,
+        parts,
+
         complete: matches!(kernel, KernelInfo::Done(_)),
         context,
         root: tree.root,

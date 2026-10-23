@@ -182,8 +182,18 @@ fn export_step() {
     json(&["export", &data("platte.scad"), "-o", &stp.display().to_string(), "--schema", "ap203"], 2);
 }
 
+/// Without the feature `solidcore`, `diff-kernels` is a usage error with a build hint.
+#[cfg(not(feature = "solidcore"))]
+#[test]
+fn diff_kernels_needs_the_feature() {
+    let v = json(&["diff-kernels", &data("platte.scad")], 2);
+    assert!(v["error"].as_str().unwrap().contains("--features solidcore"), "{v}");
+}
+
 /// `diff-kernels` over all examples: today mostly `Unsupported` on the solidcore side; it must
-/// answer for every file and node without crashing (exit 1 = not all nodes the same).
+/// answer for every file and node without crashing (exit 1 = not all nodes the same). Only with
+/// the feature `solidcore` (`cargo test -p cad-cli --features solidcore`).
+#[cfg(feature = "solidcore")]
 #[test]
 fn diff_kernels_on_examples() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");

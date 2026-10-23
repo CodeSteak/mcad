@@ -124,6 +124,8 @@ pub enum Value<'a> {
     },
     /// Named module instance `k`.
     Instance(InstId),
+    /// `k` of `k[i]: m();`: a family of named instances, indexed by integers.
+    Family(u32),
 }
 
 #[derive(Debug, Clone)]
@@ -237,14 +239,14 @@ impl<'a> Val<'a> {
             Value::Range(_) => true,
             Value::Func(_) => true,
             Value::PlaneRef { value, .. } => *value != 0.0,
-            Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_) => true,
+            Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_) | Value::Family(_) => true,
         }
     }
 
     /// Grids, grid lines/planes and instances: only allowed where an argument
     /// explicitly accepts them (a type error elsewhere).
     pub fn is_special(&self) -> bool {
-        matches!(self.v, Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_))
+        matches!(self.v, Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_) | Value::Family(_))
     }
 
     pub fn type_name(&self) -> &'static str {
@@ -263,6 +265,7 @@ impl<'a> Val<'a> {
             },
             Value::PlaneRef { .. } => "number",
             Value::Instance(_) => "instance",
+            Value::Family(_) => "instance list",
         }
     }
 
@@ -282,6 +285,7 @@ impl<'a> Val<'a> {
                 _ => "Rasterebene",
             },
             Value::Instance(_) => "Instanz",
+            Value::Family(_) => "Instanzliste",
         }
     }
 }
@@ -328,7 +332,7 @@ impl PValue {
             Value::List(l) => PValue::List(l.iter().map(PValue::from_val).collect()),
             Value::Range(r) => PValue::Range { start: r.start, step: r.step, end: r.end },
             Value::Func(_) => PValue::Function,
-            Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_) => PValue::Other(v.type_name().into()),
+            Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_) | Value::Family(_) => PValue::Other(v.type_name().into()),
         }
     }
 }
@@ -440,7 +444,7 @@ pub fn display(v: &Val, out: &mut String, top: bool, o: DisplayOpts) {
             let _ = write!(out, "[{} : {} : {}]", fmt_num(r.start), fmt_num(r.step), fmt_num(r.end));
         }
         Value::Func(c) => crate::print::function(c.params, c.body, out),
-        Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_) => out.push_str(v.type_name()),
+        Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_) | Value::Family(_) => out.push_str(v.type_name()),
     }
 }
 
@@ -487,6 +491,7 @@ pub fn values_eq(a: &Val, b: &Val) -> bool {
         (Value::Range(x), Value::Range(y)) => x == y,
         (Value::Grid(x), Value::Grid(y)) => x == y,
         (Value::Instance(x), Value::Instance(y)) => x == y,
+        (Value::Family(x), Value::Family(y)) => x == y,
         (Value::GridSel { grid: g1, sel: s1 }, Value::GridSel { grid: g2, sel: s2 }) => g1 == g2 && s1 == s2,
         _ => false,
     }

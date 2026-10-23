@@ -52,6 +52,8 @@ export class WorkerTransport implements EngineTransport {
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastContext: ToEngine | null = null;
   private lastSource: ToEngine | null = null;
+  /** Project files as the engine has them (`SetFiles` with the later `SetFile`s folded in). */
+  private files: { files: Record<string, string>; main?: string } | null = null;
   /** Cache keys of nodes that hung (sent as `BlockKeys` to every new worker). */
   readonly blockedKeys = new Set<string>();
   private lastProgress: Extract<FromEngine, { type: "Progress" }> | null = null;
@@ -73,6 +75,12 @@ export class WorkerTransport implements EngineTransport {
   send(msg: ToEngine): void {
     if (this.disposed) return;
     if (msg.type === "SetContext") this.lastContext = msg;
+    if (msg.type === "SetFiles") this.files = { files: { ...msg.files }, main: msg.main };
+    if (msg.type === "SetFile") {
+      this.files ??= { files: {} };
+      if (msg.text === undefined) delete this.files.files[msg.path];
+      else this.files.files[msg.path] = msg.text;
+    }
     if (msg.type === "SetSource") {
       this.lastVersion = msg.version;
       this.lastSource = msg;
@@ -178,6 +186,8 @@ export class WorkerTransport implements EngineTransport {
     this.lastProgress = null;
     const pending: ToEngine[] = [];
     if (this.blockedKeys.size) pending.push({ type: "BlockKeys", keys: [...this.blockedKeys] });
+    if (this.files) pending.push({ type: "SetFiles", files: { ...this.files.files }, main: this.files.main });
+
     if (this.lastContext) pending.push(this.lastContext);
     // With a newly blocked node the same source evaluates again (that node reports an error).
     if (fresh && this.lastSource) pending.push(this.lastSource);

@@ -7,6 +7,7 @@ import { syntaxTree } from "@codemirror/language";
 import type { EditorState, Range, Text } from "@codemirror/state";
 import { Decoration, type DecorationSet, WidgetType } from "@codemirror/view";
 import type { Diagnostic, Scene } from "../engine/protocol";
+import { diagnosticPath, fileIds, includeStatements } from "../logic/files";
 import { mapRange, type MapPos, type VersionMapper } from "../logic/positions";
 import { disabledStatements } from "./lang";
 import { type LiteralControl, LiteralControlWidget, literalAt } from "./literalControls";
@@ -20,6 +21,9 @@ export interface DecorationInput {
   viewHoverLines: number[];
   hoverLine: number | null;
   hoverRef: { from: number; to: number } | null;
+  /** Project file in the editor and the main file (default: a single file). */
+  activeFile?: string;
+  mainFile?: string;
 }
 
 type SegKind = "error" | "warning" | "info" | "hint" | "echo";
@@ -96,9 +100,26 @@ export function collectLines(doc: Text, input: DecorationInput, disabled: Array<
     for (let l = lineOf(doc, d.from); l <= lineOf(doc, d.to); l++) lineInfo(lines, l).classes.add("cm-l-disabled");
   }
 
+  // Only what belongs to the file in the editor.
+  const main = input.mainFile ?? "";
+  const active = input.activeFile ?? main;
+  const idsCache = new Map<Scene, Set<number>>();
+  const single = input.activeFile === undefined;
+  const inFile = (s: Scene, file: number | undefined) => {
+    if (single) return (file ?? 0) === 0;
+    let ids = idsCache.get(s);
+    if (!ids) {
+      ids = fileIds(s, active, main);
+      idsCache.set(s, ids);
+    }
+    return ids.has(file ?? 0);
+  };
+
   // Diagnostics (own version).
   const dmap = input.mapper.mapper(input.diagnostics.version);
   for (const d of input.diagnostics.items) {
+    if (single ? d.file !== undefined : diagnosticPath(d, main) !== active) continue;
+
     const r = mapRange(dmap, d.range.from, d.range.to);
     const line = lineOf(doc, r.from);
     const li = lineInfo(lines, line);
@@ -112,7 +133,7 @@ export function collectLines(doc: Text, input: DecorationInput, disabled: Array<
   if (input.scene) {
     const m = input.mapper.mapper(input.scene.version);
     for (const h of input.scene.hints) {
-      if (!h.in_context) continue;
+      if (!h.in_context || !inFile(input.scene, h.range.file)) continue;
       const r = mapRange(m, h.range.from, h.range.to);
       const line = lineOf(doc, r.to);
       lineInfo(lines, line).segs.push({ kind: "hint", text: `= ${h.text}` });
@@ -124,7 +145,7 @@ export function collectLines(doc: Text, input: DecorationInput, disabled: Array<
       }
     }
     for (const e of input.scene.echoes) {
-      if (!e.in_context) continue;
+      if (!e.in_context || !inFile(input.scene, e.range.file)) continue;
       const r = mapRange(m, e.range.from, e.range.to);
       lineInfo(lines, lineOf(doc, r.to)).segs.push({ kind: "echo", text: `ECHO: ${e.text}` });
     }
@@ -136,7 +157,7 @@ export function collectLines(doc: Text, input: DecorationInput, disabled: Array<
     const m: MapPos = input.mapper.mapper(c.version);
     const seen = new Map<number, Set<string>>();
     for (const n of c.nodes) {
-      if (n.stmt === null) continue;
+      if (n.stmt === null || !inFile(c, n.range.file)) continue;
       const r = mapRange(m, n.range.from, n.range.to);
       const line = lineOf(doc, r.from);
       if (n.flags.disabled) for (let l = line; l <= lineOf(doc, r.to); l++) lineInfo(lines, l).classes.add("cm-l-disabled");
@@ -157,7 +178,8 @@ export function collectLines(doc: Text, input: DecorationInput, disabled: Array<
     const ee = input.engineError;
     if (ee && ee.node !== null) {
       const n = c.nodes[ee.node];
-      if (n) {
+      if (n && inFile(c, n.range.file)) {
+
         const line = lineOf(doc, mapRange(m, n.range.from, n.range.to).from);
         const li = lineInfo(lines, line);
         li.classes.add("cm-l-error");
@@ -187,6 +209,10 @@ export function buildDecorations(state: EditorState, input: DecorationInput): De
   for (const m of marks) {
     const attributes = m.cls === "cm-ref-hover" ? { title: "Strg+Klick: zur Deklaration springen" } : undefined;
     ranges.push(Decoration.mark({ class: m.cls, attributes }).range(m.from, m.to));
+  }
+  // Paths of include/use: Ctrl+click opens the file.
+  for (const inc of includeStatements(doc.toString())) {
+    if (inc.to > inc.from) ranges.push(Decoration.mark({ class: "cm-include", attributes: { title: "Strg+Klick: Datei öffnen" } }).range(inc.from, inc.to));
   }
   return Decoration.set(ranges, true);
 }

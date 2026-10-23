@@ -8,6 +8,7 @@ use glam::DVec3;
 use serde::{Deserialize, Serialize};
 
 use crate::output::{EvalOutput, Handle, HandleKind, TextEdit};
+use crate::project::{Project, SourceText};
 use crate::value::{GridId, InstId, fmt_literal};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -82,10 +83,11 @@ fn in_src(src: &str, s: Span) -> bool {
 }
 
 /// Text edits for dragging handle `handle_id` to `target`. Empty if the handle does
-/// not exist or the target does not apply.
-pub fn drag_edits(
+/// not exist or the target does not apply. `src`: the source text (single file) or the
+/// [`Project`]; edits of a project carry global spans (their file is `span.file()`).
+pub fn drag_edits<S: SourceText + ?Sized>(
     out: &EvalOutput,
-    src: &str,
+    src: &S,
     handle_id: u64,
     target: &DragTarget,
     opts: &DragOptions,
@@ -99,7 +101,7 @@ pub fn drag_edits(
     };
     edits
         .into_iter()
-        .filter(|e| in_src(src, e.span) && src[e.span.start as usize..e.span.end as usize] != e.text)
+        .filter(|e| src.span_text(e.span).is_some_and(|t| t != e.text))
         .collect()
 }
 
@@ -340,3 +342,21 @@ pub fn set_default_edit(src: &str, file: &File, module: &str, param: &str, value
     };
     in_src(src, edit.span).then_some(edit)
 }
+
+/// [`set_default_edit`] in a project: the module is looked up in the main file (includes
+/// spliced), then in the used libraries; the edit's span is global (its file is
+/// `span.file()`).
+pub fn set_default_edit_project(proj: &Project, module: &str, param: &str, value_text: &str) -> Option<TextEdit> {
+    let path = crate::eval::find_module_path(&proj.main.stmts, module)
+        .or_else(|| proj.libs.iter().rev().find_map(|l| crate::eval::find_module_path(&l.ast.stmts, module)))?;
+    let m = path.last()?;
+    let p = m.params.iter().find(|p| p.name.name == param)?;
+    let edit = match &p.default {
+        Some(d) => TextEdit { span: d.span, text: value_text.to_string() },
+        None => {
+            TextEdit { span: Span { start: p.name.span.end, end: p.name.span.end }, text: format!(" = {value_text}") }
+        }
+    };
+    proj.span_text(edit.span).is_some().then_some(edit)
+}
+

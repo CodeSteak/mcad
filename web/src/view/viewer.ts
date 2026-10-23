@@ -16,8 +16,10 @@ import { MeshVolume, edgesInZone, facesInZones } from "../logic/zones";
 import { needsRefit } from "../logic/fit";
 import type { DragController, DragPreview, DragView } from "../app/drag";
 import { buildHandleLayer, readHandleColors, type HandleColors } from "./handleLayer";
-import { EMPTY_SELECTION, type CursorSelection } from "../logic/sceneIndex";
+import { EMPTY_SELECTION, type CursorSelection, isOff } from "../logic/sceneIndex";
+import { rangePath } from "../logic/files";
 import { bridge } from "../state/bridge";
+import { project } from "../state/project";
 import { type CadState, store } from "../state/store";
 import { Materials, readPalette } from "./materials";
 import type { MeshCache } from "./meshCache";
@@ -41,6 +43,8 @@ export interface PickResult {
   point: Vec3;
   tag: number;
   scene: Scene;
+  /** The face comes from another project file than the editor's: its file and line. */
+  other: { path: string; line: number; pos: number } | null;
 }
 
 export interface ViewState {
@@ -236,7 +240,8 @@ export class Viewer implements DragView {
       s.meshRevision !== p.meshRevision ||
       s.viewHover !== p.viewHover ||
       s.docRevision !== p.docRevision ||
-      s.drag !== p.drag
+      s.drag !== p.drag ||
+      s.hiddenParts !== p.hiddenParts
     )
       this.requestBuild();
     else if (s.hoverHandle !== p.hoverHandle) {
@@ -396,7 +401,8 @@ export class Viewer implements DragView {
     const hoverRef = hoverRefIdx !== null ? scene.refs[hoverRefIdx] : null;
     const hoverAnchor = hoverRef && hoverRef.target.kind === "anchor" ? { inst: hoverRef.target.inst, anchor: hoverRef.target.anchor } : null;
     const vh = st.viewHover && st.viewHover.sceneVersion === scene.version ? st.viewHover.nodes : [];
-    const p = makePlan({ scene, cursor: sel.nodes, hover, hoverAnchor, picked: vh });
+    const hidden = (scene.parts ?? []).filter((pt) => st.hiddenParts.includes(pt.name)).map((pt) => pt.node);
+    const p = makePlan({ scene, cursor: sel.nodes, hover, hoverAnchor, picked: vh, hidden });
     this.lastPlan = p;
     this.lastSelection = sel;
     this.lastHoverNodes = hover;
@@ -968,10 +974,19 @@ export class Viewer implements DragView {
       const point: Vec3 = [h.point.x, h.point.y, h.point.z];
       const nodes = idx.nodesForTag(tag, point);
       if (!nodes.length) continue;
-      return { nodes, lines: idx.linesOf(bridge.doc(), nodes), point, tag, scene };
+      const lines = idx.linesOf(bridge.doc(), nodes);
+      let other: PickResult["other"] = null;
+      if (!lines.length) {
+        const r = scene.nodes[nodes[0]].range;
+        other = { path: rangePath(scene, r, project.main), line: r.line, pos: r.from };
+      }
+      return { nodes, lines, point, tag, scene, other };
     }
     return null;
   }
+
+  /** Opens a position in another project file (set by the runtime). */
+  onOpenLocation: ((path: string, pos: number) => void) | null = null;
 
   private onPointerMove(e: PointerEvent): void {
     this.pointer = { x: e.clientX, y: e.clientY };
@@ -996,6 +1011,9 @@ export class Viewer implements DragView {
 
   private setViewHover(r: PickResult | null): void {
     const cur = store.getState().viewHover;
+    const other = r?.other ?? null;
+    const co = store.getState().viewHoverOther;
+    if ((co?.path ?? null) !== (other?.path ?? null) || co?.line !== other?.line) store.setState({ viewHoverOther: other });
     if (!r) {
       if (cur !== null) store.setState({ viewHover: null });
       return;
@@ -1012,7 +1030,9 @@ export class Viewer implements DragView {
     const r = this.pick(e.clientX, e.clientY);
     if (!r) return;
     const idx = bridge.index(r.scene);
-    bridge.setCursor(idx.span(r.nodes[0]).from);
+    const span = idx.span(r.nodes[0]);
+    if (isOff(span) && r.other) this.onOpenLocation?.(r.other.path, r.other.pos);
+    else bridge.setCursor(span.from);
   }
 
   private onDoubleClick(e: MouseEvent): void {
@@ -1023,9 +1043,17 @@ export class Viewer implements DragView {
       const inst = idx.instanceOfNode(n);
       if (inst === null) continue;
       const name = r.scene.instances[inst].module;
-      const mod = r.scene.modules.find((m) => m.name === name);
+      const def = r.scene.instances[inst].def_range;
+      const mod = r.scene.modules.find((m) => m.name === name && (!def || ((m.range.file ?? 0) === (def.file ?? 0) && m.range.from === def.from))) ?? r.scene.modules.find((m) => m.name === name);
       if (!mod) continue;
-      bridge.setCursor(definitionTarget(bridge.text(), idx.range(mod.body_range)));
+      if (idx.inFile(mod.body_range)) {
+        bridge.setCursor(definitionTarget(bridge.text(), idx.range(mod.body_range)));
+      } else {
+        // Module of another file (included or used): open that file at the definition.
+        const path = rangePath(r.scene, mod.body_range, project.main);
+        const text = project.text(path);
+        this.onOpenLocation?.(path, definitionTarget(text, { from: mod.body_range.from, to: mod.body_range.to }));
+      }
       return;
     }
   }
@@ -1100,7 +1128,8 @@ export class Viewer implements DragView {
     const g = this.lastGrid;
     const doc = bridge.doc();
     const idx = s ? bridge.index(s) : null;
-    const lineOf = (n: number) => (idx ? doc.lineAt(Math.min(idx.span(n).from, doc.length)).number : 0);
+    const lineOf = (n: number) => (idx && !isOff(idx.span(n)) ? doc.lineAt(Math.min(idx.span(n).from, doc.length)).number : 0);
+
     return {
       sceneVersion: s?.version ?? null,
       complete: s?.complete ?? false,

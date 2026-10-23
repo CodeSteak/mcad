@@ -18,7 +18,12 @@ type PResult<T> = Result<T, ()>;
 
 impl<'a> Parser<'a> {
     pub fn new(toks: &'a [Token]) -> Self {
-        Parser { toks, pos: 0, diags: Vec::new(), next_stmt: 0, next_expr: 0 }
+        Self::with_ids(toks, 0)
+    }
+
+    /// Statement and expression ids start at `first_id`.
+    pub fn with_ids(toks: &'a [Token], first_id: u32) -> Self {
+        Parser { toks, pos: 0, diags: Vec::new(), next_stmt: first_id, next_expr: first_id }
     }
 
     pub fn parse_file(mut self) -> (File, Vec<Diagnostic>) {
@@ -182,10 +187,10 @@ impl<'a> Parser<'a> {
                 "include" | "use" => {
                     self.bump();
                     let is_use = w == "use";
-                    let path = match self.peek().clone() {
+                    let (path, path_span) = match self.peek().clone() {
                         Tok::Path(p) => {
-                            self.bump();
-                            p
+                            let sp = self.bump().span;
+                            (p, sp)
                         }
                         _ => {
                             let sp = self.span();
@@ -195,7 +200,7 @@ impl<'a> Parser<'a> {
                     };
                     self.eat(&Tok::Semi);
                     let id = self.stmt_id();
-                    Ok(Stmt { id, span: self.span_from(start), modifiers: vec![], kind: StmtKind::Include { path, is_use } })
+                    Ok(Stmt { id, span: self.span_from(start), modifiers: vec![], kind: StmtKind::Include { path, path_span, is_use } })
                 }
                 "anchor" if matches!(self.peek_at(1), Tok::Ident(_)) && self.peek_at(2) == &Tok::Assign => {
                     self.bump();
@@ -233,7 +238,23 @@ impl<'a> Parser<'a> {
                         id,
                         span: self.span_from(start),
                         modifiers: vec![],
-                        kind: StmtKind::Named { name, inst: Box::new(inst) },
+                        kind: StmtKind::Named { name, index: None, inst: Box::new(inst) },
+                    })
+                }
+                _ if self.indexed_name_ahead() => {
+                    // `k[i]: call;` (named instance in a loop)
+                    let name = self.ident()?;
+                    self.expect(&Tok::LBracket, "`[`")?;
+                    let index = self.expr()?;
+                    self.expect(&Tok::RBracket, "`]`")?;
+                    self.expect(&Tok::Colon, "`:`")?;
+                    let inst = self.instantiation()?;
+                    let id = self.stmt_id();
+                    Ok(Stmt {
+                        id,
+                        span: self.span_from(start),
+                        modifiers: vec![],
+                        kind: StmtKind::Named { name, index: Some(index), inst: Box::new(inst) },
                     })
                 }
                 _ => self.instantiation(),
@@ -244,6 +265,29 @@ impl<'a> Parser<'a> {
                 self.error(sp, format!("Anweisung erwartet, gefunden: {}", describe(&other)));
                 Err(())
             }
+        }
+    }
+
+    /// `ident [ … ] :` ahead (indexed named instance).
+    fn indexed_name_ahead(&self) -> bool {
+        if self.peek_at(1) != &Tok::LBracket {
+            return false;
+        }
+        let mut depth = 0i32;
+        let mut n = 1;
+        loop {
+            match self.peek_at(n) {
+                Tok::LBracket | Tok::LParen | Tok::LBrace => depth += 1,
+                Tok::RBracket | Tok::RParen | Tok::RBrace => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return self.peek_at(n + 1) == &Tok::Colon;
+                    }
+                }
+                Tok::Semi | Tok::Eof => return false,
+                _ => {}
+            }
+            n += 1;
         }
     }
 
@@ -452,7 +496,7 @@ impl<'a> Parser<'a> {
                 self.error(sp, "Definition hier nicht erlaubt");
                 Err(())
             }
-            Tok::Ident(_) if self.peek_at(1) == &Tok::Colon => self.stmt(),
+            Tok::Ident(_) if self.peek_at(1) == &Tok::Colon || self.indexed_name_ahead() => self.stmt(),
             Tok::Ident(_) if self.peek_at(1) == &Tok::Assign => {
                 let sp = self.span();
                 self.error(sp, "Zuweisung als Kind nicht erlaubt");

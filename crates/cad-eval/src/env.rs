@@ -34,6 +34,9 @@ pub struct Scope<'a> {
     pub vars: Vec<(&'a str, Binding<'a>)>,
     pub funcs: Vec<(&'a str, &'a FunctionDef)>,
     pub modules: Vec<(&'a str, &'a ModuleDef)>,
+    /// File scopes of libraries made visible by `use` (file roots only): their own modules
+    /// and functions are found after this scope's, the last `use` first.
+    pub uses: Vec<Env<'a>>,
     pub parent: Option<Env<'a>>,
     /// `$` variables in effect for code of this scope (used to force lazy bindings).
     pub dyn_: Dyn<'a>,
@@ -55,6 +58,7 @@ impl<'a> Env<'a> {
             vars: Vec::new(),
             funcs: Vec::new(),
             modules: Vec::new(),
+            uses: Vec::new(),
             parent: parent.cloned(),
             dyn_,
             inst,
@@ -109,6 +113,10 @@ impl<'a> Env<'a> {
         self.0.borrow().vars.iter().any(|(n, _)| *n == name)
     }
 
+    pub fn set_uses(&self, uses: Vec<Env<'a>>) {
+        self.0.borrow_mut().uses = uses;
+    }
+
     pub fn set_dyn(&self, d: Dyn<'a>) {
         self.0.borrow_mut().dyn_ = d;
     }
@@ -125,6 +133,11 @@ impl<'a> Env<'a> {
                 if let Some((_, f)) = s.funcs.iter().rev().find(|(n, _)| *n == name) {
                     return Some((*f, e.clone()));
                 }
+                for u in s.uses.iter().rev() {
+                    if let Some((_, f)) = u.0.borrow().funcs.iter().rev().find(|(n, _)| *n == name) {
+                        return Some((*f, u.clone()));
+                    }
+                }
                 s.parent.clone()
             };
             cur = next;
@@ -139,6 +152,11 @@ impl<'a> Env<'a> {
                 let s = e.0.borrow();
                 if let Some((_, m)) = s.modules.iter().rev().find(|(n, _)| *n == name) {
                     return Some((*m, e.clone()));
+                }
+                for u in s.uses.iter().rev() {
+                    if let Some((_, m)) = u.0.borrow().modules.iter().rev().find(|(n, _)| *n == name) {
+                        return Some((*m, u.clone()));
+                    }
                 }
                 s.parent.clone()
             };
@@ -159,6 +177,8 @@ impl<'a> Env<'a> {
             s.vars.clear();
             s.dyn_ = None;
             s.parent = None;
+            s.uses.clear();
+
         }
     }
 }

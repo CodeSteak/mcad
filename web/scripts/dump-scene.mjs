@@ -1,10 +1,11 @@
 // Prints the complete scene (JSON) of a .scad file, evaluated with the browser engine in Node.
 //
-//   node web/scripts/dump-scene.mjs <file.scad> [--module name] [--meshes] [--summary]
+//   node web/scripts/dump-scene.mjs <file.scad> [--module name] [--meshes] [--summary] [--project]
 //
-// Used to inspect scenes and to write Vitest fixtures.
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+// Used to inspect scenes and to write Vitest fixtures. `--project`: every .scad file below the
+// file's folder is a project file (`SetFiles`; include/use resolve relative to the file).
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -28,6 +29,20 @@ const run = () => {
   while (s.busy()) out.push(...s.step(1000));
 };
 if (module) s.post({ type: "SetContext", module, overrides: {} });
+if (args.includes("--project")) {
+  const root = dirname(file);
+  const files = {};
+  const walk = (d) => {
+    for (const n of readdirSync(d)) {
+      const p = join(d, n);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (n.endsWith(".scad") && p !== file) files[relative(root, p).split("\\").join("/")] = readFileSync(p, "utf8");
+    }
+  };
+  walk(root);
+  s.post({ type: "SetFiles", files, main: basename(file) });
+}
+
 out.push(...s.post({ type: "SetSource", text: readFileSync(file, "utf8"), version: 1 }));
 run();
 const scene = out.filter((m) => m.type === "Scene").at(-1);

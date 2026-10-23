@@ -182,7 +182,11 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     let mut all_same = true;
     let mut totals: BTreeMap<&'static str, usize> = BTreeMap::new();
     if !SolidcoreKernel::available() {
-        text.push_str("Hinweis: cad ohne Feature `solidcore` gebaut, jede Operation ist Unsupported\n");
+        return Err(Fail::Usage(
+            "diff-kernels braucht solidcore: cad mit `--features solidcore` bauen \
+             (cargo build -p cad-cli --features solidcore)"
+                .into(),
+        ));
     }
     for f in files {
         let src = std::fs::read_to_string(f).map_err(|e| Fail::Usage(format!("{}: {e}", f.display())))?;

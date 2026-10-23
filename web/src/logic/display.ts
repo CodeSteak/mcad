@@ -114,6 +114,36 @@ export interface PlanInput {
   hoverAnchor?: { inst: number; anchor: number } | null;
   /** Nodes under the mouse in the view. */
   picked?: number[];
+  /** Hidden parts (their `ModuleCall` nodes): the model is drawn without them. */
+  hidden?: number[];
+}
+
+/**
+ * Nodes that draw the model without the `hidden` subtrees: the root is split through groups
+ * and transforms down to the subtrees without hidden nodes (other operations stay whole).
+ */
+export function visiblePieces(scene: Scene, hidden: number[]): SceneNode[] {
+  if (scene.root === null) return [];
+  const hide = new Set(hidden);
+  const containsHidden = new Map<number, boolean>();
+  const contains = (n: SceneNode): boolean => {
+    const c = containsHidden.get(n.idx);
+    if (c !== undefined) return c;
+    const v = hide.has(n.idx) || n.children.some((k) => contains(scene.nodes[k]));
+    containsHidden.set(n.idx, v);
+    return v;
+  };
+  const out: SceneNode[] = [];
+  const walk = (n: SceneNode, depth: number) => {
+    if (hide.has(n.idx) || n.flags.disabled) return;
+    if (!contains(n) || depth > 64 || !(PASS.has(n.label) || n.idx === scene.root)) {
+      if (hasGeometry(n)) out.push(n);
+      return;
+    }
+    for (const c of visibleChildren(scene, n)) if (!c.flags.background && !c.flags.zone) walk(c, depth + 1);
+  };
+  walk(scene.nodes[scene.root], 0);
+  return out;
 }
 
 const TRANSFORMS = new Set(["translate", "rotate", "scale", "mirror", "multmatrix"]);
@@ -274,7 +304,15 @@ export function plan(input: PlanInput): Plan {
 
   const cursor = input.cursor.map((i) => nodes[i]).filter((n) => n && n.idx !== scene.root);
   const cursorGeo = cursor.filter(hasGeometry);
-  const base: DrawItem | null = root && hasGeometry(root) ? item(root, cursorGeo.length ? "dim" : "full", "Modell") : null;
+  const hidden = input.hidden ?? [];
+  let base: DrawItem | null = root && hasGeometry(root) ? item(root, cursorGeo.length ? "dim" : "full", "Modell") : null;
+  if (base && hidden.length) {
+    // Hidden parts: the model in pieces without them.
+    const mode = base.mode;
+    base = null;
+    for (const n of visiblePieces(scene, hidden)) items.push(item(n, mode, "Modell ohne ausgeblendete Bauteile"));
+  }
+
 
   // Cursor line: the node full, plus what its kind shows.
   for (const n of cursor) {

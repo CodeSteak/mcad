@@ -7,8 +7,9 @@ publish.workspace = true
 description = "cad_kernel::Kernel over solidcore (Rust port of SMLib), as far as its public API reaches today"
 
 [features]
-default = ["solidcore"]
-# Without it the crate builds without solidcore and every operation is Unsupported.
+# Opt-in: without it the crate builds without solidcore (nothing of it is compiled) and every
+# operation is Unsupported.
+default = []
 solidcore = ["dep:solidcore"]
 
 [dependencies]

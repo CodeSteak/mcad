@@ -215,7 +215,8 @@ Ziel: Typische Hobby-Dateien laufen ohne Änderung, solange sie keine Mesh-Opera
 | --- | --- |
 | Voll | Syntax, Variablen, Funktionen und Funktionsliterale, Module, `children()`, `for`, `if`, `let`, `each`, Listenausdrücke, Strings, Bereiche, `echo`, `assert`, Mathefunktionen, `cube`, `sphere`, `cylinder`, `square`, `circle`, `polygon`, Transformationen, Booleans, Modifier, `linear_extrude`, `rotate_extrude` |
 | Mit Abweichung | `color()` nur als Anzeigefarbe; `$fn/$fa/$fs` siehe Abschnitt 11; `polyhedron` nur für kleine Körper mit ebenen Flächen; `resize` als `scale` mit denselben Regeln |
-| Später | `include`/`use` (mit Projekten aus mehreren Dateien), `text()` (Schriften), `offset()` in 2D, `hull()` |
+| Voll (Projekte) | `include`/`use` mit Projekten aus mehreren Dateien (Pfade relativ zur einbindenden Datei; ohne Suchpfad `OPENSCADPATH`) |
+| Später | `text()` (Schriften), `offset()` in 2D, `hull()` |
 | Nicht vorgesehen | `minkowski`, `projection`, `import` von Meshes, `surface()` als Höhenkarte (der Name ist in der Spec für NURBS-Flächen vergeben) |
 
 Ein Korpus von `.scad`-Dateien (Lizenzen vorher prüfen) läuft in CI über die CLI. Gemessen wird pro Datei: parst, wertet aus, erzeugt Geometrie.
@@ -395,14 +396,14 @@ CI: GitHub Actions; SMLib-Wasm und SMLib-nativ als gecachte Build-Artefakte.
 Vorschläge, wie der Plan sie bis zur Klärung behandelt:
 
 1. **`g.name` ist Zahl oder Ebene.** In `mirror(g.deckel)` eine Ebene, in Ausdrücken eine Zahl. Vorschlag: Typ `PlaneRef`, der sich nach dem erwarteten Argumenttyp umwandelt.
-2. **Benannte Instanzen in Schleifen.** `k: gehaeuse();` innerhalb von `for` ist nicht definiert. Vorschlag: zunächst Fehler; später `k[i]`.
+2. **Benannte Instanzen in Schleifen.** `k: gehaeuse();` innerhalb von `for` ist nicht definiert. Umgesetzt: `k: …` in `for` ist ein Fehler; `k[i]: …` benennt die Instanzen mit ganzzahligem Index (`k[2].anker`, Snap schreibt `k[2].ecke`).
 3. **`$fn` aus OpenSCAD.** In OpenSCAD erzeugt `cylinder(r = 5, $fn = 6)` ein Sechseck, das wird oft für Muttern genutzt. Ein globales `$fn = 100` ist dagegen nur für glatte Darstellung gedacht. Vorschlag: `$fn` zwischen 3 und 12 am Aufruf erzeugt ein Prisma wie in OpenSCAD; sonst exakte Geometrie und ein Hinweis.
 4. **Länge von `zone(linie, d)`.** Eine Rasterlinie ist unendlich. Vorschlag: auf die Hülle des Körpers plus `d` begrenzt.
 5. **Ziehen an Standardparametern.** Kommt ein Wert aus einem Standardparameter (`w = 40`) und der Aufruf überschreibt ihn nicht, ändert Ziehen den Standardwert und damit alle Aufrufe. Vorschlag: zulassen, Griff anders einfärben.
 6. **Fillets unter `scale`.** Fillet im lokalen System, danach Transformation. Passt zur Architektur.
 7. **2D-Formen mit z-Abweichung.** Warnung laut Spec; projiziert wird in die xy-Ebene des aktuellen Systems.
 8. **Alt-Schrittweite** (Offener Punkt 1): einstellbar, Standard 1 mm und 15°.
-9. **Mehrere Bauteile** (Offener Punkt 2): später. Vorschlag zur Diskussion: benannte Instanzen auf oberster Ebene sind Bauteile und bestimmen die Exportnamen.
+9. **Mehrere Bauteile** (Offener Punkt 2): umgesetzt nach dem Vorschlag – benannte Instanzen auf oberster Ebene der Hauptdatei sind Bauteile und bestimmen die Exportnamen (Export pro Bauteil als STL/3MF/STEP, mehrere als ZIP oder als 3MF mit einem Objekt je Bauteil; CLI `export --part`, `--all-parts`). Baugruppen bleiben offen.
 
 ---
 

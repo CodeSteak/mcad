@@ -22,17 +22,19 @@
 pub mod convert;
 pub mod protocol;
 
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::rc::Rc;
 
-use cad_engine::{Budget, Engine, EngineConfig, Evaluation, Job, Step};
-use cad_eval::{Context, DragOptions, EvalOptions, EvalOutput};
+use cad_engine::{Budget, CacheKey, Engine, EngineConfig, Evaluation, Job, NodeFormat, Step};
+use cad_eval::{Context, DragOptions, EvalOptions, EvalOutput, Project};
 use cad_ir::NodeIdx;
 use cad_kernel::{Kernel, MassProps, Mesh};
 
 use convert::{KernelInfo, SceneInput, Source};
 use protocol::{self as p, FromEngine, ToEngine};
 
+pub use cad_engine::part_file_name;
+pub use cad_eval::{FileResolver, FsResolver};
 pub use protocol::PROTOCOL_VERSION;
 
 /// Monotonic clock in milliseconds.
@@ -68,6 +70,8 @@ impl Default for SessionOptions {
 pub struct Current {
     pub version: u64,
     pub src: Source,
+    /// The loaded project (main file, included and used files).
+    pub proj: Project,
     pub out: EvalOutput,
     pub eval_ms: f64,
     /// Syntax and evaluation diagnostics (protocol form).
@@ -85,6 +89,13 @@ struct Running<S> {
     job: Job<S>,
     version: u64,
     kernel_ms: f64,
+}
+
+#[derive(Debug, Clone)]
+struct ExportReq {
+    format: p::ExportFormat,
+    parts: Option<Vec<String>>,
+    zip: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -108,9 +119,17 @@ pub struct Session<K: Kernel> {
     done: Option<Done<K::Shape>>,
     drag: Option<u64>,
     mesh_queue: VecDeque<MeshReq>,
-    export: Option<p::ExportFormat>,
+    export: VecDeque<ExportReq>,
     /// (key, coarse) of the root mesh sent last.
     last_root_mesh: Option<(String, bool)>,
+    /// Project files besides the main file (`SetFiles`/`SetFile`).
+    files: BTreeMap<String, String>,
+    /// Path of the main file (includes resolve relative to it).
+    main_path: String,
+    /// Reads project files instead of `files` (CLI: the file system).
+    resolver: Option<Box<dyn FileResolver>>,
+    /// Volumes of parts by node key (kernel mass properties are not free).
+    part_volumes: HashMap<CacheKey, Option<f64>>,
 }
 
 impl<K: Kernel> Session<K>
@@ -134,8 +153,31 @@ where
             done: None,
             drag: None,
             mesh_queue: VecDeque::new(),
-            export: None,
+            export: VecDeque::new(),
             last_root_mesh: None,
+            files: BTreeMap::new(),
+            main_path: "main.scad".into(),
+            resolver: None,
+            part_volumes: HashMap::new(),
+        }
+    }
+
+    /// Reads project files through `resolver` instead of the files given with `SetFiles`
+    /// (CLI: the directory of the main file). `main_path`: the main file's project path.
+    pub fn set_resolver(&mut self, resolver: Box<dyn FileResolver>, main_path: &str) {
+        self.resolver = Some(resolver);
+        self.main_path = cad_eval::normalize_path(main_path);
+    }
+
+    /// Path of the main file.
+    pub fn main_path(&self) -> &str {
+        &self.main_path
+    }
+
+    fn load_project(&self, text: &str) -> Project {
+        match &self.resolver {
+            Some(r) => Project::load(&self.main_path, text, r.as_ref()),
+            None => Project::load(&self.main_path, text, &self.files),
         }
     }
 
@@ -163,7 +205,7 @@ where
 
     /// Kernel job, mesh or export work pending: call [`Session::step`].
     pub fn busy(&self) -> bool {
-        self.running.is_some() || !self.mesh_queue.is_empty() || (self.export.is_some() && self.done.is_some())
+        self.running.is_some() || !self.mesh_queue.is_empty() || (!self.export.is_empty() && self.done.is_some())
     }
 
     pub fn drag_active(&self) -> bool {
@@ -178,6 +220,25 @@ where
                 self.version = version;
                 self.has_source = true;
                 self.reevaluate()
+            }
+            ToEngine::SetFiles { files, main } => {
+                self.files = files.into_iter().map(|(k, v)| (cad_eval::normalize_path(&k), v)).collect();
+                if let Some(m) = main {
+                    self.main_path = cad_eval::normalize_path(&m);
+                }
+                Vec::new()
+            }
+            ToEngine::SetFile { path, text } => {
+                let path = cad_eval::normalize_path(&path);
+                match text {
+                    Some(t) => {
+                        self.files.insert(path, t);
+                    }
+                    None => {
+                        self.files.remove(&path);
+                    }
+                }
+                Vec::new()
             }
             ToEngine::SetContext { module, overrides } => {
                 self.context = match module {
@@ -249,27 +310,27 @@ where
                 Vec::new()
             }
             ToEngine::SetDefault { module, param, value } => {
-                let (file, _) = cad_syntax::parse(&self.text);
+                let proj = self.load_project(&self.text);
                 let text = convert::value_text(&value);
-                match cad_eval::set_default_edit(&self.text, &file, &module, &param, &text) {
+                match cad_eval::set_default_edit_project(&proj, &module, &param, &text) {
                     Some(e) => {
-                        let src = Source::new(self.text.clone());
+                        let src = Source::from_project(&proj);
                         vec![FromEngine::Edits { version: self.version, edits: vec![src.edit(&e)] }]
                     }
                     None => vec![self.error(&format!("Parameter {param} von Modul {module} nicht gefunden"), None)],
                 }
             }
-            ToEngine::Export { format } => {
+            ToEngine::Export { format, parts, zip } => {
                 if self.done.is_none() && self.running.is_none() {
                     return vec![self.error("keine Auswertung vorhanden", None)];
                 }
-                self.export = Some(format);
+                self.export.push_back(ExportReq { format, parts, zip: zip.unwrap_or(false) });
                 Vec::new()
             }
             ToEngine::Cancel => {
                 self.running = None;
                 self.mesh_queue.clear();
-                self.export = None;
+                self.export.clear();
                 Vec::new()
             }
             ToEngine::BlockKeys { keys } => {
@@ -298,8 +359,10 @@ where
     /// Parse + evaluate the latest text; start a kernel job.
     fn reevaluate(&mut self) -> Vec<FromEngine> {
         let t0 = (self.clock)();
-        let (file, parse_diags) = cad_syntax::parse(&self.text);
-        let src = Source::new(self.text.clone());
+        // Main file, included and used files (syntax errors of any of them keep the last scene).
+        let proj = self.load_project(&self.text);
+        let src = Source::from_project(&proj);
+        let parse_diags = proj.syntax.clone();
         if parse_diags.iter().any(|d| d.severity == cad_syntax::Severity::Error) {
             // Keep the last scene and the running job (it belongs to the last valid source).
             return vec![FromEngine::Diagnostics {
@@ -307,7 +370,7 @@ where
                 items: convert::lang_diagnostics(&src, &parse_diags, p::DiagSource::Syntax),
             }];
         }
-        let mut out = cad_eval::eval(&self.text, &file, &self.eval_options());
+        let mut out = cad_eval::eval_project(&proj, &self.eval_options());
         let eval_ms = (self.clock)() - t0;
         let mut items = convert::lang_diagnostics(&src, &parse_diags, p::DiagSource::Syntax);
         items.extend(convert::lang_diagnostics(&src, &out.diagnostics, p::DiagSource::Eval));
@@ -320,13 +383,14 @@ where
         let job = self.engine.start(out.tree.clone());
         let keys: Vec<_> = (0..job.tree().nodes.len() as u32).map(|n| job.key(n)).collect();
         let tags: Vec<u32> = (0..job.tree().nodes.len() as u32).map(|n| job.tag(n)).collect();
-        let cur = Current { version: self.version, src, out, eval_ms, lang_diagnostics: items.clone() };
+        let cur = Current { version: self.version, src, proj, out, eval_ms, lang_diagnostics: items.clone() };
         let scene = convert::scene(SceneInput {
             version: self.version,
             src: &cur.src,
             out: &cur.out,
             kernel: KernelInfo::<K::Shape>::Pending { keys: &keys, tags: &tags },
             stats: p::Stats { eval_ms, eval_steps: cur.out.steps as u32, ..Default::default() },
+            project: Some(convert::ProjectInfo { main_path: &self.main_path, proj: &cur.proj, part_volumes: &[] }),
         });
         let progress = FromEngine::Progress {
             version: self.version,
@@ -363,7 +427,7 @@ where
             p::DragTarget::Value { value } => cad_eval::DragTarget::Free(cad_eval::DragValue::Scalar(*value)),
             p::DragTarget::Snap { snap } => cad_eval::DragTarget::Snap(snap_ref_from_p(snap)),
         };
-        let edits = cad_eval::drag_edits(&cur.out, &cur.src.text, handle, &t, &self.opts.drag);
+        let edits = cad_eval::drag_edits(&cur.out, &cur.proj, handle, &t, &self.opts.drag);
         if edits.is_empty() {
             return Vec::new();
         }
@@ -415,9 +479,10 @@ where
             res.push(FromEngine::Meshes { version: items_version, items });
         }
         if res.is_empty()
-            && let Some(fmt) = self.export.take()
+            && self.done.is_some()
+            && let Some(req) = self.export.pop_front()
         {
-            res.push(self.do_export(fmt));
+            res.push(self.do_export(req));
         }
         res
     }
@@ -431,7 +496,36 @@ where
         res
     }
 
+    /// Volumes of the parts of the current evaluation (cached by node key).
+    fn part_volumes(&mut self, ev: &Evaluation<K::Shape>) -> Vec<Option<f64>> {
+        let Some(cur) = self.cur.as_ref() else { return Vec::new() };
+        let nodes: Vec<u32> = cur.out.parts.iter().map(|p| p.node).collect();
+        let mut out = Vec::with_capacity(nodes.len());
+        for n in nodes {
+            let rep = ev.report(n);
+            if rep.dim != Some(cad_ir::Dim::Three) || rep.status == cad_engine::Status::Skipped {
+                out.push(None);
+                continue;
+            }
+            let key = rep.key;
+            let v = match self.part_volumes.get(&key) {
+                Some(v) => *v,
+                None => {
+                    let v = self.engine.mass_props(ev, n).ok().map(|m| m.volume);
+                    if self.part_volumes.len() > 4096 {
+                        self.part_volumes.clear();
+                    }
+                    self.part_volumes.insert(key, v);
+                    v
+                }
+            };
+            out.push(v);
+        }
+        out
+    }
+
     fn finish(&mut self, ev: Evaluation<K::Shape>, r: Running<K::Shape>) -> Vec<FromEngine> {
+        let volumes = self.part_volumes(&ev);
         let cur = self.cur.as_ref().expect("finished job without source");
         let stats = p::Stats {
             eval_ms: cur.eval_ms,
@@ -449,6 +543,7 @@ where
             out: &cur.out,
             kernel: KernelInfo::Done(&ev),
             stats,
+            project: Some(convert::ProjectInfo { main_path: &self.main_path, proj: &cur.proj, part_volumes: &volumes }),
         });
         let mut items = cur.lang_diagnostics.clone();
         items.extend(convert::kernel_diagnostics(&cur.src, &ev));
@@ -537,9 +632,19 @@ where
         Ok(out)
     }
 
-    fn do_export(&mut self, format: p::ExportFormat) -> FromEngine {
-        match self.export_bytes(format) {
-            Ok((bytes, triangles)) => FromEngine::ExportResult { format, bytes, triangles },
+    fn do_export(&mut self, req: ExportReq) -> FromEngine {
+        let res = match &req.parts {
+            None => self.export_bytes(req.format),
+            Some(names) => self.export_parts(req.format, names, req.zip),
+        };
+        match res {
+            Ok((bytes, triangles)) => FromEngine::ExportResult {
+                format: req.format,
+                bytes,
+                triangles,
+                parts: req.parts,
+                zip: req.zip.then_some(true),
+            },
             Err(e) => self.error(&e, None),
         }
     }
@@ -562,6 +667,52 @@ where
         Ok((bytes, tris))
     }
 
+    /// Parts of the last finished evaluation (`Scene.parts`), by name.
+    pub fn parts(&self) -> Vec<(String, NodeIdx)> {
+        self.cur.as_ref().map(|c| c.out.parts.iter().map(|p| (p.name.clone(), p.node)).collect()).unwrap_or_default()
+    }
+
+    /// Export of named parts of the last finished evaluation: STL (all in one file), 3MF (one
+    /// object per part), STEP (one product with their bodies, the same writer as
+    /// [`Session::export_step`]); `zip`: one file per part in a ZIP package. (bytes, triangles)
+    pub fn export_parts(&mut self, format: p::ExportFormat, names: &[String], zip: bool) -> Result<(Vec<u8>, u32), String> {
+        self.export_parts_with(format, names, zip, &cad_engine::StepOptions::default())
+    }
+
+    /// [`Session::export_parts`] with STEP options (schema, header).
+    pub fn export_parts_with(
+        &mut self,
+        format: p::ExportFormat,
+        names: &[String],
+        zip: bool,
+        step: &cad_engine::StepOptions,
+    ) -> Result<(Vec<u8>, u32), String> {
+        let tol = Some(self.opts.export_tol);
+        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+        let cur = self.cur.as_ref().filter(|c| c.version == d.version).ok_or("Auswertung läuft noch")?;
+        let mut nodes = Vec::new();
+        for n in names {
+            match cur.out.part(n) {
+                Some(pt) => nodes.push((pt.name.clone(), pt.node)),
+                None => {
+                    let known: Vec<&str> = cur.out.parts.iter().map(|p| p.name.as_str()).collect();
+                    let known = if known.is_empty() { "keine".to_string() } else { known.join(", ") };
+                    return Err(format!("Bauteil `{n}` nicht gefunden (Bauteile: {known})"));
+                }
+            }
+        }
+        let fmt = match format {
+            p::ExportFormat::Stl => NodeFormat::Stl,
+            p::ExportFormat::ThreeMf => NodeFormat::ThreeMf,
+            p::ExportFormat::Step => NodeFormat::Step,
+        };
+        if zip {
+            self.engine.export_nodes_zip_with(&d.ev, &nodes, fmt, tol, step)
+        } else {
+            self.engine.export_nodes_with(&d.ev, &nodes, fmt, tol, step)
+        }
+    }
+
     /// STEP export of the root of the last finished evaluation, with what was written.
     pub fn export_step(
         &mut self,
@@ -571,6 +722,7 @@ where
         self.engine.export_step(&d.ev, opts)
     }
 }
+
 
 fn node_ref<S>(cur: &Current, n: NodeIdx, job: &Job<S>) -> p::NodeRef {
     let node = cur.out.tree.node(n);

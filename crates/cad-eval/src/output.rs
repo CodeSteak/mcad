@@ -326,11 +326,28 @@ pub struct RefInfo {
     pub target: RefTarget,
 }
 
+/// A part (Plan 12.9): a named instance at the top level of the main file (`deckel: deckel();`,
+/// also `k[i]: …` in a loop). Parts give the export names.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PartInfo {
+    /// `deckel`, `k[2]`.
+    pub name: String,
+    pub inst: InstId,
+    /// `ModuleCall` node of the instance.
+    pub node: NodeIdx,
+    /// The named statement.
+    pub stmt: StmtId,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct EvalOutput {
     pub tree: Tree,
     pub diagnostics: Vec<Diagnostic>,
     pub hints: Vec<Hint>,
+    /// Parts in declaration order (file context only).
+    #[serde(default)]
+    pub parts: Vec<PartInfo>,
     pub grids: Vec<GridInfo>,
     /// Module instances; index = id, 0 = context root.
     pub instances: Vec<InstanceInfo>,
@@ -353,7 +370,12 @@ impl EvalOutput {
         self.handles.iter().find(|h| h.id == id)
     }
 
+    pub fn part(&self, name: &str) -> Option<&PartInfo> {
+        self.parts.iter().find(|p| p.name == name)
+    }
+
     pub fn grid_by_name(&self, name: &str) -> Option<&GridInfo> {
+
         self.grids.iter().find(|g| g.name == name)
     }
 

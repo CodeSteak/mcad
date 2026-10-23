@@ -11,10 +11,15 @@ Stand: 2026-10-23 · solidcore `main` @ `3a6a50b` (tangency-labs/solidcore, Apac
   (`rust-toolchain.toml`); diese Datei gilt nicht für abhängige Crates. Mit unserem Stand
   (Rust 1.97) baut solidcore ohne Änderung (Release ca. 3 min, Debug mit `opt-level = 2` für
   Abhängigkeiten ca. 6 min, einmalig).
-- **Feature `solidcore`** (Standard in `kernel-solidcore` und `cad-cli`). Ohne das Feature
-  (`--no-default-features`) wird solidcore nicht kompiliert; jede Operation meldet dann
-  `Unsupported("solidcore: … (built without feature `solidcore`)")`. Der git-Eintrag wird
-  für `Cargo.lock` trotzdem aufgelöst (einmal Netz nötig).
+- **Feature `solidcore`** (opt-in in `kernel-solidcore` und `cad-cli`, Standard aus): ein
+  normaler Build (`cargo build`, `cargo test --workspace`) kompiliert solidcore nicht; jede
+  Operation von `kernel-solidcore` meldet dann
+  `Unsupported("solidcore: … (built without feature `solidcore`)")`, und `cad diff-kernels`
+  bricht mit „diff-kernels braucht solidcore: cad mit `--features solidcore` bauen“ ab
+  (Exit-Code 2). Für den Vergleich: `cargo build -p cad-cli --features solidcore`, Tests mit
+  `cargo test -p cad-cli --features solidcore` bzw. `cargo test -p kernel-solidcore
+  --features solidcore`. Der git-Eintrag steht weiter in `Cargo.lock` (Auflösung einmal mit
+  Netz).
 - **Was heute geht:** nichts Durchgängiges. Alle Primitive (`make_box`, `make_sphere`,
   `make_cylinder`, Kegel, `make_torus`) brechen in solidcore mit
   `SolidError::Unported` ab: `SmSurface::DropCurve` (Unit `intersect.surface_drop_lib_p3`)
@@ -62,5 +67,6 @@ weiter bestehen (dafür braucht `kernel-solidcore` noch `tessellate` und `brep`)
 
 Heutiger Lauf über die 46 Beispiele (Testbericht 5): 855 Knoten, 101 gleich (2D-Knoten ohne
 Kernel), 267 unsupported, 487 blockiert, 0 abweichend, 0 gescheitert. Der Test
-`diff_kernels_on_examples` (`crates/cad-cli/tests/cli.rs`) prüft, dass der Vergleich über alle
-Beispiele ohne Absturz durchläuft.
+`diff_kernels_on_examples` (`crates/cad-cli/tests/cli.rs`, nur mit `--features solidcore`)
+prüft, dass der Vergleich über alle Beispiele ohne Absturz durchläuft; ohne das Feature prüft
+`diff_kernels_needs_the_feature` den Hinweis zum Bauen.

@@ -61,12 +61,23 @@ export class EngineClient {
    */
   setSource(text: string, editAt?: number): number {
     const version = ++this.version;
-    bridge.mapper.mark(version, text.length);
+    // The mapper follows the document in the editor (the main file or another project file).
+    bridge.mapper.mark(version, bridge.doc().length);
     if (editAt !== undefined) bridge.editTimes.set(version, editAt);
     this.sentAt.set(version, performance.now());
     store.setState({ sentVersion: version, pendingSend: false });
     this.send({ type: "SetSource", text, version });
     return version;
+  }
+
+  /** Project files besides the main file (sent before the next `SetSource`). */
+  setFiles(files: Record<string, string>, main: string): void {
+    this.send({ type: "SetFiles", files, main });
+  }
+
+  /** One project file changed (`null`: removed). */
+  setFile(path: string, text: string | null): void {
+    this.send(text === null ? { type: "SetFile", path } : { type: "SetFile", path, text });
   }
 
   /** Module context with the parameter bar's temporary values (Spec: Parameterleiste). */
@@ -78,7 +89,7 @@ export class EngineClient {
     this.send(module === null ? { type: "SetContext", overrides: {} } : { type: "SetContext", module, overrides });
     // Re-send the source with a fresh version: the scene of the new context must not share
     // its version with the previous context's scene.
-    if (this.version > 0 && !store.getState().pendingSend) this.setSource(bridge.text());
+    if (this.version > 0 && !store.getState().pendingSend) this.setSource(bridge.mainText());
   }
 
   /** Requests the meshes of `nodes` of the latest complete scene that are not cached yet. */
@@ -101,12 +112,14 @@ export class EngineClient {
     if (want.length) this.send({ type: "RequestMeshes", nodes: want, version: scene.version, coarse });
   }
 
-  exportFile(format: ExportFormat): Promise<ExportResult> {
+  /** Export of the model, or of parts (`zip`: one file per part in a ZIP). */
+  exportFile(format: ExportFormat, parts?: string[], zip = false): Promise<ExportResult> {
     return new Promise((resolve, reject) => {
       this.exportWaiters.push({ resolve, reject });
-      this.send({ type: "Export", format });
+      this.send(parts ? { type: "Export", format, parts, zip } : { type: "Export", format });
     });
   }
+
 
   private receive(m: FromEngine): void {
     switch (m.type) {

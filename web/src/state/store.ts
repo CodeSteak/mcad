@@ -67,8 +67,34 @@ export interface DragInfo {
   axis: number | null;
 }
 
+/** What the UI shows of the open project (the texts are in `state/project.ts`). */
+export interface ProjectView {
+  name: string;
+  /** Main file (what is evaluated). */
+  main: string;
+  /** File shown in the editor. */
+  active: string;
+  /** All files, main file first. */
+  paths: string[];
+  /** Opened from a folder (saving writes back). */
+  folder: boolean;
+}
+
+/** Face under the mouse in the view that comes from another file than the editor's. */
+export interface ViewHoverOther {
+  path: string;
+  line: number;
+  /** Character offset of the statement in that file (click target). */
+  pos: number;
+}
+
 export interface CadState {
+  /** Main file name (path bar, export names). */
   fileName: string;
+  project: ProjectView;
+  /** Parts (`Scene.parts`) hidden in the view. */
+  hiddenParts: string[];
+  viewHoverOther: ViewHoverOther | null;
   /** Number of editor document changes. */
   docVersion: number;
   /** Version of the last source sent to the engine (unique per evaluation request). */
@@ -146,6 +172,10 @@ function initialTheme(): Theme {
 
 export const store = createStore<CadState>(() => ({
   fileName: "unbenannt.scad",
+  project: { name: "Projekt", main: "unbenannt.scad", active: "unbenannt.scad", paths: ["unbenannt.scad"], folder: false },
+  hiddenParts: [],
+  viewHoverOther: null,
+
   docVersion: 0,
   sentVersion: 0,
   pendingSend: false,

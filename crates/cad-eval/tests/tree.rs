@@ -386,7 +386,7 @@ fn unsupported_operations_keep_children() {
 #[test]
 fn unknown_module_and_include() {
     let out = run("include <x.scad>\nfoo(1); cube(1) sphere(1);");
-    assert!(has_warning(&out, "`include` noch nicht unterstützt"));
+    assert!(has_error(&out, "Datei `x.scad` nicht gefunden"));
     assert!(has_warning(&out, "unbekanntes Modul `foo`"));
     assert!(has_warning(&out, "`cube()` nimmt keine Kinder"));
 }

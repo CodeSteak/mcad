@@ -10,8 +10,8 @@
 
 import type { EngineClient } from "../engine/client";
 import type { DragTarget, Edit, SnapTarget, Vec3 } from "../engine/protocol";
-import { mapEdits } from "../editor/applyEdits";
-import { EditGroup } from "../editor/editGroup";
+import { mapEdits, mapEditsPlain } from "../editor/applyEdits";
+import { EditGroup, type EditTarget } from "../editor/editGroup";
 import { type AxisLock, DragQueue, axisFromMotion, axisLine, dragStep, lockableAxes } from "../logic/drag";
 import { type HandleGeom, type Ray, type ScreenPoint, alignTargets, toLocal } from "../logic/handles";
 import { bridge } from "../state/bridge";
@@ -73,9 +73,27 @@ interface Active {
 /** Longest wait for the scene of a drag edit before the next position is sent. */
 const SCENE_WAIT_MS = 1500;
 
+/**
+ * Project files: edits may change another file than the one in the editor (a literal in an
+ * included file). Default: a single file in the editor.
+ */
+export interface DragFiles {
+  /** Edit target of a file (the editor for the file shown). */
+  target(path: string): EditTarget | null;
+  /** File an edit applies to. */
+  fileOf(e: Edit): string;
+  /** File shown in the editor. */
+  active(): string;
+}
+
+const SINGLE_FILE: DragFiles = { target: () => bridge.view, fileOf: () => "", active: () => "" };
+
 export class DragController {
   private a: Active | null = null;
-  private group = new EditGroup(() => bridge.view, "input.drag");
+  /** One undo group per changed file (one undo step each, Spec: Griffe, Regel 6). */
+  private groups = new Map<string, EditGroup>();
+  /** Live edits applied in this drag (all files). */
+  private applied = 0;
   /** Answers still expected for a cancelled drag (dropped when they arrive). */
   private stale = 0;
   private sendSource: () => void;
@@ -84,6 +102,7 @@ export class DragController {
   constructor(
     private client: EngineClient,
     sendSource: () => void,
+    private files: DragFiles = SINGLE_FILE,
   ) {
     this.sendSource = sendSource;
     client.onEdits((v, e) => this.onEdits(v, e));
@@ -107,7 +126,9 @@ export class DragController {
   start(geom: HandleGeom, view: DragView, e: { clientX: number; clientY: number; altKey: boolean; shiftKey?: boolean }): boolean {
     if (this.a || geom.handle.locked) return false;
     const id = geom.handle.id;
-    this.group.begin();
+    this.groups.clear();
+    this.applied = 0;
+    this.group(this.files.active()).begin();
     const queue = new DragQueue((t: DragTarget) => {
       if (this.a) this.a.sentAt = performance.now();
       this.client.post({ type: "Drag", handle: id, target: t });
@@ -285,6 +306,37 @@ export class DragController {
     if (d && (d.snap !== snapText || d.alt !== a.alt || d.axis !== ax)) store.setState({ drag: { ...d, snap: snapText, alt: a.alt, axis: ax } });
   }
 
+  /** Undo group of a file (created on first use). */
+  private group(path: string): EditGroup {
+    let g = this.groups.get(path);
+    if (!g) {
+      g = new EditGroup(() => this.files.target(path), "input.drag");
+      this.groups.set(path, g);
+    }
+    return g;
+  }
+
+  /** Applies edits (grouped by file) as live edits; `true` if anything changed. */
+  private applyLive(version: number, edits: Edit[]): boolean {
+    const byFile = new Map<string, Edit[]>();
+    for (const e of edits) {
+      const f = this.files.fileOf(e);
+      byFile.set(f, [...(byFile.get(f) ?? []), e]);
+    }
+    let any = false;
+    for (const [path, list] of byFile) {
+      const t = this.files.target(path);
+      if (!t) continue;
+      const changes =
+        path === this.files.active() ? mapEdits(bridge.mapper, version, list, t.state.doc.length) : mapEditsPlain(list, t.state.doc.length);
+      if (changes && this.group(path).apply(changes)) {
+        any = true;
+        this.applied++;
+      }
+    }
+    return any;
+  }
+
   private onEdits(version: number, edits: Edit[]): void {
     const a = this.a;
     if (!a) {
@@ -295,16 +347,14 @@ export class DragController {
       this.applyOnce(version, edits);
       return;
     }
-    const view = bridge.view;
-    if (edits.length && view) {
-      const changes = mapEdits(bridge.mapper, version, edits, view.state.doc.length);
-      if (changes && this.group.apply(changes)) {
+    if (edits.length && bridge.view) {
+      if (this.applyLive(version, edits)) {
         // Send at once (no debounce): the next Drag must be computed on this text.
         this.sendSource();
         const v = store.getState().sentVersion;
         bridge.dragTimes.set(v, a.sentAt);
         const d = store.getState().drag;
-        if (d) store.setState({ drag: { ...d, edits: this.group.edits } });
+        if (d) store.setState({ drag: { ...d, edits: this.applied } });
         // The next position waits for the scene of this text: a new source would abort the
         // running kernel job, and with every move the model would never be shown.
         this.awaitScene(a, v);
@@ -348,15 +398,26 @@ export class DragController {
     if (a.ending && !a.queue.busy) this.finish();
   }
 
-  /** Edits outside a drag ("Als Standard übernehmen"): one undoable change. */
+  /** Edits outside a drag ("Als Standard übernehmen"): one undoable change per file. */
   applyOnce(version: number, edits: Edit[]): boolean {
-    const view = bridge.view;
-    if (!view || !edits.length) return false;
-    const changes = mapEdits(bridge.mapper, version, edits, view.state.doc.length);
-    if (!changes) return false;
-    view.dispatch({ changes, userEvent: "input.engine" });
-    this.sendSource();
-    return true;
+    if (!bridge.view || !edits.length) return false;
+    const byFile = new Map<string, Edit[]>();
+    for (const e of edits) {
+      const f = this.files.fileOf(e);
+      byFile.set(f, [...(byFile.get(f) ?? []), e]);
+    }
+    let any = false;
+    for (const [path, list] of byFile) {
+      const t = this.files.target(path);
+      if (!t) continue;
+      const changes =
+        path === this.files.active() ? mapEdits(bridge.mapper, version, list, t.state.doc.length) : mapEditsPlain(list, t.state.doc.length);
+      if (!changes) continue;
+      t.dispatch(t.state.update({ changes, userEvent: "input.engine" }));
+      any = true;
+    }
+    if (any) this.sendSource();
+    return any;
   }
 
   private onUp(e: PointerEvent | null): void {
@@ -379,8 +440,9 @@ export class DragController {
     a.unsubScene?.();
     this.unlisten();
     this.client.post({ type: "DragEnd", handle: a.geom.handle.id });
-    const edits = this.group.edits;
-    this.group.end();
+    const edits = this.applied;
+    for (const g of this.groups.values()) g.end();
+    this.groups.clear();
     const ms = performance.now() - a.startedAt;
     const st = store.getState();
     const fps = ms > 0 ? (a.frames * 1000) / ms : 0;
@@ -406,8 +468,10 @@ export class DragController {
     // An Edits answer is still on its way (not when only the scene was awaited).
     if (a.queue.busy && a.awaitVersion === null) this.stale++;
     this.client.post({ type: "DragEnd", handle: a.geom.handle.id });
-    this.group.cancel();
+    for (const g of this.groups.values()) g.cancel();
+    this.groups.clear();
     this.sendSource();
+
     store.setState({ drag: null });
     a.view.setDragPreview(null);
   }

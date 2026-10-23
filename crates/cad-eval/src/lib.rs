@@ -21,24 +21,43 @@ pub mod math;
 mod ops;
 mod output;
 mod print;
+pub mod project;
 mod sig;
 pub mod value;
 
-pub use edit::{DragOptions, DragTarget, DragValue, SnapRef, SnapTarget, drag_edits, set_default_edit, snap_targets};
+pub use edit::{
+    DragOptions, DragTarget, DragValue, SnapRef, SnapTarget, drag_edits, set_default_edit, set_default_edit_project,
+    snap_targets,
+};
 pub use output::*;
+pub use project::{
+    FileResolver, FileRole, FsResolver, Library, NoFiles, Project, SourceFile, SourceText, normalize_path, resolve_path,
+};
 pub use value::{Origin, PValue, fmt_literal, fmt_num};
 
-/// Evaluates a parsed file (see [`eval::eval`]). Handles of computed values are moved from
-/// `handles` to `locked_handles`: they are shown, but not edited (Spec: Griffe, Regel 3).
+/// Evaluates a parsed single file without other project files (`include`/`use` report a
+/// missing file). See [`eval_project`].
 pub fn eval(src: &str, file: &cad_syntax::ast::File, opts: &EvalOptions) -> EvalOutput {
-    let mut out = eval::eval(src, file, opts);
+    let proj = Project::load_parsed("main.scad", src, file.clone(), Vec::new(), &NoFiles);
+    eval_project(&proj, opts)
+}
+
+/// Evaluates the main file of a loaded project. The diagnostics are the project's link
+/// errors (missing files, include cycles) and those of the evaluation; syntax errors are in
+/// `proj.syntax`. Handles of computed values are moved from `handles` to `locked_handles`:
+/// they are shown, but not edited (Spec: Griffe, Regel 3).
+pub fn eval_project(proj: &Project, opts: &EvalOptions) -> EvalOutput {
+    let mut out = eval::eval(proj, opts);
     let (locked, handles): (Vec<Handle>, Vec<Handle>) = std::mem::take(&mut out.handles).into_iter().partition(|h| h.locked);
     out.handles = handles;
     out.locked_handles = locked;
+    let mut diags = proj.link.clone();
+    diags.append(&mut out.diagnostics);
+    out.diagnostics = diags;
     out
 }
 
-/// Parses and evaluates a source text.
+/// Parses and evaluates a source text (single file).
 pub fn eval_source(src: &str, opts: &EvalOptions) -> EvalOutput {
     let (file, mut diags) = cad_syntax::parse(src);
     let mut out = eval(src, &file, opts);
@@ -46,6 +65,17 @@ pub fn eval_source(src: &str, opts: &EvalOptions) -> EvalOutput {
     out.diagnostics = diags;
     out
 }
+
+/// Loads and evaluates a project: all diagnostics (syntax of every file, links, evaluation).
+pub fn eval_files(main_path: &str, main_text: &str, resolver: &dyn FileResolver, opts: &EvalOptions) -> (Project, EvalOutput) {
+    let proj = Project::load(main_path, main_text, resolver);
+    let mut out = eval_project(&proj, opts);
+    let mut diags = proj.syntax.clone();
+    diags.append(&mut out.diagnostics);
+    out.diagnostics = diags;
+    (proj, out)
+}
+
 
 pub(crate) const MASK53: u64 = (1 << 53) - 1;
 

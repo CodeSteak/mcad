@@ -1,30 +1,44 @@
 import { useEffect, useRef, useState } from "react";
 import { createEditor } from "../editor/setup";
-import { EXAMPLES, GROUP_LABELS } from "../files/files";
+import { EXAMPLE_PROJECTS, GROUP_LABELS, SINGLE_EXAMPLES } from "../files/files";
 import { pathSegments } from "../logic/context";
+import { diagnosticPath } from "../logic/files";
+import { fmtNum } from "../logic/format";
 import { bridge } from "../state/bridge";
+import { project } from "../state/project";
 import { store, useCad } from "../state/store";
 import { Viewer, type StandardView } from "../view/viewer";
 import {
+  addProjectFile,
+  downloadProjectZip,
   exportModel,
-  initialDocument,
+  exportParts,
+  initialProject,
   jumpToLevel,
   meshes,
   newFile,
   onDocChange,
   openExample,
+  openExampleProject,
+  openFolderOrZip,
   openFromDisk,
+  openZip,
+  removeProjectFile,
   saveToDisk,
   sendNow,
   client,
+  setMainFile,
   setViewer,
+  startProject,
+  switchFile,
+  togglePart,
 } from "./runtime";
 import { ParamBar, SettingsButton } from "./panels";
 
 function Toolbar() {
   const theme = useCad((s) => s.theme);
   const fileName = useCad((s) => s.fileName);
-  const groups = [...new Set(EXAMPLES.map((e) => e.group))];
+  const groups = [...new Set(SINGLE_EXAMPLES.map((e) => e.group))];
   return (
     <header className="toolbar" role="toolbar" aria-label="Werkzeugleiste">
       <span className="brand">Parametrisches CAD</span>
@@ -40,25 +54,38 @@ function Toolbar() {
           data-testid="examples"
           value=""
           onChange={(e) => {
-            const ex = EXAMPLES.find((x) => x.path === e.target.value);
+            const v = e.target.value;
+            const pr = EXAMPLE_PROJECTS.find((x) => `projekt:${x.name}` === v);
+            if (pr) return openExampleProject(pr);
+            const ex = SINGLE_EXAMPLES.find((x) => x.path === v);
             if (ex) openExample(ex);
           }}
         >
           <option value="">Beispiel wählen …</option>
           {groups.map((g) => (
             <optgroup key={g} label={GROUP_LABELS[g] ?? g}>
-              {EXAMPLES.filter((e) => e.group === g).map((e) => (
+              {SINGLE_EXAMPLES.filter((e) => e.group === g).map((e) => (
                 <option key={e.path} value={e.path}>
                   {e.name}
                 </option>
               ))}
             </optgroup>
           ))}
+          {EXAMPLE_PROJECTS.length > 0 && (
+            <optgroup label="Projekte (mehrere Dateien)">
+              {EXAMPLE_PROJECTS.map((p) => (
+                <option key={p.name} value={`projekt:${p.name}`}>
+                  {p.name}/
+                </option>
+              ))}
+            </optgroup>
+          )}
         </select>
       </label>
       <span className="sep" />
       <button onClick={() => void exportModel("stl")} title="Als STL exportieren">Export STL</button>
       <button onClick={() => void exportModel("3mf")} title="Als 3MF exportieren">Export 3MF</button>
+      <button onClick={() => void exportModel("step")} title="Als STEP exportieren (über den Kernel)">Export STEP</button>
       <span className="grow" />
       <SettingsButton />
       <span className="filename" title="Aktuelle Datei">{fileName}</span>
@@ -78,6 +105,132 @@ function Toolbar() {
         {theme === "dark" ? "Hell" : "Dunkel"}
       </button>
     </header>
+  );
+}
+
+/** File tabs of the project: switch, main file, add/remove files, folders and ZIPs. */
+function FileBar() {
+  const p = useCad((s) => s.project);
+  const diags = useCad((s) => s.diagnostics);
+  const errorsIn = new Set(diags.items.filter((d) => d.severity === "error").map((d) => diagnosticPath(d, p.main)));
+  return (
+    <div className="filebar" role="tablist" aria-label="Dateien des Projekts" data-testid="filebar">
+      <div className="tabs">
+        {p.paths.map((path) => (
+          <button
+            key={path}
+            role="tab"
+            aria-selected={path === p.active}
+            className={`tab${path === p.active ? " active" : ""}${path === p.main ? " is-main" : ""}`}
+            data-testid={`tab-${path}`}
+            title={path === p.main ? `${path} (Hauptdatei)` : path}
+            onClick={() => switchFile(path)}
+          >
+            {path === p.main && <span className="star" aria-label="Hauptdatei">★</span>}
+            {path}
+            {errorsIn.has(path) && <span className="dot" title="Fehler in dieser Datei" />}
+          </button>
+        ))}
+      </div>
+      <div className="fileactions">
+        <button
+          title="Neue Datei im Projekt"
+          data-testid="file-add"
+          onClick={() => {
+            const name = window.prompt("Name der neuen Datei (z. B. lib/teile.scad)", "neu.scad");
+            if (name) addProjectFile(name);
+          }}
+        >
+          + Datei
+        </button>
+        <button title="Angezeigte Datei als Hauptdatei auswerten" data-testid="file-main" disabled={p.active === p.main} onClick={() => setMainFile(p.active)}>
+          ★ Hauptdatei
+        </button>
+        <button
+          title="Angezeigte Datei aus dem Projekt entfernen"
+          data-testid="file-remove"
+          disabled={p.active === p.main}
+          onClick={() => {
+            if (window.confirm(`${p.active} aus dem Projekt entfernen?`)) removeProjectFile(p.active);
+          }}
+        >
+          ×
+        </button>
+        <span className="sep" />
+        <button title="Ordner als Projekt öffnen (sonst ZIP)" data-testid="open-folder" onClick={() => void openFolderOrZip()}>
+          Ordner…
+        </button>
+        <button title="Projekt aus ZIP-Datei öffnen" data-testid="open-zip" onClick={() => void openZip()}>
+          ZIP laden…
+        </button>
+        <button title="Projekt als ZIP herunterladen" data-testid="download-zip" onClick={() => downloadProjectZip()}>
+          ZIP ↓
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function vol(v: number | null | undefined): string {
+  return v === null || v === undefined ? "–" : `${fmtNum(Math.round(v * 10) / 10)} mm³`;
+}
+
+/** Parts (named instances at the top level): visibility and export per part. */
+function PartsBar() {
+  const shown = useCad((s) => s.complete ?? s.shown);
+  const hidden = useCad((s) => s.hiddenParts);
+  const fileContext = !shown || shown.context.module === null;
+  const parts = fileContext ? (shown?.parts ?? []) : [];
+  const names = parts.map((p) => p.name);
+  // Always one row (the 3D view keeps its size when parts come and go).
+  if (!parts.length) {
+    return (
+      <div className="partsbar empty" data-testid="partsbar" aria-label="Bauteile">
+        <span className="ptitle">Bauteile</span>
+        <span className="pinfo">{fileContext ? "keine – benannte Instanzen auf oberster Ebene (deckel: deckel();) sind Bauteile" : "nur im Dateikontext"}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="partsbar" data-testid="partsbar" aria-label="Bauteile">
+      <span className="ptitle">Bauteile</span>
+      {parts.map((pt) => {
+        const b = pt.bounds;
+        const size = b ? b.max.map((x, i) => fmtNum(Math.round((x - b.min[i]) * 10) / 10)).join(" × ") : "";
+        return (
+          <span key={pt.name} className={`part${hidden.includes(pt.name) ? " off" : ""}`} data-testid={`part-${pt.name}`}>
+            <label title={`Bauteil ${pt.name} (Zeile ${pt.range.line}) ein-/ausblenden`}>
+              <input type="checkbox" checked={!hidden.includes(pt.name)} onChange={(e) => togglePart(pt.name, e.target.checked)} data-testid={`part-visible-${pt.name}`} />
+              <span className="pname">{pt.name}</span>
+            </label>
+            <span className="pinfo" title={size ? `Hülle ${size} mm` : undefined}>
+              {vol(pt.volume)}
+            </span>
+            <button onClick={() => void exportParts("stl", [pt.name], false)} title={`${pt.name} als STL`} data-testid={`part-stl-${pt.name}`}>
+              STL
+            </button>
+            <button onClick={() => void exportParts("3mf", [pt.name], false)} title={`${pt.name} als 3MF`} data-testid={`part-3mf-${pt.name}`}>
+              3MF
+            </button>
+            <button onClick={() => void exportParts("step", [pt.name], false)} title={`${pt.name} als STEP`} data-testid={`part-step-${pt.name}`}>
+              STEP
+            </button>
+          </span>
+        );
+      })}
+      <span className="pall">
+        Alle:
+        <button onClick={() => void exportParts("stl", names, true)} title="Jedes Bauteil als STL, zusammen als ZIP" data-testid="parts-zip">
+          ZIP (STL)
+        </button>
+        <button onClick={() => void exportParts("step", names, true)} title="Jedes Bauteil als STEP, zusammen als ZIP" data-testid="parts-zip-step">
+          ZIP (STEP)
+        </button>
+        <button onClick={() => void exportParts("3mf", names, false)} title="Ein 3MF mit einem Objekt je Bauteil" data-testid="parts-3mf">
+          3MF
+        </button>
+      </span>
+    </div>
   );
 }
 
@@ -148,10 +301,16 @@ function EditorPane() {
   useEffect(() => {
     let disposed = false;
     let view: ReturnType<typeof createEditor> | null = null;
-    void initialDocument().then((d) => {
+    void initialProject().then((d) => {
       if (disposed || !ref.current) return;
-      store.setState({ fileName: d.name });
-      view = createEditor(ref.current, d.text, { onChange: onDocChange, onSave: () => void saveToDisk() });
+      startProject(d);
+      view = createEditor(ref.current, project.texts.get(project.active) ?? "", {
+        onChange: onDocChange,
+        onSave: () => void saveToDisk(),
+        onOpenFile: (path) => {
+          if (!switchFile(path)) store.setState({ notice: `Datei ${path} ist nicht im Projekt` });
+        },
+      });
       sendNow();
       view.focus();
     });
@@ -172,6 +331,7 @@ function StatusBar() {
   const ready = useCad((s) => s.engineReady);
   const notice = useCad((s) => s.notice);
   const complete = useCad((s) => s.complete);
+  const hoverOther = useCad((s) => s.viewHoverOther);
   const errors = diags.items.filter((d) => d.severity === "error").length;
   const warnings = diags.items.filter((d) => d.severity === "warning").length;
   const syntax = diags.items.some((d) => d.source === "syntax" && d.severity === "error");
@@ -210,6 +370,11 @@ function StatusBar() {
         <span className="st-note draft" data-testid="status-draft" title="Entwurfsmodus: Verrundungen, die länger als 25 ms brauchen, werden beim Ziehen ausgesetzt und danach berechnet">
           Verrundung beim Ziehen ausgesetzt (Zeile {suspended.slice(0, 4).join(", ")}
           {suspended.length > 4 ? ", …" : ""})
+        </span>
+      )}
+      {hoverOther && (
+        <span className="st-note" data-testid="status-hover-file" title="Klick öffnet die Datei an dieser Stelle">
+          Fläche aus {hoverOther.path}, Zeile {hoverOther.line}
         </span>
       )}
       {notice && <span className="st-note" data-testid="status-notice">{notice}</span>}
@@ -252,11 +417,14 @@ export function App() {
       <Toolbar />
       <main className="main">
         <section className="editorpane" aria-label="Editor">
+          <FileBar />
           <EditorPane />
         </section>
         <Splitter />
         <section className="viewcol" aria-label="3D-Ansicht">
           <PathBar />
+          <PartsBar />
+
           <div className="viewbody">
             <ViewPane />
             <ParamBar />

@@ -47,6 +47,7 @@ pub mod counting;
 mod eval;
 pub mod export;
 pub mod key;
+pub mod parts;
 mod profile;
 
 pub use cad_step::{Schema as StepSchema, StepOptions, StepStats};
@@ -65,6 +66,7 @@ pub use cache::Lru;
 pub use counting::CountingKernel;
 pub use eval::SUSPENDED_HINT;
 pub use key::{CacheKey, KeyHasher};
+pub use parts::{NodeFormat, part_file_name};
 
 /// Error of a node whose key is blocked (see [`Engine::block_keys`]).
 pub const BLOCKED_MESSAGE: &str = "Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung";
@@ -796,26 +798,9 @@ where
         ev: &Evaluation<K::Shape>,
         opts: &cad_step::StepOptions,
     ) -> Result<(Vec<u8>, cad_step::StepStats), String> {
+        // The root's display system is the context system: the same writer as for parts.
         let root = ev.root().ok_or("kein Ergebnis")?;
-        if ev.reports[root as usize].dim == Some(Dim::Two) {
-            return Err("2D-Ergebnis kann nicht als Körper exportiert werden".into());
-        }
-        let mut breps = Vec::new();
-        for p in ev.parts(root) {
-            breps.push(self.kernel.brep(&p.shape).map_err(|e| format!("STEP: {e}"))?);
-        }
-        let mut o = opts.clone();
-        if o.tag_colors.is_empty() {
-            for f in breps.iter().flat_map(|b| b.faces()) {
-                let color = ev.nodes_for_tag(f.tag).first().and_then(|r| ev.tree.node(r.node).color);
-                if let Some(c) = color {
-                    o.tag_colors.insert(f.tag, [c[0] as f64, c[1] as f64, c[2] as f64]);
-                }
-            }
-        }
-        let refs: Vec<&cad_kernel::brep::Brep> = breps.iter().collect();
-        let (text, st) = cad_step::write(&refs, &o).map_err(|e| e.to_string())?;
-        Ok((text.into_bytes(), st))
+        self.export_step_nodes(ev, &[root], opts)
     }
 
     fn export_mesh(&mut self, ev: &Evaluation<K::Shape>, tol: Option<f64>) -> Result<Rc<Mesh>, String> {
