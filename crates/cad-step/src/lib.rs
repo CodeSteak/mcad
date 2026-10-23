@@ -391,11 +391,12 @@ fn elliptic_extrusion(s: &Surface) -> Option<(cad_kernel::brep::Frame, f64, f64,
         if m[col][col].abs() < 1e-12 {
             return None;
         }
-        for r in 0..5 {
+        let pivot = m[col];
+        for (r, row) in m.iter_mut().enumerate() {
             if r != col {
-                let f = m[r][col] / m[col][col];
-                for k in col..6 {
-                    m[r][k] -= f * m[col][k];
+                let f = row[col] / pivot[col];
+                for (x, p) in row.iter_mut().zip(pivot).skip(col) {
+                    *x -= f * p;
                 }
             }
         }

@@ -1061,7 +1061,11 @@ gelten die gemeinsamen Eckpunkte der Schleife.
 Glyphe, bei mehreren unter einer Gruppe (Vereinigung: überlappende Elemente/Glyphen). Mit
 `Seg::Nurbs` (aus Schritt 2) werden tangentenstetige Ketten von Bézierkurven eine B-Spline mit
 C1-Knoten (eine Kernel-Fläche je Glyphenflanke statt Dutzender), Ellipsenbögen rational
-quadratisch. Engine und Fassade blieben unverändert, bis auf die Farbregionen (unten). (Die
+quadratisch. Engine und Fassade blieben unverändert bis auf die Farbregionen (unten) und eine
+Vereinigung ohne SMLib-Boolean für Körper, deren Hüllquader getrennt sind (`disjoint_union` in
+`sc_facade.cpp`: beide Schalen in eine Brep): SMLib gab bei der Vereinigung getrennter
+Glyphenteile (Schablonen-„c“ aus drei Stücken) ein Stück doppelt zurück, einmal verkehrt herum
+(Volumen 2,0 statt 7,3 mm³, ohne Fehlermeldung); nebenbei wird Text schneller. (Die
 zwischenzeitliche Umgehung – Bögen über 90° beim Import teilen – entfiel mit
 `profile::split_arcs` aus Schritt 2.)
 

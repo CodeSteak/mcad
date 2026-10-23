@@ -225,13 +225,14 @@ const html = `<!doctype html>
 <li>Dateien relativ zur einbindenden Datei (CLI: Dateisystem; Browser: Projektdateien; Desktop: liest und schreibt sie); geänderte SVGs ändern den Cache-Schlüssel, <code>cad watch</code> folgt ihnen, die UI-Szene auch (T02).</li>
 <li>Pflicht-Zeichensatz mit Umlauten, ß/ẞ und Satzzeichen in allen mitgelieferten Schriften (Test); Lücken (nur Allerta Stencil) kommen mit Warnung aus JetBrains Mono.</li>
 <li>Nebenbei: Farbregionen von Modellen, die nur Vereinigungen ihrer Farbknoten sind, ohne Boolean mit dem Ganzen (mehrfarbiger Text: Sekunden statt Abbruch durch den Watchdog).</li>
+<li>Gefunden mit der Alphabet-Tafel: SMLib vereinigte getrennte Glyphenteile falsch (Allerta-„c“: ein Stück doppelt, einmal verkehrt herum; Volumen 2,0 statt 7,3 mm³, „a“ in „abcd“ verschwand, ohne Meldung). Die Fassade vereinigt Körper mit getrennten Hüllquadern jetzt ohne SMLib-Boolean (<code>disjoint_union</code>: beide Schalen in eine Brep); Regressionstest <code>text_volume_is_area_times_height</code>.</li>
 </ul>
 
 <h2>2 Entscheidungen</h2>
 <table>
 <tr><th>Frage</th><th>Entscheidung</th></tr>
 <tr><td>Bibliotheken</td><td><code>roxmltree</code> 0.21 (XML, Zeilen für Meldungen), <code>rustybuzz</code> 0.20.1 mit <code>ttf-parser</code> 0.25 (Shaping wie HarfBuzz, Umrisse, reines Rust, Wasm-tauglich). Pfaddaten, Transformationen, Einheiten, Bögen, Füllregeln: eigener Code.</td></tr>
-<tr><td>Aufteilung</td><td>Neue Crates <code>cad-outline</code> (neutrale Konturen), <code>cad-svg</code>, <code>cad-font</code>; in <code>cad-eval</code> nur die Builtins (<code>import.rs</code>) und das Laden der Datendateien (<code>Project::assets</code>). IR: <code>Seg::Nurbs</code> (aus Schritt 2) für B-Spline-Ketten und Ellipsenbögen. Engine/Fassade unverändert außer den Farbregionen.</td></tr>
+<tr><td>Aufteilung</td><td>Neue Crates <code>cad-outline</code> (neutrale Konturen), <code>cad-svg</code>, <code>cad-font</code>; in <code>cad-eval</code> nur die Builtins (<code>import.rs</code>) und das Laden der Datendateien (<code>Project::assets</code>). IR: <code>Seg::Nurbs</code> (aus Schritt 2) für B-Spline-Ketten und Ellipsenbögen. Engine unverändert außer den Farbregionen; Fassade: Vereinigung getrennter Körper ohne SMLib-Boolean (unten).</td></tr>
 <tr><td>Profil-Knoten</td><td>Ein <code>Profile::Sketch</code> je gefülltem SVG-Element bzw. je Glyphe, mehrere unter einer Gruppe (Vereinigung): überlappende Elemente oder Glyphen ergeben die Vereinigung wie beim Malen; innerhalb eines Elements entscheidet seine Füllregel.</td></tr>
 <tr><td>Kurven</td><td>Tangentenstetige Ketten von Bézierkurven einer Glyphe oder eines Pfads werden <b>eine</b> B-Spline (Knoten C1, Parameterlängen aus den Tangentenlängen; exakt), Ecken trennen. Weniger Kernel-Flächen (Glyphe „o“: 4 statt ~30).</td></tr>
 <tr><td>Größe <code>size</code></td><td>wie OpenSCAD: em = <code>size</code>/0,72 (OpenSCAD setzt die Schrift auf <code>size</code> Punkt bei 100 dpi); Versalhöhe ≈ <code>size</code>. Laufweite, Versatz und Ausrichtung mal 1000/1024 wie OpenSCAD (dessen FreeType-Umrechnung): Text bleibt gleich breit wie in OpenSCAD.</td></tr>
@@ -263,7 +264,7 @@ ${pre(fallbackWarn)}
 <tr><th>Fall</th><th>OpenSCAD Hülle</th><th>cad Hülle</th><th>max. Abw.</th><th>OpenSCAD mm²</th><th>cad mm²</th><th>Fläche</th></tr>
 ${oscText.map(oscRow).join("\n")}
 </table>
-<p class="small">Die Fläche von OpenSCAD ist kleiner, weil es die Kurven als Polygone abtastet (Sehnen innerhalb der Kurve); die Hülle stimmt auf 6 Stellen. valign misst OpenSCAD an den gerasterten Glyphenmetriken (FreeType), daher bis 0,005 mm Unterschied. „Hello World“, „AV“ (Kerning), „fi“ und „-&gt;“ (Ligaturen in JetBrains Mono) zeigen, dass Shaping und Laufweite gleich sind.</p>
+<p class="small">Die Fläche von OpenSCAD ist kleiner, weil es die Kurven als Polygone abtastet (Sehnen innerhalb der Kurve); die Hülle stimmt bis auf ≤ 0,001 mm (OpenSCAD schreibt 6 Stellen; seine Polygonecken liegen auf der Kurve). <code>valign</code> misst OpenSCAD an gerasterten Glyphenmetriken (FreeType), daher dort bis 0,004 mm. „Hello World“, „AV“ (Kerning), „fi“ und „-&gt;“ (Ligaturen in JetBrains Mono) zeigen, dass Shaping und Laufweite gleich sind.</p>
 
 <h2>5 SVG-Import</h2>
 <h3>5.1 Beispiele: Quelle und Ergebnis</h3>

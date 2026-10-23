@@ -71,6 +71,18 @@ fn import_volume_warning_and_step() {
     assert!(t.contains("CIRCLE") && t.contains("CYLINDRICAL_SURFACE"), "exact circle in STEP");
     let v = volume(&f);
     assert!((v - std::f64::consts::PI * 64.0 * 2.0).abs() < 1e-3, "{v}");
+    // ellipses: extrusion of an ELLIPSE (OpenCASCADE reads that one exactly)
+    write(
+        dir.path(),
+        "e.svg",
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="30mm" height="30mm" viewBox="0 0 30 30"><ellipse cx="15" cy="15" rx="10" ry="6"/></svg>"#,
+    );
+    let f = write(dir.path(), "e.scad", "linear_extrude(2) import(\"e.svg\");\n");
+    let step = dir.path().join("e.step");
+    json(&["export", &f, "-o", &step.display().to_string()], 0);
+    let t = std::fs::read_to_string(&step).unwrap();
+    assert!(t.contains("ELLIPSE('',") && t.contains("SURFACE_OF_LINEAR_EXTRUSION"), "ellipse in STEP");
+    assert!((volume(&f) - std::f64::consts::PI * 60.0 * 2.0).abs() < 1e-3);
 }
 
 #[test]
@@ -82,6 +94,18 @@ fn text_volume_is_area_times_height() {
     assert!((v - 2.0 * 32.0824).abs() < 0.01, "{v}");
     let v = json(&["check", &write(dir.path(), "u.scad", "text(\"a\", font = \"Keine\");\n")], 0);
     assert!(v["diagnostics"][0]["message"].as_str().unwrap().contains("nicht vorhanden"));
+    // glyphs apart from each other unite without loss (stencil "c": three pieces; SMLib's union
+    // returned one of them twice, once inside out, before the facade merged disjoint bodies)
+    let vol = |t: &str, name: &str| {
+        volume(&write(
+            dir.path(),
+            name,
+            &format!("linear_extrude(0.6) text(\"{t}\", size = 8, font = \"Allerta Stencil\");\n"),
+        ))
+    };
+    let (a, c, ac) = (vol("a", "a.scad"), vol("c", "c.scad"), vol("ac", "ac.scad"));
+    assert!((c - 7.2994).abs() < 1e-3, "c: {c}");
+    assert!((ac - (a + c)).abs() < 1e-3, "ac {ac} = a {a} + c {c}");
 }
 
 #[test]
