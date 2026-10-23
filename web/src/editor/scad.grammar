@@ -1,0 +1,164 @@
+// Lezer grammar for syntax highlighting: OpenSCAD plus `grid`, `anchor` and instance labels
+// (`k: modul();`). It is only used for highlighting and for finding `*` statements; the
+// engine parses with its own parser (crates/cad-syntax).
+
+@precedence {
+  member,
+  call,
+  index,
+  prefix,
+  pow @right,
+  times @left,
+  plus @left,
+  rel @left,
+  eq @left,
+  and @left,
+  or @left,
+  ternary @right,
+  letExpr @right,
+  else
+}
+
+@top Program { statement* }
+
+statement[@isGroup=Statement] {
+  ModuleDef |
+  FunctionDef |
+  Assignment |
+  GridDecl |
+  AnchorDecl |
+  Block |
+  IfStatement |
+  ForStatement |
+  LetStatement |
+  Instantiation |
+  IncludeStatement |
+  Empty { ";" }
+}
+
+IncludeStatement { (kw<"include"> | kw<"use">) IncludePath }
+
+ModuleDef { kw<"module"> DefName ParamList statement }
+
+FunctionDef { kw<"function"> DefName ParamList "=" expression ";" }
+
+ParamList { "(" commaSep<Param> ")" }
+
+Param { (VariableName | SpecialVariable) ("=" expression)? }
+
+Assignment { (VariableName | SpecialVariable) "=" expression ";" }
+
+GridDecl { kw<"grid"> GridName "{" GridAxis* "}" }
+
+GridAxis { AxisName ":" commaSep1<GridPlane> ";" }
+
+GridPlane { PlaneName "=" expression }
+
+AnchorDecl { kw<"anchor"> AnchorName "=" expression ("," PropertyName "=" expression)* ";" }
+
+Block { "{" statement* "}" }
+
+IfStatement { kw<"if"> "(" expression ")" statement (!else kw<"else"> statement)? }
+
+ForStatement { kw<"for"> "(" commaSep<ForBinding> ")" statement }
+
+LetStatement { kw<"let"> "(" commaSep<ForBinding> ")" statement }
+
+ForBinding { VariableName "=" expression }
+
+Instantiation { Modifier* (Label ":")? CallName ArgList statement }
+
+Modifier { "#" | "%" | "!" | "*" }
+
+ArgList { "(" commaSep<Argument> ")" }
+
+Argument { ((PropertyName | SpecialVariable) "=")? expression }
+
+expression[@isGroup=Expression] {
+  Number |
+  String |
+  @specialize[@name=BooleanLiteral]<identifier, "true" | "false"> |
+  @specialize[@name=Undef]<identifier, "undef"> |
+  VariableName |
+  SpecialVariable |
+  ParenExpression { "(" expression ")" } |
+  Vector |
+  RangeExpression |
+  CallExpression { expression !call ArgList } |
+  IndexExpression { expression !index "[" commaSep1<indexArg> "]" } |
+  MemberExpression { expression !member "." PropertyName } |
+  UnaryExpression { !prefix ("-" | "+" | "!") expression } |
+  BinaryExpression {
+    expression !pow "^" expression |
+    expression !times ("*" | "/" | "%") expression |
+    expression !plus ("+" | "-") expression |
+    expression !rel ("<" | "<=" | ">" | ">=") expression |
+    expression !eq ("==" | "!=") expression |
+    expression !and "&&" expression |
+    expression !or "||" expression
+  } |
+  ConditionalExpression { expression !ternary "?" expression ":" expression } |
+  LetExpression { kw<"let"> "(" commaSep<ForBinding> ")" !letExpr expression } |
+  FunctionLiteral { kw<"function"> ParamList !letExpr expression }
+}
+
+indexArg { expression | Wildcard { "*" } }
+
+Vector { "[" commaSep<element> "]" }
+
+RangeExpression { "[" expression ":" expression (":" expression)? "]" }
+
+element { expression | generator }
+
+generator {
+  ForGenerator { kw<"for"> "(" commaSep<ForBinding> (";" expression ";" commaSep<ForBinding>)? ")" element } |
+  IfGenerator { kw<"if"> "(" expression ")" element (!else kw<"else"> element)? } |
+  EachGenerator { kw<"each"> element } |
+  LetGenerator { kw<"let"> "(" commaSep<ForBinding> ")" generator }
+}
+
+DefName { identifier }
+GridName { identifier }
+AxisName { identifier }
+PlaneName { identifier }
+AnchorName { identifier }
+Label { identifier }
+CallName { identifier }
+VariableName { identifier }
+PropertyName { identifier }
+
+kw<term> { @specialize[@name={term}]<identifier, term> }
+
+commaSep<content> { (content ("," content)*)? ","? }
+commaSep1<content> { content ("," content)* ","? }
+
+@skip { space | LineComment | BlockComment }
+
+@tokens {
+  space { @whitespace+ }
+  LineComment { "//" ![\n]* }
+  BlockComment { "/*" blockCommentRest }
+  blockCommentRest { ![*] blockCommentRest | "*" blockCommentAfterStar }
+  blockCommentAfterStar { "/" | "*" blockCommentAfterStar | ![/*] blockCommentRest }
+
+  identifier { $[a-zA-Z_\u{c0}-\u{24f}] $[a-zA-Z_0-9\u{c0}-\u{24f}]* }
+  SpecialVariable { "$" $[a-zA-Z_0-9]+ }
+
+  Number {
+    (@digit+ ("." @digit*)? | "." @digit+) ($[eE] $[+\-]? @digit+)?
+  }
+
+  String { '"' (![\\\n"] | "\\" _)* '"'? }
+
+  IncludePath { "<" ![>\n]* ">" }
+
+  @precedence { LineComment, BlockComment, "/" }
+  @precedence { IncludePath, "<=", "<" }
+
+  "(" ")" "[" "]" "{" "}"
+  "," ";" ":" "." "=" "?"
+  "+" "-" "*" "/" "%" "^" "!" "#"
+  "<" "<=" ">" ">=" "==" "!=" "&&" "||"
+}
+
+@detectDelim

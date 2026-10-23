@@ -95,8 +95,17 @@ function tick(): void {
   if (busy) schedule();
 }
 
-self.onmessage = (e: MessageEvent<ToEngine>) => {
-  queue.push(e.data);
+self.onmessage = (e: MessageEvent<ToEngine | { type: "__debugHang"; ms: number }>) => {
+  const d = e.data;
+  if (d.type === "__debugHang") {
+    // Test aid for the watchdog (e2e): blocks the worker like a hanging kernel operation.
+    const end = performance.now() + d.ms;
+    while (performance.now() < end) {
+      /* busy */
+    }
+    return;
+  }
+  queue.push(d);
   if (session) schedule();
 };
 
