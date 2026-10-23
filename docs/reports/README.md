@@ -6,6 +6,7 @@ genannten Commit. Die Generatoren liegen in `tools/report/`; Zwischenergebnisse 
 landen in `reports/tmp/` (nicht eingecheckt). Das PDF druckt
 `node tools/report/print-pdf.mjs <report.html> <report.pdf>` mit Playwrights Chromium
 (`cd tools/report && npm i playwright@1.56.1 --no-save`).
+Kein Testbericht, aber ebenso erzeugt: der Katalog der Beispielmodelle [`docs/modelle/alltagsmodelle.pdf`](../modelle/alltagsmodelle.pdf) (`tools/report/katalog.mjs`, siehe [`docs/modelle/README.md`](../modelle/README.md)).
 
 | Nr. | Ordner | Datum, Commit | Umfang | Erzeugt mit |
 | --- | --- | --- | --- | --- |
