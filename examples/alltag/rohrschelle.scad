@@ -1,0 +1,53 @@
+// Zweck: zweiteilige Rohrschelle für ein Rohr 32 mm – Halbringe als rotate_extrude(angle = 180)
+// eines Rechtecks, Laschen mit Bohrungen M5, Unterteil mit Anschlussstutzen M8 (Kernloch 6,8),
+// Kanten der Bohrungen mit difference(chamfer = …), Halbringkanten über Zonen gefast.
+// Baugruppe: Oberteil, Unterteil und ein Prüfrohr als Bauteile; im offenen Zustand klafft an
+// den Laschen der Spalt `spalt` (Kollision/Abstand mit `cad measure`). Maße in mm.
+module halbschelle(rohr_d = 32, t = 4, b = 20, lasche = 12, lasche_t = 5, spalt = 2, loch_d = 5.5,
+                   stutzen = false) {
+    ri = rohr_d / 2;
+    ro = ri + t;
+    grid g {
+        x: lasche_l = -ro - lasche, innen_l = -ri, achse = 0, innen_r = ri, lasche_r = ro + lasche,
+           loch_l = -ro - lasche / 2, loch_r = ro + lasche / 2;
+        y: teilung = spalt / 2, lasche_o = spalt / 2 + lasche_t, scheitel = spalt / 2 + ro;
+        z: vorne = 0, mitte = b / 2, hinten = b;
+    }
+    difference(chamfer = 0.4) {
+        union() {
+            chamfer(0.6) {
+                translate([0, g.teilung, 0]) rotate_extrude(angle = 180) translate([ri, 0]) square([t, b]);
+                zone(g.vorne, d = 0.5);
+                zone(g.hinten, d = 0.5);
+            }
+            box(g[lasche_l, teilung, vorne], g[innen_l, lasche_o, hinten]);
+            box(g[innen_r, teilung, vorne], g[lasche_r, lasche_o, hinten]);
+            if (stutzen)
+                cylinder(g[achse, scheitel, mitte] - [0, t, 0], g[achse, scheitel, mitte] + [0, 10, 0], d = 14);
+        }
+        // Rohr freihalten (Laschen und Stutzen ragen sonst hinein)
+        translate([0, 0, -1]) cylinder(h = b + 2, r = ri);
+        for (x = [g.loch_l, g.loch_r])
+            cylinder([x, g.teilung - 1, g.mitte], [x, g.lasche_o + 1, g.mitte], d = loch_d);
+        if (stutzen)
+            cylinder(g[achse, scheitel, mitte] - [0, 1, 0], g[achse, scheitel, mitte] + [0, 11, 0], d = 6.8);
+    }
+    anchor scheitel = g[achse, scheitel, mitte] + [0, stutzen ? 10 : 0, 0], dir = [0, 1, 0];  // Stutzenende bzw. Scheitel
+    anchor loch = g[loch_r, lasche_o, mitte], dir = [0, 1, 0];
+}
+
+module pruefrohr(d = 32, l = 60) {
+    translate([0, 0, -l / 2]) difference() {
+        cylinder(h = l, d = d);
+        translate([0, 0, -1]) cylinder(h = l + 2, d = d - 4);
+    }
+}
+
+rohr_d = 32;
+b = 20;
+// Rohrachse entlang x, Stutzen nach unten (Wandmontage an der Decke bzw. am Boden)
+rotate([0, 90, 0]) rotate([0, 0, 90]) {
+    oben: halbschelle(rohr_d = rohr_d, b = b);
+    mirror([0, 1, 0]) unten: halbschelle(rohr_d = rohr_d, b = b, stutzen = true);
+    translate([0, 0, b / 2]) rohr: pruefrohr(d = rohr_d);
+}

@@ -1,0 +1,190 @@
+{
+  "becher.scad": {
+    "parts": {
+      "b": 77709.4
+    },
+    "volume": 77709.4,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "flansch.scad": {
+    "parts": {
+      "f": 150299.9
+    },
+    "volume": 150299.9,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "gehaeuse/gehaeuse.scad": {
+    "parts": {
+      "unterteil": 29183.9,
+      "deckel": 12495.5,
+      "s[0]": 97.1,
+      "s[1]": 97.1,
+      "s[2]": 97.1,
+      "s[3]": 97.1
+    },
+    "volume": 42067.7,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "handystaender.scad": {
+    "parts": {
+      "staender": 109977.6
+    },
+    "volume": 109977.6,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "kabelclip.scad": {
+    "parts": {
+      "clip": 24456.6
+    },
+    "volume": 24456.6,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "kuehlkoerper.scad": {
+    "parts": {
+      "kk": 34652.1
+    },
+    "volume": 34652.1,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "lagerbock.scad": {
+    "parts": {
+      "bock": 34403.5
+    },
+    "volume": 34403.5,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "pflanztopf/pflanztopf.scad": {
+    "parts": {
+      "untersetzer": 31064.4,
+      "topf": 76113.3
+    },
+    "volume": 107177.6,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "pi_platte.scad": {
+    "parts": {
+      "platte": 20151.3,
+      "pi": 25896.9
+    },
+    "volume": 46048.2,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "rohrschelle.scad": {
+    "parts": {
+      "oben": 6687.2,
+      "unten": 7873.2,
+      "rohr": 11309.7
+    },
+    "volume": 25870.1,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "scharnier/scharnier.scad": {
+    "parts": {
+      "a": 5148.9,
+      "b": 4572.4,
+      "stift": 429.3
+    },
+    "volume": 10150.7,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "schluesselbrett/schluesselbrett.scad": {
+    "parts": {
+      "brett": 150717.5,
+      "h[0]": 1471.9,
+      "h[1]": 1471.9,
+      "h[2]": 1471.9,
+      "h[3]": 1471.9,
+      "h[4]": 1471.9
+    },
+    "volume": 158077.1,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "seifenschale.scad": {
+    "parts": {
+      "schale": 36961.3
+    },
+    "volume": 36961.3,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "stiftebox.scad": {
+    "parts": {
+      "box_": 115179.3
+    },
+    "volume": 115179.3,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "topfuntersetzer.scad": {
+    "parts": {
+      "u": 83249.6
+    },
+    "volume": 83249.6,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "tuerstopper.scad": {
+    "parts": {
+      "stopper": 64236.7
+    },
+    "volume": 64236.7,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "wandhaken.scad": {
+    "parts": {
+      "haken": 18818.2
+    },
+    "volume": 18818.2,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "winkel_rippe.scad": {
+    "parts": {
+      "w": 22246.1
+    },
+    "volume": 22246.1,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  },
+  "zahnrad.scad": {
+    "parts": {
+      "rad1": 12553.1,
+      "rad2": 4075.1
+    },
+    "volume": 16628.1,
+    "errors": 0,
+    "warnings": 0,
+    "diagnostics": 0
+  }
+}

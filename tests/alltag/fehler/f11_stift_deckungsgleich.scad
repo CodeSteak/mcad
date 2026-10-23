@@ -1,0 +1,8 @@
+// F11: Scharnier mit Stift 3,0 in Bohrung 3,0 (deckungsgleiche Zylinder): die Vereinigung
+// aller Bauteile (Wurzel, Z. 1) scheitert mit SM_ERR_NULL_POINTER, `--interference` meldet
+// 0,24 mm³ Kollision a ↔ stift. Nicht weiter reduziert (ein einzelnes Auge mit Stift geht).
+// ERWARTET: fehlerfrei
+use <../../../examples/alltag/scharnier/teile.scad>
+a: blatt(seite = 0, bohrung = 3.0);
+b: blatt(seite = 1, bohrung = 3.4);
+stift: stift(l = 60, d = 3.0);
