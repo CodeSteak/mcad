@@ -10,7 +10,7 @@ module griffschale(l = 90, b = 34, h = 18, wand = 1.6) {
 
     difference() {
         shell(wand) {
-            box(g[hinten, links, boden], g[vorn, rechts, oben], $fillet = 6);
+            box(g[hinten, links, boden], g[vorn, rechts, oben], $fillet = 5);
             zone(g.oben, d = 1);    // Deckelseite offen
         }
         translate(g[vorn, mitte, 9]) cube([8, 10, 6], center = true); // Kabelausgang

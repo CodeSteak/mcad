@@ -122,6 +122,8 @@ export class Viewer implements DragView {
   private fitBox: Box3 | null = null;
   /** Zone volumes by mesh key and placement (built on demand). */
   private volumes = new Map<string, MeshVolume>();
+  /** Results of the zone tests (hover and cursor changes rebuild often). */
+  private zoneCache = new Map<string, unknown>();
   lastZoneEdges: ViewState["zoneEdges"] = null;
   lastOpenFaces: ViewState["openFaces"] = [];
   lastEdgeKinds: Record<string, number> = {};
@@ -433,7 +435,8 @@ export class Viewer implements DragView {
       const q = p.zoneEdges;
       const vol = this.volume(scene, q.zone);
       if (vol) {
-        const mine = edgesInZone(q.edges, vol.v, q.select, vol.eps);
+        const ck = `e|${scene.nodes[q.zone].mesh_key}|${this.meshes.isCoarse(scene.nodes[q.zone].mesh_key)}|${scene.nodes[q.zone].display_world.join(",")}|${q.select}|${JSON.stringify(q.edges)}`;
+        const mine = this.cached(ck, () => edgesInZone(q.edges, vol.v, q.select, vol.eps));
         for (const e of mine) {
           this.addFatPolyline(e, pal.selectedEdge, 3.5, false, false, "edge:selected");
           countEdge("selected");
@@ -450,7 +453,8 @@ export class Viewer implements DragView {
         continue;
       }
       const eps = Math.max(...vols.map((v) => v!.eps));
-      const faces = facesInZones(body, q.matrix, vols.map((v) => v!.v), q.select, eps);
+      const ck = `f|${scene.nodes[q.body].mesh_key}|${this.meshes.isCoarse(scene.nodes[q.body].mesh_key)}|${q.matrix.join(",")}|${q.select}|${q.zones.map((z) => `${scene.nodes[z].mesh_key}@${scene.nodes[z].display_world.join(",")}`).join(";")}`;
+      const faces = this.cached(ck, () => facesInZones(body, q.matrix, vols.map((v) => v!.v), q.select, eps));
       this.addFaceSubset(body.positions, body.indices, [...faces.values()].flat(), q.matrix, pal.openFace);
       this.lastOpenFaces.push({ shell: q.shell, faces: faces.size, engine: scene.nodes[q.shell].opened_faces });
     }
@@ -540,6 +544,14 @@ export class Viewer implements DragView {
     const pos: number[] = [];
     for (let i = 0; i + 1 < points.length; i++) pos.push(...points[i], ...points[i + 1]);
     this.addFatSegments(pos, color, width, depthTest, dashed, name);
+  }
+
+  private cached<T>(key: string, f: () => T): T {
+    if (this.zoneCache.has(key)) return this.zoneCache.get(key) as T;
+    if (this.zoneCache.size > 64) this.zoneCache.clear();
+    const v = f();
+    this.zoneCache.set(key, v);
+    return v;
   }
 
   /** Zone mesh of a node as a volume in context coordinates (cached by key and placement). */

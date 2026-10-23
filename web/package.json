@@ -15,6 +15,7 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "test:report": "vitest run --reporter=default --reporter=json --outputFile.json=../reports/tmp/report2/vitest.json && playwright test && node ../tools/report/report2-ui.mjs",
+    "test:report4": "mkdir -p ../reports/tmp/report4 && (cd .. && cargo test --workspace 2>&1 | tee reports/tmp/report4/cargo.txt | tail -3) && vitest run --reporter=default --reporter=json --outputFile.json=../reports/tmp/report4/vitest.json && playwright test && node ../tools/report/report4.mjs",
     "test:report3": "mkdir -p ../reports/tmp/report3 && (cd .. && (cargo test -p cad-eval --test handles && cargo test -p cad-session) 2>&1 | tee reports/tmp/report3/cargo.txt | tail -3) && vitest run --reporter=default --reporter=json --outputFile.json=../reports/tmp/report3/vitest.json && playwright test && node ../tools/report/report3-ui.mjs"
   },
   "devDependencies": {

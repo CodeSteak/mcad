@@ -90,6 +90,43 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
+        file: "flasche.scad",
+        grids: &[("g", 8, false), ("g", 8, false)],
+        instances: &[],
+        handles: 1,
+        ops: &[("rotate_extrude", 2), ("fillet", 2), ("polygon", 2), ("cylinder", 4)],
+        check: |out| {
+            let angles: Vec<f64> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| if let Op::RotateExtrude { angle } = n.op { Some(angle) } else { None })
+                .collect();
+            assert_eq!(angles, [360.0, 270.0]);
+            let f: Vec<f64> =
+                out.tree.nodes.iter().filter_map(|n| if let Op::Blend { r, .. } = n.op { Some(r) } else { None }).collect();
+            assert_eq!(f, [3.0, 3.0]);
+        },
+    },
+    Expect {
+        file: "freiformdeckel.scad",
+        grids: &[("g", 9, false)],
+        instances: &[],
+        handles: 0,
+        ops: &[("surface", 1), ("thicken", 1), ("box", 1)],
+        check: |out| {
+            let rows = out
+                .tree
+                .nodes
+                .iter()
+                .find_map(|n| if let Op::Surface { rows } = &n.op { Some(rows.clone()) } else { None })
+                .unwrap();
+            assert_eq!((rows.len(), rows[0].len()), (4, 4));
+            assert_close(rows[1][1], [20.0, 13.0, 9.0]);
+            assert!(has_op(out, |o| *o == Op::Thicken { t: 2.0 }));
+        },
+    },
+    Expect {
         file: "gehaeuse.scad",
         grids: &[("g", 8, false), ("h", 3, true)],
         instances: &[("k", "gehaeuse", &["ecke", "oben"])],
@@ -103,6 +140,44 @@ const EXPECT: &[Expect] = &[
             assert_eq!(h.planes.iter().find(|p| p.name == "rand").unwrap().value, 60.0);
             let lid = nodes_with(out, "box")[2];
             assert_close(out.tree.node(lid).world.transform_point3(DVec3::ZERO), [60.0, 30.0, 20.0]);
+        },
+    },
+    Expect {
+        file: "griffschale.scad",
+        grids: &[("g", 9, false)],
+        instances: &[("s", "griffschale", &["deckel"])],
+        handles: 0,
+        ops: &[("shell", 1), ("zone", 1), ("difference", 3), ("cylinder", 4)],
+        check: |out| {
+            assert!(has_op(out, |o| *o == Op::Shell { t: 1.6, select: Select::Inside }));
+            assert_eq!(blends(out), [(BlendKind::Fillet, 5.0)]);
+            let f = out.tree.nodes.iter().filter(|n| matches!(n.op, Op::Boolean { fillet: Some(f), .. } if f == 0.5));
+            assert_eq!(f.count(), 2);
+            let g = out.grid_by_name("g").unwrap();
+            let dom: Vec<f64> = g.planes.iter().filter(|p| p.base == "dom").map(|p| p.value).collect();
+            assert_eq!(dom, [18.0, 72.0]);
+        },
+    },
+    Expect {
+        file: "kabelfuehrung.scad",
+        grids: &[("g", 7, true)],
+        instances: &[],
+        handles: 17,
+        ops: &[("sweep", 2), ("polygon", 2), ("box", 2)],
+        check: |out| {
+            let sweeps: Vec<(&Vec<DVec3>, PathInterp)> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match &n.op {
+                    Op::Sweep { path, interp } => Some((path, *interp)),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(sweeps[0].1, PathInterp::Spline);
+            assert_eq!(sweeps[0].0.len(), 4);
+            assert_close(sweeps[0].0[2], [40.0, 25.0, 20.0]);
+            assert_eq!(sweeps[1].1, PathInterp::Linear);
         },
     },
     Expect {
@@ -175,6 +250,20 @@ const EXPECT: &[Expect] = &[
             assert_eq!(sweeps[1].1, PathInterp::Linear);
             let loft = nodes_with(out, "loft")[0];
             assert_eq!(out.tree.solid_children(loft).count(), 3);
+        },
+    },
+    Expect {
+        file: "lueftungsgitter.scad",
+        grids: &[("g", 15, false)],
+        instances: &[("", "gitter", &["mitte"])],
+        handles: 0,
+        ops: &[("linear_extrude", 10), ("difference", 1), ("rect", 10)],
+        check: |out| {
+            assert!(has_op(out, |o| matches!(o, Op::Boolean { chamfer: Some(c), fillet: None, .. } if *c == 0.6)));
+            let g = out.grid_by_name("g").unwrap();
+            let s: Vec<f64> = g.planes.iter().filter(|p| p.base == "s").map(|p| p.value).collect();
+            assert_eq!(s.len(), 7);
+            assert_eq!((s[0], s[6]), (10.0, 70.0));
         },
     },
     Expect {
