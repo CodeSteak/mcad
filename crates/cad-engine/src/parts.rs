@@ -264,6 +264,27 @@ where
     }
 }
 
+/// First synthetic face tag of the STEP colours (one per colour; kernel tags are far below).
+const STEP_COLOR_TAG: u32 = 0x4000_0000;
+
+fn for_each_face_mut(b: &mut cad_kernel::brep::Brep, f: &mut dyn FnMut(&mut cad_kernel::brep::Face)) {
+    use cad_kernel::brep::Body;
+    for body in &mut b.bodies {
+        match body {
+            Body::Solid { outer, voids } => {
+                for sh in std::iter::once(outer).chain(voids.iter_mut()) {
+                    sh.faces.iter_mut().for_each(&mut *f);
+                }
+            }
+            Body::Sheet { shells } => {
+                for sh in shells {
+                    sh.faces.iter_mut().for_each(&mut *f);
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -287,26 +308,5 @@ mod tests {
         assert_eq!(x.matches("<object ").count(), 2);
         assert!(x.contains("name=\"a&lt;b\""));
         assert_eq!(x.matches("<item ").count(), 2);
-    }
-}
-
-/// First synthetic face tag of the STEP colours (one per colour; kernel tags are far below).
-const STEP_COLOR_TAG: u32 = 0x4000_0000;
-
-fn for_each_face_mut(b: &mut cad_kernel::brep::Brep, f: &mut dyn FnMut(&mut cad_kernel::brep::Face)) {
-    use cad_kernel::brep::Body;
-    for body in &mut b.bodies {
-        match body {
-            Body::Solid { outer, voids } => {
-                for sh in std::iter::once(outer).chain(voids.iter_mut()) {
-                    sh.faces.iter_mut().for_each(&mut *f);
-                }
-            }
-            Body::Sheet { shells } => {
-                for sh in shells {
-                    sh.faces.iter_mut().for_each(&mut *f);
-                }
-            }
-        }
     }
 }

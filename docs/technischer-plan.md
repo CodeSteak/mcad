@@ -595,7 +595,7 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 
 ---
 
-## 16. Farben, Filamente, dunkles Thema (B11)
+## 16. Farben, Filamente, dunkles Thema (B11, Korrekturen B12)
 
 ### 16.1 Palette
 
@@ -608,10 +608,24 @@ simulierte Deuteranopie/Protanopie (Machado 2009): `red #c74240, orange #dc813b,
 #abaeb2, white #f4f3f0`; `grey`, `aqua`, `fuchsia` als CSS-Schreibweisen. Auswahl: die
 häufigsten Namen in OpenSCAD-Dateien (red, green, blue, yellow, cyan, gray, black, white,
 magenta, orange, silver, lime, purple) plus teal, pink, brown für typische Filamente;
-`indigo`/`slate` fallen weg (zu nah an blue/purple bzw. gray). Unbekannter Name → Warnung am
-Argument und Farbe aus FNV-1a des kleingeschriebenen Namens (Farbton) mit L 0,65 / C 0,125
-(Mediane der Palette). Anzeige je Thema: Schwarz im Dunkeln auf L 0,36, dunkle Töne +0,04;
-Weiß im Hellen auf L 0,93; Exporte nutzen die Grundwerte.
+`indigo`/`slate` fallen weg (zu nah an blue/purple bzw. gray). Anzeige je Thema: Schwarz im
+Dunkeln auf L 0,36, dunkle Töne +0,04; Weiß im Hellen auf L 0,93; Exporte nutzen die
+Grundwerte.
+
+**Unbekannte Namen** (B12, F5): Warnung am Argument; Farbe aus einer Folge von Kandidaten je
+Name (FNV-1a 64 des kleingeschriebenen Namens, weitere Kandidaten über SplitMix64): Farbton,
+Helligkeit L 0,45–0,80 und Chroma 0,06–0,16 aus dem Hash (Chroma verringert bis sRGB). Gewählt
+wird der erste Kandidat mit ΔE_OK ≥ 0,07 zu allen Palettenfarben und zum Standard und – im
+Modell, in Reihenfolge des ersten Auftretens – ≥ 0,06 zu den Zufallsfarben anderer Namen
+(höchstens 256 Kandidaten, sonst der mit dem größten Abstand). Derselbe Name (Groß/Klein egal)
+hat im Modell immer dieselbe Farbe; ohne Kollision im Modell ist sie über Modelle, Sitzungen,
+CLI und UI gleich. Verschiedene Namen fallen nie zufällig auf einen Wert.
+
+**Werte** (B12, F7): Hex und Vektoren exakt; Vektorwerte außerhalb 0–1 und `alpha` außerhalb
+0–1 werden mit Warnung geklemmt (bei 0–255-Werten mit Hinweis auf `"#rrggbb"`). Die Identität
+einer Druckfarbe ist ihr **RGB-Wert**: `alpha` wirkt nur in der Ansicht (Transparenz), Einträge,
+Slots, Konfliktprüfung und Regionen sehen über Alpha hinweg. `color("transparent")`,
+`color("")` und `color()` färben nicht (Warnung, das Material bleibt Standard/Slot 1).
 
 ### 16.2 Farbregionen
 
@@ -619,31 +633,80 @@ Weiß im Hellen auf L 0,93; Exporte nutzen die Grundwerte.
 das System des Bauteils gelegt, mit `resize`-Faktoren) gehört dieser Farbe; Überlappung →
 die spätere Anweisung (Pre-Order: inneres `color()` nach dem äußeren, späteres Geschwister
 nach früherem) gewinnt; Abgezogenes gilt für alle (alles wird mit dem Ergebnis geschnitten).
-`Stück(C) = R ∩ M(C) − ⋃ M(später)`, Rest `R − ⋃ M` → Farbe am Bauteil, sonst Standard
-(wenn das Bauteil ungefärbte Primitive hat), sonst die erste Farbe. Gecacht unter einem
-Schlüssel aus Bauteil, Farbknoten, Lagen und Farben; Farbe und Slot sind nicht Teil der
-Knotenschlüssel. Prüfung Summe = Volumen (sonst Warnung). Ohne Farbknoten unter dem Bauteil
-gibt es keinen Boolean: eine Region aus den Körpern des Bauteils, Volumen = Bauteilvolumen
-(gecacht), damit die offene Farbliste ungefärbte Modelle nichts kostet.
+`Stück(C) = R ∩ M(C) − ⋃ M(später, andere Farbe)` – ein gleichfarbiger Nachbar wird nicht
+abgezogen (B12, F6: sonst Splitter an Berührflächen), Stücke einer Farbe werden vereinigt –,
+Rest `R − ⋃ M` → Farbe am Bauteil, sonst Standard (wenn das Bauteil ungefärbte Primitive hat),
+sonst die erste Farbe. Gecacht unter einem Schlüssel aus Bauteil, Farbknoten, Lagen und Farben;
+Farbe und Slot sind nicht Teil der Knotenschlüssel. Prüfung Summe = Volumen (sonst Warnung).
+Ohne Farbknoten unter dem Bauteil gibt es keinen Boolean: eine Region aus den Körpern des
+Bauteils, Volumen = Bauteilvolumen (gecacht).
+
+`color()` im 2D-Profil einer Extrusion ohne eigene Farbe (B12, F3): haben alle 2D-Blätter eine
+Farbe, ist die Extrusion ein Körper dieser Farbe (wie `color()` um die Extrusion); gemischte
+oder teils ungefärbte 2D-Inhalte werden nicht getrennt (ein Körper, Standard, Warnung
+„Farben im 2D-Profil … werden nicht getrennt“).
+
+Material außerhalb der Bauteile (B12, F4): die obersten Knoten, die weder Bauteil sind noch
+eines enthalten, bilden den Eintrag „ohne Bauteil“ der Regionen (Farbliste, Export).
 
 ### 16.3 Filamente
 
-`filament = n` (1–16) an einem `color()` legt den Slot der Farbe fest (erste Angabe gilt,
-Widerspruch → Warnung); ungefärbtes Material Slot 1; sonst niedrigster freier Slot in
-Reihenfolge des ersten Auftretens. Die UI schreibt den Slot als Text-Edit (`SetFilament`):
-der Code bleibt die einzige Quelle, CLI-Export und UI-Export stimmen überein, Undo und Git
-sehen die Änderung; eine reine Vorschau ginge beim Speichern verloren.
+Slot einer Farbe, in dieser Reihenfolge:
+1. `filament("red", 4);` auf oberster Ebene der Hauptdatei (B12, F2): Slot-Tabelle des Modells,
+   vor allen anderen Anweisungen ausgewertet (eigener Durchlauf); erste Angabe einer Farbe
+   gilt; ein widersprechendes `filament = m` an `color()` warnt und wird ignoriert;
+   `filament()` an anderer Stelle warnt („nur auf oberster Ebene“); ein eigenes Modul
+   `filament` des Nutzers hat Vorrang.
+2. `filament = n` (1–16) an einem `color()` (erste Angabe gilt, Widerspruch → Warnung).
+3. Ungefärbtes Material Slot 1; sonst niedrigster freier Slot in Reihenfolge des ersten
+   Auftretens.
+
+Hinweise der Farbtabelle (B12, F8): automatische Slots über 16 → Warnung; zwei Farben auf
+demselben festen Slot und ein fester Slot 1 neben Standard → Hinweis (Info).
+
+Die UI schreibt den Slot als Text-Edit (`SetFilament`, `cad_eval::filament_set_edits`): gibt es
+ein `filament()` der Farbe, wird dessen Slot geändert („automatisch“ entfernt die Zeile);
+nennen alle `color()`-Anweisungen der Farbe sie als Literal (Text oder Zahlenvektor), kommt
+`filament = n` dorthin; sonst (Parameter, Schleifenwert, Variable – `filament = n` gälte dort
+für alle Farben der Anweisung) fügt sie `filament("<name>", n);` ein (nach vorhandenen, sonst
+vor der ersten Anweisung, die kein `use`/`include`, keine Definition und keine Zuweisung ist).
+Begründung: der Code bleibt die einzige Quelle (CLI-Export und UI-Export stimmen überein, Undo
+und Git sehen die Änderung, der Agent liest dieselbe Datei); die Tabelle braucht keine neue
+Syntax (ein Modulaufruf, in OpenSCAD eine harmlose Warnung) und gilt genau für eine Farbe;
+`$filaments = [...]` hätte `$`-Gültigkeitsbereiche und wäre an jeder Stelle änderbar.
 
 ### 16.4 Export
 
-3MF (`cad_engine::color_export`): `m:colorgroup`, ein Netz je (Bauteil, Farbe) mit
-`pid`/`pindex`, je Bauteil ein Objekt mit `components` ohne Transformation,
-`Metadata/model_settings.config` mit `extruder` je Teil und Objekt (Annahmen aus
-`bbs_3mf.cpp` von Bambu Studio und OrcaSlicer, Bericht 11). Kein `project_settings.config`.
+3MF (`cad_engine::color_export`): je Bauteil ein Objekt (Material außerhalb der Bauteile: ein
+Objekt „ohne Bauteil“; ohne Bauteile die Wurzel) mit `components` ohne Transformation, ein Netz
+je (Objekt, Farbe), `Metadata/model_settings.config` mit `extruder` je Teil und Objekt
+(Annahmen aus `bbs_3mf.cpp` von Bambu Studio und OrcaSlicer, Bericht 11). **Keine
+`m:colorgroup`** (B12): Bambu Studio öffnet bei fremden 3MF genau dann den Farbdialog, wenn
+eine Farbgruppe und Dreiecksfarben da sind (`Plater.cpp`), und dessen OK überschreibt
+`extruder`; ohne Farbgruppe übernimmt es die Slots. OrcaSlicer nutzt Farbgruppen nur für
+Objekte ohne `model_settings.config`. `--color-group` (CLI) schreibt sie für andere Programme
+(nur bei mehr als einer Farbe; Meldung: im Dialog „Abbrechen“ wählen). Kein
+`project_settings.config`, kein `Application = BambuStudio-…`. CLI und UI rufen denselben
+Export (`Session::export_colors`), die Meldung nennt die Objekte (`color_export_notes`).
 Standard für 3MF (`--single-color` / `colors: false` für einfarbig); `--per-color` /
-`Export { format: stl, colors: true }`: ZIP mit `F<slot>_<farbe>.stl`.
+`Export { format: stl, colors: true }`: ZIP mit `F<slot>_<farbe>.stl` (CLI: Endung `.zip`
+Pflicht; `--part` beschränkt auch die Farbliste).
 
-### 16.5 Thema
+STEP: Flächenfarben aus den Farbregionen ohne Boolean (`Engine::face_region_colors`): je Fläche
+die Farbe des spätesten Farbknotens, dessen Material ihre Abtastpunkte enthält (Mehrheit),
+sonst die Restfarbe; Material ohne `color()` ohne Farbe. Flächen werden nicht geteilt.
+
+### 16.5 Ansicht (B12, F1/F3)
+
+Ein Modell mit Farben zeigt in der vollen Ansicht die **Farbregionen** (die Körper des 3MF),
+sobald sie gerechnet sind (UI: „Farbregionen zeigen“, Standard an; CLI `cad render` ohne
+`--show faces`). Davor und für hervorgehobene Teilbäume: Farbe je Fläche aus dem Knoten, der die
+Fläche erzeugt hat – nur Knoten unterhalb des gezeichneten Knotens, und bei mehreren mit
+gleichem Inhalt (geteilter Cache-Eintrag, ein Flächen-Tag) der, dessen Hülle das Dreieck
+enthält (bei mehreren der späteste). Die Cache-Wiederverwendung bleibt; Grenze: Farbe je Fläche
+ist bei Überlappung und Verrundung an Farbgrenzen nur angenähert, die Regionen sind exakt.
+
+### 16.6 Thema
 
 CSS-Token je Thema (`:root[data-theme=…]`), `contrast.test.ts` prüft Text ≥ 4,5:1 und
 UI-Teile ≥ 3:1; CodeMirror-Tooltips/Suchleiste über Token; 3D-Farben aus Token

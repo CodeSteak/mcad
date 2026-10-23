@@ -238,6 +238,7 @@ fn wire_batch_has_binary_meshes() {
             parts: None,
             zip: None,
             colors: None,
+            notes: Some(vec!["n".into()]),
         },
     ];
     let f = encode_batch(&msgs, true);

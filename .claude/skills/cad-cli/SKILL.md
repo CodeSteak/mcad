@@ -41,9 +41,10 @@ Agenten arbeiten immer mit den Befehlen unten, die UI ist nie nötig. Headless-B
    Kernel-Meldung) und `cad measure` (Abstände zwischen Ankern/Rasterpunkten, Hülle, Volumen,
    Kollisionen der Bauteile, Abstand zweier Bauteile).
 6. **Ausgeben:** `cad export datei.scad -o teil.step` (oder `--all-parts -o ordner/`). Zum
-   Mehrfarbdruck `cad export datei.scad -o teil.3mf` (Standard mehrfarbig: Bambu Studio /
-   OrcaSlicer öffnen die Datei mit einem Teil je Farbe und gesetzten Filament-Slots; vorher
-   `cad measure datei.scad --colors` für Slots, Volumen und Masse je Farbe).
+   Mehrfarbdruck `cad export datei.scad -o teil.3mf` (Standard mehrfarbig: je Bauteil ein
+   Objekt, Material außerhalb der Bauteile als Objekt „ohne Bauteil“, ein Teil je Farbe mit
+   Filament-Slot; ohne Farbgruppe, daher übernehmen Bambu Studio und OrcaSlicer die Slots ohne
+   Farbdialog; vorher `cad measure datei.scad --colors` für Slots, Volumen und Masse je Farbe).
 
 Der Kernel-Cache bleibt zwischen den Aufrufen erhalten (**Daemon**, unten): ein zweiter Aufruf
 auf derselben oder einer wenig geänderten Datei rechnet nur die geänderten Knoten neu. Für
@@ -90,7 +91,8 @@ oder über `CAD_DAEMON_CACHE_MB`, `CAD_DAEMON_MAX_PROJECTS`, `CAD_DAEMON_IDLE_SE
 vor beidem). Gibt es keinen Daemon (Windows, Socket-Ordner unbrauchbar, Fehler), rechnet der
 Befehl still selbst. Ein `cad` mit anderer Build-ID ersetzt den laufenden Daemon. Socket-Ordner
 wie bei `cad ui`: `$CAD_IPC_DIR`, sonst `$XDG_RUNTIME_DIR/controller-cad`, sonst
-`/tmp/controller-cad-<uid>` (0700, Socket 0600).
+`/tmp/controller-cad-<uid>` (0700, Socket 0600); ist der Socketpfad zu lang (> 107 Byte), liegt
+der Socket unter `/tmp/cad-<uid>/<hash>-daemon.sock` (`cad daemon status` zeigt ihn).
 
 ## Zusammenarbeit: Nutzer in der Desktop-UI, Agent editiert und prüft
 
@@ -133,8 +135,8 @@ und prüft mit der CLI. Die UI beobachtet die Datei und alle eingebundenen Datei
 | `cad measure DATEI [Optionen]` | Messen (Optionen unten) |
 | `cad watch DATEI [--json] [--render bild.png …]` | Beobachten und bei jeder Änderung neu auswerten (unten) |
 | `cad set DATEI --param modul.param=wert \| --literal [datei:]zeile:spalte=wert [--dry-run]` | Code über die Engine ändern (unten) |
-| `cad export DATEI -o teil.stl\|teil.3mf\|teil.step [--schema ap214]` | Exportdatei der Wurzel (STEP: exakte B-Rep, AP242; 3MF: **mehrfarbig**, ein Teil je Farbe mit Filament-Slot für Bambu Studio/OrcaSlicer, einfarbig mit `--single-color`) |
-| `cad export DATEI --per-color [--part NAME]… -o farben.zip` | ZIP mit einem STL je Farbe (und Bauteil): `F<slot>_<farbe>.stl`, alle im selben Koordinatensystem |
+| `cad export DATEI -o teil.stl\|teil.3mf\|teil.step [--schema ap214]` | Exportdatei (STEP: exakte B-Rep, AP242, Flächenfarben aus den Farbregionen; 3MF: **mehrfarbig**, je Bauteil ein Objekt + „ohne Bauteil“, ein Teil je Farbe mit Filament-Slot für Bambu Studio/OrcaSlicer, ohne Farbgruppe; `--color-group` mit Farbgruppe für andere Programme – Bambu öffnet dann einen Farbdialog, „Abbrechen“ behält die Slots; einfarbig mit `--single-color`) |
+| `cad export DATEI --per-color [--part NAME]… -o farben.zip` | ZIP mit einem STL je Farbe (und Bauteil): `F<slot>_<farbe>.stl`, alle im selben Koordinatensystem (Endung `.zip` Pflicht) |
 | `cad export DATEI --part NAME [--part NAME2] -o …` | Nur diese Bauteile (benannte Instanzen auf oberster Ebene, z. B. `deckel`, `k[2]`) |
 | `cad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | Jedes Bauteil als eigene Datei (`deckel.stl`, `k_2.step`) |
 | `cad diff-kernels DATEI…` | Vergleich SMLib ↔ solidcore (nur Entwicklung, `--features solidcore`) |
@@ -167,7 +169,7 @@ Dateikontext.
 | `--section-flip` | Die andere Hälfte behalten |
 | `--xray` | Alles halbtransparent mit Kanten |
 | `--theme dark` | Dunkles Farbschema (wie die UI; Palette-Farben in der dunklen Variante) |
-| `--show regions` | Farbregionen: Körper je Farbe (wie exportiert) statt Farbe je Fläche |
+| `--show regions` / `--show faces` | Farbregionen (Körper je Farbe wie exportiert; Standard bei Modellen mit Farben) bzw. Farbe je Fläche (schneller, bei Überlappung/Verrundung ungenau) |
 | `--size BxH`, `--no-axes`, `--whole-file` | Bildgröße, ohne Achsenkreuz, Dateikontext |
 
 **Schnitt-Konvention (gleich in der UI):** Ebene durch Punkt `p` mit Normale `n`; entfernt
@@ -259,9 +261,9 @@ Offsets UTF-16). `Bounds = { min, max, size }`. Vollständiges Schema: Kopf von
 - `set`: `+ { changes: [{kind, spec, file, line, col, old, new}], dry_run, written, refused,
   errors_before, errors_after, diff }`
 - `export`: `+ { output, format, bytes, triangles, volume, area, bounds, step?, multicolor,
-  colors?, color_regions? }` (`--per-color`: `format: "zip"`, `files`)
+  color_group?, notes?, colors?, color_regions? }` (`--per-color`: `format: "zip"`, `files`)
 - `outline`/`measure --colors`: `colors: [{key, label, source: default|palette|random|exact,
-  filament, explicit, lines, volume, mass_g}]`, `color_regions`/`colors.parts: [{part, node,
+  filament, explicit, lines, places, volume, mass_g}]` (`places`: `Z.3` oder `lib.scad:3`), `color_regions`/`colors.parts: [{part, node,
   total, warning, regions: [{color, label, filament, volume, mass_g}]}]`
 - `daemon status`: `{ running, pid, version, build_id, uptime_s, idle_s, idle_limit_s, watchdog_s,
   busy, current, pending, requests, failed, projects, max_projects, project_evictions, cache:
@@ -350,21 +352,32 @@ Verrundung). `chamfer` und `shell(t) { körper; zone; }` folgen demselben Muster
 `inspect --line` des Blocks zeigt die Kantenanzahl, `render --line` die Zonen (blau) und die
 Kanten (orange).
 
-**Farben und Filamente** (Bericht 11): `color("name")` nimmt die Palette (16 gedeckte Farben,
-Groß/Klein egal): `red, orange, yellow, lime, green, teal, cyan, blue, purple, magenta, pink,
-brown, black, gray (grey), silver, white`; `aqua` = cyan, `fuchsia` = magenta. Andere Namen
-(auch CSS wie `lightblue`, deutsche wie `rot`) geben eine Warnung und eine stabile
-Zufallsfarbe. `#rgb`, `#rrggbb`, `#rrggbbaa`, `[r, g, b(, a)]` und `alpha` bleiben exakt.
-`color("teal", filament = 2)` legt den Slot fest (benannt, nicht positionell); sonst Slots in
-Reihenfolge des ersten Auftretens, Material ohne `color()` immer Slot 1. Volumen je Farbe:
-der Körper eines gefärbten Teilbaums gehört dieser Farbe, bei Überlappung gewinnt die spätere
-Anweisung (auch ein inneres `color()`), Abgezogenes gilt für alle. Prüfen mit
-`cad outline` (Abschnitt „Farben“) oder `cad measure --colors`, ansehen mit
-`cad render --show regions`.
+**Farben und Filamente** (Bericht 11, Korrekturen Bericht 12): `color("name")` nimmt die
+Palette (16 gedeckte Farben, Groß/Klein egal): `red, orange, yellow, lime, green, teal, cyan,
+blue, purple, magenta, pink, brown, black, gray (grey), silver, white`; `aqua` = cyan,
+`fuchsia` = magenta. Andere Namen (auch CSS wie `lightblue`, deutsche wie `rot`) geben eine
+Warnung und eine stabile Zufallsfarbe (mit Abstand zur Palette und zu den anderen Zufallsfarben
+des Modells). `#rgb`, `#rrggbb`, `#rrggbbaa`, `[r, g, b(, a)]` (Werte 0–1; anderes wird mit
+Warnung geklemmt) bleiben exakt; `alpha` wirkt nur in der Ansicht (`red` mit alpha ist der
+Eintrag `red`); `transparent` und `""` färben nicht (Warnung).
+Slot: `color("teal", filament = 2)` (benannt) an einem `color()` mit festem Farbwert; kommt
+die Farbe aus einem Parameter oder einer Schleife (`module bar(c) color(c) …`), auf oberster
+Ebene der Hauptdatei `filament("red", 4);` – das gilt für das ganze Modell und vor
+`filament = n`. Sonst Slots in Reihenfolge des ersten Auftretens, Material ohne `color()`
+immer Slot 1; über 16 Slots warnt, geteilte Slots zeigt ein Hinweis. Volumen je Farbe: der
+Körper eines gefärbten Teilbaums gehört dieser Farbe, bei Überlappung gewinnt die spätere
+Anweisung (auch ein inneres `color()`), Abgezogenes gilt für alle; `color()` im 2D-Profil
+färbt die Extrusion (gemischte 2D-Farben: Warnung). Prüfen mit `cad outline` (Abschnitt
+„Farben“, Zeilen anderer Dateien als `lib.scad:3`) oder `cad measure --colors`, ansehen mit
+`cad render` (ein Modell mit Farben zeigt die Farbregionen wie gedruckt; `--show faces` die
+schnellere Farbe je Fläche).
 
 ```
 color("white") cube([40, 20, 2]);                              // Platte: Slot 1
 color("red", filament = 3) translate([5, 5, 2]) cube([30, 10, 1]);  // Schrift: Slot 3
+module knopf(c) color(c) cylinder(h = 2, r = 3);
+filament("teal", 4);                                           // Slot einer Parameterfarbe
+translate([10, 10, 3]) knopf("teal");
 ```
 
 **Modifier:** `#` rot halbtransparent zusätzlich, `%` Hilfsgeometrie (grau, nicht im

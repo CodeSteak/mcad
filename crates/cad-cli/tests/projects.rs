@@ -114,7 +114,8 @@ fn export_single_parts_and_all_parts() {
     assert_eq!(v["multicolor"], true);
     let text = String::from_utf8_lossy(&std::fs::read(&mf).unwrap()).into_owned();
     assert_eq!(text.matches("<item ").count(), 2);
-    assert!(text.contains("Metadata/model_settings.config") && text.contains("<m:colorgroup"));
+    // Bericht 12: slots in model_settings.config, no colour group (Bambu Studio colour dialog)
+    assert!(text.contains("Metadata/model_settings.config") && !text.contains("<m:colorgroup"));
 
     // All parts into a folder.
     let out = dir.path().join("teile");

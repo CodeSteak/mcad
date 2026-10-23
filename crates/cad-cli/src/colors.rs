@@ -54,11 +54,11 @@ pub(crate) fn table_of(
         None
     };
     let mut shown: Vec<&p::ColorInfo> = sc.colors.iter().collect();
-    if let Some(names) = only {
-        if let Some(s) = sets.as_mut() {
-            s.retain(|set| set.part.as_ref().is_some_and(|p| names.contains(p)));
-            shown.retain(|c| s.iter().flat_map(|x| &x.regions).any(|r| r.color == c.key));
-        }
+    if let Some(names) = only
+        && let Some(s) = sets.as_mut()
+    {
+        s.retain(|set| set.part.as_ref().is_some_and(|p| names.contains(p)));
+        shown.retain(|c| s.iter().flat_map(|x| &x.regions).any(|r| r.color == c.key));
     }
     let volume_of = |key: &str| -> Option<f64> {
         sets.as_ref().map(|s| s.iter().flat_map(|x| &x.regions).filter(|r| r.color == key).map(|r| r.volume).sum())
