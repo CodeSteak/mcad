@@ -12,6 +12,11 @@
 #   0001  1ed8669 of the fork's capi-solidcraft branch, source part: pointer maps iterate in
 #         insertion order, not address order (shell/offset/fillet/Boolean results no longer
 #         depend on the heap layout; native and Wasm take the same path).
+#   0002  SmFilletExecutive::CreateFilletCorners: a vertex without corner type fails the
+#         fillet instead of leaving its edge list in the corner map, where it was later read
+#         as a corner (segmentation fault; Testbericht 13, F9).
+#   0003  SmSweepOptions::bUseProfileRefPoint/sProfileRefPoint: the caller gives the profile
+#         point that travels along the path of a curve sweep (Testbericht 13, F1).
 #
 #   smlib/fetch.sh            # clone https://github.com/tangency-labs/smlib
 #   SMLIB_URL=/path/or/url smlib/fetch.sh

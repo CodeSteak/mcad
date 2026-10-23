@@ -2,7 +2,8 @@
 // Kante an einer kurzen konkaven endet (Stufe vor einer hohen Wand): „chamfer failed:
 // SM_ERR (1001)“; `cad render --line 5` zeigt die konkave Kante rot. Ebenso: Rippenfüße samt
 // kurzer Außenkanten (Kühlkörper), Oberkanten des vorderen Fachs (Stiftebox).
-// ERWARTET: fehlerfrei
+// Status (Bericht 13): offen – SMLib-Ecktyp konvex/konkav; Meldung markiert die Kante.
+// SOLL: fehlerfrei
 chamfer(0.5) {
     difference() {
         union() {

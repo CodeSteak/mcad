@@ -1,0 +1,43 @@
+From: controller-cad (Testbericht 13, F1)
+Subject: SMLib: curve sweep with a given profile reference point
+
+SmPrimitiveCreation::CreateCurveSweep moves the profile so that the centre of its curves'
+bounding box (bMoveProfileCenterToPath) or the start point of the first curve travels along the
+path. The box of a B-spline is the box of its control points, so even a symmetric closed spline
+profile counts as off-centre (control box x -15..5 for the spline through (5,0) (0,3) (-5,0)
+(0,-3)). New SmSweepOptions fields bUseProfileRefPoint and sProfileRefPoint let the caller give
+the profile point that travels along the path (the facade passes the origin of the profile
+frame, so any profile follows a curved path with its origin).
+
+diff --git a/source/SMLib/inc/SmPrimitiveCreation.h b/source/SMLib/inc/SmPrimitiveCreation.h
+index a993ed8..972cd8d 100644
+--- a/source/SMLib/inc/SmPrimitiveCreation.h
++++ b/source/SMLib/inc/SmPrimitiveCreation.h
+@@ -60,6 +60,9 @@ class SmSweepOptions
+       SmBoolean bOrientProfilePerpendicularToPath = false; // if true, orient the profile so that it begins perpendicular to the path
+       SmBoolean bMoveToProfile = false;                    // if true, move the result back to the original position of the profile
+                                                            // otherwise the result will be at the path
++      SmBoolean bUseProfileRefPoint = false;               // if true, sProfileRefPoint (not the profile's centre or start
++                                                           // point) is the profile point that travels along the path
++      SmVector3d sProfileRefPoint = SmVector3d( 0, 0, 0 );
+ } ;
+ 
+ /*******************************************************************//**
+diff --git a/source/SMLib/src/SmPrimitiveCreation.cpp b/source/SMLib/src/SmPrimitiveCreation.cpp
+index 6654acb..e4aea79 100644
+--- a/source/SMLib/src/SmPrimitiveCreation.cpp
++++ b/source/SMLib/src/SmPrimitiveCreation.cpp
+@@ -5048,7 +5048,12 @@ SmStatus SmPrimitiveCreation::CreateCurveSweep
+ 
+   // Move Profiles to orgin
+   SmVector3d sProfileRefPt( 0, 0, 0 );
+-  if(pOptions->bMoveProfileCenterToPath)
++  if(pOptions->bUseProfileRefPoint)
++  {
++    // the caller's reference point (e.g. the origin of the profile's own frame)
++    sProfileRefPt = pOptions->sProfileRefPoint;
++  }
++  else if(pOptions->bMoveProfileCenterToPath)
+   {
+     // If moving profile to center of path then we need to 
+     // compute the centroid of all of the edges.

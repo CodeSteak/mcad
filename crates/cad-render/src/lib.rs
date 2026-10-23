@@ -1080,7 +1080,8 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
             if r.0 < 0 || r.1 < 0 || r.2 > ow as i64 || r.3 > oh as i64 {
                 continue;
             }
-            if placed.iter().any(|p| r.0 < p.2 && p.0 < r.2 && r.1 < p.3 && p.1 < r.3) {
+            // 3 px apart horizontally, 2 px vertically: touching boxes read as one label
+            if placed.iter().any(|p| r.0 < p.2 + 3 && p.0 < r.2 + 3 && r.1 < p.3 + 2 && p.1 < r.3 + 2) {
                 continue;
             }
             img.draw_label_on(bx, by, &l.text, TextSize::Small, l.color, opts.label_background);

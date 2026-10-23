@@ -3004,6 +3004,22 @@ uint32_t sc_sweep(const double* loop, uint32_t len_, const double* path, uint32_
                "SmApiCreateCurveSweep");
     }
     BrepPtr b(r);
+    if (r && r->GetNumFaces() > 0 && !r->IsManifoldSolid() && loops[0].kind == SC_LOOP_POLYGON &&
+        !straight) {
+      // SMLib's curve sweep sometimes leaves seams between neighbouring side faces of a
+      // polygon profile open: coincident twin edges (gap 0) that SmBrep::StitchFaces does not
+      // glue either (16-gon along a curved path; 12-, 32-gons on other paths).
+      size_t open = 0;
+      for (SmEdge* e : edges_of(r)) {
+        SmTArray<SmFace*> ef;
+        e->GetFaces(ef);
+        if (ef.GetSize() < 2) open++;
+      }
+      throw fail(SC_FAILED, "sweep: SMLib left " + std::to_string(open / 2) +
+                                " seam(s) between the side faces of the polygon profile open "
+                                "(SMLib limitation on curved paths; circle() or a spline() "
+                                "profile work)");
+    }
     require_solid(r, "sweep");
     tag_all(b.get(), tag);
     _res = put(std::move(b));
@@ -3055,6 +3071,55 @@ uint32_t sc_thicken(uint32_t h, double t, uint32_t tag) {
   })
 }
 
+// Smallest radius of convex curvature over the faces of `b` that are not in `skip` (finite
+// differences of the outward normal on a 7 x 7 grid of each face's UV domain; INFINITY if none
+// is convex). An inward shell offsets every face by t: where a convex rounding has a radius
+// below t the offset surface degenerates, and SMLib's shell fails with a bare SM_ERR.
+double min_convex_radius(const SmBrep* b, const std::vector<const SmFace*>& skip) {
+  double best = INFINITY;
+  for (SmFace* f : faces_of(b)) {
+    if (std::find(skip.begin(), skip.end(), f) != skip.end()) continue;
+    SmSurface* srf = f->GetSurface();
+    if (!srf || srf->IsKindOf(SmPlane_TYPE)) continue;
+    SmFaceuse* fu = f->GetUpwardFaceuse();
+    bool flip = fu && fu->GetShell() && fu->GetShell()->GetRegion() &&
+                !fu->GetShell()->GetRegion()->IsVoid();
+    SmExtent2d d = f->GetUVDomain();
+    double du = 1e-4 * (d.GetUMax() - d.GetUMin()), dv = 1e-4 * (d.GetVMax() - d.GetVMin());
+    auto eval = [&](double u, double v, V3& p, V3& nrm) {
+      SmVector2d uv(u, v);
+      SmVector3d pv, nv;
+      if (SmApiEvaluateSurfacePoint(srf, uv, pv) != SM_SUCCESS) return false;
+      if (SmApiEvaluateSurfaceNormal(srf, uv, nv) != SM_SUCCESS) return false;
+      p = v3(pv.x, pv.y, pv.z);
+      nrm = normalize(v3(nv.x, nv.y, nv.z));
+      if (flip) nrm = nrm * -1.0;
+      return len(nrm) > 0;
+    };
+    for (int i = 1; i <= 7; i++)
+      for (int j = 1; j <= 7; j++) {
+        double u = d.GetUMin() + (d.GetUMax() - d.GetUMin()) * i / 8.0;
+        double v = d.GetVMin() + (d.GetVMax() - d.GetVMin()) * j / 8.0;
+        SmPointClassification pc;
+        if (f->PointClassify(SmPoint2d(u, v), SmTol::GetZoneTol3d(f), FALSE, TRUE, pc) != SM_SUCCESS ||
+            pc.GetPointClass() != SM_PC_FACE)
+          continue;
+        V3 p0, n0;
+        if (!eval(u, v, p0, n0)) continue;
+        for (int k = 0; k < 2; k++) {
+          V3 p1, n1;
+          if (!eval(u + (k == 0 ? du : 0), v + (k == 1 ? dv : 0), p1, n1)) continue;
+          V3 dp = p1 - p0;
+          double l2 = dot(dp, dp);
+          if (l2 <= 0) continue;
+          double kappa = dot(n1 - n0, dp) / l2;  // > 0: convex in this direction
+          if (kappa > 1e-9) best = std::min(best, 1.0 / kappa);
+        }
+      }
+  }
+  return best;
+}
+
 uint32_t sc_shell(uint32_t h, double t, const uint32_t* open_faces, uint32_t n, uint32_t tag) {
   SC_SHAPE_CALL({
     SmBrep* in = get(h);
@@ -3094,6 +3159,13 @@ uint32_t sc_shell(uint32_t h, double t, const uint32_t* open_faces, uint32_t n, 
       b = shell_by_booleans(in, t, open_v, why);
       if (!b.get()) {
         first.msg += "; shell from booleans: " + why;
+        double rmin = min_convex_radius(in, open_v);
+        if (rmin <= 1.02 * t)
+          first.msg = "shell: wall thickness " + std::to_string(t) +
+                      " is not smaller than the radius of a convex rounding of the body (about " +
+                      std::to_string(rmin) +
+                      "): the inner surface degenerates there (rounding radius must be > wall "
+                      "thickness). " + first.msg;
         throw first;
       }
     }

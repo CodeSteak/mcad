@@ -1,3 +1,15 @@
+From: controller-cad (Testbericht 13, F9)
+Subject: SMLib: missing fillet corner type -> error instead of a type confusion (segfault)
+
+SmFilletExecutive::CreateFilletCorners skipped a vertex for which SmFilletCorner::Create found
+no corner type ("Unimplemented corner case") with `continue`. m_vVertexCornerMap still held the
+vertex's edgeuse list (SmTArray<SmEdgeuse*>*) for it, and GetFilletCornerOfVertex() later
+returned that list as an SmFilletCorner*: CollectTangentEdgeSequence called virtual methods on
+it and crashed (union(fillet) of a dome touching a wall tangentially; of a pin and an equally
+thick sweep starting at its end face). Now the entry is removed, the edge noted in the fillet
+error info (comment "unsupported fillet corner") and the fillet fails with
+SM_ERR_INVALID_INPUT.
+
 diff --git a/source/SMLib/src/SmFilletExecutive.cpp b/source/SMLib/src/SmFilletExecutive.cpp
 index 2812b31..5c52867 100644
 --- a/source/SMLib/src/SmFilletExecutive.cpp

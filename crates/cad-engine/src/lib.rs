@@ -269,6 +269,9 @@ pub(crate) struct NodeOutput<S> {
     pub blend_ms: f64,
     /// The blend was left out (draft mode).
     pub suspended: bool,
+    /// `parts` are the operands of a Boolean that failed here or below (reported there): a
+    /// union of them in a parent fails again and is not reported a second time.
+    pub unmerged: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -594,6 +597,7 @@ impl<S: Clone + 'static> Job<S> {
             opened_faces: Vec::new(),
             blend_ms: 0.0,
             suspended: false,
+            unmerged: false,
         }
     }
 

@@ -64,8 +64,36 @@ Alle Baugruppen: `--interference` ohne Kollision (Toleranz 0,001 mm³).
 ## Gefundene Fehler und Schwächen
 
 Minimalbeispiele liegen in [`tests/alltag/fehler/`](../../tests/alltag/fehler/) (Kopfkommentar:
-Erwartung, Befund, Umgehung; `tests/alltag/check.sh --fehler` meldet „besteht“/„behoben“).
-CLI-Stand: `target/release/cad` vom 23.10.2026 14:31 (Merge `384d31b`).
+Befund, Status, Soll-Zustand `// SOLL…`; `tests/alltag/check.sh --fehler` meldet je Beispiel
+„behoben“ oder „offen“). Befunde mit CLI-Stand `target/release/cad` vom 23.10.2026 14:31
+(Merge `384d31b`); Korrekturen und Nachweise in
+[Testbericht 13](../../docs/reports/13-geometrie-korrekturen/report.pdf).
+
+**Stand nach Bericht 13:**
+
+| Befund | Status | Ursache / Korrektur |
+| --- | --- | --- |
+| F1 sweep mit Spline-Profil | behoben | SMLib setzt den Mittelpunkt der *Kontrollpunkt*-Hülle auf den Pfad; Patch `0003` lässt die Fassade den Profilursprung vorgeben (beliebige, auch außermittige Profile auf gekrümmten Pfaden) |
+| F2 Zylinder ∪ Sweep | offen, Meldung einfach | SMLib-Schnitt nahe der gekippten Endkappe (`SM_ERR_NULL_POINTER`); doppelte Diagnose behoben (eine Meldung je gescheiterter Operation) |
+| F3 Sweep 16-Eck | offen, Meldung mit Ursache | SMLib lässt Nähte zwischen Seitenflächen offen (Zwillingskanten mit Abstand 0, `StitchFaces` klebt sie nicht) |
+| F4 union(fillet) an 32-Eck-Sweep | offen | Verrundung der Facettenkanten (SMLib `SM_ERR`), Umgehung `circle()` |
+| F5 Fase → Volumen 0 | behoben (Fehlermeldung) | Fasen innen/außen stoßen an der Ecke zusammen (Wand 1,76 mm); Ergebnis wird auf geschlossene Hülle und Volumen geprüft, offene Hülle = Fehler; `chamfer(0.7)` geht |
+| F6 Fase an kurzer konkaver Kante | offen | SMLib-Ecktyp konvex/konkav; Kante wird markiert |
+| F7 `torus()` als Zone | behoben | wie F8 (Toleranz 0 nach Verschieben) |
+| F8 Booleans mit Torus/`rotate_extrude` | behoben (a, b); c als Fehlermeldung | `SmBrep::Transform` leitete die Toleranzen aus der Hülle der Eckpunkte ab – Torus und Rotationskörper eines Kreises haben nur einen Eckpunkt → Toleranz 0; starre Transformationen lassen die Toleranzen jetzt unverändert. F8c (tangentiale Berührung) hat kein mannigfaltiges Ergebnis → Meldung statt Volumen 0 |
+| F9 Absturz | behoben | Typverwechslung in `SmFilletExecutive::CreateFilletCorners` (Patch `0002`): fehlender Ecktyp → Fehler; tangentiale Berührung → Meldung |
+| F10 union(fillet) verliert die Schale | gemeldet, richtige Kehle offen | Verrundung liefert offenen Körper → Fehler (Plausibilitätsprüfung), die Vereinigung bleibt |
+| F11 deckungsgleiche Zylinder | offen | SMLib-Boolean mit deckungsgleichen Zylinderflächen; Umgehung Spiel ≥ 0,05 mm |
+| F12 shell Loft Quadrat → Kreis | offen | SMLib-Shell und Ersatzweg scheitern |
+| F13 Meldung shell | behoben | Meldung nennt den kleinsten konvexen Radius ≤ Wandstärke |
+| F15 Knauf-Kehle | offen | Verrundung Sweep/Kugel (SMLib) |
+| S1 Profilraster | behoben (CLI) | Raster, deren Bezüge alle im Profil eines `rotate_extrude` liegen, zeichnet `cad render` in der Profilebene; UI: siehe Bericht 13 |
+| S2 Ebenennamen als Werte, Anker-Listen | Vorschlag | Bericht 13, Abschnitt S2 |
+| S3 `outline` | behoben | in Modulen benannte Instanzen und ihre Anker getrennt („Benannte Instanzen in Modulen“, JSON `scope`) |
+| S4 Schnitt/Beschriftung | behoben | Schnitt eines Modells aus Bauteilen je Bauteil (eigene Kappe, Kontur, Schraffur); Rasterreihen `g.rippe[0..7]` mit einer Beschriftung, Abstand zwischen Beschriftungen |
+| Laufzeit | behoben | 70 % der Zeit in `SmApiBrepComputeVolume(…, 1e-8)` für die Bauteilvolumina; Genauigkeit 1e-6: Auswertung Schlüsselbrett 16,7 → 6,1 s (Median aus 3) |
+
+Die Befunde im Wortlaut der Erhebung (vor Bericht 13):
 
 ### Falsches Ergebnis ohne Meldung (am schwersten)
 

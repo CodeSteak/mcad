@@ -1,7 +1,10 @@
 // F10: union(fillet = 1) aus einer verrundeten Schale (shell) und einem Dom nahe der
 // Innenecke: das Ergebnis ist nur der Dom samt Kehle, die Schale fehlt; Status ok,
 // Volumen 0 mm³. Mit dem Dom bei (30, 30) stimmt das Ergebnis (~26 000 mm³).
-// ERWARTET-VOLUMEN-MIN: 20000
+// Status (Bericht 13): gemeldet statt still falsch (Verrundung liefert offenen Körper → Fehler,
+// die Vereinigung bleibt); richtige Kehle offen (läuft auf die Bodenverrundung).
+// SOLL: fehlerfrei
+// SOLL-VOLUMEN-MIN: 20000
 grid g {
     x: l = 0, r = 80;
     y: v = 0, h = 60;
