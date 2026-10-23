@@ -253,3 +253,52 @@ fn stdin_source() {
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["file"], "<stdin>");
 }
+
+#[test]
+fn sketch_and_namespaces() {
+    use std::f64::consts::PI;
+    let want = (40.0 * 20.0 + PI * 400.0 / 2.0) * 5.0;
+    // a sketch with an arc: exact volume
+    let v = json(
+        &[
+            "export",
+            &data("skizze.scad"),
+            "-o",
+            &tempfile::tempdir().unwrap().path().join("s.step").display().to_string(),
+        ],
+        0,
+    );
+    let vol = v["volume"].as_f64().unwrap();
+    assert!((vol - want).abs() < 1e-6 * want, "{vol} {want}");
+    // the function of the namespace
+    let t = text(&["eval", &data("skizze.scad")], 0);
+    assert!(t.contains(&format!("ECHO: {}", cad_eval::fmt_num(40.0 * 20.0 + PI * 200.0))), "{t}");
+    // outline: qualified module and function names
+    let v = json(&["outline", &data("skizze.scad")], 0);
+    let q: Vec<&str> = v["modules"].as_array().unwrap().iter().map(|m| m["qualified"].as_str().unwrap()).collect();
+    assert_eq!(q, ["teile", "teile.platte"]);
+    let f: Vec<&str> = v["functions"].as_array().unwrap().iter().map(|m| m["name"].as_str().unwrap()).collect();
+    assert_eq!(f, ["teile.flaeche"]);
+    let t = text(&["outline", &data("skizze.scad")], 0);
+    assert!(t.contains("teile.platte(a = 40: Zahl"), "{t}");
+    // --module with a path: the inner module as context
+    let v = json(&["eval", &data("skizze.scad"), "--module", "teile.platte", "-D", "a=30"], 0);
+    assert_eq!(v["scene"]["context"]["path"], serde_json::json!(["teile", "platte"]));
+    let v = json(&["inspect", &data("skizze.scad"), "--module", "teile.platte", "--line", "5"], 0);
+    let n = &v["nodes"][0];
+    assert_eq!(n["label"], "linear_extrude");
+    let vol = n["volume"].as_f64().unwrap();
+    assert!((vol - want).abs() < 1e-6 * want, "{vol}");
+    // a segment line: the sketch node (render highlights it)
+    let dir = tempfile::tempdir().unwrap();
+    let o = dir.path().join("s.png").display().to_string();
+    json(&["render", &data("skizze.scad"), "-o", &o, "--line", "9", "--size", "320x240"], 0);
+    // errors per segment line
+    let src = dir.path().join("fehler.scad");
+    std::fs::write(&src, "linear_extrude(1) sketch {\n start([0, 0]);\n arc(to = [10, 0], r = 2);\n close();\n}\n")
+        .unwrap();
+    let v = json(&["check", &src.display().to_string()], 1);
+    let d = &v["diagnostics"][0];
+    assert_eq!(d["range"]["line"], 3);
+    assert!(d["message"].as_str().unwrap().contains("halbe Sehne"), "{d}");
+}

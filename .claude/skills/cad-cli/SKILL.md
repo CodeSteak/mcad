@@ -141,7 +141,7 @@ und prüft mit der CLI. Die UI beobachtet die Datei und alle eingebundenen Datei
 | `cad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | Jedes Bauteil als eigene Datei (`deckel.stl`, `k_2.step`) |
 | `cad diff-kernels DATEI…` | Vergleich SMLib ↔ solidcore (nur Entwicklung, `--features solidcore`) |
 
-Gemeinsame Optionen: `--json`, `--module m` (Modul als Kontext, verschachtelt `aussen::innen`),
+Gemeinsame Optionen: `--json`, `--module m` (Modul als Kontext, verschachtelt `aussen.innen`),
 `-D name=wert` (Parameter des Kontextmoduls, Wert als JSON: `-D w=60`, `-D hohl=true`,
 `-D p=[1,2,3]`). `-D` braucht einen Modulkontext.
 
@@ -382,6 +382,40 @@ translate([10, 10, 3]) knopf("teal");
 
 **Modifier:** `#` rot halbtransparent zusätzlich, `%` Hilfsgeometrie (grau, nicht im
 Ergebnis), `!` nur dieser Teilbaum, `*` ignoriert.
+
+**Skizzen** (Plan 17, Bericht 14): `sketch { … }` ist ein 2D-Profil aus Segmenten, jede
+Zeile ein Segment mit eigener Fehlermeldung (Zeile:Spalte in `cad check`):
+
+```
+linear_extrude(5) sketch {
+    grid s { x: l = 0, r = 40; y: u = 0, o = 20; }  // Raster in der Skizze erlaubt
+    start(s[l, u]);                       // neue Kontur
+    line(to = s[r, u]);                   // auch: by = [dx, dy], length = l, angle = a
+    arc(to = [40, 20], r = 10);           // + large = true / cw = true (wie SVG)
+    arc(center = [20, 20], angle = 90);   // Grad, negativ = im Uhrzeigersinn; oder center + to
+    arc(through = [5, 30], to = [0, 20]); // durch einen Punkt
+    arc(to = [0, 10]);                    // ohne r: tangential an das vorige Segment
+    bezier(c1 = [-5, 5], to = [0, 0]);    // kubisch: c1, c2, to
+    // spline([[…], …], tangent = true, end_tangent = [1, 0]);
+    close();                              // Gerade zum Start (endet die Kontur dort, unnötig)
+    start([10, 5]); …                     // weitere Kontur: Loch nach Windungsregel (Gegenlauf)
+    hole { start(…); …; }                 // Loch in jeder Laufrichtung
+}
+module profil(b = 40) sketch { … }        // benannte Skizze; for/if/let und Module mit Segmenten
+sweep() { sketch(closed = false) { start([0, 0]); line(to = [30, 0]); arc(to = [45, 15]); } circle(2); }
+```
+
+Fehler: „Kontur nicht geschlossen“, „unmöglicher Bogen“ (Radius < halbe Sehne, …),
+„Selbstüberschneidung … mit Segment in Zeile n“, „Kontur ohne Fläche“. `loft` verbindet
+Skizzen gleicher Segmentzahl Segment für Segment (Start = `start`), sonst als je eine Kurve.
+`corner()` ist reserviert (Warnung). In `cad render --line N` einer Segmentzeile ist die Skizze
+hervorgehoben.
+
+**Module als Namensräume:** `module teile { M3 = 3.2; function kopf(d) = 1.8 * d;
+module schraube(d = 3) { … } }` (Klammern dürfen fehlen) → `teile.schraube(d = 4);`,
+`k: teile.schraube();`, `a.b.c();`, `teile.kopf(teile.M3)`. Das innere Modul sieht die Parameter
+des äußeren mit Standardwerten, nicht dessen Raster/Instanzen. `cad --module teile.schraube`,
+`cad set --param teile.schraube.d=4`; `cad outline` zeigt Module und Funktionen mit Pfad.
 
 **Profile:** 2D-Formen (`square`, `rect`, `circle`, `polygon`, `spline`) in `linear_extrude`,
 `rotate_extrude`, `loft`, `sweep`; Freiformflächen mit `surface(points)` + `thicken(t)`.

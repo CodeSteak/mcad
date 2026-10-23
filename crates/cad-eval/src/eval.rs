@@ -643,10 +643,11 @@ impl<'a> Ev<'a> {
             return self.fatal(Span::default(), format!("Modul `{name}` nicht gefunden"));
         };
         let def = *path.last().unwrap();
-        info.module = Some(def.name.name.clone());
         info.def_stmt = Some(def.stmt);
         info.def_span = Some(def.span);
         info.path = path.iter().map(|m| m.name.name.clone()).collect();
+        // nested modules by their path (`teile.schraube`, Plan 17.2)
+        info.module = Some(info.path.join("."));
 
         let (root, mut dy) = match lib {
             None => {

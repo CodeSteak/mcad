@@ -176,6 +176,30 @@ pnpm build                                  # -> web/dist (statisch, z. B. GitHu
   `transparent` färbt nicht. Das 3MF hat ein Objekt je Bauteil (Rest: „ohne Bauteil“) und
   keine Farbgruppe, damit Bambu Studio die Slots ohne Farbdialog übernimmt (Bericht 12).
 
+- `sketch { start(p); line(to = …); arc(to = …, r = …); bezier(c1 = …, to = …); spline(…);
+  close(); }` ist ein 2D-Profil aus exakten Segmenten (Geraden, Kreisbögen, Bézier, Splines) für
+  `linear_extrude`, `rotate_extrude`, `loft` und `sweep` (STEP schreibt Kreise und Linien exakt).
+  Jede Zeile ist ein Segment mit Darstellung, Griffen und eigenen Fehlern (nicht geschlossen,
+  unmöglicher Bogen, Selbstüberschneidung); mehrere Konturen mit `start`, Löcher nach der
+  Windungsregel oder in `hole { … }`, `for`/`if`/`let` und Raster in der Skizze;
+  `sketch(closed = false)` ist ein `sweep`-Pfad. `module profil(b = 40) sketch { … }` ist eine
+  benannte Skizze (Plan 17, Bericht 14).
+- Module sind Namensräume: `module teile { module schraube(d = 3) { … } }` (Klammern dürfen
+  fehlen), Aufruf von außen `teile.schraube(d = 4);`, mehrstufig `a.b.c();`; Funktionen und
+  Konstanten eines Moduls als `teile.kopf(d)`, `teile.M3`; `cad --module teile.schraube`.
+
+```
+linear_extrude(5) sketch {
+    start([0, 0]);
+    line(to = [40, 0]);
+    arc(to = [50, 10], r = 10);          // auch: center + angle, through, tangential
+    line(by = [0, 20]);
+    bezier(c1 = [45, 40], to = [20, 35]);
+    close();
+    hole { start([12, 12]); arc(to = [22, 12], r = 5); arc(to = [12, 12], r = 5); }
+}
+```
+
 ```
 module halter(w = 40, d = 20, h = 10) {
     grid g {
@@ -197,7 +221,7 @@ k: halter(w = 50);
 translate(k.oben) rotate(to = dir(k.oben)) cylinder(h = 8, r = 3);
 ```
 
-Weitere Beispiele: `examples/spec/` (Spracherweiterungen), `examples/openscad-compat/`
+Weitere Beispiele: `examples/spec/` (Spracherweiterungen, Skizzen: `skizze_*.scad`), `examples/openscad-compat/`
 (33 OpenSCAD-Modelle), `examples/projekt-gehaeuse/` (Projekt aus drei Dateien).
 
 ## Verzeichnisstruktur
@@ -282,6 +306,7 @@ CMakeLists, Build-Skript und Compiler: `scripts/ci/smlib-key.sh`). Ist der SMLib
 - [Bericht 10](docs/reports/10-cli-daemon/report.pdf): CLI-Daemon (Cache zwischen Aufrufen, Grenzen, Messung).
 - [Bericht 11](docs/reports/11-farben-filamente/report.pdf): Farben, Multi-Filament-3MF (Bambu Studio/OrcaSlicer), dunkles Thema.
 - [Bericht 12](docs/reports/12-farben-korrekturen/report.pdf): Korrekturen Farben und Daemon (Befunde F1–F9 der unabhängigen Prüfung, Bambu-Farbdialog, Socketpfad).
+- [Bericht 14](docs/reports/14-skizzen/report.pdf): Skizzen mit gemischten Konturen (Geraden, Bögen, Bézier, Splines) und Module als Namensräume.
 
 ## Lizenzen
 

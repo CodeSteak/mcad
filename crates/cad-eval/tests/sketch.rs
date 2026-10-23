@@ -199,6 +199,8 @@ fn handles_of_segments_and_dragging() {
     let local = h.frame.inverse().transform_point3(DVec3::new(50.0, 33.0, 0.0));
     let new = drag(h, DragTarget::Free(DragValue::Point(local)));
     assert!(new.contains("line(by = [0, 23]);"), "{new}");
+    // relative values are not snapped to (absolute) grid points
+    assert!(snap_targets(&out, h.id).is_empty());
     // arc radius
     let h = find("arc(", HandleKind::Radius, 0);
     assert_eq!(h.value, vec![10.0]);

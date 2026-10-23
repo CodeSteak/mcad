@@ -524,7 +524,7 @@ Abhängigkeiten: M1 → M2 → M3 → M4 → M5. M6 hängt nur an M2. M8 hängt 
 
 ---
 
-## 15. Bekannte Grenzen (aus den Testberichten 1–12)
+## 15. Bekannte Grenzen (aus den Testberichten 1–14)
 
 Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1–F4 aus B4, behoben in B7).
 
@@ -597,6 +597,23 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 - Zufallsfarben, die im Modell ausweichen, hängen von den unbekannten Namen davor ab.
 - Ohne Farbgruppe zeigen Programme, die nur 3MF-Farben lesen, das Modell einfarbig (`--color-group` für sie; Bambu öffnet dann den Farbdialog). Bambu Studio/OrcaSlicer nicht am Programm geprüft (Quellcode, Modell des Importers).
 - Der Ersatz-Socket des Daemons liegt fest unter `/tmp/cad-<uid>/`.
+
+**Skizzen und Namensräume (B14)**
+
+- `corner`, `fillet2d`, `offset`, `stroke` fehlen (Schritt 2); Transformationen innerhalb einer
+  Skizze gibt es nicht (ein in der Skizze aufgerufenes Modul zeichnet in Skizzenkoordinaten).
+- Die Prüfung auf Selbstüberschneidung arbeitet auf abgetasteten Polylinien (Toleranz relativ zur
+  Skizzengröße); Überschneidungen *zwischen* Konturen sind erlaubt (Vereinigung nach nonzero).
+  Die Verschachtelung von Löchern und Inseln setzt sich nicht schneidende Konturen voraus.
+- Sweep entlang einer Skizze: wie bisher müssen Profile auf gekrümmten Pfaden um ihren Ursprung
+  zentriert sein; Pfade mit Ecken nur als Gehrung (eben); ein geschlossener Pfad wird nicht
+  unterstützt.
+- Loft verschiedener Segmentzahlen verbindet jeden Abschnitt zu einer Kurve (C0 an den Stößen);
+  die Flächen folgen dann nicht mehr den Segmenten.
+- Namensräume: die Konstanten eines Moduls werden je Zugriff in einem neuen Namensraum
+  ausgewertet (keine Zwischenspeicherung); `use`/`include` liefern Namensräume wie lokale Module.
+  Ein Modul mit gleichem Namen auf verschiedenen Pfaden wählt im Kontext über den Pfad, `--module
+  name` ohne Pfad nimmt das erste.
 
 **solidcore (M8)**
 
@@ -724,9 +741,11 @@ CLI: `cad render --theme dark`.
 
 ---
 
-## 17. Skizzen, Text, SVG-Import, Skizzen-Editor (geplant)
+## 17. Skizzen, Text, SVG-Import, Skizzen-Editor
 
-Stand: Plan, abgestimmt mit dem Nutzer am 2026-10-23.
+Stand: Plan, abgestimmt mit dem Nutzer am 2026-10-23. **Schritt 1 umgesetzt** (Skizzen mit
+gemischten Konturen, Module als Namensräume; Testbericht 14, Entscheidungen in 17.8); Schritte
+2–4 geplant.
 
 ### 17.1 Skizzen
 
@@ -815,3 +834,85 @@ Kein SVG- oder DXF-Export.
 2. `corner`, `fillet2d`, `offset`, `stroke`.
 3. Text mit eigener Schablonenschrift und OFL-Schriften; SVG-Import.
 4. Skizzen-Editor (Zeichenmodus mit Raster) in Browser und Tauri.
+
+### 17.8 Umsetzung Schritt 1 (Testbericht 14)
+
+**Sprache.** `sketch { … }` ist ein eingebautes 2D-Modul (`sketch(closed = false) { … }` für
+offene Pfade); der Parser nimmt `sketch {` und `hole {` ohne Klammern an, `module p(…) sketch
+{ … }` ist ein Modul, dessen Körper eine Skizze ist. Segmente sind eigene Anweisungen; sie
+hängen an die gerade ausgewertete Skizze an, auch aus Modulen und Schleifen heraus
+(`for (i = …) zahn(i);`). In einer Skizze haben Segmentnamen Vorrang vor Benutzermodulen gleichen
+Namens (Bibliotheken mit `module line(…)`); außerhalb bleibt alles wie in OpenSCAD (`spline(points)`
+ist dort weiter das 2D-Primitiv, andere Segmentnamen ohne Benutzermodul melden „nur innerhalb von
+`sketch`“). Andere Geometrie und Transformationen in einer Skizze sind ein Fehler.
+
+| Segment | Formen |
+| --- | --- |
+| `start(p)` | beginnt eine Kontur (eine offene vorherige ist ein Fehler an deren letzter Zeile) |
+| `line` | `to = p` (auch positional), `by = v`, `length = l, angle = a`; `length` allein setzt die Richtung fort |
+| `arc` | `to = p, r = r [, large, cw]` (wie SVG), `center = c, angle = a` (Grad, Vorzeichen = Richtung), `center = c, to = p`, `through = q, to = p`, `to = p` allein = tangential (auch `tangent = true`) |
+| `bezier` | `c1, to` (quadratisch), `c1, c2, to` (kubisch), auch positional |
+| `spline` | `points` nach dem aktuellen Punkt; `tangent = true` (Richtung des Vorgängers) oder Vektor, `end_tangent = v`; kubische globale Interpolation (Sehnenlängen-Parameter, gemittelte Knoten) |
+| `close()` | schließt mit einer Geraden zum Start (endet die Kontur schon am Start, ist sie ohne `close()` geschlossen) |
+| `hole { … }` | Konturen darin sind Löcher |
+| `corner(…)` | reserviert, Warnung (Schritt 2) |
+
+Punkte dürfen Rasterpunkte und Anker sein (z ≠ 0: Warnung, projiziert), ein `grid` in der
+Skizze ist erlaubt, ebenso `let`, Zuweisungen, `for`, `if`. **Löcher:** Konturen füllen nach der
+Windungsregel *nonzero*, Konturen in `hole { … }` zählen dabei immer im Uhrzeigersinn; eine Kontur
+ist Rand, wo die Windungszahl nur auf einer Seite ≠ 0 ist (innen ≠ 0: Material, sonst Loch);
+Inseln in Löchern werden über die Verschachtelung aufgebaut (Material minus Löcher darin, Loch
+minus Inseln darin). **Fehler je Segmentzeile:** nicht geschlossen (die Skizze wird mit einer
+rot gestrichelten Schlusslinie weiter gezeigt), Selbstüberschneidung (an der späteren Zeile, mit
+Verweis auf die andere), unmöglicher Bogen (Radius < halbe Sehne, Punkte auf einer Geraden,
+tangentialer Bogen auf seiner Tangente, Winkel 0 oder > 360°), Kontur ohne Fläche, Segment vor
+`start` oder nach `close()`.
+
+**Sweep entlang einer offenen Skizze:** ohne `path` ist ein Kind von `sweep` eine offene Skizze
+(auch durch Transformationen, Gruppen, Modulaufrufe): `sweep() { sketch(closed = false) { … }
+circle(2); }`. Ist der Pfad tangentenstetig, wird er zu einer B-Spline verbunden (Kurven-Sweep),
+sonst Segment für Segment mit Gehrung (der Pfad ist eben).
+
+**Loft:** Haben alle Abschnitte gleich viele Segmente, werden sie Segment für Segment verbunden
+(Start = `start(p)`, Richtung gegen den Uhrzeigersinn): jedes Segment wird eine eigene Fläche,
+Geraden bleiben Regelflächen, und der Nutzer bestimmt die Zuordnung. Bei verschiedener Anzahl gibt
+es keine natürliche Zuordnung: jeder Abschnitt wird zu einer geschlossenen B-Spline verbunden
+(Grad erhöht, C0 an den Stößen) und beginnt dort, wo der +x-Strahl vom Schwerpunkt ihn schneidet –
+wie Kreise und Polygone –, damit die Abschnitte nicht gegeneinander verdreht sind.
+
+**Module als Namensräume.** `module name { … }` ohne Klammern; Aufrufe `a.b.c(…)` (der Parser
+fügt den Pfad zu einem Namen `a.b.c` zusammen, auch `k: a.b();`). Der erste Teil wird lexikalisch
+gesucht, jeder weitere nur direkt im Körper des vorigen Moduls; dieser Körper ist der Namensraum,
+mit den Parametern des äußeren Moduls auf ihren Standardwerten. Er gehört zu keiner Instanz:
+Raster, benannte Instanzen und Anker des äußeren Moduls sind nicht sichtbar, seine Geometrie
+entsteht nicht. **Funktionen und Konstanten** eines Modulkörpers sind von außen erreichbar
+(`teile.kopf(d)`, `teile.M3`): Bibliotheken bündeln so Hilfsfunktionen und Maße mit ihren
+Modulen, ohne eigene Datei; OpenSCAD kennt keinen Punkt hinter Modulnamen, es gibt also keinen
+Konflikt, und eine Variable gleichen Namens verdeckt das Modul (`v.x` bleibt Komponentenzugriff).
+Kontextmodul: `cad --module teile.schraube` (auch `teile::schraube` oder nur `schraube`),
+`ContextInfo.module` ist der Pfad, die UI wählt das Modul unter dem Cursor mit Pfad, die
+Pfadleiste zeigt „teile › schraube“; `cad outline` listet Module und Funktionen mit Pfad.
+
+**IR, Kernel, Fassade.** `Profile::Sketch { contours, closed }` mit `Seg::{Line, Arc (Mittelpunkt,
+Radius, Start-/Endwinkel, Richtung), Bezier, Spline}`; die Anweisungen der Segmente stehen in
+`EvalOutput::sketches` (nicht im IR: der Cache-Schlüssel bleibt unabhängig von Quellpositionen).
+Kernel: `cad_kernel::Segment::{Line, Arc, Nurbs}` (`curve2.rs`: NURBS-Form, affine Abbildung –
+Bögen bleiben unter Ähnlichkeiten Bögen, sonst exakte rationale Ellipsenbögen –, Abtastung,
+Interpolation, Verbinden), `Loop::Composite`, `PlacedPath`, `Kernel::sweep_path`. Die Fassade
+`smlib/facade/sc_sketch.cpp` wird am Ende von `sc_facade.cpp` eingebunden (nutzt dessen interne
+Hilfen; allein übersetzt ist die Datei leer); Kodierung Schleifenart 3. Geraden werden `SmLine`,
+Bögen rationale quadratische B-Splines (Form `SM_CF_CIRCULAR_ARC`), Bézier/Splines B-Splines; die
+Stöße werden exakt verschweißt. Extrude (auch mit twist/scale), Revolve, Loft und Sweep nutzen die
+bestehenden Einstiege; neu ist `sc_sketch_sweep`. STEP schreibt die Bögen als `CIRCLE`, die
+Geraden als `LINE` (aus den exakten NURBS erkannt). Die 2D-Darstellung tastet Bögen und Kurven
+mit der Anzeigetoleranz ab (Polygon-Clipping in Rust).
+
+**Darstellung und Griffe.** `OpInfo::Sketch` (Segmente abgetastet, Kontrollpolygone, Fehler,
+Startpunkte). Steht der Cursor in einer Skizze (Segmentzeile, Schleife, `hole`, Aufruf eines
+Skizzen-Moduls), zeichnet die Ansicht sie in ihrer Ebene: Netz als Umriss mit leichter Füllung
+(durch den Körper sichtbar), Segmente als Linien, das Segment der Cursorzeile dick in der
+Akzentfarbe, Fehler rot, Kontrollpolygone und Bogenmittelpunkte gestrichelt, Start als Ring mit
+Richtungspfeil, das Ende offener Konturen als Quadrat. Griffe: End-/Startpunkte (Literal und
+Raster-Snap wie bei Punkten; `line(by = …)` relativ, ohne Snap), Bogenradius, Mittelpunkt,
+Durchgangspunkt, Bézier-Kontrollpunkte, Spline-Punkte, Länge von `line(length = …)`. Auf der
+`sketch`-Zeile zeigt die Ansicht die Griffe aller Segmente.

@@ -313,7 +313,8 @@ impl<'a> Ev<'a> {
             frame,
             pos,
             axis: None,
-            base: None,
+            // relative value (`by`): no snapping to grid points (see `snap_targets`)
+            base: origin.map(|_| glam::DVec3::ZERO),
             value: (0..dims).map(|i| pos[i]).collect(),
             comps,
             has_ref,

@@ -282,7 +282,9 @@ pub fn snap_targets(out: &EvalOutput, handle_id: u64) -> Vec<SnapTarget> {
             .filter(|t| [h.def_span, Some(h.expr_span)].into_iter().flatten().any(|s| visible_at(out, &t.r#ref, s)))
             .collect();
     }
-    if h.kind != HandleKind::Point || h.comps.iter().flatten().any(|c| c.scale != 1.0) {
+    // a point handle with a base is relative to it (`line(by = …)` in a sketch): a grid point
+    // or anchor (absolute) cannot be written there
+    if h.kind != HandleKind::Point || h.base.is_some() || h.comps.iter().flatten().any(|c| c.scale != 1.0) {
         return Vec::new();
     }
     let mut res = Vec::new();

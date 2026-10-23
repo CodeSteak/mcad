@@ -287,7 +287,7 @@ pub struct ParamValue {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ContextInfo {
-    /// `None` for the file.
+    /// `None` for the file; nested modules with their path (`teile.schraube`).
     pub module: Option<String>,
     pub def_stmt: Option<StmtId>,
     pub def_span: Option<Span>,

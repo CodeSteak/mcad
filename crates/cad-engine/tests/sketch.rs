@@ -181,6 +181,16 @@ fn step_has_exact_lines_and_circles() {
     assert!(m.count("CIRCLE") >= 2, "{st:?}");
     assert!(m.count("LINE") >= 6, "{st:?}");
     assert_eq!(st.approximated_edges, 0, "{st:?}");
+    // the curved side: SMLib's extrusion of the exact arc, written as a cylinder
+    assert_eq!(st.surfaces.get("cylinder"), Some(&1), "{st:?}");
+    assert_eq!(m.count("CYLINDRICAL_SURFACE"), 1);
+    // revolved arcs: a torus from two arcs
+    let src = "rotate_extrude() sketch { start([24, 0]); arc(to = [16, 0], r = 4); arc(to = [24, 0], r = 4); }";
+    let ev = e.evaluate(tree(src));
+    assert_clean(&ev);
+    let (_, st) = e.export_step(&ev, &opts).unwrap();
+    assert_eq!(st.curves.get("circle"), Some(&4), "{st:?}");
+    assert_eq!((st.approximated_edges, st.approximated_faces), (0, 0), "{st:?}");
     let c = m.of_type("CIRCLE").next().unwrap();
     assert!((c.args()[2].as_num().unwrap() - 20.0).abs() < 1e-9);
     // the sketch is one node with one profile
