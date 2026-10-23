@@ -16,7 +16,7 @@ prüfen, eine Desktop-App (Tauri 2: nativer Kernel, echte Dateien, Dateibeobacht
 VS Code, Git-Markierungen am Rand, Steuerung durch `cad ui …`), eine 3D-Schnittansicht, ein
 CLI-Daemon, der den Kernel-Cache zwischen CLI-Aufrufen hält, sowie Mehrfarbigkeit mit
 Farbpalette, Farbregionen, Filament-Slots, mehrfarbigem 3MF für Bambu Studio/OrcaSlicer und ein
-überarbeitetes dunkles Thema (Testberichte 1–11,
+überarbeitetes dunkles Thema, nach einer unabhängigen Prüfung korrigiert (Testberichte 1–12,
 [`docs/reports/`](docs/reports/README.md)). Offen ist der Umstieg auf den
 Rust-Kernel solidcore (M8, wartet auf den Portierungsstand von solidcore, siehe
 [`docs/solidcore-umstieg.md`](docs/solidcore-umstieg.md)). Browser: kein Backend, gespeichert
@@ -102,6 +102,9 @@ $cad daemon status                                             # Daemon: PID, La
 
 Der erste rechnende Befehl startet den Daemon (`cad daemon serve`, abgekoppelt, Log
 `daemon.log` im Socket-Ordner); weitere Aufrufe nutzen dessen Cache (Messwerte: Bericht 10).
+Wäre der Socketpfad länger als die Unix-Grenze (107 Byte, z. B. ein tiefer `CAD_IPC_DIR`),
+liegt der Socket unter `/tmp/cad-<uid>/<hash>-daemon.sock` (gleiche Rechteprüfung);
+`cad daemon status` nennt ihn („Ersatzpfad“).
 Einstellungen (Standardwerte; Umgebung vor Datei, Argumente von `cad daemon serve` vor beidem):
 
 ```toml
@@ -167,7 +170,11 @@ pnpm build                                  # -> web/dist (statisch, z. B. GitHu
   eine stabile Zufallsfarbe, Hex und Vektoren bleiben exakt. `color("red", filament = 3)` legt
   den Filament-Slot fest, sonst Slots in Reihenfolge des ersten Auftretens (ungefärbtes
   Material: Slot 1). Die UI zeigt „Farben & Filamente“ (Slot per Auswahl, schreibt
-  `filament = n` in den Code, Volumen und Masse PLA) und auf Wunsch die Farbregionen.
+  `filament = n` in den Code, Volumen und Masse PLA) und die Farbregionen wie gedruckt.
+  Kommt die Farbe aus einem Parameter oder einer Schleife, legt `filament("red", 4);` auf
+  oberster Ebene den Slot fest (die UI schreibt das dann). `alpha` wirkt nur in der Ansicht,
+  `transparent` färbt nicht. Das 3MF hat ein Objekt je Bauteil (Rest: „ohne Bauteil“) und
+  keine Farbgruppe, damit Bambu Studio die Slots ohne Farbdialog übernimmt (Bericht 12).
 
 ```
 module halter(w = 40, d = 20, h = 10) {
@@ -274,6 +281,7 @@ CMakeLists, Build-Skript und Compiler: `scripts/ci/smlib-key.sh`). Ist der SMLib
 - [Bericht 9](docs/reports/09-desktop-schnitt/report.pdf): Desktop-App, Dateibeobachter, Git, Schnittansicht, CLI↔UI.
 - [Bericht 10](docs/reports/10-cli-daemon/report.pdf): CLI-Daemon (Cache zwischen Aufrufen, Grenzen, Messung).
 - [Bericht 11](docs/reports/11-farben-filamente/report.pdf): Farben, Multi-Filament-3MF (Bambu Studio/OrcaSlicer), dunkles Thema.
+- [Bericht 12](docs/reports/12-farben-korrekturen/report.pdf): Korrekturen Farben und Daemon (Befunde F1–F9 der unabhängigen Prüfung, Bambu-Farbdialog, Socketpfad).
 
 ## Lizenzen
 

@@ -249,11 +249,15 @@ pub(crate) enum Cmd {
         /// Jedes Bauteil als eigene Datei in den Ordner `-o` (Format: --format, Standard stl).
         #[arg(long)]
         all_parts: bool,
-        /// 3MF einfarbig wie früher (ein Netz je Bauteil, ohne Farben und Filament-Zuordnung).
-        /// Standard: mehrfarbig – je Bauteil ein Objekt mit einem Teil je Farbe und
-        /// Filament-Slots für Bambu Studio/OrcaSlicer.
+        /// 3MF einfarbig wie früher (ein Netz, ohne Farben und Filament-Zuordnung).
+        /// Standard: mehrfarbig – je Bauteil ein Objekt (Material außerhalb der Bauteile: Objekt
+        /// „ohne Bauteil“) mit einem Teil je Farbe und Filament-Slots für Bambu Studio/OrcaSlicer.
         #[arg(long)]
         single_color: bool,
+        /// 3MF mehrfarbig mit Farbgruppe (`m:colorgroup`) für Programme, die 3MF-Farben zeigen.
+        /// Bambu Studio öffnet dann einen Farbdialog: „Abbrechen“ behält die Slots, OK ersetzt sie.
+        #[arg(long, conflicts_with_all = ["single_color", "per_color"])]
+        color_group: bool,
         /// Ein STL je Farbe (und Bauteil) in einer ZIP-Datei `-o x.zip` (Dateinamen
         /// `F<slot>_<farbe>.stl`, alle im selben Koordinatensystem).
         #[arg(long, conflicts_with_all = ["single_color", "all_parts"])]
@@ -502,13 +506,22 @@ pub(crate) fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
         Cmd::Measure { c, a } => measure::command(c, a),
         Cmd::Watch { c, a } => watch::command(c, a),
         Cmd::Set { a } => set::command(a),
-        Cmd::Export { c, output, format, schema, part, all_parts, single_color, per_color } => {
+        Cmd::Export { c, output, format, schema, part, all_parts, single_color, per_color, color_group } => {
+            let pkg = cad_engine::color_export::PackageOptions { color_group: *color_group };
             if *per_color {
                 export_per_color(c, output, part)
             } else if *all_parts || !part.is_empty() {
-                parts::export_parts(c, output, format.as_deref(), schema, part, *all_parts, !*single_color)
+                parts::export_parts(
+                    c,
+                    output,
+                    format.as_deref(),
+                    schema,
+                    part,
+                    *all_parts,
+                    (!*single_color).then_some(pkg),
+                )
             } else {
-                export(c, output, format.as_deref(), schema, !*single_color)
+                export(c, output, format.as_deref(), schema, (!*single_color).then_some(pkg))
             }
         }
         Cmd::DiffKernels { files, .. } => diff::command(files),
@@ -1103,7 +1116,13 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
     Ok(Outcome { json: j, text: t, errors })
 }
 
-fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str, multicolor: bool) -> Result<Outcome, Fail> {
+fn export(
+    c: &Common,
+    output: &Path,
+    format: Option<&str>,
+    schema: &str,
+    multicolor: Option<cad_engine::color_export::PackageOptions>,
+) -> Result<Outcome, Fail> {
     let fmt = match format
         .map(|s| s.to_ascii_lowercase())
         .or_else(|| output.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()))
@@ -1122,14 +1141,17 @@ fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str, multico
         let t = m.diagnostics_text();
         return Ok(Outcome { json: j, text: t, errors: true });
     }
-    let colored = multicolor && fmt == p::ExportFormat::ThreeMf;
+    let colored = multicolor.is_some() && fmt == p::ExportFormat::ThreeMf;
+    let pkg = multicolor.unwrap_or_default();
+    let mut notes = Vec::new();
     let (bytes, triangles, step) = if fmt == p::ExportFormat::Step {
         let name = output.file_stem().and_then(|s| s.to_str()).unwrap_or("part").to_string();
         let opts = cad_engine::StepOptions { schema, name, timestamp: utc_timestamp(), ..Default::default() };
         let (bytes, st) = m.session.export_step(&opts).map_err(Fail::Kernel)?;
         (bytes, 0, Some(st))
     } else if colored {
-        let (bytes, st) = m.session.export_colors(fmt, None).map_err(Fail::Kernel)?;
+        let (bytes, st) = m.session.export_colors_with(fmt, None, pkg).map_err(Fail::Kernel)?;
+        notes = cad_session::color_export_notes(&st, pkg);
         (bytes, st.triangles, None)
     } else {
         let (bytes, tris) = m.session.export_bytes(fmt).map_err(Fail::Kernel)?;
@@ -1151,6 +1173,10 @@ fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str, multico
         j["step"] = json!(st);
     }
     j["multicolor"] = json!(colored);
+    if colored {
+        j["color_group"] = json!(pkg.color_group);
+        j["notes"] = json!(notes);
+    }
     let mut colors_text = String::new();
     if colored && let Some(sc) = m.scene.clone() {
         let (colors, regions, text) = colors::table(&mut m, &sc, true)?;
@@ -1170,7 +1196,7 @@ fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str, multico
         mp.map(|mp| format!(", Volumen {} mm³", num(mp.volume))).unwrap_or_default()
     ));
     if colored {
-        t.push_str("3MF mehrfarbig: je Bauteil ein Objekt, ein Teil je Farbe, Filament-Slots für Bambu Studio/OrcaSlicer (einfarbig: --single-color)\n");
+        t.push_str(&format!("3MF mehrfarbig: {} (einfarbig: --single-color)\n", notes.join("; ")));
     }
     t.push_str(&colors_text);
     Ok(Outcome { json: j, text: t, errors: m.has_errors() })
@@ -1178,6 +1204,13 @@ fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str, multico
 
 /// `cad export --per-color -o x.zip`: one STL per colour (and part) in a ZIP.
 fn export_per_color(c: &Common, output: &Path, parts: &[String]) -> Result<Outcome, Fail> {
+    // a ZIP under another extension would be taken for an STL by the slicer
+    if !output.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
+        return Err(Fail::Usage(format!(
+            "--per-color schreibt eine ZIP-Datei mit einem STL je Farbe: -o {}",
+            output.with_extension("zip").display()
+        )));
+    }
     let mut m = load(c, None, true, true)?;
     let mut j = m.base_json("export");
     let Some(sc) = m.scene.clone() else {
@@ -1187,7 +1220,7 @@ fn export_per_color(c: &Common, output: &Path, parts: &[String]) -> Result<Outco
     let names = if parts.is_empty() { None } else { Some(parts) };
     let (bytes, st) = m.session.export_colors(p::ExportFormat::Stl, names).map_err(Fail::Kernel)?;
     host::write_file(output, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
-    let (colors, regions, colors_text) = colors::table(&mut m, &sc, true)?;
+    let (colors, regions, colors_text) = colors::table_of(&mut m, &sc, true, names)?;
     j["output"] = json!(output.display().to_string());
     j["format"] = json!("zip");
     j["per_color"] = json!(true);

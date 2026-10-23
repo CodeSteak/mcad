@@ -125,11 +125,109 @@ fn multicolour_exports() {
     assert_eq!(r.len(), 3);
     let FromEngine::ExportResult { bytes, colors: Some(true), .. } = &r[0] else { panic!() };
     let t = String::from_utf8_lossy(bytes);
-    assert_eq!(t.matches("<m:color ").count(), 3);
+    // Bericht 12: no colour group (Bambu Studio would open its colour dialog), slots only in
+    // model_settings.config
+    assert_eq!(t.matches("<m:color ").count(), 0);
+    assert!(t.contains("<metadata key=\"extruder\" value=\"2\"/>"));
     assert!(t.contains("name=\"main – red\""), "root object named after the main file");
     let FromEngine::ExportResult { bytes, colors: None, .. } = &r[1] else { panic!() };
     assert!(!String::from_utf8_lossy(bytes).contains("m:colorgroup"));
     let FromEngine::ExportResult { bytes, zip: Some(true), colors: Some(true), .. } = &r[2] else { panic!() };
     let t = String::from_utf8_lossy(bytes);
     assert!(t.contains("F1_white.stl") && t.contains("F2_red.stl") && t.contains("F3_lightgoldenrod.stl"));
+}
+
+fn edits_of(r: &[FromEngine]) -> &[Edit] {
+    match &r[0] {
+        FromEngine::Edits { edits, .. } => edits,
+        other => panic!("{other:?}"),
+    }
+}
+
+fn slots(sc: &Scene) -> Vec<(String, u32, bool)> {
+    sc.colors.iter().map(|c| (c.label.clone(), c.filament, c.explicit)).collect()
+}
+
+/// Bericht 12, F2: the colour is a parameter (`module bar(c) color(c) …`): `filament = n` at
+/// that statement would give every colour the slot. SetFilament writes a `filament(c, n);`
+/// table at the top of the file instead; only the chosen colour moves.
+#[test]
+fn set_filament_of_a_parameter_colour_writes_a_table() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../tests/farben-pruefung/cases/slot_mod.scad"
+    ))
+    .unwrap();
+    let mut s = session();
+    let r = run(&mut s, &src);
+    assert_eq!(
+        slots(last_scene(&r)),
+        [("red".into(), 1, false), ("blue".into(), 2, false), ("green".into(), 3, false)]
+    );
+    let t = apply(&src, edits_of(&s.post(ToEngine::SetFilament { color: "#c74240".into(), filament: Some(4) })));
+    assert!(t.starts_with("module bar(c) color(c) cube([10, 2, 2]);\nfilament(\"red\", 4);\nbar(\"red\");"), "{t}");
+    assert!(!t.contains("filament = "), "nothing at the shared statement: {t}");
+    let r = run(&mut s, &t);
+    let FromEngine::Diagnostics { items, .. } = &r[0] else { panic!() };
+    assert!(items.iter().all(|d| d.severity != Severity::Warning), "{items:?}");
+    assert_eq!(slots(last_scene(&r)), [("red".into(), 4, true), ("blue".into(), 1, false), ("green".into(), 2, false)]);
+    // a second colour goes below the first declaration; changing one edits its slot
+    let t2 = apply(&t, edits_of(&s.post(ToEngine::SetFilament { color: "#4ca167".into(), filament: Some(7) })));
+    assert!(t2.contains("filament(\"red\", 4);\nfilament(\"green\", 7);\n"), "{t2}");
+    let r = run(&mut s, &t2);
+    assert_eq!(slots(last_scene(&r))[2], ("green".into(), 7, true));
+    let t3 = apply(&t2, edits_of(&s.post(ToEngine::SetFilament { color: "#c74240".into(), filament: Some(5) })));
+    assert!(t3.contains("filament(\"red\", 5);"), "{t3}");
+    run(&mut s, &t3);
+    // automatic removes the statement with its line
+    let t4 = apply(&t3, edits_of(&s.post(ToEngine::SetFilament { color: "#c74240".into(), filament: None })));
+    let t4r = run(&mut s, &t4);
+    let t5 = apply(&t4, edits_of(&s.post(ToEngine::SetFilament { color: "#4ca167".into(), filament: None })));
+    assert_eq!(t5, src);
+    assert_eq!(slots(last_scene(&t4r))[0], ("red".into(), 1, false));
+}
+
+/// Bericht 12, F2: colours from a loop (`for (i) color(names[i]) …`) get a table too; a
+/// literal colour keeps `filament = n` at its statement; the table wins over `filament = m`.
+#[test]
+fn filament_table_rules() {
+    let src = "names = [\"red\", \"blue\"];\nfor (i = [0:1]) translate([i * 10, 0, 0]) color(names[i]) cube(5);\ncolor(\"teal\") translate([0, 10, 0]) cube(5);\n";
+    let mut s = session();
+    run(&mut s, src);
+    let t = apply(src, edits_of(&s.post(ToEngine::SetFilament { color: "#2e65b9".into(), filament: Some(3) })));
+    assert!(t.starts_with("names = [\"red\", \"blue\"];\nfilament(\"blue\", 3);\nfor"), "{t}");
+    let r = run(&mut s, &t);
+    assert_eq!(slots(last_scene(&r)), [("red".into(), 1, false), ("blue".into(), 3, true), ("teal".into(), 2, false)]);
+    let t2 = apply(&t, edits_of(&s.post(ToEngine::SetFilament { color: "#217274".into(), filament: Some(6) })));
+    assert!(t2.contains("color(\"teal\", filament = 6) translate"), "{t2}");
+    // the table wins; a conflicting filament = m warns
+    let src =
+        "filament(\"red\", 5);\ncolor(\"red\", filament = 2) cube(1);\ntranslate([3, 0, 0]) filament(\"blue\", 2);\n";
+    let r = run(&mut s, src);
+    let sc = last_scene(&r);
+    assert_eq!(slots(sc), [("red".into(), 5, true)]);
+    let FromEngine::Diagnostics { items, .. } = &r[0] else { panic!() };
+    let w: Vec<&str> = items.iter().map(|d| d.message.as_str()).collect();
+    assert!(w.iter().any(|m| m.contains("Farbe hat schon Filament 5")), "{w:?}");
+    assert!(w.iter().any(|m| m.contains("nur auf oberster Ebene")), "{w:?}");
+}
+
+/// Bericht 12, F4: material outside the parts is an object "ohne Bauteil" of the default
+/// export and has a volume in the colour regions; the export names its objects.
+#[test]
+fn material_outside_parts_is_exported() {
+    let src = "module a() color(\"red\") cube(5);\nteil: a();\ntranslate([10, 0, 0]) color(\"blue\") cube(4);\n";
+    let mut s = session();
+    run(&mut s, src);
+    let regs = s.color_regions(false, false).unwrap();
+    let parts: Vec<(Option<&str>, f64)> = regs.iter().map(|r| (r.part.as_deref(), r.total)).collect();
+    assert_eq!(parts, [(Some("teil"), 125.0), (Some("ohne Bauteil"), 64.0)]);
+    s.post(ToEngine::Export { format: ExportFormat::ThreeMf, parts: None, zip: None, colors: None });
+    let r = s.run_to_idle();
+    let FromEngine::ExportResult { bytes, notes: Some(notes), .. } = &r[0] else { panic!("{r:?}") };
+    let t = String::from_utf8_lossy(bytes);
+    assert_eq!(t.matches("<item ").count(), 2);
+    assert!(t.contains("name=\"ohne Bauteil – blue\""), "{t}");
+    assert!(notes[0].starts_with("2 Objekte (teil, ohne Bauteil)"), "{notes:?}");
+    assert!(notes.iter().any(|n| n.contains("ohne Farbdialog")), "{notes:?}");
 }

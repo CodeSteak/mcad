@@ -634,3 +634,41 @@ fn watchdog_ends_daemon_and_command_runs_locally() {
     assert!(used(&env.run(&["check", &f, "--json"])));
     assert_ne!(env.status()["pid"].as_u64().unwrap(), pid);
 }
+
+/// Bericht 12: a `CAD_IPC_DIR` whose socket path exceeds the Unix limit (107 bytes) used to
+/// stop the daemon from starting, silently. Now the socket goes to `/tmp/cad-<uid>/` and
+/// `cad daemon status` names it.
+#[test]
+fn long_ipc_dir_uses_short_socket_path() {
+    let mut env = Env::new();
+    let long = env
+        .tmp
+        .path()
+        .join("ein-sehr-langer-verzeichnisname-fuer-den-socket-des-hintergrundprozesses-damit-es-reicht")
+        .join("ipc");
+    std::fs::create_dir_all(&long).unwrap();
+    assert!(long.join("daemon.sock").as_os_str().len() > 107, "{}", long.display());
+    env.vars.push(("CAD_IPC_DIR".into(), long.display().to_string()));
+    let o = env.run(&["check", &ex("spec/gehaeuse.scad"), "--json"]);
+    assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
+    assert!(used(&o), "Daemon nicht verwendet: {}", text(&o.stderr));
+    let st = env.status();
+    assert_eq!(st["running"], true, "{st}");
+    assert_eq!(st["socket_substitute"], true, "{st}");
+    let sock = st["socket"].as_str().unwrap().to_string();
+    assert!(sock.len() <= 107 && sock.starts_with("/tmp/cad-") && sock.ends_with("-daemon.sock"), "{sock}");
+    assert!(Path::new(&sock).exists());
+    // lock and log stay in the long directory
+    assert!(long.join("daemon.lock").exists() && long.join("daemon.log").exists());
+    let t = text(&env.run(&["daemon", "status"]).stdout);
+    assert!(t.contains(&sock) && t.contains("Ersatzpfad"), "{t}");
+    // the next call reaches the same daemon
+    let pid = st["pid"].as_u64().unwrap();
+    assert!(used(&env.run(&["check", &ex("spec/gehaeuse.scad"), "--json"])));
+    assert_eq!(env.status()["pid"].as_u64(), Some(pid));
+    let o = env.run(&["daemon", "stop", "--json"]);
+    assert_eq!(json(&o)["stopped"], true);
+    assert!(!Path::new(&sock).exists(), "Ersatz-Socket bleibt liegen");
+    let o = env.run(&["daemon", "status"]);
+    assert!(text(&o.stdout).starts_with("kein Daemon"), "{}", text(&o.stdout));
+}

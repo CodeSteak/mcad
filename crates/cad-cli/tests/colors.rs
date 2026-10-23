@@ -86,8 +86,16 @@ fn export_multicolour_single_and_per_colour() {
     assert_eq!(rows(&v["colors"]).len(), 5);
     assert!(t.contains("3MF mehrfarbig"), "{t}");
     let s = String::from_utf8_lossy(&std::fs::read(&mf).unwrap()).into_owned();
+    // Bericht 12: one object per part also without --part, no colour group (Bambu dialog)
+    assert_eq!(s.matches("<m:color ").count(), 0);
+    assert_eq!(s.matches("<item ").count(), 2, "one object per part");
+    assert!(t.contains("2 Objekte (schild, figur)") && t.contains("ohne Farbdialog"), "{t}");
+    // --color-group: the colour group for other viewers, with the hint for Bambu Studio
+    let (v, t) = run(&["export", &example(), "--color-group", "-o", &mf.display().to_string()], 0);
+    assert_eq!(v["color_group"], true);
+    assert!(t.contains("„Abbrechen“"), "{t}");
+    let s = String::from_utf8_lossy(&std::fs::read(&mf).unwrap()).into_owned();
     assert_eq!(s.matches("<m:color ").count(), 5);
-    assert_eq!(s.matches("<item ").count(), 1, "the root: one object");
     // parts: one object per part, one volume per colour
     let (v, _) =
         run(&["export", &example(), "--part", "schild", "--part", "figur", "-o", &mf.display().to_string()], 0);

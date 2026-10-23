@@ -1,8 +1,9 @@
 // Model colours in the view and the colour list (Plan 16): palette display values per theme,
 // colours per face (from `Scene.tag_nodes`), rows of "Farben & Filamente".
 
-import type { ColorInfo, MeshData, Rgba, Scene } from "../engine/protocol";
+import type { ColorInfo, MeshData, Rgba, Scene, Vec3 } from "../engine/protocol";
 import type { RegionsState, Theme } from "../state/store";
+import { apply, invertAffine, mul } from "./math";
 import { DEFAULT_COLOR, PALETTE } from "./palette";
 
 /** Density of PLA for the mass estimate (g/cm³), as in the CLI. */
@@ -56,6 +57,83 @@ export function tagColors(scene: Scene, theme: Theme): Map<number, string> {
   return m;
 }
 
+/** Colours of the faces of one node's mesh (see {@link faceColors}). */
+export interface FaceColors {
+  /** Display colour of triangle `t` of `mesh` (undefined: the fallback). */
+  colorOf(t: number, mesh: Pick<MeshData, "positions" | "indices" | "tri_tags">): string | undefined;
+  /** Changes when a colour of these faces can change (cache key of coloured geometries). */
+  sig: string;
+  /** Number of face tags with a colour. */
+  count: number;
+}
+
+/**
+ * Colours per face of the mesh of node `owner` (its own system), from `color()` of the node
+ * that created the face (Bericht 12, F1). A face tag belongs to every node of equal content
+ * (the engine shares their cached result), so only nodes below `owner` count, and of several
+ * with different colours the one whose bounds contain the triangle (the latest in pre-order
+ * if several do). Approximate where colours overlap or a fillet joins them: the colour
+ * regions (drawn as soon as they are computed) are exact.
+ */
+export function faceColors(scene: Scene, owner: number, theme: Theme): FaceColors {
+  const below = (n: number): boolean => {
+    for (let i: number | null = n; i !== null && i !== undefined; i = scene.nodes[i]?.parent ?? null) if (i === owner) return true;
+    return false;
+  };
+  const fixed = new Map<number, string>();
+  const ambiguous = new Map<number, number[]>();
+  const sig: string[] = [theme];
+  for (const tn of scene.tag_nodes) {
+    const nodes = tn.nodes.filter(below);
+    if (!nodes.length) continue;
+    const cols = nodes.map((n) => scene.nodes[n]?.color);
+    const hex = cols.map((c) => (c ? displayHex(c, theme) : ""));
+    if (hex.every((h) => h === hex[0])) {
+      if (hex[0]) {
+        fixed.set(tn.tag, hex[0]);
+        sig.push(`${tn.tag}:${hex[0]}`);
+      }
+    } else {
+      ambiguous.set(tn.tag, nodes);
+      sig.push(`${tn.tag}:${nodes.map((n, i) => `${hex[i]}@${scene.nodes[n].display_world.join(",")}`).join(";")}`);
+    }
+  }
+  const ow = scene.nodes[owner]?.display_world;
+  const local = new Map<number, ReturnType<typeof invertAffine>>();
+  return {
+    count: fixed.size + ambiguous.size,
+    sig: `${owner}@${ow?.join(",") ?? ""}|${sig.join(",")}`,
+    colorOf(t, mesh) {
+      const tag = mesh.tri_tags[t];
+      const f = fixed.get(tag);
+      if (f !== undefined || !ambiguous.has(tag) || !ow) return f;
+      const cands = ambiguous.get(tag)!;
+      const p: Vec3 = [0, 0, 0];
+      for (let k = 0; k < 3; k++) {
+        const v = mesh.indices[3 * t + k] * 3;
+        for (let a = 0; a < 3; a++) p[a] += mesh.positions[v + a] / 3;
+      }
+      let pick = -1;
+      for (const n of cands) {
+        const node = scene.nodes[n];
+        const b = node.bounds;
+        if (!b) continue;
+        let m = local.get(n);
+        if (!m) {
+          m = mul(invertAffine(node.display_world), ow);
+          local.set(n, m);
+        }
+        const q = apply(m, p);
+        const d = Math.hypot(b.max[0] - b.min[0], b.max[1] - b.min[1], b.max[2] - b.min[2]);
+        const eps = 1e-6 * d + 1e-4;
+        if ([0, 1, 2].every((a) => q[a] >= b.min[a] - eps && q[a] <= b.max[a] + eps)) pick = Math.max(pick, n);
+      }
+      const c = scene.nodes[pick >= 0 ? pick : cands[0]]?.color;
+      return c ? displayHex(c, theme) : undefined;
+    },
+  };
+}
+
 /** Does the scene colour any face? */
 export function hasFaceColors(scene: Scene): boolean {
   return (scene.colors ?? []).some((c) => c.source !== "default");
@@ -75,7 +153,11 @@ function lin(c: number): number {
  * Per-vertex colours (linear RGB) of a mesh: every vertex gets the colour of a triangle that
  * uses it (kernel meshes have their own vertices per face, so faces do not bleed).
  */
-export function vertexColors(mesh: Pick<MeshData, "positions" | "indices" | "tri_tags">, colorOf: (tag: number) => string | undefined, fallback: string): Float32Array {
+export function vertexColors(
+  mesh: Pick<MeshData, "positions" | "indices" | "tri_tags">,
+  colorOf: (tri: number, mesh: Pick<MeshData, "positions" | "indices" | "tri_tags">) => string | undefined,
+  fallback: string,
+): Float32Array {
   const n = mesh.positions.length / 3;
   const out = new Float32Array(n * 3);
   const base = rgb(fallback).map(lin);
@@ -83,7 +165,7 @@ export function vertexColors(mesh: Pick<MeshData, "positions" | "indices" | "tri
   const cache = new Map<string, number[]>();
   const tris = mesh.indices.length / 3;
   for (let t = 0; t < tris; t++) {
-    const hex = colorOf(mesh.tri_tags[t]);
+    const hex = colorOf(t, mesh);
     if (!hex) continue;
     let c = cache.get(hex);
     if (!c) {
@@ -111,6 +193,8 @@ export interface ColorRow {
   filament: number;
   explicit: boolean;
   lines: number[];
+  /** `color()` statements: line, file (null: main file), offset in the file, label. */
+  places: Array<{ line: number; file: string | null; from: number; label: string }>;
   /** mm³ over all parts (null: regions not computed yet). */
   volume: number | null;
   grams: number | null;
@@ -129,7 +213,14 @@ export function colorRows(scene: Scene, regions: RegionsState | null, theme: The
       hex: c.source === "default" ? DEFAULT_COLOR : rgbaHex(c.rgba),
       filament: c.filament,
       explicit: c.explicit,
-      lines: [...new Set(c.ranges.map((r) => r.line))],
+      lines: [...new Set(c.ranges.filter((r) => !r.file).map((r) => r.line))],
+      places: c.ranges
+        .map((r) => {
+          const file = r.file ? (scene.files ?? []).find((f) => f.id === r.file)?.path ?? null : null;
+          const short = file ? file.split("/").pop() : null;
+          return { line: r.line, file, from: r.from, label: short ? `${short}:${r.line}` : `Z.${r.line}` };
+        })
+        .filter((p, i, a) => a.findIndex((q) => q.label === p.label) === i),
       volume,
       grams: volume === null ? null : grams(volume),
     };

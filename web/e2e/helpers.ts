@@ -580,3 +580,24 @@ export function writeMetrics11(m: Record<string, unknown>): void {
   const old = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
   writeFileSync(f, JSON.stringify({ ...old, ...m }, null, 2));
 }
+
+// ---------------------------------------------------------------- Bericht 12 (Farben-Korrekturen)
+
+export const REPORT12_DIR = join(here, "../../reports/tmp/report12");
+
+export async function screenshot12(page: Page, name: string, area: "view" | "full" | "editor" | "colors" = "view"): Promise<void> {
+  mkdirSync(join(REPORT12_DIR, "img"), { recursive: true });
+  const sel = { view: "section.viewcol", editor: "section.editorpane", colors: "[data-testid=colors-panel]" } as const;
+  const clip = area === "full" ? null : await page.locator(sel[area]).boundingBox();
+  await page.screenshot({ path: join(REPORT12_DIR, "img", `${name}.jpg`), type: "jpeg", quality: 85, ...(clip ? { clip } : {}) });
+}
+
+export function record12(entry: ScenarioC): void {
+  mkdirSync(REPORT12_DIR, { recursive: true });
+  const f = join(REPORT12_DIR, "scenarios.json");
+  const all: ScenarioC[] = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
+  const i = all.findIndex((e) => e.id === entry.id);
+  if (i >= 0) all[i] = entry;
+  else all.push(entry);
+  writeFileSync(f, JSON.stringify(all, null, 2));
+}

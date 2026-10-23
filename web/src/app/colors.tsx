@@ -6,7 +6,7 @@ import { colorRows, MAX_FILAMENT, sharedSlots } from "../logic/colors";
 import { fmtNum } from "../logic/format";
 import { bridge } from "../state/bridge";
 import { setColorsOpen, store, useCad } from "../state/store";
-import { client, exportColors, getViewer } from "./runtime";
+import { client, exportColors, getViewer, openLocation } from "./runtime";
 
 function vol(v: number | null): string {
   return v === null ? "…" : `${fmtNum(Math.round(v * 10) / 10)} mm³`;
@@ -52,7 +52,7 @@ export function ColorsPanel() {
           ×
         </button>
       </div>
-      <label className="check cpregions" title="Körper je Farbe anzeigen, wie sie exportiert werden (statt Farbe je Fläche)">
+      <label className="check cpregions" title="Körper je Farbe anzeigen, wie sie exportiert und gedruckt werden (aus: Farbe je Fläche, schneller, bei Überlappung und Verrundung ungenau)">
         <input type="checkbox" checked={showRegions} onChange={(e) => store.setState({ showRegions: e.target.checked })} data-testid="colors-regions" />
         Farbregionen zeigen
       </label>
@@ -78,9 +78,14 @@ export function ColorsPanel() {
                   )}
                   {r.source === "default" && <span className="badge">ohne color()</span>}
                   <span className="cplines">
-                    {r.lines.map((l) => (
-                      <button key={l} className="link" title={`Zeile ${l} zeigen`} onClick={() => bridge.setCursorLine(l)}>
-                        Z.{l}
+                    {r.places.map((p) => (
+                      <button
+                        key={p.label}
+                        className="link"
+                        title={p.file ? `${p.file}, Zeile ${p.line} zeigen` : `Zeile ${p.line} zeigen`}
+                        onClick={() => (p.file ? openLocation(p.file, p.from) : bridge.setCursorLine(p.line))}
+                      >
+                        {p.label}
                       </button>
                     ))}
                   </span>
@@ -92,7 +97,11 @@ export function ColorsPanel() {
                   data-testid={`color-slot-${r.label}`}
                   value={r.explicit ? String(r.filament) : "auto"}
                   disabled={r.source === "default"}
-                  title={r.source === "default" ? "Material ohne color() druckt immer mit Filament 1" : "Schreibt filament = n in den color()-Aufruf"}
+                  title={
+                    r.source === "default"
+                      ? "Material ohne color() druckt immer mit Filament 1"
+                      : "Schreibt filament = n in den color()-Aufruf; kommt die Farbe aus einem Parameter oder einer Schleife, filament(\"Farbe\", n); am Anfang der Datei"
+                  }
                   onChange={(e) => client.setFilament(r.key, e.target.value === "auto" ? null : Number(e.target.value))}
                 >
                   <option value="auto">{r.explicit ? "automatisch" : `${r.filament} (auto)`}</option>
@@ -139,7 +148,12 @@ export function ColorsPanel() {
           3MF einfarbig
         </button>
       </div>
-      <p className="pbnote">Slot ändern schreibt <code>filament = n</code> in den Code. Masse: PLA 1,24 g/cm³.</p>
+      <p
+        className="pbnote"
+        title="Kommt die Farbe aus einem Parameter oder einer Schleife, schreibt die Auswahl filament(&quot;Farbe&quot;, n); an den Anfang der Datei. 3MF: ein Objekt je Bauteil (Rest: „ohne Bauteil“), ohne Farbgruppe – Bambu Studio und OrcaSlicer übernehmen die Slots ohne Farbdialog."
+      >
+        Slot ändern schreibt <code>filament = n</code> in den Code. Masse: PLA 1,24 g/cm³.
+      </p>
     </aside>
   );
 }

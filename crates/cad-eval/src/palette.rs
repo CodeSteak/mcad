@@ -6,8 +6,12 @@
 //!   apart in OKLab also for deuteranopia and protanopia (Machado et al. 2009) and work on
 //!   light and dark backgrounds; `grey`, `aqua` and `fuchsia` are CSS spellings of `gray`,
 //!   `cyan` and `magenta`.
-//! * Unknown names give a warning and a **stable** random colour: the hue comes from a hash
-//!   of the name, lightness and chroma are the palette's medians (it fits in).
+//! * Unknown names give a warning and a **stable** random colour: hue, lightness and chroma
+//!   come from a hash of the lowercase name (muted range of the palette), at least
+//!   [`RANDOM_MIN_PALETTE`] (ΔE OK) away from every palette colour and the default; within a
+//!   model the evaluator also keeps [`RANDOM_MIN_OTHER`] between random colours of different
+//!   names ([`random_color_avoiding`]: the next candidate of the name's hash sequence, so the
+//!   result depends only on the names that came before in the model).
 //! * Hex (`#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`) and vectors stay exact.
 //! * [`display_rgb`]: what the 3D views show for a palette colour in the light or dark
 //!   theme (black a bit lighter on dark backgrounds, white a bit darker on light ones).
@@ -55,9 +59,14 @@ pub const DEFAULT_RGB: [u8; 3] = [0xc3, 0xc8, 0xcf];
 /// filaments with four AMS units.
 pub const MAX_FILAMENT: u32 = 16;
 
-/// OKLCH lightness and chroma of random colours: medians of the 12 chromatic palette colours.
-pub const RANDOM_L: f64 = 0.65;
-pub const RANDOM_C: f64 = 0.125;
+/// Least ΔE OK of a random colour to every palette colour and to the default colour (the
+/// palette's own closest pair is 0.107, about 0.02 is just noticeable).
+pub const RANDOM_MIN_PALETTE: f64 = 0.07;
+/// Least ΔE OK between random colours of different names in one model.
+pub const RANDOM_MIN_OTHER: f64 = 0.06;
+/// OKLCH range of random colours (muted like the palette): lightness, chroma.
+pub const RANDOM_L: (f64, f64) = (0.45, 0.80);
+pub const RANDOM_C: (f64, f64) = (0.06, 0.16);
 
 /// How a colour was given.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,6 +120,14 @@ pub fn rgba_bytes(c: [f32; 4]) -> [u8; 4] {
     c.map(|x| (x.clamp(0.0, 1.0) * 255.0).round() as u8)
 }
 
+/// Identity of a print colour: RGB bytes with alpha 255 (alpha only changes the view; colour
+/// table, filament slots and regions treat `color("red", alpha = 0.5)` as `red`).
+pub fn rgb_key(c: [f32; 4]) -> [u8; 4] {
+    let mut b = rgba_bytes(c);
+    b[3] = 255;
+    b
+}
+
 /// `#rrggbb` or `#rrggbbaa` (alpha < 1).
 pub fn hex_string(c: [f32; 4]) -> String {
     let b = rgba_bytes(c);
@@ -159,19 +176,60 @@ fn name_hash(name: &str) -> u64 {
     h
 }
 
-/// Stable random colour of an unknown name: hue from the name's hash, lightness and chroma
-/// of the palette ([`RANDOM_L`], [`RANDOM_C`], chroma reduced until it is in sRGB gamut).
-pub fn random_color(name: &str) -> [f32; 4] {
-    let h = (name_hash(name) % 3600) as f64 / 10.0;
-    let mut cc = RANDOM_C;
+/// SplitMix64 finaliser (candidate `k` of a name).
+fn mix(mut x: u64) -> u64 {
+    x = x.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^ (x >> 31)
+}
+
+/// Candidate `k` of a name: hue, lightness and chroma from the hash (chroma reduced until
+/// the colour is in the sRGB gamut).
+fn random_candidate(name: &str, k: u64) -> [u8; 3] {
+    let h0 = name_hash(name);
+    let h = if k == 0 { h0 } else { mix(h0 ^ k.wrapping_mul(0x9e37_79b9_7f4a_7c15)) };
+    let hue = (h % 3600) as f64 / 10.0;
+    let f = |shift: u32| ((h >> shift) % 1001) as f64 / 1000.0;
+    let l = RANDOM_L.0 + (RANDOM_L.1 - RANDOM_L.0) * f(20);
+    let mut cc = RANDOM_C.0 + (RANDOM_C.1 - RANDOM_C.0) * f(40);
     loop {
-        let lin = oklch_to_linear(RANDOM_L, cc, h);
+        let lin = oklch_to_linear(l, cc, hue);
         if lin.iter().all(|x| (-1e-6..=1.0 + 1e-6).contains(x)) || cc <= 0.0 {
-            let b = linear_to_bytes(lin);
-            return rgba_of(b);
+            return linear_to_bytes(lin);
         }
         cc -= 0.005;
     }
+}
+
+/// Stable random colour of an unknown name (no other random colours to avoid).
+pub fn random_color(name: &str) -> [f32; 4] {
+    random_color_avoiding(name, &[])
+}
+
+/// Random colour of a name that keeps [`RANDOM_MIN_PALETTE`] to the palette and the default,
+/// and [`RANDOM_MIN_OTHER`] to the colours in `others` (random colours of other names in the
+/// same model): the first such candidate of the name's sequence (at most 256 tried; then
+/// the candidate farthest from all).
+pub fn random_color_avoiding(name: &str, others: &[[u8; 3]]) -> [f32; 4] {
+    let fixed: Vec<[f64; 3]> = PALETTE.iter().map(|p| p.rgb).chain([DEFAULT_RGB]).map(oklab).collect();
+    let used: Vec<[f64; 3]> = others.iter().map(|&c| oklab(c)).collect();
+    let d = |a: &[f64; 3], b: &[f64; 3]| ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt();
+    let mut best: Option<([u8; 3], f64)> = None;
+    for k in 0..256 {
+        let c = random_candidate(name, k);
+        let lab = oklab(c);
+        let dp = fixed.iter().map(|p| d(&lab, p)).fold(f64::INFINITY, f64::min);
+        let dr = used.iter().map(|p| d(&lab, p)).fold(f64::INFINITY, f64::min);
+        if dp >= RANDOM_MIN_PALETTE && dr >= RANDOM_MIN_OTHER {
+            return rgba_of(c);
+        }
+        let score = (dp / RANDOM_MIN_PALETTE).min(dr / RANDOM_MIN_OTHER);
+        if best.is_none_or(|(_, s)| score > s) {
+            best = Some((c, score));
+        }
+    }
+    rgba_of(best.map_or([128, 128, 128], |b| b.0))
 }
 
 // ---------------------------------------------------------------- colour science

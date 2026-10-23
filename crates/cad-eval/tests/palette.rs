@@ -81,21 +81,69 @@ fn unknown_name_warns_and_gets_a_stable_random_colour() {
     let a = rgba(&colors(src)[0].0);
     assert_eq!(a, rgba(&colors("color(\"LightGoldenrodYellow\") cube(1);")[0].0));
     assert_eq!(a, random_color("lightgoldenrodyellow"));
-    assert_eq!(palette::hex_string(random_color("lightgoldenrodyellow")), "#947fd3");
-    assert_eq!(palette::hex_string(random_color("rot")), "#d06f65");
-    // Different names give different hues; lightness/chroma like the palette.
-    let mut hues = Vec::new();
+    assert_eq!(palette::hex_string(random_color("lightgoldenrodyellow")), "#a991ef");
+    assert_eq!(palette::hex_string(random_color("rot")), "#a9342e");
+    // Different names give different colours in the muted range, away from the palette.
+    let mut seen: Vec<[u8; 3]> = Vec::new();
     for n in ["salmon", "navy", "gold", "olive", "maroon", "lavender", "coral", "khaki"] {
         let b = rgba_bytes(random_color(n));
-        let [l, c, h] = oklch([b[0], b[1], b[2]]);
-        assert!((l - palette::RANDOM_L).abs() < 0.01, "{n}: L {l}");
-        assert!(c <= palette::RANDOM_C + 0.005 && c > 0.04, "{n}: C {c}");
-        hues.push(h);
+        let rgb = [b[0], b[1], b[2]];
+        let [l, c, _] = oklch(rgb);
+        assert!((palette::RANDOM_L.0 - 0.01..=palette::RANDOM_L.1 + 0.01).contains(&l), "{n}: L {l}");
+        assert!(c <= palette::RANDOM_C.1 + 0.005, "{n}: C {c}");
+        for p in PALETTE.iter().map(|p| p.rgb).chain([palette::DEFAULT_RGB]) {
+            assert!(delta_e(rgb, p) >= palette::RANDOM_MIN_PALETTE, "{n} too close to {p:?}");
+        }
+        assert!(!seen.contains(&rgb), "{n}");
+        seen.push(rgb);
         assert_eq!(parse_color(n).unwrap().kind, ColorKind::Random);
     }
-    hues.sort_by(f64::total_cmp);
-    hues.dedup_by(|a, b| (*a - *b).abs() < 1.0);
-    assert_eq!(hues.len(), 8);
+}
+
+/// Bericht 12, F5: random colours of different names in one model keep a distance to each
+/// other and to the palette (before: only the hue varied, `baz`/`violet` and `x`/`rose` were
+/// equal and merged into one entry and slot).
+#[test]
+fn random_colours_do_not_collide_in_a_model() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/farben-pruefung/cases/randnames.scad");
+    let src = std::fs::read_to_string(path).unwrap();
+    let out = run(&src);
+    let mut by_name: Vec<(String, [u8; 3])> = Vec::new();
+    for n in &out.tree.nodes {
+        if let Op::Color { rgba, name: Some(name), .. } = &n.op {
+            let b = rgba_bytes(*rgba);
+            let key = name.to_ascii_lowercase();
+            match by_name.iter().find(|(k, _)| *k == key) {
+                Some((_, c)) => assert_eq!(*c, [b[0], b[1], b[2]], "{name}: same name, same colour"),
+                None => by_name.push((key, [b[0], b[1], b[2]])),
+            }
+        }
+    }
+    let random: Vec<_> = by_name.iter().filter(|(k, _)| palette::palette_color(k).is_none()).collect();
+    assert_eq!(random.len(), 34, "{by_name:?}");
+    for (i, (a, ca)) in random.iter().enumerate() {
+        for p in PALETTE.iter().map(|p| p.rgb).chain([palette::DEFAULT_RGB]) {
+            assert!(delta_e(*ca, p) >= palette::RANDOM_MIN_PALETTE - 1e-9, "{a} near palette {p:?}");
+        }
+        for (b, cb) in &random[i + 1..] {
+            assert!(delta_e(*ca, *cb) >= palette::RANDOM_MIN_OTHER - 1e-9, "{a} / {b}: {}", delta_e(*ca, *cb));
+        }
+    }
+    // the same names in another order: still distinct (values may move, never merge)
+    let rev: String = src.lines().rev().collect::<Vec<_>>().join("\n");
+    let out = run(&rev);
+    let mut keys: Vec<[u8; 4]> = out
+        .tree
+        .nodes
+        .iter()
+        .filter_map(|n| match &n.op {
+            Op::Color { rgba, name: Some(n), .. } if palette::palette_color(n).is_none() => Some(rgba_bytes(*rgba)),
+            _ => None,
+        })
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
+    assert_eq!(keys.len(), 34);
 }
 
 #[test]
@@ -208,4 +256,21 @@ fn display_variants() {
 /// A face lit at an angle (Lambert factor `k`).
 fn scale(c: [u8; 3], k: f64) -> [u8; 3] {
     c.map(|x| (x as f64 * k).round() as u8)
+}
+
+/// Bericht 12, F2: `filament(c, n);` – the slot table of the model (top level, evaluated
+/// first); invalid slots warn once; a user module named `filament` keeps working.
+#[test]
+fn filament_declarations() {
+    let out = run("color(\"red\", filament = 2) cube(1);\nfilament(\"red\", 4);\nfilament(\"#2e65b9\", 17);\n");
+    assert_eq!(out.tree.filaments.len(), 1);
+    assert_eq!((out.tree.filaments[0].slot, out.tree.filaments[0].name.as_deref()), (4, Some("red")));
+    let w = warnings(&out);
+    assert_eq!(w.len(), 2, "{w:?}");
+    assert!(w.iter().any(|x| x.contains("Slot muss eine ganze Zahl von 1 bis 16 sein")), "{w:?}");
+    assert!(w.iter().any(|x| x.contains("Farbe hat schon Filament 4")), "the table counts first: {w:?}");
+    let out = run("module filament(a, b) cube(b);\nfilament(\"red\", 3);\n");
+    assert!(out.tree.filaments.is_empty());
+    assert!(warnings(&out).is_empty(), "{:?}", warnings(&out));
+    assert_eq!(out.tree.nodes.iter().filter(|n| matches!(n.op, Op::Prim { .. })).count(), 1);
 }

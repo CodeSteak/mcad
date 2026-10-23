@@ -102,7 +102,11 @@ zip?: boolean,
 /**
  * Multi-colour export (3MF with volumes per colour, ZIP with one STL per colour).
  */
-colors?: boolean, } | { "type": "ColorRegions", version: number, items: Array<RegionSet>, } | { "type": "Error", message: string, version: number | null, node: number | null, };
+colors?: boolean, 
+/**
+ * Notes for the user (multi-colour 3MF: objects, material outside parts, slicers).
+ */
+notes?: Array<string>, } | { "type": "ColorRegions", version: number, items: Array<RegionSet>, } | { "type": "Error", message: string, version: number | null, node: number | null, };
 
 export type Severity = "error" | "warning" | "info";
 

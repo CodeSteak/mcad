@@ -52,6 +52,26 @@ lib3mf), `contrast.py` (WCAG-Kontrast der Token), `deltae.py` (Farbabstände).
 - **Daemon:** ein langer `CAD_IPC_DIR` überschreitet die Unix-Socket-Grenze (107 Zeichen,
   „path must be shorter than SUN_LEN“); der Daemon startet nicht, ohne sichtbaren Hinweis.
 
+## Status der Befunde (Bericht 12, `docs/reports/12-farben-korrekturen/report.pdf`)
+
+Alle Fälle aus `cases/` laufen als Regressionstest `crates/cad-cli/tests/farben_pruefung.rs`
+(jede Datei ohne Fehler, Regionsvolumen = Bauteilvolumen, Zufallsfarben mit Abstand zur
+Palette), dazu je Befund ein eigener Test.
+
+| Befund | Status | Korrektur | Tests |
+| --- | --- | --- | --- |
+| F1 | behoben | Ansicht zeigt die Farbregionen (UI-Standard, `cad render`); Farbe je Fläche nur aus Knoten unter dem gezeichneten Knoten, bei gleichem Inhalt der mit passender Hülle; STEP-Flächenfarben aus den Regionen (`face_region_colors`). Cache-Wiederverwendung bleibt. | `f1_equal_geometry_…`, Vitest „F1“, Playwright G01, Tauri T15 |
+| F2 | behoben | `filament("red", 4);` auf oberster Ebene: Slot-Tabelle mit Vorrang; die UI schreibt sie, wenn die Farbe an einer Anweisung kein Literal ist | `set_filament_of_a_parameter_colour_writes_a_table`, `filament_table_rules`, `filament_declarations`, G02, T15 |
+| F3 | behoben | (a, b) Regionen in der Ansicht; (c) einheitliche 2D-Farbe färbt die Extrusion, gemischte → Warnung, Standard | `f3_view_matches_the_print`, G03 |
+| F4 | behoben | Objekt „ohne Bauteil“ in Liste und Export, CLI = UI, Meldung nennt die Objekte | `f4_material_outside_parts`, `material_outside_parts_is_exported`, G04, T15 |
+| F5 | behoben | L, C, Farbton aus dem Hash; ΔE ≥ 0,07 zur Palette, ≥ 0,06 zu anderen Zufallsfarben im Modell | `f5_random_colours_keep_their_distance`, `random_colours_do_not_collide_in_a_model` |
+| F6 | behoben | nur andersfarbiges späteres Material wird abgezogen | `f6_no_slivers_…`, alle Fälle (Summe auf 10⁻⁶) |
+| F7 | behoben | Identität = RGB (alpha nur Ansicht), Klemmen mit Warnung, `transparent`/`""`/`color()` färben nicht (Warnung) | `f7_value_rules` |
+| F8 | behoben | Warnung über 16 Slots, Hinweis bei geteiltem Slot und Slot 1 neben Standard; keine Farbgruppe (auch einfarbig) | `f8_slot_remarks_and_single_colour`, `no_color_group_by_default` |
+| F9 | behoben | `--per-color` nur mit `.zip`, `--part` filtert die Farbliste, Zeilen anderer Dateien als `lib.scad:1` | `f9_per_colour_export_and_list`, Vitest „F9“ |
+| Daemon | behoben | zu langer Socketpfad → `/tmp/cad-<uid>/<hash>-daemon.sock`, in `cad daemon status` | `long_ipc_dir_uses_short_socket_path` |
+| Bambu-Dialog | vermieden | 3MF ohne `m:colorgroup` (Dialog öffnet nur mit Farbgruppe); `--color-group` für andere Programme, Meldung „Abbrechen“ | `no_color_group_by_default`, `export_multicolour_single_and_per_colour` |
+
 ## Hinweise zu Bambu Studio (aus dem Quellcode, nicht am Programm geprüft)
 
 Bei 3MF fremder Programme mit `colorgroup` öffnet Bambu Studio einen Farbdialog; dessen

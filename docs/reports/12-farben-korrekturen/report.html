@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Testbericht 12 – Korrekturen Farben und Daemon</title>
+<style>
+  @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
+  :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
+  * { box-sizing: border-box; }
+  body { font: 9.6pt/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); margin: 0; }
+  main { max-width: 184mm; margin: 0 auto; }
+  h1 { font-size: 18pt; margin: 0 0 2mm; }
+  h2 { font-size: 13pt; margin: 7mm 0 3mm; border-bottom: 1px solid var(--border); padding-bottom: 1mm; break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p { margin: 1.5mm 0; }
+  .meta { color: var(--muted); margin-bottom: 4mm; }
+  .summary { display: flex; flex-wrap: wrap; gap: 2.5mm; margin: 3mm 0; }
+  .summary div { flex: 1 1 28mm; border: 1px solid var(--border); border-radius: 2mm; padding: 2mm; font-size: 8.4pt; }
+  .summary b { display: block; font-size: 12pt; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 8.2pt; }
+  th, td { border: 1px solid var(--border); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
+  th { background: var(--head); font-weight: 600; }
+  td.n { text-align: right; white-space: nowrap; }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 7.6pt; }
+  pre { margin: 0 0 1.5mm; padding: 1.4mm 2mm; background: #f6f8fa; border: 1px solid var(--border); border-radius: 1mm; white-space: pre-wrap; word-break: break-word; }
+  .small { font-size: 7.6pt; color: var(--muted); font-weight: 400; }
+  ul { margin: 1mm 0 2mm 5mm; padding: 0; }
+  li { margin: 0.5mm 0; }
+  tr, td, figure, pre { break-inside: avoid; }
+  .ok { color: var(--ok); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+  figure { margin: 2mm 0; }
+  figure img { max-width: 100%; max-height: 95mm; border: 1px solid var(--border); border-radius: 1mm; }
+  figcaption { font-size: 7.8pt; color: var(--muted); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; align-items: start; }
+  dl.f { display: grid; grid-template-columns: 22mm 1fr; gap: 0.8mm 3mm; margin: 1.5mm 0; }
+  dl.f dt { font-weight: 600; color: var(--muted); }
+  dl.f dd { margin: 0; }
+  .note { border-left: 1mm solid #e8b84a; padding: 1mm 2.5mm; background: #fff8e6; margin: 2mm 0; }
+  .sw { display: inline-block; width: 3.2mm; height: 3.2mm; border-radius: 0.6mm; border: 0.25mm solid rgba(0,0,0,0.3); vertical-align: -0.5mm; margin-right: 0.5mm; }
+  section.finding { break-before: auto; }
+</style>
+</head>
+<body>
+<main>
+<h1>Testbericht 12 – Korrekturen Farben und Daemon</h1>
+<div class="meta">Befunde F1–F9 der unabhängigen Prüfung (<code>tests/farben-pruefung/</code>) und Daemon-Socketpfad · cad-eval, cad-engine, cad-session, cad-cli, cad-ipc, web · 23.10.2026 · Branch worktree-agent-a118501517e2aa7b5 · Commit 1968be9 · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 Kerne</div>
+
+<div class="summary">
+  <div>cargo test --workspace<b class="ok">404 / 404</b>davon 16 neue Regressionstests</div>
+  <div>clippy · fmt<b class="ok">sauber · sauber</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="ok">195 · 88 / 88</b>neu: G01–G04</div>
+  <div>Tauri-E2E<b class="ok">15 / 15</b>neu: T15</div>
+  <div>OpenSCAD · STEP<b class="ok">33/33 · 48/48</b>compare.py · verify.py</div>
+  <div>Alltagsmodelle<b class="ok">unverändert</b>tests/alltag/check.sh</div>
+  <div>3MF (lib3mf, trimesh)<b class="ok">bestanden</b>Farbdialog Bambu: nein</div>
+</div>
+
+<h2>1 Auftrag und Ergebnis</h2>
+<p>Ein unabhängiger Test-Agent hat die Farbfunktionen aus Bericht 11 geprüft und neun Befunde (F1–F9) sowie einen Daemon-Fehler gemeldet (<code>tests/farben-pruefung/README.md</code>, Testfälle in <code>cases/</code>, Bilder in <code>img/</code>). Alle Befunde sind behoben; jeder hat einen Regressionstest in Rust, die UI-Befunde zusätzlich in Vitest, Playwright und Tauri-E2E. Die Testfälle der Prüfung laufen vollständig als <code>crates/cad-cli/tests/farben_pruefung.rs</code> (jede Datei: keine Fehler, Regionsvolumen = Bauteilvolumen, Zufallsfarben mit Abstand zur Palette). „Vorher“-Bilder sind die des Prüfers (Commit d8fe983), „nachher“ die CLI und UI dieses Commits.</p>
+<table>
+<tr><th>Nr.</th><th>Schwere</th><th>Befund</th><th>Status</th></tr>
+<tr><td>F1</td><td>hoch</td><td>Gleiche Geometrie in verschiedenen Farben: Ansicht und STEP in der ersten Farbe</td><td class="ok">behoben</td></tr>
+<tr><td>F2</td><td>hoch</td><td>Slotwahl in der UI an einem color() mit Parameter-/Schleifenfarbe färbte alle Farben</td><td class="ok">behoben (filament()-Tabelle)</td></tr>
+<tr><td>F3</td><td>mittel</td><td>Ansicht ≠ Druck (Überlappung, Verrundung an Farbgrenze, color() im 2D-Profil)</td><td class="ok">behoben (Regionen in der Ansicht; gemischte 2D-Farben: Warnung)</td></tr>
+<tr><td>F4</td><td>mittel</td><td>Material außerhalb von Bauteilen: UI ließ es weg, CLI-Meldung falsch</td><td class="ok">behoben</td></tr>
+<tr><td>F5</td><td>mittel</td><td>Zufallsfarben kollidieren</td><td class="ok">behoben</td></tr>
+<tr><td>F6</td><td>mittel/niedrig</td><td>Splitter bei gleichfarbigen Nachbarn</td><td class="ok">behoben</td></tr>
+<tr><td>F7</td><td>niedrig</td><td>Alpha-Varianten, stilles Klemmen, transparent, leerer Name</td><td class="ok">behoben (Regeln + Warnungen)</td></tr>
+<tr><td>F8</td><td>niedrig</td><td>&gt; 16 Slots, geteilte Slots ohne Hinweis, Farbgruppe bei einfarbig</td><td class="ok">behoben</td></tr>
+<tr><td>F9</td><td>niedrig</td><td>--per-color mit .stl, Farbliste bei --part, Dateiname bei use/include</td><td class="ok">behoben</td></tr>
+<tr><td>D</td><td>–</td><td>Daemon startet bei zu langem Socketpfad still nicht</td><td class="ok">behoben (Ersatzpfad)</td></tr>
+<tr><td>B</td><td>–</td><td>Bambu Studio: Farbdialog überschreibt Slots</td><td class="ok">vermieden (3MF ohne Farbgruppe)</td></tr>
+</table>
+
+<h2>2 Befunde</h2>
+
+<section class="finding">
+<h3>F1 (hoch) – gleiche Geometrie, verschiedene Farben</h3>
+<dl class="f">
+<dt>Ursache</dt><dd>Der Cache-Schlüssel eines Knotens enthält die Farbe nicht (Absicht: eine neue Farbe rechnet nichts neu). <code>color("red") cube(5)</code> und <code>translate(…) color("blue") cube(5)</code> haben daher denselben Würfelknoten-Inhalt, dasselbe Flächen-Tag und – aus dem Cache – dieselben Kernel-Flächen. Ansicht (<code>tagColors</code>: Tag → erster Knoten mit Farbe) und STEP (<code>nodes_for_tag(tag).first()</code>) nahmen für alle Flächen dieses Tags die erste Farbe. Das 3MF war richtig, weil die Farbregionen die Instanzen einzeln platzieren.</dd>
+<dt>Korrektur</dt><dd>Die Cache-Wiederverwendung bleibt; die Farbe wird über Instanzen und Regionen zugeordnet: (1) die Ansicht zeigt bei Modellen mit Farben die <b>Farbregionen</b> (die Körper des 3MF), sobald sie gerechnet sind (UI „Farbregionen zeigen“, jetzt Standard; <code>cad render</code> ohne <code>--show faces</code>); (2) die Farbe je Fläche (davor, für hervorgehobene Teilbäume und <code>--show faces</code>) nimmt nur Knoten unterhalb des gezeichneten Knotens und unter mehreren gleichen Inhalts den, dessen Hülle das Dreieck enthält (<code>faceColors</code> in <code>web/src/logic/colors.ts</code>, <code>face_colors</code> in <code>cad-cli/src/render.rs</code>); (3) STEP-Flächenfarben kommen aus der Regelmenge der Regionen ohne Boolean: Abtastpunkte jeder Fläche gegen das platzierte Material jedes Farbknotens (<code>kernel.classify</code>), der späteste gewinnt (<code>Engine::face_region_colors</code>), als synthetische Tags in einer Kopie der B-Rep.</dd>
+<dt>Tests</dt><dd><code>f1_equal_geometry_keeps_its_colour_in_view_and_step</code> <span class="ok">ok</span>, <code>all_review_cases_evaluate_and_regions_add_up</code> <span class="ok">ok</span>; Vitest „Bericht 12 F1“; Playwright G01; Tauri T15.</dd>
+</dl>
+<div class="two"><figure><img src="img/vorher-pal2.jpg" alt=""><figcaption>vorher: pal2.scad, drei rote Würfel (Prüfer)</figcaption></figure><figure><img src="img/cli-f1-pal2.jpg" alt=""><figcaption>nachher: <code>cad render</code> (Farbregionen)</figcaption></figure></div>
+<div class="two"><figure><img src="img/cli-f1-pal2-flaechen.jpg" alt=""><figcaption>nachher: <code>--show faces</code> (Farbe je Fläche je Instanz)</figcaption></figure><figure><img src="img/cli-f1-palette.jpg" alt=""><figcaption>nachher: palette.scad, 16 gleiche Kacheln in einer Schleife</figcaption></figure></div>
+<p>STEP von pal2.scad (Flächen je Farbe):</p><pre>#2e65b9: 6 Flächen
+#4ca167: 6 Flächen
+#c74240: 6 Flächen</pre>
+<figure><img src="img/ui-g01-flaechen.jpg" alt=""><figcaption>UI: Farbe je Fläche mit „Farbregionen zeigen“ aus – jede Instanz in ihrer Farbe</figcaption></figure>
+<p class="small">Grenze: die Farbe je Fläche ist eine Näherung (Hüllen-Test; bei überlappenden Hüllen gleich geformter Körper verschiedener Farbe die spätere). Exakt sind die Regionen, die die Ansicht nach der Rechnung zeigt; in STEP bekommt eine über eine Farbgrenze verschmolzene Fläche eine Farbe (Mehrheit der Abtastpunkte).</p>
+</section>
+
+<section class="finding">
+<h3>F2 (hoch) – Slotwahl bei Parameter- oder Schleifenfarbe</h3>
+<dl class="f">
+<dt>Ursache</dt><dd><code>SetFilament</code> schrieb <code>filament = n</code> an die erste <code>color()</code>-Anweisung der Farbe. Bei <code>module bar(c) color(c) …</code> oder <code>for (i) color(names[i]) …</code> färbt diese Anweisung mehrere Farben – alle bekamen den Slot (bzw. die erste Angabe gewann mit Warnung).</dd>
+<dt>Entscheidung</dt><dd>Eine Slot-Tabelle im Code: <code>filament("red", 4);</code> auf oberster Ebene der Hauptdatei, eine Anweisung je Farbe. Begründung: der Code bleibt die einzige Quelle (CLI und UI exportieren dasselbe, Undo/Git sehen die Änderung, ein Agent liest es mit); die Tabelle gilt für genau eine Farbe und ist unabhängig davon, wo die Farbe entsteht (Parameter, Schleife, Bibliothek); es ist ein gewöhnlicher Modulaufruf (keine neue Syntax, OpenSCAD meldet nur ein unbekanntes Modul); ein Block <code>filaments { … }</code> bräuchte Parser-Änderungen, <code>$filaments = […]</code> hätte die Gültigkeitsregeln von <code>$</code>-Variablen und ließe sich an jeder Stelle überschreiben. Die UI schreibt <code>filament = n</code> weiter an die Anweisung, wenn <b>alle</b> Anweisungen der Farbe sie als Literal nennen (lesbar am Ort), sonst die Tabellenzeile; gibt es eine Tabellenzeile, ändert sie deren Slot, „automatisch“ entfernt die Zeile.</dd>
+<dt>Regeln</dt><dd>Die Tabelle wird vor allen anderen Anweisungen ausgewertet (eigener Durchlauf) und hat Vorrang; ein widersprechendes <code>filament = m</code> warnt und wird ignoriert; <code>filament()</code> in Modulen, Schleifen oder Bibliotheken warnt („nur auf oberster Ebene der Hauptdatei“); ein eigenes Modul <code>filament</code> des Nutzers hat Vorrang.</dd>
+<dt>Tests</dt><dd><code>filament_declarations</code> <span class="ok">ok</span>, <code>filament_table_rules</code> <span class="ok">ok</span>, <code>set_filament_of_a_parameter_colour_writes_a_table</code> <span class="ok">ok</span>; Playwright G02; Tauri T15.</dd>
+</dl>
+<figure><img src="img/ui-g02-tabelle.jpg" alt=""><figcaption>UI nach Slot 4 für red in slot_mod.scad: <code>filament(&quot;red&quot;, 4);</code> im Code, blue und green automatisch (vorher bekamen alle drei Slot 4)</figcaption></figure>
+<p><code>cad outline</code> der Datei mit Tabelle:</p><pre>Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):
+  F4  red            #c74240  40 mm³  0.05 g  Z.1  filament = 4
+  F1  blue           #2e65b9  40 mm³  0.05 g  Z.1
+  F2  green          #4ca167  40 mm³  0.05 g  Z.1</pre>
+</section>
+
+<section class="finding">
+<h3>F3 (mittel) – Ansicht ≠ Druck</h3>
+<dl class="f">
+<dt>Ursache</dt><dd>(a) Bei Überlappung verschmilzt der Kernel koplanare Flächen beider Körper zu einer Fläche mit einem Tag – die Farbe je Fläche kann die Farbgrenze nicht zeigen. (b) Die Verrundung an einer Farbgrenze gehört dem ungefärbten <code>union</code>-Knoten (grau gezeigt), die Regionen geben sie der Restfarbe (rot). (c) <code>color()</code> im 2D-Profil: die Ansicht zeigte die Farbe des 2D-Blatts, die Farbtabelle sah unter Profiloperationen nicht nach (Standard, ohne Eintrag, ohne Warnung).</dd>
+<dt>Korrektur</dt><dd>(a, b) Die Ansicht zeigt die Farbregionen (F1). (c) Haben alle 2D-Blätter einer Extrusion ohne eigene Farbe dieselbe Farbe, ist die Extrusion ein Körper dieser Farbe (wie <code>color()</code> um sie); gemischte 2D-Farben werden nicht getrennt: ein Körper in Standard und die Warnung „Farben im 2D-Profil von linear_extrude werden nicht getrennt …“.</dd>
+<dt>Tests</dt><dd><code>f3_view_matches_the_print</code> <span class="ok">ok</span>; Playwright G03.</dd>
+</dl>
+<div class="two"><figure><img src="img/vorher-r_overlap23.jpg" alt=""><figcaption>vorher: r_overlap2/3 (links), Regionen (rechts) – Prüfer</figcaption></figure><figure><img src="img/cli-f3-overlap3.jpg" alt=""><figcaption>nachher: r_overlap3.scad, blau besitzt die Überlappung</figcaption></figure></div>
+<div class="two"><figure><img src="img/vorher-r_fillet2.jpg" alt=""><figcaption>vorher: Verrundung grau, exportiert rot (Prüfer)</figcaption></figure><figure><img src="img/cli-f3-fillet2.jpg" alt=""><figcaption>nachher: Verrundung rot wie im Druck</figcaption></figure></div>
+<div class="two"><figure><img src="img/vorher-r_extrude_faces.jpg" alt=""><figcaption>vorher: 2D-Farbe gezeigt, als Standard exportiert (Prüfer)</figcaption></figure><figure><img src="img/cli-f3-extrude.jpg" alt=""><figcaption>nachher: rot und blau wie exportiert, gemischtes Profil Standard mit Warnung</figcaption></figure></div>
+<pre>tests/farben-pruefung/cases/r_extrude.scad:3:21: Warnung (Auswertung): Farben im 2D-Profil von linear_extrude werden nicht getrennt: der Körper druckt als Standard – color() um die Extrusion setzen oder je Farbe extrudieren
+Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):
+  F1  Standard       #c3c8cf  250 mm³  0.31 g  (ohne color())
+  F2  red            #c74240  500 mm³  0.62 g  Z.1
+  F3  blue           #2e65b9  500 mm³  0.62 g  Z.2</pre>
+<p class="small">Grenze: gemischte Farben in einem 2D-Profil unter einer Extrusion werden nicht in Körper je Farbe geteilt (Warnung; Abhilfe: je Farbe extrudieren).</p>
+</section>
+
+<section class="finding">
+<h3>F4 (mittel) – Material außerhalb von Bauteilen</h3>
+<dl class="f">
+<dt>Ursache</dt><dd>Farbliste und UI-Export nahmen nur die Bauteile (Rest: 0 mm³, im 3MF weggelassen); der CLI-Export ohne <code>--part</code> nahm die Wurzel als ein Objekt und meldete trotzdem „je Bauteil ein Objekt“.</dd>
+<dt>Korrektur</dt><dd>Die Regionen umfassen die Bauteile und die obersten Knoten, die weder Bauteil sind noch eines enthalten („ohne Bauteil“, <code>cad_session::rest_nodes</code>); der Standard-Export (CLI ohne <code>--part</code> und UI, beide <code>Session::export_colors</code>) schreibt je Bauteil ein Objekt und das Objekt „ohne Bauteil“ – die Dateien von CLI und UI sind gleich. Die Meldung zählt die Objekte auf (<code>color_export_notes</code>), die UI zeigt sie in der Statuszeile.</dd>
+<dt>Tests</dt><dd><code>f4_material_outside_parts</code> <span class="ok">ok</span>, <code>material_outside_parts_is_exported</code> <span class="ok">ok</span>; Playwright G04; Tauri T15.</dd>
+</dl>
+<pre>tests/farben-pruefung/cases/inc/lib.scad:2:22: Warnung (Auswertung): Farbe `rosarot` unbekannt – Zufallsfarbe (Palette: red, orange, yellow, lime, green, teal, cyan, blue, purple, magenta, pink, brown, black, gray, silver, white)
+main_use.3mf: 792 Dreiecke, 55988 Bytes, Volumen 1204.3893 mm³
+3MF mehrfarbig: 3 Objekte (teil, deko, ohne Bauteil), 6 Teile (eines je Farbe und Objekt); Material außerhalb der Bauteile ist ein eigenes Objekt „ohne Bauteil“; Filament-Slots in Metadata/model_settings.config, ohne Farbgruppe: Bambu Studio und OrcaSlicer übernehmen die Slots ohne Farbdialog (einfarbig: --single-color)
+Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):
+  F1  white          #f4f3f0  600 mm³  0.74 g  Z.2
+  F2  red            #c74240  150.7964 mm³  0.19 g  lib.scad:1
+  F3  teal           #217274  301.5929 mm³  0.37 g  lib.scad:1
+  F4  rosarot        #959d3b  27 mm³  0.03 g  lib.scad:2  (unbekannter Name: Zufallsfarbe)
+  F5  yellow         #f7d974  125 mm³  0.16 g  Z.6
+  teil: F1 white 600 mm³, F2 red 150.7964 mm³, F3 teal 150.7964 mm³, F4 rosarot 27 mm³
+  deko: F3 teal 150.7964 mm³
+  ohne Bauteil: F5 yellow 125 mm³</pre>
+</section>
+
+<section class="finding">
+<h3>F5 (mittel) – Zufallsfarben kollidieren</h3>
+<dl class="f">
+<dt>Ursache</dt><dd>Nur der Farbton kam aus dem Hash (L, C fest): Namen fielen auf denselben Wert (<code>baz</code>/<code>violet</code>, <code>x</code>/<code>rose</code>) und wurden zu einem Eintrag und Slot zusammengelegt; andere lagen nah an Palettenfarben.</dd>
+<dt>Korrektur</dt><dd>Farbton, Helligkeit (0,45–0,80) und Chroma (0,06–0,16) aus dem Hash; eine Kandidatenfolge je Name (SplitMix64); gewählt wird der erste Kandidat mit ΔE<sub>OK</sub> ≥ 0,07 zu Palette und Standard und – im Modell, in Reihenfolge des ersten Auftretens – ≥ 0,06 zu den Zufallsfarben anderer Namen. Verschiedene Namen fallen so nie zufällig zusammen; zusammengelegt wird nur bei exakt gleichem Wert (z. B. <code>"#f00"</code> und <code>[1, 0, 0]</code>).</dd>
+<dt>Nachweis</dt><dd>randnames.scad: 34 unbekannte Namen (36 Anweisungen, rot/Rot/ROT ist ein Name), 34 Einträge auf 34 verschiedenen Slots; kleinster Abstand zweier Zufallsfarben ΔE<sub>OK</sub> 0,060 (gelb/violet), zur Palette 0,071 (rot ↔ #c74240).</dd>
+<dt>Tests</dt><dd><code>f5_random_colours_keep_their_distance</code> <span class="ok">ok</span>, <code>random_colours_do_not_collide_in_a_model</code> <span class="ok">ok</span>.</dd>
+</dl>
+<p><span class="sw" style="background:#a9342e"></span>rot · <span class="sw" style="background:#e07e82"></span>grün · <span class="sw" style="background:#168eaf"></span>blau · <span class="sw" style="background:#fe8c99"></span>gelb · <span class="sw" style="background:#c291b8"></span>lightblue · <span class="sw" style="background:#726127"></span>darkred · <span class="sw" style="background:#59804c"></span>navy · <span class="sw" style="background:#8e3c4d"></span>olive · <span class="sw" style="background:#5d739d"></span>maroon · <span class="sw" style="background:#91730e"></span>coral · <span class="sw" style="background:#b7b4f2"></span>salmon · <span class="sw" style="background:#56cf96"></span>gold · <span class="sw" style="background:#eb9cc0"></span>violet · <span class="sw" style="background:#9f7055"></span>indigo · <span class="sw" style="background:#535e85"></span>beige · <span class="sw" style="background:#93965d"></span>tan · <span class="sw" style="background:#9489bc"></span>khaki · <span class="sw" style="background:#a16da4"></span>crimson · <span class="sw" style="background:#4bb2e3"></span>turquoise · <span class="sw" style="background:#fba648"></span>lavender · <span class="sw" style="background:#99aa3d"></span>mint · <span class="sw" style="background:#884479"></span>rose · <span class="sw" style="background:#c0a262"></span>foo · <span class="sw" style="background:#6d9eb7"></span>bar · <span class="sw" style="background:#54aea0"></span>baz · <span class="sw" style="background:#1b88d7"></span>x · <span class="sw" style="background:#bc7c96"></span>y · <span class="sw" style="background:#deb639"></span>z · <span class="sw" style="background:#a0606c"></span>petrol · <span class="sw" style="background:#ca6569"></span>schwarz · <span class="sw" style="background:#daa28a"></span>weiss · <span class="sw" style="background:#769ded"></span>orange2 · <span class="sw" style="background:#86ad7f"></span>red2 · <span class="sw" style="background:#b29bfd"></span>blue1</p>
+<p class="small">Grenze: weicht ein Name im Modell aus, hängt seine Farbe von den Namen davor ab (deterministisch, aber nicht modellübergreifend gleich).</p>
+</section>
+
+<section class="finding">
+<h3>F6 – Splitter bei gleichfarbigen Nachbarn</h3>
+<dl class="f">
+<dt>Ursache</dt><dd><code>Stück(C) = R ∩ M(C) − ⋃ M(später)</code> zog auch einen berührenden späteren Körper derselben Farbe ab; an der Berührfläche blieben dünne Splitter (0,00016 mm), die nach dem Vereinigen überlappten: r_touch.scad rot 2000,032 statt 2000 mm³, ohne Warnung.</dd>
+<dt>Korrektur</dt><dd>Abgezogen wird nur das Material späterer Farbknoten <b>anderer</b> Farbe; die Stücke einer Farbe werden wie bisher vereinigt. Die Zuordnung ist dieselbe (gleiche Farbe), die Splitter entfallen.</dd>
+<dt>Tests</dt><dd><code>f6_no_slivers_between_same_coloured_neighbours</code> <span class="ok">ok</span>, <code>all_review_cases_evaluate_and_regions_add_up</code> <span class="ok">ok</span> (alle Fälle: Summe = Volumen auf 10⁻⁶).</dd>
+</dl>
+<pre>Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):
+  F1  red            #c74240  2000 mm³  2.48 g  Z.1, Z.2
+  F2  blue           #2e65b9  1000 mm³  1.24 g  Z.3</pre>
+</section>
+
+<section class="finding">
+<h3>F7 – Alpha, Klemmen, transparent, leerer Name</h3>
+<dl class="f">
+<dt>Regeln</dt><dd>Die Identität einer Druckfarbe ist ihr RGB-Wert: <code>alpha</code> wirkt nur in der Ansicht (die Farbregion wird transparent gezeichnet), <code>color("red", alpha = 0.5)</code> ist der Eintrag <code>red</code> (ein Slot, die Konfliktprüfung sieht über Alpha). Vektorwerte und <code>alpha</code> außerhalb 0–1 werden mit Warnung geklemmt (bei 0–255-Werten mit Hinweis auf <code>"#rrggbb"</code>). <code>color("transparent")</code> ist keine Druckfarbe: Warnung, das Material bleibt Standard (kein Filament <code>#00000000</code>); <code>color("")</code> und <code>color()</code> warnen und färben nicht.</dd>
+<dt>Tests</dt><dd><code>f7_value_rules</code> <span class="ok">ok</span>.</dd>
+</dl>
+<pre>tests/farben-pruefung/cases/values.scad:8:27: Warnung (Auswertung): Farbwerte liegen zwischen 0 und 1 (wie in OpenSCAD), andere werden geklemmt – für Werte 0–255 &quot;#ff0000&quot; schreiben
+tests/farben-pruefung/cases/values.scad:9:27: Warnung (Auswertung): Farbe muss Name oder [r, g, b, a] sein
+tests/farben-pruefung/cases/values.scad:10:27: Warnung (Auswertung): Farbe muss Name oder [r, g, b, a] sein
+tests/farben-pruefung/cases/values.scad:11:27: Warnung (Auswertung): `#12345` ist keine Farbe (#rgb, #rrggbb, #rrggbbaa oder Name)
+tests/farben-pruefung/cases/values.scad:12:27: Warnung (Auswertung): `#ggg` ist keine Farbe (#rgb, #rrggbb, #rrggbbaa oder Name)
+tests/farben-pruefung/cases/values.scad:13:27: Warnung (Auswertung): Farbe muss Name oder [r, g, b, a] sein
+tests/farben-pruefung/cases/values.scad:14:42: Warnung (Auswertung): alpha liegt zwischen 0 und 1, der Wert wird geklemmt
+tests/farben-pruefung/cases/values.scad:15:27: Warnung (Auswertung): `transparent` ist keine Druckfarbe: das Material bleibt ungefärbt (Standard, Filament 1)
+tests/farben-pruefung/cases/values.scad:18:27: Warnung (Auswertung): Farbe muss Name oder [r, g, b, a] sein
+tests/farben-pruefung/cases/values.scad:19:27: Warnung (Auswertung): Farbwerte liegen zwischen 0 und 1 (wie in OpenSCAD), andere werden geklemmt
+tests/farben-pruefung/cases/values.scad:20:42: Warnung (Auswertung): alpha liegt zwischen 0 und 1, der Wert wird geklemmt
+tests/farben-pruefung/cases/values.scad:21:42: Warnung (Auswertung): `alpha` muss eine Zahl sein, ist String
+tests/farben-pruefung/cases/values.scad:22:34: Warnung (Auswertung): `color()` hat keinen Parameter `foo`
+tests/farben-pruefung/cases/values.scad:23:21: Warnung (Auswertung): color() ohne Farbe hat keine Wirkung
+Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):
+  F1  Standard       #c3c8cf  81.845 mm³  0.1 g  (ohne color())
+  F2  #ff0000        #ff0000  8.11 mm³  0.01 g  Z.1, Z.4, Z.8
+  F3  #00ff00        #00ff00  1.331 mm³  0 g  Z.2
+  F4  #0000ff        #0000ff  1.728 mm³  0 g  Z.3
+  F5  #80331a        #80331a  6.119 mm³  0.01 g  Z.5, Z.6
+  F6  teal           #217274  4.096 mm³  0.01 g  Z.7
+  F7  red            #c74240  94.354 mm³  0.12 g  Z.14, Z.17, Z.20, Z.21, Z.22
+  F8  blue           #2e65b9  12.5 mm³  0.02 g  Z.16
+  F9  #008080        #008080  15.68 mm³  0.02 g  Z.19</pre>
+</section>
+
+<section class="finding">
+<h3>F8 – Slots über 16, geteilte Slots, einfarbiges 3MF</h3>
+<dl class="f">
+<dt>Korrektur</dt><dd>Die Farbtabelle meldet automatische Slots über 16 als Warnung („mehr als 16 Filamente …“), zwei Farben auf demselben festen Slot und einen festen Slot 1 neben Standard als Hinweis (Info). Das 3MF hat keine Farbgruppe mehr (Abschnitt 3), auch nicht mit <code>--color-group</code> bei nur einer Farbe.</dd>
+<dt>Tests</dt><dd><code>f8_slot_remarks_and_single_colour</code> <span class="ok">ok</span>, <code>color_export::tests::no_color_group_by_default</code> <span class="ok">ok</span>.</dd>
+</dl>
+<pre>tests/farben-pruefung/cases/f1.scad:3:45: Warnung (Auswertung): Farbe hat schon Filament 3 (die erste Angabe gilt), filament = 4 wird ignoriert
+tests/farben-pruefung/cases/f1.scad:8:47: Warnung (Auswertung): filament muss eine ganze Zahl von 1 bis 16 sein
+tests/farben-pruefung/cases/f1.scad:9:47: Warnung (Auswertung): filament muss eine ganze Zahl von 1 bis 16 sein
+tests/farben-pruefung/cases/f1.scad:10:47: Warnung (Auswertung): filament muss eine ganze Zahl von 1 bis 16 sein
+tests/farben-pruefung/cases/f1.scad:11:48: Warnung (Auswertung): `filament` muss eine Zahl sein, ist String
+tests/farben-pruefung/cases/f1.scad:13:46: Warnung (Auswertung): Farbe hat schon Filament 3 (die erste Angabe gilt), filament = 5 wird ignoriert
+tests/farben-pruefung/cases/f1.scad:14:50: Warnung (Auswertung): Farbe hat schon Filament 3 (die erste Angabe gilt), filament = 6 wird ignoriert
+tests/farben-pruefung/cases/f1.scad:15:59: Warnung (Auswertung): Farbe hat schon Filament 3 (die erste Angabe gilt), filament = 7 wird ignoriert
+tests/farben-pruefung/cases/f1.scad:4:21: Info (Auswertung): Slot 3 hat schon die Farbe `red`: beide drucken mit demselben Filament
+tests/farben-pruefung/cases/f1.scad:6:21: Info (Auswertung): Slot 1 druckt auch das Material ohne color() („Standard“) – `yellow` und Standard teilen sich das Filament
+Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):
+  F1  Standard       #c3c8cf  125 mm³  0.16 g  (ohne color())
+  F3  red            #c74240  750 mm³  0.93 g  Z.1, Z.2, Z.3, Z.13, Z.14, Z.15  filament = 3
+  F3  blue           #2e65b9  125 mm³  0.16 g  Z.4  filament = 3
+  F2  green          #4ca167  125 mm³  0.16 g  Z.5
+  F1  yellow         #f7d974  125 mm³  0.16 g  Z.6  filament = 1
+  F4  white          #f4f3f0  500 mm³  0.62 g  Z.8, Z.9, Z.10, Z.11
+  F16 pink           #f7b8c6  125 mm³  0.16 g  Z.12  filament = 16</pre>
+</section>
+
+<section class="finding">
+<h3>F9 – --per-color, --part, use/include</h3>
+<dl class="f">
+<dt>Korrektur</dt><dd><code>--per-color</code> verlangt die Endung <code>.zip</code> (sonst Exit 2 mit Vorschlag); <code>--per-color --part</code> zeigt nur die Farben und Volumen der gewählten Bauteile; die Farbliste nennt Zeilen anderer Dateien als <code>lib.scad:1</code> (CLI und UI; in der UI öffnet der Klick die Datei an der Stelle).</dd>
+<dt>Tests</dt><dd><code>f9_per_colour_export_and_list</code> <span class="ok">ok</span>; Vitest „Bericht 12 F9“.</dd>
+</dl>
+<pre>cad export: --per-color schreibt eine ZIP-Datei mit einem STL je Farbe: -o x.zip
+
+tests/farben-pruefung/cases/inc/lib.scad:2:22: Warnung (Auswertung): Farbe `rosarot` unbekannt – Zufallsfarbe (Palette: red, orange, yellow, lime, green, teal, cyan, blue, purple, magenta, pink, brown, black, gray, silver, white)
+teil.zip: 4 STL (eine je Farbe), 528 Dreiecke, 27156 Bytes
+Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):
+  F1  white          #f4f3f0  600 mm³  0.74 g  Z.2
+  F2  red            #c74240  150.7964 mm³  0.19 g  lib.scad:1
+  F3  teal           #217274  150.7964 mm³  0.19 g  lib.scad:1
+  F4  rosarot        #959d3b  27 mm³  0.03 g  lib.scad:2  (unbekannter Name: Zufallsfarbe)</pre>
+</section>
+
+<section class="finding">
+<h3>Daemon – Socketpfad länger als die Unix-Grenze</h3>
+<dl class="f">
+<dt>Ursache</dt><dd><code>sun_path</code> fasst 108 Byte (Linux; 107 ohne NUL). Mit einem tiefen <code>CAD_IPC_DIR</code> scheiterte <code>bind</code> („path must be shorter than SUN_LEN“), der Client rechnete still ohne Daemon.</dd>
+<dt>Korrektur</dt><dd><code>cad_ipc::socket_path_in</code>: ist <code>&lt;dir&gt;/&lt;name&gt;.sock</code> zu lang, liegt der Socket in <code>/tmp/cad-&lt;uid&gt;/&lt;hash&gt;-&lt;name&gt;.sock</code> (Verzeichnis mit denselben Prüfungen: 0700, eigener Benutzer, kein Symlink; <code>hash</code> = FNV-1a des kanonischen Laufzeitverzeichnisses, damit sich mehrere lange Verzeichnisse nicht stören). Sperr- und Logdatei bleiben im Laufzeitverzeichnis; <code>list</code> findet auch Ersatz-Sockets (UI-Endpunkte); <code>cad daemon status</code> zeigt den Pfad mit „Ersatzpfad“ (JSON <code>socket_substitute</code>), das Log nennt ihn.</dd>
+<dt>Tests</dt><dd><code>long_ipc_dir_uses_short_socket_path</code> <span class="ok">ok</span>.</dd>
+</dl>
+<pre>CAD_IPC_DIR: /tmp/tmp.OVFKN13EtA/ein-sehr-langer-verzeichnisname-fuer-den-socket-des-hintergrundprozesses-damit-es-reicht/ipc (124 Byte bis daemon.sock)
+cad: Daemon gestartet (pid 28107, Log /tmp/tmp.OVFKN13EtA/ein-sehr-langer-verzeichnisname-fuer-den-socket-des-hintergrundprozesses-damit-es-reicht/ipc/daemon.log)
+cad: Daemon pid 28107: 529 ms, Cache 13 Treffer / 64 neu, 64 Einträge, 7,8 MiB
+Daemon läuft: pid 28107, Version 0.1.0 (Build 0.1.0+1ebe850.18e1397934aa36b8)
+Laufzeit 0 s, Leerlauf 0 s (Ende nach 15 min ohne Anfrage), Watchdog 60 s
+Anfragen: 1, Projekte 1 von 8 (0 verdrängt)
+Cache: 62 Knoten + 2 Netze/abgeleitete, 7,8 MiB von 512,0 MiB, Trefferquote 17 % (13 Treffer, 64 neu berechnet), 0 verdrängt
+Speicher (RSS): 54,0 MiB, Start 36,1 MiB, Cache wird geleert über 804,1 MiB (0× geleert)
+Socket /tmp/cad-0/27d121efb38cc86e-daemon.sock (Ersatzpfad: Pfad im IPC-Verzeichnis länger als 107 Byte), Log /tmp/tmp.OVFKN13EtA/ein-sehr-langer-verzeichnisname-fuer-den-socket-des-hintergrundprozesses-damit-es-reicht/ipc/daemon.log
+Daemon beendet (pid 28107)</pre>
+</section>
+
+<h2>3 Bambu Studio: Farbdialog und Slots</h2>
+<p>Quellen abgerufen am 23.10.2026 (<code>raw.githubusercontent.com</code>, BambuStudio <code>master</code>, OrcaSlicer <code>main</code>; Prüfsummen in <code>reports/tmp/report12/sources.sha256</code>):</p>
+<pre>== BambuStudio Plater.cpp: Farbdialog für fremde 3MF
+8890:                    if (load_model &amp;&amp; !color_group_map.empty() &amp;&amp; !volume_color_data.empty() &amp;&amp; en_3mf_file_type != En3mfType::From_BBS) {
+== BambuStudio bbs_3mf.cpp: Dreiecksfarben nur aus pid/pindex
+5517:            if (!m_is_bbl_3mf &amp;&amp; sub_object-&gt;geometry.triangle_colors.size() == triangles_count) {
+4328:            if (boost::starts_with(m_curr_characters, &quot;BambuStudio-&quot;)) {
+== BambuStudio bbs_3mf.cpp: model_settings.config für alle Dateien
+1744:                else if (boost::algorithm::iequals(name, BBS_MODEL_CONFIG_FILE)) {
+2130:                else if (boost::algorithm::iequals(name, BBS_MODEL_CONFIG_FILE)) {
+== BambuStudio ObjColorDialog.cpp: OK überschreibt extruder
+270:              m_panel_ObjColor-&gt;apply_volume_filament_ids();
+647:void ObjColorPanel::apply_volume_filament_ids()
+707:                    volume-&gt;config.set(&quot;extruder&quot;, volume_filament-&gt;second);
+== OrcaSlicer bbs_3mf.cpp: Farbgruppe nur ohne Volumen-Metadaten
+2307:                    auto extruder_itor = color_group_id_to_extruder_id_map.find(current_object-&gt;second.pid);
+== OrcaSlicer Plater.cpp: Vorkommen von color_group_map (0: kein Farbdialog für 3MF)
+0</pre>
+<ul>
+<li><b>Bedingung des Dialogs</b> (<code>Plater.cpp</code>): <code>load_model &amp;&amp; !color_group_map.empty() &amp;&amp; !volume_color_data.empty() &amp;&amp; en_3mf_file_type != From_BBS</code>. <code>volume_color_data</code> füllt der Importer nur für Teile, deren Dreiecke über <code>pid</code>/<code>pindex</code> eine Farbe haben (<code>bbs_3mf.cpp</code>, <code>triangle_colors.size() == triangles_count</code>).</li>
+<li><b>OK im Dialog</b> ruft <code>apply_volume_filament_ids</code> und setzt <code>extruder</code> jedes Teils neu; „Abbrechen“ und Schließen lassen ihn.</li>
+<li><b><code>Metadata/model_settings.config</code></b> liest der Importer für alle 3MF (nicht an die Versionsprüfung gebunden) und übernimmt <code>extruder</code> je Teil und Objekt.</li>
+<li><b>Wege, den Dialog zu vermeiden:</b> (1) keine Farbgruppe – gewählt; (2) <code>Application = BambuStudio-…</code> – verworfen: gibt einen fremden Hersteller an, schaltet die Projekt-Pfade des Importers ein (Versionsprüfung, erwartete Projektdateien, Platten) und könnte bei neuen Bambu-Versionen brechen; (3) <code>project_settings.config</code> mit <code>filament_colour</code> – verworfen: wird für fremde Dateien nicht geladen (<code>dont_load_config</code> ohne Bambu-Version), OrcaSlicer würde es über Drucker- und Prozesseinstellungen legen; (4) Paint-Daten (<code>mmu_segmentation</code>) – unnötig, die Teile tragen den Slot bereits.</li>
+<li><b>OrcaSlicer</b> hat diesen Dialog nicht; Farbgruppen nutzt sein Importer nur für Objekte ohne Volumen-Metadaten (<code>color_group_id_to_extruder_id_map</code>), mit <code>model_settings.config</code> gelten die <code>extruder</code>-Werte. Der Verzicht auf die Farbgruppe ist also mit Orca verträglich.</li>
+</ul>
+<p><b>Umsetzung:</b> das mehrfarbige 3MF hat keine <code>m:colorgroup</code> und keine <code>pid</code>/<code>pindex</code> mehr; die Slots stehen nur in <code>model_settings.config</code>. Die Farben der Slots kommen in Bambu Studio aus den Filamenten des Druckers (AMS). Für Programme, die 3MF-Farben anzeigen, schreibt <code>cad export --color-group</code> die Farbgruppe weiter; die Meldung sagt dann „Bambu Studio öffnet einen Farbdialog – dort ‚Abbrechen‘ wählen“.</p>
+<table>
+<tr><th>Datei</th><th>lib3mf</th><th>trimesh</th><th>Bambu-Modell: extruder je Teil</th><th>Farbdialog (Modell von Plater.cpp)</th></tr>
+<tr><td>mehrfarbig.3mf (Standard)</td><td><span class="ok">ok</span></td><td><span class="ok">dicht</span></td><td>schild: 1/2/3, figur: 4/1/5</td><td><span class="ok">öffnet nicht</span></td></tr>
+<tr><td>mehrfarbig-cg.3mf (<code>--color-group</code>)</td><td><span class="ok">ok</span></td><td><span class="ok">dicht</span></td><td>schild: 1/2/3, figur: 4/1/5</td><td>öffnet („Abbrechen“ behält Slots)</td></tr>
+</table>
+<pre>mehrfarbig.3mf: 8434 Dreiecke, 605379 Bytes, Volumen 7647.6695 mm³
+3MF mehrfarbig: 2 Objekte (schild, figur), 6 Teile (eines je Farbe und Objekt); Filament-Slots in Metadata/model_settings.config, ohne Farbgruppe: Bambu Studio und OrcaSlicer übernehmen die Slots ohne Farbdialog (einfarbig: --single-color)
+Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):
+  F1  white          #f4f3f0  4900.8071 mm³  6.08 g  Z.36, Z.66
+  F2  teal           #217274  622.5 mm³  0.77 g  Z.37
+  F3  red            #c74240  208.8 mm³  0.26 g  Z.42  filament = 3
+  F4  blue           #2e65b9  1689.3253 mm³  2.09 g  Z.61
+  F5  yellow         #f7d974  226.2372 mm³  0.28 g  Z.67
+  schild: F1 white 4773.5726 mm³, F2 teal 622.5 mm³, F3 red 208.8 mm³
+  figur: F4 blue 1689.3253 mm³, F1 white 127.2345 mm³, F5 yellow 226.2372 mm³</pre>
+<p class="small">Grenze: am Programm selbst (Bambu Studio, OrcaSlicer) nicht geprüft – kein grafisches Programm im Container. Ob Bambu Studio fehlende Filamente beim Laden ergänzt, wenn ein Teil Slot 5 nutzt und das Projekt nur vier Filamente hat, hängt vom Ladeweg ab (<code>Plater.cpp</code>: bei „nur Geometrie“ werden Filamente bis zur höchsten Nummer angelegt).</p>
+
+<h2>4 UI und Desktop</h2>
+<h3>G01 F1: gleiche Geometrie in verschiedenen Farben</h3><p>pal2.scad (drei gleiche Würfel rot, blau, grün) und palette.scad (16 gleiche Kacheln in einer Schleife): vorher alle in der ersten Farbe. Jetzt zeigt die Ansicht die Farbregionen (die Körper des 3MF), und auch die Farbe je Fläche nimmt die Farbe der eigenen Instanz.</p><figure><img src="img/ui-g01-regionen.jpg" alt=""><figcaption>pal2: Farbregionen (Standard)</figcaption></figure><figure><img src="img/ui-g01-flaechen.jpg" alt=""><figcaption>pal2: Farbe je Fläche (Regionen aus)</figcaption></figure><figure><img src="img/ui-g01-palette.jpg" alt=""><figcaption>palette.scad: 16 Kacheln</figcaption></figure><ul><li>Regionen: 9960 rote, 11988 blaue, 13119 grüne Pixel</li><li>je Fläche: 9960 rote, 11988 blaue, 13119 grüne Pixel</li><li>Palette: 2381 petrolfarbene, 2939 magentafarbene Pixel, 16 Regionen</li></ul>
+<h3>G02 F2: Slot einer Farbe aus einem Parameter</h3><p>slot_mod.scad: module bar(c) color(c) …; Slot 4 für red schrieb vorher filament = 4 an color(c) – alle drei Farben bekamen Slot 4. Jetzt schreibt die UI filament(&quot;red&quot;, 4); in die Datei; blue und green bleiben automatisch. „automatisch“ entfernt die Zeile wieder.</p><figure><img src="img/ui-g02-tabelle.jpg" alt=""><figcaption>filament(&quot;red&quot;, 4); im Code, Farbliste</figcaption></figure><ul><li>Text enthält filament(&quot;red&quot;, 4); und kein filament = 4</li><li>Slots red 4 (fest), blue 1, green 2</li><li>automatisch: Text wie vorher</li></ul>
+<h3>G03 F3: Ansicht = Druck</h3><p>r_fillet2.scad: die Verrundung zwischen rot und blau war grau gezeigt und rot exportiert, jetzt rot gezeigt. r_overlap3.scad: die spätere Farbe (blau) besitzt die Überlappung, auch in der Ansicht. r_extrude.scad: color() im 2D-Profil färbt die Extrusion (rot, blau); gemischte 2D-Farben unter einer Extrusion werden nicht getrennt – Warnung, Standard.</p><figure><img src="img/ui-g03-verrundung.jpg" alt=""><figcaption>Verrundung an der Farbgrenze</figcaption></figure><figure><img src="img/ui-g03-ueberlappung.jpg" alt=""><figcaption>Überlappung: blau gewinnt</figcaption></figure><figure><img src="img/ui-g03-extrusion.jpg" alt=""><figcaption>Extrusion mit 2D-Farbe, Warnung Zeile 3</figcaption></figure><ul><li>48752 rote Pixel an Platte und Verrundung</li><li>Überlappung: 78063 blaue &gt; 21943 rote Pixel</li><li>Warnung „Farben im 2D-Profil …“ in Zeile 3, Liste Standard, red, blue</li></ul>
+<h3>G04 F4: Material ohne Bauteil, 3MF für Bambu Studio</h3><p>Ein Bauteil teil und ein gelber Würfel ohne Bauteil: vorher 0 mm³ in der Liste und im UI-Export weggelassen. Jetzt 125 mm³, eigenes Objekt „ohne Bauteil“, gleiche Datei wie cad export. Das 3MF hat keine Farbgruppe mehr: Bambu Studio öffnet keinen Farbdialog und übernimmt die Slots aus model_settings.config.</p><figure><img src="img/ui-g04-export.jpg" alt=""><figcaption>Export-Meldung mit Objekten</figcaption></figure><ul><li>Objekte teil, ohne Bauteil</li><li>keine m:colorgroup, keine m:color</li><li>Hinweise: 2 Objekte (teil, ohne Bauteil), 2 Teile (eines je Farbe und Objekt); Material außerhalb der Bauteile ist ein eigenes Objekt „ohne Bauteil“; Filament-Slots in Metadata/model_settings.config, ohne Farbgruppe: Bambu Studio und OrcaSlicer übernehmen die Slots ohne Farbdialog</li></ul>
+<h3>T15 (Tauri) Bericht 12 in Tauri: Farbregionen je Instanz, filament()-Tabelle, Objekt „ohne Bauteil“, 3MF ohne Farbgruppe</h3><ul><li class="">Farben red, blue, green</li><li class="">kein filament = 4 an color(c)</li><li class="">Slots red:4, blue:1, green:2</li><li class="">Objekte teil, ohne Bauteil</li><li class="">keine Farbgruppe</li><li class="">Hinweise 2 Objekte (teil, ohne Bauteil), 2 Teile (eines je Farbe und Objekt); Material außerhalb der Bauteile ist ein eigenes Objekt „ohne Bauteil“; Filament-Slots in Metadata/model_settings.config, ohne Farbgruppe: Bambu Studio und OrcaSlicer übernehmen die Slots ohne Farbdialog</li></ul><figure><img src="img/tauri-t15-pal2.jpg" alt=""><figcaption>pal2.scad: drei gleiche Würfel in drei Farben (Farbregionen)</figcaption></figure>
+
+<h2>5 Testläufe</h2>
+<table>
+<tr><th>Lauf</th><th>Ergebnis</th></tr>
+<tr><td><code>cargo test --workspace --no-fail-fast</code></td><td>404 bestanden, 0 fehlgeschlagen</td></tr>
+<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>sauber · sauber</td></tr>
+<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>sauber · 195 bestanden</td></tr>
+<tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>88 / 88</td></tr>
+<tr><td>Tauri-E2E (<code>web/e2e-tauri/desktop.e2e.mjs</code>)</td><td>15 / 15</td></tr>
+<tr><td><code>tests/openscad-compat/compare.py</code></td><td>33/33</td></tr>
+<tr><td><code>tests/step/verify.py</code></td><td>48/48 passed</td></tr>
+<tr><td><code>tests/alltag/check.sh</code> (Volumen der Alltagsmodelle)</td><td>19 Modelle, 0 mit Problemen, 175 s, Exporte in /tmp/alltag-d1zsigol (gelöscht)</td></tr>
+</table>
+<p>Neue Rust-Tests:</p>
+<ul><li><code>long_ipc_dir_uses_short_socket_path</code> <span class="ok">ok</span></li><li><code>f4_material_outside_parts</code> <span class="ok">ok</span></li><li><code>f1_equal_geometry_keeps_its_colour_in_view_and_step</code> <span class="ok">ok</span></li><li><code>f3_view_matches_the_print</code> <span class="ok">ok</span></li><li><code>f6_no_slivers_between_same_coloured_neighbours</code> <span class="ok">ok</span></li><li><code>f8_slot_remarks_and_single_colour</code> <span class="ok">ok</span></li><li><code>f9_per_colour_export_and_list</code> <span class="ok">ok</span></li><li><code>f7_value_rules</code> <span class="ok">ok</span></li><li><code>f5_random_colours_keep_their_distance</code> <span class="ok">ok</span></li><li><code>all_review_cases_evaluate_and_regions_add_up</code> <span class="ok">ok</span></li><li><code>color_export::tests::no_color_group_by_default</code> <span class="ok">ok</span></li><li><code>filament_declarations</code> <span class="ok">ok</span></li><li><code>random_colours_do_not_collide_in_a_model</code> <span class="ok">ok</span></li><li><code>filament_table_rules</code> <span class="ok">ok</span></li><li><code>set_filament_of_a_parameter_colour_writes_a_table</code> <span class="ok">ok</span></li><li><code>material_outside_parts_is_exported</code> <span class="ok">ok</span></li></ul>
+
+<h2>6 Grenzen</h2>
+<ul>
+<li>Die Ansicht zeigt die exakten Regionen erst nach ihrer Berechnung (Booleans je Farbknoten, gecacht); bis dahin, beim Ziehen und für den hervorgehobenen Teilbaum unter dem Cursor gilt die genäherte Farbe je Fläche. Ist der Cursor auf einer Anweisung, wird der Rest gedimmt gezeigt (wie bisher).</li>
+<li>STEP teilt keine Flächen an Farbgrenzen (eine verschmolzene Fläche bekommt die Mehrheitsfarbe).</li>
+<li>Gemischte Farben in einem 2D-Profil unter einer Extrusion werden nicht getrennt (Warnung).</li>
+<li>Zufallsfarben, die im Modell ausweichen, hängen von den Namen davor ab.</li>
+<li>Bambu Studio und OrcaSlicer wurden nicht am Programm geprüft, sondern über ihren Quellcode und ein Modell des Importers (<code>tools/report/verify3mf.py</code>).</li>
+<li>Der Ersatz-Socket liegt fest unter <code>/tmp</code> (nicht <code>$TMPDIR</code>, das selbst lang sein kann).</li>
+</ul>
+</main>
+</body>
+</html>

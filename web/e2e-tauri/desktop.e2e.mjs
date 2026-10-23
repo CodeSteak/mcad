@@ -560,7 +560,8 @@ async function main() {
     check(s2.dirty.length >= 1, "Datei als geändert markiert");
     // multi-colour 3MF over the native engine
     const sum = await hookAsync("exportSummary", "3mf", undefined, ["schild", "figur"]);
-    check(sum.colorGroup && sum.mColors === 5 && sum.items === 2 && sum.components === 6 && sum.modelSettings, `3MF: ${JSON.stringify(sum)}`);
+    // Bericht 12: no colour group (Bambu Studio keeps the slots without its colour dialog)
+    check(!sum.colorGroup && sum.mColors === 0 && sum.items === 2 && sum.components === 6 && sum.modelSettings, `3MF: ${JSON.stringify(sum)}`);
     check(sum.extruders.includes(5) && sum.extruders.includes(3), `extruder je Teil ${sum.extruders.join(",")}`);
     const zip = await hookAsync("exportSummary", "stl", true, ["schild", "figur"]);
     check(zip.files.length === 6, `STL je Farbe: ${zip.files.join(", ")}`);
@@ -591,6 +592,41 @@ async function main() {
     check(v.faceColors > 0, "Farbe je Fläche in der Ansicht");
     e.details = { contrast: ratios };
     e.images.push({ name: await shot("t13-dunkel"), label: "dunkles Thema in der Desktop-App" });
+  });
+
+  await test("T15", "Bericht 12 in Tauri: Farbregionen je Instanz, filament()-Tabelle, Objekt „ohne Bauteil“, 3MF ohne Farbgruppe", async (check, e) => {
+    await ensureApp();
+    await exec("window.__cad.setThemePref('light'); window.__cad.store.setState({ colorsOpen: true, showRegions: true })");
+    const pal2 = `// pal2\n${readFileSync(join(ROOT, "tests/farben-pruefung/cases/pal2.scad"), "utf8")}`;
+    await exec("window.__cad.setText(arguments[0])", pal2);
+    await sceneReady();
+    const v = await waitFor("drei Farbregionen", async () => {
+      const s = await state();
+      return s.view && s.view.regionsDrawn === 3 ? s : null;
+    });
+    check(v.colors.map((c) => c.label).join(",") === "red,blue,green", `Farben ${v.colors.map((c) => c.label).join(", ")}`);
+    e.images.push({ name: await shot("t15-pal2"), label: "pal2.scad: drei gleiche Würfel in drei Farben (Farbregionen)" });
+    // slot of a parameter colour: filament("red", 4); at the top, not filament = 4 at color(c)
+    const slotMod = `// slot_mod\n${readFileSync(join(ROOT, "tests/farben-pruefung/cases/slot_mod.scad"), "utf8")}`;
+    await exec("window.__cad.setText(arguments[0])", slotMod);
+    await sceneReady();
+    await waitFor("Farbliste", async () => (await exists("[data-testid=color-slot-red]")) || null);
+    await selectOption("[data-testid=color-slot-red]", "4");
+    await waitFor("filament(\"red\", 4)", async () => ((await exec("return window.__cad.text()")).includes('filament("red", 4);') ? true : null));
+    const t = await exec("return window.__cad.text()");
+    check(!t.includes("filament = 4"), "kein filament = 4 an color(c)");
+    await sceneReady();
+    const s2 = await state();
+    const slots = s2.colors.map((c) => `${c.label}:${c.filament}`).join(", ");
+    check(slots === "red:4, blue:1, green:2", `Slots ${slots}`);
+    // material outside the parts: its own object, the same file as cad export
+    await exec("window.__cad.setText(arguments[0])", '// F4\nmodule a() color("white") cube([20, 10, 2]);\nteil: a();\ntranslate([0, 20, 0]) color("yellow") cube(5);\n');
+    await sceneReady();
+    const sum = await hookAsync("exportSummary", "3mf", true);
+    check(sum.objects.join(",") === "teil,ohne Bauteil", `Objekte ${sum.objects.join(", ")}`);
+    check(!sum.colorGroup && sum.mColors === 0, "keine Farbgruppe");
+    check(sum.notes.some((n) => n.includes("ohne Farbdialog")), `Hinweise ${sum.notes.join("; ")}`);
+    e.details = { slots, export3mf: sum };
   });
 
   await test("T14", "Thema „System“ in Tauri folgt dem GTK-Farbschema (prefers-color-scheme)", async (check, e) => {
