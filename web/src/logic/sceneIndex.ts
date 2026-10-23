@@ -224,14 +224,17 @@ export class SceneIndex {
     return [...out].sort((a, b) => a - b);
   }
 
-  /** Innermost module definition containing `pos` (its name), `null` at file level. */
+  /**
+   * Innermost module definition containing `pos`, `null` at file level: its name, qualified by
+   * the enclosing modules for nested ones (`teile.schraube`, Plan 17.2).
+   */
   moduleAt(pos: number): string | null {
     let best: string | null = null;
     let size = Infinity;
     for (const m of this.scene.modules) {
       const s = this.range(m.range);
       if (s.from <= pos && pos <= s.to && s.to - s.from < size) {
-        best = m.name;
+        best = [...m.path, m.name].join(".");
         size = s.to - s.from;
       }
     }

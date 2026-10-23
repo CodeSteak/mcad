@@ -60,6 +60,8 @@ extern "C" {
     fn js_loft(lp: &[f64], n_sections: u32, ruled: i32, tag: u32) -> u32;
     #[wasm_bindgen(js_name = sc_sweep)]
     fn js_sweep(lp: &[f64], path: &[f64], interp: i32, tag: u32) -> u32;
+    #[wasm_bindgen(js_name = sc_sketch_sweep)]
+    fn js_sketch_sweep(lp: &[f64], path: &[f64], mode: i32, tag: u32) -> u32;
     #[wasm_bindgen(js_name = sc_nurbs_surface)]
     fn js_nurbs_surface(pts: &[f64], rows: u32, cols: u32, tag: u32) -> u32;
     #[wasm_bindgen(js_name = sc_thicken)]
@@ -171,6 +173,9 @@ pub fn loft(lp: &[f64], n_sections: u32, ruled: bool, tag: u32) -> u32 {
 }
 pub fn sweep(lp: &[f64], path: &[f64], interp: i32, tag: u32) -> u32 {
     js_sweep(lp, path, interp, tag)
+}
+pub fn sketch_sweep(lp: &[f64], path: &[f64], mode: i32, tag: u32) -> u32 {
+    js_sketch_sweep(lp, path, mode, tag)
 }
 pub fn nurbs_surface(pts: &[f64], rows: u32, cols: u32, tag: u32) -> u32 {
     js_nurbs_surface(pts, rows, cols, tag)

@@ -361,7 +361,9 @@ async function show(body: { file: string; line?: number | null; module?: string 
       return !!st.scene && st.scene.version === st.sentVersion;
     }, 10_000);
     const sc = store.getState().scene;
-    const m = sc?.modules.find((x) => x.name === body.module || [...x.path, x.name].join("::") === body.module);
+    const m = sc?.modules.find(
+      (x) => x.name === body.module || [...x.path, x.name].join("::") === body.module || [...x.path, x.name].join(".") === body.module,
+    );
     if (!m || !sc) throw new Error(`Modul ${body.module} nicht gefunden`);
     const idx = bridge.index(sc);
     if (!body.line) {

@@ -18,12 +18,14 @@ mod grid;
 mod handles;
 mod law;
 pub mod math;
+mod ns;
 mod ops;
 mod output;
 pub mod palette;
 mod print;
 pub mod project;
 mod sig;
+mod sketch;
 pub mod value;
 
 pub use edit::{

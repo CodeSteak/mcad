@@ -59,6 +59,7 @@ export interface CadState {
       status: string | null;
       guides: Record<string, number>;
       guidePoints: Array<{ kind: string; points: Array<[number, number, number]> }>;
+      sketches?: Array<{ node: number; closed: boolean; segments: number; active: Array<{ stmt: number; kind: string; line: number }>; errors: number; helpers: number; open: number }>;
     };
     grid: { lines: number; dashed: number; points: number; highlight: string[] };
     missingMeshes: number;
@@ -595,6 +596,27 @@ export async function screenshot12(page: Page, name: string, area: "view" | "ful
 export function record12(entry: ScenarioC): void {
   mkdirSync(REPORT12_DIR, { recursive: true });
   const f = join(REPORT12_DIR, "scenarios.json");
+  const all: ScenarioC[] = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
+  const i = all.findIndex((e) => e.id === entry.id);
+  if (i >= 0) all[i] = entry;
+  else all.push(entry);
+  writeFileSync(f, JSON.stringify(all, null, 2));
+}
+
+// ---------------------------------------------------------------- Bericht 14 (Skizzen, Namensräume)
+
+export const REPORT14_DIR = join(here, "../../reports/tmp/report14");
+
+export async function screenshot14(page: Page, name: string, area: "view" | "full" | "editor" = "full"): Promise<void> {
+  mkdirSync(join(REPORT14_DIR, "img"), { recursive: true });
+  const sel = { view: "section.viewcol", editor: "section.editorpane" } as const;
+  const clip = area === "full" ? null : await page.locator(sel[area]).boundingBox();
+  await page.screenshot({ path: join(REPORT14_DIR, "img", `${name}.jpg`), type: "jpeg", quality: 85, ...(clip ? { clip } : {}) });
+}
+
+export function record14(entry: ScenarioC): void {
+  mkdirSync(REPORT14_DIR, { recursive: true });
+  const f = join(REPORT14_DIR, "scenarios.json");
   const all: ScenarioC[] = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
   const i = all.findIndex((e) => e.id === entry.id);
   if (i >= 0) all[i] = entry;

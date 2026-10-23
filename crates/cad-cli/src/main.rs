@@ -154,7 +154,7 @@ struct Common {
     /// Ausgabe als JSON (festes Schema, siehe `cad --help`/Skill).
     #[arg(long)]
     json: bool,
-    /// Modul als Kontext (wie Cursor in der Moduldefinition), auch `aussen::innen`.
+    /// Modul als Kontext (wie Cursor in der Moduldefinition), auch verschachtelt `aussen.innen`.
     #[arg(long, short = 'm')]
     module: Option<String>,
     /// Parameter des Kontextmoduls überschreiben, z. B. `-D w=60`, `-D p=[1,2,3]`.
@@ -667,11 +667,11 @@ fn last_scene(msgs: &[FromEngine]) -> Option<p::Scene> {
     })
 }
 
-/// Module path name for `SetContext` (`outer::inner`).
+/// Module path name for `SetContext` (`outer.inner`).
 fn module_context_name(m: &p::Module) -> String {
     let mut parts = m.path.clone();
     parts.push(m.name.clone());
-    parts.join("::")
+    parts.join(".")
 }
 
 /// Innermost module definition whose body contains line `line`.

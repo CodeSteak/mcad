@@ -38,7 +38,8 @@ statement[@isGroup=Statement] {
 
 IncludeStatement { (kw<"include"> | kw<"use">) IncludePath }
 
-ModuleDef { kw<"module"> DefName ParamList statement }
+// `module teile { … }`: parentheses may be omitted (Plan 17.2).
+ModuleDef { kw<"module"> DefName ParamList? statement }
 
 FunctionDef { kw<"function"> DefName ParamList "=" expression ";" }
 
@@ -66,7 +67,9 @@ LetStatement { kw<"let"> "(" commaSep<ForBinding> ")" statement }
 
 ForBinding { VariableName "=" expression }
 
-Instantiation { Modifier* (Label ":")? CallName ArgList statement }
+// `teile.schraube(d = 3);` (modules as namespaces), `sketch { … }` / `hole { … }` without
+// arguments (sketches, Plan 17.1; any name is accepted here, the engine checks).
+Instantiation { Modifier* (Label ":")? CallName ("." CallName)* (ArgList statement | Block) }
 
 Modifier { "#" | "%" | "!" | "*" }
 

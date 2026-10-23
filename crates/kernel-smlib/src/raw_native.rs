@@ -47,6 +47,7 @@ mod ffi {
         pub fn sc_revolve(lp: *const f64, len: u32, angle: f64, tag: u32) -> u32;
         pub fn sc_loft(lp: *const f64, len: u32, n_sections: u32, ruled: i32, tag: u32) -> u32;
         pub fn sc_sweep(lp: *const f64, len: u32, path: *const f64, n_path: u32, interp: i32, tag: u32) -> u32;
+        pub fn sc_sketch_sweep(lp: *const f64, len: u32, path: *const f64, plen: u32, mode: i32, tag: u32) -> u32;
         pub fn sc_nurbs_surface(pts: *const f64, rows: u32, cols: u32, tag: u32) -> u32;
         pub fn sc_thicken(h: u32, t: f64, tag: u32) -> u32;
         pub fn sc_shell(h: u32, t: f64, open: *const u32, n: u32, tag: u32) -> u32;
@@ -170,6 +171,9 @@ pub fn loft(lp: &[f64], n_sections: u32, ruled: bool, tag: u32) -> u32 {
 }
 pub fn sweep(lp: &[f64], path: &[f64], interp: i32, tag: u32) -> u32 {
     unsafe { ffi::sc_sweep(lp.as_ptr(), len(lp.len()), path.as_ptr(), len(path.len() / 3), interp, tag) }
+}
+pub fn sketch_sweep(lp: &[f64], path: &[f64], mode: i32, tag: u32) -> u32 {
+    unsafe { ffi::sc_sketch_sweep(lp.as_ptr(), len(lp.len()), path.as_ptr(), len(path.len()), mode, tag) }
 }
 pub fn nurbs_surface(pts: &[f64], rows: u32, cols: u32, tag: u32) -> u32 {
     unsafe { ffi::sc_nurbs_surface(pts.as_ptr(), rows, cols, tag) }

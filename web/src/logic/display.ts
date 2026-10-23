@@ -2,7 +2,7 @@
 // scene, the node(s) under the cursor and the node(s) of the hovered line. Pure function; the
 // viewer turns the plan into three.js objects.
 
-import type { Anchor, Mat4, OpInfo, Scene, SceneNode, Vec3 } from "../engine/protocol";
+import type { Anchor, Mat4, OpInfo, Scene, SceneNode, SrcRange, Vec3 } from "../engine/protocol";
 import { REVOLVE_PROFILE, sweepPath, sweepStartFrame } from "./curves";
 import { apply, invertAffine, mul } from "./math";
 import type { SelectMode } from "./zones";
@@ -91,6 +91,32 @@ export interface AnchorMark {
   active: boolean;
 }
 
+/** One segment of a drawn sketch (points in the sketch's plane, its node system). */
+export interface SketchSegmentDraw {
+  stmt: number;
+  kind: string;
+  points: Vec3[];
+  /** On the cursor line. */
+  active: boolean;
+  error: boolean;
+  /** Closing line added for a contour without `close()`. */
+  implicit: boolean;
+}
+
+/** A sketch under the cursor (Plan 17.1): drawn in its plane with outline, light fill, the
+ *  segment of the cursor line highlighted, help lines and start/end marks. */
+export interface SketchDraw {
+  node: number;
+  /** Sketch plane → context coordinates. */
+  matrix: Mat4;
+  closed: boolean;
+  segments: SketchSegmentDraw[];
+  /** Control polygons of Bézier curves; arcs: centre → start / end. */
+  helpers: Vec3[][];
+  /** Start point and direction of every contour; `open`: the contour is not closed. */
+  starts: Array<{ point: Vec3; dir: Vec3; open: boolean; end: Vec3; hole: boolean }>;
+}
+
 export interface Plan {
   /** Context root (the whole model of the current module). */
   base: DrawItem | null;
@@ -104,6 +130,7 @@ export interface Plan {
   guides: Guide[];
   zoneEdges: ZoneEdgeQuery | null;
   openFaces: OpenFaceQuery[];
+  sketches: SketchDraw[];
 }
 
 export interface PlanInput {
@@ -116,6 +143,49 @@ export interface PlanInput {
   picked?: number[];
   /** Hidden parts (their `ModuleCall` nodes): the model is drawn without them. */
   hidden?: number[];
+  /** Is a segment statement on the cursor line (sketches)? */
+  segmentActive?: (range: SrcRange) => boolean;
+}
+
+/** The sketch a node belongs to: itself, an ancestor, or (module calls of a sketch module,
+ *  groups) the sketches below it. */
+export function sketchesFor(scene: Scene, n: SceneNode): SceneNode[] {
+  for (let cur: SceneNode | null = n, d = 0; cur && d < 64; cur = cur.parent !== null ? scene.nodes[cur.parent] : null, d++) {
+    if (cur.op_info?.kind === "sketch") return [cur];
+  }
+  const out: SceneNode[] = [];
+  const walk = (c: SceneNode, depth: number) => {
+    if (depth > 8 || c.flags.disabled) return;
+    if (c.op_info?.kind === "sketch") out.push(c);
+    // (profiles of rotate_extrude, loft and sweep are drawn elsewhere than in their own plane)
+    else if (c.label !== "rotate_extrude" && c.label !== "loft" && c.label !== "sweep" && !(c.op_info?.kind === "linear_extrude" && c.op_info.center)) {
+      for (const k of c.children) walk(scene.nodes[k], depth + 1);
+    }
+  };
+  walk(n, 0);
+  return out;
+}
+
+function sketchDraw(n: SceneNode, active: (r: SrcRange) => boolean): SketchDraw | null {
+  const o = n.op_info;
+  if (!o || o.kind !== "sketch") return null;
+  const segments: SketchSegmentDraw[] = [];
+  const helpers: Vec3[][] = [];
+  const starts: SketchDraw["starts"] = [];
+  for (const c of o.contours) {
+    for (const g of c.segments) {
+      segments.push({ stmt: g.stmt, kind: g.kind, points: g.points, active: !g.implicit && active(g.range), error: g.error, implicit: g.implicit });
+      if (g.kind === "bezier" && g.ctrl.length >= 3) helpers.push(g.ctrl);
+      if (g.kind === "arc" && g.ctrl.length === 1 && g.points.length >= 2) helpers.push([g.points[0], g.ctrl[0], g.points[g.points.length - 1]]);
+    }
+    const first = c.segments[0]?.points ?? [];
+    const last = c.segments[c.segments.length - 1]?.points ?? [];
+    if (first.length >= 2) {
+      const d = [first[1][0] - first[0][0], first[1][1] - first[0][1], 0] as Vec3;
+      starts.push({ point: first[0], dir: d, open: !c.closed, end: last[last.length - 1] ?? first[0], hole: c.hole });
+    }
+  }
+  return { node: n.idx, matrix: n.display_world, closed: o.closed, segments, helpers, starts };
 }
 
 /**
@@ -299,6 +369,7 @@ export function plan(input: PlanInput): Plan {
   const guides: Guide[] = [];
   const openFaces: OpenFaceQuery[] = [];
   let zoneEdges: ZoneEdgeQuery | null = null;
+  const sketches: SketchDraw[] = [];
   const activeInst = new Set<number>();
   const root = scene.root !== null ? nodes[scene.root] : null;
 
@@ -316,7 +387,10 @@ export function plan(input: PlanInput): Plan {
 
   // Cursor line: the node full, plus what its kind shows.
   for (const n of cursor) {
-    if (hasGeometry(n)) items.push(item(n, n.flags.zone ? "blue" : n.label === "loft" ? "translucent" : "full", "Cursor"));
+    if (hasGeometry(n)) {
+      const mode: Mode = n.flags.zone ? "blue" : n.label === "loft" ? "translucent" : n.op_info?.kind === "sketch" ? "profile" : "full";
+      items.push(item(n, mode, "Cursor"));
+    }
     if (n.label === "difference") {
       for (const c of visibleChildren(scene, n)) if (c.subtracted && hasGeometry(c)) items.push(item(c, "red", "abgezogen"));
     } else if (n.label === "intersection") {
@@ -349,6 +423,13 @@ export function plan(input: PlanInput): Plan {
     }
     edges.push(...polylinesToWorld(n.display_world, n.selected_edges, "selected"));
     profileOp(scene, n, items, guides);
+    // Sketch under the cursor: in its plane, the segment of the cursor line highlighted.
+    for (const sk of sketchesFor(scene, n)) {
+      if (sketches.some((d) => d.node === sk.idx)) continue;
+      const d = sketchDraw(sk, input.segmentActive ?? (() => false));
+      if (d) sketches.push(d);
+      if (hasGeometry(sk) && sk.idx !== n.idx) items.push(item(sk, "profile", "Skizze"));
+    }
     const inst = instanceBelow(scene, n);
     if (inst !== null) activeInst.add(inst);
   }
@@ -396,7 +477,7 @@ export function plan(input: PlanInput): Plan {
     status = `Nur Teilbaum mit ! angezeigt${r ? ` (Zeile ${r.range.line})` : ""}`;
   }
 
-  return { base, items, edges, frames, anchors, status, guides, zoneEdges, openFaces };
+  return { base, items, edges, frames, anchors, status, guides, zoneEdges, openFaces, sketches };
 }
 
 /** Nodes whose meshes a plan needs. */

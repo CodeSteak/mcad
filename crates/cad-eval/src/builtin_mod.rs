@@ -48,6 +48,7 @@ pub(crate) const BUILTIN_MODULES: &[&str] = &[
     "thicken",
     "shell",
     "children",
+    "sketch",
     "echo",
     "assert",
     "render",
@@ -78,12 +79,12 @@ const LEAVES: &[&str] = &[
     "import",
 ];
 
-type Slots<'x, 'a> = Vec<Option<&'x ArgV<'a>>>;
+pub(crate) type Slots<'x, 'a> = Vec<Option<&'x ArgV<'a>>>;
 
 impl<'a> Ev<'a> {
     /// Assigns arguments of a built-in module to parameter slots. The first `npos`
     /// names also take positional arguments; named arguments win.
-    fn bind<'x>(&mut self, what: &str, a: &'x Args<'a>, names: &[&str], npos: usize) -> Slots<'x, 'a> {
+    pub(crate) fn bind<'x>(&mut self, what: &str, a: &'x Args<'a>, names: &[&str], npos: usize) -> Slots<'x, 'a> {
         let mut slots: Slots<'x, 'a> = vec![None; names.len()];
         let mut pi = 0;
         for arg in a.list.iter().filter(|x| x.name.is_none()) {
@@ -115,7 +116,7 @@ impl<'a> Ev<'a> {
         slots
     }
 
-    fn num_of(&mut self, a: Option<&ArgV<'a>>, what: &str) -> Option<f64> {
+    pub(crate) fn num_of(&mut self, a: Option<&ArgV<'a>>, what: &str) -> Option<f64> {
         let a = a?;
         match a.val.as_num() {
             Some(n) => Some(n),
@@ -148,7 +149,7 @@ impl<'a> Ev<'a> {
     }
 
     /// A grid, grid line/plane or instance where a number or point is expected.
-    fn special_misuse(&mut self, a: &ArgV<'a>, what: &str) {
+    pub(crate) fn special_misuse(&mut self, a: &ArgV<'a>, what: &str) {
         let t = a.val.type_de();
         let hint = match a.val.v {
             Value::GridSel { .. } => "; Linien und Ebenen nur in zone() und mirror()",
@@ -160,7 +161,7 @@ impl<'a> Ev<'a> {
     }
 
     /// 2D point; a z component other than 0 is projected away with a warning.
-    fn pt2(&mut self, v: &Val<'a>, span: Span) -> Option<DVec2> {
+    pub(crate) fn pt2(&mut self, v: &Val<'a>, span: Span) -> Option<DVec2> {
         let l = v.as_list()?;
         let p = v.as_vec2()?;
         if l.len() >= 3
@@ -201,7 +202,7 @@ impl<'a> Ev<'a> {
         self.node(s, Op::Empty, ctx)
     }
 
-    fn profile(&mut self, s: &Stmt, p: Profile, ctx: &Ctx<'a>, dy: &Dyn<'a>) -> NodeIdx {
+    pub(crate) fn profile(&mut self, s: &Stmt, p: Profile, ctx: &Ctx<'a>, dy: &Dyn<'a>) -> NodeIdx {
         let n = self.node(s, Op::Profile(p), ctx);
         self.nodes[n as usize].tol = dyn_lookup(dy, "$tol").and_then(|v| v.as_num()).filter(|x| *x > 0.0);
         n
@@ -233,6 +234,13 @@ impl<'a> Ev<'a> {
         ctx: &Ctx<'a>,
     ) -> R<()> {
         let n = name.name.as_str();
+        if self.sketch.is_some() && !crate::sketch::allowed_in_sketch(n) {
+            self.error(
+                name.span,
+                format!("`{n}()` ist in einer Skizze nicht erlaubt: nur Segmente (`start`, `line`, `arc`, `bezier`, `spline`, `close`, `hole`)"),
+            );
+            return Ok(());
+        }
         if LEAVES.contains(&n) && children.iter().any(crate::eval::is_geometric) {
             self.warn(name.span, format!("`{n}()` nimmt keine Kinder"));
         }
@@ -283,6 +291,10 @@ impl<'a> Ev<'a> {
             }
             "surface" => self.m_surface(s, a, ctx, dy),
             "children" => return self.children_stmt(s, a, ctx),
+            "sketch" => return self.m_sketch(s, a, children, ctx, dy),
+            "start" | "line" | "arc" | "bezier" | "close" | "corner" | "hole" => {
+                self.error(name.span, format!("`{n}()` nur innerhalb von `sketch {{ … }}`"));
+            }
             _ => return self.m_group_like(s, name, a, children, ctx, dy),
         }
         Ok(())
@@ -1461,8 +1473,9 @@ impl<'a> Ev<'a> {
             "sweep" => {
                 let p = self.bind(n, a, &["path", "interp"], 2);
                 let Some(pa) = p[0] else {
-                    self.error(s.span, "sweep() braucht `path`");
-                    return Ok(());
+                    // the path is an open sketch among the children (engine)
+                    let node = self.node(s, Op::Sweep { path: Vec::new(), interp: PathInterp::Spline }, ctx);
+                    return self.eval_children(node, &DMat4::IDENTITY, children, ctx, dy);
                 };
                 let Some(path) = self.path_points(pa, "sweep-Pfad") else { return Ok(()) };
                 let interp = match p[1].map(|x| (x, x.val.as_str())) {

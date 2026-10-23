@@ -632,6 +632,43 @@ pub enum OpInfo {
     Thicken {
         t: f64,
     },
+    /// `sketch { … }` (Plan 17.1): contours with their segments, for drawing the sketch in its
+    /// plane (outline, fill, the segment of the cursor line).
+    Sketch {
+        closed: bool,
+        contours: Vec<SketchContour>,
+    },
+}
+
+/// One contour of a sketch (node system, z = 0).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct SketchContour {
+    /// In a `hole { … }` block.
+    pub hole: bool,
+    pub closed: bool,
+    /// Start point (`start(p)`).
+    pub start: Vec3,
+    /// The `start(…)` statement.
+    pub start_range: Option<SrcRange>,
+    pub segments: Vec<SketchSegment>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct SketchSegment {
+    /// `line`, `arc`, `bezier`, `spline`.
+    pub kind: String,
+    /// Statement that made the segment.
+    pub stmt: u32,
+    pub range: SrcRange,
+    /// Polyline from start to end (display tolerance).
+    pub points: Vec<Vec3>,
+    /// Help lines: control polygon of a Bézier curve (start, control points, end); centre of an
+    /// arc (one point).
+    pub ctrl: Vec<Vec3>,
+    /// Closing line added for a contour without `close()` (error).
+    pub implicit: bool,
+    /// An error was reported for this segment.
+    pub error: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -1036,6 +1073,8 @@ pub fn typescript() -> String {
         NodeFlags,
         SelectMode,
         OpInfo,
+        SketchContour,
+        SketchSegment,
         Bounds,
         NodeMessage,
         SceneNode,

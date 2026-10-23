@@ -56,12 +56,15 @@ extern "C" {
  *   kind 0 = polygon:  count = number of points, payload = x0 y0 x1 y1 ...
  *   kind 1 = circle:   count = 3, payload = cx cy r
  *   kind 2 = spline:   count = number of points, payload = x0 y0 ... (closed interpolating)
+ *   kind 3 = composite: count = number of segments (lines, arcs, B-splines; sketches),
+ *            payload see sc_sketch.cpp
  *   frame = 4x4 column-major matrix (like glam::DMat4::to_cols_array) mapping the
  *           profile's xy-plane to model space.
  * Several loops are simply concatenated. */
 #define SC_LOOP_POLYGON 0
 #define SC_LOOP_CIRCLE 1
 #define SC_LOOP_SPLINE 2
+#define SC_LOOP_COMPOSITE 3
 
 SC_API void sc_init(void);
 SC_API uint32_t sc_version(void);
@@ -123,6 +126,12 @@ SC_API uint32_t sc_loft(const double* loops, uint32_t len, uint32_t n_sections, 
 /* loop frame is ignored; path: xyz per point; interp 0 = linear, 1 = spline. */
 SC_API uint32_t sc_sweep(const double* loop, uint32_t len, const double* path, uint32_t n_path,
                          int32_t interp, uint32_t tag);
+/* Sweep along an open sketch path (sketches): `path` is one composite loop (kind
+ * 3) whose frame places the path in model space. mode 0: the segments are joined with mitered
+ * corners (planar path), mode 1: the path is one smooth curve (a single segment). The profile
+ * is placed at the path start as in sc_sweep (its frame is ignored). */
+SC_API uint32_t sc_sketch_sweep(const double* loop, uint32_t len, const double* path, uint32_t plen,
+                                int32_t mode, uint32_t tag);
 /* rows x cols points, row-major, xyz each; interpolating B-spline of degree min(3, n - 1) in
  * each direction (n = 2: bilinear, 3: quadratic) */
 SC_API uint32_t sc_nurbs_surface(const double* pts, uint32_t rows, uint32_t cols, uint32_t tag);

@@ -333,6 +333,27 @@ fn surface(w: &mut W, s: &Surface) -> u32 {
     }
 }
 
+/// Analytic form of a sweep surface: a linear extrusion of a circular arc along the circle's
+/// axis is a cylinder (sketch arcs: SMLib keeps them as extrusions of their exact rational
+/// B-spline). Returns the surface and whether its normal is opposite to the original one.
+fn analytic_surface(s: &Surface) -> (Option<Surface>, bool) {
+    let Surface::Extrusion { curve, dir } = s else { return (None, false) };
+    let (t0, t1) = curve.domain();
+    let (a, b) = (curve.eval(t0), curve.eval(t1));
+    let size = curve.points.iter().fold(1.0f64, |m, p| m.max(p.length()));
+    let Curve::Circle { frame, r } = cad_kernel::brep::recognise_curve(curve, a, b, 1e-9 * size) else {
+        return (None, false);
+    };
+    let Some(d) = dir.try_normalize() else { return (None, false) };
+    if frame.z.cross(d).length() > 1e-9 {
+        return (None, false);
+    }
+    // extrusion normal: curve' × dir, outwards for a curve turning counter-clockwise about dir;
+    // the cylinder's normal always points away from the axis
+    let reversed = frame.z.dot(d) < 0.0;
+    (Some(Surface::Cylinder { frame, r }), reversed)
+}
+
 /// Entity ids of one B-rep's shared vertices and edges.
 struct Shared {
     vertices: Vec<Option<u32>>,
@@ -387,10 +408,12 @@ fn face(w: &mut W, b: &Brep, sh: &mut Shared, st: &mut StepStats, f: &Face, flip
         };
         bounds.push(w.add(format!("FACE_BOUND('',#{lp},{orient})")));
     }
-    let s = surface(w, &f.surface);
-    let sense = if f.same_sense != flip { ".T." } else { ".F." };
+    let (surf, reversed) = analytic_surface(&f.surface);
+    let surf = surf.as_ref().unwrap_or(&f.surface);
+    let s = surface(w, surf);
+    let sense = if (f.same_sense != flip) != reversed { ".T." } else { ".F." };
     st.faces += 1;
-    *st.surfaces.entry(f.surface.kind().to_string()).or_insert(0) += 1;
+    *st.surfaces.entry(surf.kind().to_string()).or_insert(0) += 1;
     st.approximated_faces += f.approximated as usize;
     let id = w.add(format!("ADVANCED_FACE('',({}),#{s},{sense})", refs(&bounds)));
     w.faces.push((id, f.tag));

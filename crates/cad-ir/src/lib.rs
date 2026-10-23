@@ -213,6 +213,92 @@ pub enum Profile {
         points: Vec<DVec2>,
         closed: bool,
     },
+    /// `sketch { … }` (Plan 17.1): contours of exact segments. With `closed` every contour is
+    /// closed and the filled region follows the nonzero winding rule, `hole` contours are always
+    /// subtracted; otherwise the contours are open paths (a `sweep` path). Statement ids of
+    /// the segments are in the evaluation output (`EvalOutput::sketches`), not here, so the
+    /// cache key does not depend on source positions.
+    Sketch {
+        contours: Vec<Contour>,
+        closed: bool,
+    },
+}
+
+/// One contour of a sketch: connected segments from `start()` to the next `start()` / `close()`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Contour {
+    /// Inside a `hole { … }` block.
+    pub hole: bool,
+    pub closed: bool,
+    pub segs: Vec<Seg>,
+}
+
+/// A sketch segment in the profile's xy-plane. Angles in radians.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum Seg {
+    Line {
+        a: DVec2,
+        b: DVec2,
+    },
+    /// Circular arc: `ccw` gives the direction from angle `a0` to `a1` (`a1 - a0` is the signed
+    /// sweep, positive for `ccw`).
+    Arc {
+        center: DVec2,
+        r: f64,
+        a0: f64,
+        a1: f64,
+        ccw: bool,
+    },
+    /// Quadratic (3 points) or cubic (4 points) Bézier curve; start and end included.
+    Bezier {
+        points: Vec<DVec2>,
+    },
+    /// Interpolating spline through `points` (start included); optional end tangent
+    /// directions.
+    Spline {
+        points: Vec<DVec2>,
+        t0: Option<DVec2>,
+        t1: Option<DVec2>,
+    },
+}
+
+impl Seg {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Seg::Line { .. } => "line",
+            Seg::Arc { .. } => "arc",
+            Seg::Bezier { .. } => "bezier",
+            Seg::Spline { .. } => "spline",
+        }
+    }
+
+    /// Kernel segment (exact; splines interpolated).
+    pub fn to_kernel(&self) -> Option<cad_kernel::Segment> {
+        Some(match self {
+            Seg::Line { a, b } => cad_kernel::Segment::Line { a: *a, b: *b },
+            Seg::Arc { center, r, a0, a1, .. } => cad_kernel::Segment::Arc { center: *center, r: *r, a0: *a0, a1: *a1 },
+            Seg::Bezier { points } => cad_kernel::Segment::bezier(points),
+            Seg::Spline { points, t0, t1 } => {
+                cad_kernel::Segment::Nurbs(cad_kernel::curve2::interpolate(points, *t0, *t1)?)
+            }
+        })
+    }
+
+    pub fn start(&self) -> DVec2 {
+        match self {
+            Seg::Line { a, .. } => *a,
+            Seg::Arc { center, r, a0, .. } => *center + DVec2::new(a0.cos(), a0.sin()) * *r,
+            Seg::Bezier { points } | Seg::Spline { points, .. } => points[0],
+        }
+    }
+
+    pub fn end(&self) -> DVec2 {
+        match self {
+            Seg::Line { b, .. } => *b,
+            Seg::Arc { center, r, a1, .. } => *center + DVec2::new(a1.cos(), a1.sin()) * *r,
+            Seg::Bezier { points } | Seg::Spline { points, .. } => *points.last().unwrap_or(&DVec2::ZERO),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -241,6 +327,7 @@ impl Op {
                 Profile::Circle { .. } => "circle".into(),
                 Profile::Polygon { .. } => "polygon".into(),
                 Profile::Spline { .. } => "spline".into(),
+                Profile::Sketch { .. } => "sketch".into(),
             },
             Op::Transform { kind, .. } => format!("{kind:?}").to_lowercase(),
             Op::Boolean { op, .. } => format!("{op:?}").to_lowercase(),

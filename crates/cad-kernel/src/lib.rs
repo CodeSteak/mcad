@@ -7,6 +7,9 @@ use glam::{DMat4, DVec2, DVec3};
 use serde::{Deserialize, Serialize};
 
 pub mod brep;
+pub mod curve2;
+
+pub use curve2::Segment;
 
 /// Provenance tag on faces. The engine assigns tags; the kernel only carries them
 /// through operations. Faces created by an operation (fillet faces, caps of an
@@ -55,6 +58,17 @@ pub enum Loop {
     },
     /// Closed interpolating spline through the points.
     Spline(Vec<DVec2>),
+    /// Connected segments (lines, arcs, B-splines) forming a closed loop: each segment starts
+    /// where the previous one ends, the last ends at the start of the first (sketches).
+    Composite(Vec<Segment>),
+}
+
+/// An open planar path of connected segments, placed in space by `frame` (the path of a
+/// `sweep` drawn as an open sketch).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PlacedPath {
+    pub segs: Vec<Segment>,
+    pub frame: DMat4,
 }
 
 /// A planar loop placed in space: `frame` maps the profile's xy-plane to model space.
@@ -243,6 +257,12 @@ pub trait Kernel {
     /// Sweep a profile along a path. The profile frame's origin sits at the path start
     /// with its z-axis along the start tangent.
     fn sweep(&mut self, p: &Loop, path: &[DVec3], interp: PathInterp, tag: Tag) -> KResult<Self::Shape>;
+    /// Sweep a profile along an open path of exact segments. The profile is placed at the
+    /// path start like in [`Kernel::sweep`].
+    fn sweep_path(&mut self, p: &Loop, path: &PlacedPath, tag: Tag) -> KResult<Self::Shape> {
+        let _ = (p, path, tag);
+        Err(KernelError::Unsupported("sweep along a sketch path".into()))
+    }
     /// Open NURBS surface interpolating a grid of points (rows of equal length).
     fn nurbs_surface(&mut self, rows: &[Vec<DVec3>], tag: Tag) -> KResult<Self::Shape>;
     /// Solid from an open surface, offset by `t` along its normal.

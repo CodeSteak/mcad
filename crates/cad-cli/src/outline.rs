@@ -117,8 +117,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     for md in &file_scene.modules {
         let mut path = md.path.clone();
         path.push(md.name.clone());
-        let msgs =
-            m.session.post(ToEngine::SetContext { module: Some(path.join("::")), overrides: Default::default() });
+        let msgs = m.session.post(ToEngine::SetContext { module: Some(path.join(".")), overrides: Default::default() });
         m.session.post(ToEngine::Cancel);
         let errs = msgs
             .iter()
@@ -205,7 +204,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         qual.push(md.name.clone());
         t.push_str(&format!(
             "  {}({})  {}:{}–{}\n",
-            qual.join("::"),
+            qual.join("."),
             ptxt.join(", "),
             file_path(&sc, &md.range),
             md.range.line,
@@ -228,7 +227,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
             t.push_str(&format!("    ({errs} Fehler mit Standardwerten)\n"));
         }
         modules.push(json!({
-            "name": md.name, "path": md.path, "qualified": qual.join("::"),
+            "name": md.name, "path": md.path, "qualified": qual.join("."),
             "file": file_path(&sc, &md.range), "line": md.range.line, "end_line": md.range.end_line,
             "params": params,
             "grids": grids.iter().map(|g| grid_json(&sc, proj, g)).collect::<Vec<_>>(),
@@ -240,7 +239,31 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     // functions and top-level variables (main file with includes, used libraries)
     let mut functions = Vec::new();
     let mut variables = Vec::new();
+    // functions of module bodies are reachable as `modul.f(…)` (namespaces, Plan 17.2)
+    fn module_functions(
+        stmts: &[Stmt],
+        prefix: &str,
+        out: &mut Vec<(String, std::rc::Rc<cad_syntax::ast::FunctionDef>)>,
+    ) {
+        for s in stmts {
+            match &s.kind {
+                StmtKind::Function(f) if !prefix.is_empty() => {
+                    out.push((format!("{prefix}{}", f.name.name), f.clone()))
+                }
+                StmtKind::Module(m) => module_functions(&m.body, &format!("{prefix}{}.", m.name.name), out),
+                _ => {}
+            }
+        }
+    }
     let visit = |stmts: &[Stmt], lib: bool, functions: &mut Vec<Json>, variables: &mut Vec<Json>| {
+        let mut nested = Vec::new();
+        module_functions(stmts, "", &mut nested);
+        for (name, f) in &nested {
+            functions.push(json!({
+                "name": name, "params": params_text(&f.params, &src),
+                "file": proj.path_of(f.span), "line": proj.line(f.span), "body": src(f.body.span),
+            }));
+        }
         for s in stmts {
             match &s.kind {
                 StmtKind::Function(f) => functions.push(json!({

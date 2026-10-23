@@ -28,7 +28,7 @@ pub(crate) struct SetArgs {
     /// Ausgabe als JSON.
     #[arg(long)]
     pub json: bool,
-    /// Standardwert eines Modulparameters: `modul.param=wert` (auch `aussen::innen.param=…`),
+    /// Standardwert eines Modulparameters: `modul.param=wert` (auch `aussen.innen.param=…`),
     /// mehrfach möglich.
     #[arg(long, value_name = "MODUL.PARAM=WERT")]
     pub param: Vec<String>,
@@ -155,7 +155,7 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
             .map(|md| {
                 let mut path = md.path.clone();
                 path.push(md.name.clone());
-                path.join("::")
+                path.join(".")
             });
         let sc = match &module {
             None => file_scene.clone(),

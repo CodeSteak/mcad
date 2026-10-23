@@ -319,6 +319,54 @@ pub fn op_info(op: &Op) -> Option<p::OpInfo> {
     })
 }
 
+/// Display data of a sketch node: its profile with the segment statements of the evaluation.
+pub fn sketch_info(out: &EvalOutput, node: u32, op: &Op, src: &Source) -> Option<p::OpInfo> {
+    let Op::Profile(cad_ir::Profile::Sketch { contours, closed }) = op else { return None };
+    let info = out.sketches.iter().find(|s| s.node == node)?;
+    // display tolerance relative to the sketch size
+    let mut size: f64 = 1e-6;
+    for c in contours {
+        for g in &c.segs {
+            size = size.max((g.end() - g.start()).length());
+        }
+    }
+    let tol = (size * 1e-3).clamp(1e-4, 0.05);
+    let p2 = |q: glam::DVec2| v3(q.extend(0.0));
+    let contours = contours
+        .iter()
+        .zip(&info.contours)
+        .map(|(c, ci)| p::SketchContour {
+            hole: c.hole,
+            closed: c.closed,
+            start: c.segs.first().map(|g| p2(g.start())).unwrap_or(p::Vec3([0.0; 3])),
+            start_range: ci.start_span.map(|s| src.range(s)),
+            segments: c
+                .segs
+                .iter()
+                .zip(&ci.segs)
+                .map(|(g, gi)| {
+                    let points = g.to_kernel().map(|k| k.sample(tol)).unwrap_or_default().into_iter().map(p2).collect();
+                    let ctrl = match g {
+                        cad_ir::Seg::Bezier { points } => points.iter().map(|q| p2(*q)).collect(),
+                        cad_ir::Seg::Arc { center, .. } => vec![p2(*center)],
+                        _ => Vec::new(),
+                    };
+                    p::SketchSegment {
+                        kind: g.kind().into(),
+                        stmt: gi.stmt,
+                        range: src.range(gi.span),
+                        points,
+                        ctrl,
+                        implicit: gi.implicit,
+                        error: gi.error,
+                    }
+                })
+                .collect(),
+        })
+        .collect();
+    Some(p::OpInfo::Sketch { closed: *closed, contours })
+}
+
 /// Mesh key of a node: hex of its content key.
 pub fn mesh_key(k: &cad_engine::CacheKey) -> String {
     k.to_hex()
@@ -480,7 +528,10 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
                 tag: 0,
                 cached: false,
                 tol: n.tol,
-                op_info: op_info(&n.op),
+                op_info: match &n.op {
+                    Op::Profile(cad_ir::Profile::Sketch { .. }) => sketch_info(out, idx, &n.op, src),
+                    op => op_info(op),
+                },
             };
             match &kernel {
                 KernelInfo::Pending { keys, tags } => p::SceneNode {
