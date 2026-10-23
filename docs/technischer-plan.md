@@ -1,19 +1,48 @@
 # Technischer Plan: Parametrische CAD-Sprache mit Rastern
 
-Stand: 2026-10-22 · Grundlage: `Spec: Parametrische CAD-Sprache mit Rastern` (22.10.2026)
+Stand: 2026-10-23, Ist-Stand nach Testbericht 7 (erste Fassung 2026-10-22) · Grundlage: `Spec: Parametrische CAD-Sprache mit Rastern` (22.10.2026)
 
-Ziel: Die Anwendung läuft vollständig im Browser, nur auf dem Desktop, für kleine Hobbyprojekte. Sprache, Auswertung, Cache und Rückschreiben sind in Rust (Wasm), die UI in TypeScript/React. Später kommen eine CLI (auch zur Nutzung durch Claude Code) und eventuell eine Tauri-Version dazu.
+Abschnitt 0 fasst zusammen, was sich gegenüber der ersten Fassung geändert hat; die Abschnitte 1–14 beschreiben den umgesetzten Stand, Abschnitt 13 den Status der Meilensteine, Abschnitt 15 die bekannten Grenzen. Testberichte: `docs/reports/` (B1 … B7 = Bericht 1 … 7, Übersicht in `docs/reports/README.md`).
+
+Ziel: Die Anwendung läuft vollständig im Browser, nur auf dem Desktop, für kleine Hobbyprojekte. Sprache, Auswertung, Cache und Rückschreiben sind in Rust (Wasm), die UI in TypeScript/React. Dazu gibt es eine CLI (auch zur Nutzung durch Claude Code); eine Tauri-Version ist optional und noch offen.
 
 Festgelegte Rahmenbedingungen:
 
 | Thema | Entscheidung |
 | --- | --- |
-| Kernel | Bis zur Veröffentlichung: SMLib (C++, Upstream von solidcore) als Wasm. Vor der Veröffentlichung: Umstieg auf solidcore. |
+| Kernel | Bis zur Veröffentlichung: SMLib (C++, Upstream von solidcore) als Wasm, aus dem Fork `tangency-labs/smlib` (`capi-tess` @ `7eba8aa`) mit `smlib/patches/0001`. Vor der Veröffentlichung: Umstieg auf solidcore (M8, offen). |
 | Plattform | Desktop-Browser; keine Touch-Bedienung |
 | Speicherung | Nur im Browser; kein Backend |
 | Header | Keine Cross-Origin-Isolation (COOP/COEP), solange nicht nötig. Damit auch kein `SharedArrayBuffer` und keine Threads. |
 | OpenSCAD | Weitgehend kompatibel, nicht vollständig (Abschnitt 5) |
 | Priorität | Raster vor Fillets |
+
+---
+
+## 0. Geänderte und konkretisierte Entscheidungen (Ist-Stand)
+
+| Thema | Erste Fassung | Umgesetzt | Nachweis |
+| --- | --- | --- | --- |
+| Kernel-Quelle | `usd-brep` @ `c9c5979` direkt | Fork `tangency-labs/smlib`, Zweig `capi-tess` @ `7eba8aa` (= `c9c5979` plus Korrekturen von Speicherfehlern aus ASan/UBSan, ohne OCCT-Übersetzer) und `smlib/patches/0001` (Zeigertabellen in Einfügereihenfolge: Ergebnisse hängen nicht mehr von der Heap-Lage ab, nativ und Wasm gleich). `smlib/fetch.sh` holt beides. | B4 (Kernel-Stand `58735e2`), B7 |
+| Fassade | flache C-ABI mit Handles | zusätzlich: Booleans werden geprüft (Volumen, Probepunkte an den Operandenflächen) mit Rückfällen (Operanden tauschen, Reihenfolge, Verschiebung um 10⁻⁶…10⁻⁴); `rand()`/`srand()` fest; zu dicke Shell-Wände vor SMLib abgewiesen; Shell mit Öffnung aus Booleans, wenn SMLibs Shell scheitert; Kantenflags (glatt); ABI-Version 4 (`sc_version`) | B1, B7 |
+| Szenen | „Szenenbeschreibung sofort senden“ | zwei Szenen pro Auswertung: eine vorläufige (`complete = false`, ohne Kernel: Knoten, Raster, Anker, Griffe) direkt nach `SetSource` und die vollständige nach dem Kernel-Job; Meshes werden pro Szenen-Version angefordert | B1 (6.2), B2 |
+| Tag-Schema der Provenienz | Tags lokal pro Teilbaum, Fassade verschiebt sie beim Kombinieren | ein Tag ist der internierte Index des Cache-Schlüssels des erzeugenden Knotens (gleich für gleichen Inhalt, solange die Engine lebt); die Fassade reicht Tags nur durch; `Evaluation::tag_nodes` bildet Tag → Knoten ab (mehrere Zeilen bei gleichem Inhalt); UI: Dreieck → `tri_tags` → `tag_nodes` → Knoten → Zeile | B2 (S07) |
+| Neue Kanten, Kantenwahl | Kante zwischen Flächen verschiedener Kinder | dazu: eine Kante, die auf einer Kante eines Operanden liegt, ist nicht neu (koplanar verschmolzene Flächen); glatte Kanten (Naht, Pol, tangential innerhalb 2°) werden nie gewählt | B7 (F3, F4) |
+| Entwurfsmodus beim Ziehen | nur grobe Tessellierung | zusätzlich: Verrundungen, die zuletzt länger als 25 ms brauchten und nicht im Cache liegen, setzt die Engine während des Ziehens aus (Hinweis „Verrundung beim Ziehen ausgesetzt“); nach `DragEnd` vollständige Auswertung | B4 (C20) |
+| Watchdog-Sperre | Schlüssel merken, nicht erneut rechnen | 15 s (`WorkerTransport`); gesperrt wird der Inhaltsschlüssel des Knotens aus dem letzten `Progress.current`; der neue Worker bekommt `BlockKeys` vor `SetSource`; die Sperre endet mit einer Änderung des Knotens (neuer Schlüssel) oder dem Neuladen der Seite | B2 (S17), B4 (C19) |
+| Rasterzugriff | Ebenennamen | ein Eintrag von `g[…]`, der keine Ebene des Rasters ist, ist ein Zahlenausdruck (`g[vorn, mitte, 9]`); Listen ergeben indizierte Ebenen (`g[loch[i], …]`); `g.name` als Zahl oder Ebene (12.1) | B1, B4 |
+| Raster und Anker in Schleifen | Warnung laut Spec | Fehler: `grid` und `anchor` in `for` sowie `grid` in den Kindern eines Modulaufrufs sind nicht erlaubt (Fehler an der Anweisung) | `cad-eval/tests/grids.rs` |
+| Sprung zur Deklaration | Klick auf Raster-/Ankerausdruck | Strg+Klick (ein einfacher Klick setzt weiter den Cursor, sonst wären die Ausdrücke nicht editierbar); ebenso Strg+Klick auf den Pfad von `include`/`use` | B3 (B13), B6 (P04) |
+| Snap von 1D-Griffen | – | Höhe, Radius und Ebene snappen auf Rasterebenen derselben Achse und schreiben `g.name`, nur wenn der Griff danach exakt auf der Ebene liegt | B3 (B06) |
+| STEP-Export | „später“ | AP242 (Standard) oder AP214 mit eigenem Writer `cad-step` aus der neutralen B-Rep `cad_kernel::brep` (Fassade `sc_brep`, exakte Geometrie); geprüft mit OpenCASCADE (`tests/step/verify.py`) | B5 |
+| `include`/`use` | „später“ | OpenSCAD-Semantik; Pfade relativ zur einbindenden Datei oder absolut, kein `OPENSCADPATH`; fehlende Dateien und Zyklen sind Fehler an der `include`/`use`-Zeile (OpenSCAD: Warnung) | B6 |
+| Datei-IDs in Spans | Byte-Spans einer Datei | jede geladene Datei belegt einen eigenen Positionsbereich (Datei `f` ab `f << 24`, Anweisungs-IDs ab `f << 22`); Diagnosen, Hinweise, Griffe und Text-Edits kennen ihre Datei; das Protokoll gibt Positionen lokal zur Datei mit Feld `file` aus | B6 |
+| Bauteile | Offener Punkt 2 | benannte Instanzen auf oberster Ebene der Hauptdatei; Export je Bauteil (STL/3MF/STEP), alle als ZIP oder als 3MF mit einem Objekt je Bauteil; CLI `export --part`, `--all-parts` | B6 |
+| Benannte Instanzen in Schleifen | nicht definiert | `k[i]: …` mit ganzzahligem Index (`k[2].anker`, Snap schreibt `k[2].ecke`); `k: …` in `for` bleibt ein Fehler | B6 (P08) |
+| Variabler Radius | Stretch Goal | `fillet(r = function (p) …)` und `difference/union/intersection(fillet = function (p) …)`: cad-eval übersetzt das Funktionsliteral in ein Radiusgesetz `cad_ir::Law` (reiner Ausdruck über `p`, Teil des Baums und des Cache-Schlüssels) statt eines Rückrufs; die Engine wertet es an Stützpunkten je Kante aus, die Fassade (`sc_fillet_var`) baut daraus ein B-Spline-Gesetz | B7 |
+| solidcore | `kernel-solidcore` ab Umstieg | `kernel-solidcore` und `cad diff-kernels` vorhanden, opt-in (Feature `solidcore`); heute bricht jedes Primitiv in solidcore ab (`Unported`), M8 wartet | B5, B6, `docs/solidcore-umstieg.md` |
+| UI-Bibliotheken | react-three-fiber, `three-mesh-bvh`, `Line2` | three.js direkt (Raycaster, Linien als `LineSegments`), ohne r3f und BVH; TS-Protokolltypen aus Rust mit `ts-rs` | B2 |
+| CI | GitHub Actions, gecachte SMLib-Builds | Workflows `rust`, `web`, `compat`, `pages` (manuell) in `.github/workflows/`, Schritte in `scripts/ci/` (Abschnitt 11) | – |
 
 ---
 
@@ -54,7 +83,7 @@ Grundsätze:
 
 solidcore ist ein Rust-Port von SMLib aus NVIDIAs `usd-brep` (Apache-2.0) mit dem Ziel gleicher Topologie und numerischer Abweichung ≤ 1e-9. Heute ist etwa ein Drittel portiert; Primitive, Booleans und Fillets laufen noch nicht durchgängig.
 
-Bis solidcore so weit ist, nutzt die Anwendung den C++-Upstream direkt, auf demselben Stand, gegen den solidcore prüft (`usd-brep` @ `c9c5979`), seit Bericht 4 mit den Speicherfehler-Korrekturen aus dem Fork `tangency-labs/smlib` (Zweig `capi-tess` @ `7eba8aa`, `smlib/fetch.sh`):
+Bis solidcore so weit ist, nutzt die Anwendung den C++-Upstream direkt, auf demselben Stand, gegen den solidcore prüft (`usd-brep` @ `c9c5979`), seit Bericht 4 mit den Speicherfehler-Korrekturen aus dem Fork `tangency-labs/smlib` (Zweig `capi-tess` @ `7eba8aa`) und seit Bericht 7 mit `smlib/patches/0001` (`smlib/fetch.sh`). Die Bewertung vor dem Spike:
 
 | Kriterium | SMLib (C++) als Übergang | OCCT als Übergang |
 | --- | --- | --- |
@@ -65,7 +94,7 @@ Bis solidcore so weit ist, nutzt die Anwendung den C++-Upstream direkt, auf dems
 | STEP-Export | nicht enthalten (Upstream nutzt dafür OCCT) | enthalten |
 | Wasm-Build | unbekannt, im Spike prüfen | bekannt machbar |
 
-Empfehlung: SMLib. OCCT bleibt die Rückfallebene, falls SMLib sich im Spike nicht mit Emscripten bauen lässt oder bei einfachen Teilen scheitert.
+Entscheidung (M0): SMLib. Der Emscripten-Build gelingt (`smlib/build-wasm.sh`, smlib.wasm ≈ 1,24 MiB Brotli, B1); OCCT wird nur noch zur unabhängigen Prüfung des STEP-Exports verwendet (B5).
 
 ### 2.2 Anbindung im Browser
 
@@ -78,7 +107,7 @@ Empfehlung: SMLib. OCCT bleibt die Rückfallebene, falls SMLib sich im Spike nic
 
 Zwei Wasm-Module statt einem: `wasm-bindgen` unterstützt das Emscripten-Target nicht. Ein gemeinsames Modul (Rust auf `wasm32-unknown-emscripten`) wäre möglich, die Toolchain aber fragiler. Die Brücke kostet Mikrosekunden pro Aufruf; Kernel-Operationen dauern Millisekunden. Massenaufrufe (Klassifizieren vieler Punkte) werden gebündelt.
 
-**Nativ:** Dieselbe Fassade wird für CLI und Tests nativ gebaut und per FFI gelinkt. solidcore bringt dafür bereits ein Build-Skript für die C++-Bibliotheken mit (`harness/cpp/build.sh`, Ausgabe `libSMLib.a`, `libSM_API.a`).
+**Nativ:** Dieselbe Fassade wird für CLI und Tests nativ gebaut und per FFI gelinkt. `smlib/CMakeLists.txt` folgt den Einstellungen von solidcores `harness/cpp`; `smlib/build-native.sh` baut `libSMLib.a` und `libSM_API.a` (über `SMLIB_PREBUILT` eingebunden), sonst baut `crates/kernel-smlib/build.rs` sie selbst.
 
 ### 2.3 Umstieg auf solidcore
 
@@ -90,8 +119,8 @@ Zwei Wasm-Module statt einem: `wasm-bindgen` unterstützt das Emscripten-Target 
 ### 2.4 Fassade: Kernpunkte
 
 - **Handle-Tabelle** mit Referenzzählung. Rust hält `Shape(u32)`, `Drop` gibt frei.
-- **Provenienz:** Jede Fläche trägt einen Tag als SMLib-Attribut. SMLib reicht Attribute bei Booleans weiter (`SmAttribute::Split/Merge`). Im Spike wird geprüft, wie sie sich bei Fillets, Fasen und Sweeps verhalten. Rückfall: Tag über die nächstgelegene Fläche der Eingaben bestimmen.
-- **Neue Kanten eines Booleans** werden kernelunabhängig bestimmt: Eine Kante ist neu, wenn ihre beiden angrenzenden Flächen von verschiedenen Kindern dieser Operation stammen. Das entspricht der Definition der Spec und braucht nur die Flächen-Tags.
+- **Provenienz:** Jede Fläche trägt einen Tag als SMLib-Attribut. SMLib reicht Attribute bei Booleans weiter (`SmAttribute::Split/Merge`); neu erzeugte Flächen (Rundungen, Deckel) bekommen den Tag der Operation. Die Tags vergibt die Engine (6.3).
+- **Neue Kanten eines Booleans** werden kernelunabhängig bestimmt: Eine Kante ist neu, wenn ihre beiden angrenzenden Flächen von verschiedenen Kindern dieser Operation stammen und sie nicht auf einer Kante eines Operanden liegt (B7, F4). Glatte Kanten (`sc_edges`-Flag) zählen nie.
 - **Fehler:** Jede Funktion fängt Exceptions, gibt einen Code zurück und legt Meldung sowie betroffene Kanten ab (für „Kante rot“).
 - **Hänger:** Upstream hat bekannte Endlosschleifen bei bestimmten Eingaben. Siehe Watchdog in 7.3.
 
@@ -173,7 +202,7 @@ enum Origin {
 | --- | --- | --- |
 | `GridPoint` | Punkt im Modulsystem + Raster-ID + Ebenennamen | verhält sich in Ausdrücken wie ein Vektor |
 | `GridLine`, `GridPlane` | Raster-ID, Auswahl, Lage | nur in Argumenten, die sie annehmen; sonst Typfehler |
-| `PlaneRef` (`g.name`) | Raster-ID + Ebenenname | wird kontextabhängig zu Zahl oder Ebene (Abschnitt 11) |
+| `PlaneRef` (`g.name`) | Raster-ID + Ebenenname | wird kontextabhängig zu Zahl oder Ebene (12.1) |
 | `InstanceRef` | benannte Instanz `k` | nur `k.anker` und `dir(k.anker)` zulässig |
 
 Geometrie ist kein Wert: Anweisungen erzeugen Knoten im Geometriebaum, nie Werte.
@@ -214,7 +243,7 @@ Ziel: Typische Hobby-Dateien laufen ohne Änderung, solange sie keine Mesh-Opera
 | Bereich | Umfang |
 | --- | --- |
 | Voll | Syntax, Variablen, Funktionen und Funktionsliterale, Module, `children()`, `for`, `if`, `let`, `each`, Listenausdrücke, Strings, Bereiche, `echo`, `assert`, Mathefunktionen, `cube`, `sphere`, `cylinder`, `square`, `circle`, `polygon`, Transformationen, Booleans, Modifier, `linear_extrude`, `rotate_extrude` |
-| Mit Abweichung | `color()` nur als Anzeigefarbe; `$fn/$fa/$fs` siehe Abschnitt 11; `polyhedron` nur für kleine Körper mit ebenen Flächen; `resize` als `scale` mit denselben Regeln |
+| Mit Abweichung | `color()` nur als Anzeigefarbe; `$fn/$fa/$fs` siehe 12.3; `polyhedron` nur für kleine Körper mit ebenen Flächen; `resize` als `scale` mit denselben Regeln |
 | Voll (Projekte) | `include`/`use` mit Projekten aus mehreren Dateien (Pfade relativ zur einbindenden Datei; ohne Suchpfad `OPENSCADPATH`) |
 | Später | `text()` (Schriften), `offset()` in 2D, `hull()` |
 | Nicht vorgesehen | `minkowski`, `projection`, `import` von Meshes, `surface()` als Höhenkarte (der Name ist in der Spec für NURBS-Flächen vergeben) |
@@ -229,7 +258,7 @@ Ein Korpus von `.scad`-Dateien (Lizenzen vorher prüfen) läuft in CI über die 
 
 1. Parsen. Bei Syntaxfehler: Diagnosen senden, letzte Szene bleibt.
 2. Sprachauswertung → Geometriebaum.
-3. Szenenbeschreibung sofort senden (Knoten, Raster, Anker, Griffe, Hinweise). Raster und Griffe sind damit schon sichtbar.
+3. Vorläufige Szene sofort senden (`complete = false`: Knoten, Raster, Anker, Griffe, Hinweise). Raster und Griffe sind damit schon sichtbar. Nach dem Kernel-Job folgt die vollständige Szene derselben Version (`complete = true`).
 4. Kernel-Auswertung von unten nach oben, in Schritten (7.3); pro Knoten Cache-Lookup über `CacheKey`.
 5. Tessellierung der Wurzel und der von der UI angeforderten Knoten; Meshes als Transferables.
 
@@ -241,10 +270,9 @@ Ein Korpus von `.scad`-Dateien (Lizenzen vorher prüfen) läuft in CI über die 
 
 ### 6.3 Provenienz (Fläche/Kante → Zeile)
 
-- Kernel-Tags sind lokal zum gecachten Teilbaum: Index in die Liste der erzeugenden Knoten dieses Teilbaums.
-- Beim Kombinieren verschiebt die Fassade die Tags der Kinder in den Bereich des Elternknotens.
-- Nach der Auswertung kennt die Engine für jeden Knoten die Liste `lokaler Tag → InstanceId`. Ein gecachtes Ergebnis wird dadurch an anderer Stelle wiederverwendet, ohne die Geometrie anzufassen.
-- Die UI bekommt pro Mesh ein Attribut `tag` pro Dreieck und Kantensegment plus die Tabelle `tag → InstanceId → Zeile`.
+- Ein Tag ist der internierte Index des Cache-Schlüssels des erzeugenden Knotens (umgesetzt statt lokaler, beim Kombinieren verschobener Tags). Gleicher Inhalt ergibt denselben Tag, die Tabelle wächst nur.
+- Nach der Auswertung bildet `Evaluation::tag_nodes` jeden Tag auf die Knoten dieses Baums ab (mehrere bei gleichem Inhalt). Ein gecachtes Ergebnis wird dadurch an anderer Stelle wiederverwendet, ohne die Geometrie anzufassen. Jedes Ergebnis trägt außerdem die Menge seiner möglichen Tags (Zuordnung von Flächen zu Kindern für neue Kanten).
+- Die UI bekommt pro Mesh die Tags der Dreiecke (`tri_tags`) plus die Tabelle `tag_nodes`; Kanten tragen keine Knoten-Tags (Hover über Kanten geht über die angrenzende Fläche, B2).
 
 ### 6.4 Kantenauswahl über Zonen
 
@@ -293,7 +321,7 @@ Engine → UI: `Diagnostics`, `Scene { version, nodes, grids, anchors, handles, 
 
 ### 7.2 Feine und grobe Tessellierung
 
-- Während eines Ziehvorgangs: grobe Toleranz (z. B. 10 × `$tol`), nur die Wurzel.
+- Während eines Ziehvorgangs: grobe Toleranz (10 × Toleranz), nur die Wurzel. Entwurfsmodus: Verrundungen über 25 ms (letzte Messung, nicht im Cache) werden ausgesetzt (B4, C20).
 - Bei `DragEnd`: feine Tessellierung. Meshes werden pro Toleranz gecacht.
 
 ### 7.3 Abbruch ohne `SharedArrayBuffer`
@@ -301,7 +329,7 @@ Engine → UI: `Diagnostics`, `Scene { version, nodes, grids, anchors, handles, 
 - Die Engine rechnet in Schritten: `engine.step(budget_ms)` bearbeitet Knoten, bis das Zeitbudget (z. B. 20 ms) erreicht ist, und kehrt zurück.
 - Die Worker-Schleife gibt zwischen zwei Schritten die Kontrolle an die Event-Loop ab (`MessageChannel`), verarbeitet neue Nachrichten und bricht bei `SetSource` die laufende Auswertung ab. Fertige Knoten bleiben im Cache.
 - Eine einzelne lange Kernel-Operation ist nicht unterbrechbar. Bei Hobbyprojekten ist das selten ein Problem.
-- **Watchdog:** Der Main Thread beendet den Worker, wenn ein Schritt länger als z. B. 15 s dauert (Schutz vor Hängern im Kernel), und startet ihn neu. Der Cache geht dabei verloren. Der Schlüssel des betroffenen Knotens wird gemerkt und bis zur nächsten Parameteränderung nicht erneut gerechnet; die Zeile wird rot markiert.
+- **Watchdog:** Der Main Thread beendet den Worker, wenn 15 s keine Antwort kommt (Schutz vor Hängern im Kernel), und startet ihn neu. Der Cache geht dabei verloren. Der Inhaltsschlüssel des Knotens aus dem letzten `Progress.current` wird gesperrt; der neue Worker bekommt `BlockKeys` vor `SetSource`. Der Knoten meldet „Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung“, die Zeile wird rot (B4, C19).
 
 ### 7.4 Versionen
 
@@ -319,7 +347,7 @@ Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem K
 | `eval <datei> [--module m] [-D name=wert]` | Baum, Werte, Inline-Hinweise, Raster, Anker |
 | `inspect <datei> --line n` | Was die Zeile erzeugt: Knoten, Hülle, Volumen, ausgewählte Kanten, Warnungen |
 | `render <datei> -o bild.png [--view iso\|front\|top\|right] [--line n] [--size 1024x768]` | Bild des Modells, optional mit hervorgehobener Zeile wie im Editor |
-| `export <datei> -o teil.stl\|.3mf [-D …]` | Exportdatei |
+| `export <datei> -o teil.stl\|.3mf\|.step [-D …] [--schema ap214] [--part name] [--all-parts]` | Exportdatei (STEP: exakte B-Rep, AP242), einzelne oder alle Bauteile |
 | `diff-kernels <datei…>` | Vergleich SMLib ↔ solidcore (nur Entwicklung, `docs/solidcore-umstieg.md`) |
 
 - Jeder Befehl hat `--json` mit festem Schema und definierte Exit-Codes. Ohne `--json` gibt es lesbaren Text.
@@ -335,14 +363,15 @@ Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem K
 | Build | Vite, pnpm; Wasm über `wasm-bindgen --target web` |
 | Zustand | Zustand (Stores für Quelltext, Szene, Auswahl, Parameterleiste) |
 | Editor | CodeMirror 6: Lezer-Grammatik für Syntaxhervorhebung; Diagnosen, Inline-Hinweise, Ausgrauen (`*`) und Zeilenfarben als Decorations aus den Engine-Daten |
-| 3D | three.js über react-three-fiber; `three-mesh-bvh` für Picking; `Line2` für Kanten und Rasterlinien |
+| 3D | three.js direkt (umgesetzt ohne react-three-fiber und `three-mesh-bvh`); Picking mit dem Raycaster; Kanten und Rasterlinien als `LineSegments` |
 | Picking | Raycast → Dreieck → `tag` → `InstanceId` → Zeile; Hover und Klick ohne Engine-Aufruf |
 | Darstellungszustände | Material-Varianten pro Knoten: voll, gedimmt, halbtransparent, rot halbtransparent (`#`, abgezogen), grau (`%`), Umriss |
 | Griffe | Eigene Gizmos (Punkt, Pfeil, Drehring mit 15°-Rasten, Ebenengriff); Snap-Suche im Bildschirmraum gegen Rasterpunkte und Anker |
 | Raster | Ebenen als Linien am Rand der Bauteilhülle; durchgezogen (Literal) oder gestrichelt (Ausdruck); standardmäßig nur die von der aktuellen Zeile verwendeten |
 | Parameterleiste | aus der Modulsignatur; Werte pro Modul in der Sitzung; „Als Standard übernehmen“ erzeugt einen `TextEdit` |
 | Pfadleiste | aus dem Modulkontext; Doppelklick auf Instanz springt in die Definition |
-| Dateien | Autospeichern in IndexedDB; Öffnen/Speichern über File System Access API (Chromium), sonst Hoch- und Herunterladen |
+| Dateien | Autospeichern des Projekts in IndexedDB; Projekte aus mehreren Dateien als Tabs; Ordner öffnen/speichern über File System Access API (Chromium), sonst Hoch- und Herunterladen (Datei oder ZIP) |
+| Bauteile | Bauteilleiste mit Sichtbarkeit, Volumen und Export je Bauteil |
 
 Eine Zeile kann mehrere Instanzen haben (Schleifen, mehrfache Modulaufrufe). Die UI indiziert die Szene nach `stmt` und hebt alle hervor.
 
@@ -352,24 +381,32 @@ Eine Zeile kann mehrere Instanzen haben (Schleifen, mehrfache Modulaufrufe). Die
 
 ```
 crates/
-  cad-syntax/       Lexer, Parser, AST, Spans
-  cad-eval/         Namensauflösung, Werte mit Herkunft, Raster, Anker, Auswertung
-  cad-ir/           Geometriebaum, CacheKey
-  cad-kernel/       trait Kernel, gemeinsame Typen (P3, Mat4, Mesh, Tag …)
+  cad-syntax/       Lexer, Parser, AST, Spans (mit Datei-ID)
+  cad-eval/         Namensauflösung, Werte mit Herkunft, Raster, Anker, Griffe, Rückschreiben, include/use
+  cad-ir/           Geometriebaum, CacheKey, Radiusgesetz (Law)
+  cad-kernel/       trait Kernel, gemeinsame Typen (P3, Mat4, Mesh, Tag …), neutrale B-Rep
   kernel-mock/      Testkernel in Rust
   kernel-smlib/     Kernel über SMLib-Fassade (Features: wasm | native)
-  kernel-solidcore/ Kernel über solidcore (ab Umstieg)
-  cad-engine/       Cache, Provenienz, Zonen, Griffe, Rückschreiben, Export STL/3MF
+  kernel-solidcore/ Kernel über solidcore (opt-in, Feature solidcore)
+  cad-engine/       Cache, Provenienz, Zonen, Bauteile, Export STL/3MF/STEP
+  cad-step/         STEP-Writer (AP242/AP214)
   cad-render/       Software-Rasterizer für die CLI
+  cad-session/      Protokoll und Sitzung (Worker und CLI), TS-Typen (ts-rs)
   cad-wasm/         wasm-bindgen-Einstieg für den Worker
   cad-cli/          CLI
+  compat-tests/     OpenSCAD-Vergleich Stufe 1
 smlib/
-  facade/           C++-Fassade + CMake
-  build/            Emscripten- und native Builds (tangency-labs/smlib @ 7eba8aa = usd-brep c9c5979 + Korrekturen)
+  fetch.sh          Quellen: tangency-labs/smlib @ 7eba8aa (= usd-brep c9c5979 + Korrekturen) + patches/
+  facade/           C++-Fassade; CMakeLists.txt, build-native.sh, build-wasm.sh
+third_party/smlib/  SMLib-Quellen (nicht eingecheckt)
 web/
-  src/editor/  src/viewport/  src/engine/  src/panels/  src/state/
-examples/           Beispieldateien (zugleich Testfälle)
-docs/
+  src/app/  src/editor/  src/view/  src/engine/  src/logic/  src/files/  src/state/  e2e/  scripts/
+examples/           Beispieldateien (zugleich Testfälle): spec/, openscad-compat/, projekt-gehaeuse/
+tests/              openscad-compat/ (Referenz, compare.py), step/verify.py
+tools/report/       Generatoren der Testberichte
+scripts/ci/         Schritte der CI-Workflows
+.github/            Workflows und Composite-Actions (SMLib nativ/Wasm mit Cache)
+docs/               Plan, solidcore-Umstieg, Testberichte (reports/)
 ```
 
 ---
@@ -387,7 +424,16 @@ docs/
 | UI | Vitest, Playwright | Editor ↔ Ansicht, Ziehen, Undo, Snappen |
 | Leistung | Browser-Benchmarks | Ladezeit, Auswertung der Beispiele, Ziehen mit ≥ 30 fps |
 
-CI: GitHub Actions; SMLib-Wasm und SMLib-nativ als gecachte Build-Artefakte.
+CI: GitHub Actions; SMLib-Wasm und SMLib-nativ als gecachte Build-Artefakte. Umgesetzt in `.github/workflows/`, jeder Schritt ist ein Skript in `scripts/ci/` und lokal genauso aufrufbar:
+
+| Workflow | Inhalt | Cache |
+| --- | --- | --- |
+| `rust` | `cargo fmt --check`, `cargo clippy --workspace --all-targets -D warnings` (nativ und `cad-wasm` für wasm32), `cargo test --workspace`, `cargo check -p cad-wasm --target wasm32-unknown-unknown` | SMLib nativ (`smlib/build-native/lib`), Cargo |
+| `web` | emsdk 6.0.13, `smlib/build-wasm.sh`, `web/scripts/build-wasm.sh`, `pnpm install --frozen-lockfile`, `typecheck`, Vitest, Node-Tests (smlib.wasm, Engine, Transport), `pnpm build`, Playwright; Artefakte `web/dist` und bei Fehlern der Playwright-Bericht | emsdk, smlib.js/.wasm, Cargo, pnpm |
+| `compat` | OpenSCAD 2021.01 (apt): Referenz neu erzeugen und mit `reference.json` vergleichen, Selbsttest von `compare.py`, `include`/`use` gegen OpenSCAD, `compare.py --eval` mit der Release-CLI; STEP-Prüfung mit `cadquery-ocp==8.0.1.1.0` | SMLib nativ, Cargo, venv |
+| `pages` | manuell (`workflow_dispatch`): `web/dist` auf GitHub Pages (keine COOP/COEP-Header nötig) | wie `web` |
+
+Cache-Schlüssel der SMLib-Builds (`scripts/ci/smlib-key.sh`): Fork-Commit, Inhalt der Patches, `smlib/CMakeLists.txt`, Build-Skript und Compiler-Version (nativ `c++`, Wasm `emcc`, dazu CMake), bei Wasm zusätzlich die Fassadenquellen.
 
 ---
 
@@ -411,18 +457,20 @@ Vorschläge, wie der Plan sie bis zur Klärung behandelt:
 
 Jeder Meilenstein endet mit einem lauffähigen Stand im Browser und in der CLI.
 
-| # | Inhalt | Ergebnis |
-| --- | --- | --- |
-| M0 | **Spike:** SMLib mit Emscripten bauen; Fassade mit Quader, Zylinder, Boolean, Fillet, Klassifizieren, Tessellierung, Attribut-Weitergabe; Aufruf aus Rust im Worker und nativ; Anzeige in three.js | Größe, Ladezeit, Aufrufkosten, Stabilität gemessen; Entscheidung SMLib oder OCCT |
-| M1 | Sprachkern: Parser, Variablen, Funktionen, Module, `for`/`if`/`let`, 3D-Primitive, Transformationen, Booleans; Editor mit Diagnosen und Inline-Werten; CLI `check`, `eval` | OpenSCAD-ähnliche Teile modellierbar |
-| M2 | Szene und Zuordnung: Provenienz, Cursor/Hover in beide Richtungen, Dimmen, Modifier, Cache, schrittweise Auswertung, Watchdog, Modulkontext, Pfadleiste; CLI `inspect`, `render`, `export` (STL) | Code ↔ Ansicht vollständig; Claude Code kann Modelle prüfen und ansehen |
-| M3 | Raster und Anker: `grid`, Zugriffe, Platzierung, Sichtbarkeit, `anchor`, benannte Instanzen, `rotate(to = …)`, Darstellung | Raster nutzbar |
-| M4 | Griffe und Rückschreiben: Herkunft der Werte, Griffe für Primitive, Transformationen und Rasterebenen, Snappen, Undo, Parameterleiste | Bearbeiten in der Ansicht |
-| M5 | Verrundung und Fase: `$fillet`, `fillet =` an Booleans, Zonenblöcke, `select`, Fehlerdarstellung | Fillets wie in der Spec |
-| M6 | 2D und Profiloperationen: Profile, `linear_extrude`, `rotate_extrude`, `loft`, `sweep`, `surface`, `thicken`, `shell` | Freiformen |
-| M7 | Dateien, 3MF, OpenSCAD-Korpus, Beispiele, Leistung | erste vollständige Version |
-| M8 | Umstieg auf solidcore: `kernel-solidcore`, Vergleich über `diff-kernels`, SMLib-Wasm entfernen | bereit zur Veröffentlichung |
-| später | STEP-Export, Tauri, variabler Radius, mehrere Bauteile, `include`/`use` | |
+| # | Inhalt | Ergebnis | Status |
+| --- | --- | --- | --- |
+| M0 | **Spike:** SMLib mit Emscripten bauen; Fassade mit Quader, Zylinder, Boolean, Fillet, Klassifizieren, Tessellierung, Attribut-Weitergabe; Aufruf aus Rust im Worker und nativ; Anzeige in three.js | Größe, Ladezeit, Aufrufkosten, Stabilität gemessen; Entscheidung SMLib oder OCCT | erledigt (SMLib, B1) |
+| M1 | Sprachkern: Parser, Variablen, Funktionen, Module, `for`/`if`/`let`, 3D-Primitive, Transformationen, Booleans; Editor mit Diagnosen und Inline-Werten; CLI `check`, `eval` | OpenSCAD-ähnliche Teile modellierbar | erledigt (B1) |
+| M2 | Szene und Zuordnung: Provenienz, Cursor/Hover in beide Richtungen, Dimmen, Modifier, Cache, schrittweise Auswertung, Watchdog, Modulkontext, Pfadleiste; CLI `inspect`, `render`, `export` (STL) | Code ↔ Ansicht vollständig; Claude Code kann Modelle prüfen und ansehen | erledigt (B1, B2) |
+| M3 | Raster und Anker: `grid`, Zugriffe, Platzierung, Sichtbarkeit, `anchor`, benannte Instanzen, `rotate(to = …)`, Darstellung | Raster nutzbar | erledigt (B1, B2) |
+| M4 | Griffe und Rückschreiben: Herkunft der Werte, Griffe für Primitive, Transformationen und Rasterebenen, Snappen, Undo, Parameterleiste | Bearbeiten in der Ansicht | erledigt (B3) |
+| M5 | Verrundung und Fase: `$fillet`, `fillet =` an Booleans, Zonenblöcke, `select`, Fehlerdarstellung | Fillets wie in der Spec | erledigt (B4, B7) |
+| M6 | 2D und Profiloperationen: Profile, `linear_extrude`, `rotate_extrude`, `loft`, `sweep`, `surface`, `thicken`, `shell` | Freiformen | erledigt (B4, B7) |
+| M7 | Dateien, 3MF, OpenSCAD-Korpus, Beispiele, Leistung | erste vollständige Version | erledigt (B1, B6; Leistung in B1–B4) |
+| M8 | Umstieg auf solidcore: `kernel-solidcore`, Vergleich über `diff-kernels`, SMLib-Wasm entfernen | bereit zur Veröffentlichung | offen: wartet auf solidcore (heute bricht jedes Primitiv ab, B5); `kernel-solidcore` und `diff-kernels` vorhanden |
+| später | STEP-Export, variabler Radius, mehrere Bauteile, `include`/`use` | | erledigt (B5, B6, B7) |
+| später | Tauri-Version (`TauriTransport`) | | offen (optional) |
+| – | CI (GitHub Actions) | | erledigt (Workflows lokal geprüft; Lauf auf GitHub steht aus) |
 
 Abhängigkeiten: M1 → M2 → M3 → M4 → M5. M6 hängt nur an M2. M8 hängt am Fortschritt von solidcore und kann jederzeit nach M2 teilweise beginnen.
 
@@ -432,10 +480,51 @@ Abhängigkeiten: M1 → M2 → M3 → M4 → M5. M6 hängt nur an M2. M8 hängt 
 
 | Risiko | Gegenmaßnahme |
 | --- | --- |
-| SMLib lässt sich nicht mit Emscripten bauen | im Spike klären; Rückfall OCCT (gleicher Trait, andere Fassade) |
-| Kernel hängt oder verhält sich undefiniert bei bestimmten Eingaben | Watchdog mit Neustart (7.3); gefundene Fälle an solidcore melden |
+| SMLib lässt sich nicht mit Emscripten bauen | eingetreten nicht: der Build gelingt (B1); Rückfall OCCT nicht nötig |
+| Kernel hängt oder verhält sich undefiniert bei bestimmten Eingaben | Watchdog mit Neustart und Sperre (7.3); Fork mit Speicherfehler-Korrekturen und Patch 0001; geprüfte Booleans in der Fassade; gefundene Fälle an solidcore melden |
 | solidcore ist zur geplanten Veröffentlichung nicht fertig | Veröffentlichung mit SMLib-C++ ist lizenzrechtlich möglich (Apache-2.0); Umstieg danach |
 | Attribute gehen bei einzelnen Operationen verloren (Provenienz) | Rückfall über geometrische Zuordnung; Tests pro Operation |
 | Fillets scheitern bei Grenzfällen | klare Fehlermeldung mit Kante, Körper ohne Fillet anzeigen (Spec-konform) |
 | Wasm-Stack ohne Guard-Page (solidcore) | Stack auf 8 MiB setzen, wie im solidcore-README beschrieben |
 | Speicher (wasm32, 4 GB) | LRU-Cache mit Speicherschätzung, Handles konsequent freigeben |
+
+---
+
+## 15. Bekannte Grenzen (aus den Testberichten 1–7)
+
+Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1–F4 aus B4, behoben in B7).
+
+**Kernel (SMLib)**
+
+- Booleans in Sonderlagen unzuverlässig; die Fassade erkennt falsche Ergebnisse nur über Stichproben (ein Fehler zwischen den Probepunkten bleibt unentdeckt). Die Prüfung nutzt SMLibs Punktklassifizierung, die bei gedrehten Splinekörpern selbst irrt; besteht keine Variante, bleibt SMLibs Ergebnis. Im Verschiebe-Rückfall weicht der zweite Operand um bis zu 10⁻⁴ der Modellgröße ab. Die Prüfung kostet Zeit (+38 % über alle Beispiele). (B1)
+- Berühren sich Körper nur an einer Kante, ist die Vereinigung kein geschlossener Körper; `cad` meldet Volumen 0 (STL in Ordnung). (B1)
+- Speicherfehler in SMLib können Ergebnisse vom Heap abhängig machen; die Shell-Vorprüfung deckt nur ebene, gegenüberliegende Wände ab. Patch 0001 beseitigt die Abhängigkeit von der Adressreihenfolge der Zeigertabellen. (B1, B7)
+- `shell` aus Booleans nur für ebene geöffnete Flächen; bei gekrümmten geöffneten Flächen bleibt SMLibs Ergebnis bzw. dessen Fehlermeldung. Wanddicke ≥ Rundungsradius scheitert weiter (SMLibs Versatz). Die Booleans kosten Zeit (`dose_shell` ≈ 1,9 s). (B7)
+- Variabler Radius: SMLibs Löser ist empfindlich (steile Verläufe an Taschenecken, Kreiskanten mit veränderlichem Radius scheitern); Sprünge werden über etwa drei Stützpunktabstände geglättet; kein variabler Radius für `chamfer` und `$fillet`; Gesetze nur aus dem reinen Ausdruckskern (keine Texte, Listenausdrücke oder Rekursion über `p`). (B7)
+- Glatte Kanten nach SMLibs Kriterium (2°): fast tangentiale Kanten werden nie gewählt; die Prüfung „alte Kante eines Operanden“ ist bei gekrümmten Kanten nur so genau wie deren Abtastung. (B7)
+- Tessellierung von Freiformflächen verfeinert global, ebene Flächen desselben Körpers werden mit feiner (z. B. 15 730 Dreiecke bei `12_linear_extrude_twist`). Twist-Extrusion ist eine kubische Loft-Annäherung (Schnitte alle 7,5°); Kreisprofile mit ungleichmäßigem `scale` und `scale = 0` werden nicht unterstützt. (B1)
+- SMLib integriert Flächen nur auf etwa 10⁻⁴ genau. (B5)
+- Vorgebaute Bibliotheken (`SMLIB_PREBUILT`) müssen nach einer Patch-Änderung neu gebaut werden (Header-Änderung); ein Symlink `third_party/smlib` wird von `fetch.sh` nur geprüft. (B7)
+
+**Sprache und Engine**
+
+- OpenSCAD facettiert, wir rechnen exakt: Volumen runder Teile weichen um 0,01–0,3 % ab, bei `twist` liegt OpenSCAD selbst um ~1 % daneben. (B1)
+- `include`/`use`: kein Suchpfad (`OPENSCADPATH`); Variablen einer Bibliothek werden einmal je Auswertung ausgewertet; doppelt eingebundene Dateien werden zweimal geladen; höchstens 255 Dateien zu je 16 MiB; Snap-Sichtbarkeit eines in einer eingebundenen Datei benannten Rasters endet am Ende dieser Datei. (B6)
+- Bauteile nur im Dateikontext; ein Bauteil innerhalb einer Booleschen Operation lässt sich nicht getrennt ausblenden; STEP mehrerer Bauteile ist ein Produkt ohne Baugruppenstruktur; Baugruppen sind offen. (B6)
+- Die Tag-Tabelle der Engine wächst nur; Kanten zwischen Flächen zweier inhaltsgleicher Kinder gelten als alt (gleicher Tag). (`cad-engine`, Modulkommentar)
+
+**STEP**
+
+- Keine p-Kurven (Leser projizieren die 3D-Kanten); Kantenkurven von Booleans sind B-Splines, Kreise/Linien werden erkannt; Flächen ohne B-Spline-Form würden approximiert (in den Beispielen 0). Farben als `STYLED_ITEM`, von `verify.py` nicht geprüft. 2D-Ergebnisse werden abgelehnt; im Browser ist der Zeitstempel fest. (B5)
+
+**UI**
+
+- Hover über Kanten geht über die angrenzende Fläche; bei Mehrdeutigkeit (gleicher Inhalt an mehreren Stellen) wird über die Lage in den Knotenhüllen getrennt, sonst werden alle Zeilen markiert; Rasterausdrücke in Schleifen zeigen den Punkt des ersten Durchlaufs. (B2)
+- Snap von 1D-Griffen nur auf Ebenen, auf denen der Griff nach dem Schreiben exakt landet (nicht unter verschobenen Teilbäumen oder bei `center = true`/`d =`). Punktgriffe bewegen sich in der Ebene senkrecht zur Blickrichtung (achsgebunden mit Umschalt oder X/Y/Z, B4). Inline-Regler nur für Zahl-/Bool-Literale von Zuweisungen. Parameter ohne Standardwert werden beim Reset 0/false/[0, 0, 0]. (B3)
+- Zonen-Kanten und geöffnete Flächen bestimmt die Ansicht an tessellierten Zonen-Meshes (die Engine exakt); in Grenzfällen kann die Anzeige abweichen. Die Anzeige des `sweep`-Pfads interpoliert wie die Fassade und weicht ab, falls sich das Verfahren im Kernel ändert. (B4)
+- Watchdog-Sperre gilt für den Inhaltsschlüssel (gleiche Knoten an anderer Stelle sind mitgesperrt) und bis zum Neuladen der Seite; der Test blockiert den Worker über eine Testnachricht, ein echter hängender Kernel-Aufruf wurde nicht nachgestellt. (B2, B4)
+- Messwerte stammen aus headless Chromium mit SwiftShader (ohne GPU) und sind nur relativ aussagekräftig. (B2–B4)
+
+**solidcore (M8)**
+
+- Jedes Primitiv bricht in solidcore mit `Unported: SmSurface::DropCurve` ab; nur 2D-Knoten (in Rust berechnet) stimmen überein (101 von 855). `kernel-solidcore` deckt nur die heute vorhandenen API-Einstiege ab. (B5)
