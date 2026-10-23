@@ -1213,6 +1213,51 @@ BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow
   return BrepPtr();
 }
 
+// ------------------------------------------------------------------ shell pre-check
+
+// SMLib's inward shell reads freed memory when the wall does not fit (valgrind: invalid reads
+// in SmProtoEdge::RemoveProtoVertex for a 10 mm cube with t >= 5; solidcore
+// plan/upstream-issues.md UB-239, UB-242). Depending on the heap the call then fails, returns
+// a solid or crashes the process (kernel.rs::invalid_profiles_fail_cleanly: 1 of 100 runs
+// with 8 threads, after rand() was fixed). This catches the common case before SMLib: two
+// antiparallel planar walls (not opened) facing each other at a distance below `limit`
+// (= 2 t). Curved walls are not checked.
+bool opposite_walls_closer_than(const SmBrep* b, const std::vector<const SmFace*>& open,
+                                double limit, double& gap_out) {
+  struct Wall {
+    SmFace* f;
+    V3 p, n;  // a point and the outward normal
+    std::vector<std::pair<V3, V3>> samples;
+  };
+  std::vector<Wall> walls;
+  for (SmFace* f : faces_of(b)) {
+    if (std::find(open.begin(), open.end(), f) != open.end()) continue;
+    const SmSurface* srf = f->GetSurface();
+    if (!srf || !srf->IsKindOf(SmPlane_TYPE)) continue;
+    Wall w{f, v3(0, 0, 0), v3(0, 0, 0), {}};
+    face_samples(f, w.samples);
+    if (w.samples.empty()) continue;
+    w.p = w.samples[0].first;
+    w.n = w.samples[0].second;
+    walls.push_back(std::move(w));
+  }
+  double tol = 1e-9 * std::max(1.0, model_diag(b));
+  for (const Wall& a : walls)
+    for (const Wall& c : walls) {
+      if (&a == &c || dot(a.n, c.n) > -0.999) continue;
+      for (const auto& smp : a.samples) {
+        double gap = -dot(smp.first - c.p, c.n);  // distance to c's plane, > 0 on its inner side
+        if (!(gap > tol) || gap > limit * (1 + 1e-9)) continue;  // no cavity left at gap = 2 t
+        // the foot point must lie on face c (walls really face each other there)
+        V3 foot = smp.first - c.n * (-gap);
+        if (face_distance(c.f, foot) > 1e-6 * std::max(1.0, gap)) continue;
+        gap_out = gap;
+        return true;
+      }
+    }
+  return false;
+}
+
 // ------------------------------------------------------------------ tessellation
 
 // Free-form faces: not planar, no surface of revolution/extrusion, sphere or torus.
@@ -1994,6 +2039,12 @@ uint32_t sc_shell(uint32_t h, double t, const uint32_t* open_faces, uint32_t n, 
         throw fail(SC_INVALID, "face id " + std::to_string(open_faces[i]) + " out of range");
       open.Add(fs[open_faces[i]]);
     }
+    std::vector<const SmFace*> open_v;
+    for (ULONG i = 0; i < open.GetSize(); i++) open_v.push_back(open[i]);
+    double gap = 0;
+    if (opposite_walls_closer_than(in, open_v, 2.0 * t, gap))
+      throw fail(SC_FAILED, "shell: wall thickness " + std::to_string(t) +
+                                " does not fit (opposite walls " + std::to_string(gap) + " apart)");
     SmBrep* r = nullptr;
     SC_CHECK(SmApiShellBrepFull(in, -t, TRUE, TRUE, FALSE, open, r), "SmApiShellBrepFull");
     require_result(r, "shell");

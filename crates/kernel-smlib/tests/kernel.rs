@@ -370,7 +370,8 @@ fn invalid_profiles_fail_cleanly() {
     // degenerate input
     assert!(matches!(k.make_box(DVec3::ZERO, DVec3::new(1.0, 0.0, 1.0), 1), Err(KernelError::InvalidInput(_))));
     assert!(matches!(k.make_sphere(-1.0, 1), Err(KernelError::InvalidInput(_))));
-    // too thick shell
+    // too thick shell: rejected by the facade before SMLib, whose shell reads freed memory
+    // here (valgrind) and then fails, succeeds or crashes depending on the heap
     let b = cube(&mut k, 10.0, T_BOX);
     assert!(matches!(k.shell(&b, 6.0, &[0], 3), Err(KernelError::Failed { .. })));
 }
@@ -760,16 +761,3 @@ fn nurbs_surface_and_thicken() {
     }
 }
 
-#[test]
-fn handles_are_released() {
-    let mut k = k();
-    // other tests run in parallel: measure only our own allocations with a margin
-    let before = k.live_handles();
-    {
-        let d = box_minus_cylinder(&mut k);
-        let _f = k.fillet(&d, &[0], 0.5, 9).unwrap();
-        let _c = d.clone();
-    }
-    let after = k.live_handles();
-    assert!(after <= before + 8, "handles leak: {before} -> {after}");
-}

@@ -12,7 +12,8 @@ use glam::DVec3;
 /// boundary, saw other sample points: `kernel.rs::invalid_profiles_fail_cleanly` (too-thick
 /// shell must fail) succeeded in 4 of 40 runs with `--test-threads=8`, never with a fixed
 /// time. The facade defines rand()/srand() itself: srand() restarts a fixed sequence and so
-/// does every facade call.
+/// does every facade call. (The remaining 1 in 100 came from a use-after-free in SMLib's
+/// shell; the facade now rejects such walls before calling it, see `sc_shell`.)
 #[test]
 fn rand_is_deterministic() {
     unsafe extern "C" {
