@@ -179,6 +179,8 @@ function StatusBar() {
   const bangLine = shown && shown.context.root_modifier !== null ? shown.nodes[shown.context.root_modifier]?.range.line : null;
   const st = complete?.stats;
   const drag = useCad((s) => s.drag);
+  // Draft mode while dragging: blends that take too long are left out until the drag ends.
+  const suspended = shown ? [...new Set(shown.nodes.filter((n) => n.blend_suspended).map((n) => n.range.line))] : [];
   return (
     <footer className="statusbar" data-testid="statusbar">
       <span className="st-progress" data-testid="status-progress">
@@ -202,6 +204,12 @@ function StatusBar() {
         <span className="st-note drag" data-testid="status-drag">
           {drag.axis !== null ? `Achse ${"xyz"[drag.axis]} · ` : ""}
           {drag.alt ? "Alt: frei ziehen (Zahlen)" : drag.snap ? `Snap: ${drag.snap}` : drag.axis !== null ? "Umschalt/X/Y/Z: Achse" : "Ziehen – Alt: ohne Snap, Umschalt: Achse, Esc: abbrechen"}
+        </span>
+      )}
+      {suspended.length > 0 && (
+        <span className="st-note draft" data-testid="status-draft" title="Entwurfsmodus: Verrundungen, die länger als 25 ms brauchen, werden beim Ziehen ausgesetzt und danach berechnet">
+          Verrundung beim Ziehen ausgesetzt (Zeile {suspended.slice(0, 4).join(", ")}
+          {suspended.length > 4 ? ", …" : ""})
         </span>
       )}
       {notice && <span className="st-note" data-testid="status-notice">{notice}</span>}

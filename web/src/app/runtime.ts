@@ -203,6 +203,7 @@ window.__cad = {
       view: viewer?.viewState() ?? null,
       frames: viewer?.frames ?? 0,
       restarts: transport.restarts,
+      blockedKeys: [...transport.blockedKeys],
     };
   },
   setCursorLine(line: number, col = 0) {

@@ -46,6 +46,10 @@ const waitText = (page: Page, pred: string) =>
   page.waitForFunction((src) => new Function("t", `return (${src})(t);`)((window as unknown as { __cad: { text(): string } }).__cad.text()), pred, { timeout: 30_000, polling: 30 });
 const lineHint = (page: Page, l: number) => lineEl(page, l).locator(".cm-lineend");
 const view = (s: CadState) => s.view!;
+type NodeLite = { status: string; label: string; range: { line: number }; messages: Array<{ message: string }>; blend_suspended?: boolean };
+/** Nodes of the last complete scene (store). */
+const completeNodes = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __cad: { store: { getState(): { complete: { nodes: NodeLite[] } | null } } } }).__cad.store.getState().complete?.nodes ?? []);
 /** Display modes of the plan (without the face under a resting mouse). */
 const modes = (s: CadState) => view(s).plan.items.filter((i) => i.mode !== "picked").map((i) => `${i.mode}@${i.line}`);
 
@@ -658,6 +662,103 @@ test("C17 Neue Beispiele im Menü", async ({ page }) => {
     });
   }
   recordC({ id: "C17", title: "Neue Beispiele", images: [], caption: caps.join(" · ") });
+});
+
+test("C19 Watchdog: hängender Knoten wird gesperrt, Zeile rot, Änderung hebt die Sperre auf", async ({ page }) => {
+  page.on("pageerror", (e) => console.log("pageerror:", e.message));
+  await page.goto("/?watchdog=1500");
+  await expect(page.getByTestId("editor").locator(".cm-content")).toBeVisible();
+  await waitScene(page);
+  await loadText(page, "cube(5);\n");
+  // Five expensive nodes (difference with fillet), one per line: the evaluation takes several
+  // steps, so a Progress with the current node arrives before the scene is complete.
+  const row = (i: number, w: number, f: number, r: number) =>
+    `translate([${i * 40}, 0, 0]) difference(fillet = ${f}) { cube([${w}, 20, 5]); translate([8, 10, -1]) cylinder(h = 7, r = ${r}); translate([20, 10, -1]) cylinder(h = 7, r = ${r}); }`;
+  // Distinct values per line: cache keys are content keys, equal nodes share them (and a block).
+  const src = [0, 1, 2, 3, 4].map((i) => row(i, 30 + i, +(0.8 + i * 0.05).toFixed(2), +(3 + i * 0.1).toFixed(1))).join("\n") + "\n";
+  const v0 = (await cad(page)).sentVersion;
+  // Hang the worker as soon as the first Progress with a current node arrives.
+  await page.evaluate(() => {
+    type W = { __cad: { store: { subscribe(f: (s: { progress: { line: number | null } | null }) => void): () => void }; debugHang(ms: number): void } };
+    const c = (window as unknown as W).__cad;
+    const off = c.store.subscribe((s) => {
+      if (s.progress?.line) {
+        off();
+        c.debugHang(4000);
+      }
+    });
+  });
+  await hook(page, (c, t) => c.setText(t as string), src);
+  await page.waitForFunction(() => (window as unknown as { __cad: { state(): CadState } }).__cad.state().restarts === 1, null, { timeout: 30_000 });
+  const err = (await cad(page)).engineError!;
+  expect(err).toMatch(/Kernel hängt.*Zeile \d+.*Knoten gesperrt/);
+  const s = await waitScene(page, { minVersion: v0 + 1 });
+  expect(s.blockedKeys).toHaveLength(1);
+  const blocked = (await completeNodes(page)).filter((n) => n.status === "error");
+  expect(blocked).toHaveLength(1);
+  const bl = blocked[0].range.line;
+  expect(blocked[0].messages[0].message).toContain("Zeitüberschreitung");
+  await expect(lineEl(page, bl)).toHaveClass(/cm-l-error/);
+  await expect(lineHint(page, bl)).toContainText("Zeitüberschreitung");
+  await expect(page.getByTestId("status-engine-error")).toContainText("Knoten gesperrt");
+  await screenshotC(page, "c19-gesperrt", "full");
+  // Editing the blocked line changes its keys: it evaluates normally (the key stays in the list).
+  const t0 = await text(page);
+  const edited = t0.split("\n").map((l, i) => (i === bl - 1 ? row(bl - 1, 33 + bl, 0.7, 2.8) : l)).join("\n");
+  const s2 = await loadText(page, edited);
+  expect((await completeNodes(page)).filter((n) => n.status === "error")).toEqual([]);
+  expect(s2.restarts).toBe(1);
+  await expect(lineEl(page, bl)).not.toHaveClass(/cm-l-error/);
+  recordC({
+    id: "C19",
+    title: "Watchdog-Sperre",
+    images: [{ name: "c19-gesperrt", label: "nach dem Neustart: gesperrter Knoten rot" }],
+    code: `${lines(src, bl).trim()}\n// geändert:\n${lines(edited, bl).trim()}`,
+    caption: `Watchdog auf 1,5 s gesetzt (?watchdog=1500), der Worker beim ersten Progress mit __debugHang 4 s blockiert: der Worker wird beendet und neu gestartet, der Schlüssel des Knotens aus Progress.current wird gesperrt; der neue Worker bekommt vor SetSource {type: "BlockKeys", keys: […]}. Der Knoten (${blocked[0].label}) in Zeile ${bl} meldet „Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung“ (Zeile rot), der Rest wird ausgewertet. Gesperrt wird der Inhaltsschlüssel: gleiche Knoten in anderen Zeilen wären mitgesperrt. Nach Ändern der Zeile wird sie normal berechnet; die Liste bleibt für weitere Neustarts erhalten (Unit-Test transport.test.ts).`,
+    checks: [`Neustarts: 1, gesperrte Schlüssel: ${s.blockedKeys.length}`, `gesperrter Knoten: Zeile ${bl} (${blocked[0].label})`, "nach Änderung: 0 Fehler, kein weiterer Neustart"],
+  });
+});
+
+test("C20 Entwurfsmodus: Verrundung beim Ziehen ausgesetzt, danach berechnet", async ({ page }) => {
+  await openApp(page);
+  const src = "difference(fillet = 1) {\n    cube([40, 30, 10]);\n    translate([20, 15, -1]) cylinder(h = 12, r = 5);\n}\n";
+  await loadText(page, src);
+  await clickLine(page, 3, 6);
+  const [h] = await waitHandles(page, "(hs) => hs.some(h => h.kind === 'point')");
+  const from = grip(h);
+  let draftSeen = false;
+  let hint = "";
+  await mouseDrag(page, from, line(from, { x: from.x + 40, y: from.y + 10 }, 16), {
+    mid: async () => {
+      await expect(page.getByTestId("status-draft")).toContainText("Verrundung beim Ziehen ausgesetzt (Zeile 1)", { timeout: 20_000 });
+      draftSeen = true;
+      hint = (await lineHint(page, 1).textContent()) ?? "";
+      await screenshotC(page, "c20-ziehen", "full");
+    },
+  });
+  await waitDragDone(page);
+  // After the drag the full evaluation follows: the blend is back, the note is gone.
+  await page.waitForFunction(() => {
+    const c = (window as unknown as { __cad: { store: { getState(): { complete: { nodes: Array<{ blend_suspended?: boolean }> } | null } } } }).__cad.store.getState().complete;
+    return !!c && c.nodes.every((n) => !n.blend_suspended);
+  }, null, { timeout: 30_000 });
+  await expect(page.getByTestId("status-draft")).toHaveCount(0);
+  const d = (await nodesOnLine(page, 1)).find((x) => x.label === "difference")!;
+  expect(d.status).toBe("ok");
+  expect(draftSeen).toBe(true);
+  expect(hint).toContain("Verrundung beim Ziehen ausgesetzt");
+  await screenshotC(page, "c20-danach", "full");
+  recordC({
+    id: "C20",
+    title: "Entwurfsmodus beim Ziehen",
+    images: [
+      { name: "c20-ziehen", label: "während des Ziehens" },
+      { name: "c20-danach", label: "nach dem Loslassen" },
+    ],
+    code: `${src.trim()}\n// gezogen: ${lines(await text(page), 3).trim()}`,
+    caption: "Beim Ziehen des Zylinder-Griffs wird die Verrundung von difference(fillet = 1) ausgesetzt (Entwurfsmodus der Engine: Verrundungen, die länger als 25 ms brauchen): die Statuszeile zeigt „Verrundung beim Ziehen ausgesetzt (Zeile 1)“, am Zeilenende steht derselbe Hinweis (NodeReport.blend_suspended, im Szenenknoten als blend_suspended). Nach dem Loslassen wertet die Engine vollständig aus, Hinweis und Meldung verschwinden.",
+    checks: ["Statuszeile während des Ziehens: Zeile 1", `Zeilenhinweis: ${hint.trim()}`, "danach: blend_suspended überall false, Knoten ok"],
+  });
 });
 
 test("C18 Messwerte: Auswertzeit fillet, chamfer, shell, sweep, loft, surface", async ({ page }) => {

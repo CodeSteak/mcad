@@ -442,6 +442,9 @@ pub struct SceneNode {
     /// Edges selected by fillet/chamfer (polylines, node system).
     pub selected_edges: Vec<Vec<Vec3>>,
     pub opened_faces: u32,
+    /// Draft mode while dragging: this node's blend was left out (it took longer than the
+    /// draft limit); the full evaluation after the drag restores it.
+    pub blend_suspended: bool,
     /// Bounds in the node system.
     pub bounds: Option<Bounds>,
     pub dim: Option<Dim>,
@@ -738,6 +741,8 @@ pub struct Stats {
     pub steps: u32,
     /// Language evaluation steps.
     pub eval_steps: u32,
+    /// Blends left out in draft mode (while dragging).
+    pub suspended_blends: u32,
 }
 
 /// TypeScript declarations of all protocol types (content of `web/src/engine/protocol.ts`).

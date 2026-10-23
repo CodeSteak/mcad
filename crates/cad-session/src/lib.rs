@@ -441,6 +441,7 @@ where
             kernel_calls: ev.stats.kernel_calls as u32,
             steps: ev.stats.steps,
             eval_steps: cur.out.steps as u32,
+            suspended_blends: ev.stats.suspended_blends as u32,
         };
         let scene = convert::scene(SceneInput {
             version: r.version,

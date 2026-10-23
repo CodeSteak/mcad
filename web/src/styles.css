@@ -708,6 +708,10 @@ input:checked + .cm-switch-knob::after {
   font-weight: 600;
 }
 
+.statusbar .st-note.draft {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
 .statusbar .st-note.bang {
   color: var(--hl-modifier);
   font-weight: 600;

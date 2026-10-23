@@ -63,6 +63,8 @@ export interface CadState {
   } | null;
   frames: number;
   restarts: number;
+  /** Cache keys of nodes that hung (watchdog), sent to every new worker. */
+  blockedKeys: string[];
 }
 
 export async function cad(page: Page): Promise<CadState> {

@@ -258,6 +258,11 @@ hints: Array<string>,
  */
 selected_edges: Array<Array<Vec3>>, opened_faces: number, 
 /**
+ * Draft mode while dragging: this node's blend was left out (it took longer than the
+ * draft limit); the full evaluation after the drag restores it.
+ */
+blend_suspended: boolean, 
+/**
  * Bounds in the node system.
  */
 bounds: Bounds | null, dim: Dim | null, 
@@ -497,4 +502,8 @@ kernel_ms: number, nodes: number, cache_hits: number, kernel_calls: number, step
 /**
  * Language evaluation steps.
  */
-eval_steps: number, };
+eval_steps: number, 
+/**
+ * Blends left out in draft mode (while dragging).
+ */
+suspended_blends: number, };

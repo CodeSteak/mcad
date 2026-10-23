@@ -117,7 +117,7 @@ if (vt) {
 }
 const unitTotal = unit.reduce((s, f) => s + f.total, 0);
 const unitPassed = unit.reduce((s, f) => s + f.passed, 0);
-const NEW_UNIT = new Set(["web/src/logic/curves.test.ts", "web/src/logic/zones.test.ts"]);
+const NEW_UNIT = new Set(["web/src/logic/curves.test.ts", "web/src/logic/zones.test.ts", "web/src/engine/transport.test.ts"]);
 const CHANGED_UNIT = new Set(["web/src/logic/display.test.ts", "web/src/logic/drag.test.ts"]);
 
 /** Rust tests: `test name ... ok` lines grouped by test binary. */
@@ -237,15 +237,15 @@ ${text}
 
 const BUGS = [
   {
-    crate: "kernel-smlib / smlib (sc_shell), Meldung in cad-engine",
-    title: "shell eines verrundeten Körpers: leeres oder falsches Ergebnis ohne Fehler, sonst Fehler je nach Maßen, Zonen, Plattform und Verlauf",
+    crate: "kernel-smlib / smlib (sc_shell)",
+    title: "shell eines verrundeten Körpers scheitert; Meldung hängt von der Plattform ab",
     code: `grid g { z: o = 18; }
-shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 5); zone(g.o, d = 1); } // ok, aber leer
-shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 6); zone(g.o, d = 1); } // ok, Außenwand fehlt
-shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 3); zone(g.o, d = 1); } // SM_ERR (1001)
+shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 3); zone(g.o, d = 1); }
+shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 5); zone(g.o, d = 1); }
+shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 6); zone(g.o, d = 1); }
 // Maße von examples/spec/dose_shell.scad (dort mit grid g { z: o = 30; }):
-shell(1.5) { box([0, 0, 0], [50, 35, 30], $fillet = 4); zone(g.o, d = 1); } // self-overlapping`,
-    text: "Im Browser (Wasm): $fillet = 5 meldet „ok · 1 Fläche geöffnet“, das Ergebnis hat aber 0 Dreiecke und keine Bounds – die Ansicht zeigt nichts, ohne Fehler. $fillet = 6 meldet ok, die Bounds sind 1,6 … 88,4 statt 0 … 90: es fehlt die Außenwand, übrig ist nur die nach innen versetzte Fläche. $fillet = 3 scheitert mit „SmApiShellBrepFull failed: SM_ERR (1001)“, die Maße von dose_shell.scad mit „shell produced an invalid (self-overlapping) solid at 11 face(s)“ (auch nativ) – dose_shell.scad ist deshalb rot. Nativ (cad check) weichen die Ergebnisse ab ($fillet = 6 scheitert dort mit SM_ERR, leere Ergebnisse meldet cad check nicht). Außerdem hängt das Ergebnis von einer zusätzlichen Zone ab, die keine Fläche öffnet (translate([90, 17, 8]) cube([4, 10, 6], center = true)), und davon, was vorher in derselben Sitzung ausgewertet wurde. Zwei benachbarte geöffnete Flächen (zone(g.oben) und zone(g.vorn)) scheitern mit SM_ERR (1001). Scharfkantige und gefaste Körper ($chamfer) ergeben korrekte Hohlkörper. Vorschlag: Ergebnis prüfen (Volumen, Bounds) und ein leeres oder ungültiges Ergebnis als Fehler melden.",
+shell(1.5) { box([0, 0, 0], [50, 35, 30], $fillet = 4); zone(g.o, d = 1); }`,
+    text: "Mit dem SMLib-Fork (tangency-labs/smlib, capi-tess @ 7eba8aa) scheitert jede dieser shells, im Browser (Wasm) wie nativ (cad check): $fillet = 3 mit „SmApiShellBrepFull failed: SM_ERR_NULL_POINTER (1006)“, $fillet = 5 und 6 mit „wall thickness 1.6 leaves no cavity (SMLib returned no closed solid)“ bzw. „self-overlapping“, die Maße von dose_shell.scad mit „self-overlapping solid at 10 face(s)“ – dose_shell.scad ist deshalb rot. Für dieselbe Eingabe unterscheiden sich die Meldungen zwischen Wasm und nativ ($fillet = 8: Wasm „self-overlapping“, nativ SM_ERR (1001)). Mit dem vorigen Kernel-Stand meldete $fillet = 5 „ok“ bei leerem Ergebnis und $fillet = 6 „ok“ ohne Außenwand; diese stillen Fehler gibt es nicht mehr. Scharfkantige und gefaste Körper ($chamfer) ergeben korrekte Hohlkörper (griffschale.scad, Messung C18).",
   },
   {
     crate: "kernel-smlib (nurbs_surface)",
@@ -334,9 +334,11 @@ const html = `<!doctype html>
   <li><b>Neu einpassen:</b> nach einer deutlichen Größenänderung (Diagonale × 1,6 oder Mitte um mehr als die halbe Diagonale verschoben) passt die Ansicht selbst neu ein, solange der Nutzer die Kamera nicht bewegt (und keinen Griff gezogen) hat; sonst erscheint der Knopf „Neu einpassen“.</li>
   <li><b>Achsgebundenes Ziehen</b> von Punktgriffen: Umschalttaste – Achse des lokalen Systems aus der Mausbewegung; Tasten X/Y/Z – Achse direkt (erneut: frei), auch mitten im Ziehen. Führungslinie in Achsfarbe, Snap nur auf Ziele auf der Achse, die übrigen Komponenten behalten ihren Text.</li>
   <li><b>Beispiele (neu, im Beispielmenü):</b> griffschale.scad (shell), flasche.scad (rotate_extrude + fillet), lueftungsgitter.scad (linear_extrude + Raster, chamfer =), kabelfuehrung.scad (sweep), freiformdeckel.scad (surface + thicken).</li>
+  <li><b>Entwurfsmodus beim Ziehen (Engine-Stand 58735e2):</b> Verrundungen, die länger als 25 ms brauchen, setzt die Engine beim Ziehen aus (<code>NodeReport.blend_suspended</code>). Die Statuszeile zeigt dann „Verrundung beim Ziehen ausgesetzt (Zeile …)“, am Zeilenende steht derselbe Hinweis; nach dem Loslassen wertet die Engine vollständig aus und der Hinweis verschwindet (C20).</li>
+  <li><b>Watchdog-Sperre (Plan 7.3):</b> die UI merkt sich bei jedem <code>Progress</code> den Schlüssel von <code>current</code>. Beendet der Watchdog den Worker, bekommt der neue Worker vor <code>SetSource</code> <code>{type: "BlockKeys", keys: […]}</code> mit allen bisher hängenden Schlüsseln (die Liste bleibt über weitere Neustarts erhalten) und dann die letzte Quelle erneut; der gesperrte Knoten meldet „Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung“, seine Zeile ist rot (C19, Unit-Test transport.test.ts). Ohne neuen gesperrten Knoten wird die Quelle nicht erneut gesendet, damit dieselbe Eingabe nicht erneut hängt.</li>
   <li><b>tools/report/report2-ui.mjs</b> läuft wieder eigenständig: fehlen Vitest-Ergebnisse oder enthält das gemeinsame playwright.json keine Phase-A-Szenarien (es hält nur den letzten Lauf), führt es diese Tests selbst aus.</li>
 </ul>
-<p class="small">Änderungen an Rust-Crates: <code>cad-session</code> – Szenenknoten mit <code>op_info</code> (aufgelöste Parameter von fillet/chamfer/shell inkl. <code>select</code>, zone, linear_extrude, rotate_extrude, loft, sweep-Pfad, surface-Netz, thicken), Protokoll-Typen neu erzeugt; <code>cad-eval</code> – beim freien Ziehen werden Literale, deren Wert sich nicht ändert, nicht neu geschrieben (sonst würde das achsgebundene Ziehen z. B. 5.5 zu 6 runden), Tests für Profil-Griffe; <code>compat-tests</code> – Erwartungen für die fünf neuen Beispiele (der Test verlangt einen Eintrag je Datei in examples/spec).</p>
+<p class="small">Änderungen an Rust-Crates: <code>cad-session</code> – Szenenknoten mit <code>op_info</code> (aufgelöste Parameter von fillet/chamfer/shell inkl. <code>select</code>, zone, linear_extrude, rotate_extrude, loft, sweep-Pfad, surface-Netz, thicken), <code>blend_suspended</code> je Knoten und <code>suspended_blends</code> in den Statistiken (aus dem Entwurfsmodus der Engine), Protokoll-Typen neu erzeugt; <code>cad-eval</code> – beim freien Ziehen werden Literale, deren Wert sich nicht ändert, nicht neu geschrieben (sonst würde das achsgebundene Ziehen z. B. 5.5 zu 6 runden), Tests für Profil-Griffe; <code>compat-tests</code> – Erwartungen für die fünf neuen Beispiele (der Test verlangt einen Eintrag je Datei in examples/spec).</p>
 
 <h2>2 Testumgebung</h2>
 <table>${env.map(([a, b]) => `<tr><th style="width:32mm">${esc(a)}</th><td>${esc(b)}</td></tr>`).join("")}</table>
@@ -367,6 +369,8 @@ ${cargo ? `<table><tr><th>Rust-Testprogramm (cargo test --workspace)</th><th>bes
   <li><b>Neu einpassen:</b> automatisch nur, solange die Kamera seit dem letzten Einpassen nicht gedreht/verschoben/gezoomt und kein Griff gezogen wurde; „Alles zeigen“ und die Standardansichten stellen diesen Zustand wieder her.</li>
   <li><b>Achsgebunden:</b> Achsen des lokalen Systems des Griffs (bei 2D-Punkten nur x/y); mit Umschalt wartet der Griff, bis 6 px Bewegung die Achse bestimmen. Wird die Achse erst während des Ziehens gewählt, geht die Achslinie durch die aktuelle Lage.</li>
   <li><b>Offene Fläche neben Körpern</b> auf oberster Ebene ist eine implizite Vereinigung und damit ein Fehler („zuerst thicken“) – Spec-konform, im Test getrennt geladen.</li>
+  <li><b>Watchdog-Sperre:</b> gesperrt wird der Knoten aus dem letzten <code>Progress.current</code> vor dem Hängen; gesperrt ist sein Inhaltsschlüssel, gleiche Knoten an anderer Stelle sind mitgesperrt. Die Liste gilt bis zum Neuladen der Seite; eine Änderung am Knoten ändert den Schlüssel und hebt die Sperre damit auf.</li>
+  <li><b>Entwurfsmodus:</b> der Hinweis zeigt den zuletzt gezeichneten Stand; die Schwelle (25 ms) und die Auswahl der ausgesetzten Verrundungen liegen in der Engine.</li>
   <li>Einige Ergebnisse hängen am Kernel: dose_shell.scad ist wegen F1 derzeit rot (Zeile rot, Körper ohne shell); griffschale.scad verwendet deshalb $chamfer = 4 (auf beiden Plattformen ein korrekter Hohlkörper); die Tests C08, C17 und C18 prüfen zusätzlich, dass ein „ok“-Knoten Geometrie hat.</li>
 </ul>
 
