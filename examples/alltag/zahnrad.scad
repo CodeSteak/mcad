@@ -1,0 +1,57 @@
+// Zweck: Stirnradpaar Modul 2 (20 und 12 Zähne, Achsabstand 32 mm) – Evolventenflanken als
+// Polygon aus Listen-Funktionen (Evolventenwinkel, Zahndicke über Radius), linear_extrude;
+// Rad 1 mit Nabe, Passfedernut und Erleichterungslöchern (for), Rad 2 mit D-Bohrung für eine
+// Motorwelle 5 mm. Beide Räder als Bauteile im Eingriff (Flankenspiel prüfen mit
+// `cad measure --clearance rad1 rad2`). Bohrungskanten mit difference(chamfer = …). Maße in mm.
+
+function inv(a) = tan(a) - a * PI / 180;                // Evolventenfunktion (a in Grad)
+function zahn_halbwinkel(m, z, rho, alpha, spiel) =      // halbe Zahndicke in Grad beim Radius rho
+    let (r = m * z / 2, rb = r * cos(alpha), a_rho = acos(min(1, rb / rho)))
+    90 / z - (spiel / 2) / r * 180 / PI + (inv(alpha) - inv(a_rho)) * 180 / PI;
+function zahnprofil(m, z, alpha = 20, spiel = 0.1, n = 5) =
+    let (r = m * z / 2, ra = r + m, rf = r - 1.25 * m, rb = r * cos(alpha), r0 = max(rb, rf),
+         radien = [for (i = [0 : n]) r0 + (ra - r0) * i / n])
+    [for (k = [0 : z - 1])
+        let (mitte = k * 360 / z,
+             f1 = [for (rho = radien) [rho, mitte - zahn_halbwinkel(m, z, rho, alpha, spiel)]],
+             f2 = [for (j = [n : -1 : 0]) let (rho = radien[j]) [rho, mitte + zahn_halbwinkel(m, z, rho, alpha, spiel)]],
+             luecke = mitte + 180 / z)
+        each concat([[rf, mitte - zahn_halbwinkel(m, z, r0, alpha, spiel)]], f1, f2,
+                    [[rf, mitte + zahn_halbwinkel(m, z, r0, alpha, spiel)], [rf, luecke]])]
+    ;
+function polar(p) = [p[0] * cos(p[1]), p[0] * sin(p[1])];
+
+module zahnrad(m = 2, z = 20, b = 10, bohrung = 8, nabe_d = 0, nabe_h = 0, nut_b = 3, nut_t = 1.4,
+               d_flach = 0, loecher = 0) {
+    r = m * z / 2;
+    grid g {
+        x: achse = 0, teilkreis = r, kopf = r + m, fuss = r - 1.25 * m;
+        z: unten = 0, oben = b, nabe_o = b + nabe_h;
+    }
+    difference(chamfer = 0.4) {
+        union() {
+            linear_extrude(b) polygon([for (p = zahnprofil(m, z)) polar(p)]);
+            if (nabe_h > 0) cylinder(h = g.nabe_o, d = nabe_d);
+        }
+        // Bohrung; bei d_flach > 0 als D-Profil (Kreis, unten bei y = -d_flach abgeflacht)
+        intersection() {
+            translate([0, 0, -1]) cylinder(h = g.nabe_o + 2, d = bohrung);
+            if (d_flach > 0) translate([-bohrung, -d_flach, -2]) cube([2 * bohrung, 2 * bohrung, g.nabe_o + 4]);
+        }
+        if (nut_b > 0)
+            translate([-nut_b / 2, 0, -1]) cube([nut_b, bohrung / 2 + nut_t, g.nabe_o + 2]);
+        if (loecher > 0) for (i = [0 : loecher - 1])
+            rotate([0, 0, i * 360 / loecher + 180 / z])
+                translate([(g.fuss + nabe_d / 2) / 2, 0, -1]) cylinder(h = b + 2, d = (g.fuss - nabe_d / 2) * 0.55);
+    }
+    anchor achse = g[achse, _, oben], dir = [0, 0, 1];
+}
+
+m = 2;
+z1 = 20;
+z2 = 12;
+achsabstand = m * (z1 + z2) / 2;
+
+rad1: zahnrad(m = m, z = z1, bohrung = 8, nabe_d = 18, nabe_h = 6, loecher = 5);
+translate([achsabstand, 0, 0]) rotate([0, 0, 180 + 180 / z2])
+    rad2: zahnrad(m = m, z = z2, bohrung = 5, nut_b = 0, d_flach = 2);

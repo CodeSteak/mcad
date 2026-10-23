@@ -1,0 +1,58 @@
+// Teile: Pflanztopf (loft vom abgerundeten Quadrat zum Kreis) und Untersetzer
+// (rotate_extrude, mit shell geöffnet). Per use eingebunden; Maße aus masse.scad.
+include <masse.scad>
+
+module topf(unten = topf_unten, oben_d = topf_oben_d, h = topf_h, t = wand, b = boden, fh = fuss_h) {
+    grid g {
+        x: mitte = 0, fuss = unten / 2 - 9;
+        y: mitte_y = 0;
+        z: aufstand = 0, boden_u = fh, boden_o = fh + b, rand = fh + h;
+    }
+    difference() {
+        union() {
+            // Hohlkörper als Differenz zweier Lofts (shell eines solchen Lofts scheitert, README: F12)
+            difference() {
+                translate([0, 0, g.boden_u]) loft() {
+                    spline(superellipse(unten / 2));
+                    translate([0, 0, h]) circle(d = oben_d);
+                }
+                translate([0, 0, g.boden_o]) loft() {
+                    spline(superellipse(unten / 2 - t));
+                    translate([0, 0, h - b + 1]) circle(d = oben_d - 2 * t);
+                }
+            }
+            // vier Füße unter den Ecken
+            for (a = [45 : 90 : 315])
+                rotate([0, 0, a]) translate([g.fuss * sqrt(2) * 0.85, 0, g.aufstand])
+                    cylinder(h = fh + 0.5, d = 10, $fillet = 1);
+        }
+        // Abflusslöcher: Mitte und vier im Kreis
+        translate([0, 0, -1]) cylinder(h = fh + b + 2, d = 10);
+        for (a = [0 : 90 : 270])
+            rotate([0, 0, a]) translate([18, 0, -1]) cylinder(h = fh + b + 2, d = 6);
+    }
+    anchor aufstand = g[mitte, mitte_y, aufstand], dir = [0, 0, -1];
+}
+
+module untersetzer(d_innen = 0, h = 16, t = 2.4, rand_r = 1.2) {
+    // Innendurchmesser aus der Diagonale des Topfbodens plus Spalt
+    di = d_innen > 0 ? d_innen : topf_unten * 1.25 + 2 * spalt;
+    grid p {   // Profil: x = Radius, y = Höhe
+        x: achse = 0, boden_r = di / 2 + t, rand = di / 2 + t + 6;
+        y: unten = 0, oben = h;
+    }
+    grid g {
+        z: unten = 0, boden_o = t, oben = h;
+    }
+    fillet(rand_r) {
+        shell(t) {
+            fillet(6) {
+                rotate_extrude() polygon([p[achse, unten], p[boden_r, unten], p[rand, oben], p[achse, oben]]);
+                translate([0, 0, g.unten]) cylinder(h = 1, r = p.rand + 5, center = true);   // Bodenkante
+            }
+            translate([0, 0, g.oben]) cylinder(h = 1, r = p.rand + 5, center = true);       // oben offen
+        }
+        translate([0, 0, g.oben]) cylinder(h = 1, r = p.rand + 5, center = true);           // Rand runden
+    }
+    anchor boden = [0, 0, g.boden_o], dir = [0, 0, 1];
+}

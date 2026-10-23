@@ -1,0 +1,44 @@
+// Zweck: Seifenschale mit Ablauf – Wanne aus einem Quader, senkrechte Ecken und Bodenkanten
+// über Zonen verrundet (verschachtelt, zwei Radien), mit shell oben geöffnet; runde Auflagerippen
+// als cylinder(a, b, r) zwischen Rasterpunkten, Ablaufschlitze zwischen den Rippen
+// (difference(fillet = …)), vier Füße. Maße in mm.
+module seifenschale(l = 115, b = 80, h = 24, wand = 2.2, ecke = 14, n = 7, fuss_h = 3) {
+    pitch = (l - 2 * ecke) / (n - 1);
+    grid g {
+        x: links = 0, mitte_x = l / 2, rechts = l, rippe = [for (i = [0 : n - 1]) ecke + i * pitch],
+           schlitz = [for (i = [0 : n - 2]) ecke + (i + 0.5) * pitch];
+        y: vorne = 0, hinten = b, r_v = 12, r_h = b - 12, mitte = b / 2;
+        z: fuss = 0, boden = fuss_h, innen = fuss_h + wand, rand = fuss_h + h;
+    }
+
+    difference(fillet = 0.6) {
+        union() {
+            shell(wand) {
+                fillet(5) {
+                    fillet(ecke) {
+                        box(g[links, vorne, boden], g[rechts, hinten, rand]);
+                        zone(g[links, vorne, *], d = 1);
+                        zone(g[rechts, vorne, *], d = 1);
+                        zone(g[links, hinten, *], d = 1);
+                        zone(g[rechts, hinten, *], d = 1);
+                    }
+                    zone(g.boden, d = 1);
+                }
+                zone(g.rand, d = 1);    // oben offen
+            }
+            // Auflagerippen (Seife liegt trocken)
+            for (i = [0 : n - 1])
+                cylinder(g[rippe[i], r_v, innen], g[rippe[i], r_h, innen], r = 2);
+            // Füße
+            for (x = [g.links + ecke, g.rechts - ecke], y = [g.vorne + ecke, g.hinten - ecke])
+                translate([x, y, g.fuss]) cylinder(h = fuss_h + 1, d = 10);
+        }
+        // Ablaufschlitze im Boden zwischen den Rippen
+        for (i = [0 : n - 2])
+            box(g[schlitz[i], r_v, fuss] + [-2, 8, -1], g[schlitz[i], r_h, innen] + [2, -8, 1]);
+    }
+
+    anchor auflage = g[mitte_x, mitte, innen] + [0, 0, 2], dir = [0, 0, 1];
+}
+
+schale: seifenschale();
