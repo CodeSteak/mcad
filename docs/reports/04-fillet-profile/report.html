@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Testbericht 4 – Verrundung, Fase, Shell und Profiloperationen</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm 16mm 14mm; }
+  :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
+  * { box-sizing: border-box; }
+  body { font: 10pt/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); margin: 0; }
+  main { max-width: 182mm; margin: 0 auto; }
+  h1 { font-size: 19pt; margin: 0 0 2mm; }
+  h2 { font-size: 13pt; margin: 8mm 0 3mm; border-bottom: 1px solid var(--border); padding-bottom: 1mm; }
+  h3 { font-size: 11pt; margin: 0 0 2mm; }
+  .meta { color: var(--muted); margin-bottom: 5mm; }
+  .summary { display: flex; gap: 3mm; margin: 4mm 0; }
+  .summary div { flex: 1; border: 1px solid var(--border); border-radius: 2mm; padding: 2.5mm; font-size: 9pt; }
+  .summary b { display: block; font-size: 13pt; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 8.6pt; }
+  th, td { border: 1px solid var(--border); padding: 1.3mm 2mm; text-align: left; vertical-align: top; }
+  th { background: var(--head); font-weight: 600; }
+  td.num { text-align: right; white-space: nowrap; }
+  tr.ok td.res { color: var(--ok); font-weight: 600; }
+  tr.bad td.res, tr.bad td:first-child { color: var(--bad); font-weight: 600; }
+  .err { color: var(--bad); font-size: 8pt; margin-top: 1mm; }
+  .tag { font-size: 7pt; color: #fff; background: #0c8599; border-radius: 1mm; padding: 0 1mm; }
+  .tag.alt { background: #6741d9; }
+  ul { margin: 1mm 0 2mm 5mm; padding: 0; }
+  li { margin: 0.6mm 0; }
+  ul.checks { margin: 0 0 0 3.5mm; }
+  ul.checks li { margin: 0; }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 8pt; }
+  pre { margin: 0; padding: 1.5mm 2mm; background: #f6f8fa; border: 1px solid var(--border); border-radius: 1mm; white-space: pre-wrap; word-break: break-word; }
+  .sc, .bug { break-inside: avoid; page-break-inside: avoid; margin: 0 0 7mm; }
+  .pair { display: flex; gap: 2mm; }
+  .pair > div { flex: 1; min-width: 0; }
+  .pair img { max-width: 100%; max-height: 74mm; width: auto; height: auto; border: 1px solid var(--border); display: block; }
+  .side { display: flex; gap: 3mm; align-items: flex-start; }
+  .side > .img { flex: 0 0 auto; max-width: 58%; }
+  .side > .img img { max-width: 100%; max-height: 88mm; width: auto; height: auto; border: 1px solid var(--border); display: block; }
+  .side > .txt { flex: 1; min-width: 0; }
+  .lbl { font-size: 7.5pt; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 1mm 0 0.5mm; }
+  .cap { font-size: 8.8pt; color: var(--muted); margin: 1.5mm 0 0; }
+  .small { font-size: 8.8pt; color: var(--muted); }
+  .bug p { font-size: 9pt; margin: 1.5mm 0 0; }
+  tr, td { break-inside: avoid; page-break-inside: avoid; }
+</style>
+</head>
+<body>
+<main>
+<h1>Testbericht 4 – Verrundung, Fase, Shell und Profiloperationen</h1>
+<div class="meta">Darstellung in der Browser-UI · 23. Oktober 2026 · Commit 76dc53c</div>
+
+<div class="summary">
+  <div>Phase C (Playwright)<b>18 / 18 bestanden</b></div>
+  <div>Phase A/B (Regression)<b>36 / 36</b></div>
+  <div>Vitest<b>153 / 153</b></div>
+  <div>cargo test --workspace<b>202 / 202</b></div>
+  <div>Fehler in fremden Crates<b>3</b></div>
+</div>
+
+<h2>1 Umfang</h2>
+<p>Geprüft und vervollständigt wurde die Darstellung der Spec-Abschnitte „Verrundung und Fase“, „Boolesche Operationen“ (Parameter <code>fillet =</code>/<code>chamfer =</code>), „Profiloperationen und Flächen“, „Primitive/2D“ und „Fehler und Warnungen“ sowie zwei offene Punkte aus Phase A/B.</p>
+<ul>
+  <li><b>fillet/chamfer-Zeile:</b> Zonen blau halbtransparent, ausgewählte Kanten orange, „n Zonen · m Kanten“ am Zeilenende (vorhanden, jetzt mit Pixelprüfung). <b>Neu: Cursor auf einer Zone</b> zeigt nur diese Zone und nur die Kanten des Blocks, die in ihr liegen (in der Ansicht an den Zonen-Meshes geprüft, <code>inside</code>: alle Abtastpunkte, <code>touch</code>: einer); eine Zone über <code>translate</code> ohne Umriss/Koordinatenkreuze der Transformation. Leere Auswahl gelb mit „0 Kanten“, Fehlschlag rot mit roter Kante und Körper ohne Verrundung (Engine), <code>difference(fillet = r)</code>, <code>$fillet</code>/<code>$chamfer</code>, <code>select = "touch"</code> und verschachtelte Blöcke geprüft.</li>
+  <li><b>shell:</b> wie der Zonenblock; <b>neu</b> sind die geöffneten Flächen des Körpers orange gefüllt (Flächen des Körper-Meshes, die vollständig in einer Zone liegen; Anzahl gegen <code>opened_faces</code> der Engine geprüft), auch beim Cursor auf einer Zone.</li>
+  <li><b>Profiloperationen (neu):</b> <code>linear_extrude</code> – Profil als Umriss unten (bei <code>center</code> auf −h/2), Höhengriff oben; <code>rotate_extrude</code> – Profil in der xz-Ebene, Drehachse als gestrichelte Linie, Winkelgriff auf dem Ring; <code>loft</code> – alle Profile als Umrisse an ihrer Lage, Ergebnis halbtransparent; <code>sweep</code> – Pfad als Kurve (kubische Interpolation wie im Kernel), Griffe an Literal-Punkten, Profil am Startpunkt senkrecht zur Starttangente; <code>surface</code> – Kontrollnetz als Linien mit Griffen, Fläche beidseitig; <code>thicken</code> – Fläche als Umriss, Ergebnis voll. Die Griffe (Höhe, Winkel, Pfadpunkte, Kontrollnetz) lieferte cad-eval schon; neu sind ein Test dafür und ihre Darstellung/Prüfung im Browser.</li>
+  <li><b>2D-Formen allein:</b> Umriss mit leichter Füllung in der xy-Ebene; die Warnung bei z-Abweichung von Rasterpunkten erscheint gelb am Zeilenende.</li>
+  <li><b>Neu einpassen:</b> nach einer deutlichen Größenänderung (Diagonale × 1,6 oder Mitte um mehr als die halbe Diagonale verschoben) passt die Ansicht selbst neu ein, solange der Nutzer die Kamera nicht bewegt (und keinen Griff gezogen) hat; sonst erscheint der Knopf „Neu einpassen“.</li>
+  <li><b>Achsgebundenes Ziehen</b> von Punktgriffen: Umschalttaste – Achse des lokalen Systems aus der Mausbewegung; Tasten X/Y/Z – Achse direkt (erneut: frei), auch mitten im Ziehen. Führungslinie in Achsfarbe, Snap nur auf Ziele auf der Achse, die übrigen Komponenten behalten ihren Text.</li>
+  <li><b>Beispiele (neu, im Beispielmenü):</b> griffschale.scad (shell), flasche.scad (rotate_extrude + fillet), lueftungsgitter.scad (linear_extrude + Raster, chamfer =), kabelfuehrung.scad (sweep), freiformdeckel.scad (surface + thicken).</li>
+  <li><b>tools/report/report2-ui.mjs</b> läuft wieder eigenständig: fehlen Vitest-Ergebnisse oder enthält das gemeinsame playwright.json keine Phase-A-Szenarien (es hält nur den letzten Lauf), führt es diese Tests selbst aus.</li>
+</ul>
+<p class="small">Änderungen an Rust-Crates: <code>cad-session</code> – Szenenknoten mit <code>op_info</code> (aufgelöste Parameter von fillet/chamfer/shell inkl. <code>select</code>, zone, linear_extrude, rotate_extrude, loft, sweep-Pfad, surface-Netz, thicken), Protokoll-Typen neu erzeugt; <code>cad-eval</code> – beim freien Ziehen werden Literale, deren Wert sich nicht ändert, nicht neu geschrieben (sonst würde das achsgebundene Ziehen z. B. 5.5 zu 6 runden), Tests für Profil-Griffe; <code>compat-tests</code> – Erwartungen für die fünf neuen Beispiele (der Test verlangt einen Eintrag je Datei in examples/spec).</p>
+
+<h2>2 Testumgebung</h2>
+<table><tr><th style="width:32mm">Betriebssystem</th><td>Linux 6.18.44-fc-v140 (x64)</td></tr><tr><th style="width:32mm">CPU</th><td>Intel(R) Xeon(R) Processor @ 2.80GHz · 4 Kerne</td></tr><tr><th style="width:32mm">Node.js</th><td>v22.22.0</td></tr><tr><th style="width:32mm">Browser</th><td>Chromium 141.0.7390.37 (headless, Playwright 1.56.1)</td></tr><tr><th style="width:32mm">Grafik</th><td>WebGL über SwiftShader (Software-Rendering, keine GPU)</td></tr><tr><th style="width:32mm">Fenster</th><td>1440 × 900 px, Gerätepixelverhältnis 1</td></tr><tr><th style="width:32mm">Build</th><td>Vite 8.3.5 Produktions-Build, Vorschau-Server (vite preview)</td></tr><tr><th style="width:32mm">Bibliotheken</th><td>React 19.3.1, three.js 0.186.1, CodeMirror 6.43.15, Zustand 5.0.16, Vitest 5.0.5</td></tr><tr><th style="width:32mm">Engine</th><td>cad_wasm_bg.wasm 1.18 MiB, smlib.wasm 4.85 MiB (SMLib-Kernel, Emscripten)</td></tr><tr><th style="width:32mm">Quelltext</th><td>Branch worktree-agent-ab88fcc31de0a88e0, Commit 76dc53c</td></tr></table>
+<p class="small">Die End-to-End-Tests laufen gegen den Produktions-Build mit echten Maus- und Tastaturereignissen. Geprüft wird über den Testhaken <code>window.__cad</code> (Darstellungsplan, gezeichnete Kanten nach Art, Zonen-/Flächenprüfung, Kamera, Griffe, Editortext) und über Pixel: für eine Ebene (z. B. <code>edge:selected</code>, <code>open-faces</code>, <code>mode:profile</code>, <code>guide:path</code>) werden die Bildpunkte gezählt, die sich ändern, wenn sie ausgeblendet wird.</p>
+
+<h2>3 Szenarien (Playwright, web/e2e/ui-c.spec.ts)</h2>
+<table>
+<tr><th>ID</th><th>Szenario</th><th>Ergebnis</th><th>Dauer</th><th>Geprüft</th></tr>
+<tr class="ok"><td>C01</td><td>fillet-Zeile: Zonen blau, ausgewählte Kanten farbig, Anzahl am Zeilenende</td><td class="res">bestanden</td><td class="num">4.8 s</td><td><ul class="checks"><li>Darstellung: full@12, blue@17, blue@18</li><li>ausgewählte Kanten gezeichnet: 2</li><li>Pixel der Kanten: 1225, der Zonen: 7447 (Differenz mit/ohne Ebene)</li></ul></td></tr>
+<tr class="ok"><td>C02</td><td>Cursor auf einer Zone: nur diese Zone und ihre Kanten</td><td class="res">bestanden</td><td class="num">3.5 s</td><td><ul class="checks"><li>Zone Kugel: 1 von 2 Kanten, nur blue@18</li><li>Zone Rasterlinie: 1 von 2 Kanten, nur blue@17</li></ul></td></tr>
+<tr class="ok"><td>C03</td><td>Leere Auswahl: Zeile gelb, „0 Kanten“</td><td class="res">bestanden</td><td class="num">2.5 s</td><td><ul class="checks"><li>Zeilenklasse cm-l-warning</li><li>Knotenstatus warning</li><li>keine ausgewählten Kanten gezeichnet</li></ul></td></tr>
+<tr class="ok"><td>C04</td><td>Verrundung gescheitert: Zeile rot, Kante rot, Körper ohne Verrundung</td><td class="res">bestanden</td><td class="num">3.3 s</td><td><ul class="checks"><li>Knotenstatus error, 1 betroffene Kante</li><li>Mesh des fillet-Knotens: 12 Dreiecke (unverrundeter Würfel)</li><li>Pixel der roten Kante: 1184</li></ul></td></tr>
+<tr class="ok"><td>C05</td><td>difference(fillet = r) und $fillet am Primitiv</td><td class="res">bestanden</td><td class="num">4.1 s</td><td><ul class="checks"><li>difference: 2 Kanten gezeichnet</li><li>$fillet: 12 Kanten</li><li>$chamfer am Zylinder: 3 Kanten wie gemeldet</li></ul></td></tr>
+<tr class="ok"><td>C06</td><td>select = &quot;touch&quot; und verschachtelte Blöcke</td><td class="res">bestanden</td><td class="num">4.1 s</td><td><ul class="checks"><li>touch: 5 Kanten, Zone: 5 von 5</li><li>äußerer Block: 5 Kanten, eine Zone (blue@20)</li><li>innerer Block: 2 Kanten</li></ul></td></tr>
+<tr class="ok"><td>C07</td><td>chamfer in allen drei Formen</td><td class="res">bestanden</td><td class="num">3.4 s</td><td><ul class="checks"><li>Zonenblock: 4 Kanten</li><li>union(chamfer =): Schnittkanten &gt; 0</li><li>$chamfer: 12 Kanten</li></ul></td></tr>
+<tr class="ok"><td>C08</td><td>shell: Zone blau, geöffnete Flächen farbig</td><td class="res">bestanden</td><td class="num">4.3 s</td><td><ul class="checks"><li>geöffnete Flächen Ansicht/Engine: 1/1</li><li>Pixel der geöffneten Fläche: 23047</li></ul></td></tr>
+<tr class="ok"><td>C09</td><td>linear_extrude: Profil als Umriss unten, Höhengriff oben</td><td class="res">bestanden</td><td class="num">6.5 s</td><td><ul class="checks"><li>Darstellung full@1, profile@2</li><li>Höhengriff über dem Ursprung</li><li>Pixel des Profils: 1628</li></ul></td></tr>
+<tr class="ok"><td>C10</td><td>rotate_extrude: Profil in der xz-Ebene, Drehachse, Winkelgriff</td><td class="res">bestanden</td><td class="num">13.4 s</td><td><ul class="checks"><li>Darstellung full@1, profile@2</li><li>Achse: Linie x = y = 0 entlang z</li><li>Winkelgriff 270 → 180</li><li>Pixel Achse/Profil: 588/2237</li></ul></td></tr>
+<tr class="ok"><td>C11</td><td>loft: alle Profile als Umrisse, Ergebnis halbtransparent</td><td class="res">bestanden</td><td class="num">4.8 s</td><td><ul class="checks"><li>translucent@9, profile@10/11/12</li><li>Pixel der Profile: 2527</li></ul></td></tr>
+<tr class="ok"><td>C12</td><td>sweep: Pfad als Kurve, Griffe an Literal-Punkten, Profil am Startpunkt</td><td class="res">bestanden</td><td class="num">9.6 s</td><td><ul class="checks"><li>Kurve durch alle 4 Punkte (Abstand &lt; 0,6 mm)</li><li>4 Griffe (Literal)</li><li>Pixel Pfad/Profil: 1853/568</li></ul></td></tr>
+<tr class="ok"><td>C13</td><td>surface und thicken: Kontrollnetz mit Griffen, Fläche beidseitig, Fläche als Umriss</td><td class="res">bestanden</td><td class="num">11.5 s</td><td><ul class="checks"><li>8 Netzlinien, 16 Griffe</li><li>mittlerer Punkt gezogen</li><li>thicken: full@1, profile@2</li><li>bedeckte Pixel der offenen Fläche von oben/unten: 229152/224965</li></ul></td></tr>
+<tr class="ok"><td>C14</td><td>2D-Formen allein: Umriss mit Füllung, z-Abweichung als Warnung</td><td class="res">bestanden</td><td class="num">3.3 s</td><td><ul class="checks"><li>Warnung in Zeile 6 (Diagnose und Zeilenklasse)</li><li>alle Darstellungen flach</li><li>Pixel Flächenfarbe: 310</li></ul></td></tr>
+<tr class="ok"><td>C15</td><td>Ansicht nach deutlicher Größenänderung neu einpassen</td><td class="res">bestanden</td><td class="num">6.2 s</td><td><ul class="checks"><li>automatisch: Abstand &gt; 3 × vorher</li><li>kleine Änderung: Kamera unverändert</li><li>nach Drehen: Knopf, Kamera unverändert</li><li>Knopf: eingepasst, Knopf weg</li></ul></td></tr>
+<tr class="ok"><td>C16</td><td>Punktgriff achsgebunden ziehen (Umschalttaste, X/Y/Z)</td><td class="res">bestanden</td><td class="num">31.0 s</td><td><ul class="checks"><li>Umschalt: 27, 5.5, 2.25 (nur x geändert)</li><li>erst frei, dann Taste Z: 29, 7, 19 (x, y wie beim Drücken von Z)</li></ul></td></tr>
+<tr class="ok"><td>C17</td><td>Neue Beispiele im Menü</td><td class="res">bestanden</td><td class="num">12.8 s</td><td>griffschale.scad: shell mit Zone g.oben, Kabelausgang per difference, Schraubdome mit difference(fillet = 0.5) (Cursor Zeile 12: full@12, blue@14) · flasche.scad: rotate_extrude eines Polygons aus Rasterpunkten, fillet(3) mit zwei Zonen, Teilumlauf 270° (Cursor Zeile 11: full@11, profile@12) · lueftungsgitter.scad: linear_extrude für Rahmen und Schlitze an indizierten Rasterebenen, difference(chamfer = 0.6) (Cursor Zeile 12: full@12, profile@12) · kabelfuehrung.scad: sweep eines U-Profils entlang eines Spline-Pfads aus Rasterpunkten und Literalen, linearer Kanal (Cursor Zeile 16: full@16, profile@17) · freiformdeckel.scad: surface aus einem 4 × 4-Netz (Rasterrand, Wölbung als Literale), thicken(2) (Cursor Zeile 11: full@11)</td></tr>
+<tr class="ok"><td>C18</td><td>Messwerte: Auswertzeit fillet, chamfer, shell, sweep, loft, surface</td><td class="res">bestanden</td><td class="num">23.4 s</td><td>fillet(r) Zonenblock, 4 Kanten: Kernel 163 ms (Median aus 5), SetSource → Szene 171 ms · difference(fillet = r), 4 Bohrungen: Kernel 284 ms (Median aus 5), SetSource → Szene 379 ms · chamfer, 12 Kanten ($chamfer): Kernel 148 ms (Median aus 5), SetSource → Szene 155 ms · shell(1.6) eines gefasten Quaders ($chamfer = 4): Kernel 335 ms (Median aus 5), SetSource → Szene 340 ms · sweep, Spline-Pfad mit 4 Punkten: Kernel 193 ms (Median aus 5), SetSource → Szene 195 ms · loft, 3 Profile: Kernel 36 ms (Median aus 5), SetSource → Szene 42 ms · thicken(surface) 4 × 4: Kernel 397 ms (Median aus 5), SetSource → Szene 403 ms</td></tr>
+</table>
+<p class="small">Regression im selben Lauf: Phase A (web/e2e/ui.spec.ts) 22 / 22, Phase B (web/e2e/ui-b.spec.ts) 14 / 14 bestanden.</p>
+
+<h2>4 Unit- und Rust-Tests</h2>
+<table><tr><th>Vitest-Datei</th><th>bestanden</th><th>Fehlgeschlagen</th></tr><tr class="ok"><td>web/src/editor/decorations.test.ts</td><td class="num">7 / 7</td><td>–</td></tr>
+<tr class="ok"><td>web/src/editor/editGroup.test.ts</td><td class="num">7 / 7</td><td>–</td></tr>
+<tr class="ok"><td>web/src/editor/lang.test.ts</td><td class="num">47 / 47</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/context.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/curves.test.ts <span class="tag">neu</span></td><td class="num">5 / 5</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/display.test.ts <span class="tag alt">erweitert</span></td><td class="num">23 / 23</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/drag.test.ts <span class="tag alt">erweitert</span></td><td class="num">12 / 12</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/format.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/grids.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/handles.test.ts</td><td class="num">12 / 12</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/params.test.ts</td><td class="num">7 / 7</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/positions.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/sceneIndex.test.ts</td><td class="num">9 / 9</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/zones.test.ts <span class="tag">neu</span></td><td class="num">4 / 4</td><td>–</td></tr></table>
+<p class="small">Neu: kubische Pfad-Interpolation, Startrahmen des Profils, Punkt-in-Mesh mit Toleranz, Kanten in einer Zone (inside/touch), geöffnete Flächen, Kriterium für das Neu-Einpassen. Erweitert: Darstellungsplan für Profiloperationen, Zonen und shell (Fixture <code>profile.scad</code> aus der echten Engine), achsgebundenes Ziehen.</p>
+<table><tr><th>Rust-Testprogramm (cargo test --workspace)</th><th>bestanden</th><th>neue/geänderte Tests</th></tr><tr class="ok"><td>tests/cli.rs</td><td class="num">7 / 7</td><td>–</td></tr>
+<tr class="ok"><td>src/lib.rs</td><td class="num">5 / 5</td><td>–</td></tr>
+<tr class="ok"><td>tests/engine.rs</td><td class="num">22 / 22</td><td>–</td></tr>
+<tr class="ok"><td>tests/spec_examples.rs</td><td class="num">2 / 2</td><td>–</td></tr>
+<tr class="ok"><td>tests/expr.rs</td><td class="num">25 / 25</td><td>–</td></tr>
+<tr class="ok"><td>tests/grids.rs</td><td class="num">14 / 14</td><td>–</td></tr>
+<tr class="ok"><td>tests/handles.rs</td><td class="num">26 / 26</td><td><code>profile_operation_handles</code>, <code>unchanged_literals_keep_their_text</code></td></tr>
+<tr class="ok"><td>tests/limits.rs</td><td class="num">8 / 8</td><td>–</td></tr>
+<tr class="ok"><td>tests/openscad_compat.rs</td><td class="num">1 / 1</td><td>–</td></tr>
+<tr class="ok"><td>tests/openscad_deviations.rs</td><td class="num">10 / 10</td><td>–</td></tr>
+<tr class="ok"><td>tests/tree.rs</td><td class="num">24 / 24</td><td>–</td></tr>
+<tr class="ok"><td>tests/render.rs</td><td class="num">3 / 3</td><td>–</td></tr>
+<tr class="ok"><td>tests/protocol_ts.rs</td><td class="num">1 / 1</td><td>–</td></tr>
+<tr class="ok"><td>tests/session.rs</td><td class="num">8 / 8</td><td>–</td></tr>
+<tr class="ok"><td>src/lib.rs</td><td class="num">16 / 16</td><td>–</td></tr>
+<tr class="ok"><td>tests/openscad_compat.rs</td><td class="num">1 / 1</td><td>–</td></tr>
+<tr class="ok"><td>tests/spec_models.rs</td><td class="num">1 / 1</td><td><code>spec_models_stage1</code></td></tr>
+<tr class="ok"><td>tests/tree_bounds.rs</td><td class="num">1 / 1</td><td>–</td></tr>
+<tr class="ok"><td>tests/kernel.rs</td><td class="num">27 / 27</td><td>–</td></tr></table>
+
+<h2>5 Messwerte</h2>
+<table><tr><th>Modell</th><th>Kernel / gesamt</th><th>Messung</th></tr><tr><td>fillet(r) Zonenblock, 4 Kanten</td><td class="num">163 ms / 171 ms</td><td>Kernel-Zeit der vollständigen Szene / SetSource → Szene in der App, Median aus 5 Varianten (Einzelwerte Kernel 263, 164, 89, 100, 163 ms)</td></tr>
+<tr><td>difference(fillet = r), 4 Bohrungen</td><td class="num">284 ms / 379 ms</td><td>Kernel-Zeit der vollständigen Szene / SetSource → Szene in der App, Median aus 5 Varianten (Einzelwerte Kernel 374, 284, 336, 250, 258 ms)</td></tr>
+<tr><td>chamfer, 12 Kanten ($chamfer)</td><td class="num">148 ms / 155 ms</td><td>Kernel-Zeit der vollständigen Szene / SetSource → Szene in der App, Median aus 5 Varianten (Einzelwerte Kernel 203, 142, 148, 109, 178 ms)</td></tr>
+<tr><td>shell(1.6) eines gefasten Quaders ($chamfer = 4)</td><td class="num">335 ms / 340 ms</td><td>Kernel-Zeit der vollständigen Szene / SetSource → Szene in der App, Median aus 5 Varianten (Einzelwerte Kernel 335, 343, 252, 179, 447 ms)</td></tr>
+<tr><td>sweep, Spline-Pfad mit 4 Punkten</td><td class="num">193 ms / 195 ms</td><td>Kernel-Zeit der vollständigen Szene / SetSource → Szene in der App, Median aus 5 Varianten (Einzelwerte Kernel 178, 134, 354, 228, 193 ms)</td></tr>
+<tr><td>loft, 3 Profile</td><td class="num">36 ms / 42 ms</td><td>Kernel-Zeit der vollständigen Szene / SetSource → Szene in der App, Median aus 5 Varianten (Einzelwerte Kernel 54, 24, 53, 23, 36 ms)</td></tr>
+<tr><td>thicken(surface) 4 × 4</td><td class="num">397 ms / 403 ms</td><td>Kernel-Zeit der vollständigen Szene / SetSource → Szene in der App, Median aus 5 Varianten (Einzelwerte Kernel 397, 307, 541, 359, 510 ms)</td></tr>
+<tr><td>Größte Bilddatei im Bericht</td><td class="num">148 KiB</td><td>JPEG, Qualität 82</td></tr></table>
+<p class="small">Jede Variante hat andere Parameter (kein Cache-Treffer im betroffenen Knoten). „Gesamt“ ist SetSource bis zur vollständigen Szene im Worker einschließlich Sprachauswertung und Tessellierung; die Zeiten stammen aus headless Chromium mit SwiftShader auf 4 Kernen.</p>
+
+<h2>6 Bekannte Grenzen und Abweichungen</h2>
+<ul>
+  <li><b>Kanten einer Zone, geöffnete Flächen:</b> die Ansicht prüft an den tessellierten Zonen-Meshes (Toleranz 1,5 × Sehnenfehler); die Engine wählt mit der exakten Kernel-Klassifikation. In Grenzfällen (Kante genau auf einer gekrümmten Zonenfläche) kann die Ansicht abweichen; im Test stimmen Anzahl und Engine überein.</li>
+  <li><b>sweep-Pfad:</b> die Kurve wird in der UI nach demselben Verfahren wie in der SMLib-Fassade interpoliert (kubisch, Sehnenlängen, bei drei Punkten zwei Zusatzpunkte); ändert sich das Verfahren im Kernel, weicht die Anzeige ab. Der Startrahmen folgt sc_sweep (x = globales X in die Normalebene projiziert).</li>
+  <li><b>Profil von linear_extrude/rotate_extrude:</b> gezeigt wird das Mesh der direkten Kinder (2D, flach in ihrer Ebene); z-Verschiebungen von 2D-Transformationen gehen dabei wie in der Engine verloren.</li>
+  <li><b>Zone über translate:</b> der Cursor auf der Zone zeigt nur Zone und Kanten, nicht das Koordinatenkreuz der Transformation (Spec-Zeile „Cursor auf einer Zone“ geht vor); der Griff am Zonenmittelpunkt bleibt.</li>
+  <li><b>Neu einpassen:</b> automatisch nur, solange die Kamera seit dem letzten Einpassen nicht gedreht/verschoben/gezoomt und kein Griff gezogen wurde; „Alles zeigen“ und die Standardansichten stellen diesen Zustand wieder her.</li>
+  <li><b>Achsgebunden:</b> Achsen des lokalen Systems des Griffs (bei 2D-Punkten nur x/y); mit Umschalt wartet der Griff, bis 6 px Bewegung die Achse bestimmen. Wird die Achse erst während des Ziehens gewählt, geht die Achslinie durch die aktuelle Lage.</li>
+  <li><b>Offene Fläche neben Körpern</b> auf oberster Ebene ist eine implizite Vereinigung und damit ein Fehler („zuerst thicken“) – Spec-konform, im Test getrennt geladen.</li>
+  <li>Einige Ergebnisse hängen am Kernel: dose_shell.scad ist wegen F1 derzeit rot (Zeile rot, Körper ohne shell); griffschale.scad verwendet deshalb $chamfer = 4 (auf beiden Plattformen ein korrekter Hohlkörper); die Tests C08, C17 und C18 prüfen zusätzlich, dass ein „ok“-Knoten Geometrie hat.</li>
+</ul>
+
+<h2>7 Gefundene Fehler in fremden Crates</h2>
+<p class="small">Nicht behoben (andere Crates als dieser Auftrag); minimale Beispiele zum Nachstellen im Browser oder mit <code>cad check datei.scad</code> (cad-cli, nativer Kernel).</p>
+<section class="bug"><h3>F1 shell eines verrundeten Körpers: leeres oder falsches Ergebnis ohne Fehler, sonst Fehler je nach Maßen, Zonen, Plattform und Verlauf</h3><div class="small"><b>Crate:</b> kernel-smlib / smlib (sc_shell), Meldung in cad-engine</div><pre>grid g { z: o = 18; }
+shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 5); zone(g.o, d = 1); } // ok, aber leer
+shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 6); zone(g.o, d = 1); } // ok, Außenwand fehlt
+shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 3); zone(g.o, d = 1); } // SM_ERR (1001)
+// Maße von examples/spec/dose_shell.scad (dort mit grid g { z: o = 30; }):
+shell(1.5) { box([0, 0, 0], [50, 35, 30], $fillet = 4); zone(g.o, d = 1); } // self-overlapping</pre><p>Im Browser (Wasm): $fillet = 5 meldet „ok · 1 Fläche geöffnet“, das Ergebnis hat aber 0 Dreiecke und keine Bounds – die Ansicht zeigt nichts, ohne Fehler. $fillet = 6 meldet ok, die Bounds sind 1,6 … 88,4 statt 0 … 90: es fehlt die Außenwand, übrig ist nur die nach innen versetzte Fläche. $fillet = 3 scheitert mit „SmApiShellBrepFull failed: SM_ERR (1001)“, die Maße von dose_shell.scad mit „shell produced an invalid (self-overlapping) solid at 11 face(s)“ (auch nativ) – dose_shell.scad ist deshalb rot. Nativ (cad check) weichen die Ergebnisse ab ($fillet = 6 scheitert dort mit SM_ERR, leere Ergebnisse meldet cad check nicht). Außerdem hängt das Ergebnis von einer zusätzlichen Zone ab, die keine Fläche öffnet (translate([90, 17, 8]) cube([4, 10, 6], center = true)), und davon, was vorher in derselben Sitzung ausgewertet wurde. Zwei benachbarte geöffnete Flächen (zone(g.oben) und zone(g.vorn)) scheitern mit SM_ERR (1001). Scharfkantige und gefaste Körper ($chamfer) ergeben korrekte Hohlkörper. Vorschlag: Ergebnis prüfen (Volumen, Bounds) und ein leeres oder ungültiges Ergebnis als Fehler melden.</p></section>
+<section class="bug"><h3>F2 surface(points) mit 2 × 2 oder 3 × 3 Kontrollpunkten scheitert</h3><div class="small"><b>Crate:</b> kernel-smlib (nurbs_surface)</div><pre>surface(points = [[[0, 0, 0], [20, 0, 6]], [[0, 20, 6], [20, 20, 0]]]);</pre><p>„surface gescheitert: SmApiCreateSurfaceFromOrderedPoints failed: SM_ERR (1001)“, ebenso für 3 × 3. cad-eval nimmt ab 2 × 2 Punkte an, die Spec nennt kein Minimum; 4 × 4 funktioniert. Vorschlag: Grad an die Punktzahl anpassen (wie interp_curve bei drei Pfadpunkten).</p></section>
+<section class="bug"><h3>F3 Nahtkanten zählen als eigene Kanten eines Primitivs</h3><div class="small"><b>Crate:</b> cad-engine ($fillet / $chamfer)</div><pre>cylinder(h = 10, r = 5, $chamfer = 1);   // „3 Kanten“
+sphere(5, $fillet = 1);                    // Fehler</pre><p>Beim Zylinder werden Deckel-, Boden- und die Nahtkante ausgewählt („3 Kanten“, gezeichnet 3); bei der Kugel nur die Naht („1 Kante“), und die Verrundung scheitert mit „fillet: none of the edges can be blended (smooth, seam or open edges)“ – Zeile rot statt „0 Kanten“ bzw. ohne Wirkung. Glatte Naht- und Polkanten sollten nicht ausgewählt werden.</p></section>
+
+<h2>8 Screenshots und Codeausschnitte</h2>
+<section class="sc">
+<h3>C01 fillet-Zeile</h3>
+<div class="side"><div class="img"><div class="lbl">Cursor auf fillet(2)</div><img src="img/c01-fillet.jpg" alt="fillet-Zeile: Cursor auf fillet(2)"></div><div class="txt"><div class="lbl">Code</div><pre>    fillet(1) {
+        fillet(2) {
+            difference() {
+                box(g[links, vorne, boden], g[rechts, hinten, deckel]);
+                translate(p) cylinder(h = h + 1, r = 4);
+            }
+            zone(g[rechts, *, deckel], d = 2);     // obere rechte Kante
+            translate(p + [0, 0, h]) sphere(6);   // Bohrungskante oben
+        }
+        zone(g.boden, d = 1);                     // alle Bodenkanten (äußerer Radius)
+    }</pre><p class="cap">fillet_zonen.scad, Modul block, Cursor auf fillet(2) (Zeile 12): Körper voll, Rest gedimmt; die beiden Zonen (Zylinder um die Rasterlinie g[rechts, *, deckel] und die Kugel über der Bohrung) blau halbtransparent, die zwei ausgewählten Kanten orange; am Zeilenende „2 Zonen · 2 Kanten“.</p></div></div>
+</section>
+<section class="sc">
+<h3>C02 Cursor auf einer Zone</h3>
+<div class="pair"><div><div class="lbl">Zone Kugel (Zeile 18)</div><img src="img/c02-zone-kugel.jpg" alt="Cursor auf einer Zone: Zone Kugel (Zeile 18)"></div><div><div class="lbl">Zone Rasterlinie (Zeile 17)</div><img src="img/c02-zone-linie.jpg" alt="Cursor auf einer Zone: Zone Rasterlinie (Zeile 17)"></div></div>
+<div class="lbl">Code</div><pre>        fillet(2) {
+            difference() {
+                box(g[links, vorne, boden], g[rechts, hinten, deckel]);
+                translate(p) cylinder(h = h + 1, r = 4);
+            }
+            zone(g[rechts, *, deckel], d = 2);     // obere rechte Kante
+            translate(p + [0, 0, h]) sphere(6);   // Bohrungskante oben
+        }</pre><p class="cap">Cursor auf einer Zone des Blocks fillet(2): nur diese Zone ist blau, von den zwei ausgewählten Kanten des Blocks ist nur die Kante in dieser Zone orange (Kugel: obere Bohrungskante; Rasterlinie: obere rechte Kante). Der Griff am Zonenmittelpunkt (translate) snappt auf Raster (Phase B, B10).</p>
+</section>
+<section class="sc">
+<h3>C03 Leere Auswahl</h3>
+<div class="side"><div class="img"><div class="lbl">Editor und Ansicht</div><img src="img/c03-leer.jpg" alt="Leere Auswahl: Editor und Ansicht"></div><div class="txt"><div class="lbl">Code</div><pre>fillet(2) {
+    cube(20);
+    translate([20, 0, 20]) sphere(3);   // berührt nur die Ecke
+}</pre><p class="cap">Die Kugel berührt den Würfel nur an der Ecke, keine Kante liegt vollständig in der Zone: Zeile 1 gelb markiert, am Zeilenende „1 Zone · 0 Kanten“ und die Warnung; die Ansicht zeigt den Würfel unverändert (Warnung, kein Fehler).</p></div></div>
+</section>
+<section class="sc">
+<h3>C04 Verrundung gescheitert</h3>
+<div class="side"><div class="img"><div class="lbl">Editor und Ansicht</div><img src="img/c04-fehler.jpg" alt="Verrundung gescheitert: Editor und Ansicht"></div><div class="txt"><div class="lbl">Code</div><pre>fillet(25) {
+    cube(20);
+    translate([20, 10, 20]) cube([2, 22, 2], center = true);
+}</pre><p class="cap">fillet(25) an einer Kante eines 20-mm-Würfels: Zeile 1 rot mit der Kernel-Meldung am Zeilenende, die betroffene Kante rot; die Ansicht zeigt den Würfel ohne Verrundung (Mesh des Knotens = Mesh des Körpers, 12 Dreiecke).</p></div></div>
+</section>
+<section class="sc">
+<h3>C05 fillet = an Booleans, $fillet/$chamfer an Primitiven</h3>
+<div class="pair"><div><div class="lbl">difference(fillet = 1)</div><img src="img/c05-difference.jpg" alt="fillet = an Booleans, $fillet/$chamfer an Primitiven: difference(fillet = 1)"></div><div><div class="lbl">cube(10, $fillet = 1)</div><img src="img/c05-dollar-fillet.jpg" alt="fillet = an Booleans, $fillet/$chamfer an Primitiven: cube(10, $fillet = 1)"></div></div>
+<div class="lbl">Code</div><pre>difference(fillet = 1) {
+    cube(20);
+    translate([10, 10, -1]) cylinder(h = 30, r = 4);
+}
+translate([30, 0, 0]) cube(10, $fillet = 1);
+translate([50, 0, 0]) cylinder(h = 10, r = 5, $chamfer = 1);</pre><p class="cap">difference(fillet = 1): die zwei durch die Bohrung neu entstandenen Kanten orange, abgezogener Zylinder rot halbtransparent, „2 Kanten“ am Zeilenende. $fillet = 1 am Würfel: alle 12 eigenen Kanten, „12 Kanten“; $chamfer = 1 am Zylinder: die Kanten, die die Engine meldet (3: oben, unten und die Naht – siehe gefundene Fehler).</p>
+</section>
+<section class="sc">
+<h3>C06 select = &quot;touch&quot;, verschachtelte Blöcke</h3>
+<div class="pair"><div><div class="lbl">fillet(1.5, select = &quot;touch&quot;)</div><img src="img/c06-touch.jpg" alt="select = &quot;touch&quot;, verschachtelte Blöcke: fillet(1.5, select = &quot;touch&quot;)"></div><div><div class="lbl">äußerer Block fillet(1)</div><img src="img/c06-aussen.jpg" alt="select = &quot;touch&quot;, verschachtelte Blöcke: äußerer Block fillet(1)"></div></div>
+<div class="lbl">Code</div><pre>    fillet(1) {
+        fillet(2) {
+            difference() {
+                box(g[links, vorne, boden], g[rechts, hinten, deckel]);
+                translate(p) cylinder(h = h + 1, r = 4);
+            }
+            zone(g[rechts, *, deckel], d = 2);     // obere rechte Kante
+            translate(p + [0, 0, h]) sphere(6);   // Bohrungskante oben
+        }
+        zone(g.boden, d = 1);                     // alle Bodenkanten (äußerer Radius)
+    }
+
+    translate([0, d + 10, 0]) fillet(1.5, select = &quot;touch&quot;) {
+        box(g[links, vorne, boden], g[rechts, hinten, deckel]);
+        zone(g[links, vorne, *], d = 1);
+    }</pre><p class="cap">select = &quot;touch&quot;: die Zone um die senkrechte Rasterlinie g[links, vorne, *] erfasst die senkrechte Kante und die vier Kanten, die sie an den Enden berühren (auf ganzer Länge), „5 Kanten“; Cursor auf der Zone: alle 5 in dieser Zone. Verschachtelt: der innere Block fillet(2) wählt 2 Kanten, der äußere fillet(1) mit der Zone g.boden die 5 Bodenkanten (vier Außenkanten und die Bohrungskante).</p>
+</section>
+<section class="sc">
+<h3>C07 chamfer</h3>
+<div class="side"><div class="img"><div class="lbl">chamfer(1) mit Zone g.o</div><img src="img/c07-chamfer.jpg" alt="chamfer: chamfer(1) mit Zone g.o"></div><div class="txt"><div class="lbl">Code</div><pre>chamfer(1) {
+    box(g[a, v, u], g[b, h, o]);
+    zone(g.o, d = 1);
+}
+
+translate([0, 35, 0]) union(chamfer = 0.5) {
+    cube([30, 10, 5]);
+    translate([10, 0, 0]) cube([10, 10, 15]);
+}
+
+translate([50, 0, 0]) cube(10, $chamfer = 1);</pre><p class="cap">chamfer(1) { box; zone(g.o) }: die vier oberen Kanten orange, Zone blau; union(chamfer = 0.5) markiert die Schnittkanten der beiden Quader, $chamfer = 1 die 12 Würfelkanten.</p></div></div>
+</section>
+<section class="sc">
+<h3>C08 shell</h3>
+<div class="pair"><div><div class="lbl">Cursor auf shell(wand)</div><img src="img/c08-shell.jpg" alt="shell: Cursor auf shell(wand)"></div><div><div class="lbl">Cursor auf der Zone</div><img src="img/c08-shell-zone.jpg" alt="shell: Cursor auf der Zone"></div></div>
+<div class="lbl">Code</div><pre>    difference() {
+        shell(wand) {
+            box(g[hinten, links, boden], g[vorn, rechts, oben], $chamfer = 4);
+            zone(g.oben, d = 1);    // Deckelseite offen
+        }
+        translate(g[vorn, mitte, 9]) cube([8, 10, 6], center = true); // Kabelausgang
+    }</pre><p class="cap">griffschale.scad (neu), Modul griffschale: Cursor auf shell(wand): Hohlkörper voll, Zone (Platte um g.oben) blau, die geöffnete Oberseite des Körpers orange – in der Ansicht aus den Zonen-Meshes bestimmt (1 Fläche, wie die Engine meldet); „1 Zone · 1 Fläche geöffnet“ am Zeilenende. Cursor auf der Zone: nur diese Zone und ihre Fläche.</p>
+</section>
+<section class="sc">
+<h3>C09 linear_extrude</h3>
+<div class="pair"><div><div class="lbl">vorher</div><img src="img/c09-vorher.jpg" alt="linear_extrude: vorher"></div><div><div class="lbl">Höhe gezogen → 21</div><img src="img/c09-nachher.jpg" alt="linear_extrude: Höhe gezogen → 21"></div></div>
+<div class="lbl">Code</div><pre>linear_extrude(height = 15, twist = 30)
+    translate([-10, -5]) square([20, 10]);
+translate([40, 0, 0]) linear_extrude(8, center = true) circle(6);
+// nach dem Ziehen:
+linear_extrude(height = 21, twist = 30)</pre><p class="cap">Cursor auf linear_extrude: Körper voll, das Profil (Rechteck) als Umriss in Profilfarbe unten in der xy-Ebene, sichtbar durch den Körper; Höhengriff oben auf der Achse. Griff mit der Maus nach oben gezogen: height = 15 → 21. Bei center = true liegt der Umriss auf −h/2.</p>
+</section>
+<section class="sc">
+<h3>C10 rotate_extrude</h3>
+<div class="pair"><div><div class="lbl">angle = 270</div><img src="img/c10-vorher.jpg" alt="rotate_extrude: angle = 270"></div><div><div class="lbl">Winkelgriff auf 180° gezogen</div><img src="img/c10-nachher.jpg" alt="rotate_extrude: Winkelgriff auf 180° gezogen"></div></div>
+<div class="lbl">Code</div><pre>rotate_extrude(angle = 270)
+    translate([12, 0]) square([4, 20]);
+// nach dem Ziehen:
+rotate_extrude(angle = 180)</pre><p class="cap">Cursor auf rotate_extrude: Körper voll, das Profil (Rechteck x = 12…16, y = 0…20) als Umriss in der xz-Ebene (Profil-y wird z), die Drehachse z als gestrichelte Linie, der Winkelgriff auf dem Ring um z. Ring mit der Maus auf 180° gezogen: angle = 270 → 180 (Raster 15°).</p>
+</section>
+<section class="sc">
+<h3>C11 loft</h3>
+<div class="side"><div class="img"><div class="lbl">Cursor auf loft()</div><img src="img/c11-loft.jpg" alt="loft: Cursor auf loft()"></div><div class="txt"><div class="lbl">Code</div><pre>loft() {
+    circle(10);
+    translate([0, 0, 15]) square(14, center = true);
+    translate([0, 0, 30]) circle(4);
+}</pre><p class="cap">loft_sweep.scad, Cursor auf loft(): Ergebnis halbtransparent, alle drei Profile (Kreis unten, Quadrat auf z = 15, Kreis auf z = 30) als Umrisse an ihrer Lage.</p></div></div>
+</section>
+<section class="sc">
+<h3>C12 sweep</h3>
+<div class="pair"><div><div class="lbl">vorher</div><img src="img/c12-vorher.jpg" alt="sweep: vorher"></div><div><div class="lbl">dritten Pfadpunkt gezogen</div><img src="img/c12-nachher.jpg" alt="sweep: dritten Pfadpunkt gezogen"></div></div>
+<div class="lbl">Code</div><pre>sweep(path = [[0, 0, 0], [20, 0, 10], [40, 10, 10], [60, 10, 0]], interp = &quot;spline&quot;)
+    circle(3);
+// nach dem Ziehen:
+sweep(path = [[0, 0, 0], [20, 0, 10], [39, 12, 14], [60, 10, 0]], interp = &quot;spline&quot;)</pre><p class="cap">Cursor auf sweep: Pfad als Kurve (kubischer Spline durch die Punkte wie im Kernel, Sehnenlängen-Parameter), ein Griff an jedem Literal-Punkt, das Profil (Kreis) als Umriss am Startpunkt senkrecht zur Starttangente. Den dritten Punkt mit Alt frei gezogen: nur dieses Literal ändert sich, Kurve und Körper folgen.</p>
+</section>
+<section class="sc">
+<h3>C13 surface und thicken</h3>
+<div class="pair"><div><div class="lbl">Cursor auf surface: Kontrollnetz</div><img src="img/c13-netz.jpg" alt="surface und thicken: Cursor auf surface: Kontrollnetz"></div><div><div class="lbl">Cursor auf thicken(2)</div><img src="img/c13-thicken.jpg" alt="surface und thicken: Cursor auf thicken(2)"></div><div><div class="lbl">offene Fläche von unten</div><img src="img/c13-unten.jpg" alt="surface und thicken: offene Fläche von unten"></div></div>
+<div class="lbl">Code</div><pre>thicken(2)
+    surface(points = [
+        [[0, 0, 0], [10, 0, 3], [20, 0, 3], [30, 0, 0]],
+        [[0, 10, 3], [10, 10, 10], [20, 10, 10], [30, 10, 3]],
+        [[0, 20, 3], [10, 20, 10], [20, 20, 12], [30, 20, 3]],
+        [[0, 30, 0], [10, 30, 3], [20, 30, 3], [30, 30, 0]]
+    ]);
+// nach dem Ziehen (Zeile 4):
+        [[0, 10, 3], [9, 11, 12], [20, 10, 10], [30, 10, 3]],
+// Fläche allein:
+surface(points = [for (i = [0:3]) [for (j = [0:3]) [i * 8, j * 8, (i - 1.5) * (j - 1.5)]]]);</pre><p class="cap">Cursor auf surface (4 × 4): Kontrollnetz (4 Zeilen + 4 Spalten als Linien) mit einem Griff an jedem Kontrollpunkt. Einen inneren Punkt mit Alt nach oben gezogen: nur sein Literal ändert sich. Cursor auf thicken(2): Ergebnis voll, die Fläche als Umriss. Eine offene Fläche allein (berechnete Punkte, gesperrte Griffe) wird beidseitig gerendert: von oben und von unten sichtbar.</p>
+</section>
+<section class="sc">
+<h3>C14 2D-Formen allein</h3>
+<div class="side"><div class="img"><div class="lbl">Editor und Ansicht von oben</div><img src="img/c14-2d.jpg" alt="2D-Formen allein: Editor und Ansicht von oben"></div><div class="txt"><div class="lbl">Code</div><pre>grid g {
+    x: a = 0, b = 30;
+    y: v = 0, h = 20;
+    z: u = 0, o = 4;
+}
+polygon([g[a, v, u], g[b, v, u], g[b, h, o], g[a, h, u]]);
+translate([40, 0]) circle(8);</pre><p class="cap">Nur 2D-Formen: Umriss mit leichter Füllung in der xy-Ebene (Ansicht von oben). Der Rasterpunkt g[b, h, o] hat z = 4: Zeile 6 gelb mit „z-Koordinate ignoriert: 2D-Formen liegen in der xy-Ebene“ am Zeilenende.</p></div></div>
+</section>
+<section class="sc">
+<h3>C15 Ansicht neu einpassen</h3>
+<div class="pair"><div><div class="lbl">Kamera bewegt, Modell 5× größer: Knopf</div><img src="img/c15-knopf.jpg" alt="Ansicht neu einpassen: Kamera bewegt, Modell 5× größer: Knopf"></div><div><div class="lbl">nach „Neu einpassen“</div><img src="img/c15-eingepasst.jpg" alt="Ansicht neu einpassen: nach „Neu einpassen“"></div></div>
+<div class="lbl">Code</div><pre>cube(10);  →  cube(60);  →  cube(62);  →  (Drehen)  →  cube(300);</pre><p class="cap">Solange der Nutzer die Kamera nicht bewegt hat, wird nach einer deutlichen Größenänderung (Diagonale × 1,6 oder Mitte um mehr als die halbe Diagonale verschoben) neu eingepasst: cube(10) → cube(60), Kameraabstand 32 → 194 mm; cube(62) ändert nichts. Nach dem Drehen mit der Maus bleibt die Kamera bei cube(300) stehen, oben erscheint „Neu einpassen“; ein Klick rahmt das Modell ein.</p>
+</section>
+<section class="sc">
+<h3>C16 Achsgebundenes Ziehen</h3>
+<div class="pair"><div><div class="lbl">Umschalttaste: Achse x aus der Bewegung</div><img src="img/c16-waehrend.jpg" alt="Achsgebundenes Ziehen: Umschalttaste: Achse x aus der Bewegung"></div><div><div class="lbl">erst frei, dann Taste Z</div><img src="img/c16-nachher.jpg" alt="Achsgebundenes Ziehen: erst frei, dann Taste Z"></div></div>
+<div class="lbl">Code</div><pre>cube([60, 30, 1]);
+translate([10, 5.5, 2.25]) cube(6);
+// Umschalt + Ziehen (schräg, überwiegend x):
+translate([27, 5.5, 2.25]) cube(6);
+// erst frei, dann Taste Z:
+translate([29, 7, 19]) cube(6);</pre><p class="cap">Mit gedrückter Umschalttaste bestimmt die Mausbewegung die Achse (die Achse des lokalen Systems, deren Bildschirmrichtung am besten zur Bewegung passt); der Griff läuft auf einer Linie in Achsfarbe, nur diese Komponente ändert sich – y = 5.5 und z = 2.25 bleiben als Text erhalten (cad-eval schreibt unveränderte Literale nicht neu). Die Tasten X/Y/Z wählen die Achse direkt (erneut drücken: frei), auch mitten im Ziehen: die Achslinie geht dann durch die aktuelle Lage, die übrigen Komponenten behalten ihren Wert; die Tasten erreichen den Editor nicht.</p>
+</section>
+<section class="sc">
+<h3>C17-flasche Beispiel flasche.scad</h3>
+<div class="side"><div class="img"><div class="lbl">Cursor in Zeile 11</div><img src="img/c17-flasche.jpg" alt="Beispiel flasche.scad: Cursor in Zeile 11"></div><div class="txt"><p class="cap">rotate_extrude eines Polygons aus Rasterpunkten, fillet(3) mit zwei Zonen, Teilumlauf 270°. Fehlerfrei ausgewertet; Cursor in Zeile 11.</p></div></div>
+</section>
+<section class="sc">
+<h3>C17-freiformdeckel Beispiel freiformdeckel.scad</h3>
+<div class="side"><div class="img"><div class="lbl">Cursor in Zeile 11</div><img src="img/c17-freiformdeckel.jpg" alt="Beispiel freiformdeckel.scad: Cursor in Zeile 11"></div><div class="txt"><p class="cap">surface aus einem 4 × 4-Netz (Rasterrand, Wölbung als Literale), thicken(2). Fehlerfrei ausgewertet; Cursor in Zeile 11.</p></div></div>
+</section>
+<section class="sc">
+<h3>C17-griffschale Beispiel griffschale.scad</h3>
+<div class="side"><div class="img"><div class="lbl">Cursor in Zeile 12</div><img src="img/c17-griffschale.jpg" alt="Beispiel griffschale.scad: Cursor in Zeile 12"></div><div class="txt"><p class="cap">shell mit Zone g.oben, Kabelausgang per difference, Schraubdome mit difference(fillet = 0.5). Fehlerfrei ausgewertet; Cursor in Zeile 12.</p></div></div>
+</section>
+<section class="sc">
+<h3>C17-kabelfuehrung Beispiel kabelfuehrung.scad</h3>
+<div class="side"><div class="img"><div class="lbl">Cursor in Zeile 16</div><img src="img/c17-kabelfuehrung.jpg" alt="Beispiel kabelfuehrung.scad: Cursor in Zeile 16"></div><div class="txt"><p class="cap">sweep eines U-Profils entlang eines Spline-Pfads aus Rasterpunkten und Literalen, linearer Kanal. Fehlerfrei ausgewertet; Cursor in Zeile 16.</p></div></div>
+</section>
+<section class="sc">
+<h3>C17-lueftungsgitter Beispiel lueftungsgitter.scad</h3>
+<div class="side"><div class="img"><div class="lbl">Cursor in Zeile 12</div><img src="img/c17-lueftungsgitter.jpg" alt="Beispiel lueftungsgitter.scad: Cursor in Zeile 12"></div><div class="txt"><p class="cap">linear_extrude für Rahmen und Schlitze an indizierten Rasterebenen, difference(chamfer = 0.6). Fehlerfrei ausgewertet; Cursor in Zeile 12.</p></div></div>
+</section>
+</main>
+</body>
+</html>

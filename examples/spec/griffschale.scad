@@ -1,5 +1,5 @@
 // Zweck: Griffschale – shell(t) { körper; zone } mit der Zone an der Rasterebene oben (die
-// Oberseite wird geöffnet), Körper mit $fillet verrundet, Kabelausgang per difference,
+// Oberseite wird geöffnet), Körper mit $chamfer gefast, Kabelausgang per difference,
 // Schraubdome an indizierten Rasterebenen mit difference(fillet = …) für die Bohrkanten.
 module griffschale(l = 90, b = 34, h = 18, wand = 1.6) {
     grid g {
@@ -10,7 +10,7 @@ module griffschale(l = 90, b = 34, h = 18, wand = 1.6) {
 
     difference() {
         shell(wand) {
-            box(g[hinten, links, boden], g[vorn, rechts, oben], $fillet = 5);
+            box(g[hinten, links, boden], g[vorn, rechts, oben], $chamfer = 4);
             zone(g.oben, d = 1);    // Deckelseite offen
         }
         translate(g[vorn, mitte, 9]) cube([8, 10, 6], center = true); // Kabelausgang

@@ -245,6 +245,8 @@ test("C08 shell: Zone blau, geöffnete Flächen farbig", async ({ page }) => {
   expect(modes(s)).toEqual(["full@12", "blue@14"]);
   const sh = (await nodesOnLine(page, 12)).find((x) => x.label === "shell")!;
   expect(sh.status).toBe("ok");
+  // A real hollow body (the kernel returns an empty solid for some filleted bodies, see report).
+  expect(sh.triangles ?? 0).toBeGreaterThan(50);
   expect(view(s).openFaces).toEqual([expect.objectContaining({ faces: 1, engine: 1 })]);
   await expect(lineHint(page, 12)).toContainText("1 Zone · 1 Fläche geöffnet");
   const open = (await layerPixels(page, "open-faces")).changed;
@@ -638,8 +640,12 @@ test("C17 Neue Beispiele im Menü", async ({ page }) => {
     expect(options).toContain(name);
     let s = await openExample(page, ex.path);
     expect(s.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
-    const errs = await page.evaluate(() => (window as unknown as { __cad: { store: { getState(): { complete: { nodes: Array<{ status: string }> } } } } }).__cad.store.getState().complete.nodes.filter((n) => n.status === "error").length);
-    expect(errs).toBe(0);
+    const bad = await page.evaluate(() => {
+      const nodes = (window as unknown as { __cad: { store: { getState(): { complete: { nodes: Array<{ status: string; stmt: number | null; bounds: unknown; label: string }> } } } } }).__cad.store.getState().complete.nodes;
+      // Failed nodes, and nodes reported ok without any geometry (empty kernel result).
+      return nodes.filter((n) => n.status === "error" || (n.stmt !== null && n.status === "ok" && !n.bounds && n.label !== "group")).map((n) => n.label);
+    });
+    expect(bad).toEqual([]);
     s = await cursorOn(page, ex.line, ex.col, ex.context, "(s) => s.view.plan.items.length > 0");
     const img = `c17-${name.replace(".scad", "")}`;
     await screenshotC(page, img, "full");
@@ -662,7 +668,7 @@ test("C18 Messwerte: Auswertzeit fillet, chamfer, shell, sweep, loft, surface", 
     { key: "fillet", label: "fillet(r) Zonenblock, 4 Kanten", src: (k) => `grid g { z: o = 15; }\nfillet(${1 + k * 0.25}) {\n  cube([${30 + k}, 20, 15]);\n  zone(g.o, d = 1);\n}\n` },
     { key: "fillet_bool", label: "difference(fillet = r), 4 Bohrungen", src: (k) => `difference(fillet = ${0.8 + k * 0.1}) {\n  cube([${60 + k}, 20, 5]);\n  for (i = [0:3]) translate([10 + i * 13, 10, -1]) cylinder(h = 7, r = 3);\n}\n` },
     { key: "chamfer", label: "chamfer, 12 Kanten ($chamfer)", src: (k) => `cube([${20 + k}, 20, 20], $chamfer = ${1 + k * 0.2});\n` },
-    { key: "shell", label: "shell(1.6) eines verrundeten Quaders ($fillet = 6)", src: (k) => `grid g { z: o = 18; }\nshell(1.6) {\n  box([0, 0, 0], [${90 + 2 * k}, 34, 18], $fillet = 6);\n  zone(g.o, d = 1);\n}\n` },
+    { key: "shell", label: "shell(1.6) eines gefasten Quaders ($chamfer = 4)", src: (k) => `grid g { z: o = 18; }\nshell(1.6) {\n  box([0, 0, 0], [${90 + 2 * k}, 34, 18], $chamfer = 4);\n  zone(g.o, d = 1);\n}\n` },
     { key: "sweep", label: "sweep, Spline-Pfad mit 4 Punkten", src: (k) => `sweep(path = [[0, 0, 0], [20, 0, ${10 + k}], [40, 10, 10], [60, 10, 0]]) circle(3);\n` },
     { key: "loft", label: "loft, 3 Profile", src: (k) => `loft() {\n  circle(${10 + k * 0.5});\n  translate([0, 0, 15]) square(14, center = true);\n  translate([0, 0, 30]) circle(4);\n}\n` },
     { key: "surface", label: "thicken(surface) 4 × 4", src: (k) => `thicken(2) surface(points = [for (i = [0:3]) [for (j = [0:3]) [i * 10, j * 10, ${2 + k} * sin(i * 60) * cos(j * 60)]]]);\n` },
@@ -678,11 +684,12 @@ test("C18 Messwerte: Auswertzeit fillet, chamfer, shell, sweep, loft, surface", 
       await hook(page, (c, t) => c.setText(t as string), m.src(k));
       await waitScene(page, { minVersion: v0 + 1 });
       const st = await page.evaluate(() => {
-        const s = (window as unknown as { __cad: { store: { getState(): { complete: { stats: { kernel_ms: number; eval_ms: number; nodes: number; cache_hits: number }; nodes: Array<{ status: string }> }; metrics: { evalMs: number[] } } } } }).__cad.store.getState();
-        return { stats: s.complete.stats, errors: s.complete.nodes.filter((n) => n.status === "error").length, evalMs: s.metrics.evalMs.at(-1) ?? null };
+        const s = (window as unknown as { __cad: { store: { getState(): { complete: { stats: { kernel_ms: number; eval_ms: number; nodes: number; cache_hits: number }; nodes: Array<{ status: string; stmt: number | null; bounds: unknown; label: string }> }; metrics: { evalMs: number[] } } } } }).__cad.store.getState();
+        // A node reported ok but without geometry (bounds null) counts as failed too.
+        const empty = s.complete.nodes.filter((n) => n.status === "ok" && n.stmt !== null && !n.bounds && n.label !== "group").length;
+        return { stats: s.complete.stats, errors: s.complete.nodes.filter((n) => n.status === "error").length + empty, evalMs: s.metrics.evalMs.at(-1) ?? null };
       });
-      // shell of a filleted box fails in some variants (kernel, see report); measured anyway.
-      if (m.key !== "shell") expect(st.errors).toBe(0);
+      expect(st.errors).toBe(0);
       if (st.errors) failed++;
       kernel.push(st.stats.kernel_ms);
       if (st.evalMs !== null) total.push(st.evalMs);

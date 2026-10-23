@@ -219,35 +219,33 @@ const blocks = scenarios
   .filter((s) => (s.images ?? []).length)
   .sort((a, b) => a.id.localeCompare(b.id, "de", { numeric: true }))
   .map((s) => {
-    const wide = s.images.length === 1;
-    const imgs = `<div class="pair${wide ? " one" : ""}">${s.images.map((i) => `<div><div class="lbl">${esc(i.label)}</div><img src="img/${esc(i.name)}.jpg" alt="${esc(s.title)}: ${esc(i.label)}"></div>`).join("")}</div>`;
+    const img = (i) => `<div class="lbl">${esc(i.label)}</div><img src="img/${esc(i.name)}.jpg" alt="${esc(s.title)}: ${esc(i.label)}">`;
+    const text = `${s.code ? `<div class="lbl">Code</div>${code(s.code)}` : ""}<p class="cap">${esc(s.caption)}</p>`;
+    if (s.images.length === 1) {
+      return `<section class="sc">
+<h3>${esc(s.id)} ${esc(s.title)}</h3>
+<div class="side"><div class="img">${img(s.images[0])}</div><div class="txt">${text}</div></div>
+</section>`;
+    }
     return `<section class="sc">
 <h3>${esc(s.id)} ${esc(s.title)}</h3>
-${imgs}
-${s.code ? `<div class="lbl">Code</div>${code(s.code)}` : ""}
-<p class="cap">${esc(s.caption)}</p>
+<div class="pair">${s.images.map((i) => `<div>${img(i)}</div>`).join("")}</div>
+${text}
 </section>`;
   })
   .join("\n");
 
 const BUGS = [
   {
-    crate: "kernel-smlib / smlib (sc_shell)",
-    title: "shell eines verrundeten Quaders scheitert je nach Maßen, Zonen, Plattform und Auswertungsverlauf",
-    code: `// A – Maße von examples/spec/dose_shell.scad
-grid g { z: o = 30; }
-shell(1.5) {
-    box([0, 0, 0], [50, 35, 30], $fillet = 4);
-    zone(g.o, d = 1);
-}
-
-// B (mit grid g { z: o = 18; })
-shell(1.6) {
-    box([0, 0, 0], [90, 34, 18], $fillet = 6);
-    zone(g.o, d = 1);
-    translate([90, 17, 8]) cube([4, 10, 6], center = true); // öffnet keine Fläche
-}`,
-    text: "A: „shell produced an invalid (self-overlapping) solid at 11 face(s)“ im Browser (Wasm) und nativ (cad check, 12–13 Flächen); dose_shell.scad ist deshalb rot. B ohne die zweite Zone: im Browser gültig, nativ „SmApiShellBrepFull failed: SM_ERR (1001)“. B mit der zweiten Zone, die keine weitere Fläche öffnet: im Browser ungültig (self-overlapping), nativ gültig; im Browser gelingt sie, wenn vorher in derselben Sitzung B ohne zweite Zone ausgewertet wurde. Das Ergebnis hängt also von Plattform und Kernel-Zustand ab, nicht nur von den Eingaben. $fillet = 3 scheitert auf beiden Plattformen, $fillet = 5 sowie t = 2 gelingen auf beiden; Länge 92 statt 90 scheitert im Browser (Messung C18). Zwei benachbarte geöffnete Flächen (zone(g.oben) und zone(g.vorn)) scheitern mit SM_ERR (1001).",
+    crate: "kernel-smlib / smlib (sc_shell), Meldung in cad-engine",
+    title: "shell eines verrundeten Körpers: leeres oder falsches Ergebnis ohne Fehler, sonst Fehler je nach Maßen, Zonen, Plattform und Verlauf",
+    code: `grid g { z: o = 18; }
+shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 5); zone(g.o, d = 1); } // ok, aber leer
+shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 6); zone(g.o, d = 1); } // ok, Außenwand fehlt
+shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 3); zone(g.o, d = 1); } // SM_ERR (1001)
+// Maße von examples/spec/dose_shell.scad (dort mit grid g { z: o = 30; }):
+shell(1.5) { box([0, 0, 0], [50, 35, 30], $fillet = 4); zone(g.o, d = 1); } // self-overlapping`,
+    text: "Im Browser (Wasm): $fillet = 5 meldet „ok · 1 Fläche geöffnet“, das Ergebnis hat aber 0 Dreiecke und keine Bounds – die Ansicht zeigt nichts, ohne Fehler. $fillet = 6 meldet ok, die Bounds sind 1,6 … 88,4 statt 0 … 90: es fehlt die Außenwand, übrig ist nur die nach innen versetzte Fläche. $fillet = 3 scheitert mit „SmApiShellBrepFull failed: SM_ERR (1001)“, die Maße von dose_shell.scad mit „shell produced an invalid (self-overlapping) solid at 11 face(s)“ (auch nativ) – dose_shell.scad ist deshalb rot. Nativ (cad check) weichen die Ergebnisse ab ($fillet = 6 scheitert dort mit SM_ERR, leere Ergebnisse meldet cad check nicht). Außerdem hängt das Ergebnis von einer zusätzlichen Zone ab, die keine Fläche öffnet (translate([90, 17, 8]) cube([4, 10, 6], center = true)), und davon, was vorher in derselben Sitzung ausgewertet wurde. Zwei benachbarte geöffnete Flächen (zone(g.oben) und zone(g.vorn)) scheitern mit SM_ERR (1001). Scharfkantige und gefaste Körper ($chamfer) ergeben korrekte Hohlkörper. Vorschlag: Ergebnis prüfen (Volumen, Bounds) und ein leeres oder ungültiges Ergebnis als Fehler melden.",
   },
   {
     crate: "kernel-smlib (nurbs_surface)",
@@ -301,8 +299,11 @@ const html = `<!doctype html>
   .sc, .bug { break-inside: avoid; page-break-inside: avoid; margin: 0 0 7mm; }
   .pair { display: flex; gap: 2mm; }
   .pair > div { flex: 1; min-width: 0; }
-  .pair img { max-width: 100%; max-height: 82mm; width: auto; height: auto; border: 1px solid var(--border); display: block; }
-  .pair.one img { max-height: 100mm; }
+  .pair img { max-width: 100%; max-height: 74mm; width: auto; height: auto; border: 1px solid var(--border); display: block; }
+  .side { display: flex; gap: 3mm; align-items: flex-start; }
+  .side > .img { flex: 0 0 auto; max-width: 58%; }
+  .side > .img img { max-width: 100%; max-height: 88mm; width: auto; height: auto; border: 1px solid var(--border); display: block; }
+  .side > .txt { flex: 1; min-width: 0; }
   .lbl { font-size: 7.5pt; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 1mm 0 0.5mm; }
   .cap { font-size: 8.8pt; color: var(--muted); margin: 1.5mm 0 0; }
   .small { font-size: 8.8pt; color: var(--muted); }
@@ -366,11 +367,11 @@ ${cargo ? `<table><tr><th>Rust-Testprogramm (cargo test --workspace)</th><th>bes
   <li><b>Neu einpassen:</b> automatisch nur, solange die Kamera seit dem letzten Einpassen nicht gedreht/verschoben/gezoomt und kein Griff gezogen wurde; „Alles zeigen“ und die Standardansichten stellen diesen Zustand wieder her.</li>
   <li><b>Achsgebunden:</b> Achsen des lokalen Systems des Griffs (bei 2D-Punkten nur x/y); mit Umschalt wartet der Griff, bis 6 px Bewegung die Achse bestimmen. Wird die Achse erst während des Ziehens gewählt, geht die Achslinie durch die aktuelle Lage.</li>
   <li><b>Offene Fläche neben Körpern</b> auf oberster Ebene ist eine implizite Vereinigung und damit ein Fehler („zuerst thicken“) – Spec-konform, im Test getrennt geladen.</li>
-  <li>Einige Ergebnisse hängen am Kernel: dose_shell.scad ist wegen F1 derzeit rot (Zeile rot, Körper ohne shell); griffschale.scad verwendet deshalb $fillet = 5 (auf beiden Plattformen gültig).</li>
+  <li>Einige Ergebnisse hängen am Kernel: dose_shell.scad ist wegen F1 derzeit rot (Zeile rot, Körper ohne shell); griffschale.scad verwendet deshalb $chamfer = 4 (auf beiden Plattformen ein korrekter Hohlkörper); die Tests C08, C17 und C18 prüfen zusätzlich, dass ein „ok“-Knoten Geometrie hat.</li>
 </ul>
 
 <h2>7 Gefundene Fehler in fremden Crates</h2>
-<p class="small">Nicht behoben (andere Crates als dieser Auftrag); minimale Beispiele zum Nachstellen im Browser oder mit <code>cad-cli check</code>.</p>
+<p class="small">Nicht behoben (andere Crates als dieser Auftrag); minimale Beispiele zum Nachstellen im Browser oder mit <code>cad check datei.scad</code> (cad-cli, nativer Kernel).</p>
 ${bugBlocks}
 
 <h2>8 Screenshots und Codeausschnitte</h2>

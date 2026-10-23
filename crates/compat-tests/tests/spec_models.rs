@@ -150,7 +150,7 @@ const EXPECT: &[Expect] = &[
         ops: &[("shell", 1), ("zone", 1), ("difference", 3), ("cylinder", 4)],
         check: |out| {
             assert!(has_op(out, |o| *o == Op::Shell { t: 1.6, select: Select::Inside }));
-            assert_eq!(blends(out), [(BlendKind::Fillet, 5.0)]);
+            assert_eq!(blends(out), [(BlendKind::Chamfer, 4.0)]);
             let f = out.tree.nodes.iter().filter(|n| matches!(n.op, Op::Boolean { fillet: Some(f), .. } if f == 0.5));
             assert_eq!(f.count(), 2);
             let g = out.grid_by_name("g").unwrap();
