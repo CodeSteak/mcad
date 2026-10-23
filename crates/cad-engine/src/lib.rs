@@ -20,6 +20,15 @@
 //! * **Failures** follow the spec: a failing operation yields its inputs without the
 //!   operation (fillet → body without fillet), with an error diagnostic at the node; the
 //!   evaluation continues.
+//! * **Draft mode** ([`Engine::set_draft`], while a handle is dragged): blend nodes whose last
+//!   fillet/chamfer took longer than [`EngineConfig::drag_blend_budget_ms`] (and whose result
+//!   is not cached) are left out; the node shows the body without the blend and the hint
+//!   [`SUSPENDED_HINT`]. Such nodes and their ancestors get marked keys (never shared with full
+//!   results) and run with [`Kernel::set_draft`]. The next evaluation outside draft mode
+//!   computes everything again.
+//! * **Blocked keys** ([`Engine::block_keys`], watchdog): a node whose key is blocked is not
+//!   evaluated; it yields nothing and the error [`BLOCKED_MESSAGE`]. A changed parameter
+//!   changes the key, so the node is computed again.
 //!
 //! Known limits: the tag interning table only grows (one entry per distinct node content
 //! seen by this engine); edges between faces of two equal-content children count as old
@@ -41,7 +50,7 @@ pub mod key;
 mod profile;
 
 use std::any::Any;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
 use cad_ir::{Dim, NodeIdx, Op, Tree};
@@ -53,7 +62,11 @@ use serde::Serialize;
 
 pub use cache::Lru;
 pub use counting::CountingKernel;
+pub use eval::SUSPENDED_HINT;
 pub use key::{CacheKey, KeyHasher};
+
+/// Error of a node whose key is blocked (see [`Engine::block_keys`]).
+pub const BLOCKED_MESSAGE: &str = "Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung";
 
 /// Default display tolerance in mm when neither the call nor `$tol` gives one.
 pub const DEFAULT_TOL: f64 = 0.05;
@@ -69,6 +82,12 @@ pub struct EngineConfig {
     /// Sample points per face for `shell` zones.
     pub face_samples: u32,
     pub default_tol: f64,
+    /// Draft mode: blends whose last kernel time exceeded this many ms are left out
+    /// (`None`: never).
+    pub drag_blend_budget_ms: Option<f64>,
+    /// Keys blocked from the start (watchdog after a worker restart), see
+    /// [`Engine::block_keys`].
+    pub blocked_keys: Vec<CacheKey>,
 }
 
 impl Default for EngineConfig {
@@ -79,6 +98,8 @@ impl Default for EngineConfig {
             edge_samples: 16,
             face_samples: 4,
             default_tol: DEFAULT_TOL,
+            drag_blend_budget_ms: Some(25.0),
+            blocked_keys: Vec::new(),
         }
     }
 }
@@ -170,6 +191,10 @@ pub(crate) struct NodeOutput<S> {
     pub selected_edges: Vec<Vec<DVec3>>,
     /// Sample points of faces opened by `shell` (node system).
     pub opened_faces: Vec<Vec<DVec3>>,
+    /// Time of the node's fillet/chamfer kernel calls (ms, 0 without a clock).
+    pub blend_ms: f64,
+    /// The blend was left out (draft mode).
+    pub suspended: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -195,6 +220,11 @@ pub struct NodeReport {
     pub parts: usize,
     /// Result came from the cache.
     pub cached: bool,
+    /// Draft mode left this node's fillet/chamfer out (hint [`SUSPENDED_HINT`]).
+    pub blend_suspended: bool,
+    /// The node's key is blocked ([`Engine::block_keys`]): not evaluated, error
+    /// [`BLOCKED_MESSAGE`].
+    pub blocked: bool,
     /// Where the UI places this node's mesh: `Node.world` relative to the evaluated root.
     /// Equals `Node.world` unless a `!` modifier made a nested node the root, whose
     /// enclosing transforms are ignored (as in OpenSCAD).
@@ -215,6 +245,10 @@ pub struct EvalStats {
     pub cache_hits: usize,
     pub kernel_calls: u64,
     pub steps: u32,
+    /// Blend nodes left out in draft mode.
+    pub suspended_blends: usize,
+    /// Nodes not evaluated because their key is blocked.
+    pub blocked: usize,
 }
 
 /// Finished evaluation of one tree.
@@ -225,6 +259,8 @@ pub struct Evaluation<S> {
     /// Tag → nodes of this tree whose key the tag was interned for.
     pub tag_nodes: BTreeMap<Tag, Vec<NodeRef>>,
     pub stats: EvalStats,
+    /// Evaluated in draft mode ([`Engine::set_draft`]).
+    pub draft: bool,
     outputs: Vec<Option<Rc<NodeOutput<S>>>>,
 }
 
@@ -303,6 +339,10 @@ pub struct Engine<K: Kernel> {
     tags: TagTable,
     clock: Option<Clock>,
     kernel_calls: u64,
+    draft: bool,
+    /// Last measured fillet/chamfer time per blend node (`inst_key`), for draft mode.
+    blend_ms: HashMap<u64, f64>,
+    blocked: HashSet<CacheKey>,
 }
 
 /// An evaluation in progress. Owns its tree; drop it to abort.
@@ -317,6 +357,13 @@ pub struct Job<S> {
     /// Kernel results of the interrupted node, replayed in call order.
     replay: Vec<Rc<dyn Any>>,
     stats: EvalStats,
+    draft: bool,
+    /// Per node: blend left out (draft mode).
+    skip: Vec<bool>,
+    /// Per node: draft result (a skipped blend in its subtree); evaluated with
+    /// `Kernel::set_draft(true)`.
+    tainted: Vec<bool>,
+    blocked: Vec<bool>,
 }
 
 impl<S> Job<S> {
@@ -346,6 +393,16 @@ impl<S> Job<S> {
     pub fn tree(&self) -> &Tree {
         &self.tree
     }
+
+    /// Started in draft mode.
+    pub fn draft(&self) -> bool {
+        self.draft
+    }
+
+    /// Blend nodes this job leaves out (draft mode).
+    pub fn suspended_blends(&self) -> usize {
+        self.skip.iter().filter(|&&s| s).count()
+    }
 }
 
 impl<S: Clone + 'static> Job<S> {
@@ -360,6 +417,14 @@ impl<S: Clone + 'static> Job<S> {
         while self.pos < self.order.len() {
             let idx = self.order[self.pos];
             let key = self.keys[idx as usize];
+            if self.replay.is_empty() && e.blocked.contains(&key) {
+                self.blocked[idx as usize] = true;
+                self.outputs[idx as usize] = Some(Rc::new(self.blocked_output(idx)));
+                self.stats.blocked += 1;
+                self.stats.nodes += 1;
+                self.pos += 1;
+                continue;
+            }
             if self.replay.is_empty()
                 && let Some(o) = e.cache.get(&key)
             {
@@ -385,11 +450,26 @@ impl<S: Clone + 'static> Job<S> {
                     tags: &self.tags,
                     outputs: &self.outputs,
                     config: &e.config,
+                    skip: &self.skip,
                 };
-                eval::eval_node(&mut run, &ctx, idx)
+                let tainted = self.tainted[idx as usize];
+                if tainted {
+                    run.k.set_draft(true);
+                }
+                let r = eval::eval_node(&mut run, &ctx, idx);
+                if tainted {
+                    run.k.set_draft(false);
+                }
+                r
             };
             match res {
                 Ok(out) => {
+                    if out.blend_ms > 0.0 {
+                        e.blend_ms.insert(self.tree.node(idx).inst_key, out.blend_ms);
+                    }
+                    if out.suspended {
+                        self.stats.suspended_blends += 1;
+                    }
                     let o = Rc::new(out);
                     e.cache.insert(key, o.clone(), 1);
                     self.outputs[idx as usize] = Some(o);
@@ -412,6 +492,23 @@ impl<S: Clone + 'static> Job<S> {
         self.stats.kernel_calls += ops;
         e.kernel_calls += ops;
         Step::Done(self.finish())
+    }
+
+    fn blocked_output(&self, idx: NodeIdx) -> NodeOutput<S> {
+        let dim = self.tree.dim(idx);
+        let two_d = dim == Some(Dim::Two) && !is_profile_op(&self.tree.node(idx).op);
+        NodeOutput {
+            parts: Vec::new(),
+            tags: vec![self.tags[idx as usize]].into(),
+            dim: if two_d { dim } else { Some(Dim::Three) },
+            bounds: None,
+            diags: vec![Diag { severity: Severity::Error, message: BLOCKED_MESSAGE.into(), edges: Vec::new() }],
+            hints: Vec::new(),
+            selected_edges: Vec::new(),
+            opened_faces: Vec::new(),
+            blend_ms: 0.0,
+            suspended: false,
+        }
     }
 
     fn finish(&self) -> Evaluation<S> {
@@ -464,6 +561,8 @@ impl<S: Clone + 'static> Job<S> {
                 dim: out.and_then(|o| o.dim),
                 parts: out.map(|o| o.parts.len()).unwrap_or(0),
                 cached: self.cached[i],
+                blend_suspended: out.is_some_and(|o| o.suspended),
+                blocked: self.blocked[i],
                 display_world: root_inv * n.world,
             });
         }
@@ -472,6 +571,7 @@ impl<S: Clone + 'static> Job<S> {
             reports,
             tag_nodes,
             stats: self.stats,
+            draft: self.draft,
             outputs: self.outputs.clone(),
         }
     }
@@ -490,11 +590,39 @@ where
             kernel,
             cache: Lru::new(config.cache_entries),
             meshes: Lru::new(config.mesh_cache_bytes),
+            blocked: config.blocked_keys.iter().copied().collect(),
             config,
             tags: TagTable::default(),
             clock: None,
             kernel_calls: 0,
+            draft: false,
+            blend_ms: HashMap::new(),
         }
+    }
+
+    /// Draft mode for evaluations started from now on (see the crate docs). Needs a clock
+    /// ([`Engine::set_clock`]) to measure blends.
+    pub fn set_draft(&mut self, draft: bool) {
+        self.draft = draft;
+    }
+
+    pub fn draft(&self) -> bool {
+        self.draft
+    }
+
+    /// Blocks nodes with these keys (watchdog: the node hung the kernel). Evaluations started
+    /// from now on do not compute them and report [`BLOCKED_MESSAGE`].
+    pub fn block_keys(&mut self, keys: impl IntoIterator<Item = CacheKey>) {
+        self.blocked.extend(keys);
+    }
+
+    /// Lifts all blocks.
+    pub fn unblock_all(&mut self) {
+        self.blocked.clear();
+    }
+
+    pub fn blocked_keys(&self) -> impl Iterator<Item = &CacheKey> {
+        self.blocked.iter()
     }
 
     /// Clock for time budgets, in milliseconds.
@@ -546,7 +674,30 @@ where
         let tree = Rc::new(tree);
         let n = tree.nodes.len();
         let order = eval::post_order(&tree);
-        let keys = eval::compute_keys(&tree, self.kernel.id());
+        let mut keys = eval::compute_keys(&tree, self.kernel.id(), &[]);
+        // Draft mode: blends known to be slow whose results are not cached are left out.
+        let mut skip = vec![false; n];
+        if self.draft
+            && let Some(budget) = self.config.drag_blend_budget_ms
+        {
+            for &i in &order {
+                if eval::is_blend_node(&tree, i)
+                    && self.blend_ms.get(&tree.node(i).inst_key).is_some_and(|&ms| ms > budget)
+                    && !self.cache.contains(&keys[i as usize])
+                {
+                    skip[i as usize] = true;
+                }
+            }
+        }
+        let mut tainted = vec![false; n];
+        if skip.iter().any(|&s| s) {
+            keys = eval::compute_keys(&tree, self.kernel.id(), &skip);
+            for &i in &order {
+                // post-order: children before parents
+                let t = skip[i as usize] || tree.node(i).children.iter().any(|&c| tainted[c as usize]);
+                tainted[i as usize] = t;
+            }
+        }
         let tags = keys.iter().map(|&k| self.tags.intern(k)).collect();
         Job {
             tree,
@@ -558,6 +709,10 @@ where
             cached: vec![false; n],
             replay: Vec::new(),
             stats: EvalStats::default(),
+            draft: self.draft,
+            skip,
+            tainted,
+            blocked: vec![false; n],
         }
     }
 

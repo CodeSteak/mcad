@@ -1,6 +1,7 @@
 # C functions exported from smlib.wasm (one per line, without leading underscore)
 sc_init
 sc_version
+sc_set_draft
 sc_last_status
 sc_last_message
 sc_last_message_len

@@ -245,4 +245,11 @@ pub trait Kernel {
         let _ = (shapes, fmt);
         Err(KernelError::Unsupported("export".into()))
     }
+
+    /// Draft mode for the following calls: their results only serve a temporary display
+    /// (while a handle is dragged) and are never reused for a final result, so the kernel may
+    /// skip expensive validation of its results. Default: ignored.
+    fn set_draft(&mut self, draft: bool) {
+        let _ = draft;
+    }
 }

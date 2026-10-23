@@ -14,7 +14,7 @@ ein Modell ohne Browser bauen und kontrollieren.
 ```sh
 # SMLib nativ: vorgebaute Bibliotheken (schnell) oder Build über CMake (~3 min beim ersten Mal)
 export SMLIB_PREBUILT=/home/user/controller-cad/smlib/build-native   # falls vorhanden
-ln -sfn /opt/tools/usd-brep third_party/usd-brep                       # Quellen, falls fehlend
+smlib/fetch.sh                                                         # Quellen (tangency-labs/smlib @ 7eba8aa), falls fehlend
 cargo build --release -p cad-cli
 target/release/cad --help
 ```

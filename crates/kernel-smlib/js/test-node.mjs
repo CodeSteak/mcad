@@ -86,7 +86,7 @@ const tRead = performance.now();
 await sc.initSmlib(createSmlib, { wasmBinary });
 const tLoad = performance.now();
 console.log(`smlib.wasm ${statSync(wasmPath).size} B; read ${(tRead - t0).toFixed(1)} ms, compile+instantiate+init ${(tLoad - tRead).toFixed(1)} ms`);
-assert.equal(sc.sc_version(), 1);
+assert.equal(sc.sc_version(), 2);
 
 // ---------------------------------------------------------------- tests
 

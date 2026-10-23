@@ -92,6 +92,9 @@ export function sc_init() {
 export function sc_version() {
   return mod()._sc_version() >>> 0;
 }
+export function sc_set_draft(on) {
+  mod()._sc_set_draft(on | 0);
+}
 export function sc_last_status() {
   return mod()._sc_last_status() | 0;
 }

@@ -70,6 +70,21 @@ impl<K: Kernel> Run<'_, K> {
         self.cursor += 1;
         Ok(r)
     }
+
+    /// Like [`Run::call`], plus the call's duration in ms (0 without a clock); a replayed
+    /// call returns the duration measured when it ran.
+    fn call_timed<T: Clone + 'static>(
+        &mut self,
+        f: impl FnOnce(&mut K) -> KResult<T>,
+    ) -> Result<(KResult<T>, f64), Interrupt> {
+        let clock = self.clock;
+        let r = self.call(|k| {
+            let t0 = clock.map_or(0.0, |c| c());
+            let r = f(k);
+            Ok((r, clock.map_or(0.0, |c| c() - t0)))
+        })?;
+        Ok(r.unwrap_or_else(|e| (Err(e), 0.0)))
+    }
 }
 
 pub(crate) struct Ctx<'a, S> {
@@ -77,7 +92,12 @@ pub(crate) struct Ctx<'a, S> {
     pub tags: &'a [Tag],
     pub outputs: &'a [Option<Rc<NodeOutput<S>>>],
     pub config: &'a EngineConfig,
+    /// Per node: leave the blend out (draft evaluation while dragging, see `Engine::start`).
+    pub skip: &'a [bool],
 }
+
+/// Hint of a blend node whose rounding/chamfer was left out while dragging.
+pub const SUSPENDED_HINT: &str = "Verrundung beim Ziehen ausgesetzt";
 
 // ---------------------------------------------------------------- order and keys
 
@@ -126,8 +146,21 @@ pub(crate) fn zone_block(tree: &Tree, zone: NodeIdx) -> Option<(NodeIdx, NodeIdx
     }
 }
 
-/// Keys of all nodes (zero key for nodes not reachable from the root).
-pub(crate) fn compute_keys(tree: &Tree, kernel_id: &str) -> Vec<CacheKey> {
+/// `true` for nodes that round or chamfer edges (candidates for skipping while dragging).
+pub(crate) fn is_blend_node(tree: &Tree, n: NodeIdx) -> bool {
+    let node = tree.node(n);
+    match &node.op {
+        Op::Blend { .. } => true,
+        Op::Boolean { fillet, chamfer, .. } => fillet.is_some_and(|r| r > 0.0) || chamfer.is_some_and(|c| c > 0.0),
+        Op::Prim { .. } => node.blend.is_some_and(|(_, r)| r > 0.0),
+        _ => false,
+    }
+}
+
+/// Keys of all nodes (zero key for nodes not reachable from the root). Nodes with `skip[n]`
+/// (blends left out while dragging) get a marked key, which changes the keys of all their
+/// ancestors as well: such draft results never share cache entries with full results.
+pub(crate) fn compute_keys(tree: &Tree, kernel_id: &str, skip: &[bool]) -> Vec<CacheKey> {
     let mut keys = vec![CacheKey([0; 32]); tree.nodes.len()];
     // Post-order over everything reachable, including disabled subtrees (cheap, keeps the
     // order simple); children before parents, earlier siblings before later ones.
@@ -149,6 +182,9 @@ pub(crate) fn compute_keys(tree: &Tree, kernel_id: &str) -> Vec<CacheKey> {
         h.str("cad-engine/1").str(kernel_id);
         h.value(&node.op);
         h.value(&node.blend);
+        if skip.get(n as usize).copied().unwrap_or(false) {
+            h.str("draft: blend suspended");
+        }
         if let Op::Zone(_) = node.op {
             match zone_block(tree, n) {
                 Some((_, body, path)) => {
@@ -219,6 +255,9 @@ struct NodeEval<'r, 'a, 'c, K: Kernel> {
     hints: Vec<String>,
     selected: Vec<Vec<DVec3>>,
     opened: Vec<Vec<DVec3>>,
+    /// Time of this node's fillet/chamfer kernel calls (ms).
+    blend_ms: f64,
+    suspended: bool,
 }
 
 type R<T> = Result<T, Interrupt>;
@@ -240,6 +279,8 @@ where
         hints: Vec::new(),
         selected: Vec::new(),
         opened: Vec::new(),
+        blend_ms: 0.0,
+        suspended: false,
     };
     let tree = ctx.tree;
     let node = tree.node(idx);
@@ -283,16 +324,24 @@ where
             hints: ev.hints,
             selected_edges: Vec::new(),
             opened_faces: Vec::new(),
+            blend_ms: 0.0,
+            suspended: false,
         });
     }
 
     let parts = ev.eval_op()?;
-    let mut bounds = None;
-    for p in &parts {
-        if let Ok(Some(b)) = ev.run.call(|k| k.bounds(&p.shape))? {
-            bounds = merge_box(bounds, Some(b));
+    let bounds = match ev.derived_bounds() {
+        Some(b) => b,
+        None => {
+            let mut bounds = None;
+            for p in &parts {
+                if let Ok(Some(b)) = ev.run.call(|k| k.bounds(&p.shape))? {
+                    bounds = merge_box(bounds, Some(b));
+                }
+            }
+            bounds
         }
-    }
+    };
     Ok(NodeOutput {
         parts,
         tags: tags.into(),
@@ -302,6 +351,18 @@ where
         hints: ev.hints,
         selected_edges: ev.selected,
         opened_faces: ev.opened,
+        blend_ms: ev.blend_ms,
+        suspended: ev.suspended,
+    })
+}
+
+/// The linear part maps every axis onto an axis (signed permutation times a diagonal scale):
+/// a box transformed by it is the box of the transformed body.
+fn axis_aligned(m: &DMat4) -> bool {
+    [m.x_axis, m.y_axis, m.z_axis].iter().all(|c| {
+        let c = c.truncate().abs();
+        let big = c.max_element();
+        big > 0.0 && (c.x + c.y + c.z - big) <= 1e-12 * big
     })
 }
 
@@ -311,6 +372,42 @@ where
 {
     fn error(&mut self, msg: impl Into<String>) {
         self.diags.push(Diag { severity: Severity::Error, message: msg.into(), edges: Vec::new() });
+    }
+
+    /// Bounds without a kernel call where they follow exactly from the children: groups,
+    /// transforms and plain unions (the tight box of a union is the union of the tight
+    /// boxes; a failed union returns its inputs) whose children are placed by axis-aligned
+    /// matrices. `None`: ask the kernel. The tight box costs more than the union itself on
+    /// bodies with rounds (lochplatte: 5 ms per call).
+    fn derived_bounds(&mut self) -> Option<Option<(DVec3, DVec3)>> {
+        let tree = self.ctx.tree;
+        let node = tree.node(self.idx);
+        let plain = match &node.op {
+            Op::Group | Op::ModuleCall { .. } | Op::Transform { .. } | Op::Color { .. } | Op::Empty => true,
+            Op::Boolean { op: BoolOp::Union, fillet, chamfer } => {
+                !fillet.is_some_and(|r| r > 0.0) && !chamfer.is_some_and(|c| c > 0.0)
+            }
+            _ => false,
+        };
+        if !plain {
+            return None;
+        }
+        let mut b = None;
+        for c in tree.solid_children(self.idx) {
+            if tree.dim(c) == Some(Dim::Two) {
+                continue;
+            }
+            let Some(o) = self.output(c) else { continue };
+            if o.parts.is_empty() {
+                continue;
+            }
+            let m = tree.node(c).local;
+            if !axis_aligned(&m) {
+                return None;
+            }
+            b = merge_box(b, Some(transform_box(o.bounds?, &m)));
+        }
+        Some(b)
     }
 
     fn error_edges(&mut self, msg: impl Into<String>, edges: Vec<Vec<DVec3>>) {
@@ -468,11 +565,19 @@ where
         sel: &[&EdgeInfo],
         tag: Tag,
     ) -> R<Part<K::Shape>> {
+        if self.ctx.skip.get(self.idx as usize).copied().unwrap_or(false) {
+            if !self.suspended {
+                self.suspended = true;
+                self.hints.push(SUSPENDED_HINT.into());
+            }
+            return Ok(part.clone());
+        }
         let ids: Vec<u32> = sel.iter().map(|e| e.id).collect();
-        let res = self.run.call(|k| match kind {
+        let (res, ms) = self.run.call_timed(|k| match kind {
             BlendKind::Fillet => k.fillet(&part.shape, &ids, r, tag),
             BlendKind::Chamfer => k.chamfer(&part.shape, &ids, r, tag),
         })?;
+        self.blend_ms += ms;
         match res {
             Ok(s) => Ok(Part { shape: s, solid: part.solid }),
             Err(e) => {

@@ -5,7 +5,7 @@
 #   smlib/build-wasm.sh [OUT_DIR] [--libs-only] [--debug]
 #
 # OUT_DIR defaults to web/public/smlib/. Requires emsdk (emcc on PATH, or EMSDK set,
-# or /opt/tools/emsdk). Sources come from SMLIB_SRC or third_party/usd-brep
+# or /opt/tools/emsdk). Sources come from SMLIB_SRC or third_party/smlib
 # (see smlib/fetch.sh). The CMake build tree is smlib/build-wasm (cached).
 #
 # Flags (see smlib/CMakeLists.txt): -O3 -fwasm-exceptions, MODULARIZE, EXPORT_ES6,
@@ -26,7 +26,7 @@ for a in "$@"; do
     *) OUT="$a" ;;
   esac
 done
-SRC="${SMLIB_SRC:-$ROOT/third_party/usd-brep}"
+SRC="${SMLIB_SRC:-$ROOT/third_party/smlib}"
 JOBS="${JOBS:-4}"
 BUILD="${SMLIB_WASM_BUILD:-$HERE/build-wasm}"
 

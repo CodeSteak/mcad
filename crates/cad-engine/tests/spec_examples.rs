@@ -4,6 +4,7 @@ mod common;
 
 use cad_eval::{EvalOptions, eval_source};
 use cad_ir::{BlendKind, Op};
+use cad_kernel::Kernel;
 use common::*;
 
 fn eval(src: &str) -> cad_eval::EvalOutput {
@@ -102,4 +103,54 @@ teil();
     let vol = root_volume(&mut e, &ev);
     let unfilleted = 8000.0 - std::f64::consts::PI * 25.0 * 20.0;
     assert!(vol < unfilleted && vol > unfilleted - 50.0, "{vol}");
+}
+
+const PI: f64 = std::f64::consts::PI;
+
+/// `examples/spec/knauf_mirror.scad` (report 1: open body, torus and pin missing, fillet
+/// SM_ERR). Cause: the closed spline profile crossed the revolve axis between its two axis
+/// points, which gave self-overlapping revolved solids.
+#[test]
+fn spec_knauf_mirror_file() {
+    let out = eval(include_str!("../../../examples/spec/knauf_mirror.scad"));
+    let mut e = engine();
+    let ev = e.evaluate(out.tree);
+    assert_clean(&ev);
+    let root = ev.root().unwrap();
+    assert_eq!(ev.parts(root).len(), 1);
+    let shape = ev.parts(root)[0].shape.clone();
+    assert!(e.kernel_mut().inner.is_solid(&shape));
+    let knobs: Vec<u32> = (0..ev.tree.nodes.len() as u32)
+        .filter(|&i| matches!(&ev.tree.node(i).op, Op::ModuleCall { name, .. } if name == "knauf"))
+        .collect();
+    assert_eq!(knobs.len(), 2);
+    let (v15, v10) = (volume(&mut e, &ev, knobs[0]), volume(&mut e, &ev, knobs[1]));
+    // revolved knob minus bore; the r = 10 copy was 172 mm³ before
+    assert!(v15 > 11000.0 && v15 < 11600.0, "knauf r = 15: {v15}");
+    assert!(v10 > 4200.0 && v10 < 4700.0, "knauf r = 10: {v10}");
+    // the torus lies inside the knob (the spline bulges to z = 22.7 above it); the pin
+    // (z 20..23) sticks out of its top
+    let (lo, hi) = ev.report(root).bounds.unwrap();
+    assert!((hi.z - 23.0).abs() < 1e-6, "{lo} {hi}");
+    let total = root_volume(&mut e, &ev);
+    let pin = PI * 4.0 * 3.0;
+    assert!(total > v15 + v10 + 0.5 * pin && total < v15 + v10 + pin, "{total}");
+}
+
+/// `examples/spec/winkel_anker.scad` (report 1: union of touching bodies open, volume 0).
+#[test]
+fn spec_winkel_anker_file() {
+    let out = eval(include_str!("../../../examples/spec/winkel_anker.scad"));
+    let mut e = engine();
+    let ev = e.evaluate(out.tree);
+    assert_clean(&ev);
+    let root = ev.root().unwrap();
+    let shape = ev.parts(root)[0].shape.clone();
+    assert!(e.kernel_mut().inner.is_solid(&shape));
+    // brackets 3420 + 4620, screws (head d 6 h 2, shank d 3) minus their 3 mm in the walls,
+    // ruler cube 8 (touches bracket a along an edge)
+    let head = PI * 9.0 * 2.0;
+    let shank = |l: f64| PI * 2.25 * l;
+    let want = 3420.0 + 4620.0 + (head + shank(10.0)) + 2.0 * (head + shank(8.0)) - 3.0 * shank(3.0) + 8.0;
+    assert_approx("winkel_anker", root_volume(&mut e, &ev), want, 1e-6);
 }
