@@ -685,7 +685,9 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
             }
             if cn.subtracted {
                 draws.push(Draw { node: ch, color: lk.red, edges: None, node_colors: false, role: "subtracted" });
-            } else if cn.flags.zone && matches!(n.label.as_str(), "fillet" | "chamfer" | "shell") {
+            } else if cn.flags.zone
+                && matches!(n.label.as_str(), "fillet" | "chamfer" | "shell" | "fillet2d" | "chamfer2d")
+            {
                 draws.push(Draw { node: ch, color: lk.blue, edges: None, node_colors: false, role: "zone" });
             }
         }
@@ -696,6 +698,16 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
         let w = mat(&n.display_world);
         for e in &n.selected_edges {
             lines.push(polyline(e, &w, lk.selected, 2.5));
+        }
+        // 2D operations (Plan 17.3): input contour, offset contour dashed, stroke centre line
+        for g in &n.guides {
+            let pts: Vec<DVec3> = g.points.iter().map(|q| w.transform_point3(DVec3::from_array(q.0))).collect();
+            match g.kind.as_str() {
+                "result" => lines.push(top_line(pts, lk.selected, 2.0, true)),
+                "centerline" => lines.push(top_line(pts, lk.handle, 1.6, true)),
+                "source" => lines.push(top_line(pts, lk.edge, 1.4, false)),
+                _ => {}
+            }
         }
         for msg in &n.messages {
             for e in &msg.edges {

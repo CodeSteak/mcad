@@ -302,3 +302,38 @@ fn sketch_and_namespaces() {
     assert_eq!(d["range"]["line"], 3);
     assert!(d["message"].as_str().unwrap().contains("halbe Sehne"), "{d}");
 }
+
+#[test]
+fn sketch_corners_offset_stroke() {
+    use std::f64::consts::PI;
+    let f = data("skizze_ecken.scad");
+    let k = 4.0 - PI;
+    let sketch = 600.0 - 2.0 * k * 16.0 / 4.0 - 4.5;
+    let fillet = 600.0 - k * 9.0;
+    let offset = 24.0 * 14.0 - k * 4.0;
+    let stroke = PI / 4.0 * (11.0f64.powi(2) - 9.0f64.powi(2));
+    let want = 2.0 * (sketch + fillet + offset + stroke);
+    let dir = tempfile::tempdir().unwrap();
+    let v = json(&["export", &f, "-o", &dir.path().join("e.step").display().to_string()], 0);
+    let vol = v["volume"].as_f64().unwrap();
+    assert!((vol - want).abs() < 1e-5 * want, "{vol} {want}");
+    // the inline hint of fillet2d and the corner's radius handle
+    let v = json(&["inspect", &f, "--line", "12"], 0);
+    let n = v["nodes"].as_array().unwrap().iter().find(|n| n["label"] == "fillet2d").expect("fillet2d node").clone();
+    assert_eq!(n["hints"], serde_json::json!(["4 Ecken"]));
+    let v = json(&["inspect", &f, "--line", "5"], 0);
+    let h = v["handles"].as_array().unwrap();
+    assert!(h.iter().any(|h| h["kind"] == "radius" || h["kind"]["kind"] == "radius"), "{v}");
+    // render of the offset line: the offset contour (dashed) and the input contour as lines
+    let o = dir.path().join("o.png").display().to_string();
+    let v = json(&["render", &f, "-o", &o, "--line", "13", "--view", "top", "--show", "handles"], 0);
+    assert_eq!(v["overlays"]["lines"], 2, "{v}");
+    assert!(v["overlays"]["handles"].as_u64().unwrap() > 0);
+    // a radius too large for the corner: error at the corner line
+    let src = dir.path().join("zu_gross.scad");
+    std::fs::write(&src, "linear_extrude(1) sketch {\n start([0, 0]);\n line(to = [10, 0]);\n corner(r = 12);\n line(to = [10, 5]);\n line(to = [0, 5]);\n close();\n}\n").unwrap();
+    let v = json(&["check", &src.display().to_string()], 1);
+    let d = &v["diagnostics"][0];
+    assert_eq!(d["range"]["line"], 4);
+    assert!(d["message"].as_str().unwrap().contains("höchstens ≈ 5"), "{d}");
+}
