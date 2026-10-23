@@ -7,10 +7,14 @@ import { WorkerTransport } from "../engine/transport";
 import { replaceDocument } from "../editor/setup";
 import { EXAMPLES, type Example, baseName, download, forgetHandle, loadAutosave, openFile, saveAutosave, saveFile } from "../files/files";
 import { jumpUpTarget, moduleSpans } from "../logic/context";
+import { modelHull } from "../logic/grids";
+import { transformBox } from "../logic/math";
 import { bridge } from "../state/bridge";
 import { store } from "../state/store";
 import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
+import { DragController } from "./drag";
+import { undo, redo } from "@codemirror/commands";
 
 export const DEFAULT_EXAMPLE = "spec/gehaeuse.scad";
 
@@ -20,9 +24,24 @@ const watchdogMs = Number(params.get("watchdog")) || undefined;
 export const transport = new WorkerTransport({ watchdogMs });
 export const client = new EngineClient(transport, meshes);
 
+let viewerRef: Viewer | null = null;
+/** Handle drags (Spec: Griffe und Rückschreiben). */
+export const drag = new DragController(client, () => sendNow());
+
+// Rounding steps of free drags (Einstellungen).
+{
+  const s = store.getState().settings;
+  client.setDragOptions(s.stepMm, s.stepDeg);
+}
+store.subscribe((s, p) => {
+  if (s.settings !== p.settings) client.setDragOptions(s.settings.stepMm, s.settings.stepDeg);
+});
+
 let viewer: Viewer | null = null;
 export function setViewer(v: Viewer | null): void {
   viewer = v;
+  viewerRef = v;
+  if (v) v.drag = drag;
 }
 export function getViewer(): Viewer | null {
   return viewer;
@@ -67,11 +86,11 @@ function syncContext(): void {
   const scene = st.scene;
   if (!scene || !bridge.view) return;
   const module = bridge.index(scene).moduleAt(st.cursor);
-  client.setContext(module);
+  client.setContext(module, module === null ? {} : st.paramOverrides[module] ?? {});
 }
 
 store.subscribe((s, p) => {
-  if (s.cursor !== p.cursor || s.scene !== p.scene || s.docRevision !== p.docRevision) syncContext();
+  if (s.cursor !== p.cursor || s.scene !== p.scene || s.docRevision !== p.docRevision || s.paramOverrides !== p.paramOverrides) syncContext();
 });
 
 /** Path bar: jump to `level` (0 = file). */
@@ -188,6 +207,50 @@ window.__cad = {
   },
   setCursorLine(line: number, col = 0) {
     bridge.setCursorLine(line, col);
+  },
+  text() {
+    return bridge.text();
+  },
+  /** Handles drawn for the cursor line, with screen positions. */
+  handles() {
+    return viewerRef?.handleViews() ?? [];
+  },
+  /** Screen position on a ring (degrees) or 1D handle line (value). */
+  handlePoint(id: number, value: number) {
+    return viewerRef?.handlePoint(id, value) ?? null;
+  },
+  drag() {
+    return store.getState().drag;
+  },
+  undo() {
+    const v = bridge.view;
+    return v ? undo(v) : false;
+  },
+  redo() {
+    const v = bridge.view;
+    return v ? redo(v) : false;
+  },
+  focusEditor() {
+    bridge.view?.focus();
+  },
+  cursorLine() {
+    const d = bridge.doc();
+    return d.lineAt(Math.min(store.getState().cursor, d.length)).number;
+  },
+  /** Bounds of the shown model (context coordinates). */
+  rootBounds() {
+    const s = store.getState().shown;
+    return s ? modelHull(s) : null;
+  },
+  /** Context bounds of the nodes whose statement starts on a line (current document). */
+  nodeBounds(line: number) {
+    const s = store.getState().shown;
+    if (!s) return [];
+    const idx = bridge.index(s);
+    const doc = bridge.doc();
+    return s.nodes
+      .filter((n) => n.stmt !== null && n.bounds && doc.lineAt(Math.min(idx.span(n.idx).from, doc.length)).number === line)
+      .map((n) => ({ label: n.label, ...transformBox(n.display_world, { min: n.bounds!.min, max: n.bounds!.max }) }));
   },
   /** Client coordinates of a character (1-based line, 0-based column). */
   coordsOf(line: number, col: number) {

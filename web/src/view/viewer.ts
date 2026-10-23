@@ -9,8 +9,11 @@ import type { EngineClient } from "../engine/client";
 import type { Mat4, Scene, Vec3 } from "../engine/protocol";
 import { definitionTarget } from "../logic/context";
 import { type Plan, plan as makePlan, planNodes } from "../logic/display";
-import { type GridOverlay, gridOverlay, modelHull } from "../logic/grids";
+import { type GridOverlay, gridOverlay, modelHull, viewBox } from "../logic/grids";
+import { type HandleGeom, type Ray, handleGeom, handleLabel, handlesForCursor } from "../logic/handles";
 import { type Box3, boxDiagonal, emptyBox, isEmpty, length, sub } from "../logic/math";
+import type { DragController, DragPreview, DragView } from "../app/drag";
+import { buildHandleLayer, readHandleColors, type HandleColors } from "./handleLayer";
 import { EMPTY_SELECTION, type CursorSelection } from "../logic/sceneIndex";
 import { bridge } from "../state/bridge";
 import { type CadState, store } from "../state/store";
@@ -50,7 +53,24 @@ export interface ViewState {
   objects: number;
 }
 
-export class Viewer {
+/** A handle as drawn (test hook, report). */
+export interface HandleView {
+  id: number;
+  kind: string;
+  /** Axis of angle, plane and scale handles. */
+  axis: number | null;
+  index: number;
+  style: string;
+  line: number;
+  value: number[];
+  screen: { x: number; y: number } | null;
+  label: string;
+}
+
+/** Grip pick radius in pixels. */
+const GRIP_PX = 10;
+
+export class Viewer implements DragView {
   readonly renderer: THREE.WebGLRenderer;
   readonly camera: THREE.PerspectiveCamera;
   readonly controls: OrbitControls;
@@ -58,6 +78,14 @@ export class Viewer {
   private content = new THREE.Group();
   private overlay = new THREE.Group();
   private helpers = new THREE.Group();
+  private handleGroup = new THREE.Group();
+  private handleColors: HandleColors;
+  private preview: DragPreview | null = null;
+  private snapLabel: HTMLDivElement;
+  /** Drag controller (set by the runtime). */
+  drag: DragController | null = null;
+  /** Handles drawn for the cursor line. */
+  lastHandles: HandleGeom[] = [];
   private gizmo: { scene: THREE.Scene; camera: THREE.OrthographicCamera; group: THREE.Group };
   private materials: Materials;
   private pickables: THREE.Mesh[] = [];
@@ -105,7 +133,13 @@ export class Viewer {
     this.controls.zoomToCursor = true;
     this.controls.addEventListener("change", () => this.requestRender());
 
-    this.scene3.add(this.helpers, this.content, this.overlay);
+    this.scene3.add(this.helpers, this.content, this.overlay, this.handleGroup);
+    this.handleColors = readHandleColors();
+    this.snapLabel = document.createElement("div");
+    this.snapLabel.className = "snap-label";
+    this.snapLabel.setAttribute("data-testid", "snap-label");
+    this.snapLabel.hidden = true;
+    container.appendChild(this.snapLabel);
     const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.6);
     hemi.position.set(0, 0, 1);
     this.scene3.add(hemi);
@@ -123,6 +157,8 @@ export class Viewer {
     this.resize();
 
     const el = this.renderer.domElement;
+    // Grips win over orbiting: the capture listener on the container runs before OrbitControls.
+    container.addEventListener("pointerdown", (e) => this.onGripDown(e), true);
     el.addEventListener("pointermove", (e) => this.onPointerMove(e));
     el.addEventListener("pointerleave", () => {
       this.pointer = null;
@@ -144,6 +180,8 @@ export class Viewer {
     this.clearGroup(this.content);
     this.clearGroup(this.overlay);
     this.clearGroup(this.helpers);
+    this.clearGroup(this.handleGroup);
+    this.snapLabel.remove();
     this.materials.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
@@ -161,9 +199,14 @@ export class Viewer {
       s.allGrids !== p.allGrids ||
       s.meshRevision !== p.meshRevision ||
       s.viewHover !== p.viewHover ||
-      s.docRevision !== p.docRevision
+      s.docRevision !== p.docRevision ||
+      s.drag !== p.drag
     )
       this.requestBuild();
+    else if (s.hoverHandle !== p.hoverHandle) {
+      this.buildHandles();
+      this.requestRender();
+    }
   }
 
   applyTheme(): void {
@@ -171,6 +214,7 @@ export class Viewer {
     this.materials.dispose();
     this.materials = new Materials(pal);
     this.renderer.setClearColor(new THREE.Color(pal.background), 1);
+    this.handleColors = readHandleColors();
     this.requestBuild();
   }
 
@@ -225,6 +269,31 @@ export class Viewer {
     r.setViewport(0, 0, w, h);
     this.frames++;
     this.noteDrawn();
+    this.noteDrag();
+  }
+
+  /** Drag latencies: Drag message → scene drawn (coarse), release → fine root mesh drawn. */
+  private noteDrag(): void {
+    const s = this.lastShown;
+    if (!s || !s.complete) return;
+    const rootKey = s.root !== null ? s.nodes[s.root].mesh_key : null;
+    const coarse = this.meshes.isCoarse(rootKey);
+    let metrics: CadState["metrics"] | null = null;
+    const st = store.getState();
+    for (const [v, t] of bridge.dragTimes) {
+      if (v > s.version) continue;
+      bridge.dragTimes.delete(v);
+      if (v !== s.version) continue;
+      metrics ??= { ...st.metrics };
+      metrics.dragToScene = [...metrics.dragToScene, { ms: performance.now() - t, coarse }].slice(-500);
+    }
+    const end = bridge.dragEnd;
+    if (end && st.drag === null && s.version >= end.version && !coarse && !this.missingMeshes) {
+      bridge.dragEnd = null;
+      metrics ??= { ...st.metrics };
+      metrics.dragEndToFine = [...metrics.dragEndToFine, performance.now() - end.at].slice(-100);
+    }
+    if (metrics) store.setState({ metrics });
   }
 
   /** Records the time from an edit until its scene was drawn (metrics). */
@@ -258,8 +327,9 @@ export class Viewer {
     for (const c of [...g.children]) {
       g.remove(c);
       c.traverse((o) => {
-        const any = o as THREE.Object3D & { geometry?: THREE.BufferGeometry; userData: { ownGeometry?: boolean } };
+        const any = o as THREE.Object3D & { geometry?: THREE.BufferGeometry; material?: THREE.Material; userData: { ownGeometry?: boolean; ownMaterial?: boolean } };
         if (any.userData.ownGeometry && any.geometry) any.geometry.dispose();
+        if (any.userData.ownMaterial && any.material) any.material.dispose();
       });
     }
   }
@@ -275,6 +345,8 @@ export class Viewer {
     if (!scene) {
       this.lastPlan = null;
       this.lastGrid = null;
+      this.lastHandles = [];
+      this.buildHandles();
       this.updateHelpers(null);
       return;
     }
@@ -293,7 +365,7 @@ export class Viewer {
     this.client.ensureMeshes(scene, planNodes(p));
 
     const hull = modelHull(scene);
-    this.modelBox = hull ?? emptyBox();
+    this.modelBox = viewBox(scene, hull);
     const g = gridOverlay({ scene, hull, all: st.allGrids, refs: sel.refs, grids: sel.grids, hoverRef: hoverRefIdx });
     this.lastGrid = g;
 
@@ -330,6 +402,8 @@ export class Viewer {
     }
     this.addGrid(g, diag);
     this.addAnchors(p, diag);
+    this.lastHandles = this.computeHandles(scene, sel, diag);
+    this.buildHandles();
     this.updateHelpers(scene);
     this.maybeFit(scene);
     // The face under a resting mouse may belong to another line in the new scene.
@@ -591,6 +665,140 @@ export class Viewer {
     this.fitAll();
   }
 
+  // ---------------------------------------------------------------- handles
+
+  private computeHandles(scene: Scene, sel: CursorSelection, diag: number): HandleGeom[] {
+    const st = store.getState();
+    const idx = bridge.index(scene);
+    const hs = handlesForCursor(scene, idx, bridge.doc(), st.cursor, sel);
+    const ring = Math.max(1, diag * 0.16);
+    const out = hs.map((h) => handleGeom(scene, h, ring));
+    // The dragged handle keeps its geometry from the drag start (its literal changes live).
+    const dragId = this.drag?.handle ?? null;
+    if (dragId !== null) {
+      const old = this.lastHandles.find((g) => g.handle.id === dragId);
+      const i = out.findIndex((g) => g.handle.id === dragId);
+      if (old && i >= 0) out[i] = old;
+      else if (old) out.push(old);
+    }
+    return out;
+  }
+
+  private buildHandles(): void {
+    this.clearGroup(this.handleGroup);
+    buildHandleLayer(this.handleGroup, {
+      geoms: this.lastHandles,
+      preview: this.preview,
+      hovered: store.getState().hoverHandle,
+      colors: this.handleColors,
+      resolution: { w: this.container.clientWidth, h: this.container.clientHeight },
+    });
+    const snap = this.preview?.snap ?? null;
+    if (snap) {
+      const p = this.project(snap.world);
+      this.snapLabel.textContent = snap.text;
+      this.snapLabel.hidden = !p.visible;
+      if (p.visible) {
+        const r = this.container.getBoundingClientRect();
+        // Left of the point near the right edge.
+        const w = this.snapLabel.offsetWidth || snap.text.length * 8 + 14;
+        const x = p.x - r.left + 14 + w > r.width - 4 ? p.x - r.left - 14 - w : p.x - r.left + 14;
+        this.snapLabel.style.left = `${Math.max(2, x)}px`;
+        this.snapLabel.style.top = `${p.y - r.top - 26}px`;
+      }
+    } else this.snapLabel.hidden = true;
+  }
+
+  /** Drag preview (grip position, snap targets); null when the drag ends. */
+  setDragPreview(p: DragPreview | null): void {
+    this.preview = p;
+    this.buildHandles();
+    this.requestRender();
+  }
+
+  /** Grip under a client position (nearest within the pick radius). */
+  handleAt(clientX: number, clientY: number): HandleGeom | null {
+    let best: HandleGeom | null = null;
+    let bd = GRIP_PX;
+    for (const g of this.lastHandles) {
+      const p = this.project(g.grip);
+      if (!p.visible) continue;
+      const d = Math.hypot(p.x - clientX, p.y - clientY);
+      if (d <= bd) {
+        bd = d;
+        best = g;
+      }
+    }
+    return best;
+  }
+
+  private onGripDown(e: PointerEvent): void {
+    if (e.button !== 0 || !this.drag) return;
+    const g = this.handleAt(e.clientX, e.clientY);
+    if (!g) return;
+    e.stopPropagation();
+    e.preventDefault();
+    if (g.handle.locked) {
+      store.setState({ notice: `${handleLabel(g.handle)}: berechneter Wert – gesperrt` });
+      return;
+    }
+    this.drag.start(g, this, e);
+  }
+
+  /** Mouse ray in context coordinates. */
+  ray(clientX: number, clientY: number): Ray {
+    this.raycaster.setFromCamera(this.ndc(clientX, clientY), this.camera);
+    const o = this.raycaster.ray.origin;
+    const d = this.raycaster.ray.direction;
+    return { origin: [o.x, o.y, o.z], dir: [d.x, d.y, d.z] };
+  }
+
+  /** Viewing direction (from the camera towards the target). */
+  viewDir(): Vec3 {
+    const d = new THREE.Vector3();
+    this.camera.getWorldDirection(d);
+    return [d.x, d.y, d.z];
+  }
+
+  /** Handles drawn for the cursor line with screen positions (test hook). */
+  handleViews(): HandleView[] {
+    const doc = bridge.doc();
+    const s = this.lastShown;
+    const idx = s ? bridge.index(s) : null;
+    return this.lastHandles.map((g) => {
+      const p = this.project(g.grip);
+      const from = idx ? idx.range(g.handle.range).from : 0;
+      return {
+        id: g.handle.id,
+        kind: g.handle.kind.kind,
+        axis: "axis" in g.handle.kind ? g.handle.kind.axis : null,
+        index: g.handle.index,
+        style: g.style,
+        line: doc.lineAt(Math.min(from, doc.length)).number,
+        value: g.handle.value,
+        screen: p.visible ? { x: p.x, y: p.y } : null,
+        label: handleLabel(g.handle),
+      };
+    });
+  }
+
+  /** Screen position on a handle's ring (angle in degrees) or line (value). */
+  handlePoint(id: number, value: number): { x: number; y: number } | null {
+    const g = this.lastHandles.find((x) => x.handle.id === id);
+    if (!g) return null;
+    let w: Vec3;
+    if (g.ring) {
+      const a = (value * Math.PI) / 180;
+      const r = g.ring;
+      w = [0, 1, 2].map((k) => r.center[k] + (r.u[k] * Math.cos(a) + r.v[k] * Math.sin(a)) * r.radius) as Vec3;
+    } else if (g.line) {
+      const l = g.line;
+      w = [0, 1, 2].map((k) => l.base[k] + l.dir[k] * value) as Vec3;
+    } else return null;
+    const p = this.project(w);
+    return { x: p.x, y: p.y };
+  }
+
   // ---------------------------------------------------------------- picking
 
   private ndc(clientX: number, clientY: number): THREE.Vector2 {
@@ -621,7 +829,13 @@ export class Viewer {
 
   private onPointerMove(e: PointerEvent): void {
     this.pointer = { x: e.clientX, y: e.clientY };
-    if (e.buttons !== 0) return;
+    if (e.buttons !== 0 || this.drag?.active) return;
+    const g = this.handleAt(e.clientX, e.clientY);
+    const hid = g?.handle.id ?? null;
+    if (store.getState().hoverHandle !== hid) store.setState({ hoverHandle: hid });
+    const el = this.renderer.domElement;
+    el.style.cursor = g ? (g.handle.locked ? "not-allowed" : "grab") : "";
+    el.title = g ? gripTitle(g) : "";
     const first = this.hoverQueued === null;
     this.hoverQueued = e;
     if (!first) return;
@@ -748,6 +962,14 @@ export class Viewer {
       objects: this.content.children.length,
     };
   }
+}
+
+function gripTitle(g: HandleGeom): string {
+  const h = g.handle;
+  const what = handleLabel(h);
+  if (h.locked) return `${what}: berechneter Wert – gesperrt`;
+  const how = h.via_default ? "Standardwert des Parameters" : h.via_var ? "Variable" : h.comps.every((c) => c === null) ? "Referenz (Snap, Alt: Zahlen)" : "Literal";
+  return `${what} (${how}) – ziehen ändert den Code; Alt: frei`;
 }
 
 function niceStep(x: number): number {
