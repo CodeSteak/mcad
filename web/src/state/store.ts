@@ -286,7 +286,7 @@ export const store = createStore<CadState>(() => ({
   theme: resolveTheme(initialThemePref()),
   themePref: initialThemePref(),
   colorsOpen: initialColorsOpen(),
-  showRegions: false,
+  showRegions: true,
   regions: null,
   regionsError: null,
   meshRevision: 0,

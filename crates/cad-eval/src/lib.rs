@@ -27,8 +27,8 @@ mod sig;
 pub mod value;
 
 pub use edit::{
-    DragOptions, DragTarget, DragValue, SnapRef, SnapTarget, drag_edits, filament_edits, set_default_edit,
-    set_default_edit_project, snap_targets,
+    DragOptions, DragTarget, DragValue, SlotSource, SnapRef, SnapTarget, color_is_literal, drag_edits, filament_edits,
+    filament_set_edits, set_default_edit, set_default_edit_project, snap_targets,
 };
 pub use output::*;
 pub use project::{

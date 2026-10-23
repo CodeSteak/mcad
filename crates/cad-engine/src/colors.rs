@@ -5,8 +5,10 @@
 //! first appearance (pre-order), one entry per RGBA value. Material from a primitive,
 //! extrusion or surface without any `color()` above it is the *default* entry ("Standard").
 //!
-//! **Filament slots:** an entry with `filament = n` at one of its `color()` calls gets slot
-//! `n` (the first explicit value counts; the evaluator warns about conflicting ones). The
+//! **Filament slots:** a `filament(c, n);` statement at the top level of the main file sets
+//! the slot of colour `c` for the model (Bericht 12, F2); otherwise an entry with
+//! `filament = n` at one of its `color()` calls gets slot `n` (the first explicit value
+//! counts; the evaluator warns about conflicting ones). The
 //! default entry gets slot 1. All other entries get the lowest free slot in order of
 //! appearance. Slots are thus fixed by the code alone, never by kernel results.
 //!
@@ -21,27 +23,37 @@
 //!   the colour in effect at the node; without one, the default entry if the node has
 //!   uncoloured primitives, otherwise the colour of its first coloured subtree.
 //!
-//! Then `piece(C) = R ∩ M(C) − ⋃ M(later)`, `rest = R − ⋃ M(all)`; pieces of one colour are
-//! united. The volumes add up to the volume of the result (up to the kernel tolerance; empty
-//! pieces are dropped). `color()` inside 2D subtrees (below an extrusion) is not split into
-//! volumes: the extrusion is one region.
+//! Then `piece(C) = R ∩ M(C) − ⋃ M(later, other colour)`, `rest = R − ⋃ M(all)`; pieces of
+//! one colour are united (a same-coloured neighbour is not subtracted: no slivers). The
+//! volumes add up to the volume of the result (up to the kernel tolerance; empty pieces are
+//! dropped).
+//!
+//! `color()` inside 2D subtrees (below an extrusion without a colour of its own, Bericht 12,
+//! F3): one colour for all 2D leaves → the extrusion is a body of that colour (as if `color()`
+//! were around it); several colours → one body of the default colour and a warning.
 
 use std::rc::Rc;
 
 use cad_ir::{Dim, NodeIdx, Op, Tree};
 use cad_kernel::{BoolOp, Kernel, Mesh};
-use glam::DMat4;
+use glam::{DMat4, DVec3};
 use serde::Serialize;
 
 use crate::key::{CacheKey, KeyHasher};
 use crate::{Cached, Engine, Evaluation, Slot, append_offset, mesh_bytes};
 
-/// Colour identity: RGBA bytes.
+/// Colour identity: RGB bytes, alpha always 255 (alpha only changes the view: a print colour
+/// is its RGB value, `color("red", alpha = 0.5)` is the entry `red`).
 pub type ColorKey = [u8; 4];
 
 pub fn color_key(c: [f32; 4]) -> ColorKey {
-    c.map(|x| (x.clamp(0.0, 1.0) * 255.0).round() as u8)
+    let mut k = c.map(|x| (x.clamp(0.0, 1.0) * 255.0).round() as u8);
+    k[3] = 255;
+    k
 }
+
+/// Highest filament slot (Bambu Studio and OrcaSlicer: 16; `cad_eval::palette::MAX_FILAMENT`).
+pub const MAX_SLOT: u32 = 16;
 
 /// `#rrggbb` (or `#rrggbbaa` with alpha < 1).
 pub fn key_hex(k: ColorKey) -> String {
@@ -82,11 +94,15 @@ pub struct ColorEntry {
     pub nodes: Vec<NodeIdx>,
     /// The `color()` node whose `filament = n` set the slot.
     pub explicit_node: Option<NodeIdx>,
+    /// The `filament(c, n)` statement (index into `Tree::filaments`) that set the slot.
+    pub decl: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct ColorTable {
     pub entries: Vec<ColorEntry>,
+    /// Profile operations with 2D content of several colours (one body, warning).
+    pub profile_remarks: Vec<(NodeIdx, bool, String)>,
 }
 
 /// Nodes that create material (leaves of the material tree).
@@ -124,6 +140,62 @@ fn effective(tree: &Tree, n: NodeIdx) -> Option<ColorKey> {
     }
 }
 
+/// Colours of the 2D content of a profile operation (`linear_extrude`, …) without a colour in
+/// effect (Bericht 12, F3): all 2D leaves in one colour → `Uniform(colour, first 2D color()
+/// node)` (the body prints in it, as if `color()` were around the extrusion); leaves of
+/// several colours, or partly uncoloured → `Mixed` (one body, default colour, warning);
+/// no colour → `None`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProfileColor {
+    None,
+    Uniform(ColorKey, NodeIdx),
+    Mixed,
+}
+
+pub(crate) fn profile_color(tree: &Tree, n: NodeIdx) -> ProfileColor {
+    let node = tree.node(n);
+    if !crate::is_profile_op(&node.op) || node.color.is_some() {
+        return ProfileColor::None;
+    }
+    let mut leaves: Vec<Option<ColorKey>> = Vec::new();
+    let mut first: Option<NodeIdx> = None;
+    let mut stack: Vec<NodeIdx> = tree.solid_children(n).collect();
+    while let Some(i) = stack.pop() {
+        let c = tree.node(i);
+        if first.is_none() && matches!(c.op, Op::Color { .. }) {
+            first = Some(i);
+        }
+        if matches!(c.op, Op::Profile(_)) {
+            leaves.push(c.color.map(color_key));
+        }
+        // the first operand of a 2D difference gives the material
+        let kids: Vec<NodeIdx> = match &c.op {
+            Op::Boolean { op: BoolOp::Difference, .. } => tree.solid_children(i).take(1).collect(),
+            _ => tree.solid_children(i).collect(),
+        };
+        stack.extend(kids);
+    }
+    let known: Vec<ColorKey> = leaves.iter().flatten().copied().collect();
+    if known.is_empty() {
+        return ProfileColor::None;
+    }
+    if known.len() == leaves.len() && known.iter().all(|k| *k == known[0]) {
+        // the color() node of that colour that comes first in pre-order
+        let mut best: Option<NodeIdx> = None;
+        let mut st = vec![n];
+        while let Some(i) = st.pop() {
+            if let Op::Color { rgba, .. } = &tree.node(i).op
+                && color_key(*rgba) == known[0]
+            {
+                best = Some(best.map_or(i, |b: NodeIdx| b.min(i)));
+            }
+            st.extend(tree.solid_children(i));
+        }
+        return ProfileColor::Uniform(known[0], best.or(first).unwrap_or(n));
+    }
+    ProfileColor::Mixed
+}
+
 /// Pre-order walk of the material tree below `n` (inclusive): `f(node, colour in effect)`.
 fn walk(tree: &Tree, n: NodeIdx, f: &mut impl FnMut(NodeIdx, Option<ColorKey>)) {
     let mut stack = vec![n];
@@ -151,7 +223,23 @@ impl ColorTable {
             if matches!(node.op, Op::Color { .. }) {
                 order.push((eff.expect("colour node"), i));
             } else if eff.is_none() && creates_material(&node.op) && tree.dim(i) == Some(Dim::Three) {
-                uncolored = true;
+                match profile_color(tree, i) {
+                    // colour of the 2D profile: the 2D color() node gives the entry
+                    ProfileColor::Uniform(k, c) => order.push((k, c)),
+                    _ => uncolored = true,
+                }
+            }
+        });
+        walk(tree, root, &mut |i, eff| {
+            if eff.is_none() && profile_color(tree, i) == ProfileColor::Mixed {
+                t.profile_remarks.push((
+                    i,
+                    true,
+                    format!(
+                        "Farben im 2D-Profil von {} werden nicht getrennt: der Körper druckt als Standard – color() um die Extrusion setzen oder je Farbe extrudieren",
+                        tree.node(i).op.label()
+                    ),
+                ));
             }
         });
         if uncolored {
@@ -164,10 +252,14 @@ impl ColorTable {
                 explicit: false,
                 nodes: Vec::new(),
                 explicit_node: None,
+                decl: None,
             });
         }
         for (key, i) in order {
             let Op::Color { rgba, name, filament } = &tree.node(i).op else { continue };
+            if t.entries.iter().any(|e| e.nodes.contains(&i)) {
+                continue;
+            }
             let pos = t.entries.iter().position(|e| e.key == key && e.source != ColorSource::Default);
             let e = match pos {
                 Some(p) => &mut t.entries[p],
@@ -186,6 +278,7 @@ impl ColorTable {
                         explicit: false,
                         nodes: Vec::new(),
                         explicit_node: None,
+                        decl: None,
                     });
                     t.entries.last_mut().unwrap()
                 }
@@ -197,6 +290,19 @@ impl ColorTable {
                 e.filament = *f;
                 e.explicit = true;
                 e.explicit_node = Some(i);
+            }
+        }
+        // `filament(c, n)` statements: the slot table of the model (the evaluator drops
+        // conflicting `filament = m` at `color()`)
+        for (di, d) in tree.filaments.iter().enumerate() {
+            let key = color_key(d.rgba);
+            if let Some(e) = t.entries.iter_mut().find(|e| e.key == key && e.source != ColorSource::Default)
+                && e.decl.is_none()
+            {
+                e.filament = d.slot;
+                e.explicit = true;
+                e.explicit_node = None;
+                e.decl = Some(di);
             }
         }
         // auto slots: lowest free slot in order of appearance
@@ -211,6 +317,52 @@ impl ColorTable {
             used.push(s);
         }
         t
+    }
+
+    /// Remarks about the slots (Bericht 12, F8): `(node, warning?, text)` with the `color()`
+    /// node to show them at; `warning = false` is a hint.
+    /// * more than [`MAX_SLOT`] slots (automatic ones beyond 16): warning;
+    /// * two colours on the same explicit slot: hint (they print with one filament);
+    /// * an explicit slot 1 next to material without `color()` (slot 1): hint.
+    pub fn remarks(&self) -> Vec<(NodeIdx, bool, String)> {
+        let mut out = self.profile_remarks.clone();
+        let default = self.default_entry().is_some();
+        for (i, e) in self.entries.iter().enumerate() {
+            let Some(&node) = e.explicit_node.as_ref().or(e.nodes.first()) else { continue };
+            if e.filament > MAX_SLOT {
+                out.push((
+                    node,
+                    true,
+                    format!(
+                        "Farbe `{}` bekommt Slot {} – mehr als {MAX_SLOT} Filamente (Bambu Studio/OrcaSlicer: höchstens {MAX_SLOT}); Farben zusammenlegen oder filament = n setzen",
+                        e.label, e.filament
+                    ),
+                ));
+                continue;
+            }
+            if !e.explicit {
+                continue;
+            }
+            if let Some(o) =
+                self.entries[..i].iter().find(|o| o.filament == e.filament && o.source != ColorSource::Default)
+            {
+                out.push((
+                    node,
+                    false,
+                    format!(
+                        "Slot {} hat schon die Farbe `{}`: beide drucken mit demselben Filament",
+                        e.filament, o.label
+                    ),
+                ));
+            } else if e.filament == 1 && default {
+                out.push((
+                    node,
+                    false,
+                    format!("Slot 1 druckt auch das Material ohne color() („Standard“) – `{}` und Standard teilen sich das Filament", e.label),
+                ));
+            }
+        }
+        out
     }
 
     pub fn find(&self, key: ColorKey) -> Option<usize> {
@@ -316,6 +468,11 @@ fn inner_color_nodes(tree: &Tree, p: NodeIdx) -> Vec<(NodeIdx, ColorKey)> {
             && n.color.map(color_key) != Some(color_key(*rgba))
         {
             out.push((i, eff.expect("colour node")));
+        } else if eff.is_none()
+            && let ProfileColor::Uniform(k, _) = profile_color(tree, i)
+        {
+            // an extrusion of a coloured profile: its body is the colour's material
+            out.push((i, k));
         }
     });
     out
@@ -325,7 +482,11 @@ fn inner_color_nodes(tree: &Tree, p: NodeIdx) -> Vec<(NodeIdx, ColorKey)> {
 fn has_uncolored(tree: &Tree, p: NodeIdx) -> bool {
     let mut found = false;
     walk(tree, p, &mut |i, eff| {
-        if eff.is_none() && creates_material(&tree.node(i).op) && tree.dim(i) == Some(Dim::Three) {
+        if eff.is_none()
+            && creates_material(&tree.node(i).op)
+            && tree.dim(i) == Some(Dim::Three)
+            && !matches!(profile_color(tree, i), ProfileColor::Uniform(..))
+        {
             found = true;
         }
     });
@@ -424,8 +585,13 @@ where
         };
         let total = k.mass_props(&r).map_err(|e| fail("Volumen", e))?.volume;
         out.total = total;
+        // Later statements win, but only over other colours: a piece is reduced by the
+        // material of later colour nodes of *other* colours (Bericht 12, F6: subtracting a
+        // touching neighbour of the same colour left slivers; the same colour's pieces are
+        // united below anyway, so the ownership is the same).
         let mut pieces: Vec<(RegionColor, K::Shape)> = Vec::new();
-        let mut claimed: Option<K::Shape> = None;
+        // material of the colour nodes processed so far (later in pre-order), per colour
+        let mut claimed: Vec<(ColorKey, K::Shape)> = Vec::new();
         for &(c, ck, m) in placed.iter().rev() {
             let ctag = ev.reports[c as usize].tag;
             let mut ms = Vec::new();
@@ -447,20 +613,25 @@ where
             };
             let mut piece =
                 k.boolean(BoolOp::Intersection, &[r.clone(), mc.clone()], ctag).map_err(|e| fail("Schnittmenge", e))?;
-            if let Some(cl) = &claimed
-                && !k.is_empty(&piece)
-            {
-                piece = k.boolean(BoolOp::Difference, &[piece, cl.clone()], ctag).map_err(|e| fail("Differenz", e))?;
+            let others: Vec<K::Shape> = claimed.iter().filter(|(x, _)| *x != ck).map(|(_, s)| s.clone()).collect();
+            if !others.is_empty() && !k.is_empty(&piece) {
+                let mut ops = vec![piece];
+                ops.extend(others);
+                piece = k.boolean(BoolOp::Difference, &ops, ctag).map_err(|e| fail("Differenz", e))?;
             }
-            claimed = Some(match claimed.take() {
-                None => mc,
-                Some(cl) => k.boolean(BoolOp::Union, &[cl, mc], ctag).map_err(|e| fail("Vereinigung", e))?,
-            });
+            match claimed.iter_mut().find(|(x, _)| *x == ck) {
+                Some((_, cl)) => {
+                    *cl = k.boolean(BoolOp::Union, &[cl.clone(), mc], ctag).map_err(|e| fail("Vereinigung", e))?
+                }
+                None => claimed.push((ck, mc)),
+            }
             pieces.push((RegionColor::Color(ck), piece));
         }
         pieces.reverse();
-        if let Some(cl) = claimed {
-            let rem = k.boolean(BoolOp::Difference, &[r, cl], tag).map_err(|e| fail("Differenz", e))?;
+        if !claimed.is_empty() {
+            let mut ops = vec![r];
+            ops.extend(claimed.into_iter().map(|(_, s)| s));
+            let rem = k.boolean(BoolOp::Difference, &ops, tag).map_err(|e| fail("Differenz", e))?;
             pieces.push((rest, rem));
         }
         // drop empty pieces, unite pieces of one colour (order of first piece)
@@ -500,6 +671,71 @@ where
             out.warning = Some(format!(
                 "Farbregionen ungenau: Summe {sum:.3} mm³ statt {total:.3} mm³ (Boolean des Kernels unvollständig)"
             ));
+        }
+        Ok(out)
+    }
+
+    /// Region colour of every face of part `part` of a node's result, by [`cad_kernel::FaceId`]
+    /// (Bericht 12, F1/F3; STEP colours). The rule of the regions without booleans: a face
+    /// gets the colour of the latest colour node (pre-order) whose placed material contains
+    /// its sample points (inside or on the boundary), otherwise the rest colour; majority of
+    /// the face's sample points. Faces are not split (a face merged across a colour boundary
+    /// gets one colour; the 3MF regions split it).
+    pub fn face_region_colors(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        node: NodeIdx,
+        part: usize,
+    ) -> Result<Vec<RegionColor>, String> {
+        let tree = ev.tree.clone();
+        let inner = inner_color_nodes(&tree, node);
+        let base = effective(&tree, node);
+        let rest = match (base, inner.first()) {
+            (Some(b), _) => RegionColor::Color(b),
+            (None, _) if has_uncolored(&tree, node) => RegionColor::Default,
+            (None, Some(&(_, k))) => RegionColor::Color(k),
+            (None, None) => RegionColor::Default,
+        };
+        let shape = ev.parts(node).get(part).ok_or("kein solcher Teil")?.shape.clone();
+        let fail = |what: &str, e: cad_kernel::KernelError| format!("Flächenfarben: {what} gescheitert: {e}");
+        let faces = self.kernel.faces(&shape, 3).map_err(|e| fail("Flächen", e))?;
+        if inner.is_empty() {
+            return Ok(vec![rest; faces.len()]);
+        }
+        let pts: Vec<DVec3> = faces.iter().flat_map(|f| f.points.iter().copied()).collect();
+        // owner per sample point: index into `inner` of the latest colour node containing it
+        let mut owner: Vec<Option<usize>> = vec![None; pts.len()];
+        for (ci, &(c, _)) in inner.iter().enumerate() {
+            let m = placement(ev, node, c).ok_or("Farbknoten liegt nicht unter dem Knoten")?;
+            for p in ev.parts(c).iter().filter(|p| p.solid) {
+                let s = if m.abs_diff_eq(DMat4::IDENTITY, 1e-12) {
+                    p.shape.clone()
+                } else {
+                    self.kernel.transform(&p.shape, &m).map_err(|e| fail("Transformation", e))?
+                };
+                let cls = self.kernel.classify(&s, &pts).map_err(|e| fail("Klassifikation", e))?;
+                for (o, c) in owner.iter_mut().zip(cls) {
+                    if c != cad_kernel::Class::Outside {
+                        *o = Some(ci);
+                    }
+                }
+            }
+        }
+        let mut out = Vec::with_capacity(faces.len());
+        let mut at = 0;
+        for f in &faces {
+            let mut votes: Vec<(RegionColor, usize)> = Vec::new();
+            for o in &owner[at..at + f.points.len()] {
+                let c = o.map_or(rest, |ci| RegionColor::Color(inner[ci].1));
+                match votes.iter_mut().find(|(x, _)| *x == c) {
+                    Some(v) => v.1 += 1,
+                    None => votes.push((c, 1)),
+                }
+            }
+            at += f.points.len();
+            // most votes; ties: the later colour (owners are in pre-order)
+            let best = votes.iter().rev().max_by_key(|(_, n)| *n).map_or(rest, |(c, _)| *c);
+            out.push(best);
         }
         Ok(out)
     }

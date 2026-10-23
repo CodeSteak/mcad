@@ -141,7 +141,7 @@ impl Look {
 pub(crate) const ALL_VIEWS: [&str; 4] = ["iso", "front", "top", "right"];
 /// Grids with more points get no point labels (only plane names).
 const MAX_POINT_LABELS: usize = 48;
-const SHOW: [&str; 8] = ["grids", "anchors", "handles", "edges", "labels", "bbox", "dims", "regions"];
+const SHOW: [&str; 9] = ["grids", "anchors", "handles", "edges", "labels", "bbox", "dims", "regions", "faces"];
 
 /// Selection, camera, overlays, section (shared by `render` and `watch --render`).
 #[derive(Args, Clone, Debug, Default)]
@@ -198,8 +198,10 @@ pub(crate) struct ViewArgs {
     /// Kein Achsenkreuz.
     #[arg(long)]
     pub no_axes: bool,
-    /// Überlagerungen: grids, anchors, handles, edges, labels, bbox, dims (Komma-Liste, `all`);
-    /// `regions`: Farbregionen (Körper je Farbe) statt Farbe je Fläche.
+    /// Überlagerungen: grids, anchors, handles, edges, labels, bbox, dims (Komma-Liste, `all`).
+    /// Farben: ein Modell mit color() zeigt die Farbregionen (Körper je Farbe, wie der Druck);
+    /// `faces`: stattdessen Farbe je Fläche aus den Knoten (schneller, kann bei Überlappung und
+    /// Verrundung vom Druck abweichen); `regions` erzwingt die Regionen.
     #[arg(long, value_delimiter = ',')]
     pub show: Vec<String>,
     /// Schnitt an einer Achsebene: `x=WERT`, `y=WERT`, `z=WERT` (entfernt die Seite +Achse).
@@ -417,9 +419,70 @@ struct Draw {
     role: &'static str,
 }
 
-/// Splits a mesh by triangle colour. Edges stay with the first part.
-fn split_by_color(m: &Mesh, color_of: &dyn Fn(u32) -> Option<[f32; 4]>, base: [f32; 4]) -> Vec<(Mesh, [f32; 4])> {
-    let colors: Vec<[f32; 4]> = m.tri_tags.iter().map(|&t| color_of(t).unwrap_or(base)).collect();
+/// Colour per triangle of the mesh of node `owner` (its own system), from `color()` of the
+/// node that created the face (Bericht 12, F1): a face tag belongs to all nodes of equal
+/// content (the cache shares their result), so only those below `owner` count, and of several
+/// with different colours the one whose bounds contain the triangle (the latest in pre-order
+/// if several do). Approximate where colours overlap or a fillet joins them; the regions
+/// (`regions_on`) are exact.
+pub(crate) fn face_colors(sc: &p::Scene, owner: u32, m: &Mesh) -> Vec<Option<[f32; 4]>> {
+    let below = |mut n: u32| loop {
+        if n == owner {
+            return true;
+        }
+        match sc.nodes[n as usize].parent {
+            Some(par) => n = par,
+            None => return false,
+        }
+    };
+    let mut cands: HashMap<u32, Vec<u32>> = HashMap::new();
+    for tn in &sc.tag_nodes {
+        let v: Vec<u32> = tn.nodes.iter().copied().filter(|&n| below(n)).collect();
+        if !v.is_empty() {
+            cands.insert(tn.tag, v);
+        }
+    }
+    let ow = mat(&sc.nodes[owner as usize].display_world);
+    let mut inv: HashMap<u32, DMat4> = HashMap::new();
+    let tris = m.indices.len() / 3;
+    let mut out = Vec::with_capacity(tris);
+    for t in 0..tris {
+        let Some(c) = cands.get(&m.tri_tags[t]) else {
+            out.push(None);
+            continue;
+        };
+        let col = |n: u32| sc.nodes[n as usize].color.map(|c| c.0);
+        let first = col(c[0]);
+        if c.iter().all(|&n| col(n) == first) {
+            out.push(first);
+            continue;
+        }
+        let mut p = DVec3::ZERO;
+        for k in 0..3 {
+            let v = m.indices[3 * t + k] as usize * 3;
+            p += DVec3::new(m.positions[v] as f64, m.positions[v + 1] as f64, m.positions[v + 2] as f64) / 3.0;
+        }
+        let pw = ow.transform_point3(p);
+        let mut pick = None;
+        for &n in c {
+            let node = &sc.nodes[n as usize];
+            let Some(b) = &node.bounds else { continue };
+            let iv = *inv.entry(n).or_insert_with(|| mat(&node.display_world).inverse());
+            let q = iv.transform_point3(pw);
+            let (lo, hi) = (DVec3::from_array(b.min.0), DVec3::from_array(b.max.0));
+            let eps = 1e-6 * (hi - lo).length() + 1e-4;
+            if q.cmpge(lo - eps).all() && q.cmple(hi + eps).all() {
+                pick = Some(pick.map_or(n, |x: u32| x.max(n)));
+            }
+        }
+        out.push(col(pick.unwrap_or(c[0])));
+    }
+    out
+}
+
+/// Splits a mesh by triangle colour (`None`: `base`). Edges stay with the first part.
+fn split_by_color(m: &Mesh, tri_colors: &[Option<[f32; 4]>], base: [f32; 4]) -> Vec<(Mesh, [f32; 4])> {
+    let colors: Vec<[f32; 4]> = tri_colors.iter().map(|c| c.unwrap_or(base)).collect();
     if colors.iter().all(|c| *c == base) {
         return vec![(m.clone(), base)];
     }
@@ -656,14 +719,12 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
         }
     }
 
-    // Meshes (cached per key in the engine).
-    let tag_color: HashMap<u32, [f32; 4]> = sc
-        .tag_nodes
-        .iter()
-        .filter_map(|tn| tn.nodes.iter().find_map(|&n| sc.nodes[n as usize].color).map(|c| (tn.tag, lk.model(c.0))))
-        .collect();
-    // `--show regions`: bodies per colour instead of colours per face (the base draws)
-    let regions_on = plan.shows("regions") && !plan.xray;
+    // `regions` (default for a model with colours, Bericht 12, F1/F3): bodies per colour as
+    // the 3MF prints them, instead of colours per face (the base draws)
+    let colored = sc.colors.iter().any(|c| c.source != p::ColorSource::Default);
+    let has_base = draws.iter().any(|d| d.role == "base");
+    let regions_on =
+        !plan.xray && has_base && (plan.shows("regions") || (colored && sc.complete && !plan.shows("faces")));
     let mut region_meshes: Vec<(u32, Mesh, [f32; 4])> = Vec::new();
     if regions_on {
         let sets = m.session.color_regions(true, false).map_err(Fail::Kernel)?;
@@ -709,7 +770,9 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
         triangles += mesh.triangle_count();
         let cap = d.color[3] >= 0.999;
         if d.node_colors {
-            for (sub, col) in split_by_color(&mesh, &|t| tag_color.get(&t).copied(), d.color) {
+            let fc = face_colors(sc, d.node, &mesh);
+            let fc: Vec<Option<[f32; 4]>> = fc.into_iter().map(|c| c.map(|c| lk.model(c))).collect();
+            for (sub, col) in split_by_color(&mesh, &fc, d.color) {
                 meshes.push((sub, col, w, d.edges, cap));
             }
         } else {

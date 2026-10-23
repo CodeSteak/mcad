@@ -33,6 +33,7 @@ pub(crate) const BUILTIN_MODULES: &[&str] = &[
     "multmatrix",
     "resize",
     "color",
+    "filament",
     "union",
     "difference",
     "intersection",
@@ -274,6 +275,7 @@ impl<'a> Ev<'a> {
                 return self.m_transform(s, n, a, children, ctx, dy);
             }
             "color" => return self.m_color(s, a, children, ctx, dy),
+            "filament" => self.m_filament(s, a),
             "fillet" | "chamfer" | "shell" => return self.m_blend(s, n, a, children, ctx, dy),
             "zone" => self.m_zone(s, a, ctx),
             "linear_extrude" | "rotate_extrude" | "loft" | "sweep" | "thicken" | "resize" => {
@@ -1068,44 +1070,135 @@ impl<'a> Ev<'a> {
         Some((g.frame_module.transform_point3(axis * p.value), math::transform_dir(&g.frame_module, axis)))
     }
 
-    #[inline(never)]
-    fn m_color(&mut self, s: &'a Stmt, a: &Args<'a>, children: &'a [Stmt], ctx: &Ctx<'a>, dy: &Dyn<'a>) -> R<()> {
-        let p = self.bind("color", a, &["c", "alpha", "filament"], 2);
+    /// The colour of a `color()`/`filament()` argument (with the warnings of Plan 16.1 and
+    /// Bericht 12, F7): RGBA (vectors clamped to 0..1) and the palette or unknown name.
+    /// `None`: no colour (`""`, `transparent`, malformed).
+    fn color_arg(&mut self, x: &ArgV<'a>) -> (Option<[f32; 4]>, Option<String>) {
         let mut name = None;
-        let mut rgba = match p[0] {
-            None => None,
-            Some(x) => match (&x.val.v, x.val.as_nums()) {
-                (Value::Str(text), _) => match parse_color(text) {
-                    Some(c) => {
-                        if c.kind == ColorKind::Random {
-                            let known: Vec<&str> = palette::PALETTE.iter().map(|p| p.name).collect();
-                            self.warn(
-                                x.expr.span,
-                                format!("Farbe `{text}` unbekannt – Zufallsfarbe (Palette: {})", known.join(", ")),
-                            );
-                        }
-                        name = c.name;
-                        Some(c.rgba)
-                    }
-                    None => {
+        let rgba = match (&x.val.v, x.val.as_nums()) {
+            (Value::Str(text), _) if text.trim().is_empty() => {
+                self.warn(x.expr.span, "leerer Farbname: color() hat keine Wirkung");
+                None
+            }
+            (Value::Str(text), _) if text.trim().eq_ignore_ascii_case("transparent") => {
+                // OpenSCAD hides it in the preview; a print has no transparent filament
+                self.warn(
+                    x.expr.span,
+                    "`transparent` ist keine Druckfarbe: das Material bleibt ungefärbt (Standard, Filament 1)",
+                );
+                None
+            }
+            (Value::Str(text), _) => match parse_color(text) {
+                Some(c) => {
+                    if c.kind == ColorKind::Random {
+                        let known: Vec<&str> = palette::PALETTE.iter().map(|p| p.name).collect();
                         self.warn(
                             x.expr.span,
-                            format!("`{text}` ist keine Farbe (#rgb, #rrggbb, #rrggbbaa oder Name)"),
+                            format!("Farbe `{text}` unbekannt – Zufallsfarbe (Palette: {})", known.join(", ")),
                         );
-                        None
                     }
-                },
-                (_, Some(v)) if v.len() == 3 || v.len() == 4 => {
-                    Some([v[0] as f32, v[1] as f32, v[2] as f32, v.get(3).copied().unwrap_or(1.0) as f32])
+                    name = c.name;
+                    if c.kind == ColorKind::Random { Some(self.random_color(text)) } else { Some(c.rgba) }
                 }
-                _ => {
-                    self.warn(x.expr.span, "Farbe muss Name oder [r, g, b, a] sein");
+                None => {
+                    self.warn(x.expr.span, format!("`{text}` ist keine Farbe (#rgb, #rrggbb, #rrggbbaa oder Name)"));
                     None
                 }
             },
+            (_, Some(v)) if v.len() == 3 || v.len() == 4 => {
+                if v.iter().any(|c| !(0.0..=1.0).contains(c)) {
+                    let hint = if v.iter().take(3).any(|&c| c > 1.0) && v.iter().take(3).all(|&c| c <= 255.0) {
+                        let b: Vec<u8> = v.iter().take(3).map(|&c| c.clamp(0.0, 255.0).round() as u8).collect();
+                        format!(" – für Werte 0–255 \"#{:02x}{:02x}{:02x}\" schreiben", b[0], b[1], b[2])
+                    } else {
+                        String::new()
+                    };
+                    self.warn(
+                        x.expr.span,
+                        format!("Farbwerte liegen zwischen 0 und 1 (wie in OpenSCAD), andere werden geklemmt{hint}"),
+                    );
+                }
+                let c = |i: usize| v.get(i).copied().unwrap_or(1.0).clamp(0.0, 1.0) as f32;
+                Some([c(0), c(1), c(2), c(3)])
+            }
+            _ => {
+                self.warn(x.expr.span, "Farbe muss Name oder [r, g, b, a] sein");
+                None
+            }
         };
-        if let (Some(c), Some(al)) = (rgba.as_mut(), self.num_of(p[1], "alpha")) {
-            c[3] = al as f32;
+        (rgba, name)
+    }
+
+    /// `filament(c, n);` (Bericht 12, F2): colour `c` prints with slot `n`, for the whole model.
+    /// Only at the top level of the main file (evaluated first, see `filament_pass`); the
+    /// first declaration of a colour counts, `filament = m` at its `color()` calls must agree.
+    #[inline(never)]
+    fn m_filament(&mut self, s: &'a Stmt, a: &Args<'a>) {
+        if !self.decl_pass {
+            if !self.decl_spans.contains(&s.span) {
+                self.warn(s.span, "filament(…) gilt nur auf oberster Ebene der Hauptdatei – hier ohne Wirkung");
+            }
+            return;
+        }
+        self.decl_spans.push(s.span);
+        let p = self.bind("filament", a, &["c", "n"], 2);
+        let Some(c) = p[0] else {
+            self.warn(s.span, "filament(Farbe, Slot): Farbe fehlt");
+            return;
+        };
+        let (rgba, name) = self.color_arg(c);
+        let Some(rgba) = rgba else { return };
+        let Some(n) = self.num_of(p[1], "n") else {
+            self.warn(s.span, "filament(Farbe, Slot): Slot fehlt");
+            return;
+        };
+        if n.fract() != 0.0 || !(1.0..=palette::MAX_FILAMENT as f64).contains(&n) {
+            let sp = p[1].map_or(s.span, |x| x.expr.span);
+            self.warn(sp, format!("Slot muss eine ganze Zahl von 1 bis {} sein", palette::MAX_FILAMENT));
+            return;
+        }
+        let key = palette::rgb_key(rgba);
+        let n = n as u32;
+        if let Some(&(m, _)) = self.filaments.get(&key) {
+            self.warn(s.span, format!("Farbe hat schon Filament {m} (die erste Angabe gilt), Slot {n} wird ignoriert"));
+            return;
+        }
+        let sp = p[1].map_or(s.span, |x| x.expr.span);
+        self.filaments.insert(key, (n, sp));
+        self.filament_decls.push(cad_ir::FilamentDecl { rgba, name, slot: n, stmt: s.id, span: s.span });
+    }
+
+    /// Colour of an unknown name in this model: the same for every spelling of the name, apart
+    /// from the random colours of the names before it (`palette::random_color_avoiding`).
+    fn random_color(&mut self, text: &str) -> [f32; 4] {
+        let key = text.trim().to_ascii_lowercase();
+        if let Some((_, c)) = self.random_colors.iter().find(|(n, _)| *n == key) {
+            return palette::rgba_of(*c);
+        }
+        let others: Vec<[u8; 3]> = self.random_colors.iter().map(|(_, c)| *c).collect();
+        let c = palette::random_color_avoiding(&key, &others);
+        let b = palette::rgba_bytes(c);
+        self.random_colors.push((key, [b[0], b[1], b[2]]));
+        c
+    }
+
+    #[inline(never)]
+    fn m_color(&mut self, s: &'a Stmt, a: &Args<'a>, children: &'a [Stmt], ctx: &Ctx<'a>, dy: &Dyn<'a>) -> R<()> {
+        let p = self.bind("color", a, &["c", "alpha", "filament"], 2);
+        let (mut rgba, name) = match p[0] {
+            None => {
+                self.warn(s.span, "color() ohne Farbe hat keine Wirkung");
+                (None, None)
+            }
+            Some(x) => self.color_arg(x),
+        };
+        if let Some(al) = self.num_of(p[1], "alpha") {
+            if !(0.0..=1.0).contains(&al) {
+                self.warn(p[1].map_or(s.span, |x| x.expr.span), "alpha liegt zwischen 0 und 1, der Wert wird geklemmt");
+            }
+            if let Some(c) = rgba.as_mut() {
+                c[3] = al.clamp(0.0, 1.0) as f32;
+            }
         }
         let mut filament = None;
         if let Some(arg) = p[2]
@@ -1117,7 +1210,8 @@ impl<'a> Ev<'a> {
                     format!("filament muss eine ganze Zahl von 1 bis {} sein", palette::MAX_FILAMENT),
                 );
             } else if let Some(c) = rgba {
-                let key = palette::rgba_bytes(c);
+                // the identity of a print colour is its RGB value (alpha only affects the view)
+                let key = palette::rgb_key(c);
                 let n = f as u32;
                 match self.filaments.get(&key) {
                     Some(&(m, _)) if m != n => {

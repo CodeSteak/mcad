@@ -1,24 +1,32 @@
 //! Multi-colour exports (Plan 16.4): a 3MF for Bambu Studio / OrcaSlicer with one object per
 //! part and one part (volume) per colour, and a ZIP with one STL per colour.
 //!
-//! The 3MF (all in `3D/3dmodel.model`, core spec 2015/02 plus the materials extension):
-//! * `m:colorgroup` id 1 with one `m:color` per colour (sRGB `#RRGGBBAA`);
-//! * one mesh object per (part, colour) with `pid="1" pindex="i"` (object-level colour);
+//! The 3MF (all in `3D/3dmodel.model`, core spec 2015/02, materials extension optional):
+//! * one mesh object per (part, colour);
 //! * one object per part with a `components` list of its colour meshes (identity
 //!   transforms: all meshes are in the same coordinates, nothing moves), referenced by a
 //!   build item;
 //! * `Metadata/model_settings.config` (Bambu/Orca project metadata): per part object its name
 //!   and `extruder` (slot of the largest colour), per colour mesh a `part` with name and
-//!   `extruder` = filament slot.
+//!   `extruder` = filament slot;
+//! * only with [`PackageOptions::color_group`] (and more than one colour): `m:colorgroup` id 1
+//!   with one `m:color` per colour (sRGB `#RRGGBBAA`) and `pid="1" pindex="i"` at every colour
+//!   mesh, for viewers that show 3MF colours.
 //!
-//! Sources of these assumptions (BambuStudio `src/libslic3r/Format/bbs_3mf.cpp`, OrcaSlicer
-//! the same file, both read on 23.10.2026): the importer parses `model_settings.config` also
-//! for 3MF files of other applications, matches `<part id>` to the component's object id
-//! (`_generate_volumes_new`) and applies `extruder` as volume setting; objects with a single
-//! volume use the object's `extruder`; `m:colorgroup` (the parser compares the literal
-//! prefix `m:`) with object-level `pid`/`pindex` gives every triangle a colour, which current
-//! Bambu Studio offers to map onto filaments ("Append" adds the colours as filaments,
-//! `ObjColorPanel::apply_volume_filament_ids` keeps volume boundaries). No
+//! Sources (BambuStudio `src/libslic3r/Format/bbs_3mf.cpp` and `src/slic3r/GUI/Plater.cpp`,
+//! OrcaSlicer the same files, read on 23.10.2026, Bericht 11 and 12): both importers read
+//! `model_settings.config` also from 3MF files of other applications (not gated by the version
+//! check), match `<part id>` to the component's object id (`_generate_volumes_new`) and apply
+//! `extruder` as volume setting; objects with a single volume use the object's `extruder`.
+//! Bambu Studio opens its colour dialog (`ObjColorDialog`) for a foreign 3MF exactly when the
+//! file has a `m:colorgroup` and triangles with colours (`Plater.cpp`: `!color_group_map.empty()
+//! && !volume_color_data.empty() && en_3mf_file_type != From_BBS`; object-level `pid` gives
+//! every triangle a colour); OK there overwrites `extruder` of every part
+//! (`ObjColorPanel::apply_volume_filament_ids`), "Abbrechen" keeps it. Without the colour group
+//! the dialog does not open and the slots of the code stay. OrcaSlicer has no such dialog; it
+//! uses colour groups only for objects without `model_settings.config` volumes. Marking the
+//! file as a Bambu project (`Application` = `BambuStudio-…`) would also skip the dialog but
+//! claims a producer it is not and switches on the project code paths: not done. No
 //! `project_settings.config`: Bambu Studio ignores it for files not written by itself, and
 //! OrcaSlicer would apply it over its default printer and process settings.
 
@@ -67,10 +75,20 @@ pub struct ColorExportStats {
     pub triangles: u32,
     /// (label, filament, volume mm³) per colour, in package order.
     pub colors: Vec<(String, u32, f64)>,
+    /// Object names in package order.
+    pub object_names: Vec<String>,
 }
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('"', "&quot;").replace('>', "&gt;")
+}
+
+/// Options of the multi-colour 3MF.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PackageOptions {
+    /// Write `m:colorgroup` and `pid`/`pindex` (more than one colour only). Bambu Studio then
+    /// opens its colour dialog, whose OK replaces the filament slots (see the module docs).
+    pub color_group: bool,
 }
 
 /// `3D/3dmodel.model` of a multi-colour package; also returns the object id of every part
@@ -79,17 +97,22 @@ pub fn color_model_xml(
     objects: &[PackageObject],
     colors: &[PackageColor],
     app: &str,
+    opts: PackageOptions,
 ) -> (String, Vec<(u32, Vec<u32>)>) {
+    let group = opts.color_group && colors.len() > 1;
     let mut s = String::new();
     s.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
     s.push_str("<model unit=\"millimeter\" xml:lang=\"en-US\" xmlns=\"http://schemas.microsoft.com/3dmanufacturing/core/2015/02\" xmlns:m=\"http://schemas.microsoft.com/3dmanufacturing/material/2015/02\">\n");
     let _ = writeln!(s, " <metadata name=\"Application\">{}</metadata>", xml_escape(app));
-    s.push_str(" <resources>\n  <m:colorgroup id=\"1\">\n");
-    for c in colors {
-        let b = c.rgba;
-        let _ = writeln!(s, "   <m:color color=\"#{:02X}{:02X}{:02X}{:02X}\"/>", b[0], b[1], b[2], b[3]);
+    s.push_str(" <resources>\n");
+    if group {
+        s.push_str("  <m:colorgroup id=\"1\">\n");
+        for c in colors {
+            let b = c.rgba;
+            let _ = writeln!(s, "   <m:color color=\"#{:02X}{:02X}{:02X}{:02X}\"/>", b[0], b[1], b[2], b[3]);
+        }
+        s.push_str("  </m:colorgroup>\n");
     }
-    s.push_str("  </m:colorgroup>\n");
     let mut next = 2u32;
     let mut ids = Vec::new();
     for o in objects {
@@ -99,11 +122,11 @@ pub fn color_model_xml(
             next += 1;
             part_ids.push(id);
             let (verts, tris) = welded(&p.mesh);
+            let color = if group { format!(" pid=\"1\" pindex=\"{}\"", p.color) } else { String::new() };
             let _ = writeln!(
                 s,
-                "  <object id=\"{id}\" type=\"model\" name=\"{}\" pid=\"1\" pindex=\"{}\">\n   <mesh>\n    <vertices>",
+                "  <object id=\"{id}\" type=\"model\" name=\"{}\"{color}>\n   <mesh>\n    <vertices>",
                 xml_escape(&p.name),
-                p.color
             );
             for v in &verts {
                 let _ = writeln!(s, "     <vertex x=\"{}\" y=\"{}\" z=\"{}\"/>", v[0], v[1], v[2]);
@@ -153,8 +176,8 @@ pub fn model_settings_xml(objects: &[PackageObject], colors: &[PackageColor], id
 }
 
 /// The complete multi-colour 3MF package.
-pub fn color_package(objects: &[PackageObject], colors: &[PackageColor], app: &str) -> Vec<u8> {
-    let (model, ids) = color_model_xml(objects, colors, app);
+pub fn color_package(objects: &[PackageObject], colors: &[PackageColor], app: &str, opts: PackageOptions) -> Vec<u8> {
+    let (model, ids) = color_model_xml(objects, colors, app, opts);
     let settings = model_settings_xml(objects, colors, &ids);
     zip_store(&[
         ("[Content_Types].xml", CONTENT_TYPES_COLOR.as_bytes()),
@@ -180,7 +203,8 @@ where
     K::Shape: 'static,
 {
     /// Colour objects of nodes `(name, node)` in context coordinates: per node its colour
-    /// regions tessellated with `tol` (default 0.01 mm) and placed with `display_world`.
+    /// regions tessellated with `tol` (default 0.01 mm) and placed with `display_world`;
+    /// nodes of the same name form one object.
     pub fn color_objects(
         &mut self,
         ev: &Evaluation<K::Shape>,
@@ -221,7 +245,11 @@ where
                     volume: reg.volume,
                 });
             }
-            objects.push(PackageObject { name: name.clone(), parts });
+            // several nodes of one name (the material outside the parts): one object
+            match objects.iter_mut().find(|o: &&mut PackageObject| o.name == *name) {
+                Some(o) => o.parts.extend(parts),
+                None => objects.push(PackageObject { name: name.clone(), parts }),
+            }
         }
         Ok((objects, colors))
     }
@@ -234,13 +262,14 @@ where
         tol: Option<f64>,
         table: &ColorTable,
         app: &str,
+        opts: PackageOptions,
     ) -> Result<(Vec<u8>, ColorExportStats), String> {
         if nodes.is_empty() {
             return Err("keine Bauteile gewählt".into());
         }
         let (objects, colors) = self.color_objects(ev, nodes, tol, table)?;
         let st = stats(&objects, &colors);
-        Ok((color_package(&objects, &colors, app), st))
+        Ok((color_package(&objects, &colors, app, opts), st))
     }
 
     /// ZIP with one binary STL per colour (several nodes: per node and colour), named
@@ -284,6 +313,7 @@ fn stats(objects: &[PackageObject], colors: &[PackageColor]) -> ColorExportStats
         parts: objects.iter().map(|o| o.parts.len()).sum(),
         triangles: objects.iter().flat_map(|o| &o.parts).map(|p| p.mesh.triangle_count() as u32).sum(),
         colors: colors.iter().map(|c| (c.label.clone(), c.filament, 0.0)).collect(),
+        object_names: objects.iter().map(|o| o.name.clone()).collect(),
     };
     for p in objects.iter().flat_map(|o| &o.parts) {
         st.colors[p.color].2 += p.volume;
@@ -317,7 +347,7 @@ mod tests {
                 PackagePart { name: "b".into(), color: 1, mesh: tri(), volume: 5.0 },
             ],
         }];
-        let (x, ids) = color_model_xml(&objects, &colors, "controller-cad");
+        let (x, ids) = color_model_xml(&objects, &colors, "controller-cad", PackageOptions { color_group: true });
         assert_eq!(ids, vec![(4, vec![2, 3])]);
         assert!(x.contains("<m:color color=\"#C74240FF\"/>"));
         assert!(x.contains("<object id=\"2\" type=\"model\" name=\"a\" pid=\"1\" pindex=\"0\">"));
@@ -330,6 +360,32 @@ mod tests {
         assert!(c.contains("<object id=\"4\">\n    <metadata key=\"name\" value=\"schild&lt;1&gt;\"/>\n    <metadata key=\"extruder\" value=\"1\"/>"), "{c}");
         assert!(c.contains("<part id=\"2\" subtype=\"normal_part\">\n      <metadata key=\"name\" value=\"a\"/>\n      <metadata key=\"extruder\" value=\"2\"/>"), "{c}");
         assert!(c.contains("<part id=\"3\" subtype=\"normal_part\">\n      <metadata key=\"name\" value=\"b\"/>\n      <metadata key=\"extruder\" value=\"1\"/>"), "{c}");
+    }
+
+    #[test]
+    fn no_color_group_by_default() {
+        // Bericht 12: without `m:colorgroup` Bambu Studio opens no colour dialog and keeps the
+        // `extruder` of every part; a single colour never gets a group.
+        let colors = vec![
+            PackageColor { rgba: [0xc7, 0x42, 0x40, 255], label: "red".into(), filament: 2 },
+            PackageColor { rgba: [0xf4, 0xf3, 0xf0, 255], label: "white".into(), filament: 1 },
+        ];
+        let objects = vec![PackageObject {
+            name: "a".into(),
+            parts: vec![
+                PackagePart { name: "a".into(), color: 0, mesh: tri(), volume: 1.0 },
+                PackagePart { name: "b".into(), color: 1, mesh: tri(), volume: 5.0 },
+            ],
+        }];
+        let (x, _) = color_model_xml(&objects, &colors, "controller-cad", PackageOptions::default());
+        assert!(!x.contains("colorgroup") && !x.contains("pid=") && !x.contains("pindex="), "{x}");
+        let one = &colors[..1];
+        let objects1 = vec![PackageObject {
+            name: "a".into(),
+            parts: vec![PackagePart { name: "a".into(), color: 0, mesh: tri(), volume: 1.0 }],
+        }];
+        let (x, _) = color_model_xml(&objects1, one, "controller-cad", PackageOptions { color_group: true });
+        assert!(!x.contains("colorgroup") && !x.contains("pid="), "{x}");
     }
 
     #[test]

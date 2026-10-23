@@ -277,6 +277,10 @@ pub enum FromEngine {
         #[ts(optional)]
         #[serde(default, skip_serializing_if = "Option::is_none")]
         colors: Option<bool>,
+        /// Notes for the user (multi-colour 3MF: objects, material outside parts, slicers).
+        #[ts(optional)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        notes: Option<Vec<String>>,
     },
     /// Answer to `RequestColorRegions`.
     ColorRegions {

@@ -233,7 +233,16 @@ fn multicolour_3mf_structure() {
     assert_eq!(named.len(), 2, "{named:?}");
     let ct = table(&out.tree);
     let ev = e.evaluate(out.tree);
-    let (bytes, st) = e.export_3mf_colors(&ev, &named, None, &ct, "controller-cad test").unwrap();
+    let (bytes, st) = e
+        .export_3mf_colors(
+            &ev,
+            &named,
+            None,
+            &ct,
+            "controller-cad test",
+            cad_engine::color_export::PackageOptions { color_group: true },
+        )
+        .unwrap();
     assert_eq!((st.objects, st.parts), (2, 3));
     let files = unzip(&bytes);
     let names: Vec<&str> = files.iter().map(|(n, _)| n.as_str()).collect();

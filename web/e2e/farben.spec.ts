@@ -181,8 +181,9 @@ test("F03 Export mehrfarbig: 3MF und STL je Farbe", async ({ page }) => {
   const bytes = readFileSync((await dl.path())!);
   const t = bytes.toString("utf8");
   expect(bytes.subarray(0, 2).toString()).toBe("PK");
-  expect(t).toContain('<m:colorgroup id="1">');
-  expect((t.match(/<m:color /g) ?? []).length).toBe(5);
+  // Bericht 12: no colour group – Bambu Studio keeps the slots without its colour dialog
+  expect(t).not.toContain("<m:colorgroup");
+  expect((t.match(/<m:color /g) ?? []).length).toBe(0);
   expect((t.match(/<item /g) ?? []).length).toBe(2);
   expect((t.match(/<component /g) ?? []).length).toBe(6);
   expect(t).toContain("Metadata/model_settings.config");
@@ -198,7 +199,7 @@ test("F03 Export mehrfarbig: 3MF und STL je Farbe", async ({ page }) => {
     title: "Export für Bambu Studio / OrcaSlicer",
     caption: "„3MF mehrfarbig“: ein Objekt je Bauteil (schild, figur), darin ein Teil je Farbe ohne Verschiebung, Farbgruppe mit fünf Farben, Metadata/model_settings.config mit extruder je Teil. „STL je Farbe“: ZIP mit sechs Dateien F<slot>_<farbe>.stl. „3MF einfarbig“ ohne Farben.",
     images: [],
-    checks: ["2 Build-Items, 6 Komponenten, 5 m:color", "schild – red → extruder 3", "ZIP mit 6 STL (Bauteil_F<slot>_<farbe>.stl)", "einfarbig ohne colorgroup"],
+    checks: ["2 Build-Items, 6 Komponenten, keine Farbgruppe (Bericht 12)", "schild – red → extruder 3", "ZIP mit 6 STL (Bauteil_F<slot>_<farbe>.stl)", "einfarbig ohne colorgroup"],
   });
 });
 

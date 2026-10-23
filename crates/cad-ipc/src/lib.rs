@@ -5,6 +5,12 @@
 //!   `$TMPDIR/controller-cad-<uid>`. The directory is created with mode 0700 and must belong
 //!   to the current user; sockets get mode 0600. An endpoint has a name (`ui-<pid>`,
 //!   `daemon`), the socket is `<dir>/<name>.sock`.
+//! * **Long paths:** a Unix socket path has at most [`MAX_SOCKET_PATH`] bytes (`sun_path`).
+//!   If `<dir>/<name>.sock` is longer, the socket goes to the short substitute directory
+//!   `/tmp/cad-<uid>` (same checks: created 0700, must be a directory of the current user,
+//!   no symlink) as `<hash>-<name>.sock`, `<hash>` = FNV-1a 64 of the canonical runtime
+//!   directory (several long directories do not collide). Lock and log files stay in the
+//!   runtime directory. [`socket_path_in`] gives the path, [`is_substitute`] tells which.
 //! * **Frames**: `[u32 LE header length][u32 LE data length][header JSON][data bytes]`. The
 //!   header is a [`Header`] with the protocol version `v` ([`IPC_VERSION`]), a message id, the
 //!   kind (request, response, event), a method name, a JSON body and an optional error. The
@@ -230,12 +236,60 @@ pub fn runtime_dir() -> Result<PathBuf> {
     imp::runtime_dir()
 }
 
-/// Socket path of endpoint `name` (`[A-Za-z0-9._-]`).
-pub fn endpoint_path(name: &str) -> Result<PathBuf> {
+/// Longest Unix socket path in bytes (`sizeof(sun_path)` minus the terminating NUL: 108 on
+/// Linux, 104 on macOS and the BSDs).
+#[cfg(target_os = "linux")]
+pub const MAX_SOCKET_PATH: usize = 107;
+#[cfg(not(target_os = "linux"))]
+pub const MAX_SOCKET_PATH: usize = 103;
+
+fn check_name(name: &str) -> Result<()> {
     if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c)) {
         return Err(Error::Protocol(format!("ungültiger Endpunktname `{name}`")));
     }
-    Ok(runtime_dir()?.join(format!("{name}.sock")))
+    Ok(())
+}
+
+/// Socket path of endpoint `name` (`[A-Za-z0-9._-]`), see [`socket_path_in`].
+pub fn endpoint_path(name: &str) -> Result<PathBuf> {
+    socket_path_in(&runtime_dir()?, name)
+}
+
+/// FNV-1a 64 of the canonical directory: prefix of substitute socket names.
+fn dir_hash(dir: &Path) -> String {
+    let canon = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in canon.as_os_str().as_encoded_bytes() {
+        h ^= *b as u64;
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{h:016x}")
+}
+
+/// Socket path of endpoint `name` for runtime directory `dir`: `<dir>/<name>.sock`, or, if
+/// that is longer than [`MAX_SOCKET_PATH`], `/tmp/cad-<uid>/<hash>-<name>.sock` (see the
+/// crate docs).
+pub fn socket_path_in(dir: &Path, name: &str) -> Result<PathBuf> {
+    check_name(name)?;
+    let p = dir.join(format!("{name}.sock"));
+    if p.as_os_str().len() <= MAX_SOCKET_PATH {
+        return Ok(p);
+    }
+    let short = imp::short_dir()?;
+    let q = short.join(format!("{}-{name}.sock", dir_hash(dir)));
+    if q.as_os_str().len() > MAX_SOCKET_PATH {
+        return Err(Error::Protocol(format!(
+            "Socketpfad zu lang ({} Byte, höchstens {MAX_SOCKET_PATH}): {}",
+            p.as_os_str().len(),
+            p.display()
+        )));
+    }
+    Ok(q)
+}
+
+/// `true` if the socket of `name` in `dir` uses the short substitute path.
+pub fn is_substitute(dir: &Path, name: &str) -> bool {
+    dir.join(format!("{name}.sock")).as_os_str().len() > MAX_SOCKET_PATH
 }
 
 /// Live endpoints whose name starts with `prefix` (name, path), sorted by name. Stale sockets
@@ -244,17 +298,34 @@ pub fn list(prefix: &str) -> Result<Vec<(String, PathBuf)>> {
     list_in(&runtime_dir()?, prefix)
 }
 
-/// [`list`] in a given directory.
+/// [`list`] in a given directory (and its substitute sockets, see the crate docs).
 pub fn list_in(dir: &Path, prefix: &str) -> Result<Vec<(String, PathBuf)>> {
     let mut out = Vec::new();
+    scan(dir, "", prefix, &mut out)?;
+    // endpoints whose path would be too long live in the short directory
+    if let Ok(short) = imp::short_dir()
+        && short != dir
+    {
+        scan(&short, &format!("{}-", dir_hash(dir)), prefix, &mut out)?;
+    }
+    out.sort();
+    Ok(out)
+}
+
+fn scan(dir: &Path, strip: &str, prefix: &str, out: &mut Vec<(String, PathBuf)>) -> Result<()> {
     let rd = match std::fs::read_dir(dir) {
         Ok(rd) => rd,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(out),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(e.into()),
     };
     for e in rd.flatten() {
         let p = e.path();
-        let Some(name) = p.file_name().and_then(|n| n.to_str()).and_then(|n| n.strip_suffix(".sock")) else {
+        let Some(name) = p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.strip_suffix(".sock"))
+            .and_then(|n| n.strip_prefix(strip))
+        else {
             continue;
         };
         if !name.starts_with(prefix) {
@@ -264,8 +335,7 @@ pub fn list_in(dir: &Path, prefix: &str) -> Result<Vec<(String, PathBuf)>> {
             out.push((name.to_string(), p));
         }
     }
-    out.sort();
-    Ok(out)
+    Ok(())
 }
 
 // ------------------------------------------------------------------------------------------
@@ -434,8 +504,8 @@ impl LockFile {
     /// Takes the lock on `<runtime dir>/<name>.lock` if no other process holds it
     /// (`Ok(None)`: held by another process).
     pub fn try_lock(name: &str) -> Result<Option<LockFile>> {
-        let p = endpoint_path(name)?.with_extension("lock");
-        LockFile::try_lock_path(&p)
+        check_name(name)?;
+        LockFile::try_lock_path(&runtime_dir()?.join(format!("{name}.lock")))
     }
 
     /// [`LockFile::try_lock`] on a path (created with mode 0600).
@@ -492,6 +562,24 @@ mod imp {
         } else {
             std::env::temp_dir().join(format!("controller-cad-{}", uid()))
         };
+        private_dir(dir)
+    }
+
+    /// Short directory for sockets whose path in the runtime directory is too long.
+    pub fn short_dir() -> Result<PathBuf> {
+        private_dir(PathBuf::from(format!("/tmp/cad-{}", uid())))
+    }
+
+    /// Creates `dir` (0700) and checks it: a directory (no symlink) of the current user.
+    fn private_dir(dir: PathBuf) -> Result<PathBuf> {
+        if !dir.exists() {
+            use std::os::unix::fs::DirBuilderExt;
+            match std::fs::DirBuilder::new().recursive(true).mode(0o700).create(&dir) {
+                Ok(()) => {}
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e.into()),
+            }
+        }
         match std::fs::create_dir_all(&dir) {
             Ok(()) => {}
             Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}
@@ -646,6 +734,9 @@ mod imp {
     }
 
     pub fn runtime_dir() -> Result<PathBuf> {
+        Err(Error::Unsupported)
+    }
+    pub fn short_dir() -> Result<PathBuf> {
         Err(Error::Unsupported)
     }
     pub fn alive(_: &Path) -> bool {

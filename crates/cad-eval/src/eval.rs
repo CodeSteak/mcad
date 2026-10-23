@@ -173,6 +173,16 @@ pub(crate) struct Ev<'a> {
     pub file_context: bool,
     /// First explicit `filament = n` per colour (RGBA bytes), for conflict warnings.
     pub filaments: std::collections::HashMap<[u8; 4], (u32, Span)>,
+    /// Random colours of unknown names in order of first appearance (lowercase name, RGB):
+    /// a new name keeps its distance to them (`palette::random_color_avoiding`).
+    pub random_colors: Vec<(String, [u8; 3])>,
+    /// `filament(c, n)` declarations (top level of the main file, evaluated before the other
+    /// statements so that they take precedence over `color(…, filament = n)`).
+    pub filament_decls: Vec<cad_ir::FilamentDecl>,
+    /// The declaration pass runs (`filament()` registers, nothing else is evaluated).
+    pub decl_pass: bool,
+    /// `filament()` statements seen by the declaration pass.
+    pub decl_spans: Vec<Span>,
 }
 
 #[inline(never)]
@@ -260,6 +270,10 @@ impl<'a> Ev<'a> {
             cur_span: Span::default(),
             file_context: matches!(opts.context, Context::File),
             filaments: std::collections::HashMap::new(),
+            random_colors: Vec::new(),
+            filament_decls: Vec::new(),
+            decl_pass: false,
+            decl_spans: Vec::new(),
         }
     }
 
@@ -576,9 +590,34 @@ impl<'a> Ev<'a> {
         self.setup_libs(&env)?;
         let dy = self.hoist(&self.file.stmts, &env, &None)?;
         let ctx = self.root_ctx(env, dy, end, key);
+        self.filament_pass(&ctx)?;
         for s in &self.file.stmts {
             self.stmt(s, &ctx)?;
         }
+        Ok(())
+    }
+
+    /// Evaluates the `filament(c, n)` statements at the top level of the main file first:
+    /// the slot table of the model takes precedence over `filament = n` at `color()`.
+    fn filament_pass(&mut self, ctx: &Ctx<'a>) -> R<()> {
+        let file = self.file;
+        // a module of the user named `filament` is called in the normal pass only
+        if ctx.env.find_module("filament").is_some() {
+            return Ok(());
+        }
+        self.decl_pass = true;
+        for s in &file.stmts {
+            if let StmtKind::Call { name, .. } = &s.kind
+                && name.name == "filament"
+            {
+                let r = self.stmt(s, ctx);
+                if r.is_err() {
+                    self.decl_pass = false;
+                    return r;
+                }
+            }
+        }
+        self.decl_pass = false;
         Ok(())
     }
 
@@ -607,6 +646,9 @@ impl<'a> Ev<'a> {
         let (root, mut dy) = match lib {
             None => {
                 let dy = self.hoist(&self.file.stmts, &main_root, &None)?;
+                // the slot table of the file applies to its modules too
+                let c = self.root_ctx(main_root.clone(), dy.clone(), 0, 0);
+                self.filament_pass(&c)?;
                 (main_root, dy)
             }
             Some(i) => {
@@ -709,7 +751,7 @@ impl<'a> Ev<'a> {
             .collect();
         let root = if self.nodes.is_empty() { None } else { Some(self.root_mod.unwrap_or(0)) };
         EvalOutput {
-            tree: Tree { nodes: self.nodes, root },
+            tree: Tree { nodes: self.nodes, root, filaments: self.filament_decls },
             diagnostics: self.diags,
             hints,
             parts: self.parts,
