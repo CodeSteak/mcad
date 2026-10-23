@@ -150,6 +150,9 @@ pub enum ExportFormat {
     Stl,
     #[serde(rename = "3mf")]
     ThreeMf,
+    /// STEP AP242 with the exact B-rep (`ExportResult.triangles` is 0).
+    #[serde(rename = "step")]
+    Step,
 }
 
 // ------------------------------------------------------------------------------------------

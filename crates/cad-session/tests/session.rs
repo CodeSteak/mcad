@@ -274,6 +274,15 @@ fn new_source_aborts_running_job() {
     let FromEngine::ExportResult { bytes, triangles, format } = &r[0] else { panic!("{r:?}") };
     assert_eq!(*format, ExportFormat::Stl);
     assert_eq!(bytes.len(), 84 + 50 * *triangles as usize);
+    // STEP: exact B-rep, no triangles
+    s.post(ToEngine::Export { format: ExportFormat::Step });
+    let r = s.run_to_idle();
+    let FromEngine::ExportResult { bytes, triangles, format } = &r[0] else { panic!("{r:?}") };
+    assert_eq!((*format, *triangles), (ExportFormat::Step, 0));
+    let text = std::str::from_utf8(bytes).unwrap();
+    assert!(text.starts_with("ISO-10303-21;") && text.contains("MANIFOLD_SOLID_BREP"), "{text}");
+    let m: ToEngine = serde_json::from_str(r#"{"type":"Export","format":"step"}"#).unwrap();
+    assert_eq!(m, ToEngine::Export { format: ExportFormat::Step });
 }
 
 #[test]

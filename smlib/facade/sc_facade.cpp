@@ -33,6 +33,10 @@
 #include <SmEdgeuse.h>
 #include <SmPointClass.h>
 #include <SmMessages.h>
+#include <SmNurbsSrf.h>
+#include <SmSurfOfRevolution.h>
+#include <SmSurfOfExtrusion.h>
+#include <nurbs.h>
 
 #include <algorithm>
 #include <cmath>
@@ -50,7 +54,7 @@
 namespace {
 
 const ULONG SC_TAG_ATTR_ID = SM_AI_USER_1 + 77;  // 10077
-const uint32_t SC_FACADE_VERSION = 2;
+const uint32_t SC_FACADE_VERSION = 3;
 
 // ------------------------------------------------------------------ errors
 
@@ -1582,6 +1586,350 @@ void emit_edge_segments(SmBrep* b, const std::vector<SmFace*>& fs, const std::ve
 
 }  // namespace
 
+// ------------------------------------------------------------------ B-rep export (sc_brep)
+//
+// Topology and exact geometry of a Brep as one f64 stream, for STEP export (format in
+// sc_facade.h, "sc_brep"). Every surface and curve is written in its exact NURBS form (SMLib's
+// analytic classes are B-spline subclasses); analytic surfaces additionally carry their
+// canonical parameters. Surfaces and curves that are not B-splines (blends, offsets, curves on
+// surfaces) are approximated to the Brep's tolerance and flagged.
+
+namespace brep_out {
+
+const double SC_BREP_FORMAT = 1;
+
+// surface classes
+const double SURF_BSPLINE = 0, SURF_PLANE = 1, SURF_CYLINDER = 2, SURF_CONE = 3, SURF_SPHERE = 4,
+             SURF_TORUS = 5, SURF_REVOLUTION = 6, SURF_EXTRUSION = 7, SURF_OTHER = 8;
+// curve classes
+const double CRV_BSPLINE = 0, CRV_LINE = 1, CRV_CIRCLE = 2, CRV_ELLIPSE = 3, CRV_OTHER = 4;
+
+void put3(std::vector<double>& o, double x, double y, double z) {
+  o.push_back(x);
+  o.push_back(y);
+  o.push_back(z);
+}
+
+// degree, n_ctrl, n_knots, knots..., (x y z w) per control point (w = 1 if non-rational)
+void put_nurbs_curve(std::vector<double>& o, SmBSplineCurve* c) {
+  gw_CURVE* nurb = c->GetOrCreateGwNurbPointer();
+  if (!nurb) throw fail(SC_FAILED, "B-spline curve without NURBS data");
+  uint32_t nk = (uint32_t)nurb->knt->m + 1;
+  uint32_t nc = (uint32_t)nurb->pol->n + 1;
+  o.push_back((double)nurb->p);
+  o.push_back((double)nc);
+  o.push_back((double)nk);
+  for (uint32_t i = 0; i < nk; i++) o.push_back((double)nurb->knt->U[i]);
+  for (uint32_t i = 0; i < nc; i++) {
+    NL_CPOINT q = nurb->pol->Pw[i];
+    double w = q.w == NL_NOW ? 1.0 : (double)q.w;
+    double s = q.w == NL_NOW ? 1.0 : 1.0 / w;
+    put3(o, q.x * s, q.y * s, q.z * s);
+    o.push_back(w);
+  }
+}
+
+// du, dv, nu, nv, n_ku, ku..., n_kv, kv..., (x y z w) per control point, u-major
+void put_nurbs_surface(std::vector<double>& o, SmBSplineSurface* s) {
+  NL_SURFACE* n = s->GetOrCreateGwNurbPointer();
+  if (!n) throw fail(SC_FAILED, "B-spline surface without NURBS data");
+  uint32_t nku = (uint32_t)n->knu->m + 1, nkv = (uint32_t)n->knv->m + 1;
+  uint32_t nu = (uint32_t)n->net->n + 1, nv = (uint32_t)n->net->m + 1;
+  o.push_back((double)n->p);
+  o.push_back((double)n->q);
+  o.push_back((double)nu);
+  o.push_back((double)nv);
+  o.push_back((double)nku);
+  for (uint32_t i = 0; i < nku; i++) o.push_back((double)n->knu->U[i]);
+  o.push_back((double)nkv);
+  for (uint32_t i = 0; i < nkv; i++) o.push_back((double)n->knv->U[i]);
+  for (uint32_t i = 0; i < nu; i++)
+    for (uint32_t j = 0; j < nv; j++) {
+      NL_CPOINT q = n->net->Pw[i][j];
+      double w = q.w == NL_NOW ? 1.0 : (double)q.w;
+      double sc = q.w == NL_NOW ? 1.0 : 1.0 / w;
+      put3(o, q.x * sc, q.y * sc, q.z * sc);
+      o.push_back(w);
+    }
+}
+
+double approx_tol(const SmBrep* b) {
+  double t = SmTol::GetZoneTol3d(b);
+  for (SmFace* f : faces_of(b)) t = std::max(t, (double)SmTol::GetZoneTol3d(f));
+  for (SmEdge* e : edges_of(b)) t = std::max(t, (double)SmTol::GetZoneTol3d(e));
+  if (!(t > 0) || !is_fin(t)) t = 1e-6;
+  SmXSectTol3d xt = SM_ZONE_TO_XSECTTOL3D(t);
+  return (double)SmTol::GetApproxTol3d(xt);
+}
+
+// Edge: start vertex, end vertex, curve class, t0, t1, approximated (0/1), NURBS curve.
+void put_edge(std::vector<double>& o, SmEdge* e,
+              const std::unordered_map<const SmVertex*, uint32_t>& vix, double atol) {
+  SmVertex* a = e->GetStartVertex();
+  SmVertex* z = e->GetEndVertex();
+  auto ia = vix.find(a), iz = vix.find(z);
+  if (ia == vix.end() || iz == vix.end()) throw fail(SC_FAILED, "edge without vertices");
+  SmCurve* c = e->GetCurve();
+  if (!c) throw fail(SC_FAILED, "edge without curve");
+  SmExtent1d iv = e->GetInterval();
+  double cls = CRV_OTHER;
+  if (c->IsKindOf(SmCircle_TYPE))
+    cls = CRV_CIRCLE;
+  else if (c->IsKindOf(SmEllipse_TYPE))
+    cls = CRV_ELLIPSE;
+  else if (c->IsKindOf(SmLine_TYPE))
+    cls = CRV_LINE;
+  else if (c->IsKindOf(SmBSplineCurve_TYPE))
+    cls = CRV_BSPLINE;
+  o.push_back((double)ia->second);
+  o.push_back((double)iz->second);
+  o.push_back(cls);
+  if (cls != CRV_OTHER) {
+    o.push_back(iv.GetMin());
+    o.push_back(iv.GetMax());
+    o.push_back(0);
+    put_nurbs_curve(o, (SmBSplineCurve*)c);
+    return;
+  }
+  SmTArray<double> breaks;
+  breaks.Add(iv.GetMin());
+  breaks.Add(iv.GetMax());
+  double achieved = 0;
+  SmBSplineCurve* bs = nullptr;
+  SmStatus st = c->ApproximateCurve(*c->GetContext(), breaks, atol, achieved, bs, FALSE);
+  ObjPtr<SmBSplineCurve> own(bs);
+  if (st != SM_SUCCESS || !bs)
+    throw sm_fail("SmCurve::ApproximateCurve", st == SM_SUCCESS ? SM_ERR : st);
+  SmExtent1d biv = bs->GetNaturalInterval();
+  o.push_back(biv.GetMin());
+  o.push_back(biv.GetMax());
+  o.push_back(1);
+  put_nurbs_curve(o, bs);
+}
+
+// Surface: class, 13 parameters (origin, z axis, x axis, p1..p4), approximated (0/1), NURBS
+// surface; revolution and extrusion surfaces are followed by their generator curve.
+void put_surface(std::vector<double>& o, SmSurface* s, double atol) {
+  double cls = SURF_OTHER;
+  double prm[13] = {0};
+  SmAxis2Placement a;
+  auto frame = [&](const SmAxis2Placement& f) {
+    SmPoint3d p = f.GetOrigin();
+    SmVector3d z = f.GetZAxis(), x = f.GetXAxis();
+    double v[9] = {p.x, p.y, p.z, z.x, z.y, z.z, x.x, x.y, x.z};
+    for (int i = 0; i < 9; i++) prm[i] = v[i];
+  };
+  if (s->IsKindOf(SmPlane_TYPE)) {
+    if (((SmPlane*)s)->GetCanonical(a) == SM_SUCCESS) {
+      cls = SURF_PLANE;
+      frame(a);
+    }
+  } else if (s->IsKindOf(SmCylinder_TYPE)) {
+    double r = 0;
+    if (((SmCylinder*)s)->GetCanonical(a, r) == SM_SUCCESS) {
+      cls = SURF_CYLINDER;
+      frame(a);
+      prm[9] = r;
+    }
+  } else if (s->IsKindOf(SmCone_TYPE)) {
+    double r = 0, ang = 0;
+    if (((SmCone*)s)->GetCanonical(a, r, ang) == SM_SUCCESS) {
+      cls = SURF_CONE;
+      frame(a);
+      prm[9] = r;
+      prm[10] = ang * M_PI / 180.0;
+    }
+  } else if (s->IsKindOf(SmSphere_TYPE)) {
+    double r = 0;
+    if (((SmSphere*)s)->GetCanonical(a, r) == SM_SUCCESS) {
+      cls = SURF_SPHERE;
+      frame(a);
+      prm[9] = r;
+    }
+  } else if (s->IsKindOf(SmTorus_TYPE)) {
+    double R = 0, r = 0;
+    if (((SmTorus*)s)->GetCanonical(a, R, r) == SM_SUCCESS) {
+      cls = SURF_TORUS;
+      frame(a);
+      prm[9] = R;
+      prm[10] = r;
+    }
+  } else if (s->IsKindOf(SmSurfOfRevolution_TYPE)) {
+    SmSurfOfRevolution* rv = (SmSurfOfRevolution*)s;
+    if (rv->GetGenCurve()) {
+      cls = SURF_REVOLUTION;
+      frame(rv->GetPosition());
+    }
+  } else if (s->IsKindOf(SmSurfOfExtrusion_TYPE)) {
+    SmSurfOfExtrusion* ex = (SmSurfOfExtrusion*)s;
+    if (ex->GetGenCurve()) {
+      cls = SURF_EXTRUSION;
+      SmVector3d d = ex->GetExtrusionVector();
+      prm[3] = d.x;
+      prm[4] = d.y;
+      prm[5] = d.z;
+    }
+  } else if (s->IsKindOf(SmBSplineSurface_TYPE)) {
+    cls = SURF_BSPLINE;
+  }
+  o.push_back(cls);
+  for (double d : prm) o.push_back(d);
+  if (s->IsKindOf(SmBSplineSurface_TYPE)) {
+    o.push_back(0);
+    put_nurbs_surface(o, (SmBSplineSurface*)s);
+  } else {
+    double achieved = 0;
+    SmBSplineSurface* bs = nullptr;
+    SmStatus st = s->ApproximateSurface(*s->GetContext(), atol, achieved, 5, bs, FALSE);
+    ObjPtr<SmBSplineSurface> own(bs);
+    if (!bs) throw sm_fail("SmSurface::ApproximateSurface", st == SM_SUCCESS ? SM_ERR : st);
+    o.push_back(1);
+    put_nurbs_surface(o, bs);
+  }
+  if (cls == SURF_REVOLUTION) put_nurbs_curve(o, ((SmSurfOfRevolution*)s)->GetGenCurve());
+  if (cls == SURF_EXTRUSION) put_nurbs_curve(o, ((SmSurfOfExtrusion*)s)->GetGenCurve());
+}
+
+struct Ctx {
+  std::unordered_map<const SmVertex*, uint32_t> vix;
+  std::unordered_map<const SmEdge*, uint32_t> eix;
+  std::unordered_map<const SmFace*, uint32_t> fix;
+  double atol = 1e-6;
+};
+
+// Face: face index, tag, surface, sample (ok, point, normal, u, v), loops of `fu`.
+// The loops of `fu` run counter-clockwise about its normal (SMLib's CCW edgeuse order); the
+// sample normal is the normal of `fu` (out of the material for faces of solid regions).
+void put_face(std::vector<double>& o, Ctx& cx, SmFaceuse* fu) {
+  SmFace* f = fu->GetFace();
+  uint32_t tag = 0;
+  face_tag(f, tag);
+  o.push_back((double)cx.fix.at(f));
+  o.push_back((double)tag);
+  put_surface(o, f->GetSurface(), cx.atol);
+  V3 p = v3(0, 0, 0), n = v3(0, 0, 0);
+  SmPoint2d uv(0, 0);
+  bool ok = face_sample(f, p, n, &uv);
+  if (ok) {
+    // normal of the faceuse whose loops are written (face_sample orients it out of solids)
+    SmVector3d nv;
+    if (SmApiEvaluateSurfaceNormal(f->GetSurface(), SmVector2d(uv.x, uv.y), nv) == SM_SUCCESS) {
+      n = normalize(v3(nv.x, nv.y, nv.z));
+      if (fu->GetOrientation() != SM_OT_SAME) n = n * -1.0;
+    } else {
+      ok = false;
+    }
+  }
+  o.push_back(ok ? 1 : 0);
+  put3(o, p.x, p.y, p.z);
+  put3(o, n.x, n.y, n.z);
+  o.push_back(uv.x);
+  o.push_back(uv.y);
+  o.push_back(fu->GetOrientation() == SM_OT_SAME ? 1 : 0);
+  SmTArray<SmLoopuse*> lus;
+  fu->GetLoopuses(lus);
+  o.push_back((double)lus.GetSize());
+  for (ULONG i = 0; i < lus.GetSize(); i++) {
+    SmLoopuse* lu = lus[i];
+    if (lu->IsVertexLoopuse()) {
+      SmTArray<SmEdgeuse*> eus;
+      SmTArray<SmVertexuse*> vus;
+      lu->GetEdgeusesAndVertexuses(eus, vus);
+      if (vus.GetSize() == 0 || !vus[0]->GetVertex())
+        throw fail(SC_FAILED, "vertex loop without vertex");
+      o.push_back(0);
+      o.push_back((double)cx.vix.at(vus[0]->GetVertex()));
+      continue;
+    }
+    SmTArray<SmEdgeuse*> eus;
+    lu->GetEdgeuses(eus);
+    if (eus.GetSize() == 0) throw fail(SC_FAILED, "empty loop");
+    o.push_back((double)eus.GetSize());
+    for (ULONG k = 0; k < eus.GetSize(); k++) {
+      auto it = cx.eix.find(eus[k]->GetEdge());
+      if (it == cx.eix.end()) throw fail(SC_FAILED, "edgeuse of an unknown edge");
+      o.push_back((double)it->second);
+      o.push_back(eus[k]->GetOrientation() == SM_OT_SAME ? 1 : 0);
+    }
+  }
+}
+
+void write(SmBrep* b, std::vector<double>& o) {
+  Ctx cx;
+  cx.atol = approx_tol(b);
+  o.push_back(SC_BREP_FORMAT);
+  o.push_back(cx.atol);
+  SmTArray<SmVertex*> vs;
+  b->GetVertices(vs);
+  o.push_back((double)vs.GetSize());
+  for (ULONG i = 0; i < vs.GetSize(); i++) {
+    cx.vix[vs[i]] = (uint32_t)i;
+    SmPoint3d p = vs[i]->GetPoint();
+    put3(o, p.x, p.y, p.z);
+  }
+  auto es = edges_of(b);
+  for (size_t i = 0; i < es.size(); i++) cx.eix[es[i]] = (uint32_t)i;
+  auto fs = faces_of(b);
+  for (size_t i = 0; i < fs.size(); i++) cx.fix[fs[i]] = (uint32_t)i;
+  o.push_back((double)es.size());
+  for (SmEdge* e : es) put_edge(o, e, cx.vix, cx.atol);
+
+  // bodies: one per solid region (outer shell(s) and voids), else one sheet body
+  struct Body {
+    std::vector<std::pair<SmShell*, bool>> shells;  // shell, inner
+  };
+  std::vector<Body> solids;
+  SmTArray<SmRegion*> regions;
+  b->GetRegions(regions);
+  for (ULONG i = 0; i < regions.GetSize(); i++) {
+    SmRegion* r = regions[i];
+    if (r->IsInfiniteRegion() || r->IsVoid() != FALSE) continue;
+    Body body;
+    SmTArray<SmShell*> shells;
+    r->GetShells(shells);
+    for (ULONG k = 0; k < shells.GetSize(); k++) {
+      SmShell* s = shells[k];
+      if (!s->IsFaceuseShell()) continue;
+      SmBoolean inner = FALSE;
+      if (shells.GetSize() > 1 && s->IsInnerShell(inner) != SM_SUCCESS) inner = FALSE;
+      body.shells.push_back({s, inner == TRUE});
+    }
+    if (!body.shells.empty()) solids.push_back(body);
+  }
+  if (!solids.empty()) {
+    o.push_back((double)solids.size());
+    for (Body& body : solids) {
+      o.push_back(0);  // solid
+      o.push_back((double)body.shells.size());
+      for (auto& sh : body.shells) {
+        SmTArray<SmFaceuse*> fus;
+        sh.first->GetFaceuses(fus);
+        o.push_back(sh.second ? 1 : 0);
+        o.push_back((double)fus.GetSize());
+        // the mate faceuse lies outside the material
+        for (ULONG k = 0; k < fus.GetSize(); k++) put_face(o, cx, fus[k]->GetMate());
+      }
+    }
+    return;
+  }
+  if (fs.empty()) {
+    o.push_back(0);
+    return;
+  }
+  o.push_back(1);
+  o.push_back(1);  // sheet
+  o.push_back(1);
+  o.push_back(0);
+  o.push_back((double)fs.size());
+  for (SmFace* f : fs) {
+    SmFaceuse* fu = f->GetUpwardFaceuse();
+    if (!fu) throw fail(SC_FAILED, "face without faceuse");
+    put_face(o, cx, fu);
+  }
+}
+
+}  // namespace brep_out
+
 // ================================================================== C ABI
 
 extern "C" {
@@ -2550,6 +2898,13 @@ int32_t sc_edge_count(uint32_t h) {
   int32_t r = -1;
   guarded([&] { r = (int32_t)edges_of(get(h)).size(); });
   return r;
+}
+
+int32_t sc_brep(uint32_t h) {
+  SC_STATUS_CALL({
+    SmBrep* b = get(h);
+    brep_out::write(b, g_f64[0]);
+  })
 }
 
 }  // extern "C"

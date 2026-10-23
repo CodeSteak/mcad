@@ -49,6 +49,7 @@ pub mod export;
 pub mod key;
 mod profile;
 
+pub use cad_step::{Schema as StepSchema, StepOptions, StepStats};
 use std::any::Any;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
@@ -785,6 +786,36 @@ where
     pub fn export_3mf(&mut self, ev: &Evaluation<K::Shape>, tol: Option<f64>) -> Result<Vec<u8>, String> {
         let m = self.export_mesh(ev, tol)?;
         Ok(export::threemf(&m))
+    }
+
+    /// STEP (exact B-rep from [`Kernel::brep`]) of the root, in the root's own system like the
+    /// mesh exports. Faces get the colour of the node their tag belongs to (`color()`), unless
+    /// `opts.tag_colors` is set.
+    pub fn export_step(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        opts: &cad_step::StepOptions,
+    ) -> Result<(Vec<u8>, cad_step::StepStats), String> {
+        let root = ev.root().ok_or("kein Ergebnis")?;
+        if ev.reports[root as usize].dim == Some(Dim::Two) {
+            return Err("2D-Ergebnis kann nicht als Körper exportiert werden".into());
+        }
+        let mut breps = Vec::new();
+        for p in ev.parts(root) {
+            breps.push(self.kernel.brep(&p.shape).map_err(|e| format!("STEP: {e}"))?);
+        }
+        let mut o = opts.clone();
+        if o.tag_colors.is_empty() {
+            for f in breps.iter().flat_map(|b| b.faces()) {
+                let color = ev.nodes_for_tag(f.tag).first().and_then(|r| ev.tree.node(r.node).color);
+                if let Some(c) = color {
+                    o.tag_colors.insert(f.tag, [c[0] as f64, c[1] as f64, c[2] as f64]);
+                }
+            }
+        }
+        let refs: Vec<&cad_kernel::brep::Brep> = breps.iter().collect();
+        let (text, st) = cad_step::write(&refs, &o).map_err(|e| e.to_string())?;
+        Ok((text.into_bytes(), st))
     }
 
     fn export_mesh(&mut self, ev: &Evaluation<K::Shape>, tol: Option<f64>) -> Result<Rc<Mesh>, String> {

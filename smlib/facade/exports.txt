@@ -42,3 +42,4 @@ sc_is_empty
 sc_is_solid
 sc_face_count
 sc_edge_count
+sc_brep

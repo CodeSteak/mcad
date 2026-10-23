@@ -82,6 +82,8 @@ extern "C" {
     fn js_face_count(h: u32) -> i32;
     #[wasm_bindgen(js_name = sc_edge_count)]
     fn js_edge_count(h: u32) -> i32;
+    #[wasm_bindgen(js_name = sc_brep)]
+    fn js_brep(h: u32) -> i32;
 }
 
 pub fn init() {
@@ -198,4 +200,7 @@ pub fn face_count(h: u32) -> i32 {
 }
 pub fn edge_count(h: u32) -> i32 {
     js_edge_count(h)
+}
+pub fn brep(h: u32) -> i32 {
+    js_brep(h)
 }

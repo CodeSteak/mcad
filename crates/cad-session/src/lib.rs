@@ -546,14 +546,28 @@ where
     /// Export of the root of the last finished evaluation: (bytes, triangle count).
     pub fn export_bytes(&mut self, format: p::ExportFormat) -> Result<(Vec<u8>, u32), String> {
         let tol = Some(self.opts.export_tol);
+        if format == p::ExportFormat::Step {
+            let (bytes, _) = self.export_step(&cad_engine::StepOptions::default())?;
+            return Ok((bytes, 0));
+        }
         let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
         let root = d.ev.root().ok_or("kein Ergebnis")?;
         let bytes = match format {
             p::ExportFormat::Stl => self.engine.export_stl(&d.ev, tol)?,
             p::ExportFormat::ThreeMf => self.engine.export_3mf(&d.ev, tol)?,
+            p::ExportFormat::Step => unreachable!(),
         };
         let tris = self.engine.tessellate(&d.ev, root, tol)?.triangle_count() as u32;
         Ok((bytes, tris))
+    }
+
+    /// STEP export of the root of the last finished evaluation, with what was written.
+    pub fn export_step(
+        &mut self,
+        opts: &cad_engine::StepOptions,
+    ) -> Result<(Vec<u8>, cad_engine::StepStats), String> {
+        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+        self.engine.export_step(&d.ev, opts)
     }
 }
 

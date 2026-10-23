@@ -6,6 +6,8 @@
 use glam::{DMat4, DVec2, DVec3};
 use serde::{Deserialize, Serialize};
 
+pub mod brep;
+
 /// Provenance tag on faces. The engine assigns tags; the kernel only carries them
 /// through operations. Faces created by an operation (fillet faces, caps of an
 /// extrusion, …) get the tag passed to that operation.
@@ -240,6 +242,12 @@ pub trait Kernel {
     fn is_empty(&mut self, s: &Self::Shape) -> bool;
     /// `true` for closed solids, `false` for open surfaces.
     fn is_solid(&mut self, s: &Self::Shape) -> bool;
+
+    /// Topology and exact geometry of `s` ([`brep::Brep`], e.g. for STEP export).
+    fn brep(&mut self, s: &Self::Shape) -> KResult<brep::Brep> {
+        let _ = s;
+        Err(KernelError::Unsupported("brep".into()))
+    }
 
     fn export(&mut self, shapes: &[Self::Shape], fmt: ExportFormat) -> KResult<Vec<u8>> {
         let _ = (shapes, fmt);

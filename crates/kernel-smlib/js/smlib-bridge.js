@@ -242,3 +242,6 @@ export function sc_face_count(h) {
 export function sc_edge_count(h) {
   return mod()._sc_edge_count(h) | 0;
 }
+export function sc_brep(h) {
+  return mod()._sc_brep(h) | 0;
+}
