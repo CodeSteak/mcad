@@ -70,7 +70,7 @@ fn measure_colours() {
     assert_eq!(c["density_g_cm3"], 1.24);
     let red = c["colors"].as_array().unwrap().iter().find(|x| x["label"] == "red").unwrap();
     let vol = red["volume"].as_f64().unwrap();
-    assert!((vol - 201.6).abs() < 1e-6, "{vol}");
+    assert!((vol - 208.8).abs() < 1e-6, "{vol}");
     assert!((red["mass_g"].as_f64().unwrap() - vol * 1.24e-3).abs() < 1e-9);
     let parts: Vec<&str> = c["parts"].as_array().unwrap().iter().map(|p| p["part"].as_str().unwrap()).collect();
     assert_eq!(parts, ["schild", "figur"]);

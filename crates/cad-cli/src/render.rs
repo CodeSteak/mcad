@@ -748,7 +748,7 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
                 ));
             }
             n_grids += 1;
-            n_points += grid_overlay(g, subject.as_ref(), size, labels_on, lk, &mut lines, &mut markers, &mut labels);
+            n_points += grid_overlay(g, subject.as_ref(), size, labels_on, lk, (&mut lines, &mut markers, &mut labels));
         }
     }
     if plan.shows("anchors") {
@@ -865,9 +865,7 @@ fn grid_overlay(
     size: f64,
     labels_on: bool,
     lk: &Look,
-    lines: &mut Vec<Polyline>,
-    markers: &mut Vec<Marker>,
-    labels: &mut Vec<Label>,
+    (lines, markers, labels): (&mut Vec<Polyline>, &mut Vec<Marker>, &mut Vec<Label>),
 ) -> usize {
     let frame = mat(&g.frame);
     let inv = frame.inverse();

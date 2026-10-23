@@ -279,25 +279,27 @@ function ViewPane() {
   return (
     <div className="viewpane">
       <div className="viewport" ref={ref} data-testid="viewport" />
-      <div className="viewtools" role="toolbar" aria-label="Ansicht">
-        <button onClick={() => viewer?.fitAll()} title="Alles zeigen">Alles zeigen</button>
-        {refitHint && (
-          <button className="refit" onClick={() => viewer?.fitAll()} title="Das Modell hat seine Größe deutlich geändert: Ansicht neu einpassen" data-testid="refit">
-            Neu einpassen
-          </button>
-        )}
-        <button onClick={() => view("iso")}>Iso</button>
-        <button onClick={() => view("top")}>Oben</button>
-        <button onClick={() => view("front")}>Vorne</button>
-        <button onClick={() => view("right")}>Rechts</button>
-        <label className="check">
-          <input type="checkbox" checked={allGrids} onChange={(e) => store.setState({ allGrids: e.target.checked })} data-testid="all-grids" />
-          alle Raster
-        </label>
-        <SectionToggle />
-        <ColorsToggle />
+      <div className="viewoverlay">
+        <div className="viewtools" role="toolbar" aria-label="Ansicht">
+          <button onClick={() => viewer?.fitAll()} title="Alles zeigen">Alles zeigen</button>
+          {refitHint && (
+            <button className="refit" onClick={() => viewer?.fitAll()} title="Das Modell hat seine Größe deutlich geändert: Ansicht neu einpassen" data-testid="refit">
+              Neu einpassen
+            </button>
+          )}
+          <button onClick={() => view("iso")}>Iso</button>
+          <button onClick={() => view("top")}>Oben</button>
+          <button onClick={() => view("front")}>Vorne</button>
+          <button onClick={() => view("right")}>Rechts</button>
+          <label className="check">
+            <input type="checkbox" checked={allGrids} onChange={(e) => store.setState({ allGrids: e.target.checked })} data-testid="all-grids" />
+            alle Raster
+          </label>
+          <SectionToggle />
+          <ColorsToggle />
+        </div>
+        <SectionBar />
       </div>
-      <SectionBar />
     </div>
   );
 }

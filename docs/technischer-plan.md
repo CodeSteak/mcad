@@ -622,7 +622,9 @@ nach früherem) gewinnt; Abgezogenes gilt für alle (alles wird mit dem Ergebnis
 `Stück(C) = R ∩ M(C) − ⋃ M(später)`, Rest `R − ⋃ M` → Farbe am Bauteil, sonst Standard
 (wenn das Bauteil ungefärbte Primitive hat), sonst die erste Farbe. Gecacht unter einem
 Schlüssel aus Bauteil, Farbknoten, Lagen und Farben; Farbe und Slot sind nicht Teil der
-Knotenschlüssel. Prüfung Summe = Volumen (sonst Warnung).
+Knotenschlüssel. Prüfung Summe = Volumen (sonst Warnung). Ohne Farbknoten unter dem Bauteil
+gibt es keinen Boolean: eine Region aus den Körpern des Bauteils, Volumen = Bauteilvolumen
+(gecacht), damit die offene Farbliste ungefärbte Modelle nichts kostet.
 
 ### 16.3 Filamente
 

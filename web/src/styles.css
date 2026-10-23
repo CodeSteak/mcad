@@ -687,11 +687,26 @@ input:checked + .cm-switch-knob::after {
   outline: none;
 }
 
-.viewtools {
+/* View toolbar and section bar stacked in the top right corner: when the toolbar wraps
+   (narrow view, colour list open) the section bar moves down instead of covering it. */
+.viewoverlay {
   position: absolute;
   top: 8px;
   right: 8px;
   max-width: calc(100% - 16px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.viewoverlay > * {
+  pointer-events: auto;
+}
+
+.viewtools {
+  max-width: 100%;
   justify-content: flex-end;
   flex-wrap: wrap;
   display: flex;
@@ -1048,14 +1063,11 @@ input:checked + .cm-switch-knob::after {
 }
 
 .sectionbar {
-  position: absolute;
-  top: 46px;
-  right: 8px;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   align-items: center;
-  max-width: calc(100% - 16px);
+  max-width: 100%;
   padding: 4px 6px;
   background: color-mix(in srgb, var(--panel) 90%, transparent);
   border: 1px solid var(--border);
@@ -1166,7 +1178,8 @@ input:checked + .cm-switch-knob::after {
 
 .cptable select {
   padding: 1px 4px;
-  max-width: 96px;
+  /* same width for every row (the explicit slot offers the longer "automatisch") */
+  width: 88px;
 }
 
 .cpcolor {

@@ -305,3 +305,20 @@ fn region_meshes_share_coordinates() {
     assert_eq!(colors.iter().map(|c| c.filament).collect::<Vec<_>>(), [1, 2]);
     let _ = palette::PALETTE;
 }
+
+#[test]
+fn uncoloured_part_needs_no_boolean() {
+    // No colour below the root: one Standard region from the root's solids as they are (no
+    // Boolean), volume = the cached part volume (`Engine::mass_props`); the mesh holds both cubes.
+    let mut e = engine();
+    let t = tree("cube(10);\ntranslate([20, 0, 0]) cube(5);");
+    let ct = table(&t);
+    let ev = e.evaluate(t);
+    assert_clean(&ev);
+    check(&regions(&mut e, &ev, &ct), &[("Standard", 1, 1125.0)]);
+    let r = e.color_regions(&ev, ev.root().unwrap()).unwrap();
+    assert!(!r.regions[0].shapes.is_empty());
+    let m = e.region_mesh(&r, 0, 0.05).unwrap();
+    let xmax = m.positions.chunks(3).map(|p| p[0]).fold(f32::MIN, f32::max);
+    assert!((xmax - 25.0).abs() < 1e-4, "{xmax}");
+}

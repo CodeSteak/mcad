@@ -56,7 +56,7 @@ pub enum Input {
 /// `seen` counts the inputs taken so far (the supervisor knows what is still unanswered).
 pub fn engine_loop<K: Kernel>(
     mut session: Session<K>,
-    rx: Receiver<Input>,
+    rx: Receiver<Vec<Input>>,
     mut emit: impl FnMut(Vec<FromEngine>, bool, u64) -> bool,
 ) where
     K::Shape: 'static,
@@ -66,12 +66,12 @@ pub fn engine_loop<K: Kernel>(
         let mut queue = Vec::new();
         if !session.busy() {
             match rx.recv() {
-                Ok(m) => queue.push(m),
+                Ok(m) => queue.extend(m),
                 Err(_) => return,
             }
         }
         while let Ok(m) = rx.try_recv() {
-            queue.push(m);
+            queue.extend(m);
         }
         seen += queue.len() as u64;
         let mut out = Vec::new();
@@ -117,7 +117,9 @@ where
     K::Shape: 'static,
     F: FnOnce() -> K + Send + 'static,
 {
-    let (tx, rx) = channel::<Input>();
+    // One channel message per frame: a batch (e.g. `SetSource` + `__debugHang` in one tick of
+    // the webview) reaches the engine loop as a whole, never split between two loop passes.
+    let (tx, rx) = channel::<Vec<Input>>();
     std::thread::Builder::new()
         .name("cad-engine-in".into())
         .spawn(move || {
@@ -143,10 +145,8 @@ where
                     "debug_hang" => vec![Input::Hang(f.header.body["ms"].as_u64().unwrap_or(0))],
                     _ => continue,
                 };
-                for i in batch {
-                    if tx.send(i).is_err() {
-                        return;
-                    }
+                if tx.send(batch).is_err() {
+                    return;
                 }
             }
         })

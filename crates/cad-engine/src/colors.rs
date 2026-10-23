@@ -250,7 +250,9 @@ pub enum RegionColor {
 #[derive(Debug, Clone)]
 pub struct Region<S> {
     pub color: RegionColor,
-    pub shape: S,
+    /// Solids of the region: one, or (no colour node below the part) the part's solids as
+    /// they are, without a union (like the part's volume, see [`Engine::mass_props`]).
+    pub shapes: Vec<S>,
     /// Volume in mm³.
     pub volume: f64,
     /// Cache key of this region (meshes).
@@ -330,6 +332,9 @@ fn has_uncolored(tree: &Tree, p: NodeIdx) -> bool {
     found
 }
 
+/// A solid of one colour region with its volume.
+type Piece<S> = (S, f64);
+
 const EMPTY_REL: f64 = 1e-7;
 const EMPTY_ABS: f64 = 1e-4;
 
@@ -373,8 +378,12 @@ where
         if let Some(Cached::Regions(r)) = self.cache.get(&Slot::Regions(key)) {
             return Ok(r);
         }
-        let out = self.compute_regions(ev, node, rest, &placed, key)?;
-        let cost = 256 + out.regions.iter().map(|r| 64 + self.kernel.shape_bytes(&r.shape)).sum::<usize>();
+        // without colour nodes the region is the whole result: its volume is the (cached)
+        // part volume the parts list already asked for
+        let whole = if placed.is_empty() { Some(self.mass_props(ev, node)?.volume) } else { None };
+        let out = self.compute_regions(ev, node, rest, &placed, key, whole)?;
+        let cost =
+            256 + out.regions.iter().flat_map(|r| &r.shapes).map(|s| 64 + self.kernel.shape_bytes(s)).sum::<usize>();
         let rc = Rc::new(out);
         self.cache.insert(Slot::Regions(key), Cached::Regions(rc.clone()), cost);
         Ok(rc)
@@ -387,6 +396,7 @@ where
         rest: RegionColor,
         placed: &[(NodeIdx, ColorKey, DMat4)],
         key: CacheKey,
+        whole: Option<f64>,
     ) -> Result<ColorRegions<K::Shape>, String> {
         let tag = ev.reports[node as usize].tag;
         let k = &mut self.kernel;
@@ -397,6 +407,16 @@ where
         if solids.is_empty() {
             return Ok(out);
         }
+        if let Some(volume) = whole {
+            // No colour below the part: one region with the part's solids, no Boolean (a union
+            // of many solids can take seconds, and the list asks for every finished scene).
+            out.total = volume;
+            if volume.abs() > (volume.abs() * EMPTY_REL).max(EMPTY_ABS) {
+                let rkey = KeyHasher::new().key(&key).u64(0).finish();
+                out.regions.push(Region { color: rest, shapes: solids, volume, key: rkey });
+            }
+            return Ok(out);
+        }
         let r = if solids.len() == 1 {
             solids[0].clone()
         } else {
@@ -405,53 +425,47 @@ where
         let total = k.mass_props(&r).map_err(|e| fail("Volumen", e))?.volume;
         out.total = total;
         let mut pieces: Vec<(RegionColor, K::Shape)> = Vec::new();
-        if placed.is_empty() {
-            pieces.push((rest, r));
-        } else {
-            let mut claimed: Option<K::Shape> = None;
-            for &(c, ck, m) in placed.iter().rev() {
-                let ctag = ev.reports[c as usize].tag;
-                let mut ms = Vec::new();
-                for p in ev.parts(c).iter().filter(|p| p.solid) {
-                    let s = if m.abs_diff_eq(DMat4::IDENTITY, 1e-12) {
-                        p.shape.clone()
-                    } else {
-                        k.transform(&p.shape, &m).map_err(|e| fail("Transformation", e))?
-                    };
-                    ms.push(s);
-                }
-                if ms.is_empty() {
-                    continue;
-                }
-                let mc = if ms.len() == 1 {
-                    ms.pop().unwrap()
+        let mut claimed: Option<K::Shape> = None;
+        for &(c, ck, m) in placed.iter().rev() {
+            let ctag = ev.reports[c as usize].tag;
+            let mut ms = Vec::new();
+            for p in ev.parts(c).iter().filter(|p| p.solid) {
+                let s = if m.abs_diff_eq(DMat4::IDENTITY, 1e-12) {
+                    p.shape.clone()
                 } else {
-                    k.boolean(BoolOp::Union, &ms, ctag).map_err(|e| fail("Vereinigung", e))?
+                    k.transform(&p.shape, &m).map_err(|e| fail("Transformation", e))?
                 };
-                let mut piece = k
-                    .boolean(BoolOp::Intersection, &[r.clone(), mc.clone()], ctag)
-                    .map_err(|e| fail("Schnittmenge", e))?;
-                if let Some(cl) = &claimed
-                    && !k.is_empty(&piece)
-                {
-                    piece =
-                        k.boolean(BoolOp::Difference, &[piece, cl.clone()], ctag).map_err(|e| fail("Differenz", e))?;
-                }
-                claimed = Some(match claimed.take() {
-                    None => mc,
-                    Some(cl) => k.boolean(BoolOp::Union, &[cl, mc], ctag).map_err(|e| fail("Vereinigung", e))?,
-                });
-                pieces.push((RegionColor::Color(ck), piece));
+                ms.push(s);
             }
-            pieces.reverse();
-            if let Some(cl) = claimed {
-                let rem = k.boolean(BoolOp::Difference, &[r, cl], tag).map_err(|e| fail("Differenz", e))?;
-                pieces.push((rest, rem));
+            if ms.is_empty() {
+                continue;
             }
+            let mc = if ms.len() == 1 {
+                ms.pop().unwrap()
+            } else {
+                k.boolean(BoolOp::Union, &ms, ctag).map_err(|e| fail("Vereinigung", e))?
+            };
+            let mut piece =
+                k.boolean(BoolOp::Intersection, &[r.clone(), mc.clone()], ctag).map_err(|e| fail("Schnittmenge", e))?;
+            if let Some(cl) = &claimed
+                && !k.is_empty(&piece)
+            {
+                piece = k.boolean(BoolOp::Difference, &[piece, cl.clone()], ctag).map_err(|e| fail("Differenz", e))?;
+            }
+            claimed = Some(match claimed.take() {
+                None => mc,
+                Some(cl) => k.boolean(BoolOp::Union, &[cl, mc], ctag).map_err(|e| fail("Vereinigung", e))?,
+            });
+            pieces.push((RegionColor::Color(ck), piece));
+        }
+        pieces.reverse();
+        if let Some(cl) = claimed {
+            let rem = k.boolean(BoolOp::Difference, &[r, cl], tag).map_err(|e| fail("Differenz", e))?;
+            pieces.push((rest, rem));
         }
         // drop empty pieces, unite pieces of one colour (order of first piece)
         let eps = (total.abs() * EMPTY_REL).max(EMPTY_ABS);
-        let mut merged: Vec<(RegionColor, Vec<(K::Shape, f64)>)> = Vec::new();
+        let mut merged: Vec<(RegionColor, Vec<Piece<K::Shape>>)> = Vec::new();
         for (c, s) in pieces {
             if k.is_empty(&s) {
                 continue;
@@ -479,7 +493,7 @@ where
                 (u, v)
             };
             let rkey = KeyHasher::new().key(&key).u64(i as u64).finish();
-            out.regions.push(Region { color: c, shape, volume, key: rkey });
+            out.regions.push(Region { color: c, shapes: vec![shape], volume, key: rkey });
         }
         let sum: f64 = out.regions.iter().map(|r| r.volume).sum();
         if (sum - total).abs() > 1e-4 * total.abs() + 1e-3 {
@@ -497,9 +511,11 @@ where
         if let Some(Cached::Mesh(m)) = self.cache.get(&slot) {
             return Ok(m);
         }
-        let m = self.kernel.tessellate(&r.shape, tol).map_err(|e| e.to_string())?;
         let mut mesh = Mesh::default();
-        append_offset(&mut mesh, &m);
+        for s in &r.shapes {
+            let m = self.kernel.tessellate(s, tol).map_err(|e| e.to_string())?;
+            append_offset(&mut mesh, &m);
+        }
         let cost = mesh_bytes(&mesh);
         let mesh = Rc::new(mesh);
         self.cache.insert(slot, Cached::Mesh(mesh.clone()), cost);
