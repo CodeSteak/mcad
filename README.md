@@ -184,6 +184,11 @@ pnpm build                                  # -> web/dist (statisch, z. B. GitHu
   Windungsregel oder in `hole { … }`, `for`/`if`/`let` und Raster in der Skizze;
   `sketch(closed = false)` ist ein `sweep`-Pfad. `module profil(b = 40) sketch { … }` ist eine
   benannte Skizze (Plan 17, Bericht 14).
+- `corner(r = …)` / `corner(chamfer = …)` rundet bzw. fast die Ecke zwischen zwei Segmenten
+  (exakt für Geraden und Bögen, numerisch für Bézier/Splines; Radius-Griff), `fillet2d(r)` /
+  `chamfer2d(d)` alle Ecken eines 2D-Profils oder nur die in 2D-Zonen, `offset(r | delta,
+  chamfer)` wie OpenSCAD (exakte Bögen statt Facetten), `stroke(w, cap, join)` macht aus
+  einem offenen Pfad eine Fläche (Rippen, Langlöcher, Kabelkanäle; Plan 17.3, Bericht 15).
 - Module sind Namensräume: `module teile { module schraube(d = 3) { … } }` (Klammern dürfen
   fehlen), Aufruf von außen `teile.schraube(d = 4);`, mehrstufig `a.b.c();`; Funktionen und
   Konstanten eines Moduls als `teile.kopf(d)`, `teile.M3`; `cad --module teile.schraube`.
@@ -238,7 +243,7 @@ translate(k.oben) rotate(to = dir(k.oben)) cylinder(h = 8, r = 3);
 
 Weitere Beispiele: `examples/spec/` (Spracherweiterungen, Skizzen: `skizze_*.scad`, Text: `text_schild.scad`,
 SVG: `svg_logo.scad` mit `examples/svg/*.svg`), `examples/openscad-compat/`
-(33 OpenSCAD-Modelle), `examples/projekt-gehaeuse/` (Projekt aus drei Dateien).
+(36 OpenSCAD-Modelle), `examples/projekt-gehaeuse/` (Projekt aus drei Dateien).
 
 ## Verzeichnisstruktur
 
@@ -326,6 +331,7 @@ CMakeLists, Build-Skript und Compiler: `scripts/ci/smlib-key.sh`). Ist der SMLib
 - [Bericht 11](docs/reports/11-farben-filamente/report.pdf): Farben, Multi-Filament-3MF (Bambu Studio/OrcaSlicer), dunkles Thema.
 - [Bericht 12](docs/reports/12-farben-korrekturen/report.pdf): Korrekturen Farben und Daemon (Befunde F1–F9 der unabhängigen Prüfung, Bambu-Farbdialog, Socketpfad).
 - [Bericht 14](docs/reports/14-skizzen/report.pdf): Skizzen mit gemischten Konturen (Geraden, Bögen, Bézier, Splines) und Module als Namensräume.
+- [Bericht 15](docs/reports/15-skizzen-ecken-offset/report.pdf): Skizzen – Ecken (`corner`, `fillet2d`), `offset` (OpenSCAD-Vergleich), `stroke`.
 - [Bericht 16](docs/reports/16-text-svg/report.pdf): Text mit mitgelieferten Schriften und SVG-Import, Vergleich mit OpenSCAD.
 
 ## Lizenzen

@@ -33,30 +33,10 @@ fn ir_seg(s: &cad_outline::Seg) -> Seg {
             match (cad_kernel::Segment::Arc { center: glam::DVec2::ZERO, r: 1.0, a0: t0, a1: t1 }).map(&m) {
                 cad_kernel::Segment::Arc { center, r, a0, a1 } => Seg::Arc { center, r, a0, a1, ccw: a1 > a0 },
                 cad_kernel::Segment::Line { a, b } => Seg::Line { a, b },
-                cad_kernel::Segment::Nurbs(c) => Seg::Nurbs {
-                    degree: c.degree,
-                    knots: c.knots,
-                    points: c.points.iter().map(|p| p.truncate()).collect(),
-                    weights: c.weights,
-                },
+                cad_kernel::Segment::Nurbs(c) => Seg::Nurbs(c),
             }
         }
     }
-}
-
-/// Pushes `s`, circular arcs split into pieces of at most 90° (exact as well). Workaround: the
-/// SMLib facade (`sc_sketch.cpp`, Plan 17.8) unites extruded sketch arcs of more than 90° with
-/// other solids unreliably (Bericht 16); can go once that is fixed (Skizzen Schritt 2).
-fn push_split(out: &mut Vec<Seg>, s: Seg) {
-    if let Seg::Arc { center, r, a0, a1, ccw } = s {
-        let n = ((a1 - a0).abs() / (std::f64::consts::FRAC_PI_2 + 1e-9)).ceil().max(1.0) as usize;
-        for i in 0..n {
-            let (b0, b1) = (a0 + (a1 - a0) * i as f64 / n as f64, a0 + (a1 - a0) * (i + 1) as f64 / n as f64);
-            out.push(Seg::Arc { center, r, a0: b0, a1: b1, ccw });
-        }
-        return;
-    }
-    out.push(s);
 }
 
 /// Bézier control points of an outline segment (`None` for lines and arcs).
@@ -106,7 +86,12 @@ fn chain_nurbs(chain: &[&[glam::DVec2]]) -> Seg {
     for k in &mut knots {
         *k /= t;
     }
-    Seg::Nurbs { degree: p as u32, knots, points, weights: None }
+    Seg::Nurbs(cad_kernel::brep::BSplineCurve {
+        degree: p as u32,
+        knots,
+        points: points.iter().map(|q| q.extend(0.0)).collect(),
+        weights: None,
+    })
 }
 
 /// IR segments of a contour: tangent-continuous runs of Bézier curves become one B-spline
@@ -131,7 +116,7 @@ fn ir_segs(c: &cad_outline::Contour) -> Vec<Seg> {
     let mut i = 0;
     while i < segs.len() {
         let Some(first) = bezier_points(&segs[i]) else {
-            push_split(&mut out, ir_seg(&segs[i]));
+            out.push(ir_seg(&segs[i]));
             i += 1;
             continue;
         };

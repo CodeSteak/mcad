@@ -115,6 +115,28 @@ pub enum Op {
         select: Select,
         law: Option<Box<Law>>,
     },
+    /// `fillet2d(r) { profile; zone; … }` / `chamfer2d(d)` (Plan 17.3): rounds (cuts) the
+    /// corners of a 2D profile, convex and concave; child 0 is the profile, the others are 2D
+    /// zones selecting corners.
+    Blend2 {
+        kind: BlendKind,
+        r: f64,
+        select: Select,
+    },
+    /// `offset(r = …)` (`round`) / `offset(delta = …, chamfer)` of the 2D children
+    /// (OpenSCAD-compatible).
+    Offset {
+        round: bool,
+        d: f64,
+        chamfer: bool,
+    },
+    /// `stroke(w, cap, join)`: the area a pen of width `w` covers along the paths of the
+    /// children (open sketches; boundaries of 2D profiles).
+    Stroke {
+        w: f64,
+        cap: StrokeCap,
+        join: StrokeJoin,
+    },
     /// `shell(t) { body; zone; … }`.
     Shell {
         t: f64,
@@ -177,6 +199,20 @@ pub enum TransformKind {
 pub enum BlendKind {
     Fillet,
     Chamfer,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StrokeCap {
+    Round,
+    Flat,
+    Square,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StrokeJoin {
+    Round,
+    Miter,
+    Bevel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -260,17 +296,8 @@ pub enum Seg {
         t0: Option<DVec2>,
         t1: Option<DVec2>,
     },
-    /// Clamped (rational) B-spline: imported outlines – chains of tangent-continuous glyph or
-    /// SVG Bézier curves joined into one curve, elliptic arcs (rational quadratic).
-    Nurbs {
-        degree: u32,
-        /// `points.len() + degree + 1` values, non-decreasing, end knots of multiplicity
-        /// `degree + 1`.
-        knots: Vec<f64>,
-        points: Vec<DVec2>,
-        /// `None`: polynomial.
-        weights: Option<Vec<f64>>,
-    },
+    /// Piece of a B-spline (a spline shortened by `corner()`, results of `fillet2d`), `z = 0`.
+    Nurbs(cad_kernel::brep::BSplineCurve),
 }
 
 impl Seg {
@@ -280,7 +307,7 @@ impl Seg {
             Seg::Arc { .. } => "arc",
             Seg::Bezier { .. } => "bezier",
             Seg::Spline { .. } => "spline",
-            Seg::Nurbs { .. } => "nurbs",
+            Seg::Nurbs(_) => "nurbs",
         }
     }
 
@@ -293,22 +320,27 @@ impl Seg {
             Seg::Spline { points, t0, t1 } => {
                 cad_kernel::Segment::Nurbs(cad_kernel::curve2::interpolate(points, *t0, *t1)?)
             }
-            Seg::Nurbs { degree, knots, points, weights } => {
-                cad_kernel::Segment::Nurbs(cad_kernel::brep::BSplineCurve {
-                    degree: *degree,
-                    knots: knots.clone(),
-                    points: points.iter().map(|p| p.extend(0.0)).collect(),
-                    weights: weights.clone(),
-                })
-            }
+            Seg::Nurbs(c) => cad_kernel::Segment::Nurbs(c.clone()),
         })
+    }
+
+    /// IR form of a kernel segment.
+    pub fn from_kernel(s: &cad_kernel::Segment) -> Seg {
+        match s {
+            cad_kernel::Segment::Line { a, b } => Seg::Line { a: *a, b: *b },
+            cad_kernel::Segment::Arc { center, r, a0, a1 } => {
+                Seg::Arc { center: *center, r: *r, a0: *a0, a1: *a1, ccw: a1 >= a0 }
+            }
+            cad_kernel::Segment::Nurbs(c) => Seg::Nurbs(c.clone()),
+        }
     }
 
     pub fn start(&self) -> DVec2 {
         match self {
             Seg::Line { a, .. } => *a,
             Seg::Arc { center, r, a0, .. } => *center + DVec2::new(a0.cos(), a0.sin()) * *r,
-            Seg::Bezier { points } | Seg::Spline { points, .. } | Seg::Nurbs { points, .. } => points[0],
+            Seg::Bezier { points } | Seg::Spline { points, .. } => points[0],
+            Seg::Nurbs(c) => c.eval(c.domain().0).truncate(),
         }
     }
 
@@ -316,9 +348,8 @@ impl Seg {
         match self {
             Seg::Line { b, .. } => *b,
             Seg::Arc { center, r, a1, .. } => *center + DVec2::new(a1.cos(), a1.sin()) * *r,
-            Seg::Bezier { points } | Seg::Spline { points, .. } | Seg::Nurbs { points, .. } => {
-                *points.last().unwrap_or(&DVec2::ZERO)
-            }
+            Seg::Bezier { points } | Seg::Spline { points, .. } => *points.last().unwrap_or(&DVec2::ZERO),
+            Seg::Nurbs(c) => c.eval(c.domain().1).truncate(),
         }
     }
 }
@@ -354,6 +385,9 @@ impl Op {
             Op::Transform { kind, .. } => format!("{kind:?}").to_lowercase(),
             Op::Boolean { op, .. } => format!("{op:?}").to_lowercase(),
             Op::Blend { kind, .. } => format!("{kind:?}").to_lowercase(),
+            Op::Blend2 { kind, .. } => format!("{}2d", format!("{kind:?}").to_lowercase()),
+            Op::Offset { .. } => "offset".into(),
+            Op::Stroke { .. } => "stroke".into(),
             Op::Shell { .. } => "shell".into(),
             Op::Zone(_) => "zone".into(),
             Op::LinearExtrude { .. } => "linear_extrude".into(),
@@ -378,7 +412,7 @@ impl Tree {
     pub fn dim(&self, i: NodeIdx) -> Option<Dim> {
         let n = self.node(i);
         match &n.op {
-            Op::Profile(_) => Some(Dim::Two),
+            Op::Profile(_) | Op::Blend2 { .. } | Op::Offset { .. } | Op::Stroke { .. } => Some(Dim::Two),
             Op::Prim { .. }
             | Op::LinearExtrude { .. }
             | Op::RotateExtrude { .. }

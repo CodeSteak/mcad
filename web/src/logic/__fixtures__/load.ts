@@ -23,6 +23,10 @@ const FIXTURES: Record<string, { example: string; local?: boolean }> = {
   skizze: { example: "spec/skizze_profil.scad" },
   "skizze-modul": { example: "spec/skizze_profil.scad" },
   bibliothek: { example: "spec/skizze_bibliothek.scad" },
+  "skizze-deckel": { example: "spec/skizze_deckel.scad" },
+  "skizze-halter": { example: "spec/skizze_halter.scad" },
+  "skizze-kabelkanal": { example: "spec/skizze_kabelkanal.scad" },
+  "skizze-pfad": { example: "spec/skizze_kabelkanal.scad" },
 };
 
 export interface Fixture {

@@ -138,10 +138,145 @@ fn errors_per_segment_line() {
     // outside a sketch, and other statements inside one
     assert!(has_error(&run("line(to = [1, 0]);"), "nur innerhalb von `sketch"));
     assert!(has_error(&run("sketch { start([0,0]); cube(3); }"), "in einer Skizze nicht erlaubt"));
-    // corner() is reserved
-    let out = run("sketch { start([0,0]); line(to=[4,0]); corner(r = 1); line(to=[0,4]); close(); }");
-    assert!(has_warning(&out, "noch nicht unterstützt"), "{:?}", warnings(&out));
-    assert!(errors(&out).is_empty());
+}
+
+// ---------------------------------------------------------------- corner (17.3, Schritt 2)
+
+fn arcs_of(cs: &[cad_ir::Contour]) -> Vec<(DVec2, f64)> {
+    cs.iter()
+        .flat_map(|c| c.segs.iter())
+        .filter_map(|g| match g {
+            Seg::Arc { center, r, .. } => Some((*center, *r)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn corner_rules() {
+    // between two segments: the vertex between them
+    let out = clean(
+        "sketch { start([0, 0]); line(to = [20, 0]); corner(r = 3); line(to = [20, 10]); line(to = [0, 10]); close(); }",
+    );
+    let (cs, _) = sketch_of(&out);
+    assert_eq!(cs[0].segs.len(), 5);
+    let a = arcs_of(&cs);
+    assert_eq!(a.len(), 1);
+    assert!(near(a[0].0, [17.0, 3.0]) && approx(a[0].1, 3.0), "{a:?}");
+    assert!(near(cs[0].segs[0].end(), [17.0, 0.0]));
+    // directly after start(p): the start vertex (between the closing line and the first segment)
+    let out = clean(
+        "sketch { start([0, 0]); corner(r = 2); line(to = [20, 0]); line(to = [20, 10]); line(to = [0, 10]); close(); }",
+    );
+    let (cs, _) = sketch_of(&out);
+    let a = arcs_of(&cs);
+    assert!(near(a[0].0, [2.0, 2.0]), "{a:?}");
+    // the contour starts after the rounding, the rounding is its last segment
+    assert!(near(cs[0].segs[0].start(), [2.0, 0.0]));
+    assert!(matches!(cs[0].segs.last(), Some(Seg::Arc { .. })));
+    // before close(): the vertex between the last segment and the closing line
+    let out = clean(
+        "sketch { start([0, 0]); line(to = [20, 0]); line(to = [20, 10]); line(to = [0, 10]); corner(r = 2); close(); }",
+    );
+    let a = arcs_of(&sketch_of(&out).0);
+    assert!(near(a[0].0, [2.0, 8.0]), "{a:?}");
+    // at the end of a contour that ends at its start (no closing line): the start vertex
+    let out = clean(
+        "sketch { start([0, 0]); line(to = [20, 0]); line(to = [20, 10]); line(to = [0, 10]); line(to = [0, 0]); corner(r = 2); }",
+    );
+    let a = arcs_of(&sketch_of(&out).0);
+    assert!(near(a[0].0, [2.0, 2.0]), "{a:?}");
+    // chamfer: a line between the points at distance d from the vertex
+    let out = clean(
+        "sketch { start([0, 0]); line(to = [20, 0]); corner(chamfer = 4); line(to = [20, 10]); line(to = [0, 10]); close(); }",
+    );
+    let (cs, _) = sketch_of(&out);
+    assert!(
+        cs[0].segs.iter().any(|g| matches!(g, Seg::Line { a, b } if near(*a, [16.0, 0.0]) && near(*b, [20.0, 4.0])))
+    );
+    // line into an arc: the rounding is tangent to both
+    let out = clean(
+        "sketch { start([0, 0]); line(to = [10, 0]); corner(r = 1); arc(center = [0, 0], angle = 90); close(); }",
+    );
+    let a = arcs_of(&sketch_of(&out).0);
+    let (c, r) = a.iter().find(|(_, r)| approx(*r, 1.0)).copied().unwrap();
+    assert!(approx(c.y, 1.0) && approx(c.length(), 9.0), "{c} {r}");
+    // in loops: a rounded zigzag
+    let out = clean(
+        "sketch { start([0, 0]); for (i = [1 : 4]) { line(to = [i * 10, (i % 2) * 5]); if (i < 4) corner(r = 1); } line(to = [40, -5]); line(to = [0, -5]); close(); }",
+    );
+    assert_eq!(arcs_of(&sketch_of(&out).0).len(), 3);
+}
+
+#[test]
+fn corner_errors_at_the_line() {
+    let src = "sketch {\n start([0, 0]);\n line(to = [4, 0]);\n corner(r = 5);\n line(to = [4, 4]);\n line(to = [0, 4]);\n close();\n}";
+    let out = run(src);
+    let e = errors_at(&out, src);
+    assert_eq!(e.len(), 1, "{e:?}");
+    assert_eq!(e[0].0, 4);
+    assert!(e[0].1.contains("passt nicht") && e[0].1.contains("höchstens ≈ 4"), "{e:?}");
+    // two corners sharing a short segment: both fail, with the largest common radius
+    let src = "sketch {\n start([0, 0]);\n line(to = [10, 0]);\n corner(r = 2);\n line(to = [10, 3]);\n corner(r = 2);\n line(to = [0, 3]);\n close();\n}";
+    let e = errors_at(&run(src), src);
+    assert_eq!(e.iter().map(|x| x.0).collect::<Vec<_>>(), [4, 6], "{e:?}");
+    assert!(e[0].1.contains("höchstens ≈ 1.5"), "{e:?}");
+    // tangent: no corner
+    let src = "sketch {\n start([0, 0]);\n line(to = [10, 0]);\n corner(r = 1);\n arc(to = [10, 10]);\n close();\n}";
+    let e = errors_at(&run(src), src);
+    assert!(e.iter().any(|(l, m)| *l == 4 && m.contains("tangential")), "{e:?}");
+    // open contour: no start corner, nothing after the last segment
+    let e =
+        errors(&run("sketch(closed = false) { start([0, 0]); corner(r = 1); line(to = [5, 0]); line(to = [5, 5]); }"));
+    assert!(e.iter().any(|m| m.contains("keine Startecke")), "{e:?}");
+    let e =
+        errors(&run("sketch(closed = false) { start([0, 0]); line(to = [5, 0]); line(to = [5, 5]); corner(r = 1); }"));
+    assert!(e.iter().any(|m| m.contains("folgt keines mehr")), "{e:?}");
+    // after close(), before start, twice at one vertex, bad values
+    assert!(has_error(
+        &run("sketch { start([0, 0]); line(to = [5, 0]); line(to = [0, 5]); close(); corner(r = 1); }"),
+        "nach `close()`"
+    ));
+    assert!(has_error(
+        &run("sketch { corner(r = 1); start([0, 0]); line(to = [5, 0]); line(to = [0, 5]); close(); }"),
+        "vor `start(p)`"
+    ));
+    assert!(has_error(
+        &run("sketch { start([0, 0]); line(to = [5, 0]); corner(r = 1); corner(r = 2); line(to = [0, 5]); close(); }"),
+        "schon ein `corner()`"
+    ));
+    assert!(has_error(
+        &run("sketch { start([0, 0]); line(to = [5, 0]); corner(r = -1); line(to = [0, 5]); close(); }"),
+        "muss > 0 sein"
+    ));
+    assert!(has_error(
+        &run("sketch { start([0, 0]); line(to = [5, 0]); corner(); line(to = [0, 5]); close(); }"),
+        "braucht `r`"
+    ));
+    assert!(has_error(&run("corner(r = 1);"), "nur innerhalb von `sketch"));
+}
+
+#[test]
+fn corner_radius_handle() {
+    let src = "linear_extrude(2) sketch {\n start([0, 0]);\n line(to = [20, 0]);\n corner(r = 3);\n line(to = [20, 10]);\n line(to = [0, 10]);\n close();\n}";
+    let out = clean(src);
+    let h = out
+        .handles
+        .iter()
+        .find(|h| span_text(src, h.span).starts_with("corner") && h.kind == HandleKind::Radius)
+        .expect("radius handle");
+    assert_eq!(h.value, vec![3.0]);
+    // on the rounding's midpoint; base at the vertex, linear in r
+    let mid = DVec2::new(17.0, 3.0) + DVec2::new(1.0, -1.0).normalize() * 3.0;
+    assert!(approx3(h.pos, [mid.x, mid.y, 0.0]), "{}", h.pos);
+    assert!(approx3(h.base.unwrap(), [20.0, 0.0, 0.0]));
+    let axis = h.axis.unwrap();
+    assert!(approx3(h.base.unwrap() + axis * 3.0, [mid.x, mid.y, 0.0]));
+    let new = apply_edits(
+        src,
+        &drag_edits(&out, src, h.id, &DragTarget::Free(DragValue::Scalar(4.0)), &DragOptions::default()),
+    );
+    assert!(new.contains("corner(r = 4);"), "{new}");
 }
 
 #[test]
@@ -311,4 +446,50 @@ fn openscad_files_are_unaffected() {
     // spline() outside a sketch is still the 2D primitive
     let out = clean("linear_extrude(1) spline([[0,0],[5,0],[5,5],[0,5]]);");
     assert!(out.tree.nodes.iter().any(|n| matches!(n.op, Op::Profile(Profile::Spline { .. }))));
+}
+
+#[test]
+fn arguments_of_2d_operations() {
+    let op = |src: &str| -> Op {
+        let out = clean(src);
+        out.tree
+            .nodes
+            .iter()
+            .find(|n| matches!(n.op, Op::Offset { .. } | Op::Stroke { .. } | Op::Blend2 { .. }))
+            .unwrap()
+            .op
+            .clone()
+    };
+    assert_eq!(op("offset(2) square(5);"), Op::Offset { round: true, d: 2.0, chamfer: false });
+    assert_eq!(
+        op("offset(delta = -1, chamfer = true) square(5);"),
+        Op::Offset { round: false, d: -1.0, chamfer: true }
+    );
+    // OpenSCAD: without arguments r = 1
+    assert_eq!(op("offset() square(5);"), Op::Offset { round: true, d: 1.0, chamfer: false });
+    assert!(has_warning(&run("offset(r = 1, delta = 2) square(5);"), "`delta` wird ignoriert"));
+    use cad_ir::{BlendKind, Select, StrokeCap, StrokeJoin};
+    assert_eq!(
+        op(
+            "stroke(2, cap = \"square\", join = \"miter\") sketch(closed = false) { start([0, 0]); line(to = [5, 0]); }"
+        ),
+        Op::Stroke { w: 2.0, cap: StrokeCap::Square, join: StrokeJoin::Miter }
+    );
+    assert!(has_warning(&run("stroke(2, cap = \"butt\") circle(3);"), "`cap` muss"));
+    assert!(has_error(&run("stroke() circle(3);"), "braucht eine Breite"));
+    assert_eq!(
+        op("chamfer2d(1.5) square(5);"),
+        Op::Blend2 { kind: BlendKind::Chamfer, r: 1.5, select: Select::Inside }
+    );
+    // zones: children after the first; zone() is valid in fillet2d
+    let out = clean(
+        "grid g { x: a = 0; y: b = 0; z: c = 0; }\nfillet2d(1, select = \"touch\") { square(5); circle(1); zone(g[a, *, *], d = 1); }",
+    );
+    let n = out.tree.nodes.iter().position(|n| matches!(n.op, Op::Blend2 { .. })).unwrap();
+    let kids = &out.tree.nodes[n].children;
+    assert_eq!(kids.len(), 3);
+    assert!(!out.tree.nodes[kids[0] as usize].flags.zone);
+    assert!(kids[1..].iter().all(|&k| out.tree.nodes[k as usize].flags.zone));
+    assert_eq!(out.tree.dim(n as u32), Some(cad_ir::Dim::Two));
+    assert!(has_error(&run("fillet2d() square(5);"), "braucht einen Radius"));
 }

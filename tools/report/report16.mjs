@@ -231,7 +231,7 @@ const html = `<!doctype html>
 <table>
 <tr><th>Frage</th><th>Entscheidung</th></tr>
 <tr><td>Bibliotheken</td><td><code>roxmltree</code> 0.21 (XML, Zeilen für Meldungen), <code>rustybuzz</code> 0.20.1 mit <code>ttf-parser</code> 0.25 (Shaping wie HarfBuzz, Umrisse, reines Rust, Wasm-tauglich). Pfaddaten, Transformationen, Einheiten, Bögen, Füllregeln: eigener Code.</td></tr>
-<tr><td>Aufteilung</td><td>Neue Crates <code>cad-outline</code> (neutrale Konturen), <code>cad-svg</code>, <code>cad-font</code>; in <code>cad-eval</code> nur die Builtins (<code>import.rs</code>) und das Laden der Datendateien (<code>Project::assets</code>). IR: neues Segment <code>Seg::Nurbs</code>. Engine/Fassade unverändert außer den Farbregionen.</td></tr>
+<tr><td>Aufteilung</td><td>Neue Crates <code>cad-outline</code> (neutrale Konturen), <code>cad-svg</code>, <code>cad-font</code>; in <code>cad-eval</code> nur die Builtins (<code>import.rs</code>) und das Laden der Datendateien (<code>Project::assets</code>). IR: <code>Seg::Nurbs</code> (aus Schritt 2) für B-Spline-Ketten und Ellipsenbögen. Engine/Fassade unverändert außer den Farbregionen.</td></tr>
 <tr><td>Profil-Knoten</td><td>Ein <code>Profile::Sketch</code> je gefülltem SVG-Element bzw. je Glyphe, mehrere unter einer Gruppe (Vereinigung): überlappende Elemente oder Glyphen ergeben die Vereinigung wie beim Malen; innerhalb eines Elements entscheidet seine Füllregel.</td></tr>
 <tr><td>Kurven</td><td>Tangentenstetige Ketten von Bézierkurven einer Glyphe oder eines Pfads werden <b>eine</b> B-Spline (Knoten C1, Parameterlängen aus den Tangentenlängen; exakt), Ecken trennen. Weniger Kernel-Flächen (Glyphe „o“: 4 statt ~30).</td></tr>
 <tr><td>Größe <code>size</code></td><td>wie OpenSCAD: em = <code>size</code>/0,72 (OpenSCAD setzt die Schrift auf <code>size</code> Punkt bei 100 dpi); Versalhöhe ≈ <code>size</code>. Laufweite, Versatz und Ausrichtung mal 1000/1024 wie OpenSCAD (dessen FreeType-Umrechnung): Text bleibt gleich breit wie in OpenSCAD.</td></tr>
@@ -269,7 +269,7 @@ ${oscText.map(oscRow).join("\n")}
 <h3>5.1 Beispiele: Quelle und Ergebnis</h3>
 <p>Links die SVG-Datei, wie der Browser sie zeichnet (Quelle in <code>examples/svg/</code>, eigene Zeichnungen), rechts <code>linear_extrude(2) import("….svg")</code> von oben.</p>
 ${[
-  ["logo", "Ring aus vier Bögen mit Loch (evenodd), acht gedrehte Rechtecke mit Rundung, Polygon"],
+  ["logo", "Ring aus Halbkreisbögen mit Loch (evenodd), acht gedrehte Rechtecke mit Rundung, Polygon"],
   ["blatt", "kubische Bézier (C, S), Rippe als Gegenlauf (nonzero), Stiel aus Q/T, gedrehte Gruppe"],
   ["haus", "relative Befehle (h, v, m), Fenster und Tür als Löcher (evenodd), Rechteck mit rx, skalierte Gruppe mit Kreis"],
   ["welle", "Q/T-Welle, Ellipse, Kreis mit scale(2 1) (Ellipsenbögen), skewX, gedrehter Ellipsenbogen (A)"],
@@ -317,7 +317,7 @@ ${timeRow("platte", "„Hello World“ auf einer Platte (Vereinigung)", null)}
 ${timeRow("svg_logo", "examples/spec/svg_logo.scad", null)}
 ${timeRow("text_schild", "examples/spec/text_schild.scad", null)}
 </table>
-<p>Je Glyphe: Extrusion je Kontur (Außen, Loch), Differenz für Löcher, eine Vereinigung aller Glyphen (sie berühren sich nicht). Teuer ist Text <b>auf</b> einer Fläche: SMLib prägt jede Glyphe in die Deckfläche (Schild: eine Vereinigung von ≈ 9 s nativ). Die neue Farbregion-Regel (Plan 17.9) vermeidet dabei die Booleans mit dem Ganzen; vorher brauchte der Kontaktbogen von T01 nativ 21 s und scheiterte („Schnittmenge gescheitert“), jetzt 4 s.</p>
+<p>Je Glyphe: Extrusion je Kontur (Außen, Loch), Differenz für Löcher, eine Vereinigung aller Glyphen (sie berühren sich nicht). Teuer ist Text <b>auf</b> einer Fläche: SMLib prägt jede Glyphe in die Deckfläche (Schild: eine Vereinigung von ≈ 9 s nativ). Die neue Farbregion-Regel (Plan 17.10) vermeidet dabei die Booleans mit dem Ganzen; vorher brauchte der Kontaktbogen von T01 nativ 21 s und scheiterte („Schnittmenge gescheitert“), jetzt 4 s.</p>
 <h3>Wasm-Modul</h3>
 ${wasm ? `<table><tr><th></th><th>roh</th><th>gzip -9</th></tr><tr><td><code>cad_wasm_bg.wasm</code> vorher (Commit ${esc(wasm.base ?? "cafe7a4")})</td><td class="n">${de(wasm.before.raw)} B</td><td class="n">${de(wasm.before.gzip)} B</td></tr><tr><td>nachher</td><td class="n">${de(wasm.after.raw)} B</td><td class="n">${de(wasm.after.gzip)} B</td></tr><tr><td>Zuwachs</td><td class="n">+${de(wasm.after.raw - wasm.before.raw)} B</td><td class="n">+${de(wasm.after.gzip - wasm.before.gzip)} B</td></tr><tr><td>davon Schriftdateien</td><td class="n">${de(wasm.fonts)} B</td><td class="n">–</td></tr></table><p class="small">Der Rest des Zuwachses ist Code (rustybuzz/ttf-parser, roxmltree, SVG- und Textlogik). <code>smlib.wasm</code> unverändert (${de(wasm.smlib)} B).</p>` : "<p>(fehlt)</p>"}
 
@@ -348,7 +348,7 @@ ${scenarios.map((s) => `<h3>${esc(s.id)} ${esc(s.title)}</h3><p>${md(s.caption)}
 <li>Füllregeln setzen sich nicht schneidende Konturen innerhalb eines Elements voraus (Schriften mit überlappenden Konturen, z. B. manche Variable Fonts, und sich selbst schneidende SVG-Pfade werden nicht aufgelöst). Variable Fonts nur in der Standardinstanz.</li>
 <li>SVG: kein Text, keine <code>use</code>-Klone, keine CSS-Klassen, keine Striche als Fläche, keine Masken/Clip-Pfade; Prozent- und em-Längen werden wie Zahlen behandelt.</li>
 <li>Dateinamen müssen als Text im Projekt stehen (ein zur Laufzeit zusammengesetzter Name wird nicht geladen).</li>
-<li>Umgehung: Kreisbögen über 90° werden beim Import geviertelt, weil die SMLib-Fassade Vereinigungen solcher Skizzenbögen falsch berechnet (Skizzen Schritt 1; Behebung im Skizzen-Schritt 2); danach entfällt sie.</li>
+<li>Gefunden beim Logo: Vereinigungen extrudierter Skizzenbögen über 90° rechnete die Fassade falsch (Skizzen Schritt 1); behoben in Schritt 2 (<code>profile::split_arcs</code>), die zwischenzeitliche Umgehung im Import entfiel.</li>
 <li>Standardausrichtung senkrechten Texts wie OpenSCAD (Versatz des Shapers); <code>valign</code> nach der echten Glyphenhülle (OpenSCAD: gerasterte FreeType-Metriken, ≤ 0,005 mm).</li>
 </ul>
 </main>

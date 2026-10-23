@@ -5,7 +5,7 @@ Hobbymodellen. Umfang: nur Features aus „Voll“ in `docs/technischer-plan.md`
 
 | Ort | Inhalt |
 | --- | --- |
-| `examples/openscad-compat/*.scad` | 33 Modelle, je mit Kopfkommentar `// Zweck: …` |
+| `examples/openscad-compat/*.scad` | 36 Modelle, je mit Kopfkommentar `// Zweck: …` (34–36: `offset`) |
 | `examples/spec/*.scad` | 8 Modelle mit den neuen Sprachfeatures (Raster, Anker, Fillets, …) |
 | `tests/openscad-compat/make-reference.py` | erzeugt `reference.json` mit OpenSCAD |
 | `tests/openscad-compat/reference.json` | Referenz (eingecheckt): Volumen, Fläche, Hülle, Dreiecke, echo |

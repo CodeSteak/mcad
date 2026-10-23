@@ -190,6 +190,154 @@ impl Segment {
     }
 }
 
+impl Segment {
+    /// Lines and arcs within `tol` of the segment: lines and arcs as they are, B-splines as G1
+    /// biarcs (two tangent arcs per piece, pieces halved until the deviation is at most
+    /// `tol`). Offsets, strokes and 2D booleans of B-splines work on this form: the offset of
+    /// a B-spline is no B-spline, the offset of an arc is an arc, and the tangent continuity
+    /// of the biarcs keeps the offset curve smooth.
+    pub fn to_arcs(&self, tol: f64) -> Vec<Segment> {
+        let Segment::Nurbs(c) = self else { return vec![self.clone()] };
+        let tol = tol.max(1e-9);
+        if c.degree == 1 && !c.is_rational() {
+            return c
+                .points
+                .windows(2)
+                .filter(|w| w[0].distance(w[1]) > EPS)
+                .map(|w| Segment::Line { a: d2(w[0]), b: d2(w[1]) })
+                .collect();
+        }
+        let (lo, hi) = c.domain();
+        let mut knots: Vec<f64> = c.knots.iter().copied().filter(|k| *k >= lo && *k <= hi).collect();
+        knots.dedup_by(|a, b| (*a - *b).abs() <= EPS * (hi - lo).max(1.0));
+        let mut out = Vec::new();
+        for w in knots.windows(2) {
+            let (k0, k1) = (w[0], w[1]);
+            // tangent at a parameter of this span (one-sided at the span ends)
+            let tan = |t: f64| -> DVec2 {
+                let h = (k1 - k0) * 1e-5;
+                let d = if t - h < k0 {
+                    (c.eval(t) * -3.0 + c.eval(t + h) * 4.0 - c.eval(t + 2.0 * h)) / (2.0 * h)
+                } else if t + h > k1 {
+                    (c.eval(t) * 3.0 - c.eval(t - h) * 4.0 + c.eval(t - 2.0 * h)) / (2.0 * h)
+                } else {
+                    (c.eval(t + h) - c.eval(t - h)) / (2.0 * h)
+                };
+                d2(d).normalize_or_zero()
+            };
+            let n0 = 4;
+            for i in 0..n0 {
+                let t0 = k0 + (k1 - k0) * i as f64 / n0 as f64;
+                let t1 = k0 + (k1 - k0) * (i + 1) as f64 / n0 as f64;
+                fit_biarcs(c, &tan, t0, t1, tol, 0, &mut out);
+            }
+        }
+        // exact joints
+        for i in 1..out.len() {
+            let p = out[i - 1].end();
+            if let Segment::Line { a, .. } = &mut out[i] {
+                *a = p;
+            }
+        }
+        out
+    }
+}
+
+/// Arc (or line) from `p` with tangent `t` to `q`.
+fn arc_from(p: DVec2, t: DVec2, q: DVec2) -> Segment {
+    let n = DVec2::new(-t.y, t.x);
+    let v = q - p;
+    let den = 2.0 * n.dot(v);
+    if den.abs() <= 1e-12 * v.length() {
+        return Segment::Line { a: p, b: q };
+    }
+    let k = v.length_squared() / den;
+    let c = p + n * k;
+    let a0 = (p - c).y.atan2((p - c).x);
+    let a1r = (q - c).y.atan2((q - c).x);
+    let tau = std::f64::consts::TAU;
+    let sw = if k > 0.0 { (a1r - a0).rem_euclid(tau) } else { -((a0 - a1r).rem_euclid(tau)) };
+    Segment::Arc { center: c, r: k.abs(), a0, a1: a0 + sw }
+}
+
+/// Distance of a point from a line or arc segment.
+pub fn dist_to_seg(s: &Segment, p: DVec2) -> f64 {
+    match s {
+        Segment::Line { a, b } => {
+            let d = *b - *a;
+            let t = ((p - *a).dot(d) / d.length_squared().max(1e-300)).clamp(0.0, 1.0);
+            (*a + d * t).distance(p)
+        }
+        Segment::Arc { center, r, a0, a1 } => {
+            let ang = (p - *center).y.atan2((p - *center).x);
+            let tau = std::f64::consts::TAU;
+            let sw = a1 - a0;
+            let d = if sw >= 0.0 { (ang - a0).rem_euclid(tau) } else { (a0 - ang).rem_euclid(tau) };
+            if d <= sw.abs() { (p.distance(*center) - r).abs() } else { s.start().distance(p).min(s.end().distance(p)) }
+        }
+        Segment::Nurbs(_) => f64::INFINITY,
+    }
+}
+
+/// Biarc of the curve piece `[t0, t1]`; halves the piece while the deviation exceeds `tol`.
+fn fit_biarcs(
+    c: &BSplineCurve,
+    tan: &dyn Fn(f64) -> DVec2,
+    t0: f64,
+    t1: f64,
+    tol: f64,
+    depth: u32,
+    out: &mut Vec<Segment>,
+) {
+    let p0 = d2(c.eval(t0));
+    let p1 = d2(c.eval(t1));
+    let v = p1 - p0;
+    if v.length() <= EPS {
+        return;
+    }
+    let (ta, tb) = (tan(t0), tan(t1));
+    let split = |out: &mut Vec<Segment>| {
+        let tm = (t0 + t1) / 2.0;
+        fit_biarcs(c, tan, t0, tm, tol, depth + 1, out);
+        fit_biarcs(c, tan, tm, t1, tol, depth + 1, out);
+    };
+    let t = ta + tb;
+    let den = 2.0 * (1.0 - ta.dot(tb));
+    let d = if den.abs() <= 1e-12 {
+        let vt = v.dot(tb);
+        if vt.abs() <= 1e-12 * v.length() { f64::NAN } else { v.length_squared() / (4.0 * vt) }
+    } else {
+        let vt = v.dot(t);
+        (-vt + (vt * vt + den * v.length_squared()).max(0.0).sqrt()) / den
+    };
+    if !(d.is_finite() && d > 0.0) {
+        if depth < 20 {
+            split(out);
+        } else {
+            out.push(Segment::Line { a: p0, b: p1 });
+        }
+        return;
+    }
+    let pm = (p0 + p1 + (ta - tb) * d) / 2.0;
+    let s1 = arc_from(p0, ta, pm);
+    let s2 = arc_from(p1, -tb, pm).reversed();
+    let n = 8;
+    let mut err: f64 = 0.0;
+    for i in 1..n {
+        let q = d2(c.eval(t0 + (t1 - t0) * i as f64 / n as f64));
+        err = err.max(dist_to_seg(&s1, q).min(dist_to_seg(&s2, q)));
+    }
+    if err > tol && depth < 20 {
+        split(out);
+        return;
+    }
+    for s in [s1, s2] {
+        if s.length() > EPS {
+            out.push(s);
+        }
+    }
+}
+
 fn nurbs_end_tangent(c: &BSplineCurve, at_end: bool) -> DVec2 {
     // first/last distinct control point (clamped curves)
     let pts = &c.points;

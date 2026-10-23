@@ -257,11 +257,11 @@ Ziel: Typische Hobby-Dateien laufen ohne Änderung, solange sie keine Mesh-Opera
 
 | Bereich | Umfang |
 | --- | --- |
-| Voll | Syntax, Variablen, Funktionen und Funktionsliterale, Module, `children()`, `for`, `if`, `let`, `each`, Listenausdrücke, Strings, Bereiche, `echo`, `assert`, Mathefunktionen, `cube`, `sphere`, `cylinder`, `square`, `circle`, `polygon`, Transformationen, Booleans, Modifier, `linear_extrude`, `rotate_extrude` |
+| Voll | Syntax, Variablen, Funktionen und Funktionsliterale, Module, `children()`, `for`, `if`, `let`, `each`, Listenausdrücke, Strings, Bereiche, `echo`, `assert`, Mathefunktionen, `cube`, `sphere`, `cylinder`, `square`, `circle`, `polygon`, Transformationen, Booleans, Modifier, `linear_extrude`, `rotate_extrude`, `offset` (exakte Bögen statt Facetten, 17.9) |
 | Mit Abweichung | `color()` nur als Anzeigefarbe; `$fn/$fa/$fs` siehe 12.3; `polyhedron` nur für kleine Körper mit ebenen Flächen; `resize` als `scale` mit denselben Regeln |
 | Voll (Projekte) | `include`/`use` mit Projekten aus mehreren Dateien (Pfade relativ zur einbindenden Datei; ohne Suchpfad `OPENSCADPATH`) |
-| Mit Abweichung (Bericht 16) | `text()` mit den mitgelieferten Schriften oder Schriftdateien des Projekts (17.9), `import()` von SVG (17.9; Abweichungen bei Einheiten ohne `viewBox`, Strichen und Füllregel) |
-| Später | `offset()` in 2D, `hull()` |
+| Mit Abweichung (Bericht 16) | `text()` mit den mitgelieferten Schriften oder Schriftdateien des Projekts (17.10), `import()` von SVG (17.10; Abweichungen bei Einheiten ohne `viewBox`, Strichen und Füllregel) |
+| Später | `hull()` |
 | Nicht vorgesehen | `minkowski`, `projection`, `import` von Meshes, `surface()` als Höhenkarte (der Name ist in der Spec für NURBS-Flächen vergeben) |
 
 Ein Korpus von `.scad`-Dateien (Lizenzen vorher prüfen) läuft in CI über die CLI. Gemessen wird pro Datei: parst, wertet aus, erzeugt Geometrie.
@@ -603,8 +603,8 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 
 **Skizzen und Namensräume (B14)**
 
-- `corner`, `fillet2d`, `offset`, `stroke` fehlen (Schritt 2); Transformationen innerhalb einer
-  Skizze gibt es nicht (ein in der Skizze aufgerufenes Modul zeichnet in Skizzenkoordinaten).
+- Transformationen innerhalb einer Skizze gibt es nicht (ein in der Skizze aufgerufenes Modul
+  zeichnet in Skizzenkoordinaten).
 - Die Prüfung auf Selbstüberschneidung arbeitet auf abgetasteten Polylinien (Toleranz relativ zur
   Skizzengröße); Überschneidungen *zwischen* Konturen sind erlaubt (Vereinigung nach nonzero).
   Die Verschachtelung von Löchern und Inseln setzt sich nicht schneidende Konturen voraus.
@@ -618,6 +618,22 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
   ausgewertet (keine Zwischenspeicherung); `use`/`include` liefern Namensräume wie lokale Module.
   Ein Modul mit gleichem Namen auf verschiedenen Pfaden wählt im Kontext über den Pfad, `--module
   name` ohne Pfad nimmt das erste.
+
+**Ecken, Offset, Stroke (B15)**
+
+- `offset(delta)` an Bögen verlängert die Tangenten (Gehrung der Tangentenlinien); OpenSCAD kennt
+  dort nur Polygone. B-Splines gehen in `offset`, `stroke` und 2D-Booleans als Biarcs (Toleranz
+  1 µm) ein – im Ergebnis stehen Bögen statt der Spline; `fillet2d` einer einzelnen Kontur und
+  `corner` behalten die Spline (gekürzt).
+- `fillet2d`/`chamfer2d` haben keinen Radius-Griff (nur `corner`); Zonen sind 2D-Formen und
+  `zone(linie | ebene, d)`, 3D-Zonen werden mit Warnung ignoriert.
+- Die exakte Region klassifiziert jedes Teilstück über Testpunkte im Abstand ~10⁻⁶ der
+  Modellgröße: Ränder, die sich näher kommen ohne zu schneiden oder zu überlappen, können falsch
+  eingeordnet werden. Kandidatenpaare über x-Sortierung (quadratisch im schlechtesten Fall).
+- 2D-Booleans *zwischen* Ergebnissen (`difference() { stroke(…); stroke(…); }`) bleiben
+  3D-Booleans der extrudierten Teile; exakt in 2D rechnen nur `offset`, `fillet2d`, `stroke`.
+- `stroke`: Gehrungen länger als 4 Halbbreiten werden abgeschrägt (fest); ein Bogen mit Radius
+  unter der halben Breite wird als Sektor plus gespiegeltem Sektor überstrichen.
 
 **solidcore (M8)**
 
@@ -749,10 +765,11 @@ CLI: `cad render --theme dark`.
 ## 17. Skizzen, Text, SVG-Import, Skizzen-Editor
 
 Stand: Plan, abgestimmt mit dem Nutzer am 2026-10-23. **Schritt 1 umgesetzt** (Skizzen mit
-gemischten Konturen, Module als Namensräume; Testbericht 14, Entscheidungen in 17.8). **Aus
-Schritt 3 umgesetzt:** `text()` mit den mitgelieferten OFL-Schriften und SVG-Import
-(Testbericht 16, Entscheidungen in 17.9); die eigene Schablonenschrift folgt (braucht `stroke`
-aus Schritt 2). Schritte 2 und 4 geplant.
+gemischten Konturen, Module als Namensräume; Testbericht 14, Entscheidungen in 17.8), **Schritt 2
+umgesetzt** (`corner`, `fillet2d`/`chamfer2d`, `offset`, `stroke`; Testbericht 15, Entscheidungen
+in 17.9); **aus Schritt 3 umgesetzt:** `text()` mit den mitgelieferten OFL-Schriften und
+SVG-Import (Testbericht 16, Entscheidungen in 17.10); die eigene Schablonenschrift folgt.
+Schritt 4 geplant.
 
 ### 17.1 Skizzen
 
@@ -800,8 +817,9 @@ rotate_extrude() profil(b = 30);
 ### 17.3 2D-Operationen
 
 `offset(r = …)` / `offset(delta = …, chamfer = …)` exakt für Geraden und Bögen
-(OpenSCAD-kompatibel), `fillet2d(r)` für alle Ecken eines Profils, optional mit Zonen wie in
-3D, `stroke(w, cap = "round" | "flat")` für offene Pfade.
+(OpenSCAD-kompatibel), `fillet2d(r)` / `chamfer2d(d)` für alle Ecken eines Profils, optional mit
+Zonen wie in 3D, `stroke(w, cap = "round" | "flat" | "square", join = "round" | "miter" |
+"bevel")` für offene Pfade. Umgesetzt in Schritt 2 (17.9).
 
 ### 17.4 Text
 
@@ -827,7 +845,7 @@ bzw. Parameter `scale`/`dpi`): `path` (M, L, H, V, C, S, Q, T, A, Z, absolut und
 `rect` (auch mit `rx`), `circle`, `ellipse`, `polygon`, `polyline`, `line`, `g` mit
 `transform`; Füllregel `nonzero`/`evenodd`. Nicht unterstützt (Warnung): Text, Bilder,
 Strichstärken als Fläche, CSS, Masken, Verläufe. Wahl einzelner Ebenen per `id`.
-Kein SVG- oder DXF-Export. Umgesetzt (17.9).
+Kein SVG- oder DXF-Export. Umgesetzt (17.10).
 
 ### 17.6 Skizzen-Editor (Zeichenmodus)
 
@@ -933,7 +951,106 @@ Raster-Snap wie bei Punkten; `line(by = …)` relativ, ohne Snap), Bogenradius, 
 Durchgangspunkt, Bézier-Kontrollpunkte, Spline-Punkte, Länge von `line(length = …)`. Auf der
 `sketch`-Zeile zeigt die Ansicht die Griffe aller Segmente.
 
-### 17.9 Umsetzung Schritt 3, Teil Text und SVG (Testbericht 16)
+### 17.9 Umsetzung Schritt 2 (Testbericht 15)
+
+**`corner(r = …)` / `corner(chamfer = d)`** rundet bzw. fast in einer Skizze die Ecke zwischen dem
+vorigen und dem nächsten Segment. Regeln: zwischen zwei Segmenten → diese Ecke (die Schlusslinie
+von `close()` zählt als Segment, `corner()` vor `close()` rundet also die Ecke zur Schlusslinie);
+direkt nach `start(p)` → die Startecke (zwischen letztem und erstem Segment, nur geschlossene
+Konturen); nach dem letzten Segment einer Kontur, die am Start endet (keine Schlusslinie nötig) →
+ebenfalls die Startecke. Fehler an der corner-Zeile: nach `close()`, vor `start`, zweimal an einer
+Ecke, Start/Ende einer offenen Kontur, Wert ≤ 0, tangentiale Ecke („keine Ecke“), Spitze (180°),
+Radius passt nicht („höchstens ≈ r“). Die Skizze wird ohne Ecken aufgebaut (`arc(to)` tangential,
+`line(length)` beziehen sich auf die spitze Ecke); danach werden alle Ecken einer Kontur auf den
+ursprünglichen Segmenten berechnet. Brauchen zwei Ecken überlappende Stücke eines Segments, scheitern
+beide mit dem größten gemeinsamen Faktor („höchstens ≈ …“) – unabhängig von der Reihenfolge. Die
+Verrundung (Bogen) bzw. Fase (Gerade) ist ein Segment der corner-Zeile (Darstellung, Hervorhebung);
+eine Startecke steht am Ende der Kontur, der Start rückt auf das Ende der Verrundung. Fase: die
+Schnittpunkte liegen im (euklidischen) Abstand `d` vom Eckpunkt. Exakt (Mittelpunkt als Schnitt der
+um `r` versetzten Kurven, geschlossene Formen) für Gerade–Gerade, Gerade–Bogen und Bogen–Bogen; mit
+Bézier/Spline Newton auf `a(u) + r n_a(u) = b(w) + r n_b(w)` (Startwert aus den Tangenten,
+Abbruch bei Rest 10⁻¹³ der Größe, Warnung über 10⁻⁶), die Kurve wird am Parameter gekürzt
+(`Seg::Nurbs`). **Griff:** Radius (Fase: Länge) auf der Mitte der Verrundung, Basis im Eckpunkt,
+linear in `r` (für Gerade–Gerade exakt).
+
+**`fillet2d(r) { profil; zone; … }` / `chamfer2d(d)`** (`Op::Blend2`): erstes Kind das Profil,
+weitere Kinder Zonen (2D-Formen, auch `zone(linie | ebene, d)` über den Abstand). Ecken sind die
+Stöße mit Knick (|Knickwinkel| > 10⁻⁷), konvex und konkav (die Verrundung liegt immer auf der
+Innenseite des Knicks: konvex nimmt Material weg, konkav fügt hinzu). Auswahl wie in 3D:
+`select = "inside"` (Standard) – der Eckpunkt liegt in einer Zone (Rand zählt mit); `"touch"` –
+auch wenn nur das Stück des Profils, das die Verrundung ersetzt, eine Zone berührt. Inline-Hinweis
+„n Ecken“, leere Auswahl ist eine Warnung; zu große Radien sind Fehler je Ecke („Ecke bei [x, y]:
+Radius … passt nicht (höchstens ≈ …)“), die übrigen Ecken werden trotzdem gerundet. Verschachtelte
+Blöcke wirken von innen nach außen; die Übergänge einer Verrundung sind tangential und keine Ecken.
+Eine einzelne geschlossene Kontur behält ihre Segmente (Splines bleiben Splines), alles andere geht
+durch die exakte Region.
+
+**`offset(r = …)` / `offset(delta = …, chamfer = false)`** wie OpenSCAD 2021.01: das erste
+Positionsargument ist `r`, ohne Argumente `r = 1`, `r` gewinnt vor `delta` (Warnung), `chamfer` nur
+mit `delta`. `r > 0`: alle Punkte im Abstand ≤ r (konvexe Ecken werden exakte Bögen, konkave bleiben
+spitz); `r < 0`: die Punkte weiter als |r| vom Äußeren (konvexe Ecken bleiben spitz, konkave werden
+rund, schmale Teile verschwinden, Löcher wachsen); `delta`: Kanten wandern um `delta`, Ecken
+verlängern sich bis zum Schnitt der versetzten Tangenten (ohne Gehrungsgrenze, wie OpenSCAD mit
+`miter_limit` 10⁶), `chamfer = true` schneidet sie wie Clippers `jtSquare` senkrecht zur
+Winkelhalbierenden im Abstand `delta` vom Eckpunkt (an OpenSCAD gemessen). Der Bogen eines Bogens
+ist ein Bogen; OpenSCAD facettiert (`$fn`), wir rechnen exakt.
+
+**`stroke(w, cap = "round" | "flat" | "square", join = "round" | "miter" | "bevel")`**
+(Standard rund/rund): Kinder sind offene Skizzen (ihre Konturen als Pfade; eine am Start endende
+Kontur ist geschlossen) und beliebige 2D-Profile (ihr Rand als geschlossene Pfade, `stroke(1)
+circle(5)` = Ring). Bänder der halben Breite längs der Segmente (Gerade: Rechteck, Bogen:
+Ringsektor), Stöße rund (Kreis), Gehrung (bis 4 Halbbreiten, sonst Fase) oder Fase, Enden rund
+(Kreis), flach oder eckig (um w/2 verlängert); sich kreuzende Pfade werden vereinigt.
+
+**Kernel: exakte 2D-Regionen** (`cad_kernel::region2`). `combine(operanden, prädikat)`: alle
+Segmente (Geraden, Bögen) werden an ihren exakten Schnittpunkten geteilt (Gerade–Gerade,
+Gerade–Kreis, Kreis–Kreis mit Berührung, Überlappung kollinearer Geraden und gleicher Kreise;
+Punkte im Abstand 10⁻⁹ der Größe verschmelzen), doppelte Stücke entfallen, jedes Stück bleibt, wo
+das Prädikat der Insideness der Operanden (Windungszahl je Füllregel: Strahl nach +x, Bögen in
+y-monotone Stücke geteilt) links und rechts verschieden ist, mit der Region links. Die Stücke werden
+zu Schleifen verbunden (an gemeinsamen Ecken die engste Drehung: Berührungen ergeben getrennte
+Schleifen), Stücke derselben Geraden oder desselben Kreises verschmelzen. Darauf: 2D-Booleans der
+Kinder (das Prädikat ist der boolesche Ausdruck der Blätter), `offset_round` = Region ∪ (Bänder
+±r ∪ Kreise in den Ecken) bzw. Region ∖ (…) für r < 0 (Minkowski-Summe mit dem Kreis exakt aus
+Geraden und Bögen), `offset_delta` = Region ∪ einseitige Bänder ∪ Eckstücke (Gehrung bzw. Fase) an
+auseinanderlaufenden Ecken (für delta < 0 gespiegelt), `stroke` = Vereinigung von Bändern, Stößen
+und Kappen, `apply_corners`/`round_corner` für `corner` und `fillet2d`. **B-Splines** gehen als
+G1-Biarcs ein (zwei tangentiale Bögen je Stück, halbiert bis zur Abweichung ≤ 1 µm, höchstens
+10⁻⁵ der Größe): Der Offset einer B-Spline ist keine B-Spline, der eines Bogens ein Bogen – so bleibt
+der Offset exakt zur Näherung, tangentenstetig, und STEP enthält Linien und Kreise; 1 µm liegt weit
+unter Druck- und Fertigungstoleranzen (≥ 10 µm) und über der Rechengenauigkeit.
+
+**IR, Engine, Darstellung.** `Op::Offset { round, d, chamfer }`, `Op::Blend2 { kind, r, select }`,
+`Op::Stroke { w, cap, join }` sind 2D-Knoten; `Seg::Nurbs` für gekürzte Splines. `profile::lift`
+berechnet für sie die Region (`op2d.rs`, zwischengespeichert nach dem Inhalt des Teilbaums, 48
+Einträge) und gibt sie als Skizzen-Blätter weiter: Extrude, Revolve, Loft, Sweep und STEP sehen
+exakte Geraden und Bögen (STEP: `CIRCLE`, Zylinder). Fehler, Warnungen und Hinweise stehen am Knoten
+selbst; `NodeReport::guides` / `SceneNode.guides` tragen Hilfslinien (`source` Ausgangskontur,
+`result` Offset-Kontur, `centerline` Pfad), die neuen Eckstücke von `fillet2d` sind
+`selected_edges`. `cad_engine::region_2d` liefert die exakte Region eines 2D-Knotens (Hüllen der
+Kompatibilitätstests). UI: Cursor auf `offset` – Kinder als Umriss, Offset-Kontur gestrichelt in der
+Akzentfarbe (`guide:offset`); auf `stroke` – Pfad als Umriss, Mittellinie gestrichelt
+(`guide:centerline`); auf `fillet2d` – Zonen blau, Profil vor dem Verrunden als Umriss, neue Ecken
+farbig, Hinweis an der Zeile; auf `corner` – die Verrundung als aktives Segment mit Radius-Griff.
+`cad render --line N` zeigt dieselben Linien (`--show handles` die Griffe). OpenSCAD-Vergleich:
+`tests/openscad-compat` 34–36 (offset r/delta/chamfer, Löcher, Zusammenwachsen, Verschwinden),
+`stl_stats.classify` zählt `offset(r)` zu den Rundungen (`$fn = 128` für die Referenz).
+
+**Korrektur aus Schritt 1 (Bögen > 90°).** Die Fassade baut einen Bogen als eine rationale
+quadratische B-Spline mit Spannen ≤ 90°; ein Bogen über 90° ist damit eine Kurve aus mehreren
+Spannen. SMLib-Booleans mit Extrusionen solcher Kurven lieferten je nach Lage falsche Ergebnisse
+(Ring aus zwei 180°-Bögen ∪ Quader: „volume 924.12 impossible for operands 976.79, 43.2“; mit
+4 × 90° oder gedreht richtig). Die Engine teilt deshalb Bögen über 90° vor dem Kernel in gleiche
+Stücke ≤ 90° (`profile::split_arcs`, für Extrude, Revolve und Sweep; nicht für Loft, das die
+Abschnitte Segment für Segment verbindet): jedes Stück ist eine Spanne, ein Halbkreis wird zwei
+Zylinderflächen (STEP: zwei `CYLINDRICAL_SURFACE`). Regressionstest
+`ring_of_long_arcs_unites_with_a_box` (Bögen 180°/120°/90°/360°, acht Drehungen des Quaders).
+Dabei gefunden und behoben: die Windungszahl der exakten Region nahm die Endpunkte der Bögen aus
+ihren Winkeln (Rundung ~10⁻¹⁵), ein Strahl durch einen Eckpunkt zählte dann falsch; jetzt
+gelten die gemeinsamen Eckpunkte der Schleife.
+
+
+### 17.10 Umsetzung Schritt 3, Teil Text und SVG (Testbericht 16)
 
 **Crates.** Drei neue Crates ohne Bezug zu Sprache und Kernel: `cad-outline` (neutrale Konturen:
 `Seg::{Line, Arc, Quad, Cubic, Ellipse}`, affine Abbildung – Kreisbögen bleiben unter
@@ -941,12 +1058,12 @@ Durchgangspunkt, Bézier-Kontrollpunkte, Spline-Punkte, Länge von `line(length 
 `cad-svg` (Parser auf `roxmltree`) und `cad-font` (Schriften, Shaping mit `rustybuzz` 0.20 /
 `ttf-parser` 0.25, Glyphen-Umrisse). `cad-eval` hat die Builtins `import(…)` und `text(…)`
 (`import.rs`); sie erzeugen `Profile::Sketch` – ein Knoten je gefülltem SVG-Element bzw. je
-Glyphe, bei mehreren unter einer Gruppe (Vereinigung: überlappende Elemente/Glyphen). Neu im IR
-ist `Seg::Nurbs` (geklemmte, ggf. rationale B-Spline): tangentenstetige Ketten von Bézierkurven
-werden zu einer B-Spline mit C1-Knoten (eine Kernel-Fläche je Glyphenflanke statt Dutzender),
-Ellipsenbögen rational quadratisch. Engine und Fassade blieben unverändert, bis auf die
-Farbregionen (unten). Bögen über 90° werden beim Import in Viertel geteilt (Umgehung eines
-Fehlers der Fassade bei Vereinigungen solcher Skizzenbögen; entfällt nach dessen Behebung).
+Glyphe, bei mehreren unter einer Gruppe (Vereinigung: überlappende Elemente/Glyphen). Mit
+`Seg::Nurbs` (aus Schritt 2) werden tangentenstetige Ketten von Bézierkurven eine B-Spline mit
+C1-Knoten (eine Kernel-Fläche je Glyphenflanke statt Dutzender), Ellipsenbögen rational
+quadratisch. Engine und Fassade blieben unverändert, bis auf die Farbregionen (unten). (Die
+zwischenzeitliche Umgehung – Bögen über 90° beim Import teilen – entfiel mit
+`profile::split_arcs` aus Schritt 2.)
 
 **Füllregeln.** Je Element werden die Konturen so orientiert, dass die gefüllte Fläche links
 liegt (außen gegen, Löcher im Uhrzeigersinn, Inseln wieder gegen): Prüfpunkte links/rechts

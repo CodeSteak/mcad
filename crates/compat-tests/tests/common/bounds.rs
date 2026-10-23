@@ -259,6 +259,14 @@ fn pieces2(t: &Tree, i: u32, m: DMat4, out: &mut Vec<P2>) -> Result<(), String> 
                 out.push(P2::Rect(lo, hi));
             }
         }
+        // 2D operations: the exact region (Plan 17.3)
+        Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } => {
+            for lp in cad_engine::region_2d(t, i)? {
+                for g in lp {
+                    out.extend(g.sample(1e-3).into_iter().map(|q| P2::Pt(pt(q))));
+                }
+            }
+        }
         other => return Err(format!("no 2D bounds estimate for `{}`", other.label())),
     }
     Ok(())

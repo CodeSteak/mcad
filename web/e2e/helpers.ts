@@ -624,6 +624,27 @@ export function record14(entry: ScenarioC): void {
   writeFileSync(f, JSON.stringify(all, null, 2));
 }
 
+// ---------------------------------------------------------------- Bericht 15 (Ecken, Offset, Stroke)
+
+export const REPORT15_DIR = join(here, "../../reports/tmp/report15");
+
+export async function screenshot15(page: Page, name: string, area: "view" | "full" | "editor" = "full"): Promise<void> {
+  mkdirSync(join(REPORT15_DIR, "img"), { recursive: true });
+  const sel = { view: "section.viewcol", editor: "section.editorpane" } as const;
+  const clip = area === "full" ? null : await page.locator(sel[area]).boundingBox();
+  await page.screenshot({ path: join(REPORT15_DIR, "img", `${name}.jpg`), type: "jpeg", quality: 85, ...(clip ? { clip } : {}) });
+}
+
+export function record15(entry: ScenarioC): void {
+  mkdirSync(REPORT15_DIR, { recursive: true });
+  const f = join(REPORT15_DIR, "scenarios.json");
+  const all: ScenarioC[] = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
+  const i = all.findIndex((e) => e.id === entry.id);
+  if (i >= 0) all[i] = entry;
+  else all.push(entry);
+  writeFileSync(f, JSON.stringify(all, null, 2));
+}
+
 // ---------------------------------------------------------------- Bericht 16 (Text, SVG-Import)
 
 export const REPORT16_DIR = join(here, "../../reports/tmp/report16");

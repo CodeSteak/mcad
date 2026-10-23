@@ -12,6 +12,7 @@ use crate::eval::{ArgV, Args, Ctx, Ev, R};
 use crate::handles::{HSpec, comp_scalar, comps_of};
 use crate::output::{HandleKind, SketchContourInfo, SketchInfo, SketchSegInfo};
 use crate::value::fmt_num;
+use cad_kernel::region2::{CornerError, CornerKind, Piece, apply_corners};
 
 /// Statements that only exist inside a sketch.
 pub(crate) const SEGMENTS: &[&str] = &["start", "line", "arc", "bezier", "spline", "close", "corner", "hole"];
@@ -40,6 +41,17 @@ struct ContourB<'a> {
     start: DVec2,
     start_stmt: Option<&'a Stmt>,
     segs: Vec<SegB<'a>>,
+    corners: Vec<CornerB<'a>>,
+}
+
+/// `corner(r = …)` / `corner(chamfer = …)`: rounds the vertex after segment `at - 1` (the
+/// start vertex for `at = 0`, and for `at` = segment count of a contour that ends at its start).
+struct CornerB<'a> {
+    stmt: &'a Stmt,
+    at: usize,
+    kind: CornerKind,
+    /// Index of its handle in `Ev::handles` (position fixed once the corner is computed).
+    handle: Option<usize>,
 }
 
 impl ContourB<'_> {
@@ -222,9 +234,7 @@ impl<'a> Ev<'a> {
             "bezier" => self.sk_bezier(s, &a, ctx),
             "spline" => self.sk_spline(s, &a, ctx),
             "close" => self.sk_close(s, &a),
-            "corner" => {
-                self.warn(s.span, "`corner()` wird noch nicht unterstützt (Plan 17.7, Schritt 2) und ignoriert");
-            }
+            "corner" => self.sk_corner(s, &a, ctx),
             _ => {
                 // hole { … }
                 let _ = self.bind("hole", &a, &[], 0);
@@ -439,7 +449,14 @@ impl<'a> Ev<'a> {
         };
         self.close_open_contour();
         let hole = self.sk().hole > 0;
-        self.sk().contours.push(ContourB { hole, closed: false, start: pt, start_stmt: Some(s), segs: Vec::new() });
+        self.sk().contours.push(ContourB {
+            hole,
+            closed: false,
+            start: pt,
+            start_stmt: Some(s),
+            segs: Vec::new(),
+            corners: Vec::new(),
+        });
         if let Some(x) = p[0] {
             self.sk_handle(s, ctx, 0, x, pt, None);
         }
@@ -724,6 +741,191 @@ impl<'a> Ev<'a> {
         self.push_seg(s, Seg::Spline { points: pts, t0, t1 });
     }
 
+    /// `corner(r = …)` / `corner(chamfer = d)` between the previous and the next segment.
+    fn sk_corner(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>) {
+        let p = self.bind("corner", a, &["r", "chamfer"], 1);
+        let (x, chamfer) = match (p[0], p[1]) {
+            (Some(x), None) => (x, false),
+            (None, Some(x)) => (x, true),
+            (Some(x), Some(_)) => {
+                self.warn(s.span, "corner: `r` und `chamfer` gegeben, `chamfer` wird ignoriert");
+                (x, false)
+            }
+            (None, None) => {
+                self.error(s.span, "corner() braucht `r` (Radius) oder `chamfer` (Abstand)");
+                return;
+            }
+        };
+        let what = if chamfer { "chamfer" } else { "r" };
+        let Some(v) = self.num_of(Some(x), what) else { return };
+        if v.is_nan() || v <= 0.0 {
+            self.error(x.expr.span, format!("corner: `{what}` = {} muss > 0 sein", fmt_num(v)));
+            return;
+        }
+        let Some(b) = self.sketch.as_ref() else { return };
+        let Some(c) = b.contours.last() else {
+            self.error(s.span, "corner() vor `start(p)`: eine Ecke liegt zwischen zwei Segmenten");
+            return;
+        };
+        if c.closed {
+            self.error(
+                s.span,
+                "corner() nach `close()`: für die Startecke `corner()` direkt nach `start(p)` schreiben",
+            );
+            return;
+        }
+        let at = c.segs.len();
+        if c.corners.iter().any(|k| k.at == at) {
+            self.error(s.span, "an dieser Ecke steht schon ein `corner()`");
+            return;
+        }
+        let cur = c.end();
+        let dir = c.end_tangent().unwrap_or(DVec2::X);
+        let before = self.handles.len();
+        let kind = if chamfer { HandleKind::Height } else { HandleKind::Radius };
+        self.sk_scalar_handle(s, ctx, kind, 0, x, v, cur, DVec2::new(-dir.y, dir.x));
+        let handle = (self.handles.len() > before).then_some(before);
+        let kind = if chamfer { CornerKind::Chamfer(v) } else { CornerKind::Round(v) };
+        if let Some(c) = self.sk().contours.last_mut() {
+            c.corners.push(CornerB { stmt: s, at, kind, handle });
+        }
+    }
+
+    /// Applies the `corner()`s of a contour: the segments at each vertex are shortened and the
+    /// rounding (arc) or chamfer (line) is inserted, attributed to the `corner` statement.
+    fn apply_corners(&mut self, c: &mut ContourB<'a>) {
+        if c.corners.is_empty() {
+            return;
+        }
+        let corners = std::mem::take(&mut c.corners);
+        let n = c.segs.len();
+        let has_error = c.segs.iter().any(|g| g.implicit);
+        let ks: Vec<Option<cad_kernel::Segment>> = c.segs.iter().map(|g| g.seg.to_kernel()).collect();
+        if ks.iter().any(|k| k.is_none()) {
+            return;
+        }
+        let ks: Vec<cad_kernel::Segment> = ks.into_iter().flatten().collect();
+        let mut list: Vec<(usize, CornerKind)> = Vec::new();
+        let mut which: Vec<&CornerB<'a>> = Vec::new();
+        for k in &corners {
+            if n == 0 {
+                self.error(k.stmt.span, "corner(): Kontur ohne Segmente");
+                continue;
+            }
+            let v = if c.closed { k.at % n } else { k.at };
+            if !c.closed && (v == 0 || v >= n) {
+                let msg = if v == 0 {
+                    "corner(): eine offene Kontur hat keine Startecke"
+                } else {
+                    "corner(): nach dem letzten Segment einer offenen Kontur folgt keines mehr"
+                };
+                self.error(k.stmt.span, msg);
+                continue;
+            }
+            if has_error {
+                continue;
+            }
+            if list.iter().any(|(w, _)| *w == v) {
+                self.error(k.stmt.span, "an dieser Ecke steht schon ein `corner()`");
+                continue;
+            }
+            list.push((v, k.kind));
+            which.push(k);
+        }
+        if list.is_empty() {
+            return;
+        }
+        let (pieces, results) = apply_corners(&ks, c.closed, &list);
+        for (i, (k, r)) in which.iter().zip(&results).enumerate() {
+            let v = list[i].0;
+            let (a, b) = (&ks[(v + n - 1) % n], &ks[v]);
+            let vertex = b.start();
+            let what = match k.kind {
+                CornerKind::Round(r) => format!("Radius {}", fmt_num(r)),
+                CornerKind::Chamfer(d) => format!("Fase {}", fmt_num(d)),
+            };
+            match r {
+                Ok(res) => {
+                    if res.residual > 1e-6 {
+                        self.warn(
+                            k.stmt.span,
+                            format!("corner(): numerische Lösung ungenau (Rest {:.1e})", res.residual),
+                        );
+                    }
+                    let mid_pt = match &res.mid {
+                        cad_kernel::Segment::Arc { center, r, a0, a1 } => {
+                            *center + DVec2::new(((a0 + a1) / 2.0).cos(), ((a0 + a1) / 2.0).sin()) * *r
+                        }
+                        m => (m.start() + m.end()) / 2.0,
+                    };
+                    self.fix_corner_handle(k, vertex, mid_pt);
+                }
+                Err(e) => {
+                    let (ta, tb) = (a.end_tangent(), b.start_tangent());
+                    let inside = (tb - ta).normalize_or_zero();
+                    let phi = cad_kernel::region2::turn(ta, tb).abs();
+                    let val = match k.kind {
+                        CornerKind::Round(r) | CornerKind::Chamfer(r) => r,
+                    };
+                    let reach = match k.kind {
+                        CornerKind::Round(r) => r * (1.0 / (phi / 2.0).cos().max(1e-6) - 1.0),
+                        CornerKind::Chamfer(d) => d * (phi / 2.0).sin(),
+                    };
+                    self.fix_corner_handle(k, vertex, vertex + inside * reach.max(val * 1e-3));
+                    let msg = match e {
+                        CornerError::Tangent => {
+                            "corner(): keine Ecke, die Segmente gehen tangential ineinander über".to_string()
+                        }
+                        CornerError::Cusp => "corner(): Spitze (Umkehr um 180°) lässt sich nicht verrunden".to_string(),
+                        CornerError::TooLarge { max: Some(m) } => format!(
+                            "corner(): {what} passt nicht zwischen die Segmente (höchstens ≈ {})",
+                            fmt_num((m * 1e4).floor() / 1e4)
+                        ),
+                        CornerError::TooLarge { max: None } | CornerError::NoSolution => {
+                            format!("corner(): {what} passt nicht an diese Ecke")
+                        }
+                    };
+                    self.error(k.stmt.span, msg);
+                }
+            }
+        }
+        let old = std::mem::take(&mut c.segs);
+        let mut segs: Vec<SegB<'a>> = Vec::with_capacity(pieces.len());
+        for (piece, seg) in pieces {
+            match piece {
+                Piece::Seg(i) => {
+                    let g = &old[i];
+                    if seg == ks[i] {
+                        segs.push(SegB { seg: g.seg.clone(), ..*g });
+                    } else {
+                        segs.push(SegB { seg: Seg::from_kernel(&seg), ..*g });
+                    }
+                }
+                Piece::Corner(k) => {
+                    segs.push(SegB { seg: Seg::from_kernel(&seg), stmt: which[k].stmt, implicit: false, error: false });
+                }
+            }
+        }
+        if let Some(first) = segs.first() {
+            c.start = first.seg.start();
+        }
+        c.segs = segs;
+    }
+
+    /// Places a corner's radius handle on the rounding (linear in the value from the vertex).
+    fn fix_corner_handle(&mut self, k: &CornerB<'a>, vertex: DVec2, mid: DVec2) {
+        let Some(i) = k.handle else { return };
+        let val = match k.kind {
+            CornerKind::Round(r) | CornerKind::Chamfer(r) => r,
+        };
+        let Some(h) = self.handles.get_mut(i) else { return };
+        let axis = (mid - vertex) / val;
+        h.base = Some(vertex.extend(0.0));
+        h.axis = Some(axis.extend(0.0));
+        h.pos = mid.extend(0.0);
+        h.value = vec![val];
+    }
+
     fn sk_close(&mut self, s: &'a Stmt, a: &Args<'a>) {
         let _ = self.bind("close", a, &[], 0);
         let Some((cur, _)) = self.sk_need_cur(s) else { return };
@@ -770,6 +972,9 @@ impl<'a> Ev<'a> {
             }
         }
         let size = if lo.x.is_finite() { (hi - lo).length().max(1e-6) } else { 1.0 };
+        for c in &mut contours {
+            self.apply_corners(c);
+        }
         let tol = size * 2e-4;
         let eps = size * 1e-9;
         let mut errors: Vec<(StmtId, String)> = Vec::new();

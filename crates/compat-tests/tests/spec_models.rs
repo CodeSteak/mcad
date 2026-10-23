@@ -325,6 +325,82 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
+        file: "skizze_deckel.scad",
+        grids: &[],
+        instances: &[],
+        handles: 15,
+        ops: &[("sketch", 3), ("offset", 2), ("difference", 2), ("cylinder", 4)],
+        check: |out| {
+            // the outline with four rounded corners: 4 lines + 4 arcs
+            let n = out.tree.nodes.iter().find_map(|n| match &n.op {
+                Op::Profile(cad_ir::Profile::Sketch { contours, .. }) => Some(contours.clone()),
+                _ => None,
+            });
+            let kinds: Vec<&str> = n.as_ref().unwrap()[0].segs.iter().map(|g| g.kind()).collect();
+            assert_eq!(kinds, ["line", "arc", "line", "arc", "line", "arc", "line", "arc"]);
+            let offs: Vec<f64> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match n.op {
+                    Op::Offset { round: true, d, .. } => Some(d),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(offs.len(), 2);
+            assert!((offs[0] + 2.2).abs() < 1e-12 && (offs[1] + 3.7).abs() < 1e-12, "{offs:?}");
+        },
+    },
+    Expect {
+        file: "skizze_halter.scad",
+        grids: &[],
+        instances: &[],
+        handles: 11,
+        ops: &[("fillet2d", 2), ("stroke", 2), ("sketch", 2), ("polygon", 1)],
+        check: |out| {
+            let r: Vec<f64> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match n.op {
+                    Op::Blend2 { kind: BlendKind::Fillet, r, .. } => Some(r),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(r, [1.0, 5.0]);
+            // the zone of the inner block
+            let z = out.tree.nodes.iter().filter(|n| n.flags.zone).count();
+            assert_eq!(z, 1);
+        },
+    },
+    Expect {
+        file: "skizze_kabelkanal.scad",
+        grids: &[],
+        instances: &[],
+        handles: 6,
+        ops: &[("stroke", 4), ("sketch", 4), ("linear_extrude", 3)],
+        check: |out| {
+            let caps: Vec<cad_ir::StrokeCap> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match n.op {
+                    Op::Stroke { cap, .. } => Some(cap),
+                    _ => None,
+                })
+                .collect();
+            use cad_ir::StrokeCap::*;
+            assert_eq!(caps, [Flat, Flat, Square, Round]);
+            // the open path with a rounded corner: line, arc, line, arc (corner), line
+            let n = out.tree.nodes.iter().find_map(|n| match &n.op {
+                Op::Profile(cad_ir::Profile::Sketch { contours, closed: false }) => Some(contours.clone()),
+                _ => None,
+            });
+            let kinds: Vec<&str> = n.as_ref().unwrap()[0].segs.iter().map(|g| g.kind()).collect();
+            assert_eq!(kinds, ["line", "arc", "line", "arc", "line"]);
+        },
+    },
+    Expect {
         file: "skizze_profil.scad",
         grids: &[("s", 6, false)],
         instances: &[],
