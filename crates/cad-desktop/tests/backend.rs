@@ -153,7 +153,10 @@ fn diff_hunks_kinds() {
     assert_eq!((h[1].kind, h[1].start, h[1].end), (HunkKind::Added, 5, 5));
     let h = diff_hunks(base, "a\nd\ne\n");
     assert_eq!(h.len(), 1);
-    assert_eq!((h[0].kind, h[0].start, h[0].end, h[0].old.clone()), (HunkKind::Deleted, 2, 2, vec!["b".into(), "c".into()]));
+    assert_eq!(
+        (h[0].kind, h[0].start, h[0].end, h[0].old.clone()),
+        (HunkKind::Deleted, 2, 2, vec!["b".into(), "c".into()])
+    );
     // deleted at the end: marker after the last line
     let h = diff_hunks(base, "a\nb\nc\n");
     assert_eq!((h[0].kind, h[0].start), (HunkKind::Deleted, 4));
@@ -228,7 +231,13 @@ fn wire_batch_has_binary_meshes() {
     let msgs = vec![
         FromEngine::Meshes { version: 5, items: vec![mesh] },
         FromEngine::Error { message: "x".into(), version: Some(5), node: None },
-        FromEngine::ExportResult { format: cad_session::protocol::ExportFormat::Stl, bytes: vec![1, 2, 3], triangles: 1, parts: None, zip: None },
+        FromEngine::ExportResult {
+            format: cad_session::protocol::ExportFormat::Stl,
+            bytes: vec![1, 2, 3],
+            triangles: 1,
+            parts: None,
+            zip: None,
+        },
     ];
     let f = encode_batch(&msgs, true);
     // header: no number arrays, only blob descriptors
@@ -288,7 +297,10 @@ fn wait_for(got: &Got, what: &str, f: impl Fn(&Json) -> bool) -> Json {
 #[test]
 fn supervisor_evaluates_and_sends_meshes() {
     let (s, got) = supervisor(15_000);
-    s.send(vec![ToEngine::SetSource { text: "cube(1);".into(), version: 1 }, ToEngine::SetSource { text: "cube(10);".into(), version: 2 }]);
+    s.send(vec![
+        ToEngine::SetSource { text: "cube(1);".into(), version: 1 },
+        ToEngine::SetSource { text: "cube(10);".into(), version: 2 },
+    ]);
     let scene = wait_for(&got, "Szene", |m| m["type"] == "Scene" && m["complete"] == true);
     assert_eq!(scene["version"], 2, "a SetSource followed by another is dropped");
     let meshes = wait_for(&got, "Meshes", |m| m["type"] == "Meshes");
@@ -329,7 +341,9 @@ fn supervisor_watchdog_replaces_engine_and_blocks_key() {
     ]);
     let prog = wait_for(&got, "Progress", |m| m["type"] == "Progress" && m["current"]["key"].is_string());
     let key = prog["current"]["key"].as_str().unwrap().to_string();
-    let err = wait_for(&got, "Watchdog-Fehler", |m| m["type"] == "Error" && m["message"].as_str().unwrap_or("").contains("neu gestartet"));
+    let err = wait_for(&got, "Watchdog-Fehler", |m| {
+        m["type"] == "Error" && m["message"].as_str().unwrap_or("").contains("neu gestartet")
+    });
     let msg = err["message"].as_str().unwrap();
     assert!(msg.contains("Kernel hängt"), "{msg}");
     assert!(msg.contains("Knoten gesperrt"), "{msg}");
@@ -338,7 +352,9 @@ fn supervisor_watchdog_replaces_engine_and_blocks_key() {
     assert_eq!(st.blocked_keys, vec![key.clone()]);
     // The new engine gets BlockKeys and the source again: the blocked node reports an error.
     let scene = wait_for(&got, "Szene nach Neustart", |m| {
-        m["type"] == "Scene" && m["complete"] == true && m["nodes"].as_array().is_some_and(|ns| ns.iter().any(|n| n["status"] == "error"))
+        m["type"] == "Scene"
+            && m["complete"] == true
+            && m["nodes"].as_array().is_some_and(|ns| ns.iter().any(|n| n["status"] == "error"))
     });
     assert_eq!(scene["version"], 1);
     let host = wait_for(&got, "host", |m| m["type"] == "__host" && m["body"]["restarts"] == 1);

@@ -73,7 +73,9 @@ fn pick(file: Option<&Path>) -> Result<Vec<(String, PathBuf)>, String> {
                     ws.iter().any(|w| {
                         let root = w["project"]["root"].as_str().map(PathBuf::from);
                         w["project"]["files"].as_array().is_some_and(|fs| {
-                            fs.iter().filter_map(Json::as_str).any(|rel| root.as_ref().is_some_and(|r| cad_desktop::files::abs_path(r, rel) == f))
+                            fs.iter()
+                                .filter_map(Json::as_str)
+                                .any(|rel| root.as_ref().is_some_and(|r| cad_desktop::files::abs_path(r, rel) == f))
                         })
                     })
                 })
@@ -98,16 +100,34 @@ fn status_text(r: &Json) -> String {
             pr["main"].as_str().unwrap_or("–"),
             if pr["folder"] == true { ", Ordner" } else { "" }
         ));
-        let files: Vec<String> = pr["files"].as_array().into_iter().flatten().filter_map(|f| f.as_str().map(String::from)).collect();
-        let dirty: Vec<String> = w["dirty"].as_array().into_iter().flatten().filter_map(|f| f.as_str().map(String::from)).collect();
-        t.push_str(&format!("  Dateien: {}\n", files.iter().map(|f| if dirty.contains(f) { format!("{f}*") } else { f.clone() }).collect::<Vec<_>>().join(", ")));
+        let files: Vec<String> =
+            pr["files"].as_array().into_iter().flatten().filter_map(|f| f.as_str().map(String::from)).collect();
+        let dirty: Vec<String> =
+            w["dirty"].as_array().into_iter().flatten().filter_map(|f| f.as_str().map(String::from)).collect();
+        t.push_str(&format!(
+            "  Dateien: {}\n",
+            files
+                .iter()
+                .map(|f| if dirty.contains(f) { format!("{f}*") } else { f.clone() })
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
         let c = &w["cursor"];
-        t.push_str(&format!("  Cursor: {} Zeile {} Spalte {}\n", c["file"].as_str().unwrap_or("–"), c["line"], c["col"]));
+        t.push_str(&format!(
+            "  Cursor: {} Zeile {} Spalte {}\n",
+            c["file"].as_str().unwrap_or("–"),
+            c["line"],
+            c["col"]
+        ));
         if let Some(sel) = w["selection"]["nodes"].as_array().filter(|a| !a.is_empty()) {
-            let s: Vec<String> = sel.iter().map(|n| format!("[{}] {}", n["idx"], n["label"].as_str().unwrap_or(""))).collect();
+            let s: Vec<String> =
+                sel.iter().map(|n| format!("[{}] {}", n["idx"], n["label"].as_str().unwrap_or(""))).collect();
             t.push_str(&format!("  Auswahl: {}\n", s.join(", ")));
         }
-        t.push_str(&format!("  Kontext: {}\n", w["context"].as_str().map(|m| format!("Modul {m}")).unwrap_or_else(|| "Datei".into())));
+        t.push_str(&format!(
+            "  Kontext: {}\n",
+            w["context"].as_str().map(|m| format!("Modul {m}")).unwrap_or_else(|| "Datei".into())
+        ));
         if let Some(p) = w["params"].as_object().filter(|p| !p.is_empty()) {
             let s: Vec<String> = p.iter().map(|(k, v)| format!("{k} = {v}")).collect();
             t.push_str(&format!("  Parameterleiste: {}\n", s.join(", ")));
@@ -191,7 +211,12 @@ pub fn command(cmd: &UiCmd) -> ExitCode {
                         j["exit_code"] = json!(0);
                         println!("{}", serde_json::to_string_pretty(&j).unwrap());
                     } else {
-                        println!("{} in der UI ({}) geöffnet{}", abs.display(), uis[0].0, line.map(|l| format!(", Zeile {l}")).unwrap_or_default());
+                        println!(
+                            "{} in der UI ({}) geöffnet{}",
+                            abs.display(),
+                            uis[0].0,
+                            line.map(|l| format!(", Zeile {l}")).unwrap_or_default()
+                        );
                     }
                     ExitCode::SUCCESS
                 }

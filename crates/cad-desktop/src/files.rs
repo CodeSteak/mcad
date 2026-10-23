@@ -44,7 +44,8 @@ pub fn abs_path(root: &Path, rel: &str) -> PathBuf {
 
 pub fn read_text(path: &Path) -> io::Result<String> {
     let b = std::fs::read(path)?;
-    String::from_utf8(b).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, format!("{}: kein UTF-8", path.display())))
+    String::from_utf8(b)
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, format!("{}: kein UTF-8", path.display())))
 }
 
 /// Writes `text` atomically (temporary file in the same directory, then rename); keeps the

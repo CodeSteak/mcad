@@ -84,7 +84,11 @@ pub fn diff_hunks(base: &str, current: &str) -> Vec<Hunk> {
 pub enum Base {
     /// Not in a repository, untracked, or not in `HEAD`.
     None,
-    Head { repo: PathBuf, commit: String, text: String },
+    Head {
+        repo: PathBuf,
+        commit: String,
+        text: String,
+    },
 }
 
 fn git(dir: &Path, args: &[&str]) -> Option<Vec<u8>> {

@@ -17,11 +17,14 @@ dieselben Dateien in der UI bearbeitet (`cad watch` bemerkt jedes Speichern).
 export SMLIB_PREBUILT=/home/user/controller-cad/smlib/build-native   # falls vorhanden
 smlib/fetch.sh                                                         # Quellen (tangency-labs/smlib @ 7eba8aa), falls fehlend
 cargo build --release -p cad-cli
-target/release/cad --help              # ohne Argumente: Hilfe
+target/release/cad --help              # Hilfe (ohne Argumente: Desktop-UI)
 ```
 
-Datei `-` liest von stdin: `echo 'cube(5);' | cad check -`. `cad datei.scad` ohne Befehl ist
-für die Desktop-UI reserviert und endet heute mit Exit 2 und einem Hinweis.
+Datei `-` liest von stdin: `echo 'cube(5);' | cad check -`. Ohne Befehl startet `cad` die
+Desktop-UI (`cad`, `cad datei.scad`, `cad ordner/`); ohne grafische Sitzung (kein
+`DISPLAY`/`WAYLAND_DISPLAY`, z. B. in Containern und CI) endet das mit Exit 2 und einem Hinweis –
+Agenten arbeiten immer mit den Befehlen unten, die UI ist nie nötig. Headless-Build ohne UI:
+`cargo build --release -p cad-cli --no-default-features`.
 
 ## Empfohlener Ablauf für Agenten
 
@@ -44,6 +47,35 @@ einem Hintergrundprozess laufen lassen – jede Dateiänderung ergibt eine JSON-
 neues Bild. Der Kernel-Cache bleibt erhalten: nur geänderte Knoten werden neu berechnet
 (Bericht 8: ~25 ms ohne Geometrieänderung, sonst die Kernelzeit der geänderten Knoten),
 statt 0,1–1,1 s für jeden einzelnen Aufruf (jeder Prozess beginnt mit leerem Cache).
+
+## Zusammenarbeit: Nutzer in der Desktop-UI, Agent editiert und prüft
+
+Der Nutzer hat die Datei in der UI offen (`cad datei.scad`), der Agent ändert dieselbe Datei
+und prüft mit der CLI. Die UI beobachtet die Datei und alle eingebundenen Dateien:
+
+- **Datei ohne ungespeicherte Änderungen in der UI:** jede Änderung des Agenten (Edit-Werkzeug,
+  `cad set`) erscheint sofort im Editor und in der 3D-Ansicht (~0,2–0,3 s, Bericht 9); Cursor und
+  Bildausschnitt des Nutzers bleiben, die Änderung ist ein eigener Rückgängig-Schritt.
+- **Nutzer hat ungespeicherte Änderungen:** die UI überschreibt nichts, sondern zeigt die Leiste
+  „Datei wurde extern geändert: Neu laden / Meine behalten / Vergleichen“. Deshalb vor dem
+  Schreiben `cad ui status --json` prüfen: steht die Datei in `dirty`, den Nutzer fragen statt
+  zu schreiben.
+- Ablauf: `cad ui status` (was ist offen, Cursorzeile, ausgewählter Knoten, Kontextmodul, Werte
+  der Parameterleiste, Diagnosen) → editieren → `cad check` → `cad render …` (eigene Bilder) →
+  bei Bedarf `cad ui show datei.scad --line N [--module m]` (zeigt dem Nutzer die Stelle: Fenster
+  nach vorn, Cursor dorthin) und `cad ui screenshot -o /tmp/ui.png` (die 3D-Ansicht, wie der
+  Nutzer sie sieht; Bild ansehen).
+- Ohne laufende UI enden `cad ui …` mit Exit 3 („keine laufende Desktop-UI“) – dann einfach
+  headless weiterarbeiten. Alles andere funktioniert ohne UI unverändert.
+- Schnitt aus der UI: „Als `cad render …` kopieren“ in der Schnittansicht liefert denselben
+  Schnitt als CLI-Aufruf (`--section z=12 --azimuth … --elevation …`); `cad ui status` nennt ihn
+  unter `section.cli`.
+
+| Befehl | Ergebnis |
+| --- | --- |
+| `cad ui status [--json]` | je Fenster: `project {root, main, active, files, folder}`, `dirty` (ungespeicherte Dateien), `cursor {file, line, col}`, `selection {line, nodes}`, `context` (Modul), `params` (Parameterleiste), `diagnostics`, `scene {version, complete, nodes, parts}`, `section` |
+| `cad ui show DATEI [--line N] [--module m]` | Datei öffnen bzw. zu ihr wechseln, Cursor setzen, Fenster nach vorn |
+| `cad ui screenshot -o bild.png` | PNG der 3D-Ansicht |
 
 ## Befehle
 

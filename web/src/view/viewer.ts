@@ -1086,8 +1086,8 @@ export class Viewer implements DragView {
     const start = performance.now();
     for (let i = 0; i < frames; i++) {
       await new Promise<void>((res) => requestAnimationFrame(() => res()));
+      // like a drag: the store update moves the plane, the frame is drawn by the next rAF
       store.setState({ section: withOffset(store.getState().section, offset(s0) + Math.sin((i / frames) * Math.PI * 2) * span * 0.3) });
-      this.render();
     }
     const ms = performance.now() - start;
     store.setState({ section: s0 });

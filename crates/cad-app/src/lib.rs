@@ -146,7 +146,11 @@ fn open_path(state: State<'_, AppState>, path: PathBuf) -> Result<OpenedProject,
 
 /// File or folder dialog, then open.
 #[tauri::command]
-async fn open_dialog(app: AppHandle, state: State<'_, AppState>, folder: bool) -> Result<Option<OpenedProject>, String> {
+async fn open_dialog(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    folder: bool,
+) -> Result<Option<OpenedProject>, String> {
     let d = app.dialog().file();
     let picked = if folder {
         d.set_title("Ordner als Projekt öffnen").blocking_pick_folder()
@@ -187,8 +191,15 @@ fn save_files(state: State<'_, AppState>, files: Vec<FileText>) -> SaveResult {
 
 /// "Speichern unter": save dialog, write; returns the new path.
 #[tauri::command]
-async fn save_as(app: AppHandle, state: State<'_, AppState>, name: String, dir: Option<PathBuf>, text: String) -> Result<Option<PathBuf>, String> {
-    let mut d = app.dialog().file().set_title("Speichern unter").add_filter("CAD-Modelle", &["scad"]).set_file_name(&name);
+async fn save_as(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    name: String,
+    dir: Option<PathBuf>,
+    text: String,
+) -> Result<Option<PathBuf>, String> {
+    let mut d =
+        app.dialog().file().set_title("Speichern unter").add_filter("CAD-Modelle", &["scad"]).set_file_name(&name);
     if let Some(dir) = dir {
         d = d.set_directory(dir);
     }
@@ -224,7 +235,12 @@ fn watch_files(state: State<'_, AppState>, files: Vec<WatchFile>) {
 
 /// Line markers of the buffer `text` of `path` against `HEAD` (`null`: no markers).
 #[tauri::command]
-async fn git_hunks(state: State<'_, AppState>, path: PathBuf, text: String, refresh: bool) -> Result<Option<Vec<Hunk>>, String> {
+async fn git_hunks(
+    state: State<'_, AppState>,
+    path: PathBuf,
+    text: String,
+    refresh: bool,
+) -> Result<Option<Vec<Hunk>>, String> {
     Ok(state.git.lock().unwrap().hunks(&path, &text, refresh))
 }
 
@@ -253,7 +269,8 @@ fn ask_webview(app: &AppHandle, method: &str, body: Json, timeout: Duration) -> 
     let id = state.next_id.fetch_add(1, Ordering::Relaxed) + 1;
     let (tx, rx) = mpsc::channel();
     state.replies.lock().unwrap().insert(id, tx);
-    app.emit_to("main", "ui-request", json!({ "id": id, "method": method, "body": body })).map_err(|e| e.to_string())?;
+    app.emit_to("main", "ui-request", json!({ "id": id, "method": method, "body": body }))
+        .map_err(|e| e.to_string())?;
     let r = rx.recv_timeout(timeout).map_err(|_| "die Oberfläche antwortet nicht".to_string());
     state.replies.lock().unwrap().remove(&id);
     let r = r?;
@@ -300,7 +317,10 @@ fn serve_control(app: AppHandle, server: cad_ipc::Server) {
             uictl::STATUS => {
                 let w = ask_webview(&app, "status", Json::Null, Duration::from_secs(5))?;
                 let engine = serde_json::to_value(state.sup.status()).unwrap_or(Json::Null);
-                Ok((json!({ "pid": std::process::id(), "endpoint": state.endpoint, "engine": engine, "windows": [w] }), Vec::new()))
+                Ok((
+                    json!({ "pid": std::process::id(), "endpoint": state.endpoint, "engine": engine, "windows": [w] }),
+                    Vec::new(),
+                ))
             }
             uictl::SHOW => {
                 if let Some(w) = app.get_webview_window("main") {
@@ -332,7 +352,11 @@ pub fn run(opts: LaunchOptions) -> i32 {
     let o2 = out.clone();
     let sink: cad_desktop::engine::Sink = Arc::new(move |f| send_out(&o2, cad_desktop::wire::frame_bytes(&f)));
     // The engine process starts right away (SMLib initialisation overlaps the webview start).
-    let watchdog = std::env::var("CAD_WATCHDOG_MS").ok().and_then(|v| v.parse().ok()).map(Duration::from_millis).unwrap_or(opts.watchdog);
+    let watchdog = std::env::var("CAD_WATCHDOG_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .map(Duration::from_millis)
+        .unwrap_or(opts.watchdog);
     let sup = Supervisor::start(
         Arc::new(ProcessLauncher { program: opts.engine_program.clone(), args: opts.engine_args.clone() }),
         sink,
@@ -365,13 +389,19 @@ pub fn run(opts: LaunchOptions) -> i32 {
             let h2 = handle.clone();
             let watcher = FileWatcher::new(move |e| {
                 let _ = match e {
-                    WatchEvent::Changed { path, text } => h2.emit_to("main", "file-changed", json!({ "path": path, "text": text })),
+                    WatchEvent::Changed { path, text } => {
+                        h2.emit_to("main", "file-changed", json!({ "path": path, "text": text }))
+                    }
                     WatchEvent::Removed { path } => h2.emit_to("main", "file-removed", json!({ "path": path })),
                 };
             })
             .map_err(|e| eprintln!("cad: Dateibeobachter nicht verfügbar: {e}"))
             .ok();
-            let recent_file = app.path().app_config_dir().unwrap_or_else(|_| std::env::temp_dir().join("controller-cad")).join("recent.json");
+            let recent_file = app
+                .path()
+                .app_config_dir()
+                .unwrap_or_else(|_| std::env::temp_dir().join("controller-cad"))
+                .join("recent.json");
             let recent = Recent::new(recent_file);
             if let Some(Ok(p)) = &initial {
                 let src = opts.open.clone().unwrap_or_else(|| p.root.clone());
@@ -400,7 +430,9 @@ pub fn run(opts: LaunchOptions) -> i32 {
                 .build()?;
             match cad_ipc::Server::bind(&endpoint) {
                 Ok(server) => {
-                    std::thread::Builder::new().name("cad-ui-ipc".into()).spawn(move || serve_control(handle, server))?;
+                    std::thread::Builder::new()
+                        .name("cad-ui-ipc".into())
+                        .spawn(move || serve_control(handle, server))?;
                 }
                 Err(e) => eprintln!("cad: Steuerung über `cad ui` nicht verfügbar: {e}"),
             }
@@ -431,7 +463,10 @@ pub fn run(opts: LaunchOptions) -> i32 {
 mod tests {
     #[test]
     fn base64() {
-        assert_eq!(super::b64_decode("data:image/png;base64,iVBORw0K").unwrap(), vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a]);
+        assert_eq!(
+            super::b64_decode("data:image/png;base64,iVBORw0K").unwrap(),
+            vec![0x89, b'P', b'N', b'G', 0x0d, 0x0a]
+        );
         assert_eq!(super::b64_decode("YWI=").unwrap(), b"ab");
         assert_eq!(super::b64_decode("YQ==").unwrap(), b"a");
     }

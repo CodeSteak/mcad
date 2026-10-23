@@ -14,6 +14,7 @@
 import { isolateHistory } from "@codemirror/commands";
 import { Transaction } from "@codemirror/state";
 import { setHunks } from "../editor/gitGutter";
+import { definitionTarget } from "../logic/context";
 import { lineChanges } from "../logic/textDiff";
 import { type DiskProject, IS_TAURI, absPath, desktop, normalizeAbs } from "../platform/desktop";
 import { bridge } from "../state/bridge";
@@ -353,11 +354,18 @@ async function show(body: { file: string; line?: number | null; module?: string 
     rel = relOf(body.file);
   } else if (rel !== project.active) switchFile(rel);
   if (body.module) {
-    await waitFor(() => !!store.getState().scene?.modules.some((m) => m.name === body.module), 10_000);
+    await waitFor(() => {
+      const st = store.getState();
+      return !!st.scene && st.scene.version === st.sentVersion;
+    }, 10_000);
     const sc = store.getState().scene;
     const m = sc?.modules.find((x) => x.name === body.module || [...x.path, x.name].join("::") === body.module);
-    if (!m) throw new Error(`Modul ${body.module} nicht gefunden`);
-    if (!body.line) bridge.setCursorLine(m.range.line + 1);
+    if (!m || !sc) throw new Error(`Modul ${body.module} nicht gefunden`);
+    const idx = bridge.index(sc);
+    if (!body.line) {
+      if (idx.inFile(m.body_range)) bridge.setCursor(definitionTarget(bridge.text(), idx.range(m.body_range)));
+      else throw new Error(`Modul ${body.module} liegt in einer anderen Datei`);
+    }
   }
   if (body.line) bridge.setCursorLine(body.line);
   await waitFor(() => {

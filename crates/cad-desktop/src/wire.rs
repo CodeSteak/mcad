@@ -20,7 +20,7 @@ struct Blobs(Vec<u8>);
 
 impl Blobs {
     fn align(&mut self) {
-        while self.0.len() % 4 != 0 {
+        while !self.0.len().is_multiple_of(4) {
             self.0.push(0);
         }
     }
@@ -78,7 +78,8 @@ pub fn encode_batch(msgs: &[FromEngine], busy: bool) -> Frame {
                 json!({ "type": "Meshes", "version": version, "items": items })
             }
             FromEngine::ExportResult { format, bytes, triangles, parts, zip } => {
-                let mut o = json!({ "type": "ExportResult", "format": format, "bytes": b.u8(bytes), "triangles": triangles });
+                let mut o =
+                    json!({ "type": "ExportResult", "format": format, "bytes": b.u8(bytes), "triangles": triangles });
                 if let Some(p) = parts {
                     o["parts"] = json!(p);
                 }
@@ -87,7 +88,9 @@ pub fn encode_batch(msgs: &[FromEngine], busy: bool) -> Frame {
                 }
                 o
             }
-            other => serde_json::to_value(other).unwrap_or_else(|e| json!({ "type": "Error", "message": e.to_string(), "version": null, "node": null })),
+            other => serde_json::to_value(other).unwrap_or_else(
+                |e| json!({ "type": "Error", "message": e.to_string(), "version": null, "node": null }),
+            ),
         })
         .collect();
     Frame::event(OUT, json!({ "msgs": out, "busy": busy })).with_data(b.0)

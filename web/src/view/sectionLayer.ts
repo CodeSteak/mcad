@@ -45,6 +45,9 @@ export class SectionLayer {
   private caps: THREE.ShaderMaterial[] = [];
   private quad = new THREE.PlaneGeometry(1, 1);
   private contour: THREE.LineSegments | null = null;
+  private contourMat: THREE.LineBasicMaterial | null = null;
+  /** Reused buffer of the contour segments (grows when needed). */
+  private contourBuf = new Float32Array(0);
   private outline: THREE.LineLoop | null = null;
   private grip: THREE.Mesh | null = null;
   private bodies: CapBody[] = [];
@@ -82,6 +85,7 @@ export class SectionLayer {
     this.capColor = cap;
     this.lineColor = line;
     this.accent = accent;
+    this.contourMat?.color.set(line);
     for (const c of this.caps) (c.uniforms.color.value as THREE.Color).set(cap).convertLinearToSRGB();
   }
 
@@ -124,6 +128,7 @@ export class SectionLayer {
       if (g && g !== this.quad) g.dispose();
     }
     this.contour = null;
+    this.contourBuf = new Float32Array(0);
     this.outline = null;
     this.grip = null;
   }
@@ -251,24 +256,35 @@ export class SectionLayer {
       }
     }
     this.contourSegments = seg.length / 6;
-    if (this.contour) {
-      this.group.remove(this.contour);
-      this.contour.geometry.dispose();
-      (this.contour.material as THREE.Material).dispose();
-      this.contour = null;
+    // One line object, its buffer reused while the plane moves (no allocation per frame).
+    this.contourMat ??= new THREE.LineBasicMaterial({ color: this.lineColor, depthFunc: THREE.LessEqualDepth });
+    if (!this.contour) {
+      this.contour = new THREE.LineSegments(new THREE.BufferGeometry(), this.contourMat);
+      this.contour.name = "section-contour";
+      this.contour.frustumCulled = false;
+      this.group.add(this.contour);
     }
-    if (!seg.length) return;
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(seg, 3));
-    this.contour = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: this.lineColor, depthFunc: THREE.LessEqualDepth }));
     this.contour.renderOrder = 1000 + this.bodies.length * 2 + 2;
-    this.contour.name = "section-contour";
-    this.group.add(this.contour);
+    const g = this.contour.geometry;
+    if (this.contourBuf.length < seg.length) {
+      this.contourBuf = new Float32Array(Math.max(seg.length, this.contourBuf.length * 2, 192));
+      g.setAttribute("position", new THREE.BufferAttribute(this.contourBuf, 3));
+    }
+    this.contourBuf.set(seg);
+    const attr = g.getAttribute("position") as THREE.BufferAttribute | undefined;
+    if (attr) {
+      attr.needsUpdate = true;
+      attr.clearUpdateRanges();
+      attr.addUpdateRange(0, seg.length);
+    }
+    g.setDrawRange(0, seg.length / 3);
+    this.contour.visible = seg.length > 0;
   }
 
   dispose(): void {
     this.clear();
     this.parity.dispose();
+    this.contourMat?.dispose();
     for (const c of this.caps) c.dispose();
     this.quad.dispose();
   }

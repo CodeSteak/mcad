@@ -605,7 +605,10 @@ fn ui_entry_without_display() {
         let err = String::from_utf8_lossy(&out.stderr);
         let expect = if cfg!(feature = "gui") { "keine grafische Sitzung" } else { "UI nicht in diesem Build" };
         assert!(err.contains(expect), "{err}");
-        assert!(err.contains("render") && err.contains("outline") && err.contains("watch") && err.contains("check"), "{err}");
+        assert!(
+            err.contains("render") && err.contains("outline") && err.contains("watch") && err.contains("check"),
+            "{err}"
+        );
     }
     let out = headless().arg("gibt-es-nicht.scad").output().unwrap();
     assert_eq!(out.status.code(), Some(2));
@@ -617,7 +620,9 @@ fn ui_entry_without_display() {
     let out = cad().arg("--help").output().unwrap();
     assert_eq!(out.status.code(), Some(0));
     let help = String::from_utf8_lossy(&out.stdout);
-    for c in ["outline", "measure", "watch", "set", "render", "check", "Desktop-UI", "headless", "cad ui status", "DISPLAY"] {
+    for c in
+        ["outline", "measure", "watch", "set", "render", "check", "Desktop-UI", "headless", "cad ui status", "DISPLAY"]
+    {
         assert!(help.contains(c), "{c}: {help}");
     }
 }
@@ -665,7 +670,10 @@ fn ui_commands_talk_to_a_running_ui() {
     let out = run(&["ui", "status"]);
     assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
     let t = String::from_utf8_lossy(&out.stdout);
-    assert!(t.contains("Zeile 7") && t.contains("Modul gehaeuse") && t.contains("gehaeuse.scad*") && t.contains("w = 50"), "{t}");
+    assert!(
+        t.contains("Zeile 7") && t.contains("Modul gehaeuse") && t.contains("gehaeuse.scad*") && t.contains("w = 50"),
+        "{t}"
+    );
     let out = run(&["ui", "status", "--json"]);
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(v["uis"][0]["windows"][0]["cursor"]["line"], 7);

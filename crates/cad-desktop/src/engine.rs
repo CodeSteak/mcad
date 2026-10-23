@@ -154,7 +154,9 @@ where
     let engine = std::thread::Builder::new().name("cad-engine".into()).stack_size(ENGINE_STACK).spawn(move || {
         let mut output = output;
         let session = Session::new(make_kernel(), session_options(), std_clock());
-        if write_frame(&mut output, &Frame::event("ready", json!({ "protocol": cad_session::PROTOCOL_VERSION }))).is_err() {
+        if write_frame(&mut output, &Frame::event("ready", json!({ "protocol": cad_session::PROTOCOL_VERSION })))
+            .is_err()
+        {
             return;
         }
         engine_loop(session, rx, |msgs, busy, seen| {
@@ -343,7 +345,8 @@ impl Supervisor {
                         return;
                     }
                     if st.busy && st.deadline.is_some_and(|d| Instant::now() >= d) {
-                        let secs = if st.ready { s.opts.watchdog } else { s.opts.startup.max(s.opts.watchdog) }.as_secs();
+                        let secs =
+                            if st.ready { s.opts.watchdog } else { s.opts.startup.max(s.opts.watchdog) }.as_secs();
                         s.restart(&mut st, &format!("Engine reagiert seit {secs} s nicht (Kernel hängt)"));
                     }
                 }

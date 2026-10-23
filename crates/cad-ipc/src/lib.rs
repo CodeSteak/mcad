@@ -70,16 +70,29 @@ pub struct Frame {
 
 impl Frame {
     pub fn request(id: u64, method: &str, body: Json) -> Frame {
-        Frame { header: Header { v: IPC_VERSION, id, kind: Kind::Request, method: method.into(), body, error: None }, data: Vec::new() }
+        Frame {
+            header: Header { v: IPC_VERSION, id, kind: Kind::Request, method: method.into(), body, error: None },
+            data: Vec::new(),
+        }
     }
 
     pub fn event(method: &str, body: Json) -> Frame {
-        Frame { header: Header { v: IPC_VERSION, id: 0, kind: Kind::Event, method: method.into(), body, error: None }, data: Vec::new() }
+        Frame {
+            header: Header { v: IPC_VERSION, id: 0, kind: Kind::Event, method: method.into(), body, error: None },
+            data: Vec::new(),
+        }
     }
 
     pub fn response_to(req: &Header, body: Json) -> Frame {
         Frame {
-            header: Header { v: IPC_VERSION, id: req.id, kind: Kind::Response, method: req.method.clone(), body, error: None },
+            header: Header {
+                v: IPC_VERSION,
+                id: req.id,
+                kind: Kind::Response,
+                method: req.method.clone(),
+                body,
+                error: None,
+            },
             data: Vec::new(),
         }
     }
@@ -101,7 +114,10 @@ pub enum Error {
     /// A live server holds the endpoint.
     InUse(PathBuf),
     /// The peer speaks another protocol version.
-    Version { ours: u32, theirs: u32 },
+    Version {
+        ours: u32,
+        theirs: u32,
+    },
     /// Malformed frame.
     Protocol(String),
     /// The server answered with an error.
@@ -152,7 +168,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub fn write_frame(w: &mut impl Write, f: &Frame) -> Result<()> {
     let mut header = serde_json::to_vec(&f.header).map_err(|e| Error::Protocol(e.to_string()))?;
     // Pad with spaces so the data part starts 4-byte aligned (typed array views in JS).
-    while header.len() % 4 != 0 {
+    while !header.len().is_multiple_of(4) {
         header.push(b' ');
     }
     if header.len() > MAX_HEADER || f.data.len() > MAX_DATA {

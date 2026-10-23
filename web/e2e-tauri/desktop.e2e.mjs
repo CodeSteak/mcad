@@ -357,6 +357,10 @@ async function main() {
     check(st2.selection.nodes.length > 0, `ausgewählter Knoten ${JSON.stringify(st2.selection.nodes[0])}`);
     check(Object.keys(st2.params).includes("w"), "Werte der Parameterleiste");
     check(Array.isArray(st2.diagnostics), "Diagnosen");
+    const shm = cad("ui", "show", file, "--module", "deckel", "--json");
+    check(shm.code === 0 && JSON.parse(shm.out).module === "deckel", `show --module deckel (${shm.out.slice(0, 120)} ${shm.err})`);
+    const shx = cad("ui", "show", file, "--module", "gibtsnicht", "--json");
+    check(shx.code === 1, `unbekanntes Modul: Exit 1 (${shx.code})`);
     const png = join(OUT, "img", "t07-cad-ui-screenshot.png");
     const sc = cad("ui", "screenshot", "-o", png, "--json");
     check(sc.code === 0, `screenshot Exit 0 ${sc.err}`);

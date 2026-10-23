@@ -1,10 +1,10 @@
 # Technischer Plan: Parametrische CAD-Sprache mit Rastern
 
-Stand: 2026-10-23, Ist-Stand nach Testbericht 7 (erste Fassung 2026-10-22) · Grundlage: `Spec: Parametrische CAD-Sprache mit Rastern` (22.10.2026)
+Stand: 2026-10-23, Ist-Stand nach Testbericht 9 (erste Fassung 2026-10-22) · Grundlage: `Spec: Parametrische CAD-Sprache mit Rastern` (22.10.2026)
 
 Abschnitt 0 fasst zusammen, was sich gegenüber der ersten Fassung geändert hat; die Abschnitte 1–14 beschreiben den umgesetzten Stand, Abschnitt 13 den Status der Meilensteine, Abschnitt 15 die bekannten Grenzen. Testberichte: `docs/reports/` (B1 … B7 = Bericht 1 … 7, Übersicht in `docs/reports/README.md`).
 
-Ziel: Die Anwendung läuft vollständig im Browser, nur auf dem Desktop, für kleine Hobbyprojekte. Sprache, Auswertung, Cache und Rückschreiben sind in Rust (Wasm), die UI in TypeScript/React. Dazu gibt es eine CLI (auch zur Nutzung durch Claude Code); eine Tauri-Version ist optional und noch offen.
+Ziel: Die Anwendung läuft vollständig im Browser, nur auf dem Desktop, für kleine Hobbyprojekte. Sprache, Auswertung, Cache und Rückschreiben sind in Rust (Wasm), die UI in TypeScript/React. Dazu gibt es eine CLI (auch zur Nutzung durch Claude Code) und eine Desktop-Version (Tauri 2, B9) mit nativem Kernel, echten Dateien, Dateibeobachter und Git-Markierungen.
 
 Festgelegte Rahmenbedingungen:
 
@@ -42,7 +42,9 @@ Festgelegte Rahmenbedingungen:
 | Variabler Radius | Stretch Goal | `fillet(r = function (p) …)` und `difference/union/intersection(fillet = function (p) …)`: cad-eval übersetzt das Funktionsliteral in ein Radiusgesetz `cad_ir::Law` (reiner Ausdruck über `p`, Teil des Baums und des Cache-Schlüssels) statt eines Rückrufs; die Engine wertet es an Stützpunkten je Kante aus, die Fassade (`sc_fillet_var`) baut daraus ein B-Spline-Gesetz | B7 |
 | solidcore | `kernel-solidcore` ab Umstieg | `kernel-solidcore` und `cad diff-kernels` vorhanden, opt-in (Feature `solidcore`); heute bricht jedes Primitiv in solidcore ab (`Unported`), M8 wartet | B5, B6, `docs/solidcore-umstieg.md` |
 | UI-Bibliotheken | react-three-fiber, `three-mesh-bvh`, `Line2` | three.js direkt (Raycaster, Linien als `LineSegments`), ohne r3f und BVH; TS-Protokolltypen aus Rust mit `ts-rs` | B2 |
-| CI | GitHub Actions, gecachte SMLib-Builds | Workflows `rust`, `web`, `compat`, `pages` (manuell) in `.github/workflows/`, Schritte in `scripts/ci/` (Abschnitt 11) | – |
+| CI | GitHub Actions, gecachte SMLib-Builds | Workflows `rust`, `web`, `desktop`, `compat`, `pages` (manuell) in `.github/workflows/`, Schritte in `scripts/ci/` (Abschnitt 11) | B9 |
+| Tauri-Version | „später, optional“ | `crates/cad-app` (Tauri 2) im Binary `cad` (Feature `gui`, Standard): `cad` / `cad datei.scad` / `cad ordner/` startet die UI. Engine in einem eigenen Prozess (`cad engine-host`, Engine-Thread mit 256 MiB Stack, schrittweise wie im Worker), weil SMLib globalen Zustand hat und ein hängender Aufruf nur mit dem Prozess beendet werden kann; Antworten binär über einen Tauri-Kanal (`cad-desktop/src/wire.rs`). Dateien auf der Festplatte, Dateibeobachter (`notify`), Git-Rand gegen `HEAD` (`git`-Aufruf + `similar`), Steuerung durch `cad ui status/show/screenshot` über lokale IPC (`cad-ipc`) | B9 |
+| Schnittansicht | – | GPU-Schnitt in Browser und Tauri: Clipping-Ebene, Stencil-Kappe (Paritäts-Pass je Körper, schraffiert wie `cad render --section`), Kontur, Griff mit Rasten auf Rasterebenen und Anker; „Als `cad render …` kopieren“ | B9 |
 
 ---
 
@@ -54,7 +56,7 @@ Festgelegte Rahmenbedingungen:
 │        │  ▲                        │  ▲                                          │
 │        ▼  │                        ▼  │                                          │
 │  ─────────────────────── EngineTransport (TS-Interface) ──────────────────────── │
-│        Browser: Web Worker + postMessage      später Tauri: IPC                  │
+│        Browser: Web Worker + postMessage      Tauri: Kanal + Engine-Prozess      │
 └──────────────────────────────────────┬─────────────────────────────────────────┘
                                        │
 ┌──────────────────────────── Engine (Rust) ─────────────────────────────────────┐
@@ -65,12 +67,20 @@ Festgelegte Rahmenbedingungen:
 │               │                                                                 │
 │        smlib.wasm (C++, Emscripten) bzw. nativ gelinkt                           │
 └─────────────────────────────────────────────────────────────────────────────────┘
-      Einstiege:  cad-wasm (Browser-Worker) · cad-cli (nativ) · später Tauri-Backend
+      Einstiege:  cad-wasm (Browser-Worker) · cad-cli (nativ) · cad-app/cad-desktop (Tauri, nativ)
+
+Desktop (Tauri 2, B9):
+  cad (App-Prozess): Tauri-Hauptthread + Webview (dieselbe React-App), Supervisor mit Watchdog,
+                     Dateibeobachter, Git-Basis, Steuer-Socket ui-<pid> (cad-ipc)
+     │ stdin: Rahmen `post` [ToEngine…]            ▲ stdout: binäre Antwort-Batches (wire.rs)
+     ▼                                              │
+  cad engine-host (Engine-Prozess): Engine-Thread 256 MiB, Session::post/step(16 ms), SMLib nativ
+  cad ui status|show|screenshot (CLI) ──── Unix-Socket im Benutzerverzeichnis ────▶ App
 ```
 
 Grundsätze:
 
-- **Die Engine kennt weder Browser noch Transport.** Dieselben Crates laufen im Worker (Wasm), in der CLI (nativ) und später im Tauri-Backend (nativ). Das Protokoll ist ein Satz `serde`-Typen.
+- **Die Engine kennt weder Browser noch Transport.** Dieselben Crates laufen im Worker (Wasm), in der CLI (nativ) und im Engine-Prozess der Desktop-App (nativ). Das Protokoll ist ein Satz `serde`-Typen.
 - **Die Engine besitzt den Zustand** (Quelltext-Version, Cache, Kernel-Shapes). Die UI hält nur Darstellungsdaten.
 - **Cursor und Hover brauchen keine Neuberechnung.** Die Engine liefert pro Auswertung eine vollständige Szenenbeschreibung (alle Knoten mit Quellbereich, Transformation, Art, Eltern). Die UI entscheidet selbst über Hervorheben, Dimmen und Ausblenden. Meshes werden pro Knoten bei Bedarf nachgeladen.
 - **Volle Neuauswertung der Sprache bei jeder Änderung, Kernel-Operationen aus dem Cache.** Die Sprachauswertung dauert Millisekunden. Teuer sind nur Kernel-Aufrufe; sie werden über inhaltsbasierte Schlüssel wiederverwendet. Damit folgt „nur der Pfad zur Wurzel wird ungültig“ automatisch.
@@ -317,7 +327,9 @@ Engine → UI: `Diagnostics`, `Scene { version, nodes, grids, anchors, handles, 
 
 Übergabe mit `serde` + `serde-wasm-bindgen`, Meshes als `Float32Array`/`Uint32Array`-Transferables. TS-Typen werden aus Rust generiert (`tsify` oder `ts-rs`).
 
-`EngineTransport` in TS kapselt den Weg: `WorkerTransport` jetzt, `TauriTransport` später (Tauri-2-Kanäle für Binärdaten). Die UI kennt nur das Interface.
+`EngineTransport` in TS kapselt den Weg: `WorkerTransport` (Browser) oder `TauriTransport` (Desktop, `web/src/engine/tauriTransport.ts`). Die UI kennt nur das Interface.
+
+`TauriTransport`: Nachrichten an die Engine gehen gebündelt pro Microtask als ein Befehl `engine_post` (Reihenfolge bleibt); die Antworten kommen über einen Tauri-2-Kanal als Binärrahmen `[u32 Kopflänge][u32 Datenlänge][Kopf-JSON, auf 4 Bytes aufgefüllt][Daten]` (Format von `cad-ipc`). Der Kopf enthält die `FromEngine`-Nachrichten als JSON, die Mesh-Arrays und Exportbytes sind durch `{"$b": [offset, länge, "f32"|"u32"|"u8"]}` ersetzt; der Webview legt `Float32Array`/`Uint32Array` direkt auf den empfangenen `ArrayBuffer` (keine JSON-Zahlenarrays, keine Kopie). Die Desktop-Oberfläche wird ohne Worker und ohne Wasm gebaut (`pnpm build:tauri`, `vite --mode tauri` ersetzt `workerFactory.ts`).
 
 ### 7.2 Feine und grobe Tessellierung
 
@@ -329,7 +341,7 @@ Engine → UI: `Diagnostics`, `Scene { version, nodes, grids, anchors, handles, 
 - Die Engine rechnet in Schritten: `engine.step(budget_ms)` bearbeitet Knoten, bis das Zeitbudget (z. B. 20 ms) erreicht ist, und kehrt zurück.
 - Die Worker-Schleife gibt zwischen zwei Schritten die Kontrolle an die Event-Loop ab (`MessageChannel`), verarbeitet neue Nachrichten und bricht bei `SetSource` die laufende Auswertung ab. Fertige Knoten bleiben im Cache.
 - Eine einzelne lange Kernel-Operation ist nicht unterbrechbar. Bei Hobbyprojekten ist das selten ein Problem.
-- **Watchdog:** Der Main Thread beendet den Worker, wenn 15 s keine Antwort kommt (Schutz vor Hängern im Kernel), und startet ihn neu. Der Cache geht dabei verloren. Der Inhaltsschlüssel des Knotens aus dem letzten `Progress.current` wird gesperrt; der neue Worker bekommt `BlockKeys` vor `SetSource`. Der Knoten meldet „Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung“, die Zeile wird rot (B4, C19).
+- **Watchdog:** Der Main Thread beendet den Worker, wenn 15 s keine Antwort kommt (Schutz vor Hängern im Kernel), und startet ihn neu. In der Desktop-App übernimmt der Supervisor im App-Prozess dasselbe (`cad-desktop/src/engine.rs`): er zählt gesendete und von der Engine übernommene Nachrichten, beendet bei 15 s ohne Antwort den Engine-Prozess (`kill`) und startet ihn neu, mit denselben `BlockKeys`/`SetFiles`/`SetContext`/`SetSource` wie im Browser; ein Thread allein ließe sich nicht beenden und teilte den globalen SMLib-Zustand mit dem hängenden Aufruf. Der Cache geht dabei verloren. Der Inhaltsschlüssel des Knotens aus dem letzten `Progress.current` wird gesperrt; der neue Worker bekommt `BlockKeys` vor `SetSource`. Der Knoten meldet „Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung“, die Zeile wird rot (B4, C19).
 
 ### 7.4 Versionen
 
@@ -355,7 +367,8 @@ Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem K
 | `diff-kernels <datei…>` | Vergleich SMLib ↔ solidcore (nur Entwicklung, `docs/solidcore-umstieg.md`) |
 
 - Jeder Befehl hat `--json` mit festem, versioniertem Schema (`schema_version`) und definierte Exit-Codes (0 ok, 1 Modellfehler, 2 Aufruf, 3 Kernel). Ohne `--json` gibt es lesbaren Text.
-- `cad` ohne Argumente zeigt die Hilfe; `cad datei.scad` (Positionsargument ohne Befehl) ist für die Desktop-UI (Tauri) reserviert und endet bis dahin mit Exit 2 und einer Meldung.
+- `cad` ohne Argumente startet die Desktop-UI, `cad datei.scad` bzw. `cad ordner/` mit dieser Datei bzw. diesem Ordner als Projekt (Feature `gui`, Standard; `--no-default-features` baut eine CLI ohne UI). Ohne grafische Sitzung (kein `DISPLAY`/`WAYLAND_DISPLAY`) oder ohne `gui`: Meldung mit den headless Befehlen, Exit 2. `cad --help` erklärt beides.
+- `cad ui status [--json]` / `cad ui show datei [--line N] [--module m]` / `cad ui screenshot -o x.png` sprechen über lokale IPC (`cad-ipc`, Unix-Socket `ui-<pid>` im Benutzerverzeichnis, nur der eigene Benutzer) mit laufenden Fenstern; ohne laufende UI Exit 3. Für den Ablauf „Nutzer in der UI, Agent editiert und prüft“ siehe Skill.
 - `render` nutzt einen kleinen Software-Rasterizer in Rust (`cad-render`: Z-Buffer, Schattierung, Kantenlinien, Ortho/Perspektive, Marker, Beschriftung mit eingebetteter Bitmap-Schrift). Er braucht keine GPU und läuft damit auch in Containern und CI.
 - Schnitt: Clipping im Renderer mit gefüllter Kappe nach dem Stencil-Prinzip (Kappe, wo der Sichtstrahl bis zur Ebene die Oberfläche ungerade oft kreuzt), kein Kernel-Boolean. Gleiches Verfahren und gleiche Konvention wie die spätere GPU-Schnittansicht der UI: Ebene durch `p` mit Normale `n` entfernt die Hälfte, in die `n` zeigt (es bleibt `(q − p) · n ≤ 0`).
 - Kein persistenter Cache zwischen CLI-Aufrufen: ein Aufruf dauert 0,4–1 s (Bericht 8), Kernel-Ergebnisse sind Handles der nativen Bibliothek und nicht serialisierbar. Für schnelle Schleifen gibt es `cad watch` (Cache im Prozess).
@@ -377,7 +390,10 @@ Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem K
 | Raster | Ebenen als Linien am Rand der Bauteilhülle; durchgezogen (Literal) oder gestrichelt (Ausdruck); standardmäßig nur die von der aktuellen Zeile verwendeten |
 | Parameterleiste | aus der Modulsignatur; Werte pro Modul in der Sitzung; „Als Standard übernehmen“ erzeugt einen `TextEdit` |
 | Pfadleiste | aus dem Modulkontext; Doppelklick auf Instanz springt in die Definition |
-| Dateien | Autospeichern des Projekts in IndexedDB; Projekte aus mehreren Dateien als Tabs; Ordner öffnen/speichern über File System Access API (Chromium), sonst Hoch- und Herunterladen (Datei oder ZIP) |
+| Dateien | Browser: Autospeichern des Projekts in IndexedDB; Projekte aus mehreren Dateien als Tabs; Ordner öffnen/speichern über File System Access API (Chromium), sonst Hoch- und Herunterladen (Datei oder ZIP). Desktop: echtes Dateisystem (Öffnen, Speichern atomar, Speichern unter, Ordner als Projekt, zuletzt geöffnet), ungespeicherte Dateien mit ●, „Automatisch speichern“ (Standard aus, Verzögerung einstellbar), kein IndexedDB |
+| Dateibeobachter (Desktop) | `notify` auf die Ordner der Projektdateien (atomares Speichern ersetzt die Datei); bekannte Inhalte als Hash, eigene Speichervorgänge kommen nicht zurück; saubere Datei: still neu laden als kleinste Zeilenänderungen (Cursor/Scroll bleiben, eigener Undo-Schritt); ungespeicherte Änderungen: Leiste „Neu laden / Meine behalten / Vergleichen“ (Diff-Ansicht); gelöscht/umbenannt: Leiste, Speichern legt neu an |
+| Git (Desktop) | Randmarkierung gegen `HEAD`: neu grün, geändert blau (3 px, Deckkraft 0,5–0,55), gelöscht rotes Dreieck zwischen den Zeilen; Hover zeigt die alten Zeilen; entprellt 300 ms beim Tippen, beim Speichern, bei externen Änderungen und Fensterfokus; unversionierte Dateien ohne Markierung |
+| Schnittansicht | Werkzeug „Schnitt“: Ebene x/y/z oder frei (Normale aus Blickrichtung oder Eingabe), Griff ziehen (rastet auf Rasterebenen des Kontextmoduls und Anker, Alt frei), Umkehren, Kappe (Stencil, schraffiert, je Körper wechselnde Richtung, transparente Körper ohne Kappe), Kontur; Statuszeile und „Als `cad render …` kopieren“ mit derselben Konvention wie die CLI |
 | Bauteile | Bauteilleiste mit Sichtbarkeit, Volumen und Export je Bauteil |
 
 Eine Zeile kann mehrere Instanzen haben (Schleifen, mehrfache Modulaufrufe). Die UI indiziert die Szene nach `stmt` und hebt alle hervor.
@@ -400,14 +416,17 @@ crates/
   cad-render/       Software-Rasterizer für die CLI
   cad-session/      Protokoll und Sitzung (Worker und CLI), TS-Typen (ts-rs)
   cad-wasm/         wasm-bindgen-Einstieg für den Worker
-  cad-cli/          CLI
+  cad-ipc/          lokale IPC (Unix-Socket je Benutzer, versionierte Rahmen, Anfrage/Antwort, Ereignisse)
+  cad-desktop/      Desktop-Backend ohne Tauri: Engine-Prozess + Supervisor, Binärformat, Dateien, Beobachter, Git
+  cad-app/          Tauri-2-App (Befehle, Kanal, Fenster, Steuer-Socket)
+  cad-cli/          CLI (startet ohne Befehl die UI)
   compat-tests/     OpenSCAD-Vergleich Stufe 1
 smlib/
   fetch.sh          Quellen: tangency-labs/smlib @ 7eba8aa (= usd-brep c9c5979 + Korrekturen) + patches/
   facade/           C++-Fassade; CMakeLists.txt, build-native.sh, build-wasm.sh
 third_party/smlib/  SMLib-Quellen (nicht eingecheckt)
 web/
-  src/app/  src/editor/  src/view/  src/engine/  src/logic/  src/files/  src/state/  e2e/  scripts/
+  src/app/  src/editor/  src/view/  src/engine/  src/logic/  src/files/  src/state/  src/platform/  e2e/  e2e-tauri/  scripts/
 examples/           Beispieldateien (zugleich Testfälle): spec/, openscad-compat/, projekt-gehaeuse/
 tests/              openscad-compat/ (Referenz, compare.py), step/verify.py
 tools/report/       Generatoren der Testberichte
@@ -435,9 +454,10 @@ CI: GitHub Actions; SMLib-Wasm und SMLib-nativ als gecachte Build-Artefakte. Umg
 
 | Workflow | Inhalt | Cache |
 | --- | --- | --- |
-| `rust` | `cargo fmt --check`, `cargo clippy --workspace --all-targets -D warnings` (nativ und `cad-wasm` für wasm32), `cargo test --workspace`, `cargo check -p cad-wasm --target wasm32-unknown-unknown` | SMLib nativ (`smlib/build-native/lib`), Cargo |
+| `rust` | Tauri-Systempakete (apt, `scripts/ci/desktop.sh deps`: der Workspace enthält `cad-app`), `cargo fmt --check`, `cargo clippy --workspace --all-targets -D warnings` (nativ und `cad-wasm` für wasm32), `cargo test --workspace`, `cargo check -p cad-wasm --target wasm32-unknown-unknown` | SMLib nativ (`smlib/build-native/lib`), Cargo |
 | `web` | emsdk 6.0.13, `smlib/build-wasm.sh`, `web/scripts/build-wasm.sh`, `pnpm install --frozen-lockfile`, `typecheck`, Vitest, Node-Tests (smlib.wasm, Engine, Transport), `pnpm build`, Playwright; Artefakte `web/dist` und bei Fehlern der Playwright-Bericht | emsdk, smlib.js/.wasm, Cargo, pnpm |
 | `compat` | OpenSCAD 2021.01 (apt): Referenz neu erzeugen und mit `reference.json` vergleichen, Selbsttest von `compare.py`, `include`/`use` gegen OpenSCAD, `compare.py --eval` mit der Release-CLI; STEP-Prüfung mit `cadquery-ocp==8.0.1.1.0` | SMLib nativ, Cargo, venv |
+| `desktop` | Tauri-Pakete (apt), SMLib nativ, `pnpm build:tauri`, `cargo build --release -p cad-cli`, Tauri-E2E mit `tauri-driver` + WebKitWebDriver unter Xvfb (`web/e2e-tauri/desktop.e2e.mjs`) | SMLib nativ, Cargo, pnpm |
 | `pages` | manuell (`workflow_dispatch`): `web/dist` auf GitHub Pages (keine COOP/COEP-Header nötig) | wie `web` |
 
 Cache-Schlüssel der SMLib-Builds (`scripts/ci/smlib-key.sh`): Fork-Commit, Inhalt der Patches, `smlib/CMakeLists.txt`, Build-Skript und Compiler-Version (nativ `c++`, Wasm `emcc`, dazu CMake), bei Wasm zusätzlich die Fassadenquellen.
@@ -476,7 +496,7 @@ Jeder Meilenstein endet mit einem lauffähigen Stand im Browser und in der CLI.
 | M7 | Dateien, 3MF, OpenSCAD-Korpus, Beispiele, Leistung | erste vollständige Version | erledigt (B1, B6; Leistung in B1–B4) |
 | M8 | Umstieg auf solidcore: `kernel-solidcore`, Vergleich über `diff-kernels`, SMLib-Wasm entfernen | bereit zur Veröffentlichung | offen: wartet auf solidcore (heute bricht jedes Primitiv ab, B5); `kernel-solidcore` und `diff-kernels` vorhanden |
 | später | STEP-Export, variabler Radius, mehrere Bauteile, `include`/`use` | | erledigt (B5, B6, B7) |
-| später | Tauri-Version (`TauriTransport`) | | offen (optional) |
+| später | Tauri-Version (`TauriTransport`), Dateibeobachter, Git-Rand, `cad ui`, Schnittansicht | | erledigt (B9) |
 | – | CI (GitHub Actions) | | erledigt (Workflows lokal geprüft; Lauf auf GitHub steht aus) |
 
 Abhängigkeiten: M1 → M2 → M3 → M4 → M5. M6 hängt nur an M2. M8 hängt am Fortschritt von solidcore und kann jederzeit nach M2 teilweise beginnen.
@@ -497,7 +517,7 @@ Abhängigkeiten: M1 → M2 → M3 → M4 → M5. M6 hängt nur an M2. M8 hängt 
 
 ---
 
-## 15. Bekannte Grenzen (aus den Testberichten 1–7)
+## 15. Bekannte Grenzen (aus den Testberichten 1–9)
 
 Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1–F4 aus B4, behoben in B7).
 
@@ -531,6 +551,16 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 - Zonen-Kanten und geöffnete Flächen bestimmt die Ansicht an tessellierten Zonen-Meshes (die Engine exakt); in Grenzfällen kann die Anzeige abweichen. Die Anzeige des `sweep`-Pfads interpoliert wie die Fassade und weicht ab, falls sich das Verfahren im Kernel ändert. (B4)
 - Watchdog-Sperre gilt für den Inhaltsschlüssel (gleiche Knoten an anderer Stelle sind mitgesperrt) und bis zum Neuladen der Seite; der Test blockiert den Worker über eine Testnachricht, ein echter hängender Kernel-Aufruf wurde nicht nachgestellt. (B2, B4)
 - Messwerte stammen aus headless Chromium mit SwiftShader (ohne GPU) und sind nur relativ aussagekräftig. (B2–B4)
+
+**Desktop, Schnittansicht (B9)**
+
+- Steuer-IPC nur unter Unix (Linux, macOS); unter Windows liefern `cad ui …` und der Steuer-Socket „nicht umgesetzt“ (die App selbst läuft). Ein Fenster je App-Prozess; `cad datei.scad` startet einen weiteren Prozess, statt das laufende Fenster zu nutzen.
+- Der hängende Engine-Prozess wird beendet; die Watchdog-Tests blockieren ihn über eine Testnachricht (`__debugHang`), ein echter hängender Kernel-Aufruf wurde nicht nachgestellt.
+- Der Dateibeobachter vergleicht Inhalte (Hash); eine externe Änderung, die genau den Inhalt der UI schreibt, bleibt unbemerkt (gewollt). Umbenennen wird als Löschen erkannt, nicht als neuer Name.
+- Git-Markierungen nur gegen `HEAD` (nicht gegen den Index), über den `git`-Befehl; ohne `git` im `PATH` keine Markierungen.
+- „Speichern unter“ und die Öffnen-Dialoge sind native Dialoge und in den E2E-Tests nicht automatisiert (der Weg über die Kommandozeile und `cad ui show` schon).
+- Schnitt: eine Ebene; Kappen nur für undurchsichtige Körper (wie die CLI); die Kontur wird je Lage auf der CPU berechnet (bei sehr großen Meshes sinkt die Bildrate); Picking ignoriert den entfernten Teil, Griffe und Raster werden nicht abgeschnitten. Die kopierte CLI-Kamera ist orthografisch (UI perspektivisch) – das Bild stimmt im Schnitt, nicht pixelgenau.
+- Messwerte unter Xvfb ohne GPU (WebKitGTK mit Software-GL, Chromium mit SwiftShader) sind nur relativ aussagekräftig.
 
 **solidcore (M8)**
 

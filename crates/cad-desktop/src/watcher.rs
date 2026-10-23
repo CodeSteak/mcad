@@ -80,7 +80,8 @@ impl FileWatcher {
                 }
             }
         })?;
-        let shared = Arc::new(Mutex::new(Shared { files: HashMap::new(), names: HashMap::new(), dirs: HashSet::new() }));
+        let shared =
+            Arc::new(Mutex::new(Shared { files: HashMap::new(), names: HashMap::new(), dirs: HashSet::new() }));
         let sh = shared.clone();
         std::thread::Builder::new().name("cad-watch".into()).spawn(move || run(rx, sh, callback)).expect("thread");
         Ok(FileWatcher { shared, watcher: Mutex::new(watcher) })
@@ -158,7 +159,11 @@ fn run(rx: Receiver<PathBuf>, sh: Arc<Mutex<Shared>>, cb: impl Fn(WatchEvent)) {
     let mut due: HashMap<PathBuf, Instant> = HashMap::new();
     let mut rechecking: HashSet<PathBuf> = HashSet::new();
     loop {
-        let wait = due.values().min().map(|t| t.saturating_duration_since(Instant::now())).unwrap_or(Duration::from_secs(3600));
+        let wait = due
+            .values()
+            .min()
+            .map(|t| t.saturating_duration_since(Instant::now()))
+            .unwrap_or(Duration::from_secs(3600));
         match rx.recv_timeout(wait) {
             Ok(p) => {
                 let k = key(&p);

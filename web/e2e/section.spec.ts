@@ -312,16 +312,32 @@ test("X06 fps beim Verschieben der Ebene", async ({ page }) => {
   await page.getByTestId("examples").selectOption("spec/fillet_zonen.scad");
   await waitScene(page);
   await hook(page, (c) => c.setView("iso"));
+  const plain = await page.evaluate(() => (window as unknown as { __cad: { orbitBenchmark(n: number): Promise<{ fps: number }> } }).__cad.orbitBenchmark(120));
   await sectionOn(page);
   const r = await page.evaluate(() => (window as unknown as W).__cad.sectionBenchmark(120));
   expect(r.fps).toBeGreaterThan(5);
   const orbit = await page.evaluate(() => (window as unknown as { __cad: { orbitBenchmark(n: number): Promise<{ fps: number }> } }).__cad.orbitBenchmark(120));
-  writeMetrics9({ sectionMoveFps: r, orbitFpsWithSection: orbit });
+  writeMetrics9({ sectionMoveFps: r, orbitFpsWithSection: orbit, orbitFpsNoSection: plain });
   record9({
     id: "X06",
     title: "Bildrate beim Schnittziehen",
-    caption: `Ebene 120 Bilder lang verschoben (jedes Bild neue Lage, Kappe und Kontur neu): ${r.fps.toFixed(1)} fps in Chromium mit SwiftShader (Software-GL, keine GPU); Drehen mit Schnitt ${orbit.fps.toFixed(1)} fps.`,
+    caption: `Ebene 120 Bilder lang verschoben (jedes Bild neue Lage, Kappe und Kontur neu): ${r.fps.toFixed(1)} fps in Chromium mit SwiftShader (Software-GL, keine GPU); Drehen mit Schnitt ${orbit.fps.toFixed(1)} fps, ohne Schnitt ${plain.fps.toFixed(1)} fps – der Schnitt kostet kaum mehr als das Zeichnen selbst.`,
     images: [],
     checks: [`${r.frames} Bilder in ${r.ms.toFixed(0)} ms`],
   });
+});
+
+test("X07 Tastendruck → Szene im Browser (Wasm), gleiche Änderung wie in Tauri", async ({ page }) => {
+  await openApp(page);
+  // after "w = 60" in `k: gehaeuse(w = 60);`: Backspace / digit, always a valid model
+  await clickLine(page, 21, 18);
+  const before = (await cad(page)).metrics.editToScene.length;
+  for (let i = 0; i < 8; i++) {
+    await page.keyboard.press(i % 2 ? "0" : "Backspace");
+    await page.waitForTimeout(250);
+    await waitScene(page);
+  }
+  const ms = (await cad(page)).metrics.editToScene.slice(before);
+  expect(ms.length).toBeGreaterThan(0);
+  writeMetrics9({ keystrokeToSceneWasm: ms });
 });

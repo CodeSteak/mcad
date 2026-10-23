@@ -272,7 +272,11 @@ fn main() -> ExitCode {
     match &cmd {
         Cmd::Ui { cmd } => return ui::command(cmd),
         Cmd::EngineHost => {
-            let code = cad_desktop::engine::host_main(SmlibKernel::new, std::io::stdin(), cad_desktop::engine::protocol_stdout());
+            let code = cad_desktop::engine::host_main(
+                SmlibKernel::new,
+                std::io::stdin(),
+                cad_desktop::engine::protocol_stdout(),
+            );
             return ExitCode::from(code as u8);
         }
         Cmd::External(args) => {
@@ -282,7 +286,9 @@ fn main() -> ExitCode {
                 return launch::run(Some(Path::new(&first)));
             }
             if looks_like_path {
-                eprintln!("cad: `cad {first}` öffnet die UI und nimmt keine weiteren Argumente. Befehle: {COMMANDS} (cad --help)");
+                eprintln!(
+                    "cad: `cad {first}` öffnet die UI und nimmt keine weiteren Argumente. Befehle: {COMMANDS} (cad --help)"
+                );
             } else {
                 eprintln!("cad: unbekannter Befehl `{first}`. Befehle: {COMMANDS} (cad --help)");
             }

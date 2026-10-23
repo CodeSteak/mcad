@@ -58,7 +58,9 @@ pub fn message(d: &Decision, target: Option<&Path>) -> String {
         Decision::NoDisplay => format!(
             "cad: keine grafische Sitzung (weder DISPLAY noch WAYLAND_DISPLAY gesetzt), die Desktop-UI{what} startet nicht.\n{HEADLESS}"
         ),
-        Decision::Missing(p) => format!("cad: {} gibt es nicht (Datei .scad oder Ordner erwartet).\n{HEADLESS}", p.display()),
+        Decision::Missing(p) => {
+            format!("cad: {} gibt es nicht (Datei .scad oder Ordner erwartet).\n{HEADLESS}", p.display())
+        }
     }
 }
 
@@ -106,7 +108,10 @@ mod tests {
         if !cfg!(any(target_os = "macos", target_os = "windows")) {
             assert_eq!(decide(None, &env_of(&[]), true), Decision::NoDisplay);
             assert_eq!(decide(None, &env_of(&[("DISPLAY", "")]), true), Decision::NoDisplay);
-            assert_eq!(decide(Some(here), &env_of(&[("WAYLAND_DISPLAY", "wayland-0")]), true), Decision::Gui(Some(here.into())));
+            assert_eq!(
+                decide(Some(here), &env_of(&[("WAYLAND_DISPLAY", "wayland-0")]), true),
+                Decision::Gui(Some(here.into()))
+            );
         }
         assert_eq!(decide(None, &env_of(&[("DISPLAY", ":0")]), true), Decision::Gui(None));
         assert_eq!(decide(None, &env_of(&[("DISPLAY", ":0")]), false), Decision::NotBuilt);
