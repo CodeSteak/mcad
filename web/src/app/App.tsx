@@ -223,6 +223,9 @@ function PartsBar() {
         <button onClick={() => void exportParts("stl", names, true)} title="Jedes Bauteil als STL, zusammen als ZIP" data-testid="parts-zip">
           ZIP (STL)
         </button>
+        <button onClick={() => void exportParts("step", names, true)} title="Jedes Bauteil als STEP, zusammen als ZIP" data-testid="parts-zip-step">
+          ZIP (STEP)
+        </button>
         <button onClick={() => void exportParts("3mf", names, false)} title="Ein 3MF mit einem Objekt je Bauteil" data-testid="parts-3mf">
           3MF
         </button>

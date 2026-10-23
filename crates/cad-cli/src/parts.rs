@@ -6,7 +6,7 @@ use std::path::Path;
 use cad_session::protocol as p;
 use serde_json::json;
 
-use crate::{Common, Fail, Outcome, load, num};
+use crate::{Common, Fail, Outcome, load, num, utc_timestamp};
 
 fn format_of(format: Option<&str>, output: &Path, dir: bool) -> Result<p::ExportFormat, Fail> {
     let f = format.map(|s| s.to_ascii_lowercase()).or_else(|| {
@@ -33,10 +33,15 @@ pub(crate) fn export_parts(
     c: &Common,
     output: &Path,
     format: Option<&str>,
+    schema: &str,
     names: &[String],
     all: bool,
 ) -> Result<Outcome, Fail> {
     let fmt = format_of(format, output, all)?;
+    let schema = cad_engine::StepSchema::parse(schema)
+        .ok_or_else(|| Fail::Usage(format!("unbekanntes STEP-Schema: {schema} (ap242 oder ap214)")))?;
+    // STEP header: product name = part name(s) (the engine joins them), time of the export.
+    let step = cad_engine::StepOptions { schema, timestamp: utc_timestamp(), ..Default::default() };
     let mut m = load(c, None, true, true)?;
     let mut j = m.base_json("export");
     let Some(scene) = m.scene.clone() else {
@@ -52,7 +57,7 @@ pub(crate) fn export_parts(
     if all {
         std::fs::create_dir_all(output).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
         for pt in &scene.parts {
-            let (bytes, tris) = m.session.export_parts(fmt, std::slice::from_ref(&pt.name), false).map_err(Fail::Kernel)?;
+            let (bytes, tris) = m.session.export_parts_with(fmt, std::slice::from_ref(&pt.name), false, &step).map_err(Fail::Kernel)?;
             let file = output.join(cad_session::part_file_name(&pt.name, ext(fmt)));
             std::fs::write(&file, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", file.display())))?;
             t.push_str(&format!(
@@ -70,7 +75,7 @@ pub(crate) fn export_parts(
         }
         j["output"] = json!(output.display().to_string());
     } else {
-        let (bytes, tris) = m.session.export_parts(fmt, names, false).map_err(Fail::Kernel)?;
+        let (bytes, tris) = m.session.export_parts_with(fmt, names, false, &step).map_err(Fail::Kernel)?;
         std::fs::write(output, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
         t.push_str(&format!("{}: {} ({} Dreiecke, {} Bytes)\n", names.join(", "), output.display(), tris, bytes.len()));
         for n in names {

@@ -44,13 +44,13 @@
 <body>
 <main>
 <h1>Testbericht 6 – Projekte, Bauteile, include/use</h1>
-<div class="meta">Sprache, Engine, CLI und Browser-UI · 23. Oktober 2026 · Commit 02c978c</div>
+<div class="meta">Sprache, Engine, CLI und Browser-UI · 23. Oktober 2026 · Commit e4ee224</div>
 
 <div class="summary">
   <div>Phase D (Playwright)<b>9 / 9 bestanden</b></div>
   <div>Phase A–C (Regression)<b>56 / 56</b></div>
   <div>Vitest<b>167 / 167</b></div>
-  <div>cargo test --workspace<b>251 / 251</b></div>
+  <div>cargo test --workspace<b>274 / 274</b></div>
   <div>include/use gegen OpenSCAD<b>4 / 4</b></div>
 </div>
 
@@ -60,13 +60,13 @@
   <li><b>Datei-IDs in Quellpositionen:</b> jede geladene Datei belegt einen eigenen Bereich der Positionen (Datei <i>f</i> ab <i>f</i>·2<sup>24</sup>, Anweisungs-IDs ab <i>f</i>·2<sup>22</sup>); Diagnosen, Hinweise, Griffe, Spans und Text-Edits kennen damit ihre Datei. Das Protokoll gibt Positionen lokal zur Datei aus (<code>SrcRange.file</code>, <code>Diagnostic.file</code>, <code>Edit.file</code>, <code>Scene.files</code>); Rückschreiben trifft die richtige Datei.</li>
   <li><b>Datei-Resolver:</b> <code>cad-eval</code> liest Projektdateien über den Trait <code>FileResolver</code> (Dateisystem für die CLI, Map für Session/Wasm). Die Session bekommt die Dateien mit <code>SetFiles</code>/<code>SetFile</code>. Der Engine-Cache ist unverändert (Schlüssel aus dem Inhalt).</li>
   <li><b>Projekte in der UI:</b> Dateien als Tabs über dem Editor (eigene Undo-Historie je Datei), Hauptdatei wählbar (★), neue Dateien, Entfernen; Ordner öffnen (File System Access API, Speichern schreibt zurück), sonst ZIP hoch- und herunterladen; Autospeichern des ganzen Projekts in IndexedDB; Beispielprojekte im Beispielmenü. Strg+Klick auf den Pfad in include/use öffnet die Datei; Doppelklick auf eine Instanz eines Moduls aus einer anderen Datei öffnet diese in der Definition; Griffe schreiben in die Datei des Literals (auch nicht angezeigte Dateien, ein Undo-Schritt dort); Fläche aus einer anderen Datei: Statuszeile nennt Datei und Zeile, Klick öffnet sie.</li>
-  <li><b>Mehrere Bauteile</b> (Offener Punkt 2, Plan 12.9): benannte Instanzen auf oberster Ebene der Hauptdatei sind Bauteile. Szene mit Hülle und Volumen je Bauteil; Bauteilleiste mit Sichtbarkeit und Export STL/3MF/STEP je Bauteil, alle als ZIP oder ein 3MF mit einem Objekt je Bauteil. STEP geht über den gemeinsamen Export-Weg des Kernels (<code>Kernel::export</code>). CLI: <code>cad export --part name</code>, <code>--all-parts -o ordner/</code>.</li>
+  <li><b>Mehrere Bauteile</b> (Offener Punkt 2, Plan 12.9): benannte Instanzen auf oberster Ebene der Hauptdatei sind Bauteile. Szene mit Hülle und Volumen je Bauteil; Bauteilleiste mit Sichtbarkeit und Export STL/3MF/STEP je Bauteil, alle als ZIP (STL oder STEP) oder ein 3MF mit einem Objekt je Bauteil. STEP (exakte B-Rep, AP242/AP214) geht über denselben Writer wie das ganze Modell: <code>Engine::export_step</code> ist <code>Engine::export_step_nodes</code> der Wurzel, Bauteile werden mit ihrer Lage (<code>display_world</code>) über <code>Kernel::transform</code> und <code>Kernel::brep</code> nach <code>cad_step::write</code> gegeben. CLI: <code>cad export --part name</code> (auch <code>.step</code>, <code>--schema</code>), <code>--all-parts -o ordner/ [--format step]</code>.</li>
   <li><b>Benannte Instanzen in Schleifen</b> (Plan 12 Punkt 2): <code>for (i = [0:3]) k[i]: halter();</code> → <code>k[2].anker</code>; Index ganzzahlig, Sichtbarkeit wie benannte Instanzen, Snap schreibt <code>k[2].ecke</code>. <code>k: …</code> in einer Schleife bleibt ein Fehler.</li>
   <li><b>Beispielprojekt</b> <code>examples/projekt-gehaeuse/</code>: gehaeuse.scad (Hauptdatei), konstanten.scad (include), lib/teile.scad (use, mit Schraubdomen <code>dom[i]</code>), Bauteile gehaeuse und deckel.</li>
 </ul>
 
 <h2>2 Testumgebung</h2>
-<table><tr><th style="width:32mm">Betriebssystem</th><td>Linux 6.18.44-fc-v153 (x64)</td></tr><tr><th style="width:32mm">CPU</th><td>Intel(R) Xeon(R) Processor @ 2.10GHz · 4 Kerne</td></tr><tr><th style="width:32mm">Node.js</th><td>v22.22.0</td></tr><tr><th style="width:32mm">Browser</th><td>Chromium 141.0.7390.37 (headless, Playwright 1.56.1), WebGL über SwiftShader</td></tr><tr><th style="width:32mm">Fenster</th><td>1440 × 900 px, Gerätepixelverhältnis 1</td></tr><tr><th style="width:32mm">Build</th><td>Vite 8.3.5 Produktions-Build; React 19.3.1, three.js 0.186.1, CodeMirror 6.43.15</td></tr><tr><th style="width:32mm">OpenSCAD</th><td>OpenSCAD version 2021.01</td></tr><tr><th style="width:32mm">Quelltext</th><td>Branch worktree-agent-a7438d365a2b87939, Commit 02c978c</td></tr></table>
+<table><tr><th style="width:32mm">Betriebssystem</th><td>Linux 6.18.44-fc-v153 (x64)</td></tr><tr><th style="width:32mm">CPU</th><td>Intel(R) Xeon(R) Processor @ 2.10GHz · 4 Kerne</td></tr><tr><th style="width:32mm">Node.js</th><td>v22.22.0</td></tr><tr><th style="width:32mm">Browser</th><td>Chromium 141.0.7390.37 (headless, Playwright 1.56.1), WebGL über SwiftShader</td></tr><tr><th style="width:32mm">Fenster</th><td>1440 × 900 px, Gerätepixelverhältnis 1</td></tr><tr><th style="width:32mm">Build</th><td>Vite 8.3.5 Produktions-Build; React 19.3.1, three.js 0.186.1, CodeMirror 6.43.15</td></tr><tr><th style="width:32mm">OpenSCAD</th><td>OpenSCAD version 2021.01</td></tr><tr><th style="width:32mm">Quelltext</th><td>Branch worktree-agent-a7438d365a2b87939, Commit e4ee224</td></tr></table>
 
 <h2>3 include/use gegen OpenSCAD 2021.01</h2>
 <p class="small">Je Projekt in <code>tests/openscad-compat/projects/</code> die ECHO-Zeilen von <code>cad eval --json main.scad</code> gegen <code>expected.echo</code> (mit <code>openscad -o x.echo main.scad</code> erzeugt) und gegen einen frischen OpenSCAD-Lauf. Derselbe Vergleich läuft als Rust-Test <code>cad-eval/tests/project_openscad.rs</code>.</p>
@@ -129,24 +129,23 @@ ECHO: &quot;inner&quot;, 7</pre></div></div></div>
 <h2>4 Szenarien (Playwright, web/e2e/projekte.spec.ts)</h2>
 <table>
 <tr><th>ID</th><th>Szenario</th><th>Ergebnis</th><th>Dauer</th><th>Geprüft</th></tr>
-<tr class="ok"><td>P01</td><td>Beispielprojekt öffnen: Dateien als Tabs, Hauptdatei, Bauteile</td><td class="res">bestanden</td><td class="num">2.0 s</td><td><ul class="checks"><li>Tabs gehaeuse.scad (aktiv, ★), konstanten.scad, lib/teile.scad</li><li>Scene.files: main, include, use; keine Fehler oder Warnungen</li><li>Bauteile gehaeuse und deckel; Hülle des Deckels ab y = 50</li></ul></td></tr>
-<tr class="ok"><td>P02</td><td>Ordner öffnen (File System Access API), ZIP hoch- und herunterladen</td><td class="res">bestanden</td><td class="num">3.0 s</td><td><ul class="checks"><li>3 Dateien, Hauptdatei gehaeuse.scad, notizen.txt ignoriert</li><li>Strg+S schreibt 3 Dateien (konstanten.scad mit Änderung)</li><li>ZIP mit 3 Einträgen; nach dem Hochladen gleiche Dateien und Bauteile</li></ul></td></tr>
-<tr class="ok"><td>P03</td><td>Datei wechseln: Tabs, Kontext aus der Bibliothek, Undo je Datei</td><td class="res">bestanden</td><td class="num">3.3 s</td><td><ul class="checks"><li>Kontext gehaeuse aus lib/teile.scad</li><li>Änderung bleibt beim Wechsel erhalten</li><li>Undo je Datei</li></ul></td></tr>
-<tr class="ok"><td>P04</td><td>Strg+Klick auf include/use-Pfad öffnet die Datei</td><td class="res">bestanden</td><td class="num">2.6 s</td><td><ul class="checks"><li>Strg+Klick auf &lt;konstanten.scad&gt; → konstanten.scad aktiv</li><li>Strg+Klick auf &lt;lib/teile.scad&gt; → lib/teile.scad aktiv</li><li>einfacher Klick wechselt nicht</li></ul></td></tr>
-<tr class="ok"><td>P05</td><td>Griff ändert die eingebundene Datei (Variable aus include, Literal in der Bibliothek)</td><td class="res">bestanden</td><td class="num">9.3 s</td><td><ul class="checks"><li>Edit mit file = mass.scad, Hauptdatei unverändert</li><li>Hülle = neuer Wert</li><li>Strg+Z in mass.scad → breite = 40</li><li>Radiusgriff in lib/teile.scad schreibt in lib/teile.scad</li></ul></td></tr>
-<tr class="ok"><td>P06</td><td>Hover und Klick über Dateigrenzen, Doppelklick öffnet das Modul der Bibliothek</td><td class="res">bestanden</td><td class="num">3.5 s</td><td><ul class="checks"><li>Hover → status-hover-file mit Datei und Zeile</li><li>Klick → gehaeuse.scad in der Zeile der Fläche</li><li>Doppelklick → lib/teile.scad Zeile 15, Kontext gehaeuse</li></ul></td></tr>
-<tr class="ok"><td>P07</td><td>Bauteilliste: Sichtbarkeit und Export pro Bauteil</td><td class="res">bestanden</td><td class="num">3.3 s</td><td><ul class="checks"><li>Haken aus → Plan ohne Basis, nur gehaeuse</li><li>deckel.stl gültig, min y = 50</li><li>ZIP: gehaeuse.stl, deckel.stl</li><li>3MF: 2 Objekte mit Namen</li><li>STEP: Meldung des Kernel-Exports</li></ul></td></tr>
-<tr class="ok"><td>P08</td><td>k[i]: Anker der Instanzen in der Schleife sichtbar, Snap schreibt k[2].oben</td><td class="res">bestanden</td><td class="num">8.8 s</td><td><ul class="checks"><li>Bauteile k[0] … k[3]</li><li>4 Anker mit Text k[i].oben</li><li>Snap-Text k[2].oben während des Ziehens</li><li>Text translate(k[2].oben) sphere(2);</li></ul></td></tr>
-<tr class="ok"><td>P09</td><td>Fehler in eingebundenen Dateien: fehlende Datei an der Zeile, Syntaxfehler in der Bibliothek</td><td class="res">bestanden</td><td class="num">2.3 s</td><td><ul class="checks"><li>„Datei fehlt.scad nicht gefunden“ in main.scad Zeile 2</li><li>Syntaxfehler mit file = lib.scad</li><li>Tabs mit Fehlerpunkt</li></ul></td></tr>
+<tr class="ok"><td>P01</td><td>Beispielprojekt öffnen: Dateien als Tabs, Hauptdatei, Bauteile</td><td class="res">bestanden</td><td class="num">2.3 s</td><td><ul class="checks"><li>Tabs gehaeuse.scad (aktiv, ★), konstanten.scad, lib/teile.scad</li><li>Scene.files: main, include, use; keine Fehler oder Warnungen</li><li>Bauteile gehaeuse und deckel; Hülle des Deckels ab y = 50</li></ul></td></tr>
+<tr class="ok"><td>P02</td><td>Ordner öffnen (File System Access API), ZIP hoch- und herunterladen</td><td class="res">bestanden</td><td class="num">3.1 s</td><td><ul class="checks"><li>3 Dateien, Hauptdatei gehaeuse.scad, notizen.txt ignoriert</li><li>Strg+S schreibt 3 Dateien (konstanten.scad mit Änderung)</li><li>ZIP mit 3 Einträgen; nach dem Hochladen gleiche Dateien und Bauteile</li></ul></td></tr>
+<tr class="ok"><td>P03</td><td>Datei wechseln: Tabs, Kontext aus der Bibliothek, Undo je Datei</td><td class="res">bestanden</td><td class="num">3.7 s</td><td><ul class="checks"><li>Kontext gehaeuse aus lib/teile.scad</li><li>Änderung bleibt beim Wechsel erhalten</li><li>Undo je Datei</li></ul></td></tr>
+<tr class="ok"><td>P04</td><td>Strg+Klick auf include/use-Pfad öffnet die Datei</td><td class="res">bestanden</td><td class="num">3.1 s</td><td><ul class="checks"><li>Strg+Klick auf &lt;konstanten.scad&gt; → konstanten.scad aktiv</li><li>Strg+Klick auf &lt;lib/teile.scad&gt; → lib/teile.scad aktiv</li><li>einfacher Klick wechselt nicht</li></ul></td></tr>
+<tr class="ok"><td>P05</td><td>Griff ändert die eingebundene Datei (Variable aus include, Literal in der Bibliothek)</td><td class="res">bestanden</td><td class="num">10.2 s</td><td><ul class="checks"><li>Edit mit file = mass.scad, Hauptdatei unverändert</li><li>Hülle = neuer Wert</li><li>Strg+Z in mass.scad → breite = 40</li><li>Radiusgriff in lib/teile.scad schreibt in lib/teile.scad</li></ul></td></tr>
+<tr class="ok"><td>P06</td><td>Hover und Klick über Dateigrenzen, Doppelklick öffnet das Modul der Bibliothek</td><td class="res">bestanden</td><td class="num">3.6 s</td><td><ul class="checks"><li>Hover → status-hover-file mit Datei und Zeile</li><li>Klick → gehaeuse.scad in der Zeile der Fläche</li><li>Doppelklick → lib/teile.scad Zeile 15, Kontext gehaeuse</li></ul></td></tr>
+<tr class="ok"><td>P07</td><td>Bauteilliste: Sichtbarkeit und Export pro Bauteil (STL, 3MF, STEP, ZIP)</td><td class="res">bestanden</td><td class="num">3.4 s</td><td><ul class="checks"><li>Haken aus → Plan ohne Basis, nur gehaeuse</li><li>deckel.stl gültig, min y = 50</li><li>ZIP: gehaeuse.stl, deckel.stl</li><li>3MF: 2 Objekte mit Namen</li><li>deckel.step: ein Körper, Produkt deckel</li><li>ZIP (STEP): gehaeuse.step, deckel.step</li><li>Export STEP des ganzen Modells</li></ul></td></tr>
+<tr class="ok"><td>P08</td><td>k[i]: Anker der Instanzen in der Schleife sichtbar, Snap schreibt k[2].oben</td><td class="res">bestanden</td><td class="num">9.7 s</td><td><ul class="checks"><li>Bauteile k[0] … k[3]</li><li>4 Anker mit Text k[i].oben</li><li>Snap-Text k[2].oben während des Ziehens</li><li>Text translate(k[2].oben) sphere(2);</li></ul></td></tr>
+<tr class="ok"><td>P09</td><td>Fehler in eingebundenen Dateien: fehlende Datei an der Zeile, Syntaxfehler in der Bibliothek</td><td class="res">bestanden</td><td class="num">2.2 s</td><td><ul class="checks"><li>„Datei fehlt.scad nicht gefunden“ in main.scad Zeile 2</li><li>Syntaxfehler mit file = lib.scad</li><li>Tabs mit Fehlerpunkt</li></ul></td></tr>
 </table>
 <p class="small">Regression im selben Lauf (Phase A–C: ui.spec.ts, ui-b.spec.ts, ui-c.spec.ts): 56 / 56 bestanden.</p>
 
 <h2>5 Unit-, Rust- und CLI-Tests</h2>
-<table><tr><th>Vitest-Datei</th><th>bestanden</th><th>Fehlgeschlagen</th></tr><tr class="ok"><td>web/src/engine/transport.test.ts</td><td class="num">2 / 2</td><td>–</td></tr>
-<tr class="ok"><td>web/src/editor/decorations.test.ts</td><td class="num">7 / 7</td><td>–</td></tr>
+<table><tr><th>Vitest-Datei</th><th>bestanden</th><th>Fehlgeschlagen</th></tr><tr class="ok"><td>web/src/editor/decorations.test.ts</td><td class="num">7 / 7</td><td>–</td></tr>
 <tr class="ok"><td>web/src/editor/editGroup.test.ts</td><td class="num">7 / 7</td><td>–</td></tr>
 <tr class="ok"><td>web/src/editor/lang.test.ts</td><td class="num">47 / 47</td><td>–</td></tr>
-<tr class="ok"><td>web/src/files/zip.test.ts <span class="tag">neu</span></td><td class="num">4 / 4</td><td>–</td></tr>
+<tr class="ok"><td>web/src/engine/transport.test.ts</td><td class="num">2 / 2</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/context.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/curves.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/display.test.ts</td><td class="num">23 / 23</td><td>–</td></tr>
@@ -158,12 +157,13 @@ ECHO: &quot;inner&quot;, 7</pre></div></div></div>
 <tr class="ok"><td>web/src/logic/params.test.ts</td><td class="num">7 / 7</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/positions.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/sceneIndex.test.ts</td><td class="num">9 / 9</td><td>–</td></tr>
-<tr class="ok"><td>web/src/logic/zones.test.ts</td><td class="num">4 / 4</td><td>–</td></tr></table>
-<table><tr><th>Rust-Testprogramm (cargo test --workspace)</th><th>bestanden</th><th>neue Tests</th></tr><tr class="ok"><td>tests/cli.rs</td><td class="num">7 / 7</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/zones.test.ts</td><td class="num">4 / 4</td><td>–</td></tr>
+<tr class="ok"><td>web/src/files/zip.test.ts <span class="tag">neu</span></td><td class="num">4 / 4</td><td>–</td></tr></table>
+<table><tr><th>Rust-Testprogramm (cargo test --workspace)</th><th>bestanden</th><th>neue Tests</th></tr><tr class="ok"><td>tests/cli.rs</td><td class="num">9 / 9</td><td>–</td></tr>
 <tr class="ok"><td>tests/projects.rs <span class="tag">neu</span></td><td class="num">3 / 3</td><td><code>diagnostics_name_their_file_and_line</code>, <code>check_and_eval_read_included_and_used_files</code>, <code>export_single_parts_and_all_parts</code></td></tr>
 <tr class="ok"><td>src/lib.rs</td><td class="num">7 / 7</td><td>–</td></tr>
 <tr class="ok"><td>tests/draft.rs</td><td class="num">3 / 3</td><td>–</td></tr>
-<tr class="ok"><td>tests/engine.rs</td><td class="num">24 / 24</td><td>–</td></tr>
+<tr class="ok"><td>tests/engine.rs</td><td class="num">25 / 25</td><td>–</td></tr>
 <tr class="ok"><td>tests/spec_examples.rs</td><td class="num">4 / 4</td><td>–</td></tr>
 <tr class="ok"><td>tests/expr.rs</td><td class="num">25 / 25</td><td>–</td></tr>
 <tr class="ok"><td>tests/grids.rs</td><td class="num">14 / 14</td><td>–</td></tr>
@@ -171,22 +171,28 @@ ECHO: &quot;inner&quot;, 7</pre></div></div></div>
 <tr class="ok"><td>tests/limits.rs</td><td class="num">8 / 8</td><td>–</td></tr>
 <tr class="ok"><td>tests/openscad_compat.rs</td><td class="num">1 / 1</td><td>–</td></tr>
 <tr class="ok"><td>tests/openscad_deviations.rs</td><td class="num">10 / 10</td><td>–</td></tr>
-<tr class="ok"><td>tests/project.rs <span class="tag">neu</span></td><td class="num">16 / 16</td><td><code>diamond_include_loads_the_file_twice</code>, <code>drag_writes_into_the_included_file</code>, <code>include_cycle_is_an_error</code>, <code>diagnostics_of_library_code_know_their_file</code>, <code>indexed_named_instances_in_loops</code>, <code>include_inserts_definitions_variables_and_geometry</code>, <code>include_assignments_follow_textual_order</code>, <code>indexed_named_instance_errors</code>, <code>missing_file_is_an_error_at_the_line</code>, <code>module_of_a_used_library_as_context</code>, <code>own_definitions_win_and_includes_bring_their_uses</code>, <code>parts_are_top_level_named_instances</code>, <code>paths_are_relative_to_the_including_file</code>, <code>single_file_eval_reports_includes_as_missing</code>, <code>use_imports_modules_and_functions_only</code>, <code>use_without_geometry_and_used_once</code></td></tr>
+<tr class="ok"><td>tests/project.rs <span class="tag">neu</span></td><td class="num">16 / 16</td><td><code>include_assignments_follow_textual_order</code>, <code>drag_writes_into_the_included_file</code>, <code>diamond_include_loads_the_file_twice</code>, <code>diagnostics_of_library_code_know_their_file</code>, <code>include_cycle_is_an_error</code>, <code>missing_file_is_an_error_at_the_line</code>, <code>include_inserts_definitions_variables_and_geometry</code>, <code>module_of_a_used_library_as_context</code>, <code>indexed_named_instance_errors</code>, <code>own_definitions_win_and_includes_bring_their_uses</code>, <code>paths_are_relative_to_the_including_file</code>, <code>indexed_named_instances_in_loops</code>, <code>single_file_eval_reports_includes_as_missing</code>, <code>parts_are_top_level_named_instances</code>, <code>use_imports_modules_and_functions_only</code>, <code>use_without_geometry_and_used_once</code></td></tr>
 <tr class="ok"><td>tests/project_openscad.rs <span class="tag">neu</span></td><td class="num">2 / 2</td><td><code>projects_match_openscad_reference</code>, <code>projects_match_openscad_live</code></td></tr>
 <tr class="ok"><td>tests/tree.rs</td><td class="num">24 / 24</td><td>–</td></tr>
+<tr class="ok"><td>src/lib.rs</td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>tests/render.rs</td><td class="num">4 / 4</td><td>–</td></tr>
-<tr class="ok"><td>tests/project.rs <span class="tag">neu</span></td><td class="num">5 / 5</td><td><code>missing_files_and_syntax_errors_of_other_files</code>, <code>files_ranges_and_parts</code>, <code>export_parts</code>, <code>set_default_writes_into_the_library</code>, <code>drag_edit_targets_the_included_file</code></td></tr>
+<tr class="ok"><td>tests/project.rs <span class="tag">neu</span></td><td class="num">5 / 5</td><td><code>missing_files_and_syntax_errors_of_other_files</code>, <code>files_ranges_and_parts</code>, <code>set_default_writes_into_the_library</code>, <code>drag_edit_targets_the_included_file</code>, <code>export_parts</code></td></tr>
 <tr class="ok"><td>tests/protocol_ts.rs</td><td class="num">1 / 1</td><td>–</td></tr>
 <tr class="ok"><td>tests/session.rs</td><td class="num">8 / 8</td><td>–</td></tr>
 <tr class="ok"><td>tests/watchdog.rs</td><td class="num">2 / 2</td><td>–</td></tr>
+<tr class="ok"><td>src/lib.rs</td><td class="num">3 / 3</td><td>–</td></tr>
+<tr class="ok"><td>tests/writer.rs</td><td class="num">6 / 6</td><td>–</td></tr>
 <tr class="ok"><td>src/lib.rs</td><td class="num">19 / 19</td><td><code>tests::file_regions</code>, <code>tests::include_path_span</code>, <code>tests::indexed_named_instance</code></td></tr>
 <tr class="ok"><td>tests/openscad_compat.rs</td><td class="num">1 / 1</td><td>–</td></tr>
 <tr class="ok"><td>tests/spec_models.rs</td><td class="num">1 / 1</td><td>–</td></tr>
 <tr class="ok"><td>tests/tree_bounds.rs</td><td class="num">1 / 1</td><td>–</td></tr>
+<tr class="ok"><td>tests/brep.rs</td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>tests/determinism.rs</td><td class="num">1 / 1</td><td>–</td></tr>
 <tr class="ok"><td>tests/handles.rs</td><td class="num">1 / 1</td><td>–</td></tr>
-<tr class="ok"><td>tests/kernel.rs</td><td class="num">33 / 33</td><td>–</td></tr></table>
-<p class="small">Neu in Rust: Projekte (Resolver, include/use, Zyklus, fehlende Datei, use ohne Geometrie, Rückschreiben in eingebundene Datei, Kontextmodul aus einer Bibliothek, Bauteile, <code>k[i]</code> mit Fehlerfällen), OpenSCAD-Vergleich, Session (SetFiles/SetFile, Datei in Bereichen und Edits, Bauteil-Export), CLI (<code>check</code>/<code>eval</code> mit Dateisystem, Diagnosen mit Pfad, <code>export --part</code>, <code>--all-parts</code>). OpenSCAD-Vergleich der Einzeldateien (compare.py): <code>33/33 files match</code>.</p>
+<tr class="ok"><td>tests/kernel.rs</td><td class="num">33 / 33</td><td>–</td></tr>
+<tr class="ok"><td>tests/coverage.rs</td><td class="num">1 / 1</td><td>–</td></tr></table>
+<p class="small">Neu in Rust: Projekte (Resolver, include/use, Zyklus, fehlende Datei, use ohne Geometrie, Rückschreiben in eingebundene Datei, Kontextmodul aus einer Bibliothek, Bauteile, <code>k[i]</code> mit Fehlerfällen), OpenSCAD-Vergleich, Session (SetFiles/SetFile, Datei in Bereichen und Edits, Bauteil-Export), CLI (<code>check</code>/<code>eval</code> mit Dateisystem, Diagnosen mit Pfad, <code>export --part</code>, <code>--all-parts</code>). OpenSCAD-Vergleich der Einzeldateien (compare.py): <code>33/33 files match</code>. STEP-Prüfung mit OpenCASCADE über alle Beispiele (<code>tests/step/verify.py</code>, venv-step): <code>46/46 passed</code>. STEP pro Bauteil, als ZIP und mit <code>--all-parts --format step</code>: Rust-Tests <code>cad-session/tests/project.rs</code> (<code>export_parts</code>) und <code>cad-cli/tests/projects.rs</code>; im Browser P07.</p>
+
 
 <h2>6 Abweichungen und Grenzen</h2>
 <ul>
@@ -195,7 +201,9 @@ ECHO: &quot;inner&quot;, 7</pre></div></div></div>
   <li><b>Doppelt eingebundene Datei</b> (über zwei include-Wege) wird zweimal geladen (zwei Datei-IDs, gleicher Pfad); höchstens 255 Dateien, je Datei höchstens 16 MiB.</li>
   <li><b>Snap-Sichtbarkeit</b> eines in einer eingebundenen Datei benannten Rasters/einer Instanz reicht bis zum Ende dieser Datei (nicht in die einbindende Datei hinein); das Auswerten von <code>k.anker</code> ist davon nicht betroffen.</li>
   <li><b>Bauteile</b> nur im Dateikontext; ein ausgeblendetes Bauteil innerhalb einer Booleschen Operation lässt sich nicht getrennt ausblenden (der Teilbaum bleibt ganz). Baugruppen sind offen.</li>
-  <li><b>STEP:</b> der Export ruft <code>Kernel::export(…, Step)</code>; der SMLib-Kernel dieses Stands bietet ihn noch nicht an – die UI meldet den Fehler des Kernels, sobald der STEP-Writer vorhanden ist, liefert derselbe Weg die Datei.</li>
+  <li><b>STEP mehrerer Bauteile in einer Datei:</b> ein Produkt (Name: Bauteilnamen mit „ + “) mit allen Körpern, keine Baugruppenstruktur je Bauteil; ein Bauteil, dessen Modul eine implizite Vereinigung ist, besteht aus mehreren Körpern (z. B. Gehäuse mit Schraubdomen).</li>
+  <li><b>solidcore</b> ist jetzt opt-in (<code>--features solidcore</code>); <code>cad diff-kernels</code> ohne das Feature meldet „mit <code>--features solidcore</code> bauen“ (Exit 2).</li>
+
   <li><b>Modulnamen</b> gleichen Namens in Hauptdatei und Bibliothek: der Kontext (Parameterleiste) nimmt das Modul der Hauptdatei.</li>
 </ul>
 
@@ -256,7 +264,7 @@ breite = 40;
 <section class="sc">
 <h3>P07 Bauteilliste und Export pro Bauteil</h3>
 <div class="shot"><div class="lbl">Deckel ausgeblendet: nur das Gehäuse wird gezeichnet</div><img src="img/p07-ausgeblendet.jpg" alt="Bauteilliste und Export pro Bauteil: Deckel ausgeblendet: nur das Gehäuse wird gezeichnet"></div><div class="shot"><div class="lbl">Bauteilleiste mit Volumen und Export-Knöpfen</div><img src="img/p07-bauteile.jpg" alt="Bauteilliste und Export pro Bauteil: Bauteilleiste mit Volumen und Export-Knöpfen"></div>
-<p class="cap">Die Bauteilleiste listet die Bauteile mit Volumen (Hülle als Tooltip). Ohne Haken wird das Bauteil nicht gezeichnet (das Modell wird aus den übrigen Teilbäumen zusammengesetzt). Export: deckel.stl (28 Dreiecke, Modellkoordinaten), alle Bauteile als ZIP mit einer STL je Bauteil, ein 3MF mit einem Objekt je Bauteil. STEP läuft über den Export des Kernels; Meldung: „Export fehlgeschlagen: STEP-Export: not supported by this kernel: export“.</p>
+<p class="cap">Die Bauteilleiste listet die Bauteile mit Volumen (Hülle als Tooltip). Ohne Haken wird das Bauteil nicht gezeichnet (das Modell wird aus den übrigen Teilbäumen zusammengesetzt). Export: deckel.stl (28 Dreiecke, Modellkoordinaten), alle Bauteile als ZIP mit einer STL je Bauteil, ein 3MF mit einem Objekt je Bauteil. STEP (exakte B-Rep, AP242, derselbe Writer wie für das ganze Modell): deckel.step 11900 Bytes (1 Körper), Modell gehaeuse.step 38268 Bytes (6 Körper); alle Bauteile als ZIP mit einer STEP-Datei je Bauteil.</p>
 </section>
 <section class="sc">
 <h3>P08 Benannte Instanzen in der Schleife</h3>

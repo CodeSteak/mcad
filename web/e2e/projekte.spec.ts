@@ -433,7 +433,7 @@ test("P06 Hover und Klick über Dateigrenzen, Doppelklick öffnet das Modul der 
   });
 });
 
-test("P07 Bauteilliste: Sichtbarkeit und Export pro Bauteil", async ({ page }) => {
+test("P07 Bauteilliste: Sichtbarkeit und Export pro Bauteil (STL, 3MF, STEP, ZIP)", async ({ page }) => {
   await openApp(page);
   await openExampleProject(page);
   const ps = await parts(page);
@@ -468,10 +468,23 @@ test("P07 Bauteilliste: Sichtbarkeit und Export pro Bauteil", async ({ page }) =
   const xml = mf.bytes.toString("latin1");
   expect(xml.match(/<object /g)?.length).toBe(2);
   expect(xml).toContain('name="deckel"');
-  // STEP goes through the kernel's export; the SMLib kernel has none yet: a clear message.
-  await page.getByTestId("part-step-deckel").click();
-  await expect(page.getByTestId("status-notice")).toContainText(/STEP|Exportiert: deckel\.step/);
-  const stepNotice = await page.getByTestId("status-notice").textContent();
+  // STEP of one part: exact B-rep through the same writer as the whole model.
+  const st = await downloaded(page, () => page.getByTestId("part-step-deckel").click());
+  expect(st.name).toBe("deckel.step");
+  const stepText = st.bytes.toString("utf8");
+  expect(stepText.startsWith("ISO-10303-21;")).toBe(true);
+  expect(stepText.match(/MANIFOLD_SOLID_BREP\(/g)?.length).toBe(1);
+  expect(stepText).toContain("PRODUCT('deckel','deckel'");
+  // All parts as STEP files in a ZIP, and the whole model as STEP (toolbar).
+  const sz = await downloaded(page, () => page.getByTestId("parts-zip-step").click());
+  expect(sz.name).toBe("gehaeuse-teile-step.zip");
+  expect(zipNames(sz.bytes)).toEqual(["gehaeuse.step", "deckel.step"]);
+  const whole = await downloaded(page, () => page.getByRole("button", { name: "Export STEP" }).click());
+  expect(whole.name).toBe("gehaeuse.step");
+  const solids = whole.bytes.toString("utf8").match(/MANIFOLD_SOLID_BREP\(/g)?.length ?? 0;
+  expect(solids).toBeGreaterThanOrEqual(2);
+  await expect(page.getByTestId("status-notice")).toContainText("Exportiert: gehaeuse.step");
+  const stepNotice = `deckel.step ${st.bytes.length} Bytes (1 Körper), Modell gehaeuse.step ${whole.bytes.length} Bytes (${solids} Körper)`;
   await screenshotD(page, "p07-bauteile", "view");
   recordD({
     id: "P07",
@@ -480,8 +493,9 @@ test("P07 Bauteilliste: Sichtbarkeit und Export pro Bauteil", async ({ page }) =
       { name: "p07-ausgeblendet", label: "Deckel ausgeblendet: nur das Gehäuse wird gezeichnet" },
       { name: "p07-bauteile", label: "Bauteilleiste mit Volumen und Export-Knöpfen" },
     ],
-    caption: `Die Bauteilleiste listet die Bauteile mit Volumen (Hülle als Tooltip). Ohne Haken wird das Bauteil nicht gezeichnet (das Modell wird aus den übrigen Teilbäumen zusammengesetzt). Export: deckel.stl (${n} Dreiecke, Modellkoordinaten), alle Bauteile als ZIP mit einer STL je Bauteil, ein 3MF mit einem Objekt je Bauteil. STEP läuft über den Export des Kernels; Meldung: „${stepNotice?.trim()}“.`,
-    checks: ["Haken aus → Plan ohne Basis, nur gehaeuse", "deckel.stl gültig, min y = 50", "ZIP: gehaeuse.stl, deckel.stl", "3MF: 2 Objekte mit Namen", "STEP: Meldung des Kernel-Exports"],
+    caption: `Die Bauteilleiste listet die Bauteile mit Volumen (Hülle als Tooltip). Ohne Haken wird das Bauteil nicht gezeichnet (das Modell wird aus den übrigen Teilbäumen zusammengesetzt). Export: deckel.stl (${n} Dreiecke, Modellkoordinaten), alle Bauteile als ZIP mit einer STL je Bauteil, ein 3MF mit einem Objekt je Bauteil. STEP (exakte B-Rep, AP242, derselbe Writer wie für das ganze Modell): ${stepNotice}; alle Bauteile als ZIP mit einer STEP-Datei je Bauteil.`,
+    checks: ["Haken aus → Plan ohne Basis, nur gehaeuse", "deckel.stl gültig, min y = 50", "ZIP: gehaeuse.stl, deckel.stl", "3MF: 2 Objekte mit Namen", "deckel.step: ein Körper, Produkt deckel", "ZIP (STEP): gehaeuse.step, deckel.step", "Export STEP des ganzen Modells"],
+
   });
 });
 

@@ -182,6 +182,11 @@ impl<K: Kernel> Kernel for CountingKernel<K> {
         let r = self.inner.is_solid(s);
         self.done("is_solid", t0, r)
     }
+    fn brep(&mut self, s: &Self::Shape) -> KResult<cad_kernel::brep::Brep> {
+        let t0 = self.hit("brep");
+        let r = self.inner.brep(s);
+        self.done("brep", t0, r)
+    }
     fn export(&mut self, shapes: &[Self::Shape], fmt: ExportFormat) -> KResult<Vec<u8>> {
         let t0 = self.hit("export");
         let r = self.inner.export(shapes, fmt);

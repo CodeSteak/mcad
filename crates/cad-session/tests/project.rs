@@ -158,10 +158,21 @@ fn export_parts() {
     assert!(t.contains("gehaeuse.stl") && t.contains("deckel.stl"));
     let FromEngine::Error { message, .. } = &r[3] else { panic!() };
     assert!(message.contains("Bauteil `fehlt` nicht gefunden (Bauteile: gehaeuse, deckel)"), "{message}");
-    // STEP goes through the kernel's export (SMLib: whatever it supports).
-    match &r[4] {
-        FromEngine::ExportResult { format: ExportFormat::Step, .. } => {}
-        FromEngine::Error { message, .. } => assert!(message.starts_with("STEP-Export"), "{message}"),
-        other => panic!("{other:?}"),
-    }
+    // STEP of a part: the exact B-rep through the same writer as the whole model.
+    let FromEngine::ExportResult { format: ExportFormat::Step, bytes, triangles, .. } = &r[4] else { panic!("{:?}", r[4]) };
+    assert_eq!(*triangles, 0);
+    let t = String::from_utf8_lossy(bytes);
+    assert!(t.starts_with("ISO-10303-21;"));
+    assert_eq!(t.matches("MANIFOLD_SOLID_BREP(").count(), 1);
+    assert!(t.contains("PRODUCT('deckel','deckel'"), "{}", &t[..t.len().min(2000)]);
+    // STEP per part as ZIP; the whole model as STEP.
+    s.post(ToEngine::Export { format: ExportFormat::Step, parts: Some(vec!["gehaeuse".into(), "deckel".into()]), zip: Some(true) });
+    s.post(ToEngine::Export { format: ExportFormat::Step, parts: None, zip: None });
+    let r = s.run_to_idle();
+    let FromEngine::ExportResult { bytes, zip: Some(true), .. } = &r[0] else { panic!("{:?}", r[0]) };
+    let t = String::from_utf8_lossy(bytes);
+    assert!(t.contains("gehaeuse.step") && t.contains("deckel.step"));
+    assert_eq!(t.matches("MANIFOLD_SOLID_BREP(").count(), 2);
+    let FromEngine::ExportResult { bytes, parts: None, .. } = &r[1] else { panic!("{:?}", r[1]) };
+    assert_eq!(String::from_utf8_lossy(bytes).matches("MANIFOLD_SOLID_BREP(").count(), 2);
 }

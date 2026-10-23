@@ -417,7 +417,7 @@ export async function exportModel(format: ExportFormat): Promise<void> {
     const r = await client.exportFile(format);
     const name = `${baseName(store.getState().fileName)}.${format}`;
     download(new Blob([r.bytes as BlobPart], { type: MIME[format] }), name);
-    store.setState({ notice: `Exportiert: ${name} (${r.triangles} Dreiecke)` });
+    store.setState({ notice: `Exportiert: ${name} (${r.triangles ? `${r.triangles} Dreiecke` : `${r.bytes.length} Bytes`})` });
   } catch (e) {
     store.setState({ notice: `Export fehlgeschlagen: ${(e as Error).message}` });
   }

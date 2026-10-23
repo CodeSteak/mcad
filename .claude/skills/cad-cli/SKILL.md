@@ -1,6 +1,6 @@
 ---
 name: cad-cli
-description: Modelle der parametrischen CAD-Sprache (OpenSCAD-Stil mit Rastern, Ankern und Fillet-Zonen, Dateien *.scad) prüfen, auswerten, als PNG ansehen und als STL/3MF exportieren – mit der CLI `cad` (crates/cad-cli). Verwenden, wenn ein Modell geschrieben, geändert, untersucht oder Fehler darin gesucht werden.
+description: Modelle der parametrischen CAD-Sprache (OpenSCAD-Stil mit Rastern, Ankern und Fillet-Zonen, Dateien *.scad) prüfen, auswerten, als PNG ansehen und als STL/3MF/STEP exportieren – mit der CLI `cad` (crates/cad-cli). Verwenden, wenn ein Modell geschrieben, geändert, untersucht oder Fehler darin gesucht werden.
 ---
 
 # CAD-CLI `cad`
@@ -29,9 +29,10 @@ Datei `-` liest von stdin: `echo 'cube(5);' | cad check -`.
 | `cad eval DATEI [--module m] [-D name=wert]…` | Baum (Knoten, Zeile, Status, Hülle), Werte der Variablen, Raster, Anker, `echo` |
 | `cad inspect DATEI --line N` | Was Zeile N erzeugt: Knoten, Hülle, Volumen/Fläche, ausgewählte Kanten, Hinweise („4 Kanten“), Fehler, Griffe |
 | `cad render DATEI -o bild.png [--view iso\|front\|back\|top\|bottom\|left\|right] [--line N] [--size 1024x768]` | Bild; mit `--line` wie im Editor: Knoten der Zeile voll, Rest gedimmt, Zonen blau, abgezogene Körper rot halbtransparent, ausgewählte Kanten orange, gescheiterte Kanten rot |
-| `cad export DATEI -o teil.stl\|teil.3mf` | Exportdatei der Wurzel |
-| `cad export DATEI --part NAME [--part NAME2] -o teil.stl\|.3mf\|.step` | Nur diese Bauteile (benannte Instanzen auf oberster Ebene, z. B. `deckel`, `k[2]`); 3MF: ein Objekt je Bauteil |
-| `cad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | Jedes Bauteil als eigene Datei (`deckel.stl`, `k_2.stl`) |
+| `cad export DATEI -o teil.stl\|teil.3mf\|teil.step [--schema ap214]` | Exportdatei der Wurzel (STEP: exakte B-Rep, AP242) |
+| `cad export DATEI --part NAME [--part NAME2] -o teil.stl\|.3mf\|.step` | Nur diese Bauteile (benannte Instanzen auf oberster Ebene, z. B. `deckel`, `k[2]`); 3MF: ein Objekt je Bauteil, STEP: ein Produkt mit ihren Körpern |
+| `cad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | Jedes Bauteil als eigene Datei (`deckel.stl`, `k_2.step`) |
+| `cad diff-kernels DATEI…` | Vergleich SMLib ↔ solidcore je Knoten (nur Entwicklung; nur mit `cargo build -p cad-cli --features solidcore`, sonst Exit 2 mit Hinweis) |
 
 Gemeinsame Optionen: `--json`, `--module m` (Modul als Kontext, verschachtelt `aussen::innen`),
 `-D name=wert` (Parameter des Kontextmoduls, Wert als JSON: `-D w=60`, `-D hohl=true`,
@@ -81,7 +82,7 @@ node, range }`, `range = { from, to, line, col, end_line, end_col }` (Zeilen/Spa
   world_bounds, volume, area, selected_edges, opened_faces, hints, messages, cached }], hints,
   handles, echoes }`
 - `render`: `+ { output, width, height, view, line, highlighted: [idx], triangles }`
-- `export`: `+ { output, format, bytes, triangles, volume }`
+- `export`: `+ { output, format, bytes, triangles, volume, area, bounds, step? }` (`step`: Körper, Flächen, Kanten, Flächen-/Kurventypen)
 
 ## Sprache: Besonderheiten gegenüber OpenSCAD
 

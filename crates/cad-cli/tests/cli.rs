@@ -157,6 +157,83 @@ fn export_stl_and_3mf() {
 }
 
 #[test]
+fn export_step() {
+    let dir = tempfile::tempdir().unwrap();
+    let step = dir.path().join("teil.step");
+    let v = json(&["export", &data("platte.scad"), "-o", &step.display().to_string()], 0);
+    assert_eq!(v["format"], "step");
+    assert_eq!(v["triangles"], 0);
+    let st = &v["step"];
+    assert_eq!(st["solids"], 1);
+    let text = std::fs::read_to_string(&step).unwrap();
+    assert_eq!(v["bytes"], text.len());
+    let m = cad_step::p21::parse(&text).unwrap();
+    assert!(m.schema.starts_with("AP242"), "{}", m.schema);
+    assert_eq!(m.count("ADVANCED_FACE") as u64, st["faces"].as_u64().unwrap());
+    assert_eq!(m.count("EDGE_CURVE") as u64, st["edges"].as_u64().unwrap());
+    assert_eq!(m.count("MANIFOLD_SOLID_BREP"), 1);
+    assert!(v["area"].as_f64().unwrap() > 0.0);
+    assert!(v["bounds"]["min"].is_array());
+    // .stp and AP214
+    let stp = dir.path().join("teil.stp");
+    json(&["export", &data("platte.scad"), "-o", &stp.display().to_string(), "--schema", "ap214"], 0);
+    let m = cad_step::p21::parse(&std::fs::read_to_string(&stp).unwrap()).unwrap();
+    assert!(m.schema.starts_with("AUTOMOTIVE_DESIGN"), "{}", m.schema);
+    json(&["export", &data("platte.scad"), "-o", &stp.display().to_string(), "--schema", "ap203"], 2);
+}
+
+/// Without the feature `solidcore`, `diff-kernels` is a usage error with a build hint.
+#[cfg(not(feature = "solidcore"))]
+#[test]
+fn diff_kernels_needs_the_feature() {
+    let v = json(&["diff-kernels", &data("platte.scad")], 2);
+    assert!(v["error"].as_str().unwrap().contains("--features solidcore"), "{v}");
+}
+
+/// `diff-kernels` over all examples: today mostly `Unsupported` on the solidcore side; it must
+/// answer for every file and node without crashing (exit 1 = not all nodes the same). Only with
+/// the feature `solidcore` (`cargo test -p cad-cli --features solidcore`).
+#[cfg(feature = "solidcore")]
+#[test]
+fn diff_kernels_on_examples() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut files: Vec<String> = Vec::new();
+    for d in ["examples/openscad-compat", "examples/spec"] {
+        let mut v: Vec<String> = std::fs::read_dir(root.join(d))
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| p.extension().is_some_and(|e| e == "scad"))
+            .map(|p| p.display().to_string())
+            .collect();
+        v.sort();
+        files.extend(v);
+    }
+    assert!(files.len() >= 41, "{}", files.len());
+    let mut args = vec!["diff-kernels"];
+    args.extend(files.iter().map(|s| s.as_str()));
+    let out = cad().args(&args).arg("--json").output().unwrap();
+    let code = out.status.code().unwrap();
+    assert!(code == 0 || code == 1, "exit {code}: {}", String::from_utf8_lossy(&out.stderr));
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["command"], "diff-kernels");
+    assert_eq!(v["files"].as_array().unwrap().len(), files.len());
+    let s = &v["summary"];
+    assert!(s["nodes"].as_u64().unwrap() > 500);
+    for f in v["files"].as_array().unwrap() {
+        for n in f["nodes"].as_array().unwrap() {
+            let verdict = n["verdict"].as_str().unwrap();
+            assert!(["same", "unsupported", "blocked", "differ", "failed", "skipped"].contains(&verdict), "{verdict}");
+        }
+    }
+    if v["solidcore_available"] == true {
+        // solidcore @ 3a6a50b builds no primitive yet
+        assert!(s["unsupported"].as_u64().unwrap() > 100, "{s}");
+    }
+    // 2D nodes need no kernel and agree
+    assert!(s["same"].as_u64().unwrap() > 0, "{s}");
+}
+
+#[test]
 fn usage_errors() {
     json(&["check", "/nonexistent/datei.scad"], 2);
     // -D without module context

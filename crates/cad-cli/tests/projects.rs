@@ -99,6 +99,40 @@ fn export_single_parts_and_all_parts() {
     for i in 0..3 {
         assert!(out.join(format!("k_{i}.3mf")).exists());
     }
+    // STEP of one part (the same writer as the whole model), in model coordinates.
+    let step = dir.path().join("deckel.step");
+    let (v, _) = run(&["export", &example(), "--part", "deckel", "-o", &step.display().to_string()], 0);
+    assert_eq!(v["format"], "step");
+    let m = cad_step::p21::parse(&std::fs::read_to_string(&step).unwrap()).unwrap();
+    assert!(m.schema.starts_with("AP242"), "{}", m.schema);
+    assert_eq!(m.count("MANIFOLD_SOLID_BREP"), 1);
+    let product = m.of_type("PRODUCT").next().unwrap();
+    assert_eq!(product.args()[0], cad_step::p21::Value::Str("deckel".into()));
+    let ys: Vec<f64> = m
+        .of_type("VERTEX_POINT")
+        .filter_map(|e| e.args().get(1).and_then(|r| r.as_ref_id()).and_then(|id| m.coords(id)))
+        .map(|c| c[1])
+        .collect();
+    assert!(!ys.is_empty());
+    let min_y = ys.iter().cloned().fold(f64::INFINITY, f64::min);
+    assert!((min_y - 50.0).abs() < 1e-9, "{min_y}");
+    // Two parts into one STEP: two solids; AP214 through --schema.
+    let both = dir.path().join("beide.stp");
+    run(&["export", &example(), "--part", "gehaeuse", "--part", "deckel", "--schema", "ap214", "-o", &both.display().to_string()], 0);
+    let m = cad_step::p21::parse(&std::fs::read_to_string(&both).unwrap()).unwrap();
+    assert!(m.schema.starts_with("AUTOMOTIVE_DESIGN"), "{}", m.schema);
+    // the housing's module body is an implicit union of several solids
+    assert!(m.count("MANIFOLD_SOLID_BREP") >= 2);
+    // All parts as STEP files.
+    let out_step = dir.path().join("teile-step");
+    let (v, _) = run(&["export", &example(), "--all-parts", "--format", "step", "-o", &out_step.display().to_string()], 0);
+    assert_eq!(v["parts"].as_array().unwrap().len(), 2);
+    for n in ["gehaeuse", "deckel"] {
+        let t = std::fs::read_to_string(out_step.join(format!("{n}.step"))).unwrap();
+        let m = cad_step::p21::parse(&t).unwrap();
+        assert!(m.count("MANIFOLD_SOLID_BREP") >= 1, "{n}");
+    }
+
     // Unknown part / no parts.
     run(&["export", &example(), "--part", "fehlt", "-o", &stl.display().to_string()], 3);
     run(&["export", &data("platte.scad"), "--all-parts", "-o", &out.display().to_string()], 2);

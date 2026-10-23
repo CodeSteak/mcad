@@ -1,11 +1,12 @@
 //! Export of single nodes (parts, Plan 12.9): a part's result placed in context coordinates,
-//! as STL, as a 3MF object (several parts → one 3MF with one object each) or as STEP through
-//! the kernel's export (`Kernel::export`, the same path as the whole model).
+//! as STL, as a 3MF object (several parts → one 3MF with one object each) or as STEP (exact
+//! B-rep through `Kernel::brep` and `cad_step`, the same writer as the whole model:
+//! [`Engine::export_step`] is [`Engine::export_step_nodes`] of the root).
 
 use std::fmt::Write as _;
 
 use cad_ir::{Dim, NodeIdx};
-use cad_kernel::{ExportFormat, Kernel, Mesh};
+use cad_kernel::{Kernel, Mesh};
 
 use crate::export::{CONTENT_TYPES, RELS, stl_binary, welded, zip_store};
 use crate::{Engine, Evaluation};
@@ -17,7 +18,7 @@ pub enum NodeFormat {
     Stl,
     /// One 3MF package, one object per node (named).
     ThreeMf,
-    /// STEP through the kernel (`Kernel::export(…, ExportFormat::Step)`).
+    /// STEP with the exact B-rep ([`Engine::export_step_nodes`]).
     Step,
 }
 
@@ -101,15 +102,69 @@ where
         Ok(out)
     }
 
+    /// STEP of nodes in context coordinates (`NodeReport::display_world`): the exact B-reps of
+    /// their results ([`Kernel::brep`], placed with the kernel's `transform`) written as one
+    /// product by `cad_step`. Faces get the colour of the node their tag belongs to
+    /// (`color()`), unless `opts.tag_colors` is set.
+    pub fn export_step_nodes(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        nodes: &[NodeIdx],
+        opts: &cad_step::StepOptions,
+    ) -> Result<(Vec<u8>, cad_step::StepStats), String> {
+        let mut breps = Vec::new();
+        for &n in nodes {
+            let r = ev.reports.get(n as usize).ok_or_else(|| format!("Knoten {n} existiert nicht"))?;
+            if r.dim == Some(Dim::Two) {
+                return Err("2D-Ergebnis kann nicht als Körper exportiert werden".into());
+            }
+            let world = r.display_world;
+            for p in ev.parts(n) {
+                let b = if world == glam::DMat4::IDENTITY {
+                    self.kernel_mut().brep(&p.shape)
+                } else {
+                    let s = self.kernel_mut().transform(&p.shape, &world).map_err(|e| format!("STEP: {e}"))?;
+                    self.kernel_mut().brep(&s)
+                };
+                breps.push(b.map_err(|e| format!("STEP: {e}"))?);
+            }
+        }
+        let mut o = opts.clone();
+        if o.tag_colors.is_empty() {
+            for f in breps.iter().flat_map(|b| b.faces()) {
+                let color = ev.nodes_for_tag(f.tag).first().and_then(|r| ev.tree.node(r.node).color);
+                if let Some(c) = color {
+                    o.tag_colors.insert(f.tag, [c[0] as f64, c[1] as f64, c[2] as f64]);
+                }
+            }
+        }
+        let refs: Vec<&cad_kernel::brep::Brep> = breps.iter().collect();
+        let (text, st) = cad_step::write(&refs, &o).map_err(|e| e.to_string())?;
+        Ok((text.into_bytes(), st))
+    }
+
     /// Exports nodes `(name, node)` in context coordinates: STL (all in one file), 3MF (one
-    /// object per node) or STEP (the kernel's export of all their shapes). Returns the bytes
-    /// and the number of triangles (0 for STEP).
+    /// object per node) or STEP (one product with all their bodies, default options). Returns
+    /// the bytes and the number of triangles (0 for STEP).
     pub fn export_nodes(
         &mut self,
         ev: &Evaluation<K::Shape>,
         nodes: &[(String, NodeIdx)],
         format: NodeFormat,
         tol: Option<f64>,
+    ) -> Result<(Vec<u8>, u32), String> {
+        self.export_nodes_with(ev, nodes, format, tol, &cad_step::StepOptions::default())
+    }
+
+    /// [`Engine::export_nodes`] with STEP options (schema, header); the product name is the
+    /// node names joined unless `step.name` is set to something else than the default.
+    pub fn export_nodes_with(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        nodes: &[(String, NodeIdx)],
+        format: NodeFormat,
+        tol: Option<f64>,
+        step: &cad_step::StepOptions,
     ) -> Result<(Vec<u8>, u32), String> {
         if nodes.is_empty() {
             return Err("keine Bauteile gewählt".into());
@@ -134,20 +189,12 @@ where
                 Ok((threemf_objects(&objs), tris))
             }
             NodeFormat::Step => {
-                let mut shapes = Vec::new();
-                for (_, n) in nodes {
-                    let world = ev.reports.get(*n as usize).ok_or("Knoten existiert nicht")?.display_world;
-                    for p in ev.parts(*n) {
-                        let s = if world == glam::DMat4::IDENTITY {
-                            p.shape.clone()
-                        } else {
-                            self.kernel_mut().transform(&p.shape, &world).map_err(|e| e.to_string())?
-                        };
-                        shapes.push(s);
-                    }
+                let mut o = step.clone();
+                if o.name == cad_step::StepOptions::default().name {
+                    o.name = nodes.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(" + ");
                 }
-                let bytes =
-                    self.kernel_mut().export(&shapes, ExportFormat::Step).map_err(|e| format!("STEP-Export: {e}"))?;
+                let ids: Vec<NodeIdx> = nodes.iter().map(|(_, n)| *n).collect();
+                let (bytes, _) = self.export_step_nodes(ev, &ids, &o)?;
                 Ok((bytes, 0))
             }
         }
@@ -161,10 +208,22 @@ where
         format: NodeFormat,
         tol: Option<f64>,
     ) -> Result<(Vec<u8>, u32), String> {
+        self.export_nodes_zip_with(ev, nodes, format, tol, &cad_step::StepOptions::default())
+    }
+
+    /// [`Engine::export_nodes_zip`] with STEP options.
+    pub fn export_nodes_zip_with(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        nodes: &[(String, NodeIdx)],
+        format: NodeFormat,
+        tol: Option<f64>,
+        step: &cad_step::StepOptions,
+    ) -> Result<(Vec<u8>, u32), String> {
         let mut files = Vec::new();
         let mut tris = 0;
         for (name, n) in nodes {
-            let (b, t) = self.export_nodes(ev, &[(name.clone(), *n)], format, tol)?;
+            let (b, t) = self.export_nodes_with(ev, &[(name.clone(), *n)], format, tol, step)?;
             tris += t;
             let mut fname = part_file_name(name, format.extension());
             while files.iter().any(|(f, _): &(String, Vec<u8>)| *f == fname) {

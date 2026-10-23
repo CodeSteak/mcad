@@ -186,7 +186,7 @@ pub enum ExportFormat {
     Stl,
     #[serde(rename = "3mf")]
     ThreeMf,
-    /// Through the kernel's STEP export (an error while the kernel has none).
+    /// STEP AP242 with the exact B-rep (`ExportResult.triangles` is 0).
     #[serde(rename = "step")]
     Step,
 }

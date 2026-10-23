@@ -1,7 +1,8 @@
 //! `cad`: command line interface for the CAD language (native SMLib kernel).
 //!
 //! Commands (Plan section 8): `check`, `eval`, `inspect --line n`, `render -o bild.png`,
-//! `export -o teil.stl|teil.3mf`. Every command prints readable text, or with `--json` one
+//! `export -o teil.stl|teil.3mf|teil.step`, `diff-kernels <files…>` (SMLib ↔ solidcore, see
+//! `diff.rs`). Every command prints readable text, or with `--json` one
 //! JSON object (schema below). The evaluation runs in a thread with a 256 MiB stack.
 //!
 //! Exit codes: 0 ok, 1 diagnostics with severity error (syntax, evaluation or a failed kernel
@@ -22,13 +23,15 @@
 //!                          world_bounds: {min,max}|null, volume|null, area|null,
 //!                          selected_edges, opened_faces, hints, messages, cached }
 //! render:  + { output, width, height, view, line|null, highlighted: number[], triangles }
-//! export:  + { output, format: "stl"|"3mf"|"step", bytes, triangles, volume|null }
+//! export:  + { output, format: "stl"|"3mf"|"step", bytes, triangles, volume|null, area|null,
+//!            bounds: {min,max}|null, step?: StepStats }   (triangles 0 for STEP)
 //!          with --part/--all-parts: + { parts: [{ name, output, bytes, triangles, volume|null }] }
 //! ```
 //!
 //! Projects: `include <…>`/`use <…>` are read from the file system relative to the including
 //! file. Diagnostics of other files are printed with their path (`lib/teile.scad:3:5: …`).
 
+mod diff;
 mod parts;
 mod render;
 
@@ -113,22 +116,35 @@ enum Cmd {
         #[arg(long)]
         no_axes: bool,
     },
-    /// Exportdatei (STL binär oder 3MF, nach Endung oder --format).
+    /// Exportdatei (STL binär, 3MF oder STEP, nach Endung oder --format).
     Export {
         #[command(flatten)]
         c: Common,
         #[arg(short, long)]
         output: PathBuf,
-        /// stl oder 3mf (Standard: aus der Endung).
+        /// stl, 3mf oder step (Standard: aus der Endung, .stp = step).
         #[arg(long)]
         format: Option<String>,
+        /// STEP-Schema: ap242 (Standard) oder ap214.
+        #[arg(long, default_value = "ap242")]
+        schema: String,
         /// Nur dieses Bauteil (benannte Instanz auf oberster Ebene, z. B. `deckel`, `k[2]`);
-        /// mehrfach: alle in eine Datei (3MF: ein Objekt je Bauteil).
+        /// mehrfach: alle in eine Datei (3MF: ein Objekt je Bauteil, STEP: ein Produkt).
         #[arg(long = "part", value_name = "NAME")]
         part: Vec<String>,
         /// Jedes Bauteil als eigene Datei in den Ordner `-o` (Format: --format, Standard stl).
         #[arg(long)]
         all_parts: bool,
+    },
+    /// Vergleich SMLib ↔ solidcore je Knoten (Volumen, Flächen, Kanten, ausgewählte Kanten) und
+    /// Abdeckung von solidcore (nur Entwicklung).
+    DiffKernels {
+        /// Quelldateien.
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+        /// Ausgabe als JSON.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -153,6 +169,7 @@ fn main() -> ExitCode {
         | Cmd::Inspect { c, .. }
         | Cmd::Render { c, .. }
         | Cmd::Export { c, .. } => c.json,
+        Cmd::DiffKernels { json, .. } => *json,
     };
     let name = command_name(&cli.cmd);
     let worker = std::thread::Builder::new().stack_size(256 << 20).name("cad-eval".into()).spawn(move || run(&cli.cmd));
@@ -209,6 +226,7 @@ fn command_name(c: &Cmd) -> &'static str {
         Cmd::Inspect { .. } => "inspect",
         Cmd::Render { .. } => "render",
         Cmd::Export { .. } => "export",
+        Cmd::DiffKernels { .. } => "diff-kernels",
     }
 }
 
@@ -220,13 +238,14 @@ fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
         Cmd::Render { c, output, view, line, size, whole_file, no_axes } => {
             render::command(c, output, view, *line, size, *whole_file, !*no_axes)
         }
-        Cmd::Export { c, output, format, part, all_parts } => {
+        Cmd::Export { c, output, format, schema, part, all_parts } => {
             if *all_parts || !part.is_empty() {
-                parts::export_parts(c, output, format.as_deref(), part, *all_parts)
+                parts::export_parts(c, output, format.as_deref(), schema, part, *all_parts)
             } else {
-                export(c, output, format.as_deref())
+                export(c, output, format.as_deref(), schema)
             }
         }
+        Cmd::DiffKernels { files, .. } => diff::command(files),
     }
 }
 
@@ -796,7 +815,7 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
     Ok(Outcome { json: j, text: t, errors })
 }
 
-fn export(c: &Common, output: &Path, format: Option<&str>) -> Result<Outcome, Fail> {
+fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str) -> Result<Outcome, Fail> {
     let fmt = match format
         .map(|s| s.to_ascii_lowercase())
         .or_else(|| output.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()))
@@ -804,32 +823,72 @@ fn export(c: &Common, output: &Path, format: Option<&str>) -> Result<Outcome, Fa
         Some(f) if f == "stl" => p::ExportFormat::Stl,
         Some(f) if f == "3mf" => p::ExportFormat::ThreeMf,
         Some(f) if f == "step" || f == "stp" => p::ExportFormat::Step,
-        Some(f) => return Err(Fail::Usage(format!("unbekanntes Exportformat: {f} (stl oder 3mf)"))),
-
-        None => return Err(Fail::Usage("Exportformat fehlt (Endung .stl/.3mf oder --format)".into())),
+        Some(f) => return Err(Fail::Usage(format!("unbekanntes Exportformat: {f} (stl, 3mf oder step)"))),
+        None => return Err(Fail::Usage("Exportformat fehlt (Endung .stl/.3mf/.step oder --format)".into())),
     };
+    let schema = cad_engine::StepSchema::parse(schema)
+        .ok_or_else(|| Fail::Usage(format!("unbekanntes STEP-Schema: {schema} (ap242 oder ap214)")))?;
     let mut m = load(c, None, true, true)?;
     let mut j = m.base_json("export");
     if m.scene.is_none() {
         let t = m.diagnostics_text();
         return Ok(Outcome { json: j, text: t, errors: true });
     }
-    let (bytes, triangles) = m.session.export_bytes(fmt).map_err(Fail::Kernel)?;
+    let (bytes, triangles, step) = if fmt == p::ExportFormat::Step {
+        let name = output.file_stem().and_then(|s| s.to_str()).unwrap_or("part").to_string();
+        let opts = cad_engine::StepOptions { schema, name, timestamp: utc_timestamp(), ..Default::default() };
+        let (bytes, st) = m.session.export_step(&opts).map_err(Fail::Kernel)?;
+        (bytes, 0, Some(st))
+    } else {
+        let (bytes, tris) = m.session.export_bytes(fmt).map_err(Fail::Kernel)?;
+        (bytes, tris, None)
+    };
     std::fs::write(output, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
     let root = m.scene.as_ref().and_then(|s| s.root);
-    let volume = root.and_then(|r| m.session.mass_props(r).ok()).map(|mp| mp.volume);
+    let mp = root.and_then(|r| m.session.mass_props(r).ok());
+    let bounds = root.and_then(|r| m.scene.as_ref().and_then(|s| s.nodes.get(r as usize)).and_then(|n| n.bounds.clone()));
     j["output"] = json!(output.display().to_string());
     j["format"] = json!(fmt);
     j["bytes"] = json!(bytes.len());
     j["triangles"] = json!(triangles);
-    j["volume"] = json!(volume);
+    j["volume"] = json!(mp.map(|mp| mp.volume));
+    j["area"] = json!(mp.map(|mp| mp.area));
+    j["bounds"] = json!(bounds);
+    if let Some(st) = &step {
+        j["step"] = json!(st);
+    }
     let mut t = m.diagnostics_text();
+    let what = match &step {
+        Some(st) => format!(
+            "{} Körper, {} Flächen, {} Kanten",
+            st.solids + st.sheets,
+            st.faces,
+            st.edges
+        ),
+        None => format!("{triangles} Dreiecke"),
+    };
     t.push_str(&format!(
-        "{}: {} Dreiecke, {} Bytes{}\n",
+        "{}: {what}, {} Bytes{}\n",
         output.display(),
-        triangles,
         bytes.len(),
-        volume.map(|v| format!(", Volumen {} mm³", num(v))).unwrap_or_default()
+        mp.map(|mp| format!(", Volumen {} mm³", num(mp.volume))).unwrap_or_default()
     ));
     Ok(Outcome { json: j, text: t, errors: m.has_errors() })
+}
+
+/// Current UTC time as ISO 8601 (STEP header).
+pub(crate) fn utc_timestamp() -> String {
+    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let (days, rem) = (secs / 86400, secs % 86400);
+    // civil from days (Howard Hinnant)
+    let z = days as i64 + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let mo = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(mo <= 2);
+    format!("{y:04}-{mo:02}-{d:02}T{:02}:{:02}:{:02}", rem / 3600, rem % 3600 / 60, rem % 60)
 }

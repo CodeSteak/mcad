@@ -50,6 +50,7 @@ pub mod key;
 pub mod parts;
 mod profile;
 
+pub use cad_step::{Schema as StepSchema, StepOptions, StepStats};
 use std::any::Any;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
@@ -787,6 +788,19 @@ where
     pub fn export_3mf(&mut self, ev: &Evaluation<K::Shape>, tol: Option<f64>) -> Result<Vec<u8>, String> {
         let m = self.export_mesh(ev, tol)?;
         Ok(export::threemf(&m))
+    }
+
+    /// STEP (exact B-rep from [`Kernel::brep`]) of the root, in the root's own system like the
+    /// mesh exports. Faces get the colour of the node their tag belongs to (`color()`), unless
+    /// `opts.tag_colors` is set.
+    pub fn export_step(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        opts: &cad_step::StepOptions,
+    ) -> Result<(Vec<u8>, cad_step::StepStats), String> {
+        // The root's display system is the context system: the same writer as for parts.
+        let root = ev.root().ok_or("kein Ergebnis")?;
+        self.export_step_nodes(ev, &[root], opts)
     }
 
     fn export_mesh(&mut self, ev: &Evaluation<K::Shape>, tol: Option<f64>) -> Result<Rc<Mesh>, String> {

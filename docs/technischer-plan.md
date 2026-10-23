@@ -98,7 +98,7 @@ Zwei Wasm-Module statt einem: `wasm-bindgen` unterstützt das Emscripten-Target 
 ### 2.5 Export
 
 - STL und 3MF aus der Tessellierung, in Rust, kernelunabhängig.
-- STEP: weder SMLib noch solidcore haben einen Writer. Vorschlag: später ein eigener AP242-Writer für die Flächentypen, die die Sprache erzeugt (Ebene, Zylinder, Kegel, Kugel, Torus, B-Spline). Grobe Größe 2–3 kLOC.
+- STEP: weder SMLib noch solidcore haben einen Writer. Umgesetzt (Testbericht 5): neutrale B-Rep-Beschreibung `cad_kernel::brep` (`Kernel::brep`, bei SMLib über die Fassadenabfrage `sc_brep`), Writer `cad-step` (AP242, wahlweise AP214; Ebene, Zylinder, Kegel, Kugel, Torus, Rotations-/Extrusionsfläche, B-Spline; Linie, Kreis, Ellipse, B-Spline), `Engine::export_step`, `cad export -o teil.step`, `Export { format: "step" }`. Prüfung mit OpenCASCADE: `tests/step/verify.py`.
 
 ---
 
@@ -283,7 +283,7 @@ UI → Engine:
 | `DragStart / DragHandle / DragEnd` | Griffe (`Drag` antwortet immer mit `Edits`, auch leer: höchstens ein Drag in Flug) |
 | `SnapTargets` | Rasterpunkte und Anker (Punktgriffe), Rasterebenen `g.name` (Höhe, Radius, Ebene) |
 | `SetDragOptions { step_mm, step_deg }` | Schrittweiten beim freien Ziehen (Einstellungen) |
-| `Export { format, root }` | STL, 3MF |
+| `Export { format, root }` | STL, 3MF, STEP |
 
 Engine → UI: `Diagnostics`, `Scene { version, nodes, grids, anchors, handles, hints }`, `Meshes`, `TextEdits`, `ExportResult`, `Progress`.
 
@@ -320,7 +320,7 @@ Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem K
 | `inspect <datei> --line n` | Was die Zeile erzeugt: Knoten, Hülle, Volumen, ausgewählte Kanten, Warnungen |
 | `render <datei> -o bild.png [--view iso\|front\|top\|right] [--line n] [--size 1024x768]` | Bild des Modells, optional mit hervorgehobener Zeile wie im Editor |
 | `export <datei> -o teil.stl\|.3mf [-D …]` | Exportdatei |
-| `diff-kernels <datei…>` | Vergleich SMLib ↔ solidcore (nur Entwicklung) |
+| `diff-kernels <datei…>` | Vergleich SMLib ↔ solidcore (nur Entwicklung, `docs/solidcore-umstieg.md`) |
 
 - Jeder Befehl hat `--json` mit festem Schema und definierte Exit-Codes. Ohne `--json` gibt es lesbaren Text.
 - `render` nutzt einen kleinen Software-Rasterizer in Rust (Z-Buffer, flache Schattierung, Kantenlinien). Er braucht keine GPU und läuft damit auch in Containern und CI.

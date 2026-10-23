@@ -652,14 +652,16 @@ where
     /// Export of the root of the last finished evaluation: (bytes, triangle count).
     pub fn export_bytes(&mut self, format: p::ExportFormat) -> Result<(Vec<u8>, u32), String> {
         let tol = Some(self.opts.export_tol);
+        if format == p::ExportFormat::Step {
+            let (bytes, _) = self.export_step(&cad_engine::StepOptions::default())?;
+            return Ok((bytes, 0));
+        }
         let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
         let root = d.ev.root().ok_or("kein Ergebnis")?;
         let bytes = match format {
             p::ExportFormat::Stl => self.engine.export_stl(&d.ev, tol)?,
             p::ExportFormat::ThreeMf => self.engine.export_3mf(&d.ev, tol)?,
-            p::ExportFormat::Step => {
-                return self.engine.export_nodes(&d.ev, &[("modell".into(), root)], NodeFormat::Step, tol);
-            }
+            p::ExportFormat::Step => unreachable!(),
         };
         let tris = self.engine.tessellate(&d.ev, root, tol)?.triangle_count() as u32;
         Ok((bytes, tris))
@@ -671,8 +673,20 @@ where
     }
 
     /// Export of named parts of the last finished evaluation: STL (all in one file), 3MF (one
-    /// object per part), STEP; `zip`: one file per part in a ZIP package. (bytes, triangles)
+    /// object per part), STEP (one product with their bodies, the same writer as
+    /// [`Session::export_step`]); `zip`: one file per part in a ZIP package. (bytes, triangles)
     pub fn export_parts(&mut self, format: p::ExportFormat, names: &[String], zip: bool) -> Result<(Vec<u8>, u32), String> {
+        self.export_parts_with(format, names, zip, &cad_engine::StepOptions::default())
+    }
+
+    /// [`Session::export_parts`] with STEP options (schema, header).
+    pub fn export_parts_with(
+        &mut self,
+        format: p::ExportFormat,
+        names: &[String],
+        zip: bool,
+        step: &cad_engine::StepOptions,
+    ) -> Result<(Vec<u8>, u32), String> {
         let tol = Some(self.opts.export_tol);
         let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
         let cur = self.cur.as_ref().filter(|c| c.version == d.version).ok_or("Auswertung läuft noch")?;
@@ -693,10 +707,19 @@ where
             p::ExportFormat::Step => NodeFormat::Step,
         };
         if zip {
-            self.engine.export_nodes_zip(&d.ev, &nodes, fmt, tol)
+            self.engine.export_nodes_zip_with(&d.ev, &nodes, fmt, tol, step)
         } else {
-            self.engine.export_nodes(&d.ev, &nodes, fmt, tol)
+            self.engine.export_nodes_with(&d.ev, &nodes, fmt, tol, step)
         }
+    }
+
+    /// STEP export of the root of the last finished evaluation, with what was written.
+    pub fn export_step(
+        &mut self,
+        opts: &cad_engine::StepOptions,
+    ) -> Result<(Vec<u8>, cad_engine::StepStats), String> {
+        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+        self.engine.export_step(&d.ev, opts)
     }
 }
 

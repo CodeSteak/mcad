@@ -1,0 +1,13 @@
+[package]
+name = "cad-step"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "STEP (ISO 10303-21, AP242/AP214) writer for the neutral B-rep of cad-kernel"
+
+[dependencies]
+cad-kernel.workspace = true
+glam.workspace = true
+serde.workspace = true
+thiserror.workspace = true

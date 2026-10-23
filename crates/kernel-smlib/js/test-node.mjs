@@ -86,7 +86,7 @@ const tRead = performance.now();
 await sc.initSmlib(createSmlib, { wasmBinary });
 const tLoad = performance.now();
 console.log(`smlib.wasm ${statSync(wasmPath).size} B; read ${(tRead - t0).toFixed(1)} ms, compile+instantiate+init ${(tLoad - tRead).toFixed(1)} ms`);
-assert.equal(sc.sc_version(), 2);
+assert.equal(sc.sc_version(), 3);
 
 // ---------------------------------------------------------------- tests
 
@@ -196,6 +196,23 @@ test("twisted extrude: rotate, then scale (OpenSCAD)", () => {
   const bb = sc.sc_out_f64(0);
   assert.ok(Math.abs(bb[4] - 3.8309045) < 1e-3 && Math.abs(bb[3] - Math.sqrt(34)) < 1e-3, `${[...bb]}`);
   sc.sc_release(e);
+});
+
+test("B-rep export stream (sc_brep): box minus cylinder", () => {
+  // format 1, see smlib/facade/sc_facade.h; only the head is decoded here, Rust parses the rest
+  assert.equal(sc.sc_brep(boxMinusCyl), 0, sc.sc_last_message());
+  const d = sc.sc_out_f64(0);
+  assert.equal(d[0], 1, "format");
+  const nv = d[2];
+  let i = 3 + 3 * nv;
+  const ne = d[i];
+  assert.ok(nv >= 8 && ne >= 12, `${nv} vertices, ${ne} edges`);
+  i += 1;
+  // first edge: start, end, class, t0, t1, approximated, degree, n_ctrl, n_knots
+  const [start, end, , t0, t1, approx, deg, nc, nk] = d.slice(i, i + 9);
+  assert.ok(start < nv && end < nv && t1 > t0 && approx === 0, `${[start, end, t0, t1, approx]}`);
+  assert.equal(nk, nc + deg + 1);
+  assert.equal(sc.sc_brep(123456), 3);
 });
 
 test("invalid handle", () => {

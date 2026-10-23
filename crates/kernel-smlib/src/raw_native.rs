@@ -72,6 +72,7 @@ mod ffi {
         pub fn sc_is_solid(h: u32) -> i32;
         pub fn sc_face_count(h: u32) -> i32;
         pub fn sc_edge_count(h: u32) -> i32;
+        pub fn sc_brep(h: u32) -> i32;
     }
 }
 
@@ -217,4 +218,7 @@ pub fn face_count(h: u32) -> i32 {
 }
 pub fn edge_count(h: u32) -> i32 {
     unsafe { ffi::sc_edge_count(h) }
+}
+pub fn brep(h: u32) -> i32 {
+    unsafe { ffi::sc_brep(h) }
 }
