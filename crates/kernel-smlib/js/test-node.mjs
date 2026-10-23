@@ -86,7 +86,7 @@ const tRead = performance.now();
 await sc.initSmlib(createSmlib, { wasmBinary });
 const tLoad = performance.now();
 console.log(`smlib.wasm ${statSync(wasmPath).size} B; read ${(tRead - t0).toFixed(1)} ms, compile+instantiate+init ${(tLoad - tRead).toFixed(1)} ms`);
-assert.equal(sc.sc_version(), 1);
+assert.equal(sc.sc_version(), 2);
 
 // ---------------------------------------------------------------- tests
 
@@ -171,6 +171,31 @@ test("extrude, revolve, mirror", () => {
   const mir = check(sc.sc_transform(boxMinusCyl, new Float64Array([-1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])), "mirror");
   assert.ok(near(massProps(mir).volume, massProps(boxMinusCyl).volume, 1e-6));
   [e, r, mir].forEach(sc.sc_release);
+});
+
+test("union of three orthogonal cylinders (checked boolean)", () => {
+  // SMLib alone drops the -x arm in (Z ∪ Y) ∪ X; the facade checks and reorders
+  const c0 = check(sc.sc_make_cylinder(30, 4, 4, 1), "cyl");
+  const z = check(sc.sc_transform(c0, new Float64Array(translate(0, 0, -15))), "z");
+  const y = check(sc.sc_transform(z, new Float64Array([1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 1])), "y");
+  const x = check(sc.sc_transform(z, new Float64Array([0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1])), "x");
+  const u = check(sc.sc_boolean(0, new Uint32Array([z, y, x]), 9), "union");
+  const want = 3 * Math.PI * 16 * 30 - 16 * 64 + 8 * (2 - Math.SQRT2) * 64;
+  assert.ok(near(massProps(u).volume, want, 1e-5), `${massProps(u).volume} vs ${want}`);
+  assert.equal(sc.sc_bounds(u), 0);
+  const bb = sc.sc_out_f64(0);
+  assert.ok(bb.every((v, i) => Math.abs(v - (i < 3 ? -15 : 15)) < 1e-3), `${[...bb]}`);
+  [c0, z, y, x, u].forEach(sc.sc_release);
+});
+
+test("twisted extrude: rotate, then scale (OpenSCAD)", () => {
+  const loop = new Float64Array([0, 4, -5, -3, 5, -3, 5, 3, -5, 3, ...IDENT]);
+  const e = check(sc.sc_extrude(loop, 12, Math.PI / 3, 1, 0.5, 7), "extrude");
+  assert.ok(near(massProps(e).volume, 540, 1e-4), `${massProps(e).volume}`);
+  assert.equal(sc.sc_bounds(e), 0);
+  const bb = sc.sc_out_f64(0);
+  assert.ok(Math.abs(bb[4] - 3.8309045) < 1e-3 && Math.abs(bb[3] - Math.sqrt(34)) < 1e-3, `${[...bb]}`);
+  sc.sc_release(e);
 });
 
 test("invalid handle", () => {

@@ -33,7 +33,7 @@ export type Value = null | boolean | number | string | Array<Value> | { start: n
 /**
  * Message from the UI to the engine.
  */
-export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, } | { "type": "Cancel" };
+export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, };
 
 /**
  * Where a dragged handle goes.
@@ -65,7 +65,11 @@ export type Edit = {
  */
 from: number, to: number, text: string, };
 
-export type NodeRef = { node: number, stmt: number | null, range: SrcRange, };
+export type NodeRef = { node: number, stmt: number | null, range: SrcRange, 
+/**
+ * Cache key of the node (hex; in `Progress.current`): what `BlockKeys` takes.
+ */
+key?: string, };
 
 export type SnapTarget = { 
 /**

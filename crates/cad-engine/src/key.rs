@@ -24,6 +24,21 @@ impl CacheKey {
         self.0.iter().map(|b| format!("{b:02x}")).collect()
     }
 
+    /// Inverse of [`CacheKey::to_hex`] (64 hex digits, any case).
+    pub fn from_hex(s: &str) -> Option<CacheKey> {
+        let b = s.as_bytes();
+        if b.len() != 64 {
+            return None;
+        }
+        let mut out = [0u8; 32];
+        for (i, o) in out.iter_mut().enumerate() {
+            let hi = (b[2 * i] as char).to_digit(16)?;
+            let lo = (b[2 * i + 1] as char).to_digit(16)?;
+            *o = (hi * 16 + lo) as u8;
+        }
+        Some(CacheKey(out))
+    }
+
     /// First 8 bytes as an integer (compact display, `inst_key`-like use).
     pub fn short(&self) -> u64 {
         u64::from_le_bytes(self.0[..8].try_into().unwrap())

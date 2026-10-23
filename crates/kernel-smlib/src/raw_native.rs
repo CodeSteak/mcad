@@ -7,6 +7,7 @@ mod ffi {
     unsafe extern "C" {
         pub fn sc_init();
         pub fn sc_version() -> u32;
+        pub fn sc_set_draft(on: i32);
         pub fn sc_last_status() -> i32;
         pub fn sc_last_message() -> *const c_char;
         pub fn sc_last_message_len() -> u32;
@@ -91,6 +92,9 @@ pub fn init() {
 }
 pub fn version() -> u32 {
     unsafe { ffi::sc_version() }
+}
+pub fn set_draft(on: bool) {
+    unsafe { ffi::sc_set_draft(on as i32) }
 }
 pub fn last_status() -> i32 {
     unsafe { ffi::sc_last_status() }

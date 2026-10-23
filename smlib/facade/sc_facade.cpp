@@ -36,6 +36,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <map>
@@ -49,7 +50,7 @@
 namespace {
 
 const ULONG SC_TAG_ATTR_ID = SM_AI_USER_1 + 77;  // 10077
-const uint32_t SC_FACADE_VERSION = 1;
+const uint32_t SC_FACADE_VERSION = 2;
 
 // ------------------------------------------------------------------ errors
 
@@ -134,7 +135,44 @@ Failure sm_fail(const char* what, SmStatus st, std::vector<uint32_t> edges = {})
   return Failure{SC_FAILED, m, std::move(edges)};
 }
 
+// ------------------------------------------------------------------ deterministic rand()
+//
+// SMLib seeds the C library generator with srand(time(NULL)) and draws from rand() in
+// SmFace::GetPointsInFace (dithered interior sample points, used by SmShell::IsInnerShellOf
+// and the Boolean face classification) and in SmShell::IsInnerShellOf (ray directions for
+// wire/vertex shells). Results then depend on the wall-clock second. The facade defines
+// rand()/srand() itself (they take precedence over the C library's in the static link, native
+// and Emscripten): srand() ignores its argument and restarts a fixed sequence, and every sc_*
+// call restarts it as well, so each operation sees the same draws regardless of time and
+// call history.
+const uint32_t SC_RAND_SEED = 0x2545F491u;
+uint64_t g_rand_state = SC_RAND_SEED;
+
+void rand_reset() { g_rand_state = SC_RAND_SEED; }
+
+}  // namespace
+
+#ifdef __THROW
+#define SC_LIBC_NOTHROW __THROW
+#else
+#define SC_LIBC_NOTHROW
+#endif
+
+extern "C" {
+void srand(unsigned) SC_LIBC_NOTHROW { rand_reset(); }
+int rand(void) SC_LIBC_NOTHROW {
+  // 64-bit LCG (Knuth MMIX), upper 31 bits: uniform over [0, RAND_MAX] for RAND_MAX = 2^31 - 1.
+  g_rand_state = g_rand_state * 6364136223846793005ULL + 1442695040888963407ULL;
+  return (int)((g_rand_state >> 33) & (uint64_t)RAND_MAX);
+}
+}
+
+namespace {
+
 bool g_inited = false;
+// Draft mode (sc_set_draft): results serve a temporary display only; booleans skip the
+// plausibility check while SMLib succeeds, fillets skip the self-overlap check.
+bool g_draft = false;
 void ensure_init() {
   if (g_inited) return;
   SmApiCreateContext();
@@ -145,6 +183,7 @@ void ensure_init() {
 void begin_call() {
   ensure_init();
   smos_SetErrorCallback(error_callback);  // cheap; covers callers on other threads
+  rand_reset();
   g_status = SC_OK;
   g_message.clear();
   g_err_edges.clear();
@@ -705,6 +744,70 @@ void loop_curves(const Loop& l, bool single, bool local, CurveList& out) {
   }
 }
 
+// Profile curves of a revolve (model space, axis = z through the origin, radial = x).
+//
+// A closed interpolating spline cannot pass through two points on the axis without crossing
+// it: at each axis point it has a tangent with a radial component, so it overshoots to x < 0
+// next to it (knauf_mirror: the spline (0,0) (r,0) ... (r,h) (0,h) bulges to x = -1.6 between
+// (0,h) and (0,0)). SMLib's full-turn sweep does not check that and returns a self-overlapping
+// solid (wrong volume, open booleans, misclassified points, failed fillets). For a revolve, two
+// spline points that follow each other (cyclically) on the axis are therefore joined by a
+// straight segment along the axis, and the spline runs open between such segments. Afterwards
+// every profile curve is sampled: one reaching x < 0 fails with SC_INVALID.
+void revolve_profile_curves(const Loop& l, CurveList& out) {
+  if (l.kind != SC_LOOP_SPLINE) {
+    loop_curves(l, false, false, out);
+  } else {
+    std::vector<V3> pts;
+    double ext = 0;
+    for (V3 p : l.pts) pts.push_back(l.frame.point(p));
+    for (V3 p : pts) ext = std::max(ext, len(p));
+    double atol = 1e-9 * std::max(1.0, ext);
+    size_t n = pts.size();
+    auto on_axis = [&](size_t i) { return std::hypot(pts[i].x, pts[i].y) <= atol; };
+    std::vector<size_t> cuts;  // i: segment i -> i+1 lies on the axis
+    for (size_t i = 0; i < n; i++)
+      if (on_axis(i) && on_axis((i + 1) % n)) cuts.push_back(i);
+    if (cuts.empty()) {
+      loop_curves(l, false, false, out);
+    } else {
+      for (size_t c = 0; c < cuts.size(); c++) {
+        size_t a = cuts[c], b = (a + 1) % n;
+        SmLine* ln = nullptr;
+        SC_CHECK(SmApiCreateLineSegment(sp(pts[a]), sp(pts[b]), ln), "SmApiCreateLineSegment");
+        out.add(ln);
+        // open run from b to the start of the next axis segment
+        size_t e = cuts[(c + 1) % cuts.size()];
+        std::vector<V3> run{pts[b]};
+        for (size_t i = b; i != e;) {
+          i = (i + 1) % n;
+          run.push_back(pts[i]);
+        }
+        if (run.size() >= 2) out.add(interp_curve(run, false));
+      }
+    }
+  }
+  double ext = 0;
+  for (SmCurve* c : out.v) {
+    SmExtent3d cb;
+    c->CalculateBoundingBox(c->GetNaturalInterval(), &cb);
+    ext = std::max({ext, len(fromsm(cb.GetMin())), len(fromsm(cb.GetMax()))});
+  }
+  double tol = 1e-7 * std::max(1.0, ext);
+  for (SmCurve* c : out.v) {
+    SmExtent1d iv = c->GetNaturalInterval();
+    const int K = 256;
+    for (int k = 0; k <= K; k++) {
+      SmPoint3d p;
+      if (c->EvaluatePoint(iv.GetMin() + (iv.GetMax() - iv.GetMin()) * k / K, p) != SM_SUCCESS)
+        continue;
+      if (p.x < -tol)
+        throw fail(SC_INVALID, "revolve: the profile curve crosses the axis (reaches x = " +
+                                   std::to_string(p.x) + " after its frame)");
+    }
+  }
+}
+
 SmTArray<SmCurve*> as_array(const CurveList& cl) {
   SmTArray<SmCurve*> a;
   for (SmCurve* c : cl.v) a.Add(c);
@@ -874,7 +977,7 @@ uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, u
   }
   b->StitchAndOrient();
   if (b->GetNumFaces() == 0) throw fail(SC_FAILED, std::string(what) + " removed all faces");
-  auto badf = invalid_faces(b.get());
+  auto badf = g_draft ? std::vector<size_t>() : invalid_faces(b.get());
   if (!badf.empty()) {
     auto e = edges_near_faces(b.get(), badf, in_sel, in_all, 3.0 * r + 1e-6);
     if (e.empty()) e = sel_ids;
@@ -892,7 +995,475 @@ uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, u
   return put(std::move(b));
 }
 
+// ------------------------------------------------------------------ validated booleans
+//
+// SMLib's two-Brep Booleans occasionally return SM_SUCCESS with a closed, valid-looking solid
+// that is geometrically wrong: whole face regions of an operand are classified to the wrong
+// side and dropped. Reproducer: three orthogonal cylinders of equal radius (r = 4, h = 30,
+// centred); (Z u Y) u X loses the -x arm of the X cylinder (volume 3237 instead of 3800,
+// bounds x >= -4), (Z u X) u Y is correct, (Y u X) u Z fails with SM_ERR. Only equal radii
+// fail (3.9 or 4.1 for the third cylinder work): the untrimmed cylinder pairs then intersect
+// in two ellipses that cross at tangent points, a singular case for the surface intersection.
+// The facade therefore checks every pairwise result (see boolean_plausible) and on a mismatch
+// retries with swapped operands, a different order of the remaining operands (sc_boolean),
+// and finally with the second operand shifted by 1e-6..1e-4 of the model size (far below
+// every export tolerance). If nothing passes the check, SMLib's own result is kept, as
+// before (see checked_boolean).
+
+struct Box3 {
+  V3 mn = v3(1e300, 1e300, 1e300), mx = v3(-1e300, -1e300, -1e300);
+  bool empty() const { return mn.x > mx.x; }
+  void add(const Box3& b) {
+    if (b.empty()) return;
+    mn = v3(std::min(mn.x, b.mn.x), std::min(mn.y, b.mn.y), std::min(mn.z, b.mn.z));
+    mx = v3(std::max(mx.x, b.mx.x), std::max(mx.y, b.mx.y), std::max(mx.z, b.mx.z));
+  }
+  double diag() const { return empty() ? 0.0 : len(mx - mn); }
+  bool overlaps(const Box3& b, double tol) const {
+    return !empty() && !b.empty() && mn.x <= b.mx.x + tol && b.mn.x <= mx.x + tol &&
+           mn.y <= b.mx.y + tol && b.mn.y <= mx.y + tol && mn.z <= b.mx.z + tol &&
+           b.mn.z <= mx.z + tol;
+  }
+};
+
+// Loose box (union of the vertex, edge and face boxes; cheap). The tight box costs more than
+// the Boolean itself on bodies with many faces.
+Box3 loose_box(const SmBrep* b) {
+  Box3 r;
+  if (!b || b->GetNumFaces() == 0) return r;
+  SmPoint3d mn, mx;
+  if (SmApiBrepBoundingBox(b, FALSE, mn, mx) != SM_SUCCESS) {
+    r.mn = v3(-1e300, -1e300, -1e300);  // unknown: never constrains
+    r.mx = v3(1e300, 1e300, 1e300);
+    return r;
+  }
+  r.mn = fromsm(mn);
+  r.mx = fromsm(mx);
+  return r;
+}
+
+Box3 face_box(const SmFace* f) {
+  Box3 r;
+  SmPoint3d mn, mx;
+  if (SmApiFaceBoundingBox(f, FALSE, mn, mx) == SM_SUCCESS) {
+    r.mn = fromsm(mn);
+    r.mx = fromsm(mx);
+  } else {
+    r.mn = v3(-1e300, -1e300, -1e300);
+    r.mx = v3(1e300, 1e300, 1e300);
+  }
+  return r;
+}
+
+// Coarse volume (relative accuracy 1e-2: much cheaper than 1e-6, enough for the inequalities).
+double solid_volume(const SmBrep* b) {
+  if (!b || b->GetNumFaces() == 0) return 0.0;
+  double v = 0;
+  if (SmApiBrepComputeVolume(b, 1e-2, v) != SM_SUCCESS || !is_fin(v)) return NAN;
+  return v;
+}
+
+// Up to 5 points strictly inside face `f` with the outward normal of the solid at each. Fixed
+// off-centre UV fractions (the UV centre of a revolved face lies in a symmetry plane, where
+// SMLib's ray-based point classification is least reliable); the face's internal point only
+// if none of them lies on the face.
+void face_samples(const SmFace* f, std::vector<std::pair<V3, V3>>& out) {
+  SmSurface* srf = f->GetSurface();
+  if (!srf) return;
+  SmExtent2d d = f->GetUVDomain();
+  const double st[5][2] = {{0.27, 0.23}, {0.73, 0.31}, {0.21, 0.77}, {0.69, 0.71}, {0.53, 0.46}};
+  bool flip = false;
+  {
+    SmFaceuse* fu = f->GetUpwardFaceuse();
+    flip = fu && fu->GetShell() && fu->GetShell()->GetRegion() &&
+           !fu->GetShell()->GetRegion()->IsVoid();
+  }
+  size_t before = out.size();
+  for (const auto& s : st) {
+    SmPoint2d uv(d.GetUMin() + s[0] * (d.GetUMax() - d.GetUMin()),
+                 d.GetVMin() + s[1] * (d.GetVMax() - d.GetVMin()));
+    SmPointClassification pc;
+    if (f->PointClassify(uv, SmTol::GetZoneTol3d(f), FALSE, TRUE, pc) != SM_SUCCESS ||
+        pc.GetPointClass() != SM_PC_FACE)
+      continue;
+    SmVector2d uvv(uv.x, uv.y);
+    SmVector3d pv, nv;
+    if (SmApiEvaluateSurfacePoint(srf, uvv, pv) != SM_SUCCESS) continue;
+    if (SmApiEvaluateSurfaceNormal(srf, uvv, nv) != SM_SUCCESS) continue;
+    V3 nn = normalize(v3(nv.x, nv.y, nv.z));
+    if (len(nn) == 0) continue;
+    out.push_back({v3(pv.x, pv.y, pv.z), flip ? nn * -1.0 : nn});
+  }
+  V3 p, n;
+  if (out.size() == before && face_sample(f, p, n)) out.push_back({p, n});
+}
+
+// Expected membership of point q in (A op B), from A's and B's classification;
+// -1 = undecidable (q on a boundary or classification failed).
+int expected_class(int32_t op, int ca, int cb) {
+  if (ca < 0 || cb < 0 || ca == 2 || cb == 2) return -1;
+  bool a = ca == 1, b = cb == 1;
+  bool in = op == SC_UNION ? (a || b) : op == SC_DIFFERENCE ? (a && !b) : (a && b);
+  return in ? 1 : 0;
+}
+
+// Is R a plausible result of A op B? `why` gets the first violated condition.
+//  1. volume inequalities of the operation (coarse volumes, 3 % slack: gross errors only);
+//  2. membership of points just inside and just outside the faces of each operand that reach
+//     the other operand's box (5 samples per face): a point inside A, outside B must be
+//     inside A u B and A - B, and so on. A mismatch counts only if it persists at a second,
+//     shifted point with all three bodies classified again (SMLib's ray classification
+//     can be wrong at single points).
+// PL_OPEN: the result of two closed solids is not closed. That is legitimate for bodies
+// touching along an edge, but also a symptom of the misclassification (box minus the three
+// cylinders above, in one order). Operands whose boxes do not overlap are not checked.
+enum Plausible { PL_OK, PL_OPEN, PL_WRONG };
+
+// `va_known`: volume of A if already known (NAN: compute); `vr_out` gets R's volume when it
+// was computed (NAN otherwise), so a chain of Booleans computes each volume once.
+Plausible boolean_plausible(int32_t op, const SmBrep* A, const SmBrep* B, const SmBrep* R,
+                            std::string& why, double va_known = NAN, double* vr_out = nullptr) {
+  if (vr_out) *vr_out = NAN;
+  bool ra = A->GetNumFaces() > 0 && A->IsManifoldSolid();
+  bool rb = B->GetNumFaces() > 0 && B->IsManifoldSolid();
+  if (!ra || !rb) return PL_OK;  // only closed solids can be checked
+  bool r_empty = !R || R->GetNumFaces() == 0;
+  if (!r_empty && !R->IsManifoldSolid()) {
+    why = "result is not a closed solid";
+    return PL_OPEN;
+  }
+  Box3 ba = loose_box(A), bb = loose_box(B);
+  Box3 all = ba;
+  all.add(bb);
+  double size = std::max(all.diag(), 1e-9);
+  double eps = 1e-4 * size;
+  if (!ba.overlaps(bb, eps)) return PL_OK;
+
+  double va = is_fin(va_known) ? va_known : solid_volume(A), vb = solid_volume(B),
+         vr = r_empty ? 0.0 : solid_volume(R);
+  if (vr_out) *vr_out = vr;
+  if (is_fin(va) && is_fin(vb) && is_fin(vr)) {
+    double s = 3e-2 * (va + vb) + 1e-12;
+    bool ok = true;
+    if (op == SC_UNION) ok = vr >= std::max(va, vb) - s && vr <= va + vb + s;
+    else if (op == SC_DIFFERENCE) ok = vr >= va - vb - s && vr <= va + s;
+    else ok = vr >= -s && vr <= std::min(va, vb) + s;
+    if (!ok) {
+      why = "volume " + std::to_string(vr) + " impossible for operands " + std::to_string(va) +
+            ", " + std::to_string(vb);
+      return PL_WRONG;
+    }
+  }
+
+  auto check_point = [&](V3 q, int ca, int cb) -> int {  // 1 = consistent, 0 = not, -1 = n/a
+    int want = expected_class(op, ca, cb);
+    if (want < 0) return -1;
+    int got = r_empty ? 0 : classify_point(R, q);
+    if (got < 0 || got == 2) return -1;
+    return got == want ? 1 : 0;
+  };
+  for (int side = 0; side < 2; side++) {
+    const SmBrep* self = side == 0 ? A : B;
+    const SmBrep* other = side == 0 ? B : A;
+    const Box3& obox = side == 0 ? bb : ba;
+    std::vector<std::pair<V3, V3>> samples;
+    for (SmFace* f : faces_of(self))
+      if (face_box(f).overlaps(obox, eps)) face_samples(f, samples);
+    for (const auto& smp : samples) {
+      for (double sign : {-1.0, 1.0}) {
+        V3 q = smp.first + smp.second * (sign * eps);
+        int cs = sign < 0 ? 1 : 0;  // just inside / outside the own operand
+        int co = classify_point(other, q);
+        int ok = check_point(q, side == 0 ? cs : co, side == 0 ? co : cs);
+        if (ok != 0) continue;
+        // confirm at a second point, everything classified again
+        V3 t = normalize(cross(smp.second, v3(0.48, 0.6, 0.64)));
+        if (len(t) == 0) t = normalize(cross(smp.second, v3(1, 0, 0)));
+        V3 q2 = q + t * (0.37 * eps);
+        if (check_point(q2, classify_point(A, q2), classify_point(B, q2)) != 0) continue;
+        int got = classify_point(R, q);
+        why = "point (" + std::to_string(q.x) + ", " + std::to_string(q.y) + ", " +
+              std::to_string(q.z) + ") is " + (got == 1 ? "inside" : "outside") +
+              " the result but must be " + (got == 1 ? "outside" : "inside");
+        return PL_WRONG;
+      }
+    }
+  }
+  return PL_OK;
+}
+
+// One SMLib Boolean on copies of A and B. Returns the result (an empty Brep for an empty
+// result) or nullptr on an SMLib error (`err` gets the message).
+BrepPtr raw_boolean(int32_t op, const SmBrep* A, const SmBrep* B, std::string& err) {
+  BrepPtr a = copy_brep(A);
+  BrepPtr b = copy_brep(B);
+  SmBrep* res = nullptr;
+  SmStatus st;
+  const char* what;
+  g_trail.clear();
+  if (op == SC_UNION) {
+    st = SmApiBooleanUnion(a.get(), b.get(), res);
+    what = "boolean union";
+  } else if (op == SC_DIFFERENCE) {
+    st = SmApiBooleanDifference(a.get(), b.get(), res);
+    what = "boolean difference";
+  } else {
+    st = SmApiBooleanIntersection(a.get(), b.get(), res);
+    what = "boolean intersection";
+  }
+  if (st != SM_SUCCESS) {
+    err = sm_fail(what, st).msg;
+    return BrepPtr();
+  }
+  b.release();  // deleted by SMLib on success
+  if (res != a.get()) {
+    a.release();
+    a.reset(res);
+  }
+  if (!a.get()) a = empty_brep();
+  return a;
+}
+
+// Do the interiors of the closed solids A and B overlap? Points just inside the faces of each
+// that reach the other's box must not be inside the other, and A n B must have no volume.
+// SMLib errors count as overlap (the caller then keeps its previous behaviour).
+bool interiors_overlap(const SmBrep* A, const SmBrep* B) {
+  Box3 ba = loose_box(A), bb = loose_box(B);
+  Box3 all = ba;
+  all.add(bb);
+  double eps = 1e-4 * std::max(all.diag(), 1e-9);
+  for (int side = 0; side < 2; side++) {
+    const SmBrep* self = side == 0 ? A : B;
+    const SmBrep* other = side == 0 ? B : A;
+    const Box3& obox = side == 0 ? bb : ba;
+    std::vector<std::pair<V3, V3>> samples;
+    for (SmFace* f : faces_of(self))
+      if (face_box(f).overlaps(obox, eps)) face_samples(f, samples);
+    for (const auto& smp : samples)
+      if (classify_point(other, smp.first - smp.second * eps) == 1) return true;
+  }
+  std::string e;
+  BrepPtr x = raw_boolean(SC_INTERSECTION, A, B, e);
+  if (!x.get()) return true;
+  if (x->GetNumFaces() == 0) return false;
+  double vx = solid_volume(x.get());
+  double vmin = std::min(solid_volume(A), solid_volume(B));
+  return !(is_fin(vx) && is_fin(vmin) && std::fabs(vx) <= 1e-6 * vmin);
+}
+
+// Union of closed solids that only touch (along an edge, at points): SMLib returns a
+// non-manifold body there, which is not a closed solid (volume 0, winkel_anker). Instead both
+// bodies go into one Brep as separate shells (SmBrep::MergeBrep, no intersection), which is a
+// closed solid with the right volume. nullptr if the interiors overlap or the merge fails.
+BrepPtr touching_union(const SmBrep* A, const SmBrep* B) {
+  if (interiors_overlap(A, B)) return BrepPtr();
+  BrepPtr m = copy_brep(A);
+  if (m->MergeBrep(*B, nullptr, nullptr, FALSE) != SM_SUCCESS) return BrepPtr();
+  if (m->GetNumFaces() == 0 || !m->IsManifoldSolid()) return BrepPtr();
+  return m;
+}
+
+// A op B with the plausibility check and fallbacks (see above). `allow_perturb` = false
+// leaves out the shifted retries (used while other operand orders are still untried); they
+// are only tried after a wrong result or an SMLib error, not for results that are merely
+// open. Returns nullptr if nothing passes; `plain` then holds SMLib's own result for A op B
+// (if it produced one), which the caller takes as a last resort: the check itself relies on
+// SMLib's point classification, which errs on some bodies (revolved splines), so a result
+// it rejects is not necessarily wrong, and it is what the facade returned before the check.
+// `va`: volume of A if known (NAN otherwise); on success it is set to the result's volume
+// (NAN if not computed).
+BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow_perturb,
+                        std::string& err, BrepPtr& plain, double& va) {
+  bool commutative = op != SC_DIFFERENCE;
+  bool wrong = false;
+  std::string why;
+  // runs a op b (swapped: b op a) and checks the result against a op b
+  bool first = true;
+  auto attempt = [&](const SmBrep* a, const SmBrep* b, bool swapped) -> BrepPtr {
+    std::string e;
+    BrepPtr r = swapped ? raw_boolean(op, b, a, e) : raw_boolean(op, a, b, e);
+    bool is_plain = first;
+    first = false;
+    if (!r.get()) {
+      wrong = true;
+      if (why.empty()) why = e;
+      return BrepPtr();
+    }
+    std::string w;
+    double vr = NAN;
+    Plausible pl = boolean_plausible(op, a, b, r.get(), w, a == A ? va : NAN, &vr);
+    if (pl == PL_OK) {
+      va = vr;
+      return r;
+    }
+    if (pl == PL_OPEN && op == SC_UNION) {
+      BrepPtr t = touching_union(a, b);
+      if (t.get()) {
+        va = NAN;
+        return t;
+      }
+    }
+    if (pl == PL_WRONG) wrong = true;
+    if (is_plain) plain = std::move(r);
+    if (why.empty()) why = "SMLib returned a wrong result (" + w + ")";
+    return BrepPtr();
+  };
+  BrepPtr r = attempt(A, B, false);
+  if (r.get()) return r;
+  if (commutative) {
+    r = attempt(A, B, true);
+    if (r.get()) return r;
+  }
+  if (allow_perturb && wrong) {
+    Box3 all = loose_box(A);
+    all.add(loose_box(B));
+    double size = std::max(all.diag(), 1e-9);
+    V3 dir = normalize(v3(0.2672612, 0.5345225, 0.8017837));
+    for (double rel : {1e-6, 1e-5, 1e-4}) {
+      BrepPtr bs = copy_brep(B);
+      M4 t = identity();
+      V3 off = dir * (rel * size);
+      t.m[12] = off.x;
+      t.m[13] = off.y;
+      t.m[14] = off.z;
+      apply_matrix(bs.get(), t);
+      r = attempt(A, bs.get(), false);
+      if (r.get()) return r;
+      if (commutative) {
+        r = attempt(A, bs.get(), true);
+        if (r.get()) return r;
+      }
+    }
+  }
+  err = why;
+  return BrepPtr();
+}
+
+// ------------------------------------------------------------------ shell pre-check
+
+// A wall that does not fit leaves no cavity. usd-brep c9c5979 read freed memory there
+// (valgrind: invalid reads in SmProtoEdge::RemoveProtoVertex for a 10 mm cube already at
+// t = 4.99; solidcore plan/upstream-issues.md UB-175, UB-239, UB-242) and then failed,
+// returned a solid or crashed. With the fork's fixes (smlib/fetch.sh) valgrind is clean for
+// cubes (closed and open), spheres and cylinders up to t = 2 r, but the closed cube with
+// t >= 5 comes back as an empty Brep with SM_SUCCESS; open bodies, spheres and cylinders fail
+// with SM_ERR. So this check is no longer a memory-safety guard; it stays as the fast path
+// with a clear message for the common case (two antiparallel planar walls, not opened,
+// facing each other at a distance below `limit` = 2 t), and sc_shell rejects empty or open
+// results after SMLib for everything else.
+bool opposite_walls_closer_than(const SmBrep* b, const std::vector<const SmFace*>& open,
+                                double limit, double& gap_out) {
+  struct Wall {
+    SmFace* f;
+    V3 p, n;  // a point and the outward normal
+    std::vector<std::pair<V3, V3>> samples;
+  };
+  std::vector<Wall> walls;
+  for (SmFace* f : faces_of(b)) {
+    if (std::find(open.begin(), open.end(), f) != open.end()) continue;
+    const SmSurface* srf = f->GetSurface();
+    if (!srf || !srf->IsKindOf(SmPlane_TYPE)) continue;
+    Wall w{f, v3(0, 0, 0), v3(0, 0, 0), {}};
+    face_samples(f, w.samples);
+    if (w.samples.empty()) continue;
+    w.p = w.samples[0].first;
+    w.n = w.samples[0].second;
+    walls.push_back(std::move(w));
+  }
+  double tol = 1e-9 * std::max(1.0, model_diag(b));
+  for (const Wall& a : walls)
+    for (const Wall& c : walls) {
+      if (&a == &c || dot(a.n, c.n) > -0.999) continue;
+      for (const auto& smp : a.samples) {
+        double gap = -dot(smp.first - c.p, c.n);  // distance to c's plane, > 0 on its inner side
+        if (!(gap > tol) || gap > limit * (1 + 1e-9)) continue;  // no cavity left at gap = 2 t
+        // the foot point must lie on face c (walls really face each other there)
+        V3 foot = smp.first - c.n * (-gap);
+        if (face_distance(c.f, foot) > 1e-6 * std::max(1.0, gap)) continue;
+        gap_out = gap;
+        return true;
+      }
+    }
+  return false;
+}
+
 // ------------------------------------------------------------------ tessellation
+
+// Free-form faces: not planar, no surface of revolution/extrusion, sphere or torus.
+bool free_form(const SmFace* f) {
+  const SmSurface* s = f->GetSurface();
+  if (!s) return false;
+  return !(s->IsKindOf(SmPlane_TYPE) || s->IsKindOf(SmSurfOfRevolution_TYPE) ||
+           s->IsKindOf(SmSurfOfExtrusion_TYPE) || s->IsKindOf(SmSphere_TYPE) ||
+           s->IsKindOf(SmTorus_TYPE));
+}
+
+// Number of polygons and their total area.
+size_t poly_triangles(SmPolyBrep* poly, double* area) {
+  SmTArray<SmPolyFace*> pfs;
+  poly->GetPolyFaces(pfs);
+  double a = 0;
+  for (ULONG i = 0; i < pfs.GetSize(); i++) {
+    SmTArray<SmPolyEdge*> pe;
+    pfs[i]->GetPolyEdges(pe);
+    if (pe.GetSize() < 3) continue;
+    V3 p0 = fromsm(pe[0]->GetStartPolyVertex()->GetPoint());
+    for (ULONG j = 1; j + 1 < pe.GetSize(); j++) {
+      V3 p1 = fromsm(pe[j]->GetStartPolyVertex()->GetPoint());
+      V3 p2 = fromsm(pe[j + 1]->GetStartPolyVertex()->GetPoint());
+      a += 0.5 * len(cross(p1 - p0, p2 - p0));
+    }
+  }
+  if (area) *area = a;
+  return pfs.GetSize();
+}
+
+// Largest distance between a triangle centroid and its face's surface over the free-form
+// faces of `poly` (up to 64 triangles per face), and the longest edge of that triangle.
+void tess_deviation(SmPolyBrep* poly, const std::unordered_map<const SmFace*, uint32_t>& face_ix,
+                    double& worst, double& worst_edge) {
+  worst = 0;
+  worst_edge = 0;
+  std::unordered_map<const SmFace*, int> ff;  // face -> free-form?
+  std::unordered_map<const SmFace*, uint32_t> seen;
+  SmTArray<SmPolyFace*> pfs;
+  poly->GetPolyFaces(pfs);
+  for (ULONG i = 0; i < pfs.GetSize(); i++) {
+    SmFace* of = pfs[i]->GetOriginalFace();
+    if (!of || face_ix.find(of) == face_ix.end()) continue;
+    auto it = ff.find(of);
+    if (it == ff.end()) it = ff.emplace(of, free_form(of) ? 1 : 0).first;
+    if (!it->second) continue;
+    if (seen[of]++ >= 64) continue;
+    SmTArray<SmPolyEdge*> pe;
+    pfs[i]->GetPolyEdges(pe);
+    if (pe.GetSize() < 3) continue;
+    V3 c = v3(0, 0, 0);
+    double emax = 0;
+    for (ULONG j = 0; j < pe.GetSize(); j++) {
+      V3 a = fromsm(pe[j]->GetStartPolyVertex()->GetPoint());
+      V3 z = fromsm(pe[(j + 1) % pe.GetSize()]->GetStartPolyVertex()->GetPoint());
+      c = c + a;
+      emax = std::max(emax, len(z - a));
+    }
+    c = c * (1.0 / pe.GetSize());
+    double dvert = 1e300;  // the vertices lie on the surface: an upper bound of the distance
+    for (ULONG j = 0; j < pe.GetSize(); j++)
+      dvert = std::min(dvert, len(fromsm(pe[j]->GetStartPolyVertex()->GetPoint()) - c));
+    SmPoint3d cp;
+    SmTArray<SmPoint2d> uvs;
+    double d = 0;
+    if (SmApiSurfaceClosestPoint(of->GetSurface(), sp(c), cp, uvs, d) != SM_SUCCESS || !is_fin(d))
+      continue;
+    // a "closest" point farther than a vertex is a failed solve (seen on revolved splines
+    // near the axis): ignore it
+    if (d >= 0.5 * dvert) continue;
+    if (d > worst) {
+      worst = d;
+      worst_edge = emax;
+    }
+  }
+}
 
 struct PairHash {
   size_t operator()(const std::pair<const void*, uint32_t>& p) const {
@@ -1016,6 +1587,8 @@ void emit_edge_segments(SmBrep* b, const std::vector<SmFace*>& fs, const std::ve
 extern "C" {
 
 void sc_init(void) { ensure_init(); }
+
+void sc_set_draft(int32_t on) { g_draft = on != 0; }
 uint32_t sc_version(void) { return SC_FACADE_VERSION; }
 
 int32_t sc_last_status(void) { return g_status; }
@@ -1211,50 +1784,99 @@ uint32_t sc_boolean(int32_t op, const uint32_t* hs, uint32_t n, uint32_t tag) {
     std::vector<const SmBrep*> inputs;
     for (uint32_t i = 0; i < n; i++) inputs.push_back(get(hs[i]));
 
-    BrepPtr acc;
-    bool acc_set = false;
+    // Operand list: empty shapes drop out of a union, make an intersection empty and do
+    // nothing as subtrahends.
+    std::vector<const SmBrep*> ops;
+    bool trivially_empty = false;
     for (uint32_t i = 0; i < n; i++) {
-      const SmBrep* in = inputs[i];
-      bool empty = in->GetNumFaces() == 0;
-      if (!acc_set) {
-        if (op == SC_UNION && empty) continue;
-        acc = copy_brep(in);
-        acc_set = true;
+      bool empty = inputs[i]->GetNumFaces() == 0;
+      if (i == 0 && op != SC_UNION) {
+        if (empty) trivially_empty = true;
+        ops.push_back(inputs[i]);
         continue;
-      }
-      if (acc->GetNumFaces() == 0) {
-        if (op == SC_UNION) {
-          acc = copy_brep(in);
-        }
-        continue;  // difference/intersection of an empty shape stays empty
       }
       if (empty) {
-        if (op == SC_INTERSECTION) acc = empty_brep();
+        if (op == SC_INTERSECTION) trivially_empty = true;
         continue;
       }
-      BrepPtr other = copy_brep(in);
-      SmBrep* res = nullptr;
-      SmStatus st;
-      const char* what;
-      if (op == SC_UNION) {
-        st = SmApiBooleanUnion(acc.get(), other.get(), res);
-        what = "boolean union";
-      } else if (op == SC_DIFFERENCE) {
-        st = SmApiBooleanDifference(acc.get(), other.get(), res);
-        what = "boolean difference";
-      } else {
-        st = SmApiBooleanIntersection(acc.get(), other.get(), res);
-        what = "boolean intersection";
-      }
-      if (st != SM_SUCCESS) throw sm_fail(what, st);
-      other.release();  // deleted by SMLib on success
-      if (res != acc.get()) {
-        acc.release();
-        acc.reset(res);
-      }
-      if (!acc.get()) acc = empty_brep();
+      ops.push_back(inputs[i]);
     }
-    if (!acc_set) acc = empty_brep();
+    BrepPtr acc;
+    if (trivially_empty || ops.empty()) {
+      acc = empty_brep();
+    } else if (ops.size() == 1) {
+      acc = copy_brep(ops[0]);
+    } else {
+      // Union and intersection may combine the operands in any order, a difference its
+      // subtrahends. If a step fails (SMLib error, wrong or open result, see
+      // checked_boolean), the failing operand is moved forward and the chain is rebuilt;
+      // only when no order works, the original order runs with the shifted retries and,
+      // where nothing passes, keeps SMLib's own result (touching bodies, unreliable checks).
+      size_t first_free = op == SC_DIFFERENCE ? 1 : 0;
+      std::vector<std::vector<const SmBrep*>> tried;
+      std::vector<const SmBrep*> order = ops;
+      std::string err;
+      // `last_resort`: shifted retries, and SMLib's own result is accepted if nothing passes
+      auto run = [&](const std::vector<const SmBrep*>& ord, bool last_resort, size_t& failed_at) {
+        BrepPtr a = copy_brep(ord[0]);
+        double va = NAN;
+        for (size_t i = 1; i < ord.size(); i++) {
+          if (a->GetNumFaces() == 0) break;  // difference/intersection stays empty
+          BrepPtr plain;
+          BrepPtr r = checked_boolean(op, a.get(), ord[i], last_resort, err, plain, va);
+          if (!r.get() && last_resort && plain.get()) {
+            r = std::move(plain);
+            va = NAN;
+          }
+          if (!r.get()) {
+            failed_at = i;
+            return BrepPtr();
+          }
+          a = std::move(r);
+        }
+        return a;
+      };
+      if (g_draft) {
+        // Draft: SMLib's own results in the given order while every step succeeds (closed
+        // results, or touching bodies merged); otherwise the checked path below.
+        BrepPtr a = copy_brep(ops[0]);
+        bool ok = true;
+        for (size_t i = 1; i < ops.size() && ok; i++) {
+          if (a->GetNumFaces() == 0) break;
+          std::string e;
+          BrepPtr r = raw_boolean(op, a.get(), ops[i], e);
+          if (r.get() && r->GetNumFaces() > 0 && !r->IsManifoldSolid() && op == SC_UNION)
+            r = touching_union(a.get(), ops[i]);
+          if (!r.get() || (r->GetNumFaces() > 0 && !r->IsManifoldSolid())) ok = false;
+          else a = std::move(r);
+        }
+        if (ok) acc = std::move(a);
+      }
+      for (int round = 0; round < 8 && !acc.get(); round++) {
+        tried.push_back(order);
+        size_t failed_at = 0;
+        acc = run(order, false, failed_at);
+        if (acc.get()) break;
+        // next order: the failing operand one position earlier (not before first_free)
+        bool found = false;
+        for (size_t pos = failed_at; pos-- > first_free && !found;) {
+          std::vector<const SmBrep*> next = order;
+          const SmBrep* f = next[failed_at];
+          next.erase(next.begin() + failed_at);
+          next.insert(next.begin() + pos, f);
+          if (std::find(tried.begin(), tried.end(), next) == tried.end()) {
+            order = next;
+            found = true;
+          }
+        }
+        if (!found) break;
+      }
+      if (!acc.get()) {
+        size_t failed_at = 0;
+        acc = run(ops, true, failed_at);
+      }
+      if (!acc.get()) throw fail(SC_FAILED, err.empty() ? std::string("boolean failed") : err);
+    }
     resolve_tags(acc.get(), inputs, tag, false);
     _res = put(std::move(acc));
   })
@@ -1294,8 +1916,13 @@ uint32_t sc_extrude(const double* loop, uint32_t len_, double height, double twi
         throw fail(SC_UNSUPPORTED, "extrude with scale 0 (apex)");
       if (l.kind == SC_LOOP_CIRCLE && std::fabs(scale_x - scale_y) > 1e-12)
         throw fail(SC_UNSUPPORTED, "non-uniform scale of a circle profile");
-      // Loft through k+1 sections, each rotated by twist*t and scaled by lerp(1, scale, t).
-      int k = std::fabs(twist) < 1e-12 ? 1 : std::max(2, (int)std::ceil(std::fabs(twist) / (M_PI / 8)));
+      // Loft through k+1 sections. Section t (0..1) is the profile rotated by twist*t about
+      // the origin and then scaled by lerp(1, scale, t) along x and y, in that order, as
+      // OpenSCAD does (Eigen::Scaling(scale) * Rotation2D(angle) in its linear_extrude). For
+      // a non-uniform scale the order matters: scaling first gives other cross-sections
+      // (12_linear_extrude_twist: y extent 5.08 instead of 3.83).
+      double step_deg = 7.5;
+      int k = std::fabs(twist) < 1e-12 ? 1 : std::max(2, (int)std::ceil(std::fabs(twist) / (step_deg * M_PI / 180)));
       std::vector<CurveList> secs(k + 1);
       for (int i = 0; i <= k; i++) {
         double t = (double)i / k;
@@ -1303,19 +1930,16 @@ uint32_t sc_extrude(const double* loop, uint32_t len_, double height, double twi
         double sx = 1 + (scale_x - 1) * t, sy = 1 + (scale_y - 1) * t;
         Loop s = l;
         s.frame = identity();
-        // section frame: translate(0,0,h t) * rot(a) * scale(sx, sy)
+        // section frame: translate(0,0,h t) * scale(sx, sy) * rot(a)
         double c = std::cos(a), sn = std::sin(a);
-        if (l.kind == SC_LOOP_CIRCLE) {
+        if (l.kind == SC_LOOP_CIRCLE) {  // sx == sy here
           s.frame.m[0] = c * sx;
-          s.frame.m[1] = sn * sx;
+          s.frame.m[1] = sn * sy;
           s.frame.m[4] = -sn * sx;
-          s.frame.m[5] = c * sx;
+          s.frame.m[5] = c * sy;
           s.frame.m[10] = sx;
         } else {
-          for (V3& p : s.pts) {
-            double x = p.x * sx, y = p.y * sy;
-            p = v3(c * x - sn * y, sn * x + c * y, 0);
-          }
+          for (V3& p : s.pts) p = v3((c * p.x - sn * p.y) * sx, (sn * p.x + c * p.y) * sy, 0);
         }
         s.frame.m[14] = height * t;
         loop_curves(s, false, false, secs[i]);
@@ -1355,7 +1979,7 @@ uint32_t sc_revolve(const double* loop, uint32_t len_, double angle, uint32_t ta
         throw fail(SC_INVALID, "revolve: the profile crosses the axis (x < 0 after its frame)");
     }
     CurveList cl;
-    loop_curves(loops[0], false, false, cl);
+    revolve_profile_curves(loops[0], cl);
     SmBrep* r = nullptr;
     SC_CHECK(SmApiCreateRotationalSweep(as_array(cl), SmPoint3d(0, 0, 0),
                                         SmVector3d(0, 0, deg > 0 ? 1 : -1), std::fabs(deg), TRUE,
@@ -1566,10 +2190,19 @@ uint32_t sc_shell(uint32_t h, double t, const uint32_t* open_faces, uint32_t n, 
         throw fail(SC_INVALID, "face id " + std::to_string(open_faces[i]) + " out of range");
       open.Add(fs[open_faces[i]]);
     }
+    std::vector<const SmFace*> open_v;
+    for (ULONG i = 0; i < open.GetSize(); i++) open_v.push_back(open[i]);
+    double gap = 0;
+    if (opposite_walls_closer_than(in, open_v, 2.0 * t, gap))
+      throw fail(SC_FAILED, "shell: wall thickness " + std::to_string(t) +
+                                " does not fit (opposite walls " + std::to_string(gap) + " apart)");
     SmBrep* r = nullptr;
     SC_CHECK(SmApiShellBrepFull(in, -t, TRUE, TRUE, FALSE, open, r), "SmApiShellBrepFull");
     require_result(r, "shell");
     BrepPtr b(r);
+    if (b->GetNumFaces() == 0 || !b->IsManifoldSolid())
+      throw fail(SC_FAILED, "shell: wall thickness " + std::to_string(t) +
+                                " leaves no cavity (SMLib returned no closed solid)");
     check_valid(b.get(), "shell");
     std::vector<const SmFace*> removed;
     for (ULONG i = 0; i < open.GetSize(); i++) removed.push_back(open[i]);
@@ -1712,10 +2345,45 @@ int32_t sc_tessellate(uint32_t h, double tol) {
     prm.dChordHeightTol = tol;
     prm.dCurveAngleTolDeg = 20.0;
     prm.dSurfaceAngleTolDeg = 20.0;
-    SmPolyBrep* poly = nullptr;
-    SmTArray<SmTessellationFailure> failures;
-    SmStatus st = SmApiTessellate(b, poly, prm, TRUE, &failures, nullptr);
-    if (st != SM_SUCCESS || !poly) throw sm_fail("SmApiTessellate", st == SM_SUCCESS ? SM_ERR : st);
+    auto run_tess = [&]() {
+      SmPolyBrep* p = nullptr;
+      SmTArray<SmTessellationFailure> failures;
+      SmStatus st = SmApiTessellate(b, p, prm, TRUE, &failures, nullptr);
+      if (st != SM_SUCCESS || !p) {
+        if (p) delete p;
+        throw sm_fail("SmApiTessellate", st == SM_SUCCESS ? SM_ERR : st);
+      }
+      return p;
+    };
+    SmPolyBrep* poly = run_tess();
+    // SMLib bounds the chord height only along the triangle edges. On doubly curved free-form
+    // faces with a twist (linear_extrude with twist, lofts, sweeps) long thin triangles whose
+    // edges lie on the surface still cut through it: twisted 8 mm square, 90 degrees over
+    // 20 mm: 0.2 mm in the triangle centres, mesh volume +2.9 %. Measure the centroid deviation
+    // on free-form faces and re-tessellate with a maximum edge length until it is within
+    // 2 * tol (planar and analytic faces are left to SMLib; their error is the chord height).
+    // Each pass sets a global maximum edge length (planar faces get finer too), at least
+    // halving it; at most 3 passes, and none beyond a budget of predicted triangles.
+    {
+      double area = 0;
+      size_t n0 = poly_triangles(poly, &area);
+      size_t budget = std::min<size_t>(300000, std::max<size_t>(20000, 8 * n0));
+      for (int pass = 0; pass < 3; pass++) {
+        double worst = 0, worst_edge = 0;
+        tess_deviation(poly, face_ix, worst, worst_edge);
+        if (worst <= 2.0 * tol || worst_edge <= 0) break;
+        double target = worst_edge * std::sqrt(tol / worst) * 0.9;
+        if (prm.dMaxEdgeLength > 0) target = std::min(target, 0.5 * prm.dMaxEdgeLength);
+        // about area / (0.43 target^2) triangles at that edge length
+        double floor_len = std::sqrt(area / (0.43 * (double)budget));
+        if (target < floor_len) target = floor_len;
+        if (target >= 0.9 * worst_edge) break;  // budget leaves no room for improvement
+        prm.dMaxEdgeLength = target;
+        SmPolyBrep* finer = run_tess();
+        delete poly;
+        poly = finer;
+      }
+    }
     ObjPtr<SmPolyBrep> polyOwner(poly);
 
     auto& pos = g_f32[0];

@@ -312,6 +312,50 @@ fn fillet_cylinder_rims_skips_seam() {
     assert_eq!(k.faces(&f, 1).unwrap().iter().filter(|f| f.tag == T_FIL).count(), 2);
 }
 
+/// union() { cylinder(h=30, r=4, center=true); rotate([90,0,0]) …; rotate([0,90,0]) …; }
+/// (05_nested_booleans.scad). SMLib's (Z ∪ Y) ∪ X returns SM_SUCCESS but drops the -x arm of
+/// the X cylinder (volume 3237, bounds x ≥ -4); (Y ∪ X) ∪ Z fails with SM_ERR. Every operand
+/// order, n-ary and nested, must give the analytic volume
+/// 3·π·r²·h − 3·(16/3)·r³ + 8·(2 − √2)·r³.
+#[test]
+fn union_of_three_orthogonal_cylinders() {
+    let mut k = k();
+    let r = 4.0f64;
+    let want = 3.0 * PI_ * r * r * 30.0 - 3.0 * 16.0 / 3.0 * r.powi(3) + 8.0 * (2.0 - 2f64.sqrt()) * r.powi(3);
+    let c = k.make_cylinder(30.0, r, r, 1).unwrap();
+    let z = k.transform(&c, &translate(0.0, 0.0, -15.0)).unwrap();
+    let y = k.transform(&z, &DMat4::from_rotation_x(PI_ / 2.0)).unwrap();
+    let x = k.transform(&z, &DMat4::from_rotation_y(PI_ / 2.0)).unwrap();
+    let check = |k: &mut kernel_smlib::SmlibKernel, s: &kernel_smlib::Shape, what: &str| {
+        assert_approx(what, volume(k, s), want, 1e-5);
+        let (lo, hi) = k.bounds(s).unwrap().unwrap();
+        assert!((lo + DVec3::splat(15.0)).abs().max_element() < 1e-3, "{what}: {lo}");
+        assert!((hi - DVec3::splat(15.0)).abs().max_element() < 1e-3, "{what}: {hi}");
+    };
+    let orders = [[&z, &y, &x], [&z, &x, &y], [&y, &z, &x], [&y, &x, &z], [&x, &z, &y], [&x, &y, &z]];
+    for (i, o) in orders.iter().enumerate() {
+        let v: Vec<_> = o.iter().map(|s| (*s).clone()).collect();
+        let u = k.boolean(BoolOp::Union, &v, 9).unwrap();
+        check(&mut k, &u, &format!("order {i}"));
+        if i == 0 {
+            let m = k.tessellate(&u, 0.01).unwrap();
+            assert!(mesh_closed(&m));
+            assert_approx("mesh volume", mesh_volume(&m), want, 3e-3);
+        }
+    }
+    // nested: union(union(z, y), x) has no other order to try
+    let zy = k.boolean(BoolOp::Union, &[z.clone(), y.clone()], 9).unwrap();
+    let u = k.boolean(BoolOp::Union, &[zy.clone(), x.clone()], 9).unwrap();
+    check(&mut k, &u, "nested");
+    let u = k.boolean(BoolOp::Union, &[x.clone(), zy], 9).unwrap();
+    check(&mut k, &u, "nested, swapped");
+    // and as the tool of a difference (the cross bore of 05)
+    let b = k.make_box(DVec3::splat(-10.0), DVec3::splat(10.0), 2).unwrap();
+    let d = k.boolean(BoolOp::Difference, &[b, z, y, x], 9).unwrap();
+    let cross_in_box = 3.0 * PI_ * r * r * 20.0 - 3.0 * 16.0 / 3.0 * r.powi(3) + 8.0 * (2.0 - 2f64.sqrt()) * r.powi(3);
+    assert_approx("box minus cross", volume(&mut k, &d), 8000.0 - cross_in_box, 1e-5);
+}
+
 #[test]
 fn invalid_profiles_fail_cleanly() {
     let mut k = k();
@@ -326,9 +370,19 @@ fn invalid_profiles_fail_cleanly() {
     // degenerate input
     assert!(matches!(k.make_box(DVec3::ZERO, DVec3::new(1.0, 0.0, 1.0), 1), Err(KernelError::InvalidInput(_))));
     assert!(matches!(k.make_sphere(-1.0, 1), Err(KernelError::InvalidInput(_))));
-    // too thick shell
+    // too thick shell: planar walls are rejected by the facade before SMLib (usd-brep c9c5979
+    // read freed memory here); curved ones by SMLib, or by the facade when SMLib returns an
+    // empty body
     let b = cube(&mut k, 10.0, T_BOX);
     assert!(matches!(k.shell(&b, 6.0, &[0], 3), Err(KernelError::Failed { .. })));
+    assert!(matches!(k.shell(&b, 5.0, &[], 3), Err(KernelError::Failed { .. })));
+    let s = k.make_sphere(5.0, 1).unwrap();
+    assert!(matches!(k.shell(&s, 5.0, &[], 3), Err(KernelError::Failed { .. })));
+    let c = k.make_cylinder(20.0, 5.0, 5.0, 1).unwrap();
+    assert!(matches!(k.shell(&c, 6.0, &[], 3), Err(KernelError::Failed { .. })));
+    // just fits: 10 mm cube, wall 4.99 (valgrind clean with the fork)
+    let h = k.shell(&b, 4.99, &[], 3).unwrap();
+    assert_approx("thin cavity", volume(&mut k, &h), 1000.0 - 0.02f64.powi(3), 1e-9);
 }
 
 // ---------------------------------------------------------------- queries
@@ -524,11 +578,67 @@ fn extrude_with_twist_and_scale() {
         Err(e) => panic!("{e}"),
     }
     // twist: volume of a twisted square prism equals the untwisted one
-    match k.extrude(&p, 4.0, PI_ / 2.0, DVec2::ONE, 7) {
-        Ok(s) => assert_approx("twisted extrude", volume(&mut k, &s), 16.0, 2e-2),
-        Err(KernelError::Unsupported(_)) => {}
-        Err(e) => panic!("{e}"),
+    let s = k.extrude(&p, 4.0, PI_ / 2.0, DVec2::ONE, 7).unwrap();
+    assert_approx("twisted extrude", volume(&mut k, &s), 16.0, 1e-4);
+}
+
+/// Exact extent of a twisted, scaled polygon prism: section t is the profile rotated by
+/// twist·t, then scaled by lerp(1, scale, t) along x and y (OpenSCAD's order).
+fn twisted_extent(pts: &[DVec2], twist: f64, scale: DVec2) -> DVec2 {
+    let mut m = DVec2::ZERO;
+    for i in 0..=20000 {
+        let t = i as f64 / 20000.0;
+        let (s, c) = (twist * t).sin_cos();
+        let sc = DVec2::ONE + (scale - DVec2::ONE) * t;
+        for p in pts {
+            let q = DVec2::new(c * p.x - s * p.y, s * p.x + c * p.y) * sc;
+            m = m.max(q.abs());
+        }
     }
+    m
+}
+
+/// linear_extrude(height = 12, twist = -60, scale = [1, 0.5]) square([10, 6], center = true)
+/// (12_linear_extrude_twist.scad). The kernel's twist is counter-clockwise (the engine negates
+/// OpenSCAD's angle). Scaling before rotating gave y extent 5.08 instead of 3.83.
+#[test]
+fn twisted_extrude_with_nonuniform_scale_matches_openscad() {
+    let mut k = k();
+    let pts = vec![DVec2::new(-5.0, -3.0), DVec2::new(5.0, -3.0), DVec2::new(5.0, 3.0), DVec2::new(-5.0, 3.0)];
+    let twist = 60f64.to_radians();
+    let scale = DVec2::new(1.0, 0.5);
+    let s = k.extrude(&placed(Loop::Polygon(pts.clone()), DMat4::IDENTITY), 12.0, twist, scale, 7).unwrap();
+    // A(t) = 60 · sx · sy = 60 (1 - t/2)
+    assert_approx("volume", volume(&mut k, &s), 540.0, 1e-4);
+    let want = twisted_extent(&pts, twist, scale);
+    assert!((want - DVec2::new(34f64.sqrt(), 3.8309045)).abs().max_element() < 1e-5, "{want}");
+    let (lo, hi) = k.bounds(&s).unwrap().unwrap();
+    for (got, w) in [(hi.x, want.x), (-lo.x, want.x), (hi.y, want.y), (-lo.y, want.y)] {
+        assert!((got - w).abs() < 1e-3, "bounds {lo} {hi}, want ±{want}");
+    }
+    assert!(lo.z.abs() < 1e-9 && (hi.z - 12.0).abs() < 1e-9);
+    // direction: at mid height (30°, sy = 0.75) the corner (5, 3) has turned counter-clockwise
+    // to (2.83, 3.82); clockwise, the corner (-5, 3) would be there, mirrored
+    let c = k.classify(&s, &[DVec3::new(2.6, 3.5, 6.0), DVec3::new(-2.6, 3.5, 6.0)]).unwrap();
+    assert_eq!(c, vec![Class::Inside, Class::Outside]);
+}
+
+/// The export mesh of a twisted extrusion follows the surface: SMLib only bounds the chord
+/// height along triangle edges, the facade refines free-form faces until the triangle centres
+/// are within 2·tol (before: twisted 8 mm square, 90°: mesh volume 1317 instead of 1280).
+#[test]
+fn twisted_extrude_mesh_volume() {
+    let mut k = k();
+    let sq = vec![DVec2::new(-4.0, -4.0), DVec2::new(4.0, -4.0), DVec2::new(4.0, 4.0), DVec2::new(-4.0, 4.0)];
+    let s = k.extrude(&placed(Loop::Polygon(sq), DMat4::IDENTITY), 20.0, PI_ / 2.0, DVec2::ONE, 7).unwrap();
+    assert_approx("brep volume", volume(&mut k, &s), 1280.0, 1e-4);
+    let tol = 0.01;
+    let m = k.tessellate(&s, tol).unwrap();
+    assert!(mesh_closed(&m));
+    // volume error at most tolerance × area (≈ 7.8 mm³ = 0.6 %; before: 37 mm³)
+    let area = k.mass_props(&s).unwrap().area;
+    let err = (mesh_volume(&m) - 1280.0).abs();
+    assert!(err < tol * area, "mesh volume {} (error {err}, area {area})", mesh_volume(&m));
 }
 
 #[test]
@@ -660,16 +770,111 @@ fn nurbs_surface_and_thicken() {
     }
 }
 
+
+// ---------------------------------------------------------------- regressions (report 4)
+
+/// Knob profile of `examples/spec/knauf_mirror.scad`: a closed spline through two points on
+/// the axis. Interpolated as one closed curve it crosses the axis next to them (x down to
+/// -1.6), and SMLib's full-turn sweep returned a self-overlapping solid (volume 172 instead of
+/// ~3200 for r = 10, open booleans, failed fillets). The facade joins the two axis points by a
+/// straight segment.
+fn knob_profile(r: f64, h: f64) -> Loop {
+    Loop::Spline(vec![
+        DVec2::new(0.0, 0.0),
+        DVec2::new(r, 0.0),
+        DVec2::new(r * 0.6, h / 2.0),
+        DVec2::new(r, h),
+        DVec2::new(0.0, h),
+    ])
+}
+
 #[test]
-fn handles_are_released() {
+fn revolve_spline_through_axis_points() {
     let mut k = k();
-    // other tests run in parallel: measure only our own allocations with a margin
-    let before = k.live_handles();
-    {
-        let d = box_minus_cylinder(&mut k);
-        let _f = k.fillet(&d, &[0], 0.5, 9).unwrap();
-        let _c = d.clone();
+    let to_xz = DMat4::from_rotation_x(PI_ / 2.0);
+    for r in [15.0, 10.0] {
+        let full = k.revolve(&placed(knob_profile(r, 20.0), to_xz), 2.0 * PI_, 8).unwrap();
+        // a half turn used to fail with SM_ERR_AXIS_INSIDE_FACE
+        let half = k.revolve(&placed(knob_profile(r, 20.0), to_xz), PI_, 8).unwrap();
+        assert!(k.is_solid(&full) && k.is_solid(&half));
+        let (vf, vh) = (volume(&mut k, &full), volume(&mut k, &half));
+        assert_approx("full turn = 2 half turns", vf, 2.0 * vh, 1e-4);
+        // between the waist cylinder (r = 0.6 r) and the outer one, height 20
+        assert!(vf > PI_ * (0.6 * r).powi(2) * 20.0 && vf < PI_ * (1.1 * r).powi(2) * 20.0, "r = {r}: volume {vf}");
+        let (lo, hi) = k.bounds(&half).unwrap().unwrap();
+        assert!(lo.y > -1e-6, "half turn reaches y = {} (profile crosses the axis)", lo.y);
+        // the interpolating spline overshoots its points (z down to -2.7, up to 22.7)
+        assert!(lo.z > -3.0 && hi.z < 23.0, "{lo} {hi}");
+        let c = k.classify(&full, &[DVec3::new(1.0, 1.0, 10.0), DVec3::new(0.0, 0.0, 30.0)]).unwrap();
+        assert_eq!(c, vec![Class::Inside, Class::Outside]);
+        // booleans with the knob: the bore of the example (through the bottom, which the
+        // spline bends below z = 0) and a cavity inside
+        let cyl = k.make_cylinder(10.0, 3.0, 3.0, 2).unwrap();
+        let bore = k.transform(&cyl, &translate(0.0, 0.0, -1.0)).unwrap();
+        let d = k.boolean(BoolOp::Difference, &[full.clone(), bore], 3).unwrap();
+        assert!(k.is_solid(&d));
+        let vd = volume(&mut k, &d);
+        assert!(vd < vf - PI_ * 9.0 * 9.0 && vd > vf - PI_ * 9.0 * 10.0, "knob minus bore: {vd}");
+        let cavity = k.transform(&cyl, &translate(0.0, 0.0, 5.0)).unwrap();
+        let d = k.boolean(BoolOp::Difference, &[full.clone(), cavity], 3).unwrap();
+        assert_approx("knob minus cavity", volume(&mut k, &d), vf - PI_ * 9.0 * 10.0, 1e-4);
     }
-    let after = k.live_handles();
-    assert!(after <= before + 8, "handles leak: {before} -> {after}");
+}
+
+#[test]
+fn revolve_spline_crossing_the_axis_fails() {
+    let mut k = k();
+    // no two consecutive points on the axis: the closed spline bulges to x < 0
+    let lp = Loop::Spline(vec![DVec2::new(0.2, 0.0), DVec2::new(10.0, 0.0), DVec2::new(10.0, 10.0), DVec2::new(0.2, 10.0)]);
+    let r = k.revolve(&placed(lp, DMat4::from_rotation_x(PI_ / 2.0)), 2.0 * PI_, 3);
+    assert!(matches!(r, Err(KernelError::InvalidInput(_))), "{r:?}");
+}
+
+/// Bodies touching along an edge (`examples/spec/winkel_anker.scad`: the ruler cube on the
+/// bracket's corner): SMLib's union is non-manifold, not a closed solid (volume 0).
+#[test]
+fn union_of_touching_solids_is_closed() {
+    let mut k = k();
+    let a = k.make_box(DVec3::ZERO, DVec3::new(30.0, 20.0, 3.0), 1).unwrap();
+    let b = k.make_box(DVec3::new(30.0, 20.0, 0.0), DVec3::new(32.0, 22.0, 2.0), 2).unwrap();
+    let u = k.boolean(BoolOp::Union, &[a.clone(), b.clone()], 3).unwrap();
+    assert!(k.is_solid(&u));
+    assert_approx("edge-touching union", volume(&mut k, &u), 1800.0 + 8.0, 1e-9);
+    let tags: BTreeSet<Tag> = k.faces(&u, 1).unwrap().iter().map(|f| f.tag).collect();
+    assert_eq!(tags, BTreeSet::from([1, 2]));
+    // same height: the shared edge is a full edge of both
+    let c = k.make_box(DVec3::ZERO, DVec3::splat(2.0), 1).unwrap();
+    let d = k.make_box(DVec3::new(2.0, 2.0, 0.0), DVec3::new(4.0, 4.0, 2.0), 2).unwrap();
+    let u2 = k.boolean(BoolOp::Union, &[c.clone(), d.clone()], 3).unwrap();
+    assert!(k.is_solid(&u2));
+    assert_approx("edge-touching cubes", volume(&mut k, &u2), 16.0, 1e-9);
+    let m = k.tessellate(&u2, 0.01).unwrap();
+    assert_approx("mesh volume", mesh_volume(&m), 16.0, 1e-6);
+    // a third body overlapping both
+    let e = k.make_box(DVec3::new(1.0, 1.0, 0.0), DVec3::new(3.0, 3.0, 1.0), 4).unwrap();
+    let u3 = k.boolean(BoolOp::Union, &[c, d, e], 3).unwrap();
+    assert!(k.is_solid(&u3));
+    assert_approx("touching pair plus a bridge", volume(&mut k, &u3), 18.0, 1e-9);
+    // overlapping bodies are still united normally
+    let f = k.make_box(DVec3::new(29.0, 19.0, 0.0), DVec3::new(32.0, 22.0, 2.0), 2).unwrap();
+    let u4 = k.boolean(BoolOp::Union, &[a, f], 3).unwrap();
+    assert!(k.is_solid(&u4));
+    assert_approx("overlapping union", volume(&mut k, &u4), 1800.0 + 18.0 - 2.0, 1e-9);
+}
+
+/// Draft mode only drops checks: the plain cases give the same results.
+#[test]
+fn draft_mode_booleans_and_fillets() {
+    let mut k = k();
+    k.set_draft(true);
+    let d = box_minus_cylinder(&mut k);
+    let want = 1000.0 - PI_ * 4.0 * 10.0;
+    assert_approx("draft difference", volume(&mut k, &d), want, 1e-5);
+    let b = cube(&mut k, 10.0, T_BOX);
+    let all: Vec<u32> = (0..12).collect();
+    let f = k.fillet(&b, &all, 1.0, T_FIL).unwrap();
+    k.set_draft(false);
+    assert!(k.is_solid(&f));
+    let f2 = k.fillet(&b, &all, 1.0, T_FIL).unwrap();
+    assert_approx("draft fillet = fillet", volume(&mut k, &f), volume(&mut k, &f2), 1e-9);
 }

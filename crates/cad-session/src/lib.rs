@@ -12,7 +12,9 @@
 //!   cache, so the next job only recomputes the path to the root.
 //! * Syntax errors: only `Diagnostics` are sent, the last scene stays valid (Spec: Fehler).
 //! * While a handle is dragged, meshes are tessellated with a coarse tolerance
-//!   ([`SessionOptions::coarse_factor`] × the fine one), afterwards fine again.
+//!   ([`SessionOptions::coarse_factor`] × the fine one), afterwards fine again. Jobs started
+//!   during a drag run in the engine's draft mode (slow fillets/chamfers left out, see
+//!   `cad_engine::Engine::set_draft`); `DragEnd` without a new source re-evaluates in full.
 //! * After every finished job the root mesh is sent automatically
 //!   ([`SessionOptions::auto_root_mesh`]) unless it was already sent with that key and
 //!   tolerance class.
@@ -217,6 +219,12 @@ where
                     Some(t) => self.drag_edits(handle, &t),
                     None => Vec::new(),
                 };
+                let draft = self.running.as_ref().is_some_and(|r| r.job.suspended_blends() > 0)
+                    || self.done.as_ref().is_some_and(|d| d.ev.draft && d.ev.stats.suspended_blends > 0);
+                if res.is_empty() && draft && self.has_source {
+                    // No new source follows, but the scene left blends out: evaluate in full.
+                    return self.reevaluate();
+                }
                 if res.is_empty() {
                     // No new source follows: refine the coarse root mesh of the current state.
                     if let Some(d) = &self.done
@@ -264,6 +272,18 @@ where
                 self.export = None;
                 Vec::new()
             }
+            ToEngine::BlockKeys { keys } => {
+                let mut ok = Vec::new();
+                let mut bad = Vec::new();
+                for k in keys {
+                    match cad_engine::CacheKey::from_hex(&k) {
+                        Some(key) => ok.push(key),
+                        None => bad.push(k),
+                    }
+                }
+                self.engine.block_keys(ok);
+                if bad.is_empty() { Vec::new() } else { vec![self.error(&format!("ungültige Schlüssel: {}", bad.join(", ")), None)] }
+            }
         }
     }
 
@@ -296,6 +316,7 @@ where
         out.diagnostics = diags;
 
         self.running = None;
+        self.engine.set_draft(self.drag.is_some());
         let job = self.engine.start(out.tree.clone());
         let keys: Vec<_> = (0..job.tree().nodes.len() as u32).map(|n| job.key(n)).collect();
         let tags: Vec<u32> = (0..job.tree().nodes.len() as u32).map(|n| job.tag(n)).collect();
@@ -311,7 +332,7 @@ where
             version: self.version,
             done: 0,
             total: job.total() as u32,
-            current: job.current().map(|n| node_ref(&cur, n)),
+            current: job.current().map(|n| node_ref(&cur, n, &job)),
         };
         self.cur = Some(cur);
         self.running = Some(Running { job, version: self.version, kernel_ms: 0.0 });
@@ -364,7 +385,7 @@ where
                         version: r.version,
                         done: done as u32,
                         total: total as u32,
-                        current: r.job.current().map(|n| node_ref(cur, n)),
+                        current: r.job.current().map(|n| node_ref(cur, n, &r.job)),
                     }]
                 }
                 Step::Done(ev) => {
@@ -536,9 +557,14 @@ where
     }
 }
 
-fn node_ref(cur: &Current, n: NodeIdx) -> p::NodeRef {
+fn node_ref<S>(cur: &Current, n: NodeIdx, job: &Job<S>) -> p::NodeRef {
     let node = cur.out.tree.node(n);
-    p::NodeRef { node: n, stmt: convert::stmt(node.stmt), range: cur.src.range(node.span) }
+    p::NodeRef {
+        node: n,
+        stmt: convert::stmt(node.stmt),
+        range: cur.src.range(node.span),
+        key: Some(job.key(n).to_hex()),
+    }
 }
 
 fn snap_ref_to_p(r: &cad_eval::SnapRef) -> p::SnapRef {

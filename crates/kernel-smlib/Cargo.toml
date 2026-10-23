@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "cad_kernel::Kernel over NVIDIA SMLib (usd-brep @ c9c5979) through a C++ facade"
+description = "cad_kernel::Kernel over SMLib (tangency-labs/smlib @ 7eba8aa, based on NVIDIA usd-brep c9c5979) through a C++ facade"
 build = "build.rs"
 
 [features]
