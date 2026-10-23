@@ -344,6 +344,7 @@ impl Shared {
             "rss_limit_bytes": self.rss_limit(),
             "rss_clears": st.rss_clears,
             "socket": self.socket.display().to_string(),
+            "socket_substitute": cad_ipc::is_substitute(&self.dir, ENDPOINT),
             "log": self.dir.join("daemon.log").display().to_string(),
             "config_file": self.cfg.file.as_ref().map(|p| p.display().to_string()),
         })
@@ -393,7 +394,22 @@ fn serve(a: &ServeArgs) -> ExitCode {
             return ExitCode::from(3);
         }
     };
-    let socket = dir.join(format!("{ENDPOINT}.sock"));
+    // a socket path longer than the Unix limit goes to a short substitute (cad_ipc docs)
+    let socket = match cad_ipc::socket_path_in(&dir, ENDPOINT) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("cad daemon serve: {e}");
+            return ExitCode::from(3);
+        }
+    };
+    if cad_ipc::is_substitute(&dir, ENDPOINT) {
+        log(&format!(
+            "Socketpfad in {} wäre länger als {} Byte: Ersatz {}",
+            dir.display(),
+            cad_ipc::MAX_SOCKET_PATH,
+            socket.display()
+        ));
+    }
     let lock_path = dir.join(format!("{ENDPOINT}.lock"));
     // One daemon: the lock. Another start meanwhile waits briefly (a replaced daemon may
     // still finish a request) and ends once a daemon answers.
@@ -843,7 +859,8 @@ fn execute(job: &Job, engine: Engine<SmlibKernel>) -> Result<Executed, String> {
 
 fn not_running_json(cmd: &str) -> Json {
     json!({"schema_version": cad_session::PROTOCOL_VERSION, "command": cmd, "ok": true, "exit_code": 0, "running": false,
-           "socket": cad_ipc::endpoint_path(ENDPOINT).ok().map(|p| p.display().to_string())})
+           "socket": cad_ipc::endpoint_path(ENDPOINT).ok().map(|p| p.display().to_string()),
+           "socket_substitute": cad_ipc::runtime_dir().is_ok_and(|d| cad_ipc::is_substitute(&d, ENDPOINT))})
 }
 
 fn status(as_json: bool) -> ExitCode {
@@ -925,7 +942,16 @@ fn status(as_json: bool) -> ExitCode {
         mib(f("rss_limit_bytes") as u64),
         st["rss_clears"]
     ));
-    t.push_str(&format!("Socket {}, Log {}\n", st["socket"].as_str().unwrap_or(""), st["log"].as_str().unwrap_or("")));
+    t.push_str(&format!(
+        "Socket {}{}, Log {}\n",
+        st["socket"].as_str().unwrap_or(""),
+        if st["socket_substitute"].as_bool() == Some(true) {
+            format!(" (Ersatzpfad: Pfad im IPC-Verzeichnis länger als {} Byte)", cad_ipc::MAX_SOCKET_PATH)
+        } else {
+            String::new()
+        },
+        st["log"].as_str().unwrap_or("")
+    ));
     print!("{t}");
     ExitCode::SUCCESS
 }
@@ -955,7 +981,7 @@ pub fn stop_daemon(conn: Option<Conn>, wait: Duration) -> Result<Option<u32>, St
 
 /// PID from the lock file.
 pub fn lock_pid() -> Option<u32> {
-    let p = cad_ipc::endpoint_path(ENDPOINT).ok()?.with_extension("lock");
+    let p = cad_ipc::runtime_dir().ok()?.join(format!("{ENDPOINT}.lock"));
     LockFile::read_info(&p)?.lines().next()?.trim().parse().ok()
 }
 
