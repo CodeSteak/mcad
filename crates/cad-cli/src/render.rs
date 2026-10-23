@@ -748,7 +748,19 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
                 ));
             }
             n_grids += 1;
-            n_points += grid_overlay(g, subject.as_ref(), size, labels_on, lk, (&mut lines, &mut markers, &mut labels));
+            let frame = profile_grid_frame(sc, g);
+            if frame.is_some() {
+                notes.push(format!("Raster {}: in der Profilebene von rotate_extrude gezeichnet (x = Radius, y = Höhe)", g.name));
+            }
+            n_points += grid_overlay(
+                g,
+                frame,
+                subject.as_ref(),
+                size,
+                labels_on,
+                lk,
+                (&mut lines, &mut markers, &mut labels),
+            );
         }
     }
     if plan.shows("anchors") {
@@ -858,16 +870,73 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
     Ok(Built { meshes, lines, markers, labels, triangles, visible, highlighted, subject, counts, notes })
 }
 
-/// Lines (plane rectangles at the grid's border), points and labels of one grid.
+/// A grid whose every reference lies in the 2D profile of one `rotate_extrude` (`polygon([g[…],
+/// …])` below it, through 2D operations only) describes that profile: x = radius, y = height.
+/// The profile is swept from the extrusion's xz plane, so the grid is drawn there instead of in
+/// the xy plane of its module: the frame `RE · Rx(90°) · RE⁻¹ · N · frame_module` (N the node
+/// of the referencing statement, RE the extrusion; grid values are coordinates in N's system).
+/// `None` for every other grid, or when references sit in different extrusions or outside a
+/// node (variables).
+fn profile_grid_frame(sc: &p::Scene, g: &p::Grid) -> Option<DMat4> {
+    let refs: Vec<&p::Ref> = sc
+        .refs
+        .iter()
+        .filter(|r| match r.target {
+            p::RefTarget::Grid { grid, .. } | p::RefTarget::Plane { grid, .. } => grid == g.id,
+            p::RefTarget::Anchor { .. } => false,
+        })
+        .collect();
+    if refs.is_empty() || g.planes.iter().any(|pl| pl.axis == 2 && !pl.implicit) {
+        return None;
+    }
+    let mut found: Option<(u32, DMat4)> = None;
+    for r in refs {
+        let stmt = r.stmt?;
+        let mut any = false;
+        for n in sc.nodes.iter().filter(|n| n.stmt == Some(stmt)) {
+            if n.dim != Some(p::Dim::Two) {
+                return None;
+            }
+            // up through 2D nodes to the extrusion
+            let mut cur = n.parent;
+            let re = loop {
+                let q = sc.nodes.get(cur? as usize)?;
+                if matches!(q.op_info, Some(p::OpInfo::RotateExtrude { .. })) {
+                    break q;
+                }
+                if q.dim != Some(p::Dim::Two) {
+                    return None;
+                }
+                cur = q.parent;
+            };
+            let rw = crate::mat(&re.world);
+            let f = rw * DMat4::from_rotation_x(std::f64::consts::FRAC_PI_2) * rw.inverse() * crate::mat(&n.world)
+                * crate::mat(&g.frame_module);
+            match &found {
+                Some((idx, f0)) if *idx != re.idx || !f0.abs_diff_eq(f, 1e-9) => return None,
+                _ => found = Some((re.idx, f)),
+            }
+            any = true;
+        }
+        if !any {
+            return None;
+        }
+    }
+    found.map(|(_, f)| f)
+}
+
+/// Lines (plane rectangles at the grid's border), points and labels of one grid; `frame`
+/// overrides the grid's own frame (see [`profile_grid_frame`]).
 fn grid_overlay(
     g: &p::Grid,
+    frame: Option<DMat4>,
     subject: Option<&p::Bounds>,
     size: f64,
     labels_on: bool,
     lk: &Look,
     (lines, markers, labels): (&mut Vec<Polyline>, &mut Vec<Marker>, &mut Vec<Label>),
 ) -> usize {
-    let frame = mat(&g.frame);
+    let frame = frame.unwrap_or_else(|| mat(&g.frame));
     let inv = frame.inverse();
     // subject bounds in the grid system (for axes with a single plane)
     let local_box = subject.map(|b| {
