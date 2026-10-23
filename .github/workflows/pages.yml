@@ -1,0 +1,78 @@
+# Prepared, manual only: builds web/dist and deploys it to GitHub Pages. The app needs no
+# COOP/COEP headers (no SharedArrayBuffer), so static hosting is enough. Requires Pages with
+# source "GitHub Actions" in the repository settings.
+name: pages
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust 1.97.0 (wasm32)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.0"
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: web
+          save-if: false
+
+      - name: Build tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build
+
+      - name: SMLib (Wasm)
+        uses: ./.github/actions/smlib-wasm
+        with:
+          smlib-url: ${{ secrets.SMLIB_CLONE_URL }}
+
+      - name: wasm-bindgen-cli
+        run: scripts/ci/wasm-bindgen.sh
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.22.0"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Build web/dist
+        run: scripts/ci/web.sh wasm install build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

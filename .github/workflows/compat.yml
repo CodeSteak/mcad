@@ -1,0 +1,96 @@
+# Comparisons with other systems: OpenSCAD 2021.01 (apt) and OpenCASCADE (cadquery-ocp).
+#
+# - reference: regenerates the OpenSCAD reference and checks the checked-in reference.json,
+#   self-test of compare.py
+# - projects: include/use projects against a live OpenSCAD run
+# - compare: tests/openscad-compat/compare.py --eval with the release CLI (33 models)
+# - step: tests/step/verify.py, every example exported as STEP and read back with OCCT
+# Locally: scripts/ci/compat.sh cli reference projects compare step
+name: compat
+
+on:
+  push:
+    paths-ignore: ["docs/**", "**/*.md"]
+  pull_request:
+    paths-ignore: ["docs/**", "**/*.md"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  OCP_VERSION: "8.0.1.1.0"
+
+jobs:
+  compat:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust 1.97.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.0"
+
+      - name: OpenSCAD 2021.01, build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends openscad ninja-build
+          openscad --version
+
+      - name: SMLib (native)
+        uses: ./.github/actions/smlib-native
+        with:
+          smlib-url: ${{ secrets.SMLIB_CLONE_URL }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: compat
+
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: "3.13"
+
+      - name: Restore STEP venv
+        id: venv
+        uses: actions/cache@v4
+        with:
+          path: ~/venv-step
+          key: ${{ runner.os }}-venv-step-py${{ steps.python.outputs.python-version }}-ocp${{ env.OCP_VERSION }}
+
+      - name: cadquery-ocp ${{ env.OCP_VERSION }}
+        run: scripts/ci/step-venv.sh
+
+      - name: Release CLI
+        run: scripts/ci/compat.sh cli
+
+      - name: OpenSCAD reference and self-test of compare.py
+        run: scripts/ci/compat.sh reference
+
+      - name: include/use against OpenSCAD
+        run: scripts/ci/compat.sh projects
+
+      - name: OpenSCAD comparison (compare.py)
+        run: scripts/ci/compat.sh compare
+
+      - name: STEP check with OpenCASCADE (verify.py)
+        run: scripts/ci/compat.sh step
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-reports
+          path: |
+            target/openscad-compat/compare-report.json
+            target/openscad-compat/reference.fresh.json
+            target/step/verify-report.json
+          if-no-files-found: ignore
+          retention-days: 14
