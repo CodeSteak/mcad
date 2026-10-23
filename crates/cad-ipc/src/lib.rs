@@ -22,7 +22,9 @@
 //!   any time.
 //! * **Stale sockets**: a socket file whose server is gone (connect refused) is removed by
 //!   [`Server::bind`], [`connect`] and [`list`]; binding a name that a live server holds fails
-//!   with [`Error::InUse`].
+//!   with [`Error::InUse`]. A server binds under a temporary name and moves the socket to its
+//!   path only once it listens, so a refused connection really means a stale file (and only
+//!   the file that refused is removed).
 //!
 //! * **Lock files** ([`LockFile`]): an exclusive `flock` on `<dir>/<name>.lock` makes sure
 //!   only one process serves an endpoint (CLI daemon: several CLI calls may start one at the
@@ -602,40 +604,80 @@ mod imp {
         e.kind() == io::ErrorKind::ConnectionRefused
     }
 
-    pub fn alive(path: &Path) -> bool {
-        match UnixStream::connect(path) {
-            Ok(_) => true,
-            Err(e) => {
-                if refused(&e) {
-                    let _ = std::fs::remove_file(path);
-                }
-                false
-            }
+    /// Inode of the file at `path` (not following a symlink).
+    fn ino(path: &Path) -> Option<u64> {
+        std::fs::symlink_metadata(path).ok().map(|m| m.ino())
+    }
+
+    /// Connects; a refused connection removes the socket file, but only the file that
+    /// refused: a server that has meanwhile put its socket at `path` (see [`bind`]) keeps it.
+    fn connect_or_remove(path: &Path) -> io::Result<UnixStream> {
+        let before = ino(path);
+        let r = UnixStream::connect(path);
+        if let Err(e) = &r
+            && refused(e)
+            && before.is_some()
+            && ino(path) == before
+        {
+            let _ = std::fs::remove_file(path);
         }
+        r
+    }
+
+    pub fn alive(path: &Path) -> bool {
+        connect_or_remove(path).is_ok()
     }
 
     pub fn connect(path: &Path) -> Result<UnixStream> {
-        match UnixStream::connect(path) {
+        match connect_or_remove(path) {
             Ok(s) => Ok(s),
-            Err(e) if refused(&e) => {
-                let _ = std::fs::remove_file(path);
-                Err(Error::NotRunning(path.to_path_buf()))
-            }
+            Err(e) if refused(&e) => Err(Error::NotRunning(path.to_path_buf())),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Err(Error::NotRunning(path.to_path_buf())),
             Err(e) => Err(e.into()),
         }
     }
 
+    /// Binds the socket under a temporary name in the same directory, sets mode 0600 and
+    /// only then moves it to `path`: the socket appears there when it already listens.
+    /// Bound at `path` directly, a client connecting between `bind` and `listen` was refused,
+    /// took the new socket for a stale one and removed it (the daemon then failed to start).
     pub fn bind(path: &Path) -> Result<UnixListener> {
-        if path.exists() {
-            if alive(path) {
-                return Err(Error::InUse(path.to_path_buf()));
-            }
-            let _ = std::fs::remove_file(path);
+        static SEQ: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        if path.exists() && alive(path) {
+            return Err(Error::InUse(path.to_path_buf()));
         }
-        let l = UnixListener::bind(path)?;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
-        Ok(l)
+        let seq = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let tmp = path.with_file_name(format!(".{}-{seq}.tmp", std::process::id()));
+        if tmp.as_os_str().len() > MAX_SOCKET_PATH {
+            // no room for a temporary name: bind in place
+            let _ = std::fs::remove_file(path);
+            let l = UnixListener::bind(path)?;
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+            return Ok(l);
+        }
+        let _ = std::fs::remove_file(&tmp);
+        let l = UnixListener::bind(&tmp)?;
+        let placed = std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600)).and_then(|()| {
+            // a new name: link, so that a server that came first keeps its socket
+            match std::fs::hard_link(&tmp, path) {
+                Ok(()) => Ok(true),
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {
+                    if alive(path) {
+                        Ok(false)
+                    } else {
+                        // stale socket: replace it atomically
+                        std::fs::rename(&tmp, path).map(|()| true)
+                    }
+                }
+                Err(e) => Err(e),
+            }
+        });
+        let _ = std::fs::remove_file(&tmp);
+        match placed {
+            Ok(true) => Ok(l),
+            Ok(false) => Err(Error::InUse(path.to_path_buf())),
+            Err(e) => Err(e.into()),
+        }
     }
 
     pub fn accept(l: &UnixListener) -> Result<UnixStream> {
