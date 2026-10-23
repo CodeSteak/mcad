@@ -1,0 +1,10 @@
+color("rot") cube(5);
+translate([10,0,0]) color("lightblue") cube(5);
+translate([20,0,0]) color("Rot") cube(5);
+translate([30,0,0]) color("dunkelgrün") cube(5);
+translate([40,0,0]) color("") cube(5);
+translate([50,0,0]) color("RED") cube(5);
+translate([60,0,0]) color(" red ") cube(5);
+translate([70,0,0]) color("Grey") cube(5);
+translate([80,0,0]) color("AQUA") cube(5);
+translate([90,0,0]) color("fuchsia") cube(5);

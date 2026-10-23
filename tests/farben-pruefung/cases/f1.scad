@@ -1,0 +1,15 @@
+color("red") cube(5);
+translate([10,0,0]) color("red", filament = 3) cube(5);
+translate([20,0,0]) color("red", filament = 4) cube(5);
+translate([30,0,0]) color("blue", filament = 3) cube(5);
+translate([40,0,0]) color("green") cube(5);
+translate([50,0,0]) color("yellow", filament = 1) cube(5);
+translate([60,0,0]) cube(5);
+translate([70,0,0]) color("white", filament = 0) cube(5);
+translate([80,0,0]) color("white", filament = 17) cube(5);
+translate([90,0,0]) color("white", filament = 2.5) cube(5);
+translate([100,0,0]) color("white", filament = "2") cube(5);
+translate([110,0,0]) color("pink", filament = 16) cube(5);
+translate([120,0,0]) color("Red", filament = 5) cube(5);
+translate([130,0,0]) color("#c74240", filament = 6) cube(5);
+translate([140,0,0]) color("red", alpha = 0.5, filament = 7) cube(5);
