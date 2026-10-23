@@ -16,10 +16,11 @@ module buchstabe(c, b = 8, h = 12, s = 2, t = 1.2) {
         balken(0, h - s, b, s, t);
         balken(0, h / 2 - s / 2, b, s, t);
     } else if (c == "D") {
+        // Balken überlappen (nur Kanten berühren gäbe keinen geschlossenen Körper)
         balken(0, 0, s, h, t);
-        balken(0, h - s, b - s, s, t);
-        balken(0, 0, b - s, s, t);
-        balken(b - s, s, s, h - 2 * s, t);
+        balken(0, h - s, b - s / 2, s, t);
+        balken(0, 0, b - s / 2, s, t);
+        balken(b - s, s / 2, s, h - s, t);
     }
 }
 
