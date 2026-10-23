@@ -48,6 +48,15 @@ pub fn read_text(path: &Path) -> io::Result<String> {
         .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, format!("{}: kein UTF-8", path.display())))
 }
 
+/// Bytes a project text stands for: binary files (fonts) are kept as `data:…;base64,…` URLs
+/// in the UI and written decoded.
+pub fn content_bytes(text: &str) -> std::borrow::Cow<'_, [u8]> {
+    match cad_eval::decode_data_url(text) {
+        Some(Ok(b)) => std::borrow::Cow::Owned(b),
+        _ => std::borrow::Cow::Borrowed(text.as_bytes()),
+    }
+}
+
 /// Writes `text` atomically (temporary file in the same directory, then rename); keeps the
 /// permissions of an existing file. Creates missing parent directories.
 pub fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
@@ -55,7 +64,7 @@ pub fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
     std::fs::create_dir_all(dir)?;
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "datei".into());
     let tmp = dir.join(format!(".{name}.cad-{}.tmp", std::process::id()));
-    std::fs::write(&tmp, text)?;
+    std::fs::write(&tmp, content_bytes(text))?;
     if let Ok(md) = std::fs::metadata(path) {
         let _ = std::fs::set_permissions(&tmp, md.permissions());
     }
@@ -67,7 +76,19 @@ pub fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
 /// Files the main file includes or uses (transitively), relative to `root`, with texts.
 fn closure(root: &Path, main: &str, text: &str) -> BTreeMap<String, String> {
     let proj = Project::load(main, text, &FsResolver { root: root.to_path_buf() });
-    proj.files.iter().filter(|f| f.path != main).map(|f| (f.path.clone(), f.text.clone())).collect()
+    let mut out: BTreeMap<String, String> =
+        proj.files.iter().filter(|f| f.path != main).map(|f| (f.path.clone(), f.text.clone())).collect();
+    // data files (`import("logo.svg")`, fonts): SVG as text, binary files as data URLs
+    for (path, a) in &proj.assets {
+        if let Ok(b) = &a.0 {
+            let text = match std::str::from_utf8(b) {
+                Ok(t) if path.to_ascii_lowercase().ends_with(".svg") => t.to_string(),
+                _ => cad_eval::data_url("application/octet-stream", b),
+            };
+            out.insert(path.clone(), text);
+        }
+    }
+    out
 }
 
 /// Opens one file: the project is the file and everything it includes or uses.

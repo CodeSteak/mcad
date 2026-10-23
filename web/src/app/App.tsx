@@ -31,6 +31,7 @@ import {
   setViewer,
   startProject,
   switchFile,
+  uploadProjectFiles,
   togglePart,
 } from "./runtime";
 import { ParamBar, SettingsButton } from "./panels";
@@ -146,6 +147,21 @@ function FileBar() {
         >
           + Datei
         </button>
+        <label className="upload" title="SVG (für import), Schrift .ttf/.otf (für text) oder .scad ins Projekt laden" data-testid="file-upload">
+          ⇡ Datei laden
+          <input
+            type="file"
+            multiple
+            accept=".svg,.ttf,.otf,.scad"
+            data-testid="file-upload-input"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const files = e.currentTarget.files;
+              if (files && files.length) void uploadProjectFiles(Array.from(files));
+              e.currentTarget.value = "";
+            }}
+          />
+        </label>
         <button title="Angezeigte Datei als Hauptdatei auswerten" data-testid="file-main" disabled={p.active === p.main} onClick={() => setMainFile(p.active)}>
           ★ Hauptdatei
         </button>

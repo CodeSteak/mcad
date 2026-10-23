@@ -3,7 +3,7 @@
 // several files: autosave of the whole project, folders (File System Access API), ZIP upload
 // and download.
 
-import { guessMain, normalizePath, stripCommonFolder } from "../logic/files";
+import { dataFileRefs, fileBytes, fileText, guessMain, isProjectFile, normalizePath, resolvePath, stripCommonFolder } from "../logic/files";
 import type { DirHandle, FileHandleLike, ProjectSnapshot } from "../state/project";
 import { readZip, writeZip } from "./zip";
 
@@ -125,13 +125,13 @@ export function hasDirectoryAccess(): boolean {
   return typeof (window as DirWindow).showDirectoryPicker === "function";
 }
 
-/** All .scad files of a folder (recursive, without hidden folders). */
+/** All .scad files of a folder and the data files (SVG, fonts; recursive, without hidden folders). */
 async function readDir(dir: DirHandle, prefix = "", out: Record<string, string> = {}): Promise<Record<string, string>> {
   for await (const h of dir.values()) {
     if (Object.keys(out).length >= MAX_PROJECT_FILES) break;
     if (h.name.startsWith(".")) continue;
     if (h.kind === "directory") await readDir(h, `${prefix}${h.name}/`, out);
-    else if (h.name.toLowerCase().endsWith(".scad")) out[`${prefix}${h.name}`] = await (await h.getFile()).text();
+    else if (isProjectFile(h.name)) out[`${prefix}${h.name}`] = fileText(h.name, new Uint8Array(await (await h.getFile()).arrayBuffer()));
   }
   return out;
 }
@@ -163,21 +163,20 @@ export async function saveToFolder(dir: DirHandle, files: Record<string, string>
     for (const seg of parts.slice(0, -1)) d = await d.getDirectoryHandle(seg, { create: true });
     const fh: FileHandleLike = await d.getFileHandle(parts[parts.length - 1], { create: true });
     const out = await fh.createWritable();
-    await out.write(text);
+    await out.write(new Blob([fileBytes(text) as BlobPart]));
     await out.close();
     n++;
   }
   return n;
 }
 
-/** A project from ZIP bytes (.scad files; a common top folder is removed). */
+/** A project from ZIP bytes (.scad files and data files; a common top folder is removed). */
 export async function projectFromZip(name: string, bytes: Uint8Array): Promise<LoadedProject> {
   const entries = await readZip(bytes);
-  const dec = new TextDecoder();
   let files: Record<string, string> = {};
   for (const e of entries) {
-    if (!e.name.toLowerCase().endsWith(".scad") || e.name.split("/").some((s) => s.startsWith(".") || s === "__MACOSX")) continue;
-    files[normalizePath(e.name)] = dec.decode(e.data);
+    if (!isProjectFile(e.name) || e.name.split("/").some((s) => s.startsWith(".") || s === "__MACOSX")) continue;
+    files[normalizePath(e.name)] = fileText(e.name, e.data);
     if (Object.keys(files).length >= MAX_PROJECT_FILES) break;
   }
   const stripped = stripCommonFolder(files);
@@ -213,12 +212,28 @@ export function pickZip(): Promise<LoadedProject | null> {
 /** ZIP of the project's files (a top folder named after the project). */
 export function projectZip(name: string, files: Record<string, string>): Uint8Array {
   const folder = name.replace(/[^\w.-]+/g, "_") || "projekt";
-  return writeZip(Object.keys(files).sort().map((p) => ({ name: `${folder}/${p}`, data: files[p] })));
+  return writeZip(Object.keys(files).sort().map((p) => ({ name: `${folder}/${p}`, data: fileBytes(files[p]) })));
 }
 
 // ---------------------------------------------------------------- examples
 
 const raw = import.meta.glob("../../../examples/**/*.scad", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+/** SVGs of examples/svg (imported by spec examples). */
+const rawSvg = import.meta.glob("../../../examples/**/*.svg", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const EXAMPLE_DATA: Record<string, string> = Object.fromEntries(Object.entries(rawSvg).map(([p, t]) => [p.replace(/^.*examples\//, ""), t]));
+
+/**
+ * Data files an example imports (paths relative to examples/), e.g. `spec/svg_logo.scad` →
+ * `{"svg/logo.svg": …}`; empty if it imports none.
+ */
+export function exampleData(path: string, text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const rel of dataFileRefs(text)) {
+    const p = resolvePath(path, rel);
+    if (EXAMPLE_DATA[p] !== undefined) out[p] = EXAMPLE_DATA[p];
+  }
+  return out;
+}
 
 export interface Example {
   group: string;
