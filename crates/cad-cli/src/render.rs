@@ -43,11 +43,13 @@ const GRID_POINT: [f32; 4] = [0.15, 0.3, 0.7, 0.95];
 const ANCHOR: [f32; 4] = [0.98, 0.76, 0.1, 1.0];
 const HANDLE: [f32; 4] = [1.0, 0.45, 0.05, 1.0];
 const BBOX: [f32; 4] = [0.1, 0.55, 0.3, 0.9];
-const HIDDEN: [f32; 4] = [0.2, 0.2, 0.28, 0.45];
+const HIDDEN: [f32; 4] = [0.15, 0.15, 0.3, 0.7];
 const TEXT: [f32; 4] = [0.08, 0.08, 0.12, 1.0];
 
 /// Names of `--views all`.
 pub(crate) const ALL_VIEWS: [&str; 4] = ["iso", "front", "top", "right"];
+/// Grids with more points get no point labels (only plane names).
+const MAX_POINT_LABELS: usize = 48;
 const SHOW: [&str; 7] = ["grids", "anchors", "handles", "edges", "labels", "bbox", "dims"];
 
 /// Selection, camera, overlays, section (shared by `render` and `watch --render`).
@@ -599,6 +601,13 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
             notes.push("keine Raster im Kontext (Raster gelten nur in ihrem Modul: --module NAME)".into());
         }
         for g in grids {
+            let n: usize = (0..3u8).map(|a| g.planes.iter().filter(|pl| pl.axis == a).count().max(1)).product();
+            if labels_on && n > MAX_POINT_LABELS {
+                notes.push(format!(
+                    "Raster {}: {n} Punkte, nur Ebenen beschriftet (Punkte bis {MAX_POINT_LABELS}; --view und --zoom für Details)",
+                    g.name
+                ));
+            }
             n_grids += 1;
             n_points += grid_overlay(g, subject.as_ref(), size, labels_on, &mut lines, &mut markers, &mut labels);
         }
@@ -788,6 +797,7 @@ fn grid_overlay(
     }
     // intersection points
     let mut count = 0;
+    let point_labels = labels_on && planes.iter().map(|p| p.len().max(1)).product::<usize>() <= MAX_POINT_LABELS;
     let axis_planes: [Vec<(String, f64)>; 3] = std::array::from_fn(|a| {
         if planes[a].is_empty() {
             vec![("_".to_string(), 0.0)]
@@ -804,7 +814,7 @@ fn grid_overlay(
                 count += 1;
                 let pnt = w(DVec3::new(*x, *y, *z));
                 markers.push(Marker { pos: pnt, shape: MarkerShape::Dot, size: 2.5, color: GRID_POINT, on_top: true });
-                if labels_on {
+                if point_labels {
                     labels.push(Label {
                         pos: pnt,
                         text: format!("{}[{nx},{ny},{nz}]", g.name),
@@ -1006,17 +1016,25 @@ pub(crate) fn vec3d(v: DVec3) -> String {
 
 pub(crate) fn command(c: &Common, output: &Path, a: &ViewArgs) -> Result<Outcome, Fail> {
     let plan = Plan::from_args(a)?;
+    let t0 = std::time::Instant::now();
     let mut m = load(c, plan.lines.first().copied(), a.whole_file, true)?;
+    let load_ms = t0.elapsed().as_secs_f64() * 1000.0;
     let mut j = m.base_json("render");
     j["line"] = json!(plan.lines.first());
     if m.scene.is_none() {
         let t = m.diagnostics_text();
         return Ok(Outcome { json: j, text: t, errors: true });
     }
+    let t1 = std::time::Instant::now();
     let (fields, line) = render_model(&mut m, &plan, output)?;
     if let (Json::Object(dst), Json::Object(src)) = (&mut j, fields) {
         dst.extend(src);
     }
+    let stats = m.scene.as_ref().map(|s| s.stats).unwrap_or_default();
+    j["timings"] = json!({
+        "evaluate_ms": load_ms, "eval_ms": stats.eval_ms, "kernel_ms": stats.kernel_ms,
+        "render_ms": t1.elapsed().as_secs_f64() * 1000.0,
+    });
     let mut t = m.diagnostics_text();
     t.push_str(&line);
     Ok(Outcome { json: j, text: t, errors: m.has_errors() })

@@ -887,7 +887,8 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
         let cs = 0.72 + 0.28 * cap_n.dot(light).max(0.0) as f32;
         let cc = opts.cap_color;
         let mut parity = vec![false; w * h];
-        for it in scene.items.iter().filter(|i| i.cap && i.color[3] >= 0.999) {
+        let oh_cap = h / ss + 7;
+        for (ci, it) in scene.items.iter().filter(|i| i.cap && i.color[3] >= 0.999).enumerate() {
             parity.iter_mut().for_each(|p| *p = false);
             let m = &it.mesh;
             let mut any = false;
@@ -928,7 +929,9 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
                 if parity[i] && pd[i] < t.depth[i] {
                     t.depth[i] = pd[i];
                     let (x, y) = (i % w / ss, i / w / ss);
-                    let k = if (x + y) % 7 == 0 { 0.72 } else { 1.0 };
+                    // hatching, alternating direction per capped item (neighbouring parts)
+                    let hatch = if ci % 2 == 0 { x + y } else { x + 7 * oh_cap - y };
+                    let k = if hatch % 7 == 0 { 0.72 } else { 1.0 };
                     t.color[i] = [cc[0] * cs * k, cc[1] * cs * k, cc[2] * cs * k];
                 }
             }

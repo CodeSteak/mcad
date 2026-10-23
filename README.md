@@ -11,7 +11,8 @@ Plan und Entscheidungen: [`docs/technischer-plan.md`](docs/technischer-plan.md).
 ## Status
 
 Meilensteine M0–M7 sind umgesetzt, dazu STEP-Export, `include`/`use`, mehrere Bauteile und
-variabler Fillet-Radius (Testberichte 1–7, [`docs/reports/`](docs/reports/README.md)). Offen
+variabler Fillet-Radius und eine CLI, mit der Agenten Modelle ganz ohne UI entwickeln und
+prüfen (Testberichte 1–8, [`docs/reports/`](docs/reports/README.md)). Offen
 sind der Umstieg auf den Rust-Kernel solidcore (M8, wartet auf den Portierungsstand von
 solidcore, siehe [`docs/solidcore-umstieg.md`](docs/solidcore-umstieg.md)) und eine
 Tauri-Version (optional). Nur Desktop-Browser, kein Backend; gespeichert wird im Browser
@@ -57,17 +58,30 @@ cargo build --release -p cad-cli            # -> target/release/cad
 
 Ohne `SMLIB_PREBUILT` baut `crates/kernel-smlib/build.rs` SMLib selbst (einmal pro Profil).
 
-CLI-Beispiele (Details: `cad --help` und `.claude/skills/cad-cli/SKILL.md`):
+CLI für Menschen und Agenten (Details: `cad --help`, `.claude/skills/cad-cli/SKILL.md`,
+Bericht 8). Empfohlener Ablauf: `outline` → editieren → `check` →
+`render --views all --show grids,anchors` → `inspect`/`measure` → `export`.
 
 ```sh
 cad=target/release/cad
-$cad check examples/spec/gehaeuse.scad                      # Diagnosen mit Zeile:Spalte
-$cad eval examples/spec/gehaeuse.scad --json                 # Szene, Raster, Anker, echo
-$cad inspect examples/spec/fillet_zonen.scad --line 12       # was Zeile 12 erzeugt
-$cad render examples/spec/fillet_zonen.scad -o x.png --line 12 --view iso
-$cad export examples/spec/flasche.scad -o flasche.step       # auch .stl, .3mf
+$cad outline examples/projekt-gehaeuse/gehaeuse.scad          # Module, Parameter, Raster, Anker, Bauteile
+$cad check examples/spec/gehaeuse.scad                         # Diagnosen mit Zeile:Spalte
+$cad eval examples/spec/gehaeuse.scad --json                   # Szene, Raster, Anker, echo
+$cad inspect examples/spec/fillet_zonen.scad --line 12         # was Zeile 12 erzeugt
+$cad render examples/spec/gehaeuse.scad -o x.png --module gehaeuse --views all --show grids,anchors,labels
+$cad render examples/spec/gehaeuse.scad -o s.png --section z=10 --show dims   # Schnitt mit Kappe
+$cad render examples/spec/fillet_zonen.scad -o f.png --line 12 --azimuth 120 --elevation 30 --xray
+$cad measure examples/spec/gehaeuse.scad --between k.ecke k.oben --volume part:k
+$cad measure examples/projekt-gehaeuse/gehaeuse.scad --interference --clearance gehaeuse deckel
+$cad set examples/spec/gehaeuse.scad --param gehaeuse.w=50 --dry-run   # Standardwert, Diff
+$cad watch teil.scad --json --render teil.png --views all      # neu auswerten bei jeder Änderung
+$cad export examples/spec/flasche.scad -o flasche.step         # auch .stl, .3mf
 $cad export examples/projekt-gehaeuse/gehaeuse.scad --all-parts -o teile/ --format step
 ```
+
+Jeder Befehl hat `--json` mit festem, versioniertem Schema (`schema_version`, Kopf von
+`crates/cad-cli/src/main.rs`) und Exit-Codes 0 (ok), 1 (Fehler im Modell), 2 (Aufruf),
+3 (Kernel/intern). `cad datei.scad` ohne Befehl ist für die spätere Desktop-UI reserviert.
 
 Browser (Wasm-Module bauen, dann Vite):
 
@@ -131,7 +145,7 @@ crates/
   kernel-mock/       Testkernel in Rust
   cad-engine/        Auswertung mit Cache, Provenienz, Zonen, Bauteile, Export STL/3MF/STEP
   cad-step/          STEP-Writer (AP242/AP214)
-  cad-render/        Software-Rasterizer für `cad render`
+  cad-render/        Software-Rasterizer für `cad render` (Schnitt mit Kappe, Beschriftung)
   cad-session/       Protokoll (Worker und CLI), TS-Typen
   cad-wasm/          wasm-bindgen-Einstieg für den Worker
   cad-cli/           CLI `cad`
@@ -142,6 +156,7 @@ web/                 React-App (src/), Playwright-Tests (e2e/), Build-Skripte (s
 examples/            Beispielmodelle (zugleich Testfälle)
 tests/               openscad-compat/ (Referenz, compare.py), step/verify.py
 tools/report/        Generatoren der Testberichte
+tools/font/          Generator der Bitmap-Schrift von cad-render
 scripts/ci/          Schritte der GitHub-Actions-Workflows (lokal genauso aufrufbar)
 docs/                Plan, solidcore-Umstieg, Testberichte
 ```
@@ -186,6 +201,7 @@ CMakeLists, Build-Skript und Compiler: `scripts/ci/smlib-key.sh`). Ist der SMLib
 - [Bericht 5](docs/reports/05-step-export/report.pdf): STEP-Export und Kernel-Vergleich SMLib ↔ solidcore.
 - [Bericht 6](docs/reports/06-projekte-bauteile/report.pdf): Projekte, Bauteile, `include`/`use`.
 - [Bericht 7](docs/reports/07-kernel-variabler-radius/report.pdf): Kernel-Korrekturen und variabler Radius.
+- [Bericht 8](docs/reports/08-cli-agenten/report.pdf): CLI für Agenten (outline, render-Ansichten/Schnitt, measure, watch, set).
 
 ## Lizenzen
 

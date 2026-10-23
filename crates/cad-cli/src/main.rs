@@ -1,28 +1,69 @@
-//! `cad`: command line interface for the CAD language (native SMLib kernel).
+//! `cad`: command line interface for the CAD language (native SMLib kernel), made for agents
+//! that develop and check models without the UI.
 //!
-//! Commands (Plan section 8): `check`, `eval`, `inspect --line n`, `render -o bild.png`,
-//! `export -o teil.stl|teil.3mf|teil.step`, `diff-kernels <files…>` (SMLib ↔ solidcore, see
-//! `diff.rs`). Every command prints readable text, or with `--json` one
-//! JSON object (schema below). The evaluation runs in a thread with a 256 MiB stack.
+//! Commands (Plan section 8): `check`, `outline`, `eval`, `inspect --line n`,
+//! `render -o bild.png`, `measure`, `watch`, `set`, `export -o teil.stl|teil.3mf|teil.step`,
+//! `diff-kernels <files…>` (SMLib ↔ solidcore, see `diff.rs`). Every command prints readable
+//! text, or with `--json` one JSON object (`watch`: one object per line). The evaluation runs
+//! in a thread with a 256 MiB stack. `cad DATEI.scad` without a command is reserved for the
+//! desktop UI (exit 2 with a message), `cad` without arguments prints the help.
 //!
 //! Exit codes: 0 ok, 1 diagnostics with severity error (syntax, evaluation or a failed kernel
-//! operation), 2 usage error (arguments, unreadable file), 3 kernel/internal error
-//! (tessellation or export failed, panic).
+//! operation; `set`: change refused), 2 usage error (arguments, unreadable file, unknown
+//! reference), 3 kernel/internal error (tessellation or export failed, panic).
 //!
 //! JSON schema (`schema_version` = `cad_session::PROTOCOL_VERSION`, currently 1). Types such
 //! as `Diagnostic`, `Scene`, `SrcRange`, `Hint`, `Handle` are the protocol types documented in
-//! `web/src/engine/protocol.ts` (lines/columns 1-based, offsets UTF-16):
+//! `web/src/engine/protocol.ts` (lines/columns 1-based, offsets UTF-16); `Bounds` here is
+//! `{ min, max, size }`:
 //!
 //! ```text
 //! common:  { schema_version, command, file, ok, exit_code, context: string|null,
 //!            diagnostics: Diagnostic[], error?: string }
 //! check:   + { errors: number, warnings: number }
+//! outline: + { files: [{path, role}], includes: [{file, line, path, use, found}],
+//!            modules: [{name, path, qualified, file, line, end_line,
+//!                       params: [{name, default, default_value, type}],
+//!                       grids: [Grid'], anchors: [{name, point, dir, line}], errors_with_defaults}],
+//!            functions: [{name, params: [{name, default}], file, line, body}],
+//!            variables: [{name, expr, value, text, literal, file, line}],
+//!            grids: Grid'[] (file level), anchors: [{ref, point, dir, line}],
+//!            instances: [{name, module, file, line, depth, part}],
+//!            parts: [{name, module, line, node, bounds: Bounds|null, volume}],
+//!            counts: {errors, warnings, nodes, modules, parts}, kernel: bool }
+//!          Grid' = { name, file, line, planes: [{axis: "x"|"y"|"z", name, value,
+//!                    kind: "literal"|"expression"|"reference"|"implicit", expr}] }
 //! eval:    + { scene: Scene|null }
 //! inspect: + { line, nodes: InspectNode[], hints: Hint[], handles: Handle[], echoes: Echo[] }
 //!          InspectNode = { idx, label, instance, range, status, dim, flags, subtracted,
 //!                          world_bounds: {min,max}|null, volume|null, area|null,
 //!                          selected_edges, opened_faces, hints, messages, cached }
-//! render:  + { output, width, height, view, line|null, highlighted: number[], triangles }
+//! render:  + { output, width, height, view, views: [{name, x, y, width, height, camera}],
+//!            camera: Camera, line|null, lines: number[], nodes: number[], parts: string[],
+//!            highlighted: number[], visible_nodes: [{idx, label, instance, role, line, file,
+//!            triangles}], triangles, show: string[], overlays: {grids, grid_points, anchors,
+//!            handles, labels, lines, markers}, section: {point, normal, keeps, method}|null,
+//!            xray, bounds: Bounds|null, notes: string[],
+//!            timings: {evaluate_ms, eval_ms, kernel_ms, render_ms} }
+//!          Camera = { projection: "ortho"|"perspective", fov_deg|null, azimuth, elevation,
+//!                     dir, up, right, target, eye, scale_px_per_mm, width_mm, height_mm }
+//!          role: base | dimmed | highlighted | zone | subtracted | background | modifier #|%
+//! measure: + { between?: {a: {ref, kind, point}, b: {…}, delta, distance},
+//!              bounds?: {target, nodes, bounds: Bounds|null},
+//!              volume?: {target, nodes, volume}, area?: {target, nodes, area},
+//!              interference?: {parts, tolerance, method, pairs: [{a, b, bounds_overlap,
+//!                              volume, collision?}], collisions: [{a, b, volume}]},
+//!              clearance?: {a, b, distance, mesh_distance, point_a, point_b,
+//!                           intersection_volume, collision, accuracy, mesh_tol, triangles,
+//!                           method} }
+//! watch:   one line per run: { schema_version, command, run, trigger: "start"|"change",
+//!            changed: string[], file, ok, exit_code, context, errors, warnings,
+//!            diagnostics, stats: {nodes, cache_hits, kernel_calls}, volume|null,
+//!            bounds: Bounds|null, parts: [{name, volume, bounds}],
+//!            render: {output, width, height}|{error}|null,
+//!            timings: {total_ms, eval_ms, kernel_ms, render_ms?} }
+//! set:     + { changes: [{kind: "param"|"literal", spec, file, line, col, old, new}],
+//!            dry_run, written: string[], refused, errors_before, errors_after, diff }
 //! export:  + { output, format: "stl"|"3mf"|"step", bytes, triangles, volume|null, area|null,
 //!            bounds: {min,max}|null, step?: StepStats }   (triangles 0 for STEP)
 //!          with --part/--all-parts: + { parts: [{ name, output, bytes, triangles, volume|null }] }
@@ -122,6 +163,7 @@ enum Cmd {
     Render {
         #[command(flatten)]
         c: Common,
+        /// Ausgabebild (PNG).
         #[arg(short, long)]
         output: PathBuf,
         #[command(flatten)]

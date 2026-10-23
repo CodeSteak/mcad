@@ -74,7 +74,8 @@ fn report(m: &mut Model, plan: Option<&(Plan, PathBuf)>, r: Run) -> (Json, Strin
         "warnings": warnings,
         "diagnostics": m.diagnostics,
     });
-    let mut t = format!("[{}] {}: {errors} Fehler, {warnings} Warnungen, {} ms", r.n, m.file, num(r.total_ms));
+    let mut t =
+        format!("[{}] {}: {errors} Fehler, {warnings} Warnungen, Auswertung {} ms", r.n, m.file, num(r.total_ms));
     let mut timings = json!({ "total_ms": r.total_ms });
     if let Some(sc) = m.scene.clone() {
         timings["eval_ms"] = json!(sc.stats.eval_ms);
@@ -118,7 +119,9 @@ fn report(m: &mut Model, plan: Option<&(Plan, PathBuf)>, r: Run) -> (Json, Strin
                     t.push_str(&format!(", Bild: {e}"));
                 }
             }
-            timings["render_ms"] = json!(t0.elapsed().as_secs_f64() * 1000.0);
+            let render_ms = t0.elapsed().as_secs_f64() * 1000.0;
+            timings["render_ms"] = json!(render_ms);
+            timings["total_ms"] = json!(r.total_ms + render_ms);
         }
     } else {
         j["render"] = Json::Null;

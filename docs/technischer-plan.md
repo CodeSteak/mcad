@@ -339,20 +339,27 @@ Die Szene trägt die Quelltext-Version. Bis eine neue Szene da ist, bildet die U
 
 ## 8. CLI (`cad-cli`)
 
-Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem Kernel. Zweck: Nutzung durch Claude Code und andere Werkzeuge, Tests in CI, Kernel-Vergleich vor dem Umstieg auf solidcore.
+Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem Kernel. Zweck: Nutzung durch Claude Code und andere Agenten (Modelle ganz ohne UI entwickeln und prüfen, auch parallel zu einem Menschen in der UI), Tests in CI, Kernel-Vergleich vor dem Umstieg auf solidcore.
 
 | Befehl | Ausgabe |
 | --- | --- |
 | `check <datei>` | Diagnosen mit Zeile und Spalte |
+| `outline <datei>` | Übersicht in einem Aufruf: Module (Datei:Zeile, Parameter mit Standardwert und Typ, Raster und Anker mit Standardwerten), Funktionen, Variablen mit Werten, benannte Instanzen, Bauteile (Hülle, Volumen), `include`/`use`, Diagnosen |
 | `eval <datei> [--module m] [-D name=wert]` | Baum, Werte, Inline-Hinweise, Raster, Anker |
 | `inspect <datei> --line n` | Was die Zeile erzeugt: Knoten, Hülle, Volumen, ausgewählte Kanten, Warnungen |
-| `render <datei> -o bild.png [--view iso\|front\|top\|right] [--line n] [--size 1024x768]` | Bild des Modells, optional mit hervorgehobener Zeile wie im Editor |
+| `render <datei> -o bild.png` | Bild: `--view`, Kontaktbogen `--views iso,front,top,right\|all` (gleiche Skalierung), freie Kamera (`--azimuth/--elevation/--zoom/--target/--fit`, `--perspective`), Auswahl (`--part`, `--line` mehrfach, `--node`, `--only`), Überlagerungen `--show grids,anchors,handles,edges,labels,bbox,dims`, Schnitt `--section x\|y\|z=wert`/`--section-plane p,n`/`--section-flip`, `--xray` |
+| `measure <datei>` | `--between A B` (Anker, Rasterpunkt, Koordinate), `--bounds/--volume/--area ZIEL`, `--interference` (Kernel-Schnitt aller Bauteilpaare), `--clearance A B` (Abstand über die Tessellierung) |
+| `watch <datei> [--render bild.png …]` | Beobachtet Datei und Projektdateien (`notify`), wertet in derselben Sitzung neu aus (Cache bleibt), eine JSON-Zeile je Lauf |
+| `set <datei> --param m.p=wert \| --literal [datei:]z:s=wert` | Code über die Engine ändern (Standardwert, Literal), prüft vor dem Schreiben, atomar, `--dry-run` |
 | `export <datei> -o teil.stl\|.3mf\|.step [-D …] [--schema ap214] [--part name] [--all-parts]` | Exportdatei (STEP: exakte B-Rep, AP242), einzelne oder alle Bauteile |
 | `diff-kernels <datei…>` | Vergleich SMLib ↔ solidcore (nur Entwicklung, `docs/solidcore-umstieg.md`) |
 
-- Jeder Befehl hat `--json` mit festem Schema und definierte Exit-Codes. Ohne `--json` gibt es lesbaren Text.
-- `render` nutzt einen kleinen Software-Rasterizer in Rust (Z-Buffer, flache Schattierung, Kantenlinien). Er braucht keine GPU und läuft damit auch in Containern und CI.
-- Dazu eine kurze Anleitung für Claude Code im Repo (Skill-Datei), die die Befehle und das Vorgehen beschreibt: ändern → `check` → `render` → Bild ansehen.
+- Jeder Befehl hat `--json` mit festem, versioniertem Schema (`schema_version`) und definierte Exit-Codes (0 ok, 1 Modellfehler, 2 Aufruf, 3 Kernel). Ohne `--json` gibt es lesbaren Text.
+- `cad` ohne Argumente zeigt die Hilfe; `cad datei.scad` (Positionsargument ohne Befehl) ist für die Desktop-UI (Tauri) reserviert und endet bis dahin mit Exit 2 und einer Meldung.
+- `render` nutzt einen kleinen Software-Rasterizer in Rust (`cad-render`: Z-Buffer, Schattierung, Kantenlinien, Ortho/Perspektive, Marker, Beschriftung mit eingebetteter Bitmap-Schrift). Er braucht keine GPU und läuft damit auch in Containern und CI.
+- Schnitt: Clipping im Renderer mit gefüllter Kappe nach dem Stencil-Prinzip (Kappe, wo der Sichtstrahl bis zur Ebene die Oberfläche ungerade oft kreuzt), kein Kernel-Boolean. Gleiches Verfahren und gleiche Konvention wie die spätere GPU-Schnittansicht der UI: Ebene durch `p` mit Normale `n` entfernt die Hälfte, in die `n` zeigt (es bleibt `(q − p) · n ≤ 0`).
+- Kein persistenter Cache zwischen CLI-Aufrufen: ein Aufruf dauert 0,4–1 s (Bericht 8), Kernel-Ergebnisse sind Handles der nativen Bibliothek und nicht serialisierbar. Für schnelle Schleifen gibt es `cad watch` (Cache im Prozess).
+- Dazu eine Anleitung für Claude Code im Repo (`.claude/skills/cad-cli/SKILL.md`): outline → editieren → check → render (Kontaktbogen mit Rastern/Ankern) → inspect/measure → export.
 
 ---
 
