@@ -211,4 +211,7 @@ impl<K: Kernel> Kernel for CountingKernel<K> {
     fn set_draft(&mut self, draft: bool) {
         self.inner.set_draft(draft)
     }
+    fn shape_bytes(&mut self, s: &Self::Shape) -> usize {
+        self.inner.shape_bytes(s)
+    }
 }

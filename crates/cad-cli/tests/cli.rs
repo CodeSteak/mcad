@@ -10,7 +10,10 @@ fn data(name: &str) -> String {
 }
 
 fn cad() -> Command {
-    Command::cargo_bin("cad").unwrap()
+    // without daemon (tests/daemon.rs covers it, with a socket directory of its own)
+    let mut c = Command::cargo_bin("cad").unwrap();
+    c.env("CAD_NO_DAEMON", "1");
+    c
 }
 
 /// Runs with `--json`, checks the exit code, returns the parsed output.

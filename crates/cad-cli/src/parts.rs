@@ -61,12 +61,12 @@ pub(crate) fn export_parts(
     let mut t = m.diagnostics_text();
     let mut rows = Vec::new();
     if all {
-        std::fs::create_dir_all(output).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
+        crate::host::create_dir_all(output).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
         for pt in &scene.parts {
             let (bytes, tris) =
                 m.session.export_parts_with(fmt, std::slice::from_ref(&pt.name), false, &step).map_err(Fail::Kernel)?;
             let file = output.join(cad_session::part_file_name(&pt.name, ext(fmt)));
-            std::fs::write(&file, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", file.display())))?;
+            crate::host::write_file(&file, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", file.display())))?;
             t.push_str(&format!(
                 "{}: {} ({} Dreiecke, {} Bytes{})\n",
                 pt.name,
@@ -83,7 +83,7 @@ pub(crate) fn export_parts(
         j["output"] = json!(output.display().to_string());
     } else {
         let (bytes, tris) = m.session.export_parts_with(fmt, names, false, &step).map_err(Fail::Kernel)?;
-        std::fs::write(output, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
+        crate::host::write_file(output, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
         t.push_str(&format!("{}: {} ({} Dreiecke, {} Bytes)\n", names.join(", "), output.display(), tris, bytes.len()));
         for n in names {
             rows.push(json!({ "name": n, "output": output.display().to_string(), "volume": volume(n) }));

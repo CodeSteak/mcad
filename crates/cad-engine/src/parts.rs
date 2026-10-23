@@ -125,14 +125,8 @@ where
                 return Err("2D-Ergebnis kann nicht als Körper exportiert werden".into());
             }
             let world = r.display_world;
-            for p in ev.parts(n) {
-                let b = if world == glam::DMat4::IDENTITY {
-                    self.kernel_mut().brep(&p.shape)
-                } else {
-                    let s = self.kernel_mut().transform(&p.shape, &world).map_err(|e| format!("STEP: {e}"))?;
-                    self.kernel_mut().brep(&s)
-                };
-                breps.push(b.map_err(|e| format!("STEP: {e}"))?);
+            for i in 0..ev.parts(n).len() {
+                breps.push(self.placed_brep(ev, n, i, &world)?);
             }
         }
         let mut o = opts.clone();
@@ -144,7 +138,7 @@ where
                 }
             }
         }
-        let refs: Vec<&cad_kernel::brep::Brep> = breps.iter().collect();
+        let refs: Vec<&cad_kernel::brep::Brep> = breps.iter().map(|b| &**b).collect();
         let (text, st) = cad_step::write(&refs, &o).map_err(|e| e.to_string())?;
         Ok((text.into_bytes(), st))
     }

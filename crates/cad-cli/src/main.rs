@@ -7,6 +7,12 @@
 //! text, or with `--json` one JSON object (`watch`: one object per line). The evaluation runs
 //! in a thread with a 256 MiB stack.
 //!
+//! Daemon (`daemon.rs`, `client.rs`, `host.rs`, `config.rs`): `check`, `eval`, `inspect`,
+//! `render`, `export`, `outline`, `measure` and `set` run in a background process that keeps
+//! the engine cache (started by the first such call, ends after 15 min without a request);
+//! the output is the same as without it. `--no-daemon`, `CAD_NO_DAEMON=1` or
+//! `[daemon] enabled = false` switch it off; `cad daemon status|stop|serve`.
+//!
 //! Desktop UI (feature `gui`, on by default; `launch.rs`): `cad` without arguments starts the
 //! UI, `cad DATEI.scad` / `cad ORDNER/` with that file or folder. Without a graphical session
 //! (no `DISPLAY`/`WAYLAND_DISPLAY`) or in a build without `gui`: message with the headless
@@ -24,7 +30,8 @@
 //!
 //! ```text
 //! common:  { schema_version, command, file, ok, exit_code, context: string|null,
-//!            diagnostics: Diagnostic[], error?: string }
+//!            diagnostics: Diagnostic[], error?: string,
+//!            daemon?: {used: bool, reason: string|null} }   (commands that use the daemon)
 //! check:   + { errors: number, warnings: number }
 //! outline: + { files: [{path, role}], includes: [{file, line, path, use, found}],
 //!            modules: [{name, path, qualified, file, line, end_line,
@@ -77,8 +84,12 @@
 //! Projects: `include <…>`/`use <…>` are read from the file system relative to the including
 //! file. Diagnostics of other files are printed with their path (`lib/teile.scad:3:5: …`).
 
+mod client;
+mod config;
+mod daemon;
 mod diff;
 mod geom;
+mod host;
 mod launch;
 mod measure;
 mod outline;
@@ -89,16 +100,19 @@ mod ui;
 mod watch;
 
 use std::ffi::OsString;
-use std::io::Read;
+use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use cad_session::protocol::{self as p, FromEngine, ToEngine};
-use cad_session::{PROTOCOL_VERSION, Session, SessionOptions, std_clock};
+use cad_session::{PROTOCOL_VERSION, SessionOptions};
 use clap::{Args, Parser, Subcommand};
 use glam::{DMat4, DVec3};
 use kernel_smlib::SmlibKernel;
 use serde_json::{Value as Json, json};
+
+/// Stack of the thread that runs a command (CLI and daemon).
+pub(crate) const EVAL_STACK: usize = 256 << 20;
 
 #[derive(Parser)]
 #[command(
@@ -115,11 +129,21 @@ render --views all --show grids,anchors → inspect/measure → export. `cad wat
 neu aus (Cache bleibt).\n\
 Läuft die UI, sieht `cad ui status` was der Nutzer offen hat (Datei, Cursor, Kontextmodul, Parameter, \
 Diagnosen), `cad ui show datei --line N` zeigt ihm eine Stelle, `cad ui screenshot -o x.png` liefert seine \
-3D-Ansicht."
+3D-Ansicht.\n\
+Daemon: check, eval, inspect, render, export, outline, measure und set rechnen in einem Hintergrundprozess, der den \
+Kernel-Cache zwischen Aufrufen hält (startet beim ersten Aufruf, endet nach 15 min ohne Anfrage; Ausgabe wie ohne \
+Daemon). Aus: --no-daemon, CAD_NO_DAEMON=1 oder `[daemon] enabled = false` in \
+$XDG_CONFIG_HOME/controller-cad/config.toml. Verwalten: `cad daemon status|stop|serve`."
 )]
-struct Cli {
+pub(crate) struct Cli {
     #[command(subcommand)]
     cmd: Option<Cmd>,
+    /// Ohne Daemon rechnen (dauerhaft: CAD_NO_DAEMON=1 oder `[daemon] enabled = false`).
+    #[arg(long, global = true)]
+    no_daemon: bool,
+    /// Meldungen zum Daemon auf stderr (verwendet oder nicht und warum, Cache-Treffer).
+    #[arg(long, global = true)]
+    verbose: bool,
 }
 
 #[derive(Args, Clone)]
@@ -138,7 +162,7 @@ struct Common {
 }
 
 #[derive(Subcommand)]
-enum Cmd {
+pub(crate) enum Cmd {
     /// Diagnosen mit Zeile und Spalte.
     Check {
         #[command(flatten)]
@@ -240,6 +264,11 @@ enum Cmd {
         #[command(subcommand)]
         cmd: ui::UiCmd,
     },
+    /// Hintergrundprozess mit Kernel-Cache für die Befehle: status, stop, serve.
+    Daemon {
+        #[command(subcommand)]
+        cmd: daemon::DaemonCmd,
+    },
     /// Engine-Prozess der Desktop-App (intern: Rahmen auf stdin/stdout).
     #[command(hide = true)]
     EngineHost,
@@ -248,19 +277,42 @@ enum Cmd {
 }
 
 /// Names of the subcommands (messages for `cad DATEI` and unknown commands).
-const COMMANDS: &str = "check, outline, eval, inspect, render, measure, watch, set, export, ui, diff-kernels";
+const COMMANDS: &str = "check, outline, eval, inspect, render, measure, watch, set, export, ui, daemon, diff-kernels";
 
 /// Failure that ends a command without a regular result.
-enum Fail {
+pub(crate) enum Fail {
     Usage(String),
     Kernel(String),
 }
 
-struct Outcome {
+pub(crate) struct Outcome {
     json: Json,
     text: String,
     /// Exit code 1 (diagnostics with errors).
     errors: bool,
+}
+
+/// What a command prints and its exit code (computed here or in the daemon).
+pub(crate) struct Output {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub code: u8,
+}
+
+impl Output {
+    fn emit(self) -> ExitCode {
+        let mut o = std::io::stdout().lock();
+        let _ = o.write_all(&self.stdout);
+        let _ = o.flush();
+        let _ = std::io::stderr().lock().write_all(&self.stderr);
+        ExitCode::from(self.code)
+    }
+}
+
+/// Whether the daemon computed a command (`daemon` field of the JSON answer).
+pub(crate) struct DaemonInfo {
+    pub used: bool,
+    pub reason: Option<String>,
 }
 
 fn main() -> ExitCode {
@@ -271,6 +323,7 @@ fn main() -> ExitCode {
     };
     match &cmd {
         Cmd::Ui { cmd } => return ui::command(cmd),
+        Cmd::Daemon { cmd } => return daemon::command(cmd),
         Cmd::EngineHost => {
             let code = cad_desktop::engine::host_main(
                 SmlibKernel::new,
@@ -296,7 +349,34 @@ fn main() -> ExitCode {
         }
         _ => {}
     }
-    let json_mode = match &cmd {
+    let json_mode = json_mode(&cmd);
+    let name = command_name(&cmd);
+    let mut info = None;
+    if daemon::eligible(&cmd) {
+        let argv: Vec<OsString> = std::env::args_os().skip(1).collect();
+        match client::run(&argv, uses_stdin(&cmd), cli.no_daemon, cli.verbose) {
+            client::Attempt::Done(out) => return out.emit(),
+            client::Attempt::Local(i) => info = Some(i),
+        }
+    }
+    let worker = std::thread::Builder::new().stack_size(EVAL_STACK).name("cad-eval".into()).spawn(move || run(&cmd));
+    let result = match worker {
+        Ok(h) => h.join().unwrap_or_else(|e| Err(Fail::Kernel(format!("interner Fehler: {}", panic_text(&*e))))),
+        Err(e) => Err(Fail::Kernel(format!("Thread: {e}"))),
+    };
+    finish(name, json_mode, result, info.as_ref()).emit()
+}
+
+pub(crate) fn panic_text(e: &(dyn std::any::Any + Send)) -> String {
+    e.downcast_ref::<String>()
+        .cloned()
+        .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
+        .unwrap_or_else(|| "Panik".into())
+}
+
+/// `--json` of a command.
+pub(crate) fn json_mode(cmd: &Cmd) -> bool {
+    match cmd {
         Cmd::Check { c, .. }
         | Cmd::Outline { c, .. }
         | Cmd::Eval { c }
@@ -307,36 +387,53 @@ fn main() -> ExitCode {
         | Cmd::Export { c, .. } => c.json,
         Cmd::Set { a } => a.json,
         Cmd::DiffKernels { json, .. } => *json,
-        Cmd::External(_) | Cmd::Ui { .. } | Cmd::EngineHost => false,
-    };
-    let name = command_name(&cmd);
-    let worker = std::thread::Builder::new().stack_size(256 << 20).name("cad-eval".into()).spawn(move || run(&cmd));
-    let result = match worker {
-        Ok(h) => h.join().unwrap_or_else(|e| {
-            let msg = e
-                .downcast_ref::<String>()
-                .cloned()
-                .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
-                .unwrap_or_else(|| "Panik".into());
-            Err(Fail::Kernel(format!("interner Fehler: {msg}")))
-        }),
-        Err(e) => Err(Fail::Kernel(format!("Thread: {e}"))),
-    };
-    match result {
+        Cmd::External(_) | Cmd::Ui { .. } | Cmd::Daemon { .. } | Cmd::EngineHost => false,
+    }
+}
+
+/// The command reads its source from stdin (`-`).
+fn uses_stdin(cmd: &Cmd) -> bool {
+    match cmd {
+        Cmd::Check { c, .. }
+        | Cmd::Outline { c, .. }
+        | Cmd::Eval { c }
+        | Cmd::Inspect { c, .. }
+        | Cmd::Render { c, .. }
+        | Cmd::Measure { c, .. }
+        | Cmd::Export { c, .. } => c.file.as_os_str() == "-",
+        _ => false,
+    }
+}
+
+/// Text or JSON of a result and the exit code (the same in the CLI and in the daemon).
+pub(crate) fn finish(
+    name: &str,
+    json_mode: bool,
+    result: Result<Outcome, Fail>,
+    daemon: Option<&DaemonInfo>,
+) -> Output {
+    let daemon_json = daemon.map(|d| json!({"used": d.used, "reason": d.reason}));
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    let code = match result {
         Ok(o) => {
             let code = if o.errors { 1 } else { 0 };
             if o.json.is_null() {
                 // the command printed its own output (watch)
-                print!("{}", o.text);
+                stdout.push_str(&o.text);
             } else if json_mode {
                 let mut j = o.json;
                 j["exit_code"] = json!(code);
                 j["ok"] = json!(code == 0);
-                println!("{}", serde_json::to_string_pretty(&j).unwrap());
+                if let Some(d) = daemon_json {
+                    j["daemon"] = d;
+                }
+                stdout.push_str(&serde_json::to_string_pretty(&j).unwrap());
+                stdout.push('\n');
             } else {
-                print!("{}", o.text);
+                stdout.push_str(&o.text);
             }
-            ExitCode::from(code)
+            code
         }
         Err(f) => {
             let (code, msg) = match f {
@@ -344,24 +441,29 @@ fn main() -> ExitCode {
                 Fail::Kernel(m) => (3u8, m),
             };
             if json_mode {
-                let j = json!({
+                let mut j = json!({
                     "schema_version": PROTOCOL_VERSION,
                     "command": name,
                     "ok": false,
                     "exit_code": code,
                     "error": msg,
                 });
+                if let Some(d) = daemon_json {
+                    j["daemon"] = d;
+                }
                 let j = if name == "watch" { serde_json::to_string(&j) } else { serde_json::to_string_pretty(&j) };
-                println!("{}", j.unwrap());
+                stdout.push_str(&j.unwrap());
+                stdout.push('\n');
             } else {
-                eprintln!("cad {name}: {msg}");
+                stderr.push_str(&format!("cad {name}: {msg}\n"));
             }
-            ExitCode::from(code)
+            code
         }
-    }
+    };
+    Output { stdout: stdout.into_bytes(), stderr: stderr.into_bytes(), code }
 }
 
-fn command_name(c: &Cmd) -> &'static str {
+pub(crate) fn command_name(c: &Cmd) -> &'static str {
     match c {
         Cmd::Check { .. } => "check",
         Cmd::Outline { .. } => "outline",
@@ -374,12 +476,13 @@ fn command_name(c: &Cmd) -> &'static str {
         Cmd::Export { .. } => "export",
         Cmd::DiffKernels { .. } => "diff-kernels",
         Cmd::Ui { .. } => "ui",
+        Cmd::Daemon { .. } => "daemon",
         Cmd::EngineHost => "engine-host",
         Cmd::External(_) => "ui",
     }
 }
 
-fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
+pub(crate) fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
     match cmd {
         Cmd::Check { c, no_kernel } => check(c, !no_kernel),
         Cmd::Eval { c } => eval(c),
@@ -397,7 +500,7 @@ fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
             }
         }
         Cmd::DiffKernels { files, .. } => diff::command(files),
-        Cmd::External(_) | Cmd::Ui { .. } | Cmd::EngineHost => unreachable!("handled in main"),
+        Cmd::External(_) | Cmd::Ui { .. } | Cmd::Daemon { .. } | Cmd::EngineHost => unreachable!("handled in main"),
     }
 }
 
@@ -406,7 +509,7 @@ fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
 // ------------------------------------------------------------------------------------------
 
 pub(crate) struct Model {
-    pub session: Session<SmlibKernel>,
+    pub session: host::Pooled,
     pub file: String,
     /// Directory of the main file (paths of other project files are relative to it).
     pub root: PathBuf,
@@ -518,8 +621,7 @@ fn parse_define(d: &str) -> Result<(String, p::Value), Fail> {
 
 fn read_source(path: &Path) -> Result<(String, String), Fail> {
     if path.as_os_str() == "-" {
-        let mut s = String::new();
-        std::io::stdin().read_to_string(&mut s).map_err(|e| Fail::Usage(format!("stdin: {e}")))?;
+        let s = host::read_stdin().map_err(|e| Fail::Usage(format!("stdin: {e}")))?;
         return Ok(("<stdin>".into(), s));
     }
     let s = std::fs::read_to_string(path).map_err(|e| Fail::Usage(format!("{}: {e}", path.display())))?;
@@ -562,7 +664,7 @@ pub(crate) fn load(c: &Common, line: Option<u32>, whole_file: bool, kernel: bool
     let defines = c.define.iter().map(|d| parse_define(d)).collect::<Result<Vec<_>, _>>()?;
     let mut opts = SessionOptions { auto_root_mesh: false, ..Default::default() };
     opts.eval.max_stack_bytes = 192 << 20;
-    let mut s = Session::new(SmlibKernel::new(), opts, std_clock());
+    let mut s = host::new_session(opts);
     // Project files (`include`/`use`) relative to the main file's directory.
     let (root, main_name) = if c.file.as_os_str() == "-" {
         (PathBuf::new(), "stdin.scad".to_string())
@@ -1017,7 +1119,7 @@ fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str) -> Resu
         let (bytes, tris) = m.session.export_bytes(fmt).map_err(Fail::Kernel)?;
         (bytes, tris, None)
     };
-    std::fs::write(output, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
+    host::write_file(output, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
     let root = m.scene.as_ref().and_then(|s| s.root);
     let mp = root.and_then(|r| m.session.mass_props(r).ok());
     let bounds =

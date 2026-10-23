@@ -13,8 +13,9 @@ Plan und Entscheidungen: [`docs/technischer-plan.md`](docs/technischer-plan.md).
 Meilensteine M0–M7 sind umgesetzt, dazu STEP-Export, `include`/`use`, mehrere Bauteile und
 variabler Fillet-Radius, eine CLI, mit der Agenten Modelle ganz ohne UI entwickeln und
 prüfen, eine Desktop-App (Tauri 2: nativer Kernel, echte Dateien, Dateibeobachter wie in
-VS Code, Git-Markierungen am Rand, Steuerung durch `cad ui …`) und eine 3D-Schnittansicht
-(Testberichte 1–9, [`docs/reports/`](docs/reports/README.md)). Offen ist der Umstieg auf den
+VS Code, Git-Markierungen am Rand, Steuerung durch `cad ui …`), eine 3D-Schnittansicht und ein
+CLI-Daemon, der den Kernel-Cache zwischen CLI-Aufrufen hält (Testberichte 1–10,
+[`docs/reports/`](docs/reports/README.md)). Offen ist der Umstieg auf den
 Rust-Kernel solidcore (M8, wartet auf den Portierungsstand von solidcore, siehe
 [`docs/solidcore-umstieg.md`](docs/solidcore-umstieg.md)). Browser: kein Backend, gespeichert
 wird im Browser (IndexedDB) oder über die File System Access API; Desktop: Dateisystem.
@@ -25,6 +26,7 @@ wird im Browser (IndexedDB) oder über die File System Access API; Desktop: Date
 Browser:  React/TS (CodeMirror 6, three.js) ── EngineTransport ── Web Worker
 Worker:   cad-wasm → cad-session → cad-engine ── trait Kernel ── kernel-smlib ── smlib.wasm (Emscripten)
 CLI:      cad-cli  → cad-session → cad-engine ── trait Kernel ── kernel-smlib ── SMLib nativ (FFI)
+          (rechnet im Daemon `cad daemon serve` über cad-ipc, Cache bleibt zwischen Aufrufen)
 Desktop:  cad (Tauri 2: dieselbe React-App, TauriTransport) ── Kanal (binär) ── cad engine-host
           (Engine-Prozess: cad-session, SMLib nativ); Beobachter, Git, Steuer-Socket in cad-desktop/cad-ipc
 Sprache:  cad-syntax (Parser) → cad-eval (Werte mit Herkunft, Raster, Anker, Griffe) → cad-ir (Baum)
@@ -40,6 +42,11 @@ Sprache:  cad-syntax (Parser) → cad-eval (Werte mit Herkunft, Raster, Anker, G
 - Export: STL und 3MF aus der Tessellierung, STEP (AP242/AP214) mit eigenem Writer
   (`cad-step`) aus der exakten B-Rep.
 - Keine COOP/COEP-Header nötig (keine Threads, kein `SharedArrayBuffer`).
+- CLI-Daemon: `check`, `eval`, `inspect`, `render`, `export`, `outline`, `measure`, `set`
+  laufen in einem Hintergrundprozess mit einer Engine für alle Projekte (startet beim ersten
+  Aufruf, endet nach 15 min ohne Anfrage; Grenzen 512 MiB Cache, 8 Projekte, Watchdog 60 s).
+  Ausgabe wie ohne Daemon; aus mit `--no-daemon`, `CAD_NO_DAEMON=1` oder `[daemon] enabled =
+  false` in `$XDG_CONFIG_HOME/controller-cad/config.toml`; `cad daemon status|stop|serve`.
 - Desktop: ein Binary `cad` (Feature `gui`, Standard). `cad` ohne Befehl startet die UI, die
   Engine läuft in einem eigenen Prozess (Watchdog beendet ihn bei hängendem Kernel), Meshes
   kommen binär über einen Tauri-2-Kanal. Ohne grafische Sitzung: Meldung, Exit 2.
@@ -83,6 +90,23 @@ $cad set examples/spec/gehaeuse.scad --param gehaeuse.w=50 --dry-run   # Standar
 $cad watch teil.scad --json --render teil.png --views all      # neu auswerten bei jeder Änderung
 $cad export examples/spec/flasche.scad -o flasche.step         # auch .stl, .3mf
 $cad export examples/projekt-gehaeuse/gehaeuse.scad --all-parts -o teile/ --format step
+$cad daemon status                                             # Daemon: PID, Laufzeit, Cache, Trefferquote
+```
+
+Der erste rechnende Befehl startet den Daemon (`cad daemon serve`, abgekoppelt, Log
+`daemon.log` im Socket-Ordner); weitere Aufrufe nutzen dessen Cache (Messwerte: Bericht 10).
+Einstellungen (Standardwerte; Umgebung vor Datei, Argumente von `cad daemon serve` vor beidem):
+
+```toml
+# $XDG_CONFIG_HOME/controller-cad/config.toml  (sonst ~/.config/…, Pfad auch über CAD_CONFIG)
+[daemon]
+enabled = true        # false oder CAD_NO_DAEMON=1: nie Daemon; je Aufruf: --no-daemon
+cache_mb = 512        # Knotenergebnisse + Netze (CAD_DAEMON_CACHE_MB, serve --cache-mb)
+max_projects = 8      # Projekte, deren Ergebnisse der Cache hält (CAD_DAEMON_MAX_PROJECTS)
+idle_minutes = 15     # Ende ohne Anfrage (CAD_DAEMON_IDLE_MINUTES oder CAD_DAEMON_IDLE_SECS)
+watchdog_secs = 60    # länger laufender Befehl: Daemon endet, Befehl läuft ohne ihn (CAD_DAEMON_WATCHDOG_SECS)
+rss_factor = 1.5      # RSS über Start + Faktor × cache_mb: Cache leeren (CAD_DAEMON_RSS_FACTOR)
+cache_entries = 16384 # Höchstzahl der Einträge (CAD_DAEMON_CACHE_ENTRIES)
 ```
 
 Jeder Befehl hat `--json` mit festem, versioniertem Schema (`schema_version`, Kopf von
@@ -171,7 +195,7 @@ crates/
   cad-render/        Software-Rasterizer für `cad render` (Schnitt mit Kappe, Beschriftung)
   cad-session/       Protokoll (Worker und CLI), TS-Typen
   cad-wasm/          wasm-bindgen-Einstieg für den Worker
-  cad-ipc/           lokale IPC (Unix-Socket je Benutzer, versionierte Rahmen) – auch für einen späteren CLI-Daemon
+  cad-ipc/           lokale IPC (Unix-Socket je Benutzer, versionierte Rahmen, Sperrdateien) – UI-Steuerung, CLI-Daemon
   cad-desktop/       Desktop-Backend ohne Tauri: Engine-Prozess, Watchdog, Dateien, Beobachter, Git-Hunks
   cad-app/           Tauri-2-App (eingebettete UI aus web/dist-tauri)
   cad-cli/           CLI `cad` (ohne Befehl: Desktop-UI)
@@ -231,6 +255,7 @@ CMakeLists, Build-Skript und Compiler: `scripts/ci/smlib-key.sh`). Ist der SMLib
 - [Bericht 7](docs/reports/07-kernel-variabler-radius/report.pdf): Kernel-Korrekturen und variabler Radius.
 - [Bericht 8](docs/reports/08-cli-agenten/report.pdf): CLI für Agenten (outline, render-Ansichten/Schnitt, measure, watch, set).
 - [Bericht 9](docs/reports/09-desktop-schnitt/report.pdf): Desktop-App, Dateibeobachter, Git, Schnittansicht, CLI↔UI.
+- [Bericht 10](docs/reports/10-cli-daemon/report.pdf): CLI-Daemon (Cache zwischen Aufrufen, Grenzen, Messung).
 
 ## Lizenzen
 

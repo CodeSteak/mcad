@@ -27,6 +27,19 @@ need_openscad() {
   esac
 }
 
+# Runs a command whose `cad` calls go through the CLI daemon (as for users), with a socket
+# directory of its own; the daemon is stopped afterwards, also on failure.
+with_daemon() {
+  local ipc="$TMP/ipc-$$"
+  mkdir -p "$ipc"
+  local rc=0
+  CAD_IPC_DIR="$ipc" "$@" || rc=$?
+  CAD_IPC_DIR="$ipc" "$CAD" daemon status || true
+  CAD_IPC_DIR="$ipc" "$CAD" daemon stop || true
+  rm -rf "$ipc"
+  return $rc
+}
+
 step() {
   case "$1" in
     cli)
@@ -52,11 +65,11 @@ step() {
       ;;
     compare)
       [ -x "$CAD" ] || { echo "CLI not found at $CAD (scripts/ci/compat.sh cli)" >&2; exit 2; }
-      CAD="$CAD" python3 tests/openscad-compat/compare.py --eval
+      with_daemon env CAD="$CAD" python3 tests/openscad-compat/compare.py --eval
       ;;
     step)
       [ -x "$CAD" ] || { echo "CLI not found at $CAD (scripts/ci/compat.sh cli)" >&2; exit 2; }
-      "${STEP_PYTHON:-python3}" tests/step/verify.py --cad "$CAD"
+      with_daemon "${STEP_PYTHON:-python3}" tests/step/verify.py --cad "$CAD"
       ;;
     *) echo "unknown step: $1 (cli|reference|projects|compare|step)" >&2; exit 2 ;;
   esac

@@ -940,7 +940,7 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
         tiles.push(img);
     }
     let img = if plan.sheet { contact_sheet(&tiles, cols, gap, [0.96, 0.96, 0.97, 1.0]) } else { tiles.remove(0) };
-    img.write_png(output).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
+    crate::host::write_file(output, &img.to_png()).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
 
     let section = plan.section.map(|s| {
         json!({ "point": s.point.to_array(), "normal": s.normal.to_array(), "keeps": "(q - point) · normal <= 0",

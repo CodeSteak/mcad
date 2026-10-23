@@ -1,4 +1,4 @@
-//! Small LRU map with a cost limit (entry count or estimated bytes).
+//! Small LRU map with two limits: a total cost (e.g. estimated bytes) and an entry count.
 
 use std::collections::{BTreeMap, HashMap};
 use std::hash::Hash;
@@ -9,14 +9,33 @@ pub struct Lru<K, V> {
     clock: u64,
     cost: usize,
     limit: usize,
+    max_len: usize,
     pub hits: u64,
     pub misses: u64,
+    /// Entries removed because a limit was exceeded.
+    pub evictions: u64,
 }
 
 impl<K: Hash + Eq + Clone, V: Clone> Lru<K, V> {
-    /// `limit`: maximum total cost (sum of the costs passed to [`Lru::insert`]).
+    /// `limit`: maximum total cost (sum of the costs passed to [`Lru::insert`]); no limit on the
+    /// number of entries.
     pub fn new(limit: usize) -> Self {
-        Lru { map: HashMap::new(), order: BTreeMap::new(), clock: 0, cost: 0, limit, hits: 0, misses: 0 }
+        Self::with_limits(limit, usize::MAX)
+    }
+
+    /// `limit`: maximum total cost, `max_len`: maximum number of entries.
+    pub fn with_limits(limit: usize, max_len: usize) -> Self {
+        Lru {
+            map: HashMap::new(),
+            order: BTreeMap::new(),
+            clock: 0,
+            cost: 0,
+            limit,
+            max_len,
+            hits: 0,
+            misses: 0,
+            evictions: 0,
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -35,8 +54,18 @@ impl<K: Hash + Eq + Clone, V: Clone> Lru<K, V> {
         self.limit
     }
 
+    pub fn max_len(&self) -> usize {
+        self.max_len
+    }
+
     pub fn set_limit(&mut self, limit: usize) {
         self.limit = limit;
+        self.evict();
+    }
+
+    pub fn set_limits(&mut self, limit: usize, max_len: usize) {
+        self.limit = limit;
+        self.max_len = max_len;
         self.evict();
     }
 
@@ -75,6 +104,27 @@ impl<K: Hash + Eq + Clone, V: Clone> Lru<K, V> {
         self.evict();
     }
 
+    /// Keeps only the entries for which `keep` returns `true` (not counted as evictions).
+    pub fn retain(&mut self, mut keep: impl FnMut(&K, &V) -> bool) {
+        let mut removed = Vec::new();
+        self.map.retain(|k, (v, stamp, c)| {
+            let k_ = keep(k, v);
+            if !k_ {
+                removed.push((*stamp, *c));
+            }
+            k_
+        });
+        for (stamp, c) in removed {
+            self.order.remove(&stamp);
+            self.cost -= c;
+        }
+    }
+
+    /// All entries with their cost (no particular order, does not count as use).
+    pub fn entries(&self) -> impl Iterator<Item = (&K, &V, usize)> {
+        self.map.iter().map(|(k, (v, _, c))| (k, v, *c))
+    }
+
     pub fn clear(&mut self) {
         self.map.clear();
         self.order.clear();
@@ -83,11 +133,12 @@ impl<K: Hash + Eq + Clone, V: Clone> Lru<K, V> {
 
     fn evict(&mut self) {
         // The newest entry is kept even if it alone exceeds the limit.
-        while self.cost > self.limit && self.map.len() > 1 {
+        while (self.cost > self.limit || self.map.len() > self.max_len) && self.map.len() > 1 {
             let Some((&stamp, _)) = self.order.iter().next() else { break };
             let k = self.order.remove(&stamp).unwrap();
             if let Some((_, _, c)) = self.map.remove(&k) {
                 self.cost -= c;
+                self.evictions += 1;
             }
         }
     }
@@ -108,5 +159,21 @@ mod tests {
         c.set_limit(1);
         assert_eq!(c.len(), 1);
         assert!(c.contains(&3));
+        assert_eq!(c.evictions, 2);
+    }
+
+    #[test]
+    fn entry_limit_and_retain() {
+        let mut c = Lru::with_limits(1000, 2);
+        c.insert(1, "a", 10);
+        c.insert(2, "b", 20);
+        c.insert(3, "c", 30);
+        assert_eq!(c.len(), 2);
+        assert_eq!(c.cost(), 50);
+        c.retain(|k, _| *k != 3);
+        assert_eq!(c.len(), 1);
+        assert_eq!(c.cost(), 20);
+        c.insert(4, "d", 5);
+        assert!(c.contains(&2) && c.contains(&4));
     }
 }

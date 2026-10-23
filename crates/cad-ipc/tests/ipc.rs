@@ -140,3 +140,18 @@ fn runtime_dir_is_private() {
     assert_eq!(cad_ipc::endpoint_path("ui-5").unwrap(), d.join("ui-5.sock"));
     assert!(cad_ipc::endpoint_path("../x").is_err());
 }
+
+#[test]
+fn lock_file_is_exclusive_and_removed() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("daemon.lock");
+    let mut a = cad_ipc::LockFile::try_lock_path(&path).unwrap().expect("first lock");
+    a.write_info("pid 1").unwrap();
+    assert_eq!(cad_ipc::LockFile::read_info(&path).as_deref(), Some("pid 1"));
+    // a second open file description does not get it (flock, also within one process)
+    assert!(cad_ipc::LockFile::try_lock_path(&path).unwrap().is_none());
+    assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+    drop(a);
+    assert!(!path.exists());
+    assert!(cad_ipc::LockFile::try_lock_path(&path).unwrap().is_some());
+}

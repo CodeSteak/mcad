@@ -37,6 +37,10 @@ similar = "2"
 cad-desktop = { path = "../cad-desktop" }
 cad-ipc = { path = "../cad-ipc" }
 cad-app = { path = "../cad-app", optional = true }
+toml = "1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 cad-step.workspace = true
