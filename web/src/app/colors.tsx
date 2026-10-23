@@ -1,0 +1,145 @@
+// "Farben & Filamente" (Plan 16.3): colours of the model with their filament slot, volume and
+// estimated mass; the slot is written into the code (`filament = n`), exports for Bambu
+// Studio / OrcaSlicer, "Farbregionen zeigen".
+
+import { colorRows, MAX_FILAMENT, sharedSlots } from "../logic/colors";
+import { fmtNum } from "../logic/format";
+import { bridge } from "../state/bridge";
+import { setColorsOpen, store, useCad } from "../state/store";
+import { client, exportColors, getViewer } from "./runtime";
+
+function vol(v: number | null): string {
+  return v === null ? "…" : `${fmtNum(Math.round(v * 10) / 10)} mm³`;
+}
+
+function mass(g: number | null): string {
+  return g === null ? "" : `${fmtNum(Math.round(g * 100) / 100)} g`;
+}
+
+/** Toggle in the view tools (count of colours). */
+export function ColorsToggle() {
+  const open = useCad((s) => s.colorsOpen);
+  const n = useCad((s) => (s.complete?.colors ?? []).length);
+  if (n === 0) return null;
+  return (
+    <button className={open ? "on" : ""} aria-pressed={open} data-testid="colors-toggle" title="Farben und Filamente des Modells" onClick={() => setColorsOpen(!open)}>
+      Farben ({n})
+    </button>
+  );
+}
+
+export function ColorsPanel() {
+  const open = useCad((s) => s.colorsOpen);
+  const scene = useCad((s) => s.complete);
+  const regions = useCad((s) => s.regions);
+  const regionsError = useCad((s) => s.regionsError);
+  const theme = useCad((s) => s.theme);
+  const showRegions = useCad((s) => s.showRegions);
+  if (!open || !scene || !(scene.colors ?? []).length) return null;
+  const model = getViewer()?.modelColor() ?? "#c3cad4";
+  const rows = colorRows(scene, regions, theme, model);
+  const shared = sharedSlots(rows);
+  const total = rows.every((r) => r.volume !== null) ? rows.reduce((a, r) => a + (r.volume ?? 0), 0) : null;
+  const warnings = regions && regions.version === scene.version ? regions.items.map((s) => s.warning).filter((w): w is string => !!w) : [];
+  const parts = scene.context.module === null ? scene.parts.length : 0;
+  return (
+    <aside className="colorspanel" aria-label="Farben und Filamente" data-testid="colors-panel">
+      <div className="cptitle">
+        <span>
+          Farben &amp; Filamente <span className="cpcount">{rows.length}</span>
+        </span>
+        <button className="picon" aria-label="Farbliste schließen" title="Schließen" onClick={() => setColorsOpen(false)}>
+          ×
+        </button>
+      </div>
+      <label className="check cpregions" title="Körper je Farbe anzeigen, wie sie exportiert werden (statt Farbe je Fläche)">
+        <input type="checkbox" checked={showRegions} onChange={(e) => store.setState({ showRegions: e.target.checked })} data-testid="colors-regions" />
+        Farbregionen zeigen
+      </label>
+      <table className="cptable">
+        <thead>
+          <tr>
+            <th>Farbe</th>
+            <th title="Filament-Slot (AMS)">Slot</th>
+            <th className="n">Volumen</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.key} data-testid={`color-row-${r.label}`} className={shared.includes(r.filament) ? "shared" : ""}>
+              <td className="cpcolor">
+                <span className="swatch" style={{ background: r.swatch }} data-testid={`color-swatch-${r.label}`} title={`${r.hex} (Anzeige ${r.swatch})`} />
+                <span className="cplabel">
+                  {r.label}
+                  {r.source === "random" && (
+                    <span className="badge warn" title="Name nicht in der Palette: stabile Zufallsfarbe">
+                      zufällig
+                    </span>
+                  )}
+                  {r.source === "default" && <span className="badge">ohne color()</span>}
+                  <span className="cplines">
+                    {r.lines.map((l) => (
+                      <button key={l} className="link" title={`Zeile ${l} zeigen`} onClick={() => bridge.setCursorLine(l)}>
+                        Z.{l}
+                      </button>
+                    ))}
+                  </span>
+                </span>
+              </td>
+              <td>
+                <select
+                  aria-label={`Filament für ${r.label}`}
+                  data-testid={`color-slot-${r.label}`}
+                  value={r.explicit ? String(r.filament) : "auto"}
+                  disabled={r.source === "default"}
+                  title={r.source === "default" ? "Material ohne color() druckt immer mit Filament 1" : "Schreibt filament = n in den color()-Aufruf"}
+                  onChange={(e) => client.setFilament(r.key, e.target.value === "auto" ? null : Number(e.target.value))}
+                >
+                  <option value="auto">{r.explicit ? "automatisch" : `${r.filament} (auto)`}</option>
+                  {Array.from({ length: MAX_FILAMENT }, (_, i) => i + 1).map((s) => (
+                    <option key={s} value={String(s)}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td className="n" data-testid={`color-volume-${r.label}`}>
+                {vol(r.volume)}
+                <span className="cpmass">{mass(r.grams)}</span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colSpan={2}>Summe{parts > 0 ? ` (${parts} Bauteile)` : ""}</td>
+            <td className="n" data-testid="colors-total">
+              {vol(total)}
+              <span className="cpmass">{total !== null ? `${mass(total * 1.24e-3)} PLA` : ""}</span>
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+      {shared.length > 0 && <p className="pbnote warn">Slot {shared.join(", ")}: mehrere Farben auf einem Filament.</p>}
+      {regionsError && <p className="pbnote warn">{regionsError}</p>}
+      {warnings.map((w) => (
+        <p key={w} className="pbnote warn">
+          {w}
+        </p>
+      ))}
+      <div className="cpexport">
+        <b>Export für den Druck</b>
+        <button onClick={() => void exportColors("3mf")} data-testid="export-3mf-colors" title="3MF: je Bauteil ein Objekt, ein Teil je Farbe mit Filament-Slot (Bambu Studio, OrcaSlicer)">
+          3MF mehrfarbig
+        </button>
+        <button onClick={() => void exportColors("stl-zip")} data-testid="export-stl-colors" title="ZIP mit einem STL je Farbe (alle im selben Koordinatensystem)">
+          STL je Farbe (ZIP)
+        </button>
+        <button onClick={() => void exportColors("3mf-single")} data-testid="export-3mf-single" title="3MF ohne Farben: ein Netz je Bauteil">
+          3MF einfarbig
+        </button>
+      </div>
+      <p className="pbnote">Slot ändern schreibt <code>filament = n</code> in den Code. Masse: PLA 1,24 g/cm³.</p>
+    </aside>
+  );
+}

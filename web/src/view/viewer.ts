@@ -22,6 +22,7 @@ import { bridge } from "../state/bridge";
 import { project } from "../state/project";
 import { type CadState, store } from "../state/store";
 import { Materials, readPalette } from "./materials";
+import { colorSignature, displayHex, tagColors, vertexColors } from "../logic/colors";
 import { type CapBody, SectionLayer } from "./sectionLayer";
 import { type SectionState, effectiveNormal, keeps, offset, snapCandidates, withOffset } from "../logic/section";
 import type { MeshCache } from "./meshCache";
@@ -50,6 +51,10 @@ export interface PickResult {
 }
 
 export interface ViewState {
+  /** Colour regions drawn instead of the base ("Farbregionen zeigen"). */
+  regionsDrawn: number;
+  /** Face tags with a colour (colours per face). */
+  faceColors: number;
   sceneVersion: number | null;
   complete: boolean;
   context: string | null;
@@ -124,6 +129,11 @@ export class Viewer implements DragView {
   private raycaster = new THREE.Raycaster();
   private renderQueued = false;
   private buildQueued = false;
+  /** Face tag → display colour of the shown scene (colours per face). */
+  private tagColor = new Map<number, string>();
+  private colorSig = "";
+  /** Colour regions drawn instead of the base (`showRegions`). */
+  private regionsDrawn = 0;
   private unsub: () => void;
   private resizeObs: ResizeObserver;
   private lastFitKey = "";
@@ -263,13 +273,20 @@ export class Viewer implements DragView {
       s.viewHover !== p.viewHover ||
       s.docRevision !== p.docRevision ||
       s.drag !== p.drag ||
-      s.hiddenParts !== p.hiddenParts
+      s.hiddenParts !== p.hiddenParts ||
+      s.showRegions !== p.showRegions ||
+      s.regions !== p.regions
     )
       this.requestBuild();
     else if (s.hoverHandle !== p.hoverHandle) {
       this.buildHandles();
       this.requestRender();
     }
+  }
+
+  /** Colour of uncoloured material in the current theme. */
+  modelColor(): string {
+    return this.materials.palette.model;
   }
 
   applyTheme(): void {
@@ -442,13 +459,22 @@ export class Viewer implements DragView {
     this.lastZoneEdges = null;
     this.lastOpenFaces = [];
     let missing = 0;
+    // Colours per face: tag → colour of the creating node (palette colours in the theme variant).
+    this.tagColor = tagColors(scene, st.theme);
+    this.colorSig = `${st.theme}|${colorSignature(this.tagColor)}`;
     // Base: the model of the current module. While a node's mesh is missing, the base stays full.
     const itemsReady = p.items.filter((i) => this.meshes.has(scene.nodes[i.node].mesh_key));
     const cursorMissing = p.items.some((i) => i.mode === "full" && !this.meshes.has(scene.nodes[i.node].mesh_key));
+    this.regionsDrawn = 0;
     if (p.base) {
       const mode = p.base.mode === "dim" && cursorMissing ? "full" : p.base.mode;
       this.baseMode = mode;
-      if (!this.addMesh(scene, { ...p.base, mode })) missing++;
+      // "Farbregionen zeigen": bodies per colour instead of the base (full display only)
+      const regions = mode === "full" && st.showRegions ? this.regionItems(scene, hidden) : null;
+      if (regions) {
+        for (const r of regions) this.addRegionMesh(r);
+        this.regionsDrawn = regions.length;
+      } else if (!this.addMesh(scene, { ...p.base, mode })) missing++;
     } else this.baseMode = null;
     for (const it of itemsReady) this.addMesh(scene, it);
     missing += p.items.length - itemsReady.length;
@@ -524,17 +550,69 @@ export class Viewer implements DragView {
     }
   }
 
+  /** Region meshes of the shown scene, if they are there (`null`: draw the base instead). */
+  private regionItems(scene: Scene, hidden: number[]): Array<{ node: number; key: string; color: string; matrix: Mat4 }> | null {
+    const st = store.getState();
+    const r = st.regions;
+    if (!r || r.version !== scene.version || !r.meshes) return null;
+    const out: Array<{ node: number; key: string; color: string; matrix: Mat4 }> = [];
+    for (const set of r.items) {
+      if (hidden.includes(set.node)) continue;
+      for (const reg of set.regions) {
+        if (!reg.mesh || !this.meshes.has(reg.mesh.key)) return null;
+        const info = (scene.colors ?? []).find((c) => c.key === reg.color);
+        const color = !info || info.source === "default" ? this.materials.palette.model : displayHex(info.rgba, st.theme);
+        out.push({ node: set.node, key: reg.mesh.key, color, matrix: scene.nodes[set.node].display_world });
+      }
+    }
+    return out.length ? out : null;
+  }
+
+  /** One colour region: opaque body in its colour with edges, pickable, with section cap. */
+  private addRegionMesh(r: { node: number; key: string; color: string; matrix: Mat4 }): void {
+    const c = new THREE.Color(r.color);
+    const style = this.materials.style("full", false, [c.r, c.g, c.b, 1]);
+    const group = new THREE.Group();
+    group.matrixAutoUpdate = false;
+    group.matrix.copy(m4(r.matrix));
+    group.matrixWorldNeedsUpdate = true;
+    const geo = this.meshes.geometry(r.key);
+    if (geo && geo.index && geo.index.count > 0 && style.surface) {
+      const mesh = new THREE.Mesh(geo, style.surface);
+      mesh.renderOrder = style.renderOrder;
+      mesh.userData = { meshKey: r.key, node: r.node };
+      group.add(mesh);
+      this.pickables.push(mesh);
+      this.capBodies.push({ group, geometry: geo, key: r.key });
+    }
+    const eg = this.meshes.edges(r.key);
+    if (style.edges && eg && (eg.getAttribute("position")?.count ?? 0) > 0) {
+      const lines = new THREE.LineSegments(eg, style.edges);
+      lines.renderOrder = style.renderOrder + 1;
+      group.add(lines);
+    }
+    group.userData = { node: r.node, mode: "region" };
+    group.name = "mode:region";
+    this.content.add(group);
+  }
+
   private addMesh(scene: Scene, it: { node: number; mode: Plan["items"][number]["mode"]; matrix: Mat4; flat: boolean }): boolean {
     const n = scene.nodes[it.node];
     const key = n.mesh_key;
     if (!key || !this.meshes.has(key)) return false;
-    const style = this.materials.style(it.mode, it.flat, it.mode === "full" ? n.color : null);
+    // Colours per face (colour of the node that created the face), unless the node itself is
+    // transparent through `color(…, alpha)`.
+    const perFace = it.mode === "full" && !it.flat && this.tagColor.size > 0 && !(n.color && n.color[3] < 1);
+    const style = this.materials.style(it.mode, it.flat, it.mode === "full" ? n.color : null, perFace);
     const group = new THREE.Group();
     group.matrixAutoUpdate = false;
     group.matrix.copy(m4(it.matrix));
     group.matrixWorldNeedsUpdate = true;
     if (style.surface) {
-      const geo = this.meshes.geometry(key);
+      const fallback = n.color ? displayHex(n.color, store.getState().theme) : this.materials.palette.model;
+      const geo = perFace
+        ? this.meshes.coloredGeometry(key, `${this.colorSig}|${fallback}`, (d) => vertexColors(d, (t) => this.tagColor.get(t), fallback))
+        : this.meshes.geometry(key);
       if (geo && geo.index && geo.index.count > 0) {
         const mesh = new THREE.Mesh(geo, style.surface);
         mesh.renderOrder = style.renderOrder;
@@ -1317,6 +1395,8 @@ export class Viewer implements DragView {
     return {
       sceneVersion: s?.version ?? null,
       complete: s?.complete ?? false,
+      regionsDrawn: this.regionsDrawn,
+      faceColors: this.tagColor.size,
       context: s?.context.module ?? null,
       selection: this.lastSelection,
       hoverNodes: this.lastHoverNodes,

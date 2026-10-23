@@ -415,7 +415,7 @@ test("S18 Autospeichern in IndexedDB", async ({ page }) => {
 
 test("S19 Dunkles Thema und Standardansichten", async ({ page }) => {
   await openApp(page);
-  await page.getByTestId("theme").click();
+  await page.getByTestId("theme").selectOption("dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.getByRole("button", { name: "Oben" }).click();
   await page.getByRole("button", { name: "Iso" }).click();

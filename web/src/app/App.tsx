@@ -6,7 +6,7 @@ import { diagnosticPath } from "../logic/files";
 import { fmtNum } from "../logic/format";
 import { bridge } from "../state/bridge";
 import { project } from "../state/project";
-import { store, useCad } from "../state/store";
+import { type ThemePref, setThemePref, store, useCad } from "../state/store";
 import { Viewer, type StandardView } from "../view/viewer";
 import {
   addProjectFile,
@@ -36,9 +36,10 @@ import {
 import { ParamBar, SettingsButton } from "./panels";
 import { SectionBar, SectionStatus, SectionToggle } from "./section";
 import { DiffDialog, ExternalBar, RecentMenu } from "./desktopUi";
+import { ColorsPanel, ColorsToggle } from "./colors";
 
 function Toolbar() {
-  const theme = useCad((s) => s.theme);
+  const themePref = useCad((s) => s.themePref);
   const fileName = useCad((s) => s.fileName);
   const groups = [...new Set(SINGLE_EXAMPLES.map((e) => e.group))];
   return (
@@ -87,26 +88,19 @@ function Toolbar() {
       </label>
       <span className="sep" />
       <button onClick={() => void exportModel("stl")} title="Als STL exportieren">Export STL</button>
-      <button onClick={() => void exportModel("3mf")} title="Als 3MF exportieren">Export 3MF</button>
+      <button onClick={() => void exportModel("3mf")} title="Als 3MF exportieren (mehrfarbig: ein Teil je Farbe mit Filament-Slot)">Export 3MF</button>
       <button onClick={() => void exportModel("step")} title="Als STEP exportieren (über den Kernel)">Export STEP</button>
       <span className="grow" />
       <SettingsButton />
       <span className="filename" title="Aktuelle Datei">{fileName}</span>
-      <button
-        onClick={() => {
-          const t = theme === "dark" ? "light" : "dark";
-          try {
-            localStorage.setItem("cad-theme", t);
-          } catch {
-            /* ignore */
-          }
-          store.setState({ theme: t });
-        }}
-        title="Hell/Dunkel umschalten"
-        data-testid="theme"
-      >
-        {theme === "dark" ? "Hell" : "Dunkel"}
-      </button>
+      <label className="themesel" title="Farbschema: System folgt der Einstellung des Betriebssystems">
+        <span aria-hidden="true">◐</span>
+        <select aria-label="Farbschema" data-testid="theme" value={themePref} onChange={(e) => setThemePref(e.target.value as ThemePref)}>
+          <option value="system">System</option>
+          <option value="light">Hell</option>
+          <option value="dark">Dunkel</option>
+        </select>
+      </label>
     </header>
   );
 }
@@ -301,6 +295,7 @@ function ViewPane() {
           alle Raster
         </label>
         <SectionToggle />
+        <ColorsToggle />
       </div>
       <SectionBar />
     </div>
@@ -441,6 +436,7 @@ export function App() {
           <div className="viewbody">
             <ViewPane />
             <ParamBar />
+            <ColorsPanel />
           </div>
         </section>
       </main>

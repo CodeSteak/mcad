@@ -3,11 +3,21 @@
 
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { Diagnostic, Scene } from "../engine/protocol";
+import type { Diagnostic, RegionSet, Scene } from "../engine/protocol";
 import type { ParamOverrides } from "../logic/params";
 import { SECTION_OFF, type SectionState } from "../logic/section";
 
 export type Theme = "light" | "dark";
+/** Choice in the toolbar: follow the system (`prefers-color-scheme`) or fixed. */
+export type ThemePref = "system" | "light" | "dark";
+
+/** Colour regions of a complete scene (`RequestColorRegions`). */
+export interface RegionsState {
+  version: number;
+  items: RegionSet[];
+  /** With meshes (shown in the view). */
+  meshes: boolean;
+}
 
 export interface Progress {
   version: number;
@@ -135,7 +145,17 @@ export interface CadState {
   editorHover: number | null;
   viewHover: ViewHover | null;
   allGrids: boolean;
+  /** Theme in effect (resolved from `themePref`). */
   theme: Theme;
+  themePref: ThemePref;
+  /** Colour list ("Farben & Filamente") open. */
+  colorsOpen: boolean;
+  /** Show colour regions (bodies per colour) instead of colours per face. */
+  showRegions: boolean;
+  /** Last colour regions answer. */
+  regions: RegionsState | null;
+  /** Error of the last colour region request. */
+  regionsError: string | null;
   /** Incremented when meshes arrive. */
   meshRevision: number;
   metrics: Metrics;
@@ -194,14 +214,50 @@ export function saveSettings(s: Settings): void {
   }
 }
 
-function initialTheme(): Theme {
+function initialThemePref(): ThemePref {
   try {
     const t = localStorage.getItem("cad-theme");
-    if (t === "light" || t === "dark") return t;
+    if (t === "light" || t === "dark" || t === "system") return t;
   } catch {
     /* no storage */
   }
+  return "system";
+}
+
+/** Dark mode of the system (browser or desktop webview). */
+export function systemTheme(): Theme {
   return typeof matchMedia !== "undefined" && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+export function resolveTheme(pref: ThemePref): Theme {
+  return pref === "system" ? systemTheme() : pref;
+}
+
+/** Sets the theme choice (kept in localStorage). */
+export function setThemePref(pref: ThemePref): void {
+  try {
+    localStorage.setItem("cad-theme", pref);
+  } catch {
+    /* no storage */
+  }
+  store.setState({ themePref: pref, theme: resolveTheme(pref) });
+}
+
+function initialColorsOpen(): boolean {
+  try {
+    return localStorage.getItem("cad-colors-open") !== "0";
+  } catch {
+    return true;
+  }
+}
+
+export function setColorsOpen(open: boolean): void {
+  try {
+    localStorage.setItem("cad-colors-open", open ? "1" : "0");
+  } catch {
+    /* no storage */
+  }
+  store.setState({ colorsOpen: open });
 }
 
 export const store = createStore<CadState>(() => ({
@@ -227,7 +283,12 @@ export const store = createStore<CadState>(() => ({
   editorHover: null,
   viewHover: null,
   allGrids: false,
-  theme: initialTheme(),
+  theme: resolveTheme(initialThemePref()),
+  themePref: initialThemePref(),
+  colorsOpen: initialColorsOpen(),
+  showRegions: false,
+  regions: null,
+  regionsError: null,
   meshRevision: 0,
   metrics: { firstSceneMs: null, editToScene: [], evalMs: [], dragToScene: [], dragEndToFine: [], dragFps: [] },
   notice: null,
