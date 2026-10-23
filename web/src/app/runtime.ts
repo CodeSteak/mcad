@@ -28,6 +28,7 @@ import {
   saveProjectAutosave,
   saveToFolder,
 } from "../files/files";
+import { hasFaceColors } from "../logic/colors";
 import { jumpUpTarget, moduleSpans } from "../logic/context";
 import { baseName as pathBase, normalizePath } from "../logic/files";
 import { modelHull } from "../logic/grids";
@@ -454,23 +455,24 @@ export async function exportModel(format: ExportFormat): Promise<void> {
 }
 
 /**
- * Multi-colour exports of the model (or the parts, if any): 3MF with one volume per colour
- * and filament slots for Bambu Studio / OrcaSlicer, single-colour 3MF, or a ZIP with one STL
- * per colour.
+ * Multi-colour exports of the model: 3MF with one object per part (material outside the parts:
+ * an object "ohne Bauteil"), one volume per colour and filament slots for Bambu Studio /
+ * OrcaSlicer, single-colour 3MF, or a ZIP with one STL per colour. The engine picks the parts
+ * like `cad export` (Bericht 12, F4): the files of UI and CLI are the same.
  */
 export async function exportColors(kind: "3mf" | "3mf-single" | "stl-zip"): Promise<void> {
   const st = store.getState();
-  const parts = (st.complete?.context.module === null ? st.complete?.parts ?? [] : []).map((p) => p.name);
   const format: ExportFormat = kind === "stl-zip" ? "stl" : "3mf";
   const colors = kind !== "3mf-single";
   const label = kind === "3mf" ? "3MF mehrfarbig" : kind === "3mf-single" ? "3MF einfarbig" : "STL je Farbe";
   store.setState({ notice: `Export ${label} …` });
   try {
-    const r = await client.exportFile(format, parts.length ? parts : undefined, false, colors);
+    const r = await client.exportFile(format, undefined, false, colors);
     const base = baseName(st.fileName);
     const name = kind === "stl-zip" ? `${base}-farben.zip` : kind === "3mf" ? `${base}.3mf` : `${base}-einfarbig.3mf`;
     download(new Blob([r.bytes as BlobPart], { type: kind === "stl-zip" ? "application/zip" : MIME["3mf"] }), name);
-    store.setState({ notice: `Exportiert: ${name} (${r.triangles} Dreiecke)` });
+    const notes = r.notes?.length ? ` – ${r.notes.join("; ")}` : "";
+    store.setState({ notice: `Exportiert: ${name} (${r.triangles} Dreiecke)${notes}` });
   } catch (e) {
     store.setState({ notice: `Export fehlgeschlagen: ${(e as Error).message}` });
   }
@@ -493,7 +495,8 @@ let regionsTimer: ReturnType<typeof setTimeout> | null = null;
 function syncRegions(): void {
   const s = store.getState();
   const c = s.complete;
-  const want = (s.colorsOpen || s.showRegions) && c !== null && (c.colors ?? []).length > 0;
+  // the list needs volumes; the view draws the regions of a model with colours (Bericht 12)
+  const want = c !== null && ((s.colorsOpen && (c.colors ?? []).length > 0) || (s.showRegions && hasFaceColors(c)));
   if (!want || !c) return;
   const key = `${c.version}|${s.showRegions}`;
   if (key === regionsAsked) return;
@@ -782,6 +785,8 @@ window.__cad = {
       triangles: r.triangles,
       colors: r.colors ?? false,
       colorGroup: t.includes("<m:colorgroup"),
+      notes: r.notes ?? [],
+      objects: [...t.matchAll(/<object id="\d+" type="model" name="([^"]*)">\n   <components>/g)].map((m) => m[1]),
       mColors: count(/<m:color /g),
       items: count(/<item /g),
       components: count(/<component /g),

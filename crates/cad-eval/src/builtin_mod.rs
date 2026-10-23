@@ -1135,11 +1135,12 @@ impl<'a> Ev<'a> {
     #[inline(never)]
     fn m_filament(&mut self, s: &'a Stmt, a: &Args<'a>) {
         if !self.decl_pass {
-            if !self.filament_decls.iter().any(|d| d.span == s.span) {
+            if !self.decl_spans.contains(&s.span) {
                 self.warn(s.span, "filament(…) gilt nur auf oberster Ebene der Hauptdatei – hier ohne Wirkung");
             }
             return;
         }
+        self.decl_spans.push(s.span);
         let p = self.bind("filament", a, &["c", "n"], 2);
         let Some(c) = p[0] else {
             self.warn(s.span, "filament(Farbe, Slot): Farbe fehlt");

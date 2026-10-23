@@ -495,8 +495,9 @@ pub enum SlotSource {
 /// * A `filament(c, n);` statement of the colour: its slot is changed (removed for `None`).
 /// * All `color()` statements of the colour name it literally: [`filament_edits`] there.
 /// * Otherwise (the colour is a parameter or a loop value: `filament = n` at the statement
-///   would hold for all its colours) a statement `filament("<label>", n);` is inserted at the
-///   top of the main file (after existing ones, else before the first statement); literal
+///   would hold for all its colours) a statement `filament("<label>", n);` is inserted in the
+///   main file (after existing ones, else before the first statement that is no `use`,
+///   `include`, definition or assignment); literal
 ///   statements with `filament = …` get the same value.
 ///
 /// `label`: palette name, unknown name or `#rrggbb`. `Err` for `None` when the slot comes from
@@ -571,7 +572,10 @@ pub fn filament_set_edits(
                     .main
                     .stmts
                     .iter()
-                    .find(|s| s.span.file() == 0 && !matches!(s.kind, K::Include { .. }))
+                    .find(|s| {
+                        s.span.file() == 0
+                            && !matches!(s.kind, K::Include { .. } | K::Module(_) | K::Function(_) | K::Assign { .. })
+                    })
                     .map(|s| {
                         let a = s.span.start as usize;
                         text[..a].rfind('\n').map_or(0, |i| i + 1)

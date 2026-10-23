@@ -257,3 +257,20 @@ fn display_variants() {
 fn scale(c: [u8; 3], k: f64) -> [u8; 3] {
     c.map(|x| (x as f64 * k).round() as u8)
 }
+
+/// Bericht 12, F2: `filament(c, n);` – the slot table of the model (top level, evaluated
+/// first); invalid slots warn once; a user module named `filament` keeps working.
+#[test]
+fn filament_declarations() {
+    let out = run("color(\"red\", filament = 2) cube(1);\nfilament(\"red\", 4);\nfilament(\"#2e65b9\", 17);\n");
+    assert_eq!(out.tree.filaments.len(), 1);
+    assert_eq!((out.tree.filaments[0].slot, out.tree.filaments[0].name.as_deref()), (4, Some("red")));
+    let w = warnings(&out);
+    assert_eq!(w.len(), 2, "{w:?}");
+    assert!(w.iter().any(|x| x.contains("Slot muss eine ganze Zahl von 1 bis 16 sein")), "{w:?}");
+    assert!(w.iter().any(|x| x.contains("Farbe hat schon Filament 4")), "the table counts first: {w:?}");
+    let out = run("module filament(a, b) cube(b);\nfilament(\"red\", 3);\n");
+    assert!(out.tree.filaments.is_empty());
+    assert!(warnings(&out).is_empty(), "{:?}", warnings(&out));
+    assert_eq!(out.tree.nodes.iter().filter(|n| matches!(n.op, Op::Prim { .. })).count(), 1);
+}

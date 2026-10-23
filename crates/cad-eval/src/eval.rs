@@ -181,6 +181,8 @@ pub(crate) struct Ev<'a> {
     pub filament_decls: Vec<cad_ir::FilamentDecl>,
     /// The declaration pass runs (`filament()` registers, nothing else is evaluated).
     pub decl_pass: bool,
+    /// `filament()` statements seen by the declaration pass.
+    pub decl_spans: Vec<Span>,
 }
 
 #[inline(never)]
@@ -271,6 +273,7 @@ impl<'a> Ev<'a> {
             random_colors: Vec::new(),
             filament_decls: Vec::new(),
             decl_pass: false,
+            decl_spans: Vec::new(),
         }
     }
 
@@ -598,6 +601,10 @@ impl<'a> Ev<'a> {
     /// the slot table of the model takes precedence over `filament = n` at `color()`.
     fn filament_pass(&mut self, ctx: &Ctx<'a>) -> R<()> {
         let file = self.file;
+        // a module of the user named `filament` is called in the normal pass only
+        if ctx.env.find_module("filament").is_some() {
+            return Ok(());
+        }
         self.decl_pass = true;
         for s in &file.stmts {
             if let StmtKind::Call { name, .. } = &s.kind
