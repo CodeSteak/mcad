@@ -325,10 +325,10 @@ async function main() {
       if (st.edit) {
         writeFileSync(file, st.edit(readFileSync(file, "utf8")));
         const c = cad("check", file, "--json");
-        check(c.code === 0, `cad check Exit 0 (${c.out.slice(0, 80)})`);
+        check(c.code === 0 && JSON.parse(c.out).errors === 0, "`cad check --json`: Exit 0, 0 Fehler");
       } else {
         const c = cad("set", file, ...st.set);
-        check(c.code === 0, `cad set Exit 0 (${c.err.slice(0, 120)})`);
+        check(c.code === 0, `\`cad set ${st.set.join(" ")}\`: Exit 0${c.err ? ` (${c.err.slice(0, 120)})` : ""}`);
       }
       await waitFor(`Schritt ${i + 1}`, async () => {
         const s = await state();
@@ -357,10 +357,6 @@ async function main() {
     check(st2.selection.nodes.length > 0, `ausgewählter Knoten ${JSON.stringify(st2.selection.nodes[0])}`);
     check(Object.keys(st2.params).includes("w"), "Werte der Parameterleiste");
     check(Array.isArray(st2.diagnostics), "Diagnosen");
-    const shm = cad("ui", "show", file, "--module", "deckel", "--json");
-    check(shm.code === 0 && JSON.parse(shm.out).module === "deckel", `show --module deckel (${shm.out.slice(0, 120)} ${shm.err})`);
-    const shx = cad("ui", "show", file, "--module", "gibtsnicht", "--json");
-    check(shx.code === 1, `unbekanntes Modul: Exit 1 (${shx.code})`);
     const png = join(OUT, "img", "t07-cad-ui-screenshot.png");
     const sc = cad("ui", "screenshot", "-o", png, "--json");
     check(sc.code === 0, `screenshot Exit 0 ${sc.err}`);
@@ -370,6 +366,10 @@ async function main() {
     e.details = { status_text: txt.out, status_json: st2 };
     e.images.push({ name: "t07-cad-ui-screenshot.png", label: "`cad ui screenshot`: die 3D-Ansicht, wie der Nutzer sie sieht" });
     e.images.push({ name: await shot("t07-ui-nach-show"), label: "nach `cad ui show gehaeuse.scad --line 11`" });
+    const shm = cad("ui", "show", file, "--module", "deckel", "--json");
+    check(shm.code === 0 && JSON.parse(shm.out).module === "deckel", "show --module deckel: Kontext deckel");
+    const shx = cad("ui", "show", file, "--module", "gibtsnicht", "--json");
+    check(shx.code === 1, `unbekanntes Modul: Exit ${shx.code} („${JSON.parse(shx.out).error}“)`);
     await exec("window.__cad.setCursorLine(1, 0)");
     await sceneReady();
   });
@@ -483,6 +483,16 @@ async function main() {
     keys.push(...s.metrics.editToScene.slice(before));
     metrics.keystrokeToSceneNative = keys;
     metrics.keystrokeEvalNative = s.metrics.evalMs.slice(beforeEval);
+    // kernel-heavy edit: 4×4 holes with fillet, radius changed (all fillets recompute)
+    const heavy = (r) => `difference(fillet = 0.4) {\n    cube(40);\n    for (i = [0 : 3]) for (j = [0 : 3]) translate([10 * i + 5, 10 * j + 5, -1]) cylinder(h = 42, r = ${r});\n}\n`;
+    metrics.heavyEvalNative = [];
+    for (const r of [2, 2.5, 3]) {
+      const v0 = (await state()).sentVersion;
+      await exec("window.__cad.setText(arguments[0])", heavy(r));
+      await waitFor("schwere Szene", async () => ((await state()).sentVersion > v0 ? true : null));
+      const sc = await sceneReady();
+      metrics.heavyEvalNative.push(sc.metrics.evalMs[sc.metrics.evalMs.length - 1]);
+    }
     check(keys.length > 0, `${keys.length} Messungen`);
   });
 

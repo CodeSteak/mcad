@@ -127,7 +127,8 @@ test("B02 translate-Griff auf Rasterpunkt loslassen schreibt g[…]", async ({ p
   await openApp(page);
   await loadText(page, GRID);
   await clickLine(page, 7, 0);
-  const [h] = await waitHandles(page);
+  // the handles of line 7 (not the grid's of line 1 from before the cursor moved)
+  const [h] = await waitHandles(page, "(hs) => hs.length > 0 && hs.every((h) => h.line === 7)");
   expect(h.value).toEqual([5, 5, 2]);
   await screenshotB(page, "b02-vorher");
   const from = grip(h);

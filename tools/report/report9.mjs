@@ -216,6 +216,7 @@ const html = `<!doctype html>
   <div>clippy · fmt · actionlint<b class="${clippy != null && !/^(error|warning)/m.test(clippy) && fmt != null && fmt.trim() === "" ? "ok" : "bad"}">${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "Befund" : "sauber"} · ${fmt == null ? "–" : fmt.trim() === "" ? "sauber" : "Abw."} · ${actionlint == null ? "–" : actionlint.trim() === "" ? "sauber" : "Befund"}</b></div>
   <div>Start bis Szene<b>${de(tm.startup?.wallMs)} ms</b>Sitzung → erste vollständige Szene</div>
   <div>Tastendruck → Szene (Median)<b>${de(median(kNative))} / ${de(median(kWasm))} ms</b>nativ (Tauri) / Wasm (Chromium)</div>
+  <div>Kernel-lastige Änderung<b>${de(median(tm.heavyEvalNative ?? []))} / ${de(median(metrics.heavyEvalWasm ?? []))} ms</b>nativ / Wasm (Median)</div>
   <div>Schnitt verschieben<b>${de(metrics.sectionMoveFps?.fps, 1)} fps</b>Chromium SwiftShader; Tauri ${de(tm.sectionFpsTauri?.fps, 1)}</div>
 </div>
 
@@ -277,13 +278,14 @@ ${sectionCli ? `<p>Kopierter Aufruf in Tauri: <code>${esc(sectionCli.replace(/\/
 <tr><td>Tastendruck → Szene, nativ (Tauri)</td><td>Median ${de(median(kNative))} ms (${kNative.map((x) => de(x)).join(", ")})</td><td>Backspace/Ziffer in <code>w = 60</code> (gehaeuse), echte Tastendrücke über WebDriver; Zeit von der Editoränderung bis die Szene gezeichnet ist (inkl. 8 ms Entprellung, WebKitGTK mit Software-GL)</td></tr>
 <tr><td>Tastendruck → Szene, Wasm (Chromium)</td><td>Median ${de(median(kWasm))} ms (${kWasm.map((x) => de(x)).join(", ")})</td><td>dieselbe Änderung im Browser (Worker, smlib.wasm), headless Chromium mit SwiftShader</td></tr>
 <tr><td>davon Engine (SetSource → vollständige Szene)</td><td>nativ Median ${de(median(tm.keystrokeEvalNative ?? []))} ms, Wasm Median ${de(median(metrics.keystrokeEvalWasm ?? []))} ms</td><td>Auswertung und Kernel ohne Zeichnen, gleiche Tastendrücke</td></tr>
+<tr><td>Kernel-lastige Änderung (16 Bohrungen mit Verrundung, Radius 2 → 2,5 → 3)</td><td>nativ ${(tm.heavyEvalNative ?? []).map((x) => de(x)).join(" / ")} ms, Wasm ${(metrics.heavyEvalWasm ?? []).map((x) => de(x)).join(" / ")} ms</td><td>SetSource → vollständige Szene; erster Wert inkl. leerem Cache für das neue Modell</td></tr>
 <tr><td>Externe Änderung → Szene</td><td>${de(tm.externalToScene)} ms</td><td>Datei schreiben bis neue Szene gezeichnet (Entprellung 50 ms im Beobachter)</td></tr>
 <tr><td>Schnittebene verschieben (Chromium)</td><td>${de(metrics.sectionMoveFps?.fps, 1)} fps</td><td>fillet_zonen, 120 Bilder, jede Lage neu (Kappe, Kontur); Drehen ohne Schnitt ${de(metrics.orbitFpsNoSection?.fps, 1)} fps, mit Schnitt ${de(metrics.orbitFpsWithSection?.fps, 1)} fps – Software-GL ohne GPU, das 60-fps-Ziel betrifft GPUs</td></tr>
 <tr><td>Schnittebene verschieben (Tauri)</td><td>${de(tm.sectionFpsTauri?.fps, 1)} fps</td><td>gehaeuse, WebKitGTK unter Xvfb (llvmpipe)</td></tr>
 <tr><td>Ziehen am Griff (Chromium)</td><td>${(metrics.sectionDragFps ?? []).map((f) => `${de(f.fps, 0)} fps`).join(", ") || "–"}</td><td>X02: drei echte Mausziehvorgänge (je ~12 Bewegungen), Bildrate der Ansicht während des Ziehens</td></tr>
 <tr><td>Kappenanteil UI ↔ CLI</td><td>${metrics.cliCompare ? `${de(metrics.cliCompare.web.share * 100, 1)} % / ${de(metrics.cliCompare.cliPx.share * 100, 1)} %` : "–"}</td><td>Anteil der Kappenpixel an den gezeichneten Pixeln, Abweichung ${metrics.cliCompare ? de(metrics.cliCompare.rel * 100, 0) : "–"} % (Grenze 35 %)</td></tr>
 </table>
-<p>Die nativen Kernelzeiten sind kürzer als in Wasm (Bericht 7: nativ ↔ Wasm); bei kleinen Modellen wie <i>gehaeuse</i> bestimmen aber Entprellung, Zeichnen und – im Desktop – das Software-Rendering von WebKitGTK unter Xvfb die Zeit vom Tastendruck bis zur Szene, deshalb liegen beide Werte nahe beieinander. Alle Messungen ohne GPU; nur relativ aussagekräftig.</p>
+<p>Bei kleinen Änderungen (Tastendruck in <i>gehaeuse</i>, Kernel fast nur aus dem Cache) ist die Desktop-App nicht schneller: die Engine rechnet nur wenige Millisekunden, die Zeit bestimmen Entprellung, der Weg über Tauri-Befehl, Engine-Prozess und Kanal (nativ ${de(median(tm.keystrokeEvalNative ?? []))} ms gegen ${de(median(metrics.keystrokeEvalWasm ?? []))} ms im Worker) und das Software-Rendering von WebKitGTK unter Xvfb. Sobald der Kernel rechnet, gewinnt der native Kernel deutlich (Zeile „Kernel-lastige Änderung“). Alle Messungen ohne GPU; nur relativ aussagekräftig.</p>
 
 <h2>7 Tests</h2>
 <ul>

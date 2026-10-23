@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Testbericht 9 – Desktop-App, Dateibeobachter, Git, Schnittansicht, CLI↔UI</title>
+<style>
+  @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
+  :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
+  * { box-sizing: border-box; }
+  body { font: 9.6pt/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); margin: 0; }
+  main { max-width: 184mm; margin: 0 auto; }
+  h1 { font-size: 18pt; margin: 0 0 2mm; }
+  h2 { font-size: 13pt; margin: 7mm 0 3mm; border-bottom: 1px solid var(--border); padding-bottom: 1mm; break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p { margin: 1.5mm 0; }
+  .meta { color: var(--muted); margin-bottom: 4mm; }
+  .summary { display: flex; flex-wrap: wrap; gap: 2.5mm; margin: 3mm 0; }
+  .summary div { flex: 1 1 28mm; border: 1px solid var(--border); border-radius: 2mm; padding: 2mm; font-size: 8.4pt; }
+  .summary b { display: block; font-size: 12pt; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 8.2pt; }
+  th, td { border: 1px solid var(--border); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
+  th { background: var(--head); font-weight: 600; }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 7.6pt; }
+  pre { margin: 0 0 1.5mm; padding: 1.4mm 2mm; background: #f6f8fa; border: 1px solid var(--border); border-radius: 1mm; white-space: pre-wrap; word-break: break-word; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm; margin: 2mm 0; align-items: start; }
+  .tri { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2mm; margin: 2mm 0; align-items: start; }
+  .pair > *, .tri > * { min-width: 0; }
+  figure { margin: 0 0 2mm; break-inside: avoid; }
+  figure img { max-width: 100%; max-height: 105mm; border: 1px solid var(--border); display: block; }
+  figcaption { font-size: 7.6pt; color: var(--muted); margin-top: 0.6mm; }
+  figure.missing { border: 1px dashed var(--border); padding: 4mm; }
+  .small { font-size: 8.2pt; color: var(--muted); font-weight: 400; }
+  .step { border: 1px solid var(--border); border-radius: 2mm; padding: 2.5mm 3mm; margin: 3mm 0; break-inside: avoid-page; }
+  .step h3 { margin-top: 0; }
+  ul { margin: 1mm 0 2mm 5mm; padding: 0; }
+  li { margin: 0.5mm 0; }
+  ul.checks { list-style: none; margin-left: 0; font-size: 8.3pt; }
+  ul.checks li::before { content: "✓ "; color: var(--ok); }
+  ul.checks li.bad::before { content: "✗ "; color: var(--bad); }
+  tr, td { break-inside: avoid; }
+  .ok { color: var(--ok); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+<h1>Testbericht 9 – Desktop-App, Dateibeobachter, Git, Schnittansicht, CLI↔UI</h1>
+<div class="meta">cad-app (Tauri 2), cad-desktop, cad-ipc, cad-cli, web · 23.10.2026 · Branch worktree-agent-ac30a6a8716573971 · Commit bdf77d4 · rustc 1.97.0 (2d8144b78 2026-07-07) · WebKitGTK 2.52.6 · 4 Kerne (Intel(R) Xeon(R) Processor @ 2.10GHz) · Xvfb ohne GPU</div>
+
+<div class="summary">
+  <div>Tauri-E2E (tauri-driver, Xvfb)<b class="ok">11 / 11</b>echte App, echter Kernel</div>
+  <div>Playwright (Chromium)<b class="ok">77 / 77</b>davon 7 Schnitt, 70 bisherige</div>
+  <div>cargo test --workspace<b class="ok">338 / 338</b>0 ignoriert</div>
+  <div>clippy · fmt · actionlint<b class="ok">sauber · sauber · sauber</b></div>
+  <div>Start bis Szene<b>1.544 ms</b>Sitzung → erste vollständige Szene</div>
+  <div>Tastendruck → Szene (Median)<b>65 / 36 ms</b>nativ (Tauri) / Wasm (Chromium)</div>
+  <div>Schnitt verschieben<b>12,5 fps</b>Chromium SwiftShader; Tauri 34,4</div>
+</div>
+
+<h2>1 Umfang und Architektur</h2>
+<p>Die Desktop-Version läuft mit derselben React-App wie der Browser; neu sind die Tauri-App (<code>crates/cad-app</code>), das Backend ohne Tauri (<code>crates/cad-desktop</code>: Engine-Prozess mit Supervisor, Binärformat, Dateien, Beobachter, Git), die lokale IPC (<code>crates/cad-ipc</code>) und im Web <code>TauriTransport</code>, die Desktop-Plattform und die Schnittansicht (Browser und Desktop).</p>
+<pre>cad datei.scad  (App-Prozess, Feature gui)
+  Hauptthread: Tauri-Ereignisschleife + Webview (React-App, TauriTransport statt Worker)
+  Befehle: engine_post · open/save/save_as · watch_files · git_hunks · ui_reply · …
+  Kanal (Tauri 2, roh): binäre Batches  ◀──────────── stdout ── cad engine-host (Engine-Prozess)
+  Supervisor (cad-desktop::engine) ───── stdin: post [ToEngine…] ─▶  Engine-Thread 256 MiB Stack:
+    Watchdog 15 s: Prozess beenden + neu starten, BlockKeys          Session::post / step(16 ms)
+  cad-watch: notify → file-changed / file-removed                    SMLib nativ (FFI)
+  cad-ui-ipc: Unix-Socket ui-&lt;pid&gt; (cad-ipc) ◀── cad ui status | show | screenshot</pre>
+<ul>
+<li><b>Engine:</b> native <code>cad-session</code> mit nativ gelinktem SMLib in einem eigenen Prozess (<code>cad engine-host</code>, dasselbe Binary), darin ein Engine-Thread mit 256 MiB Stack und dieselbe Schleife wie der Worker (Nachrichten posten, ein <code>SetSource</code> vor einem weiteren entfällt, dann <code>step(16 ms)</code>, dazwischen neue Nachrichten). Ein Prozess statt nur eines Threads, weil SMLib und seine C-Fassade globalen Zustand haben (Handle-Tabelle, Meldungen): ein hängender Aufruf lässt sich nur mit dem Prozess beenden, ein Ersatz-Thread daneben teilte den Zustand. Der Watchdog im App-Prozess zählt gesendete und übernommene Nachrichten (<code>seen</code>) und ersetzt die Engine nach 15 s ohne Antwort, mit denselben <code>BlockKeys</code>/<code>SetFiles</code>/<code>SetContext</code>/<code>SetSource</code> wie <code>WorkerTransport</code>.</li>
+<li><b>Transport:</b> <code>EngineTransport</code> bleibt; <code>TauriTransport</code> bündelt UI-Nachrichten je Microtask in einen Befehl <code>engine_post</code> (Reihenfolge bleibt) und empfängt Batches über einen Tauri-2-Kanal als <code>ArrayBuffer</code>: <code>[u32 Kopflänge][u32 Datenlänge][Kopf-JSON][Daten]</code>, Mesh-Arrays als <code>{"$b": [offset, länge, typ]}</code>, im Webview Typed-Array-Sichten ohne Kopie. Die Desktop-UI wird ohne Worker und Wasm gebaut (<code>pnpm build:tauri</code>) und ins Binary eingebettet.</li>
+<li><b>Ein Binary:</b> <code>cad</code> mit Feature <code>gui</code> (Standard). <code>cad</code>, <code>cad datei.scad</code>, <code>cad ordner/</code> starten die UI; ohne <code>DISPLAY</code>/<code>WAYLAND_DISPLAY</code> oder ohne <code>gui</code>: Meldung mit den headless Befehlen, Exit 2. Alle Unterbefehle bleiben.</li>
+<li><b>IPC (<code>cad-ipc</code>, wiederverwendbar):</b> Endpunkte als Unix-Sockets in <code>$CAD_IPC_DIR</code> bzw. <code>$XDG_RUNTIME_DIR/controller-cad</code> bzw. <code>$TMPDIR/controller-cad-&lt;uid&gt;</code> (Ordner 0700, Eigentümer geprüft, Sockets 0600, Peer-UID geprüft); Rahmen mit Versionsfeld <code>v</code>, Arten Anfrage/Antwort/Ereignis, Binärteil; veraltete Sockets (Verbindung abgewiesen) werden beim Binden, Verbinden und Auflisten entfernt. API: <code>Server::bind(name)</code>, <code>Server::serve(handler)</code>, <code>connect(name)</code>, <code>Conn::request/request_with/respond/send_event/next_event</code>, <code>list(prefix)</code>.</li>
+</ul>
+
+<h2>2 Entscheidungen</h2>
+<table>
+<tr><th>Thema</th><th>Entscheidung</th><th>Begründung</th></tr>
+<tr><td>Git-Anbindung</td><td><code>git</code>-Befehl für die HEAD-Fassung (<code>rev-parse</code>, <code>show HEAD:pfad</code>), Diff im Prozess mit <code>similar</code></td><td>Ein Blob je Datei und HEAD-Stand (gecacht, HEAD höchstens alle 5 s neu geprüft); Tippen startet keinen Prozess. <code>git2</code> bräuchte libgit2 (C-Build), <code>gix</code> brächte weit über hundert Crates in jedes Binary; <code>git</code> ist überall da, wo es Repositories gibt. Unversionierte oder nicht in HEAD enthaltene Dateien: keine Markierung.</td></tr>
+<tr><td>Feature <code>gui</code></td><td>Standard an</td><td>Der Workspace enthält <code>cad-app</code> ohnehin (<code>cargo test --workspace</code> baut es), der Mehraufwand sind nur die WebKitGTK-Pakete unter Linux (CI: <code>scripts/ci/desktop.sh deps</code>). Headless: <code>--no-default-features</code>. Ohne <code>web/dist-tauri</code> bettet der Build eine Platzhalterseite ein.</td></tr>
+<tr><td>Engine</td><td>eigener Prozess, darin Thread mit großem Stack</td><td>siehe Abschnitt 1 (globaler SMLib-Zustand, Watchdog)</td></tr>
+<tr><td>Automatisch speichern</td><td>Standard aus, Verzögerung einstellbar (1000 ms)</td><td>Wer gleichzeitig mit einem Agenten an der Datei arbeitet, soll entscheiden, wann sein Stand auf der Platte landet; die Hinweisleiste schützt beide Seiten.</td></tr>
+<tr><td>Beobachter</td><td><code>notify</code> auf die Ordner (nicht die Dateien), Inhaltsvergleich per Hash</td><td>atomares Speichern (Editoren, <code>cad set</code>) ersetzt die Datei; eigene Speichervorgänge melden den neuen Inhalt vorher an und kommen nie als „extern“ zurück.</td></tr>
+<tr><td>Neu laden</td><td>als kleinste Zeilenänderungen, eigener Undo-Schritt (<code>isolateHistory</code>)</td><td>Cursor, Auswahl und Scrollposition bleiben, Strg+Z stellt den eigenen Stand wieder her.</td></tr>
+</table>
+
+<h2>3 Desktop-App (Tauri-E2E mit tauri-driver und WebKitWebDriver unter Xvfb)</h2>
+<p>Binary <code>target/release/cad</code>, 11/11 bestanden. Der Lauf startet die echte App mit Datei über WebDriver, ändert Dateien per Shell, benutzt die echte CLI (<code>cad check</code>, <code>cad set</code>, <code>cad ui …</code>) und ein temporäres Git-Repository. tauri-driver lief unter Xvfb stabil; Bilder: WebDriver-Bildschirmfotos des Webviews und ein X-Bildschirmfoto des Fensters.</p>
+<div class="step"><h3>T01 App startet mit Datei, Szene erscheint (nativer Kernel) <span class="ok">bestanden</span> <span class="small">1.821 ms</span></h3>
+<ul class="checks"><li class="ok">Tauri-Plattform erkannt (TauriTransport, kein Worker)</li><li class="ok">Datei aus der Kommandozeile geöffnet</li><li class="ok">keine Diagnosen</li><li class="ok">Projektordner /tmp/cad-desktop-e2e-Vak7pV/repo</li><li class="ok">Meshes binär über den Kanal (102144 Bytes)</li></ul>
+<div class="pair"><figure><img src="img/t01-start.jpg"><figcaption>Start mit gehaeuse.scad</figcaption></figure><figure><img src="img/t01-fenster.jpg"><figcaption>Fenster unter Xvfb (X-Bildschirmfoto)</figcaption></figure></div></div>
+<div class="step"><h3>T02 Externe Änderung ohne ungespeicherte Änderungen: still neu geladen, Undo als eigener Schritt <span class="ok">bestanden</span> <span class="small">571 ms</span></h3>
+<p>Die Datei wird außerhalb geändert (<code>k: gehaeuse(w = 60)</code> → <code>w = 90</code>), der Editor hat keine ungespeicherten Änderungen.</p><ul class="checks"><li class="ok">Teständerung trifft</li><li class="ok">Editor zeigt den neuen Inhalt</li><li class="ok">Ansicht ausgewertet</li><li class="ok">Cursor bleibt in Zeile 24</li><li class="ok">nicht als ungespeichert markiert</li><li class="ok">Modell breiter (Hülle x 0…100)</li><li class="ok">Rückgängig stellt den alten Stand her (eigener Schritt)</li><li class="ok">Wiederholen</li></ul>
+<div class="pair"><figure><img src="img/t02-vorher.jpg"><figcaption>vorher (w = 60)</figcaption></figure><figure><img src="img/t02-nachher.jpg"><figcaption>nach der externen Änderung (w = 90), ohne Zutun neu geladen</figcaption></figure></div></div>
+<div class="step"><h3>T03 Git-Markierungen am Rand (neu, geändert, gelöscht) <span class="ok">bestanden</span> <span class="small">939 ms</span></h3>
+<p>Puffer gegen HEAD: Zeile 21 geändert (blau), eine neue Kommentarzeile (grün), das Modul <code>deckel</code> gelöscht (rotes Dreieck zwischen den Zeilen). Die Markierungen sind 3 px breit mit Deckkraft 0,5–0,55 (hell/dunkel abgestimmt); der Titel (Hover) zeigt die alten Zeilen.</p><ul class="checks"><li class="ok">geänderte Zeile 21 (w = 90) blau markiert</li><li class="ok">neue Zeile grün</li><li class="ok">gelöschte Zeile als Dreieck</li><li class="ok">3 Markierungen im DOM</li><li class="ok">schmaler Balken (≤ 5 px)</li><li class="ok">geringe Deckkraft</li><li class="ok">Hover zeigt alte Zeilen</li></ul>
+<div class="pair"><figure><img src="img/t03-git.jpg"><figcaption>Git-Markierungen: geändert (blau), neu (grün), gelöscht (rotes Dreieck)</figcaption></figure><figure><img src="img/t03-git-dunkel.jpg"><figcaption>dasselbe im dunklen Thema</figcaption></figure></div></div>
+<div class="step"><h3>T04 Externe Änderung bei ungespeicherten Änderungen: Hinweisleiste, Vergleichen, Meine behalten, Speichern ohne Schleife <span class="ok">bestanden</span> <span class="small">2.475 ms</span></h3>
+<ul class="checks"><li class="ok">Puffer ist ungespeichert</li><li class="ok">Editor behält den eigenen Stand</li><li class="ok">Vergleich zeigt + und − Zeilen</li><li class="ok">Leiste weg nach „Meine behalten“</li><li class="ok">keine Reload-Schleife (Meldung: Gespeichert: gehaeuse.scad)</li><li class="ok">keine Hinweisleiste nach dem Speichern</li><li class="ok">gespeichert, nicht mehr markiert</li><li class="ok">„Neu laden“ übernimmt die Festplatte</li></ul>
+<div class="pair"><figure><img src="img/t04-leiste.jpg"><figcaption>„Datei wurde extern geändert“ mit Neu laden / Meine behalten / Vergleichen</figcaption></figure><figure><img src="img/t04-vergleich.jpg"><figcaption>Vergleichen: Festplatte (−) gegen Editor (+)</figcaption></figure></div></div>
+<div class="step"><h3>T05 Gelöschte und umbenannte Datei <span class="ok">bestanden</span> <span class="small">1.258 ms</span></h3>
+<ul class="checks"><li class="ok">Speichern legt die Datei wieder an</li><li class="ok">keine Leiste mehr</li></ul>
+<div class=""><figure><img src="img/t05-geloescht.jpg"><figcaption>Datei umbenannt/gelöscht: Inhalt bleibt, „Wieder speichern“</figcaption></figure></div></div>
+
+<h2>4 Ablauf „Agent ändert Datei → UI aktualisiert sich“</h2>
+<p>Der Nutzer hat die Datei in der UI offen, ein Agent ändert sie per Shell und prüft mit der CLI. Jedes Bild ist die UI nach dem Schritt, ohne dass in der UI etwas getan wurde. Zeit vom Schreiben bis zur gezeichneten Szene: 208 ms, 216 ms, 170 ms (inkl. <code>cad check</code>/<code>cad set</code>).</p>
+<div class="step"><h3>T06 Agent-Ablauf: Datei per Shell ändern, `cad check`, UI folgt (Bildfolge) <span class="ok">bestanden</span> <span class="small">1.022 ms</span></h3>
+<ul class="checks"><li class="ok">cad check Exit 0 ({
+  &quot;command&quot;: &quot;check&quot;,
+  &quot;context&quot;: null,
+  &quot;diagnostics&quot;: [],
+  &quot;errors&quot;: 0,
+ )</li><li class="ok">Editor = Datei nach Schritt 1</li><li class="ok">cad check Exit 0 ({
+  &quot;command&quot;: &quot;check&quot;,
+  &quot;context&quot;: null,
+  &quot;diagnostics&quot;: [],
+  &quot;errors&quot;: 0,
+ )</li><li class="ok">Editor = Datei nach Schritt 2</li><li class="ok">cad set Exit 0 ()</li><li class="ok">Editor = Datei nach Schritt 3</li></ul>
+<div class="pair"><figure><img src="img/t06-schritt1.jpg"><figcaption>1. Agent ändert w = 60 → 75 und prüft mit `cad check`</figcaption></figure><figure><img src="img/t06-schritt2.jpg"><figcaption>2. Agent fügt einen zweiten Deckel hinzu</figcaption></figure><figure><img src="img/t06-schritt3.jpg"><figcaption>3. Agent setzt h über `cad set --param gehaeuse.h=30`</figcaption></figure></div></div>
+<div class="step"><h3>T07 `cad ui status` / `show` / `screenshot` gegen die laufende App <span class="ok">bestanden</span> <span class="small">983 ms</span></h3>
+<p>Kopplung CLI ↔ laufende UI über <code>cad-ipc</code>.</p><ul class="checks"><li class="ok">status Exit 0 </li><li class="ok">offene Datei und Ordner</li><li class="ok">Cursorzeile</li><li class="ok">show Exit 0 </li><li class="ok">Cursor in Zeile 11</li><li class="ok">status sieht Zeile 11</li><li class="ok">Kontextmodul gehaeuse (gehaeuse)</li><li class="ok">ausgewählter Knoten {&quot;idx&quot;:2,&quot;label&quot;:&quot;box&quot;,&quot;line&quot;:11}</li><li class="ok">Werte der Parameterleiste</li><li class="ok">Diagnosen</li><li class="ok">show --module deckel ({
+  &quot;command&quot;: &quot;ui show&quot;,
+  &quot;exit_code&quot;: 0,
+  &quot;file&quot;: &quot;gehaeuse.scad&quot;,
+  &quot;line&quot;: 19,
+  &quot;module&quot;: &quot;deckel&quot;,
+  &quot;ok&quot;: true, )</li><li class="ok">unbekanntes Modul: Exit 1 (1)</li><li class="ok">screenshot Exit 0 </li><li class="ok">PNG 20521 Bytes</li></ul>
+<div class="pair"><figure><img src="img/t07-cad-ui-screenshot.jpg"><figcaption>`cad ui screenshot`: die 3D-Ansicht, wie der Nutzer sie sieht</figcaption></figure><figure><img src="img/t07-ui-nach-show.jpg"><figcaption>nach `cad ui show gehaeuse.scad --line 11`</figcaption></figure></div></div>
+<div class="small">Ausgabe von <code>cad ui status</code>:</div><pre>UI pid 10455 (ui-10455)
+  Projekt /tmp/…/repo (Hauptdatei gehaeuse.scad)
+  Dateien: gehaeuse.scad
+  Cursor: gehaeuse.scad Zeile 19 Spalte 17
+  Auswahl: [1] box
+  Kontext: Modul deckel
+  Diagnosen: 0 Fehler, 0 Warnungen
+  Szene v13 (vollständig), 2 Knoten
+</pre>
+<div class="step"><h3>T09 Watchdog in Tauri: hängender Kernel → Engine-Prozess ersetzt, Knoten gesperrt <span class="ok">bestanden</span> <span class="small">7.873 ms</span></h3>
+<p>Hängender Kernel (Testnachricht <code>__debugHang</code> im Engine-Prozess, Watchdog für den Test 3 s): (a) im Leerlauf, (b) während eines langsamen Kernel-Jobs (8×8 Bohrungen mit Verrundung, nativ ~3,6 s).</p><ul class="checks"><li class="ok">Engine reagiert seit 3 s nicht (Kernel hängt); Engine neu gestartet, Cache verworfen</li><li class="ok">nächste Änderung wird normal ausgewertet</li><li class="ok">Engine reagiert seit 3 s nicht (Kernel hängt) (Zeile 1); Engine neu gestartet, Cache verworfen, Knoten gesperrt</li><li class="ok">1 gesperrter Schlüssel</li><li class="ok">gesperrter Knoten meldet Fehler (1)</li><li class="ok">Szene nach dem Neustart</li></ul>
+<div class=""><figure><img src="img/t09-watchdog.jpg"><figcaption>Watchdog: Engine-Prozess ersetzt, hängender Knoten gesperrt (Zeile rot)</figcaption></figure></div></div>
+<div class="step"><h3>T10 Ordner als Projekt, Autospeichern <span class="ok">bestanden</span> <span class="small">2.936 ms</span></h3>
+<ul class="checks"><li class="ok">Hauptdatei gehaeuse.scad</li><li class="ok">3 Dateien (gehaeuse.scad, konstanten.scad, lib/teile.scad)</li><li class="ok">eingebundene Datei neu geladen</li><li class="ok">nach dem Autospeichern sauber</li></ul>
+<div class=""><figure><img src="img/t10-ordner.jpg"><figcaption>Ordner als Projekt (3 Dateien), Autospeichern an</figcaption></figure></div></div>
+<div class="step"><h3>T11 Tastendruck → Szene nativ (Messung) <span class="ok">bestanden</span> <span class="small">2.999 ms</span></h3>
+<ul class="checks"><li class="ok">8 Messungen</li></ul>
+</div>
+
+<h2>5 3D-Schnittansicht</h2>
+<p>Werkzeug „Schnitt“ in der Ansicht (Browser und Tauri): Ebene X/Y/Z durch die Modellmitte oder frei (Normale aus der Blickrichtung oder per Eingabe), Griff (blauer Punkt) zum Ziehen entlang der Normalen mit Rasten auf Rasterebenen des Kontextmoduls und auf Anker (Alt: frei, 0,1 mm), Umkehren, gefüllte Kappe und Kontur. Verfahren wie im CLI-Renderer: Clipping-Ebene an allen Modellmaterialien, je undurchsichtigem Körper ein Paritäts-Pass (Stencil <code>INVERT</code> über alle Fragmente des abgeschnittenen Netzes) und ein großes Viereck in der Ebene, das die Kappe zeichnet, wo das Bit gesetzt ist (tiefengetestet, schraffiert, Richtung je Körper wechselnd). Konvention exakt wie <code>cad render --section</code>: Ebene durch p mit Normale n, entfernt wird die Seite, in die n zeigt; „Als <code>cad render …</code> kopieren“ schreibt <code>--section a=v [--section-flip]</code> bzw. <code>--section-plane p,n</code> mit <code>--module</code> und der Kamera (<code>--azimuth/--elevation</code>).</p>
+<div class="step"><h3>X01 Schnitt z = 11 mit Kappe <span class="ok">bestanden</span></h3><p>„Schnitt“ in der Ansicht: Ebene z durch die Modellmitte (z = 11), entfernt wird z &gt; 11. Die Schnittfläche ist gefüllt und schraffiert (Stencil-Kappe, Farbe wie im CLI-Renderer), die Kontur als Linie; Statuszeile „Schnitt z = 11 · entfernt z &gt; 11“.</p><ul class="checks"><li class="ok">Kappenpixel vorher 27, nachher 6452</li><li class="ok">1 Körper mit Kappe, 18 Kontursegmente</li></ul>
+<div class=""><figure><img src="img/x01-schnitt-z.jpg"><figcaption>Schnitt z = 11 (iso)</figcaption></figure></div></div>
+<div class="step"><h3>X02 Ebene ziehen und rasten <span class="ok">bestanden</span></h3><p>Im Modulkontext gehaeuse (Raster g): Griff (blauer Punkt) nach oben gezogen, die Ebene rastet auf g.deckel (z = 20, grünes Etikett), nach unten auf g.boden; mit Alt frei (auf 0,1 mm gerundet).</p><ul class="checks"><li class="ok">Rasten: g.deckel (z = 20), g.boden (z = 0)</li><li class="ok">frei: z = 13.4</li><li class="ok">fps beim Ziehen: 9, 26, 25</li></ul>
+<div class="pair"><figure><img src="img/x02-rasten-deckel.jpg"><figcaption>beim Ziehen: rastet auf g.deckel</figcaption></figure><figure><img src="img/x02-frei.jpg"><figcaption>mit Alt frei gezogen</figcaption></figure></div></div>
+<div class="step"><h3>X03 Umkehren, Achsen, freie Ebene <span class="ok">bestanden</span></h3><p>„Umkehren“ behält die obere Hälfte (n = −z, entspricht --section-flip); X mit Wert 30; „Aus Blickrichtung“ legt eine freie Ebene senkrecht zur Blickrichtung, die Normale lässt sich eingeben (1, 1, 1).</p><ul class="checks"><li class="ok">CLI: cad render gehaeuse.scad -o schnitt.png --section-plane 35,20,11,0.5774,0.5774,0.5774 --azimuth 38.7 --elevation -29.3</li></ul>
+<div class="tri"><figure><img src="img/x03-umgekehrt.jpg"><figcaption>z umgekehrt (entfernt die untere Hälfte), von unten</figcaption></figure><figure><img src="img/x03-x30.jpg"><figcaption>x = 30</figcaption></figure><figure><img src="img/x03-frei.jpg"><figcaption>frei, n = (1, 1, 1)/√3</figcaption></figure></div></div>
+<div class="step"><h3>X04 Schnitt zusammen mit Hervorhebung, Zonen, Transparenz <span class="ok">bestanden</span></h3><p>Cursor auf einer Zeile: deren Körper voll und mit Kappe, der Rest gedimmt (nur abgeschnitten, ohne Kappe); abgezogener Körper rot transparent ohne Kappe; Zone (blau) im Fillet-Beispiel; Griffe bleiben über dem Schnitt.</p><ul class="checks"><li class="ok">Kappen = volle Körper (1)</li><li class="ok">0 Griffe gezeichnet</li></ul>
+<div class="tri"><figure><img src="img/x04-hervorhebung.jpg"><figcaption>Zeile 11 hervorgehoben</figcaption></figure><figure><img src="img/x04-abgezogen.jpg"><figcaption>Zeile 12: abgezogener Körper</figcaption></figure><figure><img src="img/x04-zone.jpg"><figcaption>Zone (Zeile 17)</figcaption></figure></div></div>
+<div class="step"><h3>X05 Gleicher Schnitt in UI und CLI <span class="ok">bestanden</span></h3><p>„Als cad render … kopieren“ ergibt `cad render gehaeuse.scad -o schnitt.png --section z=12 --azimuth 38.7 --elevation 29.3`; in der CLI ausgeführt zeigt das Bild denselben Schnitt (Kappenanteil an den gezeichneten Pixeln UI 6.7 %, CLI 6.2 %, Abweichung 7 %; Perspektive in der UI, orthografisch in der CLI).</p><ul class="checks"><li class="ok">Kappenpixel UI 6429 / 96597, CLI 5335 / 85769</li></ul>
+<div class="pair"><figure><img src="img/x05-web.jpg"><figcaption>UI (WebGL)</figcaption></figure><figure><img src="img/x05-cli.jpg"><figcaption>CLI (Software-Renderer), kopierter Aufruf</figcaption></figure></div></div>
+<div class="step"><h3>X06 Bildrate beim Schnittziehen <span class="ok">bestanden</span></h3><p>Ebene 120 Bilder lang verschoben (jedes Bild neue Lage, Kappe und Kontur neu): 12.5 fps in Chromium mit SwiftShader (Software-GL, keine GPU); Drehen mit Schnitt 15.9 fps, ohne Schnitt 20.4 fps – der Schnitt kostet kaum mehr als das Zeichnen selbst.</p><ul class="checks"><li class="ok">120 Bilder in 9586 ms</li></ul>
+</div>
+<div class="step"><h3>T08 Schnittansicht in Tauri (Kappe, Kontur, Ziehen, CLI-Aufruf) <span class="ok">bestanden</span> <span class="small">3.971 ms</span></h3>
+<ul class="checks"><li class="ok">1 Körper mit Kappe</li><li class="ok">18 Kontursegmente</li><li class="ok">Kappe sichtbar (4022 rote Pixel)</li><li class="ok">Ebene verschieben: 34.4 fps (WebKitGTK, Software-GL)</li><li class="ok">cad render /tmp/cad-desktop-e2e-Vak7pV/repo/gehaeuse.scad -o schnitt.png --section z=16 --azimuth 38.7 --elevation 28.7</li></ul>
+<div class=""><figure><img src="img/t08-schnitt.jpg"><figcaption>Schnitt z in Tauri: gefüllte, schraffierte Kappe und Kontur</figcaption></figure></div></div>
+<p>Kopierter Aufruf in Tauri: <code>cad render /tmp/…/repo/gehaeuse.scad -o schnitt.png --section z=16 --azimuth 38.7 --elevation 28.7</code></p>
+
+<h2>6 Messwerte</h2>
+<table>
+<tr><th>Messung</th><th>Wert</th><th>Bemerkung</th></tr>
+<tr><td>Start der App bis erste vollständige Szene</td><td>1.544 ms</td><td>WebDriver-Sitzung anlegen (Prozessstart, Webview, Engine-Prozess, SMLib) bis die Szene gezeichnet ist; davon im Webview bis zur ersten Szene 710 ms</td></tr>
+<tr><td>Tastendruck → Szene, nativ (Tauri)</td><td>Median 65 ms (118, 61, 60, 75, 70, 56, 65, 65)</td><td>Backspace/Ziffer in <code>w = 60</code> (gehaeuse), echte Tastendrücke über WebDriver; Zeit von der Editoränderung bis die Szene gezeichnet ist (inkl. 8 ms Entprellung, WebKitGTK mit Software-GL)</td></tr>
+<tr><td>Tastendruck → Szene, Wasm (Chromium)</td><td>Median 36 ms (69, 28, 38, 45, 28, 34, 37, 35)</td><td>dieselbe Änderung im Browser (Worker, smlib.wasm), headless Chromium mit SwiftShader</td></tr>
+<tr><td>davon Engine (SetSource → vollständige Szene)</td><td>nativ Median 19 ms, Wasm Median 5 ms</td><td>Auswertung und Kernel ohne Zeichnen, gleiche Tastendrücke</td></tr>
+<tr><td>Externe Änderung → Szene</td><td>166 ms</td><td>Datei schreiben bis neue Szene gezeichnet (Entprellung 50 ms im Beobachter)</td></tr>
+<tr><td>Schnittebene verschieben (Chromium)</td><td>12,5 fps</td><td>fillet_zonen, 120 Bilder, jede Lage neu (Kappe, Kontur); Drehen ohne Schnitt 20,4 fps, mit Schnitt 15,9 fps – Software-GL ohne GPU, das 60-fps-Ziel betrifft GPUs</td></tr>
+<tr><td>Schnittebene verschieben (Tauri)</td><td>34,4 fps</td><td>gehaeuse, WebKitGTK unter Xvfb (llvmpipe)</td></tr>
+<tr><td>Ziehen am Griff (Chromium)</td><td>9 fps, 26 fps, 25 fps</td><td>X02: drei echte Mausziehvorgänge (je ~12 Bewegungen), Bildrate der Ansicht während des Ziehens</td></tr>
+<tr><td>Kappenanteil UI ↔ CLI</td><td>6,7 % / 6,2 %</td><td>Anteil der Kappenpixel an den gezeichneten Pixeln, Abweichung 7 % (Grenze 35 %)</td></tr>
+</table>
+<p>Die nativen Kernelzeiten sind kürzer als in Wasm (Bericht 7: nativ ↔ Wasm); bei kleinen Modellen wie <i>gehaeuse</i> bestimmen aber Entprellung, Zeichnen und – im Desktop – das Software-Rendering von WebKitGTK unter Xvfb die Zeit vom Tastendruck bis zur Szene, deshalb liegen beide Werte nahe beieinander. Alle Messungen ohne GPU; nur relativ aussagekräftig.</p>
+
+<h2>7 Tests</h2>
+<ul>
+<li><code>cargo test --workspace</code>: 338 bestanden, 0 fehlgeschlagen, 0 ignoriert; <code>cargo clippy --workspace --all-targets -- -D warnings</code>: ohne Befund; <code>cargo fmt --check</code>: ohne Befund.</li>
+<li>Web: <code>pnpm typecheck</code> ohne Befund; Vitest Tests  186 passed (186) (neu: <code>tauriTransport.test.ts</code>, <code>textDiff.test.ts</code>, <code>section.test.ts</code>); Playwright 77/77 (alle bisherigen 70 Szenarien und 7 neue zur Schnittansicht).</li>
+<li>CI: Workflow <code>rust</code> installiert die Tauri-Pakete (<code>scripts/ci/desktop.sh deps</code>), neuer Workflow <code>desktop</code> (UI für Tauri, Release-Build, Tauri-E2E unter Xvfb, Ergebnisse als Artefakt); <code>actionlint</code> 1.7.7 über alle Workflows: ohne Befund.</li>
+</ul>
+<table><tr><th>Rust-Test (neu)</th><th>Datei</th><th>Ergebnis</th></tr><tr><td>tests::base64</td><td>unittests src/lib.rs</td><td class="ok">ok</td></tr><tr><td>launch::tests::decisions</td><td>unittests src/main.rs</td><td class="ok">ok</td></tr><tr><td>geom::tests::distance_of_cubes</td><td>unittests src/main.rs</td><td class="ok">ok</td></tr><tr><td>ui_commands_talk_to_a_running_ui</td><td>tests/agent.rs</td><td class="ok">ok</td></tr><tr><td>ui_commands_without_running_ui</td><td>tests/agent.rs</td><td class="ok">ok</td></tr><tr><td>ui_entry_without_display</td><td>tests/agent.rs</td><td class="ok">ok</td></tr><tr><td>diff_hunks_kinds</td><td>tests/backend.rs</td><td class="ok">ok</td></tr><tr><td>open_file_loads_includes</td><td>tests/backend.rs</td><td class="ok">ok</td></tr><tr><td>open_folder_chooses_main</td><td>tests/backend.rs</td><td class="ok">ok</td></tr><tr><td>atomic_write_and_recent</td><td>tests/backend.rs</td><td class="ok">ok</td></tr><tr><td>supervisor_evaluates_and_sends_meshes</td><td>tests/backend.rs</td><td class="ok">ok</td></tr><tr><td>head_base_of_tracked_and_untracked_files</td><td>tests/backend.rs</td><td class="ok">ok</td></tr><tr><td>wire_batch_has_binary_meshes</td><td>tests/backend.rs</td><td class="ok">ok</td></tr><tr><td>supervisor_watchdog_when_idle_engine_hangs</td><td>tests/backend.rs</td><td class="ok">ok</td></tr><tr><td>supervisor_watchdog_replaces_engine_and_blocks_key</td><td>tests/backend.rs</td><td class="ok">ok</td></tr><tr><td>watcher_reports_external_changes_only</td><td>tests/backend.rs</td><td class="ok">ok</td></tr><tr><td>frame_roundtrip_with_data</td><td>tests/ipc.rs</td><td class="ok">ok</td></tr><tr><td>runtime_dir_is_private</td><td>tests/ipc.rs</td><td class="ok">ok</td></tr><tr><td>stale_socket_is_removed</td><td>tests/ipc.rs</td><td class="ok">ok</td></tr><tr><td>version_mismatch_is_reported</td><td>tests/ipc.rs</td><td class="ok">ok</td></tr><tr><td>request_response_events_and_stale_cleanup</td><td>tests/ipc.rs</td><td class="ok">ok</td></tr><tr><td>serve_handles_requests</td><td>tests/ipc.rs</td><td class="ok">ok</td></tr></table>
+<p class="small">Backend (<code>cad-desktop/tests/backend.rs</code>): Datei öffnen mit includes, Ordner und Wahl der Hauptdatei, atomares Speichern und zuletzt geöffnet, Beobachter (externe Änderung, eigene Speicherung ignoriert, atomares Ersetzen, gleicher Inhalt, include, fremde Dateien, gelöscht/wieder angelegt, umbenannt), Git-Hunks (Arten, CRLF, Ende) und HEAD-Basis in einem temporären Repository (unversioniert, neuer Commit, Unterordner), Binärformat, Supervisor (Auswertung, Meshes, Watchdog mit Sperre, Watchdog im Leerlauf). IPC (<code>cad-ipc/tests/ipc.rs</code>): Rahmen, Version, Anfrage/Antwort/Ereignis, veraltete Sockets, Rechte, mehrere Clients. CLI (<code>agent.rs</code>, <code>launch.rs</code>): kein Display → Exit 2 + Meldung, <code>cad ui …</code> ohne UI → Exit 3, <code>cad ui</code> gegen einen Test-Endpunkt.</p>
+
+<h2>8 Bekannte Grenzen</h2>
+<ul>
+<li>Steuer-IPC nur unter Unix (Linux, macOS); unter Windows meldet <code>cad-ipc</code> „nicht umgesetzt“ (Named Pipes fehlen), die App selbst ist dort ungetestet. Ein Fenster je App-Prozess; <code>cad datei.scad</code> startet einen weiteren Prozess statt das laufende Fenster zu nutzen (<code>cad ui show</code> tut das).</li>
+<li>Watchdog-Tests blockieren den Engine-Prozess über eine Testnachricht; ein echter hängender SMLib-Aufruf wurde nicht nachgestellt. Die Sperre gilt bis zum Neustart der App.</li>
+<li>Beobachter: Umbenennen erscheint als Löschen (Leiste „gelöscht oder umbenannt“), der neue Name wird nicht verfolgt; eine externe Änderung auf genau den Inhalt der UI bleibt (gewollt) unbemerkt.</li>
+<li>Git nur gegen HEAD (nicht gegen den Index), über den <code>git</code>-Befehl; ohne <code>git</code> keine Markierungen.</li>
+<li>Native Dialoge (Öffnen, Ordner, Speichern unter) sind in den E2E-Tests nicht automatisiert; geprüft sind Öffnen über die Kommandozeile, <code>cad ui show</code>, zuletzt geöffnet (Rust) und Speichern.</li>
+<li>Schnitt: eine Ebene; Kappen nur für undurchsichtige, geschlossene Körper; Kontur auf der CPU je Lage; Griffe, Raster und Anker werden nicht abgeschnitten. Der kopierte CLI-Aufruf trifft Schnitt und Blickrichtung, nicht den Bildausschnitt (UI perspektivisch, CLI orthografisch).</li>
+<li>Messwerte ohne GPU (Xvfb/llvmpipe, SwiftShader).</li>
+</ul>
+</main>
+</body>
+</html>

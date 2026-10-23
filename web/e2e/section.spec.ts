@@ -327,7 +327,8 @@ test("X06 fps beim Verschieben der Ebene", async ({ page }) => {
   });
 });
 
-test("X07 Tastendruck → Szene im Browser (Wasm), gleiche Änderung wie in Tauri", async ({ page }) => {
+test("X07 Tastendruck → Szene im Browser (Wasm), gleiche Änderungen wie in Tauri", async ({ page }) => {
+  test.setTimeout(240_000);
   await openApp(page);
   // after "w = 60" in `k: gehaeuse(w = 60);`: Backspace / digit, always a valid model
   await clickLine(page, 21, 18);
@@ -342,5 +343,13 @@ test("X07 Tastendruck → Szene im Browser (Wasm), gleiche Änderung wie in Taur
   const m1 = (await cad(page)).metrics;
   const ms = m1.editToScene.slice(before);
   expect(ms.length).toBeGreaterThan(0);
-  writeMetrics9({ keystrokeToSceneWasm: ms, keystrokeEvalWasm: m1.evalMs.slice(beforeEval) });
+  const heavy = (r: number) => `difference(fillet = 0.4) {\n    cube(40);\n    for (i = [0 : 3]) for (j = [0 : 3]) translate([10 * i + 5, 10 * j + 5, -1]) cylinder(h = 42, r = ${r});\n}\n`;
+  const heavyEval: number[] = [];
+  for (const r of [2, 2.5, 3]) {
+    const v0 = (await cad(page)).sentVersion;
+    await hook(page, (c, t) => c.setText(t as string), heavy(r));
+    const sc = await waitScene(page, { minVersion: v0 + 1 });
+    heavyEval.push(sc.metrics.evalMs[sc.metrics.evalMs.length - 1]);
+  }
+  writeMetrics9({ keystrokeToSceneWasm: ms, keystrokeEvalWasm: m1.evalMs.slice(beforeEval), heavyEvalWasm: heavyEval });
 });
