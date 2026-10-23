@@ -643,7 +643,7 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
         base.extend(target_nodes(sc, &format!("part:{name}"))?);
     }
     if plan.parts.is_empty() {
-        base.extend(sc.root);
+        base.extend(section_parts(sc, plan).unwrap_or_else(|| sc.root.into_iter().collect()));
     }
     base.retain(|&n| live(n));
     let selecting = !plan.lines.is_empty() || !plan.nodes.is_empty();
@@ -811,7 +811,15 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
                 ));
             }
             n_grids += 1;
-            n_points += grid_overlay(g, subject.as_ref(), size, labels_on, lk, (&mut lines, &mut markers, &mut labels));
+            let frame = profile_grid_frame(sc, g);
+            if frame.is_some() {
+                notes.push(format!(
+                    "Raster {}: in der Profilebene von rotate_extrude gezeichnet (x = Radius, y = Höhe)",
+                    g.name
+                ));
+            }
+            n_points +=
+                grid_overlay(g, frame, subject.as_ref(), size, labels_on, lk, (&mut lines, &mut markers, &mut labels));
         }
     }
     if plan.shows("anchors") {
@@ -921,16 +929,106 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
     Ok(Built { meshes, lines, markers, labels, triangles, visible, highlighted, subject, counts, notes })
 }
 
-/// Lines (plane rectangles at the grid's border), points and labels of one grid.
+/// With a section, a model made of parts is drawn part by part instead of as the root's single
+/// mesh: touching parts (lid on its case) then get their own section caps, hatched in
+/// alternating directions and outlined by their own cut contour, instead of one merged cap.
+/// `None` unless the parts make up the whole root (below it only parts, and transforms, groups
+/// and loops leading to them).
+fn section_parts(sc: &p::Scene, plan: &Plan) -> Option<Vec<u32>> {
+    plan.section?;
+    if sc.parts.len() < 2 {
+        return None;
+    }
+    fn covered(sc: &p::Scene, n: u32, out: &mut Vec<u32>) -> bool {
+        let node = &sc.nodes[n as usize];
+        if node.dim == Some(p::Dim::Two) || node.flags.disabled || node.flags.background {
+            return true;
+        }
+        if sc.parts.iter().any(|pt| pt.node == n) {
+            out.push(n);
+            return true;
+        }
+        let structural = matches!(
+            node.label.as_str(),
+            "translate" | "rotate" | "mirror" | "multmatrix" | "for" | "group" | "union" | "color" | "scale"
+        );
+        structural && !node.children.is_empty() && node.children.iter().all(|&c| covered(sc, c, out))
+    }
+    let root = sc.nodes.get(sc.root? as usize)?;
+    let mut out = Vec::new();
+    root.children.iter().all(|&c| covered(sc, c, &mut out)).then_some(out).filter(|o| o.len() > 1)
+}
+
+/// A grid whose every reference lies in the 2D profile of one `rotate_extrude` (`polygon([g[…],
+/// …])` below it, through 2D operations only) describes that profile: x = radius, y = height.
+/// The profile is swept from the extrusion's xz plane, so the grid is drawn there instead of in
+/// the xy plane of its module: the frame `RE · Rx(90°) · RE⁻¹ · N · frame_module` (N the node
+/// of the referencing statement, RE the extrusion; grid values are coordinates in N's system).
+/// `None` for every other grid, or when references sit in different extrusions or outside a
+/// node (variables).
+fn profile_grid_frame(sc: &p::Scene, g: &p::Grid) -> Option<DMat4> {
+    let refs: Vec<&p::Ref> = sc
+        .refs
+        .iter()
+        .filter(|r| match r.target {
+            p::RefTarget::Grid { grid, .. } | p::RefTarget::Plane { grid, .. } => grid == g.id,
+            p::RefTarget::Anchor { .. } => false,
+        })
+        .collect();
+    if refs.is_empty() || g.planes.iter().any(|pl| pl.axis == 2 && !pl.implicit) {
+        return None;
+    }
+    let mut found: Option<(u32, DMat4)> = None;
+    for r in refs {
+        let stmt = r.stmt?;
+        let mut any = false;
+        for n in sc.nodes.iter().filter(|n| n.stmt == Some(stmt)) {
+            if n.dim != Some(p::Dim::Two) {
+                return None;
+            }
+            // up through 2D nodes to the extrusion
+            let mut cur = n.parent;
+            let re = loop {
+                let q = sc.nodes.get(cur? as usize)?;
+                if matches!(q.op_info, Some(p::OpInfo::RotateExtrude { .. })) {
+                    break q;
+                }
+                if q.dim != Some(p::Dim::Two) {
+                    return None;
+                }
+                cur = q.parent;
+            };
+            let rw = crate::mat(&re.world);
+            let f = rw
+                * DMat4::from_rotation_x(std::f64::consts::FRAC_PI_2)
+                * rw.inverse()
+                * crate::mat(&n.world)
+                * crate::mat(&g.frame_module);
+            match &found {
+                Some((idx, f0)) if *idx != re.idx || !f0.abs_diff_eq(f, 1e-9) => return None,
+                _ => found = Some((re.idx, f)),
+            }
+            any = true;
+        }
+        if !any {
+            return None;
+        }
+    }
+    found.map(|(_, f)| f)
+}
+
+/// Lines (plane rectangles at the grid's border), points and labels of one grid; `frame`
+/// overrides the grid's own frame (see [`profile_grid_frame`]).
 fn grid_overlay(
     g: &p::Grid,
+    frame: Option<DMat4>,
     subject: Option<&p::Bounds>,
     size: f64,
     labels_on: bool,
     lk: &Look,
     (lines, markers, labels): (&mut Vec<Polyline>, &mut Vec<Marker>, &mut Vec<Label>),
 ) -> usize {
-    let frame = mat(&g.frame);
+    let frame = frame.unwrap_or_else(|| mat(&g.frame));
     let inv = frame.inverse();
     // subject bounds in the grid system (for axes with a single plane)
     let local_box = subject.map(|b| {
@@ -987,13 +1085,20 @@ fn grid_overlay(
             let (b0, b1, c0, c1) = (ext[b].0, ext[b].1, ext[c].0, ext[c].1);
             let pts = vec![corner(b0, c0), corner(b1, c0), corner(b1, c1), corner(b0, c1), corner(b0, c0)];
             lines.push(top_line(pts, lk.grid, 1.0, pl.literal.is_none()));
-            labels.push(Label {
-                pos: corner(b0, c0),
-                text: format!("{}.{}", g.name, pl.name),
-                color: lk.grid_label,
-                offset: (3.0, 2.0),
-                priority: 3,
-            });
+            // Indexed planes (`rippe[0]` … `rippe[7]`) get one label for the whole series at
+            // its first plane, `g.rippe[0..7]` (the label font has no ellipsis): one label per plane crowded the image (S4).
+            let series: Vec<u32> =
+                planes[a].iter().filter(|q| q.index.is_some() && q.base == pl.base).filter_map(|q| q.index).collect();
+            let text = match pl.index {
+                Some(i) if series.len() > 2 => {
+                    if i != *series.iter().min().unwrap_or(&i) {
+                        continue;
+                    }
+                    format!("{}.{}[{}..{}]", g.name, pl.base, i, series.iter().max().unwrap_or(&i))
+                }
+                _ => format!("{}.{}", g.name, pl.name),
+            };
+            labels.push(Label { pos: corner(b0, c0), text, color: lk.grid_label, offset: (3.0, 2.0), priority: 3 });
         }
     }
     // intersection points
