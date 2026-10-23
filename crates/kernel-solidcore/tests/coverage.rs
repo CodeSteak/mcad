@@ -34,7 +34,14 @@ fn every_operation_answers_without_panicking() {
         ("make_cylinder (cone)", k.make_cylinder(3.0, 1.0, 0.5, 1)),
         ("make_cylinder (tip down)", k.make_cylinder(3.0, 0.0, 0.5, 1)),
         ("make_torus", k.make_torus(3.0, 1.0, 1)),
-        ("make_polyhedron", k.make_polyhedron(&[DVec3::ZERO, DVec3::X, DVec3::Y, DVec3::Z], &[vec![0, 1, 2], vec![0, 1, 3], vec![1, 2, 3], vec![0, 2, 3]], 1)),
+        (
+            "make_polyhedron",
+            k.make_polyhedron(
+                &[DVec3::ZERO, DVec3::X, DVec3::Y, DVec3::Z],
+                &[vec![0, 1, 2], vec![0, 1, 3], vec![1, 2, 3], vec![0, 2, 3]],
+                1,
+            ),
+        ),
     ] {
         show(n, &r);
         assert!(unsupported_or_ok(&r));

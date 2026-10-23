@@ -550,7 +550,11 @@ fn eval(c: &Common) -> Result<Outcome, Fail> {
         if !sc.parts.is_empty() {
             t.push_str("Bauteile:\n");
             for pt in &sc.parts {
-                let b = pt.bounds.as_ref().map(|b| format!("  Hülle {}–{}", vec3(&b.min), vec3(&b.max))).unwrap_or_default();
+                let b = pt
+                    .bounds
+                    .as_ref()
+                    .map(|b| format!("  Hülle {}–{}", vec3(&b.min), vec3(&b.max)))
+                    .unwrap_or_default();
                 let v = pt.volume.map(|v| format!("  Volumen {} mm³", num(v))).unwrap_or_default();
                 t.push_str(&format!("  {}  Z.{}{b}{v}\n", pt.name, pt.range.line));
             }
@@ -846,7 +850,8 @@ fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str) -> Resu
     std::fs::write(output, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
     let root = m.scene.as_ref().and_then(|s| s.root);
     let mp = root.and_then(|r| m.session.mass_props(r).ok());
-    let bounds = root.and_then(|r| m.scene.as_ref().and_then(|s| s.nodes.get(r as usize)).and_then(|n| n.bounds.clone()));
+    let bounds =
+        root.and_then(|r| m.scene.as_ref().and_then(|s| s.nodes.get(r as usize)).and_then(|n| n.bounds.clone()));
     j["output"] = json!(output.display().to_string());
     j["format"] = json!(fmt);
     j["bytes"] = json!(bytes.len());
@@ -859,12 +864,7 @@ fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str) -> Resu
     }
     let mut t = m.diagnostics_text();
     let what = match &step {
-        Some(st) => format!(
-            "{} Körper, {} Flächen, {} Kanten",
-            st.solids + st.sheets,
-            st.faces,
-            st.edges
-        ),
+        Some(st) => format!("{} Körper, {} Flächen, {} Kanten", st.solids + st.sheets, st.faces, st.edges),
         None => format!("{triangles} Dreiecke"),
     };
     t.push_str(&format!(

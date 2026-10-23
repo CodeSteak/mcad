@@ -16,15 +16,7 @@ pub struct Lru<K, V> {
 impl<K: Hash + Eq + Clone, V: Clone> Lru<K, V> {
     /// `limit`: maximum total cost (sum of the costs passed to [`Lru::insert`]).
     pub fn new(limit: usize) -> Self {
-        Lru {
-            map: HashMap::new(),
-            order: BTreeMap::new(),
-            clock: 0,
-            cost: 0,
-            limit,
-            hits: 0,
-            misses: 0,
-        }
+        Lru { map: HashMap::new(), order: BTreeMap::new(), clock: 0, cost: 0, limit, hits: 0, misses: 0 }
     }
 
     pub fn len(&self) -> usize {

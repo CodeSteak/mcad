@@ -270,7 +270,10 @@ where
                 let mut res = self.drag_edits(handle, &target);
                 if res.is_empty() {
                     // Always answer: the UI keeps at most one drag in flight.
-                    res.push(FromEngine::Edits { version: self.cur.as_ref().map_or(self.version, |c| c.version), edits: Vec::new() });
+                    res.push(FromEngine::Edits {
+                        version: self.cur.as_ref().map_or(self.version, |c| c.version),
+                        edits: Vec::new(),
+                    });
                 }
                 res
             }
@@ -343,7 +346,11 @@ where
                     }
                 }
                 self.engine.block_keys(ok);
-                if bad.is_empty() { Vec::new() } else { vec![self.error(&format!("ungültige Schlüssel: {}", bad.join(", ")), None)] }
+                if bad.is_empty() {
+                    Vec::new()
+                } else {
+                    vec![self.error(&format!("ungültige Schlüssel: {}", bad.join(", ")), None)]
+                }
             }
         }
     }
@@ -675,7 +682,12 @@ where
     /// Export of named parts of the last finished evaluation: STL (all in one file), 3MF (one
     /// object per part), STEP (one product with their bodies, the same writer as
     /// [`Session::export_step`]); `zip`: one file per part in a ZIP package. (bytes, triangles)
-    pub fn export_parts(&mut self, format: p::ExportFormat, names: &[String], zip: bool) -> Result<(Vec<u8>, u32), String> {
+    pub fn export_parts(
+        &mut self,
+        format: p::ExportFormat,
+        names: &[String],
+        zip: bool,
+    ) -> Result<(Vec<u8>, u32), String> {
         self.export_parts_with(format, names, zip, &cad_engine::StepOptions::default())
     }
 
@@ -714,15 +726,11 @@ where
     }
 
     /// STEP export of the root of the last finished evaluation, with what was written.
-    pub fn export_step(
-        &mut self,
-        opts: &cad_engine::StepOptions,
-    ) -> Result<(Vec<u8>, cad_engine::StepStats), String> {
+    pub fn export_step(&mut self, opts: &cad_engine::StepOptions) -> Result<(Vec<u8>, cad_engine::StepStats), String> {
         let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
         self.engine.export_step(&d.ev, opts)
     }
 }
-
 
 fn node_ref<S>(cur: &Current, n: NodeIdx, job: &Job<S>) -> p::NodeRef {
     let node = cur.out.tree.node(n);

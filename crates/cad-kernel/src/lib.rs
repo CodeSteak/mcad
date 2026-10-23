@@ -49,7 +49,10 @@ pub type KResult<T> = Result<T, KernelError>;
 pub enum Loop {
     /// Straight segments, implicitly closed. Counter-clockwise or clockwise.
     Polygon(Vec<DVec2>),
-    Circle { center: DVec2, r: f64 },
+    Circle {
+        center: DVec2,
+        r: f64,
+    },
     /// Closed interpolating spline through the points.
     Spline(Vec<DVec2>),
 }
@@ -133,9 +136,7 @@ impl Mesh {
             self.positions.extend_from_slice(&[v.x as f32, v.y as f32, v.z as f32]);
         }
         for n in other.normals.chunks_exact(3) {
-            let v = nm
-                .transform_vector3(DVec3::new(n[0] as f64, n[1] as f64, n[2] as f64))
-                .normalize_or_zero();
+            let v = nm.transform_vector3(DVec3::new(n[0] as f64, n[1] as f64, n[2] as f64)).normalize_or_zero();
             self.normals.extend_from_slice(&[v.x as f32, v.y as f32, v.z as f32]);
         }
         for t in other.indices.chunks_exact(3) {
@@ -201,12 +202,7 @@ pub trait Kernel {
     fn make_torus(&mut self, big_r: f64, r: f64, tag: Tag) -> KResult<Self::Shape>;
     /// Solid bounded by planar polygonal faces (OpenSCAD `polyhedron`). Faces index into
     /// `points`, any orientation; the kernel orients them outward.
-    fn make_polyhedron(
-        &mut self,
-        points: &[DVec3],
-        faces: &[Vec<u32>],
-        tag: Tag,
-    ) -> KResult<Self::Shape>;
+    fn make_polyhedron(&mut self, points: &[DVec3], faces: &[Vec<u32>], tag: Tag) -> KResult<Self::Shape>;
 
     // ---- operations ----
     fn transform(&mut self, s: &Self::Shape, m: &DMat4) -> KResult<Self::Shape>;
@@ -239,16 +235,14 @@ pub trait Kernel {
 
     /// Extrude along +z of the profile frame by `h`, rotating by `twist` (radians) and
     /// scaling the profile by `scale` at the top.
-    fn extrude(&mut self, p: &PlacedLoop, h: f64, twist: f64, scale: DVec2, tag: Tag)
-    -> KResult<Self::Shape>;
+    fn extrude(&mut self, p: &PlacedLoop, h: f64, twist: f64, scale: DVec2, tag: Tag) -> KResult<Self::Shape>;
     /// Revolve around the z-axis of model space by `angle` (radians). The loop lies in
     /// the xz-half-plane x >= 0 after applying its frame.
     fn revolve(&mut self, p: &PlacedLoop, angle: f64, tag: Tag) -> KResult<Self::Shape>;
     fn loft(&mut self, sections: &[PlacedLoop], ruled: bool, tag: Tag) -> KResult<Self::Shape>;
     /// Sweep a profile along a path. The profile frame's origin sits at the path start
     /// with its z-axis along the start tangent.
-    fn sweep(&mut self, p: &Loop, path: &[DVec3], interp: PathInterp, tag: Tag)
-    -> KResult<Self::Shape>;
+    fn sweep(&mut self, p: &Loop, path: &[DVec3], interp: PathInterp, tag: Tag) -> KResult<Self::Shape>;
     /// Open NURBS surface interpolating a grid of points (rows of equal length).
     fn nurbs_surface(&mut self, rows: &[Vec<DVec3>], tag: Tag) -> KResult<Self::Shape>;
     /// Solid from an open surface, offset by `t` along its normal.

@@ -56,7 +56,8 @@ fillet(r = function (p) let(d = norm([p.x, p.y])) f(basis + rampe(d) - (p.z > g.
 
 #[test]
 fn boolean_parameter_and_trig() {
-    let out = clean("difference(fillet = function (p) 1 + sin(p.x * 9) / 2) { cube(20); translate([5, 5, 5]) cube(20); }");
+    let out =
+        clean("difference(fillet = function (p) 1 + sin(p.x * 9) / 2) { cube(20); translate([5, 5, 5]) cube(20); }");
     let l = law_of(&out);
     assert!((at(l, 10.0, 0.0, 0.0) - 1.5).abs() < 1e-12);
     assert!((at(l, 0.0, 0.0, 0.0) - 1.0).abs() < 1e-12);

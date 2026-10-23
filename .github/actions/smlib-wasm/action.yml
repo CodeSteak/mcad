@@ -1,0 +1,68 @@
+name: SMLib (Wasm)
+description: >
+  Installs the pinned emsdk (cached) and restores smlib.js/smlib.wasm (web/public/smlib) from
+  the cache or builds them with smlib/build-wasm.sh. Exports EMSDK and puts emcc on PATH.
+inputs:
+  emsdk-version:
+    description: Emscripten SDK version (the one used for the test reports)
+    required: false
+    default: "6.0.13"
+  smlib-url:
+    description: Clone URL of the SMLib fork (empty = the default in smlib/fetch.sh)
+    required: false
+    default: ""
+outputs:
+  cache-hit:
+    description: "'true' if smlib.wasm came from the cache"
+    value: ${{ steps.restore.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - name: Restore emsdk
+      id: emsdk-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/emsdk
+        key: ${{ runner.os }}-emsdk-${{ inputs.emsdk-version }}
+
+    - name: Install emsdk ${{ inputs.emsdk-version }}
+      shell: bash
+      env:
+        EMSDK_VERSION: ${{ inputs.emsdk-version }}
+      run: EMSDK="$HOME/emsdk" scripts/ci/emsdk.sh
+
+    - name: Save emsdk
+      if: steps.emsdk-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/emsdk
+        key: ${{ runner.os }}-emsdk-${{ inputs.emsdk-version }}
+
+    - name: SMLib Wasm cache key
+      id: key
+      shell: bash
+      run: echo "key=${{ runner.os }}-$(scripts/ci/smlib-key.sh wasm)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore smlib.wasm
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: |
+          web/public/smlib/smlib.js
+          web/public/smlib/smlib.wasm
+        key: ${{ steps.key.outputs.key }}
+
+    - name: Fetch SMLib and build smlib.wasm if not cached
+      shell: bash
+      env:
+        SMLIB_URL: ${{ inputs.smlib-url }}
+      run: scripts/ci/smlib-wasm.sh
+
+    - name: Save smlib.wasm
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: |
+          web/public/smlib/smlib.js
+          web/public/smlib/smlib.wasm
+        key: ${{ steps.key.outputs.key }}

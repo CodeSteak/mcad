@@ -5,21 +5,22 @@
 
 mod common;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use cad_eval::{EvalOptions, FsResolver, eval_files};
 
 fn projects() -> Vec<PathBuf> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/openscad-compat/projects");
-    let mut out: Vec<PathBuf> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).filter(|p| p.is_dir()).collect();
+    let mut out: Vec<PathBuf> =
+        std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).filter(|p| p.is_dir()).collect();
     out.sort();
     out
 }
 
-fn ours(dir: &PathBuf) -> Vec<String> {
+fn ours(dir: &Path) -> Vec<String> {
     let main = std::fs::read_to_string(dir.join("main.scad")).unwrap();
-    let r = FsResolver { root: dir.clone() };
+    let r = FsResolver { root: dir.to_path_buf() };
     let (p, out) = eval_files("main.scad", &main, &r, &EvalOptions::default());
     assert!(p.syntax.is_empty() && p.link.is_empty(), "{}: {:?} {:?}", dir.display(), p.syntax, p.link);
     out.echoes.iter().map(|e| format!("ECHO: {}", e.text)).collect()

@@ -87,7 +87,11 @@ where
             status: status.into(),
             message,
             unsupported,
-            selected_edges: n.selected_edges.iter().map(|e| e.iter().map(|v| [v.0[0], v.0[1], v.0[2]]).collect()).collect(),
+            selected_edges: n
+                .selected_edges
+                .iter()
+                .map(|e| e.iter().map(|v| [v.0[0], v.0[1], v.0[2]]).collect())
+                .collect(),
             ..Default::default()
         };
         if matches!(n.status, p::NodeStatus::Ok | p::NodeStatus::Warning) {
@@ -148,17 +152,13 @@ fn compare(a: &Metrics, b: &Metrics, notes: &mut Vec<String>) -> &'static str {
     if a.selected_edges.len() != b.selected_edges.len() {
         notes.push(format!("selected edges {} vs {}", a.selected_edges.len(), b.selected_edges.len()));
     } else {
-        let size = a
-            .selected_edges
-            .iter()
-            .flatten()
-            .flat_map(|p| p.iter().map(|x| x.abs()))
-            .fold(1.0f64, f64::max);
+        let size = a.selected_edges.iter().flatten().flat_map(|p| p.iter().map(|x| x.abs())).fold(1.0f64, f64::max);
         let close = a.selected_edges.iter().zip(&b.selected_edges).all(|(x, y)| {
             let (ea, eb) = (x.first().zip(x.last()), y.first().zip(y.last()));
             match (ea, eb) {
                 (Some((a0, a1)), Some((b0, b1))) => {
-                    let d = |p: &[f64; 3], q: &[f64; 3]| p.iter().zip(q).map(|(u, v)| (u - v).abs()).fold(0.0, f64::max);
+                    let d =
+                        |p: &[f64; 3], q: &[f64; 3]| p.iter().zip(q).map(|(u, v)| (u - v).abs()).fold(0.0, f64::max);
                     let tol = 1e-6 * size;
                     (d(a0, b0) <= tol && d(a1, b1) <= tol) || (d(a0, b1) <= tol && d(a1, b0) <= tol)
                 }
@@ -209,10 +209,17 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
             own.push((verdict, mb, notes));
         }
         let pos: BTreeMap<u32, usize> = nodes.iter().enumerate().map(|(i, n)| (n.0, i)).collect();
-        fn broken(i: usize, nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, own: &[(&str, Metrics, Vec<String>)]) -> bool {
-            nodes[i].3.iter().filter_map(|c| pos.get(c)).any(|&c| {
-                matches!(own[c].0, "unsupported" | "failed") || broken(c, nodes, pos, own)
-            })
+        fn broken(
+            i: usize,
+            nodes: &[NodeRow],
+            pos: &BTreeMap<u32, usize>,
+            own: &[(&str, Metrics, Vec<String>)],
+        ) -> bool {
+            nodes[i]
+                .3
+                .iter()
+                .filter_map(|c| pos.get(c))
+                .any(|&c| matches!(own[c].0, "unsupported" | "failed") || broken(c, nodes, pos, own))
         }
         // a zone selects edges of its sibling (the fillet/chamfer target): look at the parent
         let parent: BTreeMap<u32, usize> =
@@ -284,7 +291,8 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
             g("differ") + g("failed")
         ));
     }
-    let n: usize = ["same", "unsupported", "blocked", "differ", "failed"].iter().map(|k| totals.get(k).unwrap_or(&0)).sum();
+    let n: usize =
+        ["same", "unsupported", "blocked", "differ", "failed"].iter().map(|k| totals.get(k).unwrap_or(&0)).sum();
     text.push_str(&format!(
         "\nGesamt: {n} Knoten, gleich {}, unsupported {}, blockiert {}, abweichend {}, gescheitert {}\n",
         totals.get("same").unwrap_or(&0),

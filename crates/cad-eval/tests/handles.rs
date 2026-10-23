@@ -552,7 +552,8 @@ fn zone_center_handle_through_translate() {
     assert!(approx3(h.frame.transform_point3(h.pos), [20.0, 20.0, 20.0]));
     let t = snap_targets(&out, h.id);
     assert!(t.iter().any(|t| t.text == "g[r, h, d]"), "{t:?}");
-    let new = drag(&out, src, h, DragTarget::Snap(SnapRef::Grid { grid: 0, planes: ["r".into(), "h".into(), "d".into()] }));
+    let new =
+        drag(&out, src, h, DragTarget::Snap(SnapRef::Grid { grid: 0, planes: ["r".into(), "h".into(), "d".into()] }));
     assert!(new.contains("translate(g[r, h, d]) sphere(8);"), "{new}");
 }
 

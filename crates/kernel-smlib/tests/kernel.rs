@@ -66,9 +66,8 @@ fn cylinder_and_cones() {
     // cone tip at the bottom: r1 = 0
     let inv = k.make_cylinder(6.0, 0.0, 2.0, 1).unwrap();
     assert_approx("inverted cone", volume(&mut k, &inv), PI_ * 4.0 * 6.0 / 3.0, 1e-5);
-    let cls = k
-        .classify(&inv, &[DVec3::new(0.0, 0.0, 5.5), DVec3::new(1.9, 0.0, 0.5), DVec3::new(0.0, 0.0, -0.1)])
-        .unwrap();
+    let cls =
+        k.classify(&inv, &[DVec3::new(0.0, 0.0, 5.5), DVec3::new(1.9, 0.0, 0.5), DVec3::new(0.0, 0.0, -0.1)]).unwrap();
     assert_eq!(cls, vec![Class::Inside, Class::Outside, Class::Outside]);
     assert!(matches!(k.make_cylinder(5.0, 0.0, 0.0, 1), Err(KernelError::InvalidInput(_))));
 }
@@ -86,12 +85,8 @@ fn torus_volume() {
 #[test]
 fn polyhedron_tetrahedron() {
     let mut k = k();
-    let pts = [
-        DVec3::new(0.0, 0.0, 0.0),
-        DVec3::new(6.0, 0.0, 0.0),
-        DVec3::new(0.0, 6.0, 0.0),
-        DVec3::new(0.0, 0.0, 6.0),
-    ];
+    let pts =
+        [DVec3::new(0.0, 0.0, 0.0), DVec3::new(6.0, 0.0, 0.0), DVec3::new(0.0, 6.0, 0.0), DVec3::new(0.0, 0.0, 6.0)];
     // mixed orientation on purpose
     let faces = vec![vec![0, 1, 2], vec![0, 1, 3], vec![1, 2, 3], vec![0, 3, 2]];
     match k.make_polyhedron(&pts, &faces, 4) {
@@ -131,10 +126,8 @@ fn box_minus_cylinder_volume_and_provenance() {
     assert_eq!(faces.iter().filter(|f| f.tag == T_CYL).count(), 1);
     // edges between bore and box faces are "new" edges of the boolean (different child tags)
     let edges = k.edges(&d, 4).unwrap();
-    let new_edges: Vec<_> = edges
-        .iter()
-        .filter(|e| e.face_tags.contains(&T_BOX) && e.face_tags.contains(&T_CYL))
-        .collect();
+    let new_edges: Vec<_> =
+        edges.iter().filter(|e| e.face_tags.contains(&T_BOX) && e.face_tags.contains(&T_CYL)).collect();
     assert_eq!(new_edges.len(), 2, "two circular rim edges");
     for e in new_edges {
         assert!(e.points.iter().all(|p| on_cylinder(*p, 5.0, 5.0, 2.0)));
@@ -213,9 +206,8 @@ fn fillet_single_edge_and_provenance() {
     let mut k = k();
     let b = cube(&mut k, 10.0, T_BOX);
     // edge along y at x = 10, z = 10
-    let e = k
-        .edges_where(&b, |e| e.points.iter().all(|p| (p.x - 10.0).abs() < 1e-9 && (p.z - 10.0).abs() < 1e-9))
-        .unwrap();
+    let e =
+        k.edges_where(&b, |e| e.points.iter().all(|p| (p.x - 10.0).abs() < 1e-9 && (p.z - 10.0).abs() < 1e-9)).unwrap();
     assert_eq!(e.len(), 1);
     let f = k.fillet(&b, &e, 2.0, T_FIL).unwrap();
     assert_approx("single fillet", volume(&mut k, &f), 1000.0 - (1.0 - PI_ / 4.0) * 4.0 * 10.0, 1e-5);
@@ -408,7 +400,9 @@ fn tessellation_closed_with_tags_and_ids() {
     let mut k = k();
     let d = box_minus_cylinder(&mut k);
     let all: Vec<u32> = k
-        .edges_where(&d, |e| e.points.iter().all(|p| p.z > 9.999) && !e.points.iter().all(|p| on_cylinder(*p, 5.0, 5.0, 2.0)))
+        .edges_where(&d, |e| {
+            e.points.iter().all(|p| p.z > 9.999) && !e.points.iter().all(|p| on_cylinder(*p, 5.0, 5.0, 2.0))
+        })
         .unwrap();
     assert_eq!(all.len(), 4);
     let f = k.fillet(&d, &all, 1.0, T_FIL).unwrap();
@@ -438,12 +432,9 @@ fn tessellation_closed_with_tags_and_ids() {
             let e = &edges[*id as usize];
             for j in 0..2 {
                 let o = i * 6 + j * 3;
-                let p = DVec3::new(m.edge_segments[o] as f64, m.edge_segments[o + 1] as f64, m.edge_segments[o + 2] as f64);
-                let d = e
-                    .points
-                    .windows(2)
-                    .map(|w| dist_point_segment(p, w[0], w[1]))
-                    .fold(f64::INFINITY, f64::min);
+                let p =
+                    DVec3::new(m.edge_segments[o] as f64, m.edge_segments[o + 1] as f64, m.edge_segments[o + 2] as f64);
+                let d = e.points.windows(2).map(|w| dist_point_segment(p, w[0], w[1])).fold(f64::INFINITY, f64::min);
                 assert!(d < 0.05, "segment point {p} is {d} away from edge {id}");
             }
         }
@@ -560,7 +551,8 @@ fn extrude_polygon_and_circle() {
     let (lo, _) = k.bounds(&en).unwrap().unwrap();
     assert!((lo.z + 2.0).abs() < 1e-6);
     // spline profile
-    let sp = Loop::Spline(vec![DVec2::new(2.0, 0.0), DVec2::new(0.0, 2.0), DVec2::new(-2.0, 0.0), DVec2::new(0.0, -2.0)]);
+    let sp =
+        Loop::Spline(vec![DVec2::new(2.0, 0.0), DVec2::new(0.0, 2.0), DVec2::new(-2.0, 0.0), DVec2::new(0.0, -2.0)]);
     let es = k.extrude(&placed(sp, DMat4::IDENTITY), 1.0, 0.0, DVec2::ONE, 7).unwrap();
     let v = volume(&mut k, &es);
     assert!(v > 8.0 && v < 16.0, "spline extrude volume {v}");
@@ -688,9 +680,7 @@ fn sweep_along_path() {
     let mut k = k();
     let circle = Loop::Circle { center: DVec2::ZERO, r: 0.5 };
     // straight path: cylinder
-    let s = k
-        .sweep(&circle, &[DVec3::ZERO, DVec3::new(0.0, 0.0, 10.0)], PathInterp::Linear, 3)
-        .unwrap();
+    let s = k.sweep(&circle, &[DVec3::ZERO, DVec3::new(0.0, 0.0, 10.0)], PathInterp::Linear, 3).unwrap();
     assert_approx("straight sweep", volume(&mut k, &s), PI_ * 0.25 * 10.0, 1e-4);
     // curved path through 5 points (spline)
     let path: Vec<DVec3> = (0..5)
@@ -707,7 +697,8 @@ fn sweep_along_path() {
     assert_approx("curved sweep", volume(&mut k, &c), want, 2e-2);
     assert!(k.faces(&c, 1).unwrap().iter().all(|f| f.tag == 3));
     // square profile, linear path
-    let sq = Loop::Polygon(vec![DVec2::new(-0.5, -0.5), DVec2::new(0.5, -0.5), DVec2::new(0.5, 0.5), DVec2::new(-0.5, 0.5)]);
+    let sq =
+        Loop::Polygon(vec![DVec2::new(-0.5, -0.5), DVec2::new(0.5, -0.5), DVec2::new(0.5, 0.5), DVec2::new(-0.5, 0.5)]);
     let s2 = k.sweep(&sq, &[DVec3::ZERO, DVec3::new(5.0, 0.0, 0.0)], PathInterp::Linear, 3).unwrap();
     assert_approx("square sweep", volume(&mut k, &s2), 5.0, 1e-4);
     // profile offset from its origin on a straight path: plain translation
@@ -749,7 +740,9 @@ fn shell_box() {
 fn nurbs_surface_and_thicken() {
     let mut k = k();
     let rows: Vec<Vec<DVec3>> = (0..4)
-        .map(|i| (0..4).map(|j| DVec3::new(i as f64 * 2.0, j as f64 * 2.0, ((i + j) as f64 * 0.7).sin() * 0.5)).collect())
+        .map(|i| {
+            (0..4).map(|j| DVec3::new(i as f64 * 2.0, j as f64 * 2.0, ((i + j) as f64 * 0.7).sin() * 0.5)).collect()
+        })
         .collect();
     let s = k.nurbs_surface(&rows, 4).unwrap();
     assert!(!k.is_solid(&s));
@@ -769,7 +762,6 @@ fn nurbs_surface_and_thicken() {
         Err(e) => panic!("thicken failed: {e}"),
     }
 }
-
 
 // ---------------------------------------------------------------- regressions (report 4)
 
@@ -825,7 +817,8 @@ fn revolve_spline_through_axis_points() {
 fn revolve_spline_crossing_the_axis_fails() {
     let mut k = k();
     // no two consecutive points on the axis: the closed spline bulges to x < 0
-    let lp = Loop::Spline(vec![DVec2::new(0.2, 0.0), DVec2::new(10.0, 0.0), DVec2::new(10.0, 10.0), DVec2::new(0.2, 10.0)]);
+    let lp =
+        Loop::Spline(vec![DVec2::new(0.2, 0.0), DVec2::new(10.0, 0.0), DVec2::new(10.0, 10.0), DVec2::new(0.2, 10.0)]);
     let r = k.revolve(&placed(lp, DMat4::from_rotation_x(PI_ / 2.0)), 2.0 * PI_, 3);
     assert!(matches!(r, Err(KernelError::InvalidInput(_))), "{r:?}");
 }

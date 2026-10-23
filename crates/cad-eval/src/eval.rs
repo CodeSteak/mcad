@@ -342,7 +342,11 @@ impl<'a> Ev<'a> {
     /// "Zeile n" or "Zeile n in `datei`" for messages about a position seen from `here`.
     pub(crate) fn where_(&self, span: Span, here: Span) -> String {
         let l = self.line(span);
-        if span.file() == here.file() { format!("Zeile {l}") } else { format!("Zeile {l} in `{}`", self.proj.path_of(span)) }
+        if span.file() == here.file() {
+            format!("Zeile {l}")
+        } else {
+            format!("Zeile {l} in `{}`", self.proj.path_of(span))
+        }
     }
 
     /// File scopes of the used libraries; `env` (a file root) sees the main file's libraries.
@@ -582,7 +586,11 @@ impl<'a> Ev<'a> {
         self.setup_libs(&main_root)?;
         let proj = self.proj;
         let found = find_module_path(&self.file.stmts, name).map(|p| (p, None)).or_else(|| {
-            proj.libs.iter().enumerate().rev().find_map(|(i, l)| find_module_path(&l.ast.stmts, name).map(|p| (p, Some(i))))
+            proj.libs
+                .iter()
+                .enumerate()
+                .rev()
+                .find_map(|(i, l)| find_module_path(&l.ast.stmts, name).map(|p| (p, Some(i))))
         });
         let Some((path, lib)) = found else {
             return self.fatal(Span::default(), format!("Modul `{name}` nicht gefunden"));
@@ -869,7 +877,11 @@ impl<'a> Ev<'a> {
 
     #[inline(never)]
     fn for_stmt(&mut self, s: &'a Stmt, vars: &'a [Assignment], body: &'a Stmt, inter: bool, ctx: &Ctx<'a>) -> R<()> {
-        let op = if inter { Op::Boolean { op: BoolOp::Intersection, fillet: None, chamfer: None, fillet_law: None } } else { Op::Group };
+        let op = if inter {
+            Op::Boolean { op: BoolOp::Intersection, fillet: None, chamfer: None, fillet_law: None }
+        } else {
+            Op::Group
+        };
         let n = self.node(s, op, ctx);
         let mut base = self.sub(ctx, n, &DMat4::IDENTITY);
         base.in_loop = true;
@@ -1057,8 +1069,7 @@ impl<'a> Ev<'a> {
         ctx: &Ctx<'a>,
         label: Option<String>,
     ) -> (InstId, NodeIdx, Env<'a>, Dyn<'a>, Rc<Frame<'a>>) {
-        let node =
-            self.node(s, Op::ModuleCall { name: def.name.name.clone(), instance: label }, ctx);
+        let node = self.node(s, Op::ModuleCall { name: def.name.name.clone(), instance: label }, ctx);
         let depth = self.insts[ctx.frame.inst as usize].depth + 1;
         let id = self.new_instance(InstanceInfo {
             id: 0,
@@ -1153,7 +1164,10 @@ impl<'a> Ev<'a> {
                     if v >= 0.0 && (v as usize) < geo.len() {
                         out.push(v as usize);
                     } else {
-                        self.warn(arg.expr.span, format!("children(): Index {} außerhalb ({} Kinder)", fmt_num(v), geo.len()));
+                        self.warn(
+                            arg.expr.span,
+                            format!("children(): Index {} außerhalb ({} Kinder)", fmt_num(v), geo.len()),
+                        );
                     }
                 }
                 out
@@ -1304,12 +1318,18 @@ impl<'a> Ev<'a> {
         };
         if ctx.in_loop && index.is_none() {
             let n = &name.name;
-            self.error(name.span, format!("benannte Instanzen sind in for-Schleifen nicht erlaubt (`{n}[i]: …` verwenden)"));
+            self.error(
+                name.span,
+                format!("benannte Instanzen sind in for-Schleifen nicht erlaubt (`{n}[i]: …` verwenden)"),
+            );
             return self.stmt(inst, ctx);
         }
         if ctx.env.find_module(&mname.name).is_none() {
             if is_builtin_module(&mname.name) {
-                self.error(name.span, format!("nur Aufrufe eigener Module sind benennbar, `{}` ist eingebaut", mname.name));
+                self.error(
+                    name.span,
+                    format!("nur Aufrufe eigener Module sind benennbar, `{}` ist eingebaut", mname.name),
+                );
             }
             return self.stmt(inst, ctx);
         }

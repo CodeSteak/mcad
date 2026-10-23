@@ -1,0 +1,64 @@
+# Rust: formatting, clippy, tests with the native SMLib kernel, Wasm check of cad-wasm.
+#
+# Native SMLib (smlib/fetch.sh + smlib/build-native.sh) is cached by
+# .github/actions/smlib-native (key: fork commit + patches + CMakeLists + compiler).
+# Locally: scripts/ci/smlib-native.sh && SMLIB_PREBUILT=smlib/build-native scripts/ci/rust.sh all
+name: rust
+
+on:
+  push:
+    paths-ignore: ["docs/**", "**/*.md"]
+  pull_request:
+    paths-ignore: ["docs/**", "**/*.md"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  rust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust 1.97.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.97.0"
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - name: cargo fmt --check
+        run: scripts/ci/rust.sh fmt
+
+      - name: Build tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build
+
+      - name: SMLib (native)
+        uses: ./.github/actions/smlib-native
+        with:
+          smlib-url: ${{ secrets.SMLIB_CLONE_URL }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust
+
+      - name: cargo clippy (native, -D warnings)
+        run: scripts/ci/rust.sh clippy
+
+      - name: cargo clippy cad-wasm (wasm32, -D warnings)
+        run: scripts/ci/rust.sh clippy-wasm
+
+      - name: cargo test --workspace
+        run: scripts/ci/rust.sh test
+
+      - name: cargo check cad-wasm (wasm32)
+        run: scripts/ci/rust.sh wasm-check

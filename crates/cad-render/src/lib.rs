@@ -148,10 +148,7 @@ impl Image {
 
     /// Number of pixels that differ from `c` by more than 2 in any channel.
     pub fn count_not(&self, c: [u8; 4]) -> usize {
-        self.rgba
-            .chunks_exact(4)
-            .filter(|p| p.iter().zip(c).any(|(a, b)| (*a as i32 - b as i32).abs() > 2))
-            .count()
+        self.rgba.chunks_exact(4).filter(|p| p.iter().zip(c).any(|(a, b)| (*a as i32 - b as i32).abs() > 2)).count()
     }
 
     pub fn to_png(&self) -> Vec<u8> {
@@ -420,7 +417,8 @@ pub fn render(scene: &Scene, opts: &RenderOptions) -> Image {
         let nm = it.transform.inverse().transpose();
         let has_n = m.normals.len() == m.positions.len();
         for tri in m.indices.chunks_exact(3) {
-            let p: [DVec3; 3] = std::array::from_fn(|k| it.transform.transform_point3(v3(&m.positions[tri[k] as usize * 3..])));
+            let p: [DVec3; 3] =
+                std::array::from_fn(|k| it.transform.transform_point3(v3(&m.positions[tri[k] as usize * 3..])));
             let fnrm = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
             // two-sided: make the normal face the camera
             let flip = fnrm.dot(dir) > 0.0;
@@ -493,7 +491,8 @@ pub fn render(scene: &Scene, opts: &RenderOptions) -> Image {
     if opts.axes {
         let len = 28.0 * ss as f64;
         let o = (18.0 * ss as f64 + len, h as f64 - 18.0 * ss as f64 - len, 0.0);
-        let axes = [(DVec3::X, [0.85, 0.2, 0.2, 1.0]), (DVec3::Y, [0.2, 0.65, 0.25, 1.0]), (DVec3::Z, [0.2, 0.35, 0.9, 1.0])];
+        let axes =
+            [(DVec3::X, [0.85, 0.2, 0.2, 1.0]), (DVec3::Y, [0.2, 0.65, 0.25, 1.0]), (DVec3::Z, [0.2, 0.35, 0.9, 1.0])];
         // farthest first so nearer axes are drawn on top
         let mut order: Vec<_> = axes.iter().collect();
         order.sort_by(|a, b| b.0.dot(dir).partial_cmp(&a.0.dot(dir)).unwrap_or(std::cmp::Ordering::Equal));

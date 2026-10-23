@@ -613,9 +613,8 @@ fn shell_opens_faces_in_zone() {
 #[test]
 fn surfaces_and_thicken() {
     let mut e = engine();
-    let rows: Vec<Vec<DVec3>> = (0..4)
-        .map(|i| (0..4).map(|j| v(i as f64 * 10.0, j as f64 * 10.0, ((i + j) % 2) as f64)).collect())
-        .collect();
+    let rows: Vec<Vec<DVec3>> =
+        (0..4).map(|i| (0..4).map(|j| v(i as f64 * 10.0, j as f64 * 10.0, ((i + j) % 2) as f64)).collect()).collect();
     // open surface in a boolean → error at the boolean, inputs shown
     let mut b = TreeBuilder::new();
     let u = b.root(union());

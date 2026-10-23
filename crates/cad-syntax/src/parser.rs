@@ -174,7 +174,12 @@ impl<'a> Parser<'a> {
             Tok::Semi => {
                 self.bump();
                 let id = self.stmt_id();
-                Ok(Stmt { id, span: Span::new(start as usize, self.prev_end() as usize), modifiers: vec![], kind: StmtKind::Empty })
+                Ok(Stmt {
+                    id,
+                    span: Span::new(start as usize, self.prev_end() as usize),
+                    modifiers: vec![],
+                    kind: StmtKind::Empty,
+                })
             }
             Tok::LBrace => {
                 let id = self.stmt_id();
@@ -200,7 +205,12 @@ impl<'a> Parser<'a> {
                     };
                     self.eat(&Tok::Semi);
                     let id = self.stmt_id();
-                    Ok(Stmt { id, span: self.span_from(start), modifiers: vec![], kind: StmtKind::Include { path, path_span, is_use } })
+                    Ok(Stmt {
+                        id,
+                        span: self.span_from(start),
+                        modifiers: vec![],
+                        kind: StmtKind::Include { path, path_span, is_use },
+                    })
                 }
                 "anchor" if matches!(self.peek_at(1), Tok::Ident(_)) && self.peek_at(2) == &Tok::Assign => {
                     self.bump();
@@ -219,7 +229,12 @@ impl<'a> Parser<'a> {
                     }
                     self.expect(&Tok::Semi, "`;`")?;
                     let id = self.stmt_id();
-                    Ok(Stmt { id, span: self.span_from(start), modifiers: vec![], kind: StmtKind::Anchor { name, point, dir } })
+                    Ok(Stmt {
+                        id,
+                        span: self.span_from(start),
+                        modifiers: vec![],
+                        kind: StmtKind::Anchor { name, point, dir },
+                    })
                 }
                 _ if self.peek_at(1) == &Tok::Assign => {
                     let name = self.ident()?;
@@ -227,7 +242,12 @@ impl<'a> Parser<'a> {
                     let value = self.expr()?;
                     self.expect(&Tok::Semi, "`;`")?;
                     let id = self.stmt_id();
-                    Ok(Stmt { id, span: self.span_from(start), modifiers: vec![], kind: StmtKind::Assign { name, value } })
+                    Ok(Stmt {
+                        id,
+                        span: self.span_from(start),
+                        modifiers: vec![],
+                        kind: StmtKind::Assign { name, value },
+                    })
                 }
                 _ if self.peek_at(1) == &Tok::Colon => {
                     let name = self.ident()?;
@@ -590,10 +610,7 @@ impl<'a> Parser<'a> {
             let a = self.expr()?;
             self.expect(&Tok::Colon, "`:`")?;
             let b = self.expr()?;
-            return Ok(self.mk_expr(
-                self.span_from(start),
-                ExprKind::Ternary(Box::new(cond), Box::new(a), Box::new(b)),
-            ));
+            return Ok(self.mk_expr(self.span_from(start), ExprKind::Ternary(Box::new(cond), Box::new(a), Box::new(b))));
         }
         Ok(cond)
     }
@@ -669,9 +686,7 @@ impl<'a> Parser<'a> {
                     self.bump();
                     let mut items = Vec::new();
                     loop {
-                        if self.at(&Tok::Star)
-                            && matches!(self.peek_at(1), Tok::Comma | Tok::RBracket)
-                        {
+                        if self.at(&Tok::Star) && matches!(self.peek_at(1), Tok::Comma | Tok::RBracket) {
                             items.push(IndexItem::Wild(self.bump().span));
                         } else {
                             items.push(IndexItem::Expr(self.expr()?));
@@ -740,11 +755,8 @@ impl<'a> Parser<'a> {
             let first = self.expr()?;
             if self.eat(&Tok::Colon) {
                 let second = self.expr()?;
-                let (step, end) = if self.eat(&Tok::Colon) {
-                    (Some(Box::new(second)), self.expr()?)
-                } else {
-                    (None, second)
-                };
+                let (step, end) =
+                    if self.eat(&Tok::Colon) { (Some(Box::new(second)), self.expr()?) } else { (None, second) };
                 self.expect(&Tok::RBracket, "`]`")?;
                 return Ok(self.mk_expr(
                     self.span_from(start),
@@ -803,13 +815,7 @@ impl<'a> Parser<'a> {
                     self.expect(&Tok::Semi, "`;`")?;
                     let update = self.assignments(&Tok::RParen)?;
                     let body = self.vec_elem()?;
-                    return Ok(VecElem::ForC {
-                        init,
-                        cond,
-                        update,
-                        body: Box::new(body),
-                        span: self.span_from(start),
-                    });
+                    return Ok(VecElem::ForC { init, cond, update, body: Box::new(body), span: self.span_from(start) });
                 }
                 self.expect(&Tok::RParen, "`)`")?;
                 let body = self.vec_elem()?;

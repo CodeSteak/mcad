@@ -46,17 +46,10 @@ impl Expr2 {
 
 /// Lifts the 2D node `idx` whose own system maps into the target system by `m`.
 /// Children contribute with `m * child.local`. Non-fatal remarks go to `warn`.
-pub(crate) fn lift(
-    tree: &Tree,
-    idx: NodeIdx,
-    m: DMat4,
-    warn: &mut Vec<String>,
-) -> Result<Expr2, String> {
+pub(crate) fn lift(tree: &Tree, idx: NodeIdx, m: DMat4, warn: &mut Vec<String>) -> Result<Expr2, String> {
     let n = tree.node(idx);
     let kids = |warn: &mut Vec<String>| -> Result<Vec<Expr2>, String> {
-        tree.solid_children(idx)
-            .map(|c| lift(tree, c, m * tree.node(c).local, warn))
-            .collect()
+        tree.solid_children(idx).map(|c| lift(tree, c, m * tree.node(c).local, warn)).collect()
     };
     match &n.op {
         Op::Profile(p) => Ok(Expr2::Leaf(Leaf { node: idx, profile: p.clone(), m })),
@@ -73,19 +66,14 @@ pub(crate) fn lift(
             // Bounds of the children in this node's own system, then scale.
             let inner = Expr2::Op(
                 BoolOp::Union,
-                tree.solid_children(idx)
-                    .map(|c| lift(tree, c, tree.node(c).local, warn))
-                    .collect::<Result<_, _>>()?,
+                tree.solid_children(idx).map(|c| lift(tree, c, tree.node(c).local, warn)).collect::<Result<_, _>>()?,
             );
             let Some((lo, hi)) = expr_bounds(&inner, 0.05) else {
                 return Ok(inner);
             };
             let ext = hi - lo;
-            let s = resize_scale(
-                DVec3::new(ext.x, ext.y, 0.0),
-                DVec3::new(size.x, size.y, 0.0),
-                [auto[0], auto[1], false],
-            );
+            let s =
+                resize_scale(DVec3::new(ext.x, ext.y, 0.0), DVec3::new(size.x, size.y, 0.0), [auto[0], auto[1], false]);
             let sm = m * DMat4::from_scale(DVec3::new(s.x, s.y, 1.0));
             Ok(Expr2::Op(
                 BoolOp::Union,
@@ -126,12 +114,7 @@ pub(crate) fn profile_loops(p: &Profile) -> Result<Vec<Loop>, String> {
             if (max.x - min.x).abs() < EPS || (max.y - min.y).abs() < EPS {
                 return Err("Rechteck ohne Fläche".into());
             }
-            Ok(vec![Loop::Polygon(vec![
-                *min,
-                DVec2::new(max.x, min.y),
-                *max,
-                DVec2::new(min.x, max.y),
-            ])])
+            Ok(vec![Loop::Polygon(vec![*min, DVec2::new(max.x, min.y), *max, DVec2::new(min.x, max.y)])])
         }
         Profile::Circle { r } => {
             if *r <= 0.0 {
@@ -438,15 +421,8 @@ pub(crate) fn region_mesh(e: &Expr2, tol: f64, tag_of: &dyn Fn(NodeIdx) -> Tag) 
             mesh.normals.extend_from_slice(&[0.0, 0.0, 1.0]);
         }
         for t in tri.indices.chunks_exact(3) {
-            let c = (0..3)
-                .map(|k| DVec2::from_array(tri.points[t[k] as usize]))
-                .fold(DVec2::ZERO, |a, b| a + b)
-                / 3.0;
-            let tag = leaves
-                .iter()
-                .find(|(_, cs)| point_in_contours(c, cs))
-                .map(|l| l.0)
-                .unwrap_or(default_tag);
+            let c = (0..3).map(|k| DVec2::from_array(tri.points[t[k] as usize])).fold(DVec2::ZERO, |a, b| a + b) / 3.0;
+            let tag = leaves.iter().find(|(_, cs)| point_in_contours(c, cs)).map(|l| l.0).unwrap_or(default_tag);
             mesh.indices.extend_from_slice(&[base + t[0], base + t[1], base + t[2]]);
             mesh.tri_tags.push(tag);
             mesh.tri_faces.push(si as u32);
@@ -455,9 +431,7 @@ pub(crate) fn region_mesh(e: &Expr2, tol: f64, tag_of: &dyn Fn(NodeIdx) -> Tag) 
             let n = c.len();
             for i in 0..n {
                 let (a, b) = (c[i], c[(i + 1) % n]);
-                mesh.edge_segments.extend_from_slice(&[
-                    a[0] as f32, a[1] as f32, 0.0, b[0] as f32, b[1] as f32, 0.0,
-                ]);
+                mesh.edge_segments.extend_from_slice(&[a[0] as f32, a[1] as f32, 0.0, b[0] as f32, b[1] as f32, 0.0]);
                 mesh.edge_ids.push(edge_id);
             }
             edge_id += 1;

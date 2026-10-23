@@ -337,7 +337,9 @@ fn call(f: LawFn, a: &[LawVal]) -> LawVal {
             match vals {
                 Some(v) if !v.is_empty() => Num(v.into_iter().fold(
                     if f == LawFn::Max { f64::NEG_INFINITY } else { f64::INFINITY },
-                    |acc, x| if f == LawFn::Max { acc.max(x) } else { acc.min(x) },
+                    |acc, x| {
+                        if f == LawFn::Max { acc.max(x) } else { acc.min(x) }
+                    },
                 )),
                 _ => Undef,
             }
@@ -453,7 +455,11 @@ mod tests {
         // p.z < 10 ? 2 : 4
         let law = Law {
             expr: LawExpr::Cond(
-                b(LawExpr::Bin(LawOp::Lt, b(LawExpr::Index(b(LawExpr::Point), b(LawExpr::Num(2.0)))), b(LawExpr::Num(10.0)))),
+                b(LawExpr::Bin(
+                    LawOp::Lt,
+                    b(LawExpr::Index(b(LawExpr::Point), b(LawExpr::Num(2.0)))),
+                    b(LawExpr::Num(10.0)),
+                )),
                 b(LawExpr::Num(2.0)),
                 b(LawExpr::Num(4.0)),
             ),

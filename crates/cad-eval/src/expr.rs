@@ -695,7 +695,10 @@ impl<'a> Ev<'a> {
             Value::Instance(i) => Ok(self.anchor_member(*i, name, e.span, in_ctx)),
             Value::Family(_) => {
                 let b = self.text(base.span);
-                self.warn(e.span, format!("`{b}` ist eine Liste benannter Instanzen: `{b}[i].{}` verwenden", name.name));
+                self.warn(
+                    e.span,
+                    format!("`{b}` ist eine Liste benannter Instanzen: `{b}[i].{}` verwenden", name.name),
+                );
                 Ok(Val::undef())
             }
             Value::List(l) => {

@@ -66,10 +66,20 @@ pub struct BSplineSurface {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Curve {
     /// Unbounded line `origin + s * dir`, `dir` unit length.
-    Line { origin: DVec3, dir: DVec3 },
-    Circle { frame: Frame, r: f64 },
+    Line {
+        origin: DVec3,
+        dir: DVec3,
+    },
+    Circle {
+        frame: Frame,
+        r: f64,
+    },
     /// `r1` along the frame's x axis, `r2` along y.
-    Ellipse { frame: Frame, r1: f64, r2: f64 },
+    Ellipse {
+        frame: Frame,
+        r1: f64,
+        r2: f64,
+    },
     BSpline(BSplineCurve),
 }
 
@@ -689,9 +699,7 @@ impl Surface {
         let n = match self {
             Surface::Plane { frame } => frame.z,
             Surface::Cylinder { frame, .. } => radial(frame),
-            Surface::Cone { frame, semi_angle, .. } => {
-                radial(frame).try_normalize()? - frame.z * semi_angle.tan()
-            }
+            Surface::Cone { frame, semi_angle, .. } => radial(frame).try_normalize()? - frame.z * semi_angle.tan(),
             Surface::Sphere { frame, .. } => p - frame.origin,
             Surface::Torus { frame, major, .. } => {
                 let rv = radial(frame).try_normalize()?;

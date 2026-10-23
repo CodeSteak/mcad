@@ -78,10 +78,7 @@ impl<'a> Ev<'a> {
                 }
             } else {
                 let t = v.type_de();
-                self.error(
-                    pd.value.span,
-                    format!("Ebene `{}` muss Zahl oder Zahlenliste sein, ist {t}", pd.name.name),
-                );
+                self.error(pd.value.span, format!("Ebene `{}` muss Zahl oder Zahlenliste sein, ist {t}", pd.name.name));
             }
         }
         for axis in 0..3u8 {

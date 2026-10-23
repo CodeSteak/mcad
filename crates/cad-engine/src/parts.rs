@@ -34,7 +34,8 @@ impl NodeFormat {
 
 /// A file name for a part name: `k[2]` → `k_2`, characters outside `[A-Za-z0-9_.-]` → `_`.
 pub fn part_file_name(name: &str, ext: &str) -> String {
-    let mut s: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || "_.-".contains(c) { c } else { '_' }).collect();
+    let mut s: String =
+        name.chars().map(|c| if c.is_ascii_alphanumeric() || "_.-".contains(c) { c } else { '_' }).collect();
     while s.ends_with('_') {
         s.pop();
     }
@@ -56,7 +57,12 @@ pub fn threemf_objects_xml(objects: &[(&str, &Mesh)]) -> String {
     s.push_str(" <resources>\n");
     for (i, (name, m)) in objects.iter().enumerate() {
         let (verts, tris) = welded(m);
-        let _ = writeln!(s, "  <object id=\"{}\" type=\"model\" name=\"{}\">\n   <mesh>\n    <vertices>", i + 1, xml_escape(name));
+        let _ = writeln!(
+            s,
+            "  <object id=\"{}\" type=\"model\" name=\"{}\">\n   <mesh>\n    <vertices>",
+            i + 1,
+            xml_escape(name)
+        );
         for v in &verts {
             let _ = writeln!(s, "     <vertex x=\"{}\" y=\"{}\" z=\"{}\"/>", v[0], v[1], v[2]);
         }
@@ -249,10 +255,12 @@ mod tests {
 
     #[test]
     fn objects_xml_has_one_object_per_mesh() {
-        let mut m = Mesh::default();
-        m.positions = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
-        m.normals = vec![0.0; 9];
-        m.indices = vec![0, 1, 2];
+        let m = Mesh {
+            positions: vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            normals: vec![0.0; 9],
+            indices: vec![0, 1, 2],
+            ..Default::default()
+        };
         let x = threemf_objects_xml(&[("a<b", &m), ("c", &m)]);
         assert_eq!(x.matches("<object ").count(), 2);
         assert!(x.contains("name=\"a&lt;b\""));

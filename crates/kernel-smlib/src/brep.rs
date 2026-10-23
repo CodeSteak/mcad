@@ -10,8 +10,7 @@
 //!   reports for the written side (out of the material) at an interior sample point.
 
 use cad_kernel::brep::{
-    BSplineCurve, BSplineSurface, Body, Brep, Edge, Face, Frame, Loop, OrientedEdge, Shell,
-    Surface, recognise_curve,
+    BSplineCurve, BSplineSurface, Body, Brep, Edge, Face, Frame, Loop, OrientedEdge, Shell, Surface, recognise_curve,
 };
 use cad_kernel::{KResult, KernelError};
 use glam::DVec3;
@@ -155,7 +154,8 @@ pub fn parse(d: &[f64]) -> KResult<(Brep, BrepStats)> {
     for _ in 0..nv {
         vertices.push(r.v3()?);
     }
-    let (lo, hi) = vertices.iter().fold((DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)), |(a, b), p| (a.min(*p), b.max(*p)));
+    let (lo, hi) =
+        vertices.iter().fold((DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)), |(a, b), p| (a.min(*p), b.max(*p)));
     let size = if nv > 0 { (hi - lo).length().max(1.0) } else { 1.0 };
     let tol_rec = 1e-9 * size;
     let tol_srf = 1e-6 * size;

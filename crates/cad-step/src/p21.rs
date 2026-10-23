@@ -116,7 +116,9 @@ impl Lx<'_> {
     fn keyword(&mut self) -> Result<String, String> {
         self.ws();
         let st = self.i;
-        while self.i < self.s.len() && (self.s[self.i].is_ascii_alphanumeric() || self.s[self.i] == b'_' || self.s[self.i] == b'-') {
+        while self.i < self.s.len()
+            && (self.s[self.i].is_ascii_alphanumeric() || self.s[self.i] == b'_' || self.s[self.i] == b'-')
+        {
             self.i += 1;
         }
         if st == self.i {
@@ -176,7 +178,8 @@ impl Lx<'_> {
             c if c == b'-' || c == b'+' || c.is_ascii_digit() => {
                 let st = self.i;
                 self.i += 1;
-                while self.i < self.s.len() && matches!(self.s[self.i], b'0'..=b'9' | b'.' | b'E' | b'e' | b'-' | b'+') {
+                while self.i < self.s.len() && matches!(self.s[self.i], b'0'..=b'9' | b'.' | b'E' | b'e' | b'-' | b'+')
+                {
                     self.i += 1;
                 }
                 let t = std::str::from_utf8(&self.s[st..self.i]).unwrap();

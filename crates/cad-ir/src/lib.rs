@@ -69,30 +69,73 @@ pub enum Op {
     /// Implicit union (block, `for`, `if`, module call body, `children()`).
     Group,
     /// Module instantiation; children are the body's results.
-    ModuleCall { name: String, instance: Option<String> },
+    ModuleCall {
+        name: String,
+        instance: Option<String>,
+    },
     /// Primitive, placed by `place` within the node's system.
-    Prim { prim: Prim, place: DMat4 },
+    Prim {
+        prim: Prim,
+        place: DMat4,
+    },
     Profile(Profile),
     /// Transform applied to the children (the matrix is also in the children's `local`).
-    Transform { kind: TransformKind, m: DMat4 },
+    Transform {
+        kind: TransformKind,
+        m: DMat4,
+    },
     /// `fillet_law`: `fillet = function (p) …` (variable radius; `fillet` is then `None`).
-    Boolean { op: BoolOp, fillet: Option<f64>, chamfer: Option<f64>, fillet_law: Option<Box<Law>> },
+    Boolean {
+        op: BoolOp,
+        fillet: Option<f64>,
+        chamfer: Option<f64>,
+        fillet_law: Option<Box<Law>>,
+    },
     /// `fillet(r) { body; zone; … }` / `chamfer`. Child 0 is the body, others zones.
     /// `law`: `fillet(r = function (p) …)`, a variable radius (`r` is then 0).
-    Blend { kind: BlendKind, r: f64, select: Select, law: Option<Box<Law>> },
+    Blend {
+        kind: BlendKind,
+        r: f64,
+        select: Select,
+        law: Option<Box<Law>>,
+    },
     /// `shell(t) { body; zone; … }`.
-    Shell { t: f64, select: Select },
+    Shell {
+        t: f64,
+        select: Select,
+    },
     /// Explicit zone around a grid line or plane, in the node's local system.
     Zone(ZoneShape),
-    LinearExtrude { h: f64, twist: f64, scale: DVec2, center: bool },
-    RotateExtrude { angle: f64 },
-    Loft { ruled: bool },
-    Sweep { path: Vec<DVec3>, interp: PathInterp },
-    Surface { rows: Vec<Vec<DVec3>> },
-    Thicken { t: f64 },
+    LinearExtrude {
+        h: f64,
+        twist: f64,
+        scale: DVec2,
+        center: bool,
+    },
+    RotateExtrude {
+        angle: f64,
+    },
+    Loft {
+        ruled: bool,
+    },
+    Sweep {
+        path: Vec<DVec3>,
+        interp: PathInterp,
+    },
+    Surface {
+        rows: Vec<Vec<DVec3>>,
+    },
+    Thicken {
+        t: f64,
+    },
     /// `resize`: scale children so their bounds get the given size (0 = keep / auto).
-    Resize { size: DVec3, auto: [bool; 3] },
-    Color { rgba: [f32; 4] },
+    Resize {
+        size: DVec3,
+        auto: [bool; 3],
+    },
+    Color {
+        rgba: [f32; 4],
+    },
     /// Unsupported or failed statement that still has children to show.
     Empty,
 }
@@ -131,11 +174,21 @@ pub enum Prim {
 /// 2D shapes in the xy-plane of the node's local system.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Profile {
-    Rect { min: DVec2, max: DVec2 },
-    Circle { r: f64 },
+    Rect {
+        min: DVec2,
+        max: DVec2,
+    },
+    Circle {
+        r: f64,
+    },
     /// Outer and hole loops (OpenSCAD `polygon(points, paths)`).
-    Polygon { loops: Vec<Vec<DVec2>> },
-    Spline { points: Vec<DVec2>, closed: bool },
+    Polygon {
+        loops: Vec<Vec<DVec2>>,
+    },
+    Spline {
+        points: Vec<DVec2>,
+        closed: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -4,9 +4,7 @@ use std::any::Any;
 use std::rc::Rc;
 
 use cad_ir::{BlendKind, Dim, Law, NodeIdx, Op, Prim, Select, Tree, ZoneShape};
-use cad_kernel::{
-    BoolOp, Class, EdgeInfo, FaceInfo, KResult, Kernel, KernelError, Loop, PlacedLoop, Tag,
-};
+use cad_kernel::{BoolOp, Class, EdgeInfo, FaceInfo, KResult, Kernel, KernelError, Loop, PlacedLoop, Tag};
 use glam::{DMat4, DQuat, DVec2, DVec3};
 
 use crate::key::{CacheKey, KeyHasher};
@@ -49,10 +47,7 @@ pub(crate) struct Run<'a, K: Kernel> {
 }
 
 impl<K: Kernel> Run<'_, K> {
-    fn call<T: Clone + 'static>(
-        &mut self,
-        f: impl FnOnce(&mut K) -> KResult<T>,
-    ) -> Result<KResult<T>, Interrupt> {
+    fn call<T: Clone + 'static>(&mut self, f: impl FnOnce(&mut K) -> KResult<T>) -> Result<KResult<T>, Interrupt> {
         if self.cursor < self.replay.len() {
             let v = self.replay[self.cursor]
                 .downcast_ref::<KResult<T>>()
@@ -236,7 +231,11 @@ fn on_polylines(points: &[DVec3], lines: &[Vec<DVec3>]) -> bool {
         l.windows(2)
             .map(|w| {
                 let ab = w[1] - w[0];
-                let t = if ab.length_squared() > 0.0 { ((q - w[0]).dot(ab) / ab.length_squared()).clamp(0.0, 1.0) } else { 0.0 };
+                let t = if ab.length_squared() > 0.0 {
+                    ((q - w[0]).dot(ab) / ab.length_squared()).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
                 (w[0] + ab * t - q).length()
             })
             .fold(f64::INFINITY, f64::min)
@@ -356,8 +355,7 @@ where
         // 2D node on its own: no kernel work; bounds from the polygon approximation.
         let mut warn = Vec::new();
         let bounds = match profile::lift(tree, idx, DMat4::IDENTITY, &mut warn) {
-            Ok(e) => profile::expr_bounds(&e, ctx.config.default_tol)
-                .map(|(lo, hi)| (lo.extend(0.0), hi.extend(0.0))),
+            Ok(e) => profile::expr_bounds(&e, ctx.config.default_tol).map(|(lo, hi)| (lo.extend(0.0), hi.extend(0.0))),
             Err(msg) => {
                 ev.error(msg);
                 None
@@ -637,11 +635,9 @@ where
                     BlendKind::Chamfer => "Fase",
                 };
                 let bad: Vec<Vec<DVec3>> = match &e {
-                    KernelError::Failed { edges, .. } if !edges.is_empty() => sel
-                        .iter()
-                        .filter(|x| edges.contains(&x.id))
-                        .map(|x| x.points.clone())
-                        .collect(),
+                    KernelError::Failed { edges, .. } if !edges.is_empty() => {
+                        sel.iter().filter(|x| edges.contains(&x.id)).map(|x| x.points.clone()).collect()
+                    }
                     _ => sel.iter().map(|x| x.points.clone()).collect(),
                 };
                 self.error_edges(format!("{what} gescheitert ({r} mm): {e}"), bad);
@@ -705,14 +701,16 @@ where
             }
             return Ok(part.clone());
         }
-        let (lo, hi) = radii
-            .iter()
-            .flatten()
-            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &r| (lo.min(r), hi.max(r)));
+        let (lo, hi) =
+            radii.iter().flatten().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &r| (lo.min(r), hi.max(r)));
         // one radius everywhere: the constant fillet (same result as `fillet(r)`)
         let constant = hi - lo <= 1e-12 * hi;
         let (res, ms) = self.run.call_timed(|k| {
-            if constant { k.fillet(&part.shape, &ids, lo, tag) } else { k.fillet_variable(&part.shape, &ids, &radii, tag) }
+            if constant {
+                k.fillet(&part.shape, &ids, lo, tag)
+            } else {
+                k.fillet_variable(&part.shape, &ids, &radii, tag)
+            }
         })?;
         self.blend_ms += ms;
         match res {
@@ -780,9 +778,7 @@ where
                     _ => Ok(parts),
                 }
             }
-            Op::Blend { kind, r, select, law } => {
-                self.zone_block(Some((*kind, *r)), law.as_deref(), None, *select)
-            }
+            Op::Blend { kind, r, select, law } => self.zone_block(Some((*kind, *r)), law.as_deref(), None, *select),
             Op::Shell { t, select } => self.zone_block(None, None, Some(*t), *select),
             Op::Zone(z) => self.zone(z),
             Op::LinearExtrude { h, twist, scale, center } => {
@@ -865,12 +861,7 @@ where
         }
     }
 
-    fn prim(
-        &mut self,
-        prim: &Prim,
-        place: &DMat4,
-        blend: Option<(BlendKind, f64)>,
-    ) -> R<Vec<Part<K::Shape>>> {
+    fn prim(&mut self, prim: &Prim, place: &DMat4, blend: Option<(BlendKind, f64)>) -> R<Vec<Part<K::Shape>>> {
         let tag = self.tag;
         let res = self.run.call(|k| match prim {
             Prim::Box { min, max } => k.make_box(*min, *max, tag),
@@ -927,10 +918,7 @@ where
         r: f64,
         law: Option<&Law>,
     ) -> R<Vec<Part<K::Shape>>> {
-        let sets: Vec<Rc<[Tag]>> = kids
-            .iter()
-            .filter_map(|&c| self.output(c).map(|o| o.tags.clone()))
-            .collect();
+        let sets: Vec<Rc<[Tag]>> = kids.iter().filter_map(|&c| self.output(c).map(|o| o.tags.clone())).collect();
         let part = &parts[0];
         let samples = self.ctx.config.edge_samples;
         let edges = match self.run.call(|k| k.edges(&part.shape, samples))? {
@@ -1073,9 +1061,8 @@ where
                     sel
                 };
                 count += sel.len();
-                self.selected.extend(
-                    sel.iter().map(|e| e.points.iter().map(|p| body_local.transform_point3(*p)).collect()),
-                );
+                self.selected
+                    .extend(sel.iter().map(|e| e.points.iter().map(|p| body_local.transform_point3(*p)).collect()));
                 if sel.is_empty() {
                     out.push(part.clone());
                 } else if let Some(law) = law {
@@ -1113,8 +1100,7 @@ where
                         };
                         if take {
                             open.push(f.id);
-                            self.opened
-                                .push(f.points.iter().map(|p| body_local.transform_point3(*p)).collect());
+                            self.opened.push(f.points.iter().map(|p| body_local.transform_point3(*p)).collect());
                         }
                     }
                 }

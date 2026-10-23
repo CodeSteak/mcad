@@ -56,11 +56,7 @@ fn sig(src: &Project, m: &ModuleDef, path: &[String]) -> ModuleSig {
                 ParamSig {
                     name: p.name.name.clone(),
                     span: p.span,
-                    default_text: p
-                        .default
-                        .as_ref()
-                        .map(|d| src.text(d.span))
-                        .map(String::from),
+                    default_text: p.default.as_ref().map(|d| src.text(d.span)).map(String::from),
                     default_span: p.default.as_ref().map(|d| d.span),
                     ty: default_value.as_ref().map_or(ParamType::Unknown, type_of),
                     default_value,

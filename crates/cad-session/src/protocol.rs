@@ -488,19 +488,47 @@ pub enum SelectMode {
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum OpInfo {
     /// `fillet(r) { … }` / `chamfer(d) { … }`.
-    Blend { chamfer: bool, r: f64, select: SelectMode },
+    Blend {
+        chamfer: bool,
+        r: f64,
+        select: SelectMode,
+    },
     /// `shell(t) { … }`.
-    Shell { t: f64, select: SelectMode },
+    Shell {
+        t: f64,
+        select: SelectMode,
+    },
     /// `zone(linie, d)` / `zone(ebene, d)`.
-    Zone { line: bool, point: Vec3, dir: Vec3, d: f64 },
-    LinearExtrude { h: f64, center: bool, twist: f64, scale: [f64; 2] },
+    Zone {
+        line: bool,
+        point: Vec3,
+        dir: Vec3,
+        d: f64,
+    },
+    LinearExtrude {
+        h: f64,
+        center: bool,
+        twist: f64,
+        scale: [f64; 2],
+    },
     /// `angle` in degrees.
-    RotateExtrude { angle: f64 },
-    Loft { ruled: bool },
-    Sweep { path: Vec<Vec3>, spline: bool },
+    RotateExtrude {
+        angle: f64,
+    },
+    Loft {
+        ruled: bool,
+    },
+    Sweep {
+        path: Vec<Vec3>,
+        spline: bool,
+    },
     /// Control points, rows of equal length.
-    Surface { rows: Vec<Vec<Vec3>> },
-    Thicken { t: f64 },
+    Surface {
+        rows: Vec<Vec<Vec3>>,
+    },
+    Thicken {
+        t: f64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -883,7 +911,6 @@ pub fn typescript() -> String {
         FileInfo,
         IncludeRef,
         Part,
-
         ToEngine,
         DragTarget,
         SnapRef,

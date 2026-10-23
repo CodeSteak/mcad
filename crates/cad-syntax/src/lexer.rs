@@ -178,9 +178,7 @@ pub fn lex(src: &str, diags: &mut Vec<Diagnostic>) -> Vec<Token> {
                             i += 2;
                         }
                         b'u' if i + 4 <= b.len() => {
-                            if let Some(ch) =
-                                u32::from_str_radix(&src[i..i + 4], 16).ok().and_then(char::from_u32)
-                            {
+                            if let Some(ch) = u32::from_str_radix(&src[i..i + 4], 16).ok().and_then(char::from_u32) {
                                 s.push(ch);
                             }
                             i += 4;
