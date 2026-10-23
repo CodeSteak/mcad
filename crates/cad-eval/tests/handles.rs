@@ -555,3 +555,51 @@ fn zone_center_handle_through_translate() {
     let new = drag(&out, src, h, DragTarget::Snap(SnapRef::Grid { grid: 0, planes: ["r".into(), "h".into(), "d".into()] }));
     assert!(new.contains("translate(g[r, h, d]) sphere(8);"), "{new}");
 }
+
+#[test]
+fn unchanged_literals_keep_their_text() {
+    // Axis-constrained drag: only x changes; y = 5.5 and z = 2.25 are not re-rounded.
+    let src = "translate([5, 5.5, 2.25]) cube(1);";
+    let out = clean(src);
+    let h = handle(&out, src, "translate", HandleKind::Point, 0);
+    assert_eq!(drag(&out, src, h, free([12.2, 5.5, 2.25])), "translate([12, 5.5, 2.25]) cube(1);");
+    // A component that does change is rounded as before.
+    assert_eq!(drag(&out, src, h, free([5.0, 7.4, 2.25])), "translate([5, 7, 2.25]) cube(1);");
+}
+
+#[test]
+fn profile_operation_handles() {
+    let src = "linear_extrude(12) square(4);\n\
+               rotate_extrude(angle = 270) translate([10, 0]) circle(2);\n\
+               sweep(path = [[0, 0, 0], [10, 0, 5], [20, 5, 5]]) circle(1);\n\
+               thicken(1) surface(points = [[[0, 0, 0], [10, 0, 2]], [[0, 10, 1], [10, 10, 0]]]);";
+    let out = clean(src);
+    // Height grip on top of the extrusion.
+    let h = handle(&out, src, "linear_extrude", HandleKind::Height, 0);
+    assert_eq!(h.value, [12.0]);
+    assert!(approx3(h.pos, [0.0, 0.0, 12.0]));
+    assert_eq!(drag(&out, src, h, scalar(20.2)).lines().next(), Some("linear_extrude(20) square(4);"));
+    // Angle grip of rotate_extrude (about z).
+    let a = handle(&out, src, "rotate_extrude", HandleKind::Angle { axis: 2 }, 0);
+    assert_eq!(a.value, [270.0]);
+    assert_eq!(
+        drag(&out, src, a, scalar(181.0)).lines().nth(1),
+        Some("rotate_extrude(angle = 180) translate([10, 0]) circle(2);")
+    );
+    // One grip per literal path point of a sweep.
+    for i in 0..3 {
+        handle(&out, src, "sweep", HandleKind::Point, i);
+    }
+    let p1 = handle(&out, src, "sweep", HandleKind::Point, 1);
+    assert!(approx3(p1.pos, [10.0, 0.0, 5.0]));
+    let new = drag(&out, src, p1, free([10.0, 3.0, 5.0]));
+    assert!(new.contains("sweep(path = [[0, 0, 0], [10, 3, 5], [20, 5, 5]])"), "{new}");
+    // Control net of a surface: rows × columns grips (index = row * cols + col).
+    for i in 0..4 {
+        handle(&out, src, "surface", HandleKind::Point, i);
+    }
+    let c = handle(&out, src, "surface", HandleKind::Point, 3);
+    assert!(approx3(c.pos, [10.0, 10.0, 0.0]));
+    let new = drag(&out, src, c, free([10.0, 10.0, 4.0]));
+    assert!(new.contains("[[0, 10, 1], [10, 10, 4]]"), "{new}");
+}

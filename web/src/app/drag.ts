@@ -5,14 +5,15 @@
 //   Edits → applied to the editor as live edits of one undo group → SetSource at once
 //   pointerup → last position, DragEnd → the undo group becomes one history event
 //
-// Escape cancels the drag and reverts its edits.
+// Escape cancels the drag and reverts its edits. Shift locks a point handle to the axis of its
+// local system that matches the mouse motion; X, Y, Z choose the axis (again: free).
 
 import type { EngineClient } from "../engine/client";
 import type { DragTarget, Edit, SnapTarget, Vec3 } from "../engine/protocol";
 import { mapEdits } from "../editor/applyEdits";
 import { EditGroup } from "../editor/editGroup";
-import { DragQueue, dragStep } from "../logic/drag";
-import { type HandleGeom, type Ray, type ScreenPoint, alignTargets } from "../logic/handles";
+import { type AxisLock, DragQueue, axisFromMotion, axisLine, dragStep, lockableAxes } from "../logic/drag";
+import { type HandleGeom, type Ray, type ScreenPoint, alignTargets, toLocal } from "../logic/handles";
 import { bridge } from "../state/bridge";
 import { store } from "../state/store";
 
@@ -29,6 +30,8 @@ export interface DragPreview {
   grip: Vec3;
   targets: SnapTarget[];
   snap: SnapTarget | null;
+  /** Axis lock: guide line through the start position. */
+  axis?: { axis: number; from: Vec3; to: Vec3 } | null;
 }
 
 interface Active {
@@ -38,6 +41,20 @@ interface Active {
   targets: SnapTarget[];
   mouse: ScreenPoint;
   alt: boolean;
+  /** Shift held: axis from the mouse motion. */
+  shift: boolean;
+  /** Axis chosen with X/Y/Z (wins over Shift). */
+  axisKey: number | null;
+  /** Axis found from the motion since Shift was pressed. */
+  autoAxis: number | null;
+  /** Mouse position when Shift was pressed. */
+  shiftFrom: ScreenPoint;
+  /** Axis of the lock in effect and the local position the lock line goes through (the
+   *  position the grip had when the lock started, so the other components keep their text). */
+  lockedAxis: number | null;
+  lockOrigin: Vec3 | null;
+  /** Local position the grip was last shown at. */
+  lastLocal: Vec3 | null;
   angle: number;
   ending: boolean;
   startedAt: number;
@@ -87,7 +104,7 @@ export class DragController {
   }
 
   /** Starts a drag on a grip. Locked handles do not start a drag. */
-  start(geom: HandleGeom, view: DragView, e: { clientX: number; clientY: number; altKey: boolean }): boolean {
+  start(geom: HandleGeom, view: DragView, e: { clientX: number; clientY: number; altKey: boolean; shiftKey?: boolean }): boolean {
     if (this.a || geom.handle.locked) return false;
     const id = geom.handle.id;
     this.group.begin();
@@ -103,6 +120,13 @@ export class DragController {
       targets: [],
       mouse: { x: e.clientX, y: e.clientY },
       alt: e.altKey,
+      shift: !!e.shiftKey,
+      axisKey: null,
+      autoAxis: null,
+      shiftFrom: { x: e.clientX, y: e.clientY },
+      lockedAxis: null,
+      lockOrigin: null,
+      lastLocal: null,
       angle: geom.ring?.value ?? 0,
       ending: false,
       startedAt: now,
@@ -115,7 +139,7 @@ export class DragController {
       awaitVersion: null,
       unsubScene: null,
     };
-    store.setState({ drag: { handle: id, snap: null, alt: e.altKey, edits: 0 }, viewHover: null });
+    store.setState({ drag: { handle: id, snap: null, alt: e.altKey, edits: 0, axis: null }, viewHover: null });
     this.client.post({ type: "DragStart", handle: id });
     this.listen("pointermove", (ev) => this.onMove(ev as PointerEvent));
     this.listen("pointerup", (ev) => this.onUp(ev as PointerEvent));
@@ -151,8 +175,39 @@ export class DragController {
     if (!a || a.ending) return;
     a.mouse = { x: e.clientX, y: e.clientY };
     a.alt = e.altKey;
+    this.setShift(a, e.shiftKey);
     e.preventDefault();
     this.update();
+  }
+
+  private setShift(a: Active, down: boolean): void {
+    if (down === a.shift) return;
+    a.shift = down;
+    a.autoAxis = null;
+    a.shiftFrom = { ...a.mouse };
+  }
+
+  /** Axis lock in effect (point handles only). */
+  private lock(a: Active): AxisLock | null {
+    const h = a.geom.handle;
+    const axes = lockableAxes(h);
+    if (!axes.length || a.geom.line || a.geom.ring) return null;
+    let axis = a.axisKey;
+    if (axis === null && a.shift) {
+      if (a.autoAxis === null) {
+        a.autoAxis = axisFromMotion(h, h.pos, a.shiftFrom, a.mouse, (p) => {
+          const q = a.view.project(p) as (ScreenPoint & { visible?: boolean }) | null;
+          return q && q.visible !== false ? q : null;
+        });
+      }
+      axis = a.autoAxis;
+    }
+    if (axis === null || !axes.includes(axis)) axis = null;
+    if (axis !== a.lockedAxis) {
+      a.lockedAxis = axis;
+      a.lockOrigin = axis === null ? null : ([...(a.lastLocal ?? h.pos)] as Vec3);
+    }
+    return axis !== null && a.lockOrigin ? { axis, origin: a.lockOrigin } : null;
   }
 
   private onKey(e: KeyboardEvent, down: boolean): void {
@@ -167,6 +222,22 @@ export class DragController {
       e.preventDefault();
       a.alt = down;
       this.update();
+      return;
+    }
+    if (e.key === "Shift") {
+      this.setShift(a, down);
+      this.update();
+      return;
+    }
+    const k = ["x", "y", "z"].indexOf(e.key.toLowerCase());
+    if (k >= 0 && !e.ctrlKey && !e.metaKey) {
+      // Keep the key away from the editor while dragging.
+      e.preventDefault();
+      e.stopPropagation();
+      if (!down) return;
+      if (!lockableAxes(a.geom.handle).includes(k)) return;
+      a.axisKey = a.axisKey === k ? null : k;
+      this.update();
     }
   }
 
@@ -174,6 +245,9 @@ export class DragController {
   private update(): void {
     const a = this.a;
     if (!a) return;
+    // Shift held, axis not yet known (too little motion): the grip waits instead of moving
+    // freely (a free step would already change the other components).
+    if (a.shift && a.axisKey === null && lockableAxes(a.geom.handle).length && !a.geom.line && !a.geom.ring && this.lock(a) === null) return;
     const s = store.getState().settings;
     const step = dragStep({
       geom: a.geom,
@@ -190,14 +264,25 @@ export class DragController {
       prevAngle: a.angle,
       stepMm: s.stepMm,
       stepDeg: s.stepDeg,
+      axis: this.lock(a),
     });
     if (step.angle !== null) a.angle = step.angle;
+    if (step.target?.kind === "point" || step.target?.kind === "snap") a.lastLocal = toLocal(a.geom.handle, step.grip);
     a.lastStep = { grip: step.grip, snap: step.snap };
     a.queue.push(step.target);
-    a.view.setDragPreview({ handle: a.geom.handle.id, grip: step.grip, targets: a.alt ? [] : a.targets, snap: step.snap });
+    const lock = this.lock(a);
+    let axis: DragPreview["axis"] = null;
+    if (lock) {
+      const h = a.geom.handle;
+      const g0 = a.geom.grip;
+      const len = Math.max(50, 4 * Math.hypot(step.grip[0] - g0[0], step.grip[1] - g0[1], step.grip[2] - g0[2]));
+      axis = { axis: lock.axis, ...axisLine(h, lock, len) };
+    }
+    a.view.setDragPreview({ handle: a.geom.handle.id, grip: step.grip, targets: a.alt ? [] : a.targets, snap: step.snap, axis });
     const d = store.getState().drag;
     const snapText = step.snap?.text ?? null;
-    if (d && (d.snap !== snapText || d.alt !== a.alt)) store.setState({ drag: { ...d, snap: snapText, alt: a.alt } });
+    const ax = lock?.axis ?? null;
+    if (d && (d.snap !== snapText || d.alt !== a.alt || d.axis !== ax)) store.setState({ drag: { ...d, snap: snapText, alt: a.alt, axis: ax } });
   }
 
   private onEdits(version: number, edits: Edit[]): void {

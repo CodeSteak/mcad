@@ -121,18 +121,22 @@ fn free_edits(h: &Handle, v: DragValue, opts: &DragOptions) -> Vec<TextEdit> {
     };
     let step = step_for(h, opts);
     if h.comps.iter().any(|c| c.is_some()) {
-        let mut by_span: BTreeMap<(u32, u32), Vec<f64>> = BTreeMap::new();
+        // (new values, current values) per literal.
+        let mut by_span: BTreeMap<(u32, u32), (Vec<f64>, Vec<f64>)> = BTreeMap::new();
         for (i, c) in h.comps.iter().enumerate() {
             if let (Some(c), Some(v)) = (c, vals.get(i)) {
-                by_span.entry((c.span.start, c.span.end)).or_default().push(v * c.scale);
+                let e = by_span.entry((c.span.start, c.span.end)).or_default();
+                e.0.push(v * c.scale);
+                e.1.push(h.value.get(i).copied().unwrap_or(f64::NAN) * c.scale);
             }
         }
+        let mean = |v: &[f64]| v.iter().sum::<f64>() / v.len() as f64;
         return by_span
             .into_iter()
-            .map(|((start, end), vs)| {
-                let mean = vs.iter().sum::<f64>() / vs.len() as f64;
-                TextEdit { span: Span { start, end }, text: fmt_literal(mean, step) }
-            })
+            // A literal whose value does not change keeps its text (no re-rounding of the
+            // components an axis-constrained drag leaves alone).
+            .filter(|(_, (new, cur))| !((mean(new) - mean(cur)).abs() <= 1e-9 * mean(cur).abs().max(1.0)))
+            .map(|((start, end), (vs, _))| TextEdit { span: Span { start, end }, text: fmt_literal(mean(&vs), step) })
             .collect();
     }
     if h.has_ref {

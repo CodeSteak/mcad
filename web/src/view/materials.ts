@@ -25,6 +25,9 @@ export interface Palette {
   floorMajor: string;
   anchor: string;
   flat: string;
+  profile: string;
+  guide: string;
+  openFace: string;
 }
 
 export function readPalette(el: HTMLElement = document.documentElement): Palette {
@@ -50,6 +53,9 @@ export function readPalette(el: HTMLElement = document.documentElement): Palette
     floorMajor: v("--view-floor-major", "#c4c8cf"),
     anchor: v("--view-anchor", "#f59e0b"),
     flat: v("--view-flat", "#2f80ed"),
+    profile: v("--view-profile", "#0b7285"),
+    guide: v("--view-guide", "#d6336c"),
+    openFace: v("--view-open-face", "#f08c00"),
   };
 }
 
@@ -150,6 +156,13 @@ export class Materials {
         break;
       case "picked":
         s = { surface: null, edges: this.lines(p.accent, 1), renderOrder: 15, pickable: false };
+        break;
+      case "profile":
+        // Drawn as thick lines by the viewer (edge segments of the mesh), through the result.
+        s = { surface: flat ? this.transparent(p.profile, 0.1, { depthTest: false }) : null, edges: this.lines(p.profile, 1, false), renderOrder: 35, pickable: false };
+        break;
+      case "translucent":
+        s = { surface: this.transparent(p.model, 0.42, { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }), edges: this.lines(p.edge, 0.45), renderOrder: 6, pickable: true };
         break;
     }
     this.styles.set(key, s);

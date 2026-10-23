@@ -368,6 +368,35 @@ pub struct NodeFlags {
     pub zone: bool,
 }
 
+/// Edge/face selection of a zone block (`select`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectMode {
+    Inside,
+    Touch,
+}
+
+/// Resolved parameters of operations the view draws specially (zone blocks, profile
+/// operations, surfaces). Points are in the node system.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum OpInfo {
+    /// `fillet(r) { … }` / `chamfer(d) { … }`.
+    Blend { chamfer: bool, r: f64, select: SelectMode },
+    /// `shell(t) { … }`.
+    Shell { t: f64, select: SelectMode },
+    /// `zone(linie, d)` / `zone(ebene, d)`.
+    Zone { line: bool, point: Vec3, dir: Vec3, d: f64 },
+    LinearExtrude { h: f64, center: bool, twist: f64, scale: [f64; 2] },
+    /// `angle` in degrees.
+    RotateExtrude { angle: f64 },
+    Loft { ruled: bool },
+    Sweep { path: Vec<Vec3>, spline: bool },
+    /// Control points, rows of equal length.
+    Surface { rows: Vec<Vec<Vec3>> },
+    Thicken { t: f64 },
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct Bounds {
     pub min: Vec3,
@@ -416,6 +445,9 @@ pub struct SceneNode {
     /// Edges selected by fillet/chamfer (polylines, node system).
     pub selected_edges: Vec<Vec<Vec3>>,
     pub opened_faces: u32,
+    /// Draft mode while dragging: this node's blend was left out (it took longer than the
+    /// draft limit); the full evaluation after the drag restores it.
+    pub blend_suspended: bool,
     /// Bounds in the node system.
     pub bounds: Option<Bounds>,
     pub dim: Option<Dim>,
@@ -427,6 +459,8 @@ pub struct SceneNode {
     pub cached: bool,
     /// `$tol` in effect.
     pub tol: Option<f64>,
+    /// Parameters of zone blocks, profile operations and surfaces (special display).
+    pub op_info: Option<OpInfo>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -710,6 +744,8 @@ pub struct Stats {
     pub steps: u32,
     /// Language evaluation steps.
     pub eval_steps: u32,
+    /// Blends left out in draft mode (while dragging).
+    pub suspended_blends: u32,
 }
 
 /// TypeScript declarations of all protocol types (content of `web/src/engine/protocol.ts`).
@@ -753,6 +789,8 @@ pub fn typescript() -> String {
         NodeStatus,
         Dim,
         NodeFlags,
+        SelectMode,
+        OpInfo,
         Bounds,
         NodeMessage,
         SceneNode,

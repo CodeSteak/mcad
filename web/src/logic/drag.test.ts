@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DragTarget, SnapTarget, Vec3 } from "../engine/protocol";
 import { fixture, pos } from "./__fixtures__/load";
-import { DragQueue, type DragInput, dragStep, targetKey } from "./drag";
+import { DragQueue, type DragInput, axisFromMotion, axisLine, dragStep, lockableAxes, targetKey } from "./drag";
 import { handleGeom, handlesForCursor } from "./handles";
 import { SceneIndex } from "./sceneIndex";
 
@@ -81,6 +81,48 @@ describe("Ein Schritt beim Ziehen", () => {
     // Preview at 45°.
     expect(s.grip[0]).toBeCloseTo(10 * Math.cos(Math.PI / 4));
     expect(s.grip[1]).toBeCloseTo(10 * Math.sin(Math.PI / 4));
+  });
+});
+
+describe("Achsgebundenes Ziehen", () => {
+  const translate = handleGeom(f.scene, handlesAt(7, 0)[0], 10);
+  const h = translate.handle;
+  const origin = [...h.pos] as Vec3;
+
+  it("nur die gewählte Komponente ändert sich", () => {
+    const s = dragStep(input(translate, 253, -38, { axis: { axis: 0, origin }, targets: [] }));
+    const p = (s.target as Extract<DragTarget, { kind: "point" }>).pos;
+    expect(p[0]).toBeCloseTo(25.3);
+    expect(p[1]).toBe(origin[1]);
+    expect(p[2]).toBe(origin[2]);
+    expect(s.grip[1]).toBeCloseTo(origin[1]);
+    // Along y (screen up = +y in the test camera).
+    const t = dragStep(input(translate, 253, -38, { axis: { axis: 1, origin }, targets: [] }));
+    const q = (t.target as Extract<DragTarget, { kind: "point" }>).pos;
+    expect(q[0]).toBe(origin[0]);
+    expect(q[1]).toBeCloseTo(3.8);
+  });
+
+  it("nur Rasterpunkte auf der Achse sind Snap-Ziele", () => {
+    const onAxis: SnapTarget = { ...gridPoint, text: "g[rechts, …]", local: [40, origin[1], origin[2]], world: [40, origin[1], origin[2]], result_world: [40, origin[1], origin[2]] };
+    const off: SnapTarget = { ...gridPoint, local: [40, origin[1] + 5, origin[2]], world: [40, origin[1] + 5, origin[2]], result_world: [40, origin[1] + 5, origin[2]] };
+    const near = { x: 400, y: -origin[1] * 10 };
+    let s = dragStep(input(translate, near.x, near.y, { axis: { axis: 0, origin }, targets: [off, onAxis] }));
+    expect(s.snap?.text).toBe("g[rechts, …]");
+    s = dragStep(input(translate, near.x, near.y - 50, { axis: { axis: 0, origin }, targets: [off] }));
+    expect(s.snap).toBeNull();
+    expect(s.target?.kind).toBe("point");
+  });
+
+  it("Achse aus der Mausbewegung; 2D-Punkte nur x/y", () => {
+    expect(lockableAxes(h)).toEqual([0, 1, 2]);
+    expect(axisFromMotion(h, origin, { x: 0, y: 0 }, { x: 3, y: 1 }, project)).toBeNull();
+    expect(axisFromMotion(h, origin, { x: 0, y: 0 }, { x: 40, y: 6 }, project)).toBe(0);
+    expect(axisFromMotion(h, origin, { x: 0, y: 0 }, { x: -5, y: -40 }, project)).toBe(1);
+    expect(lockableAxes({ ...h, value: [1, 2] })).toEqual([0, 1]);
+    expect(lockableAxes({ ...h, kind: { kind: "height" } })).toEqual([]);
+    const l = axisLine(h, { axis: 2, origin }, 5);
+    expect(l.to[2] - l.from[2]).toBeCloseTo(10);
   });
 });
 

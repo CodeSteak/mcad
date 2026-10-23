@@ -12,6 +12,8 @@ import { type Plan, plan as makePlan, planNodes } from "../logic/display";
 import { type GridOverlay, gridOverlay, modelHull, viewBox } from "../logic/grids";
 import { type HandleGeom, type Ray, handleGeom, handleLabel, handlesForCursor } from "../logic/handles";
 import { type Box3, boxDiagonal, emptyBox, isEmpty, length, sub } from "../logic/math";
+import { MeshVolume, edgesInZone, facesInZones } from "../logic/zones";
+import { needsRefit } from "../logic/fit";
 import type { DragController, DragPreview, DragView } from "../app/drag";
 import { buildHandleLayer, readHandleColors, type HandleColors } from "./handleLayer";
 import { EMPTY_SELECTION, type CursorSelection } from "../logic/sceneIndex";
@@ -47,7 +49,26 @@ export interface ViewState {
   context: string | null;
   selection: CursorSelection;
   hoverNodes: number[];
-  plan: { base: string | null; items: Array<{ node: number; mode: string; label: string; line: number; flat: boolean }>; edges: number; frames: number; anchors: number; activeAnchors: number; status: string | null };
+  plan: {
+    base: string | null;
+    items: Array<{ node: number; mode: string; label: string; line: number; flat: boolean; why: string }>;
+    edges: number;
+    frames: number;
+    anchors: number;
+    activeAnchors: number;
+    status: string | null;
+    /** Guide lines by kind (axis, path, net). */
+    guides: Record<string, number>;
+    /** Polyline points of the guides (context coordinates). */
+    guidePoints: Array<{ kind: string; points: Vec3[] }>;
+  };
+  /** Drawn edge lines by kind (selected, error; zone edges are "selected"). */
+  edgeKinds: Record<string, number>;
+  /** Cursor on a zone: selected edges of the block in this zone / of the block. */
+  zoneEdges: { zone: number; inZone: number; total: number } | null;
+  /** shell: faces of the body in the zones (drawn coloured) and the engine's count. */
+  openFaces: Array<{ shell: number; faces: number; engine: number }>;
+  camera: { autoFit: boolean; refitHint: boolean; distance: number; target: Vec3 };
   grid: { lines: number; dashed: number; points: number; highlight: string[] };
   missingMeshes: number;
   objects: number;
@@ -97,6 +118,15 @@ export class Viewer implements DragView {
   private lastFitKey = "";
   /** The camera still shows the last automatic fit (refit when the viewport size changes). */
   private autoFit = false;
+  /** Model box of the last fit (refit after a clear size change). */
+  private fitBox: Box3 | null = null;
+  /** Zone volumes by mesh key and placement (built on demand). */
+  private volumes = new Map<string, MeshVolume>();
+  /** Results of the zone tests (hover and cursor changes rebuild often). */
+  private zoneCache = new Map<string, unknown>();
+  lastZoneEdges: ViewState["zoneEdges"] = null;
+  lastOpenFaces: ViewState["openFaces"] = [];
+  lastEdgeKinds: Record<string, number> = {};
   private lastShown: Scene | null = null;
   private pickedScene: Scene | null = null;
   private drawnVersions = new Set<string>();
@@ -191,6 +221,9 @@ export class Viewer implements DragView {
   }
 
   private onStore(s: CadState, p: CadState): void {
+    // A handle drag is work in the view: from then on the camera is not refitted on its own
+    // (the user gets the "Neu einpassen" button instead).
+    if (s.drag && !p.drag) this.autoFit = false;
     if (s.theme !== p.theme) {
       // CSS variables change with the theme attribute; read them after the style update.
       requestAnimationFrame(() => this.applyTheme());
@@ -374,6 +407,9 @@ export class Viewer implements DragView {
     const g = gridOverlay({ scene, hull, all: st.allGrids, refs: sel.refs, grids: sel.grids, hoverRef: hoverRefIdx });
     this.lastGrid = g;
 
+    this.lastEdgeKinds = {};
+    this.lastZoneEdges = null;
+    this.lastOpenFaces = [];
     let missing = 0;
     // Base: the model of the current module. While a node's mesh is missing, the base stays full.
     const itemsReady = p.items.filter((i) => this.meshes.has(scene.nodes[i.node].mesh_key));
@@ -388,7 +424,44 @@ export class Viewer implements DragView {
     this.missingMeshes = missing;
 
     const diag = Math.max(1, boxDiagonal(this.modelBox));
-    for (const e of p.edges) this.addFatPolyline(e.points, e.kind === "error" ? this.materials.palette.errorEdge : this.materials.palette.selectedEdge, 3.5);
+    const pal = this.materials.palette;
+    const countEdge = (k: string) => (this.lastEdgeKinds[k] = (this.lastEdgeKinds[k] ?? 0) + 1);
+    for (const e of p.edges) {
+      this.addFatPolyline(e.points, e.kind === "error" ? pal.errorEdge : pal.selectedEdge, 3.5, false, false, `edge:${e.kind}`);
+      countEdge(e.kind);
+    }
+    if (p.zoneEdges) {
+      // Cursor on a zone: only the block's edges in this zone.
+      const q = p.zoneEdges;
+      const vol = this.volume(scene, q.zone);
+      if (vol) {
+        const ck = `e|${scene.nodes[q.zone].mesh_key}|${this.meshes.isCoarse(scene.nodes[q.zone].mesh_key)}|${scene.nodes[q.zone].display_world.join(",")}|${q.select}|${JSON.stringify(q.edges)}`;
+        const mine = this.cached(ck, () => edgesInZone(q.edges, vol.v, q.select, vol.eps));
+        for (const e of mine) {
+          this.addFatPolyline(e, pal.selectedEdge, 3.5, false, false, "edge:selected");
+          countEdge("selected");
+        }
+        this.lastZoneEdges = { zone: q.zone, inZone: mine.length, total: q.edges.length };
+      } else missing++;
+    }
+    for (const q of p.openFaces) {
+      // shell: faces of the body in the zones are opened (coloured).
+      const body = this.meshes.get(scene.nodes[q.body].mesh_key)?.data;
+      const vols = q.zones.map((z) => this.volume(scene, z));
+      if (!body || vols.some((v) => !v)) {
+        missing++;
+        continue;
+      }
+      const eps = Math.max(...vols.map((v) => v!.eps));
+      const ck = `f|${scene.nodes[q.body].mesh_key}|${this.meshes.isCoarse(scene.nodes[q.body].mesh_key)}|${q.matrix.join(",")}|${q.select}|${q.zones.map((z) => `${scene.nodes[z].mesh_key}@${scene.nodes[z].display_world.join(",")}`).join(";")}`;
+      const faces = this.cached(ck, () => facesInZones(body, q.matrix, vols.map((v) => v!.v), q.select, eps));
+      this.addFaceSubset(body.positions, body.indices, [...faces.values()].flat(), q.matrix, pal.openFace);
+      this.lastOpenFaces.push({ shell: q.shell, faces: faces.size, engine: scene.nodes[q.shell].opened_faces });
+    }
+    for (const gd of p.guides) {
+      this.addFatPolyline(gd.points, pal.guide, gd.kind === "net" ? 1.6 : 2.6, false, gd.dashed, `guide:${gd.kind}`);
+    }
+    this.missingMeshes = missing;
     for (const f of p.frames) this.addFrame(f.matrix, f.dashed, diag * 0.18);
     if (p.frames.length === 2) {
       const a = new THREE.Vector3().setFromMatrixPosition(m4(p.frames[0].matrix));
@@ -438,13 +511,14 @@ export class Viewer implements DragView {
         if (style.pickable) this.pickables.push(mesh);
       }
     }
-    if (it.mode === "picked") {
-      // Node under the mouse: thick accent edges (2.5 px).
+    if (it.mode === "picked" || it.mode === "profile") {
+      // Node under the mouse: thick accent edges (2.5 px); profiles: thick, through the result.
       const segs = this.meshes.get(key)?.data.edge_segments;
       if (segs && segs.length >= 6) {
         const geo = new LineSegmentsGeometry();
         geo.setPositions(segs);
-        const mat = this.materials.fat(this.materials.palette.accent, 2.5, true);
+        const prof = it.mode === "profile";
+        const mat = this.materials.fat(prof ? this.materials.palette.profile : this.materials.palette.accent, prof ? 2.8 : 2.5, !prof);
         mat.resolution.set(this.container.clientWidth, this.container.clientHeight);
         const l = new LineSegments2(geo, mat);
         l.renderOrder = style.renderOrder;
@@ -460,18 +534,63 @@ export class Viewer implements DragView {
       }
     }
     group.userData = { node: it.node, mode: it.mode };
+    group.name = `mode:${it.mode}`;
     this.content.add(group);
     return true;
   }
 
-  private addFatPolyline(points: Vec3[], color: string, width: number, depthTest = false): void {
+  private addFatPolyline(points: Vec3[], color: string, width: number, depthTest = false, dashed = false, name = ""): void {
     if (points.length < 2) return;
     const pos: number[] = [];
     for (let i = 0; i + 1 < points.length; i++) pos.push(...points[i], ...points[i + 1]);
-    this.addFatSegments(pos, color, width, depthTest);
+    this.addFatSegments(pos, color, width, depthTest, dashed, name);
   }
 
-  private addFatSegments(pos: number[], color: string, width: number, depthTest = false, dashed = false): void {
+  private cached<T>(key: string, f: () => T): T {
+    if (this.zoneCache.has(key)) return this.zoneCache.get(key) as T;
+    if (this.zoneCache.size > 64) this.zoneCache.clear();
+    const v = f();
+    this.zoneCache.set(key, v);
+    return v;
+  }
+
+  /** Zone mesh of a node as a volume in context coordinates (cached by key and placement). */
+  private volume(scene: Scene, node: number): { v: MeshVolume; eps: number } | null {
+    const n = scene.nodes[node];
+    const m = this.meshes.get(n.mesh_key)?.data;
+    if (!m) return null;
+    const key = `${n.mesh_key}|${n.display_world.join(",")}`;
+    let v = this.volumes.get(key);
+    if (!v) {
+      if (this.volumes.size > 64) this.volumes.clear();
+      v = new MeshVolume(m.positions, m.indices, n.display_world);
+      this.volumes.set(key, v);
+    }
+    // Tolerance: chordal deviation of the tessellation plus a small share of the model size.
+    const eps = Math.max(m.tol * 1.5, boxDiagonal(this.modelBox) * 2e-4, 1e-4);
+    return { v, eps };
+  }
+
+  /** Coloured triangles of a mesh (opened faces of a shell). */
+  private addFaceSubset(positions: Float32Array, indices: Uint32Array, tris: number[], matrix: Mat4, color: string): void {
+    if (!tris.length) return;
+    const idx = new Uint32Array(tris.length * 3);
+    tris.forEach((t, i) => idx.set(indices.subarray(t * 3, t * 3 + 3), i * 3));
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    geo.setIndex(new THREE.BufferAttribute(idx, 1));
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.42, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.matrixAutoUpdate = false;
+    mesh.matrix.copy(m4(matrix));
+    mesh.renderOrder = 42;
+    mesh.userData.ownGeometry = true;
+    mesh.userData.ownMaterial = true;
+    mesh.name = "open-faces";
+    this.overlay.add(mesh);
+  }
+
+  private addFatSegments(pos: number[], color: string, width: number, depthTest = false, dashed = false, name = ""): void {
     if (pos.length < 6) return;
     const geo = new LineSegmentsGeometry();
     geo.setPositions(pos);
@@ -481,6 +600,7 @@ export class Viewer implements DragView {
     if (dashed) l.computeLineDistances();
     l.renderOrder = 40;
     l.userData.ownGeometry = true;
+    l.name = name;
     this.overlay.add(l);
   }
 
@@ -636,9 +756,18 @@ export class Viewer implements DragView {
     const st = store.getState();
     if (!scene.complete || scene.version < st.loadVersion) return;
     const key = `${st.loadVersion}|${scene.context.module ?? ""}`;
-    if (key === this.lastFitKey || isEmpty(this.modelBox)) return;
-    this.lastFitKey = key;
-    this.fitAll();
+    if (isEmpty(this.modelBox)) return;
+    if (key !== this.lastFitKey) {
+      this.lastFitKey = key;
+      this.fitAll();
+      return;
+    }
+    // The model changed its size clearly (typing, parameter bar): refit while the camera still
+    // shows the automatic fit; after the user moved the camera only offer it (button).
+    if (st.drag !== null || !this.fitBox) return;
+    const refit = needsRefit(this.fitBox, this.modelBox);
+    if (refit && this.autoFit) this.fitAll();
+    else if (refit !== st.refitHint) store.setState({ refitHint: refit });
   }
 
   /** "Alles zeigen": frames the shown model, keeping the view direction. */
@@ -654,6 +783,8 @@ export class Viewer implements DragView {
     const fitW = radius / Math.sin(Math.atan(Math.tan(fov / 2) * this.camera.aspect));
     const dist = Math.max(fitH, fitW) * 1.08;
     this.autoFit = true;
+    this.fitBox = { min: [...b.min] as Vec3, max: [...b.max] as Vec3 };
+    if (store.getState().refitHint) store.setState({ refitHint: false });
     this.controls.target.copy(center);
     this.camera.position.copy(center.clone().add(dir.multiplyScalar(dist)));
     this.camera.near = Math.max(0.01, dist / 1000);
@@ -661,6 +792,15 @@ export class Viewer implements DragView {
     this.camera.updateProjectionMatrix();
     this.controls.update();
     this.requestRender();
+  }
+
+  /** Camera from the direction `dir` (towards the target), z up unless looking along z. */
+  viewFrom(dir: Vec3): void {
+    const d = new THREE.Vector3(...dir).normalize();
+    this.camera.position.copy(this.controls.target.clone().add(d.multiplyScalar(100)));
+    this.camera.up.set(0, 0, 1);
+    this.controls.update();
+    this.fitAll();
   }
 
   setView(v: StandardView): void {
@@ -935,6 +1075,24 @@ export class Viewer implements DragView {
     return { fps: (frames * 1000) / ms, frames, ms };
   }
 
+  /**
+   * Shows or hides drawn objects by name prefix (`open-faces`, `guide:path`, `edge:selected`,
+   * `mode:profile`, …) and renders; returns how many were found (tests: pixel difference).
+   */
+  setLayerVisible(prefix: string, visible: boolean): number {
+    let n = 0;
+    for (const g of [this.content, this.overlay]) {
+      for (const o of g.children) {
+        if (o.name.startsWith(prefix)) {
+          o.visible = visible;
+          n++;
+        }
+      }
+    }
+    this.render();
+    return n;
+  }
+
   /** Summary of what is drawn (test hook). */
   viewState(): ViewState {
     const s = this.lastShown;
@@ -951,12 +1109,23 @@ export class Viewer implements DragView {
       hoverNodes: this.lastHoverNodes,
       plan: {
         base: p?.base ? this.baseMode : null,
-        items: (p?.items ?? []).map((i) => ({ node: i.node, mode: i.mode, label: s!.nodes[i.node].label, line: lineOf(i.node), flat: i.flat })),
+        items: (p?.items ?? []).map((i) => ({ node: i.node, mode: i.mode, label: s!.nodes[i.node].label, line: lineOf(i.node), flat: i.flat, why: i.why })),
         edges: p?.edges.length ?? 0,
         frames: p?.frames.length ?? 0,
         anchors: p?.anchors.length ?? 0,
         activeAnchors: p?.anchors.filter((a) => a.active).length ?? 0,
         status: p?.status ?? null,
+        guides: (p?.guides ?? []).reduce<Record<string, number>>((m, g) => ((m[g.kind] = (m[g.kind] ?? 0) + 1), m), {}),
+        guidePoints: (p?.guides ?? []).map((g) => ({ kind: g.kind, points: g.points })),
+      },
+      edgeKinds: this.lastEdgeKinds,
+      zoneEdges: this.lastZoneEdges,
+      openFaces: this.lastOpenFaces,
+      camera: {
+        autoFit: this.autoFit,
+        refitHint: store.getState().refitHint,
+        distance: this.camera.position.distanceTo(this.controls.target),
+        target: [this.controls.target.x, this.controls.target.y, this.controls.target.z],
       },
       grid: {
         lines: g?.lines.length ?? 0,
