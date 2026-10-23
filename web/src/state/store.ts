@@ -5,6 +5,7 @@ import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
 import type { Diagnostic, Scene } from "../engine/protocol";
 import type { ParamOverrides } from "../logic/params";
+import { SECTION_OFF, type SectionState } from "../logic/section";
 
 export type Theme = "light" | "dark";
 
@@ -42,6 +43,8 @@ export interface Metrics {
   dragEndToFine: number[];
   /** Frames per second while dragging (one entry per drag). */
   dragFps: Array<{ fps: number; frames: number; ms: number; maxGapMs: number; sent: number; dropped: number }>;
+  /** Frames per second while dragging the section plane (one entry per drag). */
+  sectionFps?: Array<{ fps: number; frames: number; ms: number; maxGapMs: number }>;
 }
 
 /** Settings (Einstellungen), kept in localStorage. */
@@ -52,9 +55,20 @@ export interface Settings {
   stepDeg: number;
   /** Snap radius in screen pixels. */
   snapPx: number;
+  /** Desktop app: save changed files automatically. */
+  autoSave: boolean;
+  /** Delay of the automatic save after the last edit (ms). */
+  autoSaveMs: number;
 }
 
-export const DEFAULT_SETTINGS: Settings = { stepMm: 1, stepDeg: 15, snapPx: 14 };
+export const DEFAULT_SETTINGS: Settings = { stepMm: 1, stepDeg: 15, snapPx: 14, autoSave: false, autoSaveMs: 1000 };
+
+/** An external change the user has to decide on (desktop app). */
+export interface ExternalChange {
+  kind: "changed" | "removed";
+  /** New text on disk (changed). */
+  text?: string;
+}
 
 export interface DragInfo {
   handle: number;
@@ -136,6 +150,20 @@ export interface CadState {
   hoverHandle: number | null;
   /** The model changed its size clearly after the user moved the camera: offer a refit. */
   refitHint: boolean;
+  /** 3D section view. */
+  section: SectionState;
+  /** Last copied CLI call (section view). */
+  lastCli: string | null;
+  /** Desktop app: project files with unsaved changes. */
+  dirty: string[];
+  /** Desktop app: external changes waiting for a decision, by project path. */
+  external: Record<string, ExternalChange>;
+  /** Desktop app: "Vergleichen" view. */
+  diffView: { path: string; disk: string; mine: string } | null;
+  /** Desktop app: recently opened files and folders. */
+  recent: Array<{ path: string; folder: boolean }>;
+  /** Incremented when git markers arrive. */
+  gitVersion: number;
 }
 
 function initialSettings(): Settings {
@@ -144,7 +172,13 @@ function initialSettings(): Settings {
     if (raw) {
       const s = JSON.parse(raw) as Partial<Settings>;
       const ok = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : d);
-      return { stepMm: ok(s.stepMm, DEFAULT_SETTINGS.stepMm), stepDeg: ok(s.stepDeg, DEFAULT_SETTINGS.stepDeg), snapPx: ok(s.snapPx, DEFAULT_SETTINGS.snapPx) };
+      return {
+        stepMm: ok(s.stepMm, DEFAULT_SETTINGS.stepMm),
+        stepDeg: ok(s.stepDeg, DEFAULT_SETTINGS.stepDeg),
+        snapPx: ok(s.snapPx, DEFAULT_SETTINGS.snapPx),
+        autoSave: typeof s.autoSave === "boolean" ? s.autoSave : DEFAULT_SETTINGS.autoSave,
+        autoSaveMs: ok(s.autoSaveMs, DEFAULT_SETTINGS.autoSaveMs),
+      };
     }
   } catch {
     /* no storage */
@@ -202,6 +236,13 @@ export const store = createStore<CadState>(() => ({
   drag: null,
   hoverHandle: null,
   refitHint: false,
+  section: SECTION_OFF,
+  lastCli: null,
+  dirty: [],
+  external: {},
+  diffView: null,
+  recent: [],
+  gitVersion: 0,
 }));
 
 export function useCad<T>(sel: (s: CadState) => T): T {

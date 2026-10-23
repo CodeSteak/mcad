@@ -57,6 +57,11 @@
   --view-profile: #0b7285;
   --view-guide: #d6336c;
   --view-open-face: #f08c00;
+  --view-cap: #db5c3d;
+  --git-added: #2da44e;
+  --git-modified: #2f81f7;
+  --git-deleted: #e5484d;
+  --git-opacity: 0.55;
 }
 
 :root[data-theme="dark"] {
@@ -117,6 +122,11 @@
   --view-profile: #3bc9db;
   --view-guide: #f783ac;
   --view-open-face: #ffa94d;
+  --view-cap: #e0694b;
+  --git-added: #3fb950;
+  --git-modified: #58a6ff;
+  --git-deleted: #f85149;
+  --git-opacity: 0.5;
 }
 
 * {
@@ -161,6 +171,8 @@ select:focus-visible {
 .app {
   display: grid;
   grid-template-rows: auto 1fr auto;
+  /* never wider than the window (WebKitGTK fonts are wider than Chromium's) */
+  grid-template-columns: minmax(0, 1fr);
   height: 100%;
 }
 
@@ -168,6 +180,10 @@ select:focus-visible {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  white-space: nowrap;
   padding: 6px 10px;
   background: var(--panel);
   border-bottom: 1px solid var(--border);
@@ -195,6 +211,10 @@ select:focus-visible {
   align-items: center;
   gap: 6px;
   color: var(--muted);
+}
+
+.toolbar .examples select {
+  max-width: 220px;
 }
 
 .toolbar .filename {
@@ -845,4 +865,198 @@ input:checked + .cm-switch-knob::after {
   align-items: center;
   gap: 4px;
   color: var(--muted);
+}
+
+/* ---------------------------------------------------------------- git markers (desktop) */
+
+.cm-git-gutter {
+  width: 5px;
+}
+
+.cm-git-gutter .cm-gutterElement {
+  position: relative;
+  padding: 0;
+}
+
+.cm-git-mark {
+  position: absolute;
+  inset: 0 1px 0 1px;
+  opacity: var(--git-opacity);
+}
+
+.cm-git-added {
+  background: var(--git-added);
+}
+
+.cm-git-modified {
+  background: var(--git-modified);
+}
+
+/* deleted lines: a small triangle on the boundary above the line (or below the last one) */
+.cm-git-deleted,
+.cm-git-deleted-end {
+  inset: auto;
+  left: 0;
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--git-deleted);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+
+.cm-git-deleted {
+  top: -4px;
+}
+
+.cm-git-deleted-end {
+  bottom: -4px;
+}
+
+/* ---------------------------------------------------------------- desktop: files */
+
+.tab .dirty {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.extbar-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.extbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--warning-bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.extbar.removed {
+  background: var(--error-bg);
+}
+
+.extbar .msg {
+  flex: 1;
+  min-width: 0;
+}
+
+.modal-back {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.diffview {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  width: min(1000px, 92vw);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.diffview header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.diffview header .grow {
+  flex: 1;
+}
+
+.diffview pre {
+  margin: 0;
+  overflow: auto;
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+  padding: 6px 0;
+}
+
+.diffview .dl {
+  white-space: pre;
+  padding: 0 10px;
+}
+
+.diffview .dl.add,
+.diffview .add {
+  background: color-mix(in srgb, var(--git-added) 18%, transparent);
+}
+
+.diffview .dl.del,
+.diffview .del {
+  background: color-mix(in srgb, var(--git-deleted) 18%, transparent);
+}
+
+.diffview .ln {
+  display: inline-block;
+  width: 3.2em;
+  color: var(--muted);
+  text-align: right;
+  margin-right: 6px;
+}
+
+.diffview .mk {
+  display: inline-block;
+  width: 1.2em;
+}
+
+/* ---------------------------------------------------------------- section view */
+
+.viewtools button.on,
+.sectionbar button.on {
+  border-color: var(--view-accent);
+  color: var(--view-accent);
+  font-weight: 600;
+}
+
+.sectionbar {
+  position: absolute;
+  top: 46px;
+  right: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  max-width: calc(100% - 16px);
+  padding: 4px 6px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.sectionbar .stitle {
+  font-weight: 600;
+  margin-right: 2px;
+}
+
+.sectionbar label {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.sectionbar input {
+  font: inherit;
+  padding: 1px 4px;
+}
+
+.sectionbar code {
+  font-size: 11px;
+}
+
+.st-note.section {
+  color: var(--view-cap);
 }

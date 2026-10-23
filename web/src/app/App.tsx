@@ -34,6 +34,8 @@ import {
   togglePart,
 } from "./runtime";
 import { ParamBar, SettingsButton } from "./panels";
+import { SectionBar, SectionStatus, SectionToggle } from "./section";
+import { DiffDialog, ExternalBar, RecentMenu } from "./desktopUi";
 
 function Toolbar() {
   const theme = useCad((s) => s.theme);
@@ -47,6 +49,7 @@ function Toolbar() {
       <button onClick={() => void openFromDisk()} title="Datei öffnen">Öffnen…</button>
       <button onClick={() => void saveToDisk()} title="Speichern (Strg+S)">Speichern</button>
       <button onClick={() => void saveToDisk(true)} title="Speichern unter">Speichern unter…</button>
+      <RecentMenu />
       <label className="examples">
         <span>Beispiele</span>
         <select
@@ -112,6 +115,7 @@ function Toolbar() {
 function FileBar() {
   const p = useCad((s) => s.project);
   const diags = useCad((s) => s.diagnostics);
+  const dirty = useCad((s) => s.dirty);
   const errorsIn = new Set(diags.items.filter((d) => d.severity === "error").map((d) => diagnosticPath(d, p.main)));
   return (
     <div className="filebar" role="tablist" aria-label="Dateien des Projekts" data-testid="filebar">
@@ -128,6 +132,11 @@ function FileBar() {
           >
             {path === p.main && <span className="star" aria-label="Hauptdatei">★</span>}
             {path}
+            {dirty.includes(path) && (
+              <span className="dirty" title="Ungespeicherte Änderungen" data-testid={`dirty-${path}`}>
+                ●
+              </span>
+            )}
             {errorsIn.has(path) && <span className="dot" title="Fehler in dieser Datei" />}
           </button>
         ))}
@@ -291,7 +300,9 @@ function ViewPane() {
           <input type="checkbox" checked={allGrids} onChange={(e) => store.setState({ allGrids: e.target.checked })} data-testid="all-grids" />
           alle Raster
         </label>
+        <SectionToggle />
       </div>
+      <SectionBar />
     </div>
   );
 }
@@ -377,6 +388,7 @@ function StatusBar() {
           Fläche aus {hoverOther.path}, Zeile {hoverOther.line}
         </span>
       )}
+      <SectionStatus />
       {notice && <span className="st-note" data-testid="status-notice">{notice}</span>}
       <span className="grow" />
       {st && (
@@ -418,6 +430,7 @@ export function App() {
       <main className="main">
         <section className="editorpane" aria-label="Editor">
           <FileBar />
+          <ExternalBar />
           <EditorPane />
         </section>
         <Splitter />
@@ -432,6 +445,7 @@ export function App() {
         </section>
       </main>
       <StatusBar />
+      <DiffDialog />
     </div>
   );
 }

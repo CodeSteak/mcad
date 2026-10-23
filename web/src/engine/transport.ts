@@ -1,8 +1,9 @@
 // EngineTransport: how the UI talks to the engine (Plan 7.1). The UI only knows this
-// interface; WorkerTransport runs the engine in a Web Worker, a later TauriTransport will use
-// IPC.
+// interface; WorkerTransport runs the engine in a Web Worker, TauriTransport
+// (tauriTransport.ts) talks to the native engine of the desktop app.
 
 import type { FromEngine, ToEngine } from "./protocol";
+import { createEngineWorker } from "./workerFactory";
 
 export type EngineListener = (msg: FromEngine) => void;
 
@@ -67,7 +68,7 @@ export class WorkerTransport implements EngineTransport {
 
   constructor(opts: WorkerTransportOptions = {}) {
     this.createWorker =
-      opts.createWorker ?? (() => new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }));
+      opts.createWorker ?? createEngineWorker;
     this.watchdogMs = opts.watchdogMs ?? 15_000;
     this.start();
   }

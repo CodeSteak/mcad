@@ -28,6 +28,7 @@ import { bridge } from "../state/bridge";
 import { project } from "../state/project";
 import { store } from "../state/store";
 import { buildDecorations } from "./decorations";
+import { gitGutter } from "./gitGutter";
 import { scad } from "./lang";
 
 /** Forces the engine decorations to be rebuilt. */
@@ -144,6 +145,7 @@ export function makeState(doc: string): EditorState {
 function editorExtensions(cb: EditorCallbacks): Extension[] {
   return [
     lineNumbers(),
+    gitGutter(),
     highlightActiveLineGutter(),
     highlightSpecialChars(),
     history(),

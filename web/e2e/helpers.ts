@@ -514,3 +514,32 @@ export function recordE(entry: ScenarioC): void {
   else all.push(entry);
   writeFileSync(f, JSON.stringify(all, null, 2));
 }
+
+// ---------------------------------------------------------------- section view (test report 9)
+
+/** Screenshots and scenario data for test report 9 (tools/report/report9.mjs). */
+export const REPORT9_DIR = join(here, "../../reports/tmp/report9");
+
+/** Screenshot for report 9: the view column (default), the whole window or the editor pane. */
+export async function screenshot9(page: Page, name: string, area: "view" | "full" | "editor" = "view"): Promise<void> {
+  mkdirSync(join(REPORT9_DIR, "img"), { recursive: true });
+  const clip = area === "view" ? await page.locator("section.viewcol").boundingBox() : area === "editor" ? await page.locator("section.editorpane").boundingBox() : null;
+  await page.screenshot({ path: join(REPORT9_DIR, "img", `${name}.jpg`), type: "jpeg", quality: 82, ...(clip ? { clip } : {}) });
+}
+
+export function record9(entry: ScenarioC): void {
+  mkdirSync(REPORT9_DIR, { recursive: true });
+  const f = join(REPORT9_DIR, "scenarios.json");
+  const all: ScenarioC[] = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
+  const i = all.findIndex((e) => e.id === entry.id);
+  if (i >= 0) all[i] = entry;
+  else all.push(entry);
+  writeFileSync(f, JSON.stringify(all, null, 2));
+}
+
+export function writeMetrics9(m: Record<string, unknown>): void {
+  mkdirSync(REPORT9_DIR, { recursive: true });
+  const f = join(REPORT9_DIR, "metrics.json");
+  const old = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
+  writeFileSync(f, JSON.stringify({ ...old, ...m }, null, 2));
+}

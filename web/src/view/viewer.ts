@@ -22,6 +22,8 @@ import { bridge } from "../state/bridge";
 import { project } from "../state/project";
 import { type CadState, store } from "../state/store";
 import { Materials, readPalette } from "./materials";
+import { type CapBody, SectionLayer } from "./sectionLayer";
+import { type SectionState, effectiveNormal, keeps, offset, snapCandidates, withOffset } from "../logic/section";
 import type { MeshCache } from "./meshCache";
 
 export type StandardView = "iso" | "top" | "front" | "right";
@@ -113,6 +115,11 @@ export class Viewer implements DragView {
   lastHandles: HandleGeom[] = [];
   private gizmo: { scene: THREE.Scene; camera: THREE.OrthographicCamera; group: THREE.Group };
   private materials: Materials;
+  /** Section view (clipping plane, caps, contour, grip). */
+  readonly section: SectionLayer;
+  /** Opaque solids drawn in this build (they get section caps). */
+  private capBodies: CapBody[] = [];
+  private sectionDrag: { t0: number; center: THREE.Vector3; n: THREE.Vector3; frames: number; start: number; last: number; maxGap: number } | null = null;
   private pickables: THREE.Mesh[] = [];
   private raycaster = new THREE.Raycaster();
   private renderQueued = false;
@@ -155,9 +162,10 @@ export class Viewer implements DragView {
     private client: EngineClient,
     private meshes: MeshCache,
   ) {
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true, stencil: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.localClippingEnabled = false;
+    // Section view: model materials get a clipping plane (local clipping).
+    this.renderer.localClippingEnabled = true;
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.setAttribute("data-testid", "viewport-canvas");
     this.camera = new THREE.PerspectiveCamera(35, 1, 0.1, 10000);
@@ -171,6 +179,11 @@ export class Viewer implements DragView {
     this.controls.addEventListener("start", () => (this.autoFit = false));
 
     this.scene3.add(this.helpers, this.content, this.overlay, this.handleGroup);
+    {
+      const pal = readPalette();
+      this.section = new SectionLayer(pal.cap, pal.edge, pal.accent);
+      this.scene3.add(this.section.group);
+    }
     this.handleColors = readHandleColors();
     this.snapLabel = document.createElement("div");
     this.snapLabel.className = "snap-label";
@@ -219,6 +232,7 @@ export class Viewer implements DragView {
     this.clearGroup(this.helpers);
     this.clearGroup(this.handleGroup);
     this.snapLabel.remove();
+    this.section.dispose();
     this.materials.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
@@ -231,6 +245,14 @@ export class Viewer implements DragView {
     if (s.theme !== p.theme) {
       // CSS variables change with the theme attribute; read them after the style update.
       requestAnimationFrame(() => this.applyTheme());
+    }
+    if (s.section !== p.section) {
+      if (s.section.on !== p.section.on) this.requestBuild();
+      else if (s.section.on) {
+        this.section.update(s.section);
+        this.updateSnapLabelForSection(s.section);
+        this.requestRender();
+      }
     }
     if (
       s.shown !== p.shown ||
@@ -255,6 +277,7 @@ export class Viewer implements DragView {
     this.materials.dispose();
     this.materials = new Materials(pal);
     this.renderer.setClearColor(new THREE.Color(pal.background), 1);
+    this.section?.setColors(pal.cap, pal.edge, pal.accent);
     this.handleColors = readHandleColors();
     this.requestBuild();
   }
@@ -384,8 +407,10 @@ export class Viewer implements DragView {
     this.clearGroup(this.overlay);
     this.materials.releaseFat();
     this.pickables = [];
+    this.capBodies = [];
     this.lastShown = scene;
     if (!scene) {
+      this.section.clear();
       this.lastPlan = null;
       this.lastGrid = null;
       this.lastHandles = [];
@@ -489,6 +514,7 @@ export class Viewer implements DragView {
     this.lastHandles = this.computeHandles(scene, sel, diag);
     this.buildHandles();
     this.updateHelpers(scene);
+    this.applySection(st.section);
     this.maybeFit(scene);
     // The face under a resting mouse may belong to another line in the new scene.
     if (this.pointer && scene !== this.pickedScene) {
@@ -515,6 +541,8 @@ export class Viewer implements DragView {
         mesh.userData = { meshKey: key, node: it.node };
         group.add(mesh);
         if (style.pickable) this.pickables.push(mesh);
+        // Opaque solids get a section cap (transparent ones are only clipped).
+        if (it.mode === "full" && !it.flat && !style.surface.transparent) this.capBodies.push({ group, geometry: geo, key });
       }
     }
     if (it.mode === "picked" || it.mode === "profile") {
@@ -885,6 +913,7 @@ export class Viewer implements DragView {
   }
 
   private onGripDown(e: PointerEvent): void {
+    if (e.button === 0 && this.onSectionGripDown(e)) return;
     if (e.button !== 0 || !this.drag) return;
     const g = this.handleAt(e.clientX, e.clientY);
     if (!g) return;
@@ -905,11 +934,164 @@ export class Viewer implements DragView {
     return { origin: [o.x, o.y, o.z], dir: [d.x, d.y, d.z] };
   }
 
+  /** Direction from the orbit target to the camera (CLI azimuth/elevation). */
+  eyeDir(): Vec3 {
+    const d = this.camera.position.clone().sub(this.controls.target).normalize();
+    return [d.x, d.y, d.z];
+  }
+
   /** Viewing direction (from the camera towards the target). */
   viewDir(): Vec3 {
     const d = new THREE.Vector3();
     this.camera.getWorldDirection(d);
     return [d.x, d.y, d.z];
+  }
+
+  // ---------------------------------------------------------------- section
+
+  /** Clipping, caps and contour for the current build. */
+  private applySection(sec: SectionState): void {
+    const planes = sec.on ? [this.section.plane] : null;
+    this.content.traverse((o) => {
+      if (o.name === "section-parity") return;
+      const m = (o as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      for (const mm of Array.isArray(m) ? m : m ? [m] : []) {
+        if (mm.clippingPlanes !== planes) mm.clippingPlanes = planes;
+      }
+    });
+    if (!sec.on) {
+      this.section.clear();
+      return;
+    }
+    const b = isEmpty(this.modelBox) ? { min: [-25, -25, -25] as Vec3, max: [25, 25, 25] as Vec3 } : this.modelBox;
+    this.section.build(sec, this.capBodies, b);
+  }
+
+  /** Section grip in screen coordinates (null when off or not visible). */
+  sectionGripScreen(): { x: number; y: number } | null {
+    if (!store.getState().section.on) return null;
+    const g = this.section.gripPos;
+    const p = this.project([g.x, g.y, g.z]);
+    return p.visible ? { x: p.x, y: p.y } : null;
+  }
+
+  /** Closest parameter on the line c + u·n to the mouse ray. */
+  private lineParam(c: THREE.Vector3, n: THREE.Vector3, clientX: number, clientY: number): number {
+    this.raycaster.setFromCamera(this.ndc(clientX, clientY), this.camera);
+    const o = this.raycaster.ray.origin;
+    const d = this.raycaster.ray.direction;
+    const w = c.clone().sub(o);
+    const a = n.dot(n);
+    const b = n.dot(d);
+    const cc = d.dot(d);
+    const dd = n.dot(w);
+    const ee = d.dot(w);
+    const den = a * cc - b * b;
+    if (Math.abs(den) < 1e-9) return 0;
+    return (b * ee - cc * dd) / den;
+  }
+
+  private onSectionGripDown(e: PointerEvent): boolean {
+    const st = store.getState();
+    const g = this.sectionGripScreen();
+    if (!g || Math.hypot(g.x - e.clientX, g.y - e.clientY) > GRIP_PX * 1.6) return false;
+    e.stopPropagation();
+    e.preventDefault();
+    const n = new THREE.Vector3(...st.section.normal);
+    this.sectionDrag = { t0: offset(st.section), center: this.section.gripPos.clone(), n, frames: this.frames, start: performance.now(), last: performance.now(), maxGap: 0 };
+    this.controls.enabled = false;
+    const move = (ev: PointerEvent) => this.onSectionGripMove(ev);
+    const up = () => {
+      window.removeEventListener("pointermove", move, true);
+      window.removeEventListener("pointerup", up, true);
+      this.controls.enabled = true;
+      const d = this.sectionDrag;
+      this.sectionDrag = null;
+      this.snapLabel.hidden = true;
+      if (d) {
+        const ms = performance.now() - d.start;
+        const frames = this.frames - d.frames;
+        const m = store.getState().metrics;
+        if (ms > 0 && frames > 1) store.setState({ metrics: { ...m, sectionFps: [...(m.sectionFps ?? []), { fps: (frames * 1000) / ms, frames, ms, maxGapMs: d.maxGap }].slice(-50) } });
+      }
+    };
+    window.addEventListener("pointermove", move, true);
+    window.addEventListener("pointerup", up, true);
+    return true;
+  }
+
+  private onSectionGripMove(e: PointerEvent): void {
+    const d = this.sectionDrag;
+    if (!d) return;
+    const now = performance.now();
+    d.maxGap = Math.max(d.maxGap, now - d.last);
+    d.last = now;
+    const st = store.getState();
+    const scene = this.lastShown;
+    let t = d.t0 + this.lineParam(d.center, d.n, e.clientX, e.clientY);
+    let snap: string | null = null;
+    if (!e.altKey && scene) {
+      const at = (tt: number) => {
+        const q = d.center.clone().add(d.n.clone().multiplyScalar(tt - d.t0));
+        return this.project([q.x, q.y, q.z]);
+      };
+      const cur = at(t);
+      let best = st.settings.snapPx;
+      for (const c of snapCandidates(scene, st.section)) {
+        const q = at(c.t);
+        const dist = Math.hypot(q.x - cur.x, q.y - cur.y);
+        if (dist < best) {
+          best = dist;
+          t = c.t;
+          snap = c.label;
+        }
+      }
+    }
+    if (!snap) {
+      // Free drag: round like handles (Einstellungen: Schrittweite).
+      const step = st.settings.stepMm > 0 ? Math.min(st.settings.stepMm, 0.1) : 0;
+      if (step > 0) t = Math.round(t / step) * step;
+    }
+    store.setState({ section: withOffset(st.section, t, snap) });
+  }
+
+  private updateSnapLabelForSection(s: SectionState): void {
+    if (!this.sectionDrag || !s.snap) {
+      if (this.sectionDrag) this.snapLabel.hidden = true;
+      return;
+    }
+    const g = this.section.gripPos;
+    const p = this.project([g.x, g.y, g.z]);
+    const r = this.container.getBoundingClientRect();
+    this.snapLabel.textContent = s.snap;
+    this.snapLabel.hidden = !p.visible;
+    this.snapLabel.style.left = `${Math.max(2, p.x - r.left + 14)}px`;
+    this.snapLabel.style.top = `${p.y - r.top - 26}px`;
+  }
+
+  /** Section state as drawn (test hook). */
+  sectionInfo(): { on: boolean; caps: number; contour: number; grip: { x: number; y: number } | null; gripWorld: Vec3; normal: Vec3; point: Vec3; snap: string | null; dragging: boolean } {
+    const s = store.getState().section;
+    const g = this.section.gripPos;
+    return { on: s.on, caps: s.on ? this.capBodies.length : 0, contour: s.on ? this.section.contourSegments : 0, grip: this.sectionGripScreen(), gripWorld: [g.x, g.y, g.z], normal: effectiveNormal(s), point: s.point, snap: s.snap, dragging: this.sectionDrag !== null };
+  }
+
+  /** Moves the plane once per frame over `frames` frames and returns the fps (report). */
+  async sectionBenchmark(frames = 120): Promise<{ fps: number; frames: number; ms: number }> {
+    const s0 = store.getState().section;
+    if (!s0.on) return { fps: 0, frames: 0, ms: 0 };
+    const b = this.modelBox;
+    const n = s0.normal;
+    const span = Math.max(1, boxDiagonal(b) * 0.6);
+    const start = performance.now();
+    for (let i = 0; i < frames; i++) {
+      await new Promise<void>((res) => requestAnimationFrame(() => res()));
+      store.setState({ section: withOffset(store.getState().section, offset(s0) + Math.sin((i / frames) * Math.PI * 2) * span * 0.3) });
+      this.render();
+    }
+    const ms = performance.now() - start;
+    store.setState({ section: s0 });
+    return { fps: (frames * 1000) / ms, frames, ms };
   }
 
   /** Handles drawn for the cursor line with screen positions (test hook). */
@@ -965,7 +1147,9 @@ export class Viewer implements DragView {
     this.raycaster.setFromCamera(this.ndc(clientX, clientY), this.camera);
     this.content.updateMatrixWorld(true);
     const hits = this.raycaster.intersectObjects(this.pickables, false);
+    const sec = store.getState().section;
     for (const h of hits) {
+      if (sec.on && !keeps(sec, [h.point.x, h.point.y, h.point.z])) continue;
       const key = h.object.userData.meshKey as string;
       const data = this.meshes.get(key)?.data;
       if (!data || h.faceIndex === undefined || h.faceIndex === null) continue;

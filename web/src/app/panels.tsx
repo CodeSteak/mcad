@@ -1,5 +1,6 @@
 // Parameter bar (Spec: Parameterleiste) and settings (Schrittweiten beim Ziehen).
 
+import { IS_TAURI } from "../platform/desktop";
 import { useEffect, useRef, useState } from "react";
 import type { Value } from "../engine/protocol";
 import { fmtNum } from "../logic/format";
@@ -187,7 +188,7 @@ export function SettingsButton() {
     saveSettings(s);
     store.setState({ settings: s });
   };
-  const field = (key: keyof Settings, label: string, unit: string) => (
+  const field = (key: "stepMm" | "stepDeg" | "snapPx" | "autoSaveMs", label: string, unit: string) => (
     <label className="setrow">
       <span>{label}</span>
       <input
@@ -216,6 +217,17 @@ export function SettingsButton() {
           {field("stepDeg", "Schrittweite Winkel", "°")}
           {field("snapPx", "Fangradius", "px")}
           <p className="pbnote">Mit Alt wird frei gezogen (ohne Snap); Zahlen werden auf die Schrittweite gerundet.</p>
+          {IS_TAURI && (
+            <>
+              <b>Dateien</b>
+              <label className="setrow">
+                <span>Automatisch speichern</span>
+                <input type="checkbox" checked={settings.autoSave} onChange={(e) => set({ autoSave: e.target.checked })} data-testid="setting-autoSave" />
+                <span className="unit" />
+              </label>
+              {field("autoSaveMs", "Verzögerung", "ms")}
+            </>
+          )}
           <button onClick={() => set({ ...DEFAULT_SETTINGS })}>Standard</button>
         </div>
       )}

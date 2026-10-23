@@ -28,6 +28,8 @@ export interface Palette {
   profile: string;
   guide: string;
   openFace: string;
+  /** Section caps (like the CLI renderer). */
+  cap: string;
 }
 
 export function readPalette(el: HTMLElement = document.documentElement): Palette {
@@ -56,6 +58,7 @@ export function readPalette(el: HTMLElement = document.documentElement): Palette
     profile: v("--view-profile", "#0b7285"),
     guide: v("--view-guide", "#d6336c"),
     openFace: v("--view-open-face", "#f08c00"),
+    cap: v("--view-cap", "#db5c3d"),
   };
 }
 
