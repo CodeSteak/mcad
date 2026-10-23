@@ -370,10 +370,19 @@ fn invalid_profiles_fail_cleanly() {
     // degenerate input
     assert!(matches!(k.make_box(DVec3::ZERO, DVec3::new(1.0, 0.0, 1.0), 1), Err(KernelError::InvalidInput(_))));
     assert!(matches!(k.make_sphere(-1.0, 1), Err(KernelError::InvalidInput(_))));
-    // too thick shell: rejected by the facade before SMLib, whose shell reads freed memory
-    // here (valgrind) and then fails, succeeds or crashes depending on the heap
+    // too thick shell: planar walls are rejected by the facade before SMLib (usd-brep c9c5979
+    // read freed memory here); curved ones by SMLib, or by the facade when SMLib returns an
+    // empty body
     let b = cube(&mut k, 10.0, T_BOX);
     assert!(matches!(k.shell(&b, 6.0, &[0], 3), Err(KernelError::Failed { .. })));
+    assert!(matches!(k.shell(&b, 5.0, &[], 3), Err(KernelError::Failed { .. })));
+    let s = k.make_sphere(5.0, 1).unwrap();
+    assert!(matches!(k.shell(&s, 5.0, &[], 3), Err(KernelError::Failed { .. })));
+    let c = k.make_cylinder(20.0, 5.0, 5.0, 1).unwrap();
+    assert!(matches!(k.shell(&c, 6.0, &[], 3), Err(KernelError::Failed { .. })));
+    // just fits: 10 mm cube, wall 4.99 (valgrind clean with the fork)
+    let h = k.shell(&b, 4.99, &[], 3).unwrap();
+    assert_approx("thin cavity", volume(&mut k, &h), 1000.0 - 0.02f64.powi(3), 1e-9);
 }
 
 // ---------------------------------------------------------------- queries
@@ -761,3 +770,111 @@ fn nurbs_surface_and_thicken() {
     }
 }
 
+
+// ---------------------------------------------------------------- regressions (report 4)
+
+/// Knob profile of `examples/spec/knauf_mirror.scad`: a closed spline through two points on
+/// the axis. Interpolated as one closed curve it crosses the axis next to them (x down to
+/// -1.6), and SMLib's full-turn sweep returned a self-overlapping solid (volume 172 instead of
+/// ~3200 for r = 10, open booleans, failed fillets). The facade joins the two axis points by a
+/// straight segment.
+fn knob_profile(r: f64, h: f64) -> Loop {
+    Loop::Spline(vec![
+        DVec2::new(0.0, 0.0),
+        DVec2::new(r, 0.0),
+        DVec2::new(r * 0.6, h / 2.0),
+        DVec2::new(r, h),
+        DVec2::new(0.0, h),
+    ])
+}
+
+#[test]
+fn revolve_spline_through_axis_points() {
+    let mut k = k();
+    let to_xz = DMat4::from_rotation_x(PI_ / 2.0);
+    for r in [15.0, 10.0] {
+        let full = k.revolve(&placed(knob_profile(r, 20.0), to_xz), 2.0 * PI_, 8).unwrap();
+        // a half turn used to fail with SM_ERR_AXIS_INSIDE_FACE
+        let half = k.revolve(&placed(knob_profile(r, 20.0), to_xz), PI_, 8).unwrap();
+        assert!(k.is_solid(&full) && k.is_solid(&half));
+        let (vf, vh) = (volume(&mut k, &full), volume(&mut k, &half));
+        assert_approx("full turn = 2 half turns", vf, 2.0 * vh, 1e-4);
+        // between the waist cylinder (r = 0.6 r) and the outer one, height 20
+        assert!(vf > PI_ * (0.6 * r).powi(2) * 20.0 && vf < PI_ * (1.1 * r).powi(2) * 20.0, "r = {r}: volume {vf}");
+        let (lo, hi) = k.bounds(&half).unwrap().unwrap();
+        assert!(lo.y > -1e-6, "half turn reaches y = {} (profile crosses the axis)", lo.y);
+        // the interpolating spline overshoots its points (z down to -2.7, up to 22.7)
+        assert!(lo.z > -3.0 && hi.z < 23.0, "{lo} {hi}");
+        let c = k.classify(&full, &[DVec3::new(1.0, 1.0, 10.0), DVec3::new(0.0, 0.0, 30.0)]).unwrap();
+        assert_eq!(c, vec![Class::Inside, Class::Outside]);
+        // booleans with the knob: the bore of the example (through the bottom, which the
+        // spline bends below z = 0) and a cavity inside
+        let cyl = k.make_cylinder(10.0, 3.0, 3.0, 2).unwrap();
+        let bore = k.transform(&cyl, &translate(0.0, 0.0, -1.0)).unwrap();
+        let d = k.boolean(BoolOp::Difference, &[full.clone(), bore], 3).unwrap();
+        assert!(k.is_solid(&d));
+        let vd = volume(&mut k, &d);
+        assert!(vd < vf - PI_ * 9.0 * 9.0 && vd > vf - PI_ * 9.0 * 10.0, "knob minus bore: {vd}");
+        let cavity = k.transform(&cyl, &translate(0.0, 0.0, 5.0)).unwrap();
+        let d = k.boolean(BoolOp::Difference, &[full.clone(), cavity], 3).unwrap();
+        assert_approx("knob minus cavity", volume(&mut k, &d), vf - PI_ * 9.0 * 10.0, 1e-4);
+    }
+}
+
+#[test]
+fn revolve_spline_crossing_the_axis_fails() {
+    let mut k = k();
+    // no two consecutive points on the axis: the closed spline bulges to x < 0
+    let lp = Loop::Spline(vec![DVec2::new(0.2, 0.0), DVec2::new(10.0, 0.0), DVec2::new(10.0, 10.0), DVec2::new(0.2, 10.0)]);
+    let r = k.revolve(&placed(lp, DMat4::from_rotation_x(PI_ / 2.0)), 2.0 * PI_, 3);
+    assert!(matches!(r, Err(KernelError::InvalidInput(_))), "{r:?}");
+}
+
+/// Bodies touching along an edge (`examples/spec/winkel_anker.scad`: the ruler cube on the
+/// bracket's corner): SMLib's union is non-manifold, not a closed solid (volume 0).
+#[test]
+fn union_of_touching_solids_is_closed() {
+    let mut k = k();
+    let a = k.make_box(DVec3::ZERO, DVec3::new(30.0, 20.0, 3.0), 1).unwrap();
+    let b = k.make_box(DVec3::new(30.0, 20.0, 0.0), DVec3::new(32.0, 22.0, 2.0), 2).unwrap();
+    let u = k.boolean(BoolOp::Union, &[a.clone(), b.clone()], 3).unwrap();
+    assert!(k.is_solid(&u));
+    assert_approx("edge-touching union", volume(&mut k, &u), 1800.0 + 8.0, 1e-9);
+    let tags: BTreeSet<Tag> = k.faces(&u, 1).unwrap().iter().map(|f| f.tag).collect();
+    assert_eq!(tags, BTreeSet::from([1, 2]));
+    // same height: the shared edge is a full edge of both
+    let c = k.make_box(DVec3::ZERO, DVec3::splat(2.0), 1).unwrap();
+    let d = k.make_box(DVec3::new(2.0, 2.0, 0.0), DVec3::new(4.0, 4.0, 2.0), 2).unwrap();
+    let u2 = k.boolean(BoolOp::Union, &[c.clone(), d.clone()], 3).unwrap();
+    assert!(k.is_solid(&u2));
+    assert_approx("edge-touching cubes", volume(&mut k, &u2), 16.0, 1e-9);
+    let m = k.tessellate(&u2, 0.01).unwrap();
+    assert_approx("mesh volume", mesh_volume(&m), 16.0, 1e-6);
+    // a third body overlapping both
+    let e = k.make_box(DVec3::new(1.0, 1.0, 0.0), DVec3::new(3.0, 3.0, 1.0), 4).unwrap();
+    let u3 = k.boolean(BoolOp::Union, &[c, d, e], 3).unwrap();
+    assert!(k.is_solid(&u3));
+    assert_approx("touching pair plus a bridge", volume(&mut k, &u3), 18.0, 1e-9);
+    // overlapping bodies are still united normally
+    let f = k.make_box(DVec3::new(29.0, 19.0, 0.0), DVec3::new(32.0, 22.0, 2.0), 2).unwrap();
+    let u4 = k.boolean(BoolOp::Union, &[a, f], 3).unwrap();
+    assert!(k.is_solid(&u4));
+    assert_approx("overlapping union", volume(&mut k, &u4), 1800.0 + 18.0 - 2.0, 1e-9);
+}
+
+/// Draft mode only drops checks: the plain cases give the same results.
+#[test]
+fn draft_mode_booleans_and_fillets() {
+    let mut k = k();
+    k.set_draft(true);
+    let d = box_minus_cylinder(&mut k);
+    let want = 1000.0 - PI_ * 4.0 * 10.0;
+    assert_approx("draft difference", volume(&mut k, &d), want, 1e-5);
+    let b = cube(&mut k, 10.0, T_BOX);
+    let all: Vec<u32> = (0..12).collect();
+    let f = k.fillet(&b, &all, 1.0, T_FIL).unwrap();
+    k.set_draft(false);
+    assert!(k.is_solid(&f));
+    let f2 = k.fillet(&b, &all, 1.0, T_FIL).unwrap();
+    assert_approx("draft fillet = fillet", volume(&mut k, &f), volume(&mut k, &f2), 1e-9);
+}

@@ -113,6 +113,11 @@ pub enum ToEngine {
     Export { format: ExportFormat },
     /// Abort the running job and drop queued mesh/export work. The last scene stays.
     Cancel,
+    /// Watchdog: nodes with these cache keys (`NodeRef.key` of `Progress.current`, hex) hung
+    /// the kernel. Jobs started from now on do not compute them and report the error
+    /// "Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung"; a changed parameter
+    /// gives a new key, which is computed again. Answers nothing (`Error` for a bad key).
+    BlockKeys { keys: Vec<String> },
 }
 
 /// Where a dragged handle goes.
@@ -240,6 +245,10 @@ pub struct NodeRef {
     pub node: u32,
     pub stmt: Option<u32>,
     pub range: SrcRange,
+    /// Cache key of the node (hex; in `Progress.current`): what `BlockKeys` takes.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

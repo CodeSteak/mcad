@@ -13,7 +13,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OUT="${1:-$HERE/build-native}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
-SRC="${SMLIB_SRC:-$HERE/../third_party/usd-brep}"
+SRC="${SMLIB_SRC:-$HERE/../third_party/smlib}"
 JOBS="${JOBS:-4}"
 
 GEN=()

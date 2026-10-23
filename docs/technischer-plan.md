@@ -54,7 +54,7 @@ Grundsätze:
 
 solidcore ist ein Rust-Port von SMLib aus NVIDIAs `usd-brep` (Apache-2.0) mit dem Ziel gleicher Topologie und numerischer Abweichung ≤ 1e-9. Heute ist etwa ein Drittel portiert; Primitive, Booleans und Fillets laufen noch nicht durchgängig.
 
-Bis solidcore so weit ist, nutzt die Anwendung den C++-Upstream direkt, auf demselben Stand, gegen den solidcore prüft (`usd-brep` @ `c9c5979`):
+Bis solidcore so weit ist, nutzt die Anwendung den C++-Upstream direkt, auf demselben Stand, gegen den solidcore prüft (`usd-brep` @ `c9c5979`), seit Bericht 4 mit den Speicherfehler-Korrekturen aus dem Fork `tangency-labs/smlib` (Zweig `capi-tess` @ `7eba8aa`, `smlib/fetch.sh`):
 
 | Kriterium | SMLib (C++) als Übergang | OCCT als Übergang |
 | --- | --- | --- |
@@ -364,7 +364,7 @@ crates/
   cad-cli/          CLI
 smlib/
   facade/           C++-Fassade + CMake
-  build/            Emscripten- und native Builds (usd-brep @ c9c5979)
+  build/            Emscripten- und native Builds (tangency-labs/smlib @ 7eba8aa = usd-brep c9c5979 + Korrekturen)
 web/
   src/editor/  src/viewport/  src/engine/  src/panels/  src/state/
 examples/           Beispieldateien (zugleich Testfälle)

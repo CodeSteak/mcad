@@ -4,7 +4,7 @@
 //!   e.g. the output of `smlib/build-native.sh`. Fast iteration.
 //! * otherwise SMLib + SM_API are built with CMake from `smlib/CMakeLists.txt` into
 //!   `OUT_DIR` (cached by cargo; ~3 min with 4 cores the first time).
-//! * Sources: `SMLIB_SRC` or `<repo>/third_party/usd-brep` (see `smlib/fetch.sh`).
+//! * Sources: `SMLIB_SRC` or `<repo>/third_party/smlib` (see `smlib/fetch.sh`).
 //!
 //! The facade (`smlib/facade/*.cpp`) is always compiled here with the `cc` crate.
 //! Nothing is built for the `wasm` feature: smlib.wasm comes from `smlib/build-wasm.sh`.
@@ -35,10 +35,10 @@ fn native_build() {
     let facade = smlib_dir.join("facade");
     let src = env::var_os("SMLIB_SRC")
         .map(PathBuf::from)
-        .unwrap_or_else(|| root.join("third_party/usd-brep"));
+        .unwrap_or_else(|| root.join("third_party/smlib"));
     if !src.join("source/SMLib/inc/SmSmlibAll.h").exists() {
         panic!(
-            "usd-brep sources not found at {} (run smlib/fetch.sh or set SMLIB_SRC)",
+            "SMLib sources not found at {} (run smlib/fetch.sh or set SMLIB_SRC)",
             src.display()
         );
     }

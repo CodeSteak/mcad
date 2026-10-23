@@ -50,7 +50,7 @@
 namespace {
 
 const ULONG SC_TAG_ATTR_ID = SM_AI_USER_1 + 77;  // 10077
-const uint32_t SC_FACADE_VERSION = 1;
+const uint32_t SC_FACADE_VERSION = 2;
 
 // ------------------------------------------------------------------ errors
 
@@ -170,6 +170,9 @@ int rand(void) SC_LIBC_NOTHROW {
 namespace {
 
 bool g_inited = false;
+// Draft mode (sc_set_draft): results serve a temporary display only; booleans skip the
+// plausibility check while SMLib succeeds, fillets skip the self-overlap check.
+bool g_draft = false;
 void ensure_init() {
   if (g_inited) return;
   SmApiCreateContext();
@@ -741,6 +744,70 @@ void loop_curves(const Loop& l, bool single, bool local, CurveList& out) {
   }
 }
 
+// Profile curves of a revolve (model space, axis = z through the origin, radial = x).
+//
+// A closed interpolating spline cannot pass through two points on the axis without crossing
+// it: at each axis point it has a tangent with a radial component, so it overshoots to x < 0
+// next to it (knauf_mirror: the spline (0,0) (r,0) ... (r,h) (0,h) bulges to x = -1.6 between
+// (0,h) and (0,0)). SMLib's full-turn sweep does not check that and returns a self-overlapping
+// solid (wrong volume, open booleans, misclassified points, failed fillets). For a revolve, two
+// spline points that follow each other (cyclically) on the axis are therefore joined by a
+// straight segment along the axis, and the spline runs open between such segments. Afterwards
+// every profile curve is sampled: one reaching x < 0 fails with SC_INVALID.
+void revolve_profile_curves(const Loop& l, CurveList& out) {
+  if (l.kind != SC_LOOP_SPLINE) {
+    loop_curves(l, false, false, out);
+  } else {
+    std::vector<V3> pts;
+    double ext = 0;
+    for (V3 p : l.pts) pts.push_back(l.frame.point(p));
+    for (V3 p : pts) ext = std::max(ext, len(p));
+    double atol = 1e-9 * std::max(1.0, ext);
+    size_t n = pts.size();
+    auto on_axis = [&](size_t i) { return std::hypot(pts[i].x, pts[i].y) <= atol; };
+    std::vector<size_t> cuts;  // i: segment i -> i+1 lies on the axis
+    for (size_t i = 0; i < n; i++)
+      if (on_axis(i) && on_axis((i + 1) % n)) cuts.push_back(i);
+    if (cuts.empty()) {
+      loop_curves(l, false, false, out);
+    } else {
+      for (size_t c = 0; c < cuts.size(); c++) {
+        size_t a = cuts[c], b = (a + 1) % n;
+        SmLine* ln = nullptr;
+        SC_CHECK(SmApiCreateLineSegment(sp(pts[a]), sp(pts[b]), ln), "SmApiCreateLineSegment");
+        out.add(ln);
+        // open run from b to the start of the next axis segment
+        size_t e = cuts[(c + 1) % cuts.size()];
+        std::vector<V3> run{pts[b]};
+        for (size_t i = b; i != e;) {
+          i = (i + 1) % n;
+          run.push_back(pts[i]);
+        }
+        if (run.size() >= 2) out.add(interp_curve(run, false));
+      }
+    }
+  }
+  double ext = 0;
+  for (SmCurve* c : out.v) {
+    SmExtent3d cb;
+    c->CalculateBoundingBox(c->GetNaturalInterval(), &cb);
+    ext = std::max({ext, len(fromsm(cb.GetMin())), len(fromsm(cb.GetMax()))});
+  }
+  double tol = 1e-7 * std::max(1.0, ext);
+  for (SmCurve* c : out.v) {
+    SmExtent1d iv = c->GetNaturalInterval();
+    const int K = 256;
+    for (int k = 0; k <= K; k++) {
+      SmPoint3d p;
+      if (c->EvaluatePoint(iv.GetMin() + (iv.GetMax() - iv.GetMin()) * k / K, p) != SM_SUCCESS)
+        continue;
+      if (p.x < -tol)
+        throw fail(SC_INVALID, "revolve: the profile curve crosses the axis (reaches x = " +
+                                   std::to_string(p.x) + " after its frame)");
+    }
+  }
+}
+
 SmTArray<SmCurve*> as_array(const CurveList& cl) {
   SmTArray<SmCurve*> a;
   for (SmCurve* c : cl.v) a.Add(c);
@@ -910,7 +977,7 @@ uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, u
   }
   b->StitchAndOrient();
   if (b->GetNumFaces() == 0) throw fail(SC_FAILED, std::string(what) + " removed all faces");
-  auto badf = invalid_faces(b.get());
+  auto badf = g_draft ? std::vector<size_t>() : invalid_faces(b.get());
   if (!badf.empty()) {
     auto e = edges_near_faces(b.get(), badf, in_sel, in_all, 3.0 * r + 1e-6);
     if (e.empty()) e = sel_ids;
@@ -1052,8 +1119,11 @@ int expected_class(int32_t op, int ca, int cb) {
 // cylinders above, in one order). Operands whose boxes do not overlap are not checked.
 enum Plausible { PL_OK, PL_OPEN, PL_WRONG };
 
+// `va_known`: volume of A if already known (NAN: compute); `vr_out` gets R's volume when it
+// was computed (NAN otherwise), so a chain of Booleans computes each volume once.
 Plausible boolean_plausible(int32_t op, const SmBrep* A, const SmBrep* B, const SmBrep* R,
-                            std::string& why) {
+                            std::string& why, double va_known = NAN, double* vr_out = nullptr) {
+  if (vr_out) *vr_out = NAN;
   bool ra = A->GetNumFaces() > 0 && A->IsManifoldSolid();
   bool rb = B->GetNumFaces() > 0 && B->IsManifoldSolid();
   if (!ra || !rb) return PL_OK;  // only closed solids can be checked
@@ -1069,7 +1139,9 @@ Plausible boolean_plausible(int32_t op, const SmBrep* A, const SmBrep* B, const 
   double eps = 1e-4 * size;
   if (!ba.overlaps(bb, eps)) return PL_OK;
 
-  double va = solid_volume(A), vb = solid_volume(B), vr = r_empty ? 0.0 : solid_volume(R);
+  double va = is_fin(va_known) ? va_known : solid_volume(A), vb = solid_volume(B),
+         vr = r_empty ? 0.0 : solid_volume(R);
+  if (vr_out) *vr_out = vr;
   if (is_fin(va) && is_fin(vb) && is_fin(vr)) {
     double s = 3e-2 * (va + vb) + 1e-12;
     bool ok = true;
@@ -1152,6 +1224,45 @@ BrepPtr raw_boolean(int32_t op, const SmBrep* A, const SmBrep* B, std::string& e
   return a;
 }
 
+// Do the interiors of the closed solids A and B overlap? Points just inside the faces of each
+// that reach the other's box must not be inside the other, and A n B must have no volume.
+// SMLib errors count as overlap (the caller then keeps its previous behaviour).
+bool interiors_overlap(const SmBrep* A, const SmBrep* B) {
+  Box3 ba = loose_box(A), bb = loose_box(B);
+  Box3 all = ba;
+  all.add(bb);
+  double eps = 1e-4 * std::max(all.diag(), 1e-9);
+  for (int side = 0; side < 2; side++) {
+    const SmBrep* self = side == 0 ? A : B;
+    const SmBrep* other = side == 0 ? B : A;
+    const Box3& obox = side == 0 ? bb : ba;
+    std::vector<std::pair<V3, V3>> samples;
+    for (SmFace* f : faces_of(self))
+      if (face_box(f).overlaps(obox, eps)) face_samples(f, samples);
+    for (const auto& smp : samples)
+      if (classify_point(other, smp.first - smp.second * eps) == 1) return true;
+  }
+  std::string e;
+  BrepPtr x = raw_boolean(SC_INTERSECTION, A, B, e);
+  if (!x.get()) return true;
+  if (x->GetNumFaces() == 0) return false;
+  double vx = solid_volume(x.get());
+  double vmin = std::min(solid_volume(A), solid_volume(B));
+  return !(is_fin(vx) && is_fin(vmin) && std::fabs(vx) <= 1e-6 * vmin);
+}
+
+// Union of closed solids that only touch (along an edge, at points): SMLib returns a
+// non-manifold body there, which is not a closed solid (volume 0, winkel_anker). Instead both
+// bodies go into one Brep as separate shells (SmBrep::MergeBrep, no intersection), which is a
+// closed solid with the right volume. nullptr if the interiors overlap or the merge fails.
+BrepPtr touching_union(const SmBrep* A, const SmBrep* B) {
+  if (interiors_overlap(A, B)) return BrepPtr();
+  BrepPtr m = copy_brep(A);
+  if (m->MergeBrep(*B, nullptr, nullptr, FALSE) != SM_SUCCESS) return BrepPtr();
+  if (m->GetNumFaces() == 0 || !m->IsManifoldSolid()) return BrepPtr();
+  return m;
+}
+
 // A op B with the plausibility check and fallbacks (see above). `allow_perturb` = false
 // leaves out the shifted retries (used while other operand orders are still untried); they
 // are only tried after a wrong result or an SMLib error, not for results that are merely
@@ -1159,8 +1270,10 @@ BrepPtr raw_boolean(int32_t op, const SmBrep* A, const SmBrep* B, std::string& e
 // (if it produced one), which the caller takes as a last resort: the check itself relies on
 // SMLib's point classification, which errs on some bodies (revolved splines), so a result
 // it rejects is not necessarily wrong, and it is what the facade returned before the check.
+// `va`: volume of A if known (NAN otherwise); on success it is set to the result's volume
+// (NAN if not computed).
 BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow_perturb,
-                        std::string& err, BrepPtr& plain) {
+                        std::string& err, BrepPtr& plain, double& va) {
   bool commutative = op != SC_DIFFERENCE;
   bool wrong = false;
   std::string why;
@@ -1177,8 +1290,19 @@ BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow
       return BrepPtr();
     }
     std::string w;
-    Plausible pl = boolean_plausible(op, a, b, r.get(), w);
-    if (pl == PL_OK) return r;
+    double vr = NAN;
+    Plausible pl = boolean_plausible(op, a, b, r.get(), w, a == A ? va : NAN, &vr);
+    if (pl == PL_OK) {
+      va = vr;
+      return r;
+    }
+    if (pl == PL_OPEN && op == SC_UNION) {
+      BrepPtr t = touching_union(a, b);
+      if (t.get()) {
+        va = NAN;
+        return t;
+      }
+    }
     if (pl == PL_WRONG) wrong = true;
     if (is_plain) plain = std::move(r);
     if (why.empty()) why = "SMLib returned a wrong result (" + w + ")";
@@ -1217,13 +1341,16 @@ BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow
 
 // ------------------------------------------------------------------ shell pre-check
 
-// SMLib's inward shell reads freed memory when the wall does not fit (valgrind: invalid reads
-// in SmProtoEdge::RemoveProtoVertex for a 10 mm cube with t >= 5; solidcore
-// plan/upstream-issues.md UB-239, UB-242). Depending on the heap the call then fails, returns
-// a solid or crashes the process (kernel.rs::invalid_profiles_fail_cleanly: 1 of 100 runs
-// with 8 threads, after rand() was fixed). This catches the common case before SMLib: two
-// antiparallel planar walls (not opened) facing each other at a distance below `limit`
-// (= 2 t). Curved walls are not checked.
+// A wall that does not fit leaves no cavity. usd-brep c9c5979 read freed memory there
+// (valgrind: invalid reads in SmProtoEdge::RemoveProtoVertex for a 10 mm cube already at
+// t = 4.99; solidcore plan/upstream-issues.md UB-175, UB-239, UB-242) and then failed,
+// returned a solid or crashed. With the fork's fixes (smlib/fetch.sh) valgrind is clean for
+// cubes (closed and open), spheres and cylinders up to t = 2 r, but the closed cube with
+// t >= 5 comes back as an empty Brep with SM_SUCCESS; open bodies, spheres and cylinders fail
+// with SM_ERR. So this check is no longer a memory-safety guard; it stays as the fast path
+// with a clear message for the common case (two antiparallel planar walls, not opened,
+// facing each other at a distance below `limit` = 2 t), and sc_shell rejects empty or open
+// results after SMLib for everything else.
 bool opposite_walls_closer_than(const SmBrep* b, const std::vector<const SmFace*>& open,
                                 double limit, double& gap_out) {
   struct Wall {
@@ -1460,6 +1587,8 @@ void emit_edge_segments(SmBrep* b, const std::vector<SmFace*>& fs, const std::ve
 extern "C" {
 
 void sc_init(void) { ensure_init(); }
+
+void sc_set_draft(int32_t on) { g_draft = on != 0; }
 uint32_t sc_version(void) { return SC_FACADE_VERSION; }
 
 int32_t sc_last_status(void) { return g_status; }
@@ -1690,11 +1819,15 @@ uint32_t sc_boolean(int32_t op, const uint32_t* hs, uint32_t n, uint32_t tag) {
       // `last_resort`: shifted retries, and SMLib's own result is accepted if nothing passes
       auto run = [&](const std::vector<const SmBrep*>& ord, bool last_resort, size_t& failed_at) {
         BrepPtr a = copy_brep(ord[0]);
+        double va = NAN;
         for (size_t i = 1; i < ord.size(); i++) {
           if (a->GetNumFaces() == 0) break;  // difference/intersection stays empty
           BrepPtr plain;
-          BrepPtr r = checked_boolean(op, a.get(), ord[i], last_resort, err, plain);
-          if (!r.get() && last_resort && plain.get()) r = std::move(plain);
+          BrepPtr r = checked_boolean(op, a.get(), ord[i], last_resort, err, plain, va);
+          if (!r.get() && last_resort && plain.get()) {
+            r = std::move(plain);
+            va = NAN;
+          }
           if (!r.get()) {
             failed_at = i;
             return BrepPtr();
@@ -1703,6 +1836,22 @@ uint32_t sc_boolean(int32_t op, const uint32_t* hs, uint32_t n, uint32_t tag) {
         }
         return a;
       };
+      if (g_draft) {
+        // Draft: SMLib's own results in the given order while every step succeeds (closed
+        // results, or touching bodies merged); otherwise the checked path below.
+        BrepPtr a = copy_brep(ops[0]);
+        bool ok = true;
+        for (size_t i = 1; i < ops.size() && ok; i++) {
+          if (a->GetNumFaces() == 0) break;
+          std::string e;
+          BrepPtr r = raw_boolean(op, a.get(), ops[i], e);
+          if (r.get() && r->GetNumFaces() > 0 && !r->IsManifoldSolid() && op == SC_UNION)
+            r = touching_union(a.get(), ops[i]);
+          if (!r.get() || (r->GetNumFaces() > 0 && !r->IsManifoldSolid())) ok = false;
+          else a = std::move(r);
+        }
+        if (ok) acc = std::move(a);
+      }
       for (int round = 0; round < 8 && !acc.get(); round++) {
         tried.push_back(order);
         size_t failed_at = 0;
@@ -1830,7 +1979,7 @@ uint32_t sc_revolve(const double* loop, uint32_t len_, double angle, uint32_t ta
         throw fail(SC_INVALID, "revolve: the profile crosses the axis (x < 0 after its frame)");
     }
     CurveList cl;
-    loop_curves(loops[0], false, false, cl);
+    revolve_profile_curves(loops[0], cl);
     SmBrep* r = nullptr;
     SC_CHECK(SmApiCreateRotationalSweep(as_array(cl), SmPoint3d(0, 0, 0),
                                         SmVector3d(0, 0, deg > 0 ? 1 : -1), std::fabs(deg), TRUE,
@@ -2051,6 +2200,9 @@ uint32_t sc_shell(uint32_t h, double t, const uint32_t* open_faces, uint32_t n, 
     SC_CHECK(SmApiShellBrepFull(in, -t, TRUE, TRUE, FALSE, open, r), "SmApiShellBrepFull");
     require_result(r, "shell");
     BrepPtr b(r);
+    if (b->GetNumFaces() == 0 || !b->IsManifoldSolid())
+      throw fail(SC_FAILED, "shell: wall thickness " + std::to_string(t) +
+                                " leaves no cavity (SMLib returned no closed solid)");
     check_valid(b.get(), "shell");
     std::vector<const SmFace*> removed;
     for (ULONG i = 0; i < open.GetSize(); i++) removed.push_back(open[i]);

@@ -1,5 +1,7 @@
-//! [`cad_kernel::Kernel`] over NVIDIA SMLib (usd-brep @ c9c5979) through the C++ facade in
-//! `smlib/facade`.
+//! [`cad_kernel::Kernel`] over SMLib through the C++ facade in `smlib/facade`. Sources:
+//! tangency-labs/smlib, branch `capi-tess` @ 7eba8aa = NVIDIA usd-brep c9c5979 plus fixes of
+//! use-after-free and other undefined behaviour (proto-topology teardown, shell, failed
+//! imprints in booleans); see `smlib/fetch.sh`.
 //!
 //! * feature `native` (default): facade + SMLib/SM_API statically linked (see `build.rs`).
 //! * feature `wasm` (target `wasm32-unknown-unknown`): SMLib runs as a separate Emscripten
@@ -24,6 +26,13 @@
 //!   bounding-box centre along the path, so profiles not centred on their origin are only
 //!   supported on straight paths (`Unsupported` otherwise). Linear paths with corners must be
 //!   planar (mitered joints); non-planar paths need `PathInterp::Spline`.
+//! * `revolve` of a spline profile: two spline points that follow each other on the axis are
+//!   joined by a straight segment along the axis (a closed spline through them would cross
+//!   the axis); a profile curve reaching x < 0 is `InvalidInput`.
+//! * `boolean` union of solids that only touch (along an edge, at points) gives one closed
+//!   solid with a shell per body, not SMLib's non-manifold result.
+//! * `set_draft(true)`: booleans take SMLib's result without the plausibility check (unless
+//!   it fails or is open), fillets skip the self-overlap check.
 //! * `bounds` is SMLib's tight box; `mass_props` of an open surface has volume 0.
 
 use std::rc::Rc;
@@ -95,10 +104,11 @@ impl Drop for ShapeHandle {
 
 pub type Shape = Rc<ShapeHandle>;
 
-/// Kernel over SMLib. Cheap to construct; all instances share the facade's global state.
+/// Kernel over SMLib. Cheap to construct; all instances share the facade's global state
+/// (except the draft flag, which is per instance and set around each of its calls).
 #[derive(Debug)]
 pub struct SmlibKernel {
-    _priv: (),
+    draft: bool,
 }
 
 impl Default for SmlibKernel {
@@ -156,7 +166,7 @@ impl SmlibKernel {
     /// Creates the kernel (initialises SMLib's context on first use).
     pub fn new() -> Self {
         locked(raw::init);
-        SmlibKernel { _priv: () }
+        SmlibKernel { draft: false }
     }
 
     /// Facade ABI version.
@@ -178,7 +188,17 @@ impl SmlibKernel {
     }
 
     fn call(&self, f: impl FnOnce() -> u32) -> KResult<Shape> {
-        locked(|| shape_result(f()))
+        let draft = self.draft;
+        locked(|| {
+            if draft {
+                raw::set_draft(true);
+            }
+            let h = f();
+            if draft {
+                raw::set_draft(false);
+            }
+            shape_result(h)
+        })
     }
 
     /// Edge ids of `s` whose sample points all satisfy `pred` (test/diagnostic helper).
@@ -195,7 +215,7 @@ impl Kernel for SmlibKernel {
     type Shape = Shape;
 
     fn id(&self) -> &'static str {
-        "smlib-c9c5979/facade-1"
+        "smlib-7eba8aa/facade-2"
     }
 
     fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Shape> {
@@ -391,5 +411,9 @@ impl Kernel for SmlibKernel {
 
     fn is_solid(&mut self, s: &Shape) -> bool {
         locked(|| raw::is_solid(s.h)) == 1
+    }
+
+    fn set_draft(&mut self, draft: bool) {
+        self.draft = draft;
     }
 }

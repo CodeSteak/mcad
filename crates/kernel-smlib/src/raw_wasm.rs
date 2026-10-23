@@ -10,6 +10,8 @@ extern "C" {
     fn js_init();
     #[wasm_bindgen(js_name = sc_version)]
     fn js_version() -> u32;
+    #[wasm_bindgen(js_name = sc_set_draft)]
+    fn js_set_draft(on: i32);
     #[wasm_bindgen(js_name = sc_last_status)]
     fn js_last_status() -> i32;
     #[wasm_bindgen(js_name = sc_last_message)]
@@ -87,6 +89,9 @@ pub fn init() {
 }
 pub fn version() -> u32 {
     js_version()
+}
+pub fn set_draft(on: bool) {
+    js_set_draft(on as i32)
 }
 pub fn last_status() -> i32 {
     js_last_status()

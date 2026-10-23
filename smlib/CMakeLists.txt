@@ -1,4 +1,5 @@
-# SMLib + SM_API (NVIDIA usd-brep @ c9c5979, Apache-2.0) and the controller-cad facade.
+# SMLib + SM_API (tangency-labs/smlib capi-tess @ 7eba8aa: NVIDIA usd-brep c9c5979 with
+# memory-safety fixes, Apache-2.0; see fetch.sh) and the controller-cad facade.
 #
 # Settings follow solidcore's harness/cpp/CMakeLists.txt (which mirrors upstream premake):
 #   defines NDEBUG NOMINMAX SM_GRAPHICS_CALLBACKS=1, flags -fexceptions -frtti -w, no TBB
@@ -22,13 +23,13 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(SMLIB_SRC "" CACHE PATH "Path to the usd-brep checkout")
+set(SMLIB_SRC "" CACHE PATH "Path to the SMLib checkout (tangency-labs/smlib)")
 if(NOT SMLIB_SRC)
-  get_filename_component(SMLIB_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/usd-brep" ABSOLUTE)
+  get_filename_component(SMLIB_SRC "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/smlib" ABSOLUTE)
 endif()
 set(UP "${SMLIB_SRC}")
 if(NOT EXISTS "${UP}/source/SMLib/inc/SmSmlibAll.h")
-  message(FATAL_ERROR "usd-brep not found at ${UP} (run smlib/fetch.sh or set SMLIB_SRC)")
+  message(FATAL_ERROR "SMLib sources not found at ${UP} (run smlib/fetch.sh or set SMLIB_SRC)")
 endif()
 
 option(SC_BUILD_FACADE "Build the controller-cad facade library" ON)

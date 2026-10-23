@@ -62,6 +62,9 @@ extern "C" {
 
 SC_API void sc_init(void);
 SC_API uint32_t sc_version(void);
+/* Draft mode (0/1): results only serve a temporary display; booleans skip the
+ * plausibility check while SMLib succeeds, fillets the self-overlap check. */
+SC_API void sc_set_draft(int32_t on);
 
 /* errors */
 SC_API int32_t sc_last_status(void);
