@@ -5,8 +5,13 @@
 //! `render -o bild.png`, `measure`, `watch`, `set`, `export -o teil.stl|teil.3mf|teil.step`,
 //! `diff-kernels <files…>` (SMLib ↔ solidcore, see `diff.rs`). Every command prints readable
 //! text, or with `--json` one JSON object (`watch`: one object per line). The evaluation runs
-//! in a thread with a 256 MiB stack. `cad DATEI.scad` without a command is reserved for the
-//! desktop UI (exit 2 with a message), `cad` without arguments prints the help.
+//! in a thread with a 256 MiB stack.
+//!
+//! Desktop UI (feature `gui`, on by default; `launch.rs`): `cad` without arguments starts the
+//! UI, `cad DATEI.scad` / `cad ORDNER/` with that file or folder. Without a graphical session
+//! (no `DISPLAY`/`WAYLAND_DISPLAY`) or in a build without `gui`: message with the headless
+//! commands, exit 2. `cad ui status|show|screenshot` talks to running windows (`ui.rs`, exit 3
+//! without one). `cad engine-host` (hidden) is the engine process of the desktop app.
 //!
 //! Exit codes: 0 ok, 1 diagnostics with severity error (syntax, evaluation or a failed kernel
 //! operation; `set`: change refused), 2 usage error (arguments, unreadable file, unknown
@@ -74,11 +79,13 @@
 
 mod diff;
 mod geom;
+mod launch;
 mod measure;
 mod outline;
 mod parts;
 mod render;
 mod set;
+mod ui;
 mod watch;
 
 use std::ffi::OsString;
@@ -97,11 +104,18 @@ use serde_json::{Value as Json, json};
 #[command(
     name = "cad",
     version,
-    about = "Parametrisches CAD: prüfen, auswerten, ansehen, messen, exportieren",
+    about = "Parametrisches CAD: Desktop-UI und headless prüfen, auswerten, ansehen, messen, exportieren",
+    override_usage = "cad [DATEI.scad | ORDNER]   (Desktop-UI)\n       cad <BEFEHL> [OPTIONEN]     (headless)",
     allow_external_subcommands = true,
-    after_help = "Ablauf für Agenten: outline → editieren → check → render --views all --show grids,anchors \
-→ inspect/measure → export. `cad watch` wertet bei jeder Dateiänderung neu aus (Cache bleibt).\n\
-`cad DATEI.scad` (ohne Befehl) ist für die Desktop-UI reserviert."
+    after_help = "Desktop-UI: `cad` startet die UI, `cad datei.scad` bzw. `cad ordner/` mit dieser Datei bzw. \
+diesem Ordner als Projekt (Dateien werden beobachtet: Änderungen von außen erscheinen sofort). Ohne grafische \
+Sitzung (kein DISPLAY/WAYLAND_DISPLAY) oder ohne Feature `gui`: Meldung und Exit 2 – dann die Befehle nutzen.\n\
+Headless (ohne UI, auch in CI/Containern): alle Befehle unten. Ablauf für Agenten: outline → editieren → check → \
+render --views all --show grids,anchors → inspect/measure → export. `cad watch` wertet bei jeder Dateiänderung \
+neu aus (Cache bleibt).\n\
+Läuft die UI, sieht `cad ui status` was der Nutzer offen hat (Datei, Cursor, Kontextmodul, Parameter, \
+Diagnosen), `cad ui show datei --line N` zeigt ihm eine Stelle, `cad ui screenshot -o x.png` liefert seine \
+3D-Ansicht."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -221,12 +235,20 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    /// Laufende Desktop-UI abfragen und steuern (status, show, screenshot).
+    Ui {
+        #[command(subcommand)]
+        cmd: ui::UiCmd,
+    },
+    /// Engine-Prozess der Desktop-App (intern: Rahmen auf stdin/stdout).
+    #[command(hide = true)]
+    EngineHost,
     #[command(external_subcommand)]
     External(Vec<OsString>),
 }
 
 /// Names of the subcommands (messages for `cad DATEI` and unknown commands).
-const COMMANDS: &str = "check, outline, eval, inspect, render, measure, watch, set, export, diff-kernels";
+const COMMANDS: &str = "check, outline, eval, inspect, render, measure, watch, set, export, ui, diff-kernels";
 
 /// Failure that ends a command without a regular result.
 enum Fail {
@@ -244,24 +266,35 @@ struct Outcome {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let Some(cmd) = cli.cmd else {
-        use clap::CommandFactory;
-        let _ = Cli::command().print_help();
-        println!();
-        return ExitCode::SUCCESS;
+        // `cad` alone: the desktop UI.
+        return launch::run(None);
     };
-    if let Cmd::External(args) = &cmd {
-        // Reserved: `cad` without a command starts the desktop UI in a later build.
-        let first = args.first().map(|a| a.to_string_lossy().into_owned()).unwrap_or_default();
-        let looks_like_file = first.ends_with(".scad") || first == "-" || Path::new(&first).exists();
-        if looks_like_file {
-            eprintln!(
-                "cad: UI nicht in diesem Build (`cad {first}` startet später die Desktop-UI).\n\
-                 Befehle: {COMMANDS}\nBeispiel: cad render {first} -o bild.png --views all"
+    match &cmd {
+        Cmd::Ui { cmd } => return ui::command(cmd),
+        Cmd::EngineHost => {
+            let code = cad_desktop::engine::host_main(
+                SmlibKernel::new,
+                std::io::stdin(),
+                cad_desktop::engine::protocol_stdout(),
             );
-        } else {
-            eprintln!("cad: unbekannter Befehl `{first}`. Befehle: {COMMANDS} (cad --help)");
+            return ExitCode::from(code as u8);
         }
-        return ExitCode::from(2);
+        Cmd::External(args) => {
+            let first = args.first().map(|a| a.to_string_lossy().into_owned()).unwrap_or_default();
+            let looks_like_path = first.ends_with(".scad") || first.contains('/') || Path::new(&first).exists();
+            if looks_like_path && args.len() == 1 {
+                return launch::run(Some(Path::new(&first)));
+            }
+            if looks_like_path {
+                eprintln!(
+                    "cad: `cad {first}` öffnet die UI und nimmt keine weiteren Argumente. Befehle: {COMMANDS} (cad --help)"
+                );
+            } else {
+                eprintln!("cad: unbekannter Befehl `{first}`. Befehle: {COMMANDS} (cad --help)");
+            }
+            return ExitCode::from(2);
+        }
+        _ => {}
     }
     let json_mode = match &cmd {
         Cmd::Check { c, .. }
@@ -274,7 +307,7 @@ fn main() -> ExitCode {
         | Cmd::Export { c, .. } => c.json,
         Cmd::Set { a } => a.json,
         Cmd::DiffKernels { json, .. } => *json,
-        Cmd::External(_) => false,
+        Cmd::External(_) | Cmd::Ui { .. } | Cmd::EngineHost => false,
     };
     let name = command_name(&cmd);
     let worker = std::thread::Builder::new().stack_size(256 << 20).name("cad-eval".into()).spawn(move || run(&cmd));
@@ -340,6 +373,8 @@ fn command_name(c: &Cmd) -> &'static str {
         Cmd::Set { .. } => "set",
         Cmd::Export { .. } => "export",
         Cmd::DiffKernels { .. } => "diff-kernels",
+        Cmd::Ui { .. } => "ui",
+        Cmd::EngineHost => "engine-host",
         Cmd::External(_) => "ui",
     }
 }
@@ -362,7 +397,7 @@ fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
             }
         }
         Cmd::DiffKernels { files, .. } => diff::command(files),
-        Cmd::External(_) => unreachable!("handled in main"),
+        Cmd::External(_) | Cmd::Ui { .. } | Cmd::EngineHost => unreachable!("handled in main"),
     }
 }
 

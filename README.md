@@ -1,6 +1,6 @@
 # controller-cad
 
-Parametrisches CAD im Browser für kleine Hobbyprojekte. Modelle werden als Text in einem
+Parametrisches CAD im Browser und als Desktop-App (Tauri 2) für kleine Hobbyprojekte. Modelle werden als Text in einem
 OpenSCAD-Dialekt geschrieben; dazu kommen Raster, Anker, benannte Instanzen und Verrundungen
 über Zonen. Geometrie ist exakte B-Rep (Kernel SMLib), keine Netze. Code und 3D-Ansicht sind
 gekoppelt: Cursor und Hover markieren die zugehörige Geometrie, Griffe in der Ansicht
@@ -11,12 +11,13 @@ Plan und Entscheidungen: [`docs/technischer-plan.md`](docs/technischer-plan.md).
 ## Status
 
 Meilensteine M0–M7 sind umgesetzt, dazu STEP-Export, `include`/`use`, mehrere Bauteile und
-variabler Fillet-Radius und eine CLI, mit der Agenten Modelle ganz ohne UI entwickeln und
-prüfen (Testberichte 1–8, [`docs/reports/`](docs/reports/README.md)). Offen
-sind der Umstieg auf den Rust-Kernel solidcore (M8, wartet auf den Portierungsstand von
-solidcore, siehe [`docs/solidcore-umstieg.md`](docs/solidcore-umstieg.md)) und eine
-Tauri-Version (optional). Nur Desktop-Browser, kein Backend; gespeichert wird im Browser
-(IndexedDB) oder über die File System Access API.
+variabler Fillet-Radius, eine CLI, mit der Agenten Modelle ganz ohne UI entwickeln und
+prüfen, eine Desktop-App (Tauri 2: nativer Kernel, echte Dateien, Dateibeobachter wie in
+VS Code, Git-Markierungen am Rand, Steuerung durch `cad ui …`) und eine 3D-Schnittansicht
+(Testberichte 1–9, [`docs/reports/`](docs/reports/README.md)). Offen ist der Umstieg auf den
+Rust-Kernel solidcore (M8, wartet auf den Portierungsstand von solidcore, siehe
+[`docs/solidcore-umstieg.md`](docs/solidcore-umstieg.md)). Browser: kein Backend, gespeichert
+wird im Browser (IndexedDB) oder über die File System Access API; Desktop: Dateisystem.
 
 ## Architektur in Kürze
 
@@ -24,6 +25,8 @@ Tauri-Version (optional). Nur Desktop-Browser, kein Backend; gespeichert wird im
 Browser:  React/TS (CodeMirror 6, three.js) ── EngineTransport ── Web Worker
 Worker:   cad-wasm → cad-session → cad-engine ── trait Kernel ── kernel-smlib ── smlib.wasm (Emscripten)
 CLI:      cad-cli  → cad-session → cad-engine ── trait Kernel ── kernel-smlib ── SMLib nativ (FFI)
+Desktop:  cad (Tauri 2: dieselbe React-App, TauriTransport) ── Kanal (binär) ── cad engine-host
+          (Engine-Prozess: cad-session, SMLib nativ); Beobachter, Git, Steuer-Socket in cad-desktop/cad-ipc
 Sprache:  cad-syntax (Parser) → cad-eval (Werte mit Herkunft, Raster, Anker, Griffe) → cad-ir (Baum)
 ```
 
@@ -37,6 +40,9 @@ Sprache:  cad-syntax (Parser) → cad-eval (Werte mit Herkunft, Raster, Anker, G
 - Export: STL und 3MF aus der Tessellierung, STEP (AP242/AP214) mit eigenem Writer
   (`cad-step`) aus der exakten B-Rep.
 - Keine COOP/COEP-Header nötig (keine Threads, kein `SharedArrayBuffer`).
+- Desktop: ein Binary `cad` (Feature `gui`, Standard). `cad` ohne Befehl startet die UI, die
+  Engine läuft in einem eigenen Prozess (Watchdog beendet ihn bei hängendem Kernel), Meshes
+  kommen binär über einen Tauri-2-Kanal. Ohne grafische Sitzung: Meldung, Exit 2.
 
 ## Schnellstart
 
@@ -81,7 +87,24 @@ $cad export examples/projekt-gehaeuse/gehaeuse.scad --all-parts -o teile/ --form
 
 Jeder Befehl hat `--json` mit festem, versioniertem Schema (`schema_version`, Kopf von
 `crates/cad-cli/src/main.rs`) und Exit-Codes 0 (ok), 1 (Fehler im Modell), 2 (Aufruf),
-3 (Kernel/intern). `cad datei.scad` ohne Befehl ist für die spätere Desktop-UI reserviert.
+3 (Kernel/intern).
+
+Desktop-App (Linux: `libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev
+libayatana-appindicator3-dev librsvg2-dev libxdo-dev`, siehe `scripts/ci/desktop.sh deps`):
+
+```sh
+(cd web && pnpm install && pnpm build:tauri)   # UI ohne Worker/Wasm -> web/dist-tauri (wird eingebettet)
+cargo build --release -p cad-cli               # target/release/cad mit UI (ohne UI: --no-default-features)
+cad                                            # Desktop-UI
+cad examples/spec/gehaeuse.scad                # mit Datei (wird beobachtet, Git-Rand)
+cad examples/projekt-gehaeuse/                 # Ordner als Projekt
+cad ui status --json                           # was ist offen (Datei, Cursor, Kontext, Parameter, Diagnosen)
+cad ui show examples/spec/gehaeuse.scad --line 11
+cad ui screenshot -o ansicht.png               # 3D-Ansicht der laufenden UI
+```
+
+Ohne `web/dist-tauri` bettet `cargo build` eine Platzhalterseite ein (der Workspace baut
+trotzdem). Ablauf „Nutzer in der UI, Agent editiert und prüft“: `.claude/skills/cad-cli/SKILL.md`.
 
 Browser (Wasm-Module bauen, dann Vite):
 
@@ -148,11 +171,14 @@ crates/
   cad-render/        Software-Rasterizer für `cad render` (Schnitt mit Kappe, Beschriftung)
   cad-session/       Protokoll (Worker und CLI), TS-Typen
   cad-wasm/          wasm-bindgen-Einstieg für den Worker
-  cad-cli/           CLI `cad`
+  cad-ipc/           lokale IPC (Unix-Socket je Benutzer, versionierte Rahmen) – auch für einen späteren CLI-Daemon
+  cad-desktop/       Desktop-Backend ohne Tauri: Engine-Prozess, Watchdog, Dateien, Beobachter, Git-Hunks
+  cad-app/           Tauri-2-App (eingebettete UI aus web/dist-tauri)
+  cad-cli/           CLI `cad` (ohne Befehl: Desktop-UI)
   compat-tests/      OpenSCAD-Vergleich Stufe 1 (Rust-Tests)
 smlib/               fetch.sh, Patches, CMakeLists, Fassade, Build-Skripte nativ/Wasm
 third_party/smlib/   SMLib-Quellen (nicht eingecheckt, smlib/fetch.sh)
-web/                 React-App (src/), Playwright-Tests (e2e/), Build-Skripte (scripts/)
+web/                 React-App (src/), Playwright-Tests (e2e/), Tauri-E2E (e2e-tauri/), Build-Skripte (scripts/)
 examples/            Beispielmodelle (zugleich Testfälle)
 tests/               openscad-compat/ (Referenz, compare.py), step/verify.py
 tools/report/        Generatoren der Testberichte
@@ -167,12 +193,13 @@ docs/                Plan, solidcore-Umstieg, Testberichte
 export SMLIB_PREBUILT=$PWD/smlib/build-native
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace                                          # ~300 Tests
+cargo test --workspace                                          # ~340 Tests
 cargo check -p cad-wasm --target wasm32-unknown-unknown
 
 node crates/kernel-smlib/js/test-node.mjs                       # smlib.wasm über die Brücke
 node web/scripts/smoke-node.mjs                                 # Browser-Engine in Node
 cd web && pnpm typecheck && pnpm test && pnpm e2e               # tsc, Vitest, Playwright (Chromium)
+node web/e2e-tauri/desktop.e2e.mjs --bin target/release/cad    # Desktop: tauri-driver + WebKitWebDriver (Xvfb)
 
 python3 tests/openscad-compat/make-reference.py                 # Referenz-STLs (OpenSCAD 2021.01)
 python3 tests/openscad-compat/compare.py --self-test
@@ -180,8 +207,9 @@ CAD=target/release/cad python3 tests/openscad-compat/compare.py --eval   # 33/33
 /pfad/zum/venv/bin/python tests/step/verify.py --cad target/release/cad  # STEP mit OpenCASCADE
 ```
 
-CI (`.github/workflows/`): `rust` (fmt, clippy, Tests, Wasm-Check), `web` (smlib.wasm,
-cad-wasm, Typecheck, Vitest, Node-Tests, Build, Playwright), `compat` (OpenSCAD-Referenz und
+CI (`.github/workflows/`): `rust` (Tauri-Pakete, fmt, clippy, Tests, Wasm-Check), `web` (smlib.wasm,
+cad-wasm, Typecheck, Vitest, Node-Tests, Build, Playwright), `desktop` (UI für Tauri, Release-Build,
+Tauri-E2E unter Xvfb), `compat` (OpenSCAD-Referenz und
 -Vergleich, include/use gegen OpenSCAD, STEP-Prüfung), `pages` (manuell: `web/dist` auf
 GitHub Pages). Die Workflows rufen nur `scripts/ci/*.sh` auf; dieselben Aufrufe laufen lokal,
 z. B. `scripts/ci/smlib-native.sh && SMLIB_PREBUILT=smlib/build-native scripts/ci/rust.sh all`.
@@ -202,11 +230,13 @@ CMakeLists, Build-Skript und Compiler: `scripts/ci/smlib-key.sh`). Ist der SMLib
 - [Bericht 6](docs/reports/06-projekte-bauteile/report.pdf): Projekte, Bauteile, `include`/`use`.
 - [Bericht 7](docs/reports/07-kernel-variabler-radius/report.pdf): Kernel-Korrekturen und variabler Radius.
 - [Bericht 8](docs/reports/08-cli-agenten/report.pdf): CLI für Agenten (outline, render-Ansichten/Schnitt, measure, watch, set).
+- [Bericht 9](docs/reports/09-desktop-schnitt/report.pdf): Desktop-App, Dateibeobachter, Git, Schnittansicht, CLI↔UI.
 
 ## Lizenzen
 
 - Dieses Projekt: privat, nicht lizenziert (`license = "UNLICENSED"`, `publish = false`).
-- SMLib/SM_API (NVIDIA usd-brep, Fork tangency-labs/smlib): Apache-2.0. Die Quellen sind
+- SMLib/SM_API (NVIDIA usd-brep, Fork tangency-labs/smlib): Apache-2.0.
+- Tauri 2 (Apache-2.0/MIT), `notify` (CC0/MIT/Apache-2.0), `similar` (Apache-2.0). Die Quellen sind
   nicht Teil des Repositorys; `smlib/patches/` enthält Änderungen daran.
 - solidcore (tangency-labs/solidcore, optionale Abhängigkeit): Apache-2.0.
 - Weitere Abhängigkeiten über Cargo und pnpm (u. a. React, three.js, CodeMirror) unter ihren

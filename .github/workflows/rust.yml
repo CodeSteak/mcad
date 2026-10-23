@@ -1,4 +1,6 @@
-# Rust: formatting, clippy, tests with the native SMLib kernel, Wasm check of cad-wasm.
+# Rust: formatting, clippy, tests with the native SMLib kernel, Wasm check of cad-wasm. The
+# desktop app (Tauri) is built too: without web/dist-tauri its build script embeds a
+# placeholder page (the real UI and the Tauri end-to-end tests: workflow `desktop`).
 #
 # Native SMLib (smlib/fetch.sh + smlib/build-native.sh) is cached by
 # .github/actions/smlib-native (key: fork commit + patches + CMakeLists + compiler).
@@ -39,8 +41,10 @@ jobs:
       - name: cargo fmt --check
         run: scripts/ci/rust.sh fmt
 
-      - name: Build tools
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ninja-build
+      # ninja for SMLib; WebKitGTK etc.: the workspace contains the desktop app (crates/cad-app,
+      # cad-cli feature `gui`), so clippy and the tests link Tauri.
+      - name: Build tools, Tauri system packages
+        run: scripts/ci/desktop.sh deps
 
       - name: SMLib (native)
         uses: ./.github/actions/smlib-native

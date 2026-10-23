@@ -38,6 +38,12 @@ class Project {
   states = new Map<string, EditorState>();
   /** Folder the project was opened from (File System Access API), for saving back. */
   dir: DirHandle | null = null;
+  /** Desktop app: absolute directory the paths are relative to (`null`: not on disk yet). */
+  root: string | null = null;
+  /** Desktop app: opened as a folder (all `.scad` files of the folder). */
+  folder = false;
+  /** Desktop app: file contents as on disk (loaded or saved last); a file is dirty if its text differs. */
+  saved = new Map<string, string>();
   /** Reads the active file's current text from the editor. */
   activeText: () => string | null = () => null;
 
@@ -81,8 +87,17 @@ class Project {
     return { name: this.name, main: this.main, active: this.active, files: this.files(), savedAt: Date.now() };
   }
 
+  /** Files whose text differs from the disk (desktop app; files never saved count). */
+  dirty(): string[] {
+    if (this.root === null) return [];
+    return [...this.texts.keys()].filter((p) => this.saved.get(p) !== this.text(p));
+  }
+
   /** Replaces everything (editor states are dropped). */
-  reset(s: { name: string; main: string; active?: string; files: Record<string, string> }, dir: DirHandle | null = null): void {
+  reset(s: { name: string; main: string; active?: string; files: Record<string, string> }, dir: DirHandle | null = null, disk: { root: string; folder: boolean } | null = null): void {
+    this.root = disk?.root ?? null;
+    this.folder = disk?.folder ?? false;
+    this.saved = new Map(disk ? Object.entries(s.files) : []);
     this.name = s.name;
     this.main = s.main;
     this.active = s.active && s.files[s.active] !== undefined ? s.active : s.main;

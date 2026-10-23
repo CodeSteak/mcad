@@ -1,0 +1,24 @@
+[package]
+name = "cad-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Desktop backend without Tauri: engine process and supervisor (watchdog), binary wire format, files and projects, file watcher, git line markers, UI control protocol"
+
+[dependencies]
+cad-ipc = { path = "../cad-ipc" }
+cad-session.workspace = true
+cad-eval.workspace = true
+cad-kernel.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+notify = "8"
+similar = "2"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+kernel-smlib.workspace = true
+tempfile = "3"

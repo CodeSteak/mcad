@@ -586,24 +586,103 @@ fn set_in_project_file() {
 }
 
 // ------------------------------------------------------------------------------------------
-// reserved UI entry, help
+// UI entry (`cad`, `cad DATEI`), `cad ui`, help
 // ------------------------------------------------------------------------------------------
 
+/// `cad` without a graphical session (and without a running UI).
+fn headless() -> Command {
+    let mut c = cad();
+    let ipc = std::env::temp_dir().join(format!("cad-ipc-test-{}", std::process::id()));
+    c.env_remove("DISPLAY").env_remove("WAYLAND_DISPLAY").env("CAD_IPC_DIR", ipc);
+    c
+}
+
 #[test]
-fn ui_entry_is_reserved() {
-    let out = cad().arg(data("gehaeuse.scad")).output().unwrap();
+fn ui_entry_without_display() {
+    for args in [vec![], vec![data("gehaeuse.scad")], vec![data("")]] {
+        let out = headless().args(&args).output().unwrap();
+        assert_eq!(out.status.code(), Some(2), "{args:?}");
+        let err = String::from_utf8_lossy(&out.stderr);
+        let expect = if cfg!(feature = "gui") { "keine grafische Sitzung" } else { "UI nicht in diesem Build" };
+        assert!(err.contains(expect), "{err}");
+        assert!(
+            err.contains("render") && err.contains("outline") && err.contains("watch") && err.contains("check"),
+            "{err}"
+        );
+    }
+    let out = headless().arg("gibt-es-nicht.scad").output().unwrap();
     assert_eq!(out.status.code(), Some(2));
-    let err = String::from_utf8_lossy(&out.stderr);
-    assert!(err.contains("UI nicht in diesem Build"), "{err}");
-    assert!(err.contains("render") && err.contains("outline") && err.contains("watch"), "{err}");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("gibt es nicht"));
     let out = cad().arg("rendr").output().unwrap();
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("unbekannter Befehl"));
-    // without arguments: help
-    let out = cad().output().unwrap();
+    // --help explains both ways
+    let out = cad().arg("--help").output().unwrap();
     assert_eq!(out.status.code(), Some(0));
     let help = String::from_utf8_lossy(&out.stdout);
-    for c in ["outline", "measure", "watch", "set", "render", "check"] {
-        assert!(help.contains(c), "{help}");
+    for c in
+        ["outline", "measure", "watch", "set", "render", "check", "Desktop-UI", "headless", "cad ui status", "DISPLAY"]
+    {
+        assert!(help.contains(c), "{c}: {help}");
     }
+}
+
+#[test]
+fn ui_commands_without_running_ui() {
+    let out = headless().args(["ui", "status"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("keine laufende Desktop-UI"));
+    let out = headless().args(["ui", "status", "--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3));
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["exit_code"], 3);
+    assert_eq!(v["ok"], false);
+    let out = headless().args(["ui", "screenshot", "-o", "/tmp/x.png"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3));
+    let out = headless().args(["ui", "show", &data("gehaeuse.scad"), "--line", "3"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3));
+}
+
+#[test]
+fn ui_commands_talk_to_a_running_ui() {
+    // A fake UI endpoint answers like the app: the CLI side of the control protocol.
+    let dir = tempfile::tempdir().unwrap();
+    let server = cad_ipc::Server::bind_path(&dir.path().join("ui-4242.sock")).unwrap();
+    let file = data("gehaeuse.scad");
+    let root = std::path::Path::new(&file).parent().unwrap().to_path_buf();
+    std::thread::spawn(move || {
+        let _ = server.serve(move |f| match f.header.method.as_str() {
+            "status" => Ok((
+                serde_json::json!({ "pid": 4242, "endpoint": "ui-4242", "windows": [{
+                    "project": { "root": root, "main": "gehaeuse.scad", "files": ["gehaeuse.scad"], "folder": false },
+                    "dirty": ["gehaeuse.scad"], "cursor": { "file": "gehaeuse.scad", "line": 7, "col": 3 },
+                    "selection": { "nodes": [{ "idx": 2, "label": "box", "line": 7 }] }, "context": "gehaeuse",
+                    "params": { "w": 50 }, "diagnostics": [], "scene": { "version": 3, "complete": true, "nodes": 9 }, "section": null
+                }]}),
+                Vec::new(),
+            )),
+            "show" => Ok((serde_json::json!({ "shown": true, "line": f.header.body["line"] }), Vec::new())),
+            "screenshot" => Ok((serde_json::json!({ "width": 2, "height": 1 }), vec![0x89, b'P', b'N', b'G'])),
+            _ => Err("?".into()),
+        });
+    });
+    let run = |args: &[&str]| cad().env("CAD_IPC_DIR", dir.path()).args(args).output().unwrap();
+    let out = run(&["ui", "status"]);
+    assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
+    let t = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        t.contains("Zeile 7") && t.contains("Modul gehaeuse") && t.contains("gehaeuse.scad*") && t.contains("w = 50"),
+        "{t}"
+    );
+    let out = run(&["ui", "status", "--json"]);
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["uis"][0]["windows"][0]["cursor"]["line"], 7);
+    let out = run(&["ui", "show", &file, "--line", "12", "--json"]);
+    assert_eq!(out.status.code(), Some(0));
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["line"], 12);
+    let png = dir.path().join("s.png");
+    let out = run(&["ui", "screenshot", "-o", png.to_str().unwrap()]);
+    assert_eq!(out.status.code(), Some(0));
+    assert_eq!(std::fs::read(&png).unwrap(), vec![0x89, b'P', b'N', b'G']);
 }

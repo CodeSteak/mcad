@@ -5,6 +5,9 @@ import type { EditorState } from "@codemirror/state";
 import { EngineClient } from "../engine/client";
 import type { Edit, ExportFormat } from "../engine/protocol";
 import { WorkerTransport } from "../engine/transport";
+import { createTauriTransport } from "../engine/tauriTransport";
+import { IS_TAURI, desktop } from "../platform/desktop";
+import { diskToLoad, initDesktop, onEdit, openDialog, projectLoaded, publishDirty, requestGit, saveProject } from "./desktop";
 import type { EditTarget } from "../editor/editGroup";
 import { makeState } from "../editor/setup";
 import {
@@ -38,13 +41,15 @@ import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
 import { DragController } from "./drag";
 import { undo, redo } from "@codemirror/commands";
+import { gitMarks } from "../editor/gitGutter";
 
 export const DEFAULT_EXAMPLE = "spec/gehaeuse.scad";
 
 export const meshes = new MeshCache();
 const params = new URLSearchParams(location.search);
 const watchdogMs = Number(params.get("watchdog")) || undefined;
-export const transport = new WorkerTransport({ watchdogMs });
+// Browser: engine in a Web Worker (Wasm). Desktop app: the native engine process (Tauri IPC).
+export const transport = IS_TAURI ? createTauriTransport() : new WorkerTransport({ watchdogMs });
 export const client = new EngineClient(transport, meshes);
 
 let viewerRef: Viewer | null = null;
@@ -55,7 +60,7 @@ project.activeText = () => (bridge.view ? bridge.text() : null);
 /** Publishes the project's file list etc. to the store (tabs, path bar). */
 function publishProject(): void {
   store.setState({
-    project: { name: project.name, main: project.main, active: project.active, paths: project.paths(), folder: project.dir !== null },
+    project: { name: project.name, main: project.main, active: project.active, paths: project.paths(), folder: project.dir !== null || project.folder },
     fileName: pathBase(project.main),
   });
 }
@@ -126,6 +131,7 @@ export function switchFile(path: string, pos?: number): boolean {
     store.setState({ docRevision: st.docRevision + 1, cursor: next.selection.main.head, editorHover: null, viewHover: null, viewHoverOther: null });
     publishProject();
     scheduleSave();
+    requestGit(false);
   }
   if (pos !== undefined) bridge.setCursor(pos);
   else v.focus();
@@ -181,6 +187,8 @@ function flushActive(): void {
 }
 
 function scheduleSave(): void {
+  // Desktop app: files live on disk (no IndexedDB); dirty state, git markers, autosave.
+  if (IS_TAURI) return onEdit();
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
@@ -233,7 +241,22 @@ export function jumpToLevel(level: number): void {
 // ---------------------------------------------------------------- files
 
 /** The project to start with: the autosaved one, else the default example. */
-export async function initialProject(): Promise<{ name: string; main: string; active: string; files: Record<string, string> }> {
+export async function initialProject(): Promise<{ name: string; main: string; active: string; files: Record<string, string>; disk?: { root: string; folder: boolean } }> {
+  if (IS_TAURI) {
+    // Desktop app: the file or folder from the command line, else the example as a new file.
+    try {
+      const p = await desktop.initialProject();
+      if (p) {
+        const d = diskToLoad(p);
+        return { ...d.project, active: d.project.active, disk: d.disk };
+      }
+    } catch (e) {
+      store.setState({ notice: `Öffnen fehlgeschlagen: ${String(e)}` });
+    }
+    const ex = EXAMPLES.find((e) => e.path === DEFAULT_EXAMPLE) ?? EXAMPLES[0];
+    const name = ex ? ex.name : "unbenannt.scad";
+    return { name, main: name, active: name, files: { [name]: ex ? ex.text : "cube(10);\n" } };
+  }
   const auto = await loadProjectAutosave();
   if (auto && Object.values(auto.files).some((t) => t.trim())) return auto;
   const ex = EXAMPLES.find((e) => e.path === DEFAULT_EXAMPLE) ?? EXAMPLES[0];
@@ -242,20 +265,22 @@ export async function initialProject(): Promise<{ name: string; main: string; ac
 }
 
 /** Takes over a project after the editor exists (start). */
-export function startProject(p: { name: string; main: string; active?: string; files: Record<string, string> }): void {
-  project.reset(p);
+export function startProject(p: { name: string; main: string; active?: string; files: Record<string, string>; disk?: { root: string; folder: boolean } }): void {
+  project.reset(p, null, p.disk ?? null);
   publishProject();
   client.setFiles(project.others(), project.main);
+  initDesktop();
+  projectLoaded();
 }
 
 /**
  * Opens a project: every file, the main file in the editor (or `active`). The editor's undo
  * history starts fresh.
  */
-export function loadProject(p: { name: string; main: string; active?: string; files: Record<string, string> }, dir: DirHandle | null = null): void {
+export function loadProject(p: { name: string; main: string; active?: string; files: Record<string, string> }, dir: DirHandle | null = null, disk: { root: string; folder: boolean } | null = null): void {
   const v = bridge.view;
   if (!v) return;
-  project.reset(p, dir);
+  project.reset(p, dir, disk);
   v.setState(makeState(project.texts.get(project.active) ?? ""));
   resetMapper();
   const st = store.getState();
@@ -265,6 +290,7 @@ export function loadProject(p: { name: string; main: string; active?: string; fi
   sendNow();
   store.setState({ loadVersion: store.getState().sentVersion });
   scheduleSave();
+  projectLoaded();
   v.focus();
 }
 
@@ -284,8 +310,9 @@ function openLoaded(p: LoadedProject | null): void {
   store.setState({ notice: `Projekt ${p.name}: ${Object.keys(p.files).length} Dateien, Hauptdatei ${p.main}` });
 }
 
-/** Opens a folder (File System Access API), else a ZIP file. */
+/** Opens a folder (File System Access API), else a ZIP file. Desktop app: folder dialog. */
 export async function openFolderOrZip(): Promise<void> {
+  if (IS_TAURI) return openDialog(true);
   try {
     const w = window as Window & { showDirectoryPicker?: unknown };
     openLoaded(typeof w.showDirectoryPicker === "function" ? await openFolder() : await pickZip());
@@ -324,6 +351,7 @@ export function addProjectFile(path: string, text = ""): boolean {
   publishProject();
   switchFile(name);
   sendNow();
+  publishDirty();
   return true;
 }
 
@@ -370,6 +398,7 @@ export function newFile(): void {
 }
 
 export async function openFromDisk(): Promise<void> {
+  if (IS_TAURI) return openDialog(false);
   try {
     const f = await openFile();
     if (f) loadText(f.name, f.text);
@@ -379,6 +408,7 @@ export async function openFromDisk(): Promise<void> {
 }
 
 export async function saveToDisk(saveAs = false): Promise<void> {
+  if (IS_TAURI) return saveProject(saveAs);
   try {
     flushActive();
     if (project.dir && !saveAs) {
@@ -496,6 +526,11 @@ window.__cad = {
       frames: viewer?.frames ?? 0,
       restarts: transport.restarts,
       blockedKeys: [...transport.blockedKeys],
+      desktop: IS_TAURI,
+      dirty: s.dirty,
+      external: Object.fromEntries(Object.entries(s.external).map(([k, v]) => [k, v.kind])),
+      section: s.section,
+      lastCli: s.lastCli,
     };
   },
   setCursorLine(line: number, col = 0) {
@@ -641,6 +676,33 @@ window.__cad = {
 
   /** Blocks the engine worker for `ms` (watchdog test). */
   debugHang(ms: number) {
-    transport.send({ type: "__debugHang", ms } as unknown as Parameters<typeof transport.send>[0]);
+    if (transport instanceof WorkerTransport) transport.send({ type: "__debugHang", ms } as unknown as Parameters<typeof transport.send>[0]);
+    else transport.debugHang(ms);
+  },
+  /** Section view as drawn. */
+  sectionInfo() {
+    return viewer?.sectionInfo() ?? null;
+  },
+  setSection(s: Partial<import("../logic/section").SectionState>) {
+    store.setState({ section: { ...store.getState().section, ...s } });
+  },
+  sectionBenchmark(frames: number) {
+    return viewer?.sectionBenchmark(frames) ?? null;
+  },
+  /** Git markers of the editor (desktop app). */
+  gitMarks() {
+    const v = bridge.view;
+    return v ? gitMarks(v.state) : null;
+  },
+  /** Project on disk (desktop app). */
+  disk() {
+    return { root: project.root, folder: project.folder, dirty: project.dirty(), saved: Object.fromEntries(project.saved) };
+  },
+  /** Engine bytes received over the Tauri channel. */
+  transportBytes() {
+    return "bytes" in transport ? (transport as { bytes: number }).bytes : null;
+  },
+  async appInfo() {
+    return IS_TAURI ? desktop.appInfo() : null;
   },
 };
