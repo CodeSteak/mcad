@@ -96,6 +96,9 @@ const renderRows = rows.filter((r) => r.command === "render");
 const coldRender = renderRows.map((r) => r.cold.median);
 const warmRender = renderRows.map((r) => r.warm.median);
 
+const startDiffs = rows.map((r) => r.start.median - r.cold.median);
+const startExtra = startDiffs.length ? [...startDiffs].sort((a, b) => a - b)[Math.floor(startDiffs.length / 2)] : null;
+const md = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>");
 const timingTable = `<table><tr><th>Modell</th><th>Befehl</th><th>kalt ohne Daemon</th><th>1. Aufruf mit Daemon (inkl. Start)</th><th>2. Aufruf</th><th>2. Aufruf nach kleiner Änderung</th><th>kalt ÷ 2.</th></tr>
 ${rows
   .map(
@@ -141,7 +144,7 @@ const demo = timings?.demo ?? [];
 const demoText = demo
   .map((d) => `$ ${d.cmd}\n${d.stderr ? d.stderr.replace(/\n$/, "") + "\n" : ""}${d.stdout.replace(/\n$/, "")}`)
   .join("\n");
-const logText = (timings?.log ?? "").split("\n").filter(Boolean).slice(0, 8).join("\n");
+const logText = (timings?.log ?? "").split("\n").filter(Boolean).slice(-6).join("\n");
 
 const html = `<!doctype html>
 <html lang="de">
@@ -235,7 +238,7 @@ daemon.lock (flock, PID + Build) · daemon.sock (0600) · daemon.log  in  $CAD_I
 <ul>
 <li><b>Cache:</b> ein LRU der Engine für Knotenergebnisse und Meshes zusammen (vorher: 4096 Knoten ohne Größe, Meshes 256 MiB getrennt), mit Bytegrenze und Eintragsgrenze; der neueste Eintrag bleibt auch, wenn er allein darüber liegt. Eine Engine für alle Projekte, die Schlüssel sind inhaltsbasiert.</li>
 <li><b>Projekte:</b> je Hauptdatei (absoluter Pfad; stdin je Arbeitsverzeichnis) merkt sich der Daemon die Schlüssel, die ihre Befehle berührt haben. Beim 9. Projekt verliert das am längsten unbenutzte seine Einträge, soweit kein anderes gehaltenes Projekt sie nutzt.</li>
-<li><b>RSS:</b> nach jeder Anfrage aus <code>/proc/self/statm</code>; über Start-RSS + 1,5 × Cache-Grenze wird der Cache geleert und freier Speicher mit <code>malloc_trim</code> zurückgegeben. Die Start-RSS (${timings?.demo ? "etwa 40 MiB" : "–"}: Programm, SMLib, Tauri-Bibliotheken) zählt nicht gegen die Grenze, sonst griffe eine kleine Grenze immer.</li>
+<li><b>RSS:</b> nach jeder Anfrage aus <code>/proc/self/statm</code>; über Start-RSS + 1,5 × Cache-Grenze wird der Cache geleert und freier Speicher mit <code>malloc_trim</code> zurückgegeben. Die Start-RSS (rund 35–40 MiB: Programm, SMLib, Tauri-Bibliotheken) zählt nicht gegen die Grenze, sonst griffe eine kleine Grenze immer.</li>
 <li><b>Lebensdauer:</b> Ende nach 15 min ohne <code>run</code> (<code>status</code> zählt nicht), nach <code>cad daemon stop</code> (wartet auf laufende Befehle), wenn der Socket entfernt oder ersetzt wird (z. B. Testordner gelöscht), nach dem Watchdog; Socket und Sperrdatei werden entfernt.</li>
 </ul>
 
@@ -249,9 +252,9 @@ ${sizeTable}
 <ul>${models.map((m) => `<li><code>${esc(m)}</code>: ${changes[m] ?? ""}</li>`).join("")}</ul>
 ${timingTable}
 <ul>
-<li>Der 1. Aufruf mit Daemon kostet etwa so viel wie kalt ohne Daemon (Start des Daemons ${de(Math.min(...rows.map((r) => r.start.median - r.cold.median)))}–${de(Math.max(...rows.map((r) => r.start.median - r.cold.median)))} ms mehr: Prozessstart, Warten auf <code>hello</code>, eine zusätzliche Übertragung).</li>
+<li>Der 1. Aufruf mit Daemon kostet etwa so viel wie kalt ohne Daemon: im Median ${de(startExtra)} ms mehr (Prozessstart des Daemons, Warten auf <code>hello</code>, eine zusätzliche Übertragung), je Messreihe ${de(Math.min(...startDiffs))} bis +${de(Math.max(...startDiffs))} ms – innerhalb der Streuung der Kaltzeit.</li>
 <li>Der 2. Aufruf rechnet nichts im Kernel: <code>check</code> braucht nur Parser, Auswertung und den Weg über den Socket; <code>render</code> zusätzlich Rasterisierung und PNG (das Mesh kommt aus dem Cache), <code>export -o x.step</code> den STEP-Writer.</li>
-<li>Nach einer kleinen Änderung rechnet der Kernel nur die betroffenen Knoten (Zeile 4 je Modell, mit <code>--verbose</code>: Treffer/neu). Bei <code>variabler_radius</code> dominiert die eine neue variable Verrundung.</li>
+<li>Nach einer kleinen Änderung rechnet der Kernel nur die betroffenen Knoten (Spalte „nach kleiner Änderung“). Bei <code>variabler_radius</code> dominiert die eine neue variable Verrundung; beim STEP-Export kommt die B-Rep der geänderten Wurzel dazu, die neu aus SMLib gelesen und geschrieben wird.</li>
 <li>Ein leerer Aufruf (<code>check</code> von <code>cube(1)</code>) kostet mit Daemon ${de(timings?.tiny_check_daemon?.median, 1)} ms, ohne ${de(timings?.tiny_check_local?.median, 1)} ms: Prozessstart des Clients und Socket statt SMLib-Initialisierung im Prozess.</li>
 </ul>
 
@@ -262,7 +265,7 @@ ${timingTable}
 <li>CI: <code>scripts/ci/rust.sh test</code> prüft nach <code>cargo test</code>, dass kein <code>cad daemon serve</code> übrig ist (in CI, sonst Fehler); <code>scripts/ci/compat.sh compare|step</code> laufen jetzt über den Daemon (eigener Socket-Ordner, danach <code>status</code> und <code>stop</code>), so prüfen der OpenSCAD-Vergleich und die STEP-Prüfung mit OpenCASCADE auch die Ausgabe des Daemons; die Tauri-E2E-Tests rufen <code>cad</code> mit <code>CAD_NO_DAEMON=1</code> auf.</li>
 </ul>
 <table><tr><th>Test (<code>crates/cad-cli/tests/daemon.rs</code>)</th><th>Prüft</th><th>Ergebnis</th></tr>
-${daemonRes.map((t) => `<tr><td><code>${esc(t.name)}</code></td><td>${esc(testDesc[t.name] ?? "")}</td><td class="${t.res === "ok" ? "ok" : "bad"}">${esc(t.res)}</td></tr>`).join("\n")}
+${daemonRes.map((t) => `<tr><td><code>${esc(t.name)}</code></td><td>${md(testDesc[t.name] ?? "")}</td><td class="${t.res === "ok" ? "ok" : "bad"}">${esc(t.res)}</td></tr>`).join("\n")}
 ${[...ipcRes, ...unitRes].map((t) => `<tr><td><code>${esc(t.name)}</code></td><td>${t.name.includes("lock") ? "<code>cad-ipc</code>: Sperrdatei exklusiv (auch im selben Prozess), 0600, beim Ende entfernt" : t.name.startsWith("config") ? "Konfigurationsdatei: Werte, unbekannte Schlüssel, <code>daemon = false</code>, <code>enabled = false</code>, kaputtes TOML" : "LRU: Eintragsgrenze, <code>retain</code>, Verdrängungszähler"}</td><td class="${t.res === "ok" ? "ok" : "bad"}">${esc(t.res)}</td></tr>`).join("\n")}
 </table>
 ${daemonTimes ? `<p class="small">Im Test <code>autostart_then_cache_hits_and_faster</code> (Debug-Build, <code>eval --json</code> von <code>variabler_radius</code>): 1. Aufruf ${de(daemonTimes.first)} ms, 2. Aufruf ${de(daemonTimes.second)} ms.</p>` : ""}
