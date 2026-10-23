@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Testbericht 10 – CLI-Daemon</title>
+<style>
+  @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
+  :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
+  * { box-sizing: border-box; }
+  body { font: 9.6pt/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); margin: 0; }
+  main { max-width: 184mm; margin: 0 auto; }
+  h1 { font-size: 18pt; margin: 0 0 2mm; }
+  h2 { font-size: 13pt; margin: 7mm 0 3mm; border-bottom: 1px solid var(--border); padding-bottom: 1mm; break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p { margin: 1.5mm 0; }
+  .meta { color: var(--muted); margin-bottom: 4mm; }
+  .summary { display: flex; flex-wrap: wrap; gap: 2.5mm; margin: 3mm 0; }
+  .summary div { flex: 1 1 28mm; border: 1px solid var(--border); border-radius: 2mm; padding: 2mm; font-size: 8.4pt; }
+  .summary b { display: block; font-size: 12pt; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 8.2pt; }
+  th, td { border: 1px solid var(--border); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
+  th { background: var(--head); font-weight: 600; }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 7.6pt; }
+  pre { margin: 0 0 1.5mm; padding: 1.4mm 2mm; background: #f6f8fa; border: 1px solid var(--border); border-radius: 1mm; white-space: pre-wrap; word-break: break-word; }
+  .small { font-size: 7.6pt; color: var(--muted); font-weight: 400; }
+  ul { margin: 1mm 0 2mm 5mm; padding: 0; }
+  li { margin: 0.5mm 0; }
+  tr, td { break-inside: avoid; }
+  .ok { color: var(--ok); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+  .keep { break-inside: avoid; }
+</style>
+</head>
+<body>
+<main>
+<h1>Testbericht 10 – CLI-Daemon</h1>
+<div class="meta">cad-cli (daemon, client, host, config), cad-ipc, cad-engine, cad-session, kernel-smlib · 23.10.2026 · Branch worktree-agent-aaefce8a64cd87ac5 · Commit 75d1f98 · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 Kerne (Intel(R) Xeon(R) Processor @ 2.10GHz) · Messung mit <code>target/release/cad</code></div>
+
+<div class="summary">
+  <div>cargo test --workspace<b class="ok">353 / 353</b>0 ignoriert</div>
+  <div>Daemon-Tests<b class="ok">12 / 12</b><code>crates/cad-cli/tests/daemon.rs</code></div>
+  <div>clippy · fmt<b class="ok">sauber · sauber</b>-D warnings</div>
+  <div><code>render</code> kalt → 2. Aufruf<b>445–948 → 145–209 ms</b>Median, drei Modelle</div>
+  <div>Beschleunigung 2. Aufruf<b>2,8–25,8×</b>über alle 9 Messreihen</div>
+  <div>Leerer Aufruf (cube)<b>32,7 / 30,4 ms</b>mit / ohne Daemon</div>
+  <div>Speicherschätzung<b>1,01× (1,00–1,55)</b>Heap-Messung ÷ gehalten, 48 Modelle</div>
+</div>
+
+<h2>1 Auftrag und Ergebnis</h2>
+<p>Bericht 8 maß für einen einzelnen <code>cad render</code> 0,4–1,1 s, davon der Kernel bis 640 ms; <code>cad watch</code> mit warmem Cache 24 ms. Jeder CLI-Aufruf begann mit leerem Cache. Jetzt hält ein Hintergrundprozess <code>cad daemon serve</code> den Engine-Cache über Aufrufe hinweg: der erste rechnende Befehl startet ihn, nach 15 min ohne Anfrage endet er, die Cache-Größe ist begrenzt, und mit <code>--no-daemon</code>, <code>CAD_NO_DAEMON=1</code> oder <code>[daemon] enabled = false</code> ist er aus. Ausgabe, Exit-Codes, Dateien und JSON sind dieselben wie ohne Daemon; ein zweiter Aufruf auf derselben Datei braucht 34–209 ms statt 287–1.357 ms.</p>
+
+<h2>2 Architektur</h2>
+<pre>cad check|eval|inspect|render|export|outline|measure|set …     (Client, jeder Aufruf ein Prozess)
+  1 cad-ipc: connect("daemon") → hello {proto, build_id, pid}
+      kein Daemon  → cad daemon serve starten (setsid, stdin /dev/null, stdout/stderr → daemon.log),
+                      bis 5 s auf hello warten
+      andere Build-ID → stop (graceful, nach 3 s SIGKILL), neuen starten
+      Fehler (kein Ordner, fremder Socket, Windows) → still lokal rechnen
+  2 run {argv, cwd, stdin?} ─────────▶  Verbindungs-Thread ── Kanal ──▶ Arbeits-Thread (256 MiB Stack)
+     ◀── accepted, wait (1 s Takt)       (je Verbindung)                 eine Engine&lt;SmlibKernel&gt; für alle Projekte
+     ◀── stdout, stderr, exit, Dateien                                   chdir(cwd); Cli::try_parse_from(argv);
+  3 Dateien schreiben (atomar bei set),                                  run(&amp;cmd) mit Sitzung auf der Engine
+    stdout/stderr ausgeben, Exit-Code                                    (host.rs: Dateien aufzeichnen, stdin)
+                                         Überwachungs-Thread: Leerlauf 15 min, Watchdog 60 s, Socket vorhanden?
+daemon.lock (flock, PID + Build) · daemon.sock (0600) · daemon.log  in  $CAD_IPC_DIR | $XDG_RUNTIME_DIR/controller-cad | /tmp/controller-cad-&lt;uid&gt;</pre>
+<ul>
+<li><b>Gleicher Code mit und ohne Daemon.</b> Die Befehle der CLI laufen unverändert; drei Stellen gehen über <code>host.rs</code>: <code>load()</code> holt eine Sitzung über <code>host::new_session</code> (im Daemon auf dessen Engine, <code>Session::with_engine</code>; beim Ende des Befehls gibt <code>host::Pooled</code> die Engine zurück), stdin kommt vom Client, und Dateischreiben (<code>render</code>-PNG, <code>export</code>, <code>--all-parts</code>-Ordner, <code>set</code> atomar) wird im Daemon aufgezeichnet und vom Client ausgeführt. Ausgabe und Exit-Code baut dieselbe Funktion <code>finish()</code> im Daemon wie lokal. Schlägt das Schreiben beim Client fehl, rechnet er lokal neu und gibt so dieselbe Fehlermeldung.</li>
+<li><b>Gleiche Flächen-Tags.</b> Die Engine vergibt Tags in der Reihenfolge, in der sie Knoteninhalte zum ersten Mal sieht; in einer Engine, die schon andere Modelle gerechnet hat, sind die Nummern andere als in einem frischen Prozess (sichtbar in <code>eval --json</code>: <code>nodes[].tag</code>, <code>tag_nodes</code>). Die Sitzung nummeriert Tags deshalb selbst in der Reihenfolge ihrer Jobs – genau die Nummern einer frischen Engine – und übersetzt Szene und Meshes (<code>render</code> färbt über diese Zuordnung). Mit eigener Engine ist die Übersetzung die Identität und kostet nichts (Browser, Desktop).</li>
+<li><b>Arbeitsverzeichnis:</b> der Daemon wechselt vor jedem Befehl in das Verzeichnis des Clients (danach nach <code>/</code>); relative Pfade, Meldungen und <code>include</code> verhalten sich wie lokal. Ein Arbeits-Thread, die Befehle laufen nacheinander (SMLib hat globalen Zustand).</li>
+<li><b>Genau ein Daemon:</b> <code>flock</code> auf <code>daemon.lock</code> (neu in <code>cad-ipc</code>: <code>LockFile</code>, Datei beim Ende entfernt, Inode-Prüfung gegen das Entfernen durch den Vorgänger). Wer die Sperre nicht bekommt, wartet bis 10 s und endet, sobald ein Daemon antwortet; mehrere gleichzeitige Clients starten so höchstens Prozesse, die sofort wieder gehen.</li>
+<li><b>Version:</b> <code>hello</code> liefert Protokoll und Build-ID (Version + Größe und Änderungszeit des Programms); bei Abweichung beendet der Client den alten Daemon und startet einen neuen.</li>
+<li><b>Watchdog:</b> läuft ein Befehl länger als 60 s, meldet der Daemon den wartenden Clients „watchdog“ und endet (der hängende Kernel-Aufruf lässt sich nicht abbrechen, wie beim Engine-Prozess der Desktop-App). Der Client wiederholt den Befehl ohne Daemon und schreibt das auf stderr. Ohne Lebenszeichen 10 s (<code>wait</code> kommt jede Sekunde) beendet der Client den Daemon (SIGKILL) und rechnet selbst.</li>
+<li><b>Sicherheit:</b> nur der Unix-Socket aus <code>cad-ipc</code> (Ordner 0700 des Benutzers, Socket 0600, Peer-UID), kein Netzwerk; Anfragen nur <code>hello</code>, <code>run</code>, <code>status</code>, <code>stop</code>; <code>run</code> nur für die acht Befehle (mit dem Parser der CLI geprüft). Der Daemon liest Dateien als derselbe Benutzer und schreibt keine.</li>
+</ul>
+<h3>Beispiel</h3>
+<pre>$ cad check examples/spec/variabler_radius.scad --verbose
+cad: Daemon gestartet (pid 20939, Log $TMP/ipc/daemon.log)
+cad: Daemon pid 20939: 626 ms, Cache 1 Treffer / 11 neu, 11 Einträge, 15,4 MiB
+examples/spec/variabler_radius.scad: 0 Fehler, 0 Warnungen
+$ cad render examples/spec/variabler_radius.scad -o v.png --verbose
+cad: Daemon pid 20939: 357 ms, Cache 12 Treffer / 1 neu, 12 Einträge, 15,6 MiB
+$TMP/v.png: 1024x768, Ansicht iso, Hülle 160 × 30 × 20 mm
+$ cad export examples/spec/lochplatte.scad -o l.step --verbose
+cad: Daemon pid 20939: 925 ms, Cache 6 Treffer / 19 neu, 31 Einträge, 22,2 MiB
+$TMP/l.step: 2 Körper, 23 Flächen, 49 Kanten, 28669 Bytes, Volumen 2376.6812 mm³
+$ cad check examples/spec/lochplatte.scad --json
+{&quot;command&quot;: &quot;check&quot;, &quot;ok&quot;: true, &quot;daemon&quot;: {&quot;reason&quot;: null, &quot;used&quot;: true}}
+$ cad daemon status
+Daemon läuft: pid 20939, Version 0.1.0 (Build 0.1.0+1e0f060.18e128aaa5a04ed5)
+Laufzeit 2 s, Leerlauf 0 s (Ende nach 15 min ohne Anfrage), Watchdog 60 s
+Anfragen: 4, Projekte 2 von 8 (0 verdrängt)
+Cache: 27 Knoten + 4 Netze/abgeleitete, 22,2 MiB von 512,0 MiB, Trefferquote 58 % (42 Treffer, 31 neu berechnet), 0 verdrängt
+Speicher (RSS): 75,1 MiB, Start 35,3 MiB, Cache wird geleert über 803,3 MiB (0× geleert)
+Socket $TMP/ipc/daemon.sock, Log $TMP/ipc/daemon.log</pre>
+<p class="small">Log (<code>daemon.log</code> im Socket-Ordner):</p>
+<pre>[2026-10-23T12:37:03] cad daemon 20849: Ende (cad daemon stop)
+[2026-10-23T12:37:05] cad daemon 20939: Start: Version 0.1.0, Build 0.1.0+1e0f060.18e128aaa5a04ed5, Cache 512 MiB / 16384 Einträge, 8 Projekte, Leerlauf 900 s, Watchdog 60 s, RSS 35,3 MiB
+[2026-10-23T12:37:05] cad daemon 20939: `cad check examples/spec/variabler_radius.scad --verbose` → 0 in 626 ms, Cache 1 Treffer / 11 neu, 11 Einträge, 15,4 MiB
+[2026-10-23T12:37:06] cad daemon 20939: `cad render examples/spec/variabler_radius.scad -o $TMP/v.png --verbose` → 0 in 357 ms, Cache 12 Treffer / 1 neu, 12 Einträge, 15,6 MiB
+[2026-10-23T12:37:07] cad daemon 20939: `cad export examples/spec/lochplatte.scad -o $TMP/l.step --verbose` → 0 in 925 ms, Cache 6 Treffer / 19 neu, 31 Einträge, 22,2 MiB
+[2026-10-23T12:37:07] cad daemon 20939: `cad check examples/spec/lochplatte.scad --json` → 0 in 1 ms, Cache 23 Treffer / 0 neu, 31 Einträge, 22,2 MiB</pre>
+
+<h2>3 Grenzen und Konfiguration</h2>
+<table><tr><th>Einstellung</th><th>Standard</th><th>Datei <code>[daemon]</code></th><th>Umgebung</th><th><code>cad daemon serve</code></th></tr>
+<tr><td>Daemon an/aus</td><td>an</td><td><code>enabled = false</code> (oder <code>daemon = false</code> oben)</td><td><code>CAD_NO_DAEMON=1</code></td><td>– (je Aufruf <code>--no-daemon</code>)</td></tr>
+<tr><td>Cache (Knotenergebnisse + Meshes)</td><td>512 MiB</td><td><code>cache_mb</code></td><td><code>CAD_DAEMON_CACHE_MB</code></td><td><code>--cache-mb</code></td></tr>
+<tr><td>Einträge</td><td>16384</td><td><code>cache_entries</code></td><td><code>CAD_DAEMON_CACHE_ENTRIES</code></td><td>–</td></tr>
+<tr><td>Projekte im Cache</td><td>8</td><td><code>max_projects</code></td><td><code>CAD_DAEMON_MAX_PROJECTS</code></td><td><code>--max-projects</code></td></tr>
+<tr><td>Leerlauf bis Ende</td><td>15 min</td><td><code>idle_minutes</code>, <code>idle_secs</code></td><td><code>CAD_DAEMON_IDLE_MINUTES</code>, <code>_IDLE_SECS</code></td><td><code>--idle-minutes</code>, <code>--idle-secs</code></td></tr>
+<tr><td>Watchdog</td><td>60 s</td><td><code>watchdog_secs</code></td><td><code>CAD_DAEMON_WATCHDOG_SECS</code></td><td><code>--watchdog-secs</code></td></tr>
+<tr><td>RSS-Grenze</td><td>Start + 1,5 × Cache</td><td><code>rss_factor</code></td><td><code>CAD_DAEMON_RSS_FACTOR</code></td><td>–</td></tr>
+</table>
+<p>Datei: <code>$CAD_CONFIG</code>, sonst <code>$XDG_CONFIG_HOME/controller-cad/config.toml</code>, sonst <code>~/.config/controller-cad/config.toml</code>; Vorrang Argumente &gt; Umgebung &gt; Datei &gt; Standard; ungültige Werte werden ignoriert (Log, mit <code>--verbose</code> auf stderr).</p>
+<ul>
+<li><b>Cache:</b> ein LRU der Engine für Knotenergebnisse und Meshes zusammen (vorher: 4096 Knoten ohne Größe, Meshes 256 MiB getrennt), mit Bytegrenze und Eintragsgrenze; der neueste Eintrag bleibt auch, wenn er allein darüber liegt. Eine Engine für alle Projekte, die Schlüssel sind inhaltsbasiert.</li>
+<li><b>Projekte:</b> je Hauptdatei (absoluter Pfad; stdin je Arbeitsverzeichnis) merkt sich der Daemon die Schlüssel, die ihre Befehle berührt haben. Beim 9. Projekt verliert das am längsten unbenutzte seine Einträge, soweit kein anderes gehaltenes Projekt sie nutzt.</li>
+<li><b>RSS:</b> nach jeder Anfrage aus <code>/proc/self/statm</code>; über Start-RSS + 1,5 × Cache-Grenze wird der Cache geleert und freier Speicher mit <code>malloc_trim</code> zurückgegeben. Die Start-RSS (rund 35–40 MiB: Programm, SMLib, Tauri-Bibliotheken) zählt nicht gegen die Grenze, sonst griffe eine kleine Grenze immer.</li>
+<li><b>Lebensdauer:</b> Ende nach 15 min ohne <code>run</code> (<code>status</code> zählt nicht), nach <code>cad daemon stop</code> (wartet auf laufende Befehle), wenn der Socket entfernt oder ersetzt wird (z. B. Testordner gelöscht), nach dem Watchdog; Socket und Sperrdatei werden entfernt.</li>
+</ul>
+
+<h3>Speicherschätzung</h3>
+<p>Kernel-Ergebnisse sind Handles in SMLib; ihre Größe kennt nur der C++-Heap. Gemessen mit <code>crates/cad-cli/examples/cache_size.rs</code>: jedes der 48 Beispielmodelle mit frischer Engine auswerten, dann die Engine fallen lassen und die freigegebenen Heap-Bytes zählen (glibc <code>mallinfo2</code>). Die Breps halten 10–297 KiB je Fläche (Median 26 KiB), Freiformflächen und variable Verrundungen am meisten. Die erste Schätzung aus der Topologie (4 KiB + 3 KiB/Fläche + 1 KiB/Kante) lag um den Faktor 6 zu niedrig. Jetzt: <code>Kernel::shape_bytes</code> für SMLib 8 KiB + 32 KiB je Fläche + 1 KiB je Kante (Summe über alle Beispiele 1,10×, je Modell 0,13–4,54×) und im Daemon zusätzlich eine Messung je Knoten: Heap nach minus vor der Auswertung des Knotens (<code>Engine::set_heap_probe</code>), was die neuen Breps des Knotens samt SMLib-Zwischendaten erfasst. Damit liegt die Schätzung je Modell bei 1,00–1,55× des tatsächlich Gehaltenen (Median 1,01), nie darunter.</p>
+<table><tr><th>Modell</th><th>Breps</th><th>Flächen</th><th>Kanten</th><th>gehalten (MiB)</th><th>Schätzung Topologie (÷ gehalten)</th><th>Daemon: Heap-Messung (÷ gehalten)</th></tr>
+<tr><td>spec/freiformdeckel.scad</td><td>5</td><td>91</td><td>172</td><td>18,24</td><td>4,13 (0,23)</td><td>18,38 (1,01)</td></tr>
+<tr><td>spec/variabler_radius.scad</td><td>11</td><td>169</td><td>336</td><td>14,91</td><td>5,71 (0,38)</td><td>15,25 (1,02)</td></tr>
+<tr><td>spec/knauf_mirror.scad</td><td>16</td><td>48</td><td>67</td><td>13,92</td><td>1,81 (0,13)</td><td>16,39 (1,18)</td></tr>
+<tr><td>spec/dose_shell.scad</td><td>6</td><td>218</td><td>404</td><td>12,13</td><td>10,80 (0,89)</td><td>12,48 (1,03)</td></tr>
+<tr><td>spec/kabelfuehrung.scad</td><td>8</td><td>104</td><td>246</td><td>9,56</td><td>3,56 (0,37)</td><td>9,58 (1,00)</td></tr>
+<tr><td>spec/loft_sweep.scad</td><td>6</td><td>45</td><td>87</td><td>8,78</td><td>1,54 (0,18)</td><td>8,79 (1,00)</td></tr>
+<tr><td>openscad-compat/20_box_with_lid.scad</td><td>34</td><td>366</td><td>732</td><td>8,52</td><td>13,09 (1,54)</td><td>8,51 (1,00)</td></tr>
+<tr><td>spec/griffschale.scad</td><td>16</td><td>201</td><td>462</td><td>6,45</td><td>8,53 (1,32)</td><td>6,96 (1,08)</td></tr>
+<tr><th>alle 48 Modelle</th><th>559</th><th>4989</th><th>9887</th><th>180,1</th><th>198,6 (1,10)</th><th>190,7 (1,06)</th></tr></table>
+<p class="small">Die acht größten Modelle; „gehalten“ = beim Verwerfen der Engine freigegeben. Meshes zählen mit 4 Byte je Array-Element (genau).</p>
+
+<h2>4 Messung</h2>
+<p>Je Zeile 5 Wiederholungen, jede mit gestopptem Daemon und frischer Kopie der Datei; Median (fett), daneben Minimum–Maximum, Wanduhrzeit des <code>cad</code>-Prozesses in ms (2026-10-23 12:37, 4 Kerne). „Kalt ohne Daemon“ = Verhalten bis Bericht 9. Kleine Änderungen:</p>
+<ul><li><code>spec/variabler_radius.scad</code>: Tasche <code>cube([30, 14, 10])</code> → <code>[30, 15, 10]</code> (ein Körper von dreien neu, mit variabler Verrundung)</li><li><code>projekt-gehaeuse/gehaeuse.scad</code>: Deckel um 1 mm verschoben (<code>tiefe + abstand + 1</code>; nur die Wurzel neu)</li><li><code>spec/lochplatte.scad</code>: Stift <code>d = 3.5</code> → <code>3.6</code> (Zylinder und Wurzel neu)</li></ul>
+<table><tr><th>Modell</th><th>Befehl</th><th>kalt ohne Daemon</th><th>1. Aufruf mit Daemon (inkl. Start)</th><th>2. Aufruf</th><th>2. Aufruf nach kleiner Änderung</th><th>kalt ÷ 2.</th></tr>
+<tr><td>spec/variabler_radius.scad</td><td><code>check</code></td><td><b>625</b> <span class="small">550–768</span></td><td><b>695</b> <span class="small">567–766</span></td><td><b>36</b> <span class="small">32–42</span></td><td><b>162</b> <span class="small">154–246</span></td><td>17,5×</td></tr>
+<tr><td>spec/variabler_radius.scad</td><td><code>render -o x.png</code></td><td><b>948</b> <span class="small">890–1.163</span></td><td><b>1.096</b> <span class="small">978–1.326</span></td><td><b>145</b> <span class="small">139–205</span></td><td><b>507</b> <span class="small">493–619</span></td><td>6,5×</td></tr>
+<tr><td>spec/variabler_radius.scad</td><td><code>export -o x.step</code></td><td><b>1.357</b> <span class="small">1.267–1.754</span></td><td><b>1.313</b> <span class="small">1.275–1.575</span></td><td><b>63</b> <span class="small">57–72</span></td><td><b>1.003</b> <span class="small">797–1.094</span></td><td>21,4×</td></tr>
+<tr><td>projekt-gehaeuse/gehaeuse.scad</td><td><code>check</code></td><td><b>287</b> <span class="small">267–329</span></td><td><b>331</b> <span class="small">306–497</span></td><td><b>35</b> <span class="small">31–42</span></td><td><b>36</b> <span class="small">33–46</span></td><td>8,3×</td></tr>
+<tr><td>projekt-gehaeuse/gehaeuse.scad</td><td><code>render -o x.png</code></td><td><b>445</b> <span class="small">427–465</span></td><td><b>516</b> <span class="small">457–662</span></td><td><b>156</b> <span class="small">149–161</span></td><td><b>188</b> <span class="small">183–229</span></td><td>2,8×</td></tr>
+<tr><td>projekt-gehaeuse/gehaeuse.scad</td><td><code>export -o x.step</code></td><td><b>409</b> <span class="small">391–496</span></td><td><b>425</b> <span class="small">424–652</span></td><td><b>34</b> <span class="small">32–41</span></td><td><b>153</b> <span class="small">128–167</span></td><td>12,1×</td></tr>
+<tr><td>spec/lochplatte.scad</td><td><code>check</code></td><td><b>589</b> <span class="small">519–759</span></td><td><b>698</b> <span class="small">586–882</span></td><td><b>37</b> <span class="small">32–43</span></td><td><b>97</b> <span class="small">73–154</span></td><td>15,7×</td></tr>
+<tr><td>spec/lochplatte.scad</td><td><code>render -o x.png</code></td><td><b>933</b> <span class="small">874–1.090</span></td><td><b>962</b> <span class="small">851–1.031</span></td><td><b>209</b> <span class="small">190–224</span></td><td><b>331</b> <span class="small">327–392</span></td><td>4,5×</td></tr>
+<tr><td>spec/lochplatte.scad</td><td><code>export -o x.step</code></td><td><b>965</b> <span class="small">811–1.338</span></td><td><b>977</b> <span class="small">858–1.530</span></td><td><b>37</b> <span class="small">34–44</span></td><td><b>550</b> <span class="small">403–666</span></td><td>25,8×</td></tr></table>
+<ul>
+<li>Der 1. Aufruf mit Daemon kostet etwa so viel wie kalt ohne Daemon: im Median 44 ms mehr (Prozessstart des Daemons, Warten auf <code>hello</code>, eine zusätzliche Übertragung), je Messreihe -44 bis +149 ms – innerhalb der Streuung der Kaltzeit.</li>
+<li>Der 2. Aufruf rechnet nichts im Kernel: <code>check</code> braucht nur Parser, Auswertung und den Weg über den Socket; <code>render</code> zusätzlich Rasterisierung und PNG (das Mesh kommt aus dem Cache), <code>export -o x.step</code> den STEP-Writer.</li>
+<li>Nach einer kleinen Änderung rechnet der Kernel nur die betroffenen Knoten (Spalte „nach kleiner Änderung“). Bei <code>variabler_radius</code> dominiert die eine neue variable Verrundung; beim STEP-Export kommt die B-Rep der geänderten Wurzel dazu, die neu aus SMLib gelesen und geschrieben wird.</li>
+<li>Ein leerer Aufruf (<code>check</code> von <code>cube(1)</code>) kostet mit Daemon 32,7 ms, ohne 30,4 ms: Prozessstart des Clients und Socket statt SMLib-Initialisierung im Prozess.</li>
+</ul>
+
+<h2>5 Tests</h2>
+<ul>
+<li><code>cargo test --workspace</code>: 353 bestanden, 0 fehlgeschlagen, 0 ignoriert; <code>cargo clippy --workspace --all-targets -- -D warnings</code>: ohne Befund; <code>cargo fmt --all --check</code>: ohne Befund.</li>
+<li>Jeder Test hat einen eigenen Socket-Ordner (<code>CAD_IPC_DIR</code> in einem temporären Verzeichnis) und beendet seinen Daemon (Guard mit <code>cad daemon stop</code>); löscht der Test den Ordner, endet der Daemon spätestens 0,5 s später von selbst (Socket fehlt). Die übrigen CLI-Tests (<code>cli.rs</code>, <code>agent.rs</code>, <code>projects.rs</code>) laufen mit <code>CAD_NO_DAEMON=1</code>.</li>
+<li>CI: <code>scripts/ci/rust.sh test</code> prüft nach <code>cargo test</code>, dass kein <code>cad daemon serve</code> übrig ist (in CI, sonst Fehler); <code>scripts/ci/compat.sh compare|step</code> laufen jetzt über den Daemon (eigener Socket-Ordner, danach <code>status</code> und <code>stop</code>), so prüfen der OpenSCAD-Vergleich und die STEP-Prüfung mit OpenCASCADE auch die Ausgabe des Daemons; die Tauri-E2E-Tests rufen <code>cad</code> mit <code>CAD_NO_DAEMON=1</code> auf.</li>
+</ul>
+<table><tr><th>Test (<code>crates/cad-cli/tests/daemon.rs</code>)</th><th>Prüft</th><th>Ergebnis</th></tr>
+<tr><td><code>changed_files_are_never_stale</code></td><td>Hauptdatei, eingebundene Datei, Rückkehr zu altem Stand, <code>set</code> über den Client, Syntaxfehler und Korrektur – jedes Ergebnis passt zum aktuellen Inhalt</td><td class="ok">ok</td></tr>
+<tr><td><code>autostart_then_cache_hits_and_faster</code></td><td>erster Aufruf startet den Daemon (<code>daemon.used</code>), zweiter Aufruf: alle Knoten aus dem Cache, 0 Kernel-Aufrufe, gleiche Ausgabe, Trefferzähler steigt, messbar schneller</td><td class="ok">ok</td></tr>
+<tr><td><code>fallback_when_socket_is_broken</code></td><td>Socket-Ordner ist eine Datei; fremder Prozess am Socket, der jede Verbindung schließt; veralteter Socket ohne Prozess (wird ersetzt)</td><td class="ok">ok</td></tr>
+<tr><td><code>idle_end_removes_socket_and_lock</code></td><td>Leerlauf 1 s: Daemon endet, Socket und Sperrdatei entfernt, Log „ohne Anfrage“</td><td class="ok">ok</td></tr>
+<tr><td><code>parallel_starts_give_one_daemon</code></td><td>sechs gleichzeitige Aufrufe ohne Daemon: alle nutzen den Daemon, genau ein Prozess <code>cad daemon serve</code> bleibt</td><td class="ok">ok</td></tr>
+<tr><td><code>relative_paths_and_stdin</code></td><td>relativer Pfad mit anderem Arbeitsverzeichnis (gleiche Ausgabe), Quelltext über stdin (<code>-</code>)</td><td class="ok">ok</td></tr>
+<tr><td><code>status_and_stop</code></td><td><code>daemon status</code> (Text, JSON-Felder), <code>daemon stop</code> (PID, Socket entfernt), zweites <code>stop</code>: „kein Daemon“</td><td class="ok">ok</td></tr>
+<tr><td><code>switched_off_by_flag_env_and_config</code></td><td><code>--no-daemon</code> (vor und nach dem Befehl), <code>CAD_NO_DAEMON=1</code>, <code>[daemon] enabled = false</code>: kein Daemon, Grund in <code>daemon.reason</code>, Text still, <code>--verbose</code> nennt den Grund</td><td class="ok">ok</td></tr>
+<tr><td><code>version_change_replaces_daemon</code></td><td>Build-ID a → b: Client beendet den alten Daemon und startet einen neuen; <code>status</code> eines dritten Builds meldet die Abweichung</td><td class="ok">ok</td></tr>
+<tr><td><code>watchdog_ends_daemon_and_command_runs_locally</code></td><td>Watchdog 1 s, künstlich hängender Befehl (8 s): Daemon endet, Befehl läuft ohne Daemon mit gleicher Ausgabe, Meldung auf stderr, nächster Aufruf startet einen neuen Daemon</td><td class="ok">ok</td></tr>
+<tr><td><code>cache_limit_and_project_limit</code></td><td>Grenze 1 MiB und 2 Projekte bei 7 Modellen: Verdrängungen, Größe unter der Grenze (oder nur der neueste Eintrag), 5 Projekte verdrängt; 512 MiB: nichts verdrängt</td><td class="ok">ok</td></tr>
+<tr><td><code>output_identical_with_and_without_daemon</code></td><td>Daemon erst mit drei anderen Modellen gefüllt; dann je Befehl lokal, 1. und 2. Aufruf mit Daemon: check (ok, Syntaxfehler, Kernelfehler), eval, eval --module, inspect, outline, measure (Abstand/Volumen, Kollision/Abstand), set --dry-run, export mit unbekanntem Bauteil (Exit 2) – Text und JSON; render (Kontaktbogen, Schnitt, Röntgen) PNG byteweise, STL, 3MF, STEP (ohne Zeitstempel), --all-parts in einen Ordner</td><td class="ok">ok</td></tr>
+<tr><td><code>lock_file_is_exclusive_and_removed</code></td><td><code>cad-ipc</code>: Sperrdatei exklusiv (auch im selben Prozess), 0600, beim Ende entfernt</td><td class="ok">ok</td></tr>
+<tr><td><code>config::tests::file_values_and_errors</code></td><td>Konfigurationsdatei: Werte, unbekannte Schlüssel, <code>daemon = false</code>, <code>enabled = false</code>, kaputtes TOML</td><td class="ok">ok</td></tr>
+<tr><td><code>cache::tests::evicts_least_recently_used</code></td><td>LRU: Eintragsgrenze, <code>retain</code>, Verdrängungszähler</td><td class="ok">ok</td></tr>
+<tr><td><code>cache::tests::entry_limit_and_retain</code></td><td>LRU: Eintragsgrenze, <code>retain</code>, Verdrängungszähler</td><td class="ok">ok</td></tr>
+</table>
+<p class="small">Im Test <code>autostart_then_cache_hits_and_faster</code> (Debug-Build, <code>eval --json</code> von <code>variabler_radius</code>): 1. Aufruf 680 ms, 2. Aufruf 49 ms.</p>
+
+<h2>6 Bekannte Grenzen</h2>
+<ul>
+<li>Nur Unix (Linux, macOS; Peer-UID-Prüfung nur unter Linux, sonst schützt der 0700-Ordner). Unter Windows rechnet jeder Befehl selbst, still.</li>
+<li>Ein Arbeits-Thread: gleichzeitige CLI-Aufrufe warten aufeinander (ohne Daemon liefen sie parallel in eigenen Prozessen); <code>wait</code>-Ereignisse halten die Clients am Leben.</li>
+<li>Der Watchdog trifft auch einen legitim langen Befehl (&gt; 60 s): der Daemon endet, der Befehl läuft ein zweites Mal ohne Daemon. Ein Absturz im Kernel (Signal) beendet den Daemon ebenso; die lokale Wiederholung kann genauso abstürzen. Getestet ist der Watchdog mit einer künstlichen Verzögerung (<code>CAD_DAEMON_DEBUG_HANG_MS</code>), nicht mit einem echten hängenden SMLib-Aufruf.</li>
+<li>Speichermessung je Knoten nur mit glibc; Allokationen anderer Threads (Verbindungen) zählen mit. Ohne glibc gilt die Topologie-Schätzung (je Modell Faktor 0,1–4,5). Die RSS wird nach jeder Anfrage geprüft, nicht während einer Auswertung.</li>
+<li>Abweichungen zur Ausgabe ohne Daemon: das zusätzliche JSON-Feld <code>daemon</code>; Zähler und Zeiten (<code>stats.cache_hits</code>, <code>kernel_calls</code>, <code>cached</code>, <code>*_ms</code>, <code>timings</code>, die Zeile „Statistik“ von <code>eval</code>) zeigen, was tatsächlich passiert ist. Bei einer Panik sind Meldung und Exit-Code gleich, die Panikmeldung des Laufzeitsystems steht aber im Log statt auf stderr.</li>
+<li>Build-ID aus Größe und Änderungszeit des Programms: wechseln sich zwei <code>cad</code>-Binaries ab (Debug und Release), ersetzen sie einander den Daemon (Cache weg). Ein alter Daemon, der noch rechnet, wird nach 3 s hart beendet; dessen Client rechnet dann selbst.</li>
+<li>Die Tag-Tabelle der Engine wächst weiter (ein Eintrag je gesehenem Knoteninhalt); nach 2²⁰ Tags ersetzt der Daemon die Engine samt Cache.</li>
+<li><code>cad watch</code> nutzt den Daemon nicht (eigener Cache im Prozess); <code>cad set</code> prüft die Änderung mit einer zweiten, kernel-losen Sitzung ohne Cache (wie bisher).</li>
+</ul>
+
+<h2>7 Reproduktion</h2>
+<pre>export SMLIB_PREBUILT=$PWD/smlib/build-native
+cargo build --release -p cad-cli --bin cad --example cache_size
+python3 tools/report/report10-measure.py --cad target/release/cad --repeat 5
+target/release/examples/cache_size examples/spec/*.scad examples/projekt-gehaeuse/gehaeuse.scad \
+    examples/openscad-compat/*.scad &gt; reports/tmp/report10/cache_size.jsonl
+cargo test --workspace --no-fail-fast &gt; reports/tmp/report10/cargo.txt 2&gt;&amp;1
+cargo test -p cad-cli --test daemon -- --nocapture --test-threads 1 &gt; reports/tmp/report10/daemon-tests.txt 2&gt;&amp;1
+cargo clippy --workspace --all-targets -- -D warnings &gt; reports/tmp/report10/clippy.txt 2&gt;&amp;1
+cargo fmt --all --check &gt; reports/tmp/report10/fmt.txt
+node tools/report/report10.mjs
+node tools/report/print-pdf.mjs docs/reports/10-cli-daemon/report.html docs/reports/10-cli-daemon/report.pdf "Testbericht 10: CLI-Daemon"</pre>
+</main>
+</body>
+</html>

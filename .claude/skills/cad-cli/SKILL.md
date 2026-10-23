@@ -42,11 +42,52 @@ Agenten arbeiten immer mit den Befehlen unten, die UI ist nie nötig. Headless-B
    Kollisionen der Bauteile, Abstand zweier Bauteile).
 6. **Ausgeben:** `cad export datei.scad -o teil.step` (oder `--all-parts -o ordner/`).
 
-Für viele kleine Schritte: `cad watch datei.scad --json --render /tmp/x.png --views all` in
-einem Hintergrundprozess laufen lassen – jede Dateiänderung ergibt eine JSON-Zeile und ein
-neues Bild. Der Kernel-Cache bleibt erhalten: nur geänderte Knoten werden neu berechnet
-(Bericht 8: ~25 ms ohne Geometrieänderung, sonst die Kernelzeit der geänderten Knoten),
-statt 0,1–1,1 s für jeden einzelnen Aufruf (jeder Prozess beginnt mit leerem Cache).
+Der Kernel-Cache bleibt zwischen den Aufrufen erhalten (**Daemon**, unten): ein zweiter Aufruf
+auf derselben oder einer wenig geänderten Datei rechnet nur die geänderten Knoten neu. Für
+viele kleine Schritte geht zusätzlich `cad watch datei.scad --json --render /tmp/x.png --views all`
+in einem Hintergrundprozess – jede Dateiänderung ergibt eine JSON-Zeile und ein neues Bild.
+
+## Daemon (Cache zwischen Aufrufen)
+
+`check`, `eval`, `inspect`, `render`, `export`, `outline`, `measure` und `set` rechnen in einem
+Hintergrundprozess `cad daemon serve`, den der erste solche Aufruf startet (abgekoppelt, Log
+`daemon.log` im Socket-Ordner) und der den Engine-Cache hält. Ausgabe, Exit-Codes, Dateien und
+JSON sind dieselben wie ohne Daemon (nur `--json` hat zusätzlich `daemon: {used, reason}`, und
+die Zähler `stats.cache_hits`/`kernel_calls`/`cached` sowie Zeitfelder zeigen, was tatsächlich
+passiert ist). Der Cache ist inhaltsbasiert: geänderte Dateien (auch eingebundene) werden immer
+neu gelesen, ein Ergebnis ist nie veraltet. Nichts zu tun für Agenten – einfach die Befehle
+nutzen; `watch` hat seinen eigenen Cache und nutzt den Daemon nicht.
+
+| Befehl / Einstellung | Wirkung |
+| --- | --- |
+| `cad daemon status [--json]` | PID, Version/Build, Laufzeit, Leerlauf, Anfragen, Projekte, Cache (Einträge, MiB, Grenze, Trefferquote, verdrängt), RSS |
+| `cad daemon stop` | beenden (wartet auf den laufenden Befehl) |
+| `cad daemon serve [--cache-mb N] [--idle-minutes M] [--max-projects N] [--watchdog-secs S]` | im Vordergrund (Fehlersuche) |
+| `--no-daemon` (jeder Befehl), `CAD_NO_DAEMON=1`, `[daemon] enabled = false` | ohne Daemon rechnen |
+| `--verbose` | auf stderr: Daemon verwendet (Zeit, Cache-Treffer) oder warum nicht |
+
+Grenzen (Standard): 512 MiB Cache (Knotenergebnisse + Netze, im Daemon pro Knoten am Heap
+gemessen), 16384 Einträge, Ergebnisse von 8 Projekten (Hauptdateien), Cache leeren bei RSS über
+Start + 1,5 × Grenze, Ende nach 15 min ohne Anfrage, Watchdog 60 s (ein hängender Befehl beendet
+den Daemon, der Befehl läuft dann ohne Daemon und meldet das auf stderr). Einstellbar in
+`$XDG_CONFIG_HOME/controller-cad/config.toml` (bzw. `~/.config/…`, Pfad auch `CAD_CONFIG`):
+
+```toml
+[daemon]
+enabled = true
+cache_mb = 512
+max_projects = 8
+idle_minutes = 15
+watchdog_secs = 60
+rss_factor = 1.5
+```
+
+oder über `CAD_DAEMON_CACHE_MB`, `CAD_DAEMON_MAX_PROJECTS`, `CAD_DAEMON_IDLE_SECS`/`_IDLE_MINUTES`,
+`CAD_DAEMON_WATCHDOG_SECS`, `CAD_DAEMON_RSS_FACTOR` (Umgebung vor Datei, Argumente von `serve`
+vor beidem). Gibt es keinen Daemon (Windows, Socket-Ordner unbrauchbar, Fehler), rechnet der
+Befehl still selbst. Ein `cad` mit anderer Build-ID ersetzt den laufenden Daemon. Socket-Ordner
+wie bei `cad ui`: `$CAD_IPC_DIR`, sonst `$XDG_RUNTIME_DIR/controller-cad`, sonst
+`/tmp/controller-cad-<uid>` (0700, Socket 0600).
 
 ## Zusammenarbeit: Nutzer in der Desktop-UI, Agent editiert und prüft
 
@@ -175,7 +216,8 @@ Ebene) · `3` Kernel-/interner Fehler.
 ## JSON (Kurzfassung)
 
 Jede Antwort ist ein Objekt mit `schema_version` (1), `command`, `file`, `ok`, `exit_code`,
-`context` (Modulname oder `null`), `diagnostics: Diagnostic[]`, bei Aufruffehlern `error`.
+`context` (Modulname oder `null`), `diagnostics: Diagnostic[]`, bei Aufruffehlern `error`, bei
+den Befehlen mit Daemon `daemon: {used, reason}` (`reason` z. B. `--no-daemon`, sonst `null`).
 `Diagnostic = { severity: "error"|"warning"|"info", message, source: "syntax"|"eval"|"kernel",
 node, range, file? }`, `range = { from, to, line, col, end_line, end_col }` (1-basiert,
 Offsets UTF-16). `Bounds = { min, max, size }`. Vollständiges Schema: Kopf von
@@ -210,6 +252,10 @@ Offsets UTF-16). `Bounds = { min, max, size }`. Vollständiges Schema: Kopf von
 - `set`: `+ { changes: [{kind, spec, file, line, col, old, new}], dry_run, written, refused,
   errors_before, errors_after, diff }`
 - `export`: `+ { output, format, bytes, triangles, volume, area, bounds, step? }`
+- `daemon status`: `{ running, pid, version, build_id, uptime_s, idle_s, idle_limit_s, watchdog_s,
+  busy, current, pending, requests, failed, projects, max_projects, project_evictions, cache:
+  {entries, nodes, meshes, bytes, limit_bytes, max_entries, evictions, hits, misses, hit_rate},
+  rss_bytes, rss_start_bytes, rss_limit_bytes, rss_clears, socket, log }` (`running: false` ohne Daemon)
 
 ## Beispiele
 

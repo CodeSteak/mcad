@@ -7,7 +7,11 @@
 //! * **Cache:** every node has a content [`CacheKey`] (operation, resolved parameters,
 //!   `$fillet`/`$chamfer`, keys/relative matrices/modifier flags of the children, kernel id;
 //!   never the world matrix). Node results (shapes, diagnostics, hints, selected edges, bounds)
-//!   live in an LRU owned by the [`Engine`] and survive evaluations.
+//!   and meshes (also mass properties and STEP B-reps) live in one LRU owned by the [`Engine`]
+//!   and survive evaluations. It has two limits ([`EngineConfig::cache_bytes`],
+//!   [`EngineConfig::cache_entries`]); the size of a node result is estimated with
+//!   [`Kernel::shape_bytes`] or measured ([`Engine::set_heap_probe`]), that of a mesh from its
+//!   arrays.
 //! * **Provenance:** the engine assigns face tags. A tag is an interned index of the creating
 //!   node's key (stable for equal content for the engine's lifetime). After an evaluation
 //!   [`Evaluation::tag_nodes`] maps tags to the nodes of that tree (several rows for nodes with
@@ -74,12 +78,73 @@ pub const BLOCKED_MESSAGE: &str = "Zeitüberschreitung, Knoten gesperrt bis zur 
 /// Default display tolerance in mm when neither the call nor `$tol` gives one.
 pub const DEFAULT_TOL: f64 = 0.05;
 
+/// Default limit of the cache in estimated bytes (node results and meshes): 512 MiB.
+pub const DEFAULT_CACHE_BYTES: usize = 512 << 20;
+
+/// What the cache holds ([`Engine::cache_stats`]).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct CacheStats {
+    /// Node results.
+    pub nodes: usize,
+    /// Meshes (per key and tolerance).
+    pub meshes: usize,
+    /// Estimated bytes of the node results.
+    pub node_bytes: usize,
+    /// Estimated bytes of the meshes.
+    pub mesh_bytes: usize,
+    pub limit_bytes: usize,
+    pub max_entries: usize,
+    /// Lookups that found an entry / found none (node results and meshes).
+    pub hits: u64,
+    pub misses: u64,
+    /// Entries dropped because a limit was exceeded.
+    pub evictions: u64,
+}
+
+/// Key of a cache entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Slot {
+    Node(CacheKey),
+    /// Mesh of a node result at a tolerance (canonical bits).
+    Mesh(CacheKey, u64),
+    /// Mass properties of a node result.
+    Mass(CacheKey),
+    /// Neutral B-rep of part `u32` of a node result, placed with a matrix (hash).
+    Brep(CacheKey, u64, u32),
+}
+
+impl Slot {
+    fn key(&self) -> &CacheKey {
+        match self {
+            Slot::Node(k) | Slot::Mesh(k, _) | Slot::Mass(k) | Slot::Brep(k, ..) => k,
+        }
+    }
+}
+
+enum Cached<S> {
+    Node(Rc<NodeOutput<S>>),
+    Mesh(Rc<Mesh>),
+    Mass(MassProps),
+    Brep(Rc<cad_kernel::brep::Brep>),
+}
+
+impl<S> Clone for Cached<S> {
+    fn clone(&self) -> Self {
+        match self {
+            Cached::Node(o) => Cached::Node(o.clone()),
+            Cached::Mesh(m) => Cached::Mesh(m.clone()),
+            Cached::Mass(m) => Cached::Mass(*m),
+            Cached::Brep(b) => Cached::Brep(b.clone()),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct EngineConfig {
-    /// Maximum number of cached node results.
+    /// Maximum number of cache entries (node results and meshes).
     pub cache_entries: usize,
-    /// Maximum estimated size of cached meshes in bytes.
-    pub mesh_cache_bytes: usize,
+    /// Maximum estimated size of the cache in bytes (node results and meshes together).
+    pub cache_bytes: usize,
     /// Interior sample points per edge for zone selection and new-edge detection.
     pub edge_samples: u32,
     /// Sample points per face for `shell` zones.
@@ -96,8 +161,8 @@ pub struct EngineConfig {
 impl Default for EngineConfig {
     fn default() -> Self {
         EngineConfig {
-            cache_entries: 4096,
-            mesh_cache_bytes: 256 << 20,
+            cache_entries: 16384,
+            cache_bytes: DEFAULT_CACHE_BYTES,
             edge_samples: 16,
             face_samples: 4,
             default_tol: DEFAULT_TOL,
@@ -337,8 +402,7 @@ impl TagTable {
 pub struct Engine<K: Kernel> {
     kernel: K,
     config: EngineConfig,
-    cache: Lru<CacheKey, Rc<NodeOutput<K::Shape>>>,
-    meshes: Lru<(CacheKey, u64), Rc<Mesh>>,
+    cache: Lru<Slot, Cached<K::Shape>>,
     tags: TagTable,
     clock: Option<Clock>,
     kernel_calls: u64,
@@ -346,7 +410,11 @@ pub struct Engine<K: Kernel> {
     /// Last measured fillet/chamfer time per blend node (`inst_key`), for draft mode.
     blend_ms: HashMap<u64, f64>,
     blocked: HashSet<CacheKey>,
+    heap_probe: Option<HeapProbe>,
 }
+
+/// Bytes in use on the heap (e.g. glibc `mallinfo2`), see [`Engine::set_heap_probe`].
+pub type HeapProbe = Box<dyn Fn() -> usize>;
 
 /// An evaluation in progress. Owns its tree; drop it to abort.
 pub struct Job<S> {
@@ -429,7 +497,7 @@ impl<S: Clone + 'static> Job<S> {
                 continue;
             }
             if self.replay.is_empty()
-                && let Some(o) = e.cache.get(&key)
+                && let Some(o) = e.cached_node(&key)
             {
                 self.outputs[idx as usize] = Some(o);
                 self.cached[idx as usize] = true;
@@ -438,6 +506,8 @@ impl<S: Clone + 'static> Job<S> {
                 self.pos += 1;
                 continue;
             }
+            // heap in use before a fresh node evaluation (not for a replayed one)
+            let heap0 = if self.replay.is_empty() { e.heap_probe.as_ref().map(|p| p()) } else { None };
             let res = {
                 let mut run = eval::Run {
                     k: &mut e.kernel,
@@ -474,7 +544,14 @@ impl<S: Clone + 'static> Job<S> {
                         self.stats.suspended_blends += 1;
                     }
                     let o = Rc::new(out);
-                    e.cache.insert(key, o.clone(), 1);
+                    // What the node kept on the heap (its new shapes), if measured: the
+                    // topology estimate can be off by a factor of 10 for freeform geometry.
+                    let measured = heap0.and_then(|h0| e.heap_probe.as_ref().map(|p| p().saturating_sub(h0)));
+                    let cost = match measured {
+                        Some(m) => m.max(512),
+                        None => e.output_bytes(&o),
+                    };
+                    e.cache.insert(Slot::Node(key), Cached::Node(o.clone()), cost);
                     self.outputs[idx as usize] = Some(o);
                     self.replay.clear();
                     self.stats.nodes += 1;
@@ -591,8 +668,7 @@ where
     pub fn with_config(kernel: K, config: EngineConfig) -> Self {
         Engine {
             kernel,
-            cache: Lru::new(config.cache_entries),
-            meshes: Lru::new(config.mesh_cache_bytes),
+            cache: Lru::with_limits(config.cache_bytes, config.cache_entries),
             blocked: config.blocked_keys.iter().copied().collect(),
             config,
             tags: TagTable::default(),
@@ -600,6 +676,7 @@ where
             kernel_calls: 0,
             draft: false,
             blend_ms: HashMap::new(),
+            heap_probe: None,
         }
     }
 
@@ -628,6 +705,13 @@ where
         self.blocked.iter()
     }
 
+    /// Measures the cache cost of node results from the heap: bytes in use after minus before
+    /// evaluating a node, instead of the estimate from [`Kernel::shape_bytes`]. For a process
+    /// with one engine thread (the CLI daemon); other threads' allocations count too.
+    pub fn set_heap_probe(&mut self, probe: Option<HeapProbe>) {
+        self.heap_probe = probe;
+    }
+
     /// Clock for time budgets, in milliseconds.
     pub fn set_clock(&mut self, clock: Clock) {
         self.clock = Some(clock);
@@ -645,26 +729,83 @@ where
         &self.config
     }
 
-    /// Changes the cache limits (evicts as needed).
-    pub fn set_cache_limits(&mut self, entries: usize, mesh_bytes: usize) {
+    /// Changes the cache limits (evicts as needed): entries, estimated bytes.
+    pub fn set_cache_limits(&mut self, entries: usize, bytes: usize) {
         self.config.cache_entries = entries;
-        self.config.mesh_cache_bytes = mesh_bytes;
-        self.cache.set_limit(entries);
-        self.meshes.set_limit(mesh_bytes);
+        self.config.cache_bytes = bytes;
+        self.cache.set_limits(bytes, entries);
     }
 
     pub fn clear_cache(&mut self) {
         self.cache.clear();
-        self.meshes.clear();
     }
 
+    /// Number of cached node results.
     pub fn cache_len(&self) -> usize {
-        self.cache.len()
+        self.cache.entries().filter(|(k, _, _)| matches!(k, Slot::Node(_))).count()
+    }
+
+    /// Size, limits and counters of the cache.
+    pub fn cache_stats(&self) -> CacheStats {
+        let mut st = CacheStats {
+            limit_bytes: self.cache.limit(),
+            max_entries: self.cache.max_len(),
+            hits: self.cache.hits,
+            misses: self.cache.misses,
+            evictions: self.cache.evictions,
+            ..Default::default()
+        };
+        for (k, _, cost) in self.cache.entries() {
+            match k {
+                Slot::Node(_) => {
+                    st.nodes += 1;
+                    st.node_bytes += cost;
+                }
+                // meshes and derived data (mass properties, B-reps for STEP)
+                Slot::Mesh(..) | Slot::Mass(_) | Slot::Brep(..) => {
+                    st.meshes += 1;
+                    st.mesh_bytes += cost;
+                }
+            }
+        }
+        st
+    }
+
+    /// Removes the node results and meshes of these keys from the cache.
+    pub fn evict_keys(&mut self, keys: &HashSet<CacheKey>) -> usize {
+        let before = self.cache.len();
+        self.cache.retain(|k, _| !keys.contains(k.key()));
+        before - self.cache.len()
+    }
+
+    fn cached_node(&mut self, key: &CacheKey) -> Option<Rc<NodeOutput<K::Shape>>> {
+        match self.cache.get(&Slot::Node(*key)) {
+            Some(Cached::Node(o)) => Some(o),
+            _ => None,
+        }
+    }
+
+    /// Estimated memory of a node result (shapes from [`Kernel::shape_bytes`]).
+    fn output_bytes(&mut self, o: &NodeOutput<K::Shape>) -> usize {
+        let pts = |v: &[Vec<DVec3>]| v.iter().map(|p| 24 * p.len() + 24).sum::<usize>();
+        let mut b = 256 + std::mem::size_of::<NodeOutput<K::Shape>>() + 4 * o.tags.len();
+        for p in &o.parts {
+            b += 32 + self.kernel.shape_bytes(&p.shape);
+        }
+        b += pts(&o.selected_edges) + pts(&o.opened_faces);
+        b += o.hints.iter().map(|h| h.len() + 24).sum::<usize>();
+        b += o.diags.iter().map(|d| d.message.len() + 48 + pts(&d.edges)).sum::<usize>();
+        b
     }
 
     /// Kernel calls made by evaluations of this engine (not counting tessellation).
     pub fn kernel_calls(&self) -> u64 {
         self.kernel_calls
+    }
+
+    /// Number of interned tags (distinct node contents this engine has seen; only grows).
+    pub fn tag_count(&self) -> usize {
+        self.tags.keys.len()
     }
 
     /// Key a tag was interned for.
@@ -686,7 +827,7 @@ where
             for &i in &order {
                 if eval::is_blend_node(&tree, i)
                     && self.blend_ms.get(&tree.node(i).inst_key).is_some_and(|&ms| ms > budget)
-                    && !self.cache.contains(&keys[i as usize])
+                    && !self.cache.contains(&Slot::Node(keys[i as usize]))
                 {
                     skip[i as usize] = true;
                 }
@@ -747,8 +888,8 @@ where
         let Some(out) = ev.outputs.get(node as usize).and_then(|o| o.clone()) else {
             return Err(format!("Knoten {node} wurde nicht ausgewertet"));
         };
-        let mkey = (ev.reports[node as usize].key, key::canon_f64(tol));
-        if let Some(m) = self.meshes.get(&mkey) {
+        let mkey = Slot::Mesh(ev.reports[node as usize].key, key::canon_f64(tol));
+        if let Some(Cached::Mesh(m)) = self.cache.get(&mkey) {
             return Ok(m);
         }
         let mesh = if out.dim == Some(Dim::Two) {
@@ -766,7 +907,7 @@ where
         };
         let cost = mesh_bytes(&mesh);
         let mesh = Rc::new(mesh);
-        self.meshes.insert(mkey, mesh.clone(), cost);
+        self.cache.insert(mkey, Cached::Mesh(mesh.clone()), cost);
         Ok(mesh)
     }
 
@@ -811,8 +952,43 @@ where
         self.tessellate(ev, root, Some(tol.unwrap_or(0.01)))
     }
 
-    /// Volume, area and centroid of a node's result (sum over its parts).
+    /// Volume, area and centroid of a node's result (sum over its parts; cached by key).
     pub fn mass_props(&mut self, ev: &Evaluation<K::Shape>, node: NodeIdx) -> Result<MassProps, String> {
+        let slot = Slot::Mass(ev.reports[node as usize].key);
+        if let Some(Cached::Mass(m)) = self.cache.get(&slot) {
+            return Ok(m);
+        }
+        let m = self.mass_props_uncached(ev, node)?;
+        self.cache.insert(slot, Cached::Mass(m), 128);
+        Ok(m)
+    }
+
+    /// Neutral B-rep of part `part` of a node, placed with `world` (cached by key and matrix).
+    pub(crate) fn placed_brep(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        node: NodeIdx,
+        part: usize,
+        world: &DMat4,
+    ) -> Result<Rc<cad_kernel::brep::Brep>, String> {
+        let slot = Slot::Brep(ev.reports[node as usize].key, KeyHasher::new().mat(world).finish().short(), part as u32);
+        if let Some(Cached::Brep(b)) = self.cache.get(&slot) {
+            return Ok(b);
+        }
+        let p = &ev.parts(node)[part];
+        let b = if *world == DMat4::IDENTITY {
+            self.kernel.brep(&p.shape)
+        } else {
+            let s = self.kernel.transform(&p.shape, world).map_err(|e| format!("STEP: {e}"))?;
+            self.kernel.brep(&s)
+        }
+        .map_err(|e| format!("STEP: {e}"))?;
+        let b = Rc::new(b);
+        self.cache.insert(slot, Cached::Brep(b.clone()), brep_bytes(&b));
+        Ok(b)
+    }
+
+    fn mass_props_uncached(&mut self, ev: &Evaluation<K::Shape>, node: NodeIdx) -> Result<MassProps, String> {
         let mut acc = MassProps::default();
         let mut c = DVec3::ZERO;
         for p in ev.parts(node) {
@@ -846,6 +1022,34 @@ fn append_offset(dst: &mut Mesh, m: &Mesh) {
     for e in &mut dst.edge_ids[ne..] {
         *e += edge_off;
     }
+}
+
+/// Rough size of a neutral B-rep (points, knots, topology).
+fn brep_bytes(b: &cad_kernel::brep::Brep) -> usize {
+    use cad_kernel::brep::{Curve, Loop, Surface};
+    let bs = |knots: usize, points: usize| 8 * knots + 32 * points + 64;
+    let mut n = 256 + 24 * b.vertices.len();
+    for e in &b.edges {
+        n += 48
+            + match &e.curve {
+                Curve::BSpline(c) => bs(c.knots.len(), c.points.len()),
+                _ => 96,
+            };
+    }
+    for f in b.faces() {
+        n += 160;
+        n += match &f.surface {
+            Surface::BSpline(s) => bs(s.knots_u.len() + s.knots_v.len(), s.points.len()),
+            Surface::Revolution { curve: c, .. } | Surface::Extrusion { curve: c, .. } => {
+                bs(c.knots.len(), c.points.len())
+            }
+            _ => 0,
+        };
+        for l in &f.loops {
+            n += 32 + if let Loop::Edges(es) = l { 8 * es.len() } else { 0 };
+        }
+    }
+    n
 }
 
 fn mesh_bytes(m: &Mesh) -> usize {

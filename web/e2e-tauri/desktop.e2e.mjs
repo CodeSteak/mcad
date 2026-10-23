@@ -107,7 +107,8 @@ function xshot(name) {
 }
 
 function cad(...args) {
-  const r = spawnSync(BIN, args, { env: { ...process.env, CAD_IPC_DIR: ipcDir, DISPLAY: display }, encoding: "utf8" });
+  // CAD_NO_DAEMON: no CLI daemon (it would outlive the test run; tests/daemon.rs covers it).
+  const r = spawnSync(BIN, args, { env: { ...process.env, CAD_IPC_DIR: ipcDir, DISPLAY: display, CAD_NO_DAEMON: "1" }, encoding: "utf8" });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 

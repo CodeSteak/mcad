@@ -96,6 +96,17 @@ const LOOP_POLYGON: f64 = 0.0;
 const LOOP_CIRCLE: f64 = 1.0;
 const LOOP_SPLINE: f64 = 2.0;
 
+/// Estimated bytes of an SMLib Brep: fixed part ([`Kernel::shape_bytes`]). Measured over the
+/// 48 example models (heap freed when the cache is dropped, `cad-cli` example `cache_size`,
+/// test report 10): 10–210 KiB per face, median 26 KiB; freeform surfaces are the large ones.
+/// The constants hit the total of all examples within 10 %; a single model may be off by a
+/// factor of 2–10 (the CLI daemon measures the heap per node instead).
+pub const SHAPE_BYTES_BASE: usize = 8 << 10;
+/// Estimated bytes per face.
+pub const SHAPE_BYTES_PER_FACE: usize = 32 << 10;
+/// Estimated bytes per edge.
+pub const SHAPE_BYTES_PER_EDGE: usize = 1 << 10;
+
 /// One SMLib Brep in the facade's handle table. Released on drop.
 #[derive(Debug)]
 pub struct ShapeHandle {
@@ -459,6 +470,14 @@ impl Kernel for SmlibKernel {
 
     fn set_draft(&mut self, draft: bool) {
         self.draft = draft;
+    }
+
+    /// Estimate from the topology: a fixed part per Brep plus a part per face (surface,
+    /// loops, coedges with parameter curves) and per edge (3D curve, vertices), see
+    /// [`SHAPE_BYTES_BASE`].
+    fn shape_bytes(&mut self, s: &Shape) -> usize {
+        let (faces, edges) = locked(|| (raw::face_count(s.h).max(0) as usize, raw::edge_count(s.h).max(0) as usize));
+        SHAPE_BYTES_BASE + faces * SHAPE_BYTES_PER_FACE + edges * SHAPE_BYTES_PER_EDGE
     }
 
     fn brep(&mut self, s: &Shape) -> KResult<cad_kernel::brep::Brep> {

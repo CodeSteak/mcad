@@ -18,6 +18,10 @@
 //!   [`Server::bind`], [`connect`] and [`list`]; binding a name that a live server holds fails
 //!   with [`Error::InUse`].
 //!
+//! * **Lock files** ([`LockFile`]): an exclusive `flock` on `<dir>/<name>.lock` makes sure
+//!   only one process serves an endpoint (CLI daemon: several CLI calls may start one at the
+//!   same time). The file is removed when the lock is dropped.
+//!
 //! Only Unix is implemented; on other platforms every call returns [`Error::Unsupported`].
 
 use std::fmt;
@@ -420,6 +424,52 @@ impl Drop for Server {
     }
 }
 
+/// An exclusive lock on a file (`flock`), held until drop; the file is removed on drop.
+pub struct LockFile {
+    file: std::fs::File,
+    path: PathBuf,
+}
+
+impl LockFile {
+    /// Takes the lock on `<runtime dir>/<name>.lock` if no other process holds it
+    /// (`Ok(None)`: held by another process).
+    pub fn try_lock(name: &str) -> Result<Option<LockFile>> {
+        let p = endpoint_path(name)?.with_extension("lock");
+        LockFile::try_lock_path(&p)
+    }
+
+    /// [`LockFile::try_lock`] on a path (created with mode 0600).
+    pub fn try_lock_path(path: &Path) -> Result<Option<LockFile>> {
+        Ok(imp::try_lock(path)?.map(|file| LockFile { file, path: path.to_path_buf() }))
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// Replaces the file's content (e.g. the owner's pid).
+    pub fn write_info(&mut self, text: &str) -> Result<()> {
+        use std::io::Seek;
+        self.file.set_len(0)?;
+        self.file.seek(io::SeekFrom::Start(0))?;
+        self.file.write_all(text.as_bytes())?;
+        Ok(())
+    }
+
+    /// Content of a lock file (whoever holds it), if readable.
+    pub fn read_info(path: &Path) -> Option<String> {
+        std::fs::read_to_string(path).ok()
+    }
+}
+
+impl Drop for LockFile {
+    fn drop(&mut self) {
+        // Remove while still holding the lock; a process that opened the old file before
+        // notices the changed inode after taking the lock and retries (see `imp::try_lock`).
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
 #[cfg(unix)]
 mod imp {
     use super::*;
@@ -541,6 +591,37 @@ mod imp {
     pub fn try_clone(s: &UnixStream) -> Result<UnixStream> {
         Ok(s.try_clone()?)
     }
+
+    pub fn try_lock(path: &Path) -> Result<Option<std::fs::File>> {
+        use std::os::fd::AsRawFd;
+        use std::os::unix::fs::OpenOptionsExt;
+        for _ in 0..16 {
+            let f = std::fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .truncate(false)
+                .mode(0o600)
+                .open(path)?;
+            // SAFETY: valid fd.
+            let r = unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+            if r != 0 {
+                let e = io::Error::last_os_error();
+                if e.raw_os_error() == Some(libc::EWOULDBLOCK) {
+                    return Ok(None);
+                }
+                return Err(e.into());
+            }
+            // The holder before us may have removed the file after we opened it: then our
+            // lock is on a deleted inode, try again with the current file.
+            let ours = f.metadata()?;
+            match std::fs::metadata(path) {
+                Ok(m) if m.ino() == ours.ino() && m.dev() == ours.dev() => return Ok(Some(f)),
+                _ => continue,
+            }
+        }
+        Err(Error::Protocol(format!("{}: Sperre wechselt ständig", path.display())))
+    }
 }
 
 #[cfg(not(unix))]
@@ -583,6 +664,9 @@ mod imp {
         Err(Error::Unsupported)
     }
     pub fn try_clone(_: &Stream) -> Result<Stream> {
+        Err(Error::Unsupported)
+    }
+    pub fn try_lock(_: &Path) -> Result<Option<std::fs::File>> {
         Err(Error::Unsupported)
     }
 }

@@ -73,13 +73,7 @@ fn offset_of(text: &str, line: u32, col: u32) -> Option<usize> {
 }
 
 fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "datei".into());
-    let tmp = path.with_file_name(format!(".{name}.cad-set.tmp"));
-    std::fs::write(&tmp, text)?;
-    if let Ok(meta) = std::fs::metadata(path) {
-        let _ = std::fs::set_permissions(&tmp, meta.permissions());
-    }
-    std::fs::rename(&tmp, path)
+    crate::host::write_atomic(path, text.as_bytes())
 }
 
 pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {

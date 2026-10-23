@@ -274,6 +274,13 @@ pub trait Kernel {
         Err(KernelError::Unsupported("export".into()))
     }
 
+    /// Estimated memory of `s` in bytes (cache limits of the engine). Should be cheap: called
+    /// once per cached node result. Default: a flat 16 KiB.
+    fn shape_bytes(&mut self, s: &Self::Shape) -> usize {
+        let _ = s;
+        16 << 10
+    }
+
     /// Draft mode for the following calls: their results only serve a temporary display
     /// (while a handle is dragged) and are never reused for a final result, so the kernel may
     /// skip expensive validation of its results. Default: ignored.

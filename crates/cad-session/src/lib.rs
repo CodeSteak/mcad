@@ -18,11 +18,18 @@
 //! * After every finished job the root mesh is sent automatically
 //!   ([`SessionOptions::auto_root_mesh`]) unless it was already sent with that key and
 //!   tolerance class.
+//! * **Shared engine** ([`Session::with_engine`], CLI daemon): the engine and its cache may
+//!   outlive the session and serve several projects. Face tags are interned by the engine in
+//!   the order it first sees a node content, so they depend on what the engine computed
+//!   before. The session therefore numbers tags itself, in the order *its* jobs meet them —
+//!   exactly the numbers a fresh engine would assign — and translates every tag it hands out
+//!   (scene nodes, `tag_nodes`, mesh `tri_tags`). With an engine of its own the translation
+//!   is the identity and costs nothing.
 
 pub mod convert;
 pub mod protocol;
 
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 
 use cad_engine::{Budget, CacheKey, Engine, EngineConfig, Evaluation, Job, NodeFormat, Step};
@@ -130,6 +137,11 @@ pub struct Session<K: Kernel> {
     resolver: Option<Box<dyn FileResolver>>,
     /// Volumes of parts by node key (kernel mass properties are not free).
     part_volumes: HashMap<CacheKey, Option<f64>>,
+    /// Engine tag → session tag (see the module docs), and whether that is the identity.
+    tags: HashMap<u32, u32>,
+    tags_identity: bool,
+    /// Keys of every node of every job this session started.
+    touched: HashSet<CacheKey>,
 }
 
 impl<K: Kernel> Session<K>
@@ -137,7 +149,13 @@ where
     K::Shape: 'static,
 {
     pub fn new(kernel: K, opts: SessionOptions, clock: SharedClock) -> Self {
-        let mut engine = Engine::with_config(kernel, opts.engine.clone());
+        let engine = Engine::with_config(kernel, opts.engine.clone());
+        Self::with_engine(engine, opts, clock)
+    }
+
+    /// A session on an existing engine (and its cache); `opts.engine` is ignored. Get the
+    /// engine back with [`Session::into_engine`].
+    pub fn with_engine(mut engine: Engine<K>, opts: SessionOptions, clock: SharedClock) -> Self {
         let c = clock.clone();
         engine.set_clock(Box::new(move || c()));
         Session {
@@ -159,7 +177,59 @@ where
             main_path: "main.scad".into(),
             resolver: None,
             part_volumes: HashMap::new(),
+            tags: HashMap::new(),
+            tags_identity: true,
+            touched: HashSet::new(),
         }
+    }
+
+    /// Ends the session and returns its engine (with the cache).
+    pub fn into_engine(self) -> Engine<K> {
+        self.engine
+    }
+
+    /// Cache keys of all nodes of the jobs this session started.
+    pub fn touched_keys(&self) -> &HashSet<CacheKey> {
+        &self.touched
+    }
+
+    /// Session tag of an engine tag (0 stays 0).
+    fn local_tag(&mut self, t: u32) -> u32 {
+        if t == 0 {
+            return 0;
+        }
+        let next = self.tags.len() as u32 + 1;
+        let l = *self.tags.entry(t).or_insert(next);
+        if l != t {
+            self.tags_identity = false;
+        }
+        l
+    }
+
+    /// Translates the tags of a scene to session tags.
+    fn localize_scene(&mut self, scene: &mut p::Scene) {
+        if self.tags_identity {
+            return;
+        }
+        for n in &mut scene.nodes {
+            n.tag = self.local_tag(n.tag);
+        }
+        for tn in &mut scene.tag_nodes {
+            tn.tag = self.local_tag(tn.tag);
+        }
+        scene.tag_nodes.sort_by_key(|tn| tn.tag);
+    }
+
+    /// A mesh with session tags (the same `Rc` while the translation is the identity).
+    fn localize_mesh(&mut self, mesh: Rc<Mesh>) -> Rc<Mesh> {
+        if self.tags_identity {
+            return mesh;
+        }
+        let mut m = (*mesh).clone();
+        for t in &mut m.tri_tags {
+            *t = self.local_tag(*t);
+        }
+        Rc::new(m)
     }
 
     /// Reads project files through `resolver` instead of the files given with `SetFiles`
@@ -389,7 +459,9 @@ where
         self.engine.set_draft(self.drag.is_some());
         let job = self.engine.start(out.tree.clone());
         let keys: Vec<_> = (0..job.tree().nodes.len() as u32).map(|n| job.key(n)).collect();
-        let tags: Vec<u32> = (0..job.tree().nodes.len() as u32).map(|n| job.tag(n)).collect();
+        self.touched.extend(keys.iter().copied());
+        // Session tags in the order a fresh engine would intern them (node order).
+        let tags: Vec<u32> = (0..job.tree().nodes.len() as u32).map(|n| self.local_tag(job.tag(n))).collect();
         let cur = Current { version: self.version, src, proj, out, eval_ms, lang_diagnostics: items.clone() };
         let scene = convert::scene(SceneInput {
             version: self.version,
@@ -544,7 +616,7 @@ where
             eval_steps: cur.out.steps as u32,
             suspended_blends: ev.stats.suspended_blends as u32,
         };
-        let scene = convert::scene(SceneInput {
+        let mut scene = convert::scene(SceneInput {
             version: r.version,
             src: &cur.src,
             out: &cur.out,
@@ -554,6 +626,7 @@ where
         });
         let mut items = cur.lang_diagnostics.clone();
         items.extend(convert::kernel_diagnostics(&cur.src, &ev));
+        self.localize_scene(&mut scene);
         let res =
             vec![FromEngine::Diagnostics { version: r.version, items }, FromEngine::Scene(Box::new(scene.clone()))];
         let root = ev.root();
@@ -590,7 +663,8 @@ where
         if node as usize >= d.ev.tree.nodes.len() {
             return Err(format!("Knoten {node} existiert nicht"));
         }
-        self.engine.tessellate(&d.ev, node, Some(tol))
+        let m = self.engine.tessellate(&d.ev, node, Some(tol))?;
+        Ok(self.localize_mesh(m))
     }
 
     /// Mesh of a node of the last finished evaluation (node system) with tolerance `tol` mm.
@@ -599,7 +673,8 @@ where
         if node as usize >= d.ev.tree.nodes.len() {
             return Err(format!("Knoten {node} existiert nicht"));
         }
-        self.engine.tessellate(&d.ev, node, Some(tol))
+        let m = self.engine.tessellate(&d.ev, node, Some(tol))?;
+        Ok(self.localize_mesh(m))
     }
 
     /// Runs `f` with the kernel and the last finished evaluation (measurements with kernel

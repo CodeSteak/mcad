@@ -275,7 +275,7 @@ Ein Korpus von `.scad`-Dateien (Lizenzen vorher prüfen) läuft in CI über die 
 ### 6.2 Cache
 
 - `CacheKey`: stabiler Hash (z. B. `blake3`) über Operation, Parameter (Floats mit kanonisiertem Bitmuster), Kinder-Schlüssel und Kernel-Version.
-- Eintrag: Kernel-Shape, Tag-Tabelle, optional Meshes pro Toleranz. LRU nach geschätztem Speicher; Freigabe gibt Kernel-Handles frei.
+- Eintrag: Kernel-Shape, Tag-Tabelle, optional Meshes pro Toleranz. Ein LRU für Knotenergebnisse und Meshes nach geschätztem Speicher (`cache_bytes`, Standard 512 MiB) und Anzahl (`cache_entries`); Größe eines Shapes über `Kernel::shape_bytes` (SMLib: aus Flächen/Kanten, an den Beispielen kalibriert) oder, im CLI-Daemon, gemessen am Heap während der Auswertung des Knotens (Bericht 10). Freigabe gibt Kernel-Handles frei.
 - **Transformationen werden für die Anzeige nicht in die Shapes gebacken.** Ein Mesh wird im lokalen System tesselliert und in three.js per Matrix platziert. Gleiche Teile in Schleifen teilen sich ein Mesh.
 
 ### 6.3 Provenienz (Fläche/Kante → Zeile)
@@ -371,7 +371,7 @@ Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem K
 - `cad ui status [--json]` / `cad ui show datei [--line N] [--module m]` / `cad ui screenshot -o x.png` sprechen über lokale IPC (`cad-ipc`, Unix-Socket `ui-<pid>` im Benutzerverzeichnis, nur der eigene Benutzer) mit laufenden Fenstern; ohne laufende UI Exit 3. Für den Ablauf „Nutzer in der UI, Agent editiert und prüft“ siehe Skill.
 - `render` nutzt einen kleinen Software-Rasterizer in Rust (`cad-render`: Z-Buffer, Schattierung, Kantenlinien, Ortho/Perspektive, Marker, Beschriftung mit eingebetteter Bitmap-Schrift). Er braucht keine GPU und läuft damit auch in Containern und CI.
 - Schnitt: Clipping im Renderer mit gefüllter Kappe nach dem Stencil-Prinzip (Kappe, wo der Sichtstrahl bis zur Ebene die Oberfläche ungerade oft kreuzt), kein Kernel-Boolean. Gleiches Verfahren und gleiche Konvention wie die spätere GPU-Schnittansicht der UI: Ebene durch `p` mit Normale `n` entfernt die Hälfte, in die `n` zeigt (es bleibt `(q − p) · n ≤ 0`).
-- Kein persistenter Cache zwischen CLI-Aufrufen: ein Aufruf dauert 0,4–1 s (Bericht 8), Kernel-Ergebnisse sind Handles der nativen Bibliothek und nicht serialisierbar. Für schnelle Schleifen gibt es `cad watch` (Cache im Prozess).
+- **Daemon** (Bericht 10): Kernel-Ergebnisse sind Handles der nativen Bibliothek und nicht serialisierbar; statt eines Cache auf der Platte hält ein Hintergrundprozess den Engine-Cache. `check`, `eval`, `inspect`, `render`, `export`, `outline`, `measure` und `set` verbinden sich über `cad-ipc` (Endpunkt `daemon`, Socket-Ordner 0700, Socket 0600, Peer-UID) mit `cad daemon serve` oder starten ihn abgekoppelt (neue Sitzung, Ausgabe in `daemon.log`); genau ein Daemon über eine `flock`-Sperre. Der Client schickt Argumente, Arbeitsverzeichnis und stdin; der Daemon führt dieselbe Befehlsfunktion aus (Sitzung auf seiner Engine, Wechsel ins Arbeitsverzeichnis, Dateischreiben wird aufgezeichnet) und liefert stdout, stderr, Exit-Code und die Dateien, die der Client schreibt. Ausgabe wie ohne Daemon, auch die Flächen-Tags: die Sitzung nummeriert sie in der Reihenfolge, in der eine frische Engine sie vergäbe. Eine Engine für alle Projekte (inhaltsbasierte Schlüssel); Grenzen 512 MiB (Knotenergebnisse + Netze; Kosten eines Knotens im Daemon am Heap gemessen, sonst aus der Topologie geschätzt), 16384 Einträge, 8 Projekte, Cache leeren bei RSS über Start + 1,5 × Grenze; Ende nach 15 min ohne Anfrage; Watchdog 60 s (Daemon endet, der Befehl läuft ohne Daemon und meldet das); andere Build-ID ersetzt den Daemon. Aus mit `--no-daemon`, `CAD_NO_DAEMON=1`, `[daemon] enabled = false` (`$XDG_CONFIG_HOME/controller-cad/config.toml`); ohne Daemon (Windows, Fehler) rechnet der Befehl still selbst. `cad daemon status|stop|serve`. `cad watch` behält seinen eigenen Cache im Prozess.
 - Dazu eine Anleitung für Claude Code im Repo (`.claude/skills/cad-cli/SKILL.md`): outline → editieren → check → render (Kontaktbogen mit Rastern/Ankern) → inspect/measure → export.
 
 ---
@@ -517,7 +517,7 @@ Abhängigkeiten: M1 → M2 → M3 → M4 → M5. M6 hängt nur an M2. M8 hängt 
 
 ---
 
-## 15. Bekannte Grenzen (aus den Testberichten 1–9)
+## 15. Bekannte Grenzen (aus den Testberichten 1–10)
 
 Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1–F4 aus B4, behoben in B7).
 
@@ -561,6 +561,16 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 - „Speichern unter“ und die Öffnen-Dialoge sind native Dialoge und in den E2E-Tests nicht automatisiert (der Weg über die Kommandozeile und `cad ui show` schon).
 - Schnitt: eine Ebene; Kappen nur für undurchsichtige Körper (wie die CLI); die Kontur wird je Lage auf der CPU berechnet (bei sehr großen Meshes sinkt die Bildrate); Picking ignoriert den entfernten Teil, Griffe und Raster werden nicht abgeschnitten. Die kopierte CLI-Kamera ist orthografisch (UI perspektivisch) – das Bild stimmt im Schnitt, nicht pixelgenau.
 - Messwerte unter Xvfb ohne GPU (WebKitGTK mit Software-GL, Chromium mit SwiftShader) sind nur relativ aussagekräftig.
+
+**CLI-Daemon (B10)**
+
+- Nur Unix (Linux, macOS; Peer-UID-Prüfung nur unter Linux, sonst nur der 0700-Ordner); unter Windows rechnet jeder Befehl selbst.
+- Ein Arbeitsthread: gleichzeitige CLI-Aufrufe warten aufeinander (ohne Daemon liefen sie parallel in eigenen Prozessen).
+- Der Watchdog (60 s) trifft auch einen legitim langen Befehl: der Daemon endet, der Befehl wird ohne Daemon wiederholt (doppelte Zeit); einstellbar. Ein Absturz im Kernel (Signal) beendet den Daemon ebenso, die Wiederholung kann lokal genauso abstürzen.
+- Speichermessung pro Knoten nur mit glibc (`mallinfo2`, Allokationen anderer Threads zählen mit); sonst die Schätzung aus Flächen/Kanten, die je Modell um den Faktor 2–10 danebenliegen kann (Freiformflächen). RSS wird nach jeder Anfrage geprüft, nicht währenddessen.
+- Panik im Daemon: Exit-Code und Meldung wie ohne Daemon, die Panikmeldung des Laufzeitsystems steht aber im Log statt auf stderr. Die Zähler `cache_hits`, `kernel_calls`, `cached` und Zeitfelder zeigen, was der Daemon tatsächlich tat.
+- Build-ID aus Größe und Änderungszeit des Programms: wechseln sich zwei `cad`-Binaries ab (Debug/Release), ersetzen sie einander den Daemon.
+- Die Tag-Tabelle der Engine wächst weiter; nach 2²⁰ Tags wird die Engine (mit Cache) ersetzt.
 
 **solidcore (M8)**
 
