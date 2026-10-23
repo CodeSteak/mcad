@@ -1,0 +1,10 @@
+[package]
+name = "cad-outline"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Neutral 2D contours (lines, circular and elliptic arcs, Bezier curves) shared by SVG import and text"
+
+[dependencies]
+glam.workspace = true

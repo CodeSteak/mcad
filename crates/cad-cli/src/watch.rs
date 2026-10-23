@@ -42,8 +42,10 @@ fn project_files(m: &Model, main: &Path) -> BTreeSet<PathBuf> {
     let mut out = BTreeSet::new();
     out.insert(std::path::absolute(main).unwrap_or_else(|_| main.to_path_buf()));
     if let Some(cur) = m.session.current() {
-        for f in cur.proj.files.iter().skip(1) {
-            let p = m.root.join(&f.path);
+        // included/used files and data files (`import("logo.svg")`, fonts), also missing ones
+        let paths = cur.proj.files.iter().skip(1).map(|f| &f.path).chain(cur.proj.assets.keys());
+        for f in paths {
+            let p = m.root.join(f);
             out.insert(std::path::absolute(&p).unwrap_or(p));
         }
     }

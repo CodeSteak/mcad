@@ -260,6 +260,17 @@ pub enum Seg {
         t0: Option<DVec2>,
         t1: Option<DVec2>,
     },
+    /// Clamped (rational) B-spline: imported outlines – chains of tangent-continuous glyph or
+    /// SVG Bézier curves joined into one curve, elliptic arcs (rational quadratic).
+    Nurbs {
+        degree: u32,
+        /// `points.len() + degree + 1` values, non-decreasing, end knots of multiplicity
+        /// `degree + 1`.
+        knots: Vec<f64>,
+        points: Vec<DVec2>,
+        /// `None`: polynomial.
+        weights: Option<Vec<f64>>,
+    },
 }
 
 impl Seg {
@@ -269,6 +280,7 @@ impl Seg {
             Seg::Arc { .. } => "arc",
             Seg::Bezier { .. } => "bezier",
             Seg::Spline { .. } => "spline",
+            Seg::Nurbs { .. } => "nurbs",
         }
     }
 
@@ -281,6 +293,14 @@ impl Seg {
             Seg::Spline { points, t0, t1 } => {
                 cad_kernel::Segment::Nurbs(cad_kernel::curve2::interpolate(points, *t0, *t1)?)
             }
+            Seg::Nurbs { degree, knots, points, weights } => {
+                cad_kernel::Segment::Nurbs(cad_kernel::brep::BSplineCurve {
+                    degree: *degree,
+                    knots: knots.clone(),
+                    points: points.iter().map(|p| p.extend(0.0)).collect(),
+                    weights: weights.clone(),
+                })
+            }
         })
     }
 
@@ -288,7 +308,7 @@ impl Seg {
         match self {
             Seg::Line { a, .. } => *a,
             Seg::Arc { center, r, a0, .. } => *center + DVec2::new(a0.cos(), a0.sin()) * *r,
-            Seg::Bezier { points } | Seg::Spline { points, .. } => points[0],
+            Seg::Bezier { points } | Seg::Spline { points, .. } | Seg::Nurbs { points, .. } => points[0],
         }
     }
 
@@ -296,7 +316,9 @@ impl Seg {
         match self {
             Seg::Line { b, .. } => *b,
             Seg::Arc { center, r, a1, .. } => *center + DVec2::new(a1.cos(), a1.sin()) * *r,
-            Seg::Bezier { points } | Seg::Spline { points, .. } => *points.last().unwrap_or(&DVec2::ZERO),
+            Seg::Bezier { points } | Seg::Spline { points, .. } | Seg::Nurbs { points, .. } => {
+                *points.last().unwrap_or(&DVec2::ZERO)
+            }
         }
     }
 }

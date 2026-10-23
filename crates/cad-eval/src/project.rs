@@ -26,6 +26,95 @@ pub trait FileResolver {
     /// Text of the file at `path` (normalised project path, `/`-separated, relative to the
     /// project root, or absolute). `Err` with a reason if it cannot be read.
     fn read(&self, path: &str) -> Result<String, String>;
+
+    /// Contents of a data file (`import("logo.svg")`, `text(font = "schrift.ttf")`). By default
+    /// the text: projects held as texts (browser, `SetFiles`) store binary files as a
+    /// `data:…;base64,…` URL, which is decoded.
+    fn read_bytes(&self, path: &str) -> Result<Vec<u8>, String> {
+        let t = self.read(path)?;
+        match decode_data_url(&t) {
+            Some(b) => b,
+            None => Ok(t.into_bytes()),
+        }
+    }
+}
+
+/// Largest data file read by `import()`/`text()` (bytes).
+pub const MAX_ASSET_LEN: usize = 32 << 20;
+
+/// Extensions of data files the loader reads when their names appear as text in the project.
+pub const ASSET_EXTENSIONS: &[&str] = &[".svg", ".ttf", ".otf", ".ttc", ".otc"];
+
+/// `data:[mime];base64,…` → bytes (`None` if `t` is no base64 data URL).
+pub fn decode_data_url(t: &str) -> Option<Result<Vec<u8>, String>> {
+    let rest = t.strip_prefix("data:")?;
+    let (head, data) = rest.split_once(',')?;
+    if !head.ends_with(";base64") {
+        return None;
+    }
+    Some(base64_decode(data.trim()).ok_or_else(|| "ungültige base64-Daten".to_string()))
+}
+
+/// A `data:` URL of `bytes` (how binary files are kept in text projects).
+pub fn data_url(mime: &str, bytes: &[u8]) -> String {
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(bytes.len() * 4 / 3 + 32);
+    out.push_str("data:");
+    out.push_str(mime);
+    out.push_str(";base64,");
+    for c in bytes.chunks(3) {
+        let b = [c[0], *c.get(1).unwrap_or(&0), *c.get(2).unwrap_or(&0)];
+        let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
+        out.push(A[(n >> 18) as usize & 63] as char);
+        out.push(A[(n >> 12) as usize & 63] as char);
+        out.push(if c.len() > 1 { A[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if c.len() > 2 { A[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
+fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    let val = |c: u8| -> Option<u32> {
+        Some(match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            _ => return None,
+        } as u32)
+    };
+    let mut out = Vec::with_capacity(s.len() * 3 / 4);
+    let (mut acc, mut bits) = (0u32, 0u32);
+    for &c in s.as_bytes() {
+        if c == b'=' {
+            break;
+        }
+        if c.is_ascii_whitespace() {
+            continue;
+        }
+        acc = acc << 6 | val(c)?;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+            acc &= (1 << bits) - 1;
+        }
+    }
+    Some(out)
+}
+
+/// Contents of a data file (or why it could not be read).
+#[derive(Clone)]
+pub struct Asset(pub Result<std::sync::Arc<[u8]>, String>);
+
+impl std::fmt::Debug for Asset {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.0 {
+            Ok(b) => write!(f, "Asset({} Bytes)", b.len()),
+            Err(e) => write!(f, "Asset(Err({e}))"),
+        }
+    }
 }
 
 /// No files besides the main file.
@@ -60,6 +149,12 @@ impl FileResolver for FsResolver {
         let p = std::path::Path::new(path);
         let full = if p.is_absolute() { p.to_path_buf() } else { self.root.join(p) };
         std::fs::read_to_string(&full).map_err(|e| e.to_string())
+    }
+
+    fn read_bytes(&self, path: &str) -> Result<Vec<u8>, String> {
+        let p = std::path::Path::new(path);
+        let full = if p.is_absolute() { p.to_path_buf() } else { self.root.join(p) };
+        std::fs::read(&full).map_err(|e| e.to_string())
     }
 }
 
@@ -145,6 +240,12 @@ pub struct Project {
     pub syntax: Vec<Diagnostic>,
     /// Missing files, include cycles, too many files.
     pub link: Vec<Diagnostic>,
+    /// Data files (`import("logo.svg")`, fonts) by normalised project path: every text in the
+    /// project's expressions that names a file with an [`ASSET_EXTENSIONS`] extension, resolved
+    /// relative to each loaded file's folder (only existing ones are kept, except relative to
+    /// the file the name is written in, which keeps the error). Part of the project's content:
+    /// a changed SVG changes the evaluation.
+    pub assets: BTreeMap<String, Asset>,
 }
 
 struct Loader<'r> {
@@ -197,7 +298,15 @@ impl Project {
         let stmts = l.splice(ast.stmts, &main_path, &mut stack);
         let main = File { stmts, stmt_count: ast.stmt_count, expr_count: ast.expr_count };
         let main_uses = l.uses_of(&main.stmts, &main_path);
-        Project { files: l.files, main, main_uses, libs: l.libs, syntax: l.syntax, link: l.link }
+        let assets = load_assets(&l.files, &main, &l.libs, resolver);
+        Project { files: l.files, main, main_uses, libs: l.libs, syntax: l.syntax, link: l.link, assets }
+    }
+
+    /// A data file by the path written in `import(…)`/`font = …` at `span`: relative to that
+    /// statement's file. `None` if it was not loaded (a name computed at run time).
+    pub fn asset(&self, span: Span, rel: &str) -> Option<(String, &Asset)> {
+        let path = resolve_path(self.path_of(span), rel);
+        self.assets.get(&path).map(|a| (path, a))
     }
 
     /// A single file without other project files (`include`/`use` report missing files).
@@ -446,6 +555,75 @@ impl Loader<'_> {
         self.libs[idx].uses = uses;
         Some(idx)
     }
+}
+
+/// Visits the expressions of a statement (not of its child statements).
+fn stmt_exprs<'a>(s: &'a Stmt, f: &mut dyn FnMut(&'a Expr)) {
+    match &s.kind {
+        StmtKind::Assign { value, .. } => value.walk(f),
+        StmtKind::Module(m) => m.params.iter().filter_map(|p| p.default.as_ref()).for_each(|e| e.walk(f)),
+        StmtKind::Function(d) => {
+            d.params.iter().filter_map(|p| p.default.as_ref()).for_each(|e| e.walk(f));
+            d.body.walk(f);
+        }
+        StmtKind::Anchor { point, dir, .. } => {
+            point.walk(f);
+            if let Some(d) = dir {
+                d.walk(f);
+            }
+        }
+        StmtKind::Named { index: Some(i), .. } => i.walk(f),
+        StmtKind::Call { args, .. } => args.iter().for_each(|a| a.value.walk(f)),
+        StmtKind::For { vars, .. } | StmtKind::Let { vars, .. } => vars.iter().for_each(|v| v.value.walk(f)),
+        StmtKind::If { cond, .. } => cond.walk(f),
+        _ => {}
+    }
+}
+
+/// Loads the data files named by string literals of all loaded files (see [`Project::assets`]).
+fn load_assets(
+    files: &[SourceFile],
+    main: &File,
+    libs: &[Library],
+    resolver: &dyn FileResolver,
+) -> BTreeMap<String, Asset> {
+    let mut names: Vec<(String, FileId)> = Vec::new();
+    let mut visit = |e: &Expr| {
+        if let ExprKind::Str(t) = &e.kind {
+            let name = t.trim().split(':').next().unwrap_or("").to_string();
+            let l = name.to_ascii_lowercase();
+            if ASSET_EXTENSIONS.iter().any(|x| l.ends_with(x)) {
+                let f = file_of(e.span.start);
+                if !names.iter().any(|(n, g)| *n == name && *g == f) {
+                    names.push((name, f));
+                }
+            }
+        }
+    };
+    for s in main.stmts.iter().chain(libs.iter().flat_map(|l| l.ast.stmts.iter())) {
+        s.walk(&mut |s| stmt_exprs(s, &mut visit));
+    }
+    let mut out = BTreeMap::new();
+    for (name, own) in names {
+        let own_path = files.get(own as usize).map_or("", |f| f.path.as_str());
+        for from in std::iter::once(own_path).chain(files.iter().map(|f| f.path.as_str())) {
+            let path = resolve_path(from, &name);
+            if out.contains_key(&path) {
+                continue;
+            }
+            let res = resolver.read_bytes(&path).and_then(|b| {
+                if b.len() > MAX_ASSET_LEN {
+                    Err(format!("zu groß ({} Bytes, höchstens {MAX_ASSET_LEN})", b.len()))
+                } else {
+                    Ok(std::sync::Arc::<[u8]>::from(b))
+                }
+            });
+            if res.is_ok() || from == own_path {
+                out.insert(path, Asset(res));
+            }
+        }
+    }
+    out
 }
 
 fn has_include(s: &Stmt) -> bool {
