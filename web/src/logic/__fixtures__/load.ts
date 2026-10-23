@@ -18,6 +18,8 @@ const FIXTURES: Record<string, { example: string; local?: boolean }> = {
   winkel: { example: "spec/winkel_anker.scad" },
   nested: { example: "openscad-compat/05_nested_booleans.scad" },
   "spacers-2d": { example: "openscad-compat/27_spacers_2d.scad" },
+  projekt: { example: "projekt-gehaeuse/gehaeuse.scad" },
+  "projekt-modul": { example: "projekt-gehaeuse/gehaeuse.scad" },
 };
 
 export interface Fixture {

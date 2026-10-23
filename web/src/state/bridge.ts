@@ -5,8 +5,10 @@
 import { Text } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import type { Scene } from "../engine/protocol";
+import { fileIds } from "../logic/files";
 import { SceneIndex } from "../logic/sceneIndex";
 import { VersionMapper } from "../logic/positions";
+import { project } from "./project";
 import { store } from "./store";
 
 class Bridge {
@@ -18,25 +20,34 @@ class Bridge {
   dragTimes = new Map<number, number>();
   /** Last drag end with edits: time and source version (fine mesh latency). */
   dragEnd: { at: number; version: number } | null = null;
-  private indices = new WeakMap<Scene, { rev: number; idx: SceneIndex }>();
+  private indices = new WeakMap<Scene, { rev: number; file: string; idx: SceneIndex }>();
 
+  /** Document in the editor (the active project file). */
   doc(): Text {
     return this.view?.state.doc ?? Text.empty;
   }
 
+  /** Text in the editor (the active project file). */
   text(): string {
     return this.doc().toString();
   }
 
-  /** Index of a scene with positions mapped into the current document. */
+  /** Text of the main file (what is evaluated). */
+  mainText(): string {
+    return project.active === project.main ? this.text() : project.mainText();
+  }
+
+  /** Index of a scene with positions mapped into the current document (the active file). */
   index(scene: Scene): SceneIndex {
     const rev = store.getState().docRevision;
+    const file = project.active;
     const c = this.indices.get(scene);
-    if (c && c.rev === rev) return c.idx;
-    const idx = new SceneIndex(scene, this.mapper.mapper(scene.version));
-    this.indices.set(scene, { rev, idx });
+    if (c && c.rev === rev && c.file === file) return c.idx;
+    const idx = new SceneIndex(scene, this.mapper.mapper(scene.version), fileIds(scene, file, project.main));
+    this.indices.set(scene, { rev, file, idx });
     return idx;
   }
+
 
   /** Moves the editor cursor (and scrolls it into view). */
   setCursor(pos: number, focus = true): void {

@@ -30,6 +30,8 @@ Datei `-` liest von stdin: `echo 'cube(5);' | cad check -`.
 | `cad inspect DATEI --line N` | Was Zeile N erzeugt: Knoten, Hülle, Volumen/Fläche, ausgewählte Kanten, Hinweise („4 Kanten“), Fehler, Griffe |
 | `cad render DATEI -o bild.png [--view iso\|front\|back\|top\|bottom\|left\|right] [--line N] [--size 1024x768]` | Bild; mit `--line` wie im Editor: Knoten der Zeile voll, Rest gedimmt, Zonen blau, abgezogene Körper rot halbtransparent, ausgewählte Kanten orange, gescheiterte Kanten rot |
 | `cad export DATEI -o teil.stl\|teil.3mf` | Exportdatei der Wurzel |
+| `cad export DATEI --part NAME [--part NAME2] -o teil.stl\|.3mf\|.step` | Nur diese Bauteile (benannte Instanzen auf oberster Ebene, z. B. `deckel`, `k[2]`); 3MF: ein Objekt je Bauteil |
+| `cad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | Jedes Bauteil als eigene Datei (`deckel.stl`, `k_2.stl`) |
 
 Gemeinsame Optionen: `--json`, `--module m` (Modul als Kontext, verschachtelt `aussen::innen`),
 `-D name=wert` (Parameter des Kontextmoduls, Wert als JSON: `-D w=60`, `-D hohl=true`,
@@ -38,6 +40,11 @@ Gemeinsame Optionen: `--json`, `--module m` (Modul als Kontext, verschachtelt `a
 **Kontext wie im Editor:** Liegt `--line` in einer Moduldefinition, zeigen `inspect` und
 `render` nur dieses Modul mit seinen Standardwerten (und `-D`). `--whole-file` behält den
 Dateikontext.
+
+**Projekte aus mehreren Dateien:** `include <datei>` fügt den Inhalt ein, `use <datei>` macht
+nur Module und Funktionen sichtbar (wie OpenSCAD); Pfade relativ zur einbindenden Datei.
+Diagnosen anderer Dateien stehen mit deren Pfad da (`lib/teile.scad:3:5: …`, JSON: `file`,
+`range` lokal in dieser Datei); `eval` listet `Dateien:` und `Bauteile:` (Hülle, Volumen).
 
 Exit-Codes: `0` ok · `1` Diagnosen mit Fehlern (Syntax, Auswertung oder gescheiterte
 Kernel-Operation; Ausgabe trotzdem vollständig) · `2` Aufruffehler (Argumente, Datei) ·
@@ -107,7 +114,9 @@ Listen erzeugen indizierte Ebenen: `x: loch = [for (i = [0:3]) 6 + i * 12];` →
 Transformationen vor `grid` platzieren das Raster: `translate(g[rechts, vorne, boden]) grid l { … }`.
 
 **Anker und benannte Instanzen:** `k: gehaeuse(w = 60);` benennt die Instanz; `k.ecke` ist ein
-Punkt im aktuellen System, `dir(k.oben)` die Richtung, `rotate(to = v)` dreht z auf `v`:
+Punkt im aktuellen System, `dir(k.oben)` die Richtung, `rotate(to = v)` dreht z auf `v`. In
+Schleifen mit Index: `for (i = [0:3]) k[i]: halter();` → `k[2].oben` (Index ganzzahlig).
+Benannte Instanzen auf oberster Ebene der Hauptdatei sind Bauteile (Exportnamen):
 
 ```
 k: gehaeuse(w = 60);

@@ -214,6 +214,7 @@ select:focus-visible {
   min-height: 0;
   background: var(--panel);
   display: flex;
+  flex-direction: column;
 }
 
 .editor {
@@ -290,6 +291,11 @@ select:focus-visible {
   text-underline-offset: 3px;
 }
 
+.editor .cm-include {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
 .editor .cm-ref-hover {
   background: var(--accent-soft);
   outline: 1px solid var(--accent);
@@ -336,8 +342,8 @@ select:focus-visible {
 }
 
 .viewcol {
-  display: grid;
-  grid-template-rows: auto 1fr;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
 }
@@ -383,6 +389,7 @@ select:focus-visible {
 
 .viewbody {
   display: flex;
+  flex: 1;
   min-height: 0;
   min-width: 0;
 }
@@ -715,4 +722,121 @@ input:checked + .cm-switch-knob::after {
 .statusbar .st-note.bang {
   color: var(--hl-modifier);
   font-weight: 600;
+}
+
+/* Project files (tabs above the editor) */
+.filebar {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding: 3px 6px 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel-2);
+  flex-wrap: wrap;
+}
+
+.filebar .tabs {
+  display: flex;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.filebar .tab {
+  border-radius: 4px 4px 0 0;
+  border-bottom: none;
+  padding: 3px 10px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+  background: transparent;
+  color: var(--muted);
+}
+
+.filebar .tab.active {
+  background: var(--panel);
+  color: var(--text);
+  border-color: var(--border);
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.filebar .tab .star {
+  color: var(--view-anchor);
+  margin-right: 4px;
+}
+
+.filebar .tab .dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--error);
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.filebar .fileactions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: 3px;
+}
+
+.filebar .fileactions button {
+  font-size: 11px;
+  padding: 1px 6px;
+}
+
+.filebar .fileactions .sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+}
+
+/* Parts (named instances at the top level) */
+.partsbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 4px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.partsbar .ptitle {
+  font-weight: 600;
+}
+
+.partsbar .part {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.partsbar .part.off .pname {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+.partsbar .pname {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.partsbar .pinfo {
+  color: var(--muted);
+}
+
+.partsbar button {
+  font-size: 11px;
+  padding: 0 5px;
+}
+
+.partsbar .pall {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
 }

@@ -470,3 +470,25 @@ export interface NodeInfo {
 export function nodesOnLine(page: Page, line: number): Promise<NodeInfo[]> {
   return page.evaluate((l) => (window as unknown as { __cad: { nodesOnLine(l: number): NodeInfo[] } }).__cad.nodesOnLine(l), line);
 }
+
+// ---------------------------------------------------------------- Phase D (test report 6)
+
+/** Screenshots and measurements for test report 6 (tools/report/report6.mjs). */
+export const REPORT6_DIR = join(here, "../../reports/tmp/report6");
+
+/** Screenshot for report 6: the whole window (default), the view column or the editor pane. */
+export async function screenshotD(page: Page, name: string, area: "view" | "full" | "editor" = "full"): Promise<void> {
+  mkdirSync(join(REPORT6_DIR, "img"), { recursive: true });
+  const clip = area === "view" ? await page.locator("section.viewcol").boundingBox() : area === "editor" ? await page.locator("section.editorpane").boundingBox() : null;
+  await page.screenshot({ path: join(REPORT6_DIR, "img", `${name}.jpg`), type: "jpeg", quality: 80, ...(clip ? { clip } : {}) });
+}
+
+export function recordD(entry: ScenarioC): void {
+  mkdirSync(REPORT6_DIR, { recursive: true });
+  const f = join(REPORT6_DIR, "scenarios.json");
+  const all: ScenarioC[] = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
+  const i = all.findIndex((e) => e.id === entry.id);
+  if (i >= 0) all[i] = entry;
+  else all.push(entry);
+  writeFileSync(f, JSON.stringify(all, null, 2));
+}

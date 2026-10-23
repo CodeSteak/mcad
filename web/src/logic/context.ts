@@ -11,7 +11,10 @@ export interface ModuleSpan extends Span {
 }
 
 export function moduleSpans(idx: SceneIndex): ModuleSpan[] {
-  return idx.scene.modules.map((m) => ({ name: m.name, ...idx.range(m.range), body: idx.range(m.body_range), path: m.path }));
+  // Only modules of the file in the editor (others map to negative positions).
+  return idx.scene.modules
+    .filter((m) => idx.inFile(m.range))
+    .map((m) => ({ name: m.name, ...idx.range(m.range), body: idx.range(m.body_range), path: m.path }));
 }
 
 /** Path bar segments: "Datei" then the modules of the context. */

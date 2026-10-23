@@ -22,8 +22,10 @@ import {
   rectangularSelection,
 } from "@codemirror/view";
 import { refDeclaration } from "../logic/context";
+import { includeAt, resolvePath } from "../logic/files";
 import { VersionMapper } from "../logic/positions";
 import { bridge } from "../state/bridge";
+import { project } from "../state/project";
 import { store } from "../state/store";
 import { buildDecorations } from "./decorations";
 import { scad } from "./lang";
@@ -35,6 +37,8 @@ export interface EditorCallbacks {
   /** The document changed (new version). */
   onChange(text: string, version: number): void;
   onSave(): void;
+  /** Ctrl+click on the path of `include <…>`/`use <…>`: open that project file. */
+  onOpenFile?(path: string): void;
 }
 
 function hoverRefSpan(): { from: number; to: number } | null {
@@ -69,6 +73,8 @@ const engineDecorations = ViewPlugin.fromClass(
         viewHoverLines: st.viewHover?.lines ?? [],
         hoverLine,
         hoverRef: hoverRefSpan(),
+        activeFile: project.active,
+        mainFile: project.main,
       });
     }
   },
@@ -89,6 +95,8 @@ function syncPlugin(cb: EditorCallbacks): Extension {
   });
 }
 
+let callbacks: EditorCallbacks | null = null;
+
 const hoverTracking = EditorView.domEventHandlers({
   mousemove(e, view) {
     const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }, false);
@@ -106,9 +114,16 @@ const hoverTracking = EditorView.domEventHandlers({
   // keeps placing the cursor so references stay editable).
   mousedown(e, view) {
     if (e.button !== 0 || !(e.ctrlKey || e.metaKey)) return false;
+    const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }, false);
+    // `include <datei>` / `use <datei>`: open the file (paths relative to this file).
+    const inc = includeAt(view.state.doc.toString(), pos);
+    if (inc && callbacks?.onOpenFile) {
+      e.preventDefault();
+      callbacks.onOpenFile(resolvePath(project.active, inc.path));
+      return true;
+    }
     const s = store.getState().scene;
     if (!s) return false;
-    const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }, false);
     const idx = bridge.index(s);
     const r = idx.refAt(pos);
     if (r === null) return false;
@@ -120,45 +135,54 @@ const hoverTracking = EditorView.domEventHandlers({
   },
 });
 
+/** A new editor state with all extensions (one per project file: own undo history). */
+export function makeState(doc: string): EditorState {
+  if (!callbacks) throw new Error("editor not created");
+  return EditorState.create({ doc, extensions: editorExtensions(callbacks) });
+}
+
+function editorExtensions(cb: EditorCallbacks): Extension[] {
+  return [
+    lineNumbers(),
+    highlightActiveLineGutter(),
+    highlightSpecialChars(),
+    history(),
+    foldGutter(),
+    drawSelection(),
+    dropCursor(),
+    EditorState.allowMultipleSelections.of(true),
+    indentOnInput(),
+    indentUnit.of("    "),
+    bracketMatching(),
+    closeBrackets(),
+    autocompletion({ activateOnTyping: false }),
+    rectangularSelection(),
+    crosshairCursor(),
+    highlightActiveLine(),
+    highlightSelectionMatches(),
+    EditorView.lineWrapping,
+    keymap.of([
+      { key: "Mod-s", preventDefault: true, run: () => (cb.onSave(), true) },
+      ...closeBracketsKeymap,
+      ...defaultKeymap,
+      ...searchKeymap,
+      ...historyKeymap,
+      ...foldKeymap,
+      indentWithTab,
+    ]),
+    scad(),
+    engineDecorations,
+    syncPlugin(cb),
+    hoverTracking,
+    EditorView.contentAttributes.of({ "aria-label": "Quelltext", spellcheck: "false" }),
+  ];
+}
+
 export function createEditor(parent: HTMLElement, doc: string, cb: EditorCallbacks): EditorView {
-  const state = EditorState.create({
-    doc,
-    extensions: [
-      lineNumbers(),
-      highlightActiveLineGutter(),
-      highlightSpecialChars(),
-      history(),
-      foldGutter(),
-      drawSelection(),
-      dropCursor(),
-      EditorState.allowMultipleSelections.of(true),
-      indentOnInput(),
-      indentUnit.of("    "),
-      bracketMatching(),
-      closeBrackets(),
-      autocompletion({ activateOnTyping: false }),
-      rectangularSelection(),
-      crosshairCursor(),
-      highlightActiveLine(),
-      highlightSelectionMatches(),
-      EditorView.lineWrapping,
-      keymap.of([
-        { key: "Mod-s", preventDefault: true, run: () => (cb.onSave(), true) },
-        ...closeBracketsKeymap,
-        ...defaultKeymap,
-        ...searchKeymap,
-        ...historyKeymap,
-        ...foldKeymap,
-        indentWithTab,
-      ]),
-      scad(),
-      engineDecorations,
-      syncPlugin(cb),
-      hoverTracking,
-      EditorView.contentAttributes.of({ "aria-label": "Quelltext", spellcheck: "false" }),
-    ],
-  });
+  callbacks = cb;
+  const state = makeState(doc);
   const view = new EditorView({ state, parent });
+
   bridge.view = view;
   bridge.mapper = new VersionMapper(doc.length);
   // Rebuild decorations when engine data or hover state change.

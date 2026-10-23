@@ -1,6 +1,8 @@
 // Code ↔ view mapping on one scene: which nodes a cursor position or line selects, which
 // lines a mesh face belongs to, which module a position lies in. All positions are in the
-// *current* editor document; scene ranges are mapped with the scene's `MapPos`.
+// *current* editor document; scene ranges are mapped with the scene's `MapPos`. Ranges of
+// other project files than the one in the editor (`files`: its scene file ids) map to `OFF`
+// and never match a position.
 
 import type { Text } from "@codemirror/state";
 import type { Ref, Scene, SceneNode, SrcRange, Vec3 } from "../engine/protocol";
@@ -27,6 +29,15 @@ export interface CursorSelection {
 
 export const EMPTY_SELECTION: CursorSelection = { nodes: [], stmt: null, line: 0, refs: [], grids: [] };
 
+/** Span of a range in another file than the editor's. */
+export const OFF: Span = Object.freeze({ from: -1, to: -1 }) as Span;
+
+export function isOff(s: Span): boolean {
+  return s.from < 0;
+}
+
+const MAIN_ONLY: ReadonlySet<number> = new Set([0]);
+
 export class SceneIndex {
   readonly scene: Scene;
   readonly map: MapPos;
@@ -34,10 +45,14 @@ export class SceneIndex {
   private byStmt = new Map<number, number[]>();
   private tagNodes = new Map<number, number[]>();
 
-  constructor(scene: Scene, map: MapPos = identityMap) {
+  /** Scene file ids of the file in the editor. */
+  readonly files: ReadonlySet<number>;
+
+  constructor(scene: Scene, map: MapPos = identityMap, files: ReadonlySet<number> = MAIN_ONLY) {
     this.scene = scene;
     this.map = map;
-    this.spans = scene.nodes.map((n) => mapRange(map, n.range.from, n.range.to));
+    this.files = files;
+    this.spans = scene.nodes.map((n) => this.range(n.range));
     for (const n of scene.nodes) {
       if (n.stmt === null) continue;
       const l = this.byStmt.get(n.stmt);
@@ -51,7 +66,13 @@ export class SceneIndex {
     return this.spans[node];
   }
 
+  /** The range is in the file shown in the editor. */
+  inFile(r: SrcRange): boolean {
+    return this.files.has(r.file ?? 0);
+  }
+
   range(r: SrcRange): Span {
+    if (!this.inFile(r)) return OFF;
     return mapRange(this.map, r.from, r.to);
   }
 
@@ -195,7 +216,11 @@ export class SceneIndex {
   /** 1-based lines (current document) where nodes start. */
   linesOf(doc: Text, nodes: number[]): number[] {
     const out = new Set<number>();
-    for (const n of nodes) out.add(doc.lineAt(Math.min(this.spans[n].from, doc.length)).number);
+    for (const n of nodes) {
+      const s = this.spans[n];
+      if (!isOff(s)) out.add(doc.lineAt(Math.min(s.from, doc.length)).number);
+    }
+
     return [...out].sort((a, b) => a - b);
   }
 
