@@ -440,3 +440,118 @@ fn handles_only_in_context_and_unique() {
     assert_eq!(ids.len(), out.handles.len());
     assert!(ids.iter().all(|i| *i < (1 << 53)));
 }
+
+#[test]
+fn computed_values_have_locked_handles() {
+    let src = "p = [1, 2, 3];\ntranslate(p + [1, 0, 0]) cube(1);\nw = 4; grid g { x: a = w * 2, b = 5; }";
+    let out = clean(src);
+    assert!(no_handle(&out, src, "translate"));
+    let t = out
+        .locked_handles
+        .iter()
+        .find(|h| span_text(src, h.span).starts_with("translate"))
+        .expect("locked translate handle");
+    assert!(t.locked && !t.has_ref);
+    assert!(approx3(t.pos, [2.0, 2.0, 3.0]));
+    assert!(t.comps.iter().all(|c| c.is_none()));
+    // Locked handles cannot be dragged.
+    assert!(drag_edits(&out, src, t.id, &free([9.0, 9.0, 9.0]), &DragOptions::default()).is_empty());
+    // Expression plane `w * 2`: locked; literal plane `b = 5`: editable.
+    let g = out.grid_by_name("g").unwrap();
+    let a = g.planes.iter().position(|p| p.name == "a").unwrap() as u32;
+    assert!(out.locked_handles.iter().any(|h| h.kind == (HandleKind::Plane { axis: 0 }) && h.index == a));
+    assert!(out.handles.iter().all(|h| !h.locked));
+    let mut ids: Vec<u64> = out.handles.iter().chain(&out.locked_handles).map(|h| h.id).collect();
+    let n = ids.len();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), n);
+}
+
+const PLANE_SNAP_SRC: &str = "grid g {
+    x: rechts = 15;
+    z: boden = 0, mitte = 12, deckel = 20;
+}
+cylinder(h = 25, r = 3);
+translate([0, 0, 5]) cylinder(h = 10, r = 2);
+hh = 7;
+linear_extrude(height = hh) square(3);
+sphere(r = 4);
+";
+
+#[test]
+fn one_d_handles_snap_to_grid_planes() {
+    let src = PLANE_SNAP_SRC;
+    let out = clean(src);
+    let h = handle(&out, src, "cylinder(h = 25", HandleKind::Height, 0);
+    let t = snap_targets(&out, h.id);
+    let texts: Vec<&str> = t.iter().map(|t| t.text.as_str()).collect();
+    assert_eq!(texts, ["g.boden", "g.mitte", "g.deckel"]);
+    assert!(approx3(t[2].world, [0.0, 0.0, 20.0]));
+    assert_eq!(t[2].world, t[2].result_world);
+    let new = drag(&out, src, h, DragTarget::Snap(t[2].r#ref.clone()));
+    assert!(new.contains("cylinder(h = g.deckel, r = 3);"), "{new}");
+    let out2 = clean(&new);
+    let h2 = handle(&out2, &new, "cylinder(h = g.deckel", HandleKind::Height, 0);
+    assert!(h2.has_ref && !h2.locked);
+    assert_eq!(h2.value, [20.0]);
+    // Alt drag of the reference writes a number again.
+    let freed = drag(&out2, &new, h2, scalar(17.2));
+    assert!(freed.contains("cylinder(h = 17, r = 3);"), "{freed}");
+    // Radius along x snaps onto the x plane.
+    let r = handle(&out, src, "cylinder(h = 25", HandleKind::Radius, 0);
+    let t = snap_targets(&out, r.id);
+    assert_eq!(t.iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["g.rechts"]);
+    let new = drag(&out, src, r, DragTarget::Snap(t[0].r#ref.clone()));
+    assert!(new.contains("cylinder(h = 25, r = g.rechts);"), "{new}");
+    clean(&new);
+    // Moved by translate: writing g.deckel would not land on the plane → no targets.
+    let ht = handle(&out, src, "cylinder(h = 10", HandleKind::Height, 0);
+    assert!(snap_targets(&out, ht.id).is_empty());
+    let bad = SnapRef::Plane { grid: 0, plane: "deckel".into() };
+    assert!(drag_edits(&out, src, ht.id, &DragTarget::Snap(bad), &DragOptions::default()).is_empty());
+    // Through a variable: the definition is rewritten.
+    let le = handle(&out, src, "linear_extrude", HandleKind::Height, 0);
+    let t = snap_targets(&out, le.id);
+    let m = t.iter().find(|t| t.text == "g.mitte").expect("g.mitte");
+    let new = drag(&out, src, le, DragTarget::Snap(m.r#ref.clone()));
+    assert!(new.contains("hh = g.mitte;"), "{new}");
+    let out3 = clean(&new);
+    let le3 = handle(&out3, &new, "linear_extrude", HandleKind::Height, 0);
+    assert_eq!(le3.value, [12.0]);
+    // Sphere radius (axis x) → g.rechts.
+    let s = handle(&out, src, "sphere", HandleKind::Radius, 0);
+    assert_eq!(snap_targets(&out, s.id).len(), 1);
+}
+
+#[test]
+fn plane_snap_respects_visibility() {
+    // Before the grid declaration nothing can reference it.
+    let src = "cylinder(h = 25, r = 3);\ngrid g { z: deckel = 20; }";
+    let out = clean(src);
+    let h = handle(&out, src, "cylinder", HandleKind::Height, 0);
+    assert!(snap_targets(&out, h.id).is_empty());
+    // A plane of a later-declared grid can snap onto an earlier grid's plane, not its own.
+    let src = "grid a { z: top = 10; }\ngrid b { z: p = 3, q = 10; }";
+    let out = clean(src);
+    let b = out.grid_by_name("b").unwrap();
+    let q = b.planes.iter().position(|p| p.name == "q").unwrap() as u32;
+    let hq = handle(&out, src, "grid b", HandleKind::Plane { axis: 2 }, q);
+    let t = snap_targets(&out, hq.id);
+    assert_eq!(t.iter().map(|t| t.text.as_str()).collect::<Vec<_>>(), ["a.top"]);
+    let new = drag(&out, src, hq, DragTarget::Snap(t[0].r#ref.clone()));
+    assert_eq!(new, "grid a { z: top = 10; }\ngrid b { z: p = 3, q = a.top; }");
+    clean(&new);
+}
+
+#[test]
+fn zone_center_handle_through_translate() {
+    let src = "grid g { x: r = 20; y: h = 20; z: d = 20; }\nfillet(2) {\n    cube(20);\n    translate([20, 20, 20]) sphere(8);\n}";
+    let out = run(src);
+    let h = handle(&out, src, "translate([20, 20, 20]) sphere", HandleKind::Point, 0);
+    assert!(approx3(h.frame.transform_point3(h.pos), [20.0, 20.0, 20.0]));
+    let t = snap_targets(&out, h.id);
+    assert!(t.iter().any(|t| t.text == "g[r, h, d]"), "{t:?}");
+    let new = drag(&out, src, h, DragTarget::Snap(SnapRef::Grid { grid: 0, planes: ["r".into(), "h".into(), "d".into()] }));
+    assert!(new.contains("translate(g[r, h, d]) sphere(8);"), "{new}");
+}

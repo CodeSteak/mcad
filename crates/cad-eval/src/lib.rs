@@ -25,9 +25,18 @@ mod sig;
 pub mod value;
 
 pub use edit::{DragOptions, DragTarget, DragValue, SnapRef, SnapTarget, drag_edits, set_default_edit, snap_targets};
-pub use eval::eval;
 pub use output::*;
 pub use value::{Origin, PValue, fmt_literal, fmt_num};
+
+/// Evaluates a parsed file (see [`eval::eval`]). Handles of computed values are moved from
+/// `handles` to `locked_handles`: they are shown, but not edited (Spec: Griffe, Regel 3).
+pub fn eval(src: &str, file: &cad_syntax::ast::File, opts: &EvalOptions) -> EvalOutput {
+    let mut out = eval::eval(src, file, opts);
+    let (locked, handles): (Vec<Handle>, Vec<Handle>) = std::mem::take(&mut out.handles).into_iter().partition(|h| h.locked);
+    out.handles = handles;
+    out.locked_handles = locked;
+    out
+}
 
 /// Parses and evaluates a source text.
 pub fn eval_source(src: &str, opts: &EvalOptions) -> EvalOutput {

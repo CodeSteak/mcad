@@ -204,7 +204,12 @@ where
             }
             ToEngine::Drag { handle, target } => {
                 self.drag = Some(handle);
-                self.drag_edits(handle, &target)
+                let mut res = self.drag_edits(handle, &target);
+                if res.is_empty() {
+                    // Always answer: the UI keeps at most one drag in flight.
+                    res.push(FromEngine::Edits { version: self.cur.as_ref().map_or(self.version, |c| c.version), edits: Vec::new() });
+                }
+                res
             }
             ToEngine::DragEnd { handle, target } => {
                 self.drag = None;
@@ -225,6 +230,16 @@ where
                 res
             }
             ToEngine::SnapTargets { handle } => self.snap_targets(handle),
+            ToEngine::SetDragOptions { step_mm, step_deg } => {
+                let ok = |v: f64| v.is_finite() && v >= 0.0;
+                if ok(step_mm) {
+                    self.opts.drag.step_mm = step_mm;
+                }
+                if ok(step_deg) {
+                    self.opts.drag.step_deg = step_deg;
+                }
+                Vec::new()
+            }
             ToEngine::SetDefault { module, param, value } => {
                 let (file, _) = cad_syntax::parse(&self.text);
                 let text = convert::value_text(&value);
@@ -530,6 +545,7 @@ fn snap_ref_to_p(r: &cad_eval::SnapRef) -> p::SnapRef {
     match r {
         cad_eval::SnapRef::Grid { grid, planes } => p::SnapRef::Grid { grid: *grid, planes: planes.clone() },
         cad_eval::SnapRef::Anchor { inst, name } => p::SnapRef::Anchor { inst: *inst, name: name.clone() },
+        cad_eval::SnapRef::Plane { grid, plane } => p::SnapRef::Plane { grid: *grid, plane: plane.clone() },
     }
 }
 
@@ -537,6 +553,7 @@ fn snap_ref_from_p(r: &p::SnapRef) -> cad_eval::SnapRef {
     match r {
         p::SnapRef::Grid { grid, planes } => cad_eval::SnapRef::Grid { grid: *grid, planes: planes.clone() },
         p::SnapRef::Anchor { inst, name } => cad_eval::SnapRef::Anchor { inst: *inst, name: name.clone() },
+        p::SnapRef::Plane { grid, plane } => cad_eval::SnapRef::Plane { grid: *grid, plane: plane.clone() },
     }
 }
 

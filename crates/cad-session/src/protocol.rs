@@ -91,7 +91,8 @@ pub enum ToEngine {
     },
     /// A handle drag starts: coarse tessellation until `DragEnd`. Answers `SnapTargets`.
     DragStart { handle: u64 },
-    /// Handle moved: answers `Edits` (nothing if the text would not change).
+    /// Handle moved: always answers `Edits` (an empty list if the text would not change), so
+    /// the UI can keep at most one drag message in flight.
     Drag { handle: u64, target: DragTarget },
     /// Drag finished; `target` = final position (optional). Back to fine tessellation.
     DragEnd {
@@ -99,8 +100,12 @@ pub enum ToEngine {
         #[ts(optional)]
         target: Option<DragTarget>,
     },
-    /// Grid points and anchors a point handle can snap to. Answers `SnapTargets`.
+    /// Grid points and anchors a point handle can snap to; grid planes (`g.name`) for height,
+    /// radius and plane handles. Answers `SnapTargets`.
     SnapTargets { handle: u64 },
+    /// Rounding steps of free drags (Alt): lengths in mm, angles in degrees (0 = no rounding).
+    /// Answers nothing.
+    SetDragOptions { step_mm: f64, step_deg: f64 },
     /// "Als Standard übernehmen": write `value` as the default of `param` of `module`.
     /// Answers `Edits`.
     SetDefault { module: String, param: String, value: Value },
@@ -130,6 +135,8 @@ pub enum SnapRef {
     Grid { grid: u32, planes: [String; 3] },
     /// Anchor `name` of the named instance `inst`.
     Anchor { inst: u32, name: String },
+    /// Grid plane `g.name` as a number (height, radius and plane handles).
+    Plane { grid: u32, plane: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -299,7 +306,10 @@ pub struct Scene {
     pub anchors: Vec<Anchor>,
     /// Module instances; index = id, 0 = context root.
     pub instances: Vec<Instance>,
+    /// Editable handles of the context module.
     pub handles: Vec<Handle>,
+    /// Handles of computed values (`locked = true`): shown, not editable.
+    pub locked_handles: Vec<Handle>,
     /// Inline hints of assignments.
     pub hints: Vec<Hint>,
     /// Module signatures (parameter bar, path bar).
@@ -581,6 +591,8 @@ pub struct Handle {
     pub via_var: bool,
     /// Edited through a module parameter default (all calls change).
     pub via_default: bool,
+    /// Computed value: shown, not editable (no literal, no reference).
+    pub locked: bool,
     /// Grids / named instances visible at the statement (snap targets).
     pub grids: Vec<u32>,
     pub instances: Vec<u32>,

@@ -33,14 +33,14 @@ export type Value = null | boolean | number | string | Array<Value> | { start: n
 /**
  * Message from the UI to the engine.
  */
-export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, } | { "type": "Cancel" };
+export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, } | { "type": "Cancel" };
 
 /**
  * Where a dragged handle goes.
  */
 export type DragTarget = { "kind": "point", pos: Vec3, } | { "kind": "value", value: number, } | { "kind": "snap", snap: SnapRef, };
 
-export type SnapRef = { "kind": "grid", grid: number, planes: [string, string, string], } | { "kind": "anchor", inst: number, name: string, };
+export type SnapRef = { "kind": "grid", grid: number, planes: [string, string, string], } | { "kind": "anchor", inst: number, name: string, } | { "kind": "plane", grid: number, plane: string, };
 
 export type ExportFormat = "stl" | "3mf";
 
@@ -132,7 +132,15 @@ anchors: Array<Anchor>,
 /**
  * Module instances; index = id, 0 = context root.
  */
-instances: Array<Instance>, handles: Array<Handle>, 
+instances: Array<Instance>, 
+/**
+ * Editable handles of the context module.
+ */
+handles: Array<Handle>, 
+/**
+ * Handles of computed values (`locked = true`): shown, not editable.
+ */
+locked_handles: Array<Handle>, 
 /**
  * Inline hints of assignments.
  */
@@ -425,6 +433,10 @@ via_var: boolean,
  * Edited through a module parameter default (all calls change).
  */
 via_default: boolean, 
+/**
+ * Computed value: shown, not editable (no literal, no reference).
+ */
+locked: boolean, 
 /**
  * Grids / named instances visible at the statement (snap targets).
  */
