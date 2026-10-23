@@ -197,14 +197,7 @@ impl Project {
         let stmts = l.splice(ast.stmts, &main_path, &mut stack);
         let main = File { stmts, stmt_count: ast.stmt_count, expr_count: ast.expr_count };
         let main_uses = l.uses_of(&main.stmts, &main_path);
-        Project {
-            files: l.files,
-            main,
-            main_uses,
-            libs: l.libs,
-            syntax: l.syntax,
-            link: l.link,
-        }
+        Project { files: l.files, main, main_uses, libs: l.libs, syntax: l.syntax, link: l.link }
     }
 
     /// A single file without other project files (`include`/`use` report missing files).
@@ -335,17 +328,14 @@ impl Loader<'_> {
                     if let Some(i) = stack.iter().position(|p| *p == target) {
                         let mut chain: Vec<&str> = stack[i..].iter().map(|s| s.as_str()).collect();
                         chain.push(&target);
-                        self.link.push(Diagnostic::error(
-                            path_span,
-                            format!("zyklisches `include`: {}", chain.join(" → ")),
-                        ));
+                        self.link
+                            .push(Diagnostic::error(path_span, format!("zyklisches `include`: {}", chain.join(" → "))));
                         continue;
                     }
                     match self.read(&target) {
-                        Err(why) => self.link.push(Diagnostic::error(
-                            path_span,
-                            format!("Datei `{target}` nicht gefunden ({why})"),
-                        )),
+                        Err(why) => self
+                            .link
+                            .push(Diagnostic::error(path_span, format!("Datei `{target}` nicht gefunden ({why})"))),
                         Ok(text) => {
                             if let Some((_, ast)) = self.add_file(&target, text, FileRole::Include, at) {
                                 stack.push(target.clone());
@@ -382,7 +372,9 @@ impl Loader<'_> {
             StmtKind::For { vars, body, intersection } => {
                 StmtKind::For { vars, body: Box::new(self.splice_child(*body, from, stack)), intersection }
             }
-            StmtKind::Let { vars, body } => StmtKind::Let { vars, body: Box::new(self.splice_child(*body, from, stack)) },
+            StmtKind::Let { vars, body } => {
+                StmtKind::Let { vars, body: Box::new(self.splice_child(*body, from, stack)) }
+            }
             StmtKind::If { cond, then, els } => StmtKind::If {
                 cond,
                 then: Box::new(self.splice_child(*then, from, stack)),
@@ -440,7 +432,12 @@ impl Loader<'_> {
         };
         let (id, ast) = self.add_file(path, text, FileRole::Use, at)?;
         let idx = self.libs.len();
-        self.libs.push(Library { file: id, path: path.to_string(), ast: File { stmts: Vec::new(), stmt_count: 0, expr_count: 0 }, uses: Vec::new() });
+        self.libs.push(Library {
+            file: id,
+            path: path.to_string(),
+            ast: File { stmts: Vec::new(), stmt_count: 0, expr_count: 0 },
+            uses: Vec::new(),
+        });
         self.lib_by_path.insert(path.to_string(), idx);
         let mut stack = vec![path.to_string()];
         let stmts = self.splice(ast.stmts, path, &mut stack);

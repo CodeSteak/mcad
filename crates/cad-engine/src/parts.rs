@@ -34,7 +34,8 @@ impl NodeFormat {
 
 /// A file name for a part name: `k[2]` → `k_2`, characters outside `[A-Za-z0-9_.-]` → `_`.
 pub fn part_file_name(name: &str, ext: &str) -> String {
-    let mut s: String = name.chars().map(|c| if c.is_ascii_alphanumeric() || "_.-".contains(c) { c } else { '_' }).collect();
+    let mut s: String =
+        name.chars().map(|c| if c.is_ascii_alphanumeric() || "_.-".contains(c) { c } else { '_' }).collect();
     while s.ends_with('_') {
         s.pop();
     }
@@ -56,7 +57,12 @@ pub fn threemf_objects_xml(objects: &[(&str, &Mesh)]) -> String {
     s.push_str(" <resources>\n");
     for (i, (name, m)) in objects.iter().enumerate() {
         let (verts, tris) = welded(m);
-        let _ = writeln!(s, "  <object id=\"{}\" type=\"model\" name=\"{}\">\n   <mesh>\n    <vertices>", i + 1, xml_escape(name));
+        let _ = writeln!(
+            s,
+            "  <object id=\"{}\" type=\"model\" name=\"{}\">\n   <mesh>\n    <vertices>",
+            i + 1,
+            xml_escape(name)
+        );
         for v in &verts {
             let _ = writeln!(s, "     <vertex x=\"{}\" y=\"{}\" z=\"{}\"/>", v[0], v[1], v[2]);
         }

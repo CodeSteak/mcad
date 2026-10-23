@@ -185,7 +185,10 @@ impl<'a> Ev<'a> {
         let n = self.node(s, Op::Prim { prim, place }, ctx);
         self.set_blend(n, dy);
         if dyn_lookup(dy, "$fillet").is_some_and(|v| matches!(v.v, Value::Func(_))) {
-            self.warn(s.span, "variabler Radius über `$fillet` nicht unterstützt: `fillet(r = function (p) …) { … }` verwenden");
+            self.warn(
+                s.span,
+                "variabler Radius über `$fillet` nicht unterstützt: `fillet(r = function (p) …) { … }` verwenden",
+            );
         }
         n
     }
@@ -511,9 +514,7 @@ impl<'a> Ev<'a> {
         let valid = positive(&[h]) && r1.is_finite() && r2.is_finite() && r1 >= 0.0 && r2 >= 0.0 && r1 + r2 > 0.0;
         let z0 = if center { -h / 2.0 } else { 0.0 };
         let node = match self.facets(s, a, dy) {
-            _ if !valid => {
-                self.invalid_prim(s, "cylinder: braucht Höhe > 0 und Radien ≥ 0, nicht beide 0", ctx)
-            }
+            _ if !valid => self.invalid_prim(s, "cylinder: braucht Höhe > 0 und Radien ≥ 0, nicht beide 0", ctx),
             Some(n) => {
                 let (points, faces) = prism(n, h, r1, r2, z0);
                 self.prim(s, Prim::Polyhedron { points, faces }, DMat4::IDENTITY, ctx, dy)
@@ -1398,7 +1399,10 @@ impl<'a> Ev<'a> {
             return;
         };
         if rows.len() < 2 || rows.iter().any(|r| r.len() != rows[0].len() || r.len() < 2) {
-            self.error(pa.expr.span, "surface: `points` braucht mindestens 2 gleich lange Zeilen mit mindestens 2 Punkten");
+            self.error(
+                pa.expr.span,
+                "surface: `points` braucht mindestens 2 gleich lange Zeilen mit mindestens 2 Punkten",
+            );
             return;
         }
         let cols = rows[0].len();

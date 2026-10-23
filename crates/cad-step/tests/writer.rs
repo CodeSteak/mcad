@@ -7,7 +7,9 @@ use glam::DVec3;
 
 /// Axis-parallel box `[0,a]x[0,b]x[0,c]` as a neutral B-rep (planes, lines).
 fn box_brep(a: f64, b: f64, c: f64) -> Brep {
-    let v = |i: u32| DVec3::new(if i & 1 != 0 { a } else { 0.0 }, if i & 2 != 0 { b } else { 0.0 }, if i & 4 != 0 { c } else { 0.0 });
+    let v = |i: u32| {
+        DVec3::new(if i & 1 != 0 { a } else { 0.0 }, if i & 2 != 0 { b } else { 0.0 }, if i & 4 != 0 { c } else { 0.0 })
+    };
     let vertices: Vec<DVec3> = (0..8).map(v).collect();
     let mut edges: Vec<Edge> = Vec::new();
     let mut edge = |s: u32, e: u32| -> OrientedEdge {
@@ -18,7 +20,12 @@ fn box_brep(a: f64, b: f64, c: f64) -> Brep {
             return OrientedEdge { edge: i as u32, forward: false };
         }
         let (p, q) = (vertices[s as usize], vertices[e as usize]);
-        edges.push(Edge { start: s, end: e, curve: Curve::Line { origin: p, dir: (q - p).normalize() }, approximated: false });
+        edges.push(Edge {
+            start: s,
+            end: e,
+            curve: Curve::Line { origin: p, dir: (q - p).normalize() },
+            approximated: false,
+        });
         OrientedEdge { edge: edges.len() as u32 - 1, forward: true }
     };
     // faces: vertex cycles counter-clockwise seen from outside, outward normal
@@ -235,7 +242,8 @@ fn analytic_and_rational_geometry_round_trip() {
 
     // rational curve
     let rc = m.of_type("RATIONAL_B_SPLINE_CURVE").next().unwrap();
-    let w: Vec<f64> = rc.part("RATIONAL_B_SPLINE_CURVE").unwrap()[0].as_list().unwrap().iter().map(|x| x.as_num().unwrap()).collect();
+    let w: Vec<f64> =
+        rc.part("RATIONAL_B_SPLINE_CURVE").unwrap()[0].as_list().unwrap().iter().map(|x| x.as_num().unwrap()).collect();
     assert_eq!(w, vec![1.0, s, 1.0]);
     let kc = rc.part("B_SPLINE_CURVE_WITH_KNOTS").unwrap();
     assert_eq!(expand(kc[1].as_list().unwrap(), kc[0].as_list().unwrap()), curve.knots);

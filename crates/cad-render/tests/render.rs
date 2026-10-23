@@ -127,8 +127,7 @@ fn square_mesh(z: f32, other_diagonal: bool) -> cad_kernel::Mesh {
 fn transparent_coplanar_faces_have_no_diagonal_bands() {
     let a = square_mesh(0.0, false);
     let b = square_mesh(0.0, true);
-    let items =
-        vec![Item::new(&a, [0.78, 0.79, 0.82, 0.22]).with_edges(None), Item::new(&b, RED).with_edges(None)];
+    let items = vec![Item::new(&a, [0.78, 0.79, 0.82, 0.22]).with_edges(None), Item::new(&b, RED).with_edges(None)];
     // iso: the plane is oblique, so the triangle centroids lie at different depths
     let opts = RenderOptions { width: 240, height: 180, axes: false, ..Default::default() };
     let img = render(&Scene { items, lines: vec![] }, &opts);

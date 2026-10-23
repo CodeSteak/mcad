@@ -178,7 +178,6 @@ impl<'a> Env<'a> {
             s.dyn_ = None;
             s.parent = None;
             s.uses.clear();
-
         }
     }
 }

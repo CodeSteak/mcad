@@ -54,8 +54,8 @@ mod brep;
 pub use brep::BrepStats;
 
 use cad_kernel::{
-    BoolOp, Class, EdgeInfo, FaceId, FaceInfo, KResult, Kernel, KernelError, Loop, MassProps, Mesh,
-    PathInterp, PlacedLoop, Tag,
+    BoolOp, Class, EdgeInfo, FaceId, FaceInfo, KResult, Kernel, KernelError, Loop, MassProps, Mesh, PathInterp,
+    PlacedLoop, Tag,
 };
 use glam::{DMat4, DVec2, DVec3};
 
@@ -67,13 +67,8 @@ mod raw;
 #[path = "raw_wasm.rs"]
 mod raw;
 
-#[cfg(not(any(
-    all(feature = "native", not(target_arch = "wasm32")),
-    all(feature = "wasm", target_arch = "wasm32")
-)))]
-compile_error!(
-    "kernel-smlib: enable feature `native` (non-wasm targets) or `wasm` (wasm32-unknown-unknown)"
-);
+#[cfg(not(any(all(feature = "native", not(target_arch = "wasm32")), all(feature = "wasm", target_arch = "wasm32"))))]
+compile_error!("kernel-smlib: enable feature `native` (non-wasm targets) or `wasm` (wasm32-unknown-unknown)");
 
 /// Facade calls are not reentrant and SMLib's context is process-global: serialise all calls
 /// (a call and the reads of its output buffers form one critical section).
@@ -230,11 +225,7 @@ impl SmlibKernel {
     }
 
     /// Edge ids of `s` whose sample points all satisfy `pred` (test/diagnostic helper).
-    pub fn edges_where(
-        &mut self,
-        s: &Shape,
-        pred: impl Fn(&EdgeInfo) -> bool,
-    ) -> KResult<Vec<u32>> {
+    pub fn edges_where(&mut self, s: &Shape, pred: impl Fn(&EdgeInfo) -> bool) -> KResult<Vec<u32>> {
         Ok(self.edges(s, 3)?.into_iter().filter(|e| pred(e)).map(|e| e.id).collect())
     }
 }
@@ -318,8 +309,7 @@ impl Kernel for SmlibKernel {
         self.call(|| raw::fillet_var(s.h, edges, &counts, &flat, tag))
     }
 
-    fn extrude(&mut self, p: &PlacedLoop, h: f64, twist: f64, scale: DVec2, tag: Tag)
-    -> KResult<Shape> {
+    fn extrude(&mut self, p: &PlacedLoop, h: f64, twist: f64, scale: DVec2, tag: Tag) -> KResult<Shape> {
         let mut enc = Vec::new();
         encode_loop(&mut enc, &p.lp, &p.frame);
         self.call(|| raw::extrude(&enc, h, twist, scale.x, scale.y, tag))
@@ -354,9 +344,7 @@ impl Kernel for SmlibKernel {
     fn nurbs_surface(&mut self, rows: &[Vec<DVec3>], tag: Tag) -> KResult<Shape> {
         let cols = rows.first().map(|r| r.len()).unwrap_or(0);
         if rows.len() < 2 || cols < 2 || rows.iter().any(|r| r.len() != cols) {
-            return Err(KernelError::InvalidInput(
-                "nurbs_surface needs at least 2 rows of equal length >= 2".into(),
-            ));
+            return Err(KernelError::InvalidInput("nurbs_surface needs at least 2 rows of equal length >= 2".into()));
         }
         let pts: Vec<f64> = rows.iter().flatten().flat_map(|p| p.to_array()).collect();
         let nr = rows.len() as u32;

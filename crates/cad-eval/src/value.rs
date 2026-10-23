@@ -332,7 +332,9 @@ impl PValue {
             Value::List(l) => PValue::List(l.iter().map(PValue::from_val).collect()),
             Value::Range(r) => PValue::Range { start: r.start, step: r.step, end: r.end },
             Value::Func(_) => PValue::Function,
-            Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_) | Value::Family(_) => PValue::Other(v.type_name().into()),
+            Value::Grid(_) | Value::GridSel { .. } | Value::Instance(_) | Value::Family(_) => {
+                PValue::Other(v.type_name().into())
+            }
         }
     }
 }

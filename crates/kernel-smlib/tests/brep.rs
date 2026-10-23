@@ -42,7 +42,13 @@ fn check_conventions(k: &mut SmlibKernel, s: &Shape, b: &Brep) {
                 let e = &b.edges[oe.edge as usize];
                 let pts = sample_edge(&e.curve, b.vertices[e.start as usize], b.vertices[e.end as usize], 8);
                 if let Some(d) = pts.iter().filter_map(|p| f.surface.distance(*p)).reduce(f64::max) {
-                    assert!(d < 1e-6 * diag, "face {} ({}): edge {} off the surface by {d}", f.id, f.surface.kind(), oe.edge);
+                    assert!(
+                        d < 1e-6 * diag,
+                        "face {} ({}): edge {} off the surface by {d}",
+                        f.id,
+                        f.surface.kind(),
+                        oe.edge
+                    );
                 }
             }
         }
@@ -53,7 +59,13 @@ fn check_conventions(k: &mut SmlibKernel, s: &Shape, b: &Brep) {
         if let Some(n) = face_normal(f, p) {
             let eps = 1e-3 * diag;
             let c = k.classify(s, &[p + n * eps, p - n * eps]).unwrap();
-            assert_eq!(c, vec![Class::Outside, Class::Inside], "face {} ({}) normal points inwards", f.id, f.surface.kind());
+            assert_eq!(
+                c,
+                vec![Class::Outside, Class::Inside],
+                "face {} ({}) normal points inwards",
+                f.id,
+                f.surface.kind()
+            );
         }
         if let (Surface::Plane { .. }, Some(Loop::Edges(es))) = (&f.surface, f.loops.first())
             && f.loops.len() == 1

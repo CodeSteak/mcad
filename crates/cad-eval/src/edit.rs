@@ -99,10 +99,7 @@ pub fn drag_edits<S: SourceText + ?Sized>(
         DragTarget::Free(v) => free_edits(h, *v, opts),
         DragTarget::Snap(r) => snap_edit(out, h, r).into_iter().collect(),
     };
-    edits
-        .into_iter()
-        .filter(|e| src.span_text(e.span).is_some_and(|t| t != e.text))
-        .collect()
+    edits.into_iter().filter(|e| src.span_text(e.span).is_some_and(|t| t != e.text)).collect()
 }
 
 fn free_edits(h: &Handle, v: DragValue, opts: &DragOptions) -> Vec<TextEdit> {
@@ -359,4 +356,3 @@ pub fn set_default_edit_project(proj: &Project, module: &str, param: &str, value
     };
     proj.span_text(edit.span).is_some().then_some(edit)
 }
-

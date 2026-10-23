@@ -46,21 +46,52 @@ pub struct Stmt {
 pub enum StmtKind {
     Empty,
     Block(Vec<Stmt>),
-    Assign { name: Ident, value: Expr },
+    Assign {
+        name: Ident,
+        value: Expr,
+    },
     Module(Rc<ModuleDef>),
     Function(Rc<FunctionDef>),
     /// `include <path>` / `use <path>`; `path_span` covers `<path>`.
-    Include { path: String, path_span: Span, is_use: bool },
+    Include {
+        path: String,
+        path_span: Span,
+        is_use: bool,
+    },
     /// `anchor name = point, dir = v;`
-    Anchor { name: Ident, point: Expr, dir: Option<Expr> },
+    Anchor {
+        name: Ident,
+        point: Expr,
+        dir: Option<Expr>,
+    },
     Grid(Rc<GridDecl>),
     /// `name: call;` or `name[index]: call;` (in loops).
-    Named { name: Ident, index: Option<Expr>, inst: Box<Stmt> },
+    Named {
+        name: Ident,
+        index: Option<Expr>,
+        inst: Box<Stmt>,
+    },
     /// Module instantiation `name(args) children`.
-    Call { name: Ident, args: Vec<Arg>, children: Vec<Stmt>, has_block: bool },
-    For { vars: Vec<Assignment>, body: Box<Stmt>, intersection: bool },
-    Let { vars: Vec<Assignment>, body: Box<Stmt> },
-    If { cond: Expr, then: Box<Stmt>, els: Option<Box<Stmt>> },
+    Call {
+        name: Ident,
+        args: Vec<Arg>,
+        children: Vec<Stmt>,
+        has_block: bool,
+    },
+    For {
+        vars: Vec<Assignment>,
+        body: Box<Stmt>,
+        intersection: bool,
+    },
+    Let {
+        vars: Vec<Assignment>,
+        body: Box<Stmt>,
+    },
+    If {
+        cond: Expr,
+        then: Box<Stmt>,
+        els: Option<Box<Stmt>>,
+    },
     /// Unparseable statement (diagnostic already reported).
     Error,
 }
@@ -181,16 +212,41 @@ pub enum ExprKind {
     Unary(UnOp, Box<Expr>),
     Binary(BinOp, Box<Expr>, Box<Expr>),
     Ternary(Box<Expr>, Box<Expr>, Box<Expr>),
-    Call { callee: Box<Expr>, args: Vec<Arg> },
+    Call {
+        callee: Box<Expr>,
+        args: Vec<Arg>,
+    },
     /// `a[i]` or grid access `g[x, *, _]`.
-    Index { base: Box<Expr>, items: Vec<IndexItem> },
-    Member { base: Box<Expr>, name: Ident },
+    Index {
+        base: Box<Expr>,
+        items: Vec<IndexItem>,
+    },
+    Member {
+        base: Box<Expr>,
+        name: Ident,
+    },
     Vector(Vec<VecElem>),
-    Range { start: Box<Expr>, step: Option<Box<Expr>>, end: Box<Expr> },
-    FuncLit { params: Vec<Param>, body: Rc<Expr> },
-    Let { vars: Vec<Assignment>, body: Box<Expr> },
-    Assert { args: Vec<Arg>, body: Option<Box<Expr>> },
-    Echo { args: Vec<Arg>, body: Option<Box<Expr>> },
+    Range {
+        start: Box<Expr>,
+        step: Option<Box<Expr>>,
+        end: Box<Expr>,
+    },
+    FuncLit {
+        params: Vec<Param>,
+        body: Rc<Expr>,
+    },
+    Let {
+        vars: Vec<Assignment>,
+        body: Box<Expr>,
+    },
+    Assert {
+        args: Vec<Arg>,
+        body: Option<Box<Expr>>,
+    },
+    Echo {
+        args: Vec<Arg>,
+        body: Option<Box<Expr>>,
+    },
     Error,
 }
 
@@ -205,13 +261,7 @@ pub enum IndexItem {
 pub enum VecElem {
     Expr(Expr),
     For { vars: Vec<Assignment>, body: Box<VecElem>, span: Span },
-    ForC {
-        init: Vec<Assignment>,
-        cond: Expr,
-        update: Vec<Assignment>,
-        body: Box<VecElem>,
-        span: Span,
-    },
+    ForC { init: Vec<Assignment>, cond: Expr, update: Vec<Assignment>, body: Box<VecElem>, span: Span },
     If { cond: Expr, then: Box<VecElem>, els: Option<Box<VecElem>>, span: Span },
     Let { vars: Vec<Assignment>, body: Box<VecElem>, span: Span },
     Each(Box<VecElem>, Span),

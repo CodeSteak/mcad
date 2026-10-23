@@ -33,14 +33,9 @@ fn native_build() {
     let root = manifest.join("../..").canonicalize().expect("repo root");
     let smlib_dir = root.join("smlib");
     let facade = smlib_dir.join("facade");
-    let src = env::var_os("SMLIB_SRC")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| root.join("third_party/smlib"));
+    let src = env::var_os("SMLIB_SRC").map(PathBuf::from).unwrap_or_else(|| root.join("third_party/smlib"));
     if !src.join("source/SMLib/inc/SmSmlibAll.h").exists() {
-        panic!(
-            "SMLib sources not found at {} (run smlib/fetch.sh or set SMLIB_SRC)",
-            src.display()
-        );
+        panic!("SMLib sources not found at {} (run smlib/fetch.sh or set SMLIB_SRC)", src.display());
     }
 
     let lib_dir: PathBuf = match env::var_os("SMLIB_PREBUILT") {
@@ -114,7 +109,5 @@ fn build_smlib_cmake(smlib_dir: &Path, src: &Path) -> PathBuf {
 
 #[cfg(feature = "native")]
 fn which(cmd: &str) -> bool {
-    env::var_os("PATH")
-        .map(|paths| env::split_paths(&paths).any(|p| p.join(cmd).is_file()))
-        .unwrap_or(false)
+    env::var_os("PATH").map(|paths| env::split_paths(&paths).any(|p| p.join(cmd).is_file())).unwrap_or(false)
 }

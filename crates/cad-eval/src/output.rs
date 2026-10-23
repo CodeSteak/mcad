@@ -375,7 +375,6 @@ impl EvalOutput {
     }
 
     pub fn grid_by_name(&self, name: &str) -> Option<&GridInfo> {
-
         self.grids.iter().find(|g| g.name == name)
     }
 

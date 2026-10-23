@@ -49,7 +49,8 @@ const EXPECT: &[Expect] = &[
         handles: 17,
         ops: &[("chamfer", 1), ("zone", 1), ("union", 1), ("box", 4), ("cylinder", 1)],
         check: |out| {
-            assert!(has_op(out, |o| *o == Op::Blend { kind: BlendKind::Chamfer, r: 1.0, select: Select::Inside, law: None }));
+            assert!(has_op(out, |o| *o
+                == Op::Blend { kind: BlendKind::Chamfer, r: 1.0, select: Select::Inside, law: None }));
             assert!(has_op(out, |o| matches!(o, Op::Boolean { chamfer: Some(c), fillet: None, .. } if *c == 0.5)));
             assert_eq!(blends(out), [(BlendKind::Chamfer, 1.0), (BlendKind::Fillet, 1.0)]);
             // All grid planes are literals: one draggable handle each.
@@ -103,8 +104,12 @@ const EXPECT: &[Expect] = &[
                 .filter_map(|n| if let Op::RotateExtrude { angle } = n.op { Some(angle) } else { None })
                 .collect();
             assert_eq!(angles, [360.0, 270.0]);
-            let f: Vec<f64> =
-                out.tree.nodes.iter().filter_map(|n| if let Op::Blend { r, .. } = n.op { Some(r) } else { None }).collect();
+            let f: Vec<f64> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| if let Op::Blend { r, .. } = n.op { Some(r) } else { None })
+                .collect();
             assert_eq!(f, [3.0, 3.0]);
         },
     },

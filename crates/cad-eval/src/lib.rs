@@ -49,7 +49,8 @@ pub fn eval(src: &str, file: &cad_syntax::ast::File, opts: &EvalOptions) -> Eval
 /// they are shown, but not edited (Spec: Griffe, Regel 3).
 pub fn eval_project(proj: &Project, opts: &EvalOptions) -> EvalOutput {
     let mut out = eval::eval(proj, opts);
-    let (locked, handles): (Vec<Handle>, Vec<Handle>) = std::mem::take(&mut out.handles).into_iter().partition(|h| h.locked);
+    let (locked, handles): (Vec<Handle>, Vec<Handle>) =
+        std::mem::take(&mut out.handles).into_iter().partition(|h| h.locked);
     out.handles = handles;
     out.locked_handles = locked;
     let mut diags = proj.link.clone();
@@ -68,7 +69,12 @@ pub fn eval_source(src: &str, opts: &EvalOptions) -> EvalOutput {
 }
 
 /// Loads and evaluates a project: all diagnostics (syntax of every file, links, evaluation).
-pub fn eval_files(main_path: &str, main_text: &str, resolver: &dyn FileResolver, opts: &EvalOptions) -> (Project, EvalOutput) {
+pub fn eval_files(
+    main_path: &str,
+    main_text: &str,
+    resolver: &dyn FileResolver,
+    opts: &EvalOptions,
+) -> (Project, EvalOutput) {
     let proj = Project::load(main_path, main_text, resolver);
     let mut out = eval_project(&proj, opts);
     let mut diags = proj.syntax.clone();
@@ -76,7 +82,6 @@ pub fn eval_files(main_path: &str, main_text: &str, resolver: &dyn FileResolver,
     out.diagnostics = diags;
     (proj, out)
 }
-
 
 pub(crate) const MASK53: u64 = (1 << 53) - 1;
 

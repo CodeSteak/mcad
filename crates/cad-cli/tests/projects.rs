@@ -11,12 +11,21 @@ fn data(name: &str) -> String {
 }
 
 fn example() -> String {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/projekt-gehaeuse/gehaeuse.scad").display().to_string()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../examples/projekt-gehaeuse/gehaeuse.scad")
+        .display()
+        .to_string()
 }
 
 fn run(args: &[&str], code: i32) -> (Value, String) {
     let out = Command::cargo_bin("cad").unwrap().args(args).arg("--json").output().unwrap();
-    assert_eq!(out.status.code(), Some(code), "{args:?}\n{}\n{}", String::from_utf8_lossy(&out.stdout), String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(code),
+        "{args:?}\n{}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     let t = Command::cargo_bin("cad").unwrap().args(args).output().unwrap();
     (v, String::from_utf8_lossy(&t.stdout).into_owned() + &String::from_utf8_lossy(&t.stderr))
@@ -95,7 +104,10 @@ fn export_single_parts_and_all_parts() {
     assert!(t.contains("deckel:"), "{t}");
     // Indexed instances: file names k_0 … k_2.
     let out = dir.path().join("reihe");
-    run(&["export", &data("projekt/reihe.scad"), "--all-parts", "--format", "3mf", "-o", &out.display().to_string()], 0);
+    run(
+        &["export", &data("projekt/reihe.scad"), "--all-parts", "--format", "3mf", "-o", &out.display().to_string()],
+        0,
+    );
     for i in 0..3 {
         assert!(out.join(format!("k_{i}.3mf")).exists());
     }
@@ -118,14 +130,29 @@ fn export_single_parts_and_all_parts() {
     assert!((min_y - 50.0).abs() < 1e-9, "{min_y}");
     // Two parts into one STEP: two solids; AP214 through --schema.
     let both = dir.path().join("beide.stp");
-    run(&["export", &example(), "--part", "gehaeuse", "--part", "deckel", "--schema", "ap214", "-o", &both.display().to_string()], 0);
+    run(
+        &[
+            "export",
+            &example(),
+            "--part",
+            "gehaeuse",
+            "--part",
+            "deckel",
+            "--schema",
+            "ap214",
+            "-o",
+            &both.display().to_string(),
+        ],
+        0,
+    );
     let m = cad_step::p21::parse(&std::fs::read_to_string(&both).unwrap()).unwrap();
     assert!(m.schema.starts_with("AUTOMOTIVE_DESIGN"), "{}", m.schema);
     // the housing's module body is an implicit union of several solids
     assert!(m.count("MANIFOLD_SOLID_BREP") >= 2);
     // All parts as STEP files.
     let out_step = dir.path().join("teile-step");
-    let (v, _) = run(&["export", &example(), "--all-parts", "--format", "step", "-o", &out_step.display().to_string()], 0);
+    let (v, _) =
+        run(&["export", &example(), "--all-parts", "--format", "step", "-o", &out_step.display().to_string()], 0);
     assert_eq!(v["parts"].as_array().unwrap().len(), 2);
     for n in ["gehaeuse", "deckel"] {
         let t = std::fs::read_to_string(out_step.join(format!("{n}.step"))).unwrap();

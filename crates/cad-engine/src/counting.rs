@@ -4,8 +4,8 @@
 use std::collections::BTreeMap;
 
 use cad_kernel::{
-    BoolOp, Class, EdgeId, EdgeInfo, ExportFormat, FaceId, FaceInfo, KResult, Kernel, Loop,
-    MassProps, Mesh, PathInterp, PlacedLoop, Tag,
+    BoolOp, Class, EdgeId, EdgeInfo, ExportFormat, FaceId, FaceInfo, KResult, Kernel, Loop, MassProps, Mesh,
+    PathInterp, PlacedLoop, Tag,
 };
 use glam::{DMat4, DVec2, DVec3};
 
@@ -112,7 +112,13 @@ impl<K: Kernel> Kernel for CountingKernel<K> {
         let r = self.inner.law_stations(s, edges, counts);
         self.done("law_stations", t0, r)
     }
-    fn fillet_variable(&mut self, s: &Self::Shape, edges: &[EdgeId], radii: &[Vec<f64>], tag: Tag) -> KResult<Self::Shape> {
+    fn fillet_variable(
+        &mut self,
+        s: &Self::Shape,
+        edges: &[EdgeId],
+        radii: &[Vec<f64>],
+        tag: Tag,
+    ) -> KResult<Self::Shape> {
         let t0 = self.hit("fillet_variable");
         let r = self.inner.fillet_variable(s, edges, radii, tag);
         self.done("fillet_variable", t0, r)

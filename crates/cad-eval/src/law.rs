@@ -81,9 +81,7 @@ fn mentions(e: &Expr, names: &HashSet<&str>) -> bool {
         ExprKind::Member { base, .. } => m(base),
         ExprKind::Vector(v) => v.iter().any(|x| elem_mentions(x, names)),
         ExprKind::Range { start, step, end } => m(start) || step.as_deref().is_some_and(m) || m(end),
-        ExprKind::FuncLit { params, body } => {
-            params.iter().any(|p| p.default.as_ref().is_some_and(m)) || m(body)
-        }
+        ExprKind::FuncLit { params, body } => params.iter().any(|p| p.default.as_ref().is_some_and(m)) || m(body),
         ExprKind::Let { vars, body } => vars.iter().any(|a| m(&a.value)) || m(body),
         ExprKind::Assert { args, body } | ExprKind::Echo { args, body } => {
             args.iter().any(|a| m(&a.value)) || body.as_deref().is_some_and(m)
@@ -100,7 +98,9 @@ fn elem_mentions(e: &VecElem, names: &HashSet<&str>) -> bool {
             asg(init) || mentions(cond, names) || asg(update) || elem_mentions(body, names)
         }
         VecElem::If { cond, then, els, .. } => {
-            mentions(cond, names) || elem_mentions(then, names) || els.as_deref().is_some_and(|x| elem_mentions(x, names))
+            mentions(cond, names)
+                || elem_mentions(then, names)
+                || els.as_deref().is_some_and(|x| elem_mentions(x, names))
         }
         VecElem::Let { vars, body, .. } => asg(vars) || elem_mentions(body, names),
         VecElem::Each(x, _) => elem_mentions(x, names),
@@ -228,7 +228,12 @@ impl<'a> Ev<'a> {
                     "x" => 0.0,
                     "y" => 1.0,
                     "z" => 2.0,
-                    other => return err(name.span, format!("`.{other}` ist in einer Radiusfunktion nicht möglich (nur .x, .y, .z)")),
+                    other => {
+                        return err(
+                            name.span,
+                            format!("`.{other}` ist in einer Radiusfunktion nicht möglich (nur .x, .y, .z)"),
+                        );
+                    }
                 };
                 LawExpr::Index(bx(sub!(base)), bx(LawExpr::Num(i)))
             }
@@ -242,7 +247,10 @@ impl<'a> Ev<'a> {
                     match el {
                         VecElem::Expr(x) => out.push(sub!(x)),
                         _ => {
-                            return err(e.span, "Listenausdrücke, die von der Position abhängen, sind in einer Radiusfunktion nicht möglich");
+                            return err(
+                                e.span,
+                                "Listenausdrücke, die von der Position abhängen, sind in einer Radiusfunktion nicht möglich",
+                            );
                         }
                     }
                 }
@@ -273,7 +281,9 @@ impl<'a> Ev<'a> {
             ExprKind::Call { callee, args } => return self.law_call(e, callee, args, cx, slots, dy),
             ExprKind::Assert { body: Some(b), .. } | ExprKind::Echo { body: Some(b), .. } => sub!(b),
             ExprKind::FuncLit { .. } => return err(e.span, "Funktionsliteral in einer Radiusfunktion nicht möglich"),
-            ExprKind::Range { .. } => return err(e.span, "Bereiche, die von der Position abhängen, sind nicht möglich"),
+            ExprKind::Range { .. } => {
+                return err(e.span, "Bereiche, die von der Position abhängen, sind nicht möglich");
+            }
             _ => return err(e.span, "Ausdruck in einer Radiusfunktion nicht möglich"),
         }))
     }

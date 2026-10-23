@@ -125,8 +125,19 @@ fn main() {
             report(&mut k, "scale circle", r, |k, s| vol(k, &s));
         }
         "loft_square_circle" => {
-            let a = PlacedLoop { lp: Loop::Polygon(vec![DVec2::new(-1.0, -1.0), DVec2::new(1.0, -1.0), DVec2::new(1.0, 1.0), DVec2::new(-1.0, 1.0)]), frame: DMat4::IDENTITY };
-            let c = PlacedLoop { lp: Loop::Circle { center: DVec2::ZERO, r: 1.0 }, frame: DMat4::from_translation(DVec3::new(0.0, 0.0, 3.0)) };
+            let a = PlacedLoop {
+                lp: Loop::Polygon(vec![
+                    DVec2::new(-1.0, -1.0),
+                    DVec2::new(1.0, -1.0),
+                    DVec2::new(1.0, 1.0),
+                    DVec2::new(-1.0, 1.0),
+                ]),
+                frame: DMat4::IDENTITY,
+            };
+            let c = PlacedLoop {
+                lp: Loop::Circle { center: DVec2::ZERO, r: 1.0 },
+                frame: DMat4::from_translation(DVec3::new(0.0, 0.0, 3.0)),
+            };
             let r = k.loft(&[a.clone(), c.clone()], true, 3);
             report(&mut k, &case, r, |k, s| vol(k, &s));
             let r = k.loft(&[a, c], false, 3);
@@ -155,7 +166,12 @@ fn main() {
             for i in 0..10 {
                 for j in 0..10 {
                     let c = k.make_cylinder(7.0, 2.0, 2.0, 2).unwrap();
-                    let c = k.transform(&c, &DMat4::from_translation(DVec3::new(5.0 + 10.0 * i as f64, 5.0 + 10.0 * j as f64, -1.0))).unwrap();
+                    let c = k
+                        .transform(
+                            &c,
+                            &DMat4::from_translation(DVec3::new(5.0 + 10.0 * i as f64, 5.0 + 10.0 * j as f64, -1.0)),
+                        )
+                        .unwrap();
                     acc = k.boolean(BoolOp::Difference, &[acc, c], 3).unwrap();
                 }
             }

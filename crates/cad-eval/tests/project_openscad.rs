@@ -12,7 +12,8 @@ use cad_eval::{EvalOptions, FsResolver, eval_files};
 
 fn projects() -> Vec<PathBuf> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/openscad-compat/projects");
-    let mut out: Vec<PathBuf> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).filter(|p| p.is_dir()).collect();
+    let mut out: Vec<PathBuf> =
+        std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().path()).filter(|p| p.is_dir()).collect();
     out.sort();
     out
 }

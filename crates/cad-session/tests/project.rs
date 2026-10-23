@@ -52,7 +52,10 @@ fn files_ranges_and_parts() {
     let sc = start(&mut s);
     assert!(sc.complete);
     let paths: Vec<(&str, FileRole)> = sc.files.iter().map(|f| (f.path.as_str(), f.role)).collect();
-    assert_eq!(paths, [("haupt.scad", FileRole::Main), ("konst.scad", FileRole::Include), ("lib/teile.scad", FileRole::Use)]);
+    assert_eq!(
+        paths,
+        [("haupt.scad", FileRole::Main), ("konst.scad", FileRole::Include), ("lib/teile.scad", FileRole::Use)]
+    );
     // Hint of `breite` in konst.scad: local positions, file id 1.
     let h = sc.hints.iter().find(|h| h.text == "40").unwrap();
     assert_eq!(h.range.file, Some(1));
@@ -141,8 +144,16 @@ fn export_parts() {
     let mut s = session();
     start(&mut s);
     s.post(ToEngine::Export { format: ExportFormat::Stl, parts: Some(vec!["deckel".into()]), zip: None });
-    s.post(ToEngine::Export { format: ExportFormat::ThreeMf, parts: Some(vec!["gehaeuse".into(), "deckel".into()]), zip: None });
-    s.post(ToEngine::Export { format: ExportFormat::Stl, parts: Some(vec!["gehaeuse".into(), "deckel".into()]), zip: Some(true) });
+    s.post(ToEngine::Export {
+        format: ExportFormat::ThreeMf,
+        parts: Some(vec!["gehaeuse".into(), "deckel".into()]),
+        zip: None,
+    });
+    s.post(ToEngine::Export {
+        format: ExportFormat::Stl,
+        parts: Some(vec!["gehaeuse".into(), "deckel".into()]),
+        zip: Some(true),
+    });
     s.post(ToEngine::Export { format: ExportFormat::Stl, parts: Some(vec!["fehlt".into()]), zip: None });
     s.post(ToEngine::Export { format: ExportFormat::Step, parts: Some(vec!["deckel".into()]), zip: None });
     let r = s.run_to_idle();
@@ -159,14 +170,20 @@ fn export_parts() {
     let FromEngine::Error { message, .. } = &r[3] else { panic!() };
     assert!(message.contains("Bauteil `fehlt` nicht gefunden (Bauteile: gehaeuse, deckel)"), "{message}");
     // STEP of a part: the exact B-rep through the same writer as the whole model.
-    let FromEngine::ExportResult { format: ExportFormat::Step, bytes, triangles, .. } = &r[4] else { panic!("{:?}", r[4]) };
+    let FromEngine::ExportResult { format: ExportFormat::Step, bytes, triangles, .. } = &r[4] else {
+        panic!("{:?}", r[4])
+    };
     assert_eq!(*triangles, 0);
     let t = String::from_utf8_lossy(bytes);
     assert!(t.starts_with("ISO-10303-21;"));
     assert_eq!(t.matches("MANIFOLD_SOLID_BREP(").count(), 1);
     assert!(t.contains("PRODUCT('deckel','deckel'"), "{}", &t[..t.len().min(2000)]);
     // STEP per part as ZIP; the whole model as STEP.
-    s.post(ToEngine::Export { format: ExportFormat::Step, parts: Some(vec!["gehaeuse".into(), "deckel".into()]), zip: Some(true) });
+    s.post(ToEngine::Export {
+        format: ExportFormat::Step,
+        parts: Some(vec!["gehaeuse".into(), "deckel".into()]),
+        zip: Some(true),
+    });
     s.post(ToEngine::Export { format: ExportFormat::Step, parts: None, zip: None });
     let r = s.run_to_idle();
     let FromEngine::ExportResult { bytes, zip: Some(true), .. } = &r[0] else { panic!("{:?}", r[0]) };

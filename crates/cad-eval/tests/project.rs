@@ -45,7 +45,10 @@ fn paths_are_relative_to_the_including_file() {
 fn include_inserts_definitions_variables_and_geometry() {
     let (p, out) = project(
         "include <konst.scad>\necho(breite, f(2));\nteil();\ncube(breite);",
-        &[("konst.scad", "breite = 40;\nfunction f(x) = x * breite;\nmodule teil() sphere(breite);\ncylinder(h = 1, r = 2);")],
+        &[(
+            "konst.scad",
+            "breite = 40;\nfunction f(x) = x * breite;\nmodule teil() sphere(breite);\ncylinder(h = 1, r = 2);",
+        )],
     );
     assert_eq!(not_info(&out), Vec::<String>::new());
     assert_eq!(echoes(&out), ["40, 80"]);
@@ -65,7 +68,11 @@ fn include_assignments_follow_textual_order() {
     // OpenSCAD: the last assignment of the (spliced) file wins, with a warning.
     let (_, out) = project("x = 5;\ninclude <c.scad>\necho(x = x, y = y);", &[("c.scad", "x = 1;\ny = x * 10;")]);
     assert_eq!(echoes(&out), ["x = 1, y = 10"]);
-    assert!(has_warning(&out, "`x` aus Zeile 1 in `main.scad` wird in Zeile 1 in `c.scad` überschrieben"), "{:?}", warnings(&out));
+    assert!(
+        has_warning(&out, "`x` aus Zeile 1 in `main.scad` wird in Zeile 1 in `c.scad` überschrieben"),
+        "{:?}",
+        warnings(&out)
+    );
     let (_, out) = project("include <c.scad>\nx = 3;\necho(x = x, y = y);", &[("c.scad", "x = 1;\ny = x * 10;")]);
     assert_eq!(echoes(&out), ["x = 3, y = 30"]);
 }
@@ -119,7 +126,10 @@ fn use_without_geometry_and_used_once() {
 
 #[test]
 fn include_cycle_is_an_error() {
-    let (p, out) = project("include <a.scad>\ncube(1);", &[("a.scad", "include <b.scad>\nz = 1;"), ("b.scad", "include <a.scad>\n")]);
+    let (p, out) = project(
+        "include <a.scad>\ncube(1);",
+        &[("a.scad", "include <b.scad>\nz = 1;"), ("b.scad", "include <a.scad>\n")],
+    );
     let d = out.diagnostics.iter().find(|d| d.message.contains("zyklisches")).expect("cycle error");
     assert_eq!(d.severity, Severity::Error);
     assert_eq!(d.message, "zyklisches `include`: a.scad → b.scad → a.scad");
@@ -151,7 +161,8 @@ fn missing_file_is_an_error_at_the_line() {
 
 #[test]
 fn diagnostics_of_library_code_know_their_file() {
-    let (p, out) = project("use <lib/teile.scad>\nhalter();", &[("lib/teile.scad", "\nmodule halter() {\n  cube(unbekannt);\n}")]);
+    let (p, out) =
+        project("use <lib/teile.scad>\nhalter();", &[("lib/teile.scad", "\nmodule halter() {\n  cube(unbekannt);\n}")]);
     let d = out.diagnostics.iter().find(|d| d.message.contains("unbekannt")).unwrap();
     assert_eq!(p.path_of(d.span), "lib/teile.scad");
     assert_eq!(p.line(d.span), 3);
@@ -205,7 +216,8 @@ fn drag_writes_into_the_included_file() {
 #[test]
 fn module_of_a_used_library_as_context() {
     let lib = "module halter(h = 12) {\n  cylinder(h = h, r = 3);\n  anchor oben = [0, 0, h];\n}";
-    let opts = EvalOptions { context: Context::Module { name: "halter".into(), overrides: vec![] }, ..Default::default() };
+    let opts =
+        EvalOptions { context: Context::Module { name: "halter".into(), overrides: vec![] }, ..Default::default() };
     let (p, out) = project_with("use <lib/halter.scad>\nhalter();", &[("lib/halter.scad", lib)], &opts);
     assert_eq!(not_info(&out), Vec::<String>::new());
     assert_eq!(out.context.module.as_deref(), Some("halter"));

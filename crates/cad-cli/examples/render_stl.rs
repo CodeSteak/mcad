@@ -13,7 +13,8 @@ fn read_stl(bytes: &[u8]) -> Mesh {
     let mut push = |tri: [[f32; 3]; 3]| {
         let base = (m.positions.len() / 3) as u32;
         let a = DVec3::from(tri[0].map(f64::from));
-        let n = (DVec3::from(tri[1].map(f64::from)) - a).cross(DVec3::from(tri[2].map(f64::from)) - a).normalize_or_zero();
+        let n =
+            (DVec3::from(tri[1].map(f64::from)) - a).cross(DVec3::from(tri[2].map(f64::from)) - a).normalize_or_zero();
         for p in tri {
             m.positions.extend_from_slice(&p);
             m.normals.extend_from_slice(&[n.x as f32, n.y as f32, n.z as f32]);

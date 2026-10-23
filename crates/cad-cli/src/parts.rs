@@ -10,7 +10,11 @@ use crate::{Common, Fail, Outcome, load, num, utc_timestamp};
 
 fn format_of(format: Option<&str>, output: &Path, dir: bool) -> Result<p::ExportFormat, Fail> {
     let f = format.map(|s| s.to_ascii_lowercase()).or_else(|| {
-        if dir { Some("stl".into()) } else { output.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()) }
+        if dir {
+            Some("stl".into())
+        } else {
+            output.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase())
+        }
     });
     match f.as_deref() {
         Some("stl") => Ok(p::ExportFormat::Stl),
@@ -49,7 +53,9 @@ pub(crate) fn export_parts(
         return Ok(Outcome { json: j, text: t, errors: true });
     };
     if scene.parts.is_empty() {
-        return Err(Fail::Usage("keine Bauteile: benannte Instanzen auf oberster Ebene, z. B. `deckel: deckel();`".into()));
+        return Err(Fail::Usage(
+            "keine Bauteile: benannte Instanzen auf oberster Ebene, z. B. `deckel: deckel();`".into(),
+        ));
     }
     let volume = |name: &str| scene.parts.iter().find(|pt| pt.name == name).and_then(|pt| pt.volume);
     let mut t = m.diagnostics_text();
@@ -57,7 +63,8 @@ pub(crate) fn export_parts(
     if all {
         std::fs::create_dir_all(output).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
         for pt in &scene.parts {
-            let (bytes, tris) = m.session.export_parts_with(fmt, std::slice::from_ref(&pt.name), false, &step).map_err(Fail::Kernel)?;
+            let (bytes, tris) =
+                m.session.export_parts_with(fmt, std::slice::from_ref(&pt.name), false, &step).map_err(Fail::Kernel)?;
             let file = output.join(cad_session::part_file_name(&pt.name, ext(fmt)));
             std::fs::write(&file, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", file.display())))?;
             t.push_str(&format!(

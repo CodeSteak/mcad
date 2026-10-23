@@ -151,8 +151,7 @@ impl Source {
     /// The project's files for `Scene.files` (just the main file for a plain source).
     pub fn file_infos(&self, main_path: &str) -> Vec<p::FileInfo> {
         if self.files.is_empty() {
-            return
- vec![p::FileInfo { id: 0, path: main_path.to_string(), role: p::FileRole::Main }];
+            return vec![p::FileInfo { id: 0, path: main_path.to_string(), role: p::FileRole::Main }];
         }
         self.files
             .iter()
@@ -296,7 +295,9 @@ pub fn op_info(op: &Op) -> Option<p::OpInfo> {
         }
         Op::Shell { t, select: s } => p::OpInfo::Shell { t: *t, select: select(*s) },
         Op::Zone(z) => match *z {
-            cad_ir::ZoneShape::Line { point, dir, d } => p::OpInfo::Zone { line: true, point: v3(point), dir: v3(dir), d },
+            cad_ir::ZoneShape::Line { point, dir, d } => {
+                p::OpInfo::Zone { line: true, point: v3(point), dir: v3(dir), d }
+            }
             cad_ir::ZoneShape::Plane { point, normal, d } => {
                 p::OpInfo::Zone { line: false, point: v3(point), dir: v3(normal), d }
             }
@@ -582,35 +583,35 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
         .collect();
 
     let handle = |h: &cad_eval::Handle| p::Handle {
-            id: h.id,
-            stmt: h.stmt,
-            range: r(h.span),
-            kind: match h.kind {
-                cad_eval::HandleKind::Point => p::HandleKind::Point,
-                cad_eval::HandleKind::Radius => p::HandleKind::Radius,
-                cad_eval::HandleKind::Height => p::HandleKind::Height,
-                cad_eval::HandleKind::Angle { axis } => p::HandleKind::Angle { axis },
-                cad_eval::HandleKind::Plane { axis } => p::HandleKind::Plane { axis },
-                cad_eval::HandleKind::Scale { axis } => p::HandleKind::Scale { axis },
-            },
-            index: h.index,
-            frame: m4(&h.frame),
-            pos: v3(h.pos),
-            world_pos: v3(h.frame.transform_point3(h.pos)),
-            axis: h.axis.map(v3),
-            base: h.base.map(v3),
-            value: h.value.clone(),
-            comps: h.comps.iter().map(|c| c.map(|c| p::Comp { range: r(c.span), scale: c.scale })).collect(),
-            has_ref: h.has_ref,
-            expr_range: r(h.expr_span),
-            def_range: ro(h.def_span),
-            via_var: h.via_var,
-            via_default: h.via_default,
-            locked: h.locked,
-            grids: h.grids.clone(),
-            instances: h.instances.clone(),
-            node: h.node,
-            module_inst: h.module_inst,
+        id: h.id,
+        stmt: h.stmt,
+        range: r(h.span),
+        kind: match h.kind {
+            cad_eval::HandleKind::Point => p::HandleKind::Point,
+            cad_eval::HandleKind::Radius => p::HandleKind::Radius,
+            cad_eval::HandleKind::Height => p::HandleKind::Height,
+            cad_eval::HandleKind::Angle { axis } => p::HandleKind::Angle { axis },
+            cad_eval::HandleKind::Plane { axis } => p::HandleKind::Plane { axis },
+            cad_eval::HandleKind::Scale { axis } => p::HandleKind::Scale { axis },
+        },
+        index: h.index,
+        frame: m4(&h.frame),
+        pos: v3(h.pos),
+        world_pos: v3(h.frame.transform_point3(h.pos)),
+        axis: h.axis.map(v3),
+        base: h.base.map(v3),
+        value: h.value.clone(),
+        comps: h.comps.iter().map(|c| c.map(|c| p::Comp { range: r(c.span), scale: c.scale })).collect(),
+        has_ref: h.has_ref,
+        expr_range: r(h.expr_span),
+        def_range: ro(h.def_span),
+        via_var: h.via_var,
+        via_default: h.via_default,
+        locked: h.locked,
+        grids: h.grids.clone(),
+        instances: h.instances.clone(),
+        node: h.node,
+        module_inst: h.module_inst,
     };
     let handles = out.handles.iter().map(handle).collect();
     let locked_handles = out.locked_handles.iter().map(handle).collect();

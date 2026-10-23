@@ -88,7 +88,11 @@ fn main() {
     let ksum: f64 = times.values().sum();
     println!("kernel time per change {:.1} ms (rest: language evaluation, scene, engine)", ksum / n as f64);
     for (name, ms) in tv {
-        println!("  {name:14} {:8.1} ms per change  {:5} calls per change", ms / n as f64, counts[name] as f64 / n as f64);
+        println!(
+            "  {name:14} {:8.1} ms per change  {:5} calls per change",
+            ms / n as f64,
+            counts[name] as f64 / n as f64
+        );
     }
     // release: fine again
     let t = clock();

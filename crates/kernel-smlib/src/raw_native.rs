@@ -41,33 +41,12 @@ mod ffi {
         pub fn sc_fillet(h: u32, edges: *const u32, n: u32, r: f64, tag: u32) -> u32;
         pub fn sc_chamfer(h: u32, edges: *const u32, n: u32, d: f64, tag: u32) -> u32;
         pub fn sc_law_stations(h: u32, edges: *const u32, n: u32, counts: *const u32) -> i32;
-        pub fn sc_fillet_var(
-            h: u32,
-            edges: *const u32,
-            n: u32,
-            counts: *const u32,
-            radii: *const f64,
-            tag: u32,
-        ) -> u32;
-        pub fn sc_extrude(
-            lp: *const f64,
-            len: u32,
-            height: f64,
-            twist: f64,
-            sx: f64,
-            sy: f64,
-            tag: u32,
-        ) -> u32;
+        pub fn sc_fillet_var(h: u32, edges: *const u32, n: u32, counts: *const u32, radii: *const f64, tag: u32)
+        -> u32;
+        pub fn sc_extrude(lp: *const f64, len: u32, height: f64, twist: f64, sx: f64, sy: f64, tag: u32) -> u32;
         pub fn sc_revolve(lp: *const f64, len: u32, angle: f64, tag: u32) -> u32;
         pub fn sc_loft(lp: *const f64, len: u32, n_sections: u32, ruled: i32, tag: u32) -> u32;
-        pub fn sc_sweep(
-            lp: *const f64,
-            len: u32,
-            path: *const f64,
-            n_path: u32,
-            interp: i32,
-            tag: u32,
-        ) -> u32;
+        pub fn sc_sweep(lp: *const f64, len: u32, path: *const f64, n_path: u32, interp: i32, tag: u32) -> u32;
         pub fn sc_nurbs_surface(pts: *const f64, rows: u32, cols: u32, tag: u32) -> u32;
         pub fn sc_thicken(h: u32, t: f64, tag: u32) -> u32;
         pub fn sc_shell(h: u32, t: f64, open: *const u32, n: u32, tag: u32) -> u32;
@@ -86,11 +65,7 @@ mod ffi {
 }
 
 unsafe fn slice<T: Copy>(p: *const T, n: u32) -> Vec<T> {
-    if p.is_null() || n == 0 {
-        Vec::new()
-    } else {
-        unsafe { std::slice::from_raw_parts(p, n as usize).to_vec() }
-    }
+    if p.is_null() || n == 0 { Vec::new() } else { unsafe { std::slice::from_raw_parts(p, n as usize).to_vec() } }
 }
 
 fn len(n: usize) -> u32 {
@@ -182,9 +157,7 @@ pub fn law_stations(h: u32, edges: &[u32], counts: &[u32]) -> i32 {
 pub fn fillet_var(h: u32, edges: &[u32], counts: &[u32], radii: &[f64], tag: u32) -> u32 {
     assert_eq!(edges.len(), counts.len());
     assert_eq!(counts.iter().map(|&c| c as usize).sum::<usize>(), radii.len());
-    unsafe {
-        ffi::sc_fillet_var(h, edges.as_ptr(), len(edges.len()), counts.as_ptr(), radii.as_ptr(), tag)
-    }
+    unsafe { ffi::sc_fillet_var(h, edges.as_ptr(), len(edges.len()), counts.as_ptr(), radii.as_ptr(), tag) }
 }
 pub fn extrude(lp: &[f64], height: f64, twist: f64, sx: f64, sy: f64, tag: u32) -> u32 {
     unsafe { ffi::sc_extrude(lp.as_ptr(), len(lp.len()), height, twist, sx, sy, tag) }
@@ -196,9 +169,7 @@ pub fn loft(lp: &[f64], n_sections: u32, ruled: bool, tag: u32) -> u32 {
     unsafe { ffi::sc_loft(lp.as_ptr(), len(lp.len()), n_sections, ruled as i32, tag) }
 }
 pub fn sweep(lp: &[f64], path: &[f64], interp: i32, tag: u32) -> u32 {
-    unsafe {
-        ffi::sc_sweep(lp.as_ptr(), len(lp.len()), path.as_ptr(), len(path.len() / 3), interp, tag)
-    }
+    unsafe { ffi::sc_sweep(lp.as_ptr(), len(lp.len()), path.as_ptr(), len(path.len() / 3), interp, tag) }
 }
 pub fn nurbs_surface(pts: &[f64], rows: u32, cols: u32, tag: u32) -> u32 {
     unsafe { ffi::sc_nurbs_surface(pts.as_ptr(), rows, cols, tag) }

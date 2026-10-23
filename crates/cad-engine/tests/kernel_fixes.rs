@@ -32,7 +32,8 @@ fn rounded_box(a: f64, b: f64, c: f64, r: f64) -> f64 {
 /// shell(t) of a box a × b × c rounded at r, opened at its flat top: the rounded box minus
 /// the inner rounded box (r - t) minus the band of the wall under the flat top.
 fn open_shell(a: f64, b: f64, c: f64, r: f64, t: f64) -> f64 {
-    rounded_box(a, b, c, r) - rounded_box(a - 2.0 * t, b - 2.0 * t, c - 2.0 * t, (r - t).max(0.0))
+    rounded_box(a, b, c, r)
+        - rounded_box(a - 2.0 * t, b - 2.0 * t, c - 2.0 * t, (r - t).max(0.0))
         - (a - 2.0 * r) * (b - 2.0 * r) * t
 }
 
@@ -56,7 +57,14 @@ fn shell_of_rounded_boxes() {
         assert!(k.is_solid(&parts[0].shape));
         // wall, cavity, opening: inside the wall, in the cavity, above the opening
         let cls = k
-            .classify(&parts[0].shape, &[DVec3::new(a / 2.0, t / 2.0, c / 2.0), DVec3::new(a / 2.0, b / 2.0, c / 2.0), DVec3::new(a / 2.0, b / 2.0, c - t / 2.0)])
+            .classify(
+                &parts[0].shape,
+                &[
+                    DVec3::new(a / 2.0, t / 2.0, c / 2.0),
+                    DVec3::new(a / 2.0, b / 2.0, c / 2.0),
+                    DVec3::new(a / 2.0, b / 2.0, c - t / 2.0),
+                ],
+            )
             .unwrap();
         assert_eq!(cls, vec![Class::Inside, Class::Outside, Class::Outside]);
     }
@@ -64,7 +72,8 @@ fn shell_of_rounded_boxes() {
 
 #[test]
 fn dose_shell_example_is_a_hollow_box() {
-    let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/spec/dose_shell.scad")).unwrap();
+    let src =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/spec/dose_shell.scad")).unwrap();
     let mut e = engine();
     let ev = e.evaluate(tree(&src));
     assert_clean(&ev);
@@ -91,7 +100,9 @@ fn surfaces_from_two_and_three_points_per_direction() {
         let pts: Vec<String> = (0..rows)
             .map(|i| {
                 let row: Vec<String> = (0..cols)
-                    .map(|j| format!("[{}, {}, 0]", 20.0 * j as f64 / (cols - 1) as f64, 20.0 * i as f64 / (rows - 1) as f64))
+                    .map(|j| {
+                        format!("[{}, {}, 0]", 20.0 * j as f64 / (cols - 1) as f64, 20.0 * i as f64 / (rows - 1) as f64)
+                    })
                     .collect();
                 format!("[{}]", row.join(", "))
             })
@@ -145,7 +156,9 @@ fn seams_and_poles_are_not_edges() {
     assert!(ev.report(f).hints.contains(&"2 Kanten".to_string()), "{:?}", ev.report(f).hints);
 
     // fillet = at a union of two equal coaxial cylinders: the joint is tangent, no new edge
-    let ev = e.evaluate(tree("union(fillet = 1) { cylinder(h = 10, r = 5); translate([0, 0, 10]) cylinder(h = 10, r = 5); }"));
+    let ev = e.evaluate(tree(
+        "union(fillet = 1) { cylinder(h = 10, r = 5); translate([0, 0, 10]) cylinder(h = 10, r = 5); }",
+    ));
     assert_eq!(errors(&ev), Vec::<String>::new());
     let u = find(&ev.tree, |o| matches!(o, Op::Boolean { .. }));
     assert!(ev.report(u).hints.contains(&"0 Kanten".to_string()), "{:?}", ev.report(u).hints);
