@@ -279,7 +279,9 @@ UI → Engine:
 | `SetSource { text, version }` | Neuauswertung |
 | `SetContext { module, overrides }` | Modulvorschau, Parameterleiste |
 | `RequestMeshes { keys, tol }` | Meshes für einzelne Knoten |
-| `DragStart / DragHandle / DragEnd` | Griffe |
+| `DragStart / DragHandle / DragEnd` | Griffe (`Drag` antwortet immer mit `Edits`, auch leer: höchstens ein Drag in Flug) |
+| `SnapTargets` | Rasterpunkte und Anker (Punktgriffe), Rasterebenen `g.name` (Höhe, Radius, Ebene) |
+| `SetDragOptions { step_mm, step_deg }` | Schrittweiten beim freien Ziehen (Einstellungen) |
 | `Export { format, root }` | STL, 3MF |
 
 Engine → UI: `Diagnostics`, `Scene { version, nodes, grids, anchors, handles, hints }`, `Meshes`, `TextEdits`, `ExportResult`, `Progress`.

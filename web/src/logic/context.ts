@@ -1,6 +1,6 @@
 // Module context (Spec: Kontext: aktuelles Modul): path bar targets and definition jumps.
 
-import type { Scene } from "../engine/protocol";
+import type { Scene, SrcRange } from "../engine/protocol";
 import type { SceneIndex, Span } from "./sceneIndex";
 
 export interface ModuleSpan extends Span {
@@ -73,6 +73,22 @@ export function jumpUpTarget(text: string, modules: ModuleSpan[], path: string[]
     return at;
   }
   return child ? Math.min(child.to + 1, text.length) : null;
+}
+
+/**
+ * Declaration a grid or anchor reference points to (Spec: Klick auf Rasterpunkt springt zur
+ * Rasterdeklaration): the grid name for points/lines/planes, the plane's value for `g.name`,
+ * the anchor statement for `k.anker`.
+ */
+export function refDeclaration(scene: Scene, refIndex: number): SrcRange | null {
+  const r = scene.refs[refIndex];
+  if (!r) return null;
+  const t = r.target;
+  if (t.kind === "anchor") return scene.instances[t.inst]?.anchors[t.anchor]?.range ?? null;
+  const g = scene.grids.find((x) => x.id === t.grid);
+  if (!g) return null;
+  if (t.kind === "plane") return g.planes[t.plane]?.value_range ?? g.name_range;
+  return g.name_range;
 }
 
 /** Position inside the definition of a module (start of its body, after `{`). */

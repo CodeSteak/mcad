@@ -19,6 +19,7 @@ import {
   client,
   setViewer,
 } from "./runtime";
+import { ParamBar, SettingsButton } from "./panels";
 
 function Toolbar() {
   const theme = useCad((s) => s.theme);
@@ -59,6 +60,7 @@ function Toolbar() {
       <button onClick={() => void exportModel("stl")} title="Als STL exportieren">Export STL</button>
       <button onClick={() => void exportModel("3mf")} title="Als 3MF exportieren">Export 3MF</button>
       <span className="grow" />
+      <SettingsButton />
       <span className="filename" title="Aktuelle Datei">{fileName}</span>
       <button
         onClick={() => {
@@ -170,6 +172,7 @@ function StatusBar() {
   const bang = shown && (shown.root_is_subtree || shown.context.root_modifier !== null);
   const bangLine = shown && shown.context.root_modifier !== null ? shown.nodes[shown.context.root_modifier]?.range.line : null;
   const st = complete?.stats;
+  const drag = useCad((s) => s.drag);
   return (
     <footer className="statusbar" data-testid="statusbar">
       <span className="st-progress" data-testid="status-progress">
@@ -187,6 +190,11 @@ function StatusBar() {
       {engineError && (
         <span className="st-note error" data-testid="status-engine-error" title={engineError.message}>
           {engineError.message}
+        </span>
+      )}
+      {drag && (
+        <span className="st-note drag" data-testid="status-drag">
+          {drag.alt ? "Alt: frei ziehen (Zahlen)" : drag.snap ? `Snap: ${drag.snap}` : "Ziehen – Alt: ohne Snap, Esc: abbrechen"}
         </span>
       )}
       {notice && <span className="st-note" data-testid="status-notice">{notice}</span>}
@@ -234,7 +242,10 @@ export function App() {
         <Splitter />
         <section className="viewcol" aria-label="3D-Ansicht">
           <PathBar />
-          <ViewPane />
+          <div className="viewbody">
+            <ViewPane />
+            <ParamBar />
+          </div>
         </section>
       </main>
       <StatusBar />

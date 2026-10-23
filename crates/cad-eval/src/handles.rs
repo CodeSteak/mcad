@@ -81,9 +81,8 @@ impl<'a> Ev<'a> {
         if !h.ctx.in_context() {
             return;
         }
-        if h.comps.iter().all(|c| c.is_none()) && !h.has_ref {
-            return;
-        }
+        // Computed values (no literal, no reference) are shown locked (Spec: Regel 3).
+        let locked = h.comps.iter().all(|c| c.is_none()) && !h.has_ref;
         let count = self.handle_count.entry((h.stmt.id, h.kind.tag(), h.index)).or_insert(0);
         if *count >= MAX_REPEATS {
             return;
@@ -120,6 +119,7 @@ impl<'a> Ev<'a> {
             def_span,
             via_var,
             via_default,
+            locked,
             grids,
             instances,
             node: h.node,

@@ -224,6 +224,10 @@ pub struct Handle {
     pub via_var: bool,
     /// Literals are module parameter defaults (editing changes every call).
     pub via_default: bool,
+    /// Computed value without literals or references (Spec: Griffe, Regel 3): shown, not
+    /// editable. Such handles are listed in `EvalOutput::locked_handles`.
+    #[serde(default)]
+    pub locked: bool,
     /// Grids visible at the statement (snap targets).
     pub grids: Vec<GridId>,
     /// Named instances visible at the statement (anchor snap targets).
@@ -330,7 +334,11 @@ pub struct EvalOutput {
     pub grids: Vec<GridInfo>,
     /// Module instances; index = id, 0 = context root.
     pub instances: Vec<InstanceInfo>,
+    /// Editable handles (a literal or a grid/anchor reference behind some component).
     pub handles: Vec<Handle>,
+    /// Display-only handles of computed values (`locked = true`).
+    #[serde(default)]
+    pub locked_handles: Vec<Handle>,
     pub echoes: Vec<Echo>,
     pub modules: Vec<ModuleSig>,
     pub context: ContextInfo,

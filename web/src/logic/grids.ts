@@ -181,3 +181,25 @@ export function modelHull(scene: Scene): Box3 | null {
   if (!r.bounds) return null;
   return transformBox(r.display_world, { min: r.bounds.min, max: r.bounds.max });
 }
+
+/**
+ * Box to frame in the view: the model hull plus the grid points of the context module's grids
+ * and the anchors (snap targets should be on screen).
+ */
+export function viewBox(scene: Scene, hull: Box3 | null): Box3 {
+  const b = emptyBox();
+  if (hull && !isEmpty(hull)) {
+    expandPoint(b, hull.min);
+    expandPoint(b, hull.max);
+  }
+  for (const g of scene.grids) {
+    if (!g.in_context) continue;
+    const ext: Array<[number, number]> = [0, 1, 2].map((k) => {
+      const vs = g.planes.filter((p) => p.axis === k).map((p) => p.value);
+      return vs.length ? [Math.min(...vs), Math.max(...vs)] : [0, 0];
+    }) as Array<[number, number]>;
+    for (let i = 0; i < 8; i++) expandPoint(b, apply(g.frame, [ext[0][i & 1], ext[1][(i >> 1) & 1], ext[2][(i >> 2) & 1]]));
+  }
+  for (const a of scene.anchors) expandPoint(b, a.point);
+  return b;
+}

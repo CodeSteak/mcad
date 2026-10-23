@@ -318,3 +318,47 @@ fn protocol_json_roundtrip() {
     let j = serde_json::to_string(&FromEngine::Progress { version: 1, done: 2, total: 3, current: None }).unwrap();
     assert_eq!(j, r#"{"type":"Progress","version":1,"done":2,"total":3,"current":null}"#);
 }
+
+const PLANES: &str = "grid g {
+    z: boden = 0, deckel = 20;
+}
+cylinder(h = 25, r = 3);
+translate([1, 0, 0] * 2) cube(2);
+";
+
+#[test]
+fn drag_always_answers_and_plane_snap() {
+    let mut s = session();
+    let r = set_source(&mut s, PLANES, 1);
+    let scene = *scenes(&r).last().unwrap();
+    // Computed translate target: locked handle, not in `handles`.
+    let locked = scene.locked_handles.iter().find(|h| h.range.line == 5).expect("locked translate handle");
+    assert!(locked.locked);
+    assert_eq!(locked.world_pos, Vec3([2.0, 0.0, 0.0]));
+    assert!(!scene.handles.iter().any(|h| h.id == locked.id));
+    let h = scene.handles.iter().find(|h| h.kind == HandleKind::Height).expect("height handle");
+    assert!(!h.locked);
+    let st = s.post(ToEngine::DragStart { handle: h.id });
+    let FromEngine::SnapTargets { targets, .. } = &st[0] else { panic!("{st:?}") };
+    let texts: Vec<&str> = targets.iter().map(|t| t.text.as_str()).collect();
+    assert_eq!(texts, ["g.boden", "g.deckel"]);
+    assert_eq!(targets[1].result_world, Vec3([0.0, 0.0, 20.0]));
+    // A drag that does not change the text still answers (empty edit list).
+    let same = s.post(ToEngine::Drag { handle: h.id, target: DragTarget::Value { value: 25.2 } });
+    assert!(matches!(&same[..], [FromEngine::Edits { version: 1, edits }] if edits.is_empty()), "{same:?}");
+    // Snap writes `g.deckel`.
+    let e = edits(&s.post(ToEngine::Drag { handle: h.id, target: DragTarget::Snap { snap: targets[1].snap.clone() } }));
+    let v2 = apply(PLANES, &e);
+    assert!(v2.contains("cylinder(h = g.deckel, r = 3);"), "{v2}");
+    let r = set_source(&mut s, &v2, 2);
+    assert!(diagnostics(&r).is_empty(), "{:?}", diagnostics(&r));
+    // Drag options: 0.5 mm steps.
+    assert!(s.post(ToEngine::SetDragOptions { step_mm: 0.5, step_deg: 5.0 }).is_empty());
+    let e = edits(&s.post(ToEngine::Drag { handle: h.id, target: DragTarget::Value { value: 17.3 } }));
+    assert!(apply(&v2, &e).contains("cylinder(h = 17.5, r = 3);"), "{e:?}");
+    // Invalid values are ignored.
+    s.post(ToEngine::SetDragOptions { step_mm: f64::NAN, step_deg: -1.0 });
+    assert_eq!(s.options().drag.step_mm, 0.5);
+    assert_eq!(s.options().drag.step_deg, 5.0);
+    assert!(s.post(ToEngine::DragEnd { handle: h.id, target: None }).is_empty());
+}

@@ -21,6 +21,7 @@ import {
   lineNumbers,
   rectangularSelection,
 } from "@codemirror/view";
+import { refDeclaration } from "../logic/context";
 import { VersionMapper } from "../logic/positions";
 import { bridge } from "../state/bridge";
 import { store } from "../state/store";
@@ -100,6 +101,22 @@ const hoverTracking = EditorView.domEventHandlers({
   },
   mouseleave() {
     if (store.getState().editorHover !== null) store.setState({ editorHover: null });
+  },
+  // Ctrl/Cmd+click on a grid or anchor reference jumps to its declaration (a plain click
+  // keeps placing the cursor so references stay editable).
+  mousedown(e, view) {
+    if (e.button !== 0 || !(e.ctrlKey || e.metaKey)) return false;
+    const s = store.getState().scene;
+    if (!s) return false;
+    const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }, false);
+    const idx = bridge.index(s);
+    const r = idx.refAt(pos);
+    if (r === null) return false;
+    const target = refDeclaration(s, r);
+    if (!target) return false;
+    e.preventDefault();
+    bridge.setCursor(idx.range(target).from);
+    return true;
   },
 });
 

@@ -654,6 +654,7 @@ impl<'a> Ev<'a> {
             grids: self.grids,
             instances: self.insts,
             handles: self.handles,
+            locked_handles: Vec::new(),
             echoes: self.echoes,
             modules,
             context,

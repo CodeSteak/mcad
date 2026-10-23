@@ -1,7 +1,7 @@
 // Engine client: sends UI messages through an EngineTransport and folds the answers into the
 // UI store and the mesh cache.
 
-import type { ExportFormat, FromEngine, Scene, ToEngine } from "./protocol";
+import type { Edit, ExportFormat, FromEngine, Scene, SnapTarget, ToEngine, Value } from "./protocol";
 import type { EngineTransport } from "./transport";
 import { bridge } from "../state/bridge";
 import { store } from "../state/store";
@@ -9,11 +9,16 @@ import type { MeshCache } from "../view/meshCache";
 
 type ExportResult = Extract<FromEngine, { type: "ExportResult" }>;
 
+export type EditsListener = (version: number, edits: Edit[]) => void;
+export type SnapListener = (handle: number, version: number, targets: SnapTarget[]) => void;
+
 export class EngineClient {
   private requested = new Map<string, number>();
   private exportWaiters: Array<{ resolve: (r: ExportResult) => void; reject: (e: Error) => void }> = [];
   private sentAt = new Map<number, number>();
-  private lastContext: string | null | undefined = undefined;
+  private lastContext: string | undefined = undefined;
+  private editsListeners: EditsListener[] = [];
+  private snapListeners: SnapListener[] = [];
   private seq = 0;
   private version = 0;
   private seqs = new WeakMap<Scene, number>();
@@ -27,6 +32,26 @@ export class EngineClient {
 
   private send(m: ToEngine): void {
     this.transport.send(m);
+  }
+
+  /** Sends a message as it is (drags, defaults, options). */
+  post(m: ToEngine): void {
+    this.send(m);
+  }
+
+  /** `Edits` answers (drags, "Als Standard übernehmen"). */
+  onEdits(f: EditsListener): () => void {
+    this.editsListeners.push(f);
+    return () => (this.editsListeners = this.editsListeners.filter((x) => x !== f));
+  }
+
+  onSnapTargets(f: SnapListener): () => void {
+    this.snapListeners.push(f);
+    return () => (this.snapListeners = this.snapListeners.filter((x) => x !== f));
+  }
+
+  setDragOptions(stepMm: number, stepDeg: number): void {
+    this.send({ type: "SetDragOptions", step_mm: stepMm, step_deg: stepDeg });
   }
 
   /**
@@ -44,11 +69,13 @@ export class EngineClient {
     return version;
   }
 
-  setContext(module: string | null): void {
-    if (module === this.lastContext) return;
-    this.lastContext = module;
+  /** Module context with the parameter bar's temporary values (Spec: Parameterleiste). */
+  setContext(module: string | null, overrides: Record<string, Value> = {}): void {
+    const key = JSON.stringify([module, module === null ? {} : overrides]);
+    if (key === this.lastContext) return;
+    this.lastContext = key;
     store.setState({ context: module });
-    this.send(module === null ? { type: "SetContext", overrides: {} } : { type: "SetContext", module, overrides: {} });
+    this.send(module === null ? { type: "SetContext", overrides: {} } : { type: "SetContext", module, overrides });
     // Re-send the source with a fresh version: the scene of the new context must not share
     // its version with the previous context's scene.
     if (this.version > 0 && !store.getState().pendingSend) this.setSource(bridge.text());
@@ -59,15 +86,19 @@ export class EngineClient {
     const latest = store.getState().complete;
     if (!scene.complete || !latest || latest.version !== scene.version) return;
     const want: number[] = [];
+    // Coarse meshes from a drag are replaced by fine ones once the drag is over.
+    const coarse = store.getState().drag !== null;
     for (const i of nodes) {
       const n = scene.nodes[i];
       const key = n?.mesh_key;
-      if (!key || this.meshes.has(key)) continue;
-      if (this.requested.get(key) === scene.version) continue;
-      this.requested.set(key, scene.version);
+      if (!key) continue;
+      if (this.meshes.has(key) && (coarse || !this.meshes.isCoarse(key))) continue;
+      const rk = `${key}|${coarse ? "c" : "f"}`;
+      if (this.requested.get(rk) === scene.version) continue;
+      this.requested.set(rk, scene.version);
       want.push(i);
     }
-    if (want.length) this.send({ type: "RequestMeshes", nodes: want, version: scene.version });
+    if (want.length) this.send({ type: "RequestMeshes", nodes: want, version: scene.version, coarse });
   }
 
   exportFile(format: ExportFormat): Promise<ExportResult> {
@@ -117,6 +148,14 @@ export class EngineClient {
       }
       case "ExportResult": {
         this.exportWaiters.shift()?.resolve(m);
+        break;
+      }
+      case "Edits": {
+        for (const f of this.editsListeners) f(m.version, m.edits);
+        break;
+      }
+      case "SnapTargets": {
+        for (const f of this.snapListeners) f(m.handle, m.version, m.targets);
         break;
       }
       default:

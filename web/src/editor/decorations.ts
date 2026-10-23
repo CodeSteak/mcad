@@ -9,6 +9,7 @@ import { Decoration, type DecorationSet, WidgetType } from "@codemirror/view";
 import type { Diagnostic, Scene } from "../engine/protocol";
 import { mapRange, type MapPos, type VersionMapper } from "../logic/positions";
 import { disabledStatements } from "./lang";
+import { type LiteralControl, LiteralControlWidget, literalAt } from "./literalControls";
 
 export interface DecorationInput {
   scene: Scene | null;
@@ -74,8 +75,10 @@ function lineOf(doc: Text, pos: number): number {
 export function collectLines(doc: Text, input: DecorationInput, disabled: Array<{ from: number; to: number }>): {
   lines: Map<number, LineInfo>;
   marks: Array<{ from: number; to: number; cls: string }>;
+  controls: Map<number, LiteralControl>;
 } {
   const lines = new Map<number, LineInfo>();
+  const controls = new Map<number, LiteralControl>();
   const marks: Array<{ from: number; to: number; cls: string }> = [];
   const clampMark = (from: number, to: number, cls: string) => {
     let f = Math.max(0, Math.min(from, doc.length));
@@ -111,7 +114,14 @@ export function collectLines(doc: Text, input: DecorationInput, disabled: Array<
     for (const h of input.scene.hints) {
       if (!h.in_context) continue;
       const r = mapRange(m, h.range.from, h.range.to);
-      lineInfo(lines, lineOf(doc, r.to)).segs.push({ kind: "hint", text: `= ${h.text}` });
+      const line = lineOf(doc, r.to);
+      lineInfo(lines, line).segs.push({ kind: "hint", text: `= ${h.text}` });
+      // Number literal → slider, bool literal → switch (Spec: Werttypen).
+      if (h.literal && (typeof h.value === "number" || typeof h.value === "boolean") && !controls.has(line)) {
+        const lr = mapRange(m, h.literal.from, h.literal.to);
+        const c: LiteralControl = { from: lr.from, to: lr.to, kind: typeof h.value === "number" ? "number" : "bool", value: h.value };
+        if (literalAt(doc, c) && lineOf(doc, lr.from) === line) controls.set(line, c);
+      }
     }
     for (const e of input.scene.echoes) {
       if (!e.in_context) continue;
@@ -159,19 +169,24 @@ export function collectLines(doc: Text, input: DecorationInput, disabled: Array<
   for (const l of input.viewHoverLines) if (l >= 1 && l <= doc.lines) lineInfo(lines, l).classes.add("cm-l-viewhover");
   if (input.hoverLine !== null && input.hoverLine >= 1 && input.hoverLine <= doc.lines) lineInfo(lines, input.hoverLine).classes.add("cm-l-hover");
   if (input.hoverRef) clampMark(input.hoverRef.from, input.hoverRef.to, "cm-ref-hover");
-  return { lines, marks };
+  return { lines, marks, controls };
 }
 
 export function buildDecorations(state: EditorState, input: DecorationInput): DecorationSet {
   const doc = state.doc;
   const disabled = disabledStatements(syntaxTree(state), doc.toString());
-  const { lines, marks } = collectLines(doc, input, disabled);
+  const { lines, marks, controls } = collectLines(doc, input, disabled);
   const ranges: Range<Decoration>[] = [];
   for (const [line, info] of lines) {
     const l = doc.line(line);
     if (info.classes.size) ranges.push(Decoration.line({ class: [...info.classes].join(" ") }).range(l.from));
     if (info.segs.length) ranges.push(Decoration.widget({ widget: new LineEndWidget(info.segs), side: 1 }).range(l.to));
+    const c = controls.get(line);
+    if (c) ranges.push(Decoration.widget({ widget: new LiteralControlWidget(c), side: 2 }).range(l.to));
   }
-  for (const m of marks) ranges.push(Decoration.mark({ class: m.cls }).range(m.from, m.to));
+  for (const m of marks) {
+    const attributes = m.cls === "cm-ref-hover" ? { title: "Strg+Klick: zur Deklaration springen" } : undefined;
+    ranges.push(Decoration.mark({ class: m.cls, attributes }).range(m.from, m.to));
+  }
   return Decoration.set(ranges, true);
 }

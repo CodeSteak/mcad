@@ -14,6 +14,10 @@ class Bridge {
   mapper = new VersionMapper(0);
   /** performance.now() of the last edit that produced a document version. */
   editTimes = new Map<number, number>();
+  /** Source version → performance.now() of the Drag message whose edits produced it. */
+  dragTimes = new Map<number, number>();
+  /** Last drag end with edits: time and source version (fine mesh latency). */
+  dragEnd: { at: number; version: number } | null = null;
   private indices = new WeakMap<Scene, { rev: number; idx: SceneIndex }>();
 
   doc(): Text {

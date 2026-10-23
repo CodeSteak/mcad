@@ -381,10 +381,7 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
         })
         .collect();
 
-    let handles = out
-        .handles
-        .iter()
-        .map(|h| p::Handle {
+    let handle = |h: &cad_eval::Handle| p::Handle {
             id: h.id,
             stmt: h.stmt,
             range: r(h.span),
@@ -409,12 +406,14 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
             def_range: ro(h.def_span),
             via_var: h.via_var,
             via_default: h.via_default,
+            locked: h.locked,
             grids: h.grids.clone(),
             instances: h.instances.clone(),
             node: h.node,
             module_inst: h.module_inst,
-        })
-        .collect();
+    };
+    let handles = out.handles.iter().map(handle).collect();
+    let locked_handles = out.locked_handles.iter().map(handle).collect();
 
     let hints = out
         .hints
@@ -514,6 +513,7 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
         anchors,
         instances,
         handles,
+        locked_handles,
         hints,
         modules,
         refs,

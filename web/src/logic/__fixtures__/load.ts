@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { Text } from "@codemirror/state";
 import type { Diagnostic, Scene } from "../../engine/protocol";
 
-const FIXTURES: Record<string, { example: string }> = {
+const FIXTURES: Record<string, { example: string; local?: boolean }> = {
+  griffe: { example: "griffe.scad", local: true },
   gehaeuse: { example: "spec/gehaeuse.scad" },
   "gehaeuse-modul": { example: "spec/gehaeuse.scad" },
   modifiers: { example: "openscad-compat/24_modifiers.scad" },
@@ -27,7 +28,8 @@ export interface Fixture {
 
 export function fixture(name: keyof typeof FIXTURES): Fixture {
   const f = JSON.parse(readFileSync(join(__dirname, `${name}.json`), "utf8")) as { scene: Scene; diagnostics: Diagnostic[] };
-  const source = readFileSync(join(__dirname, "../../../../examples", FIXTURES[name].example), "utf8");
+  const fx = FIXTURES[name];
+  const source = readFileSync(fx.local ? join(__dirname, fx.example) : join(__dirname, "../../../../examples", fx.example), "utf8");
   return { ...f, source, doc: Text.of(source.split("\n")) };
 }
 

@@ -24,6 +24,8 @@ pub enum SnapRef {
     Grid { grid: GridId, planes: [String; 3] },
     /// Anchor `name` of the named instance `inst`.
     Anchor { inst: InstId, name: String },
+    /// Grid plane `g.name` as a number (1D handles: height, radius, plane).
+    Plane { grid: GridId, plane: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -163,6 +165,10 @@ fn ref_text(out: &EvalOutput, r: &SnapRef) -> Option<String> {
             let label = i.label.as_ref()?;
             i.anchors.iter().any(|a| a.name == *name).then(|| format!("{label}.{name}"))
         }
+        SnapRef::Plane { grid, plane } => {
+            let g = out.grids.get(*grid as usize)?;
+            g.planes.iter().any(|p| p.name == *plane && !p.implicit).then(|| format!("{}.{plane}", g.name))
+        }
     }
 }
 
@@ -170,7 +176,7 @@ fn ref_text(out: &EvalOutput, r: &SnapRef) -> Option<String> {
 /// not inside a module definition nested in that range).
 fn visible_at(out: &EvalOutput, r: &SnapRef, span: Span) -> bool {
     let vis = match r {
-        SnapRef::Grid { grid, .. } => out.grids.get(*grid as usize).map(|g| g.visible),
+        SnapRef::Grid { grid, .. } | SnapRef::Plane { grid, .. } => out.grids.get(*grid as usize).map(|g| g.visible),
         SnapRef::Anchor { inst, .. } => out.instances.get(*inst as usize).and_then(|i| i.visible),
     };
     let Some(vis) = vis else { return false };
@@ -180,9 +186,24 @@ fn visible_at(out: &EvalOutput, r: &SnapRef, span: Span) -> bool {
     !out.modules.iter().any(|m| vis.start <= m.span.start && m.span.start <= span.start && span.end <= m.span.end)
 }
 
+/// 1D handles that can snap onto grid planes (`g.name`).
+fn is_linear(k: HandleKind) -> bool {
+    matches!(k, HandleKind::Radius | HandleKind::Height | HandleKind::Plane { .. })
+}
+
 fn snap_edit(out: &EvalOutput, h: &Handle, r: &SnapRef) -> Option<TextEdit> {
-    if h.kind != HandleKind::Point || h.comps.iter().flatten().any(|c| c.scale != 1.0) {
-        return None;
+    match r {
+        SnapRef::Plane { .. } => {
+            // Only planes the handle actually lands on (see `plane_targets`).
+            if !plane_targets(out, h).iter().any(|t| t.r#ref == *r) {
+                return None;
+            }
+        }
+        _ => {
+            if h.kind != HandleKind::Point || h.comps.iter().flatten().any(|c| c.scale != 1.0) {
+                return None;
+            }
+        }
     }
     let text = ref_text(out, r)?;
     for span in [h.def_span, Some(h.expr_span)].into_iter().flatten() {
@@ -193,11 +214,67 @@ fn snap_edit(out: &EvalOutput, h: &Handle, r: &SnapRef) -> Option<TextEdit> {
     None
 }
 
-/// Grid points and anchors a point handle can snap to.
+/// Grid planes a 1D handle (height, radius, plane) can snap to: planes of the visible grids
+/// perpendicular to the handle's axis whose value, written as `g.name` into the handle's
+/// literal, puts the handle exactly onto the plane (same origin and unit along the axis).
+fn plane_targets(out: &EvalOutput, h: &Handle) -> Vec<SnapTarget> {
+    let mut res = Vec::new();
+    if !is_linear(h.kind) || h.comps.len() != 1 {
+        return res;
+    }
+    let (Some(axis), Some(base)) = (h.axis, h.base) else { return res };
+    // Literal = value * scale; without a literal (pure reference) scale 1.
+    let scale = h.comps[0].map_or(1.0, |c| c.scale);
+    if scale == 0.0 {
+        return res;
+    }
+    let a_w = h.frame.transform_vector3(axis);
+    let b_w = h.frame.transform_point3(base);
+    if a_w.length_squared() < 1e-24 {
+        return res;
+    }
+    for &gid in &h.grids {
+        let Some(g) = out.grids.get(gid as usize) else { continue };
+        for p in &g.planes {
+            if p.implicit {
+                continue;
+            }
+            let mut e = DVec3::ZERO;
+            e[p.axis as usize] = 1.0;
+            let n_w = g.frame.transform_vector3(e).normalize_or_zero();
+            let q_w = g.frame.transform_point3(e * p.value);
+            let an = a_w.dot(n_w);
+            // Axis perpendicular to the plane.
+            if an.abs() < (1.0 - 1e-9) * a_w.length() {
+                continue;
+            }
+            let t = (q_w - b_w).dot(n_w) / an;
+            let written = p.value / scale;
+            if (t - written).abs() > 1e-6 * t.abs().max(1.0) {
+                continue;
+            }
+            let r = SnapRef::Plane { grid: gid, plane: p.name.clone() };
+            let Some(text) = ref_text(out, &r) else { continue };
+            let local = base + axis * written;
+            let world = h.frame.transform_point3(local);
+            res.push(SnapTarget { text, r#ref: r, local, world, result_world: world });
+        }
+    }
+    res
+}
+
+/// Grid points and anchors a point handle can snap to; grid planes (`g.name`) for 1D
+/// handles (height, radius, plane).
 pub fn snap_targets(out: &EvalOutput, handle_id: u64) -> Vec<SnapTarget> {
     let Some(h) = out.handle(handle_id) else {
         return Vec::new();
     };
+    if is_linear(h.kind) {
+        return plane_targets(out, h)
+            .into_iter()
+            .filter(|t| [h.def_span, Some(h.expr_span)].into_iter().flatten().any(|s| visible_at(out, &t.r#ref, s)))
+            .collect();
+    }
     if h.kind != HandleKind::Point || h.comps.iter().flatten().any(|c| c.scale != 1.0) {
         return Vec::new();
     }
