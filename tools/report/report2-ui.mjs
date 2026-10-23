@@ -178,8 +178,8 @@ const extraFigure = (n) => `<figure><img src="img/${esc(n)}.jpg" alt="${esc(n)}"
 /** Main screenshot of each scenario followed by its further screenshots (same sNN prefix). */
 const figures = images
   .map((s) => {
-    const prefix = s.image.split("-")[0];
-    const more = extra.map((f) => f.replace(/\.jpg$/, "")).filter((n) => n.split("-")[0] === prefix);
+    const prefix = s.image.match(/^s\d+/)?.[0];
+    const more = extra.map((f) => f.replace(/\.jpg$/, "")).filter((n) => n.match(/^s\d+/)?.[0] === prefix);
     return [figure(s), ...more.map(extraFigure)].join("\n");
   })
   .join("\n");
@@ -266,6 +266,8 @@ ${vt ? `<table><tr><th>Datei</th><th>bestanden</th><th>Fehlgeschlagen</th></tr>$
   <li>Hover über Kanten wird über die angrenzende Fläche aufgelöst (Kanten tragen keine Knoten-Tags). Union-Kinder erhalten beim Hover einen dünnen Umriss, beim Cursor nicht.</li>
   <li>Beim Wechsel des Modulkontexts sendet die UI den Quelltext mit neuer Version erneut, damit jede Szenen-Version genau eine Auswertung bezeichnet (Meshes werden pro Version angefordert). Das kostet eine zusätzliche Sprachauswertung von wenigen Millisekunden.</li>
   <li>Bei Mehrdeutigkeit (gleicher Inhalt an mehreren Stellen, z. B. zwei Deckel) wird über die Lage des Trefferpunkts in den Knotenhüllen getrennt; bleibt sie bestehen, werden alle Zeilen markiert.</li>
+  <li>Rasterausdrücke in Schleifen (z. B. <code>g[loch[i], mitte, boden]</code>) liefert die Szene einmal; beim Hover wird der Punkt des ersten Durchlaufs hervorgehoben.</li>
+  <li>Der Editor bricht lange Zeilen um; Hinweise am Zeilenende können dadurch in eine zweite Bildschirmzeile rutschen.</li>
   <li>Der Watchdog-Test blockiert den Worker über eine Testnachricht; ein echter hängender Kernel-Aufruf wurde nicht nachgestellt.</li>
   <li>Die Messwerte stammen aus einem headless Chromium mit SwiftShader und sind nur relativ aussagekräftig.</li>
 </ul>

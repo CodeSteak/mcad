@@ -143,7 +143,7 @@ export class Materials {
         };
         break;
       case "ghost":
-        s = { surface: this.transparent(p.ghost, 0.22), edges: this.lines(p.ghost, 0.6), renderOrder: 8, pickable: false };
+        s = { surface: this.transparent(p.ghost, 0.1, { side: THREE.FrontSide }), edges: this.lines(p.ghost, 0.7), renderOrder: 8, pickable: false };
         break;
       case "outline":
         s = { surface: null, edges: this.lines(p.outline, 0.85), renderOrder: 7, pickable: false };
