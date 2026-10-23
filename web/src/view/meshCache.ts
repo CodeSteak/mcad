@@ -9,6 +9,8 @@ export interface CachedMesh {
   bytes: number;
   geometry: THREE.BufferGeometry | null;
   edges: THREE.BufferGeometry | null;
+  /** Geometries with per-vertex colours (colours per face), by colour signature. */
+  colored: Map<string, THREE.BufferGeometry>;
 }
 
 const LIMIT_BYTES = 256 << 20;
@@ -32,7 +34,7 @@ export class MeshCache {
     const old = this.map.get(m.key);
     if (old && !old.data.coarse && m.coarse) return;
     if (old) this.drop(m.key);
-    const e: CachedMesh = { data: m, bytes: sizeOf(m), geometry: null, edges: null };
+    const e: CachedMesh = { data: m, bytes: sizeOf(m), geometry: null, edges: null, colored: new Map() };
     this.map.set(m.key, e);
     this.bytes += e.bytes;
     this.evict();
@@ -68,6 +70,35 @@ export class MeshCache {
     return e.geometry;
   }
 
+  /**
+   * The geometry with a `color` attribute (shares positions, normals and indices); `sig`
+   * identifies the colours (cache key), `colors` computes them for the mesh data.
+   */
+  coloredGeometry(key: string, sig: string, colors: (data: MeshData) => Float32Array): THREE.BufferGeometry | null {
+    const base = this.geometry(key);
+    const e = this.map.get(key);
+    if (!base || !e) return null;
+    let g = e.colored.get(sig);
+    if (!g) {
+      g = new THREE.BufferGeometry();
+      g.setAttribute("position", base.getAttribute("position"));
+      const n = base.getAttribute("normal");
+      if (n) g.setAttribute("normal", n);
+      g.setIndex(base.getIndex());
+      g.setAttribute("color", new THREE.BufferAttribute(colors(e.data), 3));
+      g.boundingSphere = base.boundingSphere;
+      g.boundingBox = base.boundingBox;
+      // a few colourings per mesh (themes, colour edits)
+      if (e.colored.size >= 4) {
+        const [k0, g0] = e.colored.entries().next().value as [string, THREE.BufferGeometry];
+        g0.deleteAttribute("color");
+        e.colored.delete(k0);
+      }
+      e.colored.set(sig, g);
+    }
+    return g;
+  }
+
   edges(key: string): THREE.BufferGeometry | null {
     const e = this.get(key);
     if (!e) return null;
@@ -89,6 +120,7 @@ export class MeshCache {
     if (!e) return;
     e.geometry?.dispose();
     e.edges?.dispose();
+    e.colored.clear();
     this.bytes -= e.bytes;
     this.map.delete(key);
   }

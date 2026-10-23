@@ -112,12 +112,27 @@ export class EngineClient {
     if (want.length) this.send({ type: "RequestMeshes", nodes: want, version: scene.version, coarse });
   }
 
-  /** Export of the model, or of parts (`zip`: one file per part in a ZIP). */
-  exportFile(format: ExportFormat, parts?: string[], zip = false): Promise<ExportResult> {
+  /**
+   * Export of the model, or of parts (`zip`: one file per part in a ZIP). `colors`: 3MF with
+   * one volume per colour (engine default for 3MF), STL as a ZIP with one file per colour.
+   */
+  exportFile(format: ExportFormat, parts?: string[], zip = false, colors?: boolean): Promise<ExportResult> {
     return new Promise((resolve, reject) => {
       this.exportWaiters.push({ resolve, reject });
-      this.send(parts ? { type: "Export", format, parts, zip } : { type: "Export", format });
+      const m: ToEngine = parts ? { type: "Export", format, parts, zip } : { type: "Export", format };
+      if (colors !== undefined && m.type === "Export") m.colors = colors;
+      this.send(m);
     });
+  }
+
+  /** Colour regions of a complete scene (`meshes`: with a mesh per region). */
+  requestColorRegions(version: number, meshes: boolean): void {
+    this.send({ type: "RequestColorRegions", meshes, version });
+  }
+
+  /** Writes a filament slot into the code (`null`: automatic). The answer is an `Edits`. */
+  setFilament(color: string, filament: number | null): void {
+    this.send(filament === null ? { type: "SetFilament", color } : { type: "SetFilament", color, filament });
   }
 
 
@@ -154,7 +169,20 @@ export class EngineClient {
         store.setState({ progress: { version: m.version, done: m.done, total: m.total, line: m.current?.range.line ?? null } });
         break;
       }
+      case "ColorRegions": {
+        let meshes = false;
+        for (const set of m.items)
+          for (const r of set.regions)
+            if (r.mesh) {
+              this.meshes.put(r.mesh);
+              meshes = true;
+            }
+        const st = store.getState();
+        store.setState({ regions: { version: m.version, items: m.items, meshes }, regionsError: null, meshRevision: st.meshRevision + (meshes ? 1 : 0) });
+        break;
+      }
       case "Error": {
+        if (m.message.startsWith("Farbregionen")) store.setState({ regionsError: m.message });
         store.setState({ engineError: { message: m.message, version: m.version, node: m.node, at: performance.now() }, progress: null });
         for (const w of this.exportWaiters.splice(0)) w.reject(new Error(m.message));
         break;

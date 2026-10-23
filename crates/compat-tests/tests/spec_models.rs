@@ -272,6 +272,36 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
+        file: "mehrfarbig.scad",
+        grids: &[("g", 8, false), ("p", 9, false)],
+        instances: &[("schild", "schild", &[]), ("figur", "figur", &[])],
+        handles: 0,
+        ops: &[("color", 6), ("difference", 2), ("rotate_extrude", 1)],
+        check: |out| {
+            // colours from the palette, one explicit filament slot (red on 3)
+            let colors: Vec<(Option<&str>, Option<u32>)> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match &n.op {
+                    Op::Color { name, filament, .. } => Some((name.as_deref(), *filament)),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(
+                colors,
+                [
+                    (Some("white"), None),
+                    (Some("teal"), None),
+                    (Some("red"), Some(3)),
+                    (Some("blue"), None),
+                    (Some("white"), None),
+                    (Some("yellow"), None)
+                ]
+            );
+        },
+    },
+    Expect {
         file: "variabler_radius.scad",
         grids: &[("g", 7, true)],
         instances: &[],

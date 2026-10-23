@@ -103,6 +103,14 @@ struct ExportReq {
     format: p::ExportFormat,
     parts: Option<Vec<String>>,
     zip: bool,
+    colors: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+struct RegionReq {
+    meshes: bool,
+    coarse: bool,
+    version: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -127,6 +135,7 @@ pub struct Session<K: Kernel> {
     drag: Option<u64>,
     mesh_queue: VecDeque<MeshReq>,
     export: VecDeque<ExportReq>,
+    regions: VecDeque<RegionReq>,
     /// (key, coarse) of the root mesh sent last.
     last_root_mesh: Option<(String, bool)>,
     /// Project files besides the main file (`SetFiles`/`SetFile`).
@@ -172,6 +181,7 @@ where
             drag: None,
             mesh_queue: VecDeque::new(),
             export: VecDeque::new(),
+            regions: VecDeque::new(),
             last_root_mesh: None,
             files: BTreeMap::new(),
             main_path: "main.scad".into(),
@@ -275,7 +285,9 @@ where
 
     /// Kernel job, mesh or export work pending: call [`Session::step`].
     pub fn busy(&self) -> bool {
-        self.running.is_some() || !self.mesh_queue.is_empty() || (!self.export.is_empty() && self.done.is_some())
+        self.running.is_some()
+            || !self.mesh_queue.is_empty()
+            || ((!self.export.is_empty() || !self.regions.is_empty()) && self.done.is_some())
     }
 
     pub fn drag_active(&self) -> bool {
@@ -393,17 +405,31 @@ where
                     None => vec![self.error(&format!("Parameter {param} von Modul {module} nicht gefunden"), None)],
                 }
             }
-            ToEngine::Export { format, parts, zip } => {
+            ToEngine::Export { format, parts, zip, colors } => {
                 if self.done.is_none() && self.running.is_none() {
                     return vec![self.error("keine Auswertung vorhanden", None)];
                 }
-                self.export.push_back(ExportReq { format, parts, zip: zip.unwrap_or(false) });
+                self.export.push_back(ExportReq { format, parts, zip: zip.unwrap_or(false), colors });
                 Vec::new()
             }
+            ToEngine::RequestColorRegions { meshes, coarse, version } => {
+                if self.done.is_none() && self.running.is_none() {
+                    return vec![self.error("keine Auswertung vorhanden", None)];
+                }
+                let v = self.cur.as_ref().map_or(self.version, |c| c.version);
+                if version.is_some_and(|x| x != v) {
+                    return Vec::new();
+                }
+                let coarse = coarse.unwrap_or(self.drag.is_some());
+                self.regions.push_back(RegionReq { meshes, coarse, version: v });
+                Vec::new()
+            }
+            ToEngine::SetFilament { color, filament } => self.filament_edits(&color, filament),
             ToEngine::Cancel => {
                 self.running = None;
                 self.mesh_queue.clear();
                 self.export.clear();
+                self.regions.clear();
                 Vec::new()
             }
             ToEngine::BlockKeys { keys } => {
@@ -559,11 +585,111 @@ where
         }
         if res.is_empty()
             && self.done.is_some()
+            && let Some(req) = self.regions.pop_front()
+        {
+            res.push(self.do_regions(req));
+            return res;
+        }
+        if res.is_empty()
+            && self.done.is_some()
             && let Some(req) = self.export.pop_front()
         {
             res.push(self.do_export(req));
         }
         res
+    }
+
+    /// Edits for `SetFilament`.
+    fn filament_edits(&self, color: &str, filament: Option<u32>) -> Vec<FromEngine> {
+        let Some(cur) = &self.cur else { return vec![self.error("keine Auswertung vorhanden", None)] };
+        let table = convert::color_table(&cur.out.tree);
+        let Some(e) = table.entries.iter().find(|e| cad_engine::colors::key_hex(e.key) == color) else {
+            return vec![self.error(&format!("Farbe {color} kommt im Modell nicht vor"), None)];
+        };
+        if e.source == cad_engine::colors::ColorSource::Default {
+            return vec![self.error("Material ohne color() hat immer Filament 1", None)];
+        }
+        if filament.is_some_and(|f| !(1..=cad_eval::palette::MAX_FILAMENT).contains(&f)) {
+            return vec![self.error("Filament muss 1 bis 16 sein", None)];
+        }
+        let spans: Vec<cad_syntax::Span> = e.nodes.iter().map(|&n| cur.out.tree.node(n).span).collect();
+        let edits = cad_eval::filament_edits(&cur.proj, &spans, filament);
+        vec![FromEngine::Edits { version: cur.version, edits: edits.iter().map(|x| cur.src.edit(x)).collect() }]
+    }
+
+    /// Nodes whose colour regions the UI lists: the parts (file context), else the root.
+    pub fn region_nodes(&self) -> Vec<(Option<String>, NodeIdx)> {
+        let (Some(d), Some(cur)) = (&self.done, &self.cur) else { return Vec::new() };
+        if cur.version == d.version && !cur.out.parts.is_empty() {
+            return cur
+                .out
+                .parts
+                .iter()
+                .filter(|p| d.ev.report(p.node).status != cad_engine::Status::Skipped)
+                .map(|p| (Some(p.name.clone()), p.node))
+                .collect();
+        }
+        d.ev.root().filter(|&r| d.ev.report(r).dim != Some(cad_ir::Dim::Two)).map(|r| (None, r)).into_iter().collect()
+    }
+
+    /// The colour table of the last finished evaluation.
+    pub fn color_table(&self) -> Option<cad_engine::colors::ColorTable> {
+        self.done.as_ref().map(|d| convert::color_table(&d.ev.tree))
+    }
+
+    /// Colour regions of the parts (or the root) of the last finished evaluation.
+    pub fn color_regions(&mut self, meshes: bool, coarse: bool) -> Result<Vec<p::RegionSet>, String> {
+        let nodes = self.region_nodes();
+        let table = self.color_table().ok_or("keine Auswertung vorhanden")?;
+        let mut out = Vec::new();
+        for (part, n) in nodes {
+            let tol = self.tolerance(n, coarse);
+            let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+            let regs = self.engine.color_regions(&d.ev, n)?;
+            let mut items = Vec::new();
+            for (i, r) in regs.regions.iter().enumerate() {
+                let e = table.entry_of(r.color).map(|e| &table.entries[e]);
+                let mesh = if meshes {
+                    let m = self.engine.region_mesh(&regs, i, tol)?;
+                    let m = self.localize_mesh(m);
+                    Some(p::MeshData {
+                        node: n,
+                        nodes: vec![n],
+                        key: r.key.to_hex(),
+                        coarse,
+                        tol,
+                        positions: m.positions.clone(),
+                        normals: m.normals.clone(),
+                        indices: m.indices.clone(),
+                        tri_tags: m.tri_tags.clone(),
+                        tri_faces: m.tri_faces.clone(),
+                        edge_segments: m.edge_segments.clone(),
+                        edge_ids: m.edge_ids.clone(),
+                    })
+                } else {
+                    None
+                };
+                items.push(p::Region {
+                    color: e.map(|e| cad_engine::colors::key_hex(e.key)).unwrap_or_default(),
+                    filament: e.map_or(1, |e| e.filament),
+                    volume: r.volume,
+                    mesh,
+                });
+            }
+            out.push(p::RegionSet { node: n, part, total: regs.total, regions: items, warning: regs.warning.clone() });
+        }
+        Ok(out)
+    }
+
+    fn do_regions(&mut self, req: RegionReq) -> FromEngine {
+        let version = self.done.as_ref().map_or(0, |d| d.version);
+        if version != req.version {
+            // a newer evaluation follows: answer for it (the UI drops stale versions)
+        }
+        match self.color_regions(req.meshes, req.coarse) {
+            Ok(items) => FromEngine::ColorRegions { version, items },
+            Err(e) => self.error(&e, None),
+        }
     }
 
     /// Runs [`Session::step`] until idle and collects all answers.
@@ -731,9 +857,18 @@ where
     }
 
     fn do_export(&mut self, req: ExportReq) -> FromEngine {
-        let res = match &req.parts {
-            None => self.export_bytes(req.format),
-            Some(names) => self.export_parts(req.format, names, req.zip),
+        let colors = match req.format {
+            p::ExportFormat::ThreeMf => req.colors.unwrap_or(true),
+            p::ExportFormat::Stl => req.colors.unwrap_or(false),
+            p::ExportFormat::Step => false,
+        };
+        let res = if colors {
+            self.export_colors(req.format, req.parts.as_deref()).map(|(b, st)| (b, st.triangles))
+        } else {
+            match &req.parts {
+                None => self.export_bytes(req.format),
+                Some(names) => self.export_parts(req.format, names, req.zip),
+            }
         };
         match res {
             Ok((bytes, triangles)) => FromEngine::ExportResult {
@@ -741,9 +876,49 @@ where
                 bytes,
                 triangles,
                 parts: req.parts,
-                zip: req.zip.then_some(true),
+                zip: (req.zip || (colors && req.format == p::ExportFormat::Stl)).then_some(true),
+                colors: colors.then_some(true),
             },
             Err(e) => self.error(&e, None),
+        }
+    }
+
+    /// Name of the root object in exports: the main file's stem.
+    fn model_name(&self) -> String {
+        let f = self.main_path.rsplit('/').next().unwrap_or("modell");
+        let stem = f.strip_suffix(".scad").unwrap_or(f);
+        if stem.is_empty() { "modell".into() } else { stem.to_string() }
+    }
+
+    /// Multi-colour export (Plan 16.4) of the root or the named parts of the last finished
+    /// evaluation: 3MF with one volume per colour, or (`Stl`) a ZIP with one STL per colour.
+    pub fn export_colors(
+        &mut self,
+        format: p::ExportFormat,
+        parts: Option<&[String]>,
+    ) -> Result<(Vec<u8>, cad_engine::color_export::ColorExportStats), String> {
+        let tol = Some(self.opts.export_tol);
+        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+        let nodes: Vec<(String, NodeIdx)> = match parts {
+            None => vec![(self.model_name(), d.ev.root().ok_or("kein Ergebnis")?)],
+            Some(names) => {
+                let cur = self.cur.as_ref().filter(|c| c.version == d.version).ok_or("Auswertung läuft noch")?;
+                let mut v = Vec::new();
+                for n in names {
+                    match cur.out.part(n) {
+                        Some(pt) => v.push((pt.name.clone(), pt.node)),
+                        None => return Err(format!("Bauteil `{n}` nicht gefunden")),
+                    }
+                }
+                v
+            }
+        };
+        let table = convert::color_table(&d.ev.tree);
+        let app = format!("controller-cad {}", env!("CARGO_PKG_VERSION"));
+        match format {
+            p::ExportFormat::ThreeMf => self.engine.export_3mf_colors(&d.ev, &nodes, tol, &table, &app),
+            p::ExportFormat::Stl => self.engine.export_color_stl_zip(&d.ev, &nodes, tol, &table),
+            p::ExportFormat::Step => Err("STEP trägt Farben je Fläche, keine Farbvolumen".into()),
         }
     }
 

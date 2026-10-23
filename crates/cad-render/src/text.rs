@@ -78,10 +78,23 @@ impl Image {
 
     /// Text on a light box (labels, titles); returns the box (x, y, w, h).
     pub fn draw_label(&mut self, x: i64, y: i64, text: &str, size: TextSize, color: [f32; 4]) -> (i64, i64, u32, u32) {
+        self.draw_label_on(x, y, text, size, color, [1.0, 1.0, 1.0, 0.78])
+    }
+
+    /// [`Image::draw_label`] on a box of colour `bg`.
+    pub fn draw_label_on(
+        &mut self,
+        x: i64,
+        y: i64,
+        text: &str,
+        size: TextSize,
+        color: [f32; 4],
+        bg: [f32; 4],
+    ) -> (i64, i64, u32, u32) {
         let (w, h) = text_size(text, size);
         let pad = if size == TextSize::Large { 4 } else { 2 };
         let bx = (x - pad, y - pad / 2, w + 2 * pad as u32, h + pad as u32);
-        self.fill_rect(bx.0, bx.1, bx.2, bx.3, [1.0, 1.0, 1.0, 0.78]);
+        self.fill_rect(bx.0, bx.1, bx.2, bx.3, bg);
         self.draw_text(x, y, text, size, color);
         bx
     }

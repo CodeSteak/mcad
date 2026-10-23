@@ -77,7 +77,7 @@ pub fn encode_batch(msgs: &[FromEngine], busy: bool) -> Frame {
                 let items: Vec<Json> = items.iter().map(|it| mesh_json(it, &mut b)).collect();
                 json!({ "type": "Meshes", "version": version, "items": items })
             }
-            FromEngine::ExportResult { format, bytes, triangles, parts, zip } => {
+            FromEngine::ExportResult { format, bytes, triangles, parts, zip, colors } => {
                 let mut o =
                     json!({ "type": "ExportResult", "format": format, "bytes": b.u8(bytes), "triangles": triangles });
                 if let Some(p) = parts {
@@ -86,7 +86,31 @@ pub fn encode_batch(msgs: &[FromEngine], busy: bool) -> Frame {
                 if let Some(z) = zip {
                     o["zip"] = json!(z);
                 }
+                if let Some(c) = colors {
+                    o["colors"] = json!(c);
+                }
                 o
+            }
+            FromEngine::ColorRegions { version, items } => {
+                let items: Vec<Json> = items
+                    .iter()
+                    .map(|set| {
+                        let regions: Vec<Json> = set
+                            .regions
+                            .iter()
+                            .map(|r| {
+                                json!({
+                                    "color": r.color,
+                                    "filament": r.filament,
+                                    "volume": r.volume,
+                                    "mesh": r.mesh.as_ref().map(|m| mesh_json(m, &mut b)),
+                                })
+                            })
+                            .collect();
+                        json!({ "node": set.node, "part": set.part, "total": set.total, "regions": regions, "warning": set.warning })
+                    })
+                    .collect();
+                json!({ "type": "ColorRegions", "version": version, "items": items })
             }
             other => serde_json::to_value(other).unwrap_or_else(
                 |e| json!({ "type": "Error", "message": e.to_string(), "version": null, "node": null }),

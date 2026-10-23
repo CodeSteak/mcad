@@ -374,6 +374,46 @@ pub fn include_refs(src: &Source, proj: &cad_eval::Project) -> Vec<p::IncludeRef
     out
 }
 
+/// Colour table of a tree with the palette's default colour and names (Plan 16.3).
+pub fn color_table(tree: &cad_ir::Tree) -> cad_engine::colors::ColorTable {
+    use cad_eval::palette;
+    cad_engine::colors::ColorTable::of(tree, palette::rgba_of(palette::DEFAULT_RGB), &|n| {
+        palette::palette_color(n).is_some()
+    })
+}
+
+/// Protocol form of a colour table.
+pub fn color_infos(t: &cad_engine::colors::ColorTable, tree: &cad_ir::Tree, src: &Source) -> Vec<p::ColorInfo> {
+    use cad_engine::colors::{ColorSource as S, key_hex};
+    t.entries
+        .iter()
+        .map(|e| {
+            let mut spans: Vec<Span> = Vec::new();
+            for &n in &e.nodes {
+                let sp = tree.node(n).span;
+                if !spans.contains(&sp) {
+                    spans.push(sp);
+                }
+            }
+            p::ColorInfo {
+                key: key_hex(e.key),
+                rgba: p::Rgba(e.rgba),
+                label: e.label.clone(),
+                source: match e.source {
+                    S::Default => p::ColorSource::Default,
+                    S::Palette => p::ColorSource::Palette,
+                    S::Random => p::ColorSource::Random,
+                    S::Exact => p::ColorSource::Exact,
+                },
+                filament: e.filament,
+                explicit: e.explicit,
+                ranges: spans.into_iter().map(|s| src.range(s)).collect(),
+                nodes: e.nodes.clone(),
+            }
+        })
+        .collect()
+}
+
 /// World bounds of node-system bounds under `m`.
 fn world_bounds(lo: DVec3, hi: DVec3, m: &DMat4) -> p::Bounds {
     let mut wlo = DVec3::splat(f64::INFINITY);
@@ -724,11 +764,13 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
     };
 
     let root_is_subtree = tree.root.is_some_and(|r| tree.node(r).parent.is_some());
+    let colors = color_infos(&color_table(tree), tree, src);
     p::Scene {
         version,
         files,
         includes,
         parts,
+        colors,
 
         complete: matches!(kernel, KernelInfo::Done(_)),
         context,

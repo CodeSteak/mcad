@@ -17,6 +17,8 @@ export interface HandleColors {
   ref: string;
   locked: string;
   snap: string;
+  /** Fill of ring handles (light in both themes). */
+  background: string;
 }
 
 export function readHandleColors(el: HTMLElement = document.documentElement): HandleColors {
@@ -28,6 +30,7 @@ export function readHandleColors(el: HTMLElement = document.documentElement): Ha
     ref: v("--view-handle-ref", "#0ea5a4"),
     locked: v("--view-handle-locked", "#9aa1ab"),
     snap: v("--view-snap", "#16a34a"),
+    background: v("--view-handle-bg", "#ffffff"),
   };
 }
 
@@ -132,7 +135,7 @@ export function buildHandleLayer(group: THREE.Group, input: LayerInput): void {
     const size = hovered ? 17 : g.style === "locked" ? 15 : 13;
     if (g.style === "locked") {
       // Locked: grey ring on a white disc (shown, not draggable).
-      group.add(points([grip], "#ffffff", size - 2, "dot", 79, `handle-bg:${g.handle.id}`));
+      group.add(points([grip], colors.background, size - 2, "dot", 79, `handle-bg:${g.handle.id}`));
       group.add(points([grip], color, size, "ring", 80, `handle:${g.handle.id}`));
     } else group.add(points([grip], color, size, "dot", 80, `handle:${g.handle.id}`));
   }

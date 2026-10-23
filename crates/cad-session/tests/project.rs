@@ -143,27 +143,41 @@ fn missing_files_and_syntax_errors_of_other_files() {
 fn export_parts() {
     let mut s = session();
     start(&mut s);
-    s.post(ToEngine::Export { format: ExportFormat::Stl, parts: Some(vec!["deckel".into()]), zip: None });
+    s.post(ToEngine::Export { format: ExportFormat::Stl, parts: Some(vec!["deckel".into()]), zip: None, colors: None });
     s.post(ToEngine::Export {
         format: ExportFormat::ThreeMf,
         parts: Some(vec!["gehaeuse".into(), "deckel".into()]),
         zip: None,
+        colors: None,
     });
     s.post(ToEngine::Export {
         format: ExportFormat::Stl,
         parts: Some(vec!["gehaeuse".into(), "deckel".into()]),
         zip: Some(true),
+        colors: None,
     });
-    s.post(ToEngine::Export { format: ExportFormat::Stl, parts: Some(vec!["fehlt".into()]), zip: None });
-    s.post(ToEngine::Export { format: ExportFormat::Step, parts: Some(vec!["deckel".into()]), zip: None });
+    s.post(ToEngine::Export { format: ExportFormat::Stl, parts: Some(vec!["fehlt".into()]), zip: None, colors: None });
+    s.post(ToEngine::Export {
+        format: ExportFormat::Step,
+        parts: Some(vec!["deckel".into()]),
+        zip: None,
+        colors: None,
+    });
     let r = s.run_to_idle();
     assert_eq!(r.len(), 5, "{r:?}");
     let FromEngine::ExportResult { bytes, triangles, parts, .. } = &r[0] else { panic!() };
     assert_eq!(bytes.len() as u32, 84 + 50 * triangles);
     assert_eq!(parts.as_deref(), Some(&["deckel".to_string()][..]));
-    let FromEngine::ExportResult { bytes, format: ExportFormat::ThreeMf, .. } = &r[1] else { panic!() };
+    // 3MF is multi-coloured by default: per part a component object with one volume per
+    // colour (here one), plus the Bambu/Orca metadata
+    let FromEngine::ExportResult { bytes, format: ExportFormat::ThreeMf, colors: Some(true), .. } = &r[1] else {
+        panic!("{:?}", r[1])
+    };
     let t = String::from_utf8_lossy(bytes);
-    assert_eq!(t.matches("<object ").count(), 2);
+    // 4 objects in the model (2 meshes, 2 parts), 2 in model_settings.config
+    assert_eq!(t.matches("<object ").count(), 6);
+    assert_eq!(t.matches("<item ").count(), 2);
+    assert!(t.contains("Metadata/model_settings.config"));
     let FromEngine::ExportResult { bytes, zip: Some(true), .. } = &r[2] else { panic!() };
     let t = String::from_utf8_lossy(bytes);
     assert!(t.contains("gehaeuse.stl") && t.contains("deckel.stl"));
@@ -183,8 +197,9 @@ fn export_parts() {
         format: ExportFormat::Step,
         parts: Some(vec!["gehaeuse".into(), "deckel".into()]),
         zip: Some(true),
+        colors: None,
     });
-    s.post(ToEngine::Export { format: ExportFormat::Step, parts: None, zip: None });
+    s.post(ToEngine::Export { format: ExportFormat::Step, parts: None, zip: None, colors: None });
     let r = s.run_to_idle();
     let FromEngine::ExportResult { bytes, zip: Some(true), .. } = &r[0] else { panic!("{:?}", r[0]) };
     let t = String::from_utf8_lossy(bytes);

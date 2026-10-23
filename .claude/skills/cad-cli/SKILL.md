@@ -1,6 +1,6 @@
 ---
 name: cad-cli
-description: Modelle der parametrischen CAD-Sprache (OpenSCAD-Stil mit Rastern, Ankern und Fillet-Zonen, Dateien *.scad) ohne UI entwickeln und prüfen – Übersicht, Diagnosen, Bilder (Kontaktbogen, Raster/Anker eingeblendet, Schnitt, Röntgen), Messungen (Abstände, Volumen, Kollisionen), Beobachten bei Dateiänderung, Parameter setzen und Export STL/3MF/STEP mit der CLI `cad` (crates/cad-cli). Verwenden, wenn ein Modell geschrieben, geändert, untersucht oder Fehler darin gesucht werden.
+description: Modelle der parametrischen CAD-Sprache (OpenSCAD-Stil mit Rastern, Ankern und Fillet-Zonen, Dateien *.scad) ohne UI entwickeln und prüfen – Übersicht, Diagnosen, Bilder (Kontaktbogen, Raster/Anker eingeblendet, Schnitt, Röntgen), Messungen (Abstände, Volumen, Kollisionen, Volumen je Farbe), Beobachten bei Dateiänderung, Parameter setzen und Export STL/3MF (mehrfarbig für Bambu Studio/OrcaSlicer)/STEP mit der CLI `cad` (crates/cad-cli). Verwenden, wenn ein Modell geschrieben, geändert, untersucht oder Fehler darin gesucht werden.
 ---
 
 # CAD-CLI `cad`
@@ -40,7 +40,10 @@ Agenten arbeiten immer mit den Befehlen unten, die UI ist nie nötig. Headless-B
 5. **Nachmessen:** `cad inspect datei.scad --line N` (Knoten, Hülle, Volumen, Kanten,
    Kernel-Meldung) und `cad measure` (Abstände zwischen Ankern/Rasterpunkten, Hülle, Volumen,
    Kollisionen der Bauteile, Abstand zweier Bauteile).
-6. **Ausgeben:** `cad export datei.scad -o teil.step` (oder `--all-parts -o ordner/`).
+6. **Ausgeben:** `cad export datei.scad -o teil.step` (oder `--all-parts -o ordner/`). Zum
+   Mehrfarbdruck `cad export datei.scad -o teil.3mf` (Standard mehrfarbig: Bambu Studio /
+   OrcaSlicer öffnen die Datei mit einem Teil je Farbe und gesetzten Filament-Slots; vorher
+   `cad measure datei.scad --colors` für Slots, Volumen und Masse je Farbe).
 
 Der Kernel-Cache bleibt zwischen den Aufrufen erhalten (**Daemon**, unten): ein zweiter Aufruf
 auf derselben oder einer wenig geänderten Datei rechnet nur die geänderten Knoten neu. Für
@@ -130,7 +133,8 @@ und prüft mit der CLI. Die UI beobachtet die Datei und alle eingebundenen Datei
 | `cad measure DATEI [Optionen]` | Messen (Optionen unten) |
 | `cad watch DATEI [--json] [--render bild.png …]` | Beobachten und bei jeder Änderung neu auswerten (unten) |
 | `cad set DATEI --param modul.param=wert \| --literal [datei:]zeile:spalte=wert [--dry-run]` | Code über die Engine ändern (unten) |
-| `cad export DATEI -o teil.stl\|teil.3mf\|teil.step [--schema ap214]` | Exportdatei der Wurzel (STEP: exakte B-Rep, AP242) |
+| `cad export DATEI -o teil.stl\|teil.3mf\|teil.step [--schema ap214]` | Exportdatei der Wurzel (STEP: exakte B-Rep, AP242; 3MF: **mehrfarbig**, ein Teil je Farbe mit Filament-Slot für Bambu Studio/OrcaSlicer, einfarbig mit `--single-color`) |
+| `cad export DATEI --per-color [--part NAME]… -o farben.zip` | ZIP mit einem STL je Farbe (und Bauteil): `F<slot>_<farbe>.stl`, alle im selben Koordinatensystem |
 | `cad export DATEI --part NAME [--part NAME2] -o …` | Nur diese Bauteile (benannte Instanzen auf oberster Ebene, z. B. `deckel`, `k[2]`) |
 | `cad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | Jedes Bauteil als eigene Datei (`deckel.stl`, `k_2.step`) |
 | `cad diff-kernels DATEI…` | Vergleich SMLib ↔ solidcore (nur Entwicklung, `--features solidcore`) |
@@ -162,6 +166,8 @@ Dateikontext.
 | `--section-plane px,py,pz,nx,ny,nz` | Schnitt an beliebiger Ebene (Punkt, Normale) |
 | `--section-flip` | Die andere Hälfte behalten |
 | `--xray` | Alles halbtransparent mit Kanten |
+| `--theme dark` | Dunkles Farbschema (wie die UI; Palette-Farben in der dunklen Variante) |
+| `--show regions` | Farbregionen: Körper je Farbe (wie exportiert) statt Farbe je Fläche |
 | `--size BxH`, `--no-axes`, `--whole-file` | Bildgröße, ohne Achsenkreuz, Dateikontext |
 
 **Schnitt-Konvention (gleich in der UI):** Ebene durch Punkt `p` mit Normale `n`; entfernt
@@ -182,6 +188,7 @@ der Moduldefinition.
 | `--between A B` | Abstand und Differenzvektor. A/B: Anker `k.ecke`, `k[2].ecke` (im Modulkontext auch `ecke`), Rasterpunkt im Kontext `g[rechts, hinten, deckel]` (Einträge auch Zahlen oder `_`), Koordinate `[x,y,z]` |
 | `--bounds [ZIEL]` | Achsparallele Hülle (min, max, Größe) |
 | `--volume [ZIEL]`, `--area [ZIEL]` | Volumen mm³ / Fläche mm² (Kernel, exakt) |
+| `--colors` | Farbregionen: Volumen und Masse (PLA 1,24 g/cm³) je Farbe und Filament-Slot, je Bauteil (Summe = Bauteilvolumen) |
 | `--interference [--tolerance 0.001]` | Paarweises Schnittvolumen aller Bauteile (Kernel-Schnitt der exakten B-Rep), Kollisionen über der Toleranz (mm³) |
 | `--clearance A B [--mesh-tol 0.01]` | Kleinster Abstand zweier Bauteile über die Tessellierung (Dreieck-Dreieck-Abstand), Genauigkeit ± 2·mesh-tol; überschneiden sie sich: 0 und `collision: true` |
 
@@ -251,7 +258,11 @@ Offsets UTF-16). `Bounds = { min, max, size }`. Vollständiges Schema: Kopf von
   render_ms} }`
 - `set`: `+ { changes: [{kind, spec, file, line, col, old, new}], dry_run, written, refused,
   errors_before, errors_after, diff }`
-- `export`: `+ { output, format, bytes, triangles, volume, area, bounds, step? }`
+- `export`: `+ { output, format, bytes, triangles, volume, area, bounds, step?, multicolor,
+  colors?, color_regions? }` (`--per-color`: `format: "zip"`, `files`)
+- `outline`/`measure --colors`: `colors: [{key, label, source: default|palette|random|exact,
+  filament, explicit, lines, volume, mass_g}]`, `color_regions`/`colors.parts: [{part, node,
+  total, warning, regions: [{color, label, filament, volume, mass_g}]}]`
 - `daemon status`: `{ running, pid, version, build_id, uptime_s, idle_s, idle_limit_s, watchdog_s,
   busy, current, pending, requests, failed, projects, max_projects, project_evictions, cache:
   {entries, nodes, meshes, bytes, limit_bytes, max_entries, evictions, hits, misses, hit_rate},
@@ -338,6 +349,23 @@ eine Warnung („0 Kanten“), ein zu großer Radius ein Kernel-Fehler (Körper 
 Verrundung). `chamfer` und `shell(t) { körper; zone; }` folgen demselben Muster.
 `inspect --line` des Blocks zeigt die Kantenanzahl, `render --line` die Zonen (blau) und die
 Kanten (orange).
+
+**Farben und Filamente** (Bericht 11): `color("name")` nimmt die Palette (16 gedeckte Farben,
+Groß/Klein egal): `red, orange, yellow, lime, green, teal, cyan, blue, purple, magenta, pink,
+brown, black, gray (grey), silver, white`; `aqua` = cyan, `fuchsia` = magenta. Andere Namen
+(auch CSS wie `lightblue`, deutsche wie `rot`) geben eine Warnung und eine stabile
+Zufallsfarbe. `#rgb`, `#rrggbb`, `#rrggbbaa`, `[r, g, b(, a)]` und `alpha` bleiben exakt.
+`color("teal", filament = 2)` legt den Slot fest (benannt, nicht positionell); sonst Slots in
+Reihenfolge des ersten Auftretens, Material ohne `color()` immer Slot 1. Volumen je Farbe:
+der Körper eines gefärbten Teilbaums gehört dieser Farbe, bei Überlappung gewinnt die spätere
+Anweisung (auch ein inneres `color()`), Abgezogenes gilt für alle. Prüfen mit
+`cad outline` (Abschnitt „Farben“) oder `cad measure --colors`, ansehen mit
+`cad render --show regions`.
+
+```
+color("white") cube([40, 20, 2]);                              // Platte: Slot 1
+color("red", filament = 3) translate([5, 5, 2]) cube([30, 10, 1]);  // Schrift: Slot 3
+```
 
 **Modifier:** `#` rot halbtransparent zusätzlich, `%` Hilfsgeometrie (grau, nicht im
 Ergebnis), `!` nur dieser Teilbaum, `*` ignoriert.

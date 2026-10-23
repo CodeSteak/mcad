@@ -223,9 +223,15 @@ fn transforms() {
     assert!(approx3(tr[6].1.transform_point3(DVec3::ZERO), [5.0, 0.0, 0.0]));
     let resize = out.tree.nodes.iter().find(|n| matches!(n.op, Op::Resize { .. })).unwrap();
     assert_eq!(resize.op, Op::Resize { size: DVec3::new(10.0, 0.0, 0.0), auto: [true; 3] });
-    let colors: Vec<[f32; 4]> =
-        out.tree.nodes.iter().filter_map(|n| if let Op::Color { rgba } = n.op { Some(rgba) } else { None }).collect();
-    assert_eq!(colors, [[1.0, 0.0, 0.0, 1.0], [0.0, 1.0, 0.0, 0.5]]);
+    let colors: Vec<[f32; 4]> = out
+        .tree
+        .nodes
+        .iter()
+        .filter_map(|n| if let Op::Color { rgba, .. } = n.op { Some(rgba) } else { None })
+        .collect();
+    // "red" is the palette's muted red (#c74240), vectors stay exact.
+    let red = cad_eval::palette::rgba_of([0xc7, 0x42, 0x40]);
+    assert_eq!(colors, [red, [0.0, 1.0, 0.0, 0.5]]);
     // Children inherit the display colour.
     let last = out.tree.nodes.last().unwrap();
     assert_eq!(last.color, Some([0.0, 1.0, 0.0, 0.5]));

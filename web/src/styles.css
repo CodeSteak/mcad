@@ -1,3 +1,8 @@
+/* Theme tokens (Plan 16.5). `data-theme` on <html> is "light" or "dark": the choice in the
+   toolbar (System follows prefers-color-scheme, also in the desktop app). Text colours meet
+   WCAG AA (4.5:1) on the backgrounds they are used on, UI parts 3:1 – checked by
+   src/logic/contrast.test.ts. Palette colours of models are adjusted per theme in
+   src/logic/palette.ts (generated from crates/cad-eval/src/palette.rs). */
 :root,
 :root[data-theme="light"] {
   color-scheme: light;
@@ -6,127 +11,143 @@
   --panel-2: #f0f2f5;
   --border: #d9dde3;
   --text: #1f2328;
-  --muted: #646b75;
-  --accent: #2f6fdb;
-  --accent-soft: rgba(47, 111, 219, 0.12);
-  --error: #c9302c;
+  --muted: #5f6670;
+  --accent: #2a63c4;
+  --accent-soft: rgba(42, 99, 196, 0.12);
+  --on-accent: #ffffff;
+  --error: #c4302b;
   --error-bg: rgba(229, 72, 77, 0.13);
-  --warning: #9a6700;
+  --warning: #855700;
   --warning-bg: rgba(234, 179, 8, 0.2);
-  --hover-line: rgba(47, 111, 219, 0.08);
-  --viewhover-line: rgba(47, 111, 219, 0.2);
+  --hover-line: rgba(42, 99, 196, 0.08);
+  --viewhover-line: rgba(42, 99, 196, 0.2);
   --active-line: rgba(31, 35, 40, 0.035);
+  --shadow: rgba(0, 0, 0, 0.18);
+  --backdrop: rgba(0, 0, 0, 0.35);
+  --diff-add: rgba(45, 164, 78, 0.16);
+  --diff-del: rgba(229, 72, 77, 0.14);
+  --swatch-border: rgba(31, 35, 40, 0.35);
 
   --hl-keyword: #8b2fc9;
   --hl-number: #0a7d5a;
   --hl-string: #a3501a;
-  --hl-comment: #6e7781;
+  --hl-comment: #636b75;
   --hl-special: #b5179e;
   --hl-def: #1f5bc4;
   --hl-call: #24548f;
-  --hl-label: #b4540a;
+  --hl-label: #a84f09;
   --hl-plane: #6b3fc4;
   --hl-prop: #46617f;
-  --hl-modifier: #d1242f;
+  --hl-modifier: #c8202b;
   --hl-operator: #4b5563;
 
-  --view-bg: #eef0f3;
+  --view-bg: #e7eaee;
   --view-model: #c3cad4;
   --view-edge: #39404a;
   --view-dim: #a7aeb8;
   --view-dim-edge: #8c939d;
-  --view-accent: #2f6fdb;
+  --view-accent: #2a63c4;
   --view-red: #e5484d;
   --view-grey: #7d838c;
   --view-blue: #3b82f6;
   --view-ghost: #8f99a8;
   --view-outline: #5b6270;
-  --view-selected-edge: #f08c00;
+  --view-selected-edge: #d9480f;
   --view-error-edge: #e03131;
-  --view-grid: #7c4dde;
-  --view-grid-used: #6a35d6;
-  --view-floor: #dde0e5;
-  --view-floor-major: #c7ccd3;
-  --view-anchor: #e8890c;
-  --view-flat: #2f6fdb;
+  --view-grid: #6a3fd2;
+  --view-grid-used: #5a2fc2;
+  --view-floor: #d6dae0;
+  --view-floor-major: #c2c8d0;
+  --view-anchor: #d97706;
+  --view-flat: #2a63c4;
   --view-handle: #f76707;
   --view-handle-default: #ae3ec9;
   --view-handle-ref: #0c8599;
   --view-handle-locked: #6b7280;
-  --view-snap: #2b8a3e;
+  --view-handle-bg: #ffffff;
+  --view-snap: #237a35;
+  --on-snap: #ffffff;
   --view-profile: #0b7285;
   --view-guide: #d6336c;
   --view-open-face: #f08c00;
   --view-cap: #db5c3d;
-  --git-added: #2da44e;
-  --git-modified: #2f81f7;
+  --git-added: #2a9d4a;
+  --git-modified: #2f7ff0;
   --git-deleted: #e5484d;
   --git-opacity: 0.55;
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #15171a;
-  --panel: #1c1f23;
-  --panel-2: #23272c;
-  --border: #33383f;
-  --text: #e4e7eb;
-  --muted: #9aa2ad;
-  --accent: #6aa1ff;
-  --accent-soft: rgba(106, 161, 255, 0.15);
-  --error: #ff6b6b;
-  --error-bg: rgba(255, 99, 99, 0.16);
-  --warning: #e3b341;
-  --warning-bg: rgba(227, 179, 65, 0.16);
-  --hover-line: rgba(106, 161, 255, 0.09);
-  --viewhover-line: rgba(106, 161, 255, 0.24);
-  --active-line: rgba(255, 255, 255, 0.04);
+  --bg: #121417;
+  --panel: #181b1f;
+  --panel-2: #20242a;
+  --border: #32373e;
+  --text: #e6e9ed;
+  --muted: #a2aab5;
+  --accent: #7eaaff;
+  --accent-soft: rgba(126, 170, 255, 0.18);
+  --on-accent: #0b1220;
+  --error: #ff7b7b;
+  --error-bg: rgba(255, 99, 99, 0.15);
+  --warning: #e8b84a;
+  --warning-bg: rgba(232, 184, 74, 0.13);
+  --hover-line: rgba(126, 170, 255, 0.08);
+  --viewhover-line: rgba(126, 170, 255, 0.2);
+  --active-line: rgba(255, 255, 255, 0.045);
+  --shadow: rgba(0, 0, 0, 0.55);
+  --backdrop: rgba(0, 0, 0, 0.55);
+  --diff-add: rgba(70, 192, 91, 0.18);
+  --diff-del: rgba(255, 93, 85, 0.17);
+  --swatch-border: rgba(230, 233, 237, 0.4);
 
-  --hl-keyword: #c792ea;
-  --hl-number: #7fd1b9;
-  --hl-string: #f0a76c;
-  --hl-comment: #7d8590;
-  --hl-special: #f78cc8;
-  --hl-def: #82aaff;
-  --hl-call: #9cc4ff;
-  --hl-label: #ffb86b;
-  --hl-plane: #b9a3ff;
-  --hl-prop: #a9b8cc;
-  --hl-modifier: #ff7b72;
-  --hl-operator: #aab2bd;
+  --hl-keyword: #c9a0ff;
+  --hl-number: #7fd8c0;
+  --hl-string: #f3ae78;
+  --hl-comment: #8d96a0;
+  --hl-special: #f598cf;
+  --hl-def: #8ab4ff;
+  --hl-call: #a7c7ff;
+  --hl-label: #ffbf7a;
+  --hl-plane: #c0acff;
+  --hl-prop: #b2c0d1;
+  --hl-modifier: #ff8a80;
+  --hl-operator: #b0b8c3;
 
-  --view-bg: #1b1e22;
-  --view-model: #8d96a3;
-  --view-edge: #15181c;
-  --view-dim: #5d6570;
-  --view-dim-edge: #6c7480;
-  --view-accent: #6aa1ff;
-  --view-red: #ff5c63;
-  --view-grey: #8a909a;
-  --view-blue: #4c8dff;
-  --view-ghost: #7d8796;
-  --view-outline: #b3bac4;
-  --view-selected-edge: #ffa94d;
-  --view-error-edge: #ff6b6b;
-  --view-grid: #a78bfa;
-  --view-grid-used: #c4b5fd;
-  --view-floor: #2a2f35;
-  --view-floor-major: #353b42;
-  --view-anchor: #ffa94d;
-  --view-flat: #6aa1ff;
-  --view-handle: #ff922b;
-  --view-handle-default: #da77f2;
-  --view-handle-ref: #3bc9db;
-  --view-handle-locked: #a3aab4;
-  --view-snap: #69db7c;
-  --view-profile: #3bc9db;
-  --view-guide: #f783ac;
-  --view-open-face: #ffa94d;
-  --view-cap: #e0694b;
-  --git-added: #3fb950;
-  --git-modified: #58a6ff;
-  --git-deleted: #f85149;
-  --git-opacity: 0.5;
+  --view-bg: #16191d;
+  --view-model: #7f8997;
+  --view-edge: #0e1013;
+  --view-dim: #5a626d;
+  --view-dim-edge: #727a86;
+  --view-accent: #7eaaff;
+  --view-red: #ff6b70;
+  --view-grey: #8d939c;
+  --view-blue: #5b9aff;
+  --view-ghost: #808a99;
+  --view-outline: #b7bec8;
+  --view-selected-edge: #ffb86b;
+  --view-error-edge: #ff7070;
+  --view-grid: #a990fb;
+  --view-grid-used: #c9bbff;
+  --view-floor: #252a30;
+  --view-floor-major: #323840;
+  --view-anchor: #ffb45c;
+  --view-flat: #7eaaff;
+  --view-handle: #ff9a3c;
+  --view-handle-default: #df82f4;
+  --view-handle-ref: #43d1e2;
+  --view-handle-locked: #a9b0ba;
+  --view-handle-bg: #e6e9ed;
+  --view-snap: #5fd37a;
+  --on-snap: #06210e;
+  --view-profile: #43d1e2;
+  --view-guide: #f78db3;
+  --view-open-face: #ffb066;
+  --view-cap: #e5734f;
+  --git-added: #46c05b;
+  --git-modified: #62adff;
+  --git-deleted: #ff5d55;
+  --git-opacity: 0.55;
 }
 
 * {
@@ -214,7 +235,7 @@ select:focus-visible {
 }
 
 .toolbar .examples select {
-  max-width: 220px;
+  max-width: 190px;
 }
 
 .toolbar .filename {
@@ -427,10 +448,10 @@ select:focus-visible {
   padding: 2px 7px;
   border-radius: 4px;
   background: var(--view-snap);
-  color: #fff;
+  color: var(--on-snap);
   font: 600 12px/1.4 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   white-space: nowrap;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 1px 4px var(--shadow);
   z-index: 3;
 }
 
@@ -624,7 +645,7 @@ input:checked + .cm-switch-knob::after {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 6px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 20px var(--shadow);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -666,10 +687,28 @@ input:checked + .cm-switch-knob::after {
   outline: none;
 }
 
-.viewtools {
+/* View toolbar and section bar stacked in the top right corner: when the toolbar wraps
+   (narrow view, colour list open) the section bar moves down instead of covering it. */
+.viewoverlay {
   position: absolute;
   top: 8px;
   right: 8px;
+  max-width: calc(100% - 16px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.viewoverlay > * {
+  pointer-events: auto;
+}
+
+.viewtools {
+  max-width: 100%;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   display: flex;
   gap: 4px;
   align-items: center;
@@ -681,6 +720,7 @@ input:checked + .cm-switch-knob::after {
 
 .viewtools button {
   padding: 2px 8px;
+  white-space: nowrap;
 }
 
 .viewtools button.refit {
@@ -690,6 +730,7 @@ input:checked + .cm-switch-knob::after {
 }
 
 .viewtools .check {
+  white-space: nowrap;
   display: inline-flex;
   gap: 4px;
   align-items: center;
@@ -947,7 +988,7 @@ input:checked + .cm-switch-knob::after {
 .modal-back {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--backdrop);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -991,12 +1032,12 @@ input:checked + .cm-switch-knob::after {
 
 .diffview .dl.add,
 .diffview .add {
-  background: color-mix(in srgb, var(--git-added) 18%, transparent);
+  background: var(--diff-add);
 }
 
 .diffview .dl.del,
 .diffview .del {
-  background: color-mix(in srgb, var(--git-deleted) 18%, transparent);
+  background: var(--diff-del);
 }
 
 .diffview .ln {
@@ -1022,14 +1063,11 @@ input:checked + .cm-switch-knob::after {
 }
 
 .sectionbar {
-  position: absolute;
-  top: 46px;
-  right: 8px;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   align-items: center;
-  max-width: calc(100% - 16px);
+  max-width: 100%;
   padding: 4px 6px;
   background: color-mix(in srgb, var(--panel) 90%, transparent);
   border: 1px solid var(--border);
@@ -1059,4 +1097,235 @@ input:checked + .cm-switch-knob::after {
 
 .st-note.section {
   color: var(--view-cap);
+}
+
+/* ---------------------------------------------------------------- colours and filaments */
+
+.themesel {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.colorspanel {
+  width: 300px;
+  flex: none;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  padding: 8px 10px 14px;
+  font-size: 12px;
+}
+
+.colorspanel .cptitle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.colorspanel .cpcount {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.colorspanel .picon {
+  padding: 0 6px;
+}
+
+.colorspanel .cpregions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 8px;
+}
+
+.cptable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.cptable th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 500;
+  border-bottom: 1px solid var(--border);
+  padding: 2px 4px;
+}
+
+.cptable td {
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.cptable .n {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.cptable tfoot td {
+  border-bottom: none;
+  font-weight: 600;
+}
+
+.cptable tr.shared select {
+  border-color: var(--warning);
+}
+
+.cptable select {
+  padding: 1px 4px;
+  /* same width for every row (the explicit slot offers the longer "automatisch") */
+  width: 88px;
+}
+
+.cpcolor {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+}
+
+.swatch {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border-radius: 4px;
+  border: 1px solid var(--swatch-border);
+}
+
+.cplabel {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cplines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+}
+
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+button.link:hover {
+  text-decoration: underline;
+}
+
+.badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+}
+
+.badge.warn {
+  color: var(--warning);
+  border-color: var(--warning);
+}
+
+.cpmass {
+  display: block;
+  color: var(--muted);
+}
+
+.pbnote.warn {
+  color: var(--warning);
+}
+
+.cpexport {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.cpexport b {
+  width: 100%;
+}
+
+/* ---------------------------------------------------------------- editor parts with their own default theme */
+
+.editor .cm-tooltip {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 14px var(--shadow);
+}
+
+.editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.editor .cm-completionDetail {
+  color: var(--muted);
+}
+
+.editor .cm-panels {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.editor .cm-panels.cm-panels-top {
+  border-bottom: 1px solid var(--border);
+}
+
+.editor .cm-panels.cm-panels-bottom {
+  border-top: 1px solid var(--border);
+}
+
+.editor .cm-textfield {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.editor .cm-button {
+  background-image: none;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.editor .cm-searchMatch {
+  background: var(--warning-bg);
+  outline: 1px solid var(--warning);
+}
+
+.editor .cm-searchMatch.cm-searchMatch-selected,
+.editor .cm-selectionMatch,
+.editor .cm-matchingBracket {
+  background: var(--accent-soft);
+}
+
+.editor .cm-nonmatchingBracket {
+  background: var(--error-bg);
+}
+
+.editor .cm-foldPlaceholder {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+input[type="checkbox"],
+input[type="range"] {
+  accent-color: var(--accent);
 }

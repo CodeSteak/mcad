@@ -76,7 +76,7 @@ volume: number | null, };
 /**
  * Message from the UI to the engine.
  */
-export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, };
+export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, colors?: boolean, } | { "type": "RequestColorRegions", meshes: boolean, coarse?: boolean, version?: number, } | { "type": "SetFilament", color: string, filament?: number, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, };
 
 /**
  * Where a dragged handle goes.
@@ -98,7 +98,11 @@ parts?: Array<string>,
 /**
  * A ZIP package with one file per part.
  */
-zip?: boolean, } | { "type": "Error", message: string, version: number | null, node: number | null, };
+zip?: boolean, 
+/**
+ * Multi-colour export (3MF with volumes per colour, ZIP with one STL per colour).
+ */
+colors?: boolean, } | { "type": "ColorRegions", version: number, items: Array<RegionSet>, } | { "type": "Error", message: string, version: number | null, node: number | null, };
 
 export type Severity = "error" | "warning" | "info";
 
@@ -174,6 +178,76 @@ tol: number, positions: Float32Array, normals: Float32Array, indices: Uint32Arra
  */
 tri_tags: Uint32Array, tri_faces: Uint32Array, edge_segments: Float32Array, edge_ids: Uint32Array, };
 
+/**
+ * Colour regions of one node (a part or the root), in the node's system (place meshes with
+ * `SceneNode.display_world`).
+ */
+export type RegionSet = { node: number, 
+/**
+ * Part name (`null`: the root).
+ */
+part: string | null, 
+/**
+ * Volume of the node's result in mm³ (= sum of the region volumes).
+ */
+total: number, regions: Array<Region>, 
+/**
+ * The region volumes do not add up to `total` (kernel boolean incomplete).
+ */
+warning: string | null, };
+
+export type Region = { 
+/**
+ * `ColorInfo.key`.
+ */
+color: string, filament: number, 
+/**
+ * mm³
+ */
+volume: number, 
+/**
+ * Requested with `meshes`.
+ */
+mesh: MeshData | null, };
+
+/**
+ * How a colour was given.
+ */
+export type ColorSource = "default" | "palette" | "random" | "exact";
+
+/**
+ * A colour of the material with its filament slot (Plan 16.3). Order: first appearance.
+ */
+export type ColorInfo = { 
+/**
+ * Identity, `#rrggbb` or `#rrggbbaa` (what `SetFilament` takes).
+ */
+key: string, 
+/**
+ * Exact value (exports).
+ */
+rgba: Rgba, 
+/**
+ * Palette name, the unknown name as written, hex text, or `Standard`.
+ */
+label: string, source: ColorSource, 
+/**
+ * Filament slot (1-based).
+ */
+filament: number, 
+/**
+ * The slot is written in the code (`filament = n`).
+ */
+explicit: boolean, 
+/**
+ * The `color()` statements of this colour (distinct, in order of appearance).
+ */
+ranges: Array<SrcRange>, 
+/**
+ * `color()` nodes.
+ */
+nodes: Array<number>, };
+
 export type Scene = { version: number, 
 /**
  * Files of the project, index = id (`SrcRange.file`); file 0 is the main file.
@@ -187,6 +261,10 @@ includes: Array<IncludeRef>,
  * Parts (file context only).
  */
 parts: Array<Part>, 
+/**
+ * Colours of the material and their filament slots (volumes: `RequestColorRegions`).
+ */
+colors: Array<ColorInfo>, 
 /**
  * `false`: preliminary scene before the kernel job (see `FromEngine.Scene`).
  */

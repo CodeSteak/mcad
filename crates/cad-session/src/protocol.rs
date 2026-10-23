@@ -138,6 +138,10 @@ pub enum ToEngine {
     /// named `parts` (`Scene.parts`): STL = all in one file, 3MF = one object per part, STEP =
     /// the kernel's export. `zip`: one file per part in a ZIP package. Requests are answered in
     /// order.
+    ///
+    /// `colors` (Plan 16.4): 3MF with one volume per colour and filament metadata for Bambu
+    /// Studio / OrcaSlicer (default for 3MF: `true`; `false`: single colour); STL with
+    /// `colors = true`: a ZIP with one STL per colour (and part). Ignored for STEP.
     Export {
         format: ExportFormat,
         #[ts(optional)]
@@ -146,6 +150,30 @@ pub enum ToEngine {
         #[ts(optional)]
         #[serde(default)]
         zip: Option<bool>,
+        #[ts(optional)]
+        #[serde(default)]
+        colors: Option<bool>,
+    },
+    /// Colour regions of the current evaluation (after the running job has finished): per
+    /// part (file context with parts) or for the root, the volume per colour and, with
+    /// `meshes`, a mesh per region. Answers `ColorRegions` (or `Error`). `version`: drop the
+    /// request if the evaluation has another version.
+    RequestColorRegions {
+        #[serde(default)]
+        meshes: bool,
+        #[ts(optional)]
+        coarse: Option<bool>,
+        #[ts(optional)]
+        version: Option<u64>,
+    },
+    /// Writes the filament slot of colour `color` (`ColorInfo.key`) into the code: every
+    /// `color()` of that colour with `filament = …` gets the new value, otherwise the first one
+    /// gets `filament = n`; `filament = null` removes the argument (automatic slot). Answers
+    /// `Edits`.
+    SetFilament {
+        color: String,
+        #[ts(optional)]
+        filament: Option<u32>,
     },
     /// Abort the running job and drop queued mesh/export work. The last scene stays.
     Cancel,
@@ -245,6 +273,15 @@ pub enum FromEngine {
         #[ts(optional)]
         #[serde(default, skip_serializing_if = "Option::is_none")]
         zip: Option<bool>,
+        /// Multi-colour export (3MF with volumes per colour, ZIP with one STL per colour).
+        #[ts(optional)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        colors: Option<bool>,
+    },
+    /// Answer to `RequestColorRegions`.
+    ColorRegions {
+        version: u64,
+        items: Vec<RegionSet>,
     },
     Error {
         message: String,
@@ -349,6 +386,65 @@ pub struct MeshData {
     pub edge_ids: Vec<u32>,
 }
 
+/// Colour regions of one node (a part or the root), in the node's system (place meshes with
+/// `SceneNode.display_world`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct RegionSet {
+    pub node: u32,
+    /// Part name (`null`: the root).
+    pub part: Option<String>,
+    /// Volume of the node's result in mm³ (= sum of the region volumes).
+    pub total: f64,
+    pub regions: Vec<Region>,
+    /// The region volumes do not add up to `total` (kernel boolean incomplete).
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct Region {
+    /// `ColorInfo.key`.
+    pub color: String,
+    pub filament: u32,
+    /// mm³
+    pub volume: f64,
+    /// Requested with `meshes`.
+    pub mesh: Option<MeshData>,
+}
+
+/// How a colour was given.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+pub enum ColorSource {
+    /// Material without `color()` ("Standard", filament 1).
+    Default,
+    /// Palette name.
+    Palette,
+    /// Unknown name: stable random colour (with a warning).
+    Random,
+    /// `#…` or `[r, g, b, a]`.
+    Exact,
+}
+
+/// A colour of the material with its filament slot (Plan 16.3). Order: first appearance.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct ColorInfo {
+    /// Identity, `#rrggbb` or `#rrggbbaa` (what `SetFilament` takes).
+    pub key: String,
+    /// Exact value (exports).
+    pub rgba: Rgba,
+    /// Palette name, the unknown name as written, hex text, or `Standard`.
+    pub label: String,
+    pub source: ColorSource,
+    /// Filament slot (1-based).
+    pub filament: u32,
+    /// The slot is written in the code (`filament = n`).
+    pub explicit: bool,
+    /// The `color()` statements of this colour (distinct, in order of appearance).
+    pub ranges: Vec<SrcRange>,
+    /// `color()` nodes.
+    pub nodes: Vec<u32>,
+}
+
 // ------------------------------------------------------------------------------------------
 // scene
 // ------------------------------------------------------------------------------------------
@@ -410,6 +506,9 @@ pub struct Scene {
     /// Parts (file context only).
     #[serde(default)]
     pub parts: Vec<Part>,
+    /// Colours of the material and their filament slots (volumes: `RequestColorRegions`).
+    #[serde(default)]
+    pub colors: Vec<ColorInfo>,
     /// `false`: preliminary scene before the kernel job (see `FromEngine.Scene`).
     pub complete: bool,
     pub context: ContextInfo,
@@ -923,6 +1022,10 @@ pub fn typescript() -> String {
         NodeRef,
         SnapTarget,
         MeshData,
+        RegionSet,
+        Region,
+        ColorSource,
+        ColorInfo,
         Scene,
         NodeStatus,
         Dim,

@@ -466,8 +466,11 @@ test("P07 Bauteilliste: Sichtbarkeit und Export pro Bauteil (STL, 3MF, STEP, ZIP
   const mf = await downloaded(page, () => page.getByTestId("parts-3mf").click());
   expect(mf.name).toBe("gehaeuse-teile.3mf");
   const xml = mf.bytes.toString("latin1");
-  expect(xml.match(/<object /g)?.length).toBe(2);
+  // Multicolour by default (report 11): one build item and one object per part (components
+  // over one mesh per colour), names in the model and in Metadata/model_settings.config.
+  expect(xml.match(/<item objectid=/g)?.length).toBe(2);
   expect(xml).toContain('name="deckel"');
+  expect(xml).toContain("Metadata/model_settings.config");
   // STEP of one part: exact B-rep through the same writer as the whole model.
   const st = await downloaded(page, () => page.getByTestId("part-step-deckel").click());
   expect(st.name).toBe("deckel.step");

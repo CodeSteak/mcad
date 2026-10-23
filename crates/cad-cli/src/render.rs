@@ -15,6 +15,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::rc::Rc;
 
+use cad_eval::palette::{self, Theme};
 use cad_kernel::Mesh;
 use cad_render::{
     CameraInfo, Item, Label, Marker, MarkerShape, Polyline, Projection, RenderOptions, Scene, Section, View,
@@ -27,30 +28,120 @@ use serde_json::{Value as Json, json};
 
 use crate::{Common, Fail, Model, Outcome, load, mat, nodes_at_line, num, world_bounds};
 
-const PART: [f32; 4] = [0.75, 0.78, 0.84, 1.0];
-const DIM: [f32; 4] = [0.78, 0.79, 0.82, 0.22];
-const RED: [f32; 4] = [0.9, 0.2, 0.15, 0.35];
-const BLUE: [f32; 4] = [0.2, 0.45, 0.95, 0.3];
-const GREY: [f32; 4] = [0.55, 0.55, 0.58, 0.3];
-const EDGE: [f32; 4] = [0.15, 0.15, 0.18, 1.0];
-const DIM_EDGE: [f32; 4] = [0.45, 0.45, 0.5, 0.35];
-const SELECTED: [f32; 4] = [1.0, 0.55, 0.0, 1.0];
-const FAILED: [f32; 4] = [0.95, 0.1, 0.1, 1.0];
-const XRAY: [f32; 4] = [0.55, 0.66, 0.82, 0.22];
-const XRAY_HI: [f32; 4] = [0.95, 0.62, 0.2, 0.42];
-const GRID: [f32; 4] = [0.22, 0.4, 0.78, 0.6];
-const GRID_POINT: [f32; 4] = [0.15, 0.3, 0.7, 0.95];
-const ANCHOR: [f32; 4] = [0.98, 0.76, 0.1, 1.0];
-const HANDLE: [f32; 4] = [1.0, 0.45, 0.05, 1.0];
-const BBOX: [f32; 4] = [0.1, 0.55, 0.3, 0.9];
-const HIDDEN: [f32; 4] = [0.15, 0.15, 0.3, 0.7];
-const TEXT: [f32; 4] = [0.08, 0.08, 0.12, 1.0];
+/// Colours of a rendering in one theme (`--theme`); the light one is the CLI's classic look,
+/// the dark one follows the UI's dark theme (`web/src/styles.css`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Look {
+    pub theme: Theme,
+    pub background: [f32; 4],
+    pub part: [f32; 4],
+    pub dim: [f32; 4],
+    pub red: [f32; 4],
+    pub blue: [f32; 4],
+    pub grey: [f32; 4],
+    pub edge: [f32; 4],
+    pub dim_edge: [f32; 4],
+    pub selected: [f32; 4],
+    pub failed: [f32; 4],
+    pub xray: [f32; 4],
+    pub xray_hi: [f32; 4],
+    pub xray_edge: [f32; 4],
+    pub grid: [f32; 4],
+    pub grid_point: [f32; 4],
+    pub grid_label: [f32; 4],
+    pub grid_point_label: [f32; 4],
+    pub anchor: [f32; 4],
+    pub handle: [f32; 4],
+    pub handle_label: [f32; 4],
+    pub bbox: [f32; 4],
+    pub dims_label: [f32; 4],
+    pub part_label: [f32; 4],
+    pub hidden: [f32; 4],
+    pub text: [f32; 4],
+    pub cap: [f32; 4],
+    pub label_background: [f32; 4],
+}
+
+const fn hex(c: u32, a: f32) -> [f32; 4] {
+    [((c >> 16) & 255) as f32 / 255.0, ((c >> 8) & 255) as f32 / 255.0, (c & 255) as f32 / 255.0, a]
+}
+
+pub(crate) const LIGHT: Look = Look {
+    theme: Theme::Light,
+    background: [0.96, 0.96, 0.97, 1.0],
+    part: [0.75, 0.78, 0.84, 1.0],
+    dim: [0.78, 0.79, 0.82, 0.22],
+    red: [0.9, 0.2, 0.15, 0.35],
+    blue: [0.2, 0.45, 0.95, 0.3],
+    grey: [0.55, 0.55, 0.58, 0.3],
+    edge: [0.15, 0.15, 0.18, 1.0],
+    dim_edge: [0.45, 0.45, 0.5, 0.35],
+    selected: [1.0, 0.55, 0.0, 1.0],
+    failed: [0.95, 0.1, 0.1, 1.0],
+    xray: [0.55, 0.66, 0.82, 0.22],
+    xray_hi: [0.95, 0.62, 0.2, 0.42],
+    xray_edge: [0.2, 0.25, 0.35, 0.9],
+    grid: [0.22, 0.4, 0.78, 0.6],
+    grid_point: [0.15, 0.3, 0.7, 0.95],
+    grid_label: [0.1, 0.22, 0.6, 1.0],
+    grid_point_label: [0.1, 0.18, 0.45, 1.0],
+    anchor: [0.98, 0.76, 0.1, 1.0],
+    handle: [1.0, 0.45, 0.05, 1.0],
+    handle_label: [0.55, 0.22, 0.0, 1.0],
+    bbox: [0.1, 0.55, 0.3, 0.9],
+    dims_label: [0.0, 0.35, 0.12, 1.0],
+    part_label: [0.1, 0.1, 0.45, 1.0],
+    hidden: [0.15, 0.15, 0.3, 0.7],
+    text: [0.08, 0.08, 0.12, 1.0],
+    cap: [0.86, 0.36, 0.24, 1.0],
+    label_background: [1.0, 1.0, 1.0, 0.78],
+};
+
+pub(crate) const DARK: Look = Look {
+    theme: Theme::Dark,
+    background: hex(0x16191d, 1.0),
+    part: hex(0x8f99a6, 1.0),
+    dim: hex(0x5d6570, 0.22),
+    red: hex(0xff5c63, 0.38),
+    blue: hex(0x4c8dff, 0.32),
+    grey: hex(0x8a909a, 0.3),
+    edge: hex(0x0b0d10, 1.0),
+    dim_edge: hex(0x7d8590, 0.4),
+    selected: hex(0xffa94d, 1.0),
+    failed: hex(0xff6b6b, 1.0),
+    xray: hex(0x7d9cc4, 0.24),
+    xray_hi: hex(0xffa94d, 0.45),
+    xray_edge: hex(0xa9b8cc, 0.9),
+    grid: hex(0xa78bfa, 0.65),
+    grid_point: hex(0xc4b5fd, 0.95),
+    grid_label: hex(0xc4b5fd, 1.0),
+    grid_point_label: hex(0xb9a3ff, 1.0),
+    anchor: hex(0xffc94d, 1.0),
+    handle: hex(0xff922b, 1.0),
+    handle_label: hex(0xffb86b, 1.0),
+    bbox: hex(0x69db7c, 0.9),
+    dims_label: hex(0x8ce99a, 1.0),
+    part_label: hex(0x9cc4ff, 1.0),
+    hidden: hex(0xa9b8cc, 0.6),
+    text: hex(0xe4e7eb, 1.0),
+    cap: hex(0xe0694b, 1.0),
+    label_background: hex(0x1c1f23, 0.82),
+};
+
+impl Look {
+    /// Display colour of a model colour (palette colours adjusted to the theme).
+    fn model(&self, c: [f32; 4]) -> [f32; 4] {
+        let b = palette::rgba_bytes(c);
+        let d = palette::display_rgb([b[0], b[1], b[2]], self.theme);
+        [d[0] as f32 / 255.0, d[1] as f32 / 255.0, d[2] as f32 / 255.0, c[3]]
+    }
+}
 
 /// Names of `--views all`.
 pub(crate) const ALL_VIEWS: [&str; 4] = ["iso", "front", "top", "right"];
 /// Grids with more points get no point labels (only plane names).
 const MAX_POINT_LABELS: usize = 48;
-const SHOW: [&str; 7] = ["grids", "anchors", "handles", "edges", "labels", "bbox", "dims"];
+const SHOW: [&str; 8] = ["grids", "anchors", "handles", "edges", "labels", "bbox", "dims", "regions"];
 
 /// Selection, camera, overlays, section (shared by `render` and `watch --render`).
 #[derive(Args, Clone, Debug, Default)]
@@ -107,7 +198,8 @@ pub(crate) struct ViewArgs {
     /// Kein Achsenkreuz.
     #[arg(long)]
     pub no_axes: bool,
-    /// Überlagerungen: grids, anchors, handles, edges, labels, bbox, dims (Komma-Liste, `all`).
+    /// Überlagerungen: grids, anchors, handles, edges, labels, bbox, dims (Komma-Liste, `all`);
+    /// `regions`: Farbregionen (Körper je Farbe) statt Farbe je Fläche.
     #[arg(long, value_delimiter = ',')]
     pub show: Vec<String>,
     /// Schnitt an einer Achsebene: `x=WERT`, `y=WERT`, `z=WERT` (entfernt die Seite +Achse).
@@ -123,6 +215,9 @@ pub(crate) struct ViewArgs {
     /// Alles halbtransparent mit Kanten (Röntgen).
     #[arg(long)]
     pub xray: bool,
+    /// Farbschema: light (Standard) oder dark (wie das dunkle Thema der UI).
+    #[arg(long, default_value = "light", value_name = "light|dark")]
+    pub theme: String,
 }
 
 pub(crate) fn parse_size(s: &str) -> Result<(u32, u32), Fail> {
@@ -201,6 +296,7 @@ pub(crate) struct Plan {
     pub show: Vec<String>,
     pub section: Option<Section>,
     pub xray: bool,
+    pub look: &'static Look,
 }
 
 impl Plan {
@@ -285,6 +381,11 @@ impl Plan {
             show,
             section: parse_section(a.section.as_deref(), a.section_plane.as_deref(), a.section_flip)?,
             xray: a.xray,
+            look: match a.theme.trim().to_ascii_lowercase().as_str() {
+                "light" | "hell" | "" => &LIGHT,
+                "dark" | "dunkel" => &DARK,
+                t => return Err(Fail::Usage(format!("--theme {t}: light oder dark"))),
+            },
         })
     }
 
@@ -484,14 +585,15 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
     base.retain(|&n| live(n));
     let selecting = !plan.lines.is_empty() || !plan.nodes.is_empty();
 
+    let lk = plan.look;
     let mut draws: Vec<Draw> = Vec::new();
-    let (part_c, dim_c) = if plan.xray { (XRAY, XRAY) } else { (PART, DIM) };
-    let edge_c = if plan.xray { Some([0.2, 0.25, 0.35, 0.9]) } else { Some(EDGE) };
+    let (part_c, dim_c) = if plan.xray { (lk.xray, lk.xray) } else { (lk.part, lk.dim) };
+    let edge_c = if plan.xray { Some(lk.xray_edge) } else { Some(lk.edge) };
     for &b in &base {
         if !selecting || highlighted.contains(&b) {
             draws.push(Draw { node: b, color: part_c, edges: edge_c, node_colors: !plan.xray, role: "base" });
         } else if !plan.only {
-            let e = if plan.xray { edge_c } else { Some(DIM_EDGE) };
+            let e = if plan.xray { edge_c } else { Some(lk.dim_edge) };
             draws.push(Draw { node: b, color: dim_c, edges: e, node_colors: false, role: "dimmed" });
         }
     }
@@ -501,17 +603,17 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
         }
         let n = &sc.nodes[h as usize];
         let (color, edges, role) = if up(sc, h, |x| x.flags.zone) {
-            (BLUE, None, "zone")
+            (lk.blue, None, "zone")
         } else if up(sc, h, |x| x.subtracted) {
-            (RED, None, "subtracted")
+            (lk.red, None, "subtracted")
         } else if up(sc, h, |x| x.flags.background) {
-            (GREY, None, "background")
+            (lk.grey, None, "background")
         } else if plan.xray {
-            (XRAY_HI, edge_c, "highlighted")
+            (lk.xray_hi, edge_c, "highlighted")
         } else {
-            (PART, Some(EDGE), "highlighted")
+            (lk.part, Some(lk.edge), "highlighted")
         };
-        draws.push(Draw { node: h, color, edges, node_colors: color == PART, role });
+        draws.push(Draw { node: h, color, edges, node_colors: color == lk.part, role });
         // Display of the operation: subtracted bodies red, zones blue.
         for &ch in &n.children {
             let cn = &sc.nodes[ch as usize];
@@ -519,9 +621,9 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
                 continue;
             }
             if cn.subtracted {
-                draws.push(Draw { node: ch, color: RED, edges: None, node_colors: false, role: "subtracted" });
+                draws.push(Draw { node: ch, color: lk.red, edges: None, node_colors: false, role: "subtracted" });
             } else if cn.flags.zone && matches!(n.label.as_str(), "fillet" | "chamfer" | "shell") {
-                draws.push(Draw { node: ch, color: BLUE, edges: None, node_colors: false, role: "zone" });
+                draws.push(Draw { node: ch, color: lk.blue, edges: None, node_colors: false, role: "zone" });
             }
         }
     }
@@ -530,11 +632,11 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
         let n = &sc.nodes[h as usize];
         let w = mat(&n.display_world);
         for e in &n.selected_edges {
-            lines.push(polyline(e, &w, SELECTED, 2.5));
+            lines.push(polyline(e, &w, lk.selected, 2.5));
         }
         for msg in &n.messages {
             for e in &msg.edges {
-                lines.push(polyline(e, &w, FAILED, 3.0));
+                lines.push(polyline(e, &w, lk.failed, 3.0));
             }
         }
     }
@@ -546,10 +648,10 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
             }
             let parent_has = |f: &dyn Fn(&p::SceneNode) -> bool| n.parent.is_some_and(|par| up(sc, par, |x| f(x)));
             if n.flags.highlight && !parent_has(&|x| x.flags.highlight) {
-                draws.push(Draw { node: n.idx, color: RED, edges: None, node_colors: false, role: "modifier #" });
+                draws.push(Draw { node: n.idx, color: lk.red, edges: None, node_colors: false, role: "modifier #" });
             }
             if n.flags.background && !parent_has(&|x| x.flags.background) {
-                draws.push(Draw { node: n.idx, color: GREY, edges: None, node_colors: false, role: "modifier %" });
+                draws.push(Draw { node: n.idx, color: lk.grey, edges: None, node_colors: false, role: "modifier %" });
             }
         }
     }
@@ -558,12 +660,49 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
     let tag_color: HashMap<u32, [f32; 4]> = sc
         .tag_nodes
         .iter()
-        .filter_map(|tn| tn.nodes.iter().find_map(|&n| sc.nodes[n as usize].color).map(|c| (tn.tag, c.0)))
+        .filter_map(|tn| tn.nodes.iter().find_map(|&n| sc.nodes[n as usize].color).map(|c| (tn.tag, lk.model(c.0))))
         .collect();
+    // `--show regions`: bodies per colour instead of colours per face (the base draws)
+    let regions_on = plan.shows("regions") && !plan.xray;
+    let mut region_meshes: Vec<(u32, Mesh, [f32; 4])> = Vec::new();
+    if regions_on {
+        let sets = m.session.color_regions(true, false).map_err(Fail::Kernel)?;
+        let color_of = |key: &str| sc.colors.iter().find(|c| c.key == key).map(|c| lk.model(c.rgba.0));
+        for set in sets {
+            if !plan.parts.is_empty() && !set.part.as_ref().is_some_and(|n| plan.parts.contains(n)) {
+                continue;
+            }
+            for r in set.regions {
+                let Some(md) = r.mesh else { continue };
+                let mesh = Mesh {
+                    positions: md.positions,
+                    normals: md.normals,
+                    indices: md.indices,
+                    tri_tags: md.tri_tags,
+                    tri_faces: md.tri_faces,
+                    edge_segments: md.edge_segments,
+                    edge_ids: md.edge_ids,
+                };
+                region_meshes.push((set.node, mesh, color_of(&r.color).unwrap_or(lk.part)));
+            }
+        }
+    }
     let mut meshes = Vec::new();
     let mut triangles = 0usize;
     let mut visible = Vec::new();
+    for (node, mesh, col) in &region_meshes {
+        let n = &sc.nodes[*node as usize];
+        triangles += mesh.triangle_count();
+        visible.push(json!({
+            "idx": n.idx, "label": n.label, "instance": n.instance, "role": "region",
+            "line": n.range.line, "file": n.range.file, "triangles": mesh.triangle_count(),
+        }));
+        meshes.push((mesh.clone(), *col, mat(&n.display_world), Some(lk.edge), true));
+    }
     for d in &draws {
+        if regions_on && d.role == "base" {
+            continue;
+        }
         let mesh: Rc<Mesh> = m.session.mesh(d.node, false).map_err(Fail::Kernel)?;
         let node = &sc.nodes[d.node as usize];
         let w = mat(&node.display_world);
@@ -609,26 +748,26 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
                 ));
             }
             n_grids += 1;
-            n_points += grid_overlay(g, subject.as_ref(), size, labels_on, &mut lines, &mut markers, &mut labels);
+            n_points += grid_overlay(g, subject.as_ref(), size, labels_on, lk, (&mut lines, &mut markers, &mut labels));
         }
     }
     if plan.shows("anchors") {
         for a in &sc.anchors {
             n_anchors += 1;
             let pnt = DVec3::from_array(a.point.0);
-            markers.push(Marker { pos: pnt, shape: MarkerShape::Diamond, size: 5.5, color: ANCHOR, on_top: true });
+            markers.push(Marker { pos: pnt, shape: MarkerShape::Diamond, size: 5.5, color: lk.anchor, on_top: true });
             let name = a.text.clone().unwrap_or_else(|| a.name.clone());
-            labels.push(Label { pos: pnt, text: name, color: TEXT, offset: (7.0, -18.0), priority: 4 });
+            labels.push(Label { pos: pnt, text: name, color: lk.text, offset: (7.0, -18.0), priority: 4 });
             if let Some(d) = &a.dir {
                 let d = DVec3::from_array(d.0).normalize_or_zero();
                 if d != DVec3::ZERO {
                     let l = size * 0.12;
                     let tip = pnt + d * l;
                     let side = d.any_orthonormal_vector();
-                    lines.push(top_line(vec![pnt, tip], ANCHOR, 2.0, false));
+                    lines.push(top_line(vec![pnt, tip], lk.anchor, 2.0, false));
                     lines.push(top_line(
                         vec![tip - d * l * 0.3 + side * l * 0.15, tip, tip - d * l * 0.3 - side * l * 0.15],
-                        ANCHOR,
+                        lk.anchor,
                         2.0,
                         false,
                     ));
@@ -640,7 +779,7 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
         for h in &sc.handles {
             n_handles += 1;
             let pnt = DVec3::from_array(h.world_pos.0);
-            markers.push(Marker { pos: pnt, shape: MarkerShape::Square, size: 3.5, color: HANDLE, on_top: true });
+            markers.push(Marker { pos: pnt, shape: MarkerShape::Square, size: 3.5, color: lk.handle, on_top: true });
             if labels_on {
                 let kind = match h.kind {
                     p::HandleKind::Point => "Punkt",
@@ -653,7 +792,7 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
                 labels.push(Label {
                     pos: pnt,
                     text: format!("{kind} Z.{}", h.range.line),
-                    color: [0.55, 0.22, 0.0, 1.0],
+                    color: lk.handle_label,
                     offset: (6.0, 4.0),
                     priority: 0,
                 });
@@ -666,7 +805,7 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
             for seg in mesh.edge_segments.chunks_exact(6) {
                 let a = w.transform_point3(DVec3::new(seg[0] as f64, seg[1] as f64, seg[2] as f64));
                 let b = w.transform_point3(DVec3::new(seg[3] as f64, seg[4] as f64, seg[5] as f64));
-                lines.push(top_line(vec![a, b], HIDDEN, 1.0, true));
+                lines.push(top_line(vec![a, b], lk.hidden, 1.0, true));
             }
         }
     }
@@ -678,7 +817,7 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
                 labels.push(Label {
                     pos,
                     text: pt.name.clone(),
-                    color: [0.1, 0.1, 0.45, 1.0],
+                    color: lk.part_label,
                     offset: (-8.0, -20.0),
                     priority: 5,
                 });
@@ -698,7 +837,7 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
         };
         for (a, b2) in [(0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7)]
         {
-            lines.push(top_line(vec![c(a), c(b2)], BBOX, 1.3, false));
+            lines.push(top_line(vec![c(a), c(b2)], lk.bbox, 1.3, false));
         }
         if plan.shows("dims") {
             let s = hi - lo;
@@ -708,7 +847,7 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
                 ((DVec3::new(hi.x, lo.y, lo.z + s.z / 2.0)), format!("H {} mm", num(s.z)), (8.0, -6.0)),
             ];
             for (pos, text, off) in dims {
-                labels.push(Label { pos, text, color: [0.0, 0.35, 0.12, 1.0], offset: off, priority: 6 });
+                labels.push(Label { pos, text, color: lk.dims_label, offset: off, priority: 6 });
             }
         }
     }
@@ -725,9 +864,8 @@ fn grid_overlay(
     subject: Option<&p::Bounds>,
     size: f64,
     labels_on: bool,
-    lines: &mut Vec<Polyline>,
-    markers: &mut Vec<Marker>,
-    labels: &mut Vec<Label>,
+    lk: &Look,
+    (lines, markers, labels): (&mut Vec<Polyline>, &mut Vec<Marker>, &mut Vec<Label>),
 ) -> usize {
     let frame = mat(&g.frame);
     let inv = frame.inverse();
@@ -785,11 +923,11 @@ fn grid_overlay(
             };
             let (b0, b1, c0, c1) = (ext[b].0, ext[b].1, ext[c].0, ext[c].1);
             let pts = vec![corner(b0, c0), corner(b1, c0), corner(b1, c1), corner(b0, c1), corner(b0, c0)];
-            lines.push(top_line(pts, GRID, 1.0, pl.literal.is_none()));
+            lines.push(top_line(pts, lk.grid, 1.0, pl.literal.is_none()));
             labels.push(Label {
                 pos: corner(b0, c0),
                 text: format!("{}.{}", g.name, pl.name),
-                color: [0.1, 0.22, 0.6, 1.0],
+                color: lk.grid_label,
                 offset: (3.0, 2.0),
                 priority: 3,
             });
@@ -813,12 +951,18 @@ fn grid_overlay(
                 }
                 count += 1;
                 let pnt = w(DVec3::new(*x, *y, *z));
-                markers.push(Marker { pos: pnt, shape: MarkerShape::Dot, size: 2.5, color: GRID_POINT, on_top: true });
+                markers.push(Marker {
+                    pos: pnt,
+                    shape: MarkerShape::Dot,
+                    size: 2.5,
+                    color: lk.grid_point,
+                    on_top: true,
+                });
                 if point_labels {
                     labels.push(Label {
                         pos: pnt,
                         text: format!("{}[{nx},{ny},{nz}]", g.name),
-                        color: [0.1, 0.18, 0.45, 1.0],
+                        color: lk.grid_point_label,
                         offset: (4.0, 3.0),
                         priority: 1,
                     });
@@ -892,6 +1036,10 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
         fit,
         zoom: plan.zoom,
         section: plan.section,
+        background: plan.look.background,
+        cap_color: plan.look.cap,
+        title_color: plan.look.text,
+        label_background: plan.look.label_background,
         ..Default::default()
     };
     // Contact sheet: one target (centre of the fitted geometry) and the smallest fitting scale.
@@ -939,7 +1087,7 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
             .push(json!({ "name": name, "x": x, "y": y, "width": tw, "height": th, "camera": camera_json(&cam) }));
         tiles.push(img);
     }
-    let img = if plan.sheet { contact_sheet(&tiles, cols, gap, [0.96, 0.96, 0.97, 1.0]) } else { tiles.remove(0) };
+    let img = if plan.sheet { contact_sheet(&tiles, cols, gap, plan.look.background) } else { tiles.remove(0) };
     crate::host::write_file(output, &img.to_png()).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
 
     let section = plan.section.map(|s| {
@@ -964,6 +1112,7 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
         "overlays": built.counts,
         "section": section,
         "xray": plan.xray,
+        "theme": if plan.look.theme == Theme::Dark { "dark" } else { "light" },
         "bounds": bounds_json(&built.subject),
         "notes": built.notes,
     });
@@ -998,6 +1147,9 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
     }
     if plan.xray {
         t.push_str(", Röntgen");
+    }
+    if plan.look.theme == Theme::Dark {
+        t.push_str(", dunkel");
     }
     if let Some(b) = &built.subject {
         let s: Vec<String> = (0..3).map(|i| num(b.max.0[i] - b.min.0[i])).collect();

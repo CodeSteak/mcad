@@ -36,7 +36,7 @@ import { VersionMapper } from "../logic/positions";
 import { isOff } from "../logic/sceneIndex";
 import { bridge } from "../state/bridge";
 import { type DirHandle, project } from "../state/project";
-import { store } from "../state/store";
+import { resolveTheme, setThemePref, store } from "../state/store";
 import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
 import { DragController } from "./drag";
@@ -453,6 +453,65 @@ export async function exportModel(format: ExportFormat): Promise<void> {
   }
 }
 
+/**
+ * Multi-colour exports of the model (or the parts, if any): 3MF with one volume per colour
+ * and filament slots for Bambu Studio / OrcaSlicer, single-colour 3MF, or a ZIP with one STL
+ * per colour.
+ */
+export async function exportColors(kind: "3mf" | "3mf-single" | "stl-zip"): Promise<void> {
+  const st = store.getState();
+  const parts = (st.complete?.context.module === null ? st.complete?.parts ?? [] : []).map((p) => p.name);
+  const format: ExportFormat = kind === "stl-zip" ? "stl" : "3mf";
+  const colors = kind !== "3mf-single";
+  const label = kind === "3mf" ? "3MF mehrfarbig" : kind === "3mf-single" ? "3MF einfarbig" : "STL je Farbe";
+  store.setState({ notice: `Export ${label} …` });
+  try {
+    const r = await client.exportFile(format, parts.length ? parts : undefined, false, colors);
+    const base = baseName(st.fileName);
+    const name = kind === "stl-zip" ? `${base}-farben.zip` : kind === "3mf" ? `${base}.3mf` : `${base}-einfarbig.3mf`;
+    download(new Blob([r.bytes as BlobPart], { type: kind === "stl-zip" ? "application/zip" : MIME["3mf"] }), name);
+    store.setState({ notice: `Exportiert: ${name} (${r.triangles} Dreiecke)` });
+  } catch (e) {
+    store.setState({ notice: `Export fehlgeschlagen: ${(e as Error).message}` });
+  }
+}
+
+// ---------------------------------------------------------------- theme and colour regions
+
+if (typeof matchMedia !== "undefined") {
+  // "System": follow dark mode changes of the OS (browser and desktop webview).
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    const s = store.getState();
+    if (s.themePref === "system") store.setState({ theme: resolveTheme("system") });
+  });
+}
+
+let regionsAsked = "";
+let regionsTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Asks the engine for the colour regions of the complete scene (colour list or region view). */
+function syncRegions(): void {
+  const s = store.getState();
+  const c = s.complete;
+  const want = (s.colorsOpen || s.showRegions) && c !== null && (c.colors ?? []).length > 0;
+  if (!want || !c) return;
+  const key = `${c.version}|${s.showRegions}`;
+  if (key === regionsAsked) return;
+  if (s.regions && s.regions.version === c.version && (s.regions.meshes || !s.showRegions)) return;
+  regionsAsked = key;
+  if (regionsTimer) clearTimeout(regionsTimer);
+  // Small delay: while typing, several scenes follow each other.
+  regionsTimer = setTimeout(() => {
+    regionsTimer = null;
+    const st = store.getState();
+    if (st.complete?.version === c.version) client.requestColorRegions(c.version, st.showRegions);
+  }, 120);
+}
+
+store.subscribe((s, p) => {
+  if (s.complete !== p.complete || s.colorsOpen !== p.colorsOpen || s.showRegions !== p.showRegions) syncRegions();
+});
+
 /** File name of a part (`k[2]` → `k_2.stl`, as the engine names ZIP entries). */
 export function partFileName(name: string, ext: string): string {
   const s = name.replace(/[^A-Za-z0-9_.-]/g, "_").replace(/_+$/, "") || "teil";
@@ -519,6 +578,11 @@ window.__cad = {
       viewHover: s.viewHover,
       allGrids: s.allGrids,
       theme: s.theme,
+      themePref: s.themePref,
+      colorsOpen: s.colorsOpen,
+      showRegions: s.showRegions,
+      regions: s.regions ? { version: s.regions.version, meshes: s.regions.meshes, items: s.regions.items.map((x) => ({ part: x.part, total: x.total, warning: x.warning, regions: x.regions.map((r) => ({ color: r.color, filament: r.filament, volume: r.volume })) })) } : null,
+      colors: (s.complete?.colors ?? []).map((c) => ({ key: c.key, label: c.label, source: c.source, filament: c.filament, explicit: c.explicit, lines: c.ranges.map((r) => r.line) })),
       metrics: s.metrics,
       notice: s.notice,
       meshes: meshes.size(),
@@ -704,5 +768,53 @@ window.__cad = {
   },
   async appInfo() {
     return IS_TAURI ? desktop.appInfo() : null;
+  },
+  /**
+   * Export without download (tests, also in the desktop app): bytes, triangles and the
+   * strings a multi-colour package must contain.
+   */
+  async exportSummary(format: ExportFormat, colors?: boolean, parts?: string[]) {
+    const r = await client.exportFile(format, parts, false, colors);
+    const t = new TextDecoder().decode(r.bytes);
+    const count = (re: RegExp) => (t.match(re) ?? []).length;
+    return {
+      bytes: r.bytes.length,
+      triangles: r.triangles,
+      colors: r.colors ?? false,
+      colorGroup: t.includes("<m:colorgroup"),
+      mColors: count(/<m:color /g),
+      items: count(/<item /g),
+      components: count(/<component /g),
+      modelSettings: t.includes("Metadata/model_settings.config"),
+      extruders: [...t.matchAll(/<metadata key="extruder" value="(\d+)"\/>/g)].map((m) => Number(m[1])),
+      files: [...t.matchAll(/([A-Za-z0-9_-]+_F\d+_[A-Za-z0-9_-]+\.stl)/g)].map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i),
+    };
+  },
+  /** Chooses the theme (System/Hell/Dunkel) like the toolbar. */
+  setThemePref(p: "system" | "light" | "dark") {
+    setThemePref(p);
+  },
+  /** Contrast of text and background of the first element matching a selector (computed styles). */
+  contrastOf(textSel: string, bgSel: string) {
+    const parse = (v: string) => {
+      const c = document.createElement("canvas").getContext("2d")!;
+      c.fillStyle = v;
+      const h = c.fillStyle as string;
+      if (h.startsWith("#")) return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+      return (/rgba?\(([^)]+)\)/.exec(h)?.[1] ?? "0,0,0").split(",").slice(0, 3).map(Number);
+    };
+    const fg = document.querySelector(textSel);
+    const bg = document.querySelector(bgSel);
+    if (!fg || !bg) return null;
+    const a = parse(getComputedStyle(fg).color);
+    const b = parse(getComputedStyle(bg).backgroundColor);
+    const lin = (x: number) => (x / 255 <= 0.04045 ? x / 255 / 12.92 : ((x / 255 + 0.055) / 1.055) ** 2.4);
+    const L = (c: number[]) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+    const [x, y] = [L(a), L(b)];
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  },
+  /** Does the system prefer a dark theme (`prefers-color-scheme`)? */
+  systemDark() {
+    return typeof matchMedia !== "undefined" && matchMedia("(prefers-color-scheme: dark)").matches;
   },
 };

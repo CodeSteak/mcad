@@ -360,3 +360,82 @@ pub fn set_default_edit_project(proj: &Project, module: &str, param: &str, value
     };
     proj.span_text(edit.span).is_some().then_some(edit)
 }
+
+/// The `color(…)` call statement with this span, anywhere in the project (main file with
+/// includes, used libraries; module bodies, blocks, loops, conditions).
+fn find_color_call(stmts: &[cad_syntax::ast::Stmt], span: Span) -> Option<&cad_syntax::ast::Stmt> {
+    use cad_syntax::ast::StmtKind as K;
+    for s in stmts {
+        if s.span == span && matches!(&s.kind, K::Call { name, .. } if name.name == "color") {
+            return Some(s);
+        }
+        if !(s.span.start <= span.start && span.end <= s.span.end) && !matches!(s.kind, K::Module(_)) {
+            continue;
+        }
+        let found = match &s.kind {
+            K::Block(b) => find_color_call(b, span),
+            K::Module(m) => find_color_call(&m.body, span),
+            K::Call { children, .. } => find_color_call(children, span),
+            K::Named { inst, .. } => find_color_call(std::slice::from_ref(inst), span),
+            K::For { body, .. } | K::Let { body, .. } => find_color_call(std::slice::from_ref(body), span),
+            K::If { then, els, .. } => find_color_call(std::slice::from_ref(then), span)
+                .or_else(|| els.as_deref().and_then(|e| find_color_call(std::slice::from_ref(e), span))),
+            _ => None,
+        };
+        if found.is_some() {
+            return found;
+        }
+    }
+    None
+}
+
+/// Edits that set the filament slot of a colour (Plan 16.3, colour list in the UI): `stmts`
+/// are the spans of the colour's `color()` statements in order of appearance. Every
+/// statement with a `filament = …` argument gets the new value; if none has one, the first
+/// statement gets `, filament = n`. `None` removes the argument everywhere (automatic slot).
+pub fn filament_edits(proj: &Project, stmts: &[Span], filament: Option<u32>) -> Vec<TextEdit> {
+    use cad_syntax::ast::StmtKind as K;
+    let mut calls = Vec::new();
+    for &sp in stmts {
+        if calls.iter().any(|(s, _): &(Span, _)| *s == sp) {
+            continue;
+        }
+        let found = find_color_call(&proj.main.stmts, sp)
+            .or_else(|| proj.libs.iter().find_map(|l| find_color_call(&l.ast.stmts, sp)));
+        if let Some(s) = found
+            && let K::Call { args, .. } = &s.kind
+        {
+            calls.push((sp, args));
+        }
+    }
+    let mut edits = Vec::new();
+    let mut any = false;
+    for (_, args) in &calls {
+        let Some(i) = args.iter().position(|a| a.name.as_ref().is_some_and(|n| n.name == "filament")) else { continue };
+        any = true;
+        let a = &args[i];
+        match filament {
+            Some(n) => edits.push(TextEdit { span: a.value.span, text: n.to_string() }),
+            None => {
+                // remove `, filament = n` (or `filament = n, ` if it is the first argument)
+                let span = if i > 0 {
+                    Span { start: args[i - 1].span.end, end: a.span.end }
+                } else if let Some(next) = args.get(1) {
+                    Span { start: a.span.start, end: next.span.start }
+                } else {
+                    a.span
+                };
+                edits.push(TextEdit { span, text: String::new() });
+            }
+        }
+    }
+    if !any
+        && let (Some(n), Some((_, args))) = (filament, calls.first())
+        && let Some(last) = args.last()
+    {
+        let at = last.span.end;
+        edits.push(TextEdit { span: Span { start: at, end: at }, text: format!(", filament = {n}") });
+    }
+    edits.retain(|e| proj.span_text(e.span).is_some_and(|t| t != e.text));
+    edits
+}

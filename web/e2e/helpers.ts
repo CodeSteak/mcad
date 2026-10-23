@@ -26,6 +26,11 @@ export interface CadState {
   viewHover: { lines: number[]; nodes: number[] } | null;
   allGrids: boolean;
   theme: string;
+  themePref: string;
+  colorsOpen: boolean;
+  showRegions: boolean;
+  regions: { version: number; meshes: boolean; items: Array<{ part: string | null; total: number; warning: string | null; regions: Array<{ color: string; filament: number; volume: number }> }> } | null;
+  colors: Array<{ key: string; label: string; source: string; filament: number; explicit: boolean; lines: number[] }>;
   metrics: {
     firstSceneMs: number | null;
     editToScene: number[];
@@ -37,6 +42,8 @@ export interface CadState {
   notice: string | null;
   meshes: { count: number; bytes: number };
   view: {
+    regionsDrawn: number;
+    faceColors: number;
     sceneVersion: number | null;
     complete: boolean;
     context: string | null;
@@ -540,6 +547,36 @@ export function record9(entry: ScenarioC): void {
 export function writeMetrics9(m: Record<string, unknown>): void {
   mkdirSync(REPORT9_DIR, { recursive: true });
   const f = join(REPORT9_DIR, "metrics.json");
+  const old = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
+  writeFileSync(f, JSON.stringify({ ...old, ...m }, null, 2));
+}
+
+// ---------------------------------------------------------------- colours, filaments, dark theme (test report 11)
+
+/** Screenshots and scenario data for test report 11 (tools/report/report11.mjs). */
+export const REPORT11_DIR = join(here, "../../reports/tmp/report11");
+
+/** Screenshot for report 11: the whole window (default), the view column or the editor pane. */
+export async function screenshot11(page: Page, name: string, area: "view" | "full" | "editor" | "colors" = "full"): Promise<void> {
+  mkdirSync(join(REPORT11_DIR, "img"), { recursive: true });
+  const sel = { view: "section.viewcol", editor: "section.editorpane", colors: "[data-testid=colors-panel]" } as const;
+  const clip = area === "full" ? null : await page.locator(sel[area]).boundingBox();
+  await page.screenshot({ path: join(REPORT11_DIR, "img", `${name}.jpg`), type: "jpeg", quality: 85, ...(clip ? { clip } : {}) });
+}
+
+export function record11(entry: ScenarioC): void {
+  mkdirSync(REPORT11_DIR, { recursive: true });
+  const f = join(REPORT11_DIR, "scenarios.json");
+  const all: ScenarioC[] = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
+  const i = all.findIndex((e) => e.id === entry.id);
+  if (i >= 0) all[i] = entry;
+  else all.push(entry);
+  writeFileSync(f, JSON.stringify(all, null, 2));
+}
+
+export function writeMetrics11(m: Record<string, unknown>): void {
+  mkdirSync(REPORT11_DIR, { recursive: true });
+  const f = join(REPORT11_DIR, "metrics.json");
   const old = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
   writeFileSync(f, JSON.stringify({ ...old, ...m }, null, 2));
 }

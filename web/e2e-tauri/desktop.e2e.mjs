@@ -3,11 +3,12 @@
 // Xvfb when there is no display. A small W3C WebDriver client (fetch) drives the real app
 // binary (`cad`, feature gui) with the real native engine process.
 //
-//   node web/e2e-tauri/desktop.e2e.mjs [--bin target/release/cad] [--only T03]
+//   node web/e2e-tauri/desktop.e2e.mjs [--bin target/release/cad] [--only T03] [--out reports/tmp/report11/tauri]
 //
 // Needs: tauri-driver (cargo install tauri-driver --locked), WebKitWebDriver
 // (webkit2gtk-driver), Xvfb, git. Screenshots, measurements and results go to
-// reports/tmp/report9/ (test report 9, tools/report/report9.mjs).
+// reports/tmp/report9/ (test report 9, tools/report/report9.mjs) or `--out`. T12–T14: colours,
+// filaments and the dark theme (test report 11).
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -24,7 +25,7 @@ const opt = (name, d) => {
 };
 const BIN = resolve(opt("--bin", join(ROOT, "target/release/cad")));
 const ONLY = opt("--only", null);
-const OUT = join(ROOT, "reports/tmp/report9");
+const OUT = resolve(opt("--out", join(ROOT, "reports/tmp/report9")));
 mkdirSync(join(OUT, "img"), { recursive: true });
 const PORT = 4444 + Math.floor(Math.random() * 200) * 2;
 const WD = `http://127.0.0.1:${PORT}`;
@@ -119,7 +120,9 @@ function git(dir, ...args) {
 
 // ---------------------------------------------------------------------------------- app
 
-async function startDriver() {
+let driver = null;
+
+async function startDriver(extraEnv = {}) {
   if (!display) {
     display = ":97";
     const x = spawn("Xvfb", [display, "-screen", "0", "1600x1000x24"], { stdio: "ignore" });
@@ -127,11 +130,37 @@ async function startDriver() {
     await sleep(800);
   }
   const td = spawn("tauri-driver", ["--port", String(PORT), "--native-port", String(PORT + 1)], {
-    env: { ...process.env, DISPLAY: display, CAD_IPC_DIR: ipcDir, CAD_WATCHDOG_MS: "3000" },
+    env: { ...process.env, DISPLAY: display, CAD_IPC_DIR: ipcDir, CAD_WATCHDOG_MS: "3000", ...extraEnv },
     stdio: ["ignore", "inherit", "inherit"],
   });
   children.push(td);
+  driver = td;
   await waitFor("tauri-driver", async () => (await fetch(`${WD}/status`).then((r) => r.ok).catch(() => false)), 20_000);
+}
+
+async function stopDriver() {
+  if (!driver) return;
+  driver.kill("SIGTERM");
+  await new Promise((r) => (driver.exitCode !== null ? r() : driver.once("exit", r)));
+  driver = null;
+  await sleep(500);
+}
+
+/** Selects an option of a React-controlled <select> (native setter + change event). */
+async function selectOption(css, value) {
+  await exec(
+    "const el = document.querySelector(arguments[0]); const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set; set.call(el, arguments[1]); el.dispatchEvent(new Event('change', { bubbles: true }));",
+    css,
+    value,
+  );
+}
+
+/** Runs an async page function `__cad.<name>(...args)` and returns its result. */
+async function hookAsync(name, ...args) {
+  return execAsync(
+    "const done = arguments[arguments.length - 1]; const a = arguments[0]; window.__cad[a.name](...a.args).then(done, (e) => done({ error: String(e) }));",
+    { name, args },
+  );
 }
 
 async function startApp(args) {
@@ -495,6 +524,95 @@ async function main() {
       metrics.heavyEvalNative.push(sc.metrics.evalMs[sc.metrics.evalMs.length - 1]);
     }
     check(keys.length > 0, `${keys.length} Messungen`);
+  });
+
+  // ------------------------------------------------------------ colours, filaments, theme (report 11)
+
+  const MEHR = readFileSync(join(ROOT, "examples/spec/mehrfarbig.scad"), "utf8");
+  const ensureApp = async () => {
+    if (!sid) await startApp([file]);
+  };
+
+  await test("T12", "Farben & Filamente in Tauri: Liste, Slot ändern, 3MF mehrfarbig (nativer Kernel)", async (check, e) => {
+    await ensureApp();
+    await exec("window.__cad.setThemePref('light'); localStorage.setItem('cad-colors-open', '1'); window.__cad.store.setState({ colorsOpen: true })");
+    await exec("window.__cad.setText(arguments[0])", MEHR);
+    await sceneReady();
+    await waitFor("Farbliste", async () => (await exists("[data-testid=colors-panel]")) || null);
+    const regions = await waitFor("Farbregionen", async () => {
+      const s = await state();
+      return s.regions && s.regions.version === s.shownVersion ? s : null;
+    });
+    const labels = regions.colors.map((c) => `${c.label}:${c.filament}`).join(", ");
+    check(labels === "white:1, teal:2, red:3, blue:4, yellow:5", `Farben ${labels}`);
+    for (const set of regions.regions.items) {
+      const sum = set.regions.reduce((a, r) => a + r.volume, 0);
+      check(Math.abs(sum - set.total) < 1e-6 * sum, `${set.part}: Summe ${sum.toFixed(3)} = ${set.total.toFixed(3)} mm³`);
+    }
+    e.images.push({ name: await shot("t12-farben"), label: "Farbliste in der Desktop-App (helles Thema)" });
+    // slot change writes the code
+    await selectOption("[data-testid=color-slot-teal]", "5");
+    await waitFor("filament = 5 im Text", async () => ((await exec("return window.__cad.text()")).includes('color("teal", filament = 5)') ? true : null));
+    await sceneReady();
+    const s2 = await state();
+    const teal = s2.colors.find((c) => c.label === "teal");
+    check(teal.filament === 5 && teal.explicit, "teal fest auf Slot 5");
+    check(s2.dirty.length >= 1, "Datei als geändert markiert");
+    // multi-colour 3MF over the native engine
+    const sum = await hookAsync("exportSummary", "3mf", undefined, ["schild", "figur"]);
+    check(sum.colorGroup && sum.mColors === 5 && sum.items === 2 && sum.components === 6 && sum.modelSettings, `3MF: ${JSON.stringify(sum)}`);
+    check(sum.extruders.includes(5) && sum.extruders.includes(3), `extruder je Teil ${sum.extruders.join(",")}`);
+    const zip = await hookAsync("exportSummary", "stl", true, ["schild", "figur"]);
+    check(zip.files.length === 6, `STL je Farbe: ${zip.files.join(", ")}`);
+    e.details = { colors: s2.colors, export3mf: sum, stlZip: zip };
+    e.images.push({ name: await shot("t12-slot"), label: "teal auf Slot 5: Code geändert" });
+  });
+
+  await test("T13", "Dunkles Thema in Tauri: Kontrast (computed styles), Ansicht, Editor", async (check, e) => {
+    await ensureApp();
+    await exec("window.__cad.setThemePref('dark')");
+    await waitFor("dunkel", async () => ((await exec("return document.documentElement.dataset.theme")) === "dark" ? true : null));
+    await sleep(400);
+    const pairs = {
+      Text: ["body", "body"],
+      Editor: [".cm-content", ".editor .cm-editor"],
+      Statusleiste: ["[data-testid=status-progress]", ".statusbar"],
+      Farbliste: ["[data-testid=colors-panel]", "[data-testid=colors-panel]"],
+      Werkzeugleiste: [".toolbar button", ".toolbar button"],
+    };
+    const ratios = {};
+    for (const [k, [a, b]] of Object.entries(pairs)) {
+      ratios[k] = await exec("return window.__cad.contrastOf(arguments[0], arguments[1])", a, b);
+      check(ratios[k] >= 4.5, `${k}: Kontrast ${Number(ratios[k]).toFixed(2)} ≥ 4,5`);
+    }
+    const swatch = await exec("return getComputedStyle(document.querySelector('[data-testid=color-swatch-teal]')).backgroundColor");
+    check(swatch.replace(/ /g, "") === "rgb(48,126,128)", `teal dunkle Variante (${swatch})`);
+    const v = (await state()).view;
+    check(v.faceColors > 0, "Farbe je Fläche in der Ansicht");
+    e.details = { contrast: ratios };
+    e.images.push({ name: await shot("t13-dunkel"), label: "dunkles Thema in der Desktop-App" });
+  });
+
+  await test("T14", "Thema „System“ in Tauri folgt dem GTK-Farbschema (prefers-color-scheme)", async (check, e) => {
+    await ensureApp();
+    await exec("window.__cad.setThemePref('system')");
+    const sysLight = await exec("return window.__cad.systemDark()");
+    const th = await exec("return document.documentElement.dataset.theme");
+    check(th === (sysLight ? "dark" : "light"), `System (${sysLight ? "dunkel" : "hell"}) → data-theme ${th}`);
+    // the same app with a dark GTK theme (GTK_THEME=Adwaita:dark)
+    await stopApp();
+    await stopDriver();
+    await startDriver({ GTK_THEME: "Adwaita:dark" });
+    await startApp([file]);
+    const sysDark = await exec("return window.__cad.systemDark()");
+    const th2 = await exec("return document.documentElement.dataset.theme");
+    e.details = { systemDarkWithoutGtkTheme: sysLight, systemDarkWithAdwaitaDark: sysDark };
+    check(sysDark === true, `WebKitGTK meldet prefers-color-scheme: dark mit GTK_THEME=Adwaita:dark (${sysDark})`);
+    check(th2 === "dark", `Thema System → ${th2}`);
+    e.images.push({ name: await shot("t14-system-dunkel"), label: "Thema System bei dunklem GTK-Schema" });
+    await stopApp();
+    await stopDriver();
+    await startDriver();
   });
 
   await stopApp();

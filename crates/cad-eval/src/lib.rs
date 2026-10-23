@@ -10,7 +10,6 @@
 
 mod builtin_fn;
 mod builtin_mod;
-mod colors;
 mod edit;
 pub mod env;
 mod eval;
@@ -21,14 +20,15 @@ mod law;
 pub mod math;
 mod ops;
 mod output;
+pub mod palette;
 mod print;
 pub mod project;
 mod sig;
 pub mod value;
 
 pub use edit::{
-    DragOptions, DragTarget, DragValue, SnapRef, SnapTarget, drag_edits, set_default_edit, set_default_edit_project,
-    snap_targets,
+    DragOptions, DragTarget, DragValue, SnapRef, SnapTarget, drag_edits, filament_edits, set_default_edit,
+    set_default_edit_project, snap_targets,
 };
 pub use output::*;
 pub use project::{

@@ -171,6 +171,8 @@ pub(crate) struct Ev<'a> {
     pub cur_stmt: Option<StmtId>,
     pub cur_span: Span,
     pub file_context: bool,
+    /// First explicit `filament = n` per colour (RGBA bytes), for conflict warnings.
+    pub filaments: std::collections::HashMap<[u8; 4], (u32, Span)>,
 }
 
 #[inline(never)]
@@ -257,6 +259,7 @@ impl<'a> Ev<'a> {
             cur_stmt: None,
             cur_span: Span::default(),
             file_context: matches!(opts.context, Context::File),
+            filaments: std::collections::HashMap::new(),
         }
     }
 

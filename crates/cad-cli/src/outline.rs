@@ -150,6 +150,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         m.diagnostics = d;
     }
     let sc = if kernel { m.session.done().map(|d| d.scene.clone()).unwrap_or(file_scene) } else { file_scene };
+    let (colors, color_regions, colors_text) = crate::colors::table(&mut m, &sc, kernel)?;
     let cur = m.session.current().ok_or_else(|| Fail::Kernel("keine Auswertung".into()))?;
     let proj = &cur.proj;
     let src = |s: cad_syntax::Span| proj.text(s).to_string();
@@ -359,6 +360,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
             .collect();
         t.push_str(&format!("Anker: {}\n", a.join(", ")));
     }
+    t.push_str(&colors_text);
     if let Some(root) = sc.root.and_then(|r| sc.nodes.get(r as usize))
         && let Some(b) = &root.bounds
     {
@@ -383,8 +385,10 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     j["anchors"] = json!(anchors);
     j["instances"] = json!(instances);
     j["parts"] = json!(parts);
+    j["colors"] = colors;
+    j["color_regions"] = color_regions;
     j["counts"] = json!({ "errors": errors, "warnings": warnings, "nodes": sc.nodes.len(),
-                          "modules": sc.modules.len(), "parts": sc.parts.len() });
+                          "modules": sc.modules.len(), "parts": sc.parts.len(), "colors": sc.colors.len() });
     j["kernel"] = json!(kernel);
     j["diagnostics"] = json!(m.diagnostics);
     j["ok"] = json!(errors == 0);

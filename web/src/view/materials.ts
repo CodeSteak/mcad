@@ -109,9 +109,12 @@ export class Materials {
     return new THREE.LineBasicMaterial({ color, transparent: opacity < 1 || !depthTest, opacity, depthTest });
   }
 
-  /** Surface/edge materials of a mode; `flat` for 2D nodes, `color` from `color()`. */
-  style(mode: Mode, flat: boolean, color: [number, number, number, number] | null): ModeStyle {
-    const key = `${mode}|${flat}|${color?.join(",") ?? ""}`;
+  /**
+   * Surface/edge materials of a mode; `flat` for 2D nodes, `color` from `color()`,
+   * `faceColors`: the geometry has per-vertex colours (colours per face).
+   */
+  style(mode: Mode, flat: boolean, color: [number, number, number, number] | null, faceColors = false): ModeStyle {
+    const key = `${mode}|${flat}|${color?.join(",") ?? ""}|${faceColors}`;
     const c = this.styles.get(key);
     if (c) return c;
     const p = this.palette;
@@ -119,7 +122,7 @@ export class Materials {
     switch (mode) {
       case "full":
         if (flat) s = { surface: this.transparent(p.flat, 0.18, { polygonOffset: true, polygonOffsetFactor: 1 }), edges: this.lines(p.flat), renderOrder: 1, pickable: true };
-        else s = { surface: this.fullMaterial(color), edges: this.lines(p.edge, 0.9), renderOrder: 0, pickable: true };
+        else s = { surface: faceColors ? this.vertexColorMaterial() : this.fullMaterial(color), edges: this.lines(p.edge, 0.9), renderOrder: 0, pickable: true };
         break;
       case "dim":
         s = {
@@ -170,6 +173,17 @@ export class Materials {
     }
     this.styles.set(key, s);
     return s;
+  }
+
+  private vertexColorMaterial(): THREE.Material {
+    let m = this.fullByColor.get("vertex");
+    if (!m) {
+      const mm = this.solid("#ffffff");
+      mm.vertexColors = true;
+      m = mm;
+      this.fullByColor.set("vertex", m);
+    }
+    return m;
   }
 
   private fullMaterial(color: [number, number, number, number] | null): THREE.Material {
