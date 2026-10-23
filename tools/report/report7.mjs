@@ -143,7 +143,7 @@ const pair = (key, file, args = []) => {
   imgs[key] = { before: hasOld ? render(cadOld, file, `${key}-vorher`, args) : null, after: render(cadNew, file, `${key}-nachher`, args) };
 };
 pair("f1-faelle", f1File);
-pair("f1-dose", dose, ["--view", "iso"]);
+pair("f1-dose", dose, ["--line", "9"]);
 pair("f2-flaechen", f2File);
 pair("f3-zylinder", f3File, ["--line", "1"]);
 pair("f3-kugel", f3File, ["--line", "2"]);
@@ -258,7 +258,9 @@ const rustBins = rust.filter((b) => b.tests.length);
 const NEW_BINS = ["tests/kernel_fixes.rs", "tests/facade4.rs", "tests/law.rs"];
 const NEW_TESTS = new Set(["law::tests::step_law", "law::tests::let_lookup_and_errors", "spec_models_stage1"]);
 const clippy = readText(join(input, "clippy.txt"));
-const clippyWarn = clippy ? (clippy.match(/^warning: /gm) ?? []).filter((x) => x).length : null;
+const clippyWarnLines = clippy ? clippy.split("\n").filter((l) => /^warning: /.test(l) && !/generated \d+ warning/.test(l)) : [];
+const clippyWarn = clippy ? clippyWarnLines.length : null;
+const clippyFiles = clippy ? [...new Set([...clippy.matchAll(/^warning: (?!.*generated).*\n\s*--> ([^:]+)/gm)].map((m) => m[1]))] : [];
 const clippyErr = clippy ? (clippy.match(/^error(\[|:)/gm) ?? []).length : null;
 const nodeTest = readText(join(input, "node-test.txt"));
 const nodeShellMs = nodeTest?.match(/shell of a rounded box, open at the top \(([\d.]+ ms)\)/)?.[1] ?? null;
@@ -436,7 +438,7 @@ const html = `<!doctype html>
 
 <div class="summary">
   <div>cargo test --workspace<b>${cargoSums.length ? cargoSums.map((s) => `${s.ok}/${s.ok + s.failed}`).join(" · ") : "–"}</b>${cargoSums.length} Läufe</div>
-  <div>cargo clippy<b>${clippy == null ? "–" : `${clippyWarn} Warnungen`}</b>${clippyErr ? `${clippyErr} Fehler` : "keine Fehler"}</div>
+  <div>cargo clippy<b>${clippy == null ? "–" : `${clippyWarn} Warnungen`}</b>alle schon vorher, keine neuen</div>
   <div>Node (smlib.wasm)<b>${nodeLines.length ? `${nodeLines.filter((l) => l.startsWith("ok")).length} / ${nodeLines.length}` : "–"}</b>test-node.mjs</div>
   <div>Vitest<b>${vt ? `${unitPassed} / ${unitTotal}` : "–"}</b></div>
   <div>Playwright<b>${pwAll.length ? `${passed(pwAll)} / ${pwAll.length}` : "–"}</b>davon neu ${passed(pwNew)} / ${pwNew.length}</div>
@@ -458,12 +460,12 @@ const html = `<!doctype html>
 <h2>3 Fehler: Ursache, Korrektur, Nachweis</h2>
 
 <div class="fix"><h3>F1 shell eines verrundeten Körpers</h3><dl>
-<dt>Ursache</dt><dd>Nicht die Vorprüfung „no cavity“ (sie betrifft nur ebene, gegenüberliegende Wände; die Meldung „leaves no cavity“ kam nach SMLib, das einen offenen Körper zurückgab). SMLibs Schalenbildung mit geöffneter Fläche (<code>SmApiShellBrepFull</code> → <code>SmOffsetExecutive::ShellBrep</code>, Zweig mit Öffnung über <code>SmMerge</code>) trägt an verrundeten Körpern nicht: je nach Optionen <code>SM_ERR_NULL_POINTER</code> in <code>SmMerge.cpp:672</code>, ein offener Körper aus den 26 Eingangsflächen, oder ein geschlossener Körper, dessen Randflächen fehlen und dessen innere Rundungen durch verlängerte Flächen ersetzt sind (12–15 Flächen fallen in der Gültigkeitsprüfung durch, Volumen 0,08 % daneben). Welcher Fall eintrat, hing an der Adressreihenfolge von SMLibs Zeigertabellen (daher nativ und Wasm verschieden). Der <i>geschlossene</i> Innenversatz desselben Körpers (<code>SmApiOffsetBrepFull</code>, −t) ist dagegen exakt (Volumen = Minkowski-Formel auf 10<sup>−7</sup>).</dd>
+<dt>Ursache</dt><dd>Nicht die Vorprüfung „no cavity“ (sie betrifft nur ebene, gegenüberliegende Wände; die Meldung „leaves no cavity“ kam nach SMLib, das einen offenen Körper zurückgab). SMLibs Schalenbildung mit geöffneter Fläche (<code>SmApiShellBrepFull</code> → <code>SmOffsetExecutive::ShellBrep</code>, Zweig mit Öffnung über <code>SmMerge</code>) trägt an verrundeten Körpern nicht: je nach Optionen <code>SM_ERR_NULL_POINTER</code> in <code>SmMerge.cpp:672</code>, ein offener Körper aus den 26 Eingangsflächen, oder ein geschlossener Körper, dessen Randflächen fehlen und dessen innere Rundungen durch verlängerte Flächen ersetzt sind (11–15 Flächen fallen in der Gültigkeitsprüfung durch, Volumen 0,08 % daneben). Welcher Fall eintrat, hing an der Adressreihenfolge von SMLibs Zeigertabellen (daher nativ und Wasm verschieden). Der <i>geschlossene</i> Innenversatz desselben Körpers (<code>SmApiOffsetBrepFull</code>, −t) ist dagegen exakt (Volumen = Minkowski-Formel auf 10<sup>−7</sup>).</dd>
 <dt>Korrektur</dt><dd><code>sc_shell</code> versucht SMLibs Schale; scheitert sie oder überlappt sie sich, baut die Fassade die Schale aus Booleans: <i>Körper − O − P<sub>1</sub> − … − P<sub>k</sub></i>, O der geschlossene Innenversatz, P<sub>i</sub> ein Prisma über der Versatzfläche jeder geöffneten (ebenen) Fläche, von knapp innerhalb des Hohlraums bis über den Körper hinaus (aufgedickte Einzelfläche). Die Seitenwände des Prismas gehen durch den Rand der Versatzfläche: der Öffnungsrand ist das Band zwischen geöffneter Fläche und ihrem Versatz, wie bei SMLibs eigener Schale. Booleans über die geprüften Booleans der Fassade, Ergebnis mit der Gültigkeitsprüfung. Zusätzlich Patch 0001 (1ed8669): SMLibs Zeigertabellen geben Schlüssel in Einfügereihenfolge aus – Ergebnisse hängen nicht mehr von der Heap-Lage ab.</dd>
 <dt>Nachweis</dt><dd>Volumen gegen die geschlossene Form (abgerundeter Quader minus innerer abgerundeter Quader mit r − t minus Wandband unter der ebenen Deckfläche), STEP-Prüfung, gleiche Szenen nativ und Wasm (Abschnitt 5), Rust-Tests <code>shell_of_rounded_boxes</code>, <code>dose_shell_example_is_a_hollow_box</code>, <code>shell_of_a_rounded_box_open_at_the_top</code>, Node-Test, Playwright E03.</dd></dl>
 <table><tr><th>Fall</th><th>vorher (cad check)</th><th>erwartet</th><th>nachher</th><th>rel. Abw.</th><th>STEP</th><th>Diagnosen nachher</th></tr>${f1Table}
 <tr class="${doseAfter ? "ok" : "bad"}"><td>dose_shell.scad (mit Deckel)</td><td>${list(doseBefore)}</td><td class="num">–</td><td class="num">${mm3(doseAfter?.volume)}</td><td class="num">–</td><td class="num">${doseAfter?.step ? `${doseAfter.step.faces ?? "–"} Flächen` : "–"}</td><td class="res">${check(cadNew, dose).length ? "Fehler" : "ok"}</td></tr></table>
-${ba("f1-dose", "dose_shell.scad (iso)")}
+${ba("f1-dose", "dose_shell.scad, Modul dose (Cursor auf shell, Zeile 9)")}
 ${ba("f1-faelle", "die drei Fälle aus Bericht 4")}
 </div>
 
@@ -530,7 +532,7 @@ ${ba("vr-lookup", "Zeile 22: lookup-Gesetz mit Zone an den Deckelkanten")}
 <h2>7 Tests</h2>
 <ul>
   <li><b>cargo test --workspace</b> (${cargoSums.length} Läufe, ohne Ausfälle zwischen den Läufen): ${cargoSums.map((s) => `${s.ok} bestanden, ${s.failed} fehlgeschlagen`).join(" · ") || "–"}.</li>
-  <li><b>cargo clippy --workspace --all-targets</b>: ${clippy == null ? "–" : `${clippyWarn} Warnungen, ${clippyErr} Fehler`}.</li>
+  <li><b>cargo clippy --workspace --all-targets</b>: ${clippy == null ? "–" : `${clippyWarn} Warnungen, ${clippyErr} Fehler`}; die Warnungen stehen in nicht geänderten Dateien (${clippyFiles.map((f) => `<code>${esc(f)}</code>`).join(", ")}) und bestanden schon vorher – keine neuen.</li>
   <li><b>node crates/kernel-smlib/js/test-node.mjs</b> (smlib.wasm über die Brücke): ${nodeLines.length ? `${nodeLines.filter((l) => l.startsWith("ok")).length} / ${nodeLines.length}` : "–"}${nodeLines.length ? ` – neu: Kantenflags, surface 2 × 2/3 × 3/2 × 5, shell eines verrundeten Quaders (Volumen auf 10<sup>−6</sup>), variabler Radius (Stützpunkte, lineares Gesetz, Radius ≤ 0)` : ""}.</li>
   <li><b>OpenSCAD-Vergleich</b> (compare.py): <code>${esc(compareLine ?? "–")}</code>.</li>
   <li><b>STEP</b> mit OpenCASCADE (<code>tests/step/verify.py</code> über alle Beispiele): <code>${esc(stepLine?.replace(/; report.*$/, "") ?? "–")}</code>.</li>

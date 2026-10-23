@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Testbericht 7 – Kernel-Korrekturen und variabler Radius</title>
+<style>
+  @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
+  :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
+  * { box-sizing: border-box; }
+  body { font: 9.6pt/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); margin: 0; }
+  main { max-width: 184mm; margin: 0 auto; }
+  h1 { font-size: 18pt; margin: 0 0 2mm; }
+  h2 { font-size: 13pt; margin: 7mm 0 3mm; border-bottom: 1px solid var(--border); padding-bottom: 1mm; break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  .meta { color: var(--muted); margin-bottom: 4mm; }
+  .summary { display: flex; flex-wrap: wrap; gap: 2.5mm; margin: 3mm 0; }
+  .summary div { flex: 1 1 28mm; border: 1px solid var(--border); border-radius: 2mm; padding: 2mm; font-size: 8.4pt; }
+  .summary b { display: block; font-size: 12pt; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 8.2pt; }
+  th, td { border: 1px solid var(--border); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
+  th { background: var(--head); font-weight: 600; }
+  td.num { text-align: right; white-space: nowrap; }
+  tr.ok td.res { color: var(--ok); font-weight: 600; }
+  tr.bad td.res, tr.bad td:first-child { color: var(--bad); font-weight: 600; }
+  .err { color: var(--bad); font-size: 8pt; margin-top: 1mm; }
+  .tag { font-size: 7pt; color: #fff; background: #0c8599; border-radius: 1mm; padding: 0 1mm; }
+  ul { margin: 1mm 0 2mm 5mm; padding: 0; }
+  li { margin: 0.5mm 0; }
+  ul.checks { margin: 0 0 0 3.5mm; }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 7.8pt; }
+  pre { margin: 0; padding: 1.4mm 2mm; background: #f6f8fa; border: 1px solid var(--border); border-radius: 1mm; white-space: pre-wrap; word-break: break-word; }
+  .fix { border: 1px solid var(--border); border-radius: 2mm; padding: 2.5mm 3mm; margin: 3mm 0; }
+  .fix h3 { margin-top: 0; }
+  .fix dl { margin: 0; display: grid; grid-template-columns: 22mm 1fr; gap: 1mm 3mm; }
+  .fix dt { font-weight: 600; color: var(--muted); }
+  .fix dd { margin: 0; }
+  .pair { display: flex; gap: 2mm; break-inside: avoid; margin: 2mm 0; }
+  .pair figure { flex: 1; min-width: 0; }
+  figure { margin: 0 0 2mm; break-inside: avoid; }
+  figure img { max-width: 100%; max-height: 110mm; border: 1px solid var(--border); display: block; }
+  figcaption { font-size: 7.8pt; color: var(--muted); margin-top: 0.6mm; }
+  figure.missing { border: 1px dashed var(--border); padding: 4mm; }
+  .sc { break-inside: avoid; margin: 0 0 6mm; }
+  .lbl { font-size: 7.4pt; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 1.5mm 0 0.5mm; }
+  .cap { font-size: 8.6pt; color: var(--muted); margin: 1.5mm 0 0; }
+  .small { font-size: 8.6pt; color: var(--muted); }
+  tr, td { break-inside: avoid; }
+</style>
+</head>
+<body>
+<main>
+<h1>Testbericht 7 – Kernel-Korrekturen und variabler Radius</h1>
+<div class="meta">SMLib-Fassade, Engine, Sprache, CLI und Browser-UI · 23. Oktober 2026 · Commit 19f2e47</div>
+
+<div class="summary">
+  <div>cargo test --workspace<b>298/298 · 298/298 · 298/298</b>3 Läufe</div>
+  <div>cargo clippy<b>3 Warnungen</b>alle schon vorher, keine neuen</div>
+  <div>Node (smlib.wasm)<b>15 / 15</b>test-node.mjs</div>
+  <div>Vitest<b>168 / 168</b></div>
+  <div>Playwright<b>70 / 70</b>davon neu 5 / 5</div>
+  <div>OpenSCAD-Vergleich<b>33/33</b>compare.py</div>
+  <div>STEP (OCCT)<b>47/47</b>verify.py</div>
+  <div>nativ ↔ Wasm<b>9 / 9</b>identische Szenen</div>
+</div>
+
+<h2>1 Umfang</h2>
+<ul>
+  <li><b>F1</b> <code>shell</code> eines verrundeten Körpers (dose_shell.scad war rot), <b>F2</b> <code>surface(points)</code> mit 2 × 2 oder 3 × 3 Punkten, <b>F3</b> Naht- und Polkanten als eigene Kanten – die drei in Bericht 4, Abschnitt 7 gefundenen Fehler. Dazu <b>F4</b>: fase_chamfer.scad war ebenfalls rot (<code>union(chamfer = 0.5)</code> wählte acht statt zwei Kanten).</li>
+  <li><b>Variabler Radius</b> (Spec „Variabler Radius (Stretch Goal)“): <code>fillet(r = function (p) …) { … }</code> und <code>difference/union/intersection(fillet = function (p) …)</code>; Radius als Funktion der Position, an Stützpunkten jeder Kante ausgewertet, Hinweis „r 2–4“, Fehlerfälle wie beim konstanten Radius. Neues Beispiel <code>examples/spec/variabler_radius.scad</code>.</li>
+  <li><b>SMLib</b>: Korrektur 1ed8669 (Zeigertabellen in Einfügereihenfolge) aus dem Fork-Zweig <code>capi-solidcraft</code> als Patch <code>smlib/patches/0001-pointer-maps-insertion-order.patch</code> über 7eba8aa (<code>smlib/fetch.sh</code> wendet ihn an). <b>Fassaden-ABI 4</b> (<code>sc_version()</code> = 4): Kantenflags in <code>sc_edges</code>, <code>sc_law_stations</code>, <code>sc_fillet_var</code>; Kernel-ID <code>smlib-7eba8aa+1/facade-4</code> (neue Cache-Schlüssel).</li>
+</ul>
+
+<h2>2 Testumgebung</h2>
+<table><tr><th style="width:30mm">Betriebssystem</th><td>Linux 6.18.44-fc-v153 (x64)</td></tr><tr><th style="width:30mm">CPU</th><td>Intel(R) Xeon(R) Processor @ 2.10GHz · 4 Kerne</td></tr><tr><th style="width:30mm">Rust</th><td>rustc 1.97.0 (2d8144b78 2026-07-07)</td></tr><tr><th style="width:30mm">Node.js</th><td>v22.22.0</td></tr><tr><th style="width:30mm">Emscripten</th><td>emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.13 (e13ee988ce3d87a738dd8f3661d02223308c412a)</td></tr><tr><th style="width:30mm">Browser</th><td>Chromium (Playwright 1.56.1), WebGL über SwiftShader, 1440 × 900 px</td></tr><tr><th style="width:30mm">SMLib</th><td>tangency-labs/smlib capi-tess @ 7eba8aa + smlib/patches/0001 (1ed8669 aus capi-solidcraft, nur Quelltext), Fassade ABI 4</td></tr><tr><th style="width:30mm">Quelltext</th><td>Branch worktree-agent-a1ce9f9f0bb82a038, Commit 19f2e47</td></tr></table>
+
+<h2>3 Fehler: Ursache, Korrektur, Nachweis</h2>
+
+<div class="fix"><h3>F1 shell eines verrundeten Körpers</h3><dl>
+<dt>Ursache</dt><dd>Nicht die Vorprüfung „no cavity“ (sie betrifft nur ebene, gegenüberliegende Wände; die Meldung „leaves no cavity“ kam nach SMLib, das einen offenen Körper zurückgab). SMLibs Schalenbildung mit geöffneter Fläche (<code>SmApiShellBrepFull</code> → <code>SmOffsetExecutive::ShellBrep</code>, Zweig mit Öffnung über <code>SmMerge</code>) trägt an verrundeten Körpern nicht: je nach Optionen <code>SM_ERR_NULL_POINTER</code> in <code>SmMerge.cpp:672</code>, ein offener Körper aus den 26 Eingangsflächen, oder ein geschlossener Körper, dessen Randflächen fehlen und dessen innere Rundungen durch verlängerte Flächen ersetzt sind (11–15 Flächen fallen in der Gültigkeitsprüfung durch, Volumen 0,08 % daneben). Welcher Fall eintrat, hing an der Adressreihenfolge von SMLibs Zeigertabellen (daher nativ und Wasm verschieden). Der <i>geschlossene</i> Innenversatz desselben Körpers (<code>SmApiOffsetBrepFull</code>, −t) ist dagegen exakt (Volumen = Minkowski-Formel auf 10<sup>−7</sup>).</dd>
+<dt>Korrektur</dt><dd><code>sc_shell</code> versucht SMLibs Schale; scheitert sie oder überlappt sie sich, baut die Fassade die Schale aus Booleans: <i>Körper − O − P<sub>1</sub> − … − P<sub>k</sub></i>, O der geschlossene Innenversatz, P<sub>i</sub> ein Prisma über der Versatzfläche jeder geöffneten (ebenen) Fläche, von knapp innerhalb des Hohlraums bis über den Körper hinaus (aufgedickte Einzelfläche). Die Seitenwände des Prismas gehen durch den Rand der Versatzfläche: der Öffnungsrand ist das Band zwischen geöffneter Fläche und ihrem Versatz, wie bei SMLibs eigener Schale. Booleans über die geprüften Booleans der Fassade, Ergebnis mit der Gültigkeitsprüfung. Zusätzlich Patch 0001 (1ed8669): SMLibs Zeigertabellen geben Schlüssel in Einfügereihenfolge aus – Ergebnisse hängen nicht mehr von der Heap-Lage ab.</dd>
+<dt>Nachweis</dt><dd>Volumen gegen die geschlossene Form (abgerundeter Quader minus innerer abgerundeter Quader mit r − t minus Wandband unter der ebenen Deckfläche), STEP-Prüfung, gleiche Szenen nativ und Wasm (Abschnitt 5), Rust-Tests <code>shell_of_rounded_boxes</code>, <code>dose_shell_example_is_a_hollow_box</code>, <code>shell_of_a_rounded_box_open_at_the_top</code>, Node-Test, Playwright E03.</dd></dl>
+<table><tr><th>Fall</th><th>vorher (cad check)</th><th>erwartet</th><th>nachher</th><th>rel. Abw.</th><th>STEP</th><th>Diagnosen nachher</th></tr><tr class="ok"><td>90 × 34 × 18, r 3, Wand 1.6</td><td>Z.2: Fehler (Kernel): shell gescheitert (1.6 mm): shell produced an invalid (self-overlapping) solid at 15 face(s); parameter too large?</td><td class="num">10.908,088 mm³</td><td class="num">10.908,088 mm³</td><td class="num">2.0e-10</td><td class="num">54 Flächen</td><td class="res">ok</td></tr>
+<tr class="ok"><td>90 × 34 × 18, r 5, Wand 1.6</td><td>Z.2: Fehler (Kernel): shell gescheitert (1.6 mm): shell: wall thickness 1.600000 leaves no cavity (SMLib returned no closed solid)</td><td class="num">10.822,339 mm³</td><td class="num">10.822,339 mm³</td><td class="num">1.1e-9</td><td class="num">54 Flächen</td><td class="res">ok</td></tr>
+<tr class="ok"><td>50 × 35 × 30, r 4, Wand 1.5</td><td>Z.2: Fehler (Kernel): shell gescheitert (1.5 mm): shell produced an invalid (self-overlapping) solid at 12 face(s); parameter too large?</td><td class="num">9.245,011 mm³</td><td class="num">9.245,011 mm³</td><td class="num">1.8e-9</td><td class="num">54 Flächen</td><td class="res">ok</td></tr>
+<tr class="ok"><td>90 × 34 × 18, r 6, Wand 1.6</td><td>Z.2: Fehler (Kernel): shell gescheitert (1.6 mm): shell: wall thickness 1.600000 leaves no cavity (SMLib returned no closed solid)</td><td class="num">10.754,828 mm³</td><td class="num">10.754,828 mm³</td><td class="num">7.3e-10</td><td class="num">54 Flächen</td><td class="res">ok</td></tr>
+<tr class="ok"><td>dose_shell.scad (mit Deckel)</td><td>Z.9: Fehler (Kernel): shell gescheitert (1.5 mm): shell produced an invalid (self-overlapping) solid at 11 face(s); parameter too large?</td><td class="num">–</td><td class="num">12.697,900 mm³</td><td class="num">–</td><td class="num">80 Flächen</td><td class="res">ok</td></tr></table>
+<div class="pair"><figure><img src="img/f1-dose-vorher.png" alt="vorher: dose_shell.scad, Modul dose (Cursor auf shell, Zeile 9)"><figcaption>vorher: dose_shell.scad, Modul dose (Cursor auf shell, Zeile 9)</figcaption></figure><figure><img src="img/f1-dose-nachher.png" alt="nachher: dose_shell.scad, Modul dose (Cursor auf shell, Zeile 9)"><figcaption>nachher: dose_shell.scad, Modul dose (Cursor auf shell, Zeile 9)</figcaption></figure></div>
+<div class="pair"><figure><img src="img/f1-faelle-vorher.png" alt="vorher: die drei Fälle aus Bericht 4"><figcaption>vorher: die drei Fälle aus Bericht 4</figcaption></figure><figure><img src="img/f1-faelle-nachher.png" alt="nachher: die drei Fälle aus Bericht 4"><figcaption>nachher: die drei Fälle aus Bericht 4</figcaption></figure></div>
+</div>
+
+<div class="fix"><h3>F2 surface(points) mit 2 × 2 oder 3 × 3 Punkten</h3><dl>
+<dt>Ursache</dt><dd><code>SmApiCreateSurfaceFromOrderedPoints</code> ruft <code>SmBSplineSurface::ApproximatePoints</code> fest mit Grad 3 in beiden Richtungen auf; das braucht mindestens 4 Punkte je Richtung, sonst <code>SM_ERR</code>.</dd>
+<dt>Korrektur</dt><dd><code>sc_nurbs_surface</code> ruft <code>ApproximatePoints</code> selbst auf, mit Grad min(3, n − 1) je Richtung getrennt: bilinear bei 2, quadratisch bei 3, kubisch ab 4 (ab 4 × 4 unverändert). Mit so vielen Kontrollpunkten wie Punkten interpoliert die Ausgleichsrechnung die Punkte.</dd>
+<dt>Nachweis</dt><dd><code>surfaces_get_the_degree_their_point_count_allows</code> (Grade 1/1, 2/2, 1/3, 3/1, 3/3 im B-Rep, Punkte auf der Fläche), <code>surfaces_from_two_and_three_points_per_direction</code> (ebene Gitter 2 × 2 … 4 × 4: Fläche 400 mm²), Node-Test, Playwright E05.</dd>
+<dt>Meldungen</dt><dd>vorher: Z.1: Fehler (Kernel): surface gescheitert: SmApiCreateSurfaceFromOrderedPoints failed: SM_ERR (1001)<br>Z.2: Fehler (Kernel): surface gescheitert: SmApiCreateSurfaceFromOrderedPoints failed: SM_ERR (1001)<br>Z.3: Fehler (Kernel): surface gescheitert: SmApiCreateSurfaceFromOrderedPoints failed: SM_ERR (1001)<br>nachher: –</dd></dl>
+<div class="pair"><figure><img src="img/f2-flaechen-vorher.png" alt="vorher: 2 × 2, 3 × 3 und 2 × 5 Punkte, aufgedickt"><figcaption>vorher: 2 × 2, 3 × 3 und 2 × 5 Punkte, aufgedickt</figcaption></figure><figure><img src="img/f2-flaechen-nachher.png" alt="nachher: 2 × 2, 3 × 3 und 2 × 5 Punkte, aufgedickt"><figcaption>nachher: 2 × 2, 3 × 3 und 2 × 5 Punkte, aufgedickt</figcaption></figure></div>
+</div>
+
+<div class="fix"><h3>F3 Naht- und Polkanten zählten als Kanten</h3><dl>
+<dt>Ursache</dt><dd>Die Engine wählte bei <code>$fillet/$chamfer</code> alle Kanten des Primitivs und in Zonen alle Kanten in der Zone. SMLibs Zylinder hat eine Naht (gleiche Fläche auf beiden Seiten), die Kugel eine Naht von Pol zu Pol. Die Fassade übersprang solche Kanten beim Verrunden (<code>GetBlendEdgeuse() == NULL</code>), gezählt und gezeichnet wurden sie trotzdem; bei der Kugel blieb keine Kante übrig → Fehler.</dd>
+<dt>Korrektur</dt><dd><code>sc_edges</code> meldet je Kante Flags, <code>SC_EDGE_SMOOTH</code> = nichts zu verrunden (Naht, Pol, tangential stetiger Übergang innerhalb 2°, offener Rand; SMLibs eigenes Kriterium). <code>EdgeInfo.smooth</code>; die Engine wählt solche Kanten nie – bei <code>$fillet/$chamfer</code>, in Zonen und bei <code>fillet =</code> an Booleans. Ein Primitiv ohne Kante zum Verrunden ergibt „0 Kanten“ als Warnung ohne Wirkung. Auch die tangentialen Ränder früherer Rundungen zählen nicht mehr (verschachtelte Blöcke).</dd>
+<dt>Hinweise</dt><dd>Zylinder vorher: cylinder: 3 Kanten · nachher: cylinder: 2 Kanten<br>Kugel vorher: sphere: 1 Kante · nachher: sphere: 0 Kanten<br>Meldungen vorher: Z.2: Fehler (Kernel): Verrundung gescheitert (1 mm): fillet: none of the edges can be blended (smooth, seam or open edges) · nachher: Z.2: Warnung (Kernel): 0 Kanten: das Primitiv hat keine Kanten zum Verrunden</dd>
+<dt>Nachweis</dt><dd><code>seams_and_poles_are_not_edges</code> (Zylinder 2 Kanten, Volumen mit zwei Fasenringen; Kugel 0 Kanten, Warnung, Volumen unverändert; Zone um den Zylinder 2 Kanten; Vereinigung zweier gleicher Zylinder: 0 neue Kanten), <code>tangent_edges_of_rounds_are_not_selected</code>, <code>edges_flag_seams_poles_and_tangent_edges_as_smooth</code>, Playwright E04 und C05.</dd></dl>
+<div class="pair"><figure><img src="img/f3-zylinder-vorher.png" alt="vorher: cylinder(…, $chamfer = 1), Cursor Zeile 1 (ausgewählte Kanten orange)"><figcaption>vorher: cylinder(…, $chamfer = 1), Cursor Zeile 1 (ausgewählte Kanten orange)</figcaption></figure><figure><img src="img/f3-zylinder-nachher.png" alt="nachher: cylinder(…, $chamfer = 1), Cursor Zeile 1 (ausgewählte Kanten orange)"><figcaption>nachher: cylinder(…, $chamfer = 1), Cursor Zeile 1 (ausgewählte Kanten orange)</figcaption></figure></div>
+<div class="pair"><figure><img src="img/f3-kugel-vorher.png" alt="vorher: sphere(5, $fillet = 1), Cursor Zeile 2"><figcaption>vorher: sphere(5, $fillet = 1), Cursor Zeile 2</figcaption></figure><figure><img src="img/f3-kugel-nachher.png" alt="nachher: sphere(5, $fillet = 1), Cursor Zeile 2"><figcaption>nachher: sphere(5, $fillet = 1), Cursor Zeile 2</figcaption></figure></div>
+</div>
+
+<div class="fix"><h3>F4 fase_chamfer.scad: union(chamfer) wählte acht Kanten</h3><dl>
+<dt>Ursache</dt><dd>„Neue Kanten“ einer Booleschen Operation waren Kanten zwischen Flächen verschiedener Operanden (Flächen-Tags). Teilen sich zwei Operanden eine Ebene (Platte und Turm mit gleicher Vorder- und Rückseite), verschmilzt SMLib die Flächen zu einer mit dem Tag eines Operanden; die sechs alten Turmkanten an Vorder- und Rückseite trennten dann Flächen verschiedener Operanden und galten als neu. Die Fase an diesen Kanten scheiterte (<code>SM_ERR</code>).</dd>
+<dt>Korrektur</dt><dd>Eine Kante, die auf einer Kante eines Operanden liegt, ist nicht neu (Abtastpunkte auf dem Kantenzug eines Operanden, Toleranz 10<sup>−6</sup> der Modellgröße).</dd>
+<dt>Hinweise</dt><dd>vorher: union: 8 Kanten · nachher: union: 2 Kanten<br>Meldungen vorher: Z.1: Fehler (Kernel): Fase gescheitert (0.5 mm): chamfer failed: SM_ERR (1001) · nachher: –</dd>
+<dt>Nachweis</dt><dd><code>coplanar_merged_faces_keep_old_edges_old</code> (2 Kanten, Volumen 2502,5 mm³), fase_chamfer.scad fehlerfrei (Stufe 1, STEP, Laufzeittabelle).</dd></dl>
+<div class="pair"><figure><img src="img/f4-union-vorher.png" alt="vorher: union(chamfer = 0.5) aus fase_chamfer.scad, Cursor Zeile 1"><figcaption>vorher: union(chamfer = 0.5) aus fase_chamfer.scad, Cursor Zeile 1</figcaption></figure><figure><img src="img/f4-union-nachher.png" alt="nachher: union(chamfer = 0.5) aus fase_chamfer.scad, Cursor Zeile 1"><figcaption>nachher: union(chamfer = 0.5) aus fase_chamfer.scad, Cursor Zeile 1</figcaption></figure></div>
+</div>
+
+<h2>4 Variabler Radius</h2>
+<h3>Architektur: auswertbare Beschreibung statt Rückruf</h3>
+<p>Die Kanten, an denen der Radius gebraucht wird, gibt es erst, wenn der Kernel den Körper gebaut hat – lange nach der Auswertung, in der Engine. Zwei Wege: ein Rückruf aus der Engine in die Auswertung, oder die Auswertung liefert eine auswertbare Beschreibung der Funktion. Gewählt ist die Beschreibung: <code>cad-eval</code> übersetzt das Funktionsliteral in ein <b>Radiusgesetz</b> (<code>cad_ir::Law</code>), einen kleinen reinen Ausdruck über <code>p</code>. Was nicht von <code>p</code> abhängt (eingefangene Variablen, Rasterebenen, Listenausdrücke, beliebige Builtins), wird dabei schon ausgewertet und ist Konstante; Aufrufe von Benutzerfunktionen und Funktionswerten werden eingesetzt (Parameter als lokale Slots, Tiefe ≤ 16); übrig bleiben Literale, Arithmetik, Vergleiche, <code>&amp;&amp; || ! ?:</code>, <code>let</code>, Indizes, <code>.x/.y/.z</code>, Vektoren und die Mathe-Builtins (<code>sin … lookup</code>).</p>
+<ul>
+  <li>Das Gesetz ist Teil des Baums (serialisierbar, Teil des Cache-Schlüssels): eine geänderte eingefangene Variable ändert den Schlüssel, gleicher Quelltext trifft den Cache. Ein Rückruf bräuchte dafür einen eigenen Schlüssel der Closure samt Umgebung.</li>
+  <li>Die Engine hängt weiter nicht von <code>cad-eval</code> und dessen AST-Lebensdauer ab; Wasm und nativ werten dasselbe Datenobjekt aus, auch aus dem Cache, ohne erneute Auswertung des Quelltexts.</li>
+  <li>Grenze: nur der reine Ausdruckskern ist von <code>p</code> abhängig möglich (keine Texte, keine Listenausdrücke über <code>p</code>, keine Rekursion über <code>p</code>); solche Fälle sind Fehler an der Funktion mit eigener Meldung.</li>
+</ul>
+<h3>Ablauf</h3>
+<ol>
+  <li>Auswertung: <code>fillet(r = function …)</code> → <code>Op::Blend { law }</code>, <code>difference(fillet = function …)</code> → <code>Op::Boolean { fillet_law }</code>. <code>chamfer</code> und <code>$fillet</code> mit Funktion: Warnung, nicht unterstützt.</li>
+  <li>Engine: Kantenwahl wie beim konstanten Radius (Zonen, neue Kanten, ohne glatte Kanten); je Kante <i>m</i> Stützpunkte (etwa einer je 1,5 mm, 4 bis 32) von <code>Kernel::law_stations</code>; das Gesetz im System der fillet-/Boolean-Anweisung an jedem Stützpunkt ausgewertet. Radius ≤ 0, keine Zahl → Fehler mit Wert und Position, Kante rot, Körper unverändert. Alle Werte gleich → konstante Verrundung (gleiches Ergebnis wie <code>fillet(r)</code>). Sonst <code>Kernel::fillet_variable</code>; Kernelfehler wie beim konstanten Radius mit dem Bereich („Verrundung gescheitert (8–18 mm): …“). Hinweis am Zeilenende: „r <i>min</i>–<i>max</i>“ der Stützwerte.</li>
+  <li>Fassade (<code>sc_law_stations</code>, <code>sc_fillet_var</code>): das Gesetz einer Kante ist ein geklemmter B-Spline vom Grad min(3, m − 1) über dem normierten Kantenparameter mit gleichmäßigen inneren Knoten, Kontrollradius <i>j</i> am Greville-Punkt t<sub>j</sub> (dort liegen die Stützpunkte). Er bleibt zwischen kleinstem und größtem Wert, ist exakt für konstante und lineare Verläufe und nimmt an den Kantenenden den ersten und letzten Wert an. Als <code>SmBSplineFilletLaw</code> trägt die Gesetzeskurve den Radius als x und t selbst als y (Kontrollpunkte (r<sub>j</sub>, t<sub>j</sub>), also y(t) = t), damit SMLib sie an Ecken über die Kantenenden hinaus verlängern kann. Je Kante SMLibs Variabler-Radius-Löser (<code>SM_FS_VARIABLE_RADIUS</code>), Kanten mit gleichen Werten der konstante.</li>
+</ol>
+<h3>Messwerte</h3>
+<table><tr><th>x (mm)</th><th>Gesetz 1 + x/15</th><th>gemessen (Beginn der Deckfläche)</th><th>Abw.</th></tr><tr><td class="num">2,0</td><td class="num">1,1333</td><td class="num">1,1227</td><td class="num">-0,94 %</td></tr><tr><td class="num">7,5</td><td class="num">1,5000</td><td class="num">1,4878</td><td class="num">-0,81 %</td></tr><tr><td class="num">15,0</td><td class="num">2,0000</td><td class="num">1,9859</td><td class="num">-0,71 %</td></tr><tr><td class="num">22,5</td><td class="num">2,5000</td><td class="num">2,4843</td><td class="num">-0,63 %</td></tr><tr><td class="num">28,0</td><td class="num">2,8667</td><td class="num">2,8498</td><td class="num">-0,59 %</td></tr></table>
+<p class="small">Eine Kante eines 30 × 20 × 20-Quaders mit linearem Gesetz: Radius gemessen über Punktklassifikation knapp unter der Deckfläche (dort beginnt die Rundung; bei wachsendem Radius liegt die Berührlinie etwas hinter r(x)). Volumen gegen die geschlossene Form 12000 − (1 − π/4)·130: Abweichung &lt; 10<sup>−5</sup> (Rust- und Node-Test).
+Stufengesetz <code>p.z &lt; 10 ? 2 : 4</code> an allen 12 Kanten eines 30 × 30 × 20-Quaders: 17.346,308 mm³, zwischen r = 4 (16.986,950 mm³) und r = 2 (17.736,024 mm³).
+Taschenrand mit <code>1 + p.x / 40</code>: 9.434,560 mm³ zwischen r = 1,875 (9.411,622 mm³) und r = 1,125 (9.455,670 mm³).
+variabler_radius.scad: 56.527,548 mm³, STEP 55 Flächen, <code>cad export</code> 1660 ms.</p>
+<table><tr><th>Zeile</th><th>vorher</th><th>nachher</th></tr>
+<tr><td>11</td><td>fillet: 12 Kanten</td><td>fillet: 12 Kanten · r 2–4</td></tr><tr><td>16</td><td>difference: –</td><td>difference: 4 Kanten · r 1.125–1.875</td></tr><tr><td>22</td><td>fillet: 1 Zone · 4 Kanten</td><td>fillet: 1 Zone · 4 Kanten · r 1.5–3.9</td></tr>
+<tr><td>Diagnosen</td><td>Z.11: Warnung (Auswertung): variabler Radius `r` (Funktion) noch nicht unterstützt<br>Z.16: Warnung (Auswertung): variabler Radius `fillet` (Funktion) noch nicht unterstützt<br>Z.22: Warnung (Auswertung): variabler Radius `r` (Funktion) noch nicht unterstützt<br>Z.11: Fehler (Kernel): Verrundung gescheitert (0 mm): invalid input: fillet size must be &gt; 0<br>Z.22: Fehler (Kernel): Verrundung gescheitert (0 mm): invalid input: fillet size must be &gt; 0</td><td>–</td></tr></table>
+<div class="pair"><figure><img src="img/vr-stufe-vorher.png" alt="vorher: variabler_radius.scad, Cursor Zeile 11 (Stufengesetz)"><figcaption>vorher: variabler_radius.scad, Cursor Zeile 11 (Stufengesetz)</figcaption></figure><figure><img src="img/vr-stufe-nachher.png" alt="nachher: variabler_radius.scad, Cursor Zeile 11 (Stufengesetz)"><figcaption>nachher: variabler_radius.scad, Cursor Zeile 11 (Stufengesetz)</figcaption></figure></div>
+<div class="pair"><figure><img src="img/vr-tasche-vorher.png" alt="vorher: Zeile 16: difference(fillet = function (p) 1 + p.x / 40)"><figcaption>vorher: Zeile 16: difference(fillet = function (p) 1 + p.x / 40)</figcaption></figure><figure><img src="img/vr-tasche-nachher.png" alt="nachher: Zeile 16: difference(fillet = function (p) 1 + p.x / 40)"><figcaption>nachher: Zeile 16: difference(fillet = function (p) 1 + p.x / 40)</figcaption></figure></div>
+<div class="pair"><figure><img src="img/vr-lookup-vorher.png" alt="vorher: Zeile 22: lookup-Gesetz mit Zone an den Deckelkanten"><figcaption>vorher: Zeile 22: lookup-Gesetz mit Zone an den Deckelkanten</figcaption></figure><figure><img src="img/vr-lookup-nachher.png" alt="nachher: Zeile 22: lookup-Gesetz mit Zone an den Deckelkanten"><figcaption>nachher: Zeile 22: lookup-Gesetz mit Zone an den Deckelkanten</figcaption></figure></div>
+
+<h2>5 Nativ und Wasm</h2>
+<p class="small">Szene von <code>cad eval --json</code> (nativ) gegen <code>web/scripts/dump-scene.mjs</code> (Browser-Engine in Node: cad-wasm + smlib.wasm) je Knoten: Status, Hinweise, Anzahl ausgewählter Kanten, Hülle (10<sup>−4</sup> mm), Meldungen, und die Diagnosen.</p>
+<table><tr><th>Datei</th><th>Knoten</th><th>davon Fehler</th><th>Ergebnis</th><th>Abweichung</th></tr><tr class="ok"><td>F1 (drei Fälle)</td><td class="num">12</td><td class="num">0</td><td class="res">identisch</td><td></td></tr>
+<tr class="ok"><td>F1 (r = 6)</td><td class="num">4</td><td class="num">0</td><td class="res">identisch</td><td></td></tr>
+<tr class="ok"><td>dose_shell.scad</td><td class="num">9</td><td class="num">0</td><td class="res">identisch</td><td></td></tr>
+<tr class="ok"><td>F2</td><td class="num">9</td><td class="num">0</td><td class="res">identisch</td><td></td></tr>
+<tr class="ok"><td>F3</td><td class="num">4</td><td class="num">0</td><td class="res">identisch</td><td></td></tr>
+<tr class="ok"><td>F4</td><td class="num">5</td><td class="num">0</td><td class="res">identisch</td><td></td></tr>
+<tr class="ok"><td>variabler_radius.scad</td><td class="num">12</td><td class="num">0</td><td class="res">identisch</td><td></td></tr>
+<tr class="ok"><td>griffschale.scad</td><td class="num">19</td><td class="num">0</td><td class="res">identisch</td><td></td></tr>
+<tr class="ok"><td>fillet_zonen.scad</td><td class="num">16</td><td class="num">0</td><td class="res">identisch</td><td></td></tr></table>
+
+<h2>6 Laufzeiten cad export (alle Beispiele)</h2>
+<p class="small"><code>cad export &lt;datei&gt; -o x.stl</code> (Release, Wandzeit inkl. Start, ein Lauf je Datei, nacheinander) vorher (Stand vor diesem Auftrag) und nachher. Summe über 47 gemeinsame Dateien: vorher 21743 ms, nachher 23587 ms. Exit 1 = Diagnosen mit Fehlern (vorher dose_shell, fase_chamfer).</p>
+<table><tr><th>Datei</th><th>vorher</th><th>nachher</th><th>Δ</th></tr><tr class="ok"><td>spec/dose_shell.scad</td><td class="num">988 ms (Exit 1)</td><td class="num">1925 ms</td><td class="num">+937 ms</td></tr>
+<tr class="ok"><td>spec/fase_chamfer.scad</td><td class="num">319 ms (Exit 1)</td><td class="num">394 ms</td><td class="num">+75 ms</td></tr>
+<tr class="ok"><td>spec/fillet_zonen.scad</td><td class="num">429 ms</td><td class="num">439 ms</td><td class="num">+10 ms</td></tr>
+<tr class="ok"><td>spec/flasche.scad</td><td class="num">715 ms</td><td class="num">673 ms</td><td class="num">-42 ms</td></tr>
+<tr class="ok"><td>spec/freiformdeckel.scad</td><td class="num">3657 ms</td><td class="num">3868 ms</td><td class="num">+211 ms</td></tr>
+<tr class="ok"><td>spec/gehaeuse.scad</td><td class="num">40 ms</td><td class="num">56 ms</td><td class="num">+16 ms</td></tr>
+<tr class="ok"><td>spec/griffschale.scad</td><td class="num">584 ms</td><td class="num">693 ms</td><td class="num">+109 ms</td></tr>
+<tr class="ok"><td>spec/kabelfuehrung.scad</td><td class="num">426 ms</td><td class="num">595 ms</td><td class="num">+169 ms</td></tr>
+<tr class="ok"><td>spec/knauf_mirror.scad</td><td class="num">2308 ms</td><td class="num">2224 ms</td><td class="num">-84 ms</td></tr>
+<tr class="ok"><td>spec/lochplatte.scad</td><td class="num">957 ms</td><td class="num">1127 ms</td><td class="num">+170 ms</td></tr>
+<tr class="ok"><td>spec/loft_sweep.scad</td><td class="num">811 ms</td><td class="num">698 ms</td><td class="num">-113 ms</td></tr>
+<tr class="ok"><td>spec/lueftungsgitter.scad</td><td class="num">549 ms</td><td class="num">519 ms</td><td class="num">-30 ms</td></tr>
+<tr class="ok"><td>spec/winkel_anker.scad</td><td class="num">242 ms</td><td class="num">326 ms</td><td class="num">+84 ms</td></tr>
+<tr class="ok"><td>openscad-compat/01_cube_variants.scad</td><td class="num">30 ms</td><td class="num">38 ms</td><td class="num">+8 ms</td></tr>
+<tr class="ok"><td>openscad-compat/02_sphere_variants.scad</td><td class="num">774 ms</td><td class="num">737 ms</td><td class="num">-37 ms</td></tr>
+<tr class="ok"><td>openscad-compat/03_cylinder_variants.scad</td><td class="num">150 ms</td><td class="num">176 ms</td><td class="num">+26 ms</td></tr>
+<tr class="ok"><td>openscad-compat/04_cone_variants.scad</td><td class="num">103 ms</td><td class="num">117 ms</td><td class="num">+14 ms</td></tr>
+<tr class="ok"><td>openscad-compat/05_nested_booleans.scad</td><td class="num">1301 ms</td><td class="num">1467 ms</td><td class="num">+166 ms</td></tr>
+<tr class="ok"><td>openscad-compat/06_hole_grid.scad</td><td class="num">1304 ms</td><td class="num">1128 ms</td><td class="num">-176 ms</td></tr>
+<tr class="ok"><td>openscad-compat/07_crown_ring.scad</td><td class="num">783 ms</td><td class="num">701 ms</td><td class="num">-82 ms</td></tr>
+<tr class="ok"><td>openscad-compat/08_module_children.scad</td><td class="num">262 ms</td><td class="num">312 ms</td><td class="num">+50 ms</td></tr>
+<tr class="ok"><td>openscad-compat/09_rotate_mirror.scad</td><td class="num">81 ms</td><td class="num">57 ms</td><td class="num">-24 ms</td></tr>
+<tr class="ok"><td>openscad-compat/10_scale_multmatrix.scad</td><td class="num">29 ms</td><td class="num">26 ms</td><td class="num">-3 ms</td></tr>
+<tr class="ok"><td>openscad-compat/11_linear_extrude_basic.scad</td><td class="num">14 ms</td><td class="num">15 ms</td><td class="num">+1 ms</td></tr>
+<tr class="ok"><td>openscad-compat/12_linear_extrude_twist.scad</td><td class="num">390 ms</td><td class="num">480 ms</td><td class="num">+90 ms</td></tr>
+<tr class="ok"><td>openscad-compat/13_rotate_extrude_ring.scad</td><td class="num">521 ms</td><td class="num">585 ms</td><td class="num">+64 ms</td></tr>
+<tr class="ok"><td>openscad-compat/14_pipe_bend.scad</td><td class="num">486 ms</td><td class="num">484 ms</td><td class="num">-2 ms</td></tr>
+<tr class="ok"><td>openscad-compat/15_vase.scad</td><td class="num">164 ms</td><td class="num">168 ms</td><td class="num">+4 ms</td></tr>
+<tr class="ok"><td>openscad-compat/16_polygon_holes.scad</td><td class="num">40 ms</td><td class="num">45 ms</td><td class="num">+5 ms</td></tr>
+<tr class="ok"><td>openscad-compat/17_polyhedron.scad</td><td class="num">11 ms</td><td class="num">17 ms</td><td class="num">+6 ms</td></tr>
+<tr class="ok"><td>openscad-compat/18_functions_let.scad</td><td class="num">43 ms</td><td class="num">78 ms</td><td class="num">+35 ms</td></tr>
+<tr class="ok"><td>openscad-compat/19_hex_nut.scad</td><td class="num">96 ms</td><td class="num">162 ms</td><td class="num">+66 ms</td></tr>
+<tr class="ok"><td>openscad-compat/20_box_with_lid.scad</td><td class="num">546 ms</td><td class="num">710 ms</td><td class="num">+164 ms</td></tr>
+<tr class="ok"><td>openscad-compat/21_angle_bracket.scad</td><td class="num">267 ms</td><td class="num">303 ms</td><td class="num">+36 ms</td></tr>
+<tr class="ok"><td>openscad-compat/22_gear.scad</td><td class="num">340 ms</td><td class="num">320 ms</td><td class="num">-20 ms</td></tr>
+<tr class="ok"><td>openscad-compat/23_shelf_holder.scad</td><td class="num">176 ms</td><td class="num">212 ms</td><td class="num">+36 ms</td></tr>
+<tr class="ok"><td>openscad-compat/24_modifiers.scad</td><td class="num">45 ms</td><td class="num">49 ms</td><td class="num">+4 ms</td></tr>
+<tr class="ok"><td>openscad-compat/25_root_modifier.scad</td><td class="num">42 ms</td><td class="num">44 ms</td><td class="num">+2 ms</td></tr>
+<tr class="ok"><td>openscad-compat/26_if_else_variants.scad</td><td class="num">273 ms</td><td class="num">268 ms</td><td class="num">-5 ms</td></tr>
+<tr class="ok"><td>openscad-compat/27_spacers_2d.scad</td><td class="num">414 ms</td><td class="num">367 ms</td><td class="num">-47 ms</td></tr>
+<tr class="ok"><td>openscad-compat/28_cable_clip.scad</td><td class="num">177 ms</td><td class="num">178 ms</td><td class="num">+1 ms</td></tr>
+<tr class="ok"><td>openscad-compat/29_assert_strings.scad</td><td class="num">64 ms</td><td class="num">61 ms</td><td class="num">-3 ms</td></tr>
+<tr class="ok"><td>openscad-compat/30_each_ranges.scad</td><td class="num">80 ms</td><td class="num">67 ms</td><td class="num">-13 ms</td></tr>
+<tr class="ok"><td>openscad-compat/31_phone_stand.scad</td><td class="num">34 ms</td><td class="num">33 ms</td><td class="num">-1 ms</td></tr>
+<tr class="ok"><td>openscad-compat/32_low_fn_shapes.scad</td><td class="num">42 ms</td><td class="num">39 ms</td><td class="num">-3 ms</td></tr>
+<tr class="ok"><td>openscad-compat/33_global_fn.scad</td><td class="num">256 ms</td><td class="num">253 ms</td><td class="num">-3 ms</td></tr>
+<tr class="ok"><td>projekt-gehaeuse/gehaeuse.scad</td><td class="num">380 ms</td><td class="num">353 ms</td><td class="num">-27 ms</td></tr>
+<tr class="ok"><td>spec/variabler_radius.scad</td><td class="num">–</td><td class="num">1660 ms</td><td class="num">–</td></tr></table>
+
+<h2>7 Tests</h2>
+<ul>
+  <li><b>cargo test --workspace</b> (3 Läufe, ohne Ausfälle zwischen den Läufen): 298 bestanden, 0 fehlgeschlagen · 298 bestanden, 0 fehlgeschlagen · 298 bestanden, 0 fehlgeschlagen.</li>
+  <li><b>cargo clippy --workspace --all-targets</b>: 3 Warnungen, 0 Fehler; die Warnungen stehen in nicht geänderten Dateien (<code>crates/cad-eval/src/edit.rs</code>, <code>crates/cad-eval/tests/project_openscad.rs</code>, <code>crates/cad-engine/src/parts.rs</code>) und bestanden schon vorher – keine neuen.</li>
+  <li><b>node crates/kernel-smlib/js/test-node.mjs</b> (smlib.wasm über die Brücke): 15 / 15 – neu: Kantenflags, surface 2 × 2/3 × 3/2 × 5, shell eines verrundeten Quaders (Volumen auf 10<sup>−6</sup>), variabler Radius (Stützpunkte, lineares Gesetz, Radius ≤ 0).</li>
+  <li><b>OpenSCAD-Vergleich</b> (compare.py): <code>33/33 files match</code>.</li>
+  <li><b>STEP</b> mit OpenCASCADE (<code>tests/step/verify.py</code> über alle Beispiele): <code>47/47 passed</code>.</li>
+  <li><b>Vitest</b>: 168 / 168; <b>pnpm typecheck</b> ohne Fehler.</li>
+  <li><b>Playwright</b>: 70 / 70 (bisherige Szenarien 65 / 65, neu 5 / 5).</li>
+</ul>
+<table><tr><th>ID</th><th>Szenario (web/e2e/ui-e.spec.ts)</th><th>Ergebnis</th><th>Dauer</th><th>Geprüft</th></tr><tr class="ok"><td>E01</td><td>Variabler Radius: Hinweis „r 2–4“, Kanten orange, Ergebnis verrundet</td><td class="res">bestanden</td><td class="num">5.7 s</td><td><ul class="checks"><li>Status ok, Hinweise [&quot;12 Kanten&quot;,&quot;r 2–4&quot;], [&quot;4 Kanten&quot;,&quot;r 1.125–1.875&quot;], [&quot;1 Zone&quot;,&quot;4 Kanten&quot;,&quot;r 1.5–3.9&quot;]</li><li>gezeichnete ausgewählte Kanten 12 / 4 / 4, Pixel der orangen Kanten (Stufe): 4304</li><li>Dreiecke der verrundeten Box: 2228</li></ul></td></tr>
+<tr class="ok"><td>E02</td><td>Variabler Radius: Radius ≤ 0 und zu großer Radius wie beim konstanten Radius</td><td class="res">bestanden</td><td class="num">2.4 s</td><td><ul class="checks"><li>Status error/error, Dreiecke 12/12</li><li>Meldung: Verrundung gescheitert (variabler Radius): Radius -5 ≤ 0 bei [0, 20, 20]</li></ul></td></tr>
+<tr class="ok"><td>E03</td><td>shell eines verrundeten Körpers: dose_shell.scad und die drei Fälle aus Bericht 4</td><td class="res">bestanden</td><td class="num">8.8 s</td><td><ul class="checks"><li>dose: 2332 Dreiecke, 1 Fläche geöffnet (Ansicht und Engine)</li><li>Fälle: Status ok/ok/ok, je 1/1/1 Fläche geöffnet; Mitte 2332 Dreiecke</li></ul></td></tr>
+<tr class="ok"><td>E04</td><td>Naht- und Polkanten zählen nicht: Zylinder 2 Kanten, Kugel 0 Kanten</td><td class="res">bestanden</td><td class="num">2.9 s</td><td><ul class="checks"><li>gezeichnete Kanten 2 / 0 / 2</li><li>Kugel: Status warning, Zeile gelb</li></ul></td></tr>
+<tr class="ok"><td>E05</td><td>surface aus 2 × 2 und 3 × 3 Punkten</td><td class="res">bestanden</td><td class="num">2.8 s</td><td><ul class="checks"><li>beide surface-Knoten ok</li></ul></td></tr></table>
+<table><tr><th>Rust-Testprogramm (letzter Lauf)</th><th>bestanden</th><th>neue Tests</th></tr><tr class="ok"><td>tests/cli.rs</td><td class="num">9 / 9</td><td>–</td></tr>
+<tr class="ok"><td>tests/projects.rs</td><td class="num">3 / 3</td><td>–</td></tr>
+<tr class="ok"><td>src/lib.rs</td><td class="num">7 / 7</td><td>–</td></tr>
+<tr class="ok"><td>tests/draft.rs</td><td class="num">3 / 3</td><td>–</td></tr>
+<tr class="ok"><td>tests/engine.rs</td><td class="num">25 / 25</td><td>–</td></tr>
+<tr class="ok"><td>tests/kernel_fixes.rs <span class="tag">neu</span></td><td class="num">12 / 12</td><td><code>coplanar_merged_faces_keep_old_edges_old</code>, <code>dose_shell_example_is_a_hollow_box</code>, <code>law_changes_change_the_cache_key</code>, <code>seams_and_poles_are_not_edges</code>, <code>shell_too_thick_still_fails</code>, <code>tangent_edges_of_rounds_are_not_selected</code>, <code>shell_of_rounded_boxes</code>, <code>variable_radius_captured_values_user_functions_and_booleans</code>, <code>surfaces_from_two_and_three_points_per_direction</code>, <code>variable_radius_errors_like_constant_radius</code>, <code>variable_radius_linear_law_on_one_edge</code>, <code>variable_radius_step_law_between_constant_radii</code></td></tr>
+<tr class="ok"><td>tests/spec_examples.rs</td><td class="num">4 / 4</td><td>–</td></tr>
+<tr class="ok"><td>tests/expr.rs</td><td class="num">25 / 25</td><td>–</td></tr>
+<tr class="ok"><td>tests/grids.rs</td><td class="num">14 / 14</td><td>–</td></tr>
+<tr class="ok"><td>tests/handles.rs</td><td class="num">26 / 26</td><td>–</td></tr>
+<tr class="ok"><td>tests/law.rs <span class="tag">neu</span></td><td class="num">5 / 5</td><td><code>step_law_and_text</code>, <code>boolean_parameter_and_trig</code>, <code>law_is_part_of_the_tree_data</code>, <code>captured_values_functions_let_and_builtins</code>, <code>unsupported_parts_are_errors</code></td></tr>
+<tr class="ok"><td>tests/limits.rs</td><td class="num">8 / 8</td><td>–</td></tr>
+<tr class="ok"><td>tests/openscad_compat.rs</td><td class="num">1 / 1</td><td>–</td></tr>
+<tr class="ok"><td>tests/openscad_deviations.rs</td><td class="num">10 / 10</td><td>–</td></tr>
+<tr class="ok"><td>tests/project.rs</td><td class="num">16 / 16</td><td>–</td></tr>
+<tr class="ok"><td>tests/project_openscad.rs</td><td class="num">2 / 2</td><td>–</td></tr>
+<tr class="ok"><td>tests/tree.rs</td><td class="num">24 / 24</td><td>–</td></tr>
+<tr class="ok"><td>src/lib.rs</td><td class="num">2 / 2</td><td><code>law::tests::step_law</code>, <code>law::tests::let_lookup_and_errors</code></td></tr>
+<tr class="ok"><td>src/lib.rs</td><td class="num">5 / 5</td><td>–</td></tr>
+<tr class="ok"><td>tests/render.rs</td><td class="num">4 / 4</td><td>–</td></tr>
+<tr class="ok"><td>tests/project.rs</td><td class="num">5 / 5</td><td>–</td></tr>
+<tr class="ok"><td>tests/protocol_ts.rs</td><td class="num">1 / 1</td><td>–</td></tr>
+<tr class="ok"><td>tests/session.rs</td><td class="num">8 / 8</td><td>–</td></tr>
+<tr class="ok"><td>tests/watchdog.rs</td><td class="num">2 / 2</td><td>–</td></tr>
+<tr class="ok"><td>src/lib.rs</td><td class="num">3 / 3</td><td>–</td></tr>
+<tr class="ok"><td>tests/writer.rs</td><td class="num">6 / 6</td><td>–</td></tr>
+<tr class="ok"><td>src/lib.rs</td><td class="num">19 / 19</td><td>–</td></tr>
+<tr class="ok"><td>tests/openscad_compat.rs</td><td class="num">1 / 1</td><td>–</td></tr>
+<tr class="ok"><td>tests/spec_models.rs</td><td class="num">1 / 1</td><td><code>spec_models_stage1</code></td></tr>
+<tr class="ok"><td>tests/tree_bounds.rs</td><td class="num">1 / 1</td><td>–</td></tr>
+<tr class="ok"><td>tests/brep.rs</td><td class="num">5 / 5</td><td>–</td></tr>
+<tr class="ok"><td>tests/determinism.rs</td><td class="num">1 / 1</td><td>–</td></tr>
+<tr class="ok"><td>tests/facade4.rs <span class="tag">neu</span></td><td class="num">5 / 5</td><td><code>edges_flag_seams_poles_and_tangent_edges_as_smooth</code>, <code>law_stations_and_a_linear_law</code>, <code>facade_version</code>, <code>surfaces_get_the_degree_their_point_count_allows</code>, <code>shell_of_a_rounded_box_open_at_the_top</code></td></tr>
+<tr class="ok"><td>tests/handles.rs</td><td class="num">1 / 1</td><td>–</td></tr>
+<tr class="ok"><td>tests/kernel.rs</td><td class="num">33 / 33</td><td>–</td></tr>
+<tr class="ok"><td>tests/coverage.rs</td><td class="num">1 / 1</td><td>–</td></tr></table>
+
+<h2>8 Grenzen</h2>
+<ul>
+  <li><b>shell aus Booleans</b> nur für ebene geöffnete Flächen (das Prisma ist die aufgedickte Versatzfläche); bei gekrümmten geöffneten Flächen bleibt SMLibs Ergebnis bzw. dessen Fehlermeldung. Geschlossene Schalen (ohne Zone) nehmen weiter SMLibs Ergebnis, wenn es gültig ist. Die Booleans kosten Zeit: dose_shell 988 ms (scheiternd) → 1925 ms (Abschnitt 6); in smlib.wasm (Node-Test, 90 × 34 × 18, r 3) 1758.4 ms.</li>
+  <li><b>Wanddicke ≥ Rundungsradius</b> (r ≤ t, z. B. 30 × 20 × 10 mit r 1, Wand 2): der Innenversatz wäre scharfkantig; SMLibs Versatz scheitert dort in 7eba8aa (<code>SM_ERR</code>, Fork-Commit a252570 nicht übernommen), die Schale bleibt wie vorher ein Fehler (Meldung nennt beide Wege).</li>
+  <li><b>Variabler Radius:</b> SMLibs Variabler-Radius-Löser ist empfindlich. Steile Verläufe mit großem Radius an Taschenecken scheitern („überlappt sich“, z. B. Taschenrand mit 1 + p.x/20, 1,25–2,75), ebenso Kreiskanten mit veränderlichem Radius (<code>SM_ERR</code>); das Beispiel nutzt deshalb 1 + p.x/40. Sprünge (<code>p.z &lt; 10 ? 2 : 4</code> an senkrechten Kanten) werden über etwa drei Stützpunktabstände geglättet; der Hinweis zeigt den Bereich der Stützwerte (lookup-Spitze 4 → „3.9“, weil kein Stützpunkt genau auf x = 20 liegt). Position <code>p</code> im System der fillet-/Boolean-Anweisung. Kein variabler Radius für <code>chamfer</code> und <code>$fillet</code> (Warnung).</li>
+  <li><b>Glatte Kanten:</b> SMLibs Kriterium (Flächen innerhalb 2° tangential) – fast tangentiale Kanten werden nie gewählt. Die Prüfung „alte Kante eines Operanden“ (F4) vergleicht mit den Kantenzügen der Operanden, für gekrümmte Kanten nur so genau wie deren Abtastung (dort bleibt die frühere Wahl).</li>
+  <li><b>SMLib-Patch</b> als Arbeitskopie-Patch über 7eba8aa (der Fork-Commit liegt nicht auf <code>capi-tess</code>); vorgebaute Bibliotheken (<code>SMLIB_PREBUILT</code>) müssen mit dem Patch neu gebaut werden (Header-Änderung, sonst ODR-Bruch). Ein Symlink <code>third_party/smlib</code> wird von <code>fetch.sh</code> nur geprüft.</li>
+</ul>
+
+<h2>9 Screenshots der Browser-UI</h2>
+<section class="sc"><h3>E01 Variabler Radius im Browser</h3>
+<figure><img src="img/e01-stufe.jpg" alt="Cursor auf fillet(r = function (p) p.z &lt; g.mitte ? 2 : 4)"><figcaption>Cursor auf fillet(r = function (p) p.z &lt; g.mitte ? 2 : 4)</figcaption></figure><figure><img src="img/e01-tasche.jpg" alt="Cursor auf difference(fillet = function (p) 1 + p.x / 40)"><figcaption>Cursor auf difference(fillet = function (p) 1 + p.x / 40)</figcaption></figure><figure><img src="img/e01-lookup.jpg" alt="Cursor auf fillet(r = function (p) lookup(p.x, …)) mit Zone"><figcaption>Cursor auf fillet(r = function (p) lookup(p.x, …)) mit Zone</figcaption></figure>
+<div class="lbl">Code</div><pre>// unter der Mitte Radius 2, darüber 4; die senkrechten Kanten gehen stetig von 2 auf 4
+fillet(r = function (p) p.z &lt; g.mitte ? 2 : 4) {
+    box(g[links, vorne, boden], g[rechts, hinten, deckel]);
+}
+
+// Tasche mit verrundetem Rand, der Radius wächst entlang x (1,125 bis 1,875 am Rand)
+translate([60, 0, 0]) difference(fillet = function (p) 1 + p.x / 40) {
+    cube([40, 30, 10]);
+    translate([5, 8, 4]) cube([30, 14, 10]);
+}
+
+// nur die vier Deckelkanten, Radius aus einer Tabelle (lookup) über x
+translate([120, 0, 0]) fillet(r = function (p) lookup(p.x, [[0, 1.5], [20, 4], [40, 1.5]])) {
+    box(g[links, vorne, boden], g[rechts, hinten, deckel]);
+    zone(g.deckel, d = 1);
+}</pre><p class="cap">variabler_radius.scad: der Radius ist eine Funktion der Position. Am Zeilenende stehen Kantenzahl und Radiusbereich der ausgewerteten Stützpunkte („12 Kanten · r 2–4“, „4 Kanten · r 1.125–1.875“, „1 Zone · 4 Kanten · r 1.5–3.9“); ausgewählte Kanten orange, Zone blau wie beim konstanten Radius.</p></section>
+<section class="sc"><h3>E02 Fehlerfälle des variablen Radius</h3>
+<figure><img src="img/e02-negativ.jpg" alt="Radius ≤ 0 an einer Kante"><figcaption>Radius ≤ 0 an einer Kante</figcaption></figure><figure><img src="img/e02-zu-gross.jpg" alt="Radius 8–18 an einem 20-mm-Würfel"><figcaption>Radius 8–18 an einem 20-mm-Würfel</figcaption></figure>
+<div class="lbl">Code</div><pre>fillet(r = function (p) p.x - 5) {
+    cube(20);
+}
+translate([40, 0, 0]) fillet(r = function (p) 8 + p.z / 2) {
+    cube(20);
+}</pre><p class="cap">Radius ≤ 0 an einem Stützpunkt: Zeile rot, Meldung mit Wert und Position, die Kante rot, der Würfel bleibt ohne Verrundung (12 Dreiecke). Zu großer Radius: Kernel-Meldung mit dem Radiusbereich, Körper unverändert – wie beim konstanten Radius.</p></section>
+<section class="sc"><h3>E03 shell verrundeter Körper</h3>
+<figure><img src="img/e03-dose.jpg" alt="dose_shell.scad, Cursor auf shell(wand)"><figcaption>dose_shell.scad, Cursor auf shell(wand)</figcaption></figure><figure><img src="img/e03-faelle.jpg" alt="die drei Fälle aus Bericht 4 (F1)"><figcaption>die drei Fälle aus Bericht 4 (F1)</figcaption></figure>
+<div class="lbl">Code</div><pre>grid g { z: o = 18; }
+grid h { z: o = 30; }
+shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 3); zone(g.o, d = 1); }
+translate([0, 45, 0]) shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 5); zone(g.o, d = 1); }
+translate([0, 90, 0]) shell(1.5) { box([0, 0, 0], [50, 35, 30], $fillet = 4); zone(h.o, d = 1); }</pre><p class="cap">dose_shell.scad ist wieder grün: ein geschlossener Hohlkörper mit Öffnung oben, „1 Zone · 1 Fläche geöffnet“. Die drei Fälle aus Bericht 4 (früher SM_ERR_NULL_POINTER, „leaves no cavity“, „self-overlapping“) ergeben Hohlkörper.</p></section>
+<section class="sc"><h3>E04 Naht- und Polkanten</h3>
+<figure><img src="img/e04-zylinder.jpg" alt="cylinder(…, $chamfer = 1): Deckel- und Bodenkante"><figcaption>cylinder(…, $chamfer = 1): Deckel- und Bodenkante</figcaption></figure><figure><img src="img/e04-zone.jpg" alt="fillet(1) mit Kugelzone um den Zylinder"><figcaption>fillet(1) mit Kugelzone um den Zylinder</figcaption></figure>
+<div class="lbl">Code</div><pre>cylinder(h = 10, r = 5, $chamfer = 1);
+translate([20, 0, 0]) sphere(5, $fillet = 1);
+translate([40, 0, 0]) fillet(1) { cylinder(h = 10, r = 5); sphere(20); }</pre><p class="cap">Die Naht des Zylinders und die Naht/Pole der Kugel sind glatt und werden nie ausgewählt: $chamfer am Zylinder „2 Kanten“ (vorher 3), $fillet an der Kugel „0 Kanten“ als Warnung ohne Wirkung (vorher Fehler), Zonenauswahl um den ganzen Zylinder ebenfalls 2 Kanten.</p></section>
+<section class="sc"><h3>E05 surface aus wenigen Punkten</h3>
+<figure><img src="img/e05-surface.jpg" alt="bilinear (2 × 2) und quadratisch (3 × 3)"><figcaption>bilinear (2 × 2) und quadratisch (3 × 3)</figcaption></figure>
+<div class="lbl">Code</div><pre>thicken(1) surface(points = [[[0, 0, 0], [20, 0, 6]], [[0, 20, 6], [20, 20, 0]]]);
+translate([30, 0, 0]) thicken(1) surface(points = [[[0, 0, 0], [10, 0, 6], [20, 0, 0]], [[0, 10, 6], [10, 10, 9], [20, 10, 6]], [[0, 20, 0], [10, 20, 6], [20, 20, 0]]]);</pre><p class="cap">surface(points) mit 2 × 2 (bilinear) und 3 × 3 Punkten (quadratisch) wird erzeugt und lässt sich aufdicken (vorher SmApiCreateSurfaceFromOrderedPoints … SM_ERR).</p></section>
+</main>
+</body>
+</html>

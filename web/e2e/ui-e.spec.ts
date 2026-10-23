@@ -162,7 +162,7 @@ test("E03 shell eines verrundeten Körpers: dose_shell.scad und die drei Fälle 
     code: src.trim(),
     caption:
       "dose_shell.scad ist wieder grün: ein geschlossener Hohlkörper mit Öffnung oben, „1 Zone · 1 Fläche geöffnet“. Die drei Fälle aus Bericht 4 (früher SM_ERR_NULL_POINTER, „leaves no cavity“, „self-overlapping“) ergeben Hohlkörper.",
-    checks: [`dose: ${sh.triangles} Dreiecke, geöffnet ${view(s).openFaces.length ? 1 : 0}`, `Fälle: Status ${shells.map((x) => x.status).join("/")}`],
+    checks: [`dose: ${sh.triangles} Dreiecke, ${sh.openedFaces} Fläche geöffnet (Ansicht und Engine)`, `Fälle: Status ${shells.map((x) => x.status).join("/")}, je ${shells.map((x) => x.openedFaces).join("/")} Fläche geöffnet; Mitte ${mid.triangles} Dreiecke`],
   });
 });
 
