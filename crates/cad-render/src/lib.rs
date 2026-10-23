@@ -1,13 +1,29 @@
 //! Software rasterizer for the CLI (`render`): meshes + camera → RGBA image → PNG.
 //!
-//! Orthographic camera with standard views, fitted to the scene. Z-buffer, per-vertex Lambert
-//! shading (two-sided), edge lines from [`Mesh::edge_segments`] with depth test, colour per
-//! mesh, transparency (transparent fragments are sorted back to front per sample and blended over the
-//! opaque image), extra polylines (e.g. selected edges), optional axis triad.
-//! Anti-aliasing by supersampling. No GPU.
+//! * Camera: orthographic (default) or perspective, standard views or azimuth/elevation,
+//!   fitted to the scene or to given bounds, optional look-at target, zoom and fixed scale
+//!   (contact sheets with equal scale per tile).
+//! * Z-buffer, per-vertex Lambert shading (two-sided), edge lines from [`Mesh::edge_segments`]
+//!   with depth test, colour per mesh, transparency (transparent fragments are sorted back to
+//!   front per sample and blended over the opaque image), extra polylines (solid or dashed),
+//!   point markers (diamonds, dots, squares), text labels with overlap avoidance, a title,
+//!   optional axis triad.
+//! * Section ([`Section`]): meshes are clipped against a plane in the renderer and the cut is
+//!   closed by a filled cap in its own colour — the same principle as GPU clipping with a
+//!   stencil cap. The cap covers every sample whose ray crosses the item's surface an odd
+//!   number of times before it reaches the plane (the plane point lies inside the solid),
+//!   counted with a top-left fill rule so shared edges count once. Convention: the plane
+//!   through `point` with `normal` removes the half space the normal points into, i.e. what
+//!   stays is `(q − point) · normal ≤ 0`.
+//! * Anti-aliasing by supersampling. No GPU.
+
+mod font;
+pub mod text;
 
 use cad_kernel::Mesh;
 use glam::{DMat4, DVec3};
+
+pub use text::{TextSize, contact_sheet, text_size, tile_origin};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum View {
@@ -43,8 +59,31 @@ impl View {
         })
     }
 
+    /// Camera on a sphere around the target: azimuth 0° = from −y (front), 90° = from +x
+    /// (right), counter-clockwise seen from above; elevation 90° = from above. `iso` is
+    /// azimuth 45°, elevation 35.26°.
+    pub fn from_angles(azimuth_deg: f64, elevation_deg: f64) -> View {
+        let (a, e) = (azimuth_deg.to_radians(), elevation_deg.clamp(-90.0, 90.0).to_radians());
+        let eye = DVec3::new(a.sin() * e.cos(), -a.cos() * e.cos(), e.sin());
+        let up = if e.cos() < 1e-6 {
+            // straight from above or below: y of the azimuth's front is up
+            DVec3::new(-a.sin(), a.cos(), 0.0) * e.sin().signum()
+        } else {
+            DVec3::Z
+        };
+        View::Custom { dir: -eye, up }
+    }
+
+    /// (azimuth, elevation) in degrees of the viewing direction (see [`View::from_angles`]).
+    pub fn angles(&self) -> (f64, f64) {
+        let eye = -self.basis().0.normalize();
+        let el = eye.z.clamp(-1.0, 1.0).asin().to_degrees();
+        let az = if eye.x.abs() < 1e-12 && eye.y.abs() < 1e-12 { 0.0 } else { eye.x.atan2(-eye.y).to_degrees() };
+        (az, el)
+    }
+
     /// (viewing direction, up)
-    fn basis(&self) -> (DVec3, DVec3) {
+    pub fn basis(&self) -> (DVec3, DVec3) {
         match *self {
             View::Iso => (DVec3::new(-1.0, 1.0, -1.0), DVec3::Z),
             View::Front => (DVec3::Y, DVec3::Z),
@@ -58,6 +97,29 @@ impl View {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Projection {
+    Ortho,
+    /// Vertical field of view (of the shorter image side) in degrees.
+    Perspective {
+        fov_deg: f64,
+    },
+}
+
+/// Section plane: removes the half space `(q − point) · normal > 0`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Section {
+    pub point: DVec3,
+    pub normal: DVec3,
+}
+
+impl Section {
+    /// Signed distance (positive = removed side).
+    pub fn dist(&self, q: DVec3) -> f64 {
+        (q - self.point).dot(self.normal.normalize_or_zero())
+    }
+}
+
 /// One mesh to draw.
 #[derive(Debug, Clone)]
 pub struct Item<'a> {
@@ -68,11 +130,13 @@ pub struct Item<'a> {
     pub color: [f32; 4],
     /// Colour of the mesh's edge lines; `None` draws no edges.
     pub edges: Option<[f32; 4]>,
+    /// With a section: close the cut with a cap (opaque solids).
+    pub cap: bool,
 }
 
 impl<'a> Item<'a> {
     pub fn new(mesh: &'a Mesh, color: [f32; 4]) -> Self {
-        Item { mesh, transform: DMat4::IDENTITY, color, edges: Some([0.15, 0.15, 0.18, 1.0]) }
+        Item { mesh, transform: DMat4::IDENTITY, color, edges: Some([0.15, 0.15, 0.18, 1.0]), cap: true }
     }
 
     pub fn with_transform(mut self, m: DMat4) -> Self {
@@ -82,6 +146,11 @@ impl<'a> Item<'a> {
 
     pub fn with_edges(mut self, c: Option<[f32; 4]>) -> Self {
         self.edges = c;
+        self
+    }
+
+    pub fn with_cap(mut self, cap: bool) -> Self {
+        self.cap = cap;
         self
     }
 }
@@ -94,12 +163,53 @@ pub struct Polyline {
     /// Width in output pixels.
     pub width: f32,
     pub on_top: bool,
+    /// Dashed (6 px on, 4 px off).
+    pub dashed: bool,
+}
+
+impl Polyline {
+    pub fn new(points: Vec<DVec3>, color: [f32; 4], width: f32) -> Self {
+        Polyline { points, color, width, on_top: false, dashed: false }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkerShape {
+    Diamond,
+    Dot,
+    Square,
+}
+
+/// A point marker of fixed screen size.
+#[derive(Debug, Clone)]
+pub struct Marker {
+    pub pos: DVec3,
+    pub shape: MarkerShape,
+    /// Half size in output pixels.
+    pub size: f32,
+    pub color: [f32; 4],
+    pub on_top: bool,
+}
+
+/// Text at a scene point (drawn after everything else; labels that would overlap an already
+/// placed one are tried at a few offsets and dropped if none fits).
+#[derive(Debug, Clone)]
+pub struct Label {
+    pub pos: DVec3,
+    pub text: String,
+    pub color: [f32; 4],
+    /// Offset of the text's top left corner from the projected point (output pixels).
+    pub offset: (f32, f32),
+    /// Higher first.
+    pub priority: i32,
 }
 
 #[derive(Debug, Clone, Default)]
 pub struct Scene<'a> {
     pub items: Vec<Item<'a>>,
     pub lines: Vec<Polyline>,
+    pub markers: Vec<Marker>,
+    pub labels: Vec<Label>,
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +225,21 @@ pub struct RenderOptions {
     pub margin: f64,
     /// Width of mesh edge lines in output pixels.
     pub edge_width: f32,
+    pub projection: Projection,
+    /// Look-at point (default: centre of the fitted geometry).
+    pub target: Option<DVec3>,
+    /// Bounds to fit (default: everything drawn).
+    pub fit: Option<(DVec3, DVec3)>,
+    /// Magnification after fitting.
+    pub zoom: f64,
+    /// Fixed scale in output pixels per mm at the target (overrides fitting; `zoom` still
+    /// applies).
+    pub scale: Option<f64>,
+    pub section: Option<Section>,
+    /// Colour of section caps.
+    pub cap_color: [f32; 4],
+    /// Text in the upper left corner.
+    pub title: Option<String>,
 }
 
 impl Default for RenderOptions {
@@ -128,8 +253,36 @@ impl Default for RenderOptions {
             supersample: 2,
             margin: 0.08,
             edge_width: 1.0,
+            projection: Projection::Ortho,
+            target: None,
+            fit: None,
+            zoom: 1.0,
+            scale: None,
+            section: None,
+            cap_color: [0.86, 0.36, 0.24, 1.0],
+            title: None,
         }
     }
+}
+
+/// The camera a rendering used (output pixels).
+#[derive(Debug, Clone, PartialEq)]
+pub struct CameraInfo {
+    pub projection: Projection,
+    /// Viewing direction (camera → scene), unit.
+    pub dir: DVec3,
+    pub up: DVec3,
+    pub right: DVec3,
+    pub target: DVec3,
+    /// Camera position (perspective); for orthographic views a point behind the scene.
+    pub eye: DVec3,
+    /// Output pixels per mm at the target.
+    pub scale: f64,
+    /// Visible size at the target in mm.
+    pub width_mm: f64,
+    pub height_mm: f64,
+    pub azimuth: f64,
+    pub elevation: f64,
 }
 
 /// 8-bit RGBA image.
@@ -176,19 +329,65 @@ struct Camera {
     right: DVec3,
     up: DVec3,
     dir: DVec3,
+    target: DVec3,
+    /// Supersampled pixels per mm at the target.
     scale: f64,
-    cx: f64,
-    cy: f64,
     w: f64,
     h: f64,
+    /// Perspective: distance eye → target.
+    dist: Option<f64>,
 }
 
 impl Camera {
-    /// Screen position (pixels, y down) and depth (larger = farther).
+    fn eye(&self) -> DVec3 {
+        self.target - self.dir * self.dist.unwrap_or(0.0)
+    }
+
+    /// Screen position (pixels, y down) and depth (larger = farther; linear in screen space,
+    /// near the target in mm along the viewing direction).
     fn project(&self, p: DVec3) -> (f64, f64, f64) {
-        let x = (p.dot(self.right) - self.cx) * self.scale + self.w / 2.0;
-        let y = self.h / 2.0 - (p.dot(self.up) - self.cy) * self.scale;
-        (x, y, p.dot(self.dir))
+        let v = p - self.target;
+        match self.dist {
+            None => (
+                v.dot(self.right) * self.scale + self.w / 2.0,
+                self.h / 2.0 - v.dot(self.up) * self.scale,
+                v.dot(self.dir),
+            ),
+            Some(d) => {
+                let zc = (d + v.dot(self.dir)).max(1e-9);
+                let f = self.scale * d / zc;
+                (v.dot(self.right) * f + self.w / 2.0, self.h / 2.0 - v.dot(self.up) * f, d - d * d / zc)
+            }
+        }
+    }
+
+    /// Depth (as [`Camera::project`]) where the ray through sample (sx, sy) meets `plane`.
+    fn plane_depth(&self, sx: f64, sy: f64, plane: &Section) -> Option<f64> {
+        let n = plane.normal.normalize_or_zero();
+        let (x, y) = ((sx - self.w / 2.0) / self.scale, (self.h / 2.0 - sy) / self.scale);
+        match self.dist {
+            None => {
+                let o = self.target + self.right * x + self.up * y;
+                let dn = self.dir.dot(n);
+                if dn.abs() < 1e-9 {
+                    return None;
+                }
+                Some((plane.point - o).dot(n) / dn)
+            }
+            Some(d) => {
+                let eye = self.eye();
+                let r = self.right * x + self.up * y + self.dir * d;
+                let dn = r.dot(n);
+                if dn.abs() < 1e-12 {
+                    return None;
+                }
+                let t = (plane.point - eye).dot(n) / dn;
+                if t <= 0.0 {
+                    return None;
+                }
+                Some(self.project(eye + r * t).2)
+            }
+        }
     }
 }
 
@@ -220,20 +419,25 @@ fn edge_fn(a: &SV, b: &SV, x: f64, y: f64) -> f64 {
     (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x)
 }
 
+/// Pixel range of a triangle's screen bounds.
+fn tri_box(t: &Target, v: &[SV; 3]) -> Option<(usize, usize, usize, usize)> {
+    let minx = v.iter().map(|p| p.x).fold(f64::INFINITY, f64::min).floor().max(0.0) as usize;
+    let maxx = v.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max).ceil().min(t.w as f64 - 1.0);
+    let miny = v.iter().map(|p| p.y).fold(f64::INFINITY, f64::min).floor().max(0.0) as usize;
+    let maxy = v.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max).ceil().min(t.h as f64 - 1.0);
+    if maxx < 0.0 || maxy < 0.0 {
+        return None;
+    }
+    Some((minx, maxx as usize, miny, maxy as usize))
+}
+
 /// Rasterises a triangle; `f(index, depth, shade)` decides what to do with each covered sample.
 fn raster_tri(t: &Target, v: [SV; 3], mut f: impl FnMut(usize, f64, f32)) {
     let area = edge_fn(&v[0], &v[1], v[2].x, v[2].y);
     if area.abs() < 1e-12 {
         return;
     }
-    let minx = v.iter().map(|p| p.x).fold(f64::INFINITY, f64::min).floor().max(0.0) as usize;
-    let maxx = v.iter().map(|p| p.x).fold(f64::NEG_INFINITY, f64::max).ceil().min(t.w as f64 - 1.0);
-    let miny = v.iter().map(|p| p.y).fold(f64::INFINITY, f64::min).floor().max(0.0) as usize;
-    let maxy = v.iter().map(|p| p.y).fold(f64::NEG_INFINITY, f64::max).ceil().min(t.h as f64 - 1.0);
-    if maxx < 0.0 || maxy < 0.0 {
-        return;
-    }
-    let (maxx, maxy) = (maxx as usize, maxy as usize);
+    let Some((minx, maxx, miny, maxy)) = tri_box(t, &v) else { return };
     for y in miny..=maxy {
         let py = y as f64 + 0.5;
         for x in minx..=maxx {
@@ -251,7 +455,56 @@ fn raster_tri(t: &Target, v: [SV; 3], mut f: impl FnMut(usize, f64, f32)) {
     }
 }
 
-fn draw_line(t: &mut Target, a: (f64, f64, f64), b: (f64, f64, f64), width: f64, c: [f32; 4], bias: f64, test: bool) {
+/// Like [`raster_tri`] (without shade) but with a top-left fill rule: a sample on an edge
+/// shared by two triangles is covered by exactly one of them (section cap parity).
+fn raster_tri_exact(t: &Target, v: [SV; 3], mut f: impl FnMut(usize, f64)) {
+    let mut v = v;
+    let mut area = edge_fn(&v[0], &v[1], v[2].x, v[2].y);
+    if area.abs() < 1e-12 {
+        return;
+    }
+    if area < 0.0 {
+        v.swap(1, 2);
+        area = -area;
+    }
+    let Some((minx, maxx, miny, maxy)) = tri_box(t, &v) else { return };
+    // y down: with positive area the triangle is clockwise on screen; an edge a→b is "top" if
+    // horizontal and going right, "left" if going up.
+    let top_left = |a: &SV, b: &SV| (a.y == b.y && b.x > a.x) || b.y < a.y;
+    let edges = [(1usize, 2usize), (2, 0), (0, 1)];
+    let tl: [bool; 3] = std::array::from_fn(|k| top_left(&v[edges[k].0], &v[edges[k].1]));
+    for y in miny..=maxy {
+        let py = y as f64 + 0.5;
+        for x in minx..=maxx {
+            let px = x as f64 + 0.5;
+            let mut w = [0.0; 3];
+            let mut inside = true;
+            for k in 0..3 {
+                let e = edge_fn(&v[edges[k].0], &v[edges[k].1], px, py);
+                if e < 0.0 || (e == 0.0 && !tl[k]) {
+                    inside = false;
+                    break;
+                }
+                w[k] = e / area;
+            }
+            if inside {
+                f(y * t.w + x, w[0] * v[0].z + w[1] * v[1].z + w[2] * v[2].z);
+            }
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn draw_line(
+    t: &mut Target,
+    a: (f64, f64, f64),
+    b: (f64, f64, f64),
+    width: f64,
+    c: [f32; 4],
+    bias: f64,
+    test: bool,
+    dash: Option<(f64, f64)>,
+) {
     let (dx, dy) = (b.0 - a.0, b.1 - a.1);
     let len = dx.hypot(dy);
     let steps = (len * 2.0).ceil().max(1.0) as usize;
@@ -259,6 +512,11 @@ fn draw_line(t: &mut Target, a: (f64, f64, f64), b: (f64, f64, f64), width: f64,
     let ri = r.ceil() as i64;
     for s in 0..=steps {
         let u = s as f64 / steps as f64;
+        if let Some((on, period)) = dash
+            && (u * len) % period > on
+        {
+            continue;
+        }
         let (x, y, z) = (a.0 + dx * u, a.1 + dy * u, a.2 + (b.2 - a.2) * u);
         for oy in -ri..=ri {
             for ox in -ri..=ri {
@@ -359,56 +617,199 @@ fn v3(p: &[f32]) -> DVec3 {
     DVec3::new(p[0] as f64, p[1] as f64, p[2] as f64)
 }
 
-/// Renders the scene.
-pub fn render(scene: &Scene, opts: &RenderOptions) -> Image {
-    let ss = opts.supersample.max(1) as usize;
-    let (w, h) = (opts.width.max(1) as usize * ss, opts.height.max(1) as usize * ss);
-    let (dir, up0) = opts.view.basis();
-    let dir = dir.normalize();
-    let right = dir.cross(up0).normalize_or(DVec3::X);
-    let up = right.cross(dir);
+/// Clips a convex polygon of (position, normal) against the planes (keeps `dist ≤ 0`).
+fn clip_poly(mut poly: Vec<(DVec3, DVec3)>, planes: &[Section]) -> Vec<(DVec3, DVec3)> {
+    for pl in planes {
+        if poly.is_empty() {
+            break;
+        }
+        let d: Vec<f64> = poly.iter().map(|(p, _)| pl.dist(*p)).collect();
+        if d.iter().all(|&x| x <= 0.0) {
+            continue;
+        }
+        let mut out = Vec::with_capacity(poly.len() + 2);
+        for i in 0..poly.len() {
+            let j = (i + 1) % poly.len();
+            let (a, b) = (poly[i], poly[j]);
+            if d[i] <= 0.0 {
+                out.push(a);
+            }
+            if (d[i] <= 0.0) != (d[j] <= 0.0) {
+                let u = d[i] / (d[i] - d[j]);
+                out.push((a.0 + (b.0 - a.0) * u, a.1 + (b.1 - a.1) * u));
+            }
+        }
+        poly = out;
+    }
+    poly
+}
 
-    // Fit: projected bounds of all geometry.
-    let mut lo = (f64::INFINITY, f64::INFINITY);
-    let mut hi = (f64::NEG_INFINITY, f64::NEG_INFINITY);
-    let mut zlo = f64::INFINITY;
-    let mut zhi = f64::NEG_INFINITY;
-    let mut add = |p: DVec3| {
-        let (x, y) = (p.dot(right), p.dot(up));
-        lo = (lo.0.min(x), lo.1.min(y));
-        hi = (hi.0.max(x), hi.1.max(y));
-        zlo = zlo.min(p.dot(dir));
-        zhi = zhi.max(p.dot(dir));
-    };
+/// Clips a segment against the planes (keeps `dist ≤ 0`).
+fn clip_segment(mut a: DVec3, mut b: DVec3, planes: &[Section]) -> Option<(DVec3, DVec3)> {
+    for pl in planes {
+        let (da, db) = (pl.dist(a), pl.dist(b));
+        match (da <= 0.0, db <= 0.0) {
+            (true, true) => {}
+            (false, false) => return None,
+            (true, false) => b = a + (b - a) * (da / (da - db)),
+            (false, true) => a = a + (b - a) * (da / (da - db)),
+        }
+    }
+    Some((a, b))
+}
+
+/// World points used for fitting (mesh vertices, lines, markers, or the given bounds).
+fn fit_points(scene: &Scene, opts: &RenderOptions) -> Vec<DVec3> {
+    if let Some((lo, hi)) = opts.fit {
+        return (0..8)
+            .map(|i| {
+                DVec3::new(
+                    if i & 1 == 0 { lo.x } else { hi.x },
+                    if i & 2 == 0 { lo.y } else { hi.y },
+                    if i & 4 == 0 { lo.z } else { hi.z },
+                )
+            })
+            .collect();
+    }
+    let mut pts = Vec::new();
     for it in &scene.items {
         for p in it.mesh.positions.chunks_exact(3) {
-            add(it.transform.transform_point3(v3(p)));
+            pts.push(it.transform.transform_point3(v3(p)));
         }
     }
     for l in &scene.lines {
-        l.points.iter().for_each(|p| add(*p));
+        pts.extend_from_slice(&l.points);
+    }
+    pts.extend(scene.markers.iter().map(|m| m.pos));
+    pts
+}
+
+/// Basis (dir, up, right) of a view.
+fn basis(view: &View) -> (DVec3, DVec3, DVec3) {
+    let (dir, up0) = view.basis();
+    let dir = dir.normalize();
+    let right = dir.cross(up0).normalize_or(DVec3::X);
+    let up = right.cross(dir);
+    (dir, up, right)
+}
+
+/// Fitted camera for supersampled size (w, h).
+fn camera(scene: &Scene, opts: &RenderOptions, w: f64, h: f64) -> Camera {
+    let (dir, up, right) = basis(&opts.view);
+    let pts = fit_points(scene, opts);
+    let empty = pts.is_empty();
+    let target = opts.target.unwrap_or_else(|| {
+        if empty {
+            return DVec3::ZERO;
+        }
+        let (mut lo, mut hi) = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
+        for p in &pts {
+            let q = DVec3::new(p.dot(right), p.dot(up), p.dot(dir));
+            lo = lo.min(q);
+            hi = hi.max(q);
+        }
+        let c = (lo + hi) / 2.0;
+        right * c.x + up * c.y + dir * c.z
+    });
+    let avail = (1.0 - 2.0 * opts.margin).clamp(0.1, 1.0);
+    let ss = opts.supersample.max(1) as f64;
+    let zoom = if opts.zoom.is_finite() && opts.zoom > 0.0 { opts.zoom } else { 1.0 };
+    match opts.projection {
+        Projection::Ortho => {
+            let (mut hx, mut hy) = (0.0f64, 0.0f64);
+            for p in &pts {
+                let v = *p - target;
+                hx = hx.max(v.dot(right).abs());
+                hy = hy.max(v.dot(up).abs());
+            }
+            let (hx, hy) = (hx.max(1e-9), hy.max(1e-9));
+            let fit = if empty { 1.0 } else { (w * avail / (2.0 * hx)).min(h * avail / (2.0 * hy)) };
+            let scale = opts.scale.map(|s| s * ss).unwrap_or(fit) * zoom;
+            Camera { right, up, dir, target, scale, w, h, dist: None }
+        }
+        Projection::Perspective { fov_deg } => {
+            let half = (fov_deg.clamp(1.0, 170.0) / 2.0).to_radians();
+            let r = pts.iter().map(|p| (*p - target).length()).fold(0.0, f64::max).max(1e-6);
+            let dist = r / half.sin() / avail;
+            let fit = (w.min(h) / 2.0) / (dist * half.tan());
+            let scale = opts.scale.map(|s| s * ss).unwrap_or(if empty { 1.0 } else { fit }) * zoom;
+            Camera { right, up, dir, target, scale, w, h, dist: Some(dist) }
+        }
+    }
+}
+
+/// Output pixels per mm at the target the fit would use for `opts` (without `scale`).
+pub fn fit_scale(scene: &Scene, opts: &RenderOptions) -> f64 {
+    let o = RenderOptions { scale: None, zoom: 1.0, supersample: 1, ..opts.clone() };
+    camera(scene, &o, opts.width.max(1) as f64, opts.height.max(1) as f64).scale
+}
+
+fn camera_info(cam: &Camera, opts: &RenderOptions, ss: f64) -> CameraInfo {
+    let scale = cam.scale / ss;
+    let eye = match cam.dist {
+        Some(_) => cam.eye(),
+        None => cam.target - cam.dir * (cam.w.max(cam.h) / cam.scale),
+    };
+    let (azimuth, elevation) = View::Custom { dir: cam.dir, up: cam.up }.angles();
+    CameraInfo {
+        projection: opts.projection,
+        dir: cam.dir,
+        up: cam.up,
+        right: cam.right,
+        target: cam.target,
+        eye,
+        scale,
+        width_mm: opts.width as f64 / scale,
+        height_mm: opts.height as f64 / scale,
+        azimuth,
+        elevation,
+    }
+}
+
+/// Renders the scene.
+pub fn render(scene: &Scene, opts: &RenderOptions) -> Image {
+    render_info(scene, opts).0
+}
+
+/// Renders the scene and returns the camera it used.
+pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
+    let ss = opts.supersample.max(1) as usize;
+    let (w, h) = (opts.width.max(1) as usize * ss, opts.height.max(1) as usize * ss);
+    let cam = camera(scene, opts, w as f64, h as f64);
+    let (dir, up, right) = (cam.dir, cam.up, cam.right);
+
+    let pts = fit_points(scene, &RenderOptions { fit: None, ..opts.clone() });
+    let (mut zlo, mut zhi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for p in &pts {
+        let z = cam.project(*p).2;
+        zlo = zlo.min(z);
+        zhi = zhi.max(z);
+    }
+    if zlo > zhi {
+        (zlo, zhi) = (0.0, 0.0);
     }
     let bg = [opts.background[0], opts.background[1], opts.background[2]];
     let mut t = Target { w, h, color: vec![bg; w * h], depth: vec![f64::INFINITY; w * h] };
-    let empty = lo.0 > hi.0;
-    let (sx, sy) = if empty { (1.0, 1.0) } else { ((hi.0 - lo.0).max(1e-9), (hi.1 - lo.1).max(1e-9)) };
-    let avail = (1.0 - 2.0 * opts.margin).clamp(0.1, 1.0);
-    let scale = ((w as f64 * avail) / sx).min((h as f64 * avail) / sy);
-    let cam = Camera {
-        right,
-        up,
-        dir,
-        scale,
-        cx: if empty { 0.0 } else { (lo.0 + hi.0) / 2.0 },
-        cy: if empty { 0.0 } else { (lo.1 + hi.1) / 2.0 },
-        w: w as f64,
-        h: h as f64,
-    };
-    let bias = ((zhi - zlo).abs() * 2e-3).max(1e-6) + 1.5 * ss as f64 / scale;
+    let bias = ((zhi - zlo).abs() * 2e-3).max(1e-6) + 1.5 * ss as f64 / cam.scale;
+
+    // Clip planes: the section and (perspective) the near plane.
+    let mut planes: Vec<Section> = Vec::new();
+    if let Some(s) = opts.section
+        && s.normal.length() > 1e-12
+    {
+        planes.push(s);
+    }
+    let near_plane = cam.dist.map(|d| Section { point: cam.eye() + dir * (d * 0.02), normal: -dir });
+    let mut all_planes = planes.clone();
+    all_planes.extend(near_plane);
 
     // Light from the upper left, slightly towards the viewer.
     let light = (-dir * 0.8 + up * 0.6 - right * 0.35).normalize();
     let shade = |n: DVec3| -> f32 { (0.38 + 0.62 * n.dot(light).max(0.0)) as f32 };
+    let sv = |p: DVec3, n: DVec3| {
+        let (x, y, z) = cam.project(p);
+        SV { x, y, z, shade: shade(n) }
+    };
 
     let mut transparent: Vec<Tri> = Vec::new();
     let mut opaque: Vec<Tri> = Vec::new();
@@ -420,28 +821,41 @@ pub fn render(scene: &Scene, opts: &RenderOptions) -> Image {
             let p: [DVec3; 3] =
                 std::array::from_fn(|k| it.transform.transform_point3(v3(&m.positions[tri[k] as usize * 3..])));
             let fnrm = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
-            // two-sided: make the normal face the camera
-            let flip = fnrm.dot(dir) > 0.0;
-            let v: [SV; 3] = std::array::from_fn(|k| {
-                let mut n = if has_n {
+            let vn: [DVec3; 3] = std::array::from_fn(|k| {
+                if has_n {
                     nm.transform_vector3(v3(&m.normals[tri[k] as usize * 3..])).normalize_or(fnrm)
                 } else {
                     fnrm
-                };
-                if (n.dot(dir) > 0.0) != flip || n == DVec3::ZERO {
-                    n = fnrm;
                 }
-                if flip {
-                    n = -n;
-                }
-                let (x, y, z) = cam.project(p[k]);
-                SV { x, y, z, shade: shade(n) }
             });
-            let t = Tri { v, color: it.color, item: item as u32 };
-            if it.color[3] < 0.999 {
-                transparent.push(t);
-            } else {
-                opaque.push(t);
+            let poly = clip_poly((0..3).map(|k| (p[k], vn[k])).collect(), &all_planes);
+            if poly.len() < 3 {
+                continue;
+            }
+            for f in 1..poly.len() - 1 {
+                let q = [poly[0], poly[f], poly[f + 1]];
+                // two-sided: make the normal face the camera (per view ray in perspective)
+                let v: [SV; 3] = std::array::from_fn(|k| {
+                    let ray = match cam.dist {
+                        Some(_) => (q[k].0 - cam.eye()).normalize_or(dir),
+                        None => dir,
+                    };
+                    let flip = fnrm.dot(ray) > 0.0;
+                    let mut n = q[k].1;
+                    if (n.dot(ray) > 0.0) != flip || n == DVec3::ZERO {
+                        n = fnrm;
+                    }
+                    if flip {
+                        n = -n;
+                    }
+                    sv(q[k].0, n)
+                });
+                let t = Tri { v, color: it.color, item: item as u32 };
+                if it.color[3] < 0.999 {
+                    transparent.push(t);
+                } else {
+                    opaque.push(t);
+                }
             }
         }
     }
@@ -460,32 +874,145 @@ pub fn render(scene: &Scene, opts: &RenderOptions) -> Image {
             }
         }
     }
+
+    // Section caps (stencil principle, see the module docs) and the cut contour.
+    let mut contour: Vec<(DVec3, DVec3, [f32; 4])> = Vec::new();
+    if let Some(sec) = planes.first().copied() {
+        let pd: Vec<f64> = (0..w * h)
+            .map(|i| cam.plane_depth((i % w) as f64 + 0.5, (i / w) as f64 + 0.5, &sec).unwrap_or(f64::NAN))
+            .collect();
+        let n = sec.normal.normalize();
+        let cap_n = if n.dot(dir) > 0.0 { -n } else { n };
+        // caps stay bright from every side (they are the point of a section)
+        let cs = 0.72 + 0.28 * cap_n.dot(light).max(0.0) as f32;
+        let cc = opts.cap_color;
+        let mut parity = vec![false; w * h];
+        let oh_cap = h / ss + 7;
+        for (ci, it) in scene.items.iter().filter(|i| i.cap && i.color[3] >= 0.999).enumerate() {
+            parity.iter_mut().for_each(|p| *p = false);
+            let m = &it.mesh;
+            let mut any = false;
+            for tri in m.indices.chunks_exact(3) {
+                let p: [DVec3; 3] =
+                    std::array::from_fn(|k| it.transform.transform_point3(v3(&m.positions[tri[k] as usize * 3..])));
+                let d: [f64; 3] = std::array::from_fn(|k| sec.dist(p[k]));
+                // contour: the triangle crosses the plane
+                let mut cut = Vec::new();
+                for (a, b) in [(0, 1), (1, 2), (2, 0)] {
+                    if (d[a] <= 0.0) != (d[b] <= 0.0) {
+                        cut.push(p[a] + (p[b] - p[a]) * (d[a] / (d[a] - d[b])));
+                    }
+                }
+                if cut.len() == 2 {
+                    any = true;
+                    if let Some(ec) = it.edges {
+                        contour.push((cut[0], cut[1], ec));
+                    }
+                }
+                let poly = clip_poly(p.iter().map(|q| (*q, DVec3::ZERO)).collect(), near_plane.as_slice());
+                if poly.len() < 3 {
+                    continue;
+                }
+                for f in 1..poly.len() - 1 {
+                    let v = [sv(poly[0].0, DVec3::Z), sv(poly[f].0, DVec3::Z), sv(poly[f + 1].0, DVec3::Z)];
+                    raster_tri_exact(&t, v, |i, z| {
+                        if z < pd[i] {
+                            parity[i] = !parity[i];
+                        }
+                    });
+                }
+            }
+            if !any {
+                continue;
+            }
+            for i in 0..w * h {
+                if parity[i] && pd[i] < t.depth[i] {
+                    t.depth[i] = pd[i];
+                    let (x, y) = (i % w / ss, i / w / ss);
+                    // hatching, alternating direction per capped item (neighbouring parts)
+                    let hatch = if ci % 2 == 0 { x + y } else { x + 7 * oh_cap - y };
+                    let k = if hatch % 7 == 0 { 0.72 } else { 1.0 };
+                    t.color[i] = [cc[0] * cs * k, cc[1] * cs * k, cc[2] * cs * k];
+                }
+            }
+        }
+    }
+
     // Edges of opaque meshes (depth tested).
     let lw = opts.edge_width as f64 * ss as f64;
+    let draw_edges = |t: &mut Target, it: &Item, ec: [f32; 4]| {
+        for seg in it.mesh.edge_segments.chunks_exact(6) {
+            let a = it.transform.transform_point3(v3(&seg[0..3]));
+            let b = it.transform.transform_point3(v3(&seg[3..6]));
+            if let Some((a, b)) = clip_segment(a, b, &all_planes) {
+                draw_line(t, cam.project(a), cam.project(b), lw, ec, bias, true, None);
+            }
+        }
+    };
     for it in scene.items.iter().filter(|i| i.color[3] >= 0.999) {
         if let Some(ec) = it.edges {
-            for seg in it.mesh.edge_segments.chunks_exact(6) {
-                let a = cam.project(it.transform.transform_point3(v3(&seg[0..3])));
-                let b = cam.project(it.transform.transform_point3(v3(&seg[3..6])));
-                draw_line(&mut t, a, b, lw, ec, bias, true);
-            }
+            draw_edges(&mut t, it, ec);
+        }
+    }
+    for (a, b, c) in &contour {
+        if let Some((a, b)) = clip_segment(*a, *b, near_plane.as_slice()) {
+            draw_line(&mut t, cam.project(a), cam.project(b), lw, *c, bias, true, None);
         }
     }
     blend_transparent(&mut t, &transparent, (zhi - zlo).abs());
     for it in scene.items.iter().filter(|i| i.color[3] < 0.999) {
         if let Some(ec) = it.edges {
             let ec = [ec[0], ec[1], ec[2], ec[3] * it.color[3].max(0.3)];
-            for seg in it.mesh.edge_segments.chunks_exact(6) {
-                let a = cam.project(it.transform.transform_point3(v3(&seg[0..3])));
-                let b = cam.project(it.transform.transform_point3(v3(&seg[3..6])));
-                draw_line(&mut t, a, b, lw, ec, bias, true);
-            }
+            draw_edges(&mut t, it, ec);
         }
     }
+    let dash = Some((6.0 * ss as f64, 10.0 * ss as f64));
     for l in &scene.lines {
         for w2 in l.points.windows(2) {
-            let (a, b) = (cam.project(w2[0]), cam.project(w2[1]));
-            draw_line(&mut t, a, b, l.width as f64 * ss as f64, l.color, bias, !l.on_top);
+            let Some((a, b)) = clip_segment(w2[0], w2[1], near_plane.as_slice()) else { continue };
+            let (a, b) = (cam.project(a), cam.project(b));
+            draw_line(
+                &mut t,
+                a,
+                b,
+                l.width as f64 * ss as f64,
+                l.color,
+                bias,
+                !l.on_top,
+                if l.dashed { dash } else { None },
+            );
+        }
+    }
+    for mk in &scene.markers {
+        if near_plane.is_some_and(|n| n.dist(mk.pos) > 0.0) {
+            continue;
+        }
+        let (x, y, z) = cam.project(mk.pos);
+        let s = mk.size as f64 * ss as f64;
+        let si = s.ceil() as i64 + 1;
+        let outline = [mk.color[0] * 0.35, mk.color[1] * 0.35, mk.color[2] * 0.35, mk.color[3]];
+        for oy in -si..=si {
+            for ox in -si..=si {
+                let (qx, qy) = (x + ox as f64, y + oy as f64);
+                if qx < 0.0 || qy < 0.0 || qx >= w as f64 || qy >= h as f64 {
+                    continue;
+                }
+                let (dx, dy) = ((ox as f64).abs(), (oy as f64).abs());
+                let r = match mk.shape {
+                    MarkerShape::Diamond => dx + dy,
+                    MarkerShape::Dot => dx.hypot(dy),
+                    MarkerShape::Square => dx.max(dy),
+                };
+                if r > s {
+                    continue;
+                }
+                let i = qy as usize * w + qx as usize;
+                if !mk.on_top && z > t.depth[i] + bias {
+                    continue;
+                }
+                let c = if r > s - 1.2 * ss as f64 { outline } else { mk.color };
+                t.blend(i, [c[0], c[1], c[2]], c[3]);
+            }
         }
     }
     if opts.axes {
@@ -498,7 +1025,7 @@ pub fn render(scene: &Scene, opts: &RenderOptions) -> Image {
         order.sort_by(|a, b| b.0.dot(dir).partial_cmp(&a.0.dot(dir)).unwrap_or(std::cmp::Ordering::Equal));
         for (ax, c) in order {
             let e = (o.0 + ax.dot(right) * len, o.1 - ax.dot(up) * len, 0.0);
-            draw_line(&mut t, o, e, 2.0 * ss as f64, *c, 0.0, false);
+            draw_line(&mut t, o, e, 2.0 * ss as f64, *c, 0.0, false, None);
         }
     }
 
@@ -521,5 +1048,40 @@ pub fn render(scene: &Scene, opts: &RenderOptions) -> Image {
             rgba[(y * ow + x) * 4..(y * ow + x) * 4 + 4].copy_from_slice(&px);
         }
     }
-    Image { width: ow as u32, height: oh as u32, rgba }
+    let mut img = Image { width: ow as u32, height: oh as u32, rgba };
+
+    // Labels (output pixels), highest priority first, without overlaps.
+    let mut placed: Vec<(i64, i64, i64, i64)> = Vec::new();
+    if let Some(title) = &opts.title {
+        let b = img.draw_label(8, 6, title, TextSize::Large, [0.1, 0.1, 0.12, 1.0]);
+        placed.push((b.0, b.1, b.0 + b.2 as i64, b.1 + b.3 as i64));
+    }
+    let mut labels: Vec<&Label> = scene.labels.iter().collect();
+    labels.sort_by_key(|l| std::cmp::Reverse(l.priority));
+    for l in labels {
+        if near_plane.is_some_and(|n| n.dist(l.pos) > 0.0) {
+            continue;
+        }
+        let (x, y, _) = cam.project(l.pos);
+        let (x, y) = (x / ss as f64, y / ss as f64);
+        let (tw, th) = text_size(&l.text, TextSize::Small);
+        let (tw, th) = (tw as i64 + 4, th as i64 + 2);
+        let (ox, oy) = (l.offset.0 as i64, l.offset.1 as i64);
+        let cands = [(ox, oy), (ox, -oy - th), (-ox - tw, oy), (-ox - tw, -oy - th), (ox, oy + th), (ox, -oy - 2 * th)];
+        for (dx, dy) in cands {
+            let (bx, by) = (x as i64 + dx, y as i64 + dy);
+            let r = (bx - 2, by - 1, bx + tw - 2, by + th - 1);
+            if r.0 < 0 || r.1 < 0 || r.2 > ow as i64 || r.3 > oh as i64 {
+                continue;
+            }
+            if placed.iter().any(|p| r.0 < p.2 && p.0 < r.2 && r.1 < p.3 && p.1 < r.3) {
+                continue;
+            }
+            img.draw_label(bx, by, &l.text, TextSize::Small, l.color);
+            placed.push(r);
+            break;
+        }
+    }
+    let info = camera_info(&cam, opts, ss as f64);
+    (img, info)
 }

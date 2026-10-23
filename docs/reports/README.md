@@ -16,9 +16,10 @@ landen in `reports/tmp/` (nicht eingecheckt). Das PDF druckt
 | 5 | [`05-step-export`](05-step-export/report.pdf) | 23.10.2026, `ff21522` | STEP-Export (AP242/AP214, eigener Writer `cad-step`), Prüfung mit OpenCASCADE 46/46, Kernel-Vergleich SMLib ↔ solidcore (`cad diff-kernels`) | `python3 tools/report/report5.py --run` (ohne `--run`: nur HTML/PDF) |
 | 6 | [`06-projekte-bauteile`](06-projekte-bauteile/report.pdf) | 23.10.2026, `e4ee224` | `include`/`use` (gegen OpenSCAD), Projekte mit Tabs, Datei-IDs in Spans, Bauteile mit Export je Bauteil, `k[i]`; 9 neue Szenarien, 274 Rust-Tests | `cd web && pnpm test:report6` |
 | 7 | [`07-kernel-variabler-radius`](07-kernel-variabler-radius/report.pdf) | 23.10.2026, `19f2e47` | Kernel-Korrekturen F1–F4 (shell verrundeter Körper, `surface` 2×2/3×3, Naht- und Polkanten, `union(chamfer)`), SMLib-Patch 0001, variabler Radius (`cad_ir::Law`), nativ ↔ Wasm; 298 Rust-Tests, 70 Playwright, STEP 47/47 | Testläufe nach `reports/tmp/report7/` (Kopf von `tools/report/report7.mjs`), dann `node tools/report/report7.mjs` und `print-pdf.mjs` |
+| 8 | [`08-cli-agenten`](08-cli-agenten/report.pdf) | 23.10.2026, `8c9876a` | CLI für Agenten: `outline`, `render` (Kontaktbogen, freie Kamera, Auswahl, Überlagerungen, Schnitt mit Kappe, Röntgen), `measure` (Abstände, Volumen, Kollisionen, Bauteilabstand), `watch`, `set`, reservierter UI-Einstieg; Laufzeiten, Fallstudie „Agent entwickelt ein Teil nur mit der CLI“; 318 Rust-Tests | Testläufe nach `reports/tmp/report8/` (Kopf von `tools/report/report8.mjs`), dann `node tools/report/report8.mjs` und `print-pdf.mjs` |
 
 Voraussetzungen der Generatoren (lokal): SMLib-Quellen (`smlib/fetch.sh`), nativ gebaute
 Bibliotheken (`SMLIB_PREBUILT`), emsdk 6.0.13, wasm-bindgen-cli in der Version aus
 `Cargo.lock`, OpenSCAD 2021.01 (Berichte 1, 6), ein venv mit `cadquery-ocp==8.0.1.1.0`
-(Berichte 5–7), Chromium aus Playwright 1.56.1. Die Berichte laufen nicht in CI; die
+(Berichte 5–7), Python 3 mit Pillow (Bericht 8, Pixelzählung), Chromium aus Playwright 1.56.1. Die Berichte laufen nicht in CI; die
 Prüfungen, auf denen sie beruhen, schon (`.github/workflows/`).

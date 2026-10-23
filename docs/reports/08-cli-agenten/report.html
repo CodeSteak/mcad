@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Testbericht 8 – CLI für Agenten</title>
+<style>
+  @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
+  :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
+  * { box-sizing: border-box; }
+  body { font: 9.6pt/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); margin: 0; }
+  main { max-width: 184mm; margin: 0 auto; }
+  h1 { font-size: 18pt; margin: 0 0 2mm; }
+  h2 { font-size: 13pt; margin: 7mm 0 3mm; border-bottom: 1px solid var(--border); padding-bottom: 1mm; break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p { margin: 1.5mm 0; }
+  .meta { color: var(--muted); margin-bottom: 4mm; }
+  .summary { display: flex; flex-wrap: wrap; gap: 2.5mm; margin: 3mm 0; }
+  .summary div { flex: 1 1 28mm; border: 1px solid var(--border); border-radius: 2mm; padding: 2mm; font-size: 8.4pt; }
+  .summary b { display: block; font-size: 12pt; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 8.2pt; }
+  th, td { border: 1px solid var(--border); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
+  th { background: var(--head); font-weight: 600; }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 7.6pt; }
+  pre { margin: 0 0 1.5mm; padding: 1.4mm 2mm; background: #f6f8fa; border: 1px solid var(--border); border-radius: 1mm; white-space: pre-wrap; word-break: break-word; }
+  pre.call { background: #eef3fb; font-weight: 600; }
+  pre.call .t { font-weight: 400; color: var(--muted); float: right; }
+  .cmd { margin: 1.5mm 0; }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm; margin: 2mm 0; align-items: start; }
+  .pair > div { min-width: 0; break-inside: avoid; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1.5mm; }
+  figure { margin: 0 0 2mm; break-inside: avoid; }
+  figure img { max-width: 100%; max-height: 100mm; border: 1px solid var(--border); display: block; }
+  figcaption { font-size: 7.6pt; color: var(--muted); margin-top: 0.6mm; }
+  figure.missing { border: 1px dashed var(--border); padding: 4mm; }
+  .lbl { font-size: 7.4pt; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 1.5mm 0 0.5mm; }
+  .small { font-size: 8.4pt; color: var(--muted); }
+  .step { border: 1px solid var(--border); border-radius: 2mm; padding: 2.5mm 3mm; margin: 3mm 0; }
+  .step h3 { margin-top: 0; }
+  ul { margin: 1mm 0 2mm 5mm; padding: 0; }
+  li { margin: 0.5mm 0; }
+  tr, td { break-inside: avoid; }
+  .ok { color: var(--ok); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+<h1>Testbericht 8 – CLI für Agenten</h1>
+<div class="meta">cad-cli, cad-render, cad-session · 23.10.2026 · Branch worktree-agent-a1d075a147b8bbdd0 · Commit 8c9876a · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 Kerne (Intel(R) Xeon(R) Processor @ 2.10GHz)</div>
+
+<div class="summary">
+  <div>cargo test --workspace<b class="ok">318 / 318</b>0 ignoriert</div>
+  <div>neue Tests<b>20</b>agent.rs, features.rs, geom</div>
+  <div>cargo clippy -D warnings<b class="ok">sauber</b></div>
+  <div>cargo fmt --check<b class="ok">sauber</b></div>
+  <div>render je Aufruf<b>1,10 s</b>max. (2 Läufe × 3 Dateien)</div>
+  <div>watch-Lauf<b>30 ms</b>Kommentar, alles aus dem Cache</div>
+</div>
+
+<h2>Umfang</h2>
+<p>Die CLI <code>cad</code> ist so erweitert, dass ein Agent (z. B. Claude Code) Modelle ganz ohne UI entwickeln und prüfen kann – allein oder während ein Mensch dieselben Dateien in der UI bearbeitet. Neu:</p>
+<table>
+<tr><th>Befehl/Option</th><th>Zweck</th></tr>
+<tr><td><code>cad outline</code></td><td>Übersicht eines Projekts in einem Aufruf</td></tr>
+<tr><td><code>render --views</code></td><td>Kontaktbogen mit beschrifteten Teilbildern gleicher Skalierung</td></tr>
+<tr><td><code>render --azimuth/--elevation/--zoom/--target/--fit/--perspective</code></td><td>Freie Kamera</td></tr>
+<tr><td><code>render --part/--line (mehrfach)/--node/--only</code></td><td>Auswahl, kombinierbar mit <code>--module</code>, <code>-D</code></td></tr>
+<tr><td><code>render --show grids,anchors,handles,edges,labels,bbox,dims</code></td><td>Überlagerungen</td></tr>
+<tr><td><code>render --section/--section-plane/--section-flip</code>, <code>--xray</code></td><td>Schnitt mit gefüllter Kappe, Röntgen</td></tr>
+<tr><td><code>cad measure</code></td><td>Abstände (Anker, Rasterpunkte, Koordinaten), Hülle, Volumen, Fläche, Kollisionen, Bauteilabstand</td></tr>
+<tr><td><code>cad watch</code></td><td>Neu auswerten bei Dateiänderung, eine JSON-Zeile je Lauf, optional Bild</td></tr>
+<tr><td><code>cad set</code></td><td>Standardwert oder Literal über die Engine ändern, geprüft, atomar, <code>--dry-run</code></td></tr>
+<tr><td><code>cad DATEI.scad</code>, <code>cad</code></td><td>UI-Einstieg reserviert (Exit 2 mit Meldung), ohne Argumente Hilfe</td></tr>
+</table>
+<p>Jeder Befehl hat <code>--json</code> mit festem, versioniertem Schema (<code>schema_version</code> 1, vollständig im Kopf von <code>crates/cad-cli/src/main.rs</code>, Kurzfassung im Skill <code>.claude/skills/cad-cli/SKILL.md</code>) und die bisherigen Exit-Codes (0 ok, 1 Modellfehler, 2 Aufruf, 3 Kernel). Empfohlener Ablauf für Agenten: <b>outline → editieren → check → render --views all --show grids,anchors → inspect/measure → export</b>. Beschriftungen zeichnet <code>cad-render</code> mit einer eingebetteten Bitmap-Schrift (DejaVu Sans Mono, erzeugt von <code>tools/font/gen-font.py</code>), ohne neue Laufzeitabhängigkeit.</p>
+
+<h2>1 cad outline</h2>
+<p>Ein Aufruf liefert die Struktur eines Projekts: Module mit Datei:Zeile, Parametern (Standardwert, geratener Typ), Raster und Anker je Modul (mit den Standardwerten ausgewertet, Ausdrucksebenen mit Ausdruck und Wert), Funktionen, Variablen der obersten Ebene mit Werten, benannte Instanzen und Bauteile (Hülle, Volumen), <code>include</code>/<code>use</code> und die Diagnosenanzahl. <code>--no-kernel</code> lässt Hüllen und Volumen weg.</p>
+<div class="cmd"><pre class="call">$ cad outline examples/projekt-gehaeuse/gehaeuse.scad<span class="t">  275 ms, Exit 0</span></pre><pre>examples/projekt-gehaeuse/gehaeuse.scad: 0 Fehler, 0 Warnungen
+Dateien:
+  include &lt;konstanten.scad&gt;  gehaeuse.scad:3
+  use &lt;lib/teile.scad&gt;  gehaeuse.scad:4
+Module:
+  schraubdom(h = 10: Zahl)  lib/teile.scad:6–12
+    Anker: oben = [0, 0, 10] dir [0, 0, 1] (Z.11)
+  gehaeuse(w = 60: Zahl, d = 40: Zahl, h = 25: Zahl, t = 2: Zahl)  lib/teile.scad:14–30
+    Raster g (Z.15): x: links = 0, innen_l = 2, innen_r = w - t → 58, rechts = 60; y: vorne = 0, innen_v = 2, innen_h = d - t → 38, hinten = 40; z: boden = 0, innen_b = 2, oben = 25
+    Anker: deckel_mitte = [2, 2, 25] dir [0, 0, 1] (Z.29)
+  deckel(w = 60: Zahl, d = 40: Zahl, t = 2: Zahl)  lib/teile.scad:32–35
+Variablen:
+  breite = 60  konstanten.scad:2
+  tiefe = 40  konstanten.scad:3
+  hoehe = 25  konstanten.scad:4
+  wand = 2  konstanten.scad:5
+  abstand = 10  konstanten.scad:6
+Benannte Instanzen:
+  gehaeuse: gehaeuse  Z.6  Bauteil, Hülle [0, 0, 0]–[60, 40, 25], Volumen 15474.7326 mm³
+  dom[0]: schraubdom  Z.27
+  dom[1]: schraubdom  Z.27
+  dom[2]: schraubdom  Z.27
+  dom[3]: schraubdom  Z.27
+  deckel: deckel  Z.7  Bauteil, Hülle [0, 50, 0]–[60, 90, 5], Volumen 10738.08 mm³
+Anker: gehaeuse.deckel_mitte = [2, 2, 25] dir [0, 0, 1], dom[0].oben = [5, 5, 21] dir [0, 0, 1], dom[1].oben = [55, 5, 21] dir [0, 0, 1], dom[2].oben = [5, 35, 21] dir [0, 0, 1], dom[3].oben = [55, 35, 21] dir [0, 0, 1]
+Gesamt: Hülle [0, 0, 0]–[60, 90, 25] (60 × 90 × 25 mm), 33 Knoten</pre></div>
+<div class="cmd"><pre class="call">$ cad outline crates/cad-cli/tests/data/gehaeuse.scad --json<span class="t">  45 ms, Exit 0</span></pre><div class="lbl">JSON (Auszug: modules, parts, counts)</div><pre>{
+  &quot;modules&quot;: [
+    {
+      &quot;anchors&quot;: [
+        {&quot;dir&quot;: null, &quot;line&quot;: 15, &quot;name&quot;: &quot;ecke&quot;, &quot;point&quot;: [40, 30, 20]},
+        {&quot;dir&quot;: [0, 0, 1], &quot;line&quot;: 16, &quot;name&quot;: &quot;oben&quot;, &quot;point&quot;: [0, 0, 20]}
+      ],
+      &quot;end_line&quot;: 17,
+      &quot;errors_with_defaults&quot;: 0,
+      &quot;file&quot;: &quot;gehaeuse.scad&quot;,
+      &quot;grids&quot;: [
+        {
+          &quot;file&quot;: &quot;gehaeuse.scad&quot;,
+          &quot;line&quot;: 4,
+          &quot;name&quot;: &quot;g&quot;,
+          &quot;planes&quot;: [
+            {&quot;axis&quot;: &quot;x&quot;, &quot;expr&quot;: &quot;0&quot;, &quot;kind&quot;: &quot;literal&quot;, &quot;name&quot;: &quot;links&quot;, &quot;value&quot;: 0},
+            {&quot;axis&quot;: &quot;x&quot;, &quot;expr&quot;: &quot;t&quot;, &quot;kind&quot;: &quot;literal&quot;, &quot;name&quot;: &quot;innen_l&quot;, &quot;value&quot;: 3},
+            {&quot;axis&quot;: &quot;x&quot;, &quot;expr&quot;: &quot;w - t&quot;, &quot;kind&quot;: &quot;expression&quot;, &quot;name&quot;: &quot;innen_r&quot;, &quot;value&quot;: 37},
+            &quot;… (5 weitere)&quot;
+          ]
+        }
+      ],
+      &quot;line&quot;: 3,
+      &quot;name&quot;: &quot;gehaeuse&quot;,
+      &quot;params&quot;: [
+        {&quot;default&quot;: &quot;40&quot;, &quot;default_value&quot;: 40, &quot;name&quot;: &quot;w&quot;, &quot;type&quot;: &quot;number&quot;},
+        {&quot;default&quot;: &quot;30&quot;, &quot;default_value&quot;: 30, &quot;name&quot;: &quot;d&quot;, &quot;type&quot;: &quot;number&quot;},
+        {&quot;default&quot;: &quot;20&quot;, &quot;default_value&quot;: 20, &quot;name&quot;: &quot;h&quot;, &quot;type&quot;: &quot;number&quot;},
+        &quot;… (1 weitere)&quot;
+      ],
+      &quot;path&quot;: [],
+      &quot;qualified&quot;: &quot;gehaeuse&quot;
+    },
+    {
+      &quot;anchors&quot;: [],
+      &quot;end_line&quot;: 19,
+      &quot;errors_with_defaults&quot;: 0,
+      &quot;file&quot;: &quot;gehaeuse.scad&quot;,
+      &quot;grids&quot;: [],
+      &quot;line&quot;: 19,
+      &quot;name&quot;: &quot;deckel&quot;,
+      &quot;params&quot;: [],
+      &quot;path&quot;: [],
+      &quot;qualified&quot;: &quot;deckel&quot;
+    }
+  ],
+  &quot;parts&quot;: [
+    {
+      &quot;bounds&quot;: {&quot;max&quot;: [60, 30, 20], &quot;min&quot;: [0, 0, 0], &quot;size&quot;: [60, 30, 20]},
+      &quot;line&quot;: 21,
+      &quot;module&quot;: &quot;gehaeuse&quot;,
+      &quot;name&quot;: &quot;k&quot;,
+      &quot;node&quot;: 1,
+      &quot;volume&quot;: 8460
+    }
+  ],
+  &quot;counts&quot;: {&quot;errors&quot;: 0, &quot;modules&quot;: 2, &quot;nodes&quot;: 12, &quot;parts&quot;: 1, &quot;warnings&quot;: 0}
+}</pre></div>
+<h2>2 cad render: Kontaktbogen</h2>
+<p><code>--views iso,front,top,right</code> (oder <code>all</code>) setzt beschriftete Teilbilder zu einem Bild zusammen. Alle Teilbilder haben dieselbe Skalierung (px/mm) und denselben Blickpunkt (Mitte des Modells), damit Größen zwischen den Ansichten vergleichbar sind; <code>--size</code> ist die Gesamtgröße. Das JSON nennt je Teilbild Lage und Kamera.</p>
+<div class="cmd"><pre class="call">$ cad render crates/cad-cli/tests/data/gehaeuse.scad -o docs/reports/08-cli-agenten/img/bogen.png --module gehaeuse --views all --show &quot;grids,anchors,labels,dims&quot; --size 1500x1100 --json<span class="t">  166 ms, Exit 0</span></pre><div class="lbl">JSON (Auszug: width, height, views, overlays)</div><pre>{
+  &quot;width&quot;: 1500,
+  &quot;height&quot;: 1100,
+  &quot;views&quot;: [
+    {
+      &quot;camera&quot;: {
+        &quot;azimuth&quot;: 45,
+        &quot;dir&quot;: [-0.5774, 0.5774, -0.5774],
+        &quot;elevation&quot;: 35.2644,
+        &quot;eye&quot;: [67.3148, -32.3148, 57.3148],
+        &quot;fov_deg&quot;: null,
+        &quot;height_mm&quot;: 59.7425,
+        &quot;projection&quot;: &quot;ortho&quot;,
+        &quot;right&quot;: [0.7071, 0.7071, 0],
+        &quot;scale_px_per_mm&quot;: 9.0053,
+        &quot;target&quot;: [20, 15, 10],
+        &quot;up&quot;: [-0.4082, 0.4082, 0.8165],
+        &quot;width_mm&quot;: 81.9516
+      },
+      &quot;height&quot;: 538,
+      &quot;name&quot;: &quot;iso&quot;,
+      &quot;width&quot;: 738,
+      &quot;x&quot;: 8,
+      &quot;y&quot;: 8
+    },
+    {
+      &quot;camera&quot;: {
+        &quot;azimuth&quot;: 0,
+        &quot;dir&quot;: [0, 1, 0],
+        &quot;elevation&quot;: 0,
+        &quot;eye&quot;: [20, -66.9516, 10],
+        &quot;fov_deg&quot;: null,
+        &quot;height_mm&quot;: 59.7425,
+        &quot;projection&quot;: &quot;ortho&quot;,
+        &quot;right&quot;: [1, 0, 0],
+        &quot;scale_px_per_mm&quot;: 9.0053,
+        &quot;target&quot;: [20, 15, 10],
+        &quot;up&quot;: [0, 0, 1],
+        &quot;width_mm&quot;: 81.9516
+      },
+      &quot;height&quot;: 538,
+      &quot;name&quot;: &quot;front&quot;,
+      &quot;width&quot;: 738,
+      &quot;x&quot;: 754,
+      &quot;y&quot;: 8
+    },
+    {
+      &quot;camera&quot;: {
+        &quot;azimuth&quot;: 0,
+        &quot;dir&quot;: [0, 0, -1],
+        &quot;elevation&quot;: 90,
+        &quot;eye&quot;: [20, 15, 91.9516],
+        &quot;fov_deg&quot;: null,
+        &quot;height_mm&quot;: 59.7425,
+        &quot;projection&quot;: &quot;ortho&quot;,
+        &quot;right&quot;: [1, 0, 0],
+        &quot;scale_px_per_mm&quot;: 9.0053,
+        &quot;target&quot;: [20, 15, 10],
+        &quot;up&quot;: [0, 1, 0],
+        &quot;width_mm&quot;: 81.9516
+… (11 Zeilen mehr)</pre></div><figure><img src="img/bogen.png"><figcaption>Spec-Beispiel gehaeuse im Modulkontext: Raster g mit Ebenennamen und Rasterpunkten g[a,b,c], Anker als Rauten mit Richtungspfeil, Maße B/T/H.</figcaption></figure>
+<div class="cmd"><pre class="call">$ cad render examples/projekt-gehaeuse/gehaeuse.scad -o docs/reports/08-cli-agenten/img/bogen-projekt.png --views &quot;iso,front,top,right&quot; --show &quot;anchors,labels&quot; --size 1500x1100 --json<span class="t">  656 ms, Exit 0</span></pre></div><figure><img src="img/bogen-projekt.png"><figcaption>Projekt aus drei Dateien im Dateikontext: Anker der benannten Instanzen (gehaeuse.deckel_mitte, dom[i].oben) und Bauteilnamen.</figcaption></figure>
+<h2>3 cad render: freie Kamera und Auswahl</h2>
+<p>Kamera: <code>--azimuth</code> (0° von vorn/−y, 90° von rechts/+x), <code>--elevation</code> (90° von oben), <code>--zoom</code>, <code>--target x,y,z</code>, <code>--fit all|part:NAME|line:N</code>, <code>--ortho</code>/<code>--perspective [--fov]</code>. Auswahl: <code>--part NAME</code> (nur Bauteile), <code>--line N</code> und <code>--node I</code> mehrfach (Knoten voll, Rest gedimmt, <code>--only</code> lässt den Rest weg), kombinierbar mit <code>--module</code> und <code>-D</code>.</p>
+<div class="pair"><div><div class="cmd"><pre class="call">$ cad render examples/spec/fillet_zonen.scad -o docs/reports/08-cli-agenten/img/kamera-azimut.png --line 12 --azimuth 120 --elevation 30 --size 700x500 --json<span class="t">  525 ms, Exit 0</span></pre></div><figure><img src="img/kamera-azimut.png"><figcaption>fillet_zonen.scad --line 12 --azimuth 120 --elevation 30: Zonen blau, ausgewählte Kanten orange.</figcaption></figure></div><div><div class="cmd"><pre class="call">$ cad render crates/cad-cli/tests/data/gehaeuse.scad -o docs/reports/08-cli-agenten/img/kamera-perspektive.png --perspective --fov 45 --azimuth -30 --elevation 20 --size 700x500 --json<span class="t">  74 ms, Exit 0</span></pre></div><figure><img src="img/kamera-perspektive.png"><figcaption>gehaeuse --perspective --fov 45 --azimuth -30 --elevation 20</figcaption></figure></div></div>
+<div class="pair"><div><div class="cmd"><pre class="call">$ cad render examples/projekt-gehaeuse/gehaeuse.scad -o docs/reports/08-cli-agenten/img/auswahl-part.png --part deckel --show dims --size 700x500 --json<span class="t">  337 ms, Exit 0</span></pre></div><figure><img src="img/auswahl-part.png"><figcaption>Projekt --part deckel --show dims</figcaption></figure></div><div><div class="cmd"><pre class="call">$ cad render crates/cad-cli/tests/data/gehaeuse.scad -o docs/reports/08-cli-agenten/img/auswahl-zeilen.png --line 22 --line 23 --fit line:22 --zoom 0.8 --size 700x500 --json<span class="t">  159 ms, Exit 0</span></pre></div><figure><img src="img/auswahl-zeilen.png"><figcaption>--line 22 --line 23 --fit line:22: zwei Zeilen hervorgehoben, eingepasst auf Zeile 22.</figcaption></figure></div></div>
+<div class="cmd"><pre class="call">$ cad render crates/cad-cli/tests/data/gehaeuse.scad -o docs/reports/08-cli-agenten/img/kamera-perspektive.png --perspective --fov 45 --azimuth -30 --elevation 20 --size 700x500 --json<span class="t">  74 ms, Exit 0</span></pre><div class="lbl">JSON (Auszug: camera)</div><pre>{
+  &quot;camera&quot;: {
+    &quot;azimuth&quot;: -30,
+    &quot;dir&quot;: [0.4698, 0.8138, -0.342],
+    &quot;elevation&quot;: 20,
+    &quot;eye&quot;: [-34.1027, -96.0291, 60.1489],
+    &quot;fov_deg&quot;: 45,
+    &quot;height_mm&quot;: 116.2131,
+    &quot;projection&quot;: &quot;perspective&quot;,
+    &quot;right&quot;: [0.866, -0.5, 0],
+    &quot;scale_px_per_mm&quot;: 4.3024,
+    &quot;target&quot;: [31.8081, 18.1317, 12.1698],
+    &quot;up&quot;: [0.171, 0.2962, 0.9397],
+    &quot;width_mm&quot;: 162.6983
+  }
+}</pre></div>
+<div class="cmd"><pre class="call">$ cad render crates/cad-cli/tests/data/gehaeuse.scad -o docs/reports/08-cli-agenten/img/auswahl-zeilen.png --line 22 --line 23 --fit line:22 --zoom 0.8 --size 700x500 --json<span class="t">  159 ms, Exit 0</span></pre><div class="lbl">JSON (Auszug: highlighted, visible_nodes)</div><pre>{
+  &quot;highlighted&quot;: [5, 6, 8, &quot;… (2 weitere)&quot;],
+  &quot;visible_nodes&quot;: [
+    {&quot;file&quot;: null, &quot;idx&quot;: 0, &quot;instance&quot;: null, &quot;label&quot;: &quot;group&quot;, &quot;line&quot;: 1, &quot;role&quot;: &quot;dimmed&quot;, &quot;triangles&quot;: 54},
+    {
+      &quot;file&quot;: null,
+      &quot;idx&quot;: 5,
+      &quot;instance&quot;: null,
+      &quot;label&quot;: &quot;translate&quot;,
+      &quot;line&quot;: 22,
+      &quot;role&quot;: &quot;highlighted&quot;,
+      &quot;triangles&quot;: 12
+    },
+    {
+      &quot;file&quot;: null,
+      &quot;idx&quot;: 6,
+      &quot;instance&quot;: null,
+      &quot;label&quot;: &quot;deckel&quot;,
+      &quot;line&quot;: 22,
+      &quot;role&quot;: &quot;highlighted&quot;,
+      &quot;triangles&quot;: 12
+    },
+    &quot;… (3 weitere)&quot;
+  ]
+}</pre></div>
+<h2>4 cad render: Überlagerungen</h2>
+<p><code>--show grids,anchors,handles,edges,labels,bbox,dims</code> (oder <code>all</code>): Raster des Kontextmoduls (Ebenen als Rechtecke am Rand des Rasters, Ausdrucksebenen gestrichelt, Schnittpunkte als Punkte, Ebenennamen <code>g.links</code>), Anker als Rauten mit Namen und Pfeil bei <code>dir</code>, Griffe als Quadrate, verdeckte Kanten gestrichelt, <code>labels</code> beschriftet Rasterpunkte <code>g[a,b,c]</code> (bis 48 Punkte je Raster), Griffe und Bauteile, <code>bbox</code> den Hüllquader, <code>dims</code> zusätzlich Breite/Tiefe/Höhe in mm. Beschriftungen, die sich überdecken würden, werden versetzt oder weggelassen.</p>
+<div class="tiles"><figure><img src="img/ov-ohne.png"><figcaption>ohne Überlagerung</figcaption></figure><figure><img src="img/ov-grids.png"><figcaption>--show grids</figcaption></figure><figure><img src="img/ov-anchors.png"><figcaption>--show anchors</figcaption></figure><figure><img src="img/ov-handles.png"><figcaption>--show handles</figcaption></figure><figure><img src="img/ov-edges.png"><figcaption>--show edges</figcaption></figure><figure><img src="img/ov-labels.png"><figcaption>--show grids,labels</figcaption></figure><figure><img src="img/ov-bbox.png"><figcaption>--show bbox</figcaption></figure><figure><img src="img/ov-dims.png"><figcaption>--show dims</figcaption></figure></div>
+<table><tr><th>--show</th><th>Raster</th><th>Rasterpunkte</th><th>Anker</th><th>Griffe</th><th>Beschriftungen</th><th>Linien</th></tr><tr><td>grids</td><td>1</td><td>16</td><td>0</td><td>0</td><td>8</td><td>8</td></tr><tr><td>anchors</td><td>0</td><td>0</td><td>2</td><td>0</td><td>2</td><td>2</td></tr><tr><td>handles</td><td>0</td><td>0</td><td>0</td><td>13</td><td>0</td><td>0</td></tr><tr><td>edges</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>24</td></tr><tr><td>grids,labels</td><td>1</td><td>16</td><td>0</td><td>0</td><td>24</td><td>8</td></tr><tr><td>bbox</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>12</td></tr><tr><td>dims</td><td>0</td><td>0</td><td>0</td><td>0</td><td>3</td><td>12</td></tr></table>
+<h2>5 cad render: Schnitt und Röntgen</h2>
+<p><b>Schnitt:</b> <code>--section x=WERT|y=WERT|z=WERT</code>, <code>--section-plane px,py,pz,nx,ny,nz</code>, <code>--section-flip</code>. Konvention (gleich für die spätere UI): Ebene durch <i>p</i> mit Normale <i>n</i>; entfernt wird die Hälfte, in die <i>n</i> zeigt, es bleibt (q − p)·n ≤ 0. <code>z=10</code> heißt p = (0,0,10), n = +z; <code>--section-flip</code> kehrt n um. Die Schnittfläche wird als schraffierte Kappe in eigener Farbe gezeichnet (Schraffur je Körper abwechselnd), die Schnittkontur als Linie.</p>
+<p><b>Verfahren: Clipping im Renderer mit Kappe, kein Kernel-Boolean.</b> Die Dreiecke werden an der Ebene geometrisch abgeschnitten (Sutherland–Hodgman je Dreieck, ebenso Kanten). Die Kappe folgt dem Stencil-Prinzip der GPU: für jede Abtastung wird gezählt, wie oft der Sichtstrahl bis zur Ebene die Oberfläche eines Körpers kreuzt (Top-Left-Regel, damit gemeinsame Kanten genau einmal zählen); ist die Zahl ungerade, liegt der Ebenenpunkt im Körper und die Kappe wird in Ebenentiefe geschrieben. Gründe: (1) dasselbe Verfahren wird die UI mit GPU-Clipping und Stencil-Kappe verwenden, Bilder und Konvention stimmen also überein; (2) es braucht keine Kernelarbeit – ein Boolean mit einem Halbraum kostet bei verrundeten Körpern schnell Sekunden und kann scheitern, das Clipping kostet einige ms und gelingt immer; (3) es funktioniert für jede Ebene, auch für Ansichten mehrerer Bauteile. Voraussetzung sind geschlossene Netze; die Tessellierung der B-Rep-Körper ist geschlossen. Offene Flächen (<code>surface</code>) und transparente Körper bekommen keine Kappe.</p>
+<div class="pair"><div><div class="cmd"><pre class="call">$ cad render crates/cad-cli/tests/data/gehaeuse.scad -o docs/reports/08-cli-agenten/img/schnitt-ohne.png --size 600x450 --json<span class="t">  82 ms, Exit 0</span></pre></div><figure><img src="img/schnitt-ohne.png"><figcaption>ohne Schnitt</figcaption></figure></div><div><div class="cmd"><pre class="call">$ cad render crates/cad-cli/tests/data/gehaeuse.scad -o docs/reports/08-cli-agenten/img/schnitt-z.png --section z=10 --size 600x450 --json<span class="t">  121 ms, Exit 0</span></pre></div><figure><img src="img/schnitt-z.png"><figcaption>--section z=10: obere Hälfte entfernt, Wände geschnitten</figcaption></figure></div></div>
+<div class="pair"><div><div class="cmd"><pre class="call">$ cad render crates/cad-cli/tests/data/gehaeuse.scad -o docs/reports/08-cli-agenten/img/schnitt-flip.png --section z=10 --section-flip --view bottom --size 600x450 --json<span class="t">  86 ms, Exit 0</span></pre></div><figure><img src="img/schnitt-flip.png"><figcaption>--section z=10 --section-flip --view bottom: obere Hälfte bleibt</figcaption></figure></div><div><div class="cmd"><pre class="call">$ cad render examples/spec/flasche.scad -o docs/reports/08-cli-agenten/img/schnitt-ebene.png --section-plane &quot;0,0,0,1,1,0&quot; --perspective --size 600x450 --json<span class="t">  444 ms, Exit 0</span></pre></div><figure><img src="img/schnitt-ebene.png"><figcaption>flasche.scad --section-plane 0,0,0,1,1,0 --perspective</figcaption></figure></div></div>
+<div class="pair"><div><div class="cmd"><pre class="call">$ cad render tools/report/report8-fallstudie/v2.scad -o docs/reports/08-cli-agenten/img/schnitt-fallstudie.png --section x=20 --size 600x450 --json<span class="t">  395 ms, Exit 0</span></pre></div><figure><img src="img/schnitt-fallstudie.png"><figcaption>Fallstudie --section x=20: Stange in der Bohrung, zwei Kappen mit gegenläufiger Schraffur, Spalt 0,25 mm als Kontur</figcaption></figure></div><div><div class="cmd"><pre class="call">$ cad render examples/spec/fillet_zonen.scad -o docs/reports/08-cli-agenten/img/xray.png --xray --size 600x450 --json<span class="t">  389 ms, Exit 0</span></pre></div><figure><img src="img/xray.png"><figcaption>fillet_zonen.scad --xray: alles halbtransparent mit Kanten</figcaption></figure></div></div>
+<div class="cmd"><pre class="call">$ cad render crates/cad-cli/tests/data/gehaeuse.scad -o docs/reports/08-cli-agenten/img/schnitt-z.png --section z=10 --size 600x450 --json<span class="t">  121 ms, Exit 0</span></pre><div class="lbl">JSON (Auszug: section, bounds)</div><pre>{
+  &quot;section&quot;: {
+    &quot;keeps&quot;: &quot;(q - point) · normal &lt;= 0&quot;,
+    &quot;method&quot;: &quot;renderer clipping + cap&quot;,
+    &quot;normal&quot;: [0, 0, 1],
+    &quot;point&quot;: [0, 0, 10]
+  },
+  &quot;bounds&quot;: {&quot;max&quot;: [70, 40, 22], &quot;min&quot;: [0, 0, 0], &quot;size&quot;: [70, 40, 22]}
+}</pre></div>
+<p>Sichtbare Fläche (Pixel ≠ Hintergrund, 600×450): ohne Schnitt 74.159, mit <code>--section z=10</code> 58.204 (78 %), davon Kappe 3.967. Derselbe Vergleich ist der Test <code>render_section_reduces_visible_area</code>.</p>
+<figure><img src="img/xray-projekt.png"><figcaption>Projekt --xray --show anchors: Schraubdome und Anker sichtbar durch die Wand</figcaption></figure>
+<h2>6 cad measure</h2>
+<p><code>--between A B</code> mit Ankern (<code>k.ecke</code>, <code>k[2].ecke</code>, im Modulkontext <code>ecke</code>), Rasterpunkten des Kontextmoduls (<code>g[a,b,c]</code>, Einträge auch Zahlen oder <code>_</code>) und Koordinaten <code>[x,y,z]</code>: Abstand und Differenzvektor. <code>--bounds/--volume/--area ZIEL</code> mit <code>all</code>, <code>part:NAME</code>, <code>line:N</code>, <code>node:I</code>. <code>--interference</code>: paarweise Schnittvolumen aller Bauteile, exakt über den Kernel (Boolean-Schnitt der B-Rep, vorher Test der Hüllquader); Kollision ab <code>--tolerance</code> (Standard 0,001 mm³). <code>--clearance A B</code>: kleinster Abstand zweier Bauteile als exakter Dreieck-Dreieck-Abstand ihrer Tessellierungen (BVH, Toleranz <code>--mesh-tol</code> 0,01 mm, Genauigkeit ± 2·0,01 mm); überschneiden sich die Bauteile, ist der Abstand 0 und <code>collision: true</code>.</p>
+<p>Sollwerte Spec-Beispiel <i>gehaeuse</i>: k.ecke = [60, 30, 20], k.oben = [0, 0, 20] → √(60² + 30²) = 67,082 mm; im Modul g[links,vorne,boden] → g[rechts,hinten,deckel] = √(40² + 30² + 20²) = 53,852 mm; Volumen k = 60·30·20 − 54·30·17 = 8460 mm³. <i>kollision.scad</i>: a und b überlappen 2 × 10 × 10 = 200 mm³, c steht 5 mm neben b.</p>
+<div class="cmd"><pre class="call">$ cad measure crates/cad-cli/tests/data/gehaeuse.scad --between k.ecke k.oben --bounds part:k --volume part:k --area part:k<span class="t">  40 ms, Exit 0</span></pre><pre>Abstand k.ecke [60, 30, 20] → k.oben [0, 0, 20]: 67.082 mm (Δ [-60, -30, 0])
+Hülle part:k: [0, 0, 0] – [60, 30, 20], Größe 60 × 30 × 20 mm
+Volumen part:k: 8460 mm³
+Fläche part:k: 6384 mm²</pre></div>
+<div class="cmd"><pre class="call">$ cad measure crates/cad-cli/tests/data/gehaeuse.scad --module gehaeuse --between &quot;g[links,vorne,boden]&quot; &quot;g[rechts,hinten,deckel]&quot;<span class="t">  13 ms, Exit 0</span></pre><pre>Abstand g[links,vorne,boden] [0, 0, 0] → g[rechts,hinten,deckel] [40, 30, 20]: 53.8516 mm (Δ [40, 30, 20])</pre></div>
+<div class="cmd"><pre class="call">$ cad measure crates/cad-cli/tests/data/gehaeuse.scad --module gehaeuse -D w=60 --between ecke &quot;[0,0,0]&quot;<span class="t">  13 ms, Exit 0</span></pre><pre>Abstand ecke [60, 30, 20] → [0,0,0] [0, 0, 0]: 70 mm (Δ [-60, -30, -20])</pre></div>
+<div class="cmd"><pre class="call">$ cad measure crates/cad-cli/tests/data/gehaeuse.scad --between &quot;g[links,vorne,boden]&quot; &quot;[0,0,0]&quot;<span class="t">  37 ms, Exit 2</span></pre><div class="small">Fehler erwartet: Raster g ist im Dateikontext nicht sichtbar (Exit 2).</div><pre>cad measure: g[links,vorne,boden]: Raster `g` ist nicht im Kontext (Raster gelten nur in ihrem Modul: --module NAME)</pre></div>
+<div class="cmd"><pre class="call">$ cad measure crates/cad-cli/tests/data/kollision.scad --interference --clearance b c<span class="t">  22 ms, Exit 0</span></pre><pre>Kollision a ↔ b: 200 mm³
+Abstand b ↔ c: 5 mm (± 0.02 mm, Tessellierung 0.01 mm), zwischen [18, 10, 0] und [23, 10, 0]</pre></div>
+<div class="cmd"><pre class="call">$ cad measure crates/cad-cli/tests/data/kollision.scad --interference --json<span class="t">  33 ms, Exit 0</span></pre><div class="lbl">JSON (Auszug: interference)</div><pre>{
+  &quot;interference&quot;: {
+    &quot;collisions&quot;: [{&quot;a&quot;: &quot;a&quot;, &quot;b&quot;: &quot;b&quot;, &quot;volume&quot;: 200}],
+    &quot;method&quot;: &quot;kernel intersection (exact B-rep)&quot;,
+    &quot;pairs&quot;: [
+      {&quot;a&quot;: &quot;a&quot;, &quot;b&quot;: &quot;b&quot;, &quot;bounds_overlap&quot;: true, &quot;collision&quot;: true, &quot;volume&quot;: 200},
+      {&quot;a&quot;: &quot;a&quot;, &quot;b&quot;: &quot;c&quot;, &quot;bounds_overlap&quot;: false, &quot;volume&quot;: 0},
+      {&quot;a&quot;: &quot;b&quot;, &quot;b&quot;: &quot;c&quot;, &quot;bounds_overlap&quot;: false, &quot;volume&quot;: 0}
+    ],
+    &quot;parts&quot;: [&quot;a&quot;, &quot;b&quot;, &quot;c&quot;],
+    &quot;tolerance&quot;: 0.001
+  }
+}</pre></div>
+<div class="cmd"><pre class="call">$ cad measure examples/projekt-gehaeuse/gehaeuse.scad --interference --clearance gehaeuse deckel --json<span class="t">  488 ms, Exit 0</span></pre><div class="lbl">JSON (Auszug: clearance)</div><pre>{
+  &quot;clearance&quot;: {
+    &quot;a&quot;: &quot;gehaeuse&quot;,
+    &quot;accuracy&quot;: 0.02,
+    &quot;b&quot;: &quot;deckel&quot;,
+    &quot;collision&quot;: false,
+    &quot;distance&quot;: 10,
+    &quot;intersection_volume&quot;: 0,
+    &quot;mesh_distance&quot;: 10,
+    &quot;mesh_tol&quot;: 0.01,
+    &quot;method&quot;: &quot;minimum triangle–triangle distance of both tessellations&quot;,
+    &quot;point_a&quot;: [60, 40, 0],
+    &quot;point_b&quot;: [60, 50, 0],
+    &quot;triangles&quot;: [1820, 28]
+  }
+}</pre></div>
+<figure><img src="img/kollision.png"><figcaption>kollision.scad --xray --show labels: a und b überlappen, c mit 5 mm Abstand</figcaption></figure>
+<h2>7 cad set</h2>
+<p><code>--param modul.param=wert</code> schreibt einen Standardwert (wie „Als Standard übernehmen“ in der UI, Module auch aus <code>use</code>-Dateien), <code>--literal [datei:]zeile:spalte=wert</code> ersetzt das editierbare Literal an der Stelle – dieselben Literale, die die UI über Griffe, Regler und Rasterebenen ändert. Vor dem Schreiben wird das geänderte Projekt ausgewertet; neue Fehler verhindern das Schreiben (Exit 1, <code>--force</code> überstimmt). Geschrieben wird atomar (temporäre Datei + Umbenennen); <code>--dry-run</code> zeigt nur den Diff.</p>
+<div class="cmd"><pre class="call">$ cad set reports/tmp/report8/work/set.scad --param gehaeuse.w=50 --literal 21:17=70 --dry-run<span class="t">  6 ms, Exit 0</span></pre><pre>--- reports/tmp/report8/work/set.scad
++++ reports/tmp/report8/work/set.scad
+@@ -1,5 +1,5 @@
+ // Zweck: Spec-Beispiel „gehaeuse“ – Raster g im Modul, Box zwischen Rasterpunkten, Anker
+ // nach außen, benannte Instanz k, Deckel am Anker und ein zweites Raster aus k.ecke.x.
+-module gehaeuse(w = 40, d = 30, h = 20, t = 3) {
++module gehaeuse(w = 50, d = 30, h = 20, t = 3) {
+     grid g {
+         x: links = 0, innen_l = t, innen_r = w - t, rechts = w;
+@@ -19,5 +19,5 @@
+ module deckel() cube([10, 10, 2]);
+ 
+-k: gehaeuse(w = 60);
++k: gehaeuse(w = 70);
+ translate(k.ecke) deckel();
+ translate(k.oben) rotate(to = dir(k.oben)) deckel();
+(--dry-run: nichts geschrieben)</pre></div>
+<div class="cmd"><pre class="call">$ cad set reports/tmp/report8/work/set.scad --param gehaeuse.w=50 --literal 21:17=70 --json<span class="t">  7 ms, Exit 0</span></pre><div class="lbl">JSON (Auszug: changes, written, errors_before, errors_after)</div><pre>{
+  &quot;changes&quot;: [
+    {
+      &quot;col&quot;: 21,
+      &quot;file&quot;: &quot;reports/tmp/report8/work/set.scad&quot;,
+      &quot;kind&quot;: &quot;param&quot;,
+      &quot;line&quot;: 3,
+      &quot;new&quot;: &quot;50&quot;,
+      &quot;old&quot;: &quot;40&quot;,
+      &quot;spec&quot;: &quot;gehaeuse.w=50&quot;
+    },
+    {
+      &quot;col&quot;: 17,
+      &quot;file&quot;: &quot;reports/tmp/report8/work/set.scad&quot;,
+      &quot;kind&quot;: &quot;literal&quot;,
+      &quot;line&quot;: 21,
+      &quot;new&quot;: &quot;70&quot;,
+      &quot;old&quot;: &quot;60&quot;,
+      &quot;spec&quot;: &quot;21:17=70&quot;
+    }
+  ],
+  &quot;written&quot;: [&quot;reports/tmp/report8/work/set.scad&quot;],
+  &quot;errors_before&quot;: 0,
+  &quot;errors_after&quot;: 0
+}</pre></div>
+<div class="cmd"><pre class="call">$ cad set reports/tmp/report8/work/set.scad --literal 5:30=4<span class="t">  6 ms, Exit 2</span></pre><div class="small">Fehler erwartet: an 5:30 steht `t`, eine Referenz auf einen Parameter, kein Literal (Exit 2).</div><pre>cad set: --literal 5:30=4: an 5:30 steht kein editierbares Literal (Literale der Zeile: 5:20 `0`)</pre></div>
+<div class="cmd"><pre class="call">$ cad set reports/tmp/report8/work/set.scad --param gehaeuse.t=foo<span class="t">  8 ms, Exit 1</span></pre><div class="small">Abgelehnt: die Änderung erzeugt Fehler (Exit 1), die Datei bleibt unverändert.</div><pre>--- reports/tmp/report8/work/set.scad
++++ reports/tmp/report8/work/set.scad
+@@ -1,5 +1,5 @@
+ // Zweck: Spec-Beispiel „gehaeuse“ – Raster g im Modul, Box zwischen Rasterpunkten, Anker
+ // nach außen, benannte Instanz k, Deckel am Anker und ein zweites Raster aus k.ecke.x.
+-module gehaeuse(w = 50, d = 30, h = 20, t = 3) {
++module gehaeuse(w = 50, d = 30, h = 20, t = foo) {
+     grid g {
+         x: links = 0, innen_l = t, innen_r = w - t, rechts = w;
+nicht geschrieben: die Änderung erzeugt Fehler (0 → 5); --force schreibt trotzdem
+reports/tmp/report8/work/set.scad:3:45: Warnung (Auswertung): unbekannte Variable `foo`
+reports/tmp/report8/work/set.scad:5:33: Fehler (Auswertung): Ebene `innen_l` muss Zahl oder Zahlenliste sein, ist undef
+reports/tmp/report8/work/set.scad:5:46: Warnung (Auswertung): undefinierte Operation (Zahl - undef)
+reports/tmp/report8/work/set.scad:5:46: Fehler (Auswertung): Ebene `innen_r` muss Zahl oder Zahlenliste sein, ist undef
+reports/tmp/report8/work/set.scad:12:15: Fehler (Auswertung): Raster `g` hat keine Ebene `innen_l`
+reports/tmp/report8/work/set.scad:12:37: Fehler (Auswertung): Raster `g` hat keine Ebene `innen_r`
+reports/tmp/report8/work/set.scad:12:13: Warnung (Auswertung): `a` muss ein Vektor [x, y, z] sein, ist undef
+reports/tmp/report8/work/set.scad:12:35: Warnung (Auswertung): `b` muss ein Vektor [x, y, z] sein, ist undef
+reports/tmp/report8/work/set.scad:12:9: Fehler (Auswertung): box() braucht zwei Eckpunkte `a` und `b`</pre></div>
+<h2>8 Reservierter UI-Einstieg</h2>
+<p><code>cad datei.scad</code> (Positionsargument, das kein Befehl ist) startet später die Desktop-UI. Heute: Meldung und Exit 2. <code>cad</code> ohne Argumente zeigt die Hilfe (Exit 0). Ein Tippfehler im Befehl ergibt „unbekannter Befehl“.</p>
+<div class="cmd"><pre class="call">$ cad crates/cad-cli/tests/data/gehaeuse.scad<span class="t">  5 ms, Exit 2</span></pre><pre>cad: UI nicht in diesem Build (`cad crates/cad-cli/tests/data/gehaeuse.scad` startet später die Desktop-UI).
+Befehle: check, outline, eval, inspect, render, measure, watch, set, export, diff-kernels
+Beispiel: cad render crates/cad-cli/tests/data/gehaeuse.scad -o bild.png --views all</pre></div>
+<div class="cmd"><pre class="call">$ cad <span class="t">  5 ms, Exit 0</span></pre><pre>Parametrisches CAD: prüfen, auswerten, ansehen, messen, exportieren
+
+Usage: cad [COMMAND]
+
+Commands:
+  check         Diagnosen mit Zeile und Spalte
+  outline       Übersicht in einem Aufruf: Module mit Parametern, Funktionen, Variablen, Raster und Anker je Modul, benannte Instanzen, Bauteile, Dateien, Diagnosen
+  eval          Baum, Werte, Inline-Hinweise, Raster, Anker
+  inspect       Was eine Zeile erzeugt: Knoten, Hülle, Volumen, ausgewählte Kanten, Meldungen
+  render        Bild des Modells (PNG): Ansichten, Kontaktbogen, freie Kamera, Auswahl, Überlagerungen, Schnitt, Röntgen
+  measure       Messen: Abstand zweier Punkte (Anker, Rasterpunkt, Koordinate), Hülle, Volumen, Fläche, Kollisionen der Bauteile, Abstand zweier Bauteile
+  watch         Beobachtet die Datei und eingebundene Dateien; je Auswertung eine JSON-Zeile (mit --json) bzw. eine Textzeile, optional neues Bild
+  set           Code ändern über die Engine: Standardwert eines Modulparameters oder ein Literal; schreibt atomar (`--dry-run`: nur Diff)
+  export        Exportdatei (STL binär, 3MF oder STEP, nach Endung oder --format)
+  diff-kernels  Vergleich SMLib ↔ solidcore je Knoten (Volumen, Flächen, Kanten, ausgewählte Kanten) und Abdeckung von solidcore (nur Entwicklung)
+  help          Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+
+Ablauf für Agenten: outline → editieren → check → render --views all --show grids,anchors → inspect/measure → export. `cad watch` wertet bei jeder Dateiänderung neu aus (Cache bleibt).
+… (1 Zeilen mehr)</pre></div>
+<h2>9 cad watch</h2>
+<p><code>cad watch DATEI [--json] [--render bild.png …]</code> beobachtet die Datei und alle eingebundenen Dateien (Crate <code>notify</code>, inotify unter Linux; beobachtet werden die Verzeichnisse, damit auch atomares Speichern der Editoren erkannt wird), wertet bei jeder Änderung in derselben Sitzung neu aus und schreibt je Lauf eine JSON-Zeile (Diagnosen, Zeiten, Volumen, Bauteile, Bild). Der Engine-Cache bleibt erhalten: unveränderte Knoten kommen aus dem Cache. Ende mit Strg+C, <code>--once-after-change</code> oder <code>--timeout S</code>.</p>
+<table><tr><th>Datei</th><th>Lauf</th><th>Auslöser</th><th>Gesamt ms</th><th>Kernel ms</th><th>Bild ms</th><th>aus Cache / Knoten</th><th>Kernel-Aufrufe</th><th>Volumen mm³</th></tr><tr><td>variabler_radius.scad</td><td>1: Start (alles neu)</td><td>start</td><td>1.101,9</td><td>734,3</td><td>367,1</td><td>1 / 12</td><td>29</td><td>56.527,5</td></tr><tr><td>variabler_radius.scad</td><td>2: Kommentar angehängt (alles aus dem Cache)</td><td>variabler_radius.scad</td><td>29,7</td><td>0,0</td><td>28,9</td><td>12 / 12</td><td>0</td><td>56.527,5</td></tr><tr><td>variabler_radius.scad</td><td>3: deckel = 22 (zwei Verrundungen neu)</td><td>variabler_radius.scad</td><td>947,1</td><td>569,0</td><td>377,5</td><td>6 / 12</td><td>16</td><td>61.297,6</td></tr><tr><td>variabler_radius.scad</td><td>4: Radiusfunktion der Tasche geändert</td><td>variabler_radius.scad</td><td>329,6</td><td>103,0</td><td>226,0</td><td>9 / 12</td><td>9</td><td>56.573,0</td></tr><tr><td>projekt-gehaeuse</td><td>1: Start (alles neu)</td><td>start</td><td>252,5</td><td>164,7</td><td>–</td><td>9 / 33</td><td>29</td><td>26.212,8</td></tr><tr><td>projekt-gehaeuse</td><td>2: konstanten.scad: abstand = 15 (nur Lage des Deckels)</td><td>konstanten.scad</td><td>6,5</td><td>5,3</td><td>–</td><td>31 / 33</td><td>2</td><td>26.212,8</td></tr><tr><td>projekt-gehaeuse</td><td>3: lib/teile.scad: dom_r = 3.5 (Schraubdome neu)</td><td>lib/teile.scad</td><td>210,0</td><td>126,3</td><td>–</td><td>20 / 33</td><td>11</td><td>26.988,8</td></tr></table>
+<div class="lbl">JSON-Zeile (Lauf 3, gekürzt)</div><pre>{
+  &quot;command&quot;: &quot;watch&quot;,
+  &quot;run&quot;: 3,
+  &quot;trigger&quot;: &quot;change&quot;,
+  &quot;changed&quot;: [&quot;variabler_radius.scad&quot;],
+  &quot;ok&quot;: true,
+  &quot;errors&quot;: 0,
+  &quot;stats&quot;: {&quot;cache_hits&quot;: 6, &quot;kernel_calls&quot;: 16, &quot;nodes&quot;: 12},
+  &quot;volume&quot;: 61297.5811,
+  &quot;timings&quot;: {&quot;eval_ms&quot;: 0.2223, &quot;kernel_ms&quot;: 569.007, &quot;render_ms&quot;: 377.4542, &quot;total_ms&quot;: 947.1355},
+  &quot;render&quot;: {&quot;height&quot;: 400, &quot;output&quot;: &quot;docs/reports/08-cli-agenten/img/watch.png&quot;, &quot;width&quot;: 800}
+}</pre>
+<figure><img src="img/watch.png"><figcaption>Bild nach dem letzten Lauf von watch --render … --views iso,top</figcaption></figure>
+
+<h2>10 Leistung bei wiederholten Aufrufen</h2>
+<p>Jeder CLI-Aufruf startet einen neuen Prozess mit leerem Cache. Gemessen: <code>cad render</code> zweimal hintereinander (Standardansicht 1024×768), Wandzeit des Prozesses und die Zeiten aus dem JSON (<code>timings</code>: Auswerten inkl. Kernel, davon Kernel, Bild inkl. Tessellierung). Prozessstart mit Parser ohne Kernel (<code>check --no-kernel</code>): 7 ms.</p>
+<table><tr><th>Datei</th><th>Lauf</th><th>Wandzeit ms</th><th>Auswerten ms</th><th>davon Kernel ms</th><th>Bild ms</th></tr>
+<tr><td>spec/variabler_radius.scad</td><td>1</td><td>1.017</td><td>631</td><td>630</td><td>375</td></tr><tr><td>spec/variabler_radius.scad</td><td>2</td><td>1.104</td><td>667</td><td>666</td><td>426</td></tr><tr><td>projekt-gehaeuse/gehaeuse.scad</td><td>1</td><td>579</td><td>340</td><td>218</td><td>229</td></tr><tr><td>projekt-gehaeuse/gehaeuse.scad</td><td>2</td><td>610</td><td>378</td><td>248</td><td>220</td></tr><tr><td>spec/gehaeuse.scad</td><td>1</td><td>159</td><td>37</td><td>34</td><td>114</td></tr><tr><td>spec/gehaeuse.scad</td><td>2</td><td>165</td><td>30</td><td>29</td><td>126</td></tr></table>
+<p><b>Entscheidung: kein persistenter Cache zwischen Aufrufen.</b> Der zweite Aufruf ist so schnell wie der erste (kein Cache), ein Aufruf dauert bis 1,10 s – bei <i>variabler_radius</i> an der Grenze von 1 s, fast alles Kernelzeit (Verrundungen) und Tessellierung. Ein Datei-Cache der Kernel-Ergebnisse wäre aufwendig: die Ergebnisse sind Handles auf SMLib-Objekte im Speicher der nativen Bibliothek, ein Cache müsste die B-Rep serialisieren und wieder einlesen (und mit der Provenienz der Flächen und Kanten), was selbst Kernelzeit kostet. Stattdessen <code>cad watch</code>: dieselbe Sitzung bleibt bestehen, der Engine-Cache hält alle Knotenergebnisse; ein Lauf nach einer Änderung kostet nur die geänderten Knoten (Tabelle in Abschnitt 9: 30 ms für eine Änderung ohne Geometrieeinfluss, 947 ms wenn zwei verrundete Körper neu entstehen). Der Skill empfiehlt <code>cad watch</code> für Schleifen mit vielen kleinen Schritten.</p>
+<h3>Laufzeit je Befehl (Spec-Beispiel gehaeuse, Wandzeit)</h3>
+<table><tr><th>Befehl</th><th>ms</th><th>Exit</th></tr><tr><td>outline</td><td>46</td><td>0</td></tr><tr><td>check</td><td>44</td><td>0</td></tr><tr><td>render (iso)</td><td>143</td><td>0</td></tr><tr><td>render --views all --show grids,anchors</td><td>170</td><td>0</td></tr><tr><td>render --section z=10</td><td>285</td><td>0</td></tr><tr><td>measure --between --volume</td><td>35</td><td>0</td></tr><tr><td>measure --interference (kollision)</td><td>25</td><td>0</td></tr><tr><td>measure --clearance b c (kollision)</td><td>19</td><td>0</td></tr><tr><td>set --dry-run</td><td>6</td><td>0</td></tr></table>
+
+<h2>11 Fallstudie: Agent entwickelt ein Teil nur mit der CLI</h2>
+<p>Der Agent (dieser Bericht ist von Claude erzeugt) hat einen Wandhalter für eine Stange Ø 20 mm entworfen, ohne die UI zu öffnen: Quelltext mit dem Edit-Werkzeug, alles Weitere mit <code>cad</code>. Die Schritte unten sind die tatsächlich ausgeführten, vom Generator nachgespielt (Fassungen in <code>tools/report/report8-fallstudie/</code>). Der Agent hat dabei die Bilder mit dem Read-Werkzeug angesehen; gefunden wurde ein echter Entwurfsfehler (kein Spiel zwischen Stange und Bohrung), sichtbar nur durch <code>measure --clearance</code>, nicht im Bild.</p>
+<div class="step"><h3>Schritt 1: Entwurf schreiben</h3><p>Erste Fassung mit Raster g (Ebenen für Platte, Ausleger, Bohrung, Schraublöcher), zwei Ankern und den Bauteilen halter und stange.</p><div class="lbl">Quelltext</div><pre>// Fallstudie Bericht 8: Wandhalter für eine Stange, nur mit der CLI entwickelt.
+// Grundplatte an der Wand (y = 0), Ausleger mit Bohrung für die Stange, zwei Schraublöcher.
+module halter(b = 40, t = 5, h = 50, a = 30, d = 20, spiel = 0) {
+    grid g {
+        x: links = 0, loch_l = 10, mitte = b / 2, loch_r = b - 10, rechts = b;
+        y: wand = 0, platte = t, achse = t + a, vorn = t + a + d / 2 + t;
+        z: unten = 0, loch = 10, arm = h - d - 2 * t, achse_z = h - t - d / 2, oben = h;
+    }
+    difference() {
+        union() {
+            box(g[links, wand, unten], g[rechts, platte, oben]);
+            box(g[links, platte, arm], g[rechts, vorn, oben]);
+        }
+        cylinder(g[-1, achse, achse_z], g[b + 1, achse, achse_z], r = (d + spiel) / 2);
+        for (x = [g.loch_l, g.loch_r])
+            cylinder(g[x, -1, loch], g[x, t + 1, loch], r = 2.25);
+    }
+    anchor stange = g[links, achse, achse_z], dir = [1, 0, 0];
+    anchor schraube = g[loch_l, wand, loch], dir = [0, -1, 0];
+}
+
+module stange(l = 60, d = 20) cylinder(h = l, r = d / 2);
+
+halter: halter();
+translate(halter.stange) rotate(to = dir(halter.stange)) translate([0, 0, -10]) stange: stange();
+</pre></div>
+<div class="step"><h3>Schritt 2: Prüfen und verstehen</h3><p>check meldet keine Fehler; outline zeigt Raster, Anker und Bauteile mit Hülle und Volumen.</p><div class="cmd"><pre class="call">$ cad check reports/tmp/report8/work/wandhalter.scad<span class="t">  159 ms, Exit 0</span></pre><pre>reports/tmp/report8/work/wandhalter.scad: 0 Fehler, 0 Warnungen</pre></div><div class="cmd"><pre class="call">$ cad outline reports/tmp/report8/work/wandhalter.scad<span class="t">  146 ms, Exit 0</span></pre><pre>reports/tmp/report8/work/wandhalter.scad: 0 Fehler, 0 Warnungen
+Module:
+  halter(b = 40: Zahl, t = 5: Zahl, h = 50: Zahl, a = 30: Zahl, d = 20: Zahl, spiel = 0: Zahl)  wandhalter.scad:3–20
+    Raster g (Z.4): x: links = 0, loch_l = 10, mitte = b / 2 → 20, loch_r = b - 10 → 30, rechts = 40; y: wand = 0, platte = 5, achse = t + a → 35, vorn = t + a + d / 2 + t → 50; z: unten = 0, loch = 10, arm = h - d - 2 * t → 20, achse_z = h - t - d / 2 → 35, oben = 50
+    Anker: stange = [0, 35, 35] dir [1, 0, 0] (Z.18), schraube = [10, 0, 10] dir [0, -1, 0] (Z.19)
+  stange(l = 60: Zahl, d = 20: Zahl)  wandhalter.scad:22–22
+Benannte Instanzen:
+  halter: halter  Z.24  Bauteil, Hülle [0, 0, 0]–[40, 50, 50], Volumen 51274.5869 mm³
+  stange: stange  Z.25  Bauteil, Hülle [-10, 25, 25]–[50, 45, 45], Volumen 18849.5559 mm³
+Anker: halter.stange = [0, 35, 35] dir [1, 0, 0], halter.schraube = [10, 0, 10] dir [0, -1, 0]
+Gesamt: Hülle [-10, 0, 0]–[50, 50, 50] (60 × 50 × 50 mm), 15 Knoten</pre></div></div>
+<div class="step"><h3>Schritt 3: Ansehen</h3><p>Kontaktbogen mit Ankern und Beschriftung: Platte, Ausleger, Bohrung und Stange liegen wie geplant.</p><div class="cmd"><pre class="call">$ cad render reports/tmp/report8/work/wandhalter.scad -o docs/reports/08-cli-agenten/img/fs-1.png --views all --show &quot;anchors,labels&quot; --size 1400x1000<span class="t">  339 ms, Exit 0</span></pre><pre>docs/reports/08-cli-agenten/img/fs-1.png: 1400x1000, Ansichten iso, front, top, right, Hülle 60 × 50 × 50 mm</pre></div><figure><img src="img/fs-1.png"><figcaption></figcaption></figure></div>
+<div class="step"><h3>Schritt 4: Nachmessen</h3><p>Kollisionen und Abstand Stange ↔ Bohrung: Abstand 0 – die Stange liegt ohne Spiel in der Bohrung (Ø 20 in Ø 20). Fehler im Entwurf gefunden.</p><div class="cmd"><pre class="call">$ cad measure reports/tmp/report8/work/wandhalter.scad --interference --clearance halter stange<span class="t">  318 ms, Exit 0</span></pre><pre>Keine Kollisionen (2 Bauteile, 1 Paare mit überlappender Hülle geprüft, Toleranz 0.001 mm³)
+Abstand halter ↔ stange: 0 mm (± 0.02 mm, Tessellierung 0.01 mm), zwischen [40, 31.7825, 44.4683] und [40, 31.7825, 44.4683]</pre></div><div class="cmd"><pre class="call">$ cad measure reports/tmp/report8/work/wandhalter.scad --between halter.schraube halter.stange<span class="t">  245 ms, Exit 0</span></pre><pre>Abstand halter.schraube [10, 0, 10] → halter.stange [0, 35, 35]: 44.1588 mm (Δ [-10, 35, 25])</pre></div></div>
+<div class="step"><h3>Schritt 5: Korrigieren mit cad set</h3><p>Spiel 0,5 mm als Standardwert setzen (erst Diff, dann schreiben); danach Abstand 0,25 mm (radial) ± 0,02 mm.</p><div class="cmd"><pre class="call">$ cad set reports/tmp/report8/work/wandhalter.scad --param halter.spiel=0.5 --dry-run<span class="t">  7 ms, Exit 0</span></pre><pre>--- reports/tmp/report8/work/wandhalter.scad
++++ reports/tmp/report8/work/wandhalter.scad
+@@ -1,5 +1,5 @@
+ // Fallstudie Bericht 8: Wandhalter für eine Stange, nur mit der CLI entwickelt.
+ // Grundplatte an der Wand (y = 0), Ausleger mit Bohrung für die Stange, zwei Schraublöcher.
+-module halter(b = 40, t = 5, h = 50, a = 30, d = 20, spiel = 0) {
++module halter(b = 40, t = 5, h = 50, a = 30, d = 20, spiel = 0.5) {
+     grid g {
+         x: links = 0, loch_l = 10, mitte = b / 2, loch_r = b - 10, rechts = b;
+(--dry-run: nichts geschrieben)</pre></div><div class="cmd"><pre class="call">$ cad set reports/tmp/report8/work/wandhalter.scad --param halter.spiel=0.5<span class="t">  7 ms, Exit 0</span></pre><pre>--- reports/tmp/report8/work/wandhalter.scad
++++ reports/tmp/report8/work/wandhalter.scad
+@@ -1,5 +1,5 @@
+ // Fallstudie Bericht 8: Wandhalter für eine Stange, nur mit der CLI entwickelt.
+ // Grundplatte an der Wand (y = 0), Ausleger mit Bohrung für die Stange, zwei Schraublöcher.
+-module halter(b = 40, t = 5, h = 50, a = 30, d = 20, spiel = 0) {
++module halter(b = 40, t = 5, h = 50, a = 30, d = 20, spiel = 0.5) {
+     grid g {
+         x: links = 0, loch_l = 10, mitte = b / 2, loch_r = b - 10, rechts = b;
+geschrieben: reports/tmp/report8/work/wandhalter.scad</pre></div><div class="cmd"><pre class="call">$ cad measure reports/tmp/report8/work/wandhalter.scad --clearance halter stange<span class="t">  368 ms, Exit 0</span></pre><pre>Abstand halter ↔ stange: 0.2499 mm (± 0.02 mm, Tessellierung 0.01 mm), zwischen [40, 41.8678, 27.3913] und [40, 41.6957, 27.5725]</pre></div></div>
+<div class="step"><h3>Schritt 6: Innenkante verrunden</h3><p>Zonenblock fillet(4) um die Innenkante Platte/Ausleger (zone(g[*, platte, arm], d = 2)), mit dem Edit-Werkzeug eingefügt. inspect der fillet-Zeile: genau 1 Kante ausgewählt.</p><div class="lbl">Änderung (diff)</div><pre>--- vorher
++++ nachher
+@@ -7,9 +7,12 @@
+         z: unten = 0, loch = 10, arm = h - d - 2 * t, achse_z = h - t - d / 2, oben = h;
+     }
+     difference() {
+-        union() {
+-            box(g[links, wand, unten], g[rechts, platte, oben]);
+-            box(g[links, platte, arm], g[rechts, vorn, oben]);
++        fillet(4) {
++            union() {
++                box(g[links, wand, unten], g[rechts, platte, oben]);
++                box(g[links, platte, arm], g[rechts, vorn, oben]);
++            }
++            zone(g[*, platte, arm], d = 2);         // Innenkante Platte/Ausleger
+         }
+         cylinder(g[-1, achse, achse_z], g[b + 1, achse, achse_z], r = (d + spiel) / 2);
+         for (x = [g.loch_l, g.loch_r])
+</pre><div class="cmd"><pre class="call">$ cad check reports/tmp/report8/work/wandhalter.scad<span class="t">  273 ms, Exit 0</span></pre><pre>reports/tmp/report8/work/wandhalter.scad: 0 Fehler, 0 Warnungen</pre></div><div class="cmd"><pre class="call">$ cad inspect reports/tmp/report8/work/wandhalter.scad --line 10<span class="t">  119 ms, Exit 0</span></pre><pre>Kontext: Modul halter(b = 40, t = 5, h = 50, a = 30, d = 20, spiel = 0.5)
+Z.10: fillet(4) {
+  [2] fillet  Z.10:9–16:10  ok
+      Hülle [0, 0, 0] – [40, 50, 50]
+      Volumen 64137.3452 mm³, Fläche 11138.1947 mm²
+      ausgewählte Kanten: 1
+      Hinweis: 1 Zone
+      Hinweis: 1 Kante</pre></div></div>
+<div class="step"><h3>Schritt 7: Raster und Zone ansehen</h3><p>Zeile 10 hervorgehoben im Modulkontext, Raster mit Ebenennamen (100 Rasterpunkte: nur Ebenen beschriftet).</p><div class="cmd"><pre class="call">$ cad render reports/tmp/report8/work/wandhalter.scad -o docs/reports/08-cli-agenten/img/fs-2.png --line 10 --views &quot;iso,right&quot; --show &quot;grids,labels&quot; --size 1400x620<span class="t">  652 ms, Exit 0</span></pre><pre>docs/reports/08-cli-agenten/img/fs-2.png: 1400x620, Ansichten iso, right, Zeile 10: [2] fillet, Kontext Modul halter, Hülle 40 × 50 × 50 mm
+Hinweis: Raster g: 100 Punkte, nur Ebenen beschriftet (Punkte bis 48; --view und --zoom für Details)</pre></div><figure><img src="img/fs-2.png"><figcaption></figcaption></figure></div>
+<div class="step"><h3>Schritt 8: Schnitt durch die Bohrung</h3><p>Schnitt x = 20 zeigt Stange und Bohrung mit Spalt; Maße des Ganzen.</p><div class="cmd"><pre class="call">$ cad render reports/tmp/report8/work/wandhalter.scad -o docs/reports/08-cli-agenten/img/fs-3.png --section x=20 --show dims --size 900x650<span class="t">  866 ms, Exit 0</span></pre><pre>docs/reports/08-cli-agenten/img/fs-3.png: 900x650, Ansicht iso, Schnitt durch [20, 0, 0] Normale [1, 0, 0], Hülle 60 × 50 × 50 mm</pre></div><figure><img src="img/fs-3.png"><figcaption></figcaption></figure></div>
+<div class="step"><h3>Schritt 9: Ausgeben</h3><p>Jedes Bauteil als STEP-Datei.</p><div class="cmd"><pre class="call">$ cad export reports/tmp/report8/work/wandhalter.scad --all-parts -o reports/tmp/report8/work/teile --format step<span class="t">  185 ms, Exit 0</span></pre><pre>halter: reports/tmp/report8/work/teile/halter.step (0 Dreiecke, 14823 Bytes, Volumen 50775.7597 mm³)
+stange: reports/tmp/report8/work/teile/stange.step (0 Dreiecke, 3821 Bytes, Volumen 18849.5559 mm³)</pre></div></div>
+<p>Bilanz: 13 CLI-Aufrufe, zusammen 3,7 s. Was gefehlt hätte ohne die neuen Funktionen: die Abstandsmessung (Spiel), die Rasternamen im Bild (welche Ebene ist <code>arm</code>?) und der Schnitt durch die Bohrung.</p>
+
+<h2>12 Tests</h2>
+<ul>
+<li><code>cargo test --workspace</code>: 318 bestanden, 0 fehlgeschlagen, 0 ignoriert; <code>cargo clippy --workspace --all-targets -- -D warnings</code>: ohne Befund; <code>cargo fmt --check</code>: ohne Befund.</li>
+<li>Neu in <code>crates/cad-cli/tests/agent.rs</code> (assert_cmd, je Befehl/Option mit JSON-Feldern): outline (Spec-Beispiel, Funktionen/Variablen, Projekt), render (Kontaktbogen: Bildgröße und gleiche Skalierung; freie Kamera; Auswahl; Überlagerungen ändern Pixel; Schnitt verkleinert die sichtbare Fläche und erzeugt Kappenpixel; Röntgen), measure (Anker, Rasterpunkte, Koordinaten gegen Sollwerte des Spec-Beispiels; Hülle, Volumen; Kollision an <code>tests/data/kollision.scad</code>; Abstand), watch (Datei ändern → zweite JSON-Zeile, Cache-Treffer steigen; Text und Timeout), set (Parameter, Literal, Diff, Ablehnung, Projektdateien), UI-Einstieg.</li>
+<li>Neu in <code>crates/cad-render/tests/features.rs</code>: Kamerawinkel = Standardansichten, Schnitt mit Kappe an einem geschlossenen Würfel (von oben ganz Kappe, von unten keine), Perspektive und feste Skalierung, Marker/Beschriftung/Titel/Kontaktbogen; in <code>geom.rs</code>: Dreieck-Dreieck-Abstand an Würfeln (Fläche, Kante, Ecke, Überlappung).</li>
+</ul>
+<table><tr><th>Testdatei</th><th>Test</th><th>Ergebnis</th></tr><tr><td>unittests src/main.rs</td><td>geom::tests::distance_of_cubes</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>outline_spec_example</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>measure_points_bounds_volume</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>outline_functions_variables_and_projects</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>measure_interference_and_clearance</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>render_free_camera</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>render_section_reduces_visible_area</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>render_overlays_change_pixels</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>render_contact_sheet</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>set_param_and_literal</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>ui_entry_is_reserved</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>render_xray</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>set_in_project_file</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>watch_text_and_timeout</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>watch_reports_a_second_run_after_a_change</td><td class="ok">ok</td></tr><tr><td>tests/agent.rs</td><td>render_selection</td><td class="ok">ok</td></tr><tr><td>tests/features.rs</td><td>angles_match_named_views</td><td class="ok">ok</td></tr><tr><td>tests/features.rs</td><td>perspective_and_fixed_scale</td><td class="ok">ok</td></tr><tr><td>tests/features.rs</td><td>markers_labels_title_and_sheet</td><td class="ok">ok</td></tr><tr><td>tests/features.rs</td><td>section_clips_and_caps_a_closed_mesh</td><td class="ok">ok</td></tr></table>
+
+<h2>13 Grenzen</h2>
+<ul>
+<li>Schnittkappen setzen geschlossene Netze voraus; bei offenen Flächen (<code>surface</code> ohne <code>thicken</code>) und transparenten Körpern gibt es keine Kappe. Die Kappe ist eben und einfarbig (Schraffur je Körper abwechselnd), keine Materialunterscheidung.</li>
+<li><code>--clearance</code> misst an der Tessellierung (Genauigkeit ± 2·<code>--mesh-tol</code>), <code>--interference</code> exakt über den Kernel; Bauteile, deren Hülle sich nicht überlappt, werden ohne Kernel als kollisionsfrei gezählt.</li>
+<li>Rasterpunkte werden bis 48 Punkte je Raster beschriftet, darüber nur die Ebenen (Hinweis in <code>notes</code>); überdeckte Beschriftungen fallen weg.</li>
+<li><code>outline</code> wertet jedes Modul mit seinen Standardwerten aus; Module mit Pflichtparametern ohne Standardwert zeigen dann ggf. keine Raster (<code>errors_with_defaults</code>).</li>
+<li><code>watch</code> liest bei jeder Änderung alle Projektdateien neu; Änderungen innerhalb der Entprellzeit (<code>--debounce</code>, 60 ms) werden zu einem Lauf zusammengefasst.</li>
+<li>Kein persistenter Cache zwischen Aufrufen (Abschnitt 10).</li>
+</ul>
+</main>
+</body>
+</html>

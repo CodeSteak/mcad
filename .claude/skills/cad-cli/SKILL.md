@@ -1,13 +1,14 @@
 ---
 name: cad-cli
-description: Modelle der parametrischen CAD-Sprache (OpenSCAD-Stil mit Rastern, Ankern und Fillet-Zonen, Dateien *.scad) prüfen, auswerten, als PNG ansehen und als STL/3MF/STEP exportieren – mit der CLI `cad` (crates/cad-cli). Verwenden, wenn ein Modell geschrieben, geändert, untersucht oder Fehler darin gesucht werden.
+description: Modelle der parametrischen CAD-Sprache (OpenSCAD-Stil mit Rastern, Ankern und Fillet-Zonen, Dateien *.scad) ohne UI entwickeln und prüfen – Übersicht, Diagnosen, Bilder (Kontaktbogen, Raster/Anker eingeblendet, Schnitt, Röntgen), Messungen (Abstände, Volumen, Kollisionen), Beobachten bei Dateiänderung, Parameter setzen und Export STL/3MF/STEP mit der CLI `cad` (crates/cad-cli). Verwenden, wenn ein Modell geschrieben, geändert, untersucht oder Fehler darin gesucht werden.
 ---
 
 # CAD-CLI `cad`
 
-Die CLI wertet eine Quelldatei mit denselben Crates aus wie der Browser (Parser, Auswertung,
+Die CLI wertet eine Quelldatei mit denselben Crates aus wie die UI (Parser, Auswertung,
 Engine, SMLib-Kernel nativ) und zeigt das Ergebnis als Text, JSON oder Bild. Damit lässt sich
-ein Modell ohne Browser bauen und kontrollieren.
+ein Modell komplett headless bauen und kontrollieren – auch parallel zu einem Menschen, der
+dieselben Dateien in der UI bearbeitet (`cad watch` bemerkt jedes Speichern).
 
 ## Bauen und aufrufen
 
@@ -16,23 +17,50 @@ ein Modell ohne Browser bauen und kontrollieren.
 export SMLIB_PREBUILT=/home/user/controller-cad/smlib/build-native   # falls vorhanden
 smlib/fetch.sh                                                         # Quellen (tangency-labs/smlib @ 7eba8aa), falls fehlend
 cargo build --release -p cad-cli
-target/release/cad --help
+target/release/cad --help              # ohne Argumente: Hilfe
 ```
 
-Datei `-` liest von stdin: `echo 'cube(5);' | cad check -`.
+Datei `-` liest von stdin: `echo 'cube(5);' | cad check -`. `cad datei.scad` ohne Befehl ist
+für die Desktop-UI reserviert und endet heute mit Exit 2 und einem Hinweis.
+
+## Empfohlener Ablauf für Agenten
+
+1. **Verstehen:** `cad outline datei.scad` – Module mit Parametern (Standardwert, Typ), Raster
+   und Anker je Modul, Funktionen, Variablen mit Werten, benannte Instanzen, Bauteile (Hülle,
+   Volumen), `include`/`use`, Diagnosen. Ein Aufruf reicht für ein Projekt.
+2. **Editieren:** Datei ändern (Edit-Werkzeug) oder `cad set` für Standardwerte/Literale.
+3. **Prüfen:** `cad check datei.scad` – erst weiter, wenn keine Fehler. Warnungen lesen
+   (z. B. „0 Kanten“ bei leerer Zonenauswahl).
+4. **Ansehen:** `cad render datei.scad -o /tmp/x.png --views all --show grids,anchors` und
+   **das Bild ansehen** (Read-Tool). Für ein Modul `--module NAME` (Raster sind nur im eigenen
+   Modul sichtbar), für Details `--line N`, `--section z=…`, `--xray`, `--show labels,dims`.
+5. **Nachmessen:** `cad inspect datei.scad --line N` (Knoten, Hülle, Volumen, Kanten,
+   Kernel-Meldung) und `cad measure` (Abstände zwischen Ankern/Rasterpunkten, Hülle, Volumen,
+   Kollisionen der Bauteile, Abstand zweier Bauteile).
+6. **Ausgeben:** `cad export datei.scad -o teil.step` (oder `--all-parts -o ordner/`).
+
+Für viele kleine Schritte: `cad watch datei.scad --json --render /tmp/x.png --views all` in
+einem Hintergrundprozess laufen lassen – jede Dateiänderung ergibt eine JSON-Zeile und ein
+neues Bild. Der Kernel-Cache bleibt erhalten: nur geänderte Knoten werden neu berechnet
+(Bericht 8: ~25 ms ohne Geometrieänderung, sonst die Kernelzeit der geänderten Knoten),
+statt 0,1–1,1 s für jeden einzelnen Aufruf (jeder Prozess beginnt mit leerem Cache).
 
 ## Befehle
 
 | Befehl | Zweck |
 | --- | --- |
 | `cad check DATEI [--no-kernel]` | Diagnosen `datei:zeile:spalte: Fehler/Warnung (Syntax/Auswertung/Kernel): …` |
+| `cad outline DATEI [--no-kernel]` | Übersicht (siehe oben); `--no-kernel`: ohne Hüllen/Volumen, schneller |
 | `cad eval DATEI [--module m] [-D name=wert]…` | Baum (Knoten, Zeile, Status, Hülle), Werte der Variablen, Raster, Anker, `echo` |
 | `cad inspect DATEI --line N` | Was Zeile N erzeugt: Knoten, Hülle, Volumen/Fläche, ausgewählte Kanten, Hinweise („4 Kanten“), Fehler, Griffe |
-| `cad render DATEI -o bild.png [--view iso\|front\|back\|top\|bottom\|left\|right] [--line N] [--size 1024x768]` | Bild; mit `--line` wie im Editor: Knoten der Zeile voll, Rest gedimmt, Zonen blau, abgezogene Körper rot halbtransparent, ausgewählte Kanten orange, gescheiterte Kanten rot |
+| `cad render DATEI -o bild.png [Optionen]` | Bild (Optionen unten) |
+| `cad measure DATEI [Optionen]` | Messen (Optionen unten) |
+| `cad watch DATEI [--json] [--render bild.png …]` | Beobachten und bei jeder Änderung neu auswerten (unten) |
+| `cad set DATEI --param modul.param=wert \| --literal [datei:]zeile:spalte=wert [--dry-run]` | Code über die Engine ändern (unten) |
 | `cad export DATEI -o teil.stl\|teil.3mf\|teil.step [--schema ap214]` | Exportdatei der Wurzel (STEP: exakte B-Rep, AP242) |
-| `cad export DATEI --part NAME [--part NAME2] -o teil.stl\|.3mf\|.step` | Nur diese Bauteile (benannte Instanzen auf oberster Ebene, z. B. `deckel`, `k[2]`); 3MF: ein Objekt je Bauteil, STEP: ein Produkt mit ihren Körpern |
+| `cad export DATEI --part NAME [--part NAME2] -o …` | Nur diese Bauteile (benannte Instanzen auf oberster Ebene, z. B. `deckel`, `k[2]`) |
 | `cad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | Jedes Bauteil als eigene Datei (`deckel.stl`, `k_2.step`) |
-| `cad diff-kernels DATEI…` | Vergleich SMLib ↔ solidcore je Knoten (nur Entwicklung; nur mit `cargo build -p cad-cli --features solidcore`, sonst Exit 2 mit Hinweis) |
+| `cad diff-kernels DATEI…` | Vergleich SMLib ↔ solidcore (nur Entwicklung, `--features solidcore`) |
 
 Gemeinsame Optionen: `--json`, `--module m` (Modul als Kontext, verschachtelt `aussen::innen`),
 `-D name=wert` (Parameter des Kontextmoduls, Wert als JSON: `-D w=60`, `-D hohl=true`,
@@ -42,47 +70,128 @@ Gemeinsame Optionen: `--json`, `--module m` (Modul als Kontext, verschachtelt `a
 `render` nur dieses Modul mit seinen Standardwerten (und `-D`). `--whole-file` behält den
 Dateikontext.
 
-**Projekte aus mehreren Dateien:** `include <datei>` fügt den Inhalt ein, `use <datei>` macht
-nur Module und Funktionen sichtbar (wie OpenSCAD); Pfade relativ zur einbindenden Datei.
-Diagnosen anderer Dateien stehen mit deren Pfad da (`lib/teile.scad:3:5: …`, JSON: `file`,
-`range` lokal in dieser Datei); `eval` listet `Dateien:` und `Bauteile:` (Hülle, Volumen).
+**Ziele** (`--fit`, `measure --bounds/--volume/--area`): `all` (Wurzel), `part:NAME` (oder nur
+`NAME`), `line:N` (Knoten der Zeile), `node:I` (Index aus `cad eval`).
 
-Exit-Codes: `0` ok · `1` Diagnosen mit Fehlern (Syntax, Auswertung oder gescheiterte
-Kernel-Operation; Ausgabe trotzdem vollständig) · `2` Aufruffehler (Argumente, Datei) ·
-`3` Kernel-/interner Fehler (Tessellierung, Export).
+### `render`
 
-## Vorgehen
+| Option | Wirkung |
+| --- | --- |
+| `--view iso\|front\|back\|top\|bottom\|left\|right` | Standardansicht (Standard `iso`) |
+| `--views iso,front,top,right` / `--views all` | Kontaktbogen: beschriftete Teilbilder mit **gleicher Skalierung** (`all` = iso, front, top, right); `--size` ist dann die Gesamtgröße (Standard 1600x1200) |
+| `--azimuth A --elevation E` | Freie Kamera: Azimut 0° = von vorn (−y), 90° = von rechts (+x); Höhe 90° = von oben; `iso` = 45°/35,26° |
+| `--zoom Z`, `--target x,y,z`, `--fit ZIEL` | Vergrößern, Blickpunkt, Einpassen auf ein Ziel (Standard: alles Gezeichnete) |
+| `--ortho` (Standard) / `--perspective [--fov 35]` | Projektion |
+| `--part NAME` (mehrfach) | Nur diese Bauteile |
+| `--line N` (mehrfach), `--node I` (mehrfach), `--only` | Knoten voll, Rest gedimmt (mit `--only` weggelassen); Zonen blau, abgezogene Körper rot halbtransparent, ausgewählte Kanten orange, gescheiterte Kanten rot |
+| `--show grids,anchors,handles,edges,labels,bbox,dims` (oder `all`) | Überlagerungen: Raster des Kontextmoduls (Ebenen als Rechtecke am Rand, Ausdrucksebenen gestrichelt, Schnittpunkte als Punkte, Ebenennamen `g.links`), Anker als gelbe Rauten mit Namen und Richtungspfeil, Griffe als orange Quadrate, verdeckte Kanten gestrichelt, `labels`: Rasterpunkte `g[a,b,c]`, Griffe, Bauteilnamen; Hüllquader, `dims`: Maße B/T/H in mm |
+| `--section x=WERT\|y=WERT\|z=WERT` | Schnitt an einer Achsebene, Schnittfläche gefüllt (rot schraffiert) |
+| `--section-plane px,py,pz,nx,ny,nz` | Schnitt an beliebiger Ebene (Punkt, Normale) |
+| `--section-flip` | Die andere Hälfte behalten |
+| `--xray` | Alles halbtransparent mit Kanten |
+| `--size BxH`, `--no-axes`, `--whole-file` | Bildgröße, ohne Achsenkreuz, Dateikontext |
 
-1. Datei ändern.
-2. `cad check datei.scad` – erst weiter, wenn keine Fehler. Warnungen lesen (z. B. „0 Kanten“
-   bei leerer Zonenauswahl, ungleichmäßiges `scale`).
-3. `cad render datei.scad -o /tmp/x.png` und **das Bild ansehen** (Read-Tool). Für Details
-   andere Ansichten (`--view top`, `front`) oder eine Zeile hervorheben (`--line 12`).
-4. Bei Zweifeln `cad inspect datei.scad --line N` (Volumen, Hülle in Weltkoordinaten,
-   Kantenanzahl, Fehlermeldung des Kernels) oder `cad eval` (Werte, Raster, Anker).
-5. Zum Schluss ggf. `cad export datei.scad -o teil.stl`.
+**Schnitt-Konvention (gleich in der UI):** Ebene durch Punkt `p` mit Normale `n`; entfernt
+wird die Hälfte, in die `n` zeigt, es bleibt `(q − p) · n ≤ 0`. `x=10` heißt `p = (10,0,0)`,
+`n = +x` (entfernt x > 10), ebenso `y=`/`z=`; `--section-flip` kehrt `n` um. Verfahren:
+Clipping im Renderer mit gefüllter Kappe (Stencil-Prinzip: Kappe dort, wo die Ebene im
+Körper liegt), kein Kernel-Boolean – schnell und für jede Ebene gleich. In `iso` sieht man
+die Kappe von `z=`/`x=`-Schnitten; für `y=` `--section-flip` oder `--view back` nehmen.
+
+Raster sind nur im eigenen Modul sichtbar: `--show grids` im Dateikontext zeigt nur Raster
+der obersten Ebene (Hinweis in `notes`); für Modulraster `--module NAME` oder `--line N` in
+der Moduldefinition.
+
+### `measure`
+
+| Option | Ergebnis |
+| --- | --- |
+| `--between A B` | Abstand und Differenzvektor. A/B: Anker `k.ecke`, `k[2].ecke` (im Modulkontext auch `ecke`), Rasterpunkt im Kontext `g[rechts, hinten, deckel]` (Einträge auch Zahlen oder `_`), Koordinate `[x,y,z]` |
+| `--bounds [ZIEL]` | Achsparallele Hülle (min, max, Größe) |
+| `--volume [ZIEL]`, `--area [ZIEL]` | Volumen mm³ / Fläche mm² (Kernel, exakt) |
+| `--interference [--tolerance 0.001]` | Paarweises Schnittvolumen aller Bauteile (Kernel-Schnitt der exakten B-Rep), Kollisionen über der Toleranz (mm³) |
+| `--clearance A B [--mesh-tol 0.01]` | Kleinster Abstand zweier Bauteile über die Tessellierung (Dreieck-Dreieck-Abstand), Genauigkeit ± 2·mesh-tol; überschneiden sie sich: 0 und `collision: true` |
+
+Beispiel (Spec `gehaeuse`): `cad measure gehaeuse.scad --between k.ecke k.oben` → 67,082 mm,
+Δ [−60, −30, 0]; `cad measure gehaeuse.scad --module gehaeuse --between "g[links,vorne,boden]" "g[rechts,hinten,deckel]"` → 53,852 mm.
+
+### `watch`
+
+`cad watch DATEI [--json] [--render bild.png RENDER-OPTIONEN] [--once-after-change] [--timeout S]`
+beobachtet die Datei und alle eingebundenen Dateien (`include`/`use`, auch neu hinzugekommene),
+wertet bei Änderung in derselben Sitzung neu aus (Engine-Cache bleibt: nur geänderte Knoten
+gehen an den Kernel) und schreibt pro Lauf eine Zeile auf stdout – mit `--json` ein
+JSON-Objekt pro Zeile. Ende mit Strg+C, `--once-after-change` (nach dem ersten durch eine
+Änderung ausgelösten Lauf) oder `--timeout S` (S Sekunden ohne Änderung).
+
+### `set`
+
+- `cad set datei.scad --param gehaeuse.w=50` schreibt den Standardwert (wie „Als Standard
+  übernehmen“ in der UI; Modul auch aus `use`-Dateien, verschachtelt `aussen::innen.p`).
+- `cad set datei.scad --literal 21:17=70` ersetzt das editierbare Literal an Zeile:Spalte
+  (Spalte irgendwo im Literal; die Literale, die die UI ändert: Variablenwerte, Griffe,
+  Rasterebenen, Standardwerte); in Projektdateien `--literal lib/teile.scad:12:20=4`.
+- Mehrere `--param`/`--literal` in einem Aufruf; `--dry-run` zeigt nur den Diff. Vor dem
+  Schreiben wird das geänderte Projekt ausgewertet: erzeugt die Änderung neue Fehler, wird
+  nichts geschrieben (Exit 1, `refused: true`), außer mit `--force`. Geschrieben wird atomar
+  (temporäre Datei + Umbenennen).
+
+Exit-Codes (alle Befehle): `0` ok · `1` Diagnosen mit Fehlern (Ausgabe trotzdem vollständig;
+`set`: Änderung abgelehnt) · `2` Aufruffehler (Argumente, Datei, unbekannter Anker/Bauteil/
+Ebene) · `3` Kernel-/interner Fehler.
 
 ## JSON (Kurzfassung)
 
-Jede Antwort ist ein Objekt mit
-`schema_version` (1), `command`, `file`, `ok`, `exit_code`, `context` (Modulname oder `null`),
-`diagnostics: Diagnostic[]`, bei Aufruffehlern `error`.
+Jede Antwort ist ein Objekt mit `schema_version` (1), `command`, `file`, `ok`, `exit_code`,
+`context` (Modulname oder `null`), `diagnostics: Diagnostic[]`, bei Aufruffehlern `error`.
 `Diagnostic = { severity: "error"|"warning"|"info", message, source: "syntax"|"eval"|"kernel",
-node, range }`, `range = { from, to, line, col, end_line, end_col }` (Zeilen/Spalten
-1-basiert, Offsets in UTF-16).
+node, range, file? }`, `range = { from, to, line, col, end_line, end_col }` (1-basiert,
+Offsets UTF-16). `Bounds = { min, max, size }`. Vollständiges Schema: Kopf von
+`crates/cad-cli/src/main.rs`.
 
 - `check`: `+ { errors, warnings }`
-- `eval`: `+ { scene }` – vollständige Szene wie im Browser-Protokoll
-  (`web/src/engine/protocol.ts`, Typ `Scene`): `nodes[]` (idx, parent, children, label, range,
-  status, bounds im Knotensystem, `display_world` 4×4 spaltenweise, hints, selected_edges,
-  messages), `grids[]` (Ebenen mit Wert, Literal oder Ausdruck), `anchors[]`
-  (Kontextkoordinaten, `text` = `k.ecke`), `hints[]` (Variablenwerte), `handles[]`, `modules[]`,
-  `echoes[]`, `context.params`, `stats`.
+- `outline`: `+ { files, includes: [{file, line, path, use, found}], modules: [{name, qualified,
+  file, line, end_line, params: [{name, default, default_value, type}], grids: [{name, line,
+  planes: [{axis, name, value, kind: literal|expression|reference|implicit, expr}]}], anchors:
+  [{name, point, dir, line}]}], functions: [{name, params, file, line, body}], variables:
+  [{name, expr, value, text, literal, file, line}], grids, anchors: [{ref, point, dir}],
+  instances: [{name, module, line, part}], parts: [{name, module, bounds, volume}], counts }`
+- `eval`: `+ { scene }` – vollständige Szene wie im Protokoll (`web/src/engine/protocol.ts`,
+  Typ `Scene`): `nodes[]`, `grids[]`, `anchors[]` (`text` = `k.ecke`), `hints[]`, `handles[]`,
+  `modules[]`, `echoes[]`, `context.params`, `stats`.
 - `inspect`: `+ { line, nodes: [{ idx, label, instance, range, status, dim, flags, subtracted,
   world_bounds, volume, area, selected_edges, opened_faces, hints, messages, cached }], hints,
   handles, echoes }`
-- `render`: `+ { output, width, height, view, line, highlighted: [idx], triangles }`
-- `export`: `+ { output, format, bytes, triangles, volume, area, bounds, step? }` (`step`: Körper, Flächen, Kanten, Flächen-/Kurventypen)
+- `render`: `+ { output, width, height, view, views: [{name, x, y, width, height, camera}],
+  camera: {projection, fov_deg, azimuth, elevation, dir, up, right, target, eye,
+  scale_px_per_mm, width_mm, height_mm}, lines, highlighted, visible_nodes: [{idx, label,
+  instance, role, line}], triangles, show, overlays: {grids, grid_points, anchors, handles,
+  labels}, section: {point, normal, keeps, method}|null, xray, bounds, notes, timings }`
+- `measure`: `+ { between?: {a: {ref, kind, point}, b, delta, distance}, bounds?: {target,
+  bounds}, volume?: {target, volume}, area?: {target, area}, interference?: {parts, pairs,
+  collisions: [{a, b, volume}]}, clearance?: {a, b, distance, point_a, point_b, collision,
+  accuracy} }`
+- `watch` (eine Zeile je Lauf): `{ schema_version, command, run, trigger: start|change,
+  changed, ok, errors, warnings, diagnostics, stats: {nodes, cache_hits, kernel_calls}, volume,
+  bounds, parts: [{name, volume, bounds}], render, timings: {total_ms, eval_ms, kernel_ms,
+  render_ms} }`
+- `set`: `+ { changes: [{kind, spec, file, line, col, old, new}], dry_run, written, refused,
+  errors_before, errors_after, diff }`
+- `export`: `+ { output, format, bytes, triangles, volume, area, bounds, step? }`
+
+## Beispiele
+
+```sh
+cad outline examples/projekt-gehaeuse/gehaeuse.scad
+cad render examples/spec/gehaeuse.scad -o /tmp/g.png --module gehaeuse --views all --show grids,anchors,labels
+cad render examples/spec/gehaeuse.scad -o /tmp/s.png --section z=10 --show dims
+cad render examples/spec/fillet_zonen.scad -o /tmp/f.png --line 12 --azimuth 120 --elevation 30
+cad render examples/projekt-gehaeuse/gehaeuse.scad -o /tmp/d.png --part deckel --xray
+cad measure examples/spec/gehaeuse.scad --between k.ecke k.oben --volume part:k
+cad measure examples/projekt-gehaeuse/gehaeuse.scad --interference --clearance gehaeuse deckel
+cad set examples/spec/gehaeuse.scad --param gehaeuse.w=50 --dry-run
+cad watch teil.scad --json --render /tmp/teil.png --views all --show grids,anchors &
+```
 
 ## Sprache: Besonderheiten gegenüber OpenSCAD
 

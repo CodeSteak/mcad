@@ -1,28 +1,69 @@
-//! `cad`: command line interface for the CAD language (native SMLib kernel).
+//! `cad`: command line interface for the CAD language (native SMLib kernel), made for agents
+//! that develop and check models without the UI.
 //!
-//! Commands (Plan section 8): `check`, `eval`, `inspect --line n`, `render -o bild.png`,
-//! `export -o teil.stl|teil.3mf|teil.step`, `diff-kernels <files…>` (SMLib ↔ solidcore, see
-//! `diff.rs`). Every command prints readable text, or with `--json` one
-//! JSON object (schema below). The evaluation runs in a thread with a 256 MiB stack.
+//! Commands (Plan section 8): `check`, `outline`, `eval`, `inspect --line n`,
+//! `render -o bild.png`, `measure`, `watch`, `set`, `export -o teil.stl|teil.3mf|teil.step`,
+//! `diff-kernels <files…>` (SMLib ↔ solidcore, see `diff.rs`). Every command prints readable
+//! text, or with `--json` one JSON object (`watch`: one object per line). The evaluation runs
+//! in a thread with a 256 MiB stack. `cad DATEI.scad` without a command is reserved for the
+//! desktop UI (exit 2 with a message), `cad` without arguments prints the help.
 //!
 //! Exit codes: 0 ok, 1 diagnostics with severity error (syntax, evaluation or a failed kernel
-//! operation), 2 usage error (arguments, unreadable file), 3 kernel/internal error
-//! (tessellation or export failed, panic).
+//! operation; `set`: change refused), 2 usage error (arguments, unreadable file, unknown
+//! reference), 3 kernel/internal error (tessellation or export failed, panic).
 //!
 //! JSON schema (`schema_version` = `cad_session::PROTOCOL_VERSION`, currently 1). Types such
 //! as `Diagnostic`, `Scene`, `SrcRange`, `Hint`, `Handle` are the protocol types documented in
-//! `web/src/engine/protocol.ts` (lines/columns 1-based, offsets UTF-16):
+//! `web/src/engine/protocol.ts` (lines/columns 1-based, offsets UTF-16); `Bounds` here is
+//! `{ min, max, size }`:
 //!
 //! ```text
 //! common:  { schema_version, command, file, ok, exit_code, context: string|null,
 //!            diagnostics: Diagnostic[], error?: string }
 //! check:   + { errors: number, warnings: number }
+//! outline: + { files: [{path, role}], includes: [{file, line, path, use, found}],
+//!            modules: [{name, path, qualified, file, line, end_line,
+//!                       params: [{name, default, default_value, type}],
+//!                       grids: [Grid'], anchors: [{name, point, dir, line}], errors_with_defaults}],
+//!            functions: [{name, params: [{name, default}], file, line, body}],
+//!            variables: [{name, expr, value, text, literal, file, line}],
+//!            grids: Grid'[] (file level), anchors: [{ref, point, dir, line}],
+//!            instances: [{name, module, file, line, depth, part}],
+//!            parts: [{name, module, line, node, bounds: Bounds|null, volume}],
+//!            counts: {errors, warnings, nodes, modules, parts}, kernel: bool }
+//!          Grid' = { name, file, line, planes: [{axis: "x"|"y"|"z", name, value,
+//!                    kind: "literal"|"expression"|"reference"|"implicit", expr}] }
 //! eval:    + { scene: Scene|null }
 //! inspect: + { line, nodes: InspectNode[], hints: Hint[], handles: Handle[], echoes: Echo[] }
 //!          InspectNode = { idx, label, instance, range, status, dim, flags, subtracted,
 //!                          world_bounds: {min,max}|null, volume|null, area|null,
 //!                          selected_edges, opened_faces, hints, messages, cached }
-//! render:  + { output, width, height, view, line|null, highlighted: number[], triangles }
+//! render:  + { output, width, height, view, views: [{name, x, y, width, height, camera}],
+//!            camera: Camera, line|null, lines: number[], nodes: number[], parts: string[],
+//!            highlighted: number[], visible_nodes: [{idx, label, instance, role, line, file,
+//!            triangles}], triangles, show: string[], overlays: {grids, grid_points, anchors,
+//!            handles, labels, lines, markers}, section: {point, normal, keeps, method}|null,
+//!            xray, bounds: Bounds|null, notes: string[],
+//!            timings: {evaluate_ms, eval_ms, kernel_ms, render_ms} }
+//!          Camera = { projection: "ortho"|"perspective", fov_deg|null, azimuth, elevation,
+//!                     dir, up, right, target, eye, scale_px_per_mm, width_mm, height_mm }
+//!          role: base | dimmed | highlighted | zone | subtracted | background | modifier #|%
+//! measure: + { between?: {a: {ref, kind, point}, b: {…}, delta, distance},
+//!              bounds?: {target, nodes, bounds: Bounds|null},
+//!              volume?: {target, nodes, volume}, area?: {target, nodes, area},
+//!              interference?: {parts, tolerance, method, pairs: [{a, b, bounds_overlap,
+//!                              volume, collision?}], collisions: [{a, b, volume}]},
+//!              clearance?: {a, b, distance, mesh_distance, point_a, point_b,
+//!                           intersection_volume, collision, accuracy, mesh_tol, triangles,
+//!                           method} }
+//! watch:   one line per run: { schema_version, command, run, trigger: "start"|"change",
+//!            changed: string[], file, ok, exit_code, context, errors, warnings,
+//!            diagnostics, stats: {nodes, cache_hits, kernel_calls}, volume|null,
+//!            bounds: Bounds|null, parts: [{name, volume, bounds}],
+//!            render: {output, width, height}|{error}|null,
+//!            timings: {total_ms, eval_ms, kernel_ms, render_ms?} }
+//! set:     + { changes: [{kind: "param"|"literal", spec, file, line, col, old, new}],
+//!            dry_run, written: string[], refused, errors_before, errors_after, diff }
 //! export:  + { output, format: "stl"|"3mf"|"step", bytes, triangles, volume|null, area|null,
 //!            bounds: {min,max}|null, step?: StepStats }   (triangles 0 for STEP)
 //!          with --part/--all-parts: + { parts: [{ name, output, bytes, triangles, volume|null }] }
@@ -32,9 +73,15 @@
 //! file. Diagnostics of other files are printed with their path (`lib/teile.scad:3:5: …`).
 
 mod diff;
+mod geom;
+mod measure;
+mod outline;
 mod parts;
 mod render;
+mod set;
+mod watch;
 
+use std::ffi::OsString;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -47,10 +94,18 @@ use kernel_smlib::SmlibKernel;
 use serde_json::{Value as Json, json};
 
 #[derive(Parser)]
-#[command(name = "cad", version, about = "Parametrisches CAD: prüfen, auswerten, ansehen, exportieren")]
+#[command(
+    name = "cad",
+    version,
+    about = "Parametrisches CAD: prüfen, auswerten, ansehen, messen, exportieren",
+    allow_external_subcommands = true,
+    after_help = "Ablauf für Agenten: outline → editieren → check → render --views all --show grids,anchors \
+→ inspect/measure → export. `cad watch` wertet bei jeder Dateiänderung neu aus (Cache bleibt).\n\
+`cad DATEI.scad` (ohne Befehl) ist für die Desktop-UI reserviert."
+)]
 struct Cli {
     #[command(subcommand)]
-    cmd: Cmd,
+    cmd: Option<Cmd>,
 }
 
 #[derive(Args, Clone)]
@@ -78,6 +133,15 @@ enum Cmd {
         #[arg(long)]
         no_kernel: bool,
     },
+    /// Übersicht in einem Aufruf: Module mit Parametern, Funktionen, Variablen, Raster und
+    /// Anker je Modul, benannte Instanzen, Bauteile, Dateien, Diagnosen.
+    Outline {
+        #[command(flatten)]
+        c: Common,
+        /// Ohne Kernel (keine Hüllen/Volumen der Bauteile, schneller).
+        #[arg(long)]
+        no_kernel: bool,
+    },
     /// Baum, Werte, Inline-Hinweise, Raster, Anker.
     Eval {
         #[command(flatten)]
@@ -94,27 +158,38 @@ enum Cmd {
         #[arg(long)]
         whole_file: bool,
     },
-    /// Bild des Modells (PNG), optional mit hervorgehobener Zeile wie im Editor.
+    /// Bild des Modells (PNG): Ansichten, Kontaktbogen, freie Kamera, Auswahl, Überlagerungen,
+    /// Schnitt, Röntgen.
     Render {
         #[command(flatten)]
         c: Common,
+        /// Ausgabebild (PNG).
         #[arg(short, long)]
         output: PathBuf,
-        /// iso, front, back, top, bottom, left, right
-        #[arg(long, default_value = "iso")]
-        view: String,
-        /// Knoten dieser Zeile voll, Rest gedimmt.
-        #[arg(long)]
-        line: Option<u32>,
-        /// Bildgröße BxH.
-        #[arg(long, default_value = "1024x768")]
-        size: String,
-        /// Dateikontext behalten, auch wenn die Zeile in einer Moduldefinition liegt.
-        #[arg(long)]
-        whole_file: bool,
-        /// Kein Achsenkreuz.
-        #[arg(long)]
-        no_axes: bool,
+        #[command(flatten)]
+        v: render::ViewArgs,
+    },
+    /// Messen: Abstand zweier Punkte (Anker, Rasterpunkt, Koordinate), Hülle, Volumen, Fläche,
+    /// Kollisionen der Bauteile, Abstand zweier Bauteile.
+    Measure {
+        #[command(flatten)]
+        c: Common,
+        #[command(flatten)]
+        a: measure::MeasureArgs,
+    },
+    /// Beobachtet die Datei und eingebundene Dateien; je Auswertung eine JSON-Zeile (mit --json)
+    /// bzw. eine Textzeile, optional neues Bild.
+    Watch {
+        #[command(flatten)]
+        c: Common,
+        #[command(flatten)]
+        a: watch::WatchArgs,
+    },
+    /// Code ändern über die Engine: Standardwert eines Modulparameters oder ein Literal;
+    /// schreibt atomar (`--dry-run`: nur Diff).
+    Set {
+        #[command(flatten)]
+        a: set::SetArgs,
     },
     /// Exportdatei (STL binär, 3MF oder STEP, nach Endung oder --format).
     Export {
@@ -146,7 +221,12 @@ enum Cmd {
         #[arg(long)]
         json: bool,
     },
+    #[command(external_subcommand)]
+    External(Vec<OsString>),
 }
+
+/// Names of the subcommands (messages for `cad DATEI` and unknown commands).
+const COMMANDS: &str = "check, outline, eval, inspect, render, measure, watch, set, export, diff-kernels";
 
 /// Failure that ends a command without a regular result.
 enum Fail {
@@ -163,16 +243,41 @@ struct Outcome {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    let json_mode = match &cli.cmd {
+    let Some(cmd) = cli.cmd else {
+        use clap::CommandFactory;
+        let _ = Cli::command().print_help();
+        println!();
+        return ExitCode::SUCCESS;
+    };
+    if let Cmd::External(args) = &cmd {
+        // Reserved: `cad` without a command starts the desktop UI in a later build.
+        let first = args.first().map(|a| a.to_string_lossy().into_owned()).unwrap_or_default();
+        let looks_like_file = first.ends_with(".scad") || first == "-" || Path::new(&first).exists();
+        if looks_like_file {
+            eprintln!(
+                "cad: UI nicht in diesem Build (`cad {first}` startet später die Desktop-UI).\n\
+                 Befehle: {COMMANDS}\nBeispiel: cad render {first} -o bild.png --views all"
+            );
+        } else {
+            eprintln!("cad: unbekannter Befehl `{first}`. Befehle: {COMMANDS} (cad --help)");
+        }
+        return ExitCode::from(2);
+    }
+    let json_mode = match &cmd {
         Cmd::Check { c, .. }
+        | Cmd::Outline { c, .. }
         | Cmd::Eval { c }
         | Cmd::Inspect { c, .. }
         | Cmd::Render { c, .. }
+        | Cmd::Measure { c, .. }
+        | Cmd::Watch { c, .. }
         | Cmd::Export { c, .. } => c.json,
+        Cmd::Set { a } => a.json,
         Cmd::DiffKernels { json, .. } => *json,
+        Cmd::External(_) => false,
     };
-    let name = command_name(&cli.cmd);
-    let worker = std::thread::Builder::new().stack_size(256 << 20).name("cad-eval".into()).spawn(move || run(&cli.cmd));
+    let name = command_name(&cmd);
+    let worker = std::thread::Builder::new().stack_size(256 << 20).name("cad-eval".into()).spawn(move || run(&cmd));
     let result = match worker {
         Ok(h) => h.join().unwrap_or_else(|e| {
             let msg = e
@@ -187,7 +292,10 @@ fn main() -> ExitCode {
     match result {
         Ok(o) => {
             let code = if o.errors { 1 } else { 0 };
-            if json_mode {
+            if o.json.is_null() {
+                // the command printed its own output (watch)
+                print!("{}", o.text);
+            } else if json_mode {
                 let mut j = o.json;
                 j["exit_code"] = json!(code);
                 j["ok"] = json!(code == 0);
@@ -210,7 +318,8 @@ fn main() -> ExitCode {
                     "exit_code": code,
                     "error": msg,
                 });
-                println!("{}", serde_json::to_string_pretty(&j).unwrap());
+                let j = if name == "watch" { serde_json::to_string(&j) } else { serde_json::to_string_pretty(&j) };
+                println!("{}", j.unwrap());
             } else {
                 eprintln!("cad {name}: {msg}");
             }
@@ -222,11 +331,16 @@ fn main() -> ExitCode {
 fn command_name(c: &Cmd) -> &'static str {
     match c {
         Cmd::Check { .. } => "check",
+        Cmd::Outline { .. } => "outline",
         Cmd::Eval { .. } => "eval",
         Cmd::Inspect { .. } => "inspect",
         Cmd::Render { .. } => "render",
+        Cmd::Measure { .. } => "measure",
+        Cmd::Watch { .. } => "watch",
+        Cmd::Set { .. } => "set",
         Cmd::Export { .. } => "export",
         Cmd::DiffKernels { .. } => "diff-kernels",
+        Cmd::External(_) => "ui",
     }
 }
 
@@ -235,9 +349,11 @@ fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
         Cmd::Check { c, no_kernel } => check(c, !no_kernel),
         Cmd::Eval { c } => eval(c),
         Cmd::Inspect { c, line, whole_file } => inspect(c, *line, *whole_file),
-        Cmd::Render { c, output, view, line, size, whole_file, no_axes } => {
-            render::command(c, output, view, *line, size, *whole_file, !*no_axes)
-        }
+        Cmd::Outline { c, no_kernel } => outline::command(c, !no_kernel),
+        Cmd::Render { c, output, v } => render::command(c, output, v),
+        Cmd::Measure { c, a } => measure::command(c, a),
+        Cmd::Watch { c, a } => watch::command(c, a),
+        Cmd::Set { a } => set::command(a),
         Cmd::Export { c, output, format, schema, part, all_parts } => {
             if *all_parts || !part.is_empty() {
                 parts::export_parts(c, output, format.as_deref(), schema, part, *all_parts)
@@ -246,6 +362,7 @@ fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
             }
         }
         Cmd::DiffKernels { files, .. } => diff::command(files),
+        Cmd::External(_) => unreachable!("handled in main"),
     }
 }
 
@@ -264,9 +381,27 @@ pub(crate) struct Model {
     pub diagnostics: Vec<p::Diagnostic>,
     /// Context module name, `None` for the file.
     pub context: Option<String>,
+    /// Source version of the last evaluation (`watch` counts up).
+    pub version: u64,
 }
 
 impl Model {
+    /// Evaluates a new main file text in the same session (context, overrides and the engine
+    /// cache stay); project files are read again. Returns the time in ms.
+    pub fn reload(&mut self, text: String) -> f64 {
+        let t0 = std::time::Instant::now();
+        self.version += 1;
+        let mut msgs = self.session.post(ToEngine::SetSource { text: text.clone(), version: self.version });
+        msgs.extend(self.session.run_to_idle());
+        self.diagnostics = last_diagnostics(&msgs).unwrap_or_default();
+        // Syntax errors keep the last scene in the session; the CLI reports none.
+        let syntax =
+            self.diagnostics.iter().any(|d| d.severity == p::Severity::Error && d.source == p::DiagSource::Syntax);
+        self.scene = if syntax { None } else { self.session.done().map(|d| d.scene.clone()) };
+        self.text = text;
+        t0.elapsed().as_secs_f64() * 1000.0
+    }
+
     pub fn has_errors(&self) -> bool {
         self.diagnostics.iter().any(|d| d.severity == p::Severity::Error)
     }
@@ -426,7 +561,7 @@ pub(crate) fn load(c: &Common, line: Option<u32>, whole_file: bool, kernel: bool
     }
     let diagnostics = last_diagnostics(&msgs).unwrap_or_default();
     let scene = if kernel { s.done().map(|d| d.scene.clone()) } else { last_scene(&msgs) };
-    Ok(Model { session: s, file, root, text, scene, diagnostics, context: module })
+    Ok(Model { session: s, file, root, text, scene, diagnostics, context: module, version: 1 })
 }
 
 // ------------------------------------------------------------------------------------------
