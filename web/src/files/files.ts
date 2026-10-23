@@ -3,7 +3,7 @@
 // several files: autosave of the whole project, folders (File System Access API), ZIP upload
 // and download.
 
-import { dataFileRefs, fileBytes, fileText, guessMain, isProjectFile, normalizePath, resolvePath, stripCommonFolder } from "../logic/files";
+import { dataFileRefs, fileBytes, fileText, fromDataUrl, guessMain, isProjectFile, normalizePath, resolvePath, stripCommonFolder } from "../logic/files";
 import type { DirHandle, FileHandleLike, ProjectSnapshot } from "../state/project";
 import { readZip, writeZip } from "./zip";
 
@@ -163,7 +163,9 @@ export async function saveToFolder(dir: DirHandle, files: Record<string, string>
     for (const seg of parts.slice(0, -1)) d = await d.getDirectoryHandle(seg, { create: true });
     const fh: FileHandleLike = await d.getFileHandle(parts[parts.length - 1], { create: true });
     const out = await fh.createWritable();
-    await out.write(new Blob([fileBytes(text) as BlobPart]));
+    // binary files (fonts) are data URLs in the project: write their bytes, texts as text
+    const bin = fromDataUrl(text);
+    await out.write(bin ? new Blob([bin as BlobPart]) : text);
     await out.close();
     n++;
   }

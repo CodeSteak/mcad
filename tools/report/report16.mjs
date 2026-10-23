@@ -302,7 +302,7 @@ ${oscSvg.map(oscRow).join("\n")}
 <h3><code>examples/spec/text_schild.scad</code></h3>
 <div class="codefig">${pre(src("examples/spec/text_schild.scad"))}<div>${fig(cli("text_schild"), "Schild: Platte aus einer Skizze, Rand, erhabener Text in Inter Bold und Allerta Stencil, vier Farben")}${fig(cli("text_schild-oben"), "von oben")}${pre(T("schild-colors.txt"))}</div></div>
 <h3><code>examples/spec/svg_logo.scad</code></h3>
-<div class="codefig">${pre(src("examples/spec/svg_logo.scad"))}<div>${fig(cli("svg_logo"), "die vier SVGs: Logo, Blatt (skaliert), Haus als Prägung, Welle (nur id = \"welle\" und alles)")}${fig(cli("svg_logo-oben"), "von oben")}</div></div>
+<div class="codefig">${pre(src("examples/spec/svg_logo.scad"))}<div>${fig(cli("svg_logo"), "Logo, Blatt (skaliert), Haus als Prägung, aus welle.svg nur id = \"oval\" und id = \"bogen\"")}${fig(cli("svg_logo-oben"), "von oben")}</div></div>
 <p class="small">STEP von svg_logo: ${esc(T("svg_logo.step-counts.json"))} – Kreise bleiben <code>CIRCLE</code>, extrudierte Bögen <code>CYLINDRICAL_SURFACE</code>.</p>
 
 <h2>7 Messwerte</h2>
@@ -319,7 +319,7 @@ ${timeRow("text_schild", "examples/spec/text_schild.scad", null)}
 </table>
 <p>Je Glyphe: Extrusion je Kontur (Außen, Loch), Differenz für Löcher, eine Vereinigung aller Glyphen (sie berühren sich nicht). Teuer ist Text <b>auf</b> einer Fläche: SMLib prägt jede Glyphe in die Deckfläche (Schild: eine Vereinigung von ≈ 9 s nativ). Die neue Farbregion-Regel (Plan 17.10) vermeidet dabei die Booleans mit dem Ganzen; vorher brauchte der Kontaktbogen von T01 nativ 21 s und scheiterte („Schnittmenge gescheitert“), jetzt 4 s.</p>
 <h3>Wasm-Modul</h3>
-${wasm ? `<table><tr><th></th><th>roh</th><th>gzip -9</th></tr><tr><td><code>cad_wasm_bg.wasm</code> vorher (Commit ${esc(wasm.base ?? "cafe7a4")})</td><td class="n">${de(wasm.before.raw)} B</td><td class="n">${de(wasm.before.gzip)} B</td></tr><tr><td>nachher</td><td class="n">${de(wasm.after.raw)} B</td><td class="n">${de(wasm.after.gzip)} B</td></tr><tr><td>Zuwachs</td><td class="n">+${de(wasm.after.raw - wasm.before.raw)} B</td><td class="n">+${de(wasm.after.gzip - wasm.before.gzip)} B</td></tr><tr><td>davon Schriftdateien</td><td class="n">${de(wasm.fonts)} B</td><td class="n">–</td></tr></table><p class="small">Der Rest des Zuwachses ist Code (rustybuzz/ttf-parser, roxmltree, SVG- und Textlogik). <code>smlib.wasm</code> unverändert (${de(wasm.smlib)} B).</p>` : "<p>(fehlt)</p>"}
+${wasm ? `<table><tr><th></th><th>roh</th><th>gzip -9</th></tr><tr><td><code>cad_wasm_bg.wasm</code> vorher (Commit ${esc(wasm.base ?? "cafe7a4")})</td><td class="n">${de(wasm.before.raw)} B</td><td class="n">${de(wasm.before.gzip)} B</td></tr><tr><td>mit Text/SVG (vor dem Merge von Schritt 2)</td><td class="n">${de(wasm.after.raw)} B</td><td class="n">${de(wasm.after.gzip)} B</td></tr>${wasm.merged ? `<tr><td>nach dem Merge mit Skizzen Schritt 2 (Stand dieses Berichts)</td><td class="n">${de(wasm.merged.raw)} B</td><td class="n">${de(wasm.merged.gzip)} B</td></tr>` : ""}<tr><td>Zuwachs durch Text/SVG</td><td class="n">+${de(wasm.after.raw - wasm.before.raw)} B</td><td class="n">+${de(wasm.after.gzip - wasm.before.gzip)} B</td></tr><tr><td>davon Schriftdateien</td><td class="n">${de(wasm.fonts)} B</td><td class="n">–</td></tr></table><p class="small">Der Rest des Zuwachses ist Code (rustybuzz/ttf-parser, roxmltree, SVG- und Textlogik). <code>smlib.wasm</code> unverändert (${de(wasm.smlib)} B).</p>` : "<p>(fehlt)</p>"}
 
 <h2>8 UI</h2>
 <p>Prüfungen über den Zustand der UI (<code>window.__cad</code>), Szenen und Hüllen; Screenshots aus <code>web/e2e/text-svg.spec.ts</code>.</p>
@@ -349,6 +349,7 @@ ${scenarios.map((s) => `<h3>${esc(s.id)} ${esc(s.title)}</h3><p>${md(s.caption)}
 <li>SVG: kein Text, keine <code>use</code>-Klone, keine CSS-Klassen, keine Striche als Fläche, keine Masken/Clip-Pfade; Prozent- und em-Längen werden wie Zahlen behandelt.</li>
 <li>Dateinamen müssen als Text im Projekt stehen (ein zur Laufzeit zusammengesetzter Name wird nicht geladen).</li>
 <li>Gefunden beim Logo: Vereinigungen extrudierter Skizzenbögen über 90° rechnete die Fassade falsch (Skizzen Schritt 1); behoben in Schritt 2 (<code>profile::split_arcs</code>), die zwischenzeitliche Umgehung im Import entfiel.</li>
+<li>STEP: Extrusionen von Ellipsenbögen schreibt der Writer jetzt als Extrusion einer <code>ELLIPSE</code> (OpenCASCADE hatte die rationale B-Spline um 3,6·10<sup>−3</sup> falsch integriert). Offen: die Extrusion der quadratischen Q/T-Welle aus <code>welle.svg</code> misst OpenCASCADE um 3 % zu klein (Kernel 652,25 mm², analytisch 652,19 mm²) – <code>svg_logo.scad</code> nimmt aus <code>welle.svg</code> daher nur Ellipse und Bogen; die Welle selbst steht in 5.1.</li>
 <li>Standardausrichtung senkrechten Texts wie OpenSCAD (Versatz des Shapers); <code>valign</code> nach der echten Glyphenhülle (OpenSCAD: gerasterte FreeType-Metriken, ≤ 0,005 mm).</li>
 </ul>
 </main>

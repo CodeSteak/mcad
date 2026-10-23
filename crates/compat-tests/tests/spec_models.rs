@@ -465,10 +465,10 @@ const EXPECT: &[Expect] = &[
         ops: &[("linear_extrude", 5), ("color", 6), ("box", 1)],
         check: |out| {
             // one profile per filled SVG element: logo 10 (ring, 8 teeth, bolt), leaf 2,
-            // house 4, wave (id) 1, wave 5
+            // house 4, oval (id) 1, arc (id) 1
             let sketches =
                 out.tree.nodes.iter().filter(|n| matches!(n.op, Op::Profile(cad_ir::Profile::Sketch { .. })));
-            assert_eq!(sketches.count(), 10 + 2 + 4 + 1 + 5);
+            assert_eq!(sketches.count(), 10 + 2 + 4 + 1 + 1);
             // the ring keeps its circle as arcs (quarters), with a hole
             let ring = out.tree.nodes.iter().find_map(|n| match &n.op {
                 Op::Profile(cad_ir::Profile::Sketch { contours, .. })

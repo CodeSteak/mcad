@@ -17,6 +17,7 @@ translate([0, -50, 0]) difference() {
     color("red") translate([0, 0, dicke - 1]) linear_extrude(2) import("../svg/haus.svg", center = true);
 }
 
-// Nur ein Element des SVG (id), als Relief
-translate([80, -35, 0]) color("orange") linear_extrude(dicke) import("../svg/welle.svg", id = "welle", center = true);
-translate([80, -65, 0]) color("teal") linear_extrude(dicke / 2) import("../svg/welle.svg", center = true);
+// Nur einzelne Elemente des SVG (id): ungleichmäßig skalierter Kreis (exakte Ellipsenbögen),
+// gedrehter Ellipsenbogen
+translate([70, -35, 0]) color("orange") linear_extrude(dicke) import("../svg/welle.svg", id = "oval", center = true);
+translate([70, -60, 0]) color("teal") linear_extrude(dicke / 2) import("../svg/welle.svg", id = "bogen", center = true);

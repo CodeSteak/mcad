@@ -354,6 +354,93 @@ fn analytic_surface(s: &Surface) -> (Option<Surface>, bool) {
     (Some(Surface::Cylinder { frame, r }), reversed)
 }
 
+/// An extrusion of an elliptic arc (rational quadratic B-spline) perpendicular to its plane:
+/// the ellipse's frame (z: the arc's turning direction, x: major axis), radii and the extrusion
+/// vector. Found by a conic through five samples, checked on 65.
+fn elliptic_extrusion(s: &Surface) -> Option<(cad_kernel::brep::Frame, f64, f64, DVec3)> {
+    let Surface::Extrusion { curve, dir } = s else { return None };
+    if !curve.is_rational() || curve.degree != 2 {
+        return None;
+    }
+    const N: usize = 64;
+    let (t0, t1) = curve.domain();
+    let ts: Vec<f64> = (0..=N).map(|i| t0 + (t1 - t0) * i as f64 / N as f64).collect();
+    let pts = curve.eval_many(&ts);
+    let size = pts.iter().fold(1.0f64, |m, p| m.max(p.length()));
+    let tol = 1e-9 * size;
+    let d = dir.try_normalize()?;
+    let c0 = pts.iter().copied().sum::<DVec3>() / pts.len() as f64;
+    if pts.iter().any(|p| (*p - c0).dot(d).abs() > tol) {
+        return None;
+    }
+    let x = (pts[0] - c0) - d * (pts[0] - c0).dot(d);
+    let x = x.try_normalize()?;
+    let y = d.cross(x);
+    let q: Vec<glam::DVec2> = pts.iter().map(|p| glam::DVec2::new((*p - c0).dot(x), (*p - c0).dot(y))).collect();
+    let scale = q.iter().fold(0.0f64, |m, p| m.max(p.length())).max(1e-12);
+    let q: Vec<glam::DVec2> = q.iter().map(|p| *p / scale).collect();
+    // A x² + B xy + C y² + D x + E y = 1 through five samples (Gauss with pivoting)
+    let mut m = [[0.0f64; 6]; 5];
+    for (r, &i) in [0, N / 5, 2 * N / 5, 3 * N / 5, 4 * N / 5].iter().enumerate() {
+        let p = q[i];
+        m[r] = [p.x * p.x, p.x * p.y, p.y * p.y, p.x, p.y, 1.0];
+    }
+    for col in 0..5 {
+        let piv = (col..5).max_by(|&a, &b| m[a][col].abs().total_cmp(&m[b][col].abs()))?;
+        m.swap(col, piv);
+        if m[col][col].abs() < 1e-12 {
+            return None;
+        }
+        for r in 0..5 {
+            if r != col {
+                let f = m[r][col] / m[col][col];
+                for k in col..6 {
+                    m[r][k] -= f * m[col][k];
+                }
+            }
+        }
+    }
+    let [a, b, c, dd, e] = [0, 1, 2, 3, 4].map(|i| m[i][5] / m[i][i]);
+    let conic = |p: glam::DVec2| a * p.x * p.x + b * p.x * p.y + c * p.y * p.y + dd * p.x + e * p.y - 1.0;
+    if q.iter().any(|p| conic(*p).abs() > 1e-8) {
+        return None;
+    }
+    let det = 4.0 * a * c - b * b;
+    if det <= 1e-12 {
+        return None; // not an ellipse
+    }
+    let ctr = glam::DVec2::new((-2.0 * c * dd + b * e) / det, (b * dd - 2.0 * a * e) / det);
+    let f0 = conic(ctr);
+    let h = ((a - c) / 2.0).hypot(b / 2.0);
+    let (l_small, l_big) = ((a + c) / 2.0 - h, (a + c) / 2.0 + h);
+    if l_small <= 0.0 || f0 >= 0.0 {
+        return None;
+    }
+    let (r1, r2) = ((-f0 / l_small).sqrt() * scale, (-f0 / l_big).sqrt() * scale);
+    // major axis: eigenvector of the smaller eigenvalue
+    let ev = if b.abs() > 1e-15 {
+        glam::DVec2::new(b / 2.0, l_small - a).normalize()
+    } else if a <= c {
+        glam::DVec2::X
+    } else {
+        glam::DVec2::Y
+    };
+    let origin = c0 + (x * ctr.x + y * ctr.y) * scale;
+    let xaxis = x * ev.x + y * ev.y;
+    // turning direction of the arc
+    let (u, v) = (q[0] - ctr, q[1] - ctr);
+    let z = if u.perp_dot(v) >= 0.0 { d } else { -d };
+    let frame = cad_kernel::brep::Frame::new(origin, z, xaxis)?;
+    // verify in the ellipse's frame
+    let fy = frame.y();
+    let ok = pts.iter().all(|p| {
+        let w = *p - origin;
+        let (s, t) = (w.dot(frame.x) / r1, w.dot(fy) / r2);
+        (s * s + t * t - 1.0).abs() <= 1e-8
+    });
+    ok.then_some((frame, r1, r2, *dir))
+}
+
 /// Entity ids of one B-rep's shared vertices and edges.
 struct Shared {
     vertices: Vec<Option<u32>>,
@@ -410,7 +497,20 @@ fn face(w: &mut W, b: &Brep, sh: &mut Shared, st: &mut StepStats, f: &Face, flip
     }
     let (surf, reversed) = analytic_surface(&f.surface);
     let surf = surf.as_ref().unwrap_or(&f.surface);
-    let s = surface(w, surf);
+    let s = match elliptic_extrusion(surf) {
+        Some((frame, r1, r2, dir)) => {
+            // `ELLIPSE` as the swept curve (imported SVG ellipses, Bericht 16): OpenCASCADE
+            // integrates extrusions of rational B-splines without p-curves inaccurately
+            let a = w.axis2(&frame);
+            let (r1, r2) = (w.r(r1), w.r(r2));
+            let c = w.add(format!("ELLIPSE('',#{a},{r1},{r2})"));
+            let d = w.direction(dir);
+            let m = w.r(dir.length());
+            let v = w.add(format!("VECTOR('',#{d},{m})"));
+            w.add(format!("SURFACE_OF_LINEAR_EXTRUSION('',#{c},#{v})"))
+        }
+        None => surface(w, surf),
+    };
     let sense = if (f.same_sense != flip) != reversed { ".T." } else { ".F." };
     st.faces += 1;
     *st.surfaces.entry(surf.kind().to_string()).or_insert(0) += 1;

@@ -1114,6 +1114,14 @@ Material anderer Farbe, dessen Hülle es überlappt (Berührung zählt nicht); T
 bleiben getrennt, wenn ihre Hüllen sich nicht überlappen (`colors.rs`, `union_regions`).
 Mehrfarbiger Text auf einer Platte: Sekunden statt Minuten bzw. Abbruch durch den Watchdog.
 
+**STEP.** Extrusionen von Ellipsenbögen (rationale quadratische B-Spline, senkrecht zur Ebene
+extrudiert) schreibt der Writer als `SURFACE_OF_LINEAR_EXTRUSION` einer `ELLIPSE` (`cad-step`,
+`elliptic_extrusion`: Kegelschnitt durch fünf Abtastpunkte, geprüft an 65): OpenCASCADE
+integrierte die Extrusion der rationalen B-Spline um 3,6·10⁻³ falsch. Offen: die Extrusion einer
+quadratischen Q/T-Welle (`welle.svg`, `id = "welle"`) misst OpenCASCADE um 3 % zu klein (Kernel
+652,25 mm², analytisch 652,19 mm²); `svg_logo.scad` nutzt daher nur Ellipse und Bogen aus
+`welle.svg`.
+
 **Grenzen.** Kernel-Zeit wächst stark mit der Zahl der Glyphen auf einer gemeinsamen Fläche
 (Vereinigung Platte ∪ Text in SMLib: 9 Glyphen ≈ 1,5 s, 28 ≈ 9 s nativ); Konturen, die sich
 innerhalb eines Elements schneiden, werden nicht aufgelöst; keine Textpfade, kein `use`,
