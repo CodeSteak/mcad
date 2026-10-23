@@ -934,15 +934,14 @@ uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, u
 // that is geometrically wrong: whole face regions of an operand are classified to the wrong
 // side and dropped. Reproducer: three orthogonal cylinders of equal radius (r = 4, h = 30,
 // centred); (Z u Y) u X loses the -x arm of the X cylinder (volume 3237 instead of 3800,
-// bounds x >= -4), (Z u X) u Y is correct, (Y u X) u Z fails with SM_ERR. The untrimmed
-// cylinder pairs intersect in two ellipses that cross at tangent points, a singular case for
-// SMLib's surface intersection; the classification of the resulting face pieces then depends
-// on operand order. The facade therefore checks every pairwise result (volume and bounds
-// inequalities of the operation, and point membership at sample points next to the operand
-// faces) and on a mismatch retries with swapped operands, a different order of the remaining
-// operands, and finally with the second operand shifted by 1e-6..1e-4 of the model size
-// (a perturbation far below every export tolerance). If nothing passes the check, the
-// Boolean fails instead of returning a wrong solid.
+// bounds x >= -4), (Z u X) u Y is correct, (Y u X) u Z fails with SM_ERR. Only equal radii
+// fail (3.9 or 4.1 for the third cylinder work): the untrimmed cylinder pairs then intersect
+// in two ellipses that cross at tangent points, a singular case for the surface intersection.
+// The facade therefore checks every pairwise result (see boolean_plausible) and on a mismatch
+// retries with swapped operands, a different order of the remaining operands (sc_boolean),
+// and finally with the second operand shifted by 1e-6..1e-4 of the model size (far below
+// every export tolerance). If nothing passes the check, the Boolean fails instead of
+// returning a wrong solid.
 
 struct Box3 {
   V3 mn = v3(1e300, 1e300, 1e300), mx = v3(-1e300, -1e300, -1e300);
@@ -958,19 +957,15 @@ struct Box3 {
            mn.y <= b.mx.y + tol && b.mn.y <= mx.y + tol && mn.z <= b.mx.z + tol &&
            b.mn.z <= mx.z + tol;
   }
-  // every coordinate of `b` within `tol` of / inside this box
-  bool contains(const Box3& b, double tol) const {
-    return b.empty() || (!empty() && b.mn.x >= mn.x - tol && b.mn.y >= mn.y - tol &&
-                         b.mn.z >= mn.z - tol && b.mx.x <= mx.x + tol && b.mx.y <= mx.y + tol &&
-                         b.mx.z <= mx.z + tol);
-  }
 };
 
-Box3 tight_box(const SmBrep* b) {
+// Loose box (union of the vertex, edge and face boxes; cheap). The tight box costs more than
+// the Boolean itself on bodies with many faces.
+Box3 loose_box(const SmBrep* b) {
   Box3 r;
   if (!b || b->GetNumFaces() == 0) return r;
   SmPoint3d mn, mx;
-  if (SmApiBrepBoundingBox(b, TRUE, mn, mx) != SM_SUCCESS) {
+  if (SmApiBrepBoundingBox(b, FALSE, mn, mx) != SM_SUCCESS) {
     r.mn = v3(-1e300, -1e300, -1e300);  // unknown: never constrains
     r.mx = v3(1e300, 1e300, 1e300);
     return r;
@@ -993,28 +988,30 @@ Box3 face_box(const SmFace* f) {
   return r;
 }
 
+// Coarse volume (relative accuracy 1e-2: much cheaper than 1e-6, enough for the inequalities).
 double solid_volume(const SmBrep* b) {
   if (!b || b->GetNumFaces() == 0) return 0.0;
   double v = 0;
-  if (SmApiBrepComputeVolume(b, 1e-6, v) != SM_SUCCESS || !is_fin(v)) return NAN;
+  if (SmApiBrepComputeVolume(b, 1e-2, v) != SM_SUCCESS || !is_fin(v)) return NAN;
   return v;
 }
 
-// Up to 5 points strictly inside face `f` (centre-most grid point and 4 spread ones) with
-// the outward normal of the solid at each.
+// Up to 5 points strictly inside face `f` with the outward normal of the solid at each. Fixed
+// off-centre UV fractions (the UV centre of a revolved face lies in a symmetry plane, where
+// SMLib's ray-based point classification is least reliable); the face's internal point only
+// if none of them lies on the face.
 void face_samples(const SmFace* f, std::vector<std::pair<V3, V3>>& out) {
-  V3 p, n;
-  if (face_sample(f, p, n)) out.push_back({p, n});
   SmSurface* srf = f->GetSurface();
   if (!srf) return;
   SmExtent2d d = f->GetUVDomain();
-  const double st[4][2] = {{0.27, 0.23}, {0.73, 0.31}, {0.21, 0.77}, {0.69, 0.71}};
+  const double st[5][2] = {{0.27, 0.23}, {0.73, 0.31}, {0.21, 0.77}, {0.69, 0.71}, {0.53, 0.46}};
   bool flip = false;
   {
     SmFaceuse* fu = f->GetUpwardFaceuse();
     flip = fu && fu->GetShell() && fu->GetShell()->GetRegion() &&
            !fu->GetShell()->GetRegion()->IsVoid();
   }
+  size_t before = out.size();
   for (const auto& s : st) {
     SmPoint2d uv(d.GetUMin() + s[0] * (d.GetUMax() - d.GetUMin()),
                  d.GetVMin() + s[1] * (d.GetVMax() - d.GetVMin()));
@@ -1030,6 +1027,8 @@ void face_samples(const SmFace* f, std::vector<std::pair<V3, V3>>& out) {
     if (len(nn) == 0) continue;
     out.push_back({v3(pv.x, pv.y, pv.z), flip ? nn * -1.0 : nn});
   }
+  V3 p, n;
+  if (out.size() == before && face_sample(f, p, n)) out.push_back({p, n});
 }
 
 // Expected membership of point q in (A op B), from A's and B's classification;
@@ -1042,26 +1041,37 @@ int expected_class(int32_t op, int ca, int cb) {
 }
 
 // Is R a plausible result of A op B? `why` gets the first violated condition.
-bool boolean_plausible(int32_t op, const SmBrep* A, const SmBrep* B, const SmBrep* R,
-                       std::string& why) {
+//  1. volume inequalities of the operation (coarse volumes, 3 % slack: gross errors only);
+//  2. membership of points just inside and just outside the faces of each operand that reach
+//     the other operand's box (5 samples per face): a point inside A, outside B must be
+//     inside A u B and A - B, and so on. A mismatch counts only if it persists at a second,
+//     shifted point with all three bodies classified again (SMLib's ray classification
+//     can be wrong at single points).
+// PL_OPEN: the result of two closed solids is not closed. That is legitimate for bodies
+// touching along an edge, but also a symptom of the misclassification (box minus the three
+// cylinders above, in one order). Operands whose boxes do not overlap are not checked.
+enum Plausible { PL_OK, PL_OPEN, PL_WRONG };
+
+Plausible boolean_plausible(int32_t op, const SmBrep* A, const SmBrep* B, const SmBrep* R,
+                            std::string& why) {
   bool ra = A->GetNumFaces() > 0 && A->IsManifoldSolid();
   bool rb = B->GetNumFaces() > 0 && B->IsManifoldSolid();
-  if (!ra || !rb) return true;  // only closed solids can be checked
+  if (!ra || !rb) return PL_OK;  // only closed solids can be checked
   bool r_empty = !R || R->GetNumFaces() == 0;
   if (!r_empty && !R->IsManifoldSolid()) {
     why = "result is not a closed solid";
-    return false;
+    return PL_OPEN;
   }
-  Box3 ba = tight_box(A), bb = tight_box(B), br = r_empty ? Box3() : tight_box(R);
+  Box3 ba = loose_box(A), bb = loose_box(B);
   Box3 all = ba;
   all.add(bb);
   double size = std::max(all.diag(), 1e-9);
-  double btol = 1e-6 * size + 1e-9;
+  double eps = 1e-4 * size;
+  if (!ba.overlaps(bb, eps)) return PL_OK;
 
-  // 1. volume inequalities
   double va = solid_volume(A), vb = solid_volume(B), vr = r_empty ? 0.0 : solid_volume(R);
   if (is_fin(va) && is_fin(vb) && is_fin(vr)) {
-    double s = 1e-4 * (va + vb) + 1e-12;
+    double s = 3e-2 * (va + vb) + 1e-12;
     bool ok = true;
     if (op == SC_UNION) ok = vr >= std::max(va, vb) - s && vr <= va + vb + s;
     else if (op == SC_DIFFERENCE) ok = vr >= va - vb - s && vr <= va + s;
@@ -1069,50 +1079,45 @@ bool boolean_plausible(int32_t op, const SmBrep* A, const SmBrep* B, const SmBre
     if (!ok) {
       why = "volume " + std::to_string(vr) + " impossible for operands " + std::to_string(va) +
             ", " + std::to_string(vb);
-      return false;
+      return PL_WRONG;
     }
   }
-  // 2. bounds: union covers both; difference inside A; intersection inside both
-  if (op == SC_UNION) {
-    if (!br.contains(ba, btol) || !br.contains(bb, btol) || !all.contains(br, btol)) {
-      why = "bounds of the union differ from the operands' bounds";
-      return false;
-    }
-  } else if (op == SC_DIFFERENCE) {
-    if (!ba.contains(br, btol)) {
-      why = "difference extends beyond the first operand";
-      return false;
-    }
-  } else if (!ba.contains(br, btol) || !bb.contains(br, btol)) {
-    why = "intersection extends beyond an operand";
-    return false;
-  }
-  // 3. membership of points just inside and just outside the operand faces where the
-  //    operands interact (faces of each operand that reach the other's box)
-  double eps = 1e-4 * size;
-  std::vector<std::pair<V3, V3>> samples;
+
+  auto check_point = [&](V3 q, int ca, int cb) -> int {  // 1 = consistent, 0 = not, -1 = n/a
+    int want = expected_class(op, ca, cb);
+    if (want < 0) return -1;
+    int got = r_empty ? 0 : classify_point(R, q);
+    if (got < 0 || got == 2) return -1;
+    return got == want ? 1 : 0;
+  };
   for (int side = 0; side < 2; side++) {
     const SmBrep* self = side == 0 ? A : B;
-    const Box3& other = side == 0 ? bb : ba;
+    const SmBrep* other = side == 0 ? B : A;
+    const Box3& obox = side == 0 ? bb : ba;
+    std::vector<std::pair<V3, V3>> samples;
     for (SmFace* f : faces_of(self))
-      if (face_box(f).overlaps(other, eps)) face_samples(f, samples);
-  }
-  for (const auto& s : samples) {
-    for (double sign : {-1.0, 1.0}) {
-      V3 q = s.first + s.second * (sign * eps);
-      int want = expected_class(op, classify_point(A, q), classify_point(B, q));
-      if (want < 0) continue;
-      int got = r_empty ? 0 : classify_point(R, q);
-      if (got < 0 || got == 2) continue;
-      if (got != want) {
+      if (face_box(f).overlaps(obox, eps)) face_samples(f, samples);
+    for (const auto& smp : samples) {
+      for (double sign : {-1.0, 1.0}) {
+        V3 q = smp.first + smp.second * (sign * eps);
+        int cs = sign < 0 ? 1 : 0;  // just inside / outside the own operand
+        int co = classify_point(other, q);
+        int ok = check_point(q, side == 0 ? cs : co, side == 0 ? co : cs);
+        if (ok != 0) continue;
+        // confirm at a second point, everything classified again
+        V3 t = normalize(cross(smp.second, v3(0.48, 0.6, 0.64)));
+        if (len(t) == 0) t = normalize(cross(smp.second, v3(1, 0, 0)));
+        V3 q2 = q + t * (0.37 * eps);
+        if (check_point(q2, classify_point(A, q2), classify_point(B, q2)) != 0) continue;
+        int got = classify_point(R, q);
         why = "point (" + std::to_string(q.x) + ", " + std::to_string(q.y) + ", " +
-              std::to_string(q.z) + ") is " + (got ? "inside" : "outside") +
-              " the result but must be " + (want ? "inside" : "outside");
-        return false;
+              std::to_string(q.z) + ") is " + (got == 1 ? "inside" : "outside") +
+              " the result but must be " + (got == 1 ? "outside" : "inside");
+        return PL_WRONG;
       }
     }
   }
-  return true;
+  return PL_OK;
 }
 
 // One SMLib Boolean on copies of A and B. Returns the result (an empty Brep for an empty
@@ -1148,21 +1153,32 @@ BrepPtr raw_boolean(int32_t op, const SmBrep* A, const SmBrep* B, std::string& e
 }
 
 // A op B with the plausibility check and fallbacks (see above). `allow_perturb` = false
-// leaves out the shifted retries (used while other operand orders are still untried).
+// leaves out the shifted retries (used while other operand orders are still untried); they
+// are only tried after a wrong result or an SMLib error, not for results that are merely
+// open. Returns nullptr if nothing passes; `open` then gets the first open (not closed)
+// result, if there was one, which the caller may accept as before the check existed.
 BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow_perturb,
-                        std::string& err) {
+                        std::string& err, BrepPtr& open) {
   bool commutative = op != SC_DIFFERENCE;
+  bool wrong = false;
   std::string why;
   // runs a op b (swapped: b op a) and checks the result against a op b
   auto attempt = [&](const SmBrep* a, const SmBrep* b, bool swapped) -> BrepPtr {
     std::string e;
     BrepPtr r = swapped ? raw_boolean(op, b, a, e) : raw_boolean(op, a, b, e);
     if (!r.get()) {
+      wrong = true;
       if (why.empty()) why = e;
       return BrepPtr();
     }
     std::string w;
-    if (boolean_plausible(op, a, b, r.get(), w)) return r;
+    Plausible pl = boolean_plausible(op, a, b, r.get(), w);
+    if (pl == PL_OK) return r;
+    if (pl == PL_OPEN) {
+      if (!open.get()) open = std::move(r);
+    } else {
+      wrong = true;
+    }
     if (why.empty()) why = "SMLib returned a wrong result (" + w + ")";
     return BrepPtr();
   };
@@ -1172,9 +1188,9 @@ BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow
     r = attempt(A, B, true);
     if (r.get()) return r;
   }
-  if (allow_perturb) {
-    Box3 all = tight_box(A);
-    all.add(tight_box(B));
+  if (allow_perturb && wrong) {
+    Box3 all = loose_box(A);
+    all.add(loose_box(B));
     double size = std::max(all.diag(), 1e-9);
     V3 dir = normalize(v3(0.2672612, 0.5345225, 0.8017837));
     for (double rel : {1e-6, 1e-5, 1e-4}) {
@@ -1208,6 +1224,26 @@ bool free_form(const SmFace* f) {
            s->IsKindOf(SmTorus_TYPE));
 }
 
+// Number of polygons and their total area.
+size_t poly_triangles(SmPolyBrep* poly, double* area) {
+  SmTArray<SmPolyFace*> pfs;
+  poly->GetPolyFaces(pfs);
+  double a = 0;
+  for (ULONG i = 0; i < pfs.GetSize(); i++) {
+    SmTArray<SmPolyEdge*> pe;
+    pfs[i]->GetPolyEdges(pe);
+    if (pe.GetSize() < 3) continue;
+    V3 p0 = fromsm(pe[0]->GetStartPolyVertex()->GetPoint());
+    for (ULONG j = 1; j + 1 < pe.GetSize(); j++) {
+      V3 p1 = fromsm(pe[j]->GetStartPolyVertex()->GetPoint());
+      V3 p2 = fromsm(pe[j + 1]->GetStartPolyVertex()->GetPoint());
+      a += 0.5 * len(cross(p1 - p0, p2 - p0));
+    }
+  }
+  if (area) *area = a;
+  return pfs.GetSize();
+}
+
 // Largest distance between a triangle centroid and its face's surface over the free-form
 // faces of `poly` (up to 64 triangles per face), and the longest edge of that triangle.
 void tess_deviation(SmPolyBrep* poly, const std::unordered_map<const SmFace*, uint32_t>& face_ix,
@@ -1237,11 +1273,17 @@ void tess_deviation(SmPolyBrep* poly, const std::unordered_map<const SmFace*, ui
       emax = std::max(emax, len(z - a));
     }
     c = c * (1.0 / pe.GetSize());
+    double dvert = 1e300;  // the vertices lie on the surface: an upper bound of the distance
+    for (ULONG j = 0; j < pe.GetSize(); j++)
+      dvert = std::min(dvert, len(fromsm(pe[j]->GetStartPolyVertex()->GetPoint()) - c));
     SmPoint3d cp;
     SmTArray<SmPoint2d> uvs;
     double d = 0;
     if (SmApiSurfaceClosestPoint(of->GetSurface(), sp(c), cp, uvs, d) != SM_SUCCESS || !is_fin(d))
       continue;
+    // a "closest" point farther than a vertex is a failed solve (seen on revolved splines
+    // near the axis): ignore it
+    if (d >= 0.5 * dvert) continue;
     if (d > worst) {
       worst = d;
       worst_edge = emax;
@@ -1590,18 +1632,22 @@ uint32_t sc_boolean(int32_t op, const uint32_t* hs, uint32_t n, uint32_t tag) {
       acc = copy_brep(ops[0]);
     } else {
       // Union and intersection may combine the operands in any order, a difference its
-      // subtrahends. If a step fails (SMLib error or implausible result, see
+      // subtrahends. If a step fails (SMLib error, wrong or open result, see
       // checked_boolean), the failing operand is moved forward and the chain is rebuilt;
-      // only when no order works, the shifted retries are used.
+      // only when no order works, the original order runs with the shifted retries and
+      // accepts open results (touching bodies).
       size_t first_free = op == SC_DIFFERENCE ? 1 : 0;
       std::vector<std::vector<const SmBrep*>> tried;
       std::vector<const SmBrep*> order = ops;
       std::string err;
-      auto run = [&](const std::vector<const SmBrep*>& ord, bool perturb, size_t& failed_at) {
+      // `last_resort`: shifted retries, and open results are accepted
+      auto run = [&](const std::vector<const SmBrep*>& ord, bool last_resort, size_t& failed_at) {
         BrepPtr a = copy_brep(ord[0]);
         for (size_t i = 1; i < ord.size(); i++) {
           if (a->GetNumFaces() == 0) break;  // difference/intersection stays empty
-          BrepPtr r = checked_boolean(op, a.get(), ord[i], perturb, err);
+          BrepPtr open;
+          BrepPtr r = checked_boolean(op, a.get(), ord[i], last_resort, err, open);
+          if (!r.get() && last_resort && open.get()) r = std::move(open);
           if (!r.get()) {
             failed_at = i;
             return BrepPtr();
@@ -2111,16 +2157,27 @@ int32_t sc_tessellate(uint32_t h, double tol) {
     // 20 mm: 0.2 mm in the triangle centres, mesh volume +2.9 %. Measure the centroid deviation
     // on free-form faces and re-tessellate with a maximum edge length until it is within
     // 2 * tol (planar and analytic faces are left to SMLib; their error is the chord height).
-    for (int pass = 0; pass < 4; pass++) {
-      double worst = 0, worst_edge = 0;
-      tess_deviation(poly, face_ix, worst, worst_edge);
-      if (worst <= 2.0 * tol || worst_edge <= 0) break;
-      double target = worst_edge * std::sqrt(tol / worst) * 0.9;
-      if (prm.dMaxEdgeLength > 0) target = std::min(target, 0.5 * prm.dMaxEdgeLength);
-      prm.dMaxEdgeLength = target;
-      SmPolyBrep* finer = run_tess();
-      delete poly;
-      poly = finer;
+    // Each pass sets a global maximum edge length (planar faces get finer too), at least
+    // halving it; at most 3 passes, and none beyond a budget of predicted triangles.
+    {
+      double area = 0;
+      size_t n0 = poly_triangles(poly, &area);
+      size_t budget = std::min<size_t>(300000, std::max<size_t>(20000, 8 * n0));
+      for (int pass = 0; pass < 3; pass++) {
+        double worst = 0, worst_edge = 0;
+        tess_deviation(poly, face_ix, worst, worst_edge);
+        if (worst <= 2.0 * tol || worst_edge <= 0) break;
+        double target = worst_edge * std::sqrt(tol / worst) * 0.9;
+        if (prm.dMaxEdgeLength > 0) target = std::min(target, 0.5 * prm.dMaxEdgeLength);
+        // about area / (0.43 target^2) triangles at that edge length
+        double floor_len = std::sqrt(area / (0.43 * (double)budget));
+        if (target < floor_len) target = floor_len;
+        if (target >= 0.9 * worst_edge) break;  // budget leaves no room for improvement
+        prm.dMaxEdgeLength = target;
+        SmPolyBrep* finer = run_tess();
+        delete poly;
+        poly = finer;
+      }
     }
     ObjPtr<SmPolyBrep> polyOwner(poly);
 
