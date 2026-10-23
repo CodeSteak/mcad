@@ -1527,11 +1527,23 @@ fn single_union(e: &Expr2) -> bool {
 }
 
 enum LiftMode {
-    Extrude { h: f64, twist: f64, scale: DVec2, z0: f64 },
-    Revolve { angle: f64 },
-    Sweep { path: Vec<DVec3>, interp: cad_kernel::PathInterp },
+    Extrude {
+        h: f64,
+        twist: f64,
+        scale: DVec2,
+        z0: f64,
+    },
+    Revolve {
+        angle: f64,
+    },
+    Sweep {
+        path: Vec<DVec3>,
+        interp: cad_kernel::PathInterp,
+    },
     /// `sweep() { sketch(closed = false) { … } profil(); }`: path of exact segments.
-    SweepPath { path: cad_kernel::PlacedPath },
+    SweepPath {
+        path: cad_kernel::PlacedPath,
+    },
 }
 
 /// The open sketch in the subtree of `idx` (through groups, module calls, transforms and

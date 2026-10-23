@@ -203,7 +203,14 @@ pub(crate) fn open_sketch_mesh(p: &Profile, tol: f64) -> Option<Mesh> {
             pts.push(pts[0]);
         }
         for w in pts.windows(2) {
-            mesh.edge_segments.extend_from_slice(&[w[0].x as f32, w[0].y as f32, 0.0, w[1].x as f32, w[1].y as f32, 0.0]);
+            mesh.edge_segments.extend_from_slice(&[
+                w[0].x as f32,
+                w[0].y as f32,
+                0.0,
+                w[1].x as f32,
+                w[1].y as f32,
+                0.0,
+            ]);
             mesh.edge_ids.push(ci as u32);
         }
     }
@@ -212,7 +219,10 @@ pub(crate) fn open_sketch_mesh(p: &Profile, tol: f64) -> Option<Mesh> {
 
 /// Kernel segments of a sketch contour.
 pub(crate) fn contour_segments(c: &Contour) -> Result<Vec<Segment>, String> {
-    c.segs.iter().map(|s| s.to_kernel().ok_or_else(|| format!("{}-Segment lässt sich nicht berechnen", s.kind()))).collect()
+    c.segs
+        .iter()
+        .map(|s| s.to_kernel().ok_or_else(|| format!("{}-Segment lässt sich nicht berechnen", s.kind())))
+        .collect()
 }
 
 /// Winding number of the closed polyline `poly` around `p`.

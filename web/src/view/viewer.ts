@@ -6,12 +6,12 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import type { EngineClient } from "../engine/client";
-import type { Mat4, Scene, Vec3 } from "../engine/protocol";
+import type { Mat4, Scene, SrcRange, Vec3 } from "../engine/protocol";
 import { definitionTarget } from "../logic/context";
-import { type Plan, plan as makePlan, planNodes } from "../logic/display";
+import { type Plan, type SketchDraw, plan as makePlan, planNodes } from "../logic/display";
 import { type GridOverlay, gridOverlay, modelHull, viewBox } from "../logic/grids";
 import { type HandleGeom, type Ray, handleGeom, handleLabel, handlesForCursor } from "../logic/handles";
-import { type Box3, boxDiagonal, emptyBox, isEmpty, length, sub } from "../logic/math";
+import { type Box3, apply, boxDiagonal, emptyBox, isEmpty, length, sub } from "../logic/math";
 import { MeshVolume, edgesInZone, facesInZones } from "../logic/zones";
 import { needsRefit } from "../logic/fit";
 import type { DragController, DragPreview, DragView } from "../app/drag";
@@ -72,6 +72,8 @@ export interface ViewState {
     guides: Record<string, number>;
     /** Polyline points of the guides (context coordinates). */
     guidePoints: Array<{ kind: string; points: Vec3[] }>;
+    /** Sketches drawn for the cursor (segments, the cursor line's segments, help lines). */
+    sketches: Array<{ node: number; closed: boolean; segments: number; active: Array<{ stmt: number; kind: string; line: number }>; errors: number; helpers: number; open: number }>;
   };
   /** Drawn edge lines by kind (selected, error; zone edges are "selected"). */
   edgeKinds: Record<string, number>;
@@ -444,7 +446,13 @@ export class Viewer implements DragView {
     const hoverAnchor = hoverRef && hoverRef.target.kind === "anchor" ? { inst: hoverRef.target.inst, anchor: hoverRef.target.anchor } : null;
     const vh = st.viewHover && st.viewHover.sceneVersion === scene.version ? st.viewHover.nodes : [];
     const hidden = (scene.parts ?? []).filter((pt) => st.hiddenParts.includes(pt.name)).map((pt) => pt.node);
-    const p = makePlan({ scene, cursor: sel.nodes, hover, hoverAnchor, picked: vh, hidden });
+    // segments (sketches) on the cursor line
+    const cline = doc.lineAt(Math.min(st.cursor, doc.length));
+    const segmentActive = (r: SrcRange) => {
+      const sp = idx.range(r);
+      return !isOff(sp) && sp.from <= cline.to && sp.to >= cline.from;
+    };
+    const p = makePlan({ scene, cursor: sel.nodes, hover, hoverAnchor, picked: vh, hidden, segmentActive });
     this.lastPlan = p;
     this.lastSelection = sel;
     this.lastHoverNodes = hover;
@@ -519,6 +527,7 @@ export class Viewer implements DragView {
     for (const gd of p.guides) {
       this.addFatPolyline(gd.points, pal.guide, gd.kind === "net" ? 1.6 : 2.6, false, gd.dashed, `guide:${gd.kind}`);
     }
+    for (const sk of p.sketches) this.addSketch(sk, diag);
     this.missingMeshes = missing;
     for (const f of p.frames) this.addFrame(f.matrix, f.dashed, diag * 0.18);
     if (p.frames.length === 2) {
@@ -655,6 +664,44 @@ export class Viewer implements DragView {
     group.name = `mode:${it.mode}`;
     this.content.add(group);
     return true;
+  }
+
+  /** Sketch under the cursor: segments in its plane (the cursor line's segment thick in the
+   *  accent colour, errors red), help lines, start point with direction, end of open contours. */
+  private addSketch(sk: SketchDraw, diag: number): void {
+    const pal = this.materials.palette;
+    const w = (pts: Vec3[]) => pts.map((q) => apply(sk.matrix, q));
+    for (const g of sk.segments) {
+      if (g.active) continue;
+      const color = g.error ? pal.errorEdge : pal.profile;
+      this.addFatPolyline(w(g.points), color, g.error ? 3 : 2.4, false, g.implicit, g.error ? "sketch:error" : "sketch:seg");
+    }
+    for (const g of sk.segments) {
+      if (g.active) this.addFatPolyline(w(g.points), g.error ? pal.errorEdge : pal.accent, 5, false, false, "sketch:active");
+    }
+    for (const h of sk.helpers) this.addFatPolyline(w(h), pal.guide, 1.4, false, true, "sketch:help");
+    const r = diag * 0.012;
+    for (const st of sk.starts) {
+      const ring: Vec3[] = [];
+      for (let i = 0; i <= 24; i++) {
+        const a = (i / 24) * Math.PI * 2;
+        ring.push([st.point[0] + r * Math.cos(a), st.point[1] + r * Math.sin(a), st.point[2]]);
+      }
+      this.addFatPolyline(w(ring), pal.accent, 2.2, false, false, "sketch:start");
+      // direction of travel: a chevron after the start point
+      const l = Math.hypot(st.dir[0], st.dir[1]);
+      if (l > 1e-12) {
+        const d = [st.dir[0] / l, st.dir[1] / l];
+        const tip: Vec3 = [st.point[0] + d[0] * 3 * r, st.point[1] + d[1] * 3 * r, 0];
+        const back = (s: number): Vec3 => [tip[0] - d[0] * r + -d[1] * r * s, tip[1] - d[1] * r + d[0] * r * s, 0];
+        this.addFatPolyline(w([back(1), tip, back(-1)]), pal.accent, 2.2, false, false, "sketch:dir");
+      }
+      if (st.open) {
+        const e = st.end;
+        const sq: Vec3[] = [[e[0] - r, e[1] - r, 0], [e[0] + r, e[1] - r, 0], [e[0] + r, e[1] + r, 0], [e[0] - r, e[1] + r, 0], [e[0] - r, e[1] - r, 0]];
+        this.addFatPolyline(w(sq), pal.accent, 2.2, false, false, "sketch:end");
+      }
+    }
   }
 
   private addFatPolyline(points: Vec3[], color: string, width: number, depthTest = false, dashed = false, name = ""): void {
@@ -1416,6 +1463,15 @@ export class Viewer implements DragView {
         status: p?.status ?? null,
         guides: (p?.guides ?? []).reduce<Record<string, number>>((m, g) => ((m[g.kind] = (m[g.kind] ?? 0) + 1), m), {}),
         guidePoints: (p?.guides ?? []).map((g) => ({ kind: g.kind, points: g.points })),
+        sketches: (p?.sketches ?? []).map((k) => ({
+          node: k.node,
+          closed: k.closed,
+          segments: k.segments.length,
+          active: k.segments.filter((g) => g.active).map((g) => ({ stmt: g.stmt, kind: g.kind, line: s ? lineOfStmt(s, g.stmt) : 0 })),
+          errors: k.segments.filter((g) => g.error).length,
+          helpers: k.helpers.length,
+          open: k.starts.filter((st) => st.open).length,
+        })),
       },
       edgeKinds: this.lastEdgeKinds,
       zoneEdges: this.lastZoneEdges,
@@ -1476,4 +1532,13 @@ function labelTexture(text: string, color: number): THREE.Texture {
   g.textBaseline = "middle";
   g.fillText(text, 32, 34);
   return new THREE.CanvasTexture(c);
+}
+
+/** 1-based line of a statement's first node (debug state). */
+function lineOfStmt(scene: Scene, stmt: number): number {
+  for (const n of scene.nodes) {
+    if (n.op_info?.kind !== "sketch") continue;
+    for (const c of n.op_info.contours) for (const g of c.segments) if (g.stmt === stmt) return g.range.line;
+  }
+  return 0;
 }

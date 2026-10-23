@@ -117,8 +117,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     for md in &file_scene.modules {
         let mut path = md.path.clone();
         path.push(md.name.clone());
-        let msgs =
-            m.session.post(ToEngine::SetContext { module: Some(path.join("::")), overrides: Default::default() });
+        let msgs = m.session.post(ToEngine::SetContext { module: Some(path.join(".")), overrides: Default::default() });
         m.session.post(ToEngine::Cancel);
         let errs = msgs
             .iter()
@@ -205,7 +204,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         qual.push(md.name.clone());
         t.push_str(&format!(
             "  {}({})  {}:{}–{}\n",
-            qual.join("::"),
+            qual.join("."),
             ptxt.join(", "),
             file_path(&sc, &md.range),
             md.range.line,
@@ -228,7 +227,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
             t.push_str(&format!("    ({errs} Fehler mit Standardwerten)\n"));
         }
         modules.push(json!({
-            "name": md.name, "path": md.path, "qualified": qual.join("::"),
+            "name": md.name, "path": md.path, "qualified": qual.join("."),
             "file": file_path(&sc, &md.range), "line": md.range.line, "end_line": md.range.end_line,
             "params": params,
             "grids": grids.iter().map(|g| grid_json(&sc, proj, g)).collect::<Vec<_>>(),

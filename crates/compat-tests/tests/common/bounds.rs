@@ -216,6 +216,14 @@ fn pieces2(t: &Tree, i: u32, m: DMat4, out: &mut Vec<P2>) -> Result<(), String> 
             Profile::Circle { r } => out.push(P2::Ellipse(pt(DVec2::ZERO), vc(DVec2::X * *r), vc(DVec2::Y * *r))),
             Profile::Polygon { loops } => out.extend(loops.iter().flatten().map(|q| P2::Pt(pt(*q)))),
             Profile::Spline { points, .. } => out.extend(points.iter().map(|q| P2::Pt(pt(*q)))),
+            // sketches: sampled segments of the contours that are not holes
+            Profile::Sketch { contours, .. } => {
+                for c in contours.iter().filter(|c| !c.hole) {
+                    for g in c.segs.iter().filter_map(|g| g.to_kernel()) {
+                        out.extend(g.sample(1e-3).into_iter().map(|q| P2::Pt(pt(q))));
+                    }
+                }
+            }
         },
         Op::Group | Op::ModuleCall { .. } | Op::Transform { .. } | Op::Color { .. } | Op::Empty => {
             for c in t.solid_children(i) {

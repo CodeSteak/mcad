@@ -411,8 +411,7 @@ impl Kernel for SmlibKernel {
         if path.segs.is_empty() {
             return Err(KernelError::InvalidInput("sweep path without segments".into()));
         }
-        let smooth =
-            path.segs.windows(2).all(|w| w[0].end_tangent().dot(w[1].start_tangent()) > 1.0 - 1e-9);
+        let smooth = path.segs.windows(2).all(|w| w[0].end_tangent().dot(w[1].start_tangent()) > 1.0 - 1e-9);
         let (segs, mode) = if path.segs.len() == 1 {
             (path.segs.clone(), 1)
         } else if smooth {

@@ -20,6 +20,9 @@ const FIXTURES: Record<string, { example: string; local?: boolean }> = {
   "spacers-2d": { example: "openscad-compat/27_spacers_2d.scad" },
   projekt: { example: "projekt-gehaeuse/gehaeuse.scad" },
   "projekt-modul": { example: "projekt-gehaeuse/gehaeuse.scad" },
+  skizze: { example: "spec/skizze_profil.scad" },
+  "skizze-modul": { example: "spec/skizze_profil.scad" },
+  bibliothek: { example: "spec/skizze_bibliothek.scad" },
 };
 
 export interface Fixture {

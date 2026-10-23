@@ -122,12 +122,9 @@ impl Segment {
     /// Exact NURBS form (lines of degree 1, arcs rational quadratic).
     pub fn to_nurbs(&self) -> BSplineCurve {
         match self {
-            Segment::Line { a, b } => BSplineCurve {
-                degree: 1,
-                knots: vec![0.0, 0.0, 1.0, 1.0],
-                points: vec![d3(*a), d3(*b)],
-                weights: None,
-            },
+            Segment::Line { a, b } => {
+                BSplineCurve { degree: 1, knots: vec![0.0, 0.0, 1.0, 1.0], points: vec![d3(*a), d3(*b)], weights: None }
+            }
             Segment::Arc { center, r, a0, a1 } => arc_nurbs(*center, *r, *a0, *a1),
             Segment::Nurbs(c) => c.clone(),
         }
@@ -302,8 +299,9 @@ fn solve(mut a: Vec<Vec<f64>>, mut b: Vec<DVec2>) -> Option<Vec<DVec2>> {
             if f == 0.0 {
                 continue;
             }
-            for k in c..n {
-                a[r][k] -= f * a[c][k];
+            let (top, bottom) = a.split_at_mut(r);
+            for (x, y) in bottom[0][c..n].iter_mut().zip(&top[c][c..n]) {
+                *x -= f * y;
             }
             let bc = b[c];
             b[r] -= bc * f;
@@ -312,8 +310,8 @@ fn solve(mut a: Vec<Vec<f64>>, mut b: Vec<DVec2>) -> Option<Vec<DVec2>> {
     let mut x = vec![DVec2::ZERO; n];
     for r in (0..n).rev() {
         let mut s = b[r];
-        for k in r + 1..n {
-            s -= x[k] * a[r][k];
+        for (xk, ak) in x[r + 1..n].iter().zip(&a[r][r + 1..n]) {
+            s -= *xk * *ak;
         }
         x[r] = s / a[r][r];
     }

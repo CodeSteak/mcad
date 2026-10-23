@@ -104,9 +104,9 @@ export function paramRows(sig: Module, used: ParamValue[], overrides: Record<str
 export function contextModule(scene: Scene | null): Module | null {
   if (!scene || scene.context.module === null) return null;
   const path = scene.context.path;
-  const name = scene.context.module.split("::").pop()!;
+  const name = scene.context.module.split(/::|\./).pop()!;
   return (
-    scene.modules.find((m) => m.name === name && m.path.join("::") === path.slice(0, -1).join("::")) ??
+    scene.modules.find((m) => m.name === name && m.path.join(".") === path.slice(0, -1).join(".")) ??
     scene.modules.find((m) => m.name === name) ??
     null
   );

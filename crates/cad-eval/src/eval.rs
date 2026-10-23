@@ -1387,7 +1387,7 @@ impl<'a> Ev<'a> {
             );
             return self.stmt(inst, ctx);
         }
-        if ctx.env.find_module(&mname.name).is_none() {
+        if !mname.name.contains('.') && ctx.env.find_module(&mname.name).is_none() {
             if is_builtin_module(&mname.name) {
                 self.error(
                     name.span,

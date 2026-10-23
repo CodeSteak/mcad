@@ -112,8 +112,28 @@ fn seg_hit(p0: DVec2, p1: DVec2, q0: DVec2, q1: DVec2, eps: f64) -> Option<DVec2
     ((-m..=1.0 + m).contains(&t) && (-m..=1.0 + m).contains(&u)).then(|| p0 + r * t)
 }
 
+/// All points on one straight line (no area at all).
+fn flat(polys: &[Vec<DVec2>], size: f64) -> bool {
+    let pts: Vec<DVec2> = polys.iter().flatten().copied().collect();
+    let n = pts.len().max(1) as f64;
+    let m = pts.iter().fold(DVec2::ZERO, |a, p| a + *p) / n;
+    let (mut sxx, mut syy, mut sxy) = (0.0, 0.0, 0.0);
+    for p in &pts {
+        let d = *p - m;
+        sxx += d.x * d.x;
+        syy += d.y * d.y;
+        sxy += d.x * d.y;
+    }
+    // smallest eigenvalue of the covariance matrix
+    let tr = (sxx + syy) / n;
+    let det = (sxx * syy - sxy * sxy) / (n * n);
+    let lmin = tr / 2.0 - ((tr * tr / 4.0 - det).max(0.0)).sqrt();
+    lmin.max(0.0).sqrt() <= size * 1e-9
+}
+
 fn bbox(pts: &[DVec2]) -> (DVec2, DVec2) {
-    pts.iter().fold((DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY)), |(lo, hi), p| (lo.min(*p), hi.max(*p)))
+    pts.iter()
+        .fold((DVec2::splat(f64::INFINITY), DVec2::splat(f64::NEG_INFINITY)), |(lo, hi), p| (lo.min(*p), hi.max(*p)))
 }
 
 /// First self-intersection of a contour: `(i, j)` segment indices (`i <= j`).
@@ -491,7 +511,10 @@ impl<'a> Ev<'a> {
                 }
                 let Some(ang) = self.num_of(Some(ax), "angle") else { return };
                 if ang == 0.0 || ang.abs() > 360.0 {
-                    self.mark_error(s, format!("unmöglicher Bogen: Winkel {}° (erlaubt 0 < |Winkel| ≤ 360)", fmt_num(ang)));
+                    self.mark_error(
+                        s,
+                        format!("unmöglicher Bogen: Winkel {}° (erlaubt 0 < |Winkel| ≤ 360)", fmt_num(ang)),
+                    );
                     return;
                 }
                 let a0 = angle_of(cur - c);
@@ -550,7 +573,7 @@ impl<'a> Ev<'a> {
             if tangent_a.is_some() {
                 self.warn(s.span, "arc: `r` gegeben, `tangent` wird ignoriert");
             }
-            if !(r > 0.0) {
+            if r.is_nan() || r <= 0.0 {
                 self.mark_error(s, format!("unmöglicher Bogen: Radius {} ≤ 0", fmt_num(r)));
                 return;
             }
@@ -592,7 +615,10 @@ impl<'a> Ev<'a> {
         let n = DVec2::new(-t.y, t.x);
         let nd = n.dot(chord);
         if nd.abs() <= 1e-9 * d {
-            self.mark_error(s, "unmöglicher tangentialer Bogen: der Endpunkt liegt auf der Tangente (`line` verwenden)");
+            self.mark_error(
+                s,
+                "unmöglicher tangentialer Bogen: der Endpunkt liegt auf der Tangente (`line` verwenden)",
+            );
             return;
         }
         let k = d * d / (2.0 * nd);
@@ -766,15 +792,10 @@ impl<'a> Ev<'a> {
                 continue;
             }
             let polys: Vec<Vec<DVec2>> = ks.iter().map(|k| k.sample(tol)).collect();
-            if c.closed {
-                let area = cad_kernel::curve2::signed_area(&ks, tol);
-                if area.abs() <= size * size * 1e-9 {
-                    let st = c.start_stmt.unwrap_or(c.segs[0].stmt);
-                    errors.push((st.id, "Kontur ohne Fläche".into()));
-                    continue;
-                }
-            }
-            if let Some((i, j)) = self_intersection(&polys, c.closed, eps) {
+            if c.closed && flat(&polys, size) {
+                let st = c.start_stmt.unwrap_or(c.segs[0].stmt);
+                errors.push((st.id, "Kontur ohne Fläche".into()));
+            } else if let Some((i, j)) = self_intersection(&polys, c.closed, eps) {
                 let other = c.segs[i].stmt;
                 let st = c.segs[j].stmt;
                 let msg = if other.id == st.id {
@@ -783,7 +804,12 @@ impl<'a> Ev<'a> {
                     format!("Selbstüberschneidung der Kontur mit Segment in {}", self.where_(other.span, st.span))
                 };
                 errors.push((st.id, msg));
-                let _ = j;
+            } else if c.closed {
+                let area = cad_kernel::curve2::signed_area(&ks, tol);
+                if area.abs() <= size * size * 1e-9 {
+                    let st = c.start_stmt.unwrap_or(c.segs[0].stmt);
+                    errors.push((st.id, "Kontur ohne Fläche".into()));
+                }
             }
         }
         for (id, msg) in &errors {
@@ -799,7 +825,11 @@ impl<'a> Ev<'a> {
             contours: contours
                 .iter()
                 .filter(|c| !c.segs.is_empty())
-                .map(|c| Contour { hole: c.hole, closed: c.closed, segs: c.segs.iter().map(|g| g.seg.clone()).collect() })
+                .map(|c| Contour {
+                    hole: c.hole,
+                    closed: c.closed,
+                    segs: c.segs.iter().map(|g| g.seg.clone()).collect(),
+                })
                 .collect(),
             closed: b.closed,
         };
@@ -820,7 +850,12 @@ impl<'a> Ev<'a> {
                     segs: c
                         .segs
                         .iter()
-                        .map(|g| SketchSegInfo { stmt: g.stmt.id, span: g.stmt.span, implicit: g.implicit, error: g.error })
+                        .map(|g| SketchSegInfo {
+                            stmt: g.stmt.id,
+                            span: g.stmt.span,
+                            implicit: g.implicit,
+                            error: g.error,
+                        })
                         .collect(),
                 })
                 .collect(),

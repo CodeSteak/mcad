@@ -350,7 +350,51 @@ export type SelectMode = "inside" | "touch";
  * Resolved parameters of operations the view draws specially (zone blocks, profile
  * operations, surfaces). Points are in the node system.
  */
-export type OpInfo = { "kind": "blend", chamfer: boolean, r: number, select: SelectMode, } | { "kind": "shell", t: number, select: SelectMode, } | { "kind": "zone", line: boolean, point: Vec3, dir: Vec3, d: number, } | { "kind": "linear_extrude", h: number, center: boolean, twist: number, scale: [number, number], } | { "kind": "rotate_extrude", angle: number, } | { "kind": "loft", ruled: boolean, } | { "kind": "sweep", path: Array<Vec3>, spline: boolean, } | { "kind": "surface", rows: Array<Array<Vec3>>, } | { "kind": "thicken", t: number, };
+export type OpInfo = { "kind": "blend", chamfer: boolean, r: number, select: SelectMode, } | { "kind": "shell", t: number, select: SelectMode, } | { "kind": "zone", line: boolean, point: Vec3, dir: Vec3, d: number, } | { "kind": "linear_extrude", h: number, center: boolean, twist: number, scale: [number, number], } | { "kind": "rotate_extrude", angle: number, } | { "kind": "loft", ruled: boolean, } | { "kind": "sweep", path: Array<Vec3>, spline: boolean, } | { "kind": "surface", rows: Array<Array<Vec3>>, } | { "kind": "thicken", t: number, } | { "kind": "sketch", closed: boolean, contours: Array<SketchContour>, };
+
+/**
+ * One contour of a sketch (node system, z = 0).
+ */
+export type SketchContour = { 
+/**
+ * In a `hole { … }` block.
+ */
+hole: boolean, closed: boolean, 
+/**
+ * Start point (`start(p)`).
+ */
+start: Vec3, 
+/**
+ * The `start(…)` statement.
+ */
+start_range: SrcRange | null, segments: Array<SketchSegment>, };
+
+export type SketchSegment = { 
+/**
+ * `line`, `arc`, `bezier`, `spline`.
+ */
+kind: string, 
+/**
+ * Statement that made the segment.
+ */
+stmt: number, range: SrcRange, 
+/**
+ * Polyline from start to end (display tolerance).
+ */
+points: Array<Vec3>, 
+/**
+ * Help lines: control polygon of a Bézier curve (start, control points, end); centre of an
+ * arc (one point).
+ */
+ctrl: Array<Vec3>, 
+/**
+ * Closing line added for a contour without `close()` (error).
+ */
+implicit: boolean, 
+/**
+ * An error was reported for this segment.
+ */
+error: boolean, };
 
 export type Bounds = { min: Vec3, max: Vec3, };
 

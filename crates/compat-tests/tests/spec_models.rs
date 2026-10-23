@@ -302,6 +302,86 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
+        file: "skizze_bibliothek.scad",
+        grids: &[],
+        instances: &[],
+        handles: 10,
+        ops: &[("sketch", 2), ("linear_extrude", 2), ("lochplatte", 1), ("schraube", 4)],
+        check: |out| {
+            // qualified calls: the instances know their module (not the namespace)
+            let mods: Vec<&str> = out.instances[1..].iter().map(|i| i.module.as_str()).collect();
+            assert_eq!(mods, ["stern", "langloch", "lochplatte", "schraube", "schraube", "schraube", "schraube"]);
+            // `raster` of the enclosing module with its default: a 40 × 10 plate
+            let plate = out.tree.nodes.iter().find_map(|n| match &n.op {
+                Op::Prim { prim: cad_ir::Prim::Box { max, .. }, .. } => Some(*max),
+                _ => None,
+            });
+            assert_eq!(plate, Some(DVec3::new(40.0, 10.0, 3.0)));
+            // teile.kopf(teile.M3)
+            assert!(has_op(
+                out,
+                |o| matches!(o, Op::Prim { prim: cad_ir::Prim::Cylinder { r1, .. }, .. } if (*r1 - 1.8 * 3.2 / 2.0).abs() < 1e-12)
+            ));
+        },
+    },
+    Expect {
+        file: "skizze_profil.scad",
+        grids: &[("s", 6, false)],
+        instances: &[],
+        handles: 9,
+        ops: &[("sketch", 2), ("linear_extrude", 1), ("rotate_extrude", 1)],
+        check: |out| {
+            let sk: Vec<&Vec<cad_ir::Contour>> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match &n.op {
+                    Op::Profile(cad_ir::Profile::Sketch { contours, .. }) => Some(contours),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(
+                sk[0].iter().map(|c| (c.hole, c.segs.len())).collect::<Vec<_>>(),
+                [(false, 4), (false, 2), (true, 4)]
+            );
+            let kinds: Vec<&str> = sk[1][0].segs.iter().map(|g| g.kind()).collect();
+            assert_eq!(kinds, ["line", "line", "arc", "bezier", "line"]);
+            assert_eq!(out.sketches.len(), 2);
+        },
+    },
+    Expect {
+        file: "skizze_sweep.scad",
+        grids: &[],
+        instances: &[],
+        handles: 15,
+        ops: &[("sweep", 2), ("sketch", 2), ("circle", 2), ("rect", 1)],
+        check: |out| {
+            // both sweeps take their path from an open sketch child
+            assert_eq!(
+                out.tree.nodes.iter().filter(|n| matches!(&n.op, Op::Sweep { path, .. } if path.is_empty())).count(),
+                2
+            );
+            assert!(out.sketches.iter().all(|s| !s.closed));
+        },
+    },
+    Expect {
+        file: "skizze_zahnriemenscheibe.scad",
+        grids: &[],
+        instances: &[],
+        handles: 0,
+        ops: &[("sketch", 1), ("scheibe", 1), ("cylinder", 4)],
+        check: |out| {
+            let n = out.tree.nodes.iter().find_map(|n| match &n.op {
+                Op::Profile(cad_ir::Profile::Sketch { contours, .. }) => Some(contours.clone()),
+                _ => None,
+            });
+            let c = n.unwrap();
+            // 20 teeth: two arcs each; the bore: two arcs (a second contour)
+            assert_eq!(c.iter().map(|c| c.segs.len()).collect::<Vec<_>>(), [40, 2]);
+            assert!(c.iter().all(|c| c.closed && c.segs.iter().all(|g| g.kind() == "arc")));
+        },
+    },
+    Expect {
         file: "variabler_radius.scad",
         grids: &[("g", 7, true)],
         instances: &[],

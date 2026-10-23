@@ -138,7 +138,10 @@ fn sweep_along_open_sketch_path() {
     let corner = "sweep() {\n sketch(closed = false) { start([0, 0]); line(to = [20, 0]); line(to = [20, 15]); }\n square(2, center = true);\n}";
     assert_approx("mitered", vol(corner), 4.0 * 35.0, 1e-6);
     // the path sketch must be open
-    let out = eval_source("sweep() { sketch { start([0,0]); line(to=[5,0]); line(to=[0,5]); close(); } circle(1); }", &EvalOptions::default());
+    let out = eval_source(
+        "sweep() { sketch { start([0,0]); line(to=[5,0]); line(to=[0,5]); close(); } circle(1); }",
+        &EvalOptions::default(),
+    );
     let mut e = engine();
     let ev = e.evaluate(out.tree);
     assert!(errors(&ev).iter().any(|m| m.contains("offenen Skizzenpfad")), "{:?}", errors(&ev));
@@ -195,7 +198,8 @@ fn sketch_alone_is_2d_and_open_sketch_is_a_path() {
     // area of the filled 2D mesh: half disc
     let area: f64 = mesh_area(&m);
     assert_approx("2D area", area, PI * 25.0 / 2.0, 5e-3);
-    let ev = e.evaluate(tree("sketch(closed = false) { start([0, 0]); line(to = [10, 0]); arc(to = [20, 0], r = 5); }"));
+    let ev =
+        e.evaluate(tree("sketch(closed = false) { start([0, 0]); line(to = [10, 0]); arc(to = [20, 0], r = 5); }"));
     assert_clean(&ev);
     let sk = ev.tree.nodes.iter().position(|n| matches!(n.op, Op::Profile(Profile::Sketch { .. }))).unwrap() as u32;
     let m = e.tessellate(&ev, sk, Some(0.01)).unwrap();

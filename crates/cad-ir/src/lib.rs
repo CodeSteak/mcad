@@ -236,15 +236,30 @@ pub struct Contour {
 /// A sketch segment in the profile's xy-plane. Angles in radians.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Seg {
-    Line { a: DVec2, b: DVec2 },
+    Line {
+        a: DVec2,
+        b: DVec2,
+    },
     /// Circular arc: `ccw` gives the direction from angle `a0` to `a1` (`a1 - a0` is the signed
     /// sweep, positive for `ccw`).
-    Arc { center: DVec2, r: f64, a0: f64, a1: f64, ccw: bool },
+    Arc {
+        center: DVec2,
+        r: f64,
+        a0: f64,
+        a1: f64,
+        ccw: bool,
+    },
     /// Quadratic (3 points) or cubic (4 points) Bézier curve; start and end included.
-    Bezier { points: Vec<DVec2> },
+    Bezier {
+        points: Vec<DVec2>,
+    },
     /// Interpolating spline through `points` (start included); optional end tangent
     /// directions.
-    Spline { points: Vec<DVec2>, t0: Option<DVec2>, t1: Option<DVec2> },
+    Spline {
+        points: Vec<DVec2>,
+        t0: Option<DVec2>,
+        t1: Option<DVec2>,
+    },
 }
 
 impl Seg {

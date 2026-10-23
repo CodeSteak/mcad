@@ -114,7 +114,12 @@ impl<'a> Ev<'a> {
         let has_var = ns.0.borrow().vars.iter().any(|(n, b)| *n == name.name && !matches!(b, Binding::InProgress));
         let has_mod = ns.0.borrow().modules.iter().any(|(n, _)| *n == name.name);
         let as_fn = |f: &'a cad_syntax::ast::FunctionDef| {
-            Val::new(Value::Func(Rc::new(Closure { params: &f.params, body: &f.body, env: ns.clone(), name: Some(&f.name.name) })))
+            Val::new(Value::Func(Rc::new(Closure {
+                params: &f.params,
+                body: &f.body,
+                env: ns.clone(),
+                name: Some(&f.name.name),
+            })))
         };
         let ns_name = path.join(".");
         Ok(Some(match (func, has_var) {

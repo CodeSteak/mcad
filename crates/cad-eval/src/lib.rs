@@ -18,13 +18,13 @@ mod grid;
 mod handles;
 mod law;
 pub mod math;
+mod ns;
 mod ops;
 mod output;
 pub mod palette;
 mod print;
 pub mod project;
 mod sig;
-mod ns;
 mod sketch;
 pub mod value;
 

@@ -4,6 +4,7 @@
 
 import type { Text } from "@codemirror/state";
 import type { Handle, Scene, SnapTarget, Vec3 } from "../engine/protocol";
+import { sketchesFor } from "./display";
 import { gridBox } from "./grids";
 import { type Box3, add, apply, applyDir, invertAffine, length, scale, sub } from "./math";
 import type { CursorSelection, SceneIndex } from "./sceneIndex";
@@ -60,6 +61,10 @@ export function handlesForCursor(scene: Scene, idx: SceneIndex, doc: Text, pos: 
     const hs = all.filter((h) => h.stmt === sel.stmt);
     if (hs.length) return hs;
   }
+  // Sketch: the cursor line's segment handles, else (on the `sketch` line, a loop, an `if`
+  // in it) the handles of all its segments.
+  const sketches = sel.nodes.flatMap((n) => sketchesFor(scene, scene.nodes[n]).map((s) => s.idx));
+  const ofSketch = all.filter((h) => h.node !== null && sketches.includes(h.node));
   const line = doc.lineAt(Math.min(pos, doc.length));
   const gridStmts = new Set(scene.grids.map((g) => g.stmt));
   let best: number | null = null;
@@ -73,7 +78,13 @@ export function handlesForCursor(scene: Scene, idx: SceneIndex, doc: Text, pos: 
       best = h.stmt;
     }
   }
-  return best === null ? [] : all.filter((h) => h.stmt === best);
+  if (best !== null) return all.filter((h) => h.stmt === best);
+  // in a sketch: the segments starting on the cursor line (cursor in the indentation), else all
+  const onLine = ofSketch.filter((h) => {
+    const r = idx.range(h.range);
+    return r.from >= line.from && r.from <= line.to;
+  });
+  return onLine.length ? onLine : ofSketch;
 }
 
 /** A 1D handle as a line in context coordinates: grip = base + dir * value. */
