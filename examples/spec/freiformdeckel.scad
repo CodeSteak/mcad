@@ -1,0 +1,21 @@
+// Zweck: Freiformdeckel – surface(points) aus einem 4 × 4-Kontrollnetz (Rand auf den
+// Rasterebenen, Wölbung als Literale), thicken(t) zum Körper und eine verrundete Montageleiste.
+module deckel(w = 60, d = 40, t = 2, wolbung = 9) {
+    grid g {
+        x: a = 0, b = w / 3, c = 2 * w / 3, e = w;
+        y: v = 0, m1 = d / 3, m2 = 2 * d / 3, h = d;
+        z: rand = 0;
+    }
+
+    thicken(t)
+        surface(points = [
+            [g[a, v, rand], g[b, v, rand] + [0, 0, 2], g[c, v, rand] + [0, 0, 2], g[e, v, rand]],
+            [g[a, m1, rand] + [0, 0, 2], [20, 13, wolbung], [40, 13, wolbung], g[e, m1, rand] + [0, 0, 2]],
+            [g[a, m2, rand] + [0, 0, 2], [20, 27, wolbung], [40, 27, 12], g[e, m2, rand] + [0, 0, 2]],
+            [g[a, h, rand], g[b, h, rand] + [0, 0, 2], g[c, h, rand] + [0, 0, 2], g[e, h, rand]]
+        ]);
+
+    translate([0, -6, -3]) cube([w, 6, 3], $fillet = 0.8);
+}
+
+deckel();

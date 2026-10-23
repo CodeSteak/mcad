@@ -203,6 +203,7 @@ window.__cad = {
       view: viewer?.viewState() ?? null,
       frames: viewer?.frames ?? 0,
       restarts: transport.restarts,
+      blockedKeys: [...transport.blockedKeys],
     };
   },
   setCursorLine(line: number, col = 0) {
@@ -252,6 +253,31 @@ window.__cad = {
       .filter((n) => n.stmt !== null && n.bounds && doc.lineAt(Math.min(idx.span(n.idx).from, doc.length)).number === line)
       .map((n) => ({ label: n.label, ...transformBox(n.display_world, { min: n.bounds!.min, max: n.bounds!.max }) }));
   },
+  /** Nodes whose statement starts on a line (current document) with their engine data. */
+  nodesOnLine(line: number) {
+    const s = store.getState().shown;
+    if (!s) return [];
+    const idx = bridge.index(s);
+    const doc = bridge.doc();
+    return s.nodes
+      .filter((n) => n.stmt !== null && doc.lineAt(Math.min(idx.span(n.idx).from, doc.length)).number === line)
+      .map((n) => {
+        const m = meshes.get(n.mesh_key)?.data;
+        return {
+          idx: n.idx,
+          label: n.label,
+          status: n.status,
+          hints: n.hints,
+          messages: n.messages.map((x) => ({ severity: x.severity, message: x.message, edges: x.edges.length })),
+          selectedEdges: n.selected_edges.length,
+          openedFaces: n.opened_faces,
+          meshKey: n.mesh_key,
+          triangles: m ? m.indices.length / 3 : null,
+          op: n.op_info?.kind ?? null,
+          zone: n.flags.zone,
+        };
+      });
+  },
   /** Client coordinates of a character (1-based line, 0-based column). */
   coordsOf(line: number, col: number) {
     const v = bridge.view;
@@ -287,6 +313,14 @@ window.__cad = {
   },
   fitAll() {
     viewer?.fitAll();
+  },
+  /** Shows/hides drawn objects by name prefix (pixel checks); returns the number found. */
+  setLayerVisible(prefix: string, visible: boolean) {
+    return viewer?.setLayerVisible(prefix, visible) ?? 0;
+  },
+  /** Camera looking along `-dir` (from the direction `dir`), then framed (tests). */
+  viewFrom(dir: [number, number, number]) {
+    viewer?.viewFrom(dir);
   },
   autosave() {
     return loadAutosave();

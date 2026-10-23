@@ -188,6 +188,17 @@ disabled: boolean,
  */
 zone: boolean, };
 
+/**
+ * Edge/face selection of a zone block (`select`).
+ */
+export type SelectMode = "inside" | "touch";
+
+/**
+ * Resolved parameters of operations the view draws specially (zone blocks, profile
+ * operations, surfaces). Points are in the node system.
+ */
+export type OpInfo = { "kind": "blend", chamfer: boolean, r: number, select: SelectMode, } | { "kind": "shell", t: number, select: SelectMode, } | { "kind": "zone", line: boolean, point: Vec3, dir: Vec3, d: number, } | { "kind": "linear_extrude", h: number, center: boolean, twist: number, scale: [number, number], } | { "kind": "rotate_extrude", angle: number, } | { "kind": "loft", ruled: boolean, } | { "kind": "sweep", path: Array<Vec3>, spline: boolean, } | { "kind": "surface", rows: Array<Array<Vec3>>, } | { "kind": "thicken", t: number, };
+
 export type Bounds = { min: Vec3, max: Vec3, };
 
 export type NodeMessage = { severity: Severity, message: string, 
@@ -247,6 +258,11 @@ hints: Array<string>,
  */
 selected_edges: Array<Array<Vec3>>, opened_faces: number, 
 /**
+ * Draft mode while dragging: this node's blend was left out (it took longer than the
+ * draft limit); the full evaluation after the drag restores it.
+ */
+blend_suspended: boolean, 
+/**
  * Bounds in the node system.
  */
 bounds: Bounds | null, dim: Dim | null, 
@@ -265,7 +281,11 @@ cached: boolean,
 /**
  * `$tol` in effect.
  */
-tol: number | null, };
+tol: number | null, 
+/**
+ * Parameters of zone blocks, profile operations and surfaces (special display).
+ */
+op_info: OpInfo | null, };
 
 export type TagNodes = { tag: number, nodes: Array<number>, };
 
@@ -482,4 +502,8 @@ kernel_ms: number, nodes: number, cache_hits: number, kernel_calls: number, step
 /**
  * Language evaluation steps.
  */
-eval_steps: number, };
+eval_steps: number, 
+/**
+ * Blends left out in draft mode (while dragging).
+ */
+suspended_blends: number, };

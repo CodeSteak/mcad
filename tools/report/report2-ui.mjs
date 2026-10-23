@@ -11,7 +11,11 @@
 //   img/*.jpg         screenshots
 //
 //   cd web && pnpm test:report      (runs Vitest, Playwright, then this script)
-//   node tools/report/report2-ui.mjs
+//   node tools/report/report2-ui.mjs [--run]
+//
+// Without inputs the script runs what is missing itself: Vitest (vitest.json) and the Phase A
+// scenarios (web/e2e/ui.spec.ts) when playwright.json has none of them – it is shared with the
+// other reports and holds only the last Playwright run. `--run` reruns both.
 //
 // The PDF is printed with Chromium (page.pdf, A4, backgrounds on).
 
@@ -50,12 +54,30 @@ const pkgVersion = (name) => {
 
 // ---------------------------------------------------------------- inputs
 
+const rerun = process.argv.includes("--run");
+const sh = (args) => {
+  try {
+    execFileSync("pnpm", ["exec", ...args], { cwd: web, stdio: "inherit" });
+  } catch {
+    /* failed tests still write their results */
+  }
+};
+const hasPhaseA = (j) => JSON.stringify(j?.suites ?? []).includes('"ui.spec.ts"');
+mkdirSync(input, { recursive: true });
+if (rerun || !existsSync(join(input, "vitest.json"))) {
+  console.log("report2: Vitest …");
+  sh(["vitest", "run", "--reporter=default", "--reporter=json", `--outputFile.json=${join(input, "vitest.json")}`]);
+}
+if (rerun || !hasPhaseA(readJson(join(input, "playwright.json")))) {
+  console.log("report2: Playwright (web/e2e/ui.spec.ts) …");
+  sh(["playwright", "test", "e2e/ui.spec.ts"]);
+}
 const pw = readJson(join(input, "playwright.json"));
 const vt = readJson(join(input, "vitest.json"));
 const scenarios = readJson(join(input, "scenarios.json"), []);
 const metrics = readJson(join(input, "metrics.json"), {});
-if (!pw) {
-  console.error(`fehlt: ${join(input, "playwright.json")} (zuerst: cd web && pnpm e2e)`);
+if (!pw || !hasPhaseA(pw)) {
+  console.error(`fehlt: Ergebnisse von web/e2e/ui.spec.ts in ${join(input, "playwright.json")} (cd web && pnpm e2e)`);
   process.exit(1);
 }
 

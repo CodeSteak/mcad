@@ -33,12 +33,15 @@ export interface WorkerTransportOptions {
 /**
  * Runs the engine in a Web Worker.
  *
- * Watchdog: while the worker reports `busy`, every step answers within milliseconds. If no
- * answer arrives for `watchdogMs`, a kernel operation hangs: the worker is terminated and
- * started again (the cache is lost), the UI gets an `Error` with the node that was being
- * evaluated (`Progress.current`), and the last `SetContext` is sent again. The source is
- * *not* sent again, so the same input does not hang again; the next `SetSource` (an edit)
- * evaluates normally. A `fatal` message from the worker is handled the same way.
+ * Watchdog (Plan 7.3): while the worker reports `busy`, every step answers within
+ * milliseconds. If no answer arrives for `watchdogMs`, a kernel operation hangs: the worker is
+ * terminated and started again (the cache is lost), the UI gets an `Error` with the node that
+ * was being evaluated (`Progress.current`). The cache key of that node is blocked: the new
+ * worker first gets `BlockKeys` with every key that hung so far (kept over further restarts),
+ * then the last `SetContext` and `SetSource` again. The blocked node reports an error (its
+ * line turns red) instead of hanging again; an edit that changes the node changes its key and
+ * evaluates it normally. Without a node to block, the source is not sent again (the same input
+ * would hang again). A `fatal` message from the worker is handled the same way.
  */
 export class WorkerTransport implements EngineTransport {
   private worker: Worker | null = null;
@@ -48,6 +51,9 @@ export class WorkerTransport implements EngineTransport {
   private busy = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastContext: ToEngine | null = null;
+  private lastSource: ToEngine | null = null;
+  /** Cache keys of nodes that hung (sent as `BlockKeys` to every new worker). */
+  readonly blockedKeys = new Set<string>();
   private lastProgress: Extract<FromEngine, { type: "Progress" }> | null = null;
   private lastVersion: number | null = null;
   private disposed = false;
@@ -67,7 +73,10 @@ export class WorkerTransport implements EngineTransport {
   send(msg: ToEngine): void {
     if (this.disposed) return;
     if (msg.type === "SetContext") this.lastContext = msg;
-    if (msg.type === "SetSource") this.lastVersion = msg.version;
+    if (msg.type === "SetSource") {
+      this.lastVersion = msg.version;
+      this.lastSource = msg;
+    }
     if (!this.ready || !this.worker) {
       this.pending.push(msg);
       return;
@@ -158,14 +167,21 @@ export class WorkerTransport implements EngineTransport {
     this.restarts++;
     const cur = this.lastProgress?.current ?? null;
     const where = cur ? ` (Zeile ${cur.range.line})` : "";
+    const fresh = !!cur?.key && !this.blockedKeys.has(cur.key);
+    if (cur?.key) this.blockedKeys.add(cur.key);
     this.emit({
       type: "Error",
-      message: `${reason}${where}; Engine neu gestartet, Cache verworfen`,
+      message: `${reason}${where}; Engine neu gestartet, Cache verworfen${fresh ? ", Knoten gesperrt" : ""}`,
       version: this.lastProgress?.version ?? this.lastVersion,
       node: cur?.node ?? null,
     });
     this.lastProgress = null;
-    this.pending = this.lastContext ? [this.lastContext] : [];
+    const pending: ToEngine[] = [];
+    if (this.blockedKeys.size) pending.push({ type: "BlockKeys", keys: [...this.blockedKeys] });
+    if (this.lastContext) pending.push(this.lastContext);
+    // With a newly blocked node the same source evaluates again (that node reports an error).
+    if (fresh && this.lastSource) pending.push(this.lastSource);
+    this.pending = pending;
     this.start();
   }
 }

@@ -2,8 +2,10 @@
 // scene, the node(s) under the cursor and the node(s) of the hovered line. Pure function; the
 // viewer turns the plan into three.js objects.
 
-import type { Anchor, Mat4, Scene, SceneNode, Vec3 } from "../engine/protocol";
-import { apply } from "./math";
+import type { Anchor, Mat4, OpInfo, Scene, SceneNode, Vec3 } from "../engine/protocol";
+import { REVOLVE_PROFILE, sweepPath, sweepStartFrame } from "./curves";
+import { apply, invertAffine, mul } from "./math";
+import type { SelectMode } from "./zones";
 
 export type Mode =
   /** Normal opaque body. */
@@ -23,7 +25,11 @@ export type Mode =
   /** Edges only (source position of a transform, children of a hovered union). */
   | "outline"
   /** Node under the mouse in the view: edges in the accent colour. */
-  | "picked";
+  | "picked"
+  /** Profile of a profile operation / surface of `thicken`: outline, visible through the result. */
+  | "profile"
+  /** Result of a `loft`: semi-transparent so the profiles stay visible. */
+  | "translucent";
 
 export interface DrawItem {
   node: number;
@@ -40,6 +46,38 @@ export type EdgeKind = "selected" | "error";
 export interface EdgeLine {
   points: Vec3[];
   kind: EdgeKind;
+}
+
+export type GuideKind =
+  /** Rotation axis of `rotate_extrude`. */
+  | "axis"
+  /** Path of a `sweep`. */
+  | "path"
+  /** Control net of a `surface`. */
+  | "net";
+
+export interface Guide {
+  points: Vec3[];
+  kind: GuideKind;
+  dashed: boolean;
+}
+
+/** Cursor on a zone: the block's selected edges that lie in this zone (viewer tests them). */
+export interface ZoneEdgeQuery {
+  zone: number;
+  /** All selected edges of the block (context coordinates). */
+  edges: Vec3[][];
+  select: SelectMode;
+}
+
+/** `shell`: faces of the body that lie in the zones are opened (viewer tests them). */
+export interface OpenFaceQuery {
+  shell: number;
+  body: number;
+  /** Placement of the body mesh. */
+  matrix: Mat4;
+  zones: number[];
+  select: SelectMode;
 }
 
 export interface Frame {
@@ -62,6 +100,10 @@ export interface Plan {
   anchors: AnchorMark[];
   /** Hint for the status line (`!` modifier). */
   status: string | null;
+  /** Guide lines of profile operations and surfaces. */
+  guides: Guide[];
+  zoneEdges: ZoneEdgeQuery | null;
+  openFaces: OpenFaceQuery[];
 }
 
 export interface PlanInput {
@@ -75,6 +117,8 @@ export interface PlanInput {
 }
 
 const TRANSFORMS = new Set(["translate", "rotate", "scale", "mirror", "multmatrix"]);
+/** Nodes descended to find the profiles of a loft (their own meshes are flat in their system). */
+const PASS = new Set([...TRANSFORMS, "group", "color", "resize"]);
 const BLENDS = new Set(["fillet", "chamfer", "shell"]);
 
 export function isTransform(n: SceneNode): boolean {
@@ -129,12 +173,102 @@ function topmost(scene: Scene, pred: (n: SceneNode) => boolean): SceneNode[] {
   return out;
 }
 
+/** Child system → parent node system (both in context coordinates via `world`). */
+function relative(parent: SceneNode, child: SceneNode): Mat4 {
+  return mul(invertAffine(parent.world), child.world);
+}
+
+/** Profile nodes of a loft: descends through transforms and groups to the shapes. */
+export function profileLeaves(scene: Scene, n: SceneNode): SceneNode[] {
+  const out: SceneNode[] = [];
+  const walk = (c: SceneNode, depth: number) => {
+    if (c.flags.background || depth > 64) return;
+    const kids = visibleChildren(scene, c);
+    if (PASS.has(c.label) && kids.length) for (const k of kids) walk(k, depth + 1);
+    else if (hasGeometry(c)) out.push(c);
+  };
+  for (const c of visibleChildren(scene, n)) walk(c, 0);
+  return out;
+}
+
+function translation(z: number): Mat4 {
+  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, z, 1];
+}
+
+function opInfo(n: SceneNode): OpInfo | null {
+  return n.op_info ?? null;
+}
+
+/** Body (first child) and zones of a fillet/chamfer/shell block. */
+function blockParts(scene: Scene, n: SceneNode): { body: SceneNode | null; zones: SceneNode[] } {
+  const kids = visibleChildren(scene, n);
+  return { body: kids.find((c) => !c.flags.zone) ?? null, zones: kids.filter((c) => c.flags.zone && hasGeometry(c)) };
+}
+
+function selectOf(n: SceneNode): SelectMode {
+  const o = opInfo(n);
+  return o && (o.kind === "blend" || o.kind === "shell") ? o.select : "inside";
+}
+
+/** Display of profile operations and surfaces under the cursor (Spec: Profiloperationen). */
+function profileOp(scene: Scene, n: SceneNode, items: DrawItem[], guides: Guide[]): void {
+  const o = opInfo(n);
+  if (!o) return;
+  const kids = visibleChildren(scene, n).filter(hasGeometry);
+  const dw = n.display_world;
+  const world = (pts: Vec3[]) => pts.map((p) => apply(dw, p));
+  switch (o.kind) {
+    case "linear_extrude": {
+      // Profile as outline at the bottom (z0), height grip on top (handle).
+      const z0 = o.center ? -o.h / 2 : 0;
+      for (const c of kids) items.push(item(c, "profile", "Profil unten", mul(dw, mul(translation(z0), relative(n, c)))));
+      break;
+    }
+    case "rotate_extrude": {
+      // Profile in the xz plane, rotation axis as a line, angle grip (handle).
+      for (const c of kids) items.push(item(c, "profile", "Profil in der xz-Ebene", mul(dw, mul(REVOLVE_PROFILE, relative(n, c)))));
+      const b = n.bounds;
+      const lo = b ? b.min[2] : 0;
+      const hi = b ? b.max[2] : 10;
+      const pad = Math.max(2, (hi - lo) * 0.15);
+      guides.push({ points: world([[0, 0, lo - pad], [0, 0, hi + pad]]), kind: "axis", dashed: true });
+      break;
+    }
+    case "loft":
+      for (const c of profileLeaves(scene, n)) items.push(item(c, "profile", "Profil"));
+      break;
+    case "sweep": {
+      const path = sweepPath(o.path, o.spline);
+      if (!path) break;
+      guides.push({ points: world(path.points), kind: "path", dashed: false });
+      const f = sweepStartFrame(path.points[0], path.tangent);
+      for (const c of kids) items.push(item(c, "profile", "Profil am Startpunkt", mul(dw, mul(f, relative(n, c)))));
+      break;
+    }
+    case "surface": {
+      const rows = o.rows;
+      for (const r of rows) guides.push({ points: world(r), kind: "net", dashed: false });
+      const cols = rows[0]?.length ?? 0;
+      for (let j = 0; j < cols; j++) guides.push({ points: world(rows.map((r) => r[j])), kind: "net", dashed: false });
+      break;
+    }
+    case "thicken":
+      for (const c of kids) items.push(item(c, "profile", "Fläche"));
+      break;
+    default:
+      break;
+  }
+}
+
 export function plan(input: PlanInput): Plan {
   const { scene } = input;
   const nodes = scene.nodes;
   const items: DrawItem[] = [];
   const edges: EdgeLine[] = [];
   const frames: Frame[] = [];
+  const guides: Guide[] = [];
+  const openFaces: OpenFaceQuery[] = [];
+  let zoneEdges: ZoneEdgeQuery | null = null;
   const activeInst = new Set<number>();
   const root = scene.root !== null ? nodes[scene.root] : null;
 
@@ -144,25 +278,39 @@ export function plan(input: PlanInput): Plan {
 
   // Cursor line: the node full, plus what its kind shows.
   for (const n of cursor) {
-    if (hasGeometry(n)) items.push(item(n, n.flags.zone ? "blue" : "full", "Cursor"));
+    if (hasGeometry(n)) items.push(item(n, n.flags.zone ? "blue" : n.label === "loft" ? "translucent" : "full", "Cursor"));
     if (n.label === "difference") {
       for (const c of visibleChildren(scene, n)) if (c.subtracted && hasGeometry(c)) items.push(item(c, "red", "abgezogen"));
     } else if (n.label === "intersection") {
       for (const c of visibleChildren(scene, n)) if (hasGeometry(c)) items.push(item(c, "ghost", "Schnittmenge"));
     } else if (BLENDS.has(n.label)) {
-      for (const c of visibleChildren(scene, n)) if (c.flags.zone && hasGeometry(c)) items.push(item(c, "blue", "Zone"));
-    } else if (isTransform(n)) {
+      const { body, zones } = blockParts(scene, n);
+      for (const c of zones) items.push(item(c, "blue", "Zone"));
+      if (n.label === "shell" && body && hasGeometry(body) && zones.length) {
+        openFaces.push({ shell: n.idx, body: body.idx, matrix: body.display_world, zones: zones.map((z) => z.idx), select: selectOf(n) });
+      }
+    } else if (isTransform(n) && !n.flags.zone) {
+      // (A zone placed by a transform shows only the zone and its edges.)
       const kids = visibleChildren(scene, n);
       frames.push({ matrix: n.display_world, dashed: true });
       if (kids.length) frames.push({ matrix: kids[0].display_world, dashed: false });
       for (const c of kids) if (hasGeometry(c)) items.push(item(c, "outline", "Ausgangsposition", n.display_world));
     }
     if (n.flags.zone && n.parent !== null) {
-      // Cursor on a zone: the body of the block dimmed is the base; the zone is blue.
+      // Cursor on a zone: only this zone and its edges (or opened faces) are highlighted.
       const p = nodes[n.parent];
-      edges.push(...polylinesToWorld(p.display_world, p.selected_edges, "selected"));
+      if (p.label === "shell") {
+        const { body } = blockParts(scene, p);
+        if (body && hasGeometry(body) && hasGeometry(n)) {
+          openFaces.push({ shell: p.idx, body: body.idx, matrix: body.display_world, zones: [n.idx], select: selectOf(p) });
+        }
+      } else if (p.selected_edges.length && hasGeometry(n)) {
+        const all = polylinesToWorld(p.display_world, p.selected_edges, "selected").map((e) => e.points);
+        zoneEdges = { zone: n.idx, edges: all, select: selectOf(p) };
+      }
     }
     edges.push(...polylinesToWorld(n.display_world, n.selected_edges, "selected"));
+    profileOp(scene, n, items, guides);
     const inst = instanceBelow(scene, n);
     if (inst !== null) activeInst.add(inst);
   }
@@ -210,7 +358,7 @@ export function plan(input: PlanInput): Plan {
     status = `Nur Teilbaum mit ! angezeigt${r ? ` (Zeile ${r.range.line})` : ""}`;
   }
 
-  return { base, items, edges, frames, anchors, status };
+  return { base, items, edges, frames, anchors, status, guides, zoneEdges, openFaces };
 }
 
 /** Nodes whose meshes a plan needs. */
@@ -218,5 +366,10 @@ export function planNodes(p: Plan): number[] {
   const s = new Set<number>();
   if (p.base) s.add(p.base.node);
   for (const i of p.items) s.add(i.node);
+  if (p.zoneEdges) s.add(p.zoneEdges.zone);
+  for (const q of p.openFaces) {
+    s.add(q.body);
+    for (const z of q.zones) s.add(z);
+  }
   return [...s];
 }
