@@ -940,8 +940,8 @@ uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, u
 // The facade therefore checks every pairwise result (see boolean_plausible) and on a mismatch
 // retries with swapped operands, a different order of the remaining operands (sc_boolean),
 // and finally with the second operand shifted by 1e-6..1e-4 of the model size (far below
-// every export tolerance). If nothing passes the check, the Boolean fails instead of
-// returning a wrong solid.
+// every export tolerance). If nothing passes the check, SMLib's own result is kept, as
+// before (see checked_boolean).
 
 struct Box3 {
   V3 mn = v3(1e300, 1e300, 1e300), mx = v3(-1e300, -1e300, -1e300);
@@ -1155,17 +1155,22 @@ BrepPtr raw_boolean(int32_t op, const SmBrep* A, const SmBrep* B, std::string& e
 // A op B with the plausibility check and fallbacks (see above). `allow_perturb` = false
 // leaves out the shifted retries (used while other operand orders are still untried); they
 // are only tried after a wrong result or an SMLib error, not for results that are merely
-// open. Returns nullptr if nothing passes; `open` then gets the first open (not closed)
-// result, if there was one, which the caller may accept as before the check existed.
+// open. Returns nullptr if nothing passes; `plain` then holds SMLib's own result for A op B
+// (if it produced one), which the caller takes as a last resort: the check itself relies on
+// SMLib's point classification, which errs on some bodies (revolved splines), so a result
+// it rejects is not necessarily wrong, and it is what the facade returned before the check.
 BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow_perturb,
-                        std::string& err, BrepPtr& open) {
+                        std::string& err, BrepPtr& plain) {
   bool commutative = op != SC_DIFFERENCE;
   bool wrong = false;
   std::string why;
   // runs a op b (swapped: b op a) and checks the result against a op b
+  bool first = true;
   auto attempt = [&](const SmBrep* a, const SmBrep* b, bool swapped) -> BrepPtr {
     std::string e;
     BrepPtr r = swapped ? raw_boolean(op, b, a, e) : raw_boolean(op, a, b, e);
+    bool is_plain = first;
+    first = false;
     if (!r.get()) {
       wrong = true;
       if (why.empty()) why = e;
@@ -1174,11 +1179,8 @@ BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow
     std::string w;
     Plausible pl = boolean_plausible(op, a, b, r.get(), w);
     if (pl == PL_OK) return r;
-    if (pl == PL_OPEN) {
-      if (!open.get()) open = std::move(r);
-    } else {
-      wrong = true;
-    }
+    if (pl == PL_WRONG) wrong = true;
+    if (is_plain) plain = std::move(r);
     if (why.empty()) why = "SMLib returned a wrong result (" + w + ")";
     return BrepPtr();
   };
@@ -1679,20 +1681,20 @@ uint32_t sc_boolean(int32_t op, const uint32_t* hs, uint32_t n, uint32_t tag) {
       // Union and intersection may combine the operands in any order, a difference its
       // subtrahends. If a step fails (SMLib error, wrong or open result, see
       // checked_boolean), the failing operand is moved forward and the chain is rebuilt;
-      // only when no order works, the original order runs with the shifted retries and
-      // accepts open results (touching bodies).
+      // only when no order works, the original order runs with the shifted retries and,
+      // where nothing passes, keeps SMLib's own result (touching bodies, unreliable checks).
       size_t first_free = op == SC_DIFFERENCE ? 1 : 0;
       std::vector<std::vector<const SmBrep*>> tried;
       std::vector<const SmBrep*> order = ops;
       std::string err;
-      // `last_resort`: shifted retries, and open results are accepted
+      // `last_resort`: shifted retries, and SMLib's own result is accepted if nothing passes
       auto run = [&](const std::vector<const SmBrep*>& ord, bool last_resort, size_t& failed_at) {
         BrepPtr a = copy_brep(ord[0]);
         for (size_t i = 1; i < ord.size(); i++) {
           if (a->GetNumFaces() == 0) break;  // difference/intersection stays empty
-          BrepPtr open;
-          BrepPtr r = checked_boolean(op, a.get(), ord[i], last_resort, err, open);
-          if (!r.get() && last_resort && open.get()) r = std::move(open);
+          BrepPtr plain;
+          BrepPtr r = checked_boolean(op, a.get(), ord[i], last_resort, err, plain);
+          if (!r.get() && last_resort && plain.get()) r = std::move(plain);
           if (!r.get()) {
             failed_at = i;
             return BrepPtr();
