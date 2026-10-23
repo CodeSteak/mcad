@@ -5,6 +5,7 @@ und geprüft nur mit der CLI (`cad outline`, `check`, `render --views all --show
 `inspect`, `measure --interference/--clearance`, `export` STL/STEP). Jede Datei beginnt mit
 `// Zweck: …`; alle Maße in mm; jedes Modell ist ein Modul mit Standardwerten, auf oberster
 Ebene als benannte Instanz (Bauteil, Export je Teil mit `cad export … --all-parts`).
+Katalog mit Bild, Kenndaten und Parametern je Modell: [`docs/modelle/alltagsmodelle.pdf`](../../docs/modelle/alltagsmodelle.pdf).
 
 Regression: `tests/alltag/check.sh` (alle Modelle: `check --json`, Export STEP je Bauteil, STL
 und STEP gesamt in ein temporäres Verzeichnis, Vergleich mit `tests/alltag/expected.json`;
