@@ -605,9 +605,10 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 - Die Prüfung auf Selbstüberschneidung arbeitet auf abgetasteten Polylinien (Toleranz relativ zur
   Skizzengröße); Überschneidungen *zwischen* Konturen sind erlaubt (Vereinigung nach nonzero).
   Die Verschachtelung von Löchern und Inseln setzt sich nicht schneidende Konturen voraus.
-- Sweep entlang einer Skizze: wie bisher müssen Profile auf gekrümmten Pfaden um ihren Ursprung
-  zentriert sein; Pfade mit Ecken nur als Gehrung (eben); ein geschlossener Pfad wird nicht
-  unterstützt.
+- Sweep entlang einer Skizze: Pfade mit Ecken nur als Gehrung (eben) und dann mit um den Ursprung
+  zentriertem Profil; ein geschlossener Pfad wird nicht unterstützt.
+- STEP: Rotationsflächen von Bögen bleiben `SURFACE_OF_REVOLUTION` der exakten Kurve (Kugel und
+  Torus werden nicht als solche geschrieben).
 - Loft verschiedener Segmentzahlen verbindet jeden Abschnitt zu einer Kurve (C0 an den Stößen);
   die Flächen folgen dann nicht mehr den Segmenten.
 - Namensräume: die Konstanten eines Moduls werden je Zugriff in einem neuen Namensraum
@@ -903,8 +904,12 @@ Interpolation, Verbinden), `Loop::Composite`, `PlacedPath`, `Kernel::sweep_path`
 Hilfen; allein übersetzt ist die Datei leer); Kodierung Schleifenart 3. Geraden werden `SmLine`,
 Bögen rationale quadratische B-Splines (Form `SM_CF_CIRCULAR_ARC`), Bézier/Splines B-Splines; die
 Stöße werden exakt verschweißt. Extrude (auch mit twist/scale), Revolve, Loft und Sweep nutzen die
-bestehenden Einstiege; neu ist `sc_sketch_sweep`. STEP schreibt die Bögen als `CIRCLE`, die
-Geraden als `LINE` (aus den exakten NURBS erkannt). Die 2D-Darstellung tastet Bögen und Kurven
+bestehenden Einstiege; neu ist `sc_sketch_sweep` (glatter Pfad: Kurven-Sweep mit dem
+Profil-Ursprung als Bezugspunkt, SMLib-Patch 0003; Ecken: Gehrung). STEP schreibt die Bögen als
+`CIRCLE`, die Geraden als `LINE` (aus den exakten NURBS erkannt); SMLib hält extrudierte Bögen als
+Extrusionsflächen der B-Spline, der Writer schreibt eine Extrusion eines Kreisbogens längs seiner
+Achse als `CYLINDRICAL_SURFACE` (OpenCASCADE rechnete auf den Extrusionsflächen ohne p-Kurven bis
+2,5·10⁻³ falsche Volumen). Die 2D-Darstellung tastet Bögen und Kurven
 mit der Anzeigetoleranz ab (Polygon-Clipping in Rust).
 
 **Darstellung und Griffe.** `OpInfo::Sketch` (Segmente abgetastet, Kontrollpolygone, Fehler,

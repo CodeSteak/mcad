@@ -263,7 +263,7 @@ docs/                Plan, solidcore-Umstieg, Testberichte
 export SMLIB_PREBUILT=$PWD/smlib/build-native
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace                                          # ~390 Tests (Daemon: tests/daemon.rs)
+cargo test --workspace                                          # ~450 Tests (Daemon: tests/daemon.rs)
 cargo check -p cad-wasm --target wasm32-unknown-unknown
 
 node crates/kernel-smlib/js/test-node.mjs                       # smlib.wasm über die Brücke

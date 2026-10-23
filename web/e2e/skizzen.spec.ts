@@ -73,11 +73,11 @@ test("S01 Segmentzeile: Skizze in ihrer Ebene, Segment hervorgehoben", async ({ 
   expect(act.changed).toBeGreaterThan(30);
   const start = await layerPixels(page, "sketch:start");
   expect(start.found).toBe(2);
-  await screenshot14(page, "s01-bogen");
+  await screenshot14(page, "s01-bogen", "view");
   // another line: the hole's arc
   const s2 = await cursorOn(page, 10, 10, null, "(s) => (s.view.plan.sketches ?? [])[0]?.active.length > 0");
   expect(sketches(s2)[0].active.map((a) => `${a.kind}@${a.line}`)).toEqual(["arc@10"]);
-  await screenshot14(page, "s01-loch");
+  await screenshot14(page, "s01-loch", "view");
   record14({
     id: "S01",
     title: "Skizze unter dem Cursor",
@@ -120,7 +120,7 @@ test("S03 Griff ziehen ändert das Literal des Endpunkts", async ({ page }) => {
   await cursorOn(page, 3, 6, null, "(s) => (s.view.plan.sketches ?? [])[0]?.active.length > 0");
   const hs = await waitHandles(page, "(hs) => hs.some(h => h.kind === 'point' && h.value[0] === 40)");
   const h = hs.find((x) => x.kind === "point" && x.value[0] === 40)!;
-  await screenshot14(page, "s03-vorher");
+  await screenshot14(page, "s03-vorher", "view");
   const from = grip(h);
   await mouseDrag(page, from, line(from, { x: from.x + 70, y: from.y + 25 }, 14), { alt: true });
   await waitDragDone(page);
@@ -133,7 +133,7 @@ test("S03 Griff ziehen ändert das Literal des Endpunkts", async ({ page }) => {
   expect(after).toContain("arc(to = [50, 10], r = 10);");
   const s = await waitView(page, "(s) => (s.view.plan.sketches ?? []).length === 1");
   expect(sketches(s)[0].active.map((a) => a.kind)).toEqual(["line"]);
-  await screenshot14(page, "s03-nachher");
+  await screenshot14(page, "s03-nachher", "view");
   record14({
     id: "S03",
     title: "Endpunkt ziehen",
@@ -197,11 +197,11 @@ teile.rohr(r = 3);
   await expect(page.getByTestId("pathbar")).toContainText("rohr");
   const end = await layerPixels(page, "sketch:end");
   expect(end.found).toBe(1);
-  await screenshot14(page, "s05-pfad");
+  await screenshot14(page, "s05-pfad", "view");
   // the call from outside with a dot: the tube in the file context
   const f = await cursorOn(page, 14, 2, null, "(s) => s.view.plan.items.some(i => i.label === 'rohr')");
   expect(f.view!.plan.items.find((i) => i.label === "rohr")!.mode).toBe("full");
-  await screenshot14(page, "s05-aufruf");
+  await screenshot14(page, "s05-aufruf", "view");
   record14({
     id: "S05",
     title: "Sweep-Pfad und Namensraum",

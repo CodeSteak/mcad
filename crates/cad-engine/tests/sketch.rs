@@ -10,6 +10,10 @@ use cad_eval::{EvalOptions, eval_source};
 use cad_ir::{Op, Profile, Tree};
 use common::*;
 
+/// Relative tolerance of the kernel volumes (SMLib integrates the volume adaptively; the
+/// geometry itself is exact).
+const VREL: f64 = 1e-5;
+
 fn tree(src: &str) -> Tree {
     let out = eval_source(src, &EvalOptions::default());
     let errs: Vec<_> = out.errors().collect();
@@ -32,7 +36,7 @@ fn rectangle_with_half_circle() {
         a / 2.0
     );
     let want = (a * b + PI * (a / 2.0) * (a / 2.0) / 2.0) * h;
-    assert_approx("rect + half circle", vol(&src), want, 1e-7);
+    assert_approx("rect + half circle", vol(&src), want, VREL);
     // the same with a tangent arc, a 3-point arc and centre + angle
     for arc in [
         "arc(to = [0, 20]);".to_string(),
@@ -42,7 +46,7 @@ fn rectangle_with_half_circle() {
         let src = format!(
             "linear_extrude(5) sketch {{ start([0, 0]); line(to = [40, 0]); line(by = [0, 20]); {arc} close(); }}"
         );
-        assert_approx(&arc, vol(&src), want, 1e-7);
+        assert_approx(&arc, vol(&src), want, VREL);
     }
 }
 
@@ -50,7 +54,7 @@ fn rectangle_with_half_circle() {
 fn revolve_arc_profiles_sphere_and_torus() {
     let r = 7.0;
     let sphere = format!("rotate_extrude() sketch {{ start([0, -{r}]); arc(to = [0, {r}], r = {r}); close(); }}");
-    assert_approx("sphere", vol(&sphere), 4.0 / 3.0 * PI * r * r * r, 1e-7);
+    assert_approx("sphere", vol(&sphere), 4.0 / 3.0 * PI * r * r * r, VREL);
     let (big, small) = (20.0, 4.0);
     let torus = format!(
         "rotate_extrude() sketch {{ start([{}, 0]); arc(to = [{}, 0], r = {small}); arc(to = [{}, 0], r = {small}); }}",
@@ -58,12 +62,12 @@ fn revolve_arc_profiles_sphere_and_torus() {
         big - small,
         big + small
     );
-    assert_approx("torus", vol(&torus), 2.0 * PI * PI * big * small * small, 1e-7);
+    assert_approx("torus", vol(&torus), 2.0 * PI * PI * big * small * small, VREL);
     // half turn of a quarter disc: a quarter of a sphere ... of radius r about the axis
     let quarter = format!(
         "rotate_extrude(angle = 180) sketch {{ start([0, 0]); line(to = [{r}, 0]); arc(center = [0, 0], angle = 90); close(); }}"
     );
-    assert_approx("half hemisphere", vol(&quarter), 4.0 / 3.0 * PI * r * r * r / 4.0, 1e-7);
+    assert_approx("half hemisphere", vol(&quarter), 4.0 / 3.0 * PI * r * r * r / 4.0, VREL);
 }
 
 #[test]
@@ -71,13 +75,13 @@ fn holes_by_winding_and_hole_block() {
     // outer square counter-clockwise, inner circle clockwise: a hole (nonzero)
     let ring = "linear_extrude(2) sketch {\n start([0, 0]); line(to = [20, 0]); line(to = [20, 20]); line(to = [0, 20]); close();\n start([15, 10]); arc(to = [5, 10], r = 5, cw = true); arc(to = [15, 10], r = 5, cw = true);\n}";
     let want = (400.0 - PI * 25.0) * 2.0;
-    assert_approx("cw hole", vol(ring), want, 1e-7);
+    assert_approx("cw hole", vol(ring), want, VREL);
     // the same circle counter-clockwise: same direction as the outer loop, filled (nonzero)
     let filled = ring.replace(", cw = true", "");
-    assert_approx("ccw inner", vol(&filled), 800.0, 1e-7);
+    assert_approx("ccw inner", vol(&filled), 800.0, VREL);
     // `hole { … }` is a hole in any direction
     let block = "linear_extrude(2) sketch {\n start([0, 0]); line(to = [20, 0]); line(to = [20, 20]); line(to = [0, 20]); close();\n hole { start([15, 10]); arc(to = [5, 10], r = 5); arc(to = [15, 10], r = 5); }\n}";
-    assert_approx("hole block", vol(block), want, 1e-7);
+    assert_approx("hole block", vol(block), want, VREL);
     // island in the hole, and a second separate contour
     let island = format!(
         "{}\n",
@@ -86,14 +90,14 @@ fn holes_by_winding_and_hole_block() {
             "\n start([11, 10]); arc(to = [9, 10], r = 1); arc(to = [11, 10], r = 1);\n start([30, 0]); line(by = [5, 0]); line(by = [0, 5]); line(by = [-5, 0]); close();\n}"
         )
     );
-    assert_approx("island + second contour", vol(&island), want + PI * 2.0 + 50.0, 1e-7);
+    assert_approx("island + second contour", vol(&island), want + PI * 2.0 + 50.0, VREL);
 }
 
 #[test]
 fn bezier_and_spline_segments() {
     // square with a quadratic Bézier cap (area of the parabola segment: 2/3 · base · height)
     let src = "linear_extrude(1) sketch { start([0, 0]); line(to = [4, 0]); line(to = [4, 4]); bezier(c1 = [2, 6], to = [0, 4]); close(); }";
-    assert_approx("quadratic bezier", vol(src), 16.0 + 8.0 / 3.0, 1e-7);
+    assert_approx("quadratic bezier", vol(src), 16.0 + 8.0 / 3.0, VREL);
     // cubic Bézier: cap area from Green's theorem on the exact curve
     // x = 4 - 12t² + 8t³, y = 4 + 12t - 12t²: ∮ x dy over the cap = ∫ x y' dt (chord adds 0)
     let cap = {
@@ -109,7 +113,7 @@ fn bezier_and_spline_segments() {
             .abs()
     };
     let cubic = "linear_extrude(1) sketch { start([0, 0]); line(to = [4, 0]); line(to = [4, 4]); bezier(c1 = [4, 8], c2 = [0, 8], to = [0, 4]); close(); }";
-    assert_approx("cubic bezier", vol(cubic), 16.0 + cap, 1e-7);
+    assert_approx("cubic bezier", vol(cubic), 16.0 + cap, VREL);
     // spline: a closed body of positive volume through the points
     let spline = "linear_extrude(1) sketch { start([0, 0]); line(to = [10, 0]); spline([[8, 5], [5, 7], [2, 5]], tangent = true); close(); }";
     let v = vol(spline);
@@ -122,7 +126,7 @@ fn sketch_modules_loops_and_twist() {
     let src = "module stern(n = 6, r1 = 10, r2 = 5) sketch {\n start([r1, 0]);\n for (i = [1 : n]) {\n  line(to = [r2 * cos(360 * (i - 0.5) / n), r2 * sin(360 * (i - 0.5) / n)]);\n  line(to = [r1 * cos(360 * i / n), r1 * sin(360 * i / n)]);\n }\n}\nlinear_extrude(3) stern();";
     // star: 2n triangles centre–r1–r2 with angle π/n between them
     let area = 12.0 * 0.5 * 10.0 * 5.0 * (PI / 6.0).sin();
-    assert_approx("star", vol(src), area * 3.0, 1e-7);
+    assert_approx("star", vol(src), area * 3.0, VREL);
     // twist keeps the volume of a sketch with arcs
     let tw = "linear_extrude(10, twist = 90) sketch { start([-5, -3]); line(to = [5, -3]); arc(to = [5, 3], r = 3); line(to = [-5, 3]); arc(to = [-5, -3], r = 3); }";
     assert_approx("twist", vol(tw), (60.0 + PI * 9.0) * 10.0, 1e-3);
@@ -134,6 +138,10 @@ fn sweep_along_open_sketch_path() {
     let src = "sweep() {\n sketch(closed = false) { start([0, 0]); line(to = [20, 0]); arc(to = [30, 10]); line(by = [0, 15]); }\n circle(2);\n}";
     let len = 20.0 + PI * 10.0 / 2.0 + 15.0;
     assert_approx("smooth path", vol(src), PI * 4.0 * len, 1e-4);
+    // a profile off its origin follows the smooth path with its origin (patch 0003)
+    let off = "sweep() {\n sketch(closed = false) { start([0, 0]); line(to = [20, 0]); arc(to = [30, 10]); line(by = [0, 15]); }\n translate([3, 0]) circle(1);\n}";
+    let v = vol(off);
+    assert!(v > PI * 1.0 * 30.0 && v < PI * 1.0 * 60.0, "{v}");
     // path with a corner: mitered joint
     let corner = "sweep() {\n sketch(closed = false) { start([0, 0]); line(to = [20, 0]); line(to = [20, 15]); }\n square(2, center = true);\n}";
     assert_approx("mitered", vol(corner), 4.0 * 35.0, 1e-6);

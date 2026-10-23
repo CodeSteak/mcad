@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Testbericht 14 – Skizzen und Namensräume</title>
+<style>
+  @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
+  :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
+  * { box-sizing: border-box; }
+  body { font: 9.6pt/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); margin: 0; }
+  main { max-width: 184mm; margin: 0 auto; }
+  h1 { font-size: 18pt; margin: 0 0 2mm; }
+  h2 { font-size: 13pt; margin: 7mm 0 3mm; border-bottom: 1px solid var(--border); padding-bottom: 1mm; break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p { margin: 1.5mm 0; }
+  .meta { color: var(--muted); margin-bottom: 4mm; }
+  .summary { display: flex; flex-wrap: wrap; gap: 2.5mm; margin: 3mm 0; }
+  .summary div { flex: 1 1 28mm; border: 1px solid var(--border); border-radius: 2mm; padding: 2mm; font-size: 8.4pt; }
+  .summary b { display: block; font-size: 12pt; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 8.2pt; }
+  th, td { border: 1px solid var(--border); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
+  th { background: var(--head); font-weight: 600; }
+  td.n { text-align: right; white-space: nowrap; }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 7.6pt; }
+  pre { margin: 0 0 1.5mm; padding: 1.4mm 2mm; background: #f6f8fa; border: 1px solid var(--border); border-radius: 1mm; white-space: pre-wrap; word-break: break-word; }
+  .small { font-size: 7.6pt; color: var(--muted); font-weight: 400; }
+  ul { margin: 1mm 0 2mm 5mm; padding: 0; }
+  li { margin: 0.5mm 0; }
+  tr, td, figure, pre { break-inside: avoid; }
+  .ok { color: var(--ok); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+  figure { margin: 2mm 0; }
+  figure img { max-width: 100%; max-height: 92mm; border: 1px solid var(--border); border-radius: 1mm; }
+  figcaption { font-size: 7.8pt; color: var(--muted); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; align-items: start; }
+  .codefig { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; align-items: start; }
+  .note { border-left: 1mm solid #e8b84a; padding: 1mm 2.5mm; background: #fff8e6; margin: 2mm 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Testbericht 14 – Skizzen und Namensräume</h1>
+<div class="meta">Plan 17.7, Schritt 1: <code>sketch { … }</code> mit gemischten Konturen, Module als Namensräume · cad-syntax, cad-eval, cad-ir, cad-kernel, cad-engine, kernel-smlib (Fassade <code>sc_sketch.cpp</code>), cad-step, cad-session, cad-cli, web · 23.10.2026 · Branch worktree-agent-a41d0f69bbe04a86a · Commit a2374ac · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 Kerne</div>
+
+<div class="summary">
+  <div>cargo test --workspace<b class="ok">453 / 453</b>davon 29 neu/erweitert</div>
+  <div>clippy · fmt<b class="ok">sauber · sauber</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="ok">205 · 93 / 93</b>neu: S01–S05</div>
+  <div>OpenSCAD · STEP<b class="ok">33/33 · 52/52</b>compare.py · verify.py (OCCT)</div>
+  <div>Alltagsmodelle<b class="ok">unverändert</b>tests/alltag/check.sh</div>
+  <div>Wasm-Kernel (Node)<b class="ok">bestanden</b>test-node.mjs</div>
+</div>
+
+<h2>1 Auftrag und Ergebnis</h2>
+<p>Schritt 1 von Plan 17: <b>Skizzen</b> – ein 2D-Block aus Segmenten (Geraden, Kreisbögen, Bézier-Kurven, Splines), jede Zeile ein Segment mit eigener Darstellung, eigenen Griffen und eigenen Fehlern – als Profil für <code>linear_extrude</code>, <code>rotate_extrude</code>, <code>loft</code> und <code>sweep</code> (auch als Pfad), exakt durch den Kernel bis in STEP; und <b>Module als Namensräume</b> (<code>teile.schraube(d = 3)</code>). Der Zeichenmodus (Schritt 4) und <code>corner</code>/<code>offset</code>/<code>stroke</code> (Schritt 2) gehören nicht dazu; <code>corner()</code> ist reserviert (Warnung).</p>
+<ul>
+<li>Volumen gegen Formeln (Abschnitt 5): alle Fälle innerhalb der Integrationsgenauigkeit von SMLib (≤ 3.9·10<sup>−6</sup> relativ; die twist-Extrusion ist eine kubische Loft-Näherung wie bisher).</li>
+<li>STEP: Bögen als <code>CIRCLE</code>, Geraden als <code>LINE</code>, extrudierte Bögen als <code>CYLINDRICAL_SURFACE</code>, keine angenäherten Kanten; OpenCASCADE liest alle vier neuen Beispiele mit gleichem Volumen (≤ 10<sup>−6</sup>).</li>
+<li>OpenSCAD-Dateien unverändert: compare.py 33/33; Benutzermodule namens <code>line</code>/<code>arc</code> und <code>spline(points)</code> außerhalb von Skizzen verhalten sich wie vorher (Tests).</li>
+</ul>
+
+<h2>2 Skizzen: Sprache</h2>
+<p>Entscheidungen (Plan 17.8): <code>sketch</code> ist ein eingebautes 2D-Modul; <code>sketch {</code> und <code>hole {</code> gehen ohne Klammern; Segmente sind gewöhnliche Anweisungen, die an die gerade ausgewertete Skizze anhängen – auch aus Modulen und Schleifen heraus. In einer Skizze haben Segmentnamen Vorrang vor gleichnamigen Benutzermodulen, außerhalb bleibt alles wie in OpenSCAD. Andere Geometrie und Transformationen in einer Skizze sind ein Fehler. Jede Skizze ist <b>ein</b> Knoten <code>Profile::Sketch</code>; die Anweisungen der Segmente stehen in <code>EvalOutput::sketches</code>, damit der Cache-Schlüssel nicht von Quellpositionen abhängt.</p>
+<table>
+<tr><th>Segment</th><th>Formen</th></tr>
+<tr><td><code>start(p)</code></td><td>beginnt eine Kontur; Punkte dürfen Rasterpunkte und Anker sein (z ≠ 0: Warnung, projiziert)</td></tr>
+<tr><td><code>line</code></td><td><code>to = p</code>, <code>by = v</code> (relativ), <code>length = l, angle = a</code>; <code>length</code> allein setzt die Richtung fort</td></tr>
+<tr><td><code>arc</code></td><td><code>to, r [, large, cw]</code> wie SVG · <code>center, angle</code> (Grad, Vorzeichen = Richtung) · <code>center, to</code> · <code>through, to</code> · <code>to</code> allein = tangential</td></tr>
+<tr><td><code>bezier</code></td><td><code>c1, to</code> (quadratisch) · <code>c1, c2, to</code> (kubisch)</td></tr>
+<tr><td><code>spline</code></td><td>Punkte nach dem aktuellen Punkt, <code>tangent = true | v</code>, <code>end_tangent = v</code>; kubische globale Interpolation (Sehnenlänge, gemittelte Knoten)</td></tr>
+<tr><td><code>close()</code></td><td>Gerade zum Start; endet die Kontur am Start, ist sie auch ohne <code>close()</code> geschlossen</td></tr>
+<tr><td><code>hole { … }</code></td><td>Konturen darin sind Löcher (in jeder Laufrichtung)</td></tr>
+</table>
+<p><b>Löcher und mehrere Konturen:</b> Windungsregel <i>nonzero</i>; eine Kontur ist Rand, wo die Windungszahl nur auf einer Seite ≠ 0 ist; Inseln in Löchern über die Verschachtelung. <b>Sweep:</b> ohne <code>path</code> ist eine offene Skizze (<code>sketch(closed = false)</code>) unter den Kindern der Pfad. <b>Loft:</b> gleiche Segmentzahl → Segment für Segment (jedes Segment eine Fläche, Zuordnung durch <code>start</code>); sonst wird jeder Abschnitt eine geschlossene B-Spline, die am +x-Strahl vom Schwerpunkt beginnt (wie Kreise/Polygone), damit nichts verdreht.</p>
+<h3>Beispiele (<code>examples/spec/skizze_*.scad</code>)</h3>
+<div class="codefig"><pre>// Zweck: Skizzen mit Bögen (Plan 17.1) – ein Halter als Skizze aus Geraden und Bögen mit
+// Raster in der Skizze, einer Bohrung (Gegenlauf, Windungsregel) und einem Langloch
+// (`hole { … }`), extrudiert; daneben ein Drehknopf aus einer Skizze mit tangentialem Bogen
+// und kubischer Bézier-Kurve, um die z-Achse gedreht.
+module halter(l = 60, b = 24, r_loch = 4) sketch {
+    grid s {
+        x: links = 0, bogen = l - b / 2;
+        y: unten = 0, mitte = b / 2, oben = b;
+    }
+    start(s[links, unten]);
+    line(to = s[bogen, unten]);
+    arc(to = s[bogen, oben], r = b / 2);        // Halbkreis am Ende
+    line(to = s[links, oben]);
+    close();
+    // Bohrung um den Bogenmittelpunkt, im Uhrzeigersinn: ein Loch (Windungsregel)
+    start([l - b / 2 + r_loch, b / 2]);
+    arc(to = [l - b / 2 - r_loch, b / 2], r = r_loch, cw = true);
+    arc(to = [l - b / 2 + r_loch, b / 2], r = r_loch, cw = true);
+    // Langloch: ein Loch in jeder Laufrichtung
+    hole {
+        start([10, b / 2 - 3]);
+        line(to = [26, b / 2 - 3]);
+        arc(to = [26, b / 2 + 3], r = 3);
+        line(to = [10, b / 2 + 3]);
+        arc(to = [10, b / 2 - 3], r = 3);
+    }
+}
+
+linear_extrude(5) halter();
+
+translate([90, 12, 0]) rotate_extrude() sketch {
+    start([0, 0]);
+    line(to = [14, 0]);
+    line(to = [14, 8]);
+    arc(to = [12, 10]);                         // tangential an die Gerade
+    bezier(c1 = [6, 10], c2 = [5, 16], to = [0, 16]);
+    close();                                    // entlang der Achse zurück
+}</pre><div><figure><img src="img/cli-profil.jpg" alt=""><figcaption>skizze_profil.scad: Halter (Bögen, Bohrung im Gegenlauf, Langloch per <code>hole</code>), Drehknopf (tangentialer Bogen, kubische Bézier)</figcaption></figure><figure><img src="img/cli-profil-oben.jpg" alt=""><figcaption>von oben</figcaption></figure></div></div>
+<div class="codefig"><pre>// Zweck: Zahnriemenscheibe (GT2-ähnlich) als Skizze per Schleife (Plan 17.1): jede Zahnlücke
+// ist ein Bogen durch einen Punkt am Lückengrund, dazwischen ein Bogen um die Mitte auf dem
+// Kopfkreis; die Nabenbohrung ist eine zweite Kontur im Uhrzeigersinn. Bordscheiben als Zylinder.
+function polar(r, a) = [r * cos(a), r * sin(a)];
+
+module scheibe(z = 20, teilung = 2, h = 7, bohrung = 5) {
+    ra = z * teilung / PI / 2 - 0.25;           // Kopfkreisradius
+    t = 0.75;                                   // Tiefe der Zahnlücke
+    dw = 0.6 / ra * 180 / PI;                   // halbe Lückenbreite als Winkel
+    a = 360 / z;
+    translate([0, 0, 1]) linear_extrude(h) sketch {
+        start(polar(ra, -dw));
+        for (i = [0 : z - 1]) {
+            arc(through = polar(ra - t, i * a), to = polar(ra, i * a + dw));
+            arc(center = [0, 0], to = polar(ra, (i + 1) * a - dw));
+        }
+        start([bohrung / 2, 0]);
+        arc(to = [-bohrung / 2, 0], r = bohrung / 2, cw = true);
+        arc(to = [bohrung / 2, 0], r = bohrung / 2, cw = true);
+    }
+    for (zb = [0, h + 1]) translate([0, 0, zb]) difference() {
+        cylinder(h = 1, r = ra + 1);
+        translate([0, 0, -1]) cylinder(h = 3, d = bohrung);
+    }
+}
+
+scheibe();</pre><div><figure><img src="img/cli-scheibe.jpg" alt=""><figcaption>skizze_zahnriemenscheibe.scad: 20 Zahnlücken per Schleife (Bogen durch einen Punkt + Bogen um die Mitte), Nabe als zweite Kontur</figcaption></figure><figure><img src="img/cli-scheibe-oben.jpg" alt=""><figcaption>von oben</figcaption></figure></div></div>
+<div class="codefig"><pre>// Zweck: Offene Skizzen als `sweep`-Pfad (Plan 17.1): ein Rohrbogen aus Gerade, tangentialem
+// Bogen und Gerade (glatter Pfad: ein Kurvenzug, das Profil ist ein Kreisring) in der xz-Ebene,
+// und ein Rahmen aus einem Rechteckprofil entlang eines Pfads mit Ecken (Gehrung).
+sweep() {
+    rotate([90, 0, 0]) sketch(closed = false) {
+        start([0, 0]);
+        line(to = [30, 0]);
+        arc(to = [45, 15]);                     // tangential: Radius 15
+        line(by = [0, 25]);
+    }
+    difference() {
+        circle(4);
+        circle(3);
+    }
+}
+
+translate([0, 20, 0]) sweep() {
+    sketch(closed = false) {
+        start([0, 0]);
+        line(to = [40, 0]);
+        line(to = [40, 30]);
+        line(to = [0, 30]);
+    }
+    square([3, 6], center = true);
+}</pre><figure><img src="img/cli-sweep.jpg" alt=""><figcaption>skizze_sweep.scad: Rohrbogen (glatter Pfad: ein Kurvenzug, Kreisring als Profil), Rahmen entlang eines Pfads mit Ecken (Gehrung)</figcaption></figure></div>
+
+<h2>3 Module als Namensräume</h2>
+<p><code>module name { … }</code> ohne Klammern; Aufrufe <code>a.b.c(…)</code>, auch benannt (<code>k: teile.schraube();</code>). Der erste Teil wird lexikalisch gesucht, jeder weitere nur direkt im Körper des vorigen Moduls. Der Körper ist der Namensraum, mit den Parametern des äußeren Moduls auf ihren Standardwerten; er gehört zu keiner Instanz – Raster, benannte Instanzen und Anker des äußeren Moduls sieht das innere nicht, die Geometrie des äußeren entsteht nicht. <b>Entscheidung Funktionen/Konstanten:</b> erreichbar (<code>teile.kopf(d)</code>, <code>teile.M3</code>) – Bibliotheken bündeln Hilfsfunktionen und Maße mit ihren Modulen ohne eigene Datei; OpenSCAD kennt keinen Punkt hinter Modulnamen (kein Konflikt), eine Variable gleichen Namens verdeckt das Modul. Kontext: <code>cad --module teile.platte.lochplatte</code>, UI-Pfadleiste „teile › rohr“ (S05).</p>
+<div class="codefig"><pre>// Zweck: Module als Namensräume (Plan 17.2) – eine Bibliothek `profile` mit Skizzen-Modulen
+// und eine Teilebibliothek `teile` mit Konstanten, Funktionen und Untermodulen; Aufrufe von
+// außen mit Punkt (`profile.stern()`, `teile.schraube(d = 3)`, mehrstufig
+// `teile.platte.lochplatte()`), Funktionen und Konstanten als `teile.kopf(teile.M3)`.
+module profile {
+    module stern(n = 5, r1 = 12, r2 = 5) sketch {
+        start([r1, 0]);
+        for (i = [1 : n]) {
+            line(to = [r2 * cos(360 * (i - 0.5) / n), r2 * sin(360 * (i - 0.5) / n)]);
+            line(to = [r1 * cos(360 * i / n), r1 * sin(360 * i / n)]);
+        }
+    }
+    module langloch(l = 20, b = 6) sketch {
+        start([0, -b / 2]);
+        line(to = [l, -b / 2]);
+        arc(to = [l, b / 2], r = b / 2);
+        line(to = [0, b / 2]);
+        arc(to = [0, -b / 2], r = b / 2);
+    }
+}
+
+module teile(raster = 10) {
+    M3 = 3.2;                                   // Durchgangsbohrung M3
+    function kopf(d) = 1.8 * d;                 // Kopfdurchmesser
+    module schraube(d = 3, l = 12) {
+        cylinder(h = l, d = d);
+        translate([0, 0, l]) cylinder(h = d * 0.6, d = kopf(d));
+    }
+    module platte {
+        // sieht `raster` und `M3` von `teile` (Standardwerte)
+        module lochplatte(n = 3) {
+            difference() {
+                cube([n * raster, raster, 3]);
+                for (i = [0 : n - 1]) translate([raster * (i + 0.5), raster / 2, -1]) cylinder(h = 5, d = M3);
+            }
+        }
+    }
+}
+
+linear_extrude(3) profile.stern();
+translate([25, -3, 0]) linear_extrude(4) profile.langloch(l = 25);
+translate([0, 30, 0]) teile.platte.lochplatte(n = 4);
+for (i = [0 : 3]) translate([10 * (i + 0.5), 35, 3]) teile.schraube(d = 3, l = 8);
+translate([70, 0, 0]) cylinder(h = 2, d = teile.kopf(teile.M3));</pre><div><figure><img src="img/cli-bibliothek.jpg" alt=""><figcaption>skizze_bibliothek.scad: profile.stern(), profile.langloch(), teile.platte.lochplatte(n = 4), teile.schraube(), Scheibe mit d = teile.kopf(teile.M3)</figcaption></figure><pre>examples/spec/skizze_bibliothek.scad: 0 Fehler, 0 Warnungen
+Module:
+  profile()  skizze_bibliothek.scad:5–20
+  profile.stern(n = 5: Zahl, r1 = 12: Zahl, r2 = 5: Zahl)  skizze_bibliothek.scad:6–12
+  profile.langloch(l = 20: Zahl, b = 6: Zahl)  skizze_bibliothek.scad:13–19
+  teile(raster = 10: Zahl)  skizze_bibliothek.scad:22–38
+  teile.schraube(d = 3: Zahl, l = 12: Zahl)  skizze_bibliothek.scad:25–28
+  teile.platte()  skizze_bibliothek.scad:29–37
+  teile.platte.lochplatte(n = 3: Zahl)  skizze_bibliothek.scad:31–36
+Funktionen:
+  teile.kopf(d) = 1.8 * d  skizze_bibliothek.scad:24
+Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):</pre><pre>examples/spec/skizze_bibliothek.scad: 0 Fehler, 0 Warnungen</pre></div></div>
+
+<h2>4 Kernel-Anbindung</h2>
+<ul>
+<li><code>cad_kernel::Segment::{Line, Arc, Nurbs}</code> (<code>curve2.rs</code>): NURBS-Form, affine Abbildung (Bögen bleiben unter Ähnlichkeiten Bögen, sonst exakte rationale Ellipsenbögen), Abtastung, globale Interpolation, Verbinden zu einer B-Spline (Bézier-Zerlegung, Graderhöhung); <code>Loop::Composite</code>, <code>PlacedPath</code>, <code>Kernel::sweep_path</code>.</li>
+<li>Fassade <code>smlib/facade/sc_sketch.cpp</code>, eingebunden am Ende von <code>sc_facade.cpp</code> (nutzt dessen interne Hilfen; allein übersetzt leer). Schleifenart 3: Geraden → <code>SmLine</code>, Bögen → rationale quadratische B-Splines (<code>SM_CF_CIRCULAR_ARC</code>), Bézier/Splines → B-Splines; Stöße exakt verschweißt. Änderungen an bestehenden Funktionen: ein Feld in <code>Loop</code>, je ein Zweig in <code>parse_loops</code>/<code>loop_curves</code>, die Bedingung im twist-Zweig von <code>sc_extrude</code>, <code>loft_segmentwise</code> in <code>sc_loft</code>. Neu: <code>sc_sketch_sweep</code> (glatter Pfad: Kurven-Sweep mit Profil-Bezugspunkt aus Patch 0003; Ecken: Gehrung).</li>
+<li>STEP: SMLib hält extrudierte Bögen als <code>SmSurfOfExtrusion</code> der exakten B-Spline; OpenCASCADE rechnete auf solchen Flächen (ohne p-Kurven) bis 2,5·10<sup>−3</sup> falsche Volumen. Der Writer schreibt eine Extrusion eines Kreisbogens längs seiner Achse deshalb als <code>CYLINDRICAL_SURFACE</code> (Orientierung angepasst) – danach stimmt OCCT auf 10<sup>−9</sup> bzw. die Kernel-Genauigkeit.</li>
+</ul>
+<table>
+<tr><th>Modell</th><th>Flächen</th><th>CIRCLE</th><th>LINE</th><th>B-Spline-Kurven</th><th>Flächentypen</th><th>angenähert</th></tr>
+<tr><td>skizze_profil</td><td class="n">16</td><td class="n">14</td><td class="n">21</td><td class="n">3</td><td>cylinder 5, plane 8, revolution 3</td><td class="n">0 / 0</td></tr>
+<tr><td>skizze_zahnriemenscheibe</td><td class="n">47</td><td class="n">86</td><td class="n">44</td><td class="n">0</td><td>cylinder 43, plane 4</td><td class="n">0 / 0</td></tr>
+<tr><td>skizze_sweep</td><td class="n">18</td><td class="n">10</td><td class="n">24</td><td class="n">4</td><td>nurbs 5, plane 12, revolution 1</td><td class="n">0 / 0</td></tr>
+<tr><td>rechteck_halbkreis</td><td class="n">6</td><td class="n">2</td><td class="n">10</td><td class="n">0</td><td>cylinder 1, plane 5</td><td class="n">0 / 0</td></tr>
+<tr><td>torus</td><td class="n">2</td><td class="n">4</td><td class="n">0</td><td class="n">0</td><td>revolution 2</td><td class="n">0 / 0</td></tr>
+</table>
+<p>OpenCASCADE (<code>tests/step/verify.py</code>) für die neuen Beispiele (Spalten: Körper, Flächen, V Kernel, V OCCT, dV, dA, dBox):</p>
+<pre>skizze_bibliothek            ok        8    51         2788.8         2788.8 8.685e-07 4.080e-06 3.621e-17  {'cylinder': 15, 'plane': 36}  
+skizze_profil                ok        2    16        12823.7        12823.7 1.091e-06 1.098e-06 9.184e-10  {'cylinder': 5, 'plane': 8, 'revolution': 3}  
+skizze_sweep                 ok        2    18        3707.67        3707.67 1.287e-06 7.266e-06 1.161e-09  {'bspline': 5, 'plane': 12, 'revolution': 1}  
+skizze_zahnriemenscheibe     ok        1    47        860.299        860.299 3.972e-07 4.166e-05 1.611e-16  {'cylinder': 43, 'plane': 4}</pre>
+
+<h2>5 Messwerte: Volumen gegen Formeln</h2>
+<p>Je Fall eine kleine Datei (<code>reports/tmp/report14/cases/</code>), <code>cad measure --volume</code> mit dem Release-Build (Zeit: ganzer CLI-Aufruf ohne Daemon). Die Geometrie ist exakt; die Abweichung ist die der Volumenintegration in SMLib.</p>
+<table>
+<tr><th>Fall</th><th>Kernel mm³</th><th>Formel mm³</th><th>rel. Abw.</th><th>ms</th></tr>
+<tr><td>Rechteck 40 × 20 + Halbkreis r 20 (Endpunkt + Radius), h 5</td><td class="n">7.141,5969</td><td class="n">7.141,5927</td><td class="n">5.9·10<sup>−7</sup></td><td class="n">59</td></tr>
+<tr><td>dasselbe mit tangentialem Bogen</td><td class="n">7.141,5969</td><td class="n">7.141,5927</td><td class="n">5.9·10<sup>−7</sup></td><td class="n">46</td></tr>
+<tr><td>dasselbe mit Mittelpunkt + Winkel</td><td class="n">7.141,5969</td><td class="n">7.141,5927</td><td class="n">5.9·10<sup>−7</sup></td><td class="n">50</td></tr>
+<tr><td>rotate_extrude eines Halbkreises: Kugel r 7</td><td class="n">1.436,7565</td><td class="n">1.436,7550</td><td class="n">1.0·10<sup>−6</sup></td><td class="n">81</td></tr>
+<tr><td>rotate_extrude zweier Bögen: Torus R 20, r 4</td><td class="n">6.316,5572</td><td class="n">6.316,5468</td><td class="n">1.6·10<sup>−6</sup></td><td class="n">114</td></tr>
+<tr><td>Quadrat 20 minus Kreis r 5 (Gegenlauf, nonzero)</td><td class="n">642,9202</td><td class="n">642,9204</td><td class="n">2.6·10<sup>−7</sup></td><td class="n">70</td></tr>
+<tr><td>dasselbe mit <code>hole { … }</code></td><td class="n">642,9202</td><td class="n">642,9204</td><td class="n">2.6·10<sup>−7</sup></td><td class="n">71</td></tr>
+<tr><td>Quadrat 4 + quadratische Bézier-Kappe (Parabel 2/3 · b · h)</td><td class="n">18,6666</td><td class="n">18,6667</td><td class="n">1.0·10<sup>−6</sup></td><td class="n">49</td></tr>
+<tr><td>Stern aus 12 Geraden per Schleife in einem Skizzen-Modul</td><td class="n">450,0000</td><td class="n">450,0000</td><td class="n">1.3·10<sup>−16</sup></td><td class="n">51</td></tr>
+<tr><td>sweep eines Kreises r 2 entlang Gerade–Bogen–Gerade (Pappus)</td><td class="n">637,2176</td><td class="n">637,2151</td><td class="n">3.9·10<sup>−6</sup></td><td class="n">104</td></tr>
+<tr><td>sweep eines Quadrats 2 entlang einer Ecke (Gehrung)</td><td class="n">140,0000</td><td class="n">140,0000</td><td class="n">4.1·10<sup>−16</sup></td><td class="n">68</td></tr>
+<tr><td>linear_extrude(twist = 90) eines Langlochs (Volumen ohne twist)</td><td class="n">882,7768</td><td class="n">882,7433</td><td class="n">3.8·10<sup>−5</sup></td><td class="n">72</td></tr>
+</table>
+<p class="small">twist: die Extrusion mit Verdrehung ist (wie bisher für alle Profile) eine kubische Loft-Näherung durch Schnitte alle 7,5°.</p>
+
+<h2>6 Fehler je Segmentzeile</h2>
+<pre>linear_extrude(2) sketch {
+    start([0, 0]);
+    line(to = [30, 0]);
+    arc(to = [30, 20], r = 5);
+    line(to = [0, 20]);
+}
+linear_extrude(2) translate([40, 0]) sketch {
+    start([0, 0]);
+    line(to = [10, 10]);
+    line(to = [10, 0]);
+    line(to = [0, 10]);
+    close();
+}</pre>
+<pre>cases/fehler.scad:4:5: Fehler (Auswertung): unmöglicher Bogen: Radius 5 kleiner als die halbe Sehne 10
+cases/fehler.scad:5:5: Fehler (Auswertung): Kontur nicht geschlossen: endet bei [0, 20] statt [0, 0]; `close()` fehlt
+cases/fehler.scad:11:5: Fehler (Auswertung): Selbstüberschneidung der Kontur mit Segment in Zeile 9
+cases/fehler.scad:7:1: Fehler (Kernel): linear_extrude gescheitert: extrude did not produce a closed solid (self-intersecting or open profile?)
+cases/fehler.scad: 4 Fehler, 0 Warnungen</pre>
+<p>Geprüft werden: Kontur nicht geschlossen (die Skizze bleibt mit einer rot gestrichelten Schlusslinie sichtbar), Selbstüberschneidung (an der späteren Zeile, mit Verweis), unmöglicher Bogen (Radius &lt; halbe Sehne, drei Punkte auf einer Geraden, tangential auf der Tangente, Winkel 0 oder &gt; 360°), Kontur ohne Fläche, Segment vor <code>start</code>/nach <code>close()</code>. Eine sich schneidende Kontur meldet zusätzlich der Kernel an der Extrusion.</p>
+
+<h2>7 UI: Darstellung und Griffe</h2>
+<p>Steht der Cursor in einer Skizze (Segmentzeile, Schleife, <code>hole</code>, Aufruf eines Skizzen-Moduls), zeichnet die Ansicht sie in ihrer Ebene: Netz als Umriss mit leichter Füllung (durch den Körper sichtbar), Segmente als Linien, das Segment der Cursorzeile dick in der Akzentfarbe, Fehler rot, Kontrollpolygone und Bogenmittelpunkte gestrichelt, Start als Ring mit Richtungspfeil, Ende offener Konturen als Quadrat. Griffe: End-/Startpunkte (Literal oder Raster-Snap; <code>line(by = …)</code> relativ, ohne Snap), Bogenradius, Mittelpunkt, Durchgangspunkt, Bézier-Kontrollpunkte, Spline-Punkte. Prüfungen über den Zustand der UI (<code>window.__cad</code>) und Pixel der Ebenen.</p>
+<h3>S01 Skizze unter dem Cursor</h3><p>Cursor auf einer Segmentzeile: die Skizze wird in ihrer Ebene gezeichnet – Umriss mit leichter Füllung (Netz der Engine, Modus „profile“, durch den Körper sichtbar), die Segmente als Linien, das Segment der Zeile dick in der Akzentfarbe; Startpunkt jeder Kontur als Ring mit Richtungspfeil, Bogenmittelpunkte als gestrichelte Hilfslinien.</p><div class="two"><figure><img src="img/ui-s01-bogen.jpg" alt=""><figcaption>Cursor auf arc(…) (Zeile 4)</figcaption></figure><figure><img src="img/ui-s01-loch.jpg" alt=""><figcaption>Cursor im hole-Block (Zeile 10)</figcaption></figure></div><pre>linear_extrude(5) sketch {
+    start([0, 0]);
+    line(to = [40, 0]);
+    arc(to = [50, 10], r = 10);
+    line(by = [0, 20]);
+    bezier(c1 = [45, 40], to = [20, 35]);
+    close();
+    hole {
+        start([12, 12]);
+        arc(to = [22, 12], r = 5);
+        arc(to = [12, 12], r = 5);
+    }
+}</pre><ul><li>aktives Segment: arc (Zeile 4), Pixel 1019</li><li>Startmarken: 2</li><li>Zeile 10: Bogen im Loch aktiv</li></ul>
+<h3>S02 Bézier-Segment</h3><p>Quadratische Bézier-Kurve: Kontrollpolygon (Anfang – c1 – Ende) gestrichelt als Hilfslinie, Griffe am Endpunkt und am Kontrollpunkt.</p><figure><img src="img/ui-s02-bezier.jpg" alt=""><figcaption>Cursor auf bezier(c1 = …, to = …)</figcaption></figure><pre>bezier(c1 = [45, 40], to = [20, 35]);</pre><ul><li>Hilfslinien: 4</li><li>Pixel der Hilfslinien: 735</li><li>2 Punktgriffe (to, c1)</li></ul>
+<h3>S03 Endpunkt ziehen</h3><p>Der Punktgriff am Ende der Geraden mit der Maus gezogen (Alt: frei, Raster 1 mm): das Literal in der Zeile ändert sich, die Skizze folgt live; der folgende Bogen beginnt am neuen Punkt.</p><div class="two"><figure><img src="img/ui-s03-vorher.jpg" alt=""><figcaption>vorher: line(to = [40, 0])</figcaption></figure><figure><img src="img/ui-s03-nachher.jpg" alt=""><figcaption>nachher: line(to = [46, 1])</figcaption></figure></div><pre>// vorher
+line(to = [40, 0]);
+// nach dem Ziehen (Alt, frei)
+line(to = [46, 1]);</pre><ul><li>Literal: [40, 0] → [46, 1]</li><li>arc-Zeile unverändert</li></ul>
+<h3>S04 Fehler je Segmentzeile</h3><p>Ein Bogen mit Radius kleiner als die halbe Sehne und eine Kontur ohne close(): beide Fehler stehen an ihrer Segmentzeile (rot, Meldung am Zeilenende); die Skizze bleibt mit der fehlenden Schlusslinie (rot gestrichelt) sichtbar.</p><figure><img src="img/ui-s04-fehler.jpg" alt=""><figcaption>unmöglicher Bogen, Kontur nicht geschlossen</figcaption></figure><pre>linear_extrude(2) sketch {
+    start([0, 0]);
+    line(to = [30, 0]);
+    arc(to = [30, 20], r = 5);
+    line(to = [0, 20]);
+}</pre><ul><li>4: unmöglicher Bogen: Radius 5 kleiner als die halbe Sehne 10</li><li>5: Kontur nicht geschlossen: endet bei [0, 20] statt [0, 0]; <code>close()</code> fehlt</li></ul>
+<h3>S05 Sweep-Pfad und Namensraum</h3><p>Eine offene Skizze (closed = false) ist der Pfad des sweep: ohne Füllung, Start als Ring, Ende als Quadrat; der Kreis läuft entlang Gerade – tangentialem Bogen – Gerade (ein Kurvenzug). Das Modul rohr steht im Namensraum teile: die Pfadleiste zeigt „teile › rohr“, von außen wird es als teile.rohr(r = 3) aufgerufen.</p><div class="two"><figure><img src="img/ui-s05-pfad.jpg" alt=""><figcaption>Kontext teile › rohr, Cursor auf dem Bogen des Pfads</figcaption></figure><figure><img src="img/ui-s05-aufruf.jpg" alt=""><figcaption>Aufruf teile.rohr(r = 3) in der Datei</figcaption></figure></div><pre>module teile {
+    module rohr(r = 4) {
+        sweep() {
+            sketch(closed = false) {
+                start([0, 0]);
+                line(to = [30, 0]);
+                arc(to = [45, 15]);
+                line(by = [0, 20]);
+            }
+            circle(r);
+        }
+    }
+}
+teile.rohr(r = 3);</pre><ul><li>Pfadleiste: teile › rohr</li><li>offene Kontur: 1, Endmarke gezeichnet</li><li>Aufruf in der Datei voll dargestellt</li></ul>
+
+<h2>8 Testläufe</h2>
+<table>
+<tr><th>Lauf</th><th>Ergebnis</th></tr>
+<tr><td><code>cargo test --workspace --no-fail-fast</code></td><td>453 bestanden, 0 fehlgeschlagen</td></tr>
+<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>sauber · sauber</td></tr>
+<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>sauber · 205 bestanden</td></tr>
+<tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>93 / 93 · zweiter Lauf; im ersten Lauf 92/93: B10 (Snap eines Zonenmittelpunkts, Bericht 3) scheiterte einmal, einzeln und im zweiten Lauf bestanden</td></tr>
+<tr><td><code>tests/openscad-compat/compare.py --eval</code></td><td>33/33</td></tr>
+<tr><td><code>tests/step/verify.py</code> (OpenCASCADE)</td><td>52/52 passed</td></tr>
+<tr><td><code>tests/alltag/check.sh</code></td><td>19 Modelle, 0 mit Problemen, 87 s, Exporte in /tmp/alltag-ocn57h6z (gelöscht)</td></tr>
+<tr><td><code>node crates/kernel-smlib/js/test-node.mjs</code></td><td>bestanden</td></tr>
+</table>
+<p>Neue bzw. erweiterte Rust-Tests (29):</p>
+<p class="small"><code>sketch_and_namespaces</code> <span class="ok">ok</span> · <code>bezier_and_spline_segments</code> <span class="ok">ok</span> · <code>loft_between_sketches</code> <span class="ok">ok</span> · <code>sketch_alone_is_2d_and_open_sketch_is_a_path</code> <span class="ok">ok</span> · <code>holes_by_winding_and_hole_block</code> <span class="ok">ok</span> · <code>revolve_arc_profiles_sphere_and_torus</code> <span class="ok">ok</span> · <code>sketch_modules_loops_and_twist</code> <span class="ok">ok</span> · <code>rectangle_with_half_circle</code> <span class="ok">ok</span> · <code>step_has_exact_lines_and_circles</code> <span class="ok">ok</span> · <code>sweep_along_open_sketch_path</code> <span class="ok">ok</span> · <code>arc_forms</code> <span class="ok">ok</span> · <code>named_sketch_module_and_qualified_profiles</code> <span class="ok">ok</span> · <code>namespace_visibility_and_errors</code> <span class="ok">ok</span> · <code>handles_of_segments_and_dragging</code> <span class="ok">ok</span> · <code>openscad_files_are_unaffected</code> <span class="ok">ok</span> · <code>errors_per_segment_line</code> <span class="ok">ok</span> · <code>qualified_module_calls</code> <span class="ok">ok</span> · <code>loops_variables_grids_and_modules_in_a_sketch</code> <span class="ok">ok</span> · <code>several_contours_holes_and_open_paths</code> <span class="ok">ok</span> · <code>qualified_context_module</code> <span class="ok">ok</span> · <code>segments_of_all_kinds</code> <span class="ok">ok</span> · <code>curve2::tests::arc_nurbs_lies_on_circle</code> <span class="ok">ok</span> · <code>curve2::tests::join_keeps_the_geometry</code> <span class="ok">ok</span> · <code>curve2::tests::mapped_arcs</code> <span class="ok">ok</span> · <code>curve2::tests::interpolation_hits_points_and_tangents</code> <span class="ok">ok</span> · <code>tests::module_without_parentheses_and_qualified_calls</code> <span class="ok">ok</span> · <code>tests::sketch_block_without_arguments</code> <span class="ok">ok</span> · <code>spec_models_stage1</code> <span class="ok">ok</span> · <code>sweep_along_path</code> <span class="ok">ok</span></p>
+<p class="small">Vitest: <code>web/src/logic/sketch.test.ts</code> (Skizze unter dem Cursor, Hilfslinien, Griffe der Segmente, Modul mit Pfad); Lezer-Grammatik für <code>sketch {</code>, Module ohne Klammern und <code>a.b()</code>. CLI: <code>sketch_and_namespaces</code> (Volumen, Funktion im Namensraum, <code>outline</code>, <code>--module teile.platte</code>, Fehler je Zeile).</p>
+
+<h2>9 Grenzen</h2>
+<ul>
+<li><code>corner</code>, <code>fillet2d</code>, <code>offset</code>, <code>stroke</code> fehlen (Schritt 2); keine Transformationen innerhalb einer Skizze (ein in der Skizze aufgerufenes Modul zeichnet in Skizzenkoordinaten).</li>
+<li>Selbstüberschneidung wird auf abgetasteten Polylinien geprüft (Toleranz relativ zur Skizzengröße); Überschneidungen zwischen Konturen sind erlaubt (nonzero); die Verschachtelung von Löchern und Inseln setzt sich nicht schneidende Konturen voraus.</li>
+<li>Sweep entlang einer Skizze mit Ecken nur als Gehrung und mit um den Ursprung zentriertem Profil; geschlossene Pfade nicht.</li>
+<li>Loft mit verschiedener Segmentzahl verbindet jeden Abschnitt zu einer Kurve (C0 an den Stößen): die Flächen folgen nicht mehr den Segmenten.</li>
+<li>STEP: nur Extrusionen von Kreisbögen werden als Zylinder geschrieben; Rotationsflächen von Bögen bleiben <code>SURFACE_OF_REVOLUTION</code> der exakten Kurve (Kugel/Torus nicht erkannt; OCCT liest sie richtig).</li>
+<li><code>cad render --line N</code> einer Segmentzeile hebt die ganze Skizze hervor; die Hervorhebung des einzelnen Segments gibt es nur in der UI.</li>
+<li>Namensräume: Konstanten werden je Zugriff in einem neuen Namensraum ausgewertet (keine Zwischenspeicherung); <code>--module name</code> ohne Pfad nimmt das erste Modul des Namens.</li>
+</ul>
+</main>
+</body>
+</html>

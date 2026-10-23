@@ -258,7 +258,6 @@ uint32_t sc_sketch_sweep(const double* loop, uint32_t len_, const double* path, 
       z = normalize(v3(d1.x, d1.y, d1.z));
       if (len(z) == 0) throw fail(SC_INVALID, "sweep path starts with a zero tangent");
     }
-    bool straight = psegs.size() == 1 && psegs[0].type == 0;
     // profile placement as in sc_sweep: x = global X projected into the normal plane
     V3 ref = std::fabs(z.x) < 0.9 ? v3(1, 0, 0) : v3(0, 1, 0);
     V3 x = normalize(ref - z * dot(ref, z));
@@ -272,6 +271,9 @@ uint32_t sc_sketch_sweep(const double* loop, uint32_t len_, const double* path, 
     CurveList cl;
     loop_curves(l, false, false, cl);
     SmTArray<SmCurve*> prof = as_array(cl);
+    // As in sc_sweep: the curve sweep moves the profile frame origin along the path
+    // (bUseProfileRefPoint, smlib/patches/0003); the mitered planar-path sweep moves the
+    // profile's box centre, so there the profile must be centred.
     SmExtent3d box;
     for (SmCurve* c : cl.v) {
       SmExtent3d cb;
@@ -279,14 +281,14 @@ uint32_t sc_sketch_sweep(const double* loop, uint32_t len_, const double* path, 
       box.AddPoint3d(cb.GetMin());
       box.AddPoint3d(cb.GetMax());
     }
-    V3 off = fromsm(box.GetMid()) - p0;
     double psize = len(fromsm(box.GetMax()) - fromsm(box.GetMin()));
-    bool centred = len(off) <= 1e-9 * std::max(1.0, psize);
-    if (!centred && !straight)
+    bool centred = len(fromsm(box.GetMid()) - p0) <= 1e-9 * std::max(1.0, psize);
+    bool mitered = mode == 0 && pcl.v.size() > 1;
+    if (!centred && mitered)
       throw fail(SC_UNSUPPORTED,
-                 "sweep of a profile that is not centred on its origin along a curved path");
+                 "sweep of a profile that is not centred on its origin along a path with corners");
     SmBrep* r = nullptr;
-    if (mode == 0 && pcl.v.size() > 1) {
+    if (mitered) {
       // planar path with corners: mitered joints
       SmTArray<SmCurve*> segarr = as_array(pcl);
       SC_CHECK(SmApiCreateSweepAlongPlanarPath(prof, segarr, TRUE, 3, r),
@@ -304,18 +306,13 @@ uint32_t sc_sketch_sweep(const double* loop, uint32_t len_, const double* path, 
       SmSweepOptions opt;
       opt.bCapEndsArg = TRUE;
       opt.bMoveProfileCenterToPath = TRUE;
+      opt.bUseProfileRefPoint = TRUE;
+      opt.sProfileRefPoint = SmVector3d(p0.x, p0.y, p0.z);
       SC_CHECK(SmApiCreateCurveSweep(prof, pathc, nullptr, nullptr, &opt, r, nullptr, nullptr, nullptr),
                "SmApiCreateCurveSweep");
     }
     BrepPtr b(r);
     require_solid(r, "sweep");
-    if (!centred) {
-      M4 t = identity();
-      t.m[12] = off.x;
-      t.m[13] = off.y;
-      t.m[14] = off.z;
-      apply_matrix(b.get(), t);
-    }
     tag_all(b.get(), tag);
     _res = put(std::move(b));
   })
