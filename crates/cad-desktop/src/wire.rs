@@ -77,7 +77,7 @@ pub fn encode_batch(msgs: &[FromEngine], busy: bool) -> Frame {
                 let items: Vec<Json> = items.iter().map(|it| mesh_json(it, &mut b)).collect();
                 json!({ "type": "Meshes", "version": version, "items": items })
             }
-            FromEngine::ExportResult { format, bytes, triangles, parts, zip, colors } => {
+            FromEngine::ExportResult { format, bytes, triangles, parts, zip, colors, notes } => {
                 let mut o =
                     json!({ "type": "ExportResult", "format": format, "bytes": b.u8(bytes), "triangles": triangles });
                 if let Some(p) = parts {
@@ -88,6 +88,9 @@ pub fn encode_batch(msgs: &[FromEngine], busy: bool) -> Frame {
                 }
                 if let Some(c) = colors {
                     o["colors"] = json!(c);
+                }
+                if let Some(n) = notes {
+                    o["notes"] = json!(n);
                 }
                 o
             }

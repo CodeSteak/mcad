@@ -110,8 +110,9 @@ where
 
     /// STEP of nodes in context coordinates (`NodeReport::display_world`): the exact B-reps of
     /// their results ([`Kernel::brep`], placed with the kernel's `transform`) written as one
-    /// product by `cad_step`. Faces get the colour of the node their tag belongs to
-    /// (`color()`), unless `opts.tag_colors` is set.
+    /// product by `cad_step`. Faces get the colour of their colour region
+    /// ([`Engine::face_region_colors`]; material without `color()` gets none), unless
+    /// `opts.tag_colors` is set.
     pub fn export_step_nodes(
         &mut self,
         ev: &Evaluation<K::Shape>,
@@ -119,6 +120,12 @@ where
         opts: &cad_step::StepOptions,
     ) -> Result<(Vec<u8>, cad_step::StepStats), String> {
         let mut breps = Vec::new();
+        let mut o = opts.clone();
+        let own = o.tag_colors.is_empty();
+        // Colours per face from the colour regions (Bericht 12, F1): a tag can belong to
+        // several nodes of equal content in different colours, so faces get synthetic tags
+        // (one per colour) in a copy of the B-rep.
+        let mut colors: Vec<[u8; 4]> = Vec::new();
         for &n in nodes {
             let r = ev.reports.get(n as usize).ok_or_else(|| format!("Knoten {n} existiert nicht"))?;
             if r.dim == Some(Dim::Two) {
@@ -126,16 +133,37 @@ where
             }
             let world = r.display_world;
             for i in 0..ev.parts(n).len() {
-                breps.push(self.placed_brep(ev, n, i, &world)?);
+                let b = self.placed_brep(ev, n, i, &world)?;
+                if !own {
+                    breps.push(b);
+                    continue;
+                }
+                let fc = self.face_region_colors(ev, n, i)?;
+                let mut b = (*b).clone();
+                for_each_face_mut(&mut b, &mut |f| {
+                    let c = match fc.get(f.id as usize) {
+                        Some(crate::colors::RegionColor::Color(k)) => *k,
+                        _ => {
+                            f.tag = 0;
+                            return;
+                        }
+                    };
+                    let idx = match colors.iter().position(|x| *x == c) {
+                        Some(i) => i,
+                        None => {
+                            colors.push(c);
+                            colors.len() - 1
+                        }
+                    };
+                    f.tag = STEP_COLOR_TAG + idx as u32;
+                });
+                breps.push(std::rc::Rc::new(b));
             }
         }
-        let mut o = opts.clone();
-        if o.tag_colors.is_empty() {
-            for f in breps.iter().flat_map(|b| b.faces()) {
-                let color = ev.nodes_for_tag(f.tag).first().and_then(|r| ev.tree.node(r.node).color);
-                if let Some(c) = color {
-                    o.tag_colors.insert(f.tag, [c[0] as f64, c[1] as f64, c[2] as f64]);
-                }
+        if own {
+            for (i, c) in colors.iter().enumerate() {
+                let f = |x: u8| x as f64 / 255.0;
+                o.tag_colors.insert(STEP_COLOR_TAG + i as u32, [f(c[0]), f(c[1]), f(c[2])]);
             }
         }
         let refs: Vec<&cad_kernel::brep::Brep> = breps.iter().map(|b| &**b).collect();
@@ -259,5 +287,26 @@ mod tests {
         assert_eq!(x.matches("<object ").count(), 2);
         assert!(x.contains("name=\"a&lt;b\""));
         assert_eq!(x.matches("<item ").count(), 2);
+    }
+}
+
+/// First synthetic face tag of the STEP colours (one per colour; kernel tags are far below).
+const STEP_COLOR_TAG: u32 = 0x4000_0000;
+
+fn for_each_face_mut(b: &mut cad_kernel::brep::Brep, f: &mut dyn FnMut(&mut cad_kernel::brep::Face)) {
+    use cad_kernel::brep::Body;
+    for body in &mut b.bodies {
+        match body {
+            Body::Solid { outer, voids } => {
+                for sh in std::iter::once(outer).chain(voids.iter_mut()) {
+                    sh.faces.iter_mut().for_each(&mut *f);
+                }
+            }
+            Body::Sheet { shells } => {
+                for sh in shells {
+                    sh.faces.iter_mut().for_each(&mut *f);
+                }
+            }
+        }
     }
 }

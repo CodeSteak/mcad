@@ -23,25 +23,54 @@ fn source(s: p::ColorSource) -> &'static str {
     }
 }
 
+/// "Z.n" of a range, with the file name for ranges in other project files (`use`/`include`).
+fn line_ref(sc: &p::Scene, r: &p::SrcRange) -> String {
+    match r.file {
+        None | Some(0) => format!("Z.{}", r.line),
+        Some(id) => {
+            let f = sc.files.iter().find(|f| f.id == id).map(|f| f.path.as_str()).unwrap_or("?");
+            format!("{f}:{}", r.line)
+        }
+    }
+}
+
 /// Colour table of the scene, with volumes per colour if `kernel` (colour regions of the
-/// parts, or of the root without parts). (JSON `colors`, JSON `regions`|null, text)
+/// parts and the material outside them, or of the root without parts). (JSON `colors`, JSON
+/// `regions`|null, text)
 pub(crate) fn table(m: &mut Model, sc: &p::Scene, kernel: bool) -> Result<(Json, Json, String), Fail> {
-    let sets = if kernel && sc.complete && !sc.colors.is_empty() {
+    table_of(m, sc, kernel, None)
+}
+
+/// [`table`] of some parts only (`cad export --part`): their regions and the colours in them.
+pub(crate) fn table_of(
+    m: &mut Model,
+    sc: &p::Scene,
+    kernel: bool,
+    only: Option<&[String]>,
+) -> Result<(Json, Json, String), Fail> {
+    let mut sets = if kernel && sc.complete && !sc.colors.is_empty() {
         Some(m.session.color_regions(false, false).map_err(Fail::Kernel)?)
     } else {
         None
     };
+    let mut shown: Vec<&p::ColorInfo> = sc.colors.iter().collect();
+    if let Some(names) = only {
+        if let Some(s) = sets.as_mut() {
+            s.retain(|set| set.part.as_ref().is_some_and(|p| names.contains(p)));
+            shown.retain(|c| s.iter().flat_map(|x| &x.regions).any(|r| r.color == c.key));
+        }
+    }
     let volume_of = |key: &str| -> Option<f64> {
         sets.as_ref().map(|s| s.iter().flat_map(|x| &x.regions).filter(|r| r.color == key).map(|r| r.volume).sum())
     };
-    let rows: Vec<Json> = sc
-        .colors
+    let rows: Vec<Json> = shown
         .iter()
         .map(|c| {
             let v = volume_of(&c.key);
             json!({
                 "key": c.key, "label": c.label, "source": source(c.source), "filament": c.filament,
                 "explicit": c.explicit, "lines": c.ranges.iter().map(|r| r.line).collect::<Vec<_>>(),
+                "places": c.ranges.iter().map(|r| line_ref(sc, r)).collect::<Vec<_>>(),
                 "volume": v, "mass_g": v.map(pla_grams),
             })
         })
@@ -62,11 +91,11 @@ pub(crate) fn table(m: &mut Model, sc: &p::Scene, kernel: bool) -> Result<(Json,
         None => Json::Null,
     };
     let mut t = String::new();
-    if !sc.colors.is_empty() {
+    if !shown.is_empty() {
         t.push_str("Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):\n");
-        for c in &sc.colors {
+        for c in &shown {
             let v = volume_of(&c.key);
-            let lines: Vec<String> = c.ranges.iter().map(|r| format!("Z.{}", r.line)).collect();
+            let lines: Vec<String> = c.ranges.iter().map(|r| line_ref(sc, r)).collect();
             let mut l = format!("  F{:<2} {:<14} {}", c.filament, c.label, c.key);
             if let Some(v) = v {
                 l.push_str(&format!("  {} mm³  {} g", num(v), num((pla_grams(v) * 100.0).round() / 100.0)));
@@ -91,17 +120,25 @@ pub(crate) fn table(m: &mut Model, sc: &p::Scene, kernel: bool) -> Result<(Json,
         if let Some(s) = &sets
             && s.len() > 1
         {
+            // one line per part (the material outside the parts may be several nodes)
+            let mut names: Vec<Option<&String>> = Vec::new();
             for set in s {
-                let parts: Vec<String> = set
-                    .regions
-                    .iter()
-                    .map(|r| {
-                        let label =
-                            sc.colors.iter().find(|c| c.key == r.color).map_or(r.color.as_str(), |c| c.label.as_str());
-                        format!("F{} {label} {} mm³", r.filament, num(r.volume))
-                    })
-                    .collect();
-                t.push_str(&format!("  {}: {}\n", set.part.as_deref().unwrap_or("Modell"), parts.join(", ")));
+                if !names.contains(&set.part.as_ref()) {
+                    names.push(set.part.as_ref());
+                }
+            }
+            for name in names {
+                let mut acc: Vec<(u32, String, f64)> = Vec::new();
+                for r in s.iter().filter(|x| x.part.as_ref() == name).flat_map(|x| &x.regions) {
+                    let label =
+                        sc.colors.iter().find(|c| c.key == r.color).map_or(r.color.clone(), |c| c.label.clone());
+                    match acc.iter_mut().find(|a| a.1 == label && a.0 == r.filament) {
+                        Some(a) => a.2 += r.volume,
+                        None => acc.push((r.filament, label, r.volume)),
+                    }
+                }
+                let parts: Vec<String> = acc.iter().map(|(f, l, v)| format!("F{f} {l} {} mm³", num(*v))).collect();
+                t.push_str(&format!("  {}: {}\n", name.map_or("Modell", |n| n.as_str()), parts.join(", ")));
             }
         }
     }

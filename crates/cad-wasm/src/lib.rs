@@ -79,7 +79,7 @@ fn to_js(msgs: Vec<FromEngine>) -> Result<Array, JsValue> {
                 set(&o, "items", &arr);
                 o.into()
             }
-            FromEngine::ExportResult { format, bytes, triangles, parts, zip, colors } => {
+            FromEngine::ExportResult { format, bytes, triangles, parts, zip, colors, notes } => {
                 let o = Object::new();
                 set(&o, "type", &JsValue::from_str("ExportResult"));
                 set(&o, "format", &format.serialize(&serializer())?);
@@ -93,6 +93,9 @@ fn to_js(msgs: Vec<FromEngine>) -> Result<Array, JsValue> {
                 }
                 if let Some(c) = colors {
                     set(&o, "colors", &JsValue::from_bool(*c));
+                }
+                if let Some(n) = notes {
+                    set(&o, "notes", &n.serialize(&serializer())?);
                 }
                 o.into()
             }

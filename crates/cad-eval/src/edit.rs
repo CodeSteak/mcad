@@ -439,3 +439,160 @@ pub fn filament_edits(proj: &Project, stmts: &[Span], filament: Option<u32>) -> 
     edits.retain(|e| proj.span_text(e.span).is_some_and(|t| t != e.text));
     edits
 }
+
+/// Is a colour argument fixed at its statement (a string or a vector of numbers)? Then
+/// `filament = n` there belongs to exactly this colour.
+fn literal_color(e: &cad_syntax::ast::Expr) -> bool {
+    use cad_syntax::ast::{ExprKind as E, UnOp, VecElem};
+    let num = |e: &cad_syntax::ast::Expr| match &e.kind {
+        E::Number(_) => true,
+        E::Unary(UnOp::Neg, x) => matches!(x.kind, E::Number(_)),
+        _ => false,
+    };
+    match &e.kind {
+        E::Str(_) => true,
+        E::Vector(items) => items.iter().all(|i| matches!(i, VecElem::Expr(x) if num(x))),
+        _ => false,
+    }
+}
+
+/// The colour argument of a `color(…)` statement (first positional or `c = …`).
+fn color_arg_of(args: &[cad_syntax::ast::Arg]) -> Option<&cad_syntax::ast::Expr> {
+    args.iter()
+        .find(|a| a.name.as_ref().is_some_and(|n| n.name == "c"))
+        .or_else(|| args.iter().find(|a| a.name.is_none()))
+        .map(|a| &a.value)
+}
+
+/// `true` if the `color()` statement with this span names its colour literally.
+pub fn color_is_literal(proj: &Project, span: Span) -> bool {
+    use cad_syntax::ast::StmtKind as K;
+    let found = find_color_call(&proj.main.stmts, span)
+        .or_else(|| proj.libs.iter().find_map(|l| find_color_call(&l.ast.stmts, span)));
+    match found.map(|s| &s.kind) {
+        Some(K::Call { args, .. }) => color_arg_of(args).is_some_and(literal_color),
+        _ => false,
+    }
+}
+
+/// Text of a string literal.
+fn quoted(s: &str) -> String {
+    format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
+}
+
+/// Where a colour's filament slot is written (Bericht 12, F2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SlotSource {
+    /// `filament(c, n);` statement (its span).
+    Decl(Span),
+    /// `filament = n` at this `color()` statement.
+    Color(Span),
+    /// Automatic.
+    Auto,
+}
+
+/// Edits for `SetFilament` (Plan 16.3, Bericht 12, F2): the code stays the only source.
+/// * A `filament(c, n);` statement of the colour: its slot is changed (removed for `None`).
+/// * All `color()` statements of the colour name it literally: [`filament_edits`] there.
+/// * Otherwise (the colour is a parameter or a loop value: `filament = n` at the statement
+///   would hold for all its colours) a statement `filament("<label>", n);` is inserted at the
+///   top of the main file (after existing ones, else before the first statement); literal
+///   statements with `filament = …` get the same value.
+///
+/// `label`: palette name, unknown name or `#rrggbb`. `Err` for `None` when the slot comes from
+/// a statement shared by several colours.
+pub fn filament_set_edits(
+    proj: &Project,
+    stmts: &[Span],
+    source: SlotSource,
+    label: &str,
+    filament: Option<u32>,
+) -> Result<Vec<TextEdit>, String> {
+    use cad_syntax::ast::StmtKind as K;
+    let decls: Vec<&cad_syntax::ast::Stmt> = proj
+        .main
+        .stmts
+        .iter()
+        .filter(|s| s.span.file() == 0 && matches!(&s.kind, K::Call { name, .. } if name.name == "filament"))
+        .collect();
+    if let SlotSource::Decl(sp) = source {
+        let Some(st) = decls.iter().find(|s| s.span == sp) else {
+            return Err("filament()-Anweisung nicht gefunden".into());
+        };
+        let K::Call { args, .. } = &st.kind else { unreachable!() };
+        return Ok(match filament {
+            Some(n) => {
+                let slot = args
+                    .iter()
+                    .find(|a| a.name.as_ref().is_some_and(|x| x.name == "n"))
+                    .or_else(|| args.iter().filter(|a| a.name.is_none()).nth(1));
+                match slot {
+                    Some(a) => vec![TextEdit { span: a.value.span, text: n.to_string() }],
+                    None => return Err("filament(): Slot-Argument fehlt".into()),
+                }
+            }
+            None => {
+                // the whole statement with its line break
+                let text = proj.main_text();
+                let (a, mut b) = (st.span.start as usize, st.span.end as usize);
+                let line_start = text[..a].rfind('\n').map_or(0, |i| i + 1);
+                let alone = text[line_start..a].trim().is_empty();
+                if text[b..].starts_with('\n') {
+                    b += 1;
+                }
+                let start = if alone { line_start } else { a };
+                vec![TextEdit { span: Span::new(start, b), text: String::new() }]
+            }
+        }
+        .into_iter()
+        .filter(|e| proj.span_text(e.span).is_some_and(|t| t != e.text))
+        .collect());
+    }
+    let literal: Vec<Span> = stmts.iter().copied().filter(|&s| color_is_literal(proj, s)).collect();
+    if !stmts.is_empty() && literal.len() == stmts.len() {
+        return Ok(filament_edits(proj, stmts, filament));
+    }
+    match filament {
+        None => match source {
+            SlotSource::Color(sp) if !literal.contains(&sp) => Err(format!(
+                "der Slot steht in Zeile {} als filament = … an einem color(), das mehrere Farben färbt – dort entfernen",
+                proj.line(sp)
+            )),
+            _ => Ok(filament_edits(proj, &literal, None)),
+        },
+        Some(n) => {
+            let text = proj.main_text();
+            let at = match decls.last() {
+                Some(d) => {
+                    let e = d.span.end as usize;
+                    e + text[e..].find('\n').map_or(text.len() - e, |i| i + 1)
+                }
+                None => proj
+                    .main
+                    .stmts
+                    .iter()
+                    .find(|s| s.span.file() == 0 && !matches!(s.kind, K::Include { .. }))
+                    .map(|s| {
+                        let a = s.span.start as usize;
+                        text[..a].rfind('\n').map_or(0, |i| i + 1)
+                    })
+                    .unwrap_or(text.len()),
+            };
+            let line = format!("filament({}, {n});\n", quoted(label));
+            let mut edits = vec![TextEdit { span: Span::new(at, at), text: line }];
+            // literal statements of the colour with `filament = …` agree with the table
+            let with_arg: Vec<Span> = literal
+                .iter()
+                .copied()
+                .filter(|&sp| {
+                    let found = find_color_call(&proj.main.stmts, sp)
+                        .or_else(|| proj.libs.iter().find_map(|l| find_color_call(&l.ast.stmts, sp)));
+                    matches!(found.map(|s| &s.kind), Some(K::Call { args, .. })
+                        if args.iter().any(|a| a.name.as_ref().is_some_and(|x| x.name == "filament")))
+                })
+                .collect();
+            edits.extend(filament_edits(proj, &with_arg, Some(n)));
+            Ok(edits)
+        }
+    }
+}

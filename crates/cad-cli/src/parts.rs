@@ -40,8 +40,10 @@ pub(crate) fn export_parts(
     schema: &str,
     names: &[String],
     all: bool,
-    multicolor: bool,
+    multicolor: Option<cad_engine::color_export::PackageOptions>,
 ) -> Result<Outcome, Fail> {
+    let pkg = multicolor.unwrap_or_default();
+    let multicolor = multicolor.is_some();
     let fmt = format_of(format, output, all)?;
     let schema = cad_engine::StepSchema::parse(schema)
         .ok_or_else(|| Fail::Usage(format!("unbekanntes STEP-Schema: {schema} (ap242 oder ap214)")))?;
@@ -66,7 +68,10 @@ pub(crate) fn export_parts(
         for pt in &scene.parts {
             let one = std::slice::from_ref(&pt.name);
             let (bytes, tris) = if multicolor && fmt == p::ExportFormat::ThreeMf {
-                m.session.export_colors(fmt, Some(one)).map(|(b, st)| (b, st.triangles)).map_err(Fail::Kernel)?
+                m.session
+                    .export_colors_with(fmt, Some(one), pkg)
+                    .map(|(b, st)| (b, st.triangles))
+                    .map_err(Fail::Kernel)?
             } else {
                 m.session.export_parts_with(fmt, one, false, &step).map_err(Fail::Kernel)?
             };
@@ -88,7 +93,10 @@ pub(crate) fn export_parts(
         j["output"] = json!(output.display().to_string());
     } else {
         let (bytes, tris) = if multicolor && fmt == p::ExportFormat::ThreeMf {
-            m.session.export_colors(fmt, Some(names)).map(|(b, st)| (b, st.triangles)).map_err(Fail::Kernel)?
+            m.session
+                .export_colors_with(fmt, Some(names), pkg)
+                .map(|(b, st)| (b, st.triangles))
+                .map_err(Fail::Kernel)?
         } else {
             m.session.export_parts_with(fmt, names, false, &step).map_err(Fail::Kernel)?
         };

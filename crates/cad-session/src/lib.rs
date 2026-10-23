@@ -474,6 +474,18 @@ where
             }];
         }
         let mut out = cad_eval::eval_project(&proj, &self.eval_options());
+        // remarks of the colour table (slots beyond 16, shared slots), as evaluation messages
+        for (node, warn, msg) in convert::color_table(&out.tree).remarks() {
+            let span = out.tree.node(node).span;
+            let d = if warn {
+                cad_syntax::Diagnostic::warning(span, msg)
+            } else {
+                cad_syntax::Diagnostic { span, severity: cad_syntax::Severity::Info, message: msg }
+            };
+            if !out.diagnostics.contains(&d) {
+                out.diagnostics.push(d);
+            }
+        }
         let eval_ms = (self.clock)() - t0;
         let mut items = convert::lang_diagnostics(&src, &parse_diags, p::DiagSource::Syntax);
         items.extend(convert::lang_diagnostics(&src, &out.diagnostics, p::DiagSource::Eval));
@@ -612,22 +624,57 @@ where
         if filament.is_some_and(|f| !(1..=cad_eval::palette::MAX_FILAMENT).contains(&f)) {
             return vec![self.error("Filament muss 1 bis 16 sein", None)];
         }
-        let spans: Vec<cad_syntax::Span> = e.nodes.iter().map(|&n| cur.out.tree.node(n).span).collect();
-        let edits = cad_eval::filament_edits(&cur.proj, &spans, filament);
-        vec![FromEngine::Edits { version: cur.version, edits: edits.iter().map(|x| cur.src.edit(x)).collect() }]
+        let tree = &cur.out.tree;
+        let mut spans: Vec<cad_syntax::Span> = Vec::new();
+        for &n in &e.nodes {
+            let sp = tree.node(n).span;
+            if !spans.contains(&sp) {
+                spans.push(sp);
+            }
+        }
+        let source = match (e.decl, e.explicit_node) {
+            (Some(d), _) => cad_eval::SlotSource::Decl(tree.filaments[d].span),
+            (None, Some(n)) => cad_eval::SlotSource::Color(tree.node(n).span),
+            _ => cad_eval::SlotSource::Auto,
+        };
+        let label = match e.source {
+            cad_engine::colors::ColorSource::Exact => cad_engine::colors::key_hex(e.key),
+            _ => e.label.clone(),
+        };
+        match cad_eval::filament_set_edits(&cur.proj, &spans, source, &label, filament) {
+            Ok(edits) => {
+                vec![FromEngine::Edits { version: cur.version, edits: edits.iter().map(|x| cur.src.edit(x)).collect() }]
+            }
+            Err(m) => vec![self.error(&m, None)],
+        }
     }
 
-    /// Nodes whose colour regions the UI lists: the parts (file context), else the root.
+    /// Nodes whose colour regions the UI lists and the default multi-colour export writes:
+    /// the parts (file context) plus the material outside them ([`NO_PART`], see
+    /// [`rest_nodes`]), else the root.
     pub fn region_nodes(&self) -> Vec<(Option<String>, NodeIdx)> {
         let (Some(d), Some(cur)) = (&self.done, &self.cur) else { return Vec::new() };
         if cur.version == d.version && !cur.out.parts.is_empty() {
-            return cur
+            let mut v: Vec<(Option<String>, NodeIdx)> = cur
                 .out
                 .parts
                 .iter()
                 .filter(|p| d.ev.report(p.node).status != cad_engine::Status::Skipped)
                 .map(|p| (Some(p.name.clone()), p.node))
                 .collect();
+            let parts: Vec<NodeIdx> = cur.out.parts.iter().map(|p| p.node).collect();
+            if let Some(r) = d.ev.root() {
+                for n in rest_nodes(&d.ev.tree, r, &parts) {
+                    let rep = d.ev.report(n);
+                    if rep.status != cad_engine::Status::Skipped
+                        && rep.dim != Some(cad_ir::Dim::Two)
+                        && d.ev.parts(n).iter().any(|p| p.solid)
+                    {
+                        v.push((Some(NO_PART.to_string()), n));
+                    }
+                }
+            }
+            return v;
         }
         d.ev.root().filter(|&r| d.ev.report(r).dim != Some(cad_ir::Dim::Two)).map(|r| (None, r)).into_iter().collect()
     }
@@ -863,21 +910,27 @@ where
             p::ExportFormat::Step => false,
         };
         let res = if colors {
-            self.export_colors(req.format, req.parts.as_deref()).map(|(b, st)| (b, st.triangles))
+            self.export_colors(req.format, req.parts.as_deref()).map(|(b, st)| {
+                let notes = (req.format == p::ExportFormat::ThreeMf)
+                    .then(|| color_export_notes(&st, cad_engine::color_export::PackageOptions::default()));
+                (b, st.triangles, notes)
+            })
         } else {
             match &req.parts {
                 None => self.export_bytes(req.format),
                 Some(names) => self.export_parts(req.format, names, req.zip),
             }
+            .map(|(b, t)| (b, t, None))
         };
         match res {
-            Ok((bytes, triangles)) => FromEngine::ExportResult {
+            Ok((bytes, triangles, notes)) => FromEngine::ExportResult {
                 format: req.format,
                 bytes,
                 triangles,
                 parts: req.parts,
                 zip: (req.zip || (colors && req.format == p::ExportFormat::Stl)).then_some(true),
                 colors: colors.then_some(true),
+                notes,
             },
             Err(e) => self.error(&e, None),
         }
@@ -897,10 +950,29 @@ where
         format: p::ExportFormat,
         parts: Option<&[String]>,
     ) -> Result<(Vec<u8>, cad_engine::color_export::ColorExportStats), String> {
+        self.export_colors_with(format, parts, cad_engine::color_export::PackageOptions::default())
+    }
+
+    /// [`Session::export_colors`] with package options (`m:colorgroup` for other viewers).
+    pub fn export_colors_with(
+        &mut self,
+        format: p::ExportFormat,
+        parts: Option<&[String]>,
+        opts: cad_engine::color_export::PackageOptions,
+    ) -> Result<(Vec<u8>, cad_engine::color_export::ColorExportStats), String> {
         let tol = Some(self.opts.export_tol);
         let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
         let nodes: Vec<(String, NodeIdx)> = match parts {
-            None => vec![(self.model_name(), d.ev.root().ok_or("kein Ergebnis")?)],
+            // the parts and the material outside them (as the colour list), else the root
+            None => {
+                let name = self.model_name();
+                let v: Vec<(String, NodeIdx)> =
+                    self.region_nodes().into_iter().map(|(p, n)| (p.unwrap_or_else(|| name.clone()), n)).collect();
+                if v.is_empty() {
+                    return Err("kein Ergebnis".into());
+                }
+                v
+            }
             Some(names) => {
                 let cur = self.cur.as_ref().filter(|c| c.version == d.version).ok_or("Auswertung läuft noch")?;
                 let mut v = Vec::new();
@@ -916,7 +988,7 @@ where
         let table = convert::color_table(&d.ev.tree);
         let app = format!("controller-cad {}", env!("CARGO_PKG_VERSION"));
         match format {
-            p::ExportFormat::ThreeMf => self.engine.export_3mf_colors(&d.ev, &nodes, tol, &table, &app),
+            p::ExportFormat::ThreeMf => self.engine.export_3mf_colors(&d.ev, &nodes, tol, &table, &app, opts),
             p::ExportFormat::Stl => self.engine.export_color_stl_zip(&d.ev, &nodes, tol, &table),
             p::ExportFormat::Step => Err("STEP trägt Farben je Fläche, keine Farbvolumen".into()),
         }
@@ -996,6 +1068,75 @@ where
         let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
         self.engine.export_step(&d.ev, opts)
     }
+}
+
+/// Notes of a multi-colour 3MF export for CLI and UI (what the file holds, how the slicers
+/// read it).
+pub fn color_export_notes(
+    st: &cad_engine::color_export::ColorExportStats,
+    opts: cad_engine::color_export::PackageOptions,
+) -> Vec<String> {
+    let mut v = Vec::new();
+    let real: Vec<&String> = st.object_names.iter().filter(|n| n.as_str() != NO_PART).collect();
+    let rest = real.len() < st.object_names.len();
+    v.push(format!(
+        "{} Objekt{} ({}{}), {} Teil{} (eines je Farbe und Objekt)",
+        st.objects,
+        if st.objects == 1 { "" } else { "e" },
+        real.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "),
+        if rest { if real.is_empty() { NO_PART.to_string() } else { format!(", {NO_PART}") } } else { String::new() },
+        st.parts,
+        if st.parts == 1 { "" } else { "e" },
+    ));
+    if rest && !real.is_empty() {
+        v.push(format!("Material außerhalb der Bauteile ist ein eigenes Objekt „{NO_PART}“"));
+    }
+    if opts.color_group && st.colors.len() > 1 {
+        v.push(
+            "mit Farbgruppe: Bambu Studio öffnet einen Farbdialog – dort „Abbrechen“ wählen, sonst ersetzt er die Filament-Slots"
+                .into(),
+        );
+    } else {
+        v.push(
+            "Filament-Slots in Metadata/model_settings.config, ohne Farbgruppe: Bambu Studio und OrcaSlicer übernehmen die Slots ohne Farbdialog"
+                .into(),
+        );
+    }
+    v
+}
+
+/// Name of the material outside the parts in the colour list and in multi-colour exports
+/// (an object of its own; a part name never contains a space).
+pub const NO_PART: &str = "ohne Bauteil";
+
+/// Material of the result outside the parts: the topmost nodes below `root` that are neither
+/// a part nor contain one (pre-order; `%`, `*` and zones are not material).
+pub fn rest_nodes(tree: &cad_ir::Tree, root: NodeIdx, parts: &[NodeIdx]) -> Vec<NodeIdx> {
+    let mut holds = vec![false; tree.nodes.len()];
+    for &p in parts {
+        let mut cur = Some(p);
+        while let Some(c) = cur {
+            if holds[c as usize] {
+                break;
+            }
+            holds[c as usize] = true;
+            cur = tree.node(c).parent;
+        }
+    }
+    let mut out = Vec::new();
+    let mut stack = vec![root];
+    while let Some(n) = stack.pop() {
+        if parts.contains(&n) {
+            continue;
+        }
+        if !holds[n as usize] {
+            out.push(n);
+            continue;
+        }
+        let kids: Vec<NodeIdx> = tree.solid_children(n).collect();
+        stack.extend(kids.into_iter().rev());
+    }
+    out
 }
 
 fn node_ref<S>(cur: &Current, n: NodeIdx, job: &Job<S>) -> p::NodeRef {

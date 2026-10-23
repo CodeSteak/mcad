@@ -18,6 +18,22 @@ pub const NO_STMT: StmtId = u32::MAX;
 pub struct Tree {
     pub nodes: Vec<Node>,
     pub root: Option<NodeIdx>,
+    /// `filament(c, n)` statements at the top level of the main file (Bericht 12, F2): the
+    /// slot of a colour for the whole model, before any `color(…, filament = n)`.
+    #[serde(default)]
+    pub filaments: Vec<FilamentDecl>,
+}
+
+/// `filament("red", 4);`: colour `rgba` prints with slot `slot`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FilamentDecl {
+    pub rgba: [f32; 4],
+    /// Palette name or the unknown name as written (`None` for hex and vectors).
+    pub name: Option<String>,
+    pub slot: u32,
+    /// The statement.
+    pub stmt: StmtId,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
