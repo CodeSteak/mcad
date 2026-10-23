@@ -291,7 +291,7 @@ fn select(s: cad_ir::Select) -> p::SelectMode {
 /// Parameters the view needs to draw zone blocks, profile operations and surfaces.
 pub fn op_info(op: &Op) -> Option<p::OpInfo> {
     Some(match op {
-        Op::Blend { kind, r, select: s } => {
+        Op::Blend { kind, r, select: s, .. } => {
             p::OpInfo::Blend { chamfer: *kind == cad_ir::BlendKind::Chamfer, r: *r, select: select(*s) }
         }
         Op::Shell { t, select: s } => p::OpInfo::Shell { t: *t, select: select(*s) },

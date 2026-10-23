@@ -54,7 +54,9 @@
 namespace {
 
 const ULONG SC_TAG_ATTR_ID = SM_AI_USER_1 + 77;  // 10077
-const uint32_t SC_FACADE_VERSION = 3;
+// 4: sc_edges reports flags (SC_EDGE_SMOOTH), sc_law_stations / sc_fillet_var (variable
+//    radius), surfaces from 2 or 3 points per direction, shells from Booleans.
+const uint32_t SC_FACADE_VERSION = 4;
 
 // ------------------------------------------------------------------ errors
 
@@ -921,9 +923,89 @@ std::vector<uint32_t> edges_near_faces(SmBrep* result, const std::vector<size_t>
   return out;
 }
 
+// ------------------------------------------------------------------ variable radius
+//
+// A variable radius along an edge is a law r(t) over the edge's normalised parameter
+// t = (u - u0) / (u1 - u0) (u0, u1 the edge's interval; t = 0 at the edge's start vertex): a
+// clamped B-spline of degree p = min(3, m - 1) with m control radii, uniform interior knots on
+// [0, 1]. Its control radius j sits at the Greville abscissa t_j (mean of the p knots after j);
+// sc_law_stations returns the edge points there, the caller evaluates its radius function at
+// them and passes the values to sc_fillet_var. The spline lies between the smallest and the
+// largest control radius (variation diminishing), reproduces constant and linear laws exactly
+// and takes the first and last value at the edge's ends. It becomes an SmBSplineFilletLaw
+// whose curve carries the radius as x and t itself as y (control points (r_j, t_j): y(t) = t),
+// so SMLib can extend the law past the edge's ends, which a round needs at a corner.
+
+std::vector<double> law_knots(uint32_t m, uint32_t& p) {
+  p = std::min<uint32_t>(3, m - 1);
+  std::vector<double> k;
+  for (uint32_t i = 0; i <= p; i++) k.push_back(0.0);
+  uint32_t inner = m - p - 1;
+  for (uint32_t i = 1; i <= inner; i++) k.push_back((double)i / (double)(inner + 1));
+  for (uint32_t i = 0; i <= p; i++) k.push_back(1.0);
+  return k;
+}
+
+std::vector<double> law_greville(uint32_t m) {
+  uint32_t p = 0;
+  std::vector<double> k = law_knots(m, p);
+  std::vector<double> g;
+  for (uint32_t j = 0; j < m; j++) {
+    double s = 0;
+    for (uint32_t i = 1; i <= p; i++) s += k[j + i];
+    g.push_back(s / p);
+  }
+  return g;
+}
+
+// Owns the laws of one variable fillet (the solvers keep references until DoFillet ends).
+struct LawList {
+  std::vector<SmFilletLaw*> v;
+  LawList() = default;
+  LawList(const LawList&) = delete;
+  ~LawList() {
+    for (SmFilletLaw* l : v)
+      if (l) delete l;
+  }
+};
+
+SmBSplineFilletLaw* make_law(const std::vector<double>& radii) {
+  uint32_t m = (uint32_t)radii.size(), p = 0;
+  std::vector<double> k = law_knots(m, p);
+  std::vector<double> g = law_greville(m);
+  SmTArray<SmPoint3d> cps;
+  for (uint32_t j = 0; j < m; j++) cps.Add(SmPoint3d(radii[j], g[j], 0.0));
+  SmTArray<double> unique;
+  SmTArray<ULONG> mults;
+  for (double x : k) {
+    if (unique.GetSize() > 0 && unique[unique.GetSize() - 1] == x)
+      mults[mults.GetSize() - 1] += 1;
+    else {
+      unique.Add(x);
+      mults.Add(1);
+    }
+  }
+  SmBSplineCurve* c = nullptr;
+  SC_CHECK(SmBSplineCurve::CreateCanonical(*ctx(), 3, p, cps, SM_CF_UNSPECIFIED, mults, unique,
+                                           SM_KT_UNSPECIFIED, nullptr, nullptr, c),
+           "SmBSplineCurve::CreateCanonical (radius law)");
+  if (!c) throw fail(SC_FAILED, "radius law could not be built");
+  return new (*ctx()) SmBSplineFilletLaw(c, SmExtent1d(0.0, 1.0));
+}
+
+// `laws` (variable fillet): per selected edge id its control radii; empty: radius r everywhere.
 uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, uint32_t tag,
-                        bool chamfer) {
+                        bool chamfer,
+                        const std::unordered_map<uint32_t, std::vector<double>>* laws = nullptr) {
   const char* what = chamfer ? "chamfer" : "fillet";
+  if (laws) {
+    r = 0;
+    for (const auto& kv : *laws)
+      for (double x : kv.second) {
+        if (!(x > 0) || !is_fin(x)) throw fail(SC_INVALID, "fillet radius must be > 0", {kv.first});
+        r = std::max(r, x);
+      }
+  }
   if (!(r > 0) || !is_fin(r)) throw fail(SC_INVALID, std::string(what) + " size must be > 0");
   SmBrep* in = get(h);
   std::vector<SmEdge*> in_all;
@@ -955,9 +1037,42 @@ uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, u
 
   SmFilletExecutive ex(*ctx(), b.get());
   ex.SetDoGlobalMerge(TRUE);
-  SmStatus st = ex.SetFilletParameters(b.get(), sel, chamfer ? SM_FSG_LINEAR : SM_FSG_CIRCULAR,
-                                       SM_FS_CONST_RADIUS, r, nullptr, -1.0, -1.0, -1.0, -1.0, 1,
-                                       1.0);
+  SmStatus st;
+  LawList owned;
+  if (!laws) {
+    st = ex.SetFilletParameters(b.get(), sel, chamfer ? SM_FSG_LINEAR : SM_FSG_CIRCULAR,
+                                SM_FS_CONST_RADIUS, r, nullptr, -1.0, -1.0, -1.0, -1.0, 1, 1.0);
+  } else {
+    // per edge: constant solver where all its radii agree, the variable one otherwise
+    SmTArray<SmFilletSurfaceGeneratorType> xs;
+    SmTArray<SmFilletSolverType> types;
+    SmTArray<double> values;
+    SmTArray<SmFilletLaw*> law_ptrs;
+    for (uint32_t i : sel_ids) {
+      auto it = laws->find(i);
+      if (it == laws->end() || it->second.empty())
+        throw fail(SC_INVALID, "no radius law for edge " + std::to_string(i), {i});
+      const std::vector<double>& rs = it->second;
+      double lo = *std::min_element(rs.begin(), rs.end());
+      double hi = *std::max_element(rs.begin(), rs.end());
+      xs.Add(SM_FSG_CIRCULAR);
+      if (rs.size() == 1 || hi - lo <= 1e-12 * hi) {
+        types.Add(SM_FS_CONST_RADIUS);
+        values.Add(rs[0]);
+        law_ptrs.Add(nullptr);
+      } else {
+        SmBSplineFilletLaw* l = make_law(rs);
+        owned.v.push_back(l);
+        types.Add(SM_FS_VARIABLE_RADIUS);
+        values.Add(hi);
+        law_ptrs.Add(l);
+      }
+    }
+    st = ex.SetFilletParameters(b.get(), sel, xs, types, values, &law_ptrs, -1.0, -1.0, -1.0,
+                                -1.0, 1, 1.0);
+  }
+  // (SetFilletParameters resets the merge options to topology insertion in both cases, so the
+  // SetDoGlobalMerge above has no effect; kept as SmApiFilletEdges has it.)
   if (st == SM_SUCCESS) {
     if (chamfer) {
       st = ex.CreateFilletCorners();
@@ -1389,6 +1504,160 @@ bool opposite_walls_closer_than(const SmBrep* b, const std::vector<const SmFace*
       }
     }
   return false;
+}
+
+// ------------------------------------------------------------------ shell from booleans
+//
+// SmApiShellBrepFull with opened faces fails on rounded bodies (box with $fillet: SM_ERR,
+// SM_ERR_NULL_POINTER in SmMerge, or a solid whose rim faces are missing and whose round
+// offsets cross each other: about a dozen faces fail invalid_faces, the volume is still close),
+// although the closed inward offset of the same body is exact. sc_shell then builds the shell
+// from Booleans instead:
+//
+//   result = body - O - P_1 - ... - P_k
+//
+// O is the closed inward offset of the body (SmApiOffsetBrepFull, -t), P_i a prism over the
+// face of O that is the offset of the i-th opened face: from just inside O's cavity along the
+// face's outward normal to past the body. Its side walls run through the boundary of that
+// offset face, so the opening's rim is the ruled band between the opened face and its offset,
+// as in SMLib's own shell. Only planar opened faces are handled (the prism is the thickened
+// offset face); otherwise the fallback gives up and sc_shell reports SMLib's error.
+
+// Index of the face of `o` that lies on the inward offset (by `t`) of the planar face `f`.
+long offset_face_index(const SmBrep* o, const SmFace* f, double t, double tol) {
+  V3 p, n;
+  if (!face_sample(f, p, n)) return -1;
+  V3 q = p - n * t;
+  auto fs = faces_of(o);
+  long best = -1;
+  double bd = 1e300;
+  for (size_t i = 0; i < fs.size(); i++) {
+    const SmSurface* s = fs[i]->GetSurface();
+    if (!s || !s->IsKindOf(SmPlane_TYPE)) continue;
+    V3 pp, nn;
+    if (!face_sample(fs[i], pp, nn) || dot(nn, n) < 1 - 1e-9) continue;
+    if (std::fabs(dot(pp - q, n)) > tol) continue;
+    double d = face_distance(fs[i], q);
+    if (d < bd) {
+      bd = d;
+      best = (long)i;
+    }
+  }
+  return bd <= tol ? best : -1;
+}
+
+// A - B with the plausibility check; SMLib's own result if the check rejects every attempt.
+BrepPtr checked_difference(const SmBrep* A, const SmBrep* B, std::string& err) {
+  BrepPtr plain;
+  double va = NAN;
+  BrepPtr r = checked_boolean(SC_DIFFERENCE, A, B, true, err, plain, va);
+  if (!r.get()) r = std::move(plain);
+  return r;
+}
+
+BrepPtr shell_by_booleans(const SmBrep* in, double t, const std::vector<const SmFace*>& open,
+                          std::string& why) {
+  for (const SmFace* f : open) {
+    const SmSurface* s = f->GetSurface();
+    if (!s || !s->IsKindOf(SmPlane_TYPE)) {
+      why = "opened face is not planar";
+      return BrepPtr();
+    }
+  }
+  double vin = solid_volume(in);
+  double tol = 1e-6 * std::max(1.0, model_diag(in));
+  // 1. the inward offset, a closed solid with a cavity's volume
+  BrepPtr O;
+  for (int k = 0; k < 2 && !O.get(); k++) {
+    BrepPtr c = copy_brep(in);
+    SmBrep* o = nullptr;
+    g_trail.clear();
+    SmStatus st = SmApiOffsetBrepFull(c.get(), -t, k == 1, k == 1, o);
+    BrepPtr ob(o);
+    if (st != SM_SUCCESS || !o) {
+      why = sm_fail("SmApiOffsetBrepFull", st == SM_SUCCESS ? SM_ERR : st).msg;
+      continue;
+    }
+    if (o->GetNumFaces() == 0 || !o->IsManifoldSolid()) {
+      why = "the inward offset is no closed solid (no cavity left)";
+      continue;
+    }
+    double vo = solid_volume(o);
+    if (!(vo > 0) || !(vo < vin)) {
+      why = "the inward offset has an impossible volume";
+      continue;
+    }
+    if (!invalid_faces(o).empty()) {
+      why = "the inward offset overlaps itself";
+      continue;
+    }
+    O = std::move(ob);
+  }
+  if (!O.get()) return BrepPtr();
+  // 2. prisms over the offsets of the opened faces
+  std::vector<BrepPtr> prisms;
+  double delta = 0.5 * t, margin = t;
+  for (const SmFace* f : open) {
+    long idx = offset_face_index(O.get(), f, t, 1e3 * tol);
+    if (idx < 0) {
+      why = "no offset of an opened face found";
+      return BrepPtr();
+    }
+    V3 p, n;
+    face_sample(f, p, n);
+    BrepPtr sheet = copy_brep(O.get());
+    {
+      auto sf = faces_of(sheet.get());
+      SmTArray<SmFace*> rm;
+      for (size_t i = 0; i < sf.size(); i++)
+        if ((long)i != idx) rm.Add(sf[i]);
+      SC_CHECK(sheet->RemoveFaces(rm), "SmBrep::RemoveFaces");
+      if (sheet->GetNumFaces() != 1) {
+        why = "offset face could not be isolated";
+        return BrepPtr();
+      }
+    }
+    M4 m = identity();
+    V3 d = n * -delta;
+    m.m[12] = d.x;
+    m.m[13] = d.y;
+    m.m[14] = d.z;
+    apply_matrix(sheet.get(), m);
+    BrepPtr prism;
+    for (double sgn : {1.0, -1.0}) {
+      SmTArray<const SmFace*> none;
+      SmBrep* pr = nullptr;
+      SmStatus st = SmApiShellBrepFull(sheet.get(), sgn * (t + delta + margin), TRUE, TRUE, TRUE, none, pr);
+      BrepPtr pb(pr);
+      if (st != SM_SUCCESS || !pr || pr->GetNumFaces() == 0 || !pr->IsManifoldSolid()) continue;
+      // the prism must reach past the opened face
+      if (classify_point(pr, p + n * (0.5 * margin)) != 1) continue;
+      prism = std::move(pb);
+      break;
+    }
+    if (!prism.get()) {
+      why = "prism over an opened face failed";
+      return BrepPtr();
+    }
+    prisms.push_back(std::move(prism));
+  }
+  // 3. body - O - prisms
+  std::string err;
+  BrepPtr r = checked_difference(in, O.get(), err);
+  for (size_t i = 0; r.get() && i < prisms.size(); i++) r = checked_difference(r.get(), prisms[i].get(), err);
+  if (!r.get()) {
+    why = err.empty() ? "boolean failed" : err;
+    return BrepPtr();
+  }
+  if (r->GetNumFaces() == 0 || !r->IsManifoldSolid()) {
+    why = "result is not a closed solid";
+    return BrepPtr();
+  }
+  if (!invalid_faces(r.get()).empty()) {
+    why = "result overlaps itself";
+    return BrepPtr();
+  }
+  return r;
 }
 
 // ------------------------------------------------------------------ tessellation
@@ -2238,6 +2507,49 @@ uint32_t sc_chamfer(uint32_t h, const uint32_t* edges, uint32_t n, double d, uin
   SC_SHAPE_CALL({ _res = do_fillet_like(h, edges, n, d, tag, true); })
 }
 
+int32_t sc_law_stations(uint32_t h, const uint32_t* edges, uint32_t n, const uint32_t* counts) {
+  SC_STATUS_CALL({
+    SmBrep* b = get(h);
+    auto all = edges_of(b);
+    auto& pts = g_f64[0];
+    auto& ts = g_f64[1];
+    for (uint32_t i = 0; i < n; i++) {
+      if (edges[i] >= all.size())
+        throw fail(SC_INVALID, "edge id " + std::to_string(edges[i]) + " out of range", {edges[i]});
+      uint32_t m = counts[i];
+      if (m < 2 || m > 256) throw fail(SC_INVALID, "a radius law needs 2 to 256 stations");
+      SmEdge* e = all[edges[i]];
+      SmCurve* c = e->GetCurve();
+      if (!c) throw fail(SC_FAILED, "edge without curve", {edges[i]});
+      SmExtent1d iv = e->GetInterval();
+      for (double t : law_greville(m)) {
+        SmPoint3d p;
+        SC_CHECK(c->EvaluatePoint(iv.GetMin() + t * (iv.GetMax() - iv.GetMin()), p),
+                 "SmCurve::EvaluatePoint");
+        pts.push_back(p.x);
+        pts.push_back(p.y);
+        pts.push_back(p.z);
+        ts.push_back(t);
+      }
+    }
+  })
+}
+
+uint32_t sc_fillet_var(uint32_t h, const uint32_t* edges, uint32_t n, const uint32_t* counts,
+                       const double* radii, uint32_t tag) {
+  SC_SHAPE_CALL({
+    std::unordered_map<uint32_t, std::vector<double>> laws;
+    size_t k = 0;
+    for (uint32_t i = 0; i < n; i++) {
+      uint32_t m = counts[i];
+      if (m < 1 || m > 256) throw fail(SC_INVALID, "a radius law needs 1 to 256 values");
+      laws[edges[i]] = std::vector<double>(radii + k, radii + k + m);
+      k += m;
+    }
+    _res = do_fillet_like(h, edges, n, 1.0, tag, false, &laws);
+  })
+}
+
 uint32_t sc_extrude(const double* loop, uint32_t len_, double height, double twist,
                     double scale_x, double scale_y, uint32_t tag) {
   SC_SHAPE_CALL({
@@ -2494,9 +2806,15 @@ uint32_t sc_nurbs_surface(const double* pts, uint32_t rows, uint32_t cols, uint3
     SmTArray<SmPoint3d> p;
     for (uint32_t i = 0; i < rows * cols; i++)
       p.Add(SmPoint3d(pts[3 * i], pts[3 * i + 1], pts[3 * i + 2]));
-    SmSurface* s = nullptr;
-    SC_CHECK(SmApiCreateSurfaceFromOrderedPoints(p, rows, cols, s),
-             "SmApiCreateSurfaceFromOrderedPoints");
+    // Interpolating B-spline (SMLib's least-squares fit with as many control points as points),
+    // degree 3 per direction where it has at least 4 points, otherwise one less than its point
+    // count: bilinear for 2, quadratic for 3 (SmApiCreateSurfaceFromOrderedPoints is bicubic
+    // only and fails below 4 x 4).
+    ULONG du = std::min<ULONG>(3, rows - 1), dv = std::min<ULONG>(3, cols - 1);
+    SmBSplineSurface* bs = nullptr;
+    SC_CHECK(SmBSplineSurface::ApproximatePoints(*ctx(), p, rows, cols, du, dv, nullptr, bs, true),
+             "SmBSplineSurface::ApproximatePoints");
+    SmSurface* s = bs;
     if (!s) throw fail(SC_FAILED, "no surface created");
     BrepPtr b = empty_brep();
     SmFace* f = nullptr;
@@ -2544,14 +2862,31 @@ uint32_t sc_shell(uint32_t h, double t, const uint32_t* open_faces, uint32_t n, 
     if (opposite_walls_closer_than(in, open_v, 2.0 * t, gap))
       throw fail(SC_FAILED, "shell: wall thickness " + std::to_string(t) +
                                 " does not fit (opposite walls " + std::to_string(gap) + " apart)");
-    SmBrep* r = nullptr;
-    SC_CHECK(SmApiShellBrepFull(in, -t, TRUE, TRUE, FALSE, open, r), "SmApiShellBrepFull");
-    require_result(r, "shell");
-    BrepPtr b(r);
-    if (b->GetNumFaces() == 0 || !b->IsManifoldSolid())
-      throw fail(SC_FAILED, "shell: wall thickness " + std::to_string(t) +
-                                " leaves no cavity (SMLib returned no closed solid)");
-    check_valid(b.get(), "shell");
+    // SMLib's shell first; where it fails or its result is not valid, the shell from Booleans
+    // (see shell_by_booleans).
+    BrepPtr b;
+    Failure first{SC_OK, "", {}};
+    try {
+      SmBrep* r = nullptr;
+      SC_CHECK(SmApiShellBrepFull(in, -t, TRUE, TRUE, FALSE, open, r), "SmApiShellBrepFull");
+      require_result(r, "shell");
+      b.reset(r);
+      if (b->GetNumFaces() == 0 || !b->IsManifoldSolid())
+        throw fail(SC_FAILED, "shell: wall thickness " + std::to_string(t) +
+                                  " leaves no cavity (SMLib returned no closed solid)");
+      check_valid(b.get(), "shell");
+    } catch (const Failure& f) {
+      b.reset();
+      first = f;
+    }
+    if (!b.get()) {
+      std::string why;
+      b = shell_by_booleans(in, t, open_v, why);
+      if (!b.get()) {
+        first.msg += "; shell from booleans: " + why;
+        throw first;
+      }
+    }
     std::vector<const SmFace*> removed;
     for (ULONG i = 0; i < open.GetSize(); i++) removed.push_back(open[i]);
     resolve_tags(b.get(), {in}, tag, true, removed);
@@ -2604,8 +2939,13 @@ int32_t sc_edges(uint32_t h, uint32_t samples) {
         tags.push_back(t);
       }
       if (ef.GetSize() == 1 && e->GetEdgeuseCount() >= 4) tags.push_back(tags[0]);  // seam
+      // SC_EDGE_SMOOTH: nothing to blend (seam, pole, tangent-continuous or open edge;
+      // GetBlendEdgeuse() is NULL for exactly these, see do_fillet_like).
+      uint32_t flags = 0;
+      if (e->GetBlendEdgeuse() == nullptr) flags |= SC_EDGE_SMOOTH;
       meta.push_back((uint32_t)ep.size());
       meta.push_back((uint32_t)tags.size());
+      meta.push_back(flags);
       for (uint32_t t : tags) meta.push_back(t);
     }
   })

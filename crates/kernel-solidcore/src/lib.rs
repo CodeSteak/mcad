@@ -137,7 +137,7 @@ mod imp {
                 let b = q::edge_bounding_box(&self.k, &s.brep, e, true).map_err(|e| err("edges", e))?;
                 let lo = DVec3::new(b.min_at(0), b.min_at(1), b.min_at(2));
                 let hi = DVec3::new(b.max_at(0), b.max_at(1), b.max_at(2));
-                out.push(EdgeInfo { id: i as u32, points: vec![lo, hi], face_tags: vec![s.tag, s.tag] });
+                out.push(EdgeInfo { id: i as u32, points: vec![lo, hi], face_tags: vec![s.tag, s.tag], smooth: false });
             }
             Ok(out)
         }

@@ -107,6 +107,16 @@ impl<K: Kernel> Kernel for CountingKernel<K> {
         let r = self.inner.chamfer(s, edges, d, tag);
         self.done("chamfer", t0, r)
     }
+    fn law_stations(&mut self, s: &Self::Shape, edges: &[EdgeId], counts: &[u32]) -> KResult<Vec<Vec<DVec3>>> {
+        let t0 = self.hit("law_stations");
+        let r = self.inner.law_stations(s, edges, counts);
+        self.done("law_stations", t0, r)
+    }
+    fn fillet_variable(&mut self, s: &Self::Shape, edges: &[EdgeId], radii: &[Vec<f64>], tag: Tag) -> KResult<Self::Shape> {
+        let t0 = self.hit("fillet_variable");
+        let r = self.inner.fillet_variable(s, edges, radii, tag);
+        self.done("fillet_variable", t0, r)
+    }
     fn extrude(&mut self, p: &PlacedLoop, h: f64, twist: f64, scale: DVec2, tag: Tag) -> KResult<Self::Shape> {
         let t0 = self.hit("extrude");
         let r = self.inner.extrude(p, h, twist, scale, tag);

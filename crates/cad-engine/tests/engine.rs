@@ -167,9 +167,11 @@ fn nested_blocks_inner_first_outer_sees_new_edges() {
     assert_eq!(errors(&ev), Vec::<String>::new());
     assert_eq!(ev.report(inner).selected_edges.len(), 1);
     let sel = &ev.report(outer).selected_edges;
-    // the inner fillet's boundary at x = 17 on the top face is selected, the old edge is gone
-    assert!(sel.iter().any(|e| e.iter().all(|p| (p.x - 17.0).abs() < 1e-3 && (p.z - 20.0).abs() < 1e-6)), "{sel:?}");
+    // the old edge is gone; the inner fillet's boundary at x = 17 on the top face is tangent
+    // (smooth) and therefore not selected; the three other top edges are
+    assert!(!sel.iter().any(|e| e.iter().all(|p| (p.x - 17.0).abs() < 1e-3 && (p.z - 20.0).abs() < 1e-6)), "{sel:?}");
     assert!(!sel.iter().any(|e| e.iter().all(|p| (p.x - 20.0).abs() < 1e-6 && (p.z - 20.0).abs() < 1e-6)));
+    assert_eq!(sel.len(), 3, "{sel:?}");
     let v_inner = volume(&mut e, &ev, inner);
     assert_approx("inner fillet", v_inner, 8000.0 - (1.0 - PI / 4.0) * 9.0 * 20.0, 1e-4);
     assert!(volume(&mut e, &ev, outer) < v_inner);

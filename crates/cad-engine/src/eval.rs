@@ -3,7 +3,7 @@
 use std::any::Any;
 use std::rc::Rc;
 
-use cad_ir::{BlendKind, Dim, NodeIdx, Op, Prim, Select, Tree, ZoneShape};
+use cad_ir::{BlendKind, Dim, Law, NodeIdx, Op, Prim, Select, Tree, ZoneShape};
 use cad_kernel::{
     BoolOp, Class, EdgeInfo, FaceInfo, KResult, Kernel, KernelError, Loop, PlacedLoop, Tag,
 };
@@ -151,7 +151,9 @@ pub(crate) fn is_blend_node(tree: &Tree, n: NodeIdx) -> bool {
     let node = tree.node(n);
     match &node.op {
         Op::Blend { .. } => true,
-        Op::Boolean { fillet, chamfer, .. } => fillet.is_some_and(|r| r > 0.0) || chamfer.is_some_and(|c| c > 0.0),
+        Op::Boolean { fillet, chamfer, fillet_law, .. } => {
+            fillet.is_some_and(|r| r > 0.0) || chamfer.is_some_and(|c| c > 0.0) || fillet_law.is_some()
+        }
         Op::Prim { .. } => node.blend.is_some_and(|(_, r)| r > 0.0),
         _ => false,
     }
@@ -217,6 +219,55 @@ pub(crate) fn compute_keys(tree: &Tree, kernel_id: &str, skip: &[bool]) -> Vec<C
 }
 
 // ---------------------------------------------------------------- node evaluation
+
+/// Do all interior sample points of an edge (and its midpoint between the ends) lie on one of
+/// the polylines (within 1e-6 of the model size)?
+fn on_polylines(points: &[DVec3], lines: &[Vec<DVec3>]) -> bool {
+    if points.len() < 2 || lines.is_empty() {
+        return false;
+    }
+    let (mut lo, mut hi) = (points[0], points[0]);
+    for p in points.iter().chain(lines.iter().flatten()) {
+        lo = lo.min(*p);
+        hi = hi.max(*p);
+    }
+    let tol = 1e-6 * (hi - lo).length().max(1.0);
+    let dist = |q: DVec3, l: &[DVec3]| {
+        l.windows(2)
+            .map(|w| {
+                let ab = w[1] - w[0];
+                let t = if ab.length_squared() > 0.0 { ((q - w[0]).dot(ab) / ab.length_squared()).clamp(0.0, 1.0) } else { 0.0 };
+                (w[0] + ab * t - q).length()
+            })
+            .fold(f64::INFINITY, f64::min)
+    };
+    let mut probes: Vec<DVec3> = points[1..points.len() - 1].to_vec();
+    if probes.is_empty() {
+        probes.push((points[0] + points[points.len() - 1]) * 0.5);
+    }
+    // all probes on the same old edge (a curved old edge's polyline is a chord: only exact for
+    // straight edges, which is where merged coplanar faces occur)
+    lines.iter().any(|l| probes.iter().all(|&q| dist(q, l) <= tol))
+}
+
+/// Number for hints and messages: at most 3 decimals, no trailing zeros.
+fn fmt_num(x: f64) -> String {
+    let s = format!("{:.3}", x);
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0".into() } else { s.into() }
+}
+
+/// `2–4` (en dash), or `3` for a constant radius.
+fn radius_range(lo: f64, hi: f64) -> String {
+    if fmt_num(lo) == fmt_num(hi) { fmt_num(lo) } else { format!("{}–{}", fmt_num(lo), fmt_num(hi)) }
+}
+
+/// Stations of a radius law along an edge with these sample points: about one per 1.5 mm of
+/// length, at least 4 (a cubic law), at most 32.
+fn law_station_count(points: &[DVec3]) -> u32 {
+    let len: f64 = points.windows(2).map(|w| (w[1] - w[0]).length()).sum();
+    ((len / 1.5).round() as u32 + 1).clamp(4, 32)
+}
 
 fn plural(n: usize, one: &str, many: &str) -> String {
     if n == 1 { format!("1 {one}") } else { format!("{n} {many}") }
@@ -384,8 +435,8 @@ where
         let node = tree.node(self.idx);
         let plain = match &node.op {
             Op::Group | Op::ModuleCall { .. } | Op::Transform { .. } | Op::Color { .. } | Op::Empty => true,
-            Op::Boolean { op: BoolOp::Union, fillet, chamfer } => {
-                !fillet.is_some_and(|r| r > 0.0) && !chamfer.is_some_and(|c| c > 0.0)
+            Op::Boolean { op: BoolOp::Union, fillet, chamfer, fillet_law } => {
+                !fillet.is_some_and(|r| r > 0.0) && !chamfer.is_some_and(|c| c > 0.0) && fillet_law.is_none()
             }
             _ => false,
         };
@@ -599,6 +650,92 @@ where
         }
     }
 
+    /// Variable-radius fillet of `edges` of `part` (in the system `to_law` maps to the law's,
+    /// the system of the fillet statement): the law is evaluated at the kernel's stations
+    /// along each edge. `range` collects the smallest and largest radius (hint `r 2–4`).
+    /// Radii ≤ 0, values that are no number, and kernel failures → part unchanged + error.
+    fn blend_part_law(
+        &mut self,
+        part: &Part<K::Shape>,
+        law: &Law,
+        to_law: &DMat4,
+        sel: &[&EdgeInfo],
+        tag: Tag,
+        range: &mut Option<(f64, f64)>,
+    ) -> R<Part<K::Shape>> {
+        let ids: Vec<u32> = sel.iter().map(|e| e.id).collect();
+        let counts: Vec<u32> = sel.iter().map(|e| law_station_count(&e.points)).collect();
+        let stations = match self.run.call(|k| k.law_stations(&part.shape, &ids, &counts))? {
+            Ok(s) => s,
+            Err(e) => {
+                let edges = sel.iter().map(|x| x.points.clone()).collect();
+                self.error_edges(format!("Verrundung gescheitert (variabler Radius): {e}"), edges);
+                return Ok(part.clone());
+            }
+        };
+        let mut radii = Vec::with_capacity(stations.len());
+        let mut bad: Option<(String, usize)> = None;
+        for (i, st) in stations.iter().enumerate() {
+            let mut rs = Vec::with_capacity(st.len());
+            for q in st {
+                let p = to_law.transform_point3(*q);
+                match law.eval(p) {
+                    Ok(r) if r.is_finite() && r > 0.0 => {
+                        *range = Some(range.map_or((r, r), |(lo, hi)| (lo.min(r), hi.max(r))));
+                        rs.push(r);
+                    }
+                    Ok(r) => {
+                        bad.get_or_insert((format!("Radius {} ≤ 0 bei {}", fmt_num(r), cad_ir::law::fmt_point(p)), i));
+                    }
+                    Err(msg) => {
+                        bad.get_or_insert((msg, i));
+                    }
+                }
+            }
+            radii.push(rs);
+        }
+        if let Some((msg, i)) = bad {
+            self.error_edges(format!("Verrundung gescheitert (variabler Radius): {msg}"), vec![sel[i].points.clone()]);
+            return Ok(part.clone());
+        }
+        if self.ctx.skip.get(self.idx as usize).copied().unwrap_or(false) {
+            if !self.suspended {
+                self.suspended = true;
+                self.hints.push(SUSPENDED_HINT.into());
+            }
+            return Ok(part.clone());
+        }
+        let (lo, hi) = radii
+            .iter()
+            .flatten()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &r| (lo.min(r), hi.max(r)));
+        // one radius everywhere: the constant fillet (same result as `fillet(r)`)
+        let constant = hi - lo <= 1e-12 * hi;
+        let (res, ms) = self.run.call_timed(|k| {
+            if constant { k.fillet(&part.shape, &ids, lo, tag) } else { k.fillet_variable(&part.shape, &ids, &radii, tag) }
+        })?;
+        self.blend_ms += ms;
+        match res {
+            Ok(s) => Ok(Part { shape: s, solid: part.solid }),
+            Err(e) => {
+                let bad: Vec<Vec<DVec3>> = match &e {
+                    KernelError::Failed { edges, .. } if !edges.is_empty() => {
+                        sel.iter().filter(|x| edges.contains(&x.id)).map(|x| x.points.clone()).collect()
+                    }
+                    _ => sel.iter().map(|x| x.points.clone()).collect(),
+                };
+                self.error_edges(format!("Verrundung gescheitert ({} mm): {e}", radius_range(lo, hi)), bad);
+                Ok(part.clone())
+            }
+        }
+    }
+
+    fn push_radius_hint(&mut self, range: Option<(f64, f64)>) {
+        if let Some((lo, hi)) = range {
+            self.hints.push(format!("r {}", radius_range(lo, hi)));
+        }
+    }
+
     fn eval_op(&mut self) -> R<Vec<Part<K::Shape>>> {
         let tree = self.ctx.tree;
         let node = tree.node(self.idx);
@@ -610,24 +747,30 @@ where
             }
             Op::Prim { prim, place } => self.prim(prim, place, node.blend),
             Op::Profile(_) => Ok(Vec::new()), // handled as 2D before
-            Op::Boolean { op, fillet, chamfer } => {
+            Op::Boolean { op, fillet, chamfer, fillet_law } => {
                 let kids = self.child_list();
                 let mut groups = Vec::new();
                 for &c in &kids {
                     groups.push(self.contrib(c)?);
                 }
                 let n_in = groups.iter().filter(|g| !g.is_empty()).count();
+                let inputs: Vec<Part<K::Shape>> = if fillet.is_some() || chamfer.is_some() || fillet_law.is_some() {
+                    groups.iter().flatten().cloned().collect()
+                } else {
+                    Vec::new()
+                };
                 let diags_before = self.diags.len();
                 let parts = self.boolean(*op, groups, tag)?;
                 let failed = self.diags[diags_before..].iter().any(|d| d.severity == Severity::Error);
                 let blend = match (fillet, chamfer) {
+                    _ if fillet_law.is_some() => Some((BlendKind::Fillet, 0.0)),
                     (Some(r), _) if *r > 0.0 => Some((BlendKind::Fillet, *r)),
                     (_, Some(c)) if *c > 0.0 => Some((BlendKind::Chamfer, *c)),
                     _ => None,
                 };
                 match blend {
                     Some((kind, r)) if !failed && parts.len() == 1 && n_in >= 2 => {
-                        self.new_edge_blend(&kids, parts, kind, r)
+                        self.new_edge_blend(&kids, &inputs, parts, kind, r, fillet_law.as_deref())
                     }
                     Some(_) if !failed => {
                         self.warn("0 Kanten: die Operation erzeugt keine neuen Kanten");
@@ -637,8 +780,10 @@ where
                     _ => Ok(parts),
                 }
             }
-            Op::Blend { kind, r, select } => self.zone_block(Some((*kind, *r)), None, *select),
-            Op::Shell { t, select } => self.zone_block(None, Some(*t), *select),
+            Op::Blend { kind, r, select, law } => {
+                self.zone_block(Some((*kind, *r)), law.as_deref(), None, *select)
+            }
+            Op::Shell { t, select } => self.zone_block(None, None, Some(*t), *select),
             Op::Zone(z) => self.zone(z),
             Op::LinearExtrude { h, twist, scale, center } => {
                 if *h <= 0.0 {
@@ -746,14 +891,19 @@ where
         {
             let samples = self.ctx.config.edge_samples;
             match self.run.call(|k| k.edges(&part.shape, samples))? {
-                Ok(edges) if !edges.is_empty() => {
-                    let sel: Vec<&EdgeInfo> = edges.iter().collect();
-                    part = self.blend_part(&part, kind, r, &sel, tag)?;
+                Ok(edges) => {
+                    // seams, poles and tangent edges are not edges to blend
+                    let sel: Vec<&EdgeInfo> = edges.iter().filter(|e| !e.smooth).collect();
                     self.hints.push(plural(sel.len(), "Kante", "Kanten"));
-                    let pl: Vec<_> = sel.iter().map(|e| e.points.clone()).collect();
-                    self.selected.extend(pl.into_iter().map(|p| p.iter().map(|q| place.transform_point3(*q)).collect()));
+                    if sel.is_empty() {
+                        self.warn("0 Kanten: das Primitiv hat keine Kanten zum Verrunden");
+                    } else {
+                        part = self.blend_part(&part, kind, r, &sel, tag)?;
+                        let pl: Vec<_> = sel.iter().map(|e| e.points.clone()).collect();
+                        self.selected
+                            .extend(pl.into_iter().map(|p| p.iter().map(|q| place.transform_point3(*q)).collect()));
+                    }
                 }
-                Ok(_) => {}
                 Err(e) => self.error(format!("Kantenabfrage gescheitert: {e}")),
             }
         }
@@ -771,9 +921,11 @@ where
     fn new_edge_blend(
         &mut self,
         kids: &[NodeIdx],
+        inputs: &[Part<K::Shape>],
         parts: Vec<Part<K::Shape>>,
         kind: BlendKind,
         r: f64,
+        law: Option<&Law>,
     ) -> R<Vec<Part<K::Shape>>> {
         let sets: Vec<Rc<[Tag]>> = kids
             .iter()
@@ -789,10 +941,10 @@ where
             }
         };
         let known = |t: Tag| sets.iter().any(|s| s.binary_search(&t).is_ok());
-        let sel: Vec<&EdgeInfo> = edges
+        let cand: Vec<&EdgeInfo> = edges
             .iter()
             .filter(|e| {
-                if e.face_tags.len() != 2 {
+                if e.smooth || e.face_tags.len() != 2 {
                     return false;
                 }
                 let (a, b) = (e.face_tags[0], e.face_tags[1]);
@@ -802,13 +954,37 @@ where
                     && !sets.iter().any(|s| s.binary_search(&a).is_ok() && s.binary_search(&b).is_ok())
             })
             .collect();
+        // An edge of an operand stays an old edge even where coplanar faces of two operands
+        // merged into one face with one operand's tag (union(chamfer) of a slab and a tower
+        // sharing their front plane: the tower's front edges then separate faces of both).
+        let mut old: Vec<Vec<DVec3>> = Vec::new();
+        if !cand.is_empty() {
+            for p in inputs {
+                match self.run.call(|k| k.edges(&p.shape, samples))? {
+                    Ok(es) => old.extend(es.into_iter().map(|e| e.points)),
+                    Err(e) => {
+                        self.error(format!("Kantenabfrage gescheitert: {e}"));
+                        return Ok(parts);
+                    }
+                }
+            }
+        }
+        let sel: Vec<&EdgeInfo> = cand.into_iter().filter(|e| !on_polylines(&e.points, &old)).collect();
         self.hints.push(plural(sel.len(), "Kante", "Kanten"));
         if sel.is_empty() {
             self.warn("0 Kanten: keine neuen Kanten gefunden");
             return Ok(parts);
         }
         self.selected.extend(sel.iter().map(|e| e.points.clone()));
-        let p = self.blend_part(part, kind, r, &sel, self.tag)?;
+        let p = match law {
+            Some(law) => {
+                let mut range = None;
+                let p = self.blend_part_law(part, law, &DMat4::IDENTITY, &sel, self.tag, &mut range)?;
+                self.push_radius_hint(range);
+                p
+            }
+            None => self.blend_part(part, kind, r, &sel, self.tag)?,
+        };
         Ok(vec![p])
     }
 
@@ -836,6 +1012,7 @@ where
     fn zone_block(
         &mut self,
         blend: Option<(BlendKind, f64)>,
+        law: Option<&Law>,
         shell: Option<f64>,
         select: Select,
     ) -> R<Vec<Part<K::Shape>>> {
@@ -862,11 +1039,13 @@ where
         let tag = self.tag;
         let mut out = Vec::new();
         let mut count = 0usize;
+        let mut range: Option<(f64, f64)> = None;
         for part in &body_parts {
             if let Some((kind, r)) = blend {
                 let samples = self.ctx.config.edge_samples;
                 let edges = match self.run.call(|k| k.edges(&part.shape, samples))? {
-                    Ok(e) => e,
+                    // seams, poles and tangent edges are never selected
+                    Ok(e) => e.into_iter().filter(|e| !e.smooth).collect::<Vec<_>>(),
                     Err(e) => {
                         self.error(format!("Kantenabfrage gescheitert: {e}"));
                         out.push(part.clone());
@@ -899,6 +1078,9 @@ where
                 );
                 if sel.is_empty() {
                     out.push(part.clone());
+                } else if let Some(law) = law {
+                    let p = self.blend_part_law(part, law, &body_local, &sel, tag, &mut range)?;
+                    out.push(p);
                 } else {
                     let p = self.blend_part(part, kind, r, &sel, tag)?;
                     out.push(p);
@@ -950,6 +1132,9 @@ where
             self.hints.push(plural(count, "Kante", "Kanten"));
             if count == 0 && !body_parts.is_empty() {
                 self.warn("0 Kanten");
+            }
+            if law.is_some() {
+                self.push_radius_hint(range);
             }
         } else {
             self.hints.push(plural(count, "Fläche geöffnet", "Flächen geöffnet"));

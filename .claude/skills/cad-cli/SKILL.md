@@ -137,7 +137,14 @@ fillet(2) {                                              // Zonenblock: 1. Kind 
     translate([15, 10, 15]) sphere(6);                   // beliebiges Volumen als Zone
 }
 fillet(1.5, select = "touch") { … }                      // auch berührende Kanten
+fillet(r = function (p) p.z < 10 ? 2 : 4) { … }          // variabler Radius (Position p)
+difference(fillet = function (p) 1 + p.x / 40) { … }     // auch an Booleans
 ```
+
+Variabler Radius: die Funktion wird an Stützpunkten jeder Kante ausgewertet (`p` im System
+der Anweisung); Hinweis „r 2–4“. Nur reine Ausdrücke über `p` (Arithmetik, `?:`, `let`,
+Mathe-Builtins, `lookup`, eingefangene Variablen, Benutzerfunktionen); nicht für `chamfer`
+und `$fillet`. Naht- und Polkanten (Zylinder, Kugel) und tangentiale Kanten zählen nie.
 
 Kanten zählen, wenn sie ganz in einer Zone liegen (`select = "inside"`). Leere Auswahl ist
 eine Warnung („0 Kanten“), ein zu großer Radius ein Kernel-Fehler (Körper bleibt ohne

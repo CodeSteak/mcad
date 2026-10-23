@@ -119,7 +119,7 @@ pub fn scale(s: DVec3) -> Op {
 }
 
 pub fn boolean(op: BoolOp) -> Op {
-    Op::Boolean { op, fillet: None, chamfer: None }
+    Op::Boolean { op, fillet: None, chamfer: None, fillet_law: None }
 }
 
 pub fn difference() -> Op {
@@ -135,15 +135,15 @@ pub fn intersection() -> Op {
 }
 
 pub fn difference_fillet(r: f64) -> Op {
-    Op::Boolean { op: BoolOp::Difference, fillet: Some(r), chamfer: None }
+    Op::Boolean { op: BoolOp::Difference, fillet: Some(r), chamfer: None, fillet_law: None }
 }
 
 pub fn fillet(r: f64, select: Select) -> Op {
-    Op::Blend { kind: BlendKind::Fillet, r, select }
+    Op::Blend { kind: BlendKind::Fillet, r, select, law: None }
 }
 
 pub fn chamfer(r: f64, select: Select) -> Op {
-    Op::Blend { kind: BlendKind::Chamfer, r, select }
+    Op::Blend { kind: BlendKind::Chamfer, r, select, law: None }
 }
 
 pub fn shell(t: f64, select: Select) -> Op {

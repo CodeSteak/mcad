@@ -63,8 +63,8 @@ pub(crate) fn lift(
         Op::Group | Op::ModuleCall { .. } | Op::Transform { .. } | Op::Color { .. } | Op::Empty => {
             Ok(Expr2::Op(BoolOp::Union, kids(warn)?))
         }
-        Op::Boolean { op, fillet, chamfer } => {
-            if fillet.is_some() || chamfer.is_some() {
+        Op::Boolean { op, fillet, chamfer, fillet_law } => {
+            if fillet.is_some() || chamfer.is_some() || fillet_law.is_some() {
                 warn.push("fillet/chamfer an 2D-Booleans wird ignoriert".into());
             }
             Ok(Expr2::Op(*op, kids(warn)?))

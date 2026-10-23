@@ -182,6 +182,25 @@ export function sc_fillet(h, edges, r, tag) {
 export function sc_chamfer(h, edges, d, tag) {
   return withU32(edges, (p) => mod()._sc_chamfer(h, p, edges.length, d, tag) >>> 0);
 }
+export function sc_law_stations(h, edges, counts) {
+  const pe = allocU32(edges);
+  const pc = allocU32(counts);
+  try {
+    return mod()._sc_law_stations(h, pe, edges.length, pc) | 0;
+  } finally {
+    free(pe, pc);
+  }
+}
+export function sc_fillet_var(h, edges, counts, radii, tag) {
+  const pe = allocU32(edges);
+  const pc = allocU32(counts);
+  const pr = allocF64(radii);
+  try {
+    return mod()._sc_fillet_var(h, pe, edges.length, pc, pr, tag) >>> 0;
+  } finally {
+    free(pe, pc, pr);
+  }
+}
 export function sc_extrude(loop, height, twist, sx, sy, tag) {
   return withF64(loop, (p) => mod()._sc_extrude(p, loop.length, height, twist, sx, sy, tag) >>> 0);
 }

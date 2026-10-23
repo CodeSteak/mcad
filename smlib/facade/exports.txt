@@ -25,6 +25,8 @@ sc_transform
 sc_boolean
 sc_fillet
 sc_chamfer
+sc_law_stations
+sc_fillet_var
 sc_extrude
 sc_revolve
 sc_loft

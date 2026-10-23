@@ -184,6 +184,9 @@ impl<'a> Ev<'a> {
     fn prim(&mut self, s: &Stmt, prim: Prim, place: DMat4, ctx: &Ctx<'a>, dy: &Dyn<'a>) -> NodeIdx {
         let n = self.node(s, Op::Prim { prim, place }, ctx);
         self.set_blend(n, dy);
+        if dyn_lookup(dy, "$fillet").is_some_and(|v| matches!(v.v, Value::Func(_))) {
+            self.warn(s.span, "variabler Radius über `$fillet` nicht unterstützt: `fillet(r = function (p) …) { … }` verwenden");
+        }
         n
     }
 
@@ -295,14 +298,14 @@ impl<'a> Ev<'a> {
         let op = match n {
             "union" | "difference" | "intersection" => {
                 let p = self.bind(n, a, &["fillet", "chamfer"], 0);
-                let fillet = self.blend_param(p[0], "fillet");
+                let (fillet, fillet_law) = self.fillet_param(p[0], "fillet", dy)?;
                 let chamfer = self.blend_param(p[1], "chamfer");
                 let op = match n {
                     "union" => BoolOp::Union,
                     "difference" => BoolOp::Difference,
                     _ => BoolOp::Intersection,
                 };
-                Op::Boolean { op, fillet, chamfer }
+                Op::Boolean { op, fillet, chamfer, fillet_law }
             }
             "group" | "render" => Op::Group,
             "echo" | "assert" => {
@@ -336,10 +339,32 @@ impl<'a> Ev<'a> {
     fn blend_param(&mut self, a: Option<&ArgV<'a>>, what: &str) -> Option<f64> {
         let a = a?;
         if matches!(a.val.v, Value::Func(_)) {
-            self.warn(a.expr.span, format!("variabler Radius `{what}` (Funktion) noch nicht unterstützt"));
+            self.warn(a.expr.span, format!("variabler Wert `{what}` (Funktion) wird hier nicht unterstützt"));
             return None;
         }
         self.num_of(Some(a), what)
+    }
+
+    /// Fillet radius: a number, or a function of the position (variable radius, compiled
+    /// into a law). Compilation errors are reported; the result is then `(None, None)`.
+    fn fillet_param(
+        &mut self,
+        a: Option<&ArgV<'a>>,
+        what: &str,
+        dy: &Dyn<'a>,
+    ) -> R<(Option<f64>, Option<Box<cad_ir::Law>>)> {
+        let Some(arg) = a else { return Ok((None, None)) };
+        if let Value::Func(c) = &arg.val.v {
+            let c = c.clone();
+            return Ok(match self.compile_law(&c, arg.expr.span, dy)? {
+                Ok(law) => (None, Some(Box::new(law))),
+                Err(e) => {
+                    self.error(e.span, format!("Radiusfunktion `{what}`: {}", e.msg));
+                    (None, None)
+                }
+            });
+        }
+        Ok((self.num_of(Some(arg), what), None))
     }
 
     // ------------------------------------------------------------ 3D primitives
@@ -1097,7 +1122,13 @@ impl<'a> Ev<'a> {
         let p = self.bind(n, a, names, 2);
         let main = if n == "chamfer" { p[0].or(p[2]) } else { p[0] };
         let what = if n == "shell" { "t" } else { "r" };
+        let mut law = None;
         let r = match main {
+            Some(x) if n == "fillet" && matches!(x.val.v, Value::Func(_)) => {
+                let (r, l) = self.fillet_param(Some(x), what, dy)?;
+                law = l;
+                if law.is_some() { Some(0.0) } else { r }
+            }
             Some(x) => self.blend_param(Some(x), what),
             None => {
                 self.error(
@@ -1120,8 +1151,8 @@ impl<'a> Ev<'a> {
         };
         let r = r.unwrap_or(0.0);
         let op = match n {
-            "fillet" => Op::Blend { kind: BlendKind::Fillet, r, select },
-            "chamfer" => Op::Blend { kind: BlendKind::Chamfer, r, select },
+            "fillet" => Op::Blend { kind: BlendKind::Fillet, r, select, law },
+            "chamfer" => Op::Blend { kind: BlendKind::Chamfer, r, select, law: None },
             _ => Op::Shell { t: r, select },
         };
         let node = self.node(s, op, ctx);
