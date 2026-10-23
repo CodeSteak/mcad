@@ -44,7 +44,7 @@
 <body>
 <main>
 <h1>Testbericht 3 – UI Phase B: Griffe, Snap, Parameterleiste</h1>
-<div class="meta">Bearbeiten in der Ansicht · 23. Oktober 2026 · Commit 26a7a20</div>
+<div class="meta">Bearbeiten in der Ansicht · 23. Oktober 2026 · Commit af6edd6</div>
 
 <div class="summary">
   <div>Phase B (Playwright)<b>14 / 14 bestanden</b></div>
@@ -67,7 +67,7 @@
 <p class="small">Änderungen an Rust-Crates: <code>cad-eval</code> (gesperrte Griffe als <code>locked_handles</code>, <code>SnapRef::Plane</code> mit Prüfung, dass der Griff nach dem Schreiben exakt auf der Ebene liegt und die Ebene an der Stelle sichtbar ist), <code>cad-session</code> (<code>Drag</code> antwortet immer, <code>SetDragOptions</code>, Szene mit <code>locked_handles</code>), Protokoll-Typen neu erzeugt.</p>
 
 <h2>2 Testumgebung</h2>
-<table><tr><th style="width:32mm">Betriebssystem</th><td>Linux 6.18.44-fc-v140 (x64)</td></tr><tr><th style="width:32mm">CPU</th><td>Intel(R) Xeon(R) Processor @ 2.80GHz · 4 Kerne</td></tr><tr><th style="width:32mm">Node.js</th><td>v22.22.0</td></tr><tr><th style="width:32mm">Browser</th><td>Chromium 141.0.7390.37 (headless, Playwright 1.56.1)</td></tr><tr><th style="width:32mm">Grafik</th><td>WebGL über SwiftShader (Software-Rendering, keine GPU)</td></tr><tr><th style="width:32mm">Fenster</th><td>1440 × 900 px, Gerätepixelverhältnis 1</td></tr><tr><th style="width:32mm">Build</th><td>Vite 8.3.5 Produktions-Build, Vorschau-Server (vite preview)</td></tr><tr><th style="width:32mm">Bibliotheken</th><td>React 19.3.1, three.js 0.186.1, CodeMirror 6.43.15, Zustand 5.0.16, Vitest 5.0.5</td></tr><tr><th style="width:32mm">Engine</th><td>cad_wasm_bg.wasm 1.17 MiB, smlib.wasm 4.85 MiB</td></tr><tr><th style="width:32mm">Quelltext</th><td>Branch worktree-agent-a590210bcbc87a815, Commit 26a7a20</td></tr></table>
+<table><tr><th style="width:32mm">Betriebssystem</th><td>Linux 6.18.44-fc-v140 (x64)</td></tr><tr><th style="width:32mm">CPU</th><td>Intel(R) Xeon(R) Processor @ 2.80GHz · 4 Kerne</td></tr><tr><th style="width:32mm">Node.js</th><td>v22.22.0</td></tr><tr><th style="width:32mm">Browser</th><td>Chromium 141.0.7390.37 (headless, Playwright 1.56.1)</td></tr><tr><th style="width:32mm">Grafik</th><td>WebGL über SwiftShader (Software-Rendering, keine GPU)</td></tr><tr><th style="width:32mm">Fenster</th><td>1440 × 900 px, Gerätepixelverhältnis 1</td></tr><tr><th style="width:32mm">Build</th><td>Vite 8.3.5 Produktions-Build, Vorschau-Server (vite preview)</td></tr><tr><th style="width:32mm">Bibliotheken</th><td>React 19.3.1, three.js 0.186.1, CodeMirror 6.43.15, Zustand 5.0.16, Vitest 5.0.5</td></tr><tr><th style="width:32mm">Engine</th><td>cad_wasm_bg.wasm 1.17 MiB, smlib.wasm 4.85 MiB</td></tr><tr><th style="width:32mm">Quelltext</th><td>Branch worktree-agent-a590210bcbc87a815, Commit af6edd6</td></tr></table>
 <p class="small">Die End-to-End-Tests laufen gegen den Produktions-Build mit echten Mausereignissen auf dem Canvas (Playwright <code>mouse.down/move/up</code>, ein Schritt pro Animationsframe). Gewartet wird auf Szenen-Versionen, den Zieh-Zustand und den Editortext über den Testhaken <code>window.__cad</code>, nie auf feste Zeiten. Der Haken liefert nur Bildschirmpositionen (Griffe, Rasterpunkte, Punkte auf Ring oder Achse).</p>
 
 <h2>3 Szenarien (Playwright, web/e2e/ui-b.spec.ts)</h2>
