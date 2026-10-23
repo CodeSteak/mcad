@@ -39,6 +39,9 @@ fn request_response_events_and_stale_cleanup() {
     let path = dir.path().join("ui-1.sock");
     let server = Server::bind_path(&path).unwrap();
     assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+    // bound under a temporary name and moved into place: nothing else is left behind
+    let names: Vec<_> = std::fs::read_dir(dir.path()).unwrap().map(|e| e.unwrap().file_name()).collect();
+    assert_eq!(names, vec![std::ffi::OsString::from("ui-1.sock")]);
     // A second server on the same live endpoint is refused.
     assert!(matches!(Server::bind_path(&path), Err(Error::InUse(_))));
 
