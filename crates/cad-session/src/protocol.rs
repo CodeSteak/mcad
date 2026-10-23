@@ -396,6 +396,8 @@ pub struct RegionSet {
     /// Volume of the node's result in mm³ (= sum of the region volumes).
     pub total: f64,
     pub regions: Vec<Region>,
+    /// The region volumes do not add up to `total` (kernel boolean incomplete).
+    pub warning: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

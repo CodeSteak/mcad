@@ -107,7 +107,7 @@ pub fn encode_batch(msgs: &[FromEngine], busy: bool) -> Frame {
                                 })
                             })
                             .collect();
-                        json!({ "node": set.node, "part": set.part, "total": set.total, "regions": regions })
+                        json!({ "node": set.node, "part": set.part, "total": set.total, "regions": regions, "warning": set.warning })
                     })
                     .collect();
                 json!({ "type": "ColorRegions", "version": version, "items": items })

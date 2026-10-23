@@ -39,6 +39,9 @@ pub(crate) struct MeasureArgs {
     /// Sehnentoleranz der Tessellierung für --clearance in mm.
     #[arg(long, default_value_t = 0.01)]
     pub mesh_tol: f64,
+    /// Farbregionen: Volumen und Masse (PLA) je Farbe und Filament, je Bauteil.
+    #[arg(long)]
+    pub colors: bool,
 }
 
 /// A point reference resolved in context coordinates.
@@ -182,10 +185,12 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
         && a.volume.is_none()
         && a.area.is_none()
         && !a.interference
-        && a.clearance.is_empty();
+        && a.clearance.is_empty()
+        && !a.colors;
     if nothing {
         return Err(Fail::Usage(
-            "nichts zu messen: --between A B, --bounds, --volume, --area, --interference oder --clearance A B".into(),
+            "nichts zu messen: --between A B, --bounds, --volume, --area, --interference, --clearance A B oder --colors"
+                .into(),
         ));
     }
     let mut m = load(c, None, true, true)?;
@@ -194,6 +199,14 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
     let Some(sc) = m.scene.clone() else {
         return Ok(Outcome { json: j, text: t, errors: true });
     };
+    if a.colors {
+        let (colors, regions, text) = crate::colors::table(&mut m, &sc, true)?;
+        j["colors"] = json!({ "colors": colors, "parts": regions, "density_g_cm3": crate::colors::PLA_DENSITY });
+        if text.is_empty() {
+            t.push_str("Farben: keine (leeres Modell)\n");
+        }
+        t.push_str(&text);
+    }
     if !a.between.is_empty() {
         let (pa, ka) = resolve_point(&sc, &a.between[0])?;
         let (pb, kb) = resolve_point(&sc, &a.between[1])?;

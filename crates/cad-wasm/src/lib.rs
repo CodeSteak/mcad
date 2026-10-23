@@ -120,6 +120,7 @@ fn to_js(msgs: Vec<FromEngine>) -> Result<Array, JsValue> {
                         regs.push(&ro);
                     }
                     set(&so, "regions", &regs);
+                    set(&so, "warning", &set_.warning.as_deref().map(JsValue::from_str).unwrap_or(JsValue::NULL));
                     arr.push(&so);
                 }
                 set(&o, "items", &arr);

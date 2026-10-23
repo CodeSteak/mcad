@@ -85,6 +85,7 @@
 //! file. Diagnostics of other files are printed with their path (`lib/teile.scad:3:5: …`).
 
 mod client;
+mod colors;
 mod config;
 mod daemon;
 mod diff;
@@ -248,6 +249,15 @@ pub(crate) enum Cmd {
         /// Jedes Bauteil als eigene Datei in den Ordner `-o` (Format: --format, Standard stl).
         #[arg(long)]
         all_parts: bool,
+        /// 3MF einfarbig wie früher (ein Netz je Bauteil, ohne Farben und Filament-Zuordnung).
+        /// Standard: mehrfarbig – je Bauteil ein Objekt mit einem Teil je Farbe und
+        /// Filament-Slots für Bambu Studio/OrcaSlicer.
+        #[arg(long)]
+        single_color: bool,
+        /// Ein STL je Farbe (und Bauteil) in einer ZIP-Datei `-o x.zip` (Dateinamen
+        /// `F<slot>_<farbe>.stl`, alle im selben Koordinatensystem).
+        #[arg(long, conflicts_with_all = ["single_color", "all_parts"])]
+        per_color: bool,
     },
     /// Vergleich SMLib ↔ solidcore je Knoten (Volumen, Flächen, Kanten, ausgewählte Kanten) und
     /// Abdeckung von solidcore (nur Entwicklung).
@@ -492,11 +502,13 @@ pub(crate) fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
         Cmd::Measure { c, a } => measure::command(c, a),
         Cmd::Watch { c, a } => watch::command(c, a),
         Cmd::Set { a } => set::command(a),
-        Cmd::Export { c, output, format, schema, part, all_parts } => {
-            if *all_parts || !part.is_empty() {
-                parts::export_parts(c, output, format.as_deref(), schema, part, *all_parts)
+        Cmd::Export { c, output, format, schema, part, all_parts, single_color, per_color } => {
+            if *per_color {
+                export_per_color(c, output, part)
+            } else if *all_parts || !part.is_empty() {
+                parts::export_parts(c, output, format.as_deref(), schema, part, *all_parts, !*single_color)
             } else {
-                export(c, output, format.as_deref(), schema)
+                export(c, output, format.as_deref(), schema, !*single_color)
             }
         }
         Cmd::DiffKernels { files, .. } => diff::command(files),
@@ -1091,7 +1103,7 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
     Ok(Outcome { json: j, text: t, errors })
 }
 
-fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str) -> Result<Outcome, Fail> {
+fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str, multicolor: bool) -> Result<Outcome, Fail> {
     let fmt = match format
         .map(|s| s.to_ascii_lowercase())
         .or_else(|| output.extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()))
@@ -1110,11 +1122,15 @@ fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str) -> Resu
         let t = m.diagnostics_text();
         return Ok(Outcome { json: j, text: t, errors: true });
     }
+    let colored = multicolor && fmt == p::ExportFormat::ThreeMf;
     let (bytes, triangles, step) = if fmt == p::ExportFormat::Step {
         let name = output.file_stem().and_then(|s| s.to_str()).unwrap_or("part").to_string();
         let opts = cad_engine::StepOptions { schema, name, timestamp: utc_timestamp(), ..Default::default() };
         let (bytes, st) = m.session.export_step(&opts).map_err(Fail::Kernel)?;
         (bytes, 0, Some(st))
+    } else if colored {
+        let (bytes, st) = m.session.export_colors(fmt, None).map_err(Fail::Kernel)?;
+        (bytes, st.triangles, None)
     } else {
         let (bytes, tris) = m.session.export_bytes(fmt).map_err(Fail::Kernel)?;
         (bytes, tris, None)
@@ -1134,6 +1150,14 @@ fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str) -> Resu
     if let Some(st) = &step {
         j["step"] = json!(st);
     }
+    j["multicolor"] = json!(colored);
+    let mut colors_text = String::new();
+    if colored && let Some(sc) = m.scene.clone() {
+        let (colors, regions, text) = colors::table(&mut m, &sc, true)?;
+        j["colors"] = colors;
+        j["color_regions"] = regions;
+        colors_text = text;
+    }
     let mut t = m.diagnostics_text();
     let what = match &step {
         Some(st) => format!("{} Körper, {} Flächen, {} Kanten", st.solids + st.sheets, st.faces, st.edges),
@@ -1145,6 +1169,43 @@ fn export(c: &Common, output: &Path, format: Option<&str>, schema: &str) -> Resu
         bytes.len(),
         mp.map(|mp| format!(", Volumen {} mm³", num(mp.volume))).unwrap_or_default()
     ));
+    if colored {
+        t.push_str("3MF mehrfarbig: je Bauteil ein Objekt, ein Teil je Farbe, Filament-Slots für Bambu Studio/OrcaSlicer (einfarbig: --single-color)\n");
+    }
+    t.push_str(&colors_text);
+    Ok(Outcome { json: j, text: t, errors: m.has_errors() })
+}
+
+/// `cad export --per-color -o x.zip`: one STL per colour (and part) in a ZIP.
+fn export_per_color(c: &Common, output: &Path, parts: &[String]) -> Result<Outcome, Fail> {
+    let mut m = load(c, None, true, true)?;
+    let mut j = m.base_json("export");
+    let Some(sc) = m.scene.clone() else {
+        let t = m.diagnostics_text();
+        return Ok(Outcome { json: j, text: t, errors: true });
+    };
+    let names = if parts.is_empty() { None } else { Some(parts) };
+    let (bytes, st) = m.session.export_colors(p::ExportFormat::Stl, names).map_err(Fail::Kernel)?;
+    host::write_file(output, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
+    let (colors, regions, colors_text) = colors::table(&mut m, &sc, true)?;
+    j["output"] = json!(output.display().to_string());
+    j["format"] = json!("zip");
+    j["per_color"] = json!(true);
+    j["bytes"] = json!(bytes.len());
+    j["triangles"] = json!(st.triangles);
+    j["files"] = json!(st.parts);
+    j["colors"] = colors;
+    j["color_regions"] = regions;
+    let mut t = m.diagnostics_text();
+    t.push_str(&format!(
+        "{}: {} STL (eine je Farbe{}), {} Dreiecke, {} Bytes\n",
+        output.display(),
+        st.parts,
+        if st.objects > 1 { " und Bauteil" } else { "" },
+        st.triangles,
+        bytes.len()
+    ));
+    t.push_str(&colors_text);
     Ok(Outcome { json: j, text: t, errors: m.has_errors() })
 }
 

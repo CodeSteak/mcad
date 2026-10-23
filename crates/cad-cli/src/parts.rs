@@ -40,6 +40,7 @@ pub(crate) fn export_parts(
     schema: &str,
     names: &[String],
     all: bool,
+    multicolor: bool,
 ) -> Result<Outcome, Fail> {
     let fmt = format_of(format, output, all)?;
     let schema = cad_engine::StepSchema::parse(schema)
@@ -63,8 +64,12 @@ pub(crate) fn export_parts(
     if all {
         crate::host::create_dir_all(output).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
         for pt in &scene.parts {
-            let (bytes, tris) =
-                m.session.export_parts_with(fmt, std::slice::from_ref(&pt.name), false, &step).map_err(Fail::Kernel)?;
+            let one = std::slice::from_ref(&pt.name);
+            let (bytes, tris) = if multicolor && fmt == p::ExportFormat::ThreeMf {
+                m.session.export_colors(fmt, Some(one)).map(|(b, st)| (b, st.triangles)).map_err(Fail::Kernel)?
+            } else {
+                m.session.export_parts_with(fmt, one, false, &step).map_err(Fail::Kernel)?
+            };
             let file = output.join(cad_session::part_file_name(&pt.name, ext(fmt)));
             crate::host::write_file(&file, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", file.display())))?;
             t.push_str(&format!(
@@ -82,7 +87,11 @@ pub(crate) fn export_parts(
         }
         j["output"] = json!(output.display().to_string());
     } else {
-        let (bytes, tris) = m.session.export_parts_with(fmt, names, false, &step).map_err(Fail::Kernel)?;
+        let (bytes, tris) = if multicolor && fmt == p::ExportFormat::ThreeMf {
+            m.session.export_colors(fmt, Some(names)).map(|(b, st)| (b, st.triangles)).map_err(Fail::Kernel)?
+        } else {
+            m.session.export_parts_with(fmt, names, false, &step).map_err(Fail::Kernel)?
+        };
         crate::host::write_file(output, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
         t.push_str(&format!("{}: {} ({} Dreiecke, {} Bytes)\n", names.join(", "), output.display(), tris, bytes.len()));
         for n in names {
@@ -95,6 +104,7 @@ pub(crate) fn export_parts(
         j["volume"] = json!(vols.map(|v| v.iter().sum::<f64>()));
     }
     j["format"] = json!(fmt);
+    j["multicolor"] = json!(multicolor && fmt == p::ExportFormat::ThreeMf);
     j["parts"] = json!(rows);
     let errors = m.has_errors();
     Ok(Outcome { json: j, text: t, errors })

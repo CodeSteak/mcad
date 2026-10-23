@@ -190,7 +190,11 @@ part: string | null,
 /**
  * Volume of the node's result in mm³ (= sum of the region volumes).
  */
-total: number, regions: Array<Region>, };
+total: number, regions: Array<Region>, 
+/**
+ * The region volumes do not add up to `total` (kernel boolean incomplete).
+ */
+warning: string | null, };
 
 export type Region = { 
 /**

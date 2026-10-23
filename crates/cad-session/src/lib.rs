@@ -676,7 +676,7 @@ where
                     mesh,
                 });
             }
-            out.push(p::RegionSet { node: n, part, total: regs.total, regions: items });
+            out.push(p::RegionSet { node: n, part, total: regs.total, regions: items, warning: regs.warning.clone() });
         }
         Ok(out)
     }

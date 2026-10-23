@@ -88,13 +88,33 @@ fn export_single_parts_and_all_parts() {
     }
     assert!((min_y - 50.0).abs() < 1e-3, "{min_y}");
 
-    // Two parts into one 3MF: one object each.
+    // Two parts into one 3MF: one object each (single colour: one mesh per object).
     let mf = dir.path().join("beide.3mf");
-    run(&["export", &example(), "--part", "gehaeuse", "--part", "deckel", "-o", &mf.display().to_string()], 0);
+    run(
+        &[
+            "export",
+            &example(),
+            "--part",
+            "gehaeuse",
+            "--part",
+            "deckel",
+            "--single-color",
+            "-o",
+            &mf.display().to_string(),
+        ],
+        0,
+    );
     let zip = std::fs::read(&mf).unwrap();
     let text = String::from_utf8_lossy(&zip);
     assert_eq!(text.matches("<object ").count(), 2);
     assert!(text.contains("name=\"gehaeuse\"") && text.contains("name=\"deckel\""));
+    // default: multi-colour (per part an object with one volume per colour, metadata)
+    let (v, _) =
+        run(&["export", &example(), "--part", "gehaeuse", "--part", "deckel", "-o", &mf.display().to_string()], 0);
+    assert_eq!(v["multicolor"], true);
+    let text = String::from_utf8_lossy(&std::fs::read(&mf).unwrap()).into_owned();
+    assert_eq!(text.matches("<item ").count(), 2);
+    assert!(text.contains("Metadata/model_settings.config") && text.contains("<m:colorgroup"));
 
     // All parts into a folder.
     let out = dir.path().join("teile");

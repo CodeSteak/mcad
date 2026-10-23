@@ -268,6 +268,8 @@ pub struct ColorRegions<S> {
     /// Number of `color()` subtrees that took part.
     pub colored_nodes: usize,
     pub key: CacheKey,
+    /// The region volumes do not add up to the total (a kernel boolean lost material).
+    pub warning: Option<String>,
 }
 
 /// Matrix from `c`'s system to `p`'s system (`local` of every node on the way, plus the scale
@@ -390,7 +392,8 @@ where
         let k = &mut self.kernel;
         let fail = |what: &str, e: cad_kernel::KernelError| format!("Farbregionen: {what} gescheitert: {e}");
         let solids: Vec<K::Shape> = ev.parts(node).iter().filter(|p| p.solid).map(|p| p.shape.clone()).collect();
-        let mut out = ColorRegions { node, regions: Vec::new(), total: 0.0, colored_nodes: placed.len(), key };
+        let mut out =
+            ColorRegions { node, regions: Vec::new(), total: 0.0, colored_nodes: placed.len(), key, warning: None };
         if solids.is_empty() {
             return Ok(out);
         }
@@ -477,6 +480,12 @@ where
             };
             let rkey = KeyHasher::new().key(&key).u64(i as u64).finish();
             out.regions.push(Region { color: c, shape, volume, key: rkey });
+        }
+        let sum: f64 = out.regions.iter().map(|r| r.volume).sum();
+        if (sum - total).abs() > 1e-4 * total.abs() + 1e-3 {
+            out.warning = Some(format!(
+                "Farbregionen ungenau: Summe {sum:.3} mm³ statt {total:.3} mm³ (Boolean des Kernels unvollständig)"
+            ));
         }
         Ok(out)
     }

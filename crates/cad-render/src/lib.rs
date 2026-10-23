@@ -240,6 +240,10 @@ pub struct RenderOptions {
     pub cap_color: [f32; 4],
     /// Text in the upper left corner.
     pub title: Option<String>,
+    /// Colour of the title.
+    pub title_color: [f32; 4],
+    /// Background box behind labels and the title.
+    pub label_background: [f32; 4],
 }
 
 impl Default for RenderOptions {
@@ -261,6 +265,8 @@ impl Default for RenderOptions {
             section: None,
             cap_color: [0.86, 0.36, 0.24, 1.0],
             title: None,
+            title_color: [0.1, 0.1, 0.12, 1.0],
+            label_background: [1.0, 1.0, 1.0, 0.78],
         }
     }
 }
@@ -1053,7 +1059,7 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
     // Labels (output pixels), highest priority first, without overlaps.
     let mut placed: Vec<(i64, i64, i64, i64)> = Vec::new();
     if let Some(title) = &opts.title {
-        let b = img.draw_label(8, 6, title, TextSize::Large, [0.1, 0.1, 0.12, 1.0]);
+        let b = img.draw_label_on(8, 6, title, TextSize::Large, opts.title_color, opts.label_background);
         placed.push((b.0, b.1, b.0 + b.2 as i64, b.1 + b.3 as i64));
     }
     let mut labels: Vec<&Label> = scene.labels.iter().collect();
@@ -1077,7 +1083,7 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
             if placed.iter().any(|p| r.0 < p.2 && p.0 < r.2 && r.1 < p.3 && p.1 < r.3) {
                 continue;
             }
-            img.draw_label(bx, by, &l.text, TextSize::Small, l.color);
+            img.draw_label_on(bx, by, &l.text, TextSize::Small, l.color, opts.label_background);
             placed.push(r);
             break;
         }
