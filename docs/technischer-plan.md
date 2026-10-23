@@ -649,3 +649,97 @@ CSS-Token je Thema (`:root[data-theme=…]`), `contrast.test.ts` prüft Text ≥
 UI-Teile ≥ 3:1; CodeMirror-Tooltips/Suchleiste über Token; 3D-Farben aus Token
 (`readPalette`); System folgt `matchMedia('(prefers-color-scheme: dark)')` mit Listener.
 CLI: `cad render --theme dark`.
+
+---
+
+## 17. Skizzen, Text, SVG-Import, Skizzen-Editor (geplant)
+
+Stand: Plan, abgestimmt mit dem Nutzer am 2026-10-23.
+
+### 17.1 Skizzen
+
+Eine Skizze ist ein 2D-Block aus Segmenten; jede Zeile ist ein Segment mit eigener
+Darstellung und eigenen Griffen. Anonym als Kind einer Profiloperation, benannt über ein
+Modul:
+
+```
+linear_extrude(5) sketch {
+    start([0, 0]);
+    line(to = [40, 0]);
+    arc(to = [50, 10], r = 10);          // auch: center + angle, through, tangent
+    line(by = [0, 20]);                  // relativ; auch length + angle
+    bezier(c1 = [45, 40], to = [20, 35]);
+    corner(r = 3);                       // rundet die Ecke zum nächsten Segment
+    close();
+}
+
+module profil(b = 40) sketch { … }       // benannte Skizze = Modul
+rotate_extrude() profil(b = 30);
+```
+
+- Segmente: `start`, `line` (`to` / `by` / `length` + `angle`), `arc` (Endpunkt + Radius,
+  Mittelpunkt + Winkel, durch einen Punkt, tangential), `bezier` (quadratisch, kubisch),
+  `spline` (durch Punkte), `corner(r = …)` / `corner(chamfer = …)` zwischen zwei Segmenten,
+  `close()`. Variablen, `let`, `for` und `if` sind im Block erlaubt (z. B. Zahnprofile).
+- Punkte dürfen Rasterpunkte und Anker sein; ein Raster darf in der Skizze stehen
+  (`grid s { x: …; y: …; }`), Snappen schreibt Referenzen.
+- Fehler je Segmentzeile: Kontur nicht geschlossen, Selbstüberschneidung, unmöglicher Bogen.
+- Löcher: `hole { … }` in der Skizze oder 2D-`difference`; offene Pfade als `sweep`-Pfad
+  oder per `stroke(w)` als Fläche.
+- Kernel: gemischte Konturen aus exakten Kanten (Gerade, Kreisbogen, NURBS) für Extrude,
+  Revolve, Sweep, Loft; STEP bleibt exakt.
+
+### 17.2 Module als Namensräume
+
+- `module name { … }`: Klammern dürfen fehlen, wenn das Modul keine Parameter hat.
+- Verschachtelte Module sind von außen über den Punkt erreichbar: `teile.schraube(d = 3);`,
+  `linear_extrude(2) profile.stern();`. Mehrstufig: `a.b.c();`. Das innere Modul sieht die
+  Parameter des äußeren mit deren Standardwerten; Raster und Instanzen des äußeren sieht es
+  nicht (wie bisher).
+- Kontextmodul und Pfadleiste unterstützen den Pfad (`teile › schraube`), `cad --module`
+  nimmt `teile.schraube`.
+
+### 17.3 2D-Operationen
+
+`offset(r = …)` / `offset(delta = …, chamfer = …)` exakt für Geraden und Bögen
+(OpenSCAD-kompatibel), `fillet2d(r)` für alle Ecken eines Profils, optional mit Zonen wie in
+3D, `stroke(w, cap = "round" | "flat")` für offene Pfade.
+
+### 17.4 Text
+
+- `text(t, size, font, halign, valign, spacing, direction)`, kompatibel zu OpenSCAD.
+- **Standardschrift:** eine eigene, sehr einfache monospaced Schablonenschrift
+  (`"cad stencil mono"`), aus Geraden und Bögen konstruiert, mit Stegen, sodass keine
+  Inseln herausfallen (Innenräume von O, A, B, D, P, R, 0, 4, 6, 8, 9 usw. sind verbunden).
+  Umfang: A–Z, a–z, 0–9, ÄÖÜäöüß, übliche Satz- und Sonderzeichen. Parameter: Strichstärke,
+  Stegbreite.
+- **Mitgelieferte freie Schriften (OFL):** Inter (Sans), JetBrains Mono (Mono),
+  Allerta Stencil (proportionale Schablone). Eigene Schriften per UI-Upload oder Pfad (CLI).
+- Umrisse exakt als Bézier/NURBS-Konturen, Kerning über Shaping, Löcher nach Windungsregel.
+
+### 17.5 SVG-Import (Teilmenge)
+
+`import("logo.svg", …)` liefert ein 2D-Profil (Einheiten: px → mm über `viewBox`/`width`
+bzw. Parameter `scale`/`dpi`): `path` (M, L, H, V, C, S, Q, T, A, Z, absolut und relativ),
+`rect` (auch mit `rx`), `circle`, `ellipse`, `polygon`, `polyline`, `line`, `g` mit
+`transform`; Füllregel `nonzero`/`evenodd`. Nicht unterstützt (Warnung): Text, Bilder,
+Strichstärken als Fläche, CSS, Masken, Verläufe. Wahl einzelner Ebenen per `id`.
+Kein SVG- oder DXF-Export.
+
+### 17.6 Skizzen-Editor (Zeichenmodus)
+
+- In der Ansicht: Werkzeuge Linie, Bogen (3 Arten), Bézier, Rechteck, Kreis, Ecke runden,
+  Schließen; Zeichnen in der Skizzenebene mit Raster (Skizzenraster oder Raster des Moduls),
+  Snap auf Raster- und Ankerpunkte, End-, Mittel- und Schnittpunkte, horizontal/vertikal,
+  tangential; Alt = frei mit Schrittweite.
+- Jede Aktion schreibt Code (`line(to = g[a, b]);` …) in den aktuellen `sketch`-Block oder
+  legt einen neuen an; Undo wie beim Ziehen. Bearbeiten über Griffe, Segment löschen.
+- Der Code bleibt die einzige Quelle.
+
+### 17.7 Reihenfolge (je ein Agent, Testbericht je Schritt)
+
+1. Sprache: `sketch`-Block, Segmente, gemischte Konturen im Kernel; Module ohne Klammern und
+   verschachtelte Module als Namensräume.
+2. `corner`, `fillet2d`, `offset`, `stroke`.
+3. Text mit eigener Schablonenschrift und OFL-Schriften; SVG-Import.
+4. Skizzen-Editor (Zeichenmodus mit Raster) in Browser und Tauri.
