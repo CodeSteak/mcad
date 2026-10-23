@@ -81,6 +81,10 @@ pub struct EdgeInfo {
     pub points: Vec<DVec3>,
     /// Tags of the adjacent faces (one entry for boundary edges of open shells).
     pub face_tags: Vec<Tag>,
+    /// Nothing to blend here: a seam or pole edge, an edge between tangent-continuous faces or
+    /// an open boundary. Never selected for fillets, chamfers or zones.
+    #[serde(default)]
+    pub smooth: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -210,6 +214,28 @@ pub trait Kernel {
     fn boolean(&mut self, op: BoolOp, shapes: &[Self::Shape], tag: Tag) -> KResult<Self::Shape>;
     fn fillet(&mut self, s: &Self::Shape, edges: &[EdgeId], r: f64, tag: Tag) -> KResult<Self::Shape>;
     fn chamfer(&mut self, s: &Self::Shape, edges: &[EdgeId], d: f64, tag: Tag) -> KResult<Self::Shape>;
+
+    /// Variable-radius fillet, step 1: for each edge `edges[i]` the `counts[i]` points (in
+    /// order along the edge, the first at its start, the last at its end) at which the radius
+    /// law takes its values. The kernel decides where they lie; the caller evaluates its
+    /// radius function there and passes the values to [`Kernel::fillet_variable`].
+    fn law_stations(&mut self, s: &Self::Shape, edges: &[EdgeId], counts: &[u32]) -> KResult<Vec<Vec<DVec3>>> {
+        let _ = (s, edges, counts);
+        Err(KernelError::Unsupported("variable-radius fillet".into()))
+    }
+
+    /// Variable-radius fillet, step 2: `radii[i]` are the radii at the stations of `edges[i]`
+    /// (as returned by [`Kernel::law_stations`] for `radii[i].len()` stations).
+    fn fillet_variable(
+        &mut self,
+        s: &Self::Shape,
+        edges: &[EdgeId],
+        radii: &[Vec<f64>],
+        tag: Tag,
+    ) -> KResult<Self::Shape> {
+        let _ = (s, edges, radii, tag);
+        Err(KernelError::Unsupported("variable-radius fillet".into()))
+    }
 
     /// Extrude along +z of the profile frame by `h`, rotating by `twist` (radians) and
     /// scaling the profile by `scale` at the top.

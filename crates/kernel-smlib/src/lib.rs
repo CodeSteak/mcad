@@ -1,7 +1,8 @@
 //! [`cad_kernel::Kernel`] over SMLib through the C++ facade in `smlib/facade`. Sources:
 //! tangency-labs/smlib, branch `capi-tess` @ 7eba8aa = NVIDIA usd-brep c9c5979 plus fixes of
 //! use-after-free and other undefined behaviour (proto-topology teardown, shell, failed
-//! imprints in booleans); see `smlib/fetch.sh`.
+//! imprints in booleans), with `smlib/patches/` applied (0001: pointer maps iterate in
+//! insertion order, from the fork's 1ed8669); see `smlib/fetch.sh`. Facade ABI version 4.
 //!
 //! * feature `native` (default): facade + SMLib/SM_API statically linked (see `build.rs`).
 //! * feature `wasm` (target `wasm32-unknown-unknown`): SMLib runs as a separate Emscripten
@@ -17,7 +18,16 @@
 //! * `chamfer(d)`: equal-distance chamfer, setback `d` on both faces of a 90° edge (SMLib
 //!   constant-radius solver with a linear cross section), corners bevelled.
 //! * `fillet`/`chamfer` silently skip selected edges SMLib cannot blend (seams and other
-//!   tangent-continuous edges); fail if none is left.
+//!   tangent-continuous edges); fail if none is left. `edges` marks them `smooth`.
+//! * `law_stations`/`fillet_variable`: the radius along an edge is a clamped B-spline of
+//!   degree min(3, m - 1) over the edge's normalised parameter with m control radii at the
+//!   Greville abscissae of uniform knots (the stations); between the smallest and largest
+//!   value, exact for constant and linear laws, equal to the first/last value at the ends.
+//!   Edges whose values all agree get SMLib's constant-radius solver.
+//! * `shell`: SMLib's shell, or where it fails or overlaps itself (rounded bodies with opened
+//!   faces) body minus its inward offset minus prisms over the offsets of the opened faces
+//!   (planar opened faces only).
+//! * `nurbs_surface`: interpolating B-spline, degree min(3, n - 1) per direction.
 //! * `extrude`: `twist` turns the profile counter-clockwise (right-handed about +z of the
 //!   profile frame); twist/scale are built as a loft through intermediate sections (bicubic
 //!   for twist, ruled for pure scale). Non-uniform scale of a circle is unsupported.
@@ -83,6 +93,9 @@ fn locked<T>(f: impl FnOnce() -> T) -> T {
 const OP_UNION: i32 = 0;
 const OP_DIFFERENCE: i32 = 1;
 const OP_INTERSECTION: i32 = 2;
+
+/// `SC_EDGE_SMOOTH` in the flags of `sc_edges`.
+const EDGE_SMOOTH: u32 = 1;
 
 const LOOP_POLYGON: f64 = 0.0;
 const LOOP_CIRCLE: f64 = 1.0;
@@ -230,7 +243,7 @@ impl Kernel for SmlibKernel {
     type Shape = Shape;
 
     fn id(&self) -> &'static str {
-        "smlib-7eba8aa/facade-3"
+        "smlib-7eba8aa+1/facade-4"
     }
 
     fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Shape> {
@@ -277,6 +290,32 @@ impl Kernel for SmlibKernel {
 
     fn chamfer(&mut self, s: &Shape, edges: &[u32], d: f64, tag: Tag) -> KResult<Shape> {
         self.call(|| raw::chamfer(s.h, edges, d, tag))
+    }
+
+    fn law_stations(&mut self, s: &Shape, edges: &[u32], counts: &[u32]) -> KResult<Vec<Vec<DVec3>>> {
+        if edges.len() != counts.len() {
+            return Err(KernelError::InvalidInput("law_stations: one count per edge".into()));
+        }
+        let pts = locked(|| {
+            status(raw::law_stations(s.h, edges, counts))?;
+            Ok::<_, KernelError>(raw::out_f64(0))
+        })?;
+        let mut out = Vec::with_capacity(edges.len());
+        let mut k = 0usize;
+        for &c in counts {
+            out.push((0..c as usize).map(|j| v3(&pts[(k + j) * 3..])).collect());
+            k += c as usize;
+        }
+        Ok(out)
+    }
+
+    fn fillet_variable(&mut self, s: &Shape, edges: &[u32], radii: &[Vec<f64>], tag: Tag) -> KResult<Shape> {
+        if edges.len() != radii.len() || radii.iter().any(|r| r.is_empty()) {
+            return Err(KernelError::InvalidInput("fillet_variable: radii for every edge".into()));
+        }
+        let counts: Vec<u32> = radii.iter().map(|r| r.len() as u32).collect();
+        let flat: Vec<f64> = radii.iter().flatten().copied().collect();
+        self.call(|| raw::fillet_var(s.h, edges, &counts, &flat, tag))
     }
 
     fn extrude(&mut self, p: &PlacedLoop, h: f64, twist: f64, scale: DVec2, tag: Tag)
@@ -342,11 +381,13 @@ impl Kernel for SmlibKernel {
         while mi < meta.len() {
             let np = meta[mi] as usize;
             let nt = meta[mi + 1] as usize;
-            let face_tags = meta[mi + 2..mi + 2 + nt].to_vec();
-            mi += 2 + nt;
+            let flags = meta[mi + 2];
+            let face_tags = meta[mi + 3..mi + 3 + nt].to_vec();
+            mi += 3 + nt;
             let points = (0..np).map(|k| v3(&pts[(pi + k) * 3..])).collect();
             pi += np;
-            out.push(EdgeInfo { id: out.len() as u32, points, face_tags });
+            let smooth = flags & EDGE_SMOOTH != 0;
+            out.push(EdgeInfo { id: out.len() as u32, points, face_tags, smooth });
         }
         Ok(out)
     }

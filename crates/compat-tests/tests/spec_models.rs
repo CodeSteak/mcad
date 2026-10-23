@@ -49,7 +49,7 @@ const EXPECT: &[Expect] = &[
         handles: 17,
         ops: &[("chamfer", 1), ("zone", 1), ("union", 1), ("box", 4), ("cylinder", 1)],
         check: |out| {
-            assert!(has_op(out, |o| *o == Op::Blend { kind: BlendKind::Chamfer, r: 1.0, select: Select::Inside }));
+            assert!(has_op(out, |o| *o == Op::Blend { kind: BlendKind::Chamfer, r: 1.0, select: Select::Inside, law: None }));
             assert!(has_op(out, |o| matches!(o, Op::Boolean { chamfer: Some(c), fillet: None, .. } if *c == 0.5)));
             assert_eq!(blends(out), [(BlendKind::Chamfer, 1.0), (BlendKind::Fillet, 1.0)]);
             // All grid planes are literals: one draggable handle each.
@@ -69,7 +69,7 @@ const EXPECT: &[Expect] = &[
                 .nodes
                 .iter()
                 .filter_map(|n| match n.op {
-                    Op::Blend { kind: BlendKind::Fillet, r, select } => Some((r, select)),
+                    Op::Blend { kind: BlendKind::Fillet, r, select, .. } => Some((r, select)),
                     _ => None,
                 })
                 .collect();
@@ -264,6 +264,33 @@ const EXPECT: &[Expect] = &[
             let s: Vec<f64> = g.planes.iter().filter(|p| p.base == "s").map(|p| p.value).collect();
             assert_eq!(s.len(), 7);
             assert_eq!((s[0], s[6]), (10.0, 70.0));
+        },
+    },
+    Expect {
+        file: "variabler_radius.scad",
+        grids: &[("g", 7, true)],
+        instances: &[],
+        handles: 16,
+        ops: &[("fillet", 2), ("difference", 1), ("zone", 1), ("box", 4)],
+        check: |out| {
+            let laws: Vec<&cad_ir::Law> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match &n.op {
+                    Op::Blend { kind: BlendKind::Fillet, law: Some(l), .. } => Some(l.as_ref()),
+                    Op::Boolean { fillet_law: Some(l), .. } => Some(l.as_ref()),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(laws.len(), 3);
+            let r = |l: &cad_ir::Law, x: f64, z: f64| l.eval(DVec3::new(x, 0.0, z)).unwrap();
+            // p.z < g.mitte ? 2 : 4 (the grid plane captured as its value 10)
+            assert_eq!((r(laws[0], 0.0, 5.0), r(laws[0], 0.0, 15.0)), (2.0, 4.0));
+            // 1 + p.x / 40 in the difference's own system
+            assert_eq!(r(laws[1], 20.0, 0.0), 1.5);
+            // lookup over x
+            assert_eq!((r(laws[2], 0.0, 20.0), r(laws[2], 20.0, 20.0), r(laws[2], 30.0, 20.0)), (1.5, 4.0, 2.75));
         },
     },
     Expect {

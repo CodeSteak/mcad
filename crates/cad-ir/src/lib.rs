@@ -6,6 +6,9 @@ use cad_syntax::ast::StmtId;
 use glam::{DMat4, DVec2, DVec3};
 use serde::{Deserialize, Serialize};
 
+pub mod law;
+pub use law::{Law, LawExpr, LawFn, LawOp, LawVal};
+
 pub type NodeIdx = u32;
 
 /// `Node::stmt` of nodes without a statement (the synthetic root of a file context).
@@ -72,9 +75,11 @@ pub enum Op {
     Profile(Profile),
     /// Transform applied to the children (the matrix is also in the children's `local`).
     Transform { kind: TransformKind, m: DMat4 },
-    Boolean { op: BoolOp, fillet: Option<f64>, chamfer: Option<f64> },
+    /// `fillet_law`: `fillet = function (p) …` (variable radius; `fillet` is then `None`).
+    Boolean { op: BoolOp, fillet: Option<f64>, chamfer: Option<f64>, fillet_law: Option<Box<Law>> },
     /// `fillet(r) { body; zone; … }` / `chamfer`. Child 0 is the body, others zones.
-    Blend { kind: BlendKind, r: f64, select: Select },
+    /// `law`: `fillet(r = function (p) …)`, a variable radius (`r` is then 0).
+    Blend { kind: BlendKind, r: f64, select: Select, law: Option<Box<Law>> },
     /// `shell(t) { body; zone; … }`.
     Shell { t: f64, select: Select },
     /// Explicit zone around a grid line or plane, in the node's local system.

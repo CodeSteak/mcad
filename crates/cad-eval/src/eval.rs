@@ -869,7 +869,7 @@ impl<'a> Ev<'a> {
 
     #[inline(never)]
     fn for_stmt(&mut self, s: &'a Stmt, vars: &'a [Assignment], body: &'a Stmt, inter: bool, ctx: &Ctx<'a>) -> R<()> {
-        let op = if inter { Op::Boolean { op: BoolOp::Intersection, fillet: None, chamfer: None } } else { Op::Group };
+        let op = if inter { Op::Boolean { op: BoolOp::Intersection, fillet: None, chamfer: None, fillet_law: None } } else { Op::Group };
         let n = self.node(s, op, ctx);
         let mut base = self.sub(ctx, n, &DMat4::IDENTITY);
         base.in_loop = true;

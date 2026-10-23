@@ -48,6 +48,10 @@ extern "C" {
     fn js_fillet(h: u32, edges: &[u32], r: f64, tag: u32) -> u32;
     #[wasm_bindgen(js_name = sc_chamfer)]
     fn js_chamfer(h: u32, edges: &[u32], d: f64, tag: u32) -> u32;
+    #[wasm_bindgen(js_name = sc_law_stations)]
+    fn js_law_stations(h: u32, edges: &[u32], counts: &[u32]) -> i32;
+    #[wasm_bindgen(js_name = sc_fillet_var)]
+    fn js_fillet_var(h: u32, edges: &[u32], counts: &[u32], radii: &[f64], tag: u32) -> u32;
     #[wasm_bindgen(js_name = sc_extrude)]
     fn js_extrude(lp: &[f64], height: f64, twist: f64, sx: f64, sy: f64, tag: u32) -> u32;
     #[wasm_bindgen(js_name = sc_revolve)]
@@ -149,6 +153,12 @@ pub fn fillet(h: u32, edges: &[u32], r: f64, tag: u32) -> u32 {
 }
 pub fn chamfer(h: u32, edges: &[u32], d: f64, tag: u32) -> u32 {
     js_chamfer(h, edges, d, tag)
+}
+pub fn law_stations(h: u32, edges: &[u32], counts: &[u32]) -> i32 {
+    js_law_stations(h, edges, counts)
+}
+pub fn fillet_var(h: u32, edges: &[u32], counts: &[u32], radii: &[f64], tag: u32) -> u32 {
+    js_fillet_var(h, edges, counts, radii, tag)
 }
 pub fn extrude(lp: &[f64], height: f64, twist: f64, sx: f64, sy: f64, tag: u32) -> u32 {
     js_extrude(lp, height, twist, sx, sy, tag)

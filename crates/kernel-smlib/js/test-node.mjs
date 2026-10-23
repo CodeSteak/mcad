@@ -86,7 +86,7 @@ const tRead = performance.now();
 await sc.initSmlib(createSmlib, { wasmBinary });
 const tLoad = performance.now();
 console.log(`smlib.wasm ${statSync(wasmPath).size} B; read ${(tRead - t0).toFixed(1)} ms, compile+instantiate+init ${(tLoad - tRead).toFixed(1)} ms`);
-assert.equal(sc.sc_version(), 3);
+assert.equal(sc.sc_version(), 4);
 
 // ---------------------------------------------------------------- tests
 
@@ -215,6 +215,82 @@ test("B-rep export stream (sc_brep): box minus cylinder", () => {
   assert.equal(sc.sc_brep(123456), 3);
 });
 
+// per edge: { points, tags, smooth } (sc_edges, facade 4: n_points, n_tags, flags, tags...)
+function edges(h, samples = 1) {
+  assert.equal(sc.sc_edges(h, samples), 0, sc.sc_last_message());
+  const meta = sc.sc_out_u32(0);
+  const pts = sc.sc_out_f64(0);
+  const out = [];
+  for (let i = 0, pi = 0; i < meta.length; ) {
+    const np = meta[i], nt = meta[i + 1], flags = meta[i + 2];
+    const points = [];
+    for (let k = 0; k < np; k++) points.push([pts[3 * (pi + k)], pts[3 * (pi + k) + 1], pts[3 * (pi + k) + 2]]);
+    out.push({ points, tags: [...meta.slice(i + 3, i + 3 + nt)], smooth: (flags & 1) !== 0 });
+    pi += np;
+    i += 3 + nt;
+  }
+  return out;
+}
+
+test("edge flags: seams and tangent edges are smooth", () => {
+  const cyl = check(sc.sc_make_cylinder(10, 5, 5, 1), "cyl");
+  assert.deepEqual(edges(cyl).map((e) => e.smooth).sort(), [false, false, true]);
+  const sph = check(sc.sc_make_sphere(5, 1), "sphere");
+  assert.ok(edges(sph).every((e) => e.smooth));
+  const b = check(sc.sc_make_box(0, 0, 0, 10, 10, 10, 1), "box");
+  assert.ok(edges(b).every((e) => !e.smooth));
+  const f = check(sc.sc_fillet(b, new Uint32Array([...Array(12).keys()]), 1.0, 77), "fillet");
+  assert.ok(edges(f).every((e) => e.smooth));
+  [cyl, sph, b, f].forEach(sc.sc_release);
+});
+
+test("surface from 2x2, 3x3 and 2x5 points", () => {
+  for (const [rows, cols] of [[2, 2], [3, 3], [2, 5], [4, 4]]) {
+    const p = [];
+    for (let i = 0; i < rows; i++)
+      for (let j = 0; j < cols; j++) p.push((20 * j) / (cols - 1), (20 * i) / (rows - 1), (i + j) % 2 ? 6 : 0);
+    const s = check(sc.sc_nurbs_surface(new Float64Array(p), rows, cols, 1), `surface ${rows}x${cols}`);
+    assert.equal(sc.sc_face_count(s), 1);
+    assert.equal(sc.sc_is_solid(s), 0);
+    sc.sc_release(s);
+  }
+});
+
+test("shell of a rounded box, open at the top", () => {
+  const b = check(sc.sc_make_box(0, 0, 0, 90, 34, 18, 1), "box");
+  const f = check(sc.sc_fillet(b, new Uint32Array([...Array(12).keys()]), 3.0, 2), "fillet");
+  const top = faces(f, 1).findIndex((x) => x.points.every((q) => Math.abs(q[2] - 18) < 1e-6));
+  assert.ok(top >= 0);
+  const s = check(sc.sc_shell(f, 1.6, new Uint32Array([top]), 3), "shell");
+  assert.equal(sc.sc_is_solid(s), 1);
+  // rounded box minus inner rounded box (r 1.4) minus the slab under the flat top (84 x 28 x 1.6)
+  const rb = (a, b2, c, r) => {
+    const [A, B, C] = [a - 2 * r, b2 - 2 * r, c - 2 * r];
+    return A * B * C + 2 * r * (A * B + B * C + A * C) + Math.PI * r * r * (A + B + C) + (4 / 3) * Math.PI * r ** 3;
+  };
+  const want = rb(90, 34, 18, 3) - rb(86.8, 30.8, 14.8, 1.4) - 84 * 28 * 1.6;
+  assert.ok(near(massProps(s).volume, want, 1e-6), `${massProps(s).volume} vs ${want}`);
+  [b, f, s].forEach(sc.sc_release);
+});
+
+test("variable-radius fillet: stations and a linear law", () => {
+  const b = check(sc.sc_make_box(0, 0, 0, 30, 20, 20, 1), "box");
+  const id = edges(b).findIndex((e) => e.points.every(([, y, z]) => Math.abs(y) < 1e-9 && Math.abs(z - 20) < 1e-9));
+  assert.ok(id >= 0);
+  assert.equal(sc.sc_law_stations(b, new Uint32Array([id]), new Uint32Array([6])), 0, sc.sc_last_message());
+  const st = sc.sc_out_f64(0);
+  assert.equal(st.length, 18);
+  const radii = [];
+  for (let k = 0; k < 6; k++) radii.push(1 + (2 * st[3 * k]) / 30);
+  const f = check(sc.sc_fillet_var(b, new Uint32Array([id]), new Uint32Array([6]), new Float64Array(radii), 5), "fillet_var");
+  // removed (1 - pi/4) * integral of r(x)^2 over 0..30 with r = 1 + x/15: 30 * 13/3
+  const want = 12000 - (1 - Math.PI / 4) * 130;
+  assert.ok(near(massProps(f).volume, want, 1e-5), `${massProps(f).volume} vs ${want}`);
+  assert.equal(sc.sc_fillet_var(b, new Uint32Array([id]), new Uint32Array([2]), new Float64Array([1, -1]), 5), 0);
+  assert.equal(sc.sc_last_status(), 3);
+  [b, f].forEach(sc.sc_release);
+});
+
 test("invalid handle", () => {
   assert.equal(sc.sc_fillet(123456, new Uint32Array([0]), 1, 1), 0);
   assert.equal(sc.sc_last_status(), 3);
@@ -245,7 +321,7 @@ test("invalid handle", () => {
       for (let k = 0; k < np; k++) if (Math.abs(pts[3 * (pi + k) + 2] - 10) > 1e-9) top = false;
       if (top) ids.push(id);
       pi += np;
-      i += 2 + nt;
+      i += 3 + nt; // n_points, n_tags, flags, tags (facade 4)
     }
   }
   t.edges = performance.now() - s;

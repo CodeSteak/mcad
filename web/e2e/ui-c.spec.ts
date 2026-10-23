@@ -172,7 +172,8 @@ test("C05 difference(fillet = r) und $fillet am Primitiv", async ({ page }) => {
   await screenshotC(page, "c05-dollar-fillet");
   s = await cursorOn(page, 6, 30, null, "(s) => s.view.edgeKinds.selected > 0");
   const cyl = (await nodesOnLine(page, 6)).find((x) => x.label === "cylinder")!;
-  // The engine also counts the seam of the cylinder (3 instead of 2, see report: found bugs).
+  // Lid and bottom edge; the seam is smooth and never selected (report 7, F3).
+  expect(cyl.selectedEdges).toBe(2);
   expect(view(s).edgeKinds.selected).toBe(cyl.selectedEdges);
   await expect(lineHint(page, 6)).toContainText(`${cyl.selectedEdges} Kanten`);
   recordC({
@@ -183,7 +184,7 @@ test("C05 difference(fillet = r) und $fillet am Primitiv", async ({ page }) => {
       { name: "c05-dollar-fillet", label: "cube(10, $fillet = 1)" },
     ],
     code: src.trim(),
-    caption: "difference(fillet = 1): die zwei durch die Bohrung neu entstandenen Kanten orange, abgezogener Zylinder rot halbtransparent, „2 Kanten“ am Zeilenende. $fillet = 1 am Würfel: alle 12 eigenen Kanten, „12 Kanten“; $chamfer = 1 am Zylinder: die Kanten, die die Engine meldet (3: oben, unten und die Naht – siehe gefundene Fehler).",
+    caption: "difference(fillet = 1): die zwei durch die Bohrung neu entstandenen Kanten orange, abgezogener Zylinder rot halbtransparent, „2 Kanten“ am Zeilenende. $fillet = 1 am Würfel: alle 12 eigenen Kanten, „12 Kanten“; $chamfer = 1 am Zylinder: Deckel- und Bodenkante (2; die Naht ist glatt und zählt nicht, Bericht 7).",
     checks: ["difference: 2 Kanten gezeichnet", "$fillet: 12 Kanten", `$chamfer am Zylinder: ${cyl.selectedEdges} Kanten wie gemeldet`],
   });
 });

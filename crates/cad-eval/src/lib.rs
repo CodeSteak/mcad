@@ -17,6 +17,7 @@ mod eval;
 mod expr;
 mod grid;
 mod handles;
+mod law;
 pub mod math;
 mod ops;
 mod output;

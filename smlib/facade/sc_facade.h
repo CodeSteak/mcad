@@ -43,6 +43,9 @@ extern "C" {
 #define SC_DIFFERENCE 1
 #define SC_INTERSECTION 2
 
+/* edge flags (sc_edges) */
+#define SC_EDGE_SMOOTH 1 /* nothing to blend: seam, pole, tangent-continuous or open edge */
+
 /* classification */
 #define SC_INSIDE 0
 #define SC_OUTSIDE 1
@@ -102,6 +105,16 @@ SC_API uint32_t sc_transform(uint32_t h, const double* m16);
 SC_API uint32_t sc_boolean(int32_t op, const uint32_t* hs, uint32_t n, uint32_t tag);
 SC_API uint32_t sc_fillet(uint32_t h, const uint32_t* edges, uint32_t n, double r, uint32_t tag);
 SC_API uint32_t sc_chamfer(uint32_t h, const uint32_t* edges, uint32_t n, double d, uint32_t tag);
+/* Variable-radius fillet (since facade version 4). The radius along edge edges[i] is a law of
+ * counts[i] values: a clamped B-spline of degree min(3, m - 1) over the edge's normalised
+ * parameter t (0 at the start of its interval, 1 at the end) with uniform interior knots, its
+ * control radius j at the Greville abscissa t_j. sc_law_stations writes the edge points at the
+ * t_j: f64[0] = xyz per station (edges in order), f64[1] = t_j. sc_fillet_var takes the radii
+ * at those stations, concatenated (sum of counts values, all > 0); an edge whose values are
+ * all equal is rounded at that constant radius. */
+SC_API int32_t sc_law_stations(uint32_t h, const uint32_t* edges, uint32_t n, const uint32_t* counts);
+SC_API uint32_t sc_fillet_var(uint32_t h, const uint32_t* edges, uint32_t n, const uint32_t* counts,
+                              const double* radii, uint32_t tag);
 SC_API uint32_t sc_extrude(const double* loop, uint32_t len, double height, double twist,
                            double scale_x, double scale_y, uint32_t tag);
 SC_API uint32_t sc_revolve(const double* loop, uint32_t len, double angle, uint32_t tag);
@@ -110,14 +123,19 @@ SC_API uint32_t sc_loft(const double* loops, uint32_t len, uint32_t n_sections, 
 /* loop frame is ignored; path: xyz per point; interp 0 = linear, 1 = spline. */
 SC_API uint32_t sc_sweep(const double* loop, uint32_t len, const double* path, uint32_t n_path,
                          int32_t interp, uint32_t tag);
-/* rows x cols points, row-major, xyz each */
+/* rows x cols points, row-major, xyz each; interpolating B-spline of degree min(3, n - 1) in
+ * each direction (n = 2: bilinear, 3: quadratic) */
 SC_API uint32_t sc_nurbs_surface(const double* pts, uint32_t rows, uint32_t cols, uint32_t tag);
 SC_API uint32_t sc_thicken(uint32_t h, double t, uint32_t tag);
+/* Inward shell. SMLib's shell first; if it fails or its result overlaps itself, the shell is
+ * built from Booleans (body minus its inward offset minus prisms over the offsets of the
+ * planar opened faces; see sc_facade.cpp, "shell from booleans"). */
 SC_API uint32_t sc_shell(uint32_t h, double t, const uint32_t* open_faces, uint32_t n,
                          uint32_t tag);
 
 /* queries */
-/* edges: f64[0] = points (xyz), u32[0] = per edge: n_points, n_tags, tags... */
+/* edges: f64[0] = points (xyz), u32[0] = per edge: n_points, n_tags, flags (SC_EDGE_*), tags...
+ * (flags since facade version 4) */
 SC_API int32_t sc_edges(uint32_t h, uint32_t samples);
 /* faces: f64[0] = points (xyz), u32[0] = per face: tag, n_points */
 SC_API int32_t sc_faces(uint32_t h, uint32_t samples);

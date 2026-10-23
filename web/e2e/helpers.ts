@@ -492,3 +492,25 @@ export function recordD(entry: ScenarioC): void {
   else all.push(entry);
   writeFileSync(f, JSON.stringify(all, null, 2));
 }
+
+// ---------------------------------------------------------------- Phase E (test report 7)
+
+/** Screenshots and scenario data for test report 7 (tools/report/report7.mjs). */
+export const REPORT7_DIR = join(here, "../../reports/tmp/report7");
+
+/** Screenshot for report 7: the whole window (default), the view column or the editor pane. */
+export async function screenshotE(page: Page, name: string, area: "view" | "full" | "editor" = "full"): Promise<void> {
+  mkdirSync(join(REPORT7_DIR, "img"), { recursive: true });
+  const clip = area === "view" ? await page.locator("section.viewcol").boundingBox() : area === "editor" ? await page.locator("section.editorpane").boundingBox() : null;
+  await page.screenshot({ path: join(REPORT7_DIR, "img", `${name}.jpg`), type: "jpeg", quality: 80, ...(clip ? { clip } : {}) });
+}
+
+export function recordE(entry: ScenarioC): void {
+  mkdirSync(REPORT7_DIR, { recursive: true });
+  const f = join(REPORT7_DIR, "scenarios.json");
+  const all: ScenarioC[] = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
+  const i = all.findIndex((e) => e.id === entry.id);
+  if (i >= 0) all[i] = entry;
+  else all.push(entry);
+  writeFileSync(f, JSON.stringify(all, null, 2));
+}

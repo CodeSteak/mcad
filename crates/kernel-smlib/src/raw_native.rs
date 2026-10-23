@@ -40,6 +40,15 @@ mod ffi {
         pub fn sc_boolean(op: i32, hs: *const u32, n: u32, tag: u32) -> u32;
         pub fn sc_fillet(h: u32, edges: *const u32, n: u32, r: f64, tag: u32) -> u32;
         pub fn sc_chamfer(h: u32, edges: *const u32, n: u32, d: f64, tag: u32) -> u32;
+        pub fn sc_law_stations(h: u32, edges: *const u32, n: u32, counts: *const u32) -> i32;
+        pub fn sc_fillet_var(
+            h: u32,
+            edges: *const u32,
+            n: u32,
+            counts: *const u32,
+            radii: *const f64,
+            tag: u32,
+        ) -> u32;
         pub fn sc_extrude(
             lp: *const f64,
             len: u32,
@@ -165,6 +174,17 @@ pub fn fillet(h: u32, edges: &[u32], r: f64, tag: u32) -> u32 {
 }
 pub fn chamfer(h: u32, edges: &[u32], d: f64, tag: u32) -> u32 {
     unsafe { ffi::sc_chamfer(h, edges.as_ptr(), len(edges.len()), d, tag) }
+}
+pub fn law_stations(h: u32, edges: &[u32], counts: &[u32]) -> i32 {
+    assert_eq!(edges.len(), counts.len());
+    unsafe { ffi::sc_law_stations(h, edges.as_ptr(), len(edges.len()), counts.as_ptr()) }
+}
+pub fn fillet_var(h: u32, edges: &[u32], counts: &[u32], radii: &[f64], tag: u32) -> u32 {
+    assert_eq!(edges.len(), counts.len());
+    assert_eq!(counts.iter().map(|&c| c as usize).sum::<usize>(), radii.len());
+    unsafe {
+        ffi::sc_fillet_var(h, edges.as_ptr(), len(edges.len()), counts.as_ptr(), radii.as_ptr(), tag)
+    }
 }
 pub fn extrude(lp: &[f64], height: f64, twist: f64, sx: f64, sy: f64, tag: u32) -> u32 {
     unsafe { ffi::sc_extrude(lp.as_ptr(), len(lp.len()), height, twist, sx, sy, tag) }

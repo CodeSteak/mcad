@@ -244,9 +244,9 @@ fn booleans_and_fillet_parameters() {
     let out = clean(src);
     let b: Vec<Op> =
         out.tree.nodes.iter().filter(|n| matches!(n.op, Op::Boolean { .. })).map(|n| n.op.clone()).collect();
-    assert_eq!(b[0], Op::Boolean { op: BoolOp::Difference, fillet: Some(2.0), chamfer: None });
-    assert_eq!(b[1], Op::Boolean { op: BoolOp::Union, fillet: None, chamfer: Some(1.0) });
-    assert_eq!(b[2], Op::Boolean { op: BoolOp::Intersection, fillet: None, chamfer: None });
+    assert_eq!(b[0], Op::Boolean { op: BoolOp::Difference, fillet: Some(2.0), chamfer: None, fillet_law: None });
+    assert_eq!(b[1], Op::Boolean { op: BoolOp::Union, fillet: None, chamfer: Some(1.0), fillet_law: None });
+    assert_eq!(b[2], Op::Boolean { op: BoolOp::Intersection, fillet: None, chamfer: None, fillet_law: None });
 }
 
 #[test]
@@ -279,8 +279,8 @@ teil();
         "group\n  teil\n    fillet\n      difference\n        box\n        translate\n          cylinder\n      translate [zone]\n        sphere\n      zone [zone]\n      zone [zone]\n    chamfer\n      box\n    shell\n      box\n      zone [zone]\n"
     );
     let ops: Vec<&Op> = out.tree.nodes.iter().map(|n| &n.op).collect();
-    assert!(ops.contains(&&Op::Blend { kind: BlendKind::Fillet, r: 2.0, select: Select::Inside }));
-    assert!(ops.contains(&&Op::Blend { kind: BlendKind::Chamfer, r: 1.0, select: Select::Touch }));
+    assert!(ops.contains(&&Op::Blend { kind: BlendKind::Fillet, r: 2.0, select: Select::Inside, law: None }));
+    assert!(ops.contains(&&Op::Blend { kind: BlendKind::Chamfer, r: 1.0, select: Select::Touch, law: None }));
     assert!(ops.contains(&&Op::Shell { t: 1.0, select: Select::Inside }));
     let zones: Vec<&ZoneShape> = ops.iter().filter_map(|o| if let Op::Zone(z) = o { Some(z) } else { None }).collect();
     assert_eq!(zones[0], &ZoneShape::Line { point: DVec3::new(20.0, 0.0, 20.0), dir: DVec3::Y, d: 2.0 });
