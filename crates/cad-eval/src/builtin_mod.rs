@@ -1,7 +1,7 @@
 //! Built-in modules: primitives, transformations, booleans, blends, profile
 //! operations, `children()`, `echo()`, `assert()`.
 
-use cad_ir::{BlendKind, NodeIdx, Op, Prim, Profile, Select, TransformKind, ZoneShape};
+use cad_ir::{BlendKind, NodeIdx, Op, Prim, Profile, Select, StrokeCap, StrokeJoin, TransformKind, ZoneShape};
 use cad_kernel::{BoolOp, PathInterp};
 use cad_syntax::Span;
 use cad_syntax::ast::{Ident, Stmt};
@@ -39,6 +39,9 @@ pub(crate) const BUILTIN_MODULES: &[&str] = &[
     "intersection",
     "fillet",
     "chamfer",
+    "fillet2d",
+    "chamfer2d",
+    "stroke",
     "zone",
     "linear_extrude",
     "rotate_extrude",
@@ -237,7 +240,7 @@ impl<'a> Ev<'a> {
         if self.sketch.is_some() && !crate::sketch::allowed_in_sketch(n) {
             self.error(
                 name.span,
-                format!("`{n}()` ist in einer Skizze nicht erlaubt: nur Segmente (`start`, `line`, `arc`, `bezier`, `spline`, `close`, `hole`)"),
+                format!("`{n}()` ist in einer Skizze nicht erlaubt: nur Segmente (`start`, `line`, `arc`, `bezier`, `spline`, `corner`, `close`, `hole`)"),
             );
             return Ok(());
         }
@@ -285,6 +288,9 @@ impl<'a> Ev<'a> {
             "color" => return self.m_color(s, a, children, ctx, dy),
             "filament" => self.m_filament(s, a),
             "fillet" | "chamfer" | "shell" => return self.m_blend(s, n, a, children, ctx, dy),
+            "fillet2d" | "chamfer2d" => return self.m_blend2(s, n, a, children, ctx, dy),
+            "offset" => return self.m_offset(s, a, children, ctx, dy),
+            "stroke" => return self.m_stroke(s, a, children, ctx, dy),
             "zone" => self.m_zone(s, a, ctx),
             "linear_extrude" | "rotate_extrude" | "loft" | "sweep" | "thicken" | "resize" => {
                 return self.m_profile_op(s, n, a, children, ctx, dy);
@@ -336,7 +342,7 @@ impl<'a> Ev<'a> {
                 }
                 Op::Group
             }
-            "hull" | "minkowski" | "offset" | "projection" => {
+            "hull" | "minkowski" | "projection" => {
                 self.warn(name.span, format!("`{n}()` nicht unterstützt; Kinder werden unverändert gezeigt"));
                 Op::Empty
             }
@@ -1323,6 +1329,130 @@ impl<'a> Ev<'a> {
         Ok(())
     }
 
+    /// `fillet2d(r, select) { profile; zone; … }` / `chamfer2d(d, select)` (Plan 17.3).
+    #[inline(never)]
+    fn m_blend2(
+        &mut self,
+        s: &'a Stmt,
+        n: &str,
+        a: &Args<'a>,
+        children: &'a [Stmt],
+        ctx: &Ctx<'a>,
+        dy: &Dyn<'a>,
+    ) -> R<()> {
+        let names: &[&str] = if n == "fillet2d" { &["r", "select"] } else { &["d", "select", "r"] };
+        let p = self.bind(n, a, names, 2);
+        let main = if n == "chamfer2d" { p[0].or(p[2]) } else { p[0] };
+        let r = match main {
+            Some(x) => self.blend_param(Some(x), if n == "fillet2d" { "r" } else { "d" }),
+            None => {
+                self.error(
+                    s.span,
+                    format!("{n}() braucht {}", if n == "fillet2d" { "einen Radius `r`" } else { "einen Abstand `d`" }),
+                );
+                None
+            }
+        };
+        let r = match r {
+            Some(r) if r > 0.0 => r,
+            Some(r) => {
+                self.error(main.map_or(s.span, |x| x.expr.span), format!("{n}: Wert {} muss > 0 sein", fmt_num(r)));
+                0.0
+            }
+            None => 0.0,
+        };
+        let select = match p[1] {
+            None => Select::Inside,
+            Some(x) => match x.val.as_str() {
+                Some("inside") => Select::Inside,
+                Some("touch") => Select::Touch,
+                _ => {
+                    self.warn(x.expr.span, "`select` muss \"inside\" oder \"touch\" sein");
+                    Select::Inside
+                }
+            },
+        };
+        let kind = if n == "fillet2d" { BlendKind::Fillet } else { BlendKind::Chamfer };
+        let node = self.node(s, Op::Blend2 { kind, r, select }, ctx);
+        self.eval_children(node, &DMat4::IDENTITY, children, ctx, dy)?;
+        let kids = self.nodes[node as usize].children.clone();
+        if kids.is_empty() {
+            self.warn(s.span, format!("{n}() ohne Profil"));
+        }
+        for &k in kids.iter().skip(1) {
+            self.nodes[k as usize].flags.zone = true;
+        }
+        Ok(())
+    }
+
+    /// `offset(r = …)` / `offset(delta = …, chamfer = false)` as in OpenSCAD: the first
+    /// positional argument is `r`; without both, `r = 1`.
+    #[inline(never)]
+    fn m_offset(&mut self, s: &'a Stmt, a: &Args<'a>, children: &'a [Stmt], ctx: &Ctx<'a>, dy: &Dyn<'a>) -> R<()> {
+        let p = self.bind("offset", a, &["r", "delta", "chamfer"], 1);
+        let r = self.num_of(p[0], "r");
+        let delta = self.num_of(p[1], "delta");
+        let op = match (r, delta) {
+            (Some(r), d) => {
+                if d.is_some() {
+                    self.warn(p[1].map_or(s.span, |x| x.expr.span), "offset: `r` gegeben, `delta` wird ignoriert");
+                }
+                if p[2].is_some() {
+                    self.warn(p[2].map_or(s.span, |x| x.expr.span), "offset: `chamfer` gilt nur mit `delta`");
+                }
+                Op::Offset { round: true, d: r, chamfer: false }
+            }
+            (None, Some(d)) => Op::Offset { round: false, d, chamfer: is_true(p[2]) },
+            (None, None) => Op::Offset { round: true, d: 1.0, chamfer: false },
+        };
+        let node = self.node(s, op, ctx);
+        self.eval_children(node, &DMat4::IDENTITY, children, ctx, dy)
+    }
+
+    /// `stroke(w, cap = "round" | "flat" | "square", join = "round" | "miter" | "bevel")`.
+    #[inline(never)]
+    fn m_stroke(&mut self, s: &'a Stmt, a: &Args<'a>, children: &'a [Stmt], ctx: &Ctx<'a>, dy: &Dyn<'a>) -> R<()> {
+        let p = self.bind("stroke", a, &["w", "cap", "join"], 1);
+        let w = match self.num_of(p[0], "w") {
+            Some(w) if w > 0.0 => w,
+            Some(w) => {
+                self.error(
+                    p[0].map_or(s.span, |x| x.expr.span),
+                    format!("stroke: Breite {} muss > 0 sein", fmt_num(w)),
+                );
+                0.0
+            }
+            None => {
+                if p[0].is_none() {
+                    self.error(s.span, "stroke() braucht eine Breite `w`");
+                }
+                0.0
+            }
+        };
+        let cap = match p[1].map(|x| (x, x.val.as_str())) {
+            None => StrokeCap::Round,
+            Some((_, Some("round"))) => StrokeCap::Round,
+            Some((_, Some("flat"))) => StrokeCap::Flat,
+            Some((_, Some("square"))) => StrokeCap::Square,
+            Some((x, _)) => {
+                self.warn(x.expr.span, "`cap` muss \"round\", \"flat\" oder \"square\" sein");
+                StrokeCap::Round
+            }
+        };
+        let join = match p[2].map(|x| (x, x.val.as_str())) {
+            None => StrokeJoin::Round,
+            Some((_, Some("round"))) => StrokeJoin::Round,
+            Some((_, Some("miter"))) => StrokeJoin::Miter,
+            Some((_, Some("bevel"))) => StrokeJoin::Bevel,
+            Some((x, _)) => {
+                self.warn(x.expr.span, "`join` muss \"round\", \"miter\" oder \"bevel\" sein");
+                StrokeJoin::Round
+            }
+        };
+        let node = self.node(s, Op::Stroke { w, cap, join }, ctx);
+        self.eval_children(node, &DMat4::IDENTITY, children, ctx, dy)
+    }
+
     #[inline(never)]
     fn m_zone(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>) {
         let p = self.bind("zone", a, &["target", "d"], 2);
@@ -1366,7 +1496,7 @@ impl<'a> Ev<'a> {
         let mut cur = ctx.parent;
         while let Some(pi) = cur {
             match self.nodes[pi as usize].op {
-                Op::Blend { .. } | Op::Shell { .. } => {
+                Op::Blend { .. } | Op::Shell { .. } | Op::Blend2 { .. } => {
                     ok = true;
                     break;
                 }

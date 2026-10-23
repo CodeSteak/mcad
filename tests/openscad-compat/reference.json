@@ -879,6 +879,85 @@
    "triangles": 4600,
    "echo": [],
    "openscad_warnings": []
+  },
+  "34_offset_round.scad": {
+   "source_fnv1a64": "9b9fab3df87cc1ef",
+   "class": "rounded",
+   "round_features": [
+    "circle",
+    "offset(r)"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 2989.1824839033347,
+   "area": 3440.0059812321538,
+   "bounds": {
+    "min": [
+     -2.0,
+     -7.9991,
+     0.0
+    ],
+    "max": [
+     108.5,
+     52.6773,
+     3.0
+    ]
+   },
+   "triangles": 3048,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "35_offset_delta.scad": {
+   "source_fnv1a64": "0dd8513f8d4800a4",
+   "class": "polygonal",
+   "round_features": [],
+   "defines": [],
+   "volume": 3076.875117086803,
+   "area": 4108.341388556072,
+   "bounds": {
+    "min": [
+     -2.0,
+     -2.0,
+     0.0
+    ],
+    "max": [
+     101.0,
+     51.5,
+     2.0
+    ]
+   },
+   "triangles": 208,
+   "echo": [],
+   "openscad_warnings": []
+  },
+  "36_offset_holes.scad": {
+   "source_fnv1a64": "4bae5ca56e00a52d",
+   "class": "rounded",
+   "round_features": [
+    "circle",
+    "offset(r)"
+   ],
+   "defines": [
+    "$fn=128"
+   ],
+   "volume": 7310.424639150248,
+   "area": 9080.957832686128,
+   "bounds": {
+    "min": [
+     -4.5,
+     -1.0,
+     0.0
+    ],
+    "max": [
+     109.0,
+     81.5,
+     2.0
+    ]
+   },
+   "triangles": 5344,
+   "echo": [],
+   "openscad_warnings": []
   }
  },
  "openscad_version": "OpenSCAD version 2021.01",

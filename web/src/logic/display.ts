@@ -54,7 +54,11 @@ export type GuideKind =
   /** Path of a `sweep`. */
   | "path"
   /** Control net of a `surface`. */
-  | "net";
+  | "net"
+  /** Contour of an `offset` (dashed, over the input contour). */
+  | "offset"
+  /** Path (centre line) of a `stroke`. */
+  | "centerline";
 
 export interface Guide {
   points: Vec3[];
@@ -219,7 +223,7 @@ export function visiblePieces(scene: Scene, hidden: number[]): SceneNode[] {
 const TRANSFORMS = new Set(["translate", "rotate", "scale", "mirror", "multmatrix"]);
 /** Nodes descended to find the profiles of a loft (their own meshes are flat in their system). */
 const PASS = new Set([...TRANSFORMS, "group", "color", "resize"]);
-const BLENDS = new Set(["fillet", "chamfer", "shell"]);
+const BLENDS = new Set(["fillet", "chamfer", "shell", "fillet2d", "chamfer2d"]);
 
 export function isTransform(n: SceneNode): boolean {
   return TRANSFORMS.has(n.label);
@@ -307,7 +311,7 @@ function blockParts(scene: Scene, n: SceneNode): { body: SceneNode | null; zones
 
 function selectOf(n: SceneNode): SelectMode {
   const o = opInfo(n);
-  return o && (o.kind === "blend" || o.kind === "shell") ? o.select : "inside";
+  return o && (o.kind === "blend" || o.kind === "shell" || o.kind === "blend2d") ? o.select : "inside";
 }
 
 /** Display of profile operations and surfaces under the cursor (Spec: Profiloperationen). */
@@ -354,6 +358,19 @@ function profileOp(scene: Scene, n: SceneNode, items: DrawItem[], guides: Guide[
     }
     case "thicken":
       for (const c of kids) items.push(item(c, "profile", "Fläche"));
+      break;
+    case "offset":
+      // Input contour as outline, the offset contour dashed over it (Plan 17.3).
+      for (const c of kids) items.push(item(c, "profile", "Ausgangskontur"));
+      for (const g of n.guides ?? []) if (g.kind === "result") guides.push({ points: world(g.points), kind: "offset", dashed: true });
+      break;
+    case "stroke":
+      for (const c of kids) items.push(item(c, "profile", "Pfad"));
+      for (const g of n.guides ?? []) if (g.kind === "centerline") guides.push({ points: world(g.points), kind: "centerline", dashed: true });
+      break;
+    case "blend2d":
+      // The profile before rounding as outline; the new corner pieces are selected edges.
+      for (const c of kids) if (!c.flags.zone) items.push(item(c, "profile", "Profil vor dem Verrunden"));
       break;
     default:
       break;

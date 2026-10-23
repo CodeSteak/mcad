@@ -369,6 +369,21 @@ where
             Op::Profile(p) => profile::open_sketch_bounds(p, ctx.config.default_tol),
             _ => None,
         };
+        let mut selected = Vec::new();
+        let mut guides = Vec::new();
+        if crate::op2d::is_op2d(&node.op)
+            && let Ok(o) = crate::op2d::compute(tree, idx).as_ref()
+        {
+            for e in &o.errors {
+                ev.error(e.clone());
+            }
+            for w in &o.warnings {
+                ev.warn(w.clone());
+            }
+            ev.hints.extend(o.hints.iter().cloned());
+            selected = o.corners.clone();
+            guides = o.guides.clone();
+        }
         let bounds = match open {
             // an open sketch is a path (sweep), not a region
             Some(b) => b.map(|(lo, hi)| (lo.extend(0.0), hi.extend(0.0))),
@@ -392,7 +407,8 @@ where
             bounds,
             diags: ev.diags,
             hints: ev.hints,
-            selected_edges: Vec::new(),
+            selected_edges: selected,
+            guides,
             opened_faces: Vec::new(),
             blend_ms: 0.0,
             suspended: false,
@@ -421,6 +437,7 @@ where
         diags: ev.diags,
         hints: ev.hints,
         selected_edges: ev.selected,
+        guides: Vec::new(),
         opened_faces: ev.opened,
         blend_ms: ev.blend_ms,
         suspended: ev.suspended,
@@ -774,7 +791,8 @@ where
                 self.union(parts, tag)
             }
             Op::Prim { prim, place } => self.prim(prim, place, node.blend),
-            Op::Profile(_) => Ok(Vec::new()), // handled as 2D before
+            // handled as 2D before
+            Op::Profile(_) | Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } => Ok(Vec::new()),
             Op::Boolean { op, fillet, chamfer, fillet_law } => {
                 let kids = self.child_list();
                 let mut groups = Vec::new();

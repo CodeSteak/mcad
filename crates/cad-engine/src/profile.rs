@@ -60,6 +60,14 @@ pub(crate) fn lift(tree: &Tree, idx: NodeIdx, m: DMat4, warn: &mut Vec<String>) 
             sketch_expr(idx, contours, m)
         }
         Op::Profile(p) => Ok(Expr2::Leaf(Leaf { node: idx, profile: p.clone(), m })),
+        Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } => {
+            let r = crate::op2d::compute(tree, idx);
+            match r.as_ref() {
+                Ok(o) if o.contours.is_empty() => Ok(Expr2::Op(BoolOp::Union, Vec::new())),
+                Ok(o) => sketch_expr(idx, &o.contours, m),
+                Err(e) => Err(e.clone()),
+            }
+        }
         Op::Group | Op::ModuleCall { .. } | Op::Transform { .. } | Op::Color { .. } | Op::Empty => {
             Ok(Expr2::Op(BoolOp::Union, kids(warn)?))
         }
@@ -170,7 +178,8 @@ pub(crate) fn profile_loops(p: &Profile) -> Result<Vec<Loop>, String> {
 pub(crate) fn open_sketch_in(tree: &Tree, idx: NodeIdx) -> bool {
     match &tree.node(idx).op {
         Op::Profile(Profile::Sketch { closed: false, .. }) => true,
-        Op::Profile(_) => false,
+        // 2D operations make regions (stroke turns paths into areas)
+        Op::Profile(_) | Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } => false,
         _ => tree.solid_children(idx).any(|c| open_sketch_in(tree, c)),
     }
 }

@@ -632,6 +632,24 @@ pub enum OpInfo {
     Thicken {
         t: f64,
     },
+    /// `fillet2d(r) { … }` / `chamfer2d(d) { … }` (Plan 17.3).
+    Blend2d {
+        chamfer: bool,
+        r: f64,
+        select: SelectMode,
+    },
+    /// `offset(r = …)` (`round`) / `offset(delta = …, chamfer)`.
+    Offset {
+        round: bool,
+        d: f64,
+        chamfer: bool,
+    },
+    /// `stroke(w, cap, join)`.
+    Stroke {
+        w: f64,
+        cap: String,
+        join: String,
+    },
     /// `sketch { … }` (Plan 17.1): contours with their segments, for drawing the sketch in its
     /// plane (outline, fill, the segment of the cursor line).
     Sketch {
@@ -669,6 +687,12 @@ pub struct SketchSegment {
     pub implicit: bool,
     /// An error was reported for this segment.
     pub error: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct GuideLine {
+    pub kind: String,
+    pub points: Vec<Vec3>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -716,8 +740,12 @@ pub struct SceneNode {
     pub messages: Vec<NodeMessage>,
     /// Inline hints of the node, e.g. "4 Kanten".
     pub hints: Vec<String>,
-    /// Edges selected by fillet/chamfer (polylines, node system).
+    /// Edges selected by fillet/chamfer (polylines, node system); the new corner pieces of
+    /// `fillet2d`/`chamfer2d`.
     pub selected_edges: Vec<Vec<Vec3>>,
+    /// Guide lines of 2D operations (node system): `source` (input contour of `offset`),
+    /// `result` (offset contour, drawn dashed), `centerline` (path of `stroke`).
+    pub guides: Vec<GuideLine>,
     pub opened_faces: u32,
     /// Draft mode while dragging: this node's blend was left out (it took longer than the
     /// draft limit); the full evaluation after the drag restores it.
@@ -1075,6 +1103,7 @@ pub fn typescript() -> String {
         OpInfo,
         SketchContour,
         SketchSegment,
+        GuideLine,
         Bounds,
         NodeMessage,
         SceneNode,

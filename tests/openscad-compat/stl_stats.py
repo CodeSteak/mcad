@@ -125,7 +125,8 @@ def classify(src: str) -> dict:
     """Tolerance class of a model.
 
     "polygonal": every sphere/cylinder/circle call has `$fn` = 3…12 directly in its
-    arguments, and there is no rotate_extrude and no twisted linear_extrude. Then
+    arguments, and there is no rotate_extrude, no twisted linear_extrude and no offset(r)
+    (rounded joins; offset(delta) keeps polygons). Then
     OpenSCAD and we build the same polygons (plan, section 12 item 3).
     "rounded": anything else; OpenSCAD facets, we are exact.
     A comment `// compat-class: polygonal|rounded` overrides the heuristic.
@@ -133,10 +134,14 @@ def classify(src: str) -> dict:
     override = _CLASS_OVERRIDE.search(src)
     code = _strip_comments(src)
     reasons = []
-    for m in re.finditer(r"\b(sphere|cylinder|circle|rotate_extrude|linear_extrude)\s*\(", code):
+    for m in re.finditer(r"\b(sphere|cylinder|circle|rotate_extrude|linear_extrude|offset)\s*\(", code):
         name = m.group(1)
         args = _call_args(code, m.end() - 1)
-        if name == "rotate_extrude":
+        if name == "offset":
+            # offset(r) (also positional or without arguments) rounds with arcs; delta does not
+            if not re.search(r"\bdelta\s*=", args) or re.search(r"\br\s*=", args):
+                reasons.append("offset(r)")
+        elif name == "rotate_extrude":
             reasons.append("rotate_extrude")
         elif name == "linear_extrude":
             t = re.search(r"\btwist\s*=\s*(-?[\d.]+)", args)
