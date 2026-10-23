@@ -13,8 +13,10 @@ Plan und Entscheidungen: [`docs/technischer-plan.md`](docs/technischer-plan.md).
 Meilensteine M0–M7 sind umgesetzt, dazu STEP-Export, `include`/`use`, mehrere Bauteile und
 variabler Fillet-Radius, eine CLI, mit der Agenten Modelle ganz ohne UI entwickeln und
 prüfen, eine Desktop-App (Tauri 2: nativer Kernel, echte Dateien, Dateibeobachter wie in
-VS Code, Git-Markierungen am Rand, Steuerung durch `cad ui …`), eine 3D-Schnittansicht und ein
-CLI-Daemon, der den Kernel-Cache zwischen CLI-Aufrufen hält (Testberichte 1–10,
+VS Code, Git-Markierungen am Rand, Steuerung durch `cad ui …`), eine 3D-Schnittansicht, ein
+CLI-Daemon, der den Kernel-Cache zwischen CLI-Aufrufen hält, sowie Mehrfarbigkeit mit
+Farbpalette, Farbregionen, Filament-Slots, mehrfarbigem 3MF für Bambu Studio/OrcaSlicer und ein
+überarbeitetes dunkles Thema (Testberichte 1–11,
 [`docs/reports/`](docs/reports/README.md)). Offen ist der Umstieg auf den
 Rust-Kernel solidcore (M8, wartet auf den Portierungsstand von solidcore, siehe
 [`docs/solidcore-umstieg.md`](docs/solidcore-umstieg.md)). Browser: kein Backend, gespeichert
@@ -40,7 +42,9 @@ Sprache:  cad-syntax (Parser) → cad-eval (Werte mit Herkunft, Raster, Anker, G
   (`smlib/facade/`). Zwei Wasm-Module: `cad_wasm_bg.wasm` (Rust, wasm-bindgen) und
   `smlib.wasm` (Emscripten), verbunden über eine kleine JS-Brücke.
 - Export: STL und 3MF aus der Tessellierung, STEP (AP242/AP214) mit eigenem Writer
-  (`cad-step`) aus der exakten B-Rep.
+  (`cad-step`) aus der exakten B-Rep. 3MF ist mehrfarbig: je Bauteil ein Objekt, darin ein Teil
+  je Farbe (Farbregionen über Kernel-Booleans, gecacht) mit Filament-Slot in
+  `Metadata/model_settings.config` (Bambu Studio, OrcaSlicer); dazu „ein STL je Farbe“ als ZIP.
 - Keine COOP/COEP-Header nötig (keine Threads, kein `SharedArrayBuffer`).
 - CLI-Daemon: `check`, `eval`, `inspect`, `render`, `export`, `outline`, `measure`, `set`
   laufen in einem Hintergrundprozess mit einer Engine für alle Projekte (startet beim ersten
@@ -89,6 +93,9 @@ $cad measure examples/projekt-gehaeuse/gehaeuse.scad --interference --clearance 
 $cad set examples/spec/gehaeuse.scad --param gehaeuse.w=50 --dry-run   # Standardwert, Diff
 $cad watch teil.scad --json --render teil.png --views all      # neu auswerten bei jeder Änderung
 $cad export examples/spec/flasche.scad -o flasche.step         # auch .stl, .3mf
+$cad export examples/spec/mehrfarbig.scad -o druck.3mf          # mehrfarbig (Bambu/Orca), --single-color
+$cad measure examples/spec/mehrfarbig.scad --colors            # Volumen/Masse je Farbe und Slot
+$cad render examples/spec/mehrfarbig.scad -o m.png --theme dark --show regions
 $cad export examples/projekt-gehaeuse/gehaeuse.scad --all-parts -o teile/ --format step
 $cad daemon status                                             # Daemon: PID, Laufzeit, Cache, Trefferquote
 ```
@@ -154,6 +161,13 @@ pnpm build                                  # -> web/dist (statisch, z. B. GitHu
   liegen (`chamfer` und `shell` ebenso); `difference(fillet = r)` die neuen Kanten,
   `$fillet = r` alle Kanten eines Primitivs; `r` darf eine Funktion der Position sein.
 - Benannte Instanzen auf oberster Ebene sind Bauteile (Export je Bauteil).
+- `color("teal")` nimmt eine kleine Palette aus 16 gedeckten Farben (`red, orange, yellow, lime,
+  green, teal, cyan, blue, purple, magenta, pink, brown, black, gray, silver, white`, Groß/Klein
+  egal, `grey`/`aqua`/`fuchsia` als CSS-Schreibweisen); unbekannte Namen warnen und bekommen
+  eine stabile Zufallsfarbe, Hex und Vektoren bleiben exakt. `color("red", filament = 3)` legt
+  den Filament-Slot fest, sonst Slots in Reihenfolge des ersten Auftretens (ungefärbtes
+  Material: Slot 1). Die UI zeigt „Farben & Filamente“ (Slot per Auswahl, schreibt
+  `filament = n` in den Code, Volumen und Masse PLA) und auf Wunsch die Farbregionen.
 
 ```
 module halter(w = 40, d = 20, h = 10) {
@@ -205,7 +219,8 @@ third_party/smlib/   SMLib-Quellen (nicht eingecheckt, smlib/fetch.sh)
 web/                 React-App (src/), Playwright-Tests (e2e/), Tauri-E2E (e2e-tauri/), Build-Skripte (scripts/)
 examples/            Beispielmodelle (zugleich Testfälle)
 tests/               openscad-compat/ (Referenz, compare.py), step/verify.py
-tools/report/        Generatoren der Testberichte
+tools/report/        Generatoren der Testberichte, 3MF-Prüfung (verify3mf.py)
+tools/palette/       Prüfung der Farbpalette (ΔE in OKLab, Farbfehlsichtigkeit, Kontrast)
 tools/font/          Generator der Bitmap-Schrift von cad-render
 scripts/ci/          Schritte der GitHub-Actions-Workflows (lokal genauso aufrufbar)
 docs/                Plan, solidcore-Umstieg, Testberichte
@@ -217,7 +232,7 @@ docs/                Plan, solidcore-Umstieg, Testberichte
 export SMLIB_PREBUILT=$PWD/smlib/build-native
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace                                          # ~350 Tests (Daemon: tests/daemon.rs)
+cargo test --workspace                                          # ~390 Tests (Daemon: tests/daemon.rs)
 cargo check -p cad-wasm --target wasm32-unknown-unknown
 
 node crates/kernel-smlib/js/test-node.mjs                       # smlib.wasm über die Brücke
@@ -229,6 +244,8 @@ python3 tests/openscad-compat/make-reference.py                 # Referenz-STLs 
 python3 tests/openscad-compat/compare.py --self-test
 CAD=target/release/cad python3 tests/openscad-compat/compare.py --eval   # 33/33
 /pfad/zum/venv/bin/python tests/step/verify.py --cad target/release/cad  # STEP mit OpenCASCADE
+python3 tools/palette/palette.py                                # Palette: ΔE, Farbfehlsichtigkeit, Kontrast
+python3 tools/report/verify3mf.py teil.3mf                      # 3MF: lib3mf, trimesh, Bambu-Import-Modell
 ```
 
 CI (`.github/workflows/`): `rust` (Tauri-Pakete, fmt, clippy, Tests, Wasm-Check), `web` (smlib.wasm,
@@ -256,6 +273,7 @@ CMakeLists, Build-Skript und Compiler: `scripts/ci/smlib-key.sh`). Ist der SMLib
 - [Bericht 8](docs/reports/08-cli-agenten/report.pdf): CLI für Agenten (outline, render-Ansichten/Schnitt, measure, watch, set).
 - [Bericht 9](docs/reports/09-desktop-schnitt/report.pdf): Desktop-App, Dateibeobachter, Git, Schnittansicht, CLI↔UI.
 - [Bericht 10](docs/reports/10-cli-daemon/report.pdf): CLI-Daemon (Cache zwischen Aufrufen, Grenzen, Messung).
+- [Bericht 11](docs/reports/11-farben-filamente/report.pdf): Farben, Multi-Filament-3MF (Bambu Studio/OrcaSlicer), dunkles Thema.
 
 ## Lizenzen
 

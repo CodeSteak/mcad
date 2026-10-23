@@ -1,8 +1,8 @@
 # Technischer Plan: Parametrische CAD-Sprache mit Rastern
 
-Stand: 2026-10-23, Ist-Stand nach Testbericht 9 (erste Fassung 2026-10-22) · Grundlage: `Spec: Parametrische CAD-Sprache mit Rastern` (22.10.2026)
+Stand: 2026-10-23, Ist-Stand nach Testbericht 11 (erste Fassung 2026-10-22) · Grundlage: `Spec: Parametrische CAD-Sprache mit Rastern` (22.10.2026)
 
-Abschnitt 0 fasst zusammen, was sich gegenüber der ersten Fassung geändert hat; die Abschnitte 1–14 beschreiben den umgesetzten Stand, Abschnitt 13 den Status der Meilensteine, Abschnitt 15 die bekannten Grenzen. Testberichte: `docs/reports/` (B1 … B7 = Bericht 1 … 7, Übersicht in `docs/reports/README.md`).
+Abschnitt 0 fasst zusammen, was sich gegenüber der ersten Fassung geändert hat; die Abschnitte 1–14 beschreiben den umgesetzten Stand, Abschnitt 13 den Status der Meilensteine, Abschnitt 15 die bekannten Grenzen, Abschnitt 16 Farben, Filamente und Thema. Testberichte: `docs/reports/` (B1 … B11 = Bericht 1 … 11, Übersicht in `docs/reports/README.md`).
 
 Ziel: Die Anwendung läuft vollständig im Browser, nur auf dem Desktop, für kleine Hobbyprojekte. Sprache, Auswertung, Cache und Rückschreiben sind in Rust (Wasm), die UI in TypeScript/React. Dazu gibt es eine CLI (auch zur Nutzung durch Claude Code) und eine Desktop-Version (Tauri 2, B9) mit nativem Kernel, echten Dateien, Dateibeobachter und Git-Markierungen.
 
@@ -45,6 +45,9 @@ Festgelegte Rahmenbedingungen:
 | CI | GitHub Actions, gecachte SMLib-Builds | Workflows `rust`, `web`, `desktop`, `compat`, `pages` (manuell) in `.github/workflows/`, Schritte in `scripts/ci/` (Abschnitt 11) | B9 |
 | Tauri-Version | „später, optional“ | `crates/cad-app` (Tauri 2) im Binary `cad` (Feature `gui`, Standard): `cad` / `cad datei.scad` / `cad ordner/` startet die UI. Engine in einem eigenen Prozess (`cad engine-host`, Engine-Thread mit 256 MiB Stack, schrittweise wie im Worker), weil SMLib globalen Zustand hat und ein hängender Aufruf nur mit dem Prozess beendet werden kann; Antworten binär über einen Tauri-Kanal (`cad-desktop/src/wire.rs`). Dateien auf der Festplatte, Dateibeobachter (`notify`), Git-Rand gegen `HEAD` (`git`-Aufruf + `similar`), Steuerung durch `cad ui status/show/screenshot` über lokale IPC (`cad-ipc`) | B9 |
 | Schnittansicht | – | GPU-Schnitt in Browser und Tauri: Clipping-Ebene, Stencil-Kappe (Paritäts-Pass je Körper, schraffiert wie `cad render --section`), Kontur, Griff mit Rasten auf Rasterebenen und Anker; „Als `cad render …` kopieren“ | B9 |
+| `color()` | CSS-Namen wie OpenSCAD | eigene Palette aus 16 gedeckten Farben (Abschnitt 16.1), unbekannte Namen: Warnung und stabile Zufallsfarbe; `filament = n` | B11 |
+| Mehrfarbdruck | – | Farbregionen über Kernel-Booleans, Filament-Slots, 3MF mit einem Teil je Farbe und Bambu/Orca-Metadaten, ein STL je Farbe (Abschnitt 16) | B11 |
+| Thema | Hell/Dunkel umschaltbar | „System“ (Standard, folgt `prefers-color-scheme`, auch in Tauri), Hell, Dunkel; Token-Satz mit WCAG-Prüfung; `cad render --theme dark` | B11 |
 
 ---
 
@@ -136,7 +139,7 @@ Zwei Wasm-Module statt einem: `wasm-bindgen` unterstützt das Emscripten-Target 
 
 ### 2.5 Export
 
-- STL und 3MF aus der Tessellierung, in Rust, kernelunabhängig.
+- STL und 3MF aus der Tessellierung, in Rust, kernelunabhängig. 3MF mehrfarbig (Standard) mit einem Teil je Farbe und Filament-Metadaten für Bambu Studio/OrcaSlicer, „ein STL je Farbe“ als ZIP (Abschnitt 16.4).
 - STEP: weder SMLib noch solidcore haben einen Writer. Umgesetzt (Testbericht 5): neutrale B-Rep-Beschreibung `cad_kernel::brep` (`Kernel::brep`, bei SMLib über die Fassadenabfrage `sc_brep`), Writer `cad-step` (AP242, wahlweise AP214; Ebene, Zylinder, Kegel, Kugel, Torus, Rotations-/Extrusionsfläche, B-Spline; Linie, Kreis, Ellipse, B-Spline), `Engine::export_step`, `cad export -o teil.step`, `Export { format: "step" }`. Prüfung mit OpenCASCADE: `tests/step/verify.py`.
 
 ---
@@ -395,6 +398,8 @@ Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem K
 | Git (Desktop) | Randmarkierung gegen `HEAD`: neu grün, geändert blau (3 px, Deckkraft 0,5–0,55), gelöscht rotes Dreieck zwischen den Zeilen; Hover zeigt die alten Zeilen; entprellt 300 ms beim Tippen, beim Speichern, bei externen Änderungen und Fensterfokus; unversionierte Dateien ohne Markierung |
 | Schnittansicht | Werkzeug „Schnitt“: Ebene x/y/z oder frei (Normale aus Blickrichtung oder Eingabe), Griff ziehen (rastet auf Rasterebenen des Kontextmoduls und Anker, Alt frei), Umkehren, Kappe (Stencil, schraffiert, je Körper wechselnde Richtung, transparente Körper ohne Kappe), Kontur; Statuszeile und „Als `cad render …` kopieren“ mit derselben Konvention wie die CLI |
 | Bauteile | Bauteilleiste mit Sichtbarkeit, Volumen und Export je Bauteil |
+| Farben & Filamente | Liste rechts neben der Ansicht (Farbfeld, Name, Zeilen, Slot-Auswahl, Volumen, Masse PLA), „Farbregionen zeigen“, Exporte „3MF mehrfarbig“, „STL je Farbe (ZIP)“, „3MF einfarbig“; Farbe je Fläche in der Ansicht (Vertex-Farben aus `tri_tags` → `tag_nodes` → `color`) |
+| Thema | Auswahl System/Hell/Dunkel in der Werkzeugleiste (localStorage `cad-theme`); alle Farben als CSS-Variablen (`styles.css`), 3D-Ansicht liest sie beim Wechsel neu; Palette-Farben im Thema angepasst (`logic/palette.ts`) |
 
 Eine Zeile kann mehrere Instanzen haben (Schleifen, mehrfache Modulaufrufe). Die UI indiziert die Szene nach `stmt` und hebt alle hervor.
 
@@ -497,6 +502,8 @@ Jeder Meilenstein endet mit einem lauffähigen Stand im Browser und in der CLI.
 | M8 | Umstieg auf solidcore: `kernel-solidcore`, Vergleich über `diff-kernels`, SMLib-Wasm entfernen | bereit zur Veröffentlichung | offen: wartet auf solidcore (heute bricht jedes Primitiv ab, B5); `kernel-solidcore` und `diff-kernels` vorhanden |
 | später | STEP-Export, variabler Radius, mehrere Bauteile, `include`/`use` | | erledigt (B5, B6, B7) |
 | später | Tauri-Version (`TauriTransport`), Dateibeobachter, Git-Rand, `cad ui`, Schnittansicht | | erledigt (B9) |
+| später | CLI-Daemon | | erledigt (B10) |
+| später | Mehrfarbigkeit, Multi-Filament-3MF, dunkles Thema (Abschnitt 16) | | erledigt (B11) |
 | – | CI (GitHub Actions) | | erledigt (Workflows lokal geprüft; Lauf auf GitHub steht aus) |
 
 Abhängigkeiten: M1 → M2 → M3 → M4 → M5. M6 hängt nur an M2. M8 hängt am Fortschritt von solidcore und kann jederzeit nach M2 teilweise beginnen.
@@ -517,7 +524,7 @@ Abhängigkeiten: M1 → M2 → M3 → M4 → M5. M6 hängt nur an M2. M8 hängt 
 
 ---
 
-## 15. Bekannte Grenzen (aus den Testberichten 1–10)
+## 15. Bekannte Grenzen (aus den Testberichten 1–11)
 
 Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1–F4 aus B4, behoben in B7).
 
@@ -572,6 +579,71 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 - Build-ID aus Größe und Änderungszeit des Programms: wechseln sich zwei `cad`-Binaries ab (Debug/Release), ersetzen sie einander den Daemon.
 - Die Tag-Tabelle der Engine wächst weiter; nach 2²⁰ Tags wird die Engine (mit Cache) ersetzt.
 
+**Farben, Multi-Filament, Thema (B11)**
+
+- Farbregionen hängen an Kernel-Booleans (Schnittmenge, Differenz, Vereinigung je `color()`): wo SMLib Material verliert (z. B. Vereinigung mit einem Torus, B1), stimmen die Regionen nicht; die Engine meldet dann „Farbregionen ungenau“ (Summe ≠ Volumen). Mehrere Booleans je Farbe kosten Zeit; die UI fragt sie nur bei offener Farbliste an (gecacht, Farb- und Slot-Änderungen rechnen keine Knoten neu).
+- `color()` innerhalb eines 2D-Teilbaums (unter `linear_extrude` usw.) färbt Flächen, teilt aber kein Volumen; die Extrusion ist eine Region. `resize` wird beim Platzieren berücksichtigt, `hull`/`minkowski` gibt es nicht.
+- Material ohne `color()` in einem sonst gefärbten Bauteil (z. B. Verrundung zwischen zwei Farben) gehört zur Farbe des ersten gefärbten Teilbaums; mit eigenem Standard-Eintrag (Slot 1) nur, wenn das Bauteil ungefärbte Primitive hat.
+- Farbliste und Mehrfarbexport betrachten die Bauteile (benannte Instanzen); Material außerhalb von Bauteilen fehlt dann in der Liste (der Export der Wurzel enthält es als ein Objekt).
+- Bambu Studio liest `project_settings.config` nur aus eigenen Dateien; die Filamentfarben setzt dort der Farbdialog für 3MF mit Farbgruppe (neuere Versionen) oder der Nutzer. OrcaSlicer übernimmt die Slots, nicht die Farben. Nicht im Container geprüft (kein Slicer mit Bambu-Importer verfügbar): die Zuordnung folgt dem Quellcode (`bbs_3mf.cpp`), geprüft mit einem Modell des Importers, lib3mf, trimesh und PrusaSlicer 2.7 (lädt sechs Objekte an der richtigen Stelle, ohne Slots).
+- Farbfehlsichtigkeit: 16 Farben lassen sich nicht für alle Formen gut trennen; kleinste ΔE_OK bei Deuteranopie 0,070 (red/green), Protanopie 0,052 (orange/green), Tritanopie 0,031 (teal/blue). Die UI zeigt Namen und Slot zu jeder Farbe.
+- Weiß auf hellem und Schwarz auf dunklem Hintergrund unterscheiden sich in der flachen Farbe kaum; Schattierung und Kantenlinien machen die Körper sichtbar, die Anzeige-Varianten (Weiß #e9e8e5 hell, Schwarz #3b3d41 dunkel) helfen etwas.
+
 **solidcore (M8)**
 
 - Jedes Primitiv bricht in solidcore mit `Unported: SmSurface::DropCurve` ab; nur 2D-Knoten (in Rust berechnet) stimmen überein (101 von 855). `kernel-solidcore` deckt nur die heute vorhandenen API-Einstiege ab. (B5)
+
+---
+
+## 16. Farben, Filamente, dunkles Thema (B11)
+
+### 16.1 Palette
+
+Eine Quelle: `crates/cad-eval/src/palette.rs`; daraus erzeugt `web/src/logic/palette.ts`
+(Test `cad-eval --test palette`), die CLI nutzt die Rust-Funktionen. 16 Farben, Werte aus
+OKLCH-Zielen (gedeckt, Chroma ≤ 0,18), optimiert auf Abstand in OKLab für normales Sehen und
+simulierte Deuteranopie/Protanopie (Machado 2009): `red #c74240, orange #dc813b, yellow
+#f7d974, lime #91ca55, green #4ca167, teal #217274, cyan #6eccec, blue #2e65b9, purple
+#693d8c, magenta #cd67b7, pink #f7b8c6, brown #6e4223, black #202225, gray #7b7d81, silver
+#abaeb2, white #f4f3f0`; `grey`, `aqua`, `fuchsia` als CSS-Schreibweisen. Auswahl: die
+häufigsten Namen in OpenSCAD-Dateien (red, green, blue, yellow, cyan, gray, black, white,
+magenta, orange, silver, lime, purple) plus teal, pink, brown für typische Filamente;
+`indigo`/`slate` fallen weg (zu nah an blue/purple bzw. gray). Unbekannter Name → Warnung am
+Argument und Farbe aus FNV-1a des kleingeschriebenen Namens (Farbton) mit L 0,65 / C 0,125
+(Mediane der Palette). Anzeige je Thema: Schwarz im Dunkeln auf L 0,36, dunkle Töne +0,04;
+Weiß im Hellen auf L 0,93; Exporte nutzen die Grundwerte.
+
+### 16.2 Farbregionen
+
+`cad_engine::colors`: der Körper eines gefärbten Teilbaums (`color()`-Knoten `C`, Ergebnis in
+das System des Bauteils gelegt, mit `resize`-Faktoren) gehört dieser Farbe; Überlappung →
+die spätere Anweisung (Pre-Order: inneres `color()` nach dem äußeren, späteres Geschwister
+nach früherem) gewinnt; Abgezogenes gilt für alle (alles wird mit dem Ergebnis geschnitten).
+`Stück(C) = R ∩ M(C) − ⋃ M(später)`, Rest `R − ⋃ M` → Farbe am Bauteil, sonst Standard
+(wenn das Bauteil ungefärbte Primitive hat), sonst die erste Farbe. Gecacht unter einem
+Schlüssel aus Bauteil, Farbknoten, Lagen und Farben; Farbe und Slot sind nicht Teil der
+Knotenschlüssel. Prüfung Summe = Volumen (sonst Warnung).
+
+### 16.3 Filamente
+
+`filament = n` (1–16) an einem `color()` legt den Slot der Farbe fest (erste Angabe gilt,
+Widerspruch → Warnung); ungefärbtes Material Slot 1; sonst niedrigster freier Slot in
+Reihenfolge des ersten Auftretens. Die UI schreibt den Slot als Text-Edit (`SetFilament`):
+der Code bleibt die einzige Quelle, CLI-Export und UI-Export stimmen überein, Undo und Git
+sehen die Änderung; eine reine Vorschau ginge beim Speichern verloren.
+
+### 16.4 Export
+
+3MF (`cad_engine::color_export`): `m:colorgroup`, ein Netz je (Bauteil, Farbe) mit
+`pid`/`pindex`, je Bauteil ein Objekt mit `components` ohne Transformation,
+`Metadata/model_settings.config` mit `extruder` je Teil und Objekt (Annahmen aus
+`bbs_3mf.cpp` von Bambu Studio und OrcaSlicer, Bericht 11). Kein `project_settings.config`.
+Standard für 3MF (`--single-color` / `colors: false` für einfarbig); `--per-color` /
+`Export { format: stl, colors: true }`: ZIP mit `F<slot>_<farbe>.stl`.
+
+### 16.5 Thema
+
+CSS-Token je Thema (`:root[data-theme=…]`), `contrast.test.ts` prüft Text ≥ 4,5:1 und
+UI-Teile ≥ 3:1; CodeMirror-Tooltips/Suchleiste über Token; 3D-Farben aus Token
+(`readPalette`); System folgt `matchMedia('(prefers-color-scheme: dark)')` mit Listener.
+CLI: `cad render --theme dark`.

@@ -36,7 +36,7 @@ import { VersionMapper } from "../logic/positions";
 import { isOff } from "../logic/sceneIndex";
 import { bridge } from "../state/bridge";
 import { type DirHandle, project } from "../state/project";
-import { resolveTheme, store } from "../state/store";
+import { resolveTheme, setThemePref, store } from "../state/store";
 import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
 import { DragController } from "./drag";
@@ -768,5 +768,53 @@ window.__cad = {
   },
   async appInfo() {
     return IS_TAURI ? desktop.appInfo() : null;
+  },
+  /**
+   * Export without download (tests, also in the desktop app): bytes, triangles and the
+   * strings a multi-colour package must contain.
+   */
+  async exportSummary(format: ExportFormat, colors?: boolean, parts?: string[]) {
+    const r = await client.exportFile(format, parts, false, colors);
+    const t = new TextDecoder().decode(r.bytes);
+    const count = (re: RegExp) => (t.match(re) ?? []).length;
+    return {
+      bytes: r.bytes.length,
+      triangles: r.triangles,
+      colors: r.colors ?? false,
+      colorGroup: t.includes("<m:colorgroup"),
+      mColors: count(/<m:color /g),
+      items: count(/<item /g),
+      components: count(/<component /g),
+      modelSettings: t.includes("Metadata/model_settings.config"),
+      extruders: [...t.matchAll(/<metadata key="extruder" value="(\d+)"\/>/g)].map((m) => Number(m[1])),
+      files: [...t.matchAll(/([A-Za-z0-9_-]+_F\d+_[A-Za-z0-9_-]+\.stl)/g)].map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i),
+    };
+  },
+  /** Chooses the theme (System/Hell/Dunkel) like the toolbar. */
+  setThemePref(p: "system" | "light" | "dark") {
+    setThemePref(p);
+  },
+  /** Contrast of text and background of the first element matching a selector (computed styles). */
+  contrastOf(textSel: string, bgSel: string) {
+    const parse = (v: string) => {
+      const c = document.createElement("canvas").getContext("2d")!;
+      c.fillStyle = v;
+      const h = c.fillStyle as string;
+      if (h.startsWith("#")) return [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+      return (/rgba?\(([^)]+)\)/.exec(h)?.[1] ?? "0,0,0").split(",").slice(0, 3).map(Number);
+    };
+    const fg = document.querySelector(textSel);
+    const bg = document.querySelector(bgSel);
+    if (!fg || !bg) return null;
+    const a = parse(getComputedStyle(fg).color);
+    const b = parse(getComputedStyle(bg).backgroundColor);
+    const lin = (x: number) => (x / 255 <= 0.04045 ? x / 255 / 12.92 : ((x / 255 + 0.055) / 1.055) ** 2.4);
+    const L = (c: number[]) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+    const [x, y] = [L(a), L(b)];
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  },
+  /** Does the system prefer a dark theme (`prefers-color-scheme`)? */
+  systemDark() {
+    return typeof matchMedia !== "undefined" && matchMedia("(prefers-color-scheme: dark)").matches;
   },
 };
