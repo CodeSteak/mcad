@@ -383,10 +383,11 @@ fn modifiers() {
 
 #[test]
 fn unsupported_operations_keep_children() {
-    let out = run("hull() { cube(1); sphere(1); } text(\"hi\"); import(\"a.stl\"); minkowski() cube(1);");
+    let out = run("hull() { cube(1); sphere(1); } import(\"a.stl\"); minkowski() cube(1);");
     assert_eq!(dump(&out), "group\n  empty\n    box\n    sphere\n  empty\n    box\n");
     assert!(has_warning(&out, "`hull()` nicht unterstützt"));
-    assert!(has_warning(&out, "`text()` nicht unterstützt"));
+    // text() and import() of SVG exist (Bericht 16); import of meshes does not
+    assert!(has_error(&out, "nur SVG"));
 }
 
 #[test]

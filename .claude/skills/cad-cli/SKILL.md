@@ -417,5 +417,30 @@ module schraube(d = 3) { … } }` (Klammern dürfen fehlen) → `teile.schraube(
 des äußeren mit Standardwerten, nicht dessen Raster/Instanzen. `cad --module teile.schraube`,
 `cad set --param teile.schraube.d=4`; `cad outline` zeigt Module und Funktionen mit Pfad.
 
+**Text und SVG** (Plan 17.4/17.5, Bericht 16):
+
+```
+linear_extrude(1.2) text("Werkstatt", size = 11, font = "Inter:style=Bold", halign = "center", valign = "center");
+linear_extrude(1) text("Maß 20 mm", font = "fonts/meine.ttf");   // Schriftdatei relativ zur .scad-Datei
+linear_extrude(2) import("logo.svg", center = true);             // auch id = "…", scale = …, dpi = 96
+```
+
+- `text()` wie OpenSCAD (`size` ≈ Versalhöhe, em = size/0,72; Laufweite/Ausrichtung gleich
+  OpenSCAD 2021.01; `spacing`, `direction` ltr/rtl/ttb/btt, `language`, `script`).
+  Mitgeliefert: JetBrains Mono (Standard; Regular/Bold), Inter (Regular/Bold), Allerta Stencil.
+  `"cad stencil mono"` ist reserviert (vorerst JetBrains Mono, Hinweis). Unbekannte Schrift →
+  Warnung + JetBrains Mono; fehlende Zeichen (z. B. `°` in Allerta Stencil) → Warnung, Zeichen
+  aus JetBrains Mono. Umlaute, ß/ẞ und übliche Satzzeichen haben alle mitgelieferten Schriften
+  (Ausnahmen Allerta Stencil: ẞ„‚{}_#°²³§~^·•…±µØø).
+- `import("….svg")`: Pfade, Rechtecke (rx/ry), Kreise/Ellipsen exakt, Polygone, Gruppen mit
+  `transform`, `viewBox`/mm/in/pt, `fill-rule`. Ursprung unten links (y nach oben) wie OpenSCAD.
+  Warnungen nennen die SVG-Zeile (`logo.svg:4: \`text\`: Text nicht unterstützt …`): Text in
+  Pfade umwandeln, Striche als Flächen gibt es nicht, offene Pfade werden nicht gefüllt.
+- Dateinamen müssen als Text im Projekt stehen (auch als Parameter-Standardwert); `cad watch`
+  beobachtet die SVG/TTF-Dateien mit.
+- Kernel-Zeit: „Hello World“ extrudiert ≈ 0,7 s; viel Text **auf** einer Platte (Vereinigung)
+  kostet Sekunden (28 Glyphen ≈ 9 s) – Text als eigenes Teil oder weniger Zeichen, beim
+  Ausprobieren `--no-kernel`.
+
 **Profile:** 2D-Formen (`square`, `rect`, `circle`, `polygon`, `spline`) in `linear_extrude`,
 `rotate_extrude`, `loft`, `sweep`; Freiformflächen mit `surface(points)` + `thicken(t)`.

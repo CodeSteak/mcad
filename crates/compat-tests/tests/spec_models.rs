@@ -382,6 +382,50 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
+        file: "svg_logo.scad",
+        grids: &[],
+        instances: &[],
+        handles: 11,
+        ops: &[("linear_extrude", 5), ("color", 6), ("box", 1)],
+        check: |out| {
+            // one profile per filled SVG element: logo 10 (ring, 8 teeth, bolt), leaf 2,
+            // house 4, wave (id) 1, wave 5
+            let sketches =
+                out.tree.nodes.iter().filter(|n| matches!(n.op, Op::Profile(cad_ir::Profile::Sketch { .. })));
+            assert_eq!(sketches.count(), 10 + 2 + 4 + 1 + 5);
+            // the ring keeps its circle as arcs (quarters), with a hole
+            let ring = out.tree.nodes.iter().find_map(|n| match &n.op {
+                Op::Profile(cad_ir::Profile::Sketch { contours, .. })
+                    if contours.len() == 2 && contours.iter().all(|c| c.segs.iter().all(|g| g.kind() == "arc")) =>
+                {
+                    Some(contours.clone())
+                }
+                _ => None,
+            });
+            assert!(ring.is_some(), "ring of arcs");
+        },
+    },
+    Expect {
+        file: "text_schild.scad",
+        grids: &[],
+        instances: &[],
+        handles: 8,
+        ops: &[("linear_extrude", 4), ("color", 4), ("platte", 3)],
+        check: |out| {
+            // glyphs: "Werkstatt" 9, "ZUTRITT NUR MIT BRILLE" 19 (Allerta Stencil: letters in
+            // several parts are one glyph each)
+            let glyphs = out
+                .tree
+                .nodes
+                .iter()
+                .filter(|n| {
+                    matches!(&n.op, Op::Profile(cad_ir::Profile::Sketch { .. })) && n.stmt != out.tree.nodes[0].stmt
+                })
+                .count();
+            assert_eq!(glyphs, 3 + 9 + 19, "3 plate sketches + glyphs");
+        },
+    },
+    Expect {
         file: "variabler_radius.scad",
         grids: &[("g", 7, true)],
         instances: &[],
@@ -465,7 +509,7 @@ fn spec_models_stage1() {
     for (path, e) in files.iter().zip(EXPECT) {
         let src = std::fs::read_to_string(path).unwrap();
         assert!(src.starts_with("// Zweck:"), "{}: missing header comment", e.file);
-        let out = eval(&src);
+        let out = eval_file(path, &src);
         let problems = stage1_problems(&src, &out);
         assert!(problems.is_empty(), "{}: {problems:#?}", e.file);
         let warnings = diags(&src, &out, Severity::Warning);

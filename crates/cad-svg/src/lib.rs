@@ -241,7 +241,7 @@ impl<'d, 'i> State<'d, 'i> {
         match name {
             "svg" => {
                 // nested viewport: x/y offset, viewBox mapping into width/height
-                let num = |a: &str| n.attribute(a).and_then(|v| length_user(v));
+                let num = |a: &str| n.attribute(a).and_then(length_user);
                 let off = DAffine2::from_translation(DVec2::new(num("x").unwrap_or(0.0), num("y").unwrap_or(0.0)));
                 let inner = match (n.attribute("viewBox").and_then(parse_viewbox), num("width"), num("height")) {
                     (Some(vb), Some(w), Some(h)) => viewbox_map(vb, w, h, n.attribute("preserveAspectRatio")),
@@ -337,7 +337,7 @@ impl<'d, 'i> State<'d, 'i> {
                 let c = DVec2::new(num("cx").unwrap_or(0.0), num("cy").unwrap_or(0.0));
                 let (u, v) = (DVec2::new(rx, 0.0), DVec2::new(0.0, ry));
                 let half = |t0: f64, t1: f64| Seg::Ellipse { center: c, u, v, t0, t1 };
-                let segs = vec![half(0.0, std::f64::consts::PI), half(std::f64::consts::PI, std::f64::consts::TAU)];
+                let segs = [half(0.0, std::f64::consts::PI), half(std::f64::consts::PI, std::f64::consts::TAU)];
                 // a circle after all: exact circular arcs
                 let segs = segs.iter().map(|s| s.transform(&DAffine2::IDENTITY)).collect();
                 contours.push(Contour { segs, closed: true });
@@ -580,7 +580,7 @@ pub fn parse_transform(s: &str) -> Result<DAffine2, String> {
             ("skewY", 1) => DAffine2::from_mat2(DMat2::from_cols(DVec2::new(1.0, a[0].to_radians().tan()), DVec2::Y)),
             _ => return Err(format!("`{name}` mit {} Werten", a.len())),
         };
-        m = m * t;
+        m *= t;
         rest = &rest[close + 1..];
     }
     Ok(m)

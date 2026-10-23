@@ -345,9 +345,11 @@ impl ttf_parser::OutlineBuilder for Builder {
     }
 }
 
+/// Glyph outlines in font units by (font key, glyph id).
+type GlyphCache = HashMap<(u64, u16), Rc<Vec<Contour>>>;
+
 thread_local! {
-    /// Glyph outlines in font units by (font key, glyph id).
-    static GLYPHS: RefCell<HashMap<(u64, u16), Rc<Vec<Contour>>>> = RefCell::new(HashMap::new());
+    static GLYPHS: RefCell<GlyphCache> = RefCell::new(HashMap::new());
 }
 
 /// Outline of a glyph in font units (cached).
