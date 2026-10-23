@@ -10,3 +10,5 @@ node_modules
 /reports/tmp
 /.claude/worktrees
 __pycache__/
+/web/test-results
+/web/playwright-report

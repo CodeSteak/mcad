@@ -1,0 +1,451 @@
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --panel-2: #f0f2f5;
+  --border: #d9dde3;
+  --text: #1f2328;
+  --muted: #646b75;
+  --accent: #2f6fdb;
+  --accent-soft: rgba(47, 111, 219, 0.12);
+  --error: #c9302c;
+  --error-bg: rgba(229, 72, 77, 0.13);
+  --warning: #9a6700;
+  --warning-bg: rgba(234, 179, 8, 0.2);
+  --hover-line: rgba(47, 111, 219, 0.08);
+  --viewhover-line: rgba(47, 111, 219, 0.2);
+  --active-line: rgba(31, 35, 40, 0.035);
+
+  --hl-keyword: #8b2fc9;
+  --hl-number: #0a7d5a;
+  --hl-string: #a3501a;
+  --hl-comment: #6e7781;
+  --hl-special: #b5179e;
+  --hl-def: #1f5bc4;
+  --hl-call: #24548f;
+  --hl-label: #b4540a;
+  --hl-plane: #6b3fc4;
+  --hl-prop: #46617f;
+  --hl-modifier: #d1242f;
+  --hl-operator: #4b5563;
+
+  --view-bg: #eef0f3;
+  --view-model: #c3cad4;
+  --view-edge: #39404a;
+  --view-dim: #a7aeb8;
+  --view-dim-edge: #8c939d;
+  --view-accent: #2f6fdb;
+  --view-red: #e5484d;
+  --view-grey: #7d838c;
+  --view-blue: #3b82f6;
+  --view-ghost: #8f99a8;
+  --view-outline: #5b6270;
+  --view-selected-edge: #f08c00;
+  --view-error-edge: #e03131;
+  --view-grid: #7c4dde;
+  --view-grid-used: #6a35d6;
+  --view-floor: #dde0e5;
+  --view-floor-major: #c7ccd3;
+  --view-anchor: #e8890c;
+  --view-flat: #2f6fdb;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #15171a;
+  --panel: #1c1f23;
+  --panel-2: #23272c;
+  --border: #33383f;
+  --text: #e4e7eb;
+  --muted: #9aa2ad;
+  --accent: #6aa1ff;
+  --accent-soft: rgba(106, 161, 255, 0.15);
+  --error: #ff6b6b;
+  --error-bg: rgba(255, 99, 99, 0.16);
+  --warning: #e3b341;
+  --warning-bg: rgba(227, 179, 65, 0.16);
+  --hover-line: rgba(106, 161, 255, 0.09);
+  --viewhover-line: rgba(106, 161, 255, 0.24);
+  --active-line: rgba(255, 255, 255, 0.04);
+
+  --hl-keyword: #c792ea;
+  --hl-number: #7fd1b9;
+  --hl-string: #f0a76c;
+  --hl-comment: #7d8590;
+  --hl-special: #f78cc8;
+  --hl-def: #82aaff;
+  --hl-call: #9cc4ff;
+  --hl-label: #ffb86b;
+  --hl-plane: #b9a3ff;
+  --hl-prop: #a9b8cc;
+  --hl-modifier: #ff7b72;
+  --hl-operator: #aab2bd;
+
+  --view-bg: #1b1e22;
+  --view-model: #8d96a3;
+  --view-edge: #15181c;
+  --view-dim: #5d6570;
+  --view-dim-edge: #6c7480;
+  --view-accent: #6aa1ff;
+  --view-red: #ff5c63;
+  --view-grey: #8a909a;
+  --view-blue: #4c8dff;
+  --view-ghost: #7d8796;
+  --view-outline: #b3bac4;
+  --view-selected-edge: #ffa94d;
+  --view-error-edge: #ff6b6b;
+  --view-grid: #a78bfa;
+  --view-grid-used: #c4b5fd;
+  --view-floor: #2a2f35;
+  --view-floor-major: #353b42;
+  --view-anchor: #ffa94d;
+  --view-flat: #6aa1ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+button,
+select {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+button:hover,
+select:hover {
+  border-color: var(--accent);
+}
+
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.toolbar .brand {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.toolbar .sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.toolbar .grow,
+.statusbar .grow {
+  flex: 1;
+}
+
+.toolbar .examples {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.toolbar .filename {
+  color: var(--muted);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.main {
+  --split: 46%;
+  display: grid;
+  grid-template-columns: var(--split) 5px 1fr;
+  min-height: 0;
+}
+
+.editorpane {
+  min-width: 0;
+  min-height: 0;
+  background: var(--panel);
+  display: flex;
+}
+
+.editor {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.editor .cm-editor {
+  height: 100%;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.editor .cm-scroller {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.editor .cm-gutters {
+  background: var(--panel);
+  color: var(--muted);
+  border-right: 1px solid var(--border);
+}
+
+.editor .cm-activeLine {
+  background: var(--active-line);
+}
+
+.editor .cm-activeLineGutter {
+  background: var(--active-line);
+  color: var(--text);
+}
+
+.editor .cm-cursor {
+  border-left-color: var(--text);
+}
+
+.editor .cm-selectionBackground,
+.editor .cm-editor.cm-focused .cm-selectionBackground {
+  background: var(--accent-soft) !important;
+}
+
+.editor .cm-l-hover {
+  background: var(--hover-line);
+}
+
+.editor .cm-l-viewhover {
+  background: var(--viewhover-line);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.editor .cm-l-error {
+  background: var(--error-bg);
+}
+
+.editor .cm-l-warning {
+  background: var(--warning-bg);
+}
+
+.editor .cm-l-disabled {
+  opacity: 0.42;
+}
+
+.editor .cm-d-error {
+  text-decoration: underline wavy var(--error);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+
+.editor .cm-d-warning {
+  text-decoration: underline wavy var(--warning);
+  text-underline-offset: 3px;
+}
+
+.editor .cm-ref-hover {
+  background: var(--accent-soft);
+  outline: 1px solid var(--accent);
+  border-radius: 2px;
+}
+
+.cm-lineend {
+  margin-left: 2.2em;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.cm-lineend > span + span {
+  margin-left: 1.2em;
+}
+
+.cm-lineend-error {
+  color: var(--error);
+}
+
+.cm-lineend-warning {
+  color: var(--warning);
+}
+
+.cm-lineend-info,
+.cm-lineend-hint,
+.cm-lineend-echo {
+  color: var(--muted);
+}
+
+.cm-lineend-echo {
+  font-style: italic;
+}
+
+.splitter {
+  cursor: col-resize;
+  background: var(--border);
+}
+
+.splitter:hover {
+  background: var(--accent);
+}
+
+.viewcol {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pathbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 10px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  min-height: 30px;
+}
+
+.pathbar .seg {
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.pathbar .seg.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+}
+
+.pathbar .seg.link:hover {
+  background: var(--accent-soft);
+}
+
+.pathbar .seg.current {
+  font-weight: 600;
+}
+
+.pathbar .chev {
+  color: var(--muted);
+  padding: 0 2px;
+}
+
+.pathbar .pathfile {
+  color: var(--muted);
+  margin-left: 6px;
+}
+
+.viewpane {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+}
+
+.viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.viewport canvas {
+  display: block;
+  outline: none;
+}
+
+.viewtools {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.viewtools button {
+  padding: 2px 8px;
+}
+
+.viewtools .check {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 0 4px;
+  color: var(--text);
+}
+
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 3px 10px;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  min-height: 24px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.statusbar .has-errors {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.statusbar .has-warnings {
+  color: var(--warning);
+}
+
+.statusbar .st-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.statusbar .st-note.warn {
+  color: var(--warning);
+}
+
+.statusbar .st-note.error {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.statusbar .st-note.bang {
+  color: var(--hl-modifier);
+  font-weight: 600;
+}

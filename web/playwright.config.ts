@@ -1,0 +1,29 @@
+import { defineConfig, devices } from "@playwright/test";
+
+// End-to-end tests in a real Chromium against the production build (vite build + preview).
+// Browsers come from PLAYWRIGHT_BROWSERS_PATH (preinstalled, `playwright install` is not run).
+export default defineConfig({
+  testDir: "e2e",
+  outputDir: "test-results",
+  timeout: 90_000,
+  expect: { timeout: 20_000 },
+  fullyParallel: false,
+  workers: 1,
+  retries: 0,
+  reporter: [["list"], ["json", { outputFile: "../reports/tmp/report2/playwright.json" }]],
+  use: {
+    baseURL: "http://127.0.0.1:4173",
+    viewport: { width: 1440, height: 900 },
+    deviceScaleFactor: 1,
+    acceptDownloads: true,
+    trace: "retain-on-failure",
+    launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] },
+  },
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 } }],
+  webServer: {
+    command: "pnpm exec vite build && pnpm exec vite preview --port 4173 --strictPort --host 127.0.0.1",
+    url: "http://127.0.0.1:4173",
+    reuseExistingServer: false,
+    timeout: 120_000,
+  },
+});
