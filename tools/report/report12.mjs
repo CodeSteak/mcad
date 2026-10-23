@@ -82,7 +82,7 @@ const cargoSum = (() => {
 const newTests = cargo
   ? [...cargo.matchAll(/^test (\S+) \.\.\. (ok|FAILED)$/gm)]
       .map((m) => ({ name: m[1], res: m[2] }))
-      .filter((t) => /^(f[1-9]_|all_review|long_ipc|set_filament_of_a_parameter|filament_table_rules|material_outside|random_colours_do_not|filament_declarations|no_color_group)/.test(t.name))
+      .filter((t) => /(^|::)(f[1-9]_|all_review|long_ipc|set_filament_of_a_parameter|filament_table_rules|material_outside|random_colours_do_not|filament_declarations|no_color_group)/.test(t.name))
   : [];
 const clippy = readText(join(input, "clippy.txt"));
 const fmt = readText(join(input, "fmt.txt"));
@@ -106,7 +106,7 @@ const tauriOk = tauri ? tauri.results.filter((r) => r.ok).length : null;
 const compare = readText(join(input, "compare.txt"));
 const compareSum = compare ? /(\d+)\/(\d+)/.exec(compare.split("\n").reverse().find((l) => /\d+\/\d+/.test(l)) ?? "")?.slice(1, 3) : null;
 const step = readText(join(input, "step.txt"));
-const stepSum = step ? (step.split("\n").reverse().find((l) => /\d+\/\d+/.test(l)) ?? "").trim() : null;
+const stepSum = step ? (/\d+\/\d+ passed/.exec(step)?.[0] ?? null) : null;
 const alltag = readText(join(input, "alltag.txt"));
 const alltagLine = alltag ? (alltag.trim().split("\n").reverse().find((l) => /bestanden|abweich|Modelle/i.test(l)) ?? alltag.trim().split("\n").at(-1)) : null;
 const verify = readJson(join(input, "verify.json"));

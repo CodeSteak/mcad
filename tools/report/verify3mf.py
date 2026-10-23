@@ -89,7 +89,9 @@ def check_lib3mf(path, out):
     res.update(meshes=meshes, components=comps, items=items)
     ok = not res["warnings"] and all(x["manifold"] for x in meshes.values())
     ok = ok and all(not any(c["transforms"]) for c in comps.values()) and all(not i["transform"] for i in items)
-    ok = ok and all(x["color"] for x in meshes.values())
+    # colours are optional (Bericht 12: no colour group by default); if there is a group, every
+    # colour mesh needs one
+    ok = ok and (not colors or all(x["color"] for x in meshes.values()))
     res["ok"] = ok
     out["lib3mf"] = res
     return ok

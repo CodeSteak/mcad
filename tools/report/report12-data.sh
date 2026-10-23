@@ -121,7 +121,7 @@ done
   grep -n "apply_volume_filament_ids\|volume->config.set(\"extruder\"" "$SRC/bambulab_BambuStudio_master_src_slic3r_GUI_ObjColorDialog.cpp" || true
   echo "== OrcaSlicer bbs_3mf.cpp: Farbgruppe nur ohne Volumen-Metadaten"
   grep -n "color_group_id_to_extruder_id_map.find" "$SRC/SoftFever_OrcaSlicer_main_src_libslic3r_Format_bbs_3mf.cpp" || true
-  echo "== OrcaSlicer Plater.cpp: ObjColorDialog für 3MF"
+  echo "== OrcaSlicer Plater.cpp: Vorkommen von color_group_map (0: kein Farbdialog für 3MF)"
   grep -c "color_group_map" "$SRC/SoftFever_OrcaSlicer_main_src_slic3r_GUI_Plater.cpp" || true
 } > "$OUT/sources.txt"
 echo "report12 data: $OUT"
