@@ -78,7 +78,7 @@ const cargoSum = (() => {
   }
   return { ok, failed };
 })();
-const NEW = /region2::|op2d::|biarcs|curve2::|sketch_ops|corner|arguments_of_2d|sketch_corners_offset_stroke|spec_models|tree_bounds|openscad_models|ring_of_long|step_has_exact/;
+const NEW = /region2::|op2d::|biarcs|curve2::|sketch_ops|corner_(rules|errors|radius)|concave_corners|arguments_of_2d|sketch_corners_offset_stroke|spec_models|tree_bounds|openscad_models|ring_of_long|step_has_exact/;
 const newTests = cargo ? [...cargo.matchAll(/^test (\S+) \.\.\. (ok|FAILED)$/gm)].map((m) => ({ name: m[1], res: m[2] })).filter((t) => NEW.test(t.name)) : [];
 const failedTests = cargo ? [...cargo.matchAll(/^test (\S+) \.\.\. FAILED$/gm)].map((m) => m[1]) : [];
 const clippy = readText(join(input, "clippy.txt"));
