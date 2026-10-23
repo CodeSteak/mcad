@@ -350,7 +350,7 @@ export type SelectMode = "inside" | "touch";
  * Resolved parameters of operations the view draws specially (zone blocks, profile
  * operations, surfaces). Points are in the node system.
  */
-export type OpInfo = { "kind": "blend", chamfer: boolean, r: number, select: SelectMode, } | { "kind": "shell", t: number, select: SelectMode, } | { "kind": "zone", line: boolean, point: Vec3, dir: Vec3, d: number, } | { "kind": "linear_extrude", h: number, center: boolean, twist: number, scale: [number, number], } | { "kind": "rotate_extrude", angle: number, } | { "kind": "loft", ruled: boolean, } | { "kind": "sweep", path: Array<Vec3>, spline: boolean, } | { "kind": "surface", rows: Array<Array<Vec3>>, } | { "kind": "thicken", t: number, } | { "kind": "sketch", closed: boolean, contours: Array<SketchContour>, };
+export type OpInfo = { "kind": "blend", chamfer: boolean, r: number, select: SelectMode, } | { "kind": "shell", t: number, select: SelectMode, } | { "kind": "zone", line: boolean, point: Vec3, dir: Vec3, d: number, } | { "kind": "linear_extrude", h: number, center: boolean, twist: number, scale: [number, number], } | { "kind": "rotate_extrude", angle: number, } | { "kind": "loft", ruled: boolean, } | { "kind": "sweep", path: Array<Vec3>, spline: boolean, } | { "kind": "surface", rows: Array<Array<Vec3>>, } | { "kind": "thicken", t: number, } | { "kind": "blend2d", chamfer: boolean, r: number, select: SelectMode, } | { "kind": "offset", round: boolean, d: number, chamfer: boolean, } | { "kind": "stroke", w: number, cap: string, join: string, } | { "kind": "sketch", closed: boolean, contours: Array<SketchContour>, };
 
 /**
  * One contour of a sketch (node system, z = 0).
@@ -395,6 +395,8 @@ implicit: boolean,
  * An error was reported for this segment.
  */
 error: boolean, };
+
+export type GuideLine = { kind: string, points: Array<Vec3>, };
 
 export type Bounds = { min: Vec3, max: Vec3, };
 
@@ -451,9 +453,15 @@ inst_key: number, status: NodeStatus, messages: Array<NodeMessage>,
  */
 hints: Array<string>, 
 /**
- * Edges selected by fillet/chamfer (polylines, node system).
+ * Edges selected by fillet/chamfer (polylines, node system); the new corner pieces of
+ * `fillet2d`/`chamfer2d`.
  */
-selected_edges: Array<Array<Vec3>>, opened_faces: number, 
+selected_edges: Array<Array<Vec3>>, 
+/**
+ * Guide lines of 2D operations (node system): `source` (input contour of `offset`),
+ * `result` (offset contour, drawn dashed), `centerline` (path of `stroke`).
+ */
+guides: Array<GuideLine>, opened_faces: number, 
 /**
  * Draft mode while dragging: this node's blend was left out (it took longer than the
  * draft limit); the full evaluation after the drag restores it.

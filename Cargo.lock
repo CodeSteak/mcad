@@ -676,6 +676,7 @@ dependencies = [
 name = "compat-tests"
 version = "0.1.0"
 dependencies = [
+ "cad-engine",
  "cad-eval",
  "cad-ir",
  "cad-kernel",

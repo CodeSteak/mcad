@@ -408,8 +408,38 @@ sweep() { sketch(closed = false) { start([0, 0]); line(to = [30, 0]); arc(to = [
 Fehler: „Kontur nicht geschlossen“, „unmöglicher Bogen“ (Radius < halbe Sehne, …),
 „Selbstüberschneidung … mit Segment in Zeile n“, „Kontur ohne Fläche“. `loft` verbindet
 Skizzen gleicher Segmentzahl Segment für Segment (Start = `start`), sonst als je eine Kurve.
-`corner()` ist reserviert (Warnung). In `cad render --line N` einer Segmentzeile ist die Skizze
-hervorgehoben.
+In `cad render --line N` einer Segmentzeile ist die Skizze hervorgehoben.
+
+**Ecken, Offset, Stroke** (Plan 17.3, Bericht 15) – alles exakt aus Geraden und Bögen (STEP:
+`CIRCLE`), B-Splines als Biarcs (1 µm):
+
+```
+sketch {
+    start([0, 0]);
+    corner(r = 2);                 // direkt nach start: die Startecke
+    line(to = [30, 0]);
+    corner(r = 4);                 // zwischen zwei Segmenten: rundet diese Ecke
+    line(to = [30, 20]);
+    corner(chamfer = 3);           // Fase: Schnittpunkte im Abstand 3 vom Eckpunkt
+    line(to = [0, 20]);
+    corner(r = 1);                 // vor close(): Ecke zur Schlusslinie
+    close();
+}
+fillet2d(2) square([30, 20]);                       // alle Ecken, konvex und konkav
+fillet2d(5) { profil(); translate([6, 6]) circle(1); }   // nur Ecken in 2D-Zonen (select = "touch")
+chamfer2d(1) polygon(…);
+offset(r = 2) …;  offset(-1) …;  offset(delta = 1, chamfer = true) …;   // wie OpenSCAD
+stroke(2, cap = "round" | "flat" | "square", join = "round" | "miter" | "bevel")
+    sketch(closed = false) { … };  // offener Pfad → Fläche; stroke(1) circle(5) = Ring
+```
+
+`corner` passt nicht → Fehler an der corner-Zeile mit „höchstens ≈ r“; tangentiale Ecke →
+„keine Ecke“. `fillet2d` meldet „n Ecken“ (Inline-Hinweis), zu große Radien je Ecke
+(„Ecke bei [x, y]: … passt nicht“). `offset` ohne Argument: `r = 1`; `r` gewinnt vor `delta`;
+negative Werte schrumpfen (schmale Teile verschwinden, Löcher wachsen), positive schließen
+Löcher. `cad render --line N` auf offset/stroke/fillet2d zeigt die Ausgangskontur, die
+Offset-Kontur gestrichelt, die Mittellinie des Strichs und die neuen Eckbögen; `--show handles`
+zeigt den Radius-Griff von `corner`.
 
 **Module als Namensräume:** `module teile { M3 = 3.2; function kopf(d) = 1.8 * d;
 module schraube(d = 3) { … } }` (Klammern dürfen fehlen) → `teile.schraube(d = 4);`,

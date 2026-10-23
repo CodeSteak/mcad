@@ -60,6 +60,14 @@ pub(crate) fn lift(tree: &Tree, idx: NodeIdx, m: DMat4, warn: &mut Vec<String>) 
             sketch_expr(idx, contours, m)
         }
         Op::Profile(p) => Ok(Expr2::Leaf(Leaf { node: idx, profile: p.clone(), m })),
+        Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } => {
+            let r = crate::op2d::compute(tree, idx);
+            match r.as_ref() {
+                Ok(o) if o.contours.is_empty() => Ok(Expr2::Op(BoolOp::Union, Vec::new())),
+                Ok(o) => sketch_expr(idx, &o.contours, m),
+                Err(e) => Err(e.clone()),
+            }
+        }
         Op::Group | Op::ModuleCall { .. } | Op::Transform { .. } | Op::Color { .. } | Op::Empty => {
             Ok(Expr2::Op(BoolOp::Union, kids(warn)?))
         }
@@ -170,7 +178,8 @@ pub(crate) fn profile_loops(p: &Profile) -> Result<Vec<Loop>, String> {
 pub(crate) fn open_sketch_in(tree: &Tree, idx: NodeIdx) -> bool {
     match &tree.node(idx).op {
         Op::Profile(Profile::Sketch { closed: false, .. }) => true,
-        Op::Profile(_) => false,
+        // 2D operations make regions (stroke turns paths into areas)
+        Op::Profile(_) | Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } => false,
         _ => tree.solid_children(idx).any(|c| open_sketch_in(tree, c)),
     }
 }
@@ -416,6 +425,32 @@ pub(crate) fn split_frame(m: &DMat4) -> (DMat4, DAffine2) {
     let frame = DMat4::from_cols(e1.extend(0.0), e2.extend(0.0), e3.extend(0.0), o.extend(1.0));
     let a = DMat2::from_cols(DVec2::new(lx, 0.0), DVec2::new(yd, ly));
     (frame, DAffine2::from_mat2(a))
+}
+
+/// Arcs of a composite loop longer than 90° as several arcs of at most 90° (each one span of
+/// the rational quadratic B-spline the kernel builds). SMLib's Booleans failed on extrusions of
+/// multi-span arc curves (a ring of two 180° arcs united with a box gave a wrong volume,
+/// Testbericht 15); single-span arcs are robust. Not used for lofts, which connect the sections
+/// segment by segment.
+pub(crate) fn split_arcs(lp: &Loop) -> Loop {
+    let Loop::Composite(segs) = lp else { return lp.clone() };
+    let quarter = std::f64::consts::FRAC_PI_2;
+    let mut out = Vec::with_capacity(segs.len());
+    for s in segs {
+        match s {
+            Segment::Arc { center, r, a0, a1 } if (a1 - a0).abs() > quarter + 1e-9 => {
+                let n = ((a1 - a0).abs() / quarter - 1e-9).ceil() as usize;
+                let d = (a1 - a0) / n as f64;
+                for i in 0..n {
+                    let b0 = a0 + d * i as f64;
+                    let b1 = if i + 1 == n { *a1 } else { a0 + d * (i + 1) as f64 };
+                    out.push(Segment::Arc { center: *center, r: *r, a0: b0, a1: b1 });
+                }
+            }
+            _ => out.push(s.clone()),
+        }
+    }
+    Loop::Composite(out)
 }
 
 /// Maps a loop by a 2D affine map. Circles stay circles under similarities; otherwise they

@@ -183,21 +183,24 @@ fn step_has_exact_lines_and_circles() {
     let opts = cad_engine::StepOptions { name: "skizze".into(), ..Default::default() };
     let (bytes, st) = e.export_step(&ev, &opts).unwrap();
     assert_eq!(st.solids, 1);
-    assert_eq!(st.faces, 6, "{st:?}");
+    // the half circle reaches the kernel as two 90° arcs (single-span curves, see
+    // `ring_of_long_arcs_unites_with_a_box`): two cylinder faces
+    assert_eq!(st.faces, 7, "{st:?}");
     let text = std::str::from_utf8(&bytes).unwrap();
     let m = cad_step::p21::parse(text).unwrap();
     assert!(m.count("CIRCLE") >= 2, "{st:?}");
     assert!(m.count("LINE") >= 6, "{st:?}");
     assert_eq!(st.approximated_edges, 0, "{st:?}");
     // the curved side: SMLib's extrusion of the exact arc, written as a cylinder
-    assert_eq!(st.surfaces.get("cylinder"), Some(&1), "{st:?}");
-    assert_eq!(m.count("CYLINDRICAL_SURFACE"), 1);
+    assert_eq!(st.surfaces.get("cylinder"), Some(&2), "{st:?}");
+    assert_eq!(m.count("CYLINDRICAL_SURFACE"), 2);
     // revolved arcs: a torus from two arcs
     let src = "rotate_extrude() sketch { start([24, 0]); arc(to = [16, 0], r = 4); arc(to = [24, 0], r = 4); }";
     let ev = e.evaluate(tree(src));
     assert_clean(&ev);
     let (_, st) = e.export_step(&ev, &opts).unwrap();
-    assert_eq!(st.curves.get("circle"), Some(&4), "{st:?}");
+    // four 90° arcs revolved: 4 faces, 8 circles
+    assert_eq!(st.curves.get("circle"), Some(&8), "{st:?}");
     assert_eq!((st.approximated_edges, st.approximated_faces), (0, 0), "{st:?}");
     let c = m.of_type("CIRCLE").next().unwrap();
     assert!((c.args()[2].as_num().unwrap() - 20.0).abs() < 1e-9);
@@ -230,4 +233,31 @@ fn mesh_area(m: &cad_kernel::Mesh) -> f64 {
         glam::DVec3::new(m.positions[i] as f64, m.positions[i + 1] as f64, m.positions[i + 2] as f64)
     };
     m.indices.chunks_exact(3).map(|t| (p(t[1]) - p(t[0])).cross(p(t[2]) - p(t[0])).length() / 2.0).sum()
+}
+
+/// Regression (found with the text import): a ring of two 180° arcs per circle extruded and
+/// united with a box gave a wrong SMLib result for some placements of the box; arcs longer than
+/// 90° are now split into single-span arcs before they reach the kernel.
+#[test]
+fn ring_of_long_arcs_unites_with_a_box() {
+    let mut e = engine();
+    for (sweep, n) in [(180.0, 2), (120.0, 3), (90.0, 4), (360.0, 1)] {
+        for rot in [0.0, 22.5, 45.0, 90.0, 157.5, 200.0, 247.5, 300.0] {
+            let arcs = |r: f64, sign: f64| {
+                let mut s = format!("start([{r}, 0]);");
+                for _ in 0..n {
+                    s += &format!(" arc(center = [0, 0], angle = {});", sign * sweep);
+                }
+                s
+            };
+            let ring = format!("sketch {{ {} {} }}", arcs(18.0, 1.0), arcs(14.8, -1.0));
+            let bx = format!("rotate({rot}) translate([-2, 16]) square([4, 3.6]);");
+            let t2 = tree(&format!("union() {{ {ring} {bx} }}"));
+            let loops = cad_engine::region_2d(&t2, t2.root.unwrap()).unwrap();
+            let area = cad_kernel::region2::region_area(&loops);
+            let ev = e.evaluate(tree(&format!("linear_extrude(3) {{ {ring} {bx} }}")));
+            assert_clean(&ev);
+            assert_approx(&format!("sweep {sweep} rot {rot}"), root_volume(&mut e, &ev), 3.0 * area, VREL);
+        }
+    }
 }

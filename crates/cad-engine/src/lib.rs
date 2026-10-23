@@ -53,6 +53,7 @@ pub mod counting;
 mod eval;
 pub mod export;
 pub mod key;
+mod op2d;
 pub mod parts;
 mod profile;
 
@@ -263,6 +264,8 @@ pub(crate) struct NodeOutput<S> {
     pub diags: Vec<Diag>,
     pub hints: Vec<String>,
     pub selected_edges: Vec<Vec<DVec3>>,
+    /// Guide lines of 2D operations (`"source"`, `"result"`, `"centerline"`), node system.
+    pub guides: Vec<(&'static str, Vec<DVec3>)>,
     /// Sample points of faces opened by `shell` (node system).
     pub opened_faces: Vec<Vec<DVec3>>,
     /// Time of the node's fillet/chamfer kernel calls (ms, 0 without a clock).
@@ -290,6 +293,9 @@ pub struct NodeReport {
     /// Edges selected by fillet/chamfer (zone block, boolean parameter, `$fillet`), as polylines
     /// in the node's own system.
     pub selected_edges: Vec<Vec<DVec3>>,
+    /// Guide lines of 2D operations: `"source"` (input contour of `offset`), `"result"` (offset
+    /// contour), `"centerline"` (path of `stroke`), polylines in the node's own system.
+    pub guides: Vec<(String, Vec<DVec3>)>,
     pub opened_faces: usize,
     /// Bounds in the node's own system.
     pub bounds: Option<(DVec3, DVec3)>,
@@ -594,6 +600,7 @@ impl<S: Clone + 'static> Job<S> {
             diags: vec![Diag { severity: Severity::Error, message: BLOCKED_MESSAGE.into(), edges: Vec::new() }],
             hints: Vec::new(),
             selected_edges: Vec::new(),
+            guides: Vec::new(),
             opened_faces: Vec::new(),
             blend_ms: 0.0,
             suspended: false,
@@ -646,6 +653,9 @@ impl<S: Clone + 'static> Job<S> {
                 diagnostics,
                 hints: out.map(|o| o.hints.clone()).unwrap_or_default(),
                 selected_edges: out.map(|o| o.selected_edges.clone()).unwrap_or_default(),
+                guides: out
+                    .map(|o| o.guides.iter().map(|(k, p)| (k.to_string(), p.clone())).collect())
+                    .unwrap_or_default(),
                 opened_faces: out.map(|o| o.opened_faces.len()).unwrap_or(0),
                 bounds: out.and_then(|o| o.bounds),
                 dim: out.and_then(|o| o.dim),
@@ -803,6 +813,7 @@ where
             b += 32 + self.kernel.shape_bytes(&p.shape);
         }
         b += pts(&o.selected_edges) + pts(&o.opened_faces);
+        b += o.guides.iter().map(|(_, p)| 24 * p.len() + 40).sum::<usize>();
         b += o.hints.iter().map(|h| h.len() + 24).sum::<usize>();
         b += o.diags.iter().map(|d| d.message.len() + 48 + pts(&d.edges)).sum::<usize>();
         b
@@ -1080,6 +1091,15 @@ pub(crate) fn mesh_bytes(m: &Mesh) -> usize {
 }
 
 /// `true` for nodes whose op is a profile operation (2D children).
+/// Exact region of a 2D node in its own system: loops of lines and arcs (outer loops
+/// counter-clockwise, holes clockwise), as `offset`, `fillet2d`, `stroke` and 2D booleans make
+/// them (Plan 17.3). B-splines enter as biarcs.
+pub fn region_2d(tree: &Tree, idx: NodeIdx) -> Result<Vec<Vec<cad_kernel::Segment>>, String> {
+    let mut warn = Vec::new();
+    let e = profile::lift(tree, idx, DMat4::IDENTITY, &mut warn)?;
+    op2d::expr_loops(&e)
+}
+
 pub(crate) fn is_profile_op(op: &Op) -> bool {
     matches!(op, Op::LinearExtrude { .. } | Op::RotateExtrude { .. } | Op::Loft { .. } | Op::Sweep { .. })
 }

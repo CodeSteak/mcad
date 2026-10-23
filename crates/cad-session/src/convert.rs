@@ -315,6 +315,15 @@ pub fn op_info(op: &Op) -> Option<p::OpInfo> {
             p::OpInfo::Surface { rows: rows.iter().map(|r| r.iter().map(|&q| v3(q)).collect()).collect() }
         }
         Op::Thicken { t } => p::OpInfo::Thicken { t: *t },
+        Op::Blend2 { kind, r, select: s } => {
+            p::OpInfo::Blend2d { chamfer: *kind == cad_ir::BlendKind::Chamfer, r: *r, select: select(*s) }
+        }
+        Op::Offset { round, d, chamfer } => p::OpInfo::Offset { round: *round, d: *d, chamfer: *chamfer },
+        Op::Stroke { w, cap, join } => p::OpInfo::Stroke {
+            w: *w,
+            cap: format!("{cap:?}").to_lowercase(),
+            join: format!("{join:?}").to_lowercase(),
+        },
         _ => return None,
     })
 }
@@ -520,6 +529,7 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
                 messages: Vec::new(),
                 hints: Vec::new(),
                 selected_edges: Vec::new(),
+                guides: Vec::new(),
                 opened_faces: 0,
                 blend_suspended: false,
                 bounds: None,
@@ -561,6 +571,14 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
                             .collect(),
                         hints: rep.hints.clone(),
                         selected_edges: polylines(&rep.selected_edges),
+                        guides: rep
+                            .guides
+                            .iter()
+                            .map(|(k, pts)| p::GuideLine {
+                                kind: k.clone(),
+                                points: pts.iter().map(|&q| v3(q)).collect(),
+                            })
+                            .collect(),
                         opened_faces: rep.opened_faces as u32,
                         blend_suspended: rep.blend_suspended,
                         bounds: rep.bounds.map(|(a, b)| p::Bounds { min: v3(a), max: v3(b) }),

@@ -8,6 +8,7 @@ publish = false
 
 [dev-dependencies]
 cad-eval.workspace = true
+cad-engine.workspace = true
 cad-ir.workspace = true
 cad-kernel.workspace = true
 cad-syntax.workspace = true

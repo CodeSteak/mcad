@@ -68,7 +68,7 @@ export interface ViewState {
     anchors: number;
     activeAnchors: number;
     status: string | null;
-    /** Guide lines by kind (axis, path, net). */
+    /** Guide lines by kind (axis, path, net, offset, centerline). */
     guides: Record<string, number>;
     /** Polyline points of the guides (context coordinates). */
     guidePoints: Array<{ kind: string; points: Vec3[] }>;
@@ -525,7 +525,9 @@ export class Viewer implements DragView {
       this.lastOpenFaces.push({ shell: q.shell, faces: faces.size, engine: scene.nodes[q.shell].opened_faces });
     }
     for (const gd of p.guides) {
-      this.addFatPolyline(gd.points, pal.guide, gd.kind === "net" ? 1.6 : 2.6, false, gd.dashed, `guide:${gd.kind}`);
+      // the offset contour in the accent colour over the input contour (Plan 17.3)
+      const color = gd.kind === "offset" ? pal.accent : pal.guide;
+      this.addFatPolyline(gd.points, color, gd.kind === "net" ? 1.6 : 2.6, false, gd.dashed, `guide:${gd.kind}`);
     }
     for (const sk of p.sketches) this.addSketch(sk, diag);
     this.missingMeshes = missing;
