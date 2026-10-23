@@ -79,7 +79,7 @@ fn to_js(msgs: Vec<FromEngine>) -> Result<Array, JsValue> {
                 set(&o, "items", &arr);
                 o.into()
             }
-            FromEngine::ExportResult { format, bytes, triangles, parts, zip } => {
+            FromEngine::ExportResult { format, bytes, triangles, parts, zip, colors } => {
                 let o = Object::new();
                 set(&o, "type", &JsValue::from_str("ExportResult"));
                 set(&o, "format", &format.serialize(&serializer())?);
@@ -91,6 +91,38 @@ fn to_js(msgs: Vec<FromEngine>) -> Result<Array, JsValue> {
                 if let Some(z) = zip {
                     set(&o, "zip", &JsValue::from_bool(*z));
                 }
+                if let Some(c) = colors {
+                    set(&o, "colors", &JsValue::from_bool(*c));
+                }
+                o.into()
+            }
+            FromEngine::ColorRegions { version, items } => {
+                let o = Object::new();
+                set(&o, "type", &JsValue::from_str("ColorRegions"));
+                set(&o, "version", &JsValue::from_f64(*version as f64));
+                let arr = Array::new();
+                for set_ in items {
+                    let so = Object::new();
+                    set(&so, "node", &JsValue::from(set_.node));
+                    set(&so, "part", &set_.part.as_deref().map(JsValue::from_str).unwrap_or(JsValue::NULL));
+                    set(&so, "total", &JsValue::from_f64(set_.total));
+                    let regs = Array::new();
+                    for r in &set_.regions {
+                        let ro = Object::new();
+                        set(&ro, "color", &JsValue::from_str(&r.color));
+                        set(&ro, "filament", &JsValue::from(r.filament));
+                        set(&ro, "volume", &JsValue::from_f64(r.volume));
+                        let mesh = match &r.mesh {
+                            Some(m) => mesh_js(m)?,
+                            None => JsValue::NULL,
+                        };
+                        set(&ro, "mesh", &mesh);
+                        regs.push(&ro);
+                    }
+                    set(&so, "regions", &regs);
+                    arr.push(&so);
+                }
+                set(&o, "items", &arr);
                 o.into()
             }
             other => other.serialize(&serializer())?,

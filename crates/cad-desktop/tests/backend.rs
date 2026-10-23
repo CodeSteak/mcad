@@ -237,6 +237,7 @@ fn wire_batch_has_binary_meshes() {
             triangles: 1,
             parts: None,
             zip: None,
+            colors: None,
         },
     ];
     let f = encode_batch(&msgs, true);
