@@ -1581,6 +1581,26 @@ BrepPtr touching_union(const SmBrep* A, const SmBrep* B) {
   return m;
 }
 
+// Union of solids whose bounding boxes are apart: both shells go into one Brep (MergeBrep, no
+// SMLib boolean). SMLib's union of such bodies could return one of them twice, once inside out
+// (pieces of stencil glyphs: volume 2.0 instead of 7.3 mm³, Bericht 16). nullptr if the boxes
+// touch or overlap, or the merge fails.
+BrepPtr disjoint_union(const SmBrep* A, const SmBrep* B) {
+  if (A->GetNumFaces() == 0 || B->GetNumFaces() == 0) return BrepPtr();
+  SmPoint3d a0, a1, b0, b1;
+  if (SmApiBrepBoundingBox(const_cast<SmBrep*>(A), TRUE, a0, a1) != SM_SUCCESS) return BrepPtr();
+  if (SmApiBrepBoundingBox(const_cast<SmBrep*>(B), TRUE, b0, b1) != SM_SUCCESS) return BrepPtr();
+  double size = std::max({a1.x - a0.x, a1.y - a0.y, a1.z - a0.z, b1.x - b0.x, b1.y - b0.y, b1.z - b0.z, 1.0});
+  double eps = 1e-7 * size;
+  bool apart = a1.x < b0.x - eps || b1.x < a0.x - eps || a1.y < b0.y - eps || b1.y < a0.y - eps ||
+               a1.z < b0.z - eps || b1.z < a0.z - eps;
+  if (!apart) return BrepPtr();
+  BrepPtr m = copy_brep(A);
+  if (m->MergeBrep(*B, nullptr, nullptr, FALSE) != SM_SUCCESS) return BrepPtr();
+  if (m->GetNumFaces() == 0 || !m->IsManifoldSolid()) return BrepPtr();
+  return m;
+}
+
 // A op B with the plausibility check and fallbacks (see above). `allow_perturb` = false
 // leaves out the shifted retries (used while other operand orders are still untried); they
 // are only tried after a wrong result or an SMLib error, not for results that are merely
@@ -1599,6 +1619,13 @@ BrepPtr touching_union(const SmBrep* A, const SmBrep* B) {
 BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow_perturb,
                         std::string& err, BrepPtr& plain, double& va,
                         bool* plain_impossible = nullptr) {
+  if (op == SC_UNION) {
+    BrepPtr d = disjoint_union(A, B);
+    if (d.get()) {
+      va = NAN;
+      return d;
+    }
+  }
   bool commutative = op != SC_DIFFERENCE;
   bool wrong = false;
   std::string why;

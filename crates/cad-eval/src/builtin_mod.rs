@@ -296,6 +296,8 @@ impl<'a> Ev<'a> {
                 return self.m_profile_op(s, n, a, children, ctx, dy);
             }
             "surface" => self.m_surface(s, a, ctx, dy),
+            "text" => self.m_text(s, a, ctx, dy),
+            "import" => self.m_import(s, a, ctx, dy),
             "children" => return self.children_stmt(s, a, ctx),
             "sketch" => return self.m_sketch(s, a, children, ctx, dy),
             "start" | "line" | "arc" | "bezier" | "close" | "corner" | "hole" => {
@@ -345,10 +347,6 @@ impl<'a> Ev<'a> {
             "hull" | "minkowski" | "projection" => {
                 self.warn(name.span, format!("`{n}()` nicht unterstützt; Kinder werden unverändert gezeigt"));
                 Op::Empty
-            }
-            "text" | "import" => {
-                self.warn(name.span, format!("`{n}()` nicht unterstützt"));
-                return Ok(());
             }
             _ => {
                 self.warn(name.span, format!("unbekanntes Modul `{n}`"));

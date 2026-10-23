@@ -260,7 +260,8 @@ Ziel: Typische Hobby-Dateien laufen ohne Änderung, solange sie keine Mesh-Opera
 | Voll | Syntax, Variablen, Funktionen und Funktionsliterale, Module, `children()`, `for`, `if`, `let`, `each`, Listenausdrücke, Strings, Bereiche, `echo`, `assert`, Mathefunktionen, `cube`, `sphere`, `cylinder`, `square`, `circle`, `polygon`, Transformationen, Booleans, Modifier, `linear_extrude`, `rotate_extrude`, `offset` (exakte Bögen statt Facetten, 17.9) |
 | Mit Abweichung | `color()` nur als Anzeigefarbe; `$fn/$fa/$fs` siehe 12.3; `polyhedron` nur für kleine Körper mit ebenen Flächen; `resize` als `scale` mit denselben Regeln |
 | Voll (Projekte) | `include`/`use` mit Projekten aus mehreren Dateien (Pfade relativ zur einbindenden Datei; ohne Suchpfad `OPENSCADPATH`) |
-| Später | `text()` (Schriften), `hull()` |
+| Mit Abweichung (Bericht 16) | `text()` mit den mitgelieferten Schriften oder Schriftdateien des Projekts (17.10), `import()` von SVG (17.10; Abweichungen bei Einheiten ohne `viewBox`, Strichen und Füllregel) |
+| Später | `hull()` |
 | Nicht vorgesehen | `minkowski`, `projection`, `import` von Meshes, `surface()` als Höhenkarte (der Name ist in der Spec für NURBS-Flächen vergeben) |
 
 Ein Korpus von `.scad`-Dateien (Lizenzen vorher prüfen) läuft in CI über die CLI. Gemessen wird pro Datei: parst, wertet aus, erzeugt Geometrie.
@@ -766,7 +767,9 @@ CLI: `cad render --theme dark`.
 Stand: Plan, abgestimmt mit dem Nutzer am 2026-10-23. **Schritt 1 umgesetzt** (Skizzen mit
 gemischten Konturen, Module als Namensräume; Testbericht 14, Entscheidungen in 17.8), **Schritt 2
 umgesetzt** (`corner`, `fillet2d`/`chamfer2d`, `offset`, `stroke`; Testbericht 15, Entscheidungen
-in 17.9); Schritte 3–4 geplant.
+in 17.9); **aus Schritt 3 umgesetzt:** `text()` mit den mitgelieferten OFL-Schriften und
+SVG-Import (Testbericht 16, Entscheidungen in 17.10); die eigene Schablonenschrift folgt.
+Schritt 4 geplant.
 
 ### 17.1 Skizzen
 
@@ -829,6 +832,11 @@ Zonen wie in 3D, `stroke(w, cap = "round" | "flat" | "square", join = "round" | 
 - **Mitgelieferte freie Schriften (OFL):** Inter (Sans), JetBrains Mono (Mono),
   Allerta Stencil (proportionale Schablone). Eigene Schriften per UI-Upload oder Pfad (CLI).
 - Umrisse exakt als Bézier/NURBS-Konturen, Kerning über Shaping, Löcher nach Windungsregel.
+- **Pflicht-Zeichensatz** (`cad_font::REQUIRED_CHARS`, Test je Schrift; gilt auch für die
+  eigene Schablonenschrift): A–Z a–z 0–9, Ä Ö Ü ä ö ü ß ẞ, Leerzeichen,
+  `. , ; : ! ? ' " „ “ ‚ ‘ » « ( ) [ ] { } - – — _ / \ & % # + * = < > ° ² ³ € @ § ~ ^ | · • …`,
+  `± × ÷ µ Ø ø`. Fehlt ein Zeichen in einer Schrift, kommt es mit Warnung am Statement aus
+  JetBrains Mono gleichen Gewichts (nicht als Kästchen oder Lücke).
 
 ### 17.5 SVG-Import (Teilmenge)
 
@@ -837,7 +845,7 @@ bzw. Parameter `scale`/`dpi`): `path` (M, L, H, V, C, S, Q, T, A, Z, absolut und
 `rect` (auch mit `rx`), `circle`, `ellipse`, `polygon`, `polyline`, `line`, `g` mit
 `transform`; Füllregel `nonzero`/`evenodd`. Nicht unterstützt (Warnung): Text, Bilder,
 Strichstärken als Fläche, CSS, Masken, Verläufe. Wahl einzelner Ebenen per `id`.
-Kein SVG- oder DXF-Export.
+Kein SVG- oder DXF-Export. Umgesetzt (17.10).
 
 ### 17.6 Skizzen-Editor (Zeichenmodus)
 
@@ -1041,3 +1049,85 @@ Dabei gefunden und behoben: die Windungszahl der exakten Region nahm die Endpunk
 ihren Winkeln (Rundung ~10⁻¹⁵), ein Strahl durch einen Eckpunkt zählte dann falsch; jetzt
 gelten die gemeinsamen Eckpunkte der Schleife.
 
+
+### 17.10 Umsetzung Schritt 3, Teil Text und SVG (Testbericht 16)
+
+**Crates.** Drei neue Crates ohne Bezug zu Sprache und Kernel: `cad-outline` (neutrale Konturen:
+`Seg::{Line, Arc, Quad, Cubic, Ellipse}`, affine Abbildung – Kreisbögen bleiben unter
+Ähnlichkeiten Kreisbögen, sonst Ellipsenbögen –, Abtastung, Füllregel-Normalisierung),
+`cad-svg` (Parser auf `roxmltree`) und `cad-font` (Schriften, Shaping mit `rustybuzz` 0.20 /
+`ttf-parser` 0.25, Glyphen-Umrisse). `cad-eval` hat die Builtins `import(…)` und `text(…)`
+(`import.rs`); sie erzeugen `Profile::Sketch` – ein Knoten je gefülltem SVG-Element bzw. je
+Glyphe, bei mehreren unter einer Gruppe (Vereinigung: überlappende Elemente/Glyphen). Mit
+`Seg::Nurbs` (aus Schritt 2) werden tangentenstetige Ketten von Bézierkurven eine B-Spline mit
+C1-Knoten (eine Kernel-Fläche je Glyphenflanke statt Dutzender), Ellipsenbögen rational
+quadratisch. Engine und Fassade blieben unverändert bis auf die Farbregionen (unten) und eine
+Vereinigung ohne SMLib-Boolean für Körper, deren Hüllquader getrennt sind (`disjoint_union` in
+`sc_facade.cpp`: beide Schalen in eine Brep): SMLib gab bei der Vereinigung getrennter
+Glyphenteile (Schablonen-„c“ aus drei Stücken) ein Stück doppelt zurück, einmal verkehrt herum
+(Volumen 2,0 statt 7,3 mm³, ohne Fehlermeldung); nebenbei wird Text schneller. (Die
+zwischenzeitliche Umgehung – Bögen über 90° beim Import teilen – entfiel mit
+`profile::split_arcs` aus Schritt 2.)
+
+**Füllregeln.** Je Element werden die Konturen so orientiert, dass die gefüllte Fläche links
+liegt (außen gegen, Löcher im Uhrzeigersinn, Inseln wieder gegen): Prüfpunkte links/rechts
+der längsten Kante, Windungszahl aller Konturen des Elements nach dessen Regel; Konturen mit
+Füllung auf beiden oder keiner Seite entfallen. Danach gilt nonzero wie in Skizzen.
+Voraussetzung: Konturen eines Elements schneiden sich nicht (Glyphen, übliche SVGs).
+
+**SVG.** Einheiten wie OpenSCAD, wo es konsistent ist: mit `viewBox` gilt `width`/`height`
+(px = 1/96 in, mm, cm, in, pt, pc; ohne Einheit Pixel mit `dpi`, Standard **96**; OpenSCAD
+2021.01: 72), ohne `width` die `viewBox`-Größe in Pixeln, `preserveAspectRatio` (Standard
+`xMidYMid meet`). y wird um die Dokumenthöhe gespiegelt: Ursprung unten links (wie OpenSCAD).
+Abweichungen von OpenSCAD 2021.01: ohne `viewBox` sind Nutzereinheiten Pixel (OpenSCAD: mm bei
+Spiegelung um die Höhe in Pixeln), der y-Versatz der `viewBox` wird abgezogen (OpenSCAD addiert
+ihn), `fill-rule` gilt (OpenSCAD: immer evenodd), Striche werden nicht zu Flächen (OpenSCAD:
+ja), offene Pfade und `line`/`polyline` sind Pfade (Warnung; nur offene Pfade → offene Skizze,
+als `sweep`-Pfad nutzbar). `center = true` zentriert die Hülle; `scale` multipliziert; `id`
+wählt ein Element mit Inhalt (unbekannte id: Fehler). Warnungen tragen Datei und SVG-Zeile
+(`logo.svg:4: …`) und erscheinen je Meldung einmal.
+
+**Dateien.** `Project::assets`: jeder Text in den Ausdrücken der Projektdateien, der auf
+`.svg/.ttf/.otf/.ttc/.otc` endet, wird beim Laden relativ zu jeder geladenen Datei gesucht und
+gelesen (`FileResolver::read_bytes`; Browser/`SetFiles`: Binärdateien als
+`data:…;base64,…`-Text). `import`/`font =` lösen relativ zur Datei der Anweisung auf; ein zur
+Laufzeit berechneter Name, der nirgends als Text steht, ist ein Fehler („nicht geladen“). Der
+Inhalt steckt in den Konturen des IR: geänderte SVGs ändern den Cache-Schlüssel; `cad watch`
+beobachtet die Datendateien, die Desktop-App liest und schreibt sie (Schriften dekodiert).
+UI: „⇡ Datei laden“ (SVG, TTF/OTF, .scad), SVGs öffnen im Editor, Schrift-Tabs zeigen einen
+Hinweis; ZIP und Ordner nehmen die Datendateien mit; Einzelbeispiele, die SVGs aus
+`examples/svg` importieren, öffnen als Projekt mit diesen Dateien.
+
+**Text.** Wie OpenSCAD 2021.01: em = `size` / 0,72; Laufweite, Versatz und die Ausrichtung
+nehmen die Werte des Shapers mal 1000/1024 (OpenSCAD rechnet so; Text bleibt dadurch gleich
+breit), `halign` nach der Laufweite, `valign` nach der Hülle der Glyphen, `spacing` multipliziert
+die Laufweite, `direction` ltr/rtl/ttb/btt, `language`, `script` (ISO 15924 oder Namen wie
+`"latin"`); ohne Angabe ermittelt der Shaper Richtung und Schrift. Hülle und Fläche stimmen mit
+OpenSCAD überein (Bericht 16). Schriftwahl: `"Familie"`, `"Familie:style=Bold"`; unbekannter
+Stil → Regular (Warnung), unbekannte Familie → JetBrains Mono (Warnung), `font = "datei.ttf"`
+→ Projektdatei. **Standardschrift:** `"cad stencil mono"` ist reserviert (Hinweis, vorerst
+JetBrains Mono); ohne `font` JetBrains Mono. **Fehlende Zeichen:** je Zeichen aus JetBrains
+Mono gleichen Gewichts (Laufweite der Ersatzschrift, Warnung „Zeichen … fehlen in …“); Allerta
+Stencil (unverändert mitgeliefert: der Reserved Font Name verbietet veränderte Fassungen unter
+dem Namen) fehlen ẞ„‚{}_#°²³§~^·•…±µØø. Zeichen in keiner Schrift: `.notdef` und Warnung.
+
+**Farbregionen.** Ist das Ergebnis eines Knotens die bloße Vereinigung seiner Farbknoten
+(nur Gruppen, Transformationen, Farben, Vereinigungen ohne Verrundung dazwischen), braucht
+eine Farbregion keine Booleans mit dem Ganzen: Material des Farbknotens minus späteres
+Material anderer Farbe, dessen Hülle es überlappt (Berührung zählt nicht); Teile einer Farbe
+bleiben getrennt, wenn ihre Hüllen sich nicht überlappen (`colors.rs`, `union_regions`).
+Mehrfarbiger Text auf einer Platte: Sekunden statt Minuten bzw. Abbruch durch den Watchdog.
+
+**STEP.** Extrusionen von Ellipsenbögen (rationale quadratische B-Spline, senkrecht zur Ebene
+extrudiert) schreibt der Writer als `SURFACE_OF_LINEAR_EXTRUSION` einer `ELLIPSE` (`cad-step`,
+`elliptic_extrusion`: Kegelschnitt durch fünf Abtastpunkte, geprüft an 65): OpenCASCADE
+integrierte die Extrusion der rationalen B-Spline um 3,6·10⁻³ falsch. Offen: die Extrusion einer
+quadratischen Q/T-Welle (`welle.svg`, `id = "welle"`) misst OpenCASCADE um 3 % zu klein (Kernel
+652,25 mm², analytisch 652,19 mm²); `svg_logo.scad` nutzt daher nur Ellipse und Bogen aus
+`welle.svg`.
+
+**Grenzen.** Kernel-Zeit wächst stark mit der Zahl der Glyphen auf einer gemeinsamen Fläche
+(Vereinigung Platte ∪ Text in SMLib: 9 Glyphen ≈ 1,5 s, 28 ≈ 9 s nativ); Konturen, die sich
+innerhalb eines Elements schneiden, werden nicht aufgelöst; keine Textpfade, kein `use`,
+keine CSS-Klassen; Variable Fonts nur in ihrer Standardinstanz; `$fn` wirkt nicht (exakte
+Kurven).

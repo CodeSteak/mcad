@@ -1,0 +1,12 @@
+[package]
+name = "cad-svg"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "SVG import (subset): shapes, paths and transforms as exact 2D contours in millimetres"
+
+[dependencies]
+glam.workspace = true
+cad-outline = { path = "../cad-outline" }
+roxmltree = "0.21"

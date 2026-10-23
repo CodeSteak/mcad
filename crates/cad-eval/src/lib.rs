@@ -16,6 +16,7 @@ mod eval;
 mod expr;
 mod grid;
 mod handles;
+mod import;
 mod law;
 pub mod math;
 mod ns;
@@ -34,7 +35,8 @@ pub use edit::{
 };
 pub use output::*;
 pub use project::{
-    FileResolver, FileRole, FsResolver, Library, NoFiles, Project, SourceFile, SourceText, normalize_path, resolve_path,
+    Asset, FileResolver, FileRole, FsResolver, Library, NoFiles, Project, SourceFile, SourceText, data_url,
+    decode_data_url, normalize_path, resolve_path,
 };
 pub use value::{Origin, PValue, fmt_literal, fmt_num};
 

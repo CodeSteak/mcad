@@ -49,6 +49,14 @@ pub fn eval(src: &str) -> EvalOutput {
     eval_source(src, &EvalOptions::default())
 }
 
+/// Evaluates a file with the project files of its folder (data files such as
+/// `import("../svg/logo.svg")`, includes); diagnostics of the file itself as with [`eval`].
+pub fn eval_file(path: &Path, src: &str) -> EvalOutput {
+    let dir = path.parent().unwrap().to_path_buf();
+    let resolver = cad_eval::FsResolver { root: dir };
+    cad_eval::eval_files(&file_name(path), src, &resolver, &EvalOptions::default()).1
+}
+
 pub fn diags(src: &str, out: &EvalOutput, sev: Severity) -> Vec<String> {
     out.diagnostics
         .iter()

@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Testbericht 16 – Text und SVG-Import</title>
+<style>
+  @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
+  :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
+  * { box-sizing: border-box; }
+  body { font: 9.6pt/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); margin: 0; }
+  main { max-width: 184mm; margin: 0 auto; }
+  h1 { font-size: 18pt; margin: 0 0 2mm; }
+  h2 { font-size: 13pt; margin: 7mm 0 3mm; border-bottom: 1px solid var(--border); padding-bottom: 1mm; break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p { margin: 1.5mm 0; }
+  .meta { color: var(--muted); margin-bottom: 4mm; }
+  .summary { display: flex; flex-wrap: wrap; gap: 2.5mm; margin: 3mm 0; }
+  .summary div { flex: 1 1 28mm; border: 1px solid var(--border); border-radius: 2mm; padding: 2mm; font-size: 8.4pt; }
+  .summary b { display: block; font-size: 12pt; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 8.2pt; }
+  th, td { border: 1px solid var(--border); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
+  th { background: var(--head); font-weight: 600; }
+  td.n { text-align: right; white-space: nowrap; }
+  td.warnc { color: #9a6700; }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 7.6pt; }
+  pre { margin: 0 0 1.5mm; padding: 1.4mm 2mm; background: #f6f8fa; border: 1px solid var(--border); border-radius: 1mm; white-space: pre-wrap; word-break: break-word; }
+  .small { font-size: 7.6pt; color: var(--muted); font-weight: 400; }
+  ul { margin: 1mm 0 2mm 5mm; padding: 0; }
+  li { margin: 0.5mm 0; }
+  tr, td, figure, pre { break-inside: avoid; }
+  .ok { color: var(--ok); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+  figure { margin: 2mm 0; }
+  figure img { max-width: 100%; max-height: 92mm; border: 1px solid var(--border); border-radius: 1mm; background: #fff; }
+  figcaption { font-size: 7.8pt; color: var(--muted); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; align-items: start; }
+  .two figure img.src { padding: 3mm; }
+  .codefig { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; align-items: start; }
+  .note { border-left: 1mm solid #e8b84a; padding: 1mm 2.5mm; background: #fff8e6; margin: 2mm 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Testbericht 16 – Text und SVG-Import</h1>
+<div class="meta">Plan 17.7, Schritt 3 (ohne eigene Schablonenschrift): <code>text()</code> mit mitgelieferten OFL-Schriften, <code>import()</code> von SVG · neue Crates cad-outline, cad-svg, cad-font; cad-eval, cad-ir, cad-engine (Farbregionen), cad-step (Ellipsen), SMLib-Fassade (getrennte Vereinigung), cad-cli, cad-desktop, web · 23.10.2026 · Branch worktree-agent-a9b869d2499e391b9 · Commit 6774bb4 · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 Kerne</div>
+
+<div class="summary">
+  <div>cargo test --workspace<b class="ok">520 / 520</b>davon 42 neu/geändert</div>
+  <div>clippy · fmt<b class="ok">sauber · sauber</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="ok">220 · 102 / 103</b>neu: T01–T05; C16 zeitabhängig</div>
+  <div>OpenSCAD Text<b class="ok">≤ 0,004 mm</b>Hülle; Fläche ≤ 0,28 %</div>
+  <div>Wasm cad_wasm<b>+2,17 MB</b>3,97 MB, gzip 1,70 MB</div>
+  <div>„Hello World“<b>505 ms</b>Kernel nativ; Browser 918 ms</div>
+</div>
+
+<h2>1 Auftrag und Ergebnis</h2>
+<p>Aus Schritt 3 von Plan 17: <b>SVG-Import</b> (Teilmenge, 17.5) und <b>Text</b> mit mitgelieferten freien Schriften (17.4). Die eigene Schablonenschrift <code>"cad stencil mono"</code> gehört nicht dazu (sie braucht <code>stroke</code> aus Schritt 2); der Name ist als künftige Standardschrift reserviert, bis dahin ist <b>JetBrains Mono</b> die Standardschrift (Hinweis bei <code>font = "cad stencil mono"</code>).</p>
+<ul>
+<li><code>text(t, size, font, halign, valign, spacing, direction, language, script)</code>: Umrisse exakt (TrueType quadratisch, CFF kubisch), Kerning und Ligaturen über <code>rustybuzz</code>, Löcher nach nonzero, <code>color()</code> wie sonst. Hülle und Fläche gegen OpenSCAD 2021.01 mit denselben Schriftdateien: Hülle ≤ 0,004 mm, Fläche ≤ 0,28 % (OpenSCAD tastet die Kurven ab).</li>
+<li><code>import("….svg", id, scale, dpi = 96, center)</code>: Pfade (alle Befehle), Rechtecke mit Rundung, Kreise und Ellipsen exakt, Polygone, Gruppen und verschachtelte <code>svg</code> mit <code>transform</code>, Einheiten, <code>fill-rule</code>, <code>display:none</code>; alles andere mit Warnung und SVG-Zeile.</li>
+<li>Dateien relativ zur einbindenden Datei (CLI: Dateisystem; Browser: Projektdateien; Desktop: liest und schreibt sie); geänderte SVGs ändern den Cache-Schlüssel, <code>cad watch</code> folgt ihnen, die UI-Szene auch (T02).</li>
+<li>Pflicht-Zeichensatz mit Umlauten, ß/ẞ und Satzzeichen in allen mitgelieferten Schriften (Test); Lücken (nur Allerta Stencil) kommen mit Warnung aus JetBrains Mono.</li>
+<li>Nebenbei: Farbregionen von Modellen, die nur Vereinigungen ihrer Farbknoten sind, ohne Boolean mit dem Ganzen (mehrfarbiger Text: Sekunden statt Abbruch durch den Watchdog).</li>
+<li>Gefunden mit der Alphabet-Tafel: SMLib vereinigte getrennte Glyphenteile falsch (Allerta-„c“: ein Stück doppelt, einmal verkehrt herum; Volumen 2,0 statt 7,3 mm³, „a“ in „abcd“ verschwand, ohne Meldung). Die Fassade vereinigt Körper mit getrennten Hüllquadern jetzt ohne SMLib-Boolean (<code>disjoint_union</code>: beide Schalen in eine Brep); Regressionstest <code>text_volume_is_area_times_height</code>.</li>
+</ul>
+
+<h2>2 Entscheidungen</h2>
+<table>
+<tr><th>Frage</th><th>Entscheidung</th></tr>
+<tr><td>Bibliotheken</td><td><code>roxmltree</code> 0.21 (XML, Zeilen für Meldungen), <code>rustybuzz</code> 0.20.1 mit <code>ttf-parser</code> 0.25 (Shaping wie HarfBuzz, Umrisse, reines Rust, Wasm-tauglich). Pfaddaten, Transformationen, Einheiten, Bögen, Füllregeln: eigener Code.</td></tr>
+<tr><td>Aufteilung</td><td>Neue Crates <code>cad-outline</code> (neutrale Konturen), <code>cad-svg</code>, <code>cad-font</code>; in <code>cad-eval</code> nur die Builtins (<code>import.rs</code>) und das Laden der Datendateien (<code>Project::assets</code>). IR: <code>Seg::Nurbs</code> (aus Schritt 2) für B-Spline-Ketten und Ellipsenbögen. Engine unverändert außer den Farbregionen; Fassade: Vereinigung getrennter Körper ohne SMLib-Boolean (unten).</td></tr>
+<tr><td>Profil-Knoten</td><td>Ein <code>Profile::Sketch</code> je gefülltem SVG-Element bzw. je Glyphe, mehrere unter einer Gruppe (Vereinigung): überlappende Elemente oder Glyphen ergeben die Vereinigung wie beim Malen; innerhalb eines Elements entscheidet seine Füllregel.</td></tr>
+<tr><td>Kurven</td><td>Tangentenstetige Ketten von Bézierkurven einer Glyphe oder eines Pfads werden <b>eine</b> B-Spline (Knoten C1, Parameterlängen aus den Tangentenlängen; exakt), Ecken trennen. Weniger Kernel-Flächen (Glyphe „o“: 4 statt ~30).</td></tr>
+<tr><td>Größe <code>size</code></td><td>wie OpenSCAD: em = <code>size</code>/0,72 (OpenSCAD setzt die Schrift auf <code>size</code> Punkt bei 100 dpi); Versalhöhe ≈ <code>size</code>. Laufweite, Versatz und Ausrichtung mal 1000/1024 wie OpenSCAD (dessen FreeType-Umrechnung): Text bleibt gleich breit wie in OpenSCAD.</td></tr>
+<tr><td>Ausrichtung</td><td><code>halign</code> nach der Laufweite, <code>valign</code> nach der Glyphenhülle (top/center/bottom), <code>baseline</code> 0; senkrechter Text mit den Versätzen des Shapers (wie OpenSCAD zentriert).</td></tr>
+<tr><td>Standardschrift</td><td>JetBrains Mono Regular, bis <code>"cad stencil mono"</code> existiert (Name reserviert, Hinweis). Unbekannte Familie: Warnung + JetBrains Mono; unbekannter Stil: Warnung + Regular der Familie.</td></tr>
+<tr><td>Fehlende Zeichen</td><td>Rückfall je Zeichen auf JetBrains Mono gleichen Gewichts (OS/2-Gewicht ≥ 600 → Bold) mit Warnung am Statement: ein lesbares Zeichen an seiner Stelle ist nützlicher als ein Kästchen oder eine Lücke, die beim Drucken übersehen wird; JetBrains Mono deckt den Pflicht-Zeichensatz und weit mehr ab. Allerta Stencil bleibt unverändert (Reserved Font Name „Allerta“: veränderte Fassungen dürften nicht so heißen).</td></tr>
+<tr><td>SVG-Einheiten</td><td>wie OpenSCAD, wo es konsistent ist; Standard <code>dpi = 96</code> (OpenSCAD 2021.01: 72 für Zahlen ohne Einheit). Abweichungen siehe 5.3.</td></tr>
+<tr><td>Dateien</td><td>Jeder Text im Projekt, der auf <code>.svg/.ttf/.otf/.ttc/.otc</code> endet, wird beim Laden gelesen (auch Parameter-Standardwerte); Binärdateien liegen in Text-Projekten (Browser, <code>SetFiles</code>) als <code>data:</code>-URL. Ein zur Laufzeit zusammengesetzter Name, der nirgends als Text steht: Fehler „nicht geladen“.</td></tr>
+</table>
+
+<h2>3 Schriften</h2>
+<p>Mitgeliefert in <code>crates/cad-font/fonts/</code> (SIL OFL 1.1, Lizenztexte und Quellen mit Prüfsummen in <code>fonts/README.md</code>), eingebettet mit <code>include_bytes!</code>: <code>AllertaStencil-Regular.ttf</code> 20 KiB, <code>Inter-Bold.ttf</code> 411 KiB, <code>Inter-Regular.ttf</code> 402 KiB, <code>JetBrainsMono-Bold.ttf</code> 271 KiB, <code>JetBrainsMono-Regular.ttf</code> 267 KiB. Auswahl per Familie und Stil wie OpenSCAD (<code>"Inter:style=Bold"</code>), eigene Schriften per Pfad (<code>font = "datei.ttf"</code>) bzw. Upload in der UI (T03).</p>
+<h3>Alphabet-Tafeln</h3>
+<p>Je Schrift <code>text(…, size = 8)</code>, 0,6 mm extrudiert, von oben (Generator <code>tools/report/report16-data.sh</code>). Zeile 3–5: Ziffern, <b>Umlaute und Satzzeichen</b> des Pflicht-Zeichensatzes.</p>
+<figure><img src="img/cli-alphabet-jetbrains.jpg" alt=""><figcaption>JetBrains Mono (Standard) – JetBrains Mono 2.304, Regular</figcaption></figure>
+<figure><img src="img/cli-alphabet-jetbrains-bold.jpg" alt=""><figcaption>JetBrains Mono:style=Bold – JetBrains Mono 2.304, Bold</figcaption></figure>
+<figure><img src="img/cli-alphabet-inter.jpg" alt=""><figcaption>Inter – Inter 4.1, Regular</figcaption></figure>
+<figure><img src="img/cli-alphabet-inter-bold.jpg" alt=""><figcaption>Inter:style=Bold – Inter 4.1, Bold</figcaption></figure>
+<figure><img src="img/cli-alphabet-allerta.jpg" alt=""><figcaption>Allerta Stencil – Allerta Stencil (Google Fonts), Regular</figcaption></figure>
+<h3>Pflicht-Zeichensatz</h3>
+<p><code>cad_font::REQUIRED_CHARS</code> (Test <code>required_chars_in_every_font</code>: jede mitgelieferte Schrift hat für jedes Zeichen eine echte Glyphe, kein <code>.notdef</code>): A–Z a–z 0–9, Ä Ö Ü ä ö ü ß ẞ, Leerzeichen, <code>. , ; : ! ? ' " „ “ ‚ ‘ » « ( ) [ ] { } - – — _ / \ &amp; % # + * = &lt; &gt; ° ² ³ € @ § ~ ^ | · • …</code>, <code>± × ÷ µ Ø ø</code>. Gilt auch für die künftige Schablonenschrift (Plan 17.4).</p>
+<table>
+<tr><th>Schrift</th><th>fehlende Zeichen</th><th>Folge</th></tr>
+<tr><td>JetBrains Mono Regular/Bold</td><td>keine</td><td>–</td></tr>
+<tr><td>Inter Regular/Bold</td><td>keine</td><td>–</td></tr>
+<tr><td>Allerta Stencil</td><td><code>ẞ „ ‚ { } _ # ° ² ³ § ~ ^ · • … ± µ Ø ø</code></td><td>aus JetBrains Mono Regular, Warnung (siehe Tafel: diese Zeichen sind nicht schabloniert)</td></tr>
+</table>
+<pre>cases/fallback.scad:1:24: Warnung (Auswertung): Zeichen „°±“ fehlen in Allerta Stencil; ersetzt aus JetBrains Mono Regular
+cases/fallback.scad: 0 Fehler, 1 Warnungen</pre>
+
+<h2>4 Text gegen OpenSCAD 2021.01</h2>
+<p>Gleiche Schriftdateien (OpenSCAD über eine fontconfig-Datei, die nur <code>crates/cad-font/fonts</code> kennt), <code>text(…)</code> als 2D exportiert (Polygone) gegen <code>cad measure --bounds --volume</code> einer 1-mm-Extrusion (<code>tools/report/report16-openscad.py</code>). Hülle in x (oben) und y (unten), mm.</p>
+<table>
+<tr><th>Fall</th><th>OpenSCAD Hülle</th><th>cad Hülle</th><th>max. Abw.</th><th>OpenSCAD mm²</th><th>cad mm²</th><th>Fläche</th></tr>
+<tr><td>Inter 'H'</td><td class="n">1,221 … 9,101<br>0,000 … 10,105</td><td class="n">1,221 … 9,101<br>0,000 … 10,105</td><td class="n">0,0000</td><td class="n">32,082</td><td class="n">32,082</td><td class="n ">0,002 %</td></tr>
+<tr><td>Inter:style=Bold 'H'</td><td class="n">0,915 … 9,460<br>0,000 … 10,105</td><td class="n">0,916 … 9,460<br>0,000 … 10,105</td><td class="n">0,0000</td><td class="n">49,421</td><td class="n">49,422</td><td class="n ">0,001 %</td></tr>
+<tr><td>JetBrains Mono 'H'</td><td class="n">1,292 … 7,041<br>0,000 … 10,138</td><td class="n">1,292 … 7,042<br>0,000 … 10,139</td><td class="n">0,0007</td><td class="n">29,044</td><td class="n">29,049</td><td class="n ">0,015 %</td></tr>
+<tr><td>JetBrains Mono:style=Bold 'Hamburg'</td><td class="n">1,069 … 56,091<br>-2,500 … 10,138</td><td class="n">1,069 … 56,092<br>-2,500 … 10,139</td><td class="n">0,0007</td><td class="n">235,350</td><td class="n">235,737</td><td class="n ">0,164 %</td></tr>
+<tr><td>Allerta Stencil 'H'</td><td class="n">1,275 … 8,883<br>0,000 … 9,996</td><td class="n">1,275 … 8,884<br>0,000 … 9,996</td><td class="n">0,0006</td><td class="n">37,000</td><td class="n">37,005</td><td class="n ">0,014 %</td></tr>
+<tr><td>Inter 'AV'</td><td class="n">0,353 … 17,661<br>0,000 … 10,105</td><td class="n">0,353 … 17,661<br>0,000 … 10,105</td><td class="n">0,0001</td><td class="n">54,797</td><td class="n">54,799</td><td class="n ">0,004 %</td></tr>
+<tr><td>Inter 'O'</td><td class="n">0,827 … 9,793<br>-0,136 … 10,240</td><td class="n">0,827 … 9,793<br>-0,136 … 10,240</td><td class="n">0,0001</td><td class="n">33,163</td><td class="n">33,257</td><td class="n ">0,283 %</td></tr>
+<tr><td>Inter 'Hello World'</td><td class="n">1,221 … 73,349<br>-0,163 … 10,105</td><td class="n">1,221 … 73,349<br>-0,163 … 10,105</td><td class="n">0,0000</td><td class="n">229,351</td><td class="n">229,494</td><td class="n ">0,062 %</td></tr>
+<tr><td>Inter 'Größe'</td><td class="n">0,827 … 38,910<br>-0,163 … 10,430</td><td class="n">0,827 … 38,910<br>-0,163 … 10,430</td><td class="n">0,0000</td><td class="n">130,494</td><td class="n">130,710</td><td class="n ">0,166 %</td></tr>
+<tr><td>Allerta Stencil 'ZUTRITT'</td><td class="n">1,058 … 56,991<br>-0,068 … 9,996</td><td class="n">1,058 … 56,991<br>-0,068 … 9,996</td><td class="n">0,0006</td><td class="n">185,418</td><td class="n">185,490</td><td class="n ">0,039 %</td></tr>
+<tr><td>JetBrains Mono '-&gt;'</td><td class="n">0,986 … 15,429<br>0,486 … 8,680</td><td class="n">0,985 … 15,430<br>0,486 … 8,681</td><td class="n">0,0006</td><td class="n">26,073</td><td class="n">26,076</td><td class="n ">0,009 %</td></tr>
+<tr><td>Inter 'fi'</td><td class="n">0,136 … 7,563<br>0,000 … 10,579</td><td class="n">0,136 … 7,563<br>0,000 … 10,579</td><td class="n">0,0001</td><td class="n">29,216</td><td class="n">29,234</td><td class="n ">0,062 %</td></tr>
+<tr><td>Inter 'H', halign = &quot;center&quot;, valign = &quot;center&quot;</td><td class="n">-3,819 … 4,061<br>-4,934 … 5,170</td><td class="n">-3,819 … 4,061<br>-4,934 … 5,171</td><td class="n">0,0004</td><td class="n">32,082</td><td class="n">32,082</td><td class="n ">0,002 %</td></tr>
+<tr><td>Inter 'Hg', valign = &quot;bottom&quot;</td><td class="n">1,221 … 17,526<br>-0,066 … 13,036</td><td class="n">1,221 … 17,526<br>-0,070 … 13,032</td><td class="n">0,0040</td><td class="n">66,071</td><td class="n">66,052</td><td class="n ">0,029 %</td></tr>
+<tr><td>Inter 'Hg', valign = &quot;top&quot;</td><td class="n">1,221 … 17,526<br>-12,866 … 0,236</td><td class="n">1,221 … 17,526<br>-12,865 … 0,237</td><td class="n">0,0009</td><td class="n">66,071</td><td class="n">66,052</td><td class="n ">0,029 %</td></tr>
+<tr><td>Inter 'HH', spacing = 2</td><td class="n">1,221 … 29,261<br>0,000 … 10,105</td><td class="n">1,221 … 29,261<br>0,000 … 10,105</td><td class="n">0,0000</td><td class="n">64,164</td><td class="n">64,165</td><td class="n ">0,002 %</td></tr>
+<tr><td>Inter 'HH', direction = &quot;ttb&quot;</td><td class="n">-3,819 … 4,061<br>-29,551 … -3,035</td><td class="n">-3,819 … 4,061<br>-29,551 … -3,035</td><td class="n">0,0001</td><td class="n">64,164</td><td class="n">64,165</td><td class="n ">0,002 %</td></tr>
+<tr><td>Inter 'H', halign = &quot;right&quot;</td><td class="n">-8,859 … -0,979<br>0,000 … 10,105</td><td class="n">-8,859 … -0,979<br>0,000 … 10,105</td><td class="n">0,0000</td><td class="n">32,082</td><td class="n">32,082</td><td class="n ">0,001 %</td></tr>
+<tr><td>Inter 'Text', size = 25</td><td class="n">1,662 … 68,083<br>-0,407 … 25,262</td><td class="n">1,662 … 68,083<br>-0,407 … 25,262</td><td class="n">0,0001</td><td class="n">503,680</td><td class="n">504,016</td><td class="n ">0,067 %</td></tr>
+</table>
+<p class="small">Die Fläche von OpenSCAD ist kleiner, weil es die Kurven als Polygone abtastet (Sehnen innerhalb der Kurve); die Hülle stimmt bis auf ≤ 0,001 mm (OpenSCAD schreibt 6 Stellen; seine Polygonecken liegen auf der Kurve). <code>valign</code> misst OpenSCAD an gerasterten Glyphenmetriken (FreeType), daher dort bis 0,004 mm. „Hello World“, „AV“ (Kerning), „fi“ und „-&gt;“ (Ligaturen in JetBrains Mono) zeigen, dass Shaping und Laufweite gleich sind.</p>
+
+<h2>5 SVG-Import</h2>
+<h3>5.1 Beispiele: Quelle und Ergebnis</h3>
+<p>Links die SVG-Datei, wie der Browser sie zeichnet (Quelle in <code>examples/svg/</code>, eigene Zeichnungen), rechts <code>linear_extrude(2) import("….svg")</code> von oben.</p>
+<h3>logo.svg</h3><p class="small">Ring aus Halbkreisbögen mit Loch (evenodd), acht gedrehte Rechtecke mit Rundung, Polygon</p><div class="two"><figure><img class="src" src="img/src-logo.svg" alt=""><figcaption>Quelle (Browser)</figcaption></figure><figure><img src="img/cli-svg-logo.jpg" alt=""><figcaption>import, extrudiert, von oben</figcaption></figure></div>
+<h3>blatt.svg</h3><p class="small">kubische Bézier (C, S), Rippe als Gegenlauf (nonzero), Stiel aus Q/T, gedrehte Gruppe</p><div class="two"><figure><img class="src" src="img/src-blatt.svg" alt=""><figcaption>Quelle (Browser)</figcaption></figure><figure><img src="img/cli-svg-blatt.jpg" alt=""><figcaption>import, extrudiert, von oben</figcaption></figure></div>
+<h3>haus.svg</h3><p class="small">relative Befehle (h, v, m), Fenster und Tür als Löcher (evenodd), Rechteck mit rx, skalierte Gruppe mit Kreis</p><div class="two"><figure><img class="src" src="img/src-haus.svg" alt=""><figcaption>Quelle (Browser)</figcaption></figure><figure><img src="img/cli-svg-haus.jpg" alt=""><figcaption>import, extrudiert, von oben</figcaption></figure></div>
+<h3>welle.svg</h3><p class="small">Q/T-Welle, Ellipse, Kreis mit scale(2 1) (Ellipsenbögen), skewX, gedrehter Ellipsenbogen (A)</p><div class="two"><figure><img class="src" src="img/src-welle.svg" alt=""><figcaption>Quelle (Browser)</figcaption></figure><figure><img src="img/cli-svg-welle.jpg" alt=""><figcaption>import, extrudiert, von oben</figcaption></figure></div>
+<h3>5.2 Unterstützt und nicht unterstützt</h3>
+<table>
+<tr><th>Element / Eigenschaft</th><th>Umsetzung</th></tr>
+<tr><td><code>path</code></td><td>M L H V C S Q T A Z, absolut und relativ, implizite Wiederholung, kompakte Zahlen (<code>10-10.5.5</code>) und Bogen-Flags (<code>a10 10 0 0110 10</code>); Fehler: der Teil davor bleibt, Warnung</td></tr>
+<tr><td>Bögen <code>A</code>, <code>circle</code>, <code>ellipse</code>, <code>rect rx/ry</code></td><td>exakte Kreisbögen (unter Ähnlichkeiten), sonst exakte Ellipsenbögen (rationale B-Spline); Radien zu klein → hochskaliert wie SVG</td></tr>
+<tr><td><code>polygon</code> · <code>polyline</code>, <code>line</code>, offene Pfade</td><td>Fläche · nur Pfad (Warnung „offener Pfad wird nicht gefüllt“); nur Pfade → offene Skizze (als <code>sweep</code>-Pfad)</td></tr>
+<tr><td><code>g</code>, <code>a</code>, verschachteltes <code>svg</code>, <code>transform</code></td><td>matrix, translate, scale, rotate (auch um Punkt), skewX, skewY; Listen von rechts nach links</td></tr>
+<tr><td><code>viewBox</code>, <code>width/height</code>, <code>preserveAspectRatio</code></td><td>px, mm, cm, in, pt, pc, ohne Einheit (<code>dpi</code>); Ursprung unten links</td></tr>
+<tr><td><code>fill</code>, <code>fill-rule</code>, <code>display</code>, <code>visibility</code></td><td>als Attribut und in <code>style</code>, vererbt; <code>fill="none"</code>: nicht übernommen (Warnung)</td></tr>
+<tr><td>Text, Bilder, <code>use</code>, CSS-Klassen/<code>&lt;style&gt;</code>, Masken, Clip-Pfade, Filter, Verläufe/Muster als Füllung, Strichstärke</td><td>Warnung mit SVG-Zeile (je Meldung einmal); Verläufe werden als einfache Fläche übernommen</td></tr>
+<tr><td>Metadaten (Inkscape, Sodipodi, <code>defs</code>, <code>title</code>)</td><td>stillschweigend übergangen</td></tr>
+<tr><td><code>id = "…"</code></td><td>nur dieses Element (mit Inhalt); unbekannt: Fehler</td></tr>
+</table>
+<pre>&lt;svg xmlns=&quot;http://www.w3.org/2000/svg&quot; width=&quot;40mm&quot; height=&quot;20mm&quot; viewBox=&quot;0 0 40 20&quot;&gt;
+  &lt;style&gt;.a { fill: red }&lt;/style&gt;
+  &lt;rect class=&quot;a&quot; width=&quot;20&quot; height=&quot;20&quot;/&gt;
+  &lt;text x=&quot;22&quot; y=&quot;12&quot;&gt;Hallo&lt;/text&gt;
+  &lt;image href=&quot;foto.png&quot; width=&quot;10&quot; height=&quot;10&quot;/&gt;
+  &lt;path d=&quot;M 22 2 L 38 2 L 38 8&quot; stroke=&quot;black&quot; fill=&quot;none&quot;/&gt;
+  &lt;use href=&quot;#r&quot;/&gt;
+&lt;/svg&gt;</pre>
+<pre>cases/warn.scad:1:26: Warnung (Auswertung): warn.svg:2: CSS-Stylesheet (`&lt;style&gt;`) nicht unterstützt
+cases/warn.scad:1:26: Warnung (Auswertung): warn.svg:3: `rect`: CSS-Klassen (`class`) nicht unterstützt; Stil nur aus Attributen und `style`
+cases/warn.scad:1:26: Warnung (Auswertung): warn.svg:4: `text`: Text nicht unterstützt (in Pfade umwandeln)
+cases/warn.scad:1:26: Warnung (Auswertung): warn.svg:5: `image`: Bilder nicht unterstützt
+cases/warn.scad:1:26: Warnung (Auswertung): warn.svg:6: `path`: offener Pfad wird nicht gefüllt (nur als Pfad übernommen; Z schließt ihn)
+cases/warn.scad:1:26: Warnung (Auswertung): warn.svg:6: Strichstärke (`stroke`) wird nicht als Fläche übernommen
+cases/warn.scad:1:26: Warnung (Auswertung): warn.svg:7: `use`: Verweise nicht unterstützt (Klone in Pfade umwandeln)
+cases/warn.scad:1:26: Warnung (Auswertung): warn.svg: 1 offene Pfade neben Flächen weggelassen
+cases/warn.scad: 0 Fehler, 8 Warnungen</pre>
+<h3>5.3 Einheiten und Vergleich mit OpenSCAD</h3>
+<p>OpenSCAD 2021.01 (<code>import(…, dpi = 96)</code>, 2D exportiert) gegen cad. Mit <code>viewBox</code> stimmen beide überein. Abweichungen mit Absicht (SVG-Regel statt OpenSCAD-Eigenheit): <b>ohne <code>viewBox</code></b> nimmt OpenSCAD Nutzereinheiten als mm, spiegelt aber um die Höhe in Pixeln (Zeile „ohne-viewbox“); ein y-Versatz der <code>viewBox</code> wird bei OpenSCAD addiert statt abgezogen; OpenSCAD füllt immer nach evenodd und macht aus Strichen Flächen.</p>
+<table>
+<tr><th>Datei</th><th>OpenSCAD Hülle</th><th>cad Hülle</th><th>max. Abw.</th><th>OpenSCAD mm²</th><th>cad mm²</th><th>Fläche</th></tr>
+<tr><td>logo.svg</td><td class="n">1,311 … 38,689<br>1,311 … 38,689</td><td class="n">1,311 … 38,689<br>1,311 … 38,689</td><td class="n">0,0006</td><td class="n">492,531</td><td class="n">492,893</td><td class="n ">0,073 %</td></tr>
+<tr><td>blatt.svg</td><td class="n">2,039 … 26,136<br>2,551 … 41,319</td><td class="n">2,033 … 26,141<br>2,549 … 41,319</td><td class="n">0,0055</td><td class="n">536,447</td><td class="n">536,858</td><td class="n ">0,077 %</td></tr>
+<tr><td>haus.svg</td><td class="n">5,000 … 56,200<br>2,000 … 46,200</td><td class="n">5,000 … 56,200<br>2,000 … 46,200</td><td class="n">0,0000</td><td class="n">1.075,692</td><td class="n">1.075,832</td><td class="n ">0,013 %</td></tr>
+<tr><td>welle.svg</td><td class="n">2,500 … 52,500<br>2,000 … 27,500</td><td class="n">2,500 … 52,500<br>2,000 … 27,500</td><td class="n">0,0000</td><td class="n">352,785</td><td class="n">353,326</td><td class="n ">0,153 %</td></tr>
+<tr><td>mm-viewbox</td><td class="n">5,000 … 29,000<br>36,000 … 47,500</td><td class="n">5,000 … 29,000<br>36,000 … 47,500</td><td class="n">0,0000</td><td class="n">100,059</td><td class="n">100,265</td><td class="n ">0,207 %</td></tr>
+<tr><td>px-viewbox</td><td class="n">2,646 … 15,346<br>5,821 … 11,906</td><td class="n">2,646 … 15,346<br>5,821 … 11,906</td><td class="n">0,0000</td><td class="n">28,018</td><td class="n">28,076</td><td class="n ">0,207 %</td></tr>
+<tr><td>in-viewbox</td><td class="n">2,540 … 14,732<br>5,588 … 11,430</td><td class="n">2,540 … 14,732<br>5,588 … 11,430</td><td class="n">0,0000</td><td class="n">25,822</td><td class="n">25,875</td><td class="n ">0,206 %</td></tr>
+<tr><td>ohne-viewbox</td><td class="n">10,000 … 58,000<br>-14,771 … 8,229</td><td class="n">2,646 … 15,346<br>5,821 … 11,906</td><td class="n">42,6542</td><td class="n">400,236</td><td class="n">28,076</td><td class="n warnc">92,985 %</td></tr>
+</table>
+
+<h2>6 Beispiele</h2>
+<h3><code>examples/spec/text_schild.scad</code></h3>
+<div class="codefig"><pre>// Zweck: Schild mit Relief-Text (Plan 17.4, Bericht 16) – Grundplatte mit Rand, erhabener Text in
+// zwei Schriften – mehrfarbig (3MF mit einem Filament je Farbe).
+// Schriften: mitgeliefert sind JetBrains Mono (Standard), Inter und Allerta Stencil, je mit
+// Stil (`&quot;Inter:style=Bold&quot;`); eigene Schriften mit `font = &quot;datei.ttf&quot;` (Datei im Projekt).
+// `size` wie in OpenSCAD: Versalhöhe etwa `size`.
+
+breite = 100;
+hoehe = 44;
+dicke = 3;
+r = 5;          // Eckenradius
+rand = 2;       // Breite des Rands
+relief = 1.2;   // Höhe von Text und Rand
+
+module platte(b, h, r) sketch {
+    start([r, 0]);
+    line(to = [b - r, 0]);
+    arc(center = [b - r, r], angle = 90);
+    line(to = [b, h - r]);
+    arc(center = [b - r, h - r], angle = 90);
+    line(to = [r, h]);
+    arc(center = [r, h - r], angle = 90);
+    line(to = [0, r]);
+    arc(center = [r, r], angle = 90);
+}
+
+color(&quot;white&quot;) linear_extrude(dicke) platte(breite, hoehe, r);
+
+// Rand
+color(&quot;blue&quot;) translate([0, 0, dicke]) linear_extrude(relief) difference() {
+    platte(breite, hoehe, r);
+    translate([rand, rand]) platte(breite - 2 * rand, hoehe - 2 * rand, r - rand);
+}
+
+// Titel und Untertitel erhaben
+color(&quot;red&quot;) translate([breite / 2, 26, dicke])
+    linear_extrude(relief) text(&quot;Werkstatt&quot;, size = 11, font = &quot;Inter:style=Bold&quot;, halign = &quot;center&quot;, valign = &quot;center&quot;);
+color(&quot;black&quot;) translate([breite / 2, 9, dicke])
+    linear_extrude(relief) text(&quot;ZUTRITT NUR MIT BRILLE&quot;, size = 4.2, font = &quot;Allerta Stencil&quot;, halign = &quot;center&quot;);</pre><div><figure><img src="img/cli-text_schild.jpg" alt=""><figcaption>Schild: Platte aus einer Skizze, Rand, erhabener Text in Inter Bold und Allerta Stencil, vier Farben</figcaption></figure><figure><img src="img/cli-text_schild-oben.jpg" alt=""><figcaption>von oben</figcaption></figure><pre>Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):
+  F1  white          #f4f3f0  13135.6195 mm³  16.29 g  Z.26
+  F2  blue           #2e65b9  655.5186 mm³  0.81 g  Z.29
+  F3  red            #c74240  445.7077 mm³  0.55 g  Z.35
+  F4  black          #202225  117.2133 mm³  0.15 g  Z.37</pre></div></div>
+<h3><code>examples/spec/svg_logo.scad</code></h3>
+<div class="codefig"><pre>// Zweck: SVG-Import (Plan 17.5, Bericht 16) – Logos und Icons aus examples/svg als exakte 2D-Profile.
+// Kreise und Bögen bleiben Kreisbögen, Bézierkurven bleiben Kurven, Löcher nach fill-rule.
+// Einheiten: viewBox + width/height in mm; ohne viewBox Pixel mit dpi (Standard 96).
+
+dicke = 3;
+
+// Logo, mittig um den Ursprung (center = true)
+color(&quot;blue&quot;) linear_extrude(dicke) import(&quot;../svg/logo.svg&quot;, center = true);
+
+// Blatt, auf 70 % verkleinert
+translate([45, 0, 0])
+    color(&quot;green&quot;) linear_extrude(dicke) import(&quot;../svg/blatt.svg&quot;, center = true, scale = 0.7);
+
+// Haus als Prägung in einer Platte
+translate([0, -50, 0]) difference() {
+    color(&quot;silver&quot;) translate([-34, -27, 0]) cube([68, 54, dicke]);
+    color(&quot;red&quot;) translate([0, 0, dicke - 1]) linear_extrude(2) import(&quot;../svg/haus.svg&quot;, center = true);
+}
+
+// Nur einzelne Elemente des SVG (id): ungleichmäßig skalierter Kreis (exakte Ellipsenbögen),
+// gedrehter Ellipsenbogen
+translate([70, -35, 0]) color(&quot;orange&quot;) linear_extrude(dicke) import(&quot;../svg/welle.svg&quot;, id = &quot;oval&quot;, center = true);
+translate([70, -60, 0]) color(&quot;teal&quot;) linear_extrude(dicke / 2) import(&quot;../svg/welle.svg&quot;, id = &quot;bogen&quot;, center = true);</pre><div><figure><img src="img/cli-svg_logo.jpg" alt=""><figcaption>Logo, Blatt (skaliert), Haus als Prägung, aus welle.svg nur id = &quot;oval&quot; und id = &quot;bogen&quot;</figcaption></figure><figure><img src="img/cli-svg_logo-oben.jpg" alt=""><figcaption>von oben</figcaption></figure></div></div>
+<p class="small">STEP von svg_logo: {&quot;CIRCLE&quot;: 78, &quot;LINE&quot;: 253, &quot;ELLIPSE&quot;: 4, &quot;B_SPLINE_CURVE_WITH_KNOTS&quot;: 27, &quot;PLANE&quot;: 85, &quot;CYLINDRICAL_SURFACE&quot;: 39, &quot;SURFACE_OF_LINEAR_EXTRUSION&quot;: 13, &quot;B_SPLINE_SURFACE_WITH_KNOTS&quot;: 0}
+ – Kreise bleiben <code>CIRCLE</code>, extrudierte Bögen <code>CYLINDRICAL_SURFACE</code>.</p>
+
+<h2>7 Messwerte</h2>
+<h3>Kernel-Zeit</h3>
+<p>Release-Build, <code>cad eval --json</code> ohne Daemon, Median aus 3 Läufen (Sprache = Auswertung inkl. Shaping und SVG; Kernel = alle Kernel-Aufrufe). Browser: dieselben Modelle in Chromium (SMLib als Wasm, T05).</p>
+<table>
+<tr><th>Modell</th><th>Knoten</th><th>Kernel-Aufrufe</th><th>Sprache ms</th><th>Kernel ms nativ</th><th>Kernel ms Browser</th></tr>
+<tr><td>„Hello World“ (Inter), extrudiert</td><td class="n">13</td><td class="n">20</td><td class="n">0,7</td><td class="n">505</td><td class="n">918</td></tr>
+<tr><td>40 Zeichen (Inter), extrudiert</td><td class="n">36</td><td class="n">61</td><td class="n">1,1</td><td class="n">2.249</td><td class="n">2.904</td></tr>
+<tr><td>40 Zeichen (JetBrains Mono)</td><td class="n">36</td><td class="n">61</td><td class="n">1,2</td><td class="n">1.917</td><td class="n">–</td></tr>
+<tr><td>„Hello World“ auf einer Platte (Vereinigung)</td><td class="n">15</td><td class="n">24</td><td class="n">0,7</td><td class="n">1.449</td><td class="n">–</td></tr>
+<tr><td>examples/spec/svg_logo.scad</td><td class="n">41</td><td class="n">45</td><td class="n">0,8</td><td class="n">1.429</td><td class="n">–</td></tr>
+<tr><td>examples/spec/text_schild.scad</td><td class="n">50</td><td class="n">66</td><td class="n">1,3</td><td class="n">10.550</td><td class="n">–</td></tr>
+</table>
+<p>Je Glyphe: Extrusion je Kontur (Außen, Loch), Differenz für Löcher, eine Vereinigung aller Glyphen (sie berühren sich nicht). Teuer ist Text <b>auf</b> einer Fläche: SMLib prägt jede Glyphe in die Deckfläche (Schild: eine Vereinigung von ≈ 9 s nativ). Die neue Farbregion-Regel (Plan 17.10) vermeidet dabei die Booleans mit dem Ganzen; vorher brauchte der Kontaktbogen von T01 nativ 21 s und scheiterte („Schnittmenge gescheitert“), jetzt 4 s.</p>
+<h3>Wasm-Modul</h3>
+<table><tr><th></th><th>roh</th><th>gzip -9</th></tr><tr><td><code>cad_wasm_bg.wasm</code> vorher (Commit cafe7a4)</td><td class="n">1.799.439 B</td><td class="n">702.133 B</td></tr><tr><td>mit Text/SVG (vor dem Merge von Schritt 2)</td><td class="n">3.970.940 B</td><td class="n">1.696.909 B</td></tr><tr><td>nach dem Merge mit Skizzen Schritt 2 (Stand dieses Berichts)</td><td class="n">4.120.239 B</td><td class="n">1.757.298 B</td></tr><tr><td>Zuwachs durch Text/SVG</td><td class="n">+2.171.501 B</td><td class="n">+994.776 B</td></tr><tr><td>davon Schriftdateien</td><td class="n">1.404.056 B</td><td class="n">–</td></tr></table><p class="small">Der Rest des Zuwachses ist Code (rustybuzz/ttf-parser, roxmltree, SVG- und Textlogik). <code>smlib.wasm</code>: 5.285.361 B (+726 B durch <code>disjoint_union</code> in der Fassade).</p>
+
+<h2>8 UI</h2>
+<p>Prüfungen über den Zustand der UI (<code>window.__cad</code>), Szenen und Hüllen; Screenshots aus <code>web/e2e/text-svg.spec.ts</code>.</p>
+<h3>T01 Text in drei Schriften</h3><p>Umlaute, ẞ und deutsche Anführungszeichen ohne Warnung; Farben wie sonst.</p><figure><img src="img/ui-t01-text.jpg" alt=""><figcaption>Inter Bold, JetBrains Mono, Allerta Stencil (Draufsicht)</figcaption></figure><pre>color(&quot;red&quot;) linear_extrude(2) text(&quot;Größe 7&quot;, size = 10, font = &quot;Inter:style=Bold&quot;);
+color(&quot;blue&quot;) translate([0, -15, 0]) linear_extrude(2) text(&quot;ÄÖÜ äöü ẞ „x“&quot;, size = 8, font = &quot;JetBrains Mono&quot;);
+color(&quot;black&quot;) translate([0, -30, 0]) linear_extrude(2) text(&quot;STENCIL 42&quot;, size = 8, font = &quot;Allerta Stencil&quot;);</pre><ul><li>keine Fehler/Warnungen</li><li>Breite &gt; 50 mm, Höhe 2 mm</li><li>„20°C“ in Allerta Stencil: Warnung, ° aus JetBrains Mono</li></ul>
+<h3>T02 SVG als Projektdatei, im Editor geändert</h3><p>Das SVG ist eine Projektdatei (Tab), wird im Editor geändert; die Szene rechnet neu (Cache-Schlüssel aus dem Inhalt).</p><div class="two"><figure><img src="img/ui-t02-vorher.jpg" alt=""><figcaption>Rechteck 20 mm + Kreis</figcaption></figure><figure><img src="img/ui-t02-nachher.jpg" alt=""><figcaption>logo.svg im Editor: Rechteck 30 mm</figcaption></figure></div><pre>color(&quot;teal&quot;) linear_extrude(3) import(&quot;logo.svg&quot;);</pre><ul><li>Breite 34 mm</li><li>nach der Änderung 44 mm</li></ul>
+<h3>T03 Eigene Schrift (Upload)</h3><p>Binärdateien liegen im Projekt als data-URL; die Engine dekodiert sie. Der Tab öffnet keinen Editor.</p><figure><img src="img/ui-t03-schrift.jpg" alt=""><figcaption>„⇡ Datei laden“: schablone.ttf, text(…, font = &quot;schablone.ttf&quot;)</figcaption></figure><ul><li>Datei im Projekt</li><li>keine Warnung</li><li>Tab: Hinweis statt Editor</li></ul>
+<h3>T04 Beispiel mit SVG-Dateien</h3><p>Einzelbeispiele, die SVGs aus examples/svg importieren, öffnen als Projekt mit diesen Dateien.</p><figure><img src="img/ui-t04-beispiel.jpg" alt=""><figcaption>examples/spec/svg_logo.scad als Projekt mit svg/*.svg</figcaption></figure><ul><li>4 SVG-Dateien im Projekt</li><li>keine Fehler</li><li>&lt;text&gt; im SVG: Warnung „w.svg:3: …Text…“</li></ul>
+
+<h2>9 Testläufe</h2>
+<table>
+<tr><th>Lauf</th><th>Ergebnis</th></tr>
+<tr><td><code>cargo test --workspace --no-fail-fast</code></td><td>520 bestanden, 0 fehlgeschlagen</td></tr>
+<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>sauber · sauber</td></tr>
+<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>sauber · 220 bestanden</td></tr>
+<tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>102 / 103 – fehlgeschlagen: C16 Punktgriff achsgebunden ziehen (Umschalttaste, X/Y/Z) · C16 (Punktgriff achsgebunden ziehen, Bericht 3) ist zeitabhängig (so schon in Bericht 15): im Gesamtlauf und einzeln mit -g C16 Test-Timeout, die ganze Datei ui-c.spec.ts danach 20/20 bestanden – auch mit der Fassade vor diesem Schritt einzeln gescheitert, also nicht von Text/SVG berührt.</td></tr>
+<tr><td><code>tests/openscad-compat/compare.py --eval</code></td><td>36/36</td></tr>
+<tr><td><code>tests/step/verify.py</code> (OpenCASCADE)</td><td>60/60 passed</td></tr>
+<tr><td><code>tests/alltag/check.sh</code></td><td>19 Modelle, 0 mit Problemen, 56 s, Exporte in /tmp/alltag-2sczuntc (gelöscht)</td></tr>
+<tr><td><code>node crates/kernel-smlib/js/test-node.mjs</code></td><td>bestanden</td></tr>
+</table>
+<p>Neue bzw. geänderte Rust-Tests (42):</p>
+<p class="small"><code>import_volume_warning_and_step</code> <span class="ok">ok</span> · <code>watch_follows_a_changed_svg</code> <span class="ok">ok</span> · <code>text_volume_is_area_times_height</code> <span class="ok">ok</span> · <code>examples_check_clean</code> <span class="ok">ok</span> · <code>data_urls_roundtrip</code> <span class="ok">ok</span> · <code>import_open_paths_are_a_path</code> <span class="ok">ok</span> · <code>import_svg_gives_sketch_profiles</code> <span class="ok">ok</span> · <code>changed_svg_changes_the_tree</code> <span class="ok">ok</span> · <code>import_relative_to_the_file_and_errors</code> <span class="ok">ok</span> · <code>text_with_a_font_file</code> <span class="ok">ok</span> · <code>text_profiles_and_fonts</code> <span class="ok">ok</span> · <code>unsupported_operations_keep_children</code> <span class="ok">ok</span> · <code>tests::fallback_to_jetbrains_mono</code> <span class="ok">ok</span> · <code>tests::font_names</code> <span class="ok">ok</span> · <code>tests::glyph_o_has_a_hole</code> <span class="ok">ok</span> · <code>tests::directions</code> <span class="ok">ok</span> · <code>tests::align_and_spacing</code> <span class="ok">ok</span> · <code>tests::kerning_pair_av</code> <span class="ok">ok</span> · <code>tests::cff_outlines_are_cubic</code> <span class="ok">ok</span> · <code>tests::user_font_data</code> <span class="ok">ok</span> · <code>tests::hull_and_area_like_openscad</code> <span class="ok">ok</span> · <code>tests::required_chars_in_every_font</code> <span class="ok">ok</span> · <code>tests::normalize_rules</code> <span class="ok">ok</span> · <code>tests::circle_area_and_mirror</code> <span class="ok">ok</span> · <code>path::tests::arcs_exact</code> <span class="ok">ok</span> · <code>path::tests::errors</code> <span class="ok">ok</span> · <code>path::tests::commands_absolute_relative</code> <span class="ok">ok</span> · <code>path::tests::implicit_lineto_and_compact_numbers</code> <span class="ok">ok</span> · <code>path::tests::smooth_curves_reflect</code> <span class="ok">ok</span> · <code>tests::nested_svg_viewport</code> <span class="ok">ok</span> · <code>tests::hidden_and_unfilled</code> <span class="ok">ok</span> · <code>tests::errors</code> <span class="ok">ok</span> · <code>tests::open_paths_are_paths</code> <span class="ok">ok</span> · <code>tests::fill_rules</code> <span class="ok">ok</span> · <code>tests::select_by_id</code> <span class="ok">ok</span> · <code>tests::units_viewbox_like_openscad</code> <span class="ok">ok</span> · <code>tests::transforms</code> <span class="ok">ok</span> · <code>tests::shapes_exact</code> <span class="ok">ok</span> · <code>tests::units_without_viewbox_are_pixels</code> <span class="ok">ok</span> · <code>tests::unsupported_warns_with_line</code> <span class="ok">ok</span> · <code>tests::transforms_before_grid</code> <span class="ok">ok</span> · <code>spec_models_stage1</code> <span class="ok">ok</span></p>
+<p class="small">SVG (<code>cad-svg</code>): Pfadbefehle, Bögen und Flags, Transformationen, Einheiten mit OpenSCAD-Referenzwerten, Füllregeln, verborgene/ungefüllte Elemente, Warnungen mit Zeile, <code>id</code>, Fehlerfälle. Text (<code>cad-font</code>): Hülle und Fläche gegen OpenSCAD (20 Fälle), Glyphe „O“ mit Loch, Kerning „AV“, Ausrichtung, Richtungen, Schriftnamen, eigene Schrift, CFF-Umrisse, Pflicht-Zeichensatz, Rückfall. <code>cad-eval</code>: Profile, Projektdateien, Fehler, data-URLs. CLI: Beispiele, Volumen, STEP-Kreis, <code>watch</code> folgt dem SVG. Vitest: Datendateien (<code>web/src/logic/files.test.ts</code>).</p>
+
+<h2>10 Grenzen</h2>
+<ul>
+<li>Eigene Schablonenschrift fehlt (Schritt 3, nach <code>stroke</code>); Allerta Stencil hat 20 Zeichen des Pflicht-Zeichensatzes nicht (aus JetBrains Mono, nicht schabloniert).</li>
+<li>Kernel-Zeit: viele Glyphen auf einer gemeinsamen Fläche sind teuer (Vereinigung in SMLib wächst überlinear: 9 Glyphen ≈ 1,5 s, 28 ≈ 9 s nativ); im Browser dauert es etwa 1,3- bis 1,8-mal so lange, ein einzelner Kernel-Aufruf über 15 s löst den Watchdog aus.</li>
+<li>Füllregeln setzen sich nicht schneidende Konturen innerhalb eines Elements voraus (Schriften mit überlappenden Konturen, z. B. manche Variable Fonts, und sich selbst schneidende SVG-Pfade werden nicht aufgelöst). Variable Fonts nur in der Standardinstanz.</li>
+<li>SVG: kein Text, keine <code>use</code>-Klone, keine CSS-Klassen, keine Striche als Fläche, keine Masken/Clip-Pfade; Prozent- und em-Längen werden wie Zahlen behandelt.</li>
+<li>Dateinamen müssen als Text im Projekt stehen (ein zur Laufzeit zusammengesetzter Name wird nicht geladen).</li>
+<li>Gefunden beim Logo: Vereinigungen extrudierter Skizzenbögen über 90° rechnete die Fassade falsch (Skizzen Schritt 1); behoben in Schritt 2 (<code>profile::split_arcs</code>), die zwischenzeitliche Umgehung im Import entfiel.</li>
+<li>STEP: Extrusionen von Ellipsenbögen schreibt der Writer jetzt als Extrusion einer <code>ELLIPSE</code> (OpenCASCADE hatte die rationale B-Spline um 3,6·10<sup>−3</sup> falsch integriert). Offen: die Extrusion der quadratischen Q/T-Welle aus <code>welle.svg</code> misst OpenCASCADE um 3 % zu klein (Kernel 652,25 mm², analytisch 652,19 mm²) – <code>svg_logo.scad</code> nimmt aus <code>welle.svg</code> daher nur Ellipse und Bogen; die Welle selbst steht in 5.1.</li>
+<li>Standardausrichtung senkrechten Texts wie OpenSCAD (Versatz des Shapers); <code>valign</code> nach der echten Glyphenhülle (OpenSCAD: gerasterte FreeType-Metriken, ≤ 0,005 mm).</li>
+</ul>
+</main>
+</body>
+</html>

@@ -493,6 +493,33 @@ fn has_uncolored(tree: &Tree, p: NodeIdx) -> bool {
     found
 }
 
+/// Is the result of `n` the plain union of the placed colour nodes' material (only groups,
+/// transforms, colours and unions without blends between `n` and them, every material leaf
+/// below a placed colour node)? Then `R ∩ M(C) = M(C)` and nothing is left for the rest
+/// colour: the regions need no Boolean with the result (Bericht 16: multi-coloured text).
+fn covered_by_union(tree: &Tree, n: NodeIdx, placed: &[(NodeIdx, ColorKey, DMat4)]) -> bool {
+    if placed.iter().any(|p| p.0 == n) {
+        return true;
+    }
+    let node = tree.node(n);
+    let union_like = match &node.op {
+        Op::Group | Op::ModuleCall { .. } | Op::Transform { .. } | Op::Color { .. } | Op::Empty => true,
+        Op::Boolean { op: BoolOp::Union, fillet, chamfer, fillet_law } => {
+            fillet.is_none() && chamfer.is_none() && fillet_law.is_none()
+        }
+        _ => false,
+    };
+    let kids: Vec<NodeIdx> = tree.solid_children(n).collect();
+    union_like && !kids.is_empty() && kids.iter().all(|&c| covered_by_union(tree, c, placed))
+}
+
+/// Boxes overlap with positive volume (touching boxes do not).
+fn boxes_overlap(a: (DVec3, DVec3), b: (DVec3, DVec3)) -> bool {
+    let size = (a.1 - a.0).max(b.1 - b.0).max_element().max(1.0);
+    let eps = 1e-6 * size;
+    (0..3).all(|i| a.1[i].min(b.1[i]) - a.0[i].max(b.0[i]) > eps)
+}
+
 /// A solid of one colour region with its volume.
 type Piece<S> = (S, f64);
 
@@ -560,7 +587,6 @@ where
         whole: Option<f64>,
     ) -> Result<ColorRegions<K::Shape>, String> {
         let tag = ev.reports[node as usize].tag;
-        let k = &mut self.kernel;
         let fail = |what: &str, e: cad_kernel::KernelError| format!("Farbregionen: {what} gescheitert: {e}");
         let solids: Vec<K::Shape> = ev.parts(node).iter().filter(|p| p.solid).map(|p| p.shape.clone()).collect();
         let mut out =
@@ -578,6 +604,10 @@ where
             }
             return Ok(out);
         }
+        if covered_by_union(&ev.tree, node, placed) {
+            return self.union_regions(ev, node, placed, key, out);
+        }
+        let k = &mut self.kernel;
         let r = if solids.len() == 1 {
             solids[0].clone()
         } else {
@@ -665,6 +695,96 @@ where
             };
             let rkey = KeyHasher::new().key(&key).u64(i as u64).finish();
             out.regions.push(Region { color: c, shapes: vec![shape], volume, key: rkey });
+        }
+        let sum: f64 = out.regions.iter().map(|r| r.volume).sum();
+        if (sum - total).abs() > 1e-4 * total.abs() + 1e-3 {
+            out.warning = Some(format!(
+                "Farbregionen ungenau: Summe {sum:.3} mm³ statt {total:.3} mm³ (Boolean des Kernels unvollständig)"
+            ));
+        }
+        Ok(out)
+    }
+
+    /// Regions of a result that is the plain union of its colour nodes ([`covered_by_union`]):
+    /// a colour node's material minus the later material of other colours whose bounds overlap
+    /// it; no Boolean with the whole result, none between bodies that are apart or only touch
+    /// (a sign with text on it: seconds instead of minutes). Same result as the general rule.
+    fn union_regions(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        node: NodeIdx,
+        placed: &[(NodeIdx, ColorKey, DMat4)],
+        key: CacheKey,
+        mut out: ColorRegions<K::Shape>,
+    ) -> Result<ColorRegions<K::Shape>, String> {
+        type Bounds = (DVec3, DVec3);
+        let total = self.mass_props(ev, node)?.volume;
+        out.total = total;
+        let k = &mut self.kernel;
+        let fail = |what: &str, e: cad_kernel::KernelError| format!("Farbregionen: {what} gescheitert: {e}");
+        let mut later: Vec<(ColorKey, K::Shape, Bounds)> = Vec::new();
+        let mut pieces: Vec<(ColorKey, K::Shape, Bounds)> = Vec::new();
+        for &(c, ck, m) in placed.iter().rev() {
+            let ctag = ev.reports[c as usize].tag;
+            for p in ev.parts(c).iter().filter(|p| p.solid) {
+                let s = if m.abs_diff_eq(DMat4::IDENTITY, 1e-12) {
+                    p.shape.clone()
+                } else {
+                    k.transform(&p.shape, &m).map_err(|e| fail("Transformation", e))?
+                };
+                let Some(b) = k.bounds(&s).map_err(|e| fail("Hülle", e))? else { continue };
+                let cut: Vec<K::Shape> = later
+                    .iter()
+                    .filter(|(x, _, bb)| *x != ck && boxes_overlap(b, *bb))
+                    .map(|(_, s, _)| s.clone())
+                    .collect();
+                let piece = if cut.is_empty() {
+                    s.clone()
+                } else {
+                    let mut ops = vec![s.clone()];
+                    ops.extend(cut);
+                    k.boolean(BoolOp::Difference, &ops, ctag).map_err(|e| fail("Differenz", e))?
+                };
+                later.push((ck, s, b));
+                pieces.push((ck, piece, b));
+            }
+        }
+        pieces.reverse();
+        let tag = ev.reports[node as usize].tag;
+        let eps = (total.abs() * EMPTY_REL).max(EMPTY_ABS);
+        // colours in order of appearance; a colour's pieces stay apart unless they overlap
+        let mut order: Vec<ColorKey> = Vec::new();
+        for &(_, ck, _) in placed {
+            if !order.contains(&ck) {
+                order.push(ck);
+            }
+        }
+        for ck in order {
+            let mine: Vec<&(ColorKey, K::Shape, Bounds)> = pieces.iter().filter(|p| p.0 == ck).collect();
+            let apart = mine.iter().enumerate().all(|(i, a)| mine[i + 1..].iter().all(|b| !boxes_overlap(a.2, b.2)));
+            let shapes: Vec<K::Shape> = if apart || mine.len() < 2 {
+                mine.iter().map(|p| p.1.clone()).collect()
+            } else {
+                let all: Vec<K::Shape> = mine.iter().map(|p| p.1.clone()).collect();
+                vec![k.boolean(BoolOp::Union, &all, tag).map_err(|e| fail("Vereinigung", e))?]
+            };
+            let mut kept = Vec::new();
+            let mut volume = 0.0;
+            for s in shapes {
+                if k.is_empty(&s) {
+                    continue;
+                }
+                let v = k.mass_props(&s).map_err(|e| fail("Volumen", e))?.volume;
+                if v.abs() > eps {
+                    volume += v;
+                    kept.push(s);
+                }
+            }
+            if kept.is_empty() {
+                continue;
+            }
+            let rkey = KeyHasher::new().key(&key).u64(out.regions.len() as u64).finish();
+            out.regions.push(Region { color: RegionColor::Color(ck), shapes: kept, volume, key: rkey });
         }
         let sum: f64 = out.regions.iter().map(|r| r.volume).sum();
         if (sum - total).abs() > 1e-4 * total.abs() + 1e-3 {

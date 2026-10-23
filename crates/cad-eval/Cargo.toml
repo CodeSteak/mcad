@@ -11,6 +11,9 @@ serde.workspace = true
 cad-syntax.workspace = true
 cad-ir.workspace = true
 cad-kernel.workspace = true
+cad-outline = { path = "../cad-outline" }
+cad-svg = { path = "../cad-svg" }
+cad-font = { path = "../cad-font" }
 
 [dev-dependencies]
 serde.workspace = true

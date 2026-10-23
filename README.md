@@ -192,6 +192,21 @@ pnpm build                                  # -> web/dist (statisch, z. B. GitHu
 - Module sind Namensräume: `module teile { module schraube(d = 3) { … } }` (Klammern dürfen
   fehlen), Aufruf von außen `teile.schraube(d = 4);`, mehrstufig `a.b.c();`; Funktionen und
   Konstanten eines Moduls als `teile.kopf(d)`, `teile.M3`; `cad --module teile.schraube`.
+- `text("Schild", size = 10, font = "Inter:style=Bold", halign = "center")` wie in OpenSCAD
+  (Größe, Laufweite, Ausrichtung, `spacing`, `direction`, `language`, `script`; Hülle und
+  Fläche gleich OpenSCAD 2021.01), Umrisse exakt (Bézier), Kerning und Ligaturen über
+  `rustybuzz`. Mitgeliefert (SIL OFL): JetBrains Mono (Standard, Regular/Bold), Inter
+  (Regular/Bold), Allerta Stencil; eigene Schriften mit `font = "datei.ttf"` (Projektdatei,
+  in der UI „⇡ Datei laden“). Pflicht-Zeichensatz mit Umlauten, ß/ẞ und Satzzeichen; fehlt
+  ein Zeichen in einer Schrift, kommt es mit Warnung aus JetBrains Mono. `"cad stencil mono"`
+  ist als künftige Standardschrift (eigene Schablonenschrift) reserviert.
+- `import("logo.svg", id = "…", scale = 1, dpi = 96, center = false)` liest SVG als exaktes
+  2D-Profil: `path` (alle Befehle), `rect`, `circle`, `ellipse`, `polygon`, `polyline`,
+  `line`, Gruppen mit `transform`, `viewBox`/Einheiten, `fill-rule`; Kreise bleiben Kreise.
+  Nicht Unterstütztes (Text, Bilder, `use`, CSS-Klassen, Masken, Striche) meldet eine Warnung
+  mit der SVG-Zeile. Die Datei liegt relativ zur einbindenden Datei (CLI: Dateisystem,
+  `cad watch` beobachtet sie; Browser: Projektdatei, im Editor änderbar) (Plan 17.4/17.5,
+  Bericht 16).
 
 ```
 linear_extrude(5) sketch {
@@ -226,7 +241,8 @@ k: halter(w = 50);
 translate(k.oben) rotate(to = dir(k.oben)) cylinder(h = 8, r = 3);
 ```
 
-Weitere Beispiele: `examples/spec/` (Spracherweiterungen, Skizzen: `skizze_*.scad`), `examples/openscad-compat/`
+Weitere Beispiele: `examples/spec/` (Spracherweiterungen, Skizzen: `skizze_*.scad`, Text: `text_schild.scad`,
+SVG: `svg_logo.scad` mit `examples/svg/*.svg`), `examples/openscad-compat/`
 (36 OpenSCAD-Modelle), `examples/projekt-gehaeuse/` (Projekt aus drei Dateien).
 
 ## Verzeichnisstruktur
@@ -242,6 +258,9 @@ crates/
   kernel-mock/       Testkernel in Rust
   cad-engine/        Auswertung mit Cache, Provenienz, Zonen, Bauteile, Export STL/3MF/STEP
   cad-step/          STEP-Writer (AP242/AP214)
+  cad-outline/       neutrale 2D-Konturen (Gerade, Kreis-/Ellipsenbogen, Bézier), Füllregeln
+  cad-svg/           SVG-Import (Teilmenge) → Konturen in mm
+  cad-font/          Text: mitgelieferte OFL-Schriften (fonts/), Shaping (rustybuzz), Glyphen-Umrisse
   cad-render/        Software-Rasterizer für `cad render` (Schnitt mit Kappe, Beschriftung)
   cad-session/       Protokoll (Worker und CLI), TS-Typen
   cad-wasm/          wasm-bindgen-Einstieg für den Worker
@@ -313,6 +332,7 @@ CMakeLists, Build-Skript und Compiler: `scripts/ci/smlib-key.sh`). Ist der SMLib
 - [Bericht 12](docs/reports/12-farben-korrekturen/report.pdf): Korrekturen Farben und Daemon (Befunde F1–F9 der unabhängigen Prüfung, Bambu-Farbdialog, Socketpfad).
 - [Bericht 14](docs/reports/14-skizzen/report.pdf): Skizzen mit gemischten Konturen (Geraden, Bögen, Bézier, Splines) und Module als Namensräume.
 - [Bericht 15](docs/reports/15-skizzen-ecken-offset/report.pdf): Skizzen – Ecken (`corner`, `fillet2d`), `offset` (OpenSCAD-Vergleich), `stroke`.
+- [Bericht 16](docs/reports/16-text-svg/report.pdf): Text mit mitgelieferten Schriften und SVG-Import, Vergleich mit OpenSCAD.
 
 ## Lizenzen
 
@@ -321,5 +341,8 @@ CMakeLists, Build-Skript und Compiler: `scripts/ci/smlib-key.sh`). Ist der SMLib
 - Tauri 2 (Apache-2.0/MIT), `notify` (CC0/MIT/Apache-2.0), `similar` (Apache-2.0). Die Quellen sind
   nicht Teil des Repositorys; `smlib/patches/` enthält Änderungen daran.
 - solidcore (tangency-labs/solidcore, optionale Abhängigkeit): Apache-2.0.
+- Mitgelieferte Schriften in `crates/cad-font/fonts/` (JetBrains Mono, Inter, Allerta Stencil):
+  SIL Open Font License 1.1, Lizenztexte und Quellen daneben (`fonts/README.md`).
+  `rustybuzz`/`ttf-parser` (MIT), `roxmltree` (MIT/Apache-2.0).
 - Weitere Abhängigkeiten über Cargo und pnpm (u. a. React, three.js, CodeMirror) unter ihren
   jeweiligen Lizenzen (überwiegend MIT/Apache-2.0).

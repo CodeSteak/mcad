@@ -109,6 +109,60 @@ export function guessMain(files: Record<string, string>): string | null {
   return free.find((p) => refers.has(p)) ?? free[0] ?? top[0];
 }
 
+// ---------------------------------------------------------------- data files (Bericht 16)
+
+const FONT_EXT = [".ttf", ".otf", ".ttc", ".otc"];
+
+/** Font files: kept as `data:…;base64,…` URL in the project's texts (the engine decodes it). */
+export function isFontFile(path: string): boolean {
+  const l = path.toLowerCase();
+  return FONT_EXT.some((e) => l.endsWith(e));
+}
+
+/** Files a project holds besides `.scad`: SVGs for `import()` (text) and fonts for `text()`. */
+export function isDataFile(path: string): boolean {
+  return path.toLowerCase().endsWith(".svg") || isFontFile(path);
+}
+
+/** Files read from folders and ZIPs. */
+export function isProjectFile(path: string): boolean {
+  return path.toLowerCase().endsWith(".scad") || isDataFile(path);
+}
+
+/** `data:<mime>;base64,…` of bytes. */
+export function dataUrl(bytes: Uint8Array, mime = "application/octet-stream"): string {
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `data:${mime};base64,${btoa(bin)}`;
+}
+
+/** Bytes of a base64 data URL, `null` for other texts. */
+export function fromDataUrl(text: string): Uint8Array | null {
+  const m = /^data:[^,]*;base64,/.exec(text);
+  if (!m) return null;
+  const bin = atob(text.slice(m[0].length).trim());
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+/** Contents of a project text as written to disk or into a ZIP. */
+export function fileBytes(text: string): Uint8Array {
+  return fromDataUrl(text) ?? new TextEncoder().encode(text);
+}
+
+/** Project text of a file's bytes: fonts as data URL, everything else as UTF-8 text. */
+export function fileText(path: string, bytes: Uint8Array): string {
+  return isFontFile(path) ? dataUrl(bytes, "font/ttf") : new TextDecoder().decode(bytes);
+}
+
+/** Data files a source imports by literal name (`import("…svg")`, `font = "….ttf"`), as written. */
+export function dataFileRefs(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(/"([^"\n]+\.(?:svg|ttf|otf|ttc|otc))(?::[^"\n]*)?"/gi)) if (!out.includes(m[1])) out.push(m[1]);
+  return out;
+}
+
 /** Strips a common top folder (`projekt/a.scad`, `projekt/lib/b.scad` → `a.scad`, `lib/b.scad`). */
 export function stripCommonFolder(files: Record<string, string>): { files: Record<string, string>; folder: string | null } {
   const paths = Object.keys(files);

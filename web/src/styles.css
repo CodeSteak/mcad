@@ -851,6 +851,21 @@ input:checked + .cm-switch-knob::after {
   padding: 1px 6px;
 }
 
+/* upload of SVGs and fonts (looks like the buttons next to it) */
+.filebar .fileactions .upload {
+  font-size: 11px;
+  padding: 1px 6px;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.filebar .fileactions .upload:hover {
+  border-color: var(--accent);
+}
+
 .filebar .fileactions .sep {
   width: 1px;
   height: 16px;

@@ -1,0 +1,12 @@
+[package]
+name = "cad-font"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Text outlines: bundled OFL fonts, shaping (rustybuzz) and exact glyph contours"
+
+[dependencies]
+glam.workspace = true
+cad-outline = { path = "../cad-outline" }
+rustybuzz = "0.20.1"

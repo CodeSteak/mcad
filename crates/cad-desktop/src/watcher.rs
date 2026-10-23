@@ -97,7 +97,7 @@ impl FileWatcher {
         for (p, text) in files {
             let k = key(p);
             let known = match text {
-                Some(t) => Known::Hash(hash(t.as_bytes())),
+                Some(t) => Known::Hash(hash(&crate::files::content_bytes(t))),
                 None => std::fs::read(&k).map(|b| Known::Hash(hash(&b))).unwrap_or(Known::Missing),
             };
             if let Some(d) = k.parent() {
@@ -141,7 +141,7 @@ impl FileWatcher {
         let mut sh = self.shared.lock().unwrap();
         let k = key(path);
         if let Some(e) = sh.files.get_mut(&k) {
-            *e = Known::Hash(hash(text.as_bytes()));
+            *e = Known::Hash(hash(&crate::files::content_bytes(text)));
         }
     }
 
@@ -191,7 +191,10 @@ fn run(rx: Receiver<PathBuf>, sh: Arc<Mutex<Shared>>, cb: impl Fn(WatchEvent)) {
                     if known == Known::Hash(h) {
                         continue;
                     }
-                    let Ok(text) = String::from_utf8(bytes) else { continue };
+                    let text = match String::from_utf8(bytes) {
+                        Ok(t) => t,
+                        Err(e) => cad_eval::data_url("application/octet-stream", e.as_bytes()),
+                    };
                     s.files.insert(k.clone(), Known::Hash(h));
                     drop(s);
                     cb(WatchEvent::Changed { path: name, text });

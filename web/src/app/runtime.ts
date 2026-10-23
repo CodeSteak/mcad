@@ -17,6 +17,7 @@ import {
   type LoadedProject,
   baseName,
   download,
+  exampleData,
   forgetHandle,
   loadAutosave,
   loadProjectAutosave,
@@ -30,7 +31,7 @@ import {
 } from "../files/files";
 import { hasFaceColors } from "../logic/colors";
 import { jumpUpTarget, moduleSpans } from "../logic/context";
-import { baseName as pathBase, normalizePath } from "../logic/files";
+import { baseName as pathBase, fileText, isDataFile, isFontFile, normalizePath } from "../logic/files";
 import { modelHull } from "../logic/grids";
 import { transformBox } from "../logic/math";
 import { VersionMapper } from "../logic/positions";
@@ -117,6 +118,10 @@ export function switchFile(path: string, pos?: number): boolean {
   const v = bridge.view;
   if (!v || !project.has(p)) {
     store.setState({ notice: `Datei ${p} gehört nicht zum Projekt` });
+    return false;
+  }
+  if (isFontFile(p)) {
+    store.setState({ notice: `${p}: Schriftdatei (binär), nutzbar mit text(…, font = "${pathBase(p)}")` });
     return false;
   }
   if (p !== project.active) {
@@ -390,7 +395,41 @@ export function openLocation(path: string, pos: number): void {
 
 export function openExample(ex: Example): void {
   forgetHandle();
-  loadText(ex.name, ex.text);
+  // an example importing SVGs of examples/svg: a project with those files (paths below examples/)
+  const data = exampleData(ex.path, ex.text);
+  if (Object.keys(data).length) loadProject({ name: ex.name, main: ex.path, files: { [ex.path]: ex.text, ...data } });
+  else loadText(ex.name, ex.text);
+}
+
+/**
+ * Adds files from the computer to the project (UI upload): `.scad` and SVG as text, fonts as
+ * data URL; next to the main file. Existing files of the same name are replaced.
+ */
+export async function uploadProjectFiles(files: ArrayLike<File>): Promise<void> {
+  const dir = project.main.includes("/") ? project.main.slice(0, project.main.lastIndexOf("/") + 1) : "";
+  const added: string[] = [];
+  for (const f of Array.from(files)) {
+    const name = normalizePath(dir + f.name);
+    if (!name.toLowerCase().endsWith(".scad") && !isDataFile(name)) {
+      store.setState({ notice: `${f.name}: nur .scad, .svg, .ttf und .otf` });
+      continue;
+    }
+    const text = fileText(name, new Uint8Array(await f.arrayBuffer()));
+    if (name === project.active && bridge.view) {
+      bridge.view.dispatch({ changes: { from: 0, to: bridge.view.state.doc.length, insert: text } });
+    } else {
+      project.states.delete(name);
+      project.texts.set(name, text);
+      client.setFile(name, text);
+    }
+    added.push(name);
+  }
+  if (!added.length) return;
+  publishProject();
+  sendNow();
+  scheduleSave();
+  publishDirty();
+  store.setState({ notice: `Hinzugefügt: ${added.join(", ")}` });
 }
 
 export function newFile(): void {
@@ -724,6 +763,11 @@ window.__cad = {
   /** The open project: file list, main and active file. */
   projectInfo() {
     return { ...store.getState().project, files: project.files() };
+  },
+  /** Adds a file (text; fonts as data URL) to the project as the upload does (tests). */
+  addProjectData(path: string, text: string) {
+    const f = new File([text], path);
+    return uploadProjectFiles([f]);
   },
   /** Opens a project (tests). */
   openProject(p: { name: string; main: string; files: Record<string, string>; active?: string }) {
