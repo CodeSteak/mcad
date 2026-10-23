@@ -155,6 +155,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "cad-desktop"
+version = "0.1.0"
+dependencies = [
+ "cad-eval",
+ "cad-ipc",
+ "cad-kernel",
+ "cad-session",
+ "kernel-smlib",
+ "notify",
+ "serde",
+ "serde_json",
+ "similar",
+ "tempfile",
+]
+
+[[package]]
 name = "cad-engine"
 version = "0.1.0"
 dependencies = [
@@ -180,6 +196,16 @@ dependencies = [
  "cad-syntax",
  "glam",
  "serde",
+]
+
+[[package]]
+name = "cad-ipc"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
