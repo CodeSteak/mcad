@@ -134,7 +134,11 @@ fn free_edits(h: &Handle, v: DragValue, opts: &DragOptions) -> Vec<TextEdit> {
             .into_iter()
             // A literal whose value does not change keeps its text (no re-rounding of the
             // components an axis-constrained drag leaves alone).
-            .filter(|(_, (new, cur))| !((mean(new) - mean(cur)).abs() <= 1e-9 * mean(cur).abs().max(1.0)))
+            .filter(|(_, (new, cur))| {
+                // NaN (no current value) counts as changed.
+                let unchanged = (mean(new) - mean(cur)).abs() <= 1e-9 * mean(cur).abs().max(1.0);
+                !unchanged
+            })
             .map(|((start, end), (vs, _))| TextEdit { span: Span { start, end }, text: fmt_literal(mean(&vs), step) })
             .collect();
     }

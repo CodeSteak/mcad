@@ -255,10 +255,12 @@ mod tests {
 
     #[test]
     fn objects_xml_has_one_object_per_mesh() {
-        let mut m = Mesh::default();
-        m.positions = vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
-        m.normals = vec![0.0; 9];
-        m.indices = vec![0, 1, 2];
+        let m = Mesh {
+            positions: vec![0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0],
+            normals: vec![0.0; 9],
+            indices: vec![0, 1, 2],
+            ..Default::default()
+        };
         let x = threemf_objects_xml(&[("a<b", &m), ("c", &m)]);
         assert_eq!(x.matches("<object ").count(), 2);
         assert!(x.contains("name=\"a&lt;b\""));

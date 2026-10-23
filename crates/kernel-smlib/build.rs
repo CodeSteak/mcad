@@ -20,11 +20,10 @@ fn main() {
 
     let native = env::var_os("CARGO_FEATURE_NATIVE").is_some();
     let target_arch = env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
-    if !native || target_arch == "wasm32" {
-        return;
+    if native && target_arch != "wasm32" {
+        #[cfg(feature = "native")]
+        native_build();
     }
-    #[cfg(feature = "native")]
-    native_build();
 }
 
 #[cfg(feature = "native")]
