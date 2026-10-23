@@ -56,7 +56,8 @@ fn main() {
         std::process::exit(2);
     }
     let mesh = read_stl(&std::fs::read(&args[1]).expect("read STL"));
-    let mut scene = Scene { items: vec![Item::new(&mesh, [0.55, 0.68, 0.82, 1.0]).with_edges(None)], lines: vec![] };
+    let mut scene =
+        Scene { items: vec![Item::new(&mesh, [0.55, 0.68, 0.82, 1.0]).with_edges(None)], ..Default::default() };
     if let Some(p) = args.get(3).filter(|p| !p.is_empty()) {
         let txt = std::fs::read_to_string(p).expect("read edges");
         let edges: Vec<Vec<[f64; 3]>> = parse_edges(&txt);
@@ -66,6 +67,7 @@ fn main() {
                 color: [0.12, 0.12, 0.16, 1.0],
                 width: 1.2,
                 on_top: false,
+                dashed: false,
             });
         }
     }

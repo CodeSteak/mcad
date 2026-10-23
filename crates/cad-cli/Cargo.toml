@@ -18,6 +18,8 @@ solidcore = ["kernel-solidcore/solidcore"]
 
 [dependencies]
 cad-session.workspace = true
+cad-eval.workspace = true
+cad-syntax.workspace = true
 cad-render.workspace = true
 cad-kernel.workspace = true
 cad-engine.workspace = true
@@ -27,8 +29,11 @@ glam.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 clap = { version = "4.5", features = ["derive"] }
+notify = "8"
+similar = "2"
 
 [dev-dependencies]
 cad-step.workspace = true
 assert_cmd = "2"
+png = "0.17"
 tempfile = "3"

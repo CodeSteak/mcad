@@ -1,0 +1,18 @@
+// Zweck: Funktionen, Variablen und ein Modul mit Vektor- und Bool-Parametern für `cad outline`.
+function doppelt(x) = 2 * x;
+breite = 30;
+hoehe = doppelt(5);
+
+module platte(groesse = [20, 10, 2], hohl = false) {
+    grid r {
+        x: a = 0, b = groesse[0];
+        z: unten = 0;
+    }
+    difference() {
+        cube(groesse);
+        if (hohl) translate([5, 2, -1]) cube([groesse[0] - 10, groesse[1] - 4, 4]);
+    }
+    anchor mitte = [groesse[0] / 2, groesse[1] / 2, groesse[2]], dir = [0, 0, 1];
+}
+
+p: platte([breite, 10, hoehe / 5], hohl = true);

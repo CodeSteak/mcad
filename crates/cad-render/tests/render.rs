@@ -43,8 +43,15 @@ fn renders_difference_with_subtracted_body() {
             .report(d)
             .selected_edges
             .iter()
-            .map(|p| Polyline { points: p.clone(), color: [1.0, 0.55, 0.0, 1.0], width: 2.5, on_top: false })
+            .map(|p| Polyline {
+                points: p.clone(),
+                color: [1.0, 0.55, 0.0, 1.0],
+                width: 2.5,
+                on_top: false,
+                dashed: false,
+            })
             .collect(),
+        ..Default::default()
     };
     let opts = RenderOptions { width: 640, height: 480, ..Default::default() };
     let img = render(&scene, &opts);
@@ -83,7 +90,11 @@ fn renders_zone_block_and_profile() {
     let ev = e.evaluate(b.finish());
     let m = e.tessellate(&ev, f, None).unwrap();
     let zm = e.tessellate(&ev, z, None).unwrap();
-    let scene = Scene { items: vec![Item::new(&m, PART), Item::new(&zm, BLUE).with_edges(None)], lines: vec![] };
+    let scene = Scene {
+        items: vec![Item::new(&m, PART), Item::new(&zm, BLUE).with_edges(None)],
+        lines: vec![],
+        ..Default::default()
+    };
     let img = render(&scene, &RenderOptions::default());
     assert!(img.count_not(to_u8(RenderOptions::default().background)) > 10_000);
     img.write_png(out_dir().join("zone_block_iso.png")).unwrap();
@@ -97,7 +108,10 @@ fn renders_zone_block_and_profile() {
     let ev = e.evaluate(b.finish());
     let m = e.tessellate(&ev, d, None).unwrap();
     let opts = RenderOptions { view: View::Top, width: 400, height: 400, axes: false, ..Default::default() };
-    let img = render(&Scene { items: vec![Item::new(&m, [0.55, 0.7, 0.9, 1.0])], lines: vec![] }, &opts);
+    let img = render(
+        &Scene { items: vec![Item::new(&m, [0.55, 0.7, 0.9, 1.0])], lines: vec![], ..Default::default() },
+        &opts,
+    );
     let bg = to_u8(opts.background);
     // the hole in the middle shows the background
     assert_eq!(img.pixel(200, 200), bg);
@@ -130,7 +144,7 @@ fn transparent_coplanar_faces_have_no_diagonal_bands() {
     let items = vec![Item::new(&a, [0.78, 0.79, 0.82, 0.22]).with_edges(None), Item::new(&b, RED).with_edges(None)];
     // iso: the plane is oblique, so the triangle centroids lie at different depths
     let opts = RenderOptions { width: 240, height: 180, axes: false, ..Default::default() };
-    let img = render(&Scene { items, lines: vec![] }, &opts);
+    let img = render(&Scene { items, lines: vec![], ..Default::default() }, &opts);
     let bg = to_u8(opts.background);
     let inside = |x: u32, y: u32| {
         (-3i32..=3).all(|dy| (-3i32..=3).all(|dx| img.pixel((x as i32 + dx) as u32, (y as i32 + dy) as u32) != bg))

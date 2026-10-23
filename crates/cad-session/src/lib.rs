@@ -593,6 +593,22 @@ where
         self.engine.tessellate(&d.ev, node, Some(tol))
     }
 
+    /// Mesh of a node of the last finished evaluation (node system) with tolerance `tol` mm.
+    pub fn mesh_tol(&mut self, node: NodeIdx, tol: f64) -> Result<Rc<Mesh>, String> {
+        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+        if node as usize >= d.ev.tree.nodes.len() {
+            return Err(format!("Knoten {node} existiert nicht"));
+        }
+        self.engine.tessellate(&d.ev, node, Some(tol))
+    }
+
+    /// Runs `f` with the kernel and the last finished evaluation (measurements with kernel
+    /// operations, e.g. interference of parts). `None` without an evaluation.
+    pub fn with_kernel<R>(&mut self, f: impl FnOnce(&mut K, &Evaluation<K::Shape>) -> R) -> Option<R> {
+        let d = self.done.as_ref()?;
+        Some(f(self.engine.kernel_mut(), &d.ev))
+    }
+
     /// Volume, area, centroid of a node of the last finished evaluation.
     pub fn mass_props(&mut self, node: NodeIdx) -> Result<MassProps, String> {
         let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
