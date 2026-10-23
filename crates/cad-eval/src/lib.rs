@@ -10,7 +10,6 @@
 
 mod builtin_fn;
 mod builtin_mod;
-mod colors;
 mod edit;
 pub mod env;
 mod eval;
@@ -21,6 +20,7 @@ mod law;
 pub mod math;
 mod ops;
 mod output;
+pub mod palette;
 mod print;
 pub mod project;
 mod sig;

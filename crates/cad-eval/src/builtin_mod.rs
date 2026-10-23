@@ -7,11 +7,11 @@ use cad_syntax::Span;
 use cad_syntax::ast::{Ident, Stmt};
 use glam::{DMat4, DVec2, DVec3};
 
-use crate::colors::parse_color;
 use crate::env::{Dyn, dyn_frame, dyn_lookup, dyn_push};
 use crate::eval::{ArgV, Args, Ctx, Ev, R};
 use crate::math::{self, cos_deg, sin_deg};
 use crate::output::HandleKind;
+use crate::palette::{self, ColorKind, parse_color};
 use crate::value::{Sel, Val, Value, fmt_num};
 
 pub(crate) const BUILTIN_MODULES: &[&str] = &[
@@ -1070,17 +1070,31 @@ impl<'a> Ev<'a> {
 
     #[inline(never)]
     fn m_color(&mut self, s: &'a Stmt, a: &Args<'a>, children: &'a [Stmt], ctx: &Ctx<'a>, dy: &Dyn<'a>) -> R<()> {
-        let p = self.bind("color", a, &["c", "alpha"], 2);
+        let p = self.bind("color", a, &["c", "alpha", "filament"], 2);
+        let mut name = None;
         let mut rgba = match p[0] {
             None => None,
             Some(x) => match (&x.val.v, x.val.as_nums()) {
-                (Value::Str(name), _) => {
-                    let c = parse_color(name);
-                    if c.is_none() {
-                        self.warn(x.expr.span, format!("unbekannte Farbe `{name}`"));
+                (Value::Str(text), _) => match parse_color(text) {
+                    Some(c) => {
+                        if c.kind == ColorKind::Random {
+                            let known: Vec<&str> = palette::PALETTE.iter().map(|p| p.name).collect();
+                            self.warn(
+                                x.expr.span,
+                                format!("Farbe `{text}` unbekannt – Zufallsfarbe (Palette: {})", known.join(", ")),
+                            );
+                        }
+                        name = c.name;
+                        Some(c.rgba)
                     }
-                    c
-                }
+                    None => {
+                        self.warn(
+                            x.expr.span,
+                            format!("`{text}` ist keine Farbe (#rgb, #rrggbb, #rrggbbaa oder Name)"),
+                        );
+                        None
+                    }
+                },
                 (_, Some(v)) if v.len() == 3 || v.len() == 4 => {
                     Some([v[0] as f32, v[1] as f32, v[2] as f32, v.get(3).copied().unwrap_or(1.0) as f32])
                 }
@@ -1093,8 +1107,37 @@ impl<'a> Ev<'a> {
         if let (Some(c), Some(al)) = (rgba.as_mut(), self.num_of(p[1], "alpha")) {
             c[3] = al as f32;
         }
+        let mut filament = None;
+        if let Some(arg) = p[2]
+            && let Some(f) = self.num_of(Some(arg), "filament")
+        {
+            if f.fract() != 0.0 || !(1.0..=palette::MAX_FILAMENT as f64).contains(&f) {
+                self.warn(
+                    arg.expr.span,
+                    format!("filament muss eine ganze Zahl von 1 bis {} sein", palette::MAX_FILAMENT),
+                );
+            } else if let Some(c) = rgba {
+                let key = palette::rgba_bytes(c);
+                let n = f as u32;
+                match self.filaments.get(&key) {
+                    Some(&(m, _)) if m != n => {
+                        self.warn(
+                            arg.expr.span,
+                            format!(
+                                "Farbe hat schon Filament {m} (die erste Angabe gilt), filament = {n} wird ignoriert"
+                            ),
+                        );
+                    }
+                    Some(_) => filament = Some(n),
+                    None => {
+                        self.filaments.insert(key, (n, arg.expr.span));
+                        filament = Some(n);
+                    }
+                }
+            }
+        }
         let node = match rgba {
-            Some(c) => self.node(s, Op::Color { rgba: c }, ctx),
+            Some(c) => self.node(s, Op::Color { rgba: c, name, filament }, ctx),
             None => self.node(s, Op::Group, ctx),
         };
         let mut c = self.sub(ctx, node, &DMat4::IDENTITY);

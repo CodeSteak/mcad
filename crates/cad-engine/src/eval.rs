@@ -177,7 +177,12 @@ pub(crate) fn compute_keys(tree: &Tree, kernel_id: &str, skip: &[bool]) -> Vec<C
         let node = tree.node(n);
         let mut h = KeyHasher::new();
         h.str("cad-engine/1").str(kernel_id);
-        h.value(&node.op);
+        match &node.op {
+            // Colour and filament do not change the geometry: a new colour or slot recomputes
+            // nothing (colour regions have their own key, see `colors.rs`).
+            Op::Color { .. } => h.str("color"),
+            op => h.value(op),
+        };
         h.value(&node.blend);
         if skip.get(n as usize).copied().unwrap_or(false) {
             h.str("draft: blend suspended");
@@ -272,7 +277,7 @@ fn plural(n: usize, one: &str, many: &str) -> String {
     if n == 1 { format!("1 {one}") } else { format!("{n} {many}") }
 }
 
-fn transform_box(b: (DVec3, DVec3), m: &DMat4) -> (DVec3, DVec3) {
+pub(crate) fn transform_box(b: (DVec3, DVec3), m: &DMat4) -> (DVec3, DVec3) {
     let (lo, hi) = b;
     let mut rlo = DVec3::splat(f64::INFINITY);
     let mut rhi = DVec3::splat(f64::NEG_INFINITY);
@@ -289,7 +294,7 @@ fn transform_box(b: (DVec3, DVec3), m: &DMat4) -> (DVec3, DVec3) {
     (rlo, rhi)
 }
 
-fn merge_box(a: Option<(DVec3, DVec3)>, b: Option<(DVec3, DVec3)>) -> Option<(DVec3, DVec3)> {
+pub(crate) fn merge_box(a: Option<(DVec3, DVec3)>, b: Option<(DVec3, DVec3)>) -> Option<(DVec3, DVec3)> {
     match (a, b) {
         (None, x) | (x, None) => x,
         (Some(a), Some(b)) => Some((a.0.min(b.0), a.1.max(b.1))),

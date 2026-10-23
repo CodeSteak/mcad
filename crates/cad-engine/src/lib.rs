@@ -47,6 +47,8 @@
 
 pub mod builder;
 mod cache;
+pub mod color_export;
+pub mod colors;
 pub mod counting;
 mod eval;
 pub mod export;
@@ -111,12 +113,14 @@ enum Slot {
     Mass(CacheKey),
     /// Neutral B-rep of part `u32` of a node result, placed with a matrix (hash).
     Brep(CacheKey, u64, u32),
+    /// Colour regions of a node result (key from `colors.rs`).
+    Regions(CacheKey),
 }
 
 impl Slot {
     fn key(&self) -> &CacheKey {
         match self {
-            Slot::Node(k) | Slot::Mesh(k, _) | Slot::Mass(k) | Slot::Brep(k, ..) => k,
+            Slot::Node(k) | Slot::Mesh(k, _) | Slot::Mass(k) | Slot::Brep(k, ..) | Slot::Regions(k) => k,
         }
     }
 }
@@ -126,6 +130,7 @@ enum Cached<S> {
     Mesh(Rc<Mesh>),
     Mass(MassProps),
     Brep(Rc<cad_kernel::brep::Brep>),
+    Regions(Rc<colors::ColorRegions<S>>),
 }
 
 impl<S> Clone for Cached<S> {
@@ -135,6 +140,7 @@ impl<S> Clone for Cached<S> {
             Cached::Mesh(m) => Cached::Mesh(m.clone()),
             Cached::Mass(m) => Cached::Mass(*m),
             Cached::Brep(b) => Cached::Brep(b.clone()),
+            Cached::Regions(r) => Cached::Regions(r.clone()),
         }
     }
 }
@@ -762,7 +768,7 @@ where
                     st.node_bytes += cost;
                 }
                 // meshes and derived data (mass properties, B-reps for STEP)
-                Slot::Mesh(..) | Slot::Mass(_) | Slot::Brep(..) => {
+                Slot::Mesh(..) | Slot::Mass(_) | Slot::Brep(..) | Slot::Regions(_) => {
                     st.meshes += 1;
                     st.mesh_bytes += cost;
                 }
@@ -1010,7 +1016,7 @@ where
 }
 
 /// Appends `m`, offsetting face and edge ids so they stay unique.
-fn append_offset(dst: &mut Mesh, m: &Mesh) {
+pub(crate) fn append_offset(dst: &mut Mesh, m: &Mesh) {
     let face_off = dst.tri_faces.iter().max().map(|v| v + 1).unwrap_or(0);
     let edge_off = dst.edge_ids.iter().max().map(|v| v + 1).unwrap_or(0);
     let nf = dst.tri_faces.len();
@@ -1052,7 +1058,7 @@ fn brep_bytes(b: &cad_kernel::brep::Brep) -> usize {
     n
 }
 
-fn mesh_bytes(m: &Mesh) -> usize {
+pub(crate) fn mesh_bytes(m: &Mesh) -> usize {
     4 * (m.positions.len()
         + m.normals.len()
         + m.indices.len()

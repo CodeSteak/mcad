@@ -133,8 +133,16 @@ pub enum Op {
         size: DVec3,
         auto: [bool; 3],
     },
+    /// `color(c, alpha, filament)`. `name`: palette name or the unknown name as written
+    /// (`None` for hex and vectors). Only `rgba` matters for geometry; the engine's cache key
+    /// of this node ignores all three (a new colour or slot recomputes nothing).
     Color {
         rgba: [f32; 4],
+        #[serde(default)]
+        name: Option<String>,
+        /// Filament slot (1-based) from `filament = n`.
+        #[serde(default)]
+        filament: Option<u32>,
     },
     /// Unsupported or failed statement that still has children to show.
     Empty,
