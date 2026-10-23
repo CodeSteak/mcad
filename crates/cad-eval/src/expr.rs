@@ -10,7 +10,7 @@ use crate::env::{Binding, Dyn, Env, NO_INST, dyn_lookup, dyn_push};
 use crate::eval::{Args, Ev, NameRef, R};
 use crate::ops::{binop, unop};
 use crate::output::Echo;
-use crate::value::{Closure, Origin, Range, Val, Value, to_display};
+use crate::value::{Closure, Origin, Range, Val, Value, fmt_num, to_display, to_hint};
 
 enum Tail<'a> {
     Val(Val<'a>),
@@ -238,6 +238,7 @@ impl<'a> Ev<'a> {
                 return Ok(Some(Val::new(match *r {
                     NameRef::Grid(g) => Value::Grid(g),
                     NameRef::Inst(i) => Value::Instance(i),
+                    NameRef::Family(f) => Value::Family(f),
                 })));
             }
             match parent {
@@ -632,6 +633,25 @@ impl<'a> Ev<'a> {
             }
         };
         let iv = self.expr(item, env, dy)?;
+        if let Value::Family(f) = b.v {
+            // `k[i]`: member of a family of named instances.
+            let member = match iv.as_num() {
+                Some(n) if n.is_finite() && n.fract() == 0.0 && n.abs() < 1e15 => {
+                    self.families[f as usize].get(&(n as i64)).copied().ok_or(n)
+                }
+                Some(n) => Err(n),
+                None => Err(f64::NAN),
+            };
+            return Ok(match member {
+                Ok(id) => Val::new(Value::Instance(id)),
+                Err(n) => {
+                    let base_txt = self.text(base.span);
+                    let shown = if n.is_nan() { to_hint(&iv) } else { fmt_num(n) };
+                    self.warn(e.span, format!("`{base_txt}[{shown}]` ist keine benannte Instanz"));
+                    undef
+                }
+            });
+        }
         let Some(i) = iv.as_num() else {
             return Ok(undef);
         };
@@ -673,6 +693,11 @@ impl<'a> Ev<'a> {
         match &b.v {
             Value::Grid(g) => Ok(self.plane_member(*g, name, e.span, in_ctx)),
             Value::Instance(i) => Ok(self.anchor_member(*i, name, e.span, in_ctx)),
+            Value::Family(_) => {
+                let b = self.text(base.span);
+                self.warn(e.span, format!("`{b}` ist eine Liste benannter Instanzen: `{b}[i].{}` verwenden", name.name));
+                Ok(Val::undef())
+            }
             Value::List(l) => {
                 let idx = match name.name.as_str() {
                     "x" => 0,

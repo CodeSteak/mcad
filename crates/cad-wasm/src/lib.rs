@@ -79,12 +79,18 @@ fn to_js(msgs: Vec<FromEngine>) -> Result<Array, JsValue> {
                 set(&o, "items", &arr);
                 o.into()
             }
-            FromEngine::ExportResult { format, bytes, triangles } => {
+            FromEngine::ExportResult { format, bytes, triangles, parts, zip } => {
                 let o = Object::new();
                 set(&o, "type", &JsValue::from_str("ExportResult"));
                 set(&o, "format", &format.serialize(&serializer())?);
                 set(&o, "bytes", &Uint8Array::from(&bytes[..]));
                 set(&o, "triangles", &JsValue::from(*triangles));
+                if let Some(p) = parts {
+                    set(&o, "parts", &p.serialize(&serializer())?);
+                }
+                if let Some(z) = zip {
+                    set(&o, "zip", &JsValue::from_bool(*z));
+                }
                 o.into()
             }
             other => other.serialize(&serializer())?,

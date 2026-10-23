@@ -1,0 +1,6 @@
+ECHO: "b"
+ECHO: "b"
+ECHO: 1
+ECHO: la = undef
+ECHO: la = 1, fn = 5
+ECHO: "inner", 7

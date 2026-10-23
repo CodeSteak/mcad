@@ -269,9 +269,9 @@ fn new_source_aborts_running_job() {
     // cube(20) came from the cache of the aborted job or is recomputed; both fine
     assert!(sc[0].complete);
     // export
-    s.post(ToEngine::Export { format: ExportFormat::Stl });
+    s.post(ToEngine::Export { format: ExportFormat::Stl, parts: None, zip: None });
     let r = s.run_to_idle();
-    let FromEngine::ExportResult { bytes, triangles, format } = &r[0] else { panic!("{r:?}") };
+    let FromEngine::ExportResult { bytes, triangles, format, .. } = &r[0] else { panic!("{r:?}") };
     assert_eq!(*format, ExportFormat::Stl);
     assert_eq!(bytes.len(), 84 + 50 * *triangles as usize);
 }
@@ -314,7 +314,7 @@ fn protocol_json_roundtrip() {
     .unwrap();
     assert!(matches!(m, ToEngine::Drag { target: DragTarget::Snap { .. }, .. }));
     let m: ToEngine = serde_json::from_str(r#"{"type":"Export","format":"3mf"}"#).unwrap();
-    assert_eq!(m, ToEngine::Export { format: ExportFormat::ThreeMf });
+    assert_eq!(m, ToEngine::Export { format: ExportFormat::ThreeMf, parts: None, zip: None });
     let j = serde_json::to_string(&FromEngine::Progress { version: 1, done: 2, total: 3, current: None }).unwrap();
     assert_eq!(j, r#"{"type":"Progress","version":1,"done":2,"total":3,"current":null}"#);
 }

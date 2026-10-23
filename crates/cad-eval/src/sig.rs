@@ -3,22 +3,23 @@
 use cad_syntax::ast::*;
 
 use crate::output::{ModuleSig, ParamSig, ParamType};
+use crate::project::Project;
 use crate::value::PValue;
 
-pub(crate) fn module_sigs(src: &str, file: &File) -> Vec<ModuleSig> {
+pub(crate) fn module_sigs(src: &Project, file: &File) -> Vec<ModuleSig> {
     let mut out = Vec::new();
     let mut path = Vec::new();
     collect(src, &file.stmts, &mut path, &mut out);
     out
 }
 
-fn collect(src: &str, stmts: &[Stmt], path: &mut Vec<String>, out: &mut Vec<ModuleSig>) {
+fn collect(src: &Project, stmts: &[Stmt], path: &mut Vec<String>, out: &mut Vec<ModuleSig>) {
     for s in stmts {
         visit(src, s, path, out);
     }
 }
 
-fn visit(src: &str, s: &Stmt, path: &mut Vec<String>, out: &mut Vec<ModuleSig>) {
+fn visit(src: &Project, s: &Stmt, path: &mut Vec<String>, out: &mut Vec<ModuleSig>) {
     match &s.kind {
         StmtKind::Module(m) => {
             out.push(sig(src, m, path));
@@ -39,7 +40,7 @@ fn visit(src: &str, s: &Stmt, path: &mut Vec<String>, out: &mut Vec<ModuleSig>) 
     }
 }
 
-fn sig(src: &str, m: &ModuleDef, path: &[String]) -> ModuleSig {
+fn sig(src: &Project, m: &ModuleDef, path: &[String]) -> ModuleSig {
     ModuleSig {
         name: m.name.name.clone(),
         stmt: m.stmt,
@@ -58,7 +59,7 @@ fn sig(src: &str, m: &ModuleDef, path: &[String]) -> ModuleSig {
                     default_text: p
                         .default
                         .as_ref()
-                        .and_then(|d| src.get(d.span.start as usize..d.span.end as usize))
+                        .map(|d| src.text(d.span))
                         .map(String::from),
                     default_span: p.default.as_ref().map(|d| d.span),
                     ty: default_value.as_ref().map_or(ParamType::Unknown, type_of),

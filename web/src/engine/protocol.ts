@@ -20,9 +20,10 @@ export type Rgba = [number, number, number, number];
 
 /**
  * A source range. `from`/`to`: UTF-16 offsets (end exclusive). `line`/`col`: 1-based start,
- * `end_line`/`end_col`: 1-based position of `to`. Columns count UTF-16 units.
+ * `end_line`/`end_col`: 1-based position of `to`. Columns count UTF-16 units. All are local
+ * to the range's file: `file` = id in `Scene.files`, omitted for the main file.
  */
-export type SrcRange = { from: number, to: number, line: number, col: number, end_line: number, end_col: number, };
+export type SrcRange = { from: number, to: number, line: number, col: number, end_line: number, end_col: number, file?: number, };
 
 /**
  * A language value: `null` = undef, numbers, bools, strings, lists, ranges; grids,
@@ -30,10 +31,52 @@ export type SrcRange = { from: number, to: number, line: number, col: number, en
  */
 export type Value = null | boolean | number | string | Array<Value> | { start: number, step: number, end: number, } | { opaque: string, };
 
+export type FileRole = "main" | "include" | "use";
+
+/**
+ * A file of the evaluated project (`SrcRange.file` indexes this list). A file included twice
+ * appears twice (same path).
+ */
+export type FileInfo = { id: number, path: string, role: FileRole, };
+
+/**
+ * An `include <…>`/`use <…>` statement: `range` covers `<path>` (Ctrl+click opens `target`).
+ */
+export type IncludeRef = { range: SrcRange, 
+/**
+ * Resolved project path.
+ */
+target: string, is_use: boolean, 
+/**
+ * The file was found.
+ */
+found: boolean, };
+
+/**
+ * A part (Plan 12.9): named instance at the top level of the main file.
+ */
+export type Part = { 
+/**
+ * `deckel`, `k[2]`: export name.
+ */
+name: string, 
+/**
+ * `ModuleCall` node.
+ */
+node: number, inst: number, range: SrcRange, 
+/**
+ * Bounds in context coordinates (complete scene).
+ */
+bounds: Bounds | null, 
+/**
+ * Volume in mm³ (complete scene, 3D parts).
+ */
+volume: number | null, };
+
 /**
  * Message from the UI to the engine.
  */
-export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, };
+export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, };
 
 /**
  * Where a dragged handle goes.
@@ -42,12 +85,20 @@ export type DragTarget = { "kind": "point", pos: Vec3, } | { "kind": "value", va
 
 export type SnapRef = { "kind": "grid", grid: number, planes: [string, string, string], } | { "kind": "anchor", inst: number, name: string, } | { "kind": "plane", grid: number, plane: string, };
 
-export type ExportFormat = "stl" | "3mf";
+export type ExportFormat = "stl" | "3mf" | "step";
 
 /**
  * Message from the engine to the UI.
  */
-export type FromEngine = { "type": "Diagnostics", version: number, items: Array<Diagnostic>, } | { "type": "Scene" } & Scene | { "type": "Progress", version: number, done: number, total: number, current: NodeRef | null, } | { "type": "Meshes", version: number, items: Array<MeshData>, } | { "type": "Edits", version: number, edits: Array<Edit>, } | { "type": "SnapTargets", version: number, handle: number, targets: Array<SnapTarget>, } | { "type": "ExportResult", format: ExportFormat, bytes: Uint8Array, triangles: number, } | { "type": "Error", message: string, version: number | null, node: number | null, };
+export type FromEngine = { "type": "Diagnostics", version: number, items: Array<Diagnostic>, } | { "type": "Scene" } & Scene | { "type": "Progress", version: number, done: number, total: number, current: NodeRef | null, } | { "type": "Meshes", version: number, items: Array<MeshData>, } | { "type": "Edits", version: number, edits: Array<Edit>, } | { "type": "SnapTargets", version: number, handle: number, targets: Array<SnapTarget>, } | { "type": "ExportResult", format: ExportFormat, bytes: Uint8Array, triangles: number, 
+/**
+ * Parts exported (`null`: the root).
+ */
+parts?: Array<string>, 
+/**
+ * A ZIP package with one file per part.
+ */
+zip?: boolean, } | { "type": "Error", message: string, version: number | null, node: number | null, };
 
 export type Severity = "error" | "warning" | "info";
 
@@ -57,13 +108,21 @@ export type Diagnostic = { severity: Severity, message: string, range: SrcRange,
 /**
  * Node of a kernel diagnostic.
  */
-node: number | null, };
+node: number | null, 
+/**
+ * Path of the file the range is in (omitted: the main file).
+ */
+file?: string, };
 
 export type Edit = { 
 /**
  * UTF-16 offsets.
  */
-from: number, to: number, text: string, };
+from: number, to: number, text: string, 
+/**
+ * Path of the file to change (omitted: the main file).
+ */
+file?: string, };
 
 export type NodeRef = { node: number, stmt: number | null, range: SrcRange, 
 /**
@@ -116,6 +175,18 @@ tol: number, positions: Float32Array, normals: Float32Array, indices: Uint32Arra
 tri_tags: Uint32Array, tri_faces: Uint32Array, edge_segments: Float32Array, edge_ids: Uint32Array, };
 
 export type Scene = { version: number, 
+/**
+ * Files of the project, index = id (`SrcRange.file`); file 0 is the main file.
+ */
+files: Array<FileInfo>, 
+/**
+ * `include`/`use` statements of all files.
+ */
+includes: Array<IncludeRef>, 
+/**
+ * Parts (file context only).
+ */
+parts: Array<Part>, 
 /**
  * `false`: preliminary scene before the kernel job (see `FromEngine.Scene`).
  */

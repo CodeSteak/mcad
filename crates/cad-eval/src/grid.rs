@@ -116,7 +116,7 @@ impl<'a> Ev<'a> {
             frame: ctx.xf.world,
             frame_module: ctx.xf.mod_local,
             planes: planes.iter().map(|(p, _, _)| p.clone()).collect(),
-            visible: Span { start: s.span.end, end: ctx.frame.body_end },
+            visible: self.visible_span(s.span, ctx.frame.body_end),
         };
         self.grids.push(info);
         self.declare_name(ctx.frame.inst, &g.name, NameRef::Grid(id), ctx);

@@ -49,12 +49,13 @@ pub enum StmtKind {
     Assign { name: Ident, value: Expr },
     Module(Rc<ModuleDef>),
     Function(Rc<FunctionDef>),
-    Include { path: String, is_use: bool },
+    /// `include <path>` / `use <path>`; `path_span` covers `<path>`.
+    Include { path: String, path_span: Span, is_use: bool },
     /// `anchor name = point, dir = v;`
     Anchor { name: Ident, point: Expr, dir: Option<Expr> },
     Grid(Rc<GridDecl>),
-    /// `name: call;`
-    Named { name: Ident, inst: Box<Stmt> },
+    /// `name: call;` or `name[index]: call;` (in loops).
+    Named { name: Ident, index: Option<Expr>, inst: Box<Stmt> },
     /// Module instantiation `name(args) children`.
     Call { name: Ident, args: Vec<Arg>, children: Vec<Stmt>, has_block: bool },
     For { vars: Vec<Assignment>, body: Box<Stmt>, intersection: bool },

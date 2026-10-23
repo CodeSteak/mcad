@@ -1,0 +1,5 @@
+ECHO: n = 3, kinder = 1
+ECHO: 10
+ECHO: 6, $fn = 7
+ECHO: fn = 12, v = 3
+ECHO: versatz = undef

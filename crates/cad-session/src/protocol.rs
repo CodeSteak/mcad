@@ -3,7 +3,13 @@
 //!
 //! Conventions:
 //! * Source positions are **UTF-16 code unit offsets** (CodeMirror) plus 1-based line and
-//!   column (column in UTF-16 units), see [`SrcRange`].
+//!   column (column in UTF-16 units), see [`SrcRange`]. They are local to their file:
+//!   `SrcRange.file` is the file id in `Scene.files` (omitted = main file), `Diagnostic.file`
+//!   and `Edit.file` name the file by its path (omitted = main file).
+//! * Projects (several files): `SetFiles` gives the other files (path → text), `SetFile`
+//!   changes one; the main file's text still comes with `SetSource`. Paths are `/`-separated,
+//!   relative to the project root; `include <p>`/`use <p>` resolve relative to the including
+//!   file.
 //! * Matrices are 4×4, column-major (`Matrix4.fromArray` in three.js), mapping the local
 //!   system of the thing they belong to into the system of the current context (the context
 //!   module or the file).
@@ -34,7 +40,8 @@ pub struct Mat4(pub [f64; 16]);
 pub struct Rgba(pub [f32; 4]);
 
 /// A source range. `from`/`to`: UTF-16 offsets (end exclusive). `line`/`col`: 1-based start,
-/// `end_line`/`end_col`: 1-based position of `to`. Columns count UTF-16 units.
+/// `end_line`/`end_col`: 1-based position of `to`. Columns count UTF-16 units. All are local
+/// to the range's file: `file` = id in `Scene.files`, omitted for the main file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 pub struct SrcRange {
     pub from: u32,
@@ -43,6 +50,9 @@ pub struct SrcRange {
     pub col: u32,
     pub end_line: u32,
     pub end_col: u32,
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<u32>,
 }
 
 /// A language value: `null` = undef, numbers, bools, strings, lists, ranges; grids,
@@ -71,6 +81,21 @@ pub enum ToEngine {
     /// are syntax errors a preliminary `Scene` and `Progress`), aborts a running kernel job
     /// (finished nodes stay cached) and starts a new one; `step` then finishes it.
     SetSource { text: String, version: u64 },
+    /// Project files besides the main file (path → text), replacing earlier ones; `main` is the
+    /// main file's path (default `main.scad`; includes resolve relative to it). Answers
+    /// nothing and does not evaluate: send `SetSource` next.
+    SetFiles {
+        files: BTreeMap<String, String>,
+        #[ts(optional)]
+        main: Option<String>,
+    },
+    /// Changes one project file (`text = null`: removes it). Answers nothing and does not
+    /// evaluate: send `SetSource` next.
+    SetFile {
+        path: String,
+        #[ts(optional)]
+        text: Option<String>,
+    },
     /// What to show: `module = null` for the whole file, otherwise a module name (or
     /// `outer::inner`) evaluated with its defaults and `overrides` (parameter bar).
     /// Re-evaluates the current source.
@@ -109,8 +134,19 @@ pub enum ToEngine {
     /// "Als Standard übernehmen": write `value` as the default of `param` of `module`.
     /// Answers `Edits`.
     SetDefault { module: String, param: String, value: Value },
-    /// Export the root of the current evaluation (after the running job has finished).
-    Export { format: ExportFormat },
+    /// Export the root of the current evaluation (after the running job has finished), or the
+    /// named `parts` (`Scene.parts`): STL = all in one file, 3MF = one object per part, STEP =
+    /// the kernel's export. `zip`: one file per part in a ZIP package. Requests are answered in
+    /// order.
+    Export {
+        format: ExportFormat,
+        #[ts(optional)]
+        #[serde(default)]
+        parts: Option<Vec<String>>,
+        #[ts(optional)]
+        #[serde(default)]
+        zip: Option<bool>,
+    },
     /// Abort the running job and drop queued mesh/export work. The last scene stays.
     Cancel,
     /// Watchdog: nodes with these cache keys (`NodeRef.key` of `Progress.current`, hex) hung
@@ -150,6 +186,9 @@ pub enum ExportFormat {
     Stl,
     #[serde(rename = "3mf")]
     ThreeMf,
+    /// Through the kernel's STEP export (an error while the kernel has none).
+    #[serde(rename = "step")]
+    Step,
 }
 
 // ------------------------------------------------------------------------------------------
@@ -198,6 +237,14 @@ pub enum FromEngine {
         #[ts(type = "Uint8Array")]
         bytes: Vec<u8>,
         triangles: u32,
+        /// Parts exported (`null`: the root).
+        #[ts(optional)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        parts: Option<Vec<String>>,
+        /// A ZIP package with one file per part.
+        #[ts(optional)]
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        zip: Option<bool>,
     },
     Error {
         message: String,
@@ -230,6 +277,10 @@ pub struct Diagnostic {
     pub source: DiagSource,
     /// Node of a kernel diagnostic.
     pub node: Option<u32>,
+    /// Path of the file the range is in (omitted: the main file).
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -238,6 +289,10 @@ pub struct Edit {
     pub from: u32,
     pub to: u32,
     pub text: String,
+    /// Path of the file to change (omitted: the main file).
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -298,9 +353,63 @@ pub struct MeshData {
 // scene
 // ------------------------------------------------------------------------------------------
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+pub enum FileRole {
+    Main,
+    /// Inserted by `include`.
+    Include,
+    /// Loaded by `use`.
+    Use,
+}
+
+/// A file of the evaluated project (`SrcRange.file` indexes this list). A file included twice
+/// appears twice (same path).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct FileInfo {
+    pub id: u32,
+    pub path: String,
+    pub role: FileRole,
+}
+
+/// An `include <…>`/`use <…>` statement: `range` covers `<path>` (Ctrl+click opens `target`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct IncludeRef {
+    pub range: SrcRange,
+    /// Resolved project path.
+    pub target: String,
+    pub is_use: bool,
+    /// The file was found.
+    pub found: bool,
+}
+
+/// A part (Plan 12.9): named instance at the top level of the main file.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct Part {
+    /// `deckel`, `k[2]`: export name.
+    pub name: String,
+    /// `ModuleCall` node.
+    pub node: u32,
+    pub inst: u32,
+    pub range: SrcRange,
+    /// Bounds in context coordinates (complete scene).
+    pub bounds: Option<Bounds>,
+    /// Volume in mm³ (complete scene, 3D parts).
+    pub volume: Option<f64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct Scene {
     pub version: u64,
+    /// Files of the project, index = id (`SrcRange.file`); file 0 is the main file.
+    #[serde(default)]
+    pub files: Vec<FileInfo>,
+    /// `include`/`use` statements of all files.
+    #[serde(default)]
+    pub includes: Vec<IncludeRef>,
+    /// Parts (file context only).
+    #[serde(default)]
+    pub parts: Vec<Part>,
     /// `false`: preliminary scene before the kernel job (see `FromEngine.Scene`).
     pub complete: bool,
     pub context: ContextInfo,
@@ -770,6 +879,11 @@ pub fn typescript() -> String {
         Rgba,
         SrcRange,
         Value,
+        FileRole,
+        FileInfo,
+        IncludeRef,
+        Part,
+
         ToEngine,
         DragTarget,
         SnapRef,

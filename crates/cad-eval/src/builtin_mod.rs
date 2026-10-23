@@ -152,6 +152,7 @@ impl<'a> Ev<'a> {
         let hint = match a.val.v {
             Value::GridSel { .. } => "; Linien und Ebenen nur in zone() und mirror()",
             Value::Instance(_) => "; Anker `k.name` verwenden",
+            Value::Family(_) => "; Anker `k[i].name` verwenden",
             _ => "; Rasterpunkt `g[x, y, z]` oder Ebene `g.name` verwenden",
         };
         self.error(a.expr.span, format!("Typfehler: `{what}` erwartet Zahl oder Punkt, ist {t}{hint}"));

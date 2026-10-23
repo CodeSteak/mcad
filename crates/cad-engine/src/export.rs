@@ -43,7 +43,7 @@ pub fn stl_binary(m: &Mesh, header: &str) -> Vec<u8> {
 }
 
 /// Vertices welded by exact position (meshes from the kernel duplicate vertices per face).
-fn welded(m: &Mesh) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
+pub(crate) fn welded(m: &Mesh) -> (Vec<[f32; 3]>, Vec<[u32; 3]>) {
     let mut map: HashMap<[u32; 3], u32> = HashMap::new();
     let mut verts = Vec::new();
     let mut remap = Vec::with_capacity(m.positions.len() / 3);
@@ -83,8 +83,8 @@ pub fn threemf_model_xml(m: &Mesh) -> String {
     s
 }
 
-const CONTENT_TYPES: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"model\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodel+xml\"/></Types>\n";
-const RELS: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Target=\"/3D/3dmodel.model\" Id=\"rel0\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel\"/></Relationships>\n";
+pub(crate) const CONTENT_TYPES: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/><Default Extension=\"model\" ContentType=\"application/vnd.ms-package.3dmanufacturing-3dmodel+xml\"/></Types>\n";
+pub(crate) const RELS: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Target=\"/3D/3dmodel.model\" Id=\"rel0\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel\"/></Relationships>\n";
 
 /// 3MF package (ZIP, stored entries).
 pub fn threemf(m: &Mesh) -> Vec<u8> {

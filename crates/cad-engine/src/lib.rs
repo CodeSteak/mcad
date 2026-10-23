@@ -47,6 +47,7 @@ pub mod counting;
 mod eval;
 pub mod export;
 pub mod key;
+pub mod parts;
 mod profile;
 
 use std::any::Any;
@@ -64,6 +65,7 @@ pub use cache::Lru;
 pub use counting::CountingKernel;
 pub use eval::SUSPENDED_HINT;
 pub use key::{CacheKey, KeyHasher};
+pub use parts::{NodeFormat, part_file_name};
 
 /// Error of a node whose key is blocked (see [`Engine::block_keys`]).
 pub const BLOCKED_MESSAGE: &str = "Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung";

@@ -100,8 +100,14 @@ impl<'a> Ev<'a> {
         let inst = h.ctx.frame.inst;
         let names = self.names_of(inst);
         let grids = names.iter().filter_map(|(_, r)| if let NameRef::Grid(g) = r { Some(*g) } else { None }).collect();
-        let instances =
-            names.iter().filter_map(|(_, r)| if let NameRef::Inst(i) = r { Some(*i) } else { None }).collect();
+        let instances = names
+            .iter()
+            .flat_map(|(_, r)| match r {
+                NameRef::Inst(i) => vec![*i],
+                NameRef::Family(f) => self.families[*f as usize].values().copied().collect(),
+                NameRef::Grid(_) => vec![],
+            })
+            .collect();
         self.handles.push(Handle {
             id,
             stmt: h.stmt.id,
