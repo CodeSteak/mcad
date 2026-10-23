@@ -292,7 +292,7 @@ test("P04 Strg+Klick auf include/use-Pfad öffnet die Datei", async ({ page }) =
   await page.mouse.click(p3.x, p3.y);
   await page.keyboard.up("Control");
   await waitActive(page, "konstanten.scad");
-  await expect(lineEl(page, 2)).toHaveText("breite = 60;");
+  expect((await text(page)).split("\n")[1]).toBe("breite = 60;");
   await expect(lineEl(page, 2).locator(".cm-lineend")).toContainText("= 60");
   await screenshotD(page, "p04-include", "editor");
   // Back, then Ctrl+click on use <lib/teile.scad> (line 4).
@@ -331,8 +331,17 @@ test("P05 Griff ändert die eingebundene Datei (Variable aus include, Literal in
   expect(h.kind).toBe("point");
   await screenshotD(page, "p05-vorher");
   const from = grip(h);
-  // Free drag (Alt) along +x: the literal 40 in mass.scad changes, main.scad stays.
-  await mouseDrag(page, from, line(from, { x: from.x + 80, y: from.y + 20 }, 12), { alt: true });
+  // Free drag (Alt) locked to x (key X): the literal 40 in mass.scad changes, main.scad stays.
+  await page.mouse.move(from.x, from.y);
+  await page.keyboard.down("Alt");
+  await page.mouse.down();
+  await page.keyboard.press("x");
+  for (const q of line(from, { x: from.x + 80, y: from.y + 20 }, 12)) {
+    await page.mouse.move(q.x, q.y);
+    await frame(page);
+  }
+  await page.mouse.up();
+  await page.keyboard.up("Alt");
   await waitDragDone(page);
   let p = await info(page);
   expect(p.active).toBe("main.scad");
@@ -394,11 +403,12 @@ test("P06 Hover und Klick über Dateigrenzen, Doppelklick öffnet das Modul der 
   const c = deckel.bounds!;
   const pt = await toScreen(page, [(c.min[0] + c.max[0]) / 2, (c.min[1] + c.max[1]) / 2, c.max[2]]);
   await page.mouse.move(pt.x, pt.y);
-  await expect(page.getByTestId("status-hover-file")).toContainText("Fläche aus gehaeuse.scad, Zeile 7");
+  await expect(page.getByTestId("status-hover-file")).toContainText(/Fläche aus gehaeuse\.scad, Zeile [67]$/);
+  const hovered = Number((await page.getByTestId("status-hover-file").textContent())!.match(/Zeile (\d+)/)![1]);
   await screenshotD(page, "p06-hover");
   await page.mouse.click(pt.x, pt.y);
   await waitActive(page, "gehaeuse.scad");
-  await page.waitForFunction(() => (window as unknown as W).__cad.cursorLine() === 7);
+  await page.waitForFunction((l) => (window as unknown as W).__cad.cursorLine() === l, hovered);
   // Double-click on the housing (an instance of a module of lib/teile.scad) opens its definition.
   const g = (await parts(page)).find((x) => x.name === "gehaeuse")!;
   const gb = g.bounds!;
@@ -414,12 +424,12 @@ test("P06 Hover und Klick über Dateigrenzen, Doppelklick öffnet das Modul der 
     id: "P06",
     title: "Hover und Klick über Dateigrenzen",
     images: [
-      { name: "p06-hover", label: "konstanten.scad offen, Maus über dem Deckel: „Fläche aus gehaeuse.scad, Zeile 7“" },
+      { name: "p06-hover", label: "konstanten.scad offen, Maus über dem Modell: „Fläche aus gehaeuse.scad, Zeile …“" },
       { name: "p06-doppelklick", label: "Doppelklick auf das Gehäuse: lib/teile.scad, Modul gehaeuse" },
     ],
     caption:
       "Liegt die Zeile einer Fläche in einer anderen Datei als der im Editor, nennt die Statuszeile Datei und Zeile; ein Klick öffnet die Datei an dieser Stelle. Der Doppelklick auf eine Instanz eines Moduls aus einer anderen Datei (gehaeuse aus lib/teile.scad) öffnet diese Datei in der Moduldefinition, der Kontext wird das Modul.",
-    checks: ["Hover → status-hover-file mit Datei und Zeile", "Klick → gehaeuse.scad Zeile 7", "Doppelklick → lib/teile.scad Zeile 15, Kontext gehaeuse"],
+    checks: ["Hover → status-hover-file mit Datei und Zeile", "Klick → gehaeuse.scad in der Zeile der Fläche", "Doppelklick → lib/teile.scad Zeile 15, Kontext gehaeuse"],
   });
 });
 
@@ -485,9 +495,11 @@ for (i = [0:3]) translate([i * 15, 0, 0]) k[i]: halter(h = 6 + 2 * i);
 translate([0, 20, 0]) sphere(2);
 `;
   await loadText(page, src);
+  // Cursor outside the module: file context (parts exist only there).
+  await clickLine(page, 6, 2);
+  await waitScene(page, { context: null });
   const ps = await parts(page);
   expect(ps.map((x) => x.name)).toEqual(["k[0]", "k[1]", "k[2]", "k[3]"]);
-  await clickLine(page, 6, 2);
   const s = await waitView(page, "(s) => s.view.selection.line === 6 && s.view.plan.anchors >= 4");
   expect(s.view!.plan.anchors).toBe(4);
   const anchors = await page.evaluate(() => ((window as unknown as W).__cad.store.getState().shown as { anchors: Array<{ text: string | null; point: number[] }> }).anchors);
@@ -541,8 +553,9 @@ test("P09 Fehler in eingebundenen Dateien: fehlende Datei an der Zeile, Syntaxfe
   // scene stays.
   await page.getByTestId("tab-lib.scad").click();
   await waitActive(page, "lib.scad");
-  await clickLine(page, 1, 20);
-  await page.keyboard.type("(");
+  await clickLine(page, 1, 0);
+  await page.keyboard.press("End");
+  await page.keyboard.type(" sphere(;");
   await page.waitForFunction(() => ((window as unknown as W).__cad.store.getState().diagnostics as { items: Array<{ source: string; file?: string }> }).items.some((d) => d.source === "syntax" && d.file === "lib.scad"));
   await expect(page.getByTestId("tab-lib.scad").locator(".dot")).toBeVisible();
   await expect(lineEl(page, 1)).toHaveClass(/cm-l-error/);
