@@ -24,6 +24,8 @@ kernel-smlib = { path = "crates/kernel-smlib" }
 cad-engine = { path = "crates/cad-engine" }
 cad-render = { path = "crates/cad-render" }
 cad-session = { path = "crates/cad-session" }
+cad-step = { path = "crates/cad-step" }
+kernel-solidcore = { path = "crates/kernel-solidcore", default-features = false }
 
 [profile.release]
 opt-level = 3

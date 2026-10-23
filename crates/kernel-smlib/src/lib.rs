@@ -34,8 +34,14 @@
 //! * `set_draft(true)`: booleans take SMLib's result without the plausibility check (unless
 //!   it fails or is open), fillets skip the self-overlap check.
 //! * `bounds` is SMLib's tight box; `mass_props` of an open surface has volume 0.
+//! * `brep`: exact NURBS of every face and edge, analytic surfaces (plane, cylinder, cone,
+//!   sphere, torus, revolution, extrusion) where SMLib holds them as such, lines and circles
+//!   recognised from their exact NURBS; blends and offsets approximated (see `brep.rs`).
 
 use std::rc::Rc;
+
+mod brep;
+pub use brep::BrepStats;
 
 use cad_kernel::{
     BoolOp, Class, EdgeInfo, FaceId, FaceInfo, KResult, Kernel, KernelError, Loop, MassProps, Mesh,
@@ -201,6 +207,15 @@ impl SmlibKernel {
         })
     }
 
+    /// [`Kernel::brep`] with conversion statistics.
+    pub fn brep_with_stats(&mut self, s: &Shape) -> KResult<(cad_kernel::brep::Brep, BrepStats)> {
+        let d = locked(|| {
+            status(raw::brep(s.h))?;
+            Ok::<_, KernelError>(raw::out_f64(0))
+        })?;
+        brep::parse(&d)
+    }
+
     /// Edge ids of `s` whose sample points all satisfy `pred` (test/diagnostic helper).
     pub fn edges_where(
         &mut self,
@@ -215,7 +230,7 @@ impl Kernel for SmlibKernel {
     type Shape = Shape;
 
     fn id(&self) -> &'static str {
-        "smlib-7eba8aa/facade-2"
+        "smlib-7eba8aa/facade-3"
     }
 
     fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Shape> {
@@ -415,5 +430,9 @@ impl Kernel for SmlibKernel {
 
     fn set_draft(&mut self, draft: bool) {
         self.draft = draft;
+    }
+
+    fn brep(&mut self, s: &Shape) -> KResult<cad_kernel::brep::Brep> {
+        self.brep_with_stats(s).map(|(b, _)| b)
     }
 }

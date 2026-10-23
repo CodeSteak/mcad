@@ -135,6 +135,33 @@ SC_API int32_t sc_is_solid(uint32_t h);
 SC_API int32_t sc_face_count(uint32_t h);
 SC_API int32_t sc_edge_count(uint32_t h);
 
+/* B-rep topology and exact geometry (STEP export), since facade version 3.
+ * f64[0] = one stream of numbers (indices and counts as exact doubles):
+ *   format (1), approx_tol,
+ *   n_vertices, (x y z) per vertex,
+ *   n_edges, per edge: start_vertex, end_vertex, curve_class, t0, t1, approximated, CURVE
+ *     (start vertex at t0; curve_class 0 B-spline, 1 line, 2 circle, 3 ellipse, 4 other,
+ *      approximated to approx_tol)
+ *   n_bodies, per body: kind (0 solid, 1 sheet), n_shells,
+ *     per shell: inner (1 = void of the solid), n_faces,
+ *       per face: face_index (as in sc_faces), tag, SURFACE,
+ *                 sample_ok, px py pz, nx ny nz, u v, same  (point, normal of the written
+ *                 side, NURBS parameters of the point, 1 if the written side's normal is the
+ *                 surface normal),
+ *                 n_loops, per loop: n_edgeuses (0 = vertex loop, then its vertex),
+ *                   per edgeuse: edge, forward (1 = along the edge)
+ *   Loops run counter-clockwise about the written side's normal, which for solids points
+ *   out of the material (for voids: into the void).
+ *   CURVE   = degree, n_ctrl, n_knots, knots..., (x y z w) per control point
+ *   SURFACE = class (0 B-spline, 1 plane, 2 cylinder, 3 cone, 4 sphere, 5 torus,
+ *             6 revolution, 7 extrusion, 8 other), 13 parameters: origin xyz, z axis xyz,
+ *             x axis xyz, p1..p4 (cylinder/sphere: r; cone: r at origin, semi-angle (rad,
+ *             may be negative); torus: R, r; extrusion: vector in the z-axis slot),
+ *             approximated, du, dv, nu, nv, n_ku, ku..., n_kv, kv...,
+ *             (x y z w) per control point (u-major), then for classes 6 and 7: CURVE
+ *             (generator). */
+SC_API int32_t sc_brep(uint32_t h);
+
 #ifdef __cplusplus
 }
 #endif

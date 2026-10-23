@@ -42,7 +42,7 @@ export type DragTarget = { "kind": "point", pos: Vec3, } | { "kind": "value", va
 
 export type SnapRef = { "kind": "grid", grid: number, planes: [string, string, string], } | { "kind": "anchor", inst: number, name: string, } | { "kind": "plane", grid: number, plane: string, };
 
-export type ExportFormat = "stl" | "3mf";
+export type ExportFormat = "stl" | "3mf" | "step";
 
 /**
  * Message from the engine to the UI.

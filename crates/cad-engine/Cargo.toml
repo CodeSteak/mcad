@@ -8,6 +8,7 @@ publish.workspace = true
 [dependencies]
 cad-ir.workspace = true
 cad-kernel.workspace = true
+cad-step.workspace = true
 cad-syntax.workspace = true
 glam.workspace = true
 serde.workspace = true

@@ -1,0 +1,19 @@
+[package]
+name = "kernel-solidcore"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "cad_kernel::Kernel over solidcore (Rust port of SMLib), as far as its public API reaches today"
+
+[features]
+default = ["solidcore"]
+# Without it the crate builds without solidcore and every operation is Unsupported.
+solidcore = ["dep:solidcore"]
+
+[dependencies]
+cad-kernel.workspace = true
+glam.workspace = true
+# tangency-labs/solidcore main @ 3a6a50b (2026-10-22), Apache-2.0. Builds with Rust 1.97
+# (solidcore pins 1.98 in its own rust-toolchain.toml, which does not apply to dependents).
+solidcore = { git = "https://github.com/tangency-labs/solidcore", rev = "3a6a50b30a7829d00abcffbe9fa561d88ab37dc1", optional = true }

@@ -712,6 +712,29 @@ fn stl_and_3mf_export() {
 }
 
 #[test]
+fn step_export() {
+    let mut e = engine();
+    let (t, ..) = box_minus_cyl(None);
+    let ev = e.evaluate(t);
+    let opts = cad_engine::StepOptions { name: "bohrung".into(), ..Default::default() };
+    let (bytes, st) = e.export_step(&ev, &opts).unwrap();
+    assert_eq!((st.solids, st.faces), (1, 7));
+    assert_eq!(st.surfaces.get("cylinder"), Some(&1));
+    let m = cad_step::p21::parse(std::str::from_utf8(&bytes).unwrap()).unwrap();
+    assert_eq!(m.count("CYLINDRICAL_SURFACE"), 1);
+    assert_eq!(m.count("PLANE"), 6);
+    assert_eq!(m.count("ADVANCED_FACE"), 7);
+    // the bore's radius and axis survive exactly
+    let cyl = m.of_type("CYLINDRICAL_SURFACE").next().unwrap();
+    assert!((cyl.args()[2].as_num().unwrap() - 5.0).abs() < 1e-12);
+    // 2D results cannot be exported
+    let mut b = TreeBuilder::new();
+    b.root(circle(3.0));
+    let ev = e.evaluate(b.finish());
+    assert!(e.export_step(&ev, &opts).is_err());
+}
+
+#[test]
 fn root_modifier_ignores_transforms_above() {
     let mut e = engine();
     let mut b = TreeBuilder::new();

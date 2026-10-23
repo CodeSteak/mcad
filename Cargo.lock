@@ -139,9 +139,11 @@ dependencies = [
  "cad-kernel",
  "cad-render",
  "cad-session",
+ "cad-step",
  "clap",
  "glam",
  "kernel-smlib",
+ "kernel-solidcore",
  "serde",
  "serde_json",
  "tempfile",
@@ -155,6 +157,7 @@ dependencies = [
  "cad-eval",
  "cad-ir",
  "cad-kernel",
+ "cad-step",
  "cad-syntax",
  "glam",
  "i_triangle",
@@ -220,6 +223,16 @@ dependencies = [
  "serde",
  "serde_json",
  "ts-rs",
+]
+
+[[package]]
+name = "cad-step"
+version = "0.1.0"
+dependencies = [
+ "cad-kernel",
+ "glam",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -607,6 +620,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kernel-solidcore"
+version = "0.1.0"
+dependencies = [
+ "cad-kernel",
+ "glam",
+ "solidcore",
+]
+
+[[package]]
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -834,6 +856,14 @@ name = "slab"
 version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+
+[[package]]
+name = "solidcore"
+version = "0.0.1"
+source = "git+https://github.com/tangency-labs/solidcore?rev=3a6a50b30a7829d00abcffbe9fa561d88ab37dc1#3a6a50b30a7829d00abcffbe9fa561d88ab37dc1"
+dependencies = [
+ "thiserror",
+]
 
 [[package]]
 name = "strsim"
