@@ -427,6 +427,32 @@ pub(crate) fn split_frame(m: &DMat4) -> (DMat4, DAffine2) {
     (frame, DAffine2::from_mat2(a))
 }
 
+/// Arcs of a composite loop longer than 90° as several arcs of at most 90° (each one span of
+/// the rational quadratic B-spline the kernel builds). SMLib's Booleans failed on extrusions of
+/// multi-span arc curves (a ring of two 180° arcs united with a box gave a wrong volume,
+/// Testbericht 15); single-span arcs are robust. Not used for lofts, which connect the sections
+/// segment by segment.
+pub(crate) fn split_arcs(lp: &Loop) -> Loop {
+    let Loop::Composite(segs) = lp else { return lp.clone() };
+    let quarter = std::f64::consts::FRAC_PI_2;
+    let mut out = Vec::with_capacity(segs.len());
+    for s in segs {
+        match s {
+            Segment::Arc { center, r, a0, a1 } if (a1 - a0).abs() > quarter + 1e-9 => {
+                let n = ((a1 - a0).abs() / quarter - 1e-9).ceil() as usize;
+                let d = (a1 - a0) / n as f64;
+                for i in 0..n {
+                    let b0 = a0 + d * i as f64;
+                    let b1 = if i + 1 == n { *a1 } else { a0 + d * (i + 1) as f64 };
+                    out.push(Segment::Arc { center: *center, r: *r, a0: b0, a1: b1 });
+                }
+            }
+            _ => out.push(s.clone()),
+        }
+    }
+    Loop::Composite(out)
+}
+
 /// Maps a loop by a 2D affine map. Circles stay circles under similarities; otherwise they
 /// are approximated by a closed spline (second value `true`).
 pub(crate) fn map_loop(lp: &Loop, a: &DAffine2) -> (Loop, bool) {

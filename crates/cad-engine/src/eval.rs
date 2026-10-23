@@ -1358,7 +1358,7 @@ where
         let out = loops
             .iter()
             .map(|lp| {
-                let (m, ap) = profile::map_loop(lp, a);
+                let (m, ap) = profile::map_loop(&profile::split_arcs(lp), a);
                 approx |= ap;
                 m
             })

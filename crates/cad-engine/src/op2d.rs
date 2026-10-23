@@ -106,7 +106,7 @@ fn run(tree: &Tree, idx: NodeIdx) -> Result<Op2Out, String> {
             out.contours = to_contours(&res);
         }
         Op::Blend2 { kind, r, select } => {
-            let (loops, exact) = blend_input(tree, idx, &mut out.warnings)?;
+            let loops = blend_input(tree, idx, &mut out.warnings)?;
             let zones = zones_of(tree, idx, &mut out.warnings);
             let size = region_size(&loops);
             let ck = match kind {
@@ -114,23 +114,24 @@ fn run(tree: &Tree, idx: NodeIdx) -> Result<Op2Out, String> {
                 BlendKind::Chamfer => CornerKind::Chamfer(*r),
             };
             let mut count = 0usize;
+            let mut chosen = 0usize;
             let mut res = Vec::new();
             let tol = display_tol(size);
             for lp in &loops {
-                let (l2, c) = fillet_loop(lp, ck, &|v, pts| zones.selects(v, pts, *select), &mut out, tol);
+                let (l2, c, k) = fillet_loop(lp, ck, &|v, pts| zones.selects(v, pts, *select), &mut out, tol);
                 count += c;
+                chosen += k;
                 res.push(l2);
             }
             let noun = if count == 1 { "Ecke" } else { "Ecken" };
             out.hints.push(format!("{count} {noun}"));
-            if count == 0 && *r > 0.0 {
+            if chosen == 0 && *r > 0.0 {
                 out.warnings.push(if zones.is_empty() {
                     "keine Ecke im Profil".to_string()
                 } else {
                     "leere Auswahl: keine Ecke in den Zonen".to_string()
                 });
             }
-            let _ = exact;
             out.contours = to_contours(&res);
         }
         Op::Stroke { w, cap, join } => {
@@ -299,7 +300,7 @@ fn children_region(tree: &Tree, idx: NodeIdx, warn: &mut Vec<String>) -> Result<
 
 /// Input loops of `fillet2d`: a single closed contour keeps its exact segments (B-splines
 /// stay B-splines); anything else goes through the exact region (B-splines as biarcs).
-fn blend_input(tree: &Tree, idx: NodeIdx, warn: &mut Vec<String>) -> Result<(Vec<Loop2>, bool), String> {
+fn blend_input(tree: &Tree, idx: NodeIdx, warn: &mut Vec<String>) -> Result<Vec<Loop2>, String> {
     let e = children_expr(tree, idx, warn)?;
     let mut single = &e;
     while let Expr2::Op(BoolOp::Union, a) = single {
@@ -317,10 +318,9 @@ fn blend_input(tree: &Tree, idx: NodeIdx, warn: &mut Vec<String>) -> Result<(Vec
         if region2::loop_area(&lp) < 0.0 {
             lp = lp.iter().rev().map(|s| s.reversed()).collect();
         }
-        // merge pieces of one line or circle (polygons with collinear points) like the region
-        return Ok((vec![lp], true));
+        return Ok(vec![lp]);
     }
-    Ok((expr_loops(&e)?, false))
+    expr_loops(&e)
 }
 
 // ---------------------------------------------------------------- zones
@@ -455,18 +455,18 @@ fn sample_piece(s: &Segment, t0: f64, t1: f64) -> Vec<DVec2> {
     (0..=16).map(|i| region2::seg_point(s, t0 + (t1 - t0) * i as f64 / 16.0)).collect()
 }
 
-/// Rounds (chamfers) the selected corners of a closed loop; returns the new loop and the
-/// number of corners done. Errors name the corner.
+/// Rounds (chamfers) the selected corners of a closed loop; returns the new loop, the number of
+/// corners done and the number selected. Errors name the corner.
 fn fillet_loop(
     lp: &[Segment],
     kind: CornerKind,
     selected: &dyn Fn(DVec2, &[DVec2]) -> bool,
     out: &mut Op2Out,
     tol: f64,
-) -> (Loop2, usize) {
+) -> (Loop2, usize, usize) {
     let n = lp.len();
     if n < 2 {
-        return (lp.to_vec(), 0);
+        return (lp.to_vec(), 0, 0);
     }
     let mut cands: Vec<(usize, CornerKind)> = Vec::new();
     for v in 0..n {
@@ -511,7 +511,7 @@ fn fillet_loop(
             }),
         }
     }
-    (pieces.into_iter().map(|p| p.1).collect(), count)
+    (pieces.into_iter().map(|p| p.1).collect(), count, cands.len())
 }
 
 // ---------------------------------------------------------------- stroke paths

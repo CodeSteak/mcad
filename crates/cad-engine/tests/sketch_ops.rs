@@ -155,6 +155,8 @@ fn errors_at_the_operation() {
     // every short edge would need 2 × 1.5: all four corners fail, at most r = 1 fits
     assert_eq!(errs.len(), 4, "{errs:?}");
     assert!(errs.iter().all(|e| e.contains("passt nicht") && e.contains("höchstens ≈ 1)")), "{errs:?}");
+    // the corners were selected: no "keine Ecke" warning
+    assert!(warnings(&ev).is_empty(), "{:?}", warnings(&ev));
     // offset of an open sketch: error, stroke takes it
     let ev = e.evaluate(
         eval_source(

@@ -236,9 +236,14 @@ impl OpData {
 /// monotone in y).
 fn loop_winding(lp: &[G], p: DVec2) -> i32 {
     let mut w = 0;
-    for g in lp {
+    // the shared vertices: every segment starts where the previous one ends, exactly (arc end
+    // points computed from angles differ by rounding, and a ray through a vertex must see the
+    // same point on both sides)
+    let n = lp.len();
+    for (i, g) in lp.iter().enumerate() {
+        let (va, vb) = (lp[i].start(), lp[(i + 1) % n].start());
         match *g {
-            G::L { a, b } => w += line_crossing(a, b, p),
+            G::L { .. } => w += line_crossing(va, vb, p),
             G::A { c, r, a0, sw } => {
                 if p.x > c.x + r || p.y > c.y + r || p.y < c.y - r {
                     continue;
@@ -261,7 +266,8 @@ fn loop_winding(lp: &[G], p: DVec2) -> i32 {
                     if t1 <= t0 {
                         continue;
                     }
-                    let (s, e) = (g.at(t0), g.at(t1));
+                    let s = if t0 == 0.0 { va } else { g.at(t0) };
+                    let e = if t1 == 1.0 { vb } else { g.at(t1) };
                     let up = s.y <= p.y && e.y > p.y;
                     let down = e.y <= p.y && s.y > p.y;
                     if !(up || down) {
@@ -785,13 +791,12 @@ pub fn loop_area(lp: &[Segment]) -> f64 {
     let mut a = 0.0;
     for s in lp {
         match s {
-            Segment::Arc { center, r, a0, a1 } => {
+            Segment::Arc { r, a0, a1, .. } => {
                 // area under the arc: chord part + circular segment
                 let (p, q) = (s.start(), s.end());
                 a += p.perp_dot(q) / 2.0;
                 let sw = a1 - a0;
                 a += r * r / 2.0 * (sw - sw.sin());
-                let _ = center;
             }
             Segment::Line { a: p, b: q } => a += p.perp_dot(*q) / 2.0,
             Segment::Nurbs(_) => {
@@ -1268,14 +1273,13 @@ fn foot_param(s: &Segment, c: DVec2) -> Option<f64> {
             let d = *b - *a;
             Some((c - *a).dot(d) / d.length_squared().max(1e-300))
         }
-        Segment::Arc { center, a0, a1, r } => {
+        Segment::Arc { center, a0, a1, .. } => {
             let ang = angle(c - *center);
             sweep_param_tol(ang, *a0, a1 - a0, 1e-12).or_else(|| {
                 // the foot may lie just beyond an end: report a value outside [0, 1]
                 let sw = a1 - a0;
                 let d0 = angdist(ang, *a0);
                 let d1 = angdist(ang, *a1);
-                let _ = r;
                 Some(if d0 < d1 { -d0 / sw.abs() } else { 1.0 + d1 / sw.abs() })
             })
         }
@@ -1351,6 +1355,9 @@ pub fn seg_point(s: &Segment, t: f64) -> DVec2 {
     seg_eval(s, t).0
 }
 
+/// Result of one corner of [`apply_corners`].
+pub type CornerOutcome = Result<CornerResult, CornerError>;
+
 /// A piece of the result of [`apply_corners`]: (part of) input segment `i`, or the rounding
 /// of corner `k`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1369,7 +1376,7 @@ pub fn apply_corners(
     segs: &[Segment],
     closed: bool,
     corners: &[(usize, CornerKind)],
-) -> (Vec<(Piece, Segment)>, Vec<Result<CornerResult, CornerError>>) {
+) -> (Vec<(Piece, Segment)>, Vec<CornerOutcome>) {
     let n = segs.len();
     let at = |k: usize| -> (usize, usize) {
         let v = corners[k].0;
@@ -1402,17 +1409,16 @@ pub fn apply_corners(
                 && let (Ok(rs), Ok(re)) = (&res[ks], &res[ke])
                 && rs.ub > re.ua + 1e-9
             {
-                conflict = Some((i, ks, ke));
+                conflict = Some((ks, ke));
                 break;
             }
         }
-        let Some((i, ks, ke)) = conflict else { break };
-        // largest common factor that fits both on segment i
+        let Some((ks, ke)) = conflict else { break };
+        // largest common factor with which both fit on the shared segment
         let fits = |f: f64| {
             let (Ok(a), Ok(b)) = (run(ks, scaled(corners[ks].1, f)), run(ke, scaled(corners[ke].1, f))) else {
                 return false;
             };
-            let _ = i;
             a.ub <= b.ua + 1e-9
         };
         let (mut lo, mut hi) = (0.0, 1.0);
@@ -1803,6 +1809,24 @@ mod tests {
         let b2 = Segment::bezier(&[DVec2::new(10.0, 0.0), DVec2::new(10.0, 5.0), DVec2::new(10.0, 10.0)]);
         let c = round_corner(&a, &b2, CornerKind::Round(2.0)).unwrap();
         assert!((c.center.unwrap() - DVec2::new(8.0, 2.0)).length() < 1e-7);
+    }
+
+    #[test]
+    fn rings_of_arcs_of_any_sweep() {
+        for (sweep, n) in [(180.0f64, 2), (120.0, 3), (90.0, 4), (360.0, 1), (72.0, 5)] {
+            let ring = |r: f64, s: f64| -> Loop2 {
+                (0..n)
+                    .map(|i| {
+                        let a0 = (s * sweep * i as f64).to_radians();
+                        Segment::Arc { center: DVec2::ZERO, r, a0, a1: a0 + (s * sweep).to_radians() }
+                    })
+                    .collect()
+            };
+            let outer = Operand::new(vec![ring(18.0, 1.0)], Fill::NonZero);
+            let inner = Operand::new(vec![ring(14.8, -1.0)], Fill::NonZero);
+            let d = combine(&[outer, inner], &minus_pred);
+            close(region_area(&d), PI * (18.0 * 18.0 - 14.8 * 14.8), 1e-9);
+        }
     }
 
     #[test]

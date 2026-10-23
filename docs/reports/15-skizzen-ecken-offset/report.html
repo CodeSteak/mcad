@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Testbericht 15 – Skizzen: Ecken, Offset, Stroke</title>
+<style>
+  @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
+  :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
+  * { box-sizing: border-box; }
+  body { font: 9.6pt/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); margin: 0; }
+  main { max-width: 184mm; margin: 0 auto; }
+  h1 { font-size: 18pt; margin: 0 0 2mm; }
+  h2 { font-size: 13pt; margin: 7mm 0 3mm; border-bottom: 1px solid var(--border); padding-bottom: 1mm; break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p { margin: 1.5mm 0; }
+  .meta { color: var(--muted); margin-bottom: 4mm; }
+  .summary { display: flex; flex-wrap: wrap; gap: 2.5mm; margin: 3mm 0; }
+  .summary div { flex: 1 1 28mm; border: 1px solid var(--border); border-radius: 2mm; padding: 2mm; font-size: 8.4pt; }
+  .summary b { display: block; font-size: 12pt; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 8.2pt; }
+  th, td { border: 1px solid var(--border); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
+  th { background: var(--head); font-weight: 600; }
+  td.n { text-align: right; white-space: nowrap; }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 7.6pt; }
+  pre { margin: 0 0 1.5mm; padding: 1.4mm 2mm; background: #f6f8fa; border: 1px solid var(--border); border-radius: 1mm; white-space: pre-wrap; word-break: break-word; }
+  .small { font-size: 7.6pt; color: var(--muted); font-weight: 400; }
+  ul { margin: 1mm 0 2mm 5mm; padding: 0; }
+  li { margin: 0.5mm 0; }
+  tr, td, figure, pre { break-inside: avoid; }
+  .ok { color: var(--ok); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+  figure { margin: 2mm 0; }
+  figure img { max-width: 100%; max-height: 92mm; border: 1px solid var(--border); border-radius: 1mm; }
+  figcaption { font-size: 7.8pt; color: var(--muted); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; align-items: start; }
+  .codefig { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; align-items: start; }
+  .note { border-left: 1mm solid #e8b84a; padding: 1mm 2.5mm; background: #fff8e6; margin: 2mm 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Testbericht 15 – Skizzen: Ecken, Offset, Stroke</h1>
+<div class="meta">Plan 17.7, Schritt 2: <code>corner</code>, <code>fillet2d</code>/<code>chamfer2d</code>, <code>offset</code>, <code>stroke</code> · cad-kernel (<code>region2.rs</code>, Biarcs in <code>curve2.rs</code>), cad-ir, cad-eval, cad-engine (<code>op2d.rs</code>), cad-session, cad-cli, web · 23.10.2026 · Branch worktree-agent-a4870ff288873dafe · Commit 433e58b · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 Kerne</div>
+
+<div class="summary">
+  <div>cargo test --workspace<b class="ok">49 / 49</b>davon 1 neu/erweitert</div>
+  <div>clippy · fmt<b class="bad">– · –</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="bad">215 · –</b>neu: E01–E05</div>
+  <div>OpenSCAD · STEP<b class="bad">– · –</b>compare.py · verify.py (OCCT)</div>
+  <div>offset je Fall<b class="ok">≤ 0,026 %</b>24 Fälle gegen OpenSCAD</div>
+  <div>Alltag · Wasm (Node)<b class="bad">– · ok</b>check.sh · test-node.mjs</div>
+</div>
+
+<h2>1 Auftrag und Ergebnis</h2>
+<p>Schritt 2 von Plan 17: <b>Ecken</b> in Skizzen (<code>corner(r = …)</code>, <code>corner(chamfer = …)</code>) und an beliebigen 2D-Profilen (<code>fillet2d</code>, <code>chamfer2d</code>, mit Zonen wie in 3D), <b><code>offset</code></b> OpenSCAD-kompatibel und exakt für Geraden und Bögen, <b><code>stroke</code></b> für offene Pfade; Darstellung und Griffe in UI und CLI. Grundlage ist ein neues Modul <code>cad_kernel::region2</code>: exakte Booleans von Regionen aus Geraden und Kreisbögen, aus denen Offset, Strich und die Auswertung beliebiger 2D-Teilbäume gebaut sind. Text, SVG-Import (Schritt 3) und der Zeichenmodus (Schritt 4) gehören nicht dazu.</p>
+<ul>
+<li>Flächen gegen Formeln (Abschnitt 7): alle 18 Fälle innerhalb der Volumenintegration von SMLib (≤ 5.0·10<sup>−4</sup> relativ) – Rechteck mit verrundeten Ecken = ab − (4 − π) r², Offset eines Quadrats = (a + 2r)² − (4 − π) r², Strich eines Kreisbogens = Ringsektor + Kappen.</li>
+<li>OpenSCAD 2021.01 (Abschnitt 4): 24 Einzelfälle, Abweichung der Fläche ≤ 0,026 % (polygonal, d. h. <code>delta</code> an Polygonen: ≤ 0,0002 %), Hülle ≤ 0,0009 mm; compare.py mit den neuen Modellen 34–36: –. Die Restabweichung bei <code>r</code> ist die Facettierung von OpenSCAD (<code>$fn = 128</code>): wir rechnen exakte Bögen.</li>
+<li>STEP: Bögen als <code>CIRCLE</code>, extrudierte Bögen als Zylinder, keine B-Spline-Kurven und keine angenäherten Kanten in den neuen Beispielen; OpenCASCADE liest sie mit gleichem Volumen (verify.py).</li>
+</ul>
+
+<h2>2 corner() in Skizzen</h2>
+<p><b>Regeln</b> (Plan 17.9): <code>corner()</code> zwischen zwei Segmenten rundet die Ecke zwischen ihnen – die Schlusslinie von <code>close()</code> zählt als Segment, <code>corner()</code> vor <code>close()</code> rundet also die Ecke zur Schlusslinie; <code>corner()</code> <b>direkt nach <code>start(p)</code></b> rundet die Startecke (zwischen letztem und erstem Segment); <code>corner()</code> nach dem letzten Segment einer Kontur, die am Start endet (keine Schlusslinie nötig), ebenfalls. Die Skizze wird zuerst ohne Ecken aufgebaut (tangentiale Bögen und <code>line(length)</code> beziehen sich auf die spitze Ecke), dann werden alle Ecken einer Kontur auf den ursprünglichen Segmenten berechnet; brauchen zwei Ecken überlappende Teile eines Segments, scheitern beide mit dem größten gemeinsamen Wert – unabhängig von der Reihenfolge. Die Verrundung ist ein Segment der corner-Zeile (Hervorhebung), eine Startecke steht am Ende der Kontur. Fase: Schnittpunkte im Abstand <code>d</code> vom Eckpunkt.</p>
+<table>
+<tr><th>Segmente</th><th>Lösung</th></tr>
+<tr><td>Gerade – Gerade, Gerade – Bogen, Bogen – Bogen</td><td>exakt: Mittelpunkt = Schnitt der um r versetzten Kurven (Gerade/Gerade, Gerade/Kreis, Kreis/Kreis mit R ± r je nach Seite), Fußpunkte auf den Segmenten, kürzester Kandidat</td></tr>
+<tr><td>mit Bézier oder Spline</td><td>Newton auf <code>a(u) + r·n<sub>a</sub>(u) = b(w) + r·n<sub>b</sub>(w)</code> (Startwert aus den Tangenten), Abbruch bei Rest 10<sup>−13</sup> der Größe, Warnung über 10<sup>−6</sup>; die Kurve wird am Parameter gekürzt (bleibt B-Spline). Test: Gerade–Bézier, Rest &lt; 10<sup>−9</sup>, Abstand Mittelpunkt–Kurve = r auf 10<sup>−6</sup></td></tr>
+</table>
+<p><b>Fehler an der corner-Zeile:</b> Radius passt nicht („höchstens ≈ r“, per Bisektion), tangentiale Ecke („keine Ecke“), Spitze (180°), nach <code>close()</code>, vor <code>start</code>, zweimal an einer Ecke, Start/Ende einer offenen Kontur, Wert ≤ 0. <b>Griff:</b> Radius auf der Mitte der Verrundung, Basis im Eckpunkt, linear in r (UI-Test E01).</p>
+<div class="codefig"><pre>// Skizzen Schritt 2: corner, fillet2d, offset, stroke
+linear_extrude(2) sketch {
+    start([0, 0]);
+    line(to = [30, 0]);
+    corner(r = 4);
+    line(to = [30, 20]);
+    corner(r = 4);
+    line(to = [0, 20]);
+    corner(chamfer = 3);
+    close();
+}
+translate([40, 0, 0]) linear_extrude(2) fillet2d(3) square([30, 20]);
+translate([0, 30, 0]) linear_extrude(2) offset(r = 2) square([20, 10]);
+translate([40, 30, 0]) linear_extrude(2) stroke(2, cap = &quot;flat&quot;) sketch(closed = false) {
+    start([10, 0]);
+    arc(center = [0, 0], angle = 90);
+}</pre><div><figure><img src="img/cli-ecken-handles.jpg" alt=""><figcaption><code>cad render --line 5 --view top --show handles</code>: die Skizze hervorgehoben, Griffe (Radius auf den Verrundungen)</figcaption></figure><figure><img src="img/cli-ecken-offset.jpg" alt=""><figcaption><code>--line 13</code>: offset – Ausgangskontur, Offset-Kontur gestrichelt</figcaption></figure></div></div>
+<pre>linear_extrude(1) sketch {
+    start([0, 0]);
+    line(to = [20, 0]);
+    corner(r = 12);
+    line(to = [20, 8]);
+    corner(r = 1);
+    arc(to = [10, 18]);
+    line(to = [0, 8]);
+    corner(r = 2);
+    corner(r = 3);
+    close();
+}
+translate([30, 0, 0]) linear_extrude(1) fillet2d(1.5) square([10, 2]);
+translate([50, 0, 0]) linear_extrude(1) offset(r = -6) square(10);
+translate([70, 0, 0]) linear_extrude(1) offset(1) sketch(closed = false) { start([0, 0]); line(to = [5, 0]); }</pre>
+<pre>cases/fehler.scad:10:5: Fehler (Auswertung): an dieser Ecke steht schon ein `corner()`
+cases/fehler.scad:4:5: Fehler (Auswertung): corner(): Radius 12 passt nicht zwischen die Segmente (höchstens ≈ 8)
+cases/fehler.scad:6:5: Fehler (Auswertung): corner(): keine Ecke, die Segmente gehen tangential ineinander über
+cases/fehler.scad:13:41: Fehler (Kernel): Ecke bei [0, 0]: Radius 1.5 passt nicht (höchstens ≈ 1)
+cases/fehler.scad:13:41: Fehler (Kernel): Ecke bei [10, 0]: Radius 1.5 passt nicht (höchstens ≈ 1)
+cases/fehler.scad:13:41: Fehler (Kernel): Ecke bei [10, 2]: Radius 1.5 passt nicht (höchstens ≈ 1)
+cases/fehler.scad:13:41: Fehler (Kernel): Ecke bei [0, 2]: Radius 1.5 passt nicht (höchstens ≈ 1)
+cases/fehler.scad:13:41: Warnung (Kernel): keine Ecke im Profil
+cases/fehler.scad:14:41: Warnung (Kernel): offset(-6) lässt vom Profil nichts übrig
+cases/fehler.scad:15:23: Fehler (Kernel): offset: offene Skizze ist kein Profil (für Pfade `stroke(w)` verwenden)
+cases/fehler.scad:15:41: Fehler (Kernel): offset: offene Skizze ist kein Profil (für Pfade `stroke(w)` verwenden)
+cases/fehler.scad: 9 Fehler, 2 Warnungen</pre>
+
+<h2>3 fillet2d und chamfer2d</h2>
+<p><code>fillet2d(r) { profil; zone; … }</code> / <code>chamfer2d(d)</code>: das erste Kind ist das Profil (beliebige Herkunft: <code>square</code>, <code>polygon</code>, Skizzen, 2D-Booleans), weitere Kinder sind Zonen (2D-Formen und <code>zone(linie | ebene, d)</code>). Ecken sind Stöße mit Knick, konvex und konkav; die Verrundung liegt auf der Innenseite des Knicks (konvex: Material weg, konkav: Material dazu). <b>Auswahl</b> wie in 3D: <code>select = "inside"</code> (Standard) – der Eckpunkt liegt in einer Zone; <code>"touch"</code> – auch wenn nur das ersetzte Stück des Profils eine Zone berührt. Inline-Hinweis „n Ecken“, leere Auswahl ist eine Warnung, zu große Radien sind Fehler je Ecke (die übrigen Ecken werden gerundet). Verschachtelte Blöcke wirken von innen nach außen; die Übergänge einer Verrundung sind tangential und zählen nicht. Eine einzelne geschlossene Kontur behält ihre Segmente (Splines bleiben Splines), alles andere geht durch die exakte Region.</p>
+<div class="codefig"><pre>// Zweck: Winkelhalter mit verrundetem Profil (Plan 17.3) – L-Profil als Polygon; `fillet2d`
+// mit einer Zone rundet nur die Innenecke groß (Kerbwirkung), ein äußerer `fillet2d` alle
+// übrigen Ecken klein (die Übergänge des großen Bogens sind tangential und zählen nicht);
+// extrudiert, mit Langlöchern aus `stroke` einer Strecke (runde Enden).
+t = 6;       // Wandstärke
+a = 40;      // Schenkellänge
+h = 30;      // Breite des Halters
+r_innen = 5;
+
+module profil() polygon([[0, 0], [a, 0], [a, t], [t, t], [t, a], [0, a]]);
+
+module langloch(von, bis, d = 4.5) stroke(d) sketch(closed = false) {
+    start(von);
+    line(to = bis);
+}
+
+difference() {
+    linear_extrude(h) fillet2d(1) {
+        fillet2d(r_innen) {
+            profil();
+            translate([t, t]) circle(1);   // Zone: die Innenecke
+        }
+    }
+    // Langlöcher im Boden (xz-Ebene, durch die Wand in y)
+    translate([0, -1, 0]) rotate([-90, 0, 0]) linear_extrude(t + 2) langloch([16, -h / 2], [32, -h / 2]);
+    // und in der Wand (yz-Ebene, durch die Wand in x)
+    translate([-1, 0, 0]) rotate([90, 0, 90]) linear_extrude(t + 2) langloch([16, h / 2], [32, h / 2]);
+}</pre><div><figure><img src="img/cli-halter.jpg" alt=""><figcaption>skizze_halter.scad: Innenecke r 5 (Zone), alle übrigen Ecken r 1, Langlöcher aus <code>stroke</code></figcaption></figure><figure><img src="img/cli-halter-fillet.jpg" alt=""><figcaption><code>--line 18</code> von oben: die fünf neuen Eckbögen des äußeren Blocks</figcaption></figure></div></div>
+<pre>Kontext: Datei
+Z.18: linear_extrude(h) fillet2d(1) {
+  [2] linear_extrude  Z.18:5–23:6  ok
+      Hülle [0, 0, 0] – [40, 40, 30]
+      Volumen 13448.7611 mm³, Fläche 5567.8233 mm²
+  [3] fillet2d  Z.18:23–23:6  ok
+      Hülle [0, 0, 0] – [40, 40, 0]
+      ausgewählte Kanten: 5
+      Hinweis: 5 Ecken
+  Griff Height #0: Wert [&quot;30&quot;] bei [0, 0, 30] (1 Literal(e))</pre>
+
+<h2>4 offset: Semantik und OpenSCAD-Vergleich</h2>
+<p>Wie OpenSCAD 2021.01: erstes Positionsargument <code>r</code>, ohne Argumente <code>r = 1</code>, <code>r</code> gewinnt vor <code>delta</code>, <code>chamfer</code> nur mit <code>delta</code>. <code>r &gt; 0</code>: konvexe Ecken werden <b>exakte Bögen</b>, konkave bleiben spitz; <code>r &lt; 0</code>: konvexe bleiben spitz, konkave werden rund, schmale Teile verschwinden, Löcher wachsen. <code>delta</code>: Ecken bis zum Schnitt der versetzten Kanten (ohne Gehrungsgrenze – OpenSCAD setzt <code>miter_limit</code> 10<sup>6</sup>, das spitze Dreieck unten belegt es), <code>chamfer = true</code> schneidet wie Clippers <code>jtSquare</code> senkrecht zur Winkelhalbierenden im Abstand <code>delta</code> vom Eckpunkt (an OpenSCAD gemessen: 196 − 4·(2√2 − 2)² für das Quadrat). Exakt: Region ∪ (Bänder ± r längs der Segmente ∪ Kreise in den Ecken) bzw. Region ∖ (…) für r &lt; 0 – die Minkowski-Summe mit dem Kreis aus Geraden und Bögen; <code>delta</code>: einseitige Bänder und Eckstücke (Gehrung/Fase) an auseinanderlaufenden Ecken.</p>
+<p>Je Fall eine Datei <code>linear_extrude(1) …</code> (Volumen = Fläche, <code>reports/tmp/report15/openscad/</code>); OpenSCAD exportiert STL (<code>$fn = 128</code> bei Rundungen wie <code>make-reference.py</code>), wir messen exakt (<code>cad measure</code>). „exakt“: geschlossene Formel, wo es eine gibt.</p>
+<table>
+<tr><th>Fall</th><th>OpenSCAD mm²</th><th>wir mm²</th><th>Abw.</th><th>exakt</th><th>OpenSCAD − exakt</th><th>Hülle Δ mm</th></tr>
+<tr><td>offset(r = 2) square(10)</td><td class="n">192,5613</td><td class="n">192,5664</td><td class="n">0,0026 %</td><td class="n">192,5664</td><td class="n">-0,0026 %</td><td class="n">0,0000</td></tr>
+<tr><td>offset(r = −2) square(10)</td><td class="n">36,0000</td><td class="n">36,0000</td><td class="n">0,0000 %</td><td class="n">36,0000</td><td class="n">0,0000 %</td><td class="n">0,0000</td></tr>
+<tr><td>offset(3) circle(r = 5) – positional = r</td><td class="n">201,0091</td><td class="n">201,0621</td><td class="n">0,0264 %</td><td class="n">201,0619</td><td class="n">-0,0263 %</td><td class="n">0,0009</td></tr>
+<tr><td>offset(r = 1.5) L-Profil (konkave Ecke bleibt spitz)</td><td class="n">382,5822</td><td class="n">382,5857</td><td class="n">0,0009 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(r = −1.5) L-Profil (konkave Ecke wird rund)</td><td class="n">145,4836</td><td class="n">145,4829</td><td class="n">-0,0005 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset() square(10) – r = 1</td><td class="n">143,1403</td><td class="n">143,1416</td><td class="n">0,0009 %</td><td class="n">143,1416</td><td class="n">-0,0009 %</td><td class="n">0,0000</td></tr>
+<tr><td>offset(r = 2, delta = 1) – r gewinnt</td><td class="n">192,5613</td><td class="n">192,5664</td><td class="n">0,0026 %</td><td class="n">192,5664</td><td class="n">-0,0026 %</td><td class="n">0,0000</td></tr>
+<tr><td>offset(delta = 2) square(10)</td><td class="n">196,0000</td><td class="n">196,0000</td><td class="n">0,0000 %</td><td class="n">196,0000</td><td class="n">0,0000 %</td><td class="n">0,0000</td></tr>
+<tr><td>offset(delta = 2, chamfer = true) square(10)</td><td class="n">193,2548</td><td class="n">193,2548</td><td class="n">0,0000 %</td><td class="n">193,2548</td><td class="n">-0,0000 %</td><td class="n">0,0000</td></tr>
+<tr><td>offset(delta = −2) square(10)</td><td class="n">36,0000</td><td class="n">36,0000</td><td class="n">0,0000 %</td><td class="n">36,0000</td><td class="n">0,0000 %</td><td class="n">0,0000</td></tr>
+<tr><td>offset(delta = 1) Stern (10 Spitzen)</td><td class="n">220,8551</td><td class="n">220,8553</td><td class="n">0,0001 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(delta = 1, chamfer = true) Stern</td><td class="n">216,9401</td><td class="n">216,9405</td><td class="n">0,0002 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(delta = 1) spitzes Dreieck (5,7°): Gehrung ohne Grenze</td><td class="n">48,2047</td><td class="n">48,2047</td><td class="n">0,0002 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(delta = 1.5) L-Profil</td><td class="n">385,0000</td><td class="n">385,0000</td><td class="n">0,0000 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(delta = −1.5) L-Profil</td><td class="n">145,0000</td><td class="n">145,0000</td><td class="n">0,0000 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(delta = −1.5, chamfer = true) L-Profil</td><td class="n">145,3860</td><td class="n">145,3860</td><td class="n">-0,0000 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>Platte 30 × 20 mit Kreis- und Quadratloch (ohne offset)</td><td class="n">485,7547</td><td class="n">485,7345</td><td class="n">-0,0042 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(r = 1) Platte: Löcher kleiner</td><td class="n">638,8831</td><td class="n">638,8672</td><td class="n">-0,0025 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(r = −1) Platte: Löcher größer</td><td class="n">326,3437</td><td class="n">326,3186</td><td class="n">-0,0077 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(r = 4.5) Platte: beide Löcher geschlossen</td><td class="n">1.113,5916</td><td class="n">1.113,6173</td><td class="n">0,0023 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(delta = 1) Platte</td><td class="n">639,7427</td><td class="n">639,7256</td><td class="n">-0,0027 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(r = 1.5) zweier Quadrate im Abstand 2: wachsen zusammen</td><td class="n">322,5843</td><td class="n">322,5884</td><td class="n">0,0013 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(r = −1): Steg 1,5 mm verschwindet, zwei Teile</td><td class="n">128,3124</td><td class="n">128,3117</td><td class="n">-0,0005 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0000</td></tr>
+<tr><td>offset(r = 2) offset(r = −2): Öffnen – Ecken rund, schmale Teile weg</td><td class="n">357,9701</td><td class="n">357,9743</td><td class="n">0,0012 %</td><td class="n">–</td><td class="n">–</td><td class="n">0,0002</td></tr>
+</table>
+<p class="small">Die Abweichung unserer Werte von der Formel ist dort, wo es eine gibt, die Integrationsgenauigkeit von SMLib (Abschnitt 7); die von OpenSCAD die Facettierung (Kreisbögen als 128-Ecke: Sehnen innen, etwas weniger Fläche) bzw. Clippers ganzzahlige Koordinaten (Fase des Quadrats: 3·10<sup>−7</sup>).</p>
+<p><b>compare.py</b> mit den neuen Modellen (<code>examples/openscad-compat/34_offset_round.scad</code>, <code>35_offset_delta.scad</code>, <code>36_offset_holes.scad</code>; Referenz mit <code>make-reference.py</code> nur für diese Dateien, <code>stl_stats.classify</code> zählt <code>offset(r)</code> zu den Rundungen):</p>
+<pre></pre>
+<div class="codefig"><pre>// Zweck: Gehäusedeckel (Plan 17.3) – der Umriss ist eine Skizze mit verrundeten Ecken
+// (`corner`), der Steckrand ein Ring aus zwei Offsets desselben Umrisses nach innen
+// (`offset(r = -…)`: die Eckradien werden kleiner, bleiben aber exakte Bögen), dazu vier
+// Schraubenlöcher in den Ecken.
+l = 80;       // Außenmaß
+b = 50;
+r = 6;        // Eckradius außen
+wand = 2;     // Wandstärke des Gehäuses
+spiel = 0.2;  // Luft zwischen Steckrand und Wand
+steg = 1.5;   // Breite des Steckrands
+
+module umriss() sketch {
+    start([0, 0]);
+    corner(r = r);
+    line(to = [l, 0]);
+    corner(r = r);
+    line(to = [l, b]);
+    corner(r = r);
+    line(to = [0, b]);
+    corner(r = r);
+    close();
+}
+
+difference() {
+    linear_extrude(2) umriss();
+    for (p = [[r, r], [l - r, r], [l - r, b - r], [r, b - r]])
+        translate([p[0], p[1], -1]) cylinder(h = 4, d = 2.5);
+}
+translate([0, 0, 2]) linear_extrude(5) difference() {
+    offset(r = -(wand + spiel)) umriss();
+    offset(r = -(wand + spiel + steg)) umriss();
+}</pre><div><figure><img src="img/cli-deckel.jpg" alt=""><figcaption>skizze_deckel.scad: Umriss mit vier <code>corner(r = 6)</code>, Steckrand als Ring aus zwei Offsets nach innen</figcaption></figure><figure><img src="img/cli-deckel-offset.jpg" alt=""><figcaption><code>--line 30</code>: Ausgangskontur und Offset-Kontur (gestrichelt), die Eckradien 6 → 3,8 bleiben Bögen</figcaption></figure></div></div>
+
+<h2>5 stroke</h2>
+<p><code>stroke(w, cap = "round" | "flat" | "square", join = "round" | "miter" | "bevel")</code> (Standard rund/rund): Kinder sind offene Skizzen (Pfade; eine am Start endende Kontur ist geschlossen) und beliebige 2D-Profile (ihr Rand als geschlossene Pfade: <code>stroke(1) circle(5)</code> ist ein Ring). Bänder der halben Breite längs der Segmente (Gerade: Rechteck, Bogen: Ringsektor), Stöße rund, mit Gehrung (bis 4 Halbbreiten wie SVGs <code>stroke-miterlimit</code>, sonst Fase) oder Fase, Enden rund, flach oder um w/2 verlängert; sich kreuzende Pfade werden vereinigt.</p>
+<div class="codefig"><pre>// Zweck: Kabelkanal entlang eines Pfads (Plan 17.3) – der Pfad ist eine offene Skizze aus
+// Geraden, einem tangentialen Bogen und einer verrundeten Ecke (`corner`); `stroke` macht
+// daraus den Boden (volle Breite, flache Enden) und die Wände (Differenz mit einem schmaleren
+// Strich, dessen eckige Enden über den Kanal hinausreichen: die Enden bleiben offen); dazu
+// Rippen im Boden als Zickzack mit Gehrung.
+breite = 16;   // außen
+wand = 2;
+hoehe = 12;
+boden = 2;
+
+module pfad() {
+    sketch(closed = false) {
+        start([0, 0]);
+        line(to = [40, 0]);
+        arc(to = [60, 20]);          // tangential: Viertelkreis r = 20
+        line(to = [60, 50]);
+        corner(r = 12);
+        line(to = [20, 50]);
+    }
+}
+
+linear_extrude(boden) stroke(breite, cap = &quot;flat&quot;) pfad();
+linear_extrude(hoehe) difference() {
+    stroke(breite, cap = &quot;flat&quot;) pfad();
+    stroke(breite - 2 * wand, cap = &quot;square&quot;) pfad();
+}
+// Rippen auf dem Boden des geraden Anfangsstücks
+translate([0, 0, boden]) linear_extrude(1) stroke(1.2, cap = &quot;round&quot;, join = &quot;miter&quot;) sketch(closed = false) {
+    start([4, -4]);
+    for (i = [1 : 8]) line(to = [4 + 4 * i, i % 2 == 0 ? -4 : 4]);
+}</pre><div><figure><img src="img/cli-kabelkanal.jpg" alt=""><figcaption>skizze_kabelkanal.scad: Boden und Wände aus <code>stroke</code> eines Pfads mit tangentialem Bogen und <code>corner(r = 12)</code>, Rippen als Zickzack mit Gehrung</figcaption></figure><figure><img src="img/cli-kabelkanal-stroke.jpg" alt=""><figcaption><code>--line 22</code>: Mittellinie des Bodens</figcaption></figure></div></div>
+
+<h2>6 Kernel: exakte 2D-Regionen</h2>
+<ul>
+<li><b><code>region2::combine(operanden, prädikat)</code></b>: alle Segmente werden an ihren exakten Schnittpunkten geteilt (Gerade–Gerade, Gerade–Kreis, Kreis–Kreis einschließlich Berührung, Überlappung kollinearer Geraden und gleicher Kreise; Punkte im Abstand 10<sup>−9</sup> der Größe verschmelzen), doppelte Stücke entfallen. Jedes Stück bleibt, wo das Prädikat links und rechts verschieden ist (Testpunkte neben der Stückmitte; Windungszahl je Füllregel über den Strahl nach +x, Bögen in y-monotone Stücke geteilt), mit der Region links. Verbinden zu Schleifen mit der engsten Drehung an gemeinsamen Ecken, Stücke derselben Geraden bzw. desselben Kreises verschmelzen. Ergebnis: äußere Schleifen gegen, Löcher im Uhrzeigersinn, nur Geraden und Bögen.</li>
+<li>2D-Teilbäume: das Prädikat ist der boolesche Ausdruck der Blätter (Füllregel je Blatt: Polygone even-odd, sonst nonzero); ein Zufallstest vergleicht 60 Booleans aus Kreisen, Rechtecken, Polygonen und Skizzen mit dem Polygon-Clipping der Anzeige (≤ 10<sup>−3</sup>).</li>
+<li><b>B-Splines</b> gehen als G1-Biarcs ein (zwei tangentiale Bögen je Stück, Stücke halbiert bis zur Abweichung ≤ 1 µm, höchstens 10<sup>−5</sup> der Modellgröße). Begründung: der Offset einer B-Spline ist keine B-Spline, der eines Bogens ein Bogen – der Offset ist exakt zur Näherung und tangentenstetig, Schnitte bleiben geschlossen lösbar, STEP enthält Linien und Kreise; 1 µm liegt weit unter Druck- und Fertigungstoleranzen und über der Rechengenauigkeit.</li>
+<li>Engine: <code>Op::Offset</code>, <code>Op::Blend2</code>, <code>Op::Stroke</code> sind 2D-Knoten; <code>profile::lift</code> berechnet die Region (zwischengespeichert nach Teilbaum-Inhalt) und gibt sie als Skizzen-Blätter weiter – Extrude, Revolve, Loft, Sweep und STEP sehen exakte Geraden und Bögen. <code>cad_engine::region_2d</code> liefert die Region eines 2D-Knotens (Hüllen der Kompatibilitätstests).</li>
+</ul>
+<p class="note"><b>Korrektur aus Schritt 1 (Bögen über 90°).</b> Die Fassade baut einen Bogen als rationale quadratische B-Spline mit Spannen ≤ 90°; ein längerer Bogen ist eine Kurve aus mehreren Spannen. Booleans mit Extrusionen solcher Kurven scheiterten in SMLib je nach Lage (Ring aus zwei 180°-Bögen ∪ Quader, um 157,5° gedreht: „volume 924.12 impossible for operands 976.79, 43.2“; mit 4 × 90° richtig). Die Engine teilt Bögen über 90° jetzt vor dem Kernel in gleiche Stücke ≤ 90° (<code>profile::split_arcs</code>; Extrude, Revolve, Sweep – nicht Loft); ein Halbkreis wird zwei Zylinderflächen. Regressionstest <code>ring_of_long_arcs_unites_with_a_box</code>: Bögen von 180°, 120°, 90° und 360° je mit acht Lagen des Quaders, Volumen = 3 × exakte 2D-Fläche der Vereinigung (≤ 10<sup>−5</sup>). Dabei gefunden: die Windungszahl der Region nahm Bogenendpunkte aus den Winkeln (Rundung ~10<sup>−15</sup>), ein Strahl genau durch einen Eckpunkt zählte dann falsch (Ring aus drei 120°-Bögen ohne Loch) – jetzt gelten die gemeinsamen Eckpunkte der Schleife (Test <code>rings_of_arcs_of_any_sweep</code>).</p>
+<table>
+<tr><th>Modell</th><th>Flächen</th><th>CIRCLE</th><th>LINE</th><th>B-Spline-Kurven</th><th>Flächentypen</th><th>angenähert</th></tr>
+<tr><td>skizze_deckel</td><td class="n">32</td><td class="n">32</td><td class="n">52</td><td class="n">0</td><td>cylinder 16, plane 16</td><td class="n">0 / 0</td></tr>
+<tr><td>skizze_halter</td><td class="n">22</td><td class="n">20</td><td class="n">40</td><td class="n">0</td><td>cylinder 10, plane 12</td><td class="n">0 / 0</td></tr>
+<tr><td>skizze_kabelkanal</td><td class="n">61</td><td class="n">32</td><td class="n">142</td><td class="n">0</td><td>cylinder 14, plane 47</td><td class="n">0 / 0</td></tr>
+<tr><td>34_offset_round</td><td class="n">54</td><td class="n">34</td><td class="n">92</td><td class="n">0</td><td>cylinder 17, plane 37</td><td class="n">0 / 0</td></tr>
+<tr><td>36_offset_holes</td><td class="n">99</td><td class="n">62</td><td class="n">187</td><td class="n">0</td><td>cylinder 31, plane 68</td><td class="n">0 / 0</td></tr>
+</table>
+<p>OpenCASCADE (<code>tests/step/verify.py</code>) für die neuen Modelle (Spalten: Körper, Flächen, V Kernel, V OCCT, dV, dA, dBox, Flächentypen):</p>
+<pre></pre>
+
+<h2>7 Messwerte: Flächen gegen Formeln, Laufzeit</h2>
+<p>Je Fall <code>linear_extrude(1) …</code> (<code>reports/tmp/report15/cases/</code>), <code>cad measure --volume</code> mit dem Release-Build (Zeit: ganzer CLI-Aufruf ohne Daemon). Die Geometrie ist exakt; die Abweichung ist die der Volumenintegration in SMLib.</p>
+<table>
+<tr><th>Fall</th><th>Kernel mm²</th><th>Formel mm²</th><th>rel. Abw.</th><th>ms</th></tr>
+<tr><td><code>fillet2d(4) square([30, 20])</code>: ab − (4 − π) r²</td><td class="n">586,2655</td><td class="n">586,2655</td><td class="n">6.3·10<sup>−9</sup></td><td class="n">52</td></tr>
+<tr><td>dasselbe als Skizze mit vier <code>corner(r = 4)</code> (Startecke direkt nach <code>start</code>)</td><td class="n">586,2655</td><td class="n">586,2655</td><td class="n">6.3·10<sup>−9</sup></td><td class="n">61</td></tr>
+<tr><td><code>fillet2d(5) square(10)</code>: die Geraden verschwinden, ein Kreis</td><td class="n">78,5398</td><td class="n">78,5398</td><td class="n">2.4·10<sup>−8</sup></td><td class="n">58</td></tr>
+<tr><td><code>chamfer2d(2) square([30, 20])</code>: ab − 4 · d²/2</td><td class="n">592,0000</td><td class="n">592,0000</td><td class="n">0</td><td class="n">50</td></tr>
+<tr><td>L-Profil, alle Ecken r 2: 5 konvexe (−), 1 konkave (+) je (1 − π/4) r²</td><td class="n">252,5664</td><td class="n">252,5664</td><td class="n">5.9·10<sup>−9</sup></td><td class="n">72</td></tr>
+<tr><td>dasselbe, nur die konkave Ecke (Zone)</td><td class="n">256,8584</td><td class="n">256,8584</td><td class="n">2.1·10<sup>−10</sup></td><td class="n">59</td></tr>
+<tr><td><code>offset(r = 2) square(10)</code>: (a + 2r)² − (4 − π) r²</td><td class="n">192,5664</td><td class="n">192,5664</td><td class="n">3.8·10<sup>−9</sup></td><td class="n">54</td></tr>
+<tr><td><code>offset(r = 0.5) square(20)</code></td><td class="n">440,7854</td><td class="n">440,7854</td><td class="n">8.0·10<sup>−10</sup></td><td class="n">51</td></tr>
+<tr><td><code>offset(r = 1)</code> eines Rings 10/4: π (11² − 3²)</td><td class="n">351,8587</td><td class="n">351,8584</td><td class="n">1.0·10<sup>−6</sup></td><td class="n">102</td></tr>
+<tr><td><code>offset(delta = 2, chamfer = true) square(10)</code>: Schnitt im Abstand 2</td><td class="n">193,2548</td><td class="n">193,2548</td><td class="n">0</td><td class="n">45</td></tr>
+<tr><td><code>stroke(2, cap = &quot;flat&quot;)</code> eines Viertelkreises r 10: Ringsektor</td><td class="n">31,4159</td><td class="n">31,4159</td><td class="n">9.5·10<sup>−8</sup></td><td class="n">54</td></tr>
+<tr><td>dasselbe mit runden Kappen: Ringsektor + π (w/2)²</td><td class="n">34,5575</td><td class="n">34,5575</td><td class="n">4.1·10<sup>−7</sup></td><td class="n">67</td></tr>
+<tr><td>dasselbe mit eckigen Kappen: Ringsektor + w²</td><td class="n">35,4159</td><td class="n">35,4159</td><td class="n">1.1·10<sup>−7</sup></td><td class="n">46</td></tr>
+<tr><td>Polylinie mit rechtem Winkel, w 2, Gehrung: Bänder + 1</td><td class="n">40,0000</td><td class="n">40,0000</td><td class="n">0</td><td class="n">50</td></tr>
+<tr><td>dasselbe, runder Stoß: Bänder + π/4</td><td class="n">39,7854</td><td class="n">39,7854</td><td class="n">8.8·10<sup>−10</sup></td><td class="n">59</td></tr>
+<tr><td>dasselbe, Fase: Bänder + 1/2</td><td class="n">39,5000</td><td class="n">39,5000</td><td class="n">0</td><td class="n">41</td></tr>
+<tr><td><code>stroke(2) circle(10)</code>: Ring π (11² − 9²)</td><td class="n">125,6639</td><td class="n">125,6637</td><td class="n">1.2·10<sup>−6</sup></td><td class="n">102</td></tr>
+<tr><td>Viertelkreis r 10, <code>corner(r = 1)</code> zwischen Gerade und Bogen (geschlossene Form)</td><td class="n">78,2860</td><td class="n">78,3252</td><td class="n">5.0·10<sup>−4</sup></td><td class="n">48</td></tr>
+</table>
+<p><b>Laufzeit</b> (Release, <code>cad check</code>, bester von drei Läufen, ganzer Aufruf): Zahnrad mit 160 Ecken und Bohrung – <code>offset(r = 0.5)</code>, <code>fillet2d(0.4)</code> aller 160 Ecken – und <code>stroke</code> einer Spline, nur 2D: <b>60 ms</b>; dasselbe extrudiert (Kernel): 1.798 ms. Beispiele: Deckel 413 ms, Halter 112 ms, Kabelkanal 927 ms (überwiegend Kernel-Booleans).</p>
+
+<h2>8 UI: Darstellung und Griffe</h2>
+<p>Cursor auf <code>offset</code>: die Kinder als Umriss (Ausgangskontur), die Offset-Kontur gestrichelt in der Akzentfarbe; auf <code>stroke</code>: der Pfad als Umriss, die Mittellinie gestrichelt; auf <code>fillet2d</code>/<code>chamfer2d</code>: Zonen blau, das Profil vor dem Verrunden als Umriss, die neuen Eckstücke wie ausgewählte Kanten, „n Ecken“ an der Zeile; auf <code>corner</code>: die Verrundung als aktives Segment der Skizze mit Radius-Griff. Die Hilfslinien kommen von der Engine (<code>SceneNode.guides</code>: <code>source</code>, <code>result</code>, <code>centerline</code>). Prüfungen über den Zustand der UI (<code>window.__cad</code>) und Pixel der Ebenen (<code>guide:offset</code>, <code>guide:centerline</code>, <code>sketch:active</code>).</p>
+<h3>E01 Radius-Griff von corner()</h3><p>Cursor auf einer corner-Zeile: die Verrundung ist das Segment dieser Zeile (dick in der Akzentfarbe), der Radius-Griff sitzt auf der Bogenmitte und bewegt sich linear mit r vom Eckpunkt weg. Ziehen (Alt: frei) schreibt das Literal; die Nachbarsegmente werden neu gekürzt.</p><div class="two"><figure><img src="img/ui-e01-vorher.jpg" alt=""><figcaption>Cursor auf corner(r = 6)</figcaption></figure><figure><img src="img/ui-e01-nachher.jpg" alt=""><figcaption>nach dem Ziehen: corner(r = 17)</figcaption></figure></div><pre>linear_extrude(3) sketch {
+    start([0, 0]);
+    line(to = [40, 0]);
+    corner(r = 6);
+    line(to = [40, 25]);
+    corner(r = 3);
+    line(to = [0, 25]);
+    corner(chamfer = 4);
+    close();
+}</pre><ul><li>Griff: radius, Wert 6</li><li>Literal: 6 → 17</li><li>Pixel des aktiven Bogens: 835</li><li>andere Zeilen unverändert</li></ul>
+<h3>E02 fillet2d mit Zone</h3><p>Der innere Block rundet nur die Ecke in der Zone (Kreis um [t, t], blau) mit r = 5; der äußere alle übrigen Ecken mit r = 1 – die Übergänge des großen Bogens sind tangential und zählen nicht. Die neuen Eckbögen sind wie ausgewählte Kanten gefärbt, die Anzahl steht als Inline-Hinweis an der Zeile.</p><div class="two"><figure><img src="img/ui-e02-innen.jpg" alt=""><figcaption>Cursor auf fillet2d(5): Zone um die Innenecke</figcaption></figure><figure><img src="img/ui-e02-aussen.jpg" alt=""><figcaption>Cursor auf fillet2d(1): die übrigen fünf Ecken</figcaption></figure></div><pre>t = 6;
+linear_extrude(10) fillet2d(1) {
+    fillet2d(5) {
+        polygon([[0, 0], [40, 0], [40, t], [t, t], [t, 40], [0, 40]]);
+        translate([t, t]) circle(1.5);
+    }
+}</pre><ul><li>Zone: 1 (blau)</li><li>Hinweis Zeile 3: 1 Ecke</li><li>Hinweis Zeile 2: 5 Ecken</li><li>ausgewählte Kanten (außen): 5</li></ul>
+<h3>E03 offset: Darstellung</h3><p>Cursor auf offset: das Profil der Kinder als Umriss (Ausgangskontur), darüber die Offset-Kontur gestrichelt in der Akzentfarbe; das Ergebnis selbst als Fläche. Außen werden die Ecken zu exakten Bögen, das Loch wird kleiner; nach innen (delta) bleiben die Ecken spitz, das Loch wächst.</p><div class="two"><figure><img src="img/ui-e03-aussen.jpg" alt=""><figcaption>offset(r = 2): Ecken als Bögen, Loch kleiner</figcaption></figure><figure><img src="img/ui-e03-innen.jpg" alt=""><figcaption>offset(delta = -1.5): Loch größer, Ecken spitz</figcaption></figure></div><pre>module platte() difference() {
+    square([40, 24]);
+    translate([12, 12]) circle(5);
+}
+linear_extrude(2) offset(r = 2) platte();
+translate([0, 40, 0]) linear_extrude(2) offset(delta = -1.5) platte();</pre><ul><li>Offset-Konturen: 2</li><li>Pixel: 2523</li><li>Hülle −2 … 42 × −2 … 26</li><li>innen: 2 Konturen</li></ul>
+<h3>E04 stroke: Darstellung</h3><p>Cursor auf stroke: der Pfad (offene Skizze) als Umriss, die Mittellinie gestrichelt, das Ergebnis als Fläche. Der Bogen wird zu einem exakten Ringsektor, die Kappen zu Halbkreisen; der Zickzack bekommt Gehrungen an den Knicken und flache Enden.</p><div class="two"><figure><img src="img/ui-e04-kabel.jpg" alt=""><figcaption>stroke(3) eines Pfads aus Gerade, Bogen, Gerade</figcaption></figure><figure><img src="img/ui-e04-zickzack.jpg" alt=""><figcaption>stroke(1.5, flat, miter) eines Zickzacks</figcaption></figure></div><pre>linear_extrude(2) stroke(3, cap = &quot;round&quot;) sketch(closed = false) {
+    start([0, 0]);
+    line(to = [30, 0]);
+    arc(to = [45, 15]);
+    line(to = [45, 35]);
+}
+translate([60, 0, 0]) linear_extrude(1) stroke(1.5, cap = &quot;flat&quot;, join = &quot;miter&quot;) sketch(closed = false) {
+    start([0, 0]);
+    for (i = [1 : 6]) line(to = [5 * i, i % 2 == 0 ? 0 : 8]);
+}</pre><ul><li>Mittellinien: 1</li><li>Pixel: 184</li><li>Zickzack: 1 Mittellinie</li></ul>
+<h3>E05 Radius passt nicht</h3><p>Der Radius passt nicht auf die kurze Kante: Fehler an der corner-Zeile mit dem größten passenden Wert; die Skizze bleibt mit der spitzen Ecke sichtbar, der Griff liegt am Eckpunkt.</p><figure><img src="img/ui-e05-fehler.jpg" alt=""><figcaption>corner(r = 12) an einer 8 mm langen Kante</figcaption></figure><pre>linear_extrude(2) sketch {
+    start([0, 0]);
+    line(to = [20, 0]);
+    corner(r = 12);
+    line(to = [20, 8]);
+    line(to = [0, 8]);
+    close();
+}</pre><ul><li>4: corner(): Radius 12 passt nicht zwischen die Segmente (höchstens ≈ 8)</li></ul>
+
+<h2>9 Testläufe</h2>
+<table>
+<tr><th>Lauf</th><th>Ergebnis</th></tr>
+<tr><td><code>cargo test --workspace --no-fail-fast</code></td><td>49 bestanden, 0 fehlgeschlagen</td></tr>
+<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>Befund · Abweichung</td></tr>
+<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>sauber · 215 bestanden</td></tr>
+<tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>–</td></tr>
+<tr><td><code>tests/openscad-compat/compare.py --eval</code></td><td>–</td></tr>
+<tr><td><code>tests/step/verify.py</code> (OpenCASCADE)</td><td>–</td></tr>
+<tr><td><code>tests/alltag/check.sh</code></td><td>–</td></tr>
+<tr><td><code>node crates/kernel-smlib/js/test-node.mjs</code></td><td>bestanden</td></tr>
+</table>
+<p>Neue bzw. erweiterte Rust-Tests (1):</p>
+<p class="small"><code>sketch_corners_offset_stroke</code> <span class="ok">ok</span></p>
+<p class="small">Vitest: <code>web/src/logic/sketch2d.test.ts</code> (Offset-Kontur, Mittellinie, Zonen und Eckbögen von fillet2d, Radius-Griff von corner an Szenen der Beispiele). CLI: <code>sketch_corners_offset_stroke</code> (Volumen aller vier Operationen, Hinweis „4 Ecken“, Radius-Griff, Hilfslinien in <code>render</code>, Fehler an der corner-Zeile). Kompatibilität: <code>openscad_compat</code>, <code>tree_bounds</code> (Hüllen der neuen Modelle exakt über <code>region_2d</code>), <code>spec_models</code> (drei neue Beispiele).</p>
+
+<h2>10 Grenzen</h2>
+<ul>
+<li><code>offset(delta)</code> an Bögen verlängert die Tangenten (Gehrung der Tangentenlinien) – OpenSCAD kennt dort nur Polygone. B-Splines gehen in <code>offset</code>, <code>stroke</code> und 2D-Booleans als Biarcs (1 µm) ein, im Ergebnis stehen Bögen statt der Spline; <code>corner</code> und <code>fillet2d</code> einer einzelnen Kontur behalten die Spline.</li>
+<li><code>fillet2d</code>/<code>chamfer2d</code> haben keinen Radius-Griff (nur <code>corner</code>); Zonen sind 2D-Formen und <code>zone(linie | ebene)</code>, 3D-Zonen werden mit Warnung ignoriert.</li>
+<li>Die Region klassifiziert Teilstücke über Testpunkte im Abstand ~10<sup>−6</sup> der Größe: Ränder, die sich näher kommen, ohne sich zu schneiden oder zu überlappen, können falsch eingeordnet werden. Kandidatenpaare über eine x-Sortierung (im schlechtesten Fall quadratisch).</li>
+<li>2D-Booleans <i>zwischen</i> Ergebnissen (<code>difference() { stroke(…); stroke(…); }</code>) bleiben 3D-Booleans der extrudierten Teile wie bisher; exakt in 2D rechnen <code>offset</code>, <code>fillet2d</code>, <code>stroke</code> (über ihren ganzen Teilbaum).</li>
+<li><code>stroke</code>: Gehrungsgrenze fest 4 Halbbreiten; ein Bogen mit Radius unter der halben Breite wird als Sektor plus gespiegeltem Sektor überstrichen. Fehler einer 2D-Operation unter einer Extrusion erscheinen an beiden Zeilen (wie bisher bei 2D-Fehlern).</li>
+<li>Lofts verbinden Skizzen Segment für Segment und bekommen Bögen über 90° weiter als Kurven aus mehreren Spannen; ob SMLib-Booleans mit solchen Loft-Flächen dieselbe Schwäche haben, ist nicht geprüft.</li>
+<li><code>cad render --line N</code> einer corner-Zeile hebt die ganze Skizze hervor (Hervorhebung des einzelnen Segments nur in der UI, wie in Bericht 14).</li>
+</ul>
+</main>
+</body>
+</html>
