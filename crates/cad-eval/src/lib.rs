@@ -24,6 +24,8 @@ pub mod palette;
 mod print;
 pub mod project;
 mod sig;
+mod ns;
+mod sketch;
 pub mod value;
 
 pub use edit::{

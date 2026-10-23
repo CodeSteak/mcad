@@ -327,7 +327,7 @@ impl Brep {
 
 /// Index `k` of the knot span with `knots[k] <= t < knots[k + 1]` among the spans of the domain
 /// (`degree <= k < n`), clamping `t` into the domain.
-fn find_span(knots: &[f64], degree: usize, n: usize, t: f64) -> usize {
+pub(crate) fn find_span(knots: &[f64], degree: usize, n: usize, t: f64) -> usize {
     if t >= knots[n] {
         let mut k = n - 1;
         while k > degree && knots[k] >= knots[n] {

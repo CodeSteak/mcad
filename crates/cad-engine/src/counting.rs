@@ -143,6 +143,11 @@ impl<K: Kernel> Kernel for CountingKernel<K> {
         let r = self.inner.sweep(p, path, interp, tag);
         self.done("sweep", t0, r)
     }
+    fn sweep_path(&mut self, p: &Loop, path: &cad_kernel::PlacedPath, tag: Tag) -> KResult<Self::Shape> {
+        let t0 = self.hit("sweep_path");
+        let r = self.inner.sweep_path(p, path, tag);
+        self.done("sweep_path", t0, r)
+    }
     fn nurbs_surface(&mut self, rows: &[Vec<DVec3>], tag: Tag) -> KResult<Self::Shape> {
         let t0 = self.hit("nurbs_surface");
         let r = self.inner.nurbs_surface(rows, tag);

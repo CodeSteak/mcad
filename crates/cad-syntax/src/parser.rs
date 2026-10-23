@@ -109,6 +109,20 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Module name, possibly qualified by enclosing modules: `teile.schraube`, `a.b.c`. The
+    /// parts are joined with `.` into one identifier whose span covers the whole path.
+    fn qualified_ident(&mut self) -> PResult<Ident> {
+        let mut id = self.ident()?;
+        while self.at(&Tok::Dot) && matches!(self.peek_at(1), Tok::Ident(_)) {
+            self.bump();
+            let part = self.ident()?;
+            id.name.push('.');
+            id.name.push_str(&part.name);
+            id.span.end = part.span.end;
+        }
+        Ok(id)
+    }
+
     fn stmt_id(&mut self) -> StmtId {
         self.next_stmt += 1;
         self.next_stmt - 1
@@ -336,8 +350,8 @@ impl<'a> Parser<'a> {
     fn module_def(&mut self) -> PResult<Stmt> {
         let start = self.bump().span.start;
         let name = self.ident()?;
-        self.expect(&Tok::LParen, "`(`")?;
-        let params = self.params()?;
+        // `module name { … }`: parentheses may be omitted when there are no parameters.
+        let params = if self.eat(&Tok::LParen) { self.params()? } else { Vec::new() };
         let body_start = self.span().start;
         let id = self.stmt_id();
         let body = if self.at(&Tok::LBrace) { self.block()? } else { vec![self.stmt_recover()] };
@@ -488,8 +502,14 @@ impl<'a> Parser<'a> {
             "grid" if matches!(self.peek_at(1), Tok::Ident(_)) && self.peek_at(2) == &Tok::LBrace => {
                 StmtKind::Grid(Rc::new(self.grid_decl()?))
             }
-            _ => {
+            // `sketch { … }` / `hole { … }`: block without an argument list.
+            "sketch" | "hole" if self.peek_at(1) == &Tok::LBrace => {
                 let name = self.ident()?;
+                let children = self.block()?;
+                StmtKind::Call { name, args: Vec::new(), children, has_block: true }
+            }
+            _ => {
+                let name = self.qualified_ident()?;
                 self.expect(&Tok::LParen, "`(`")?;
                 let args = self.args()?;
                 let (children, has_block) = match self.peek() {

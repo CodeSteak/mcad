@@ -609,7 +609,13 @@ struct Loop {
   std::vector<V3> pts;  // 2D points (z = 0) for polygon/spline
   double cx = 0, cy = 0, r = 0;
   M4 frame = identity();
+  std::vector<double> sk;  // composite (sketch) segments, raw; see sc_sketch.cpp
 };
+
+// sketches (sc_sketch.cpp, included at the end of this file)
+uint32_t sketch_parse(const double* d, uint32_t i, uint32_t dlen, uint32_t count, Loop& l);
+void sketch_curves(const Loop& l, const M4& f, bool single, CurveList& out);
+bool loft_segmentwise(const std::vector<Loop>& loops);
 
 std::vector<Loop> parse_loops(const double* d, uint32_t dlen, uint32_t expect) {
   std::vector<Loop> out;
@@ -638,6 +644,8 @@ std::vector<Loop> parse_loops(const double* d, uint32_t dlen, uint32_t expect) {
       l.r = d[i + 2];
       i += 3;
       if (!(l.r > 0) || !is_fin(l.r)) throw fail(SC_INVALID, "circle radius must be > 0");
+    } else if (l.kind == SC_LOOP_COMPOSITE) {
+      i = sketch_parse(d, i, dlen, count, l);
     } else {
       throw fail(SC_INVALID, "unknown loop kind " + std::to_string(l.kind));
     }
@@ -708,6 +716,10 @@ void place_curve(SmCurve* c, const M4& f, double s) {
 // and circles are analytic.
 void loop_curves(const Loop& l, bool single, bool local, CurveList& out) {
   M4 f = local ? identity() : l.frame;
+  if (l.kind == SC_LOOP_COMPOSITE) {
+    sketch_curves(l, f, single, out);
+    return;
+  }
   if (l.kind == SC_LOOP_CIRCLE) {
     double s;
     if (!similarity(f, s))
@@ -2592,7 +2604,7 @@ uint32_t sc_extrude(const double* loop, uint32_t len_, double height, double twi
         s.frame = identity();
         // section frame: translate(0,0,h t) * scale(sx, sy) * rot(a)
         double c = std::cos(a), sn = std::sin(a);
-        if (l.kind == SC_LOOP_CIRCLE) {  // sx == sy here
+        if (l.kind == SC_LOOP_CIRCLE || l.kind == SC_LOOP_COMPOSITE) {  // circles: sx == sy here
           s.frame.m[0] = c * sx;
           s.frame.m[1] = sn * sy;
           s.frame.m[4] = -sn * sx;
@@ -2657,9 +2669,7 @@ uint32_t sc_loft(const double* data, uint32_t len_, uint32_t n_sections, int32_t
   SC_SHAPE_CALL({
     auto loops = parse_loops(data, len_, n_sections);
     if (loops.size() < 2) throw fail(SC_INVALID, "loft needs at least 2 sections");
-    bool segments = true;
-    for (const Loop& l : loops)
-      if (l.kind != SC_LOOP_POLYGON || l.pts.size() != loops[0].pts.size()) segments = false;
+    bool segments = loft_segmentwise(loops);
     std::vector<CurveList> secs(loops.size());
     for (size_t i = 0; i < loops.size(); i++) loop_curves(loops[i], !segments, false, secs[i]);
     std::vector<CurveList*> ptrs;
@@ -3248,3 +3258,7 @@ int32_t sc_brep(uint32_t h) {
 }
 
 }  // extern "C"
+
+// sketches: composite loops, sweep along a sketch path
+#define SC_FACADE_INTERNAL 1
+#include "sc_sketch.cpp"

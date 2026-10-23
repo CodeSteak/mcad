@@ -31,6 +31,7 @@ sc_extrude
 sc_revolve
 sc_loft
 sc_sweep
+sc_sketch_sweep
 sc_nurbs_surface
 sc_thicken
 sc_shell

@@ -363,6 +363,41 @@ pub struct EvalOutput {
     /// Evaluation was aborted (step budget, recursion, failed assertion).
     pub aborted: bool,
     pub steps: u64,
+    /// Statements of the segments of every `sketch { … }` node (display, Plan 17.1).
+    #[serde(default)]
+    pub sketches: Vec<SketchInfo>,
+}
+
+/// Source of a `Profile::Sketch` node: per contour and segment (same order as in the profile)
+/// the statement that made it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SketchInfo {
+    pub node: NodeIdx,
+    /// The `sketch` statement.
+    pub stmt: StmtId,
+    pub span: Span,
+    pub closed: bool,
+    pub contours: Vec<SketchContourInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SketchContourInfo {
+    pub hole: bool,
+    pub closed: bool,
+    /// The `start(…)` statement (`None` without one).
+    pub start_stmt: Option<StmtId>,
+    pub start_span: Option<Span>,
+    pub segs: Vec<SketchSegInfo>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SketchSegInfo {
+    pub stmt: StmtId,
+    pub span: Span,
+    /// Added by the evaluation (closing line of a contour without `close()`).
+    pub implicit: bool,
+    /// Error reported for this segment.
+    pub error: bool,
 }
 
 impl EvalOutput {

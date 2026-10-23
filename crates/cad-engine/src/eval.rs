@@ -359,12 +359,22 @@ where
     if dim == Some(Dim::Two) && !is_profile_op(&node.op) {
         // 2D node on its own: no kernel work; bounds from the polygon approximation.
         let mut warn = Vec::new();
-        let bounds = match profile::lift(tree, idx, DMat4::IDENTITY, &mut warn) {
-            Ok(e) => profile::expr_bounds(&e, ctx.config.default_tol).map(|(lo, hi)| (lo.extend(0.0), hi.extend(0.0))),
-            Err(msg) => {
-                ev.error(msg);
-                None
-            }
+        let open = match &node.op {
+            Op::Profile(p) => profile::open_sketch_bounds(p, ctx.config.default_tol),
+            _ => None,
+        };
+        let bounds = match open {
+            // an open sketch is a path (sweep), not a region
+            Some(b) => b.map(|(lo, hi)| (lo.extend(0.0), hi.extend(0.0))),
+            None => match profile::lift(tree, idx, DMat4::IDENTITY, &mut warn) {
+                Ok(e) => {
+                    profile::expr_bounds(&e, ctx.config.default_tol).map(|(lo, hi)| (lo.extend(0.0), hi.extend(0.0)))
+                }
+                Err(msg) => {
+                    ev.error(msg);
+                    None
+                }
+            },
         };
         for w in warn {
             ev.warn(w);
@@ -801,6 +811,7 @@ where
                 let a = if *angle == 0.0 { 360.0 } else { *angle };
                 self.lifted(&LiftMode::Revolve { angle: a.to_radians() })
             }
+            Op::Sweep { path, .. } if path.is_empty() => self.sweep_sketch_path(),
             Op::Sweep { path, interp } => {
                 if path.len() < 2 {
                     self.error("sweep: Pfad braucht mindestens 2 Punkte");
@@ -1261,6 +1272,10 @@ where
                 self.error(format!("{} erwartet 2D-Profile als Kinder", tree.node(self.idx).op.label()));
                 return None;
             }
+            if profile::open_sketch_in(tree, c) {
+                self.error("offene Skizze ist kein Profil (nur als `sweep`-Pfad)");
+                return None;
+            }
             match profile::lift(tree, c, tree.node(c).local, &mut warn) {
                 Ok(e) => args.push(e),
                 Err(msg) => {
@@ -1351,7 +1366,7 @@ where
                 );
                 (r, profile::affine2(&l.m))
             }
-            LiftMode::Sweep { .. } => {
+            LiftMode::Sweep { .. } | LiftMode::SweepPath { .. } => {
                 if !planar {
                     self.warn("Profil liegt nicht in der xy-Ebene und wird projiziert");
                 }
@@ -1366,6 +1381,7 @@ where
                 LiftMode::Extrude { h, twist, scale, .. } => k.extrude(&pl, *h, *twist, *scale, tag),
                 LiftMode::Revolve { angle } => k.revolve(&pl, *angle, tag),
                 LiftMode::Sweep { path, interp } => k.sweep(&pl.lp, path, *interp, tag),
+                LiftMode::SweepPath { path } => k.sweep_path(&pl.lp, path, tag),
             })?;
             match r {
                 Ok(s) => solids.push(Part { shape: s, solid: true }),
@@ -1388,6 +1404,60 @@ where
         self.boolean(BoolOp::Difference, groups, tag)
     }
 
+    /// `sweep()` without `path`: one child is an open sketch (the path), the others are the
+    /// profile.
+    fn sweep_sketch_path(&mut self) -> R<Vec<Part<K::Shape>>> {
+        let tree = self.ctx.tree;
+        let kids: Vec<NodeIdx> = tree.solid_children(self.idx).collect();
+        let paths: Vec<(NodeIdx, NodeIdx, DMat4)> = kids
+            .iter()
+            .filter_map(|&c| find_open_sketch(tree, c, tree.node(c).local).map(|(s, m)| (c, s, m)))
+            .collect();
+        let Some(&(path_child, sk, m)) = paths.first() else {
+            self.error("sweep braucht `path` oder einen offenen Skizzenpfad `sketch(closed = false) { … }` als Kind");
+            return Ok(Vec::new());
+        };
+        if paths.len() > 1 {
+            self.warn("sweep: mehrere offene Skizzen, die erste ist der Pfad");
+        }
+        let Op::Profile(cad_ir::Profile::Sketch { contours, .. }) = &tree.node(sk).op else { return Ok(Vec::new()) };
+        if contours.len() != 1 {
+            self.error(format!("sweep: der Skizzenpfad braucht genau eine Kontur (hat {})", contours.len()));
+            return Ok(Vec::new());
+        }
+        let segs = match profile::contour_segments(&contours[0]) {
+            Ok(s) => s,
+            Err(e) => {
+                self.error(e);
+                return Ok(Vec::new());
+            }
+        };
+        let mut args = Vec::new();
+        let mut warn = Vec::new();
+        for &c in kids.iter().filter(|&&c| c != path_child) {
+            if tree.dim(c) == Some(Dim::Three) {
+                self.error("sweep erwartet 2D-Profile als Kinder");
+                return Ok(Vec::new());
+            }
+            match profile::lift(tree, c, tree.node(c).local, &mut warn) {
+                Ok(e) => args.push(e),
+                Err(msg) => {
+                    self.error(msg);
+                    return Ok(Vec::new());
+                }
+            }
+        }
+        for w in warn {
+            self.warn(w);
+        }
+        if args.is_empty() {
+            self.warn("kein Profil");
+            return Ok(Vec::new());
+        }
+        let mode = LiftMode::SweepPath { path: cad_kernel::PlacedPath { segs, frame: m } };
+        self.lift_expr(&Expr2::Op(BoolOp::Union, args), &mode)
+    }
+
     fn loft(&mut self, ruled: bool) -> R<Vec<Part<K::Shape>>> {
         let tree = self.ctx.tree;
         let mut sections = Vec::new();
@@ -1395,6 +1465,10 @@ where
         for c in tree.solid_children(self.idx) {
             if tree.dim(c) == Some(Dim::Three) {
                 self.error("loft erwartet 2D-Profile als Kinder");
+                return Ok(Vec::new());
+            }
+            if profile::open_sketch_in(tree, c) {
+                self.error("offene Skizze ist kein Profil (nur als `sweep`-Pfad)");
                 return Ok(Vec::new());
             }
             let e = match profile::lift(tree, c, tree.node(c).local, &mut warn) {
@@ -1456,4 +1530,23 @@ enum LiftMode {
     Extrude { h: f64, twist: f64, scale: DVec2, z0: f64 },
     Revolve { angle: f64 },
     Sweep { path: Vec<DVec3>, interp: cad_kernel::PathInterp },
+    /// `sweep() { sketch(closed = false) { … } profil(); }`: path of exact segments.
+    SweepPath { path: cad_kernel::PlacedPath },
+}
+
+/// The open sketch in the subtree of `idx` (through groups, module calls, transforms and
+/// colours) with its matrix into the system `m` maps the subtree's own system to.
+fn find_open_sketch(tree: &cad_ir::Tree, idx: NodeIdx, m: DMat4) -> Option<(NodeIdx, DMat4)> {
+    let n = tree.node(idx);
+    match &n.op {
+        Op::Profile(cad_ir::Profile::Sketch { closed: false, .. }) => Some((idx, m)),
+        Op::Group | Op::ModuleCall { .. } | Op::Transform { .. } | Op::Color { .. } => {
+            let kids: Vec<NodeIdx> = tree.solid_children(idx).collect();
+            if kids.len() != 1 {
+                return None;
+            }
+            find_open_sketch(tree, kids[0], m * tree.node(kids[0]).local)
+        }
+        _ => None,
+    }
 }

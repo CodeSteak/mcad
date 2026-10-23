@@ -55,7 +55,7 @@ pub use brep::BrepStats;
 
 use cad_kernel::{
     BoolOp, Class, EdgeInfo, FaceId, FaceInfo, KResult, Kernel, KernelError, Loop, MassProps, Mesh, PathInterp,
-    PlacedLoop, Tag,
+    PlacedLoop, PlacedPath, Segment, Tag,
 };
 use glam::{DMat4, DVec2, DVec3};
 
@@ -95,6 +95,7 @@ const EDGE_SMOOTH: u32 = 1;
 const LOOP_POLYGON: f64 = 0.0;
 const LOOP_CIRCLE: f64 = 1.0;
 const LOOP_SPLINE: f64 = 2.0;
+const LOOP_COMPOSITE: f64 = 3.0;
 
 /// Estimated bytes of an SMLib Brep: fixed part ([`Kernel::shape_bytes`]). Measured over the
 /// 48 example models (heap freed when the cache is dropped, `cad-cli` example `cache_size`,
@@ -183,8 +184,60 @@ fn encode_loop(out: &mut Vec<f64>, lp: &Loop, frame: &DMat4) {
         Loop::Circle { center, r } => {
             out.extend_from_slice(&[LOOP_CIRCLE, 3.0, center.x, center.y, *r]);
         }
+        Loop::Composite(segs) => encode_segments(out, segs),
     }
     out.extend_from_slice(&frame.to_cols_array());
+}
+
+/// Composite loop payload (`sc_sketch.cpp`): kind, count, per segment its type and data.
+fn encode_segments(out: &mut Vec<f64>, segs: &[Segment]) {
+    out.push(LOOP_COMPOSITE);
+    out.push(segs.len() as f64);
+    for s in segs {
+        match s {
+            Segment::Line { a, b } => out.extend_from_slice(&[0.0, a.x, a.y, b.x, b.y]),
+            Segment::Arc { center, r, a0, a1 } => out.extend_from_slice(&[1.0, center.x, center.y, *r, *a0, *a1]),
+            Segment::Nurbs(c) => {
+                out.extend_from_slice(&[2.0, c.degree as f64, c.points.len() as f64, c.knots.len() as f64]);
+                out.extend_from_slice(&c.knots);
+                for (i, p) in c.points.iter().enumerate() {
+                    out.extend_from_slice(&[p.x, p.y, c.weight(i)]);
+                }
+            }
+        }
+    }
+}
+
+/// Lofts match composite sections segment by segment only if all have the same number of
+/// segments; otherwise each is joined into one closed B-spline.
+fn loft_sections(sections: &[PlacedLoop]) -> Vec<PlacedLoop> {
+    let counts: Vec<Option<usize>> = sections
+        .iter()
+        .map(|s| match &s.lp {
+            Loop::Composite(v) => Some(v.len()),
+            _ => None,
+        })
+        .collect();
+    let equal = counts.iter().all(|c| c.is_some() && *c == counts[0]);
+    if equal || counts.iter().all(|c| c.is_none()) {
+        return sections.to_vec();
+    }
+    sections
+        .iter()
+        .map(|s| match &s.lp {
+            Loop::Composite(v) => {
+                // start where the +x ray from the centroid leaves the section, like circles
+                // (and polygons, see the engine's `loft_normalize`), so the sections do not
+                // twist against each other
+                let size = v.iter().map(|g| g.start().length()).fold(1e-9, f64::max);
+                let tol = size * 1e-4;
+                let c = cad_kernel::curve2::centroid(v, tol);
+                let r = cad_kernel::curve2::restart_at_ray(v, c, DVec2::X, tol);
+                PlacedLoop { lp: Loop::Composite(vec![Segment::Nurbs(cad_kernel::curve2::join(&r))]), frame: s.frame }
+            }
+            _ => s.clone(),
+        })
+        .collect()
 }
 
 impl SmlibKernel {
@@ -334,7 +387,7 @@ impl Kernel for SmlibKernel {
 
     fn loft(&mut self, sections: &[PlacedLoop], ruled: bool, tag: Tag) -> KResult<Shape> {
         let mut enc = Vec::new();
-        for s in sections {
+        for s in &loft_sections(sections) {
             encode_loop(&mut enc, &s.lp, &s.frame);
         }
         let n = sections.len() as u32;
@@ -350,6 +403,28 @@ impl Kernel for SmlibKernel {
             PathInterp::Spline => 1,
         };
         self.call(|| raw::sweep(&enc, &pts, interp, tag))
+    }
+
+    /// Tangent-continuous paths are joined into one B-spline (curve sweep); paths with corners
+    /// are swept segment by segment with mitered joints (the path is planar).
+    fn sweep_path(&mut self, p: &Loop, path: &PlacedPath, tag: Tag) -> KResult<Shape> {
+        if path.segs.is_empty() {
+            return Err(KernelError::InvalidInput("sweep path without segments".into()));
+        }
+        let smooth =
+            path.segs.windows(2).all(|w| w[0].end_tangent().dot(w[1].start_tangent()) > 1.0 - 1e-9);
+        let (segs, mode) = if path.segs.len() == 1 {
+            (path.segs.clone(), 1)
+        } else if smooth {
+            (vec![Segment::Nurbs(cad_kernel::curve2::join(&path.segs))], 1)
+        } else {
+            (path.segs.clone(), 0)
+        };
+        let mut enc = Vec::new();
+        encode_loop(&mut enc, p, &DMat4::IDENTITY);
+        let mut penc = Vec::new();
+        encode_loop(&mut penc, &Loop::Composite(segs), &path.frame);
+        self.call(|| raw::sketch_sweep(&enc, &penc, mode, tag))
     }
 
     fn nurbs_surface(&mut self, rows: &[Vec<DVec3>], tag: Tag) -> KResult<Shape> {

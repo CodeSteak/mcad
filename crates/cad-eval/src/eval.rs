@@ -183,6 +183,9 @@ pub(crate) struct Ev<'a> {
     pub decl_pass: bool,
     /// `filament()` statements seen by the declaration pass.
     pub decl_spans: Vec<Span>,
+    /// The `sketch { … }` being evaluated (its segment statements append to it).
+    pub sketch: Option<crate::sketch::SketchBuild<'a>>,
+    pub sketches: Vec<SketchInfo>,
 }
 
 #[inline(never)]
@@ -274,6 +277,8 @@ impl<'a> Ev<'a> {
             filament_decls: Vec::new(),
             decl_pass: false,
             decl_spans: Vec::new(),
+            sketch: None,
+            sketches: Vec::new(),
         }
     }
 
@@ -765,6 +770,7 @@ impl<'a> Ev<'a> {
             refs: self.refs,
             aborted: self.aborted,
             steps: self.steps,
+            sketches: self.sketches,
         }
     }
 
@@ -1068,8 +1074,20 @@ impl<'a> Ev<'a> {
         label: Option<String>,
     ) -> R<Option<InstId>> {
         let a = self.eval_args(args, &ctx.env, &ctx.dyn_)?;
-        if let Some((def, denv)) = ctx.env.find_module(&name.name) {
+        // Inside `sketch { … }` the segment statements come first (also over user modules of
+        // the same name, e.g. a library's `line`).
+        if self.sketch.is_some() && crate::sketch::is_segment(&name.name) {
+            if label.is_some() {
+                self.error(name.span, format!("Segmente sind nicht benennbar (`{}`)", name.name));
+            }
+            self.segment_stmt(s, name, a, children, ctx)?;
+            return Ok(None);
+        }
+        if let Some((def, denv)) = self.find_module_ns(&name.name, name.span, ctx)? {
             return self.user_module(s, def, denv, a, children, ctx, label).map(Some);
+        }
+        if name.name.contains('.') {
+            return Ok(None); // reported by `find_module_ns`
         }
         if label.is_some() {
             self.error(name.span, format!("nur Aufrufe eigener Module sind benennbar, `{}` ist eingebaut", name.name));
@@ -1480,7 +1498,7 @@ impl<'a> Ev<'a> {
 }
 
 pub(crate) fn find_module_path<'a>(stmts: &'a [Stmt], name: &str) -> Option<Vec<&'a ModuleDef>> {
-    let want: Vec<&str> = name.split("::").collect();
+    let want: Vec<&str> = name.split("::").flat_map(|p| p.split('.')).collect();
     let mut path = Vec::new();
     fn rec<'a>(stmts: &'a [Stmt], want: &[&str], path: &mut Vec<&'a ModuleDef>) -> bool {
         for s in stmts {

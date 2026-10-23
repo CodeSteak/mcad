@@ -898,7 +898,13 @@ where
         if let Some(Cached::Mesh(m)) = self.cache.get(&mkey) {
             return Ok(m);
         }
-        let mesh = if out.dim == Some(Dim::Two) {
+        let open = match &ev.tree.node(node).op {
+            cad_ir::Op::Profile(p) => profile::open_sketch_mesh(p, tol),
+            _ => None,
+        };
+        let mesh = if let Some(m) = open {
+            m
+        } else if out.dim == Some(Dim::Two) {
             let mut warn = Vec::new();
             let expr = profile::lift(&ev.tree, node, DMat4::IDENTITY, &mut warn)?;
             let tag_of = |n: NodeIdx| ev.reports[n as usize].tag;

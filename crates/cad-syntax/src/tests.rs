@@ -214,3 +214,43 @@ fn include_path_span() {
     let StmtKind::Include { path_span, .. } = &f.stmts[0].kind else { panic!() };
     assert_eq!(&src[path_span.start as usize..path_span.end as usize], "<a/b.scad>");
 }
+
+#[test]
+fn sketch_block_without_arguments() {
+    let src = "linear_extrude(5) sketch {\n  start([0, 0]);\n  line(to = [4, 0]);\n  close();\n}\n";
+    let f = ok(src);
+    let StmtKind::Call { children, .. } = &f.stmts[0].kind else { panic!() };
+    let StmtKind::Call { name, args, children: segs, has_block } = &children[0].kind else { panic!() };
+    assert_eq!(name.name, "sketch");
+    assert!(args.is_empty() && *has_block);
+    assert_eq!(segs.len(), 3);
+    // with arguments, `hole { … }`, and as a module body
+    ok("sketch(closed = false) { start([0, 0]); line(by = [1, 0]); }");
+    ok("sketch { start([0,0]); line(to=[1,0]); line(to=[0,1]); close(); hole { start([.2,.2]); close(); } }");
+    let f = ok("module profil(b = 40) sketch { start([0, 0]); }");
+    let StmtKind::Module(m) = &f.stmts[0].kind else { panic!() };
+    assert!(matches!(&m.body[0].kind, StmtKind::Call { name, .. } if name.name == "sketch"));
+    // `sketch` stays an ordinary name elsewhere
+    ok("sketch = 3; module sketch(n) { cube(n); } sketch(2);");
+}
+
+#[test]
+fn module_without_parentheses_and_qualified_calls() {
+    let src = "module teile {\n  module schraube(d = 3) { cylinder(h = 10, d = d); }\n}\nteile.schraube(d = 4);\nk: a.b.c();\nlinear_extrude(2) profile.stern();\nx = geo.flaeche(2);";
+    let f = ok(src);
+    let StmtKind::Module(m) = &f.stmts[0].kind else { panic!() };
+    assert_eq!(m.name.name, "teile");
+    assert!(m.params.is_empty());
+    let StmtKind::Call { name, .. } = &f.stmts[1].kind else { panic!() };
+    assert_eq!(name.name, "teile.schraube");
+    assert_eq!(&src[name.span.start as usize..name.span.end as usize], "teile.schraube");
+    let StmtKind::Named { inst, .. } = &f.stmts[2].kind else { panic!() };
+    assert!(matches!(&inst.kind, StmtKind::Call { name, .. } if name.name == "a.b.c"));
+    let StmtKind::Call { children, .. } = &f.stmts[3].kind else { panic!() };
+    assert!(matches!(&children[0].kind, StmtKind::Call { name, .. } if name.name == "profile.stern"));
+    let StmtKind::Assign { value, .. } = &f.stmts[4].kind else { panic!() };
+    let ExprKind::Call { callee, .. } = &value.kind else { panic!() };
+    assert!(matches!(&callee.kind, ExprKind::Member { name, .. } if name.name == "flaeche"));
+    // a module without parameters and a single statement body
+    ok("module stern linear_extrude(1) square(2);");
+}

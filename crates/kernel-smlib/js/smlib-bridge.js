@@ -219,6 +219,15 @@ export function sc_sweep(loop, path, interp, tag) {
     free(pl, pp);
   }
 }
+export function sc_sketch_sweep(loop, path, mode, tag) {
+  const pl = allocF64(loop);
+  const pp = allocF64(path);
+  try {
+    return mod()._sc_sketch_sweep(pl, loop.length, pp, path.length, mode, tag) >>> 0;
+  } finally {
+    free(pl, pp);
+  }
+}
 export function sc_nurbs_surface(pts, rows, cols, tag) {
   return withF64(pts, (p) => mod()._sc_nurbs_surface(p, rows, cols, tag) >>> 0);
 }

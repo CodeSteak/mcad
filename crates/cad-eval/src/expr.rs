@@ -314,7 +314,14 @@ impl<'a> Ev<'a> {
             self.warn(callee.span, format!("unbekannte Funktion `{name}`"));
             return Ok(Val::undef());
         }
-        let f = self.expr(callee, env, dy)?;
+        let ns = match &callee.kind {
+            ExprKind::Member { base, name } => self.ns_member(callee, base, name, env, dy, true)?,
+            _ => None,
+        };
+        let f = match ns {
+            Some(f) => f,
+            None => self.expr(callee, env, dy)?,
+        };
         let a = self.eval_args(args, env, dy)?;
         match &f.v {
             Value::Func(c) => {
@@ -688,6 +695,9 @@ impl<'a> Ev<'a> {
 
     #[inline(never)]
     fn member_expr(&mut self, e: &'a Expr, base: &'a Expr, name: &'a Ident, env: &Env<'a>, dy: &Dyn<'a>) -> R<Val<'a>> {
+        if let Some(v) = self.ns_member(e, base, name, env, dy, false)? {
+            return Ok(v);
+        }
         let b = self.expr(base, env, dy)?;
         let in_ctx = self.is_in_context(env);
         match &b.v {
