@@ -43,6 +43,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <functional>
 #include <map>
 #include <new>
 #include <string>
@@ -838,7 +839,31 @@ void apply_matrix(SmBrep* b, const M4& m) {
     for (int r = 0; r < 4; r++) t[c][r] = m.m[c * 4 + r];
   // SMLib uses row vectors: row i = image of basis vector i, row 3 = translation.
   if (std::fabs(m.det3()) < 1e-18) throw fail(SC_INVALID, "singular transform");
-  SC_CHECK(b->Transform(t, TRUE), "SmBrep::Transform");
+  // Tolerances: SmBrep::Transform(t, TRUE) re-derives the model size from the box of the
+  // vertices, sets every vertex/edge/face tolerance from it and also overwrites the context's
+  // model size. A torus or a revolved circle has a single vertex: its box has size 0, all
+  // tolerances become 0 and every later Boolean with the body silently misses the
+  // intersections (translate([0, 0, 2]) torus(20, 1) united with a plate came back as two
+  // overlapping bodies, intersected with it as empty). Rigid motions keep the tolerances;
+  // scaled bodies get them from their full (loose) box, the context is left alone.
+  double s = 1.0;
+  bool rigid = similarity(m, s) && std::fabs(s - 1.0) <= 1e-12;
+  SC_CHECK(b->Transform(t, FALSE), "SmBrep::Transform");
+  if (!rigid && b->GetNumFaces() > 0) {
+    SmPoint3d mn, mx;
+    if (SmApiBrepBoundingBox(b, FALSE, mn, mx) == SM_SUCCESS) {
+      double size = len(fromsm(mx) - fromsm(mn));
+      if (size > 0 && is_fin(size)) {
+        SmTol::SetModelSizeEstimate(*b, size);
+        SmZoneTol3d zt = SmTol::GetZoneTol3d(b);
+        SmTArray<SmVertex*> vs;
+        b->GetVertices(vs);
+        for (ULONG i = 0; i < vs.GetSize(); i++) vs[i]->SetTolerance(zt, FALSE, FALSE);
+        for (SmEdge* e : edges_of(b)) e->SetTolerance(zt, FALSE, FALSE);
+        for (SmFace* f : faces_of(b)) f->SetTolerance(zt, FALSE, FALSE);
+      }
+    }
+  }
 }
 
 bool is_identity(const M4& m) {
@@ -1005,47 +1030,112 @@ SmBSplineFilletLaw* make_law(const std::vector<double>& radii) {
   return new (*ctx()) SmBSplineFilletLaw(c, SmExtent1d(0.0, 1.0));
 }
 
-// `laws` (variable fillet): per selected edge id its control radii; empty: radius r everywhere.
-uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, uint32_t tag,
-                        bool chamfer,
-                        const std::unordered_map<uint32_t, std::vector<double>>* laws = nullptr) {
-  const char* what = chamfer ? "chamfer" : "fillet";
-  if (laws) {
-    r = 0;
-    for (const auto& kv : *laws)
-      for (double x : kv.second) {
-        if (!(x > 0) || !is_fin(x)) throw fail(SC_INVALID, "fillet radius must be > 0", {kv.first});
-        r = std::max(r, x);
-      }
+double solid_volume(const SmBrep* b);
+
+// Length of an edge (polyline through 33 points of its curve).
+double edge_length(const SmEdge* e) {
+  SmCurve* c = e->GetCurve();
+  SmExtent1d iv = e->GetInterval();
+  double l = 0;
+  V3 prev{};
+  for (int k = 0; c && k <= 32; k++) {
+    SmPoint3d p;
+    if (c->EvaluatePoint(iv.GetMin() + (iv.GetMax() - iv.GetMin()) * k / 32.0, p) != SM_SUCCESS)
+      return l;
+    if (k > 0) l += len(fromsm(p) - prev);
+    prev = fromsm(p);
   }
-  if (!(r > 0) || !is_fin(r)) throw fail(SC_INVALID, std::string(what) + " size must be > 0");
-  SmBrep* in = get(h);
-  std::vector<SmEdge*> in_all;
-  std::vector<SmEdge*> in_sel = select_edges(in, ids, n, in_all);
-  BrepPtr b = copy_brep(in);
-  std::vector<SmEdge*> all = edges_of(b.get());
-  if (all.size() != in_all.size()) throw fail(SC_FAILED, "Brep copy changed the edge count");
-  SmTArray<SmEdge*> sel;
-  std::vector<uint32_t> sel_ids;
-  std::vector<SmEdge*> kept_in;
-  std::vector<uint32_t> skipped;
-  for (SmEdge* e : in_sel) {
-    uint32_t i = edge_index(in_all, e);
-    // GetBlendEdgeuse() is NULL for edges SMLib cannot blend: seams and other
-    // tangent-continuous edges, lamina edges. Nothing to round there: skip them.
-    if (all[i]->GetBlendEdgeuse() == nullptr) {
-      skipped.push_back(i);
-      continue;
+  return l;
+}
+
+// Groups of selected edges connected through shared vertices (indices into `sel`).
+std::vector<std::vector<size_t>> edge_chains(const std::vector<SmEdge*>& sel) {
+  std::vector<size_t> parent(sel.size());
+  for (size_t i = 0; i < sel.size(); i++) parent[i] = i;
+  std::function<size_t(size_t)> root = [&](size_t i) {
+    return parent[i] == i ? i : (parent[i] = root(parent[i]));
+  };
+  for (size_t i = 0; i < sel.size(); i++)
+    for (size_t j = i + 1; j < sel.size(); j++) {
+      SmVertex* a[2] = {sel[i]->GetStartVertex(), sel[i]->GetEndVertex()};
+      SmVertex* b[2] = {sel[j]->GetStartVertex(), sel[j]->GetEndVertex()};
+      bool shared = false;
+      for (SmVertex* x : a)
+        for (SmVertex* y : b) shared |= x && x == y;
+      if (shared) parent[root(i)] = root(j);
     }
-    sel.Add(all[i]);
-    sel_ids.push_back(i);
-    kept_in.push_back(e);
+  std::vector<std::vector<size_t>> out;
+  std::map<size_t, size_t> slot;
+  for (size_t i = 0; i < sel.size(); i++) {
+    size_t r = root(i);
+    if (!slot.count(r)) {
+      slot[r] = out.size();
+      out.emplace_back();
+    }
+    out[slot[r]].push_back(i);
   }
-  in_sel = kept_in;
-  if (sel.GetSize() == 0)
-    throw fail(SC_FAILED,
-               std::string(what) + ": none of the edges can be blended (smooth, seam or open edges)",
-               skipped);
+  return out;
+}
+
+// Three points of an edge (ends and middle of its interval).
+bool edge_points(const SmEdge* e, V3 out[3]) {
+  SmCurve* c = e->GetCurve();
+  if (!c) return false;
+  SmExtent1d iv = e->GetInterval();
+  for (int k = 0; k < 3; k++) {
+    SmPoint3d p;
+    if (c->EvaluatePoint(iv.GetMin() + (iv.GetMax() - iv.GetMin()) * k / 2.0, p) != SM_SUCCESS)
+      return false;
+    out[k] = fromsm(p);
+  }
+  return true;
+}
+
+// The edge of `b` with the same ends and middle as `e` (either direction), or nullptr.
+SmEdge* matching_edge(const SmBrep* b, const SmEdge* e, double tol) {
+  V3 p[3];
+  if (!edge_points(e, p)) return nullptr;
+  for (SmEdge* x : edges_of(b)) {
+    V3 q[3];
+    if (!edge_points(x, q)) continue;
+    bool fwd = len(p[0] - q[0]) <= tol && len(p[2] - q[2]) <= tol;
+    bool rev = len(p[0] - q[2]) <= tol && len(p[2] - q[0]) <= tol;
+    if ((fwd || rev) && len(p[1] - q[1]) <= tol) return x;
+  }
+  return nullptr;
+}
+
+// One fillet/chamfer of the edges `src_sel` of `src` (blendable edges; `orig_ids` are their ids
+// in the caller's input, used in error reports and to look up `laws`). The result is checked:
+//  * no self-overlapping faces (invalid_faces);
+//  * a closed solid if `src` is one: SMLib sometimes leaves faces out and still returns
+//    SM_SUCCESS (chamfer of the top edges of a box with rounded corners: an open shell of 26
+//    faces, volume 0);
+//  * the volume changes by at most what a blend of that size can change near the edges
+//    (20 r^2 per unit of edge length, i.e. wedges down to ~6 degrees, plus 10 r^3 per edge,
+//    plus 2 % for the coarse volumes): union(fillet) of a rounded shell and a dome came back as
+//    the dome alone.
+BrepPtr blend_core(const SmBrep* src, const std::vector<SmEdge*>& src_sel,
+                   const std::vector<uint32_t>& orig_ids, double r, bool chamfer,
+                   const std::unordered_map<uint32_t, std::vector<double>>* laws) {
+  const char* what = chamfer ? "chamfer" : "fillet";
+  std::vector<SmEdge*> src_all = edges_of(src);
+  BrepPtr b = copy_brep(src);
+  std::vector<SmEdge*> all = edges_of(b.get());
+  if (all.size() != src_all.size()) throw fail(SC_FAILED, "Brep copy changed the edge count");
+  std::vector<uint32_t> src_idx;  // per selected edge: its index in src_all (= in all)
+  SmTArray<SmEdge*> sel;
+  for (SmEdge* e : src_sel) {
+    uint32_t i = edge_index(src_all, e);
+    if (i == UINT32_MAX) throw fail(SC_FAILED, "edge not in the body");
+    src_idx.push_back(i);
+    sel.Add(all[i]);
+  }
+  auto orig_of_index = [&](uint32_t i) -> uint32_t {
+    for (size_t k = 0; k < src_idx.size(); k++)
+      if (src_idx[k] == i) return orig_ids[k];
+    return UINT32_MAX;
+  };
 
   SmFilletExecutive ex(*ctx(), b.get());
   ex.SetDoGlobalMerge(TRUE);
@@ -1060,7 +1150,7 @@ uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, u
     SmTArray<SmFilletSolverType> types;
     SmTArray<double> values;
     SmTArray<SmFilletLaw*> law_ptrs;
-    for (uint32_t i : sel_ids) {
+    for (uint32_t i : orig_ids) {
       auto it = laws->find(i);
       if (it == laws->end() || it->second.empty())
         throw fail(SC_INVALID, "no radius law for edge " + std::to_string(i), {i});
@@ -1101,21 +1191,118 @@ uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, u
     std::vector<uint32_t> bad;
     SmFilletErrorInfo* info = ex.GetFilletErrorInfo();
     if (info && info->m_pFilletedEdge) {
-      uint32_t i = edge_index(all, info->m_pFilletedEdge);
+      uint32_t i = orig_of_index(edge_index(all, info->m_pFilletedEdge));
       if (i != UINT32_MAX) bad.push_back(i);
     }
+    // smlib/patches/0002: a vertex for whose meeting edges SMLib has no corner type
+    if (info && info->GetErrorCode() == SM_FILERR_VERTEX_PROBLEM &&
+        smos_FromTChar(info->m_cComment).find("unsupported fillet corner") != std::string::npos)
+      throw fail(SC_FAILED,
+                 std::string(what) +
+                     " failed: SMLib cannot blend the corner where these edges meet (faces that "
+                     "touch tangentially there?)",
+                 bad);
     throw sm_fail(what, st, bad);
   }
   b->StitchAndOrient();
   if (b->GetNumFaces() == 0) throw fail(SC_FAILED, std::string(what) + " removed all faces");
   auto badf = g_draft ? std::vector<size_t>() : invalid_faces(b.get());
   if (!badf.empty()) {
-    auto e = edges_near_faces(b.get(), badf, in_sel, in_all, 3.0 * r + 1e-6);
-    if (e.empty()) e = sel_ids;
+    std::vector<uint32_t> e;
+    for (uint32_t i : edges_near_faces(b.get(), badf, src_sel, src_all, 3.0 * r + 1e-6)) {
+      uint32_t o = orig_of_index(i);
+      if (o != UINT32_MAX) e.push_back(o);
+    }
+    if (e.empty()) e = orig_ids;
     throw fail(SC_FAILED,
                std::string(what) + " failed: the result overlaps itself (size " +
                    std::to_string(r) + " too large for the adjacent faces?)",
                e);
+  }
+  bool src_solid = src->GetNumFaces() > 0 && src->IsManifoldSolid();
+  if (src_solid && !b->IsManifoldSolid())
+    throw fail(SC_FAILED,
+               std::string(what) +
+                   " failed: SMLib returned a body that is not closed (faces missing): the blends "
+                   "of neighbouring edges collide, size too large for the wall between them?",
+               orig_ids);
+  if (src_solid && !g_draft) {
+    double v0 = solid_volume(src), v1 = solid_volume(b.get());
+    double reach = 0;
+    for (SmEdge* e : src_sel) reach += 20.0 * r * r * edge_length(e) + 10.0 * r * r * r;
+    if (is_fin(v0) && is_fin(v1) &&
+        (v1 <= 1e-9 * std::fabs(v0) || std::fabs(v1 - v0) > reach + 2e-2 * std::fabs(v0)))
+      throw fail(SC_FAILED,
+                 std::string(what) + " failed: SMLib returned a wrong body (volume " +
+                     std::to_string(v1) + " instead of about " + std::to_string(v0) + ")",
+                 orig_ids);
+  }
+  return b;
+}
+
+// `laws` (variable fillet): per selected edge id its control radii; empty: radius r everywhere.
+//
+// If the blend of all edges fails and the edges form several separate chains (no shared
+// vertex), the chains are blended one after the other, each chain's edges found again in the
+// intermediate body by their geometry. That helps where SMLib fails on the whole selection but
+// not on its parts (outer and inner top edges of a box with rounded corners). Variable radii
+// always go in one call.
+uint32_t do_fillet_like(uint32_t h, const uint32_t* ids, uint32_t n, double r, uint32_t tag,
+                        bool chamfer,
+                        const std::unordered_map<uint32_t, std::vector<double>>* laws = nullptr) {
+  const char* what = chamfer ? "chamfer" : "fillet";
+  if (laws) {
+    r = 0;
+    for (const auto& kv : *laws)
+      for (double x : kv.second) {
+        if (!(x > 0) || !is_fin(x)) throw fail(SC_INVALID, "fillet radius must be > 0", {kv.first});
+        r = std::max(r, x);
+      }
+  }
+  if (!(r > 0) || !is_fin(r)) throw fail(SC_INVALID, std::string(what) + " size must be > 0");
+  SmBrep* in = get(h);
+  std::vector<SmEdge*> in_all;
+  std::vector<SmEdge*> in_sel = select_edges(in, ids, n, in_all);
+  std::vector<SmEdge*> kept;
+  std::vector<uint32_t> sel_ids;
+  std::vector<uint32_t> skipped;
+  for (SmEdge* e : in_sel) {
+    uint32_t i = edge_index(in_all, e);
+    // GetBlendEdgeuse() is NULL for edges SMLib cannot blend: seams and other
+    // tangent-continuous edges, lamina edges. Nothing to round there: skip them.
+    if (e->GetBlendEdgeuse() == nullptr) {
+      skipped.push_back(i);
+      continue;
+    }
+    kept.push_back(e);
+    sel_ids.push_back(i);
+  }
+  if (kept.empty())
+    throw fail(SC_FAILED,
+               std::string(what) + ": none of the edges can be blended (smooth, seam or open edges)",
+               skipped);
+
+  BrepPtr b;
+  try {
+    b = blend_core(in, kept, sel_ids, r, chamfer, laws);
+  } catch (const Failure& whole) {
+    auto chains = laws ? std::vector<std::vector<size_t>>() : edge_chains(kept);
+    if (chains.size() < 2) throw;
+    double tol = 1e-7 * std::max(1.0, model_diag(in));
+    BrepPtr cur = copy_brep(in);
+    for (const auto& ch : chains) {
+      std::vector<SmEdge*> es;
+      std::vector<uint32_t> os;
+      for (size_t k : ch) {
+        SmEdge* e = matching_edge(cur.get(), kept[k], tol);
+        if (!e) throw whole;  // an earlier chain changed this one: they are not separate
+        es.push_back(e);
+        os.push_back(sel_ids[k]);
+      }
+      g_trail.clear();
+      cur = blend_core(cur.get(), es, os, r, chamfer, nullptr);
+    }
+    b = std::move(cur);
   }
   size_t fresh = resolve_tags(b.get(), {in}, tag, true);
   if (fresh == 0)
@@ -1401,10 +1588,17 @@ BrepPtr touching_union(const SmBrep* A, const SmBrep* B) {
 // (if it produced one), which the caller takes as a last resort: the check itself relies on
 // SMLib's point classification, which errs on some bodies (revolved splines), so a result
 // it rejects is not necessarily wrong, and it is what the facade returned before the check.
+// Not so (`plain_impossible`) when its volume is impossible for the operation (volumes do not
+// depend on the point classification), or when it is not a closed solid: operands that touch
+// tangentially along a curve while their interiors overlap (cylinder minus a torus touching
+// its top and bottom faces; a dome touching a wall) have no manifold result, SMLib returns a
+// non-manifold body that measures volume 0 and fails later operations. Operands that only
+// touch are handled before (touching_union; a - b = a, a n b = empty).
 // `va`: volume of A if known (NAN otherwise); on success it is set to the result's volume
 // (NAN if not computed).
 BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow_perturb,
-                        std::string& err, BrepPtr& plain, double& va) {
+                        std::string& err, BrepPtr& plain, double& va,
+                        bool* plain_impossible = nullptr) {
   bool commutative = op != SC_DIFFERENCE;
   bool wrong = false;
   std::string why;
@@ -1434,9 +1628,23 @@ BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow
         return t;
       }
     }
+    // Bodies that only touch: a - b = a, a n b = empty (SMLib returns a non-manifold body).
+    if (pl == PL_OPEN && op != SC_UNION && !interiors_overlap(a, b)) {
+      va = NAN;
+      if (op == SC_DIFFERENCE) return swapped ? copy_brep(b) : copy_brep(a);
+      return empty_brep();
+    }
     if (pl == PL_WRONG) wrong = true;
-    if (is_plain) plain = std::move(r);
-    if (why.empty()) why = "SMLib returned a wrong result (" + w + ")";
+    if (is_plain) {
+      plain = std::move(r);
+      if (plain_impossible)
+        *plain_impossible =
+            (pl == PL_WRONG && w.rfind("volume ", 0) == 0) || pl == PL_OPEN;
+    }
+    if (why.empty())
+      why = pl == PL_OPEN ? "the result is not a closed solid: the operands touch tangentially or "
+                            "along an edge there (let them overlap a little or keep a gap)"
+                          : "SMLib returned a wrong result (" + w + ")";
     return BrepPtr();
   };
   BrepPtr r = attempt(A, B, false);
@@ -2452,8 +2660,10 @@ uint32_t sc_boolean(int32_t op, const uint32_t* hs, uint32_t n, uint32_t tag) {
         for (size_t i = 1; i < ord.size(); i++) {
           if (a->GetNumFaces() == 0) break;  // difference/intersection stays empty
           BrepPtr plain;
-          BrepPtr r = checked_boolean(op, a.get(), ord[i], last_resort, err, plain, va);
-          if (!r.get() && last_resort && plain.get()) {
+          bool impossible = false;
+          BrepPtr r =
+              checked_boolean(op, a.get(), ord[i], last_resort, err, plain, va, &impossible);
+          if (!r.get() && last_resort && plain.get() && !impossible) {
             r = std::move(plain);
             va = NAN;
           }
@@ -2760,9 +2970,13 @@ uint32_t sc_sweep(const double* loop, uint32_t len_, const double* path, uint32_
     CurveList cl;
     loop_curves(l, false, false, cl);
     SmTArray<SmCurve*> prof = as_array(cl);
-    // SMLib sweeps the profile's bounding-box centre along the path (bMoveProfileCenterToPath),
-    // not the profile frame origin. Equal for centred profiles; on a straight path an offset
-    // is a plain translation; otherwise not representable.
+    // SMLib's curve sweep moves the profile's bounding-box centre along the path
+    // (bMoveProfileCenterToPath), not the profile frame origin. That box is the box of the
+    // control points: for a closed spline profile it is off-centre even where the curve is
+    // symmetric about the origin ([[5, 0], [0, 3], [-5, 0], [0, -3]]: control box x -15..5).
+    // smlib/patches/0003 adds bUseProfileRefPoint: the frame origin itself travels along the
+    // path, centred or not. The mitered planar-polyline sweep has no such option: there an
+    // offset is a translation on a straight path and not representable otherwise.
     SmExtent3d box;
     for (SmCurve* c : cl.v) {
       SmExtent3d cb;
@@ -2770,12 +2984,13 @@ uint32_t sc_sweep(const double* loop, uint32_t len_, const double* path, uint32_
       box.AddPoint3d(cb.GetMin());
       box.AddPoint3d(cb.GetMax());
     }
-    V3 off = fromsm(box.GetMid()) - pp[0];
     double psize = len(fromsm(box.GetMax()) - fromsm(box.GetMin()));
-    bool centred = len(off) <= 1e-9 * std::max(1.0, psize);
-    if (!centred && !straight)
+    bool centred = len(fromsm(box.GetMid()) - pp[0]) <= 1e-9 * std::max(1.0, psize);
+    bool curve_sweep = straight || spline;
+    if (!centred && !curve_sweep)
       throw fail(SC_UNSUPPORTED,
-                 "sweep of a profile that is not centred on its origin along a curved path");
+                 "sweep of a profile that is not centred on its origin along a polyline path "
+                 "with corners (use a spline path)");
     SmBrep* r = nullptr;
     if (!straight && !spline) {
       // planar polyline: mitered joints
@@ -2792,19 +3007,30 @@ uint32_t sc_sweep(const double* loop, uint32_t len_, const double* path, uint32_
       SmSweepOptions opt;
       opt.bCapEndsArg = TRUE;
       opt.bMoveProfileCenterToPath = TRUE;
+      opt.bUseProfileRefPoint = TRUE;
+      opt.sProfileRefPoint = SmVector3d(pp[0].x, pp[0].y, pp[0].z);
       SC_CHECK(SmApiCreateCurveSweep(prof, pathc, nullptr, nullptr, &opt, r, nullptr, nullptr,
                                      nullptr),
                "SmApiCreateCurveSweep");
     }
     BrepPtr b(r);
-    require_solid(r, "sweep");
-    if (!centred) {
-      M4 t = identity();
-      t.m[12] = off.x;
-      t.m[13] = off.y;
-      t.m[14] = off.z;
-      apply_matrix(b.get(), t);
+    if (r && r->GetNumFaces() > 0 && !r->IsManifoldSolid() && loops[0].kind == SC_LOOP_POLYGON &&
+        !straight) {
+      // SMLib's curve sweep sometimes leaves seams between neighbouring side faces of a
+      // polygon profile open: coincident twin edges (gap 0) that SmBrep::StitchFaces does not
+      // glue either (16-gon along a curved path; 12-, 32-gons on other paths).
+      size_t open = 0;
+      for (SmEdge* e : edges_of(r)) {
+        SmTArray<SmFace*> ef;
+        e->GetFaces(ef);
+        if (ef.GetSize() < 2) open++;
+      }
+      throw fail(SC_FAILED, "sweep: SMLib left " + std::to_string(open / 2) +
+                                " seam(s) between the side faces of the polygon profile open "
+                                "(SMLib limitation on curved paths; circle() or a spline() "
+                                "profile work)");
     }
+    require_solid(r, "sweep");
     tag_all(b.get(), tag);
     _res = put(std::move(b));
   })
@@ -2855,6 +3081,55 @@ uint32_t sc_thicken(uint32_t h, double t, uint32_t tag) {
   })
 }
 
+// Smallest radius of convex curvature over the faces of `b` that are not in `skip` (finite
+// differences of the outward normal on a 7 x 7 grid of each face's UV domain; INFINITY if none
+// is convex). An inward shell offsets every face by t: where a convex rounding has a radius
+// below t the offset surface degenerates, and SMLib's shell fails with a bare SM_ERR.
+double min_convex_radius(const SmBrep* b, const std::vector<const SmFace*>& skip) {
+  double best = INFINITY;
+  for (SmFace* f : faces_of(b)) {
+    if (std::find(skip.begin(), skip.end(), f) != skip.end()) continue;
+    SmSurface* srf = f->GetSurface();
+    if (!srf || srf->IsKindOf(SmPlane_TYPE)) continue;
+    SmFaceuse* fu = f->GetUpwardFaceuse();
+    bool flip = fu && fu->GetShell() && fu->GetShell()->GetRegion() &&
+                !fu->GetShell()->GetRegion()->IsVoid();
+    SmExtent2d d = f->GetUVDomain();
+    double du = 1e-4 * (d.GetUMax() - d.GetUMin()), dv = 1e-4 * (d.GetVMax() - d.GetVMin());
+    auto eval = [&](double u, double v, V3& p, V3& nrm) {
+      SmVector2d uv(u, v);
+      SmVector3d pv, nv;
+      if (SmApiEvaluateSurfacePoint(srf, uv, pv) != SM_SUCCESS) return false;
+      if (SmApiEvaluateSurfaceNormal(srf, uv, nv) != SM_SUCCESS) return false;
+      p = v3(pv.x, pv.y, pv.z);
+      nrm = normalize(v3(nv.x, nv.y, nv.z));
+      if (flip) nrm = nrm * -1.0;
+      return len(nrm) > 0;
+    };
+    for (int i = 1; i <= 7; i++)
+      for (int j = 1; j <= 7; j++) {
+        double u = d.GetUMin() + (d.GetUMax() - d.GetUMin()) * i / 8.0;
+        double v = d.GetVMin() + (d.GetVMax() - d.GetVMin()) * j / 8.0;
+        SmPointClassification pc;
+        if (f->PointClassify(SmPoint2d(u, v), SmTol::GetZoneTol3d(f), FALSE, TRUE, pc) != SM_SUCCESS ||
+            pc.GetPointClass() != SM_PC_FACE)
+          continue;
+        V3 p0, n0;
+        if (!eval(u, v, p0, n0)) continue;
+        for (int k = 0; k < 2; k++) {
+          V3 p1, n1;
+          if (!eval(u + (k == 0 ? du : 0), v + (k == 1 ? dv : 0), p1, n1)) continue;
+          V3 dp = p1 - p0;
+          double l2 = dot(dp, dp);
+          if (l2 <= 0) continue;
+          double kappa = dot(n1 - n0, dp) / l2;  // > 0: convex in this direction
+          if (kappa > 1e-9) best = std::min(best, 1.0 / kappa);
+        }
+      }
+  }
+  return best;
+}
+
 uint32_t sc_shell(uint32_t h, double t, const uint32_t* open_faces, uint32_t n, uint32_t tag) {
   SC_SHAPE_CALL({
     SmBrep* in = get(h);
@@ -2894,6 +3169,13 @@ uint32_t sc_shell(uint32_t h, double t, const uint32_t* open_faces, uint32_t n, 
       b = shell_by_booleans(in, t, open_v, why);
       if (!b.get()) {
         first.msg += "; shell from booleans: " + why;
+        double rmin = min_convex_radius(in, open_v);
+        if (rmin <= 1.02 * t)
+          first.msg = "shell: wall thickness " + std::to_string(t) +
+                      " is not smaller than the radius of a convex rounding of the body (about " +
+                      std::to_string(rmin) +
+                      "): the inner surface degenerates there (rounding radius must be > wall "
+                      "thickness). " + first.msg;
         throw first;
       }
     }
@@ -3197,7 +3479,7 @@ int32_t sc_mass_props(uint32_t h) {
                                               mi, pi),
                "SmApiBrepComputeMassProperties");
       double fine = vol;
-      if (SmApiBrepComputeVolume(b, 1e-8, fine) == SM_SUCCESS && is_fin(fine)) vol = fine;
+      if (SmApiBrepComputeVolume(b, 1e-6, fine) == SM_SUCCESS && is_fin(fine)) vol = fine;
       out = {vol, area, c.x, c.y, c.z};
     } else {
       double area = 0;

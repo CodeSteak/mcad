@@ -1,0 +1,39 @@
+From: controller-cad (Testbericht 13, F9)
+Subject: SMLib: missing fillet corner type -> error instead of a type confusion (segfault)
+
+SmFilletExecutive::CreateFilletCorners skipped a vertex for which SmFilletCorner::Create found
+no corner type ("Unimplemented corner case") with `continue`. m_vVertexCornerMap still held the
+vertex's edgeuse list (SmTArray<SmEdgeuse*>*) for it, and GetFilletCornerOfVertex() later
+returned that list as an SmFilletCorner*: CollectTangentEdgeSequence called virtual methods on
+it and crashed (union(fillet) of a dome touching a wall tangentially; of a pin and an equally
+thick sweep starting at its end face). Now the entry is removed, the edge noted in the fillet
+error info (comment "unsupported fillet corner") and the fillet fails with
+SM_ERR_INVALID_INPUT.
+
+diff --git a/source/SMLib/src/SmFilletExecutive.cpp b/source/SMLib/src/SmFilletExecutive.cpp
+index 2812b31..5c52867 100644
+--- a/source/SMLib/src/SmFilletExecutive.cpp
++++ b/source/SMLib/src/SmFilletExecutive.cpp
+@@ -1861,7 +1861,21 @@ SmBoolean bDebugMe = FALSE;
+               sm_GraphicsLoop();
+           }
+ #endif // SM_DEBUG_CODE
+-          continue;
++          // Without a corner, m_vVertexCornerMap would keep the edgeuse list of this vertex,
++          // which GetFilletCornerOfVertex() later returns as an SmFilletCorner (type
++          // confusion: segmentation fault in CollectTangentEdgeSequence, e.g. for a cylinder
++          // touching a wall tangentially). Fail with the edge noted instead.
++          m_vVertexCornerMap.Remove(pVert);
++          SmEdge *pBadEdge = (pSolverEUs->GetSize() > 0 && (*pSolverEUs)[0] != NULL)
++                                 ? (*pSolverEUs)[0]->GetEdge() : NULL;
++          if (pBadEdge != NULL)
++            m_sErrorInfo.NoteError(pBadEdge, SM_FIL_FAILURE, SM_FILERR_VERTEX_PROBLEM,
++                                   _T("unsupported fillet corner"));
++          else
++            m_sErrorInfo.NoteError(SM_FILERR_VERTEX_PROBLEM, _T("unsupported fillet corner"));
++          if ( pOptFilletErrorInfo != NULL )
++            { *pOptFilletErrorInfo = *( GetFilletErrorInfo() ); }
++          SER_MSG( SM_ERR_INVALID_INPUT, _T("unsupported fillet corner") );
+         } // end no corner check
+ 
+       // add FilletCorner Object to m_vFilletCorners

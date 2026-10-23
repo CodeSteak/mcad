@@ -326,15 +326,25 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         t.push_str(&format!("{}\n", grid_text(g, proj)));
     }
 
-    // named instances, parts, anchors in file coordinates
-    let named: Vec<&p::Instance> = sc.instances.iter().filter(|i| i.label.is_some() && i.id != 0).collect();
-    let instances: Vec<Json> = named
+    // named instances, parts, anchors in file coordinates. A name given inside a module body
+    // (`dom[0]: dom();` in `pi_platte`) belongs to that module, not to the file: such instances
+    // are listed separately, with the module that names them ("scope": "module").
+    let named_all: Vec<&p::Instance> = sc.instances.iter().filter(|i| i.label.is_some() && i.id != 0).collect();
+    let in_module = |i: &p::Instance| i.depth > 1;
+    let named: Vec<&p::Instance> = named_all.iter().copied().filter(|i| !in_module(i)).collect();
+    let nested: Vec<&p::Instance> = named_all.iter().copied().filter(|i| in_module(i)).collect();
+    let owner = |i: &p::Instance| -> String {
+        i.parent.and_then(|q| sc.instances.iter().find(|x| x.id == q)).map(|x| x.module.clone()).unwrap_or_default()
+    };
+    let instances: Vec<Json> = named_all
         .iter()
         .map(|i| {
             let r = i.call_range.unwrap_or_default();
             json!({
                 "name": i.label, "module": i.module, "file": file_path(&sc, &r), "line": r.line, "depth": i.depth,
                 "part": sc.parts.iter().any(|pt| pt.inst == i.id),
+                "scope": if in_module(i) { "module" } else { "file" },
+                "in_module": if in_module(i) { Some(owner(i)) } else { None },
             })
         })
         .collect();
@@ -366,16 +376,38 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
             t.push('\n');
         }
     }
+    if !nested.is_empty() {
+        // grouped by the module whose body names them, with how often they occur
+        let mut groups: Vec<(String, Vec<String>)> = Vec::new();
+        for i in &nested {
+            let m = owner(i);
+            let item = format!("{}: {}", i.label.as_deref().unwrap_or(""), i.module);
+            match groups.iter_mut().find(|g| g.0 == m) {
+                Some(g) => {
+                    if !g.1.contains(&item) {
+                        g.1.push(item)
+                    }
+                }
+                None => groups.push((m, vec![item])),
+            }
+        }
+        t.push_str("Benannte Instanzen in Modulen (nur dort sichtbar):\n");
+        for (m, items) in &groups {
+            t.push_str(&format!("  in {m}: {}\n", items.join(", ")));
+        }
+    }
+    let file_anchor = |a: &p::Anchor| sc.instances.iter().find(|i| i.id == a.inst).is_none_or(|i| !in_module(i));
     let anchors: Vec<Json> = sc
         .anchors
         .iter()
-        .filter(|a| a.text.is_some())
+        .filter(|a| a.text.is_some() && file_anchor(a))
         .map(|a| json!({ "ref": a.text, "point": a.point, "dir": a.dir, "line": a.range.line }))
         .collect();
     if !anchors.is_empty() {
         let a: Vec<String> = sc
             .anchors
             .iter()
+            .filter(|a| file_anchor(a))
             .filter_map(|a| {
                 let dir = a.dir.as_ref().map(|d| format!(" dir {}", vec3(d))).unwrap_or_default();
                 a.text.as_ref().map(|tx| format!("{tx} = {}{dir}", vec3(&a.point)))

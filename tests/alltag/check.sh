@@ -11,7 +11,8 @@
 #   tests/alltag/check.sh              prüfen gegen tests/alltag/expected.json
 #   tests/alltag/check.sh --update     expected.json aus dem aktuellen Stand neu schreiben
 #   tests/alltag/check.sh --fehler     zusätzlich die Fehlerbeispiele in tests/alltag/fehler/
-#                                      ausführen (nur Bericht: „besteht“ / „behoben“)
+#                                      gegen ihren Soll-Zustand (Kopfkommentar `// SOLL…`)
+#                                      prüfen (nur Bericht: „behoben“ / „offen“)
 #   tests/alltag/check.sh -j 4         parallel (Standard: 4)
 #   tests/alltag/check.sh --keep       temporäres Verzeichnis behalten
 #   tests/alltag/check.sh MUSTER…      nur Modelle, deren Pfad ein MUSTER enthält
@@ -132,8 +133,19 @@ def vergleiche(res, exp):
     return p
 
 def fehlerbeispiele():
+    """Minimal examples of the findings (tests/alltag/fehler). Their head comment states the
+    target state (Soll):
+      // SOLL: fehlerfrei             no error
+      // SOLL: keine Warnungen        no warning
+      // SOLL-VOLUMEN: V TOL          volume V ± TOL mm³
+      // SOLL-VOLUMEN-MIN: V          volume at least V
+      // SOLL-FEHLER: TEXT            an error whose message contains TEXT (no correct result
+                                      exists, e.g. operands touching tangentially)
+    Always: no crash, JSON output. Reported per file: "behoben" (Soll reached) or "offen"
+    (with the first deviation and, if any, the error the CLI reports now)."""
     d = os.path.join(here, "fehler")
-    print("\nFehlerbeispiele (tests/alltag/fehler, nur Bericht):")
+    print("\nFehlerbeispiele (tests/alltag/fehler):")
+    n_ok = n_open = 0
     for n in sorted(os.listdir(d)):
         if not n.endswith(".scad"):
             continue
@@ -141,23 +153,36 @@ def fehlerbeispiele():
         text = open(f, encoding="utf-8").read()
         code, j, err, _ = run(["measure", f, "--volume"], d)
         befund = []
+        gemeldet = ""
         if code < 0 or code == 139 or j is None:
             befund.append(f"Absturz/keine Ausgabe (Exit {code})")
         else:
             errs = [g for g in j["diagnostics"] if g["severity"] == "error"]
             warns = [g for g in j["diagnostics"] if g["severity"] == "warning"]
             vol = (j.get("volume") or {}).get("volume")
-            if "ERWARTET: fehlerfrei" in text and errs:
-                befund.append(errs[0]["message"][:90])
-            if "ERWARTET: keine Warnungen" in text and warns:
+            if errs:
+                gemeldet = errs[0]["message"][:110]
+            if "SOLL: fehlerfrei" in text and errs:
+                befund.append("Fehler")
+            if "SOLL: keine Warnungen" in text and warns:
                 befund.append(warns[0]["message"][:90])
-            m = re.search(r"ERWARTET-VOLUMEN: ([\d.]+) ([\d.]+)", text)
+            m = re.search(r"SOLL-VOLUMEN: ([\d.]+) ([\d.]+)", text)
             if m and (vol is None or abs(vol - float(m.group(1))) > float(m.group(2))):
                 befund.append(f"Volumen {vol} statt {m.group(1)}")
-            m = re.search(r"ERWARTET-VOLUMEN-MIN: ([\d.]+)", text)
+            m = re.search(r"SOLL-VOLUMEN-MIN: ([\d.]+)", text)
             if m and (vol is None or vol < float(m.group(1))):
                 befund.append(f"Volumen {vol} < {m.group(1)}")
-        print(f"  {'besteht' if befund else 'behoben'}  {n}" + (f": {'; '.join(befund)}" if befund else ""))
+            m = re.search(r"SOLL-FEHLER: (.+)", text)
+            if m and not any(m.group(1).strip() in g["message"] for g in errs):
+                befund.append(f"keine Fehlermeldung mit „{m.group(1).strip()}“")
+        if befund:
+            n_open += 1
+            extra = f" – gemeldet: {gemeldet}" if gemeldet and "Fehler" in befund else ""
+            print(f"  offen    {n}: {'; '.join(befund)}{extra}")
+        else:
+            n_ok += 1
+            print(f"  behoben  {n}" + (f" (Fehler wie gewollt: {gemeldet})" if gemeldet else ""))
+    print(f"  {n_ok} behoben, {n_open} offen")
 
 liste = modelle()
 tmp = tempfile.mkdtemp(prefix="alltag-")

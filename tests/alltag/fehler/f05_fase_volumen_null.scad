@@ -2,7 +2,10 @@
 // (r 6, Wand 3): Status ok, 0 Fehler, aber Volumen 0 mm³ – die Hülle ist offen (STEP mit
 // 26 Flächen). Mit fillet(2) statt fillet(6) oder chamfer(0.4) stimmt das Volumen
 // (~20 000 mm³). Ein Kernel-Ergebnis ohne geschlossene Hülle müsste ein Fehler sein.
-// ERWARTET-VOLUMEN-MIN: 15000
+// Status (Bericht 13): behoben – die Fasen der inneren und äußeren Kante stoßen an den Ecken
+// zusammen (Wand an der Ecke 1,76 mm < 0,8 + 0,8·√2); statt Volumen 0 ohne Meldung jetzt ein
+// Fehler. chamfer(0.7) geht.
+// SOLL-FEHLER: not closed
 grid g {
     x: l = 0, r = 40;
     y: v = 0, h = 30;

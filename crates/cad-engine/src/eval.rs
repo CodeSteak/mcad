@@ -313,6 +313,10 @@ struct NodeEval<'r, 'a, 'c, K: Kernel> {
     /// Time of this node's fillet/chamfer kernel calls (ms).
     blend_ms: f64,
     suspended: bool,
+    /// A contributing child's parts come from a failed Boolean (`NodeOutput::unmerged`).
+    unmerged_in: bool,
+    /// A Boolean of this node failed (its parts are the operands).
+    unmerged: bool,
 }
 
 type R<T> = Result<T, Interrupt>;
@@ -336,6 +340,8 @@ where
         opened: Vec::new(),
         blend_ms: 0.0,
         suspended: false,
+        unmerged_in: false,
+        unmerged: false,
     };
     let tree = ctx.tree;
     let node = tree.node(idx);
@@ -390,6 +396,7 @@ where
             opened_faces: Vec::new(),
             blend_ms: 0.0,
             suspended: false,
+            unmerged: false,
         });
     }
 
@@ -417,6 +424,7 @@ where
         opened_faces: ev.opened,
         blend_ms: ev.blend_ms,
         suspended: ev.suspended,
+        unmerged: ev.unmerged,
     })
 }
 
@@ -493,6 +501,7 @@ where
     /// Parts of a child in this node's system.
     fn contrib(&mut self, c: NodeIdx) -> R<Vec<Part<K::Shape>>> {
         let Some(o) = self.output(c).cloned() else { return Ok(Vec::new()) };
+        self.unmerged_in |= o.unmerged;
         let m = self.tree().node(c).local;
         if is_identity(&m) {
             return Ok(o.parts.clone());
@@ -550,7 +559,11 @@ where
         match self.run.call(|k| k.boolean(BoolOp::Union, &shapes, tag))? {
             Ok(s) => Ok(vec![Part { shape: s, solid: true }]),
             Err(e) => {
-                self.error(format!("Vereinigung gescheitert: {e}"));
+                // operands of a Boolean that already failed below: same cause, reported there
+                if !self.unmerged_in {
+                    self.error(format!("Vereinigung gescheitert: {e}"));
+                }
+                self.unmerged = true;
                 Ok(parts)
             }
         }
@@ -586,6 +599,7 @@ where
                     Ok(s) => Ok(vec![Part { shape: s, solid: true }]),
                     Err(e) => {
                         self.error(format!("Differenz gescheitert: {e}"));
+                        self.unmerged = true;
                         Ok(base)
                     }
                 }
@@ -613,6 +627,7 @@ where
                     Ok(s) => Ok(vec![Part { shape: s, solid: true }]),
                     Err(e) => {
                         self.error(format!("Schnittmenge gescheitert: {e}"));
+                        self.unmerged = true;
                         Ok(all)
                     }
                 }
