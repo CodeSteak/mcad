@@ -68,6 +68,9 @@ SMLIB_WASM   := web/public/smlib/smlib.wasm
 WEB_DEPS     := web/node_modules/.modules.yaml
 WASM_PKG     := web/src/wasm-pkg/cad_wasm.js
 UI_DIST      := web/dist-tauri/index.html
+# App-Symbol (assets/icon): PNG je Größe und SVG für hicolor
+ICON_SIZES   := $(sort $(patsubst assets/icon/png/%.png,%,$(wildcard assets/icon/png/*.png)))
+ICON_SIZES   := $(foreach s,$(ICON_SIZES),$(firstword $(subst x, ,$(s))))
 UI_SOURCES   := $(shell find web/src -type f -not -path 'web/src/wasm-pkg/*' 2>/dev/null) \
                 web/index.html web/vite.config.ts web/tsconfig.json web/package.json web/pnpm-lock.yaml
 # Version: Cargo-Workspace; Paketversion mit Git-Stand (Arch-Schema für VCS-Pakete)
@@ -231,9 +234,10 @@ install: ## cad, Desktop-Datei, Icons, Lizenzen, Beispiele nach DESTDIR+PREFIX (
 	@[ -x "$(CAD_BIN)" ] || { echo "make: $(CAD_BIN) fehlt – erst make app (oder make cli für headless)" >&2; exit 2; }
 	$(INSTALL) -Dm755 "$(CAD_BIN)" "$(DESTDIR)$(BINDIR)/cad"
 	$(INSTALL) -Dm644 packaging/linux/controller-cad.desktop "$(DESTDIR)$(APPDIR)/controller-cad.desktop"
-	$(INSTALL) -Dm644 crates/cad-app/icons/32x32.png "$(DESTDIR)$(ICONDIR)/32x32/apps/controller-cad.png"
-	$(INSTALL) -Dm644 crates/cad-app/icons/128x128.png "$(DESTDIR)$(ICONDIR)/128x128/apps/controller-cad.png"
-	$(INSTALL) -Dm644 crates/cad-app/icons/icon.png "$(DESTDIR)$(ICONDIR)/256x256/apps/controller-cad.png"
+	@for s in $(ICON_SIZES); do \
+	  echo "$(INSTALL) -Dm644 assets/icon/png/$${s}x$${s}.png $(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/controller-cad.png"; \
+	  $(INSTALL) -Dm644 "assets/icon/png/$${s}x$${s}.png" "$(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/controller-cad.png"; done
+	$(INSTALL) -Dm644 assets/icon/cad.svg "$(DESTDIR)$(ICONDIR)/scalable/apps/controller-cad.svg"
 	$(INSTALL) -Dm644 -t "$(DESTDIR)$(LICENSEDIR)" packaging/linux/NOTICE crates/cad-font/fonts/OFL-*.txt
 	$(INSTALL) -Dm644 crates/cad-font/fonts/README.md "$(DESTDIR)$(LICENSEDIR)/fonts-README.md"
 	@if [ -f "$(SMLIB_SRC)/LICENSE" ]; then \
@@ -249,7 +253,8 @@ install: ## cad, Desktop-Datei, Icons, Lizenzen, Beispiele nach DESTDIR+PREFIX (
 
 uninstall: ## Entfernt, was make install angelegt hat (gleiche PREFIX/DESTDIR)
 	rm -f "$(DESTDIR)$(BINDIR)/cad" "$(DESTDIR)$(APPDIR)/controller-cad.desktop"
-	rm -f "$(DESTDIR)$(ICONDIR)"/{32x32,128x128,256x256}/apps/controller-cad.png
+	for s in $(ICON_SIZES); do rm -f "$(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/controller-cad.png"; done
+	rm -f "$(DESTDIR)$(ICONDIR)/scalable/apps/controller-cad.svg"
 	rm -rf "$(DESTDIR)$(LICENSEDIR)" "$(DESTDIR)$(DOCDIR)"
 
 ##@ Paket

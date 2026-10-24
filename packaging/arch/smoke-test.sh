@@ -134,5 +134,8 @@ kill "$xvfb" 2>/dev/null || true
 step "Desktop-Datei"
 pacman -S --noconfirm --needed desktop-file-utils >/dev/null
 desktop-file-validate /usr/share/applications/controller-cad.desktop && echo "desktop-file-validate: ok"
+icon="$(sed -n 's/^Icon=//p' /usr/share/applications/controller-cad.desktop)"
+ls /usr/share/icons/hicolor/*/apps/"$icon".* | sed 's|/usr/share/icons/hicolor/||'
+[ -f "/usr/share/icons/hicolor/scalable/apps/$icon.svg" ] && [ -f "/usr/share/icons/hicolor/48x48/apps/$icon.png" ]
 
 step "alles ok"

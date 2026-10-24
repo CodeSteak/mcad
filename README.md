@@ -170,7 +170,7 @@ Meldung ab, was zu installieren ist.
 | `make e2e` / `make e2e-desktop` | Playwright (Chromium) / Tauri-E2E (tauri-driver, Xvfb) |
 | `make lint` | `cargo fmt --check`, Clippy nativ und wasm32 (`-D warnings`), `tsc` |
 | `make fmt` | `cargo fmt --all` |
-| `make install` | `cad`, Desktop-Datei, Icons (32/128/256 px), Lizenzen, Doku und Beispiele |
+| `make install` | `cad`, Desktop-Datei, App-Symbol (`assets/icon`: PNG 16–512 px, SVG), Lizenzen, Doku und Beispiele |
 | `make uninstall` | entfernt diese Dateien wieder |
 | `make dist` | Quelltext-Archiv von `HEAD` → `target/arch/controller-cad-<pkgver>.tar.gz` |
 | `make arch` / `make arch-test` | Arch-Paket bauen / in frischem Container installieren und prüfen |
@@ -188,7 +188,8 @@ sudo make install PREFIX=/usr/local               # oder: make install DESTDIR=/
 ```
 
 `make install` legt an: `$PREFIX/bin/cad`, `share/applications/controller-cad.desktop`
-(`cad %f`, ohne Datei startet die UI), `share/icons/hicolor/{32x32,128x128,256x256}/apps/controller-cad.png`,
+(`cad %f`, ohne Datei startet die UI), `share/icons/hicolor/<n>x<n>/apps/controller-cad.png` (n = 16 … 512 aus `assets/icon/png`) und
+`share/icons/hicolor/scalable/apps/controller-cad.svg` (`assets/icon/cad.svg`),
 `share/licenses/controller-cad/` (`NOTICE`, OFL-Texte der Schriften mit `fonts-README.md`,
 SMLib `LICENSE` und `THIRD_PARTY_NOTICES.md`), `share/doc/controller-cad/` (README, CLI-Anleitung
 `cad-cli.md`, `examples/`). Installiert wird, was `target/release/cad` gerade ist (`make app`

@@ -17,4 +17,5 @@ cad (Binary)
   Quellen und Prüfsummen: fonts-README.md.
   Die Standardschrift „cad stencil mono“ ist Teil des Quelltexts (keine Schriftdatei).
 
-Icons (share/icons/hicolor/*/apps/controller-cad.png): Teil von controller-cad.
+App-Symbol (share/icons/hicolor/*/apps/controller-cad.{png,svg}, Quelle assets/icon): Teil von
+controller-cad.
