@@ -87,8 +87,11 @@ pub struct DistanceResult {
     pub b: DVec3,
     /// Two parallel planes: `distance` is the normal distance.
     pub parallel: bool,
-    /// Minimum distance of the bounded elements (equals `distance` unless `parallel`).
+    /// Minimum distance of the bounded elements (equals `distance` unless `parallel`) and
+    /// its foot points.
     pub min_distance: f64,
+    pub min_a: DVec3,
+    pub min_b: DVec3,
     /// Closed-form geometry on both sides and the refinement converged.
     pub exact: bool,
     /// Accuracy when not exact (mm).
@@ -146,6 +149,8 @@ pub fn distance(a: &Geo, b: &Geo, tol: f64) -> Option<DistanceResult> {
         b: pb,
         parallel: false,
         min_distance: d,
+        min_a: pa,
+        min_b: pb,
         exact,
         tol: if exact { 0.0 } else { 2.0 * tol },
         axis_distance: None,

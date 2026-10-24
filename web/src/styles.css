@@ -67,6 +67,8 @@
   --view-handle-bg: #ffffff;
   --view-snap: #237a35;
   --on-snap: #ffffff;
+  --view-measure: #8a5a00;
+  --on-measure: #ffffff;
   --view-profile: #0b7285;
   --view-guide: #d6336c;
   --view-open-face: #f08c00;
@@ -140,6 +142,8 @@
   --view-handle-bg: #e6e9ed;
   --view-snap: #5fd37a;
   --on-snap: #06210e;
+  --view-measure: #f2c14e;
+  --on-measure: #1d1503;
   --view-profile: #43d1e2;
   --view-guide: #f78db3;
   --view-open-face: #ffb066;
@@ -1392,4 +1396,199 @@ button.link:hover {
 input[type="checkbox"],
 input[type="range"] {
   accent-color: var(--accent);
+}
+
+/* ---------------------------------------------------------------- measure mode (Plan 18) */
+
+/* Context bar of the measure mode: like the sketch and section bars for now; the UI overhaul
+   moves `.contextbar` top left under the toolbar (docs/konzepte/ui-ueberarbeitung). */
+.measurebar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  align-items: center;
+  max-width: 100%;
+  padding: 4px 6px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.measurebar .stitle {
+  font-weight: 600;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.measurebar .seg {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.measurebar button {
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.measurebar button.on {
+  border-color: var(--view-accent);
+  color: var(--view-accent);
+  font-weight: 600;
+}
+
+.measurebar button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.measurebar .sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+.measurebar .check {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.st-note.measure {
+  color: var(--view-accent);
+}
+
+.st-note.measure.warn {
+  color: var(--view-error-edge);
+}
+
+/* labels of measurements in the view: dimension colour, readable in both themes */
+.measure-label {
+  position: absolute;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: var(--view-measure);
+  color: var(--on-measure);
+  font: 600 12px/1.4 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px var(--shadow);
+  cursor: pointer;
+  z-index: 2;
+}
+
+.measure-label.selected {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.measure-label.stale {
+  opacity: 0.6;
+}
+
+.measurepanel {
+  width: 300px;
+  flex: none;
+  overflow-y: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  padding: 8px 10px 14px;
+  font-size: 12px;
+}
+
+.measurepanel .mptitle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.measurepanel .mpcount {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.measurepanel .mpactions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.measurepanel .mpactions button,
+.measurepanel .mpbuttons button {
+  padding: 1px 6px;
+  font-size: 11px;
+}
+
+.measurepanel .mpempty {
+  color: var(--muted);
+}
+
+.measurepanel .mplist {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.measurepanel .mpitem {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  cursor: pointer;
+}
+
+.measurepanel .mpitem.selected {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.measurepanel .mpitem.stale .mpvalue {
+  color: var(--muted);
+}
+
+.measurepanel .mphead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.measurepanel .mpkind {
+  color: var(--muted);
+}
+
+.measurepanel .mpvalue {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.measurepanel .mppicks,
+.measurepanel .mpdetail {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.measurepanel .mporigin {
+  margin: 3px 0 0;
+  padding-left: 14px;
+  color: var(--text);
+}
+
+.measurepanel .mpbuttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.measurepanel .mpbuttons code {
+  font-size: 10px;
+}
+
+.measurepanel .mpdel {
+  margin-left: auto;
 }

@@ -739,40 +739,35 @@ where
         };
         if !free {
             // points: vertices, edge midpoints, circle centres
-            let mut best: Option<(f64, usize, &str, usize)> = None;
+            let mut best: Option<(f64, f64, usize, &str, usize)> = None;
+            // nearer to the ray wins; (nearly) equal ones (coaxial circles): nearer to the eye
+            let better = |score: f64, t: f64, best: &Option<(f64, f64, usize, &str, usize)>| {
+                best.is_none_or(|x| score < x.0 - 0.02 || (score <= x.0 + 0.02 && t < x.1))
+            };
             for (bi, b) in m.bodies.iter().enumerate() {
+                let mut cands: Vec<(DVec3, &str, usize)> = Vec::new();
                 if accepts(kind, false, "vertex") {
-                    for (vi, q) in b.brep.vertices.iter().enumerate() {
-                        let (rd, t) = ray_dist(*q);
-                        if rd <= tol(t) && visible(*q) && best.is_none_or(|x| rd / tol(t) < x.0) {
-                            best = Some((rd / tol(t), bi, "vertex", vi));
-                        }
-                    }
+                    cands.extend(b.brep.vertices.iter().enumerate().map(|(vi, q)| (*q, "vertex", vi)));
                 }
                 for (ei, c) in b.edges.iter().enumerate() {
-                    let mut cands: Vec<(DVec3, &str)> = Vec::new();
                     if accepts(kind, false, "mid") && c.kind() != "circle" {
-                        cands.push((c.mid(), "mid"));
+                        cands.push((c.mid(), "mid", ei));
                     }
                     if accepts(kind, false, "center")
                         && let Some((ctr, _, _, _)) = c.circle()
                     {
-                        cands.push((ctr, "center"));
+                        cands.push((ctr, "center", ei));
                     }
-                    for (q, k) in cands {
-                        let (rd, t) = ray_dist(q);
-                        let vis = if k == "center" {
-                            t > 0.0 && clip_ok(q) && t_hit.is_none_or(|th| t <= th + tol(th).max(2.0 * m.tol))
-                        } else {
-                            visible(q)
-                        };
-                        if rd <= tol(t) && vis && best.is_none_or(|x| rd / tol(t) < x.0) {
-                            best = Some((rd / tol(t), bi, k, ei));
-                        }
+                }
+                for (q, k, i) in cands {
+                    let (rd, t) = ray_dist(q);
+                    let score = rd / tol(t);
+                    if rd <= tol(t) && visible(q) && better(score, t, &best) {
+                        best = Some((score, t, bi, k, i));
                     }
                 }
             }
-            if let Some((_, bi, k, i)) = best {
+            if let Some((_, _, bi, k, i)) = best {
                 return Some(if k == "vertex" {
                     self.pick_vertex(m, bi, i)
                 } else {
@@ -1083,6 +1078,10 @@ where
                 if dr.distance > 1e-12 {
                     r.lines.push(vec![pv(dr.a), pv(dr.b)]);
                 }
+                // parallel planes: the normal ends beside the second face; to its nearest point
+                if dr.parallel && dr.b.distance(dr.min_b) > 1e-9 * (1.0 + dr.b.length()) {
+                    r.guides.push(vec![pv(dr.b), pv(dr.min_b)]);
+                }
                 r.points = vec![pv(dr.a), pv(dr.b)];
                 r.at = pv(0.5 * (dr.a + dr.b));
                 r.exact = dr.exact;
@@ -1226,7 +1225,7 @@ where
                 let ra = (at[0] - a.vertex).length();
                 let rb = (at[1] - a.vertex).length();
                 let size = m.size();
-                let rad = (0.5 * ra.min(rb)).clamp(0.03 * size, 0.25 * size).max(1e-3);
+                let rad = (0.5 * ra.min(rb)).clamp(0.06 * size, 0.25 * size).max(1e-3);
                 if !a.parallel {
                     let arc = arc_points(a.vertex, a.da, a.db, rad, 32);
                     r.at = pv(arc[arc.len() / 2] + (arc[arc.len() / 2] - a.vertex).normalize_or_zero() * 0.15 * rad);
