@@ -585,9 +585,7 @@ fn new_block(out: &EvalOutput, proj: &Project, text: &str) -> (Ins, u32) {
         }
     }
     let end = text.len() as u32;
-    let before = if text.is_empty() {
-        String::new()
-    } else if text.ends_with("\n\n") {
+    let before = if text.is_empty() || text.ends_with("\n\n") {
         String::new()
     } else if text.ends_with('\n') {
         "\n".into()
@@ -1313,15 +1311,14 @@ pub fn click(
             if ns {
                 stmts.push(start(p0));
             }
-            let end;
-            if p1.kind.is_point() && !same(c, p1) {
+            let end = if p1.kind.is_point() && !same(c, p1) {
                 if sw.abs() < 1e-9 {
                     return Err("Endpunkt gleich Anfangspunkt".into());
                 }
                 let cw = if sw < 0.0 { ", cw = true" } else { "" };
                 stmts.push(format!("arc(center = {}, to = {}{cw});", c.text, p1.text));
                 let r = p0.p.distance(c.p);
-                end = c.p + (p1.p - c.p).normalize_or_zero() * r;
+                c.p + (p1.p - c.p).normalize_or_zero() * r
             } else {
                 let a = round_deg(sw, step_deg);
                 if a.abs() < 1e-9 {
@@ -1330,8 +1327,8 @@ pub fn click(
                 stmts.push(format!("arc(center = {}, angle = {});", c.text, fmt_num(a)));
                 let r = p0.p.distance(c.p);
                 let a0 = (p0.p - c.p).y.atan2((p0.p - c.p).x) + a.to_radians();
-                end = c.p + DVec2::new(a0.cos(), a0.sin()) * r;
-            }
+                c.p + DVec2::new(a0.cos(), a0.sin()) * r
+            };
             let mut a = insert(place, &stmts, ns && place.cur.as_ref().is_some_and(|c| c.continues));
             a.points = vec![Pick::num(end, SnapKind::End)];
             Ok(Click::Done(a))

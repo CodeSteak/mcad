@@ -821,6 +821,7 @@ window.__cad = {
       segment: a?.segment ? { line: a.segment.line } : null,
       raster: a?.raster ? { lines: a.raster.lines.length, points: a.raster.points.length, min: a.raster.min, max: a.raster.max } : null,
       drawn: viewer?.lastSketchDraw ?? {},
+      rtt: sketch.rtt,
     };
   },
   sketchEnter(tool?: string) {

@@ -56,7 +56,7 @@ export function SketchStatus() {
   const s = useCad((st) => st.sketch);
   if (!s) return null;
   const a = s.answer;
-  const text = s.message ?? a?.prompt ?? SKETCH_TOOL_NAMES[s.tool];
+  const text = s.message || a?.prompt || SKETCH_TOOL_NAMES[s.tool];
   return (
     <span className={`st-note sketch${s.message ? " warn" : ""}`} data-testid="status-sketch" title="Alt: frei mit Schrittweite · Esc: Punkte verwerfen, nochmals: beenden">
       {text}

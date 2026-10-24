@@ -38,15 +38,16 @@ export class SketchController {
   private view: SketchView | null = null;
   private seq = 0;
   /** Request in flight: id and whether it was a click. */
-  private inflight: { id: number; click: boolean; tool: SketchTool } | null = null;
+  private inflight: { id: number; click: boolean; tool: SketchTool; at: number } | null = null;
   private clicks: Pending[] = [];
   private move: Pending | null = null;
   private infoWanted = false;
   /** Plane the camera was aligned to (re-aligned when the sketch plane changes). */
   private aligned: Mat4 | null = null;
   private listeners: Array<[string, EventListener]> = [];
-  /** Answers (tests, report): count. */
+  /** Answers (tests, report): count and round trips in ms (request → answer applied). */
   answers = 0;
+  rtt: Array<{ ms: number; click: boolean }> = [];
 
   constructor(
     private client: EngineClient,
@@ -188,7 +189,7 @@ export class SketchController {
     const r: SketchRequest = { ...this.base(id, tool), free: alt, click, info: this.infoWanted && !action };
     if (ray) r.ray = ray;
     if (!action) this.infoWanted = false;
-    this.inflight = { id, click, tool };
+    this.inflight = { id, click, tool, at: performance.now() };
     this.client.post({ type: "Sketch", ...r });
   }
 
@@ -208,13 +209,14 @@ export class SketchController {
     if (!f || f.id !== a.id) return;
     this.inflight = null;
     this.answers++;
+    const done = () => (this.rtt = [...this.rtt, { ms: performance.now() - f.at, click: f.click }].slice(-400));
     const s = this.state();
     if (!s) return;
     if (f.click) {
       const applied = a.edits.length > 0 && this.apply(a);
       // the raster may change with the new code (a new sketch, other grids)
       if (applied) this.infoWanted = true;
-      const keep = { ...a, preview: [], snap: null, guides: [] };
+      const keep = { ...a, preview: [], snap: null, guides: [], prompt: a.prompt || s.answer?.prompt || "" };
       this.patch({
         points: f.tool === "close" || f.tool === "delete" ? s.points : a.points,
         message: a.message,
@@ -225,6 +227,7 @@ export class SketchController {
     } else {
       this.patch({ answer: { ...a, raster: a.raster ?? s.answer?.raster ?? null }, message: null });
     }
+    done();
     if (a.raster && this.view && !samePlane(this.aligned, a.plane)) {
       this.aligned = a.plane;
       this.view.lookAtPlane(a.plane, a.raster.min, a.raster.max, a.sketch === null);

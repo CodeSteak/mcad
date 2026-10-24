@@ -707,3 +707,10 @@ export function record18(entry: ScenarioC): void {
   else all.push(entry);
   writeFileSync(f, JSON.stringify(all, null, 2));
 }
+
+export function writeMetrics18(m: Record<string, unknown>): void {
+  mkdirSync(REPORT18_DIR, { recursive: true });
+  const f = join(REPORT18_DIR, "metrics.json");
+  const old = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
+  writeFileSync(f, JSON.stringify({ ...old, ...m }, null, 2));
+}

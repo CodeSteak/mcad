@@ -311,3 +311,25 @@ fn dragging_a_sketch_point_onto_a_grid_point_keeps_the_short_form() {
     assert_eq!(e.len(), 1);
     assert_eq!(e[0].text, "g[c, v]");
 }
+
+#[test]
+fn dragging_points_through_variables_and_indexed_planes() {
+    // a point from a variable: the variable's literal changes (all uses move)
+    let src = "p = [10, 5];\nsketch(closed = false) {\n    start([0, 0]);\n    line(to = p);\n}\n";
+    let (proj, out) = eval(src);
+    let h = out.handles.iter().find(|h| h.kind == HandleKind::Point && h.value[..2] == [10.0, 5.0]).expect("Griff");
+    let to = DragTarget::Free(DragValue::Point(DVec3::new(12.0, 6.0, 0.0)));
+    let e = drag_edits(&out, &proj, h.id, &to, &DragOptions::default());
+    let t = apply_edits(src, &e);
+    assert!(t.starts_with("p = [12, 6];"), "{t}");
+    // an indexed plane: snapping writes the other index
+    let src = "grid g {\n    x: loch = [0, 10, 20];\n    y: u = 0, v = 8;\n}\nsketch(closed = false) {\n    start(g[loch[0], u]);\n    line(to = g[loch[1], v]);\n}\n";
+    let (proj, out) = eval(src);
+    let h = out.handles.iter().find(|h| h.kind == HandleKind::Point && h.value[..2] == [10.0, 8.0]).expect("Griff");
+    let g = out.grid_by_name("g").unwrap().id;
+    let r = SnapRef::Grid { grid: g, planes: ["loch[2]".into(), "v".into(), "_".into()] };
+    let e = drag_edits(&out, &proj, h.id, &DragTarget::Snap(r), &DragOptions::default());
+    let t = apply_edits(src, &e);
+    assert!(t.contains("    line(to = g[loch[2], v]);"), "{t}");
+    no_errors(&t);
+}

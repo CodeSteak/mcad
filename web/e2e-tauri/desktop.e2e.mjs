@@ -8,7 +8,8 @@
 // Needs: tauri-driver (cargo install tauri-driver --locked), WebKitWebDriver
 // (webkit2gtk-driver), Xvfb, git. Screenshots, measurements and results go to
 // reports/tmp/report9/ (test report 9, tools/report/report9.mjs) or `--out`. T12–T14: colours,
-// filaments and the dark theme (test report 11).
+// filaments and the dark theme (test report 11). T16: sketch editor (test report 18,
+// `--only T16 --out reports/tmp/report18/tauri`).
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -627,6 +628,81 @@ async function main() {
     check(!sum.colorGroup && sum.mColors === 0, "keine Farbgruppe");
     check(sum.notes.some((n) => n.includes("ohne Farbdialog")), `Hinweise ${sum.notes.join("; ")}`);
     e.details = { slots, export3mf: sum };
+  });
+
+  await test("T16", "Skizzen-Editor in Tauri: Zeichenmodus, Rechteck auf Rasterpunkten, Snap-Anzeige, Undo (TauriTransport, nativer Kernel)", async (check, e) => {
+    await ensureApp();
+    await exec("window.__cad.setThemePref('light'); window.__cad.store.setState({ colorsOpen: false })");
+    const SRC = "grid g {\n    x: a = 0, b = 10, c = 30;\n    y: u = 0, v = 15;\n}\nlinear_extrude(3) sketch {\n}\n";
+    const s0 = await state();
+    await exec("window.__cad.setText(arguments[0])", SRC);
+    await sceneReady(s0.sentVersion + 1);
+    await exec("window.__cad.setCursorLine(6, 0)");
+    await sceneReady();
+    const sk = () => exec("return window.__cad.sketch()");
+    await click("[data-testid=sketch-toggle]");
+    await waitFor("Zeichenmodus", async () => {
+      const s = await sk();
+      return s && s.raster && s.answers > 0 ? s : null;
+    });
+    const cam = await exec("return window.__cad.camera()");
+    check(cam.dir[2] < -0.9999, `Blick senkrecht auf die Skizzenebene (z = ${cam.dir[2].toFixed(5)})`);
+    await click("[data-testid=sketch-tool-rect]");
+    await waitFor("Werkzeug Rechteck", async () => ((await sk())?.tool === "rect" ? true : null));
+    // pointer events on the canvas (the view's listeners: capture on the container, move on the canvas)
+    const fire = (type, x, y) =>
+      exec(
+        "const c = document.querySelector('[data-testid=viewport-canvas]'); c.dispatchEvent(new PointerEvent(arguments[0], { clientX: arguments[1], clientY: arguments[2], bubbles: true, cancelable: true, composed: true, button: 0, buttons: arguments[0] === 'pointerdown' ? 1 : 0, pointerId: 1, pointerType: 'mouse', isPrimary: true })); return true;",
+        type,
+        x,
+        y,
+      );
+    const at = (x, y) => exec("return window.__cad.sketchScreen(arguments[0], arguments[1])", x, y);
+    const hover = async (x, y, kind) => {
+      const p = await at(x, y);
+      const n = (await sk()).answers;
+      await fire("pointermove", p.x, p.y);
+      return waitFor(`Snap ${kind}`, async () => {
+        const s = await sk();
+        return s.answers > n && s.snap && s.snap.kind === kind ? s : null;
+      });
+    };
+    const press = async (x, y) => {
+      const p = await at(x, y);
+      const n = (await sk()).answers;
+      await fire("pointerdown", p.x, p.y);
+      await fire("pointerup", p.x, p.y);
+      return waitFor("Klick beantwortet", async () => {
+        const s = await sk();
+        return s.answers > n ? s : null;
+      });
+    };
+    const h = await hover(10.2, 0.2, "grid");
+    check(h.snap.text === "g[b, u]", `Snap auf Rasterpunkt: ${h.snap.text}`);
+    const label = await exec("const l = document.querySelector('[data-testid=sketch-snap-label]'); return l && !l.hidden ? l.textContent : null");
+    check(label === "g[b, u]", `Snap-Beschriftung sichtbar: ${label}`);
+    await press(10.2, 0.2);
+    const h2 = await hover(30, 15, "grid");
+    check(h2.preview === 1, "Vorschau des Rechtecks");
+    e.images.push({ name: await shot("t16-vorschau"), label: "Rechteck: zweite Ecke g[c, v], Vorschau und Snap-Anzeige" });
+    await press(30, 15);
+    const s1 = await waitFor("Code geschrieben", async () => {
+      const s = await sk();
+      return s.actions >= 1 ? s : null;
+    });
+    const text = await exec("return window.__cad.text()");
+    check(text.includes("    start(g[b, u]);\n    line(to = g[c, u]);\n    line(to = g[c, v]);\n    line(to = g[b, v]);\n    close();\n}"), "Code im sketch-Block mit Rasterreferenzen");
+    const s2 = await sceneReady();
+    check(s2.diagnostics.filter((d) => d.severity === "error").length === 0, "keine Fehler, Körper nativ berechnet");
+    e.images.push({ name: await shot("t16-rechteck"), label: "Rechteck auf Rasterpunkten, Code links" });
+    await exec("window.__cad.undo()");
+    const back = await waitFor("Undo", async () => ((await exec("return window.__cad.text()")) === SRC ? true : null));
+    check(back === true, "Undo nimmt die Aktion als einen Schritt zurück");
+    await click("[data-testid=sketch-exit]");
+    check((await sk()) === null, "Zeichenmodus beendet");
+    const ms = s1.rtt.filter((r) => !r.click).map((r) => r.ms).sort((a, b) => a - b);
+    metrics.sketchTauri = { hoverMedianMs: ms[Math.floor(ms.length / 2)] ?? null, answers: s1.answers };
+    e.details = { text, rtt: s1.rtt };
   });
 
   await test("T14", "Thema „System“ in Tauri folgt dem GTK-Farbschema (prefers-color-scheme)", async (check, e) => {

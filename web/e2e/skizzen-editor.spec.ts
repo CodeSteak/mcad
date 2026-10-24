@@ -4,7 +4,7 @@
 // deleting a segment, sketches under transformations and in rotate_extrude, the dark theme.
 
 import { expect, test, type Page } from "@playwright/test";
-import { type Pt, clickLine, hook, line, loadText, mouseDrag, openApp, record18, screenshot18, waitDragDone, waitHandles, waitScene, waitView } from "./helpers";
+import { type Pt, clickLine, hook, line, loadText, mouseDrag, openApp, openExample, record18, screenshot18, waitDragDone, waitHandles, waitScene, waitView, writeMetrics18 } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => console.log("pageerror:", e.message));
@@ -28,6 +28,7 @@ interface SketchInfo {
   segment: { line: number } | null;
   raster: { lines: number; points: number; min: [number, number]; max: [number, number] } | null;
   drawn: Record<string, number>;
+  rtt: Array<{ ms: number; click: boolean }>;
 }
 
 type W = { __cad: { sketch(): SketchInfo | null; sketchScreen(x: number, y: number): { x: number; y: number; visible: boolean } | null; camera(): { eye: number[]; dir: number[] } | null; text(): string; undo(): boolean } };
@@ -538,4 +539,43 @@ test("Z16 Dunkles Thema", async ({ page }) => {
   expect(contrast).toBeGreaterThan(4.5);
   await screenshot18(page, "z16-dunkel", "full");
   record18({ id: "Z16", title: "Dunkles Thema", images: [{ name: "z16-dunkel", label: "Zeichenmodus im dunklen Thema" }], caption: "Raster, Vorschau, Snap-Markierung und Beschriftung nutzen die Farben des Themas (Snap-Beschriftung wie beim Griff-Snap).", checks: [`Kontrast der Snap-Beschriftung ${contrast!.toFixed(1)}:1`] });
+});
+
+test("Z17 Antwortzeiten: Snap und Vorschau beim Bewegen (Skizze mit Schleife, 42 Segmente)", async ({ page }) => {
+  await openApp(page);
+  await openExample(page, "spec/skizze_zahnriemenscheibe.scad", null);
+  await clickLine(page, 12, 10);
+  await waitScene(page, { context: "scheibe" });
+  await enter(page);
+  const s0 = (await info(page))!;
+  expect(s0.sketch?.line).toBe(11);
+  // a chain of lines from the centre: snap + preview on every move
+  await clicks(page, [[0, 0]]);
+  const n0 = (await info(page))!.rtt.length;
+  const pts: Pt[] = [];
+  for (let i = 0; i < 40; i++) {
+    const a = (i / 40) * Math.PI * 2;
+    pts.push(await scr(page, 5.5 * Math.cos(a), 5.5 * Math.sin(a)));
+  }
+  for (const p of pts) {
+    const before = (await info(page))!.answers;
+    await page.mouse.move(p.x, p.y);
+    await waitSketch(page, "(s, a) => s.answers > a", before);
+  }
+  const s = (await info(page))!;
+  const ms = s.rtt.slice(n0).filter((r) => !r.click).map((r) => r.ms).sort((a, b) => a - b);
+  const med = ms[Math.floor(ms.length / 2)];
+  const p95 = ms[Math.min(ms.length - 1, Math.floor(ms.length * 0.95))];
+  expect(ms.length).toBeGreaterThanOrEqual(30);
+  expect(med).toBeLessThan(150);
+  await screenshot18(page, "z17-zahnscheibe", "full");
+  writeMetrics18({ hover: { n: ms.length, medianMs: med, p95Ms: p95, maxMs: ms[ms.length - 1], segments: 42 } });
+  record18({
+    id: "Z17",
+    title: "Antwortzeiten",
+    images: [{ name: "z17-zahnscheibe", label: "Zahnriemenscheibe (Skizze mit for-Schleife) im Zeichenmodus" }],
+    caption:
+      "Jede Mausbewegung schickt den Strahl an die Engine (Worker, Wasm): Snap gegen Rasterpunkte, alle End-, Mittel- und Schnittpunkte der 42 Segmente, Vorschau; höchstens eine Anfrage unterwegs, die letzte Position gewinnt. Gemessen: Anfrage bis Antwort im Store.",
+    checks: [`${ms.length} Bewegungen: Median ${med.toFixed(1)} ms, 95 % ${p95.toFixed(1)} ms, max ${ms[ms.length - 1].toFixed(1)} ms`],
+  });
 });
