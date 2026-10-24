@@ -1709,7 +1709,14 @@ export class Viewer implements DragView, SketchView, MeasureView {
     this.pointer = { x: e.clientX, y: e.clientY };
     if (e.buttons !== 0 || this.drag?.active) return;
     if (this.sketch?.active) this.sketch.hover(this.ray(e.clientX, e.clientY), e.altKey);
-    if (this.measure?.active) this.measure.hover(e.clientX, e.clientY, e.altKey);
+    if (this.measure?.active) {
+      // measuring: the engine's element under the mouse is the highlight (no node hover, which
+      // would draw the node's own mesh and change what the raycast hits)
+      this.measure.hover(e.clientX, e.clientY, e.altKey);
+      this.renderer.domElement.style.cursor = "crosshair";
+      if (store.getState().viewHover !== null) this.setViewHover(null);
+      return;
+    }
     const g = this.handleAt(e.clientX, e.clientY);
     const hid = g?.handle.id ?? null;
     if (store.getState().hoverHandle !== hid) store.setState({ hoverHandle: hid });

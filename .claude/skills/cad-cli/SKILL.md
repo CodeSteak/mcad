@@ -1,6 +1,6 @@
 ---
 name: cad-cli
-description: Modelle der parametrischen CAD-Sprache (OpenSCAD-Stil mit Rastern, Ankern und Fillet-Zonen, Dateien *.scad) ohne UI entwickeln und prüfen – Übersicht, Diagnosen, Bilder (Kontaktbogen, Raster/Anker eingeblendet, Schnitt, Röntgen), Messungen (Abstände, Volumen, Kollisionen, Volumen je Farbe), Beobachten bei Dateiänderung, Parameter setzen und Export STL/3MF (mehrfarbig für Bambu Studio/OrcaSlicer)/STEP mit der CLI `cad` (crates/cad-cli). Verwenden, wenn ein Modell geschrieben, geändert, untersucht oder Fehler darin gesucht werden.
+description: Modelle der parametrischen CAD-Sprache (OpenSCAD-Stil mit Rastern, Ankern und Fillet-Zonen, Dateien *.scad) ohne UI entwickeln und prüfen – Übersicht, Diagnosen, Bilder (Kontaktbogen, Raster/Anker eingeblendet, Schnitt, Röntgen), Messungen an der exakten B-Rep (Abstand mit Fußpunkten, Radius/Durchmesser, Winkel, Länge, Fläche, Körper, Schnittkonturen und Wandstärke, Volumen, Kollisionen, Volumen je Farbe), Beobachten bei Dateiänderung, Parameter setzen und Export STL/3MF (mehrfarbig für Bambu Studio/OrcaSlicer)/STEP mit der CLI `cad` (crates/cad-cli). Verwenden, wenn ein Modell geschrieben, geändert, untersucht oder Fehler darin gesucht werden.
 ---
 
 # CAD-CLI `cad`
@@ -38,8 +38,11 @@ Agenten arbeiten immer mit den Befehlen unten, die UI ist nie nötig. Headless-B
    **das Bild ansehen** (Read-Tool). Für ein Modul `--module NAME` (Raster sind nur im eigenen
    Modul sichtbar), für Details `--line N`, `--section z=…`, `--xray`, `--show labels,dims`.
 5. **Nachmessen:** `cad inspect datei.scad --line N` (Knoten, Hülle, Volumen, Kanten,
-   Kernel-Meldung) und `cad measure` (Abstände zwischen Ankern/Rasterpunkten, Hülle, Volumen,
-   Kollisionen der Bauteile, Abstand zweier Bauteile).
+   Kernel-Meldung) und `cad measure`: exakt an der B-Rep Abstand (`--distance face@P face@Q`),
+   Radius (`--radius edge@P`), Winkel, Länge, Fläche, Körper; im Schnitt (`--section z=…`)
+   Konturen, Bohrungskreise und Wandstärke (`--wall P`); `--at P` sagt, welche Elemente bei P
+   liegen und wie man sie nennt. Dazu Abstände zwischen Ankern/Rasterpunkten, Hülle, Volumen,
+   Kollisionen der Bauteile, Abstand zweier Bauteile.
 6. **Ausgeben:** `cad export datei.scad -o teil.step` (oder `--all-parts -o ordner/`). Zum
    Mehrfarbdruck `cad export datei.scad -o teil.3mf` (Standard mehrfarbig: je Bauteil ein
    Objekt, Material außerhalb der Bauteile als Objekt „ohne Bauteil“, ein Teil je Farbe mit
@@ -193,9 +196,33 @@ der Moduldefinition.
 | `--colors` | Farbregionen: Volumen und Masse (PLA 1,24 g/cm³) je Farbe und Filament-Slot, je Bauteil (Summe = Bauteilvolumen) |
 | `--interference [--tolerance 0.001]` | Paarweises Schnittvolumen aller Bauteile (Kernel-Schnitt der exakten B-Rep), Kollisionen über der Toleranz (mm³) |
 | `--clearance A B [--mesh-tol 0.01]` | Kleinster Abstand zweier Bauteile über die Tessellierung (Dreieck-Dreieck-Abstand), Genauigkeit ± 2·mesh-tol; überschneiden sie sich: 0 und `collision: true` |
+| `--distance A B` | Kleinster Abstand zweier **Elemente** mit Fußpunkten, exakt aus der B-Rep (Ebenen, Zylinder, Kegel, Kugeln, Tori, Linien, Kreise geschlossen; sonst numerisch mit Toleranz); zwei parallele Ebenen: Normalabstand (`details`: „parallele Ebenen“, dazu der kleinste Abstand der begrenzten Flächen); parallele Achsen: Achsabstand. A/B: Punkt wie `--between` oder Elementreferenz (unten). Mehrfach |
+| `--radius REF` | Radius, Durchmesser, Mittelpunkt, Achse einer Kreiskante (`edge@P`) oder runden Fläche (`face@P`: Zylinder, Kegel mit Halbwinkel und Spitze, Kugel, Torus mit Ringradius; Verrundungen an Kreiskanten als Rotationsfläche erkannt; Freiform: Krümmungsradien, `exact: false`) |
+| `--angle A B` | Winkel zweier Kanten oder Flächen: Ebenen 0–90° (`values.opening` = Öffnungswinkel an der Schnittgeraden, `normals`), Geraden 0–90° (an gemeinsamer Ecke 0–180°), Gerade–Ebene; Zylinder/Kegel über die Achse |
+| `--length REF`, `--area face@P` | Länge einer Kante (exakt für Gerade/Bogen), Fläche einer Fläche (eben exakt) |
+| `--body REF` | Bauteil bzw. Körper des Elements: Volumen, Oberfläche, Schwerpunkt, Hülle aus der B-Rep (`details[0]`: „Bauteil k (Zeile 21)“) |
+| `--section z=W` (`--section-plane p,n`, `--section-flip`) | Schnitt wie `cad render`: Ebene ∩ B-Rep über den Kernel; allein: Bereiche mit Fläche und Löchern, Konturen mit Segmenten (`kind`, `center`, `radius`, `exact`, `source` = geschnittene Fläche), Kreise (Bohrungen), kleinste Wandstärke (Schätzung über 8 Stellen je Abschnitt). Mit `--distance`/`--radius`/`--angle`/`--length`/`--area region@P`/`--wall` misst man in der Ebene |
+| `--wall P` | Wandstärke im Schnitt am Konturpunkt nächst P, senkrecht zur Kontur durchs Material (braucht `--section`) |
+| `--at P` | Was bei P liegt: nächster Eckpunkt, Kantenmitte, Kreismitte, Kante, Fläche (im Schnitt: Kontur, Bereich) mit Referenz, Abstand und Herkunft – zum Finden der Referenzen |
+
+**Elementreferenzen:** `vertex@P`, `mid@P` (Kantenmitte), `center@P` (Kreismitte), `edge@P`,
+`face@P`, `body@P` nehmen das Element des Ergebnisses nächst P (P wie `--between`:
+`[x,y,z]`, Anker, Rasterpunkt); mit `--section` gelten `vertex@`, `mid@`, `center@`, `edge@`
+für die Schnittkontur und `region@P` für den Bereich, der P enthält (`face@`/`body@` dann
+nicht). Reihenfolge der Ergebnisse in `measurements`: Abstände, Radien, Winkel, Längen,
+Fläche, Körper, Wandstärken. Jede Messung hat `text` (Zeilen wie in der UI), `cli` (die
+Argumente, die sie wiederholen) und `picks[].origin` (Herkunft: `Zeile 11: box (Instanz k:
+gehaeuse)`, `Rasterebene g.innen_l`, `Rasterpunkt g[b, h, o]`, `Rasterlinie g[loch[0],
+mitte, *]`, `Anker k.ecke`). Die UI („Messen“, „Als cad measure kopieren“) erzeugt dieselben
+Aufrufe.
 
 Beispiel (Spec `gehaeuse`): `cad measure gehaeuse.scad --between k.ecke k.oben` → 67,082 mm,
 Δ [−60, −30, 0]; `cad measure gehaeuse.scad --module gehaeuse --between "g[links,vorne,boden]" "g[rechts,hinten,deckel]"` → 53,852 mm.
+Wandstärke: `cad measure gehaeuse.scad --section z=10 --wall "[0,15,10]"` → 3 mm (zwei Bereiche
+à 90 mm², kleinste Wand ≈ 3 mm); Innenmaß: `--distance "face@[3,15,10]" "face@[57,15,10]"` →
+54 mm (parallele Ebenen); Lochplatte: `cad measure lochplatte.scad --radius "face@[8,6,2]"` →
+R 2 · ⌀ 4 (Achse durch [6, 6, …], Rasterlinie g[loch[0], mitte, *]), `--section z=2` → vier
+Kreise R 2, `--distance "center@[6,6,0]" "center@[18,6,0]"` → 12 mm.
 
 ### `watch`
 
@@ -253,7 +280,15 @@ Offsets UTF-16). `Bounds = { min, max, size }`. Vollständiges Schema: Kopf von
 - `measure`: `+ { between?: {a: {ref, kind, point}, b, delta, distance}, bounds?: {target,
   bounds}, volume?: {target, volume}, area?: {target, area}, interference?: {parts, pairs,
   collisions: [{a, b, volume}]}, clearance?: {a, b, distance, point_a, point_b, collision,
-  accuracy} }`
+  accuracy}, measurements?: [{kind: distance|radius|angle|length|area|body|wall, title, value,
+  unit, label, values: [{key, label, value, unit}], lines, guides, points, at, details,
+  picks: [{kind, reference, label, point, origin}], exact, tol?, section?, text, cli}],
+  section?: {plane, exact, max_dev, area, regions: [{area, holes, bounds, reference,
+  contours: [{hole, area, segments}]}], circles: [{center, radius, diameter, full}],
+  min_wall}, at?: [{point, elements: [{kind, reference, label, point, distance, origin}]}] }`
+  – Werte auf 12 Stellen gerundet; `values` z. B. `distance, dx, dy, dz, min_distance,
+  axis_distance` · `radius, diameter, sweep, semi_angle, major` · `angle, opening, normals` ·
+  `volume, area, size_x/y/z` · `wall`
 - `watch` (eine Zeile je Lauf): `{ schema_version, command, run, trigger: start|change,
   changed, ok, errors, warnings, diagnostics, stats: {nodes, cache_hits, kernel_calls}, volume,
   bounds, parts: [{name, volume, bounds}], render, timings: {total_ms, eval_ms, kernel_ms,
@@ -280,6 +315,10 @@ cad render examples/spec/fillet_zonen.scad -o /tmp/f.png --line 12 --azimuth 120
 cad render examples/projekt-gehaeuse/gehaeuse.scad -o /tmp/d.png --part deckel --xray
 cad measure examples/spec/gehaeuse.scad --between k.ecke k.oben --volume part:k
 cad measure examples/projekt-gehaeuse/gehaeuse.scad --interference --clearance gehaeuse deckel
+cad measure examples/spec/lochplatte.scad --at "[8,6,2]"
+cad measure examples/spec/lochplatte.scad --radius "face@[8,6,2]" --distance "center@[6,6,0]" "center@[18,6,0]" --json
+cad measure examples/spec/gehaeuse.scad --section z=10 --wall "[0,15,10]" --distance "edge@[3,15,10]" "edge@[57,15,10]"
+cad measure examples/spec/fase_chamfer.scad --angle "face@[39.5,12,9.5]" "face@[20,12,10]"
 cad set examples/spec/gehaeuse.scad --param gehaeuse.w=50 --dry-run
 cad watch teil.scad --json --render /tmp/teil.png --views all --show grids,anchors &
 ```
