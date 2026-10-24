@@ -16,6 +16,8 @@ Lizenzen: `OFL-JetBrainsMono.txt` (Copyright 2020 The JetBrains Mono Project Aut
 `OFL-Inter.txt` (Copyright 2016 The Inter Project Authors), `OFL-AllertaStencil.txt`
 (Copyright 2010 Matt McInerney, Reserved Font Name „Allerta“).
 
-**Standardschrift.** `"cad stencil mono"` ist als künftige Standardschrift reserviert (eigene
-Schablonenschrift aus Geraden und Bögen, Plan 17.4; folgt mit `stroke`). Bis dahin wählen der
-Name und ein fehlendes `font` JetBrains Mono.
+**Standardschrift.** `"cad stencil mono"` (Plan 17.4/17.11) ist keine Schriftdatei: die
+Glyphen sind Mittellinien aus Geraden und Kreisbögen in `src/stencil.rs`, gezeichnet mit der
+Strichstärke `stroke_width`, abzüglich der Stege `bridge_width` (exakte Konturen über
+`cad_kernel::region2`). Sie gilt ohne `font` und für unbekannte Familien; Zeichen außerhalb
+ihres Umfangs kommen aus JetBrains Mono.

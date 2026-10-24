@@ -18,4 +18,6 @@ i_triangle = "0.50"
 [dev-dependencies]
 kernel-smlib.workspace = true
 cad-eval.workspace = true
+cad-font = { path = "../cad-font" }
+cad-outline = { path = "../cad-outline" }
 zip = { version = "2", default-features = false }

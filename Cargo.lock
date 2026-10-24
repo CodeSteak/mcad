@@ -374,8 +374,10 @@ version = "0.1.0"
 dependencies = [
  "blake3",
  "cad-eval",
+ "cad-font",
  "cad-ir",
  "cad-kernel",
+ "cad-outline",
  "cad-step",
  "cad-syntax",
  "glam",
@@ -403,6 +405,7 @@ dependencies = [
 name = "cad-font"
 version = "0.1.0"
 dependencies = [
+ "cad-kernel",
  "cad-outline",
  "glam",
  "rustybuzz",

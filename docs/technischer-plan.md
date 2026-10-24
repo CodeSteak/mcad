@@ -767,8 +767,9 @@ CLI: `cad render --theme dark`.
 Stand: Plan, abgestimmt mit dem Nutzer am 2026-10-23. **Schritt 1 umgesetzt** (Skizzen mit
 gemischten Konturen, Module als Namensräume; Testbericht 14, Entscheidungen in 17.8), **Schritt 2
 umgesetzt** (`corner`, `fillet2d`/`chamfer2d`, `offset`, `stroke`; Testbericht 15, Entscheidungen
-in 17.9); **aus Schritt 3 umgesetzt:** `text()` mit den mitgelieferten OFL-Schriften und
-SVG-Import (Testbericht 16, Entscheidungen in 17.10); die eigene Schablonenschrift folgt.
+in 17.9); **Schritt 3 umgesetzt:** `text()` mit den mitgelieferten OFL-Schriften und
+SVG-Import (Testbericht 16, Entscheidungen in 17.10), die eigene Schablonenschrift
+„cad stencil mono“ als Standardschrift (Schritt 3b, Testbericht 17, Entscheidungen in 17.11).
 Schritt 4 geplant.
 
 ### 17.1 Skizzen
@@ -828,7 +829,7 @@ Zonen wie in 3D, `stroke(w, cap = "round" | "flat" | "square", join = "round" | 
   (`"cad stencil mono"`), aus Geraden und Bögen konstruiert, mit Stegen, sodass keine
   Inseln herausfallen (Innenräume von O, A, B, D, P, R, 0, 4, 6, 8, 9 usw. sind verbunden).
   Umfang: A–Z, a–z, 0–9, ÄÖÜäöüß, übliche Satz- und Sonderzeichen. Parameter: Strichstärke,
-  Stegbreite.
+  Stegbreite (`text(…, stroke_width = …, bridge_width = …)` in mm; umgesetzt in 17.11).
 - **Mitgelieferte freie Schriften (OFL):** Inter (Sans), JetBrains Mono (Mono),
   Allerta Stencil (proportionale Schablone). Eigene Schriften per UI-Upload oder Pfad (CLI).
 - Umrisse exakt als Bézier/NURBS-Konturen, Kerning über Shaping, Löcher nach Windungsregel.
@@ -1104,9 +1105,9 @@ breit), `halign` nach der Laufweite, `valign` nach der Hülle der Glyphen, `spac
 die Laufweite, `direction` ltr/rtl/ttb/btt, `language`, `script` (ISO 15924 oder Namen wie
 `"latin"`); ohne Angabe ermittelt der Shaper Richtung und Schrift. Hülle und Fläche stimmen mit
 OpenSCAD überein (Bericht 16). Schriftwahl: `"Familie"`, `"Familie:style=Bold"`; unbekannter
-Stil → Regular (Warnung), unbekannte Familie → JetBrains Mono (Warnung), `font = "datei.ttf"`
-→ Projektdatei. **Standardschrift:** `"cad stencil mono"` ist reserviert (Hinweis, vorerst
-JetBrains Mono); ohne `font` JetBrains Mono. **Fehlende Zeichen:** je Zeichen aus JetBrains
+Stil → Regular (Warnung), unbekannte Familie → Standardschrift (Warnung; bis Schritt 3b
+JetBrains Mono), `font = "datei.ttf"` → Projektdatei. **Standardschrift:** seit Schritt 3b
+`"cad stencil mono"` (17.11; vorher JetBrains Mono). **Fehlende Zeichen:** je Zeichen aus JetBrains
 Mono gleichen Gewichts (Laufweite der Ersatzschrift, Warnung „Zeichen … fehlen in …“); Allerta
 Stencil (unverändert mitgeliefert: der Reserved Font Name verbietet veränderte Fassungen unter
 dem Namen) fehlen ẞ„‚{}_#°²³§~^·•…±µØø. Zeichen in keiner Schrift: `.notdef` und Warnung.

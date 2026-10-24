@@ -457,9 +457,12 @@ linear_extrude(2) import("logo.svg", center = true);             // auch id = "�
 
 - `text()` wie OpenSCAD (`size` ≈ Versalhöhe, em = size/0,72; Laufweite/Ausrichtung gleich
   OpenSCAD 2021.01; `spacing`, `direction` ltr/rtl/ttb/btt, `language`, `script`).
-  Mitgeliefert: JetBrains Mono (Standard; Regular/Bold), Inter (Regular/Bold), Allerta Stencil.
-  `"cad stencil mono"` ist reserviert (vorerst JetBrains Mono, Hinweis). Unbekannte Schrift →
-  Warnung + JetBrains Mono; fehlende Zeichen (z. B. `°` in Allerta Stencil) → Warnung, Zeichen
+  Standard: `"cad stencil mono"` (eigene monospaced Schablonenschrift, Regular/Bold, keine
+  Löcher – Innenräume über Stege verbunden; `stroke_width`/`bridge_width` in mm, Standard
+  0,14·size bzw. 0,1·size, Grenzen 0,2·size bzw. 0,03…0,2·size, `bridge_width = 0` ohne
+  Stege). Mitgeliefert: JetBrains Mono (Regular/Bold), Inter (Regular/Bold), Allerta Stencil.
+  Für OpenSCAD-gleiche Maße eine TTF-Schrift explizit angeben (`font = "Inter"`). Unbekannte
+  Schrift → Warnung + cad stencil mono; fehlende Zeichen (z. B. `°` in Allerta Stencil) → Warnung, Zeichen
   aus JetBrains Mono. Umlaute, ß/ẞ und übliche Satzzeichen haben alle mitgelieferten Schriften
   (Ausnahmen Allerta Stencil: ẞ„‚{}_#°²³§~^·•…±µØø).
 - `import("….svg")`: Pfade, Rechtecke (rx/ry), Kreise/Ellipsen exakt, Polygone, Gruppen mit

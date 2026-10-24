@@ -1,7 +1,8 @@
 // Zweck: Schild mit Relief-Text (Plan 17.4, Bericht 16) – Grundplatte mit Rand, erhabener Text in
 // zwei Schriften – mehrfarbig (3MF mit einem Filament je Farbe).
-// Schriften: mitgeliefert sind JetBrains Mono (Standard), Inter und Allerta Stencil, je mit
-// Stil (`"Inter:style=Bold"`); eigene Schriften mit `font = "datei.ttf"` (Datei im Projekt).
+// Schriften: Standard ist die Schablonenschrift "cad stencil mono" (schablone.scad); mitgeliefert
+// sind außerdem JetBrains Mono, Inter und Allerta Stencil, je mit Stil (`"Inter:style=Bold"`);
+// eigene Schriften mit `font = "datei.ttf"` (Datei im Projekt).
 // `size` wie in OpenSCAD: Versalhöhe etwa `size`.
 
 breite = 100;

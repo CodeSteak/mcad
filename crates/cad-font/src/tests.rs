@@ -2,10 +2,10 @@ use super::*;
 use cad_outline::FillRule;
 
 fn lay(font: &str, text: &str, f: impl FnOnce(&mut TextParams)) -> Layout {
-    let (b, _) = builtin(&FontName::parse(font));
+    let (font, _) = select(&FontName::parse(font));
     let mut p = TextParams { text: text.into(), ..Default::default() };
     f(&mut p);
-    layout(&Font::builtin(b), &p).unwrap()
+    layout(&font, &p).unwrap()
 }
 
 fn area(l: &Layout) -> f64 {
@@ -159,17 +159,27 @@ fn directions() {
 #[test]
 fn font_names() {
     assert_eq!(FontName::parse("Inter:style=Bold"), FontName { family: "Inter".into(), style: Some("Bold".into()) });
-    assert_eq!(builtin(&FontName::parse("inter:style=bold")).0.style, "Bold");
-    assert_eq!(builtin(&FontName::parse("JetBrainsMono")).0.family, "JetBrains Mono");
-    let (b, p) = builtin(&FontName::parse("Inter:style=Black"));
+    assert_eq!(builtin(&FontName::parse("inter:style=bold")).unwrap().0.style, "Bold");
+    assert_eq!(builtin(&FontName::parse("JetBrainsMono")).unwrap().0.family, "JetBrains Mono");
+    let (b, p) = builtin(&FontName::parse("Inter:style=Black")).unwrap();
     assert_eq!((b.style, p), ("Regular", Pick::StyleMissing));
-    let (b, p) = builtin(&FontName::parse("Comic Sans"));
-    assert_eq!((b.family, p), (DEFAULT_FAMILY, Pick::Fallback));
-    let (b, p) = builtin(&FontName::parse(STENCIL_FAMILY));
-    assert_eq!((b.family, p), (DEFAULT_FAMILY, Pick::Stencil));
-    assert_eq!(builtin(&FontName::parse("")).0.family, DEFAULT_FAMILY);
+    assert!(builtin(&FontName::parse("Comic Sans")).is_none());
+    let names = |n: &str| {
+        let (f, p) = select(&FontName::parse(n));
+        (f.names().0, f.names().1, p)
+    };
+    // the stencil font: default, own name, unknown families
+    let stencil = |sty: &str, p: Pick| (STENCIL_FAMILY.to_string(), sty.to_string(), p);
+    assert_eq!(names(""), stencil("Regular", Pick::Exact));
+    assert_eq!(names("cad stencil mono"), stencil("Regular", Pick::Exact));
+    assert_eq!(names("CadStencilMono:style=Bold"), stencil("Bold", Pick::Exact));
+    assert_eq!(names("cad stencil mono:style=Thin"), stencil("Regular", Pick::StyleMissing));
+    assert_eq!(names("Comic Sans"), stencil("Regular", Pick::Fallback));
+    assert_eq!(names("Inter:style=Bold"), ("Inter".to_string(), "Bold".to_string(), Pick::Exact));
+    assert!(select(&FontName::parse("")).0.is_stencil() && DEFAULT_FAMILY == STENCIL_FAMILY);
     assert!(FontName::is_file("fonts/Meine.TTF") && FontName::is_file("x.otf") && !FontName::is_file("Inter"));
-    assert_eq!(builtin_names().len(), BUILTIN.len());
+    assert_eq!(builtin_names().len(), BUILTIN.len() + 2);
+    assert_eq!(builtin_names()[0], "cad stencil mono:style=Regular");
 }
 
 #[test]
@@ -196,23 +206,26 @@ fn cff_outlines_are_cubic() {
     assert!((area(&l) - area(&ttf)).abs() / area(&ttf) < 0.01, "same design: {} vs {}", area(&l), area(&ttf));
 }
 
-/// Every bundled font has a real glyph for every character of the required set – except the
-/// documented gaps of Allerta Stencil, which come from JetBrains Mono; nothing is `.notdef`.
+/// Every bundled font – the stencil font included – has a real glyph for every character of
+/// the required set, except the documented gaps of Allerta Stencil, which come from JetBrains
+/// Mono; nothing is `.notdef`.
 #[test]
 fn required_chars_in_every_font() {
-    for b in BUILTIN {
-        let f = Font::builtin(b);
+    let fonts = BUILTIN.iter().map(Font::builtin).chain([Font::stencil(false), Font::stencil(true)]);
+    for f in fonts {
+        let (fam, sty) = f.names();
         let miss: String = missing_chars(&f, REQUIRED_CHARS).into_iter().collect();
-        let gaps = if b.family == "Allerta Stencil" { ALLERTA_STENCIL_GAPS } else { "" };
-        assert_eq!(miss, gaps, "{} {}", b.family, b.style);
+        let gaps = if fam == "Allerta Stencil" { ALLERTA_STENCIL_GAPS } else { "" };
+        assert_eq!(miss, gaps, "{fam} {sty}");
         let l = layout(&f, &TextParams { text: REQUIRED_CHARS.into(), ..Default::default() }).unwrap();
-        assert!(l.missing.is_empty(), "{}", b.family);
+        assert!(l.missing.is_empty(), "{fam}");
         assert_eq!(l.fallback.iter().collect::<String>(), gaps);
         assert!(l.glyphs.iter().all(|g| g.id != 0));
         // each character alone gives an outline (JetBrains Mono joins some pairs to ligatures)
         for c in REQUIRED_CHARS.chars().filter(|c| *c != ' ') {
             let l = layout(&f, &TextParams { text: c.to_string(), ..Default::default() }).unwrap();
-            assert!(l.glyphs.len() == 1 && l.glyphs[0].id != 0, "{} {c:?}", b.family);
+            assert!(l.glyphs.len() == 1 && l.glyphs[0].id != 0, "{fam} {c:?}");
+            assert_eq!(l.glyphs[0].fallback, gaps.contains(c), "{fam} {c:?}");
         }
     }
     // the fallback has everything
@@ -222,7 +235,7 @@ fn required_chars_in_every_font() {
 /// A character the font lacks comes from JetBrains Mono, at its place in the line.
 #[test]
 fn fallback_to_jetbrains_mono() {
-    let (b, _) = builtin(&FontName::parse("Allerta Stencil"));
+    let (b, _) = builtin(&FontName::parse("Allerta Stencil")).unwrap();
     let f = Font::builtin(b);
     let ch = ['Ж', 'Ω', '→', '∑'].into_iter().find(|c| !missing_chars(&f, &c.to_string()).is_empty()).unwrap();
     let fb = fallback_font(&f);
@@ -239,4 +252,173 @@ fn fallback_to_jetbrains_mono() {
     // a character no font has: .notdef of the font, reported
     let l = layout(&f, &TextParams { text: "A\u{e000}".into(), ..Default::default() }).unwrap();
     assert_eq!(l.missing, vec!['\u{e000}']);
+}
+
+// ------------------------------------------------------------------------ cad stencil mono
+
+/// Parameter combinations (stroke, bridge as fractions of `size`) the stencil glyphs are
+/// checked with: defaults regular/bold, the limits and some in between.
+const STENCIL_PARAMS: &[(f64, f64)] = &[
+    (stencil::DEFAULT_STROKE, stencil::DEFAULT_BRIDGE),
+    (stencil::DEFAULT_STROKE_BOLD, stencil::DEFAULT_BRIDGE),
+    (0.03, stencil::MIN_BRIDGE),
+    (0.08, 0.05),
+    (0.1, stencil::MAX_BRIDGE),
+    (0.17, 0.15),
+    (stencil::MAX_STROKE, stencil::MIN_BRIDGE),
+    (stencil::MAX_STROKE, stencil::MAX_BRIDGE),
+];
+
+/// Every glyph is a valid region without holes (Plan 17.4: no islands): closed loops of lines
+/// and arcs, counter-clockwise (no clockwise hole loops), no self-overlaps (a union of the
+/// loops gives the same region), no slivers.
+#[test]
+fn stencil_glyphs_have_no_holes() {
+    use cad_kernel::Segment;
+    use cad_kernel::region2::{self, Fill, Operand};
+    for &(sf, bf) in STENCIL_PARAMS {
+        let (w, bw) = (sf * stencil::CAP, bf * stencil::CAP);
+        for ch in stencil::CHARS.chars().filter(|c| *c != ' ') {
+            let what = format!("{ch:?} stroke {sf} bridge {bf}");
+            let loops = stencil::region(ch, w, bw).unwrap();
+            assert!(!loops.is_empty(), "{what}: empty");
+            for lp in &loops {
+                let a = region2::loop_area(lp);
+                assert!(a > 0.0, "{what}: hole (loop area {a})");
+                // pieces are at least a fifth of a stroke square (dots are one square)
+                assert!(a > 0.2 * w * w, "{what}: sliver of area {a}");
+                for (i, s) in lp.iter().enumerate() {
+                    assert!(!matches!(s, Segment::Nurbs(_)), "{what}: lines and arcs only");
+                    let next = &lp[(i + 1) % lp.len()];
+                    assert!(s.end().distance(next.start()) < 1e-6, "{what}: loop not closed");
+                }
+            }
+            let total: f64 = loops.iter().map(|l| region2::loop_area(l)).sum();
+            let again = region2::combine(&[Operand::new(loops.clone(), Fill::NonZero)], &|i: &[bool]| i[0]);
+            let total2: f64 = again.iter().map(|l| region2::loop_area(l)).sum();
+            assert!((total - total2).abs() < 1e-6 * total, "{what}: self-overlap {total} vs {total2}");
+            assert_eq!(again.len(), loops.len(), "{what}: loops touch or overlap");
+        }
+    }
+}
+
+/// Without bridges (`bridge_width = 0`) the counters stay closed, like a normal font.
+#[test]
+fn stencil_without_bridges_has_counters() {
+    let holes = |ch: char| {
+        let r = stencil::region(ch, 100.0, 0.0).unwrap();
+        r.iter().filter(|l| cad_kernel::region2::loop_area(l) < 0.0).count()
+    };
+    assert_eq!((holes('O'), holes('B'), holes('8'), holes('A'), holes('e'), holes('H')), (1, 2, 2, 1, 1, 0));
+    // with bridges: O in two halves, B stem and bowls apart
+    let pieces = |ch: char| stencil::region(ch, 100.0, 72.0).unwrap().len();
+    assert_eq!((pieces('O'), pieces('B'), pieces('H'), pieces('i')), (2, 2, 1, 2));
+}
+
+fn stencil_lay(text: &str, f: impl FnOnce(&mut TextParams)) -> Layout {
+    lay("", text, f)
+}
+
+/// Metrics as OpenSCAD's `size`: cap height = `size`, monospaced advance 600/1000 em with
+/// OpenSCAD's 1000/1024 like JetBrains Mono, every glyph inside its cell.
+#[test]
+fn stencil_metrics_and_monospaced_advance() {
+    let size = 10.0;
+    let k = size / SIZE_TO_EM / stencil::UPEM;
+    let adv = stencil::ADVANCE * k * OPENSCAD_POSITION_SCALE;
+    let jb = lay("JetBrains Mono", "H", |_| {}).advance.x;
+    assert!((adv - jb).abs() < 1e-9, "advance like JetBrains Mono: {adv} vs {jb}");
+    let (lo, hi) = stencil_lay("H", |_| {}).bounds().unwrap();
+    assert!(lo.y.abs() < 1e-9 && (hi.y - size).abs() < 1e-9, "cap height = size: {lo} {hi}");
+    let (_, hx) = stencil_lay("x", |_| {}).bounds().unwrap();
+    assert!((hx.y - stencil::XHEIGHT * k).abs() < 1e-9);
+    for ch in stencil::CHARS.chars() {
+        let l = stencil_lay(&ch.to_string(), |_| {});
+        assert!((l.advance.x - adv).abs() < 1e-9, "{ch:?}: advance {}", l.advance.x);
+        if let Some((lo, hi)) = l.bounds() {
+            assert!(lo.x >= -1e-9 && hi.x <= stencil::ADVANCE * k + 1e-9, "{ch:?} outside its cell: {lo} {hi}");
+            assert!(lo.y >= stencil::DESCENDER * k - 1e-9 && hi.y <= 1.25 * size, "{ch:?}: {lo} {hi}");
+        }
+    }
+    // a line of n characters is n advances long, with spacing
+    let line = stencil_lay("Hallo Welt 42", |_| {});
+    assert!((line.advance.x - 13.0 * adv).abs() < 1e-9);
+    let wide = stencil_lay("Hallo", |p| p.spacing = 1.5);
+    assert!((wide.advance.x - 7.5 * adv).abs() < 1e-9);
+    assert_eq!(line.glyphs.len(), 11, "no glyph for spaces");
+}
+
+/// Areas: exact for H (two stems and a bar), plausible against JetBrains Mono, growing with
+/// the stroke width, bridges remove a little.
+#[test]
+fn stencil_areas() {
+    let size = 10.0;
+    let k = size / SIZE_TO_EM / stencil::UPEM;
+    let w = stencil::DEFAULT_STROKE * stencil::CAP;
+    let (l, r) = (60.0 + w / 2.0, 540.0 - w / 2.0);
+    let h_exact = (2.0 * w * stencil::CAP + (r - l - w) * w) * k * k;
+    let h = area(&stencil_lay("H", |_| {}));
+    assert!((h - h_exact).abs() < 1e-9 * h_exact, "H: {h} vs {h_exact}");
+    // the alphabet against JetBrains Mono Regular
+    let abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    let (s, j) = (area(&stencil_lay(abc, |_| {})), area(&lay("JetBrains Mono", abc, |_| {})));
+    assert!(s / j > 0.9 && s / j < 1.5, "stencil {s} vs JetBrains Mono {j}");
+    // o: ring of width w along the centre line, minus two bridges
+    let o = area(&stencil_lay("o", |_| {}));
+    let rr = (r - l) / 2.0;
+    let len = 2.0 * std::f64::consts::PI * rr + 2.0 * ((stencil::XHEIGHT - w) - 2.0 * rr);
+    let ring = len * w * k * k;
+    let bridges = 2.0 * stencil::DEFAULT_BRIDGE * stencil::CAP * w * k * k;
+    assert!((o - (ring - bridges)).abs() < 0.03 * ring, "o: {o} vs {}", ring - bridges);
+    // heavier strokes, wider bridges; bold
+    let thick = area(&stencil_lay(abc, |p| p.stroke_width = Some(1.8)));
+    assert!(thick > 1.15 * s);
+    let wide = area(&stencil_lay(abc, |p| p.bridge_width = Some(1.6)));
+    assert!(wide < s && wide > 0.85 * s);
+    let bold = area(&lay("cad stencil mono:style=Bold", abc, |_| {}));
+    let as_bold = area(&stencil_lay(abc, |p| p.stroke_width = Some(stencil::DEFAULT_STROKE_BOLD * size)));
+    assert!((bold - as_bold).abs() < 1e-9 * bold && bold > 1.2 * s, "bold {bold} vs {s}");
+    // stroke width in mm: the default equals 0.14 × size; it scales with the size
+    let explicit = area(&stencil_lay(abc, |p| p.stroke_width = Some(1.4)));
+    assert!((explicit - s).abs() < 1e-9 * s);
+    let big = area(&stencil_lay(abc, |p| p.size = 20.0));
+    assert!((big - 4.0 * s).abs() < 1e-4 * big, "{big} vs 4 × {s}");
+    // limits: clamped
+    let p = TextParams { stroke_width: Some(9.0), bridge_width: Some(9.0), ..Default::default() };
+    let (w_max, b_max) = stencil_widths(false, &p);
+    assert!((w_max - stencil::MAX_STROKE * stencil::CAP).abs() < 1e-9);
+    assert!((b_max - stencil::MAX_BRIDGE * stencil::CAP).abs() < 1e-9);
+    let (_, b_min) = stencil_widths(false, &TextParams { bridge_width: Some(0.01), ..Default::default() });
+    assert!((b_min - stencil::MIN_BRIDGE * stencil::CAP).abs() < 1e-9);
+    let (_, b0) = stencil_widths(false, &TextParams { bridge_width: Some(0.0), ..Default::default() });
+    assert_eq!(b0, 0.0);
+}
+
+/// Alignment, directions and the fallback work with the stencil font as with the others.
+#[test]
+fn stencil_layout_features() {
+    let base = stencil_lay("Hg", |_| {});
+    let c = stencil_lay("Hg", |p| p.halign = HAlign::Center);
+    assert!((c.origin.x + base.advance.x / 2.0).abs() < 1e-12);
+    let t = stencil_lay("Hg", |p| p.valign = VAlign::Top);
+    let (_, hi) = t.bounds().unwrap();
+    assert!(hi.y.abs() < 0.3, "top: {hi}");
+    let rtl = stencil_lay("HI", |p| p.direction = Some(Dir::Rtl));
+    assert!(
+        rtl.glyphs[0].cluster > rtl.glyphs[1].cluster
+            && (rtl.advance.x - stencil_lay("HI", |_| {}).advance.x).abs() < 1e-9
+    );
+    let ttb = stencil_lay("HH", |p| p.direction = Some(Dir::Ttb));
+    assert!(ttb.advance.y < 0.0 && ttb.advance.x == 0.0);
+    let (lo, hi) = ttb.bounds().unwrap();
+    assert!(lo.x < 0.0 && hi.x > 0.0, "centred on the pen: {lo} {hi}");
+    // characters the stencil font lacks: JetBrains Mono, reported
+    let l = stencil_lay("AЖB", |_| {});
+    assert_eq!(l.fallback, vec!['Ж']);
+    assert!(l.glyphs[1].fallback && !l.glyphs[0].fallback);
+    assert_eq!(missing_chars(&Font::stencil(false), "AЖ€"), vec!['Ж']);
+    assert_eq!(fallback_font(&Font::stencil(true)).names(), ("JetBrains Mono".into(), "Bold".into()));
+    // an unknown script is an error as with the other fonts
+    let p = TextParams { text: "x".into(), script: Some("nope!".into()), ..Default::default() };
+    assert!(layout(&Font::stencil(false), &p).is_err());
 }

@@ -302,6 +302,33 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
+        file: "schablone.scad",
+        grids: &[],
+        instances: &[],
+        handles: 4,
+        ops: &[("linear_extrude", 3), ("difference", 1), ("offset", 2)],
+        check: |out| {
+            // the default font is the stencil font: glyphs of lines and arcs without holes,
+            // "LACK 08" 6 glyphs and "RAL 9005 B" 8 glyphs (no glyph for spaces)
+            let glyphs: Vec<&Vec<cad_ir::Contour>> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match &n.op {
+                    Op::Profile(cad_ir::Profile::Sketch { contours, .. }) => Some(contours),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(glyphs.len(), 6 + 8);
+            for c in glyphs.iter().flat_map(|g| g.iter()) {
+                assert!(c.segs.iter().all(|s| matches!(s.kind(), "line" | "arc")), "lines and arcs");
+                let pts: Vec<_> = c.segs.iter().flat_map(|s| s.to_kernel().unwrap().sample(1e-3)).collect();
+                let a: f64 = (0..pts.len()).map(|i| pts[i].perp_dot(pts[(i + 1) % pts.len()])).sum();
+                assert!(a > 0.0, "outer contours only (no holes)");
+            }
+        },
+    },
+    Expect {
         file: "skizze_bibliothek.scad",
         grids: &[],
         instances: &[],
