@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { type Page, expect, test } from "@playwright/test";
-import { cad, hook, loadText, openApp, record12, screenshot12, waitScene, waitView } from "./helpers";
+import { cad, hook, loadText, openApp, record12, screenshot12, sideTab, waitScene, waitView } from "./helpers";
 
 test.setTimeout(180_000);
 
@@ -61,7 +61,7 @@ async function huePixels(page: Page, hex: string): Promise<number> {
 
 async function openWithList(page: Page): Promise<void> {
   await openApp(page);
-  await page.evaluate(() => localStorage.setItem("cad-colors-open", "1"));
+  await sideTab(page, "Farben").click();
 }
 
 test("G01 F1: gleiche Geometrie, verschiedene Farben – Regionen und Farbe je Fläche", async ({ page }) => {
@@ -73,14 +73,14 @@ test("G01 F1: gleiche Geometrie, verschiedene Farben – Regionen und Farbe je F
   for (const [k, v] of Object.entries(reg)) expect(v, k).toBeGreaterThan(300);
   await screenshot12(page, "g01-regionen");
   // colours per face (regions off): each cube its own colour (before: three red cubes)
-  await page.getByTestId("colors-regions").uncheck();
+  await page.getByRole("checkbox", { name: "Farbregionen zeigen" }).uncheck();
   await waitView(page, "(s) => s.view.regionsDrawn === 0");
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const faces = { red: await huePixels(page, "#c74240"), blue: await huePixels(page, "#2e65b9"), green: await huePixels(page, "#4ca167") };
   for (const [k, v] of Object.entries(faces)) expect(v, k).toBeGreaterThan(300);
   await screenshot12(page, "g01-flaechen");
   // a loop over palette names with equal tiles
-  await page.getByTestId("colors-regions").check();
+  await page.getByRole("checkbox", { name: "Farbregionen zeigen" }).check();
   await loadText(page, caseText("palette.scad"));
   await waitView(page, "(s) => s.view.regionsDrawn === 16");
   const teal = await huePixels(page, "#217274");
@@ -110,12 +110,12 @@ test("G02 F2: Slot einer Parameterfarbe schreibt filament(…) statt filament = 
   await openWithList(page);
   const src = caseText("slot_mod.scad");
   await loadText(page, src);
-  await expect(page.getByTestId("colors-panel")).toBeVisible();
-  await page.getByTestId("color-slot-red").selectOption("4");
+  await expect(page.getByRole("region", { name: "Farben und Filamente" })).toBeVisible();
+  await page.getByRole("combobox", { name: "Filament für red" }).selectOption("4");
   await expect.poll(() => text(page)).toContain('filament("red", 4);');
   expect(await text(page)).not.toContain("filament = 4");
   await waitScene(page);
-  await expect(page.getByTestId("color-slot-red")).toHaveValue("4");
+  await expect(page.getByRole("combobox", { name: "Filament für red" })).toHaveValue("4");
   const s = await cad(page);
   expect(s.colors.map((c) => [c.label, c.filament, c.explicit])).toEqual([
     ["red", 4, true],
@@ -123,7 +123,7 @@ test("G02 F2: Slot einer Parameterfarbe schreibt filament(…) statt filament = 
     ["green", 2, false],
   ]);
   await screenshot12(page, "g02-tabelle", "full");
-  await page.getByTestId("color-slot-red").selectOption("auto");
+  await page.getByRole("combobox", { name: "Filament für red" }).selectOption("auto");
   await expect.poll(() => text(page)).toBe(src);
   record12({
     id: "G02",
@@ -180,7 +180,7 @@ test("G04 F4/Bambu: Material außerhalb von Bauteilen, 3MF ohne Farbgruppe", asy
   expect(sum.mColors).toBe(0);
   expect(sum.notes.join(" ")).toContain("ohne Farbdialog");
   // the button: the notice names the objects
-  const [dl] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-3mf-colors").click()]);
+  const [dl] = await Promise.all([page.waitForEvent("download"), page.getByRole("region", { name: "Farben und Filamente" }).getByRole("button", { name: "3MF mehrfarbig" }).click()]);
   expect(readFileSync((await dl.path())!).toString("utf8")).toContain('name="ohne Bauteil – yellow"');
   await expect(page.getByTestId("status-notice")).toContainText("ohne Bauteil");
   await screenshot12(page, "g04-export", "full");

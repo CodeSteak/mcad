@@ -16,6 +16,7 @@ import {
   loadText,
   mouseDrag,
   openApp,
+  openExample,
   recordB,
   screenshotB,
   waitDragDone,
@@ -224,9 +225,9 @@ test("B04 Alt-Ziehen: frei, Zahlen auf die Schrittweite gerundet", async ({ page
   expect(v[0]).toBeGreaterThan(20);
   const first = lines(after, 7);
   // Step 0.5 mm in the settings.
-  await page.getByTestId("settings").click();
-  await page.getByTestId("setting-stepMm").fill("0.5");
-  await page.getByTestId("settings").click();
+  await page.getByRole("button", { name: "Einstellungen", exact: true }).click();
+  await page.getByRole("dialog", { name: "Einstellungen" }).getByRole("spinbutton", { name: "Schrittweite Länge" }).fill("0.5");
+  await page.getByRole("button", { name: "Einstellungen", exact: true }).click();
   await clickLine(page, 7, 0);
   [h] = await waitHandles(page);
   const f2 = grip(h);
@@ -467,13 +468,13 @@ test("B11 Parameterleiste: Vorschau, Reset, Als Standard übernehmen", async ({ 
   const src0 = await text(page);
   await clickLine(page, 10, 6);
   await waitScene(page, { context: "gehaeuse" });
-  const bar = page.getByTestId("parambar");
+  const bar = page.getByRole("region", { name: "Parameterleiste" });
   await expect(bar).toBeVisible();
   await expect(bar.getByTestId("param-w")).toBeVisible();
   await expect(bar.getByTestId("param-t")).toBeVisible();
   await screenshotB(page, "b11-vorher");
   // Number field: preview only.
-  await bar.getByTestId("param-w-input").fill("60");
+  await bar.getByRole("textbox", { name: "w Wert" }).fill("60");
   await page.waitForFunction(() => {
     const b = (window as unknown as { __cad: { rootBounds(): { min: number[]; max: number[] } | null } }).__cad.rootBounds();
     return b !== null && Math.abs(b.max[0] - b.min[0] - 60) < 1e-6;
@@ -483,14 +484,14 @@ test("B11 Parameterleiste: Vorschau, Reset, Als Standard übernehmen", async ({ 
   await expect(bar.getByTestId("param-w")).toHaveClass(/changed/);
   await screenshotB(page, "b11-vorschau");
   // Reset.
-  await bar.getByTestId("param-w-reset").click();
+  await bar.getByRole("button", { name: "w zurücksetzen" }).click();
   await page.waitForFunction(() => {
     const b = (window as unknown as { __cad: { rootBounds(): { min: number[]; max: number[] } | null } }).__cad.rootBounds();
     return b !== null && Math.abs(b.max[0] - b.min[0] - 40) < 1e-6;
   });
   await expect(bar.getByTestId("param-w")).not.toHaveClass(/changed/);
   // Slider for h with the mouse.
-  const sl = bar.getByTestId("param-h-slider");
+  const sl = bar.getByRole("slider", { name: "h Schieberegler" });
   const box = (await sl.boundingBox())!;
   await page.mouse.move(box.x + box.width * 0.5, box.y + box.height / 2);
   await page.mouse.down();
@@ -503,27 +504,27 @@ test("B11 Parameterleiste: Vorschau, Reset, Als Standard übernehmen", async ({ 
     const b = (window as unknown as { __cad: { rootBounds(): { min: number[]; max: number[] } | null } }).__cad.rootBounds();
     return b !== null && b.max[2] - b.min[2] > 25;
   });
-  const hval = Number(await bar.getByTestId("param-h-input").inputValue());
+  const hval = Number(await bar.getByRole("textbox", { name: "h Wert" }).inputValue());
   expect(hval).toBeGreaterThan(25);
   expect(await text(page)).toBe(src0);
   // Values per module stay for the session: leave the module and come back.
-  await bar.getByTestId("param-d-input").fill("50");
+  await bar.getByRole("textbox", { name: "d Wert" }).fill("50");
   await clickLine(page, 21, 0);
   await waitScene(page, { context: null });
-  await expect(page.getByTestId("parambar")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Parameterleiste" })).toHaveCount(0);
   await clickLine(page, 10, 6);
   await waitScene(page, { context: "gehaeuse" });
-  await expect(page.getByTestId("param-d-input")).toHaveValue("50");
+  await expect(page.getByRole("textbox", { name: "d Wert" })).toHaveValue("50");
   await expect(page.getByTestId("param-d")).toHaveClass(/changed/);
   // "Als Standard übernehmen" writes the default into the module definition.
-  await page.getByTestId("param-d-adopt").click();
+  await page.getByTestId("param-d").getByRole("button", { name: "Als Standard übernehmen" }).click();
   await waitText(page, `(t) => t.includes("module gehaeuse(w = 40, d = 50, h = 20, t = 3)")`);
   await expect(page.getByTestId("param-d")).not.toHaveClass(/changed/);
   await waitScene(page, { context: "gehaeuse" });
   const after = await text(page);
   await screenshotB(page, "b11-nachher");
   // "Alle zurücksetzen": h back to its default.
-  await page.getByTestId("param-reset-all").click();
+  await page.getByRole("button", { name: "Alle zurücksetzen" }).click();
   await page.waitForFunction(() => {
     const b = (window as unknown as { __cad: { rootBounds(): { min: number[]; max: number[] } | null } }).__cad.rootBounds();
     return b !== null && Math.abs(b.max[2] - b.min[2] - 20) < 1e-6;
@@ -543,7 +544,7 @@ test("B12 Inline-Schieberegler und -Schalter", async ({ page }) => {
   await openApp(page);
   const src = "t = 3;\ncube([t * 5, 10, 10]);\n";
   await loadText(page, src);
-  const sl = page.getByTestId("inline-slider");
+  const sl = page.getByRole("slider", { name: "Wert ziehen" });
   await expect(sl).toBeVisible();
   await expect(sl).toHaveValue("3");
   await screenshotB(page, "b12-vorher", "top");
@@ -572,7 +573,7 @@ test("B12 Inline-Schieberegler und -Schalter", async ({ page }) => {
   // Bool switch.
   const src2 = "hohl = true;\nif (hohl) cube(10); else sphere(5);\n";
   await loadText(page, src2);
-  await page.getByTestId("inline-switch").click();
+  await page.getByRole("checkbox", { name: "Wert umschalten" }).click();
   await waitText(page, `(t) => t.startsWith("hohl = false;")`);
   await waitScene(page);
   const nb = await hook(page, (c) => c.nodeBounds(2));
@@ -614,9 +615,7 @@ test("B13 Strg+Klick auf Rasterausdruck springt zur Rasterdeklaration", async ({
 
 test("B14 Messwerte: Latenz Ziehen → Szene (grob/fein), fps beim Ziehen", async ({ page }) => {
   await openApp(page);
-  await page.getByTestId("examples").selectOption("spec/lochplatte.scad");
-  await page.waitForFunction(() => (window as unknown as { __cad: { state(): { fileName: string } } }).__cad.state().fileName === "lochplatte.scad");
-  await waitScene(page);
+  await openExample(page, "spec/lochplatte.scad");
   // Module context: drag the plate thickness plane `oben = t` (default of t) up and down.
   await clickLine(page, 8, 12);
   await waitScene(page, { context: "lochplatte" });

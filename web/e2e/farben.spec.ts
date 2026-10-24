@@ -4,7 +4,7 @@
 
 import { readFileSync } from "node:fs";
 import { type Page, expect, test } from "@playwright/test";
-import { cad, clickLine, loadText, openApp, openExample, record11, screenshot11, waitScene, waitView, writeMetrics11 } from "./helpers";
+import { cad, clickLine, loadText, menuItem, openApp, openExample, record11, screenshot11, setTheme, sideTab, waitScene, waitView, writeMetrics11 } from "./helpers";
 
 type Hook = { __cad: { text(): string; state(): { colors: Array<{ label: string; filament: number; explicit: boolean; key: string; source: string }> } } };
 
@@ -83,11 +83,13 @@ async function canvasPixels(page: Page, hex: string, tol = 22): Promise<{ count:
   );
 }
 
+const colorsRegion = (page: Page) => page.getByRole("region", { name: "Farben und Filamente" });
+
 async function openModel(page: Page): Promise<void> {
   await openApp(page);
-  await page.evaluate(() => localStorage.setItem("cad-colors-open", "1"));
   await openExample(page, EXAMPLE);
-  await expect(page.getByTestId("colors-panel")).toBeVisible();
+  await sideTab(page, "Farben").click();
+  await expect(page.getByRole("region", { name: "Farben und Filamente" })).toBeVisible();
   // volumes arrive with the colour regions
   await expect(page.getByTestId("color-volume-white")).not.toContainText("…");
 }
@@ -103,9 +105,9 @@ test("F01 Farbliste: Palette, Slots, Volumen und Masse, Farbe je Fläche", async
     ["blue", 4, false],
     ["yellow", 5, false],
   ]);
-  await expect(page.getByTestId("color-slot-red")).toHaveValue("3");
-  await expect(page.getByTestId("color-slot-teal")).toHaveValue("auto");
-  await expect(page.getByTestId("color-slot-teal").locator("option").first()).toHaveText("2 (auto)");
+  await expect(page.getByRole("combobox", { name: "Filament für red" })).toHaveValue("3");
+  await expect(page.getByRole("combobox", { name: "Filament für teal" })).toHaveValue("auto");
+  await expect(page.getByRole("combobox", { name: "Filament für teal" }).locator("option").first()).toHaveText("2 (auto)");
   // volumes add up to the part volumes
   const regions = s.regions!;
   expect(regions.items.map((x) => x.part)).toEqual(["schild", "figur"]);
@@ -148,23 +150,23 @@ test("F02 Slot ändern schreibt filament = n in den Code", async ({ page }) => {
   await openModel(page);
   const before = await text(page);
   expect(before).toContain('color("teal") difference()');
-  await page.getByTestId("color-slot-teal").selectOption("5");
+  await page.getByRole("combobox", { name: "Filament für teal" }).selectOption("5");
   await expect.poll(() => text(page)).toContain('color("teal", filament = 5) difference()');
   await waitScene(page);
-  await expect(page.getByTestId("color-slot-teal")).toHaveValue("5");
+  await expect(page.getByRole("combobox", { name: "Filament für teal" })).toHaveValue("5");
   const s = await cad(page);
   const slots = Object.fromEntries(s.colors.map((c) => [c.label, c.filament]));
   // teal 5 fixed, blue moves to the lowest free slot
   expect(slots).toEqual({ white: 1, teal: 5, red: 3, blue: 2, yellow: 4 });
   await screenshot11(page, "f02-slot-geaendert", "full");
   // back to automatic: the argument is removed again
-  await page.getByTestId("color-slot-teal").selectOption("auto");
+  await page.getByRole("combobox", { name: "Filament für teal" }).selectOption("auto");
   await expect.poll(() => text(page)).toBe(before);
   await waitScene(page);
-  await expect(page.getByTestId("color-slot-teal")).toHaveValue("auto");
+  await expect(page.getByRole("combobox", { name: "Filament für teal" })).toHaveValue("auto");
   // the default material (no colour) has no slot choice
   await loadText(page, 'cube(10);\ncolor("red") translate([0, 0, 10]) cube(3);\n');
-  await expect(page.getByTestId("color-slot-Standard")).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "Filament für Standard" })).toBeDisabled();
   record11({
     id: "F02",
     title: "Slot per Dropdown",
@@ -176,7 +178,7 @@ test("F02 Slot ändern schreibt filament = n in den Code", async ({ page }) => {
 
 test("F03 Export mehrfarbig: 3MF und STL je Farbe", async ({ page }) => {
   await openModel(page);
-  const [dl] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-3mf-colors").click()]);
+  const [dl] = await Promise.all([page.waitForEvent("download"), colorsRegion(page).getByRole("button", { name: "3MF mehrfarbig" }).click()]);
   expect(dl.suggestedFilename()).toBe("mehrfarbig.3mf");
   const bytes = readFileSync((await dl.path())!);
   const t = bytes.toString("utf8");
@@ -188,11 +190,11 @@ test("F03 Export mehrfarbig: 3MF und STL je Farbe", async ({ page }) => {
   expect((t.match(/<component /g) ?? []).length).toBe(6);
   expect(t).toContain("Metadata/model_settings.config");
   expect(t).toContain('<metadata key="name" value="schild – red"/>\n      <metadata key="extruder" value="3"/>');
-  const [dz] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-stl-colors").click()]);
+  const [dz] = await Promise.all([page.waitForEvent("download"), colorsRegion(page).getByRole("button", { name: "STL je Farbe (ZIP)" }).click()]);
   expect(dz.suggestedFilename()).toBe("mehrfarbig-farben.zip");
   const z = readFileSync((await dz.path())!).toString("latin1");
   for (const f of ["schild_F1_white.stl", "schild_F2_teal.stl", "schild_F3_red.stl", "figur_F4_blue.stl", "figur_F1_white.stl", "figur_F5_yellow.stl"]) expect(z).toContain(f);
-  const [ds] = await Promise.all([page.waitForEvent("download"), page.getByTestId("export-3mf-single").click()]);
+  const [ds] = await Promise.all([page.waitForEvent("download"), colorsRegion(page).getByRole("button", { name: "3MF einfarbig" }).click()]);
   expect(readFileSync((await ds.path())!).toString("latin1")).not.toContain("colorgroup");
   record11({
     id: "F03",
@@ -205,14 +207,14 @@ test("F03 Export mehrfarbig: 3MF und STL je Farbe", async ({ page }) => {
 
 test("F04 Farbregionen zeigen", async ({ page }) => {
   await openModel(page);
-  await page.getByTestId("colors-regions").check();
+  await page.getByRole("checkbox", { name: "Farbregionen zeigen" }).check();
   const s = await waitView(page, "(s) => s.view.regionsDrawn === 6");
   expect(s.regions!.meshes).toBe(true);
   const yellow = await canvasPixels(page, "#f7d974", 40);
   expect(yellow.count).toBeGreaterThan(100);
   // a click on a region body selects its line like a normal face
   await screenshot11(page, "f04-farbregionen", "view");
-  await page.getByTestId("colors-regions").uncheck();
+  await page.getByRole("checkbox", { name: "Farbregionen zeigen" }).uncheck();
   await waitView(page, "(s) => s.view.regionsDrawn === 0");
   record11({
     id: "F04",
@@ -226,7 +228,7 @@ test("F04 Farbregionen zeigen", async ({ page }) => {
 test("F05 Dunkles Thema: Kontrast, Ansicht, Palette", async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await openModel(page);
-  await page.getByTestId("theme").selectOption("dark");
+  await setTheme(page, "dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await waitView(page, "(s) => s.theme === 'dark'");
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
@@ -235,8 +237,10 @@ test("F05 Dunkles Thema: Kontrast, Ansicht, Palette", async ({ page }) => {
     "Editor-Text": await textContrast(page, ".cm-content", ".editor .cm-editor"),
     "Zeilennummern": await textContrast(page, ".cm-gutters", ".editor .cm-editor"),
     "Statusleiste": await textContrast(page, "[data-testid=status-progress]", ".statusbar"),
-    "Farbliste": await textContrast(page, "[data-testid=colors-panel]", "[data-testid=colors-panel]"),
-    "Werkzeugleiste": await textContrast(page, ".toolbar button", ".toolbar button"),
+    "Farbliste": await textContrast(page, "[data-testid=colors-panel]", ".sidepanel"),
+    "Kopfleiste": await textContrast(page, ".hd .ui-btn--quiet", ".hd"),
+    "Speichern (primär)": await textContrast(page, "[data-testid=save]", "[data-testid=save]"),
+    "Werkzeugleiste": await textContrast(page, ".vtoolbar .ui-seg-item.is-on", ".vtoolbar .ui-seg-item.is-on"),
   };
   for (const [k, v] of Object.entries(checks)) expect(v, k).toBeGreaterThanOrEqual(4.5);
   // dark 3D view, palette colours in their dark variants
@@ -277,20 +281,24 @@ test("F06 Thema System folgt prefers-color-scheme", async ({ page }) => {
   await page.evaluate(() => localStorage.removeItem("cad-theme"));
   await page.reload();
   await waitScene(page);
-  await expect(page.getByTestId("theme")).toHaveValue("system");
+  await page.getByRole("button", { name: "Farbschema", exact: true }).click();
+  await expect(menuItem(page, "System")).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("Escape");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.emulateMedia({ colorScheme: "light" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   // a fixed choice ignores the system
-  await page.getByTestId("theme").selectOption("light");
+  await setTheme(page, "light");
   await page.emulateMedia({ colorScheme: "dark" });
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   await page.reload();
   await waitScene(page);
-  await expect(page.getByTestId("theme")).toHaveValue("light");
-  await page.getByTestId("theme").selectOption("system");
+  await page.getByRole("button", { name: "Farbschema", exact: true }).click();
+  await expect(menuItem(page, "Hell")).toHaveAttribute("aria-checked", "true");
+  await page.keyboard.press("Escape");
+  await setTheme(page, "system");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   record11({
     id: "F06",
@@ -313,12 +321,13 @@ test("F07 Unbekannter Farbname: Warnung und stabile Zufallsfarbe", async ({ page
     ["teal", "palette"],
   ]);
   const key = s.colors[0].key;
-  // the list is open by default; the toggle closes and opens it
-  await expect(page.getByTestId("colors-panel")).toBeVisible();
-  await page.getByTestId("colors-toggle").click();
-  await expect(page.getByTestId("colors-panel")).toBeHidden();
-  await page.getByTestId("colors-toggle").click();
-  await expect(page.getByTestId("colors-panel")).toBeVisible();
+  // the list is the tab "Farben" of the side panel; the panel folds away and comes back
+  await sideTab(page, "Farben").click();
+  await expect(page.getByRole("region", { name: "Farben und Filamente" })).toBeVisible();
+  await page.getByRole("button", { name: "Seitenpanel ausblenden" }).click();
+  await expect(page.getByRole("region", { name: "Farben und Filamente" })).toBeHidden();
+  await page.getByRole("button", { name: "Seitenpanel einblenden" }).click();
+  await expect(page.getByRole("region", { name: "Farben und Filamente" })).toBeVisible();
   await expect(page.getByTestId("color-row-lightblue")).toContainText("zufällig");
   // stable: same name, same colour after another evaluation
   await loadText(page, 'cube(1);\ncolor("LightBlue") cube(10);\n');
