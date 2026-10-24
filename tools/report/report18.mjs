@@ -43,11 +43,11 @@ const de = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x
 const md = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>");
 const pre = (t) => `<pre>${esc(String(t).trimEnd())}</pre>`;
 
-function img(srcPath, dst, width = 1440) {
+function img(srcPath, dst, width = 1200) {
   if (!existsSync(srcPath)) return null;
-  if (srcPath.endsWith(".png") && dst.endsWith(".jpg")) {
+  if (dst.endsWith(".jpg")) {
     try {
-      execFileSync("convert", [srcPath, "-resize", `${width}x>`, "-quality", "86", join(imgDir, dst)]);
+      execFileSync("convert", [srcPath, "-resize", `${width}x>`, "-quality", "78", join(imgDir, dst)]);
       return `img/${dst}`;
     } catch {
       dst = dst.replace(/\.jpg$/, ".png");
