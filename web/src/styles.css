@@ -1114,6 +1114,55 @@ input:checked + .cm-switch-knob::after {
   color: var(--view-cap);
 }
 
+/* ---------------------------------------------------------------- sketch editor (Plan 17.12) */
+
+.viewtools button.on,
+.sketchbar button.on {
+  border-color: var(--view-accent);
+  color: var(--view-accent);
+  font-weight: 600;
+}
+
+.sketchbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  align-items: center;
+  max-width: 100%;
+  padding: 4px 6px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.sketchbar button {
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.sketchbar .stitle {
+  font-weight: 600;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.sketchbar .sep {
+  width: 1px;
+  align-self: stretch;
+  background: var(--border);
+  margin: 0 2px;
+}
+
+.st-note.sketch {
+  color: var(--view-accent);
+}
+
+.st-note.sketch.warn {
+  color: var(--view-error-edge);
+}
+
 /* ---------------------------------------------------------------- colours and filaments */
 
 .themesel {

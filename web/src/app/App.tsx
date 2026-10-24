@@ -38,6 +38,7 @@ import { ParamBar, SettingsButton } from "./panels";
 import { SectionBar, SectionStatus, SectionToggle } from "./section";
 import { DiffDialog, ExternalBar, RecentMenu } from "./desktopUi";
 import { ColorsPanel, ColorsToggle } from "./colors";
+import { SketchBar, SketchStatus, SketchToggle } from "./sketchUi";
 
 function Toolbar() {
   const themePref = useCad((s) => s.themePref);
@@ -311,9 +312,11 @@ function ViewPane() {
             <input type="checkbox" checked={allGrids} onChange={(e) => store.setState({ allGrids: e.target.checked })} data-testid="all-grids" />
             alle Raster
           </label>
+          <SketchToggle />
           <SectionToggle />
           <ColorsToggle />
         </div>
+        <SketchBar />
         <SectionBar />
       </div>
     </div>
@@ -401,6 +404,7 @@ function StatusBar() {
           Fläche aus {hoverOther.path}, Zeile {hoverOther.line}
         </span>
       )}
+      <SketchStatus />
       <SectionStatus />
       {notice && <span className="st-note" data-testid="status-notice">{notice}</span>}
       <span className="grow" />

@@ -42,6 +42,7 @@ import { resolveTheme, setThemePref, store } from "../state/store";
 import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
 import { DragController } from "./drag";
+import { SketchController } from "./sketch";
 import { undo, redo } from "@codemirror/commands";
 import { gitMarks } from "../editor/gitGutter";
 
@@ -147,6 +148,9 @@ export function switchFile(path: string, pos?: number): boolean {
 /** Handle drags (Spec: Griffe und Rückschreiben). */
 export const drag = new DragController(client, () => sendNow(), { target: editTarget, fileOf: editFile, active: () => project.active });
 
+/** Sketch editor (Plan 17.12). */
+export const sketch = new SketchController(client, () => sendNow());
+
 // Rounding steps of free drags (Einstellungen).
 {
   const s = store.getState().settings;
@@ -162,8 +166,10 @@ export function setViewer(v: Viewer | null): void {
   viewerRef = v;
   if (v) {
     v.drag = drag;
+    v.sketch = sketch;
     v.onOpenLocation = openLocation;
   }
+  sketch.setView(v);
 }
 export function getViewer(): Viewer | null {
   return viewer;
@@ -791,6 +797,50 @@ window.__cad = {
   debugHang(ms: number) {
     if (transport instanceof WorkerTransport) transport.send({ type: "__debugHang", ms } as unknown as Parameters<typeof transport.send>[0]);
     else transport.debugHang(ms);
+  },
+  /** Sketch editor: mode, tool, picked points, the last answer (snap, preview, prompt). */
+  sketch() {
+    const s = store.getState().sketch;
+    if (!s) return null;
+    const a = s.answer;
+    const snap = a?.snap ? { ...a.snap, screen: viewer?.project(a.snap.point) ?? null } : null;
+    return {
+      tool: s.tool,
+      points: s.points,
+      message: s.message,
+      actions: s.actions,
+      answers: sketch.answers,
+      prompt: a?.prompt ?? null,
+      sketch: a?.sketch ? { line: a.sketch.line, endLine: a.sketch.end_line } : null,
+      node: a?.node ?? null,
+      plane: a?.plane ?? null,
+      current: a?.current ?? null,
+      snap,
+      preview: a?.preview.length ?? 0,
+      guides: a?.guides.length ?? 0,
+      segment: a?.segment ? { line: a.segment.line } : null,
+      raster: a?.raster ? { lines: a.raster.lines.length, points: a.raster.points.length, min: a.raster.min, max: a.raster.max } : null,
+      drawn: viewer?.lastSketchDraw ?? {},
+    };
+  },
+  sketchEnter(tool?: string) {
+    return sketch.enter((tool ?? "line") as import("../engine/protocol").SketchTool);
+  },
+  sketchTool(tool: string) {
+    sketch.setTool(tool as import("../engine/protocol").SketchTool);
+  },
+  sketchExit() {
+    sketch.exit();
+  },
+  /** Screen position of a point of the sketch plane. */
+  sketchScreen(x: number, y: number) {
+    return viewer?.sketchScreen([x, y]) ?? null;
+  },
+  /** Camera position and view direction (sketch plane alignment). */
+  camera() {
+    if (!viewer) return null;
+    const c = viewer.camera.position;
+    return { eye: [c.x, c.y, c.z], dir: viewer.viewDir() };
   },
   /** Section view as drawn. */
   sectionInfo() {

@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
+import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import type { EngineClient } from "../engine/client";
 import type { Mat4, Scene, SrcRange, Vec3 } from "../engine/protocol";
 import { definitionTarget } from "../logic/context";
@@ -26,6 +27,8 @@ import { displayHex, faceColors, hasFaceColors, vertexColors } from "../logic/co
 import { type CapBody, SectionLayer } from "./sectionLayer";
 import { type SectionState, effectiveNormal, keeps, offset, snapCandidates, withOffset } from "../logic/section";
 import type { MeshCache } from "./meshCache";
+import type { SketchController, SketchView } from "../app/sketch";
+import { pixelSize, planeCamera, rasterLines, rasterSpacing, snapMarker } from "../logic/sketchEditor";
 
 export type StandardView = "iso" | "top" | "front" | "right";
 
@@ -104,7 +107,7 @@ export interface HandleView {
 /** Grip pick radius in pixels. */
 const GRIP_PX = 10;
 
-export class Viewer implements DragView {
+export class Viewer implements DragView, SketchView {
   readonly renderer: THREE.WebGLRenderer;
   readonly camera: THREE.PerspectiveCamera;
   readonly controls: OrbitControls;
@@ -116,8 +119,15 @@ export class Viewer implements DragView {
   private handleColors: HandleColors;
   private preview: DragPreview | null = null;
   private snapLabel: HTMLDivElement;
+  /** Sketch editor: raster, preview, snap marker (rebuilt with every answer). */
+  private sketchGroup = new THREE.Group();
+  private sketchLabel: HTMLDivElement;
   /** Drag controller (set by the runtime). */
   drag: DragController | null = null;
+  /** Sketch editor (set by the runtime). */
+  sketch: SketchController | null = null;
+  /** What the sketch overlay drew (test hook). */
+  lastSketchDraw: Record<string, number> = {};
   /** Handles drawn for the cursor line. */
   lastHandles: HandleGeom[] = [];
   private gizmo: { scene: THREE.Scene; camera: THREE.OrthographicCamera; group: THREE.Group };
@@ -190,7 +200,7 @@ export class Viewer implements DragView {
     this.controls.addEventListener("change", () => this.requestRender());
     this.controls.addEventListener("start", () => (this.autoFit = false));
 
-    this.scene3.add(this.helpers, this.content, this.overlay, this.handleGroup);
+    this.scene3.add(this.helpers, this.content, this.overlay, this.handleGroup, this.sketchGroup);
     {
       const pal = readPalette();
       this.section = new SectionLayer(pal.cap, pal.edge, pal.accent);
@@ -202,6 +212,11 @@ export class Viewer implements DragView {
     this.snapLabel.setAttribute("data-testid", "snap-label");
     this.snapLabel.hidden = true;
     container.appendChild(this.snapLabel);
+    this.sketchLabel = document.createElement("div");
+    this.sketchLabel.className = "snap-label sketch-label";
+    this.sketchLabel.setAttribute("data-testid", "sketch-snap-label");
+    this.sketchLabel.hidden = true;
+    container.appendChild(this.sketchLabel);
     const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.6);
     hemi.position.set(0, 0, 1);
     this.scene3.add(hemi);
@@ -243,7 +258,9 @@ export class Viewer implements DragView {
     this.clearGroup(this.overlay);
     this.clearGroup(this.helpers);
     this.clearGroup(this.handleGroup);
+    this.clearGroup(this.sketchGroup);
     this.snapLabel.remove();
+    this.sketchLabel.remove();
     this.section.dispose();
     this.materials.dispose();
     this.renderer.dispose();
@@ -254,6 +271,12 @@ export class Viewer implements DragView {
     // A handle drag is work in the view: from then on the camera is not refitted on its own
     // (the user gets the "Neu einpassen" button instead).
     if (s.drag && !p.drag) this.autoFit = false;
+    if (s.sketch !== p.sketch) {
+      // on/off and another sketch: handles and the sketch drawing; else only the overlay
+      if ((s.sketch === null) !== (p.sketch === null) || s.sketch?.answer?.node !== p.sketch?.answer?.node || s.sketch?.tool !== p.sketch?.tool) this.requestBuild();
+      this.buildSketch();
+      this.requestRender();
+    }
     if (s.theme !== p.theme) {
       // CSS variables change with the theme attribute; read them after the style update.
       requestAnimationFrame(() => this.applyTheme());
@@ -551,6 +574,7 @@ export class Viewer implements DragView {
     this.addAnchors(p, diag);
     this.lastHandles = this.computeHandles(scene, sel, diag);
     this.buildHandles();
+    this.buildSketch();
     this.updateHelpers(scene);
     this.applySection(st.section);
     this.maybeFit(scene);
@@ -983,7 +1007,15 @@ export class Viewer implements DragView {
   private computeHandles(scene: Scene, sel: CursorSelection, diag: number): HandleGeom[] {
     const st = store.getState();
     const idx = bridge.index(scene);
-    const hs = handlesForCursor(scene, idx, bridge.doc(), st.cursor, sel);
+    // sketch editor: all handles of the sketch (its node in this scene: by the statement)
+    const a = st.sketch?.answer ?? null;
+    const node = !a?.sketch ? null : a.version === scene.version ? a.node : (scene.nodes.find((n) => n.op_info?.kind === "sketch" && n.range.from === a.sketch!.from && (n.range.file ?? 0) === 0)?.idx ?? null);
+    // drawing tools draw (also on existing points): grips only with the select tool
+    if (st.sketch && st.sketch.tool !== "select") return [];
+    const hs =
+      st.sketch && node !== null && scene.nodes[node]?.op_info?.kind === "sketch"
+        ? [...scene.handles, ...scene.locked_handles].filter((h) => h.node === node)
+        : handlesForCursor(scene, idx, bridge.doc(), st.cursor, sel);
     const ring = Math.max(1, diag * 0.16);
     const out = hs.map((h) => handleGeom(scene, h, ring, modelHull(scene)));
     // The dragged handle keeps its geometry from the drag start (its literal changes live).
@@ -1048,7 +1080,19 @@ export class Viewer implements DragView {
   private onGripDown(e: PointerEvent): void {
     if (e.button === 0 && this.onSectionGripDown(e)) return;
     if (e.button !== 0 || !this.drag) return;
+    const sk = store.getState().sketch;
+    if (sk) {
+      // keys go to the sketch editor, not to the code editor
+      if (document.activeElement instanceof HTMLElement && document.activeElement.closest(".cm-editor")) document.activeElement.blur();
+    }
     const g = this.handleAt(e.clientX, e.clientY);
+    if (!g && sk && sk.tool !== "select" && this.sketch) {
+      // drawing: the click goes to the tool (no orbiting with the left button)
+      e.stopPropagation();
+      e.preventDefault();
+      this.sketch.click(this.ray(e.clientX, e.clientY), e.altKey);
+      return;
+    }
     if (!g) return;
     e.stopPropagation();
     e.preventDefault();
@@ -1078,6 +1122,164 @@ export class Viewer implements DragView {
     const d = new THREE.Vector3();
     this.camera.getWorldDirection(d);
     return [d.x, d.y, d.z];
+  }
+
+  // ---------------------------------------------------------------- sketch editor
+
+  fov(): { deg: number; height: number } {
+    return { deg: this.camera.fov, height: Math.max(1, this.container.clientHeight) };
+  }
+
+  /** Camera perpendicular onto a sketch plane (Plan 17.12). */
+  lookAtPlane(plane: Mat4, min: [number, number], max: [number, number], withModel = false): void {
+    if (withModel && !isEmpty(this.modelBox)) {
+      // a new sketch: frame the model as well (its box projected onto the plane)
+      const inv = new THREE.Matrix4().fromArray(plane).invert();
+      const b = this.modelBox;
+      for (const x of [b.min[0], b.max[0]])
+        for (const y of [b.min[1], b.max[1]])
+          for (const z of [b.min[2], b.max[2]]) {
+            const v = new THREE.Vector3(x, y, z).applyMatrix4(inv);
+            min = [Math.min(min[0], v.x), Math.min(min[1], v.y)];
+            max = [Math.max(max[0], v.x), Math.max(max[1], v.y)];
+          }
+    }
+    const c = planeCamera(plane, min, max, this.camera.fov, this.camera.aspect);
+    this.autoFit = false;
+    this.controls.target.set(...c.target);
+    this.camera.position.set(...c.eye);
+    this.camera.up.set(...c.up);
+    const dist = this.camera.position.distanceTo(this.controls.target);
+    this.camera.near = Math.max(0.01, dist / 1000);
+    this.camera.far = dist * 100;
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+    this.buildSketch();
+    this.requestRender();
+  }
+
+  /** mm per pixel at the orbit target. */
+  private worldPerPx(): number {
+    return this.camera.position.distanceTo(this.controls.target) * pixelSize(this.camera.fov, this.container.clientHeight);
+  }
+
+  private sketchLine(points: Vec3[], color: string, width: number, dashed: boolean, name: string): void {
+    if (points.length < 2) return;
+    const pos: number[] = [];
+    for (let i = 0; i + 1 < points.length; i++) pos.push(...points[i], ...points[i + 1]);
+    const geo = new LineSegmentsGeometry();
+    geo.setPositions(pos);
+    const wpp = this.worldPerPx();
+    const mat = new LineMaterial({ color: new THREE.Color(color).getHex(), linewidth: width, depthTest: false, transparent: true, dashed, dashSize: 7 * wpp, gapSize: 5 * wpp });
+    mat.resolution.set(this.container.clientWidth, this.container.clientHeight);
+    const l = new LineSegments2(geo, mat);
+    if (dashed) l.computeLineDistances();
+    l.renderOrder = 70;
+    l.userData.ownGeometry = true;
+    l.userData.ownMaterial = true;
+    l.name = name;
+    this.sketchGroup.add(l);
+    this.lastSketchDraw[name] = (this.lastSketchDraw[name] ?? 0) + 1;
+  }
+
+  /** Raster of the drawing plane, preview, help lines, picked points and the snap marker. */
+  private buildSketch(): void {
+    this.clearGroup(this.sketchGroup);
+    this.lastSketchDraw = {};
+    const st = store.getState();
+    const sk = st.sketch;
+    const a = sk?.answer;
+    if (!sk || !a) {
+      this.sketchLabel.hidden = true;
+      return;
+    }
+    const pal = this.materials.palette;
+    const w = (p: [number, number] | number[]): Vec3 => apply(a.plane, [p[0], p[1], 0]);
+    const wpp = this.worldPerPx();
+    const r = a.raster;
+    if (r) {
+      // step raster (the step of free positions, coarser when zoomed out), grid lines and points
+      const spacing = rasterSpacing(st.settings.stepMm, wpp);
+      const minor: number[] = [];
+      const major: number[] = [];
+      for (const l of rasterLines(r.min, r.max, spacing)) (l.major ? major : minor).push(...w(l.a), ...w(l.b));
+      const mk = (pos: number[], color: string, opacity: number, name: string) => {
+        if (!pos.length) return;
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+        const ls = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity, depthTest: false, depthWrite: false }));
+        ls.renderOrder = 24;
+        ls.userData.ownGeometry = true;
+        ls.userData.ownMaterial = true;
+        ls.name = name;
+        this.sketchGroup.add(ls);
+        this.lastSketchDraw[name] = pos.length / 6;
+      };
+      mk(minor, pal.floorMajor, 0.55, "sketch-raster");
+      mk(major, pal.grey, 0.45, "sketch-raster-major");
+      mk(r.lines.flatMap((l) => [...l[0], ...l[1]]), pal.grid, 0.75, "sketch-grid");
+      if (r.points.length) {
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.Float32BufferAttribute(r.points.flat(), 3));
+        const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color: pal.grid, size: 6, sizeAttenuation: false, transparent: true, depthTest: false }));
+        pts.renderOrder = 26;
+        pts.userData.ownGeometry = true;
+        pts.userData.ownMaterial = true;
+        pts.name = "sketch-grid-points";
+        this.sketchGroup.add(pts);
+        this.lastSketchDraw["sketch-grid-points"] = r.points.length;
+      }
+    }
+    const dragging = st.drag !== null;
+    if (!dragging) {
+      for (const g of a.guides) this.sketchLine(g, pal.guide, 1.4, true, "sketch-guide");
+      for (const p of a.preview) this.sketchLine(p, pal.accent, 2.6, false, "sketch-preview");
+    }
+    const sq = (p: [number, number], s: number) => [w([p[0] - s, p[1] - s]), w([p[0] + s, p[1] - s]), w([p[0] + s, p[1] + s]), w([p[0] - s, p[1] + s]), w([p[0] - s, p[1] - s])];
+    // scale of the plane (marker sizes are in pixels)
+    const unit = Math.max(1e-12, Math.hypot(a.plane[0], a.plane[1], a.plane[2]));
+    const px = wpp / unit;
+    for (const p of sk.points) this.sketchLine(sq(p.p, 3.5 * px), pal.accent, 2, false, "sketch-picked");
+    if (a.current && sk.points.length === 0 && sk.tool !== "select") {
+      // end of the open contour at the cursor (where a chain would continue)
+      const inv = this.planeLocal(a.plane, a.current);
+      this.sketchLine(sq(inv, 3 * px), pal.profile, 2, false, "sketch-current");
+    }
+    if (sk.tool === "select" && a.segment && a.node !== null) {
+      const n = this.lastShown?.nodes[a.node];
+      const o = n?.op_info;
+      if (o && o.kind === "sketch") {
+        for (const c of o.contours) for (const g of c.segments) if (g.range.from === a.segment.from) this.sketchLine(g.points.map((q) => apply(o.plane ?? n!.display_world, q)), pal.accent, 5, false, "sketch-hover");
+      }
+    }
+    const snap = !dragging ? a.snap : null;
+    if (snap) {
+      this.sketchLine(snapMarker(snap.kind, snap.local, 7 * px).map((q) => w(q)), pal.snap, 2.4, false, `sketch-snap:${snap.kind}`);
+      const p = this.project(snap.point);
+      this.sketchLabel.textContent = snap.label;
+      this.sketchLabel.hidden = !p.visible;
+      if (p.visible) {
+        const rc = this.container.getBoundingClientRect();
+        const lw = this.sketchLabel.offsetWidth || snap.label.length * 8 + 14;
+        const x = p.x - rc.left + 14 + lw > rc.width - 4 ? p.x - rc.left - 14 - lw : p.x - rc.left + 14;
+        this.sketchLabel.style.left = `${Math.max(2, x)}px`;
+        this.sketchLabel.style.top = `${p.y - rc.top + 12}px`;
+      }
+    } else this.sketchLabel.hidden = true;
+  }
+
+  /** Plane coordinates of a context point (on the plane). */
+  private planeLocal(plane: Mat4, p: Vec3): [number, number] {
+    const m = new THREE.Matrix4().fromArray(plane).invert();
+    const v = new THREE.Vector3(...p).applyMatrix4(m);
+    return [v.x, v.y];
+  }
+
+  /** Screen position of a point of the sketch plane (tests). */
+  sketchScreen(local: [number, number]): { x: number; y: number; visible: boolean } | null {
+    const a = store.getState().sketch?.answer;
+    if (!a) return null;
+    return this.project(apply(a.plane, [local[0], local[1], 0]));
   }
 
   // ---------------------------------------------------------------- section
@@ -1308,6 +1510,7 @@ export class Viewer implements DragView {
   private onPointerMove(e: PointerEvent): void {
     this.pointer = { x: e.clientX, y: e.clientY };
     if (e.buttons !== 0 || this.drag?.active) return;
+    if (this.sketch?.active) this.sketch.hover(this.ray(e.clientX, e.clientY), e.altKey);
     const g = this.handleAt(e.clientX, e.clientY);
     const hid = g?.handle.id ?? null;
     if (store.getState().hoverHandle !== hid) store.setState({ hoverHandle: hid });
@@ -1344,6 +1547,17 @@ export class Viewer implements DragView {
     this.down = null;
     if (!d || e.button !== 0) return;
     if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) return;
+    const sk = store.getState().sketch;
+    if (sk) {
+      // select tool: a click on a segment puts the cursor on its line (Entf deletes it)
+      const seg = sk.tool === "select" ? sk.answer?.segment : null;
+      const scene = this.lastShown;
+      if (seg && scene && sk.answer?.version !== undefined) {
+        const m = bridge.mapper.has(sk.answer.version) ? bridge.mapper.mapper(sk.answer.version) : (x: number) => x;
+        bridge.setCursor(m(seg.from, 1), false);
+      }
+      return;
+    }
     const r = this.pick(e.clientX, e.clientY);
     if (!r) return;
     const idx = bridge.index(r.scene);

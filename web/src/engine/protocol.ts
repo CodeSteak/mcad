@@ -76,7 +76,149 @@ volume: number | null, };
 /**
  * Message from the UI to the engine.
  */
-export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, colors?: boolean, } | { "type": "RequestColorRegions", meshes: boolean, coarse?: boolean, version?: number, } | { "type": "SetFilament", color: string, filament?: number, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, };
+export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, colors?: boolean, } | { "type": "RequestColorRegions", meshes: boolean, coarse?: boolean, version?: number, } | { "type": "SetFilament", color: string, filament?: number, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, } | { "type": "Sketch" } & SketchRequest;
+
+/**
+ * Tools of the sketch editor.
+ */
+export type SketchTool = "select" | "line" | "arc_through" | "arc_center" | "arc_tangent" | "bezier" | "rect" | "circle" | "corner" | "close" | "delete";
+
+/**
+ * Grid point of a picked point (`z` omitted: implicit plane, written `g[x, y]`).
+ */
+export type SketchGridSel = { grid: number, x: string, y: string, z?: string, };
+
+/**
+ * A point a tool has picked: position in the sketch plane, the expression written for it and
+ * what it snapped to (`grid`, `anchor`, `start`, `end`, `center`, `intersection`, `mid`,
+ * `vertex`, `tangent`, `horizontal`, `vertical`, `grid_line`, `step`).
+ */
+export type SketchPoint = { p: [number, number], text: string, kind: string, grid?: SketchGridSel, };
+
+/**
+ * A ray in context coordinates.
+ */
+export type Ray = { origin: Vec3, dir: Vec3, };
+
+export type SketchRequest = { 
+/**
+ * Echoed in the answer.
+ */
+id: number, 
+/**
+ * Editor cursor in the main file (UTF-16): picks the sketch and where new code goes.
+ */
+cursor: number, tool: SketchTool, 
+/**
+ * Points picked so far (from the previous answer's `points`).
+ */
+points: Array<SketchPoint>, 
+/**
+ * Mouse ray; without it only plane, prompt (and with `info` the raster) are answered.
+ */
+ray?: Ray, 
+/**
+ * Size of a pixel at distance 1 from the camera (2·tan(fov/2)/height).
+ */
+pixel: number, 
+/**
+ * Snap radius in pixels.
+ */
+snap_px: number, 
+/**
+ * Alt: no snapping, numbers rounded to the step.
+ */
+free: boolean, 
+/**
+ * Mouse click: adds the point; a complete action answers `edits`.
+ */
+click: boolean, 
+/**
+ * Arc around a centre: sweep of the previous answer (degrees), so the arc can go on
+ * beyond 180°.
+ */
+angle?: number, 
+/**
+ * Also answer the raster.
+ */
+info: boolean, };
+
+/**
+ * Where the mouse snapped (context coordinates; `local` in the sketch plane).
+ */
+export type SketchSnap = { point: Vec3, local: [number, number], 
+/**
+ * Expression that would be written (`g[a, b]`, `k.ecke`, `[12, 5]`).
+ */
+text: string, kind: string, 
+/**
+ * Display text.
+ */
+label: string, };
+
+/**
+ * Drawing raster in the sketch plane (context coordinates): lines of the visible grids, grid
+ * points, and the extent (sketch plane) for the step raster.
+ */
+export type SketchRaster = { lines: Array<[Vec3, Vec3]>, points: Array<Vec3>, min: [number, number], max: [number, number], };
+
+export type SketchAnswer = { id: number, 
+/**
+ * Source version the answer (and its edits) belong to.
+ */
+version: number, 
+/**
+ * The sketch statement being edited (`null`: none yet, the first action creates one).
+ */
+sketch: SrcRange | null, 
+/**
+ * Its node.
+ */
+node: number | null, 
+/**
+ * Sketch plane → context coordinates (camera, drawing).
+ */
+plane: Mat4, 
+/**
+ * End of the open contour at the insertion point (context coordinates).
+ */
+current: Vec3 | null, snap: SketchSnap | null, 
+/**
+ * Help lines of the snap (horizontal/vertical, tangent).
+ */
+guides: Array<Array<Vec3>>, 
+/**
+ * What the tool would draw (context coordinates).
+ */
+preview: Array<Array<Vec3>>, 
+/**
+ * Tool state after this message: the points picked so far.
+ */
+points: Array<SketchPoint>, 
+/**
+ * Code of a completed action (one undo step).
+ */
+edits: Array<Edit>, 
+/**
+ * Cursor after applying `edits`: index of the edit and UTF-16 offset in its text.
+ */
+select: [number, number] | null, 
+/**
+ * What the tool asks for next.
+ */
+prompt: string, 
+/**
+ * Why an action did not apply.
+ */
+message: string | null, 
+/**
+ * Select tool: the segment statement under the mouse.
+ */
+segment: SrcRange | null, 
+/**
+ * Arc around a centre: current sweep in degrees (send back as `angle`).
+ */
+angle: number | null, raster: SketchRaster | null, };
 
 /**
  * Where a dragged handle goes.
@@ -106,7 +248,7 @@ colors?: boolean,
 /**
  * Notes for the user (multi-colour 3MF: objects, material outside parts, slicers).
  */
-notes?: Array<string>, } | { "type": "ColorRegions", version: number, items: Array<RegionSet>, } | { "type": "Error", message: string, version: number | null, node: number | null, };
+notes?: Array<string>, } | { "type": "ColorRegions", version: number, items: Array<RegionSet>, } | { "type": "Error", message: string, version: number | null, node: number | null, } | { "type": "Sketch" } & SketchAnswer;
 
 export type Severity = "error" | "warning" | "info";
 
@@ -350,7 +492,13 @@ export type SelectMode = "inside" | "touch";
  * Resolved parameters of operations the view draws specially (zone blocks, profile
  * operations, surfaces). Points are in the node system.
  */
-export type OpInfo = { "kind": "blend", chamfer: boolean, r: number, select: SelectMode, } | { "kind": "shell", t: number, select: SelectMode, } | { "kind": "zone", line: boolean, point: Vec3, dir: Vec3, d: number, } | { "kind": "linear_extrude", h: number, center: boolean, twist: number, scale: [number, number], } | { "kind": "rotate_extrude", angle: number, } | { "kind": "loft", ruled: boolean, } | { "kind": "sweep", path: Array<Vec3>, spline: boolean, } | { "kind": "surface", rows: Array<Array<Vec3>>, } | { "kind": "thicken", t: number, } | { "kind": "blend2d", chamfer: boolean, r: number, select: SelectMode, } | { "kind": "offset", round: boolean, d: number, chamfer: boolean, } | { "kind": "stroke", w: number, cap: string, join: string, } | { "kind": "sketch", closed: boolean, contours: Array<SketchContour>, };
+export type OpInfo = { "kind": "blend", chamfer: boolean, r: number, select: SelectMode, } | { "kind": "shell", t: number, select: SelectMode, } | { "kind": "zone", line: boolean, point: Vec3, dir: Vec3, d: number, } | { "kind": "linear_extrude", h: number, center: boolean, twist: number, scale: [number, number], } | { "kind": "rotate_extrude", angle: number, } | { "kind": "loft", ruled: boolean, } | { "kind": "sweep", path: Array<Vec3>, spline: boolean, } | { "kind": "surface", rows: Array<Array<Vec3>>, } | { "kind": "thicken", t: number, } | { "kind": "blend2d", chamfer: boolean, r: number, select: SelectMode, } | { "kind": "offset", round: boolean, d: number, chamfer: boolean, } | { "kind": "stroke", w: number, cap: string, join: string, } | { "kind": "sketch", closed: boolean, contours: Array<SketchContour>, 
+/**
+ * The sketch plane → context coordinates (like `display_world`, but for the profile of
+ * a `rotate_extrude` the xz-plane and for a centred `linear_extrude` its bottom: where
+ * the profile lies in the body; Plan 17.12).
+ */
+plane: Mat4, };
 
 /**
  * One contour of a sketch (node system, z = 0).

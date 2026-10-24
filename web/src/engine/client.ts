@@ -1,7 +1,7 @@
 // Engine client: sends UI messages through an EngineTransport and folds the answers into the
 // UI store and the mesh cache.
 
-import type { Edit, ExportFormat, FromEngine, Scene, SnapTarget, ToEngine, Value } from "./protocol";
+import type { Edit, ExportFormat, FromEngine, Scene, SketchAnswer, SnapTarget, ToEngine, Value } from "./protocol";
 import type { EngineTransport } from "./transport";
 import { bridge } from "../state/bridge";
 import { store } from "../state/store";
@@ -11,6 +11,7 @@ type ExportResult = Extract<FromEngine, { type: "ExportResult" }>;
 
 export type EditsListener = (version: number, edits: Edit[]) => void;
 export type SnapListener = (handle: number, version: number, targets: SnapTarget[]) => void;
+export type SketchListener = (answer: SketchAnswer) => void;
 
 export class EngineClient {
   private requested = new Map<string, number>();
@@ -19,6 +20,7 @@ export class EngineClient {
   private lastContext: string | undefined = undefined;
   private editsListeners: EditsListener[] = [];
   private snapListeners: SnapListener[] = [];
+  private sketchListeners: SketchListener[] = [];
   private seq = 0;
   private version = 0;
   private seqs = new WeakMap<Scene, number>();
@@ -48,6 +50,12 @@ export class EngineClient {
   onSnapTargets(f: SnapListener): () => void {
     this.snapListeners.push(f);
     return () => (this.snapListeners = this.snapListeners.filter((x) => x !== f));
+  }
+
+  /** `Sketch` answers (sketch editor). */
+  onSketch(f: SketchListener): () => void {
+    this.sketchListeners.push(f);
+    return () => (this.sketchListeners = this.sketchListeners.filter((x) => x !== f));
   }
 
   setDragOptions(stepMm: number, stepDeg: number): void {
@@ -197,6 +205,10 @@ export class EngineClient {
       }
       case "SnapTargets": {
         for (const f of this.snapListeners) f(m.handle, m.version, m.targets);
+        break;
+      }
+      case "Sketch": {
+        for (const f of this.sketchListeners) f(m as SketchAnswer);
         break;
       }
       default:

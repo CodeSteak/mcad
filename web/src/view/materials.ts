@@ -30,6 +30,8 @@ export interface Palette {
   openFace: string;
   /** Section caps (like the CLI renderer). */
   cap: string;
+  /** Snap marker of the sketch editor (like the snap label). */
+  snap: string;
 }
 
 export function readPalette(el: HTMLElement = document.documentElement): Palette {
@@ -59,6 +61,7 @@ export function readPalette(el: HTMLElement = document.documentElement): Palette
     guide: v("--view-guide", "#d6336c"),
     openFace: v("--view-open-face", "#f08c00"),
     cap: v("--view-cap", "#db5c3d"),
+    snap: v("--view-snap", "#237a35"),
   };
 }
 

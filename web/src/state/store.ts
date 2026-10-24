@@ -3,7 +3,7 @@
 
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { Diagnostic, RegionSet, Scene } from "../engine/protocol";
+import type { Diagnostic, RegionSet, Scene, SketchAnswer, SketchPoint, SketchTool } from "../engine/protocol";
 import type { ParamOverrides } from "../logic/params";
 import { SECTION_OFF, type SectionState } from "../logic/section";
 
@@ -89,6 +89,19 @@ export interface DragInfo {
   edits: number;
   /** Axis lock of a point handle (0 = x, 1 = y, 2 = z of its local system). */
   axis: number | null;
+}
+
+/** Sketch editor (Plan 17.12): tool, picked points and the engine's last answer. */
+export interface SketchState {
+  tool: SketchTool;
+  /** Points the tool has picked (from the engine's answers). */
+  points: SketchPoint[];
+  /** Last answer (snap, preview, prompt, plane, raster). */
+  answer: SketchAnswer | null;
+  /** Why the last action did not apply. */
+  message: string | null;
+  /** Code actions written in this session of the mode. */
+  actions: number;
 }
 
 /** What the UI shows of the open project (the texts are in `state/project.ts`). */
@@ -184,6 +197,8 @@ export interface CadState {
   recent: Array<{ path: string; folder: boolean }>;
   /** Incremented when git markers arrive. */
   gitVersion: number;
+  /** Sketch editor (Plan 17.12): `null` = off. */
+  sketch: SketchState | null;
 }
 
 function initialSettings(): Settings {
@@ -304,6 +319,7 @@ export const store = createStore<CadState>(() => ({
   diffView: null,
   recent: [],
   gitVersion: 0,
+  sketch: null,
 }));
 
 export function useCad<T>(sel: (s: CadState) => T): T {
