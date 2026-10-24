@@ -23,6 +23,30 @@ export const SKETCH_TOOLS: Array<{ tool: SketchTool; label: string; title: strin
   { tool: "corner", label: "Ecke runden", title: "corner(r = …): Ecke wählen, dann Radius" },
 ];
 
+/** Shortcuts of the tools (docs/konzepte/ui-ueberarbeitung, Abschnitt 5). */
+export const SKETCH_TOOL_KEYS: Partial<Record<SketchTool, string>> = {
+  select: "V",
+  line: "L",
+  arc_through: "A",
+  arc_center: "⇧+A",
+  arc_tangent: "T",
+  bezier: "B",
+  rect: "R",
+  circle: "C",
+  corner: "F",
+};
+
+/** Action of a key in the drawing mode (without Strg/Alt): a tool or a command. */
+export function sketchKeyAction(key: string, shift: boolean): { tool: SketchTool } | { command: "close" | "align" } | null {
+  if (key === "Enter") return { command: "close" };
+  const k = key.length === 1 ? key.toUpperCase() : "";
+  if (k === "N" && !shift) return { command: "align" };
+  if (k === "A") return { tool: shift ? "arc_center" : "arc_through" };
+  if (shift) return null;
+  for (const [tool, key2] of Object.entries(SKETCH_TOOL_KEYS)) if (key2 === k) return { tool: tool as SketchTool };
+  return null;
+}
+
 export const SKETCH_TOOL_NAMES: Record<SketchTool, string> = {
   select: "Auswahl",
   line: "Linie",

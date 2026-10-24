@@ -284,6 +284,8 @@ export class MeasureController {
 
   private onKey(e: KeyboardEvent): void {
     if (!this.active) return;
+    // keys in menus and dialogs belong to them (Esc closes the menu, not the mode)
+    if ((e.target as HTMLElement | null)?.closest?.(".ui-menu, [role=dialog]")) return;
     const inEditor = (e.target as HTMLElement | null)?.closest?.(".cm-editor") != null;
     const inField = (e.target as HTMLElement | null)?.closest?.("input, select, textarea") != null;
     if (e.key === "Escape") {

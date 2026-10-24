@@ -106,6 +106,23 @@ export const PAIRS: Pair[] = [
   { text: "--view-grid", bg: "--view-bg", min: 3 },
   { text: "--view-anchor", bg: "--view-bg", min: 2 },
   { text: "--view-selected-edge", bg: "--view-model", min: 2 },
+  // UI overhaul (report 20): teal accent, buttons, segments, menus, focus ring, view cube
+  { text: "--accent", bg: "--bg", min: 4.5 },
+  { text: "--accent-text", bg: "--accent-soft", base: "--panel", min: 4.5 },
+  { text: "--accent-text", bg: "--accent-soft", base: "--panel-2", min: 4.5 },
+  { text: "--text", bg: "--accent-soft", base: "--panel-2", min: 4.5 },
+  { text: "--on-accent", bg: "--accent-hover", min: 4.5 },
+  { text: "--text", bg: "--seg-on", min: 4.5 },
+  { text: "--text", bg: "--ctl-hover", base: "--panel", min: 4.5 },
+  { text: "--focus", bg: "--bg", min: 3 },
+  { text: "--focus", bg: "--panel", min: 3 },
+  { text: "--focus", bg: "--panel-2", min: 3 },
+  { text: "--focus", bg: "--view-bg", min: 3 },
+  { text: "--view-accent", bg: "--view-model", min: 2 },
+  { text: "--text", bg: "--vc-face", min: 4.5 },
+  { text: "--axis-x", bg: "--view-bg", min: 3 },
+  { text: "--axis-y", bg: "--view-bg", min: 3 },
+  { text: "--axis-z", bg: "--view-bg", min: 3 },
 ];
 
 export interface PairResult extends Pair {

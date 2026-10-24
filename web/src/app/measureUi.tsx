@@ -1,69 +1,77 @@
-// Measure mode (Plan 18): toggle in the view tools, the context bar (kind, "Im Schnitt"),
-// the status line text and the list of measurements ("Messungen").
-//
-// UI concept (docs/konzepte/ui-ueberarbeitung): the context bar belongs top left under the
-// toolbar and the list into a tab "Messen" of the side panel. Both components are
-// self-contained (`MeasureBar`, `MeasurePanel`), so the overhaul only has to place them.
+// Measure mode (Plan 18): mode "Messen" of the view toolbar, the context bar (kind, "Im Schnitt",
+// copy/delete the selected or last measurement, "Fertig"), the status line text and the list of
+// measurements in the tab "Messen" of the side panel (docs/konzepte/ui-ueberarbeitung).
 
 import { MEASURE_KINDS, accuracyText, kindAvailable, sectionText } from "../logic/measure";
-import type { MeasurePick } from "../engine/protocol";
+import type { MeasureKind, MeasurePick } from "../engine/protocol";
 import { useCad } from "../state/store";
-
-const NO_PICKS: MeasurePick[] = [];
 import { measure } from "./runtime";
 import { setSectionOn } from "./section";
+import {
+  Button,
+  IconAngle,
+  IconArea,
+  IconBody,
+  IconButton,
+  IconCheck,
+  IconCopy,
+  IconDelete,
+  IconDistance,
+  IconLength,
+  IconRadius,
+  type IconType,
+  IconWall,
+  Segmented,
+  Toolbar,
+  ToolSep,
+} from "./ui";
 
-export function MeasureToggle() {
-  const on = useCad((s) => s.measure !== null);
-  return (
-    <button
-      aria-pressed={on}
-      className={on ? "on" : ""}
-      onClick={() => (on ? measure.exit() : measure.enter())}
-      title="Messen: Abstand, Radius, Winkel, Länge, Fläche, Körper – auch im Schnitt (Esc beendet)"
-      data-testid="measure-toggle"
-    >
-      Messen
-    </button>
-  );
-}
+const NO_PICKS: MeasurePick[] = [];
+
+const KIND_ICONS: Record<MeasureKind, IconType> = {
+  distance: IconDistance,
+  radius: IconRadius,
+  angle: IconAngle,
+  length: IconLength,
+  area: IconArea,
+  body: IconBody,
+  wall: IconWall,
+};
 
 export function MeasureBar() {
   const m = useCad((s) => s.measure);
   const sectionOn = useCad((s) => s.section.on);
+  const target = useCad((s) => s.measureSelected ?? s.measurements[s.measurements.length - 1]?.id ?? null);
+  const isSel = useCad((s) => s.measureSelected !== null);
   if (!m) return null;
   return (
-    <div className="measurebar contextbar" role="toolbar" aria-label="Messen" data-testid="measurebar">
-      <span className="stitle">Messen</span>
-      <span className="seg" role="radiogroup" aria-label="Messart">
-        {MEASURE_KINDS.map((k) => {
+    <Toolbar label="Messen" float className="contextbar measurebar" data-testid="measurebar">
+      <Segmented
+        label="Messart"
+        className="measure-kinds"
+        value={m.kind}
+        onChange={(k) => measure.setKind(k)}
+        options={MEASURE_KINDS.map((k) => {
           const ok = kindAvailable(k.kind, m.inSection);
-          return (
-            <button
-              key={k.kind}
-              role="radio"
-              aria-checked={m.kind === k.kind}
-              aria-label={k.label}
-              className={m.kind === k.kind ? "on" : ""}
-              disabled={!ok}
-              title={`${k.title} (${k.key})${ok ? "" : k.where === "section" ? " – nur im Schnitt" : " – nicht im Schnitt"}`}
-              onClick={() => measure.setKind(k.kind)}
-              data-testid={`measure-kind-${k.kind}`}
-            >
-              {k.label}
-            </button>
-          );
+          return { value: k.kind, label: k.label, icon: KIND_ICONS[k.kind], shortcut: k.key, disabled: !ok, hint: `${k.title}${ok ? "" : k.where === "section" ? " – nur im Schnitt" : " – nicht im Schnitt"}` };
         })}
-      </span>
-      <span className="sep" />
-      <label className="check" title={sectionOn ? "In der Schnittebene messen: Konturen, Kreise, Wandstärke" : "Schaltet die Schnittansicht ein und misst in der Schnittebene"}>
-        <input type="checkbox" checked={m.inSection} onChange={(e) => measure.setInSection(e.target.checked, () => setSectionOn(true))} data-testid="measure-in-section" />
+      />
+      <ToolSep />
+      <Button
+        variant="quiet"
+        pressed={m.inSection}
+        hint={sectionOn ? "In der Schnittebene messen: Konturen, Kreise, Wandstärke" : "Schaltet die Schnittansicht ein und misst in der Schnittebene"}
+        onClick={() => measure.setInSection(!m.inSection, () => setSectionOn(true))}
+      >
         Im Schnitt
-      </label>
-      <button onClick={() => measure.exit()} title="Messen beenden (Esc)" data-testid="measure-exit">
+      </Button>
+      <IconButton icon={IconCopy} label="Messung kopieren" hint={isSel ? "Gewählte Messung als Text kopieren" : "Letzte Messung als Text kopieren"} disabled={target === null} onClick={() => target !== null && void measure.copy(target, "text")} />
+      <IconButton icon={IconDelete} label="Messung löschen" shortcut="Entf" hint={isSel ? "Gewählte Messung löschen" : "Letzte Messung löschen"} disabled={target === null} onClick={() => target !== null && measure.remove(target)} />
+      <ToolSep />
+      <Button variant="primary" icon={IconCheck} shortcut="Esc" hint="Messen beenden" onClick={() => measure.exit()}>
         Fertig
-      </button>
-    </div>
+      </Button>
+    </Toolbar>
   );
 }
 
@@ -82,25 +90,19 @@ export function MeasureStatus() {
 }
 
 export function MeasurePanel() {
-  const active = useCad((s) => s.measure !== null);
   const list = useCad((s) => s.measurements);
   const sel = useCad((s) => s.measureSelected);
   const version = useCad((s) => s.complete?.version ?? null);
   const picks = useCad((s) => s.measure?.picks) ?? NO_PICKS;
-  if (!active && !list.length) return null;
   return (
-    <aside className="measurepanel" aria-label="Messungen" data-testid="measure-panel">
+    <div className="measurepanel" role="region" aria-label="Messungen" data-testid="measure-panel">
       <div className="mptitle">
         <span>
           Messungen <span className="mpcount">{list.length}</span>
         </span>
         <span className="mpactions">
-          <button disabled={!list.length} onClick={() => void measure.copyAll()} title="Alle Messungen als Text kopieren" data-testid="measure-copy-all">
-            Alle kopieren
-          </button>
-          <button disabled={!list.length} onClick={() => measure.clear()} title="Alle Messungen löschen" data-testid="measure-clear">
-            Alle löschen
-          </button>
+          <IconButton icon={IconCopy} label="Alle kopieren" hint="Alle Messungen als Text kopieren" disabled={!list.length} onClick={() => void measure.copyAll()} />
+          <IconButton icon={IconDelete} label="Alle löschen" hint="Alle Messungen löschen" disabled={!list.length} onClick={() => measure.clear()} />
         </span>
       </div>
       {picks.length > 0 && (
@@ -119,7 +121,16 @@ export function MeasurePanel() {
               key={e.id}
               className={`mpitem${sel === e.id ? " selected" : ""}${stale ? " stale" : ""}`}
               data-testid={`measure-item-${e.id}`}
+              tabIndex={0}
+              aria-current={sel === e.id ? "true" : undefined}
+              aria-label={`${m.title} ${m.label}`}
+              title="Klick: in der Ansicht hervorheben"
               onClick={() => measure.select(sel === e.id ? null : e.id)}
+              onKeyDown={(ev) => {
+                if (ev.target !== ev.currentTarget || (ev.key !== "Enter" && ev.key !== " ")) return;
+                ev.preventDefault();
+                measure.select(sel === e.id ? null : e.id);
+              }}
             >
               <div className="mphead">
                 <span className="mpkind">{m.title}</span>
@@ -150,23 +161,21 @@ export function MeasurePanel() {
                 </ul>
               )}
               <div className="mpbuttons" onClick={(ev) => ev.stopPropagation()}>
-                <button onClick={() => void measure.copy(e.id, "text")} title="Als Text kopieren" data-testid={`measure-copy-${e.id}`}>
+                <Button className="ui-btn--small" aria-label="Als Text kopieren" onClick={() => void measure.copy(e.id, "text")} title="Als Text kopieren">
                   Kopieren
-                </button>
-                <button onClick={() => void measure.copy(e.id, "comment")} title="Als Code-Kommentar kopieren (// Messung: …)" data-testid={`measure-comment-${e.id}`}>
+                </Button>
+                <Button className="ui-btn--small" aria-label="Als Kommentar kopieren" onClick={() => void measure.copy(e.id, "comment")} title="Als Code-Kommentar kopieren (// Messung: …)">
                   // Kommentar
-                </button>
-                <button onClick={() => void measure.copy(e.id, "cli")} title="Gleiche Messung in der CLI: cad measure …" data-testid={`measure-cli-${e.id}`}>
-                  Als <code>cad measure</code>
-                </button>
-                <button className="mpdel" aria-label="Messung löschen" onClick={() => measure.remove(e.id)} title="Löschen (Entf)" data-testid={`measure-delete-${e.id}`}>
-                  ×
-                </button>
+                </Button>
+                <Button className="ui-btn--small" aria-label="Als cad measure kopieren" onClick={() => void measure.copy(e.id, "cli")} title="Gleiche Messung in der CLI: cad measure …">
+                  <code>cad measure</code>
+                </Button>
+                <IconButton className="ui-btn--small mpdel" icon={IconDelete} label="Messung löschen" shortcut="Entf" onClick={() => measure.remove(e.id)} />
               </div>
             </li>
           );
         })}
       </ol>
-    </aside>
+    </div>
   );
 }

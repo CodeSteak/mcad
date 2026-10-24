@@ -13,7 +13,7 @@
 import { redo, undo } from "@codemirror/commands";
 import type { EngineClient } from "../engine/client";
 import type { Mat4, Ray, SketchAnswer, SketchRequest, SketchTool } from "../engine/protocol";
-import { pixelSize, sketchTransaction } from "../logic/sketchEditor";
+import { pixelSize, sketchKeyAction, sketchTransaction } from "../logic/sketchEditor";
 import { bridge } from "../state/bridge";
 import { project } from "../state/project";
 import { type SketchState, store } from "../state/store";
@@ -105,6 +105,7 @@ export class SketchController {
     }
     this.clicks = [];
     this.patch({ tool, points: [], message: null });
+    if (tool.startsWith("arc_")) store.setState({ sketchArc: tool });
     this.request(null, false, false, false);
   }
 
@@ -254,6 +255,8 @@ export class SketchController {
 
   private onKey(e: KeyboardEvent): void {
     if (!this.active || store.getState().drag) return;
+    // keys in menus and dialogs belong to them (Esc closes the menu, not the mode)
+    if ((e.target as HTMLElement | null)?.closest?.(".ui-menu, [role=dialog]")) return;
     const inEditor = (e.target as HTMLElement | null)?.closest?.(".cm-editor") != null;
     const inField = (e.target as HTMLElement | null)?.closest?.("input, select, textarea") != null;
     if (e.key === "Escape") {
@@ -266,7 +269,19 @@ export class SketchController {
     if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
       this.deleteSegment();
-    } else if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z" || e.key === "y")) {
+      return;
+    }
+    // tool shortcuts (V, L, A, ⇧A, T, B, R, C, F), Enter: close, N: look onto the plane
+    const onButton = (e.target as HTMLElement | null)?.closest?.("button, [role=menuitem], [role=menuitemradio], [role=tab]") != null;
+    const act = !e.ctrlKey && !e.metaKey && !e.altKey ? sketchKeyAction(e.key, e.shiftKey) : null;
+    if (act && !(onButton && e.key === "Enter")) {
+      e.preventDefault();
+      if ("tool" in act) this.setTool(act.tool);
+      else if (act.command === "close") this.closeContour();
+      else this.align();
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z" || e.key === "y")) {
       const v = bridge.view;
       if (!v) return;
       e.preventDefault();

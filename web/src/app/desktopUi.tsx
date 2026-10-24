@@ -1,10 +1,11 @@
-// Desktop app UI parts: bar for external changes, diff view ("Vergleichen"), recent files.
+// Desktop app UI parts: bar for external changes, diff view ("Vergleichen"). The recent files
+// are a submenu of "Datei" (header.tsx).
 
 import { diffLines } from "../logic/textDiff";
-import { IS_TAURI } from "../platform/desktop";
 import { project } from "../state/project";
 import { store, useCad } from "../state/store";
-import { closeRemoved, compare, keepMine, openRecent, reloadFile, saveProject } from "./desktop";
+import { closeRemoved, compare, keepMine, reloadFile, saveProject } from "./desktop";
+import { Button } from "./ui";
 
 /** "Datei wurde extern geändert: Neu laden / Meine behalten / Vergleichen" (above the editor). */
 export function ExternalBar() {
@@ -20,28 +21,28 @@ export function ExternalBar() {
             <span className="msg">
               <b>{path}</b> wurde extern geändert (ungespeicherte Änderungen im Editor).
             </span>
-            <button onClick={() => reloadFile(path, e.text ?? "")} data-testid="external-reload" title="Stand der Festplatte übernehmen (rückgängig machbar)">
+            <Button onClick={() => reloadFile(path, e.text ?? "")} data-testid="external-reload" title="Stand der Festplatte übernehmen (rückgängig machbar)">
               Neu laden
-            </button>
-            <button onClick={() => keepMine(path)} data-testid="external-keep" title="Editor-Stand behalten; Speichern überschreibt die Datei">
+            </Button>
+            <Button onClick={() => keepMine(path)} data-testid="external-keep" title="Editor-Stand behalten; Speichern überschreibt die Datei">
               Meine behalten
-            </button>
-            <button onClick={() => compare(path)} data-testid="external-compare">
+            </Button>
+            <Button onClick={() => compare(path)} data-testid="external-compare">
               Vergleichen
-            </button>
+            </Button>
           </div>
         ) : (
           <div key={path} className="extbar removed" role="alert" data-testid="external-bar" data-path={path}>
             <span className="msg">
               <b>{path}</b> wurde gelöscht oder umbenannt. Der Inhalt bleibt im Editor; Speichern legt die Datei wieder an.
             </span>
-            <button onClick={() => void saveProject()} data-testid="external-restore">
+            <Button onClick={() => void saveProject()} data-testid="external-restore">
               Wieder speichern
-            </button>
+            </Button>
             {path !== project.main && (
-              <button onClick={() => closeRemoved(path)} data-testid="external-close">
+              <Button onClick={() => closeRemoved(path)} data-testid="external-close">
                 Schließen
-              </button>
+              </Button>
             )}
           </div>
         ),
@@ -62,18 +63,18 @@ export function DiffDialog() {
         <header>
           <b>{d.path}</b>: <span className="del">− auf der Festplatte</span> · <span className="add">+ im Editor</span>
           <span className="grow" />
-          <button onClick={() => reloadFile(d.path, d.disk)} data-testid="diff-reload">
+          <Button onClick={() => reloadFile(d.path, d.disk)} data-testid="diff-reload">
             Festplatte übernehmen
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => {
               keepMine(d.path);
             }}
             data-testid="diff-keep"
           >
             Meine behalten
-          </button>
-          <button onClick={close}>Schließen</button>
+          </Button>
+          <Button onClick={close}>Schließen</Button>
         </header>
         <pre>
           {rows.map((r, i) => (
@@ -87,31 +88,5 @@ export function DiffDialog() {
         </pre>
       </div>
     </div>
-  );
-}
-
-/** "Zuletzt geöffnet" (desktop app). */
-export function RecentMenu() {
-  const recent = useCad((s) => s.recent);
-  if (!IS_TAURI) return null;
-  return (
-    <label className="examples">
-      <span>Zuletzt</span>
-      <select
-        aria-label="Zuletzt geöffnet"
-        data-testid="recent"
-        value=""
-        onChange={(e) => {
-          if (e.target.value) void openRecent(e.target.value);
-        }}
-      >
-        <option value="">{recent.length ? "Zuletzt geöffnet …" : "(noch nichts)"}</option>
-        {recent.map((r) => (
-          <option key={r.path} value={r.path} title={r.path}>
-            {(r.folder ? `${r.path}/` : r.path).split("/").slice(-3).join("/")}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }

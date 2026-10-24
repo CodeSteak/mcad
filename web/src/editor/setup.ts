@@ -102,9 +102,10 @@ const hoverTracking = EditorView.domEventHandlers({
   mousemove(e, view) {
     const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }, false);
     const line = view.state.doc.lineAt(pos);
-    // Outside the text of the line (right of its end): still the line, not a reference.
+    // Outside the text of the line (right of its end): still the line, not a reference. A
+    // wrapped line ends on its last visual row; the rows above are text across the width.
     const coords = view.coordsAtPos(line.to);
-    const inText = !coords || e.clientX <= coords.right + 2;
+    const inText = !coords || e.clientY < coords.top || e.clientX <= coords.right + 2;
     const p = inText ? pos : line.to;
     if (store.getState().editorHover !== p) store.setState({ editorHover: p });
   },
