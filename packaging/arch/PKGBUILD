@@ -21,13 +21,14 @@ license=('LicenseRef-UNLICENSED' 'Apache-2.0' 'OFL-1.1' 'MIT')
 depends=(
   'cairo'
   'dbus'
-  'gcc-libs'
   'gdk-pixbuf2'
   'glib2'
   'glibc'
   'gtk3'
   'hicolor-icon-theme'
+  'libgcc'
   'libsoup3'
+  'libstdc++'
   'webkit2gtk-4.1'
 )
 makedepends=(
@@ -72,6 +73,9 @@ build() {
   export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/usr/src/$pkgname"
   # SMLib ist nur ohne libstdc++-Assertions getestet (wie in CI und den Testberichten)
   export CXXFLAGS="${CXXFLAGS//-Wp,-D_GLIBCXX_ASSERTIONS/}"
+  # __FILE__ in SMLib-Meldungen ohne $srcdir
+  CFLAGS+=" -ffile-prefix-map=$srcdir=/usr/src/$pkgname"
+  CXXFLAGS+=" -ffile-prefix-map=$srcdir=/usr/src/$pkgname"
   export JOBS="${JOBS:-$(nproc)}"
   make app SMLIB_SRC="$srcdir/smlib" SMLIB_PREBUILT="$srcdir/smlib-native" CARGO_FLAGS=--frozen
 }

@@ -13,6 +13,9 @@ mkdir -p "$OUT"
 step() { printf '\n== %s\n' "$*"; }
 
 step "Paket installieren (pacman -U, Abhängigkeiten aus den Repositorys)"
+# Das Docker-Image archlinux schließt /usr/share/doc u. a. per NoExtract aus; für den Test
+# (Beispiele unter /usr/share/doc/controller-cad) wie auf einem normalen System entpacken
+sed -i '/^NoExtract/d' /etc/pacman.conf
 pacman -Sy --noconfirm >/dev/null
 pacman -U --noconfirm "$PKG" 2>&1 | grep -E '^(Packages|Pakete|Total|Gesamt)|controller-cad' || true
 pacman -Q controller-cad

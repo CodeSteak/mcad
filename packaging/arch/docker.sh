@@ -43,6 +43,9 @@ done
 if [ -n "$CA" ]; then
   [ -f "$CA" ] || { echo "ARCH_CA_BUNDLE: $CA nicht gefunden" >&2; exit 2; }
   common+=(-v "$(cd "$(dirname "$CA")" && pwd)/$(basename "$CA"):/etc/ca-certificates/trust-source/anchors/extra-ca.crt:ro")
+  # Node (pnpm) liest den System-Trust-Store nicht: ohne diese Variable hängt pnpm install
+  # hinter einem TLS-Proxy in Wiederholungen
+  common+=(-e NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt)
 fi
 # Vor pacman: zusätzliche CA in den Trust-Store übernehmen
 TRUST='if [ -f /etc/ca-certificates/trust-source/anchors/extra-ca.crt ]; then update-ca-trust; fi'
