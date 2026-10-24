@@ -70,11 +70,13 @@ pub enum DaemonCmd {
     Serve(ServeArgs),
     /// Is a daemon running? PID, version, uptime, idle time, cache, hit rate, requests.
     Status {
+        /// Output as JSON.
         #[arg(long)]
         json: bool,
     },
     /// Stop the daemon (waits for the running command).
     Stop {
+        /// Output as JSON.
         #[arg(long)]
         json: bool,
     },

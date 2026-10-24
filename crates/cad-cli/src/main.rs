@@ -269,8 +269,8 @@ pub(crate) enum Cmd {
         #[arg(long)]
         all_parts: bool,
         /// Single-colour 3MF as before (one mesh, no colours and no filament assignment).
-        /// Default: multicolour – one object per part (material outside the parts: object
-        /// "ohne Bauteil") with one part per colour and filament slots for Bambu Studio/OrcaSlicer.
+        /// Default: multicolour – one object per part (plus one object for material outside the
+        /// parts) with one part per colour and filament slots for Bambu Studio/OrcaSlicer.
         #[arg(long)]
         single_color: bool,
         /// Multicolour 3MF with a colour group (`m:colorgroup`) for programs that show 3MF colours.
