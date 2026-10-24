@@ -27,6 +27,7 @@ mod print;
 pub mod project;
 mod sig;
 mod sketch;
+pub mod sketch_edit;
 pub mod value;
 
 pub use edit::{

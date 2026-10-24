@@ -182,6 +182,159 @@ pub enum ToEngine {
     /// "Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung"; a changed parameter
     /// gives a new key, which is computed again. Answers nothing (`Error` for a bad key).
     BlockKeys { keys: Vec<String> },
+    /// Sketch editor (Plan 17.12): snaps the mouse ray in the plane of the sketch at `cursor`,
+    /// previews the tool, and on `click` adds the point or completes the action (code as
+    /// `edits`). Answers `Sketch`.
+    Sketch(SketchRequest),
+}
+
+/// Tools of the sketch editor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum SketchTool {
+    /// Hover picks a segment (`SketchAnswer.segment`).
+    Select,
+    Line,
+    /// Arc through three points.
+    ArcThrough,
+    /// Arc around a centre (`angle`, or `to` on a snapped point).
+    ArcCenter,
+    /// Tangent arc continuing the contour.
+    ArcTangent,
+    /// Cubic Bézier curve (start, c1, c2, end).
+    Bezier,
+    Rect,
+    Circle,
+    /// `corner(r = …)`: vertex, then radius.
+    Corner,
+    /// `close();` at the insertion point (no ray needed).
+    Close,
+    /// Removes the segment statement at `cursor` (no ray needed).
+    Delete,
+}
+
+/// Grid point of a picked point (`z` omitted: implicit plane, written `g[x, y]`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct SketchGridSel {
+    pub grid: u32,
+    pub x: String,
+    pub y: String,
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub z: Option<String>,
+}
+
+/// A point a tool has picked: position in the sketch plane, the expression written for it and
+/// what it snapped to (`grid`, `anchor`, `start`, `end`, `center`, `intersection`, `mid`,
+/// `vertex`, `tangent`, `horizontal`, `vertical`, `grid_line`, `step`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct SketchPoint {
+    pub p: [f64; 2],
+    pub text: String,
+    pub kind: String,
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grid: Option<SketchGridSel>,
+}
+
+/// A ray in context coordinates.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+pub struct Ray {
+    pub origin: Vec3,
+    pub dir: Vec3,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct SketchRequest {
+    /// Echoed in the answer.
+    pub id: u32,
+    /// Editor cursor in the main file (UTF-16): picks the sketch and where new code goes.
+    pub cursor: u32,
+    pub tool: SketchTool,
+    /// Points picked so far (from the previous answer's `points`).
+    #[serde(default)]
+    pub points: Vec<SketchPoint>,
+    /// Mouse ray; without it only plane, prompt (and with `info` the raster) are answered.
+    #[ts(optional)]
+    #[serde(default)]
+    pub ray: Option<Ray>,
+    /// Size of a pixel at distance 1 from the camera (2·tan(fov/2)/height).
+    #[serde(default)]
+    pub pixel: f64,
+    /// Snap radius in pixels.
+    #[serde(default)]
+    pub snap_px: f64,
+    /// Alt: no snapping, numbers rounded to the step.
+    #[serde(default)]
+    pub free: bool,
+    /// Mouse click: adds the point; a complete action answers `edits`.
+    #[serde(default)]
+    pub click: bool,
+    /// Arc around a centre: sweep of the previous answer (degrees), so the arc can go on
+    /// beyond 180°.
+    #[ts(optional)]
+    #[serde(default)]
+    pub angle: Option<f64>,
+    /// Also answer the raster.
+    #[serde(default)]
+    pub info: bool,
+}
+
+/// Where the mouse snapped (context coordinates; `local` in the sketch plane).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct SketchSnap {
+    pub point: Vec3,
+    pub local: [f64; 2],
+    /// Expression that would be written (`g[a, b]`, `k.ecke`, `[12, 5]`).
+    pub text: String,
+    pub kind: String,
+    /// Display text.
+    pub label: String,
+}
+
+/// Drawing raster in the sketch plane (context coordinates): lines of the visible grids, grid
+/// points, and the extent (sketch plane) for the step raster.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct SketchRaster {
+    pub lines: Vec<[Vec3; 2]>,
+    pub points: Vec<Vec3>,
+    pub min: [f64; 2],
+    pub max: [f64; 2],
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct SketchAnswer {
+    pub id: u32,
+    /// Source version the answer (and its edits) belong to.
+    pub version: u64,
+    /// The sketch statement being edited (`null`: none yet, the first action creates one).
+    pub sketch: Option<SrcRange>,
+    /// Its node.
+    pub node: Option<u32>,
+    /// Sketch plane → context coordinates (camera, drawing).
+    pub plane: Mat4,
+    /// End of the open contour at the insertion point (context coordinates).
+    pub current: Option<Vec3>,
+    pub snap: Option<SketchSnap>,
+    /// Help lines of the snap (horizontal/vertical, tangent).
+    pub guides: Vec<Vec<Vec3>>,
+    /// What the tool would draw (context coordinates).
+    pub preview: Vec<Vec<Vec3>>,
+    /// Tool state after this message: the points picked so far.
+    pub points: Vec<SketchPoint>,
+    /// Code of a completed action (one undo step).
+    pub edits: Vec<Edit>,
+    /// Cursor after applying `edits`: index of the edit and UTF-16 offset in its text.
+    pub select: Option<[u32; 2]>,
+    /// What the tool asks for next.
+    pub prompt: String,
+    /// Why an action did not apply.
+    pub message: Option<String>,
+    /// Select tool: the segment statement under the mouse.
+    pub segment: Option<SrcRange>,
+    /// Arc around a centre: current sweep in degrees (send back as `angle`).
+    pub angle: Option<f64>,
+    pub raster: Option<SketchRaster>,
 }
 
 /// Where a dragged handle goes.
@@ -292,6 +445,8 @@ pub enum FromEngine {
         version: Option<u64>,
         node: Option<u32>,
     },
+    /// Answer to `Sketch`.
+    Sketch(Box<SketchAnswer>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -655,6 +810,10 @@ pub enum OpInfo {
     Sketch {
         closed: bool,
         contours: Vec<SketchContour>,
+        /// The sketch plane → context coordinates (like `display_world`, but for the profile of
+        /// a `rotate_extrude` the xz-plane and for a centred `linear_extrude` its bottom: where
+        /// the profile lies in the body; Plan 17.12).
+        plane: Mat4,
     },
 }
 
@@ -1080,6 +1239,14 @@ pub fn typescript() -> String {
         IncludeRef,
         Part,
         ToEngine,
+        SketchTool,
+        SketchGridSel,
+        SketchPoint,
+        Ray,
+        SketchRequest,
+        SketchSnap,
+        SketchRaster,
+        SketchAnswer,
         DragTarget,
         SnapRef,
         ExportFormat,

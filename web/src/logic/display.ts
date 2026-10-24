@@ -170,6 +170,13 @@ export function sketchesFor(scene: Scene, n: SceneNode): SceneNode[] {
   return out;
 }
 
+/** Where a sketch is drawn: its plane (the xz-plane in a rotate_extrude, the bottom of a
+ *  centred linear_extrude; engine `OpInfo.Sketch.plane`), else its node system. */
+export function sketchPlane(n: SceneNode): Mat4 {
+  const o = n.op_info;
+  return o && o.kind === "sketch" && o.plane ? o.plane : n.display_world;
+}
+
 function sketchDraw(n: SceneNode, active: (r: SrcRange) => boolean): SketchDraw | null {
   const o = n.op_info;
   if (!o || o.kind !== "sketch") return null;
@@ -189,7 +196,7 @@ function sketchDraw(n: SceneNode, active: (r: SrcRange) => boolean): SketchDraw 
       starts.push({ point: first[0], dir: d, open: !c.closed, end: last[last.length - 1] ?? first[0], hole: c.hole });
     }
   }
-  return { node: n.idx, matrix: n.display_world, closed: o.closed, segments, helpers, starts };
+  return { node: n.idx, matrix: sketchPlane(n), closed: o.closed, segments, helpers, starts };
 }
 
 /**
@@ -406,7 +413,7 @@ export function plan(input: PlanInput): Plan {
   for (const n of cursor) {
     if (hasGeometry(n)) {
       const mode: Mode = n.flags.zone ? "blue" : n.label === "loft" ? "translucent" : n.op_info?.kind === "sketch" ? "profile" : "full";
-      items.push(item(n, mode, "Cursor"));
+      items.push(item(n, mode, "Cursor", n.op_info?.kind === "sketch" ? sketchPlane(n) : n.display_world));
     }
     if (n.label === "difference") {
       for (const c of visibleChildren(scene, n)) if (c.subtracted && hasGeometry(c)) items.push(item(c, "red", "abgezogen"));
@@ -445,7 +452,7 @@ export function plan(input: PlanInput): Plan {
       if (sketches.some((d) => d.node === sk.idx)) continue;
       const d = sketchDraw(sk, input.segmentActive ?? (() => false));
       if (d) sketches.push(d);
-      if (hasGeometry(sk) && sk.idx !== n.idx) items.push(item(sk, "profile", "Skizze"));
+      if (hasGeometry(sk) && sk.idx !== n.idx) items.push(item(sk, "profile", "Skizze", sketchPlane(sk)));
     }
     const inst = instanceBelow(scene, n);
     if (inst !== null) activeInst.add(inst);

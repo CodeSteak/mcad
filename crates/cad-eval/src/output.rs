@@ -378,6 +378,35 @@ pub struct SketchInfo {
     pub span: Span,
     pub closed: bool,
     pub contours: Vec<SketchContourInfo>,
+    /// The segment statements in evaluation order with the drawing state after each (the
+    /// sketch editor's current point, Plan 17.12); geometry before `corner()`.
+    #[serde(default)]
+    pub steps: Vec<SketchStep>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SketchStepKind {
+    Start,
+    Seg,
+    Close,
+    Corner,
+}
+
+/// One evaluated segment statement of a sketch.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SketchStep {
+    pub stmt: StmtId,
+    pub span: Span,
+    pub kind: SketchStepKind,
+    /// Contour (counted as `start` statements are met, from 0).
+    pub contour: u32,
+    pub hole: bool,
+    /// The segment (`Seg`; `Close`: the closing line, if one was needed), before corners.
+    pub seg: Option<cad_ir::Seg>,
+    /// Current point after the statement.
+    pub point: glam::DVec2,
+    /// Direction at the current point (end tangent of the last segment).
+    pub tangent: Option<glam::DVec2>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

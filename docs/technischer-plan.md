@@ -770,7 +770,8 @@ umgesetzt** (`corner`, `fillet2d`/`chamfer2d`, `offset`, `stroke`; Testbericht 1
 in 17.9); **Schritt 3 umgesetzt:** `text()` mit den mitgelieferten OFL-Schriften und
 SVG-Import (Testbericht 16, Entscheidungen in 17.10), die eigene Schablonenschrift
 „cad stencil mono“ als Standardschrift (Schritt 3b, Testbericht 17, Entscheidungen in 17.11).
-Schritt 4 geplant.
+**Schritt 4 umgesetzt:** Skizzen-Editor, Zeichenmodus mit Raster in Browser und Tauri
+(Testbericht 18, Entscheidungen in 17.12).
 
 ### 17.1 Skizzen
 
@@ -1210,3 +1211,116 @@ keine optischen Korrekturen; W, w, m, @, * werden bei Bold dicht. Stege an Böge
 Bänder (Breite auf der Mittellinie). Kombinierende Zeichen werden nicht zusammengesetzt (das
 Zeichen kommt aus JetBrains Mono); Zeichen aus JetBrains Mono haben keine Stege. Glyphen
 berühren sich nur bei `spacing` < 1 oder den zellenbreiten `—` und `_`.
+
+### 17.12 Umsetzung Schritt 4: Skizzen-Editor (Testbericht 18)
+
+**Bedienung.** Schalter „Skizze“ in der Ansichtsleiste (Browser und Tauri gleich): Zeichenmodus
+für die Skizze am Cursor (die `sketch`-Anweisung enthält den Cursor oder beginnt auf seiner
+Zeile). Die Kamera blickt senkrecht auf die Skizzenebene (beim Eintreten, wenn sich die Ebene
+ändert, „⊥ Ansicht“); bei einer neuen Skizze passt sie auch das Modell ein. Leiste: Auswahl,
+Linie, Bogen 3P (durch drei Punkte), Bogen M (Mittelpunkt + Winkel), Bogen tan (tangential),
+Bézier (kubisch), Rechteck, Kreis, Ecke runden; Schließen, Löschen, Fertig. Die Statuszeile sagt,
+was das Werkzeug als Nächstes braucht, wohin die Maus snappt und warum eine Aktion nicht ging.
+Esc verwirft die gewählten Punkte, ein zweites Esc beendet den Modus; Entf löscht das Segment am
+Cursor; Strg+Z/Strg+Umschalt+Z wirken auch mit dem Fokus in der Ansicht. Die linke Maustaste
+gehört dem Zeichenwerkzeug (auch auf bestehenden Punkten: dort zeigt die Ansicht keine Griffe);
+mit „Auswahl“ setzt ein Klick auf ein Segment den Cursor in seine Zeile, die Griffe aller
+Segmente sind zu sehen und werden wie bisher gezogen (Literal ändern, Rasterreferenz
+umschreiben, Alt: Zahlen), links ziehen auf freier Fläche dreht die Kamera.
+
+**Werkzeuge → Code.** Jede Aktion ist ein Text-Edit der Hauptdatei und ein eigener
+Verlaufsschritt; der Cursor steht danach hinter dem neuen Code, die nächste Aktion folgt dort.
+
+| Werkzeug | Klicks | Code |
+| --- | --- | --- |
+| Linie | Anfang, dann je Punkt | `start(p);` (wenn der Anfang nicht das Ende der Kontur am Cursor ist) `line(to = q);` je Punkt; tangential: `line(length = l);`; Klick auf den Anfang der Kontur (≥ 2 Segmente): `close();` |
+| Bogen 3P | Anfang, Durchgangspunkt, Ende | `arc(through = q, to = p);` |
+| Bogen M | Anfang, Mittelpunkt, Endwinkel | `arc(center = c, angle = a);` (a auf die Winkelschrittweite gerundet; Vorzeichen = Richtung, über 180° hinaus der Mausbewegung folgend); auf einem gesnappten Punkt `arc(center = c, to = p[, cw = true]);` |
+| Bogen tan | Ende | `arc(to = p);` am Ende der offenen Kontur (braucht eine Richtung) |
+| Bézier | Anfang, c1, c2, Ende | `bezier(c1 = …, c2 = …, to = …);` |
+| Rechteck | zwei Ecken | `start(a); line(to = [bx, ay]); line(to = b); line(to = [ax, by]); close();` – sind beide Ecken Punkte desselben Rasters, auch die anderen (`g[c, u]`, `g[b, v]`) |
+| Kreis | Mittelpunkt, Punkt auf dem Kreis | `start(p); arc(center = c, angle = 360); close();` |
+| Ecke runden | Ecke, Radius (Abstand zur Ecke) | `corner(r = …);` nach dem Segment, das an der Ecke endet (Startecke: nach `start`); steht dort schon ein `corner()`, ändert sich sein Radius |
+| Schließen | – | `close();` für die offene Kontur am Cursor |
+| Löschen | – | entfernt die Segmentanweisung am Cursor (ganze Zeile); das einzige Segment einer Kontur nimmt `start`, `close`, `corner` der Kontur mit, ein `corner()` direkt nach dem Segment ebenfalls |
+
+Ketten: nach einer Linie, Bogen 3P/M und Bézier ist der letzte Punkt der Anfang des nächsten
+Elements (kein neues `start`). Punkte werden als Referenz (`g[b, u]`, `k.ecke`) oder als Zahlen
+(`fmt_num`, auf die Schrittweite gerundete freie Punkte) geschrieben; nichts Neues an der Sprache.
+
+**Einfügestelle** (`cad_eval::sketch_edit::place`). In der Skizze am Cursor: nach der Anweisung
+der Cursorzeile bzw. der letzten davor, im innersten `hole { … }`-Block, der den Cursor enthält;
+auf der `sketch {`-Zeile am Ende des Blocks; leere Blöcke (auch `sketch {}` auf einer Zeile)
+werden aufgeklappt, eingerückt wie die Nachbarn bzw. eine Stufe tiefer. Der Zeichenzustand dort
+(offene Kontur, ihr Anfang, aktueller Punkt, Richtung) kommt aus `SketchInfo::steps`: die
+Segmentanweisungen in Auswertungsreihenfolge mit dem Zustand nach jeder (auch aus Schleifen und
+Modulaufrufen im Block; Geometrie vor den `corner()`). Beginnt eine Aktion eine neue Kontur
+mitten in einer, die nach der Einfügestelle weiterläuft, kommt sie hinter deren letzte Anweisung.
+Ohne Skizze am Cursor legt die erste Aktion einen `sketch { … }`-Block an: am Ende des
+Kontextmoduls bzw. der Datei, Ebene = xy des Kontexts (eine bloße 2D-Skizze; zum Körper macht sie
+z. B. `linear_extrude`). Sichtbare Raster und benannte Instanzen gelten an der Einfügestelle.
+
+**Snap** (`snap`). Toleranz: Snap-Radius in Pixeln (Einstellungen) mal Pixelgröße am Treffpunkt
+des Strahls (`pixel` = 2·tan(fov/2)/Höhe, mal Abstand). Ohne Alt der nächste Punkt im Radius:
+Rasterpunkte (nur solche in der Skizzenebene, z = 0 im Skizzensystem) und Anker benannter
+Instanzen schreiben ihre Referenz; Anfang der offenen Kontur (schließt), Ecken, End-, Mittel- und
+Schnittpunkte (Gerade/Bogen exakt, Kurven über Abtastung) und Bogenmittelpunkte der Skizze
+schreiben Zahlen; bei gleicher Lage gewinnt die Referenz. Sonst: tangential (Linie vom Ende der
+Kontur entlang ihrer Richtung, Länge auf die Schrittweite), horizontal/vertikal zum vorigen Punkt
+und Rasterlinien (eine Koordinate `g.name`, z. B. `[g.b, 40]`, nur für Raster ohne Drehung),
+sonst die Schrittweite. Alt: frei mit Schrittweite. Die Antwort enthält Text, Art und
+Beschriftung; die Ansicht zeigt eine Markierung je Art (Quadrat Raster/Anker, Ring Punkte, Raute
+Richtungen, Kreuz Schritt), die Beschriftung und Hilfslinien.
+
+**Ebene der Skizze** (`sketch_frame`): das Knotensystem; im Profil eines `rotate_extrude` die
+xz-Ebene (wo das Profil im Körper liegt), beim zentrierten `linear_extrude` dessen Boden. Dieselbe
+Ebene nutzen die Griffe der Segmente (`Handle.frame`), die Darstellung der Skizze
+(`OpInfo::Sketch.plane`, auch außerhalb des Zeichenmodus) und der Editor (Kamera, Raster, Snap,
+Vorschau). Werte bleiben Koordinaten der Skizze; Rasterpunkte werden in der Skizzenebene gezeigt,
+wo die Referenz den Punkt hinlegt (wie `result_world` beim Griff-Snap).
+
+**Protokoll** (Plan 7.1). `Sketch { id, cursor, tool, points, ray?, pixel, snap_px, free, click,
+angle?, info }` → `Sketch { id, version, sketch, node, plane, current, snap, guides, preview,
+points, edits, select, prompt, message, segment, angle, raster }`. Die Engine ist ohne Zustand:
+die gewählten Punkte (mit Text und Art) kommen mit jeder Anfrage und gehen mit der Antwort zurück.
+Höchstens eine Anfrage ist unterwegs (die letzte Mausposition gewinnt, Klicks in Reihenfolge).
+Die UI wendet `edits` als eine Transaktion mit `isolateHistory` an, setzt den Cursor
+(`select`: Edit und Versatz im Text) und schickt die Quelle sofort; weil die Engine Nachrichten in
+Reihenfolge bearbeitet, sieht die nächste Anfrage den neuen Text. Bei Syntaxfehlern antwortet sie
+nur mit einer Meldung. Gleich über `WorkerTransport` und `TauriTransport` (JSON).
+
+**Aufteilung.** Rust (`cad-eval/src/sketch_edit.rs`, Session): Skizze und Einfügestelle,
+Zeichenzustand, Snap, Code, Vorschau, Löschen, Ecken, Raster, Ebene, Strahl in der Ebene. UI
+(`web/src/app/sketch.ts`, `sketchUi.tsx`, `logic/sketchEditor.ts`, Viewer): Maus und Tasten
+weiterreichen, Antwort anwenden, zeichnen (Schrittraster mit Abstand ≥ 12 px, Rasterlinien und
+-punkte, Vorschau, Hilfslinien, Markierung), Kamera. Helles und dunkles Thema über die
+Farbwerte der Ansicht (`--view-snap`, `--view-grid`, Akzent).
+
+**Kleinigkeiten unterwegs.** Griff-Snap: ein 2D-Punkt, der als `g[a, b]` geschrieben ist, bleibt
+in dieser Form (`g[c, v]` statt `g[c, v, _]`). Die Darstellung zeichnet Skizzen in ihrer Ebene
+(vorher lag eine Skizze im `rotate_extrude` beim Cursor auf der Segmentzeile in der xy-Ebene).
+
+**Tests.** cad-eval `tests/sketch_edit.rs` (Einfügestelle, neue Skizze in Datei und Modul,
+Ketten, neue Kontur hinter einer weiterlaufenden, Snap-Arten, Schnittpunkte, tangential,
+Rechteck mit Rasterreferenzen, Bögen, Bézier, Kreis, Mittelpunktsbogen auf einem Rasterpunkt,
+Ecken einfügen und ändern, Schließen, Löschen, `hole`- und leere Blöcke, Ebenen unter
+Transformation/`rotate_extrude`/zentriertem Extrudieren, Anker, Segment unter der Maus, Griff-Snap
+in Kurzform) und Unit-Tests im Modul; cad-session `tests/sketch_editor.rs` (Protokoll mit Strahl,
+neue Skizze, Kette, Schließen, Löschen, Ebene unter Transformation, Syntaxfehler, Auswahl,
+`OpInfo.plane`); Vitest `logic/sketchEditor.test.ts`; Playwright Z01–Z17
+(`web/e2e/skizzen-editor.spec.ts`: jedes Werkzeug, Snap-Anzeige, Snap-Arten, Undo, Griff ziehen,
+Segment löschen, Transformation und `rotate_extrude`, dunkles Thema, Antwortzeiten); Tauri T16
+(`web/e2e-tauri/desktop.e2e.mjs`: Rechteck auf Rasterpunkten über den `TauriTransport` mit
+nativem Kernel, Snap-Anzeige, Undo).
+
+**Grenzen.** Nur die Hauptdatei: in einer anderen Projektdatei startet der Modus nicht (Hinweis),
+Skizzen aus eingebundenen Dateien sind kein Ziel (die erste Aktion legt dann eine neue in der
+Hauptdatei an). Anweisungen in
+Schleifen oder Modulen werden weder gelöscht noch bekommen ihre Ecken ein `corner()` (Meldung);
+der Zeichenzustand mitten in einer Schleife ist der nach ihrem letzten Durchlauf. Snap nur auf die
+Skizze selbst, sichtbare Raster und Anker (nicht auf Kanten des Körpers oder andere Skizzen);
+horizontal/vertikal nur zum vorigen Punkt. Bézier nur kubisch, kein Spline-Werkzeug, keine
+erzeugten `line(by = …)`/`length + angle`-Formen außer tangential. Eine neue Skizze ist eine bloße
+2D-Skizze. Die Kamera behält „z oben“ (Bahnsteuerung): in gedrehten Ebenen liegt die y-Achse der
+Skizze nicht unbedingt senkrecht auf dem Bildschirm. Tauri T16 treibt die Ansicht mit
+synthetischen Zeigerereignissen (WebDriver), nicht mit echter Maus.

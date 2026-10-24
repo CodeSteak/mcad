@@ -329,7 +329,7 @@ pub fn op_info(op: &Op) -> Option<p::OpInfo> {
 }
 
 /// Display data of a sketch node: its profile with the segment statements of the evaluation.
-pub fn sketch_info(out: &EvalOutput, node: u32, op: &Op, src: &Source) -> Option<p::OpInfo> {
+pub fn sketch_info(out: &EvalOutput, node: u32, op: &Op, src: &Source, root_inv: &DMat4) -> Option<p::OpInfo> {
     let Op::Profile(cad_ir::Profile::Sketch { contours, closed }) = op else { return None };
     let info = out.sketches.iter().find(|s| s.node == node)?;
     // display tolerance relative to the sketch size
@@ -373,7 +373,8 @@ pub fn sketch_info(out: &EvalOutput, node: u32, op: &Op, src: &Source) -> Option
                 .collect(),
         })
         .collect();
-    Some(p::OpInfo::Sketch { closed: *closed, contours })
+    let plane = m4(&(*root_inv * cad_eval::sketch_edit::sketch_frame(&out.tree, node)));
+    Some(p::OpInfo::Sketch { closed: *closed, contours, plane })
 }
 
 /// Mesh key of a node: hex of its content key.
@@ -539,7 +540,7 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
                 cached: false,
                 tol: n.tol,
                 op_info: match &n.op {
-                    Op::Profile(cad_ir::Profile::Sketch { .. }) => sketch_info(out, idx, &n.op, src),
+                    Op::Profile(cad_ir::Profile::Sketch { .. }) => sketch_info(out, idx, &n.op, src, &root_inv),
                     op => op_info(op),
                 },
             };

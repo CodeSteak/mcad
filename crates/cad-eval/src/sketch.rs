@@ -10,7 +10,7 @@ use glam::{DMat4, DVec2};
 use crate::env::Dyn;
 use crate::eval::{ArgV, Args, Ctx, Ev, R};
 use crate::handles::{HSpec, comp_scalar, comps_of};
-use crate::output::{HandleKind, SketchContourInfo, SketchInfo, SketchSegInfo};
+use crate::output::{HandleKind, SketchContourInfo, SketchInfo, SketchSegInfo, SketchStep, SketchStepKind};
 use crate::value::fmt_num;
 use cad_kernel::region2::{CornerError, CornerKind, Piece, apply_corners};
 
@@ -71,6 +71,8 @@ pub(crate) struct SketchBuild<'a> {
     contours: Vec<ContourB<'a>>,
     /// Depth of `hole { … }` blocks.
     hole: u32,
+    /// Evaluated segment statements (sketch editor).
+    steps: Vec<SketchStep>,
 }
 
 fn fmt2(p: DVec2) -> String {
@@ -205,7 +207,7 @@ impl<'a> Ev<'a> {
             return Ok(());
         }
         let node = self.profile(s, Profile::Sketch { contours: Vec::new(), closed }, ctx, dy);
-        self.sketch = Some(SketchBuild { node, closed, contours: Vec::new(), hole: 0 });
+        self.sketch = Some(SketchBuild { node, closed, contours: Vec::new(), hole: 0, steps: Vec::new() });
         let r = self.eval_children(node, &DMat4::IDENTITY, children, ctx, dy);
         let Some(b) = self.sketch.take() else { return r };
         r?;
@@ -259,6 +261,15 @@ impl<'a> Ev<'a> {
         self.sketch.as_mut().expect("segment outside a sketch")
     }
 
+    /// Records the drawing state after a segment statement (sketch editor).
+    fn sk_step(&mut self, s: &'a Stmt, kind: SketchStepKind, seg: Option<Seg>) {
+        let Some(b) = self.sketch.as_mut() else { return };
+        let Some(c) = b.contours.last() else { return };
+        let contour = b.contours.len() as u32 - 1;
+        let (point, tangent) = (c.end(), c.end_tangent());
+        b.steps.push(SketchStep { stmt: s.id, span: s.span, kind, contour, hole: c.hole, seg, point, tangent });
+    }
+
     /// Current point and end tangent of the open contour, if any.
     fn sk_cur(&self) -> Option<(DVec2, Option<DVec2>)> {
         let b = self.sketch.as_ref()?;
@@ -299,9 +310,11 @@ impl<'a> Ev<'a> {
         }
     }
 
+    /// Handle frame: the sketch's plane (for the profile of a `rotate_extrude` the xz-plane,
+    /// where the sketch is drawn, Plan 17.12).
     fn sk_frame(&self) -> DMat4 {
         let node = self.sketch.as_ref().map_or(0, |b| b.node);
-        self.nodes[node as usize].world
+        crate::sketch_edit::frame_in(&self.nodes, node)
     }
 
     /// Point handle on a point argument (`origin`: the point the value is relative to).
@@ -381,8 +394,14 @@ impl<'a> Ev<'a> {
             return;
         }
         if let Some(c) = self.sk().contours.last_mut() {
-            c.segs.push(SegB { seg, stmt: s, implicit: false, error: false });
+            c.segs.push(SegB { seg: seg.clone(), stmt: s, implicit: false, error: false });
         }
+        let kind = if matches!(&s.kind, cad_syntax::ast::StmtKind::Call { name, .. } if name.name == "close") {
+            SketchStepKind::Close
+        } else {
+            SketchStepKind::Seg
+        };
+        self.sk_step(s, kind, Some(seg));
     }
 
     fn mark_error(&mut self, s: &Stmt, msg: impl Into<String>) {
@@ -460,6 +479,7 @@ impl<'a> Ev<'a> {
         if let Some(x) = p[0] {
             self.sk_handle(s, ctx, 0, x, pt, None);
         }
+        self.sk_step(s, SketchStepKind::Start, None);
     }
 
     fn sk_line(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>) {
@@ -789,6 +809,7 @@ impl<'a> Ev<'a> {
         if let Some(c) = self.sk().contours.last_mut() {
             c.corners.push(CornerB { stmt: s, at, kind, handle });
         }
+        self.sk_step(s, SketchStepKind::Corner, None);
     }
 
     /// Applies the `corner()`s of a contour: the segments at each vertex are shortened and the
@@ -941,6 +962,8 @@ impl<'a> Ev<'a> {
         }
         if cur.distance(start) > 1e-9 * (1.0 + start.length()) {
             self.push_seg(s, Seg::Line { a: cur, b: start });
+        } else {
+            self.sk_step(s, SketchStepKind::Close, None);
         }
         if let Some(c) = self.sk().contours.last_mut() {
             c.closed = true;
@@ -954,6 +977,7 @@ impl<'a> Ev<'a> {
         self.sketch = Some(b);
         self.close_open_contour();
         let b = self.sketch.take().expect("sketch");
+        let steps = b.steps;
         let mut contours: Vec<ContourB<'a>> = b.contours;
         if contours.is_empty() {
             self.warn(s.span, "leere Skizze");
@@ -1065,6 +1089,7 @@ impl<'a> Ev<'a> {
                         .collect(),
                 })
                 .collect(),
+            steps,
         };
         self.sketches.push(info);
     }

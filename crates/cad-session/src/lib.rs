@@ -448,7 +448,139 @@ where
                     vec![self.error(&format!("ungültige Schlüssel: {}", bad.join(", ")), None)]
                 }
             }
+            ToEngine::Sketch(req) => self.sketch(&req),
         }
+    }
+
+    /// Sketch editor (Plan 17.12): snapping, preview and code of a tool, see
+    /// [`cad_eval::sketch_edit`].
+    fn sketch(&self, req: &p::SketchRequest) -> Vec<FromEngine> {
+        use cad_eval::sketch_edit as se;
+        let Some(cur) = &self.cur else { return vec![self.error("keine Auswertung vorhanden", None)] };
+        let mut ans = p::SketchAnswer {
+            id: req.id,
+            version: cur.version,
+            sketch: None,
+            node: None,
+            plane: convert::m4(&glam::DMat4::IDENTITY),
+            current: None,
+            snap: None,
+            guides: Vec::new(),
+            preview: Vec::new(),
+            points: req.points.clone(),
+            edits: Vec::new(),
+            select: None,
+            prompt: String::new(),
+            message: None,
+            segment: None,
+            angle: None,
+            raster: None,
+        };
+        let done = |a: p::SketchAnswer| vec![FromEngine::Sketch(Box::new(a))];
+        if cur.version != self.version {
+            ans.message = Some("Syntaxfehler im Quelltext: Zeichnen erst nach der Korrektur".into());
+            return done(ans);
+        }
+        let src = &cur.src;
+        let byte = src.lines.utf16_to_byte(req.cursor);
+        let place = se::place(&cur.out, &cur.proj, byte);
+        let tree = &cur.out.tree;
+        let root_inv = tree.root.map(|n| tree.node(n).world.inverse()).unwrap_or(glam::DMat4::IDENTITY);
+        let frame = root_inv * place.frame;
+        let ctx = |q: glam::DVec2| convert::v3(frame.transform_point3(q.extend(0.0)));
+        let lines = |v: &[Vec<glam::DVec2>]| v.iter().map(|l| l.iter().map(|q| ctx(*q)).collect()).collect::<Vec<_>>();
+        ans.plane = convert::m4(&frame);
+        ans.sketch = place.info.map(|i| src.range(i.span));
+        ans.node = place.info.map(|i| i.node);
+        ans.current = place.cur.as_ref().map(|c| ctx(c.end));
+        let tool = sketch_tool(req.tool);
+        let picks: Vec<se::Pick> = req.points.iter().map(pick_from_p).collect();
+        let finish = |ans: &mut p::SketchAnswer, a: se::Action| {
+            ans.select = a.select.and_then(|(i, off)| {
+                let t = &a.edits.get(i)?.text;
+                Some([i as u32, t.get(..off).map_or(0, |x| x.encode_utf16().count()) as u32])
+            });
+            ans.edits = a.edits.iter().map(|e| src.edit(e)).collect();
+            ans.points = a.points.iter().map(pick_to_p).collect();
+        };
+        match tool {
+            se::SketchTool::Close => {
+                match se::close(&place) {
+                    Ok(a) => finish(&mut ans, a),
+                    Err(m) => ans.message = Some(m),
+                }
+                return done(ans);
+            }
+            se::SketchTool::Delete => {
+                match se::delete_segment(&cur.proj, &place, byte) {
+                    Ok(e) => ans.edits = e.iter().map(|x| src.edit(x)).collect(),
+                    Err(m) => ans.message = Some(m),
+                }
+                return done(ans);
+            }
+            _ => {}
+        }
+        if req.info {
+            let r = se::raster(&cur.out, &place);
+            ans.raster = Some(p::SketchRaster {
+                lines: r.lines.iter().map(|l| [ctx(l[0]), ctx(l[1])]).collect(),
+                points: r.points.iter().map(|q| ctx(*q)).collect(),
+                min: r.min.to_array(),
+                max: r.max.to_array(),
+            });
+        }
+        ans.prompt = se::prompt(&place, tool, &picks);
+        let Some(ray) = req.ray else { return done(ans) };
+        // the mouse ray in the sketch plane
+        let inv = frame.inverse();
+        let o = inv.transform_point3(glam::DVec3::from_array(ray.origin.0));
+        let d = inv.transform_vector3(glam::DVec3::from_array(ray.dir.0));
+        if d.z.abs() < 1e-12 || (-o.z / d.z) <= 0.0 {
+            return done(ans);
+        }
+        let local = o + d * (-o.z / d.z);
+        let q = local.truncate();
+        let dist = (frame.transform_point3(local) - glam::DVec3::from_array(ray.origin.0)).length();
+        let scale = frame.transform_vector3(glam::DVec3::X).length().max(1e-12);
+        let tol = req.snap_px.max(0.0) * req.pixel.max(0.0) * dist / scale;
+        let (step, step_deg) = (self.opts.drag.step_mm, self.opts.drag.step_deg);
+        if tool == se::SketchTool::Select {
+            ans.segment = se::segment_at(&cur.out, &place, q, tol.max(1e-9)).map(|s| src.range(s));
+            return done(ans);
+        }
+        let opts = se::snap_opts(&place, tool, &picks, tol, step, req.free);
+        let sn = se::snap(&cur.out, &place, q, &opts);
+        ans.snap = Some(p::SketchSnap {
+            point: ctx(sn.pick.p),
+            local: sn.pick.p.to_array(),
+            text: sn.pick.text.clone(),
+            kind: sn.pick.kind.name().into(),
+            label: sn.label.clone(),
+        });
+        ans.guides = lines(&sn.guides);
+        if tool == se::SketchTool::ArcCenter && picks.len() >= 2 {
+            let n = picks.len();
+            ans.angle = Some(se::center_sweep(picks[n - 2].p, picks[n - 1].p, sn.pick.p, req.angle));
+        }
+        if req.click {
+            let mut all = picks.clone();
+            all.push(sn.pick.clone());
+            match se::click(&cur.out, &cur.proj, &place, tool, &all, step, step_deg, req.angle) {
+                Ok(se::Click::More(ps)) => {
+                    if tool == se::SketchTool::Corner && ps.is_empty() {
+                        ans.message = Some("keine Ecke an dieser Stelle".into());
+                    }
+                    ans.points = ps.iter().map(pick_to_p).collect();
+                }
+                Ok(se::Click::Done(a)) => finish(&mut ans, a),
+                Err(m) => ans.message = Some(m),
+            }
+            let now: Vec<se::Pick> = ans.points.iter().map(pick_from_p).collect();
+            ans.prompt = se::prompt(&place, tool, &now);
+        } else {
+            ans.preview = lines(&se::preview(&place, tool, &picks, &sn.pick, req.angle, step, step_deg));
+        }
+        done(ans)
     }
 
     fn error(&self, msg: &str, node: Option<u32>) -> FromEngine {
@@ -1162,6 +1294,47 @@ fn snap_ref_from_p(r: &p::SnapRef) -> cad_eval::SnapRef {
         p::SnapRef::Grid { grid, planes } => cad_eval::SnapRef::Grid { grid: *grid, planes: planes.clone() },
         p::SnapRef::Anchor { inst, name } => cad_eval::SnapRef::Anchor { inst: *inst, name: name.clone() },
         p::SnapRef::Plane { grid, plane } => cad_eval::SnapRef::Plane { grid: *grid, plane: plane.clone() },
+    }
+}
+
+fn sketch_tool(t: p::SketchTool) -> cad_eval::sketch_edit::SketchTool {
+    use cad_eval::sketch_edit::SketchTool as T;
+    match t {
+        p::SketchTool::Select => T::Select,
+        p::SketchTool::Line => T::Line,
+        p::SketchTool::ArcThrough => T::ArcThrough,
+        p::SketchTool::ArcCenter => T::ArcCenter,
+        p::SketchTool::ArcTangent => T::ArcTangent,
+        p::SketchTool::Bezier => T::Bezier,
+        p::SketchTool::Rect => T::Rect,
+        p::SketchTool::Circle => T::Circle,
+        p::SketchTool::Corner => T::Corner,
+        p::SketchTool::Close => T::Close,
+        p::SketchTool::Delete => T::Delete,
+    }
+}
+
+fn pick_from_p(x: &p::SketchPoint) -> cad_eval::sketch_edit::Pick {
+    use cad_eval::sketch_edit as se;
+    se::Pick {
+        p: glam::DVec2::from_array(x.p),
+        text: x.text.clone(),
+        kind: se::SnapKind::from_name(&x.kind).unwrap_or(se::SnapKind::Step),
+        grid: x.grid.as_ref().map(|g| se::GridSel { grid: g.grid, x: g.x.clone(), y: g.y.clone(), z: g.z.clone() }),
+    }
+}
+
+fn pick_to_p(x: &cad_eval::sketch_edit::Pick) -> p::SketchPoint {
+    p::SketchPoint {
+        p: x.p.to_array(),
+        text: x.text.clone(),
+        kind: x.kind.name().into(),
+        grid: x.grid.as_ref().map(|g| p::SketchGridSel {
+            grid: g.grid,
+            x: g.x.clone(),
+            y: g.y.clone(),
+            z: g.z.clone(),
+        }),
     }
 }
 

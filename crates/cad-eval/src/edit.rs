@@ -97,7 +97,14 @@ pub fn drag_edits<S: SourceText + ?Sized>(
     };
     let edits = match target {
         DragTarget::Free(v) => free_edits(h, *v, opts),
-        DragTarget::Snap(r) => snap_edit(out, h, r).into_iter().collect(),
+        DragTarget::Snap(r) => snap_edit(out, h, r)
+            .map(|e| {
+                // a 2D point written as `g[a, b]` stays in that form
+                let two = src.span_text(e.span).is_some_and(two_items);
+                if h.value.len() == 2 || two { TextEdit { text: short_2d(e.text), ..e } } else { e }
+            })
+            .into_iter()
+            .collect(),
     };
     edits.into_iter().filter(|e| src.span_text(e.span).is_some_and(|t| t != e.text)).collect()
 }
@@ -179,6 +186,32 @@ fn ref_text(out: &EvalOutput, r: &SnapRef) -> Option<String> {
     }
 }
 
+/// A grid point for a 2D point (sketch segments, polygon points): `g[a, b]` instead of
+/// `g[a, b, _]` (the same value for a grid without z planes).
+fn short_2d(text: String) -> String {
+    if text.ends_with(", _]") { format!("{}]", &text[..text.len() - 4]) } else { text }
+}
+
+/// `name[a, b]`: an index with two items (top-level commas).
+fn two_items(t: &str) -> bool {
+    let t = t.trim();
+    let Some(open) = t.find('[') else { return false };
+    if !t.ends_with(']') || open == 0 || !t[..open].chars().all(|c| c.is_alphanumeric() || c == '_' || c == '.') {
+        return false;
+    }
+    let mut depth = 0;
+    let mut commas = 0;
+    for c in t[open + 1..t.len() - 1].chars() {
+        match c {
+            '[' | '(' => depth += 1,
+            ']' | ')' => depth -= 1,
+            ',' if depth == 0 => commas += 1,
+            _ => {}
+        }
+    }
+    commas == 1
+}
+
 /// Whether the reference can be written at `span` (inside the visibility range and
 /// not inside a module definition nested in that range).
 fn visible_at(out: &EvalOutput, r: &SnapRef, span: Span) -> bool {
@@ -187,6 +220,12 @@ fn visible_at(out: &EvalOutput, r: &SnapRef, span: Span) -> bool {
         SnapRef::Anchor { inst, .. } => out.instances.get(*inst as usize).and_then(|i| i.visible),
     };
     let Some(vis) = vis else { return false };
+    span_visible(out, vis, span)
+}
+
+/// Is `span` inside the visibility range `vis` and not inside a module definition nested in
+/// that range (grids and named instances are not visible there)?
+pub(crate) fn span_visible(out: &EvalOutput, vis: Span, span: Span) -> bool {
     if !(vis.start <= span.start && span.end <= vis.end) {
         return false;
     }
@@ -299,7 +338,9 @@ pub fn snap_targets(out: &EvalOutput, handle_id: u64) -> Vec<SnapTarget> {
                     let local = g.frame_module.transform_point3(DVec3::new(px.value, py.value, pz.value));
                     let planes = [px.name.clone(), py.name.clone(), pz.name.clone()];
                     let r = SnapRef::Grid { grid: gid, planes };
-                    let Some(text) = ref_text(out, &r) else { continue };
+                    let Some(text) = ref_text(out, &r).map(|t| if h.value.len() == 2 { short_2d(t) } else { t }) else {
+                        continue;
+                    };
                     res.push(SnapTarget {
                         text,
                         r#ref: r,
