@@ -11,14 +11,14 @@ import type { Viewer } from "../view/viewer";
 
 type V = [number, number, number];
 
-interface Face {
+export interface Face {
   name: string;
   n: V;
   /** Right on the face seen from outside (z up). */
   u: V;
 }
 
-const FACES: Face[] = [
+export const FACES: Face[] = [
   { name: "Vorne", n: [0, -1, 0], u: [1, 0, 0] },
   { name: "Hinten", n: [0, 1, 0], u: [-1, 0, 0] },
   { name: "Rechts", n: [1, 0, 0], u: [0, 1, 0] },
