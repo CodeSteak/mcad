@@ -21,17 +21,17 @@ use crate::{Common, Fail, Model, Outcome, load, num};
 
 #[derive(Args, Clone, Debug)]
 pub(crate) struct WatchArgs {
-    /// Bild bei jeder Auswertung neu schreiben (Optionen wie bei `render`).
-    #[arg(long, value_name = "BILD.png")]
+    /// Rewrite this image on every evaluation (options as for `render`).
+    #[arg(long, value_name = "IMAGE.png")]
     pub render: Option<PathBuf>,
-    /// Nach der ersten Auswertung, die eine Änderung ausgelöst hat, beenden.
+    /// Exit after the first evaluation triggered by a change.
     #[arg(long)]
     pub once_after_change: bool,
-    /// Beenden, wenn so viele Sekunden keine Änderung kam.
-    #[arg(long, value_name = "SEKUNDEN")]
+    /// Exit when no change came for this many seconds.
+    #[arg(long, value_name = "SECONDS")]
     pub timeout: Option<f64>,
-    /// Änderungen so lange sammeln (ms), bevor neu ausgewertet wird.
-    #[arg(long, default_value_t = 60)]
+    /// Collect changes for this long (ms) before evaluating again.
+    #[arg(long, default_value_t = 60, value_name = "MS")]
     pub debounce: u64,
     #[command(flatten)]
     pub v: ViewArgs,

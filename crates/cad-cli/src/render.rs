@@ -146,78 +146,77 @@ const SHOW: [&str; 9] = ["grids", "anchors", "handles", "edges", "labels", "bbox
 /// Selection, camera, overlays, section (shared by `render` and `watch --render`).
 #[derive(Args, Clone, Debug, Default)]
 pub(crate) struct ViewArgs {
-    /// iso, front, back, top, bottom, left, right
+    /// Standard view: iso, front, back, top, bottom, left, right.
     #[arg(long, default_value = "iso")]
     pub view: String,
-    /// Kontaktbogen: mehrere Ansichten mit gleicher Skalierung, z. B. `iso,front,top,right`;
+    /// Contact sheet: several views at the same scale, e.g. `iso,front,top,right`;
     /// `all` = iso,front,top,right.
     #[arg(long, value_name = "A,B,…|all")]
     pub views: Option<String>,
-    /// Freie Kamera: Azimut in Grad (0 = von vorn/−y, 90 = von rechts/+x).
+    /// Free camera: azimuth in degrees (0 = from the front/−y, 90 = from the right/+x).
     #[arg(long, allow_hyphen_values = true)]
     pub azimuth: Option<f64>,
-    /// Freie Kamera: Höhe in Grad (90 = von oben).
+    /// Free camera: elevation in degrees (90 = from above).
     #[arg(long, allow_hyphen_values = true)]
     pub elevation: Option<f64>,
-    /// Vergrößerung nach dem Einpassen (2 = doppelt so groß).
+    /// Magnification after fitting (2 = twice as large).
     #[arg(long)]
     pub zoom: Option<f64>,
-    /// Blickpunkt `x,y,z` (Kontextkoordinaten, mm).
+    /// Look-at point `x,y,z` (context coordinates, mm).
     #[arg(long, value_name = "X,Y,Z", allow_hyphen_values = true)]
     pub target: Option<String>,
-    /// Einpassen auf `all` (ganzes Modell), `part:NAME` oder `line:N` (Standard: alles Gezeichnete).
+    /// Fit to `all` (whole model), `part:NAME` or `line:N` (default: everything drawn).
     #[arg(long, value_name = "all|part:NAME|line:N")]
     pub fit: Option<String>,
-    /// Parallelprojektion (Standard).
+    /// Orthographic projection (default).
     #[arg(long, conflicts_with = "perspective")]
     pub ortho: bool,
-    /// Zentralprojektion.
+    /// Perspective projection.
     #[arg(long)]
     pub perspective: bool,
-    /// Bildwinkel der Zentralprojektion in Grad.
+    /// Field of view of the perspective projection in degrees.
     #[arg(long, default_value_t = 35.0)]
     pub fov: f64,
-    /// Nur dieses Bauteil (mehrfach möglich).
+    /// Only this part (repeatable).
     #[arg(long = "part", value_name = "NAME")]
     pub part: Vec<String>,
-    /// Knoten dieser Zeile voll, Rest gedimmt (mehrfach möglich).
-    #[arg(long)]
+    /// Nodes of this line in full, the rest dimmed (repeatable).
+    #[arg(long, value_name = "N")]
     pub line: Vec<u32>,
-    /// Knoten mit diesem Index (aus `cad eval`) voll, Rest gedimmt (mehrfach möglich).
-    #[arg(long)]
+    /// Node with this index (from `cad eval`) in full, the rest dimmed (repeatable).
+    #[arg(long, value_name = "I")]
     pub node: Vec<u32>,
-    /// Mit --line/--node: Rest nicht gedimmt zeigen, sondern weglassen.
+    /// With --line/--node: leave the rest out instead of dimming it.
     #[arg(long)]
     pub only: bool,
-    /// Bildgröße BxH (Standard 1024x768, Kontaktbogen 1600x1200 gesamt).
-    #[arg(long)]
+    /// Image size WxH (default 1024x768, contact sheet 1600x1200 in total).
+    #[arg(long, value_name = "WxH")]
     pub size: Option<String>,
-    /// Dateikontext behalten, auch wenn die Zeile in einer Moduldefinition liegt.
+    /// Keep the file context even if the line is inside a module definition.
     #[arg(long)]
     pub whole_file: bool,
-    /// Kein Achsenkreuz.
+    /// No axis triad.
     #[arg(long)]
     pub no_axes: bool,
-    /// Überlagerungen: grids, anchors, handles, edges, labels, bbox, dims (Komma-Liste, `all`).
-    /// Farben: ein Modell mit color() zeigt die Farbregionen (Körper je Farbe, wie der Druck);
-    /// `faces`: stattdessen Farbe je Fläche aus den Knoten (schneller, kann bei Überlappung und
-    /// Verrundung vom Druck abweichen); `regions` erzwingt die Regionen.
-    #[arg(long, value_delimiter = ',')]
+    /// Overlays: grids, anchors, handles, edges, labels, bbox, dims (comma list, `all`).
+    /// Colours: a model with color() shows the colour regions (body per colour, as printed);
+    /// `faces`: colour per face from the nodes instead (faster, may differ from the print with
+    /// overlaps and fillets); `regions` forces the regions.
+    #[arg(long, value_delimiter = ',', value_name = "LIST")]
     pub show: Vec<String>,
-    /// Schnitt an einer Achsebene: `x=WERT`, `y=WERT`, `z=WERT` (entfernt die Seite +Achse).
-    #[arg(long, value_name = "x|y|z=WERT", allow_hyphen_values = true)]
+    /// Section at an axis plane: `x=VALUE`, `y=VALUE`, `z=VALUE` (removes the +axis side).
+    #[arg(long, value_name = "x|y|z=VALUE", allow_hyphen_values = true)]
     pub section: Option<String>,
-    /// Schnitt an beliebiger Ebene: Punkt und Normale; entfernt wird die Seite, in die die
-    /// Normale zeigt.
+    /// Section at any plane: point and normal; the side the normal points to is removed.
     #[arg(long, value_name = "PX,PY,PZ,NX,NY,NZ", allow_hyphen_values = true)]
     pub section_plane: Option<String>,
-    /// Schnitt: die andere Hälfte behalten (Normale umkehren).
+    /// Section: keep the other half (flip the normal).
     #[arg(long)]
     pub section_flip: bool,
-    /// Alles halbtransparent mit Kanten (Röntgen).
+    /// Everything semi-transparent with edges (x-ray).
     #[arg(long)]
     pub xray: bool,
-    /// Farbschema: light (Standard) oder dark (wie das dunkle Thema der UI).
+    /// Colour scheme: light (default) or dark (like the dark theme of the UI).
     #[arg(long, default_value = "light", value_name = "light|dark")]
     pub theme: String,
 }

@@ -23,23 +23,24 @@ use crate::{Common, Fail, Outcome, last_diagnostics, last_scene, load};
 
 #[derive(Args, Clone, Debug)]
 pub(crate) struct SetArgs {
-    /// Hauptdatei des Projekts.
+    /// Main file of the project.
+    #[arg(value_name = "FILE")]
     pub file: PathBuf,
-    /// Ausgabe als JSON.
+    /// Output as JSON.
     #[arg(long)]
     pub json: bool,
-    /// Standardwert eines Modulparameters: `modul.param=wert` (auch `aussen.innen.param=…`),
-    /// mehrfach möglich.
-    #[arg(long, value_name = "MODUL.PARAM=WERT")]
+    /// Default value of a module parameter: `module.param=value` (also `outer.inner.param=…`),
+    /// repeatable.
+    #[arg(long, value_name = "MODULE.PARAM=VALUE")]
     pub param: Vec<String>,
-    /// Literal an einer Stelle ersetzen: `zeile:spalte=wert` (Hauptdatei) oder
-    /// `datei:zeile:spalte=wert`; Spalte wie bei `cad check`, irgendwo im Literal.
-    #[arg(long, value_name = "[DATEI:]ZEILE:SPALTE=WERT", allow_hyphen_values = true)]
+    /// Replace the literal at a position: `line:col=value` (main file) or
+    /// `file:line:col=value`; column as in `cad check`, anywhere inside the literal.
+    #[arg(long, value_name = "[FILE:]LINE:COL=VALUE", allow_hyphen_values = true)]
     pub literal: Vec<String>,
-    /// Nur den Diff zeigen, nichts schreiben.
+    /// Only show the diff, write nothing.
     #[arg(long)]
     pub dry_run: bool,
-    /// Auch schreiben, wenn die Änderung neue Fehler erzeugt.
+    /// Write even if the change introduces new errors.
     #[arg(long)]
     pub force: bool,
 }

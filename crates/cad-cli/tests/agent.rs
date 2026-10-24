@@ -619,15 +619,40 @@ fn ui_entry_without_display() {
     let out = cad().arg("rendr").output().unwrap();
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("unbekannter Befehl"));
-    // --help explains both ways
+    // --help (English) explains both ways and points to the manual
     let out = cad().arg("--help").output().unwrap();
     assert_eq!(out.status.code(), Some(0));
     let help = String::from_utf8_lossy(&out.stdout);
-    for c in
-        ["outline", "measure", "watch", "set", "render", "check", "Desktop-UI", "headless", "cad ui status", "DISPLAY"]
-    {
+    for c in [
+        "outline",
+        "measure",
+        "watch",
+        "set",
+        "render",
+        "check",
+        "usage",
+        "desktop UI",
+        "headless",
+        "cad ui status",
+        "DISPLAY",
+        "cad usage",
+    ] {
         assert!(help.contains(c), "{c}: {help}");
     }
+}
+
+#[test]
+fn usage_manual() {
+    let out = cad().arg("usage").output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.starts_with("# cad") && text.contains("Topics") && text.contains("measure"), "{text}");
+    let out = cad().args(["usage", "meas"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&out.stdout).starts_with("# cad measure"));
+    let out = cad().args(["usage", "gibt-es-nicht"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("unknown topic"));
 }
 
 #[test]

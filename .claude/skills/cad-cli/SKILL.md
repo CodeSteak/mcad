@@ -17,7 +17,8 @@ dieselben Dateien in der UI bearbeitet (`cad watch` bemerkt jedes Speichern).
 export SMLIB_PREBUILT=/home/user/controller-cad/smlib/build-native   # falls vorhanden
 smlib/fetch.sh                                                         # Quellen (tangency-labs/smlib @ 7eba8aa), falls fehlend
 cargo build --release -p cad-cli
-target/release/cad --help              # Hilfe (ohne Argumente: Desktop-UI)
+target/release/cad --help              # Hilfe, englisch (ohne Argumente: Desktop-UI)
+target/release/cad usage               # Manual für Agenten (englisch, Themen: cad usage --list)
 ```
 
 Datei `-` liest von stdin: `echo 'cube(5);' | cad check -`. Ohne Befehl startet `cad` die

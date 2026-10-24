@@ -1,0 +1,27 @@
+# cad render
+
+`cad render FILE -o x.png [options]`
+
+| Option | Effect |
+| --- | --- |
+| `--view iso\|front\|back\|top\|bottom\|left\|right` | default `iso` |
+| `--views a,b,…` / `--views all` | contact sheet, same scale for all views (`all` = iso,front,top,right; default size 1600x1200 total) |
+| `--azimuth A --elevation E` | free camera; azimuth 0 = from −y, 90 = from +x; elevation 90 = from above |
+| `--zoom Z`, `--target x,y,z`, `--fit TARGET` | framing |
+| `--perspective [--fov 35]` | default is orthographic |
+| `--part NAME` | only these parts (repeatable) |
+| `--line N`, `--node I`, `--only` | highlight nodes, rest dimmed (`--only`: hidden). Zones blue, subtracted bodies red, selected edges orange, failed edges red |
+| `--show LIST` | `grids, anchors, handles, edges, labels, bbox, dims` or `all`; colours: `regions` (as printed, default with colours) / `faces` (faster) |
+| `--section x=V\|y=V\|z=V`, `--section-plane px,py,pz,nx,ny,nz`, `--section-flip` | cut; removes the side the normal points to (`z=10` removes z > 10) |
+| `--xray`, `--theme dark`, `--size WxH`, `--no-axes` | |
+
+- `--show grids` in file context shows only top-level grids; use `--module NAME`.
+- In `iso`, cut faces of `y=` sections face away: add `--section-flip` or `--view back`.
+- `--json` returns the camera per view (`scale_px_per_mm`) to map pixels to mm.
+
+```sh
+cad render box.scad -o /tmp/a.png --module enclosure --views all --show grids,anchors,labels
+cad render box.scad -o /tmp/b.png --section z=10 --show dims
+cad render box.scad -o /tmp/c.png --line 8 --azimuth 120 --elevation 30
+cad render box.scad -o /tmp/d.png --part cover --xray
+```

@@ -77,7 +77,8 @@ cargo build --release -p cad-cli            # -> target/release/cad
 
 Ohne `SMLIB_PREBUILT` baut `crates/kernel-smlib/build.rs` SMLib selbst (einmal pro Profil).
 
-CLI für Menschen und Agenten (Details: `cad --help`, `.claude/skills/cad-cli/SKILL.md`,
+CLI für Menschen und Agenten (Details: `cad --help` (englisch), `cad usage` – Manual für
+Agenten/LLMs aus `manuell/*.md`, englisch, ins Binary kompiliert –, `.claude/skills/cad-cli/SKILL.md`,
 Bericht 8). Empfohlener Ablauf: `outline` → editieren → `check` →
 `render --views all --show grids,anchors` → `inspect`/`measure` → `export`.
 
