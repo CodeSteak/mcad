@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>UI-Überarbeitung – Konzept</title>
+<style>
+  @page { size: A4; margin: 13mm 13mm 16mm 13mm; }
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --panel-2: #f0f2f5; --border: #d9dde3;
+    --text: #1f2328; --muted: #5f6670; --accent: #2a63c4; --accent-soft: rgba(42,99,196,.12);
+    --on-accent: #fff; --view-bg: #e7eaee; --model: #c3cad4;
+  }
+  * { box-sizing: border-box; }
+  body { font: 9.5pt/1.45 system-ui, "Inter", sans-serif; color: var(--text); margin: 0; }
+  h1 { font-size: 18pt; margin: 0 0 2mm; }
+  h2 { font-size: 13pt; margin: 6mm 0 2mm; border-bottom: 1px solid var(--border); padding-bottom: 1mm; }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; }
+  p { margin: 0 0 2mm; }
+  .sub { color: var(--muted); margin-bottom: 4mm; }
+  .page { break-before: page; margin-top: 0; }
+  figure { margin: 2mm 0 3mm; }
+  figure img { width: 100%; border: 1px solid var(--border); border-radius: 3px; display: block; }
+  figcaption { color: var(--muted); font-size: 8.5pt; margin-top: 1mm; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  ol.issues { padding-left: 5mm; margin: 1mm 0; }
+  ol.issues li { margin-bottom: 1mm; }
+  table { border-collapse: collapse; width: 100%; font-size: 9pt; }
+  td, th { border-bottom: 1px solid var(--border); padding: 1.2mm 1.5mm; text-align: left; vertical-align: top; }
+  th { background: var(--panel-2); font-weight: 600; }
+  .q { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 3px; padding: 2mm 3mm; margin: 2mm 0; background: #fbfcfd; break-inside: avoid; }
+  .q b.n { color: var(--accent); }
+  .opt { display: inline-block; border: 1px solid var(--border); border-radius: 3px; padding: 0 1.5mm; margin-right: 1mm; font-size: 8.5pt; }
+
+  /* ---------- Mockup-Bausteine ---------- */
+  .mock { --h: 26px; font: 12px/1 "Inter", system-ui, sans-serif; color: var(--text); }
+  .mock.dark {
+    --bg: #16181c; --panel: #1d2025; --panel-2: #262a31; --border: #343944; --text: #e4e7ec;
+    --muted: #9aa2ad; --accent: #5b8def; --accent-soft: rgba(91,141,239,.18); --on-accent: #0b1220;
+    --view-bg: #22252b; --model: #5d6673;
+  }
+  .bar { display: flex; align-items: center; gap: 4px; padding: 5px 8px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .grp { display: flex; align-items: center; gap: 2px; }
+  .sep { width: 1px; height: 18px; background: var(--border); margin: 0 6px; }
+  .sp { flex: 1; }
+  .btn { height: var(--h); display: inline-flex; align-items: center; gap: 5px; padding: 0 9px; border-radius: 6px;
+         border: 1px solid transparent; background: transparent; color: var(--text); white-space: nowrap; }
+  .btn.def { background: var(--panel); border-color: var(--border); }
+  .btn.pri { background: var(--accent); color: var(--on-accent); }
+  .btn.on { background: var(--accent-soft); color: var(--accent); }
+  .btn.ico { width: var(--h); padding: 0; justify-content: center; }
+  .btn .car { opacity: .6; margin-left: -1px; }
+  .seg { display: inline-flex; background: var(--panel-2); border-radius: 7px; padding: 2px; gap: 2px; }
+  .seg .btn { height: calc(var(--h) - 4px); }
+  .seg .btn.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+  .mock.dark .seg .btn.on { background: #3a404b; }
+  .lbl { color: var(--muted); font-size: 11px; margin-right: 2px; }
+  .kbd { font-size: 10px; color: var(--muted); border: 1px solid var(--border); border-radius: 3px; padding: 1px 3px; }
+  svg.i { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .tabs { display: flex; align-items: flex-end; gap: 2px; padding: 4px 6px 0; background: var(--panel-2); border-bottom: 1px solid var(--border); }
+  .tab { padding: 6px 10px; border-radius: 6px 6px 0 0; font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); }
+  .tab.on { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-bottom-color: var(--panel); margin-bottom: -1px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: #dc813b; display: inline-block; margin-left: 4px; }
+  .code { font: 11px/1.6 ui-monospace, monospace; padding: 6px 10px; color: var(--muted); white-space: pre; }
+  .code b { color: #8b2fc9; font-weight: normal; } .mock.dark .code b { color: #c792ea; }
+  .zoom { width: 1000px; zoom: .695; }
+  .win { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--bg); }
+  .main { display: grid; grid-template-columns: 30% 1fr 210px; height: 400px; }
+  .ed { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .vw { background: var(--view-bg); position: relative; }
+  .vw .tool { position: absolute; left: 8px; right: 8px; top: 8px; display: flex; gap: 4px; align-items: center; }
+  .float { display: flex; align-items: center; gap: 2px; padding: 3px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .ctx { position: absolute; left: 8px; top: 46px; }
+  .side { background: var(--panel); border-left: 1px solid var(--border); padding: 0; font-size: 11px; }
+  .side .seg { margin: 6px; display: flex; } .side .seg .btn { flex: 1; justify-content: center; padding: 0 4px; font-size: 11px; }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+  .row .m { color: var(--muted); }
+  .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 5px; vertical-align: -1px; }
+  .status { display: flex; gap: 12px; padding: 4px 8px; font-size: 11px; color: var(--muted); background: var(--panel); border-top: 1px solid var(--border); }
+  .model { position: absolute; left: 30%; top: 30%; width: 40%; height: 50%; }
+  .cube { position: absolute; right: 10px; bottom: 10px; width: 46px; height: 46px; }
+  .callout { display: inline-flex; width: 15px; height: 15px; border-radius: 50%; background: #dc813b; color: #fff; font-size: 9px; font-weight: 700; align-items: center; justify-content: center; }
+  .anno { position: relative; } .anno .callout { position: absolute; }
+  .mini { font-size: 8.5pt; color: var(--muted); }
+  .box { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin: 2mm 0; break-inside: avoid; }
+  .box > .t { font-size: 8.5pt; color: var(--muted); padding: 1mm 2mm; background: var(--panel-2); border-bottom: 1px solid var(--border); }
+  .menu { position: absolute; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.15); padding: 4px; font-size: 12px; min-width: 170px; z-index: 2; }
+  .menu div { padding: 5px 8px; border-radius: 5px; display: flex; justify-content: space-between; gap: 10px; }
+  .menu div.h { background: var(--accent-soft); }
+  .menu hr { border: 0; border-top: 1px solid var(--border); margin: 3px 0; }
+</style>
+</head>
+<body>
+
+<!-- Icon-Symbole (eigene, einfache Striche) -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="i-file" viewBox="0 0 16 16"><path d="M4 1.5h5l3 3v10H4z"/><path d="M9 1.5v3h3"/></symbol>
+  <symbol id="i-save" viewBox="0 0 16 16"><path d="M2.5 2.5h9l2 2v9h-11z"/><path d="M5 2.5v3.5h5V2.5M5 13.5v-4h6v4"/></symbol>
+  <symbol id="i-down" viewBox="0 0 16 16"><path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M2.5 13.5h11"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h12"/><circle cx="5" cy="4" r="1.6" fill="var(--panel)"/><circle cx="10.5" cy="8" r="1.6" fill="var(--panel)"/><circle cx="7" cy="12" r="1.6" fill="var(--panel)"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 16 16"><path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+  <symbol id="i-dots" viewBox="0 0 16 16"><circle cx="3.5" cy="8" r=".6"/><circle cx="8" cy="8" r=".6"/><circle cx="12.5" cy="8" r=".6"/></symbol>
+  <symbol id="i-fit" viewBox="0 0 16 16"><path d="M2 5.5V2h3.5M10.5 2H14v3.5M14 10.5V14h-3.5M5.5 14H2v-3.5"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 16 16"><path d="M2 5.5h12M2 10.5h12M5.5 2v12M10.5 2v12"/></symbol>
+  <symbol id="i-cut" viewBox="0 0 16 16"><path d="M2 11 8 14l6-3V5L8 2 2 5z"/><path d="M1 8.5h14" stroke-dasharray="2 1.5"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 16 16"><path d="M11 2.5 13.5 5 6 12.5l-3.3.8.8-3.3z"/></symbol>
+  <symbol id="i-ruler" viewBox="0 0 16 16"><path d="M1.5 10.5 10.5 1.5l4 4-9 9z"/><path d="M4.5 7.5l1.5 1.5M6.5 5.5l1 1M8.5 3.5l1.5 1.5"/></symbol>
+  <symbol id="i-color" viewBox="0 0 16 16"><path d="M8 1.5a6.5 6.5 0 1 0 0 13c1 0 1.3-.8.9-1.6-.5-1 .1-1.9 1.2-1.9h1.5a2.9 2.9 0 0 0 2.9-2.9C14.5 4.4 11.6 1.5 8 1.5z"/><circle cx="5" cy="7" r=".8"/><circle cx="8" cy="4.8" r=".8"/><circle cx="11" cy="7" r=".8"/></symbol>
+  <symbol id="i-cursor" viewBox="0 0 16 16"><path d="M3 2l9.5 5.2-4.2 1.1-1.1 4.2z"/></symbol>
+  <symbol id="i-line" viewBox="0 0 16 16"><path d="M3 13 13 3"/><circle cx="3" cy="13" r="1.2"/><circle cx="13" cy="3" r="1.2"/></symbol>
+  <symbol id="i-arc" viewBox="0 0 16 16"><path d="M2.5 12.5A7 7 0 0 1 13.5 6"/><circle cx="2.5" cy="12.5" r="1.2"/><circle cx="13.5" cy="6" r="1.2"/></symbol>
+  <symbol id="i-bez" viewBox="0 0 16 16"><path d="M2.5 13C4 4 12 12 13.5 3"/><path d="M2.5 13 4 4M13.5 3 12 12" stroke-dasharray="1.3 1.3"/><circle cx="4" cy="4" r=".9"/><circle cx="12" cy="12" r=".9"/></symbol>
+  <symbol id="i-rect" viewBox="0 0 16 16"><rect x="2.5" y="4" width="11" height="8" rx=".5"/></symbol>
+  <symbol id="i-circ" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r=".5"/></symbol>
+  <symbol id="i-round" viewBox="0 0 16 16"><path d="M2.5 13.5V8a5.5 5.5 0 0 1 5.5-5.5h5.5"/></symbol>
+  <symbol id="i-close" viewBox="0 0 16 16"><path d="M3 12V4h10v8"/><path d="M3 12h10" stroke-dasharray="2 1.5"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 16 16"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.8 9.5h6.4L12 4"/></symbol>
+  <symbol id="i-perp" viewBox="0 0 16 16"><path d="M8 2.5v9M3 13.5h10"/></symbol>
+  <symbol id="i-check" viewBox="0 0 16 16"><path d="M3 8.5 6.5 12 13 4.5"/></symbol>
+  <symbol id="i-flip" viewBox="0 0 16 16"><path d="M8 1.5v13M5.5 4 2 8l3.5 4M10.5 4 14 8l-3.5 4"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5" y="5" width="9" height="9" rx="1"/><path d="M11 5V2H2v9h3"/></symbol>
+  <symbol id="i-radius" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 8l4.2-4.2"/></symbol>
+  <symbol id="i-angle" viewBox="0 0 16 16"><path d="M2 13.5h12M2 13.5 11 3"/><path d="M7 13.5a5 5 0 0 0-1.6-3.7"/></symbol>
+  <symbol id="i-dist" viewBox="0 0 16 16"><path d="M2 3v10M14 3v10M2 8h12M4.5 5.5 2 8l2.5 2.5M11.5 5.5 14 8l-2.5 2.5"/></symbol>
+</svg>
+
+<h1>UI-Überarbeitung – Konzept</h1>
+<p class="sub">Entwurf zur Abstimmung, Stand 24.10.2026. Betrifft Browser und Tauri gleichermaßen.
+Keine neuen Funktionen, nur Ordnung, Gewichtung und einheitliche Bedienelemente. Fragen an dich auf der letzten Seite.</p>
+
+<div class="q" style="border-left-color:#0f766e"><b>Entscheidung (24.10.2026):</b> alle Vorschläge (jeweils A) angenommen.
+Akzentfarbe <b>nicht Blau</b>, sondern Teal/Smaragdgrün (z. B. hell <code>#0f766e</code>, dunkel <code>#3cc4a8</code>; genaue Werte nach Kontrastprüfung).
+Die Entwürfe unten zeigen noch das alte Blau.</div>
+<h2>1. Befund</h2>
+<ol class="issues">
+  <li><b>Kopfleiste:</b> 10+ gleich gewichtete Textknöpfe; „Zuletzt“/„Beispiele“ als graue Beschriftung mit breiten Auswahllisten; drei getrennte Export-Knöpfe; bei 1440 px wird „Einstellungen“ abgeschnitten.</li>
+  <li><b>Drei Knopfgrößen</b> nebeneinander (Kopfleiste 28 px, Dateileiste 22 px, Bauteil-Export 18 px), verschiedene Ränder und Abstände.</li>
+  <li><b>Dateileiste im Editor:</b> „+ Datei, Datei laden, Hauptdatei, ×, Ordner…, ZIP laden…, ZIP ↓“ – sieben kleine Knöpfe, mal neben, mal unter den Tabs.</li>
+  <li><b>Zwei Infozeilen über der Ansicht</b> („Datei …“, „Bauteile … STL 3MF STEP … Alle: ZIP …“) kosten Höhe und mischen Anzeige mit Export.</li>
+  <li><b>Ansichtsleiste:</b> Ansichten, Raster-Checkbox und Modi (Schnitt, Farben, Skizze) gemischt; bricht um, rechtsbündig schwebend; Unterleisten (Schnitt, Skizze) erscheinen an verschiedenen Stellen mit eigener Breite.</li>
+  <li><b>Skizzen-Werkzeuge</b> nur als Text, ohne Gruppen; „Fertig“ sieht aus wie jedes andere Werkzeug.</li>
+  <li><b>Seitenpanel</b> nur für Farben; Messen hätte keinen Platz.</li>
+</ol>
+<figure style="width:68%;margin-left:auto;margin-right:auto"><img src="img/ist-farben-dunkel.jpg"><figcaption>Ist-Zustand (Tauri, dunkel, Farben-Panel offen).</figcaption></figure>
+<div class="two">
+  <figure><img src="img/ist-schnitt.jpg"><figcaption>Schnitt-Leiste unter der Ansichtsleiste.</figcaption></figure>
+  <figure><img src="img/ist-skizze.jpg"><figcaption>Skizzen-Leiste: 13 Textknöpfe in zwei Zeilen.</figcaption></figure>
+</div>
+
+
+<h2>2. Regeln</h2>
+<table>
+  <tr><th style="width:28%">Thema</th><th>Regel</th></tr>
+  <tr><td>Knopfarten</td><td><b>Primär</b> (gefüllt, höchstens einer je Bereich: „Speichern“, „Fertig“) · <b>Standard</b> (Rahmen) · <b>Leise</b> (ohne Rahmen, für Werkzeugleisten) · <b>Umschalter</b> (aktiv = Akzent-Hintergrund).</td></tr>
+  <tr><td>Größen</td><td>Eine Höhe: 26 px. Nur Symbolknöpfe quadratisch 26 × 26. Radius 6 px überall.</td></tr>
+  <tr><td>Gruppen</td><td>2 px innerhalb einer Gruppe, Trennstrich + 12 px zwischen Gruppen. Exklusive Wahl (Ansicht, Modus) als <b>Segmentschalter</b>.</td></tr>
+  <tr><td>Symbole</td><td>Einfache Strich-Symbole 15 px mit Tooltip inkl. Tastenkürzel; Text nur bei wichtigen oder seltenen Aktionen. Beispiele hier selbst gezeichnet; im Produkt z. B. Lucide (ISC-Lizenz).</td></tr>
+  <tr><td>Selten Genutztes</td><td>In Menüs (▾) statt eigener Knöpfe: Dateiaktionen, Export-Varianten, Bauteil-Export.</td></tr>
+  <tr><td>Kontextleiste</td><td>Optionen des aktiven Modus (Schnitt, Skizze, Messen) immer <b>an derselben Stelle</b>: links oben in der Ansicht, unter der Werkzeugleiste.</td></tr>
+  <tr><td>Themen</td><td>Nur bestehende Token; Fokusring sichtbar; Kontraste weiter per <code>contrast.test.ts</code> geprüft.</td></tr>
+</table>
+
+<div class="box"><div class="t">Knopfarten und Gruppen (hell / dunkel)</div>
+<div class="mock"><div class="bar">
+  <span class="btn pri"><svg class="i"><use href="#i-save"/></svg>Speichern</span>
+  <span class="btn def">Standard</span>
+  <span class="btn">Leise</span>
+  <span class="btn on"><svg class="i"><use href="#i-grid"/></svg>Raster</span>
+  <span class="sep"></span>
+  <span class="seg"><span class="btn on">Iso</span><span class="btn">Oben</span><span class="btn">Vorne</span><span class="btn">Rechts</span></span>
+  <span class="sep"></span>
+  <span class="grp"><span class="btn ico"><svg class="i"><use href="#i-fit"/></svg></span><span class="btn ico on"><svg class="i"><use href="#i-grid"/></svg></span><span class="btn ico"><svg class="i"><use href="#i-cut"/></svg></span></span>
+</div></div>
+<div class="mock dark"><div class="bar">
+  <span class="btn pri"><svg class="i"><use href="#i-save"/></svg>Speichern</span>
+  <span class="btn def">Standard</span>
+  <span class="btn">Leise</span>
+  <span class="btn on"><svg class="i"><use href="#i-grid"/></svg>Raster</span>
+  <span class="sep"></span>
+  <span class="seg"><span class="btn on">Iso</span><span class="btn">Oben</span><span class="btn">Vorne</span><span class="btn">Rechts</span></span>
+  <span class="sep"></span>
+  <span class="grp"><span class="btn ico"><svg class="i"><use href="#i-fit"/></svg></span><span class="btn ico on"><svg class="i"><use href="#i-grid"/></svg></span><span class="btn ico"><svg class="i"><use href="#i-cut"/></svg></span></span>
+</div></div>
+</div>
+
+<h2>3. Kopfleiste</h2>
+<div class="box"><div class="t">Vorschlag: Datei-Menü, Dateiname mittig, Export als geteilter Knopf</div>
+<div class="mock" style="position:relative; height: 228px; background: var(--view-bg);">
+  <div class="bar">
+    <b style="font-size:12px; margin-right:6px">Parametrisches CAD</b>
+    <span class="btn on">Datei<span class="car">▾</span></span>
+    <span class="btn">Beispiele<span class="car">▾</span></span>
+    <span class="sp"></span>
+    <span style="font-family: ui-monospace, monospace; font-size: 11.5px">gehaeuse.scad<span class="dot"></span></span>
+    <span class="sp"></span>
+    <span class="btn def"><svg class="i"><use href="#i-save"/></svg>Speichern</span>
+    <span class="grp"><span class="btn pri" style="border-radius:6px 0 0 6px"><svg class="i"><use href="#i-down"/></svg>3MF</span><span class="btn pri" style="border-radius:0 6px 6px 0; padding:0 6px; border-left:1px solid rgba(255,255,255,.35)">▾</span></span>
+    <span class="sep"></span>
+    <span class="btn ico"><svg class="i"><use href="#i-moon"/></svg></span>
+    <span class="btn ico"><svg class="i"><use href="#i-gear"/></svg></span>
+  </div>
+  <div class="menu" style="left: 150px; top: 38px;">
+    <div class="h">Neu <span class="kbd">Strg N</span></div>
+    <div>Öffnen … <span class="kbd">Strg O</span></div>
+    <div>Ordner öffnen …</div>
+    <div>Zuletzt geöffnet <span>›</span></div>
+    <hr>
+    <div>Speichern unter … <span class="kbd">Strg ⇧ S</span></div>
+    <div>Datei hinzufügen / laden …</div>
+    <div>ZIP laden … / ZIP speichern</div>
+  </div>
+  <div class="menu" style="right: 72px; top: 38px;">
+    <div class="h">3MF mehrfarbig <span class="kbd">Strg E</span></div>
+    <div>3MF einfarbig</div>
+    <div>STL</div>
+    <div>STL je Farbe (ZIP)</div>
+    <div>STEP</div>
+    <hr>
+    <div>Je Bauteil (ZIP) …</div>
+  </div>
+</div></div>
+<p class="mini">„Datei“ bündelt Neu, Öffnen, Ordner, Zuletzt, Speichern unter, Hinzufügen, ZIP. Der Export-Knopf merkt sich das zuletzt gewählte Format. Thema (hell/dunkel/System) als ein Symbolknopf mit Menü. Die Zeile „Datei …“ über der Ansicht entfällt (Name steht in der Kopfleiste).</p>
+
+<h2 class="page">4. Gesamtlayout</h2>
+<div class="box"><div class="t">Vorschlag hell: Tabs ohne Dateiknöpfe, eine Werkzeugleiste in der Ansicht, Seitenpanel mit Reitern</div>
+<div class="mock zoom"><div class="win">
+  <div class="bar">
+    <b style="font-size:12px; margin-right:6px">Parametrisches CAD</b>
+    <span class="btn">Datei<span class="car">▾</span></span><span class="btn">Beispiele<span class="car">▾</span></span>
+    <span class="sp"></span><span style="font-family: ui-monospace, monospace; font-size: 11.5px">gehaeuse.scad<span class="dot"></span></span><span class="sp"></span>
+    <span class="btn def"><svg class="i"><use href="#i-save"/></svg>Speichern</span>
+    <span class="btn pri"><svg class="i"><use href="#i-down"/></svg>3MF ▾</span>
+    <span class="sep"></span><span class="btn ico"><svg class="i"><use href="#i-moon"/></svg></span><span class="btn ico"><svg class="i"><use href="#i-gear"/></svg></span>
+  </div>
+  <div class="main">
+    <div class="ed">
+      <div class="tabs"><span class="tab on">★ gehaeuse.scad<span class="dot"></span></span><span class="tab">lib/teile.scad</span><span class="btn ico" style="height:22px;width:22px;margin:0 0 3px 2px"><svg class="i"><use href="#i-plus"/></svg></span></div>
+      <div class="code"><b>module</b> gehaeuse(w = 40, d = 30) {
+  <b>grid</b> g {
+    x: links = 0, rechts = w;
+    y: vorne = 0, hinten = d;
+  }
+  difference() {
+    box(g[links, vorne, 0], …);
+    …</div>
+    </div>
+    <div class="vw">
+      <div class="tool">
+        <div class="float"><span class="seg"><span class="btn on"><svg class="i"><use href="#i-cursor"/></svg>Modell</span><span class="btn"><svg class="i"><use href="#i-cut"/></svg>Schnitt</span><span class="btn"><svg class="i"><use href="#i-pen"/></svg>Skizze</span><span class="btn"><svg class="i"><use href="#i-ruler"/></svg>Messen</span></span></div>
+        <span class="sp"></span>
+        <div class="float"><span class="btn ico"><svg class="i"><use href="#i-fit"/></svg></span><span class="btn">Iso<span class="car">▾</span></span><span class="sep" style="margin:0 2px"></span><span class="btn ico on"><svg class="i"><use href="#i-grid"/></svg></span><span class="btn ico"><svg class="i"><use href="#i-eye"/></svg></span></div>
+      </div>
+      <svg class="model" viewBox="0 0 200 130" style="background:none;transform:none;box-shadow:none"><path d="M100 10 190 45 100 80 10 45z" fill="var(--model)" stroke="#39404a" stroke-width="1" style="filter:brightness(1.08)"/><path d="M10 45 100 80v40L10 85z" fill="var(--model)" stroke="#39404a" stroke-width="1" style="filter:brightness(.92)"/><path d="M190 45 100 80v40l90-35z" fill="var(--model)" stroke="#39404a" stroke-width="1" style="filter:brightness(.8)"/></svg>
+      <svg class="cube" viewBox="0 0 46 46"><g fill="none" stroke="#5f6670" stroke-width="1"><path d="M23 6 39 14v18L23 40 7 32V14z" fill="#fff"/><path d="M7 14l16 8 16-8M23 22v18"/></g><text x="15" y="31" font-size="6" fill="#5f6670">Vorne</text><text x="26" y="31" font-size="6" fill="#5f6670">Rechts</text><text x="18" y="16" font-size="6" fill="#5f6670">Oben</text></svg>
+    </div>
+    <div class="side">
+      <div class="seg"><span class="btn on">Bauteile</span><span class="btn">Farben</span></div>
+      <div class="row"><span><input type="checkbox" checked style="margin:0 4px 0 0;vertical-align:-2px">schild</span><span class="m">5605 mm³ <svg class="i" style="vertical-align:-3px"><use href="#i-dots"/></svg></span></div>
+      <div class="row"><span><input type="checkbox" checked style="margin:0 4px 0 0;vertical-align:-2px">figur</span><span class="m">2043 mm³ <svg class="i" style="vertical-align:-3px"><use href="#i-dots"/></svg></span></div>
+      <div class="row"><span class="m">ohne Bauteil</span><span class="m">0 mm³</span></div>
+      <div class="row" style="border:0"><b>Summe</b><b>7648 mm³</b></div>
+    </div>
+  </div>
+  <div class="status"><span>Bereit</span><span>0 Fehler · 0 Warnungen</span><span class="sp"></span><span>Sprache 1 ms · Kernel 229 ms · 75 Knoten</span></div>
+</div></div></div>
+
+<ul style="padding-left:5mm; margin:1mm 0">
+  <li><b>Editor:</b> nur Tabs; „+“ am Ende öffnet Neu/Laden; Rechtsklick auf Tab: Als Hauptdatei, Umbenennen, Schließen.</li>
+  <li><b>Ansicht:</b> links der <b>Modus</b> (Modell, Schnitt, Skizze, Messen – genau einer aktiv), rechts <b>Kamera und Anzeige</b> (Einpassen, Ansicht ▾ mit Iso/Oben/Vorne/Rechts …, Raster, Röntgen/Ghost). Klickbarer Ansichtswürfel unten rechts statt Achsenkreuz (Option, Frage 4).</li>
+  <li><b>Seitenpanel</b> rechts, ein- und ausklappbar, Reiter <b>Bauteile</b> (Sichtbarkeit, Volumen, Export im ⋯-Menü) und <b>Farben</b> (heutiges Panel). Die Zeile „Bauteile …“ über der Ansicht entfällt. Messergebnisse bekommen hier später einen eigenen Reiter.</li>
+</ul>
+
+<div class="box"><div class="t">Dasselbe dunkel, Modus „Schnitt“ aktiv: Kontextleiste links unter der Werkzeugleiste</div>
+<div class="mock dark zoom"><div class="win">
+  <div class="main" style="grid-template-columns: 1fr; height: 150px">
+    <div class="vw">
+      <div class="tool">
+        <div class="float"><span class="seg"><span class="btn"><svg class="i"><use href="#i-cursor"/></svg>Modell</span><span class="btn on"><svg class="i"><use href="#i-cut"/></svg>Schnitt</span><span class="btn"><svg class="i"><use href="#i-pen"/></svg>Skizze</span><span class="btn"><svg class="i"><use href="#i-ruler"/></svg>Messen</span></span></div>
+        <span class="sp"></span>
+        <div class="float"><span class="btn ico"><svg class="i"><use href="#i-fit"/></svg></span><span class="btn">Iso<span class="car">▾</span></span><span class="sep" style="margin:0 2px"></span><span class="btn ico on"><svg class="i"><use href="#i-grid"/></svg></span><span class="btn ico"><svg class="i"><use href="#i-eye"/></svg></span></div>
+      </div>
+      <div class="float ctx">
+        <span class="seg"><span class="btn">X</span><span class="btn">Y</span><span class="btn on">Z</span><span class="btn">Blick</span></span>
+        <span class="sep" style="margin:0 4px"></span>
+        <span class="lbl">z =</span><span class="btn def" style="width:60px; font-family: ui-monospace, monospace">16</span>
+        <span class="btn ico" title="Umkehren"><svg class="i"><use href="#i-flip"/></svg></span>
+        <span class="btn ico" title="Als cad render … kopieren"><svg class="i"><use href="#i-copy"/></svg></span>
+      </div>
+      <svg class="model"  viewBox="0 0 200 130" style="top:40%;background:none;transform:none;box-shadow:none"><path d="M100 10 190 45 100 80 10 45z" fill="var(--model)" stroke="#39404a" stroke-width="1" style="filter:brightness(1.08)"/><path d="M10 45 100 80v40L10 85z" fill="var(--model)" stroke="#39404a" stroke-width="1" style="filter:brightness(.92)"/><path d="M190 45 100 80v40l90-35z" fill="var(--model)" stroke="#39404a" stroke-width="1" style="filter:brightness(.8)"/></svg>
+    </div>
+  </div>
+</div></div></div>
+
+<h2 class="page">5. Kontextleisten</h2>
+<div class="box"><div class="t">Skizze: Werkzeuge in Gruppen, Bogen-Arten im Untermenü, „Fertig“ als Primärknopf</div>
+<div class="mock" style="position:relative; height: 150px; background: var(--view-bg)">
+  <div class="float" style="position:absolute; left:8px; top:8px">
+    <span class="lbl" style="margin:0 6px">sketch · Zeile 5</span>
+    <span class="sep" style="margin:0 4px"></span>
+    <span class="btn ico on"><svg class="i"><use href="#i-cursor"/></svg></span>
+    <span class="sep" style="margin:0 4px"></span>
+    <span class="btn ico"><svg class="i"><use href="#i-line"/></svg></span>
+    <span class="btn ico" style="width:34px"><svg class="i"><use href="#i-arc"/></svg><span class="car" style="font-size:8px">▾</span></span>
+    <span class="btn ico"><svg class="i"><use href="#i-bez"/></svg></span>
+    <span class="btn ico"><svg class="i"><use href="#i-rect"/></svg></span>
+    <span class="btn ico"><svg class="i"><use href="#i-circ"/></svg></span>
+    <span class="sep" style="margin:0 4px"></span>
+    <span class="btn ico"><svg class="i"><use href="#i-round"/></svg></span>
+    <span class="btn ico"><svg class="i"><use href="#i-close"/></svg></span>
+    <span class="btn ico"><svg class="i"><use href="#i-trash"/></svg></span>
+    <span class="sep" style="margin:0 4px"></span>
+    <span class="btn ico"><svg class="i"><use href="#i-perp"/></svg></span>
+    <span class="btn pri"><svg class="i"><use href="#i-check"/></svg>Fertig</span>
+  </div>
+  <div class="menu" style="left: 112px; top: 44px; min-width: 200px">
+    <div class="h"><span>Bogen durch 3 Punkte</span><span class="kbd">A</span></div>
+    <div><span>Bogen um Mittelpunkt</span><span class="kbd">⇧ A</span></div>
+    <div><span>Tangentialer Bogen</span><span class="kbd">T</span></div>
+  </div>
+  <div style="position:absolute; right: 12px; top: 52px; width: 230px" class="mini">
+    Tooltips mit Tastenkürzel: Auswahl V, Linie L, Bogen A, Bézier B, Rechteck R, Kreis C, Ecke runden F, Schließen Enter, Löschen Entf, ⊥ Ansicht N. Das aktive Werkzeug steht zusätzlich in der Statuszeile.
+  </div>
+</div></div>
+
+<div class="box"><div class="t">Messen (für den nächsten Auftrag, nur Platz und Bedienung): Messart wählen, Ergebnis in der Ansicht und im Reiter „Messen“</div>
+<div class="mock" style="position:relative; height: 100px; background: var(--view-bg)">
+  <div class="float" style="position:absolute; left:8px; top:8px">
+    <span class="seg"><span class="btn on"><svg class="i"><use href="#i-dist"/></svg>Abstand</span><span class="btn"><svg class="i"><use href="#i-radius"/></svg>Radius</span><span class="btn"><svg class="i"><use href="#i-angle"/></svg>Winkel</span></span>
+    <span class="sep" style="margin:0 4px"></span>
+    <span class="btn on">Im Schnitt</span>
+    <span class="btn ico"><svg class="i"><use href="#i-copy"/></svg></span>
+    <span class="btn ico"><svg class="i"><use href="#i-trash"/></svg></span>
+  </div>
+  <div style="position:absolute; left: 30px; top: 58px; font: 11px ui-monospace, monospace; background: var(--panel); border:1px solid var(--border); border-radius:5px; padding:3px 6px">⌀ 6,00 mm · Achse z</div>
+</div></div>
+
+<h2>6. Umfang und Prüfung</h2>
+<ul style="padding-left:5mm; margin:1mm 0">
+  <li>Gemeinsame Bausteine <code>Button</code>, <code>IconButton</code>, <code>Segmented</code>, <code>Menu</code>, <code>Toolbar</code> in <code>web/src/app/ui/</code>; alle Leisten darauf umstellen. Keine Funktion entfällt, alles bleibt per Tastatur erreichbar.</li>
+  <li>Playwright-Selektoren über Rollen/Namen (<code>aria-label</code> statt Knopftext); bestehende Szenarien bleiben grün; Bildvergleich hell/dunkel bei 1280, 1440 und 1920 px, kein Umbruch und kein Abschneiden.</li>
+  <li>Testbericht mit Vorher/Nachher-Bildern je Bereich.</li>
+</ul>
+
+<h2 class="page">7. Fragen an dich</h2>
+<div class="q"><b class="n">1. Symbole oder Text?</b><br>
+<span class="opt">A</span>Symbole + Tooltip in Werkzeugleisten, Text nur bei Modus, Speichern, Export, Fertig (Vorschlag) ·
+<span class="opt">B</span>Symbol + Text überall (breiter) · <span class="opt">C</span>nur Text, aber einheitlich</div>
+<div class="q"><b class="n">2. Dateiaktionen und Export in Menüs?</b><br>
+<span class="opt">A</span>„Datei ▾“ + geteilter Export-Knopf (Vorschlag) · <span class="opt">B</span>Öffnen/Speichern bleiben als Knöpfe sichtbar, Rest ins Menü</div>
+<div class="q"><b class="n">3. Bauteile und Farben im Seitenpanel?</b><br>
+<span class="opt">A</span>Seitenpanel mit Reitern, einklappbar; Zeilen über der Ansicht entfallen (Vorschlag) · <span class="opt">B</span>Bauteile bleiben als schmale Zeile über der Ansicht</div>
+<div class="q"><b class="n">4. Ansichten?</b><br>
+<span class="opt">A</span>Ansicht-Menü + klickbarer Ansichtswürfel (Vorschlag) · <span class="opt">B</span>Segmentschalter Iso/Oben/Vorne/Rechts sichtbar lassen · <span class="opt">C</span>beides</div>
+<div class="q"><b class="n">5. Lage der Werkzeugleiste?</b><br>
+<span class="opt">A</span>oben in der Ansicht, Modus links, Kamera rechts (Vorschlag) · <span class="opt">B</span>senkrechte Leiste am linken Rand der Ansicht</div>
+<div class="q"><b class="n">6. Dichte und Schrift?</b><br>
+<span class="opt">A</span>26 px Knöpfe, Inter 12 px (Vorschlag) · <span class="opt">B</span>kompakter (24 px) · <span class="opt">C</span>großzügiger (30 px)</div>
+<div class="q"><b class="n">7. Sonst etwas, das dich stört</b> (z. B. Editor-Schrift, Farben der Ansicht, Statuszeile)?</div>
+
+</body>
+</html>

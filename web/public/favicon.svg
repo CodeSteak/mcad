@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Kleine Variante (16–48 px): dickere Linien, Raster 2 × 2. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#17a38b"/>
+      <stop offset="1" stop-color="#0c6b60"/>
+    </linearGradient>
+  </defs>
+  <rect x="24" y="24" width="464" height="464" rx="96" fill="url(#bg)"/>
+  <g stroke="#0b4d46" stroke-width="16" stroke-linejoin="round">
+    <path d="M256 110 394 190 256 270 118 190Z" fill="#effbf7"/>
+    <path d="M118 190 256 270V430L118 350Z" fill="#b9e8dc"/>
+    <path d="M394 190 256 270V430L394 350Z" fill="#82cfbd"/>
+  </g>
+  <g stroke="#17a38b" stroke-width="12" stroke-linecap="round" opacity=".9">
+    <path d="M325 150 187 230M187 150 325 230"/>
+  </g>
+  <circle cx="394" cy="190" r="34" fill="#dc813b" stroke="#0b4d46" stroke-width="16"/>
+</svg>
