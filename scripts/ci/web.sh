@@ -15,20 +15,21 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 WEB="$ROOT/web"
+PNPM="${PNPM:-pnpm}"   # overridable, as in the Makefile
 
 step() {
   case "$1" in
     wasm) "$WEB/scripts/build-wasm.sh" ;;
-    install) (cd "$WEB" && pnpm install --frozen-lockfile) ;;
-    typecheck) (cd "$WEB" && pnpm typecheck) ;;
-    unit) (cd "$WEB" && pnpm test) ;;
+    install) (cd "$WEB" && "$PNPM" install --frozen-lockfile) ;;
+    typecheck) (cd "$WEB" && "$PNPM" typecheck) ;;
+    unit) (cd "$WEB" && "$PNPM" test) ;;
     node)
       node "$ROOT/crates/kernel-smlib/js/test-node.mjs" "$WEB/public/smlib"
       node "$WEB/scripts/smoke-node.mjs"
       node "$WEB/scripts/test-transport.mjs"
       ;;
-    build) (cd "$WEB" && pnpm build) ;;
-    e2e) (cd "$WEB" && pnpm e2e) ;;
+    build) (cd "$WEB" && "$PNPM" build) ;;
+    e2e) (cd "$WEB" && "$PNPM" e2e) ;;
     *) echo "unknown step: $1 (wasm|install|typecheck|unit|node|build|e2e)" >&2; exit 2 ;;
   esac
 }

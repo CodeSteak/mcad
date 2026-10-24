@@ -1,0 +1,101 @@
+# Arch-Paket von controller-cad: `cad` mit Desktop-UI (Tauri 2, WebKitGTK 4.1) und CLI.
+#
+# Gebaut wird über das Makefile im Repository-Wurzelverzeichnis:
+#   make arch          # makepkg auf Arch Linux, sonst in einem archlinux-Container (Docker)
+#   make arch-test     # Paket in frischem Container installieren und prüfen
+# `make arch` legt das Quelltext-Archiv (git archive HEAD) nach target/arch, kopiert diese
+# Datei dorthin und setzt dabei pkgver (<Cargo-Version>.r<Commits>.g<Hash>) und _srcsum.
+# Direkt mit makepkg: erst `make dist`, dann pkgver/_srcsum wie oben setzen.
+#
+# SMLib (Apache-2.0) kommt als Git-Quelle (Fork tangency-labs/smlib, fester Commit wie in
+# smlib/fetch.sh) mit den Patches aus smlib/patches; anderer Ort: SMLIB_URL=… make arch.
+
+pkgname=controller-cad
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Parametrisches CAD im OpenSCAD-Dialekt mit exakter B-Rep (SMLib): CLI cad und Desktop-UI'
+arch=('x86_64')
+url='https://github.com/CodeSteak/controller-cad'
+# Projekt: nicht lizenziert (privat); SMLib: Apache-2.0; Schriften: OFL-1.1; Crates/UI: MIT, Apache-2.0
+license=('LicenseRef-UNLICENSED' 'Apache-2.0' 'OFL-1.1' 'MIT')
+depends=(
+  'cairo'
+  'dbus'
+  'gdk-pixbuf2'
+  'glib2'
+  'glibc'
+  'gtk3'
+  'hicolor-icon-theme'
+  'libgcc'
+  'libsoup3'
+  'libstdc++'
+  'webkit2gtk-4.1'
+)
+makedepends=(
+  'cargo'
+  'cmake'
+  'git'
+  'ninja'
+  'nodejs'
+  'pnpm'
+)
+# lto: makepkg würde SMLib (statische C++-Bibliotheken) als GCC-LTO-Objekte bauen, die rustc
+# beim Linken nicht auflöst. debug: Debug-Info von Tauri/WebKit-Bindings kostet mehrere GB.
+options=('!lto' '!debug')
+_smlib_commit=7eba8aa8086777c9cb220c0eb2726112a2a5a2b4
+_srcsum=SKIP
+source=("$pkgname-$pkgver.tar.gz"
+        "smlib::git+${SMLIB_URL:-https://github.com/tangency-labs/smlib.git}#commit=$_smlib_commit")
+sha256sums=("$_srcsum"
+            'SKIP')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  # SMLib-Quellen an den Ort, den smlib/fetch.sh und build.rs erwarten, Patches einmal anwenden
+  mkdir -p third_party
+  ln -sfn "$srcdir/smlib" third_party/smlib
+  local p
+  for p in smlib/patches/*.patch; do
+    if ! git -C "$srcdir/smlib" apply --reverse --check "$PWD/$p" 2>/dev/null; then
+      git -C "$srcdir/smlib" apply "$PWD/$p"
+    fi
+  done
+  # Netzzugriff nur hier: Crates und pnpm-Pakete
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
+  (cd web && pnpm install --frozen-lockfile)
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR="$PWD/target"
+  export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/usr/src/$pkgname"
+  # SMLib ist nur ohne libstdc++-Assertions getestet (wie in CI und den Testberichten)
+  export CXXFLAGS="${CXXFLAGS//-Wp,-D_GLIBCXX_ASSERTIONS/}"
+  # __FILE__ in SMLib-Meldungen ohne $srcdir
+  CFLAGS+=" -ffile-prefix-map=$srcdir=/usr/src/$pkgname"
+  CXXFLAGS+=" -ffile-prefix-map=$srcdir=/usr/src/$pkgname"
+  export JOBS="${JOBS:-$(nproc)}"
+  make app SMLIB_SRC="$srcdir/smlib" SMLIB_PREBUILT="$srcdir/smlib-native" CARGO_FLAGS=--frozen
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  local cad="$PWD/target/release/cad"
+  export CAD_NO_DAEMON=1
+  "$cad" --version
+  "$cad" check examples/spec/gehaeuse.scad
+  "$cad" render examples/spec/gehaeuse.scad -o "$srcdir/check-gehaeuse.png" --module gehaeuse --views all
+  "$cad" export examples/spec/flasche.scad -o "$srcdir/check-flasche.step"
+  # ohne grafische Sitzung: Meldung und Exit 2 (die UI ist eingebettet, nicht der Platzhalter)
+  local rc=0
+  env -u DISPLAY -u WAYLAND_DISPLAY "$cad" >/dev/null 2>&1 || rc=$?
+  [ "$rc" = 2 ]
+  [ ! -e web/dist-tauri/placeholder ]
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  make install DESTDIR="$pkgdir" PREFIX=/usr SMLIB_SRC="$srcdir/smlib"
+}

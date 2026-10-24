@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=controller-cad
+GenericName=Parametric CAD
+GenericName[de]=Parametrisches CAD
+Comment=Parametric CAD in an OpenSCAD dialect with grids, anchors and fillet zones
+Comment[de]=Parametrisches CAD im OpenSCAD-Dialekt mit Rastern, Ankern und Fillet-Zonen
+Exec=cad %f
+TryExec=cad
+Icon=controller-cad
+Terminal=false
+Categories=Graphics;3DGraphics;Engineering;
+Keywords=CAD;OpenSCAD;SCAD;3D;STEP;STL;3MF;
+MimeType=application/x-openscad;
+StartupNotify=true
+StartupWMClass=cad

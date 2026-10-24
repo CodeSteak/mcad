@@ -9,6 +9,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
+CARGO="${CARGO:-cargo}"   # overridable, as in the Makefile (make CARGO=/path/to/cargo)
 
 need_smlib() {
   if [ -z "${SMLIB_PREBUILT:-}" ]; then
@@ -18,12 +19,12 @@ need_smlib() {
 
 step() {
   case "$1" in
-    fmt) cargo fmt --all --check ;;
-    clippy) need_smlib; cargo clippy --workspace --all-targets --locked -- -D warnings ;;
-    clippy-wasm) cargo clippy -p cad-wasm --target wasm32-unknown-unknown --locked -- -D warnings ;;
+    fmt) "$CARGO" fmt --all --check ;;
+    clippy) need_smlib; "$CARGO" clippy --workspace --all-targets --locked -- -D warnings ;;
+    clippy-wasm) "$CARGO" clippy -p cad-wasm --target wasm32-unknown-unknown --locked -- -D warnings ;;
     test)
       need_smlib
-      cargo test --workspace --locked
+      "$CARGO" test --workspace --locked
       # tests/daemon.rs stops its daemons: none may be left (checked in CI only, a local
       # daemon of the developer would count too)
       sleep 1
@@ -34,7 +35,7 @@ step() {
         exit 1
       fi
       ;;
-    wasm-check) cargo check -p cad-wasm --target wasm32-unknown-unknown --locked ;;
+    wasm-check) "$CARGO" check -p cad-wasm --target wasm32-unknown-unknown --locked ;;
     *) echo "unknown step: $1 (fmt|clippy|clippy-wasm|test|wasm-check|all)" >&2; exit 2 ;;
   esac
 }

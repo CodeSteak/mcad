@@ -14,6 +14,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
+CARGO="${CARGO:-cargo}"   # overridable, as in the Makefile
+PNPM="${PNPM:-pnpm}"
 
 SUDO=""
 [ "$(id -u)" = 0 ] || SUDO="sudo"
@@ -28,10 +30,10 @@ step() {
       ;;
     e2e-deps)
       $SUDO apt-get install -y --no-install-recommends xvfb webkit2gtk-driver imagemagick
-      command -v tauri-driver >/dev/null || cargo install tauri-driver --version 2.1.0 --locked
+      command -v tauri-driver >/dev/null || "$CARGO" install tauri-driver --version 2.1.0 --locked
       ;;
-    ui) (cd web && pnpm build:tauri) ;;
-    build) cargo build --release --locked -p cad-cli ;;
+    ui) (cd web && "$PNPM" build:tauri) ;;
+    build) "$CARGO" build --release --locked -p cad-cli ;;
     e2e) node web/e2e-tauri/desktop.e2e.mjs --bin "$ROOT/target/release/cad" ;;
     *) echo "unknown step: $1 (deps|e2e-deps|ui|build|e2e)" >&2; exit 2 ;;
   esac
