@@ -1132,3 +1132,81 @@ quadratischen Q/T-Welle (`welle.svg`, `id = "welle"`) misst OpenCASCADE um 3 % z
 innerhalb eines Elements schneiden, werden nicht aufgelöst; keine Textpfade, kein `use`,
 keine CSS-Klassen; Variable Fonts nur in ihrer Standardinstanz; `$fn` wirkt nicht (exakte
 Kurven).
+
+### 17.11 Umsetzung Schritt 3b: Schablonenschrift „cad stencil mono“ (Testbericht 17)
+
+**Schrift.** `cad_font::stencil` (`crates/cad-font/src/stencil.rs`), keine Schriftdatei: je
+Zeichen eine Zeichenfunktion über benannten Lagen (Mittellinien links/rechts/Mitte; Grund-,
+x-, Versal-, Ober-, Unterlänge), die von der Strichstärke abhängen – Mittellinie = äußere Linie
+∓ halber Strich, daher bleiben Versalhöhe und Glyphenbox bei jeder Strichstärke gleich.
+Bausteine: Geraden, tangentiale Bögen (`arc_to`: Kreisbogen vom Punkt mit der aktuellen
+Richtung zum Ziel), Bögen um einen Mittelpunkt, Stadion, Bauch, C-Bogen, Punkte (Quadrate der
+Strichstärke), Kommas, Spiegelung und Drehung um 180° (d, q, 9, `)`, `]`, `}`, `»`, `>`, `\`,
+„“ ‘). Die Region einer Glyphe: `region2::stroke` der Pfade (flache Enden, Gehrung, Grenze
+4 halbe Striche) ∪ Füllungen ∖ Stege ∩ Clip, in einem `region2::combine` – exakte Schleifen aus
+Geraden und Kreisbögen, außen gegen den Uhrzeigersinn; Cache je (Zeichen, Strich, Steg).
+Konstruktionsregeln: freie Enden laufen bis zur äußeren Linie; Stöße enden auf der Mittellinie
+des anderen Strichs (der Querschnitt liegt dann im anderen Band, keine Kerbe); Diagonalen
+werden über Grund-/Versallinie verlängert und dort beschnitten (gerade Füße, flache Spitzen,
+Gehrungsspitzen von Z, 2, 4, 7 im Clip). Umfang: `REQUIRED_CHARS` vollständig plus `’ ” $`
+(`stencil::CHARS`, Glyphen-ID = Position + 1); andere Zeichen aus JetBrains Mono.
+
+**Stege.** Ein Steg ist ein Band der Stegbreite quer über einen Strich (1,3 halbe Striche zu
+jeder Seite), von der Glyphe abgezogen. Jeder Innenraum bekommt mindestens einen: B, D, P, R,
+b, d, g, p, q am Stamm (Stamm und Bauch getrennt), O, Q, 0, 8, o, Ö, ö, Ø, ø oben und unten,
+A offen (Beine an der Versallinie um die Stegbreite auseinander, Querstrich verbindet), a und e
+am Bauch/Querstrich neben dem Stamm, 4 am Querstrich vor dem Stamm, 6/9 schräg am Bauch, ° %
+& @ § an einem Ring, # am oberen Querstrich; ß und ẞ sind offen (Lücke ≥ Stegbreite zum
+Stamm). **Ohne Stege** (`bridge_width = 0`) bleiben die Innenräume geschlossen (Löcher wie
+eine normale Schrift, A oben geschlossen).
+
+**Metrik.** 1000 Einheiten je em, em = `size`/0,72 wie bei den anderen Schriften; Versalhöhe
+720 (= `size`), x-Höhe 530, Oberlänge 760, Unterlänge −210, Vorschub 600 (× 1000/1024 wie
+OpenSCAD – gleich JetBrains Mono, Texte bleiben so breit wie mit der bisherigen
+Standardschrift), Seitenrand 60. Senkrecht: Vorschub 1000, Glyphe mittig auf dem Stift;
+`rtl`/`btt` kehren die Reihenfolge um. `halign`, `valign`, `spacing` wie sonst (17.10).
+
+**Parameter.** `text(…, stroke_width = w, bridge_width = b)` in mm, nur für diese Schrift
+(sonst Warnung „wirkt nur mit der Schrift „cad stencil mono““). Standard Strich 0,14·`size`
+(Stil Bold: 0,2·`size`), Steg 0,1·`size`. Grenzen aus dem Test der Parameterfläche: Strich
+≤ 0,2·`size` (darüber wachsen a, e, #, @ zusammen und schließen Innenräume), Steg 0 oder
+0,03…0,2·`size` (schmalere Stege schließen schwere Striche wieder); außerhalb Warnung am
+Argument und Begrenzung. mm statt Anteilen, weil Druck und Fräsen absolute Maße brauchen
+(„Steg mindestens zwei Düsenbreiten“). Schriftnamen `"cad stencil mono"`,
+`"cad stencil mono:style=Bold"`.
+
+**Auswahl.** `cad_font::select(name)`: kein `font`, der eigene Name und unbekannte Familien
+(Warnung) → Schablonenschrift; mitgelieferte TrueType-Schriften wie bisher (`builtin` liefert
+nur noch diese); `Font::stencil(bold)`, `FontData::Stencil`. Der bisherige Hinweis
+„Schablonenschrift folgt“ entfällt.
+
+**OpenSCAD-Kompatibilität.** OpenSCAD kennt die Schrift nicht; ohne `font` nimmt es seine
+fontconfig-Standardschrift. Die Vergleichsmodelle (`examples/openscad-compat`,
+`tests/openscad-compat/projects`) enthalten kein `text()`, der Textvergleich (Bericht 16,
+`hull_and_area_like_openscad`) nennt jede Schrift ausdrücklich – keine Abhängigkeit von der
+Standardschrift, keine Änderung nötig. Bewusste Abweichung: Modelle mit `text()` ohne `font`
+sehen bei uns anders aus als in OpenSCAD; für gleiche Maße eine mitgelieferte TrueType-Schrift
+angeben.
+
+**Tests.** cad-font: Abdeckung beider Stile ohne Rückfall, keine Löcher/Splitter/Überlappungen
+für 8 Kombinationen von Strich und Steg, Innenräume ohne Stege, Metrik und Vorschub, jede
+Glyphe in ihrer Zelle, Flächen (H exakt, o gegen Formel, gegen JetBrains Mono), Ausrichtung,
+Richtungen, Rückfall; cad-eval: Standardschrift, Parameter, Warnungen; cad-engine
+(`stencil_text.rs`): jede Glyphe über `region_2d` ohne Loch, Volumen = Fläche × Höhe,
+Kernel-Zeit eines Schilds gegen Allerta Stencil (nativ 1,6–1,9 s gegen 3,3–3,6 s: Geraden und
+Kreise statt B-Splines, weniger Kernel-Aufrufe); Beispiel `examples/spec/schablone.scad`;
+Playwright K01–K03 (`web/e2e/schablone.spec.ts`). Zeichentafel:
+`cargo run -p cad-font --example stencil_chart -- tafel.svg [strich steg]`.
+
+**Playwright C16 (Befund).** C16 (achsgebundenes Ziehen) scheiterte zeitabhängig, zuletzt auch
+einzeln: Der Viewer baut die Griffe nach einem Cursorwechsel erst im nächsten Animationsframe
+neu, `__cad.handles()` lieferte bis dahin die Griffe der vorigen Zeile (`cube([60, 30, 1])`,
+ebenfalls ein Punktgriff); der Test griff die Plattenecke, das Ziehen begann nicht, die Maus
+drehte die Kamera. Der Test wartet jetzt auf den Punktgriff der Zeile (`pointHandleOn`, ebenso
+C20). Die App verhält sich richtig.
+
+**Grenzen.** Eine Strichstärke je Glyphe (nur @ mit 0,72-fachem, ² ³ mit 0,75-fachem Strich),
+keine optischen Korrekturen; W, w, m, @, * werden bei Bold dicht. Stege an Bögen sind gerade
+Bänder (Breite auf der Mittellinie). Kombinierende Zeichen werden nicht zusammengesetzt (das
+Zeichen kommt aus JetBrains Mono); Zeichen aus JetBrains Mono haben keine Stege. Glyphen
+berühren sich nur bei `spacing` < 1 oder den zellenbreiten `—` und `_`.

@@ -1182,7 +1182,6 @@ fn draw(ch: char, g: &mut G) -> bool {
         }
         _ => return false,
     }
-    let _ = (x0, d);
     true
 }
 
