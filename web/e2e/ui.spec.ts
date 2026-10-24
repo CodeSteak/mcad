@@ -4,7 +4,7 @@
 
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
-import { cad, clickLine, hoverText, lineEl, openApp, openExample, record, screenshot, waitScene, waitView, writeMetrics } from "./helpers";
+import { cad, clickLine, exportAs, fileMenu, hoverText, lineEl, openApp, openExample, record, screenshot, setTheme, standardView, waitScene, waitView, writeMetrics } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => console.log("pageerror:", e.message));
@@ -18,7 +18,7 @@ test("S01 Laden: Editor, Ansicht und erste Szene", async ({ page }) => {
   // Anchors of the named instance k (diamonds).
   expect(s.view!.plan.anchors).toBe(2);
   await expect(page.getByTestId("status-errors")).toHaveText("0 Fehler · 0 Warnungen");
-  await expect(page.getByTestId("pathbar")).toContainText("Datei");
+  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toHaveText("gehaeuse.scad");
   const nav = await page.evaluate(() => performance.getEntriesByType("navigation")[0]?.startTime ?? 0);
   writeMetrics({ firstSceneMs: s.metrics.firstSceneMs! - nav, firstEvalMs: s.metrics.evalMs[0] });
   await screenshot(page, "s01-laden");
@@ -112,7 +112,7 @@ test("S05 Modulkontext, Differenz: abgezogener Körper rot", async ({ page }) =>
   const st = await waitView(page, "(s) => s.view.selection.line === 10 && s.view.plan.items.some(i => i.mode === 'red')");
   const red = st.view!.plan.items.filter((i) => i.mode === "red");
   expect(red.map((i) => i.line)).toEqual([12]);
-  await expect(page.getByTestId("pathbar")).toContainText("Datei›gehaeuse");
+  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toContainText("gehaeuse.scad›gehaeuse");
   await screenshot(page, "s05-difference");
   record({
     id: "S05",
@@ -177,7 +177,7 @@ test("S08 Pfadleiste: Klick springt eine Ebene hoch", async ({ page }) => {
   await clickLine(page, 11, 4);
   await waitScene(page, { context: "gehaeuse" });
   await screenshot(page, "s08a-modulkontext");
-  await page.getByTestId("pathbar").getByRole("button", { name: "Datei" }).click();
+  await page.getByRole("navigation", { name: "Pfadleiste" }).getByRole("button", { name: "Zur Datei gehaeuse.scad" }).click();
   const s = await waitScene(page, { context: null });
   expect(s.path).toEqual([]);
   expect(s.view!.selection.line).toBe(21);
@@ -248,7 +248,7 @@ test("S11 Gescheiterte Operation: Zeile rot, Meldung am Zeilenende", async ({ pa
   await waitScene(page);
   await expect(lineEl(page, 1)).toHaveClass(/cm-l-error/);
   await expect(lineEl(page, 1).locator(".cm-lineend-error")).toContainText("Verrundung gescheitert");
-  await page.getByRole("button", { name: "Alles zeigen" }).click();
+  await page.getByRole("button", { name: "Einpassen", exact: true }).click();
   await waitView(page, "(s) => s.frames > 0");
   await screenshot(page, "s11-fehler");
   record({
@@ -261,13 +261,13 @@ test("S11 Gescheiterte Operation: Zeile rot, Meldung am Zeilenende", async ({ pa
 
 test("S12 Export STL und 3MF", async ({ page }) => {
   await openApp(page);
-  const [dl] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export STL" }).click()]);
+  const [dl] = await Promise.all([page.waitForEvent("download"), exportAs(page, "STL")]);
   expect(dl.suggestedFilename()).toBe("gehaeuse.stl");
   const stl = readFileSync((await dl.path())!);
   const tris = stl.readUInt32LE(80);
   expect(tris).toBeGreaterThan(0);
   expect(stl.length).toBe(84 + 50 * tris);
-  const [dl2] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Export 3MF" }).click()]);
+  const [dl2] = await Promise.all([page.waitForEvent("download"), exportAs(page, "3MF mehrfarbig")]);
   expect(dl2.suggestedFilename()).toBe("gehaeuse.3mf");
   const mf = readFileSync((await dl2.path())!);
   expect(mf.subarray(0, 2).toString()).toBe("PK");
@@ -291,11 +291,12 @@ test("S13 Raster: verwendete Ebenen, alle Raster, Hover über Rasterausdruck", a
   expect(used).toBe(6);
   expect(s.view!.grid.points).toBeGreaterThan(30);
   await screenshot(page, "s13a-raster-zeile");
-  await page.getByTestId("all-grids").check();
+  await page.getByRole("button", { name: "Alle Raster", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Alle Raster", exact: true })).toHaveAttribute("aria-pressed", "true");
   s = await waitView(page, "(s, n) => s.view.grid.lines > n", used);
   expect(s.view!.grid.dashed).toBeGreaterThan(0);
   await screenshot(page, "s13b-alle-raster");
-  await page.getByTestId("all-grids").uncheck();
+  await page.getByRole("button", { name: "Alle Raster", exact: true }).click();
   // Hover over `g[loch[i], mitte, boden]` in line 14.
   // Column 24 is inside `g[loch[i], mitte, boden]`.
   await hoverText(page, 14, 26);
@@ -415,10 +416,10 @@ test("S18 Autospeichern in IndexedDB", async ({ page }) => {
 
 test("S19 Dunkles Thema und Standardansichten", async ({ page }) => {
   await openApp(page);
-  await page.getByTestId("theme").selectOption("dark");
+  await setTheme(page, "dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await page.getByRole("button", { name: "Oben" }).click();
-  await page.getByRole("button", { name: "Iso" }).click();
+  await standardView(page, "Oben");
+  await standardView(page, "Iso");
   await clickLine(page, 21, 4);
   await waitView(page, "(s) => s.view.selection.line === 21");
   await screenshot(page, "s19-dunkel");
@@ -436,7 +437,7 @@ test("S20 intersection und 2D-Formen", async ({ page }) => {
   await clickLine(page, 13, 8);
   s = await waitView(page, "(s) => s.view.selection.line === 13 && s.view.plan.items.length > 0");
   expect(s.view!.plan.items.filter((i) => i.mode === "full").every((i) => i.flat)).toBe(true);
-  await page.getByRole("button", { name: "Oben" }).click();
+  await standardView(page, "Oben");
   await waitView(page, "(s) => s.frames > 0");
   await screenshot(page, "s20b-profil");
   record({
@@ -454,7 +455,7 @@ test("S21 Öffnen und Speichern ohne File System Access API (Hoch- und Herunterl
     delete w.showSaveFilePicker;
   });
   await openApp(page);
-  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.getByRole("button", { name: "Öffnen…" }).click()]);
+  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), fileMenu(page, "Öffnen …")]);
   await chooser.setFiles({ name: "teil.scad", mimeType: "text/plain", buffer: Buffer.from("// hochgeladen\ncube([12, 8, 4]);\n") });
   const s = await waitScene(page);
   expect(s.fileName).toBe("teil.scad");
@@ -466,7 +467,7 @@ test("S21 Öffnen und Speichern ohne File System Access API (Hoch- und Herunterl
   record({
     id: "S21",
     title: "Öffnen und Speichern",
-    caption: "Ohne File System Access API: „Öffnen…“ lädt eine Datei über den Dateidialog hoch (teil.scad wird ausgewertet), „Speichern“ lädt den Quelltext unverändert herunter. Mit der API (Chromium) werden dieselben Funktionen über showOpenFilePicker/showSaveFilePicker ausgeführt.",
+    caption: "Ohne File System Access API: „Datei › Öffnen …“ lädt eine Datei über den Dateidialog hoch (teil.scad wird ausgewertet), „Speichern“ lädt den Quelltext unverändert herunter. Mit der API (Chromium) werden dieselben Funktionen über showOpenFilePicker/showSaveFilePicker ausgeführt.",
   });
 });
 

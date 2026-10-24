@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
-import { type CadState, cad, clickLine, frame, hook, openApp, record9, screenshot9, waitScene, waitView, writeMetrics9 } from "./helpers";
+import { type CadState, cad, clickLine, frame, hook, mode, openApp, openExample, record9, screenshot9, sectionBar, waitScene, waitView, writeMetrics9 } from "./helpers";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, "../..");
@@ -33,7 +33,7 @@ type W = { __cad: { sectionInfo(): SectionInfo; setSection(s: unknown): void; pr
 const info = (page: Page) => page.evaluate(() => (window as unknown as W).__cad.sectionInfo());
 
 async function sectionOn(page: Page): Promise<SectionInfo> {
-  await page.getByTestId("section-toggle").click();
+  await mode(page, "Schnitt").click();
   await page.waitForFunction(() => {
     const i = (window as unknown as W).__cad.sectionInfo();
     return i.on && i.caps > 0 && i.contour > 0;
@@ -176,7 +176,7 @@ test("X03 Umkehren, Achsen, freie Ebene aus Blickrichtung und per Eingabe", asyn
   await openApp(page);
   await hook(page, (c) => c.setView("iso"));
   await sectionOn(page);
-  await page.getByTestId("section-flip").click();
+  await sectionBar(page).getByRole("button", { name: "Umkehren" }).click();
   await expect(page.getByTestId("status-section")).toContainText("entfernt z <");
   let i = await info(page);
   expect(i.normal).toEqual([-0, -0, -1]);
@@ -187,21 +187,21 @@ test("X03 Umkehren, Achsen, freie Ebene aus Blickrichtung und per Eingabe", asyn
   const flipped = await pixels(page, await canvasPng(page));
   expect(flipped.cap).toBeGreaterThan(1000);
   await screenshot9(page, "x03-umgekehrt");
-  await page.getByTestId("section-axis-x").click();
+  await sectionBar(page).getByRole("radio", { name: "X", exact: true }).click();
   i = await info(page);
   expect(Math.abs(i.normal[0])).toBe(1);
-  await page.getByTestId("section-value").fill("30");
-  await page.getByTestId("section-value").press("Enter");
+  await sectionBar(page).getByRole("textbox", { name: /^Lage der Ebene/ }).fill("30");
+  await sectionBar(page).getByRole("textbox", { name: /^Lage der Ebene/ }).press("Enter");
   await expect(page.getByTestId("status-section")).toContainText("x = 30");
   await screenshot9(page, "x03-x30");
-  await page.getByTestId("section-view").click();
+  await sectionBar(page).getByRole("radio", { name: "Aus Blickrichtung" }).click();
   await expect(page.getByTestId("status-section")).toContainText("n = ");
-  await page.getByTestId("section-normal").fill("1, 1, 1");
-  await page.getByTestId("section-normal").press("Enter");
+  await sectionBar(page).getByRole("textbox", { name: "Normale der Ebene" }).fill("1, 1, 1");
+  await sectionBar(page).getByRole("textbox", { name: "Normale der Ebene" }).press("Enter");
   i = await info(page);
   const r = 1 / Math.sqrt(3);
   for (let k = 0; k < 3; k++) expect(Math.abs(i.normal[k])).toBeCloseTo(r, 6);
-  await page.getByTestId("section-copy").click();
+  await sectionBar(page).getByRole("button", { name: "Als cad render … kopieren" }).click();
   const cli = (await cad(page)) as CadState & { lastCli: string };
   expect(cli.lastCli).toContain("--section-plane ");
   await screenshot9(page, "x03-frei");
@@ -237,8 +237,7 @@ test("X04 Mit Hervorhebung, Zonen, transparenten Körpern (ohne Kappe) und Griff
   expect(i.caps).toBe(s.view!.plan.items.filter((it) => it.mode === "full").length);
   await screenshot9(page, "x04-abgezogen");
   // zones: fillet example, cursor on a zone
-  await page.getByTestId("examples").selectOption("spec/fillet_zonen.scad");
-  await waitScene(page);
+  await openExample(page, "spec/fillet_zonen.scad");
   const text = await hook(page, (c) => c.text());
   const zl = text.split("\n").findIndex((l) => l.includes("zone(")) + 1;
   await clickLine(page, zl, 10);
@@ -272,10 +271,10 @@ test("X05 Kopierter CLI-Aufruf ergibt im CLI denselben Schnitt (Pixelanteil der 
   await openApp(page);
   await hook(page, (c) => c.setView("iso"));
   await sectionOn(page);
-  await page.getByTestId("section-value").fill("12");
-  await page.getByTestId("section-value").press("Enter");
+  await sectionBar(page).getByRole("textbox", { name: /^Lage der Ebene/ }).fill("12");
+  await sectionBar(page).getByRole("textbox", { name: /^Lage der Ebene/ }).press("Enter");
   await frame(page);
-  await page.getByTestId("section-copy").click();
+  await sectionBar(page).getByRole("button", { name: "Als cad render … kopieren" }).click();
   const st = (await cad(page)) as CadState & { lastCli: string };
   const cli = st.lastCli;
   expect(cli).toMatch(/^cad render gehaeuse\.scad -o schnitt\.png --section z=12 --azimuth [\d.]+ --elevation [\d.]+$/);
@@ -309,8 +308,7 @@ test("X05 Kopierter CLI-Aufruf ergibt im CLI denselben Schnitt (Pixelanteil der 
 
 test("X06 fps beim Verschieben der Ebene", async ({ page }) => {
   await openApp(page);
-  await page.getByTestId("examples").selectOption("spec/fillet_zonen.scad");
-  await waitScene(page);
+  await openExample(page, "spec/fillet_zonen.scad");
   await hook(page, (c) => c.setView("iso"));
   const plain = await page.evaluate(() => (window as unknown as { __cad: { orbitBenchmark(n: number): Promise<{ fps: number }> } }).__cad.orbitBenchmark(120));
   await sectionOn(page);

@@ -1,133 +1,123 @@
 import { useEffect, useRef, useState } from "react";
 import { createEditor } from "../editor/setup";
-import { EXAMPLE_PROJECTS, GROUP_LABELS, SINGLE_EXAMPLES } from "../files/files";
-import { pathSegments } from "../logic/context";
 import { diagnosticPath } from "../logic/files";
-import { fmtNum } from "../logic/format";
 import { bridge } from "../state/bridge";
 import { project } from "../state/project";
-import { type ThemePref, setThemePref, store, useCad } from "../state/store";
+import { setSideOpen, store, useCad } from "../state/store";
 import { Viewer, type StandardView } from "../view/viewer";
 import {
-  addProjectFile,
-  downloadProjectZip,
-  exportModel,
-  exportParts,
   initialProject,
-  jumpToLevel,
   meshes,
-  newFile,
   onDocChange,
-  openExample,
-  openExampleProject,
-  openFolderOrZip,
-  openFromDisk,
-  openZip,
   removeProjectFile,
   saveToDisk,
   sendNow,
   client,
   setMainFile,
   setViewer,
+  setViewMode,
   startProject,
   switchFile,
-  uploadProjectFiles,
-  togglePart,
+  viewMode,
+  type ViewMode,
 } from "./runtime";
-import { ParamBar, SettingsButton } from "./panels";
-import { SectionBar, SectionStatus, SectionToggle } from "./section";
-import { DiffDialog, ExternalBar, RecentMenu } from "./desktopUi";
-import { ColorsPanel, ColorsToggle } from "./colors";
-import { SketchBar, SketchStatus, SketchToggle } from "./sketchUi";
-import { MeasureBar, MeasurePanel, MeasureStatus, MeasureToggle } from "./measureUi";
+import { Header, UploadInput, chooseUpload, promptNewProjectFile, useGlobalShortcuts } from "./header";
+import { SectionBar, SectionStatus, setSectionOn } from "./section";
+import { DiffDialog, ExternalBar } from "./desktopUi";
+import { SketchBar, SketchStatus } from "./sketchUi";
+import { MeasureBar, MeasureStatus } from "./measureUi";
+import { SidePanel } from "./sidePanel";
+import { ViewCube } from "./viewCube";
+import {
+  Button,
+  ContextMenu,
+  IconButton,
+  IconEye,
+  IconFit,
+  IconGrid,
+  IconMeasure,
+  IconModel,
+  IconPanelOpen,
+  IconPlus,
+  IconSection,
+  IconSketch,
+  type IconType,
+  type MenuEntry,
+  MenuButton,
+  Segmented,
+  Toolbar,
+  ToolGroup,
+  ToolSep,
+} from "./ui";
 
-function Toolbar() {
-  const themePref = useCad((s) => s.themePref);
-  const fileName = useCad((s) => s.fileName);
-  const groups = [...new Set(SINGLE_EXAMPLES.map((e) => e.group))];
-  return (
-    <header className="toolbar" role="toolbar" aria-label="Werkzeugleiste">
-      <span className="brand">Parametrisches CAD</span>
-      <span className="sep" />
-      <button onClick={newFile} title="Neue Datei">Neu</button>
-      <button onClick={() => void openFromDisk()} title="Datei öffnen">Öffnen…</button>
-      <button onClick={() => void saveToDisk()} title="Speichern (Strg+S)">Speichern</button>
-      <button onClick={() => void saveToDisk(true)} title="Speichern unter">Speichern unter…</button>
-      <RecentMenu />
-      <label className="examples">
-        <span>Beispiele</span>
-        <select
-          aria-label="Beispiel öffnen"
-          data-testid="examples"
-          value=""
-          onChange={(e) => {
-            const v = e.target.value;
-            const pr = EXAMPLE_PROJECTS.find((x) => `projekt:${x.name}` === v);
-            if (pr) return openExampleProject(pr);
-            const ex = SINGLE_EXAMPLES.find((x) => x.path === v);
-            if (ex) openExample(ex);
-          }}
-        >
-          <option value="">Beispiel wählen …</option>
-          {groups.map((g) => (
-            <optgroup key={g} label={GROUP_LABELS[g] ?? g}>
-              {SINGLE_EXAMPLES.filter((e) => e.group === g).map((e) => (
-                <option key={e.path} value={e.path}>
-                  {e.name}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-          {EXAMPLE_PROJECTS.length > 0 && (
-            <optgroup label="Projekte (mehrere Dateien)">
-              {EXAMPLE_PROJECTS.map((p) => (
-                <option key={p.name} value={`projekt:${p.name}`}>
-                  {p.name}/
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
-      </label>
-      <span className="sep" />
-      <button onClick={() => void exportModel("stl")} title="Als STL exportieren">Export STL</button>
-      <button onClick={() => void exportModel("3mf")} title="Als 3MF exportieren (mehrfarbig: ein Teil je Farbe mit Filament-Slot)">Export 3MF</button>
-      <button onClick={() => void exportModel("step")} title="Als STEP exportieren (über den Kernel)">Export STEP</button>
-      <span className="grow" />
-      <SettingsButton />
-      <span className="filename" title="Aktuelle Datei">{fileName}</span>
-      <label className="themesel" title="Farbschema: System folgt der Einstellung des Betriebssystems">
-        <span aria-hidden="true">◐</span>
-        <select aria-label="Farbschema" data-testid="theme" value={themePref} onChange={(e) => setThemePref(e.target.value as ThemePref)}>
-          <option value="system">System</option>
-          <option value="light">Hell</option>
-          <option value="dark">Dunkel</option>
-        </select>
-      </label>
-    </header>
-  );
+/** Actions of a file tab (context menu and the "+" menu). */
+function tabItems(path: string, main: string): MenuEntry[] {
+  return [
+    { label: "Als Hauptdatei", hint: "Diese Datei als Hauptdatei auswerten", disabled: path === main, onSelect: () => setMainFile(path) },
+    {
+      label: "Schließen",
+      hint: path === main ? "Die Hauptdatei bleibt im Projekt" : "Datei aus dem Projekt entfernen",
+      disabled: path === main,
+      onSelect: () => {
+        if (window.confirm(`${path} aus dem Projekt entfernen?`)) removeProjectFile(path);
+      },
+    },
+  ];
 }
 
-/** File tabs of the project: switch, main file, add/remove files, folders and ZIPs. */
+/**
+ * File tabs of the project; "+" adds or loads files and holds the actions of the shown file;
+ * right click (or the menu key, Umschalt+F10) on a tab: "Als Hauptdatei", "Schließen".
+ */
 function FileBar() {
   const p = useCad((s) => s.project);
   const diags = useCad((s) => s.diagnostics);
   const dirty = useCad((s) => s.dirty);
+  const [menu, setMenu] = useState<{ x: number; y: number; path: string; opener: HTMLElement } | null>(null);
   const errorsIn = new Set(diags.items.filter((d) => d.severity === "error").map((d) => diagnosticPath(d, p.main)));
+  const openMenu = (path: string, el: HTMLElement, x?: number, y?: number) => {
+    const r = el.getBoundingClientRect();
+    setMenu({ x: x ?? r.left, y: y ?? r.bottom + 2, path, opener: el });
+  };
   return (
-    <div className="filebar" role="tablist" aria-label="Dateien des Projekts" data-testid="filebar">
-      <div className="tabs">
+    <div className="filebar" data-testid="filebar">
+      <div className="tabs" role="tablist" aria-label="Dateien des Projekts">
         {p.paths.map((path) => (
           <button
             key={path}
+            type="button"
             role="tab"
+            aria-label={path}
             aria-selected={path === p.active}
+            aria-haspopup="menu"
+            tabIndex={path === p.active ? 0 : -1}
             className={`tab${path === p.active ? " active" : ""}${path === p.main ? " is-main" : ""}`}
             data-testid={`tab-${path}`}
-            title={path === p.main ? `${path} (Hauptdatei)` : path}
+            title={`${path === p.main ? `${path} (Hauptdatei)` : path} – Rechtsklick: Als Hauptdatei, Schließen`}
             onClick={() => switchFile(path)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              openMenu(path, e.currentTarget, e.clientX, e.clientY);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+                e.preventDefault();
+                openMenu(path, e.currentTarget);
+                return;
+              }
+              const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+              if (!d) return;
+              e.preventDefault();
+              const i = (p.paths.indexOf(path) + d + p.paths.length) % p.paths.length;
+              switchFile(p.paths[i]);
+              requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(".filebar [role=tab][aria-selected=true]")?.focus());
+            }}
           >
-            {path === p.main && <span className="star" aria-label="Hauptdatei">★</span>}
+            {path === p.main && (
+              <span className="star" aria-label="Hauptdatei" title="Hauptdatei">
+                ★
+              </span>
+            )}
             {path}
             {dirty.includes(path) && (
               <span className="dirty" title="Ungespeicherte Änderungen" data-testid={`dirty-${path}`}>
@@ -138,151 +128,97 @@ function FileBar() {
           </button>
         ))}
       </div>
-      <div className="fileactions">
-        <button
-          title="Neue Datei im Projekt"
-          data-testid="file-add"
-          onClick={() => {
-            const name = window.prompt("Name der neuen Datei (z. B. lib/teile.scad)", "neu.scad");
-            if (name) addProjectFile(name);
-          }}
-        >
-          + Datei
-        </button>
-        <label className="upload" title="SVG (für import), Schrift .ttf/.otf (für text) oder .scad ins Projekt laden" data-testid="file-upload">
-          ⇡ Datei laden
-          <input
-            type="file"
-            multiple
-            accept=".svg,.ttf,.otf,.scad"
-            data-testid="file-upload-input"
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const files = e.currentTarget.files;
-              if (files && files.length) void uploadProjectFiles(Array.from(files));
-              e.currentTarget.value = "";
-            }}
+      <MenuButton
+        label="Datei hinzufügen"
+        text={null}
+        icon={IconPlus}
+        className="tab-add"
+        hint="Neue Datei, Datei laden; Aktionen der angezeigten Datei"
+        items={[
+          { label: "Neue Datei …", hint: "Neue, leere Datei im Projekt", onSelect: promptNewProjectFile },
+          { label: "Datei laden …", hint: "SVG (für import), Schrift .ttf/.otf (für text) oder .scad ins Projekt laden", onSelect: chooseUpload },
+          { kind: "sep" },
+          { kind: "heading", label: p.active },
+          ...tabItems(p.active, p.main),
+        ]}
+      />
+      <ContextMenu at={menu} label={`Datei ${menu?.path ?? ""}`} items={menu ? tabItems(menu.path, p.main) : []} onClose={() => setMenu(null)} />
+    </div>
+  );
+}
+
+const MODES: Array<{ value: ViewMode; label: string; icon: IconType; hint: string }> = [
+  { value: "model", label: "Modell", icon: IconModel, hint: "Modell ansehen, Griffe ziehen" },
+  { value: "section", label: "Schnitt", icon: IconSection, hint: "3D-Schnittansicht (Ebene am Griff ziehen, Alt: ohne Rasten)" },
+  { value: "sketch", label: "Skizze", icon: IconSketch, hint: "Skizze zeichnen: Werkzeuge in der Skizzenebene, der Code entsteht im sketch-Block am Cursor (Esc beendet)" },
+  { value: "measure", label: "Messen", icon: IconMeasure, hint: "Abstand, Radius, Winkel, Länge, Fläche, Körper – auch im Schnitt (Esc beendet)" },
+];
+
+const VIEWS: Array<{ v: StandardView; label: string }> = [
+  { v: "iso", label: "Iso" },
+  { v: "top", label: "Oben" },
+  { v: "front", label: "Vorne" },
+  { v: "right", label: "Rechts" },
+  { v: "back", label: "Hinten" },
+  { v: "left", label: "Links" },
+  { v: "bottom", label: "Unten" },
+];
+
+/** Tool bar of the view: the mode on the left, camera and display on the right. */
+function ViewToolbar({ viewer }: { viewer: Viewer | null }) {
+  const mode = useCad((s) => viewMode(s));
+  const allGrids = useCad((s) => s.allGrids);
+  const sideOpen = useCad((s) => s.sideOpen);
+  const showRegions = useCad((s) => s.showRegions);
+  const [lastView, setLastView] = useState<StandardView>("iso");
+  const view = (v: StandardView) => {
+    setLastView(v);
+    viewer?.setView(v);
+  };
+  return (
+    <div className="vtoolbar">
+      <Toolbar label="Modus" float>
+        <Segmented label="Modus" value={mode} onChange={(m) => setViewMode(m, setSectionOn)} options={MODES} className="modes" data-testid="modes" />
+      </Toolbar>
+      <Toolbar label="Kamera und Anzeige" float>
+        <ToolGroup>
+          <IconButton icon={IconFit} label="Einpassen" hint="Alles zeigen" onClick={() => viewer?.fitAll()} />
+          <MenuButton
+            label="Ansicht"
+            text={VIEWS.find((x) => x.v === lastView)?.label ?? "Iso"}
+            hint="Standardansichten (auch über den Ansichtswürfel unten rechts)"
+            items={VIEWS.map((x) => ({ label: x.label, onSelect: () => view(x.v) }))}
+            align="end"
+            className="view-menu"
           />
-        </label>
-        <button title="Angezeigte Datei als Hauptdatei auswerten" data-testid="file-main" disabled={p.active === p.main} onClick={() => setMainFile(p.active)}>
-          ★ Hauptdatei
-        </button>
-        <button
-          title="Angezeigte Datei aus dem Projekt entfernen"
-          data-testid="file-remove"
-          disabled={p.active === p.main}
-          onClick={() => {
-            if (window.confirm(`${p.active} aus dem Projekt entfernen?`)) removeProjectFile(p.active);
-          }}
-        >
-          ×
-        </button>
-        <span className="sep" />
-        <button title="Ordner als Projekt öffnen (sonst ZIP)" data-testid="open-folder" onClick={() => void openFolderOrZip()}>
-          Ordner…
-        </button>
-        <button title="Projekt aus ZIP-Datei öffnen" data-testid="open-zip" onClick={() => void openZip()}>
-          ZIP laden…
-        </button>
-        <button title="Projekt als ZIP herunterladen" data-testid="download-zip" onClick={() => downloadProjectZip()}>
-          ZIP ↓
-        </button>
-      </div>
+        </ToolGroup>
+        <ToolSep />
+        <ToolGroup>
+          <IconButton icon={IconGrid} label="Alle Raster" hint="Alle Raster zeigen (sonst die am Cursor)" pressed={allGrids} onClick={() => store.setState({ allGrids: !allGrids })} />
+          <MenuButton
+            label="Anzeige"
+            text={null}
+            icon={IconEye}
+            align="end"
+            hint="Weitere Anzeigeoptionen"
+            items={[
+              { label: "Alle Raster", check: "checkbox", checked: allGrids, onSelect: () => store.setState({ allGrids: !allGrids }) },
+              { label: "Farbregionen zeigen", check: "checkbox", checked: showRegions, hint: "Körper je Farbe, wie sie exportiert und gedruckt werden", onSelect: () => store.setState({ showRegions: !showRegions }) },
+              { label: "Seitenpanel", check: "checkbox", checked: sideOpen, hint: "Bauteile, Farben, Messungen", onSelect: () => setSideOpen(!sideOpen) },
+            ]}
+          />
+          {!sideOpen && <IconButton icon={IconPanelOpen} label="Seitenpanel einblenden" hint="Bauteile, Farben, Messungen" onClick={() => setSideOpen(true)} />}
+        </ToolGroup>
+      </Toolbar>
     </div>
-  );
-}
-
-function vol(v: number | null | undefined): string {
-  return v === null || v === undefined ? "–" : `${fmtNum(Math.round(v * 10) / 10)} mm³`;
-}
-
-/** Parts (named instances at the top level): visibility and export per part. */
-function PartsBar() {
-  const shown = useCad((s) => s.complete ?? s.shown);
-  const hidden = useCad((s) => s.hiddenParts);
-  const fileContext = !shown || shown.context.module === null;
-  const parts = fileContext ? (shown?.parts ?? []) : [];
-  const names = parts.map((p) => p.name);
-  // Always one row (the 3D view keeps its size when parts come and go).
-  if (!parts.length) {
-    return (
-      <div className="partsbar empty" data-testid="partsbar" aria-label="Bauteile">
-        <span className="ptitle">Bauteile</span>
-        <span className="pinfo">{fileContext ? "keine – benannte Instanzen auf oberster Ebene (deckel: deckel();) sind Bauteile" : "nur im Dateikontext"}</span>
-      </div>
-    );
-  }
-  return (
-    <div className="partsbar" data-testid="partsbar" aria-label="Bauteile">
-      <span className="ptitle">Bauteile</span>
-      {parts.map((pt) => {
-        const b = pt.bounds;
-        const size = b ? b.max.map((x, i) => fmtNum(Math.round((x - b.min[i]) * 10) / 10)).join(" × ") : "";
-        return (
-          <span key={pt.name} className={`part${hidden.includes(pt.name) ? " off" : ""}`} data-testid={`part-${pt.name}`}>
-            <label title={`Bauteil ${pt.name} (Zeile ${pt.range.line}) ein-/ausblenden`}>
-              <input type="checkbox" checked={!hidden.includes(pt.name)} onChange={(e) => togglePart(pt.name, e.target.checked)} data-testid={`part-visible-${pt.name}`} />
-              <span className="pname">{pt.name}</span>
-            </label>
-            <span className="pinfo" title={size ? `Hülle ${size} mm` : undefined}>
-              {vol(pt.volume)}
-            </span>
-            <button onClick={() => void exportParts("stl", [pt.name], false)} title={`${pt.name} als STL`} data-testid={`part-stl-${pt.name}`}>
-              STL
-            </button>
-            <button onClick={() => void exportParts("3mf", [pt.name], false)} title={`${pt.name} als 3MF`} data-testid={`part-3mf-${pt.name}`}>
-              3MF
-            </button>
-            <button onClick={() => void exportParts("step", [pt.name], false)} title={`${pt.name} als STEP`} data-testid={`part-step-${pt.name}`}>
-              STEP
-            </button>
-          </span>
-        );
-      })}
-      <span className="pall">
-        Alle:
-        <button onClick={() => void exportParts("stl", names, true)} title="Jedes Bauteil als STL, zusammen als ZIP" data-testid="parts-zip">
-          ZIP (STL)
-        </button>
-        <button onClick={() => void exportParts("step", names, true)} title="Jedes Bauteil als STEP, zusammen als ZIP" data-testid="parts-zip-step">
-          ZIP (STEP)
-        </button>
-        <button onClick={() => void exportParts("3mf", names, false)} title="Ein 3MF mit einem Objekt je Bauteil" data-testid="parts-3mf">
-          3MF
-        </button>
-      </span>
-    </div>
-  );
-}
-
-function PathBar() {
-  const shown = useCad((s) => s.shown);
-  const fileName = useCad((s) => s.fileName);
-  const segs = pathSegments(shown, fileName);
-  return (
-    <nav className="pathbar" aria-label="Pfadleiste" data-testid="pathbar">
-      {segs.map((s, i) => (
-        <span key={i} className="seg-wrap">
-          {i > 0 && <span className="chev">›</span>}
-          {i < segs.length - 1 ? (
-            <button className="seg link" onClick={() => jumpToLevel(i)} title={i === 0 ? "Zur Datei" : `Zu ${s}`}>
-              {i === 0 ? "Datei" : s}
-            </button>
-          ) : (
-            <span className="seg current">{i === 0 ? "Datei" : s}</span>
-          )}
-        </span>
-      ))}
-      {segs.length === 1 && <span className="pathfile">{fileName}</span>}
-    </nav>
   );
 }
 
 function ViewPane() {
   const ref = useRef<HTMLDivElement>(null);
   const [viewer, setV] = useState<Viewer | null>(null);
-  const allGrids = useCad((s) => s.allGrids);
   const refitHint = useCad((s) => s.refitHint);
+  const mode = useCad((s) => viewMode(s));
   useEffect(() => {
     if (!ref.current) return;
     const v = new Viewer(ref.current, client, meshes);
@@ -293,35 +229,24 @@ function ViewPane() {
       v.dispose();
     };
   }, []);
-  const view = (v: StandardView) => viewer?.setView(v);
   return (
     <div className="viewpane">
       <div className="viewport" ref={ref} data-testid="viewport" />
       <div className="viewoverlay">
-        <div className="viewtools" role="toolbar" aria-label="Ansicht">
-          <button onClick={() => viewer?.fitAll()} title="Alles zeigen">Alles zeigen</button>
-          {refitHint && (
-            <button className="refit" onClick={() => viewer?.fitAll()} title="Das Modell hat seine Größe deutlich geändert: Ansicht neu einpassen" data-testid="refit">
-              Neu einpassen
-            </button>
-          )}
-          <button onClick={() => view("iso")}>Iso</button>
-          <button onClick={() => view("top")}>Oben</button>
-          <button onClick={() => view("front")}>Vorne</button>
-          <button onClick={() => view("right")}>Rechts</button>
-          <label className="check">
-            <input type="checkbox" checked={allGrids} onChange={(e) => store.setState({ allGrids: e.target.checked })} data-testid="all-grids" />
-            alle Raster
-          </label>
-          <SketchToggle />
-          <SectionToggle />
-          <MeasureToggle />
-          <ColorsToggle />
+        <ViewToolbar viewer={viewer} />
+        {/* the context bar of the mode (a section kept while drawing or measuring has none) */}
+        <div className="ctxslot">
+          {mode === "sketch" && <SketchBar />}
+          {mode === "measure" && <MeasureBar />}
+          {mode === "section" && <SectionBar />}
         </div>
-        <SketchBar />
-        <MeasureBar />
-        <SectionBar />
       </div>
+      {refitHint && (
+        <Button variant="standard" className="refit" icon={IconFit} hint="Das Modell hat seine Größe deutlich geändert: Ansicht neu einpassen" onClick={() => viewer?.fitAll()} data-testid="refit">
+          Neu einpassen
+        </Button>
+      )}
+      <ViewCube viewer={viewer} />
     </div>
   );
 }
@@ -445,9 +370,10 @@ export function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+  useGlobalShortcuts();
   return (
     <div className="app">
-      <Toolbar />
+      <Header />
       <main className="main">
         <section className="editorpane" aria-label="Editor">
           <FileBar />
@@ -456,19 +382,15 @@ export function App() {
         </section>
         <Splitter />
         <section className="viewcol" aria-label="3D-Ansicht">
-          <PathBar />
-          <PartsBar />
-
           <div className="viewbody">
             <ViewPane />
-            <ParamBar />
-            <MeasurePanel />
-            <ColorsPanel />
+            <SidePanel />
           </div>
         </section>
       </main>
       <StatusBar />
       <DiffDialog />
+      <UploadInput />
     </div>
   );
 }

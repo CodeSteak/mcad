@@ -1,5 +1,5 @@
-// Section view tool: toggle in the view toolbar, a bar with axis, flip, value/normal input
-// and "Als `cad render …` kopieren", and the status line text.
+// Section view tool: mode "Schnitt" of the view toolbar, the context bar (axis or plane from the
+// view direction, value/normal input, flip, "Als `cad render …` kopieren") and the status text.
 
 import { useEffect, useState } from "react";
 import type { Vec3 } from "../engine/protocol";
@@ -9,6 +9,7 @@ import { absPath, IS_TAURI } from "../platform/desktop";
 import { project } from "../state/project";
 import { store, useCad } from "../state/store";
 import { getViewer } from "./runtime";
+import { IconButton, IconCopy, IconFlip, Segmented, Toolbar, ToolGroup, ToolSep } from "./ui";
 
 function center(): Vec3 {
   const b = getViewer()?.modelBox;
@@ -104,15 +105,6 @@ export function sectionText(s: SectionState): string {
   return `Schnitt p = ${v3(s.point)}, n = ${v3(n)} · entfernt die Seite, in die n zeigt${s.snap ? ` · ${s.snap}` : ""}`;
 }
 
-export function SectionToggle() {
-  const on = useCad((s) => s.section.on);
-  return (
-    <button aria-pressed={on} className={on ? "on" : ""} onClick={() => setSectionOn(!on)} title="3D-Schnittansicht (Ebene ziehen am Griff, Alt: ohne Rasten)" data-testid="section-toggle">
-      Schnitt
-    </button>
-  );
-}
-
 export function SectionBar() {
   const s = useCad((st) => st.section);
   const [val, setVal] = useState("");
@@ -120,51 +112,58 @@ export function SectionBar() {
   useEffect(() => setVal(fmtNum(Math.round(offset(s) * 1000) / 1000)), [s]);
   useEffect(() => setNrm(s.normal.map((x) => fmtNum(Math.round(x * 1000) / 1000)).join(", ")), [s.normal]);
   if (!s.on) return null;
+  const axis = s.axis === "free" ? "view" : s.axis;
   return (
-    <div className="sectionbar" role="toolbar" aria-label="Schnitt" data-testid="sectionbar">
-      <span className="stitle">Schnitt</span>
-      {(["x", "y", "z"] as const).map((a) => (
-        <button key={a} aria-pressed={s.axis === a} className={s.axis === a ? "on" : ""} onClick={() => setSectionAxis(a)} data-testid={`section-axis-${a}`}>
-          {a.toUpperCase()}
-        </button>
-      ))}
-      <button aria-pressed={s.axis === "free"} className={s.axis === "free" ? "on" : ""} onClick={sectionFromView} title="Freie Ebene: Normale aus der Blickrichtung" data-testid="section-view">
-        Aus Blickrichtung
-      </button>
-      <button onClick={flipSection} title="Andere Seite behalten (--section-flip)" data-testid="section-flip">
-        Umkehren
-      </button>
-      <label title={s.axis === "free" ? "Abstand der Ebene vom Ursprung entlang n" : `Lage der Ebene (${s.axis})`}>
-        {s.axis === "free" ? "p·n" : `${s.axis} =`}
+    <Toolbar label="Schnitt" float className="contextbar sectionbar" data-testid="sectionbar">
+      <Segmented
+        label="Schnittebene"
+        value={axis}
+        onChange={(v) => (v === "view" ? sectionFromView() : setSectionAxis(v))}
+        options={[
+          { value: "x", label: "X", hint: "Ebene senkrecht zur x-Achse durch die Modellmitte" },
+          { value: "y", label: "Y", hint: "Ebene senkrecht zur y-Achse durch die Modellmitte" },
+          { value: "z", label: "Z", hint: "Ebene senkrecht zur z-Achse durch die Modellmitte" },
+          { value: "view", label: "Aus Blickrichtung", text: "Blick", hint: "Freie Ebene: Normale aus der Blickrichtung" },
+        ]}
+      />
+      <ToolSep />
+      <label className="ui-field" title={s.axis === "free" ? "Abstand der Ebene vom Ursprung entlang n" : `Lage der Ebene (${s.axis})`}>
+        <span className="ui-label">{s.axis === "free" ? "p·n =" : `${s.axis} =`}</span>
         <input
+          className="ui-input"
           value={val}
+          aria-label={s.axis === "free" ? "Lage der Ebene (p·n)" : `Lage der Ebene (${s.axis})`}
           onChange={(e) => setVal(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && setSectionValue(Number(val.replace(",", ".")))}
           onBlur={() => setSectionValue(Number(val.replace(",", ".")))}
-          size={7}
+          size={6}
           data-testid="section-value"
         />
       </label>
       {s.axis === "free" && (
-        <label title="Normale (nx, ny, nz)">
-          n =
+        <label className="ui-field" title="Normale (nx, ny, nz)">
+          <span className="ui-label">n =</span>
           <input
+            className="ui-input"
             value={nrm}
+            aria-label="Normale der Ebene"
             onChange={(e) => setNrm(e.target.value)}
             onKeyDown={(e) => {
               if (e.key !== "Enter") return;
               const v = nrm.split(/[,;\s]+/).filter(Boolean).map(Number);
               if (v.length === 3) setSectionNormal(v as Vec3);
             }}
-            size={14}
+            size={12}
             data-testid="section-normal"
           />
         </label>
       )}
-      <button onClick={() => void copySectionCli()} title="Gleichen Schnitt in der CLI rendern" data-testid="section-copy">
-        Als <code>cad render …</code> kopieren
-      </button>
-    </div>
+      <ToolSep />
+      <ToolGroup>
+        <IconButton icon={IconFlip} label="Umkehren" hint="Andere Seite behalten (--section-flip)" pressed={s.flip} onClick={flipSection} />
+        <IconButton icon={IconCopy} label="Als cad render … kopieren" hint="Gleichen Schnitt in der CLI rendern" onClick={() => void copySectionCli()} />
+      </ToolGroup>
+    </Toolbar>
   );
 }
 

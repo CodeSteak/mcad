@@ -31,14 +31,20 @@ import type { SketchController, SketchView } from "../app/sketch";
 import type { MeasureController, MeasureView } from "../app/measure";
 import { pixelSize, planeCamera, rasterLines, rasterSpacing, snapMarker } from "../logic/sketchEditor";
 
-export type StandardView = "iso" | "top" | "front" | "right";
+export type StandardView = "iso" | "top" | "front" | "right" | "back" | "left" | "bottom";
 
 const VIEW_DIRS: Record<StandardView, { dir: THREE.Vector3; up: THREE.Vector3 }> = {
   iso: { dir: new THREE.Vector3(1, -1.25, 0.9).normalize(), up: new THREE.Vector3(0, 0, 1) },
   top: { dir: new THREE.Vector3(0, -1e-4, 1).normalize(), up: new THREE.Vector3(0, 0, 1) },
   front: { dir: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1) },
   right: { dir: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 0, 1) },
+  back: { dir: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(0, 0, 1) },
+  left: { dir: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 0, 1) },
+  bottom: { dir: new THREE.Vector3(0, -1e-4, -1).normalize(), up: new THREE.Vector3(0, 0, 1) },
 };
+
+/** Camera rotation (world → camera, row-major 3 × 3) for the view cube. */
+export type CameraListener = (rot: number[]) => void;
 
 function m4(m: Mat4): THREE.Matrix4 {
   return new THREE.Matrix4().fromArray(m);
@@ -140,7 +146,8 @@ export class Viewer implements DragView, SketchView, MeasureView {
   lastSketchDraw: Record<string, number> = {};
   /** Handles drawn for the cursor line. */
   lastHandles: HandleGeom[] = [];
-  private gizmo: { scene: THREE.Scene; camera: THREE.OrthographicCamera; group: THREE.Group };
+  private cameraListeners = new Set<CameraListener>();
+  private lastRot = "";
   private materials: Materials;
   /** Section view (clipping plane, caps, contour, grip). */
   readonly section: SectionLayer;
@@ -241,7 +248,6 @@ export class Viewer implements DragView, SketchView, MeasureView {
     this.scene3.add(this.camera);
 
     this.materials = new Materials(readPalette());
-    this.gizmo = this.makeGizmo();
     this.applyTheme();
 
     this.resizeObs = new ResizeObserver(() => this.resize());
@@ -391,16 +397,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     r.setScissorTest(false);
     r.setViewport(0, 0, w, h);
     r.render(this.scene3, this.camera);
-    // Axis gizmo in the lower left corner.
-    const s = Math.min(120, Math.floor(Math.min(w, h) / 4));
-    this.gizmo.group.quaternion.copy(this.camera.quaternion).invert();
-    r.clearDepth();
-    r.setScissorTest(true);
-    r.setScissor(6, 6, s, s);
-    r.setViewport(6, 6, s, s);
-    r.render(this.gizmo.scene, this.gizmo.camera);
-    r.setScissorTest(false);
-    r.setViewport(0, 0, w, h);
+    this.noteCamera();
     this.placeMeasureLabels();
     this.frames++;
     this.noteDrawn();
@@ -950,23 +947,24 @@ export class Viewer implements DragView, SketchView, MeasureView {
     this.helpers.add(axes);
   }
 
-  private makeGizmo() {
-    const scene = new THREE.Scene();
-    const camera = new THREE.OrthographicCamera(-1.7, 1.7, 1.7, -1.7, 0.1, 10);
-    camera.position.set(0, 0, 5);
-    const group = new THREE.Group();
-    scene.add(group);
-    const cols = [0xe5484d, 0x30a46c, 0x2f80ed];
-    const labels = ["X", "Y", "Z"];
-    for (let k = 0; k < 3; k++) {
-      const dir = new THREE.Vector3(k === 0 ? 1 : 0, k === 1 ? 1 : 0, k === 2 ? 1 : 0);
-      group.add(new THREE.ArrowHelper(dir, new THREE.Vector3(), 1, cols[k], 0.3, 0.2));
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(labels[k], cols[k]), depthTest: false }));
-      sprite.position.copy(dir.clone().multiplyScalar(1.3));
-      sprite.scale.set(0.6, 0.6, 0.6);
-      group.add(sprite);
-    }
-    return { scene, camera, group };
+  /** Tells the view cube about camera rotations (only when it changed). */
+  private noteCamera(): void {
+    if (!this.cameraListeners.size) return;
+    const m = this.camera.matrixWorldInverse.elements;
+    // column-major 4 × 4 → row-major 3 × 3 rotation
+    const rot = [m[0], m[4], m[8], m[1], m[5], m[9], m[2], m[6], m[10]];
+    const key = rot.map((x) => x.toFixed(4)).join(",");
+    if (key === this.lastRot) return;
+    this.lastRot = key;
+    for (const f of this.cameraListeners) f(rot);
+  }
+
+  /** Follows the camera rotation (view cube); returns the unsubscribe function. */
+  onCamera(f: CameraListener): () => void {
+    this.cameraListeners.add(f);
+    this.lastRot = "";
+    this.requestRender();
+    return () => this.cameraListeners.delete(f);
   }
 
   private maybeFit(scene: Scene): void {
@@ -1016,6 +1014,8 @@ export class Viewer implements DragView, SketchView, MeasureView {
   /** Camera from the direction `dir` (towards the target), z up unless looking along z. */
   viewFrom(dir: Vec3): void {
     const d = new THREE.Vector3(...dir).normalize();
+    // straight down or up: z can't be "up" – tilt a hair so the front stays at the bottom
+    if (Math.abs(d.z) > 0.9999) d.set(0, -1e-4, Math.sign(d.z)).normalize();
     this.camera.position.copy(this.controls.target.clone().add(d.multiplyScalar(100)));
     this.camera.up.set(0, 0, 1);
     this.controls.update();
@@ -1948,18 +1948,6 @@ function dotTexture(): THREE.Texture {
   g.fill();
   dot = new THREE.CanvasTexture(c);
   return dot;
-}
-
-function labelTexture(text: string, color: number): THREE.Texture {
-  const c = document.createElement("canvas");
-  c.width = c.height = 64;
-  const g = c.getContext("2d")!;
-  g.fillStyle = `#${color.toString(16).padStart(6, "0")}`;
-  g.font = "bold 44px system-ui, sans-serif";
-  g.textAlign = "center";
-  g.textBaseline = "middle";
-  g.fillText(text, 32, 34);
-  return new THREE.CanvasTexture(c);
 }
 
 /** 1-based line of a statement's first node (debug state). */

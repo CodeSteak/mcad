@@ -10,7 +10,8 @@
 // reports/tmp/report9/ (test report 9, tools/report/report9.mjs) or `--out`. T12–T14: colours,
 // filaments and the dark theme (test report 11). T16: sketch editor (test report 18,
 // `--only T16 --out reports/tmp/report18/tauri`). T17: measure mode (test report 19,
-// `--only T17 --out reports/tmp/report19/tauri`).
+// `--only T17 --out reports/tmp/report19/tauri`). T18: UI overhaul – bars at 1280/1440/1920 px in
+// both themes, menus, view cube, side panel (test report 20, `--out reports/tmp/report20/tauri`).
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -307,12 +308,12 @@ async function main() {
     await waitFor("Hinweisleiste", () => exists("[data-testid=external-bar]"));
     check((await exec("return window.__cad.text()")) === mine, "Editor behält den eigenen Stand");
     e.images.push({ name: await shot("t04-leiste"), label: "„Datei wurde extern geändert“ mit Neu laden / Meine behalten / Vergleichen" });
-    await click("[data-testid=external-compare]");
+    await click("[data-testid=external-bar] button[aria-label=Vergleichen]");
     await waitFor("Vergleich", () => exists("[data-testid=diff-view]"));
     const rows = await exec("return [...document.querySelectorAll('[data-testid=diff-view] .dl')].map(e => e.className)");
     check(rows.some((r) => r.includes("add")) && rows.some((r) => r.includes("del")), "Vergleich zeigt + und − Zeilen");
     e.images.push({ name: await shot("t04-vergleich"), label: "Vergleichen: Festplatte (−) gegen Editor (+)" });
-    await click("[data-testid=diff-keep]");
+    await click("[role=dialog] button[aria-label='Meine behalten']");
     check(!(await exists("[data-testid=external-bar]")), "Leiste weg nach „Meine behalten“");
     // save: own write must not come back as an external change
     await exec("window.__cad.focusEditor()");
@@ -327,7 +328,7 @@ async function main() {
     await exec("const c = window.__cad; c.setText(c.text() + '// lokal\\n')");
     writeFileSync(file, MODEL);
     await waitFor("Hinweisleiste 2", () => exists("[data-testid=external-bar]"));
-    await click("[data-testid=external-reload]");
+    await click("[data-testid=external-bar] button[aria-label='Neu laden']");
     check((await exec("return window.__cad.text()")) === MODEL, "„Neu laden“ übernimmt die Festplatte");
     await sceneReady();
   });
@@ -336,7 +337,7 @@ async function main() {
     renameSync(file, file + ".bak");
     await waitFor("gelöscht-Leiste", async () => (await state()).external["gehaeuse.scad"] === "removed" || null);
     e.images.push({ name: await shot("t05-geloescht"), label: "Datei umbenannt/gelöscht: Inhalt bleibt, „Wieder speichern“" });
-    await click("[data-testid=external-restore]");
+    await click("[data-testid=external-bar] button[aria-label='Wieder speichern']");
     await waitFor("wieder angelegt", async () => existsSync(file) || null, 10_000);
     check(readFileSync(file, "utf8") === MODEL, "Speichern legt die Datei wieder an");
     rmSync(file + ".bak");
@@ -407,7 +408,7 @@ async function main() {
   });
 
   await test("T08", "Schnittansicht in Tauri (Kappe, Kontur, Ziehen, CLI-Aufruf)", async (check, e) => {
-    await click("[data-testid=section-toggle]");
+    await click("[role=radiogroup][aria-label=Modus] [role=radio][aria-label=Schnitt]");
     await waitFor("Schnitt", async () => {
       const i = await exec("return window.__cad.sectionInfo()");
       return i && i.on && i.caps > 0 && i.contour > 0 ? i : null;
@@ -428,11 +429,11 @@ async function main() {
     const fps = await execAsync("const done = arguments[arguments.length - 1]; window.__cad.sectionBenchmark(120).then(done)");
     metrics.sectionFpsTauri = fps;
     check(fps.fps > 5, `Ebene verschieben: ${fps.fps.toFixed(1)} fps (WebKitGTK, Software-GL)`);
-    await click("[data-testid=section-copy]");
+    await click("[role=toolbar][aria-label=Schnitt] button[aria-label='Als cad render … kopieren']");
     const cli = (await state()).lastCli;
     check(cli && cli.startsWith("cad render ") && cli.includes("--section z="), cli);
     e.details = { cli };
-    await click("[data-testid=section-toggle]");
+    await click("[role=radiogroup][aria-label=Modus] [role=radio][aria-label=Modell]");
   });
 
   await test("T09", "Watchdog in Tauri: hängender Kernel → Engine-Prozess ersetzt, Knoten gesperrt", async (check, e) => {
@@ -537,7 +538,8 @@ async function main() {
 
   await test("T12", "Farben & Filamente in Tauri: Liste, Slot ändern, 3MF mehrfarbig (nativer Kernel)", async (check, e) => {
     await ensureApp();
-    await exec("window.__cad.setThemePref('light'); localStorage.setItem('cad-colors-open', '1'); window.__cad.store.setState({ colorsOpen: true })");
+    await exec("window.__cad.setThemePref('light')");
+    await click("[role=tablist][aria-label=Seitenpanel] [role=tab][aria-label=Farben]");
     await exec("window.__cad.setText(arguments[0])", MEHR);
     await sceneReady();
     await waitFor("Farbliste", async () => (await exists("[data-testid=colors-panel]")) || null);
@@ -553,7 +555,7 @@ async function main() {
     }
     e.images.push({ name: await shot("t12-farben"), label: "Farbliste in der Desktop-App (helles Thema)" });
     // slot change writes the code
-    await selectOption("[data-testid=color-slot-teal]", "5");
+    await selectOption("select[aria-label='Filament für teal']", "5");
     await waitFor("filament = 5 im Text", async () => ((await exec("return window.__cad.text()")).includes('color("teal", filament = 5)') ? true : null));
     await sceneReady();
     const s2 = await state();
@@ -580,8 +582,10 @@ async function main() {
       Text: ["body", "body"],
       Editor: [".cm-content", ".editor .cm-editor"],
       Statusleiste: ["[data-testid=status-progress]", ".statusbar"],
-      Farbliste: ["[data-testid=colors-panel]", "[data-testid=colors-panel]"],
-      Werkzeugleiste: [".toolbar button", ".toolbar button"],
+      Farbliste: ["[data-testid=colors-panel]", ".sidepanel"],
+      Kopfleiste: [".hd .ui-btn--quiet", ".hd"],
+      "Speichern (primär)": ["[data-testid=save]", "[data-testid=save]"],
+      Werkzeugleiste: [".vtoolbar .ui-seg-item.is-on", ".vtoolbar .ui-seg-item.is-on"],
     };
     const ratios = {};
     for (const [k, [a, b]] of Object.entries(pairs)) {
@@ -598,7 +602,7 @@ async function main() {
 
   await test("T15", "Bericht 12 in Tauri: Farbregionen je Instanz, filament()-Tabelle, Objekt „ohne Bauteil“, 3MF ohne Farbgruppe", async (check, e) => {
     await ensureApp();
-    await exec("window.__cad.setThemePref('light'); window.__cad.store.setState({ colorsOpen: true, showRegions: true })");
+    await exec("window.__cad.setThemePref('light'); window.__cad.store.setState({ sideOpen: true, sideTab: 'colors', showRegions: true })");
     const pal2 = `// pal2\n${readFileSync(join(ROOT, "tests/farben-pruefung/cases/pal2.scad"), "utf8")}`;
     await exec("window.__cad.setText(arguments[0])", pal2);
     await sceneReady();
@@ -612,8 +616,8 @@ async function main() {
     const slotMod = `// slot_mod\n${readFileSync(join(ROOT, "tests/farben-pruefung/cases/slot_mod.scad"), "utf8")}`;
     await exec("window.__cad.setText(arguments[0])", slotMod);
     await sceneReady();
-    await waitFor("Farbliste", async () => (await exists("[data-testid=color-slot-red]")) || null);
-    await selectOption("[data-testid=color-slot-red]", "4");
+    await waitFor("Farbliste", async () => (await exists("select[aria-label='Filament für red']")) || null);
+    await selectOption("select[aria-label='Filament für red']", "4");
     await waitFor("filament(\"red\", 4)", async () => ((await exec("return window.__cad.text()")).includes('filament("red", 4);') ? true : null));
     const t = await exec("return window.__cad.text()");
     check(!t.includes("filament = 4"), "kein filament = 4 an color(c)");
@@ -633,7 +637,7 @@ async function main() {
 
   await test("T16", "Skizzen-Editor in Tauri: Zeichenmodus, Rechteck auf Rasterpunkten, Snap-Anzeige, Undo (TauriTransport, nativer Kernel)", async (check, e) => {
     await ensureApp();
-    await exec("window.__cad.setThemePref('light'); window.__cad.store.setState({ colorsOpen: false })");
+    await exec("window.__cad.setThemePref('light'); window.__cad.store.setState({ sideOpen: false })");
     const SRC = "grid g {\n    x: a = 0, b = 10, c = 30;\n    y: u = 0, v = 15;\n}\nlinear_extrude(3) sketch {\n}\n";
     const s0 = await state();
     await exec("window.__cad.setText(arguments[0])", SRC);
@@ -641,14 +645,14 @@ async function main() {
     await exec("window.__cad.setCursorLine(6, 0)");
     await sceneReady();
     const sk = () => exec("return window.__cad.sketch()");
-    await click("[data-testid=sketch-toggle]");
+    await click("[role=radiogroup][aria-label=Modus] [role=radio][aria-label=Skizze]");
     await waitFor("Zeichenmodus", async () => {
       const s = await sk();
       return s && s.raster && s.answers > 0 ? s : null;
     });
     const cam = await exec("return window.__cad.camera()");
     check(cam.dir[2] < -0.9999, `Blick senkrecht auf die Skizzenebene (z = ${cam.dir[2].toFixed(5)})`);
-    await click("[data-testid=sketch-tool-rect]");
+    await click("[role=toolbar][aria-label=Skizze] button[aria-label=Rechteck]");
     await waitFor("Werkzeug Rechteck", async () => ((await sk())?.tool === "rect" ? true : null));
     // pointer events on the canvas (the view's listeners: capture on the container, move on the canvas)
     const fire = (type, x, y) =>
@@ -699,7 +703,7 @@ async function main() {
     await exec("window.__cad.undo()");
     const back = await waitFor("Undo", async () => ((await exec("return window.__cad.text()")) === SRC ? true : null));
     check(back === true, "Undo nimmt die Aktion als einen Schritt zurück");
-    await click("[data-testid=sketch-exit]");
+    await click("[role=toolbar][aria-label=Skizze] button[aria-label=Fertig]");
     check((await sk()) === null, "Zeichenmodus beendet");
     const ms = s1.rtt.filter((r) => !r.click).map((r) => r.ms).sort((a, b) => a - b);
     metrics.sketchTauri = { hoverMedianMs: ms[Math.floor(ms.length / 2)] ?? null, answers: s1.answers };
@@ -708,14 +712,14 @@ async function main() {
 
   await test("T17", "Messen in Tauri: Radius, Abstand paralleler Flächen, Radius im Schnitt (TauriTransport, nativer Kernel)", async (check, e) => {
     await ensureApp();
-    await exec("window.__cad.setThemePref('light'); window.__cad.store.setState({ colorsOpen: false })");
+    await exec("window.__cad.setThemePref('light'); window.__cad.store.setState({ sideOpen: false })");
     const SRC = "cube([20, 10, 8]);\ntranslate([30, 5, 0]) cylinder(h = 12, r = 5);\n";
     const s0 = await state();
     await exec("window.__cad.setText(arguments[0])", SRC);
     await sceneReady(s0.sentVersion + 1);
     await exec("window.__cad.setView('iso')");
     const ms = () => exec("return window.__cad.measure()");
-    await click("[data-testid=measure-toggle]");
+    await click("[role=radiogroup][aria-label=Modus] [role=radio][aria-label=Messen]");
     await waitFor("Messmodus", async () => {
       const m = await ms();
       return m && m.active && m.answers > 0 ? m : null;
@@ -756,11 +760,11 @@ async function main() {
       });
     };
     const c = Math.SQRT1_2;
-    await click("[data-testid=measure-kind-radius]");
+    await click("[role=radiogroup][aria-label=Messart] [role=radio][aria-label=Radius]");
     await waitFor("Radius", async () => ((await ms()).kind === "radius" ? true : null));
     const m1 = await press([30 + 5 * c, 5 - 5 * c, 6], "face");
     check(m1.results.length === 1 && m1.results[0].label === "R 5 · ⌀ 10", `Radius des Zylinders: ${m1.results[0]?.label}`);
-    await click("[data-testid=measure-kind-distance]");
+    await click("[role=radiogroup][aria-label=Messart] [role=radio][aria-label=Abstand]");
     await waitFor("Abstand", async () => ((await ms()).kind === "distance" ? true : null));
     await press([10, 5, 8], "face");
     const m2 = await press([30, 5, 12], "face");
@@ -771,8 +775,8 @@ async function main() {
     e.images.push({ name: await shot("t17-messen"), label: "Radius des Zylinders und Normalabstand der Deckflächen" });
     // in the section z = 4: the cylinder cut gives an exact circle
     await exec("window.__cad.setSection({ on: true, axis: 'z', point: [0, 0, 4], normal: [0, 0, 1], flip: false, snap: null })");
-    await click("[data-testid=measure-kind-radius]");
-    await click("[data-testid=measure-in-section]");
+    await click("[role=radiogroup][aria-label=Messart] [role=radio][aria-label=Radius]");
+    await click("[role=toolbar][aria-label=Messen] button[aria-label='Im Schnitt']");
     const sec = await waitFor("Schnitt", async () => {
       const m = await ms();
       return m.inSection && m.section && m.section.regions === 2 ? m : null;
@@ -782,12 +786,96 @@ async function main() {
     const r3 = m3.results[2];
     check(r3 && r3.label === "R 5 · ⌀ 10", `Kreis im Schnitt: ${r3?.label}`);
     e.images.push({ name: await shot("t17-schnitt"), label: "Radius des Schnittkreises (Schnitt z = 4)" });
-    await click("[data-testid=measure-exit]");
+    await click("[role=toolbar][aria-label=Messen] button[aria-label=Fertig]");
     check((await ms()).active === false, "Messmodus beendet");
     const rtt = m3.rtt.filter((r) => !r.click).map((r) => r.ms).sort((a, b) => a - b);
     metrics.measureTauri = { hoverMedianMs: rtt[Math.floor(rtt.length / 2)] ?? null, answers: m3.answers };
     e.details = { results: m3.results.map((r) => ({ kind: r.kind, label: r.label, cli: r.cli })) };
     await exec("window.__cad.setSection({ on: false })");
+  });
+
+  // ------------------------------------------------------------ UI overhaul (report 20)
+
+  await test("T18", "UI-Überarbeitung in Tauri: Leisten ohne Umbruch bei 1280/1440/1920 (hell/dunkel), Menüs, Ansichtswürfel, Seitenpanel", async (check, e) => {
+    await ensureApp();
+    await exec("window.__cad.store.setState({ sideOpen: true, sideTab: 'parts' }); window.__cad.setText(arguments[0])", MEHR);
+    await sceneReady();
+    // bars: content not wider than the box, nothing sticks out, one row, mode and camera apart
+    const bars = () =>
+      exec(`
+        const sel = [["Kopfleiste", ".hd"], ["Kopf links", ".hd-left"], ["Kopf Mitte", ".hd-title"], ["Kopf rechts", ".hd-right"], ["Dateileiste", ".filebar"],
+          ["Modus", ".vtoolbar > [role=toolbar]:first-child"], ["Kamera", ".vtoolbar > [role=toolbar]:last-child"], ["Kontextleiste", ".ctxslot > [role=toolbar]"],
+          ["Seitenpanel", ".sp-head"], ["Statuszeile", ".statusbar"]];
+        const out = [];
+        for (const [name, s] of sel) for (const e of document.querySelectorAll(s)) {
+          const r = e.getBoundingClientRect();
+          let outside = 0;
+          for (const c of e.querySelectorAll("button, [role=radio], [role=tab], input")) {
+            const q = c.getBoundingClientRect();
+            if (q.width && (q.right > r.right + 0.5 || q.left < r.left - 0.5 || q.right > innerWidth + 0.5)) outside++;
+          }
+          out.push({ name, scroll: e.scrollWidth, client: e.clientWidth, height: Math.round(r.height), left: Math.round(r.left), right: Math.round(r.right), outside });
+        }
+        return { bars: out, inner: innerWidth, doc: [document.documentElement.scrollWidth, document.documentElement.clientWidth] };`);
+    const problems = (rep, label) => {
+      const p = [];
+      if (rep.doc[0] > rep.doc[1]) p.push(`${label}: Fenster scrollt waagerecht`);
+      for (const b of rep.bars) {
+        if (b.scroll > b.client + 1) p.push(`${label}: ${b.name} abgeschnitten (${b.scroll} > ${b.client})`);
+        if (b.outside) p.push(`${label}: ${b.name}: ${b.outside} Elemente ragen heraus`);
+        const max = b.name === "Kopfleiste" ? 41 : b.name === "Dateileiste" ? 34 : b.name === "Statuszeile" ? 26 : 40;
+        if (b.height > max) p.push(`${label}: ${b.name} umgebrochen (${b.height} px)`);
+      }
+      const m = rep.bars.find((b) => b.name === "Modus");
+      const k = rep.bars.find((b) => b.name === "Kamera");
+      if (m && k && m.right > k.left) p.push(`${label}: Modus und Kamera überlappen`);
+      return p;
+    };
+    const sizes = {};
+    const all = [];
+    for (const theme of ["light", "dark"]) {
+      await exec("window.__cad.setThemePref(arguments[0])", theme);
+      for (const w of [1280, 1440, 1920]) {
+        await wd("POST", `/session/${sid}/window/rect`, { width: w, height: 900 }).catch(() => null);
+        await sleep(500);
+        for (const m of ["Modell", "Messen"]) {
+          await click(`[role=radiogroup][aria-label=Modus] [role=radio][aria-label=${m}]`);
+          await sleep(250);
+          const rep = await bars();
+          sizes[`${w} ${theme} ${m}`] = rep.inner;
+          all.push(...problems(rep, `${w} ${theme} ${m} (innen ${rep.inner} px)`));
+        }
+        await click("[role=radiogroup][aria-label=Modus] [role=radio][aria-label=Modell]");
+        if (w !== 1440) e.images.push({ name: await shot(`t18-${w}-${theme === "light" ? "hell" : "dunkel"}`), label: `${w} px, ${theme === "light" ? "hell" : "dunkel"}` });
+      }
+      await wd("POST", `/session/${sid}/window/rect`, { width: 1440, height: 900 }).catch(() => null);
+      await sleep(400);
+      // menu "Datei" and the export menu
+      await click("button[aria-label=Datei]");
+      await waitFor("Datei-Menü", async () => (await exists("[role=menu][aria-label=Datei]")) || null);
+      e.images.push({ name: await shot(`t18-datei-${theme === "light" ? "hell" : "dunkel"}`), label: `Datei-Menü, ${theme === "light" ? "hell" : "dunkel"}` });
+      await click("button[aria-label=Datei]");
+      check(!(await exists("[role=menu]")), "Menü schließt beim zweiten Klick");
+      await click("button[aria-label=Exportformat]");
+      const formats = await exec("return [...document.querySelectorAll('[role=menu][aria-label=Exportformat] [role^=menuitem]')].map((x) => x.getAttribute('aria-label'))");
+      check(formats.join("|") === "3MF mehrfarbig|3MF einfarbig|STL|STL je Farbe (ZIP)|STEP|Je Bauteil", `Exportformate: ${formats.join(", ")}`);
+      e.images.push({ name: await shot(`t18-export-${theme === "light" ? "hell" : "dunkel"}`), label: `Export-Menü, ${theme === "light" ? "hell" : "dunkel"}` });
+      await click("button[aria-label=Exportformat]");
+    }
+    e.details = { sizes, problems: all };
+    check(all.length === 0, all.length ? all.join("; ") : `keine abgeschnittenen oder umgebrochenen Leisten (${Object.keys(sizes).length} Zustände, Fensterbreiten ${[...new Set(Object.values(sizes))].join("/")} px)`);
+    // the view cube turns the camera; the side panel shows the colours
+    await exec("window.__cad.setThemePref('light')");
+    await click("[data-testid=viewcube] [aria-label='Ansicht Oben']");
+    const cam = await waitFor("Blick von oben", async () => {
+      const c = await exec("return window.__cad.camera()");
+      return c && c.dir[2] < -0.999 ? c : null;
+    });
+    check(cam.dir[2] < -0.999, `Ansichtswürfel „Oben“: Blickrichtung ${cam.dir.map((x) => x.toFixed(3)).join(", ")}`);
+    await click("[role=tablist][aria-label=Seitenpanel] [role=tab][aria-label=Farben]");
+    await waitFor("Farbliste", async () => (await exists("[data-testid=colors-panel] .cptable")) || null);
+    e.images.push({ name: await shot("t18-oben-farben"), label: "Ansichtswürfel „Oben“, Reiter Farben" });
+    await exec("window.__cad.setView('iso'); window.__cad.store.setState({ sideTab: 'parts' })");
   });
 
   await test("T14", "Thema „System“ in Tauri folgt dem GTK-Farbschema (prefers-color-scheme)", async (check, e) => {

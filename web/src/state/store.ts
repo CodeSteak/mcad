@@ -191,8 +191,11 @@ export interface CadState {
   /** Theme in effect (resolved from `themePref`). */
   theme: Theme;
   themePref: ThemePref;
-  /** Colour list ("Farben & Filamente") open. */
-  colorsOpen: boolean;
+  /** Side panel on the right (UI overhaul): open and the chosen tab. */
+  sideOpen: boolean;
+  sideTab: SideTab;
+  /** Format of the export button (the last one chosen). */
+  exportChoice: ExportChoice;
   /** Show colour regions (bodies per colour) instead of colours per face. */
   showRegions: boolean;
   /** Last colour regions answer. */
@@ -229,6 +232,8 @@ export interface CadState {
   gitVersion: number;
   /** Sketch editor (Plan 17.12): `null` = off. */
   sketch: SketchState | null;
+  /** Arc kind of the arc button (the last one chosen). */
+  sketchArc: SketchTool;
   /** Measure mode (Plan 18): `null` = off. */
   measure: MeasureState | null;
   /** Completed measurements (kept when the mode ends, drawn in the view). */
@@ -294,21 +299,59 @@ export function setThemePref(pref: ThemePref): void {
   store.setState({ themePref: pref, theme: resolveTheme(pref) });
 }
 
-function initialColorsOpen(): boolean {
-  try {
-    return localStorage.getItem("cad-colors-open") !== "0";
-  } catch {
-    return true;
-  }
-}
+/** Tabs of the side panel: parts, colours, measurements, parameters (module context). */
+export type SideTab = "parts" | "colors" | "measure" | "params";
+const SIDE_TABS: SideTab[] = ["parts", "colors", "measure", "params"];
 
-export function setColorsOpen(open: boolean): void {
+/** What the export button exports (`Strg+E`). */
+export type ExportChoice = "3mf" | "3mf-single" | "stl" | "stl-colors" | "step" | "parts-stl" | "parts-step" | "parts-3mf";
+const EXPORT_CHOICES: ExportChoice[] = ["3mf", "3mf-single", "stl", "stl-colors", "step", "parts-stl", "parts-step", "parts-3mf"];
+
+function stored<T extends string>(key: string, allowed: readonly T[], d: T): T {
   try {
-    localStorage.setItem("cad-colors-open", open ? "1" : "0");
+    const v = localStorage.getItem(key);
+    if (v !== null && (allowed as readonly string[]).includes(v)) return v as T;
   } catch {
     /* no storage */
   }
-  store.setState({ colorsOpen: open });
+  return d;
+}
+
+function keep(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* no storage */
+  }
+}
+
+/** Opens or closes the side panel (kept in localStorage). */
+export function setSideOpen(open: boolean): void {
+  keep("cad-side-open", open ? "1" : "0");
+  store.setState({ sideOpen: open });
+}
+
+/** Shows a tab of the side panel (opens the panel). */
+export function setSideTab(tab: SideTab): void {
+  if (tab !== "params") keep("cad-side-tab", tab);
+  keep("cad-side-open", "1");
+  store.setState({ sideTab: tab, sideOpen: true });
+}
+
+/** The colour list ("Farben & Filamente") is visible: side panel open on the tab "Farben". */
+export function colorsVisible(s: Pick<CadState, "sideOpen" | "sideTab">): boolean {
+  return s.sideOpen && s.sideTab === "colors";
+}
+
+/** Colour list on or off (the tab "Farben" of the side panel). */
+export function setColorsOpen(open: boolean): void {
+  if (open) setSideTab("colors");
+  else setSideOpen(false);
+}
+
+export function setExportChoice(c: ExportChoice): void {
+  keep("cad-export", c);
+  store.setState({ exportChoice: c });
 }
 
 export const store = createStore<CadState>(() => ({
@@ -336,7 +379,9 @@ export const store = createStore<CadState>(() => ({
   allGrids: false,
   theme: resolveTheme(initialThemePref()),
   themePref: initialThemePref(),
-  colorsOpen: initialColorsOpen(),
+  sideOpen: stored("cad-side-open", ["0", "1"], "1") === "1",
+  sideTab: stored("cad-side-tab", SIDE_TABS, "parts"),
+  exportChoice: stored("cad-export", EXPORT_CHOICES, "3mf"),
   showRegions: true,
   regions: null,
   regionsError: null,
@@ -356,6 +401,7 @@ export const store = createStore<CadState>(() => ({
   recent: [],
   gitVersion: 0,
   sketch: null,
+  sketchArc: "arc_through",
   measure: null,
   measurements: [],
   measureSelected: null,

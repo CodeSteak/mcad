@@ -38,7 +38,7 @@ import { VersionMapper } from "../logic/positions";
 import { isOff } from "../logic/sceneIndex";
 import { bridge } from "../state/bridge";
 import { type DirHandle, project } from "../state/project";
-import { resolveTheme, setThemePref, store } from "../state/store";
+import { colorsVisible, type ExportChoice, type SideTab, resolveTheme, setExportChoice, setSideTab, setThemePref, store } from "../state/store";
 import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
 import { DragController } from "./drag";
@@ -553,7 +553,7 @@ function syncRegions(): void {
   const s = store.getState();
   const c = s.complete;
   // the list needs volumes; the view draws the regions of a model with colours (Bericht 12)
-  const want = c !== null && ((s.colorsOpen && (c.colors ?? []).length > 0) || (s.showRegions && hasFaceColors(c)));
+  const want = c !== null && ((colorsVisible(s) && (c.colors ?? []).length > 0) || (s.showRegions && hasFaceColors(c)));
   if (!want || !c) return;
   // meshes only where the view draws them (a model with colours): none for uncoloured models
   const meshes = s.showRegions && hasFaceColors(c);
@@ -571,7 +571,7 @@ function syncRegions(): void {
 }
 
 store.subscribe((s, p) => {
-  if (s.complete !== p.complete || s.colorsOpen !== p.colorsOpen || s.showRegions !== p.showRegions) syncRegions();
+  if (s.complete !== p.complete || colorsVisible(s) !== colorsVisible(p) || s.showRegions !== p.showRegions) syncRegions();
 });
 
 /** File name of a part (`k[2]` → `k_2.stl`, as the engine names ZIP entries). */
@@ -605,6 +605,98 @@ export function togglePart(name: string, visible: boolean): void {
   const h = store.getState().hiddenParts;
   store.setState({ hiddenParts: visible ? h.filter((x) => x !== name) : h.includes(name) ? h : [...h, name] });
 }
+
+// ---------------------------------------------------------------- export button
+
+/** Names of the export choices (menu, button text, notices). */
+export const EXPORT_LABELS: Record<ExportChoice, { label: string; short: string }> = {
+  "3mf": { label: "3MF mehrfarbig", short: "3MF" },
+  "3mf-single": { label: "3MF einfarbig", short: "3MF" },
+  stl: { label: "STL", short: "STL" },
+  "stl-colors": { label: "STL je Farbe (ZIP)", short: "STL" },
+  step: { label: "STEP", short: "STEP" },
+  "parts-stl": { label: "STL je Bauteil (ZIP)", short: "STL" },
+  "parts-step": { label: "STEP je Bauteil (ZIP)", short: "STEP" },
+  "parts-3mf": { label: "3MF mit einem Objekt je Bauteil", short: "3MF" },
+};
+
+/** Part names of the file context (the exports "je Bauteil"). */
+export function partNames(): string[] {
+  const s = store.getState();
+  const shown = s.complete ?? s.shown;
+  return shown && shown.context.module === null ? shown.parts.map((p) => p.name) : [];
+}
+
+/** Runs an export of the export button (and remembers the format for the button and Strg+E). */
+export async function runExport(c: ExportChoice, remember = true): Promise<void> {
+  if (remember) setExportChoice(c);
+  switch (c) {
+    case "3mf":
+      return exportColors("3mf");
+    case "3mf-single":
+      return exportColors("3mf-single");
+    case "stl-colors":
+      return exportColors("stl-zip");
+    case "stl":
+      return exportModel("stl");
+    case "step":
+      return exportModel("step");
+    case "parts-stl":
+    case "parts-step":
+    case "parts-3mf": {
+      const names = partNames();
+      if (!names.length) {
+        store.setState({ notice: "Keine Bauteile – benannte Instanzen auf oberster Ebene (deckel: deckel();) sind Bauteile" });
+        return;
+      }
+      return exportParts(c === "parts-stl" ? "stl" : c === "parts-step" ? "step" : "3mf", names, c !== "parts-3mf");
+    }
+  }
+}
+
+// ---------------------------------------------------------------- mode of the view
+
+/** Mode of the 3D view (exactly one): model, section, sketch or measure. */
+export type ViewMode = "model" | "section" | "sketch" | "measure";
+
+export function viewMode(s: { sketch: unknown; measure: unknown; section: { on: boolean } }): ViewMode {
+  return s.sketch ? "sketch" : s.measure ? "measure" : s.section.on ? "section" : "model";
+}
+
+/**
+ * Switches the mode. "Modell" ends everything; "Schnitt" ends sketch and measure and turns the
+ * section on; "Skizze" and "Messen" keep a section (measuring "Im Schnitt", drawing in a cut
+ * view) – after "Fertig" the view is back in "Schnitt".
+ */
+export function setViewMode(m: ViewMode, sectionOn: (on: boolean) => void): void {
+  const s = store.getState();
+  if (m === "model" || m === "section") {
+    if (s.sketch) sketch.exit();
+    if (s.measure) measure.exit();
+    sectionOn(m === "section");
+    return;
+  }
+  if (m === "sketch") {
+    if (!s.sketch) sketch.enter();
+    return;
+  }
+  if (!s.measure) measure.enter();
+}
+
+// The measure mode shows its list in the side panel; the module context its parameters.
+let tabBeforeParams: SideTab | null = null;
+store.subscribe((s, p) => {
+  if (s.measure && !p.measure) setSideTab("measure");
+  const mod = s.shown ? s.shown.context.module !== null : false;
+  const was = p.shown ? p.shown.context.module !== null : false;
+  if (mod && !was) {
+    if (s.sideTab !== "params") tabBeforeParams = s.sideTab;
+    store.setState({ sideTab: "params", sideOpen: true });
+  } else if (!mod && was && s.sideTab === "params") {
+    store.setState({ sideTab: tabBeforeParams ?? "parts" });
+    tabBeforeParams = null;
+  }
+});
 
 // ---------------------------------------------------------------- test hook
 
@@ -641,7 +733,10 @@ window.__cad = {
       allGrids: s.allGrids,
       theme: s.theme,
       themePref: s.themePref,
-      colorsOpen: s.colorsOpen,
+      colorsOpen: colorsVisible(s),
+      sideOpen: s.sideOpen,
+      sideTab: s.sideTab,
+      exportChoice: s.exportChoice,
       showRegions: s.showRegions,
       regions: s.regions ? { version: s.regions.version, meshes: s.regions.meshes, items: s.regions.items.map((x) => ({ part: x.part, total: x.total, warning: x.warning, regions: x.regions.map((r) => ({ color: r.color, filament: r.filament, volume: r.volume })) })) } : null,
       colors: (s.complete?.colors ?? []).map((c) => ({ key: c.key, label: c.label, source: c.source, filament: c.filament, explicit: c.explicit, lines: c.ranges.map((r) => r.line) })),

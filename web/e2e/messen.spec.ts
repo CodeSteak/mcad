@@ -5,7 +5,7 @@
 // comment / `cad measure`, provenance, the dark theme and answer times.
 
 import { expect, test, type Page } from "@playwright/test";
-import { hook, loadText, openApp, openExample, record19, screenshot19, waitScene, writeMetrics19 } from "./helpers";
+import { hook, loadText, measureBar, measureKind, mode, openApp, openExample, record19, screenshot19, waitScene, writeMetrics19 } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => console.log("pageerror:", e.message));
@@ -96,9 +96,9 @@ async function scr(page: Page, p: P3): Promise<{ x: number; y: number }> {
 }
 
 async function enter(page: Page, kind = "distance"): Promise<MeasureInfo> {
-  await page.getByTestId("measure-toggle").click();
+  await mode(page, "Messen").click();
   await waitMeasure(page, "(m) => m.active && m.answers > 0");
-  if (kind !== "distance") await page.getByTestId(`measure-kind-${kind}`).click();
+  if (kind !== "distance") await measureKind(page, kind).click();
   return waitMeasure(page, "(m, k) => m.kind === k && m.prompt", kind);
 }
 
@@ -144,10 +144,10 @@ test("M01 Messmodus: Schalter, Kontextleiste, Snap-Anzeige, Esc beendet", async 
   await loadText(page, BOXES);
   const m = await enter(page);
   expect(m.prompt).toContain("Abstand: erstes Element");
-  await expect(page.getByTestId("measurebar")).toBeVisible();
-  await expect(page.getByTestId("measure-panel")).toBeVisible();
-  for (const k of ["distance", "radius", "angle", "length", "area", "body"]) await expect(page.getByTestId(`measure-kind-${k}`)).toBeEnabled();
-  await expect(page.getByTestId("measure-kind-wall")).toBeDisabled();
+  await expect(measureBar(page)).toBeVisible();
+  await expect(page.getByRole("region", { name: "Messungen" })).toBeVisible();
+  for (const k of ["distance", "radius", "angle", "length", "area", "body"]) await expect(measureKind(page, k)).toBeEnabled();
+  await expect(measureKind(page, "wall")).toBeDisabled();
   const h = await hoverAt(page, [10, 5, 8], "face");
   expect(h.hover!.label).toBe("Fläche · Ebene");
   expect(h.hover!.origin).toContain("Rasterebene g.o");
@@ -162,7 +162,7 @@ test("M01 Messmodus: Schalter, Kontextleiste, Snap-Anzeige, Esc beendet", async 
   expect(mid.hover!.label).toContain("Kantenmitte");
   await page.keyboard.press("Escape");
   await waitMeasure(page, "(m) => !m.active");
-  await expect(page.getByTestId("measurebar")).toHaveCount(0);
+  await expect(measureBar(page)).toHaveCount(0);
   record19({
     id: "M01",
     title: "Messmodus ein/aus, Snap",
@@ -279,11 +279,11 @@ test("M05 Länge, Fläche, Körper/Bauteil mit Hülle", async ({ page }) => {
   await enter(page, "length");
   let m = await clickAt(page, [{ p: [60, 15, 20], kind: "edge" }]);
   expect(m.results[0].value).toBeCloseTo(30, 9);
-  await page.getByTestId("measure-kind-area").click();
+  await measureKind(page, "area").click();
   await waitMeasure(page, "(m) => m.kind === 'area'");
   m = await clickAt(page, [{ p: [60, 15, 10], kind: "face" }]);
   expect(m.results[1].value).toBeCloseTo(600, 9);
-  await page.getByTestId("measure-kind-body").click();
+  await measureKind(page, "body").click();
   await waitMeasure(page, "(m) => m.kind === 'body'");
   m = await clickAt(page, [{ p: [60, 15, 10], kind: "body" }]);
   const b = m.results[2];
@@ -317,25 +317,26 @@ test("M06 Im Schnitt: Kreis der Bohrung, Wandstärke, Fläche, Kreismitten", asy
   await page.evaluate(() => (window as unknown as W).__cad.setView("top"));
   await waitScene(page);
   await enter(page, "radius");
-  await page.getByTestId("measure-in-section").check();
+  await measureBar(page).getByRole("button", { name: "Im Schnitt" }).click();
+  await expect(measureBar(page).getByRole("button", { name: "Im Schnitt" })).toHaveAttribute("aria-pressed", "true");
   let m = await waitMeasure(page, "(m) => m.inSection && m.section && m.section.regions === 1");
   expect(m.section!.exact).toBe(true);
   expect(m.section!.area).toBeCloseTo(800 - 13 * Math.PI, 9);
-  await expect(page.getByTestId("measure-kind-wall")).toBeEnabled();
-  await expect(page.getByTestId("measure-kind-body")).toBeDisabled();
+  await expect(measureKind(page, "wall")).toBeEnabled();
+  await expect(measureKind(page, "body")).toBeDisabled();
   m = await clickAt(page, [{ p: [12, 10, 3], kind: "section_edge" }]);
   expect(m.results[0].label).toBe("R 2 · ⌀ 4");
   expect(m.results[0].cli.slice(0, 3)).toEqual(["--section", "z=3", "--radius"]);
-  await page.getByTestId("measure-kind-wall").click();
+  await measureKind(page, "wall").click();
   await waitMeasure(page, "(m) => m.kind === 'wall'");
   m = await clickAt(page, [{ p: [8, 10, 3] }]);
   expect(m.message, JSON.stringify(m)).toBeNull();
   expect(m.results[1].value).toBeCloseTo(8, 2);
-  await page.getByTestId("measure-kind-area").click();
+  await measureKind(page, "area").click();
   await waitMeasure(page, "(m) => m.kind === 'area'");
   m = await clickAt(page, [{ p: [35, 4, 3], kind: "region" }]);
   expect(m.results[2].value).toBeCloseTo(800 - 13 * Math.PI, 9);
-  await page.getByTestId("measure-kind-distance").click();
+  await measureKind(page, "distance").click();
   await waitMeasure(page, "(m) => m.kind === 'distance'");
   m = await clickAt(page, [{ p: [10, 10, 3], kind: "section_center" }, { p: [28, 10, 3], kind: "section_center" }]);
   expect(m.results[3].value).toBeCloseTo(18, 9);
@@ -360,10 +361,10 @@ test("M07 Mehrere Messungen: Auswahl, Löschen, Kopieren als Text, Kommentar und
   m = await clickAt(page, [{ p: [35, 0, 12], kind: "edge" }]);
   expect(m.results.map((r) => r.value)).toEqual([20, 10, 10]);
   const [a, b] = m.results;
-  await page.getByTestId(`measure-cli-${a.id}`).click();
+  await page.getByTestId(`measure-item-${a.id}`).getByRole("button", { name: "Als cad measure kopieren" }).click();
   await expect(page.getByTestId("status-notice")).toContainText("cad measure");
   const cli = await page.evaluate(() => (window as unknown as { __cad: { state(): { lastCli: string | null } } }).__cad.state().lastCli ?? null);
-  await page.getByTestId(`measure-comment-${a.id}`).click();
+  await page.getByTestId(`measure-item-${a.id}`).getByRole("button", { name: "Als Kommentar kopieren" }).click();
   await expect(page.getByTestId("status-notice")).toContainText("// Messung: Länge");
   await page.getByTestId(`measure-label-${b.id}`).click();
   await waitMeasure(page, "(m, id) => m.selected === id", b.id);
@@ -372,9 +373,9 @@ test("M07 Mehrere Messungen: Auswahl, Löschen, Kopieren als Text, Kommentar und
   await page.keyboard.press("Delete");
   m = await waitMeasure(page, "(m) => m.results.length === 2");
   expect(m.results.map((r) => r.id)).toEqual([a.id, m.results[1].id]);
-  await page.getByTestId(`measure-delete-${a.id}`).click();
+  await page.getByTestId(`measure-item-${a.id}`).getByRole("button", { name: "Messung löschen" }).click();
   m = await waitMeasure(page, "(m) => m.results.length === 1");
-  await page.getByTestId("measure-clear").click();
+  await page.getByRole("region", { name: "Messungen" }).getByRole("button", { name: "Alle löschen" }).click();
   m = await waitMeasure(page, "(m) => m.results.length === 0");
   expect(m.view!.labels.length).toBe(0);
   record19({
@@ -475,9 +476,9 @@ test("M11 Sketch-Editor und Messen schließen sich aus; Modelländerung verwirft
   await waitMeasure(page, "(m) => m.picks.length === 0");
   await expect(page.getByTestId("status-notice")).toContainText("Modell geändert");
   await waitScene(page);
-  await page.getByTestId("sketch-toggle").click();
+  await mode(page, "Skizze").click();
   await waitMeasure(page, "(m) => !m.active");
-  await page.getByTestId("measure-toggle").click();
+  await mode(page, "Messen").click();
   await waitMeasure(page, "(m) => m.active");
   await page.waitForFunction(() => (window as unknown as { __cad: { sketch(): unknown } }).__cad.sketch() === null);
 });

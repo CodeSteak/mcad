@@ -25,6 +25,10 @@ import {
   waitHandles,
   waitScene,
   waitView,
+  exportAs,
+  fileMenu,
+  fileTab,
+  pickMenu,
 } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
@@ -71,7 +75,7 @@ const exampleFiles = {
 
 /** Opens the example project from the menu and waits for its complete scene. */
 async function openExampleProject(page: Page): Promise<void> {
-  await page.getByTestId("examples").selectOption("projekt:projekt-gehaeuse");
+  await pickMenu(page, "Beispiele", "Projekte (mehrere Dateien)", "projekt-gehaeuse/");
   await page.waitForFunction(() => (window as unknown as W).__cad.projectInfo().paths.length === 3);
   await waitScene(page, { context: null });
   await page.waitForFunction(() => (window as unknown as W).__cad.parts().length === 2);
@@ -108,9 +112,9 @@ test("P01 Beispielprojekt öffnen: Dateien als Tabs, Hauptdatei, Bauteile", asyn
   expect(p.paths).toEqual(["gehaeuse.scad", "konstanten.scad", "lib/teile.scad"]);
   expect(p.main).toBe("gehaeuse.scad");
   expect(p.active).toBe("gehaeuse.scad");
-  await expect(page.getByTestId("tab-gehaeuse.scad")).toHaveClass(/active/);
-  await expect(page.getByTestId("tab-gehaeuse.scad").locator(".star")).toBeVisible();
-  await expect(page.getByTestId("pathbar")).toContainText("gehaeuse.scad");
+  await expect(fileTab(page, "gehaeuse.scad")).toHaveClass(/active/);
+  await expect(fileTab(page, "gehaeuse.scad").locator(".star")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toContainText("gehaeuse.scad");
   const s = await cad(page);
   expect(s.diagnostics.filter((d) => d.severity !== "info")).toEqual([]);
   const files = await page.evaluate(() => ((window as unknown as W).__cad.store.getState().complete as { files: Array<{ path: string; role: string }> }).files);
@@ -118,8 +122,8 @@ test("P01 Beispielprojekt öffnen: Dateien als Tabs, Hauptdatei, Bauteile", asyn
   const ps = await parts(page);
   expect(ps.map((x) => x.name)).toEqual(["gehaeuse", "deckel"]);
   expect(ps[1].bounds!.min[1]).toBeCloseTo(50, 5);
-  await expect(page.getByTestId("partsbar")).toContainText("gehaeuse");
-  await expect(page.getByTestId("partsbar")).toContainText("deckel");
+  await expect(page.getByRole("region", { name: "Bauteile" })).toContainText("gehaeuse");
+  await expect(page.getByRole("region", { name: "Bauteile" })).toContainText("deckel");
   // The model of both parts is drawn (root mesh).
   const b = (await hook(page, (c) => c.rootBounds()))!;
   expect(b.max[1]).toBeCloseTo(90, 3);
@@ -187,7 +191,7 @@ test("P02 Ordner öffnen (File System Access API), ZIP hoch- und herunterladen",
     (window as unknown as { showDirectoryPicker: () => Promise<H> }).showDirectoryPicker = async () => dir("mein-projekt", "");
   }, { ...exampleFiles, "notizen.txt": "kein scad" });
   await openApp(page);
-  await page.getByTestId("open-folder").click();
+  await fileMenu(page, "Ordner öffnen …");
   await page.waitForFunction(() => (window as unknown as W).__cad.projectInfo().name === "mein-projekt");
   await waitScene(page, { context: null });
   let p = await info(page);
@@ -196,7 +200,7 @@ test("P02 Ordner öffnen (File System Access API), ZIP hoch- und herunterladen",
   expect(p.folder).toBe(true);
   await expect(page.getByTestId("status-notice")).toContainText("Projekt mein-projekt: 3 Dateien, Hauptdatei gehaeuse.scad");
   // Edit konstanten.scad and save: every file is written back into the folder.
-  await page.getByTestId("tab-konstanten.scad").click();
+  await fileTab(page, "konstanten.scad").click();
   await waitActive(page, "konstanten.scad");
   await clickLine(page, 2, 9);
   await page.keyboard.press("End");
@@ -209,12 +213,12 @@ test("P02 Ordner öffnen (File System Access API), ZIP hoch- und herunterladen",
   await screenshotD(page, "p02-ordner");
 
   // ZIP download of the project, then upload of that ZIP.
-  const z = await downloaded(page, () => page.getByTestId("download-zip").click());
+  const z = await downloaded(page, () => fileMenu(page, "ZIP speichern"));
   expect(z.name).toBe("mein-projekt.zip");
   expect(zipNames(z.bytes).sort()).toEqual(["mein-projekt/gehaeuse.scad", "mein-projekt/konstanten.scad", "mein-projekt/lib/teile.scad"]);
   await page.evaluate(() => (window as unknown as W).__cad.openProject({ name: "leer", main: "a.scad", files: { "a.scad": "cube(1);\n" } }));
   await waitScene(page);
-  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), page.getByTestId("open-zip").click()]);
+  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), fileMenu(page, "ZIP laden …")]);
   await chooser.setFiles({ name: "mein-projekt.zip", mimeType: "application/zip", buffer: z.bytes });
   await page.waitForFunction(() => (window as unknown as W).__cad.projectInfo().paths.length === 3);
   await waitScene(page, { context: null });
@@ -228,7 +232,7 @@ test("P02 Ordner öffnen (File System Access API), ZIP hoch- und herunterladen",
     title: "Ordner öffnen, speichern, ZIP",
     images: [{ name: "p02-ordner", label: "Ordner „mein-projekt“ geöffnet, konstanten.scad geändert und gespeichert" }],
     caption:
-      "„Ordner…“ liest alle .scad-Dateien eines Ordners (File System Access API; im Test ein nachgebildeter Ordner mit einer .txt-Datei, die ignoriert wird) und wählt die Hauptdatei: die Datei der obersten Ebene, die keine andere einbindet. Strg+S schreibt alle Dateien zurück in den Ordner. „ZIP ↓“ lädt das Projekt als ZIP herunter, „ZIP laden…“ lädt dieses ZIP wieder hoch (gemeinsamer Ordner wird entfernt, Hauptdatei wieder gehaeuse.scad).",
+      "„Datei › Ordner öffnen …“ liest alle .scad-Dateien eines Ordners (File System Access API; im Test ein nachgebildeter Ordner mit einer .txt-Datei, die ignoriert wird) und wählt die Hauptdatei: die Datei der obersten Ebene, die keine andere einbindet. Strg+S schreibt alle Dateien zurück in den Ordner. „Datei › ZIP speichern“ lädt das Projekt als ZIP herunter, „Datei › ZIP laden …“ lädt dieses ZIP wieder hoch (gemeinsamer Ordner wird entfernt, Hauptdatei wieder gehaeuse.scad).",
     checks: ["3 Dateien, Hauptdatei gehaeuse.scad, notizen.txt ignoriert", "Strg+S schreibt 3 Dateien (konstanten.scad mit Änderung)", "ZIP mit 3 Einträgen; nach dem Hochladen gleiche Dateien und Bauteile"],
   });
 });
@@ -236,14 +240,14 @@ test("P02 Ordner öffnen (File System Access API), ZIP hoch- und herunterladen",
 test("P03 Datei wechseln: Tabs, Kontext aus der Bibliothek, Undo je Datei", async ({ page }) => {
   await openApp(page);
   await openExampleProject(page);
-  await page.getByTestId("tab-lib/teile.scad").click();
+  await fileTab(page, "lib/teile.scad").click();
   await waitActive(page, "lib/teile.scad");
   await expect(lineEl(page, 14)).toHaveText("module gehaeuse(w = 60, d = 40, h = 25, t = 2) {");
   // Cursor in module gehaeuse of the library: the module is the context.
   await clickLine(page, 21, 10);
   let s = await waitScene(page, { context: "gehaeuse" });
   expect(s.path).toEqual(["gehaeuse"]);
-  await expect(page.getByTestId("pathbar")).toContainText("gehaeuse");
+  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toContainText("gehaeuse");
   await waitView(page, "(s) => s.view.selection.line === 21 && s.view.plan.items.some(i => i.mode === 'full')");
   await screenshotD(page, "p03-bibliothek");
   // Edit in the library, switch away and back: text and undo history stay per file.
@@ -251,7 +255,7 @@ test("P03 Datei wechseln: Tabs, Kontext aus der Bibliothek, Undo je Datei", asyn
   await page.keyboard.press("End");
   await page.keyboard.type(" // mm");
   await waitText(page, "(t) => t.includes('spiel = 0.2; // mm')");
-  await page.getByTestId("tab-gehaeuse.scad").click();
+  await fileTab(page, "gehaeuse.scad").click();
   await waitActive(page, "gehaeuse.scad");
   expect(await text(page)).toBe(exampleFiles["gehaeuse.scad"]);
   s = await waitScene(page, { context: null });
@@ -259,7 +263,7 @@ test("P03 Datei wechseln: Tabs, Kontext aus der Bibliothek, Undo je Datei", asyn
   await hook(page, (c) => c.focusEditor());
   await page.keyboard.press("Control+z");
   expect(await text(page)).toBe(exampleFiles["gehaeuse.scad"]);
-  await page.getByTestId("tab-lib/teile.scad").click();
+  await fileTab(page, "lib/teile.scad").click();
   await waitActive(page, "lib/teile.scad");
   expect(await text(page)).toContain("spiel = 0.2; // mm");
   await hook(page, (c) => c.focusEditor());
@@ -296,7 +300,7 @@ test("P04 Strg+Klick auf include/use-Pfad öffnet die Datei", async ({ page }) =
   await expect(lineEl(page, 2).locator(".cm-lineend")).toContainText("= 60");
   await screenshotD(page, "p04-include", "editor");
   // Back, then Ctrl+click on use <lib/teile.scad> (line 4).
-  await page.getByTestId("tab-gehaeuse.scad").click();
+  await fileTab(page, "gehaeuse.scad").click();
   await waitActive(page, "gehaeuse.scad");
   const p4 = await at(4, 8);
   await page.keyboard.down("Control");
@@ -304,7 +308,7 @@ test("P04 Strg+Klick auf include/use-Pfad öffnet die Datei", async ({ page }) =
   await page.keyboard.up("Control");
   await waitActive(page, "lib/teile.scad");
   // A plain click places the cursor only.
-  await page.getByTestId("tab-gehaeuse.scad").click();
+  await fileTab(page, "gehaeuse.scad").click();
   await waitActive(page, "gehaeuse.scad");
   const q = await at(3, 14);
   await page.mouse.click(q.x, q.y);
@@ -353,7 +357,7 @@ test("P05 Griff ändert die eingebundene Datei (Variable aus include, Literal in
   expect(Math.round(b.max[0])).toBe(newW);
   await screenshotD(page, "p05-nachher");
   // The drag is one undo step in mass.scad.
-  await page.getByTestId("tab-mass.scad").click();
+  await fileTab(page, "mass.scad").click();
   await waitActive(page, "mass.scad");
   expect(await text(page)).toBe(`// Maße\nbreite = ${newW};\n`);
   await hook(page, (c) => c.focusEditor());
@@ -364,7 +368,7 @@ test("P05 Griff ändert die eingebundene Datei (Variable aus include, Literal in
 
   // Literal in the used library: radius handle of the cylinder in module gehaeuse.
   await openExampleProject(page);
-  await page.getByTestId("tab-lib/teile.scad").click();
+  await fileTab(page, "lib/teile.scad").click();
   await waitActive(page, "lib/teile.scad");
   await clickLine(page, 28, 40);
   await waitScene(page, { context: "gehaeuse" });
@@ -396,7 +400,7 @@ test("P06 Hover und Klick über Dateigrenzen, Doppelklick öffnet das Modul der 
   await openApp(page);
   await openExampleProject(page);
   // In konstanten.scad (no geometry): faces of the model come from gehaeuse.scad.
-  await page.getByTestId("tab-konstanten.scad").click();
+  await fileTab(page, "konstanten.scad").click();
   await waitActive(page, "konstanten.scad");
   await waitScene(page, { context: null });
   const deckel = (await parts(page)).find((x) => x.name === "deckel")!;
@@ -441,18 +445,18 @@ test("P07 Bauteilliste: Sichtbarkeit und Export pro Bauteil (STL, 3MF, STEP, ZIP
   await expect(page.getByTestId("part-deckel")).toContainText("mm³");
   // Hide the lid: the model is drawn in pieces without it.
   const before = await layerPixels(page, "mode:");
-  await page.getByTestId("part-visible-deckel").uncheck();
+  await page.getByRole("checkbox", { name: "deckel sichtbar" }).uncheck();
   let s = await waitView(page, "(s) => s.view.plan.base === null && s.view.plan.items.length > 0");
   expect(s.view!.plan.items.map((i) => i.label)).toEqual(["gehaeuse"]);
   expect((await parts(page)).find((x) => x.name === "deckel")!.hidden).toBe(true);
   await screenshotD(page, "p07-ausgeblendet", "view");
-  await page.getByTestId("part-visible-deckel").check();
+  await page.getByRole("checkbox", { name: "deckel sichtbar" }).check();
   s = await waitView(page, "(s) => s.view.plan.base !== null");
   expect(s.view!.plan.base).not.toBeNull();
   expect(before.found).toBeGreaterThan(0);
 
   // STL of one part (model coordinates: the lid lies at y >= 50).
-  const stl = await downloaded(page, () => page.getByTestId("part-stl-deckel").click());
+  const stl = await downloaded(page, () => pickMenu(page, "Export deckel", "STL"));
   expect(stl.name).toBe("deckel.stl");
   const n = stl.bytes.readUInt32LE(80);
   expect(stl.bytes.length).toBe(84 + 50 * n);
@@ -460,10 +464,10 @@ test("P07 Bauteilliste: Sichtbarkeit und Export pro Bauteil (STL, 3MF, STEP, ZIP
   for (let t = 0; t < n; t++) for (let k = 0; k < 3; k++) minY = Math.min(minY, stl.bytes.readFloatLE(84 + 50 * t + 12 + 12 * k + 4));
   expect(minY).toBeCloseTo(50, 3);
   // All parts: ZIP with one STL each; one 3MF with an object per part.
-  const zip = await downloaded(page, () => page.getByTestId("parts-zip").click());
+  const zip = await downloaded(page, () => pickMenu(page, "Export aller Bauteile", "ZIP (STL)"));
   expect(zip.name).toBe("gehaeuse-teile-stl.zip");
   expect(zipNames(zip.bytes)).toEqual(["gehaeuse.stl", "deckel.stl"]);
-  const mf = await downloaded(page, () => page.getByTestId("parts-3mf").click());
+  const mf = await downloaded(page, () => pickMenu(page, "Export aller Bauteile", "3MF (ein Objekt je Bauteil)"));
   expect(mf.name).toBe("gehaeuse-teile.3mf");
   const xml = mf.bytes.toString("latin1");
   // Multicolour by default (report 11): one build item and one object per part (components
@@ -472,17 +476,17 @@ test("P07 Bauteilliste: Sichtbarkeit und Export pro Bauteil (STL, 3MF, STEP, ZIP
   expect(xml).toContain('name="deckel"');
   expect(xml).toContain("Metadata/model_settings.config");
   // STEP of one part: exact B-rep through the same writer as the whole model.
-  const st = await downloaded(page, () => page.getByTestId("part-step-deckel").click());
+  const st = await downloaded(page, () => pickMenu(page, "Export deckel", "STEP"));
   expect(st.name).toBe("deckel.step");
   const stepText = st.bytes.toString("utf8");
   expect(stepText.startsWith("ISO-10303-21;")).toBe(true);
   expect(stepText.match(/MANIFOLD_SOLID_BREP\(/g)?.length).toBe(1);
   expect(stepText).toContain("PRODUCT('deckel','deckel'");
   // All parts as STEP files in a ZIP, and the whole model as STEP (toolbar).
-  const sz = await downloaded(page, () => page.getByTestId("parts-zip-step").click());
+  const sz = await downloaded(page, () => pickMenu(page, "Export aller Bauteile", "ZIP (STEP)"));
   expect(sz.name).toBe("gehaeuse-teile-step.zip");
   expect(zipNames(sz.bytes)).toEqual(["gehaeuse.step", "deckel.step"]);
-  const whole = await downloaded(page, () => page.getByRole("button", { name: "Export STEP" }).click());
+  const whole = await downloaded(page, () => exportAs(page, "STEP"));
   expect(whole.name).toBe("gehaeuse.step");
   const solids = whole.bytes.toString("utf8").match(/MANIFOLD_SOLID_BREP\(/g)?.length ?? 0;
   expect(solids).toBeGreaterThanOrEqual(2);
@@ -565,16 +569,16 @@ test("P09 Fehler in eingebundenen Dateien: fehlende Datei an der Zeile, Syntaxfe
   expect(missing.severity).toBe("error");
   expect(missing.line).toBe(2);
   await expect(lineEl(page, 2)).toHaveClass(/cm-l-error/);
-  await expect(page.getByTestId("tab-main.scad").locator(".dot")).toBeVisible();
+  await expect(fileTab(page, "main.scad").locator(".dot")).toBeVisible();
   // A syntax error in lib.scad: the diagnostic belongs to lib.scad (tab marked), the last
   // scene stays.
-  await page.getByTestId("tab-lib.scad").click();
+  await fileTab(page, "lib.scad").click();
   await waitActive(page, "lib.scad");
   await clickLine(page, 1, 0);
   await page.keyboard.press("End");
   await page.keyboard.type(" sphere(;");
   await page.waitForFunction(() => ((window as unknown as W).__cad.store.getState().diagnostics as { items: Array<{ source: string; file?: string }> }).items.some((d) => d.source === "syntax" && d.file === "lib.scad"));
-  await expect(page.getByTestId("tab-lib.scad").locator(".dot")).toBeVisible();
+  await expect(fileTab(page, "lib.scad").locator(".dot")).toBeVisible();
   await expect(lineEl(page, 1)).toHaveClass(/cm-l-error/);
   await screenshotD(page, "p09-fehler");
   s = await cad(page);

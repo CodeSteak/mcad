@@ -138,10 +138,122 @@ export async function openApp(page: Page): Promise<CadState> {
   return waitScene(page);
 }
 
+// ---------------------------------------------------------------- UI by roles and names
+// (UI overhaul, report 20: the tests find controls like a user – by role and accessible name –
+// not by test ids; test ids remain only on displays: status texts, panels, labels in the view.)
+
+/** A menu entry of the open menus (menuitem, menuitemradio or menuitemcheckbox) by its name. */
+export function menuItem(page: Page, name: string | RegExp) {
+  const o = typeof name === "string" ? { name, exact: true } : { name };
+  return page.getByRole("menuitem", o).or(page.getByRole("menuitemradio", o)).or(page.getByRole("menuitemcheckbox", o));
+}
+
+/** Opens the menu of a button and chooses the entries in order (submenus first). */
+export async function pickMenu(page: Page, button: string, ...items: Array<string | RegExp>): Promise<void> {
+  await page.getByRole("button", { name: button, exact: true }).click();
+  for (const it of items) await menuItem(page, it).click();
+}
+
+/** Mode of the 3D view: "Modell", "Schnitt", "Skizze", "Messen". */
+export function mode(page: Page, name: "Modell" | "Schnitt" | "Skizze" | "Messen") {
+  return page.getByRole("radiogroup", { name: "Modus" }).getByRole("radio", { name, exact: true });
+}
+
+/** Tab of the side panel: "Bauteile", "Farben", "Messen", "Parameter". */
+export function sideTab(page: Page, name: "Bauteile" | "Farben" | "Messen" | "Parameter") {
+  return page.getByRole("tab", { name, exact: true });
+}
+
+export async function setTheme(page: Page, t: "light" | "dark" | "system"): Promise<void> {
+  await pickMenu(page, "Farbschema", { light: "Hell", dark: "Dunkel", system: "System" }[t]);
+}
+
+/** Standard view from the menu "Ansicht" (Iso, Oben, Vorne, Rechts, Hinten, Links, Unten). */
+export async function standardView(page: Page, name: string): Promise<void> {
+  await pickMenu(page, "Ansicht", name);
+}
+
+/** Export from the menu of the export button ("3MF mehrfarbig", "STL", "STEP", …). */
+export async function exportAs(page: Page, name: string, ...sub: string[]): Promise<void> {
+  await pickMenu(page, "Exportformat", name, ...sub);
+}
+
+/** Entry of the menu "Datei". */
+export async function fileMenu(page: Page, ...items: string[]): Promise<void> {
+  await pickMenu(page, "Datei", ...items);
+}
+
+/** File tab of the project. */
+export function fileTab(page: Page, path: string) {
+  return page.getByRole("tablist", { name: "Dateien des Projekts" }).getByRole("tab", { name: path, exact: true });
+}
+
+/** Context menu of a file tab: "Als Hauptdatei", "Schließen". */
+export async function tabAction(page: Page, path: string, action: "Als Hauptdatei" | "Schließen"): Promise<void> {
+  await fileTab(page, path).click({ button: "right" });
+  await menuItem(page, action).click();
+}
+
+const SKETCH_NAMES: Record<string, string> = {
+  select: "Auswahl",
+  line: "Linie",
+  arc_through: "Bogen (3 Punkte)",
+  arc_center: "Bogen (Mittelpunkt)",
+  arc_tangent: "Bogen (tangential)",
+  bezier: "Bézier",
+  rect: "Rechteck",
+  circle: "Kreis",
+  corner: "Ecke runden",
+};
+
+/** Context bar of the sketch editor. */
+export function sketchBar(page: Page) {
+  return page.getByRole("toolbar", { name: "Skizze" });
+}
+
+/** Chooses a drawing tool in the context bar (arc kinds from the menu "Bogenart"). */
+export async function sketchTool(page: Page, tool: string): Promise<void> {
+  const name = SKETCH_NAMES[tool] ?? tool;
+  if (tool.startsWith("arc_")) {
+    await sketchBar(page).getByRole("button", { name: "Bogenart", exact: true }).click();
+    await menuItem(page, name).click();
+  } else await sketchBar(page).getByRole("button", { name, exact: true }).click();
+}
+
+/** Tool button of the sketch bar (pressed state). */
+export function sketchToolButton(page: Page, tool: string) {
+  return sketchBar(page).getByRole("button", { name: SKETCH_NAMES[tool] ?? tool, exact: true });
+}
+
+const MEASURE_NAMES: Record<string, string> = { distance: "Abstand", radius: "Radius", angle: "Winkel", length: "Länge", area: "Fläche", body: "Körper", wall: "Wandstärke" };
+
+/** Context bar of the measure mode. */
+export function measureBar(page: Page) {
+  return page.getByRole("toolbar", { name: "Messen" });
+}
+
+/** Measure kind (radio of the group "Messart"). */
+export function measureKind(page: Page, kind: string) {
+  return page.getByRole("radiogroup", { name: "Messart" }).getByRole("radio", { name: MEASURE_NAMES[kind] ?? kind, exact: true });
+}
+
+/** Context bar of the section view. */
+export function sectionBar(page: Page) {
+  return page.getByRole("toolbar", { name: "Schnitt" });
+}
+
+const GROUPS: Record<string, string> = { spec: "Spec-Beispiele", "openscad-compat": "OpenSCAD-Kompatibilität" };
+
 export async function openExample(page: Page, path: string, context: string | null = null): Promise<CadState> {
-  await page.getByTestId("examples").selectOption(path);
+  const [group, ...rest] = path.split("/");
+  await pickMenu(page, "Beispiele", GROUPS[group] ?? group, rest.join("/"));
   await page.waitForFunction((p) => (window as unknown as { __cad: { state(): { fileName: string } } }).__cad.state().fileName === p.split("/").pop(), path);
   return waitScene(page, { context });
+}
+
+/** Example project (folder below examples/) from the menu "Beispiele". */
+export async function openExampleProject(page: Page, name: string): Promise<void> {
+  await pickMenu(page, "Beispiele", "Projekte (mehrere Dateien)", `${name}/`);
 }
 
 /** Clicks into an editor line (1-based) at a column. */
@@ -751,6 +863,36 @@ export function record19(entry: ScenarioC): void {
 export function writeMetrics19(m: Record<string, unknown>): void {
   mkdirSync(REPORT19_DIR, { recursive: true });
   const f = join(REPORT19_DIR, "metrics.json");
+  const old = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
+  writeFileSync(f, JSON.stringify({ ...old, ...m }, null, 2));
+}
+
+// ---------------------------------------------------------------- UI overhaul (test report 20)
+
+/** Screenshots and measurements for test report 20 (tools/report/report20.mjs). */
+export const REPORT20_DIR = join(here, "../../reports/tmp/report20");
+
+/** Screenshot for report 20: whole window or the first element of a selector. */
+export async function screenshot20(page: Page, name: string, area: "full" | string = "full"): Promise<void> {
+  mkdirSync(join(REPORT20_DIR, "img"), { recursive: true });
+  const path = join(REPORT20_DIR, "img", `${name}.png`);
+  if (area === "full") await page.screenshot({ path });
+  else await page.locator(area).first().screenshot({ path });
+}
+
+export function record20(entry: ScenarioC): void {
+  mkdirSync(REPORT20_DIR, { recursive: true });
+  const f = join(REPORT20_DIR, "scenarios.json");
+  const all: ScenarioC[] = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
+  const i = all.findIndex((e) => e.id === entry.id);
+  if (i >= 0) all[i] = entry;
+  else all.push(entry);
+  writeFileSync(f, JSON.stringify(all, null, 2));
+}
+
+export function writeMetrics20(m: Record<string, unknown>): void {
+  mkdirSync(REPORT20_DIR, { recursive: true });
+  const f = join(REPORT20_DIR, "metrics.json");
   const old = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
   writeFileSync(f, JSON.stringify({ ...old, ...m }, null, 2));
 }

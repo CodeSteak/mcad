@@ -5,8 +5,9 @@
 import { colorRows, MAX_FILAMENT, sharedSlots } from "../logic/colors";
 import { fmtNum } from "../logic/format";
 import { bridge } from "../state/bridge";
-import { setColorsOpen, store, useCad } from "../state/store";
-import { client, exportColors, getViewer, openLocation } from "./runtime";
+import { store, useCad } from "../state/store";
+import { client, getViewer, openLocation, runExport } from "./runtime";
+import { Button } from "./ui";
 
 function vol(v: number | null): string {
   return v === null ? "…" : `${fmtNum(Math.round(v * 10) / 10)} mm³`;
@@ -16,26 +17,18 @@ function mass(g: number | null): string {
   return g === null ? "" : `${fmtNum(Math.round(g * 100) / 100)} g`;
 }
 
-/** Toggle in the view tools (count of colours). */
-export function ColorsToggle() {
-  const open = useCad((s) => s.colorsOpen);
-  const n = useCad((s) => (s.complete?.colors ?? []).length);
-  if (n === 0) return null;
-  return (
-    <button className={open ? "on" : ""} aria-pressed={open} data-testid="colors-toggle" title="Farben und Filamente des Modells" onClick={() => setColorsOpen(!open)}>
-      Farben ({n})
-    </button>
-  );
-}
-
 export function ColorsPanel() {
-  const open = useCad((s) => s.colorsOpen);
   const scene = useCad((s) => s.complete);
   const regions = useCad((s) => s.regions);
   const regionsError = useCad((s) => s.regionsError);
   const theme = useCad((s) => s.theme);
   const showRegions = useCad((s) => s.showRegions);
-  if (!open || !scene || !(scene.colors ?? []).length) return null;
+  if (!scene || !(scene.colors ?? []).length)
+    return (
+      <div className="colorspanel" role="region" aria-label="Farben und Filamente" data-testid="colors-panel">
+        <p className="pbnote">Keine Farben – mit color("Name") oder color("#rrggbb") gefärbte Teile erscheinen hier mit Filament-Slot und Volumen.</p>
+      </div>
+    );
   const model = getViewer()?.modelColor() ?? "#c3cad4";
   const rows = colorRows(scene, regions, theme, model);
   const shared = sharedSlots(rows);
@@ -43,14 +36,11 @@ export function ColorsPanel() {
   const warnings = regions && regions.version === scene.version ? regions.items.map((s) => s.warning).filter((w): w is string => !!w) : [];
   const parts = scene.context.module === null ? scene.parts.length : 0;
   return (
-    <aside className="colorspanel" aria-label="Farben und Filamente" data-testid="colors-panel">
+    <div className="colorspanel" role="region" aria-label="Farben und Filamente" data-testid="colors-panel">
       <div className="cptitle">
         <span>
           Farben &amp; Filamente <span className="cpcount">{rows.length}</span>
         </span>
-        <button className="picon" aria-label="Farbliste schließen" title="Schließen" onClick={() => setColorsOpen(false)}>
-          ×
-        </button>
       </div>
       <label className="check cpregions" title="Körper je Farbe anzeigen, wie sie exportiert und gedruckt werden (aus: Farbe je Fläche, schneller, bei Überlappung und Verrundung ungenau)">
         <input type="checkbox" checked={showRegions} onChange={(e) => store.setState({ showRegions: e.target.checked })} data-testid="colors-regions" />
@@ -138,15 +128,17 @@ export function ColorsPanel() {
       ))}
       <div className="cpexport">
         <b>Export für den Druck</b>
-        <button onClick={() => void exportColors("3mf")} data-testid="export-3mf-colors" title="3MF: je Bauteil ein Objekt, ein Teil je Farbe mit Filament-Slot (Bambu Studio, OrcaSlicer)">
-          3MF mehrfarbig
-        </button>
-        <button onClick={() => void exportColors("stl-zip")} data-testid="export-stl-colors" title="ZIP mit einem STL je Farbe (alle im selben Koordinatensystem)">
-          STL je Farbe (ZIP)
-        </button>
-        <button onClick={() => void exportColors("3mf-single")} data-testid="export-3mf-single" title="3MF ohne Farben: ein Netz je Bauteil">
-          3MF einfarbig
-        </button>
+        <div className="cpexport-buttons">
+          <Button onClick={() => void runExport("3mf")} title="3MF: je Bauteil ein Objekt, ein Teil je Farbe mit Filament-Slot (Bambu Studio, OrcaSlicer)">
+            3MF mehrfarbig
+          </Button>
+          <Button onClick={() => void runExport("stl-colors")} title="ZIP mit einem STL je Farbe (alle im selben Koordinatensystem)">
+            STL je Farbe (ZIP)
+          </Button>
+          <Button onClick={() => void runExport("3mf-single")} title="3MF ohne Farben: ein Netz je Bauteil">
+            3MF einfarbig
+          </Button>
+        </div>
       </div>
       <p
         className="pbnote"
@@ -154,6 +146,6 @@ export function ColorsPanel() {
       >
         Slot ändern schreibt <code>filament = n</code> in den Code. Masse: PLA 1,24 g/cm³.
       </p>
-    </aside>
+    </div>
   );
 }

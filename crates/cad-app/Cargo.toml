@@ -20,3 +20,7 @@ serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
+
+# Linux: the app id (tauri.conf.json identifier) as GLib program name, see `run`
+[target.'cfg(target_os = "linux")'.dependencies]
+glib = "0.18"

@@ -366,6 +366,12 @@ pub fn run(opts: LaunchOptions) -> i32 {
     let endpoint = uictl::endpoint_name(std::process::id());
 
     let sup_setup = sup.clone();
+    let context = tauri::generate_context!();
+    // Linux: the app id (`identifier`) as GLib program name, before GTK starts. GTK takes it as
+    // the Wayland `app_id` and the X11 `WM_CLASS` (otherwise the binary name `cad`), so the
+    // desktop file `<identifier>.desktop` (packaging/linux) and its icon match the window.
+    #[cfg(target_os = "linux")]
+    glib::set_prgname(Some(context.config().identifier.as_str()));
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
@@ -438,7 +444,7 @@ pub fn run(opts: LaunchOptions) -> i32 {
             }
             Ok(())
         })
-        .build(tauri::generate_context!());
+        .build(context);
     let app = match app {
         Ok(a) => a,
         Err(e) => {

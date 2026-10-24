@@ -23,6 +23,7 @@ import {
   mouseDrag,
   nodesOnLine,
   openApp,
+  pickMenu,
   openExample,
   recordC,
   screenshotC,
@@ -519,7 +520,7 @@ test("C15 Ansicht nach deutlicher Größenänderung neu einpassen", async ({ pag
   s = await waitScene(page, { minVersion: v1 + 1 });
   s = await waitView(page, `(s) => s.view.camera.distance > ${d0 * 3}`);
   const d1 = view(s).camera.distance;
-  await expect(page.getByTestId("refit")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Neu einpassen" })).toHaveCount(0);
   await screenshotC(page, "c15-auto");
   // A small change does not move the camera.
   const v2 = s.sentVersion;
@@ -535,12 +536,12 @@ test("C15 Ansicht nach deutlicher Größenänderung neu einpassen", async ({ pag
   const v3 = s.sentVersion;
   await hook(page, (c) => c.setText("cube(300);\n"));
   s = await waitScene(page, { minVersion: v3 + 1 });
-  await expect(page.getByTestId("refit")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Neu einpassen" })).toBeVisible();
   expect(Math.abs(view(s).camera.distance - d2)).toBeLessThan(1e-6);
   await screenshotC(page, "c15-knopf");
-  await page.getByTestId("refit").click();
+  await page.getByRole("button", { name: "Neu einpassen" }).click();
   s = await waitView(page, `(s) => s.view.camera.distance > ${d2 * 3} && s.view.camera.autoFit`);
-  await expect(page.getByTestId("refit")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Neu einpassen" })).toHaveCount(0);
   await screenshotC(page, "c15-eingepasst");
   recordC({
     id: "C15",
@@ -647,7 +648,11 @@ const NEW_EXAMPLES: Array<{ path: string; line: number; col: number; context: st
 
 test("C17 Neue Beispiele im Menü", async ({ page }) => {
   await openApp(page);
-  const options = await page.getByTestId("examples").locator("option").allTextContents();
+  // the menu "Beispiele" › "Spec-Beispiele" lists them
+  await pickMenu(page, "Beispiele", "Spec-Beispiele");
+  const options = (await page.getByRole("menu", { name: "Spec-Beispiele" }).getByRole("menuitem").evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? ""))) as string[];
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
   const caps: string[] = [];
   for (const ex of NEW_EXAMPLES) {
     const name = ex.path.split("/").pop()!;

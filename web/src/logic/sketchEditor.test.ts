@@ -7,7 +7,7 @@ import { EditorState, type Transaction } from "@codemirror/state";
 import type { Mat4 } from "../engine/protocol";
 import { IDENTITY, apply } from "./math";
 import { VersionMapper } from "./positions";
-import { pixelSize, planeCamera, rasterLines, rasterSpacing, sketchTransaction, snapMarker } from "./sketchEditor";
+import { SKETCH_TOOL_KEYS, pixelSize, planeCamera, rasterLines, rasterSpacing, sketchKeyAction, sketchTransaction, snapMarker } from "./sketchEditor";
 
 describe("Raster der Zeichenebene", () => {
   it("Abstand: Schrittweite, vergröbert bis mindestens 12 px", () => {
@@ -100,5 +100,32 @@ describe("Aktion = ein Undo-Schritt, Cursor nach dem neuen Code", () => {
     const ed = editor(doc);
     const mapper = new VersionMapper(doc.length);
     expect(sketchTransaction(ed.state, mapper, 7, [{ from: 0, to: 0, text: "x" }], null)).toBeNull();
+  });
+});
+
+describe("Tastenkürzel des Zeichenmodus (UI-Überarbeitung)", () => {
+  it("Buchstaben wählen die Werkzeuge, Umschalt+A den Bogen um den Mittelpunkt", () => {
+    const cases: Array<[string, boolean, unknown]> = [
+      ["v", false, { tool: "select" }],
+      ["L", false, { tool: "line" }],
+      ["a", false, { tool: "arc_through" }],
+      ["A", true, { tool: "arc_center" }],
+      ["t", false, { tool: "arc_tangent" }],
+      ["b", false, { tool: "bezier" }],
+      ["r", false, { tool: "rect" }],
+      ["c", false, { tool: "circle" }],
+      ["f", false, { tool: "corner" }],
+      ["Enter", false, { command: "close" }],
+      ["n", false, { command: "align" }],
+      ["x", false, null],
+      ["R", true, null],
+      ["Escape", false, null],
+    ];
+    for (const [k, shift, want] of cases) expect(sketchKeyAction(k, shift), `${shift ? "⇧" : ""}${k}`).toEqual(want);
+  });
+  it("jedes Werkzeug der Leiste hat ein Kürzel, keines doppelt", () => {
+    const keys = Object.values(SKETCH_TOOL_KEYS);
+    expect(keys.length).toBe(9);
+    expect(new Set(keys).size).toBe(keys.length);
   });
 });

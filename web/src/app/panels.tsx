@@ -7,6 +7,7 @@ import { fmtNum } from "../logic/format";
 import { type ParamRow, contextModule, dropOverride, paramRows, resetAll, resetOverride, setOverride } from "../logic/params";
 import { DEFAULT_SETTINGS, type Settings, saveSettings, store, useCad } from "../state/store";
 import { client } from "./runtime";
+import { Button, IconButton, IconReset, IconSettings } from "./ui";
 
 /** "Als Standard übernehmen" waiting for its edit: the temporary value is dropped afterwards. */
 let pendingDefault: { module: string; param: string } | null = null;
@@ -139,15 +140,21 @@ function Row({ row, module }: { row: ParamRow; module: string }) {
           {row.name}
         </span>
         <span className="pdefault">{row.hasDefault ? `= ${row.defaultText}` : "kein Standard"}</span>
-        <button className="picon" title={`Zurücksetzen auf ${row.hasDefault ? row.defaultText : numText(row.reset) || JSON.stringify(row.reset)}`} aria-label={`${row.name} zurücksetzen`} data-testid={`param-${row.name}-reset`} disabled={!row.overridden} onClick={reset}>
-          ↺
-        </button>
+        <IconButton
+          icon={IconReset}
+          className="ui-btn--small"
+          label={`${row.name} zurücksetzen`}
+          title={`Zurücksetzen auf ${row.hasDefault ? row.defaultText : numText(row.reset) || JSON.stringify(row.reset)}`}
+          data-testid={`param-${row.name}-reset`}
+          disabled={!row.overridden}
+          onClick={reset}
+        />
       </div>
       {control}
       {row.changed && row.control !== "other" && (
-        <button className="padopt" data-testid={`param-${row.name}-adopt`} onClick={adopt} title="Wert als Standardwert in die Moduldefinition schreiben">
+        <Button className="padopt" data-testid={`param-${row.name}-adopt`} onClick={adopt} title="Wert als Standardwert in die Moduldefinition schreiben">
           Als Standard übernehmen
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -162,32 +169,42 @@ export function ParamBar() {
   const rows = paramRows(sig, shown.context.params, overrides[module]);
   const anyChanged = rows.some((r) => r.overridden);
   return (
-    <aside className="parambar" aria-label="Parameterleiste" data-testid="parambar">
+    <div className="parambar" role="region" aria-label="Parameterleiste" data-testid="parambar">
       <div className="pbtitle">
         <span>
           Parameter <b>{sig.name}</b>
         </span>
-        <button data-testid="param-reset-all" disabled={!anyChanged} onClick={() => store.setState({ paramOverrides: resetAll(store.getState().paramOverrides, sig, shown.context.params) })}>
+        <Button variant="quiet" data-testid="param-reset-all" disabled={!anyChanged} onClick={() => store.setState({ paramOverrides: resetAll(store.getState().paramOverrides, sig, shown.context.params) })}>
           Alle zurücksetzen
-        </button>
+        </Button>
       </div>
       <p className="pbnote">Nur Vorschau – der Code bleibt unverändert.</p>
       {rows.length === 0 && <p className="pbnote">Keine Parameter.</p>}
       {rows.map((r) => (
         <Row key={r.name} row={r} module={module} />
       ))}
-    </aside>
+    </div>
   );
 }
 
 export function SettingsButton() {
   const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLSpanElement>(null);
   const settings = useCad((s) => s.settings);
   const set = (patch: Partial<Settings>) => {
     const s = { ...store.getState().settings, ...patch };
     saveSettings(s);
     store.setState({ settings: s });
   };
+  // close on a click outside and with Esc (focus back to the button)
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: PointerEvent) => {
+      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+    };
+    window.addEventListener("pointerdown", down, true);
+    return () => window.removeEventListener("pointerdown", down, true);
+  }, [open]);
   const field = (key: "stepMm" | "stepDeg" | "snapPx" | "autoSaveMs", label: string, unit: string) => (
     <label className="setrow">
       <span>{label}</span>
@@ -196,6 +213,7 @@ export function SettingsButton() {
         min={0}
         step="any"
         value={settings[key]}
+        aria-label={label}
         data-testid={`setting-${key}`}
         onChange={(e) => {
           const v = Number(e.target.value);
@@ -206,10 +224,18 @@ export function SettingsButton() {
     </label>
   );
   return (
-    <span className="settings-wrap">
-      <button onClick={() => setOpen(!open)} aria-expanded={open} data-testid="settings" title="Einstellungen">
-        Einstellungen
-      </button>
+    <span
+      className="settings-wrap"
+      ref={wrap}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && open) {
+          e.stopPropagation();
+          setOpen(false);
+          wrap.current?.querySelector<HTMLButtonElement>("button")?.focus();
+        }
+      }}
+    >
+      <IconButton icon={IconSettings} label="Einstellungen" onClick={() => setOpen(!open)} aria-expanded={open} aria-haspopup="dialog" pressed={open} data-testid="settings" />
       {open && (
         <div className="settings-pop" role="dialog" aria-label="Einstellungen">
           <b>Ziehen von Griffen</b>
@@ -222,13 +248,15 @@ export function SettingsButton() {
               <b>Dateien</b>
               <label className="setrow">
                 <span>Automatisch speichern</span>
-                <input type="checkbox" checked={settings.autoSave} onChange={(e) => set({ autoSave: e.target.checked })} data-testid="setting-autoSave" />
+                <input type="checkbox" checked={settings.autoSave} onChange={(e) => set({ autoSave: e.target.checked })} aria-label="Automatisch speichern" data-testid="setting-autoSave" />
                 <span className="unit" />
               </label>
               {field("autoSaveMs", "Verzögerung", "ms")}
             </>
           )}
-          <button onClick={() => set({ ...DEFAULT_SETTINGS })}>Standard</button>
+          <div className="setfoot">
+            <Button onClick={() => set({ ...DEFAULT_SETTINGS })}>Standard</Button>
+          </div>
         </div>
       )}
     </span>

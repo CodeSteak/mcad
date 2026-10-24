@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
-import { cad, clickLine, hook, loadText, openApp, record16, screenshot16, waitScene } from "./helpers";
+import { cad, clickLine, fileMenu, hook, loadText, openApp, record16, screenshot16, waitScene } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => console.log("pageerror:", e.message));
@@ -109,7 +109,9 @@ test("T03 Schrift ins Projekt laden", async ({ page }) => {
   await openApp(page);
   await loadText(page, `cube(1);\n`);
   const ttf = readFileSync(join(FONTS, "AllertaStencil-Regular.ttf"));
-  await page.getByTestId("file-upload-input").setInputFiles({ name: "schablone.ttf", mimeType: "font/ttf", buffer: ttf });
+  // "Datei › Datei laden …" (also in the "+" menu of the tabs) opens the file dialog
+  const [chooser] = await Promise.all([page.waitForEvent("filechooser"), fileMenu(page, "Datei laden …")]);
+  await chooser.setFiles({ name: "schablone.ttf", mimeType: "font/ttf", buffer: ttf });
   await page.waitForFunction(() => (window as unknown as W).__cad.projectInfo().paths.includes("schablone.ttf"));
   const f = (await info(page)).files["schablone.ttf"];
   expect(f.startsWith("data:font/ttf;base64,")).toBe(true);

@@ -191,8 +191,9 @@ make app SMLIB_PREBUILT=$PWD/smlib/build-native   # SMLib, UI, cad mit UI
 sudo make install PREFIX=/usr/local               # oder: make install DESTDIR=/tmp/root PREFIX=/usr
 ```
 
-`make install` legt an: `$PREFIX/bin/cad`, `share/applications/controller-cad.desktop`
-(`cad %f`, ohne Datei startet die UI), `share/icons/hicolor/<n>x<n>/apps/controller-cad.png` (n = 16 … 512 aus `assets/icon/png`) und
+`make install` legt an: `$PREFIX/bin/cad`, `share/applications/dev.controller-cad.desktop.desktop`
+(`cad %f`, ohne Datei startet die UI; der Dateiname ist die App-ID aus `crates/cad-app/tauri.conf.json`,
+die die App auch als Wayland-`app_id` und X11-`WM_CLASS` setzt – so ordnet die Taskleiste das Symbol zu), `share/icons/hicolor/<n>x<n>/apps/controller-cad.png` (n = 16 … 512 aus `assets/icon/png`) und
 `share/icons/hicolor/scalable/apps/controller-cad.svg` (`assets/icon/cad.svg`),
 `share/licenses/controller-cad/` (`NOTICE`, OFL-Texte der Schriften mit `fonts-README.md`,
 SMLib `LICENSE` und `THIRD_PARTY_NOTICES.md`), `share/doc/controller-cad/` (README, CLI-Anleitung

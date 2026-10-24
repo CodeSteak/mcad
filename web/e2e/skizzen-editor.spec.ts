@@ -4,7 +4,7 @@
 // deleting a segment, sketches under transformations and in rotate_extrude, the dark theme.
 
 import { expect, test, type Page } from "@playwright/test";
-import { type Pt, clickLine, hook, line, loadText, mouseDrag, openApp, openExample, record18, screenshot18, waitDragDone, waitHandles, waitScene, waitView, writeMetrics18 } from "./helpers";
+import { type Pt, clickLine, hook, line, loadText, mode, mouseDrag, openApp, openExample, record18, screenshot18, sketchBar, sketchTool, waitDragDone, waitHandles, waitScene, waitView, writeMetrics18 } from "./helpers";
 
 test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => console.log("pageerror:", e.message));
@@ -62,14 +62,14 @@ async function scr(page: Page, x: number, y: number): Promise<Pt> {
 }
 
 async function enter(page: Page): Promise<SketchInfo> {
-  await page.getByTestId("sketch-toggle").click();
+  await mode(page, "Skizze").click();
   const s = await waitSketch(page, "(s) => s.answers > 0 && s.raster !== null");
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   return s;
 }
 
 async function tool(page: Page, t: string): Promise<void> {
-  await page.getByTestId(`sketch-tool-${t}`).click();
+  await sketchTool(page, t);
   await waitSketch(page, "(s, t) => s.tool === t", t);
 }
 
@@ -121,12 +121,12 @@ test("Z01 Zeichenmodus: Schalter, Blick senkrecht auf die Skizzenebene, Esc been
   const drawn = (await info(page))!.drawn;
   expect(drawn["sketch-grid"]).toBeGreaterThan(0);
   expect(drawn["sketch-raster"] ?? 0).toBeGreaterThan(0);
-  await expect(page.getByTestId("sketchbar")).toBeVisible();
+  await expect(sketchBar(page)).toBeVisible();
   await expect(page.getByTestId("status-sketch")).toContainText("Linie: Anfangspunkt");
   await screenshot18(page, "z01-modus", "full");
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => (window as unknown as W).__cad.sketch() === null);
-  await expect(page.getByTestId("sketchbar")).toHaveCount(0);
+  await expect(sketchBar(page)).toHaveCount(0);
   record18({
     id: "Z01",
     title: "Zeichenmodus ein/aus",
@@ -317,7 +317,7 @@ test("Z09 Ecke runden, Z10 Schließen", async ({ page }) => {
   await enter(page);
   await screenshot18(page, "z10-vorher", "view");
   const a0 = (await info(page))!.actions;
-  await page.getByTestId("sketch-close").click();
+  await sketchBar(page).getByRole("button", { name: "Schließen", exact: true }).click();
   await waitSketch(page, "(s, n) => s.actions > n", a0);
   await waitScene(page);
   t = await text(page);
