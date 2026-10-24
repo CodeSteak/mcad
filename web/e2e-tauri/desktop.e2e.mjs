@@ -720,32 +720,39 @@ async function main() {
       const m = await ms();
       return m && m.active && m.answers > 0 ? m : null;
     });
-    const fire = (type, x, y) =>
+    // Faces with Alt (without snapping): in the small window the circle centres of the cylinder
+    // are within the snap radius of its side.
+    const fire = (type, x, y, alt = false) =>
       exec(
-        "const c = document.querySelector('[data-testid=viewport-canvas]'); c.dispatchEvent(new PointerEvent(arguments[0], { clientX: arguments[1], clientY: arguments[2], bubbles: true, cancelable: true, composed: true, button: 0, buttons: arguments[0] === 'pointerdown' ? 1 : 0, pointerId: 1, pointerType: 'mouse', isPrimary: true })); return true;",
+        "const c = document.querySelector('[data-testid=viewport-canvas]'); c.dispatchEvent(new PointerEvent(arguments[0], { clientX: arguments[1], clientY: arguments[2], altKey: arguments[3], bubbles: true, cancelable: true, composed: true, button: 0, buttons: arguments[0] === 'pointerdown' ? 1 : 0, pointerId: 1, pointerType: 'mouse', isPrimary: true })); return true;",
         type,
         x,
         y,
+        alt,
       );
     const at = (p) => exec("return window.__cad.screenOf(arguments[0])", p);
     const hover = async (p, kind) => {
       const q = await at(p);
       const n = (await ms()).answers;
-      await fire("pointermove", q.x + 0.3, q.y + 0.3);
+      await fire("pointermove", q.x + 0.3, q.y + 0.3, kind === "face");
       return waitFor(`Element ${kind}`, async () => {
         const m = await ms();
-        return m.answers > n && m.hover && m.hover.kind === kind ? m : null;
+        if (m.answers > n && m.hover && m.hover.kind === kind) return m;
+        // shown on a timeout (last state)
+        throw new Error(JSON.stringify({ at: q, answers: [n, m.answers], hover: m.hover && { kind: m.hover.kind, label: m.hover.label }, message: m.message }));
       });
     };
     const press = async (p, kind) => {
       await hover(p, kind);
       const q = await at(p);
       const n = (await ms()).answers;
-      await fire("pointerdown", q.x + 0.3, q.y + 0.3);
-      await fire("pointerup", q.x + 0.3, q.y + 0.3);
+      const before = await ms();
+      await fire("pointerdown", q.x + 0.3, q.y + 0.3, kind === "face");
+      await fire("pointerup", q.x + 0.3, q.y + 0.3, kind === "face");
+      // the click's own effect (a hover answer still on its way also counts as an answer)
       return waitFor("Klick beantwortet", async () => {
         const m = await ms();
-        return m.answers > n ? m : null;
+        return m.answers > n && (m.picks.length !== before.picks.length || m.results.length !== before.results.length || m.message !== null) ? m : null;
       });
     };
     const c = Math.SQRT1_2;
