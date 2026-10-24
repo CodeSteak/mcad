@@ -42,6 +42,15 @@ const grip = (h: HandleView): Pt => {
   if (!h.screen) throw new Error(`handle ${h.id} not visible`);
   return h.screen;
 };
+/**
+ * The point handle of an editor line, after moving the cursor there. The viewer rebuilds its
+ * handles in the next animation frame: until then `handles()` still lists those of the previous
+ * cursor line (with `cube([…])` there also a point handle), so the line must be part of the wait.
+ */
+const pointHandleOn = async (page: Page, l: number): Promise<HandleView> => {
+  const hs = await waitHandles(page, `(hs) => hs.some(h => h.kind === 'point' && h.line === ${l})`);
+  return hs.find((h) => h.kind === "point" && h.line === l)!;
+};
 const waitText = (page: Page, pred: string) =>
   page.waitForFunction((src) => new Function("t", `return (${src})(t);`)((window as unknown as { __cad: { text(): string } }).__cad.text()), pred, { timeout: 30_000, polling: 30 });
 const lineHint = (page: Page, l: number) => lineEl(page, l).locator(".cm-lineend");
@@ -551,7 +560,7 @@ test("C16 Punktgriff achsgebunden ziehen (Umschalttaste, X/Y/Z)", async ({ page 
   const src = "cube([60, 30, 1]);\ntranslate([10, 5.5, 2.25]) cube(6);\n";
   await loadText(page, src);
   await clickLine(page, 2, 3);
-  let [h] = await waitHandles(page, "(hs) => hs.some(h => h.kind === 'point')");
+  let h = await pointHandleOn(page, 2);
   await screenshotC(page, "c16-vorher");
   // Shift: the axis follows the mouse motion; the screen direction of +x.
   const o = (await hook(page, (c) => c.project([10, 5.5, 2.25])))!;
@@ -577,7 +586,7 @@ test("C16 Punktgriff achsgebunden ziehen (Umschalttaste, X/Y/Z)", async ({ page 
   expect(m1[3]).toBe("2.25");
   // Key Z during the drag: along z only.
   await clickLine(page, 2, 3);
-  [h] = await waitHandles(page, "(hs) => hs.some(h => h.kind === 'point')");
+  h = await pointHandleOn(page, 2);
   const f2 = grip(h);
   // Free at first, then Z: from there on only z changes (the lock starts at the current
   // position, the other components keep the values they have now).
@@ -726,7 +735,7 @@ test("C20 Entwurfsmodus: Verrundung beim Ziehen ausgesetzt, danach berechnet", a
   const src = "difference(fillet = 1) {\n    cube([40, 30, 10]);\n    translate([20, 15, -1]) cylinder(h = 12, r = 5);\n}\n";
   await loadText(page, src);
   await clickLine(page, 3, 6);
-  const [h] = await waitHandles(page, "(hs) => hs.some(h => h.kind === 'point')");
+  const h = await pointHandleOn(page, 3);
   const from = grip(h);
   let draftSeen = false;
   let hint = "";

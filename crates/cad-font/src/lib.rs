@@ -6,8 +6,9 @@
 //! `size / 0.72`, so the cap height of most fonts is about `size`); glyph positions and the
 //! alignment follow OpenSCAD too, including its 1000/1024 scale ([`OPENSCAD_POSITION_SCALE`]).
 //!
-//! **Default font:** `"cad stencil mono"`, the planned own stencil font, is reserved as the
-//! future default; until it exists the name (and a missing `font`) selects JetBrains Mono.
+//! **Default font:** `"cad stencil mono"` ([`stencil`]), an own monospaced stencil font of lines
+//! and arcs with bridges (no holes), used without `font` and for unknown families. Characters a
+//! font lacks come from JetBrains Mono ([`fallback_font`]).
 
 use cad_outline::{Contour, Seg};
 use glam::DVec2;
@@ -17,10 +18,14 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
-/// The reserved name of the coming stencil font (Plan 17.4), the future default.
+pub mod stencil;
+
+/// The own stencil font (Plan 17.4, [`stencil`]).
 pub const STENCIL_FAMILY: &str = "cad stencil mono";
-/// Family used for `font` not given (and for [`STENCIL_FAMILY`] until it exists).
-pub const DEFAULT_FAMILY: &str = "JetBrains Mono";
+/// Family used for `font` not given and for unknown families.
+pub const DEFAULT_FAMILY: &str = STENCIL_FAMILY;
+/// Family of the fallback font for characters a font lacks.
+pub const FALLBACK_FAMILY: &str = "JetBrains Mono";
 
 /// em size in mm = `size / SIZE_TO_EM` (OpenSCAD: char size `size` at 100 dpi in 72 dpi points).
 pub const SIZE_TO_EM: f64 = 0.72;
@@ -93,55 +98,70 @@ fn norm(s: &str) -> String {
 /// How a font name was resolved.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Pick {
-    /// Family and style found.
+    /// Family and style found (or no font given: the default font).
     Exact,
     /// Family found, the style not: the family's regular style.
     StyleMissing,
-    /// Reserved stencil name: the default font for now.
-    Stencil,
     /// Unknown family: the default font.
     Fallback,
 }
 
-/// A bundled font for a name; unknown names give the default font.
-pub fn builtin(name: &FontName) -> (&'static Builtin, Pick) {
+/// A bundled TrueType font by family and style (`None`: no such family). An unknown style
+/// gives the family's regular style ([`Pick::StyleMissing`]).
+pub fn builtin(name: &FontName) -> Option<(&'static Builtin, Pick)> {
     let fam = norm(&name.family);
-    let default = || BUILTIN.iter().find(|b| b.family == DEFAULT_FAMILY && b.style == "Regular").unwrap();
-    if fam.is_empty() {
-        return (default(), Pick::Exact);
-    }
-    if fam == norm(STENCIL_FAMILY) {
-        return (default(), Pick::Stencil);
-    }
     let of_family: Vec<&Builtin> = BUILTIN.iter().filter(|b| norm(b.family) == fam).collect();
     if of_family.is_empty() {
-        return (default(), Pick::Fallback);
+        return None;
     }
     let want = name.style.as_deref().map(norm).unwrap_or_else(|| "regular".into());
     if let Some(b) = of_family.iter().find(|b| norm(b.style) == want) {
-        return (b, Pick::Exact);
+        return Some((b, Pick::Exact));
     }
     let regular = of_family.iter().find(|b| b.style == "Regular").unwrap_or(&of_family[0]);
-    (regular, Pick::StyleMissing)
+    Some((regular, Pick::StyleMissing))
 }
 
-/// Family and style names of the bundled fonts, e.g. `"Inter:style=Bold"`.
+/// The font for a name: the stencil font (no name, its own name with style Regular or Bold,
+/// unknown families) or a bundled TrueType font.
+pub fn select(name: &FontName) -> (Font, Pick) {
+    let fam = norm(&name.family);
+    if fam.is_empty() || fam == norm(STENCIL_FAMILY) {
+        return match name.style.as_deref().map(norm).as_deref() {
+            None | Some("regular") => (Font::stencil(false), Pick::Exact),
+            Some("bold") => (Font::stencil(true), Pick::Exact),
+            Some(_) => (Font::stencil(false), Pick::StyleMissing),
+        };
+    }
+    match builtin(name) {
+        Some((b, pick)) => (Font::builtin(b), pick),
+        None => (Font::stencil(false), Pick::Fallback),
+    }
+}
+
+/// Family and style names of the bundled fonts, e.g. `"Inter:style=Bold"` (the stencil font
+/// first).
 pub fn builtin_names() -> Vec<String> {
-    BUILTIN.iter().map(|b| format!("{}:style={}", b.family, b.style)).collect()
+    let mut out: Vec<String> = ["Regular", "Bold"].iter().map(|s| format!("{STENCIL_FAMILY}:style={s}")).collect();
+    out.extend(BUILTIN.iter().map(|b| format!("{}:style={}", b.family, b.style)));
+    out
 }
 
-/// Font data: a bundled font or a user font file.
+/// Font data: a bundled font, a user font file or the stencil font (no file).
 #[derive(Clone)]
 pub enum FontData {
     Static(&'static [u8]),
     Shared(Arc<[u8]>),
+    Stencil { bold: bool },
 }
 
 impl FontData {
+    /// The font file (empty for the stencil font).
     pub fn bytes(&self) -> &[u8] {
         match self {
             FontData::Static(b) => b,
             FontData::Shared(b) => b,
+            FontData::Stencil { .. } => &[],
         }
     }
 }
@@ -155,6 +175,15 @@ pub struct Font {
 }
 
 impl Font {
+    /// „cad stencil mono“, regular or bold (default stroke width).
+    pub fn stencil(bold: bool) -> Font {
+        Font { data: FontData::Stencil { bold }, index: 0, key: 100 + u64::from(bold) }
+    }
+
+    pub fn is_stencil(&self) -> bool {
+        matches!(self.data, FontData::Stencil { .. })
+    }
+
     pub fn builtin(b: &'static Builtin) -> Font {
         let i = BUILTIN.iter().position(|x| std::ptr::eq(x, b)).unwrap_or(0) as u64;
         Font { data: FontData::Static(b.data), index: 0, key: i + 1 }
@@ -169,6 +198,9 @@ impl Font {
 
     /// Family and subfamily (style) names of the face.
     pub fn names(&self) -> (String, String) {
+        if let FontData::Stencil { bold } = self.data {
+            return (STENCIL_FAMILY.into(), if bold { "Bold" } else { "Regular" }.into());
+        }
         let Ok(f) = ttf_parser::Face::parse(self.data.bytes(), self.index) else {
             return (String::new(), String::new());
         };
@@ -247,6 +279,12 @@ pub struct TextParams {
     pub language: Option<String>,
     /// Script as ISO 15924 code (`"Latn"`) or OpenSCAD name (`"latin"`); `None`: guessed.
     pub script: Option<String>,
+    /// Stencil font only: stroke width in mm (`None`: [`stencil::DEFAULT_STROKE`] × `size`,
+    /// bold [`stencil::DEFAULT_STROKE_BOLD`]); at most [`stencil::MAX_STROKE`] × `size`.
+    pub stroke_width: Option<f64>,
+    /// Stencil font only: bridge width in mm (`None`: [`stencil::DEFAULT_BRIDGE`] × `size`;
+    /// 0: no bridges); at most [`stencil::MAX_BRIDGE`] × `size`.
+    pub bridge_width: Option<f64>,
 }
 
 impl Default for TextParams {
@@ -260,6 +298,8 @@ impl Default for TextParams {
             direction: None,
             language: None,
             script: None,
+            stroke_width: None,
+            bridge_width: None,
         }
     }
 }
@@ -394,9 +434,9 @@ fn script_of(s: &str) -> Option<rustybuzz::Script> {
     rustybuzz::Script::from_iso15924_tag(tag)
 }
 
-/// Characters every bundled font has a real glyph for (no `.notdef`), and the future stencil
-/// font must have (Plan 17.4): letters, digits, German umlauts and ß/ẞ, the usual punctuation
-/// and symbols.
+/// Characters every bundled font has a real glyph for (no `.notdef`), the stencil font
+/// included (Plan 17.4): letters, digits, German umlauts and ß/ẞ, the usual punctuation and
+/// symbols.
 pub const REQUIRED_CHARS: &str = concat!(
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789",
     "ÄÖÜäöüßẞ",
@@ -405,6 +445,15 @@ pub const REQUIRED_CHARS: &str = concat!(
 
 /// Characters of `s` the font has no glyph for.
 pub fn missing_chars(font: &Font, s: &str) -> Vec<char> {
+    if font.is_stencil() {
+        let mut out: Vec<char> = Vec::new();
+        for c in s.chars().filter(|c| !stencil::has(*c)) {
+            if !out.contains(&c) {
+                out.push(c);
+            }
+        }
+        return out;
+    }
     let Ok(f) = ttf_parser::Face::parse(font.data.bytes(), font.index) else { return s.chars().collect() };
     let mut out: Vec<char> = Vec::new();
     for c in s.chars() {
@@ -424,9 +473,25 @@ pub const ALLERTA_STENCIL_GAPS: &str = "ẞ„‚{}_#°²³§~^·•…±µØø"
 /// (OS/2 weight ≥ 600), else Regular. JetBrains Mono covers [`REQUIRED_CHARS`] and much more
 /// (Latin, Greek, Cyrillic, arrows, box drawing).
 pub fn fallback_font(font: &Font) -> Font {
-    let bold = ttf_parser::Face::parse(font.data.bytes(), font.index).is_ok_and(|f| f.weight().to_number() >= 600);
+    let bold = match font.data {
+        FontData::Stencil { bold } => bold,
+        _ => ttf_parser::Face::parse(font.data.bytes(), font.index).is_ok_and(|f| f.weight().to_number() >= 600),
+    };
     let style = if bold { "Bold" } else { "Regular" };
-    Font::builtin(BUILTIN.iter().find(|b| b.family == DEFAULT_FAMILY && b.style == style).unwrap())
+    Font::builtin(BUILTIN.iter().find(|b| b.family == FALLBACK_FAMILY && b.style == style).unwrap())
+}
+
+/// Stroke and bridge width of the stencil font in its units for `p` (defaults, limits).
+pub fn stencil_widths(bold: bool, p: &TextParams) -> (f64, f64) {
+    let unit = p.size / SIZE_TO_EM / stencil::UPEM; // mm per unit
+    let def = if bold { stencil::DEFAULT_STROKE_BOLD } else { stencil::DEFAULT_STROKE };
+    let w = p.stroke_width.filter(|w| w.is_finite() && *w > 0.0).map_or(def * stencil::CAP, |w| w / unit);
+    let b = p
+        .bridge_width
+        .filter(|b| b.is_finite() && *b >= 0.0)
+        .map_or(stencil::DEFAULT_BRIDGE * stencil::CAP, |b| b / unit);
+    let b = if b > 0.0 { b.clamp(stencil::MIN_BRIDGE * stencil::CAP, stencil::MAX_BRIDGE * stencil::CAP) } else { 0.0 };
+    (w.min(stencil::MAX_STROKE * stencil::CAP), b)
 }
 
 /// Combining marks, joiners and variation selectors stay with the preceding character.
@@ -439,7 +504,19 @@ fn joins_previous(c: char) -> bool {
 /// [`Layout::fallback`]); characters no font has stay `.notdef` ([`Layout::missing`]).
 /// Errors: unreadable font, unknown script or language.
 pub fn layout(font: &Font, p: &TextParams) -> Result<Layout, String> {
-    let face = rustybuzz::Face::from_slice(font.data.bytes(), font.index).ok_or("Schriftdatei nicht lesbar")?;
+    // the stencil font has no face: its glyphs are drawn, not shaped
+    let stencil_bold = match font.data {
+        FontData::Stencil { bold } => Some(bold),
+        _ => None,
+    };
+    let face = match stencil_bold {
+        Some(_) => None,
+        None => Some(rustybuzz::Face::from_slice(font.data.bytes(), font.index).ok_or("Schriftdatei nicht lesbar")?),
+    };
+    let has_glyph = |c: char| match &face {
+        Some(f) => f.glyph_index(c).is_some(),
+        None => stencil::has(c),
+    };
     let fb_font = fallback_font(font);
     let use_fb = fb_font.key != font.key;
     let fb_face = rustybuzz::Face::from_slice(fb_font.data.bytes(), 0).ok_or("Ersatzschrift nicht lesbar")?;
@@ -469,8 +546,8 @@ pub fn layout(font: &Font, p: &TextParams) -> Result<Layout, String> {
     let mut runs: Vec<(usize, usize, usize)> = Vec::new(); // (font, start, end) byte ranges
     for (i, c) in p.text.char_indices() {
         let mut which = 0;
-        if face.glyph_index(c).is_none() && !c.is_control() {
-            if joins_previous(c) {
+        if !has_glyph(c) && !c.is_control() {
+            if joins_previous(c) && face.is_some() {
                 which = runs.last().map_or(0, |r| r.0);
             } else if use_fb && fb_face.glyph_index(c).is_some() {
                 which = 1;
@@ -491,8 +568,41 @@ pub fn layout(font: &Font, p: &TextParams) -> Result<Layout, String> {
         runs.reverse();
     }
     let mut pen = DVec2::ZERO;
+    let reversed = matches!(dir, rustybuzz::Direction::RightToLeft | rustybuzz::Direction::BottomToTop);
     for (which, a, b) in runs {
-        let (f, key) = if which == 0 { (&face, font.key) } else { (&fb_face, fb_font.key) };
+        if which == 0
+            && let Some(bold) = stencil_bold
+        {
+            let (sw, bw) = stencil_widths(bold, p);
+            let k = p.size / SIZE_TO_EM / stencil::UPEM;
+            let kp = k * OPENSCAD_POSITION_SCALE;
+            let mut chars: Vec<(usize, char)> = p.text[a..b].char_indices().map(|(i, c)| (i + a, c)).collect();
+            if reversed {
+                chars.reverse();
+            }
+            for (i, c) in chars {
+                let off =
+                    if vertical { DVec2::new(-stencil::ADVANCE / 2.0, -stencil::ASCENT) * kp } else { DVec2::ZERO };
+                if let (Some(id), Some(outline)) = (stencil::glyph_id(c), stencil::render(c, sw, bw))
+                    && !outline.is_empty()
+                {
+                    let m = glam::DAffine2::from_cols(DVec2::new(k, 0.0), DVec2::new(0.0, k), pen + off);
+                    let contours = outline.iter().map(|c| c.transform(&m)).collect();
+                    out.glyphs.push(Glyph { id, cluster: i as u32, fallback: false, contours });
+                }
+                let adv = if vertical {
+                    DVec2::new(0.0, -(stencil::ASCENT - stencil::DESCENT))
+                } else {
+                    DVec2::new(stencil::ADVANCE, 0.0)
+                };
+                pen += adv * kp * p.spacing;
+            }
+            continue;
+        }
+        let (f, key) = match (&face, which) {
+            (Some(face), 0) => (face, font.key),
+            _ => (&fb_face, fb_font.key),
+        };
         let mut buf = rustybuzz::UnicodeBuffer::new();
         buf.push_str(&p.text[a..b]);
         buf.set_direction(dir);

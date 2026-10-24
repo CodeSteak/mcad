@@ -195,11 +195,14 @@ pnpm build                                  # -> web/dist (statisch, z. B. GitHu
 - `text("Schild", size = 10, font = "Inter:style=Bold", halign = "center")` wie in OpenSCAD
   (Größe, Laufweite, Ausrichtung, `spacing`, `direction`, `language`, `script`; Hülle und
   Fläche gleich OpenSCAD 2021.01), Umrisse exakt (Bézier), Kerning und Ligaturen über
-  `rustybuzz`. Mitgeliefert (SIL OFL): JetBrains Mono (Standard, Regular/Bold), Inter
-  (Regular/Bold), Allerta Stencil; eigene Schriften mit `font = "datei.ttf"` (Projektdatei,
-  in der UI „⇡ Datei laden“). Pflicht-Zeichensatz mit Umlauten, ß/ẞ und Satzzeichen; fehlt
-  ein Zeichen in einer Schrift, kommt es mit Warnung aus JetBrains Mono. `"cad stencil mono"`
-  ist als künftige Standardschrift (eigene Schablonenschrift) reserviert.
+  `rustybuzz`. **Standardschrift** ist die eigene Schablonenschrift `"cad stencil mono"`
+  (Regular/Bold): monospaced, aus Geraden und Kreisbögen, mit Stegen – keine Glyphe hat ein
+  Loch, ausgeschnitten fällt nichts heraus; `stroke_width` (Strichstärke, Standard
+  0,14·size, Bold 0,2·size) und `bridge_width` (Stegbreite, Standard 0,1·size, 0 = ohne Stege)
+  in mm. Mitgeliefert (SIL OFL): JetBrains Mono (Regular/Bold), Inter (Regular/Bold), Allerta
+  Stencil; eigene Schriften mit `font = "datei.ttf"` (Projektdatei, in der UI „⇡ Datei
+  laden“). Pflicht-Zeichensatz mit Umlauten, ß/ẞ und Satzzeichen; fehlt ein Zeichen in einer
+  Schrift, kommt es mit Warnung aus JetBrains Mono.
 - `import("logo.svg", id = "…", scale = 1, dpi = 96, center = false)` liest SVG als exaktes
   2D-Profil: `path` (alle Befehle), `rect`, `circle`, `ellipse`, `polygon`, `polyline`,
   `line`, Gruppen mit `transform`, `viewBox`/Einheiten, `fill-rule`; Kreise bleiben Kreise.
@@ -342,7 +345,8 @@ CMakeLists, Build-Skript und Compiler: `scripts/ci/smlib-key.sh`). Ist der SMLib
   nicht Teil des Repositorys; `smlib/patches/` enthält Änderungen daran.
 - solidcore (tangency-labs/solidcore, optionale Abhängigkeit): Apache-2.0.
 - Mitgelieferte Schriften in `crates/cad-font/fonts/` (JetBrains Mono, Inter, Allerta Stencil):
-  SIL Open Font License 1.1, Lizenztexte und Quellen daneben (`fonts/README.md`).
+  SIL Open Font License 1.1, Lizenztexte und Quellen daneben (`fonts/README.md`). Die
+  Standardschrift „cad stencil mono“ ist Teil des Quelltexts (`crates/cad-font/src/stencil.rs`).
   `rustybuzz`/`ttf-parser` (MIT), `roxmltree` (MIT/Apache-2.0).
 - Weitere Abhängigkeiten über Cargo und pnpm (u. a. React, three.js, CodeMirror) unter ihren
   jeweiligen Lizenzen (überwiegend MIT/Apache-2.0).

@@ -307,10 +307,23 @@ impl<'a> Ev<'a> {
         self.profiles(s, profiles, ctx, dy);
     }
 
-    /// `text(t, size, font, halign, valign, spacing, direction, language, script)`.
+    /// `text(t, size, font, halign, valign, spacing, direction, language, script, stroke_width,
+    /// bridge_width)`; the last two (mm) only for the stencil font.
     #[inline(never)]
     pub(crate) fn m_text(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
-        let names = ["text", "size", "font", "halign", "valign", "spacing", "direction", "language", "script"];
+        let names = [
+            "text",
+            "size",
+            "font",
+            "halign",
+            "valign",
+            "spacing",
+            "direction",
+            "language",
+            "script",
+            "stroke_width",
+            "bridge_width",
+        ];
         let p = self.bind("text", a, &names, 9);
         let text = match p[0].map(|x| &x.val.v) {
             None | Some(Value::Undef) => String::new(),
@@ -365,28 +378,64 @@ impl<'a> Ev<'a> {
             }
             name => {
                 let n = cad_font::FontName::parse(name.as_deref().unwrap_or(""));
-                let (b, pick) = cad_font::builtin(&n);
+                let (font, pick) = cad_font::select(&n);
+                let (fam, sty) = font.names();
                 match pick {
                     cad_font::Pick::Exact => {}
-                    cad_font::Pick::Stencil => self.info(
-                        fspan,
-                        format!("Schablonenschrift „{}“ folgt; vorerst {}", cad_font::STENCIL_FAMILY, b.family),
-                    ),
                     cad_font::Pick::StyleMissing => self.warn(
                         fspan,
-                        format!("Stil „{}“ von {} nicht mitgeliefert; {} {}", n.style.unwrap_or_default(), b.family, b.family, b.style),
+                        format!("Stil „{}“ von {fam} nicht mitgeliefert; {fam} {sty}", n.style.unwrap_or_default()),
                     ),
                     cad_font::Pick::Fallback => self.warn(
                         fspan,
                         format!(
-                            "Schrift „{}“ nicht vorhanden, verwendet wird {} (mitgeliefert: JetBrains Mono, Inter, Allerta Stencil; eigene Schrift: font = \"datei.ttf\")",
-                            n.family, b.family
+                            "Schrift „{}“ nicht vorhanden, verwendet wird die Standardschrift {fam} (mitgeliefert: cad stencil mono, JetBrains Mono, Inter, Allerta Stencil; eigene Schrift: font = \"datei.ttf\")",
+                            n.family
                         ),
                     ),
                 }
-                cad_font::Font::builtin(b)
+                font
             }
         };
+        // stroke and bridge width of the stencil font (mm)
+        for (i, what) in [(9, "stroke_width"), (10, "bridge_width")] {
+            let Some(arg) = p[i] else { continue };
+            if matches!(arg.val.v, Value::Undef) {
+                continue;
+            }
+            let span = arg.expr.span;
+            if !font.is_stencil() {
+                self.warn(span, format!("text: `{what}` wirkt nur mit der Schrift „{}“", cad_font::STENCIL_FAMILY));
+                continue;
+            }
+            let (lo, hi, zero) = if i == 9 {
+                (0.0, cad_font::stencil::MAX_STROKE, false)
+            } else {
+                (cad_font::stencil::MIN_BRIDGE, cad_font::stencil::MAX_BRIDGE, true)
+            };
+            let v = match arg.val.as_num() {
+                Some(v) if v.is_finite() && (v > 0.0 || zero && v == 0.0) => v,
+                _ => {
+                    let need = if zero { "eine Zahl ≥ 0" } else { "eine positive Zahl" };
+                    self.warn(span, format!("text: `{what}` muss {need} sein (mm)"));
+                    continue;
+                }
+            };
+            let (lo, hi) = (lo * tp.size, hi * tp.size);
+            if v > hi || v > 0.0 && v < lo {
+                let lim = if v > hi {
+                    format!("höchstens {} mm", fmt_num(hi))
+                } else {
+                    format!("mindestens {} mm (oder 0)", fmt_num(lo))
+                };
+                self.warn(span, format!("text: `{what}` = {} mm bei size = {}: {lim}", fmt_num(v), fmt_num(tp.size)));
+            }
+            if i == 9 {
+                tp.stroke_width = Some(v);
+            } else {
+                tp.bridge_width = Some(v);
+            }
+        }
         if tp.text.is_empty() {
             return;
         }

@@ -665,3 +665,24 @@ export function record16(entry: ScenarioC): void {
   else all.push(entry);
   writeFileSync(f, JSON.stringify(all, null, 2));
 }
+
+// ---------------------------------------------------------------- Bericht 17 (Schablonenschrift)
+
+export const REPORT17_DIR = join(here, "../../reports/tmp/report17");
+
+export async function screenshot17(page: Page, name: string, area: "view" | "full" | "editor" = "full"): Promise<void> {
+  mkdirSync(join(REPORT17_DIR, "img"), { recursive: true });
+  const sel = { view: "section.viewcol", editor: "section.editorpane" } as const;
+  const clip = area === "full" ? null : await page.locator(sel[area]).boundingBox();
+  await page.screenshot({ path: join(REPORT17_DIR, "img", `${name}.jpg`), type: "jpeg", quality: 85, ...(clip ? { clip } : {}) });
+}
+
+export function record17(entry: ScenarioC): void {
+  mkdirSync(REPORT17_DIR, { recursive: true });
+  const f = join(REPORT17_DIR, "scenarios.json");
+  const all: ScenarioC[] = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
+  const i = all.findIndex((e) => e.id === entry.id);
+  if (i >= 0) all[i] = entry;
+  else all.push(entry);
+  writeFileSync(f, JSON.stringify(all, null, 2));
+}

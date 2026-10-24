@@ -109,15 +109,21 @@ fn text_profiles_and_fonts() {
     assert!(out.diagnostics.is_empty(), "{:?}", out.diagnostics);
     // one profile per glyph; O and b have a hole each
     assert_eq!(sketches(&out), vec![(2, true), (2, true)]);
+    // default font: cad stencil mono, its A without a hole (open apex), single glyph
     let (_, out) = run("text(\"A\");", &[]);
-    assert_eq!(sketches(&out), vec![(2, true)], "default font, single glyph without group");
-    // fonts: style missing, unknown family, reserved stencil name
+    assert!(out.diagnostics.is_empty(), "{:?}", out.diagnostics);
+    assert_eq!(sketches(&out), vec![(1, true)], "default font, single glyph without group");
+    let (_, out) = run("text(\"O\");", &[]);
+    assert_eq!(sketches(&out), vec![(2, true)], "O: two halves, no hole");
+    let (_, out) = run("text(\"A\", font = \"JetBrains Mono\");", &[]);
+    assert_eq!(sketches(&out), vec![(2, true)], "JetBrains Mono A: outline and hole");
+    // fonts: style missing, unknown family (default font), the stencil font by name
     let (_, out) = run("text(\"A\", font = \"Inter:style=Thin\");", &[]);
     assert!(msgs(&out, Severity::Warning).iter().any(|m| m.contains("Thin")));
     let (_, out) = run("text(\"A\", font = \"Comic Sans\");", &[]);
-    assert!(msgs(&out, Severity::Warning).iter().any(|m| m.contains("Comic Sans") && m.contains("JetBrains Mono")));
-    let (_, out) = run("text(\"A\", font = \"cad stencil mono\");", &[]);
-    assert!(msgs(&out, Severity::Info).iter().any(|m| m.contains("Schablonenschrift")));
+    assert!(msgs(&out, Severity::Warning).iter().any(|m| m.contains("Comic Sans") && m.contains("cad stencil mono")));
+    let (_, out) = run("text(\"A\", font = \"cad stencil mono:style=Bold\");", &[]);
+    assert!(out.diagnostics.is_empty(), "{:?}", out.diagnostics);
     // parameters
     let (_, out) = run("text(\"A\", halign = \"mitte\");", &[]);
     assert!(msgs(&out, Severity::Warning).iter().any(|m| m.contains("halign")));
@@ -133,6 +139,46 @@ fn text_profiles_and_fonts() {
     // umlauts and punctuation of the bundled fonts need no fallback
     let (_, out) = run("text(\"Größe – „Äpfel“ ÖÜäöüẞ …\", font = \"Inter\");", &[]);
     assert!(out.diagnostics.is_empty(), "{:?}", out.diagnostics);
+}
+
+/// Stencil font parameters `stroke_width` and `bridge_width` (mm): area, limits, other fonts.
+#[test]
+fn text_stencil_parameters() {
+    let area = |src: &str| {
+        let (_, out) = run(src, &[]);
+        let a: f64 = out
+            .tree
+            .nodes
+            .iter()
+            .filter_map(|n| match &n.op {
+                Op::Profile(Profile::Sketch { contours, .. }) => Some(contours),
+                _ => None,
+            })
+            .flatten()
+            .map(|c| {
+                let pts: Vec<_> = c.segs.iter().flat_map(|s| s.to_kernel().unwrap().sample(1e-4)).collect();
+                (0..pts.len()).map(|i| pts[i].perp_dot(pts[(i + 1) % pts.len()]) / 2.0).sum::<f64>()
+            })
+            .sum();
+        (a, out)
+    };
+    let (a0, out) = area("text(\"HALLO\", size = 10);");
+    assert!(out.diagnostics.is_empty(), "{:?}", out.diagnostics);
+    let (a1, out) = area("text(\"HALLO\", size = 10, stroke_width = 1.4, bridge_width = 1);");
+    assert!(out.diagnostics.is_empty() && (a1 - a0).abs() < 1e-6 * a0, "defaults 0.14/0.1 × size: {a1} vs {a0}");
+    let (a2, _) = area("text(\"HALLO\", size = 10, stroke_width = 2);");
+    assert!(a2 > 1.3 * a0);
+    let (a3, _) = area("text(\"HALLO\", size = 10, bridge_width = 0);");
+    assert!(a3 > a0, "no bridges: more material");
+    // limits and wrong values: warnings at the argument
+    let (_, out) = run("text(\"A\", size = 10, stroke_width = 3, bridge_width = 0.1);", &[]);
+    let w = msgs(&out, Severity::Warning);
+    assert!(w.iter().any(|m| m.contains("stroke_width") && m.contains("höchstens 2 mm")), "{w:?}");
+    assert!(w.iter().any(|m| m.contains("bridge_width") && m.contains("mindestens 0.3 mm")), "{w:?}");
+    let (_, out) = run("text(\"A\", stroke_width = -1);", &[]);
+    assert!(msgs(&out, Severity::Warning).iter().any(|m| m.contains("positive Zahl")));
+    let (_, out) = run("text(\"A\", font = \"Inter\", bridge_width = 1);", &[]);
+    assert!(msgs(&out, Severity::Warning).iter().any(|m| m.contains("wirkt nur") && m.contains("cad stencil mono")));
 }
 
 #[test]
