@@ -1,17 +1,18 @@
-//! Geometry helpers of `cad measure`: exact minimum distance between two triangle meshes
-//! (triangle–triangle distance with a bounding volume hierarchy).
+//! Minimum distance between two triangle sets (triangle–triangle distance with a bounding
+//! volume hierarchy). Points and segments are degenerate triangles (`[p, p, p]`, `[a, b, b]`).
 //!
-//! The meshes are tessellations of the exact B-reps; each deviates from its surface by at
-//! most the chordal tolerance, so the distance of the meshes differs from the distance of
-//! the solids by at most the sum of both tolerances.
+//! Used for the coarse search of the exact measurements and for `cad measure --clearance`:
+//! the meshes are tessellations of the exact B-reps; each deviates from its surface by at most
+//! the chordal tolerance, so the distance of the meshes differs from the distance of the
+//! solids by at most the sum of both tolerances.
 
 use cad_kernel::Mesh;
 use glam::{DMat4, DVec3};
 
-pub(crate) type Tri = [DVec3; 3];
+pub type Tri = [DVec3; 3];
 
 /// Triangles of `mesh` placed with `m`.
-pub(crate) fn triangles(mesh: &Mesh, m: &DMat4) -> Vec<Tri> {
+pub fn triangles(mesh: &Mesh, m: &DMat4) -> Vec<Tri> {
     let v = |i: u32| {
         let k = i as usize * 3;
         m.transform_point3(DVec3::new(
@@ -77,7 +78,7 @@ fn build(tris: &[Tri], boxes: &[Aabb], mut idx: Vec<usize>) -> Node {
 }
 
 /// Closest point on triangle `t` to `p` (Ericson, Real-Time Collision Detection 5.1.5).
-fn closest_on_tri(p: DVec3, t: &Tri) -> DVec3 {
+pub fn closest_on_tri(p: DVec3, t: &Tri) -> DVec3 {
     let (a, b, c) = (t[0], t[1], t[2]);
     let (ab, ac, ap) = (b - a, c - a, p - a);
     let (d1, d2) = (ab.dot(ap), ac.dot(ap));
@@ -114,7 +115,7 @@ fn closest_on_tri(p: DVec3, t: &Tri) -> DVec3 {
 }
 
 /// Closest points of segments p1q1 and p2q2 (Ericson 5.1.9).
-fn closest_seg_seg(p1: DVec3, q1: DVec3, p2: DVec3, q2: DVec3) -> (DVec3, DVec3) {
+pub fn closest_seg_seg(p1: DVec3, q1: DVec3, p2: DVec3, q2: DVec3) -> (DVec3, DVec3) {
     let (d1, d2, r) = (q1 - p1, q2 - p2, p1 - p2);
     let (a, e, f) = (d1.dot(d1), d2.dot(d2), d2.dot(r));
     let eps = 1e-18;
@@ -174,7 +175,7 @@ fn seg_hits_tri(p: DVec3, q: DVec3, t: &Tri) -> Option<DVec3> {
 }
 
 /// Distance of two triangles and the closest points.
-fn tri_tri(a: &Tri, b: &Tri) -> (f64, DVec3, DVec3) {
+pub fn tri_tri(a: &Tri, b: &Tri) -> (f64, DVec3, DVec3) {
     for (x, y) in [(a, b), (b, a)] {
         for k in 0..3 {
             if let Some(h) = seg_hits_tri(x[k], x[(k + 1) % 3], y) {
@@ -201,14 +202,15 @@ fn tri_tri(a: &Tri, b: &Tri) -> (f64, DVec3, DVec3) {
 }
 
 /// Result of [`min_distance`].
-pub(crate) struct Distance {
+#[derive(Debug, Clone, Copy)]
+pub struct Distance {
     pub dist: f64,
     pub a: DVec3,
     pub b: DVec3,
 }
 
 /// Minimum distance between two triangle sets (0 if they touch or intersect).
-pub(crate) fn min_distance(a: &[Tri], b: &[Tri]) -> Option<Distance> {
+pub fn min_distance(a: &[Tri], b: &[Tri]) -> Option<Distance> {
     if a.is_empty() || b.is_empty() {
         return None;
     }

@@ -76,7 +76,7 @@ volume: number | null, };
 /**
  * Message from the UI to the engine.
  */
-export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, colors?: boolean, } | { "type": "RequestColorRegions", meshes: boolean, coarse?: boolean, version?: number, } | { "type": "SetFilament", color: string, filament?: number, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, } | { "type": "Sketch" } & SketchRequest;
+export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, colors?: boolean, } | { "type": "RequestColorRegions", meshes: boolean, coarse?: boolean, version?: number, } | { "type": "SetFilament", color: string, filament?: number, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, } | { "type": "Sketch" } & SketchRequest | { "type": "Measure" } & MeasureRequest;
 
 /**
  * Tools of the sketch editor.
@@ -221,6 +221,233 @@ segment: SrcRange | null,
 angle: number | null, raster: SketchRaster | null, };
 
 /**
+ * What to measure (Plan 18).
+ */
+export type MeasureKind = "distance" | "radius" | "angle" | "length" | "area" | "body" | "wall";
+
+/**
+ * Section plane: through `point`, `normal` (unit) points into the removed half (convention
+ * of `cad render --section`).
+ */
+export type SectionPlaneRef = { point: Vec3, normal: Vec3, };
+
+/**
+ * The face under the mouse (UI raycast on the displayed mesh).
+ */
+export type MeasureHit = { 
+/**
+ * Node whose mesh was hit.
+ */
+node: number, 
+/**
+ * `MeshData.tri_faces` of the hit triangle.
+ */
+face: number, 
+/**
+ * Hit point, context coordinates.
+ */
+point: Vec3, };
+
+/**
+ * A picked element. `kind`: `vertex`, `mid` (edge midpoint), `center` (circle centre),
+ * `edge`, `face`, `body`; in a section `section_vertex`, `section_mid`, `section_center`,
+ * `section_edge`, `region`; `point` (a free point: anchor, grid point, coordinate).
+ */
+export type MeasurePick = { kind: string, 
+/**
+ * Node the element belongs to.
+ */
+node: number, 
+/**
+ * Body (shape) of the node.
+ */
+body: number, 
+/**
+ * B-rep edge or face of the body; in a section: contour and segment, or region.
+ */
+edge?: number, face?: number, contour?: number, segment?: number, region?: number, 
+/**
+ * Snapped point (context coordinates).
+ */
+point: Vec3, 
+/**
+ * Display text (`Kreismitte · Kreis R 3`).
+ */
+label: string, 
+/**
+ * Reference for `cad measure` (`center@[10, 10, 6]`, `face@[…]`, `k.ecke`).
+ */
+reference: string, 
+/**
+ * Provenance: code lines, named instances, grid planes/points and anchors the element
+ * lies on.
+ */
+origin: Array<string>, 
+/**
+ * Highlight while hovering (polylines, context coordinates).
+ */
+lines: Array<Array<Vec3>>, };
+
+export type MeasureRequest = { 
+/**
+ * Echoed in the answer.
+ */
+id: number, kind: MeasureKind, 
+/**
+ * Elements picked so far (from the previous answer's `picks`).
+ */
+picks: Array<MeasurePick>, 
+/**
+ * Mouse ray; without it only the prompt (and `section` info) is answered.
+ */
+ray?: Ray, 
+/**
+ * Face under the mouse (raycast of the UI).
+ */
+hit?: MeasureHit, 
+/**
+ * Size of a pixel at distance 1 from the camera (2·tan(fov/2)/height).
+ */
+pixel: number, 
+/**
+ * Snap radius in pixels.
+ */
+snap_px: number, 
+/**
+ * Alt: no snapping to points, the exact point on the face/edge.
+ */
+free: boolean, 
+/**
+ * Mouse click: adds the pick; a complete measurement answers `result`.
+ */
+click: boolean, 
+/**
+ * Measure in this section plane (contours of plane ∩ B-rep).
+ */
+section?: SectionPlaneRef, 
+/**
+ * The section view is on (elements in the removed half are not offered).
+ */
+clip?: SectionPlaneRef, 
+/**
+ * Node to measure when nothing is hit (default: the root).
+ */
+node?: number, };
+
+/**
+ * One value of a measurement.
+ */
+export type MeasureValue = { 
+/**
+ * `distance`, `dx`, `radius`, `diameter`, `angle`, `length`, `area`, `volume`, …
+ */
+key: string, label: string, value: number, 
+/**
+ * `mm`, `mm²`, `mm³`, `°`.
+ */
+unit: string, };
+
+/**
+ * A completed measurement (UI: drawn in the view and listed; CLI: `measurements`).
+ */
+export type Measurement = { kind: MeasureKind, 
+/**
+ * `Abstand`, `Radius`, `Winkel`, `Länge`, `Fläche`, `Körper`, `Wandstärke`.
+ */
+title: string, 
+/**
+ * The main value (`values[0]`).
+ */
+value: number, unit: string, 
+/**
+ * Short text in the view (`12.5 mm`, `R 3 · ⌀ 6`, `45°`).
+ */
+label: string, values: Array<MeasureValue>, 
+/**
+ * Dimension lines (context coordinates).
+ */
+lines: Array<Array<Vec3>>, 
+/**
+ * Help lines (axes, extension lines), drawn dashed.
+ */
+guides: Array<Array<Vec3>>, 
+/**
+ * Markers (foot points, centres).
+ */
+points: Array<Vec3>, 
+/**
+ * Where the label goes.
+ */
+at: Vec3, 
+/**
+ * Further lines of text (foot points, Δ, axis, provenance).
+ */
+details: Array<string>, picks: Array<MeasurePick>, 
+/**
+ * From the exact geometry in closed form; else `tol` is the accuracy.
+ */
+exact: boolean, tol?: number, 
+/**
+ * Measured in this section plane.
+ */
+section?: SectionPlaneRef, 
+/**
+ * The measurement as text (copy, code comment).
+ */
+text: string, 
+/**
+ * Arguments of `cad measure` after the file name that repeat it.
+ */
+cli: Array<string>, };
+
+/**
+ * The section measured in (answer to requests with `section`).
+ */
+export type MeasureSectionInfo = { plane: SectionPlaneRef, regions: number, contours: number, 
+/**
+ * mm²
+ */
+area: number, 
+/**
+ * All contour segments in closed form (lines, circles, ellipses from analytic surfaces).
+ */
+exact: boolean, 
+/**
+ * Largest deviation of the kernel's intersection curves from the closed forms (mm).
+ */
+max_dev: number, 
+/**
+ * Why there is no section (kernel boolean failed, plane misses the model).
+ */
+message?: string, };
+
+export type MeasureAnswer = { id: number, 
+/**
+ * Scene version the picks belong to.
+ */
+version: number, 
+/**
+ * Element under the mouse.
+ */
+hover: MeasurePick | null, 
+/**
+ * Picks after this message.
+ */
+picks: Array<MeasurePick>, 
+/**
+ * Completed measurement (after a click).
+ */
+result: Measurement | null, 
+/**
+ * What to pick next.
+ */
+prompt: string, 
+/**
+ * Why a pick was not accepted.
+ */
+message: string | null, section: MeasureSectionInfo | null, };
+
+/**
  * Where a dragged handle goes.
  */
 export type DragTarget = { "kind": "point", pos: Vec3, } | { "kind": "value", value: number, } | { "kind": "snap", snap: SnapRef, };
@@ -248,7 +475,7 @@ colors?: boolean,
 /**
  * Notes for the user (multi-colour 3MF: objects, material outside parts, slicers).
  */
-notes?: Array<string>, } | { "type": "ColorRegions", version: number, items: Array<RegionSet>, } | { "type": "Error", message: string, version: number | null, node: number | null, } | { "type": "Sketch" } & SketchAnswer;
+notes?: Array<string>, } | { "type": "ColorRegions", version: number, items: Array<RegionSet>, } | { "type": "Error", message: string, version: number | null, node: number | null, } | { "type": "Sketch" } & SketchAnswer | { "type": "Measure" } & MeasureAnswer;
 
 export type Severity = "error" | "warning" | "info";
 

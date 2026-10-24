@@ -253,6 +253,20 @@ pub struct Part<S> {
     pub solid: bool,
 }
 
+/// One part of a node prepared for measuring ([`Engine::measure_parts`]).
+#[derive(Debug, Clone)]
+pub struct MeasurePart {
+    /// Index in [`Evaluation::parts`].
+    pub part: usize,
+    /// Context coordinates.
+    pub brep: Rc<cad_kernel::brep::Brep>,
+    /// Context coordinates, face ids as in `brep`.
+    pub mesh: Rc<Mesh>,
+    pub solid: bool,
+    /// Volume, area, centroid (solids).
+    pub mass: Option<MassProps>,
+}
+
 /// Result of one node (cached by key).
 #[derive(Debug)]
 pub(crate) struct NodeOutput<S> {
@@ -988,6 +1002,83 @@ where
         let m = self.mass_props_uncached(ev, node)?;
         self.cache.insert(slot, Cached::Mass(m), 128);
         Ok(m)
+    }
+
+    /// The shapes of a node for measuring (Plan 18): per part the neutral B-rep and a
+    /// tessellation with tolerance `tol`, both placed with `world` (context coordinates; face
+    /// ids of the mesh are those of the B-rep), whether it is a solid, and its mass
+    /// properties. Not cached (the session keeps the result per node).
+    pub fn measure_parts(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        node: NodeIdx,
+        world: &DMat4,
+        tol: f64,
+    ) -> Result<Vec<MeasurePart>, String> {
+        let mut out = Vec::new();
+        for (i, p) in ev.parts(node).iter().enumerate() {
+            let placed;
+            let s = if *world == DMat4::IDENTITY {
+                &p.shape
+            } else {
+                placed = self.kernel.transform(&p.shape, world).map_err(|e| e.to_string())?;
+                &placed
+            };
+            if self.kernel.is_empty(s) {
+                continue;
+            }
+            let brep = self.kernel.brep(s).map_err(|e| e.to_string())?;
+            let mesh = self.kernel.tessellate(s, tol).map_err(|e| e.to_string())?;
+            let mass = if p.solid { self.kernel.mass_props(s).ok() } else { None };
+            out.push(MeasurePart { part: i, brep: Rc::new(brep), mesh: Rc::new(mesh), solid: p.solid, mass });
+        }
+        Ok(out)
+    }
+
+    /// The kept half `(q − point) · normal ≤ 0` of each solid part of a node placed with
+    /// `world`, as neutral B-reps (`None`: nothing of the part stays). One kernel boolean per
+    /// part (intersection with a box beyond the part); not cached.
+    pub fn section_parts(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        node: NodeIdx,
+        world: &DMat4,
+        point: DVec3,
+        normal: DVec3,
+    ) -> Result<Vec<(usize, Option<cad_kernel::brep::Brep>)>, String> {
+        let n = normal.try_normalize().ok_or("Schnitt: Normale ist null")?;
+        let x = n.any_orthonormal_vector();
+        let y = n.cross(x);
+        let frame = DMat4::from_cols(x.extend(0.0), y.extend(0.0), n.extend(0.0), point.extend(1.0));
+        let mut out = Vec::new();
+        for (i, p) in ev.parts(node).iter().enumerate() {
+            if !p.solid {
+                continue;
+            }
+            let placed;
+            let s = if *world == DMat4::IDENTITY {
+                &p.shape
+            } else {
+                placed = self.kernel.transform(&p.shape, world).map_err(|e| e.to_string())?;
+                &placed
+            };
+            let Some((lo, hi)) = self.kernel.bounds(s).map_err(|e| e.to_string())? else { continue };
+            let c = 0.5 * (lo + hi);
+            let l = 2.0 * ((hi - lo).length() + (c - point).length()) + 1.0;
+            let b =
+                self.kernel.make_box(DVec3::new(-l, -l, -l), DVec3::new(l, l, 0.0), 0).map_err(|e| e.to_string())?;
+            let b = self.kernel.transform(&b, &frame).map_err(|e| e.to_string())?;
+            let cut = self
+                .kernel
+                .boolean(cad_kernel::BoolOp::Intersection, &[s.clone(), b], 0)
+                .map_err(|e| format!("Schnitt im Kernel: {e}"))?;
+            if self.kernel.is_empty(&cut) {
+                out.push((i, None));
+                continue;
+            }
+            out.push((i, Some(self.kernel.brep(&cut).map_err(|e| e.to_string())?)));
+        }
+        Ok(out)
     }
 
     /// Neutral B-rep of part `part` of a node, placed with `world` (cached by key and matrix).

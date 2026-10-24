@@ -333,6 +333,7 @@ dependencies = [
  "cad-eval",
  "cad-ipc",
  "cad-kernel",
+ "cad-measure",
  "cad-render",
  "cad-session",
  "cad-step",
@@ -442,6 +443,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cad-measure"
+version = "0.1.0"
+dependencies = [
+ "cad-kernel",
+ "glam",
+ "kernel-smlib",
+ "serde",
+]
+
+[[package]]
 name = "cad-outline"
 version = "0.1.0"
 dependencies = [
@@ -468,6 +479,7 @@ dependencies = [
  "cad-eval",
  "cad-ir",
  "cad-kernel",
+ "cad-measure",
  "cad-syntax",
  "glam",
  "kernel-smlib",

@@ -27,6 +27,7 @@
 //!   is the identity and costs nothing.
 
 pub mod convert;
+pub mod measure;
 pub mod protocol;
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
@@ -151,6 +152,8 @@ pub struct Session<K: Kernel> {
     tags_identity: bool,
     /// Keys of every node of every job this session started.
     touched: HashSet<CacheKey>,
+    /// Measure models and sections of the last evaluation (Plan 18).
+    measure_cache: measure::MeasureCache,
 }
 
 impl<K: Kernel> Session<K>
@@ -190,6 +193,7 @@ where
             tags: HashMap::new(),
             tags_identity: true,
             touched: HashSet::new(),
+            measure_cache: measure::MeasureCache::default(),
         }
     }
 
@@ -449,6 +453,7 @@ where
                 }
             }
             ToEngine::Sketch(req) => self.sketch(&req),
+            ToEngine::Measure(req) => self.measure(&req),
         }
     }
 
