@@ -115,9 +115,15 @@ async function clickAt(page: Page, pts: Array<{ p: P3; kind?: string }>): Promis
   for (const { p, kind } of pts) {
     await hoverAt(page, p, kind);
     const q = await scr(page, p);
-    const before = (await info(page)).answers;
+    const b = await info(page);
     await page.mouse.click(q.x + 0.3, q.y + 0.3);
-    await waitMeasure(page, "(m, a) => m.answers > a", before);
+    // A hover answer still on its way also counts as an answer: wait for the click's own effect
+    // (a pick, a measurement or the reason why the element was not accepted).
+    await waitMeasure(
+      page,
+      "(m, a) => m.answers > a[0] && (m.picks.length !== a[1] || m.results.length !== a[2] || m.message !== null)",
+      [b.answers, b.picks.length, b.results.length],
+    );
   }
   return info(page);
 }
