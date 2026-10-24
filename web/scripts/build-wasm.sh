@@ -32,7 +32,7 @@ done
 # 1. Rust → wasm32
 cargo_flags=(-p cad-wasm --target wasm32-unknown-unknown)
 [ "$PROFILE" = release ] && cargo_flags+=(--release)
-(cd "$ROOT" && cargo build "${cargo_flags[@]}")
+(cd "$ROOT" && "${CARGO:-cargo}" build "${cargo_flags[@]}")
 WASM="$ROOT/target/wasm32-unknown-unknown/$PROFILE/cad_wasm.wasm"
 
 # 2. wasm-bindgen-cli in the version of the crate
@@ -40,7 +40,7 @@ want=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/version = |"/, ""); print
 have=$(wasm-bindgen --version 2>/dev/null | awk '{ print $2 }' || true)
 if [ "$have" != "$want" ]; then
   echo "installing wasm-bindgen-cli $want (found: ${have:-none})"
-  cargo install wasm-bindgen-cli --version "$want" --locked
+  "${CARGO:-cargo}" install wasm-bindgen-cli --version "$want" --locked
 fi
 
 rm -rf "$OUT"

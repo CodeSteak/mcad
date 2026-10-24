@@ -1,0 +1,20 @@
+controller-cad – Lizenzhinweise der installierten Dateien
+
+cad (Binary)
+  controller-cad selbst: privat, nicht lizenziert (Cargo: license = "UNLICENSED").
+  Statisch gelinkt:
+  - SMLib/SM_API (NVIDIA usd-brep, Fork tangency-labs/smlib): Apache-2.0,
+    Lizenztext: SMLib-LICENSE, Hinweise: SMLib-THIRD_PARTY_NOTICES.md.
+  - Rust-Crates (u. a. Tauri 2, wry, tao, serde, clap, rustybuzz, ttf-parser, roxmltree,
+    notify, similar): überwiegend MIT und/oder Apache-2.0, siehe die Angaben in Cargo.lock
+    bzw. auf crates.io.
+  - Eingebettete Web-Oberfläche (React, three.js, CodeMirror, zustand, Lezer): MIT.
+  Eingebettete Schriften (crates/cad-font/fonts, unverändert):
+  - JetBrains Mono 2.304 (Regular, Bold): SIL Open Font License 1.1, OFL-JetBrainsMono.txt
+  - Inter 4.1 (Regular, Bold): SIL Open Font License 1.1, OFL-Inter.txt
+  - Allerta Stencil: SIL Open Font License 1.1 (Reserved Font Name „Allerta“),
+    OFL-AllertaStencil.txt
+  Quellen und Prüfsummen: fonts-README.md.
+  Die Standardschrift „cad stencil mono“ ist Teil des Quelltexts (keine Schriftdatei).
+
+Icons (share/icons/hicolor/*/apps/controller-cad.png): Teil von controller-cad.
