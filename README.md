@@ -217,7 +217,7 @@ make arch-test   # frischer archlinux-Container: pacman -U, CLI headless, UI unt
 sudo pacman -U target/arch/controller-cad-*.pkg.tar.zst
 ```
 
-- `pkgver` = Cargo-Version + Git-Stand (`0.1.0.r<Commits>.g<Hash>`); das Archiv ist `git archive
+- `pkgver` = Cargo-Version + Git-Stand (`0.2.0.r<Commits>.g<Hash>`); das Archiv ist `git archive
   HEAD`, nicht eingecheckte Änderungen fehlen darin (`make` weist darauf hin).
 - `ARCH_BUILD=auto` (Vorgabe): auf Arch mit `makepkg` (`MAKEPKG_FLAGS`, Vorgabe `--syncdeps
   --force`), sonst in Docker (`packaging/arch/docker.sh`): ein Builder-Image aus `archlinux:latest`

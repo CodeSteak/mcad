@@ -311,7 +311,7 @@ dependencies = [
 
 [[package]]
 name = "cad-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-desktop",
  "cad-ipc",
@@ -325,7 +325,7 @@ dependencies = [
 
 [[package]]
 name = "cad-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "assert_cmd",
  "cad-app",
@@ -355,7 +355,7 @@ dependencies = [
 
 [[package]]
 name = "cad-desktop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-eval",
  "cad-ipc",
@@ -372,7 +372,7 @@ dependencies = [
 
 [[package]]
 name = "cad-engine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "cad-eval",
@@ -391,7 +391,7 @@ dependencies = [
 
 [[package]]
 name = "cad-eval"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-font",
  "cad-ir",
@@ -405,7 +405,7 @@ dependencies = [
 
 [[package]]
 name = "cad-font"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-kernel",
  "cad-outline",
@@ -415,7 +415,7 @@ dependencies = [
 
 [[package]]
 name = "cad-ipc"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "libc",
  "serde",
@@ -425,7 +425,7 @@ dependencies = [
 
 [[package]]
 name = "cad-ir"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "blake3",
  "cad-kernel",
@@ -436,7 +436,7 @@ dependencies = [
 
 [[package]]
 name = "cad-kernel"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "glam",
  "serde",
@@ -445,7 +445,7 @@ dependencies = [
 
 [[package]]
 name = "cad-measure"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-kernel",
  "glam",
@@ -455,14 +455,14 @@ dependencies = [
 
 [[package]]
 name = "cad-outline"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "glam",
 ]
 
 [[package]]
 name = "cad-render"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-engine",
  "cad-ir",
@@ -474,7 +474,7 @@ dependencies = [
 
 [[package]]
 name = "cad-session"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-engine",
  "cad-eval",
@@ -491,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "cad-step"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-kernel",
  "glam",
@@ -501,7 +501,7 @@ dependencies = [
 
 [[package]]
 name = "cad-svg"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-outline",
  "glam",
@@ -510,7 +510,7 @@ dependencies = [
 
 [[package]]
 name = "cad-syntax"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "insta",
  "serde",
@@ -518,7 +518,7 @@ dependencies = [
 
 [[package]]
 name = "cad-wasm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-session",
  "js-sys",
@@ -718,7 +718,7 @@ dependencies = [
 
 [[package]]
 name = "compat-tests"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-engine",
  "cad-eval",
@@ -2206,11 +2206,11 @@ dependencies = [
 
 [[package]]
 name = "kernel-mock"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "kernel-smlib"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-kernel",
  "cc",
@@ -2221,7 +2221,7 @@ dependencies = [
 
 [[package]]
 name = "kernel-solidcore"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cad-kernel",
  "glam",
