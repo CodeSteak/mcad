@@ -296,7 +296,19 @@ export async function waitHandles(page: Page, pred: string = "(hs) => hs.length 
       { timeout: 30_000, polling: 50 },
     ),
   );
-  return hook(page, (c) => c.handles());
+  // The handles of the previous cursor line stay drawn until the next frame rebuilds the
+  // overlay, and a refit (viewport resized) can still move them: answer once two reads a few
+  // frames apart agree and still satisfy the predicate.
+  let hs = await hook(page, (c) => c.handles());
+  for (let i = 0; i < 40; i++) {
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r)))));
+    const next = await hook(page, (c) => c.handles());
+    // eslint-disable-next-line no-new-func
+    const ok = (await page.evaluate(([src, h]) => new Function("hs", `return (${src})(hs);`)(h), [pred, next] as const)) as boolean;
+    if (ok && JSON.stringify(next) === JSON.stringify(hs)) return next;
+    hs = next;
+  }
+  return hs;
 }
 
 export async function frame(page: Page): Promise<void> {
