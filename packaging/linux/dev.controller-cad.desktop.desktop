@@ -1,3 +1,5 @@
+# Dateiname = App-ID = "identifier" in crates/cad-app/tauri.conf.json: die App setzt sie als
+# GLib-Programmnamen, damit ist sie die Wayland-app_id und die X11-WM_CLASS (Icon in der Taskleiste).
 [Desktop Entry]
 Type=Application
 Version=1.5
@@ -14,4 +16,4 @@ Categories=Graphics;3DGraphics;Engineering;
 Keywords=CAD;OpenSCAD;SCAD;3D;STEP;STL;3MF;
 MimeType=application/x-openscad;
 StartupNotify=true
-StartupWMClass=cad
+StartupWMClass=dev.controller-cad.desktop

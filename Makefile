@@ -73,6 +73,8 @@ ICON_SIZES   := $(sort $(patsubst assets/icon/png/%.png,%,$(wildcard assets/icon
 ICON_SIZES   := $(foreach s,$(ICON_SIZES),$(firstword $(subst x, ,$(s))))
 UI_SOURCES   := $(shell find web/src -type f -not -path 'web/src/wasm-pkg/*' 2>/dev/null) \
                 web/index.html web/vite.config.ts web/tsconfig.json web/package.json web/pnpm-lock.yaml
+# App-ID der Desktop-App (Tauri identifier): Name der Desktop-Datei, Wayland-app_id, WM_CLASS
+APP_ID  := $(shell sed -n 's/.*"identifier": *"\([^"]*\)".*/\1/p' crates/cad-app/tauri.conf.json)
 # Version: Cargo-Workspace; Paketversion mit Git-Stand (Arch-Schema für VCS-Pakete)
 VERSION := $(shell sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
 GIT_REV := $(shell $(GIT) rev-list --count HEAD 2>/dev/null)
@@ -233,7 +235,7 @@ typecheck: $(WASM_PKG) $(WEB_DEPS) ## tsc --noEmit (braucht die Typen aus web/sr
 install: ## cad, Desktop-Datei, Icons, Lizenzen, Beispiele nach DESTDIR+PREFIX (vorher make app)
 	@[ -x "$(CAD_BIN)" ] || { echo "make: $(CAD_BIN) fehlt – erst make app (oder make cli für headless)" >&2; exit 2; }
 	$(INSTALL) -Dm755 "$(CAD_BIN)" "$(DESTDIR)$(BINDIR)/cad"
-	$(INSTALL) -Dm644 packaging/linux/controller-cad.desktop "$(DESTDIR)$(APPDIR)/controller-cad.desktop"
+	$(INSTALL) -Dm644 packaging/linux/$(APP_ID).desktop "$(DESTDIR)$(APPDIR)/$(APP_ID).desktop"
 	@for s in $(ICON_SIZES); do \
 	  echo "$(INSTALL) -Dm644 assets/icon/png/$${s}x$${s}.png $(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/controller-cad.png"; \
 	  $(INSTALL) -Dm644 "assets/icon/png/$${s}x$${s}.png" "$(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/controller-cad.png"; done
@@ -252,7 +254,7 @@ install: ## cad, Desktop-Datei, Icons, Lizenzen, Beispiele nach DESTDIR+PREFIX (
 	@echo "installiert: $(DESTDIR)$(BINDIR)/cad (+ Desktop-Datei, Icons, $(LICENSEDIR), $(DOCDIR))"
 
 uninstall: ## Entfernt, was make install angelegt hat (gleiche PREFIX/DESTDIR)
-	rm -f "$(DESTDIR)$(BINDIR)/cad" "$(DESTDIR)$(APPDIR)/controller-cad.desktop"
+	rm -f "$(DESTDIR)$(BINDIR)/cad" "$(DESTDIR)$(APPDIR)/$(APP_ID).desktop" "$(DESTDIR)$(APPDIR)/controller-cad.desktop"
 	for s in $(ICON_SIZES); do rm -f "$(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/controller-cad.png"; done
 	rm -f "$(DESTDIR)$(ICONDIR)/scalable/apps/controller-cad.svg"
 	rm -rf "$(DESTDIR)$(LICENSEDIR)" "$(DESTDIR)$(DOCDIR)"

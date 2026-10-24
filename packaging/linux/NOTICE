@@ -8,7 +8,9 @@ cad (Binary)
   - Rust-Crates (u. a. Tauri 2, wry, tao, serde, clap, rustybuzz, ttf-parser, roxmltree,
     notify, similar): überwiegend MIT und/oder Apache-2.0, siehe die Angaben in Cargo.lock
     bzw. auf crates.io.
-  - Eingebettete Web-Oberfläche (React, three.js, CodeMirror, zustand, Lezer): MIT.
+  - Eingebettete Web-Oberfläche (React, three.js, CodeMirror, zustand, Lezer): MIT; Symbole
+    aus Lucide (lucide-react): ISC; Oberflächenschrift Inter 4.1 (dieselbe Datei wie unten):
+    SIL Open Font License 1.1.
   Eingebettete Schriften (crates/cad-font/fonts, unverändert):
   - JetBrains Mono 2.304 (Regular, Bold): SIL Open Font License 1.1, OFL-JetBrainsMono.txt
   - Inter 4.1 (Regular, Bold): SIL Open Font License 1.1, OFL-Inter.txt

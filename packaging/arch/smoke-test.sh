@@ -125,16 +125,19 @@ cad ui screenshot -o "$OUT/ui-screenshot.png"
 file "$OUT/ui-screenshot.png"
 echo "-- Fenster (xwininfo) und WM_CLASS (für StartupWMClass der Desktop-Datei)"
 xwininfo -root -tree | grep -E '"[^"]+": \("[^"]*" "[^"]*"\)' | head -n 5 || true
-win="$(xwininfo -root -tree | sed -n 's/^ *\(0x[0-9a-f]*\) "\([^"]*\)": ("cad".*/\1/p' | head -n 1)"
-[ -z "$win" ] || xprop -id "$win" WM_CLASS _NET_WM_NAME 2>/dev/null || true
-grep -q '^StartupWMClass=cad$' /usr/share/applications/controller-cad.desktop
+# App-ID (Tauri identifier) = Name der Desktop-Datei = WM_CLASS (X11) bzw. app_id (Wayland)
+desktop=/usr/share/applications/dev.controller-cad.desktop.desktop
+win="$(xwininfo -root -tree | sed -n 's/^ *\(0x[0-9a-f]*\) "\([^"]*\)": ("dev.controller-cad.desktop".*/\1/p' | head -n 1)"
+[ -n "$win" ] || { echo "kein Fenster mit WM_CLASS dev.controller-cad.desktop" >&2; exit 1; }
+xprop -id "$win" WM_CLASS _NET_WM_NAME 2>/dev/null || true
+grep -q '^StartupWMClass=dev.controller-cad.desktop$' "$desktop"
 stop_ui
 kill "$xvfb" 2>/dev/null || true
 
 step "Desktop-Datei"
 pacman -S --noconfirm --needed desktop-file-utils >/dev/null
-desktop-file-validate /usr/share/applications/controller-cad.desktop && echo "desktop-file-validate: ok"
-icon="$(sed -n 's/^Icon=//p' /usr/share/applications/controller-cad.desktop)"
+desktop-file-validate "$desktop" && echo "desktop-file-validate: ok"
+icon="$(sed -n 's/^Icon=//p' "$desktop")"
 ls /usr/share/icons/hicolor/*/apps/"$icon".* | sed 's|/usr/share/icons/hicolor/||'
 [ -f "/usr/share/icons/hicolor/scalable/apps/$icon.svg" ] && [ -f "/usr/share/icons/hicolor/48x48/apps/$icon.png" ]
 
