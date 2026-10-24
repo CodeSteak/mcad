@@ -345,8 +345,26 @@ fn serve_control(app: AppHandle, server: cad_ipc::Server) {
 // run
 // ------------------------------------------------------------------------------------------
 
+/// Linux/Wayland: WebKitGTK's DMA-BUF renderer ends the app with "Error 71 (Protocol error)
+/// dispatching to Wayland display" on several compositor/driver combinations (seen with KDE
+/// Plasma and the NVIDIA driver). Without it WebKit hands frames to the compositor over shared
+/// memory; the 3D view keeps rendering with WebGL. A value set by the user (also `0`) wins.
+/// Runs before any thread starts (`set_var`).
+#[cfg(target_os = "linux")]
+fn wayland_workarounds() {
+    const VAR: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
+    let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty());
+    if wayland && std::env::var_os(VAR).is_none() {
+        // SAFETY: called first thing in `run`, before the supervisor, GTK or any other thread
+        // exists, so nothing reads the environment concurrently.
+        unsafe { std::env::set_var(VAR, "1") };
+    }
+}
+
 /// Starts the app; returns the exit code when the window is closed.
 pub fn run(opts: LaunchOptions) -> i32 {
+    #[cfg(target_os = "linux")]
+    wayland_workarounds();
     let started = Instant::now();
     let out = Arc::new(Mutex::new(EngineOut { channel: None, buffered: Vec::new() }));
     let o2 = out.clone();

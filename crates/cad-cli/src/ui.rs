@@ -12,28 +12,34 @@ use serde_json::{Value as Json, json};
 
 #[derive(Subcommand, Clone)]
 pub enum UiCmd {
-    /// Laufende Fenster: offene Dateien, Cursorzeile, ausgewählter Knoten, Kontextmodul,
-    /// Werte der Parameterleiste, Diagnosen.
+    /// Running windows: open files, cursor line, selected node, context module, values of the
+    /// parameter bar, diagnostics.
     Status {
+        /// Output as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Fenster nach vorn, Datei öffnen (oder zu ihr wechseln), Cursor setzen.
+    /// Raise the window, open the file (or switch to it), set the cursor.
     Show {
+        /// File to show.
+        #[arg(value_name = "FILE")]
         file: PathBuf,
-        /// Zeile (1-basiert).
+        /// Line (1-based).
         #[arg(long)]
         line: Option<u32>,
-        /// Modul als Kontext (Cursor in seine Definition).
+        /// Module as context (cursor into its definition).
         #[arg(long, short = 'm')]
         module: Option<String>,
+        /// Output as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Bild der 3D-Ansicht, wie der Nutzer sie sieht (PNG).
+    /// Image of the 3D view as the user sees it (PNG).
     Screenshot {
-        #[arg(short, long)]
+        /// Output image (PNG).
+        #[arg(short, long, value_name = "IMAGE.png")]
         output: PathBuf,
+        /// Output as JSON.
         #[arg(long)]
         json: bool,
     },

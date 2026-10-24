@@ -65,15 +65,15 @@ pub const HEARTBEAT: Duration = Duration::from_secs(1);
 
 #[derive(Subcommand, Clone)]
 pub enum DaemonCmd {
-    /// Daemon im Vordergrund (Fehlersuche; sonst startet ihn der erste rechnende Befehl im
-    /// Hintergrund).
+    /// Run the daemon in the foreground (debugging; otherwise the first computing command
+    /// starts it in the background).
     Serve(ServeArgs),
-    /// Läuft ein Daemon? PID, Version, Laufzeit, Leerlauf, Cache, Trefferquote, Anfragen.
+    /// Is a daemon running? PID, version, uptime, idle time, cache, hit rate, requests.
     Status {
         #[arg(long)]
         json: bool,
     },
-    /// Daemon beenden (wartet auf den laufenden Befehl).
+    /// Stop the daemon (waits for the running command).
     Stop {
         #[arg(long)]
         json: bool,
@@ -82,19 +82,19 @@ pub enum DaemonCmd {
 
 #[derive(Args, Clone, Default)]
 pub struct ServeArgs {
-    /// Cache-Grenze in MiB (geschätzt: Knotenergebnisse + Netze; Standard 512).
+    /// Cache limit in MiB (estimated: node results + meshes; default 512).
     #[arg(long)]
     pub cache_mb: Option<f64>,
-    /// Ende nach so vielen Minuten ohne Anfrage (Standard 15).
+    /// Exit after this many minutes without a request (default 15).
     #[arg(long)]
     pub idle_minutes: Option<f64>,
-    /// Wie --idle-minutes, in Sekunden.
+    /// Like --idle-minutes, in seconds.
     #[arg(long)]
     pub idle_secs: Option<f64>,
-    /// Höchstzahl der Projekte, deren Ergebnisse der Cache hält (Standard 8).
+    /// Maximum number of projects whose results the cache keeps (default 8).
     #[arg(long)]
     pub max_projects: Option<usize>,
-    /// Watchdog: ein Befehl, der länger läuft, beendet den Daemon (Standard 60 s).
+    /// Watchdog: a command running longer ends the daemon (default 60 s).
     #[arg(long)]
     pub watchdog_secs: Option<f64>,
 }

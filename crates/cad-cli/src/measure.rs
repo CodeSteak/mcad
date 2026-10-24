@@ -26,72 +26,73 @@ use crate::{Common, Fail, Model, Outcome, load, mat, num};
 
 #[derive(Args, Clone, Debug)]
 pub(crate) struct MeasureArgs {
-    /// Abstand zweier Punkte: Anker (`k.ecke`, `k[2].ecke`, im Modulkontext `ecke`), Rasterpunkt
-    /// im Kontext (`g[rechts, hinten, deckel]`, Einträge auch Zahlen oder `_`), Koordinate
+    /// Distance of two points: anchor (`k.corner`, `k[2].corner`, in module context `corner`),
+    /// grid point in context (`g[right, back, top]`, entries also numbers or `_`), coordinate
     /// `[x,y,z]`.
     #[arg(long, num_args = 2, value_names = ["A", "B"], allow_hyphen_values = true)]
     pub between: Vec<String>,
-    /// Kleinster Abstand zweier Elemente mit Fußpunkten, exakt aus der B-Rep (parallele Ebenen:
-    /// Normalabstand): Punkt wie --between oder `vertex@P`, `mid@P`, `center@P`, `edge@P`,
-    /// `face@P` (das Element nächst P). Mit --section: Elemente der Schnittkontur. Mehrfach.
+    /// Smallest distance of two elements with foot points, exact from the B-rep (parallel
+    /// planes: normal distance): point as for --between or `vertex@P`, `mid@P`, `center@P`,
+    /// `edge@P`, `face@P` (the element nearest P). With --section: elements of the section
+    /// contour. Repeatable.
     #[arg(long, num_args = 2, value_names = ["A", "B"], allow_hyphen_values = true)]
     pub distance: Vec<String>,
-    /// Radius/Durchmesser einer Kreiskante (`edge@P`) oder runden Fläche (`face@P`: Zylinder,
-    /// Kegel, Kugel, Torus, Verrundung) mit Mittelpunkt und Achse; mit --section ein
-    /// Kreisbogen der Kontur. Mehrfach.
+    /// Radius/diameter of a circular edge (`edge@P`) or round face (`face@P`: cylinder, cone,
+    /// sphere, torus, fillet) with centre and axis; with --section an arc of the contour.
+    /// Repeatable.
     #[arg(long, value_name = "REF", allow_hyphen_values = true)]
     pub radius: Vec<String>,
-    /// Winkel zwischen zwei Kanten oder Flächen (`edge@P`, `face@P`). Mehrfach.
+    /// Angle between two edges or faces (`edge@P`, `face@P`). Repeatable.
     #[arg(long, num_args = 2, value_names = ["A", "B"], allow_hyphen_values = true)]
     pub angle: Vec<String>,
-    /// Länge einer Kante (`edge@P`; mit --section ein Konturabschnitt). Mehrfach.
+    /// Length of an edge (`edge@P`; with --section a contour segment). Repeatable.
     #[arg(long, value_name = "REF", allow_hyphen_values = true)]
     pub length: Vec<String>,
-    /// Hülle (exakt aus der B-Rep), Volumen und Oberfläche des Körpers bzw. Bauteils mit der
-    /// Fläche nächst P (`body@P` oder `face@P`). Mehrfach.
+    /// Bounds (exact from the B-rep), volume and surface area of the body or part with the
+    /// face nearest P (`body@P` or `face@P`). Repeatable.
     #[arg(long, value_name = "REF", allow_hyphen_values = true)]
     pub body: Vec<String>,
-    /// Was liegt bei P: nächster Eckpunkt, nächste Kante, nächste Fläche (mit Referenz zum
-    /// Weitermessen); mit --section die Kontur. Mehrfach.
+    /// What lies at P: nearest vertex, nearest edge, nearest face (with a reference to measure
+    /// further); with --section the contour. Repeatable.
     #[arg(long, value_name = "P", allow_hyphen_values = true)]
     pub at: Vec<String>,
-    /// Schnittebene für Messungen im Schnitt: `x=WERT`, `y=WERT`, `z=WERT` (wie `cad render
-    /// --section`); allein: Konturen, Flächen, Kreise und kleinste Wandstärke des Schnitts.
-    #[arg(long, value_name = "x|y|z=WERT", allow_hyphen_values = true)]
+    /// Section plane for measuring in a section: `x=VALUE`, `y=VALUE`, `z=VALUE` (as `cad render
+    /// --section`); alone: contours, areas, circles and smallest wall thickness of the section.
+    #[arg(long, value_name = "x|y|z=VALUE", allow_hyphen_values = true)]
     pub section: Option<String>,
-    /// Schnitt an beliebiger Ebene: Punkt und Normale (Normale zeigt in die entfernte Hälfte).
+    /// Section at any plane: point and normal (the normal points into the removed half).
     #[arg(long, value_name = "PX,PY,PZ,NX,NY,NZ", allow_hyphen_values = true)]
     pub section_plane: Option<String>,
-    /// Schnitt: die andere Hälfte behalten (Normale umkehren).
+    /// Section: keep the other half (flip the normal).
     #[arg(long)]
     pub section_flip: bool,
-    /// Wandstärke im Schnitt am Konturpunkt nächst P (quer zur Kontur). Braucht --section.
-    /// Mehrfach.
+    /// Wall thickness in the section at the contour point nearest P (across the contour). Needs
+    /// --section. Repeatable.
     #[arg(long, value_name = "P", allow_hyphen_values = true)]
     pub wall: Vec<String>,
-    /// Hülle (achsparallel, Kontextkoordinaten) von `all`, `part:NAME`, `line:N`, `node:I`.
-    #[arg(long, num_args = 0..=1, default_missing_value = "all", value_name = "ZIEL")]
+    /// Bounds (axis-aligned, context coordinates) of `all`, `part:NAME`, `line:N`, `node:I`.
+    #[arg(long, num_args = 0..=1, default_missing_value = "all", value_name = "TARGET")]
     pub bounds: Option<String>,
-    /// Volumen in mm³ (Ziel wie --bounds, Standard all).
-    #[arg(long, num_args = 0..=1, default_missing_value = "all", value_name = "ZIEL")]
+    /// Volume in mm³ (target as for --bounds, default all).
+    #[arg(long, num_args = 0..=1, default_missing_value = "all", value_name = "TARGET")]
     pub volume: Option<String>,
-    /// Oberfläche in mm² (Ziel wie --bounds, Standard all); `face@P`: eine Fläche der B-Rep,
-    /// mit --section `region@P`: ein Bereich des Schnitts.
-    #[arg(long, num_args = 0..=1, default_missing_value = "all", value_name = "ZIEL")]
+    /// Surface area in mm² (target as for --bounds, default all); `face@P`: one face of the
+    /// B-rep, with --section `region@P`: one region of the section.
+    #[arg(long, num_args = 0..=1, default_missing_value = "all", value_name = "TARGET")]
     pub area: Option<String>,
-    /// Kollisionen: paarweises Schnittvolumen aller Bauteile (exakt über den Kernel).
+    /// Collisions: pairwise intersection volume of all parts (exact, via the kernel).
     #[arg(long)]
     pub interference: bool,
-    /// Kollisionen ab diesem Schnittvolumen in mm³.
+    /// Report collisions from this intersection volume on (mm³).
     #[arg(long, default_value_t = 0.001)]
     pub tolerance: f64,
-    /// Kleinster Abstand zweier Bauteile (über die Tessellierung, Genauigkeit wird angegeben).
+    /// Smallest distance of two parts (over the tessellation, the accuracy is reported).
     #[arg(long, num_args = 2, value_names = ["A", "B"])]
     pub clearance: Vec<String>,
-    /// Sehnentoleranz der Tessellierung für --clearance in mm.
+    /// Chord tolerance of the tessellation for --clearance in mm.
     #[arg(long, default_value_t = 0.01)]
     pub mesh_tol: f64,
-    /// Farbregionen: Volumen und Masse (PLA) je Farbe und Filament, je Bauteil.
+    /// Colour regions: volume and mass (PLA) per colour and filament, per part.
     #[arg(long)]
     pub colors: bool,
 }

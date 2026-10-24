@@ -19,6 +19,9 @@
 //! commands, exit 2. `cad ui status|show|screenshot` talks to running windows (`ui.rs`, exit 3
 //! without one). `cad engine-host` (hidden) is the engine process of the desktop app.
 //!
+//! `cad usage [TOPIC]` prints the usage manual for agents (`manuell/*.md`, English, embedded by
+//! `build.rs`; `usage.rs`). The `--help` texts are English as well.
+//!
 //! Exit codes: 0 ok, 1 diagnostics with severity error (syntax, evaluation or a failed kernel
 //! operation; `set`: change refused), 2 usage error (arguments, unreadable file, unknown
 //! reference), 3 kernel/internal error (tessellation or export failed, panic).
@@ -109,6 +112,7 @@ mod parts;
 mod render;
 mod set;
 mod ui;
+mod usage;
 mod watch;
 
 use std::ffi::OsString;
@@ -130,173 +134,181 @@ pub(crate) const EVAL_STACK: usize = 256 << 20;
 #[command(
     name = "cad",
     version,
-    about = "Parametrisches CAD: Desktop-UI und headless prüfen, auswerten, ansehen, messen, exportieren",
-    override_usage = "cad [DATEI.scad | ORDNER]   (Desktop-UI)\n       cad <BEFEHL> [OPTIONEN]     (headless)",
+    about = "Parametric CAD: desktop UI, and headless check, evaluate, view, measure, export",
+    override_usage = "cad [FILE.scad | FOLDER]    (desktop UI)\n       cad <COMMAND> [OPTIONS]     (headless)",
     allow_external_subcommands = true,
-    after_help = "Desktop-UI: `cad` startet die UI, `cad datei.scad` bzw. `cad ordner/` mit dieser Datei bzw. \
-diesem Ordner als Projekt (Dateien werden beobachtet: Änderungen von außen erscheinen sofort). Ohne grafische \
-Sitzung (kein DISPLAY/WAYLAND_DISPLAY) oder ohne Feature `gui`: Meldung und Exit 2 – dann die Befehle nutzen.\n\
-Headless (ohne UI, auch in CI/Containern): alle Befehle unten. Ablauf für Agenten: outline → editieren → check → \
-render --views all --show grids,anchors → inspect/measure → export. `cad watch` wertet bei jeder Dateiänderung \
-neu aus (Cache bleibt).\n\
-Läuft die UI, sieht `cad ui status` was der Nutzer offen hat (Datei, Cursor, Kontextmodul, Parameter, \
-Diagnosen), `cad ui show datei --line N` zeigt ihm eine Stelle, `cad ui screenshot -o x.png` liefert seine \
-3D-Ansicht.\n\
-Daemon: check, eval, inspect, render, export, outline, measure und set rechnen in einem Hintergrundprozess, der den \
-Kernel-Cache zwischen Aufrufen hält (startet beim ersten Aufruf, endet nach 15 min ohne Anfrage; Ausgabe wie ohne \
-Daemon). Aus: --no-daemon, CAD_NO_DAEMON=1 oder `[daemon] enabled = false` in \
-$XDG_CONFIG_HOME/controller-cad/config.toml. Verwalten: `cad daemon status|stop|serve`."
+    after_help = "Desktop UI: `cad` starts the UI, `cad file.scad` or `cad folder/` with that file or folder as the \
+project (files are watched: outside changes show up at once). Without a graphical session (no \
+DISPLAY/WAYLAND_DISPLAY) or without the `gui` feature: message and exit 2 – use the commands instead.\n\
+Headless (no UI, also in CI/containers): all commands above. Workflow for agents: outline → edit → check → \
+render --views all --show grids,anchors → inspect/measure → export. `cad watch` re-evaluates on every file \
+change (the cache stays). Full manual for agents/LLMs: `cad usage`.\n\
+While the UI runs, `cad ui status` shows what the user has open (file, cursor, context module, parameters, \
+diagnostics), `cad ui show file --line N` shows them a location, `cad ui screenshot -o x.png` returns their \
+3D view.\n\
+Daemon: check, eval, inspect, render, export, outline, measure and set compute in a background process that \
+keeps the kernel cache between calls (starts with the first call, ends after 15 min without a request; output \
+as without the daemon). Off: --no-daemon, CAD_NO_DAEMON=1 or `[daemon] enabled = false` in \
+$XDG_CONFIG_HOME/controller-cad/config.toml. Manage: `cad daemon status|stop|serve`."
 )]
 pub(crate) struct Cli {
     #[command(subcommand)]
     cmd: Option<Cmd>,
-    /// Ohne Daemon rechnen (dauerhaft: CAD_NO_DAEMON=1 oder `[daemon] enabled = false`).
+    /// Compute without the daemon (permanently: CAD_NO_DAEMON=1 or `[daemon] enabled = false`).
     #[arg(long, global = true)]
     no_daemon: bool,
-    /// Meldungen zum Daemon auf stderr (verwendet oder nicht und warum, Cache-Treffer).
+    /// Daemon messages on stderr (used or not and why, cache hits).
     #[arg(long, global = true)]
     verbose: bool,
 }
 
 #[derive(Args, Clone)]
 struct Common {
-    /// Quelldatei (`-` = stdin).
+    /// Source file (`-` = stdin).
+    #[arg(value_name = "FILE")]
     file: PathBuf,
-    /// Ausgabe als JSON (festes Schema, siehe `cad --help`/Skill).
+    /// Output as JSON (fixed schema, see `cad usage json`).
     #[arg(long)]
     json: bool,
-    /// Modul als Kontext (wie Cursor in der Moduldefinition), auch verschachtelt `aussen.innen`.
+    /// Module as context (like the cursor in the module definition), nested `outer.inner`.
     #[arg(long, short = 'm')]
     module: Option<String>,
-    /// Parameter des Kontextmoduls überschreiben, z. B. `-D w=60`, `-D p=[1,2,3]`.
-    #[arg(short = 'D', value_name = "NAME=WERT")]
+    /// Override parameters of the context module, e.g. `-D w=60`, `-D p=[1,2,3]`.
+    #[arg(short = 'D', value_name = "NAME=VALUE")]
     define: Vec<String>,
 }
 
 #[derive(Subcommand)]
 pub(crate) enum Cmd {
-    /// Diagnosen mit Zeile und Spalte.
+    /// Diagnostics with line and column.
     Check {
         #[command(flatten)]
         c: Common,
-        /// Nur Syntax und Sprachauswertung, ohne Kernel.
+        /// Syntax and language evaluation only, without the kernel.
         #[arg(long)]
         no_kernel: bool,
     },
-    /// Übersicht in einem Aufruf: Module mit Parametern, Funktionen, Variablen, Raster und
-    /// Anker je Modul, benannte Instanzen, Bauteile, Dateien, Diagnosen.
+    /// Overview in one call: modules with parameters, functions, variables, grids and anchors
+    /// per module, named instances, parts, files, diagnostics.
     Outline {
         #[command(flatten)]
         c: Common,
-        /// Ohne Kernel (keine Hüllen/Volumen der Bauteile, schneller).
+        /// Without the kernel (no bounds/volumes of the parts, faster).
         #[arg(long)]
         no_kernel: bool,
     },
-    /// Baum, Werte, Inline-Hinweise, Raster, Anker.
+    /// Tree, values, inline hints, grids, anchors.
     Eval {
         #[command(flatten)]
         c: Common,
     },
-    /// Was eine Zeile erzeugt: Knoten, Hülle, Volumen, ausgewählte Kanten, Meldungen.
+    /// What a line produces: nodes, bounds, volume, selected edges, messages.
     Inspect {
         #[command(flatten)]
         c: Common,
-        /// Zeile (1-basiert).
+        /// Line (1-based).
         #[arg(long)]
         line: u32,
-        /// Dateikontext behalten, auch wenn die Zeile in einer Moduldefinition liegt.
+        /// Keep the file context even if the line is inside a module definition.
         #[arg(long)]
         whole_file: bool,
     },
-    /// Bild des Modells (PNG): Ansichten, Kontaktbogen, freie Kamera, Auswahl, Überlagerungen,
-    /// Schnitt, Röntgen.
+    /// Image of the model (PNG): views, contact sheet, free camera, selection, overlays,
+    /// section, x-ray.
     Render {
         #[command(flatten)]
         c: Common,
-        /// Ausgabebild (PNG).
-        #[arg(short, long)]
+        /// Output image (PNG).
+        #[arg(short, long, value_name = "IMAGE.png")]
         output: PathBuf,
         #[command(flatten)]
         v: render::ViewArgs,
     },
-    /// Messen an der exakten B-Rep: Abstand mit Fußpunkten, Radius/Durchmesser, Winkel, Länge,
-    /// Fläche, Körper; im Schnitt Konturen, Kreise, Wandstärke. Dazu Abstand zweier Punkte
-    /// (Anker, Rasterpunkt, Koordinate), Hülle, Volumen, Kollisionen und Abstand der Bauteile.
-    /// Elemente: `vertex@P`, `mid@P`, `center@P`, `edge@P`, `face@P`, `body@P`, `region@P`.
+    /// Measure on the exact B-rep: distance with foot points, radius/diameter, angle, length,
+    /// area, body; in a section contours, circles, wall thickness. Also distance of two points
+    /// (anchor, grid point, coordinate), bounds, volume, collisions and clearance of parts.
+    /// Elements: `vertex@P`, `mid@P`, `center@P`, `edge@P`, `face@P`, `body@P`, `region@P`.
     Measure {
         #[command(flatten)]
         c: Common,
         #[command(flatten)]
         a: measure::MeasureArgs,
     },
-    /// Beobachtet die Datei und eingebundene Dateien; je Auswertung eine JSON-Zeile (mit --json)
-    /// bzw. eine Textzeile, optional neues Bild.
+    /// Watches the file and included files; one JSON line (with --json) or text line per
+    /// evaluation, optionally a new image.
     Watch {
         #[command(flatten)]
         c: Common,
         #[command(flatten)]
         a: watch::WatchArgs,
     },
-    /// Code ändern über die Engine: Standardwert eines Modulparameters oder ein Literal;
-    /// schreibt atomar (`--dry-run`: nur Diff).
+    /// Change code through the engine: default value of a module parameter or a literal;
+    /// writes atomically (`--dry-run`: diff only).
     Set {
         #[command(flatten)]
         a: set::SetArgs,
     },
-    /// Exportdatei (STL binär, 3MF oder STEP, nach Endung oder --format).
+    /// Export file (binary STL, 3MF or STEP, by extension or --format).
     Export {
         #[command(flatten)]
         c: Common,
-        #[arg(short, long)]
+        /// Output file (with --all-parts: a folder).
+        #[arg(short, long, value_name = "PATH")]
         output: PathBuf,
-        /// stl, 3mf oder step (Standard: aus der Endung, .stp = step).
+        /// stl, 3mf or step (default: from the extension, .stp = step).
         #[arg(long)]
         format: Option<String>,
-        /// STEP-Schema: ap242 (Standard) oder ap214.
+        /// STEP schema: ap242 (default) or ap214.
         #[arg(long, default_value = "ap242")]
         schema: String,
-        /// Nur dieses Bauteil (benannte Instanz auf oberster Ebene, z. B. `deckel`, `k[2]`);
-        /// mehrfach: alle in eine Datei (3MF: ein Objekt je Bauteil, STEP: ein Produkt).
+        /// Only this part (named instance at top level, e.g. `lid`, `k[2]`); repeatable: all
+        /// into one file (3MF: one object per part, STEP: one product).
         #[arg(long = "part", value_name = "NAME")]
         part: Vec<String>,
-        /// Jedes Bauteil als eigene Datei in den Ordner `-o` (Format: --format, Standard stl).
+        /// Every part as its own file in the folder `-o` (format: --format, default stl).
         #[arg(long)]
         all_parts: bool,
-        /// 3MF einfarbig wie früher (ein Netz, ohne Farben und Filament-Zuordnung).
-        /// Standard: mehrfarbig – je Bauteil ein Objekt (Material außerhalb der Bauteile: Objekt
-        /// „ohne Bauteil“) mit einem Teil je Farbe und Filament-Slots für Bambu Studio/OrcaSlicer.
+        /// Single-colour 3MF as before (one mesh, no colours and no filament assignment).
+        /// Default: multicolour – one object per part (material outside the parts: object
+        /// "ohne Bauteil") with one part per colour and filament slots for Bambu Studio/OrcaSlicer.
         #[arg(long)]
         single_color: bool,
-        /// 3MF mehrfarbig mit Farbgruppe (`m:colorgroup`) für Programme, die 3MF-Farben zeigen.
-        /// Bambu Studio öffnet dann einen Farbdialog: „Abbrechen“ behält die Slots, OK ersetzt sie.
+        /// Multicolour 3MF with a colour group (`m:colorgroup`) for programs that show 3MF colours.
+        /// Bambu Studio then opens a colour dialog: "Cancel" keeps the slots, OK replaces them.
         #[arg(long, conflicts_with_all = ["single_color", "per_color"])]
         color_group: bool,
-        /// Ein STL je Farbe (und Bauteil) in einer ZIP-Datei `-o x.zip` (Dateinamen
-        /// `F<slot>_<farbe>.stl`, alle im selben Koordinatensystem).
+        /// One STL per colour (and part) in a ZIP file `-o x.zip` (file names
+        /// `F<slot>_<colour>.stl`, all in the same coordinate system).
         #[arg(long, conflicts_with_all = ["single_color", "all_parts"])]
         per_color: bool,
     },
-    /// Vergleich SMLib ↔ solidcore je Knoten (Volumen, Flächen, Kanten, ausgewählte Kanten) und
-    /// Abdeckung von solidcore (nur Entwicklung).
+    /// Compare SMLib ↔ solidcore per node (volume, faces, edges, selected edges) and coverage of
+    /// solidcore (development only).
     DiffKernels {
-        /// Quelldateien.
-        #[arg(required = true)]
+        /// Source files.
+        #[arg(required = true, value_name = "FILES")]
         files: Vec<PathBuf>,
-        /// Ausgabe als JSON.
+        /// Output as JSON.
         #[arg(long)]
         json: bool,
     },
-    /// Laufende Desktop-UI abfragen und steuern (status, show, screenshot).
+    /// Query and control the running desktop UI (status, show, screenshot).
     Ui {
         #[command(subcommand)]
         cmd: ui::UiCmd,
     },
-    /// Hintergrundprozess mit Kernel-Cache für die Befehle: status, stop, serve.
+    /// Background process with the kernel cache for the commands: status, stop, serve.
     Daemon {
         #[command(subcommand)]
         cmd: daemon::DaemonCmd,
     },
-    /// Engine-Prozess der Desktop-App (intern: Rahmen auf stdin/stdout).
+    /// Usage manual for agents and LLMs (English Markdown): workflow, commands, language,
+    /// JSON. Without a topic: overview and list of topics.
+    Usage {
+        #[command(flatten)]
+        a: usage::UsageArgs,
+    },
+    /// Engine process of the desktop app (internal: frames on stdin/stdout).
     #[command(hide = true)]
     EngineHost,
     #[command(external_subcommand)]
@@ -304,7 +316,8 @@ pub(crate) enum Cmd {
 }
 
 /// Names of the subcommands (messages for `cad DATEI` and unknown commands).
-const COMMANDS: &str = "check, outline, eval, inspect, render, measure, watch, set, export, ui, daemon, diff-kernels";
+const COMMANDS: &str =
+    "check, outline, eval, inspect, render, measure, watch, set, export, ui, daemon, usage, diff-kernels";
 
 /// Failure that ends a command without a regular result.
 pub(crate) enum Fail {
@@ -351,6 +364,7 @@ fn main() -> ExitCode {
     match &cmd {
         Cmd::Ui { cmd } => return ui::command(cmd),
         Cmd::Daemon { cmd } => return daemon::command(cmd),
+        Cmd::Usage { a } => return usage::command(a),
         Cmd::EngineHost => {
             let code = cad_desktop::engine::host_main(
                 SmlibKernel::new,
@@ -414,7 +428,7 @@ pub(crate) fn json_mode(cmd: &Cmd) -> bool {
         | Cmd::Export { c, .. } => c.json,
         Cmd::Set { a } => a.json,
         Cmd::DiffKernels { json, .. } => *json,
-        Cmd::External(_) | Cmd::Ui { .. } | Cmd::Daemon { .. } | Cmd::EngineHost => false,
+        Cmd::External(_) | Cmd::Ui { .. } | Cmd::Daemon { .. } | Cmd::Usage { .. } | Cmd::EngineHost => false,
     }
 }
 
@@ -504,6 +518,7 @@ pub(crate) fn command_name(c: &Cmd) -> &'static str {
         Cmd::DiffKernels { .. } => "diff-kernels",
         Cmd::Ui { .. } => "ui",
         Cmd::Daemon { .. } => "daemon",
+        Cmd::Usage { .. } => "usage",
         Cmd::EngineHost => "engine-host",
         Cmd::External(_) => "ui",
     }
@@ -538,7 +553,9 @@ pub(crate) fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
             }
         }
         Cmd::DiffKernels { files, .. } => diff::command(files),
-        Cmd::External(_) | Cmd::Ui { .. } | Cmd::Daemon { .. } | Cmd::EngineHost => unreachable!("handled in main"),
+        Cmd::External(_) | Cmd::Ui { .. } | Cmd::Daemon { .. } | Cmd::Usage { .. } | Cmd::EngineHost => {
+            unreachable!("handled in main")
+        }
     }
 }
 
