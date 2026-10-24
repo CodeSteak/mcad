@@ -151,6 +151,82 @@ pnpm dev                                    # http://localhost:5173
 pnpm build                                  # -> web/dist (statisch, z. B. GitHub Pages)
 ```
 
+## Bauen und Installieren
+
+Das `Makefile` fasst die Schritte oben zusammen und ruft dieselben Skripte wie die CI auf
+(`scripts/ci/*.sh`, `smlib/*.sh`, `web/scripts/build-wasm.sh`). `make` allein listet die Ziele;
+fehlt ein Werkzeug (cargo, pnpm, node, cmake, emcc, docker …), bricht das Ziel mit einer
+Meldung ab, was zu installieren ist.
+
+| Ziel | Wirkung |
+| --- | --- |
+| `make deps` | `smlib` + `web-deps`: SMLib nativ (`smlib-native` → `SMLIB_PREBUILT`) und als Wasm (`smlib-wasm` → `web/public/smlib`, braucht emcc: `make emsdk`), `pnpm install --frozen-lockfile` |
+| `make wasm` / `make web` | cad-wasm → `web/src/wasm-pkg`; Browser-App → `web/dist` |
+| `make ui` | UI der Desktop-App → `web/dist-tauri` (ohne Wasm) |
+| `make cli` | `target/release/cad` ohne Desktop-UI (`--no-default-features`, ohne WebKitGTK) |
+| `make app` | `target/release/cad` mit eingebetteter Desktop-UI (Tauri 2) |
+| `make build` | SMLib nativ + Wasm, Browser-App, Desktop-App |
+| `make test` | `cargo test --workspace` und Vitest (`test-rust`, `test-web`; dazu `test-node`) |
+| `make e2e` / `make e2e-desktop` | Playwright (Chromium) / Tauri-E2E (tauri-driver, Xvfb) |
+| `make lint` | `cargo fmt --check`, Clippy nativ und wasm32 (`-D warnings`), `tsc` |
+| `make fmt` | `cargo fmt --all` |
+| `make install` | `cad`, Desktop-Datei, Icons (32/128/256 px), Lizenzen, Doku und Beispiele |
+| `make uninstall` | entfernt diese Dateien wieder |
+| `make dist` | Quelltext-Archiv von `HEAD` → `target/arch/controller-cad-<pkgver>.tar.gz` |
+| `make arch` / `make arch-test` | Arch-Paket bauen / in frischem Container installieren und prüfen |
+| `make clean` / `make distclean` | Bauergebnisse / zusätzlich `node_modules`, SMLib-Bauordner |
+
+Variablen (Umgebung oder `make VAR=…`): `CARGO`, `PNPM`, `NODE`, `GIT`, `DOCKER`;
+`SMLIB_PREBUILT` (Vorgabe `smlib/build-native`), `SMLIB_SRC` (`third_party/smlib`), `EMSDK`,
+`CARGO_TARGET_DIR`, `CARGO_FLAGS` (`--locked`); `PREFIX` (`/usr/local`), `DESTDIR`, `BINDIR`,
+`DATADIR`, `LICENSEDIR`, `DOCDIR`; für das Paket `ARCH_BUILD`, `ARCH_OUT`, `ARCH_IMAGE`,
+`ARCH_DOCKER_NETWORK`, `ARCH_CA_BUNDLE`, `ARCH_CACHE_VOLUME`.
+
+```sh
+make app SMLIB_PREBUILT=$PWD/smlib/build-native   # SMLib, UI, cad mit UI
+sudo make install PREFIX=/usr/local               # oder: make install DESTDIR=/tmp/root PREFIX=/usr
+```
+
+`make install` legt an: `$PREFIX/bin/cad`, `share/applications/controller-cad.desktop`
+(`cad %f`, ohne Datei startet die UI), `share/icons/hicolor/{32x32,128x128,256x256}/apps/controller-cad.png`,
+`share/licenses/controller-cad/` (`NOTICE`, OFL-Texte der Schriften mit `fonts-README.md`,
+SMLib `LICENSE` und `THIRD_PARTY_NOTICES.md`), `share/doc/controller-cad/` (README, CLI-Anleitung
+`cad-cli.md`, `examples/`). Installiert wird, was `target/release/cad` gerade ist (`make app`
+oder `make cli`); `install` baut nicht selbst.
+
+### Arch-Paket
+
+`packaging/arch/PKGBUILD` baut das Paket `controller-cad`: `cad` mit Desktop-UI und CLI,
+Desktop-Datei, Icons, Lizenzen (Projekt `LicenseRef-UNLICENSED`, SMLib Apache-2.0, Schriften
+OFL-1.1) und Beispiele. Laufzeit: `webkit2gtk-4.1`, `gtk3`, `libsoup3`, `glib2`, `cairo`,
+`gdk-pixbuf2`, `dbus`, `libgcc`, `libstdc++`, `glibc`, `hicolor-icon-theme`; Bau: `cargo`, `nodejs`, `pnpm`,
+`cmake`, `ninja`, `git` (und `base-devel`). SMLib kommt als Git-Quelle am Commit aus
+`smlib/fetch.sh` (anderer Ort: `SMLIB_URL=…`), die Patches aus `smlib/patches` wendet
+`prepare()` an; `build()` ist `make app`, `package()` ist `make install DESTDIR=$pkgdir PREFIX=/usr`.
+
+```sh
+make arch        # -> target/arch/controller-cad-<pkgver>-1-x86_64.pkg.tar.zst, namcap.txt
+make arch-test   # frischer archlinux-Container: pacman -U, CLI headless, UI unter Xvfb
+sudo pacman -U target/arch/controller-cad-*.pkg.tar.zst
+```
+
+- `pkgver` = Cargo-Version + Git-Stand (`0.1.0.r<Commits>.g<Hash>`); das Archiv ist `git archive
+  HEAD`, nicht eingecheckte Änderungen fehlen darin (`make` weist darauf hin).
+- `ARCH_BUILD=auto` (Vorgabe): auf Arch mit `makepkg` (`MAKEPKG_FLAGS`, Vorgabe `--syncdeps
+  --force`), sonst in Docker (`packaging/arch/docker.sh`): ein Builder-Image aus `archlinux:latest`
+  mit `base-devel`, `depends`, `makedepends` und `namcap`, `makepkg` als Benutzer `builder`,
+  danach `namcap` über PKGBUILD und Paket (`target/arch/namcap.txt`). Cargo- und pnpm-Caches
+  liegen im Volume `controller-cad-arch-cache`; `make arch-clean` entfernt Image, Volume und
+  `target/arch`.
+- Hinter einem Proxy: `HTTPS_PROXY`/`NO_PROXY` werden durchgereicht, `ARCH_DOCKER_NETWORK=host`
+  (Vorgabe) erreicht einen Proxy auf `127.0.0.1`, `ARCH_CA_BUNDLE=/pfad/ca.crt` nimmt eine
+  zusätzliche CA in den Container auf (Trust-Store und `NODE_EXTRA_CA_CERTS` für pnpm).
+- `make arch-test` (`packaging/arch/smoke-test.sh`): Installation mit Abhängigkeiten aus den
+  Repositorys, `pacman -Qi/-Ql/-Qkk`, fehlende Bibliotheken (`ldd`), `cad --version`, `check`,
+  `outline`, `render`, `export` (STEP/STL/3MF), `measure`, Daemon, Exit 2 ohne Display,
+  Desktop-UI unter Xvfb (`cad ui status`, `cad ui screenshot`), `desktop-file-validate`;
+  Ergebnisse in `target/arch/test/`.
+
 ## Sprache in Kürze
 
 - OpenSCAD-Syntax: Variablen, Funktionen, Module, `for`/`if`/`let`, Primitive, Transformationen,
@@ -281,6 +357,8 @@ tools/report/        Generatoren der Testberichte, 3MF-Prüfung (verify3mf.py)
 tools/palette/       Prüfung der Farbpalette (ΔE in OKLab, Farbfehlsichtigkeit, Kontrast)
 tools/font/          Generator der Bitmap-Schrift von cad-render
 scripts/ci/          Schritte der GitHub-Actions-Workflows (lokal genauso aufrufbar)
+packaging/           Desktop-Datei und NOTICE (linux/), Arch-Paket (arch/: PKGBUILD, Docker-Bau, Prüfskript)
+Makefile             Ziele für Bauen, Prüfen, Installieren, Arch-Paket (make help)
 docs/                Plan, solidcore-Umstieg, Testberichte
 ```
 
