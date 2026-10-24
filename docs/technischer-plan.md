@@ -397,16 +397,16 @@ Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem K
 | Darstellungszustände | Material-Varianten pro Knoten: voll, gedimmt, halbtransparent, rot halbtransparent (`#`, abgezogen), grau (`%`), Umriss |
 | Griffe | Eigene Gizmos (Punkt, Pfeil, Drehring mit 15°-Rasten, Ebenengriff); Snap-Suche im Bildschirmraum gegen Rasterpunkte und Anker |
 | Raster | Ebenen als Linien am Rand der Bauteilhülle; durchgezogen (Literal) oder gestrichelt (Ausdruck); standardmäßig nur die von der aktuellen Zeile verwendeten |
-| Parameterleiste | aus der Modulsignatur; Werte pro Modul in der Sitzung; „Als Standard übernehmen“ erzeugt einen `TextEdit` |
-| Pfadleiste | aus dem Modulkontext; Doppelklick auf Instanz springt in die Definition |
+| Parameterleiste | aus der Modulsignatur; Werte pro Modul in der Sitzung; „Als Standard übernehmen“ erzeugt einen `TextEdit`; seit der UI-Überarbeitung (Abschnitt 19) Reiter „Parameter“ des Seitenpanels |
+| Pfadleiste | aus dem Modulkontext, mittig in der Kopfleiste beim Dateinamen (Abschnitt 19); Doppelklick auf Instanz springt in die Definition |
 | Dateien | Browser: Autospeichern des Projekts in IndexedDB; Projekte aus mehreren Dateien als Tabs; Ordner öffnen/speichern über File System Access API (Chromium), sonst Hoch- und Herunterladen (Datei oder ZIP). Desktop: echtes Dateisystem (Öffnen, Speichern atomar, Speichern unter, Ordner als Projekt, zuletzt geöffnet), ungespeicherte Dateien mit ●, „Automatisch speichern“ (Standard aus, Verzögerung einstellbar), kein IndexedDB |
 | Dateibeobachter (Desktop) | `notify` auf die Ordner der Projektdateien (atomares Speichern ersetzt die Datei); bekannte Inhalte als Hash, eigene Speichervorgänge kommen nicht zurück; saubere Datei: still neu laden als kleinste Zeilenänderungen (Cursor/Scroll bleiben, eigener Undo-Schritt); ungespeicherte Änderungen: Leiste „Neu laden / Meine behalten / Vergleichen“ (Diff-Ansicht); gelöscht/umbenannt: Leiste, Speichern legt neu an |
 | Git (Desktop) | Randmarkierung gegen `HEAD`: neu grün, geändert blau (3 px, Deckkraft 0,5–0,55), gelöscht rotes Dreieck zwischen den Zeilen; Hover zeigt die alten Zeilen; entprellt 300 ms beim Tippen, beim Speichern, bei externen Änderungen und Fensterfokus; unversionierte Dateien ohne Markierung |
 | Messen | Modus „Messen“ (Abschnitt 18): Kontextleiste mit Messart und „Im Schnitt“, Snap auf Eckpunkte, Kantenmitten, Kreismitten, Kanten, Flächen bzw. die Schnittkontur, Maßlinien und Beschriftungen in der Ansicht, Liste „Messungen“ mit Kopieren als Text, Kommentar und `cad measure` |
 | Schnittansicht | Werkzeug „Schnitt“: Ebene x/y/z oder frei (Normale aus Blickrichtung oder Eingabe), Griff ziehen (rastet auf Rasterebenen des Kontextmoduls und Anker, Alt frei), Umkehren, Kappe (Stencil, schraffiert, je Körper wechselnde Richtung, transparente Körper ohne Kappe), Kontur; Statuszeile und „Als `cad render …` kopieren“ mit derselben Konvention wie die CLI |
-| Bauteile | Bauteilleiste mit Sichtbarkeit, Volumen und Export je Bauteil |
-| Farben & Filamente | Liste rechts neben der Ansicht (Farbfeld, Name, Zeilen, Slot-Auswahl, Volumen, Masse PLA), „Farbregionen zeigen“, Exporte „3MF mehrfarbig“, „STL je Farbe (ZIP)“, „3MF einfarbig“; Farbe je Fläche in der Ansicht (Vertex-Farben aus `tri_tags` → `tag_nodes` → `color`) |
-| Thema | Auswahl System/Hell/Dunkel in der Werkzeugleiste (localStorage `cad-theme`); alle Farben als CSS-Variablen (`styles.css`), 3D-Ansicht liest sie beim Wechsel neu; Palette-Farben im Thema angepasst (`logic/palette.ts`) |
+| Bauteile | Reiter „Bauteile“ des Seitenpanels: Sichtbarkeit, Volumen, Export je Bauteil im ⋯-Menü, „ohne Bauteil“, Summe |
+| Farben & Filamente | Reiter „Farben“ des Seitenpanels (Farbfeld, Name, Zeilen, Slot-Auswahl, Volumen, Masse PLA), „Farbregionen zeigen“, Exporte „3MF mehrfarbig“, „STL je Farbe (ZIP)“, „3MF einfarbig“; Farbe je Fläche in der Ansicht (Vertex-Farben aus `tri_tags` → `tag_nodes` → `color`) |
+| Thema | Symbolknopf mit Menü System/Hell/Dunkel in der Kopfleiste (localStorage `cad-theme`); alle Farben als CSS-Variablen (`styles.css`), 3D-Ansicht liest sie beim Wechsel neu; Palette-Farben im Thema angepasst (`logic/palette.ts`) |
 
 Eine Zeile kann mehrere Instanzen haben (Schleifen, mehrfache Modulaufrufe). Die UI indiziert die Szene nach `stmt` und hebt alle hervor.
 
@@ -1483,3 +1483,54 @@ liegende Extreme von B-Spline-Flächen bis auf die Sehnentoleranz). Volumen aus 
 2D-Ergebnisse (Skizzen ohne Extrusion) lassen sich nicht messen. Die Liste der Messungen lebt
 nur in der Sitzung (nicht gespeichert). Tauri T17 treibt die Ansicht mit synthetischen
 Zeigerereignissen.
+
+## 19. UI-Überarbeitung (Testbericht 20)
+
+**Grundlage.** Konzept `docs/konzepte/ui-ueberarbeitung/konzept.html` (+ PDF), vom Nutzer
+angenommen mit allen Vorschlägen (Option A) und Teal/Smaragdgrün statt Blau als Akzent. Keine
+neue Funktion; Ordnung, Gewichtung und einheitliche Bedienelemente in Browser und Tauri.
+
+**Bausteine** (`web/src/app/ui/`): `Button` (primär – höchstens einer je Bereich, standard,
+leise, Umschalter mit `aria-pressed`), `IconButton` (26 × 26), `Segmented` (Radiogruppe, Pfeiltasten,
+Pos1/Ende), `MenuButton`, `SplitButton`, `ContextMenu` (WAI-ARIA-Menü mit `menuitem`,
+`menuitemradio`, Untermenüs; Popups in `<body>` mit fester Position, Schließen bei Klick außerhalb,
+Esc gibt den Fokus zurück), `Toolbar`/`ToolGroup`/`ToolSep`/`ToolLabel`. Eine Höhe 26 px
+(`--ctl-h`), Radius 6 px, 2 px innerhalb, Trennstrich + 12 px zwischen Gruppen; Inter 12 px aus
+`crates/cad-font/fonts` (gleiche Breiten in Chromium und WebKitGTK). Symbole: `lucide-react`
+(ISC), eigene Strich-Symbole für Linie, Bogen und „⊥ Ansicht“. `aria-label` ist der schlichte
+Name, der Tooltip (`title`) hängt das Tastenkürzel an, `aria-keyshortcuts` trägt es.
+
+**Aufbau.**
+
+| Bereich | Inhalt |
+| --- | --- |
+| Kopfleiste (`app/header.tsx`) | App-Name, „Datei ▾“ (Neu, Öffnen …, Ordner öffnen …, Zuletzt geöffnet › nur Desktop, Speichern unter …, Datei hinzufügen …, Datei laden …, ZIP laden …, ZIP speichern), „Beispiele ▾“ mit Untermenüs je Gruppe; mittig Dateiname mit Änderungspunkt (Desktop) und Pfad in den Modulkontext; „Speichern“ primär; geteilter Export-Knopf (letztes Format in localStorage `cad-export`, Strg+E; 3MF mehrfarbig/einfarbig, STL, STL je Farbe, STEP, Je Bauteil › STL-ZIP/STEP-ZIP/3MF); Thema- und Einstellungen-Symbolknopf. Kürzel Strg+N (nur Desktop), Strg+O, Strg+S, Strg+⇧+S, Strg+E im ganzen Fenster |
+| Editor | Tabs (`role=tab`, ←/→) und „+“ (Neue Datei, Datei laden, Aktionen der angezeigten Datei); Rechtsklick oder Umschalt+F10/Kontextmenütaste auf einem Tab: „Als Hauptdatei“, „Schließen“ |
+| Ansicht | Werkzeugleiste oben: links Modus Modell/Schnitt/Skizze/Messen (`runtime.viewMode`/`setViewMode`, genau einer; Skizze und Messen lassen einen Schnitt stehen, danach Modus Schnitt; Farben ist kein Modus), rechts Einpassen, Ansicht ▾ (Iso, Oben, Vorne, Rechts, Hinten, Links, Unten), Alle Raster, Anzeige ▾ (Alle Raster, Farbregionen zeigen, Seitenpanel), Seitenpanel einblenden (wenn eingeklappt). Kontextleiste des Modus links oben darunter (`.ctxslot`). „Neu einpassen“ unten mittig. Ansichtswürfel unten rechts (`app/viewCube.tsx`, SVG, 3 × 3 Felder je Fläche: Fläche, Kante, Ecke; folgt der Kamera über `Viewer.onCamera`; x/y/z daneben) statt des Achsenkreuzes |
+| Kontextleisten | Schnitt: X/Y/Z/Blick, Lage (`p·n` frei), Normale, Umkehren, „Als `cad render …` kopieren“. Skizze: Auswahl \| Linie, Bogen ▾ (letzte Bogenart, `sketchArc`), Bézier, Rechteck, Kreis \| Ecke runden, Schließen, Löschen \| ⊥ Ansicht, „Fertig“ primär; Tasten V, L, A, ⇧A, T, B, R, C, F, Enter, Entf, N (`logic/sketchEditor.sketchKeyAction`). Messen: Messart als Segment (D/R/W/L/F/K/T), „Im Schnitt“, Kopieren/Löschen der gewählten bzw. letzten Messung, „Fertig“ |
+| Seitenpanel (`app/sidePanel.tsx`) | rechts, einklappbar (`sideOpen`, `sideTab` in localStorage), Reiter Bauteile, Farben, Messen und im Modulkontext Parameter (wird beim Eintritt gewählt, beim Verlassen der vorige Reiter); der Messmodus wählt „Messen“. `colorsVisible()` ersetzt `colorsOpen` (Farbregionen werden für den sichtbaren Reiter angefordert) |
+
+**Themen.** Akzent hell `#0f766e`, dunkel `#3cc4a8` (dazu `--accent-hover`, `--accent-text`,
+`--accent-soft`, `--focus`, `--seg-on`, `--ctl-hover`, `--float-shadow`); 3D-Ansicht
+`--view-accent`/`--view-flat` hell `#0f766e`, dunkel `#62dcc2`/`#3cc4a8`, `--hover-line` und
+`--viewhover-line` teal; Würfel `--vc-face`, `--vc-edge`, Achsen `--axis-x/y/z`. Die Paare stehen in
+`logic/contrast.ts` (Text ≥ 4,5:1, Bedienelemente ≥ 3:1, Akzent auf dem Modell ≥ 2:1). Die
+Modellpalette bleibt.
+
+**Wayland.** `cad-app` setzt vor GTK den GLib-Programmnamen auf den `identifier` aus
+`tauri.conf.json` (`dev.controller-cad.desktop`); GTK nimmt ihn als Wayland-`app_id` und
+X11-`WM_CLASS`. Die Desktop-Datei heißt danach (`packaging/linux/dev.controller-cad.desktop.desktop`,
+`StartupWMClass` gleich), `make install` leitet den Namen aus `tauri.conf.json` ab.
+
+**Tests.** Playwright-Selektoren über Rolle und Namen (Helfer `pickMenu`, `menuItem`, `mode`,
+`sideTab`, `fileTab`, `sketchTool`, `measureKind`, `exportAs` in `web/e2e/helpers.ts`); neu
+`e2e/ui-ueberarbeitung.spec.ts` U01–U09 (Leisten bei 1280/1440/1920 px hell/dunkel in allen Modi:
+`scrollWidth ≤ clientWidth`, nichts ragt heraus, einzeilig, keine Überlappung; Menüs per Tastatur,
+Export-Format mit Strg+E und nach Neuladen, Tabs und Kontextmenü, Modus-Exklusivität, Skizzen-Kürzel,
+Ansichtswürfel, Seitenpanel, Tab-Reihenfolge, Kontrast am gerenderten Knopf); Tauri T18 (Leisten bei
+drei Fensterbreiten in WebKitGTK, Menüs, Würfel). Vorher/Nachher-Bilder: `tools/report/report20-shots.mjs`.
+
+**Grenzen.** Kein Umbenennen von Dateien; Kanten und Ecken des Würfels nur mit der Maus (Tastatur:
+Menü „Ansicht“); kein Röntgen-Schalter in der UI (gab es nur in der CLI); Strg+N nur in der
+Desktop-App; die Standardaufteilung Editor : Ansicht ist 33 : 67 (wie im Konzept etwa ein Drittel), schmale Ansichten zeigen Modus und
+Messart als Symbole.
