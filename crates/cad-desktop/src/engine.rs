@@ -240,17 +240,28 @@ where
     }
 }
 
+/// "90 s", "20 min".
+fn dur_text(d: Duration) -> String {
+    let s = d.as_secs();
+    if s >= 120 && s.is_multiple_of(60) { format!("{} min", s / 60) } else { format!("{s} s") }
+}
+
+/// Default watchdog: a single kernel call may take this long (large models compute for minutes).
+pub const WATCHDOG: Duration = Duration::from_secs(20 * 60);
+/// Default time allowed for the engine to start.
+pub const STARTUP: Duration = Duration::from_secs(3 * 60);
+
 #[derive(Debug, Clone)]
 pub struct SupervisorOptions {
-    /// A busy engine that does not answer for this long hangs (default 15 s).
+    /// A busy engine that does not answer for this long hangs (default [`WATCHDOG`], 20 min).
     pub watchdog: Duration,
-    /// Time allowed for the engine to start (default 60 s).
+    /// Time allowed for the engine to start (default [`STARTUP`], 3 min).
     pub startup: Duration,
 }
 
 impl Default for SupervisorOptions {
     fn default() -> Self {
-        SupervisorOptions { watchdog: Duration::from_secs(15), startup: Duration::from_secs(60) }
+        SupervisorOptions { watchdog: WATCHDOG, startup: STARTUP }
     }
 }
 
@@ -345,9 +356,8 @@ impl Supervisor {
                         return;
                     }
                     if st.busy && st.deadline.is_some_and(|d| Instant::now() >= d) {
-                        let secs =
-                            if st.ready { s.opts.watchdog } else { s.opts.startup.max(s.opts.watchdog) }.as_secs();
-                        s.restart(&mut st, &format!("Engine reagiert seit {secs} s nicht (Kernel hängt)"));
+                        let t = if st.ready { s.opts.watchdog } else { s.opts.startup.max(s.opts.watchdog) };
+                        s.restart(&mut st, &format!("Engine reagiert seit {} nicht (Kernel hängt)", dur_text(t)));
                     }
                 }
             })

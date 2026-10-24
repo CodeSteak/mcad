@@ -804,7 +804,7 @@ async function main() {
     const bars = () =>
       exec(`
         const sel = [["Kopfleiste", ".hd"], ["Kopf links", ".hd-left"], ["Kopf Mitte", ".hd-title"], ["Kopf rechts", ".hd-right"], ["Dateileiste", ".filebar"],
-          ["Modus", ".vtoolbar > [role=toolbar]:first-child"], ["Kamera", ".vtoolbar > [role=toolbar]:last-child"], ["Kontextleiste", ".ctxslot > [role=toolbar]"],
+          ["Modus", ".vtoolbar > [role=toolbar]:first-child"], ["Kamera", ".vt-end > [role=toolbar]"], ["Kontextleiste", ".ctxslot > [role=toolbar]"],
           ["Seitenpanel", ".sp-head"], ["Statuszeile", ".statusbar"]];
         const out = [];
         for (const [name, s] of sel) for (const e of document.querySelectorAll(s)) {

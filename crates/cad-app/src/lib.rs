@@ -5,7 +5,7 @@
 //!   main thread: Tauri event loop, webview (React UI)    engine thread (256 MiB stack):
 //!   commands  engine_post ──── frames on stdin ────────▶   Session::post / step(16 ms)
 //!   channel   ◀── binary batches (wire.rs) ── stdout ───   SMLib native
-//!   cad-watchdog: 15 s without answer → kill + restart engine, BlockKeys (cad_desktop::engine)
+//!   cad-watchdog: 20 min without answer → kill + restart engine, BlockKeys (cad_desktop::engine)
 //!   cad-watch: file watcher (notify) → events file-changed / file-removed
 //!   cad-ui-ipc: socket ui-<pid> (cad_ipc) ← `cad ui status|show|screenshot`
 //! ```
@@ -41,7 +41,7 @@ pub struct LaunchOptions {
     /// Program and arguments of the engine process (`cad engine-host`).
     pub engine_program: PathBuf,
     pub engine_args: Vec<OsString>,
-    /// Watchdog timeout (default 15 s; `CAD_WATCHDOG_MS` overrides).
+    /// Watchdog timeout (default 20 min; `CAD_WATCHDOG_MS` overrides).
     pub watchdog: Duration,
 }
 

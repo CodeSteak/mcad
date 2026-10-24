@@ -1690,6 +1690,53 @@ select:hover {
   padding: 0 6px;
 }
 
+.vt-end {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+/* engine busy: shown only when an evaluation takes a moment (no flicker on quick edits) */
+.view-busy {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px var(--float-shadow);
+  animation: view-busy-in 0.2s ease-out 0.3s both;
+}
+
+.view-busy-ring {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--view-accent) 22%, transparent);
+  border-top-color: var(--view-accent);
+  animation: view-busy-spin 0.8s linear infinite;
+}
+
+@keyframes view-busy-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes view-busy-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-busy-ring {
+    animation-duration: 2.4s;
+  }
+}
+
 .view-menu {
   min-width: 64px;
   justify-content: space-between;

@@ -24,10 +24,21 @@ export type WorkerOut =
   /** The engine failed (load error, panic). The worker is unusable. */
   | { kind: "fatal"; message: string };
 
+/** Default watchdog: one kernel call may take this long (like crates/cad-desktop/src/engine.rs). */
+export const WATCHDOG_MS = 20 * 60_000;
+/** Time allowed for loading smlib.wasm + cad-wasm. */
+const STARTUP_MS = 3 * 60_000;
+
+/** "90 s", "20 min". */
+function durText(ms: number): string {
+  const s = Math.round(ms / 1000);
+  return s >= 120 && s % 60 === 0 ? `${s / 60} min` : `${s} s`;
+}
+
 export interface WorkerTransportOptions {
   /** Creates the worker (default: `./worker.ts` as module worker). */
   createWorker?: () => Worker;
-  /** A step that does not return within this time counts as a hang (default 15 s). */
+  /** A step that does not return within this time counts as a hang (default 20 min: large models compute for minutes). */
   watchdogMs?: number;
 }
 
@@ -69,7 +80,7 @@ export class WorkerTransport implements EngineTransport {
   constructor(opts: WorkerTransportOptions = {}) {
     this.createWorker =
       opts.createWorker ?? createEngineWorker;
-    this.watchdogMs = opts.watchdogMs ?? 15_000;
+    this.watchdogMs = opts.watchdogMs ?? WATCHDOG_MS;
     this.start();
   }
 
@@ -120,7 +131,7 @@ export class WorkerTransport implements EngineTransport {
     };
     // Loading smlib.wasm + cad-wasm can take a while: watch it too.
     this.busy = true;
-    this.arm(Math.max(this.watchdogMs, 60_000));
+    this.arm(Math.max(this.watchdogMs, STARTUP_MS));
   }
 
   private receive(w: Worker, out: WorkerOut): void {
@@ -159,7 +170,7 @@ export class WorkerTransport implements EngineTransport {
   private arm(ms = this.watchdogMs): void {
     this.disarm();
     this.timer = setTimeout(() => {
-      if (this.busy) this.restart(`Engine reagiert seit ${Math.round(ms / 1000)} s nicht (Kernel hängt)`);
+      if (this.busy) this.restart(`Engine reagiert seit ${durText(ms)} nicht (Kernel hängt)`);
     }, ms);
   }
 

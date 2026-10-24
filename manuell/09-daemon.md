@@ -13,7 +13,7 @@ content-based – results are never stale.
 | `--no-daemon`, `CAD_NO_DAEMON=1`, `[daemon] enabled = false` | off |
 
 Config `$XDG_CONFIG_HOME/controller-cad/config.toml` (or `CAD_CONFIG`), section `[daemon]`:
-`enabled`, `cache_mb` (512), `max_projects` (8), `idle_minutes` (15), `watchdog_secs` (60),
+`enabled`, `cache_mb` (512), `max_projects` (8), `idle_minutes` (15), `watchdog_secs` (1800),
 `rss_factor` (1.5); env overrides `CAD_DAEMON_CACHE_MB`, `CAD_DAEMON_MAX_PROJECTS`,
 `CAD_DAEMON_IDLE_MINUTES`, `CAD_DAEMON_WATCHDOG_SECS`, `CAD_DAEMON_RSS_FACTOR`.
 

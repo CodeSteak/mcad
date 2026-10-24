@@ -84,7 +84,7 @@ fn start(open: Option<PathBuf>) -> ExitCode {
         open,
         engine_program: exe,
         engine_args: vec!["engine-host".into()],
-        watchdog: std::time::Duration::from_secs(15),
+        watchdog: cad_desktop::engine::WATCHDOG,
     });
     ExitCode::from(code.clamp(0, 255) as u8)
 }

@@ -50,7 +50,7 @@ Sprache:  cad-syntax (Parser) → cad-eval (Werte mit Herkunft, Raster, Anker, G
 - Keine COOP/COEP-Header nötig (keine Threads, kein `SharedArrayBuffer`).
 - CLI-Daemon: `check`, `eval`, `inspect`, `render`, `export`, `outline`, `measure`, `set`
   laufen in einem Hintergrundprozess mit einer Engine für alle Projekte (startet beim ersten
-  Aufruf, endet nach 15 min ohne Anfrage; Grenzen 512 MiB Cache, 8 Projekte, Watchdog 60 s).
+  Aufruf, endet nach 15 min ohne Anfrage; Grenzen 512 MiB Cache, 8 Projekte, Watchdog 30 min).
   Ausgabe wie ohne Daemon; aus mit `--no-daemon`, `CAD_NO_DAEMON=1` oder `[daemon] enabled =
   false` in `$XDG_CONFIG_HOME/controller-cad/config.toml`; `cad daemon status|stop|serve`.
 - Desktop: ein Binary `cad` (Feature `gui`, Standard). `cad` ohne Befehl startet die UI, die
@@ -119,7 +119,7 @@ enabled = true        # false oder CAD_NO_DAEMON=1: nie Daemon; je Aufruf: --no-
 cache_mb = 512        # Knotenergebnisse + Netze (CAD_DAEMON_CACHE_MB, serve --cache-mb)
 max_projects = 8      # Projekte, deren Ergebnisse der Cache hält (CAD_DAEMON_MAX_PROJECTS)
 idle_minutes = 15     # Ende ohne Anfrage (CAD_DAEMON_IDLE_MINUTES oder CAD_DAEMON_IDLE_SECS)
-watchdog_secs = 60    # länger laufender Befehl: Daemon endet, Befehl läuft ohne ihn (CAD_DAEMON_WATCHDOG_SECS)
+watchdog_secs = 1800  # länger laufender Befehl: Daemon endet, Befehl läuft ohne ihn (CAD_DAEMON_WATCHDOG_SECS)
 rss_factor = 1.5      # RSS über Start + Faktor × cache_mb: Cache leeren (CAD_DAEMON_RSS_FACTOR)
 cache_entries = 16384 # Höchstzahl der Einträge (CAD_DAEMON_CACHE_ENTRIES)
 ```
@@ -217,7 +217,7 @@ make arch-test   # frischer archlinux-Container: pacman -U, CLI headless, UI unt
 sudo pacman -U target/arch/controller-cad-*.pkg.tar.zst
 ```
 
-- `pkgver` = Cargo-Version + Git-Stand (`0.2.0.r<Commits>.g<Hash>`); das Archiv ist `git archive
+- `pkgver` = Cargo-Version + Git-Stand (`0.2.1.r<Commits>.g<Hash>`); das Archiv ist `git archive
   HEAD`, nicht eingecheckte Änderungen fehlen darin (`make` weist darauf hin).
 - `ARCH_BUILD=auto` (Vorgabe): auf Arch mit `makepkg` (`MAKEPKG_FLAGS`, Vorgabe `--syncdeps
   --force`), sonst in Docker (`packaging/arch/docker.sh`): ein Builder-Image aus `archlinux:latest`

@@ -12,6 +12,8 @@
 | `cad ui …` exit 3 | no desktop UI running; work headless |
 | `cad` exits 2 "keine grafische Sitzung" | no `DISPLAY`/`WAYLAND_DISPLAY`; use the commands |
 | UI dies with "Error 71 (Protokollfehler) dispatching to Wayland display" | WebKitGTK DMA-BUF renderer; `cad` sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` on Wayland unless the variable is set |
+| "Engine reagiert seit 20 min nicht (Kernel hängt)", line red | one kernel call ran 20 min: node blocked until its line changes; simplify it (fewer `$fn`, separate text) |
+| "Watchdog: `cad …` läuft seit 30 min" | daemon ended after 30 min; the command reruns without it; raise `watchdog_secs` |
 | slow kernel on text | text unioned onto a body; keep it separate or use `--no-kernel` while iterating |
 
 Glossary of the German text output:

@@ -54,7 +54,7 @@ async function barReport(page: Page) {
       ["Kopf rechts", ".hd-right"],
       ["Dateileiste", ".filebar"],
       ["Werkzeugleiste Modus", ".vtoolbar > [role=toolbar]:first-child"],
-      ["Werkzeugleiste Kamera", ".vtoolbar > [role=toolbar]:last-child"],
+      ["Werkzeugleiste Kamera", ".vt-end > [role=toolbar]"],
       ["Kontextleiste", ".ctxslot > [role=toolbar]"],
       ["Seitenpanel Reiter", ".sp-head"],
       ["Statuszeile", ".statusbar"],

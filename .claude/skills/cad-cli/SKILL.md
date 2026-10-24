@@ -76,7 +76,7 @@ nutzen; `watch` hat seinen eigenen Cache und nutzt den Daemon nicht.
 
 Grenzen (Standard): 512 MiB Cache (Knotenergebnisse + Netze, im Daemon pro Knoten am Heap
 gemessen), 16384 Einträge, Ergebnisse von 8 Projekten (Hauptdateien), Cache leeren bei RSS über
-Start + 1,5 × Grenze, Ende nach 15 min ohne Anfrage, Watchdog 60 s (ein hängender Befehl beendet
+Start + 1,5 × Grenze, Ende nach 15 min ohne Anfrage, Watchdog 30 min (ein hängender Befehl beendet
 den Daemon, der Befehl läuft dann ohne Daemon und meldet das auf stderr). Einstellbar in
 `$XDG_CONFIG_HOME/controller-cad/config.toml` (bzw. `~/.config/…`, Pfad auch `CAD_CONFIG`):
 
@@ -86,7 +86,7 @@ enabled = true
 cache_mb = 512
 max_projects = 8
 idle_minutes = 15
-watchdog_secs = 60
+watchdog_secs = 1800
 rss_factor = 1.5
 ```
 

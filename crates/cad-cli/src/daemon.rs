@@ -27,7 +27,7 @@
 //! other kept project uses; resident memory (`/proc/self/statm`) above the start value +
 //! `rss_factor` × `cache_mb`: the cache is cleared (and freed memory returned with
 //! `malloc_trim`). Lifetime: ends after `idle` (15 min) without a request and removes socket
-//! and lock. Watchdog: a request running longer than `watchdog` (60 s; a hanging kernel
+//! and lock. Watchdog: a request running longer than `watchdog` (30 min; a hanging kernel
 //! call) ends the daemon; the waiting clients compute the command themselves.
 //!
 //! **Version.** A client with another build id (version + size and mtime of the executable)
@@ -96,7 +96,7 @@ pub struct ServeArgs {
     /// Maximum number of projects whose results the cache keeps (default 8).
     #[arg(long)]
     pub max_projects: Option<usize>,
-    /// Watchdog: a command running longer ends the daemon (default 60 s).
+    /// Watchdog: a command running longer ends the daemon (default 1800 s = 30 min).
     #[arg(long)]
     pub watchdog_secs: Option<f64>,
 }
@@ -512,9 +512,9 @@ fn monitor(s: &Arc<Shared>) {
             && t.elapsed() > s.cfg.watchdog
         {
             let msg = format!(
-                "Watchdog: `cad {}` läuft seit {} s (hängender Kernel-Aufruf?), Daemon beendet",
+                "Watchdog: `cad {}` läuft seit {} (hängender Kernel-Aufruf?), Daemon beendet",
                 st.current.clone().unwrap_or_default(),
-                s.cfg.watchdog.as_secs()
+                dur_text(s.cfg.watchdog)
             );
             log(&msg);
             st.dying = Some(msg);

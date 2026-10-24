@@ -11,7 +11,7 @@
 # smlib/fetch.sh) mit den Patches aus smlib/patches; anderer Ort: SMLIB_URL=… make arch.
 
 pkgname=controller-cad
-pkgver=0.2.0
+pkgver=0.2.1
 pkgrel=1
 pkgdesc='Parametrisches CAD im OpenSCAD-Dialekt mit exakter B-Rep (SMLib): CLI cad und Desktop-UI'
 arch=('x86_64')

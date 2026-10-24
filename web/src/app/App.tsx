@@ -180,36 +180,54 @@ function ViewToolbar({ viewer }: { viewer: Viewer | null }) {
       <Toolbar label="Modus" float>
         <Segmented label="Modus" value={mode} onChange={(m) => setViewMode(m, setSectionOn)} options={MODES} className="modes" data-testid="modes" />
       </Toolbar>
-      <Toolbar label="Kamera und Anzeige" float>
-        <ToolGroup>
-          <IconButton icon={IconFit} label="Einpassen" hint="Alles zeigen" onClick={() => viewer?.fitAll()} />
-          <MenuButton
-            label="Ansicht"
-            text={VIEWS.find((x) => x.v === lastView)?.label ?? "Iso"}
-            hint="Standardansichten (auch über den Ansichtswürfel unten rechts)"
-            items={VIEWS.map((x) => ({ label: x.label, onSelect: () => view(x.v) }))}
-            align="end"
-            className="view-menu"
-          />
-        </ToolGroup>
-        <ToolSep />
-        <ToolGroup>
-          <IconButton icon={IconGrid} label="Alle Raster" hint="Alle Raster zeigen (sonst die am Cursor)" pressed={allGrids} onClick={() => store.setState({ allGrids: !allGrids })} />
-          <MenuButton
-            label="Anzeige"
-            text={null}
-            icon={IconEye}
-            align="end"
-            hint="Weitere Anzeigeoptionen"
-            items={[
-              { label: "Alle Raster", check: "checkbox", checked: allGrids, onSelect: () => store.setState({ allGrids: !allGrids }) },
-              { label: "Farbregionen zeigen", check: "checkbox", checked: showRegions, hint: "Körper je Farbe, wie sie exportiert und gedruckt werden", onSelect: () => store.setState({ showRegions: !showRegions }) },
-              { label: "Seitenpanel", check: "checkbox", checked: sideOpen, hint: "Bauteile, Farben, Messungen", onSelect: () => setSideOpen(!sideOpen) },
-            ]}
-          />
-          {!sideOpen && <IconButton icon={IconPanelOpen} label="Seitenpanel einblenden" hint="Bauteile, Farben, Messungen" onClick={() => setSideOpen(true)} />}
-        </ToolGroup>
-      </Toolbar>
+      <div className="vt-end">
+        <Toolbar label="Kamera und Anzeige" float>
+          <ToolGroup>
+            <IconButton icon={IconFit} label="Einpassen" hint="Alles zeigen" onClick={() => viewer?.fitAll()} />
+            <MenuButton
+              label="Ansicht"
+              text={VIEWS.find((x) => x.v === lastView)?.label ?? "Iso"}
+              hint="Standardansichten (auch über den Ansichtswürfel unten rechts)"
+              items={VIEWS.map((x) => ({ label: x.label, onSelect: () => view(x.v) }))}
+              align="end"
+              className="view-menu"
+            />
+          </ToolGroup>
+          <ToolSep />
+          <ToolGroup>
+            <IconButton icon={IconGrid} label="Alle Raster" hint="Alle Raster zeigen (sonst die am Cursor)" pressed={allGrids} onClick={() => store.setState({ allGrids: !allGrids })} />
+            <MenuButton
+              label="Anzeige"
+              text={null}
+              icon={IconEye}
+              align="end"
+              hint="Weitere Anzeigeoptionen"
+              items={[
+                { label: "Alle Raster", check: "checkbox", checked: allGrids, onSelect: () => store.setState({ allGrids: !allGrids }) },
+                { label: "Farbregionen zeigen", check: "checkbox", checked: showRegions, hint: "Körper je Farbe, wie sie exportiert und gedruckt werden", onSelect: () => store.setState({ showRegions: !showRegions }) },
+                { label: "Seitenpanel", check: "checkbox", checked: sideOpen, hint: "Bauteile, Farben, Messungen", onSelect: () => setSideOpen(!sideOpen) },
+              ]}
+            />
+            {!sideOpen && <IconButton icon={IconPanelOpen} label="Seitenpanel einblenden" hint="Bauteile, Farben, Messungen" onClick={() => setSideOpen(true)} />}
+          </ToolGroup>
+        </Toolbar>
+        <BusySpinner />
+      </div>
+    </div>
+  );
+}
+
+/** Small spinner under the camera bar while the engine loads or evaluates (fades in after a moment). */
+function BusySpinner() {
+  const ready = useCad((s) => s.engineReady);
+  const progress = useCad((s) => s.progress);
+  if (ready && !progress) return null;
+  const text = !ready
+    ? "Engine lädt …"
+    : `Berechnung läuft${progress && progress.total > 0 ? ` · ${progress.done}/${progress.total}` : ""}${progress?.line ? ` · Zeile ${progress.line}` : ""}`;
+  return (
+    <div className="view-busy" role="status" aria-label={text} title={text} data-testid="view-busy">
+      <span className="view-busy-ring" aria-hidden="true" />
     </div>
   );
 }

@@ -10,7 +10,7 @@
 //! cache_mb = 512          # estimated size of node results + meshes
 //! max_projects = 8        # projects whose results the cache keeps
 //! idle_minutes = 15       # ends after this long without a request
-//! watchdog_secs = 60      # a command running longer: the daemon ends, the CLI computes itself
+//! watchdog_secs = 1800    # a command running longer: the daemon ends, the CLI computes itself
 //! rss_factor = 1.5        # resident memory above start + factor × cache_mb: cache cleared
 //! cache_entries = 16384   # maximum number of cache entries
 //! ```
@@ -56,7 +56,7 @@ impl Default for DaemonConfig {
             cache_mb: 512,
             max_projects: 8,
             idle: Duration::from_secs(15 * 60),
-            watchdog: Duration::from_secs(60),
+            watchdog: Duration::from_secs(30 * 60),
             rss_factor: 1.5,
             cache_entries: 16384,
             file: None,
