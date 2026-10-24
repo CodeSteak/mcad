@@ -441,7 +441,8 @@ fillet(2) {
 `;
   await loadText(page, src);
   await clickLine(page, 8, 4);
-  const [h] = await waitHandles(page);
+  // The handles of the previous cursor line (grid g, line 1) can still be shown for a moment.
+  const [h] = await waitHandles(page, "(hs) => hs.length > 0 && hs.every((x) => x.line === 8)");
   await screenshotB(page, "b10-vorher");
   const from = grip(h);
   const to = await project(page, [30, 20, 15]);

@@ -9,7 +9,8 @@
 // (webkit2gtk-driver), Xvfb, git. Screenshots, measurements and results go to
 // reports/tmp/report9/ (test report 9, tools/report/report9.mjs) or `--out`. T12–T14: colours,
 // filaments and the dark theme (test report 11). T16: sketch editor (test report 18,
-// `--only T16 --out reports/tmp/report18/tauri`).
+// `--only T16 --out reports/tmp/report18/tauri`). T17: measure mode (test report 19,
+// `--only T17 --out reports/tmp/report19/tauri`).
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -703,6 +704,90 @@ async function main() {
     const ms = s1.rtt.filter((r) => !r.click).map((r) => r.ms).sort((a, b) => a - b);
     metrics.sketchTauri = { hoverMedianMs: ms[Math.floor(ms.length / 2)] ?? null, answers: s1.answers };
     e.details = { text, rtt: s1.rtt };
+  });
+
+  await test("T17", "Messen in Tauri: Radius, Abstand paralleler Flächen, Radius im Schnitt (TauriTransport, nativer Kernel)", async (check, e) => {
+    await ensureApp();
+    await exec("window.__cad.setThemePref('light'); window.__cad.store.setState({ colorsOpen: false })");
+    const SRC = "cube([20, 10, 8]);\ntranslate([30, 5, 0]) cylinder(h = 12, r = 5);\n";
+    const s0 = await state();
+    await exec("window.__cad.setText(arguments[0])", SRC);
+    await sceneReady(s0.sentVersion + 1);
+    await exec("window.__cad.setView('iso')");
+    const ms = () => exec("return window.__cad.measure()");
+    await click("[data-testid=measure-toggle]");
+    await waitFor("Messmodus", async () => {
+      const m = await ms();
+      return m && m.active && m.answers > 0 ? m : null;
+    });
+    // Faces with Alt (without snapping): in the small window the circle centres of the cylinder
+    // are within the snap radius of its side.
+    const fire = (type, x, y, alt = false) =>
+      exec(
+        "const c = document.querySelector('[data-testid=viewport-canvas]'); c.dispatchEvent(new PointerEvent(arguments[0], { clientX: arguments[1], clientY: arguments[2], altKey: arguments[3], bubbles: true, cancelable: true, composed: true, button: 0, buttons: arguments[0] === 'pointerdown' ? 1 : 0, pointerId: 1, pointerType: 'mouse', isPrimary: true })); return true;",
+        type,
+        x,
+        y,
+        alt,
+      );
+    const at = (p) => exec("return window.__cad.screenOf(arguments[0])", p);
+    const hover = async (p, kind) => {
+      const q = await at(p);
+      const n = (await ms()).answers;
+      await fire("pointermove", q.x + 0.3, q.y + 0.3, kind === "face");
+      return waitFor(`Element ${kind}`, async () => {
+        const m = await ms();
+        if (m.answers > n && m.hover && m.hover.kind === kind) return m;
+        // shown on a timeout (last state)
+        throw new Error(JSON.stringify({ at: q, answers: [n, m.answers], hover: m.hover && { kind: m.hover.kind, label: m.hover.label }, message: m.message }));
+      });
+    };
+    const press = async (p, kind) => {
+      await hover(p, kind);
+      const q = await at(p);
+      const n = (await ms()).answers;
+      const before = await ms();
+      await fire("pointerdown", q.x + 0.3, q.y + 0.3, kind === "face");
+      await fire("pointerup", q.x + 0.3, q.y + 0.3, kind === "face");
+      // the click's own effect (a hover answer still on its way also counts as an answer)
+      return waitFor("Klick beantwortet", async () => {
+        const m = await ms();
+        return m.answers > n && (m.picks.length !== before.picks.length || m.results.length !== before.results.length || m.message !== null) ? m : null;
+      });
+    };
+    const c = Math.SQRT1_2;
+    await click("[data-testid=measure-kind-radius]");
+    await waitFor("Radius", async () => ((await ms()).kind === "radius" ? true : null));
+    const m1 = await press([30 + 5 * c, 5 - 5 * c, 6], "face");
+    check(m1.results.length === 1 && m1.results[0].label === "R 5 · ⌀ 10", `Radius des Zylinders: ${m1.results[0]?.label}`);
+    await click("[data-testid=measure-kind-distance]");
+    await waitFor("Abstand", async () => ((await ms()).kind === "distance" ? true : null));
+    await press([10, 5, 8], "face");
+    const m2 = await press([30, 5, 12], "face");
+    const d = m2.results[1];
+    check(d && Math.abs(d.value - 4) < 1e-9 && d.exact, `Normalabstand der Deckflächen: ${d?.label} (exakt)`);
+    const label = await exec("const l = document.querySelector('[data-testid=measure-label-' + arguments[0] + ']'); return l && !l.hidden ? l.textContent : null", d.id);
+    check(label === "4 mm", `Beschriftung in der Ansicht: ${label}`);
+    e.images.push({ name: await shot("t17-messen"), label: "Radius des Zylinders und Normalabstand der Deckflächen" });
+    // in the section z = 4: the cylinder cut gives an exact circle
+    await exec("window.__cad.setSection({ on: true, axis: 'z', point: [0, 0, 4], normal: [0, 0, 1], flip: false, snap: null })");
+    await click("[data-testid=measure-kind-radius]");
+    await click("[data-testid=measure-in-section]");
+    const sec = await waitFor("Schnitt", async () => {
+      const m = await ms();
+      return m.inSection && m.section && m.section.regions === 2 ? m : null;
+    });
+    check(sec.section.exact, `Schnitt exakt: ${sec.section.regions} Bereiche, ${sec.section.area.toFixed(4)} mm²`);
+    const m3 = await press([35, 5, 4], "section_edge");
+    const r3 = m3.results[2];
+    check(r3 && r3.label === "R 5 · ⌀ 10", `Kreis im Schnitt: ${r3?.label}`);
+    e.images.push({ name: await shot("t17-schnitt"), label: "Radius des Schnittkreises (Schnitt z = 4)" });
+    await click("[data-testid=measure-exit]");
+    check((await ms()).active === false, "Messmodus beendet");
+    const rtt = m3.rtt.filter((r) => !r.click).map((r) => r.ms).sort((a, b) => a - b);
+    metrics.measureTauri = { hoverMedianMs: rtt[Math.floor(rtt.length / 2)] ?? null, answers: m3.answers };
+    e.details = { results: m3.results.map((r) => ({ kind: r.kind, label: r.label, cli: r.cli })) };
+    await exec("window.__cad.setSection({ on: false })");
   });
 
   await test("T14", "Thema „System“ in Tauri folgt dem GTK-Farbschema (prefers-color-scheme)", async (check, e) => {

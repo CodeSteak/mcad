@@ -67,7 +67,19 @@
 //!                              volume, collision?}], collisions: [{a, b, volume}]},
 //!              clearance?: {a, b, distance, mesh_distance, point_a, point_b,
 //!                           intersection_volume, collision, accuracy, mesh_tol, triangles,
-//!                           method} }
+//!                           method},
+//!              measurements?: Measurement[]   (--distance/--radius/--angle/--length/
+//!                           --area face@…/--body/--wall, in this order; protocol type: kind,
+//!                           title, value, unit, label, values: [{key, label, value, unit}],
+//!                           lines, guides, points, at, details, picks: [{kind, reference,
+//!                           label, point, origin, …}], exact, tol?, section?, text, cli),
+//!              section?: {plane: {point, normal}, method, exact, max_dev, area,
+//!                         regions: [{area, holes, body, bounds, reference, contours: [{hole,
+//!                         area, segments: [{kind, length, start, end, center?, radius?,
+//!                         sweep_deg?, radii?, exact, source, dev}]}]}],
+//!                         circles: [{center, radius, diameter, full}],
+//!                         min_wall: {thickness, from, to, samples_per_segment}|null},
+//!              at?: [{point, elements: [{kind, reference, label, point, distance, origin}]}] }
 //! watch:   one line per run: { schema_version, command, run, trigger: "start"|"change",
 //!            changed: string[], file, ok, exit_code, context, errors, warnings,
 //!            diagnostics, stats: {nodes, cache_hits, kernel_calls}, volume|null,
@@ -89,7 +101,6 @@ mod colors;
 mod config;
 mod daemon;
 mod diff;
-mod geom;
 mod host;
 mod launch;
 mod measure;
@@ -208,8 +219,10 @@ pub(crate) enum Cmd {
         #[command(flatten)]
         v: render::ViewArgs,
     },
-    /// Messen: Abstand zweier Punkte (Anker, Rasterpunkt, Koordinate), Hülle, Volumen, Fläche,
-    /// Kollisionen der Bauteile, Abstand zweier Bauteile.
+    /// Messen an der exakten B-Rep: Abstand mit Fußpunkten, Radius/Durchmesser, Winkel, Länge,
+    /// Fläche, Körper; im Schnitt Konturen, Kreise, Wandstärke. Dazu Abstand zweier Punkte
+    /// (Anker, Rasterpunkt, Koordinate), Hülle, Volumen, Kollisionen und Abstand der Bauteile.
+    /// Elemente: `vertex@P`, `mid@P`, `center@P`, `edge@P`, `face@P`, `body@P`, `region@P`.
     Measure {
         #[command(flatten)]
         c: Common,

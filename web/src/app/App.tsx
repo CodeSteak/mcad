@@ -39,6 +39,7 @@ import { SectionBar, SectionStatus, SectionToggle } from "./section";
 import { DiffDialog, ExternalBar, RecentMenu } from "./desktopUi";
 import { ColorsPanel, ColorsToggle } from "./colors";
 import { SketchBar, SketchStatus, SketchToggle } from "./sketchUi";
+import { MeasureBar, MeasurePanel, MeasureStatus, MeasureToggle } from "./measureUi";
 
 function Toolbar() {
   const themePref = useCad((s) => s.themePref);
@@ -314,9 +315,11 @@ function ViewPane() {
           </label>
           <SketchToggle />
           <SectionToggle />
+          <MeasureToggle />
           <ColorsToggle />
         </div>
         <SketchBar />
+        <MeasureBar />
         <SectionBar />
       </div>
     </div>
@@ -405,6 +408,7 @@ function StatusBar() {
         </span>
       )}
       <SketchStatus />
+      <MeasureStatus />
       <SectionStatus />
       {notice && <span className="st-note" data-testid="status-notice">{notice}</span>}
       <span className="grow" />
@@ -458,6 +462,7 @@ export function App() {
           <div className="viewbody">
             <ViewPane />
             <ParamBar />
+            <MeasurePanel />
             <ColorsPanel />
           </div>
         </section>

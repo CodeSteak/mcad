@@ -7,7 +7,7 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import type { EngineClient } from "../engine/client";
-import type { Mat4, Scene, SrcRange, Vec3 } from "../engine/protocol";
+import type { Mat4, MeasureHit, Scene, SrcRange, Vec3 } from "../engine/protocol";
 import { definitionTarget } from "../logic/context";
 import { type Plan, type SketchDraw, plan as makePlan, planNodes } from "../logic/display";
 import { type GridOverlay, gridOverlay, modelHull, viewBox } from "../logic/grids";
@@ -28,6 +28,7 @@ import { type CapBody, SectionLayer } from "./sectionLayer";
 import { type SectionState, effectiveNormal, keeps, offset, snapCandidates, withOffset } from "../logic/section";
 import type { MeshCache } from "./meshCache";
 import type { SketchController, SketchView } from "../app/sketch";
+import type { MeasureController, MeasureView } from "../app/measure";
 import { pixelSize, planeCamera, rasterLines, rasterSpacing, snapMarker } from "../logic/sketchEditor";
 
 export type StandardView = "iso" | "top" | "front" | "right";
@@ -107,7 +108,7 @@ export interface HandleView {
 /** Grip pick radius in pixels. */
 const GRIP_PX = 10;
 
-export class Viewer implements DragView, SketchView {
+export class Viewer implements DragView, SketchView, MeasureView {
   readonly renderer: THREE.WebGLRenderer;
   readonly camera: THREE.PerspectiveCamera;
   readonly controls: OrbitControls;
@@ -126,6 +127,15 @@ export class Viewer implements DragView, SketchView {
   drag: DragController | null = null;
   /** Sketch editor (set by the runtime). */
   sketch: SketchController | null = null;
+  /** Measure mode (set by the runtime). */
+  measure: MeasureController | null = null;
+  /** Measure mode: hover, picks, measurements (rebuilt when they change). */
+  private measureGroup = new THREE.Group();
+  /** Labels of the measurements (DOM, placed every frame). */
+  private measureLabels = new Map<number, HTMLDivElement>();
+  private measureHoverLabel: HTMLDivElement;
+  /** What the measure overlay drew (test hook). */
+  lastMeasureDraw: Record<string, number> = {};
   /** What the sketch overlay drew (test hook). */
   lastSketchDraw: Record<string, number> = {};
   /** Handles drawn for the cursor line. */
@@ -200,7 +210,7 @@ export class Viewer implements DragView, SketchView {
     this.controls.addEventListener("change", () => this.requestRender());
     this.controls.addEventListener("start", () => (this.autoFit = false));
 
-    this.scene3.add(this.helpers, this.content, this.overlay, this.handleGroup, this.sketchGroup);
+    this.scene3.add(this.helpers, this.content, this.overlay, this.handleGroup, this.sketchGroup, this.measureGroup);
     {
       const pal = readPalette();
       this.section = new SectionLayer(pal.cap, pal.edge, pal.accent);
@@ -217,6 +227,11 @@ export class Viewer implements DragView, SketchView {
     this.sketchLabel.setAttribute("data-testid", "sketch-snap-label");
     this.sketchLabel.hidden = true;
     container.appendChild(this.sketchLabel);
+    this.measureHoverLabel = document.createElement("div");
+    this.measureHoverLabel.className = "snap-label measure-hover";
+    this.measureHoverLabel.setAttribute("data-testid", "measure-hover-label");
+    this.measureHoverLabel.hidden = true;
+    container.appendChild(this.measureHoverLabel);
     const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1.6);
     hemi.position.set(0, 0, 1);
     this.scene3.add(hemi);
@@ -240,6 +255,7 @@ export class Viewer implements DragView, SketchView {
     el.addEventListener("pointerleave", () => {
       this.pointer = null;
       this.setViewHover(null);
+      this.measure?.leave();
     });
     el.addEventListener("pointerdown", (e) => (this.down = { x: e.clientX, y: e.clientY, t: performance.now() }));
     el.addEventListener("pointerup", (e) => this.onPointerUp(e));
@@ -259,8 +275,11 @@ export class Viewer implements DragView, SketchView {
     this.clearGroup(this.helpers);
     this.clearGroup(this.handleGroup);
     this.clearGroup(this.sketchGroup);
+    this.clearGroup(this.measureGroup);
     this.snapLabel.remove();
     this.sketchLabel.remove();
+    this.measureHoverLabel.remove();
+    for (const l of this.measureLabels.values()) l.remove();
     this.section.dispose();
     this.materials.dispose();
     this.renderer.dispose();
@@ -275,6 +294,12 @@ export class Viewer implements DragView, SketchView {
       // on/off and another sketch: handles and the sketch drawing; else only the overlay
       if ((s.sketch === null) !== (p.sketch === null) || s.sketch?.answer?.node !== p.sketch?.answer?.node || s.sketch?.tool !== p.sketch?.tool) this.requestBuild();
       this.buildSketch();
+      this.requestRender();
+    }
+    if (s.measure !== p.measure || s.measurements !== p.measurements || s.measureSelected !== p.measureSelected) {
+      // on/off: handles are hidden while measuring
+      if ((s.measure === null) !== (p.measure === null)) this.requestBuild();
+      this.buildMeasure();
       this.requestRender();
     }
     if (s.theme !== p.theme) {
@@ -333,6 +358,7 @@ export class Viewer implements DragView, SketchView {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.materials.setResolution(w, h);
+    this.buildMeasure();
     // The parameter bar appears with the module scene: keep the automatic fit.
     if (this.autoFit) this.fitAll();
     this.requestRender();
@@ -375,6 +401,7 @@ export class Viewer implements DragView, SketchView {
     r.render(this.gizmo.scene, this.gizmo.camera);
     r.setScissorTest(false);
     r.setViewport(0, 0, w, h);
+    this.placeMeasureLabels();
     this.frames++;
     this.noteDrawn();
     this.noteDrag();
@@ -575,6 +602,7 @@ export class Viewer implements DragView, SketchView {
     this.lastHandles = this.computeHandles(scene, sel, diag);
     this.buildHandles();
     this.buildSketch();
+    this.buildMeasure();
     this.updateHelpers(scene);
     this.applySection(st.section);
     this.maybeFit(scene);
@@ -1012,6 +1040,8 @@ export class Viewer implements DragView, SketchView {
     const node = !a?.sketch ? null : a.version === scene.version ? a.node : (scene.nodes.find((n) => n.op_info?.kind === "sketch" && n.range.from === a.sketch!.from && (n.range.file ?? 0) === 0)?.idx ?? null);
     // drawing tools draw (also on existing points): grips only with the select tool
     if (st.sketch && st.sketch.tool !== "select") return [];
+    // measuring: clicks pick elements, no grips
+    if (st.measure) return [];
     const hs =
       st.sketch && node !== null && scene.nodes[node]?.op_info?.kind === "sketch"
         ? [...scene.handles, ...scene.locked_handles].filter((h) => h.node === node)
@@ -1282,6 +1312,174 @@ export class Viewer implements DragView, SketchView {
     return this.project(apply(a.plane, [local[0], local[1], 0]));
   }
 
+  // ---------------------------------------------------------------- measure mode (Plan 18)
+
+  /** The face under a client position for the measure mode (section respected). */
+  measureHit(clientX: number, clientY: number): MeasureHit | null {
+    if (!this.lastShown || !this.pickables.length) return null;
+    this.raycaster.setFromCamera(this.ndc(clientX, clientY), this.camera);
+    this.content.updateMatrixWorld(true);
+    const sec = store.getState().section;
+    for (const h of this.raycaster.intersectObjects(this.pickables, false)) {
+      if (sec.on && !keeps(sec, [h.point.x, h.point.y, h.point.z])) continue;
+      const key = h.object.userData.meshKey as string;
+      const node = h.object.userData.node as number | undefined;
+      const data = this.meshes.get(key)?.data;
+      if (!data || node === undefined || h.faceIndex === undefined || h.faceIndex === null) continue;
+      return { node, face: data.tri_faces[h.faceIndex] ?? 0, point: [h.point.x, h.point.y, h.point.z] };
+    }
+    return null;
+  }
+
+  /** A fat line of the measure overlay (always on top). */
+  private measureLine(points: Vec3[], color: string, width: number, dashed: boolean, name: string): void {
+    if (points.length < 2) return;
+    const pos: number[] = [];
+    for (let i = 0; i + 1 < points.length; i++) pos.push(...points[i], ...points[i + 1]);
+    const geo = new LineSegmentsGeometry();
+    geo.setPositions(pos);
+    const wpp = this.worldPerPx();
+    const mat = new LineMaterial({ color: new THREE.Color(color).getHex(), linewidth: width, depthTest: false, transparent: true, dashed, dashSize: 6 * wpp, gapSize: 4 * wpp });
+    mat.resolution.set(this.container.clientWidth, this.container.clientHeight);
+    const l = new LineSegments2(geo, mat);
+    if (dashed) l.computeLineDistances();
+    l.renderOrder = 80;
+    l.userData.ownGeometry = true;
+    l.userData.ownMaterial = true;
+    l.name = name;
+    this.measureGroup.add(l);
+    const k = name.split(":")[0];
+    this.lastMeasureDraw[k] = (this.lastMeasureDraw[k] ?? 0) + 1;
+  }
+
+  /** Point markers (screen-sized dots). */
+  private measurePoints(points: Vec3[], color: string, size: number, name: string): void {
+    if (!points.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(points.flat(), 3));
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ color, size, sizeAttenuation: false, map: dotTexture(), alphaTest: 0.5, transparent: true, depthTest: false }));
+    pts.renderOrder = 82;
+    pts.userData.ownGeometry = true;
+    pts.userData.ownMaterial = true;
+    pts.name = name;
+    this.measureGroup.add(pts);
+    const k = name.split(":")[0];
+    this.lastMeasureDraw[k] = (this.lastMeasureDraw[k] ?? 0) + points.length;
+  }
+
+  /** Hover highlight, picks and the measurements with their labels. */
+  private buildMeasure(): void {
+    if (!this.materials) return;
+    this.clearGroup(this.measureGroup);
+    this.lastMeasureDraw = {};
+    const st = store.getState();
+    const pal = this.materials.palette;
+    const m = st.measure;
+    if (m) {
+      for (const p of m.picks) {
+        for (const l of p.lines) this.measureLine(l, pal.accent, 3.2, false, "measure-pick");
+        this.measurePoints([p.point], pal.accent, 11, "measure-pick-point");
+      }
+      const h = m.hover;
+      if (h) {
+        for (const l of h.lines) this.measureLine(l, pal.snap, 2.6, false, "measure-hover");
+        this.measurePoints([h.point], pal.snap, 10, "measure-hover-point");
+      }
+    }
+    // labels: one per measurement
+    const seen = new Set<number>();
+    for (const e of st.measurements) {
+      seen.add(e.id);
+      const sel = st.measureSelected === e.id;
+      const color = sel ? pal.accent : pal.measure;
+      for (const l of e.m.lines) this.measureLine(l, color, sel ? 3 : 2.2, false, `measure-line:${e.id}`);
+      for (const g of e.m.guides) this.measureLine(g, color, 1.3, true, `measure-guide:${e.id}`);
+      this.measurePoints(e.m.points, color, sel ? 9 : 7, `measure-point:${e.id}`);
+      let el = this.measureLabels.get(e.id);
+      if (!el) {
+        el = document.createElement("div");
+        el.className = "measure-label";
+        el.setAttribute("data-testid", `measure-label-${e.id}`);
+        const id = e.id;
+        el.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          this.measure?.select(store.getState().measureSelected === id ? null : id);
+        });
+        this.container.appendChild(el);
+        this.measureLabels.set(e.id, el);
+      }
+      el.textContent = e.m.label;
+      el.title = e.m.text;
+      el.classList.toggle("selected", sel);
+      el.classList.toggle("stale", st.complete !== null && st.complete.version !== e.version);
+    }
+    for (const [id, el] of this.measureLabels) {
+      if (!seen.has(id)) {
+        el.remove();
+        this.measureLabels.delete(id);
+      }
+    }
+    this.lastMeasureDraw.labels = seen.size;
+    this.placeMeasureLabels();
+  }
+
+  /** Places the labels at their anchors (every frame: the camera moves). */
+  private placeMeasureLabels(): void {
+    const st = store.getState();
+    const rc = this.container.getBoundingClientRect();
+    // labels do not cover each other: a label that would overlap one placed before moves up
+    // or down by its height (the selected one is placed first)
+    const placed: Array<{ x: number; y: number; w: number; h: number }> = [];
+    const order = [...st.measurements].sort((a, b) => Number(b.id === st.measureSelected) - Number(a.id === st.measureSelected));
+    for (const e of order) {
+      const el = this.measureLabels.get(e.id);
+      if (!el) continue;
+      const p = this.project(e.m.at);
+      el.hidden = !p.visible;
+      if (!p.visible) continue;
+      const w = el.offsetWidth || e.m.label.length * 7 + 12;
+      const h = el.offsetHeight || 18;
+      const x = Math.round(Math.min(Math.max(2, p.x - rc.left - w / 2), rc.width - w - 2));
+      let y = Math.round(Math.min(Math.max(2, p.y - rc.top - h - 6), rc.height - h - 2));
+      const hits = (yy: number) => placed.some((q) => x < q.x + q.w + 2 && q.x < x + w + 2 && yy < q.y + q.h + 2 && q.y < yy + h + 2);
+      for (let k = 1; k <= 8 && hits(y); k++) {
+        const dy = (h + 3) * Math.ceil(k / 2) * (k % 2 ? -1 : 1);
+        const yy = y + dy;
+        if (yy >= 2 && yy <= rc.height - h - 2 && !hits(yy)) {
+          y = yy;
+          break;
+        }
+      }
+      placed.push({ x, y, w, h });
+      el.style.left = `${x}px`;
+      el.style.top = `${y}px`;
+    }
+    const h = st.measure?.hover ?? null;
+    const lab = this.measureHoverLabel;
+    if (!h) {
+      lab.hidden = true;
+      return;
+    }
+    const p = this.project(h.point);
+    lab.textContent = h.label;
+    lab.hidden = !p.visible;
+    if (p.visible) {
+      const w = lab.offsetWidth || h.label.length * 8 + 14;
+      const x = p.x - rc.left + 14 + w > rc.width - 4 ? p.x - rc.left - 14 - w : p.x - rc.left + 14;
+      lab.style.left = `${Math.max(2, x)}px`;
+      lab.style.top = `${p.y - rc.top + 12}px`;
+    }
+  }
+
+  /** The measure overlay as drawn (test hook): counts and label positions. */
+  measureView(): { drawn: Record<string, number>; labels: Array<{ id: number; text: string; x: number; y: number; visible: boolean }>; hoverLabel: string | null } {
+    const labels = [...this.measureLabels.entries()].map(([id, el]) => {
+      const r = el.getBoundingClientRect();
+      return { id, text: el.textContent ?? "", x: r.left + r.width / 2, y: r.top + r.height / 2, visible: !el.hidden };
+    });
+    return { drawn: this.lastMeasureDraw, labels, hoverLabel: this.measureHoverLabel.hidden ? null : this.measureHoverLabel.textContent };
+  }
+
   // ---------------------------------------------------------------- section
 
   /** Clipping, caps and contour for the current build. */
@@ -1511,6 +1709,14 @@ export class Viewer implements DragView, SketchView {
     this.pointer = { x: e.clientX, y: e.clientY };
     if (e.buttons !== 0 || this.drag?.active) return;
     if (this.sketch?.active) this.sketch.hover(this.ray(e.clientX, e.clientY), e.altKey);
+    if (this.measure?.active) {
+      // measuring: the engine's element under the mouse is the highlight (no node hover, which
+      // would draw the node's own mesh and change what the raycast hits)
+      this.measure.hover(e.clientX, e.clientY, e.altKey);
+      this.renderer.domElement.style.cursor = "crosshair";
+      if (store.getState().viewHover !== null) this.setViewHover(null);
+      return;
+    }
     const g = this.handleAt(e.clientX, e.clientY);
     const hid = g?.handle.id ?? null;
     if (store.getState().hoverHandle !== hid) store.setState({ hoverHandle: hid });
@@ -1547,6 +1753,11 @@ export class Viewer implements DragView, SketchView {
     this.down = null;
     if (!d || e.button !== 0) return;
     if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4) return;
+    if (this.measure?.active) {
+      // measuring: the click picks (the editor cursor stays)
+      this.measure.click(e.clientX, e.clientY, e.altKey);
+      return;
+    }
     const sk = store.getState().sketch;
     if (sk) {
       // select tool: a click on a segment puts the cursor on its line (Entf deletes it)
@@ -1567,6 +1778,7 @@ export class Viewer implements DragView, SketchView {
   }
 
   private onDoubleClick(e: MouseEvent): void {
+    if (this.measure?.active) return;
     const r = this.pick(e.clientX, e.clientY);
     if (!r) return;
     const idx = bridge.index(r.scene);

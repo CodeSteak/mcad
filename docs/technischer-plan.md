@@ -2,7 +2,7 @@
 
 Stand: 2026-10-23, Ist-Stand nach Testbericht 11 (erste Fassung 2026-10-22) · Grundlage: `Spec: Parametrische CAD-Sprache mit Rastern` (22.10.2026)
 
-Abschnitt 0 fasst zusammen, was sich gegenüber der ersten Fassung geändert hat; die Abschnitte 1–14 beschreiben den umgesetzten Stand, Abschnitt 13 den Status der Meilensteine, Abschnitt 15 die bekannten Grenzen, Abschnitt 16 Farben, Filamente und Thema. Testberichte: `docs/reports/` (B1 … B11 = Bericht 1 … 11, Übersicht in `docs/reports/README.md`).
+Abschnitt 0 fasst zusammen, was sich gegenüber der ersten Fassung geändert hat; die Abschnitte 1–14 beschreiben den umgesetzten Stand, Abschnitt 13 den Status der Meilensteine, Abschnitt 15 die bekannten Grenzen, Abschnitt 16 Farben, Filamente und Thema, Abschnitt 17 Skizzen, Text und Skizzen-Editor, Abschnitt 18 das Messen. Testberichte: `docs/reports/` (B1 … B11 = Bericht 1 … 11, Übersicht in `docs/reports/README.md`).
 
 Ziel: Die Anwendung läuft vollständig im Browser, nur auf dem Desktop, für kleine Hobbyprojekte. Sprache, Auswertung, Cache und Rückschreiben sind in Rust (Wasm), die UI in TypeScript/React. Dazu gibt es eine CLI (auch zur Nutzung durch Claude Code) und eine Desktop-Version (Tauri 2, B9) mit nativem Kernel, echten Dateien, Dateibeobachter und Git-Markierungen.
 
@@ -47,6 +47,7 @@ Festgelegte Rahmenbedingungen:
 | Schnittansicht | – | GPU-Schnitt in Browser und Tauri: Clipping-Ebene, Stencil-Kappe (Paritäts-Pass je Körper, schraffiert wie `cad render --section`), Kontur, Griff mit Rasten auf Rasterebenen und Anker; „Als `cad render …` kopieren“ | B9 |
 | `color()` | CSS-Namen wie OpenSCAD | eigene Palette aus 16 gedeckten Farben (Abschnitt 16.1), unbekannte Namen: Warnung und stabile Zufallsfarbe; `filament = n` | B11 |
 | Mehrfarbdruck | – | Farbregionen über Kernel-Booleans, Filament-Slots, 3MF mit einem Teil je Farbe und Bambu/Orca-Metadaten, ein STL je Farbe (Abschnitt 16) | B11 |
+| Messen | – | Messmodus in UI und `cad measure` mit gemeinsamer Logik in Rust (`cad-measure`, `cad_session::measure`), exakt an der B-Rep, im Schnitt über Ebene ∩ B-Rep aus dem Kernel (Abschnitt 18) | B19 |
 | Thema | Hell/Dunkel umschaltbar | „System“ (Standard, folgt `prefers-color-scheme`, auch in Tauri), Hell, Dunkel; Token-Satz mit WCAG-Prüfung; `cad render --theme dark` | B11 |
 
 ---
@@ -328,6 +329,8 @@ UI → Engine:
 | `SnapTargets` | Rasterpunkte und Anker (Punktgriffe), Rasterebenen `g.name` (Höhe, Radius, Ebene) |
 | `SetDragOptions { step_mm, step_deg }` | Schrittweiten beim freien Ziehen (Einstellungen) |
 | `Export { format, root }` | STL, 3MF, STEP |
+| `Sketch { … }` | Skizzen-Editor (17.12) |
+| `Measure { kind, picks, ray, hit, section, clip, click }` | Messmodus (Abschnitt 18): Element unter der Maus, Messung nach dem letzten Klick |
 
 Engine → UI: `Diagnostics`, `Scene { version, nodes, grids, anchors, handles, hints }`, `Meshes`, `TextEdits`, `ExportResult`, `Progress`.
 
@@ -366,7 +369,7 @@ Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem K
 | `eval <datei> [--module m] [-D name=wert]` | Baum, Werte, Inline-Hinweise, Raster, Anker |
 | `inspect <datei> --line n` | Was die Zeile erzeugt: Knoten, Hülle, Volumen, ausgewählte Kanten, Warnungen |
 | `render <datei> -o bild.png` | Bild: `--view`, Kontaktbogen `--views iso,front,top,right\|all` (gleiche Skalierung), freie Kamera (`--azimuth/--elevation/--zoom/--target/--fit`, `--perspective`), Auswahl (`--part`, `--line` mehrfach, `--node`, `--only`), Überlagerungen `--show grids,anchors,handles,edges,labels,bbox,dims`, Schnitt `--section x\|y\|z=wert`/`--section-plane p,n`/`--section-flip`, `--xray` |
-| `measure <datei>` | `--between A B` (Anker, Rasterpunkt, Koordinate), `--bounds/--volume/--area ZIEL`, `--interference` (Kernel-Schnitt aller Bauteilpaare), `--clearance A B` (Abstand über die Tessellierung) |
+| `measure <datei>` | `--between A B` (Anker, Rasterpunkt, Koordinate), `--bounds/--volume/--area ZIEL`, `--interference` (Kernel-Schnitt aller Bauteilpaare), `--clearance A B` (Abstand über die Tessellierung); an der exakten B-Rep (Abschnitt 18) `--distance`, `--radius`, `--angle`, `--length`, `--area face@P`, `--body`, `--at`, im Schnitt `--section …` (Konturen, Kreise, kleinste Wand) und `--wall P` |
 | `watch <datei> [--render bild.png …]` | Beobachtet Datei und Projektdateien (`notify`), wertet in derselben Sitzung neu aus (Cache bleibt), eine JSON-Zeile je Lauf |
 | `set <datei> --param m.p=wert \| --literal [datei:]z:s=wert` | Code über die Engine ändern (Standardwert, Literal), prüft vor dem Schreiben, atomar, `--dry-run` |
 | `export <datei> -o teil.stl\|.3mf\|.step [-D …] [--schema ap214] [--part name] [--all-parts]` | Exportdatei (STEP: exakte B-Rep, AP242), einzelne oder alle Bauteile |
@@ -399,6 +402,7 @@ Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem K
 | Dateien | Browser: Autospeichern des Projekts in IndexedDB; Projekte aus mehreren Dateien als Tabs; Ordner öffnen/speichern über File System Access API (Chromium), sonst Hoch- und Herunterladen (Datei oder ZIP). Desktop: echtes Dateisystem (Öffnen, Speichern atomar, Speichern unter, Ordner als Projekt, zuletzt geöffnet), ungespeicherte Dateien mit ●, „Automatisch speichern“ (Standard aus, Verzögerung einstellbar), kein IndexedDB |
 | Dateibeobachter (Desktop) | `notify` auf die Ordner der Projektdateien (atomares Speichern ersetzt die Datei); bekannte Inhalte als Hash, eigene Speichervorgänge kommen nicht zurück; saubere Datei: still neu laden als kleinste Zeilenänderungen (Cursor/Scroll bleiben, eigener Undo-Schritt); ungespeicherte Änderungen: Leiste „Neu laden / Meine behalten / Vergleichen“ (Diff-Ansicht); gelöscht/umbenannt: Leiste, Speichern legt neu an |
 | Git (Desktop) | Randmarkierung gegen `HEAD`: neu grün, geändert blau (3 px, Deckkraft 0,5–0,55), gelöscht rotes Dreieck zwischen den Zeilen; Hover zeigt die alten Zeilen; entprellt 300 ms beim Tippen, beim Speichern, bei externen Änderungen und Fensterfokus; unversionierte Dateien ohne Markierung |
+| Messen | Modus „Messen“ (Abschnitt 18): Kontextleiste mit Messart und „Im Schnitt“, Snap auf Eckpunkte, Kantenmitten, Kreismitten, Kanten, Flächen bzw. die Schnittkontur, Maßlinien und Beschriftungen in der Ansicht, Liste „Messungen“ mit Kopieren als Text, Kommentar und `cad measure` |
 | Schnittansicht | Werkzeug „Schnitt“: Ebene x/y/z oder frei (Normale aus Blickrichtung oder Eingabe), Griff ziehen (rastet auf Rasterebenen des Kontextmoduls und Anker, Alt frei), Umkehren, Kappe (Stencil, schraffiert, je Körper wechselnde Richtung, transparente Körper ohne Kappe), Kontur; Statuszeile und „Als `cad render …` kopieren“ mit derselben Konvention wie die CLI |
 | Bauteile | Bauteilleiste mit Sichtbarkeit, Volumen und Export je Bauteil |
 | Farben & Filamente | Liste rechts neben der Ansicht (Farbfeld, Name, Zeilen, Slot-Auswahl, Volumen, Masse PLA), „Farbregionen zeigen“, Exporte „3MF mehrfarbig“, „STL je Farbe (ZIP)“, „3MF einfarbig“; Farbe je Fläche in der Ansicht (Vertex-Farben aus `tri_tags` → `tag_nodes` → `color`) |
@@ -421,6 +425,7 @@ crates/
   kernel-solidcore/ Kernel über solidcore (opt-in, Feature solidcore)
   cad-engine/       Cache, Provenienz, Zonen, Bauteile, Export STL/3MF/STEP
   cad-step/         STEP-Writer (AP242/AP214)
+  cad-measure/      Messen an der exakten B-Rep (Abstand, Radius, Winkel, Länge, Fläche, Schnitt, Wandstärke)
   cad-render/       Software-Rasterizer für die CLI
   cad-session/      Protokoll und Sitzung (Worker und CLI), TS-Typen (ts-rs)
   cad-wasm/         wasm-bindgen-Einstieg für den Worker
@@ -1324,3 +1329,157 @@ erzeugten `line(by = …)`/`length + angle`-Formen außer tangential. Eine neue 
 2D-Skizze. Die Kamera behält „z oben“ (Bahnsteuerung): in gedrehten Ebenen liegt die y-Achse der
 Skizze nicht unbedingt senkrecht auf dem Bildschirm. Tauri T16 treibt die Ansicht mit
 synthetischen Zeigerereignissen (WebDriver), nicht mit echter Maus.
+
+
+---
+
+## 18. Messen (Testbericht 19)
+
+**Ziel.** Messen in der UI (Browser und Tauri) und in der CLI mit derselben Logik in Rust:
+Abstand (Punkt–Punkt und kleinster Abstand zwischen Punkten, Kanten und Flächen mit Fußpunkten;
+parallele Ebenen: Normalabstand), Radius/Durchmesser (Kreiskanten, Bögen, Zylinder, Kegel, Kugel,
+Torus, Verrundungen) mit Achse und Mittelpunkt, Winkel zwischen Kanten und Flächen, Länge einer
+Kante, Fläche einer Fläche, Hülle und Volumen eines Körpers oder Bauteils; im aktiven Schnitt Snap
+auf die Konturen, Abstände in der Ebene, Radius von Schnittkreisen, Wandstärke, Fläche eines
+Bereichs. Ergebnisse exakt aus der B-Rep, sonst mit angegebener Toleranz.
+
+**Aufteilung.**
+
+| Teil | Inhalt |
+| --- | --- |
+| `cad-measure` (neu, kernelunabhängig) | `curve::EdgeCurve`: Kante als beschränkte exakte Kurve (Linie, Kreisbogen, Ellipse geschlossen; B-Spline, Polylinie numerisch) mit nächstem Punkt, Länge (Gauß-Legendre), Mitte nach Bogenlänge, Hülle. `surface`: nächster Punkt auf Ebene, Zylinder, Kegel, Kugel, Torus geschlossen, auf Rotations-/Extrusionsflächen über die Erzeugende, auf B-Spline-Flächen per Gitter + Gauß-Newton. `body::Body`: B-Rep in Kontextkoordinaten mit den Dreiecken jeder Fläche (ob ein Punkt auf der getrimmten Fläche liegt, Grobsuche). `measure`: Abstand, Winkel, Radius, Fläche. `section`: Konturen, Bereiche, Wandstärke. `dist`: Dreiecksabstand mit BVH (aus `cad-cli/geom.rs`, auch `--clearance`) |
+| `cad-engine` | `measure_parts` (je Teil B-Rep und Tessellierung, platziert, Massen), `section_parts` (Kernel-Boolean mit dem behaltenen Halbraum) |
+| `cad-session::measure` | Messmodell je Knoten (einmal je Auswertung), Schnitte je Ebene (bis 6), Snap, Auswahl, Messungen mit Maßlinien, Texten und `cad measure`-Argumenten, Provenienz, Referenzen für die CLI |
+| CLI `cad measure` | Referenzen auflösen, JSON/Text (`measurements`, `section`, `at`) |
+| UI | `app/measure.ts` (Controller), `app/measureUi.tsx` (Kontextleiste `MeasureBar`, Liste `MeasurePanel`, Statuszeile), Viewer (Treffer, Hervorhebung, Maßlinien, Beschriftungen), `logic/measure.ts` (Texte, Kopieren) |
+
+**Abstand.** Grobsuche über die Tessellierung (Flächen als Dreiecke, Kanten als Polylinien,
+Punkte als entartete Dreiecke; BVH), dann abwechselnde Projektion auf die exakte Geometrie
+(Punkt auf A nächst dem Fußpunkt auf B und umgekehrt, bis zur Ruhe). Projektion auf eine Fläche:
+auf die unbeschränkte Fläche; liegt der Punkt nicht auf der getrimmten Fläche (Abstand zu ihren
+Dreiecken > 2 Sehnentoleranzen), auf den nächsten Randpunkt (exakte Kantenkurven). Exakt heißt:
+beide Elemente analytisch und die Iteration konvergiert; sonst gilt ± 2 × Sehnentoleranz und
+das Ergebnis der Grobsuche, wenn die Verfeinerung davon wegläuft. Zwei parallele Ebenen: der
+Normalabstand ist der Wert, Fußpunkte = Punkt auf A und seine Projektion auf B (Hilfslinie zum
+nächsten Punkt der Fläche B), der kleinste Abstand der begrenzten Flächen steht daneben;
+parallele Achsen (Zylinder, Kegel, Kreise): zusätzlich der Achsabstand. Δx/Δy/Δz der Fußpunkte.
+
+**Radius.** Kreis und Ellipse aus der Kantenkurve; Zylinder, Kegel (Radius an der Stelle,
+Halbwinkel, Spitze), Kugel, Torus aus den Flächenparametern; die Ausdehnung längs der Achse aus
+Dreiecken und Rand (gezeichnete Achse). Rotationsflächen, deren Erzeugende ein Kreisbogen ist
+(SMLibs Verrundung entlang einer Kreiskante), werden als Torus erkannt (Abweichung ≤ 10⁻⁹ ·
+Radius: exakt); ein gerader achsparalleler Erzeuger als Zylinder; Extrusionsflächen eines
+Kreisbogens als Zylinder; B-Spline-Kanten, die einem Kreis bis 10⁻⁶ folgen, mit angepasstem Kreis
+(`exact = false`, Abweichung angegeben); Freiformflächen: Hauptkrümmungsradien (numerisch).
+Verrundungen gerader Kanten sind in SMLib Zylinder, Ecken Kugeln.
+
+**Winkel.** Richtung je Element: Gerade (Kante), Ebene (Fläche: äußere Normale; Kreiskante:
+ihre Ebene), Achse (Zylinder, Kegel, Torus, Rotationsfläche), sonst Tangente bzw.
+Tangentialebene am Klickpunkt. Zwei Ebenen: Winkel zwischen den Ebenen 0–90° (Fase: 45°), dazu
+der Winkel der Normalen und der Öffnungswinkel an der Schnittgeraden zwischen den Halbebenen zu
+den Klickpunkten (bei Nachbarflächen der Winkel durchs Material oder außen); der Bogen liegt an
+der Schnittgeraden nächst den Klicks (beim stumpfen Öffnungswinkel zur Verlängerung der zweiten
+Fläche). Zwei Kanten mit gemeinsamer Ecke: 0–180° von der Ecke weg; sonst 0–90°. Gerade–Ebene:
+Winkel zur Ebene.
+
+**Fläche, Länge, Körper.** Ebene Flächen exakt über den Rand (Green: ½∮(x dy − y dx) über die
+exakten Kanten, Geraden geschlossen, sonst Gauß-Legendre). Zylinder, Kegel, Kugel, Torus: die
+Dreiecke 4- und 8-fach unterteilt, Innenpunkte auf die Fläche, Randpunkte auf die Randkurven
+projiziert, Richardson-Extrapolation (relativer Fehler < 10⁻⁶ in den Tests). Andere Flächen: aus
+den Dreiecken mit Toleranzangabe. Länge: exakt für Geraden und Bögen, sonst Gauß-Legendre.
+Körper: das Bauteil der gewählten Fläche (benannte Instanz der Datei, über Tags → Knoten →
+Vorfahren), sonst der Körper (Teil) des Knotens; Volumen, Oberfläche, Schwerpunkt aus dem
+Kernel (SMLib integriert auf ~10⁻⁴), Hülle aus der B-Rep (Ecken, exakte Kantenextreme,
+Dreiecke, Extrempunkte von Kugeln und Tori).
+
+**Schnitt.** Ebene ∩ B-Rep über den Kernel: je Volumenteil `Intersection` mit einem Quader
+jenseits des Teils, der genau den behaltenen Halbraum `(q − p) · n ≤ 0` abdeckt (Konvention wie
+`cad render --section` und die Schnittansicht). Die Deckflächen des Ergebnisses (Ebene mit
+Normale +n in der Schnittebene) begrenzen den Schnitt; ihre Schleifen laufen um Material gegen
+den Uhrzeigersinn um n, um Löcher im Uhrzeigersinn, die Innennormale einer Kontur ist n ×
+Tangente. Jede Kante grenzt an eine geschnittene Fläche des Körpers; ist sie Ebene, Zylinder,
+Kegel, Kugel, Torus oder Rotationsfläche (die letzten drei senkrecht zur Achse geschnitten), wird
+der Abschnitt in geschlossener Form gebildet (Gerade, Kreis, Ellipse; Lage und Richtung aus der
+Kernel-Kurve, deren Abweichung als `dev` mitgeht); sonst bleibt die Kernel-Kurve (`exact =
+false`). Bereich = Deckfläche (Umriss und Löcher) mit Fläche aus Green. Wandstärke an einem
+Konturpunkt: Strahl senkrecht zur Kontur ins Material bis zur nächsten Kontur (Geraden und Kreise
+exakt, sonst abgetastet und nachgesucht); `--section` allein meldet zusätzlich die kleinste
+Wandstärke über 8 Stellen je Abschnitt (Schätzung). Kosten: ein Boolean je Teil und Ebene
+(gecacht); beim Ziehen der Ebene im Messmodus rechnet die Engine die Lagen nacheinander.
+
+**Snap** (Session, `snap`). Toleranz wie beim Skizzen-Editor: Snap-Radius in Pixeln × Pixelgröße
+× Tiefe. Auf dem Modell: Eckpunkte, Kantenmitten (Bogenlänge), Kreismitten, dann Kanten nahe dem
+Strahl, dann die getroffene Fläche. Die UI schickt neben dem Strahl den Treffer ihres Raycasts
+(Knoten, `tri_faces`-ID, Punkt); die Flächen-ID wird über die Teile des Knotens zugeordnet (IDs
+folgen wie in `append_offset` aufeinander) und am Treffpunkt geprüft, sonst gilt die nächste
+Fläche (auch für Farbregionen, deren Netze andere IDs haben). Verdeckte Punkte (tiefer als der
+Treffer) und der entfernte Halbraum der Schnittansicht werden nicht angeboten; bei gleichem
+Bildabstand (koaxiale Kreise) gewinnt der nähere. Alt: kein Punktfang. Je Messart nur passende
+Elemente (Radius: runde Kanten und Flächen, Winkel: keine Punkte und Kugeln, …). Im Schnitt:
+Strahl ∩ Ebene, Eckpunkte, Mitten, Kreismitten der Kontur, Konturabschnitte, für „Fläche“ der
+Bereich unter der Maus.
+
+**Provenienz.** Zu jeder Auswahl: die Zeilen der Knoten der Flächen-Tags (bei Kanten beider
+Flächen, bei Ecken aller anliegenden), mit benannter Instanz und Modul (`Zeile 11: box (Instanz
+k: gehaeuse)`); Rasterpunkte (`g[b, h, o]`), Rasterlinien für Achsen (`g[loch[0], mitte, *]`),
+Rasterebenen für ebene Flächen (`g.innen_l`) und Anker (`k.ecke`), auf denen das Element liegt
+(Toleranz 10⁻⁶ relativ, alle Raster der Szene).
+
+**Protokoll** (7.1). `Measure { id, kind, picks, ray?, hit?, pixel, snap_px, free, click,
+section?, clip?, node? }` → `Measure { id, version, hover, picks, result, prompt, message,
+section }`. Wie beim Skizzen-Editor ohne Zustand in der Engine: die Auswahl (Art, Knoten,
+Körper, Kante/Fläche bzw. Kontur/Abschnitt/Bereich, Punkt, Text, Referenz, Herkunft,
+Hervorhebung) geht mit jeder Anfrage hin und zurück; höchstens eine Anfrage unterwegs.
+`Measurement { kind, title, value, unit, label, values[], lines, guides, points, at, details,
+picks, exact, tol?, section?, text, cli }`: `text` ist die Kopie als Text (mit `// ` die als
+Kommentar), `cli` die Argumente nach dem Dateinamen (mit `--module`/`-D` des Kontexts und
+`--section …`), die UI setzt `cad measure <datei>` davor. Gleich über `WorkerTransport` und
+`TauriTransport`.
+
+**CLI.** Elementreferenzen `vertex@P`, `mid@P`, `center@P`, `edge@P`, `face@P`, `body@P` (das
+Element nächst P; bei Flächen entscheidet unter gleich nahen die exakte Fläche), mit `--section`
+dieselben Präfixe für die Kontur und `region@P`; Punkte wie `--between`. `--at P` listet, was
+bei P liegt (mit Referenz) – damit findet ein Agent die Referenzen. JSON: `measurements`
+(Protokolltyp, Zahlen auf 12 Stellen, ohne Hervorhebungs-Polylinien), `section` (Bereiche,
+Konturen mit Segmenten, Kreise, kleinste Wand), `at`.
+
+**UI.** Schalter „Messen“ in der Ansichtsleiste; Kontextleiste `MeasureBar` (Messarten
+Abstand, Radius, Winkel zuerst wie im UI-Konzept, dann Länge, Fläche, Körper, im Schnitt
+Wandstärke; „Im Schnitt“ schaltet die Schnittansicht ein; Fertig); Liste `MeasurePanel`
+(rechts neben der Ansicht, später Reiter „Messen“ des Seitenpanels) mit Wert, Genauigkeit,
+Details, Herkunft, Kopieren (Text, `// Kommentar`, `cad measure`), Löschen; „Alle kopieren“,
+„Alle löschen“. Beide sind eigenständige Bausteine (`.contextbar`), die UI-Überarbeitung muss sie
+nur einordnen (Kontextleiste links oben unter der Werkzeugleiste). In der Ansicht: Element unter
+der Maus (Snap-Farbe) mit Beschriftung, gewählte Elemente (Akzent), Maßlinien, gestrichelte
+Hilfslinien (Achsen, Hülle), Punkte und eine Beschriftung je Messung (DOM, jedes Bild platziert,
+ohne Überdeckung; Klick wählt). Farben `--view-measure`/`--on-measure` je Thema
+(`contrast.test.ts`: Schrift ≥ 4,5:1, Linie zum Hintergrund ≥ 3:1). Im Messmodus keine Griffe;
+ein Klick ist Drücken ohne Bewegung (Linksziehen dreht weiter); Esc verwirft die Auswahl bzw.
+beendet, Entf löscht die gewählte Messung, Buchstaben D/R/W/L/F/K/T wählen die Messart. Eine
+Modelländerung verwirft offene Auswahlen; fertige Messungen bleiben (Hinweis „veraltet“).
+Skizzen-Editor und Messen schließen sich aus.
+
+**Tests.** `cad-measure`: Unit-Tests (Kurven, Flächen, Quadratur) und `tests/analytic.rs` gegen
+SMLib-Körper (Zylinder: Radius, Achse, Mantel- und Deckfläche, Kreislänge, Normalabstand;
+Kegel, Kugel, Torus: Radien und Flächen; Fillet-Zylinder, -Kugel, -Torus einer Kreiskante;
+Fase 45°/135°; Abstände Fläche–Kugel, Punkt–Kugel, windschiefe Kanten; Schnitt durch Bohrungen
+mit exakten Kreisen, Flächen, Wandstärken, schräger Schnitt als Ellipse). `cad-session`
+`tests/measure.rs` (Snap mit Provenienz, Klicks, CLI-Argumente, Lochplatte mit Bohrungs- und
+Verrundungsradien, Gehäuse aus `examples/spec` mit Wandstärke 3 mm im Schnitt, Innenabstand,
+Bauteilvolumen, Fase, Schnittmodus über das Protokoll). CLI `tests/messen.rs`. Vitest
+`logic/measure.test.ts`. Playwright M01–M11 (`web/e2e/messen.spec.ts`), Tauri T17.
+
+**Grenzen.** Der Schnitt kostet einen Kernel-Boolean je Teil und Ebene; scheitert er, gibt es
+keinen Schnitt (Meldung) und keine Ersatzkontur aus dem Netz. Konturen auf Freiformflächen und
+auf schräg geschnittenen Kegeln, Tori und Rotationsflächen bleiben Kernel-Kurven (`exact =
+false`). Die Wandstärke misst senkrecht zur Kontur an einer Stelle (nicht den kleinsten Abstand
+zur Gegenseite), die kleinste Wandstärke ist eine Schätzung über Stichproben. Abstände zwischen
+Freiformflächen und Fälle, in denen die abwechselnde Projektion an einem anderen lokalen Minimum
+endet, gelten mit der Toleranz der Tessellierung. Die Wahl über Punkte (`face@P`) ist eindeutig,
+solange P einem Element am nächsten liegt (CLI-Referenzen mit 6 Nachkommastellen). Flächen von
+Freiformflächen aus den Dreiecken; Hülle von Freiformkörpern aus Dreiecken und Kanten (innen
+liegende Extreme von B-Spline-Flächen bis auf die Sehnentoleranz). Volumen aus dem Kernel
+(~10⁻⁴). Die Reihenfolge der CLI-Ergebnisse folgt den Optionen, nicht der Befehlszeile.
+2D-Ergebnisse (Skizzen ohne Extrusion) lassen sich nicht messen. Die Liste der Messungen lebt
+nur in der Sitzung (nicht gespeichert). Tauri T17 treibt die Ansicht mit synthetischen
+Zeigerereignissen.

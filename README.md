@@ -16,8 +16,10 @@ prüfen, eine Desktop-App (Tauri 2: nativer Kernel, echte Dateien, Dateibeobacht
 VS Code, Git-Markierungen am Rand, Steuerung durch `cad ui …`), eine 3D-Schnittansicht, ein
 CLI-Daemon, der den Kernel-Cache zwischen CLI-Aufrufen hält, sowie Mehrfarbigkeit mit
 Farbpalette, Farbregionen, Filament-Slots, mehrfarbigem 3MF für Bambu Studio/OrcaSlicer und ein
-überarbeitetes dunkles Thema, nach einer unabhängigen Prüfung korrigiert (Testberichte 1–12,
-[`docs/reports/`](docs/reports/README.md)). Offen ist der Umstieg auf den
+überarbeitetes dunkles Thema, nach einer unabhängigen Prüfung korrigiert, Skizzen mit
+Skizzen-Editor, Text und SVG-Import sowie ein Messwerkzeug an der exakten B-Rep (Abstand mit
+Fußpunkten, Radius, Winkel, Länge, Fläche, Körper; im Schnitt Konturen, Kreise, Wandstärke) in
+der UI und in `cad measure` (Testberichte 1–19, [`docs/reports/`](docs/reports/README.md)). Offen ist der Umstieg auf den
 Rust-Kernel solidcore (M8, wartet auf den Portierungsstand von solidcore, siehe
 [`docs/solidcore-umstieg.md`](docs/solidcore-umstieg.md)). Browser: kein Backend, gespeichert
 wird im Browser (IndexedDB) oder über die File System Access API; Desktop: Dateisystem.
@@ -90,6 +92,8 @@ $cad render examples/spec/gehaeuse.scad -o s.png --section z=10 --show dims   # 
 $cad render examples/spec/fillet_zonen.scad -o f.png --line 12 --azimuth 120 --elevation 30 --xray
 $cad measure examples/spec/gehaeuse.scad --between k.ecke k.oben --volume part:k
 $cad measure examples/projekt-gehaeuse/gehaeuse.scad --interference --clearance gehaeuse deckel
+$cad measure examples/spec/lochplatte.scad --radius "face@[8,6,2]" --at "[18,6,4]"   # R 2 · ⌀ 4, Elemente bei P
+$cad measure examples/spec/gehaeuse.scad --section z=10 --wall "[0,15,10]"         # Schnitt: Bereiche, Wandstärke 3 mm
 $cad set examples/spec/gehaeuse.scad --param gehaeuse.w=50 --dry-run   # Standardwert, Diff
 $cad watch teil.scad --json --render teil.png --views all      # neu auswerten bei jeder Änderung
 $cad export examples/spec/flasche.scad -o flasche.step         # auch .stl, .3mf
@@ -338,6 +342,7 @@ crates/
   kernel-mock/       Testkernel in Rust
   cad-engine/        Auswertung mit Cache, Provenienz, Zonen, Bauteile, Export STL/3MF/STEP
   cad-step/          STEP-Writer (AP242/AP214)
+  cad-measure/       Messen an der exakten B-Rep (Abstand, Radius, Winkel, Länge, Fläche, Schnittkonturen, Wandstärke)
   cad-outline/       neutrale 2D-Konturen (Gerade, Kreis-/Ellipsenbogen, Bézier), Füllregeln
   cad-svg/           SVG-Import (Teilmenge) → Konturen in mm
   cad-font/          Text: mitgelieferte OFL-Schriften (fonts/), Shaping (rustybuzz), Glyphen-Umrisse
@@ -415,6 +420,9 @@ CMakeLists, Build-Skript und Compiler: `scripts/ci/smlib-key.sh`). Ist der SMLib
 - [Bericht 14](docs/reports/14-skizzen/report.pdf): Skizzen mit gemischten Konturen (Geraden, Bögen, Bézier, Splines) und Module als Namensräume.
 - [Bericht 15](docs/reports/15-skizzen-ecken-offset/report.pdf): Skizzen – Ecken (`corner`, `fillet2d`), `offset` (OpenSCAD-Vergleich), `stroke`.
 - [Bericht 16](docs/reports/16-text-svg/report.pdf): Text mit mitgelieferten Schriften und SVG-Import, Vergleich mit OpenSCAD.
+- [Bericht 17](docs/reports/17-schablonenschrift/report.pdf): Schablonenschrift „cad stencil mono“ als Standardschrift.
+- [Bericht 18](docs/reports/18-skizzen-editor/report.pdf): Skizzen-Editor (Zeichenmodus mit Raster, Snap, Code je Aktion).
+- [Bericht 19](docs/reports/19-messen/report.pdf): Messwerkzeug in UI und CLI (exakt an der B-Rep, im Schnitt, Bezug zur Sprache).
 
 ## Lizenzen
 

@@ -43,6 +43,7 @@ import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
 import { DragController } from "./drag";
 import { SketchController } from "./sketch";
+import { MeasureController } from "./measure";
 import { undo, redo } from "@codemirror/commands";
 import { gitMarks } from "../editor/gitGutter";
 
@@ -151,6 +152,15 @@ export const drag = new DragController(client, () => sendNow(), { target: editTa
 /** Sketch editor (Plan 17.12). */
 export const sketch = new SketchController(client, () => sendNow());
 
+/** Measure mode (Plan 18). */
+export const measure = new MeasureController(client);
+
+// Sketch editor and measure mode exclude each other.
+store.subscribe((s, p) => {
+  if (s.sketch && !p.sketch && s.measure) measure.exit();
+  if (s.measure && !p.measure && s.sketch) sketch.exit();
+});
+
 // Rounding steps of free drags (Einstellungen).
 {
   const s = store.getState().settings;
@@ -167,9 +177,11 @@ export function setViewer(v: Viewer | null): void {
   if (v) {
     v.drag = drag;
     v.sketch = sketch;
+    v.measure = measure;
     v.onOpenLocation = openLocation;
   }
   sketch.setView(v);
+  measure.setView(v);
 }
 export function getViewer(): Viewer | null {
   return viewer;
@@ -832,6 +844,43 @@ window.__cad = {
   },
   sketchExit() {
     sketch.exit();
+  },
+  /** Measure mode: kind, picks, hover, prompt, section, the measurements and their labels. */
+  measure() {
+    const st = store.getState();
+    const m = st.measure;
+    const view = viewer?.measureView() ?? null;
+    return {
+      active: m !== null,
+      kind: m?.kind ?? null,
+      inSection: m?.inSection ?? false,
+      picks: (m?.picks ?? []).map((p) => ({ kind: p.kind, label: p.label, point: p.point, reference: p.reference, origin: p.origin })),
+      hover: m?.hover ? { kind: m.hover.kind, label: m.hover.label, point: m.hover.point, reference: m.hover.reference, origin: m.hover.origin, lines: m.hover.lines.length } : null,
+      prompt: m?.prompt ?? null,
+      message: m?.message ?? null,
+      section: m?.section ?? null,
+      answers: measure.answers,
+      rtt: measure.rtt,
+      selected: st.measureSelected,
+      results: st.measurements.map((e) => ({ id: e.id, kind: e.m.kind, value: e.m.value, unit: e.m.unit, label: e.m.label, text: e.m.text, cli: e.m.cli, exact: e.m.exact, values: e.m.values, details: e.m.details, at: e.m.at, version: e.version, lines: e.m.lines.length, guides: e.m.guides.length, origin: e.m.picks.flatMap((p) => p.origin) })),
+      view,
+    };
+  },
+  measureEnter(kind?: string, inSection?: boolean) {
+    measure.enter((kind ?? "distance") as import("../engine/protocol").MeasureKind, inSection);
+  },
+  measureKind(kind: string) {
+    measure.setKind(kind as import("../engine/protocol").MeasureKind);
+  },
+  measureExit() {
+    measure.exit();
+  },
+  /** Client position of a context point (measure tests). */
+  screenOf(p: [number, number, number]) {
+    if (!viewer) return null;
+    const q = viewer.project(p);
+    const free = document.elementFromPoint(q.x, q.y)?.getAttribute("data-testid") === "viewport-canvas";
+    return { ...q, visible: q.visible && free };
   },
   /** Screen position of a point of the sketch plane. */
   sketchScreen(x: number, y: number) {

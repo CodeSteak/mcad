@@ -32,6 +32,8 @@ export interface Palette {
   cap: string;
   /** Snap marker of the sketch editor (like the snap label). */
   snap: string;
+  /** Dimension lines and labels of the measure mode. */
+  measure: string;
 }
 
 export function readPalette(el: HTMLElement = document.documentElement): Palette {
@@ -62,6 +64,7 @@ export function readPalette(el: HTMLElement = document.documentElement): Palette
     openFace: v("--view-open-face", "#f08c00"),
     cap: v("--view-cap", "#db5c3d"),
     snap: v("--view-snap", "#237a35"),
+    measure: v("--view-measure", "#8a5a00"),
   };
 }
 

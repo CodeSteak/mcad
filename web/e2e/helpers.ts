@@ -296,7 +296,19 @@ export async function waitHandles(page: Page, pred: string = "(hs) => hs.length 
       { timeout: 30_000, polling: 50 },
     ),
   );
-  return hook(page, (c) => c.handles());
+  // The handles of the previous cursor line stay drawn until the next frame rebuilds the
+  // overlay, and a refit (viewport resized) can still move them: answer once two reads a few
+  // frames apart agree and still satisfy the predicate.
+  let hs = await hook(page, (c) => c.handles());
+  for (let i = 0; i < 40; i++) {
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r)))));
+    const next = await hook(page, (c) => c.handles());
+    // eslint-disable-next-line no-new-func
+    const ok = (await page.evaluate(([src, h]) => new Function("hs", `return (${src})(hs);`)(h), [pred, next] as const)) as boolean;
+    if (ok && JSON.stringify(next) === JSON.stringify(hs)) return next;
+    hs = next;
+  }
+  return hs;
 }
 
 export async function frame(page: Page): Promise<void> {
@@ -711,6 +723,34 @@ export function record18(entry: ScenarioC): void {
 export function writeMetrics18(m: Record<string, unknown>): void {
   mkdirSync(REPORT18_DIR, { recursive: true });
   const f = join(REPORT18_DIR, "metrics.json");
+  const old = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
+  writeFileSync(f, JSON.stringify({ ...old, ...m }, null, 2));
+}
+
+// ---------------------------------------------------------------- Bericht 19 (Messen)
+
+export const REPORT19_DIR = join(here, "../../reports/tmp/report19");
+
+export async function screenshot19(page: Page, name: string, area: "view" | "full" | "editor" = "full"): Promise<void> {
+  mkdirSync(join(REPORT19_DIR, "img"), { recursive: true });
+  const sel = { view: "section.viewcol", editor: "section.editorpane" } as const;
+  const clip = area === "full" ? null : await page.locator(sel[area]).boundingBox();
+  await page.screenshot({ path: join(REPORT19_DIR, "img", `${name}.jpg`), type: "jpeg", quality: 85, ...(clip ? { clip } : {}) });
+}
+
+export function record19(entry: ScenarioC): void {
+  mkdirSync(REPORT19_DIR, { recursive: true });
+  const f = join(REPORT19_DIR, "scenarios.json");
+  const all: ScenarioC[] = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : [];
+  const i = all.findIndex((e) => e.id === entry.id);
+  if (i >= 0) all[i] = entry;
+  else all.push(entry);
+  writeFileSync(f, JSON.stringify(all, null, 2));
+}
+
+export function writeMetrics19(m: Record<string, unknown>): void {
+  mkdirSync(REPORT19_DIR, { recursive: true });
+  const f = join(REPORT19_DIR, "metrics.json");
   const old = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
   writeFileSync(f, JSON.stringify({ ...old, ...m }, null, 2));
 }

@@ -186,6 +186,215 @@ pub enum ToEngine {
     /// previews the tool, and on `click` adds the point or completes the action (code as
     /// `edits`). Answers `Sketch`.
     Sketch(SketchRequest),
+    /// Measure mode (Plan 18): snaps the mouse ray (vertex, edge midpoint, circle centre,
+    /// edge, face; in a section the contour), and on `click` adds the pick or completes the
+    /// measurement. Answers `Measure`.
+    Measure(Box<MeasureRequest>),
+}
+
+/// What to measure (Plan 18).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum MeasureKind {
+    /// Two elements: minimum distance with foot points (parallel planes: normal distance).
+    Distance,
+    /// Circular edge or round face: radius, diameter, centre, axis.
+    Radius,
+    /// Two edges or faces.
+    Angle,
+    /// Length of an edge (section: of a contour segment).
+    Length,
+    /// Area of a face (section: of a region).
+    Area,
+    /// Body or part of a face: bounds, volume, area.
+    Body,
+    /// Section only: wall thickness across the contour at a point.
+    Wall,
+}
+
+/// Section plane: through `point`, `normal` (unit) points into the removed half (convention
+/// of `cad render --section`).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+pub struct SectionPlaneRef {
+    pub point: Vec3,
+    pub normal: Vec3,
+}
+
+/// The face under the mouse (UI raycast on the displayed mesh).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+pub struct MeasureHit {
+    /// Node whose mesh was hit.
+    pub node: u32,
+    /// `MeshData.tri_faces` of the hit triangle.
+    pub face: u32,
+    /// Hit point, context coordinates.
+    pub point: Vec3,
+}
+
+/// A picked element. `kind`: `vertex`, `mid` (edge midpoint), `center` (circle centre),
+/// `edge`, `face`, `body`; in a section `section_vertex`, `section_mid`, `section_center`,
+/// `section_edge`, `region`; `point` (a free point: anchor, grid point, coordinate).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct MeasurePick {
+    pub kind: String,
+    /// Node the element belongs to.
+    pub node: u32,
+    /// Body (shape) of the node.
+    pub body: u32,
+    /// B-rep edge or face of the body; in a section: contour and segment, or region.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge: Option<u32>,
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub face: Option<u32>,
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub contour: Option<u32>,
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segment: Option<u32>,
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<u32>,
+    /// Snapped point (context coordinates).
+    pub point: Vec3,
+    /// Display text (`Kreismitte · Kreis R 3`).
+    pub label: String,
+    /// Reference for `cad measure` (`center@[10, 10, 6]`, `face@[…]`, `k.ecke`).
+    pub reference: String,
+    /// Provenance: code lines, named instances, grid planes/points and anchors the element
+    /// lies on.
+    pub origin: Vec<String>,
+    /// Highlight while hovering (polylines, context coordinates).
+    pub lines: Vec<Vec<Vec3>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct MeasureRequest {
+    /// Echoed in the answer.
+    pub id: u32,
+    pub kind: MeasureKind,
+    /// Elements picked so far (from the previous answer's `picks`).
+    #[serde(default)]
+    pub picks: Vec<MeasurePick>,
+    /// Mouse ray; without it only the prompt (and `section` info) is answered.
+    #[ts(optional)]
+    #[serde(default)]
+    pub ray: Option<Ray>,
+    /// Face under the mouse (raycast of the UI).
+    #[ts(optional)]
+    #[serde(default)]
+    pub hit: Option<MeasureHit>,
+    /// Size of a pixel at distance 1 from the camera (2·tan(fov/2)/height).
+    #[serde(default)]
+    pub pixel: f64,
+    /// Snap radius in pixels.
+    #[serde(default)]
+    pub snap_px: f64,
+    /// Alt: no snapping to points, the exact point on the face/edge.
+    #[serde(default)]
+    pub free: bool,
+    /// Mouse click: adds the pick; a complete measurement answers `result`.
+    #[serde(default)]
+    pub click: bool,
+    /// Measure in this section plane (contours of plane ∩ B-rep).
+    #[ts(optional)]
+    #[serde(default)]
+    pub section: Option<SectionPlaneRef>,
+    /// The section view is on (elements in the removed half are not offered).
+    #[ts(optional)]
+    #[serde(default)]
+    pub clip: Option<SectionPlaneRef>,
+    /// Node to measure when nothing is hit (default: the root).
+    #[ts(optional)]
+    #[serde(default)]
+    pub node: Option<u32>,
+}
+
+/// One value of a measurement.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct MeasureValue {
+    /// `distance`, `dx`, `radius`, `diameter`, `angle`, `length`, `area`, `volume`, …
+    pub key: String,
+    pub label: String,
+    pub value: f64,
+    /// `mm`, `mm²`, `mm³`, `°`.
+    pub unit: String,
+}
+
+/// A completed measurement (UI: drawn in the view and listed; CLI: `measurements`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct Measurement {
+    pub kind: MeasureKind,
+    /// `Abstand`, `Radius`, `Winkel`, `Länge`, `Fläche`, `Körper`, `Wandstärke`.
+    pub title: String,
+    /// The main value (`values[0]`).
+    pub value: f64,
+    pub unit: String,
+    /// Short text in the view (`12.5 mm`, `R 3 · ⌀ 6`, `45°`).
+    pub label: String,
+    pub values: Vec<MeasureValue>,
+    /// Dimension lines (context coordinates).
+    pub lines: Vec<Vec<Vec3>>,
+    /// Help lines (axes, extension lines), drawn dashed.
+    pub guides: Vec<Vec<Vec3>>,
+    /// Markers (foot points, centres).
+    pub points: Vec<Vec3>,
+    /// Where the label goes.
+    pub at: Vec3,
+    /// Further lines of text (foot points, Δ, axis, provenance).
+    pub details: Vec<String>,
+    pub picks: Vec<MeasurePick>,
+    /// From the exact geometry in closed form; else `tol` is the accuracy.
+    pub exact: bool,
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tol: Option<f64>,
+    /// Measured in this section plane.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub section: Option<SectionPlaneRef>,
+    /// The measurement as text (copy, code comment).
+    pub text: String,
+    /// Arguments of `cad measure` after the file name that repeat it.
+    pub cli: Vec<String>,
+}
+
+/// The section measured in (answer to requests with `section`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct MeasureSectionInfo {
+    pub plane: SectionPlaneRef,
+    pub regions: u32,
+    pub contours: u32,
+    /// mm²
+    pub area: f64,
+    /// All contour segments in closed form (lines, circles, ellipses from analytic surfaces).
+    pub exact: bool,
+    /// Largest deviation of the kernel's intersection curves from the closed forms (mm).
+    pub max_dev: f64,
+    /// Why there is no section (kernel boolean failed, plane misses the model).
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct MeasureAnswer {
+    pub id: u32,
+    /// Scene version the picks belong to.
+    pub version: u64,
+    /// Element under the mouse.
+    pub hover: Option<MeasurePick>,
+    /// Picks after this message.
+    pub picks: Vec<MeasurePick>,
+    /// Completed measurement (after a click).
+    pub result: Option<Measurement>,
+    /// What to pick next.
+    pub prompt: String,
+    /// Why a pick was not accepted.
+    pub message: Option<String>,
+    pub section: Option<MeasureSectionInfo>,
 }
 
 /// Tools of the sketch editor.
@@ -447,6 +656,8 @@ pub enum FromEngine {
     },
     /// Answer to `Sketch`.
     Sketch(Box<SketchAnswer>),
+    /// Answer to `Measure`.
+    Measure(Box<MeasureAnswer>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -1247,6 +1458,15 @@ pub fn typescript() -> String {
         SketchSnap,
         SketchRaster,
         SketchAnswer,
+        MeasureKind,
+        SectionPlaneRef,
+        MeasureHit,
+        MeasurePick,
+        MeasureRequest,
+        MeasureValue,
+        Measurement,
+        MeasureSectionInfo,
+        MeasureAnswer,
         DragTarget,
         SnapRef,
         ExportFormat,

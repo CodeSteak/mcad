@@ -3,7 +3,7 @@
 
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { Diagnostic, RegionSet, Scene, SketchAnswer, SketchPoint, SketchTool } from "../engine/protocol";
+import type { Diagnostic, MeasureKind, MeasurePick, MeasureSectionInfo, Measurement, RegionSet, Scene, SketchAnswer, SketchPoint, SketchTool } from "../engine/protocol";
 import type { ParamOverrides } from "../logic/params";
 import { SECTION_OFF, type SectionState } from "../logic/section";
 
@@ -104,6 +104,36 @@ export interface SketchState {
   actions: number;
 }
 
+/** Measure mode (Plan 18): kind, picks and the engine's last answer. */
+export interface MeasureState {
+  kind: MeasureKind;
+  /** Measure in the active section plane (contours). */
+  inSection: boolean;
+  /** Elements picked so far (from the engine's answers). */
+  picks: MeasurePick[];
+  /** Element under the mouse. */
+  hover: MeasurePick | null;
+  prompt: string;
+  /** Why the last pick was not accepted. */
+  message: string | null;
+  /** The section measured in (regions, area, exactness). */
+  section: MeasureSectionInfo | null;
+  /** Scene version of the picks. */
+  version: number | null;
+}
+
+/** A completed measurement shown in the view and listed (Plan 18). */
+export interface StoredMeasurement {
+  id: number;
+  m: Measurement;
+  /** Scene version it was measured on (stale when the model changed). */
+  version: number;
+  /** Main file at the time (for "Als cad measure kopieren"). */
+  file: string;
+  /** Context module (`--module`), if any. */
+  module: string | null;
+}
+
 /** What the UI shows of the open project (the texts are in `state/project.ts`). */
 export interface ProjectView {
   name: string;
@@ -199,6 +229,12 @@ export interface CadState {
   gitVersion: number;
   /** Sketch editor (Plan 17.12): `null` = off. */
   sketch: SketchState | null;
+  /** Measure mode (Plan 18): `null` = off. */
+  measure: MeasureState | null;
+  /** Completed measurements (kept when the mode ends, drawn in the view). */
+  measurements: StoredMeasurement[];
+  /** Measurement selected in the list (highlighted in the view). */
+  measureSelected: number | null;
 }
 
 function initialSettings(): Settings {
@@ -320,6 +356,9 @@ export const store = createStore<CadState>(() => ({
   recent: [],
   gitVersion: 0,
   sketch: null,
+  measure: null,
+  measurements: [],
+  measureSelected: null,
 }));
 
 export function useCad<T>(sel: (s: CadState) => T): T {
