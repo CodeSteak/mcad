@@ -98,7 +98,8 @@
 //! set:     + { changes: [{kind: "param"|"literal", spec, file, line, col, old, new}],
 //!            dry_run, written: string[], refused, errors_before, errors_after, diff }
 //! export:  + { output, format: "stl"|"3mf"|"step", bytes, triangles, volume|null, area|null,
-//!            bounds: {min,max}|null, step?: StepStats }   (triangles 0 for STEP)
+//!            bounds: {min,max}|null, step?: StepStats (bodies: labels), notes }   (triangles 0
+//!            for STEP; notes: e.g. overlapping bodies)
 //!          with --part/--all-parts: + { parts: [{ name, output, bytes, triangles, volume|null }] }
 //!          always: + { asserts: AssertResult[], violations, ignored_asserts, aborted }
 //!          (aborted: exit 4, nothing written, no output fields)
@@ -291,6 +292,10 @@ pub(crate) enum Cmd {
         /// `F<slot>_<colour>.stl`, all in the same coordinate system).
         #[arg(long, conflicts_with_all = ["single_color", "all_parts"])]
         per_color: bool,
+        /// STEP: the whole result as one fused body (implicit union of the top level). Default:
+        /// one named body per part and per top-level object outside the parts.
+        #[arg(long)]
+        merge: bool,
         /// Export even if an assertion (`assert_keepout`, `assert_disjoint`, `assert_intersect`,
         /// `assert_touches`) is violated; without it the export stops with exit code 4.
         #[arg(long)]
@@ -563,6 +568,7 @@ pub(crate) fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
             single_color,
             per_color,
             color_group,
+            merge,
             ignore_asserts,
         } => {
             let pkg = cad_engine::color_export::PackageOptions { color_group: *color_group };
@@ -580,7 +586,7 @@ pub(crate) fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
                     *ignore_asserts,
                 )
             } else {
-                export(c, output, format.as_deref(), schema, (!*single_color).then_some(pkg), *ignore_asserts)
+                export(c, output, format.as_deref(), schema, (!*single_color).then_some(pkg), *merge, *ignore_asserts)
             }
         }
         Cmd::DiffKernels { files, .. } => diff::command(files),
@@ -1313,6 +1319,7 @@ fn export(
     format: Option<&str>,
     schema: &str,
     multicolor: Option<cad_engine::color_export::PackageOptions>,
+    merge: bool,
     ignore_asserts: bool,
 ) -> Result<Outcome, Fail> {
     let fmt = match format
@@ -1343,7 +1350,14 @@ fn export(
     let (bytes, triangles, step) = if fmt == p::ExportFormat::Step {
         let name = output.file_stem().and_then(|s| s.to_str()).unwrap_or("part").to_string();
         let opts = cad_engine::StepOptions { schema, name, timestamp: utc_timestamp(), ..Default::default() };
-        let (bytes, st) = m.session.export_step(&opts).map_err(Fail::Kernel)?;
+        let (bytes, st) = m.session.export_step(&opts, merge).map_err(Fail::Kernel)?;
+        if !merge && let Some((sum, union)) = m.session.step_overlap() {
+            notes.push(format!(
+                "Körper überschneiden sich: Summe {} mm³ > Vereinigung {} mm³ (getrennt geschrieben; ein verschmolzener Körper: --merge)",
+                num(sum),
+                num(union)
+            ));
+        }
         (bytes, 0, Some(st))
     } else if colored {
         let (bytes, st) = m.session.export_colors_with(fmt, None, pkg).map_err(Fail::Kernel)?;
@@ -1367,6 +1381,7 @@ fn export(
     j["bounds"] = json!(bounds);
     if let Some(st) = &step {
         j["step"] = json!(st);
+        j["notes"] = json!(notes);
     }
     j["multicolor"] = json!(colored);
     if colored {
@@ -1383,6 +1398,13 @@ fn export(
     let mut t = m.diagnostics_text();
     t.push_str(&assert_note);
     let what = match &step {
+        Some(st) if st.bodies.len() > 1 => format!(
+            "{} Körper ({}), {} Flächen, {} Kanten",
+            st.solids + st.sheets,
+            st.bodies.join(", "),
+            st.faces,
+            st.edges
+        ),
         Some(st) => format!("{} Körper, {} Flächen, {} Kanten", st.solids + st.sheets, st.faces, st.edges),
         None => format!("{triangles} Dreiecke"),
     };
@@ -1394,6 +1416,10 @@ fn export(
     ));
     if colored {
         t.push_str(&format!("3MF mehrfarbig: {} (einfarbig: --single-color)\n", notes.join("; ")));
+    } else {
+        for n in &notes {
+            t.push_str(&format!("Hinweis: {n}\n"));
+        }
     }
     t.push_str(&colors_text);
     Ok(Outcome { json: j, text: t, errors: m.has_errors(), exit: None })

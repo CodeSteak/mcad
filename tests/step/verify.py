@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Independent check of the STEP export with OpenCASCADE (OCP, `pip install cadquery-ocp`).
 
-For every model: `cad export <model> -o <x>.step --json` writes the STEP file and reports the
-kernel's volume, area and bounds (SMLib `mass_props`/`bounds` of the root) and what the
-writer wrote. The file is then read back with OCCT's STEP reader (not our code) and checked:
+For every model: `cad export <model> -o <x>.step --merge --json` writes the STEP file (the
+root as one fused body, so that it compares with the root) and reports the kernel's volume,
+area and bounds (SMLib `mass_props`/`bounds` of the root) and what the writer wrote. With
+`--bodies` the default export is checked instead (one body per part / top-level object): read,
+valid, closed, solids, faces and bounds as below, the volume only if the bodies do not overlap
+(no note from `cad export`), the area not (touching bodies keep their contact faces). The file is then read back with OCCT's STEP reader (not our code) and checked:
 
   read      STEPControl_Reader reads the file and transfers a non-empty shape
   valid     BRepCheck_Analyzer reports the shape valid
@@ -110,11 +113,11 @@ def rel_ok(a: float, b: float) -> bool:
     return abs(a - b) <= REL * max(abs(b), 1e-12)
 
 
-def check(model: Path, cad: str, out: Path, stl_dir: Path | None) -> dict:
+def check(model: Path, cad: str, out: Path, stl_dir: Path | None, bodies: bool = False) -> dict:
     res: dict = {"model": str(model.relative_to(ROOT)) if model.is_relative_to(ROOT) else str(model)}
     step = out / (model.stem + ".step")
     t0 = time.time()
-    p = subprocess.run([cad, "export", str(model), "-o", str(step), "--json"],
+    p = subprocess.run([cad, "export", str(model), "-o", str(step), "--json"] + ([] if bodies else ["--merge"]),
                        capture_output=True, text=True, timeout=600)
     res["export_s"] = round(time.time() - t0, 3)
     try:
@@ -163,10 +166,13 @@ def check(model: Path, cad: str, out: Path, stl_dir: Path | None) -> dict:
     g = GProp_GProps()
     BRepGProp.SurfaceProperties_s(shape, g, OCC_EPS)
     res["occ_area"] = g.Mass()
-    if st["solids"] and res["kernel_volume"] is not None:
+    several = bodies and len(st.get("bodies", [])) > 1
+    res["bodies"] = st.get("bodies", [])
+    overlap = bool(j.get("notes"))
+    if st["solids"] and res["kernel_volume"] is not None and not (several and overlap):
         res["volume_rel"] = abs(res["occ_volume"] - res["kernel_volume"]) / max(abs(res["kernel_volume"]), 1e-12)
         checks["volume"] = rel_ok(res["occ_volume"], res["kernel_volume"])
-    if res["kernel_area"] is not None:
+    if res["kernel_area"] is not None and not several:
         res["area_rel"] = abs(res["occ_area"] - res["kernel_area"]) / max(abs(res["kernel_area"]), 1e-12)
         checks["area"] = res["area_rel"] <= AREA_REL
     box = Bnd_Box()
@@ -213,6 +219,7 @@ def main() -> int:
     ap.add_argument("--out", type=Path, default=ROOT / "target" / "step")
     ap.add_argument("--json", type=Path, default=None, help="report file (default <out>/verify-report.json)")
     ap.add_argument("--stl-dir", type=Path, default=None, help="write the read-back shapes as STL here")
+    ap.add_argument("--bodies", action="store_true", help="check the default export with separate bodies")
     a = ap.parse_args()
     models = a.models or sorted((ROOT / "examples" / "openscad-compat").glob("*.scad")) + sorted(
         (ROOT / "examples" / "spec").glob("*.scad"))
@@ -226,7 +233,7 @@ def main() -> int:
           f"{'dA rel':>9} {'dBox':>9}  surfaces (OCCT)")
     for m in models:
         m = m.resolve()
-        r = check(m, a.cad, a.out, a.stl_dir)
+        r = check(m, a.cad, a.out, a.stl_dir, a.bodies)
         ok = "error" not in r and all(r.get("checks", {}).values()) and bool(r.get("checks"))
         r["ok"] = ok
         failed += not ok

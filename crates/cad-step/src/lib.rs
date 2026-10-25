@@ -62,6 +62,10 @@ pub struct StepOptions {
     pub colors: Vec<Option<[f64; 3]>>,
     /// Colour per face tag (faces without an entry get none).
     pub tag_colors: BTreeMap<u32, [f64; 3]>,
+    /// Name of each B-rep given to [`write`] (in order): the label of its body, or `name 1`,
+    /// `name 2`, … if several bodies carry the same name. Empty: `name N` with the product
+    /// name and N counted across all bodies.
+    pub body_names: Vec<String>,
 }
 
 impl Default for StepOptions {
@@ -76,6 +80,7 @@ impl Default for StepOptions {
             uncertainty: 1e-6,
             colors: Vec::new(),
             tag_colors: BTreeMap::new(),
+            body_names: Vec::new(),
         }
     }
 }
@@ -105,6 +110,9 @@ pub struct StepStats {
     pub approximated_edges: usize,
     pub entities: usize,
     pub bytes: usize,
+    /// Labels of the bodies (`MANIFOLD_SOLID_BREP`, `BREP_WITH_VOIDS`, surface models) in
+    /// file order.
+    pub bodies: Vec<String>,
 }
 
 /// STEP REAL: always with a decimal point, exponent as `E`.
@@ -575,16 +583,43 @@ pub fn write(breps: &[&Brep], opts: &StepOptions) -> Result<(String, StepStats),
          GLOBAL_UNIT_ASSIGNED_CONTEXT((#{mm},#{deg},#{sr})) REPRESENTATION_CONTEXT('Context3D','3D Context with UNIT and UNCERTAINTY'))"
     ));
 
+    // body labels: the B-rep's name, numbered where several bodies share it
+    let named = !opts.body_names.is_empty();
+    let base: Vec<&str> = breps
+        .iter()
+        .enumerate()
+        .flat_map(|(i, b)| {
+            let n = if named { opts.body_names.get(i).map_or(opts.name.as_str(), |s| s.as_str()) } else { "" };
+            std::iter::repeat_n(n, b.bodies.len())
+        })
+        .collect();
+    let mut seen: BTreeMap<&str, usize> = BTreeMap::new();
+    let labels: Vec<String> = base
+        .iter()
+        .enumerate()
+        .map(|(k, n)| {
+            if !named {
+                return format!("{} {}", opts.name, k + 1);
+            }
+            if base.iter().filter(|x| *x == n).count() == 1 {
+                return n.to_string();
+            }
+            let c = seen.entry(n).or_insert(0);
+            *c += 1;
+            format!("{n} {c}")
+        })
+        .collect();
+    st.bodies = labels.clone();
     let mut items = Vec::new();
     let (mut n_solid, mut n_sheet) = (0usize, 0usize);
     let mut body_items: Vec<u32> = Vec::new();
     for b in breps {
         let mut sh = Shared { vertices: vec![None; b.vertices.len()], edges: vec![None; b.edges.len()] };
         for body in &b.bodies {
+            let label = string(&labels[n_solid + n_sheet]);
             match body {
                 Body::Solid { outer, voids } => {
                     n_solid += 1;
-                    let label = string(&format!("{} {}", opts.name, n_solid + n_sheet));
                     let cs = shell(&mut w, b, &mut sh, &mut st, outer, "CLOSED_SHELL", false);
                     let id = if voids.is_empty() {
                         w.add(format!("MANIFOLD_SOLID_BREP({label},#{cs})"))
@@ -602,7 +637,6 @@ pub fn write(breps: &[&Brep], opts: &StepOptions) -> Result<(String, StepStats),
                 }
                 Body::Sheet { shells } => {
                     n_sheet += 1;
-                    let label = string(&format!("{} {}", opts.name, n_solid + n_sheet));
                     let ss: Vec<u32> =
                         shells.iter().map(|s| shell(&mut w, b, &mut sh, &mut st, s, "OPEN_SHELL", false)).collect();
                     let id = w.add(format!("SHELL_BASED_SURFACE_MODEL({label},({}))", refs(&ss)));

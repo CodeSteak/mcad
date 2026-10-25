@@ -119,14 +119,30 @@ where
         nodes: &[NodeIdx],
         opts: &cad_step::StepOptions,
     ) -> Result<(Vec<u8>, cad_step::StepStats), String> {
+        let nodes: Vec<(Option<String>, NodeIdx)> = nodes.iter().map(|&n| (None, n)).collect();
+        self.export_step_named(ev, &nodes, opts)
+    }
+
+    /// [`Engine::export_step_nodes`] with a body name per node (`Some`): every body of the node
+    /// gets that label (numbered if it has several; `cad_step::StepOptions::body_names`).
+    /// Nodes without a name: `product N` as before.
+    pub fn export_step_named(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        nodes: &[(Option<String>, NodeIdx)],
+        opts: &cad_step::StepOptions,
+    ) -> Result<(Vec<u8>, cad_step::StepStats), String> {
+        let named = nodes.iter().any(|(n, _)| n.is_some());
         let mut breps = Vec::new();
         let mut o = opts.clone();
+        o.body_names.clear();
         let own = o.tag_colors.is_empty();
         // Colours per face from the colour regions (Bericht 12, F1): a tag can belong to
         // several nodes of equal content in different colours, so faces get synthetic tags
         // (one per colour) in a copy of the B-rep.
         let mut colors: Vec<[u8; 4]> = Vec::new();
-        for &n in nodes {
+        for (label, n) in nodes {
+            let n = *n;
             let r = ev.reports.get(n as usize).ok_or_else(|| format!("Knoten {n} existiert nicht"))?;
             if r.dim == Some(Dim::Two) {
                 return Err("2D-Ergebnis kann nicht als Körper exportiert werden".into());
@@ -135,6 +151,9 @@ where
             // B-rep parts, then meshes as facetted B-reps
             for i in 0..ev.parts(n).len() + ev.meshes(n).len() {
                 let b = self.placed_brep(ev, n, i, &world)?;
+                if named {
+                    o.body_names.push(label.clone().unwrap_or_else(|| opts.name.clone()));
+                }
                 if !own {
                     breps.push(b);
                     continue;
@@ -222,8 +241,9 @@ where
                 if o.name == cad_step::StepOptions::default().name {
                     o.name = nodes.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>().join(" + ");
                 }
-                let ids: Vec<NodeIdx> = nodes.iter().map(|(_, n)| *n).collect();
-                let (bytes, _) = self.export_step_nodes(ev, &ids, &o)?;
+                // one body per part, labelled with its name
+                let named: Vec<(Option<String>, NodeIdx)> = nodes.iter().map(|(s, n)| (Some(s.clone()), *n)).collect();
+                let (bytes, _) = self.export_step_named(ev, &named, &o)?;
                 Ok((bytes, 0))
             }
         }

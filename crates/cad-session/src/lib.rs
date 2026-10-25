@@ -1156,7 +1156,7 @@ where
     pub fn export_bytes(&mut self, format: p::ExportFormat) -> Result<(Vec<u8>, u32), String> {
         let tol = Some(self.opts.export_tol);
         if format == p::ExportFormat::Step {
-            let (bytes, _) = self.export_step(&cad_engine::StepOptions::default())?;
+            let (bytes, _) = self.export_step(&cad_engine::StepOptions::default(), false)?;
             return Ok((bytes, 0));
         }
         let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
@@ -1222,9 +1222,90 @@ where
     }
 
     /// STEP export of the root of the last finished evaluation, with what was written.
-    pub fn export_step(&mut self, opts: &cad_engine::StepOptions) -> Result<(Vec<u8>, cad_engine::StepStats), String> {
+    /// STEP of the last finished evaluation. Default: one body per part (named like it) and
+    /// the material outside the parts per topmost node ([`rest_nodes`], named after its node,
+    /// e.g. the module) – bodies that only touch stay apart, as in an assembly. Without parts:
+    /// one body per child of the root (the implicit union of the top level is not merged).
+    /// `merge`: the root as one fused body (implicit union), as before.
+    pub fn export_step(
+        &mut self,
+        opts: &cad_engine::StepOptions,
+        merge: bool,
+    ) -> Result<(Vec<u8>, cad_engine::StepStats), String> {
         let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
-        self.engine.export_step(&d.ev, opts)
+        if merge {
+            return self.engine.export_step(&d.ev, opts);
+        }
+        let bodies = self.step_bodies();
+        let one = bodies.len() == 1 && self.cur.as_ref().is_some_and(|c| c.out.parts.is_empty());
+        if bodies.is_empty() || one {
+            // a single body without parts: the root, named like the product (as before)
+            return self.engine.export_step(&d.ev, opts);
+        }
+        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+        let named: Vec<(Option<String>, NodeIdx)> = bodies.into_iter().map(|(s, n)| (Some(s), n)).collect();
+        self.engine.export_step_named(&d.ev, &named, opts)
+    }
+
+    /// Do bodies of the default STEP export overlap? Cheap test on cached volumes: the sum of
+    /// the body volumes exceeds the volume of the root (their union) by more than 1e-6
+    /// relative. `Some((sum, union))` then; `None` if they only touch or lie apart.
+    pub fn step_overlap(&mut self) -> Option<(f64, f64)> {
+        let bodies = self.step_bodies();
+        if bodies.len() < 2 {
+            return None;
+        }
+        let root = self.done.as_ref()?.ev.root()?;
+        let union = self.mass_props(root).ok()?.volume;
+        let mut sum = 0.0;
+        for (_, n) in &bodies {
+            sum += self.mass_props(*n).ok()?.volume;
+        }
+        (sum > union + 1e-6 * union.abs().max(1.0)).then_some((sum, union))
+    }
+
+    /// Bodies of the default STEP export ([`Session::export_step`]): (name, node), names unique
+    /// (`deckel`, `deckel 2`); the nodes hold solid 3D results.
+    pub fn step_bodies(&self) -> Vec<(String, NodeIdx)> {
+        let (Some(d), Some(cur)) = (&self.done, &self.cur) else { return Vec::new() };
+        let Some(root) = d.ev.root() else { return Vec::new() };
+        let tree = &d.ev.tree;
+        let material = |n: NodeIdx| {
+            let rep = d.ev.report(n);
+            rep.status != cad_engine::Status::Skipped
+                && rep.dim != Some(cad_ir::Dim::Two)
+                && (!d.ev.parts(n).is_empty() || !d.ev.meshes(n).is_empty())
+        };
+        let mut out: Vec<(String, NodeIdx)> = Vec::new();
+        let parts = if cur.version == d.version { &cur.out.parts[..] } else { &[] };
+        let rest = if parts.is_empty() {
+            tree.solid_children(root).collect()
+        } else {
+            for p in parts.iter().filter(|p| material(p.node)) {
+                out.push((p.name.clone(), p.node));
+            }
+            let nodes: Vec<NodeIdx> = parts.iter().map(|p| p.node).collect();
+            rest_nodes(tree, root, &nodes)
+        };
+        for n in rest.into_iter().filter(|&n| material(n)) {
+            // the name of what is placed: through transforms and colours to the object
+            let mut m = n;
+            while matches!(tree.node(m).op, cad_ir::Op::Transform { .. } | cad_ir::Op::Color { .. } | cad_ir::Op::Group)
+            {
+                let kids: Vec<NodeIdx> = tree.solid_children(m).collect();
+                let [k] = kids[..] else { break };
+                m = k;
+            }
+            let base = tree.node(m).op.label();
+            let mut name = base.clone();
+            let mut k = 1;
+            while out.iter().any(|(s, _)| *s == name) {
+                k += 1;
+                name = format!("{base} {k}");
+            }
+            out.push((name, n));
+        }
+        out
     }
 }
 

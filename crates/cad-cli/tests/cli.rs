@@ -189,6 +189,55 @@ fn export_step() {
     json(&["export", &data("platte.scad"), "-o", &stp.display().to_string(), "--schema", "ap203"], 2);
 }
 
+/// STEP export: one named body per part and per top-level object outside the parts, also when
+/// they only touch; `--merge` fuses everything into one body as before.
+#[test]
+fn export_step_separate_bodies() {
+    let dir = tempfile::tempdir().unwrap();
+    let step = dir.path().join("b.step").display().to_string();
+    let v = json(&["export", &data("beruehrend.scad"), "-o", &step], 0);
+    let st = &v["step"];
+    assert_eq!(st["solids"], 4, "{st}");
+    assert_eq!(st["bodies"], serde_json::json!(["a", "b", "box", "box 2"]));
+    let text = std::fs::read_to_string(&step).unwrap();
+    let m = cad_step::p21::parse(&text).unwrap();
+    assert_eq!(m.count("MANIFOLD_SOLID_BREP"), 4);
+    for name in ["'a'", "'b'", "'box'", "'box 2'"] {
+        assert!(text.contains(&format!("MANIFOLD_SOLID_BREP({name},")), "{name}");
+    }
+    // touching only: no overlap note, the union volume
+    assert_eq!(v["notes"], serde_json::json!([]));
+    assert!((v["volume"].as_f64().unwrap() - 2000.0 - 1000.0).abs() < 1e-6, "{v}");
+    // the colour of the red cube stays on its faces
+    assert!(text.contains("COLOUR_RGB"));
+    // --merge: one fused body (faces of a and b merge)
+    let v = json(&["export", &data("beruehrend.scad"), "-o", &step, "--merge"], 0);
+    assert_eq!(v["step"]["solids"], 1, "{}", v["step"]);
+    // without parts: the top-level children; a single one stays the product's body
+    let src = dir.path().join("zwei.scad");
+    std::fs::write(&src, "cube(10);\ntranslate([10, 0, 0]) cube(10);\n").unwrap();
+    let v = json(&["export", &src.display().to_string(), "-o", &step], 0);
+    assert_eq!(v["step"]["bodies"], serde_json::json!(["box", "box 2"]));
+    std::fs::write(&src, "cube(10);\n").unwrap();
+    let v = json(&["export", &src.display().to_string(), "-o", &step], 0);
+    assert_eq!(v["step"]["bodies"], serde_json::json!(["b 1"]));
+    // overlapping objects stay apart, with a note
+    std::fs::write(&src, "cube(10);\ntranslate([5, 0, 0]) cube(10);\n").unwrap();
+    let v = json(&["export", &src.display().to_string(), "-o", &step], 0);
+    assert_eq!(v["step"]["solids"], 2);
+    assert!(v["notes"][0].as_str().unwrap().contains("überschneiden sich"), "{v}");
+    let t = text_of(&["export", &src.display().to_string(), "-o", &step]);
+    assert!(t.contains("2 Körper (box, box 2)") && t.contains("Hinweis: Körper überschneiden sich"), "{t}");
+    // --part: the parts by name
+    let v = json(&["export", &data("beruehrend.scad"), "--part", "a", "--part", "b", "-o", &step], 0);
+    let text = std::fs::read_to_string(&step).unwrap();
+    assert!(text.contains("MANIFOLD_SOLID_BREP('a',") && text.contains("MANIFOLD_SOLID_BREP('b',"), "{v}");
+}
+
+fn text_of(args: &[&str]) -> String {
+    text(args, 0)
+}
+
 /// Without the feature `solidcore`, `diff-kernels` is a usage error with a build hint.
 #[cfg(not(feature = "solidcore"))]
 #[test]

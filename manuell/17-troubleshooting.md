@@ -45,6 +45,7 @@
 | "Kontaktart nur netzbasiert bestimmt" | freeform faces: contact found on the mesh only |
 | "`assert_disjoint()` braucht mindestens zwei Kinder (eine for-Schleife zählt als ein Kind)" | put the bodies as separate statements |
 | `cad export` exit 4 "Export abgebrochen: n Assert-Verletzung(en)" | fix the model, or `--ignore-asserts` |
+| STEP "Hinweis: Körper überschneiden sich: Summe … > Vereinigung …" | top-level objects/parts overlap and are written as separate solids; move them apart, or `--merge` for one fused body |
 
 Glossary of the German text output:
 
@@ -63,6 +64,7 @@ Glossary of the German text output:
 | Fläche, Körper, Volumen | face/area, body, volume |
 | Schnitt, Bereich, Loch, Wandstärke | section, region, hole, wall thickness |
 | Langloch | slot (`slot()`) |
+| Körper überschneiden sich, Summe, Vereinigung, verschmolzen | bodies overlap, sum, union, fused |
 | Abstand, Winkel, Länge | distance, angle, length |
 | Kontext: Datei / Modul | context: file / module |
 | oberste Ebene, Zuweisung, ignoriert | top level, assignment, ignored |
