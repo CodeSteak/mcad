@@ -1,0 +1,11 @@
+[package]
+name = "cad-stl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "STL import: ASCII/binary parser and mesh preparation (weld, orient, merge coplanar triangles into faces)"
+
+[dependencies]
+glam.workspace = true
+cad-kernel.workspace = true

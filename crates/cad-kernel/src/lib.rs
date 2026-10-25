@@ -11,6 +11,7 @@ pub mod curve2;
 pub mod hull2;
 pub mod hull3;
 pub mod region2;
+pub mod trimesh;
 
 pub use curve2::Segment;
 
