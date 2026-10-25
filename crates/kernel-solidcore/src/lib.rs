@@ -14,9 +14,10 @@
 //!   `classify` runs a self-test on a box once,
 //! * other solidcore errors → [`KernelError::Failed`] / [`KernelError::InvalidInput`].
 //!
-//! So `mcad diff-kernels` can report which operations already work ("coverage"); at c9de85d:
+//! So `mcad diff-kernels` can report which operations already work ("coverage"); at d4940b6:
 //! `make_box`, plain `extrude` of a polygon with an identity frame, `faces`, `edges`, `bounds`,
-//! `mass_props`, `is_solid`. Faces carry the tag of the operation that made the shape
+//! `mass_props`, `is_solid`; cylinders, cones, spheres, tori and `revolve` answer with the faces
+//! and edges of SMLib, but volumes about 1e-5 off. Faces carry the tag of the operation that made the shape
 //! (solidcore's attribute plumbing for provenance is not wired here yet).
 //!
 //! Feature `solidcore` (opt-in): link solidcore (git dependency pinned to a commit). Without
@@ -43,7 +44,7 @@ pub struct ShapeData {
 pub type Shape = Rc<ShapeData>;
 
 /// The commit of solidcore this crate is built against.
-pub const SOLIDCORE_REV: &str = "c9de85d6c908675cd129358cce8429fd74b26536";
+pub const SOLIDCORE_REV: &str = "d4940b63e9816c77a32a421bd9dfa89c7e63fa12";
 
 fn unsupported(op: &str) -> KernelError {
     KernelError::Unsupported(format!("solidcore: {op}"))
@@ -416,9 +417,10 @@ mod imp {
             let store = solidcore::geom::attribute::AttributeStore::new();
             let key_of = |_e: solidcore::EntityRef| solidcore::geom::attribute::ObjectKey(0);
             let attrs = mp::PropertyAttributes { store: &store, key_of: &key_of };
-            let m = mp::brep_mass_properties(&self.k, &s.brep, 1e-6, 1.0, pt(DVec3::ZERO), &attrs)
+            let mut b = s.brep.clone();
+            let m = mp::brep_mass_properties(&self.k, &mut b, 1e-6, 1.0, pt(DVec3::ZERO), &attrs)
                 .map_err(|e| err("mass_props", e))?;
-            let area = mp::brep_area(&self.k, &s.brep, 1e-6).map_err(|e| err("mass_props (area)", e))?;
+            let area = mp::brep_area(&self.k, &mut b, 1e-6).map_err(|e| err("mass_props (area)", e))?;
             let c = m.centroid;
             Ok(MassProps { volume: m.properties.volume, area, centroid: DVec3::new(c.x, c.y, c.z) })
         }
@@ -495,7 +497,7 @@ impl Kernel for SolidcoreKernel {
     type Shape = Shape;
 
     fn id(&self) -> &'static str {
-        "solidcore-c9de85d"
+        "solidcore-d4940b6"
     }
 
     fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Shape> {

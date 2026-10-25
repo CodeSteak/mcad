@@ -1,14 +1,16 @@
 # Umstieg auf solidcore (Plan 2.3, M8)
 
-Stand: 2026-10-23 · solidcore `main` @ `c9de85d` (2026-10-23 19:10 UTC, tangency-labs/solidcore, Apache-2.0)
+Stand: 2026-10-25 · solidcore `main` @ `d4940b6` (2026-10-25 18:31 UTC, tangency-labs/solidcore, Apache-2.0); die Tabellen der Operationen unten stammen vom Lauf mit `c9de85d`, die Zahlen von `d4940b6` stehen im Vergleich über die Beispiele.
 
 ## Stand
 
 - **Crate `kernel-solidcore`** implementiert `cad_kernel::Kernel` über die öffentliche API von
   solidcore. Die Abhängigkeit ist ein git-Eintrag mit festem Commit
   (`crates/kernel-solidcore/Cargo.toml`, Konstante `SOLIDCORE_REV`, Kernel-Id
-  `solidcore-c9de85d`). Vorheriger Pin: `3a6a50b` (2026-10-22); dazwischen 538 Commits. Während der Arbeit kam
-  `c9de85d` hinzu (12 Commits nach `169dbc4`, gleiche Zahlen); gepinnt ist `c9de85d`.
+  `solidcore-d4940b6`). Vorherige Pins: `3a6a50b` (2026-10-22), `c9de85d` (2026-10-23). Von
+  `c9de85d` auf `d4940b6` (2026-10-25, gut 1200 Commits) änderte sich die API der
+  Masseneigenschaften (`brep_mass_properties`, `brep_area` nehmen `&mut Brep`); der wöchentliche
+  Lauf gegen `main` wäre am Build gescheitert.
 - **solidcore selbst** (`plan/PROGRESS.md` @ `c9de85d`): 238 von 261 Port-Einheiten portiert
   (116 grün = identisch zum C++, 122 teilweise), 89,8 % der Upstream-Zeilen. Das README sagt
   weiter „Nothing is usable end to end yet (no primitives, booleans or fillets)“; „etwa ein
@@ -84,6 +86,17 @@ schalten sich von selbst frei, sobald solidcore richtig rechnet.
 | `3a6a50b` (Testbericht 5) | 46 | 855 | 101 | 267 | 487 | 0 | 0 |
 | `169dbc4`, `kernel-solidcore` unverändert | 48 | 942 | 102 | 287 | 431 | 122 | 0 |
 | `169dbc4` und `c9de85d`, `kernel-solidcore` angepasst | 48 | 942 | **241** | 288 | 413 | **0** | 0 |
+| `3688a8b` (24.10.) | 61 | 1339 | 482 | 332 | 336 | 189 | 0 |
+| `d4940b6` (25.10., Pin) | 64 | 1436 | **516** | 354 | 360 | 206 | 0 |
+
+- @ `d4940b6`: Zylinder, Kegel, Kugeln, Tori und `revolve` liefern Ergebnisse mit den Flächen- und
+  Kantenzahlen von SMLib, die Volumen weichen aber um etwa 1e-5 ab (Kugel r 5: 523,6048 statt
+  523,5988 mm³; die Genauigkeit der Integration, 1e-6 oder 1e-8, ändert nichts) – das sind die
+  meisten „abweichend“ (Zylinder 126, Kugel 20). Größter Blocker bleibt `transform`
+  (`topology.brep_p5`: nur die Ecken werden bewegt; 258 Knoten unsupported, die meisten
+  blockierten hängen daran), dazu zusammengesetzte Skizzenprofile (hier nicht verdrahtet, 42),
+  Fillet/Fase (keine öffentliche API) und Polyeder (nicht im Umfang). Booleans gehen teilweise
+  (`difference` 17 von 64 gleich).
 
 - Der Quader geht jetzt, wurde mit dem alten `kernel-solidcore` aber **nicht richtig
   verglichen**: `faces` scheiterte (innerer Punkt nicht portiert), `diff-kernels` verwarf den
@@ -174,7 +187,7 @@ weiter bestehen (dafür braucht `kernel-solidcore` noch `tessellate` und `brep`)
 
 Der Test `diff_kernels_on_examples` (`crates/cad-cli/tests/cli.rs`, nur mit `--features
 solidcore`) prüft, dass der Vergleich über alle Beispiele ohne Absturz durchläuft, dass mehr
-als 200 Knoten gleich sind und keiner abweicht; ohne das Feature prüft
+als 450 Knoten gleich sind, keiner scheitert und abweichende Zylinder, Kugeln, Tori und Rotationskörper nur im Volumen abweichen; ohne das Feature prüft
 `diff_kernels_needs_the_feature` den Hinweis zum Bauen. `crates/kernel-solidcore/tests/coverage.rs`
 prüft jede Operation einzeln (Quader: Volumen, Fläche, Schwerpunkt, Grenzen; Transformation
 und Klassifikation richtig oder `Unsupported`).

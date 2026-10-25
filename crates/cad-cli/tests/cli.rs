@@ -290,11 +290,24 @@ fn diff_kernels_on_examples() {
         }
     }
     if v["solidcore_available"] == true {
-        // solidcore @ c9de85d: cylinders, spheres, booleans and transforms are unsupported; boxes
-        // and plain extrusions agree with SMLib, nothing that answers differs
+        // solidcore @ d4940b6: transforms, fillets and most booleans are unsupported; boxes and
+        // plain extrusions agree with SMLib; cylinders, spheres, tori and revolutions answer with
+        // the right faces and edges but volumes about 1e-5 off (solidcore's geometry, not the
+        // integration accuracy; one revolution's face query fails) – they differ, nothing fails
         assert!(s["unsupported"].as_u64().unwrap() > 100, "{s}");
-        assert!(s["same"].as_u64().unwrap() > 200, "{s}");
-        assert_eq!(s["differ"].as_u64().unwrap() + s["failed"].as_u64().unwrap(), 0, "{s}");
+        assert!(s["same"].as_u64().unwrap() > 450, "{s}");
+        assert_eq!(s["failed"].as_u64().unwrap(), 0, "{s}");
+        let curved = ["cylinder", "sphere", "torus", "rotate_extrude"];
+        for f in v["files"].as_array().unwrap() {
+            for n in f["nodes"].as_array().unwrap() {
+                if n["verdict"] == "differ" && curved.contains(&n["label"].as_str().unwrap()) {
+                    let notes = n["notes"].as_array().unwrap();
+                    let query_failed =
+                        n["solidcore"]["message"].as_str().is_some_and(|m| m.starts_with("Abfrage Flächen/Kanten"));
+                    assert!(query_failed || notes.iter().all(|x| x.as_str().unwrap().starts_with("volume")), "{n}");
+                }
+            }
+        }
     }
     // 2D nodes need no kernel and agree
     assert!(s["same"].as_u64().unwrap() > 0, "{s}");
