@@ -181,7 +181,8 @@ struct Common {
     /// Module as context (like the cursor in the module definition), nested `outer.inner`.
     #[arg(long, short = 'm')]
     module: Option<String>,
-    /// Override parameters of the context module, e.g. `-D w=60`, `-D p=[1,2,3]`.
+    /// Override parameters of the context module, e.g. `-D w=60`, `-D p=[1,2,3]`; without a
+    /// module: top-level assignments of the main file (like `openscad -D`).
     #[arg(short = 'D', value_name = "NAME=VALUE")]
     define: Vec<String>,
 }
@@ -703,6 +704,11 @@ fn parse_define(d: &str) -> Result<(String, p::Value), Fail> {
     Ok((k.to_string(), val))
 }
 
+/// `-D` values of the command (a later `-D` of the same name wins).
+pub(crate) fn defines(c: &Common) -> Result<std::collections::BTreeMap<String, p::Value>, Fail> {
+    c.define.iter().map(|d| parse_define(d)).collect()
+}
+
 fn read_source(path: &Path) -> Result<(String, String), Fail> {
     if path.as_os_str() == "-" {
         let s = host::read_stdin().map_err(|e| Fail::Usage(format!("stdin: {e}")))?;
@@ -745,7 +751,7 @@ fn module_at_line(scene: &p::Scene, line: u32) -> Option<&p::Module> {
 /// Parses, evaluates and (with `kernel`) runs the kernel job.
 pub(crate) fn load(c: &Common, line: Option<u32>, whole_file: bool, kernel: bool) -> Result<Model, Fail> {
     let (file, text) = read_source(&c.file)?;
-    let defines = c.define.iter().map(|d| parse_define(d)).collect::<Result<Vec<_>, _>>()?;
+    let defines = defines(c)?;
     let mut opts = SessionOptions { auto_root_mesh: false, ..Default::default() };
     opts.eval.max_stack_bytes = 192 << 20;
     let mut s = host::new_session(opts);
@@ -768,11 +774,9 @@ pub(crate) fn load(c: &Common, line: Option<u32>, whole_file: bool, kernel: bool
         module = last_scene(&first).and_then(|sc| module_at_line(&sc, line).map(module_context_name));
         s.post(ToEngine::Cancel);
     }
-    if module.is_none() && !defines.is_empty() {
-        return Err(Fail::Usage("-D braucht einen Modulkontext (--module oder --line in einem Modul)".into()));
-    }
-    if module.is_some() {
-        s.post(ToEngine::SetContext { module: module.clone(), overrides: defines.into_iter().collect() });
+    // Without a module context `-D` overrides top-level assignments of the main file.
+    if module.is_some() || !defines.is_empty() {
+        s.post(ToEngine::SetContext { module: module.clone(), overrides: defines });
     }
     let mut msgs = s.post(ToEngine::SetSource { text: text.clone(), version: 1 });
     if kernel {

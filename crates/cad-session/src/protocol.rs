@@ -97,7 +97,8 @@ pub enum ToEngine {
         text: Option<String>,
     },
     /// What to show: `module = null` for the whole file, otherwise a module name (or
-    /// `outer::inner`) evaluated with its defaults and `overrides` (parameter bar).
+    /// `outer::inner`) evaluated with its defaults and `overrides` (parameter bar). Without a
+    /// module, `overrides` replace top-level assignments of the main file (CLI `-D`).
     /// Re-evaluates the current source.
     SetContext {
         #[ts(optional)]

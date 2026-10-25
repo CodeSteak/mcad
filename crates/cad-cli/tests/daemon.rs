@@ -198,6 +198,9 @@ fn output_identical_with_and_without_daemon() {
         vec!["eval".into(), projekt.clone(), "--module".into(), "deckel".into()],
         vec!["inspect".into(), ex("spec/fillet_zonen.scad"), "--line".into(), "12".into()],
         vec!["outline".into(), projekt.clone()],
+        // -D without a module: top-level assignments
+        vec!["measure".into(), data("variablen.scad"), "-D".into(), "w=40".into(), "--volume".into(), "all".into()],
+        vec!["check".into(), data("variablen.scad"), "-D".into(), "nix=1".into()],
         vec![
             "measure".into(),
             gehaeuse.clone(),

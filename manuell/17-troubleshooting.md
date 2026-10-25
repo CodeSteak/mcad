@@ -8,7 +8,7 @@
 | "nur Aufrufe eigener Module sind benennbar" | name the module call, not the transform: `translate(…) n: m();` |
 | "2D-Form in 3D-Kontext wird ignoriert" | extrude the 2D shape |
 | `--show grids` shows nothing | grid lives in a module: add `--module NAME` |
-| `-D` refused | needs `--module` (or `--line` inside a module) |
+| warning "-D x: keine Zuweisung `x` auf oberster Ebene der Hauptdatei (ignoriert)" | without a module `-D` sets top-level variables only; for a module parameter add `--module NAME` |
 | `cad ui …` exit 3 | no desktop UI running; work headless |
 | `cad` exits 2 "keine grafische Sitzung" | no `DISPLAY`/`WAYLAND_DISPLAY`; use the commands |
 | UI dies with "Error 71 (Protokollfehler) dispatching to Wayland display" | WebKitGTK DMA-BUF renderer; `cad` sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` on Wayland unless the variable is set |
@@ -63,6 +63,7 @@ Glossary of the German text output:
 | Schnitt, Bereich, Loch, Wandstärke | section, region, hole, wall thickness |
 | Abstand, Winkel, Länge | distance, angle, length |
 | Kontext: Datei / Modul | context: file / module |
+| oberste Ebene, Zuweisung, ignoriert | top level, assignment, ignored |
 | abgezogen, übersprungen, offen | subtracted, skipped, pending |
 | Farben, Standard | colours, default (uncoloured) |
 | Kinder werden unverändert gezeigt | children shown unchanged |

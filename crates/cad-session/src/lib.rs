@@ -180,7 +180,7 @@ where
             text: String::new(),
             version: 0,
             has_source: false,
-            context: Context::File,
+            context: Context::default(),
             cur: None,
             running: None,
             done: None,
@@ -332,12 +332,10 @@ where
                 Vec::new()
             }
             ToEngine::SetContext { module, overrides } => {
+                let overrides = overrides.iter().map(|(k, v)| (k.clone(), convert::pvalue(v))).collect();
                 self.context = match module {
-                    None => Context::File,
-                    Some(name) => Context::Module {
-                        name,
-                        overrides: overrides.iter().map(|(k, v)| (k.clone(), convert::pvalue(v))).collect(),
-                    },
+                    None => Context::File { overrides },
+                    Some(name) => Context::Module { name, overrides },
                 };
                 if self.has_source { self.reevaluate() } else { Vec::new() }
             }

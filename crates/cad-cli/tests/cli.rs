@@ -246,8 +246,8 @@ fn diff_kernels_on_examples() {
 #[test]
 fn usage_errors() {
     json(&["check", "/nonexistent/datei.scad"], 2);
-    // -D without module context
-    json(&["eval", &data("gehaeuse.scad"), "-D", "w=1"], 2);
+    // -D without a value
+    json(&["eval", &data("gehaeuse.scad"), "-D", "w"], 2);
     // clap errors exit with 2 as well
     let out = cad().args(["render"]).output().unwrap();
     assert_eq!(out.status.code(), Some(2));
@@ -343,4 +343,49 @@ fn sketch_corners_offset_stroke() {
     let d = &v["diagnostics"][0];
     assert_eq!(d["range"]["line"], 4);
     assert!(d["message"].as_str().unwrap().contains("höchstens ≈ 5"), "{d}");
+}
+
+/// `-D` without a module context overrides top-level assignments (like `openscad -D`).
+#[test]
+fn define_top_level_variables() {
+    let f = data("variablen.scad");
+    let vol = |extra: &[&str]| {
+        let mut a = vec!["measure", f.as_str(), "--volume", "all"];
+        a.extend_from_slice(extra);
+        let v = json(&a, 0);
+        (v["volume"]["volume"].as_f64().unwrap(), v)
+    };
+    let (v0, _) = vol(&[]);
+    assert!((v0 - 20.0 * 10.0 * 8.0).abs() < 1e-6, "{v0}");
+    // d = w / 2 computes with the new w
+    let (v1, j) = vol(&["-D", "w=40"]);
+    assert!((v1 - 40.0 * 20.0 * 8.0).abs() < 1e-6, "{v1}");
+    assert_eq!(j["context"], Value::Null);
+    // the last of two assignments takes the value; the last -D of a name wins
+    let (v2, _) = vol(&["-D", "h=2", "-D", "h=3"]);
+    assert!((v2 - 20.0 * 10.0 * 3.0).abs() < 1e-6, "{v2}");
+    // unknown name: warning, exit 0, model unchanged
+    let (v3, j) = vol(&["-D", "breite=3"]);
+    assert!((v3 - v0).abs() < 1e-9);
+    let d = j["diagnostics"].as_array().unwrap();
+    assert!(
+        d.iter().any(|x| x["severity"] == "warning" && x["message"].as_str().unwrap().contains("-D breite")),
+        "{d:?}"
+    );
+    // `$` variables need no assignment
+    let (_, j) = vol(&["-D", "$fn=64"]);
+    assert!(!j["diagnostics"].as_array().unwrap().iter().any(|x| x["message"].as_str().unwrap().contains("-D")), "{j}");
+    // the values show up as variable values (outline) and in other commands
+    let v = json(&["outline", &f, "-D", "w=40"], 0);
+    let w = v["variables"].as_array().unwrap().iter().find(|x| x["name"] == "w").unwrap().clone();
+    assert_eq!(w["value"], 40.0);
+    let dd = v["variables"].as_array().unwrap().iter().find(|x| x["name"] == "d").unwrap().clone();
+    assert_eq!(dd["value"], 20.0);
+    let v = json(&["inspect", &f, "--line", "6", "-D", "w=40"], 0);
+    assert_eq!(v["nodes"][0]["world_bounds"]["max"][0], 40.0);
+    let t = text(&["check", &f, "-D", "nix=1"], 0);
+    assert!(t.contains("Warnung") && t.contains("-D nix"), "{t}");
+    // with a module context -D stays a module parameter
+    let v = json(&["eval", &data("gehaeuse.scad"), "--module", "gehaeuse", "-D", "w=80"], 0);
+    assert_eq!(v["context"], "gehaeuse");
 }

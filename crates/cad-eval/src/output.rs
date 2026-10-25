@@ -9,16 +9,24 @@ use serde::{Deserialize, Serialize};
 use crate::value::{GridId, InstId, Origin, PValue, Sel};
 
 /// What the evaluation shows (Spec: UI-Modell, Kontext).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Context {
-    /// The whole file.
-    #[default]
-    File,
+    /// The whole file. `overrides` replace the values of assignments at the top level of the
+    /// main file (CLI `-D` without a module, like `openscad -D`): the last assignment of a name
+    /// takes the value, expressions that use it compute with it; `$` variables are set even
+    /// without an assignment. Other unknown names give a warning.
+    File { overrides: Vec<(String, PValue)> },
     /// One module, instantiated with its defaults and the given overrides (parameter
     /// bar, CLI `-D`). The module is the tree root; its grids are `in_context`.
     /// `name` is a module name, or a `::`-separated path for nested modules
     /// (`outer::inner`); a plain name finds the first module of that name.
     Module { name: String, overrides: Vec<(String, PValue)> },
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Context::File { overrides: Vec::new() }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -44,7 +52,7 @@ pub struct EvalOptions {
 impl Default for EvalOptions {
     fn default() -> Self {
         EvalOptions {
-            context: Context::File,
+            context: Context::default(),
             max_steps: 20_000_000,
             max_module_depth: 1000,
             max_function_depth: 2000,

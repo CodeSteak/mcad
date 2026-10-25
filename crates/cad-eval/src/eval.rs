@@ -220,7 +220,7 @@ pub fn eval<'a>(proj: &'a Project, opts: &'a EvalOptions) -> EvalOutput {
     }
     let mut context = ContextInfo::default();
     let _ = match &opts.context {
-        Context::File => ev.run_file(),
+        Context::File { overrides } => ev.run_file(overrides),
         Context::Module { name, overrides } => ev.run_module(name, overrides, &mut context),
     };
     context.root_modifier = ev.root_mod;
@@ -273,7 +273,7 @@ impl<'a> Ev<'a> {
             default_spans,
             cur_stmt: None,
             cur_span: Span::default(),
-            file_context: matches!(opts.context, Context::File),
+            file_context: matches!(opts.context, Context::File { .. }),
             filaments: std::collections::HashMap::new(),
             random_colors: Vec::new(),
             filament_decls: Vec::new(),
@@ -560,7 +560,7 @@ impl<'a> Ev<'a> {
         }
     }
 
-    fn run_file(&mut self) -> R<()> {
+    fn run_file(&mut self, overrides: &'a [(String, PValue)]) -> R<()> {
         let end = self.proj.main_text().len() as u32;
         let key = mix(0x66696c65, 0) & MASK53;
         self.nodes.push(Node {
@@ -597,12 +597,41 @@ impl<'a> Ev<'a> {
         let env = Env::new(None, None, 0, true);
         self.setup_libs(&env)?;
         let dy = self.hoist(&self.file.stmts, &env, &None)?;
+        let dy = self.file_overrides(overrides, &env, dy);
         let ctx = self.root_ctx(env, dy, end, key);
         self.filament_pass(&ctx)?;
         for s in &self.file.stmts {
             self.stmt(s, &ctx)?;
         }
         Ok(())
+    }
+
+    /// `-D name=value` in the file context: replaces the binding of the top-level assignment
+    /// `name` (the last one; `include`d statements count, they are spliced into the main
+    /// file). `$` variables go on top of the file's dynamic frame, assigned or not.
+    fn file_overrides(&mut self, overrides: &'a [(String, PValue)], env: &Env<'a>, dy: Dyn<'a>) -> Dyn<'a> {
+        let mut dollar: Vec<(&'a str, Val<'a>)> = Vec::new();
+        for (i, (name, v)) in overrides.iter().enumerate() {
+            if overrides[i + 1..].iter().any(|(n, _)| n == name) {
+                continue; // a later -D of the same name wins
+            }
+            if name.starts_with('$') {
+                dollar.push((name.as_str(), v.to_val()));
+            } else if env.has_local(name) {
+                env.set(name, v.to_val());
+            } else {
+                self.warn(
+                    Span::default(),
+                    format!("-D {name}: keine Zuweisung `{name}` auf oberster Ebene der Hauptdatei (ignoriert)"),
+                );
+            }
+        }
+        if dollar.is_empty() {
+            return dy;
+        }
+        let d = dyn_push(&dy, dollar);
+        env.set_dyn(d.clone());
+        d
     }
 
     /// Evaluates the `filament(c, n)` statements at the top level of the main file first:

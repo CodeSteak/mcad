@@ -101,9 +101,12 @@ fn params_text(params: &[Param], src: &dyn Fn(cad_syntax::Span) -> String) -> Ve
 }
 
 pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
-    if c.module.is_some() || !c.define.is_empty() {
-        return Err(Fail::Usage("outline zeigt immer das ganze Projekt (ohne --module/-D)".into()));
+    if c.module.is_some() {
+        return Err(Fail::Usage(
+            "outline zeigt immer das ganze Projekt (ohne --module; -D setzt Variablen der Datei)".into(),
+        ));
     }
+    let defines = crate::defines(c)?;
     let mut m = load(c, None, true, false)?;
     let mut j = m.base_json("outline");
     let Some(file_scene) = m.scene.clone() else {
@@ -139,7 +142,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         }
     }
     // back to the file; with the kernel for bounds and volumes of parts
-    let mut msgs = m.session.post(ToEngine::SetContext { module: None, overrides: Default::default() });
+    let mut msgs = m.session.post(ToEngine::SetContext { module: None, overrides: defines });
     if kernel {
         msgs.extend(m.session.run_to_idle());
     } else {

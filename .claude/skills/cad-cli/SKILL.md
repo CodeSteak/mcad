@@ -147,7 +147,9 @@ und prüft mit der CLI. Die UI beobachtet die Datei und alle eingebundenen Datei
 
 Gemeinsame Optionen: `--json`, `--module m` (Modul als Kontext, verschachtelt `aussen.innen`),
 `-D name=wert` (Parameter des Kontextmoduls, Wert als JSON: `-D w=60`, `-D hohl=true`,
-`-D p=[1,2,3]`). `-D` braucht einen Modulkontext.
+`-D p=[1,2,3]`). Ohne Modulkontext setzt `-D` Zuweisungen auf oberster Ebene der Hauptdatei
+(wie `openscad -D`: die letzte Zuweisung des Namens bekommt den Wert, abhängige Variablen
+rechnen damit, `$fn` usw. auch ohne Zuweisung; unbekannter Name → Warnung).
 
 **Kontext wie im Editor:** Liegt `--line` in einer Moduldefinition, zeigen `inspect` und
 `render` nur dieses Modul mit seinen Standardwerten (und `-D`). `--whole-file` behält den

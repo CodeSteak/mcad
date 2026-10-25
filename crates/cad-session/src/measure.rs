@@ -995,12 +995,14 @@ where
         if let Some(m) = self.done.as_ref().and_then(|d| d.scene.context.module.clone()) {
             out.push("--module".into());
             out.push(m);
-            if let cad_eval::Context::Module { overrides, .. } = &self.context {
-                for (k, val) in overrides {
-                    out.push("-D".into());
-                    out.push(format!("{k}={}", crate::convert::value_text(&crate::convert::value(val))));
-                }
-            }
+        }
+        let overrides = match &self.context {
+            cad_eval::Context::Module { .. } if out.is_empty() => &[][..],
+            cad_eval::Context::Module { overrides, .. } | cad_eval::Context::File { overrides } => &overrides[..],
+        };
+        for (k, val) in overrides {
+            out.push("-D".into());
+            out.push(format!("{k}={}", crate::convert::value_text(&crate::convert::value(val))));
         }
         out
     }

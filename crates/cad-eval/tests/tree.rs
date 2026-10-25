@@ -1,7 +1,7 @@
 //! Geometry tree for the spec examples and OpenSCAD-style code.
 
 mod common;
-use cad_eval::PValue;
+use cad_eval::{Context, EvalOptions, PValue};
 use cad_ir::{BlendKind, Op, Prim, Profile, Select, TransformKind, ZoneShape};
 use cad_kernel::{BoolOp, PathInterp};
 use common::*;
@@ -449,6 +449,41 @@ fn module_context_uses_defaults_and_overrides() {
     // Top-level statements are not evaluated in module context.
     assert!(out.grid_by_name("h").is_none());
     assert_eq!(out.instances[0].anchors.len(), 2);
+}
+
+/// `-D` in the file context: top-level assignments take the value (the last one of a name),
+/// dependent variables compute with it; `$` variables apply without an assignment.
+#[test]
+fn file_context_overrides_top_level_assignments() {
+    let src = "
+        w = 2;
+        d = w * 2;
+        h = 1;
+        h = 3;
+        module m() cube([w, d, h]);
+        m();
+        sphere(1);
+    ";
+    let ov = |v: Vec<(&str, PValue)>| EvalOptions {
+        context: Context::File { overrides: v.into_iter().map(|(n, v)| (n.to_string(), v)).collect() },
+        ..Default::default()
+    };
+    let out = run_with(src, &ov(vec![("w", PValue::Num(5.0)), ("h", PValue::Num(7.0)), ("$fn", PValue::Num(12.0))]));
+    assert!(errors(&out).is_empty(), "{:?}", out.diagnostics);
+    assert_eq!(warnings(&out), ["`h` aus Zeile 4 wird in Zeile 5 überschrieben"]);
+    // $fn reaches sphere(): it says it ignores it
+    assert!(out.diagnostics.iter().any(|d| d.message.starts_with("`$fn` ignoriert")), "{:?}", out.diagnostics);
+    let b = nodes_by_label(&out, "box")[0];
+    assert_eq!(prim(&out, b), &Prim::Box { min: DVec3::ZERO, max: DVec3::new(5.0, 10.0, 7.0) });
+    // the value hint of the assignment shows the overridden value
+    let w = out.hints.iter().find(|h| h.text == "5").map(|h| h.value.clone());
+    assert_eq!(w, Some(PValue::Num(5.0)));
+    let out = run_with(src, &ov(vec![("breite", PValue::Num(1.0))]));
+    assert!(has_warning(&out, "-D breite"), "{:?}", out.diagnostics);
+    assert_eq!(
+        prim(&out, nodes_by_label(&out, "box")[0]),
+        &Prim::Box { min: DVec3::ZERO, max: DVec3::new(2.0, 4.0, 3.0) }
+    );
 }
 
 #[test]
