@@ -218,29 +218,81 @@ impl Budget {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 pub enum Severity {
     Warning,
+    #[default]
     Error,
 }
 
 /// Diagnostic as stored in a (cached) node result; [`Diagnostic`] adds the node's position.
-#[derive(Debug, Clone, PartialEq)]
+/// With `at`, the message is a template: `{at}` stands for the place (written in context
+/// coordinates when the evaluation finishes), `{nodes}` for the operands `nodes`.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub(crate) struct Diag {
     pub severity: Severity,
     pub message: String,
     pub edges: Vec<Vec<DVec3>>,
+    /// Place of the problem in the node's own system.
+    pub at: Option<DVec3>,
+    /// Nodes the message is about (operands of a Boolean that touch at `at`).
+    pub nodes: Vec<NodeIdx>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct Diagnostic {
     pub severity: Severity,
+    /// The text, operands named by their label (`{nodes}` of `template` filled with
+    /// [`operand_list`] of the labels).
     pub message: String,
     pub node: NodeIdx,
     pub stmt: StmtId,
     pub span: Span,
-    /// Affected edges as polylines in the node's own system (e.g. the edge a fillet failed on).
+    /// Affected edges as polylines in the node's own system (e.g. the edge a fillet failed on,
+    /// the edges along which the operands of a Boolean touch tangentially).
     pub edges: Vec<Vec<DVec3>>,
+    /// Place of the problem in context coordinates (`NodeReport::display_world`), e.g. where
+    /// the operands of a Boolean touch.
+    pub at: Option<DVec3>,
+    /// The nodes the message names (operands of a Boolean touching at `at`).
+    pub nodes: Vec<NodeIdx>,
+    /// The message with the placeholder `{nodes}` for the operands, for callers that name
+    /// them with their source lines (`None`: no placeholder).
+    pub template: Option<String>,
+}
+
+/// Name of what node `n` places: through transforms, colours and groups with one child to the
+/// object; a named instance by its name, a module call by the module (`dom`, `cylinder`).
+pub fn object_label(tree: &Tree, n: NodeIdx) -> String {
+    let mut m = n;
+    while matches!(tree.node(m).op, Op::Transform { .. } | Op::Color { .. } | Op::Group) {
+        let kids: Vec<NodeIdx> = tree.solid_children(m).collect();
+        let [k] = kids[..] else { break };
+        m = k;
+    }
+    match &tree.node(m).op {
+        Op::ModuleCall { instance: Some(i), .. } => i.clone(),
+        op => op.label(),
+    }
+}
+
+/// "a und b", "a, b und c" (German list of operands).
+pub fn operand_list(names: &[String]) -> String {
+    match names {
+        [] => "die Operanden".into(),
+        [a] => a.clone(),
+        [rest @ .., last] => format!("{} und {last}", rest.join(", ")),
+    }
+}
+
+/// `[x, y, z]` with at most 4 decimals.
+pub(crate) fn point_text(p: DVec3) -> String {
+    let n = |x: f64| {
+        let s = format!("{:.4}", x);
+        let s = s.trim_end_matches('0').trim_end_matches('.');
+        if s == "-0" { "0".to_string() } else { s.to_string() }
+    };
+    format!("[{}, {}, {}]", n(p.x), n(p.y), n(p.z))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -669,7 +721,7 @@ impl<S: Clone + 'static> Job<S> {
             tags: vec![self.tags[idx as usize]].into(),
             dim: if two_d { dim } else { Some(Dim::Three) },
             bounds: None,
-            diags: vec![Diag { severity: Severity::Error, message: BLOCKED_MESSAGE.into(), edges: Vec::new() }],
+            diags: vec![Diag { severity: Severity::Error, message: BLOCKED_MESSAGE.into(), ..Default::default() }],
             hints: Vec::new(),
             selected_edges: Vec::new(),
             guides: Vec::new(),
@@ -697,13 +749,26 @@ impl<S: Clone + 'static> Job<S> {
                         Severity::Warning if status == Status::Ok => status = Status::Warning,
                         _ => {}
                     }
+                    let world = root_inv * n.world;
+                    let at = d.at.map(|p| world.transform_point3(p));
+                    let template = at.map(|p| d.message.replace("{at}", &point_text(p)));
+                    let message = match &template {
+                        Some(t) => {
+                            let names: Vec<String> = d.nodes.iter().map(|&k| object_label(tree, k)).collect();
+                            t.replace("{nodes}", &operand_list(&names))
+                        }
+                        None => d.message.clone(),
+                    };
                     diagnostics.push(Diagnostic {
                         severity: d.severity,
-                        message: d.message.clone(),
+                        message,
                         node: idx,
                         stmt: n.stmt,
                         span: n.span,
                         edges: d.edges.clone(),
+                        at,
+                        nodes: d.nodes.clone(),
+                        template: template.filter(|t| t.contains("{nodes}")),
                     });
                 }
                 tag_nodes.entry(self.tags[i]).or_default().push(NodeRef {

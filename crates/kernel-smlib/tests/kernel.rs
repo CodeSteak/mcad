@@ -259,7 +259,7 @@ fn fillet_too_large_fails_cleanly() {
     let b = cube(&mut k, 10.0, T_BOX);
     let all: Vec<u32> = (0..12).collect();
     match k.fillet(&b, &all, 6.0, T_FIL) {
-        Err(KernelError::Failed { msg, edges }) => {
+        Err(KernelError::Failed { msg, edges, .. }) => {
             assert!(!msg.is_empty());
             assert!(!edges.is_empty(), "failing edges reported");
             assert!(edges.iter().all(|e| *e < 12));

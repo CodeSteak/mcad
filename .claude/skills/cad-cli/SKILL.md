@@ -260,7 +260,9 @@ Jede Antwort ist ein Objekt mit `schema_version` (2), `command`, `file`, `ok`, `
 `context` (Modulname oder `null`), `diagnostics: Diagnostic[]`, bei Aufruffehlern `error`, bei
 den Befehlen mit Daemon `daemon: {used, reason}` (`reason` z. B. `--no-daemon`, sonst `null`).
 `Diagnostic = { severity: "error"|"warning"|"info", message, source: "syntax"|"eval"|"kernel",
-node, range, file? }`, `range = { from, to, line, col, end_line, end_col }` (1-basiert,
+node, range, file?, at?, nodes? }` (`at`: Ort eines Kernel-Fehlers, z. B. wo sich die Operanden
+eines Booleans tangential berühren – „Zeile 12 (dom) und Zeile 30 (rippe) berühren sich
+tangential bei [x, y, z]“; `cad render` markiert die Stelle rot), `range = { from, to, line, col, end_line, end_col }` (1-basiert,
 Offsets UTF-16). `Bounds = { min, max, size }`. Vollständiges Schema: Kopf von
 `crates/cad-cli/src/main.rs`.
 

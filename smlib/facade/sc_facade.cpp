@@ -58,19 +58,29 @@ const ULONG SC_TAG_ATTR_ID = SM_AI_USER_1 + 77;  // 10077
 // 4: sc_edges reports flags (SC_EDGE_SMOOTH), sc_law_stations / sc_fillet_var (variable
 //    radius), surfaces from 2 or 3 points per direction, shells from Booleans.
 // 5: sc_offset (outward offset, rounded).
-const uint32_t SC_FACADE_VERSION = 5;
+// 6: sc_last_points / sc_last_point_counts (where a Boolean result is not a closed solid).
+const uint32_t SC_FACADE_VERSION = 6;
 
 // ------------------------------------------------------------------ errors
+
+// Places of a failure: polylines (xyz per point, `counts` points each; one point for a
+// vertex), in the system of the operation's inputs.
+struct Places {
+  std::vector<double> pts;
+  std::vector<uint32_t> counts;
+};
 
 struct Failure {
   int32_t code;
   std::string msg;
   std::vector<uint32_t> edges;
+  Places places;
 };
 
 int32_t g_status = SC_OK;
 std::string g_message;
 std::vector<uint32_t> g_err_edges;
+Places g_err_places;
 std::string g_trail;
 
 std::vector<double> g_f64[8];
@@ -131,8 +141,8 @@ void error_callback(SmStatus error, const TCHAR* file, ULONG line, const TCHAR* 
   if (g_trail.size() > 2048) g_trail += " ...";
 }
 
-Failure fail(int32_t code, std::string msg, std::vector<uint32_t> edges = {}) {
-  return Failure{code, std::move(msg), std::move(edges)};
+Failure fail(int32_t code, std::string msg, std::vector<uint32_t> edges = {}, Places places = {}) {
+  return Failure{code, std::move(msg), std::move(edges), std::move(places)};
 }
 
 // Failure of an SMLib call: message with status name and the collected kernel trace.
@@ -140,7 +150,7 @@ Failure sm_fail(const char* what, SmStatus st, std::vector<uint32_t> edges = {})
   std::string m = std::string(what) + " failed: " + status_name(st) + " (" +
                   std::to_string((long)st) + ")";
   if (!g_trail.empty()) m += "; kernel trace: " + g_trail;
-  return Failure{SC_FAILED, m, std::move(edges)};
+  return Failure{SC_FAILED, m, std::move(edges), Places()};
 }
 
 // ------------------------------------------------------------------ deterministic rand()
@@ -195,6 +205,7 @@ void begin_call() {
   g_status = SC_OK;
   g_message.clear();
   g_err_edges.clear();
+  g_err_places = Places();
   g_trail.clear();
   for (auto& v : g_f64) v.clear();
   for (auto& v : g_f32) v.clear();
@@ -205,6 +216,7 @@ void set_failure(const Failure& f) {
   g_status = f.code;
   g_message = f.msg;
   g_err_edges = f.edges;
+  g_err_places = f.places;
 }
 
 // Runs `body`, catching every C++ exception. `body` returns true on success or
@@ -1106,6 +1118,33 @@ SmEdge* matching_edge(const SmBrep* b, const SmEdge* e, double tol) {
   return nullptr;
 }
 
+// Where a body is not a closed manifold solid: its non-manifold edges (more than two faces
+// meet, or a face edge without a partner), each sampled as a polyline (lines 2 points, curves
+// 49). At most 64 edges; empty if every edge is manifold (e.g. bodies touching in a point).
+Places open_places(const SmBrep* b) {
+  Places out;
+  if (!b) return out;
+  for (SmEdge* e : edges_of(b)) {
+    if (e->IsManifold() || e->IsWire()) continue;
+    SmCurve* c = e->GetCurve();
+    if (!c) continue;
+    SmExtent1d iv = e->GetInterval();
+    int n = c->IsKindOf(SmLine_TYPE) ? 1 : 48;
+    uint32_t got = 0;
+    for (int k = 0; k <= n; k++) {
+      SmPoint3d p;
+      if (c->EvaluatePoint(iv.GetMin() + (iv.GetMax() - iv.GetMin()) * k / n, p) != SM_SUCCESS) continue;
+      out.pts.push_back(p.x);
+      out.pts.push_back(p.y);
+      out.pts.push_back(p.z);
+      got++;
+    }
+    if (got) out.counts.push_back(got);
+    if (out.counts.size() >= 64) break;
+  }
+  return out;
+}
+
 // One fillet/chamfer of the edges `src_sel` of `src` (blendable edges; `orig_ids` are their ids
 // in the caller's input, used in error reports and to look up `laws`). The result is checked:
 //  * no self-overlapping faces (invalid_faces);
@@ -1619,7 +1658,7 @@ BrepPtr disjoint_union(const SmBrep* A, const SmBrep* B) {
 // (NAN if not computed).
 BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow_perturb,
                         std::string& err, BrepPtr& plain, double& va,
-                        bool* plain_impossible = nullptr) {
+                        bool* plain_impossible = nullptr, Places* err_places = nullptr) {
   if (op == SC_UNION) {
     BrepPtr d = disjoint_union(A, B);
     if (d.get()) {
@@ -1630,6 +1669,7 @@ BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow
   bool commutative = op != SC_DIFFERENCE;
   bool wrong = false;
   std::string why;
+  Places why_places;  // where the result that set `why` is not closed
   // runs a op b (swapped: b op a) and checks the result against a op b
   bool first = true;
   auto attempt = [&](const SmBrep* a, const SmBrep* b, bool swapped) -> BrepPtr {
@@ -1669,10 +1709,13 @@ BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow
         *plain_impossible =
             (pl == PL_WRONG && w.rfind("volume ", 0) == 0) || pl == PL_OPEN;
     }
-    if (why.empty())
+    if (why.empty()) {
       why = pl == PL_OPEN ? "the result is not a closed solid: the operands touch tangentially or "
                             "along an edge there (let them overlap a little or keep a gap)"
                           : "SMLib returned a wrong result (" + w + ")";
+      // the places in A's and B's system (a shifted retry moved only B, by at most 1e-4 of the size)
+      if (pl == PL_OPEN) why_places = open_places(is_plain ? plain.get() : r.get());
+    }
     return BrepPtr();
   };
   BrepPtr r = attempt(A, B, false);
@@ -1703,6 +1746,7 @@ BrepPtr checked_boolean(int32_t op, const SmBrep* A, const SmBrep* B, bool allow
     }
   }
   err = why;
+  if (err_places) *err_places = why_places;
   return BrepPtr();
 }
 
@@ -2461,6 +2505,10 @@ const char* sc_last_message(void) { return g_message.c_str(); }
 uint32_t sc_last_message_len(void) { return (uint32_t)g_message.size(); }
 const uint32_t* sc_last_edges(void) { return g_err_edges.data(); }
 uint32_t sc_last_edges_len(void) { return (uint32_t)g_err_edges.size(); }
+const double* sc_last_points(void) { return g_err_places.pts.data(); }
+uint32_t sc_last_points_len(void) { return (uint32_t)g_err_places.pts.size(); }
+const uint32_t* sc_last_point_counts(void) { return g_err_places.counts.data(); }
+uint32_t sc_last_point_counts_len(void) { return (uint32_t)g_err_places.counts.size(); }
 
 const double* sc_out_f64(uint32_t s) { return s < 8 ? g_f64[s].data() : nullptr; }
 uint32_t sc_out_f64_len(uint32_t s) { return s < 8 ? (uint32_t)g_f64[s].size() : 0; }
@@ -2681,6 +2729,7 @@ uint32_t sc_boolean(int32_t op, const uint32_t* hs, uint32_t n, uint32_t tag) {
       std::vector<std::vector<const SmBrep*>> tried;
       std::vector<const SmBrep*> order = ops;
       std::string err;
+      Places places;
       // `last_resort`: shifted retries, and SMLib's own result is accepted if nothing passes
       auto run = [&](const std::vector<const SmBrep*>& ord, bool last_resort, size_t& failed_at) {
         BrepPtr a = copy_brep(ord[0]);
@@ -2690,7 +2739,7 @@ uint32_t sc_boolean(int32_t op, const uint32_t* hs, uint32_t n, uint32_t tag) {
           BrepPtr plain;
           bool impossible = false;
           BrepPtr r =
-              checked_boolean(op, a.get(), ord[i], last_resort, err, plain, va, &impossible);
+              checked_boolean(op, a.get(), ord[i], last_resort, err, plain, va, &impossible, &places);
           if (!r.get() && last_resort && plain.get() && !impossible) {
             r = std::move(plain);
             va = NAN;
@@ -2742,7 +2791,7 @@ uint32_t sc_boolean(int32_t op, const uint32_t* hs, uint32_t n, uint32_t tag) {
         size_t failed_at = 0;
         acc = run(ops, true, failed_at);
       }
-      if (!acc.get()) throw fail(SC_FAILED, err.empty() ? std::string("boolean failed") : err);
+      if (!acc.get()) throw fail(SC_FAILED, err.empty() ? std::string("boolean failed") : err, {}, places);
     }
     resolve_tags(acc.get(), inputs, tag, false);
     _res = put(std::move(acc));

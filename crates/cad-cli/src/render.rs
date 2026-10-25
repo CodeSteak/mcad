@@ -724,7 +724,8 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
                 _ => {}
             }
         }
-        for msg in &n.messages {
+        // (places of failed Booleans: `failure_overlay`, always)
+        for msg in n.messages.iter().filter(|m| m.at.is_none()) {
             for e in &msg.edges {
                 lines.push(polyline(e, &w, lk.failed, 3.0));
             }
@@ -966,11 +967,61 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
     } else {
         0
     };
+    let n_failures = failure_overlay(sc, &m.diagnostics, *lk, (&mut lines, &mut markers, &mut labels));
+    if n_failures > 0 {
+        notes.push(format!(
+            "{n_failures} Fehlerstelle(n) rot markiert (Operanden berühren sich tangential; Diagnose: at)"
+        ));
+    }
     let counts = json!({
         "grids": n_grids, "grid_points": n_points, "anchors": n_anchors, "handles": n_handles,
         "labels": labels.len(), "lines": lines.len(), "markers": markers.len(), "asserts": n_asserts,
+        "failures": n_failures,
     });
     Ok(Built { meshes, lines, markers, labels, triangles, visible, highlighted, subject, counts, notes })
+}
+
+/// Places of failed operations (`NodeMessage::at`: the operands of a Boolean touch
+/// tangentially there): the contact edges red on top, a red dot and a label at the place.
+/// Always drawn, like the assertion results. Returns the number of places.
+fn failure_overlay(
+    sc: &p::Scene,
+    diags: &[p::Diagnostic],
+    lk: Look,
+    (lines, markers, labels): (&mut Vec<Polyline>, &mut Vec<Marker>, &mut Vec<Label>),
+) -> usize {
+    let mut n = 0;
+    for node in sc.nodes.iter().filter(|x| x.status != p::NodeStatus::Skipped) {
+        let w = mat(&node.display_world);
+        for msg in &node.messages {
+            let Some(at) = &msg.at else { continue };
+            n += 1;
+            for e in &msg.edges {
+                let pts: Vec<DVec3> = e.iter().map(|q| w.transform_point3(DVec3::from_array(q.0))).collect();
+                lines.push(top_line(pts, lk.failed, 3.0, false));
+            }
+            let pos = w.transform_point3(DVec3::from_array(at.0));
+            markers.push(Marker { pos, shape: MarkerShape::Dot, size: 6.0, color: lk.failed, on_top: true });
+            // the lines of the touching operands (from the diagnostic), else the operation's
+            let ops: Vec<String> = diags
+                .iter()
+                .find(|d| d.node == Some(node.idx) && d.message == msg.message)
+                .and_then(|d| d.nodes.as_ref())
+                .map(|ns| {
+                    ns.iter().filter_map(|&k| sc.nodes.get(k as usize)).map(|k| k.range.line.to_string()).collect()
+                })
+                .unwrap_or_default();
+            let lines_text = if ops.is_empty() { node.range.line.to_string() } else { ops.join(" + ") };
+            labels.push(Label {
+                pos,
+                text: format!("Berührung Z.{lines_text}"),
+                color: lk.failed,
+                offset: (9.0, -16.0),
+                priority: 7,
+            });
+        }
+    }
+    n
 }
 
 /// Mesh of an assertion overlay (context coordinates, flat normals).

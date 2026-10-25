@@ -34,9 +34,11 @@ pub enum BoolOp {
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum KernelError {
-    /// The operation failed. `edges` lists edges of the input that caused it, if known.
+    /// The operation failed. `edges` lists edges of the input that caused it, if known;
+    /// `places` where it happened, if known: polylines in the inputs' system (one point for a
+    /// point), e.g. the edges along which the operands of a Boolean touch tangentially.
     #[error("{msg}")]
-    Failed { msg: String, edges: Vec<EdgeId> },
+    Failed { msg: String, edges: Vec<EdgeId>, places: Vec<Vec<DVec3>> },
     #[error("not supported by this kernel: {0}")]
     Unsupported(String),
     #[error("invalid input: {0}")]
@@ -45,7 +47,7 @@ pub enum KernelError {
 
 impl KernelError {
     pub fn failed(msg: impl Into<String>) -> Self {
-        KernelError::Failed { msg: msg.into(), edges: Vec::new() }
+        KernelError::Failed { msg: msg.into(), edges: Vec::new(), places: Vec::new() }
     }
 }
 

@@ -33,9 +33,17 @@ describe("Editor-Dekorationen", () => {
     const doc = Text.of(["cube(10);", "sphere(;"]);
     const { lines, marks } = collectLines(doc, input({ diagnostics: { version: 0, items: [diag("error", 17, 17, "Ausdruck erwartet", 2)] } }), []);
     expect([...lines.get(2)!.classes]).toContain("cm-l-error");
-    expect(lines.get(2)!.segs).toEqual([{ kind: "error", text: "Ausdruck erwartet" }]);
+    expect(lines.get(2)!.segs).toEqual([{ kind: "error", text: "Ausdruck erwartet", locate: false }]);
     // Empty range → one character marked.
     expect(marks).toEqual([{ from: 17, to: 18, cls: "cm-d-error" }]);
+  });
+
+  it("Kernel-Fehler mit Ort: Meldung klickbar", () => {
+    const doc = Text.of(["union() {", "  cube(2);", "}"]);
+    const d: Diagnostic = { ...diag("error", 0, 5, "Vereinigung gescheitert: Zeile 2 (box) und …", 1), source: "kernel", at: [2, 10, 6], nodes: [2, 3] };
+    const { lines } = collectLines(doc, input({ diagnostics: { version: 0, items: [d, diag("warning", 12, 13, "ohne Ort", 2)] } }), []);
+    expect(lines.get(1)!.segs).toEqual([{ kind: "error", text: d.message, locate: true }]);
+    expect(lines.get(2)!.segs).toEqual([{ kind: "warning", text: "ohne Ort", locate: false }]);
   });
 
   it("Warnung: Zeile gelb", () => {

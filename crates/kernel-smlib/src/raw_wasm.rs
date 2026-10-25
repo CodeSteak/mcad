@@ -18,6 +18,10 @@ extern "C" {
     fn js_last_message() -> String;
     #[wasm_bindgen(js_name = sc_last_edges)]
     fn js_last_edges() -> Vec<u32>;
+    #[wasm_bindgen(js_name = sc_last_points)]
+    fn js_last_points() -> Vec<f64>;
+    #[wasm_bindgen(js_name = sc_last_point_counts)]
+    fn js_last_point_counts() -> Vec<u32>;
     #[wasm_bindgen(js_name = sc_out_f64)]
     fn js_out_f64(slot: u32) -> Vec<f64>;
     #[wasm_bindgen(js_name = sc_out_f32)]
@@ -111,6 +115,12 @@ pub fn last_message() -> String {
 }
 pub fn last_edges() -> Vec<u32> {
     js_last_edges()
+}
+pub fn last_points() -> Vec<f64> {
+    js_last_points()
+}
+pub fn last_point_counts() -> Vec<u32> {
+    js_last_point_counts()
 }
 pub fn out_f64(slot: u32) -> Vec<f64> {
     js_out_f64(slot)

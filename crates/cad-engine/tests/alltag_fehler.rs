@@ -142,6 +142,54 @@ fn f09_tangent_contact_under_union_fillet_fails_cleanly() {
     assert_error(&errs, "cannot blend the corner");
 }
 
+/// Where the operands touch (Plan 21, D1): the kernel reports the non-manifold edges of the
+/// result, the engine names the operands on whose boundary they lie and the place (context
+/// coordinates) – for the implicit union, `union`, `difference` and `intersection`.
+#[test]
+fn tangent_contact_names_the_operands_and_the_place() {
+    let place = |src: &str| {
+        let mut e = engine();
+        let t = tree(src);
+        let ev = e.evaluate(t.clone());
+        let d =
+            ev.diagnostics().find(|d| d.at.is_some()).unwrap_or_else(|| panic!("no place: {:#?}", errors(&ev))).clone();
+        let names: Vec<String> = d.nodes.iter().map(|&n| cad_engine::object_label(&t, n)).collect();
+        (d, names)
+    };
+    // dome touching the wall along the line x = 2, y = 10
+    let (d, names) = place(&fehler("f09a_absturz_tangentialer_dom.scad"));
+    assert_eq!(names, ["box", "cylinder"], "{}", d.message);
+    let at = d.at.unwrap();
+    assert!((at.x - 2.0).abs() < 1e-6 && (at.y - 10.0).abs() < 1e-6 && at.z > 2.0 && at.z < 10.0, "{at}");
+    assert!(d.message.contains("box und cylinder berühren sich tangential bei [2, 10,"), "{}", d.message);
+    assert!(d.message.contains("touch tangentially"), "{}", d.message);
+    assert_eq!(d.template.as_deref().map(|t| t.contains("{nodes}")), Some(true));
+    assert!(!d.edges.is_empty());
+    // cylinder minus a torus touching top and bottom: two circles of radius 20
+    let (d, names) = place(&fehler("f08c_differenz_torus_tangential.scad"));
+    assert_eq!(names, ["cylinder", "torus"], "{}", d.message);
+    let at = d.at.unwrap();
+    assert!((at.truncate().length() - 20.0).abs() < 1e-3 && (at.z.abs() - 1.0).abs() < 1e-6, "{at}");
+    assert_eq!(d.edges.len(), 2);
+    assert!(d.message.contains("(und 1 weitere Stelle)"), "{}", d.message);
+    // implicit union of a moved group: the place in context coordinates
+    let (d, names) = place(
+        "translate([100, 0, 0]) { cube([20, 20, 2]); cube([2, 20, 10]); translate([5.5, 10, 0]) cylinder(h = 10, r = 3.5); }",
+    );
+    assert_eq!(names, ["box", "cylinder"], "{}", d.message);
+    assert!((d.at.unwrap().x - 102.0).abs() < 1e-6, "{:?}", d.at);
+    // difference: a hole tangent to the removed edge strip
+    let (d, names) = place(
+        "difference() { cube([20, 20, 10]); translate([5.5, 10, -1]) cylinder(h = 12, r = 3.5); translate([-1, -1, -1]) cube([3, 22, 12]); }",
+    );
+    assert_eq!(names, ["cylinder", "box"], "{}", d.message);
+    assert!(
+        d.message.starts_with("Differenz gescheitert: cylinder und box berühren sich tangential bei [2, 10, 5]"),
+        "{}",
+        d.message
+    );
+}
+
 // ---------------------------------------------------------------- F13: shell message
 
 #[test]

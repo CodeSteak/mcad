@@ -2,7 +2,7 @@
 
 use cad_engine::{Evaluation, Status};
 use cad_eval::{EvalOutput, PValue};
-use cad_ir::{NO_STMT, Op, Tree};
+use cad_ir::{NO_STMT, NodeIdx, Op, Tree};
 use cad_kernel::BoolOp;
 use cad_syntax::{LineIndex, Span};
 use glam::{DMat4, DVec3};
@@ -239,6 +239,8 @@ pub fn lang_diagnostics(src: &Source, diags: &[cad_syntax::Diagnostic], source: 
             source,
             node: None,
             file: src.path(d.span),
+            at: None,
+            nodes: None,
         })
         .collect()
 }
@@ -247,13 +249,40 @@ pub fn kernel_diagnostics<S>(src: &Source, ev: &Evaluation<S>) -> Vec<p::Diagnos
     ev.diagnostics()
         .map(|d| p::Diagnostic {
             severity: engine_severity(d.severity),
-            message: d.message.clone(),
+            message: diag_text(src, &ev.tree, d),
             range: src.range(d.span),
             source: p::DiagSource::Kernel,
             node: Some(d.node),
             file: src.path(d.span),
+            at: d.at.map(v3),
+            nodes: (!d.nodes.is_empty()).then(|| d.nodes.clone()),
         })
         .collect()
+}
+
+/// Name of what node `n` places ([`cad_engine::object_label`]).
+pub fn object_label(tree: &Tree, n: NodeIdx) -> String {
+    cad_engine::object_label(tree, n)
+}
+
+/// Text of a kernel diagnostic: the operands it names (`{nodes}`) as "Zeile 12 (dom)" (with
+/// the file for other project files), otherwise the engine's text.
+pub fn diag_text(src: &Source, tree: &Tree, d: &cad_engine::Diagnostic) -> String {
+    let Some(t) = &d.template else { return d.message.clone() };
+    let names: Vec<String> = d
+        .nodes
+        .iter()
+        .map(|&n| {
+            let node = tree.node(n);
+            let label = object_label(tree, n);
+            let r = src.range(node.span);
+            match src.path(node.span) {
+                Some(f) => format!("{f} Zeile {} ({label})", r.line),
+                None => format!("Zeile {} ({label})", r.line),
+            }
+        })
+        .collect();
+    t.replace("{nodes}", &cad_engine::operand_list(&names))
 }
 
 fn polylines(v: &[Vec<DVec3>]) -> Vec<Vec<p::Vec3>> {
@@ -567,8 +596,9 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
                             .iter()
                             .map(|d| p::NodeMessage {
                                 severity: engine_severity(d.severity),
-                                message: d.message.clone(),
+                                message: diag_text(src, &ev.tree, d),
                                 edges: polylines(&d.edges),
+                                at: d.at.map(|q| v3(rep.display_world.inverse().transform_point3(q))),
                             })
                             .collect(),
                         hints: rep.hints.clone(),

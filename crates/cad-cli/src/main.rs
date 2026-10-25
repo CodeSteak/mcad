@@ -62,7 +62,7 @@
 //!            camera: Camera, line|null, lines: number[], nodes: number[], parts: string[],
 //!            highlighted: number[], visible_nodes: [{idx, label, instance, role, line, file,
 //!            triangles}], triangles, show: string[], overlays: {grids, grid_points, anchors,
-//!            handles, labels, lines, markers}, section: {point, normal, keeps, method}|null,
+//!            handles, labels, lines, markers, asserts, failures}, section: {point, normal, keeps, method}|null,
 //!            xray, bounds: Bounds|null, notes: string[],
 //!            timings: {evaluate_ms, eval_ms, kernel_ms, render_ms} }
 //!          Camera = { projection: "ortho"|"perspective", fov_deg|null, azimuth, elevation,

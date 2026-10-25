@@ -2,7 +2,7 @@
 //! tangency-labs/smlib, branch `capi-tess` @ 7eba8aa = NVIDIA usd-brep c9c5979 plus fixes of
 //! use-after-free and other undefined behaviour (proto-topology teardown, shell, failed
 //! imprints in booleans), with `smlib/patches/` applied (0001: pointer maps iterate in
-//! insertion order, from the fork's 1ed8669); see `smlib/fetch.sh`. Facade ABI version 4.
+//! insertion order, from the fork's 1ed8669); see `smlib/fetch.sh`. Facade ABI version 6.
 //!
 //! * feature `native` (default): facade + SMLib/SM_API statically linked (see `build.rs`).
 //! * feature `wasm` (target `wasm32-unknown-unknown`): SMLib runs as a separate Emscripten
@@ -153,8 +153,24 @@ fn last_error() -> KernelError {
     match code {
         2 => KernelError::Unsupported(msg),
         3 => KernelError::InvalidInput(msg),
-        _ => KernelError::Failed { msg, edges: raw::last_edges() },
+        _ => KernelError::Failed { msg, edges: raw::last_edges(), places: last_places() },
     }
+}
+
+/// Places of the last failure (`sc_last_points`): polylines in the inputs' system.
+fn last_places() -> Vec<Vec<glam::DVec3>> {
+    let pts = raw::last_points();
+    let mut out = Vec::new();
+    let mut i = 0;
+    for n in raw::last_point_counts() {
+        let n = n as usize;
+        if 3 * (i + n) > pts.len() {
+            break;
+        }
+        out.push((i..i + n).map(|k| glam::DVec3::new(pts[3 * k], pts[3 * k + 1], pts[3 * k + 2])).collect());
+        i += n;
+    }
+    out
 }
 
 fn shape_result(h: u32) -> KResult<Shape> {

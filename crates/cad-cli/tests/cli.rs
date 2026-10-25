@@ -489,3 +489,47 @@ fn module_call_arguments() {
     err("fehlt(1)", &[], "Modul `fehlt` nicht gefunden");
     let _ = std::fs::remove_dir_all(&out);
 }
+
+/// Kernel error with a place (Plan 21, D1): a dome touching a rib tangentially. The diagnostic
+/// names both lines and the place (`at`, `nodes`), `cad render` marks it.
+#[test]
+fn tangent_contact_place_in_diagnostics_and_render() {
+    let f = data("dom_rippe.scad");
+    let v = json(&["check", &f], 1);
+    let d =
+        v["diagnostics"].as_array().unwrap().iter().find(|d| d["at"].is_array()).expect("diagnostic with at").clone();
+    let msg = d["message"].as_str().unwrap();
+    assert!(
+        msg.starts_with(
+            "Vereinigung gescheitert: Zeile 15 (dom) und Zeile 16 (rippe) berühren sich tangential bei [7, 15,"
+        ),
+        "{msg}"
+    );
+    let at: Vec<f64> = d["at"].as_array().unwrap().iter().map(|x| x.as_f64().unwrap()).collect();
+    assert!((at[0] - 7.0).abs() < 1e-6 && (at[1] - 15.0).abs() < 1e-6 && at[2] > 2.0 && at[2] < 8.0, "{at:?}");
+    assert_eq!(d["nodes"].as_array().unwrap().len(), 2);
+    // text output: the same message
+    let t = text(&["check", &f], 1);
+    assert!(t.contains("Zeile 15 (dom) und Zeile 16 (rippe) berühren sich tangential"), "{t}");
+    // render: marked (red edges, point, label), counted
+    let dir = tempfile::tempdir().unwrap();
+    let png = dir.path().join("r.png").display().to_string();
+    let v = json(&["render", &f, "-o", &png], 1);
+    assert_eq!(v["overlays"]["failures"], 1, "{}", v["overlays"]);
+    assert!(
+        v["notes"].as_array().unwrap().iter().any(|n| n.as_str().unwrap().contains("Fehlerstelle")),
+        "{}",
+        v["notes"]
+    );
+    // scene: the node message carries the place (node system) and the contact edges
+    let v = json(&["eval", &f], 1);
+    let msgs: Vec<Value> = v["scene"]["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|n| n["messages"].as_array().unwrap().clone())
+        .collect();
+    let m = msgs.iter().find(|m| m["at"].is_array()).expect("message with at");
+    assert!(m["message"].as_str().unwrap().contains("berühren sich tangential"), "{m}");
+    assert!(!m["edges"].as_array().unwrap().is_empty());
+}

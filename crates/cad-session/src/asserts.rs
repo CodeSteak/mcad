@@ -1206,6 +1206,8 @@ where
                 source: p::DiagSource::Kernel,
                 node: Some(decl.node),
                 file: path.clone(),
+                at: None,
+                nodes: None,
             });
         }
         (pairs, diags)

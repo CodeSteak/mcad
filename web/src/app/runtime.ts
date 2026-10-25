@@ -31,7 +31,7 @@ import {
 } from "../files/files";
 import { hasFaceColors } from "../logic/colors";
 import { jumpUpTarget, moduleSpans } from "../logic/context";
-import { baseName as pathBase, fileText, isDataFile, isFontFile, isMeshFile, normalizePath, rangePath } from "../logic/files";
+import { baseName as pathBase, diagnosticPath, fileText, isDataFile, isFontFile, isMeshFile, normalizePath, rangePath } from "../logic/files";
 import { modelHull } from "../logic/grids";
 import { transformBox } from "../logic/math";
 import { VersionMapper, mapRange } from "../logic/positions";
@@ -562,6 +562,20 @@ export async function confirmExport(go: boolean): Promise<void> {
 }
 
 bridge.onAssertClick = (line) => focusAssertAtLine(line);
+bridge.onLocateClick = (line) => focusDiagnosticAtLine(line);
+
+/** Click on a kernel error with a place (`Diagnostic.at`, e.g. operands touching
+ *  tangentially) at line `line` of the file in the editor: frame the place in the view. */
+export function focusDiagnosticAtLine(line: number): boolean {
+  const s = store.getState();
+  const active = project.active;
+  const d = s.diagnostics.items.find((x) => x.at && x.range.line === line && diagnosticPath(x, project.main) === active);
+  if (!d?.at) return false;
+  const a = d.at;
+  getViewer()?.frameBox([a[0] - 1, a[1] - 1, a[2] - 1], [a[0] + 1, a[1] + 1, a[2] + 1]);
+  store.setState({ notice: `Stelle ${a.map((x) => +x.toFixed(3)).join(", ")} eingerahmt` });
+  return true;
+}
 
 /** Jumps to an assertion statement and frames its pair `pair` (the intersection body, the
  *  contact or the gap) in the view. */

@@ -137,6 +137,9 @@ export interface Plan {
   zoneEdges: ZoneEdgeQuery | null;
   openFaces: OpenFaceQuery[];
   sketches: SketchDraw[];
+  /** Places of failed operations (`NodeMessage.at`, context coordinates): the operands of a
+   *  Boolean touch tangentially there; drawn as red points, edges in `edges` ("error"). */
+  failures: Array<{ node: number; point: Vec3 }>;
 }
 
 export interface PlanInput {
@@ -493,10 +496,12 @@ export function plan(input: PlanInput): Plan {
     else if (input.showKeepout !== false) items.push(item(n, "keepout", "Sperrvolumen"));
   }
 
-  // Failed operations: affected edges red.
+  // Failed operations: affected edges red, places (operands touching) as points.
+  const failures: Plan["failures"] = [];
   for (const n of nodes) {
     for (const m of n.messages) {
       if (m.severity === "error" && m.edges.length) edges.push(...polylinesToWorld(n.display_world, m.edges, "error"));
+      if (m.severity === "error" && m.at) failures.push({ node: n.idx, point: apply(n.display_world, m.at) });
     }
   }
 
@@ -517,7 +522,7 @@ export function plan(input: PlanInput): Plan {
     status = `Nur Teilbaum mit ! angezeigt${r ? ` (Zeile ${r.range.line})` : ""}`;
   }
 
-  return { base, items, edges, frames, anchors, status, guides, zoneEdges, openFaces, sketches };
+  return { base, items, edges, frames, anchors, status, guides, zoneEdges, openFaces, sketches, failures };
 }
 
 /** Nodes whose meshes a plan needs. */

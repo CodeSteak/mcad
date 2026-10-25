@@ -13,6 +13,10 @@ mod ffi {
         pub fn sc_last_message_len() -> u32;
         pub fn sc_last_edges() -> *const u32;
         pub fn sc_last_edges_len() -> u32;
+        pub fn sc_last_points() -> *const f64;
+        pub fn sc_last_points_len() -> u32;
+        pub fn sc_last_point_counts() -> *const u32;
+        pub fn sc_last_point_counts_len() -> u32;
         pub fn sc_out_f64(slot: u32) -> *const f64;
         pub fn sc_out_f64_len(slot: u32) -> u32;
         pub fn sc_out_f32(slot: u32) -> *const f32;
@@ -95,6 +99,12 @@ pub fn last_message() -> String {
 }
 pub fn last_edges() -> Vec<u32> {
     unsafe { slice(ffi::sc_last_edges(), ffi::sc_last_edges_len()) }
+}
+pub fn last_points() -> Vec<f64> {
+    unsafe { slice(ffi::sc_last_points(), ffi::sc_last_points_len()) }
+}
+pub fn last_point_counts() -> Vec<u32> {
+    unsafe { slice(ffi::sc_last_point_counts(), ffi::sc_last_point_counts_len()) }
 }
 pub fn out_f64(slot: u32) -> Vec<f64> {
     unsafe { slice(ffi::sc_out_f64(slot), ffi::sc_out_f64_len(slot)) }

@@ -7,7 +7,8 @@
  *  - Functions that return int32_t return an SC_* status (or a boolean 0/1, or -1 on error,
  *    where documented).
  *  - After every call, sc_last_status() / sc_last_message() describe the outcome.
- *    sc_last_edges() lists input edge ids that caused a failure, if known.
+ *    sc_last_edges() lists input edge ids that caused a failure, if known, sc_last_points()
+ *    where it happened (Booleans, since version 6).
  *  - Bulk results (queries, meshes) are written to per-call output buffers, read with
  *    sc_out_f64/f32/u32(slot) + sc_out_*_len(slot). They stay valid until the next call.
  *  - No C++ exception escapes: every entry point catches everything.
@@ -78,6 +79,14 @@ SC_API const char* sc_last_message(void);
 SC_API uint32_t sc_last_message_len(void);
 SC_API const uint32_t* sc_last_edges(void);
 SC_API uint32_t sc_last_edges_len(void);
+/* Places of the failure (since facade version 6): polylines, xyz per point (sc_last_points,
+ * length 3 * total points) with the point count of each polyline (sc_last_point_counts).
+ * sc_boolean: the non-manifold edges of SMLib's result when it is not a closed solid (operands
+ * touching tangentially or along an edge), in the inputs' system. Empty otherwise. */
+SC_API const double* sc_last_points(void);
+SC_API uint32_t sc_last_points_len(void);
+SC_API const uint32_t* sc_last_point_counts(void);
+SC_API uint32_t sc_last_point_counts_len(void);
 
 /* output buffers (slot 0..7) */
 SC_API const double* sc_out_f64(uint32_t slot);

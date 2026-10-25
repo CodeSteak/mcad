@@ -86,7 +86,7 @@ const tRead = performance.now();
 await sc.initSmlib(createSmlib, { wasmBinary });
 const tLoad = performance.now();
 console.log(`smlib.wasm ${statSync(wasmPath).size} B; read ${(tRead - t0).toFixed(1)} ms, compile+instantiate+init ${(tLoad - tRead).toFixed(1)} ms`);
-assert.equal(sc.sc_version(), 4);
+assert.equal(sc.sc_version(), 6);
 
 // ---------------------------------------------------------------- tests
 
@@ -289,6 +289,24 @@ test("variable-radius fillet: stations and a linear law", () => {
   assert.equal(sc.sc_fillet_var(b, new Uint32Array([id]), new Uint32Array([2]), new Float64Array([1, -1]), 5), 0);
   assert.equal(sc.sc_last_status(), 3);
   [b, f].forEach(sc.sc_release);
+});
+
+test("failure places (facade 6): cylinder minus a torus touching top and bottom", () => {
+  const c0 = check(sc.sc_make_cylinder(2, 30, 30, 1), "cyl");
+  const c = check(sc.sc_transform(c0, new Float64Array(translate(0, 0, -1))), "transform");
+  const t = check(sc.sc_make_torus(20, 1, 2), "torus");
+  assert.equal(sc.sc_boolean(1, new Uint32Array([c, t]), 3), 0);
+  assert.match(sc.sc_last_message(), /not a closed solid/);
+  const counts = sc.sc_last_point_counts();
+  const pts = sc.sc_last_points();
+  assert.equal(counts.length, 2);
+  assert.equal(pts.length, 3 * counts.reduce((a, b) => a + b, 0));
+  for (let i = 0; i < pts.length; i += 3) {
+    assert.ok(Math.abs(Math.hypot(pts[i], pts[i + 1]) - 20) < 1e-3 && Math.abs(Math.abs(pts[i + 2]) - 1) < 1e-6);
+  }
+  // the next call clears them
+  check(sc.sc_make_box(0, 0, 0, 1, 1, 1, 1), "box");
+  assert.equal(sc.sc_last_points().length, 0);
 });
 
 test("invalid handle", () => {

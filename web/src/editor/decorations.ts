@@ -31,6 +31,8 @@ type SegKind = "error" | "warning" | "info" | "hint" | "echo";
 interface Seg {
   kind: SegKind;
   text: string;
+  /** The diagnostic has a place (`at`): a click frames it in the view. */
+  locate?: boolean;
 }
 
 class LineEndWidget extends WidgetType {
@@ -38,7 +40,7 @@ class LineEndWidget extends WidgetType {
     super();
   }
   eq(o: LineEndWidget): boolean {
-    return o.segs.length === this.segs.length && o.segs.every((s, i) => s.kind === this.segs[i].kind && s.text === this.segs[i].text);
+    return o.segs.length === this.segs.length && o.segs.every((s, i) => s.kind === this.segs[i].kind && s.text === this.segs[i].text && !!s.locate === !!this.segs[i].locate);
   }
   toDOM(): HTMLElement {
     const wrap = document.createElement("span");
@@ -47,6 +49,10 @@ class LineEndWidget extends WidgetType {
       const e = document.createElement("span");
       e.className = `cm-lineend-${s.kind}${s.kind === "warning" && /^assert_(keepout|disjoint|intersect|touches): /.test(s.text) ? " cm-lineend-assert" : ""}`;
       if (e.classList.contains("cm-lineend-assert")) e.title = "Klick: Verletzung in der Ansicht zeigen";
+      if (s.locate) {
+        e.classList.add("cm-lineend-locate");
+        e.title = "Klick: Stelle in der Ansicht zeigen";
+      }
       e.textContent = s.text;
       wrap.appendChild(e);
     }
@@ -126,7 +132,7 @@ export function collectLines(doc: Text, input: DecorationInput, disabled: Array<
     const li = lineInfo(lines, line);
     if (d.severity === "error") li.classes.add("cm-l-error");
     else if (d.severity === "warning") li.classes.add("cm-l-warning");
-    li.segs.push({ kind: d.severity, text: d.message });
+    li.segs.push({ kind: d.severity, text: d.message, locate: d.at !== undefined });
     if (d.source !== "kernel" && d.severity !== "info") clampMark(r.from, r.to, d.severity === "error" ? "cm-d-error" : "cm-d-warning");
   }
 

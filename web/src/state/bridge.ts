@@ -23,6 +23,9 @@ class Bridge {
   /** Click on an assertion warning at the end of a line of the main file (runtime: jump and
    *  frame the violation); `true` if it handled the click. */
   onAssertClick: ((line: number) => boolean) | null = null;
+  /** Click on a diagnostic with a place (`at`) at the end of line `line` of the file in the
+   *  editor (runtime: frame the place); `true` if it handled the click. */
+  onLocateClick: ((line: number) => boolean) | null = null;
   private indices = new WeakMap<Scene, { rev: number; file: string; idx: SceneIndex }>();
 
   /** Document in the editor (the active project file). */

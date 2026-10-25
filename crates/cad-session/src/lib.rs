@@ -1289,14 +1289,7 @@ where
         };
         for n in rest.into_iter().filter(|&n| material(n)) {
             // the name of what is placed: through transforms and colours to the object
-            let mut m = n;
-            while matches!(tree.node(m).op, cad_ir::Op::Transform { .. } | cad_ir::Op::Color { .. } | cad_ir::Op::Group)
-            {
-                let kids: Vec<NodeIdx> = tree.solid_children(m).collect();
-                let [k] = kids[..] else { break };
-                m = k;
-            }
-            let base = tree.node(m).op.label();
+            let base = convert::object_label(tree, n);
             let mut name = base.clone();
             let mut k = 1;
             while out.iter().any(|(s, _)| *s == name) {

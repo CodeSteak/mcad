@@ -207,3 +207,18 @@ describe("Darstellungszustände", () => {
     expect(p.anchors.filter((a) => a.active).map((a) => a.anchor.text)).toEqual(["a.boden_loch"]);
   });
 });
+
+describe("Fehlerstellen", () => {
+  it("Boolean mit Berührung: Kanten rot, Stelle als Punkt in Weltkoordinaten", () => {
+    const f = fixture("gehaeuse");
+    const scene = structuredClone(f.scene);
+    const n = scene.nodes.find((x) => x.label === "deckel")!;
+    n.messages = [{ severity: "error", message: "Vereinigung gescheitert: …", edges: [[[0, 0, 0], [0, 0, 2]]], at: [0, 0, 1] }];
+    const p = plan({ scene, cursor: [], hover: [] });
+    expect(p.failures).toEqual([{ node: n.idx, point: apply(n.display_world, [0, 0, 1]) }]);
+    expect(p.edges.filter((e) => e.kind === "error")).toHaveLength(1);
+    // without a place: no point
+    n.messages = [{ severity: "error", message: "x", edges: [] }];
+    expect(plan({ scene, cursor: [], hover: [] }).failures).toEqual([]);
+  });
+});

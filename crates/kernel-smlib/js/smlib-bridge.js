@@ -110,6 +110,18 @@ export function sc_last_edges() {
   const n = m._sc_last_edges_len() >>> 0;
   return n ? m.HEAPU32.slice(p >>> 2, (p >>> 2) + n) : new Uint32Array(0);
 }
+export function sc_last_points() {
+  const m = mod();
+  const p = m._sc_last_points() >>> 0;
+  const n = m._sc_last_points_len() >>> 0;
+  return n ? m.HEAPF64.slice(p >>> 3, (p >>> 3) + n) : new Float64Array(0);
+}
+export function sc_last_point_counts() {
+  const m = mod();
+  const p = m._sc_last_point_counts() >>> 0;
+  const n = m._sc_last_point_counts_len() >>> 0;
+  return n ? m.HEAPU32.slice(p >>> 2, (p >>> 2) + n) : new Uint32Array(0);
+}
 export function sc_out_f64(slot) {
   const m = mod();
   const p = m._sc_out_f64(slot) >>> 0;

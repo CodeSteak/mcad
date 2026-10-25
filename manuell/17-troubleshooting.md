@@ -4,6 +4,7 @@
 | --- | --- |
 | warning "0 Kanten" | zone selects no edges: check zone position with `cad render --line N`; try `select = "touch"` |
 | kernel error on fillet | radius too large for the adjacent faces; the body stays unfilleted |
+| "Vereinigung/Differenz/Schnittmenge gescheitert: Zeile 12 (dom) und Zeile 30 (rippe) berühren sich tangential bei [x, y, z] (und n weitere Stellen): the result is not a closed solid …" | the two operands touch along a line or tangentially while overlapping elsewhere: no manifold result. Let them overlap a little or keep a gap at that place (`cad render` marks it red, JSON `at`) |
 | "unbekannte Variable `top`" inside `g[…] + …` | plane names are not variables; use `g.top` |
 | "nur Aufrufe eigener Module sind benennbar" | name the module call, not the transform: `translate(…) n: m();` |
 | "2D-Form in 3D-Kontext wird ignoriert" | extrude the 2D shape |
@@ -65,6 +66,8 @@ Glossary of the German text output:
 | Schnitt, Bereich, Loch, Wandstärke | section, region, hole, wall thickness |
 | Langloch | slot (`slot()`) |
 | Körper überschneiden sich, Summe, Vereinigung, verschmolzen | bodies overlap, sum, union, fused |
+| berühren sich tangential, Stelle, weitere Stellen, Berührung, Fehlerstelle | touch tangentially, place, more places, contact, error place |
+| Differenz, Schnittmenge gescheitert | difference, intersection failed |
 | Abstand, Winkel, Länge | distance, angle, length |
 | Kontext: Datei / Modul | context: file / module |
 | oberste Ebene, Zuweisung, ignoriert | top level, assignment, ignored |

@@ -489,7 +489,16 @@ node: number | null,
 /**
  * Path of the file the range is in (omitted: the main file).
  */
-file?: string, };
+file?: string, 
+/**
+ * Where the problem is (context coordinates), e.g. where the operands of a Boolean touch
+ * tangentially; the UI frames it on a click, `cad render` marks it.
+ */
+at?: Vec3, 
+/**
+ * Nodes the message names (the touching operands).
+ */
+nodes?: Array<number>, };
 
 export type Edit = { 
 /**
@@ -933,9 +942,14 @@ export type Bounds = { min: Vec3, max: Vec3, };
 
 export type NodeMessage = { severity: Severity, message: string, 
 /**
- * Affected edges (polylines, node system), e.g. the edge a fillet failed on.
+ * Affected edges (polylines, node system), e.g. the edge a fillet failed on, the edges
+ * along which the operands of a Boolean touch tangentially.
  */
-edges: Array<Array<Vec3>>, };
+edges: Array<Array<Vec3>>, 
+/**
+ * Place of the problem (node system), e.g. where the operands touch.
+ */
+at?: Vec3, };
 
 export type SceneNode = { idx: number, parent: number | null, children: Array<number>, 
 /**

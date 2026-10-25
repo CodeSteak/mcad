@@ -464,12 +464,15 @@ fn axis_aligned(m: &DMat4) -> bool {
     })
 }
 
+/// Parts and the node each comes from (Boolean error messages name the operands).
+type OwnedParts<S> = (Vec<Part<S>>, Vec<Option<NodeIdx>>);
+
 impl<K: Kernel> NodeEval<'_, '_, '_, K>
 where
     K::Shape: 'static,
 {
     fn error(&mut self, msg: impl Into<String>) {
-        self.diags.push(Diag { severity: Severity::Error, message: msg.into(), edges: Vec::new() });
+        self.diags.push(Diag { severity: Severity::Error, message: msg.into(), ..Default::default() });
     }
 
     /// Bounds without a kernel call where they follow exactly from the children: groups,
@@ -509,11 +512,11 @@ where
     }
 
     fn error_edges(&mut self, msg: impl Into<String>, edges: Vec<Vec<DVec3>>) {
-        self.diags.push(Diag { severity: Severity::Error, message: msg.into(), edges });
+        self.diags.push(Diag { severity: Severity::Error, message: msg.into(), edges, ..Default::default() });
     }
 
     fn warn(&mut self, msg: impl Into<String>) {
-        self.diags.push(Diag { severity: Severity::Warning, message: msg.into(), edges: Vec::new() });
+        self.diags.push(Diag { severity: Severity::Warning, message: msg.into(), ..Default::default() });
     }
 
     fn tree(&self) -> &Tree {
@@ -581,11 +584,74 @@ where
     }
 
     fn all_children_parts(&mut self) -> R<Vec<Part<K::Shape>>> {
+        Ok(self.all_children_owned()?.0)
+    }
+
+    /// Parts of the contributing 3D children and the child each part comes from.
+    fn all_children_owned(&mut self) -> R<OwnedParts<K::Shape>> {
         let mut parts = Vec::new();
+        let mut owners = Vec::new();
         for c in self.child_list() {
-            parts.extend(self.contrib(c)?);
+            let p = self.contrib(c)?;
+            owners.extend(std::iter::repeat_n(Some(c), p.len()));
+            parts.extend(p);
         }
-        Ok(parts)
+        Ok((parts, owners))
+    }
+
+    /// Error of a failed Boolean `what` (German noun). If the kernel says where the result is
+    /// not a closed solid (`places`, the operands touch tangentially), the message names the
+    /// operands that touch there (`owners[i]`: node of `shapes[i]`, classified `On` at the
+    /// first place) and the place; the places are the diagnostic's edges.
+    fn boolean_error(&mut self, what: &str, e: &KernelError, shapes: &[K::Shape], owners: &[Option<NodeIdx>]) -> R<()> {
+        let places = match e {
+            KernelError::Failed { places, .. } => places.iter().filter(|p| !p.is_empty()).cloned().collect::<Vec<_>>(),
+            _ => Vec::new(),
+        };
+        let Some(first) = places.first() else {
+            self.error(format!("{what} gescheitert: {e}"));
+            return Ok(());
+        };
+        // middle of the first place (two middle points averaged: the middle of a line)
+        let at = if first.len() % 2 == 1 {
+            first[first.len() / 2]
+        } else {
+            (first[first.len() / 2 - 1] + first[first.len() / 2]) / 2.0
+        };
+        // the operands on whose boundary the middle of the first place lies (failing that: its
+        // ends; the places of curved contacts are approximations)
+        let mut touching: Vec<NodeIdx> = Vec::new();
+        for probe in [vec![at], vec![first[0], first[first.len() - 1]]] {
+            for (i, s) in shapes.iter().enumerate() {
+                let Some(Some(o)) = owners.get(i).copied() else { continue };
+                if touching.contains(&o) {
+                    continue;
+                }
+                let pts = probe.clone();
+                if let Ok(c) = self.run.call(|k| k.classify(s, &pts))?
+                    && c.contains(&Class::On)
+                {
+                    touching.push(o);
+                }
+            }
+            if touching.len() >= 2 {
+                break;
+            }
+        }
+        let more = match places.len() {
+            1 => String::new(),
+            2 => " (und 1 weitere Stelle)".into(),
+            n => format!(" (und {} weitere Stellen)", n - 1),
+        };
+        let who = if touching.len() >= 2 { "{nodes}" } else { "die Operanden" };
+        self.diags.push(Diag {
+            severity: Severity::Error,
+            message: format!("{what} gescheitert: {who} berühren sich tangential bei {{at}}{more}: {e}"),
+            edges: places,
+            at: Some(at),
+            nodes: if touching.len() >= 2 { touching } else { Vec::new() },
+        });
+        Ok(())
     }
 
     fn check_solid(&mut self, parts: &[Part<K::Shape>]) -> bool {
@@ -598,6 +664,17 @@ where
 
     /// Union of parts (no kernel call for 0 or 1 part). On failure the inputs are returned.
     fn union(&mut self, parts: Vec<Part<K::Shape>>, tag: Tag) -> R<Vec<Part<K::Shape>>> {
+        self.union_owned(parts, &[], tag)
+    }
+
+    /// [`Self::union`] with the node each part comes from (for the error message; may be
+    /// empty).
+    fn union_owned(
+        &mut self,
+        parts: Vec<Part<K::Shape>>,
+        owners: &[Option<NodeIdx>],
+        tag: Tag,
+    ) -> R<Vec<Part<K::Shape>>> {
         if parts.len() <= 1 || !self.check_solid(&parts) {
             return Ok(parts);
         }
@@ -607,7 +684,7 @@ where
             Err(e) => {
                 // operands of a Boolean that already failed below: same cause, reported there
                 if !self.unmerged_in {
-                    self.error(format!("Vereinigung gescheitert: {e}"));
+                    self.boolean_error("Vereinigung", &e, &shapes, owners)?;
                 }
                 self.unmerged = true;
                 Ok(parts)
@@ -618,12 +695,29 @@ where
     /// 3D boolean of groups of parts (one group per operand). Failure → inputs (difference:
     /// the first operand).
     fn boolean(&mut self, op: BoolOp, groups: Vec<Vec<Part<K::Shape>>>, tag: Tag) -> R<Vec<Part<K::Shape>>> {
+        self.boolean_owned(op, groups, &[], tag)
+    }
+
+    /// [`Self::boolean`] with the node of each group (operand; may be empty), named in the
+    /// error message when the operands touch tangentially.
+    fn boolean_owned(
+        &mut self,
+        op: BoolOp,
+        groups: Vec<Vec<Part<K::Shape>>>,
+        owners: &[Option<NodeIdx>],
+        tag: Tag,
+    ) -> R<Vec<Part<K::Shape>>> {
+        let owner = |i: usize| owners.get(i).copied().flatten();
         match op {
             BoolOp::Union => {
+                let own: Vec<Option<NodeIdx>> =
+                    groups.iter().enumerate().flat_map(|(i, g)| std::iter::repeat_n(owner(i), g.len())).collect();
                 let all = groups.into_iter().flatten().collect();
-                self.union(all, tag)
+                self.union_owned(all, &own, tag)
             }
             BoolOp::Difference => {
+                let mut own = vec![owner(0)];
+                own.extend(groups.iter().enumerate().skip(1).flat_map(|(i, g)| std::iter::repeat_n(owner(i), g.len())));
                 let mut it = groups.into_iter();
                 let base = it.next().unwrap_or_default();
                 let subs: Vec<_> = it.flatten().collect();
@@ -644,7 +738,7 @@ where
                 match self.run.call(|k| k.boolean(BoolOp::Difference, &shapes, tag))? {
                     Ok(s) => Ok(vec![Part { shape: s, solid: true }]),
                     Err(e) => {
-                        self.error(format!("Differenz gescheitert: {e}"));
+                        self.boolean_error("Differenz", &e, &shapes, &own)?;
                         self.unmerged = true;
                         Ok(base)
                     }
@@ -662,6 +756,7 @@ where
                     return Ok(all);
                 }
                 let mut shapes = Vec::new();
+                let own: Vec<Option<NodeIdx>> = (0..groups.len()).map(owner).collect();
                 for g in groups {
                     let u = self.union(g, tag)?;
                     if u.len() != 1 {
@@ -672,7 +767,7 @@ where
                 match self.run.call(|k| k.boolean(BoolOp::Intersection, &shapes, tag))? {
                     Ok(s) => Ok(vec![Part { shape: s, solid: true }]),
                     Err(e) => {
-                        self.error(format!("Schnittmenge gescheitert: {e}"));
+                        self.boolean_error("Schnittmenge", &e, &shapes, &own)?;
                         self.unmerged = true;
                         Ok(all)
                     }
@@ -818,8 +913,8 @@ where
             Op::Group | Op::ModuleCall { .. } | Op::Transform { .. } | Op::Color { .. } | Op::Empty => {
                 // meshes lie next to the united bodies (an implicit union does not merge them)
                 self.meshes = self.kid_meshes();
-                let parts = self.all_children_parts()?;
-                self.union(parts, tag)
+                let (parts, owners) = self.all_children_owned()?;
+                self.union_owned(parts, &owners, tag)
             }
             Op::Prim { prim: Prim::Mesh { mesh, mode }, place } => self.mesh_prim(mesh, *mode, place, node.blend),
             Op::Prim { prim, place } => self.prim(prim, place, node.blend),
@@ -843,7 +938,8 @@ where
                     Vec::new()
                 };
                 let diags_before = self.diags.len();
-                let parts = self.boolean(*op, groups, tag)?;
+                let owners: Vec<Option<NodeIdx>> = kids.iter().map(|&c| Some(c)).collect();
+                let parts = self.boolean_owned(*op, groups, &owners, tag)?;
                 let failed = self.diags[diags_before..].iter().any(|d| d.severity == Severity::Error);
                 let blend = match (fillet, chamfer) {
                     _ if fillet_law.is_some() => Some((BlendKind::Fillet, 0.0)),
@@ -937,8 +1033,8 @@ where
                         b = merge_box(b, Some(transform_box(cb, &tree.node(c).local)));
                     }
                 }
-                let parts = self.all_children_parts()?;
-                let parts = self.union(parts, tag)?;
+                let (parts, owners) = self.all_children_owned()?;
+                let parts = self.union_owned(parts, &owners, tag)?;
                 self.meshes = self.kid_meshes();
                 let Some((lo, hi)) = b else { return Ok(parts) };
                 let s = profile::resize_scale(hi - lo, *size, *auto);
@@ -1012,10 +1108,13 @@ where
                 self.warn(format!("{what}: {why}; Kinder werden unverändert gezeigt"));
                 self.meshes = self.kid_meshes();
                 let mut parts = Vec::new();
+                let mut owners = Vec::new();
                 for c in kids {
-                    parts.extend(self.contrib(c)?);
+                    let p = self.contrib(c)?;
+                    owners.extend(std::iter::repeat_n(Some(c), p.len()));
+                    parts.extend(p);
                 }
-                self.union(parts, self.tag)
+                self.union_owned(parts, &owners, self.tag)
             }
         }
     }
@@ -1608,7 +1707,10 @@ where
                 for a in args {
                     groups.push(self.lift_expr(a, mode)?);
                 }
-                self.boolean(*op, groups, self.tag)
+                // the 2D leaves name the operands
+                let owners: Vec<Option<NodeIdx>> =
+                    args.iter().map(|a| if let Expr2::Leaf(l) = a { Some(l.node) } else { None }).collect();
+                self.boolean_owned(*op, groups, &owners, self.tag)
             }
         }
     }

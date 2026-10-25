@@ -2087,7 +2087,8 @@ select:hover {
   cursor: pointer;
 }
 
-.cm-lineend-assert {
+.cm-lineend-assert,
+.cm-lineend-locate {
   cursor: pointer;
   text-decoration: underline dotted;
 }

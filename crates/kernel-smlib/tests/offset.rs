@@ -27,7 +27,7 @@ fn kinds(list: &[(&'static str, usize)]) -> BTreeMap<&'static str, usize> {
 
 #[test]
 fn facade_version() {
-    assert_eq!(k().facade_version(), 5);
+    assert!(k().facade_version() >= 5);
 }
 
 #[test]

@@ -124,6 +124,14 @@ const hoverTracking = EditorView.domEventHandlers({
         return true;
       }
     }
+    // click on a kernel error with a place (operands touching): frame the place
+    if (e.button === 0 && el?.closest?.(".cm-lineend-locate") && bridge.onLocateClick) {
+      const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }, false);
+      if (bridge.onLocateClick(view.state.doc.lineAt(pos).number)) {
+        e.preventDefault();
+        return true;
+      }
+    }
     if (e.button !== 0 || !(e.ctrlKey || e.metaKey)) return false;
     const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }, false);
     // `include <datei>` / `use <datei>`: open the file (paths relative to this file).

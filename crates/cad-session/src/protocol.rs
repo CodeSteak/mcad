@@ -796,6 +796,15 @@ pub struct Diagnostic {
     #[ts(optional)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
+    /// Where the problem is (context coordinates), e.g. where the operands of a Boolean touch
+    /// tangentially; the UI frames it on a click, `cad render` marks it.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<Vec3>,
+    /// Nodes the message names (the touching operands).
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nodes: Option<Vec<u32>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -1190,8 +1199,13 @@ pub struct Bounds {
 pub struct NodeMessage {
     pub severity: Severity,
     pub message: String,
-    /// Affected edges (polylines, node system), e.g. the edge a fillet failed on.
+    /// Affected edges (polylines, node system), e.g. the edge a fillet failed on, the edges
+    /// along which the operands of a Boolean touch tangentially.
     pub edges: Vec<Vec<Vec3>>,
+    /// Place of the problem (node system), e.g. where the operands touch.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub at: Option<Vec3>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

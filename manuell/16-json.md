@@ -18,7 +18,7 @@ diagnostics: Diagnostic[], error?: string, daemon?: {used, reason} }` plus per c
 
 Types:
 
-- `Diagnostic = { severity: "error"|"warning"|"info", message, source: "syntax"|"eval"|"kernel", node, range, file? }`
+- `Diagnostic = { severity: "error"|"warning"|"info", message, source: "syntax"|"eval"|"kernel", node, range, file?, at?: [x,y,z], nodes?: [node] }` (`at`: place of a kernel error in context coordinates, e.g. where Boolean operands touch tangentially; `nodes`: the touching operands; scene node messages carry `at` in the node system and the contact edges as `edges`)
 - `range = { from, to, line, col, end_line, end_col }` (lines/cols 1-based, offsets UTF-16)
 - `Bounds = { min: [x,y,z], max, size }`
 - `AssertResult = { node, kind: keepout|disjoint|intersect|touches, range, ok, checked, note, clearance, tol, contact: face|any, eps_volume, bodies, pairs: AssertPair[], ms, cached }` (keepout: only pairs with a problem)
@@ -46,4 +46,5 @@ program version in `daemon status`, the source version in `scene`.
 
 Schema 2 (from 1): `inspect` `selected_edges` list instead of count (+ `selected_edge_count`);
 `outline` plane `axis` number (+ `axis_name`), `variables[].literal` range instead of bool,
-`instances[].part` part name instead of bool.
+`instances[].part` part name instead of bool; diagnostics may carry `at`/`nodes`; render
+`overlays.failures`; export `step.bodies`, `notes`.

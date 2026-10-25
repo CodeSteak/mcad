@@ -77,6 +77,8 @@ export interface ViewState {
     frames: number;
     anchors: number;
     activeAnchors: number;
+    /** Places of failed Booleans drawn as red points (context coordinates). */
+    failures: Array<{ node: number; point: Vec3 }>;
     status: string | null;
     /** Guide lines by kind (axis, path, net, offset, centerline). */
     guides: Record<string, number>;
@@ -608,6 +610,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     }
     this.addGrid(g, diag);
     this.addAnchors(p, diag);
+    this.addFailures(p, diag);
     this.lastHandles = this.computeHandles(scene, sel, diag);
     this.buildHandles();
     this.buildSketch();
@@ -916,6 +919,22 @@ export class Viewer implements DragView, SketchView, MeasureView {
         mesh.name = "grid-highlight-plane";
         this.overlay.add(mesh);
       }
+    }
+  }
+
+  /** Places of failed Booleans (operands touching tangentially): red points through the model. */
+  private addFailures(p: Plan, diag: number): void {
+    const r = Math.max(0.25, diag * 0.009);
+    for (const f of p.failures) {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(r, 16, 12),
+        new THREE.MeshBasicMaterial({ color: this.materials.palette.errorEdge, depthTest: false, transparent: true, opacity: 0.95 }),
+      );
+      m.position.set(...f.point);
+      m.renderOrder = 61;
+      m.userData.ownGeometry = true;
+      m.name = `failure:${f.node}`;
+      this.overlay.add(m);
     }
   }
 
@@ -2067,6 +2086,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
         frames: p?.frames.length ?? 0,
         anchors: p?.anchors.length ?? 0,
         activeAnchors: p?.anchors.filter((a) => a.active).length ?? 0,
+        failures: (p?.failures ?? []).map((f) => ({ node: f.node, point: f.point })),
         status: p?.status ?? null,
         guides: (p?.guides ?? []).reduce<Record<string, number>>((m, g) => ((m[g.kind] = (m[g.kind] ?? 0) + 1), m), {}),
         guidePoints: (p?.guides ?? []).map((g) => ({ kind: g.kind, points: g.points })),
