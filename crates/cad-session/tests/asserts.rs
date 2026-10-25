@@ -153,6 +153,7 @@ fn touches_face_contact_area() {
     let p = &r[0].pairs[0];
     assert!(p.ok, "{p:?}");
     close("Kontaktfläche Kreis", p.contact_area.unwrap(), PI * 9.0, 1e-6);
+    assert!(p.contact_exact, "{p:?}");
 }
 
 #[test]

@@ -1009,12 +1009,14 @@ fn assert_overlay(
             if let Some(o) = &pr.overlap
                 && (!pr.ok || all)
             {
-                meshes.push((assert_mesh(o), lk.overlap, DMat4::IDENTITY, None, true));
+                // a wanted intersection (assert_intersect) green, a violation red
+                let (fill, edge) = if pr.ok { (lk.contact, lk.contact) } else { (lk.overlap, lk.failed) };
+                meshes.push((assert_mesh(o), fill, DMat4::IDENTITY, None, true));
                 // feature edges on top: visible inside the bodies
                 for e in o.edges.chunks_exact(6) {
                     let x = DVec3::new(e[0] as f64, e[1] as f64, e[2] as f64);
                     let y = DVec3::new(e[3] as f64, e[4] as f64, e[5] as f64);
-                    lines.push(top_line(vec![x, y], lk.failed, 2.0, false));
+                    lines.push(top_line(vec![x, y], edge, 2.0, false));
                 }
                 drawn = true;
             }
@@ -1071,9 +1073,13 @@ fn assert_overlay(
                 Some("apart") => format!("kein Schnitt, {} mm", num(pr.distance.unwrap_or(0.0))),
                 Some("line_contact") => "Linienkontakt".into(),
                 Some("point_contact") => "Punktkontakt".into(),
-                _ => match pr.contact_area {
-                    Some(ar) => format!("Kontakt {} mm²", num(ar)),
-                    None => pr.contact.clone().unwrap_or_else(|| "ok".into()),
+                _ => match (pr.contact_area, pr.volume.filter(|v| *v > 0.0)) {
+                    (Some(ar), _) => format!("Kontakt {} mm²", num(ar)),
+                    (None, Some(v)) => format!("Schnitt {} mm³", num(v)),
+                    _ => match &pr.contact {
+                        Some(c) => c.clone(),
+                        None => continue,
+                    },
                 },
             };
             let color = if pr.ok { lk.dims_label } else { lk.failed };

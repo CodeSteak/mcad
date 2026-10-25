@@ -578,7 +578,7 @@ fn contact<K: Kernel>(
     let ba = bodies(k, a)?;
     let bb = bodies(k, b)?;
     let line_len = 10.0 * tm;
-    let mut by_kind: Vec<(&'static str, Vec<Vec<DVec3>>)> = Vec::new();
+    let mut by_kind: Vec<(&'static str, Vec<Vec<DVec3>>, bool)> = Vec::new();
     for x in &ba {
         for y in &bb {
             for (fi, fa) in x.faces.iter().enumerate() {
@@ -591,6 +591,8 @@ fn contact<K: Kernel>(
                     if dist::min_distance(&fa.tris, &fb.tris).is_none_or(|m| m.dist > lim) {
                         continue;
                     }
+                    // exactness per face pair (only that of the kind that counts is reported)
+                    c.exact = true;
                     let kind =
                         match (plane_normal(&fa.surface, fa.same_sense), plane_normal(&fb.surface, fb.same_sense)) {
                             (Some((oa, na)), Some((ob, nb))) => {
@@ -624,14 +626,15 @@ fn contact<K: Kernel>(
                         c.kind = kind;
                     }
                     if !kind.is_empty() {
-                        by_kind.push((kind, std::mem::take(&mut c.lines)));
+                        by_kind.push((kind, std::mem::take(&mut c.lines), c.exact));
                     }
                 }
             }
         }
     }
     // only the outlines of the kind that counts (face contact: no extra edge points)
-    c.lines = by_kind.into_iter().filter(|(kd, _)| *kd == c.kind).flat_map(|(_, l)| l).collect();
+    c.exact = by_kind.iter().filter(|(kd, ..)| *kd == c.kind).all(|(.., ex)| *ex);
+    c.lines = by_kind.into_iter().filter(|(kd, ..)| *kd == c.kind).flat_map(|(_, l, _)| l).collect();
     // meshes without B-rep: only on the triangles
     if !a.meshes(ev).is_empty() || !b.meshes(ev).is_empty() {
         let (ta, _) = a.triangles(k, ev, tm)?;
