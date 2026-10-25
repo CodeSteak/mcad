@@ -5,8 +5,9 @@ For every model: `mcad export <model> -o <x>.step --merge --json` writes the STE
 root as one fused body, so that it compares with the root) and reports the kernel's volume,
 area and bounds (SMLib `mass_props`/`bounds` of the root) and what the writer wrote. With
 `--bodies` the default export is checked instead (one body per part / top-level object): read,
-valid, closed, solids, faces and bounds as below, the volume only if the bodies do not overlap
-(no note from `mcad export`), the area not (touching bodies keep their contact faces). The file is then read back with OCCT's STEP reader (not our code) and checked:
+valid, closed, solids, faces and bounds as below, the volume unless overlapping bodies had to be
+written apart (note "getrennt geschrieben" from `mcad export`; overlapping bodies are otherwise
+fused into one), the area not (touching bodies keep their contact faces). The file is then read back with OCCT's STEP reader (not our code) and checked:
 
   read      STEPControl_Reader reads the file and transfers a non-empty shape
   valid     BRepCheck_Analyzer reports the shape valid
@@ -168,7 +169,7 @@ def check(model: Path, mcad: str, out: Path, stl_dir: Path | None, bodies: bool 
     res["occ_area"] = g.Mass()
     several = bodies and len(st.get("bodies", [])) > 1
     res["bodies"] = st.get("bodies", [])
-    overlap = bool(j.get("notes"))
+    overlap = any("getrennt geschrieben" in n for n in j.get("notes") or [])
     if st["solids"] and res["kernel_volume"] is not None and not (several and overlap):
         res["volume_rel"] = abs(res["occ_volume"] - res["kernel_volume"]) / max(abs(res["kernel_volume"]), 1e-12)
         checks["volume"] = rel_ok(res["occ_volume"], res["kernel_volume"])

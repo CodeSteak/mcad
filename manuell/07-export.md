@@ -17,11 +17,13 @@
 | `-m NAME [-D p=v]`, `-m 'NAME(args)'` | only that module, with its defaults and the given parameters (`-m 'holder(30, h = 5)'`, `-m 'parts.screw(d = 3)'`; `mcad usage commands`) |
 | `--ignore-asserts` | export although an `assert_…` is violated (warning line `trotz n Assert-Verletzung(en) exportiert`) |
 
-Separate bodies (STEP): objects that only touch keep their contact faces; overlapping objects
-stay overlapping solids – the export then says `Hinweis: Körper überschneiden sich: Summe V1 mm³ >
-Vereinigung V2 mm³ …` (JSON `notes`; check with `mcad measure --interference` or
-`assert_disjoint`). STL is always one mesh of the fused result; 3MF keeps parts as objects (the
-material outside the parts is one object "ohne Bauteil"), objects outside the parts are fused.
+Separate bodies (STEP): objects that only touch or lie apart stay separate solids (contact faces
+kept); objects that overlap are fused into one solid named `a + b` – the export says `Hinweis:
+Körper a, b überschneiden sich: als ein Körper „a + b“ geschrieben …` (JSON `notes`). Overlap is
+the exact intersection volume (as `assert_disjoint`); if that boolean or the union fails, the
+bodies are written apart with a note. STL is always one mesh of the fused result; 3MF keeps
+parts as objects (the material outside the parts is one object "ohne Bauteil"), objects outside
+the parts are fused.
 
 ```sh
 mcad export pair.mcad -o pair.step   # a: block();  translate([10, 0, 0]) b: block();  (touching cubes)

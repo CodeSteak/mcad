@@ -1359,13 +1359,21 @@ fn export(
     let (bytes, triangles, step) = if fmt == p::ExportFormat::Step {
         let name = output.file_stem().and_then(|s| s.to_str()).unwrap_or("part").to_string();
         let opts = cad_engine::StepOptions { schema, name, timestamp: utc_timestamp(), ..Default::default() };
-        let (bytes, st) = m.session.export_step(&opts, merge).map_err(Fail::Kernel)?;
-        if !merge && let Some((sum, union)) = m.session.step_overlap() {
+        let (bytes, st, sn) = m.session.export_step_with_notes(&opts, merge).map_err(Fail::Kernel)?;
+        for g in &sn.fused {
             notes.push(format!(
-                "Körper überschneiden sich: Summe {} mm³ > Vereinigung {} mm³ (getrennt geschrieben; ein verschmolzener Körper: --merge)",
-                num(sum),
-                num(union)
+                "Körper {} überschneiden sich: als ein Körper „{}“ geschrieben (berührende bleiben getrennt; alles verschmolzen: --merge)",
+                g.join(", "),
+                g.join(" + ")
             ));
+        }
+        for (name, e) in &sn.apart {
+            notes.push(format!(
+                "Körper „{name}“ überschneiden sich, Vereinigung gescheitert ({e}): getrennt geschrieben"
+            ));
+        }
+        for (a, b, e) in &sn.unchecked {
+            notes.push(format!("Überschneidung von {a} und {b} nicht prüfbar ({e}): getrennt geschrieben"));
         }
         (bytes, 0, Some(st))
     } else if colored {

@@ -48,7 +48,8 @@
 | "Kontaktart nur netzbasiert bestimmt" | freeform faces: contact found on the mesh only |
 | "`assert_disjoint()` braucht mindestens zwei Kinder (eine for-Schleife zählt als ein Kind)" | put the bodies as separate statements |
 | `mcad export` exit 4 "Export abgebrochen: n Assert-Verletzung(en)" | fix the model, or `--ignore-asserts` |
-| STEP "Hinweis: Körper überschneiden sich: Summe … > Vereinigung …" | top-level objects/parts overlap and are written as separate solids; move them apart, or `--merge` for one fused body |
+| STEP "Hinweis: Körper a, b überschneiden sich: als ein Körper „a + b“ geschrieben" | top-level objects/parts overlap and are fused into one solid; move them apart to keep them separate, or `--merge` for one body of everything |
+| STEP "Überschneidung von a und b nicht prüfbar (…)" / "Vereinigung gescheitert (…): getrennt geschrieben" | the kernel boolean failed (faces lying on each other); the bodies stay separate solids |
 
 Glossary of the German text output:
 
@@ -67,7 +68,7 @@ Glossary of the German text output:
 | Fläche, Körper, Volumen | face/area, body, volume |
 | Schnitt, Bereich, Loch, Wandstärke | section, region, hole, wall thickness |
 | Langloch | slot (`slot()`) |
-| Körper überschneiden sich, Summe, Vereinigung, verschmolzen | bodies overlap, sum, union, fused |
+| Körper überschneiden sich, als ein Körper geschrieben, Vereinigung, verschmolzen, nicht prüfbar, getrennt geschrieben | bodies overlap, written as one body, union, fused, cannot be checked, written apart |
 | berühren sich tangential, Stelle, weitere Stellen, Berührung, Fehlerstelle | touch tangentially, place, more places, contact, error place |
 | Differenz, Schnittmenge gescheitert | difference, intersection failed |
 | Abstand, Winkel, Länge | distance, angle, length |

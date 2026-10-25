@@ -132,52 +132,104 @@ where
         nodes: &[(Option<String>, NodeIdx)],
         opts: &cad_step::StepOptions,
     ) -> Result<(Vec<u8>, cad_step::StepStats), String> {
-        let named = nodes.iter().any(|(n, _)| n.is_some());
+        let groups: Vec<(Option<String>, Vec<NodeIdx>)> = nodes.iter().map(|(l, n)| (l.clone(), vec![*n])).collect();
+        self.export_step_groups(ev, &groups, opts).map(|(b, st, _)| (b, st))
+    }
+
+    /// [`Engine::export_step_named`] with groups of nodes: a group of one node writes its
+    /// bodies as there; the solids of a group of several nodes are fused into one body by a
+    /// kernel union (overlapping objects of the top level, `Session::export_step`). Faces of a
+    /// fused body keep the colour of the face they come from (by face tag). If the union fails,
+    /// the group's bodies are written apart; the third value lists those groups (their label)
+    /// with the kernel message.
+    pub fn export_step_groups(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        groups: &[(Option<String>, Vec<NodeIdx>)],
+        opts: &cad_step::StepOptions,
+    ) -> Result<StepGroupsOut, String> {
+        let named = groups.iter().any(|(n, _)| n.is_some());
         let mut breps = Vec::new();
         let mut o = opts.clone();
         o.body_names.clear();
         let own = o.tag_colors.is_empty();
+        let mut failed = Vec::new();
         // Colours per face from the colour regions (Bericht 12, F1): a tag can belong to
         // several nodes of equal content in different colours, so faces get synthetic tags
         // (one per colour) in a copy of the B-rep.
         let mut colors: Vec<[u8; 4]> = Vec::new();
-        for (label, n) in nodes {
-            let n = *n;
-            let r = ev.reports.get(n as usize).ok_or_else(|| format!("Knoten {n} existiert nicht"))?;
-            if r.dim == Some(Dim::Two) {
-                return Err("2D-Ergebnis kann nicht als Körper exportiert werden".into());
+        for (label, nodes) in groups {
+            let name = label.clone().unwrap_or_else(|| opts.name.clone());
+            let mut written = Vec::new();
+            if nodes.len() > 1 {
+                match self.fused_brep(ev, nodes) {
+                    Ok(Some((b, rest))) => {
+                        // the source faces' colours by tag (the union keeps the face tags)
+                        let mut by_tag = std::collections::HashMap::new();
+                        if own {
+                            for &n in nodes {
+                                let world = ev.reports[n as usize].display_world;
+                                for i in 0..ev.parts(n).len() {
+                                    let src = self.placed_brep(ev, n, i, &world)?;
+                                    let fc = self.face_region_colors(ev, n, i)?;
+                                    for_each_face(&src, &mut |f| {
+                                        if let Some(crate::colors::RegionColor::Color(c)) = fc.get(f.id as usize) {
+                                            by_tag.entry(f.tag).or_insert(*c);
+                                        }
+                                    });
+                                }
+                            }
+                        }
+                        let mut b = b;
+                        if own {
+                            for_each_face_mut(&mut b, &mut |f| match by_tag.get(&f.tag) {
+                                Some(c) => f.tag = color_tag(&mut colors, *c),
+                                None => f.tag = 0,
+                            });
+                        }
+                        if named {
+                            o.body_names.push(name.clone());
+                        }
+                        breps.push(std::rc::Rc::new(b));
+                        written = rest;
+                    }
+                    Ok(None) => written = nodes.iter().map(|&n| (n, None)).collect(),
+                    Err(e) => {
+                        failed.push((name.clone(), e));
+                        written = nodes.iter().map(|&n| (n, None)).collect();
+                    }
+                }
+            } else {
+                written.extend(nodes.iter().map(|&n| (n, None)));
             }
-            let world = r.display_world;
-            // B-rep parts, then meshes as facetted B-reps
-            for i in 0..ev.parts(n).len() + ev.meshes(n).len() {
-                let b = self.placed_brep(ev, n, i, &world)?;
-                if named {
-                    o.body_names.push(label.clone().unwrap_or_else(|| opts.name.clone()));
+            // single nodes, and what a fused group left (open surfaces, meshes)
+            for (n, only) in written {
+                let r = ev.reports.get(n as usize).ok_or_else(|| format!("Knoten {n} existiert nicht"))?;
+                if r.dim == Some(Dim::Two) {
+                    return Err("2D-Ergebnis kann nicht als Körper exportiert werden".into());
                 }
-                if !own {
-                    breps.push(b);
-                    continue;
+                let world = r.display_world;
+                // B-rep parts, then meshes as facetted B-reps
+                for i in 0..ev.parts(n).len() + ev.meshes(n).len() {
+                    if only.as_ref().is_some_and(|v: &Vec<usize>| !v.contains(&i)) {
+                        continue;
+                    }
+                    let b = self.placed_brep(ev, n, i, &world)?;
+                    if named {
+                        o.body_names.push(name.clone());
+                    }
+                    if !own {
+                        breps.push(b);
+                        continue;
+                    }
+                    let fc = self.face_region_colors(ev, n, i)?;
+                    let mut b = (*b).clone();
+                    for_each_face_mut(&mut b, &mut |f| match fc.get(f.id as usize) {
+                        Some(crate::colors::RegionColor::Color(c)) => f.tag = color_tag(&mut colors, *c),
+                        _ => f.tag = 0,
+                    });
+                    breps.push(std::rc::Rc::new(b));
                 }
-                let fc = self.face_region_colors(ev, n, i)?;
-                let mut b = (*b).clone();
-                for_each_face_mut(&mut b, &mut |f| {
-                    let c = match fc.get(f.id as usize) {
-                        Some(crate::colors::RegionColor::Color(k)) => *k,
-                        _ => {
-                            f.tag = 0;
-                            return;
-                        }
-                    };
-                    let idx = match colors.iter().position(|x| *x == c) {
-                        Some(i) => i,
-                        None => {
-                            colors.push(c);
-                            colors.len() - 1
-                        }
-                    };
-                    f.tag = STEP_COLOR_TAG + idx as u32;
-                });
-                breps.push(std::rc::Rc::new(b));
             }
         }
         if own {
@@ -188,7 +240,48 @@ where
         }
         let refs: Vec<&cad_kernel::brep::Brep> = breps.iter().map(|b| &**b).collect();
         let (text, st) = cad_step::write(&refs, &o).map_err(|e| e.to_string())?;
-        Ok((text.into_bytes(), st))
+        Ok((text.into_bytes(), st, failed))
+    }
+
+    /// The union of the solids of `nodes`, placed in context coordinates, as a B-rep (face tags
+    /// of the sources), and per node the parts it leaves to be written alone (open surfaces,
+    /// meshes; `Some(indices)` as in [`Engine::export_step_groups`]). `None` with fewer than
+    /// two solids.
+    #[allow(clippy::type_complexity)]
+    fn fused_brep(
+        &mut self,
+        ev: &Evaluation<K::Shape>,
+        nodes: &[NodeIdx],
+    ) -> Result<Option<(cad_kernel::brep::Brep, Vec<(NodeIdx, Option<Vec<usize>>)>)>, String> {
+        let mut shapes = Vec::new();
+        let mut rest = Vec::new();
+        for &n in nodes {
+            let r = ev.reports.get(n as usize).ok_or_else(|| format!("Knoten {n} existiert nicht"))?;
+            let world = r.display_world;
+            let mut alone = Vec::new();
+            for (i, p) in ev.parts(n).iter().enumerate() {
+                if !p.solid {
+                    alone.push(i);
+                    continue;
+                }
+                let s = if world == glam::DMat4::IDENTITY {
+                    p.shape.clone()
+                } else {
+                    self.kernel.transform(&p.shape, &world).map_err(|e| e.to_string())?
+                };
+                shapes.push(s);
+            }
+            alone.extend(ev.parts(n).len()..ev.parts(n).len() + ev.meshes(n).len());
+            if !alone.is_empty() {
+                rest.push((n, Some(alone)));
+            }
+        }
+        if shapes.len() < 2 {
+            return Ok(None);
+        }
+        let u = self.kernel.boolean(cad_kernel::BoolOp::Union, &shapes, 0).map_err(|e| e.to_string())?;
+        let b = self.kernel.brep(&u).map_err(|e| e.to_string())?;
+        Ok(Some((b, rest)))
     }
 
     /// Exports nodes `(name, node)` in context coordinates: STL (all in one file), 3MF (one
@@ -285,8 +378,36 @@ where
     }
 }
 
+/// [`Engine::export_step_groups`]: bytes, statistics, groups written apart (label, message).
+pub type StepGroupsOut = (Vec<u8>, cad_step::StepStats, Vec<(String, String)>);
+
 /// First synthetic face tag of the STEP colours (one per colour; kernel tags are far below).
 const STEP_COLOR_TAG: u32 = 0x4000_0000;
+
+/// The synthetic face tag of colour `c` (added to `colors` when new).
+fn color_tag(colors: &mut Vec<[u8; 4]>, c: [u8; 4]) -> u32 {
+    let idx = match colors.iter().position(|x| *x == c) {
+        Some(i) => i,
+        None => {
+            colors.push(c);
+            colors.len() - 1
+        }
+    };
+    STEP_COLOR_TAG + idx as u32
+}
+
+fn for_each_face(b: &cad_kernel::brep::Brep, f: &mut dyn FnMut(&cad_kernel::brep::Face)) {
+    use cad_kernel::brep::Body;
+    for body in &b.bodies {
+        let shells: Vec<&cad_kernel::brep::Shell> = match body {
+            Body::Solid { outer, voids } => std::iter::once(outer).chain(voids.iter()).collect(),
+            Body::Sheet { shells } => shells.iter().collect(),
+        };
+        for sh in shells {
+            sh.faces.iter().for_each(&mut *f);
+        }
+    }
+}
 
 fn for_each_face_mut(b: &mut cad_kernel::brep::Brep, f: &mut dyn FnMut(&mut cad_kernel::brep::Face)) {
     use cad_kernel::brep::Body;

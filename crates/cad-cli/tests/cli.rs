@@ -221,13 +221,21 @@ fn export_step_separate_bodies() {
     std::fs::write(&src, "cube(10);\n").unwrap();
     let v = json(&["export", &src.display().to_string(), "-o", &step], 0);
     assert_eq!(v["step"]["bodies"], serde_json::json!(["b 1"]));
-    // overlapping objects stay apart, with a note
-    std::fs::write(&src, "cube(10);\ntranslate([5, 0, 0]) cube(10);\n").unwrap();
+    // overlapping objects are fused into one body, a touching one stays apart
+    std::fs::write(&src, "color(\"red\") cube(10);\ntranslate([5, 0, 0]) cube(10);\ntranslate([15, 0, 0]) cube(10);\n")
+        .unwrap();
     let v = json(&["export", &src.display().to_string(), "-o", &step], 0);
-    assert_eq!(v["step"]["solids"], 2);
-    assert!(v["notes"][0].as_str().unwrap().contains("überschneiden sich"), "{v}");
+    assert_eq!(v["step"]["solids"], 2, "{v}");
+    assert_eq!(v["step"]["bodies"], serde_json::json!(["box + box 2", "box 3"]));
+    assert_eq!(v["notes"].as_array().unwrap().len(), 1, "{v}");
+    assert!(v["notes"][0].as_str().unwrap().contains("als ein Körper „box + box 2“"), "{v}");
+    let text = std::fs::read_to_string(&step).unwrap();
+    assert!(text.contains("COLOUR_RGB"), "the red faces keep their colour in the fused body");
     let t = text_of(&["export", &src.display().to_string(), "-o", &step]);
-    assert!(t.contains("2 Körper (box, box 2)") && t.contains("Hinweis: Körper überschneiden sich"), "{t}");
+    assert!(
+        t.contains("2 Körper (box + box 2, box 3)") && t.contains("Hinweis: Körper box, box 2 überschneiden sich"),
+        "{t}"
+    );
     // --part: the parts by name
     let v = json(&["export", &data("beruehrend.mcad"), "--part", "a", "--part", "b", "-o", &step], 0);
     let text = std::fs::read_to_string(&step).unwrap();

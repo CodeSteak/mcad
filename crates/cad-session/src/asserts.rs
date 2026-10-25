@@ -839,10 +839,22 @@ where
             AssertKind::Intersect => Need { distance: true, contact: false },
             AssertKind::Touches => Need { distance: true, contact: true },
         };
+        self.pair_data(a, b, need, decl.tol, cached)
+    }
+
+    /// The data of a pair for `need` (cache by content key; `tol` counts for contacts only).
+    fn pair_data(
+        &mut self,
+        a: &mut BodySet<K::Shape>,
+        b: &mut BodySet<K::Shape>,
+        need: Need,
+        tol: f64,
+        cached: &mut bool,
+    ) -> Rc<PairData> {
         let mut h = KeyHasher::new();
         h.str(PAIR_VERSION).key(&a.id).key(&b.id).u64(need.distance as u64).u64(need.contact as u64);
         if need.contact {
-            h.f64(decl.tol);
+            h.f64(tol);
         }
         let key = h.finish();
         if let Some(r) = self.engine.aux_get::<PairData>(&key) {
@@ -851,10 +863,31 @@ where
         *cached = false;
         let Some(d) = &self.done else { return Rc::new(PairData::default()) };
         let k = self.engine.kernel_mut();
-        let data = Rc::new(compute_pair(k, &d.ev, a, b, need, decl.tol));
+        let data = Rc::new(compute_pair(k, &d.ev, a, b, need, tol));
         let cost = data.bytes();
         self.engine.aux_insert(key, data.clone(), cost);
         data
+    }
+
+    /// Do the results of nodes `a` and `b` (solids and meshes, placed in context coordinates)
+    /// overlap, as for `assert_disjoint`: exact intersection volume above `ε_V`, or meshes
+    /// overlapping. `Err` with the kernel message if the boolean failed and nothing was found.
+    /// Cached like the assertion pairs (STEP export: [`Session::export_step`]).
+    pub(crate) fn nodes_overlap(&mut self, a: NodeIdx, b: NodeIdx) -> Result<bool, String> {
+        let (Some(mut sa), Some(mut sb)) = (self.sets_of(a, false, "").pop(), self.sets_of(b, false, "").pop()) else {
+            return Ok(false);
+        };
+        let t = Tols::of(sa.lo.min(sb.lo), sa.hi.max(sb.hi));
+        if box_gap((sa.lo, sa.hi), (sb.lo, sb.hi)) > t.eps_len {
+            return Ok(false);
+        }
+        let mut cached = true;
+        let d = self.pair_data(&mut sa, &mut sb, Need { distance: false, contact: false }, 0.0, &mut cached);
+        match (&d.bool_failed, d.overlaps(t.eps_volume)) {
+            (_, true) => Ok(true),
+            (Some(e), false) => Err(e.clone()),
+            (None, false) => Ok(false),
+        }
     }
 
     /// Runs all assertions of the last finished evaluation: results in `done.scene.asserts`,

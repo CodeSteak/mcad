@@ -1226,42 +1226,98 @@ where
     /// the material outside the parts per topmost node ([`rest_nodes`], named after its node,
     /// e.g. the module) – bodies that only touch stay apart, as in an assembly. Without parts:
     /// one body per child of the root (the implicit union of the top level is not merged).
+    /// Bodies that overlap ([`Session::step_groups`]) are fused into one (`a + b`).
     /// `merge`: the root as one fused body (implicit union), as before.
     pub fn export_step(
         &mut self,
         opts: &cad_engine::StepOptions,
         merge: bool,
     ) -> Result<(Vec<u8>, cad_engine::StepStats), String> {
+        self.export_step_with_notes(opts, merge).map(|(b, st, _)| (b, st))
+    }
+
+    /// [`Session::export_step`] with what happened to overlapping bodies: per fused group its
+    /// name and members, and groups whose overlap could not be checked or fused.
+    pub fn export_step_with_notes(
+        &mut self,
+        opts: &cad_engine::StepOptions,
+        merge: bool,
+    ) -> Result<(Vec<u8>, cad_engine::StepStats, StepNotes), String> {
         let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
         if merge {
-            return self.engine.export_step(&d.ev, opts);
+            let (b, st) = self.engine.export_step(&d.ev, opts)?;
+            return Ok((b, st, StepNotes::default()));
         }
         let bodies = self.step_bodies();
         let one = bodies.len() == 1 && self.cur.as_ref().is_some_and(|c| c.out.parts.is_empty());
         if bodies.is_empty() || one {
             // a single body without parts: the root, named like the product (as before)
-            return self.engine.export_step(&d.ev, opts);
+            let (b, st) = self.engine.export_step(&d.ev, opts)?;
+            return Ok((b, st, StepNotes::default()));
+        }
+        let (groups, mut notes) = self.step_groups(&bodies);
+        let named: Vec<(Option<String>, Vec<NodeIdx>)> = groups
+            .iter()
+            .map(|g| {
+                (
+                    Some(g.iter().map(|&i| bodies[i].0.as_str()).collect::<Vec<_>>().join(" + ")),
+                    g.iter().map(|&i| bodies[i].1).collect(),
+                )
+            })
+            .collect();
+        for g in groups.iter().filter(|g| g.len() > 1) {
+            notes.fused.push(g.iter().map(|&i| bodies[i].0.clone()).collect());
         }
         let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
-        let named: Vec<(Option<String>, NodeIdx)> = bodies.into_iter().map(|(s, n)| (Some(s), n)).collect();
-        self.engine.export_step_named(&d.ev, &named, opts)
+        let (b, st, failed) = self.engine.export_step_groups(&d.ev, &named, opts)?;
+        for (name, e) in failed {
+            notes.fused.retain(|g| g.join(" + ") != name);
+            notes.apart.push((name, e));
+        }
+        Ok((b, st, notes))
     }
 
-    /// Do bodies of the default STEP export overlap? Cheap test on cached volumes: the sum of
-    /// the body volumes exceeds the volume of the root (their union) by more than 1e-6
-    /// relative. `Some((sum, union))` then; `None` if they only touch or lie apart.
-    pub fn step_overlap(&mut self) -> Option<(f64, f64)> {
-        let bodies = self.step_bodies();
-        if bodies.len() < 2 {
-            return None;
+    /// Groups of the bodies of the default STEP export that overlap (exact intersection volume,
+    /// cached like `assert_disjoint`), as index lists into `bodies` in their order; bodies that
+    /// only touch or lie apart are groups of one. Pairs whose boolean failed count as apart
+    /// (noted).
+    pub fn step_groups(&mut self, bodies: &[(String, NodeIdx)]) -> (Vec<Vec<usize>>, StepNotes) {
+        let mut notes = StepNotes::default();
+        let n = bodies.len();
+        let mut parent: Vec<usize> = (0..n).collect();
+        fn find(p: &mut [usize], x: usize) -> usize {
+            let mut r = x;
+            while p[r] != r {
+                r = p[r];
+            }
+            p[x] = r;
+            r
         }
-        let root = self.done.as_ref()?.ev.root()?;
-        let union = self.mass_props(root).ok()?.volume;
-        let mut sum = 0.0;
-        for (_, n) in &bodies {
-            sum += self.mass_props(*n).ok()?.volume;
+        for i in 0..n {
+            for j in i + 1..n {
+                match self.nodes_overlap(bodies[i].1, bodies[j].1) {
+                    Ok(true) => {
+                        let (a, b) = (find(&mut parent, i), find(&mut parent, j));
+                        parent[b.max(a)] = a.min(b);
+                    }
+                    Ok(false) => {}
+                    Err(e) => notes.unchecked.push((bodies[i].0.clone(), bodies[j].0.clone(), e)),
+                }
+            }
         }
-        (sum > union + 1e-6 * union.abs().max(1.0)).then_some((sum, union))
+        let mut groups: Vec<Vec<usize>> = Vec::new();
+        let mut root_of: Vec<Option<usize>> = vec![None; n];
+        for i in 0..n {
+            let r = find(&mut parent, i);
+            match root_of[r] {
+                Some(g) => groups[g].push(i),
+                None => {
+                    root_of[r] = Some(groups.len());
+                    groups.push(vec![i]);
+                }
+            }
+        }
+        (groups, notes)
     }
 
     /// Bodies of the default STEP export ([`Session::export_step`]): (name, node), names unique
@@ -1443,4 +1499,15 @@ fn pick_to_p(x: &cad_eval::sketch_edit::Pick) -> p::SketchPoint {
 pub fn std_clock() -> SharedClock {
     let t0 = std::time::Instant::now();
     Rc::new(move || t0.elapsed().as_secs_f64() * 1000.0)
+}
+
+/// What the default STEP export did with overlapping bodies ([`Session::export_step_with_notes`]).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct StepNotes {
+    /// Fused groups: the names of their bodies.
+    pub fused: Vec<Vec<String>>,
+    /// Groups written apart because their union failed: name, kernel message.
+    pub apart: Vec<(String, String)>,
+    /// Pairs whose overlap could not be checked (boolean failed): names, kernel message.
+    pub unchecked: Vec<(String, String, String)>,
 }
