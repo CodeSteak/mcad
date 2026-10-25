@@ -285,6 +285,11 @@ fn minkowski_3d() {
     assert!(mesh.tri_tags.iter().all(|t| *t == ev.reports[m as usize].tag));
     // sphere + sphere
     assert_approx("spheres", vol("minkowski() { sphere(2); sphere(3); }"), 4.0 / 3.0 * PI * 125.0, VREL);
+    // one child: the child; empty: nothing, no warning
+    assert_approx("one child", vol("minkowski() cube(2);"), 8.0, VREL);
+    let mut e = engine();
+    let ev = e.evaluate(tree("hull() {} minkowski() {} cube(1);"));
+    assert_clean(&ev);
 }
 
 #[test]

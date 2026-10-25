@@ -919,6 +919,14 @@ where
         let is_hull = matches!(tree.node(self.idx).op, Op::Hull);
         let what = if is_hull { "hull" } else { "minkowski" };
         let kids = self.child_list();
+        if kids.is_empty() {
+            return Ok(Vec::new());
+        }
+        if !is_hull && kids.len() == 1 {
+            // the Minkowski sum of one body is the body
+            let parts = self.contrib(kids[0])?;
+            return self.union(parts, self.tag);
+        }
         let plan = if is_hull {
             let mut bodies = Vec::new();
             kids.iter()
