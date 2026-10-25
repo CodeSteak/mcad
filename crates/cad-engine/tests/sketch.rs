@@ -261,3 +261,40 @@ fn ring_of_long_arcs_unites_with_a_box() {
         }
     }
 }
+
+/// `slot(p1, p2, r)`: exact stadium, area π r² + 2 r |p2 − p1| (circle for p1 == p2), in
+/// Booleans, offset and minkowski like the other profiles.
+#[test]
+fn slot_profile_area_and_operations() {
+    let area = |r: f64, l: f64| PI * r * r + 2.0 * r * l;
+    let l = (20.0f64 * 20.0 + 10.0 * 10.0).sqrt();
+    assert_approx("slot", vol("linear_extrude(1) slot([0, 0], [20, 10], 3);"), area(3.0, l), VREL);
+    assert_approx("slot d", vol("linear_extrude(2) slot([-5, 1], [7, 1], d = 4);"), 2.0 * area(2.0, 12.0), VREL);
+    assert_approx("circle", vol("linear_extrude(1) slot([5, 5], [5, 5], 2);"), area(2.0, 0.0), VREL);
+    // grid points as ends, profile op, 2D boolean
+    let g = "grid g { x: a = 5, b = 25; y: m = 10; }\n";
+    assert_approx("grid", vol(&format!("{g}linear_extrude(1) slot(g[a, m], g[b, m], 2.5);")), area(2.5, 20.0), VREL);
+    assert_approx(
+        "plate - slot",
+        vol("linear_extrude(1) difference() { square([40, 20]); slot([10, 10], [30, 10], 3); }"),
+        800.0 - area(3.0, 20.0),
+        VREL,
+    );
+    // offset by 1: the slot with r + 1; minkowski with a circle: r + its radius
+    assert_approx("offset", vol("linear_extrude(1) offset(r = 1) slot([0, 0], [10, 0], 2);"), area(3.0, 10.0), VREL);
+    assert_approx(
+        "minkowski",
+        vol("linear_extrude(1) minkowski() { slot([0, 0], [10, 0], 2); circle(1); }"),
+        area(3.0, 10.0),
+        VREL,
+    );
+    // a point slot counts as a circle in minkowski (two circles: the sum of the radii)
+    assert_approx(
+        "minkowski circles",
+        vol("linear_extrude(1) minkowski() { slot([3, 0], [3, 0], 2); circle(1); }"),
+        area(3.0, 0.0),
+        VREL,
+    );
+    // revolved around the y axis at distance 5 (Pappus: 2π · 5 · area)
+    assert_approx("revolved", vol("rotate_extrude() slot([5, 0], [5, 6], 2);"), 2.0 * PI * 5.0 * area(2.0, 6.0), VREL);
+}

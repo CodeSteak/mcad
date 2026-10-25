@@ -246,6 +246,12 @@ fn pieces2(t: &Tree, i: u32, m: DMat4, out: &mut Vec<P2>) -> Result<(), String> 
                 }
             }
             Profile::Circle { r } => out.push(P2::Ellipse(pt(DVec2::ZERO), vc(DVec2::X * *r), vc(DVec2::Y * *r))),
+            // slots: the circles at both ends span the stadium
+            Profile::Slot { a, b, r } => {
+                for c in [*a, *b] {
+                    out.push(P2::Ellipse(pt(c), vc(DVec2::X * *r), vc(DVec2::Y * *r)));
+                }
+            }
             Profile::Polygon { loops } => out.extend(loops.iter().flatten().map(|q| P2::Pt(pt(*q)))),
             Profile::Spline { points, .. } => out.extend(points.iter().map(|q| P2::Pt(pt(*q)))),
             // sketches: sampled segments of the contours that are not holes

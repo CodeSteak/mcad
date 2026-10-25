@@ -334,7 +334,8 @@ cad watch teil.scad --json --render /tmp/teil.png --views all --show grids,ancho
 Längen in mm, Winkel in Grad. Geometrie ist kein Wert; Variablen halten Zahlen, Vektoren,
 Listen. B-Rep-Kernel: exakte Zylinder/Kugeln, `$fn` ist nur Darstellung.
 
-**Primitive zwischen Punkten:** `box(a, b)`, `cylinder(a, b, r)`, `rect(a, b)` neben
+**Primitive zwischen Punkten:** `box(a, b)`, `cylinder(a, b, r)`, `rect(a, b)`,
+`slot(p1, p2, r)` (2D-Langloch, exakt: zwei Halbkreise + zwei Geraden, `d = …` statt `r`) neben
 `cube`, `cylinder(h, r)`, `sphere(r)`, `torus(R, r)`.
 
 **Raster** (lokal im Modul, Ebenen pro Achse, Zugriff `g[x, y, z]`, `_` für eine fehlende

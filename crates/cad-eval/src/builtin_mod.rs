@@ -24,6 +24,7 @@ pub(crate) const BUILTIN_MODULES: &[&str] = &[
     "square",
     "rect",
     "circle",
+    "slot",
     "polygon",
     "spline",
     "translate",
@@ -78,6 +79,7 @@ const LEAVES: &[&str] = &[
     "square",
     "rect",
     "circle",
+    "slot",
     "polygon",
     "spline",
     "surface",
@@ -285,6 +287,7 @@ impl<'a> Ev<'a> {
             "square" => self.m_square(s, a, ctx, dy),
             "rect" => self.m_rect(s, a, ctx, dy),
             "circle" => self.m_circle(s, a, ctx, dy),
+            "slot" => self.m_slot(s, a, ctx, dy),
             "polygon" | "spline" => self.m_polygon(s, n, a, ctx, dy),
             "translate" | "rotate" | "scale" | "mirror" | "multmatrix" => {
                 return self.m_transform(s, n, a, children, ctx, dy);
@@ -897,6 +900,56 @@ impl<'a> Ev<'a> {
                 w,
                 DVec3::ZERO,
                 DVec3::X,
+            );
+        }
+    }
+
+    /// `slot(p1, p2, r)` / `slot(p1, p2, d = …)`: slot (stadium) around the segment p1–p2,
+    /// exact (two half circles and two lines); `p1 == p2` gives a circle. Handles: both points
+    /// and the radius (at the end p2, across the slot).
+    #[inline(never)]
+    fn m_slot(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
+        let p = self.bind("slot", a, &["p1", "p2", "r", "d"], 3);
+        let pa = p[0].and_then(|x| self.pt2(&x.val, x.expr.span));
+        let pb = p[1].and_then(|x| self.pt2(&x.val, x.expr.span));
+        let (Some(pa), Some(pb)) = (pa, pb) else {
+            self.error(s.span, "slot() braucht zwei Punkte `p1` und `p2` ([x, y], Rasterpunkt, Anker)");
+            return;
+        };
+        let (r, src, scale) = match self.radius(p[2], p[3], "r", "d") {
+            Some((r, x, sc)) => (r, Some(x), sc),
+            None => {
+                self.error(s.span, "slot() braucht einen Radius `r` (oder `d = …`)");
+                return;
+            }
+        };
+        let node = if positive(&[r]) {
+            self.profile(s, Profile::Slot { a: pa, b: pb, r }, ctx, dy)
+        } else {
+            self.invalid_prim(s, "slot: Radius muss positiv sein", ctx)
+        };
+        for (i, (x, v)) in [(p[0], pa), (p[1], pb)].into_iter().enumerate() {
+            if let Some(x) = x {
+                self.point_handle(s, ctx, node, i as u32, x, v.extend(0.0), 2, 1.0);
+            }
+        }
+        if let Some(x) = src {
+            let d = pb - pa;
+            let n = if d.length() > 0.0 { d.normalize().perp() } else { DVec2::Y };
+            let w = self.nodes[node as usize].world;
+            self.scalar_handle(
+                s,
+                ctx,
+                node,
+                HandleKind::Radius,
+                0,
+                &x.val,
+                x.expr.span,
+                r,
+                scale,
+                w,
+                pb.extend(0.0),
+                n.extend(0.0),
             );
         }
     }

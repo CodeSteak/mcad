@@ -162,6 +162,12 @@ pub(crate) fn profile_loops(p: &Profile) -> Result<Vec<Loop>, String> {
             }
             Ok(vec![Loop::Spline(points.clone())])
         }
+        Profile::Slot { a, b, r } => {
+            if *r <= 0.0 {
+                return Err(format!("Langloch mit Radius {r}"));
+            }
+            Ok(vec![Loop::Composite(contour_segments(&cad_ir::slot_contour(*a, *b, *r))?)])
+        }
         Profile::Sketch { contours, closed } => {
             if !closed {
                 return Err("offene Skizze ist kein Profil (nur als `sweep`-Pfad)".into());

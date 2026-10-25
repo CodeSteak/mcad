@@ -383,6 +383,34 @@ pub enum Profile {
         contours: Vec<Contour>,
         closed: bool,
     },
+    /// `slot(p1, p2, r)`: stadium of radius `r` around the segment `a`–`b` (two half circles
+    /// joined by two lines, exact); `a == b` is a circle around `a`.
+    Slot {
+        a: DVec2,
+        b: DVec2,
+        r: f64,
+    },
+}
+
+/// The contour of [`Profile::Slot`], counter-clockwise: line on the right of `a`→`b`, half
+/// circle around `b`, line back, half circle around `a` (only the two half circles if `a == b`).
+pub fn slot_contour(a: DVec2, b: DVec2, r: f64) -> Contour {
+    let d = b - a;
+    let len = d.length();
+    let u = if len > 0.0 { d / len } else { DVec2::X };
+    let n = u.perp();
+    let t = u.y.atan2(u.x);
+    let h = std::f64::consts::FRAC_PI_2;
+    let mut segs = Vec::with_capacity(4);
+    if len > 0.0 {
+        segs.push(Seg::Line { a: a - n * r, b: b - n * r });
+    }
+    segs.push(Seg::Arc { center: b, r, a0: t - h, a1: t + h, ccw: true });
+    if len > 0.0 {
+        segs.push(Seg::Line { a: b + n * r, b: a + n * r });
+    }
+    segs.push(Seg::Arc { center: a, r, a0: t + h, a1: t + 3.0 * h, ccw: true });
+    Contour { hole: false, closed: true, segs }
 }
 
 /// One contour of a sketch: connected segments from `start()` to the next `start()` / `close()`.
@@ -507,6 +535,7 @@ impl Op {
                 Profile::Polygon { .. } => "polygon".into(),
                 Profile::Spline { .. } => "spline".into(),
                 Profile::Sketch { .. } => "sketch".into(),
+                Profile::Slot { .. } => "slot".into(),
             },
             Op::Transform { kind, .. } => format!("{kind:?}").to_lowercase(),
             Op::Boolean { op, .. } => format!("{op:?}").to_lowercase(),

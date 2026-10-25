@@ -212,12 +212,17 @@ fn as_circle(e: &Expr2) -> Option<(DVec2, f64)> {
         e = &a[0];
     }
     let Expr2::Leaf(l) = e else { return None };
-    let Profile::Circle { r } = l.profile else { return None };
+    // a slot with both ends at one point is a circle around it
+    let (c, r) = match l.profile {
+        Profile::Circle { r } => (DVec2::ZERO, r),
+        Profile::Slot { a, b, r } if a == b => (a, r),
+        _ => return None,
+    };
     let a = profile::affine2(&l.m);
     let (x, y) = (a.matrix2.x_axis, a.matrix2.y_axis);
     let s = x.length();
     let similar = (y.length() - s).abs() <= 1e-9 * s && x.dot(y).abs() <= 1e-9 * s * s;
-    (similar && s > 0.0 && r > 0.0).then_some((a.translation, r * s))
+    (similar && s > 0.0 && r > 0.0).then_some((a.transform_point2(c), r * s))
 }
 
 /// `minkowski()` of 2D children: any profile plus circles (rounded offset by the sum of the

@@ -1,11 +1,11 @@
 //! Geometry tree for the spec examples and OpenSCAD-style code.
 
 mod common;
-use cad_eval::{Context, EvalOptions, PValue};
+use cad_eval::{Context, EvalOptions, HandleKind, PValue};
 use cad_ir::{BlendKind, Op, Prim, Profile, Select, TransformKind, ZoneShape};
 use cad_kernel::{BoolOp, PathInterp};
 use common::*;
-use glam::{DMat4, DVec3};
+use glam::{DMat4, DVec2, DVec3};
 
 pub const GEHAEUSE: &str = r#"
 module gehaeuse(w = 40, d = 30, h = 20, t = 3) {
@@ -554,4 +554,30 @@ fn output_serialises() {
     assert_ser(&out);
     assert_ser(&cad_eval::EvalOptions::default());
     assert_ser(&cad_eval::DragTarget::Free(cad_eval::DragValue::Scalar(1.0)));
+}
+
+#[test]
+fn slot_profile_points_radius_and_handles() {
+    let out = clean("grid g { x: a = 5, b = 25; y: m = 10; }\nslot(g[a, m], g[b, m], d = 4);");
+    let n = out.tree.nodes.iter().find(|n| matches!(n.op, Op::Profile(Profile::Slot { .. }))).expect("slot node");
+    assert_eq!(n.op, Op::Profile(Profile::Slot { a: DVec2::new(5.0, 10.0), b: DVec2::new(25.0, 10.0), r: 2.0 }));
+    assert_eq!(n.op.label(), "slot");
+    // contour: line, half circle, line, half circle
+    let c = cad_ir::slot_contour(DVec2::new(5.0, 10.0), DVec2::new(25.0, 10.0), 2.0);
+    let kinds: Vec<&str> = c.segs.iter().map(|g| g.kind()).collect();
+    assert_eq!(kinds, ["line", "arc", "line", "arc"]);
+    for w in c.segs.windows(2) {
+        assert!((w[0].end() - w[1].start()).length() < 1e-12);
+    }
+    assert!((c.segs[3].end() - c.segs[0].start()).length() < 1e-12);
+    // p1 == p2: two half circles
+    assert_eq!(cad_ir::slot_contour(DVec2::ONE, DVec2::ONE, 1.0).segs.len(), 2);
+    // handles: both points (references to the grid stay references) and the radius
+    let out = clean("slot([0, 0], [20, 10], 3);");
+    let kinds: Vec<_> = out.handles.iter().map(|h| (h.kind, h.index)).collect();
+    assert_eq!(kinds, [(HandleKind::Point, 0), (HandleKind::Point, 1), (HandleKind::Radius, 0)]);
+    // errors
+    assert!(has_error(&run("slot([0, 0], 3);"), "zwei Punkte"));
+    assert!(has_error(&run("slot([0, 0], [1, 0]);"), "Radius"));
+    assert!(has_warning(&run("slot([0, 0], [1, 0], -1);"), "Radius muss positiv sein"));
 }

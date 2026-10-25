@@ -62,6 +62,7 @@ Glossary of the German text output:
 | Kante(n), ausgewählte Kanten | edge(s), selected edges |
 | Fläche, Körper, Volumen | face/area, body, volume |
 | Schnitt, Bereich, Loch, Wandstärke | section, region, hole, wall thickness |
+| Langloch | slot (`slot()`) |
 | Abstand, Winkel, Länge | distance, angle, length |
 | Kontext: Datei / Modul | context: file / module |
 | oberste Ebene, Zuweisung, ignoriert | top level, assignment, ignored |

@@ -16,6 +16,7 @@ Additions:
 | Construct | Meaning |
 | --- | --- |
 | `box(a, b)`, `rect(a, b)` | box / rectangle between two corner points |
+| `slot(p1, p2, r)`, `slot(p1, p2, d = …)` | 2D slot (stadium) around the segment p1–p2: two half circles + two lines, exact; area π r² + 2 r·\|p2 − p1\|; `p1 == p2`: circle. Points may be grid points/anchors; handles for p1, p2, r. 2D only (like `rect`): `linear_extrude(h) slot(…)` |
 | `cylinder(a, b, r)` | cylinder (or cone with `r1`, `r2`) from point a to point b |
 | `torus(R, r)` | torus around z |
 | `rotate(to = v)` | rotate z onto direction v |
@@ -31,6 +32,15 @@ Additions:
 | `sweep(path = pts, interp = "spline"\|"linear") profile;` | sweep a profile along a path (or an open `sketch` as first child) |
 | `surface(points = grid4x4…)` + `thicken(t)` | free-form surface and its solid |
 | `module ns { … }` | modules as namespaces: `ns.part();`, `ns.f(x)`, `ns.CONST`, `a.b.c();` |
+
+```
+difference() {                                                    // plate with a slot 26 × 6
+    cube([40, 20, 4]);
+    translate([0, 0, -1]) linear_extrude(6) slot([10, 10], [30, 10], 3);
+}
+// cad measure plate.scad --volume all   → Volumen all: 2606.9027 mm³  (3200 − (9π + 120) · 4)
+// cad measure plate.scad --section z=2  → two arcs "Bogen R 3 · ⌀ 6", area 651.7257 mm²
+```
 
 ## hull and minkowski
 
