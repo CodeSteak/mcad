@@ -1,7 +1,7 @@
 // Generated from crates/cad-session/src/protocol.rs (ts-rs). Do not edit.
 // Regenerate: UPDATE_PROTOCOL_TS=1 cargo test -p cad-session --test protocol_ts
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /**
  * `[x, y, z]`

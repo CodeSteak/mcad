@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Version of this protocol (also the `schema_version` of the CLI's JSON output).
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// `[x, y, z]`
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]

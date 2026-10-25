@@ -64,7 +64,7 @@ fn grid_json(sc: &p::Scene, proj: &cad_eval::Project, g: &p::Grid) -> Json {
         "file": file_path(sc, &g.range),
         "line": g.range.line,
         "planes": g.planes.iter().map(|pl| json!({
-            "axis": AXES[pl.axis as usize], "name": pl.name, "value": pl.value, "kind": plane_kind(pl),
+            "axis": pl.axis, "axis_name": AXES[pl.axis as usize], "name": pl.name, "value": pl.value, "kind": plane_kind(pl),
             "expr": pl.value_range.map(|r| range_text(proj, &r)),
         })).collect::<Vec<_>>(),
     })
@@ -275,7 +275,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
                     variables.push(json!({
                         "name": name.name, "expr": src(value.span),
                         "value": hint.map(|h| h.value.clone()), "text": hint.map(|h| h.text.clone()),
-                        "literal": hint.is_some_and(|h| h.literal.is_some()),
+                        "literal": hint.and_then(|h| h.literal),
                         "file": proj.path_of(s.span), "line": proj.line(s.span),
                     }));
                 }
@@ -342,7 +342,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
             let r = i.call_range.unwrap_or_default();
             json!({
                 "name": i.label, "module": i.module, "file": file_path(&sc, &r), "line": r.line, "depth": i.depth,
-                "part": sc.parts.iter().any(|pt| pt.inst == i.id),
+                "part": sc.parts.iter().find(|pt| pt.inst == i.id).map(|pt| pt.name.clone()),
                 "scope": if in_module(i) { "module" } else { "file" },
                 "in_module": if in_module(i) { Some(owner(i)) } else { None },
             })

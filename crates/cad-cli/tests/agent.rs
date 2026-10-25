@@ -35,7 +35,7 @@ fn json(args: &[&str], code: i32) -> Value {
         String::from_utf8_lossy(&out.stderr)
     );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(v["schema_version"], 1, "{v}");
+    assert_eq!(v["schema_version"], 2, "{v}");
     assert_eq!(v["exit_code"], code);
     assert_eq!(v["ok"], code == 0);
     v
@@ -118,7 +118,10 @@ fn outline_spec_example() {
     assert_eq!(g["name"], "g");
     let planes = g["planes"].as_array().unwrap();
     let innen_r = planes.iter().find(|p| p["name"] == "innen_r").unwrap();
-    assert_eq!((innen_r["axis"].as_str(), f(&innen_r["value"])), (Some("x"), 37.0));
+    assert_eq!(
+        (innen_r["axis"].as_u64(), innen_r["axis_name"].as_str(), f(&innen_r["value"])),
+        (Some(0), Some("x"), 37.0)
+    );
     assert_eq!(innen_r["kind"], "expression");
     assert_eq!(innen_r["expr"], "w - t");
     let ecke = m["anchors"].as_array().unwrap().iter().find(|a| a["name"] == "ecke").unwrap();
@@ -126,8 +129,8 @@ fn outline_spec_example() {
     // file level: instance k is a part with bounds and volume, anchors in file coordinates
     let k = &v["instances"][0];
     assert_eq!(
-        (k["name"].as_str(), k["module"].as_str(), k["part"].as_bool()),
-        (Some("k"), Some("gehaeuse"), Some(true))
+        (k["name"].as_str(), k["module"].as_str(), k["part"].as_str()),
+        (Some("k"), Some("gehaeuse"), Some("k"))
     );
     let part = &v["parts"][0];
     close(f(&part["volume"]), 60.0 * 30.0 * 20.0 - 54.0 * 30.0 * 17.0, 1e-6);

@@ -252,7 +252,7 @@ Ebene) · `3` Kernel-/interner Fehler.
 
 ## JSON (Kurzfassung)
 
-Jede Antwort ist ein Objekt mit `schema_version` (1), `command`, `file`, `ok`, `exit_code`,
+Jede Antwort ist ein Objekt mit `schema_version` (2), `command`, `file`, `ok`, `exit_code`,
 `context` (Modulname oder `null`), `diagnostics: Diagnostic[]`, bei Aufruffehlern `error`, bei
 den Befehlen mit Daemon `daemon: {used, reason}` (`reason` z. B. `--no-daemon`, sonst `null`).
 `Diagnostic = { severity: "error"|"warning"|"info", message, source: "syntax"|"eval"|"kernel",
@@ -263,15 +263,16 @@ Offsets UTF-16). `Bounds = { min, max, size }`. Vollständiges Schema: Kopf von
 - `check`: `+ { errors, warnings }`
 - `outline`: `+ { files, includes: [{file, line, path, use, found}], modules: [{name, qualified,
   file, line, end_line, params: [{name, default, default_value, type}], grids: [{name, line,
-  planes: [{axis, name, value, kind: literal|expression|reference|implicit, expr}]}], anchors:
+  planes: [{axis (0|1|2), axis_name, name, value, kind: literal|expression|reference|implicit, expr}]}], anchors:
   [{name, point, dir, line}]}], functions: [{name, params, file, line, body}], variables:
-  [{name, expr, value, text, literal, file, line}], grids, anchors: [{ref, point, dir}],
-  instances: [{name, module, line, part}], parts: [{name, module, bounds, volume}], counts }`
+  [{name, expr, value, text, literal (range|null), file, line}], grids, anchors: [{ref, point, dir}],
+  instances: [{name, module, line, part (Bauteilname|null)}], parts: [{name, module, bounds, volume}], counts }`
 - `eval`: `+ { scene }` – vollständige Szene wie im Protokoll (`web/src/engine/protocol.ts`,
   Typ `Scene`): `nodes[]`, `grids[]`, `anchors[]` (`text` = `k.ecke`), `hints[]`, `handles[]`,
   `modules[]`, `echoes[]`, `context.params`, `stats`.
 - `inspect`: `+ { line, nodes: [{ idx, label, instance, range, status, dim, flags, subtracted,
-  world_bounds, volume, area, selected_edges, opened_faces, hints, messages, cached }], hints,
+  world_bounds, volume, area, selected_edges (Polylinien, Welt), selected_edge_count, opened_faces,
+  hints, messages, cached }], hints,
   handles, echoes }`
 - `render`: `+ { output, width, height, view, views: [{name, x, y, width, height, camera}],
   camera: {projection, fov_deg, azimuth, elevation, dir, up, right, target, eye,

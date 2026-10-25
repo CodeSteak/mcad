@@ -27,7 +27,7 @@
 //! reference), 3 kernel/internal error (tessellation or export failed, panic), 4 `export`
 //! stopped by a violated assertion (`assert_keepout`, …; `--ignore-asserts` exports anyway).
 //!
-//! JSON schema (`schema_version` = `cad_session::PROTOCOL_VERSION`, currently 1). Types such
+//! JSON schema (`schema_version` = `cad_session::PROTOCOL_VERSION`, currently 2). Types such
 //! as `Diagnostic`, `Scene`, `SrcRange`, `Hint`, `Handle` are the protocol types documented in
 //! `web/src/engine/protocol.ts` (lines/columns 1-based, offsets UTF-16); `Bounds` here is
 //! `{ min, max, size }`:
@@ -55,7 +55,8 @@
 //! inspect: + { line, nodes: InspectNode[], hints: Hint[], handles: Handle[], echoes: Echo[] }
 //!          InspectNode = { idx, label, instance, range, status, dim, flags, subtracted,
 //!                          world_bounds: {min,max}|null, volume|null, area|null,
-//!                          selected_edges, opened_faces, hints, messages, cached,
+//!                          selected_edges: [[x,y,z]…][] (world), selected_edge_count,
+//!                          opened_faces, hints, messages, cached,
 //!                          assert: AssertResult|null }
 //! render:  + { output, width, height, view, views: [{name, x, y, width, height, camera}],
 //!            camera: Camera, line|null, lines: number[], nodes: number[], parts: string[],
@@ -1077,7 +1078,8 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
     let mut nodes = Vec::new();
     for &i in &ids {
         let n = &sc.nodes[i as usize];
-        let wb = n.bounds.as_ref().map(|b| world_bounds(b, &mat(&n.display_world)));
+        let world = mat(&n.display_world);
+        let wb = n.bounds.as_ref().map(|b| world_bounds(b, &world));
         let (volume, area) = if n.dim == Some(p::Dim::Three) && n.status != p::NodeStatus::Skipped {
             match m.session.mass_props(i) {
                 Ok(mp) => (Some(mp.volume), Some(mp.area)),
@@ -1149,7 +1151,8 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
             "world_bounds": wb,
             "volume": volume,
             "area": area,
-            "selected_edges": n.selected_edges.len(),
+            "selected_edges": n.selected_edges.iter().map(|e| e.iter().map(|q| world.transform_point3(DVec3::from_array(q.0)).to_array()).collect::<Vec<_>>()).collect::<Vec<_>>(),
+            "selected_edge_count": n.selected_edges.len(),
             "opened_faces": n.opened_faces,
             "hints": n.hints,
             "messages": n.messages.iter().map(|x| json!({"severity": x.severity, "message": x.message})).collect::<Vec<_>>(),

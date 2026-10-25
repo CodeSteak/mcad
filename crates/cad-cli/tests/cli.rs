@@ -27,7 +27,7 @@ fn json(args: &[&str], code: i32) -> Value {
         String::from_utf8_lossy(&out.stderr)
     );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(v["schema_version"], 1);
+    assert_eq!(v["schema_version"], 2);
     assert_eq!(v["exit_code"], code);
     assert_eq!(v["ok"], code == 0);
     v
@@ -109,7 +109,11 @@ fn inspect_line() {
     let v = json(&["inspect", &data("fillet_zonen.scad"), "--line", "12"], 0);
     let n = &v["nodes"][0];
     assert_eq!(n["label"], "fillet");
-    assert_eq!(n["selected_edges"], 2);
+    assert_eq!(n["selected_edge_count"], 2);
+    // the edges themselves: polylines in world coordinates, as in `diff-kernels` and the scene
+    let edges = n["selected_edges"].as_array().unwrap();
+    assert_eq!(edges.len(), 2);
+    assert!(edges.iter().all(|e| e.as_array().unwrap().len() >= 2 && e[0].as_array().unwrap().len() == 3), "{edges:?}");
     assert!(n["hints"].as_array().unwrap().iter().any(|h| h == "2 Kanten"));
     // variable line: value and handle-free
     let v = json(&["inspect", &data("platte.scad"), "--line", "2"], 0);
