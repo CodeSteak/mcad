@@ -3,7 +3,7 @@
 // (tauriTransport.ts) talks to the native engine of the desktop app.
 
 import type { FromEngine, ToEngine } from "./protocol";
-import { createEngineWorker } from "./workerFactory";
+import { createEngineWorker } from "./workerFactory.ts";
 
 export type EngineListener = (msg: FromEngine) => void;
 

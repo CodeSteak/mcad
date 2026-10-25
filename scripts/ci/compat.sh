@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # OpenSCAD comparison and STEP check as run by .github/workflows/compat.yml.
 #
-#   scripts/ci/compat.sh cli         # cargo build --release -p cad-cli (needs SMLIB_PREBUILT)
+#   scripts/ci/compat.sh cli         # cargo build --release -p cad-cli --no-default-features (headless, needs SMLIB_PREBUILT)
 #   scripts/ci/compat.sh reference   # OpenSCAD 2021.01: regenerate the reference into target/,
 #                                    # compare with the checked-in reference.json, self-test of compare.py
 #   scripts/ci/compat.sh projects    # include/use projects against a live OpenSCAD run (Rust test)
@@ -43,7 +43,7 @@ with_daemon() {
 step() {
   case "$1" in
     cli)
-      cargo build --release -p cad-cli --locked
+      cargo build --release -p cad-cli --no-default-features --locked
       ls -l "$ROOT/target/release/mcad"
       ;;
     reference)

@@ -56,11 +56,11 @@ await initSmlib(createSmlib, { wasmBinary: readFileSync(join(pkg, "smlib.wasm"))
 timings.load_smlib_ms = ms(performance.now() - t0);
 
 t0 = performance.now();
-const mcad = await import(pathToFileURL(join(pkg, "cad_wasm.js")).href);
+const cad = await import(pathToFileURL(join(pkg, "cad_wasm.js")).href);
 await cad.default({ module_or_path: readFileSync(join(pkg, "cad_wasm_bg.wasm")) });
 const session = new cad.Session();
 timings.load_cad_wasm_ms = ms(performance.now() - t0);
-assert.equal(cad.Session.protocolVersion(), 1);
+assert.equal(cad.Session.protocolVersion(), 2);
 
 /** Runs steps with a 16 ms budget until idle; calls `on(msg, tMs)` for every message. */
 function runSteps(t0, on) {
