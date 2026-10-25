@@ -25,7 +25,7 @@ use kernel_smlib::SmlibKernel;
 pub enum FileOp {
     Mkdir(PathBuf),
     Write(PathBuf, Vec<u8>),
-    /// Temporary file + rename, keeping the permissions of an existing file (`cad set`).
+    /// Temporary file + rename, keeping the permissions of an existing file (`mcad set`).
     Atomic(PathBuf, Vec<u8>),
 }
 
@@ -119,7 +119,7 @@ pub fn apply(op: &FileOp) -> std::io::Result<()> {
         FileOp::Write(p, b) => std::fs::write(p, b),
         FileOp::Atomic(path, b) => {
             let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "datei".into());
-            let tmp = path.with_file_name(format!(".{name}.cad-set.tmp"));
+            let tmp = path.with_file_name(format!(".{name}.mcad-set.tmp"));
             std::fs::write(&tmp, b)?;
             if let Ok(meta) = std::fs::metadata(path) {
                 let _ = std::fs::set_permissions(&tmp, meta.permissions());

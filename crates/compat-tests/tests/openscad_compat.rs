@@ -38,7 +38,7 @@ fn echo_problems(ours: &[String], theirs: &[String]) -> Vec<String> {
 #[test]
 fn openscad_models_stage1() {
     let reference = reference();
-    let files = scad_files("examples/openscad-compat");
+    let files = model_files("examples/openscad-compat");
     assert!(files.len() >= 25, "expected at least 25 models, found {}", files.len());
     let refs = reference["files"].as_object().unwrap();
 

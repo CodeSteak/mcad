@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Desktop app (Tauri 2): the React UI with the native engine process, real files, file watcher, git markers, control by `cad ui`"
+description = "Desktop app (Tauri 2): the React UI with the native engine process, real files, file watcher, git markers, control by `mcad ui`"
 
 [lib]
 name = "cad_app"

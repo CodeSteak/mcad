@@ -6,6 +6,7 @@
 import { useEffect } from "react";
 import { EXAMPLE_PROJECTS, GROUP_LABELS, SINGLE_EXAMPLES } from "../files/files";
 import { pathSegments } from "../logic/context";
+import { MODEL_ACCEPT, MODEL_EXT } from "../logic/files";
 import { IS_TAURI } from "../platform/desktop";
 import { type ExportChoice, type ThemePref, setThemePref, store, useCad } from "../state/store";
 import { openRecent } from "./desktop";
@@ -30,14 +31,14 @@ import { Button, IconDownload, IconMoon, IconSave, IconSun, IconSystem, type Men
 
 export const UPLOAD_INPUT_ID = "cad-upload-input";
 
-/** Opens the file dialog of "Datei laden …" (SVG, fonts, .scad into the project). */
+/** Opens the file dialog of "Datei laden …" (SVG, fonts, .mcad/.scad into the project). */
 export function chooseUpload(): void {
   (document.getElementById(UPLOAD_INPUT_ID) as HTMLInputElement | null)?.click();
 }
 
 /** Asks for a name and adds an empty file to the project. */
 export function promptNewProjectFile(): void {
-  const name = window.prompt("Name der neuen Datei (z. B. lib/teile.scad)", "neu.scad");
+  const name = window.prompt("Name der neuen Datei (z. B. lib/teile.mcad)", `neu${MODEL_EXT}`);
   if (name) addProjectFile(name);
 }
 
@@ -48,7 +49,7 @@ export function UploadInput() {
       id={UPLOAD_INPUT_ID}
       type="file"
       multiple
-      accept=".svg,.stl,.ttf,.otf,.scad"
+      accept={`.svg,.stl,.ttf,.otf,${MODEL_ACCEPT}`}
       data-testid="file-upload-input"
       aria-hidden="true"
       tabIndex={-1}
@@ -80,7 +81,7 @@ export function fileMenuItems(recent: Array<{ path: string; folder: boolean }>):
     { label: "Speichern unter …", shortcut: "Strg+⇧+S", onSelect: () => void saveToDisk(true) },
     { kind: "sep" },
     { label: "Datei hinzufügen …", hint: "Neue, leere Datei im Projekt", onSelect: promptNewProjectFile },
-    { label: "Datei laden …", hint: "SVG (für import), Schrift .ttf/.otf (für text) oder .scad ins Projekt laden", onSelect: chooseUpload },
+    { label: "Datei laden …", hint: "SVG (für import), Schrift .ttf/.otf (für text) oder .mcad/.scad ins Projekt laden", onSelect: chooseUpload },
     { kind: "sep" },
     { label: "ZIP laden …", hint: "Projekt aus ZIP-Datei öffnen", onSelect: () => void openZip() },
     { label: "ZIP speichern", hint: "Projekt als ZIP herunterladen", onSelect: downloadProjectZip },
@@ -217,7 +218,7 @@ export function Header() {
   return (
     <header className="hd" data-testid="header">
       <div className="hd-left" role="toolbar" aria-label="Datei und Beispiele">
-        <span className="hd-brand">Parametrisches CAD</span>
+        <span className="hd-brand" title="mcad – parametrisches CAD">mcad</span>
         <MenuButton label="Datei" items={fileMenuItems(recent)} data-testid="file-menu" />
         <MenuButton label="Beispiele" items={exampleItems()} data-testid="examples" />
       </div>

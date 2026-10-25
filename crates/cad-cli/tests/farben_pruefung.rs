@@ -1,6 +1,6 @@
 //! Regression tests of the independent review of the colour functions (Bericht 12,
 //! `tests/farben-pruefung/README.md`, findings F1–F9): every case of
-//! `tests/farben-pruefung/cases/` runs through `cad measure --colors` (region volumes add up,
+//! `tests/farben-pruefung/cases/` runs through `mcad measure --colors` (region volumes add up,
 //! no kernel error), plus one test per finding.
 
 use std::collections::BTreeMap;
@@ -18,9 +18,9 @@ fn case(name: &str) -> String {
     cases().join(name).display().to_string()
 }
 
-/// `cad <args> --json` (no daemon): JSON and the text of the same call.
+/// `mcad <args> --json` (no daemon): JSON and the text of the same call.
 fn run(args: &[&str], code: i32) -> (Value, String) {
-    let out = Command::cargo_bin("cad").unwrap().env("CAD_NO_DAEMON", "1").args(args).arg("--json").output().unwrap();
+    let out = Command::cargo_bin("mcad").unwrap().env("MCAD_NO_DAEMON", "1").args(args).arg("--json").output().unwrap();
     assert_eq!(
         out.status.code(),
         Some(code),
@@ -29,7 +29,7 @@ fn run(args: &[&str], code: i32) -> (Value, String) {
         String::from_utf8_lossy(&out.stderr)
     );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap_or(Value::Null);
-    let t = Command::cargo_bin("cad").unwrap().env("CAD_NO_DAEMON", "1").args(args).output().unwrap();
+    let t = Command::cargo_bin("mcad").unwrap().env("MCAD_NO_DAEMON", "1").args(args).output().unwrap();
     (v, String::from_utf8_lossy(&t.stdout).into_owned() + &String::from_utf8_lossy(&t.stderr))
 }
 

@@ -70,7 +70,7 @@ fn connect() -> Result<Option<(Conn, Hello)>, String> {
     }
 }
 
-/// Starts `cad daemon serve` detached: new session, stdin `/dev/null`, output to the log.
+/// Starts `mcad daemon serve` detached: new session, stdin `/dev/null`, output to the log.
 fn spawn(dir: &Path) -> std::io::Result<Child> {
     let exe = std::env::current_exe()?;
     let log = dir.join("daemon.log");
@@ -87,7 +87,7 @@ fn spawn(dir: &Path) -> std::io::Result<Child> {
     let out = opts.open(&log)?;
     let mut cmd = Command::new(exe);
     cmd.args(["daemon", "serve"])
-        .env("CAD_IPC_DIR", dir)
+        .env("MCAD_IPC_DIR", dir)
         .current_dir("/")
         .stdin(Stdio::null())
         .stdout(out.try_clone()?)
@@ -115,7 +115,7 @@ fn ensure(verbose: bool) -> Result<(Conn, u32), String> {
         Some((c, h)) if h.build_id == me => return Ok((c, h.pid)),
         Some((c, h)) => {
             if verbose {
-                eprintln!("cad: Daemon pid {} hat Build {}, dieses cad {me}: wird ersetzt", h.pid, h.build_id);
+                eprintln!("mcad: Daemon pid {} hat Build {}, dieses mcad {me}: wird ersetzt", h.pid, h.build_id);
             }
             daemon::stop_daemon(Some(c), Duration::from_secs(3)).map_err(|e| format!("alter Daemon: {e}"))?;
         }
@@ -125,7 +125,7 @@ fn ensure(verbose: bool) -> Result<(Conn, u32), String> {
     let dir = std::fs::canonicalize(&dir).unwrap_or(dir);
     let mut child = spawn(&dir).map_err(|e| format!("Start: {e}"))?;
     if verbose {
-        eprintln!("cad: Daemon gestartet (pid {}, Log {})", child.id(), dir.join("daemon.log").display());
+        eprintln!("mcad: Daemon gestartet (pid {}, Log {})", child.id(), dir.join("daemon.log").display());
     }
     let t0 = Instant::now();
     loop {
@@ -155,7 +155,7 @@ struct Answer {
 }
 
 fn request(conn: &mut Conn, pid: u32, argv: &[String], cwd: &Path, stdin: Option<&str>) -> Result<Answer, Fail> {
-    let hang_ms: u64 = std::env::var("CAD_DAEMON_DEBUG_HANG_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+    let hang_ms: u64 = cad_ipc::env_var("DAEMON_DEBUG_HANG_MS").and_then(|v| v.parse().ok()).unwrap_or(0);
     let body = json!({
         "proto": DAEMON_PROTO, "build_id": build_id(), "argv": argv, "cwd": cwd.to_string_lossy(),
         "stdin": stdin.is_some(), "hang_ms": hang_ms,
@@ -235,9 +235,9 @@ fn decode(f: &Frame) -> Result<Answer, String> {
 pub fn run(argv: &[OsString], uses_stdin: bool, no_daemon: bool, verbose: bool) -> Attempt {
     let local = |reason: String, loud: bool| {
         if loud {
-            eprintln!("cad: {reason}; der Befehl läuft ohne Daemon");
+            eprintln!("mcad: {reason}; der Befehl läuft ohne Daemon");
         } else if verbose {
-            eprintln!("cad: ohne Daemon: {reason}");
+            eprintln!("mcad: ohne Daemon: {reason}");
         }
         Attempt::Local(DaemonInfo { used: false, reason: Some(reason) })
     };
@@ -247,7 +247,7 @@ pub fn run(argv: &[OsString], uses_stdin: bool, no_daemon: bool, verbose: bool) 
     let cfg = DaemonConfig::load();
     if verbose {
         for w in &cfg.warnings {
-            eprintln!("cad: Konfiguration: {w}");
+            eprintln!("mcad: Konfiguration: {w}");
         }
     }
     if !cfg.enabled {
@@ -292,7 +292,7 @@ pub fn run(argv: &[OsString], uses_stdin: bool, no_daemon: bool, verbose: bool) 
                 if verbose {
                     let mib = format!("{:.1}", a.info["cache_bytes"].as_f64().unwrap_or(0.0) / (1 << 20) as f64);
                     eprintln!(
-                        "cad: Daemon pid {}: {:.0} ms, Cache {} Treffer / {} neu, {} Einträge, {} MiB",
+                        "mcad: Daemon pid {}: {:.0} ms, Cache {} Treffer / {} neu, {} Einträge, {} MiB",
                         a.info["pid"],
                         a.info["ms"].as_f64().unwrap_or(0.0),
                         a.info["cache_hits"],

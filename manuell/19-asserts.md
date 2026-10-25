@@ -1,7 +1,7 @@
 # Collision asserts
 
-Checks after the evaluation; a violation is a **warning** at the statement (`cad check` exit 0),
-`cad export` stops with **exit 4** unless `--ignore-asserts`.
+Checks after the evaluation; a violation is a **warning** at the statement (`mcad check` exit 0),
+`mcad export` stops with **exit 4** unless `--ignore-asserts`.
 
 ```
 assert_keepout(clearance = 0.5) translate([5, 5, 2]) import("pcb.stl");  // must stay free
@@ -37,20 +37,20 @@ on each other are a SMLib borderline case) is an info "Überlappung nicht prüfb
 
 | Command | Behaviour |
 | --- | --- |
-| `cad check` | warnings `assert_touches: a und b überschneiden sich (…)`, line `Asserts: 4 von 4 geprüft, 1 verletzt`; JSON `asserts`, `violations` |
-| `cad export` | violation → exit 4, nothing written, list of violations; `--ignore-asserts` writes anyway (warning line); keep-out volumes never exported |
-| `cad render` | keep-out translucent yellow with dashed outline on top; intersection bodies red (edges on top), contact faces/lines green, gaps and clearances as lines with foot points; labels for violations, `--show asserts` labels every pair |
-| `cad outline` / `measure` | section `Asserts` (`Z.21 assert_touches(tol = 0.001, contact = "face"): ok – g berührt k: Flächenkontakt 384 mm²`); JSON `asserts` |
-| `cad inspect --line N` | node `[Sperrvolumen: nicht im Ergebnis]`, each pair `ok:` / `VERLETZT:`; JSON `nodes[].assert` |
+| `mcad check` | warnings `assert_touches: a und b überschneiden sich (…)`, line `Asserts: 4 von 4 geprüft, 1 verletzt`; JSON `asserts`, `violations` |
+| `mcad export` | violation → exit 4, nothing written, list of violations; `--ignore-asserts` writes anyway (warning line); keep-out volumes never exported |
+| `mcad render` | keep-out translucent yellow with dashed outline on top; intersection bodies red (edges on top), contact faces/lines green, gaps and clearances as lines with foot points; labels for violations, `--show asserts` labels every pair |
+| `mcad outline` / `measure` | section `Asserts` (`Z.21 assert_touches(tol = 0.001, contact = "face"): ok – g berührt k: Flächenkontakt 384 mm²`); JSON `asserts` |
+| `mcad inspect --line N` | node `[Sperrvolumen: nicht im Ergebnis]`, each pair `ok:` / `VERLETZT:`; JSON `nodes[].assert` |
 
 ```sh
-cad check examples/spec/asserts.scad          # Asserts: 4 von 4 geprüft, 0 verletzt
+mcad check examples/spec/asserts.mcad          # Asserts: 4 von 4 geprüft, 0 verletzt
 # luft = 3 and a taller holder:
-#   asserts.scad:21:1: Warnung (Kernel): assert_touches: g + hl + kf und k überschneiden sich (Schnittvolumen 100 mm³)
-#   asserts.scad:33:1: Warnung (Kernel): assert_keepout: g hält den Abstand 3 mm zum Sperrvolumen nicht ein: 2 mm (± 0.0305) von [42.4444, 12, 2] bis [42.4444, 12, 4] [Zeile 14: box (Instanz g: gehaeuse)]
-cad export bad.scad -o x.3mf                  # Export abgebrochen: 2 Assert-Verletzung(en), nichts geschrieben … exit 4
-cad export bad.scad -o x.3mf --ignore-asserts # Warnung: trotz 2 Assert-Verletzung(en) exportiert
-cad render examples/spec/asserts.scad -o /tmp/a.png --show asserts
+#   asserts.mcad:21:1: Warnung (Kernel): assert_touches: g + hl + kf und k überschneiden sich (Schnittvolumen 100 mm³)
+#   asserts.mcad:33:1: Warnung (Kernel): assert_keepout: g hält den Abstand 3 mm zum Sperrvolumen nicht ein: 2 mm (± 0.0305) von [42.4444, 12, 2] bis [42.4444, 12, 4] [Zeile 14: box (Instanz g: gehaeuse)]
+mcad export bad.mcad -o x.3mf                  # Export abgebrochen: 2 Assert-Verletzung(en), nichts geschrieben … exit 4
+mcad export bad.mcad -o x.3mf --ignore-asserts # Warnung: trotz 2 Assert-Verletzung(en) exportiert
+mcad render examples/spec/asserts.mcad -o /tmp/a.png --show asserts
 ```
 
-Example model: `examples/spec/asserts.scad` (housing, lid, holder, cable clip, STL keep-out).
+Example model: `examples/spec/asserts.mcad` (housing, lid, holder, cable clip, STL keep-out).

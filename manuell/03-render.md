@@ -1,6 +1,6 @@
-# cad render
+# mcad render
 
-`cad render FILE -o x.png [options]`
+`mcad render FILE -o x.png [options]`
 
 | Option | Effect |
 | --- | --- |
@@ -29,8 +29,8 @@
 - `--json` returns the camera per view (`scale_px_per_mm`) to map pixels to mm.
 
 ```sh
-cad render box.scad -o /tmp/a.png --module enclosure --views all --show grids,anchors,labels
-cad render box.scad -o /tmp/b.png --section z=10 --show dims
-cad render box.scad -o /tmp/c.png --line 8 --azimuth 120 --elevation 30
-cad render box.scad -o /tmp/d.png --part cover --xray
+mcad render box.mcad -o /tmp/a.png --module enclosure --views all --show grids,anchors,labels
+mcad render box.mcad -o /tmp/b.png --section z=10 --show dims
+mcad render box.mcad -o /tmp/c.png --line 8 --azimuth 120 --elevation 30
+mcad render box.mcad -o /tmp/d.png --part cover --xray
 ```

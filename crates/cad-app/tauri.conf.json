@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "controller-cad",
-  "version": "0.2.1",
-  "identifier": "dev.controller-cad.desktop",
+  "productName": "mcad",
+  "version": "0.3.0",
+  "identifier": "dev.mcad.desktop",
   "build": {
     "frontendDist": "../../web/dist-tauri"
   },

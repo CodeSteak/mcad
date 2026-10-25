@@ -861,7 +861,7 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
         .collect();
     let (files, includes) = match &project {
         Some(pi) => (src.file_infos(pi.main_path), include_refs(src, pi.proj)),
-        None => (src.file_infos("main.scad"), Vec::new()),
+        None => (src.file_infos(cad_eval::DEFAULT_MAIN), Vec::new()),
     };
 
     let root_is_subtree = tree.root.is_some_and(|r| tree.node(r).parent.is_some());

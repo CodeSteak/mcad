@@ -167,8 +167,8 @@ export function MeasurePanel() {
                 <Button className="ui-btn--small" aria-label="Als Kommentar kopieren" onClick={() => void measure.copy(e.id, "comment")} title="Als Code-Kommentar kopieren (// Messung: …)">
                   // Kommentar
                 </Button>
-                <Button className="ui-btn--small" aria-label="Als cad measure kopieren" onClick={() => void measure.copy(e.id, "cli")} title="Gleiche Messung in der CLI: cad measure …">
-                  <code>cad measure</code>
+                <Button className="ui-btn--small" aria-label="Als mcad measure kopieren" onClick={() => void measure.copy(e.id, "cli")} title="Gleiche Messung in der CLI: mcad measure …">
+                  <code>mcad measure</code>
                 </Button>
                 <IconButton className="ui-btn--small mpdel" icon={IconDelete} label="Messung löschen" shortcut="Entf" onClick={() => measure.remove(e.id)} />
               </div>

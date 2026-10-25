@@ -6,7 +6,7 @@ Hobbymodellen. Umfang: nur Features aus „Voll“ in `docs/technischer-plan.md`
 | Ort | Inhalt |
 | --- | --- |
 | `examples/openscad-compat/*.scad` | 36 Modelle, je mit Kopfkommentar `// Zweck: …` (34–36: `offset`) |
-| `examples/spec/*.scad` | 8 Modelle mit den neuen Sprachfeatures (Raster, Anker, Fillets, …) |
+| `examples/spec/*.mcad` | 8 Modelle mit den neuen Sprachfeatures (Raster, Anker, Fillets, …) |
 | `tests/openscad-compat/make-reference.py` | erzeugt `reference.json` mit OpenSCAD |
 | `tests/openscad-compat/reference.json` | Referenz (eingecheckt): Volumen, Fläche, Hülle, Dreiecke, echo |
 | `tests/openscad-compat/compare.py` | Stufe 2: unsere CLI gegen die Referenz |
@@ -60,8 +60,8 @@ STL- und echo-Dateien liegen unter `target/openscad-compat/` und werden nicht ei
 3. **Stufe 2** (sobald die CLI existiert):
 
    ```sh
-   python3 tests/openscad-compat/compare.py                       # CLI `cad` im PATH
-   CAD=target/release/cad python3 tests/openscad-compat/compare.py --eval
+   python3 tests/openscad-compat/compare.py                       # CLI `mcad` im PATH
+   MCAD=target/release/mcad python3 tests/openscad-compat/compare.py --eval
    CAD_EXPORT_CMD='cargo run -q -p cad-cli -- export {src} -o {out}' python3 tests/openscad-compat/compare.py
    python3 tests/openscad-compat/compare.py --eval --metrics eval   # Kennzahlen aus `eval --json`
    python3 tests/openscad-compat/compare.py 05_nested_booleans.scad # einzelne Dateien

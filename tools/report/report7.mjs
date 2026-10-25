@@ -17,7 +17,7 @@
 //   time-before.tsv, time-after.tsv   `cad export` of every example (reports/tmp/time-export.sh)
 //   scenarios.json, img/ Playwright scenarios of web/e2e/ui-e.spec.ts (helpers.recordE)
 //   ../report2/playwright.json        Playwright JSON reporter (all spec files)
-// Binaries: $CAD (default target/release/cad) and $CAD_BEFORE (the CLI before these changes,
+// Binaries: $CAD (default target/release/mcad) and $CAD_BEFORE (the CLI before these changes,
 // default reports/tmp/cad-before) for the renderings before/after and the error messages before.
 // web/src/wasm-pkg (web/scripts/build-wasm.sh) for the comparison native ↔ Wasm.
 //
@@ -35,7 +35,7 @@ const web = join(root, "web");
 const input = join(root, "reports/tmp/report7");
 const work = join(input, "work");
 const out = join(root, "docs/reports/07-kernel-variabler-radius");
-const cadNew = process.env.CAD ?? join(root, "target/release/cad");
+const cadNew = process.env.CAD ?? join(root, "target/release/mcad");
 const cadOld = process.env.CAD_BEFORE ?? join(root, "reports/tmp/cad-before");
 const hasOld = existsSync(cadOld);
 

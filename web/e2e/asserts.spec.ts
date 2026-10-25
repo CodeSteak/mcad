@@ -80,7 +80,7 @@ assert_touches() { translate([0, 20, 0]) cube(10); translate([10.2, 20, 0]) cube
 
 test("C01 Sperrvolumen aus STL: durchscheinend, nicht wählbar, Asserts ok (hell/dunkel)", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/asserts.scad");
+  await openExample(page, "spec/asserts.mcad");
   const a = await waitAsserts(page);
   expect(a.items.map((r) => r.kind)).toEqual(["touches", "intersect", "disjoint", "keepout"]);
   expect(a.items.every((r) => r.ok && r.checked)).toBe(true);
@@ -138,7 +138,7 @@ test("C02 Verletzung: roter Schnittkörper, Statusleiste springt und rahmt ein (
 
 test("C03 Sperrvolumen ein-/ausblenden, Zustand bleibt nach dem Neuladen", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/asserts.scad");
+  await openExample(page, "spec/asserts.mcad");
   await waitAsserts(page);
   const btn = page.getByRole("button", { name: "Sperrvolumen" });
   await expect(btn).toHaveAttribute("aria-pressed", "true");
@@ -151,7 +151,7 @@ test("C03 Sperrvolumen ein-/ausblenden, Zustand bleibt nach dem Neuladen", async
   expect(stored).toBe("0");
   await page.reload();
   await expect(page.getByTestId("editor").locator(".cm-content")).toBeVisible();
-  await openExample(page, "spec/asserts.scad");
+  await openExample(page, "spec/asserts.mcad");
   await waitAsserts(page);
   await expect(btn).toHaveAttribute("aria-pressed", "false");
   expect((await asserts(page)).view?.keepout).toBe(0);
@@ -213,7 +213,7 @@ test("C05 assert_touches: Kontaktfläche grün, Spalt als Maßlinie (hell/dunkel
 
 test("C06 hull/minkowski im Browser (Phase A, sc_offset)", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/hull_minkowski.scad");
+  await openExample(page, "spec/hull_minkowski.mcad");
   const s = await cad(page);
   expect(s.diagnostics.filter((d) => d.severity !== "info")).toEqual([]);
   // minkowski() { cube([20, 20, 10]); sphere(2); } at [0, 50, 0]: 24 × 24 × 14
@@ -227,7 +227,7 @@ test("C06 hull/minkowski im Browser (Phase A, sc_offset)", async ({ page }) => {
 
 test("C07 STL-Import im Browser (Phase B)", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/stl_import.scad");
+  await openExample(page, "spec/stl_import.mcad");
   const s = await waitScene(page);
   expect(s.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
   const b = await page.evaluate(() => (window as unknown as { __cad: { rootBounds(): { min: number[]; max: number[] } | null } }).__cad.rootBounds());

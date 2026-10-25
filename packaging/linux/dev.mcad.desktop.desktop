@@ -1,19 +1,20 @@
 # Dateiname = App-ID = "identifier" in crates/cad-app/tauri.conf.json: die App setzt sie als
 # GLib-Programmnamen, damit ist sie die Wayland-app_id und die X11-WM_CLASS (Icon in der Taskleiste).
+# Dateitypen: text/x-mcad (*.mcad) und application/x-openscad (*.scad), beide in mcad.xml.
 [Desktop Entry]
 Type=Application
 Version=1.5
-Name=controller-cad
+Name=mcad
 GenericName=Parametric CAD
 GenericName[de]=Parametrisches CAD
 Comment=Parametric CAD in an OpenSCAD dialect with grids, anchors and fillet zones
 Comment[de]=Parametrisches CAD im OpenSCAD-Dialekt mit Rastern, Ankern und Fillet-Zonen
-Exec=cad %f
-TryExec=cad
-Icon=controller-cad
+Exec=mcad %f
+TryExec=mcad
+Icon=mcad
 Terminal=false
 Categories=Graphics;3DGraphics;Engineering;
-Keywords=CAD;OpenSCAD;SCAD;3D;STEP;STL;3MF;
-MimeType=application/x-openscad;
+Keywords=CAD;MCAD;OpenSCAD;SCAD;3D;STEP;STL;3MF;
+MimeType=text/x-mcad;application/x-openscad;
 StartupNotify=true
-StartupWMClass=dev.controller-cad.desktop
+StartupWMClass=dev.mcad.desktop

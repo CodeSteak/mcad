@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stand-in for our CLI (`cad`) to test compare.py before the CLI exists.
+"""Stand-in for our CLI (`mcad`) to test compare.py before the CLI exists.
 
   mock_cad.py export <file.scad> -o <out.stl>   copies OpenSCAD's reference STL
   mock_cad.py eval <file.scad> --json           prints echoes (and metrics) from reference.json

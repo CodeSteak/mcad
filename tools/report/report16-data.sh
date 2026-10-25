@@ -5,11 +5,11 @@
 # characters), and the comparison with OpenSCAD (tools/report/report16-openscad.py).
 # Writes reports/tmp/report16/.
 #
-#   CAD=target/release/cad tools/report/report16-data.sh
+#   CAD=target/release/mcad tools/report/report16-data.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
-CAD="${CAD:-$ROOT/target/release/cad}"
+CAD="${CAD:-$ROOT/target/release/mcad}"
 OUT="$ROOT/reports/tmp/report16"
 CLI="$OUT/cli"
 CASES="$OUT/cases"

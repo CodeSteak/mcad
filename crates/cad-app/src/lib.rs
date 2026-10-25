@@ -1,13 +1,13 @@
 //! Desktop app (Tauri 2). Processes and threads:
 //!
 //! ```text
-//! cad (app process)                                   cad engine-host (engine process)
+//! mcad (app process)                                  mcad engine-host (engine process)
 //!   main thread: Tauri event loop, webview (React UI)    engine thread (256 MiB stack):
 //!   commands  engine_post ──── frames on stdin ────────▶   Session::post / step(16 ms)
 //!   channel   ◀── binary batches (wire.rs) ── stdout ───   SMLib native
 //!   cad-watchdog: 20 min without answer → kill + restart engine, BlockKeys (cad_desktop::engine)
 //!   cad-watch: file watcher (notify) → events file-changed / file-removed
-//!   cad-ui-ipc: socket ui-<pid> (cad_ipc) ← `cad ui status|show|screenshot`
+//!   cad-ui-ipc: socket ui-<pid> (cad_ipc) ← `mcad ui status|show|screenshot`
 //! ```
 //!
 //! The UI is the browser app (`web/`) built with `pnpm build:tauri` and embedded; it detects
@@ -33,15 +33,21 @@ use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_dialog::DialogExt;
 
-/// How the app is started (from `cad`).
+/// Program name in window titles (as `productName` in `tauri.conf.json`).
+const PRODUCT: &str = "mcad";
+
+/// App id before the rename to mcad (configuration directory with the recent files).
+const OLD_APP_ID: &str = "dev.controller-cad.desktop";
+
+/// How the app is started (from `mcad`).
 #[derive(Debug, Clone)]
 pub struct LaunchOptions {
     /// File or folder to open.
     pub open: Option<PathBuf>,
-    /// Program and arguments of the engine process (`cad engine-host`).
+    /// Program and arguments of the engine process (`mcad engine-host`).
     pub engine_program: PathBuf,
     pub engine_args: Vec<OsString>,
-    /// Watchdog timeout (default 20 min; `CAD_WATCHDOG_MS` overrides).
+    /// Watchdog timeout (default 20 min; `MCAD_WATCHDOG_MS`, old name `CAD_WATCHDOG_MS`, overrides).
     pub watchdog: Duration,
 }
 
@@ -155,7 +161,7 @@ async fn open_dialog(
     let picked = if folder {
         d.set_title("Ordner als Projekt öffnen").blocking_pick_folder()
     } else {
-        d.set_title("Datei öffnen").add_filter("CAD-Modelle", &["scad"]).blocking_pick_file()
+        d.set_title("Datei öffnen").add_filter("CAD-Modelle", files::MODEL_EXTENSIONS).blocking_pick_file()
     };
     let Some(p) = picked.and_then(|p| p.into_path().ok()) else { return Ok(None) };
     opened(&state, &p).map(Some)
@@ -198,13 +204,17 @@ async fn save_as(
     dir: Option<PathBuf>,
     text: String,
 ) -> Result<Option<PathBuf>, String> {
-    let mut d =
-        app.dialog().file().set_title("Speichern unter").add_filter("CAD-Modelle", &["scad"]).set_file_name(&name);
+    let mut d = app
+        .dialog()
+        .file()
+        .set_title("Speichern unter")
+        .add_filter("CAD-Modelle", files::MODEL_EXTENSIONS)
+        .set_file_name(&name);
     if let Some(dir) = dir {
         d = d.set_directory(dir);
     }
     let Some(p) = d.blocking_save_file().and_then(|p| p.into_path().ok()) else { return Ok(None) };
-    let p = if p.extension().is_none() { p.with_extension("scad") } else { p };
+    let p = if p.extension().is_none() { p.with_extension(files::MODEL_EXTENSION) } else { p };
     if let Some(w) = &state.watcher {
         w.note_written(&p, &text);
     }
@@ -260,7 +270,7 @@ fn set_title(app: AppHandle, title: String) {
 }
 
 // ------------------------------------------------------------------------------------------
-// control by `cad ui …`
+// control by `mcad ui …`
 // ------------------------------------------------------------------------------------------
 
 /// Asks the webview (event `ui-request`) and waits for `ui_reply`.
@@ -370,8 +380,7 @@ pub fn run(opts: LaunchOptions) -> i32 {
     let o2 = out.clone();
     let sink: cad_desktop::engine::Sink = Arc::new(move |f| send_out(&o2, cad_desktop::wire::frame_bytes(&f)));
     // The engine process starts right away (SMLib initialisation overlaps the webview start).
-    let watchdog = std::env::var("CAD_WATCHDOG_MS")
-        .ok()
+    let watchdog = cad_ipc::env_var("WATCHDOG_MS")
         .and_then(|v| v.parse().ok())
         .map(Duration::from_millis)
         .unwrap_or(opts.watchdog);
@@ -386,7 +395,7 @@ pub fn run(opts: LaunchOptions) -> i32 {
     let sup_setup = sup.clone();
     let context = tauri::generate_context!();
     // Linux: the app id (`identifier`) as GLib program name, before GTK starts. GTK takes it as
-    // the Wayland `app_id` and the X11 `WM_CLASS` (otherwise the binary name `cad`), so the
+    // the Wayland `app_id` and the X11 `WM_CLASS` (otherwise the binary name `mcad`), so the
     // desktop file `<identifier>.desktop` (packaging/linux) and its icon match the window.
     #[cfg(target_os = "linux")]
     glib::set_prgname(Some(context.config().identifier.as_str()));
@@ -419,13 +428,18 @@ pub fn run(opts: LaunchOptions) -> i32 {
                     WatchEvent::Removed { path } => h2.emit_to("main", "file-removed", json!({ "path": path })),
                 };
             })
-            .map_err(|e| eprintln!("cad: Dateibeobachter nicht verfügbar: {e}"))
+            .map_err(|e| eprintln!("mcad: Dateibeobachter nicht verfügbar: {e}"))
             .ok();
-            let recent_file = app
-                .path()
-                .app_config_dir()
-                .unwrap_or_else(|_| std::env::temp_dir().join("controller-cad"))
-                .join("recent.json");
+            let config_dir = app.path().app_config_dir().unwrap_or_else(|_| std::env::temp_dir().join("mcad"));
+            let recent_file = config_dir.join("recent.json");
+            // Before the rename to mcad the app id was `dev.controller-cad.desktop`: take over
+            // its list of recent files once.
+            if !recent_file.exists()
+                && let Some(old) = config_dir.parent().map(|d| d.join(OLD_APP_ID).join("recent.json"))
+                && old.exists()
+            {
+                let _ = std::fs::create_dir_all(&config_dir).and_then(|()| std::fs::copy(&old, &recent_file));
+            }
             let recent = Recent::new(recent_file);
             if let Some(Ok(p)) = &initial {
                 let src = opts.open.clone().unwrap_or_else(|| p.root.clone());
@@ -444,8 +458,8 @@ pub fn run(opts: LaunchOptions) -> i32 {
                 endpoint: endpoint.clone(),
             });
             let title = match &initial {
-                Some(Ok(p)) => format!("{} – controller-cad", p.name),
-                _ => "controller-cad".into(),
+                Some(Ok(p)) => format!("{} – {PRODUCT}", p.name),
+                _ => PRODUCT.into(),
             };
             WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
                 .title(title)
@@ -458,7 +472,7 @@ pub fn run(opts: LaunchOptions) -> i32 {
                         .name("cad-ui-ipc".into())
                         .spawn(move || serve_control(handle, server))?;
                 }
-                Err(e) => eprintln!("cad: Steuerung über `cad ui` nicht verfügbar: {e}"),
+                Err(e) => eprintln!("mcad: Steuerung über `mcad ui` nicht verfügbar: {e}"),
             }
             Ok(())
         })
@@ -466,7 +480,7 @@ pub fn run(opts: LaunchOptions) -> i32 {
     let app = match app {
         Ok(a) => a,
         Err(e) => {
-            eprintln!("cad: Desktop-App startet nicht: {e}");
+            eprintln!("mcad: Desktop-App startet nicht: {e}");
             sup.shutdown();
             return 3;
         }

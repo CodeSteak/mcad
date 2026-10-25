@@ -6,9 +6,10 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use cad_eval::{FsResolver, Project, normalize_path, resolve_path};
+pub use cad_eval::{MODEL_EXTENSION, MODEL_EXTENSIONS, is_model_file};
 use serde::{Deserialize, Serialize};
 
-/// A project as the UI gets it: paths relative to `root` (`/` separators; `../x.scad` for
+/// A project as the UI gets it: paths relative to `root` (`/` separators; `../x.mcad` for
 /// included files outside the root).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OpenedProject {
@@ -21,7 +22,7 @@ pub struct OpenedProject {
     /// File shown first.
     pub active: String,
     pub files: BTreeMap<String, String>,
-    /// Opened as a folder (all `.scad` files of the folder belong to the project).
+    /// Opened as a folder (all model files `.mcad`/`.scad` of the folder belong to the project).
     pub folder: bool,
 }
 
@@ -63,7 +64,7 @@ pub fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
     let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir)?;
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "datei".into());
-    let tmp = dir.join(format!(".{name}.cad-{}.tmp", std::process::id()));
+    let tmp = dir.join(format!(".{name}.mcad-{}.tmp", std::process::id()));
     std::fs::write(&tmp, content_bytes(text))?;
     if let Ok(md) = std::fs::metadata(path) {
         let _ = std::fs::set_permissions(&tmp, md.permissions());
@@ -96,7 +97,10 @@ pub fn open_file(path: &Path) -> io::Result<OpenedProject> {
     let path = std::path::absolute(path)?;
     let text = read_text(&path)?;
     let root = path.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("/"));
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "datei.scad".into());
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| format!("datei.{MODEL_EXTENSION}"));
     let mut files = closure(&root, &name, &text);
     // Files that do not exist are diagnostics of the engine, not project files.
     files.retain(|p, _| abs_path(&root, p).is_file());
@@ -109,8 +113,8 @@ fn skip_dir(name: &str) -> bool {
     name.starts_with('.') || matches!(name, "node_modules" | "target" | "dist")
 }
 
-/// `.scad` files below `dir` (relative paths), at most `limit`.
-pub fn scan_scad(dir: &Path, limit: usize) -> io::Result<Vec<String>> {
+/// Model files (`.mcad`, `.scad`) below `dir` (relative paths), at most `limit`.
+pub fn scan_models(dir: &Path, limit: usize) -> io::Result<Vec<String>> {
     fn walk(base: &Path, dir: &Path, depth: usize, out: &mut Vec<String>, limit: usize) -> io::Result<()> {
         if depth > 8 || out.len() >= limit {
             return Ok(());
@@ -125,7 +129,7 @@ pub fn scan_scad(dir: &Path, limit: usize) -> io::Result<Vec<String>> {
                 if !skip_dir(&name) {
                     walk(base, &p, depth + 1, out, limit)?;
                 }
-            } else if ft.is_file() && name.ends_with(".scad") {
+            } else if ft.is_file() && is_model_file(&name) {
                 if let Ok(rel) = p.strip_prefix(base) {
                     out.push(rel.to_string_lossy().replace('\\', "/"));
                 }
@@ -157,27 +161,27 @@ pub fn references(from: &str, text: &str) -> Vec<String> {
     out
 }
 
-/// Main file of a folder: `hint` if given, else `main.scad`, else the first file (by path)
-/// that no other file includes or uses.
+/// Main file of a folder: `hint` if given, else `main.mcad` or `main.scad`, else the first
+/// file (by path) that no other file includes or uses.
 pub fn choose_main(files: &BTreeMap<String, String>, hint: Option<&str>) -> Option<String> {
     if let Some(h) = hint.filter(|h| files.contains_key(*h)) {
         return Some(h.to_string());
     }
-    if files.contains_key("main.scad") {
-        return Some("main.scad".into());
+    if let Some(m) = MODEL_EXTENSIONS.iter().map(|e| format!("main.{e}")).find(|m| files.contains_key(m)) {
+        return Some(m);
     }
     let referenced: BTreeSet<String> = files.iter().flat_map(|(p, t)| references(p, t)).collect();
     files.keys().find(|p| !referenced.contains(*p)).or_else(|| files.keys().next()).cloned()
 }
 
-/// Opens a folder as a project (all `.scad` files; `main`: a file in it to use as main file).
+/// Opens a folder as a project (all model files; `main`: a file in it to use as main file).
 pub fn open_folder(dir: &Path, main: Option<&Path>) -> io::Result<OpenedProject> {
     let root = std::path::absolute(dir)?;
     if !root.is_dir() {
         return Err(io::Error::new(io::ErrorKind::NotFound, format!("{} ist kein Ordner", root.display())));
     }
     let mut files = BTreeMap::new();
-    for rel in scan_scad(&root, 500)? {
+    for rel in scan_models(&root, 500)? {
         if let Ok(t) = read_text(&root.join(&rel)) {
             files.insert(rel, t);
         }
@@ -188,7 +192,7 @@ pub fn open_folder(dir: &Path, main: Option<&Path>) -> io::Result<OpenedProject>
     let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Projekt".into());
     let Some(main) = choose_main(&files, hint.as_deref()) else {
         // An empty folder: start with a new main file.
-        let main = "main.scad".to_string();
+        let main = cad_eval::DEFAULT_MAIN.to_string();
         files.insert(main.clone(), String::new());
         return Ok(OpenedProject { root, name, main: main.clone(), active: main, files, folder: true });
     };

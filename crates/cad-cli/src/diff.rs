@@ -1,4 +1,4 @@
-//! `cad diff-kernels <files…> [--json]`: evaluates each file with SMLib and with solidcore and
+//! `mcad diff-kernels <files…> [--json]`: evaluates each file with SMLib and with solidcore and
 //! compares every node (plan sections 2.3 and 8, acceptance test of the switch to solidcore).
 //!
 //! Per node evaluated by SMLib: status, volume (relative 1e-6), number of faces and edges of its
@@ -201,7 +201,7 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     let mut totals: BTreeMap<&'static str, usize> = BTreeMap::new();
     if !SolidcoreKernel::available() {
         return Err(Fail::Usage(
-            "diff-kernels braucht solidcore: cad mit `--features solidcore` bauen \
+            "diff-kernels braucht solidcore: mcad mit `--features solidcore` bauen \
              (cargo build -p cad-cli --features solidcore)"
                 .into(),
         ));

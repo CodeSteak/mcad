@@ -1,4 +1,4 @@
-//! `cad`: command line interface for the CAD language (native SMLib kernel), made for agents
+//! `mcad`: command line interface for the CAD language (native SMLib kernel), made for agents
 //! that develop and check models without the UI.
 //!
 //! Commands (Plan section 8): `check`, `outline`, `eval`, `inspect --line n`,
@@ -10,16 +10,16 @@
 //! Daemon (`daemon.rs`, `client.rs`, `host.rs`, `config.rs`): `check`, `eval`, `inspect`,
 //! `render`, `export`, `outline`, `measure` and `set` run in a background process that keeps
 //! the engine cache (started by the first such call, ends after 15 min without a request);
-//! the output is the same as without it. `--no-daemon`, `CAD_NO_DAEMON=1` or
-//! `[daemon] enabled = false` switch it off; `cad daemon status|stop|serve`.
+//! the output is the same as without it. `--no-daemon`, `MCAD_NO_DAEMON=1` or
+//! `[daemon] enabled = false` switch it off; `mcad daemon status|stop|serve`.
 //!
-//! Desktop UI (feature `gui`, on by default; `launch.rs`): `cad` without arguments starts the
-//! UI, `cad DATEI.scad` / `cad ORDNER/` with that file or folder. Without a graphical session
+//! Desktop UI (feature `gui`, on by default; `launch.rs`): `mcad` without arguments starts the
+//! UI, `mcad DATEI.mcad` (or `.scad`) / `mcad ORDNER/` with that file or folder. Without a graphical session
 //! (no `DISPLAY`/`WAYLAND_DISPLAY`) or in a build without `gui`: message with the headless
-//! commands, exit 2. `cad ui status|show|screenshot` talks to running windows (`ui.rs`, exit 3
-//! without one). `cad engine-host` (hidden) is the engine process of the desktop app.
+//! commands, exit 2. `mcad ui status|show|screenshot` talks to running windows (`ui.rs`, exit 3
+//! without one). `mcad engine-host` (hidden) is the engine process of the desktop app.
 //!
-//! `cad usage [TOPIC]` prints the usage manual for agents (`manuell/*.md`, English, embedded by
+//! `mcad usage [TOPIC]` prints the usage manual for agents (`manuell/*.md`, English, embedded by
 //! `build.rs`; `usage.rs`). The `--help` texts are English as well.
 //!
 //! Exit codes: 0 ok, 1 diagnostics with severity error (syntax, evaluation or a failed kernel
@@ -106,7 +106,7 @@
 //! ```
 //!
 //! Projects: `include <…>`/`use <…>` are read from the file system relative to the including
-//! file. Diagnostics of other files are printed with their path (`lib/teile.scad:3:5: …`).
+//! file. Diagnostics of other files are printed with their path (`lib/teile.mcad:3:5: …`).
 
 mod client;
 mod colors;
@@ -141,29 +141,32 @@ pub(crate) const EVAL_STACK: usize = 256 << 20;
 
 #[derive(Parser)]
 #[command(
-    name = "cad",
+    name = "mcad",
     version,
     about = "Parametric CAD: desktop UI, and headless check, evaluate, view, measure, export",
-    override_usage = "cad [FILE.scad | FOLDER]    (desktop UI)\n       cad <COMMAND> [OPTIONS]     (headless)",
+    override_usage = "mcad [FILE.mcad | FILE.scad | FOLDER]    (desktop UI)\n       mcad <COMMAND> [OPTIONS]                (headless)",
     allow_external_subcommands = true,
-    after_help = "Desktop UI: `cad` starts the UI, `cad file.scad` or `cad folder/` with that file or folder as the \
+    after_help = "Model files: `.mcad` (new files), `.scad` opens and evaluates the same way (also in include/use).\n\
+Desktop UI: `mcad` starts the UI, `mcad file.mcad` or `mcad folder/` with that file or folder as the \
 project (files are watched: outside changes show up at once). Without a graphical session (no \
 DISPLAY/WAYLAND_DISPLAY) or without the `gui` feature: message and exit 2 – use the commands instead.\n\
 Headless (no UI, also in CI/containers): all commands above. Workflow for agents: outline → edit → check → \
-render --views all --show grids,anchors → inspect/measure → export. `cad watch` re-evaluates on every file \
-change (the cache stays). Full manual for agents/LLMs: `cad usage`.\n\
-While the UI runs, `cad ui status` shows what the user has open (file, cursor, context module, parameters, \
-diagnostics), `cad ui show file --line N` shows them a location, `cad ui screenshot -o x.png` returns their \
+render --views all --show grids,anchors → inspect/measure → export. `mcad watch` re-evaluates on every file \
+change (the cache stays). Full manual for agents/LLMs: `mcad usage`.\n\
+While the UI runs, `mcad ui status` shows what the user has open (file, cursor, context module, parameters, \
+diagnostics), `mcad ui show file --line N` shows them a location, `mcad ui screenshot -o x.png` returns their \
 3D view.\n\
 Daemon: check, eval, inspect, render, export, outline, measure and set compute in a background process that \
 keeps the kernel cache between calls (starts with the first call, ends after 15 min without a request; output \
-as without the daemon). Off: --no-daemon, CAD_NO_DAEMON=1 or `[daemon] enabled = false` in \
-$XDG_CONFIG_HOME/controller-cad/config.toml. Manage: `cad daemon status|stop|serve`."
+as without the daemon). Off: --no-daemon, MCAD_NO_DAEMON=1 or `[daemon] enabled = false` in \
+$XDG_CONFIG_HOME/mcad/config.toml. Manage: `mcad daemon status|stop|serve`.\n\
+Old names before the rename to mcad still work: CAD_* variables (MCAD_* first), \
+~/.config/controller-cad/config.toml (if there is no mcad/config.toml)."
 )]
 pub(crate) struct Cli {
     #[command(subcommand)]
     cmd: Option<Cmd>,
-    /// Compute without the daemon (permanently: CAD_NO_DAEMON=1 or `[daemon] enabled = false`).
+    /// Compute without the daemon (permanently: MCAD_NO_DAEMON=1 or `[daemon] enabled = false`).
     #[arg(long, global = true)]
     no_daemon: bool,
     /// Daemon messages on stderr (used or not and why, cache hits).
@@ -176,7 +179,7 @@ struct Common {
     /// Source file (`-` = stdin).
     #[arg(value_name = "FILE")]
     file: PathBuf,
-    /// Output as JSON (fixed schema, see `cad usage json`).
+    /// Output as JSON (fixed schema, see `mcad usage json`).
     #[arg(long)]
     json: bool,
     /// Module as context (like the cursor in the module definition), nested `outer.inner`; with
@@ -334,7 +337,7 @@ pub(crate) enum Cmd {
     External(Vec<OsString>),
 }
 
-/// Names of the subcommands (messages for `cad DATEI` and unknown commands).
+/// Names of the subcommands (messages for `mcad DATEI` and unknown commands).
 const COMMANDS: &str =
     "check, outline, eval, inspect, render, measure, watch, set, export, ui, daemon, usage, diff-kernels";
 
@@ -349,11 +352,11 @@ pub(crate) struct Outcome {
     text: String,
     /// Exit code 1 (diagnostics with errors).
     errors: bool,
-    /// Another exit code (4: `cad export` stopped by an assertion violation).
+    /// Another exit code (4: `mcad export` stopped by an assertion violation).
     exit: Option<u8>,
 }
 
-/// Exit code of `cad export` when an assertion is violated (nothing written).
+/// Exit code of `mcad export` when an assertion is violated (nothing written).
 pub(crate) const EXIT_ASSERT: u8 = 4;
 
 /// What a command prints and its exit code (computed here or in the daemon).
@@ -382,7 +385,7 @@ pub(crate) struct DaemonInfo {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let Some(cmd) = cli.cmd else {
-        // `cad` alone: the desktop UI.
+        // `mcad` alone: the desktop UI.
         return launch::run(None);
     };
     match &cmd {
@@ -399,16 +402,16 @@ fn main() -> ExitCode {
         }
         Cmd::External(args) => {
             let first = args.first().map(|a| a.to_string_lossy().into_owned()).unwrap_or_default();
-            let looks_like_path = first.ends_with(".scad") || first.contains('/') || Path::new(&first).exists();
+            let looks_like_path = cad_eval::is_model_file(&first) || first.contains('/') || Path::new(&first).exists();
             if looks_like_path && args.len() == 1 {
                 return launch::run(Some(Path::new(&first)));
             }
             if looks_like_path {
                 eprintln!(
-                    "cad: `cad {first}` öffnet die UI und nimmt keine weiteren Argumente. Befehle: {COMMANDS} (cad --help)"
+                    "mcad: `mcad {first}` öffnet die UI und nimmt keine weiteren Argumente. Befehle: {COMMANDS} (mcad --help)"
                 );
             } else {
-                eprintln!("cad: unbekannter Befehl `{first}`. Befehle: {COMMANDS} (cad --help)");
+                eprintln!("mcad: unbekannter Befehl `{first}`. Befehle: {COMMANDS} (mcad --help)");
             }
             return ExitCode::from(2);
         }
@@ -520,7 +523,7 @@ pub(crate) fn finish(
                 stdout.push_str(&j.unwrap());
                 stdout.push('\n');
             } else {
-                stderr.push_str(&format!("cad {name}: {msg}\n"));
+                stderr.push_str(&format!("mcad {name}: {msg}\n"));
             }
             code
         }
@@ -851,10 +854,16 @@ pub(crate) fn load(c: &Common, line: Option<u32>, whole_file: bool, kernel: bool
     let mut s = host::new_session(opts);
     // Project files (`include`/`use`) relative to the main file's directory.
     let (root, main_name) = if c.file.as_os_str() == "-" {
-        (PathBuf::new(), "stdin.scad".to_string())
+        (PathBuf::new(), format!("stdin.{}", cad_eval::MODEL_EXTENSION))
     } else {
         let root = c.file.parent().map(Path::to_path_buf).unwrap_or_default();
-        (root, c.file.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_else(|| "main.scad".into()))
+        (
+            root,
+            c.file
+                .file_name()
+                .map(|f| f.to_string_lossy().into_owned())
+                .unwrap_or_else(|| cad_eval::DEFAULT_MAIN.into()),
+        )
     };
     let fs_root = if root.as_os_str().is_empty() { PathBuf::from(".") } else { root.clone() };
     s.set_resolver(Box::new(cad_session::FsResolver { root: fs_root }), &main_name);
@@ -999,7 +1008,7 @@ fn check(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         let checked = asserts.iter().filter(|a| a.checked).count();
         let bad = asserts.iter().filter(|a| !a.ok).count();
         let tail = if bad > 0 {
-            format!(" ({} Verletzung(en); cad export bricht dann ab, außer mit --ignore-asserts)", j["violations"])
+            format!(" ({} Verletzung(en); mcad export bricht dann ab, außer mit --ignore-asserts)", j["violations"])
         } else {
             String::new()
         };
@@ -1425,7 +1434,7 @@ fn export(
     Ok(Outcome { json: j, text: t, errors: m.has_errors(), exit: None })
 }
 
-/// `cad export --per-color -o x.zip`: one STL per colour (and part) in a ZIP.
+/// `mcad export --per-color -o x.zip`: one STL per colour (and part) in a ZIP.
 fn export_per_color(c: &Common, output: &Path, parts: &[String], ignore_asserts: bool) -> Result<Outcome, Fail> {
     // a ZIP under another extension would be taken for an STL by the slicer
     if !output.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
@@ -1544,7 +1553,7 @@ pub(crate) fn asserts_summary(sc: &p::Scene, only: Option<&[u32]>) -> (Json, Str
     (json!(rows), t)
 }
 
-/// `cad export` and assertions: with violations the export stops (exit code 4) unless
+/// `mcad export` and assertions: with violations the export stops (exit code 4) unless
 /// `--ignore-asserts`; then the text gets a warning line. JSON: `asserts`, `violations`,
 /// `ignored_asserts`, `aborted`.
 pub(crate) fn assert_gate(m: &Model, j: &mut Json, ignore: bool) -> Result<String, Outcome> {

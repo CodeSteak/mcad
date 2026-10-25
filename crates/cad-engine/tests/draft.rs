@@ -10,7 +10,7 @@ use cad_ir::{NodeIdx, Op, Tree};
 use common::*;
 use kernel_smlib::SmlibKernel;
 
-/// Plate with four bores, `difference(fillet = 1)` (like `examples/spec/lochplatte.scad`).
+/// Plate with four bores, `difference(fillet = 1)` (like `examples/spec/lochplatte.mcad`).
 fn plate(t: f64) -> Tree {
     let src = format!(
         r#"

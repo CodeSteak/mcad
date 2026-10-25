@@ -135,10 +135,17 @@ fn runtime_dir_is_private() {
     let d = dir.path().join("ipc");
     std::fs::create_dir(&d).unwrap();
     std::fs::set_permissions(&d, std::fs::Permissions::from_mode(0o755)).unwrap();
-    // SAFETY: the only test that touches this variable.
-    unsafe { std::env::set_var("CAD_IPC_DIR", &d) };
+    // SAFETY: the only test that touches these variables.
+    unsafe {
+        std::env::remove_var("MCAD_IPC_DIR");
+        std::env::set_var("CAD_IPC_DIR", dir.path().join("alt"));
+    }
+    // old name (before the rename to mcad) is still read
+    assert_eq!(cad_ipc::runtime_dir().unwrap(), dir.path().join("alt"));
+    // SAFETY: as above.
+    unsafe { std::env::set_var("MCAD_IPC_DIR", &d) };
     let r = cad_ipc::runtime_dir().unwrap();
-    assert_eq!(r, d);
+    assert_eq!(r, d, "MCAD_IPC_DIR before CAD_IPC_DIR");
     assert_eq!(std::fs::metadata(&d).unwrap().permissions().mode() & 0o777, 0o700);
     assert_eq!(cad_ipc::endpoint_path("ui-5").unwrap(), d.join("ui-5.sock"));
     assert!(cad_ipc::endpoint_path("../x").is_err());

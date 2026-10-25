@@ -8,7 +8,7 @@
 //   scenarios.json, metrics.json, img/*.jpg          cd web && pnpm exec playwright test e2e/farben.spec.ts
 //   playwright.json                                  copy of reports/tmp/report2/playwright.json (whole suite)
 //   vitest.txt                                       cd web && pnpm test
-//   tauri/tauri-e2e.json, tauri/img/*.png            node web/e2e-tauri/desktop.e2e.mjs --bin target/release/cad --out reports/tmp/report11/tauri
+//   tauri/tauri-e2e.json, tauri/img/*.png            node web/e2e-tauri/desktop.e2e.mjs --bin target/release/mcad --out reports/tmp/report11/tauri
 //   cargo.txt, clippy.txt, fmt.txt                   cargo test --workspace --no-fail-fast, clippy -D warnings, fmt --check
 //   compare.txt, step.txt                            tests/openscad-compat/compare.py --eval, tests/step/verify.py
 //
@@ -563,10 +563,10 @@ cargo clippy --workspace --all-targets -- -D warnings &gt; reports/tmp/report11/
 cargo fmt --all --check &gt; reports/tmp/report11/fmt.txt
 (cd web &amp;&amp; pnpm typecheck &amp;&amp; pnpm test &gt; ../reports/tmp/report11/vitest.txt &amp;&amp; pnpm e2e)
 cp reports/tmp/report2/playwright.json reports/tmp/report11/
-node web/e2e-tauri/desktop.e2e.mjs --bin target/release/cad --out reports/tmp/report11/tauri
-CAD=target/release/cad python3 tests/openscad-compat/compare.py --eval &gt; reports/tmp/report11/compare.txt
-/opt/tools/venv-step/bin/python tests/step/verify.py --cad target/release/cad &gt; reports/tmp/report11/step.txt
-CAD=target/release/cad PY3MF=/pfad/venv/bin/python tools/report/report11-data.sh   # lib3mf, trimesh
+node web/e2e-tauri/desktop.e2e.mjs --bin target/release/mcad --out reports/tmp/report11/tauri
+CAD=target/release/mcad python3 tests/openscad-compat/compare.py --eval &gt; reports/tmp/report11/compare.txt
+/opt/tools/venv-step/bin/python tests/step/verify.py --cad target/release/mcad &gt; reports/tmp/report11/step.txt
+CAD=target/release/mcad PY3MF=/pfad/venv/bin/python tools/report/report11-data.sh   # lib3mf, trimesh
 node tools/report/report11.mjs
 node tools/report/print-pdf.mjs docs/reports/11-farben-filamente/report.html docs/reports/11-farben-filamente/report.pdf "Testbericht 11: Farben, Multi-Filament-3MF, dunkles Thema"</pre>
 </main>

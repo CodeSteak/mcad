@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Regressionsprüfung der Alltagsmodelle (examples/alltag).
 #
-# Für jedes Modell (jede .scad-Datei direkt in examples/alltag, bei Baugruppen-Ordnern die Datei
-# mit dem Namen des Ordners, z. B. gehaeuse/gehaeuse.scad):
-#   1. `cad check --json`               – 0 Fehler, Anzahl der Warnungen wie erwartet
-#   2. `cad export --all-parts` (STEP)  – Bauteile und ihre Volumina (exakte B-Rep) wie erwartet
-#   3. `cad export` als STL und STEP    – Gesamtexport gelingt
+# Für jedes Modell (jede .mcad-/.scad-Datei direkt in examples/alltag, bei Baugruppen-Ordnern die Datei
+# mit dem Namen des Ordners, z. B. gehaeuse/gehaeuse.mcad):
+#   1. `mcad check --json`               – 0 Fehler, Anzahl der Warnungen wie erwartet
+#   2. `mcad export --all-parts` (STEP)  – Bauteile und ihre Volumina (exakte B-Rep) wie erwartet
+#   3. `mcad export` als STL und STEP    – Gesamtexport gelingt
 # in ein temporäres Verzeichnis. Exit ≠ 0, wenn ein Modell abweicht oder scheitert.
 #
 #   tests/alltag/check.sh              prüfen gegen tests/alltag/expected.json
@@ -17,17 +17,18 @@
 #   tests/alltag/check.sh --keep       temporäres Verzeichnis behalten
 #   tests/alltag/check.sh MUSTER…      nur Modelle, deren Pfad ein MUSTER enthält
 #
-# CLI: $CAD, sonst <repo>/target/release/cad, sonst `cad` im PATH. Braucht python3.
+# CLI: $MCAD (alter Name $CAD), sonst <repo>/target/release/mcad, sonst `mcad` im PATH. Braucht python3.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
-if [ -z "${CAD:-}" ]; then
-    if [ -x "$root/target/release/cad" ]; then
-        CAD="$root/target/release/cad"
-    elif command -v cad >/dev/null 2>&1; then
-        CAD=$(command -v cad)
+CAD="${MCAD:-${CAD:-}}"
+if [ -z "$CAD" ]; then
+    if [ -x "$root/target/release/mcad" ]; then
+        CAD="$root/target/release/mcad"
+    elif command -v mcad >/dev/null 2>&1; then
+        CAD=$(command -v mcad)
     else
-        echo "check.sh: keine CLI gefunden (CAD=… setzen oder cargo build --release -p cad-cli)" >&2
+        echo "check.sh: keine CLI gefunden (MCAD=… setzen oder cargo build --release -p cad-cli)" >&2
         exit 2
     fi
 fi
@@ -35,7 +36,7 @@ exec python3 - "$CAD" "$root" "$here" "$@" <<'PY'
 import concurrent.futures as cf
 import json, os, re, shutil, subprocess, sys, tempfile, time
 
-cad, root, here = sys.argv[1:4]
+mcad, root, here = sys.argv[1:4]
 args = sys.argv[4:]
 update = "--update" in args
 fehler = "--fehler" in args
@@ -55,21 +56,22 @@ while i < len(args):
 
 alltag = os.path.join(root, "examples", "alltag")
 expected_path = os.path.join(here, "expected.json")
+MODEL_EXT = (".mcad", ".scad")
 REL_TOL, ABS_TOL = 1e-3, 0.5   # Volumen: 0,1 % oder 0,5 mm³
 
 def modelle():
     out = []
     for n in sorted(os.listdir(alltag)):
         p = os.path.join(alltag, n)
-        if n.endswith(".scad") and not n.startswith("_") and os.path.isfile(p):
+        if n.endswith(MODEL_EXT) and not n.startswith("_") and os.path.isfile(p):
             out.append(n)
-        elif os.path.isdir(p) and os.path.isfile(os.path.join(p, n + ".scad")):
-            out.append(f"{n}/{n}.scad")
+        elif os.path.isdir(p):
+            out += [f"{n}/{n}{e}" for e in MODEL_EXT if os.path.isfile(os.path.join(p, n + e))][:1]
     return [m for m in out if not muster or any(x in m for x in muster)]
 
 def run(argv, cwd):
     t = time.time()
-    r = subprocess.run([cad] + argv + ["--json"], cwd=cwd, capture_output=True, text=True)
+    r = subprocess.run([mcad] + argv + ["--json"], cwd=cwd, capture_output=True, text=True)
     try:
         d = json.loads(r.stdout)
     except ValueError:
@@ -147,7 +149,7 @@ def fehlerbeispiele():
     print("\nFehlerbeispiele (tests/alltag/fehler):")
     n_ok = n_open = 0
     for n in sorted(os.listdir(d)):
-        if not n.endswith(".scad"):
+        if not n.endswith(MODEL_EXT):
             continue
         f = os.path.join(d, n)
         text = open(f, encoding="utf-8").read()

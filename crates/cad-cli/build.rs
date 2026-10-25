@@ -1,6 +1,6 @@
 //! Embeds the usage manual (`manuell/*.md` at the workspace root, English, for LLM agents) into
 //! the binary: `$OUT_DIR/manual.rs` lists every page as `(name, include_str!(…))`, sorted by
-//! file name (`00-overview.md` → topic `overview`). `cad usage` prints it (`src/usage.rs`).
+//! file name (`00-overview.md` → topic `overview`). `mcad usage` prints it (`src/usage.rs`).
 
 use std::path::PathBuf;
 

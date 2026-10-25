@@ -11,7 +11,7 @@ Every measurement starts from a stopped daemon and its own socket directory, is 
 (--repeat, default 5) and reported as median, min and max (wall time of the `cad` process).
 Writes reports/tmp/report10/timings.json.
 
-  python3 tools/report/report10-measure.py [--cad target/release/cad] [--repeat 5]
+  python3 tools/report/report10-measure.py [--cad target/release/mcad] [--repeat 5]
 """
 
 import argparse
@@ -43,7 +43,7 @@ COMMANDS = {
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cad", default=str(ROOT / "target/release/cad"))
+    ap.add_argument("--cad", default=str(ROOT / "target/release/mcad"))
     ap.add_argument("--repeat", type=int, default=5)
     a = ap.parse_args()
     cad = a.cad

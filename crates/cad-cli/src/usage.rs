@@ -1,4 +1,4 @@
-//! `cad usage [TOPIC…] [--all] [--list]`: the usage manual for agents and LLMs. The pages are
+//! `mcad usage [TOPIC…] [--all] [--list]`: the usage manual for agents and LLMs. The pages are
 //! the Markdown files in `manuell/` (English), embedded at build time (`build.rs`); the number
 //! prefix of a file only orders the pages (`03-render.md` → topic `render`).
 
@@ -30,7 +30,7 @@ fn title(text: &str) -> &str {
 
 fn list() -> String {
     let w = PAGES.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
-    let mut s = String::from("Topics (`cad usage TOPIC…`, everything: `cad usage --all`):\n\n");
+    let mut s = String::from("Topics (`mcad usage TOPIC…`, everything: `mcad usage --all`):\n\n");
     for (name, text) in PAGES {
         s.push_str(&format!("  {name:<w$}  {}\n", title(text)));
     }
@@ -46,15 +46,15 @@ fn find(topic: &str) -> Result<&'static (&'static str, &'static str), String> {
     let hits: Vec<_> = PAGES.iter().filter(|(n, _)| n.starts_with(&t)).collect();
     match hits.as_slice() {
         [one] => Ok(one),
-        [] => Err(format!("cad usage: unknown topic `{topic}`.\n\n{}", list())),
+        [] => Err(format!("mcad usage: unknown topic `{topic}`.\n\n{}", list())),
         many => Err(format!(
-            "cad usage: `{topic}` is ambiguous: {}",
+            "mcad usage: `{topic}` is ambiguous: {}",
             many.iter().map(|(n, _)| *n).collect::<Vec<_>>().join(", ")
         )),
     }
 }
 
-/// Text that `cad usage` prints for these arguments, or an error message (exit 2).
+/// Text that `mcad usage` prints for these arguments, or an error message (exit 2).
 pub(crate) fn text(a: &UsageArgs) -> Result<String, String> {
     if a.list {
         return Ok(list());
@@ -117,14 +117,33 @@ mod tests {
         assert!(PAGES.iter().all(|(_, p)| all.contains(p.trim_end())));
     }
 
-    /// Every subcommand of `cad` is described in the manual (`cad <name>` appears somewhere).
+    /// Every subcommand of `mcad` is described in the manual (`mcad <name>` appears somewhere).
     #[test]
     fn every_command_is_documented() {
         use clap::CommandFactory as _;
         let all = text(&args(&[], true, false)).unwrap();
         for sub in crate::Cli::command().get_subcommands().filter(|s| !s.is_hide_set()) {
             let name = sub.get_name();
-            assert!(all.contains(&format!("cad {name}")), "`cad {name}` missing in manuell/");
+            assert!(all.contains(&format!("mcad {name}")), "`mcad {name}` missing in manuell/");
+        }
+    }
+
+    /// The program is `mcad`: no call of the old name `cad <name>` is left in the manual.
+    #[test]
+    fn no_old_program_name() {
+        use clap::CommandFactory as _;
+        let all = text(&args(&[], true, false)).unwrap();
+        let names = crate::Cli::command().get_subcommands().map(|s| s.get_name().to_string()).collect::<Vec<_>>();
+        for name in names.iter().map(String::as_str).chain(["--help", "--version"]) {
+            let old = format!("cad {name}");
+            for (i, _) in all.match_indices(&old) {
+                let before = all[..i].chars().next_back();
+                assert!(
+                    before.is_some_and(|c| c.is_alphanumeric() || c == '-' || c == '_'),
+                    "old program name `{old}` in manuell/: …{}…",
+                    all.get(i.saturating_sub(40)..(i + 40).min(all.len())).unwrap_or(&old)
+                );
+            }
         }
     }
 }

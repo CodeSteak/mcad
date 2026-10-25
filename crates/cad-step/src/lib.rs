@@ -76,7 +76,7 @@ impl Default for StepOptions {
             timestamp: "1970-01-01T00:00:00".into(),
             author: String::new(),
             organization: String::new(),
-            originating_system: "controller-cad".into(),
+            originating_system: "mcad".into(),
             uncertainty: 1e-6,
             colors: Vec::new(),
             tag_colors: BTreeMap::new(),
@@ -700,7 +700,7 @@ pub fn write(breps: &[&Brep], opts: &StepOptions) -> Result<(String, StepStats),
 
     let mut out = String::with_capacity(w.data.len() + 1024);
     out.push_str("ISO-10303-21;\nHEADER;\n");
-    let _ = writeln!(out, "FILE_DESCRIPTION(('controller-cad STEP export'),'2;1');");
+    let _ = writeln!(out, "FILE_DESCRIPTION(('mcad STEP export'),'2;1');");
     let _ = writeln!(
         out,
         "FILE_NAME({},{},({}),({}),'cad-step {}',{},'');",

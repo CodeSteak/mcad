@@ -1,4 +1,4 @@
-//! `cad render`: the model as PNG.
+//! `mcad render`: the model as PNG.
 //!
 //! * Selection: the root (default), `--part NAME` (only these parts), `--line N` / `--node I`
 //!   (highlighted as in the editor: nodes of the line full, the rest dimmed, zones blue,
@@ -199,7 +199,7 @@ pub(crate) struct ViewArgs {
     /// Nodes of this line in full, the rest dimmed (repeatable).
     #[arg(long, value_name = "N")]
     pub line: Vec<u32>,
-    /// Node with this index (from `cad eval`) in full, the rest dimmed (repeatable).
+    /// Node with this index (from `mcad eval`) in full, the rest dimmed (repeatable).
     #[arg(long, value_name = "I")]
     pub node: Vec<u32>,
     /// With --line/--node: leave the rest out instead of dimming it.

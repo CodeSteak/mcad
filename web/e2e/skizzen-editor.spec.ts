@@ -543,7 +543,7 @@ test("Z16 Dunkles Thema", async ({ page }) => {
 
 test("Z17 Antwortzeiten: Snap und Vorschau beim Bewegen (Skizze mit Schleife, 42 Segmente)", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/skizze_zahnriemenscheibe.scad", null);
+  await openExample(page, "spec/skizze_zahnriemenscheibe.mcad", null);
   await clickLine(page, 12, 10);
   await waitScene(page, { context: "scheibe" });
   await enter(page);

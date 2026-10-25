@@ -1,7 +1,7 @@
 // End-to-end tests of the 3D section view (test report 9): plane x/y/z or free, dragging with
 // the grip, snapping to grid planes and anchors, flip, filled hatched cap (pixel check), cut
-// contour, status line, "Als `cad render …` kopieren" — and the copied call renders the same
-// section in the CLI (share of cap pixels compared roughly). Convention as `cad render
+// contour, status line, "Als `mcad render …` kopieren" — and the copied call renders the same
+// section in the CLI (share of cap pixels compared roughly). Convention as `mcad render
 // --section`: the plane through p with normal n removes the half n points into.
 
 import { spawnSync } from "node:child_process";
@@ -14,7 +14,7 @@ import { type CadState, cad, clickLine, frame, hook, mode, openApp, openExample,
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, "../..");
-const MODEL = readFileSync(join(ROOT, "examples/spec/gehaeuse.scad"), "utf8");
+const MODEL = readFileSync(join(ROOT, "examples/spec/gehaeuse.mcad"), "utf8");
 
 interface SectionInfo {
   on: boolean;
@@ -201,7 +201,7 @@ test("X03 Umkehren, Achsen, freie Ebene aus Blickrichtung und per Eingabe", asyn
   i = await info(page);
   const r = 1 / Math.sqrt(3);
   for (let k = 0; k < 3; k++) expect(Math.abs(i.normal[k])).toBeCloseTo(r, 6);
-  await sectionBar(page).getByRole("button", { name: "Als cad render … kopieren" }).click();
+  await sectionBar(page).getByRole("button", { name: "Als mcad render … kopieren" }).click();
   const cli = (await cad(page)) as CadState & { lastCli: string };
   expect(cli.lastCli).toContain("--section-plane ");
   await screenshot9(page, "x03-frei");
@@ -237,7 +237,7 @@ test("X04 Mit Hervorhebung, Zonen, transparenten Körpern (ohne Kappe) und Griff
   expect(i.caps).toBe(s.view!.plan.items.filter((it) => it.mode === "full").length);
   await screenshot9(page, "x04-abgezogen");
   // zones: fillet example, cursor on a zone
-  await openExample(page, "spec/fillet_zonen.scad");
+  await openExample(page, "spec/fillet_zonen.mcad");
   const text = await hook(page, (c) => c.text());
   const zl = text.split("\n").findIndex((l) => l.includes("zone(")) + 1;
   await clickLine(page, zl, 10);
@@ -261,27 +261,27 @@ test("X04 Mit Hervorhebung, Zonen, transparenten Körpern (ohne Kappe) und Griff
 });
 
 function cadBin(): string | null {
-  for (const p of [process.env.CAD_BIN, join(ROOT, "target/release/cad"), join(ROOT, "target/debug/cad")]) if (p && existsSync(p)) return p;
+  for (const p of [process.env.MCAD_BIN, join(ROOT, "target/release/mcad"), join(ROOT, "target/debug/mcad")]) if (p && existsSync(p)) return p;
   return null;
 }
 
 test("X05 Kopierter CLI-Aufruf ergibt im CLI denselben Schnitt (Pixelanteil der Kappe)", async ({ page }) => {
   const bin = cadBin();
-  test.skip(!bin, "kein cad-Binary (CAD_BIN oder target/{release,debug}/cad)");
+  test.skip(!bin, "kein mcad-Binary (MCAD_BIN oder target/{release,debug}/mcad)");
   await openApp(page);
   await hook(page, (c) => c.setView("iso"));
   await sectionOn(page);
   await sectionBar(page).getByRole("textbox", { name: /^Lage der Ebene/ }).fill("12");
   await sectionBar(page).getByRole("textbox", { name: /^Lage der Ebene/ }).press("Enter");
   await frame(page);
-  await sectionBar(page).getByRole("button", { name: "Als cad render … kopieren" }).click();
+  await sectionBar(page).getByRole("button", { name: "Als mcad render … kopieren" }).click();
   const st = (await cad(page)) as CadState & { lastCli: string };
   const cli = st.lastCli;
-  expect(cli).toMatch(/^cad render gehaeuse\.scad -o schnitt\.png --section z=12 --azimuth [\d.]+ --elevation [\d.]+$/);
+  expect(cli).toMatch(/^mcad render gehaeuse\.mcad -o schnitt\.png --section z=12 --azimuth [\d.]+ --elevation [\d.]+$/);
   const web = await pixels(page, await canvasPng(page));
   // run the copied call (file and output into a temporary directory)
   const dir = mkdtempSync(join(tmpdir(), "cad-x05-"));
-  writeFileSync(join(dir, "gehaeuse.scad"), MODEL);
+  writeFileSync(join(dir, "gehaeuse.mcad"), MODEL);
   const box = (await page.getByTestId("viewport-canvas").boundingBox())!;
   const args = cli.split(" ").slice(1);
   const r = spawnSync(bin!, [...args, "--size", `${Math.round(box.width)}x${Math.round(box.height)}`, "--no-axes"], { cwd: dir, encoding: "utf8" });
@@ -297,7 +297,7 @@ test("X05 Kopierter CLI-Aufruf ergibt im CLI denselben Schnitt (Pixelanteil der 
   record9({
     id: "X05",
     title: "Gleicher Schnitt in UI und CLI",
-    caption: `„Als cad render … kopieren“ ergibt \`${cli}\`; in der CLI ausgeführt zeigt das Bild denselben Schnitt (Kappenanteil an den gezeichneten Pixeln UI ${(web.share * 100).toFixed(1)} %, CLI ${(cliPx.share * 100).toFixed(1)} %, Abweichung ${(rel * 100).toFixed(0)} %; Perspektive in der UI, orthografisch in der CLI).`,
+    caption: `„Als mcad render … kopieren“ ergibt \`${cli}\`; in der CLI ausgeführt zeigt das Bild denselben Schnitt (Kappenanteil an den gezeichneten Pixeln UI ${(web.share * 100).toFixed(1)} %, CLI ${(cliPx.share * 100).toFixed(1)} %, Abweichung ${(rel * 100).toFixed(0)} %; Perspektive in der UI, orthografisch in der CLI).`,
     images: [
       { name: "x05-web", label: "UI (WebGL)" },
       { name: "x05-cli", label: "CLI (Software-Renderer), kopierter Aufruf" },
@@ -308,7 +308,7 @@ test("X05 Kopierter CLI-Aufruf ergibt im CLI denselben Schnitt (Pixelanteil der 
 
 test("X06 fps beim Verschieben der Ebene", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/fillet_zonen.scad");
+  await openExample(page, "spec/fillet_zonen.mcad");
   await hook(page, (c) => c.setView("iso"));
   const plain = await page.evaluate(() => (window as unknown as { __cad: { orbitBenchmark(n: number): Promise<{ fps: number }> } }).__cad.orbitBenchmark(120));
   await sectionOn(page);

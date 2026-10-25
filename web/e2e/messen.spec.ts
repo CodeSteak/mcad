@@ -2,7 +2,7 @@
 // points and parallel planes, radius of cylinders and fillets, angle of a chamfer, length,
 // area, body/part), measuring in the section (contour snap, radius of a section circle, wall
 // thickness, region area, centre distance), several measurements, delete, copy as text /
-// comment / `cad measure`, provenance, the dark theme and answer times.
+// comment / `mcad measure`, provenance, the dark theme and answer times.
 
 import { expect, test, type Page } from "@playwright/test";
 import { hook, loadText, measureBar, measureKind, mode, openApp, openExample, record19, screenshot19, waitScene, writeMetrics19 } from "./helpers";
@@ -211,7 +211,7 @@ test("M02 Abstand: parallele Flächen (Normalabstand) und Eckpunkte mit Fußpunk
     code: BOXES.trim(),
     caption:
       "Zwei Klicks: kleinster Abstand der Elemente mit Fußpunkten, aus der exakten B-Rep (abwechselnde Projektion auf Ebenen, Zylinder, … in geschlossener Form). Für parallele Ebenen gilt der Normalabstand. Die Maßlinie verbindet die Fußpunkte, die Beschriftung steht in der Mitte; die Liste rechts zeigt Werte, Δx/Δy/Δz und Herkunft.",
-    checks: [`Normalabstand ${r.value} mm (exakt)`, `Eckpunkte ${d.value.toFixed(6)} mm, Δx 40, Δz 4`, `cad measure ${d.cli.join(" ")}`],
+    checks: [`Normalabstand ${r.value} mm (exakt)`, `Eckpunkte ${d.value.toFixed(6)} mm, Δx 40, Δz 4`, `mcad measure ${d.cli.join(" ")}`],
   });
 });
 
@@ -274,7 +274,7 @@ test("M04 Winkel einer Fase und zweier Flächen", async ({ page }) => {
 
 test("M05 Länge, Fläche, Körper/Bauteil mit Hülle", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/gehaeuse.scad");
+  await openExample(page, "spec/gehaeuse.mcad");
   await waitScene(page);
   await enter(page, "length");
   let m = await clickAt(page, [{ p: [60, 15, 20], kind: "edge" }]);
@@ -296,7 +296,7 @@ test("M05 Länge, Fläche, Körper/Bauteil mit Hülle", async ({ page }) => {
     id: "M05",
     title: "Länge, Fläche, Körper",
     images: [{ name: "m05-koerper", label: "Kantenlänge 30 mm, Fläche 600 mm², Bauteil k: Volumen und Hülle 60 × 30 × 20" }],
-    code: "examples/spec/gehaeuse.scad",
+    code: "examples/spec/gehaeuse.mcad",
     caption:
       "Länge einer Kante (exakt für Geraden und Bögen, sonst Gauß-Legendre), Fläche einer Fläche (eben exakt über den Rand, gekrümmt über projizierte Unterteilung), Körper: das Bauteil der gewählten Fläche (benannte Instanz k) mit Volumen und Oberfläche aus dem Kernel und der Hülle aus der B-Rep (gestrichelte Box).",
     checks: ["Länge 30 mm", "Fläche 600 mm²", "Bauteil k: 8460 mm³, 60 × 30 × 20"],
@@ -352,7 +352,7 @@ test("M06 Im Schnitt: Kreis der Bohrung, Wandstärke, Fläche, Kreismitten", asy
   });
 });
 
-test("M07 Mehrere Messungen: Auswahl, Löschen, Kopieren als Text, Kommentar und cad measure", async ({ page }) => {
+test("M07 Mehrere Messungen: Auswahl, Löschen, Kopieren als Text, Kommentar und mcad measure", async ({ page }) => {
   await openApp(page);
   await loadText(page, BOXES);
   await enter(page, "length");
@@ -361,8 +361,8 @@ test("M07 Mehrere Messungen: Auswahl, Löschen, Kopieren als Text, Kommentar und
   m = await clickAt(page, [{ p: [35, 0, 12], kind: "edge" }]);
   expect(m.results.map((r) => r.value)).toEqual([20, 10, 10]);
   const [a, b] = m.results;
-  await page.getByTestId(`measure-item-${a.id}`).getByRole("button", { name: "Als cad measure kopieren" }).click();
-  await expect(page.getByTestId("status-notice")).toContainText("cad measure");
+  await page.getByTestId(`measure-item-${a.id}`).getByRole("button", { name: "Als mcad measure kopieren" }).click();
+  await expect(page.getByTestId("status-notice")).toContainText("mcad measure");
   const cli = await page.evaluate(() => (window as unknown as { __cad: { state(): { lastCli: string | null } } }).__cad.state().lastCli ?? null);
   await page.getByTestId(`measure-item-${a.id}`).getByRole("button", { name: "Als Kommentar kopieren" }).click();
   await expect(page.getByTestId("status-notice")).toContainText("// Messung: Länge");
@@ -384,15 +384,15 @@ test("M07 Mehrere Messungen: Auswahl, Löschen, Kopieren als Text, Kommentar und
     images: [{ name: "m07-liste", label: "drei Längen, eine gewählt (Akzentfarbe in Ansicht und Liste)" }],
     code: BOXES.trim(),
     caption:
-      "Mehrere Messungen bleiben gleichzeitig sichtbar (auch nach dem Beenden des Modus). Klick auf Beschriftung oder Eintrag wählt eine Messung, Entf oder × löscht sie, „Alle löschen“ alle. Jede Messung lässt sich als Text, als Code-Kommentar (`// Messung: …`) und als `cad measure`-Aufruf kopieren (wie „Als cad render kopieren“ beim Schnitt).",
+      "Mehrere Messungen bleiben gleichzeitig sichtbar (auch nach dem Beenden des Modus). Klick auf Beschriftung oder Eintrag wählt eine Messung, Entf oder × löscht sie, „Alle löschen“ alle. Jede Messung lässt sich als Text, als Code-Kommentar (`// Messung: …`) und als `mcad measure`-Aufruf kopieren (wie „Als mcad render kopieren“ beim Schnitt).",
     checks: [`kopiert: ${cli ?? "–"}`, "Kommentar // Messung: Länge …", "Entf löscht die gewählte", "Alle löschen"],
   });
-  expect(cli).toMatch(/^cad measure [\w.-]+\.scad --length 'edge@\[[0-9.]+,0,8\]'$/);
+  expect(cli).toMatch(/^mcad measure [\w.-]+\.mcad --length 'edge@\[[0-9.]+,0,8\]'$/);
 });
 
 test("M08 Provenienz: Rasterlinie einer Bohrung, Instanz, Anker", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/lochplatte.scad");
+  await openExample(page, "spec/lochplatte.mcad");
   await waitScene(page);
   await page.evaluate(() => (window as unknown as W).__cad.setView("top"));
   await waitScene(page);
@@ -411,7 +411,7 @@ test("M08 Provenienz: Rasterlinie einer Bohrung, Instanz, Anker", async ({ page 
       { name: "m08-kreismitte", label: "Kreismitte einer Bohrung (Fase/Verrundung) mit Herkunft" },
       { name: "m08-provenienz", label: "Abstand der Kreismitten = Teilung 12 mm, Herkunft in der Liste" },
     ],
-    code: "examples/spec/lochplatte.scad",
+    code: "examples/spec/lochplatte.mcad",
     caption:
       "Zu jedem gewählten Element nennt die Engine die Codezeilen der Flächen (Tags → Knoten), die benannte Instanz (p: lochplatte) und Raster oder Anker, auf denen es liegt: Rasterpunkte und -ebenen, Rasterlinien für Achsen (g[loch[0], mitte, *]), Anker (p.erstes_loch).",
     checks: ["Kreismitte mit Instanz p", "Abstand 12 mm = pitch"],
@@ -442,7 +442,7 @@ test("M09 Dunkles Thema: Beschriftungen lesbar", async ({ page }) => {
 
 test("M10 Antwortzeiten beim Fahren mit der Maus", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/lochplatte.scad");
+  await openExample(page, "spec/lochplatte.mcad");
   await waitScene(page);
   await enter(page);
   const a = await scr(page, [2, 2, 4]);

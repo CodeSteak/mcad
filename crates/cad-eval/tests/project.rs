@@ -162,9 +162,9 @@ fn missing_file_is_an_error_at_the_line() {
 #[test]
 fn diagnostics_of_library_code_know_their_file() {
     let (p, out) =
-        project("use <lib/teile.scad>\nhalter();", &[("lib/teile.scad", "\nmodule halter() {\n  cube(unbekannt);\n}")]);
+        project("use <lib/teile.mcad>\nhalter();", &[("lib/teile.mcad", "\nmodule halter() {\n  cube(unbekannt);\n}")]);
     let d = out.diagnostics.iter().find(|d| d.message.contains("unbekannt")).unwrap();
-    assert_eq!(p.path_of(d.span), "lib/teile.scad");
+    assert_eq!(p.path_of(d.span), "lib/teile.mcad");
     assert_eq!(p.line(d.span), 3);
     // Syntax errors of other files have their spans in those files too.
     let f = files(&[("x.scad", "cube(;")]);
@@ -218,23 +218,23 @@ fn module_of_a_used_library_as_context() {
     let lib = "module halter(h = 12) {\n  cylinder(h = h, r = 3);\n  anchor oben = [0, 0, h];\n}";
     let opts =
         EvalOptions { context: Context::Module { name: "halter".into(), overrides: vec![] }, ..Default::default() };
-    let (p, out) = project_with("use <lib/halter.scad>\nhalter();", &[("lib/halter.scad", lib)], &opts);
+    let (p, out) = project_with("use <lib/halter.mcad>\nhalter();", &[("lib/halter.mcad", lib)], &opts);
     assert_eq!(not_info(&out), Vec::<String>::new());
     assert_eq!(out.context.module.as_deref(), Some("halter"));
-    assert_eq!(p.path_of(out.context.def_span.unwrap()), "lib/halter.scad");
+    assert_eq!(p.path_of(out.context.def_span.unwrap()), "lib/halter.mcad");
     // Height handle of the cylinder, literal in the default of the library file.
     let h = out.handles.iter().find(|h| h.kind == HandleKind::Height).expect("height handle");
     assert!(h.via_default);
     let e = drag_edits(&out, &p, h.id, &DragTarget::Free(DragValue::Scalar(20.0)), &DragOptions::default());
     assert_eq!(e.len(), 1);
-    assert_eq!(p.path_of(e[0].span), "lib/halter.scad");
+    assert_eq!(p.path_of(e[0].span), "lib/halter.mcad");
     assert_eq!(p.text(e[0].span), "12");
     // Module signatures of library modules are listed (parameter bar).
     let sig = out.modules.iter().find(|m| m.name == "halter").unwrap();
     assert_eq!(sig.params[0].default_text.as_deref(), Some("12"));
     // "Als Standard übernehmen" into the library file.
     let e = set_default_edit_project(&p, "halter", "h", "15").unwrap();
-    assert_eq!((p.path_of(e.span), p.text(e.span)), ("lib/halter.scad", "12"));
+    assert_eq!((p.path_of(e.span), p.text(e.span)), ("lib/halter.mcad", "12"));
 }
 
 #[test]

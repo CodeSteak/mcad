@@ -18,5 +18,5 @@ translate([10, 10, 3]) knob("teal");
   is slot 1. More than 16 slots: warning.
 - Volume per colour: a coloured subtree owns its body; on overlap the later statement wins;
   subtracted material is removed from all colours.
-- Check with `cad outline` (section "Farben") or `cad measure --colors`; see with
-  `cad render`.
+- Check with `mcad outline` (section "Farben") or `mcad measure --colors`; see with
+  `mcad render`.

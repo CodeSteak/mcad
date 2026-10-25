@@ -14,7 +14,7 @@ use serde_json::Value;
 type Tri = [[f32; 3]; 3];
 
 fn json(args: &[&str], code: i32) -> Value {
-    let out = Command::cargo_bin("cad").unwrap().env("CAD_NO_DAEMON", "1").args(args).arg("--json").output().unwrap();
+    let out = Command::cargo_bin("mcad").unwrap().env("MCAD_NO_DAEMON", "1").args(args).arg("--json").output().unwrap();
     assert_eq!(
         out.status.code(),
         Some(code),
@@ -226,9 +226,9 @@ fn watch_follows_a_changed_stl() {
     let dir = tempfile::tempdir().unwrap();
     write(dir.path(), "w.stl", cad_stl::write_ascii("w", &cube(10.0)));
     let file = write(dir.path(), "w.scad", "import(\"w.stl\");\n");
-    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("cad"))
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("mcad"))
         .args(["watch", &file, "--json", "--once-after-change", "--timeout", "60"])
-        .env("CAD_NO_DAEMON", "1")
+        .env("MCAD_NO_DAEMON", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

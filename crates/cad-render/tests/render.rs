@@ -136,7 +136,7 @@ fn square_mesh(z: f32, other_diagonal: bool) -> cad_kernel::Mesh {
 /// Coplanar transparent faces of two meshes (a subtracted body over the cavity it leaves) and
 /// stacked transparent layers must blend to one uniform colour per region. Sorting whole
 /// triangles by centroid depth flipped the order along the triangle diagonals (diagonal bands
-/// in `cad render --line` of a subtracted box).
+/// in `mcad render --line` of a subtracted box).
 #[test]
 fn transparent_coplanar_faces_have_no_diagonal_bands() {
     let a = square_mesh(0.0, false);

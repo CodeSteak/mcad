@@ -1,6 +1,6 @@
 // Teile: Pflanztopf (loft vom abgerundeten Quadrat zum Kreis) und Untersetzer
-// (rotate_extrude, mit shell geöffnet). Per use eingebunden; Maße aus masse.scad.
-include <masse.scad>
+// (rotate_extrude, mit shell geöffnet). Per use eingebunden; Maße aus masse.mcad.
+include <masse.mcad>
 
 module topf(unten = topf_unten, oben_d = topf_oben_d, h = topf_h, t = wand, b = boden, fh = fuss_h) {
     grid g {

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generates crates/cad-render/src/font.rs: anti-aliased bitmap glyphs (4-bit alpha) of
-DejaVu Sans Mono for the labels of `cad render` (no font dependency at run time).
+DejaVu Sans Mono for the labels of `mcad render` (no font dependency at run time).
 
     python3 tools/font/gen-font.py [/pfad/DejaVuSansMono.ttf]
 

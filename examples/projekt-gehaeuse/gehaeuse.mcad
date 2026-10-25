@@ -1,0 +1,7 @@
+// Zweck: Projekt aus mehreren Dateien – Maße per include (konstanten.mcad), Bauteile aus
+// einer Bibliothek per use (lib/teile.mcad), zwei Bauteile als benannte Instanzen.
+include <konstanten.mcad>
+use <lib/teile.mcad>
+
+gehaeuse: gehaeuse(w = breite, d = tiefe, h = hoehe, t = wand);
+translate([0, tiefe + abstand, 0]) deckel: deckel(w = breite, d = tiefe, t = wand);

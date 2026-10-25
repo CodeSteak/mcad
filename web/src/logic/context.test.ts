@@ -9,7 +9,7 @@ describe("Modulkontext und Pfadleiste", () => {
   const mods = moduleSpans(idx);
 
   it("Pfadleiste aus dem Kontext", () => {
-    expect(pathSegments(f.scene, "gehaeuse.scad")).toEqual(["gehaeuse.scad", "gehaeuse"]);
+    expect(pathSegments(f.scene, "gehaeuse.mcad")).toEqual(["gehaeuse.mcad", "gehaeuse"]);
     expect(pathSegments(null, "x.scad")).toEqual(["x.scad"]);
   });
 

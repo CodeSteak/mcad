@@ -1,4 +1,4 @@
-//! `cad set`: code changes through the engine's semantics, for agents.
+//! `mcad set`: code changes through the engine's semantics, for agents.
 //!
 //! * `--param modul.param=wert`: writes the default of a module parameter (the edit of "Als
 //!   Standard übernehmen"; the module is looked up in the main file, then in used files).
@@ -34,7 +34,7 @@ pub(crate) struct SetArgs {
     #[arg(long, value_name = "MODULE.PARAM=VALUE")]
     pub param: Vec<String>,
     /// Replace the literal at a position: `line:col=value` (main file) or
-    /// `file:line:col=value`; column as in `cad check`, anywhere inside the literal.
+    /// `file:line:col=value`; column as in `mcad check`, anywhere inside the literal.
     #[arg(long, value_name = "[FILE:]LINE:COL=VALUE", allow_hyphen_values = true)]
     pub literal: Vec<String>,
     /// Only show the diff, write nothing.
@@ -88,7 +88,7 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
     let mut m = load(&c, None, true, false)?;
     let errors_before = errors_of(&m.diagnostics);
     let Some(file_scene) = m.scene.clone() else {
-        return Err(Fail::Usage(format!("{}: Syntaxfehler, erst beheben (cad check)", m.file)));
+        return Err(Fail::Usage(format!("{}: Syntaxfehler, erst beheben (mcad check)", m.file)));
     };
     let cur = m.session.current().ok_or_else(|| Fail::Kernel("keine Auswertung".into()))?;
     let proj = cur.proj.clone();

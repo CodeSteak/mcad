@@ -1,7 +1,7 @@
-controller-cad – Lizenzhinweise der installierten Dateien
+mcad (Projekt controller-cad) – Lizenzhinweise der installierten Dateien
 
-cad (Binary)
-  controller-cad selbst: privat, nicht lizenziert (Cargo: license = "UNLICENSED").
+mcad (Binary)
+  mcad selbst: privat, nicht lizenziert (Cargo: license = "UNLICENSED").
   Statisch gelinkt:
   - SMLib/SM_API (NVIDIA usd-brep, Fork tangency-labs/smlib): Apache-2.0,
     Lizenztext: SMLib-LICENSE, Hinweise: SMLib-THIRD_PARTY_NOTICES.md.
@@ -19,5 +19,5 @@ cad (Binary)
   Quellen und Prüfsummen: fonts-README.md.
   Die Standardschrift „cad stencil mono“ ist Teil des Quelltexts (keine Schriftdatei).
 
-App-Symbol (share/icons/hicolor/*/apps/controller-cad.{png,svg}, Quelle assets/icon): Teil von
+App-Symbol (share/icons/hicolor/*/apps/mcad.{png,svg}, Quelle assets/icon): Teil von
 controller-cad.

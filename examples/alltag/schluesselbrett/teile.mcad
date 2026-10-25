@@ -1,6 +1,6 @@
 // Teile des Schlüsselbretts (per use eingebunden). Vorderseite des Bretts ist y = 0, die Wand
 // liegt bei y = t; Haken zeigen nach -y.
-include <masse.scad>
+include <masse.mcad>
 
 module brett(l = brett_l, h = brett_h, t = brett_t, n = anzahl, ecke = 8) {
     grid g {

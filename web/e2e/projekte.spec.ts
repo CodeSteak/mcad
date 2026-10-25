@@ -68,9 +68,9 @@ const toScreen = async (page: Page, p: number[]): Promise<Pt> => {
 
 const EX = "../examples/projekt-gehaeuse";
 const exampleFiles = {
-  "gehaeuse.scad": readFileSync(`${EX}/gehaeuse.scad`, "utf8"),
-  "konstanten.scad": readFileSync(`${EX}/konstanten.scad`, "utf8"),
-  "lib/teile.scad": readFileSync(`${EX}/lib/teile.scad`, "utf8"),
+  "gehaeuse.mcad": readFileSync(`${EX}/gehaeuse.mcad`, "utf8"),
+  "konstanten.mcad": readFileSync(`${EX}/konstanten.mcad`, "utf8"),
+  "lib/teile.mcad": readFileSync(`${EX}/lib/teile.mcad`, "utf8"),
 };
 
 /** Opens the example project from the menu and waits for its complete scene. */
@@ -109,16 +109,16 @@ test("P01 Beispielprojekt öffnen: Dateien als Tabs, Hauptdatei, Bauteile", asyn
   await openApp(page);
   await openExampleProject(page);
   const p = await info(page);
-  expect(p.paths).toEqual(["gehaeuse.scad", "konstanten.scad", "lib/teile.scad"]);
-  expect(p.main).toBe("gehaeuse.scad");
-  expect(p.active).toBe("gehaeuse.scad");
-  await expect(fileTab(page, "gehaeuse.scad")).toHaveClass(/active/);
-  await expect(fileTab(page, "gehaeuse.scad").locator(".star")).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toContainText("gehaeuse.scad");
+  expect(p.paths).toEqual(["gehaeuse.mcad", "konstanten.mcad", "lib/teile.mcad"]);
+  expect(p.main).toBe("gehaeuse.mcad");
+  expect(p.active).toBe("gehaeuse.mcad");
+  await expect(fileTab(page, "gehaeuse.mcad")).toHaveClass(/active/);
+  await expect(fileTab(page, "gehaeuse.mcad").locator(".star")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toContainText("gehaeuse.mcad");
   const s = await cad(page);
   expect(s.diagnostics.filter((d) => d.severity !== "info")).toEqual([]);
   const files = await page.evaluate(() => ((window as unknown as W).__cad.store.getState().complete as { files: Array<{ path: string; role: string }> }).files);
-  expect(files.map((f) => `${f.path}:${f.role}`)).toEqual(["gehaeuse.scad:main", "konstanten.scad:include", "lib/teile.scad:use"]);
+  expect(files.map((f) => `${f.path}:${f.role}`)).toEqual(["gehaeuse.mcad:main", "konstanten.mcad:include", "lib/teile.mcad:use"]);
   const ps = await parts(page);
   expect(ps.map((x) => x.name)).toEqual(["gehaeuse", "deckel"]);
   expect(ps[1].bounds!.min[1]).toBeCloseTo(50, 5);
@@ -132,10 +132,10 @@ test("P01 Beispielprojekt öffnen: Dateien als Tabs, Hauptdatei, Bauteile", asyn
     id: "P01",
     title: "Beispielprojekt öffnen",
     images: [{ name: "p01-projekt", label: "projekt-gehaeuse/: drei Dateien als Tabs, Hauptdatei ★, Bauteilleiste" }],
-    code: exampleFiles["gehaeuse.scad"].trim(),
-    caption: "Das Beispielmenü öffnet examples/projekt-gehaeuse/ als Projekt: gehaeuse.scad (Hauptdatei, ★), konstanten.scad (per include) und lib/teile.scad (per use). Die Szene kennt die drei Dateien mit ihrer Rolle; die zwei benannten Instanzen auf oberster Ebene sind die Bauteile.",
+    code: exampleFiles["gehaeuse.mcad"].trim(),
+    caption: "Das Beispielmenü öffnet examples/projekt-gehaeuse/ als Projekt: gehaeuse.mcad (Hauptdatei, ★), konstanten.mcad (per include) und lib/teile.mcad (per use). Die Szene kennt die drei Dateien mit ihrer Rolle; die zwei benannten Instanzen auf oberster Ebene sind die Bauteile.",
     checks: [
-      "Tabs gehaeuse.scad (aktiv, ★), konstanten.scad, lib/teile.scad",
+      "Tabs gehaeuse.mcad (aktiv, ★), konstanten.mcad, lib/teile.mcad",
       "Scene.files: main, include, use; keine Fehler oder Warnungen",
       "Bauteile gehaeuse und deckel; Hülle des Deckels ab y = 50",
     ],
@@ -195,27 +195,27 @@ test("P02 Ordner öffnen (File System Access API), ZIP hoch- und herunterladen",
   await page.waitForFunction(() => (window as unknown as W).__cad.projectInfo().name === "mein-projekt");
   await waitScene(page, { context: null });
   let p = await info(page);
-  expect(p.paths).toEqual(["gehaeuse.scad", "konstanten.scad", "lib/teile.scad"]);
-  expect(p.main).toBe("gehaeuse.scad");
+  expect(p.paths).toEqual(["gehaeuse.mcad", "konstanten.mcad", "lib/teile.mcad"]);
+  expect(p.main).toBe("gehaeuse.mcad");
   expect(p.folder).toBe(true);
-  await expect(page.getByTestId("status-notice")).toContainText("Projekt mein-projekt: 3 Dateien, Hauptdatei gehaeuse.scad");
-  // Edit konstanten.scad and save: every file is written back into the folder.
-  await fileTab(page, "konstanten.scad").click();
-  await waitActive(page, "konstanten.scad");
+  await expect(page.getByTestId("status-notice")).toContainText("Projekt mein-projekt: 3 Dateien, Hauptdatei gehaeuse.mcad");
+  // Edit konstanten.mcad and save: every file is written back into the folder.
+  await fileTab(page, "konstanten.mcad").click();
+  await waitActive(page, "konstanten.mcad");
   await clickLine(page, 2, 9);
   await page.keyboard.press("End");
   await page.keyboard.type(" // breiter");
   await page.keyboard.press("Control+s");
   await page.waitForFunction(() => Object.keys((window as unknown as { __written: Record<string, string> }).__written).length === 3);
   const written = await page.evaluate(() => (window as unknown as { __written: Record<string, string> }).__written);
-  expect(written["konstanten.scad"]).toContain("breite = 60; // breiter");
-  expect(written["lib/teile.scad"]).toBe(exampleFiles["lib/teile.scad"]);
+  expect(written["konstanten.mcad"]).toContain("breite = 60; // breiter");
+  expect(written["lib/teile.mcad"]).toBe(exampleFiles["lib/teile.mcad"]);
   await screenshotD(page, "p02-ordner");
 
   // ZIP download of the project, then upload of that ZIP.
   const z = await downloaded(page, () => fileMenu(page, "ZIP speichern"));
   expect(z.name).toBe("mein-projekt.zip");
-  expect(zipNames(z.bytes).sort()).toEqual(["mein-projekt/gehaeuse.scad", "mein-projekt/konstanten.scad", "mein-projekt/lib/teile.scad"]);
+  expect(zipNames(z.bytes).sort()).toEqual(["mein-projekt/gehaeuse.mcad", "mein-projekt/konstanten.mcad", "mein-projekt/lib/teile.mcad"]);
   await page.evaluate(() => (window as unknown as W).__cad.openProject({ name: "leer", main: "a.scad", files: { "a.scad": "cube(1);\n" } }));
   await waitScene(page);
   const [chooser] = await Promise.all([page.waitForEvent("filechooser"), fileMenu(page, "ZIP laden …")]);
@@ -224,24 +224,24 @@ test("P02 Ordner öffnen (File System Access API), ZIP hoch- und herunterladen",
   await waitScene(page, { context: null });
   p = await info(page);
   expect(p.name).toBe("mein-projekt");
-  expect(p.main).toBe("gehaeuse.scad");
-  expect(p.files["konstanten.scad"]).toContain("// breiter");
+  expect(p.main).toBe("gehaeuse.mcad");
+  expect(p.files["konstanten.mcad"]).toContain("// breiter");
   expect((await parts(page)).map((x) => x.name)).toEqual(["gehaeuse", "deckel"]);
   recordD({
     id: "P02",
     title: "Ordner öffnen, speichern, ZIP",
-    images: [{ name: "p02-ordner", label: "Ordner „mein-projekt“ geöffnet, konstanten.scad geändert und gespeichert" }],
+    images: [{ name: "p02-ordner", label: "Ordner „mein-projekt“ geöffnet, konstanten.mcad geändert und gespeichert" }],
     caption:
-      "„Datei › Ordner öffnen …“ liest alle .scad-Dateien eines Ordners (File System Access API; im Test ein nachgebildeter Ordner mit einer .txt-Datei, die ignoriert wird) und wählt die Hauptdatei: die Datei der obersten Ebene, die keine andere einbindet. Strg+S schreibt alle Dateien zurück in den Ordner. „Datei › ZIP speichern“ lädt das Projekt als ZIP herunter, „Datei › ZIP laden …“ lädt dieses ZIP wieder hoch (gemeinsamer Ordner wird entfernt, Hauptdatei wieder gehaeuse.scad).",
-    checks: ["3 Dateien, Hauptdatei gehaeuse.scad, notizen.txt ignoriert", "Strg+S schreibt 3 Dateien (konstanten.scad mit Änderung)", "ZIP mit 3 Einträgen; nach dem Hochladen gleiche Dateien und Bauteile"],
+      "„Datei › Ordner öffnen …“ liest alle .scad-Dateien eines Ordners (File System Access API; im Test ein nachgebildeter Ordner mit einer .txt-Datei, die ignoriert wird) und wählt die Hauptdatei: die Datei der obersten Ebene, die keine andere einbindet. Strg+S schreibt alle Dateien zurück in den Ordner. „Datei › ZIP speichern“ lädt das Projekt als ZIP herunter, „Datei › ZIP laden …“ lädt dieses ZIP wieder hoch (gemeinsamer Ordner wird entfernt, Hauptdatei wieder gehaeuse.mcad).",
+    checks: ["3 Dateien, Hauptdatei gehaeuse.mcad, notizen.txt ignoriert", "Strg+S schreibt 3 Dateien (konstanten.mcad mit Änderung)", "ZIP mit 3 Einträgen; nach dem Hochladen gleiche Dateien und Bauteile"],
   });
 });
 
 test("P03 Datei wechseln: Tabs, Kontext aus der Bibliothek, Undo je Datei", async ({ page }) => {
   await openApp(page);
   await openExampleProject(page);
-  await fileTab(page, "lib/teile.scad").click();
-  await waitActive(page, "lib/teile.scad");
+  await fileTab(page, "lib/teile.mcad").click();
+  await waitActive(page, "lib/teile.mcad");
   await expect(lineEl(page, 14)).toHaveText("module gehaeuse(w = 60, d = 40, h = 25, t = 2) {");
   // Cursor in module gehaeuse of the library: the module is the context.
   await clickLine(page, 21, 10);
@@ -255,28 +255,28 @@ test("P03 Datei wechseln: Tabs, Kontext aus der Bibliothek, Undo je Datei", asyn
   await page.keyboard.press("End");
   await page.keyboard.type(" // mm");
   await waitText(page, "(t) => t.includes('spiel = 0.2; // mm')");
-  await fileTab(page, "gehaeuse.scad").click();
-  await waitActive(page, "gehaeuse.scad");
-  expect(await text(page)).toBe(exampleFiles["gehaeuse.scad"]);
+  await fileTab(page, "gehaeuse.mcad").click();
+  await waitActive(page, "gehaeuse.mcad");
+  expect(await text(page)).toBe(exampleFiles["gehaeuse.mcad"]);
   s = await waitScene(page, { context: null });
   // Undo in the main file does not touch the library.
   await hook(page, (c) => c.focusEditor());
   await page.keyboard.press("Control+z");
-  expect(await text(page)).toBe(exampleFiles["gehaeuse.scad"]);
-  await fileTab(page, "lib/teile.scad").click();
-  await waitActive(page, "lib/teile.scad");
+  expect(await text(page)).toBe(exampleFiles["gehaeuse.mcad"]);
+  await fileTab(page, "lib/teile.mcad").click();
+  await waitActive(page, "lib/teile.mcad");
   expect(await text(page)).toContain("spiel = 0.2; // mm");
   await hook(page, (c) => c.focusEditor());
   await page.keyboard.press("Control+z");
-  await waitText(page, `(t) => t === ${JSON.stringify(exampleFiles["lib/teile.scad"])}`);
+  await waitText(page, `(t) => t === ${JSON.stringify(exampleFiles["lib/teile.mcad"])}`);
   recordD({
     id: "P03",
     title: "Datei wechseln",
-    images: [{ name: "p03-bibliothek", label: "lib/teile.scad im Editor, Cursor im Modul gehaeuse (Kontext)" }],
-    code: exampleFiles["lib/teile.scad"].split("\n").slice(13, 23).join("\n"),
+    images: [{ name: "p03-bibliothek", label: "lib/teile.mcad im Editor, Cursor im Modul gehaeuse (Kontext)" }],
+    code: exampleFiles["lib/teile.mcad"].split("\n").slice(13, 23).join("\n"),
     caption:
-      "Ein Klick auf den Tab lib/teile.scad zeigt die Bibliothek; der Cursor im Modul gehaeuse macht es zum Kontext (Pfadleiste „Datei › gehaeuse“), Raster und Griffe gehören zur Bibliothek. Jede Datei behält ihren Text und ihre eigene Undo-Historie: Strg+Z in der Hauptdatei ändert die Bibliothek nicht, Strg+Z in der Bibliothek nimmt dort die Änderung zurück.",
-    checks: ["Kontext gehaeuse aus lib/teile.scad", "Änderung bleibt beim Wechsel erhalten", "Undo je Datei"],
+      "Ein Klick auf den Tab lib/teile.mcad zeigt die Bibliothek; der Cursor im Modul gehaeuse macht es zum Kontext (Pfadleiste „Datei › gehaeuse“), Raster und Griffe gehören zur Bibliothek. Jede Datei behält ihren Text und ihre eigene Undo-Historie: Strg+Z in der Hauptdatei ändert die Bibliothek nicht, Strg+Z in der Bibliothek nimmt dort die Änderung zurück.",
+    checks: ["Kontext gehaeuse aus lib/teile.mcad", "Änderung bleibt beim Wechsel erhalten", "Undo je Datei"],
   });
 });
 
@@ -288,39 +288,39 @@ test("P04 Strg+Klick auf include/use-Pfad öffnet die Datei", async ({ page }) =
     if (!p) throw new Error("no coords");
     return p;
   };
-  // Line 3: include <konstanten.scad>
+  // Line 3: include <konstanten.mcad>
   const p3 = await at(3, 14);
   await page.mouse.move(p3.x, p3.y);
   await expect(lineEl(page, 3).locator(".cm-include").first()).toBeVisible();
   await page.keyboard.down("Control");
   await page.mouse.click(p3.x, p3.y);
   await page.keyboard.up("Control");
-  await waitActive(page, "konstanten.scad");
+  await waitActive(page, "konstanten.mcad");
   expect((await text(page)).split("\n")[1]).toBe("breite = 60;");
   await expect(lineEl(page, 2).locator(".cm-lineend")).toContainText("= 60");
   await screenshotD(page, "p04-include", "editor");
-  // Back, then Ctrl+click on use <lib/teile.scad> (line 4).
-  await fileTab(page, "gehaeuse.scad").click();
-  await waitActive(page, "gehaeuse.scad");
+  // Back, then Ctrl+click on use <lib/teile.mcad> (line 4).
+  await fileTab(page, "gehaeuse.mcad").click();
+  await waitActive(page, "gehaeuse.mcad");
   const p4 = await at(4, 8);
   await page.keyboard.down("Control");
   await page.mouse.click(p4.x, p4.y);
   await page.keyboard.up("Control");
-  await waitActive(page, "lib/teile.scad");
+  await waitActive(page, "lib/teile.mcad");
   // A plain click places the cursor only.
-  await fileTab(page, "gehaeuse.scad").click();
-  await waitActive(page, "gehaeuse.scad");
+  await fileTab(page, "gehaeuse.mcad").click();
+  await waitActive(page, "gehaeuse.mcad");
   const q = await at(3, 14);
   await page.mouse.click(q.x, q.y);
   await frame(page);
-  expect((await info(page)).active).toBe("gehaeuse.scad");
+  expect((await info(page)).active).toBe("gehaeuse.mcad");
   recordD({
     id: "P04",
     title: "Strg+Klick auf include",
-    images: [{ name: "p04-include", label: "Nach Strg+Klick auf <konstanten.scad>: die Datei ist offen, Werte am Zeilenende" }],
-    code: "include <konstanten.scad>\nuse <lib/teile.scad>",
-    caption: "Der Pfad in include <…> und use <…> ist unterstrichen (Titel „Strg+Klick: Datei öffnen“). Strg+Klick öffnet die Datei relativ zur einbindenden Datei; ein einfacher Klick setzt nur den Cursor. In konstanten.scad erscheinen die Werte der Variablen am Zeilenende, weil sie per include in der Dateiauswertung gelten.",
-    checks: ["Strg+Klick auf <konstanten.scad> → konstanten.scad aktiv", "Strg+Klick auf <lib/teile.scad> → lib/teile.scad aktiv", "einfacher Klick wechselt nicht"],
+    images: [{ name: "p04-include", label: "Nach Strg+Klick auf <konstanten.mcad>: die Datei ist offen, Werte am Zeilenende" }],
+    code: "include <konstanten.mcad>\nuse <lib/teile.mcad>",
+    caption: "Der Pfad in include <…> und use <…> ist unterstrichen (Titel „Strg+Klick: Datei öffnen“). Strg+Klick öffnet die Datei relativ zur einbindenden Datei; ein einfacher Klick setzt nur den Cursor. In konstanten.mcad erscheinen die Werte der Variablen am Zeilenende, weil sie per include in der Dateiauswertung gelten.",
+    checks: ["Strg+Klick auf <konstanten.mcad> → konstanten.mcad aktiv", "Strg+Klick auf <lib/teile.mcad> → lib/teile.mcad aktiv", "einfacher Klick wechselt nicht"],
   });
 });
 
@@ -368,8 +368,8 @@ test("P05 Griff ändert die eingebundene Datei (Variable aus include, Literal in
 
   // Literal in the used library: radius handle of the cylinder in module gehaeuse.
   await openExampleProject(page);
-  await fileTab(page, "lib/teile.scad").click();
-  await waitActive(page, "lib/teile.scad");
+  await fileTab(page, "lib/teile.mcad").click();
+  await waitActive(page, "lib/teile.mcad");
   await clickLine(page, 28, 40);
   await waitScene(page, { context: "gehaeuse" });
   const hs = await waitHandles(page, "(hs) => hs.some(h => h.kind === 'radius')");
@@ -379,9 +379,9 @@ test("P05 Griff ändert die eingebundene Datei (Variable aus include, Literal in
   await waitDragDone(page);
   p = await info(page);
   const lib = await text(page);
-  expect(lib).not.toBe(exampleFiles["lib/teile.scad"]);
+  expect(lib).not.toBe(exampleFiles["lib/teile.mcad"]);
   expect(lib.split("\n")[27]).toMatch(/cylinder\(h = 3, r = \d+\);/);
-  expect(p.files["gehaeuse.scad"]).toBe(exampleFiles["gehaeuse.scad"]);
+  expect(p.files["gehaeuse.mcad"]).toBe(exampleFiles["gehaeuse.mcad"]);
   await screenshotD(page, "p05-bibliothek");
   recordD({
     id: "P05",
@@ -391,35 +391,35 @@ test("P05 Griff ändert die eingebundene Datei (Variable aus include, Literal in
       { name: "p05-nachher", label: `Nach dem Ziehen: mass.scad „breite = ${newW};“, main.scad unverändert` },
     ],
     code: `// main.scad\n${main}// mass.scad\n${mass}`,
-    caption: `Der Eckgriff des Quaders geht über die Variable breite auf das Literal in mass.scad. Ziehen schrieb „breite = ${newW};“ in mass.scad (nicht in den Editor der Hauptdatei); die Szene folgte. Das Ziehen ist ein Undo-Schritt in mass.scad. Ebenso ändert der Radiusgriff im Modul gehaeuse von lib/teile.scad das Literal r = 2 in Zeile 28 der Bibliothek, gehaeuse.scad bleibt gleich.`,
-    checks: ["Edit mit file = mass.scad, Hauptdatei unverändert", "Hülle = neuer Wert", "Strg+Z in mass.scad → breite = 40", "Radiusgriff in lib/teile.scad schreibt in lib/teile.scad"],
+    caption: `Der Eckgriff des Quaders geht über die Variable breite auf das Literal in mass.scad. Ziehen schrieb „breite = ${newW};“ in mass.scad (nicht in den Editor der Hauptdatei); die Szene folgte. Das Ziehen ist ein Undo-Schritt in mass.scad. Ebenso ändert der Radiusgriff im Modul gehaeuse von lib/teile.mcad das Literal r = 2 in Zeile 28 der Bibliothek, gehaeuse.mcad bleibt gleich.`,
+    checks: ["Edit mit file = mass.scad, Hauptdatei unverändert", "Hülle = neuer Wert", "Strg+Z in mass.scad → breite = 40", "Radiusgriff in lib/teile.mcad schreibt in lib/teile.mcad"],
   });
 });
 
 test("P06 Hover und Klick über Dateigrenzen, Doppelklick öffnet das Modul der Bibliothek", async ({ page }) => {
   await openApp(page);
   await openExampleProject(page);
-  // In konstanten.scad (no geometry): faces of the model come from gehaeuse.scad.
-  await fileTab(page, "konstanten.scad").click();
-  await waitActive(page, "konstanten.scad");
+  // In konstanten.mcad (no geometry): faces of the model come from gehaeuse.mcad.
+  await fileTab(page, "konstanten.mcad").click();
+  await waitActive(page, "konstanten.mcad");
   await waitScene(page, { context: null });
   const deckel = (await parts(page)).find((x) => x.name === "deckel")!;
   const c = deckel.bounds!;
   const pt = await toScreen(page, [(c.min[0] + c.max[0]) / 2, (c.min[1] + c.max[1]) / 2, c.max[2]]);
   await page.mouse.move(pt.x, pt.y);
-  await expect(page.getByTestId("status-hover-file")).toContainText(/Fläche aus gehaeuse\.scad, Zeile [67]$/);
+  await expect(page.getByTestId("status-hover-file")).toContainText(/Fläche aus gehaeuse\.mcad, Zeile [67]$/);
   const hovered = Number((await page.getByTestId("status-hover-file").textContent())!.match(/Zeile (\d+)/)![1]);
   await screenshotD(page, "p06-hover");
   await page.mouse.click(pt.x, pt.y);
-  await waitActive(page, "gehaeuse.scad");
+  await waitActive(page, "gehaeuse.mcad");
   await page.waitForFunction((l) => (window as unknown as W).__cad.cursorLine() === l, hovered);
-  // Double-click on the housing (an instance of a module of lib/teile.scad) opens its definition.
+  // Double-click on the housing (an instance of a module of lib/teile.mcad) opens its definition.
   const g = (await parts(page)).find((x) => x.name === "gehaeuse")!;
   const gb = g.bounds!;
   await waitScene(page, { context: null });
   const gp = await toScreen(page, [gb.max[0] - 1, gb.min[1], (gb.min[2] + gb.max[2]) / 2]);
   await page.mouse.dblclick(gp.x, gp.y);
-  await waitActive(page, "lib/teile.scad");
+  await waitActive(page, "lib/teile.mcad");
   await page.waitForFunction(() => (window as unknown as W).__cad.cursorLine() === 15);
   const s = await waitScene(page, { context: "gehaeuse" });
   expect(s.path).toEqual(["gehaeuse"]);
@@ -428,12 +428,12 @@ test("P06 Hover und Klick über Dateigrenzen, Doppelklick öffnet das Modul der 
     id: "P06",
     title: "Hover und Klick über Dateigrenzen",
     images: [
-      { name: "p06-hover", label: "konstanten.scad offen, Maus über dem Modell: „Fläche aus gehaeuse.scad, Zeile …“" },
-      { name: "p06-doppelklick", label: "Doppelklick auf das Gehäuse: lib/teile.scad, Modul gehaeuse" },
+      { name: "p06-hover", label: "konstanten.mcad offen, Maus über dem Modell: „Fläche aus gehaeuse.mcad, Zeile …“" },
+      { name: "p06-doppelklick", label: "Doppelklick auf das Gehäuse: lib/teile.mcad, Modul gehaeuse" },
     ],
     caption:
-      "Liegt die Zeile einer Fläche in einer anderen Datei als der im Editor, nennt die Statuszeile Datei und Zeile; ein Klick öffnet die Datei an dieser Stelle. Der Doppelklick auf eine Instanz eines Moduls aus einer anderen Datei (gehaeuse aus lib/teile.scad) öffnet diese Datei in der Moduldefinition, der Kontext wird das Modul.",
-    checks: ["Hover → status-hover-file mit Datei und Zeile", "Klick → gehaeuse.scad in der Zeile der Fläche", "Doppelklick → lib/teile.scad Zeile 15, Kontext gehaeuse"],
+      "Liegt die Zeile einer Fläche in einer anderen Datei als der im Editor, nennt die Statuszeile Datei und Zeile; ein Klick öffnet die Datei an dieser Stelle. Der Doppelklick auf eine Instanz eines Moduls aus einer anderen Datei (gehaeuse aus lib/teile.mcad) öffnet diese Datei in der Moduldefinition, der Kontext wird das Modul.",
+    checks: ["Hover → status-hover-file mit Datei und Zeile", "Klick → gehaeuse.mcad in der Zeile der Fläche", "Doppelklick → lib/teile.mcad Zeile 15, Kontext gehaeuse"],
   });
 });
 

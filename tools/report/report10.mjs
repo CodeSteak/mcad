@@ -4,7 +4,7 @@
 //   docs/reports/10-cli-daemon/report.html
 //
 // Inputs (gitignored, reports/tmp/report10/):
-//   timings.json      python3 tools/report/report10-measure.py --cad target/release/cad
+//   timings.json      python3 tools/report/report10-measure.py --cad target/release/mcad
 //   cache_size.jsonl  target/release/examples/cache_size examples/spec/*.scad \
 //                       examples/projekt-gehaeuse/gehaeuse.scad examples/openscad-compat/*.scad
 //   cargo.txt         cargo test --workspace --no-fail-fast
@@ -181,7 +181,7 @@ const html = `<!doctype html>
 <body>
 <main>
 <h1>Testbericht 10 – CLI-Daemon</h1>
-<div class="meta">cad-cli (daemon, client, host, config), cad-ipc, cad-engine, cad-session, kernel-smlib · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} Kerne (${esc(os.cpus()[0]?.model ?? "")}) · Messung mit <code>target/release/cad</code></div>
+<div class="meta">cad-cli (daemon, client, host, config), cad-ipc, cad-engine, cad-session, kernel-smlib · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} Kerne (${esc(os.cpus()[0]?.model ?? "")}) · Messung mit <code>target/release/mcad</code></div>
 
 <div class="summary">
   <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>${cargoSum ? `${cargoSum.ignored} ignoriert` : ""}</div>
@@ -285,7 +285,7 @@ ${daemonTimes ? `<p class="small">Im Test <code>autostart_then_cache_hits_and_fa
 <h2>7 Reproduktion</h2>
 <pre>export SMLIB_PREBUILT=$PWD/smlib/build-native
 cargo build --release -p cad-cli --bin cad --example cache_size
-python3 tools/report/report10-measure.py --cad target/release/cad --repeat ${timings?.meta?.repeat ?? 5}
+python3 tools/report/report10-measure.py --cad target/release/mcad --repeat ${timings?.meta?.repeat ?? 5}
 target/release/examples/cache_size examples/spec/*.scad examples/projekt-gehaeuse/gehaeuse.scad \\
     examples/openscad-compat/*.scad &gt; reports/tmp/report10/cache_size.jsonl
 cargo test --workspace --no-fail-fast &gt; reports/tmp/report10/cargo.txt 2&gt;&amp;1

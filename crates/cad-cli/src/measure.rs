@@ -1,4 +1,4 @@
-//! `cad measure`: distances between points (anchors, grid points, coordinates), bounds,
+//! `mcad measure`: distances between points (anchors, grid points, coordinates), bounds,
 //! volume and area of parts or lines, interference of all parts (kernel intersection), the
 //! clearance of two parts (minimum distance of their tessellations), and measurements on the
 //! exact B-rep (Plan 18, logic in `cad_session::measure` and `cad_measure`, shared with the
@@ -10,7 +10,7 @@
 //! centre), `edge@P`, `face@P`, `body@P` take the element of the result nearest to P; with
 //! `--section` the prefixes refer to the section contour (`region@P`: the region containing
 //! P). Points as in `--between` (anchor, grid point, `[x,y,z]`). The UI copies its
-//! measurements in this form ("Als cad measure kopieren").
+//! measurements in this form ("Als mcad measure kopieren").
 
 use cad_kernel::{BoolOp, Kernel};
 use cad_measure::section::SectionPlane;
@@ -56,7 +56,7 @@ pub(crate) struct MeasureArgs {
     /// further); with --section the contour. Repeatable.
     #[arg(long, value_name = "P", allow_hyphen_values = true)]
     pub at: Vec<String>,
-    /// Section plane for measuring in a section: `x=VALUE`, `y=VALUE`, `z=VALUE` (as `cad render
+    /// Section plane for measuring in a section: `x=VALUE`, `y=VALUE`, `z=VALUE` (as `mcad render
     /// --section`); alone: contours, areas, circles and smallest wall thickness of the section.
     #[arg(long, value_name = "x|y|z=VALUE", allow_hyphen_values = true)]
     pub section: Option<String>,

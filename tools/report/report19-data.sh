@@ -5,11 +5,11 @@
 # next to its contour summary, and CLI times (3 runs each, without daemon).
 # Writes reports/tmp/report19/cli/ and reports/tmp/report19/analytic.json.
 #
-#   CAD=target/release/cad tools/report/report19-data.sh
+#   CAD=target/release/mcad tools/report/report19-data.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
-CAD="${CAD:-$ROOT/target/release/cad}"
+CAD="${CAD:-$ROOT/target/release/mcad}"
 OUT="$ROOT/reports/tmp/report19"
 CLI="$OUT/cli"
 CASES="$OUT/cases"

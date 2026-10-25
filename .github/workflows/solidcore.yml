@@ -1,4 +1,4 @@
-# solidcore coverage, weekly: `cad diff-kernels` over the examples against the newest
+# solidcore coverage, weekly: `mcad diff-kernels` over the examples against the newest
 # solidcore `main` instead of the commit pinned in crates/kernel-solidcore/Cargo.toml
 # (docs/solidcore-umstieg.md). Reports the numbers only (job summary, artifact
 # `solidcore-coverage` with diff-kernels.json): unsupported, blocked or differing nodes do not

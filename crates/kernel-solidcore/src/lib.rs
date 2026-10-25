@@ -14,7 +14,7 @@
 //!   `classify` runs a self-test on a box once,
 //! * other solidcore errors → [`KernelError::Failed`] / [`KernelError::InvalidInput`].
 //!
-//! So `cad diff-kernels` can report which operations already work ("coverage"); at c9de85d:
+//! So `mcad diff-kernels` can report which operations already work ("coverage"); at c9de85d:
 //! `make_box`, plain `extrude` of a polygon with an identity frame, `faces`, `edges`, `bounds`,
 //! `mass_props`, `is_solid`. Faces carry the tag of the operation that made the shape
 //! (solidcore's attribute plumbing for provenance is not wired here yet).

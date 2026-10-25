@@ -58,7 +58,7 @@ translate([0, -16, 0]) linear_extrude(1) text("Größe ÄÖÜ", size = 10, strok
 
 test("K02 Beispiel Schablone", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/schablone.scad");
+  await openExample(page, "spec/schablone.mcad");
   expect((await cad(page)).diagnostics.filter((x) => x.severity !== "info")).toEqual([]);
   const b = await bounds(page);
   expect(b.max[0] - b.min[0]).toBeCloseTo(120, 6);
@@ -70,7 +70,7 @@ test("K02 Beispiel Schablone", async ({ page }) => {
   record17({
     id: "K02",
     title: "Beispiel Schablone",
-    images: [{ name: "k02-schablone", label: "examples/spec/schablone.scad im Browser (Draufsicht)" }],
+    images: [{ name: "k02-schablone", label: "examples/spec/schablone.mcad im Browser (Draufsicht)" }],
     caption: "Platte minus Text: die Innenteile von A, 0, 8, B, 9 hängen über die Stege an der Platte.",
     checks: ["keine Fehler/Warnungen", "Hülle 120 × 44 × 1 mm"],
   });

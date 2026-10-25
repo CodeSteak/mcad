@@ -8,7 +8,7 @@
 //   cargo.txt    `cargo test --workspace --no-fail-fast`
 //   clippy.txt   `cargo clippy --workspace --all-targets -- -D warnings`
 //   fmt.txt      `cargo fmt --all --check` (empty = ok)
-// Binary: $CAD (default target/release/cad).
+// Binary: $CAD (default target/release/mcad).
 //
 //   node tools/report/report8.mjs
 //   node tools/report/print-pdf.mjs docs/reports/08-cli-agenten/report.html docs/reports/08-cli-agenten/report.pdf "Testbericht 8: CLI für Agenten"
@@ -25,7 +25,7 @@ const input = join(root, "reports/tmp/report8");
 const work = join(input, "work");
 const out = join(root, "docs/reports/08-cli-agenten");
 const img = join(out, "img");
-const cad = process.env.CAD ?? join(root, "target/release/cad");
+const cad = process.env.CAD ?? join(root, "target/release/mcad");
 const fallstudie = join(here, "report8-fallstudie");
 
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);

@@ -1,4 +1,4 @@
-//! Control protocol between the CLI (`cad ui …`) and running desktop windows, on top of
+//! Control protocol between the CLI (`mcad ui …`) and running desktop windows, on top of
 //! [`cad_ipc`]. Every app process serves the endpoint `ui-<pid>`.
 //!
 //! | method | body | answer |

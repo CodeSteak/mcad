@@ -2,7 +2,7 @@
 // Polygon aus Listen-Funktionen (Evolventenwinkel, Zahndicke über Radius), linear_extrude;
 // Rad 1 mit Nabe, Passfedernut und Erleichterungslöchern (for), Rad 2 mit D-Bohrung für eine
 // Motorwelle 5 mm. Beide Räder als Bauteile im Eingriff (Flankenspiel prüfen mit
-// `cad measure --clearance rad1 rad2`). Bohrungskanten mit difference(chamfer = …). Maße in mm.
+// `mcad measure --clearance rad1 rad2`). Bohrungskanten mit difference(chamfer = …). Maße in mm.
 
 function inv(a) = tan(a) - a * PI / 180;                // Evolventenfunktion (a in Grad)
 function zahn_halbwinkel(m, z, rho, alpha, spiel) =      // halbe Zahndicke in Grad beim Radius rho

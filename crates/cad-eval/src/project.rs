@@ -181,6 +181,29 @@ pub fn normalize_path(p: &str) -> String {
     if abs { format!("/{joined}") } else { joined }
 }
 
+/// Extension of new model files (`mcad`; files of OpenSCAD and from before the rename keep
+/// `.scad`, which opens everywhere as well).
+pub const MODEL_EXTENSION: &str = "mcad";
+
+/// Extensions of model files, new first: `mcad`, `scad`.
+pub const MODEL_EXTENSIONS: &[&str] = &["mcad", "scad"];
+
+/// Default name of a main file without a name (stdin, in-memory sources).
+pub const DEFAULT_MAIN: &str = "main.mcad";
+
+/// Whether `path` is a model file (`.mcad` or `.scad`, any case).
+pub fn is_model_file(path: &str) -> bool {
+    path.rsplit_once('.').is_some_and(|(_, ext)| MODEL_EXTENSIONS.iter().any(|e| ext.eq_ignore_ascii_case(e)))
+}
+
+/// `path` without its model file extension (`teil.mcad` → `teil`); other paths unchanged.
+pub fn strip_model_extension(path: &str) -> &str {
+    match path.rsplit_once('.') {
+        Some((stem, _)) if is_model_file(path) => stem,
+        _ => path,
+    }
+}
+
 /// Path of `rel` (as written in `include <rel>`) seen from the file `from`.
 pub fn resolve_path(from: &str, rel: &str) -> String {
     let rel = rel.trim();
@@ -311,7 +334,7 @@ impl Project {
 
     /// A single file without other project files (`include`/`use` report missing files).
     pub fn single(text: &str) -> Project {
-        Self::load("main.scad", text, &NoFiles)
+        Self::load(DEFAULT_MAIN, text, &NoFiles)
     }
 
     pub fn file(&self, id: FileId) -> Option<&SourceFile> {

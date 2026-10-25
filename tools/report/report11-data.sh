@@ -3,7 +3,7 @@
 # and the checking scripts; writes reports/tmp/report11/ (gitignored) and the CLI images to
 # docs/reports/11-farben-filamente/img/.
 #
-#   CAD=target/release/cad PY3MF=/pfad/venv/bin/python tools/report/report11-data.sh
+#   CAD=target/release/mcad PY3MF=/pfad/venv/bin/python tools/report/report11-data.sh
 #
 # PY3MF: Python with lib3mf and trimesh (pip install lib3mf trimesh networkx lxml).
 # The test runs (cargo, Playwright, Tauri-E2E, compare.py, verify.py) are listed in
@@ -11,7 +11,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
-CAD="${CAD:-$ROOT/target/release/cad}"
+CAD="${CAD:-$ROOT/target/release/mcad}"
 PY3MF="${PY3MF:-python3}"
 OUT="$ROOT/reports/tmp/report11"
 IMG="$ROOT/docs/reports/11-farben-filamente/img"

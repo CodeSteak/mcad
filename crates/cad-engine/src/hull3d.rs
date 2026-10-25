@@ -384,7 +384,7 @@ pub(crate) enum Plan {
 }
 
 impl Plan {
-    /// Hint for `cad inspect` (which special case was taken).
+    /// Hint for `mcad inspect` (which special case was taken).
     pub fn hint(&self) -> String {
         match self {
             Plan::Polyhedron(h) => format!("exakt: Polyeder ({} Flächen)", h.faces.len()),

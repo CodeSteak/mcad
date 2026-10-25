@@ -1,4 +1,4 @@
-//! Measure mode over the protocol and through `cad measure` references (Plan 18): snapping
+//! Measure mode over the protocol and through `mcad measure` references (Plan 18): snapping
 //! (vertex, edge midpoint, circle centre, edge, face, contour), measurements against
 //! analytic values, sections (wall thickness of the housing from examples/spec), provenance
 //! (grid planes and points, anchors, named instances).
@@ -108,7 +108,7 @@ fn parse_point(t: &str) -> Result<DVec3, String> {
     (v.len() == 3).then(|| DVec3::new(v[0], v[1], v[2])).ok_or_else(|| t.to_string())
 }
 
-/// A measurement from `cad measure` references (as the CLI does it).
+/// A measurement from `mcad measure` references (as the CLI does it).
 fn by_refs(s: &mut Session<SmlibKernel>, kind: MeasureKind, refs: &[&str], plane: Option<SectionPlane>) -> Measurement {
     let r = root(s);
     let m = s.measure_model(r).unwrap();
@@ -191,7 +191,7 @@ fn distance_by_clicks_parallel_planes_and_cli() {
 
 #[test]
 fn radius_of_bores_and_fillets_in_the_hole_plate() {
-    let mut s = session(&example("lochplatte.scad"));
+    let mut s = session(&example("lochplatte.mcad"));
     // bore d = 4 at x = 6, y = 6 (first hole)
     let r = by_refs(&mut s, MeasureKind::Radius, &["face@[8,6,2]"], None);
     assert!((r.value - 2.0).abs() < 1e-9, "{r:?}");
@@ -222,7 +222,7 @@ fn radius_of_bores_and_fillets_in_the_hole_plate() {
 
 #[test]
 fn housing_wall_thickness_in_the_section_and_inner_distance() {
-    let mut s = session(&example("gehaeuse.scad"));
+    let mut s = session(&example("gehaeuse.mcad"));
     let plane = SectionPlane::new(DVec3::new(0.0, 0.0, 10.0), DVec3::Z);
     // the side walls of k: gehaeuse(w = 60) are t = 3 thick
     let w = by_refs(&mut s, MeasureKind::Wall, &["[0,15,10]"], Some(plane));
@@ -253,7 +253,7 @@ fn housing_wall_thickness_in_the_section_and_inner_distance() {
 
 #[test]
 fn angle_of_a_chamfer() {
-    let mut s = session(&example("fase_chamfer.scad"));
+    let mut s = session(&example("fase_chamfer.mcad"));
     // chamfer(1) on the top edges of box(g[a, v, u], g[b, h, o]) (40 × 25 × 10)
     let a = by_refs(&mut s, MeasureKind::Angle, &["face@[39.5,12,9.5]", "face@[20,12,10]"], None);
     assert!((a.value - 45.0).abs() < 1e-9, "{a:?}");

@@ -28,10 +28,10 @@ step() {
       # tests/daemon.rs stops its daemons: none may be left (checked in CI only, a local
       # daemon of the developer would count too)
       sleep 1
-      if [ -n "${CI:-}" ] && pgrep -f 'cad daemon serve' >/dev/null; then
+      if [ -n "${CI:-}" ] && pgrep -f 'mcad daemon serve' >/dev/null; then
         echo "CLI daemon left behind by the tests:" >&2
-        pgrep -af 'cad daemon serve' >&2
-        pkill -f 'cad daemon serve' || true
+        pgrep -af 'mcad daemon serve' >&2
+        pkill -f 'mcad daemon serve' || true
         exit 1
       fi
       ;;

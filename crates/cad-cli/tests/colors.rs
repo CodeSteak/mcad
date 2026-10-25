@@ -8,11 +8,11 @@ use assert_cmd::Command;
 use serde_json::Value;
 
 fn example() -> String {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/spec/mehrfarbig.scad").display().to_string()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/spec/mehrfarbig.mcad").display().to_string()
 }
 
 fn run(args: &[&str], code: i32) -> (Value, String) {
-    let out = Command::cargo_bin("cad").unwrap().env("CAD_NO_DAEMON", "1").args(args).arg("--json").output().unwrap();
+    let out = Command::cargo_bin("mcad").unwrap().env("MCAD_NO_DAEMON", "1").args(args).arg("--json").output().unwrap();
     assert_eq!(
         out.status.code(),
         Some(code),
@@ -21,7 +21,7 @@ fn run(args: &[&str], code: i32) -> (Value, String) {
         String::from_utf8_lossy(&out.stderr)
     );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-    let t = Command::cargo_bin("cad").unwrap().env("CAD_NO_DAEMON", "1").args(args).output().unwrap();
+    let t = Command::cargo_bin("mcad").unwrap().env("MCAD_NO_DAEMON", "1").args(args).output().unwrap();
     (v, String::from_utf8_lossy(&t.stdout).into_owned() + &String::from_utf8_lossy(&t.stderr))
 }
 

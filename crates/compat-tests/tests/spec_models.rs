@@ -28,7 +28,7 @@ struct Expect {
 
 const EXPECT: &[Expect] = &[
     Expect {
-        file: "asserts.scad",
+        file: "asserts.mcad",
         grids: &[],
         instances: &[("g", "gehaeuse", &[]), ("hl", "halter", &[]), ("kf", "kabelfuehrung", &[]), ("k", "deckel", &[])],
         handles: 1,
@@ -45,7 +45,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "dose_shell.scad",
+        file: "dose_shell.mcad",
         grids: &[("g", 6, false)],
         instances: &[("k", "dose", &["rand"])],
         handles: 0,
@@ -60,7 +60,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "fase_chamfer.scad",
+        file: "fase_chamfer.mcad",
         grids: &[("g", 6, true)],
         instances: &[],
         handles: 17,
@@ -76,7 +76,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "fillet_zonen.scad",
+        file: "fillet_zonen.mcad",
         grids: &[("g", 6, false)],
         instances: &[],
         handles: 0,
@@ -108,7 +108,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "flasche.scad",
+        file: "flasche.mcad",
         grids: &[("g", 8, false), ("g", 8, false)],
         instances: &[],
         handles: 1,
@@ -131,7 +131,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "freiformdeckel.scad",
+        file: "freiformdeckel.mcad",
         grids: &[("g", 9, false)],
         instances: &[],
         handles: 0,
@@ -149,7 +149,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "gehaeuse.scad",
+        file: "gehaeuse.mcad",
         grids: &[("g", 8, false), ("h", 3, true)],
         instances: &[("k", "gehaeuse", &["ecke", "oben"])],
         handles: 3,
@@ -165,7 +165,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "griffschale.scad",
+        file: "griffschale.mcad",
         grids: &[("g", 9, false)],
         instances: &[("s", "griffschale", &["deckel"])],
         handles: 0,
@@ -181,7 +181,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "hull_minkowski.scad",
+        file: "hull_minkowski.mcad",
         grids: &[],
         instances: &[],
         handles: 41,
@@ -193,7 +193,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "kabelfuehrung.scad",
+        file: "kabelfuehrung.mcad",
         grids: &[("g", 7, true)],
         instances: &[],
         handles: 17,
@@ -215,7 +215,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "knauf_mirror.scad",
+        file: "knauf_mirror.mcad",
         grids: &[("s", 3, true), ("p", 7, false), ("p", 7, false)],
         instances: &[("k", "knauf", &["oben"]), ("", "knauf", &["oben"])],
         handles: 5,
@@ -245,7 +245,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "lochplatte.scad",
+        file: "lochplatte.mcad",
         grids: &[("g", 11, false), ("l", 5, false)],
         instances: &[("p", "lochplatte", &["erstes_loch", "lasche"])],
         handles: 3,
@@ -264,7 +264,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "loft_sweep.scad",
+        file: "loft_sweep.mcad",
         grids: &[("g", 6, true)],
         instances: &[],
         handles: 21,
@@ -287,7 +287,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "lueftungsgitter.scad",
+        file: "lueftungsgitter.mcad",
         grids: &[("g", 15, false)],
         instances: &[("", "gitter", &["mitte"])],
         handles: 0,
@@ -301,7 +301,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "mehrfarbig.scad",
+        file: "mehrfarbig.mcad",
         grids: &[("g", 8, false), ("p", 9, false)],
         instances: &[("schild", "schild", &[]), ("figur", "figur", &[])],
         handles: 0,
@@ -331,7 +331,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "schablone.scad",
+        file: "schablone.mcad",
         grids: &[],
         instances: &[],
         handles: 4,
@@ -358,7 +358,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "skizze_bibliothek.scad",
+        file: "skizze_bibliothek.mcad",
         grids: &[],
         instances: &[],
         handles: 10,
@@ -381,7 +381,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "skizze_deckel.scad",
+        file: "skizze_deckel.mcad",
         grids: &[],
         instances: &[],
         handles: 15,
@@ -408,7 +408,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "skizze_halter.scad",
+        file: "skizze_halter.mcad",
         grids: &[],
         instances: &[],
         handles: 11,
@@ -430,7 +430,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "skizze_kabelkanal.scad",
+        file: "skizze_kabelkanal.mcad",
         grids: &[],
         instances: &[],
         handles: 6,
@@ -457,7 +457,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "skizze_profil.scad",
+        file: "skizze_profil.mcad",
         grids: &[("s", 6, false)],
         instances: &[],
         handles: 9,
@@ -482,7 +482,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "skizze_sweep.scad",
+        file: "skizze_sweep.mcad",
         grids: &[],
         instances: &[],
         handles: 15,
@@ -497,7 +497,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "skizze_zahnriemenscheibe.scad",
+        file: "skizze_zahnriemenscheibe.mcad",
         grids: &[],
         instances: &[],
         handles: 0,
@@ -514,7 +514,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "stl_import.scad",
+        file: "stl_import.mcad",
         grids: &[],
         instances: &[],
         handles: 4,
@@ -537,7 +537,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "svg_logo.scad",
+        file: "svg_logo.mcad",
         grids: &[],
         instances: &[],
         handles: 11,
@@ -561,7 +561,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "text_schild.scad",
+        file: "text_schild.mcad",
         grids: &[],
         instances: &[],
         handles: 8,
@@ -581,7 +581,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "variabler_radius.scad",
+        file: "variabler_radius.mcad",
         grids: &[("g", 7, true)],
         instances: &[],
         handles: 16,
@@ -608,7 +608,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "winkel_anker.scad",
+        file: "winkel_anker.mcad",
         grids: &[("g", 10, false), ("g", 10, false), ("m", 4, true)],
         instances: &[
             ("a", "winkel", &["boden_loch", "wand_loch", "spitze"]),
@@ -656,7 +656,7 @@ fn assert_close(v: DVec3, e: [f64; 3]) {
 
 #[test]
 fn spec_models_stage1() {
-    let files = scad_files("examples/spec");
+    let files = model_files("examples/spec");
     let names: Vec<String> = files.iter().map(|f| file_name(f)).collect();
     let expected: Vec<&str> = EXPECT.iter().map(|e| e.file).collect();
     assert_eq!(names, expected, "every model in examples/spec needs an entry in EXPECT");

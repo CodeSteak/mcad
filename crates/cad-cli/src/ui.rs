@@ -1,4 +1,4 @@
-//! `cad ui status|show|screenshot`: talks to running desktop windows over the local IPC
+//! `mcad ui status|show|screenshot`: talks to running desktop windows over the local IPC
 //! (`cad_desktop::uictl`, socket `ui-<pid>` in the user's runtime directory). Without a
 //! running UI: message and exit code 3. Headless commands do not need any of this.
 
@@ -45,7 +45,8 @@ pub enum UiCmd {
     },
 }
 
-const NO_UI: &str = "keine laufende Desktop-UI (starten mit `cad` oder `cad datei.scad`; headless: cad check/render/…)";
+const NO_UI: &str =
+    "keine laufende Desktop-UI (starten mit `mcad` oder `mcad datei.mcad`; headless: mcad check/render/…)";
 
 fn fail(json_mode: bool, cmd: &str, code: u8, msg: &str) -> ExitCode {
     if json_mode {
@@ -58,7 +59,7 @@ fn fail(json_mode: bool, cmd: &str, code: u8, msg: &str) -> ExitCode {
             .unwrap()
         );
     } else {
-        eprintln!("cad ui {cmd}: {msg}");
+        eprintln!("mcad ui {cmd}: {msg}");
     }
     ExitCode::from(code)
 }

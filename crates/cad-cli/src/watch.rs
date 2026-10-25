@@ -1,4 +1,4 @@
-//! `cad watch`: watches the main file and every project file (`include`/`use`), evaluates
+//! `mcad watch`: watches the main file and every project file (`include`/`use`), evaluates
 //! again on each change in the same session (the engine cache stays, so only changed nodes
 //! reach the kernel) and prints one line per run: JSON (`--json`, one object per line) or
 //! text. `--render bild.png` writes the image again after each run (all `render` options).
@@ -226,7 +226,7 @@ pub(crate) fn command(c: &Common, a: &WatchArgs) -> Result<Outcome, Fail> {
             std::thread::sleep(Duration::from_millis(25));
         }
         let Some(text) = text else {
-            eprintln!("cad watch: {} nicht lesbar", c.file.display());
+            eprintln!("mcad watch: {} nicht lesbar", c.file.display());
             continue;
         };
         run += 1;

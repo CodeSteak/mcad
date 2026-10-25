@@ -6,9 +6,9 @@ tests/openscad-compat/reference.json (built by make-reference.py from OpenSCAD 2
 Commands (templates; placeholders {cad} {src} {out} {name} {stem} {ref_stl}):
   export:  $CAD_EXPORT_CMD, default "{cad} export {src} -o {out}"   -> STL
   eval:    $CAD_EVAL_CMD,   default "{cad} eval {src} --json"       -> JSON (optional, --eval)
-  {cad} is $CAD (default "cad"), or --cad.
+  {cad} is $MCAD (old name $CAD; default "mcad"), or --cad.
 
-With --eval the JSON of `cad eval --json` is read as well:
+With --eval the JSON of `mcad eval --json` is read as well:
   - echo lines: key "echoes", a list of strings or of objects with "text"; compared
     with OpenSCAD's ECHO lines.
   - with --metrics eval: volume/area/bounds come from the first object in the JSON that
@@ -205,7 +205,7 @@ def table(results: list[dict]) -> str:
 
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--cad", default=os.environ.get("CAD", "cad"), help="CLI command (env CAD, default `cad`)")
+    ap.add_argument("--cad", default=os.environ.get("MCAD", os.environ.get("CAD", "mcad")), help="CLI command (env MCAD or CAD, default `mcad`)")
     ap.add_argument("--export-cmd", default=os.environ.get("CAD_EXPORT_CMD", DEFAULT_EXPORT))
     ap.add_argument("--eval-cmd", default=os.environ.get("CAD_EVAL_CMD", DEFAULT_EVAL))
     ap.add_argument("--eval", action="store_true", help="also run the eval command (echo comparison)")
@@ -275,7 +275,7 @@ def self_test() -> int:
     ]
     ok = True
     for title, env, extra, want in cases:
-        e = dict(os.environ, CAD=mock, **env)
+        e = dict(os.environ, MCAD=mock, **env)
         p = subprocess.run([sys.executable, __file__, "--report", str(rep), *extra], env=e, capture_output=True,
                            text=True, cwd=ROOT)
         good = p.returncode == want

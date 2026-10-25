@@ -41,7 +41,7 @@ pub(crate) fn table(m: &mut Model, sc: &p::Scene, kernel: bool) -> Result<(Json,
     table_of(m, sc, kernel, None)
 }
 
-/// [`table`] of some parts only (`cad export --part`): their regions and the colours in them.
+/// [`table`] of some parts only (`mcad export --part`): their regions and the colours in them.
 pub(crate) fn table_of(
     m: &mut Model,
     sc: &p::Scene,

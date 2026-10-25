@@ -1,4 +1,4 @@
-# Arch-Paket von controller-cad: `cad` mit Desktop-UI (Tauri 2, WebKitGTK 4.1) und CLI.
+# Arch-Paket mcad (Repository controller-cad; Paketname bis 0.2: controller-cad): `mcad` mit Desktop-UI (Tauri 2, WebKitGTK 4.1) und CLI.
 #
 # Gebaut wird über das Makefile im Repository-Wurzelverzeichnis:
 #   make arch          # makepkg auf Arch Linux, sonst in einem archlinux-Container (Docker)
@@ -10,13 +10,17 @@
 # SMLib (Apache-2.0) kommt als Git-Quelle (Fork tangency-labs/smlib, fester Commit wie in
 # smlib/fetch.sh) mit den Patches aus smlib/patches; anderer Ort: SMLIB_URL=… make arch.
 
-pkgname=controller-cad
-pkgver=0.2.1
+pkgname=mcad
+pkgver=0.3.0
 pkgrel=1
-pkgdesc='Parametrisches CAD im OpenSCAD-Dialekt mit exakter B-Rep (SMLib): CLI cad und Desktop-UI'
+pkgdesc='Parametrisches CAD im OpenSCAD-Dialekt mit exakter B-Rep (SMLib): CLI mcad und Desktop-UI'
 arch=('x86_64')
 url='https://github.com/CodeSteak/controller-cad'
 # Projekt: nicht lizenziert (privat); SMLib: Apache-2.0; Schriften: OFL-1.1; Crates/UI: MIT, Apache-2.0
+# bis 0.2.x hieß Paket und Programm controller-cad bzw. cad
+provides=('controller-cad')
+conflicts=('controller-cad')
+replaces=('controller-cad')
 license=('LicenseRef-UNLICENSED' 'Apache-2.0' 'OFL-1.1' 'MIT')
 depends=(
   'cairo'
@@ -29,6 +33,7 @@ depends=(
   'libgcc'
   'libsoup3'
   'libstdc++'
+  'shared-mime-info'
   'webkit2gtk-4.1'
 )
 makedepends=(
@@ -82,15 +87,16 @@ build() {
 
 check() {
   cd "$pkgname-$pkgver"
-  local cad="$PWD/target/release/cad"
-  export CAD_NO_DAEMON=1
-  "$cad" --version
-  "$cad" check examples/spec/gehaeuse.scad
-  "$cad" render examples/spec/gehaeuse.scad -o "$srcdir/check-gehaeuse.png" --module gehaeuse --views all
-  "$cad" export examples/spec/flasche.scad -o "$srcdir/check-flasche.step"
+  local mcad="$PWD/target/release/mcad"
+  export MCAD_NO_DAEMON=1
+  "$mcad" --version
+  "$mcad" check examples/spec/gehaeuse.mcad
+  "$mcad" check examples/openscad-compat/05_nested_booleans.scad   # .scad öffnet weiterhin
+  "$mcad" render examples/spec/gehaeuse.mcad -o "$srcdir/check-gehaeuse.png" --module gehaeuse --views all
+  "$mcad" export examples/spec/flasche.mcad -o "$srcdir/check-flasche.step"
   # ohne grafische Sitzung: Meldung und Exit 2 (die UI ist eingebettet, nicht der Platzhalter)
   local rc=0
-  env -u DISPLAY -u WAYLAND_DISPLAY "$cad" >/dev/null 2>&1 || rc=$?
+  env -u DISPLAY -u WAYLAND_DISPLAY "$mcad" >/dev/null 2>&1 || rc=$?
   [ "$rc" = 2 ]
   [ ! -e web/dist-tauri/placeholder ]
 }

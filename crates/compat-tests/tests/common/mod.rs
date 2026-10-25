@@ -12,12 +12,12 @@ pub fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap()
 }
 
-/// `.scad` files of a directory below the workspace root, sorted by name.
-pub fn scad_files(dir: &str) -> Vec<PathBuf> {
+/// Model files (`.mcad`, `.scad`) of a directory below the workspace root, sorted by name.
+pub fn model_files(dir: &str) -> Vec<PathBuf> {
     let mut v: Vec<PathBuf> = std::fs::read_dir(workspace_root().join(dir))
         .unwrap_or_else(|e| panic!("{dir}: {e}"))
         .map(|e| e.unwrap().path())
-        .filter(|p| p.extension().is_some_and(|x| x == "scad"))
+        .filter(|p| cad_eval::is_model_file(&p.to_string_lossy()))
         .collect();
     v.sort();
     v

@@ -1,6 +1,6 @@
 // Measure mode (Plan 18). The engine does the work – what lies under the mouse (vertex, edge
 // midpoint, circle centre, edge, face; in the section the contour), the measurement on the
-// exact B-rep, the texts and the `cad measure` arguments; this controller only forwards the
+// exact B-rep, the texts and the `mcad measure` arguments; this controller only forwards the
 // mouse (ray, the face the view's raycast hit, Alt, clicks) and keeps the answers:
 //
 //   mouse move → `Measure { ray, hit }` (at most one in flight, the latest position wins)
@@ -258,7 +258,7 @@ export class MeasureController {
     store.setState({ measureSelected: id });
   }
 
-  /** Copies a measurement: as text, as a code comment or as a `cad measure` call. */
+  /** Copies a measurement: as text, as a code comment or as a `mcad measure` call. */
   async copy(id: number, how: "text" | "comment" | "cli"): Promise<string | null> {
     const e = store.getState().measurements.find((x) => x.id === id);
     if (!e) return null;

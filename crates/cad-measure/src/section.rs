@@ -2,7 +2,7 @@
 //! is analytic.
 //!
 //! The kernel intersects the solid with the half space that stays (`(q − p) · n ≤ 0`, the
-//! convention of `cad render --section` and the UI); the faces of the result that lie in the
+//! convention of `mcad render --section` and the UI); the faces of the result that lie in the
 //! plane (the caps) bound the section. Their edges are the intersection curves. Each edge
 //! borders one cut face of the original solid: if that face is a plane, cylinder, cone,
 //! sphere or torus, the contour segment is computed in closed form (line, circle, ellipse)

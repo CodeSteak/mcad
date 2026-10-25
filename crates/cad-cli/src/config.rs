@@ -1,12 +1,13 @@
 //! Settings of the CLI daemon: defaults < configuration file < environment < arguments of
-//! `cad daemon serve`.
+//! `mcad daemon serve`.
 //!
-//! File: `$CAD_CONFIG`, else `$XDG_CONFIG_HOME/controller-cad/config.toml`, else
-//! `~/.config/controller-cad/config.toml`:
+//! File: `$MCAD_CONFIG`, else `$XDG_CONFIG_HOME/mcad/config.toml`, else
+//! `~/.config/mcad/config.toml`; if that does not exist, the file of the old name
+//! `controller-cad/config.toml` there (before the rename to `mcad`):
 //!
 //! ```toml
 //! [daemon]
-//! enabled = true          # false: never use the daemon (like CAD_NO_DAEMON=1)
+//! enabled = true          # false: never use the daemon (like MCAD_NO_DAEMON=1)
 //! cache_mb = 512          # estimated size of node results + meshes
 //! max_projects = 8        # projects whose results the cache keeps
 //! idle_minutes = 15       # ends after this long without a request
@@ -16,9 +17,10 @@
 //! ```
 //!
 //! `daemon = false` at the top level (instead of the table) also switches it off.
-//! Environment: `CAD_NO_DAEMON=1`, `CAD_DAEMON_CACHE_MB`, `CAD_DAEMON_MAX_PROJECTS`,
-//! `CAD_DAEMON_IDLE_SECS` (or `CAD_DAEMON_IDLE_MINUTES`), `CAD_DAEMON_WATCHDOG_SECS`,
-//! `CAD_DAEMON_RSS_FACTOR`, `CAD_DAEMON_CACHE_ENTRIES`.
+//! Environment: `MCAD_NO_DAEMON=1`, `MCAD_DAEMON_CACHE_MB`, `MCAD_DAEMON_MAX_PROJECTS`,
+//! `MCAD_DAEMON_IDLE_SECS` (or `MCAD_DAEMON_IDLE_MINUTES`), `MCAD_DAEMON_WATCHDOG_SECS`,
+//! `MCAD_DAEMON_RSS_FACTOR`, `MCAD_DAEMON_CACHE_ENTRIES`. Each is also read under its old name
+//! `CAD_…` (deprecated) if the `MCAD_…` variable is not set.
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -65,21 +67,29 @@ impl Default for DaemonConfig {
     }
 }
 
-/// Path of the configuration file.
+/// Path of the configuration file: `mcad/config.toml`, or the old `controller-cad/config.toml`
+/// if only that one exists.
 pub fn config_path() -> Option<PathBuf> {
-    if let Some(p) = std::env::var_os("CAD_CONFIG").filter(|p| !p.is_empty()) {
+    if let Some(p) = cad_ipc::env_var_os("CONFIG") {
         return Some(PathBuf::from(p));
     }
-    if let Some(d) = std::env::var_os("XDG_CONFIG_HOME").filter(|p| !p.is_empty()) {
-        return Some(PathBuf::from(d).join("controller-cad/config.toml"));
-    }
-    std::env::var_os("HOME")
-        .filter(|p| !p.is_empty())
-        .map(|h| PathBuf::from(h).join(".config/controller-cad/config.toml"))
+    let base = if let Some(d) = std::env::var_os("XDG_CONFIG_HOME").filter(|p| !p.is_empty()) {
+        PathBuf::from(d)
+    } else {
+        PathBuf::from(std::env::var_os("HOME").filter(|p| !p.is_empty())?).join(".config")
+    };
+    let new = base.join("mcad/config.toml");
+    let old = base.join("controller-cad/config.toml");
+    Some(if !new.exists() && old.exists() { old } else { new })
 }
 
-fn env(name: &str) -> Option<String> {
-    std::env::var(name).ok().map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+/// `MCAD_<name>`, else the old name `CAD_<name>`: the variable that is set and its value.
+fn env(name: &str) -> Option<(String, String)> {
+    ["MCAD_", "CAD_"].iter().find_map(|prefix| {
+        let key = format!("{prefix}{name}");
+        let v = std::env::var(&key).ok()?.trim().to_string();
+        (!v.is_empty()).then_some((key, v))
+    })
 }
 
 impl DaemonConfig {
@@ -151,33 +161,33 @@ impl DaemonConfig {
     }
 
     fn apply_env(&mut self) {
-        if let Some(v) = env("CAD_NO_DAEMON")
+        if let Some((key, v)) = env("NO_DAEMON")
             && v != "0"
             && !v.eq_ignore_ascii_case("false")
         {
-            self.set_enabled(false, "CAD_NO_DAEMON");
+            self.set_enabled(false, &key);
         }
         let mut num = |name: &str, f: &mut dyn FnMut(&mut Self, f64) -> bool| {
-            if let Some(v) = env(name) {
+            if let Some((key, v)) = env(name) {
                 let ok = v.parse::<f64>().ok().is_some_and(|n| f(self, n));
                 if !ok {
-                    self.warnings.push(format!("{name}={v} ignoriert"));
+                    self.warnings.push(format!("{key}={v} ignoriert"));
                 }
             }
         };
-        num("CAD_DAEMON_CACHE_MB", &mut |c, n| c.set_cache_mb(n));
-        num("CAD_DAEMON_MAX_PROJECTS", &mut |c, n| {
+        num("DAEMON_CACHE_MB", &mut |c, n| c.set_cache_mb(n));
+        num("DAEMON_MAX_PROJECTS", &mut |c, n| {
             c.max_projects = n.max(1.0) as usize;
             n >= 1.0
         });
-        num("CAD_DAEMON_IDLE_MINUTES", &mut |c, n| c.set_idle(n * 60.0));
-        num("CAD_DAEMON_IDLE_SECS", &mut |c, n| c.set_idle(n));
-        num("CAD_DAEMON_WATCHDOG_SECS", &mut |c, n| c.set_watchdog(n));
-        num("CAD_DAEMON_RSS_FACTOR", &mut |c, n| {
+        num("DAEMON_IDLE_MINUTES", &mut |c, n| c.set_idle(n * 60.0));
+        num("DAEMON_IDLE_SECS", &mut |c, n| c.set_idle(n));
+        num("DAEMON_WATCHDOG_SECS", &mut |c, n| c.set_watchdog(n));
+        num("DAEMON_RSS_FACTOR", &mut |c, n| {
             c.rss_factor = n.max(1.0);
             n >= 1.0
         });
-        num("CAD_DAEMON_CACHE_ENTRIES", &mut |c, n| {
+        num("DAEMON_CACHE_ENTRIES", &mut |c, n| {
             c.cache_entries = n.max(1.0) as usize;
             n >= 1.0
         });

@@ -140,7 +140,7 @@ function FileBar() {
         hint="Neue Datei, Datei laden; Aktionen der angezeigten Datei"
         items={[
           { label: "Neue Datei …", hint: "Neue, leere Datei im Projekt", onSelect: promptNewProjectFile },
-          { label: "Datei laden …", hint: "SVG (für import), Schrift .ttf/.otf (für text) oder .scad ins Projekt laden", onSelect: chooseUpload },
+          { label: "Datei laden …", hint: "SVG (für import), Schrift .ttf/.otf (für text) oder .mcad/.scad ins Projekt laden", onSelect: chooseUpload },
           { kind: "sep" },
           { kind: "heading", label: p.active },
           ...tabItems(p.active, p.main),
@@ -407,7 +407,7 @@ function Splitter() {
   return <div className="splitter" onPointerDown={onDown} role="separator" aria-orientation="vertical" />;
 }
 
-/** Export with violated assertions: "Trotzdem exportieren" (like `cad export --ignore-asserts`). */
+/** Export with violated assertions: "Trotzdem exportieren" (like `mcad export --ignore-asserts`). */
 function ExportConfirm() {
   const c = useCad((s) => s.exportConfirm);
   const ok = useRef<HTMLButtonElement>(null);
@@ -422,7 +422,7 @@ function ExportConfirm() {
           <IconAlert size={16} aria-hidden="true" /> Export trotz Assert-Verletzung?
         </h2>
         <p>
-          {c.what}: {c.violations.length} Prüfung{c.violations.length === 1 ? "" : "en"} verletzt (wie <code>cad export</code>, der ohne <code>--ignore-asserts</code> abbricht).
+          {c.what}: {c.violations.length} Prüfung{c.violations.length === 1 ? "" : "en"} verletzt (wie <code>mcad export</code>, der ohne <code>--ignore-asserts</code> abbricht).
         </p>
         <ul className="export-confirm-list">
           {c.violations.slice(0, 8).map((v) => (

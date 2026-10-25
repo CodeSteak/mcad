@@ -26,5 +26,5 @@ fillet(r = function (p) p.z < 10 ? 2 : 4) { … }   // variable radius over posi
 - Seam/pole edges of cylinders and spheres and tangent edges never count.
 - Empty selection → warning "0 Kanten"; radius too large → kernel error, body stays
   unfilleted.
-- Check: `cad inspect FILE --line N` (hint "4 Kanten"), `cad render FILE --line N` (zones
+- Check: `mcad inspect FILE --line N` (hint "4 Kanten"), `mcad render FILE --line N` (zones
   blue, selected edges orange).

@@ -1,5 +1,5 @@
 {
-  "becher.scad": {
+  "becher.mcad": {
     "parts": {
       "b": 77709.4
     },
@@ -8,7 +8,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "flansch.scad": {
+  "flansch.mcad": {
     "parts": {
       "f": 150299.9
     },
@@ -17,7 +17,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "gehaeuse/gehaeuse.scad": {
+  "gehaeuse/gehaeuse.mcad": {
     "parts": {
       "unterteil": 29183.9,
       "deckel": 12495.5,
@@ -31,7 +31,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "handystaender.scad": {
+  "handystaender.mcad": {
     "parts": {
       "staender": 109977.6
     },
@@ -40,7 +40,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "kabelclip.scad": {
+  "kabelclip.mcad": {
     "parts": {
       "clip": 24456.6
     },
@@ -49,7 +49,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "kuehlkoerper.scad": {
+  "kuehlkoerper.mcad": {
     "parts": {
       "kk": 34652.1
     },
@@ -58,7 +58,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "lagerbock.scad": {
+  "lagerbock.mcad": {
     "parts": {
       "bock": 34403.5
     },
@@ -67,7 +67,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "pflanztopf/pflanztopf.scad": {
+  "pflanztopf/pflanztopf.mcad": {
     "parts": {
       "untersetzer": 31064.4,
       "topf": 76113.3
@@ -77,7 +77,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "pi_platte.scad": {
+  "pi_platte.mcad": {
     "parts": {
       "platte": 20151.3,
       "pi": 25896.9
@@ -87,7 +87,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "rohrschelle.scad": {
+  "rohrschelle.mcad": {
     "parts": {
       "oben": 6687.2,
       "unten": 7873.2,
@@ -98,7 +98,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "scharnier/scharnier.scad": {
+  "scharnier/scharnier.mcad": {
     "parts": {
       "a": 5148.9,
       "b": 4572.4,
@@ -109,7 +109,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "schluesselbrett/schluesselbrett.scad": {
+  "schluesselbrett/schluesselbrett.mcad": {
     "parts": {
       "brett": 150717.5,
       "h[0]": 1471.9,
@@ -123,7 +123,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "seifenschale.scad": {
+  "seifenschale.mcad": {
     "parts": {
       "schale": 36961.3
     },
@@ -132,7 +132,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "stiftebox.scad": {
+  "stiftebox.mcad": {
     "parts": {
       "box_": 115179.3
     },
@@ -141,7 +141,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "topfuntersetzer.scad": {
+  "topfuntersetzer.mcad": {
     "parts": {
       "u": 83249.6
     },
@@ -150,7 +150,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "tuerstopper.scad": {
+  "tuerstopper.mcad": {
     "parts": {
       "stopper": 64236.7
     },
@@ -159,7 +159,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "wandhaken.scad": {
+  "wandhaken.mcad": {
     "parts": {
       "haken": 18818.2
     },
@@ -168,7 +168,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "winkel_rippe.scad": {
+  "winkel_rippe.mcad": {
     "parts": {
       "w": 22246.1
     },
@@ -177,7 +177,7 @@
     "warnings": 0,
     "diagnostics": 0
   },
-  "zahnrad.scad": {
+  "zahnrad.mcad": {
     "parts": {
       "rad1": 12553.1,
       "rad2": 4075.1

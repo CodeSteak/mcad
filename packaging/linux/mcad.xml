@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Dateitypen der Modelle (shared-mime-info): .mcad (neue Dateien) und .scad (OpenSCAD,
+     ältere Projekte; wie OpenSCADs eigene Definition, falls OpenSCAD fehlt). -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="text/x-mcad">
+    <sub-class-of type="text/plain"/>
+    <comment>mcad model</comment>
+    <comment xml:lang="de">mcad-Modell</comment>
+    <icon name="mcad"/>
+    <glob pattern="*.mcad"/>
+  </mime-type>
+  <mime-type type="application/x-openscad">
+    <sub-class-of type="text/plain"/>
+    <comment>OpenSCAD model</comment>
+    <comment xml:lang="de">OpenSCAD-Modell</comment>
+    <glob pattern="*.scad"/>
+  </mime-type>
+</mime-info>

@@ -2,9 +2,9 @@
 // verrundeten Ecken und gefaster Vorderkante, Schlüssellochaufhängung hinten, Briefrille oben;
 // Haken als sweep entlang eines Spline-Pfads mit Kugelknauf und Zapfen, als Bauteile h[0] …
 // h[4] in einer Schleife (Export je Haken). Maße per include, Teile per use. Passung Zapfen ↔
-// Bohrung: `cad measure schluesselbrett.scad --interference --clearance brett h[0]`. Maße in mm.
-include <masse.scad>
-use <teile.scad>
+// Bohrung: `mcad measure schluesselbrett.mcad --interference --clearance brett h[0]`. Maße in mm.
+include <masse.mcad>
+use <teile.mcad>
 
 brett: brett();
 for (i = [0 : anzahl - 1])

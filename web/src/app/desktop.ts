@@ -1,5 +1,5 @@
 // Desktop app (Tauri): real files, file watcher, git markers, autosave and the control
-// requests of `cad ui …`. In the browser nothing here runs (`IS_TAURI` false).
+// requests of `mcad ui …`. In the browser nothing here runs (`IS_TAURI` false).
 //
 // * Dirty state: `project.saved` holds each file as on disk; a file whose text differs is
 //   dirty (tab marker ●, window title).
@@ -36,7 +36,7 @@ export function relOf(abs: string): string | null {
 
 function title(): string {
   const dirty = project.dirty().length > 0;
-  return `${dirty ? "● " : ""}${project.root ? project.name : `${project.name} (nicht gespeichert)`} – controller-cad`;
+  return `${dirty ? "● " : ""}${project.root ? project.name : `${project.name} (nicht gespeichert)`} – mcad`;
 }
 
 /** Publishes the dirty files (tabs, title). */
@@ -304,9 +304,9 @@ function onRemoved(path: string): void {
   publishDirty();
 }
 
-// ---------------------------------------------------------------- `cad ui …` requests
+// ---------------------------------------------------------------- `mcad ui …` requests
 
-/** What `cad ui status` reports for this window. */
+/** What `mcad ui status` reports for this window. */
 export function windowStatus(): unknown {
   const st = store.getState();
   const doc = bridge.doc();

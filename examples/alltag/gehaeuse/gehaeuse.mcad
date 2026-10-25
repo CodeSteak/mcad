@@ -1,11 +1,11 @@
 // Zweck: Elektronikgehäuse mit Deckel und vier Schrauben (Baugruppe aus drei Dateien) –
-// Maße per include (masse.scad), Bauteile per use (teile.scad). Unterteil mit shell und
+// Maße per include (masse.mcad), Bauteile per use (teile.mcad). Unterteil mit shell und
 // Domen (benannte Instanzen dom[i] im Modul), Deckel am Anker des Unterteils, Schrauben als
 // Bauteile s[0] … s[3] in einer Schleife. `explosion` > 0 zieht Deckel und Schrauben
 // auseinander (Ansicht); bei 0 ist die Baugruppe geschlossen (Passung prüfen:
-// `cad measure gehaeuse.scad --interference --clearance unterteil deckel`). Maße in mm.
-include <masse.scad>
-use <teile.scad>
+// `mcad measure gehaeuse.mcad --interference --clearance unterteil deckel`). Maße in mm.
+include <masse.mcad>
+use <teile.mcad>
 
 explosion = 0;
 

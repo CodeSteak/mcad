@@ -54,8 +54,8 @@ describe("ZIP", () => {
 
   it("komprimierte Einträge (deflate)", async () => {
     const text = "module m() cube(1);\n".repeat(50);
-    const back = await readZip(deflatedZip("lib/teile.scad", text));
-    expect(back[0].name).toBe("lib/teile.scad");
+    const back = await readZip(deflatedZip("lib/teile.mcad", text));
+    expect(back[0].name).toBe("lib/teile.mcad");
     expect(new TextDecoder().decode(back[0].data)).toBe(text);
   });
 

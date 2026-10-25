@@ -3,7 +3,7 @@
 // several files: autosave of the whole project, folders (File System Access API), ZIP upload
 // and download.
 
-import { dataFileRefs, fileBytes, fileText, fromDataUrl, guessMain, isProjectFile, normalizePath, resolvePath, stripCommonFolder } from "../logic/files";
+import { dataFileRefs, fileBytes, fileText, fromDataUrl, guessMain, isProjectFile, MODEL_ACCEPT, MODEL_EXTS, normalizePath, resolvePath, stripCommonFolder } from "../logic/files";
 import type { DirHandle, FileHandleLike, ProjectSnapshot } from "../state/project";
 import { readZip, writeZip } from "./zip";
 
@@ -125,7 +125,7 @@ export function hasDirectoryAccess(): boolean {
   return typeof (window as DirWindow).showDirectoryPicker === "function";
 }
 
-/** All .scad files of a folder and the data files (SVG, fonts; recursive, without hidden folders). */
+/** All model files (.mcad, .scad) of a folder and the data files (SVG, fonts; recursive, without hidden folders). */
 async function readDir(dir: DirHandle, prefix = "", out: Record<string, string> = {}): Promise<Record<string, string>> {
   for await (const h of dir.values()) {
     if (Object.keys(out).length >= MAX_PROJECT_FILES) break;
@@ -149,7 +149,7 @@ export async function openFolder(): Promise<LoadedProject | null> {
   }
   const files = await readDir(dir);
   const main = guessMain(files);
-  if (!main) throw new Error(`Ordner ${dir.name} enthält keine .scad-Datei`);
+  if (!main) throw new Error(`Ordner ${dir.name} enthält keine Modelldatei (.mcad, .scad)`);
   return { name: dir.name, main, files, dir };
 }
 
@@ -172,7 +172,7 @@ export async function saveToFolder(dir: DirHandle, files: Record<string, string>
   return n;
 }
 
-/** A project from ZIP bytes (.scad files and data files; a common top folder is removed). */
+/** A project from ZIP bytes (model files and data files; a common top folder is removed). */
 export async function projectFromZip(name: string, bytes: Uint8Array): Promise<LoadedProject> {
   const entries = await readZip(bytes);
   let files: Record<string, string> = {};
@@ -184,7 +184,7 @@ export async function projectFromZip(name: string, bytes: Uint8Array): Promise<L
   const stripped = stripCommonFolder(files);
   files = stripped.files;
   const main = guessMain(files);
-  if (!main) throw new Error(`${name} enthält keine .scad-Datei`);
+  if (!main) throw new Error(`${name} enthält keine Modelldatei (.mcad, .scad)`);
   return { name: stripped.folder ?? name.replace(/\.zip$/i, ""), main, files, dir: null };
 }
 
@@ -219,13 +219,13 @@ export function projectZip(name: string, files: Record<string, string>): Uint8Ar
 
 // ---------------------------------------------------------------- examples
 
-const raw = import.meta.glob("../../../examples/**/*.scad", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const raw = import.meta.glob(["../../../examples/**/*.mcad", "../../../examples/**/*.scad"], { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 /** SVGs of examples/svg and ASCII STLs of examples/stl (imported by spec examples; raw text, so binary STL does not work here). */
 const rawSvg = import.meta.glob(["../../../examples/**/*.svg", "../../../examples/**/*.stl"], { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const EXAMPLE_DATA: Record<string, string> = Object.fromEntries(Object.entries(rawSvg).map(([p, t]) => [p.replace(/^.*examples\//, ""), t]));
 
 /**
- * Data files an example imports (paths relative to examples/), e.g. `spec/svg_logo.scad` →
+ * Data files an example imports (paths relative to examples/), e.g. `spec/svg_logo.mcad` →
  * `{"svg/logo.svg": …}`; empty if it imports none.
  */
 export function exampleData(path: string, text: string): Record<string, string> {
@@ -292,7 +292,7 @@ type PickerWindow = Window & {
   showSaveFilePicker?: (o?: unknown) => Promise<FsHandle>;
 };
 
-const pickerTypes = [{ description: "CAD-Quelltext", accept: { "text/plain": [".scad"] } }];
+const pickerTypes = [{ description: "CAD-Modell", accept: { "text/plain": MODEL_EXTS } }];
 
 let handle: FsHandle | null = null;
 
@@ -317,7 +317,7 @@ export async function openFile(): Promise<{ name: string; text: string } | null>
   return new Promise((resolve) => {
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = ".scad,text/plain";
+    input.accept = `${MODEL_ACCEPT},text/plain`;
     input.onchange = async () => {
       const f = input.files?.[0];
       resolve(f ? { name: f.name, text: await f.text() } : null);

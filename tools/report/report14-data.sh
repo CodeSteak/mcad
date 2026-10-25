@@ -4,11 +4,11 @@
 # formulas, STEP statistics (exact circles and lines), outline of the namespace library, errors
 # per segment line. Writes reports/tmp/report14/.
 #
-#   CAD=target/release/cad tools/report/report14-data.sh
+#   CAD=target/release/mcad tools/report/report14-data.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
-CAD="${CAD:-$ROOT/target/release/cad}"
+CAD="${CAD:-$ROOT/target/release/mcad}"
 OUT="$ROOT/reports/tmp/report14"
 CLI="$OUT/cli"
 CASES="$OUT/cases"

@@ -2,14 +2,16 @@
 
 OpenSCAD syntax and semantics (variables, functions incl. literals, modules, `children()`,
 `for`/`if`/`let`/`each`, list comprehensions, `echo`, `assert`, math builtins, primitives,
-transforms, booleans, modifiers `# % ! *`, extrusions, `include`/`use`). Differences:
+transforms, booleans, modifiers `# % ! *`, extrusions, `include`/`use`). Files: `.mcad`;
+`.scad` works the same, also in `include <lib.scad>`/`use <lib.mcad>` (the path names the file,
+extensions are not added or swapped). Differences:
 
 - Exact geometry; `$fn/$fa/$fs` only affect display (except `$fn` = 3…12 at a call: polygon).
-- `color()` defines print colours (`cad usage colors`).
+- `color()` defines print colours (`mcad usage colors`).
 - `hull`, `minkowski`: exact special cases only (below); otherwise warning, children shown
   unchanged.
 - Not supported (warning, children shown unchanged): `projection`. `polyhedron` only for
-  small planar bodies (`import("x.stl")`: `cad usage import-stl`); `resize` acts like `scale`.
+  small planar bodies (`import("x.stl")`: `mcad usage import-stl`); `resize` acts like `scale`.
 
 Additions:
 
@@ -20,14 +22,14 @@ Additions:
 | `cylinder(a, b, r)` | cylinder (or cone with `r1`, `r2`) from point a to point b |
 | `torus(R, r)` | torus around z |
 | `rotate(to = v)` | rotate z onto direction v |
-| `grid g { x: …; y: …; z: … }` | named planes (`cad usage grids`) |
-| `anchor name = p, dir = v;` | named point of a module (`cad usage grids`) |
+| `grid g { x: …; y: …; z: … }` | named planes (`mcad usage grids`) |
+| `anchor name = p, dir = v;` | named point of a module (`mcad usage grids`) |
 | `name: module(…);`, `k[i]: module();` | named instance; at top level of the main file: a **part** |
-| `fillet`, `chamfer`, `shell`, `zone`, `$fillet` | edge blends (`cad usage fillets`) |
-| `sketch { … }`, `corner`, `fillet2d`, `chamfer2d`, `offset`, `stroke` | exact 2D profiles (`cad usage sketch`) |
-| `text(…)`, `import("x.svg")` | `cad usage text-svg` |
-| `import("x.stl", as = "solid"\|"mesh")` | STL as B-rep or mesh (`cad usage import-stl`) |
-| `assert_keepout(clearance)`, `assert_disjoint()`, `assert_intersect()`, `assert_touches(tol, contact)` | collision checks after evaluation, violation = warning, export stops (`cad usage asserts`) |
+| `fillet`, `chamfer`, `shell`, `zone`, `$fillet` | edge blends (`mcad usage fillets`) |
+| `sketch { … }`, `corner`, `fillet2d`, `chamfer2d`, `offset`, `stroke` | exact 2D profiles (`mcad usage sketch`) |
+| `text(…)`, `import("x.svg")` | `mcad usage text-svg` |
+| `import("x.stl", as = "solid"\|"mesh")` | STL as B-rep or mesh (`mcad usage import-stl`) |
+| `assert_keepout(clearance)`, `assert_disjoint()`, `assert_intersect()`, `assert_touches(tol, contact)` | collision checks after evaluation, violation = warning, export stops (`mcad usage asserts`) |
 | `loft() { profiles… }` | skin through 2D profiles (`ruled = true` for straight) |
 | `sweep(path = pts, interp = "spline"\|"linear") profile;` | sweep a profile along a path (or an open `sketch` as first child) |
 | `surface(points = grid4x4…)` + `thicken(t)` | free-form surface and its solid |
@@ -38,15 +40,15 @@ difference() {                                                    // plate with 
     cube([40, 20, 4]);
     translate([0, 0, -1]) linear_extrude(6) slot([10, 10], [30, 10], 3);
 }
-// cad measure plate.scad --volume all   → Volumen all: 2606.9027 mm³  (3200 − (9π + 120) · 4)
-// cad measure plate.scad --section z=2  → two arcs "Bogen R 3 · ⌀ 6", area 651.7257 mm²
+// mcad measure plate.mcad --volume all   → Volumen all: 2606.9027 mm³  (3200 − (9π + 120) · 4)
+// mcad measure plate.mcad --section z=2  → two arcs "Bogen R 3 · ⌀ 6", area 651.7257 mm²
 ```
 
 ## hull and minkowski
 
 Exact or nothing: a combination that is no special case gives the warning
 `hull: <reason>; Kinder werden unverändert gezeigt` (same for `minkowski`) and the children
-unchanged. `cad inspect FILE --line N` names the case taken (hint `exakt: …`). Faces of the
+unchanged. `mcad inspect FILE --line N` names the case taken (hint `exakt: …`). Faces of the
 result belong to the `hull`/`minkowski` statement.
 
 | `hull()` of | Result (hint) |
@@ -80,9 +82,9 @@ hull() { sphere(5); translate([0, 0, 15]) sphere(2); }                          
 hull() { cube([10, 10, 4]); translate([20, 5, 0]) cylinder(r = 5, h = 4); }         // prism
 ```
 
-Example model: `examples/spec/hull_minkowski.scad`.
+Example model: `examples/spec/hull_minkowski.mcad`.
 
-## Example (`box.scad`, used in other pages)
+## Example (`box.mcad`, used in other pages)
 
 ```
 module enclosure(w = 60, d = 30, h = 20, t = 3) {

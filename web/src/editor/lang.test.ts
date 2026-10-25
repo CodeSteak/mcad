@@ -1,16 +1,21 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { isModelFile } from "../logic/files";
 import { disabledStatements, errorNodes, scadParser } from "./lang";
 
 const root = join(__dirname, "../../../examples");
 const files = ["spec", "openscad-compat"].flatMap((d) =>
   readdirSync(join(root, d))
-    .filter((f) => f.endsWith(".scad"))
+    .filter(isModelFile)
     .map((f) => join(d, f)),
 );
 
 describe("Lezer-Grammatik", () => {
+  it("liest alle Beispiele (.mcad und .scad)", () => {
+    expect(files.filter((f) => f.endsWith(".mcad")).length).toBeGreaterThanOrEqual(28);
+    expect(files.filter((f) => f.endsWith(".scad")).length).toBeGreaterThanOrEqual(36);
+  });
   it.each(files)("parst %s ohne Fehler", (f) => {
     const text = readFileSync(join(root, f), "utf8");
     const tree = scadParser.parse(text);

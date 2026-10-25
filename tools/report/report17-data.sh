@@ -6,11 +6,11 @@
 # stencil fonts, kernel times (3 runs each) and the warnings of the parameters.
 # Writes reports/tmp/report17/.
 #
-#   CAD=target/release/cad tools/report/report17-data.sh
+#   CAD=target/release/mcad tools/report/report17-data.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
-CAD="${CAD:-$ROOT/target/release/cad}"
+CAD="${CAD:-$ROOT/target/release/mcad}"
 CHROME="${CHROME:-$(ls -d /opt/pw-browsers/chromium_headless_shell-*/chrome-linux/headless_shell 2>/dev/null | head -n 1)}"
 OUT="$ROOT/reports/tmp/report17"
 CLI="$OUT/cli"

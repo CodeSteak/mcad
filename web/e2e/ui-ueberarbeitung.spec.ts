@@ -99,7 +99,7 @@ test("U01 Leisten bei 1280, 1440 und 1920 px, hell und dunkel: kein Umbruch, nic
   const all: Record<string, unknown> = {};
   const problems: string[] = [];
   await openApp(page);
-  await openExample(page, "spec/mehrfarbig.scad");
+  await openExample(page, "spec/mehrfarbig.mcad");
   for (const theme of ["light", "dark"] as const) {
     await setTheme(page, theme);
     for (const w of widths) {
@@ -119,7 +119,7 @@ test("U01 Leisten bei 1280, 1440 und 1920 px, hell und dunkel: kein Umbruch, nic
     }
   }
   // the sketch bar (drawing needs the sketch at the cursor)
-  await openExample(page, "spec/skizze_deckel.scad");
+  await openExample(page, "spec/skizze_deckel.mcad");
   await clickLine(page, 14, 4);
   await waitScene(page, { context: "umriss" });
   for (const theme of ["light", "dark"] as const) {
@@ -237,14 +237,14 @@ test("U03 Editor: nur Tabs und „+“, Kontextmenü Als Hauptdatei und Schließ
   await pickMenu(page, "Datei hinzufügen", "Neue Datei …");
   await expect(fileTab(page, "lib/neu.scad")).toHaveAttribute("aria-selected", "true");
   // context menu on a tab (right click)
-  await fileTab(page, "konstanten.scad").click({ button: "right" });
-  await expect(page.getByRole("menu", { name: "Datei konstanten.scad" })).toBeVisible();
+  await fileTab(page, "konstanten.mcad").click({ button: "right" });
+  await expect(page.getByRole("menu", { name: "Datei konstanten.mcad" })).toBeVisible();
   await screenshot20(page, "u03-tab-kontextmenue");
   await menuItem(page, "Als Hauptdatei").click();
-  await page.waitForFunction(() => (window as unknown as { __cad: { projectInfo(): { main: string } } }).__cad.projectInfo().main === "konstanten.scad");
-  await expect(fileTab(page, "konstanten.scad").locator(".star")).toBeVisible();
+  await page.waitForFunction(() => (window as unknown as { __cad: { projectInfo(): { main: string } } }).__cad.projectInfo().main === "konstanten.mcad");
+  await expect(fileTab(page, "konstanten.mcad").locator(".star")).toBeVisible();
   // the main file can't be closed; another one can (with confirmation)
-  await fileTab(page, "konstanten.scad").click({ button: "right" });
+  await fileTab(page, "konstanten.mcad").click({ button: "right" });
   await expect(menuItem(page, "Schließen")).toHaveAttribute("aria-disabled", "true");
   await page.keyboard.press("Escape");
   // keyboard: Umschalt+F10 on the focused tab opens the same menu
@@ -256,10 +256,10 @@ test("U03 Editor: nur Tabs und „+“, Kontextmenü Als Hauptdatei und Schließ
   await expect(menuItem(page, "Schließen")).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(fileTab(page, "lib/neu.scad")).toHaveCount(0);
-  // back to gehaeuse.scad as main file (the "+" menu holds the actions of the shown file)
-  await fileTab(page, "gehaeuse.scad").click();
+  // back to gehaeuse.mcad as main file (the "+" menu holds the actions of the shown file)
+  await fileTab(page, "gehaeuse.mcad").click();
   await pickMenu(page, "Datei hinzufügen", "Als Hauptdatei");
-  await page.waitForFunction(() => (window as unknown as { __cad: { projectInfo(): { main: string } } }).__cad.projectInfo().main === "gehaeuse.scad");
+  await page.waitForFunction(() => (window as unknown as { __cad: { projectInfo(): { main: string } } }).__cad.projectInfo().main === "gehaeuse.mcad");
   await screenshot20(page, "u03-editor", "section.editorpane");
   record20({
     id: "U03",
@@ -324,7 +324,7 @@ test("U04 Modus: genau einer aktiv, Schnitt bleibt beim Messen im Schnitt", asyn
 
 test("U05 Skizzen-Kontextleiste: Gruppen, Bogen-Menü, Tastenkürzel, Fertig", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/skizze_deckel.scad");
+  await openExample(page, "spec/skizze_deckel.mcad");
   await clickLine(page, 14, 4);
   await waitScene(page, { context: "umriss" });
   await mode(page, "Skizze").click();
@@ -449,7 +449,7 @@ test("U07 Seitenpanel: Reiter, einklappen, Bauteile mit „ohne Bauteil“, Para
   await page.getByRole("button", { name: "Seitenpanel einblenden" }).click();
   await expect(sideTab(page, "Messen")).toHaveAttribute("aria-selected", "true");
   // module context: the tab "Parameter" appears and is chosen, back in the file the last tab
-  await openExample(page, "spec/gehaeuse.scad");
+  await openExample(page, "spec/gehaeuse.mcad");
   await clickLine(page, 10, 6);
   await waitScene(page, { context: "gehaeuse" });
   await expect(sideTab(page, "Parameter")).toHaveAttribute("aria-selected", "true");
@@ -460,7 +460,7 @@ test("U07 Seitenpanel: Reiter, einklappen, Bauteile mit „ohne Bauteil“, Para
   await expect(sideTab(page, "Parameter")).toHaveCount(0);
   await expect(sideTab(page, "Messen")).toHaveAttribute("aria-selected", "true");
   const s = await cad(page);
-  expect(s.fileName).toBe("gehaeuse.scad");
+  expect(s.fileName).toBe("gehaeuse.mcad");
   record20({
     id: "U07",
     title: "Seitenpanel",
@@ -493,7 +493,7 @@ test("U08 Tastatur: Tab erreicht alle Bedienelemente der Leisten", async ({ page
     });
     seen.push(n);
   }
-  const want = ["Datei", "Beispiele", "Speichern", "Exportieren: 3MF mehrfarbig", "Exportformat", "Farbschema", "Einstellungen", "gehaeuse.scad", "Datei hinzufügen", "Editor", "Modell", "Einpassen", "Ansicht", "Alle Raster", "Bauteile", "Seitenpanel ausblenden"];
+  const want = ["Datei", "Beispiele", "Speichern", "Exportieren: 3MF mehrfarbig", "Exportformat", "Farbschema", "Einstellungen", "gehaeuse.mcad", "Datei hinzufügen", "Editor", "Modell", "Einpassen", "Ansicht", "Alle Raster", "Bauteile", "Seitenpanel ausblenden"];
   for (const w of want) expect(seen, `Tab erreicht ${w}`).toContain(w);
   // focus ring in the accent colour
   await page.getByRole("button", { name: "Einpassen" }).focus();

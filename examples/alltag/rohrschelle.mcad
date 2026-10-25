@@ -2,7 +2,7 @@
 // eines Rechtecks, Laschen mit Bohrungen M5, Unterteil mit Anschlussstutzen M8 (Kernloch 6,8),
 // Kanten der Bohrungen mit difference(chamfer = …), Halbringkanten über Zonen gefast.
 // Baugruppe: Oberteil, Unterteil und ein Prüfrohr als Bauteile; im offenen Zustand klafft an
-// den Laschen der Spalt `spalt` (Kollision/Abstand mit `cad measure`). Maße in mm.
+// den Laschen der Spalt `spalt` (Kollision/Abstand mit `mcad measure`). Maße in mm.
 module halbschelle(rohr_d = 32, t = 4, b = 20, lasche = 12, lasche_t = 5, spalt = 2, loch_d = 5.5,
                    stutzen = false) {
     ri = rohr_d / 2;

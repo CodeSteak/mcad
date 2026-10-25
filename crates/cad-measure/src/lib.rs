@@ -1,4 +1,4 @@
-//! Measuring on the exact geometry (Plan 18): the shared measurement logic of `cad measure`
+//! Measuring on the exact geometry (Plan 18): the shared measurement logic of `mcad measure`
 //! and the measure mode of the UI (via `cad-session`).
 //!
 //! * [`curve::EdgeCurve`]: edges as bounded exact curves (closest point, length, midpoint).

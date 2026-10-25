@@ -188,7 +188,7 @@ test("G04 F4/Bambu: Material außerhalb von Bauteilen, 3MF ohne Farbgruppe", asy
     id: "G04",
     title: "F4: Material ohne Bauteil, 3MF für Bambu Studio",
     caption:
-      "Ein Bauteil teil und ein gelber Würfel ohne Bauteil: vorher 0 mm³ in der Liste und im UI-Export weggelassen. Jetzt 125 mm³, eigenes Objekt „ohne Bauteil“, gleiche Datei wie cad export. Das 3MF hat keine Farbgruppe mehr: Bambu Studio öffnet keinen Farbdialog und übernimmt die Slots aus model_settings.config.",
+      "Ein Bauteil teil und ein gelber Würfel ohne Bauteil: vorher 0 mm³ in der Liste und im UI-Export weggelassen. Jetzt 125 mm³, eigenes Objekt „ohne Bauteil“, gleiche Datei wie mcad export. Das 3MF hat keine Farbgruppe mehr: Bambu Studio öffnet keinen Farbdialog und übernimmt die Slots aus model_settings.config.",
     images: [{ name: "g04-export", label: "Export-Meldung mit Objekten" }],
     checks: [`Objekte ${sum.objects.join(", ")}`, "keine m:colorgroup, keine m:color", `Hinweise: ${sum.notes.join("; ")}`],
   });

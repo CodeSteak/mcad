@@ -3,7 +3,7 @@
 // 0,24 mm³ Kollision a ↔ stift. Nicht weiter reduziert (ein einzelnes Auge mit Stift geht).
 // Status (Bericht 13): offen – deckungsgleiche Zylinderflächen (SMLib-Boolean).
 // SOLL: fehlerfrei
-use <../../../examples/alltag/scharnier/teile.scad>
+use <../../../examples/alltag/scharnier/teile.mcad>
 a: blatt(seite = 0, bohrung = 3.0);
 b: blatt(seite = 1, bohrung = 3.4);
 stift: stift(l = 60, d = 3.0);

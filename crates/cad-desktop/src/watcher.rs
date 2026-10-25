@@ -1,7 +1,7 @@
 //! File watcher for the open project (like VS Code): reports external changes of the watched
 //! files, never the app's own saves.
 //!
-//! * Watches the parent directories (not the files): editors and `cad set` save atomically
+//! * Watches the parent directories (not the files): editors and `mcad set` save atomically
 //!   (temporary file + rename), which replaces the file's inode.
 //! * Every watched file has a known content (hash of what the UI loaded or saved last). An
 //!   event whose file content equals the known content is dropped — this is how own saves

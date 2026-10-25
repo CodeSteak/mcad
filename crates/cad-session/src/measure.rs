@@ -1,5 +1,5 @@
 //! Measure mode (Plan 18): snapping and measurements on the exact B-rep, shared by the UI
-//! (`ToEngine::Measure`) and `cad measure` (references such as `face@[x,y,z]`).
+//! (`ToEngine::Measure`) and `mcad measure` (references such as `face@[x,y,z]`).
 //!
 //! * The measure model of a node ([`MeasureModel`]) holds one [`cad_measure::Body`] per part:
 //!   the neutral B-rep and a tessellation (display tolerance) in context coordinates. It is
@@ -8,7 +8,7 @@
 //!   ([`cad_measure::Section`]); kept per plane.
 //! * The engine keeps no pick state: the picks come with each request and go back with the
 //!   answer (like the sketch editor). Picks name their element by index (body, edge, face,
-//!   contour, segment, region) and carry the `cad measure` reference that finds it again.
+//!   contour, segment, region) and carry the `mcad measure` reference that finds it again.
 //! * Provenance of a pick: the code lines (face tags → nodes), named instances, and grid
 //!   points, lines and planes or anchors the element lies on.
 
@@ -225,7 +225,7 @@ pub fn plane_of(s: &p::SectionPlaneRef) -> SectionPlane {
     SectionPlane::new(v(s.point), v(s.normal))
 }
 
-/// `--section …` arguments of a plane (like `cad render`).
+/// `--section …` arguments of a plane (like `mcad render`).
 pub fn section_args(s: &SectionPlane) -> Vec<String> {
     let n = s.normal;
     for (i, a) in ["x", "y", "z"].iter().enumerate() {
@@ -1468,7 +1468,7 @@ where
         None
     }
 
-    /// Resolves a `cad measure` reference against the model (or the section): `vertex@P`,
+    /// Resolves a `mcad measure` reference against the model (or the section): `vertex@P`,
     /// `mid@P`, `center@P`, `edge@P`, `face@P`, `body@P`, `region@P` (section), a coordinate
     /// `[x,y,z]`, an anchor or a grid point (`resolve_point`).
     pub fn measure_ref(

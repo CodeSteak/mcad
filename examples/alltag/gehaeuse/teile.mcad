@@ -1,6 +1,6 @@
 // Bauteile des Elektronikgehäuses (per use eingebunden: nur Module und Funktionen sind in der
-// Hauptdatei sichtbar). Die Standardwerte kommen aus masse.scad, hier per include.
-include <masse.scad>
+// Hauptdatei sichtbar). Die Standardwerte kommen aus masse.mcad, hier per include.
+include <masse.mcad>
 
 module schraubdom(h = 20, d = 7, kern = 2.5, tiefe = 12) {
     difference() {

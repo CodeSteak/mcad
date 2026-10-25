@@ -1,4 +1,4 @@
-// Zweck: Funktionen, Variablen und ein Modul mit Vektor- und Bool-Parametern für `cad outline`.
+// Zweck: Funktionen, Variablen und ein Modul mit Vektor- und Bool-Parametern für `mcad outline`.
 function doppelt(x) = 2 * x;
 breite = 30;
 hoehe = doppelt(5);

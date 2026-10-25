@@ -1,4 +1,4 @@
-//! `cad export --part name` / `--all-parts -o ordner/`: export of parts (named instances at
+//! `mcad export --part name` / `--all-parts -o ordner/`: export of parts (named instances at
 //! the top level of the main file, Plan 12.9).
 
 use std::path::Path;

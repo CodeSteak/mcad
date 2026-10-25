@@ -3,6 +3,7 @@
 // once it was opened, its EditorState (own undo history).
 
 import type { EditorState } from "@codemirror/state";
+import { MODEL_EXT } from "../logic/files";
 
 export interface ProjectSnapshot {
   name: string;
@@ -30,8 +31,8 @@ export interface FileHandleLike {
 
 class Project {
   name = "Projekt";
-  main = "unbenannt.scad";
-  active = "unbenannt.scad";
+  main = `unbenannt${MODEL_EXT}`;
+  active = `unbenannt${MODEL_EXT}`;
   /** Texts of all files; the active file's entry may be stale (the editor has it). */
   texts = new Map<string, string>();
   /** Saved editor states of files that are not shown (undo history per file). */
@@ -40,7 +41,7 @@ class Project {
   dir: DirHandle | null = null;
   /** Desktop app: absolute directory the paths are relative to (`null`: not on disk yet). */
   root: string | null = null;
-  /** Desktop app: opened as a folder (all `.scad` files of the folder). */
+  /** Desktop app: opened as a folder (all model files of the folder). */
   folder = false;
   /** Desktop app: file contents as on disk (loaded or saved last); a file is dirty if its text differs. */
   saved = new Map<string, string>();

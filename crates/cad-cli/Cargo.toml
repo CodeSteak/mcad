@@ -7,13 +7,13 @@ publish.workspace = true
 description = "Command line interface: check, eval, inspect, render, export, …; without a command the desktop UI"
 
 [[bin]]
-name = "cad"
+name = "mcad"
 path = "src/main.rs"
 
 [features]
 # Opt-in (`cargo build -p cad-cli --features solidcore`): links solidcore for `diff-kernels`.
 # Without it the CLI does not compile solidcore and `diff-kernels` explains how to build it.
-# `gui` (default): `cad`, `cad datei.scad`, `cad ordner/` start the desktop UI (Tauri 2, needs
+# `gui` (default): `mcad`, `mcad datei.mcad`, `mcad ordner/` start the desktop UI (Tauri 2, needs
 # WebKitGTK on Linux). `--no-default-features` builds a headless CLI only.
 default = ["gui"]
 gui = ["dep:cad-app"]

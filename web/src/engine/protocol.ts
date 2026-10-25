@@ -227,7 +227,7 @@ export type MeasureKind = "distance" | "radius" | "angle" | "length" | "area" | 
 
 /**
  * Section plane: through `point`, `normal` (unit) points into the removed half (convention
- * of `cad render --section`).
+ * of `mcad render --section`).
  */
 export type SectionPlaneRef = { point: Vec3, normal: Vec3, };
 
@@ -275,7 +275,7 @@ point: Vec3,
  */
 label: string, 
 /**
- * Reference for `cad measure` (`center@[10, 10, 6]`, `face@[…]`, `k.ecke`).
+ * Reference for `mcad measure` (`center@[10, 10, 6]`, `face@[…]`, `k.ecke`).
  */
 reference: string, 
 /**
@@ -396,7 +396,7 @@ section?: SectionPlaneRef,
  */
 text: string, 
 /**
- * Arguments of `cad measure` after the file name that repeat it.
+ * Arguments of `mcad measure` after the file name that repeat it.
  */
 cli: Array<string>, };
 
@@ -492,7 +492,7 @@ node: number | null,
 file?: string, 
 /**
  * Where the problem is (context coordinates), e.g. where the operands of a Boolean touch
- * tangentially; the UI frames it on a click, `cad render` marks it.
+ * tangentially; the UI frames it on a click, `mcad render` marks it.
  */
 at?: Vec3, 
 /**
@@ -702,7 +702,7 @@ node: number,
  */
 label: string, 
 /**
- * Code lines and instances of the faces involved (like `cad measure`).
+ * Code lines and instances of the faces involved (like `mcad measure`).
  */
 origin: Array<string>, };
 

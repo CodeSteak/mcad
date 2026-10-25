@@ -82,7 +82,7 @@ pub enum ToEngine {
     /// (finished nodes stay cached) and starts a new one; `step` then finishes it.
     SetSource { text: String, version: u64 },
     /// Project files besides the main file (path → text), replacing earlier ones; `main` is the
-    /// main file's path (default `main.scad`; includes resolve relative to it). Answers
+    /// main file's path (default `main.mcad`; includes resolve relative to it). Answers
     /// nothing and does not evaluate: send `SetSource` next.
     SetFiles {
         files: BTreeMap<String, String>,
@@ -214,7 +214,7 @@ pub enum MeasureKind {
 }
 
 /// Section plane: through `point`, `normal` (unit) points into the removed half (convention
-/// of `cad render --section`).
+/// of `mcad render --section`).
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
 pub struct SectionPlaneRef {
     pub point: Vec3,
@@ -262,7 +262,7 @@ pub struct MeasurePick {
     pub point: Vec3,
     /// Display text (`Kreismitte · Kreis R 3`).
     pub label: String,
-    /// Reference for `cad measure` (`center@[10, 10, 6]`, `face@[…]`, `k.ecke`).
+    /// Reference for `mcad measure` (`center@[10, 10, 6]`, `face@[…]`, `k.ecke`).
     pub reference: String,
     /// Provenance: code lines, named instances, grid planes/points and anchors the element
     /// lies on.
@@ -358,7 +358,7 @@ pub struct Measurement {
     pub section: Option<SectionPlaneRef>,
     /// The measurement as text (copy, code comment).
     pub text: String,
-    /// Arguments of `cad measure` after the file name that repeat it.
+    /// Arguments of `mcad measure` after the file name that repeat it.
     pub cli: Vec<String>,
 }
 
@@ -718,7 +718,7 @@ pub struct AssertBody {
     pub node: u32,
     /// `deckel`, `Zeile 7: cube`, `Sperrvolumen` (German).
     pub label: String,
-    /// Code lines and instances of the faces involved (like `cad measure`).
+    /// Code lines and instances of the faces involved (like `mcad measure`).
     pub origin: Vec<String>,
 }
 
@@ -797,7 +797,7 @@ pub struct Diagnostic {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub file: Option<String>,
     /// Where the problem is (context coordinates), e.g. where the operands of a Boolean touch
-    /// tangentially; the UI frames it on a click, `cad render` marks it.
+    /// tangentially; the UI frames it on a click, `mcad render` marks it.
     #[ts(optional)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub at: Option<Vec3>,

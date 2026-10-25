@@ -4,6 +4,7 @@
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
 import type { AssertResult, Diagnostic, MeasureKind, MeasurePick, MeasureSectionInfo, Measurement, RegionSet, Scene, SketchAnswer, SketchPoint, SketchTool } from "../engine/protocol";
+import { MODEL_EXT } from "../logic/files";
 import type { ParamOverrides } from "../logic/params";
 import { SECTION_OFF, type SectionState } from "../logic/section";
 
@@ -128,7 +129,7 @@ export interface StoredMeasurement {
   m: Measurement;
   /** Scene version it was measured on (stale when the model changed). */
   version: number;
-  /** Main file at the time (for "Als cad measure kopieren"). */
+  /** Main file at the time (for "Als mcad measure kopieren"). */
   file: string;
   /** Context module (`--module`), if any. */
   module: string | null;
@@ -369,8 +370,8 @@ export function setExportChoice(c: ExportChoice): void {
 }
 
 export const store = createStore<CadState>(() => ({
-  fileName: "unbenannt.scad",
-  project: { name: "Projekt", main: "unbenannt.scad", active: "unbenannt.scad", paths: ["unbenannt.scad"], folder: false },
+  fileName: `unbenannt${MODEL_EXT}`,
+  project: { name: "Projekt", main: `unbenannt${MODEL_EXT}`, active: `unbenannt${MODEL_EXT}`, paths: [`unbenannt${MODEL_EXT}`], folder: false },
   hiddenParts: [],
   viewHoverOther: null,
 

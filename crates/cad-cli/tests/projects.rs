@@ -12,13 +12,13 @@ fn data(name: &str) -> String {
 
 fn example() -> String {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/projekt-gehaeuse/gehaeuse.scad")
+        .join("../../examples/projekt-gehaeuse/gehaeuse.mcad")
         .display()
         .to_string()
 }
 
 fn run(args: &[&str], code: i32) -> (Value, String) {
-    let out = Command::cargo_bin("cad").unwrap().env("CAD_NO_DAEMON", "1").args(args).arg("--json").output().unwrap();
+    let out = Command::cargo_bin("mcad").unwrap().env("MCAD_NO_DAEMON", "1").args(args).arg("--json").output().unwrap();
     assert_eq!(
         out.status.code(),
         Some(code),
@@ -27,7 +27,7 @@ fn run(args: &[&str], code: i32) -> (Value, String) {
         String::from_utf8_lossy(&out.stderr)
     );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-    let t = Command::cargo_bin("cad").unwrap().env("CAD_NO_DAEMON", "1").args(args).output().unwrap();
+    let t = Command::cargo_bin("mcad").unwrap().env("MCAD_NO_DAEMON", "1").args(args).output().unwrap();
     (v, String::from_utf8_lossy(&t.stdout).into_owned() + &String::from_utf8_lossy(&t.stderr))
 }
 
@@ -38,7 +38,7 @@ fn check_and_eval_read_included_and_used_files() {
     let (v, t) = run(&["eval", &example()], 0);
     let sc = &v["scene"];
     let files: Vec<&str> = sc["files"].as_array().unwrap().iter().map(|f| f["path"].as_str().unwrap()).collect();
-    assert_eq!(files, ["gehaeuse.scad", "konstanten.scad", "lib/teile.scad"]);
+    assert_eq!(files, ["gehaeuse.mcad", "konstanten.mcad", "lib/teile.mcad"]);
     let parts: Vec<&str> = sc["parts"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect();
     assert_eq!(parts, ["gehaeuse", "deckel"]);
     let deckel = &sc["parts"][1];
@@ -47,26 +47,26 @@ fn check_and_eval_read_included_and_used_files() {
     // Hints of the included file carry its file id; the text names the file.
     let h = sc["hints"].as_array().unwrap().iter().find(|h| h["text"] == "60").unwrap();
     assert_eq!(h["range"]["file"], 1);
-    assert!(t.contains("konstanten.scad Z.2 breite = 60;"), "{t}");
+    assert!(t.contains("konstanten.mcad Z.2 breite = 60;"), "{t}");
     assert!(t.contains("dom[2].oben = [5, 35, 21]"), "{t}");
     assert!(t.contains("Bauteile:"), "{t}");
     // Include statements for Ctrl+click.
     let inc = sc["includes"].as_array().unwrap();
-    assert!(inc.iter().any(|i| i["target"] == "lib/teile.scad" && i["is_use"] == true && i["found"] == true));
+    assert!(inc.iter().any(|i| i["target"] == "lib/teile.mcad" && i["is_use"] == true && i["found"] == true));
 }
 
 #[test]
 fn diagnostics_name_their_file_and_line() {
-    let (v, t) = run(&["check", "--no-kernel", &data("projekt/fehler.scad")], 1);
+    let (v, t) = run(&["check", "--no-kernel", &data("projekt/fehler.mcad")], 1);
     let d = v["diagnostics"].as_array().unwrap();
     let missing = d.iter().find(|d| d["message"].as_str().unwrap().contains("fehlt.scad")).unwrap();
     assert_eq!(missing["range"]["line"], 1);
     assert!(missing.get("file").is_none());
     let lib = d.iter().find(|d| d["message"].as_str().unwrap().contains("unbekannt")).unwrap();
-    assert_eq!(lib["file"], "lib/teile.scad");
+    assert_eq!(lib["file"], "lib/teile.mcad");
     assert_eq!(lib["range"]["line"], 3);
-    assert!(t.contains("fehler.scad:1:"), "{t}");
-    assert!(t.contains("lib/teile.scad:3:"), "{t}");
+    assert!(t.contains("fehler.mcad:1:"), "{t}");
+    assert!(t.contains("lib/teile.mcad:3:"), "{t}");
 }
 
 #[test]
@@ -126,7 +126,7 @@ fn export_single_parts_and_all_parts() {
     // Indexed instances: file names k_0 … k_2.
     let out = dir.path().join("reihe");
     run(
-        &["export", &data("projekt/reihe.scad"), "--all-parts", "--format", "3mf", "-o", &out.display().to_string()],
+        &["export", &data("projekt/reihe.mcad"), "--all-parts", "--format", "3mf", "-o", &out.display().to_string()],
         0,
     );
     for i in 0..3 {
@@ -183,5 +183,5 @@ fn export_single_parts_and_all_parts() {
 
     // Unknown part / no parts.
     run(&["export", &example(), "--part", "fehlt", "-o", &stl.display().to_string()], 3);
-    run(&["export", &data("platte.scad"), "--all-parts", "-o", &out.display().to_string()], 2);
+    run(&["export", &data("platte.mcad"), "--all-parts", "-o", &out.display().to_string()], 2);
 }

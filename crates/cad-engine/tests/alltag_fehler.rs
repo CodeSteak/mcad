@@ -38,7 +38,7 @@ fn assert_error(errs: &[String], part: &str) {
 
 #[test]
 fn f01_symmetric_spline_profile_sweeps_along_a_curved_path() {
-    let (errs, _, v) = run(&fehler("f01_sweep_spline_profil.scad"));
+    let (errs, _, v) = run(&fehler("f01_sweep_spline_profil.mcad"));
     assert!(errs.is_empty(), "{errs:#?}");
     // profile area ≈ π·5·3.08 (the spline bulges a little), path ≈ 48 mm
     assert!(v > 2000.0 && v < 2400.0, "volume {v}");
@@ -66,7 +66,7 @@ fn f02_failed_union_is_reported_once() {
     let src = "union() {\n  cylinder(h = 40, r = 20);\n  sweep(path = [[19, 0, 30], [35, 0, 25], [19, 0, 10]]) circle(3);\n}\n";
     let (errs, _, _) = run(src);
     assert_eq!(errs.len(), 1, "the root union must not repeat the error: {errs:#?}");
-    let (errs, _, _) = run(&fehler("f02_union_zylinder_sweep.scad"));
+    let (errs, _, _) = run(&fehler("f02_union_zylinder_sweep.mcad"));
     assert_eq!(errs.len(), 1, "{errs:#?}");
 }
 
@@ -74,7 +74,7 @@ fn f02_failed_union_is_reported_once() {
 
 #[test]
 fn f03_open_polygon_sweep_names_the_cause() {
-    let (errs, _, _) = run(&fehler("f03_sweep_polygon16.scad"));
+    let (errs, _, _) = run(&fehler("f03_sweep_polygon16.mcad"));
     assert_error(&errs, "seam");
 }
 
@@ -82,12 +82,12 @@ fn f03_open_polygon_sweep_names_the_cause() {
 
 #[test]
 fn f05_chamfer_that_leaves_an_open_shell_is_an_error() {
-    let (errs, _, v) = run(&fehler("f05_fase_volumen_null.scad"));
+    let (errs, _, v) = run(&fehler("f05_fase_volumen_null.mcad"));
     assert_error(&errs, "not closed");
     // the body without the chamfer stays (rounded box, wall 3)
     assert!(v > 15000.0, "volume {v}");
     // a chamfer that fits the wall at the corners works
-    let ok = fehler("f05_fase_volumen_null.scad").replace("chamfer(0.8)", "chamfer(0.7)");
+    let ok = fehler("f05_fase_volumen_null.mcad").replace("chamfer(0.8)", "chamfer(0.7)");
     let (errs, _, v) = run(&ok);
     assert!(errs.is_empty(), "{errs:#?}");
     assert!(v > 15000.0, "volume {v}");
@@ -95,7 +95,7 @@ fn f05_chamfer_that_leaves_an_open_shell_is_an_error() {
 
 #[test]
 fn f10_union_fillet_that_loses_the_shell_is_an_error() {
-    let (errs, _, v) = run(&fehler("f10_union_fillet_schale_verloren.scad"));
+    let (errs, _, v) = run(&fehler("f10_union_fillet_schale_verloren.mcad"));
     assert_error(&errs, "Verrundung gescheitert");
     assert!(v > 20000.0, "the union without the fillet stays: {v}");
 }
@@ -104,7 +104,7 @@ fn f10_union_fillet_that_loses_the_shell_is_an_error() {
 
 #[test]
 fn f07_translated_torus_selects_the_edge_on_its_core_circle() {
-    let (errs, warns, _) = run(&fehler("f07_torus_zone.scad"));
+    let (errs, warns, _) = run(&fehler("f07_torus_zone.mcad"));
     assert!(errs.is_empty() && warns.is_empty(), "{errs:#?} {warns:#?}");
 }
 
@@ -112,13 +112,13 @@ fn f07_translated_torus_selects_the_edge_on_its_core_circle() {
 
 #[test]
 fn f08_booleans_with_moved_tori_and_revolved_circles() {
-    for (f, want) in [("f08a_union_torus.scad", 5852.26), ("f08b_union_ring_verloren.scad", 5852.26)] {
+    for (f, want) in [("f08a_union_torus.mcad", 5852.26), ("f08b_union_ring_verloren.mcad", 5852.26)] {
         let (errs, _, v) = run(&fehler(f));
         assert!(errs.is_empty(), "{f}: {errs:#?}");
         assert_approx(f, v, want, 1e-4);
     }
     // the torus touching top and bottom face has no manifold result: an error, not volume 0
-    let (errs, _, _) = run(&fehler("f08c_differenz_torus_tangential.scad"));
+    let (errs, _, _) = run(&fehler("f08c_differenz_torus_tangential.mcad"));
     assert_error(&errs, "not a closed solid");
     // shifted 0.1 mm off the faces it works: cylinder minus the full torus
     let (errs, _, v) = run("difference() { cylinder(h = 2.2, r = 30, center = true); torus(20, 1); }");
@@ -135,10 +135,10 @@ fn f08_booleans_with_moved_tori_and_revolved_circles() {
 
 #[test]
 fn f09_tangent_contact_under_union_fillet_fails_cleanly() {
-    let (errs, _, _) = run(&fehler("f09a_absturz_tangentialer_dom.scad"));
+    let (errs, _, _) = run(&fehler("f09a_absturz_tangentialer_dom.mcad"));
     assert!(!errs.is_empty());
     assert!(errs.iter().any(|e| e.contains("touch tangentially")), "{errs:#?}");
-    let (errs, _, _) = run(&fehler("f09b_absturz_zapfen_sweep.scad"));
+    let (errs, _, _) = run(&fehler("f09b_absturz_zapfen_sweep.mcad"));
     assert_error(&errs, "cannot blend the corner");
 }
 
@@ -157,7 +157,7 @@ fn tangent_contact_names_the_operands_and_the_place() {
         (d, names)
     };
     // dome touching the wall along the line x = 2, y = 10
-    let (d, names) = place(&fehler("f09a_absturz_tangentialer_dom.scad"));
+    let (d, names) = place(&fehler("f09a_absturz_tangentialer_dom.mcad"));
     assert_eq!(names, ["box", "cylinder"], "{}", d.message);
     let at = d.at.unwrap();
     assert!((at.x - 2.0).abs() < 1e-6 && (at.y - 10.0).abs() < 1e-6 && at.z > 2.0 && at.z < 10.0, "{at}");
@@ -166,7 +166,7 @@ fn tangent_contact_names_the_operands_and_the_place() {
     assert_eq!(d.template.as_deref().map(|t| t.contains("{nodes}")), Some(true));
     assert!(!d.edges.is_empty());
     // cylinder minus a torus touching top and bottom: two circles of radius 20
-    let (d, names) = place(&fehler("f08c_differenz_torus_tangential.scad"));
+    let (d, names) = place(&fehler("f08c_differenz_torus_tangential.mcad"));
     assert_eq!(names, ["cylinder", "torus"], "{}", d.message);
     let at = d.at.unwrap();
     assert!((at.truncate().length() - 20.0).abs() < 1e-3 && (at.z.abs() - 1.0).abs() < 1e-6, "{at}");
@@ -194,6 +194,6 @@ fn tangent_contact_names_the_operands_and_the_place() {
 
 #[test]
 fn f13_shell_thicker_than_a_rounding_names_the_radius() {
-    let (errs, _, _) = run(&fehler("f13_shell_verrundung.scad"));
+    let (errs, _, _) = run(&fehler("f13_shell_verrundung.mcad"));
     assert_error(&errs, "radius of a convex rounding");
 }

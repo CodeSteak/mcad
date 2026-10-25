@@ -12,12 +12,12 @@
 # `git archive cba3ab4 crates Cargo.toml Cargo.lock smlib | tar -x -C OLD` with
 # OLD/third_party/smlib -> the SMLib checkout with patch 0001 only, then
 # `SMLIB_PREBUILT=<libs with 0001> cargo build --release -p cad-cli` there.
-# CAD: the current build (default target/release/cad). Both run without daemon.
+# CAD: the current build (default target/release/mcad). Both run without daemon.
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 out="$root/reports/tmp/report13"
-CAD=${CAD:-$root/target/release/cad}
+CAD=${CAD:-$root/target/release/mcad}
 : "${CAD_OLD:?CAD_OLD=<cad before the corrections> setzen}"
 export CAD_NO_DAEMON=1
 mkdir -p "$out/fehler" "$out/img"

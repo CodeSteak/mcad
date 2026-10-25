@@ -8,12 +8,12 @@
 #   scripts/ci/compat.sh compare     # compare.py --eval with the release CLI (33 models)
 #   scripts/ci/compat.sh step        # tests/step/verify.py with OpenCASCADE (STEP_PYTHON, see step-venv.sh)
 #
-# Env: CAD (default target/release/cad), OPENSCAD (default openscad), STEP_PYTHON (default python3).
+# Env: MCAD (old name CAD; default target/release/mcad), OPENSCAD (default openscad), STEP_PYTHON (default python3).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
-CAD="${CAD:-$ROOT/target/release/cad}"
+MCAD="${MCAD:-${CAD:-$ROOT/target/release/mcad}}"
 OPENSCAD="${OPENSCAD:-openscad}"
 REF="$ROOT/tests/openscad-compat/reference.json"
 TMP="$ROOT/target/openscad-compat"
@@ -27,15 +27,15 @@ need_openscad() {
   esac
 }
 
-# Runs a command whose `cad` calls go through the CLI daemon (as for users), with a socket
+# Runs a command whose `mcad` calls go through the CLI daemon (as for users), with a socket
 # directory of its own; the daemon is stopped afterwards, also on failure.
 with_daemon() {
   local ipc="$TMP/ipc-$$"
   mkdir -p "$ipc"
   local rc=0
-  CAD_IPC_DIR="$ipc" "$@" || rc=$?
-  CAD_IPC_DIR="$ipc" "$CAD" daemon status || true
-  CAD_IPC_DIR="$ipc" "$CAD" daemon stop || true
+  MCAD_IPC_DIR="$ipc" "$@" || rc=$?
+  MCAD_IPC_DIR="$ipc" "$MCAD" daemon status || true
+  MCAD_IPC_DIR="$ipc" "$MCAD" daemon stop || true
   rm -rf "$ipc"
   return $rc
 }
@@ -44,7 +44,7 @@ step() {
   case "$1" in
     cli)
       cargo build --release -p cad-cli --locked
-      ls -l "$ROOT/target/release/cad"
+      ls -l "$ROOT/target/release/mcad"
       ;;
     reference)
       need_openscad
@@ -64,12 +64,12 @@ step() {
       cargo test -p cad-eval --test project_openscad --locked
       ;;
     compare)
-      [ -x "$CAD" ] || { echo "CLI not found at $CAD (scripts/ci/compat.sh cli)" >&2; exit 2; }
-      with_daemon env CAD="$CAD" python3 tests/openscad-compat/compare.py --eval
+      [ -x "$MCAD" ] || { echo "CLI not found at $MCAD (scripts/ci/compat.sh cli)" >&2; exit 2; }
+      with_daemon env MCAD="$MCAD" python3 tests/openscad-compat/compare.py --eval
       ;;
     step)
-      [ -x "$CAD" ] || { echo "CLI not found at $CAD (scripts/ci/compat.sh cli)" >&2; exit 2; }
-      with_daemon "${STEP_PYTHON:-python3}" tests/step/verify.py --cad "$CAD"
+      [ -x "$MCAD" ] || { echo "CLI not found at $MCAD (scripts/ci/compat.sh cli)" >&2; exit 2; }
+      with_daemon "${STEP_PYTHON:-python3}" tests/step/verify.py --cad "$MCAD"
       ;;
     *) echo "unknown step: $1 (cli|reference|projects|compare|step)" >&2; exit 2 ;;
   esac

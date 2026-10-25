@@ -7,7 +7,7 @@
 // Alle Zahlen kommen aus der CLI (`cad outline`, `measure`, `eval`), Texte aus MODELLE unten
 // (Platzhalter {param} bzw. {modul.param} werden durch die Standardwerte aus `cad outline`
 // ersetzt). Zwischenergebnisse: reports/tmp/katalog/ (gitignored). Binary: $CAD (Standard
-// target/release/cad), Socket-Ordner $CAD_IPC_DIR (kurzer Pfad, z. B. /tmp/cadkat).
+// target/release/mcad), Socket-Ordner $CAD_IPC_DIR (kurzer Pfad, z. B. /tmp/cadkat).
 // Braucht ImageMagick (`convert`, `identify`).
 //
 //   node tools/report/katalog.mjs [--reuse [--redo=id,…]]   (--reuse: Messwerte/Bilder aus reports/tmp
@@ -21,7 +21,7 @@ import { fileURLToPath } from "node:url";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "../..");
-const cad = process.env.CAD ?? join(root, "target/release/cad");
+const cad = process.env.CAD ?? join(root, "target/release/mcad");
 const work = join(root, "reports/tmp/katalog");
 const out = join(root, "docs/modelle");
 const img = join(out, "img");
@@ -37,79 +37,79 @@ const BG = "#f4f5f7"; // Hintergrund von `cad render` (helles Thema)
 // view: [Azimut, Höhe] statt iso, wo iso die Rückseite zeigt.
 const MODELLE = [
   {
-    id: "handystaender", file: "handystaender.scad", titel: "Handyständer", view: [-50, 30], // iso zeigt die Rückseite
+    id: "handystaender", file: "handystaender.mcad", titel: "Handyständer", view: [-50, 30], // iso zeigt die Rückseite
     text: "Ständer für ein Telefon bis 12 mm Dicke. Das Seitenprofil ist ein Polygon aus Punkten eines 2D-Rasters und wird über die Breite w = {w} mm extrudiert; die Lehne ({lehne} mm, Wand t = {t} mm) steht im Winkel a = {a}° zur Waagrechten, ein dreieckiges Fenster entlastet sie. Ein Kabelloch Ø {kabel_d} mm mit Kanal unter dem Boden nimmt das Ladekabel auf. Innenecken von Lippe und Ablage sowie die Lippenoberkante sind über Zonen an Rasterlinien mit zwei Radien verrundet.",
   },
   {
-    id: "becher", file: "becher.scad", titel: "Becher mit Henkel",
+    id: "becher", file: "becher.mcad", titel: "Becher mit Henkel",
     text: "Trinkbecher als konischer Rotationskörper (Radius unten ru = {ru} mm, oben ro = {ro} mm, Höhe h = {h} mm), der mit shell und Wand {wand} mm oben geöffnet wird. Die Bodenkante ist über eine Zone an der Bodenebene mit r {boden_r} mm verrundet, der Trinkrand über eine zweite Zone. Der Henkel (Ø {henkel_d} mm) ist ein sweep eines Kreises entlang eines Spline-Pfads, dessen Enden radial in der Wand sitzen, und mit union(fillet = …) angesetzt.",
   },
   {
-    id: "kabelclip", file: "kabelclip.scad", titel: "Kabelclip für die Tischkante", kurz: "Kabelclip",
+    id: "kabelclip", file: "kabelclip.mcad", titel: "Kabelclip für die Tischkante", kurz: "Kabelclip",
     text: "Kabelhalter zum Aufstecken auf eine Tischplatte von dicke = {dicke} mm (Spiel {spiel} mm). Die C-Klammer ist ein extrudiertes Profil (Wand {t} mm, Arme {arm_o} und {arm_u} mm) mit Klemmnoppe; darüber sitzt ein Block mit n = {n} Kabelkanälen Ø {kabel_d} mm im Abstand {pitch} mm, die von oben eingeführt werden. Die Kanäle liegen an indizierten Rasterebenen, ihre Kanten sind mit difference(fillet = …) verrundet, die Innenecken der Klammer über Zonen.",
   },
   {
-    id: "wandhaken", file: "wandhaken.scad", titel: "Wandhaken",
+    id: "wandhaken", file: "wandhaken.mcad", titel: "Wandhaken",
     text: "Haken für Jacke oder Handtuch: Wandplatte {b} × {h} × {t} mm mit verrundeten Ecken (r {ecke} mm), gefaster Vorderkante und zwei Senkbohrungen (Ø {schraube_d} mm, Kopf Ø {kopf_d} mm). Fase und Verrundung sind verschachtelt, so dass die Fase auch die Randkanten der Verrundung erfasst. Der Haken (Ø {haken_d} mm, Ausladung {ausladung} mm) ist ein sweep entlang eines Spline-Pfads mit Kugelknauf Ø {knauf_d} mm, angesetzt mit union(fillet = …).",
   },
   {
-    id: "seifenschale", file: "seifenschale.scad", titel: "Seifenschale",
+    id: "seifenschale", file: "seifenschale.mcad", titel: "Seifenschale",
     text: "Seifenschale {l} × {b} × {h} mm mit Ablauf. Die Wanne ist ein Quader, dessen senkrechte Ecken (r {ecke} mm) und Bodenkanten über verschachtelte Zonen verrundet werden und den shell (Wand {wand} mm) oben öffnet. n = {n} runde Auflagerippen sind cylinder(a, b, r) zwischen Rasterpunkten, dazwischen liegen Ablaufschlitze mit verrundeten Kanten; unten stehen vier Füße ({fuss_h} mm).",
   },
   {
-    id: "stiftebox", file: "stiftebox.scad", titel: "Stiftebox",
+    id: "stiftebox", file: "stiftebox.mcad", titel: "Stiftebox",
     text: "Stiftebox mit drei hohen Fächern (Breiten {faecher} mm, Tiefe {tiefe} mm, Höhe {h} mm) und einem flachen vorderen Fach ({vorn_t} mm tief, {vorn_h} mm hoch), Wand {wand} mm. Die Fachgrenzen sind indizierte Rasterebenen, die eine rekursive Funktion aus der Liste der Fachbreiten berechnet. Vier verschachtelte Zonenblöcke verrunden die senkrechten Kanten (außen r {ecke} mm, Taschen r {ecke_i} mm) und die Taschenböden und fasen die hinteren Oberkanten; die Oberkanten des vorderen Fachs bleiben scharf (Kernel-Grenze F6).",
   },
   {
-    id: "tuerstopper", file: "tuerstopper.scad", titel: "Türstopper",
+    id: "tuerstopper", file: "tuerstopper.mcad", titel: "Türstopper",
     text: "Keil {l} mm lang, {b} mm breit und hinten {h_hinten} mm hoch. Der Körper ist ein loft durch drei Trapezprofile (Höhe hinten, Mitte {h_mitte} mm, Spitze {spitze} mm), liegend ausgerichtet mit rotate([90, 0, 90]); seine Unterkante ist vorher über eine Zone an der Bodenebene gefast. Oben liegt eine Griffmulde, unten {rillen} Querrillen gegen Rutschen, hinten ein Aufhängeloch Ø {loch_d} mm.",
   },
   {
-    id: "topfuntersetzer", file: "topfuntersetzer.scad", titel: "Topfuntersetzer",
+    id: "topfuntersetzer", file: "topfuntersetzer.mcad", titel: "Topfuntersetzer",
     text: "Untersetzer Ø {d} mm, {h} mm hoch: drei konzentrische Ringe (Mittenradien {ringe} mm, Steg {steg} mm) als rotate_extrude eines Rechtecks in einer for-Schleife, verbunden durch {speichen} Speichen und eine Mittelscheibe (r {mitte_r} mm). Alle Oberkanten von Ringen und Speichen werden in einem Block über eine Zone an der Deckebene gefast; unten liegen drei Mulden für Gummifüße Ø {fuss_d} mm.",
   },
   {
-    id: "flansch", file: "flansch.scad", titel: "Flanschplatte",
+    id: "flansch", file: "flansch.mcad", titel: "Flanschplatte",
     text: "Flansch Ø {d_aussen} mm, {t} mm stark, mit Bund Ø {d_bund} mm (Höhe {h_bund} mm) und Bohrung Ø {d_bohrung} mm. Der Querschnitt ist ein Polygon aus einem 2D-Raster, gedreht mit rotate_extrude; auf dem Lochkreis Ø {lk} mm liegen {n} Durchgangslöcher Ø {d_loch} mm (M10), dazu eine Dichtnut {nut_t} mm tief. Den Übergang Bund/Scheibe verrundet ein eigenes Modul als Zone (ringzone), Bohrungs- und Außenkanten sind über Volumenzonen gefast.",
   },
   {
-    id: "lagerbock", file: "lagerbock.scad", titel: "Stehlagerbock 608",
+    id: "lagerbock", file: "lagerbock.mcad", titel: "Stehlagerbock 608",
     text: "Lagerbock für ein Rillenkugellager 608 ({lager_d} × {lager_b} mm), Achshöhe {achse_h} mm. Die Grundplatte {l} × {b} × {t} mm hat zwei Langlöcher für M6 ({langloch|x} mm, Hilfsmodul) zum Ausrichten; das Lagerauge (r {auge_r} mm, {auge_b} mm breit) ist ein Quader mit tangential anschließendem cylinder(a, b, r) und hat eine Anschlagschulter Ø {schulter_d} mm. Die Kehlen rund um das Auge entstehen über Zonen an Rasterlinien in x, y und z.",
   },
   {
-    id: "winkel_rippe", file: "winkel_rippe.scad", titel: "Montagewinkel mit Rippe", kurz: "Montagewinkel",
+    id: "winkel_rippe", file: "winkel_rippe.mcad", titel: "Montagewinkel mit Rippe", kurz: "Montagewinkel",
     text: "Winkel mit Schenkeln {a} und {h} mm, {b} mm breit und {t} mm stark, mit n_rippen = {n_rippen} Versteifungsrippe ({rippe_t} mm dick, {rippe_l} mm lang). Die Rippen sind extrudierte Dreiecke an indizierten Rasterebenen; Innenkante und Rippenanschlüsse werden in einem Zonenblock verrundet, so dass die Eckübergänge sauber laufen. Die Bohrungen Ø {loch_d} mm (M5) sind mit difference(chamfer = …) gefast.",
   },
   {
-    id: "kuehlkoerper", file: "kuehlkoerper.scad", titel: "Kühlkörper",
+    id: "kuehlkoerper", file: "kuehlkoerper.mcad", titel: "Kühlkörper",
     text: "Strangpress-Kühlkörper {l} × {b} mm, Grundplatte {basis} mm, Gesamthöhe {h} mm, mit n = {n} Rippen à {rippe_t} mm. Die Rippenlage steht als indizierte Rasterebenen aus einer Liste; die Rippenfüße sind über Zonen an Rasterlinien in einer for-Schleife verrundet (r {fuss_r} mm), die Köpfe über eine Zone an der Kopfebene fast voll gerundet. Zwei Bohrungen M3 im Abstand {loch_abstand} mm liegen zwischen den Rippen, ein Anker markiert die Wärmequelle.",
   },
   {
-    id: "zahnrad", file: "zahnrad.scad", titel: "Stirnradpaar",
+    id: "zahnrad", file: "zahnrad.mcad", titel: "Stirnradpaar",
     text: "Zwei Stirnräder mit Modul m = {m} mm und {z1} bzw. {z2} Zähnen im Eingriff, Achsabstand {achsabstand} mm, Breite {zahnrad.b} mm. Die Evolventenflanken entstehen als Polygon aus Listenfunktionen (let, each, concat) und werden linear extrudiert; die Zahndicke ist für das Flankenspiel leicht verringert. Rad 1 hat Nabe, Passfedernut und Erleichterungslöcher, Rad 2 eine D-Bohrung für eine Motorwelle 5 mm.",
     pairs: [["rad1", "rad2", "Flankenspiel"]],
     extra: [{ name: "eingriff", args: ["--view", "top", "--fit", "all", "--zoom", "6", "--target", "18.6,-4.2,10"], caption: "Draufsicht, 6-fach vergrößert auf die Engstelle des Eingriffs: der Spalt zwischen den Flanken ist das gemessene Flankenspiel." }],
   },
   {
-    id: "rohrschelle", file: "rohrschelle.scad", titel: "Rohrschelle",
+    id: "rohrschelle", file: "rohrschelle.mcad", titel: "Rohrschelle",
     text: "Zweiteilige Schelle für ein Rohr Ø {rohr_d} mm: die Halbringe ({halbschelle.t} mm stark, {b} mm breit) sind rotate_extrude(angle = 180) eines Rechtecks, mit Laschen und Bohrungen Ø {halbschelle.loch_d} mm (M5); das Unterteil (mirror) trägt einen Stutzen mit Kernloch für M8. Oberteil, Unterteil und ein Prüfrohr sind Bauteile in einem gemeinsam gedrehten Block. Im offenen Zustand klafft an den Laschen der Spalt {halbschelle.spalt} mm.",
     pairs: [["oben", "unten", "Klemmspalt an den Laschen"], ["oben", "rohr", "Rohr liegt am Oberteil an"], ["unten", "rohr", "Rohr liegt am Unterteil an"]],
     extra: [{ name: "schnitt", args: ["--section", "x=10", "--view", "right"], caption: "Schnitt x = 10 (Mitte der Schelle, quer zur Rohrachse), Blick von +x: Halbringe mit Laschen und Bohrungen M5, Klemmspalt 2 mm, Stutzen mit Kernloch für M8, Prüfrohr." }],
   },
   {
-    id: "pi_platte", file: "pi_platte.scad", titel: "Montageplatte Raspberry Pi", kurz: "Raspberry-Pi-Platte",
+    id: "pi_platte", file: "pi_platte.mcad", titel: "Montageplatte Raspberry Pi", kurz: "Raspberry-Pi-Platte",
     text: "Platte {l} × {b} × {t} mm für einen Raspberry Pi (Lochbild 58 × 49 mm, M2.5). Die Abstandshalter ({hoehe} mm) sind ein eigenes Modul mit Anker, in der Schleife als benannte Instanzen dom[i] gesetzt und mit union(fillet = …) angesetzt. Dazu kommen {schlitze} Lüftungsschlitze, vier Befestigungslöcher M4 mit Senkung und verrundete Ecken (r {ecke} mm). Ein farbiger Platinen-Dummy 85 × 56 × 1,6 mm liegt als zweites Bauteil am Anker der Platte.",
     pairs: [["platte", "pi", "Platine liegt auf den Domen"]],
     extra: [{ name: "anker", args: ["--show", "anchors", "--part", "platte"], caption: "Platte mit eingeblendeten Ankern (gelb): die Anker oben der Dome tragen die Platine." }],
   },
   {
-    id: "gehaeuse", file: "gehaeuse/gehaeuse.scad", titel: "Elektronikgehäuse",
-    text: "Gehäuse für eine Platine 70 × 50 mm: innen {innen_l} × {innen_b} mm, Höhe {hoehe} mm, Wand {wand} mm, Ecken r {ecke} mm. Das Unterteil ist ein verrundeter Quader, den shell öffnet; vier Schraubdome (Kernloch Ø {kern_d} mm) sind als dom[i] mit union(fillet = …) angesetzt. Der Deckel ({deckel_t} mm, Zentrierrand {rand_h} mm, Spiel {spiel} mm) sitzt am Anker deckel_auflage, die Schrauben M3 sind Bauteile s[0] … s[3]. Maße stehen in masse.scad (include), Teile in teile.scad (use); explosion > 0 zieht die Baugruppe auseinander.",
+    id: "gehaeuse", file: "gehaeuse/gehaeuse.mcad", titel: "Elektronikgehäuse",
+    text: "Gehäuse für eine Platine 70 × 50 mm: innen {innen_l} × {innen_b} mm, Höhe {hoehe} mm, Wand {wand} mm, Ecken r {ecke} mm. Das Unterteil ist ein verrundeter Quader, den shell öffnet; vier Schraubdome (Kernloch Ø {kern_d} mm) sind als dom[i] mit union(fillet = …) angesetzt. Der Deckel ({deckel_t} mm, Zentrierrand {rand_h} mm, Spiel {spiel} mm) sitzt am Anker deckel_auflage, die Schrauben M3 sind Bauteile s[0] … s[3]. Maße stehen in masse.mcad (include), Teile in teile.mcad (use); explosion > 0 zieht die Baugruppe auseinander.",
     pairs: [["unterteil", "deckel", "Deckel liegt auf"], ["s[0]", "deckel", "Schraubenkopf liegt auf"], ["s[0]", "unterteil", "Schaft im Kernloch"]],
     extra: [{ name: "schnitt", args: ["--section", "y=8.5", "--section-flip", "--view", "front"], caption: "Schnitt y = 8,5 (durch die vorderen Dome), Blick von vorn: Schraube im Dom, Deckel mit Zentrierrand auf dem Unterteil." }],
   },
   {
-    id: "scharnier", file: "scharnier/scharnier.scad", titel: "Scharnier",
+    id: "scharnier", file: "scharnier/scharnier.mcad", titel: "Scharnier",
     text: "Druckbares Scharnier {laenge} mm aus Blatt A, Blatt B und Stift mit {augen} Gelenkaugen (r {auge_r} mm, Blattstärke {blatt_t} mm). Die Augen beider Blätter kommen aus derselben Funktion, so dass das Spiel von {spiel} mm überall gleich ist; die Freiräume entstehen per for mit Schrittweite. Blatt A hat die Bohrung {bohrung_a} mm (Stift eingeklebt), Blatt B {bohrung_b} mm (dreht frei), der Stift Ø {stift_d} mm. Die Variable winkel = {winkel}° dreht Blatt B um die Achse.",
     pairs: [["a", "b", "Spiel der Augen"], ["stift", "b", "Lagerspiel"], ["stift", "a", "Stiftkopf liegt an"]],
     extra: [
@@ -118,14 +118,14 @@ const MODELLE = [
     ],
   },
   {
-    id: "pflanztopf", file: "pflanztopf/pflanztopf.scad", titel: "Pflanztopf mit Untersetzer", kurz: "Pflanztopf",
+    id: "pflanztopf", file: "pflanztopf/pflanztopf.mcad", titel: "Pflanztopf mit Untersetzer", kurz: "Pflanztopf",
     text: "Der Topf geht per loft vom abgerundeten Quadrat ({topf_unten} mm, Superellipse als spline aus einer Funktion) zur runden Öffnung Ø {topf_oben_d} mm, Höhe {topf_h} mm, Wand {wand} mm, Boden {boden} mm; er steht auf {fuss_h} mm hohen Füßen und hat Abflusslöcher. Die Wand ist die Differenz zweier Lofts. Der Untersetzer ist ein rotate_extrude, mit shell oben geöffnet und über Zonen verrundet. Der Topf steht mit dem Anker aufstand auf dem Anker boden des Untersetzers.",
     pairs: [["topf", "untersetzer", "Füße stehen auf dem Boden"]],
     extra: [{ name: "schnitt", args: ["--section", "y=0", "--section-flip", "--view", "front"], caption: "Schnitt y = 0, Blick von vorn: Wand des Lofts, Füße und Abflusslöcher, Topf im Untersetzer." }],
   },
   {
-    id: "schluesselbrett", file: "schluesselbrett/schluesselbrett.scad", titel: "Schlüsselbrett",
-    text: "Brett {brett_l} × {brett_h} × {brett_t} mm mit {anzahl} eingeklebten Haken. Es hat über Zonen verrundete Ecken und eine gefaste Vorderkante, hinten zwei Schlüssellochaufhängungen und oben eine Briefrille. Die Haken sind ein sweep entlang eines Spline-Pfads mit Kugelknauf; ihr Zapfen Ø {zapfen_d} mm sitzt in einer Bohrung Ø {bohrung_d} mm (Kleberspalt). Die Haken sind Bauteile h[0] … h[4] aus einer for-Schleife, die Maße stehen in masse.scad.",
+    id: "schluesselbrett", file: "schluesselbrett/schluesselbrett.mcad", titel: "Schlüsselbrett",
+    text: "Brett {brett_l} × {brett_h} × {brett_t} mm mit {anzahl} eingeklebten Haken. Es hat über Zonen verrundete Ecken und eine gefaste Vorderkante, hinten zwei Schlüssellochaufhängungen und oben eine Briefrille. Die Haken sind ein sweep entlang eines Spline-Pfads mit Kugelknauf; ihr Zapfen Ø {zapfen_d} mm sitzt in einer Bohrung Ø {bohrung_d} mm (Kleberspalt). Die Haken sind Bauteile h[0] … h[4] aus einer for-Schleife, die Maße stehen in masse.mcad.",
     pairs: [["brett", "h[0]", "Zapfen in der Bohrung (Kleberspalt)"]],
     extra: [{ name: "schnitt", args: ["--section", "x=20", "--view", "right"], caption: "Schnitt x = 20 (durch Haken h[0]), Blick von +x: Zapfen in der Bohrung, Fase der Vorderkante, Briefrille oben." }],
   },
@@ -401,12 +401,12 @@ const toc = seiten.map((s) => `<tr><td class="nr">${s.nr}</td><td><a href="#m-${
 const grid = seiten.map((s) => `<a class="tile" href="#m-${s.d.id}"><img src="${s.d.img.hero?.file ?? ""}" alt=""><span><em><b>${s.nr}</b> ${esc(s.kurz)}</em><i>S. ${s.seite}</i></span></a>`).join("");
 
 const howtoLines = [
-  ["cad examples/alltag/becher.scad", "Desktop-UI: Editor und 3D"],
+  ["cad examples/alltag/becher.mcad", "Desktop-UI: Editor und 3D"],
   ["cad examples/alltag/gehaeuse/", "Baugruppe als Projekt (Ordner)"],
-  ["cad render examples/alltag/becher.scad -o becher.png --views all", "headless: Bild"],
-  ["cad outline examples/alltag/becher.scad", "Parameter, Raster, Anker, Bauteile"],
-  ["cad measure examples/alltag/becher.scad --volume --colors", "Volumen, Masse je Farbe"],
-  ["cad export examples/alltag/zahnrad.scad --all-parts -o teile/", "STL/STEP/3MF je Bauteil"],
+  ["cad render examples/alltag/becher.mcad -o becher.png --views all", "headless: Bild"],
+  ["cad outline examples/alltag/becher.mcad", "Parameter, Raster, Anker, Bauteile"],
+  ["cad measure examples/alltag/becher.mcad --volume --colors", "Volumen, Masse je Farbe"],
+  ["cad export examples/alltag/zahnrad.mcad --all-parts -o teile/", "STL/STEP/3MF je Bauteil"],
 ];
 const howto = howtoLines.map(([c, k]) => `<code>${esc(c)}</code><span>${esc(k)}</span>`).join("");
 const html = `<!doctype html>

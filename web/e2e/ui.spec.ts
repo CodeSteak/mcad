@@ -12,13 +12,13 @@ test.beforeEach(async ({ page }) => {
 
 test("S01 Laden: Editor, Ansicht und erste Szene", async ({ page }) => {
   const s = await openApp(page);
-  expect(s.fileName).toBe("gehaeuse.scad");
+  expect(s.fileName).toBe("gehaeuse.mcad");
   expect(s.view!.objects).toBeGreaterThan(0);
   expect(s.view!.plan.base).toBe("full");
   // Anchors of the named instance k (diamonds).
   expect(s.view!.plan.anchors).toBe(2);
   await expect(page.getByTestId("status-errors")).toHaveText("0 Fehler · 0 Warnungen");
-  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toHaveText("gehaeuse.scad");
+  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toHaveText("gehaeuse.mcad");
   const nav = await page.evaluate(() => performance.getEntriesByType("navigation")[0]?.startTime ?? 0);
   writeMetrics({ firstSceneMs: s.metrics.firstSceneMs! - nav, firstEvalMs: s.metrics.evalMs[0] });
   await screenshot(page, "s01-laden");
@@ -26,16 +26,16 @@ test("S01 Laden: Editor, Ansicht und erste Szene", async ({ page }) => {
     id: "S01",
     title: "Laden",
     image: "s01-laden",
-    caption: "Startzustand: Spec-Beispiel gehaeuse.scad links im Editor, rechts die Szene mit Boden, Achsenkreuz und den Ankern der benannten Instanz k (Rauten, mit Pfeil bei dir).",
+    caption: "Startzustand: Spec-Beispiel gehaeuse.mcad links im Editor, rechts die Szene mit Boden, Achsenkreuz und den Ankern der benannten Instanz k (Rauten, mit Pfeil bei dir).",
   });
 });
 
 test("S02 Beispiel öffnen", async ({ page }) => {
   await openApp(page);
   const v0 = (await cad(page)).shownVersion!;
-  const s = await openExample(page, "spec/lochplatte.scad");
+  const s = await openExample(page, "spec/lochplatte.mcad");
   expect(s.shownVersion).toBeGreaterThan(v0);
-  expect(s.fileName).toBe("lochplatte.scad");
+  expect(s.fileName).toBe("lochplatte.mcad");
   await expect(lineEl(page, 3)).toContainText("module lochplatte");
   expect(s.view!.objects).toBeGreaterThan(0);
   await screenshot(page, "s02-beispiel");
@@ -43,7 +43,7 @@ test("S02 Beispiel öffnen", async ({ page }) => {
     id: "S02",
     title: "Beispiel öffnen",
     image: "s02-beispiel",
-    caption: "Beispielmenü → spec/lochplatte.scad: der Editor lädt die Datei, die Ansicht zeigt nach der Auswertung die Platte mit Bohrungen, Lasche und den Anker p.erstes_loch.",
+    caption: "Beispielmenü → spec/lochplatte.mcad: der Editor lädt die Datei, die Ansicht zeigt nach der Auswertung die Platte mit Bohrungen, Lasche und den Anker p.erstes_loch.",
   });
 });
 
@@ -112,7 +112,7 @@ test("S05 Modulkontext, Differenz: abgezogener Körper rot", async ({ page }) =>
   const st = await waitView(page, "(s) => s.view.selection.line === 10 && s.view.plan.items.some(i => i.mode === 'red')");
   const red = st.view!.plan.items.filter((i) => i.mode === "red");
   expect(red.map((i) => i.line)).toEqual([12]);
-  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toContainText("gehaeuse.scad›gehaeuse");
+  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toContainText("gehaeuse.mcad›gehaeuse");
   await screenshot(page, "s05-difference");
   record({
     id: "S05",
@@ -177,7 +177,7 @@ test("S08 Pfadleiste: Klick springt eine Ebene hoch", async ({ page }) => {
   await clickLine(page, 11, 4);
   await waitScene(page, { context: "gehaeuse" });
   await screenshot(page, "s08a-modulkontext");
-  await page.getByRole("navigation", { name: "Pfadleiste" }).getByRole("button", { name: "Zur Datei gehaeuse.scad" }).click();
+  await page.getByRole("navigation", { name: "Pfadleiste" }).getByRole("button", { name: "Zur Datei gehaeuse.mcad" }).click();
   const s = await waitScene(page, { context: null });
   expect(s.path).toEqual([]);
   expect(s.view!.selection.line).toBe(21);
@@ -283,7 +283,7 @@ test("S12 Export STL und 3MF", async ({ page }) => {
 
 test("S13 Raster: verwendete Ebenen, alle Raster, Hover über Rasterausdruck", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/lochplatte.scad");
+  await openExample(page, "spec/lochplatte.mcad");
   await clickLine(page, 12, 10);
   let s = await waitScene(page, { context: "lochplatte" });
   s = await waitView(page, "(s) => s.view.selection.line === 12 && s.view.grid.lines > 0");
@@ -313,7 +313,7 @@ test("S13 Raster: verwendete Ebenen, alle Raster, Hover über Rasterausdruck", a
 
 test("S14 Anker benannter Instanzen", async ({ page }) => {
   await openApp(page);
-  const s = await openExample(page, "spec/winkel_anker.scad");
+  const s = await openExample(page, "spec/winkel_anker.mcad");
   // a: winkel(), b: winkel(l = 40): 3 anchors each.
   expect(s.view!.plan.anchors).toBe(6);
   // Hover over the reference `a.boden_loch` (line 26) highlights that anchor.
@@ -331,13 +331,13 @@ test("S14 Anker benannter Instanzen", async ({ page }) => {
     id: "S14",
     title: "Anker",
     image: "s14-anker",
-    caption: "winkel_anker.scad: Anker der benannten Instanzen a und b als Rauten, mit Pfeil bei dir. Hover über a.boden_loch hebt diesen Anker hervor; Cursor auf a: winkel() hebt die drei Anker der Instanz hervor.",
+    caption: "winkel_anker.mcad: Anker der benannten Instanzen a und b als Rauten, mit Pfeil bei dir. Hover über a.boden_loch hebt diesen Anker hervor; Cursor auf a: winkel() hebt die drei Anker der Instanz hervor.",
   });
 });
 
 test("S15 Fillet-Zonen blau, ausgewählte Kanten farbig, Inline-Hinweis", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/fillet_zonen.scad");
+  await openExample(page, "spec/fillet_zonen.mcad");
   await clickLine(page, 12, 10);
   await waitScene(page, { context: "block" });
   const s = await waitView(page, "(s) => s.view.selection.line === 12 && s.view.plan.items.some(i => i.mode === 'blue')");
@@ -349,7 +349,7 @@ test("S15 Fillet-Zonen blau, ausgewählte Kanten farbig, Inline-Hinweis", async 
     id: "S15",
     title: "Verrundung mit Zonen",
     image: "s15-fillet",
-    caption: "fillet_zonen.scad, Cursor auf fillet(2) in Zeile 12: Zonen (Rasterlinie und Kugel) blau halbtransparent, ausgewählte Kanten orange; Inline-Hinweis „2 Zonen · 2 Kanten“ am Zeilenende.",
+    caption: "fillet_zonen.mcad, Cursor auf fillet(2) in Zeile 12: Zonen (Rasterlinie und Kugel) blau halbtransparent, ausgewählte Kanten orange; Inline-Hinweis „2 Zonen · 2 Kanten“ am Zeilenende.",
   });
 });
 

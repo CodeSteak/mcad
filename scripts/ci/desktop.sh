@@ -5,8 +5,8 @@
 #
 #   scripts/ci/desktop.sh deps      # apt: WebKitGTK 4.1, libsoup 3, … (+ ninja); with `e2e-deps` also Xvfb, WebKitWebDriver
 #   scripts/ci/desktop.sh e2e-deps  # apt: xvfb, webkit2gtk-driver; cargo install tauri-driver
-#   scripts/ci/desktop.sh ui        # pnpm build:tauri -> web/dist-tauri (embedded into cad)
-#   scripts/ci/desktop.sh build     # cargo build --release -p cad-cli (feature gui) -> target/release/cad
+#   scripts/ci/desktop.sh ui        # pnpm build:tauri -> web/dist-tauri (embedded into mcad)
+#   scripts/ci/desktop.sh build     # cargo build --release -p cad-cli (feature gui) -> target/release/mcad
 #   scripts/ci/desktop.sh e2e       # node web/e2e-tauri/desktop.e2e.mjs (tauri-driver, Xvfb when no display)
 #
 # Locally: scripts/ci/smlib-native.sh && SMLIB_PREBUILT=smlib/build-native scripts/ci/desktop.sh ui build e2e
@@ -34,7 +34,7 @@ step() {
       ;;
     ui) (cd web && "$PNPM" build:tauri) ;;
     build) "$CARGO" build --release --locked -p cad-cli ;;
-    e2e) node web/e2e-tauri/desktop.e2e.mjs --bin "$ROOT/target/release/cad" ;;
+    e2e) node web/e2e-tauri/desktop.e2e.mjs --bin "$ROOT/target/release/mcad" ;;
     *) echo "unknown step: $1 (deps|e2e-deps|ui|build|e2e)" >&2; exit 2 ;;
   esac
 }

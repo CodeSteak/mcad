@@ -5,11 +5,11 @@
 # statistics (exact circles and lines), error messages, timings of the 2D operations. Writes
 # reports/tmp/report15/.
 #
-#   CAD=target/release/cad tools/report/report15-data.sh
+#   CAD=target/release/mcad tools/report/report15-data.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
-CAD="${CAD:-$ROOT/target/release/cad}"
+CAD="${CAD:-$ROOT/target/release/mcad}"
 OUT="$ROOT/reports/tmp/report15"
 CLI="$OUT/cli"
 CASES="$OUT/cases"

@@ -8,7 +8,7 @@ import("part.stl", center = true, scale = 25.4); // inch file → mm, bounds cen
 
 | Option | Meaning |
 | --- | --- |
-| `file` | path relative to the `.scad`; must be a string literal in the project (like SVG) |
+| `file` | path relative to the model file; must be a string literal in the project (like SVG) |
 | `as` | `"solid"`: B-rep, `"mesh"`: mesh without B-rep; default: automatic (below) |
 | `center` | centre of the bounds to the origin (all three axes) |
 | `scale` | number or `[x, y, z]`, positive, applied first (mirror with `mirror()`) |
@@ -16,7 +16,7 @@ import("part.stl", center = true, scale = 25.4); // inch file → mm, bounds cen
 | `id`, `dpi` | SVG only (warning) |
 
 Units mm. ASCII and binary STL; a file of exactly 84 + 50·n bytes is binary even if it starts
-with `solid`. The file is part of the project: CLI paths relative to the `.scad`, browser
+with `solid`. The file is part of the project: CLI paths relative to the model file, browser
 upload, desktop and `watch` reload it on change; results are cached by file content.
 
 Preparation (every mode): corners welded (tolerance 10⁻⁶ × bounds diagonal); triangles with
@@ -33,7 +33,7 @@ cannot be exactly planar stays triangles).
 With a mesh child: `union()` shows it next to the result (warning), `difference()` keeps a
 mesh base uncut or drops a mesh operand (error), `intersection()`/`fillet` leave the children
 unchanged (error); every message names `as = "solid"`. A failed B-rep build falls back to the
-mesh (warning; error with `as = "solid"`). Hint at the node (`cad inspect FILE --line N`):
+mesh (warning; error with `as = "solid"`). Hint at the node (`mcad inspect FILE --line N`):
 `B-Rep: 8 Flächen aus 20 Dreiecken` or `Netz: 20000 Dreiecke, 18556 Flächen`.
 
 Kernel time (sphere-like meshes; the limit 500 keeps import + one Boolean ≲ 2 s):
@@ -46,4 +46,4 @@ Kernel time (sphere-like meshes; the limit 500 keeps import + one Boolean ≲ 2 
 | 4646 | 7.5 s | 107 s | 0 s |
 | 18556 (20000 triangles) | – | – | 0 s (parse + prepare 0.08 s) |
 
-Example model: `examples/spec/stl_import.scad`.
+Example model: `examples/spec/stl_import.mcad`.

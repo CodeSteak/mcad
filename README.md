@@ -1,5 +1,6 @@
-# controller-cad
+# controller-cad – `mcad`
 
+Programm `mcad` (bis 0.2: `cad`), Modelldateien `*.mcad` (`*.scad` öffnet weiterhin).
 Parametrisches CAD im Browser und als Desktop-App (Tauri 2) für kleine Hobbyprojekte. Modelle werden als Text in einem
 OpenSCAD-Dialekt geschrieben; dazu kommen Raster, Anker, benannte Instanzen und Verrundungen
 über Zonen. Geometrie ist exakte B-Rep (Kernel SMLib), keine Netze. Code und 3D-Ansicht sind
@@ -13,13 +14,13 @@ Plan und Entscheidungen: [`docs/technischer-plan.md`](docs/technischer-plan.md).
 Meilensteine M0–M7 sind umgesetzt, dazu STEP-Export, `include`/`use`, mehrere Bauteile und
 variabler Fillet-Radius, eine CLI, mit der Agenten Modelle ganz ohne UI entwickeln und
 prüfen, eine Desktop-App (Tauri 2: nativer Kernel, echte Dateien, Dateibeobachter wie in
-VS Code, Git-Markierungen am Rand, Steuerung durch `cad ui …`), eine 3D-Schnittansicht, ein
+VS Code, Git-Markierungen am Rand, Steuerung durch `mcad ui …`), eine 3D-Schnittansicht, ein
 CLI-Daemon, der den Kernel-Cache zwischen CLI-Aufrufen hält, sowie Mehrfarbigkeit mit
 Farbpalette, Farbregionen, Filament-Slots, mehrfarbigem 3MF für Bambu Studio/OrcaSlicer und ein
 überarbeitetes dunkles Thema, nach einer unabhängigen Prüfung korrigiert, Skizzen mit
 Skizzen-Editor, Text und SVG-Import sowie ein Messwerkzeug an der exakten B-Rep (Abstand mit
 Fußpunkten, Radius, Winkel, Länge, Fläche, Körper; im Schnitt Konturen, Kreise, Wandstärke) in
-der UI und in `cad measure` (Testberichte 1–19, [`docs/reports/`](docs/reports/README.md)). Offen ist der Umstieg auf den
+der UI und in `mcad measure` (Testberichte 1–19, [`docs/reports/`](docs/reports/README.md)). Offen ist der Umstieg auf den
 Rust-Kernel solidcore (M8, wartet auf den Portierungsstand von solidcore, siehe
 [`docs/solidcore-umstieg.md`](docs/solidcore-umstieg.md)). Browser: kein Backend, gespeichert
 wird im Browser (IndexedDB) oder über die File System Access API; Desktop: Dateisystem.
@@ -30,8 +31,8 @@ wird im Browser (IndexedDB) oder über die File System Access API; Desktop: Date
 Browser:  React/TS (CodeMirror 6, three.js) ── EngineTransport ── Web Worker
 Worker:   cad-wasm → cad-session → cad-engine ── trait Kernel ── kernel-smlib ── smlib.wasm (Emscripten)
 CLI:      cad-cli  → cad-session → cad-engine ── trait Kernel ── kernel-smlib ── SMLib nativ (FFI)
-          (rechnet im Daemon `cad daemon serve` über cad-ipc, Cache bleibt zwischen Aufrufen)
-Desktop:  cad (Tauri 2: dieselbe React-App, TauriTransport) ── Kanal (binär) ── cad engine-host
+          (rechnet im Daemon `mcad daemon serve` über cad-ipc, Cache bleibt zwischen Aufrufen)
+Desktop:  mcad (Tauri 2: dieselbe React-App, TauriTransport) ── Kanal (binär) ── mcad engine-host
           (Engine-Prozess: cad-session, SMLib nativ); Beobachter, Git, Steuer-Socket in cad-desktop/cad-ipc
 Sprache:  cad-syntax (Parser) → cad-eval (Werte mit Herkunft, Raster, Anker, Griffe) → cad-ir (Baum)
 ```
@@ -51,9 +52,9 @@ Sprache:  cad-syntax (Parser) → cad-eval (Werte mit Herkunft, Raster, Anker, G
 - CLI-Daemon: `check`, `eval`, `inspect`, `render`, `export`, `outline`, `measure`, `set`
   laufen in einem Hintergrundprozess mit einer Engine für alle Projekte (startet beim ersten
   Aufruf, endet nach 15 min ohne Anfrage; Grenzen 512 MiB Cache, 8 Projekte, Watchdog 30 min).
-  Ausgabe wie ohne Daemon; aus mit `--no-daemon`, `CAD_NO_DAEMON=1` oder `[daemon] enabled =
-  false` in `$XDG_CONFIG_HOME/controller-cad/config.toml`; `cad daemon status|stop|serve`.
-- Desktop: ein Binary `cad` (Feature `gui`, Standard). `cad` ohne Befehl startet die UI, die
+  Ausgabe wie ohne Daemon; aus mit `--no-daemon`, `MCAD_NO_DAEMON=1` oder `[daemon] enabled =
+  false` in `$XDG_CONFIG_HOME/mcad/config.toml`; `mcad daemon status|stop|serve`.
+- Desktop: ein Binary `mcad` (Feature `gui`, Standard). `mcad` ohne Befehl startet die UI, die
   Engine läuft in einem eigenen Prozess (Watchdog beendet ihn bei hängendem Kernel), Meshes
   kommen binär über einen Tauri-2-Kanal. Ohne grafische Sitzung: Meldung, Exit 2.
 
@@ -72,56 +73,56 @@ smlib/fetch.sh
 # 2. SMLib nativ bauen (~3 min mit 4 Kernen) und die CLI bauen
 smlib/build-native.sh                       # -> smlib/build-native/lib
 export SMLIB_PREBUILT=$PWD/smlib/build-native
-cargo build --release -p cad-cli            # -> target/release/cad
+cargo build --release -p cad-cli            # -> target/release/mcad
 ```
 
 Ohne `SMLIB_PREBUILT` baut `crates/kernel-smlib/build.rs` SMLib selbst (einmal pro Profil).
 
-CLI für Menschen und Agenten (Details: `cad --help` (englisch), `cad usage` – Manual für
+CLI für Menschen und Agenten (Details: `mcad --help` (englisch), `mcad usage` – Manual für
 Agenten/LLMs aus `manuell/*.md`, englisch, ins Binary kompiliert –, `.claude/skills/cad-cli/SKILL.md`,
 Bericht 8). Empfohlener Ablauf: `outline` → editieren → `check` →
 `render --views all --show grids,anchors` → `inspect`/`measure` → `export`.
 
 ```sh
-cad=target/release/cad
-$cad outline examples/projekt-gehaeuse/gehaeuse.scad          # Module, Parameter, Raster, Anker, Bauteile
-$cad check examples/spec/gehaeuse.scad                         # Diagnosen mit Zeile:Spalte
-$cad eval examples/spec/gehaeuse.scad --json                   # Szene, Raster, Anker, echo
-$cad inspect examples/spec/fillet_zonen.scad --line 12         # was Zeile 12 erzeugt
-$cad render examples/spec/gehaeuse.scad -o x.png --module gehaeuse --views all --show grids,anchors,labels
-$cad render examples/spec/gehaeuse.scad -o s.png --section z=10 --show dims   # Schnitt mit Kappe
-$cad render examples/spec/fillet_zonen.scad -o f.png --line 12 --azimuth 120 --elevation 30 --xray
-$cad measure examples/spec/gehaeuse.scad --between k.ecke k.oben --volume part:k
-$cad measure examples/projekt-gehaeuse/gehaeuse.scad --interference --clearance gehaeuse deckel
-$cad measure examples/spec/lochplatte.scad --radius "face@[8,6,2]" --at "[18,6,4]"   # R 2 · ⌀ 4, Elemente bei P
-$cad measure examples/spec/gehaeuse.scad --section z=10 --wall "[0,15,10]"         # Schnitt: Bereiche, Wandstärke 3 mm
-$cad set examples/spec/gehaeuse.scad --param gehaeuse.w=50 --dry-run   # Standardwert, Diff
-$cad watch teil.scad --json --render teil.png --views all      # neu auswerten bei jeder Änderung
-$cad export examples/spec/flasche.scad -o flasche.step         # auch .stl, .3mf
-$cad export examples/spec/mehrfarbig.scad -o druck.3mf          # mehrfarbig (Bambu/Orca), --single-color
-$cad measure examples/spec/mehrfarbig.scad --colors            # Volumen/Masse je Farbe und Slot
-$cad render examples/spec/mehrfarbig.scad -o m.png --theme dark --show regions
-$cad export examples/projekt-gehaeuse/gehaeuse.scad --all-parts -o teile/ --format step
+mcad=target/release/mcad
+$cad outline examples/projekt-gehaeuse/gehaeuse.mcad          # Module, Parameter, Raster, Anker, Bauteile
+$cad check examples/spec/gehaeuse.mcad                         # Diagnosen mit Zeile:Spalte
+$cad eval examples/spec/gehaeuse.mcad --json                   # Szene, Raster, Anker, echo
+$cad inspect examples/spec/fillet_zonen.mcad --line 12         # was Zeile 12 erzeugt
+$cad render examples/spec/gehaeuse.mcad -o x.png --module gehaeuse --views all --show grids,anchors,labels
+$cad render examples/spec/gehaeuse.mcad -o s.png --section z=10 --show dims   # Schnitt mit Kappe
+$cad render examples/spec/fillet_zonen.mcad -o f.png --line 12 --azimuth 120 --elevation 30 --xray
+$cad measure examples/spec/gehaeuse.mcad --between k.ecke k.oben --volume part:k
+$cad measure examples/projekt-gehaeuse/gehaeuse.mcad --interference --clearance gehaeuse deckel
+$cad measure examples/spec/lochplatte.mcad --radius "face@[8,6,2]" --at "[18,6,4]"   # R 2 · ⌀ 4, Elemente bei P
+$cad measure examples/spec/gehaeuse.mcad --section z=10 --wall "[0,15,10]"         # Schnitt: Bereiche, Wandstärke 3 mm
+$cad set examples/spec/gehaeuse.mcad --param gehaeuse.w=50 --dry-run   # Standardwert, Diff
+$cad watch teil.mcad --json --render teil.png --views all      # neu auswerten bei jeder Änderung
+$cad export examples/spec/flasche.mcad -o flasche.step         # auch .stl, .3mf
+$cad export examples/spec/mehrfarbig.mcad -o druck.3mf          # mehrfarbig (Bambu/Orca), --single-color
+$cad measure examples/spec/mehrfarbig.mcad --colors            # Volumen/Masse je Farbe und Slot
+$cad render examples/spec/mehrfarbig.mcad -o m.png --theme dark --show regions
+$cad export examples/projekt-gehaeuse/gehaeuse.mcad --all-parts -o teile/ --format step
 $cad daemon status                                             # Daemon: PID, Laufzeit, Cache, Trefferquote
 ```
 
-Der erste rechnende Befehl startet den Daemon (`cad daemon serve`, abgekoppelt, Log
+Der erste rechnende Befehl startet den Daemon (`mcad daemon serve`, abgekoppelt, Log
 `daemon.log` im Socket-Ordner); weitere Aufrufe nutzen dessen Cache (Messwerte: Bericht 10).
-Wäre der Socketpfad länger als die Unix-Grenze (107 Byte, z. B. ein tiefer `CAD_IPC_DIR`),
-liegt der Socket unter `/tmp/cad-<uid>/<hash>-daemon.sock` (gleiche Rechteprüfung);
-`cad daemon status` nennt ihn („Ersatzpfad“).
-Einstellungen (Standardwerte; Umgebung vor Datei, Argumente von `cad daemon serve` vor beidem):
+Wäre der Socketpfad länger als die Unix-Grenze (107 Byte, z. B. ein tiefer `MCAD_IPC_DIR`),
+liegt der Socket unter `/tmp/mcad-<uid>/<hash>-daemon.sock` (gleiche Rechteprüfung);
+`mcad daemon status` nennt ihn („Ersatzpfad“).
+Einstellungen (Standardwerte; Umgebung vor Datei, Argumente von `mcad daemon serve` vor beidem):
 
 ```toml
-# $XDG_CONFIG_HOME/controller-cad/config.toml  (sonst ~/.config/…, Pfad auch über CAD_CONFIG)
+# $XDG_CONFIG_HOME/mcad/config.toml  (sonst ~/.config/…, Pfad auch über MCAD_CONFIG)
 [daemon]
-enabled = true        # false oder CAD_NO_DAEMON=1: nie Daemon; je Aufruf: --no-daemon
-cache_mb = 512        # Knotenergebnisse + Netze (CAD_DAEMON_CACHE_MB, serve --cache-mb)
-max_projects = 8      # Projekte, deren Ergebnisse der Cache hält (CAD_DAEMON_MAX_PROJECTS)
-idle_minutes = 15     # Ende ohne Anfrage (CAD_DAEMON_IDLE_MINUTES oder CAD_DAEMON_IDLE_SECS)
-watchdog_secs = 1800  # länger laufender Befehl: Daemon endet, Befehl läuft ohne ihn (CAD_DAEMON_WATCHDOG_SECS)
-rss_factor = 1.5      # RSS über Start + Faktor × cache_mb: Cache leeren (CAD_DAEMON_RSS_FACTOR)
-cache_entries = 16384 # Höchstzahl der Einträge (CAD_DAEMON_CACHE_ENTRIES)
+enabled = true        # false oder MCAD_NO_DAEMON=1: nie Daemon; je Aufruf: --no-daemon
+cache_mb = 512        # Knotenergebnisse + Netze (MCAD_DAEMON_CACHE_MB, serve --cache-mb)
+max_projects = 8      # Projekte, deren Ergebnisse der Cache hält (MCAD_DAEMON_MAX_PROJECTS)
+idle_minutes = 15     # Ende ohne Anfrage (MCAD_DAEMON_IDLE_MINUTES oder MCAD_DAEMON_IDLE_SECS)
+watchdog_secs = 1800  # länger laufender Befehl: Daemon endet, Befehl läuft ohne ihn (MCAD_DAEMON_WATCHDOG_SECS)
+rss_factor = 1.5      # RSS über Start + Faktor × cache_mb: Cache leeren (MCAD_DAEMON_RSS_FACTOR)
+cache_entries = 16384 # Höchstzahl der Einträge (MCAD_DAEMON_CACHE_ENTRIES)
 ```
 
 Jeder Befehl hat `--json` mit festem, versioniertem Schema (`schema_version`, Kopf von
@@ -133,13 +134,13 @@ libayatana-appindicator3-dev librsvg2-dev libxdo-dev`, siehe `scripts/ci/desktop
 
 ```sh
 (cd web && pnpm install && pnpm build:tauri)   # UI ohne Worker/Wasm -> web/dist-tauri (wird eingebettet)
-cargo build --release -p cad-cli               # target/release/cad mit UI (ohne UI: --no-default-features)
-cad                                            # Desktop-UI
-cad examples/spec/gehaeuse.scad                # mit Datei (wird beobachtet, Git-Rand)
-cad examples/projekt-gehaeuse/                 # Ordner als Projekt
-cad ui status --json                           # was ist offen (Datei, Cursor, Kontext, Parameter, Diagnosen)
-cad ui show examples/spec/gehaeuse.scad --line 11
-cad ui screenshot -o ansicht.png               # 3D-Ansicht der laufenden UI
+cargo build --release -p cad-cli               # target/release/mcad mit UI (ohne UI: --no-default-features)
+mcad                                            # Desktop-UI
+mcad examples/spec/gehaeuse.mcad                # mit Datei (wird beobachtet, Git-Rand)
+mcad examples/projekt-gehaeuse/                 # Ordner als Projekt
+mcad ui status --json                           # was ist offen (Datei, Cursor, Kontext, Parameter, Diagnosen)
+mcad ui show examples/spec/gehaeuse.mcad --line 11
+mcad ui screenshot -o ansicht.png               # 3D-Ansicht der laufenden UI
 ```
 
 Ohne `web/dist-tauri` bettet `cargo build` eine Platzhalterseite ein (der Workspace baut
@@ -168,16 +169,16 @@ Meldung ab, was zu installieren ist.
 | `make deps` | `smlib` + `web-deps`: SMLib nativ (`smlib-native` → `SMLIB_PREBUILT`) und als Wasm (`smlib-wasm` → `web/public/smlib`, braucht emcc: `make emsdk`), `pnpm install --frozen-lockfile` |
 | `make wasm` / `make web` | cad-wasm → `web/src/wasm-pkg`; Browser-App → `web/dist` |
 | `make ui` | UI der Desktop-App → `web/dist-tauri` (ohne Wasm) |
-| `make cli` | `target/release/cad` ohne Desktop-UI (`--no-default-features`, ohne WebKitGTK) |
-| `make app` | `target/release/cad` mit eingebetteter Desktop-UI (Tauri 2) |
+| `make cli` | `target/release/mcad` ohne Desktop-UI (`--no-default-features`, ohne WebKitGTK) |
+| `make app` | `target/release/mcad` mit eingebetteter Desktop-UI (Tauri 2) |
 | `make build` | SMLib nativ + Wasm, Browser-App, Desktop-App |
 | `make test` | `cargo test --workspace` und Vitest (`test-rust`, `test-web`; dazu `test-node`) |
 | `make e2e` / `make e2e-desktop` | Playwright (Chromium) / Tauri-E2E (tauri-driver, Xvfb) |
 | `make lint` | `cargo fmt --check`, Clippy nativ und wasm32 (`-D warnings`), `tsc` |
 | `make fmt` | `cargo fmt --all` |
-| `make install` | `cad`, Desktop-Datei, App-Symbol (`assets/icon`: PNG 16–512 px, SVG), Lizenzen, Doku und Beispiele |
+| `make install` | `mcad`, Desktop-Datei, App-Symbol (`assets/icon`: PNG 16–512 px, SVG), Lizenzen, Doku und Beispiele |
 | `make uninstall` | entfernt diese Dateien wieder |
-| `make dist` | Quelltext-Archiv von `HEAD` → `target/arch/controller-cad-<pkgver>.tar.gz` |
+| `make dist` | Quelltext-Archiv von `HEAD` → `target/arch/mcad-<pkgver>.tar.gz` |
 | `make arch` / `make arch-test` | Arch-Paket bauen / in frischem Container installieren und prüfen |
 | `make clean` / `make distclean` | Bauergebnisse / zusätzlich `node_modules`, SMLib-Bauordner |
 
@@ -188,36 +189,38 @@ Variablen (Umgebung oder `make VAR=…`): `CARGO`, `PNPM`, `NODE`, `GIT`, `DOCKE
 `ARCH_DOCKER_NETWORK`, `ARCH_CA_BUNDLE`, `ARCH_CACHE_VOLUME`.
 
 ```sh
-make app SMLIB_PREBUILT=$PWD/smlib/build-native   # SMLib, UI, cad mit UI
+make app SMLIB_PREBUILT=$PWD/smlib/build-native   # SMLib, UI, mcad mit UI
 sudo make install PREFIX=/usr/local               # oder: make install DESTDIR=/tmp/root PREFIX=/usr
 ```
 
-`make install` legt an: `$PREFIX/bin/cad`, `share/applications/dev.controller-cad.desktop.desktop`
-(`cad %f`, ohne Datei startet die UI; der Dateiname ist die App-ID aus `crates/cad-app/tauri.conf.json`,
-die die App auch als Wayland-`app_id` und X11-`WM_CLASS` setzt – so ordnet die Taskleiste das Symbol zu), `share/icons/hicolor/<n>x<n>/apps/controller-cad.png` (n = 16 … 512 aus `assets/icon/png`) und
-`share/icons/hicolor/scalable/apps/controller-cad.svg` (`assets/icon/cad.svg`),
-`share/licenses/controller-cad/` (`NOTICE`, OFL-Texte der Schriften mit `fonts-README.md`,
-SMLib `LICENSE` und `THIRD_PARTY_NOTICES.md`), `share/doc/controller-cad/` (README, CLI-Anleitung
-`cad-cli.md`, `examples/`). Installiert wird, was `target/release/cad` gerade ist (`make app`
-oder `make cli`); `install` baut nicht selbst.
+`make install` legt an: `$PREFIX/bin/mcad`, `share/applications/dev.mcad.desktop.desktop`
+(`mcad %f`, ohne Datei startet die UI; der Dateiname ist die App-ID aus `crates/cad-app/tauri.conf.json`,
+die die App auch als Wayland-`app_id` und X11-`WM_CLASS` setzt – so ordnet die Taskleiste das Symbol zu; Dateitypen `text/x-mcad` und `application/x-openscad`), `share/mime/packages/mcad.xml`
+(`*.mcad`, `*.scad`), `share/icons/hicolor/<n>x<n>/apps/mcad.png` (n = 16 … 512 aus `assets/icon/png`) und
+`share/icons/hicolor/scalable/apps/mcad.svg` (`assets/icon/cad.svg`),
+`share/licenses/mcad/` (`NOTICE`, OFL-Texte der Schriften mit `fonts-README.md`,
+SMLib `LICENSE` und `THIRD_PARTY_NOTICES.md`), `share/doc/mcad/` (README, CLI-Anleitung
+`cad-cli.md`, `examples/`). Installiert wird, was `target/release/mcad` gerade ist (`make app`
+oder `make cli`); `install` baut nicht selbst. `make uninstall` entfernt auch die Desktop-Datei,
+Icons, Lizenzen und Doku unter den alten Namen (`controller-cad`), nicht aber ein altes `bin/cad`.
 
 ### Arch-Paket
 
-`packaging/arch/PKGBUILD` baut das Paket `controller-cad`: `cad` mit Desktop-UI und CLI,
+`packaging/arch/PKGBUILD` baut das Paket `mcad` (ersetzt das frühere Paket `controller-cad`): `mcad` mit Desktop-UI und CLI,
 Desktop-Datei, Icons, Lizenzen (Projekt `LicenseRef-UNLICENSED`, SMLib Apache-2.0, Schriften
 OFL-1.1) und Beispiele. Laufzeit: `webkit2gtk-4.1`, `gtk3`, `libsoup3`, `glib2`, `cairo`,
-`gdk-pixbuf2`, `dbus`, `libgcc`, `libstdc++`, `glibc`, `hicolor-icon-theme`; Bau: `cargo`, `nodejs`, `pnpm`,
+`gdk-pixbuf2`, `dbus`, `libgcc`, `libstdc++`, `glibc`, `hicolor-icon-theme`, `shared-mime-info`; Bau: `cargo`, `nodejs`, `pnpm`,
 `cmake`, `ninja`, `git` (und `base-devel`). SMLib kommt als Git-Quelle am Commit aus
 `smlib/fetch.sh` (anderer Ort: `SMLIB_URL=…`), die Patches aus `smlib/patches` wendet
 `prepare()` an; `build()` ist `make app`, `package()` ist `make install DESTDIR=$pkgdir PREFIX=/usr`.
 
 ```sh
-make arch        # -> target/arch/controller-cad-<pkgver>-1-x86_64.pkg.tar.zst, namcap.txt
+make arch        # -> target/arch/mcad-<pkgver>-1-x86_64.pkg.tar.zst, namcap.txt
 make arch-test   # frischer archlinux-Container: pacman -U, CLI headless, UI unter Xvfb
-sudo pacman -U target/arch/controller-cad-*.pkg.tar.zst
+sudo pacman -U target/arch/mcad-*.pkg.tar.zst
 ```
 
-- `pkgver` = Cargo-Version + Git-Stand (`0.2.1.r<Commits>.g<Hash>`); das Archiv ist `git archive
+- `pkgver` = Cargo-Version + Git-Stand (`0.3.0.r<Commits>.g<Hash>`); das Archiv ist `git archive
   HEAD`, nicht eingecheckte Änderungen fehlen darin (`make` weist darauf hin).
 - `ARCH_BUILD=auto` (Vorgabe): auf Arch mit `makepkg` (`MAKEPKG_FLAGS`, Vorgabe `--syncdeps
   --force`), sonst in Docker (`packaging/arch/docker.sh`): ein Builder-Image aus `archlinux:latest`
@@ -229,9 +232,9 @@ sudo pacman -U target/arch/controller-cad-*.pkg.tar.zst
   (Vorgabe) erreicht einen Proxy auf `127.0.0.1`, `ARCH_CA_BUNDLE=/pfad/ca.crt` nimmt eine
   zusätzliche CA in den Container auf (Trust-Store und `NODE_EXTRA_CA_CERTS` für pnpm).
 - `make arch-test` (`packaging/arch/smoke-test.sh`): Installation mit Abhängigkeiten aus den
-  Repositorys, `pacman -Qi/-Ql/-Qkk`, fehlende Bibliotheken (`ldd`), `cad --version`, `check`,
+  Repositorys, `pacman -Qi/-Ql/-Qkk`, fehlende Bibliotheken (`ldd`), `mcad --version`, `check`,
   `outline`, `render`, `export` (STEP/STL/3MF), `measure`, Daemon, Exit 2 ohne Display,
-  Desktop-UI unter Xvfb (`cad ui status`, `cad ui screenshot`), `desktop-file-validate`;
+  Desktop-UI unter Xvfb (`mcad ui status`, `mcad ui screenshot`), `desktop-file-validate`;
   Ergebnisse in `target/arch/test/`.
 
 ## Sprache in Kürze
@@ -274,7 +277,7 @@ sudo pacman -U target/arch/controller-cad-*.pkg.tar.zst
   einem offenen Pfad eine Fläche (Rippen, Langlöcher, Kabelkanäle; Plan 17.3, Bericht 15).
 - Module sind Namensräume: `module teile { module schraube(d = 3) { … } }` (Klammern dürfen
   fehlen), Aufruf von außen `teile.schraube(d = 4);`, mehrstufig `a.b.c();`; Funktionen und
-  Konstanten eines Moduls als `teile.kopf(d)`, `teile.M3`; `cad --module teile.schraube`.
+  Konstanten eines Moduls als `teile.kopf(d)`, `teile.M3`; `mcad --module teile.schraube`.
 - `text("Schild", size = 10, font = "Inter:style=Bold", halign = "center")` wie in OpenSCAD
   (Größe, Laufweite, Ausrichtung, `spacing`, `direction`, `language`, `script`; Hülle und
   Fläche gleich OpenSCAD 2021.01), Umrisse exakt (Bézier), Kerning und Ligaturen über
@@ -291,7 +294,7 @@ sudo pacman -U target/arch/controller-cad-*.pkg.tar.zst
   `line`, Gruppen mit `transform`, `viewBox`/Einheiten, `fill-rule`; Kreise bleiben Kreise.
   Nicht Unterstütztes (Text, Bilder, `use`, CSS-Klassen, Masken, Striche) meldet eine Warnung
   mit der SVG-Zeile. Die Datei liegt relativ zur einbindenden Datei (CLI: Dateisystem,
-  `cad watch` beobachtet sie; Browser: Projektdatei, im Editor änderbar) (Plan 17.4/17.5,
+  `mcad watch` beobachtet sie; Browser: Projektdatei, im Editor änderbar) (Plan 17.4/17.5,
   Bericht 16).
 - `import("teil.stl", center, scale, as = "solid" | "mesh")` liest STL (ASCII und binär):
   verschweißt, Orientierung korrigiert, koplanare Dreiecke zu ebenen Flächen zusammengefasst.
@@ -332,8 +335,8 @@ k: halter(w = 50);
 translate(k.oben) rotate(to = dir(k.oben)) cylinder(h = 8, r = 3);
 ```
 
-Weitere Beispiele: `examples/spec/` (Spracherweiterungen, Skizzen: `skizze_*.scad`, Text: `text_schild.scad`,
-SVG: `svg_logo.scad` mit `examples/svg/*.svg`, STL: `stl_import.scad` mit `examples/stl/`), `examples/openscad-compat/`
+Weitere Beispiele: `examples/spec/` (Spracherweiterungen, Skizzen: `skizze_*.mcad`, Text: `text_schild.mcad`,
+SVG: `svg_logo.mcad` mit `examples/svg/*.svg`, STL: `stl_import.mcad` mit `examples/stl/`), `examples/openscad-compat/`
 (36 OpenSCAD-Modelle), `examples/projekt-gehaeuse/` (Projekt aus drei Dateien).
 
 ## Verzeichnisstruktur
@@ -353,13 +356,13 @@ crates/
   cad-outline/       neutrale 2D-Konturen (Gerade, Kreis-/Ellipsenbogen, Bézier), Füllregeln
   cad-svg/           SVG-Import (Teilmenge) → Konturen in mm
   cad-font/          Text: mitgelieferte OFL-Schriften (fonts/), Shaping (rustybuzz), Glyphen-Umrisse
-  cad-render/        Software-Rasterizer für `cad render` (Schnitt mit Kappe, Beschriftung)
+  cad-render/        Software-Rasterizer für `mcad render` (Schnitt mit Kappe, Beschriftung)
   cad-session/       Protokoll (Worker und CLI), TS-Typen
   cad-wasm/          wasm-bindgen-Einstieg für den Worker
   cad-ipc/           lokale IPC (Unix-Socket je Benutzer, versionierte Rahmen, Sperrdateien) – UI-Steuerung, CLI-Daemon
   cad-desktop/       Desktop-Backend ohne Tauri: Engine-Prozess, Watchdog, Dateien, Beobachter, Git-Hunks
   cad-app/           Tauri-2-App (eingebettete UI aus web/dist-tauri)
-  cad-cli/           CLI `cad` (ohne Befehl: Desktop-UI)
+  cad-cli/           CLI `mcad` (ohne Befehl: Desktop-UI)
   compat-tests/      OpenSCAD-Vergleich Stufe 1 (Rust-Tests)
 smlib/               fetch.sh, Patches, CMakeLists, Fassade, Build-Skripte nativ/Wasm
 third_party/smlib/   SMLib-Quellen (nicht eingecheckt, smlib/fetch.sh)
@@ -387,12 +390,12 @@ cargo check -p cad-wasm --target wasm32-unknown-unknown
 node crates/kernel-smlib/js/test-node.mjs                       # smlib.wasm über die Brücke
 node web/scripts/smoke-node.mjs                                 # Browser-Engine in Node
 cd web && pnpm typecheck && pnpm test && pnpm e2e               # tsc, Vitest, Playwright (Chromium)
-node web/e2e-tauri/desktop.e2e.mjs --bin target/release/cad    # Desktop: tauri-driver + WebKitWebDriver (Xvfb)
+node web/e2e-tauri/desktop.e2e.mjs --bin target/release/mcad    # Desktop: tauri-driver + WebKitWebDriver (Xvfb)
 
 python3 tests/openscad-compat/make-reference.py                 # Referenz-STLs (OpenSCAD 2021.01)
 python3 tests/openscad-compat/compare.py --self-test
-CAD=target/release/cad python3 tests/openscad-compat/compare.py --eval   # 33/33
-/pfad/zum/venv/bin/python tests/step/verify.py --cad target/release/cad  # STEP mit OpenCASCADE
+MCAD=target/release/mcad python3 tests/openscad-compat/compare.py --eval   # 33/33
+/pfad/zum/venv/bin/python tests/step/verify.py --cad target/release/mcad  # STEP mit OpenCASCADE
 python3 tools/palette/palette.py                                # Palette: ΔE, Farbfehlsichtigkeit, Kontrast
 python3 tools/report/verify3mf.py teil.3mf                      # 3MF: lib3mf, trimesh, Bambu-Import-Modell
 ```

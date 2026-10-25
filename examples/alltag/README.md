@@ -1,10 +1,10 @@
 # Alltagsmodelle und typische CAD-Teile
 
 19 parametrische Modelle (15 Einzeldateien, 4 Baugruppen-Ordner mit `include`/`use`), entwickelt
-und geprüft nur mit der CLI (`cad outline`, `check`, `render --views all --show grids,anchors`,
+und geprüft nur mit der CLI (`mcad outline`, `check`, `render --views all --show grids,anchors`,
 `inspect`, `measure --interference/--clearance`, `export` STL/STEP). Jede Datei beginnt mit
 `// Zweck: …`; alle Maße in mm; jedes Modell ist ein Modul mit Standardwerten, auf oberster
-Ebene als benannte Instanz (Bauteil, Export je Teil mit `cad export … --all-parts`).
+Ebene als benannte Instanz (Bauteil, Export je Teil mit `mcad export … --all-parts`).
 Katalog mit Bild, Kenndaten und Parametern je Modell: [`docs/modelle/alltagsmodelle.pdf`](../../docs/modelle/alltagsmodelle.pdf).
 
 Regression: `tests/alltag/check.sh` (alle Modelle: `check --json`, Export STEP je Bauteil, STL
@@ -14,31 +14,31 @@ und STEP gesamt in ein temporäres Verzeichnis, Vergleich mit `tests/alltag/expe
 ## Modelle
 
 Volumen: exakte B-Rep (Kernel), Summe der Bauteile. Kernel: `scene.stats.kernel_ms` von
-`cad eval` ohne Cache; Auswertung: `timings.evaluate_ms` von `cad render` (Auswertung samt
+`mcad eval` ohne Cache; Auswertung: `timings.evaluate_ms` von `mcad render` (Auswertung samt
 Kantenabfragen und Tessellierung), beides einmalig gemessen auf der Entwicklungsmaschine
 (Linux, ein Kern je Aufruf, ohne Daemon – siehe F14).
 
 | Datei | Zweck | Sprachmittel | Bauteile | Volumen mm³ | Kernel / Auswertung | Vorschau |
 | --- | --- | --- | --- | ---: | ---: | --- |
-| [`handystaender.scad`](handystaender.scad) | Handyständer, Neigung 65°, Kabelloch mit Kanal | 2D-Raster für das Profil + 3D-Raster für Zonen, `polygon` aus Rasterpunkten, `linear_extrude`, Funktion mit `let` (Geradenschnitt), verschachtelte `fillet`-Zonen an Rasterlinien (r 3 / 1,5) | `staender` | 109 978 | 0,2 / 0,5 s | [img](img/handystaender.png) |
-| [`becher.scad`](becher.scad) | Becher mit Henkel, ~370 ml | `rotate_extrude`, Zone an Rasterebene, **`shell`** (oben offen), `fillet` um `shell`, **`sweep`** (Spline-Pfad), `union(fillet = …)`, Funktion | `b` | 77 709 | 1,6 / 4,5 s | [img](img/becher.png) |
-| [`kabelclip.scad`](kabelclip.scad) | Kabelhalter für die Tischkante (19 mm), 4 Kanäle | indizierte Rasterebenen aus Liste, `linear_extrude`, Zonen an Rasterlinien, `difference(fillet = …)` (40 Kanten), `cylinder(a, b, r)`, `for` | `clip` | 24 457 | 0,6 / 1,7 s | [img](img/kabelclip.png) |
-| [`wandhaken.scad`](wandhaken.scad) | Wandhaken mit Kugelknauf, 2 Senkbohrungen | `fillet`-Zonen (Linien) in `chamfer`-Zone (Ebene) – Fase erfasst die Randkanten der Verrundung, **`sweep`**, `union(fillet)`, Kegel `cylinder(h, r1, r2)`, Anker mit `dir` | `haken` | 18 818 | 1,0 / 2,2 s | [img](img/wandhaken.png) |
-| [`seifenschale.scad`](seifenschale.scad) | Seifenschale mit Ablaufschlitzen, Rippen, Füßen | verschachtelte Zonen (senkrechte Linien r 14, Bodenebene r 5), **`shell`**, `cylinder(a, b, r)` zwischen Rasterpunkten, `for` mit zwei Variablen, `difference(fillet)` | `schale` | 36 961 | 1,6 / 2,1 s | [img](img/seifenschale.png) |
-| [`stiftebox.scad`](stiftebox.scad) | Stiftebox, 3 hohe Fächer + flaches Fach | rekursive Funktion, Ebenenlisten aus Ausdrücken, 4 verschachtelte Zonenblöcke, `zone` in `for`, `chamfer`-Zone | `box_` | 115 179 | 1,3 / 1,5 s | [img](img/stiftebox.png) |
-| [`tuerstopper.scad`](tuerstopper.scad) | Türstopper-Keil mit Rillen, Griffmulde, Aufhängeloch | **`loft`** durch 3 Profile (Funktion), `rotate([90, 0, 90])`, `chamfer`-Zone an der Bodenebene, `for`, Kugel als Werkzeug | `stopper` | 64 237 | 0,2 / 0,6 s | [img](img/tuerstopper.png) |
-| [`topfuntersetzer.scad`](topfuntersetzer.scad) | Topfuntersetzer Ø 180, Ringe + Speichen | `rotate_extrude` in `for`, Liste als Rasterebenen, `box` zwischen Punkten unter `rotate`, `chamfer`-Zone (103 Kanten) | `u` | 83 250 | 5,4 / 7,2 s | [img](img/topfuntersetzer.png) |
-| [`flansch.scad`](flansch.scad) | Flanschplatte Ø 120, Bund, Lochkreis 6 × M10, Dichtnut | Querschnitt aus 2D-Raster, `rotate_extrude`, **eigenes Modul als Zone** (`ringzone`), `fillet`- und `chamfer`-Zonen, `difference(chamfer)`, Lochkreis per `for`/`rotate` | `f` | 150 300 | 1,2 / 2,4 s | [img](img/flansch.png) |
-| [`lagerbock.scad`](lagerbock.scad) | Stehlagerbock für Kugellager 608, Langlöcher M6 | Zonen an Rasterlinien in x, y und z (Kehlen rund um das Auge), `chamfer`-Zone, `difference(chamfer)`, Hilfsmodul Langloch, `cylinder(a, b, r)` tangential an `box` | `bock` | 34 404 | 0,8 / 1,2 s | [img](img/lagerbock.png) |
-| [`winkel_rippe.scad`](winkel_rippe.scad) | Montagewinkel 60 × 50 mit Rippe, M5 | indizierte Ebenen (Rippen), Zonen in `for`, Kehlen mit Eckübergang in einem Block, `linear_extrude`, `difference(chamfer)` | `w` | 22 246 | 0,6 / 1,1 s | [img](img/winkel_rippe.png) |
-| [`kuehlkoerper.scad`](kuehlkoerper.scad) | Kühlkörper 60 × 50, 9 Rippen | indizierte Ebenen, Rippen per `for`, Zonen an Rasterlinien in `for` (Rippenfüße), Ebenen-Zone (Köpfe), `floor` | `kk` | 34 652 | 0,9 / 1,5 s | [img](img/kuehlkoerper.png) |
-| [`zahnrad.scad`](zahnrad.scad) | Stirnradpaar m 2, z 20/12, Passfedernut, D-Bohrung | Evolvente aus Listenfunktionen (`let`, `each`, `concat`), `polygon`, `if`, `intersection`, `difference(chamfer)`, zwei Bauteile im Eingriff | `rad1`, `rad2` | 16 628 | 5,1 / 5,5 s | [img](img/zahnrad.png) |
-| [`rohrschelle.scad`](rohrschelle.scad) | zweiteilige Rohrschelle Ø 32, M5/M8 | `rotate_extrude(angle = 180)`, `chamfer`-Zonen, `mirror`, Bauteile in einem gedrehten Block, Anker mit `?:` | `oben`, `unten`, `rohr` | 25 870 | 2,1 / 2,8 s | [img](img/rohrschelle.png) |
-| [`pi_platte.scad`](pi_platte.scad) | Montageplatte Raspberry Pi (58 × 49, M2.5) + Platinen-Dummy | benannte Instanzen `dom[i]` in einer Schleife im Modul, Anker aus Instanz-Anker (`dom[0].oben`), `union(fillet)`, Zonen, `color`, `$fillet`, Platine am Anker | `platte`, `pi` | 46 048 | 1,6 / 2,1 s | [img](img/pi_platte.png) |
-| [`gehaeuse/`](gehaeuse/gehaeuse.scad) | Elektronikgehäuse mit Deckel, 4 Schrauben M3 | **Baugruppe**: `include <masse.scad>` (Maße + Funktion `dom_pos`), `use <teile.scad>`, **`shell`** eines verrundeten Quaders, `union(fillet)`, Dome `dom[i]`, Deckel am Anker, Schrauben `s[i]`, `explosion` | `unterteil`, `deckel`, `s[0]`…`s[3]` | 42 068 | 4,0 / 3,5 s¹ | [img](img/gehaeuse.png) (explodiert) |
-| [`scharnier/`](scharnier/scharnier.scad) | Scharnier 60 mm, 5 Augen, Spiel 0,4 | **Baugruppe**: `include`/`use`, Augen aus einer Funktion, `for` mit Schrittweite, Freiräume, Blatt B auf Öffnungswinkel gedreht | `a`, `b`, `stift` | 10 151 | 2,6 / 3,7 s | [img](img/scharnier.png) |
-| [`pflanztopf/`](pflanztopf/pflanztopf.scad) | Pflanztopf mit Untersetzer | **Baugruppe**: Superellipse als `spline` (Funktion mit `pow`, `sign`), **`loft`** Quadrat → Kreis, Differenz zweier Lofts, `rotate_extrude` + **`shell`**, Volumenzonen, Anker auf Anker | `untersetzer`, `topf` | 107 178 | 1,1 / 1,8 s | [img](img/pflanztopf.png) |
-| [`schluesselbrett/`](schluesselbrett/schluesselbrett.scad) | Schlüsselbrett mit 5 eingeklebten Haken | **Baugruppe**: `include`/`use`, Ebenen aus Funktion, Zonen + Fase, Schlüssellochaufhängung, **`sweep`**, `union(fillet)`, Haken `h[i]` in `for` | `brett`, `h[0]`…`h[4]` | 158 077 | 4,0 / 15,9 s² | [img](img/schluesselbrett.png) |
+| [`handystaender.mcad`](handystaender.mcad) | Handyständer, Neigung 65°, Kabelloch mit Kanal | 2D-Raster für das Profil + 3D-Raster für Zonen, `polygon` aus Rasterpunkten, `linear_extrude`, Funktion mit `let` (Geradenschnitt), verschachtelte `fillet`-Zonen an Rasterlinien (r 3 / 1,5) | `staender` | 109 978 | 0,2 / 0,5 s | [img](img/handystaender.png) |
+| [`becher.mcad`](becher.mcad) | Becher mit Henkel, ~370 ml | `rotate_extrude`, Zone an Rasterebene, **`shell`** (oben offen), `fillet` um `shell`, **`sweep`** (Spline-Pfad), `union(fillet = …)`, Funktion | `b` | 77 709 | 1,6 / 4,5 s | [img](img/becher.png) |
+| [`kabelclip.mcad`](kabelclip.mcad) | Kabelhalter für die Tischkante (19 mm), 4 Kanäle | indizierte Rasterebenen aus Liste, `linear_extrude`, Zonen an Rasterlinien, `difference(fillet = …)` (40 Kanten), `cylinder(a, b, r)`, `for` | `clip` | 24 457 | 0,6 / 1,7 s | [img](img/kabelclip.png) |
+| [`wandhaken.mcad`](wandhaken.mcad) | Wandhaken mit Kugelknauf, 2 Senkbohrungen | `fillet`-Zonen (Linien) in `chamfer`-Zone (Ebene) – Fase erfasst die Randkanten der Verrundung, **`sweep`**, `union(fillet)`, Kegel `cylinder(h, r1, r2)`, Anker mit `dir` | `haken` | 18 818 | 1,0 / 2,2 s | [img](img/wandhaken.png) |
+| [`seifenschale.mcad`](seifenschale.mcad) | Seifenschale mit Ablaufschlitzen, Rippen, Füßen | verschachtelte Zonen (senkrechte Linien r 14, Bodenebene r 5), **`shell`**, `cylinder(a, b, r)` zwischen Rasterpunkten, `for` mit zwei Variablen, `difference(fillet)` | `schale` | 36 961 | 1,6 / 2,1 s | [img](img/seifenschale.png) |
+| [`stiftebox.mcad`](stiftebox.mcad) | Stiftebox, 3 hohe Fächer + flaches Fach | rekursive Funktion, Ebenenlisten aus Ausdrücken, 4 verschachtelte Zonenblöcke, `zone` in `for`, `chamfer`-Zone | `box_` | 115 179 | 1,3 / 1,5 s | [img](img/stiftebox.png) |
+| [`tuerstopper.mcad`](tuerstopper.mcad) | Türstopper-Keil mit Rillen, Griffmulde, Aufhängeloch | **`loft`** durch 3 Profile (Funktion), `rotate([90, 0, 90])`, `chamfer`-Zone an der Bodenebene, `for`, Kugel als Werkzeug | `stopper` | 64 237 | 0,2 / 0,6 s | [img](img/tuerstopper.png) |
+| [`topfuntersetzer.mcad`](topfuntersetzer.mcad) | Topfuntersetzer Ø 180, Ringe + Speichen | `rotate_extrude` in `for`, Liste als Rasterebenen, `box` zwischen Punkten unter `rotate`, `chamfer`-Zone (103 Kanten) | `u` | 83 250 | 5,4 / 7,2 s | [img](img/topfuntersetzer.png) |
+| [`flansch.mcad`](flansch.mcad) | Flanschplatte Ø 120, Bund, Lochkreis 6 × M10, Dichtnut | Querschnitt aus 2D-Raster, `rotate_extrude`, **eigenes Modul als Zone** (`ringzone`), `fillet`- und `chamfer`-Zonen, `difference(chamfer)`, Lochkreis per `for`/`rotate` | `f` | 150 300 | 1,2 / 2,4 s | [img](img/flansch.png) |
+| [`lagerbock.mcad`](lagerbock.mcad) | Stehlagerbock für Kugellager 608, Langlöcher M6 | Zonen an Rasterlinien in x, y und z (Kehlen rund um das Auge), `chamfer`-Zone, `difference(chamfer)`, Hilfsmodul Langloch, `cylinder(a, b, r)` tangential an `box` | `bock` | 34 404 | 0,8 / 1,2 s | [img](img/lagerbock.png) |
+| [`winkel_rippe.mcad`](winkel_rippe.mcad) | Montagewinkel 60 × 50 mit Rippe, M5 | indizierte Ebenen (Rippen), Zonen in `for`, Kehlen mit Eckübergang in einem Block, `linear_extrude`, `difference(chamfer)` | `w` | 22 246 | 0,6 / 1,1 s | [img](img/winkel_rippe.png) |
+| [`kuehlkoerper.mcad`](kuehlkoerper.mcad) | Kühlkörper 60 × 50, 9 Rippen | indizierte Ebenen, Rippen per `for`, Zonen an Rasterlinien in `for` (Rippenfüße), Ebenen-Zone (Köpfe), `floor` | `kk` | 34 652 | 0,9 / 1,5 s | [img](img/kuehlkoerper.png) |
+| [`zahnrad.mcad`](zahnrad.mcad) | Stirnradpaar m 2, z 20/12, Passfedernut, D-Bohrung | Evolvente aus Listenfunktionen (`let`, `each`, `concat`), `polygon`, `if`, `intersection`, `difference(chamfer)`, zwei Bauteile im Eingriff | `rad1`, `rad2` | 16 628 | 5,1 / 5,5 s | [img](img/zahnrad.png) |
+| [`rohrschelle.mcad`](rohrschelle.mcad) | zweiteilige Rohrschelle Ø 32, M5/M8 | `rotate_extrude(angle = 180)`, `chamfer`-Zonen, `mirror`, Bauteile in einem gedrehten Block, Anker mit `?:` | `oben`, `unten`, `rohr` | 25 870 | 2,1 / 2,8 s | [img](img/rohrschelle.png) |
+| [`pi_platte.mcad`](pi_platte.mcad) | Montageplatte Raspberry Pi (58 × 49, M2.5) + Platinen-Dummy | benannte Instanzen `dom[i]` in einer Schleife im Modul, Anker aus Instanz-Anker (`dom[0].oben`), `union(fillet)`, Zonen, `color`, `$fillet`, Platine am Anker | `platte`, `pi` | 46 048 | 1,6 / 2,1 s | [img](img/pi_platte.png) |
+| [`gehaeuse/`](gehaeuse/gehaeuse.mcad) | Elektronikgehäuse mit Deckel, 4 Schrauben M3 | **Baugruppe**: `include <masse.mcad>` (Maße + Funktion `dom_pos`), `use <teile.mcad>`, **`shell`** eines verrundeten Quaders, `union(fillet)`, Dome `dom[i]`, Deckel am Anker, Schrauben `s[i]`, `explosion` | `unterteil`, `deckel`, `s[0]`…`s[3]` | 42 068 | 4,0 / 3,5 s¹ | [img](img/gehaeuse.png) (explodiert) |
+| [`scharnier/`](scharnier/scharnier.mcad) | Scharnier 60 mm, 5 Augen, Spiel 0,4 | **Baugruppe**: `include`/`use`, Augen aus einer Funktion, `for` mit Schrittweite, Freiräume, Blatt B auf Öffnungswinkel gedreht | `a`, `b`, `stift` | 10 151 | 2,6 / 3,7 s | [img](img/scharnier.png) |
+| [`pflanztopf/`](pflanztopf/pflanztopf.mcad) | Pflanztopf mit Untersetzer | **Baugruppe**: Superellipse als `spline` (Funktion mit `pow`, `sign`), **`loft`** Quadrat → Kreis, Differenz zweier Lofts, `rotate_extrude` + **`shell`**, Volumenzonen, Anker auf Anker | `untersetzer`, `topf` | 107 178 | 1,1 / 1,8 s | [img](img/pflanztopf.png) |
+| [`schluesselbrett/`](schluesselbrett/schluesselbrett.mcad) | Schlüsselbrett mit 5 eingeklebten Haken | **Baugruppe**: `include`/`use`, Ebenen aus Funktion, Zonen + Fase, Schlüssellochaufhängung, **`sweep`**, `union(fillet)`, Haken `h[i]` in `for` | `brett`, `h[0]`…`h[4]` | 158 077 | 4,0 / 15,9 s² | [img](img/schluesselbrett.png) |
 
 ¹ Auswertung des explodierten Vorschaustands (`explosion = 22`). ² Siehe „Laufzeit“ unten.
 
@@ -47,7 +47,7 @@ Abdeckung der Vorgaben: Baugruppen mit mehreren Bauteilen: 4 Ordner + `zahnrad`,
 `gehaeuse`, `pflanztopf` (Untersetzer); `sweep`/`loft`: `becher`, `wandhaken`,
 `schluesselbrett` / `tuerstopper`, `pflanztopf`.
 
-## Passungen und Kollisionen (`cad measure`)
+## Passungen und Kollisionen (`mcad measure`)
 
 Alle Baugruppen: `--interference` ohne Kollision (Toleranz 0,001 mm³).
 
@@ -65,7 +65,7 @@ Alle Baugruppen: `--interference` ohne Kollision (Toleranz 0,001 mm³).
 
 Minimalbeispiele liegen in [`tests/alltag/fehler/`](../../tests/alltag/fehler/) (Kopfkommentar:
 Befund, Status, Soll-Zustand `// SOLL…`; `tests/alltag/check.sh --fehler` meldet je Beispiel
-„behoben“ oder „offen“). Befunde mit CLI-Stand `target/release/cad` vom 23.10.2026 14:31
+„behoben“ oder „offen“). Befunde mit CLI-Stand `target/release/mcad` vom 23.10.2026 14:31
 (Merge `384d31b`); Korrekturen und Nachweise in
 [Testbericht 13](../../docs/reports/13-geometrie-korrekturen/report.pdf).
 
@@ -87,7 +87,7 @@ Befund, Status, Soll-Zustand `// SOLL…`; `tests/alltag/check.sh --fehler` meld
 | F12 shell Loft Quadrat → Kreis | offen | SMLib-Shell und Ersatzweg scheitern |
 | F13 Meldung shell | behoben | Meldung nennt den kleinsten konvexen Radius ≤ Wandstärke |
 | F15 Knauf-Kehle | offen | Verrundung Sweep/Kugel (SMLib) |
-| S1 Profilraster | behoben (CLI) | Raster, deren Bezüge alle im Profil eines `rotate_extrude` liegen, zeichnet `cad render` in der Profilebene; UI: siehe Bericht 13 |
+| S1 Profilraster | behoben (CLI) | Raster, deren Bezüge alle im Profil eines `rotate_extrude` liegen, zeichnet `mcad render` in der Profilebene; UI: siehe Bericht 13 |
 | S2 Ebenennamen als Werte, Anker-Listen | Vorschlag | Bericht 13, Abschnitt S2 |
 | S3 `outline` | behoben | in Modulen benannte Instanzen und ihre Anker getrennt („Benannte Instanzen in Modulen“, JSON `scope`) |
 | S4 Schnitt/Beschriftung | behoben | Schnitt eines Modells aus Bauteilen je Bauteil (eigene Kappe, Kontur, Schraffur); Rasterreihen `g.rippe[0..7]` mit einer Beschriftung, Abstand zwischen Beschriftungen |
@@ -100,7 +100,7 @@ Die Befunde im Wortlaut der Erhebung (vor Bericht 13):
 - **F5 – Fase/Verrundung liefert offene Hülle, Status ok.** Kasten (Wand 3) mit senkrechten
   Ecken r 6, danach `chamfer(0.8)` über die Zone der Oberkante: 0 Fehler, Volumen 0 mm³, STEP mit
   26 Flächen. Ebenso in der Stiftebox (Ecken r 6, Wand 2,4) auch mit `fillet(0.8)`. Erwartet:
-  Kernel-Fehler, wenn der Körper nicht geschlossen ist. [`f05_fase_volumen_null.scad`](../../tests/alltag/fehler/f05_fase_volumen_null.scad)
+  Kernel-Fehler, wenn der Körper nicht geschlossen ist. [`f05_fase_volumen_null.mcad`](../../tests/alltag/fehler/f05_fase_volumen_null.mcad)
 - **F8 – Booleans mit Torus.** `union() { cylinder(h = 2, r = 30); translate([0, 0, 2]) torus(20, 1); }`
   ergibt zwei sich überlappende Körper (6049,65 statt 5852,26 mm³); dasselbe mit
   `rotate_extrude() translate([20, 0]) circle(1)` verliert den Ring ganz (5654,87 mm³);
@@ -109,7 +109,7 @@ Die Befunde im Wortlaut der Erhebung (vor Bericht 13):
 - **F10 – `union(fillet)` verliert einen Operanden.** Verrundete Schale (`shell`) plus Dom nahe
   der Innenecke: das Ergebnis ist nur der Dom samt Kehle, Volumen 0, Status ok (die
   `difference(chamfer)` darüber meldet dann „0 Kanten“). Mit dem Dom weiter innen korrekt.
-  [`f10_union_fillet_schale_verloren.scad`](../../tests/alltag/fehler/f10_union_fillet_schale_verloren.scad)
+  [`f10_union_fillet_schale_verloren.mcad`](../../tests/alltag/fehler/f10_union_fillet_schale_verloren.mcad)
 
 ### Absturz
 
@@ -151,13 +151,13 @@ Die Befunde im Wortlaut der Erhebung (vor Bericht 13):
 
 ### CLI, Darstellung, Sprache
 
-- **F14 – Daemon still nicht verfügbar:** mit `CAD_IPC_DIR=/tmp/claude-0/…/scratchpad/alltag-ipc`
+- **F14 – Daemon still nicht verfügbar:** mit `MCAD_IPC_DIR=/tmp/claude-0/…/scratchpad/alltag-ipc`
   (98 Zeichen, mit `/daemon.sock` 110 – über der Grenze von 107 für Unix-Sockets) gilt „path must
   be shorter than SUN_LEN“; jeder Befehl rechnet ohne
   Cache. Sichtbar nur in `--json` (`daemon.reason`) oder mit `--verbose`, die normale Ausgabe
   schweigt. Vorschlag: Hinweis auf stderr, oder Socket unter kurzem Pfad (Hash) anlegen.
 - **Laufzeit:** `kernel_ms` deckt oft nur einen Teil der Auswertung: Schlüsselbrett 4,0 s Kernel,
-  aber 15,9 s `evaluate_ms` und 16 s für `cad check` (ohne Bild); Becher 1,6 / 4,5 s. Der Rest ist
+  aber 15,9 s `evaluate_ms` und 16 s für `mcad check` (ohne Bild); Becher 1,6 / 4,5 s. Der Rest ist
   in den Zählern nicht ausgewiesen (Kantenabfragen der Zonen/neuen Kanten, Tessellierung?).
 - **S1 – Profilraster in der falschen Ebene:** ein 2D-Raster für ein `rotate_extrude`-Profil
   (x = Radius, y = Höhe) wird in der xy-Ebene des Moduls gezeichnet, das Profil aber in xz
@@ -167,7 +167,7 @@ Die Befunde im Wortlaut der Erhebung (vor Bericht 13):
 - **S2 – Ebenennamen sind keine Werte:** `g[i % 2 == 0 ? loch_l : loch_r, …]` ergibt „unbekannte
   Variable `loch_l`“; Umgehung über Zahlen `[i % 2 == 0 ? g.loch_l : g.loch_r, …]`. Anker lassen
   sich nicht als Liste deklarieren (`anchor loch[i] = …`), daher Positionen über Funktionen.
-- **S3 – Sichtbarkeit:** `cad outline` führt Instanzen aus einem Modul (`dom[0]` … in
+- **S3 – Sichtbarkeit:** `mcad outline` führt Instanzen aus einem Modul (`dom[0]` … in
   `pi_platte`, `gehaeuse`) unter „Benannte Instanzen“ der Datei und ihre Anker als Datei-Anker;
   `measure --between dom[0].oben …` funktioniert im Dateikontext, obwohl der Name laut Spec nur im
   Modul gilt.

@@ -17,7 +17,7 @@ grid g {
   in expressions).
 - A list makes indexed planes: `x: hole = [for (i = [0:3]) 6 + i * 12];` → `g[hole[2], …]`.
 - Grids are allowed in sketches (2 axes).
-- `cad outline` shows each plane with its kind: literal, expression, reference, implicit.
+- `mcad outline` shows each plane with its kind: literal, expression, reference, implicit.
 
 ## Anchors and named instances
 

@@ -1,6 +1,6 @@
-# Desktop app (Tauri 2): UI build without Wasm (pnpm build:tauri), release build of `cad`
+# Desktop app (Tauri 2): UI build without Wasm (pnpm build:tauri), release build of `mcad`
 # with the embedded UI and the native SMLib, end-to-end tests with tauri-driver and
-# WebKitWebDriver under Xvfb (file watcher, git markers, `cad ui …`, section view, watchdog).
+# WebKitWebDriver under Xvfb (file watcher, git markers, `mcad ui …`, section view, watchdog).
 #
 # Locally: scripts/ci/smlib-native.sh && SMLIB_PREBUILT=smlib/build-native scripts/ci/desktop.sh ui build e2e
 name: desktop

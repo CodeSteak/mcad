@@ -2,85 +2,86 @@
 # Prüft das Arch-Paket in einem frischen archlinux-Container (packaging/arch/docker.sh test):
 # installiert $PKG mit den Abhängigkeiten aus den Repositorys, prüft Dateien und Bibliotheken,
 # die CLI headless (check, outline, render, export, measure, Daemon) und die Desktop-UI unter
-# Xvfb (Start, `cad ui status`, `cad ui screenshot`, WM_CLASS).
+# Xvfb (Start, `mcad ui status`, `mcad ui screenshot`, WM_CLASS).
 #
-#   PKG=/pkg/controller-cad-….pkg.tar.zst packaging/arch/smoke-test.sh OUT_DIR
+#   PKG=/pkg/mcad-….pkg.tar.zst packaging/arch/smoke-test.sh OUT_DIR
 set -euo pipefail
 
-OUT="${1:-/tmp/cad-smoke}"
+OUT="${1:-/tmp/mcad-smoke}"
 mkdir -p "$OUT"
 : "${PKG:?PKG (Paketdatei) fehlt}"
 step() { printf '\n== %s\n' "$*"; }
 
 step "Paket installieren (pacman -U, Abhängigkeiten aus den Repositorys)"
 # Das Docker-Image archlinux schließt /usr/share/doc u. a. per NoExtract aus; für den Test
-# (Beispiele unter /usr/share/doc/controller-cad) wie auf einem normalen System entpacken
+# (Beispiele unter /usr/share/doc/mcad) wie auf einem normalen System entpacken
 sed -i '/^NoExtract/d' /etc/pacman.conf
 pacman -Sy --noconfirm >/dev/null
-pacman -U --noconfirm "$PKG" 2>&1 | grep -E '^(Packages|Pakete|Total|Gesamt)|controller-cad' || true
-pacman -Q controller-cad
+pacman -U --noconfirm "$PKG" 2>&1 | grep -E '^(Packages|Pakete|Total|Gesamt)|mcad' || true
+pacman -Q mcad
 
 step "pacman -Qi"
-pacman -Qi controller-cad | grep -E '^(Name|Version|Description|Licenses|Depends On|Installed Size)'
+pacman -Qi mcad | grep -E '^(Name|Version|Description|Licenses|Depends On|Installed Size)'
 
 step "pacman -Ql (ohne Beispiele)"
-pacman -Ql controller-cad | grep -v '/examples/.' | sed 's/^controller-cad //'
-echo "(+ $(pacman -Ql controller-cad | grep -c '/examples/.*[^/]$') Beispieldateien in /usr/share/doc/controller-cad/examples)"
+pacman -Ql mcad | grep -v '/examples/.' | sed 's/^mcad //'
+echo "(+ $(pacman -Ql mcad | grep -c '/examples/.*[^/]$') Beispieldateien in /usr/share/doc/mcad/examples)"
 
 step "pacman -Qkk (Dateien wie im Paket)"
-pacman -Qkk controller-cad
+pacman -Qkk mcad
 
-step "Bibliotheken von /usr/bin/cad"
-if ldd /usr/bin/cad | grep 'not found'; then echo "fehlende Bibliotheken" >&2; exit 1; fi
-readelf -d /usr/bin/cad | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | tr '\n' ' '; echo
-ls -l /usr/bin/cad
+step "Bibliotheken von /usr/bin/mcad"
+if ldd /usr/bin/mcad | grep 'not found'; then echo "fehlende Bibliotheken" >&2; exit 1; fi
+readelf -d /usr/bin/mcad | sed -n 's/.*(NEEDED).*\[\(.*\)\]/\1/p' | tr '\n' ' '; echo
+ls -l /usr/bin/mcad
 
-step "cad --version"
-cad --version
+step "mcad --version"
+mcad --version
 
 work="$(mktemp -d)"
-cp -r /usr/share/doc/controller-cad/examples "$work/"
+cp -r /usr/share/doc/mcad/examples "$work/"
 cd "$work/examples"
-export CAD_NO_DAEMON=1
+export MCAD_NO_DAEMON=1
 
-step "cad check (Diagnosen)"
-cad check spec/gehaeuse.scad
-cad check spec/text_schild.scad        # eingebettete Schriften
-cad check spec/svg_logo.scad           # SVG-Import
+step "mcad check (Diagnosen)"
+mcad check spec/gehaeuse.mcad
+mcad check spec/text_schild.mcad        # eingebettete Schriften
+mcad check spec/svg_logo.mcad           # SVG-Import
+mcad check openscad-compat/05_nested_booleans.scad   # .scad öffnet weiterhin
 
-step "cad outline"
-cad outline projekt-gehaeuse/gehaeuse.scad | head -n 15
+step "mcad outline"
+mcad outline projekt-gehaeuse/gehaeuse.mcad | head -n 15
 
-step "cad render (Software-Rasterizer, headless)"
-cad render spec/gehaeuse.scad -o "$OUT/gehaeuse.png" --module gehaeuse --views all --show grids,anchors,labels
-cad render spec/gehaeuse.scad -o "$OUT/schnitt.png" --section z=10 --show dims
-cad render spec/text_schild.scad -o "$OUT/text.png"
+step "mcad render (Software-Rasterizer, headless)"
+mcad render spec/gehaeuse.mcad -o "$OUT/gehaeuse.png" --module gehaeuse --views all --show grids,anchors,labels
+mcad render spec/gehaeuse.mcad -o "$OUT/schnitt.png" --section z=10 --show dims
+mcad render spec/text_schild.mcad -o "$OUT/text.png"
 file "$OUT"/*.png
 
-step "cad export STEP, STL, 3MF"
-cad export spec/flasche.scad -o "$OUT/flasche.step"
-cad export spec/gehaeuse.scad -o "$OUT/gehaeuse.stl"
-cad export spec/mehrfarbig.scad -o "$OUT/mehrfarbig.3mf"
+step "mcad export STEP, STL, 3MF"
+mcad export spec/flasche.mcad -o "$OUT/flasche.step"
+mcad export spec/gehaeuse.mcad -o "$OUT/gehaeuse.stl"
+mcad export spec/mehrfarbig.mcad -o "$OUT/mehrfarbig.3mf"
 head -c 200 "$OUT/flasche.step" | head -n 3
 ls -l "$OUT"/flasche.step "$OUT"/gehaeuse.stl "$OUT"/mehrfarbig.3mf
 
-step "cad measure"
-cad measure spec/gehaeuse.scad --between k.ecke k.oben --volume part:k
-cad measure spec/mehrfarbig.scad --colors | head -n 12
+step "mcad measure"
+mcad measure spec/gehaeuse.mcad --between k.ecke k.oben --volume part:k
+mcad measure spec/mehrfarbig.mcad --colors | head -n 12
 
 step "Daemon (Start beim ersten Aufruf, Status, Ende)"
-unset CAD_NO_DAEMON
-export CAD_IPC_DIR="$work/ipc"
-mkdir -p "$CAD_IPC_DIR"
-cad check spec/gehaeuse.scad
-cad check spec/gehaeuse.scad
-cad daemon status
-cad daemon stop
-export CAD_NO_DAEMON=1
+unset MCAD_NO_DAEMON
+export MCAD_IPC_DIR="$work/ipc"
+mkdir -p "$MCAD_IPC_DIR"
+mcad check spec/gehaeuse.mcad
+mcad check spec/gehaeuse.mcad
+mcad daemon status
+mcad daemon stop
+export MCAD_NO_DAEMON=1
 
-step "cad ohne grafische Sitzung: Meldung, Exit 2"
+step "mcad ohne grafische Sitzung: Meldung, Exit 2"
 rc=0
-env -u DISPLAY -u WAYLAND_DISPLAY cad 2>"$OUT/no-display.txt" || rc=$?
+env -u DISPLAY -u WAYLAND_DISPLAY mcad 2>"$OUT/no-display.txt" || rc=$?
 head -n 2 "$OUT/no-display.txt"
 echo "exit code: $rc"
 [ "$rc" = 2 ]
@@ -93,14 +94,14 @@ export DISPLAY=:99
 for _ in $(seq 1 50); do xwininfo -root >/dev/null 2>&1 && break; sleep 0.2; done
 
 ui_try() {
-  # $1: Beschreibung; Rest: zusätzliche Umgebung für cad
+  # $1: Beschreibung; Rest: zusätzliche Umgebung für mcad
   local what="$1"; shift
-  echo "-- Start: cad spec/gehaeuse.scad ($what)"
-  env "$@" cad spec/gehaeuse.scad >"$OUT/ui.log" 2>&1 &
+  echo "-- Start: mcad spec/gehaeuse.mcad ($what)"
+  env "$@" mcad spec/gehaeuse.mcad >"$OUT/ui.log" 2>&1 &
   ui=$!
   local ok=1
   for _ in $(seq 1 90); do
-    if cad ui status --json >"$OUT/ui-status.json" 2>/dev/null &&
+    if mcad ui status --json >"$OUT/ui-status.json" 2>/dev/null &&
       grep -q '"ok": *true' "$OUT/ui-status.json"; then ok=0; break; fi
     kill -0 "$ui" 2>/dev/null || break
     sleep 1
@@ -119,18 +120,18 @@ if ! ui_try "Standard"; then
     echo "UI startet nicht; Log:" >&2; cat "$OUT/ui.log" >&2; exit 1; }
 fi
 echo "UI läuft$sandbox, PID $ui"
-cad ui status
+mcad ui status
 sleep 5   # erste Auswertung und Ansicht
-cad ui screenshot -o "$OUT/ui-screenshot.png"
+mcad ui screenshot -o "$OUT/ui-screenshot.png"
 file "$OUT/ui-screenshot.png"
 echo "-- Fenster (xwininfo) und WM_CLASS (für StartupWMClass der Desktop-Datei)"
 xwininfo -root -tree | grep -E '"[^"]+": \("[^"]*" "[^"]*"\)' | head -n 5 || true
 # App-ID (Tauri identifier) = Name der Desktop-Datei = WM_CLASS (X11) bzw. app_id (Wayland)
-desktop=/usr/share/applications/dev.controller-cad.desktop.desktop
-win="$(xwininfo -root -tree | sed -n 's/^ *\(0x[0-9a-f]*\) "\([^"]*\)": ("dev.controller-cad.desktop".*/\1/p' | head -n 1)"
-[ -n "$win" ] || { echo "kein Fenster mit WM_CLASS dev.controller-cad.desktop" >&2; exit 1; }
+desktop=/usr/share/applications/dev.mcad.desktop.desktop
+win="$(xwininfo -root -tree | sed -n 's/^ *\(0x[0-9a-f]*\) "\([^"]*\)": ("dev.mcad.desktop".*/\1/p' | head -n 1)"
+[ -n "$win" ] || { echo "kein Fenster mit WM_CLASS dev.mcad.desktop" >&2; exit 1; }
 xprop -id "$win" WM_CLASS _NET_WM_NAME 2>/dev/null || true
-grep -q '^StartupWMClass=dev.controller-cad.desktop$' "$desktop"
+grep -q '^StartupWMClass=dev.mcad.desktop$' "$desktop"
 stop_ui
 kill "$xvfb" 2>/dev/null || true
 
@@ -140,5 +141,12 @@ desktop-file-validate "$desktop" && echo "desktop-file-validate: ok"
 icon="$(sed -n 's/^Icon=//p' "$desktop")"
 ls /usr/share/icons/hicolor/*/apps/"$icon".* | sed 's|/usr/share/icons/hicolor/||'
 [ -f "/usr/share/icons/hicolor/scalable/apps/$icon.svg" ] && [ -f "/usr/share/icons/hicolor/48x48/apps/$icon.png" ]
+
+step "Dateitypen (.mcad, .scad)"
+pacman -S --noconfirm --needed xdg-utils >/dev/null
+grep -q '^MimeType=text/x-mcad;application/x-openscad;$' "$desktop"
+touch "$work/probe.mcad" "$work/probe.scad"
+for f in probe.mcad probe.scad; do echo "$f: $(xdg-mime query filetype "$work/$f")"; done
+[ "$(xdg-mime query filetype "$work/probe.mcad")" = text/x-mcad ]
 
 step "alles ok"

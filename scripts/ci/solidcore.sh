@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# solidcore coverage as run weekly by .github/workflows/solidcore.yml: builds `cad` with
+# solidcore coverage as run weekly by .github/workflows/solidcore.yml: builds `mcad` with
 # `--features solidcore` against the newest solidcore `main` (instead of the commit pinned in
-# crates/kernel-solidcore/Cargo.toml) and runs `cad diff-kernels` over the examples
+# crates/kernel-solidcore/Cargo.toml) and runs `mcad diff-kernels` over the examples
 # (examples/openscad-compat, examples/spec). Reports the numbers only: unsupported, blocked
 # or differing nodes do not fail the run (the pin is guarded by `diff_kernels_on_examples`);
 # a build failure or a crash of diff-kernels does.
@@ -46,12 +46,12 @@ sed -i "s/SOLIDCORE_REV: &str = \"$PINNED\"/SOLIDCORE_REV: \&str = \"$REV\"/" "$
 cargo build -p cad-cli --no-default-features --features solidcore
 
 mkdir -p "$OUT"
-files=(examples/openscad-compat/*.scad examples/spec/*.scad)
+files=(examples/openscad-compat/*.scad examples/spec/*.mcad)
 code=0
-CAD_NO_DAEMON=1 "${CARGO_TARGET_DIR:-target}/debug/cad" diff-kernels "${files[@]}" --json >"$OUT/diff-kernels.json" || code=$?
+MCAD_NO_DAEMON=1 "${CARGO_TARGET_DIR:-target}/debug/mcad" diff-kernels "${files[@]}" --json >"$OUT/diff-kernels.json" || code=$?
 # 0: every node the same, 1: not (expected for now), anything else: usage error or crash
 if [ "$code" -gt 1 ]; then
-  echo "cad diff-kernels ended with exit code $code" >&2
+  echo "mcad diff-kernels ended with exit code $code" >&2
   exit 1
 fi
 
@@ -64,7 +64,7 @@ v = json.load(open(path))
 s = v["summary"]
 keys = ["same", "unsupported", "blocked", "differ", "failed"]
 print(f"## solidcore coverage @ `{rev[:7]}` (pinned: `{pinned[:7]}`)\n")
-print(f"`cad diff-kernels` over {len(v['files'])} examples, {s['nodes']} nodes.\n")
+print(f"`mcad diff-kernels` over {len(v['files'])} examples, {s['nodes']} nodes.\n")
 print("| " + " | ".join(keys) + " |")
 print("|" + " ---: |" * len(keys))
 print("| " + " | ".join(str(s[k]) for k in keys) + " |\n")

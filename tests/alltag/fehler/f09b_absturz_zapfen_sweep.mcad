@@ -1,4 +1,4 @@
-// F9b: ABSTURZ (Segmentation fault) von `cad check`: union(fillet = 1) aus einem Zapfen
+// F9b: ABSTURZ (Segmentation fault) von `mcad check`: union(fillet = 1) aus einem Zapfen
 // (Zylinder d 6) und einem gleich dicken sweep, der an der Stirnfläche des Zapfens beginnt
 // (fast tangentiale Kreiskante). Mit union() kein Absturz. Im Schlüsselbrett-Haken umgangen.
 // Status (Bericht 13): behoben – kein Absturz, Meldung zur Ecke (smlib/patches/0002).

@@ -40,15 +40,15 @@ Festgelegte Rahmenbedingungen:
 | Bauteile | Offener Punkt 2 | benannte Instanzen auf oberster Ebene der Hauptdatei; Export je Bauteil (STL/3MF/STEP), alle als ZIP oder als 3MF mit einem Objekt je Bauteil; CLI `export --part`, `--all-parts` | B6 |
 | Benannte Instanzen in Schleifen | nicht definiert | `k[i]: …` mit ganzzahligem Index (`k[2].anker`, Snap schreibt `k[2].ecke`); `k: …` in `for` bleibt ein Fehler | B6 (P08) |
 | Variabler Radius | Stretch Goal | `fillet(r = function (p) …)` und `difference/union/intersection(fillet = function (p) …)`: cad-eval übersetzt das Funktionsliteral in ein Radiusgesetz `cad_ir::Law` (reiner Ausdruck über `p`, Teil des Baums und des Cache-Schlüssels) statt eines Rückrufs; die Engine wertet es an Stützpunkten je Kante aus, die Fassade (`sc_fillet_var`) baut daraus ein B-Spline-Gesetz | B7 |
-| solidcore | `kernel-solidcore` ab Umstieg | `kernel-solidcore` und `cad diff-kernels` vorhanden, opt-in (Feature `solidcore`), Pin `c9de85d`: Quader und einfache Extrusion gleich wie SMLib, übrige Primitive, Transformation, Booleans noch nicht; Tessellierung nicht im Umfang von solidcore (eigener Tessellierer nötig), M8 wartet | B5, B6, `docs/solidcore-umstieg.md` |
+| solidcore | `kernel-solidcore` ab Umstieg | `kernel-solidcore` und `mcad diff-kernels` vorhanden, opt-in (Feature `solidcore`), Pin `c9de85d`: Quader und einfache Extrusion gleich wie SMLib, übrige Primitive, Transformation, Booleans noch nicht; Tessellierung nicht im Umfang von solidcore (eigener Tessellierer nötig), M8 wartet | B5, B6, `docs/solidcore-umstieg.md` |
 | UI-Bibliotheken | react-three-fiber, `three-mesh-bvh`, `Line2` | three.js direkt (Raycaster, Linien als `LineSegments`), ohne r3f und BVH; TS-Protokolltypen aus Rust mit `ts-rs` | B2 |
 | CI | GitHub Actions, gecachte SMLib-Builds | Workflows `rust`, `web`, `desktop`, `compat`, `pages` (manuell) in `.github/workflows/`, Schritte in `scripts/ci/` (Abschnitt 11) | B9 |
-| Tauri-Version | „später, optional“ | `crates/cad-app` (Tauri 2) im Binary `cad` (Feature `gui`, Standard): `cad` / `cad datei.scad` / `cad ordner/` startet die UI. Engine in einem eigenen Prozess (`cad engine-host`, Engine-Thread mit 256 MiB Stack, schrittweise wie im Worker), weil SMLib globalen Zustand hat und ein hängender Aufruf nur mit dem Prozess beendet werden kann; Antworten binär über einen Tauri-Kanal (`cad-desktop/src/wire.rs`). Dateien auf der Festplatte, Dateibeobachter (`notify`), Git-Rand gegen `HEAD` (`git`-Aufruf + `similar`), Steuerung durch `cad ui status/show/screenshot` über lokale IPC (`cad-ipc`) | B9 |
-| Schnittansicht | – | GPU-Schnitt in Browser und Tauri: Clipping-Ebene, Stencil-Kappe (Paritäts-Pass je Körper, schraffiert wie `cad render --section`), Kontur, Griff mit Rasten auf Rasterebenen und Anker; „Als `cad render …` kopieren“ | B9 |
+| Tauri-Version | „später, optional“ | `crates/cad-app` (Tauri 2) im Binary `mcad` (Feature `gui`, Standard): `mcad` / `mcad datei.mcad` / `mcad ordner/` startet die UI. Engine in einem eigenen Prozess (`mcad engine-host`, Engine-Thread mit 256 MiB Stack, schrittweise wie im Worker), weil SMLib globalen Zustand hat und ein hängender Aufruf nur mit dem Prozess beendet werden kann; Antworten binär über einen Tauri-Kanal (`cad-desktop/src/wire.rs`). Dateien auf der Festplatte, Dateibeobachter (`notify`), Git-Rand gegen `HEAD` (`git`-Aufruf + `similar`), Steuerung durch `mcad ui status/show/screenshot` über lokale IPC (`cad-ipc`) | B9 |
+| Schnittansicht | – | GPU-Schnitt in Browser und Tauri: Clipping-Ebene, Stencil-Kappe (Paritäts-Pass je Körper, schraffiert wie `mcad render --section`), Kontur, Griff mit Rasten auf Rasterebenen und Anker; „Als `mcad render …` kopieren“ | B9 |
 | `color()` | CSS-Namen wie OpenSCAD | eigene Palette aus 16 gedeckten Farben (Abschnitt 16.1), unbekannte Namen: Warnung und stabile Zufallsfarbe; `filament = n` | B11 |
 | Mehrfarbdruck | – | Farbregionen über Kernel-Booleans, Filament-Slots, 3MF mit einem Teil je Farbe und Bambu/Orca-Metadaten, ein STL je Farbe (Abschnitt 16) | B11 |
-| Messen | – | Messmodus in UI und `cad measure` mit gemeinsamer Logik in Rust (`cad-measure`, `cad_session::measure`), exakt an der B-Rep, im Schnitt über Ebene ∩ B-Rep aus dem Kernel (Abschnitt 18) | B19 |
-| Thema | Hell/Dunkel umschaltbar | „System“ (Standard, folgt `prefers-color-scheme`, auch in Tauri), Hell, Dunkel; Token-Satz mit WCAG-Prüfung; `cad render --theme dark` | B11 |
+| Messen | – | Messmodus in UI und `mcad measure` mit gemeinsamer Logik in Rust (`cad-measure`, `cad_session::measure`), exakt an der B-Rep, im Schnitt über Ebene ∩ B-Rep aus dem Kernel (Abschnitt 18) | B19 |
+| Thema | Hell/Dunkel umschaltbar | „System“ (Standard, folgt `prefers-color-scheme`, auch in Tauri), Hell, Dunkel; Token-Satz mit WCAG-Prüfung; `mcad render --theme dark` | B11 |
 
 ---
 
@@ -74,12 +74,12 @@ Festgelegte Rahmenbedingungen:
       Einstiege:  cad-wasm (Browser-Worker) · cad-cli (nativ) · cad-app/cad-desktop (Tauri, nativ)
 
 Desktop (Tauri 2, B9):
-  cad (App-Prozess): Tauri-Hauptthread + Webview (dieselbe React-App), Supervisor mit Watchdog,
+  mcad (App-Prozess): Tauri-Hauptthread + Webview (dieselbe React-App), Supervisor mit Watchdog,
                      Dateibeobachter, Git-Basis, Steuer-Socket ui-<pid> (cad-ipc)
      │ stdin: Rahmen `post` [ToEngine…]            ▲ stdout: binäre Antwort-Batches (wire.rs)
      ▼                                              │
-  cad engine-host (Engine-Prozess): Engine-Thread 256 MiB, Session::post/step(16 ms), SMLib nativ
-  cad ui status|show|screenshot (CLI) ──── Unix-Socket im Benutzerverzeichnis ────▶ App
+  mcad engine-host (Engine-Prozess): Engine-Thread 256 MiB, Session::post/step(16 ms), SMLib nativ
+  mcad ui status|show|screenshot (CLI) ──── Unix-Socket im Benutzerverzeichnis ────▶ App
 ```
 
 Grundsätze:
@@ -143,7 +143,7 @@ Zwei Wasm-Module statt einem: `wasm-bindgen` unterstützt das Emscripten-Target 
 ### 2.5 Export
 
 - STL und 3MF aus der Tessellierung, in Rust, kernelunabhängig. 3MF mehrfarbig (Standard) mit einem Teil je Farbe und Filament-Metadaten für Bambu Studio/OrcaSlicer, „ein STL je Farbe“ als ZIP (Abschnitt 16.4).
-- STEP: weder SMLib noch solidcore haben einen Writer. Umgesetzt (Testbericht 5): neutrale B-Rep-Beschreibung `cad_kernel::brep` (`Kernel::brep`, bei SMLib über die Fassadenabfrage `sc_brep`), Writer `cad-step` (AP242, wahlweise AP214; Ebene, Zylinder, Kegel, Kugel, Torus, Rotations-/Extrusionsfläche, B-Spline; Linie, Kreis, Ellipse, B-Spline), `Engine::export_step`, `cad export -o teil.step`, `Export { format: "step" }`. Prüfung mit OpenCASCADE: `tests/step/verify.py`.
+- STEP: weder SMLib noch solidcore haben einen Writer. Umgesetzt (Testbericht 5): neutrale B-Rep-Beschreibung `cad_kernel::brep` (`Kernel::brep`, bei SMLib über die Fassadenabfrage `sc_brep`), Writer `cad-step` (AP242, wahlweise AP214; Ebene, Zylinder, Kegel, Kugel, Torus, Rotations-/Extrusionsfläche, B-Spline; Linie, Kreis, Ellipse, B-Spline), `Engine::export_step`, `mcad export -o teil.step`, `Export { format: "step" }`. Prüfung mit OpenCASCADE: `tests/step/verify.py`.
 
 ---
 
@@ -360,7 +360,7 @@ Die Szene trägt die Quelltext-Version. Bis eine neue Szene da ist, bildet die U
 
 ## 8. CLI (`cad-cli`)
 
-Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem Kernel. Zweck: Nutzung durch Claude Code und andere Agenten (Modelle ganz ohne UI entwickeln und prüfen, auch parallel zu einem Menschen in der UI), Tests in CI, Kernel-Vergleich vor dem Umstieg auf solidcore.
+Ein natives Programm `mcad` (Crate `cad-cli`; bis 0.2 hieß das Binary `cad`) auf denselben Crates wie der Browser, mit nativ gelinktem Kernel. Zweck: Nutzung durch Claude Code und andere Agenten (Modelle ganz ohne UI entwickeln und prüfen, auch parallel zu einem Menschen in der UI), Tests in CI, Kernel-Vergleich vor dem Umstieg auf solidcore.
 
 | Befehl | Ausgabe |
 | --- | --- |
@@ -376,11 +376,12 @@ Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem K
 | `diff-kernels <datei…>` | Vergleich SMLib ↔ solidcore (nur Entwicklung, `docs/solidcore-umstieg.md`) |
 
 - Jeder Befehl hat `--json` mit festem, versioniertem Schema (`schema_version`) und definierte Exit-Codes (0 ok, 1 Modellfehler, 2 Aufruf, 3 Kernel). Ohne `--json` gibt es lesbaren Text.
-- `cad` ohne Argumente startet die Desktop-UI, `cad datei.scad` bzw. `cad ordner/` mit dieser Datei bzw. diesem Ordner als Projekt (Feature `gui`, Standard; `--no-default-features` baut eine CLI ohne UI). Ohne grafische Sitzung (kein `DISPLAY`/`WAYLAND_DISPLAY`) oder ohne `gui`: Meldung mit den headless Befehlen, Exit 2. `cad --help` erklärt beides.
-- `cad ui status [--json]` / `cad ui show datei [--line N] [--module m]` / `cad ui screenshot -o x.png` sprechen über lokale IPC (`cad-ipc`, Unix-Socket `ui-<pid>` im Benutzerverzeichnis, nur der eigene Benutzer) mit laufenden Fenstern; ohne laufende UI Exit 3. Für den Ablauf „Nutzer in der UI, Agent editiert und prüft“ siehe Skill.
+- `mcad` ohne Argumente startet die Desktop-UI, `mcad datei.mcad` bzw. `mcad ordner/` mit dieser Datei bzw. diesem Ordner als Projekt (Feature `gui`, Standard; `--no-default-features` baut eine CLI ohne UI). Ohne grafische Sitzung (kein `DISPLAY`/`WAYLAND_DISPLAY`) oder ohne `gui`: Meldung mit den headless Befehlen, Exit 2. `mcad --help` erklärt beides.
+- `mcad ui status [--json]` / `mcad ui show datei [--line N] [--module m]` / `mcad ui screenshot -o x.png` sprechen über lokale IPC (`cad-ipc`, Unix-Socket `ui-<pid>` im Benutzerverzeichnis, nur der eigene Benutzer) mit laufenden Fenstern; ohne laufende UI Exit 3. Für den Ablauf „Nutzer in der UI, Agent editiert und prüft“ siehe Skill.
 - `render` nutzt einen kleinen Software-Rasterizer in Rust (`cad-render`: Z-Buffer, Schattierung, Kantenlinien, Ortho/Perspektive, Marker, Beschriftung mit eingebetteter Bitmap-Schrift). Er braucht keine GPU und läuft damit auch in Containern und CI.
 - Schnitt: Clipping im Renderer mit gefüllter Kappe nach dem Stencil-Prinzip (Kappe, wo der Sichtstrahl bis zur Ebene die Oberfläche ungerade oft kreuzt), kein Kernel-Boolean. Gleiches Verfahren und gleiche Konvention wie die spätere GPU-Schnittansicht der UI: Ebene durch `p` mit Normale `n` entfernt die Hälfte, in die `n` zeigt (es bleibt `(q − p) · n ≤ 0`).
-- **Daemon** (Bericht 10): Kernel-Ergebnisse sind Handles der nativen Bibliothek und nicht serialisierbar; statt eines Cache auf der Platte hält ein Hintergrundprozess den Engine-Cache. `check`, `eval`, `inspect`, `render`, `export`, `outline`, `measure` und `set` verbinden sich über `cad-ipc` (Endpunkt `daemon`, Socket-Ordner 0700, Socket 0600, Peer-UID) mit `cad daemon serve` oder starten ihn abgekoppelt (neue Sitzung, Ausgabe in `daemon.log`); genau ein Daemon über eine `flock`-Sperre. Der Client schickt Argumente, Arbeitsverzeichnis und stdin; der Daemon führt dieselbe Befehlsfunktion aus (Sitzung auf seiner Engine, Wechsel ins Arbeitsverzeichnis, Dateischreiben wird aufgezeichnet) und liefert stdout, stderr, Exit-Code und die Dateien, die der Client schreibt. Ausgabe wie ohne Daemon, auch die Flächen-Tags: die Sitzung nummeriert sie in der Reihenfolge, in der eine frische Engine sie vergäbe. Eine Engine für alle Projekte (inhaltsbasierte Schlüssel); Grenzen 512 MiB (Knotenergebnisse + Netze; Kosten eines Knotens im Daemon am Heap gemessen, sonst aus der Topologie geschätzt), 16384 Einträge, 8 Projekte, Cache leeren bei RSS über Start + 1,5 × Grenze; Ende nach 15 min ohne Anfrage; Watchdog 30 min (Daemon endet, der Befehl läuft ohne Daemon und meldet das); andere Build-ID ersetzt den Daemon. Aus mit `--no-daemon`, `CAD_NO_DAEMON=1`, `[daemon] enabled = false` (`$XDG_CONFIG_HOME/controller-cad/config.toml`); ohne Daemon (Windows, Fehler) rechnet der Befehl still selbst. `cad daemon status|stop|serve`. `cad watch` behält seinen eigenen Cache im Prozess.
+- **Daemon** (Bericht 10): Kernel-Ergebnisse sind Handles der nativen Bibliothek und nicht serialisierbar; statt eines Cache auf der Platte hält ein Hintergrundprozess den Engine-Cache. `check`, `eval`, `inspect`, `render`, `export`, `outline`, `measure` und `set` verbinden sich über `cad-ipc` (Endpunkt `daemon`, Socket-Ordner 0700, Socket 0600, Peer-UID) mit `mcad daemon serve` oder starten ihn abgekoppelt (neue Sitzung, Ausgabe in `daemon.log`); genau ein Daemon über eine `flock`-Sperre. Der Client schickt Argumente, Arbeitsverzeichnis und stdin; der Daemon führt dieselbe Befehlsfunktion aus (Sitzung auf seiner Engine, Wechsel ins Arbeitsverzeichnis, Dateischreiben wird aufgezeichnet) und liefert stdout, stderr, Exit-Code und die Dateien, die der Client schreibt. Ausgabe wie ohne Daemon, auch die Flächen-Tags: die Sitzung nummeriert sie in der Reihenfolge, in der eine frische Engine sie vergäbe. Eine Engine für alle Projekte (inhaltsbasierte Schlüssel); Grenzen 512 MiB (Knotenergebnisse + Netze; Kosten eines Knotens im Daemon am Heap gemessen, sonst aus der Topologie geschätzt), 16384 Einträge, 8 Projekte, Cache leeren bei RSS über Start + 1,5 × Grenze; Ende nach 15 min ohne Anfrage; Watchdog 30 min (Daemon endet, der Befehl läuft ohne Daemon und meldet das); andere Build-ID ersetzt den Daemon. Aus mit `--no-daemon`, `MCAD_NO_DAEMON=1`, `[daemon] enabled = false` (`$XDG_CONFIG_HOME/mcad/config.toml`); ohne Daemon (Windows, Fehler) rechnet der Befehl still selbst. `mcad daemon status|stop|serve`. `mcad watch` behält seinen eigenen Cache im Prozess.
+- **Umbenennung `cad` → `mcad` (0.3.0):** Binary, Programmname, App-ID `dev.mcad.desktop` (Fenstertitel „… – mcad“, Desktop-Datei `dev.mcad.desktop.desktop`, Dateitypen `text/x-mcad` und `application/x-openscad` in `packaging/linux/mcad.xml`), Arch-Paket `mcad` (ersetzt `controller-cad`), Konfiguration `$XDG_CONFIG_HOME/mcad/config.toml`, Socket-Ordner `$XDG_RUNTIME_DIR/mcad` bzw. `/tmp/mcad-<uid>`, Umgebung `MCAD_*`. Rückfall: `CAD_*` wird gelesen, wenn `MCAD_*` fehlt (`cad_ipc::env_var`), die alte `controller-cad/config.toml`, wenn es die neue nicht gibt; die Liste zuletzt geöffneter Dateien der Desktop-App wird einmal aus dem Ordner der alten App-ID übernommen. Neue Dateien heißen `.mcad` (UI „Neu“, „Speichern unter“, neuer Ordner `main.mcad`, Beispiele, Testdaten); `.scad` öffnet überall (CLI, `include`/`use`, Datei-Dialoge, Ordner-Projekte, Upload, ZIP), gemeinsame Prüfung `cad_eval::is_model_file` bzw. `isModelFile` in der UI. `.scad` bleiben: `examples/openscad-compat/`, `tests/openscad-compat/` (Vergleich mit OpenSCAD), `tests/farben-pruefung/cases/` (Momentaufnahme einer unabhängigen Prüfung mit Bildern und Bericht) und die Fallstudie von Bericht 8. Unverändert: Crate-Namen `cad-*`, Repository `controller-cad`, Schriftname „cad stencil mono“ (steht in Modellen), IndexedDB-Name der Browser-App (gespeicherte Projekte).
 - Dazu eine Anleitung für Claude Code im Repo (`.claude/skills/cad-cli/SKILL.md`): outline → editieren → check → render (Kontaktbogen mit Rastern/Ankern) → inspect/measure → export.
 
 ---
@@ -402,8 +403,8 @@ Ein natives Programm auf denselben Crates wie der Browser, mit nativ gelinktem K
 | Dateien | Browser: Autospeichern des Projekts in IndexedDB; Projekte aus mehreren Dateien als Tabs; Ordner öffnen/speichern über File System Access API (Chromium), sonst Hoch- und Herunterladen (Datei oder ZIP). Desktop: echtes Dateisystem (Öffnen, Speichern atomar, Speichern unter, Ordner als Projekt, zuletzt geöffnet), ungespeicherte Dateien mit ●, „Automatisch speichern“ (Standard aus, Verzögerung einstellbar), kein IndexedDB |
 | Dateibeobachter (Desktop) | `notify` auf die Ordner der Projektdateien (atomares Speichern ersetzt die Datei); bekannte Inhalte als Hash, eigene Speichervorgänge kommen nicht zurück; saubere Datei: still neu laden als kleinste Zeilenänderungen (Cursor/Scroll bleiben, eigener Undo-Schritt); ungespeicherte Änderungen: Leiste „Neu laden / Meine behalten / Vergleichen“ (Diff-Ansicht); gelöscht/umbenannt: Leiste, Speichern legt neu an |
 | Git (Desktop) | Randmarkierung gegen `HEAD`: neu grün, geändert blau (3 px, Deckkraft 0,5–0,55), gelöscht rotes Dreieck zwischen den Zeilen; Hover zeigt die alten Zeilen; entprellt 300 ms beim Tippen, beim Speichern, bei externen Änderungen und Fensterfokus; unversionierte Dateien ohne Markierung |
-| Messen | Modus „Messen“ (Abschnitt 18): Kontextleiste mit Messart und „Im Schnitt“, Snap auf Eckpunkte, Kantenmitten, Kreismitten, Kanten, Flächen bzw. die Schnittkontur, Maßlinien und Beschriftungen in der Ansicht, Liste „Messungen“ mit Kopieren als Text, Kommentar und `cad measure` |
-| Schnittansicht | Werkzeug „Schnitt“: Ebene x/y/z oder frei (Normale aus Blickrichtung oder Eingabe), Griff ziehen (rastet auf Rasterebenen des Kontextmoduls und Anker, Alt frei), Umkehren, Kappe (Stencil, schraffiert, je Körper wechselnde Richtung, transparente Körper ohne Kappe), Kontur; Statuszeile und „Als `cad render …` kopieren“ mit derselben Konvention wie die CLI |
+| Messen | Modus „Messen“ (Abschnitt 18): Kontextleiste mit Messart und „Im Schnitt“, Snap auf Eckpunkte, Kantenmitten, Kreismitten, Kanten, Flächen bzw. die Schnittkontur, Maßlinien und Beschriftungen in der Ansicht, Liste „Messungen“ mit Kopieren als Text, Kommentar und `mcad measure` |
+| Schnittansicht | Werkzeug „Schnitt“: Ebene x/y/z oder frei (Normale aus Blickrichtung oder Eingabe), Griff ziehen (rastet auf Rasterebenen des Kontextmoduls und Anker, Alt frei), Umkehren, Kappe (Stencil, schraffiert, je Körper wechselnde Richtung, transparente Körper ohne Kappe), Kontur; Statuszeile und „Als `mcad render …` kopieren“ mit derselben Konvention wie die CLI |
 | Bauteile | Reiter „Bauteile“ des Seitenpanels: Sichtbarkeit, Volumen, Export je Bauteil im ⋯-Menü, „ohne Bauteil“, Summe |
 | Farben & Filamente | Reiter „Farben“ des Seitenpanels (Farbfeld, Name, Zeilen, Slot-Auswahl, Volumen, Masse PLA), „Farbregionen zeigen“, Exporte „3MF mehrfarbig“, „STL je Farbe (ZIP)“, „3MF einfarbig“; Farbe je Fläche in der Ansicht (Vertex-Farben aus `tri_tags` → `tag_nodes` → `color`) |
 | Thema | Symbolknopf mit Menü System/Hell/Dunkel in der Kopfleiste (localStorage `cad-theme`); alle Farben als CSS-Variablen (`styles.css`), 3D-Ansicht liest sie beim Wechsel neu; Palette-Farben im Thema angepasst (`logic/palette.ts`) |
@@ -509,7 +510,7 @@ Jeder Meilenstein endet mit einem lauffähigen Stand im Browser und in der CLI.
 | M7 | Dateien, 3MF, OpenSCAD-Korpus, Beispiele, Leistung | erste vollständige Version | erledigt (B1, B6; Leistung in B1–B4) |
 | M8 | Umstieg auf solidcore: `kernel-solidcore`, Vergleich über `diff-kernels`, eigener Tessellierer (nicht im Umfang von solidcore), SMLib-Wasm entfernen | bereit zur Veröffentlichung | offen: wartet auf solidcore (Pin `c9de85d`: 241 von 942 Knoten gleich, 0 abweichend; Quader und einfache Extrusion gehen, übrige Primitive, Transformation, Booleans, Fillets nicht); Schätzung der Recherche (unsicher): alle Primitive 1–2 Wochen, Booleans 2–4, Fillets/Sweeps/Shell 6–10 Wochen; Tessellierer eigene Arbeit; `kernel-solidcore` und `diff-kernels` vorhanden |
 | später | STEP-Export, variabler Radius, mehrere Bauteile, `include`/`use` | | erledigt (B5, B6, B7) |
-| später | Tauri-Version (`TauriTransport`), Dateibeobachter, Git-Rand, `cad ui`, Schnittansicht | | erledigt (B9) |
+| später | Tauri-Version (`TauriTransport`), Dateibeobachter, Git-Rand, `mcad ui`, Schnittansicht | | erledigt (B9) |
 | später | CLI-Daemon | | erledigt (B10) |
 | später | Mehrfarbigkeit, Multi-Filament-3MF, dunkles Thema (Abschnitt 16) | | erledigt (B11) |
 | – | CI (GitHub Actions) | | erledigt (Workflows lokal geprüft; Lauf auf GitHub steht aus) |
@@ -539,7 +540,7 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 **Kernel (SMLib)**
 
 - Booleans in Sonderlagen unzuverlässig; die Fassade erkennt falsche Ergebnisse nur über Stichproben (ein Fehler zwischen den Probepunkten bleibt unentdeckt). Die Prüfung nutzt SMLibs Punktklassifizierung, die bei gedrehten Splinekörpern selbst irrt; besteht keine Variante, bleibt SMLibs Ergebnis. Im Verschiebe-Rückfall weicht der zweite Operand um bis zu 10⁻⁴ der Modellgröße ab. Die Prüfung kostet Zeit (+38 % über alle Beispiele). (B1)
-- Berühren sich Körper nur an einer Kante, ist die Vereinigung kein geschlossener Körper; `cad` meldet Volumen 0 (STL in Ordnung). (B1)
+- Berühren sich Körper nur an einer Kante, ist die Vereinigung kein geschlossener Körper; `mcad` meldet Volumen 0 (STL in Ordnung). (B1)
 - Speicherfehler in SMLib können Ergebnisse vom Heap abhängig machen; die Shell-Vorprüfung deckt nur ebene, gegenüberliegende Wände ab. Patch 0001 beseitigt die Abhängigkeit von der Adressreihenfolge der Zeigertabellen. (B1, B7)
 - `shell` aus Booleans nur für ebene geöffnete Flächen; bei gekrümmten geöffneten Flächen bleibt SMLibs Ergebnis bzw. dessen Fehlermeldung. Wanddicke ≥ Rundungsradius scheitert weiter (SMLibs Versatz). Die Booleans kosten Zeit (`dose_shell` ≈ 1,9 s). (B7)
 - Variabler Radius: SMLibs Löser ist empfindlich (steile Verläufe an Taschenecken, Kreiskanten mit veränderlichem Radius scheitern); Sprünge werden über etwa drei Stützpunktabstände geglättet; kein variabler Radius für `chamfer` und `$fillet`; Gesetze nur aus dem reinen Ausdruckskern (keine Texte, Listenausdrücke oder Rekursion über `p`). (B7)
@@ -569,11 +570,11 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 
 **Desktop, Schnittansicht (B9)**
 
-- Steuer-IPC nur unter Unix (Linux, macOS); unter Windows liefern `cad ui …` und der Steuer-Socket „nicht umgesetzt“ (die App selbst läuft). Ein Fenster je App-Prozess; `cad datei.scad` startet einen weiteren Prozess, statt das laufende Fenster zu nutzen.
+- Steuer-IPC nur unter Unix (Linux, macOS); unter Windows liefern `mcad ui …` und der Steuer-Socket „nicht umgesetzt“ (die App selbst läuft). Ein Fenster je App-Prozess; `mcad datei.mcad` startet einen weiteren Prozess, statt das laufende Fenster zu nutzen.
 - Der hängende Engine-Prozess wird beendet; die Watchdog-Tests blockieren ihn über eine Testnachricht (`__debugHang`), ein echter hängender Kernel-Aufruf wurde nicht nachgestellt.
 - Der Dateibeobachter vergleicht Inhalte (Hash); eine externe Änderung, die genau den Inhalt der UI schreibt, bleibt unbemerkt (gewollt). Umbenennen wird als Löschen erkannt, nicht als neuer Name.
 - Git-Markierungen nur gegen `HEAD` (nicht gegen den Index), über den `git`-Befehl; ohne `git` im `PATH` keine Markierungen.
-- „Speichern unter“ und die Öffnen-Dialoge sind native Dialoge und in den E2E-Tests nicht automatisiert (der Weg über die Kommandozeile und `cad ui show` schon).
+- „Speichern unter“ und die Öffnen-Dialoge sind native Dialoge und in den E2E-Tests nicht automatisiert (der Weg über die Kommandozeile und `mcad ui show` schon).
 - Schnitt: eine Ebene; Kappen nur für undurchsichtige Körper (wie die CLI); die Kontur wird je Lage auf der CPU berechnet (bei sehr großen Meshes sinkt die Bildrate); Picking ignoriert den entfernten Teil, Griffe und Raster werden nicht abgeschnitten. Die kopierte CLI-Kamera ist orthografisch (UI perspektivisch) – das Bild stimmt im Schnitt, nicht pixelgenau.
 - Messwerte unter Xvfb ohne GPU (WebKitGTK mit Software-GL, Chromium mit SwiftShader) sind nur relativ aussagekräftig.
 
@@ -584,7 +585,7 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 - Der Watchdog (30 min) trifft auch einen legitim langen Befehl: der Daemon endet, der Befehl wird ohne Daemon wiederholt (doppelte Zeit); einstellbar. Ein Absturz im Kernel (Signal) beendet den Daemon ebenso, die Wiederholung kann lokal genauso abstürzen.
 - Speichermessung pro Knoten nur mit glibc (`mallinfo2`, Allokationen anderer Threads zählen mit); sonst die Schätzung aus Flächen/Kanten, die je Modell um den Faktor 2–10 danebenliegen kann (Freiformflächen). RSS wird nach jeder Anfrage geprüft, nicht währenddessen.
 - Panik im Daemon: Exit-Code und Meldung wie ohne Daemon, die Panikmeldung des Laufzeitsystems steht aber im Log statt auf stderr. Die Zähler `cache_hits`, `kernel_calls`, `cached` und Zeitfelder zeigen, was der Daemon tatsächlich tat.
-- Build-ID aus Größe und Änderungszeit des Programms: wechseln sich zwei `cad`-Binaries ab (Debug/Release), ersetzen sie einander den Daemon.
+- Build-ID aus Größe und Änderungszeit des Programms: wechseln sich zwei `mcad`-Binaries ab (Debug/Release), ersetzen sie einander den Daemon.
 - Die Tag-Tabelle der Engine wächst weiter; nach 2²⁰ Tags wird die Engine (mit Cache) ersetzt.
 
 **Farben, Multi-Filament, Thema (B11)**
@@ -604,7 +605,7 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 - Gemischte Farben in einem 2D-Profil unter einer Extrusion werden nicht in Körper je Farbe geteilt (Warnung, Standard); eine einheitliche 2D-Farbe färbt die Extrusion.
 - Zufallsfarben, die im Modell ausweichen, hängen von den unbekannten Namen davor ab.
 - Ohne Farbgruppe zeigen Programme, die nur 3MF-Farben lesen, das Modell einfarbig (`--color-group` für sie; Bambu öffnet dann den Farbdialog). Bambu Studio/OrcaSlicer nicht am Programm geprüft (Quellcode, Modell des Importers).
-- Der Ersatz-Socket des Daemons liegt fest unter `/tmp/cad-<uid>/`.
+- Der Ersatz-Socket des Daemons liegt fest unter `/tmp/mcad-<uid>/`.
 
 **Skizzen und Namensräume (B14)**
 
@@ -751,7 +752,7 @@ sonst die Restfarbe; Material ohne `color()` ohne Farbe. Flächen werden nicht g
 ### 16.5 Ansicht (B12, F1/F3)
 
 Ein Modell mit Farben zeigt in der vollen Ansicht die **Farbregionen** (die Körper des 3MF),
-sobald sie gerechnet sind (UI: „Farbregionen zeigen“, Standard an; CLI `cad render` ohne
+sobald sie gerechnet sind (UI: „Farbregionen zeigen“, Standard an; CLI `mcad render` ohne
 `--show faces`). Davor und für hervorgehobene Teilbäume: Farbe je Fläche aus dem Knoten, der die
 Fläche erzeugt hat – nur Knoten unterhalb des gezeichneten Knotens, und bei mehreren mit
 gleichem Inhalt (geteilter Cache-Eintrag, ein Flächen-Tag) der, dessen Hülle das Dreieck
@@ -763,7 +764,7 @@ ist bei Überlappung und Verrundung an Farbgrenzen nur angenähert, die Regionen
 CSS-Token je Thema (`:root[data-theme=…]`), `contrast.test.ts` prüft Text ≥ 4,5:1 und
 UI-Teile ≥ 3:1; CodeMirror-Tooltips/Suchleiste über Token; 3D-Farben aus Token
 (`readPalette`); System folgt `matchMedia('(prefers-color-scheme: dark)')` mit Listener.
-CLI: `cad render --theme dark`.
+CLI: `mcad render --theme dark`.
 
 ---
 
@@ -818,7 +819,7 @@ rotate_extrude() profil(b = 30);
   `linear_extrude(2) profile.stern();`. Mehrstufig: `a.b.c();`. Das innere Modul sieht die
   Parameter des äußeren mit deren Standardwerten; Raster und Instanzen des äußeren sieht es
   nicht (wie bisher).
-- Kontextmodul und Pfadleiste unterstützen den Pfad (`teile › schraube`), `cad --module`
+- Kontextmodul und Pfadleiste unterstützen den Pfad (`teile › schraube`), `mcad --module`
   nimmt `teile.schraube`.
 
 ### 17.3 2D-Operationen
@@ -926,9 +927,9 @@ entsteht nicht. **Funktionen und Konstanten** eines Modulkörpers sind von auße
 (`teile.kopf(d)`, `teile.M3`): Bibliotheken bündeln so Hilfsfunktionen und Maße mit ihren
 Modulen, ohne eigene Datei; OpenSCAD kennt keinen Punkt hinter Modulnamen, es gibt also keinen
 Konflikt, und eine Variable gleichen Namens verdeckt das Modul (`v.x` bleibt Komponentenzugriff).
-Kontextmodul: `cad --module teile.schraube` (auch `teile::schraube` oder nur `schraube`),
+Kontextmodul: `mcad --module teile.schraube` (auch `teile::schraube` oder nur `schraube`),
 `ContextInfo.module` ist der Pfad, die UI wählt das Modul unter dem Cursor mit Pfad, die
-Pfadleiste zeigt „teile › schraube“; `cad outline` listet Module und Funktionen mit Pfad.
+Pfadleiste zeigt „teile › schraube“; `mcad outline` listet Module und Funktionen mit Pfad.
 
 **IR, Kernel, Fassade.** `Profile::Sketch { contours, closed }` mit `Seg::{Line, Arc (Mittelpunkt,
 Radius, Start-/Endwinkel, Richtung), Bezier, Spline}`; die Anweisungen der Segmente stehen in
@@ -1039,7 +1040,7 @@ Kompatibilitätstests). UI: Cursor auf `offset` – Kinder als Umriss, Offset-Ko
 Akzentfarbe (`guide:offset`); auf `stroke` – Pfad als Umriss, Mittellinie gestrichelt
 (`guide:centerline`); auf `fillet2d` – Zonen blau, Profil vor dem Verrunden als Umriss, neue Ecken
 farbig, Hinweis an der Zeile; auf `corner` – die Verrundung als aktives Segment mit Radius-Griff.
-`cad render --line N` zeigt dieselben Linien (`--show handles` die Griffe). OpenSCAD-Vergleich:
+`mcad render --line N` zeigt dieselben Linien (`--show handles` die Griffe). OpenSCAD-Vergleich:
 `tests/openscad-compat` 34–36 (offset r/delta/chamfer, Löcher, Zusammenwachsen, Verschwinden),
 `stl_stats.classify` zählt `offset(r)` zu den Rundungen (`$fn = 128` für die Referenz).
 
@@ -1099,7 +1100,7 @@ wählt ein Element mit Inhalt (unbekannte id: Fehler). Warnungen tragen Datei un
 gelesen (`FileResolver::read_bytes`; Browser/`SetFiles`: Binärdateien als
 `data:…;base64,…`-Text). `import`/`font =` lösen relativ zur Datei der Anweisung auf; ein zur
 Laufzeit berechneter Name, der nirgends als Text steht, ist ein Fehler („nicht geladen“). Der
-Inhalt steckt in den Konturen des IR: geänderte SVGs ändern den Cache-Schlüssel; `cad watch`
+Inhalt steckt in den Konturen des IR: geänderte SVGs ändern den Cache-Schlüssel; `mcad watch`
 beobachtet die Datendateien, die Desktop-App liest und schreibt sie (Schriften dekodiert).
 UI: „⇡ Datei laden“ (SVG, TTF/OTF, .scad), SVGs öffnen im Editor, Schrift-Tabs zeigen einen
 Hinweis; ZIP und Ordner nehmen die Datendateien mit; Einzelbeispiele, die SVGs aus
@@ -1130,7 +1131,7 @@ extrudiert) schreibt der Writer als `SURFACE_OF_LINEAR_EXTRUSION` einer `ELLIPSE
 `elliptic_extrusion`: Kegelschnitt durch fünf Abtastpunkte, geprüft an 65): OpenCASCADE
 integrierte die Extrusion der rationalen B-Spline um 3,6·10⁻³ falsch. Offen: die Extrusion einer
 quadratischen Q/T-Welle (`welle.svg`, `id = "welle"`) misst OpenCASCADE um 3 % zu klein (Kernel
-652,25 mm², analytisch 652,19 mm²); `svg_logo.scad` nutzt daher nur Ellipse und Bogen aus
+652,25 mm², analytisch 652,19 mm²); `svg_logo.mcad` nutzt daher nur Ellipse und Bogen aus
 `welle.svg`.
 
 **Grenzen.** Kernel-Zeit wächst stark mit der Zahl der Glyphen auf einer gemeinsamen Fläche
@@ -1200,7 +1201,7 @@ Glyphe in ihrer Zelle, Flächen (H exakt, o gegen Formel, gegen JetBrains Mono),
 Richtungen, Rückfall; cad-eval: Standardschrift, Parameter, Warnungen; cad-engine
 (`stencil_text.rs`): jede Glyphe über `region_2d` ohne Loch, Volumen = Fläche × Höhe,
 Kernel-Zeit eines Schilds gegen Allerta Stencil (nativ 1,6–1,9 s gegen 3,3–3,6 s: Geraden und
-Kreise statt B-Splines, weniger Kernel-Aufrufe); Beispiel `examples/spec/schablone.scad`;
+Kreise statt B-Splines, weniger Kernel-Aufrufe); Beispiel `examples/spec/schablone.mcad`;
 Playwright K01–K03 (`web/e2e/schablone.spec.ts`). Zeichentafel:
 `cargo run -p cad-font --example stencil_chart -- tafel.svg [strich steg]`.
 
@@ -1349,8 +1350,8 @@ Bereichs. Ergebnisse exakt aus der B-Rep, sonst mit angegebener Toleranz.
 | --- | --- |
 | `cad-measure` (neu, kernelunabhängig) | `curve::EdgeCurve`: Kante als beschränkte exakte Kurve (Linie, Kreisbogen, Ellipse geschlossen; B-Spline, Polylinie numerisch) mit nächstem Punkt, Länge (Gauß-Legendre), Mitte nach Bogenlänge, Hülle. `surface`: nächster Punkt auf Ebene, Zylinder, Kegel, Kugel, Torus geschlossen, auf Rotations-/Extrusionsflächen über die Erzeugende, auf B-Spline-Flächen per Gitter + Gauß-Newton. `body::Body`: B-Rep in Kontextkoordinaten mit den Dreiecken jeder Fläche (ob ein Punkt auf der getrimmten Fläche liegt, Grobsuche). `measure`: Abstand, Winkel, Radius, Fläche. `section`: Konturen, Bereiche, Wandstärke. `dist`: Dreiecksabstand mit BVH (aus `cad-cli/geom.rs`, auch `--clearance`) |
 | `cad-engine` | `measure_parts` (je Teil B-Rep und Tessellierung, platziert, Massen), `section_parts` (Kernel-Boolean mit dem behaltenen Halbraum) |
-| `cad-session::measure` | Messmodell je Knoten (einmal je Auswertung), Schnitte je Ebene (bis 6), Snap, Auswahl, Messungen mit Maßlinien, Texten und `cad measure`-Argumenten, Provenienz, Referenzen für die CLI |
-| CLI `cad measure` | Referenzen auflösen, JSON/Text (`measurements`, `section`, `at`) |
+| `cad-session::measure` | Messmodell je Knoten (einmal je Auswertung), Schnitte je Ebene (bis 6), Snap, Auswahl, Messungen mit Maßlinien, Texten und `mcad measure`-Argumenten, Provenienz, Referenzen für die CLI |
+| CLI `mcad measure` | Referenzen auflösen, JSON/Text (`measurements`, `section`, `at`) |
 | UI | `app/measure.ts` (Controller), `app/measureUi.tsx` (Kontextleiste `MeasureBar`, Liste `MeasurePanel`, Statuszeile), Viewer (Treffer, Hervorhebung, Maßlinien, Beschriftungen), `logic/measure.ts` (Texte, Kopieren) |
 
 **Abstand.** Grobsuche über die Tessellierung (Flächen als Dreiecke, Kanten als Polylinien,
@@ -1394,7 +1395,7 @@ Dreiecke, Extrempunkte von Kugeln und Tori).
 
 **Schnitt.** Ebene ∩ B-Rep über den Kernel: je Volumenteil `Intersection` mit einem Quader
 jenseits des Teils, der genau den behaltenen Halbraum `(q − p) · n ≤ 0` abdeckt (Konvention wie
-`cad render --section` und die Schnittansicht). Die Deckflächen des Ergebnisses (Ebene mit
+`mcad render --section` und die Schnittansicht). Die Deckflächen des Ergebnisses (Ebene mit
 Normale +n in der Schnittebene) begrenzen den Schnitt; ihre Schleifen laufen um Material gegen
 den Uhrzeigersinn um n, um Löcher im Uhrzeigersinn, die Innennormale einer Kontur ist n ×
 Tangente. Jede Kante grenzt an eine geschnittene Fläche des Körpers; ist sie Ebene, Zylinder,
@@ -1433,7 +1434,7 @@ Hervorhebung) geht mit jeder Anfrage hin und zurück; höchstens eine Anfrage un
 `Measurement { kind, title, value, unit, label, values[], lines, guides, points, at, details,
 picks, exact, tol?, section?, text, cli }`: `text` ist die Kopie als Text (mit `// ` die als
 Kommentar), `cli` die Argumente nach dem Dateinamen (mit `--module`/`-D` des Kontexts und
-`--section …`), die UI setzt `cad measure <datei>` davor. Gleich über `WorkerTransport` und
+`--section …`), die UI setzt `mcad measure <datei>` davor. Gleich über `WorkerTransport` und
 `TauriTransport`.
 
 **CLI.** Elementreferenzen `vertex@P`, `mid@P`, `center@P`, `edge@P`, `face@P`, `body@P` (das
@@ -1447,7 +1448,7 @@ Konturen mit Segmenten, Kreise, kleinste Wand), `at`.
 Abstand, Radius, Winkel zuerst wie im UI-Konzept, dann Länge, Fläche, Körper, im Schnitt
 Wandstärke; „Im Schnitt“ schaltet die Schnittansicht ein; Fertig); Liste `MeasurePanel`
 (rechts neben der Ansicht, später Reiter „Messen“ des Seitenpanels) mit Wert, Genauigkeit,
-Details, Herkunft, Kopieren (Text, `// Kommentar`, `cad measure`), Löschen; „Alle kopieren“,
+Details, Herkunft, Kopieren (Text, `// Kommentar`, `mcad measure`), Löschen; „Alle kopieren“,
 „Alle löschen“. Beide sind eigenständige Bausteine (`.contextbar`), die UI-Überarbeitung muss sie
 nur einordnen (Kontextleiste links oben unter der Werkzeugleiste). In der Ansicht: Element unter
 der Maus (Snap-Farbe) mit Beschriftung, gewählte Elemente (Akzent), Maßlinien, gestrichelte
@@ -1507,7 +1508,7 @@ Name, der Tooltip (`title`) hängt das Tastenkürzel an, `aria-keyshortcuts` tr�
 | Kopfleiste (`app/header.tsx`) | App-Name, „Datei ▾“ (Neu, Öffnen …, Ordner öffnen …, Zuletzt geöffnet › nur Desktop, Speichern unter …, Datei hinzufügen …, Datei laden …, ZIP laden …, ZIP speichern), „Beispiele ▾“ mit Untermenüs je Gruppe; mittig Dateiname mit Änderungspunkt (Desktop) und Pfad in den Modulkontext; „Speichern“ primär; geteilter Export-Knopf (letztes Format in localStorage `cad-export`, Strg+E; 3MF mehrfarbig/einfarbig, STL, STL je Farbe, STEP, Je Bauteil › STL-ZIP/STEP-ZIP/3MF); Thema- und Einstellungen-Symbolknopf. Kürzel Strg+N (nur Desktop), Strg+O, Strg+S, Strg+⇧+S, Strg+E im ganzen Fenster |
 | Editor | Tabs (`role=tab`, ←/→) und „+“ (Neue Datei, Datei laden, Aktionen der angezeigten Datei); Rechtsklick oder Umschalt+F10/Kontextmenütaste auf einem Tab: „Als Hauptdatei“, „Schließen“ |
 | Ansicht | Werkzeugleiste oben: links Modus Modell/Schnitt/Skizze/Messen (`runtime.viewMode`/`setViewMode`, genau einer; Skizze und Messen lassen einen Schnitt stehen, danach Modus Schnitt; Farben ist kein Modus), rechts Einpassen, Ansicht ▾ (Iso, Oben, Vorne, Rechts, Hinten, Links, Unten), Alle Raster, Anzeige ▾ (Alle Raster, Farbregionen zeigen, Seitenpanel), Seitenpanel einblenden (wenn eingeklappt). Kontextleiste des Modus links oben darunter (`.ctxslot`). „Neu einpassen“ unten mittig. Ansichtswürfel unten rechts (`app/viewCube.tsx`, SVG, 3 × 3 Felder je Fläche: Fläche, Kante, Ecke; folgt der Kamera über `Viewer.onCamera`; x/y/z daneben) statt des Achsenkreuzes |
-| Kontextleisten | Schnitt: X/Y/Z/Blick, Lage (`p·n` frei), Normale, Umkehren, „Als `cad render …` kopieren“. Skizze: Auswahl \| Linie, Bogen ▾ (letzte Bogenart, `sketchArc`), Bézier, Rechteck, Kreis \| Ecke runden, Schließen, Löschen \| ⊥ Ansicht, „Fertig“ primär; Tasten V, L, A, ⇧A, T, B, R, C, F, Enter, Entf, N (`logic/sketchEditor.sketchKeyAction`). Messen: Messart als Segment (D/R/W/L/F/K/T), „Im Schnitt“, Kopieren/Löschen der gewählten bzw. letzten Messung, „Fertig“ |
+| Kontextleisten | Schnitt: X/Y/Z/Blick, Lage (`p·n` frei), Normale, Umkehren, „Als `mcad render …` kopieren“. Skizze: Auswahl \| Linie, Bogen ▾ (letzte Bogenart, `sketchArc`), Bézier, Rechteck, Kreis \| Ecke runden, Schließen, Löschen \| ⊥ Ansicht, „Fertig“ primär; Tasten V, L, A, ⇧A, T, B, R, C, F, Enter, Entf, N (`logic/sketchEditor.sketchKeyAction`). Messen: Messart als Segment (D/R/W/L/F/K/T), „Im Schnitt“, Kopieren/Löschen der gewählten bzw. letzten Messung, „Fertig“ |
 | Seitenpanel (`app/sidePanel.tsx`) | rechts, einklappbar (`sideOpen`, `sideTab` in localStorage), Reiter Bauteile, Farben, Messen und im Modulkontext Parameter (wird beim Eintritt gewählt, beim Verlassen der vorige Reiter); der Messmodus wählt „Messen“. `colorsVisible()` ersetzt `colorsOpen` (Farbregionen werden für den sichtbaren Reiter angefordert) |
 
 **Themen.** Akzent hell `#0f766e`, dunkel `#3cc4a8` (dazu `--accent-hover`, `--accent-text`,
@@ -1518,8 +1519,8 @@ Name, der Tooltip (`title`) hängt das Tastenkürzel an, `aria-keyshortcuts` tr�
 Modellpalette bleibt.
 
 **Wayland.** `cad-app` setzt vor GTK den GLib-Programmnamen auf den `identifier` aus
-`tauri.conf.json` (`dev.controller-cad.desktop`); GTK nimmt ihn als Wayland-`app_id` und
-X11-`WM_CLASS`. Die Desktop-Datei heißt danach (`packaging/linux/dev.controller-cad.desktop.desktop`,
+`tauri.conf.json` (`dev.mcad.desktop`, bis 0.2 `dev.controller-cad.desktop`); GTK nimmt ihn als Wayland-`app_id` und
+X11-`WM_CLASS`. Die Desktop-Datei heißt danach (`packaging/linux/dev.mcad.desktop.desktop`,
 `StartupWMClass` gleich), `make install` leitet den Namen aus `tauri.conf.json` ab.
 
 **Tests.** Playwright-Selektoren über Rolle und Namen (Helfer `pickMenu`, `menuItem`, `mode`,
@@ -1569,7 +1570,7 @@ entscheidet nach den Kindern.
 
 ## 21. Kollisions-Asserts (Plan 21, Phase C)
 
-Nutzerentscheidung: Verletzung = Warnung; `cad export` bricht ab (Exit 4), außer mit
+Nutzerentscheidung: Verletzung = Warnung; `mcad export` bricht ab (Exit 4), außer mit
 `--ignore-asserts`; `assert_keepout` in der UI gut sichtbar.
 
 - **Sprache**: `assert_keepout(clearance)`, `assert_disjoint()`, `assert_intersect()`,

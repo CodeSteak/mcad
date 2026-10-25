@@ -38,15 +38,16 @@ pub use edit::{
 pub use eval::{eval_top_level, module_params};
 pub use output::*;
 pub use project::{
-    Asset, FileResolver, FileRole, FsResolver, Library, NoFiles, Project, SourceFile, SourceText, data_url,
-    decode_data_url, normalize_path, resolve_path,
+    Asset, DEFAULT_MAIN, FileResolver, FileRole, FsResolver, Library, MODEL_EXTENSION, MODEL_EXTENSIONS, NoFiles,
+    Project, SourceFile, SourceText, data_url, decode_data_url, is_model_file, normalize_path, resolve_path,
+    strip_model_extension,
 };
 pub use value::{Origin, PValue, fmt_literal, fmt_num};
 
 /// Evaluates a parsed single file without other project files (`include`/`use` report a
 /// missing file). See [`eval_project`].
 pub fn eval(src: &str, file: &cad_syntax::ast::File, opts: &EvalOptions) -> EvalOutput {
-    let proj = Project::load_parsed("main.scad", src, file.clone(), Vec::new(), &NoFiles);
+    let proj = Project::load_parsed(DEFAULT_MAIN, src, file.clone(), Vec::new(), &NoFiles);
     eval_project(&proj, opts)
 }
 

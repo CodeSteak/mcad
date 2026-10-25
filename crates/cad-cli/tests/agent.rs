@@ -1,5 +1,5 @@
 //! CLI for agents: `outline`, extended `render` (contact sheet, free camera, selection,
-//! overlays, section, xray), `measure`, `watch`, `set` and the reserved UI entry `cad DATEI`.
+//! overlays, section, xray), `measure`, `watch`, `set` and the reserved UI entry `mcad DATEI`.
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -17,16 +17,16 @@ fn example(rel: &str) -> String {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples").join(rel).display().to_string()
 }
 
-fn cad() -> Command {
+fn mcad() -> Command {
     // without daemon (tests/daemon.rs covers it, with a socket directory of its own)
-    let mut c = Command::cargo_bin("cad").unwrap();
-    c.env("CAD_NO_DAEMON", "1");
+    let mut c = Command::cargo_bin("mcad").unwrap();
+    c.env("MCAD_NO_DAEMON", "1");
     c
 }
 
 /// Runs with `--json`, checks the exit code and the common fields, returns the output.
 fn json(args: &[&str], code: i32) -> Value {
-    let out = cad().args(args).arg("--json").output().unwrap();
+    let out = mcad().args(args).arg("--json").output().unwrap();
     assert_eq!(
         out.status.code(),
         Some(code),
@@ -42,7 +42,7 @@ fn json(args: &[&str], code: i32) -> Value {
 }
 
 fn text(args: &[&str], code: i32) -> String {
-    let out = cad().args(args).output().unwrap();
+    let out = mcad().args(args).output().unwrap();
     assert_eq!(out.status.code(), Some(code), "{args:?}\nstderr: {}", String::from_utf8_lossy(&out.stderr));
     String::from_utf8(out.stdout).unwrap() + &String::from_utf8(out.stderr).unwrap()
 }
@@ -103,7 +103,7 @@ impl Png {
 
 #[test]
 fn outline_spec_example() {
-    let v = json(&["outline", &data("gehaeuse.scad")], 0);
+    let v = json(&["outline", &data("gehaeuse.mcad")], 0);
     assert_eq!(v["command"], "outline");
     assert_eq!(v["counts"]["errors"], 0);
     let m = &v["modules"][0];
@@ -137,20 +137,20 @@ fn outline_spec_example() {
     assert_eq!(part["bounds"]["max"], serde_json::json!([60.0, 30.0, 20.0]));
     assert!(v["anchors"].as_array().unwrap().iter().any(|a| a["ref"] == "k.ecke"));
     assert_eq!(v["grids"][0]["name"], "h");
-    let t = text(&["outline", &data("gehaeuse.scad")], 0);
+    let t = text(&["outline", &data("gehaeuse.mcad")], 0);
     assert!(t.contains("gehaeuse(w = 40: Zahl"), "{t}");
     assert!(t.contains("innen_r = w - t → 37"), "{t}");
     assert!(t.contains("k: gehaeuse  Z.21  Bauteil"), "{t}");
     // without the kernel: no volumes
-    let v = json(&["outline", "--no-kernel", &data("gehaeuse.scad")], 0);
+    let v = json(&["outline", "--no-kernel", &data("gehaeuse.mcad")], 0);
     assert_eq!(v["parts"][0]["volume"], Value::Null);
     // --module makes no sense for an overview
-    json(&["outline", &data("gehaeuse.scad"), "--module", "gehaeuse"], 2);
+    json(&["outline", &data("gehaeuse.mcad"), "--module", "gehaeuse"], 2);
 }
 
 #[test]
 fn outline_functions_variables_and_projects() {
-    let v = json(&["outline", &data("funktionen.scad")], 0);
+    let v = json(&["outline", &data("funktionen.mcad")], 0);
     let fun = &v["functions"][0];
     assert_eq!((fun["name"].as_str(), fun["body"].as_str()), (Some("doppelt"), Some("2 * x")));
     let vars = v["variables"].as_array().unwrap();
@@ -160,13 +160,13 @@ fn outline_functions_variables_and_projects() {
     assert_eq!(params[0]["type"], "vector");
     assert_eq!(params[1]["type"], "bool");
     // project: include/use, modules from the library with their file
-    let v = json(&["outline", &example("projekt-gehaeuse/gehaeuse.scad")], 0);
+    let v = json(&["outline", &example("projekt-gehaeuse/gehaeuse.mcad")], 0);
     let inc = v["includes"].as_array().unwrap();
     assert_eq!(inc.len(), 2);
-    assert!(inc.iter().any(|i| i["use"] == true && i["path"] == "lib/teile.scad" && i["found"] == true));
+    assert!(inc.iter().any(|i| i["use"] == true && i["path"] == "lib/teile.mcad" && i["found"] == true));
     let g = v["modules"].as_array().unwrap().iter().find(|m| m["name"] == "gehaeuse").unwrap();
-    assert_eq!(g["file"], "lib/teile.scad");
-    assert!(v["variables"].as_array().unwrap().iter().any(|x| x["name"] == "breite" && x["file"] == "konstanten.scad"));
+    assert_eq!(g["file"], "lib/teile.mcad");
+    assert!(v["variables"].as_array().unwrap().iter().any(|x| x["name"] == "breite" && x["file"] == "konstanten.mcad"));
     assert_eq!(v["parts"].as_array().unwrap().len(), 2);
 }
 
@@ -179,7 +179,7 @@ fn render_contact_sheet() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("bogen.png");
     let o = out.display().to_string();
-    let v = json(&["render", &data("gehaeuse.scad"), "-o", &o, "--views", "all", "--size", "800x600"], 0);
+    let v = json(&["render", &data("gehaeuse.mcad"), "-o", &o, "--views", "all", "--size", "800x600"], 0);
     assert_eq!((v["width"].as_u64(), v["height"].as_u64()), (Some(800), Some(600)));
     let img = png(&out);
     assert_eq!((img.w, img.h), (800, 600));
@@ -195,17 +195,17 @@ fn render_contact_sheet() {
     }
     assert_eq!(views[1]["camera"]["dir"], serde_json::json!([0.0, 1.0, 0.0]));
     // explicit list
-    let v = json(&["render", &data("gehaeuse.scad"), "-o", &o, "--views", "front,top"], 0);
+    let v = json(&["render", &data("gehaeuse.mcad"), "-o", &o, "--views", "front,top"], 0);
     assert_eq!(v["views"].as_array().unwrap().len(), 2);
     assert_eq!((v["width"].as_u64(), v["height"].as_u64()), (Some(1600), Some(1200)));
-    json(&["render", &data("gehaeuse.scad"), "-o", &o, "--views", "iso,schräg"], 2);
+    json(&["render", &data("gehaeuse.mcad"), "-o", &o, "--views", "iso,schräg"], 2);
 }
 
 #[test]
 fn render_free_camera() {
     let dir = tempfile::tempdir().unwrap();
     let o = dir.path().join("k.png").display().to_string();
-    let g = data("gehaeuse.scad");
+    let g = data("gehaeuse.mcad");
     let v = json(&["render", &g, "-o", &o, "--azimuth", "30", "--elevation", "20", "--size", "320x240"], 0);
     let cam = &v["camera"];
     close(f(&cam["azimuth"]), 30.0, 1e-3);
@@ -225,9 +225,9 @@ fn render_free_camera() {
     assert_eq!(v["camera"]["fov_deg"], 40.0);
     assert_eq!(v["camera"]["target"], serde_json::json!([0.0, 0.0, 0.0]));
     // fit to a part: the part fills the image (larger scale than the whole model)
-    let all = json(&["render", &data("kollision.scad"), "-o", &o, "--view", "front", "--size", "320x240"], 0);
+    let all = json(&["render", &data("kollision.mcad"), "-o", &o, "--view", "front", "--size", "320x240"], 0);
     let one = json(
-        &["render", &data("kollision.scad"), "-o", &o, "--view", "front", "--fit", "part:c", "--size", "320x240"],
+        &["render", &data("kollision.mcad"), "-o", &o, "--view", "front", "--fit", "part:c", "--size", "320x240"],
         0,
     );
     assert!(f(&one["camera"]["scale_px_per_mm"]) > 2.0 * f(&all["camera"]["scale_px_per_mm"]));
@@ -240,7 +240,7 @@ fn render_free_camera() {
 fn render_selection() {
     let dir = tempfile::tempdir().unwrap();
     let o = dir.path().join("s.png").display().to_string();
-    let k = data("kollision.scad");
+    let k = data("kollision.mcad");
     let v = json(&["render", &k, "-o", &o, "--part", "b", "--size", "320x240"], 0);
     let vis = v["visible_nodes"].as_array().unwrap();
     assert_eq!(vis.len(), 1);
@@ -255,7 +255,7 @@ fn render_selection() {
     let v = json(&["render", &k, "-o", &o, "--line", "5", "--only", "--size", "320x240"], 0);
     assert!(v["visible_nodes"].as_array().unwrap().iter().all(|n| n["role"] != "dimmed"));
     // by node index, with -D in a module context
-    let v = json(&["render", &data("gehaeuse.scad"), "-o", &o, "--module", "gehaeuse", "-D", "w=80", "--node", "1"], 0);
+    let v = json(&["render", &data("gehaeuse.mcad"), "-o", &o, "--module", "gehaeuse", "-D", "w=80", "--node", "1"], 0);
     assert_eq!(v["highlighted"], serde_json::json!([1]));
     assert_eq!(v["bounds"]["max"][0], 80.0);
 }
@@ -263,7 +263,7 @@ fn render_selection() {
 #[test]
 fn render_overlays_change_pixels() {
     let dir = tempfile::tempdir().unwrap();
-    let g = data("gehaeuse.scad");
+    let g = data("gehaeuse.mcad");
     let plain = dir.path().join("plain.png");
     json(&["render", &g, "-o", &plain.display().to_string(), "--module", "gehaeuse", "--size", "400x300"], 0);
     let p0 = png(&plain);
@@ -315,7 +315,7 @@ fn render_overlays_change_pixels() {
     assert!(png(&out).differing(&grids) > 300);
     // no grids in the file context of this file? h is there; a file without grids gives a note
     let v = json(
-        &["render", &data("kollision.scad"), "-o", &out.display().to_string(), "--show", "grids", "--size", "200x150"],
+        &["render", &data("kollision.mcad"), "-o", &out.display().to_string(), "--show", "grids", "--size", "200x150"],
         0,
     );
     assert!(v["notes"][0].as_str().unwrap().contains("--module"));
@@ -325,7 +325,7 @@ fn render_overlays_change_pixels() {
 #[test]
 fn render_section_reduces_visible_area() {
     let dir = tempfile::tempdir().unwrap();
-    let g = data("gehaeuse.scad");
+    let g = data("gehaeuse.mcad");
     let full = dir.path().join("voll.png");
     json(&["render", &g, "-o", &full.display().to_string(), "--size", "400x300", "--no-axes"], 0);
     let cut = dir.path().join("schnitt.png");
@@ -370,7 +370,7 @@ fn render_section_reduces_visible_area() {
 #[test]
 fn render_xray() {
     let dir = tempfile::tempdir().unwrap();
-    let g = data("gehaeuse.scad");
+    let g = data("gehaeuse.mcad");
     let a = dir.path().join("a.png");
     let b = dir.path().join("b.png");
     json(&["render", &g, "-o", &a.display().to_string(), "--size", "400x300"], 0);
@@ -385,7 +385,7 @@ fn render_xray() {
 
 #[test]
 fn measure_points_bounds_volume() {
-    let g = data("gehaeuse.scad");
+    let g = data("gehaeuse.mcad");
     let v = json(&["measure", &g, "--between", "k.ecke", "k.oben"], 0);
     let b = &v["between"];
     assert_eq!(b["a"]["point"], serde_json::json!([60.0, 30.0, 20.0]));
@@ -423,7 +423,7 @@ fn measure_points_bounds_volume() {
 
 #[test]
 fn measure_interference_and_clearance() {
-    let k = data("kollision.scad");
+    let k = data("kollision.mcad");
     let v = json(&["measure", &k, "--interference"], 0);
     let i = &v["interference"];
     assert_eq!(i["parts"], serde_json::json!(["a", "b", "c"]));
@@ -445,7 +445,7 @@ fn measure_interference_and_clearance() {
     assert_eq!(v["clearance"]["distance"], 0.0);
     // the project example has no collisions
     let v = json(
-        &["measure", &example("projekt-gehaeuse/gehaeuse.scad"), "--interference", "--clearance", "gehaeuse", "deckel"],
+        &["measure", &example("projekt-gehaeuse/gehaeuse.mcad"), "--interference", "--clearance", "gehaeuse", "deckel"],
         0,
     );
     assert!(v["interference"]["collisions"].as_array().unwrap().is_empty());
@@ -461,9 +461,9 @@ fn measure_interference_and_clearance() {
 fn watch_reports_a_second_run_after_a_change() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("w.scad");
-    std::fs::write(&file, std::fs::read_to_string(data("gehaeuse.scad")).unwrap()).unwrap();
+    std::fs::write(&file, std::fs::read_to_string(data("gehaeuse.mcad")).unwrap()).unwrap();
     let img = dir.path().join("w.png");
-    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("cad"))
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("mcad"))
         .args(["watch", &file.display().to_string(), "--json", "--once-after-change", "--timeout", "60"])
         .args(["--render", &img.display().to_string(), "--size", "200x150"])
         .stdout(Stdio::piped())
@@ -517,7 +517,7 @@ fn watch_text_and_timeout() {
 fn set_param_and_literal() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("g.scad");
-    let orig = std::fs::read_to_string(data("gehaeuse.scad")).unwrap();
+    let orig = std::fs::read_to_string(data("gehaeuse.mcad")).unwrap();
     std::fs::write(&file, &orig).unwrap();
     let fs = file.display().to_string();
     // dry run: diff only
@@ -570,20 +570,20 @@ fn set_param_and_literal() {
 fn set_in_project_file() {
     let dir = tempfile::tempdir().unwrap();
     let src = PathBuf::from(example("projekt-gehaeuse"));
-    for f in ["gehaeuse.scad", "konstanten.scad", "lib/teile.scad"] {
+    for f in ["gehaeuse.mcad", "konstanten.mcad", "lib/teile.mcad"] {
         let to = dir.path().join(f);
         std::fs::create_dir_all(to.parent().unwrap()).unwrap();
         std::fs::copy(src.join(f), &to).unwrap();
     }
-    let main = dir.path().join("gehaeuse.scad").display().to_string();
-    // the module lives in lib/teile.scad (use): its default is changed there
+    let main = dir.path().join("gehaeuse.mcad").display().to_string();
+    // the module lives in lib/teile.mcad (use): its default is changed there
     let v = json(&["set", &main, "--param", "schraubdom.h=12"], 0);
-    assert!(v["changes"][0]["file"].as_str().unwrap().ends_with("lib/teile.scad"));
-    assert!(std::fs::read_to_string(dir.path().join("lib/teile.scad")).unwrap().contains("schraubdom(h = 12)"));
+    assert!(v["changes"][0]["file"].as_str().unwrap().ends_with("lib/teile.mcad"));
+    assert!(std::fs::read_to_string(dir.path().join("lib/teile.mcad")).unwrap().contains("schraubdom(h = 12)"));
     // literal in the included file by path
-    let konst = std::fs::read_to_string(dir.path().join("konstanten.scad")).unwrap();
+    let konst = std::fs::read_to_string(dir.path().join("konstanten.mcad")).unwrap();
     let line = konst.lines().position(|l| l.starts_with("abstand")).unwrap() + 1;
-    let spec = format!("konstanten.scad:{line}:11=15");
+    let spec = format!("konstanten.mcad:{line}:11=15");
     let v = json(&["set", &main, "--literal", &spec], 0);
     assert_eq!(v["changes"][0]["old"], "10");
     let o = json(&["outline", &main], 0);
@@ -592,20 +592,20 @@ fn set_in_project_file() {
 }
 
 // ------------------------------------------------------------------------------------------
-// UI entry (`cad`, `cad DATEI`), `cad ui`, help
+// UI entry (`mcad`, `mcad DATEI`), `mcad ui`, help
 // ------------------------------------------------------------------------------------------
 
-/// `cad` without a graphical session (and without a running UI).
+/// `mcad` without a graphical session (and without a running UI).
 fn headless() -> Command {
-    let mut c = cad();
+    let mut c = mcad();
     let ipc = std::env::temp_dir().join(format!("cad-ipc-test-{}", std::process::id()));
-    c.env_remove("DISPLAY").env_remove("WAYLAND_DISPLAY").env("CAD_IPC_DIR", ipc);
+    c.env_remove("DISPLAY").env_remove("WAYLAND_DISPLAY").env("MCAD_IPC_DIR", ipc);
     c
 }
 
 #[test]
 fn ui_entry_without_display() {
-    for args in [vec![], vec![data("gehaeuse.scad")], vec![data("")]] {
+    for args in [vec![], vec![data("gehaeuse.mcad")], vec![data("")]] {
         let out = headless().args(&args).output().unwrap();
         assert_eq!(out.status.code(), Some(2), "{args:?}");
         let err = String::from_utf8_lossy(&out.stderr);
@@ -619,11 +619,11 @@ fn ui_entry_without_display() {
     let out = headless().arg("gibt-es-nicht.scad").output().unwrap();
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("gibt es nicht"));
-    let out = cad().arg("rendr").output().unwrap();
+    let out = mcad().arg("rendr").output().unwrap();
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("unbekannter Befehl"));
     // --help (English) explains both ways and points to the manual
-    let out = cad().arg("--help").output().unwrap();
+    let out = mcad().arg("--help").output().unwrap();
     assert_eq!(out.status.code(), Some(0));
     let help = String::from_utf8_lossy(&out.stdout);
     for c in [
@@ -636,9 +636,9 @@ fn ui_entry_without_display() {
         "usage",
         "desktop UI",
         "headless",
-        "cad ui status",
+        "mcad ui status",
         "DISPLAY",
-        "cad usage",
+        "mcad usage",
     ] {
         assert!(help.contains(c), "{c}: {help}");
     }
@@ -646,14 +646,14 @@ fn ui_entry_without_display() {
 
 #[test]
 fn usage_manual() {
-    let out = cad().arg("usage").output().unwrap();
+    let out = mcad().arg("usage").output().unwrap();
     assert_eq!(out.status.code(), Some(0));
     let text = String::from_utf8_lossy(&out.stdout);
-    assert!(text.starts_with("# cad") && text.contains("Topics") && text.contains("measure"), "{text}");
-    let out = cad().args(["usage", "meas"]).output().unwrap();
+    assert!(text.starts_with("# mcad") && text.contains("Topics") && text.contains("measure"), "{text}");
+    let out = mcad().args(["usage", "meas"]).output().unwrap();
     assert_eq!(out.status.code(), Some(0));
-    assert!(String::from_utf8_lossy(&out.stdout).starts_with("# cad measure"));
-    let out = cad().args(["usage", "gibt-es-nicht"]).output().unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).starts_with("# mcad measure"));
+    let out = mcad().args(["usage", "gibt-es-nicht"]).output().unwrap();
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("unknown topic"));
 }
@@ -670,7 +670,7 @@ fn ui_commands_without_running_ui() {
     assert_eq!(v["ok"], false);
     let out = headless().args(["ui", "screenshot", "-o", "/tmp/x.png"]).output().unwrap();
     assert_eq!(out.status.code(), Some(3));
-    let out = headless().args(["ui", "show", &data("gehaeuse.scad"), "--line", "3"]).output().unwrap();
+    let out = headless().args(["ui", "show", &data("gehaeuse.mcad"), "--line", "3"]).output().unwrap();
     assert_eq!(out.status.code(), Some(3));
 }
 
@@ -679,14 +679,14 @@ fn ui_commands_talk_to_a_running_ui() {
     // A fake UI endpoint answers like the app: the CLI side of the control protocol.
     let dir = tempfile::tempdir().unwrap();
     let server = cad_ipc::Server::bind_path(&dir.path().join("ui-4242.sock")).unwrap();
-    let file = data("gehaeuse.scad");
+    let file = data("gehaeuse.mcad");
     let root = std::path::Path::new(&file).parent().unwrap().to_path_buf();
     std::thread::spawn(move || {
         let _ = server.serve(move |f| match f.header.method.as_str() {
             "status" => Ok((
                 serde_json::json!({ "pid": 4242, "endpoint": "ui-4242", "windows": [{
-                    "project": { "root": root, "main": "gehaeuse.scad", "files": ["gehaeuse.scad"], "folder": false },
-                    "dirty": ["gehaeuse.scad"], "cursor": { "file": "gehaeuse.scad", "line": 7, "col": 3 },
+                    "project": { "root": root, "main": "gehaeuse.mcad", "files": ["gehaeuse.mcad"], "folder": false },
+                    "dirty": ["gehaeuse.mcad"], "cursor": { "file": "gehaeuse.mcad", "line": 7, "col": 3 },
                     "selection": { "nodes": [{ "idx": 2, "label": "box", "line": 7 }] }, "context": "gehaeuse",
                     "params": { "w": 50 }, "diagnostics": [], "scene": { "version": 3, "complete": true, "nodes": 9 }, "section": null
                 }]}),
@@ -697,12 +697,12 @@ fn ui_commands_talk_to_a_running_ui() {
             _ => Err("?".into()),
         });
     });
-    let run = |args: &[&str]| cad().env("CAD_IPC_DIR", dir.path()).args(args).output().unwrap();
+    let run = |args: &[&str]| mcad().env("MCAD_IPC_DIR", dir.path()).args(args).output().unwrap();
     let out = run(&["ui", "status"]);
     assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
     let t = String::from_utf8_lossy(&out.stdout);
     assert!(
-        t.contains("Zeile 7") && t.contains("Modul gehaeuse") && t.contains("gehaeuse.scad*") && t.contains("w = 50"),
+        t.contains("Zeile 7") && t.contains("Modul gehaeuse") && t.contains("gehaeuse.mcad*") && t.contains("w = 50"),
         "{t}"
     );
     let out = run(&["ui", "status", "--json"]);

@@ -4,13 +4,13 @@
 # the images before are the reviewer's in tests/farben-pruefung/img/), the 3MF check, the
 # daemon with a long CAD_IPC_DIR and the slicer sources. Writes reports/tmp/report12/.
 #
-#   CAD=target/debug/cad PY3MF=/pfad/venv/bin/python tools/report/report12-data.sh
+#   CAD=target/debug/mcad PY3MF=/pfad/venv/bin/python tools/report/report12-data.sh
 #
 # PY3MF: Python with lib3mf and trimesh (pip install lib3mf trimesh networkx lxml).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
-CAD="${CAD:-$ROOT/target/release/cad}"
+CAD="${CAD:-$ROOT/target/release/mcad}"
 PY3MF="${PY3MF:-python3}"
 OUT="$ROOT/reports/tmp/report12"
 CLI="$OUT/cli"

@@ -1,7 +1,7 @@
 //! Minimum distance between two triangle sets (triangle–triangle distance with a bounding
 //! volume hierarchy). Points and segments are degenerate triangles (`[p, p, p]`, `[a, b, b]`).
 //!
-//! Used for the coarse search of the exact measurements and for `cad measure --clearance`:
+//! Used for the coarse search of the exact measurements and for `mcad measure --clearance`:
 //! the meshes are tessellations of the exact B-reps; each deviates from its surface by at most
 //! the chordal tolerance, so the distance of the meshes differs from the distance of the
 //! solids by at most the sum of both tolerances.

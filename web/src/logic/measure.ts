@@ -1,5 +1,5 @@
 // Measure mode (Plan 18): kinds of the context bar, texts for copying (plain, code comment,
-// `cad measure` call) and small helpers. The measuring itself happens in the engine
+// `mcad measure` call) and small helpers. The measuring itself happens in the engine
 // (`cad_session::measure`, `cad-measure`); these functions only format its answers.
 
 import type { MeasureKind, Measurement } from "../engine/protocol";
@@ -41,9 +41,9 @@ export function shellQuote(t: string): string {
   return /^[A-Za-z0-9_./:=,@+-]+$/.test(t) ? t : `'${t.replace(/'/g, "'\\''")}'`;
 }
 
-/** `cad measure DATEI …` that repeats the measurement (arguments from the engine). */
+/** `mcad measure DATEI …` that repeats the measurement (arguments from the engine). */
 export function measureCli(m: Measurement, file: string): string {
-  return ["cad", "measure", shellQuote(file), ...m.cli.map(shellQuote)].join(" ");
+  return ["mcad", "measure", shellQuote(file), ...m.cli.map(shellQuote)].join(" ");
 }
 
 /** The measurement as a code comment (`// Messung: …`, one line per line of text). */

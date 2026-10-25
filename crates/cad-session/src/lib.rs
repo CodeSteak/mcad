@@ -190,7 +190,7 @@ where
             regions: VecDeque::new(),
             last_root_mesh: None,
             files: BTreeMap::new(),
-            main_path: "main.scad".into(),
+            main_path: cad_eval::DEFAULT_MAIN.into(),
             resolver: None,
             part_volumes: HashMap::new(),
             tags: HashMap::new(),
@@ -1097,7 +1097,7 @@ where
     /// Name of the root object in exports: the main file's stem.
     fn model_name(&self) -> String {
         let f = self.main_path.rsplit('/').next().unwrap_or("modell");
-        let stem = f.strip_suffix(".scad").unwrap_or(f);
+        let stem = cad_eval::strip_model_extension(f);
         if stem.is_empty() { "modell".into() } else { stem.to_string() }
     }
 
@@ -1144,7 +1144,7 @@ where
             }
         };
         let table = convert::color_table(&d.ev.tree);
-        let app = format!("controller-cad {}", env!("CARGO_PKG_VERSION"));
+        let app = format!("mcad {}", env!("CARGO_PKG_VERSION"));
         match format {
             p::ExportFormat::ThreeMf => self.engine.export_3mf_colors(&d.ev, &nodes, tol, &table, &app, opts),
             p::ExportFormat::Stl => self.engine.export_color_stl_zip(&d.ev, &nodes, tol, &table),

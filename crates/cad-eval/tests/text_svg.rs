@@ -63,7 +63,7 @@ fn import_svg_gives_sketch_profiles() {
 #[test]
 fn import_relative_to_the_file_and_errors() {
     let lib = "module logo() import(\"bilder/logo.svg\");";
-    let (_, out) = run("use <lib/teile.scad>\nlogo();", &[("lib/teile.scad", lib), ("lib/bilder/logo.svg", LOGO)]);
+    let (_, out) = run("use <lib/teile.mcad>\nlogo();", &[("lib/teile.mcad", lib), ("lib/bilder/logo.svg", LOGO)]);
     assert!(msgs(&out, Severity::Error).is_empty(), "{:?}", out.diagnostics);
     assert_eq!(sketches(&out).len(), 2);
     // missing file

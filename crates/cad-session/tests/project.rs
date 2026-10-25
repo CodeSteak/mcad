@@ -7,7 +7,7 @@ use cad_session::protocol::*;
 use cad_session::{Session, SessionOptions, std_clock};
 use kernel_smlib::SmlibKernel;
 
-const MAIN: &str = "include <konst.scad>\nuse <lib/teile.scad>\n\
+const MAIN: &str = "include <konst.scad>\nuse <lib/teile.mcad>\n\
                     gehaeuse: gehaeuse(w = breite);\ntranslate([0, 50, 0]) deckel: deckel(w = breite);\n";
 const KONST: &str = "// Maße\nbreite = 40;\n";
 const TEILE: &str = "module gehaeuse(w = 30, h = 12) {\n    difference() {\n        cube([w, 20, h]);\n        \
@@ -18,7 +18,7 @@ fn session() -> Session<SmlibKernel> {
 }
 
 fn files() -> BTreeMap<String, String> {
-    [("konst.scad", KONST), ("lib/teile.scad", TEILE)].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()
+    [("konst.scad", KONST), ("lib/teile.mcad", TEILE)].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()
 }
 
 fn last_scene(msgs: &[FromEngine]) -> Option<Scene> {
@@ -54,7 +54,7 @@ fn files_ranges_and_parts() {
     let paths: Vec<(&str, FileRole)> = sc.files.iter().map(|f| (f.path.as_str(), f.role)).collect();
     assert_eq!(
         paths,
-        [("haupt.scad", FileRole::Main), ("konst.scad", FileRole::Include), ("lib/teile.scad", FileRole::Use)]
+        [("haupt.scad", FileRole::Main), ("konst.scad", FileRole::Include), ("lib/teile.mcad", FileRole::Use)]
     );
     // Hint of `breite` in konst.scad: local positions, file id 1.
     let h = sc.hints.iter().find(|h| h.text == "40").unwrap();
@@ -83,7 +83,7 @@ fn files_ranges_and_parts() {
 fn drag_edit_targets_the_included_file() {
     let mut s = session();
     let sc = start(&mut s);
-    // Context: module gehaeuse of the library; its height default lives in lib/teile.scad.
+    // Context: module gehaeuse of the library; its height default lives in lib/teile.mcad.
     let mut m = s.post(ToEngine::SetContext { module: Some("gehaeuse".into()), overrides: BTreeMap::new() });
     m.extend(s.run_to_idle());
     let sc2 = last_scene(&m).unwrap();
@@ -93,11 +93,11 @@ fn drag_edit_targets_the_included_file() {
     let r = s.post(ToEngine::Drag { handle: h.id, target: DragTarget::Point { pos: Vec3([40.0, 20.0, 15.0]) } });
     let FromEngine::Edits { edits, .. } = &r[0] else { panic!("{r:?}") };
     let e = edits.iter().find(|e| e.text == "15").expect("height edit");
-    assert_eq!(e.file.as_deref(), Some("lib/teile.scad"));
+    assert_eq!(e.file.as_deref(), Some("lib/teile.mcad"));
     assert_eq!(&TEILE[e.from as usize..e.to as usize], "12");
     // Apply in the file, send it, evaluate: the box is taller.
     let new = format!("{}{}{}", &TEILE[..e.from as usize], e.text, &TEILE[e.to as usize..]);
-    s.post(ToEngine::SetFile { path: "lib/teile.scad".into(), text: Some(new) });
+    s.post(ToEngine::SetFile { path: "lib/teile.mcad".into(), text: Some(new) });
     let mut m = s.post(ToEngine::SetSource { text: MAIN.into(), version: 2 });
     m.extend(s.run_to_idle());
     let sc3 = last_scene(&m).unwrap();
@@ -114,7 +114,7 @@ fn set_default_writes_into_the_library() {
     start(&mut s);
     let r = s.post(ToEngine::SetDefault { module: "deckel".into(), param: "w".into(), value: Value::Num(55.0) });
     let FromEngine::Edits { edits, .. } = &r[0] else { panic!("{r:?}") };
-    assert_eq!(edits[0].file.as_deref(), Some("lib/teile.scad"));
+    assert_eq!(edits[0].file.as_deref(), Some("lib/teile.mcad"));
     assert_eq!(&TEILE[edits[0].from as usize..edits[0].to as usize], "30");
 }
 

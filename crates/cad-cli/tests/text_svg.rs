@@ -14,7 +14,7 @@ fn example(name: &str) -> String {
 }
 
 fn json(args: &[&str], code: i32) -> Value {
-    let out = Command::cargo_bin("cad").unwrap().env("CAD_NO_DAEMON", "1").args(args).arg("--json").output().unwrap();
+    let out = Command::cargo_bin("mcad").unwrap().env("MCAD_NO_DAEMON", "1").args(args).arg("--json").output().unwrap();
     assert_eq!(
         out.status.code(),
         Some(code),
@@ -43,7 +43,7 @@ const RECT: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20mm" heigh
 
 #[test]
 fn examples_check_clean() {
-    for f in ["svg_logo.scad", "text_schild.scad"] {
+    for f in ["svg_logo.mcad", "text_schild.mcad"] {
         let v = json(&["check", &example(f)], 0);
         assert_eq!((v["errors"].as_u64(), v["warnings"].as_u64()), (Some(0), Some(0)), "{f}: {v}");
     }
@@ -113,9 +113,9 @@ fn watch_follows_a_changed_svg() {
     let dir = tempfile::tempdir().unwrap();
     write(dir.path(), "r.svg", RECT);
     let file = write(dir.path(), "w.scad", "linear_extrude(1) import(\"r.svg\");\n");
-    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("cad"))
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("mcad"))
         .args(["watch", &file, "--json", "--once-after-change", "--timeout", "60"])
-        .env("CAD_NO_DAEMON", "1")
+        .env("MCAD_NO_DAEMON", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

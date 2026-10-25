@@ -5,7 +5,7 @@
 //   docs/reports/09-desktop-schnitt/report.html, img/*
 //
 // Inputs (gitignored, reports/tmp/report9/):
-//   tauri-e2e.json     node web/e2e-tauri/desktop.e2e.mjs --bin target/release/cad   (Tauri E2E, Xvfb)
+//   tauri-e2e.json     node web/e2e-tauri/desktop.e2e.mjs --bin target/release/mcad   (Tauri E2E, Xvfb)
 //   scenarios.json,    cd web && pnpm e2e   (section view: e2e/section.spec.ts; also all older scenarios)
 //   metrics.json
 //   img/*              screenshots of both

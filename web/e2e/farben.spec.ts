@@ -8,7 +8,7 @@ import { cad, clickLine, loadText, menuItem, openApp, openExample, record11, scr
 
 type Hook = { __cad: { text(): string; state(): { colors: Array<{ label: string; filament: number; explicit: boolean; key: string; source: string }> } } };
 
-const EXAMPLE = "spec/mehrfarbig.scad";
+const EXAMPLE = "spec/mehrfarbig.mcad";
 
 // Region meshes, canvas screenshots and pixel counts take a while with SwiftShader.
 test.setTimeout(180_000);
@@ -132,7 +132,7 @@ test("F01 Farbliste: Palette, Slots, Volumen und Masse, Farbe je Fläche", async
   record11({
     id: "F01",
     title: "Farbliste mit Slots, Volumen, Masse",
-    caption: "Beispiel mehrfarbig.scad: fünf Farben in Reihenfolge des ersten Auftretens, red mit filament = 3 fest, die anderen automatisch (1, 2, 4, 5). Volumen je Farbe aus den Farbregionen beider Bauteile, Masse bei PLA 1,24 g/cm³. In der 3D-Ansicht trägt jede Fläche die Farbe ihres color()-Aufrufs.",
+    caption: "Beispiel mehrfarbig.mcad: fünf Farben in Reihenfolge des ersten Auftretens, red mit filament = 3 fest, die anderen automatisch (1, 2, 4, 5). Volumen je Farbe aus den Farbregionen beider Bauteile, Masse bei PLA 1,24 g/cm³. In der 3D-Ansicht trägt jede Fläche die Farbe ihres color()-Aufrufs.",
     images: [
       { name: "f01-farbliste-hell", label: "helles Thema, Farbliste rechts" },
       { name: "f01-panel-hell", label: "Farbliste" },

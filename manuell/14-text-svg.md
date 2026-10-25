@@ -2,9 +2,9 @@
 
 ```
 linear_extrude(1.2) text("Label", size = 11, font = "Inter:style=Bold", halign = "center", valign = "center");
-linear_extrude(1) text("20 mm", font = "fonts/my.ttf");     // font file relative to the .scad
+linear_extrude(1) text("20 mm", font = "fonts/my.ttf");     // font file relative to the model file
 linear_extrude(2) import("logo.svg", center = true);         // also id = "…", scale, dpi = 96
-// import("x.stl") (meshes): cad usage import-stl
+// import("x.stl") (meshes): mcad usage import-stl
 ```
 
 - `text()` as in OpenSCAD (`size`, `spacing`, `direction`, `halign`, `valign`, `language`,

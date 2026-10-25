@@ -1,9 +1,9 @@
-//! `cad daemon`: a background process that keeps the engine cache between CLI calls.
+//! `mcad daemon`: a background process that keeps the engine cache between CLI calls.
 //!
 //! **Start.** The first command that computes (`check`, `eval`, `inspect`, `render`,
 //! `export`, `outline`, `measure`, `set`) connects to the endpoint `daemon` of [`cad_ipc`]
 //! (socket `<runtime dir>/daemon.sock`, directory 0700, socket 0600, peer uid checked) or
-//! starts `cad daemon serve` detached (new session, stdin `/dev/null`, stdout/stderr to
+//! starts `mcad daemon serve` detached (new session, stdin `/dev/null`, stdout/stderr to
 //! `<runtime dir>/daemon.log`), see `client.rs`. Exactly one daemon: it holds an exclusive
 //! `flock` on `daemon.lock` for its lifetime; a second one waits briefly for the lock and ends
 //! as soon as the first answers.
@@ -101,11 +101,9 @@ pub struct ServeArgs {
     pub watchdog_secs: Option<f64>,
 }
 
-/// Build id: client and daemon must match (`CAD_DAEMON_BUILD_ID` overrides it, tests).
+/// Build id: client and daemon must match (`MCAD_DAEMON_BUILD_ID` overrides it, tests).
 pub fn build_id() -> String {
-    if let Ok(v) = std::env::var("CAD_DAEMON_BUILD_ID")
-        && !v.is_empty()
-    {
+    if let Some(v) = cad_ipc::env_var("DAEMON_BUILD_ID") {
         return v;
     }
     let meta = std::env::current_exe().and_then(std::fs::metadata);
@@ -216,7 +214,7 @@ pub fn wait_gone(pid: u32, max: Duration) -> bool {
 
 fn log(msg: &str) {
     let mut e = std::io::stderr().lock();
-    let _ = writeln!(e, "[{}] cad daemon {}: {msg}", crate::utc_timestamp(), std::process::id());
+    let _ = writeln!(e, "[{}] mcad daemon {}: {msg}", crate::utc_timestamp(), std::process::id());
 }
 
 fn mib(b: u64) -> String {
@@ -371,7 +369,7 @@ fn serve(a: &ServeArgs) -> ExitCode {
     if let Some(v) = a.cache_mb
         && !cfg.set_cache_mb(v)
     {
-        eprintln!("cad daemon serve: --cache-mb {v}: mindestens 1");
+        eprintln!("mcad daemon serve: --cache-mb {v}: mindestens 1");
         return ExitCode::from(2);
     }
     if let Some(v) = a.idle_minutes {
@@ -392,7 +390,7 @@ fn serve(a: &ServeArgs) -> ExitCode {
     let dir = match cad_ipc::runtime_dir() {
         Ok(d) => std::fs::canonicalize(&d).unwrap_or(d),
         Err(e) => {
-            eprintln!("cad daemon serve: {e}");
+            eprintln!("mcad daemon serve: {e}");
             return ExitCode::from(3);
         }
     };
@@ -400,7 +398,7 @@ fn serve(a: &ServeArgs) -> ExitCode {
     let socket = match cad_ipc::socket_path_in(&dir, ENDPOINT) {
         Ok(p) => p,
         Err(e) => {
-            eprintln!("cad daemon serve: {e}");
+            eprintln!("mcad daemon serve: {e}");
             return ExitCode::from(3);
         }
     };
@@ -421,17 +419,17 @@ fn serve(a: &ServeArgs) -> ExitCode {
             Ok(Some(l)) => break l,
             Ok(None) => {
                 if cad_ipc::connect_path(&socket).is_ok() {
-                    eprintln!("cad daemon serve: läuft bereits ({})", socket.display());
+                    eprintln!("mcad daemon serve: läuft bereits ({})", socket.display());
                     return ExitCode::SUCCESS;
                 }
                 if t0.elapsed() > Duration::from_secs(10) {
-                    eprintln!("cad daemon serve: {} ist gesperrt", lock_path.display());
+                    eprintln!("mcad daemon serve: {} ist gesperrt", lock_path.display());
                     return ExitCode::from(3);
                 }
                 std::thread::sleep(Duration::from_millis(20));
             }
             Err(e) => {
-                eprintln!("cad daemon serve: {e}");
+                eprintln!("mcad daemon serve: {e}");
                 return ExitCode::from(3);
             }
         }
@@ -441,7 +439,7 @@ fn serve(a: &ServeArgs) -> ExitCode {
     let server = match Server::bind_path(&socket) {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("cad daemon serve: {e}");
+            eprintln!("mcad daemon serve: {e}");
             return ExitCode::from(3);
         }
     };
@@ -476,7 +474,7 @@ fn serve(a: &ServeArgs) -> ExitCode {
         .name("cad-daemon-engine".into())
         .spawn(move || worker_loop(&w, rx));
     if let Err(e) = worker {
-        eprintln!("cad daemon serve: Thread: {e}");
+        eprintln!("mcad daemon serve: Thread: {e}");
         return ExitCode::from(3);
     }
     let m = shared.clone();
@@ -512,7 +510,7 @@ fn monitor(s: &Arc<Shared>) {
             && t.elapsed() > s.cfg.watchdog
         {
             let msg = format!(
-                "Watchdog: `cad {}` läuft seit {} (hängender Kernel-Aufruf?), Daemon beendet",
+                "Watchdog: `mcad {}` läuft seit {} (hängender Kernel-Aufruf?), Daemon beendet",
                 st.current.clone().unwrap_or_default(),
                 dur_text(s.cfg.watchdog)
             );
@@ -566,7 +564,7 @@ fn handle(s: &Arc<Shared>, mut conn: Conn, tx: &Sender<Job>) {
                 drop(st);
                 let _ = conn.respond(&h, json!({"pid": std::process::id()}), Vec::new());
                 if idle {
-                    s.exit(0, "cad daemon stop");
+                    s.exit(0, "mcad daemon stop");
                 }
                 log("Stopp angefordert, warte auf laufende Befehle");
                 Ok(())
@@ -782,7 +780,7 @@ fn worker_loop(s: &Arc<Shared>, rx: Receiver<Job>) {
         let misses = after.misses - before.misses.min(after.misses);
         let ms = t0.elapsed().as_secs_f64() * 1000.0;
         log(&format!(
-            "`cad {}` → {} in {:.0} ms, Cache {} Treffer / {} neu, {} Einträge, {} MiB",
+            "`mcad {}` → {} in {:.0} ms, Cache {} Treffer / {} neu, {} Einträge, {} MiB",
             job.argv.join(" "),
             reply.out.code,
             ms,
@@ -830,11 +828,11 @@ type Executed = (Reply, Ctx, Option<String>, bool);
 
 /// Runs one request with the CLI's command code (in the client's working directory).
 fn execute(job: &Job, engine: Engine<SmlibKernel>) -> Result<Executed, String> {
-    let cli = Cli::try_parse_from(std::iter::once("cad".to_string()).chain(job.argv.iter().cloned()))
+    let cli = Cli::try_parse_from(std::iter::once("mcad".to_string()).chain(job.argv.iter().cloned()))
         .map_err(|e| format!("Argumente: {e}"))?;
     let Some(cmd) = cli.cmd else { return Err("kein Befehl".into()) };
     if !eligible(&cmd) {
-        return Err(format!("`cad {}` läuft nicht im Daemon", crate::command_name(&cmd)));
+        return Err(format!("`mcad {}` läuft nicht im Daemon", crate::command_name(&cmd)));
     }
     std::env::set_current_dir(&job.cwd).map_err(|e| format!("{}: {e}", job.cwd.display()))?;
     let project = project_id(&cmd, &job.cwd);
@@ -877,7 +875,7 @@ fn status(as_json: bool) -> ExitCode {
             return ExitCode::SUCCESS;
         }
         Err(e) => {
-            eprintln!("cad daemon status: {e}");
+            eprintln!("mcad daemon status: {e}");
             return ExitCode::from(3);
         }
     };
@@ -885,7 +883,7 @@ fn status(as_json: bool) -> ExitCode {
     let st = match conn.request("status", json!({})) {
         Ok(f) => f.header.body,
         Err(e) => {
-            eprintln!("cad daemon status: {e}");
+            eprintln!("mcad daemon status: {e}");
             return ExitCode::from(3);
         }
     };
@@ -908,7 +906,7 @@ fn status(as_json: bool) -> ExitCode {
         st["pid"],
         st["version"].as_str().unwrap_or("?"),
         st["build_id"].as_str().unwrap_or("?"),
-        if st["build_id"].as_str() == Some(build_id().as_str()) { "" } else { ", anders als dieses cad" }
+        if st["build_id"].as_str() == Some(build_id().as_str()) { "" } else { ", anders als dieses mcad" }
     ));
     t.push_str(&format!(
         "Laufzeit {}, Leerlauf {} (Ende nach {} ohne Anfrage), Watchdog {} s\n",
@@ -924,7 +922,7 @@ fn status(as_json: bool) -> ExitCode {
         st["projects"],
         st["max_projects"],
         st["project_evictions"],
-        st["current"].as_str().map(|c| format!(", läuft: cad {c}")).unwrap_or_default()
+        st["current"].as_str().map(|c| format!(", läuft: mcad {c}")).unwrap_or_default()
     ));
     let rate = c["hit_rate"].as_f64().map(|r| format!("{:.0} %", r * 100.0)).unwrap_or_else(|| "–".into());
     t.push_str(&format!(
@@ -992,7 +990,7 @@ fn stop(as_json: bool) -> ExitCode {
     let (code, text, j) = match r {
         Ok(None) => (0, "kein Daemon\n".to_string(), json!({"stopped": false, "pid": null})),
         Ok(Some(pid)) => (0, format!("Daemon beendet (pid {pid})\n"), json!({"stopped": true, "pid": pid})),
-        Err(e) => (3, format!("cad daemon stop: {e}\n"), json!({"stopped": false, "error": e})),
+        Err(e) => (3, format!("mcad daemon stop: {e}\n"), json!({"stopped": false, "error": e})),
     };
     if as_json {
         let mut j = j;

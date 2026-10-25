@@ -137,10 +137,10 @@ test("T03 Schrift ins Projekt laden", async ({ page }) => {
 test("T04 Beispiel svg_logo mit seinen SVG-Dateien; Warnungen mit Zeile", async ({ page }) => {
   await openApp(page);
   const v0 = (await cad(page)).sentVersion;
-  expect(await page.evaluate(() => (window as unknown as W).__cad.openExample("spec/svg_logo.scad"))).toBe(true);
+  expect(await page.evaluate(() => (window as unknown as W).__cad.openExample("spec/svg_logo.mcad"))).toBe(true);
   await waitScene(page, { minVersion: v0 + 1 });
   const p = await info(page);
-  expect(p.main).toBe("spec/svg_logo.scad");
+  expect(p.main).toBe("spec/svg_logo.mcad");
   expect(p.paths).toEqual(expect.arrayContaining(["svg/logo.svg", "svg/blatt.svg", "svg/haus.svg", "svg/welle.svg"]));
   expect(await errors(page)).toEqual([]);
   await hook(page, (c) => c.setView("iso"));
@@ -163,7 +163,7 @@ test("T04 Beispiel svg_logo mit seinen SVG-Dateien; Warnungen mit Zeile", async 
   record16({
     id: "T04",
     title: "Beispiel mit SVG-Dateien",
-    images: [{ name: "t04-beispiel", label: "examples/spec/svg_logo.scad als Projekt mit svg/*.svg" }],
+    images: [{ name: "t04-beispiel", label: "examples/spec/svg_logo.mcad als Projekt mit svg/*.svg" }],
     caption: "Einzelbeispiele, die SVGs aus examples/svg importieren, öffnen als Projekt mit diesen Dateien.",
     checks: ["4 SVG-Dateien im Projekt", "keine Fehler", "<text> im SVG: Warnung „w.svg:3: …Text…“"],
   });

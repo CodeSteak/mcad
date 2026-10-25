@@ -1,4 +1,4 @@
-//! `cad measure` on the exact B-rep (Plan 18): distance with foot points, radius, angle,
+//! `mcad measure` on the exact B-rep (Plan 18): distance with foot points, radius, angle,
 //! length, area, body, section (contours, circles, wall thickness), `--at`, JSON for agents
 //! and usage errors.
 
@@ -11,14 +11,14 @@ fn example(rel: &str) -> String {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples").join(rel).display().to_string()
 }
 
-fn cad() -> Command {
-    let mut c = Command::cargo_bin("cad").unwrap();
-    c.env("CAD_NO_DAEMON", "1");
+fn mcad() -> Command {
+    let mut c = Command::cargo_bin("mcad").unwrap();
+    c.env("MCAD_NO_DAEMON", "1");
     c
 }
 
 fn json(args: &[&str], code: i32) -> Value {
-    let out = cad().args(args).arg("--json").output().unwrap();
+    let out = mcad().args(args).arg("--json").output().unwrap();
     assert_eq!(
         out.status.code(),
         Some(code),
@@ -30,7 +30,7 @@ fn json(args: &[&str], code: i32) -> Value {
 }
 
 fn text(args: &[&str], code: i32) -> String {
-    let out = cad().args(args).output().unwrap();
+    let out = mcad().args(args).output().unwrap();
     assert_eq!(out.status.code(), Some(code), "{args:?}\nstderr: {}", String::from_utf8_lossy(&out.stderr));
     String::from_utf8(out.stdout).unwrap() + &String::from_utf8(out.stderr).unwrap()
 }
@@ -51,7 +51,7 @@ fn value(m: &Value, key: &str) -> f64 {
 
 #[test]
 fn housing_section_wall_and_distances() {
-    let g = example("spec/gehaeuse.scad");
+    let g = example("spec/gehaeuse.mcad");
     let v = json(
         &["measure", &g, "--section", "z=10", "--wall", "[0,15,10]", "--distance", "edge@[3,15,10]", "edge@[57,15,10]"],
         0,
@@ -93,7 +93,7 @@ fn housing_section_wall_and_distances() {
 
 #[test]
 fn hole_plate_radii_bores_fillets_and_pitch() {
-    let l = example("spec/lochplatte.scad");
+    let l = example("spec/lochplatte.mcad");
     let v = json(
         &[
             "measure",
@@ -135,7 +135,7 @@ fn hole_plate_radii_bores_fillets_and_pitch() {
 
 #[test]
 fn chamfer_angle_and_at() {
-    let c = example("spec/fase_chamfer.scad");
+    let c = example("spec/fase_chamfer.mcad");
     let v = json(&["measure", &c, "--angle", "face@[39.5,12,9.5]", "face@[20,12,10]"], 0);
     let a = &v["measurements"][0];
     close(f(&a["value"]), 45.0, 1e-9);
@@ -153,7 +153,7 @@ fn chamfer_angle_and_at() {
 
 #[test]
 fn usage_errors() {
-    let g = example("spec/gehaeuse.scad");
+    let g = example("spec/gehaeuse.mcad");
     // --wall needs a section
     json(&["measure", &g, "--wall", "[0,15,10]"], 2);
     // face@ inside a section, unknown prefix

@@ -1,10 +1,10 @@
 // Zweck: Druckbares Scharnier 60 mm aus drei Bauteilen (Blatt A, Blatt B, Stift) – Maße per
 // include, Teile per use; die Augen beider Blätter aus derselben Funktion (axiales Spiel),
 // Freiräume per for, Blatt B um die Achse auf den Öffnungswinkel gedreht. Prüfen:
-// `cad measure scharnier.scad --interference --clearance a b` (Spiel 0,4 mm) und Stift ↔ B.
+// `mcad measure scharnier.mcad --interference --clearance a b` (Spiel 0,4 mm) und Stift ↔ B.
 // Maße in mm.
-include <masse.scad>
-use <teile.scad>
+include <masse.mcad>
+use <teile.mcad>
 
 winkel = 180;     // Öffnungswinkel zwischen den Blättern (180 = flach; unter ca. 40° berühren sich die Blätter)
 

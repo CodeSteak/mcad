@@ -21,8 +21,8 @@ Stand: 2026-10-23 · solidcore `main` @ `c9de85d` (2026-10-23 19:10 UTC, tangenc
 - **Feature `solidcore`** (opt-in in `kernel-solidcore` und `cad-cli`, Standard aus): ein
   normaler Build (`cargo build`, `cargo test --workspace`) kompiliert solidcore nicht; jede
   Operation von `kernel-solidcore` meldet dann
-  `Unsupported("solidcore: … (built without feature `solidcore`)")`, und `cad diff-kernels`
-  bricht mit „diff-kernels braucht solidcore: cad mit `--features solidcore` bauen“ ab
+  `Unsupported("solidcore: … (built without feature `solidcore`)")`, und `mcad diff-kernels`
+  bricht mit „diff-kernels braucht solidcore: mcad mit `--features solidcore` bauen“ ab
   (Exit-Code 2). Für den Vergleich: `cargo build -p cad-cli --features solidcore`, Tests mit
   `cargo test -p cad-cli --features solidcore` bzw. `cargo test -p kernel-solidcore
   --features solidcore -- --nocapture` (zeigt die Antwort jeder Operation). Der git-Eintrag
@@ -75,7 +75,7 @@ sonst `Failed`. Flächen tragen vorerst den Tag der erzeugenden Operation (Attri
 für Provenienz ist noch nicht verdrahtet). Die Prüfungen bei `transform` und `classify`
 schalten sich von selbst frei, sobald solidcore richtig rechnet.
 
-## Vergleich über die Beispiele (`cad diff-kernels`)
+## Vergleich über die Beispiele (`mcad diff-kernels`)
 
 `examples/openscad-compat` und `examples/spec`:
 
@@ -156,7 +156,7 @@ ungeprüft).
 
 ## Abnahme
 
-`cad diff-kernels <dateien…> [--json]` (`crates/cad-cli/src/diff.rs`) wertet jede Datei mit
+`mcad diff-kernels <dateien…> [--json]` (`crates/cad-cli/src/diff.rs`) wertet jede Datei mit
 SMLib und mit solidcore aus und vergleicht jeden von SMLib ausgewerteten Knoten:
 
 - Status, Volumen (relativ 1e-6), Anzahl Flächen und Kanten des Knotenergebnisses,
@@ -180,7 +180,7 @@ prüft jede Operation einzeln (Quader: Volumen, Fläche, Schwerpunkt, Grenzen; T
 und Klassifikation richtig oder `Unsupported`).
 
 Wöchentlich (montags, `.github/workflows/solidcore.yml`, auch von Hand startbar) läuft
-`scripts/ci/solidcore.sh`: `cad` mit `--features solidcore` gegen den jeweils neuesten
+`scripts/ci/solidcore.sh`: `mcad` mit `--features solidcore` gegen den jeweils neuesten
 solidcore-`main` statt des Pins gebaut, `diff-kernels` über dieselben Beispiele; die Zahlen
 stehen in der Job-Zusammenfassung (gesamt und je Operation) und als Artefakt
 `solidcore-coverage` (`diff-kernels.json`). Der Job wird nicht rot, weil Knoten unsupported,

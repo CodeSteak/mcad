@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Local IPC for cad processes: per-user Unix sockets, versioned frames, request/response and events"
+description = "Local IPC for mcad processes: per-user Unix sockets, versioned frames, request/response and events"
 
 [dependencies]
 serde.workspace = true

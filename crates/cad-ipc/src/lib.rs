@@ -1,13 +1,13 @@
-//! Local IPC between `cad` processes of one user (desktop UI ↔ CLI, later a CLI daemon).
+//! Local IPC between `mcad` processes of one user (desktop UI ↔ CLI, CLI daemon).
 //!
 //! * **Endpoints** are Unix sockets in a per-user directory ([`runtime_dir`]):
-//!   `$CAD_IPC_DIR`, else `$XDG_RUNTIME_DIR/controller-cad`, else
-//!   `$TMPDIR/controller-cad-<uid>`. The directory is created with mode 0700 and must belong
+//!   `$MCAD_IPC_DIR` (old name `$CAD_IPC_DIR`, see [`env_var`]), else `$XDG_RUNTIME_DIR/mcad`,
+//!   else `$TMPDIR/mcad-<uid>`. The directory is created with mode 0700 and must belong
 //!   to the current user; sockets get mode 0600. An endpoint has a name (`ui-<pid>`,
 //!   `daemon`), the socket is `<dir>/<name>.sock`.
 //! * **Long paths:** a Unix socket path has at most [`MAX_SOCKET_PATH`] bytes (`sun_path`).
 //!   If `<dir>/<name>.sock` is longer, the socket goes to the short substitute directory
-//!   `/tmp/cad-<uid>` (same checks: created 0700, must be a directory of the current user,
+//!   `/tmp/mcad-<uid>` (same checks: created 0700, must be a directory of the current user,
 //!   no symlink) as `<hash>-<name>.sock`, `<hash>` = FNV-1a 64 of the canonical runtime
 //!   directory (several long directories do not collide). Lock and log files stay in the
 //!   runtime directory. [`socket_path_in`] gives the path, [`is_substitute`] tells which.
@@ -39,6 +39,19 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
+
+/// Environment variable `MCAD_<name>`, else the old name `CAD_<name>` (before the rename to
+/// `mcad`, still read); empty values count as unset. `name` without prefix, e.g. `"IPC_DIR"`.
+pub fn env_var_os(name: &str) -> Option<std::ffi::OsString> {
+    [format!("MCAD_{name}"), format!("CAD_{name}")]
+        .into_iter()
+        .find_map(|k| std::env::var_os(k).filter(|v| !v.is_empty()))
+}
+
+/// [`env_var_os`] as a string (not valid Unicode: unset).
+pub fn env_var(name: &str) -> Option<String> {
+    env_var_os(name).and_then(|v| v.into_string().ok())
+}
 
 /// Version of the frame and header format. A peer with another version gets an error.
 pub const IPC_VERSION: u32 = 1;
@@ -269,7 +282,7 @@ fn dir_hash(dir: &Path) -> String {
 }
 
 /// Socket path of endpoint `name` for runtime directory `dir`: `<dir>/<name>.sock`, or, if
-/// that is longer than [`MAX_SOCKET_PATH`], `/tmp/cad-<uid>/<hash>-<name>.sock` (see the
+/// that is longer than [`MAX_SOCKET_PATH`], `/tmp/mcad-<uid>/<hash>-<name>.sock` (see the
 /// crate docs).
 pub fn socket_path_in(dir: &Path, name: &str) -> Result<PathBuf> {
     check_name(name)?;
@@ -557,19 +570,19 @@ mod imp {
     }
 
     pub fn runtime_dir() -> Result<PathBuf> {
-        let dir = if let Some(d) = std::env::var_os("CAD_IPC_DIR").filter(|d| !d.is_empty()) {
+        let dir = if let Some(d) = env_var_os("IPC_DIR") {
             PathBuf::from(d)
         } else if let Some(d) = std::env::var_os("XDG_RUNTIME_DIR").filter(|d| !d.is_empty()) {
-            PathBuf::from(d).join("controller-cad")
+            PathBuf::from(d).join("mcad")
         } else {
-            std::env::temp_dir().join(format!("controller-cad-{}", uid()))
+            std::env::temp_dir().join(format!("mcad-{}", uid()))
         };
         private_dir(dir)
     }
 
     /// Short directory for sockets whose path in the runtime directory is too long.
     pub fn short_dir() -> Result<PathBuf> {
-        private_dir(PathBuf::from(format!("/tmp/cad-{}", uid())))
+        private_dir(PathBuf::from(format!("/tmp/mcad-{}", uid())))
     }
 
     /// Creates `dir` (0700) and checks it: a directory (no symlink) of the current user.

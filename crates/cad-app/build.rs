@@ -9,7 +9,7 @@ fn main() {
         std::fs::create_dir_all(&dist).expect("web/dist-tauri");
         std::fs::write(
             dist.join("index.html"),
-            "<!doctype html><meta charset=\"utf-8\"><title>controller-cad</title>\
+            "<!doctype html><meta charset=\"utf-8\"><title>mcad</title>\
              <body style=\"font:15px system-ui;padding:2em\"><h1>UI nicht eingebettet</h1>\
              <p>Dieser Build enthält die Web-Oberfläche nicht. Bauen mit:</p>\
              <pre>cd web &amp;&amp; pnpm install &amp;&amp; pnpm build:tauri\ncargo build --release -p cad-cli</pre>\

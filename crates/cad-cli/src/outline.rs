@@ -1,4 +1,4 @@
-//! `cad outline`: an overview of a project in one call — modules (parameters with defaults
+//! `mcad outline`: an overview of a project in one call — modules (parameters with defaults
 //! and guessed types, grids and anchors evaluated with the defaults), functions, top-level
 //! variables with values, grids and anchors of the file, named instances and parts (bounds,
 //! volume), files and `include`/`use`, diagnostics.

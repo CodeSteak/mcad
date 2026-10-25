@@ -1,4 +1,4 @@
-// Project files (several .scad files): paths, which scene file ids belong to a path, the main
+// Project files (several model files, `.mcad` or `.scad`): paths, which scene file ids belong to a path, the main
 // file of a folder, include/use statements in a text. Pure functions (tested in files.test.ts).
 
 import type { Diagnostic, Scene, SrcRange } from "../engine/protocol";
@@ -92,7 +92,7 @@ export function includeAt(text: string, pos: number): IncludeStmt | null {
  * includes or uses (preferring one that includes or uses something); else the first.
  */
 export function guessMain(files: Record<string, string>): string | null {
-  const paths = Object.keys(files).filter((p) => p.endsWith(".scad")).sort();
+  const paths = Object.keys(files).filter(isModelFile).sort();
   if (!paths.length) return null;
   const referenced = new Set<string>();
   const refers = new Set<string>();
@@ -107,6 +107,33 @@ export function guessMain(files: Record<string, string>): string | null {
   const top = paths.filter((p) => depth(p) === minDepth);
   const free = top.filter((p) => !referenced.has(p));
   return free.find((p) => refers.has(p)) ?? free[0] ?? top[0];
+}
+
+// ---------------------------------------------------------------- model files
+
+/** Extension of new model files ("Neu", new project files, downloads). */
+export const MODEL_EXT = ".mcad";
+
+/** Extensions of model files: `.mcad`, and `.scad` (OpenSCAD, projects from before the rename), which opens the same way. */
+export const MODEL_EXTS = [".mcad", ".scad"];
+
+/** `accept` of file inputs and pickers for model files. */
+export const MODEL_ACCEPT = MODEL_EXTS.join(",");
+
+/** Whether `path` is a model file (`.mcad` or `.scad`, any case). */
+export function isModelFile(path: string): boolean {
+  const l = path.toLowerCase();
+  return MODEL_EXTS.some((e) => l.endsWith(e));
+}
+
+/** `name` without a model file extension (`teil.mcad` → `teil`). */
+export function stripModelExt(name: string): string {
+  return name.replace(/\.(mcad|scad)$/i, "");
+}
+
+/** `name` as a model file: unchanged with `.mcad`/`.scad`, else with `.mcad` appended. */
+export function withModelExt(name: string): string {
+  return isModelFile(name) ? name : `${name}${MODEL_EXT}`;
 }
 
 // ---------------------------------------------------------------- data files (Bericht 16)
@@ -129,14 +156,14 @@ export function isBinaryDataFile(path: string): boolean {
   return isFontFile(path) || isMeshFile(path);
 }
 
-/** Files a project holds besides `.scad`: SVGs and STLs for `import()`, fonts for `text()`. */
+/** Files a project holds besides model files: SVGs and STLs for `import()`, fonts for `text()`. */
 export function isDataFile(path: string): boolean {
   return path.toLowerCase().endsWith(".svg") || isBinaryDataFile(path);
 }
 
 /** Files read from folders and ZIPs. */
 export function isProjectFile(path: string): boolean {
-  return path.toLowerCase().endsWith(".scad") || isDataFile(path);
+  return isModelFile(path) || isDataFile(path);
 }
 
 /** `data:<mime>;base64,…` of bytes. */
@@ -175,7 +202,7 @@ export function dataFileRefs(text: string): string[] {
   return out;
 }
 
-/** Strips a common top folder (`projekt/a.scad`, `projekt/lib/b.scad` → `a.scad`, `lib/b.scad`). */
+/** Strips a common top folder (`projekt/a.mcad`, `projekt/lib/b.scad` → `a.mcad`, `lib/b.scad`). */
 export function stripCommonFolder(files: Record<string, string>): { files: Record<string, string>; folder: string | null } {
   const paths = Object.keys(files);
   if (!paths.length) return { files, folder: null };

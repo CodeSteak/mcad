@@ -7,7 +7,7 @@ tests/openscad-compat/make-reference.py), our CLI measures volume and bounds exa
 (`cad measure --volume --bounds`). Writes a TSV: name, code, V OpenSCAD, V ours, exact formula
 (if any), bounds of both.
 
-    CAD=target/release/cad python3 tools/report/report15-openscad.py OUT_DIR
+    CAD=target/release/mcad python3 tools/report/report15-openscad.py OUT_DIR
 """
 import json
 import os
@@ -57,7 +57,7 @@ def main():
     out = Path(sys.argv[1])
     cases = out / "openscad"
     cases.mkdir(parents=True, exist_ok=True)
-    cad = os.environ.get("CAD", str(ROOT / "target/release/cad"))
+    cad = os.environ.get("CAD", str(ROOT / "target/release/mcad"))
     env = dict(os.environ, CAD_NO_DAEMON="1")
     rows = []
     for name, code, exact in CASES:

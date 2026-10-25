@@ -4,7 +4,7 @@
 Starts `cad` (with UI) in an Xvfb, waits for its window and prints name and WM_CLASS of every
 top-level window via libX11 (ctypes). GTK uses the same program name as the Wayland app_id.
 
-    python3 tools/report/report20-wmclass.py target/release/cad > reports/tmp/report20/wmclass.txt
+    python3 tools/report/report20-wmclass.py target/release/mcad > reports/tmp/report20/wmclass.txt
 """
 import ctypes
 import ctypes.util
@@ -14,7 +14,7 @@ import sys
 import tempfile
 import time
 
-cad = sys.argv[1] if len(sys.argv) > 1 else "target/release/cad"
+cad = sys.argv[1] if len(sys.argv) > 1 else "target/release/mcad"
 disp = ":%d" % (90 + os.getpid() % 50)
 xvfb = subprocess.Popen(["Xvfb", disp, "-screen", "0", "1440x900x24", "-nolisten", "tcp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 time.sleep(1.0)

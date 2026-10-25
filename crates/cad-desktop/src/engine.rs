@@ -1,6 +1,6 @@
 //! The desktop engine: a separate engine process (native SMLib) and its supervisor in the app.
 //!
-//! **Engine process** ([`host_main`], started as `cad engine-host`): reads [`cad_ipc`] frames
+//! **Engine process** ([`host_main`], started as `mcad engine-host`): reads [`cad_ipc`] frames
 //! from stdin (event `post` with an array of `ToEngine` messages, `debug_hang {ms}`), runs a
 //! `cad_session::Session` in a thread with a 256 MiB stack and the same loop as the browser
 //! worker (`web/src/engine/worker.ts`): post the queued messages (a `SetSource` directly
@@ -265,7 +265,7 @@ impl Default for SupervisorOptions {
     }
 }
 
-/// What the app shows about the engine (test hook, `cad ui status`).
+/// What the app shows about the engine (test hook, `mcad ui status`).
 #[derive(Debug, Clone, Default, serde::Serialize)]
 pub struct HostStatus {
     pub ready: bool,

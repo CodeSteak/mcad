@@ -20,7 +20,7 @@ const summary = args.includes("--summary");
 const { default: createSmlib } = await import(pathToFileURL(join(pkg, "smlib.js")).href);
 const { initSmlib } = await import(pathToFileURL(join(pkg, "smlib-bridge.js")).href);
 await initSmlib(createSmlib, { wasmBinary: readFileSync(join(pkg, "smlib.wasm")) });
-const cad = await import(pathToFileURL(join(pkg, "cad_wasm.js")).href);
+const mcad = await import(pathToFileURL(join(pkg, "cad_wasm.js")).href);
 await cad.default({ module_or_path: readFileSync(join(pkg, "cad_wasm_bg.wasm")) });
 const s = new cad.Session();
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { axisSection, cliCamera, cliCommand, cliSection, effectiveNormal, freeSection, keeps, offset, withOffset } from "./section";
 
-describe("section convention (as cad render --section)", () => {
+describe("section convention (as mcad render --section)", () => {
   it("x=10 removes x > 10", () => {
     const s = axisSection("x", 10);
     expect(keeps(s, [9, 0, 0])).toBe(true);
@@ -36,6 +36,6 @@ describe("section convention (as cad render --section)", () => {
     expect(cliCamera([1, 0, 0])).toEqual({ azimuth: 90, elevation: 0 });
     expect(cliCamera([0, 0, 1]).elevation).toBe(90);
     const c = cliCommand(axisSection("z", 10), "/tmp/mein teil.scad", "gehaeuse", [1, -1, 0]);
-    expect(c).toBe("cad render '/tmp/mein teil.scad' -o schnitt.png --module gehaeuse --section z=10 --azimuth 45 --elevation 0");
+    expect(c).toBe("mcad render '/tmp/mein teil.scad' -o schnitt.png --module gehaeuse --section z=10 --azimuth 45 --elevation 0");
   });
 });

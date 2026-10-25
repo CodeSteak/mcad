@@ -1,5 +1,5 @@
 // Zweck: Kollisions-Asserts (Plan 21, Phase C) – Prüfungen nach der Auswertung; eine
-// Verletzung ist eine Warnung, `cad export` bricht dann ab (außer mit --ignore-asserts).
+// Verletzung ist eine Warnung, `mcad export` bricht dann ab (außer mit --ignore-asserts).
 // Asserts sind Gruppen ihrer Kinder und lassen sich schachteln. Das Bauteil auf der Platine
 // (STL als Netz) ist ein Sperrvolumen: gezeigt, aber nicht exportiert und nicht gezählt.
 

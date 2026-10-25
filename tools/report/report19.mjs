@@ -7,7 +7,7 @@
 //
 // Inputs (gitignored, reports/tmp/report19/):
 //   scenarios.json, img/*.jpg, metrics.json     cd web && pnpm exec playwright test e2e/messen.spec.ts
-//   cli/*.txt, cli/*.json, cli/*.png,           CAD=target/release/cad tools/report/report19-data.sh
+//   cli/*.txt, cli/*.json, cli/*.png,           CAD=target/release/mcad tools/report/report19-data.sh
 //   analytic.json
 //   playwright.txt                              whole suite (cd web && pnpm e2e > …)
 //   vitest.txt, typecheck.txt                   cd web && pnpm test, pnpm typecheck

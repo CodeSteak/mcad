@@ -73,7 +73,7 @@ fn shell_of_rounded_boxes() {
 #[test]
 fn dose_shell_example_is_a_hollow_box() {
     let src =
-        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/spec/dose_shell.scad")).unwrap();
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/spec/dose_shell.mcad")).unwrap();
     let mut e = engine();
     let ev = e.evaluate(tree(&src));
     assert_clean(&ev);

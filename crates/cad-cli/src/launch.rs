@@ -1,11 +1,11 @@
-//! `cad` without a command: start the desktop UI (feature `gui`), optionally with a file or a
+//! `mcad` without a command: start the desktop UI (feature `gui`), optionally with a file or a
 //! folder. Without a display or without the feature: a message with the headless commands and
 //! exit code 2.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-/// What `cad [PFAD]` does.
+/// What `mcad [PFAD]` does.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decision {
     /// Start the UI with this file/folder (or empty).
@@ -42,9 +42,9 @@ pub fn decide(target: Option<&Path>, env: &dyn Fn(&str) -> Option<String>, gui_b
 }
 
 const HEADLESS: &str = "Ohne UI (headless) arbeiten die Befehle:\n  \
-cad check DATEI · cad outline DATEI · cad render DATEI -o bild.png --views all · cad inspect DATEI --line N\n  \
-cad measure DATEI … · cad watch DATEI --json --render bild.png · cad set DATEI --param m.p=wert · cad export DATEI -o teil.step\n\
-Hilfe: cad --help";
+mcad check DATEI · mcad outline DATEI · mcad render DATEI -o bild.png --views all · mcad inspect DATEI --line N\n  \
+mcad measure DATEI … · mcad watch DATEI --json --render bild.png · mcad set DATEI --param m.p=wert · mcad export DATEI -o teil.step\n\
+Hilfe: mcad --help";
 
 /// Message (stderr) for a decision that does not start the UI.
 pub fn message(d: &Decision, target: Option<&Path>) -> String {
@@ -52,19 +52,19 @@ pub fn message(d: &Decision, target: Option<&Path>) -> String {
     match d {
         Decision::Gui(_) => String::new(),
         Decision::NotBuilt => format!(
-            "cad: UI nicht in diesem Build (ohne Feature `gui` gebaut){what}.\n\
+            "mcad: UI nicht in diesem Build (ohne Feature `gui` gebaut){what}.\n\
              Desktop-UI: cargo build --release -p cad-cli (Standard-Features, Linux: WebKitGTK).\n{HEADLESS}"
         ),
         Decision::NoDisplay => format!(
-            "cad: keine grafische Sitzung (weder DISPLAY noch WAYLAND_DISPLAY gesetzt), die Desktop-UI{what} startet nicht.\n{HEADLESS}"
+            "mcad: keine grafische Sitzung (weder DISPLAY noch WAYLAND_DISPLAY gesetzt), die Desktop-UI{what} startet nicht.\n{HEADLESS}"
         ),
         Decision::Missing(p) => {
-            format!("cad: {} gibt es nicht (Datei .scad oder Ordner erwartet).\n{HEADLESS}", p.display())
+            format!("mcad: {} gibt es nicht (Datei .mcad/.scad oder Ordner erwartet).\n{HEADLESS}", p.display())
         }
     }
 }
 
-/// `cad [PFAD]`.
+/// `mcad [PFAD]`.
 pub fn run(target: Option<&Path>) -> ExitCode {
     let env = |k: &str| std::env::var(k).ok();
     let d = decide(target, &env, cfg!(feature = "gui"));
@@ -79,7 +79,7 @@ pub fn run(target: Option<&Path>) -> ExitCode {
 
 #[cfg(feature = "gui")]
 fn start(open: Option<PathBuf>) -> ExitCode {
-    let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("cad"));
+    let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("mcad"));
     let code = cad_app::run(cad_app::LaunchOptions {
         open,
         engine_program: exe,
@@ -118,6 +118,6 @@ mod tests {
         let missing = Path::new("gibt-es-nicht.scad");
         assert_eq!(decide(Some(missing), &env_of(&[("DISPLAY", ":0")]), true), Decision::Missing(missing.into()));
         let m = message(&Decision::NoDisplay, Some(Path::new("a.scad")));
-        assert!(m.contains("DISPLAY") && m.contains("cad check") && m.contains("a.scad"), "{m}");
+        assert!(m.contains("DISPLAY") && m.contains("mcad check") && m.contains("a.scad"), "{m}");
     }
 }

@@ -56,7 +56,7 @@ await initSmlib(createSmlib, { wasmBinary: readFileSync(join(pkg, "smlib.wasm"))
 timings.load_smlib_ms = ms(performance.now() - t0);
 
 t0 = performance.now();
-const cad = await import(pathToFileURL(join(pkg, "cad_wasm.js")).href);
+const mcad = await import(pathToFileURL(join(pkg, "cad_wasm.js")).href);
 await cad.default({ module_or_path: readFileSync(join(pkg, "cad_wasm_bg.wasm")) });
 const session = new cad.Session();
 timings.load_cad_wasm_ms = ms(performance.now() - t0);

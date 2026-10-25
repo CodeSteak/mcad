@@ -40,8 +40,9 @@ BINDIR     ?= $(PREFIX)/bin
 DATADIR    ?= $(PREFIX)/share
 APPDIR     ?= $(DATADIR)/applications
 ICONDIR    ?= $(DATADIR)/icons/hicolor
-DOCDIR     ?= $(DATADIR)/doc/controller-cad
-LICENSEDIR ?= $(DATADIR)/licenses/controller-cad
+DOCDIR     ?= $(DATADIR)/doc/mcad
+LICENSEDIR ?= $(DATADIR)/licenses/mcad
+MIMEDIR    ?= $(DATADIR)/mime/packages
 
 # --- Arch-Paket ------------------------------------------------------------------------
 # auto: makepkg auf Arch Linux, sonst Docker (archlinux:latest)
@@ -61,7 +62,7 @@ export EMSDK
 endif
 
 # --- abgeleitete Werte -----------------------------------------------------------------
-CAD_BIN      := $(CARGO_TARGET_DIR)/release/cad
+MCAD_BIN     := $(CARGO_TARGET_DIR)/release/mcad
 SMLIB_HEADER := $(SMLIB_SRC)/source/SMLib/inc/SmSmlibAll.h
 SMLIB_LIBS   := $(SMLIB_PREBUILT)/lib/libSMLib.a
 SMLIB_WASM   := web/public/smlib/smlib.wasm
@@ -80,7 +81,7 @@ VERSION := $(shell sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\
 GIT_REV := $(shell $(GIT) rev-list --count HEAD 2>/dev/null)
 GIT_SHA := $(shell $(GIT) rev-parse --short=7 HEAD 2>/dev/null)
 PKGVER  := $(VERSION)$(if $(GIT_SHA),.r$(GIT_REV).g$(GIT_SHA))
-DIST    := $(ARCH_OUT)/controller-cad-$(PKGVER).tar.gz
+DIST    := $(ARCH_OUT)/mcad-$(PKGVER).tar.gz
 
 ifeq ($(ARCH_BUILD),auto)
 override ARCH_BUILD := $(if $(and $(wildcard /etc/arch-release),$(shell command -v $(MAKEPKG) 2>/dev/null)),native,docker)
@@ -98,7 +99,7 @@ NEED_CXX   = $(call need,$${CXX:-c++},einen C++17-Compiler installieren (g++ 13 
 ##@ Hilfe
 .PHONY: help
 help: ## Diese Übersicht (Standardziel)
-	@echo "controller-cad $(VERSION) (Paketversion $(PKGVER))"
+	@echo "mcad $(VERSION) (Paketversion $(PKGVER))"
 	@echo "Aufruf: make <ziel> [VARIABLE=wert …]"
 	@awk 'BEGIN { FS = ":.*## " } \
 	  /^##@/ { printf "\n%s\n", substr($$0, 5); next } \
@@ -179,15 +180,15 @@ endif
 $(UI_DIST): $(UI_SOURCES) $(WEB_DEPS)
 	scripts/ci/desktop.sh ui
 
-cli: $(SMLIB_LIBS) ## cad ohne Desktop-UI (headless, ohne WebKitGTK) -> target/release/cad
+cli: $(SMLIB_LIBS) ## mcad ohne Desktop-UI (headless, ohne WebKitGTK) -> target/release/mcad
 	@$(NEED_CARGO)
 	$(CARGO) build --release $(CARGO_FLAGS) -p cad-cli --no-default-features
-	@ls -l "$(CAD_BIN)"
+	@ls -l "$(MCAD_BIN)"
 
-app: $(SMLIB_LIBS) $(UI_DIST) ## cad mit Desktop-UI (Tauri 2, eingebettete UI) -> target/release/cad
+app: $(SMLIB_LIBS) $(UI_DIST) ## mcad mit Desktop-UI (Tauri 2, eingebettete UI) -> target/release/mcad
 	@$(NEED_CARGO)
 	$(CARGO) build --release $(CARGO_FLAGS) -p cad-cli
-	@ls -l "$(CAD_BIN)"
+	@ls -l "$(MCAD_BIN)"
 
 build: smlib web app ## Alles: SMLib nativ + Wasm, Browser-App, Desktop-App
 
@@ -232,14 +233,15 @@ typecheck: $(WASM_PKG) $(WEB_DEPS) ## tsc --noEmit (braucht die Typen aus web/sr
 
 ##@ Installieren
 .PHONY: install uninstall
-install: ## cad, Desktop-Datei, Icons, Lizenzen, Beispiele nach DESTDIR+PREFIX (vorher make app)
-	@[ -x "$(CAD_BIN)" ] || { echo "make: $(CAD_BIN) fehlt – erst make app (oder make cli für headless)" >&2; exit 2; }
-	$(INSTALL) -Dm755 "$(CAD_BIN)" "$(DESTDIR)$(BINDIR)/cad"
+install: ## mcad, Desktop-Datei, Icons, Lizenzen, Beispiele nach DESTDIR+PREFIX (vorher make app)
+	@[ -x "$(MCAD_BIN)" ] || { echo "make: $(MCAD_BIN) fehlt – erst make app (oder make cli für headless)" >&2; exit 2; }
+	$(INSTALL) -Dm755 "$(MCAD_BIN)" "$(DESTDIR)$(BINDIR)/mcad"
 	$(INSTALL) -Dm644 packaging/linux/$(APP_ID).desktop "$(DESTDIR)$(APPDIR)/$(APP_ID).desktop"
+	$(INSTALL) -Dm644 packaging/linux/mcad.xml "$(DESTDIR)$(MIMEDIR)/mcad.xml"
 	@for s in $(ICON_SIZES); do \
-	  echo "$(INSTALL) -Dm644 assets/icon/png/$${s}x$${s}.png $(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/controller-cad.png"; \
-	  $(INSTALL) -Dm644 "assets/icon/png/$${s}x$${s}.png" "$(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/controller-cad.png"; done
-	$(INSTALL) -Dm644 assets/icon/cad.svg "$(DESTDIR)$(ICONDIR)/scalable/apps/controller-cad.svg"
+	  echo "$(INSTALL) -Dm644 assets/icon/png/$${s}x$${s}.png $(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/mcad.png"; \
+	  $(INSTALL) -Dm644 "assets/icon/png/$${s}x$${s}.png" "$(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/mcad.png"; done
+	$(INSTALL) -Dm644 assets/icon/cad.svg "$(DESTDIR)$(ICONDIR)/scalable/apps/mcad.svg"
 	$(INSTALL) -Dm644 -t "$(DESTDIR)$(LICENSEDIR)" packaging/linux/NOTICE crates/cad-font/fonts/OFL-*.txt
 	$(INSTALL) -Dm644 crates/cad-font/fonts/README.md "$(DESTDIR)$(LICENSEDIR)/fonts-README.md"
 	@if [ -f "$(SMLIB_SRC)/LICENSE" ]; then \
@@ -251,24 +253,28 @@ install: ## cad, Desktop-Datei, Icons, Lizenzen, Beispiele nach DESTDIR+PREFIX (
 	$(INSTALL) -Dm644 .claude/skills/cad-cli/SKILL.md "$(DESTDIR)$(DOCDIR)/cad-cli.md"
 	@cd examples && find . -type f | while read -r f; do \
 	  $(INSTALL) -Dm644 "$$f" "$(DESTDIR)$(DOCDIR)/examples/$${f#./}"; done
-	@echo "installiert: $(DESTDIR)$(BINDIR)/cad (+ Desktop-Datei, Icons, $(LICENSEDIR), $(DOCDIR))"
+	@echo "installiert: $(DESTDIR)$(BINDIR)/mcad (+ Desktop-Datei, Dateitypen, Icons, $(LICENSEDIR), $(DOCDIR))"
 
-uninstall: ## Entfernt, was make install angelegt hat (gleiche PREFIX/DESTDIR)
-	rm -f "$(DESTDIR)$(BINDIR)/cad" "$(DESTDIR)$(APPDIR)/$(APP_ID).desktop" "$(DESTDIR)$(APPDIR)/controller-cad.desktop"
-	for s in $(ICON_SIZES); do rm -f "$(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/controller-cad.png"; done
-	rm -f "$(DESTDIR)$(ICONDIR)/scalable/apps/controller-cad.svg"
-	rm -rf "$(DESTDIR)$(LICENSEDIR)" "$(DESTDIR)$(DOCDIR)"
+# Entfernt auch Desktop-Datei, Icons, Lizenzen und Doku unter den Namen vor der Umbenennung
+# in mcad (0.3.0, controller-cad); ein altes $(BINDIR)/cad bleibt (könnte ein anderes Programm sein).
+OLD_APP_ID := dev.controller-cad.desktop
+uninstall: ## Entfernt, was make install angelegt hat (gleiche PREFIX/DESTDIR; auch alte controller-cad-Namen)
+	rm -f "$(DESTDIR)$(BINDIR)/mcad" "$(DESTDIR)$(APPDIR)/$(APP_ID).desktop" "$(DESTDIR)$(MIMEDIR)/mcad.xml"
+	rm -f "$(DESTDIR)$(APPDIR)/$(OLD_APP_ID).desktop" "$(DESTDIR)$(APPDIR)/controller-cad.desktop"
+	for s in $(ICON_SIZES); do rm -f "$(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/mcad.png" "$(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/controller-cad.png"; done
+	rm -f "$(DESTDIR)$(ICONDIR)/scalable/apps/mcad.svg" "$(DESTDIR)$(ICONDIR)/scalable/apps/controller-cad.svg"
+	rm -rf "$(DESTDIR)$(LICENSEDIR)" "$(DESTDIR)$(DOCDIR)" "$(DESTDIR)$(DATADIR)/licenses/controller-cad" "$(DESTDIR)$(DATADIR)/doc/controller-cad"
 
 ##@ Paket
 .PHONY: dist arch arch-test arch-clean
-dist: $(DIST) ## Quelltext-Archiv des Git-Stands HEAD -> target/arch/controller-cad-<pkgver>.tar.gz
+dist: $(DIST) ## Quelltext-Archiv des Git-Stands HEAD -> target/arch/mcad-<pkgver>.tar.gz
 
 $(DIST):
 	@$(NEED_GIT)
 	@[ -n "$(GIT_SHA)" ] || { echo "make: dist braucht ein Git-Checkout" >&2; exit 2; }
 	@$(GIT) diff --quiet HEAD -- || echo "make: Hinweis: nicht eingecheckte Änderungen sind nicht im Archiv (git archive HEAD)" >&2
 	mkdir -p "$(ARCH_OUT)"
-	$(GIT) archive --format=tar.gz --prefix=controller-cad-$(PKGVER)/ -o "$@" HEAD
+	$(GIT) archive --format=tar.gz --prefix=mcad-$(PKGVER)/ -o "$@" HEAD
 
 arch: $(DIST) ## Arch-Paket bauen (makepkg auf Arch, sonst Docker) -> target/arch/*.pkg.tar.zst
 	sed -e 's/^pkgver=.*/pkgver=$(PKGVER)/' \
@@ -285,7 +291,7 @@ else ifeq ($(ARCH_BUILD),docker)
 else
 	@echo "make: ARCH_BUILD=$(ARCH_BUILD) unbekannt (auto, native, docker)" >&2; exit 2
 endif
-	@ls -l "$(ARCH_OUT)"/controller-cad-$(PKGVER)-*.pkg.tar.zst
+	@ls -l "$(ARCH_OUT)"/mcad-$(PKGVER)-*.pkg.tar.zst
 
 arch-test: ## Paket in frischem archlinux-Container installieren und prüfen (CLI, xvfb-UI)
 	@$(call need,$(DOCKER),Docker installieren)

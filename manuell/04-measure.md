@@ -1,6 +1,6 @@
-# cad measure
+# mcad measure
 
-`cad measure FILE [options]` – exact, on the B-rep. Options combine and repeat.
+`mcad measure FILE [options]` – exact, on the B-rep. Options combine and repeat.
 
 | Option | Result |
 | --- | --- |
@@ -27,12 +27,12 @@ g.inner_l`) and, in JSON, `cli` – the arguments that repeat it.
 Wrong element type (e.g. `--radius` on a straight edge) or unknown anchor → exit 2.
 
 ```sh
-cad measure box.scad --between body.corner body.rim                   # 67.082 mm
-cad measure box.scad --module enclosure --between "g[left,front,bottom]" "g[right,back,top]"
-cad measure box.scad --distance "face@[3,15,10]" "face@[57,15,10]"    # 54 mm inner width
-cad measure box.scad --radius "face@[30,0.3,19.7]"                    # fillet R 1
-cad measure box.scad --section z=10 --wall "[0,15,10]"                # 3 mm
-cad measure box.scad --interference --clearance body cover
+mcad measure box.mcad --between body.corner body.rim                   # 67.082 mm
+mcad measure box.mcad --module enclosure --between "g[left,front,bottom]" "g[right,back,top]"
+mcad measure box.mcad --distance "face@[3,15,10]" "face@[57,15,10]"    # 54 mm inner width
+mcad measure box.mcad --radius "face@[30,0.3,19.7]"                    # fillet R 1
+mcad measure box.mcad --section z=10 --wall "[0,15,10]"                # 3 mm
+mcad measure box.mcad --interference --clearance body cover
 ```
 
-(`box.scad`: see `cad usage language`.)
+(`box.mcad`: see `mcad usage language`.)

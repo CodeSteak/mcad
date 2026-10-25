@@ -598,7 +598,7 @@ test("B13 Strg+Klick auf Rasterausdruck springt zur Rasterdeklaration", async ({
 
 test("B14 Messwerte: Latenz Ziehen → Szene (grob/fein), fps beim Ziehen", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/lochplatte.scad");
+  await openExample(page, "spec/lochplatte.mcad");
   // Module context: drag the plate thickness plane `oben = t` (default of t) up and down.
   await clickLine(page, 8, 12);
   await waitScene(page, { context: "lochplatte" });
@@ -629,7 +629,7 @@ test("B14 Messwerte: Latenz Ziehen → Szene (grob/fein), fps beim Ziehen", asyn
   expect(coarse.length).toBeGreaterThan(5);
   writeMetricsB({
     drag: {
-      model: "spec/lochplatte.scad, Modul lochplatte, Ebene oben = t (Standardwert)",
+      model: "spec/lochplatte.mcad, Modul lochplatte, Ebene oben = t (Standardwert)",
       moves: path.length,
       sent: fps.sent,
       dropped: fps.dropped,

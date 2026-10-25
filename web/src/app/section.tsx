@@ -1,5 +1,5 @@
 // Section view tool: mode "Schnitt" of the view toolbar, the context bar (axis or plane from the
-// view direction, value/normal input, flip, "Als `cad render …` kopieren") and the status text.
+// view direction, value/normal input, flip, "Als `mcad render …` kopieren") and the status text.
 
 import { useEffect, useState } from "react";
 import type { Vec3 } from "../engine/protocol";
@@ -61,7 +61,7 @@ function cliFile(): string {
   return IS_TAURI && project.root ? absPath(project.root, project.main) : project.main;
 }
 
-/** `cad render …` with the current section, context module and view direction. */
+/** `mcad render …` with the current section, context module and view direction. */
 export function sectionCli(): string {
   const st = store.getState();
   return cliCommand(st.section, cliFile(), st.shown?.context.module ?? null, getViewer()?.eyeDir() ?? null);
@@ -161,7 +161,7 @@ export function SectionBar() {
       <ToolSep />
       <ToolGroup>
         <IconButton icon={IconFlip} label="Umkehren" hint="Andere Seite behalten (--section-flip)" pressed={s.flip} onClick={flipSection} />
-        <IconButton icon={IconCopy} label="Als cad render … kopieren" hint="Gleichen Schnitt in der CLI rendern" onClick={() => void copySectionCli()} />
+        <IconButton icon={IconCopy} label="Als mcad render … kopieren" hint="Gleichen Schnitt in der CLI rendern" onClick={() => void copySectionCli()} />
       </ToolGroup>
     </Toolbar>
   );
@@ -171,7 +171,7 @@ export function SectionStatus() {
   const s = useCad((st) => st.section);
   if (!s.on) return null;
   return (
-    <span className="st-note section" data-testid="status-section" title="Konvention wie cad render --section: es bleibt (q − p) · n ≤ 0">
+    <span className="st-note section" data-testid="status-section" title="Konvention wie mcad render --section: es bleibt (q − p) · n ≤ 0">
       {sectionText(s)}
     </span>
   );

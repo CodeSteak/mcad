@@ -38,7 +38,7 @@ async function cursorOn(page: Page, l: number, col: number, context: string | nu
 
 test("E01 Variabler Radius: Hinweis „r 2–4“, Kanten orange, Ergebnis verrundet", async ({ page }) => {
   await openApp(page);
-  let s = await openExample(page, "spec/variabler_radius.scad");
+  let s = await openExample(page, "spec/variabler_radius.mcad");
   expect(s.diagnostics.filter((d) => d.severity !== "info")).toEqual([]);
   const src = await text(page);
   // step law on all twelve edges of the box
@@ -78,7 +78,7 @@ test("E01 Variabler Radius: Hinweis „r 2–4“, Kanten orange, Ergebnis verru
     ],
     code: lines(src, 10, 25),
     caption:
-      "variabler_radius.scad: der Radius ist eine Funktion der Position. Am Zeilenende stehen Kantenzahl und Radiusbereich der ausgewerteten Stützpunkte („12 Kanten · r 2–4“, „4 Kanten · r 1.125–1.875“, „1 Zone · 4 Kanten · r 1.5–3.9“); ausgewählte Kanten orange, Zone blau wie beim konstanten Radius.",
+      "variabler_radius.mcad: der Radius ist eine Funktion der Position. Am Zeilenende stehen Kantenzahl und Radiusbereich der ausgewerteten Stützpunkte („12 Kanten · r 2–4“, „4 Kanten · r 1.125–1.875“, „1 Zone · 4 Kanten · r 1.5–3.9“); ausgewählte Kanten orange, Zone blau wie beim konstanten Radius.",
     checks: [
       `Status ok, Hinweise ${JSON.stringify(f.hints)}, ${JSON.stringify(d.hints)}, ${JSON.stringify(z.hints)}`,
       `gezeichnete ausgewählte Kanten 12 / 4 / 4, Pixel der orangen Kanten (Stufe): ${orange}`,
@@ -122,9 +122,9 @@ test("E02 Variabler Radius: Radius ≤ 0 und zu großer Radius wie beim konstant
   });
 });
 
-test("E03 shell eines verrundeten Körpers: dose_shell.scad und die drei Fälle aus Bericht 4", async ({ page }) => {
+test("E03 shell eines verrundeten Körpers: dose_shell.mcad und die drei Fälle aus Bericht 4", async ({ page }) => {
   await openApp(page);
-  let s = await openExample(page, "spec/dose_shell.scad");
+  let s = await openExample(page, "spec/dose_shell.mcad");
   expect(s.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
   s = await cursorOn(page, 9, 6, "dose", "(s) => s.view.openFaces.length > 0");
   const [sh] = (await nodesOnLine(page, 9)).filter((x) => x.label === "shell");
@@ -156,12 +156,12 @@ test("E03 shell eines verrundeten Körpers: dose_shell.scad und die drei Fälle 
     id: "E03",
     title: "shell verrundeter Körper",
     images: [
-      { name: "e03-dose", label: "dose_shell.scad, Cursor auf shell(wand)" },
+      { name: "e03-dose", label: "dose_shell.mcad, Cursor auf shell(wand)" },
       { name: "e03-faelle", label: "die drei Fälle aus Bericht 4 (F1)" },
     ],
     code: src.trim(),
     caption:
-      "dose_shell.scad ist wieder grün: ein geschlossener Hohlkörper mit Öffnung oben, „1 Zone · 1 Fläche geöffnet“. Die drei Fälle aus Bericht 4 (früher SM_ERR_NULL_POINTER, „leaves no cavity“, „self-overlapping“) ergeben Hohlkörper.",
+      "dose_shell.mcad ist wieder grün: ein geschlossener Hohlkörper mit Öffnung oben, „1 Zone · 1 Fläche geöffnet“. Die drei Fälle aus Bericht 4 (früher SM_ERR_NULL_POINTER, „leaves no cavity“, „self-overlapping“) ergeben Hohlkörper.",
     checks: [`dose: ${sh.triangles} Dreiecke, ${sh.openedFaces} Fläche geöffnet (Ansicht und Engine)`, `Fälle: Status ${shells.map((x) => x.status).join("/")}, je ${shells.map((x) => x.openedFaces).join("/")} Fläche geöffnet; Mitte ${mid.triangles} Dreiecke`],
   });
 });

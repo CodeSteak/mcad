@@ -1,8 +1,8 @@
-//! The CLI daemon (`cad daemon`, `crates/cad-cli/src/daemon.rs`): autostart, cache, identical
+//! The CLI daemon (`mcad daemon`, `crates/cad-cli/src/daemon.rs`): autostart, cache, identical
 //! output with and without daemon, one daemon for parallel starts, idle end, version change,
 //! switching it off, fallback, cache limits, file changes, status/stop, watchdog.
 //!
-//! Every test has its own socket directory (`CAD_IPC_DIR`) and ends its daemon (guard).
+//! Every test has its own socket directory (`MCAD_IPC_DIR`) and ends its daemon (guard).
 #![cfg(target_os = "linux")]
 
 use std::path::{Path, PathBuf};
@@ -51,13 +51,17 @@ impl Env {
     }
 
     fn cmd(&self) -> Command {
-        let mut c = Command::cargo_bin("cad").unwrap();
-        c.env("CAD_IPC_DIR", self.ipc())
-            .env("CAD_CONFIG", self.tmp.path().join("keine-config.toml"))
-            .env_remove("CAD_NO_DAEMON")
-            .env_remove("CAD_DAEMON_BUILD_ID")
-            .env_remove("CAD_DAEMON_DEBUG_HANG_MS")
-            .env("CAD_DAEMON_IDLE_SECS", "120");
+        let mut c = Command::cargo_bin("mcad").unwrap();
+        c.env("MCAD_IPC_DIR", self.ipc())
+            .env("MCAD_CONFIG", self.tmp.path().join("keine-config.toml"))
+            .env_remove("MCAD_NO_DAEMON")
+            .env_remove("MCAD_DAEMON_BUILD_ID")
+            .env_remove("MCAD_DAEMON_DEBUG_HANG_MS")
+            .env("MCAD_DAEMON_IDLE_SECS", "120");
+        // old names (before the rename to mcad) are read as a fallback: none from outside
+        for k in ["CAD_IPC_DIR", "CAD_CONFIG", "CAD_NO_DAEMON", "CAD_DAEMON_BUILD_ID", "CAD_DAEMON_DEBUG_HANG_MS"] {
+            c.env_remove(k);
+        }
         for (k, v) in &self.vars {
             c.env(k, v);
         }
@@ -143,7 +147,7 @@ fn used(out: &Output) -> bool {
 #[test]
 fn autostart_then_cache_hits_and_faster() {
     let env = Env::new();
-    let f = ex("spec/variabler_radius.scad");
+    let f = ex("spec/variabler_radius.mcad");
     assert_eq!(env.status()["running"], false);
     let t0 = Instant::now();
     let a = env.run(&["eval", &f, "--json"]);
@@ -184,33 +188,33 @@ fn output_identical_with_and_without_daemon() {
     std::fs::create_dir(&out).unwrap();
     let o = |n: &str| out.join(n).display().to_string();
     // warm the daemon with other models first: tags and cache state differ from a fresh process
-    for f in ["spec/fillet_zonen.scad", "spec/flasche.scad", "spec/lochplatte.scad"] {
+    for f in ["spec/fillet_zonen.mcad", "spec/flasche.mcad", "spec/lochplatte.mcad"] {
         assert!(used(&env.run(&["check", &ex(f), "--json"])));
     }
-    let gehaeuse = ex("spec/gehaeuse.scad");
-    let projekt = ex("projekt-gehaeuse/gehaeuse.scad");
-    let vr = ex("spec/variabler_radius.scad");
+    let gehaeuse = ex("spec/gehaeuse.mcad");
+    let projekt = ex("projekt-gehaeuse/gehaeuse.mcad");
+    let vr = ex("spec/variabler_radius.mcad");
     let cases: Vec<Vec<String>> = vec![
         vec!["check".into(), gehaeuse.clone()],
-        vec!["check".into(), data("syntax_fehler.scad")],
-        vec!["check".into(), data("fillet_zu_gross.scad")],
+        vec!["check".into(), data("syntax_fehler.mcad")],
+        vec!["check".into(), data("fillet_zu_gross.mcad")],
         vec!["eval".into(), gehaeuse.clone()],
         vec!["eval".into(), projekt.clone(), "--module".into(), "deckel".into()],
-        vec!["inspect".into(), ex("spec/fillet_zonen.scad"), "--line".into(), "12".into()],
+        vec!["inspect".into(), ex("spec/fillet_zonen.mcad"), "--line".into(), "12".into()],
         vec!["outline".into(), projekt.clone()],
         // -D without a module: top-level assignments
-        vec!["measure".into(), data("variablen.scad"), "-D".into(), "w=40".into(), "--volume".into(), "all".into()],
-        vec!["check".into(), data("variablen.scad"), "-D".into(), "nix=1".into()],
+        vec!["measure".into(), data("variablen.mcad"), "-D".into(), "w=40".into(), "--volume".into(), "all".into()],
+        vec!["check".into(), data("variablen.mcad"), "-D".into(), "nix=1".into()],
         // -m with arguments as in a call
         vec![
             "measure".into(),
-            data("halter.scad"),
+            data("halter.mcad"),
             "-m".into(),
             "halter(breite, h = doppelt(2))".into(),
             "--volume".into(),
             "all".into(),
         ],
-        vec!["check".into(), data("halter.scad"), "-m".into(), "halter(1, 2, 3, 4)".into()],
+        vec!["check".into(), data("halter.mcad"), "-m".into(), "halter(1, 2, 3, 4)".into()],
         vec![
             "measure".into(),
             gehaeuse.clone(),
@@ -270,13 +274,13 @@ fn output_identical_with_and_without_daemon() {
             vec!["s.png"],
         ),
         (
-            vec!["render".into(), ex("spec/fillet_zonen.scad"), "--line".into(), "12".into(), "--xray".into()],
+            vec!["render".into(), ex("spec/fillet_zonen.mcad"), "--line".into(), "12".into(), "--xray".into()],
             vec!["l.png"],
         ),
         (vec!["export".into(), vr.clone()], vec!["v.stl"]),
         (vec!["export".into(), gehaeuse.clone()], vec!["g.3mf"]),
         (vec!["export".into(), projekt.clone()], vec!["p.step"]),
-        (vec!["export".into(), ex("spec/lochplatte.scad")], vec!["l.step"]),
+        (vec!["export".into(), ex("spec/lochplatte.mcad")], vec!["l.step"]),
     ];
     for (args, outs) in &files {
         let target = o(outs[0]);
@@ -331,11 +335,11 @@ fn relative_paths_and_stdin() {
         }
         c.args(args).output().unwrap()
     };
-    let a = run_in(&["check", "projekt-gehaeuse/gehaeuse.scad"], true);
-    let b = run_in(&["check", "projekt-gehaeuse/gehaeuse.scad"], false);
+    let a = run_in(&["check", "projekt-gehaeuse/gehaeuse.mcad"], true);
+    let b = run_in(&["check", "projekt-gehaeuse/gehaeuse.mcad"], false);
     assert_same(&a, &b, "relative");
     assert_eq!(text(&a.stdout), text(&b.stdout));
-    assert!(text(&b.stdout).starts_with("projekt-gehaeuse/gehaeuse.scad"), "{}", text(&b.stdout));
+    assert!(text(&b.stdout).starts_with("projekt-gehaeuse/gehaeuse.mcad"), "{}", text(&b.stdout));
     assert_eq!(env.status()["requests"], 1);
 
     let src = "cube(5);\ntranslate([10, 0, 0]) sphere(2);\n";
@@ -355,9 +359,9 @@ fn alive(pid: u32) -> bool {
     }
 }
 
-/// Processes `cad daemon serve` with this socket directory.
+/// Processes `mcad daemon serve` with this socket directory.
 fn daemon_pids(ipc: &Path) -> Vec<u32> {
-    let want = format!("CAD_IPC_DIR={}", ipc.display());
+    let want = format!("MCAD_IPC_DIR={}", ipc.display());
     let mut out = Vec::new();
     for e in std::fs::read_dir("/proc").unwrap().flatten() {
         let Some(pid) = e.file_name().to_str().and_then(|s| s.parse::<u32>().ok()) else { continue };
@@ -376,15 +380,17 @@ fn daemon_pids(ipc: &Path) -> Vec<u32> {
 #[test]
 fn parallel_starts_give_one_daemon() {
     let env = Env::new();
-    let f = ex("spec/lochplatte.scad");
+    let f = ex("spec/lochplatte.mcad");
     let mut children = Vec::new();
     for _ in 0..6 {
-        let mut c = std::process::Command::new(assert_cmd::cargo::cargo_bin("cad"));
-        c.env("CAD_IPC_DIR", env.ipc())
-            .env("CAD_CONFIG", env.path("keine.toml"))
+        let mut c = std::process::Command::new(assert_cmd::cargo::cargo_bin("mcad"));
+        c.env("MCAD_IPC_DIR", env.ipc())
+            .env("MCAD_CONFIG", env.path("keine.toml"))
+            .env_remove("MCAD_NO_DAEMON")
+            .env_remove("MCAD_DAEMON_BUILD_ID")
             .env_remove("CAD_NO_DAEMON")
             .env_remove("CAD_DAEMON_BUILD_ID")
-            .env("CAD_DAEMON_IDLE_SECS", "120")
+            .env("MCAD_DAEMON_IDLE_SECS", "120")
             .args(["check", &f, "--json"])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped());
@@ -413,8 +419,8 @@ fn parallel_starts_give_one_daemon() {
 
 #[test]
 fn idle_end_removes_socket_and_lock() {
-    let env = Env::new().with("CAD_DAEMON_IDLE_SECS", "1");
-    assert!(used(&env.run(&["check", &ex("spec/gehaeuse.scad"), "--json"])));
+    let env = Env::new().with("MCAD_DAEMON_IDLE_SECS", "1");
+    assert!(used(&env.run(&["check", &ex("spec/gehaeuse.mcad"), "--json"])));
     let pid = env.status()["pid"].as_u64().unwrap();
     assert!(env.ipc().join("daemon.sock").exists());
     assert!(env.ipc().join("daemon.lock").exists());
@@ -430,8 +436,8 @@ fn idle_end_removes_socket_and_lock() {
 #[test]
 fn version_change_replaces_daemon() {
     let env = Env::new();
-    let f = ex("spec/gehaeuse.scad");
-    let with_build = |b: &str, args: &[&str]| env.cmd().env("CAD_DAEMON_BUILD_ID", b).args(args).output().unwrap();
+    let f = ex("spec/gehaeuse.mcad");
+    let with_build = |b: &str, args: &[&str]| env.cmd().env("MCAD_DAEMON_BUILD_ID", b).args(args).output().unwrap();
     assert!(used(&with_build("test-a", &["check", &f, "--json"])));
     let st = env.status();
     assert_eq!(st["build_id"], "test-a");
@@ -445,51 +451,85 @@ fn version_change_replaces_daemon() {
     assert!(!alive(pid_a));
     // `status` of a client with another build says so
     let t = text(&with_build("test-c", &["daemon", "status"]).stdout);
-    assert!(t.contains("anders als dieses cad"), "{t}");
+    assert!(t.contains("anders als dieses mcad"), "{t}");
 }
 
 #[test]
 fn switched_off_by_flag_env_and_config() {
     let env = Env::new();
-    let f = ex("spec/gehaeuse.scad");
+    let f = ex("spec/gehaeuse.mcad");
     let o = env.run(&["--no-daemon", "check", &f, "--json"]);
     let j = json(&o);
     assert_eq!(j["daemon"]["used"], false);
     assert_eq!(j["daemon"]["reason"], "--no-daemon");
     // flag after the command works too (global flag)
     assert_eq!(json(&env.run(&["check", &f, "--json", "--no-daemon"]))["daemon"]["used"], false);
+    let o = env.cmd().env("MCAD_NO_DAEMON", "1").args(["check", &f, "--json"]).output().unwrap();
+    let j = json(&o);
+    assert_eq!(j["daemon"]["used"], false);
+    assert!(j["daemon"]["reason"].as_str().unwrap().contains("MCAD_NO_DAEMON"), "{}", j["daemon"]);
+    // old name (before the rename to mcad), still read
     let o = env.cmd().env("CAD_NO_DAEMON", "1").args(["check", &f, "--json"]).output().unwrap();
     let j = json(&o);
     assert_eq!(j["daemon"]["used"], false);
-    assert!(j["daemon"]["reason"].as_str().unwrap().contains("CAD_NO_DAEMON"), "{}", j["daemon"]);
+    let reason = j["daemon"]["reason"].as_str().unwrap();
+    assert!(reason.contains("CAD_NO_DAEMON") && !reason.contains("MCAD_"), "{reason}");
+    // configuration file of the old name, when there is no mcad/config.toml
+    let xdg = env.path("xdg");
+    std::fs::create_dir_all(xdg.join("controller-cad")).unwrap();
+    std::fs::write(xdg.join("controller-cad/config.toml"), "[daemon]\nenabled = false\n").unwrap();
+    let o = env
+        .cmd()
+        .env_remove("MCAD_CONFIG")
+        .env("XDG_CONFIG_HOME", &xdg)
+        .args(["check", &f, "--json"])
+        .output()
+        .unwrap();
+    let j = json(&o);
+    assert!(j["daemon"]["reason"].as_str().unwrap().contains("controller-cad/config.toml"), "{}", j["daemon"]);
+    std::fs::create_dir_all(xdg.join("mcad")).unwrap();
+    std::fs::write(xdg.join("mcad/config.toml"), "[daemon]\nenabled = false\n").unwrap();
+    let o = env
+        .cmd()
+        .env_remove("MCAD_CONFIG")
+        .env("XDG_CONFIG_HOME", &xdg)
+        .args(["check", &f, "--json"])
+        .output()
+        .unwrap();
+    let j = json(&o);
+    assert!(j["daemon"]["reason"].as_str().unwrap().contains("mcad/config.toml"), "{}", j["daemon"]);
     let cfg = env.path("config.toml");
     std::fs::write(&cfg, "[daemon]\nenabled = false\n").unwrap();
-    let o = env.cmd().env("CAD_CONFIG", &cfg).args(["check", &f, "--json"]).output().unwrap();
+    let o = env.cmd().env("MCAD_CONFIG", &cfg).args(["check", &f, "--json"]).output().unwrap();
     let j = json(&o);
     assert_eq!(j["daemon"]["used"], false);
     assert!(j["daemon"]["reason"].as_str().unwrap().contains("enabled = false"), "{}", j["daemon"]);
     // text output stays quiet, --verbose says why
-    let o = env.cmd().env("CAD_NO_DAEMON", "1").args(["check", &f]).output().unwrap();
+    let o = env.cmd().env("MCAD_NO_DAEMON", "1").args(["check", &f]).output().unwrap();
     assert!(o.stderr.is_empty());
-    let o = env.cmd().env("CAD_NO_DAEMON", "1").args(["check", &f, "--verbose"]).output().unwrap();
+    let o = env.cmd().env("MCAD_NO_DAEMON", "1").args(["check", &f, "--verbose"]).output().unwrap();
     assert!(text(&o.stderr).contains("ohne Daemon"), "{}", text(&o.stderr));
     // nothing was started
     assert_eq!(env.status()["running"], false);
     assert!(!env.ipc().join("daemon.sock").exists());
+    // the new name wins over the old one (this starts the daemon; the guard ends it)
+    let o =
+        env.cmd().env("CAD_NO_DAEMON", "1").env("MCAD_NO_DAEMON", "0").args(["check", &f, "--json"]).output().unwrap();
+    assert_eq!(json(&o)["daemon"]["used"], true, "MCAD_NO_DAEMON=0 before CAD_NO_DAEMON=1");
 }
 
 #[test]
 fn fallback_when_socket_is_broken() {
-    let f = ex("spec/gehaeuse.scad");
+    let f = ex("spec/gehaeuse.mcad");
     let env = Env::new();
     let reference = env.local(&["check", &f]);
     // 1. socket directory is a file
     let file = env.path("keine-dir");
     std::fs::write(&file, "x").unwrap();
-    let o = env.cmd().env("CAD_IPC_DIR", &file).args(["check", &f, "--json"]).output().unwrap();
+    let o = env.cmd().env("MCAD_IPC_DIR", &file).args(["check", &f, "--json"]).output().unwrap();
     assert_eq!(o.status.code(), Some(0));
     assert_eq!(json(&o)["daemon"]["used"], false);
-    let o = env.cmd().env("CAD_IPC_DIR", &file).args(["check", &f]).output().unwrap();
+    let o = env.cmd().env("MCAD_IPC_DIR", &file).args(["check", &f]).output().unwrap();
     assert_eq!(text(&o.stdout), text(&reference.stdout));
     assert!(o.stderr.is_empty(), "silent: {}", text(&o.stderr));
 
@@ -522,15 +562,15 @@ fn fallback_when_socket_is_broken() {
 
 #[test]
 fn cache_limit_and_project_limit() {
-    let env = Env::new().with("CAD_DAEMON_CACHE_MB", "1").with("CAD_DAEMON_MAX_PROJECTS", "2");
+    let env = Env::new().with("MCAD_DAEMON_CACHE_MB", "1").with("MCAD_DAEMON_MAX_PROJECTS", "2");
     let models = [
-        "spec/fillet_zonen.scad",
-        "spec/flasche.scad",
-        "spec/lochplatte.scad",
-        "spec/gehaeuse.scad",
-        "spec/knauf_mirror.scad",
-        "spec/winkel_anker.scad",
-        "spec/kabelfuehrung.scad",
+        "spec/fillet_zonen.mcad",
+        "spec/flasche.mcad",
+        "spec/lochplatte.mcad",
+        "spec/gehaeuse.mcad",
+        "spec/knauf_mirror.mcad",
+        "spec/winkel_anker.mcad",
+        "spec/kabelfuehrung.mcad",
     ];
     let out = env.path("x.stl");
     for m in models {
@@ -548,7 +588,7 @@ fn cache_limit_and_project_limit() {
     assert_eq!(st["project_evictions"], models.len() as u64 - 2);
 
     // a larger limit keeps everything
-    let env = Env::new().with("CAD_DAEMON_CACHE_MB", "512");
+    let env = Env::new().with("MCAD_DAEMON_CACHE_MB", "512");
     for m in &models[..3] {
         env.run(&["check", &ex(m)]);
     }
@@ -600,7 +640,7 @@ fn status_and_stop() {
     let env = Env::new();
     let o = env.run(&["daemon", "status"]);
     assert!(text(&o.stdout).starts_with("kein Daemon"), "{}", text(&o.stdout));
-    env.run(&["render", &ex("spec/gehaeuse.scad"), "-o", &env.path("g.png").display().to_string()]);
+    env.run(&["render", &ex("spec/gehaeuse.mcad"), "-o", &env.path("g.png").display().to_string()]);
     let st = env.status();
     for k in ["pid", "version", "build_id", "uptime_s", "idle_s", "idle_limit_s", "requests", "projects", "rss_bytes"] {
         assert!(!st[k].is_null(), "{k}: {st}");
@@ -624,13 +664,13 @@ fn status_and_stop() {
 
 #[test]
 fn watchdog_ends_daemon_and_command_runs_locally() {
-    let env = Env::new().with("CAD_DAEMON_WATCHDOG_SECS", "1");
-    let f = ex("spec/gehaeuse.scad");
+    let env = Env::new().with("MCAD_DAEMON_WATCHDOG_SECS", "1");
+    let f = ex("spec/gehaeuse.mcad");
     let reference = env.local(&["check", &f]);
     assert!(used(&env.run(&["check", &f, "--json"])));
     let pid = env.status()["pid"].as_u64().unwrap();
     let t0 = Instant::now();
-    let o = env.cmd().env("CAD_DAEMON_DEBUG_HANG_MS", "8000").args(["check", &f]).output().unwrap();
+    let o = env.cmd().env("MCAD_DAEMON_DEBUG_HANG_MS", "8000").args(["check", &f]).output().unwrap();
     let took = t0.elapsed();
     assert_eq!(o.status.code(), Some(0));
     assert_eq!(text(&o.stdout), text(&reference.stdout));
@@ -648,9 +688,9 @@ fn watchdog_ends_daemon_and_command_runs_locally() {
     assert_ne!(env.status()["pid"].as_u64().unwrap(), pid);
 }
 
-/// Bericht 12: a `CAD_IPC_DIR` whose socket path exceeds the Unix limit (107 bytes) used to
-/// stop the daemon from starting, silently. Now the socket goes to `/tmp/cad-<uid>/` and
-/// `cad daemon status` names it.
+/// Bericht 12: a `MCAD_IPC_DIR` whose socket path exceeds the Unix limit (107 bytes) used to
+/// stop the daemon from starting, silently. Now the socket goes to `/tmp/mcad-<uid>/` and
+/// `mcad daemon status` names it.
 #[test]
 fn long_ipc_dir_uses_short_socket_path() {
     let mut env = Env::new();
@@ -661,15 +701,15 @@ fn long_ipc_dir_uses_short_socket_path() {
         .join("ipc");
     std::fs::create_dir_all(&long).unwrap();
     assert!(long.join("daemon.sock").as_os_str().len() > 107, "{}", long.display());
-    env.vars.push(("CAD_IPC_DIR".into(), long.display().to_string()));
-    let o = env.run(&["check", &ex("spec/gehaeuse.scad"), "--json"]);
+    env.vars.push(("MCAD_IPC_DIR".into(), long.display().to_string()));
+    let o = env.run(&["check", &ex("spec/gehaeuse.mcad"), "--json"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert!(used(&o), "Daemon nicht verwendet: {}", text(&o.stderr));
     let st = env.status();
     assert_eq!(st["running"], true, "{st}");
     assert_eq!(st["socket_substitute"], true, "{st}");
     let sock = st["socket"].as_str().unwrap().to_string();
-    assert!(sock.len() <= 107 && sock.starts_with("/tmp/cad-") && sock.ends_with("-daemon.sock"), "{sock}");
+    assert!(sock.len() <= 107 && sock.starts_with("/tmp/mcad-") && sock.ends_with("-daemon.sock"), "{sock}");
     assert!(Path::new(&sock).exists());
     // lock and log stay in the long directory
     assert!(long.join("daemon.lock").exists() && long.join("daemon.log").exists());
@@ -677,7 +717,7 @@ fn long_ipc_dir_uses_short_socket_path() {
     assert!(t.contains(&sock) && t.contains("Ersatzpfad"), "{t}");
     // the next call reaches the same daemon
     let pid = st["pid"].as_u64().unwrap();
-    assert!(used(&env.run(&["check", &ex("spec/gehaeuse.scad"), "--json"])));
+    assert!(used(&env.run(&["check", &ex("spec/gehaeuse.mcad"), "--json"])));
     assert_eq!(env.status()["pid"].as_u64(), Some(pid));
     let o = env.run(&["daemon", "stop", "--json"]);
     assert_eq!(json(&o)["stopped"], true);

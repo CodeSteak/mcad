@@ -1,4 +1,4 @@
-// F9a: ABSTURZ (Segmentation fault, Exit 139) von `cad check`: union(fillet = …) aus Platte,
+// F9a: ABSTURZ (Segmentation fault, Exit 139) von `mcad check`: union(fillet = …) aus Platte,
 // Wand und einem Zylinder, der die Wand tangential berührt (Schraubdom an der Wand). Ohne
 // fillet oder mit Abstand zur Wand kein Absturz. Im Gehäuse umgangen (Dome frei stehend).
 // Status (Bericht 13): behoben – kein Absturz (smlib/patches/0002: fehlender Ecktyp war eine

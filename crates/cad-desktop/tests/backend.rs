@@ -21,15 +21,15 @@ use serde_json::Value as Json;
 fn open_file_loads_includes() {
     let d = tempfile::tempdir().unwrap();
     std::fs::create_dir(d.path().join("lib")).unwrap();
-    std::fs::write(d.path().join("lib/teile.scad"), "module t() { cube(2); }\n").unwrap();
-    std::fs::write(d.path().join("haupt.scad"), "use <lib/teile.scad>\nt();\ninclude <fehlt.scad>\n").unwrap();
+    std::fs::write(d.path().join("lib/teile.mcad"), "module t() { cube(2); }\n").unwrap();
+    std::fs::write(d.path().join("haupt.scad"), "use <lib/teile.mcad>\nt();\ninclude <fehlt.scad>\n").unwrap();
     std::fs::write(d.path().join("anders.scad"), "cube(1);\n").unwrap();
     let p = open_file(&d.path().join("haupt.scad")).unwrap();
     assert_eq!(p.main, "haupt.scad");
     assert!(!p.folder);
     let keys: Vec<&str> = p.files.keys().map(|s| s.as_str()).collect();
-    assert_eq!(keys, vec!["haupt.scad", "lib/teile.scad"], "missing includes and unrelated files are not part of it");
-    assert_eq!(p.abs("lib/teile.scad"), std::path::absolute(d.path().join("lib/teile.scad")).unwrap());
+    assert_eq!(keys, vec!["haupt.scad", "lib/teile.mcad"], "missing includes and unrelated files are not part of it");
+    assert_eq!(p.abs("lib/teile.mcad"), std::path::absolute(d.path().join("lib/teile.mcad")).unwrap());
 }
 
 #[test]
@@ -49,11 +49,30 @@ fn open_folder_chooses_main() {
     std::fs::write(d.path().join("main.scad"), "cube(1);\n").unwrap();
     let p = open_folder(d.path(), None).unwrap();
     assert_eq!(p.main, "main.scad");
+    // a new empty folder starts with main.mcad
     let empty = tempfile::tempdir().unwrap();
     let p = open_folder(empty.path(), None).unwrap();
-    assert_eq!(p.main, "main.scad");
-    assert_eq!(p.files["main.scad"], "");
+    assert_eq!(p.main, "main.mcad");
+    assert_eq!(p.files["main.mcad"], "");
     assert_eq!(choose_main(&Default::default(), None), None);
+}
+
+#[test]
+fn open_folder_mixes_mcad_and_scad() {
+    let d = tempfile::tempdir().unwrap();
+    std::fs::create_dir(d.path().join("lib")).unwrap();
+    std::fs::write(d.path().join("lib/a.scad"), "module a() { cube(1); }\n").unwrap();
+    std::fs::write(d.path().join("lib/b.MCAD"), "module b() { cube(2); }\n").unwrap();
+    std::fs::write(d.path().join("teil.mcad"), "use <lib/a.scad>\nuse <lib/b.MCAD>\na();\nb();\n").unwrap();
+    std::fs::write(d.path().join("notiz.txt"), "kein Modell\n").unwrap();
+    let p = open_folder(d.path(), None).unwrap();
+    let keys: Vec<&str> = p.files.keys().map(|s| s.as_str()).collect();
+    assert_eq!(keys, vec!["lib/a.scad", "lib/b.MCAD", "teil.mcad"], "both extensions, no other files");
+    assert_eq!(p.main, "teil.mcad");
+    // main.mcad before main.scad
+    std::fs::write(d.path().join("main.scad"), "cube(1);\n").unwrap();
+    std::fs::write(d.path().join("main.mcad"), "cube(1);\n").unwrap();
+    assert_eq!(open_folder(d.path(), None).unwrap().main, "main.mcad");
 }
 
 #[test]
@@ -115,7 +134,7 @@ fn watcher_reports_external_changes_only() {
     w.note_written(&f, "cube(3);\n");
     write_atomic(&f, "cube(3);\n").unwrap();
     assert_eq!(next(&rx, 800), None, "own saves are not reported");
-    // external atomic save (temporary file + rename, like `cad set`): changed, not removed
+    // external atomic save (temporary file + rename, like `mcad set`): changed, not removed
     std::fs::write(d.path().join(".tmp"), "cube(4);\n").unwrap();
     std::fs::rename(d.path().join(".tmp"), &f).unwrap();
     assert!(matches!(next(&rx, 3000), Some(WatchEvent::Changed { text, .. }) if text == "cube(4);\n"));

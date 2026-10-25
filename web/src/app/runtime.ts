@@ -31,7 +31,7 @@ import {
 } from "../files/files";
 import { hasFaceColors } from "../logic/colors";
 import { jumpUpTarget, moduleSpans } from "../logic/context";
-import { baseName as pathBase, diagnosticPath, fileText, isDataFile, isFontFile, isMeshFile, normalizePath, rangePath } from "../logic/files";
+import { baseName as pathBase, diagnosticPath, fileText, isDataFile, isFontFile, isMeshFile, isModelFile, MODEL_EXT, normalizePath, rangePath, stripModelExt, withModelExt } from "../logic/files";
 import { modelHull } from "../logic/grids";
 import { transformBox } from "../logic/math";
 import { VersionMapper, mapRange } from "../logic/positions";
@@ -47,7 +47,7 @@ import { MeasureController } from "./measure";
 import { undo, redo } from "@codemirror/commands";
 import { gitMarks } from "../editor/gitGutter";
 
-export const DEFAULT_EXAMPLE = "spec/gehaeuse.scad";
+export const DEFAULT_EXAMPLE = "spec/gehaeuse.mcad";
 
 export const meshes = new MeshCache();
 const params = new URLSearchParams(location.search);
@@ -282,13 +282,13 @@ export async function initialProject(): Promise<{ name: string; main: string; ac
       store.setState({ notice: `Öffnen fehlgeschlagen: ${String(e)}` });
     }
     const ex = EXAMPLES.find((e) => e.path === DEFAULT_EXAMPLE) ?? EXAMPLES[0];
-    const name = ex ? ex.name : "unbenannt.scad";
+    const name = ex ? ex.name : `unbenannt${MODEL_EXT}`;
     return { name, main: name, active: name, files: { [name]: ex ? ex.text : "cube(10);\n" } };
   }
   const auto = await loadProjectAutosave();
   if (auto && Object.values(auto.files).some((t) => t.trim())) return auto;
   const ex = EXAMPLES.find((e) => e.path === DEFAULT_EXAMPLE) ?? EXAMPLES[0];
-  const name = ex ? ex.name : "unbenannt.scad";
+  const name = ex ? ex.name : `unbenannt${MODEL_EXT}`;
   return { name, main: name, active: name, files: { [name]: ex ? ex.text : "cube(10);\n" } };
 }
 
@@ -360,8 +360,8 @@ export async function openZip(): Promise<void> {
 /** Downloads the project as a ZIP. */
 export function downloadProjectZip(): void {
   flushActive();
-  const name = `${project.name.replace(/\.scad$/, "")}.zip`;
-  download(new Blob([projectZip(project.name.replace(/\.scad$/, ""), project.files()) as BlobPart], { type: "application/zip" }), name);
+  const name = `${stripModelExt(project.name)}.zip`;
+  download(new Blob([projectZip(stripModelExt(project.name), project.files()) as BlobPart], { type: "application/zip" }), name);
   store.setState({ notice: `Heruntergeladen: ${name}` });
 }
 
@@ -372,7 +372,7 @@ export function addProjectFile(path: string, text = ""): boolean {
     store.setState({ notice: `Ungültiger Dateiname: ${path}` });
     return false;
   }
-  const name = p.endsWith(".scad") ? p : `${p}.scad`;
+  const name = withModelExt(p);
   if (project.has(name)) return switchFile(name);
   project.texts.set(name, text);
   client.setFile(name, text);
@@ -424,7 +424,7 @@ export function openExample(ex: Example): void {
 }
 
 /**
- * Adds files from the computer to the project (UI upload): `.scad` and SVG as text, fonts and
+ * Adds files from the computer to the project (UI upload): `.mcad`/`.scad` and SVG as text, fonts and
  * STL as data URL; next to the main file. Existing files of the same name are replaced.
  */
 export async function uploadProjectFiles(files: ArrayLike<File>): Promise<void> {
@@ -432,8 +432,8 @@ export async function uploadProjectFiles(files: ArrayLike<File>): Promise<void> 
   const added: string[] = [];
   for (const f of Array.from(files)) {
     const name = normalizePath(dir + f.name);
-    if (!name.toLowerCase().endsWith(".scad") && !isDataFile(name)) {
-      store.setState({ notice: `${f.name}: nur .scad, .svg, .stl, .ttf und .otf` });
+    if (!isModelFile(name) && !isDataFile(name)) {
+      store.setState({ notice: `${f.name}: nur .mcad, .scad, .svg, .stl, .ttf und .otf` });
       continue;
     }
     const text = fileText(name, new Uint8Array(await f.arrayBuffer()));
@@ -456,7 +456,7 @@ export async function uploadProjectFiles(files: ArrayLike<File>): Promise<void> 
 
 export function newFile(): void {
   forgetHandle();
-  loadText("unbenannt.scad", "// Neues Modell\ncube(10);\n");
+  loadText(`unbenannt${MODEL_EXT}`, "// Neues Modell\ncube(10);\n");
 }
 
 export async function openFromDisk(): Promise<void> {
@@ -545,7 +545,7 @@ async function currentAsserts(): Promise<AssertResult[]> {
 }
 
 /** Exports via `run` unless an assertion is violated; then the dialog "Trotzdem exportieren"
- *  (like `cad export --ignore-asserts`). */
+ *  (like `mcad export --ignore-asserts`). */
 async function guardedExport(what: string, run: () => Promise<void>): Promise<void> {
   const v = violationLines(await currentAsserts());
   if (!v.length) return run();
@@ -634,7 +634,7 @@ async function exportModelNow(format: ExportFormat): Promise<void> {
  * Multi-colour exports of the model: 3MF with one object per part (material outside the parts:
  * an object "ohne Bauteil"), one volume per colour and filament slots for Bambu Studio /
  * OrcaSlicer, single-colour 3MF, or a ZIP with one STL per colour. The engine picks the parts
- * like `cad export` (Bericht 12, F4): the files of UI and CLI are the same.
+ * like `mcad export` (Bericht 12, F4): the files of UI and CLI are the same.
  */
 export async function exportColors(kind: "3mf" | "3mf-single" | "stl-zip"): Promise<void> {
   return guardedExport(kind === "3mf" ? "3MF mehrfarbig" : kind === "3mf-single" ? "3MF einfarbig" : "STL je Farbe", () => exportColorsNow(kind));

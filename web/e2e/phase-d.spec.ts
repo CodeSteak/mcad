@@ -33,7 +33,7 @@ test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => console.log("pageerror:", e.message));
 });
 
-// Keyhole dome touching a rib along x = 7, y = 15 (crates/cad-cli/tests/data/dom_rippe.scad).
+// Keyhole dome touching a rib along x = 7, y = 15 (crates/cad-cli/tests/data/dom_rippe.mcad).
 const DOM_RIPPE = `cube([30, 30, 2]);
 translate([11, 15, 0]) dom();
 translate([5, 5, 0]) rippe();

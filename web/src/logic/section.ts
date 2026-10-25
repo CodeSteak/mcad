@@ -1,6 +1,6 @@
 // 3D section view: plane, convention, snapping and the matching CLI call.
 //
-// Convention (exactly as `cad render --section`): the plane through `p` with normal `n`
+// Convention (exactly as `mcad render --section`): the plane through `p` with normal `n`
 // removes the half space `n` points into; what stays is (q − p) · n ≤ 0. `x=v` means
 // p = (v, 0, 0), n = +x; `--section-flip` reverses n.
 
@@ -78,7 +78,7 @@ function num(v: number): string {
   return t === "-0" ? "0" : t;
 }
 
-/** The section part of a `cad render` call. */
+/** The section part of a `mcad render` call. */
 export function cliSection(s: SectionState): string {
   const n = effectiveNormal(s);
   for (const a of ["x", "y", "z"] as const) {
@@ -101,10 +101,10 @@ export function cliCamera(eyeDir: Vec3): { azimuth: number; elevation: number } 
   return { azimuth: Math.round(azimuth * 10) / 10, elevation: Math.round(elevation * 10) / 10 };
 }
 
-/** Full `cad render` call for the current section and view. */
+/** Full `mcad render` call for the current section and view. */
 export function cliCommand(s: SectionState, file: string, module: string | null, eyeDir: Vec3 | null, output = "schnitt.png"): string {
   const q = (t: string) => (/^[A-Za-z0-9_./:-]+$/.test(t) ? t : `'${t.replace(/'/g, "'\\''")}'`);
-  const parts = ["cad", "render", q(file), "-o", q(output)];
+  const parts = ["mcad", "render", q(file), "-o", q(output)];
   if (module) parts.push("--module", q(module));
   parts.push(cliSection(s));
   if (eyeDir) {

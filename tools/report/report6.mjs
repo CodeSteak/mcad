@@ -14,7 +14,7 @@
 //   report6/img/*.jpg         screenshots
 //
 // The include/use comparison with OpenSCAD 2021.01 is computed here: for every project in
-// tests/openscad-compat/projects the ECHO lines of `cad eval --json` (target/debug/cad or
+// tests/openscad-compat/projects the ECHO lines of `cad eval --json` (target/debug/mcad or
 // $CAD) against expected.echo and, if `openscad` is installed, against a fresh OpenSCAD run.
 //
 //   node tools/report/report6.mjs [--run]
@@ -141,7 +141,7 @@ const compareLine = compare?.split("\n").find((l) => /\d+\s*\/\s*\d+/.test(l) &&
 
 // ---------------------------------------------------------------- include/use against OpenSCAD
 
-const cadBin = process.env.CAD ?? [join(root, "target/release/cad"), join(root, "target/debug/cad")].find(existsSync);
+const cadBin = process.env.CAD ?? [join(root, "target/release/mcad"), join(root, "target/debug/mcad")].find(existsSync);
 const projDir = join(root, "tests/openscad-compat/projects");
 const echoLines = (t) => t.split("\n").filter((l) => l.startsWith("ECHO:"));
 const osc = [];
