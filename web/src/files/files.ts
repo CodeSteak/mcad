@@ -220,8 +220,8 @@ export function projectZip(name: string, files: Record<string, string>): Uint8Ar
 // ---------------------------------------------------------------- examples
 
 const raw = import.meta.glob("../../../examples/**/*.scad", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
-/** SVGs of examples/svg (imported by spec examples). */
-const rawSvg = import.meta.glob("../../../examples/**/*.svg", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+/** SVGs of examples/svg and ASCII STLs of examples/stl (imported by spec examples; raw text, so binary STL does not work here). */
+const rawSvg = import.meta.glob(["../../../examples/**/*.svg", "../../../examples/**/*.stl"], { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 const EXAMPLE_DATA: Record<string, string> = Object.fromEntries(Object.entries(rawSvg).map(([p, t]) => [p.replace(/^.*examples\//, ""), t]));
 
 /**

@@ -119,9 +119,19 @@ export function isFontFile(path: string): boolean {
   return FONT_EXT.some((e) => l.endsWith(e));
 }
 
-/** Files a project holds besides `.scad`: SVGs for `import()` (text) and fonts for `text()`. */
+/** Mesh files for `import("teil.stl")` (Plan 21 B): kept as data URL (binary STL). */
+export function isMeshFile(path: string): boolean {
+  return path.toLowerCase().endsWith(".stl");
+}
+
+/** Binary data files (fonts, STL): data URLs in the project texts, not editable. */
+export function isBinaryDataFile(path: string): boolean {
+  return isFontFile(path) || isMeshFile(path);
+}
+
+/** Files a project holds besides `.scad`: SVGs and STLs for `import()`, fonts for `text()`. */
 export function isDataFile(path: string): boolean {
-  return path.toLowerCase().endsWith(".svg") || isFontFile(path);
+  return path.toLowerCase().endsWith(".svg") || isBinaryDataFile(path);
 }
 
 /** Files read from folders and ZIPs. */
@@ -151,15 +161,17 @@ export function fileBytes(text: string): Uint8Array {
   return fromDataUrl(text) ?? new TextEncoder().encode(text);
 }
 
-/** Project text of a file's bytes: fonts as data URL, everything else as UTF-8 text. */
+/** Project text of a file's bytes: fonts and STL as data URL, everything else as UTF-8 text. */
 export function fileText(path: string, bytes: Uint8Array): string {
-  return isFontFile(path) ? dataUrl(bytes, "font/ttf") : new TextDecoder().decode(bytes);
+  if (isFontFile(path)) return dataUrl(bytes, "font/ttf");
+  if (isMeshFile(path)) return dataUrl(bytes, "model/stl");
+  return new TextDecoder().decode(bytes);
 }
 
-/** Data files a source imports by literal name (`import("…svg")`, `font = "….ttf"`), as written. */
+/** Data files a source imports by literal name (`import("…svg")`, `import("….stl")`, `font = "….ttf"`), as written. */
 export function dataFileRefs(text: string): string[] {
   const out: string[] = [];
-  for (const m of text.matchAll(/"([^"\n]+\.(?:svg|ttf|otf|ttc|otc))(?::[^"\n]*)?"/gi)) if (!out.includes(m[1])) out.push(m[1]);
+  for (const m of text.matchAll(/"([^"\n]+\.(?:svg|stl|ttf|otf|ttc|otc))(?::[^"\n]*)?"/gi)) if (!out.includes(m[1])) out.push(m[1]);
   return out;
 }
 

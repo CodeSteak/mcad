@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import { collectLines } from "../editor/decorations";
 import { VersionMapper } from "./positions";
 import { visiblePieces, plan } from "./display";
-import { dataFileRefs, dataUrl, fileBytes, fileIds, fileText, fromDataUrl, guessMain, includeAt, includeStatements, isDataFile, isFontFile, normalizePath, rangePath, resolvePath, stripCommonFolder } from "./files";
+import { dataFileRefs, dataUrl, fileBytes, fileIds, fileText, fromDataUrl, guessMain, includeAt, includeStatements, isBinaryDataFile, isDataFile, isFontFile, isMeshFile, normalizePath, rangePath, resolvePath, stripCommonFolder } from "./files";
 import { SceneIndex, isOff } from "./sceneIndex";
 import { fixture } from "./__fixtures__/load";
 
@@ -121,6 +121,8 @@ describe("data files (SVG, fonts; Bericht 16)", () => {
     expect(isFontFile("logo.svg")).toBe(false);
     expect(isDataFile("logo.svg") && isDataFile("x.otf")).toBe(true);
     expect(isDataFile("a.scad")).toBe(false);
+    expect(isMeshFile("teile/Platine.STL") && isDataFile("x.stl") && isBinaryDataFile("x.stl")).toBe(true);
+    expect(isBinaryDataFile("logo.svg")).toBe(false);
   });
   it("data URLs round trip, texts stay texts", () => {
     const b = new Uint8Array(70000).map((_, i) => (i * 37) & 255);
@@ -132,9 +134,12 @@ describe("data files (SVG, fonts; Bericht 16)", () => {
     expect(Array.from(fileBytes(u)).length).toBe(70000);
     expect(fileText("a.svg", new TextEncoder().encode("<svg/>"))).toBe("<svg/>");
     expect(fileText("a.ttf", new Uint8Array([1, 2, 3]))).toBe("data:font/ttf;base64,AQID");
+    // STL (also binary) as data URL
+    expect(fileText("a.stl", new Uint8Array([1, 2, 3]))).toBe("data:model/stl;base64,AQID");
   });
   it("references in a source", () => {
     const src = 'import("../svg/logo.svg", center = true);\ntext("x", font = "fonts/Meine.ttf");\ntext("y", font = "Inter:style=Bold");\nimport("../svg/logo.svg");';
     expect(dataFileRefs(src)).toEqual(["../svg/logo.svg", "fonts/Meine.ttf"]);
+    expect(dataFileRefs('import("teil.stl", as = "mesh");')).toEqual(["teil.stl"]);
   });
 });

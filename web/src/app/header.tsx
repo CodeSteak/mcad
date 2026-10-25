@@ -48,7 +48,7 @@ export function UploadInput() {
       id={UPLOAD_INPUT_ID}
       type="file"
       multiple
-      accept=".svg,.ttf,.otf,.scad"
+      accept=".svg,.stl,.ttf,.otf,.scad"
       data-testid="file-upload-input"
       aria-hidden="true"
       tabIndex={-1}

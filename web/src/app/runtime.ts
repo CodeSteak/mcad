@@ -31,7 +31,7 @@ import {
 } from "../files/files";
 import { hasFaceColors } from "../logic/colors";
 import { jumpUpTarget, moduleSpans } from "../logic/context";
-import { baseName as pathBase, fileText, isDataFile, isFontFile, normalizePath } from "../logic/files";
+import { baseName as pathBase, fileText, isDataFile, isFontFile, isMeshFile, normalizePath } from "../logic/files";
 import { modelHull } from "../logic/grids";
 import { transformBox } from "../logic/math";
 import { VersionMapper } from "../logic/positions";
@@ -124,6 +124,10 @@ export function switchFile(path: string, pos?: number): boolean {
   }
   if (isFontFile(p)) {
     store.setState({ notice: `${p}: Schriftdatei (binär), nutzbar mit text(…, font = "${pathBase(p)}")` });
+    return false;
+  }
+  if (isMeshFile(p)) {
+    store.setState({ notice: `${p}: Netzdatei (STL), nutzbar mit import("${pathBase(p)}")` });
     return false;
   }
   if (p !== project.active) {
@@ -420,8 +424,8 @@ export function openExample(ex: Example): void {
 }
 
 /**
- * Adds files from the computer to the project (UI upload): `.scad` and SVG as text, fonts as
- * data URL; next to the main file. Existing files of the same name are replaced.
+ * Adds files from the computer to the project (UI upload): `.scad` and SVG as text, fonts and
+ * STL as data URL; next to the main file. Existing files of the same name are replaced.
  */
 export async function uploadProjectFiles(files: ArrayLike<File>): Promise<void> {
   const dir = project.main.includes("/") ? project.main.slice(0, project.main.lastIndexOf("/") + 1) : "";
@@ -429,7 +433,7 @@ export async function uploadProjectFiles(files: ArrayLike<File>): Promise<void> 
   for (const f of Array.from(files)) {
     const name = normalizePath(dir + f.name);
     if (!name.toLowerCase().endsWith(".scad") && !isDataFile(name)) {
-      store.setState({ notice: `${f.name}: nur .scad, .svg, .ttf und .otf` });
+      store.setState({ notice: `${f.name}: nur .scad, .svg, .stl, .ttf und .otf` });
       continue;
     }
     const text = fileText(name, new Uint8Array(await f.arrayBuffer()));
