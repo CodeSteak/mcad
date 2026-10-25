@@ -35,6 +35,7 @@ pub use edit::{
     DragOptions, DragTarget, DragValue, SlotSource, SnapRef, SnapTarget, color_is_literal, drag_edits, filament_edits,
     filament_set_edits, set_default_edit, set_default_edit_project, snap_targets,
 };
+pub use eval::{eval_top_level, module_params};
 pub use output::*;
 pub use project::{
     Asset, FileResolver, FileRole, FsResolver, Library, NoFiles, Project, SourceFile, SourceText, data_url,

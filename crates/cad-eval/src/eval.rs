@@ -561,6 +561,19 @@ impl<'a> Ev<'a> {
     }
 
     fn run_file(&mut self, overrides: &'a [(String, PValue)]) -> R<()> {
+        let (env, dy, end, key) = self.file_root()?;
+        let dy = self.file_overrides(overrides, &env, dy);
+        let ctx = self.root_ctx(env, dy, end, key);
+        self.filament_pass(&ctx)?;
+        for s in &self.file.stmts {
+            self.stmt(s, &ctx)?;
+        }
+        Ok(())
+    }
+
+    /// Root node and instance of the file context, the top-level scope with the used
+    /// libraries and the hoisted statements of the main file.
+    fn file_root(&mut self) -> R<(Env<'a>, Dyn<'a>, u32, u64)> {
         let end = self.proj.main_text().len() as u32;
         let key = mix(0x66696c65, 0) & MASK53;
         self.nodes.push(Node {
@@ -597,13 +610,7 @@ impl<'a> Ev<'a> {
         let env = Env::new(None, None, 0, true);
         self.setup_libs(&env)?;
         let dy = self.hoist(&self.file.stmts, &env, &None)?;
-        let dy = self.file_overrides(overrides, &env, dy);
-        let ctx = self.root_ctx(env, dy, end, key);
-        self.filament_pass(&ctx)?;
-        for s in &self.file.stmts {
-            self.stmt(s, &ctx)?;
-        }
-        Ok(())
+        Ok((env, dy, end, key))
     }
 
     /// `-D name=value` in the file context: replaces the binding of the top-level assignment
@@ -1528,6 +1535,75 @@ impl<'a> Ev<'a> {
     pub(crate) fn is_in_context(&self, env: &Env<'a>) -> bool {
         env.inst() == 0
     }
+}
+
+/// Parameter names of the module `name` as the module context finds it (`outer.inner`,
+/// `outer::inner` or a plain name; the main file first, then the used libraries, last `use`
+/// first). `None`: no such module.
+pub fn module_params(proj: &Project, name: &str) -> Option<Vec<String>> {
+    let path = find_module_path(&proj.main.stmts, name)
+        .or_else(|| proj.libs.iter().rev().find_map(|l| find_module_path(&l.ast.stmts, name)))?;
+    Some(path.last()?.params.iter().map(|p| p.name.name.clone()).collect())
+}
+
+/// Evaluates expressions (source text) at the top level of the main file, as arguments of a
+/// call there: its variables and functions and those of the used libraries are visible.
+/// `Err`: the syntax or evaluation error or warning (message; an unknown variable is only a
+/// warning in the language, but as an argument it is a typo).
+pub fn eval_top_level(proj: &Project, opts: &EvalOptions, exprs: &[String]) -> Vec<Result<PValue, String>> {
+    let parsed: Vec<Result<File, String>> = exprs
+        .iter()
+        .map(|e| {
+            let (f, d) = cad_syntax::parse(&format!("_ = ({e});"));
+            match d.iter().find(|d| d.severity == cad_syntax::Severity::Error) {
+                Some(d) => Err(format!("Syntax: {}", d.message)),
+                None => Ok(f),
+            }
+        })
+        .collect();
+    let opts = EvalOptions { context: Context::default(), ..opts.clone() };
+    let mut ev = Ev::new(proj, &opts);
+    let root = ev.file_root();
+    let bad = |d: &Diagnostic| matches!(d.severity, cad_syntax::Severity::Error | cad_syntax::Severity::Warning);
+    let first_error = |ev: &Ev, from: usize| {
+        ev.diags[from..]
+            .iter()
+            .find(|d| bad(d))
+            .map(|d| d.message.clone())
+            .unwrap_or_else(|| "Auswertung abgebrochen".into())
+    };
+    let Ok((env, dy, _, _)) = root else {
+        let msg = first_error(&ev, 0);
+        return exprs.iter().map(|_| Err(msg.clone())).collect();
+    };
+    let mut out = Vec::new();
+    for f in &parsed {
+        let expr = match f {
+            Err(e) => {
+                out.push(Err(e.clone()));
+                continue;
+            }
+            Ok(f) => match f.stmts.first().map(|s| &s.kind) {
+                Some(StmtKind::Assign { value, .. }) if f.stmts.len() == 1 => value,
+                _ => {
+                    out.push(Err("kein einzelner Ausdruck".into()));
+                    continue;
+                }
+            },
+        };
+        let from = ev.diags.len();
+        let v = ev.expr(expr, &env, &dy);
+        let failed = ev.diags[from..].iter().any(bad);
+        out.push(match v {
+            Ok(v) if !failed => Ok(PValue::from_val(&v)),
+            _ => Err(first_error(&ev, from)),
+        });
+        ev.aborted = false;
+    }
+    for w in ev.captured.drain(..) {
+        Env::clear_weak(&w);
+    }
+    out
 }
 
 pub(crate) fn find_module_path<'a>(stmts: &'a [Stmt], name: &str) -> Option<Vec<&'a ModuleDef>> {

@@ -201,6 +201,16 @@ fn output_identical_with_and_without_daemon() {
         // -D without a module: top-level assignments
         vec!["measure".into(), data("variablen.scad"), "-D".into(), "w=40".into(), "--volume".into(), "all".into()],
         vec!["check".into(), data("variablen.scad"), "-D".into(), "nix=1".into()],
+        // -m with arguments as in a call
+        vec![
+            "measure".into(),
+            data("halter.scad"),
+            "-m".into(),
+            "halter(breite, h = doppelt(2))".into(),
+            "--volume".into(),
+            "all".into(),
+        ],
+        vec!["check".into(), data("halter.scad"), "-m".into(), "halter(1, 2, 3, 4)".into()],
         vec![
             "measure".into(),
             gehaeuse.clone(),

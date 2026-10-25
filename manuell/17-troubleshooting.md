@@ -9,6 +9,7 @@
 | "2D-Form in 3D-Kontext wird ignoriert" | extrude the 2D shape |
 | `--show grids` shows nothing | grid lives in a module: add `--module NAME` |
 | warning "-D x: keine Zuweisung `x` auf oberster Ebene der Hauptdatei (ignoriert)" | without a module `-D` sets top-level variables only; for a module parameter add `--module NAME` |
+| `-m 'm(…)'` exit 2 "zu viele Positionsargumente" / "hat keinen Parameter" / "steht im Aufruf und in -D" | arguments bound like a call: check the parameter list (`cad outline`); give each parameter once |
 | `cad ui …` exit 3 | no desktop UI running; work headless |
 | `cad` exits 2 "keine grafische Sitzung" | no `DISPLAY`/`WAYLAND_DISPLAY`; use the commands |
 | UI dies with "Error 71 (Protokollfehler) dispatching to Wayland display" | WebKitGTK DMA-BUF renderer; `cad` sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` on Wayland unless the variable is set |
@@ -64,6 +65,7 @@ Glossary of the German text output:
 | Abstand, Winkel, Länge | distance, angle, length |
 | Kontext: Datei / Modul | context: file / module |
 | oberste Ebene, Zuweisung, ignoriert | top level, assignment, ignored |
+| Aufruf, Argument, Positionsargument, doppelt angegeben | call, argument, positional argument, given twice |
 | abgezogen, übersprungen, offen | subtracted, skipped, pending |
 | Farben, Standard | colours, default (uncoloured) |
 | Kinder werden unverändert gezeigt | children shown unchanged |

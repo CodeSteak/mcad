@@ -389,3 +389,54 @@ fn define_top_level_variables() {
     let v = json(&["eval", &data("gehaeuse.scad"), "--module", "gehaeuse", "-D", "w=80"], 0);
     assert_eq!(v["context"], "gehaeuse");
 }
+
+/// `-m 'NAME(args)'`: module context with arguments as in a call (positional, named,
+/// expressions with the file's variables and functions), for every command with `-m`.
+#[test]
+fn module_call_arguments() {
+    let f = data("halter.scad");
+    let vol = |m: &str, extra: &[&str]| {
+        let mut a = vec!["measure", f.as_str(), "-m", m, "--volume", "all"];
+        a.extend_from_slice(extra);
+        let v = json(&a, 0);
+        assert_eq!(v["context"], m.split('(').next().unwrap().trim(), "{v}");
+        v["volume"]["volume"].as_f64().unwrap()
+    };
+    let close = |a: f64, b: f64| assert!((a - b).abs() < 1e-6 * b.abs().max(1.0), "{a} vs {b}");
+    close(vol("halter", &[]), 10.0 * 5.0 * 2.0);
+    close(vol("halter", &["-D", "w=30"]), 30.0 * 5.0 * 2.0);
+    // positional and named
+    close(vol("halter(30, h = 5)", &[]), 30.0 * 5.0 * 5.0);
+    // expressions: file variables and functions
+    close(vol("halter(breite, h = doppelt(2))", &[]), 30.0 * 5.0 * 4.0);
+    // together with -D for another parameter
+    close(vol("halter(30)", &["-D", "d=1"]), 30.0 * 1.0 * 2.0);
+    // nested module
+    close(vol("teile.schraube(d = 3)", &[]), std::f64::consts::PI * 1.5 * 1.5 * 10.0);
+    close(vol("teile.schraube(4, l = 1)", &[]), std::f64::consts::PI * 4.0);
+    // other commands: render, check, export
+    let out = std::env::temp_dir().join(format!("cad_mcall_{}", std::process::id()));
+    std::fs::create_dir_all(&out).unwrap();
+    let stl = out.join("h.stl").display().to_string();
+    let v = json(&["export", &f, "-m", "halter(30, h = 5)", "-o", &stl], 0);
+    close(v["volume"].as_f64().unwrap(), 750.0);
+    let png = out.join("h.png").display().to_string();
+    json(&["render", &f, "-m", "halter(30, h = 5)", "-o", &png], 0);
+    json(&["check", &f, "-m", "halter(h = 1)"], 0);
+    // errors: exit 2 with a message
+    let err = |m: &str, extra: &[&str], want: &str| {
+        let mut a = vec!["check", f.as_str(), "-m", m];
+        a.extend_from_slice(extra);
+        let v = json(&a, 2);
+        let e = v["error"].as_str().unwrap();
+        assert!(e.contains(want), "{m}: {e}");
+    };
+    err("halter(1, 2, 3, 4)", &[], "zu viele Positionsargumente");
+    err("halter(x = 1)", &[], "keinen Parameter `x`");
+    err("halter(30)", &["-D", "w=20"], "in -D w=");
+    err("halter(1, w = 2)", &[], "doppelt");
+    err("halter(unbekannt + 1)", &[], "Argument `w`");
+    err("halter(1", &[], "erwartet");
+    err("fehlt(1)", &[], "Modul `fehlt` nicht gefunden");
+    let _ = std::fs::remove_dir_all(&out);
+}

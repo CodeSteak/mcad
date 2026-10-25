@@ -21,12 +21,20 @@
 | Option | Effect |
 | --- | --- |
 | `-m, --module NAME` | module as context: shown alone with defaults, its grids/anchors visible; nested `outer.inner` |
+| `-m 'NAME(args)'` | same, with arguments as in a call: positional then named, expressions see the file's variables and functions (`-m 'holder(30, h = 5)'`, `-m 'parts.screw(d = 3)'`); combines with `-D` for other parameters. Exit 2: unknown module/parameter, too many positional arguments, a parameter twice or also in `-D`, an argument that fails or warns |
 | `-D NAME=VALUE` | with a module context: override a parameter of that module; without: override a top-level assignment of the main file (like `openscad -D`: the last assignment of the name takes the value, variables computed from it follow; `$fn` etc. need no assignment; unknown name → warning). JSON value (`-D w=60`, `-D p=[1,2]`), else string. Repeatable, the last `-D` of a name wins |
 | `--no-daemon`, `--verbose` | compute locally / daemon info on stderr |
 
 ```sh
 cad measure teil.scad -D w=40 --volume all   # teil.scad: w = 20; d = w / 2; h = 8; cube([w, d, h]);
 #   Volumen all: 6400 mm³                     (40 × 20 × 8: d follows w)
+```
+
+```sh
+cad export holder.scad -m 'holder(width, h = twice(2))' -o h.stl   # width = 30; function twice(x) = 2 * x;
+#   h.stl: 12 Dreiecke, 684 Bytes, Volumen 600 mm³                   (module holder(w = 10, h = 2, d = 5) cube([w, d, h]);)
+cad check holder.scad -m 'holder(1, 2, 3, 4)'
+#   cad check: -m 'holder(1, 2, 3, 4)': zu viele Positionsargumente – `holder` hat 3 Parameter (w, h, d)   (exit 2)
 ```
 
 `--line N` inside a module definition makes that module the context (`--whole-file` keeps the

@@ -178,7 +178,8 @@ struct Common {
     /// Output as JSON (fixed schema, see `cad usage json`).
     #[arg(long)]
     json: bool,
-    /// Module as context (like the cursor in the module definition), nested `outer.inner`.
+    /// Module as context (like the cursor in the module definition), nested `outer.inner`; with
+    /// arguments as in a call: `-m 'holder(30, h = 5)'` (expressions see the file's variables).
     #[arg(long, short = 'm')]
     module: Option<String>,
     /// Override parameters of the context module, e.g. `-D w=60`, `-D p=[1,2,3]`; without a
@@ -749,6 +750,93 @@ fn module_at_line(scene: &p::Scene, line: u32) -> Option<&p::Module> {
 }
 
 /// Parses, evaluates and (with `kernel`) runs the kernel job.
+/// `-m NAME` or `-m 'NAME(args)'`: the module name and the argument text (inside the
+/// parentheses), if any.
+fn split_module_call(m: &str) -> Result<(Option<String>, Option<String>), Fail> {
+    let m = m.trim();
+    let Some(open) = m.find('(') else { return Ok((Some(m.to_string()), None)) };
+    let name = m[..open].trim();
+    let Some(args) = m[open + 1..].strip_suffix(')') else {
+        return Err(Fail::Usage(format!("-m {m}: erwartet NAME oder NAME(argumente)")));
+    };
+    if name.is_empty() {
+        return Err(Fail::Usage(format!("-m {m}: Modulname fehlt")));
+    }
+    Ok((Some(name.to_string()), Some(args.to_string())))
+}
+
+/// Binds the arguments of `-m 'NAME(args)'` to the parameters of module `name` like a call at
+/// the top level of the main file: positional in order, then by name; the expressions see the
+/// file's variables and functions. Errors (exit 2): unknown module or parameter, too many
+/// positional arguments, a parameter given twice or also with `-D`, an expression that fails.
+fn bind_module_args(
+    proj: &cad_eval::Project,
+    name: &str,
+    args: &str,
+    defines: &std::collections::BTreeMap<String, p::Value>,
+) -> Result<Vec<(String, p::Value)>, Fail> {
+    use cad_syntax::ast::StmtKind;
+    let call = format!("-m '{name}({args})'");
+    let params = cad_eval::module_params(proj, name)
+        .ok_or_else(|| Fail::Usage(format!("{call}: Modul `{name}` nicht gefunden")))?;
+    let src = format!("m({args});");
+    let (f, d) = cad_syntax::parse(&src);
+    if let Some(e) = d.iter().find(|d| d.severity == cad_syntax::Severity::Error) {
+        return Err(Fail::Usage(format!("{call}: Syntax: {}", e.message)));
+    }
+    let Some(StmtKind::Call { args: list, .. }) = f.stmts.first().map(|s| &s.kind).filter(|_| f.stmts.len() == 1)
+    else {
+        return Err(Fail::Usage(format!("{call}: erwartet NAME(argumente)")));
+    };
+    let mut names: Vec<String> = Vec::new();
+    let mut exprs: Vec<String> = Vec::new();
+    let mut positional = 0;
+    for a in list {
+        let pname = match &a.name {
+            Some(n) => {
+                if !params.contains(&n.name) {
+                    let known = if params.is_empty() { "keine".into() } else { params.join(", ") };
+                    return Err(Fail::Usage(format!(
+                        "{call}: Modul `{name}` hat keinen Parameter `{}` (Parameter: {known})",
+                        n.name
+                    )));
+                }
+                n.name.clone()
+            }
+            None => {
+                let Some(p) = params.get(positional) else {
+                    return Err(Fail::Usage(format!(
+                        "{call}: zu viele Positionsargumente – `{name}` hat {} Parameter ({})",
+                        params.len(),
+                        params.join(", ")
+                    )));
+                };
+                positional += 1;
+                p.clone()
+            }
+        };
+        if names.contains(&pname) {
+            return Err(Fail::Usage(format!("{call}: Parameter `{pname}` doppelt angegeben")));
+        }
+        if defines.contains_key(&pname) {
+            return Err(Fail::Usage(format!(
+                "{call}: Parameter `{pname}` steht im Aufruf und in -D {pname}=… (nur eines angeben)"
+            )));
+        }
+        names.push(pname);
+        exprs.push(src.get(a.value.span.start as usize..a.value.span.end as usize).unwrap_or("").to_string());
+    }
+    let opts = cad_eval::EvalOptions { max_stack_bytes: 192 << 20, ..Default::default() };
+    let mut out = Vec::new();
+    for ((pname, v), text) in names.into_iter().zip(cad_eval::eval_top_level(proj, &opts, &exprs)).zip(&exprs) {
+        match v {
+            Ok(v) => out.push((pname, cad_session::convert::value(&v))),
+            Err(e) => return Err(Fail::Usage(format!("{call}: Argument `{pname}` = {text}: {e}"))),
+        }
+    }
+    Ok(out)
+}
+
 pub(crate) fn load(c: &Common, line: Option<u32>, whole_file: bool, kernel: bool) -> Result<Model, Fail> {
     let (file, text) = read_source(&c.file)?;
     let defines = defines(c)?;
@@ -764,7 +852,19 @@ pub(crate) fn load(c: &Common, line: Option<u32>, whole_file: bool, kernel: bool
     };
     let fs_root = if root.as_os_str().is_empty() { PathBuf::from(".") } else { root.clone() };
     s.set_resolver(Box::new(cad_session::FsResolver { root: fs_root }), &main_name);
-    let mut module = c.module.clone();
+    let (mut module, call) = match &c.module {
+        Some(m) => split_module_call(m)?,
+        None => (None, None),
+    };
+    let mut defines = defines;
+    if let (Some(name), Some(args)) = (&module, &call) {
+        // `-m 'halter(30, h = 5)'`: the arguments become overrides (language only, no kernel)
+        s.post(ToEngine::SetSource { text: text.clone(), version: 1 });
+        s.post(ToEngine::Cancel);
+        let cur = s.current().ok_or_else(|| Fail::Usage("-m: Datei nicht auswertbar".into()))?;
+        let bound = bind_module_args(&cur.proj, name, args, &defines)?;
+        defines.extend(bound);
+    }
     if module.is_none()
         && !whole_file
         && let Some(line) = line

@@ -145,7 +145,9 @@ und prüft mit der CLI. Die UI beobachtet die Datei und alle eingebundenen Datei
 | `cad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | Jedes Bauteil als eigene Datei (`deckel.stl`, `k_2.step`) |
 | `cad diff-kernels DATEI…` | Vergleich SMLib ↔ solidcore (nur Entwicklung, `--features solidcore`) |
 
-Gemeinsame Optionen: `--json`, `--module m` (Modul als Kontext, verschachtelt `aussen.innen`),
+Gemeinsame Optionen: `--json`, `--module m` (Modul als Kontext, verschachtelt `aussen.innen`;
+mit Argumenten wie im Code `-m 'halter(30, h = 5)'`, `-m 'teile.schraube(d = 3)'` – Ausdrücke
+sehen Variablen und Funktionen der Datei, kombinierbar mit `-D` für andere Parameter),
 `-D name=wert` (Parameter des Kontextmoduls, Wert als JSON: `-D w=60`, `-D hohl=true`,
 `-D p=[1,2,3]`). Ohne Modulkontext setzt `-D` Zuweisungen auf oberster Ebene der Hauptdatei
 (wie `openscad -D`: die letzte Zuweisung des Namens bekommt den Wert, abhängige Variablen

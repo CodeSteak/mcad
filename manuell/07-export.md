@@ -13,6 +13,7 @@
 | `--per-color -o colours.zip` | one STL per colour (and part), `F<slot>_<colour>.stl`, shared coordinates |
 | `--part NAME` (repeatable) | only these parts, in one file |
 | `--all-parts -o dir/ [--format step]` | one file per part (`body.stl`, `k_2.step`; default stl) |
+| `-m NAME [-D p=v]`, `-m 'NAME(args)'` | only that module, with its defaults and the given parameters (`-m 'holder(30, h = 5)'`, `-m 'parts.screw(d = 3)'`; `cad usage commands`) |
 | `--ignore-asserts` | export although an `assert_…` is violated (warning line `trotz n Assert-Verletzung(en) exportiert`) |
 
 Violated asserts (`cad usage asserts`) stop every variant: exit 4, nothing written, the
@@ -20,3 +21,9 @@ violations listed (`Export abgebrochen: 2 Assert-Verletzung(en), nichts geschrie
 `aborted: true, violations, asserts`. `assert_keepout` volumes are never exported.
 
 Check colours before a multicolour print: `cad measure FILE --colors`.
+
+```sh
+cad export holder.scad -m 'holder(30, h = 5)' -o holder.stl   # module holder(w = 10, h = 2, d = 5) cube([w, d, h]);
+#   holder.stl: 12 Dreiecke, 684 Bytes, Volumen 750 mm³
+cad export holder.scad -m holder -D w=30 -o holder.stl        # Volumen 300 mm³
+```
