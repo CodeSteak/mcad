@@ -164,6 +164,18 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
+        file: "hull_minkowski.scad",
+        grids: &[],
+        instances: &[],
+        handles: 41,
+        ops: &[("hull", 6), ("minkowski", 2), ("sphere", 11), ("cylinder", 2)],
+        check: |out| {
+            // the operations are nodes of their own, without warnings of the evaluation
+            assert!(has_op(out, |o| *o == Op::Hull));
+            assert!(has_op(out, |o| *o == Op::Minkowski));
+        },
+    },
+    Expect {
         file: "kabelfuehrung.scad",
         grids: &[("g", 7, true)],
         instances: &[],

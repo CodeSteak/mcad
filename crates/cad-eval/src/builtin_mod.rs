@@ -344,7 +344,16 @@ impl<'a> Ev<'a> {
                 }
                 Op::Group
             }
-            "hull" | "minkowski" | "projection" => {
+            "hull" => {
+                self.bind(n, a, &[], 0);
+                Op::Hull
+            }
+            "minkowski" => {
+                // `convexity` only matters for OpenSCAD's preview
+                self.bind(n, a, &["convexity"], 0);
+                Op::Minkowski
+            }
+            "projection" => {
                 self.warn(name.span, format!("`{n}()` nicht unterstützt; Kinder werden unverändert gezeigt"));
                 Op::Empty
             }

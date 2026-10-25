@@ -116,6 +116,8 @@ fn creates_material(op: &Op) -> bool {
             | Op::Sweep { .. }
             | Op::Surface { .. }
             | Op::Thicken { .. }
+            | Op::Hull
+            | Op::Minkowski
     )
 }
 

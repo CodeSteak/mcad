@@ -52,6 +52,7 @@ pub mod colors;
 pub mod counting;
 mod eval;
 pub mod export;
+mod hull3d;
 pub mod key;
 mod op2d;
 pub mod parts;

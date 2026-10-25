@@ -7,6 +7,7 @@ use cad_ir::{BlendKind, Dim, Law, NodeIdx, Op, Prim, Select, Tree, ZoneShape};
 use cad_kernel::{BoolOp, Class, EdgeInfo, FaceInfo, KResult, Kernel, KernelError, Loop, PlacedLoop, Tag};
 use glam::{DMat4, DQuat, DVec2, DVec3};
 
+use crate::hull3d;
 use crate::key::{CacheKey, KeyHasher};
 use crate::profile::{self, Expr2, Leaf};
 use crate::{Diag, EngineConfig, NodeOutput, Part, Severity, is_profile_op};
@@ -793,6 +794,7 @@ where
             Op::Prim { prim, place } => self.prim(prim, place, node.blend),
             // handled as 2D before
             Op::Profile(_) | Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } => Ok(Vec::new()),
+            Op::Hull | Op::Minkowski => self.hull_like(),
             Op::Boolean { op, fillet, chamfer, fillet_law } => {
                 let kids = self.child_list();
                 let mut groups = Vec::new();
@@ -908,6 +910,133 @@ where
                 Ok(out)
             }
         }
+    }
+
+    /// `hull()` / `minkowski()` of 3D children: an exact special case (`hull3d.rs`), otherwise
+    /// a warning with the reason and the children unchanged.
+    fn hull_like(&mut self) -> R<Vec<Part<K::Shape>>> {
+        let tree = self.ctx.tree;
+        let is_hull = matches!(tree.node(self.idx).op, Op::Hull);
+        let what = if is_hull { "hull" } else { "minkowski" };
+        let kids = self.child_list();
+        let plan = if is_hull {
+            let mut bodies = Vec::new();
+            kids.iter()
+                .try_for_each(|&c| hull3d::bodies(tree, c, tree.node(c).local, &mut bodies))
+                .and_then(|_| hull3d::hull_plan(&bodies))
+        } else {
+            let per: Vec<Result<Vec<hull3d::Body>, String>> = kids
+                .iter()
+                .map(|&c| {
+                    let mut b = Vec::new();
+                    hull3d::bodies(tree, c, tree.node(c).local, &mut b).map(|_| b)
+                })
+                .collect();
+            hull3d::minkowski_plan(&per)
+        };
+        let res = match plan {
+            Ok(plan) => {
+                let hint = plan.hint();
+                let r = self.build_plan(&plan, &kids)?;
+                if r.is_ok() {
+                    self.hints.push(hint);
+                }
+                r
+            }
+            Err(e) => Err(e),
+        };
+        match res {
+            Ok(parts) => Ok(parts),
+            Err(why) => {
+                self.warn(format!("{what}: {why}; Kinder werden unverändert gezeigt"));
+                let mut parts = Vec::new();
+                for c in kids {
+                    parts.extend(self.contrib(c)?);
+                }
+                self.union(parts, self.tag)
+            }
+        }
+    }
+
+    /// Builds a special case of `hull`/`minkowski`. `Err`: why it failed (kernel).
+    fn build_plan(&mut self, plan: &hull3d::Plan, kids: &[NodeIdx]) -> R<Result<Vec<Part<K::Shape>>, String>> {
+        use hull3d::Plan;
+        let tag = self.tag;
+        let idx = self.idx;
+        let lifted = |s: &mut Self,
+                      section: &[cad_kernel::region2::Loop2],
+                      mode: &LiftMode,
+                      frame: &DMat4|
+         -> R<Result<Vec<Part<K::Shape>>, String>> {
+            let contours = crate::op2d::to_contours(section);
+            let e = match profile::sketch_expr(idx, &contours, DMat4::IDENTITY) {
+                Ok(e) => e,
+                Err(e) => return Ok(Err(e)),
+            };
+            let errs = s.diags.len();
+            let parts = s.lift_expr(&e, mode)?;
+            if parts.is_empty() || s.diags[errs..].iter().any(|d| d.severity == Severity::Error) {
+                let msg = s.diags[errs..].iter().map(|d| d.message.clone()).collect::<Vec<_>>().join("; ");
+                s.diags.truncate(errs);
+                return Ok(Err(if msg.is_empty() { "Kernel lieferte keinen Körper".into() } else { msg }));
+            }
+            let mut out = Vec::new();
+            for p in parts {
+                match s.run.call(|k| k.transform(&p.shape, frame))? {
+                    Ok(sh) => out.push(Part { shape: sh, solid: true }),
+                    Err(e) => return Ok(Err(format!("Platzierung gescheitert: {e}"))),
+                }
+            }
+            Ok(Ok(out))
+        };
+        Ok(match plan {
+            Plan::Polyhedron(h) => self
+                .run
+                .call(|k| k.make_polyhedron(&h.points, &h.faces, tag))?
+                .map(|s| vec![Part { shape: s, solid: true }])
+                .map_err(|e| format!("Polyeder gescheitert: {e}")),
+            Plan::Revolve { frame, section } => {
+                return lifted(self, section, &LiftMode::Revolve { angle: std::f64::consts::TAU }, frame);
+            }
+            Plan::Extrude { frame, z0, h, section } => {
+                let mode = LiftMode::Extrude { h: *h, twist: 0.0, scale: DVec2::ONE, z0: *z0 };
+                return lifted(self, section, &mode, frame);
+            }
+            Plan::Spheres { hull, r } => {
+                let poly = self.run.call(|k| k.make_polyhedron(&hull.points, &hull.faces, tag))?;
+                match poly {
+                    Ok(p) => self
+                        .run
+                        .call(|k| k.offset(&p, *r, tag))?
+                        .map(|s| vec![Part { shape: s, solid: true }])
+                        .map_err(|e| format!("Offset der Hülle der Mittelpunkte: {e}")),
+                    Err(e) => Err(format!("Polyeder gescheitert: {e}")),
+                }
+            }
+            Plan::Sphere { c, r } => {
+                let m = DMat4::from_translation(*c);
+                self.run
+                    .call(|k| k.make_sphere(*r, tag).and_then(|s| k.transform(&s, &m)))?
+                    .map(|s| vec![Part { shape: s, solid: true }])
+                    .map_err(|e| format!("Kugel gescheitert: {e}"))
+            }
+            Plan::Offset { child, r, shift } => {
+                let parts = self.contrib(kids[*child])?;
+                let parts = self.union(parts, tag)?;
+                if parts.len() != 1 || !parts[0].solid {
+                    return Ok(Err("der Körper ist kein geschlossener Volumenkörper".into()));
+                }
+                let res = self.run.call(|k| k.offset(&parts[0].shape, *r, tag))?;
+                match res {
+                    Ok(s) if *shift == DVec3::ZERO => Ok(vec![Part { shape: s, solid: true }]),
+                    Ok(s) => match self.run.call(|k| k.transform(&s, &DMat4::from_translation(*shift)))? {
+                        Ok(s) => Ok(vec![Part { shape: s, solid: true }]),
+                        Err(e) => Err(format!("Platzierung gescheitert: {e}")),
+                    },
+                    Err(e) => Err(format!("Offset {r}: {e}")),
+                }
+            }
+        })
     }
 
     fn prim(&mut self, prim: &Prim, place: &DMat4, blend: Option<(BlendKind, f64)>) -> R<Vec<Part<K::Shape>>> {

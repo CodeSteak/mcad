@@ -262,8 +262,8 @@ Ziel: Typische Hobby-Dateien laufen ohne Änderung, solange sie keine Mesh-Opera
 | Mit Abweichung | `color()` nur als Anzeigefarbe; `$fn/$fa/$fs` siehe 12.3; `polyhedron` nur für kleine Körper mit ebenen Flächen; `resize` als `scale` mit denselben Regeln |
 | Voll (Projekte) | `include`/`use` mit Projekten aus mehreren Dateien (Pfade relativ zur einbindenden Datei; ohne Suchpfad `OPENSCADPATH`) |
 | Mit Abweichung (Bericht 16) | `text()` mit den mitgelieferten Schriften oder Schriftdateien des Projekts (17.10), `import()` von SVG (17.10; Abweichungen bei Einheiten ohne `viewBox`, Strichen und Füllregel) |
-| Später | `hull()` |
-| Nicht vorgesehen | `minkowski`, `projection`, `import` von Meshes, `surface()` als Höhenkarte (der Name ist in der Spec für NURBS-Flächen vergeben) |
+| Exakte Sonderfälle (Plan 21) | `hull()` (2D immer; 3D: ebene Körper, Kugeln/Zylinder/Kegel auf einer Achse, parallele Prismen gleicher Höhe, gleich große Kugeln) und `minkowski()` (Körper + Kugel, Profil + Kreis, Extrusion + Zylinder, zwei konvexe ebene Körper); sonst Warnung, Kinder unverändert (Abschnitt 20) |
+| Nicht vorgesehen | `projection`, `import` von Meshes, `surface()` als Höhenkarte (der Name ist in der Spec für NURBS-Flächen vergeben) |
 
 Ein Korpus von `.scad`-Dateien (Lizenzen vorher prüfen) läuft in CI über die CLI. Gemessen wird pro Datei: parst, wertet aus, erzeugt Geometrie.
 
@@ -590,7 +590,7 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 **Farben, Multi-Filament, Thema (B11)**
 
 - Farbregionen hängen an Kernel-Booleans (Schnittmenge, Differenz, Vereinigung je `color()`): wo SMLib Material verliert (z. B. Vereinigung mit einem Torus, B1), stimmen die Regionen nicht; die Engine meldet dann „Farbregionen ungenau“ (Summe ≠ Volumen). Mehrere Booleans je Farbe kosten Zeit; die UI fragt sie nur bei offener Farbliste an (gecacht, Farb- und Slot-Änderungen rechnen keine Knoten neu).
-- `color()` innerhalb eines 2D-Teilbaums (unter `linear_extrude` usw.) färbt Flächen, teilt aber kein Volumen; die Extrusion ist eine Region. `resize` wird beim Platzieren berücksichtigt, `hull`/`minkowski` gibt es nicht.
+- `color()` innerhalb eines 2D-Teilbaums (unter `linear_extrude` usw.) färbt Flächen, teilt aber kein Volumen; die Extrusion ist eine Region. `resize` wird beim Platzieren berücksichtigt. `hull`/`minkowski` erzeugen eigenes Material: was über die Kinder hinausgeht, ist ungefärbt (Standard-Eintrag), außer `color()` steht außen.
 - Material ohne `color()` in einem sonst gefärbten Bauteil (z. B. Verrundung zwischen zwei Farben) gehört zur Farbe des ersten gefärbten Teilbaums; mit eigenem Standard-Eintrag (Slot 1) nur, wenn das Bauteil ungefärbte Primitive hat.
 - Farbliste und Mehrfarbexport betrachten die Bauteile (benannte Instanzen); Material außerhalb von Bauteilen fehlt dann in der Liste (der Export der Wurzel enthält es als ein Objekt).
 - Bambu Studio liest `project_settings.config` nur aus eigenen Dateien; die Filamentfarben setzt dort der Farbdialog für 3MF mit Farbgruppe (neuere Versionen) oder der Nutzer. OrcaSlicer übernimmt die Slots, nicht die Farben. Nicht im Container geprüft (kein Slicer mit Bambu-Importer verfügbar): die Zuordnung folgt dem Quellcode (`bbs_3mf.cpp`), geprüft mit einem Modell des Importers, lib3mf, trimesh und PrusaSlicer 2.7 (lädt sechs Objekte an der richtigen Stelle, ohne Slots).
@@ -1534,3 +1534,35 @@ drei Fensterbreiten in WebKitGTK, Menüs, Würfel). Vorher/Nachher-Bilder: `tool
 Menü „Ansicht“); kein Röntgen-Schalter in der UI (gab es nur in der CLI); Strg+N nur in der
 Desktop-App; die Standardaufteilung Editor : Ansicht ist 33 : 67 (wie im Konzept etwa ein Drittel), schmale Ansichten zeigen Modus und
 Messart als Symbole.
+
+---
+
+## 20. `hull` und `minkowski` (Plan 21, Phase A)
+
+Nutzerentscheidung: nur exakte Sonderfälle; passt keiner, Warnung mit Grund und die Kinder
+unverändert (keine Näherung). Die Auswertung erzeugt `Op::Hull` / `Op::Minkowski`; die Engine
+entscheidet nach den Kindern.
+
+- **Kernel-Offset** (`Kernel::offset`, Fassade `sc_offset`, Version 5): SmApiOffsetBrepFull nach
+  außen mit Rundung und Selbstschnitt-Behandlung (ohne diese scheitern Quader und L-Profil).
+  Spike (Bericht 21): exakt für Quader (auch gedreht), Zylinder, Kugel, L-Profil (konkave Kante
+  bleibt scharf), verrundeten Quader – Volumen auf 3·10⁻⁸ an der Formel. An Ecken mit anderen als
+  rechten Winkeln (Tetraeder, 45°-Keil) scheitert SMLib (Keil) oder liefert richtige Flächen mit
+  angenäherten Trimmkurven (Tetraeder: bis 0,33 mm neben den Kanten, Volumen +4,5·10⁻⁴). Die
+  Fassade prüft deshalb Rand-Abstand zum Körper und Trimmkurven gegen die 3D-Kanten und meldet
+  sonst „offset is not exact“. Ersatz über Flächen-Offset + Fillet aller Kanten trägt nicht
+  (Fillet scheitert an Quader und L-Profil).
+- **2D-Hülle** (`cad_kernel::hull2`): Stützfunktion über den Normalenwinkel, Punkte und Bögen als
+  Orte, Übergänge an gemeinsamen Tangenten (geschlossen), Bogen-Enden; Ergebnis Geraden + Bögen
+  gegen den Uhrzeigersinn. B-Splines über die Biarc-Näherung.
+- **3D** (`cad-engine/src/hull3d.rs`): Kinder als Körper (Ecken ebener Körper; Kugeln, Kegelstümpfe,
+  Prismen nur unter Ähnlichkeitsabbildungen); Fälle Polyeder (Quickhull `cad_kernel::hull3`),
+  Rotationskörper (2D-Hülle der Halbschnitte, Hälfte ρ ≥ 0, revolve), Prisma (2D-Hülle der
+  Querschnitte, extrude), Kugeln (Polyeder + Offset). `minkowski`: Offset, Summe paralleler
+  Prismen (2D-Summe: Offset mit Kreis oder konvexe Summe), konvexe Polyeder (Hülle der
+  Eckensummen).
+- Flächen des Ergebnisses tragen den Tag des hull-/minkowski-Knotens. Rotationskörper bestehen
+  aus Rotationsflächen (STEP `SURFACE_OF_REVOLUTION`), nicht aus Kugel/Zylinder.
+- Grenzen: `rotate_extrude`, Torus, `$fillet` an Primitiven, `difference` als Kinder sind kein
+  Sonderfall; gleich große Kugeln in einer Ebene (abgerundete Platte) auch nicht; das Wasm-Bundle
+  braucht ein neues `smlib.wasm` (Export `sc_offset`).

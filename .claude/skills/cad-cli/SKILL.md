@@ -481,6 +481,21 @@ Löcher. `cad render --line N` auf offset/stroke/fillet2d zeigt die Ausgangskont
 Offset-Kontur gestrichelt, die Mittellinie des Strichs und die neuen Eckbögen; `--show handles`
 zeigt den Radius-Griff von `corner`.
 
+**`hull` und `minkowski`** (Plan 21): nur exakte Sonderfälle, sonst Warnung
+„hull: <Grund>; Kinder werden unverändert gezeigt“ (`cad usage language` hat die Tabelle).
+`hull` in 2D immer (Geraden + Bögen); in 3D: nur ebene Körper (Polyeder), Kugeln/Zylinder/Kegel
+auf einer Achse (Rotationskörper), parallele Prismen gleicher Höhe (Zylinder + Quader →
+Platte mit runden Enden), ≥ 3 gleich große Kugeln nicht in einer Ebene (abgerundeter Quader).
+`minkowski`: Körper + `sphere(r)` (Offset), 2D-Profil + `circle(r)` (`offset(r)`),
+`linear_extrude` + `cylinder`, zwei konvexe ebene Körper. `cad inspect --line N` zeigt den
+Fall („exakt: Prisma“). Offset ist nur an rechtwinkligen Ecken exakt (Tetraeder → Warnung).
+
+```
+hull() for (x = [0, 20], y = [0, 10], z = [0, 5]) translate([x, y, z]) sphere(2);   // abgerundeter Quader
+linear_extrude(3) hull() { circle(3); translate([20, 0]) circle(3); }                // Langloch-Platte
+minkowski() { cube([20, 10, 5]); sphere(2); }
+```
+
 **Module als Namensräume:** `module teile { M3 = 3.2; function kopf(d) = 1.8 * d;
 module schraube(d = 3) { … } }` (Klammern dürfen fehlen) → `teile.schraube(d = 4);`,
 `k: teile.schraube();`, `a.b.c();`, `teile.kopf(teile.M3)`. Das innere Modul sieht die Parameter

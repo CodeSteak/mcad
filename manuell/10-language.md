@@ -6,8 +6,10 @@ transforms, booleans, modifiers `# % ! *`, extrusions, `include`/`use`). Differe
 
 - Exact geometry; `$fn/$fa/$fs` only affect display (except `$fn` = 3…12 at a call: polygon).
 - `color()` defines print colours (`cad usage colors`).
-- Not supported (warning, children shown unchanged): `hull`, `minkowski`, `projection`;
-  `import` of meshes. `polyhedron` only for small planar bodies; `resize` acts like `scale`.
+- `hull`, `minkowski`: exact special cases only (below); otherwise warning, children shown
+  unchanged.
+- Not supported (warning, children shown unchanged): `projection`; `import` of meshes.
+  `polyhedron` only for small planar bodies; `resize` acts like `scale`.
 
 Additions:
 
@@ -27,6 +29,46 @@ Additions:
 | `sweep(path = pts, interp = "spline"\|"linear") profile;` | sweep a profile along a path (or an open `sketch` as first child) |
 | `surface(points = grid4x4…)` + `thicken(t)` | free-form surface and its solid |
 | `module ns { … }` | modules as namespaces: `ns.part();`, `ns.f(x)`, `ns.CONST`, `a.b.c();` |
+
+## hull and minkowski
+
+Exact or nothing: a combination that is no special case gives the warning
+`hull: <reason>; Kinder werden unverändert gezeigt` (same for `minkowski`) and the children
+unchanged. `cad inspect FILE --line N` names the case taken (hint `exakt: …`). Faces of the
+result belong to the `hull`/`minkowski` statement.
+
+| `hull()` of | Result (hint) |
+| --- | --- |
+| 2D profiles of any kind (circles, polygons, sketches, text, booleans, offsets) | convex hull of lines and arcs of the inputs (B-splines as biarcs, 1 µm); collinear input: warning |
+| planar bodies: `cube`, `polyhedron`, `linear_extrude` of polygons without `twist` (any affine transform) | polyhedron of the vertices (`exakt: Polyeder (n Flächen)`) |
+| spheres, cylinders, cones on one common axis | revolved 2D hull of the half sections: capsule, cone between two spheres (`exakt: Rotationskörper`) |
+| prisms along one direction with the same start and height: cylinders, cubes, `linear_extrude` without `twist`/`scale` | extruded 2D hull of the sections: plate with round ends (`exakt: Prisma`) |
+| ≥ 3 equal spheres, centres not in one plane | hull of the centres offset by r: rounded box (`exakt: Hülle der Mittelpunkte + Offset r`) |
+
+| `minkowski()` of | Result |
+| --- | --- |
+| 2D: profile + `circle(r)` (also several circles) | `offset(r = Σr)`, moved by the circles' centres |
+| 2D: two convex profiles, one of them a polygon | exact sum |
+| 3D: body + `sphere(r)` | outward offset by r, moved by the sphere's centre (`exakt: Offset r`) |
+| 3D: two parallel prisms (`linear_extrude` + `cylinder`, `cube` + `cylinder`) | extruded 2D sum of the sections, z from `z0a + z0b` to `z1a + z1b` |
+| 3D: two convex planar bodies (cubes, extruded convex polygons) | polyhedron of the vertex sums |
+
+Limits: spheres, cylinders, cones and arcs need rigid transforms and uniform scale. `union`,
+groups, `color`, nested `hull` are looked through; `$fillet`/`$chamfer` on a primitive,
+`difference`, `rotate_extrude`, `torus` are no special case (`minkowski` with a sphere still
+takes any closed body). The offset (`minkowski` with a sphere, equal spheres) is exact for
+boxes, cylinders, spheres, rounded bodies and concave edges; at corners whose faces meet at other
+than right angles (tetrahedron, 45° wedge) SMLib only approximates: warning `offset is not exact`.
+
+```
+hull() for (x = [0, 20], y = [0, 10], z = [0, 5]) translate([x, y, z]) sphere(2);  // rounded box
+minkowski() { cube([20, 10, 5]); sphere(2); }                                       // the same body
+linear_extrude(3) hull() { circle(3); translate([20, 0]) circle(3); }               // slot plate
+hull() { sphere(5); translate([0, 0, 15]) sphere(2); }                              // revolved
+hull() { cube([10, 10, 4]); translate([20, 5, 0]) cylinder(r = 5, h = 4); }         // prism
+```
+
+Example model: `examples/spec/hull_minkowski.scad`.
 
 ## Example (`box.scad`, used in other pages)
 

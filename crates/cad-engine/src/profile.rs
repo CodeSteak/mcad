@@ -60,7 +60,7 @@ pub(crate) fn lift(tree: &Tree, idx: NodeIdx, m: DMat4, warn: &mut Vec<String>) 
             sketch_expr(idx, contours, m)
         }
         Op::Profile(p) => Ok(Expr2::Leaf(Leaf { node: idx, profile: p.clone(), m })),
-        Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } => {
+        Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } | Op::Hull | Op::Minkowski => {
             let r = crate::op2d::compute(tree, idx);
             match r.as_ref() {
                 Ok(o) if o.contours.is_empty() => Ok(Expr2::Op(BoolOp::Union, Vec::new())),
@@ -179,7 +179,7 @@ pub(crate) fn open_sketch_in(tree: &Tree, idx: NodeIdx) -> bool {
     match &tree.node(idx).op {
         Op::Profile(Profile::Sketch { closed: false, .. }) => true,
         // 2D operations make regions (stroke turns paths into areas)
-        Op::Profile(_) | Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } => false,
+        Op::Profile(_) | Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } | Op::Hull | Op::Minkowski => false,
         _ => tree.solid_children(idx).any(|c| open_sketch_in(tree, c)),
     }
 }
@@ -263,7 +263,7 @@ fn poly_area(poly: &[DVec2]) -> f64 {
 /// nonzero: material, else a hole); contours with material on both sides (nested in the same
 /// direction) drop out. `hole` contours are always holes. Holes and islands are nested by containment: material minus the holes inside it, a
 /// hole minus the islands inside it.
-fn sketch_expr(idx: NodeIdx, contours: &[Contour], m: DMat4) -> Result<Expr2, String> {
+pub(crate) fn sketch_expr(idx: NodeIdx, contours: &[Contour], m: DMat4) -> Result<Expr2, String> {
     #[derive(Clone, Copy, PartialEq)]
     enum Role {
         Add,

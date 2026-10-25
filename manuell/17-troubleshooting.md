@@ -15,6 +15,15 @@
 | "Engine reagiert seit 20 min nicht (Kernel hängt)", line red | one kernel call ran 20 min: node blocked until its line changes; simplify it (fewer `$fn`, separate text) |
 | "Watchdog: `cad …` läuft seit 30 min" | daemon ended after 30 min; the command reruns without it; raise `watchdog_secs` |
 | slow kernel on text | text unioned onto a body; keep it separate or use `--no-kernel` while iterating |
+| "hull: Kugeln mit verschiedenen Radien nicht auf einer Achse; Kinder werden unverändert gezeigt" | no exact case (`cad usage language`): put them on one axis, use equal radii, or build the body from parts |
+| "hull: ebene und runde Körper gemischt …" | cube + sphere and the like; use prisms of equal height (cube + cylinder) or `minkowski() { body; sphere(r); }` |
+| "hull: gleich große Kugeln mit Mittelpunkten in einer Ebene" | flat arrangement (rounded plate): `minkowski() { cube([a, b, c]); sphere(r); }` with c > 0, or prisms (`cylinder`) |
+| "hull: … weder auf einer Achse noch als parallele Zylinder gleicher Höhe" | cylinders of different heights or crossing axes: equal start plane and height, or one axis |
+| "hull: verzerrte Kugel" / "verzerrter Zylinder" | non-uniform `scale` on a sphere/cylinder: scale the hull instead, or use `resize` outside |
+| "hull: die Kinder haben keine Fläche (Punkte auf einer Linie)" / "kein Volumen" | all input points on a line (2D) or in a plane (3D) |
+| "minkowski: exakt nur Körper + Kugel(n), zwei parallele Prismen … oder zwei konvexe ebene Körper" | other combination (three bodies, a cylinder not parallel to the extrusion, non-convex polyhedra) |
+| "minkowski: Offset r: offset is not exact: trim curves … off their edges" | the body has corners whose faces do not meet at right angles; SMLib's rounding there is approximate, so nothing is built |
+| "minkowski: zwei Profile nur exakt, wenn beide konvex sind" | 2D: use one profile + `circle(r)` (any profile) or two convex ones |
 
 Glossary of the German text output:
 
@@ -36,3 +45,7 @@ Glossary of the German text output:
 | Kontext: Datei / Modul | context: file / module |
 | abgezogen, übersprungen, offen | subtracted, skipped, pending |
 | Farben, Standard | colours, default (uncoloured) |
+| Kinder werden unverändert gezeigt | children shown unchanged |
+| exakt: Polyeder / Rotationskörper / Prisma / Offset | exact: polyhedron / solid of revolution / prism / offset (special case taken) |
+| Hülle der Mittelpunkte | hull of the centres |
+| verzerrt, ebene / runde Körper | distorted, planar / round bodies |

@@ -182,6 +182,11 @@ pub enum Op {
         #[serde(default)]
         filament: Option<u32>,
     },
+    /// `hull() { … }`: convex hull of the children (2D or 3D, like the children). The engine
+    /// builds the exact special cases; otherwise it warns and shows the children unchanged.
+    Hull,
+    /// `minkowski() { … }`: Minkowski sum of the children (exact special cases like `Hull`).
+    Minkowski,
     /// Unsupported or failed statement that still has children to show.
     Empty,
 }
@@ -398,6 +403,8 @@ impl Op {
             Op::Thicken { .. } => "thicken".into(),
             Op::Resize { .. } => "resize".into(),
             Op::Color { .. } => "color".into(),
+            Op::Hull => "hull".into(),
+            Op::Minkowski => "minkowski".into(),
             Op::Empty => "empty".into(),
         }
     }

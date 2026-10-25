@@ -1,4 +1,5 @@
-//! 2D operations on exact regions (Plan 17.3): `offset`, `fillet2d`/`chamfer2d`, `stroke`.
+//! 2D operations on exact regions (Plan 17.3): `offset`, `fillet2d`/`chamfer2d`, `stroke`,
+//! `hull` and the exact cases of `minkowski`.
 //!
 //! The children are lifted into the operation's system (`profile::lift`) and turned into an
 //! exact region of lines and arcs (`cad_kernel::region2::combine` over the leaf loops with the
@@ -11,6 +12,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use cad_ir::{BlendKind, Contour, NodeIdx, Op, Profile, Seg, Select, StrokeCap, StrokeJoin, Tree, ZoneShape};
+use cad_kernel::hull2;
 use cad_kernel::region2::{self, CornerError, CornerKind, Fill, Loop2, Operand};
 use cad_kernel::{BoolOp, Loop, Segment};
 use glam::{DMat4, DVec2, DVec3};
@@ -81,7 +83,7 @@ pub(crate) fn compute(tree: &Tree, idx: NodeIdx) -> Rc<Result<Op2Out, String>> {
 }
 
 pub(crate) fn is_op2d(op: &Op) -> bool {
-    matches!(op, Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. })
+    matches!(op, Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } | Op::Hull | Op::Minkowski)
 }
 
 fn run(tree: &Tree, idx: NodeIdx) -> Result<Op2Out, String> {
@@ -160,9 +162,125 @@ fn run(tree: &Tree, idx: NodeIdx) -> Result<Op2Out, String> {
             let res = region2::stroke(&paths, *w, cap, join);
             out.contours = to_contours(&res);
         }
+        Op::Hull => {
+            let e = children_expr(tree, idx, &mut out.warnings)?;
+            let loops = hull_loops(&e)?;
+            let size = region_size(&loops);
+            let h = hull2::hull(&loops);
+            if h.is_empty() {
+                out.warnings.push("hull: die Kinder haben keine Fläche (Punkte auf einer Linie)".into());
+            }
+            let tol = display_tol(size);
+            for lp in &loops {
+                out.guides.push(("source", polyline3(lp, tol, true)));
+            }
+            out.contours = to_contours(&[h]);
+        }
+        Op::Minkowski => {
+            let res = minkowski(tree, idx, &mut out)?;
+            out.contours = to_contours(&res);
+        }
         other => return Err(format!("{} ist keine 2D-Operation", other.label())),
     }
     Ok(out)
+}
+
+/// Loops whose hull is the hull of the expression: the leaves' loops below unions (holes do
+/// not matter), the exact region of differences and intersections.
+fn hull_loops(e: &Expr2) -> Result<Vec<Loop2>, String> {
+    match e {
+        Expr2::Leaf(l) => Ok(leaf_operand(l)?.loops),
+        Expr2::Op(BoolOp::Union, args) => {
+            let mut out = Vec::new();
+            for a in args {
+                out.extend(hull_loops(a)?);
+            }
+            Ok(out)
+        }
+        _ => expr_loops(e),
+    }
+}
+
+/// A circle (centre, radius) if the expression is a single `circle()` placed by a similarity
+/// (rotation, mirror, uniform scale and translation).
+fn as_circle(e: &Expr2) -> Option<(DVec2, f64)> {
+    let mut e = e;
+    while let Expr2::Op(BoolOp::Union, a) = e {
+        if a.len() != 1 {
+            return None;
+        }
+        e = &a[0];
+    }
+    let Expr2::Leaf(l) = e else { return None };
+    let Profile::Circle { r } = l.profile else { return None };
+    let a = profile::affine2(&l.m);
+    let (x, y) = (a.matrix2.x_axis, a.matrix2.y_axis);
+    let s = x.length();
+    let similar = (y.length() - s).abs() <= 1e-9 * s && x.dot(y).abs() <= 1e-9 * s * s;
+    (similar && s > 0.0 && r > 0.0).then_some((a.translation, r * s))
+}
+
+/// `minkowski()` of 2D children: any profile plus circles (rounded offset by the sum of the
+/// radii, moved by the sum of the centres), circles only (a circle), or two convex profiles of
+/// which one is a polygon (hull of the other moved to the polygon's vertices), plus circles.
+/// Anything else: a warning, the children unchanged.
+fn minkowski(tree: &Tree, idx: NodeIdx, out: &mut Op2Out) -> Result<Vec<Loop2>, String> {
+    let e = children_expr(tree, idx, &mut out.warnings)?;
+    let Expr2::Op(_, args) = &e else { unreachable!("children_expr is a union") };
+    let mut shift = DVec2::ZERO;
+    let mut r = 0.0;
+    let mut rest: Vec<&Expr2> = Vec::new();
+    for a in args {
+        match as_circle(a) {
+            Some((c, rr)) => {
+                shift += c;
+                r += rr;
+            }
+            None => rest.push(a),
+        }
+    }
+    let size = region_size(&expr_loops(&e)?);
+    let tol = display_tol(size);
+    let moved = |loops: Vec<Loop2>| -> Vec<Loop2> {
+        let m = glam::DAffine2::from_translation(shift);
+        loops.into_iter().map(|lp| lp.iter().map(|s| s.map(&m)).collect()).collect()
+    };
+    let base: Vec<Loop2> = match rest.len() {
+        0 => {
+            // circles only: a circle of the summed radius
+            let c = Loop::Circle { center: DVec2::ZERO, r };
+            return Ok(moved(vec![loop_segments(&c)]));
+        }
+        1 => expr_loops(rest[0])?,
+        2 => {
+            let a = expr_loops(rest[0])?;
+            let b = expr_loops(rest[1])?;
+            let poly_of = |l: &[Loop2]| -> Option<Vec<DVec2>> {
+                (l.len() == 1 && l[0].iter().all(|s| matches!(s, Segment::Line { .. })))
+                    .then(|| l[0].iter().map(|s| s.start()).collect())
+            };
+            if !hull2::is_convex(&a) || !hull2::is_convex(&b) {
+                return unsupported(out, &e, "zwei Profile nur exakt, wenn beide konvex sind");
+            }
+            match (poly_of(&a), poly_of(&b)) {
+                (Some(v), _) => vec![hull2::minkowski_convex(&v, &b)],
+                (_, Some(v)) => vec![hull2::minkowski_convex(&v, &a)],
+                _ => return unsupported(out, &e, "zwei konvexe Profile nur exakt, wenn eines ein Polygon ist"),
+            }
+        }
+        n => return unsupported(out, &e, &format!("{n} Profile (außer Kreisen); exakt sind höchstens zwei")),
+    };
+    for lp in &base {
+        out.guides.push(("source", polyline3(lp, tol, true)));
+    }
+    let res = if r > 0.0 { region2::offset_round(&base, r) } else { base };
+    Ok(moved(res))
+}
+
+/// Unsupported case of `minkowski`: warning with the reason, the children unchanged.
+fn unsupported(out: &mut Op2Out, e: &Expr2, why: &str) -> Result<Vec<Loop2>, String> {
+    out.warnings.push(format!("minkowski: {why}; Kinder werden unverändert gezeigt"));
+    expr_loops(e)
 }
 
 fn fmt_num(x: f64) -> String {
@@ -195,7 +313,7 @@ fn polyline3(segs: &[Segment], tol: f64, closed: bool) -> Vec<DVec3> {
     pts.into_iter().map(|p| p.extend(0.0)).collect()
 }
 
-fn to_contours(loops: &[Loop2]) -> Vec<Contour> {
+pub(crate) fn to_contours(loops: &[Loop2]) -> Vec<Contour> {
     loops
         .iter()
         .filter(|l| !l.is_empty())

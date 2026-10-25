@@ -112,7 +112,34 @@ pub fn bounds3(t: &Tree, i: u32, f: DMat4) -> Result<Aabb, String> {
         Op::Prim { prim, place } => prim_box(prim, f * *place, &mut b),
         // 2D at top level is not part of OpenSCAD's 3D export.
         Op::Profile(_) => {}
-        Op::Group | Op::ModuleCall { .. } | Op::Transform { .. } | Op::Color { .. } | Op::Empty => kids(&mut b)?,
+        // the box of a convex hull is the box of its children
+        Op::Group | Op::ModuleCall { .. } | Op::Transform { .. } | Op::Color { .. } | Op::Empty | Op::Hull => {
+            kids(&mut b)?
+        }
+        // the box of a Minkowski sum is the sum of the boxes
+        Op::Minkowski => {
+            let mut sum: Option<Aabb> = None;
+            for c in t.solid_children(i) {
+                let cb = bounds3(t, c, t.node(c).local)?;
+                if cb.is_empty() {
+                    continue;
+                }
+                sum = Some(match sum {
+                    None => cb,
+                    Some(s) => Aabb { lo: s.lo + cb.lo, hi: s.hi + cb.hi },
+                });
+            }
+            if let Some(s) = sum {
+                for k in 0..8 {
+                    let q = DVec3::new(
+                        if k & 1 == 0 { s.lo.x } else { s.hi.x },
+                        if k & 2 == 0 { s.lo.y } else { s.hi.y },
+                        if k & 4 == 0 { s.lo.z } else { s.hi.z },
+                    );
+                    b.add(f.transform_point3(q));
+                }
+            }
+        }
         Op::Boolean { op, .. } => {
             let mut first = true;
             for c in t.solid_children(i) {
@@ -259,8 +286,8 @@ fn pieces2(t: &Tree, i: u32, m: DMat4, out: &mut Vec<P2>) -> Result<(), String> 
                 out.push(P2::Rect(lo, hi));
             }
         }
-        // 2D operations: the exact region (Plan 17.3)
-        Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } => {
+        // 2D operations: the exact region (Plan 17.3, hull/minkowski Plan 21)
+        Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } | Op::Hull | Op::Minkowski => {
             for lp in cad_engine::region_2d(t, i)? {
                 for g in lp {
                     out.extend(g.sample(1e-3).into_iter().map(|q| P2::Pt(pt(q))));
