@@ -293,6 +293,11 @@ sudo pacman -U target/arch/controller-cad-*.pkg.tar.zst
   mit der SVG-Zeile. Die Datei liegt relativ zur einbindenden Datei (CLI: Dateisystem,
   `cad watch` beobachtet sie; Browser: Projektdatei, im Editor änderbar) (Plan 17.4/17.5,
   Bericht 16).
+- `import("teil.stl", center, scale, as = "solid" | "mesh")` liest STL (ASCII und binär):
+  verschweißt, Orientierung korrigiert, koplanare Dreiecke zu ebenen Flächen zusammengefasst.
+  Geschlossene Netze bis 500 Flächen werden automatisch zum B-Rep (Booleans, STEP), größere
+  oder offene bleiben ein reines Netz (Anzeige, Export STL/3MF, Messen; keine Booleans) (Plan
+  21, Phase B).
 
 ```
 linear_extrude(5) sketch {
@@ -328,7 +333,7 @@ translate(k.oben) rotate(to = dir(k.oben)) cylinder(h = 8, r = 3);
 ```
 
 Weitere Beispiele: `examples/spec/` (Spracherweiterungen, Skizzen: `skizze_*.scad`, Text: `text_schild.scad`,
-SVG: `svg_logo.scad` mit `examples/svg/*.svg`), `examples/openscad-compat/`
+SVG: `svg_logo.scad` mit `examples/svg/*.svg`, STL: `stl_import.scad` mit `examples/stl/`), `examples/openscad-compat/`
 (36 OpenSCAD-Modelle), `examples/projekt-gehaeuse/` (Projekt aus drei Dateien).
 
 ## Verzeichnisstruktur

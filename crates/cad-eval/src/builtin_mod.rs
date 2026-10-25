@@ -186,7 +186,7 @@ impl<'a> Ev<'a> {
         node.tol = tol;
     }
 
-    fn prim(&mut self, s: &Stmt, prim: Prim, place: DMat4, ctx: &Ctx<'a>, dy: &Dyn<'a>) -> NodeIdx {
+    pub(crate) fn prim(&mut self, s: &Stmt, prim: Prim, place: DMat4, ctx: &Ctx<'a>, dy: &Dyn<'a>) -> NodeIdx {
         let n = self.node(s, Op::Prim { prim, place }, ctx);
         self.set_blend(n, dy);
         if dyn_lookup(dy, "$fillet").is_some_and(|v| matches!(v.v, Value::Func(_))) {

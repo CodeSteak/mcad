@@ -254,6 +254,46 @@ pub struct Part<S> {
     pub solid: bool,
 }
 
+/// A mesh of a node result (`import("x.stl")` without B-rep), in the node's own system. Meshes
+/// pass through groups, transforms, colours and plain unions next to the B-rep parts; other
+/// operations report them (see `eval.rs`).
+#[derive(Debug, Clone)]
+pub struct MeshPart {
+    pub mesh: std::sync::Arc<cad_kernel::trimesh::TriMesh>,
+    /// Mesh coordinates → node system.
+    pub place: DMat4,
+    /// Tag of the importing node (all triangles).
+    pub tag: Tag,
+}
+
+impl MeshPart {
+    pub fn bounds(&self) -> Option<(DVec3, DVec3)> {
+        self.mesh.bounds(&self.place)
+    }
+
+    /// The same mesh placed by `m` after its placement.
+    pub fn placed(&self, m: &DMat4) -> MeshPart {
+        MeshPart { mesh: self.mesh.clone(), place: *m * self.place, tag: self.tag }
+    }
+
+    /// Closed (a solid without B-rep) or an open surface.
+    pub fn solid(&self) -> bool {
+        self.mesh.closed
+    }
+
+    /// Display mesh in the node system (face ids of the mesh's faces).
+    pub fn display(&self) -> Mesh {
+        self.mesh.display(&self.place, self.tag)
+    }
+
+    /// Triangles in the node system placed by `m`.
+    pub fn triangles(&self, m: &DMat4) -> Vec<[DVec3; 3]> {
+        let t = *m * self.place;
+        let q: Vec<DVec3> = self.mesh.points.iter().map(|p| t.transform_point3(*p)).collect();
+        self.mesh.tris.iter().map(|tr| tr.map(|i| q[i as usize])).collect()
+    }
+}
+
 /// One part of a node prepared for measuring ([`Engine::measure_parts`]).
 #[derive(Debug, Clone)]
 pub struct MeasurePart {
@@ -272,6 +312,8 @@ pub struct MeasurePart {
 #[derive(Debug)]
 pub(crate) struct NodeOutput<S> {
     pub parts: Vec<Part<S>>,
+    /// Meshes without B-rep (after `parts` in meshes, face ids and measuring).
+    pub meshes: Vec<MeshPart>,
     /// Sorted tags that faces of `parts` can carry.
     pub tags: Rc<[Tag]>,
     pub dim: Option<Dim>,
@@ -316,6 +358,8 @@ pub struct NodeReport {
     pub bounds: Option<(DVec3, DVec3)>,
     pub dim: Option<Dim>,
     pub parts: usize,
+    /// Meshes without B-rep in the result ([`Evaluation::meshes`]).
+    pub meshes: usize,
     /// Result came from the cache.
     pub cached: bool,
     /// Draft mode left this node's fillet/chamfer out (hint [`SUSPENDED_HINT`]).
@@ -380,6 +424,11 @@ impl<S> Evaluation<S> {
     /// Parts of a node's result in its own system (empty for 2D nodes and skipped nodes).
     pub fn parts(&self, n: NodeIdx) -> &[Part<S>] {
         self.outputs[n as usize].as_ref().map(|o| o.parts.as_slice()).unwrap_or(&[])
+    }
+
+    /// Meshes without B-rep of a node's result in its own system.
+    pub fn meshes(&self, n: NodeIdx) -> &[MeshPart] {
+        self.outputs[n as usize].as_ref().map(|o| o.meshes.as_slice()).unwrap_or(&[])
     }
 
     /// Nodes that created faces with this tag.
@@ -577,8 +626,9 @@ impl<S: Clone + 'static> Job<S> {
                     // What the node kept on the heap (its new shapes), if measured: the
                     // topology estimate can be off by a factor of 10 for freeform geometry.
                     let measured = heap0.and_then(|h0| e.heap_probe.as_ref().map(|p| p().saturating_sub(h0)));
+                    // (an imported mesh was allocated before, by the language evaluation)
                     let cost = match measured {
-                        Some(m) => m.max(512),
+                        Some(m) => m.max(512) + own_mesh_bytes(&o),
                         None => e.output_bytes(&o),
                     };
                     e.cache.insert(Slot::Node(key), Cached::Node(o.clone()), cost);
@@ -609,6 +659,7 @@ impl<S: Clone + 'static> Job<S> {
         let two_d = dim == Some(Dim::Two) && !is_profile_op(&self.tree.node(idx).op);
         NodeOutput {
             parts: Vec::new(),
+            meshes: Vec::new(),
             tags: vec![self.tags[idx as usize]].into(),
             dim: if two_d { dim } else { Some(Dim::Three) },
             bounds: None,
@@ -675,6 +726,7 @@ impl<S: Clone + 'static> Job<S> {
                 bounds: out.and_then(|o| o.bounds),
                 dim: out.and_then(|o| o.dim),
                 parts: out.map(|o| o.parts.len()).unwrap_or(0),
+                meshes: out.map(|o| o.meshes.len()).unwrap_or(0),
                 cached: self.cached[i],
                 blend_suspended: out.is_some_and(|o| o.suspended),
                 blocked: self.blocked[i],
@@ -827,6 +879,7 @@ where
         for p in &o.parts {
             b += 32 + self.kernel.shape_bytes(&p.shape);
         }
+        b += own_mesh_bytes(o) + 96 * o.meshes.len();
         b += pts(&o.selected_edges) + pts(&o.opened_faces);
         b += o.guides.iter().map(|(_, p)| 24 * p.len() + 40).sum::<usize>();
         b += o.hints.iter().map(|h| h.len() + 24).sum::<usize>();
@@ -945,6 +998,9 @@ where
                 let m = self.kernel.tessellate(&p.shape, tol).map_err(|e| e.to_string())?;
                 append_offset(&mut mesh, &m);
             }
+            for p in &out.meshes {
+                append_offset(&mut mesh, &p.display());
+            }
             mesh
         };
         let cost = mesh_bytes(&mesh);
@@ -1033,6 +1089,19 @@ where
             let mass = if p.solid { self.kernel.mass_props(s).ok() } else { None };
             out.push(MeasurePart { part: i, brep: Rc::new(brep), mesh: Rc::new(mesh), solid: p.solid, mass });
         }
+        // meshes: facetted B-reps (index after the B-rep parts)
+        let n = ev.parts(node).len();
+        for (i, p) in ev.meshes(node).iter().enumerate() {
+            let m = *world * p.place;
+            let mass = p.solid().then(|| p.mesh.mass_props(&m));
+            out.push(MeasurePart {
+                part: n + i,
+                brep: Rc::new(p.mesh.brep(&m, p.tag)),
+                mesh: Rc::new(p.mesh.display(&m, p.tag)),
+                solid: p.solid(),
+                mass,
+            });
+        }
         Ok(out)
     }
 
@@ -1079,6 +1148,16 @@ where
             }
             out.push((i, Some(self.kernel.brep(&cut).map_err(|e| e.to_string())?)));
         }
+        // closed meshes: the cap faces of the plane ∩ mesh (all `cad_measure` needs)
+        let np = ev.parts(node).len();
+        for (i, mp) in ev.meshes(node).iter().enumerate() {
+            if !mp.solid() {
+                continue;
+            }
+            let loops = mp.mesh.section_loops(&(*world * mp.place), point, n);
+            let cap = (!loops.is_empty()).then(|| cad_kernel::trimesh::cap_brep(&loops, point, n, mp.tag));
+            out.push((np + i, cap));
+        }
         Ok(out)
     }
 
@@ -1092,6 +1171,13 @@ where
     ) -> Result<Rc<cad_kernel::brep::Brep>, String> {
         let slot = Slot::Brep(ev.reports[node as usize].key, KeyHasher::new().mat(world).finish().short(), part as u32);
         if let Some(Cached::Brep(b)) = self.cache.get(&slot) {
+            return Ok(b);
+        }
+        let n = ev.parts(node).len();
+        if part >= n {
+            let mp = ev.meshes(node).get(part - n).ok_or("kein solcher Teil")?;
+            let b = Rc::new(mp.mesh.brep(&(*world * mp.place), mp.tag));
+            self.cache.insert(slot, Cached::Brep(b.clone()), brep_bytes(&b));
             return Ok(b);
         }
         let p = &ev.parts(node)[part];
@@ -1112,6 +1198,12 @@ where
         let mut c = DVec3::ZERO;
         for p in ev.parts(node) {
             let m = self.kernel.mass_props(&p.shape).map_err(|e| e.to_string())?;
+            acc.volume += m.volume;
+            acc.area += m.area;
+            c += m.centroid * m.volume;
+        }
+        for p in ev.meshes(node) {
+            let m = p.mesh.mass_props(&p.place);
             acc.volume += m.volume;
             acc.area += m.area;
             c += m.centroid * m.volume;
@@ -1141,6 +1233,12 @@ pub(crate) fn append_offset(dst: &mut Mesh, m: &Mesh) {
     for e in &mut dst.edge_ids[ne..] {
         *e += edge_off;
     }
+}
+
+/// Bytes of the imported mesh of an importing node (the data is shared by `Arc`: counted once,
+/// at the node with the mesh's own tag and no children).
+fn own_mesh_bytes<S>(o: &NodeOutput<S>) -> usize {
+    o.meshes.iter().filter(|m| o.tags.len() == 1 && m.tag == o.tags[0]).map(|m| m.mesh.bytes()).sum()
 }
 
 /// Rough size of a neutral B-rep (points, knots, topology).

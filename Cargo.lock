@@ -338,6 +338,7 @@ dependencies = [
  "cad-render",
  "cad-session",
  "cad-step",
+ "cad-stl",
  "cad-syntax",
  "clap",
  "glam",
@@ -393,10 +394,12 @@ dependencies = [
 name = "cad-eval"
 version = "0.2.1"
 dependencies = [
+ "blake3",
  "cad-font",
  "cad-ir",
  "cad-kernel",
  "cad-outline",
+ "cad-stl",
  "cad-svg",
  "cad-syntax",
  "glam",
@@ -497,6 +500,14 @@ dependencies = [
  "glam",
  "serde",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "cad-stl"
+version = "0.2.1"
+dependencies = [
+ "cad-kernel",
+ "glam",
 ]
 
 [[package]]

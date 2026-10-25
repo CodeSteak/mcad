@@ -13,6 +13,8 @@ cad-ir.workspace = true
 cad-kernel.workspace = true
 cad-outline = { path = "../cad-outline" }
 cad-svg = { path = "../cad-svg" }
+cad-stl = { path = "../cad-stl" }
+blake3.workspace = true
 cad-font = { path = "../cad-font" }
 
 [dev-dependencies]

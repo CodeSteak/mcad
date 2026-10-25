@@ -95,6 +95,11 @@ fn prim_box(prim: &Prim, f: DMat4, b: &mut Aabb) {
                 b.add(f.transform_point3(*p));
             }
         }
+        Prim::Mesh { mesh, .. } => {
+            for p in &mesh.mesh.points {
+                b.add(f.transform_point3(*p));
+            }
+        }
     }
 }
 

@@ -383,13 +383,13 @@ fn modifiers() {
 
 #[test]
 fn unsupported_operations_keep_children() {
-    let out = run("hull() { cube(1); sphere(1); } import(\"a.stl\"); minkowski() cube(1); projection() cube(1);");
+    let out = run("hull() { cube(1); sphere(1); } import(\"a.obj\"); minkowski() cube(1); projection() cube(1);");
     // hull and minkowski are nodes of their own (the engine builds the exact special cases)
     assert_eq!(dump(&out), "group\n  hull\n    box\n    sphere\n  minkowski\n    box\n  empty\n    box\n");
     assert!(has_warning(&out, "`projection()` nicht unterstützt"));
     assert!(!has_warning(&out, "`hull()`"));
-    // text() and import() of SVG exist (Bericht 16); import of meshes does not
-    assert!(has_error(&out, "nur SVG"));
+    // text() and import() of SVG (Bericht 16) and STL (Plan 21 B) exist; other formats do not
+    assert!(has_error(&out, "nur SVG und STL"));
 }
 
 #[test]

@@ -10,7 +10,7 @@ use glam::{DMat4, DQuat, DVec2, DVec3};
 use crate::hull3d;
 use crate::key::{CacheKey, KeyHasher};
 use crate::profile::{self, Expr2, Leaf};
-use crate::{Diag, EngineConfig, NodeOutput, Part, Severity, is_profile_op};
+use crate::{Diag, EngineConfig, MeshPart, NodeOutput, Part, Severity, is_profile_op};
 
 /// The step budget is used up; the node is re-run (with replay) on the next step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -318,6 +318,8 @@ struct NodeEval<'r, 'a, 'c, K: Kernel> {
     unmerged_in: bool,
     /// A Boolean of this node failed (its parts are the operands).
     unmerged: bool,
+    /// Meshes of the result (imported STL without B-rep), node system.
+    meshes: Vec<MeshPart>,
 }
 
 type R<T> = Result<T, Interrupt>;
@@ -343,6 +345,7 @@ where
         suspended: false,
         unmerged_in: false,
         unmerged: false,
+        meshes: Vec::new(),
     };
     let tree = ctx.tree;
     let node = tree.node(idx);
@@ -403,6 +406,7 @@ where
         }
         return Ok(NodeOutput {
             parts: Vec::new(),
+            meshes: Vec::new(),
             tags: tags.into(),
             dim,
             bounds,
@@ -427,11 +431,15 @@ where
                     bounds = merge_box(bounds, Some(b));
                 }
             }
+            for m in &ev.meshes {
+                bounds = merge_box(bounds, m.bounds());
+            }
             bounds
         }
     };
     Ok(NodeOutput {
         parts,
+        meshes: ev.meshes,
         tags: tags.into(),
         dim: dim.or(Some(Dim::Three)),
         bounds,
@@ -488,7 +496,7 @@ where
                 continue;
             }
             let Some(o) = self.output(c) else { continue };
-            if o.parts.is_empty() {
+            if o.parts.is_empty() && o.meshes.is_empty() {
                 continue;
             }
             let m = tree.node(c).local;
@@ -532,6 +540,26 @@ where
             }
         }
         Ok(out)
+    }
+
+    /// Meshes of a child in this node's system.
+    fn child_meshes(&self, c: NodeIdx) -> Vec<MeshPart> {
+        let Some(o) = self.output(c) else { return Vec::new() };
+        let m = self.tree().node(c).local;
+        o.meshes.iter().map(|p| p.placed(&m)).collect()
+    }
+
+    fn has_meshes(&self, c: NodeIdx) -> bool {
+        self.output(c).is_some_and(|o| !o.meshes.is_empty())
+    }
+
+    /// Meshes of the contributing 3D children, in this node's system.
+    fn kid_meshes(&self) -> Vec<MeshPart> {
+        let tree = self.ctx.tree;
+        tree.solid_children(self.idx)
+            .filter(|&c| tree.dim(c) != Some(Dim::Two))
+            .flat_map(|c| self.child_meshes(c))
+            .collect()
     }
 
     /// Contributing 3D children (2D children are reported and skipped).
@@ -788,9 +816,12 @@ where
         let tag = self.tag;
         match &node.op {
             Op::Group | Op::ModuleCall { .. } | Op::Transform { .. } | Op::Color { .. } | Op::Empty => {
+                // meshes lie next to the united bodies (an implicit union does not merge them)
+                self.meshes = self.kid_meshes();
                 let parts = self.all_children_parts()?;
                 self.union(parts, tag)
             }
+            Op::Prim { prim: Prim::Mesh { mesh, mode }, place } => self.mesh_prim(mesh, *mode, place, node.blend),
             Op::Prim { prim, place } => self.prim(prim, place, node.blend),
             // handled as 2D before
             Op::Profile(_) | Op::Offset { .. } | Op::Blend2 { .. } | Op::Stroke { .. } => Ok(Vec::new()),
@@ -800,6 +831,10 @@ where
                 let mut groups = Vec::new();
                 for &c in &kids {
                     groups.push(self.contrib(c)?);
+                }
+                if kids.iter().any(|&c| self.has_meshes(c)) && !self.mesh_boolean(*op, &kids) {
+                    // an intersection with a mesh: the children unchanged
+                    return Ok(groups.into_iter().flatten().collect());
                 }
                 let n_in = groups.iter().filter(|g| !g.is_empty()).count();
                 let inputs: Vec<Part<K::Shape>> = if fillet.is_some() || chamfer.is_some() || fillet_law.is_some() {
@@ -827,6 +862,15 @@ where
                     }
                     _ => Ok(parts),
                 }
+            }
+            Op::Blend { .. } | Op::Shell { .. } if node.children.first().is_some_and(|&b| self.has_meshes(b)) => {
+                let body = node.children[0];
+                let what = node.op.label();
+                self.error(format!(
+                    "{what}: ein Netz kann nicht bearbeitet werden – import(…, as = \"solid\") für einen B-Rep-Körper"
+                ));
+                self.meshes = self.child_meshes(body);
+                self.contrib(body)
             }
             Op::Blend { kind, r, select, law } => self.zone_block(Some((*kind, *r)), law.as_deref(), None, *select),
             Op::Shell { t, select } => self.zone_block(None, None, Some(*t), *select),
@@ -863,6 +907,10 @@ where
                 }
             },
             Op::Thicken { t } => {
+                self.meshes = self.kid_meshes();
+                if !self.meshes.is_empty() {
+                    self.error("thicken: ein Netz ist keine offene Fläche (unverändert)");
+                }
                 let parts = self.all_children_parts()?;
                 let mut out = Vec::new();
                 for p in parts {
@@ -891,12 +939,14 @@ where
                 }
                 let parts = self.all_children_parts()?;
                 let parts = self.union(parts, tag)?;
+                self.meshes = self.kid_meshes();
                 let Some((lo, hi)) = b else { return Ok(parts) };
                 let s = profile::resize_scale(hi - lo, *size, *auto);
                 let m = DMat4::from_scale(s);
                 if is_identity(&m) {
                     return Ok(parts);
                 }
+                self.meshes = self.meshes.iter().map(|p| p.placed(&m)).collect();
                 let mut out = Vec::new();
                 for p in parts {
                     match self.run.call(|k| k.transform(&p.shape, &m))? {
@@ -924,10 +974,13 @@ where
         }
         if !is_hull && kids.len() == 1 {
             // the Minkowski sum of one body is the body
+            self.meshes = self.kid_meshes();
             let parts = self.contrib(kids[0])?;
             return self.union(parts, self.tag);
         }
-        let plan = if is_hull {
+        let plan = if !is_hull && kids.iter().any(|&c| self.has_meshes(c)) {
+            Err("Netz als Kind (import mit as = \"solid\")".to_string())
+        } else if is_hull {
             let mut bodies = Vec::new();
             kids.iter()
                 .try_for_each(|&c| hull3d::bodies(tree, c, tree.node(c).local, &mut bodies))
@@ -957,6 +1010,7 @@ where
             Ok(parts) => Ok(parts),
             Err(why) => {
                 self.warn(format!("{what}: {why}; Kinder werden unverändert gezeigt"));
+                self.meshes = self.kid_meshes();
                 let mut parts = Vec::new();
                 for c in kids {
                     parts.extend(self.contrib(c)?);
@@ -1000,7 +1054,7 @@ where
         Ok(match plan {
             Plan::Polyhedron(h) => self
                 .run
-                .call(|k| k.make_polyhedron(&h.points, &h.faces, tag))?
+                .call(|k| k.make_polyhedron(&h.points, &h.planar_faces(), tag))?
                 .map(|s| vec![Part { shape: s, solid: true }])
                 .map_err(|e| format!("Polyeder gescheitert: {e}")),
             Plan::Revolve { frame, section } => {
@@ -1011,7 +1065,7 @@ where
                 return lifted(self, section, &mode, frame);
             }
             Plan::Spheres { hull, r } => {
-                let poly = self.run.call(|k| k.make_polyhedron(&hull.points, &hull.faces, tag))?;
+                let poly = self.run.call(|k| k.make_polyhedron(&hull.points, &hull.planar_faces(), tag))?;
                 match poly {
                     Ok(p) => self
                         .run
@@ -1047,6 +1101,82 @@ where
         })
     }
 
+    /// Diagnostics and meshes of a Boolean with mesh children (`kids` are the contributing
+    /// children). `false`: leave the operation out (intersection).
+    fn mesh_boolean(&mut self, op: BoolOp, kids: &[NodeIdx]) -> bool {
+        const HINT: &str = "import(…, as = \"solid\") für einen B-Rep-Körper";
+        match op {
+            BoolOp::Union => {
+                self.meshes = self.kid_meshes();
+                if kids.len() > 1 {
+                    self.warn(format!("union: ein Netz wird nicht vereinigt, nur daneben gezeigt – {HINT}"));
+                }
+                true
+            }
+            BoolOp::Difference => {
+                if self.has_meshes(kids[0]) {
+                    self.meshes = self.child_meshes(kids[0]);
+                    if kids.len() > 1 {
+                        self.error(format!("difference: ein Netz kann nicht beschnitten werden – {HINT}"));
+                    }
+                }
+                if kids[1..].iter().any(|&c| self.has_meshes(c)) {
+                    self.error(format!("difference: ein Netz kann nicht abgezogen werden (weggelassen) – {HINT}"));
+                }
+                true
+            }
+            BoolOp::Intersection => {
+                self.meshes = self.kid_meshes();
+                if kids.len() > 1 {
+                    self.error(format!("intersection: mit einem Netz nicht möglich, Kinder unverändert – {HINT}"));
+                    return false;
+                }
+                true
+            }
+        }
+    }
+
+    /// An imported mesh: a polyhedron of its faces (B-rep modes; the mesh again if the kernel
+    /// fails), or the mesh itself.
+    fn mesh_prim(
+        &mut self,
+        mesh: &cad_ir::MeshRef,
+        mode: cad_ir::MeshMode,
+        place: &DMat4,
+        blend: Option<(BlendKind, f64)>,
+    ) -> R<Vec<Part<K::Shape>>> {
+        use cad_ir::MeshMode;
+        let m = &mesh.mesh;
+        let as_mesh = |s: &mut Self| {
+            s.meshes.push(MeshPart { mesh: m.clone(), place: *place, tag: s.tag });
+            s.hints.push(format!("Netz: {} Dreiecke, {} Flächen", m.triangle_count(), m.face_count()));
+            if blend.is_some_and(|(_, r)| r > 0.0) {
+                s.warn("$fillet/$chamfer wirken nicht auf ein Netz");
+            }
+        };
+        if mode == MeshMode::Mesh {
+            as_mesh(self);
+            return Ok(Vec::new());
+        }
+        let prim = Prim::Polyhedron { points: m.points.clone(), faces: m.loops.clone() };
+        let diags = self.diags.len();
+        let parts = self.prim(&prim, place, blend)?;
+        if parts.is_empty() {
+            // the kernel failed (error already added): show the mesh instead
+            let msg = self.diags.drain(diags..).map(|d| d.message).collect::<Vec<_>>().join("; ");
+            let text = format!("B-Rep aus dem Netz gescheitert ({msg}): als Netz weiter, ohne Booleans");
+            if mode == MeshMode::Solid {
+                self.error(text)
+            } else {
+                self.warn(text)
+            }
+            as_mesh(self);
+            return Ok(Vec::new());
+        }
+        self.hints.push(format!("B-Rep: {} Flächen aus {} Dreiecken", m.face_count(), m.triangle_count()));
+        Ok(parts)
+    }
+
     fn prim(&mut self, prim: &Prim, place: &DMat4, blend: Option<(BlendKind, f64)>) -> R<Vec<Part<K::Shape>>> {
         let tag = self.tag;
         let res = self.run.call(|k| match prim {
@@ -1055,6 +1185,7 @@ where
             Prim::Cylinder { h, r1, r2 } => k.make_cylinder(*h, *r1, *r2, tag),
             Prim::Torus { big_r, r } => k.make_torus(*big_r, *r, tag),
             Prim::Polyhedron { points, faces } => k.make_polyhedron(points, faces, tag),
+            Prim::Mesh { .. } => Err(KernelError::Unsupported("mesh".into())),
         })?;
         let mut part = match res {
             Ok(s) => Part { shape: s, solid: true },

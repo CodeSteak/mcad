@@ -40,7 +40,7 @@ use glam::{DMat4, DVec3};
 use serde::Serialize;
 
 use crate::key::{CacheKey, KeyHasher};
-use crate::{Cached, Engine, Evaluation, Slot, append_offset, mesh_bytes};
+use crate::{Cached, Engine, Evaluation, MeshPart, Slot, append_offset, mesh_bytes};
 
 /// Colour identity: RGB bytes, alpha always 255 (alpha only changes the view: a print colour
 /// is its RGB value, `color("red", alpha = 0.5)` is the entry `red`).
@@ -407,6 +407,8 @@ pub struct Region<S> {
     /// Solids of the region: one, or (no colour node below the part) the part's solids as
     /// they are, without a union (like the part's volume, see [`Engine::mass_props`]).
     pub shapes: Vec<S>,
+    /// Meshes without B-rep of this colour (node system).
+    pub meshes: Vec<MeshPart>,
     /// Volume in mm³.
     pub volume: f64,
     /// Cache key of this region (meshes).
@@ -522,6 +524,32 @@ fn boxes_overlap(a: (DVec3, DVec3), b: (DVec3, DVec3)) -> bool {
     (0..3).all(|i| a.1[i].min(b.1[i]) - a.0[i].max(b.0[i]) > eps)
 }
 
+/// The region colour of every mesh of `node`: the latest colour node in `placed` (pre-order,
+/// with placements into `node`) whose result holds the same mesh at the same place, else
+/// `rest`.
+fn mesh_colors<S>(
+    ev: &Evaluation<S>,
+    node: NodeIdx,
+    rest: RegionColor,
+    placed: &[(NodeIdx, ColorKey, DMat4)],
+) -> Vec<RegionColor> {
+    ev.meshes(node)
+        .iter()
+        .map(|mp| {
+            placed
+                .iter()
+                .rev()
+                .find(|(c, _, m)| {
+                    ev.meshes(*c).iter().any(|q| {
+                        std::sync::Arc::ptr_eq(&q.mesh, &mp.mesh)
+                            && (*m * q.place).abs_diff_eq(mp.place, 1e-9 * (1.0 + mp.place.w_axis.length()))
+                    })
+                })
+                .map_or(rest, |&(_, k, _)| RegionColor::Color(k))
+        })
+        .collect()
+}
+
 /// A solid of one colour region with its volume.
 type Piece<S> = (S, f64);
 
@@ -570,8 +598,34 @@ where
         }
         // without colour nodes the region is the whole result: its volume is the (cached)
         // part volume the parts list already asked for
-        let whole = if placed.is_empty() { Some(self.mass_props(ev, node)?.volume) } else { None };
-        let out = self.compute_regions(ev, node, rest, &placed, key, whole)?;
+        // the Booleans only see colour nodes with B-rep material (meshes are assigned below)
+        let solid_placed: Vec<(NodeIdx, ColorKey, DMat4)> =
+            placed.iter().filter(|(c, _, _)| ev.parts(*c).iter().any(|p| p.solid)).copied().collect();
+        let whole = if solid_placed.is_empty() { Some(self.brep_volume(ev, node)?) } else { None };
+        let mut out = self.compute_regions(ev, node, rest, &solid_placed, key, whole)?;
+        out.colored_nodes = placed.len();
+        // meshes: each in the colour of the latest colour node it comes from (no Booleans)
+        let colors = mesh_colors(ev, node, rest, &placed);
+        for (i, (mp, c)) in ev.meshes(node).iter().zip(colors).enumerate() {
+            let v = mp.mesh.mass_props(&mp.place).volume;
+            out.total += v;
+            match out.regions.iter_mut().find(|r| r.color == c) {
+                Some(r) => {
+                    r.meshes.push(mp.clone());
+                    r.volume += v;
+                }
+                None => {
+                    let rkey = KeyHasher::new().key(&key).str("mesh").u64(i as u64).finish();
+                    out.regions.push(Region {
+                        color: c,
+                        shapes: Vec::new(),
+                        meshes: vec![mp.clone()],
+                        volume: v,
+                        key: rkey,
+                    });
+                }
+            }
+        }
         let cost =
             256 + out.regions.iter().flat_map(|r| &r.shapes).map(|s| 64 + self.kernel.shape_bytes(s)).sum::<usize>();
         let rc = Rc::new(out);
@@ -602,7 +656,7 @@ where
             out.total = volume;
             if volume.abs() > (volume.abs() * EMPTY_REL).max(EMPTY_ABS) {
                 let rkey = KeyHasher::new().key(&key).u64(0).finish();
-                out.regions.push(Region { color: rest, shapes: solids, volume, key: rkey });
+                out.regions.push(Region { color: rest, shapes: solids, meshes: Vec::new(), volume, key: rkey });
             }
             return Ok(out);
         }
@@ -696,7 +750,7 @@ where
                 (u, v)
             };
             let rkey = KeyHasher::new().key(&key).u64(i as u64).finish();
-            out.regions.push(Region { color: c, shapes: vec![shape], volume, key: rkey });
+            out.regions.push(Region { color: c, shapes: vec![shape], meshes: Vec::new(), volume, key: rkey });
         }
         let sum: f64 = out.regions.iter().map(|r| r.volume).sum();
         if (sum - total).abs() > 1e-4 * total.abs() + 1e-3 {
@@ -720,7 +774,7 @@ where
         mut out: ColorRegions<K::Shape>,
     ) -> Result<ColorRegions<K::Shape>, String> {
         type Bounds = (DVec3, DVec3);
-        let total = self.mass_props(ev, node)?.volume;
+        let total = self.brep_volume(ev, node)?;
         out.total = total;
         let k = &mut self.kernel;
         let fail = |what: &str, e: cad_kernel::KernelError| format!("Farbregionen: {what} gescheitert: {e}");
@@ -786,7 +840,13 @@ where
                 continue;
             }
             let rkey = KeyHasher::new().key(&key).u64(out.regions.len() as u64).finish();
-            out.regions.push(Region { color: RegionColor::Color(ck), shapes: kept, volume, key: rkey });
+            out.regions.push(Region {
+                color: RegionColor::Color(ck),
+                shapes: kept,
+                meshes: Vec::new(),
+                volume,
+                key: rkey,
+            });
         }
         let sum: f64 = out.regions.iter().map(|r| r.volume).sum();
         if (sum - total).abs() > 1e-4 * total.abs() + 1e-3 {
@@ -818,6 +878,15 @@ where
             (None, Some(&(_, k))) => RegionColor::Color(k),
             (None, None) => RegionColor::Default,
         };
+        let n = ev.parts(node).len();
+        if part >= n {
+            // a mesh: one colour (the colour of the latest colour node it comes from)
+            let mp = ev.meshes(node).get(part - n).ok_or("kein solcher Teil")?;
+            let placed: Vec<(NodeIdx, ColorKey, DMat4)> =
+                inner.iter().filter_map(|&(c, k)| placement(ev, node, c).map(|m| (c, k, m))).collect();
+            let c = mesh_colors(ev, node, rest, &placed)[part - n];
+            return Ok(vec![c; mp.mesh.face_count()]);
+        }
         let shape = ev.parts(node).get(part).ok_or("kein solcher Teil")?.shape.clone();
         let fail = |what: &str, e: cad_kernel::KernelError| format!("Flächenfarben: {what} gescheitert: {e}");
         let faces = self.kernel.faces(&shape, 3).map_err(|e| fail("Flächen", e))?;
@@ -862,6 +931,12 @@ where
         Ok(out)
     }
 
+    /// Volume of the B-rep parts of a node (its volume without the meshes).
+    fn brep_volume(&mut self, ev: &Evaluation<K::Shape>, node: NodeIdx) -> Result<f64, String> {
+        let meshes: f64 = ev.meshes(node).iter().map(|m| m.mesh.mass_props(&m.place).volume).sum();
+        Ok(self.mass_props(ev, node)?.volume - meshes)
+    }
+
     /// Mesh of region `i` (node system), cached per region key and tolerance.
     pub fn region_mesh(&mut self, regions: &ColorRegions<K::Shape>, i: usize, tol: f64) -> Result<Rc<Mesh>, String> {
         let r = regions.regions.get(i).ok_or("keine solche Farbregion")?;
@@ -873,6 +948,9 @@ where
         for s in &r.shapes {
             let m = self.kernel.tessellate(s, tol).map_err(|e| e.to_string())?;
             append_offset(&mut mesh, &m);
+        }
+        for m in &r.meshes {
+            append_offset(&mut mesh, &m.display());
         }
         let cost = mesh_bytes(&mesh);
         let mesh = Rc::new(mesh);

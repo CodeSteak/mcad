@@ -73,8 +73,8 @@ fn import_relative_to_the_file_and_errors() {
     let (_, out) = run("n = \"lo\"; import(str(n, \"go.sv\", \"g\"));", &[("logo.svg", LOGO)]);
     assert!(msgs(&out, Severity::Error).iter().any(|m| m.contains("nicht geladen")), "{:?}", out.diagnostics);
     // other formats
-    let (_, out) = run("import(\"teil.stl\");", &[]);
-    assert!(msgs(&out, Severity::Error).iter().any(|m| m.contains("nur SVG")));
+    let (_, out) = run("import(\"teil.dxf\");", &[]);
+    assert!(msgs(&out, Severity::Error).iter().any(|m| m.contains("nur SVG und STL")));
     // broken SVG and unknown id
     let (_, out) = run("import(\"x.svg\");", &[("x.svg", "<svg")]);
     assert!(msgs(&out, Severity::Error).iter().any(|m| m.contains("x.svg: SVG nicht lesbar")));

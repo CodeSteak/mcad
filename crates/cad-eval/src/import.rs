@@ -222,7 +222,7 @@ impl<'a> Ev<'a> {
     }
 
     /// The data file `rel` named at `span`, or an error there.
-    fn asset_data(&mut self, span: Span, rel: &str) -> Option<(String, Arc<[u8]>)> {
+    pub(crate) fn asset_data(&mut self, span: Span, rel: &str) -> Option<(String, Arc<[u8]>)> {
         match self.proj.asset(span, rel) {
             Some((path, a)) => match &a.0 {
                 Ok(b) => Some((path, b.clone())),
@@ -244,13 +244,14 @@ impl<'a> Ev<'a> {
         }
     }
 
-    /// `import(file, id, scale, dpi, center)`: SVG files as 2D profiles.
+    /// `import(file, id, scale, dpi, center)`: SVG files as 2D profiles; STL files as meshes
+    /// or B-reps (`import_stl.rs`, also `as`).
     #[inline(never)]
     pub(crate) fn m_import(&mut self, s: &'a Stmt, a: &Args<'a>, ctx: &Ctx<'a>, dy: &Dyn<'a>) {
         let p = self.bind(
             "import",
             a,
-            &["file", "id", "scale", "dpi", "center", "convexity", "layer", "origin", "width", "height"],
+            &["file", "id", "scale", "dpi", "center", "convexity", "layer", "origin", "width", "height", "as"],
             1,
         );
         let Some(file) = self.str_arg(p[0], "file") else {
@@ -263,10 +264,17 @@ impl<'a> Ev<'a> {
                 self.warn(x.expr.span, format!("import: `{n}` gilt nur für DXF und wird ignoriert"));
             }
         }
+        if file.to_ascii_lowercase().ends_with(".stl") {
+            self.import_stl(s, &p, fspan, &file, ctx, dy);
+            return;
+        }
         if !file.to_ascii_lowercase().ends_with(".svg") {
             let ext = file.rsplit('.').next().unwrap_or("");
-            self.error(fspan, format!("import: nur SVG wird unterstützt (nicht `.{ext}`)"));
+            self.error(fspan, format!("import: nur SVG und STL werden unterstützt (nicht `.{ext}`)"));
             return;
+        }
+        if let Some(x) = p[10] {
+            self.warn(x.expr.span, "import: `as` gilt nur für STL und wird ignoriert");
         }
         let Some((path, data)) = self.asset_data(fspan, &file) else { return };
         let opts = cad_svg::Options {

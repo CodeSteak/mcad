@@ -497,6 +497,29 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
+        file: "stl_import.scad",
+        grids: &[],
+        instances: &[],
+        handles: 4,
+        ops: &[("mesh", 2), ("difference", 1), ("cylinder", 1), ("mirror", 1)],
+        check: |out| {
+            // the same file twice: automatically a B-rep, then `as = "mesh"`
+            let modes: Vec<cad_ir::MeshMode> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match &n.op {
+                    Op::Prim { prim: cad_ir::Prim::Mesh { mesh, mode }, .. } => {
+                        assert_eq!((mesh.mesh.triangle_count(), mesh.mesh.face_count()), (20, 8));
+                        Some(*mode)
+                    }
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(modes, [cad_ir::MeshMode::AutoSolid, cad_ir::MeshMode::Mesh]);
+        },
+    },
+    Expect {
         file: "svg_logo.scad",
         grids: &[],
         instances: &[],

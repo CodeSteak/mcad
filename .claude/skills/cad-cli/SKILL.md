@@ -530,5 +530,15 @@ linear_extrude(2) import("logo.svg", center = true);             // auch id = "�
   kostet Sekunden (28 Glyphen ≈ 9 s) – Text als eigenes Teil oder weniger Zeichen, beim
   Ausprobieren `--no-kernel`.
 
+**STL-Import** (Plan 21 B, `cad usage import-stl`): `import("teil.stl", center, scale, as)`.
+Geschlossenes Netz mit ≤ 500 Flächen (nach Zusammenfassen koplanarer Dreiecke) → B-Rep
+(Booleans, Verrundung, exaktes Messen, STEP); größer, offen oder nicht mannigfaltig → reines
+**Netz** (Anzeige, Transformationen, Farben, Bauteile, `hull` bis 2000 Ecken, Export STL/3MF,
+STEP facettiert, `measure` Hülle/Volumen/Schnitt/`--clearance`/`--interference` netzbasiert;
+Booleans und Verrundungen melden einen Fehler mit Hinweis `as = "solid"`). Hinweis am Knoten
+(`cad inspect --line N`): „B-Rep: 6 Flächen aus 12 Dreiecken“ bzw. „Netz: 20000 Dreiecke, …“.
+`as = "solid"` erzwingt das B-Rep (langsam: 900 Flächen + ein Boolean ≈ 4 s), `as = "mesh"` das
+Netz. Beispiel: `examples/spec/stl_import.scad`.
+
 **Profile:** 2D-Formen (`square`, `rect`, `circle`, `polygon`, `spline`) in `linear_extrude`,
 `rotate_extrude`, `loft`, `sweep`; Freiformflächen mit `surface(points)` + `thicken(t)`.

@@ -5,7 +5,7 @@
 
 | Variant | Result |
 | --- | --- |
-| `-o part.step [--schema ap214]` | exact B-rep, AP242 default, face colours from colour regions |
+| `-o part.step [--schema ap214]` | exact B-rep, AP242 default, face colours from colour regions; STL meshes facetted (one plane per face) |
 | `-o part.stl` | binary STL |
 | `-o part.3mf` | multicolour: one object per part (material outside parts: object "ohne Bauteil"), one sub-part per colour with filament slot; Bambu Studio/OrcaSlicer take the slots without a colour dialog |
 | `-o part.3mf --single-color` | one plain mesh |

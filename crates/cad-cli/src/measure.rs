@@ -80,7 +80,8 @@ pub(crate) struct MeasureArgs {
     /// B-rep, with --section `region@P`: one region of the section.
     #[arg(long, num_args = 0..=1, default_missing_value = "all", value_name = "TARGET")]
     pub area: Option<String>,
-    /// Collisions: pairwise intersection volume of all parts (exact, via the kernel).
+    /// Collisions: pairwise intersection volume of all parts (exact, via the kernel; parts with
+    /// an imported mesh: mesh-based overlap test without volume).
     #[arg(long)]
     pub interference: bool,
     /// Report collisions from this intersection volume on (mm³).
@@ -89,7 +90,7 @@ pub(crate) struct MeasureArgs {
     /// Smallest distance of two parts (over the tessellation, the accuracy is reported).
     #[arg(long, num_args = 2, value_names = ["A", "B"])]
     pub clearance: Vec<String>,
-    /// Chord tolerance of the tessellation for --clearance in mm.
+    /// Chord tolerance of the tessellation for --clearance (and mesh-based --interference) in mm.
     #[arg(long, default_value_t = 0.01)]
     pub mesh_tol: f64,
     /// Colour regions: volume and mass (PLA) per colour and filament, per part.
@@ -222,6 +223,26 @@ fn intersection_volume(m: &mut Model, a: u32, b: u32) -> Result<f64, String> {
             Ok(v)
         })
         .unwrap_or_else(|| Err("keine Auswertung".into()))
+}
+
+/// Does the result of a node hold a mesh without B-rep (`import("x.stl")` as a mesh)?
+fn has_mesh(m: &mut Model, n: u32) -> bool {
+    m.session.with_kernel(|_, ev| !ev.meshes(n).is_empty()).unwrap_or(false)
+}
+
+/// Collision of two nodes: the exact intersection volume of their B-reps (kernel), or, if one
+/// holds a mesh without B-rep, the mesh test on tessellations with chord tolerance `tol`
+/// (overlap yes or no, volume unknown: `Err(overlap)`).
+fn collision(m: &mut Model, sc: &p::Scene, a: u32, b: u32, tol: f64) -> Result<Result<f64, bool>, Fail> {
+    if !has_mesh(m, a) && !has_mesh(m, b) {
+        return intersection_volume(m, a, b).map(Ok).map_err(Fail::Kernel);
+    }
+    let mut tris = |n: u32| -> Result<Vec<cad_measure::dist::Tri>, Fail> {
+        let mesh = m.session.mesh_tol(n, tol).map_err(Fail::Kernel)?;
+        Ok(cad_measure::dist::triangles(&mesh, &mat(&sc.nodes[n as usize].display_world)))
+    };
+    let (ta, tb) = (tris(a)?, tris(b)?);
+    Ok(Err(cad_measure::dist::solids_overlap(&ta, &tb)))
 }
 
 fn overlap(a: &p::Bounds, b: &p::Bounds, eps: f64) -> bool {
@@ -626,13 +647,29 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
                     continue;
                 }
                 checked += 1;
-                let v = intersection_volume(&mut m, pa.node, pb.node).map_err(Fail::Kernel)?;
-                let hit = v > a.tolerance;
-                pairs
-                    .push(json!({ "a": pa.name, "b": pb.name, "bounds_overlap": true, "volume": v, "collision": hit }));
-                if hit {
-                    collisions.push(json!({ "a": pa.name, "b": pb.name, "volume": v }));
-                    t.push_str(&format!("Kollision {} ↔ {}: {} mm³\n", pa.name, pb.name, num(v)));
+                match collision(&mut m, &sc, pa.node, pb.node, a.mesh_tol.max(1e-4))? {
+                    Ok(v) => {
+                        let hit = v > a.tolerance;
+                        pairs.push(
+                            json!({ "a": pa.name, "b": pb.name, "bounds_overlap": true, "volume": v, "collision": hit }),
+                        );
+                        if hit {
+                            collisions.push(json!({ "a": pa.name, "b": pb.name, "volume": v }));
+                            t.push_str(&format!("Kollision {} ↔ {}: {} mm³\n", pa.name, pb.name, num(v)));
+                        }
+                    }
+                    // a mesh without B-rep: overlap yes/no, no volume
+                    Err(hit) => {
+                        pairs.push(json!({ "a": pa.name, "b": pb.name, "bounds_overlap": true, "volume": null,
+                            "collision": hit, "method": "mesh" }));
+                        if hit {
+                            collisions.push(json!({ "a": pa.name, "b": pb.name, "volume": null, "method": "mesh" }));
+                            t.push_str(&format!(
+                                "Kollision {} ↔ {}: Netze überschneiden sich (netzbasiert, Volumen unbekannt)\n",
+                                pa.name, pb.name
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -661,8 +698,10 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
         let (ta, tb) = (tris(&mut m, na)?, tris(&mut m, nb)?);
         let d =
             cad_measure::dist::min_distance(&ta, &tb).ok_or_else(|| Fail::Usage("Bauteil ohne Geometrie".into()))?;
-        let inter = intersection_volume(&mut m, na, nb).map_err(Fail::Kernel)?;
-        let collide = inter > a.tolerance;
+        let (inter, collide) = match collision(&mut m, &sc, na, nb, tol)? {
+            Ok(v) => (Some(v), v > a.tolerance),
+            Err(hit) => (None, hit),
+        };
         let dist = if collide { 0.0 } else { d.dist };
         j["clearance"] = json!({
             "a": a.clearance[0], "b": a.clearance[1],
@@ -673,11 +712,10 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
             "method": "minimum triangle–triangle distance of both tessellations",
         });
         if collide {
+            let how = inter.map_or_else(|| "netzbasiert".to_string(), |v| format!("{} mm³", num(v)));
             t.push_str(&format!(
-                "Abstand {} ↔ {}: 0 mm – die Bauteile überschneiden sich ({} mm³)\n",
-                a.clearance[0],
-                a.clearance[1],
-                num(inter)
+                "Abstand {} ↔ {}: 0 mm – die Bauteile überschneiden sich ({how})\n",
+                a.clearance[0], a.clearance[1],
             ));
         } else {
             t.push_str(&format!(

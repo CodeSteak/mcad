@@ -31,6 +31,10 @@ use glam::{DAffine2, DMat4, DVec2, DVec3, DVec4};
 use crate::op2d;
 use crate::profile::{self, Expr2};
 
+/// `hull()` of an imported mesh takes at most this many vertices (the hull of n points on a
+/// sphere has about 2n faces; 2000 points: ~1.5 s in the kernel).
+pub(crate) const MAX_MESH_HULL_POINTS: usize = 2000;
+
 /// A right prism: `section` in the xy-plane of the rigid `frame`, from `z0` to `z0 + h` along
 /// the frame's z-axis.
 #[derive(Debug, Clone)]
@@ -202,6 +206,17 @@ pub(crate) fn bodies(tree: &Tree, n: NodeIdx, m: DMat4, out: &mut Vec<Body>) -> 
                 }
                 Prim::Polyhedron { points, .. } => {
                     let pts = points.iter().map(|p| m2.transform_point3(*p)).collect();
+                    out.push(Body::Planar { pts, prisms: Vec::new(), convex: false });
+                }
+                // an imported mesh (B-rep or not): its vertices
+                Prim::Mesh { mesh, .. } if mesh.mesh.points.len() > MAX_MESH_HULL_POINTS => {
+                    return Err(format!(
+                        "Netz mit {} Ecken (höchstens {MAX_MESH_HULL_POINTS}: die Hülle würde zu viele Flächen haben)",
+                        mesh.mesh.points.len()
+                    ));
+                }
+                Prim::Mesh { mesh, .. } => {
+                    let pts = mesh.mesh.points.iter().map(|p| m2.transform_point3(*p)).collect();
                     out.push(Body::Planar { pts, prisms: Vec::new(), convex: false });
                 }
                 Prim::Sphere { r } => {
@@ -398,7 +413,11 @@ pub(crate) fn hull_plan(bodies: &[Body]) -> Result<Plan, String> {
             .iter()
             .flat_map(|b| if let Body::Planar { pts, .. } = b { pts.clone() } else { Vec::new() })
             .collect();
-        return hull3(&pts, tol).map(Plan::Polyhedron).map_err(|_| "die Kinder haben kein Volumen".into());
+        return match hull3(&pts, tol) {
+            Ok(h) if h.is_closed() => Ok(Plan::Polyhedron(h)),
+            Ok(_) => Err("Hülle numerisch nicht geschlossen (fast koplanare Punkte)".into()),
+            Err(_) => Err("die Kinder haben kein Volumen".into()),
+        };
     }
     if let Some(p) = axis_plan(bodies, size, tol) {
         return Ok(p);

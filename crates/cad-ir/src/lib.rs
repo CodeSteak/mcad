@@ -229,11 +229,78 @@ pub enum Select {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Prim {
-    Box { min: DVec3, max: DVec3 },
-    Sphere { r: f64 },
-    Cylinder { h: f64, r1: f64, r2: f64 },
-    Torus { big_r: f64, r: f64 },
-    Polyhedron { points: Vec<DVec3>, faces: Vec<Vec<u32>> },
+    Box {
+        min: DVec3,
+        max: DVec3,
+    },
+    Sphere {
+        r: f64,
+    },
+    Cylinder {
+        h: f64,
+        r1: f64,
+        r2: f64,
+    },
+    Torus {
+        big_r: f64,
+        r: f64,
+    },
+    Polyhedron {
+        points: Vec<DVec3>,
+        faces: Vec<Vec<u32>>,
+    },
+    /// Imported triangle mesh (`import("x.stl")`): with `mode` [`MeshMode::Mesh`] a body
+    /// without B-rep, otherwise a polyhedron of its planar faces (a mesh again if the kernel
+    /// fails).
+    Mesh {
+        mesh: MeshRef,
+        mode: MeshMode,
+    },
+}
+
+/// How an imported mesh enters the model (`import(…, as = "solid" | "mesh")`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum MeshMode {
+    /// B-rep, chosen automatically (closed, at most `cad_stl::AUTO_SOLID_FACES` faces).
+    AutoSolid,
+    /// B-rep, `as = "solid"`.
+    Solid,
+    /// Mesh without B-rep (`as = "mesh"` or automatically).
+    Mesh,
+}
+
+/// Shared mesh data of an import with the hash that stands for it: equality, `Debug` and
+/// serialisation (the engine's cache keys) use only the hash of the file content and the
+/// import options. Not deserialisable.
+#[derive(Clone)]
+pub struct MeshRef {
+    pub hash: [u8; 32],
+    pub mesh: std::sync::Arc<cad_kernel::trimesh::TriMesh>,
+}
+
+impl PartialEq for MeshRef {
+    fn eq(&self, o: &Self) -> bool {
+        self.hash == o.hash
+    }
+}
+
+impl std::fmt::Debug for MeshRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let h: String = self.hash[..6].iter().map(|b| format!("{b:02x}")).collect();
+        write!(f, "MeshRef({h}…, {} Dreiecke, {} Flächen)", self.mesh.triangle_count(), self.mesh.face_count())
+    }
+}
+
+impl Serialize for MeshRef {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_bytes(&self.hash)
+    }
+}
+
+impl<'de> Deserialize<'de> for MeshRef {
+    fn deserialize<D: serde::Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
+        Err(serde::de::Error::custom("imported meshes cannot be deserialised"))
+    }
 }
 
 /// 2D shapes in the xy-plane of the node's local system.
@@ -379,6 +446,7 @@ impl Op {
                 Prim::Cylinder { .. } => "cylinder".into(),
                 Prim::Torus { .. } => "torus".into(),
                 Prim::Polyhedron { .. } => "polyhedron".into(),
+                Prim::Mesh { .. } => "mesh".into(),
             },
             Op::Profile(p) => match p {
                 Profile::Rect { .. } => "rect".into(),

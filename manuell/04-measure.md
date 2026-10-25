@@ -7,8 +7,8 @@
 | `--between A B` | distance + delta of two points |
 | `--bounds/--volume/--area [TARGET]` | bounds, volume mm³, area mm² (default `all`) |
 | `--colors` | volume and PLA mass per colour/filament slot and part |
-| `--interference [--tolerance 0.001]` | pairwise intersection volume of all parts (mm³) |
-| `--clearance A B [--mesh-tol 0.01]` | smallest gap of two parts (mesh-based, ± 2·mesh-tol; 0 + `collision` if overlapping) |
+| `--interference [--tolerance 0.001]` | pairwise intersection volume of all parts (mm³); a part with an STL mesh: mesh test, `volume: null`, `method: "mesh"` |
+| `--clearance A B [--mesh-tol 0.01]` | smallest gap of two parts (mesh-based, ± 2·mesh-tol; 0 + `collision` if overlapping; with an STL mesh `intersection_volume: null`) |
 | `--distance A B` | smallest distance with foot points; parallel planes: normal distance; parallel axes: axis distance |
 | `--radius REF` | radius, diameter, centre, axis of a circular edge or round face (cylinder, cone, sphere, torus, fillet) |
 | `--angle A B` | angle of edges/faces; planes 0–90° plus `opening` angle |

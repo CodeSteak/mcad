@@ -132,7 +132,8 @@ where
                 return Err("2D-Ergebnis kann nicht als Körper exportiert werden".into());
             }
             let world = r.display_world;
-            for i in 0..ev.parts(n).len() {
+            // B-rep parts, then meshes as facetted B-reps
+            for i in 0..ev.parts(n).len() + ev.meshes(n).len() {
                 let b = self.placed_brep(ev, n, i, &world)?;
                 if !own {
                     breps.push(b);

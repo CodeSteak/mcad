@@ -257,9 +257,103 @@ pub fn min_distance(a: &[Tri], b: &[Tri]) -> Option<Distance> {
     Some(best)
 }
 
+/// Segment pq crosses the interior of triangle t: ends, the triangle's boundary and segments in
+/// (or nearly in) the triangle's plane excluded by a relative margin, so touching never counts.
+fn seg_crosses_tri(p: DVec3, q: DVec3, t: &Tri) -> bool {
+    const E: f64 = 1e-9;
+    let d = q - p;
+    let (e1, e2) = (t[1] - t[0], t[2] - t[0]);
+    let h = d.cross(e2);
+    let a = e1.dot(h);
+    if a.abs() <= E * d.length() * e1.length() * e2.length() {
+        return false;
+    }
+    let f = 1.0 / a;
+    let s = p - t[0];
+    let u = f * s.dot(h);
+    let qv = s.cross(e1);
+    let v = f * d.dot(qv);
+    let w = f * e2.dot(qv);
+    u > E && v > E && u + v < 1.0 - E && w > E && w < 1.0 - E
+}
+
+/// Do the surfaces of two triangle sets cross (penetrate each other, not only touch)?
+pub fn surfaces_cross(a: &[Tri], b: &[Tri]) -> bool {
+    if a.is_empty() || b.is_empty() {
+        return false;
+    }
+    let boxes: Vec<Aabb> = b.iter().map(Aabb::of).collect();
+    let tree = build(b, &boxes, (0..b.len()).collect());
+    for ta in a {
+        let ba = Aabb::of(ta);
+        let mut stack = vec![&tree];
+        while let Some(n) = stack.pop() {
+            if n.bb().dist(&ba) > 0.0 {
+                continue;
+            }
+            match n {
+                Node::Leaf { tris, .. } => {
+                    for &j in tris {
+                        let tb = &b[j];
+                        let hit = (0..3).any(|k| seg_crosses_tri(ta[k], ta[(k + 1) % 3], tb))
+                            || (0..3).any(|k| seg_crosses_tri(tb[k], tb[(k + 1) % 3], ta));
+                        if hit {
+                            return true;
+                        }
+                    }
+                }
+                Node::Inner { a: l, b: r, .. } => {
+                    stack.push(l);
+                    stack.push(r);
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Is `p` inside the closed surface `tris` (ray parity)?
+pub fn inside(p: DVec3, tris: &[Tri]) -> bool {
+    cad_kernel::trimesh::ray_parity(p, tris.iter().copied())
+}
+
+/// Do two closed triangle sets share volume: their surfaces cross, or one lies inside the
+/// other (majority of three triangle centroids, a touching face can be ambiguous)? Touching
+/// solids do not overlap. Mesh-based: exact for the meshes, for tessellated B-reps up to the
+/// chordal tolerance.
+pub fn solids_overlap(a: &[Tri], b: &[Tri]) -> bool {
+    if a.is_empty() || b.is_empty() {
+        return false;
+    }
+    if surfaces_cross(a, b) {
+        return true;
+    }
+    let within = |x: &[Tri], y: &[Tri]| {
+        let probes = [0, x.len() / 2, x.len() - 1];
+        probes.iter().filter(|&&i| inside((x[i][0] + x[i][1] + x[i][2]) / 3.0, y)).count() >= 2
+    };
+    within(a, b) || within(b, a)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn overlap_of_cubes() {
+        let a = cube(DVec3::ZERO, 10.0);
+        // touching face to face: no overlap
+        assert!(!solids_overlap(&a, &cube(DVec3::new(10.0, 0.0, 0.0), 10.0)));
+        assert!(!solids_overlap(&a, &cube(DVec3::new(10.0, 2.0, 3.0), 4.0)));
+        // apart
+        assert!(!solids_overlap(&a, &cube(DVec3::new(11.0, 0.0, 0.0), 10.0)));
+        // penetrating
+        assert!(solids_overlap(&a, &cube(DVec3::new(9.0, 2.0, 2.0), 4.0)));
+        // contained, both ways
+        assert!(solids_overlap(&a, &cube(DVec3::splat(3.0), 2.0)));
+        assert!(solids_overlap(&cube(DVec3::splat(3.0), 2.0), &a));
+        assert!(inside(DVec3::splat(5.0), &a) && !inside(DVec3::splat(15.0), &a));
+    }
 
     fn cube(o: DVec3, s: f64) -> Vec<Tri> {
         let c = |i: u32| o + DVec3::new((i & 1) as f64, ((i >> 1) & 1) as f64, ((i >> 2) & 1) as f64) * s;

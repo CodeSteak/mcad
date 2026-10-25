@@ -17,6 +17,7 @@ mod expr;
 mod grid;
 mod handles;
 mod import;
+mod import_stl;
 mod law;
 pub mod math;
 mod ns;

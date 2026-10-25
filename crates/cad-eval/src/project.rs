@@ -43,7 +43,7 @@ pub trait FileResolver {
 pub const MAX_ASSET_LEN: usize = 32 << 20;
 
 /// Extensions of data files the loader reads when their names appear as text in the project.
-pub const ASSET_EXTENSIONS: &[&str] = &[".svg", ".ttf", ".otf", ".ttc", ".otc"];
+pub const ASSET_EXTENSIONS: &[&str] = &[".svg", ".stl", ".ttf", ".otf", ".ttc", ".otc"];
 
 /// `data:[mime];base64,…` → bytes (`None` if `t` is no base64 data URL).
 pub fn decode_data_url(t: &str) -> Option<Result<Vec<u8>, String>> {

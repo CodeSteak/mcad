@@ -24,6 +24,15 @@
 | "minkowski: exakt nur Körper + Kugel(n), zwei parallele Prismen … oder zwei konvexe ebene Körper" | other combination (three bodies, a cylinder not parallel to the extrusion, non-convex polyhedra) |
 | "minkowski: Offset r: offset is not exact: trim curves … off their edges" | the body has corners whose faces do not meet at right angles; SMLib's rounding there is approximate, so nothing is built |
 | "minkowski: zwei Profile nur exakt, wenn beide konvex sind" | 2D: use one profile + `circle(r)` (any profile) or two convex ones |
+| "x.stl: Zeile N: …", "Binär-STL abgeschnitten", "keine STL-Datei" | broken file (truncated download, wrong format); re-export it |
+| "x.stl: 0 Dreiecke in der Datei" / "nur entartete Dreiecke" | empty or collapsed mesh (e.g. wrong unit: `scale`) |
+| "x.stl: Orientierung korrigiert: Netz war innen nach außen …" | inverted file; corrected, nothing to do (fix the exporter if you can) |
+| "x.stl: Netz nicht geschlossen (n offene Kanten): als Netz ohne B-Rep importiert" | holes in the mesh: repair it (e.g. in the slicer/mesh tool) for Booleans; display, export and measuring work |
+| "x.stl: Netz nicht mannigfaltig (n Kanten mit mehr als zwei Dreiecken) …" | touching or self-intersecting shells; repair the mesh |
+| "x.stl: as = \"solid\" geht nicht, das Netz ist …" | an open/non-manifold mesh cannot be a B-rep; imported as a mesh |
+| "union: ein Netz wird nicht vereinigt …", "difference: ein Netz kann nicht beschnitten/abgezogen werden …", "intersection: mit einem Netz nicht möglich …", "fillet: ein Netz kann nicht bearbeitet werden …" | the STL is a mesh (more than 500 faces or `as = "mesh"`): `import(…, as = "solid")` (slow above ~500 faces: `cad usage import-stl`) |
+| "B-Rep aus dem Netz gescheitert (…): als Netz weiter" | the kernel refused the polyhedron; the mesh is shown instead |
+| "hull: Netz mit n Ecken (höchstens 2000 …)" | `hull()` of a large mesh; use a coarser STL |
 
 Glossary of the German text output:
 
@@ -49,3 +58,8 @@ Glossary of the German text output:
 | exakt: Polyeder / Rotationskörper / Prisma / Offset | exact: polyhedron / solid of revolution / prism / offset (special case taken) |
 | Hülle der Mittelpunkte | hull of the centres |
 | verzerrt, ebene / runde Körper | distorted, planar / round bodies |
+| Netz, Dreiecke, verschweißt | mesh, triangles, welded |
+| offene Kanten, nicht geschlossen, nicht mannigfaltig, entartet | open edges, not closed, non-manifold, degenerate |
+| Orientierung korrigiert, gewendet, innen nach außen | orientation corrected, flipped, inside out |
+| B-Rep aus dem Netz, als Netz weiter | B-rep from the mesh, continuing as a mesh |
+| netzbasiert, Netze überschneiden sich | mesh-based, meshes overlap |

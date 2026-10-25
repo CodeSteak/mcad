@@ -48,3 +48,4 @@ cad-step.workspace = true
 assert_cmd = "2"
 png = "0.17"
 tempfile = "3"
+cad-stl = { path = "../cad-stl" }

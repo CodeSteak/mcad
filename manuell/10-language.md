@@ -8,8 +8,8 @@ transforms, booleans, modifiers `# % ! *`, extrusions, `include`/`use`). Differe
 - `color()` defines print colours (`cad usage colors`).
 - `hull`, `minkowski`: exact special cases only (below); otherwise warning, children shown
   unchanged.
-- Not supported (warning, children shown unchanged): `projection`; `import` of meshes.
-  `polyhedron` only for small planar bodies; `resize` acts like `scale`.
+- Not supported (warning, children shown unchanged): `projection`. `polyhedron` only for
+  small planar bodies (`import("x.stl")`: `cad usage import-stl`); `resize` acts like `scale`.
 
 Additions:
 
@@ -25,6 +25,7 @@ Additions:
 | `fillet`, `chamfer`, `shell`, `zone`, `$fillet` | edge blends (`cad usage fillets`) |
 | `sketch { … }`, `corner`, `fillet2d`, `chamfer2d`, `offset`, `stroke` | exact 2D profiles (`cad usage sketch`) |
 | `text(…)`, `import("x.svg")` | `cad usage text-svg` |
+| `import("x.stl", as = "solid"\|"mesh")` | STL as B-rep or mesh (`cad usage import-stl`) |
 | `loft() { profiles… }` | skin through 2D profiles (`ruled = true` for straight) |
 | `sweep(path = pts, interp = "spline"\|"linear") profile;` | sweep a profile along a path (or an open `sketch` as first child) |
 | `surface(points = grid4x4…)` + `thicken(t)` | free-form surface and its solid |
@@ -40,7 +41,7 @@ result belong to the `hull`/`minkowski` statement.
 | `hull()` of | Result (hint) |
 | --- | --- |
 | 2D profiles of any kind (circles, polygons, sketches, text, booleans, offsets) | convex hull of lines and arcs of the inputs (B-splines as biarcs, 1 µm); collinear input: warning |
-| planar bodies: `cube`, `polyhedron`, `linear_extrude` of polygons without `twist` (any affine transform) | polyhedron of the vertices (`exakt: Polyeder (n Flächen)`) |
+| planar bodies: `cube`, `polyhedron`, imported STL (≤ 2000 vertices), `linear_extrude` of polygons without `twist` (any affine transform) | polyhedron of the vertices (`exakt: Polyeder (n Flächen)`) |
 | spheres, cylinders, cones on one common axis | revolved 2D hull of the half sections: capsule, cone between two spheres (`exakt: Rotationskörper`) |
 | prisms along one direction with the same start and height: cylinders, cubes, `linear_extrude` without `twist`/`scale` | extruded 2D hull of the sections: plate with round ends (`exakt: Prisma`) |
 | ≥ 3 equal spheres, centres not in one plane | hull of the centres offset by r: rounded box (`exakt: Hülle der Mittelpunkte + Offset r`) |
