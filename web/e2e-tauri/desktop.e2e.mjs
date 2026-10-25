@@ -12,6 +12,8 @@
 // `--only T16 --out reports/tmp/report18/tauri`). T17: measure mode (test report 19,
 // `--only T17 --out reports/tmp/report19/tauri`). T18: UI overhaul – bars at 1280/1440/1920 px in
 // both themes, menus, view cube, side panel (test report 20, `--out reports/tmp/report20/tauri`).
+// T19: collision asserts – keep-out volume, violation, framing, export question (Plan 21 C,
+// `--only T19 --out reports/tmp/report21/phase-c/tauri`).
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -876,6 +878,49 @@ async function main() {
     await waitFor("Farbliste", async () => (await exists("[data-testid=colors-panel] .cptable")) || null);
     e.images.push({ name: await shot("t18-oben-farben"), label: "Ansichtswürfel „Oben“, Reiter Farben" });
     await exec("window.__cad.setView('iso'); window.__cad.store.setState({ sideTab: 'parts' })");
+  });
+
+  await test("T19", "Asserts in Tauri: Sperrvolumen, Verletzung einrahmen, Export-Rückfrage (nativer Kernel)", async (check, e) => {
+    await ensureApp();
+    await exec("window.__cad.setThemePref('light')");
+    // the keep-out toggle is remembered: start with it on
+    if (!(await exec("return window.__cad.asserts().showKeepout"))) {
+      await exec("window.__cad.setText('cube(1);\\nassert_keepout() cube(1);\\n')");
+      await sceneReady();
+      await click("[data-testid=toggle-keepout]");
+    }
+    const BAD = "cube([40, 30, 3]);\ntranslate([0, 0, 3]) cube([12, 30, 6]);\nassert_keepout(clearance = 0.5) translate([10, 10, 2]) cube([10, 10, 5]);\n";
+    await exec("window.__cad.setText(arguments[0])", BAD);
+    await sceneReady();
+    const a = await waitFor("Assert-Ergebnisse", async () => {
+      const x = await exec("return window.__cad.asserts()");
+      return x && x.version !== null && x.version === x.completeVersion && x.view ? x : null;
+    });
+    const p = a.items[0].pairs[0];
+    check(p.problem === "overlap" && Math.abs(p.volume - 180) < 1e-6, `Schnittvolumen ${p.volume} mm³ (10·10·1 + 2·10·4 = 180)`);
+    check(a.view.keepout === 1, "Sperrvolumen gezeichnet");
+    check((a.view.drawn["assert-overlap"] ?? 0) >= 1, "Schnittkörper rot gezeichnet");
+    e.images.push({ name: await shot("t19-verletzung"), label: "Sperrvolumen mit Verletzung (Tauri, nativer Kernel)" });
+    await click("[data-testid=status-asserts]");
+    const f = await waitFor("Einrahmen", async () => (await exec("return window.__cad.asserts().focus")) || null);
+    check(f.pair === 0, "Verletzung fokussiert");
+    e.images.push({ name: await shot("t19-eingerahmt"), label: "Klick in der Statusleiste: Schnittkörper eingerahmt" });
+    await exec("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e', ctrlKey: true }))");
+    const c = await waitFor("Export-Rückfrage", async () => (await exec("return window.__cad.asserts().exportConfirm")) || null);
+    check(c.violations.length === 1 && c.violations[0].startsWith("Z.3 assert_keepout: "), `Rückfrage: ${c.violations[0]}`);
+    e.images.push({ name: await shot("t19-export-dialog"), label: "Export trotz Verletzung? (Trotzdem exportieren / Abbrechen)" });
+    await click("[data-testid=export-cancel]");
+    await waitFor("Dialog zu", async () => ((await exec("return window.__cad.asserts().exportConfirm")) === null ? true : null));
+    // (with the cursor on its statement the keep-out volume stays visible: move it away)
+    await exec("window.__cad.setCursorLine(1)");
+    await click("[data-testid=toggle-keepout]");
+    await waitFor("Sperrvolumen aus", async () => {
+      const x = await exec("return window.__cad.asserts()");
+      if (x.view.keepout === 0) return true;
+      throw new Error(`show ${x.showKeepout}, keepout ${x.view.keepout}`);
+    });
+    await click("[data-testid=toggle-keepout]");
+    e.details = { volume: p.volume, message: p.message, labels: a.view.labels };
   });
 
   await test("T14", "Thema „System“ in Tauri folgt dem GTK-Farbschema (prefers-color-scheme)", async (check, e) => {
