@@ -179,7 +179,7 @@ Meldung ab, was zu installieren ist.
 | `make install` | `mcad`, Desktop-Datei, App-Symbol (`assets/icon`: PNG 16–512 px, SVG), Lizenzen, Doku und Beispiele |
 | `make uninstall` | entfernt diese Dateien wieder |
 | `make dist` | Quelltext-Archiv von `HEAD` → `target/arch/mcad-<pkgver>.tar.gz` |
-| `make arch` / `make arch-test` | Arch-Paket bauen / in frischem Container installieren und prüfen |
+| `make arch-pkg` / `make arch-test` | Arch-Paket bauen / in frischem Container installieren und prüfen |
 | `make clean` / `make distclean` | Bauergebnisse / zusätzlich `node_modules`, SMLib-Bauordner |
 
 Variablen (Umgebung oder `make VAR=…`): `CARGO`, `PNPM`, `NODE`, `GIT`, `DOCKER`;
@@ -215,7 +215,7 @@ OFL-1.1) und Beispiele. Laufzeit: `webkit2gtk-4.1`, `gtk3`, `libsoup3`, `glib2`,
 `prepare()` an; `build()` ist `make app`, `package()` ist `make install DESTDIR=$pkgdir PREFIX=/usr`.
 
 ```sh
-make arch        # -> target/arch/mcad-<pkgver>-1-x86_64.pkg.tar.zst, namcap.txt
+make arch-pkg    # -> target/arch/mcad-<pkgver>-1-x86_64.pkg.tar.zst, namcap.txt
 make arch-test   # frischer archlinux-Container: pacman -U, CLI headless, UI unter Xvfb
 sudo pacman -U target/arch/mcad-*.pkg.tar.zst
 ```

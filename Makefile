@@ -4,7 +4,7 @@
 # web/scripts/build-wasm.sh); `make help` listet sie. Variablen lassen sich überschreiben:
 #   make app SMLIB_PREBUILT=/pfad/build-native
 #   make install PREFIX=/usr DESTDIR=/tmp/paket
-#   make arch ARCH_BUILD=docker
+#   make arch-pkg ARCH_BUILD=docker
 #
 # GNU Make, bash.
 
@@ -266,7 +266,7 @@ uninstall: ## Entfernt, was make install angelegt hat (gleiche PREFIX/DESTDIR; a
 	rm -rf "$(DESTDIR)$(LICENSEDIR)" "$(DESTDIR)$(DOCDIR)" "$(DESTDIR)$(DATADIR)/licenses/controller-cad" "$(DESTDIR)$(DATADIR)/doc/controller-cad"
 
 ##@ Paket
-.PHONY: dist arch arch-test arch-clean
+.PHONY: dist arch-pkg arch-test arch-clean
 dist: $(DIST) ## Quelltext-Archiv des Git-Stands HEAD -> target/arch/mcad-<pkgver>.tar.gz
 
 $(DIST):
@@ -276,12 +276,12 @@ $(DIST):
 	mkdir -p "$(ARCH_OUT)"
 	$(GIT) archive --format=tar.gz --prefix=mcad-$(PKGVER)/ -o "$@" HEAD
 
-arch: $(DIST) ## Arch-Paket bauen (makepkg auf Arch, sonst Docker) -> target/arch/*.pkg.tar.zst
+arch-pkg: $(DIST) ## Arch-Paket bauen (makepkg auf Arch, sonst Docker) -> target/arch/*.pkg.tar.zst
 	sed -e 's/^pkgver=.*/pkgver=$(PKGVER)/' \
 	    -e "s/^_srcsum=.*/_srcsum=$$(sha256sum "$(DIST)" | cut -d' ' -f1)/" \
 	    packaging/arch/PKGBUILD > "$(ARCH_OUT)/PKGBUILD"
 ifeq ($(ARCH_BUILD),native)
-	@$(call need,$(MAKEPKG),pacman/makepkg (Arch Linux) – sonst make arch ARCH_BUILD=docker)
+	@$(call need,$(MAKEPKG),pacman/makepkg (Arch Linux) – sonst make arch-pkg ARCH_BUILD=docker)
 	cd "$(ARCH_OUT)" && $(MAKEPKG) $(MAKEPKG_FLAGS)
 else ifeq ($(ARCH_BUILD),docker)
 	@$(call need,$(DOCKER),Docker installieren oder auf Arch mit makepkg bauen (ARCH_BUILD=native))
@@ -292,6 +292,7 @@ else
 	@echo "make: ARCH_BUILD=$(ARCH_BUILD) unbekannt (auto, native, docker)" >&2; exit 2
 endif
 	@ls -l "$(ARCH_OUT)"/mcad-$(PKGVER)-*.pkg.tar.zst
+	@echo "Installieren: sudo pacman -U $$(ls -t "$(ARCH_OUT)"/mcad-$(PKGVER)-*.pkg.tar.zst | head -1)"
 
 arch-test: ## Paket in frischem archlinux-Container installieren und prüfen (CLI, xvfb-UI)
 	@$(call need,$(DOCKER),Docker installieren)

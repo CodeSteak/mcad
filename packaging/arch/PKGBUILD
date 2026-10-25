@@ -1,14 +1,14 @@
 # Arch-Paket mcad (Repository controller-cad; Paketname bis 0.2: controller-cad): `mcad` mit Desktop-UI (Tauri 2, WebKitGTK 4.1) und CLI.
 #
 # Gebaut wird über das Makefile im Repository-Wurzelverzeichnis:
-#   make arch          # makepkg auf Arch Linux, sonst in einem archlinux-Container (Docker)
+#   make arch-pkg      # makepkg auf Arch Linux, sonst in einem archlinux-Container (Docker)
 #   make arch-test     # Paket in frischem Container installieren und prüfen
-# `make arch` legt das Quelltext-Archiv (git archive HEAD) nach target/arch, kopiert diese
+# `make arch-pkg` legt das Quelltext-Archiv (git archive HEAD) nach target/arch, kopiert diese
 # Datei dorthin und setzt dabei pkgver (<Cargo-Version>.r<Commits>.g<Hash>) und _srcsum.
 # Direkt mit makepkg: erst `make dist`, dann pkgver/_srcsum wie oben setzen.
 #
 # SMLib (Apache-2.0) kommt als Git-Quelle (Fork tangency-labs/smlib, fester Commit wie in
-# smlib/fetch.sh) mit den Patches aus smlib/patches; anderer Ort: SMLIB_URL=… make arch.
+# smlib/fetch.sh) mit den Patches aus smlib/patches; anderer Ort: SMLIB_URL=… make arch-pkg.
 
 pkgname=mcad
 pkgver=0.3.0

@@ -14,7 +14,7 @@ __pycache__/
 /web/playwright-report
 /web/dist-tauri
 /crates/cad-app/gen
-# Arch-Paket: make arch baut in target/arch; makepkg direkt in packaging/arch legt das hier an
+# Arch-Paket: make arch-pkg baut in target/arch; makepkg direkt in packaging/arch legt das hier an
 /packaging/arch/src/
 /packaging/arch/pkg/
 /packaging/arch/smlib/

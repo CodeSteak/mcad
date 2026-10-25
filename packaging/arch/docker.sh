@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Arch-Paket in Docker bauen und prüfen (für `make arch` / `make arch-test` ohne Arch Linux).
+# Arch-Paket in Docker bauen und prüfen (für `make arch-pkg` / `make arch-test` ohne Arch Linux).
 #
-#   packaging/arch/docker.sh build OUT   # makepkg in OUT (PKGBUILD + Quelltext-Archiv von make arch)
+#   packaging/arch/docker.sh build OUT   # makepkg in OUT (PKGBUILD + Quelltext-Archiv von make arch-pkg)
 #   packaging/arch/docker.sh test OUT    # OUT/mcad-*.pkg.tar.zst in frischem Container
 #                                        # installieren, packaging/arch/smoke-test.sh ausführen
 #   packaging/arch/docker.sh clean       # Builder-Image und Cache-Volume entfernen
@@ -77,7 +77,7 @@ cmd="${1:-}"
 case "$cmd" in
   build)
     OUT="$(cd "${2:?Ausgabeordner fehlt}" && pwd)"
-    [ -f "$OUT/PKGBUILD" ] || { echo "$OUT/PKGBUILD fehlt (make arch)" >&2; exit 2; }
+    [ -f "$OUT/PKGBUILD" ] || { echo "$OUT/PKGBUILD fehlt (make arch-pkg)" >&2; exit 2; }
     builder_image
     vol=()
     [ -n "$CACHE" ] && vol=(-v "$CACHE:/home/builder/.cache")
@@ -104,7 +104,7 @@ case "$cmd" in
   test)
     OUT="$(cd "${2:?Ausgabeordner fehlt}" && pwd)"
     pkg="$(ls -t "$OUT"/mcad-*.pkg.tar.zst 2>/dev/null | head -n 1)"
-    [ -n "$pkg" ] || { echo "kein Paket in $OUT (make arch)" >&2; exit 2; }
+    [ -n "$pkg" ] || { echo "kein Paket in $OUT (make arch-pkg)" >&2; exit 2; }
     ROOT="$(cd "$HERE/../.." && pwd)"
     mkdir -p "$OUT/test"
     "$DOCKER" run "${common[@]}" -v "$OUT:/pkg" -v "$ROOT/examples:/examples:ro" \
