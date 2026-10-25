@@ -142,6 +142,11 @@ SC_API uint32_t sc_thicken(uint32_t h, double t, uint32_t tag);
 SC_API uint32_t sc_shell(uint32_t h, double t, const uint32_t* open_faces, uint32_t n,
                          uint32_t tag);
 
+/* Outward offset by d > 0 of a closed solid (since facade version 5). mode bit 0: extended
+ * offset (convex edges sharp), bit 1: self-intersection handling. Without bit 0 convex edges
+ * and corners are rounded with radius d (Minkowski sum with a ball). New faces get `tag`. */
+SC_API uint32_t sc_offset(uint32_t h, double d, int32_t mode, uint32_t tag);
+
 /* queries */
 /* edges: f64[0] = points (xyz), u32[0] = per edge: n_points, n_tags, flags (SC_EDGE_*), tags...
  * (flags since facade version 4) */

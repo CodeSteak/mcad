@@ -243,6 +243,7 @@ mod imp {
                 Loop::Spline(_) => Err(unsupported(&format!(
                     "{op}: spline profile (SmApiCreateCurveInterpPoints is outside solidcore's scope)"
                 ))),
+                Loop::Composite(_) => Err(unsupported(&format!("{op}: sketch profile (lines, arcs, B-splines)"))),
             }
         }
 
@@ -559,6 +560,10 @@ impl Kernel for SolidcoreKernel {
 
     fn shell(&mut self, _s: &Shape, _t: f64, _open: &[FaceId], _tag: Tag) -> KResult<Shape> {
         Err(unsupported("shell (SmApiShellBrepFull stops at SmBrep::SmBrep, unit topology.brep_p3, at c9de85d)"))
+    }
+
+    fn offset(&mut self, _s: &Shape, _d: f64, _tag: Tag) -> KResult<Shape> {
+        Err(unsupported("offset (not wired in kernel-solidcore)"))
     }
 
     fn edges(&mut self, s: &Shape, samples: u32) -> KResult<Vec<EdgeInfo>> {

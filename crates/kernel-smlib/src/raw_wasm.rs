@@ -68,6 +68,8 @@ extern "C" {
     fn js_thicken(h: u32, t: f64, tag: u32) -> u32;
     #[wasm_bindgen(js_name = sc_shell)]
     fn js_shell(h: u32, t: f64, open: &[u32], tag: u32) -> u32;
+    #[wasm_bindgen(js_name = sc_offset)]
+    fn js_offset(h: u32, d: f64, mode: i32, tag: u32) -> u32;
     #[wasm_bindgen(js_name = sc_edges)]
     fn js_edges(h: u32, samples: u32) -> i32;
     #[wasm_bindgen(js_name = sc_faces)]
@@ -185,6 +187,9 @@ pub fn thicken(h: u32, t: f64, tag: u32) -> u32 {
 }
 pub fn shell(h: u32, t: f64, open: &[u32], tag: u32) -> u32 {
     js_shell(h, t, open, tag)
+}
+pub fn offset(h: u32, d: f64, mode: i32, tag: u32) -> u32 {
+    js_offset(h, d, mode, tag)
 }
 pub fn edges(h: u32, samples: u32) -> i32 {
     js_edges(h, samples)

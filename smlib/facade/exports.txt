@@ -35,6 +35,7 @@ sc_sketch_sweep
 sc_nurbs_surface
 sc_thicken
 sc_shell
+sc_offset
 sc_edges
 sc_faces
 sc_classify

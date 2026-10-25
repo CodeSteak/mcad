@@ -270,6 +270,13 @@ pub trait Kernel {
     fn thicken(&mut self, s: &Self::Shape, t: f64, tag: Tag) -> KResult<Self::Shape>;
     /// Hollow solid with wall thickness `t` (inwards); `open` faces are removed.
     fn shell(&mut self, s: &Self::Shape, t: f64, open: &[FaceId], tag: Tag) -> KResult<Self::Shape>;
+    /// Outward offset of a closed solid by `d > 0`: the Minkowski sum with a ball of radius
+    /// `d` (convex edges and corners rounded with radius `d`, concave edges sharp). All faces
+    /// of the result get `tag`.
+    fn offset(&mut self, s: &Self::Shape, d: f64, tag: Tag) -> KResult<Self::Shape> {
+        let _ = (s, d, tag);
+        Err(KernelError::Unsupported("offset".into()))
+    }
 
     // ---- queries ----
     fn edges(&mut self, s: &Self::Shape, samples: u32) -> KResult<Vec<EdgeInfo>>;

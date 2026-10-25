@@ -57,7 +57,8 @@ namespace {
 const ULONG SC_TAG_ATTR_ID = SM_AI_USER_1 + 77;  // 10077
 // 4: sc_edges reports flags (SC_EDGE_SMOOTH), sc_law_stations / sc_fillet_var (variable
 //    radius), surfaces from 2 or 3 points per direction, shells from Booleans.
-const uint32_t SC_FACADE_VERSION = 4;
+// 5: sc_offset (outward offset, rounded).
+const uint32_t SC_FACADE_VERSION = 5;
 
 // ------------------------------------------------------------------ errors
 
@@ -3103,6 +3104,112 @@ uint32_t sc_thicken(uint32_t h, double t, uint32_t tag) {
     require_result(r, "thicken");
     BrepPtr b(r);
     check_valid(b.get(), "thicken");
+    resolve_tags(b.get(), {in}, tag, true);
+    _res = put(std::move(b));
+  })
+}
+
+// Largest deviation of the boundary of `o` from the distance `d` to the body `in`: every point
+// on the boundary of an outward offset (a Minkowski sum with a ball) lies at distance exactly d
+// from the body. Samples: 9 points per edge, the interior sample point of every face.
+double offset_deviation(const SmBrep* o, const SmBrep* in, double d) {
+  auto in_faces = faces_of(in);
+  auto dist = [&](V3 p) {
+    double best = 1e300;
+    for (SmFace* f : in_faces) best = std::min(best, face_distance(f, p));
+    return best;
+  };
+  double dev = 0;
+  for (SmEdge* e : edges_of(o)) {
+    SmCurve* c = e->GetCurve();
+    if (!c) continue;
+    SmExtent1d iv = e->GetInterval();
+    for (int k = 0; k <= 8; k++) {
+      SmPoint3d p;
+      if (c->EvaluatePoint(iv.GetMin() + (iv.GetMax() - iv.GetMin()) * k / 8.0, p) != SM_SUCCESS) continue;
+      dev = std::max(dev, std::fabs(dist(fromsm(p)) - d));
+    }
+  }
+  for (SmFace* f : faces_of(o)) {
+    V3 p, n;
+    if (face_sample(f, p, n)) dev = std::max(dev, std::fabs(dist(p) - d));
+  }
+  return dev;
+}
+
+// Largest gap between the faces' trim curves (UV curves mapped onto the surface) and the 3D
+// curves of their edges, 9 samples per edgeuse. The rounding faces at corners whose faces do
+// not meet at right angles get approximated trim curves: tessellation, area and volume then
+// follow those, not the exact edges.
+double trim_gap(const SmBrep* o) {
+  double gap = 0;
+  for (SmFace* f : faces_of(o)) {
+    SmSurface* srf = f->GetSurface();
+    SmFaceuse* fu = f->GetUpwardFaceuse();
+    if (!srf || !fu) continue;
+    SmTArray<SmLoopuse*> lus;
+    fu->GetLoopuses(lus);
+    for (ULONG i = 0; i < lus.GetSize(); i++) {
+      if (lus[i]->IsVertexLoopuse()) continue;
+      SmTArray<SmEdgeuse*> eus;
+      lus[i]->GetEdgeuses(eus);
+      for (ULONG k = 0; k < eus.GetSize(); k++) {
+        SmEdge* e = eus[k]->GetEdge();
+        SmBSplineCurve* uv = eus[k]->GetUVTrimCurve();
+        if (!e || !uv) continue;
+        SmExtent1d iv = uv->GetNaturalInterval();
+        for (int j = 0; j <= 8; j++) {
+          SmPoint3d q;
+          if (uv->EvaluatePoint(iv.GetMin() + (iv.GetMax() - iv.GetMin()) * j / 8.0, q) != SM_SUCCESS) continue;
+          SmVector3d pv;
+          if (SmApiEvaluateSurfacePoint(srf, SmVector2d(q.x, q.y), pv) != SM_SUCCESS) continue;
+          SmPoint3d cp;
+          double t = 0, dd = 0;
+          if (SmApiEdgeClosestPoint(e, SmPoint3d(pv.x, pv.y, pv.z), cp, t, dd) != SM_SUCCESS) continue;
+          gap = std::max(gap, dd);
+        }
+      }
+    }
+  }
+  return gap;
+}
+
+// Outward offset by d > 0 (Minkowski sum with a ball of radius d): every face moves by d along
+// its outward normal; SMLib closes the gaps at convex edges with rolling-ball faces (cylinders
+// along straight edges, spheres at corners, tori along circular edges) when the extended
+// offset is off. mode bit 0: extended offset (convex edges extended and intersected, sharp),
+// bit 1: self-intersection handling (needed: without it boxes and L-profiles fail). Kernel
+// spike (report 21): exact for boxes (also rotated), cylinders, spheres, L-profiles (concave
+// edges stay sharp) and rounded boxes; at corners whose faces meet at other angles (tetrahedron,
+// 45° wedge) SMLib fails or approximates the trim curves of the corner spheres, which the
+// checks below reject. All faces are new (they lie on no input face): the operation tag.
+uint32_t sc_offset(uint32_t h, double d, int32_t mode, uint32_t tag) {
+  SC_SHAPE_CALL({
+    SmBrep* in = get(h);
+    if (!(d > 0) || !is_fin(d)) throw fail(SC_INVALID, "offset distance must be > 0");
+    if (in->GetNumFaces() == 0 || !in->IsManifoldSolid())
+      throw fail(SC_INVALID, "offset expects a closed solid");
+    BrepPtr c = copy_brep(in);
+    SmBrep* o = nullptr;
+    g_trail.clear();
+    SC_CHECK(SmApiOffsetBrepFull(c.get(), d, (mode & 1) ? TRUE : FALSE, (mode & 2) ? TRUE : FALSE, o),
+             "SmApiOffsetBrepFull");
+    require_solid(o, "offset");
+    BrepPtr b(o);
+    double vin = solid_volume(in), vo = solid_volume(b.get());
+    if (!(vo > vin)) throw fail(SC_FAILED, "offset produced a smaller solid");
+    check_valid(b.get(), "offset");
+    // exact or nothing: boundary at distance d from the body, trim curves on the edges
+    double tol = 1e-6 * std::max(1.0, model_diag(b.get()));
+    double dev = offset_deviation(b.get(), in, d);
+    if (!(dev <= tol))
+      throw fail(SC_FAILED, "offset is not exact: the result lies up to " + std::to_string(dev) +
+                                " mm off the distance " + std::to_string(d) + " from the body");
+    double gap = trim_gap(b.get());
+    if (!(gap <= tol))
+      throw fail(SC_FAILED, "offset is not exact: trim curves up to " + std::to_string(gap) +
+                                " mm off their edges (SMLib approximates the rounding at corners "
+                                "whose faces do not meet at right angles)");
     resolve_tags(b.get(), {in}, tag, true);
     _res = put(std::move(b));
   })

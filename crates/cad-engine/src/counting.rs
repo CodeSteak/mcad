@@ -163,6 +163,11 @@ impl<K: Kernel> Kernel for CountingKernel<K> {
         let r = self.inner.shell(s, t, open, tag);
         self.done("shell", t0, r)
     }
+    fn offset(&mut self, s: &Self::Shape, d: f64, tag: Tag) -> KResult<Self::Shape> {
+        let t0 = self.hit("offset");
+        let r = self.inner.offset(s, d, tag);
+        self.done("offset", t0, r)
+    }
     fn edges(&mut self, s: &Self::Shape, samples: u32) -> KResult<Vec<EdgeInfo>> {
         let t0 = self.hit("edges");
         let r = self.inner.edges(s, samples);

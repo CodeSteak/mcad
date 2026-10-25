@@ -237,6 +237,9 @@ export function sc_thicken(h, t, tag) {
 export function sc_shell(h, t, open, tag) {
   return withU32(open, (p) => mod()._sc_shell(h, t, p, open.length, tag) >>> 0);
 }
+export function sc_offset(h, d, mode, tag) {
+  return mod()._sc_offset(h, d, mode, tag) >>> 0;
+}
 
 // --- queries ---------------------------------------------------------------------------
 

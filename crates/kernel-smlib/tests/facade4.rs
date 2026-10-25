@@ -17,7 +17,7 @@ const T_FIL: Tag = 77;
 
 #[test]
 fn facade_version() {
-    assert_eq!(k().facade_version(), 4);
+    assert!(k().facade_version() >= 4);
 }
 
 #[test]

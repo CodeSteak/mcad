@@ -51,6 +51,7 @@ mod ffi {
         pub fn sc_nurbs_surface(pts: *const f64, rows: u32, cols: u32, tag: u32) -> u32;
         pub fn sc_thicken(h: u32, t: f64, tag: u32) -> u32;
         pub fn sc_shell(h: u32, t: f64, open: *const u32, n: u32, tag: u32) -> u32;
+        pub fn sc_offset(h: u32, d: f64, mode: i32, tag: u32) -> u32;
         pub fn sc_edges(h: u32, samples: u32) -> i32;
         pub fn sc_faces(h: u32, samples: u32) -> i32;
         pub fn sc_classify(h: u32, pts: *const f64, n: u32) -> i32;
@@ -183,6 +184,9 @@ pub fn thicken(h: u32, t: f64, tag: u32) -> u32 {
 }
 pub fn shell(h: u32, t: f64, open: &[u32], tag: u32) -> u32 {
     unsafe { ffi::sc_shell(h, t, open.as_ptr(), len(open.len()), tag) }
+}
+pub fn offset(h: u32, d: f64, mode: i32, tag: u32) -> u32 {
+    unsafe { ffi::sc_offset(h, d, mode, tag) }
 }
 pub fn edges(h: u32, samples: u32) -> i32 {
     unsafe { ffi::sc_edges(h, samples) }

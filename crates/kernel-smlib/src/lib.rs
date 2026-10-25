@@ -288,6 +288,12 @@ impl SmlibKernel {
         brep::parse(&d)
     }
 
+    /// Outward offset with SMLib's flags (bit 0 extended offset, bit 1 self-intersections);
+    /// [`Kernel::offset`] is mode 2 (test/diagnostic helper).
+    pub fn offset_mode(&mut self, s: &Shape, d: f64, mode: i32, tag: Tag) -> KResult<Shape> {
+        self.call(|| raw::offset(s.h, d, mode, tag))
+    }
+
     /// Edge ids of `s` whose sample points all satisfy `pred` (test/diagnostic helper).
     pub fn edges_where(&mut self, s: &Shape, pred: impl Fn(&EdgeInfo) -> bool) -> KResult<Vec<u32>> {
         Ok(self.edges(s, 3)?.into_iter().filter(|e| pred(e)).map(|e| e.id).collect())
@@ -298,7 +304,7 @@ impl Kernel for SmlibKernel {
     type Shape = Shape;
 
     fn id(&self) -> &'static str {
-        "smlib-7eba8aa+1/facade-4"
+        "smlib-7eba8aa+1/facade-5"
     }
 
     fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Shape> {
@@ -442,6 +448,10 @@ impl Kernel for SmlibKernel {
 
     fn shell(&mut self, s: &Shape, t: f64, open: &[FaceId], tag: Tag) -> KResult<Shape> {
         self.call(|| raw::shell(s.h, t, open, tag))
+    }
+
+    fn offset(&mut self, s: &Shape, d: f64, tag: Tag) -> KResult<Shape> {
+        self.call(|| raw::offset(s.h, d, 2, tag))
     }
 
     fn edges(&mut self, s: &Shape, samples: u32) -> KResult<Vec<EdgeInfo>> {
