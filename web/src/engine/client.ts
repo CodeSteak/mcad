@@ -223,6 +223,11 @@ export class EngineClient {
         for (const f of this.measureListeners) f(m as MeasureAnswer);
         break;
       }
+      case "Asserts": {
+        const cur = store.getState().asserts;
+        if (!cur || m.version >= cur.version) store.setState({ asserts: { version: m.version, items: m.items } });
+        break;
+      }
       default:
         break;
     }

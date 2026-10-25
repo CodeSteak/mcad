@@ -45,6 +45,8 @@ export {
   Trash2 as IconDelete,
   X as IconClose,
   Lasso as IconCloseContour,
+  ShieldBan as IconKeepout,
+  TriangleAlert as IconAlert,
   type LucideIcon,
 } from "lucide-react";
 

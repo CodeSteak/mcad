@@ -3,7 +3,7 @@ import { createEditor } from "../editor/setup";
 import { diagnosticPath } from "../logic/files";
 import { bridge } from "../state/bridge";
 import { project } from "../state/project";
-import { setSideOpen, store, useCad } from "../state/store";
+import { setShowKeepout, setSideOpen, store, useCad } from "../state/store";
 import { Viewer, type StandardView } from "../view/viewer";
 import {
   initialProject,
@@ -20,6 +20,8 @@ import {
   switchFile,
   viewMode,
   type ViewMode,
+  confirmExport,
+  focusNextViolation,
 } from "./runtime";
 import { Header, UploadInput, chooseUpload, promptNewProjectFile, useGlobalShortcuts } from "./header";
 import { SectionBar, SectionStatus, setSectionOn } from "./section";
@@ -35,6 +37,8 @@ import {
   IconEye,
   IconFit,
   IconGrid,
+  IconKeepout,
+  IconAlert,
   IconMeasure,
   IconModel,
   IconPanelOpen,
@@ -170,6 +174,8 @@ function ViewToolbar({ viewer }: { viewer: Viewer | null }) {
   const allGrids = useCad((s) => s.allGrids);
   const sideOpen = useCad((s) => s.sideOpen);
   const showRegions = useCad((s) => s.showRegions);
+  const showKeepout = useCad((s) => s.showKeepout);
+  const hasKeepout = useCad((s) => (s.shown?.nodes ?? []).some((n) => n.flags.keepout));
   const [lastView, setLastView] = useState<StandardView>("iso");
   const view = (v: StandardView) => {
     setLastView(v);
@@ -196,6 +202,16 @@ function ViewToolbar({ viewer }: { viewer: Viewer | null }) {
           <ToolSep />
           <ToolGroup>
             <IconButton icon={IconGrid} label="Alle Raster" hint="Alle Raster zeigen (sonst die am Cursor)" pressed={allGrids} onClick={() => store.setState({ allGrids: !allGrids })} />
+            {hasKeepout && (
+              <IconButton
+                icon={IconKeepout}
+                label="Sperrvolumen"
+                hint="Sperrvolumen (assert_keepout) zeigen oder ausblenden"
+                pressed={showKeepout}
+                onClick={() => setShowKeepout(!showKeepout)}
+                data-testid="toggle-keepout"
+              />
+            )}
             <MenuButton
               label="Anzeige"
               text={null}
@@ -204,6 +220,7 @@ function ViewToolbar({ viewer }: { viewer: Viewer | null }) {
               hint="Weitere Anzeigeoptionen"
               items={[
                 { label: "Alle Raster", check: "checkbox", checked: allGrids, onSelect: () => store.setState({ allGrids: !allGrids }) },
+                { label: "Sperrvolumen zeigen", check: "checkbox", checked: showKeepout, hint: "Sperrvolumen von assert_keepout (nicht im Export)", onSelect: () => setShowKeepout(!showKeepout) },
                 { label: "Farbregionen zeigen", check: "checkbox", checked: showRegions, hint: "Körper je Farbe, wie sie exportiert und gedruckt werden", onSelect: () => store.setState({ showRegions: !showRegions }) },
                 { label: "Seitenpanel", check: "checkbox", checked: sideOpen, hint: "Bauteile, Farben, Messungen", onSelect: () => setSideOpen(!sideOpen) },
               ]}
@@ -305,6 +322,8 @@ function StatusBar() {
   const notice = useCad((s) => s.notice);
   const complete = useCad((s) => s.complete);
   const hoverOther = useCad((s) => s.viewHoverOther);
+  const asserts = useCad((s) => s.asserts);
+  const violations = asserts && complete && asserts.version === complete.version ? asserts.items.reduce((n, r) => n + r.pairs.filter((p) => !p.ok).length, 0) : 0;
   const errors = diags.items.filter((d) => d.severity === "error").length;
   const warnings = diags.items.filter((d) => d.severity === "warning").length;
   const syntax = diags.items.some((d) => d.source === "syntax" && d.severity === "error");
@@ -323,6 +342,11 @@ function StatusBar() {
         {errors} Fehler · {warnings} Warnungen
       </span>
       {syntax && <span className="st-note warn">Syntaxfehler – letzter gültiger Stand wird angezeigt</span>}
+      {violations > 0 && (
+        <button type="button" className="st-note assert-viol" data-testid="status-asserts" title="Zur nächsten Assert-Verletzung springen (Schnittkörper einrahmen); Export nur nach Rückfrage" onClick={focusNextViolation}>
+          {violations} Assert-Verletzung{violations === 1 ? "" : "en"}
+        </button>
+      )}
       {bang && (
         <span className="st-note bang" data-testid="status-bang">
           ! aktiv: nur Teilbaum{bangLine ? ` aus Zeile ${bangLine}` : ""} sichtbar
@@ -383,6 +407,42 @@ function Splitter() {
   return <div className="splitter" onPointerDown={onDown} role="separator" aria-orientation="vertical" />;
 }
 
+/** Export with violated assertions: "Trotzdem exportieren" (like `cad export --ignore-asserts`). */
+function ExportConfirm() {
+  const c = useCad((s) => s.exportConfirm);
+  const ok = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (c) ok.current?.focus();
+  }, [c]);
+  if (!c) return null;
+  return (
+    <div className="modal-back" onKeyDown={(e) => e.key === "Escape" && void confirmExport(false)}>
+      <div className="dialog export-confirm" role="alertdialog" aria-modal="true" aria-labelledby="export-confirm-title" data-testid="export-confirm">
+        <h2 id="export-confirm-title">
+          <IconAlert size={16} aria-hidden="true" /> Export trotz Assert-Verletzung?
+        </h2>
+        <p>
+          {c.what}: {c.violations.length} Prüfung{c.violations.length === 1 ? "" : "en"} verletzt (wie <code>cad export</code>, der ohne <code>--ignore-asserts</code> abbricht).
+        </p>
+        <ul className="export-confirm-list">
+          {c.violations.slice(0, 8).map((v) => (
+            <li key={v}>{v}</li>
+          ))}
+          {c.violations.length > 8 && <li>… {c.violations.length - 8} weitere</li>}
+        </ul>
+        <div className="dialog-buttons">
+          <Button variant="quiet" onClick={() => void confirmExport(false)} data-testid="export-cancel">
+            Abbrechen
+          </Button>
+          <Button ref={ok} variant="primary" onClick={() => void confirmExport(true)} data-testid="export-anyway">
+            Trotzdem exportieren
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const theme = useCad((s) => s.theme);
   useEffect(() => {
@@ -407,6 +467,7 @@ export function App() {
         </section>
       </main>
       <StatusBar />
+      <ExportConfirm />
       <DiffDialog />
       <UploadInput />
     </div>

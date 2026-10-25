@@ -3,7 +3,7 @@
 
 import type { EditorState } from "@codemirror/state";
 import { EngineClient } from "../engine/client";
-import type { Edit, ExportFormat } from "../engine/protocol";
+import type { AssertResult, Edit, ExportFormat } from "../engine/protocol";
 import { WorkerTransport } from "../engine/transport";
 import { createTauriTransport } from "../engine/tauriTransport";
 import { IS_TAURI, desktop } from "../platform/desktop";
@@ -31,10 +31,10 @@ import {
 } from "../files/files";
 import { hasFaceColors } from "../logic/colors";
 import { jumpUpTarget, moduleSpans } from "../logic/context";
-import { baseName as pathBase, fileText, isDataFile, isFontFile, isMeshFile, normalizePath } from "../logic/files";
+import { baseName as pathBase, fileText, isDataFile, isFontFile, isMeshFile, normalizePath, rangePath } from "../logic/files";
 import { modelHull } from "../logic/grids";
 import { transformBox } from "../logic/math";
-import { VersionMapper } from "../logic/positions";
+import { VersionMapper, mapRange } from "../logic/positions";
 import { isOff } from "../logic/sceneIndex";
 import { bridge } from "../state/bridge";
 import { type DirHandle, project } from "../state/project";
@@ -503,7 +503,108 @@ export async function saveToDisk(saveAs = false): Promise<void> {
 
 const MIME: Record<ExportFormat, string> = { stl: "model/stl", "3mf": "model/3mf", step: "model/step" };
 
+// ---------------------------------------------------------------- assertions (Plan 21 C)
+
+/** Name of an assertion kind as in the code. */
+export function assertName(r: AssertResult): string {
+  return `assert_${r.kind}`;
+}
+
+/** Violations of the assertions of a scene version as text lines (`Z.3 assert_disjoint: …`). */
+export function violationLines(items: AssertResult[]): string[] {
+  const out: string[] = [];
+  for (const r of items) for (const p of r.pairs) if (!p.ok) out.push(`Z.${r.range.line} ${assertName(r)}: ${p.message}`);
+  return out;
+}
+
+/** The assertion results of the latest complete scene; waits (up to 60 s) while they are being
+ *  checked. `[]` for a model without assertions. */
+async function currentAsserts(): Promise<AssertResult[]> {
+  const ready = () => {
+    const s = store.getState();
+    const c = s.complete;
+    if (!c) return [] as AssertResult[];
+    if (!c.nodes.some((n) => n.label.startsWith("assert_"))) return [];
+    return s.asserts && s.asserts.version === c.version ? s.asserts.items : null;
+  };
+  const now = ready();
+  if (now) return now;
+  store.setState({ notice: "Asserts werden geprüft …" });
+  return new Promise((resolve) => {
+    const done = (v: AssertResult[]) => {
+      clearTimeout(t);
+      unsub();
+      resolve(v);
+    };
+    const unsub = store.subscribe(() => {
+      const v = ready();
+      if (v) done(v);
+    });
+    const t = setTimeout(() => done(store.getState().asserts?.items ?? []), 60_000);
+  });
+}
+
+/** Exports via `run` unless an assertion is violated; then the dialog "Trotzdem exportieren"
+ *  (like `cad export --ignore-asserts`). */
+async function guardedExport(what: string, run: () => Promise<void>): Promise<void> {
+  const v = violationLines(await currentAsserts());
+  if (!v.length) return run();
+  store.setState({ exportConfirm: { what, violations: v, run }, notice: `Export angehalten: ${v.length} Assert-Verletzung(en)` });
+}
+
+/** "Trotzdem exportieren" (`true`) or "Abbrechen" in the export dialog. */
+export async function confirmExport(go: boolean): Promise<void> {
+  const c = store.getState().exportConfirm;
+  store.setState({ exportConfirm: null });
+  if (!c) return;
+  if (go) await c.run();
+  else store.setState({ notice: "Export abgebrochen (Assert-Verletzung)" });
+}
+
+bridge.onAssertClick = (line) => focusAssertAtLine(line);
+
+/** Jumps to an assertion statement and frames its pair `pair` (the intersection body, the
+ *  contact or the gap) in the view. */
+export function focusAssert(r: AssertResult, pair: number): void {
+  const s = store.getState();
+  const c = s.complete;
+  const a = s.asserts;
+  if (!c || !a) return;
+  store.setState({ assertFocus: { version: a.version, node: r.node, pair } });
+  const path = rangePath(c, r.range, project.main);
+  const pos = mapRange(bridge.mapper.mapper(a.version), r.range.from, r.range.to).from;
+  openLocation(path, pos);
+  const f = r.pairs[pair]?.focus;
+  if (f) getViewer()?.frameBox(f.min, f.max);
+}
+
+/** The next violated pair after the focused one (status bar button). */
+export function focusNextViolation(): void {
+  const s = store.getState();
+  const items = s.asserts?.items ?? [];
+  const all: Array<[AssertResult, number]> = [];
+  for (const r of items) r.pairs.forEach((p, i) => !p.ok && all.push([r, i]));
+  if (!all.length) return;
+  const f = s.assertFocus;
+  const at = f ? all.findIndex(([r, i]) => r.node === f.node && i === f.pair) : -1;
+  const [r, i] = all[(at + 1) % all.length];
+  focusAssert(r, i);
+}
+
+/** Click on an assertion warning at line `line` of the main file: focus its first violation. */
+export function focusAssertAtLine(line: number): boolean {
+  const s = store.getState();
+  const r = (s.asserts?.items ?? []).find((x) => x.range.line === line && (x.range.file ?? 0) === 0 && x.pairs.some((p) => !p.ok));
+  if (!r) return false;
+  focusAssert(r, r.pairs.findIndex((p) => !p.ok));
+  return true;
+}
+
 export async function exportModel(format: ExportFormat): Promise<void> {
+  return guardedExport(format.toUpperCase(), () => exportModelNow(format));
+}
+
+async function exportModelNow(format: ExportFormat): Promise<void> {
   store.setState({ notice: `Export ${format.toUpperCase()} …` });
   try {
     const r = await client.exportFile(format);
@@ -522,6 +623,10 @@ export async function exportModel(format: ExportFormat): Promise<void> {
  * like `cad export` (Bericht 12, F4): the files of UI and CLI are the same.
  */
 export async function exportColors(kind: "3mf" | "3mf-single" | "stl-zip"): Promise<void> {
+  return guardedExport(kind === "3mf" ? "3MF mehrfarbig" : kind === "3mf-single" ? "3MF einfarbig" : "STL je Farbe", () => exportColorsNow(kind));
+}
+
+async function exportColorsNow(kind: "3mf" | "3mf-single" | "stl-zip"): Promise<void> {
   const st = store.getState();
   const format: ExportFormat = kind === "stl-zip" ? "stl" : "3mf";
   const colors = kind !== "3mf-single";
@@ -590,6 +695,10 @@ export function partFileName(name: string, ext: string): string {
  */
 export async function exportParts(format: ExportFormat, parts: string[], zip: boolean): Promise<void> {
   if (!parts.length) return;
+  return guardedExport(`${format.toUpperCase()} (${parts.join(", ")})`, () => exportPartsNow(format, parts, zip));
+}
+
+async function exportPartsNow(format: ExportFormat, parts: string[], zip: boolean): Promise<void> {
   store.setState({ notice: `Export ${format.toUpperCase()} (${parts.join(", ")}) …` });
   try {
     const single = parts.length === 1;
@@ -894,6 +1003,26 @@ window.__cad = {
     const ok = switchFile(path);
     if (ok && line !== undefined) bridge.setCursorLine(line);
     return ok;
+  },
+  /** Assertion results (Plan 21 C), the overlay as drawn and the export dialog. */
+  asserts() {
+    const st = store.getState();
+    return {
+      version: st.asserts?.version ?? null,
+      completeVersion: st.complete?.version ?? null,
+      items: (st.asserts?.items ?? []).map((r) => ({
+        kind: r.kind,
+        line: r.range.line,
+        ok: r.ok,
+        checked: r.checked,
+        bodies: r.bodies,
+        pairs: r.pairs.map((p) => ({ ok: p.ok, problem: p.problem, message: p.message, volume: p.volume, distance: p.distance, contact: p.contact, contact_area: p.contact_area, focus: p.focus })),
+      })),
+      view: viewer?.assertView() ?? null,
+      showKeepout: st.showKeepout,
+      focus: st.assertFocus,
+      exportConfirm: st.exportConfirm ? { what: st.exportConfirm.what, violations: st.exportConfirm.violations } : null,
+    };
   },
   /** Parts of the latest complete scene. */
   parts() {

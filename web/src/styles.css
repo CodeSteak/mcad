@@ -80,6 +80,10 @@
   --view-snap: #237a35;
   --on-snap: #ffffff;
   --view-measure: #8a5a00;
+  --view-keepout: #ca8a04;
+  --view-keepout-edge: #8a5a00;
+  --view-overlap: #e03131;
+  --view-contact: #2f9e44;
   --on-measure: #ffffff;
   --view-profile: #0b7285;
   --view-guide: #d6336c;
@@ -167,6 +171,10 @@
   --view-snap: #5fd37a;
   --on-snap: #06210e;
   --view-measure: #f2c14e;
+  --view-keepout: #facc15;
+  --view-keepout-edge: #fde047;
+  --view-overlap: #ff6b6b;
+  --view-contact: #69db7c;
   --on-measure: #1d1503;
   --view-profile: #43d1e2;
   --view-guide: #f78db3;
@@ -986,6 +994,33 @@ input[type="range"] {
 
 .st-note.measure.warn {
   color: var(--view-error-edge);
+}
+
+/* labels of assertion results in the view (Plan 21 C): violations red, contact areas green */
+.assert-label {
+  position: absolute;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: #237a35;
+  color: #ffffff;
+  font: 600 12px/1.4 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px var(--shadow);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.assert-label.bad {
+  background: #c92a2a;
+}
+
+:root[data-theme="dark"] .assert-label {
+  background: var(--view-contact);
+  color: #111418;
+}
+
+:root[data-theme="dark"] .assert-label.bad {
+  background: var(--view-overlap);
 }
 
 /* labels of measurements in the view: dimension colour, readable in both themes */
@@ -2001,4 +2036,58 @@ select:hover {
 .cm-panels .cm-button,
 .cm-panels button {
   border-radius: var(--radius);
+}
+
+/* export with violated assertions (Plan 21 C) */
+.export-confirm {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 28px var(--shadow);
+  padding: 16px 18px 14px;
+  width: min(560px, 92vw);
+}
+
+.export-confirm h2 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 8px;
+  font-size: 15px;
+  color: var(--warning);
+}
+
+.export-confirm p {
+  margin: 0 0 8px;
+  color: var(--muted);
+}
+
+.export-confirm-list {
+  margin: 0 0 14px;
+  padding-left: 18px;
+  max-height: 200px;
+  overflow: auto;
+  font: 12px/1.5 ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.export-confirm .dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.statusbar .st-note.assert-viol {
+  border: 1px solid var(--error);
+  background: var(--error-bg);
+  color: var(--error);
+  border-radius: 4px;
+  padding: 0 6px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cm-lineend-assert {
+  cursor: pointer;
+  text-decoration: underline dotted;
 }

@@ -155,7 +155,19 @@ describe("Darstellungszustände", () => {
     expect(modes(f, p)).toEqual(["full:translate@8", "outline:box@8", "red:translate@4", "grey:translate@6"]);
   });
 
-  it("! : Hinweis für die Statuszeile", () => {
+  it("Sperrvolumen (assert_keepout): eigener Modus, ausblendbar", () => {
+    const f = fixture("modifiers");
+    const scene = structuredClone(f.scene);
+    const bg = scene.nodes.find((n) => n.flags.background)!;
+    bg.flags.keepout = true;
+    const show = plan({ scene, cursor: [], hover: [] });
+    expect(show.items.filter((i) => i.node === bg.idx).map((i) => i.mode)).toEqual(["keepout"]);
+    expect(show.items.some((i) => i.mode === "grey")).toBe(false);
+    const hide = plan({ scene, cursor: [], hover: [], showKeepout: false });
+    expect(hide.items.some((i) => i.node === bg.idx)).toBe(false);
+  });
+
+    it("! : Hinweis für die Statuszeile", () => {
     const f = fixture("root-modifier");
     const p = plan({ scene: f.scene, cursor: [], hover: [] });
     expect(p.status).toContain("Zeile 3");

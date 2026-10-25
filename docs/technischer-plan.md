@@ -1566,3 +1566,51 @@ entscheidet nach den Kindern.
 - Grenzen: `rotate_extrude`, Torus, `$fillet` an Primitiven, `difference` als Kinder sind kein
   Sonderfall; gleich große Kugeln in einer Ebene (abgerundete Platte) auch nicht; das Wasm-Bundle
   braucht ein neues `smlib.wasm` (Export `sc_offset`).
+
+## 21. Kollisions-Asserts (Plan 21, Phase C)
+
+Nutzerentscheidung: Verletzung = Warnung; `cad export` bricht ab (Exit 4), außer mit
+`--ignore-asserts`; `assert_keepout` in der UI gut sichtbar.
+
+- **Sprache**: `assert_keepout(clearance)`, `assert_disjoint()`, `assert_intersect()`,
+  `assert_touches(tol, contact)` erzeugen einen `Op::Group`-Knoten (keine neue Operation: alle
+  Engine-Pfade behandeln ihn wie `group`) und einen Eintrag `Tree.asserts` (`AssertDecl`: Knoten,
+  Art, Parameter, Span; einer je ausgewerteter Instanz). Das Sperrvolumen bekommt
+  `Flags::keepout` und `background`: damit ist es ohne weitere Sonderfälle nicht im Ergebnis,
+  nicht in Booleans, Export, Volumen, Farbregionen und Bauteilen, aber ausgewertet (Netz zum
+  Zeigen). Asserts sind schachtelbar; benannte Instanzen darin bleiben Bauteile.
+- **Prüfung** (`cad-session/src/asserts.rs`): nach dem Kernel-Job, im nächsten `Session::step`
+  nach dem Wurzelnetz (die Szene erscheint zuerst), nicht im Entwurfsmodus beim Ziehen
+  (`checked: false`). Ergebnis: Nachricht `FromEngine::Asserts`, `Scene.asserts` der fertigen
+  Auswertung, Warnungen (Quelle Kernel) an der Anweisung. Körper: Kind = Menge aller Körper und
+  Netze des Kindes (Kontextkoordinaten); beim Sperrvolumen jeder Körper jedes Bauteils und des
+  Materials außerhalb (wie die Farbliste), sonst der Wurzel.
+- **Verfahren**: Schnittvolumen exakt per Kernel-Boolean je Körperpaar mit sich treffenden
+  Hüllquadern (Volumen aus den Masseeigenschaften, Netz des Schnitts mit Kanten für die
+  Anzeige); mit Netzen ohne B-Rep nur ja/nein (`solids_overlap`). Abstand über die Tessellierung
+  (`min_distance`, Fußpunkte, Genauigkeit ± 2·Netztoleranz). Kontakt an nahen Flächenpaaren der
+  exakten B-Rep (`cad_measure::Body`): gegensinnige koplanare Ebenen → Schnitt der beiden
+  Flächenumrisse mit `region2` (Geraden und Bögen exakt), Fläche in mm², Füllung für die Anzeige
+  über `i_triangle`; Zylinder/Kugel auf Ebene, Zylinder auf Zylinder (parallel: Linie, windschief:
+  Punkt), Kugel/Kugel → Linien-/Punktkontakt; andere Flächen nur am Netz. Ein scheiternder
+  Boolean (aufliegende Flächen) ist ein Hinweis „Überlappung nicht prüfbar“, kein Fehler.
+- **Toleranzen** relativ zur Größe L des Paares: ε_V = 10⁻⁹·L³, Kontaktfläche > 10⁻⁹·L²,
+  Netztoleranz clamp(2·10⁻⁴·L, 0,001, 0,02) mm.
+- **`assert_intersect`** verlangt eine zusammenhängende Gruppe (Union-Find über die sich
+  schneidenden Paare), nicht paarweise: ein Halter, der zwei Platten verbindet, ist gültig; je
+  weiterer Gruppe wird das nächstgelegene Paar gemeldet. Berühren ist kein Schnitt.
+- **Cache**: Paarergebnis im Engine-LRU (neuer Slot `Aux`, `Engine::aux_get/aux_insert`) unter
+  dem Schlüssel aus Knotenschlüsseln, Platzierungen, Art und Parametern: `watch`, Daemon und UI
+  rechnen nur geänderte Paare neu (Beispiel: 2. Aufruf über den Daemon 0 ms).
+- **CLI**: `check` (`asserts`, `violations`), `export` (Exit 4, `--ignore-asserts`), `render`
+  (Sperrvolumen gelb durchscheinend mit gestricheltem Umriss, Schnitt rot mit Kanten oben,
+  Kontakt grün, Spalt als Linie mit Fußpunkten, `--show asserts`), `outline`/`measure`/`inspect`.
+- **UI**: Darstellungsmodus `keepout` (schraffiert über einen Shader-Zusatz, durchscheinend, durch
+  das Modell sichtbar, gestrichelter Umriss, nicht wählbar/messbar), Schalter „Sperrvolumen“ in
+  der Werkzeugleiste und im Menü Anzeige (gemerkt), Überlagerung der Ergebnisse mit Beschriftung,
+  Statusleiste „n Assert-Verletzungen“ (Klick: nächste Verletzung, Cursor auf die Anweisung,
+  Kamera rahmt den Schnittkörper ein; ebenso Klick auf die Warnung am Zeilenende), Export-Rückfrage
+  „Trotzdem exportieren“ für alle Exportwege (entspricht `--ignore-asserts`).
+- Grenzen: Kontaktfläche an gekrümmten koinzidenten Flächen (Bolzen in Bohrung) nur am Netz
+  geschätzt; Netz-Überschneidung ohne Volumen und ohne Schnittkörper; die Prüfung blockiert den
+  Worker für die Dauer der Booleans (gecacht; beim Ziehen übersprungen).

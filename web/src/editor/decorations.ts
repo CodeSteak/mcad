@@ -45,7 +45,8 @@ class LineEndWidget extends WidgetType {
     wrap.className = "cm-lineend";
     for (const s of this.segs) {
       const e = document.createElement("span");
-      e.className = `cm-lineend-${s.kind}`;
+      e.className = `cm-lineend-${s.kind}${s.kind === "warning" && /^assert_(keepout|disjoint|intersect|touches): /.test(s.text) ? " cm-lineend-assert" : ""}`;
+      if (e.classList.contains("cm-lineend-assert")) e.title = "Klick: Verletzung in der Ansicht zeigen";
       e.textContent = s.text;
       wrap.appendChild(e);
     }

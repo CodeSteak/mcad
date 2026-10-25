@@ -7,7 +7,7 @@ import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import type { EngineClient } from "../engine/client";
-import type { Mat4, MeasureHit, Scene, SrcRange, Vec3 } from "../engine/protocol";
+import type { AssertMesh, Mat4, MeasureHit, Scene, SrcRange, Vec3 } from "../engine/protocol";
 import { definitionTarget } from "../logic/context";
 import { type Plan, type SketchDraw, plan as makePlan, planNodes } from "../logic/display";
 import { type GridOverlay, gridOverlay, modelHull, viewBox } from "../logic/grids";
@@ -137,6 +137,10 @@ export class Viewer implements DragView, SketchView, MeasureView {
   measure: MeasureController | null = null;
   /** Measure mode: hover, picks, measurements (rebuilt when they change). */
   private measureGroup = new THREE.Group();
+  /** Results of the geometric assertions: intersection bodies, contacts, gaps (Plan 21 C). */
+  private assertGroup = new THREE.Group();
+  private assertLabels: Array<{ el: HTMLDivElement; at: Vec3 }> = [];
+  private lastAssertDraw: Record<string, number> = {};
   /** Labels of the measurements (DOM, placed every frame). */
   private measureLabels = new Map<number, HTMLDivElement>();
   private measureHoverLabel: HTMLDivElement;
@@ -217,7 +221,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     this.controls.addEventListener("change", () => this.requestRender());
     this.controls.addEventListener("start", () => (this.autoFit = false));
 
-    this.scene3.add(this.helpers, this.content, this.overlay, this.handleGroup, this.sketchGroup, this.measureGroup);
+    this.scene3.add(this.helpers, this.content, this.overlay, this.handleGroup, this.sketchGroup, this.measureGroup, this.assertGroup);
     {
       const pal = readPalette();
       this.section = new SectionLayer(pal.cap, pal.edge, pal.accent);
@@ -282,6 +286,8 @@ export class Viewer implements DragView, SketchView, MeasureView {
     this.clearGroup(this.handleGroup);
     this.clearGroup(this.sketchGroup);
     this.clearGroup(this.measureGroup);
+    this.clearGroup(this.assertGroup);
+    for (const l of this.assertLabels) l.el.remove();
     this.snapLabel.remove();
     this.sketchLabel.remove();
     this.measureHoverLabel.remove();
@@ -308,6 +314,10 @@ export class Viewer implements DragView, SketchView, MeasureView {
       this.buildMeasure();
       this.requestRender();
     }
+    if (s.asserts !== p.asserts || s.assertFocus !== p.assertFocus) {
+      this.buildAsserts();
+      this.requestRender();
+    }
     if (s.theme !== p.theme) {
       // CSS variables change with the theme attribute; read them after the style update.
       requestAnimationFrame(() => this.applyTheme());
@@ -331,7 +341,8 @@ export class Viewer implements DragView, SketchView, MeasureView {
       s.drag !== p.drag ||
       s.hiddenParts !== p.hiddenParts ||
       s.showRegions !== p.showRegions ||
-      s.regions !== p.regions
+      s.regions !== p.regions ||
+      s.showKeepout !== p.showKeepout
     )
       this.requestBuild();
     else if (s.hoverHandle !== p.hoverHandle) {
@@ -399,6 +410,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     r.render(this.scene3, this.camera);
     this.noteCamera();
     this.placeMeasureLabels();
+    this.placeAssertLabels();
     this.frames++;
     this.noteDrawn();
     this.noteDrag();
@@ -499,7 +511,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
       const sp = idx.range(r);
       return !isOff(sp) && sp.from <= cline.to && sp.to >= cline.from;
     };
-    const p = makePlan({ scene, cursor: sel.nodes, hover, hoverAnchor, picked: vh, hidden, segmentActive });
+    const p = makePlan({ scene, cursor: sel.nodes, hover, hoverAnchor, picked: vh, hidden, segmentActive, showKeepout: st.showKeepout });
     this.lastPlan = p;
     this.lastSelection = sel;
     this.lastHoverNodes = hover;
@@ -600,6 +612,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     this.buildHandles();
     this.buildSketch();
     this.buildMeasure();
+    this.buildAsserts();
     this.updateHelpers(scene);
     this.applySection(st.section);
     this.maybeFit(scene);
@@ -689,7 +702,24 @@ export class Viewer implements DragView, SketchView, MeasureView {
         if (it.mode === "full" && !it.flat && !style.surface.transparent) this.capBodies.push({ group, geometry: geo, key });
       }
     }
-    if (it.mode === "picked" || it.mode === "profile") {
+    if (it.mode === "keepout") {
+      // keep-out volume: dashed outline on top of everything
+      const segs = this.meshes.get(key)?.data.edge_segments;
+      if (segs && segs.length >= 6) {
+        const geo = new LineSegmentsGeometry();
+        geo.setPositions(segs);
+        const wpp = this.worldPerPx();
+        const mat = new LineMaterial({ color: new THREE.Color(this.materials.palette.keepoutEdge).getHex(), linewidth: 1.8, depthTest: false, transparent: true, dashed: true, dashSize: 7 * wpp, gapSize: 4 * wpp });
+        mat.resolution.set(this.container.clientWidth, this.container.clientHeight);
+        const l = new LineSegments2(geo, mat);
+        l.computeLineDistances();
+        l.renderOrder = 45;
+        l.userData.ownGeometry = true;
+        l.userData.ownMaterial = true;
+        l.name = "keepout-outline";
+        group.add(l);
+      }
+    } else if (it.mode === "picked" || it.mode === "profile") {
       // Node under the mouse: thick accent edges (2.5 px); profiles: thick, through the result.
       const segs = this.meshes.get(key)?.data.edge_segments;
       if (segs && segs.length >= 6) {
@@ -1333,6 +1363,10 @@ export class Viewer implements DragView, SketchView, MeasureView {
 
   /** A fat line of the measure overlay (always on top). */
   private measureLine(points: Vec3[], color: string, width: number, dashed: boolean, name: string): void {
+    this.measureLineIn(this.measureGroup, points, color, width, dashed, name);
+  }
+
+  private measureLineIn(group: THREE.Group, points: Vec3[], color: string, width: number, dashed: boolean, name: string): void {
     if (points.length < 2) return;
     const pos: number[] = [];
     for (let i = 0; i + 1 < points.length; i++) pos.push(...points[i], ...points[i + 1]);
@@ -1347,13 +1381,18 @@ export class Viewer implements DragView, SketchView, MeasureView {
     l.userData.ownGeometry = true;
     l.userData.ownMaterial = true;
     l.name = name;
-    this.measureGroup.add(l);
+    group.add(l);
     const k = name.split(":")[0];
-    this.lastMeasureDraw[k] = (this.lastMeasureDraw[k] ?? 0) + 1;
+    const draw = group === this.measureGroup ? this.lastMeasureDraw : this.lastAssertDraw;
+    draw[k] = (draw[k] ?? 0) + 1;
   }
 
   /** Point markers (screen-sized dots). */
   private measurePoints(points: Vec3[], color: string, size: number, name: string): void {
+    this.measurePointsIn(this.measureGroup, points, color, size, name);
+  }
+
+  private measurePointsIn(group: THREE.Group, points: Vec3[], color: string, size: number, name: string): void {
     if (!points.length) return;
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute(points.flat(), 3));
@@ -1362,9 +1401,10 @@ export class Viewer implements DragView, SketchView, MeasureView {
     pts.userData.ownGeometry = true;
     pts.userData.ownMaterial = true;
     pts.name = name;
-    this.measureGroup.add(pts);
+    group.add(pts);
     const k = name.split(":")[0];
-    this.lastMeasureDraw[k] = (this.lastMeasureDraw[k] ?? 0) + points.length;
+    const draw = group === this.measureGroup ? this.lastMeasureDraw : this.lastAssertDraw;
+    draw[k] = (draw[k] ?? 0) + points.length;
   }
 
   /** Hover highlight, picks and the measurements with their labels. */
@@ -1421,6 +1461,145 @@ export class Viewer implements DragView, SketchView, MeasureView {
     }
     this.lastMeasureDraw.labels = seen.size;
     this.placeMeasureLabels();
+  }
+
+  /** A mesh of an assertion overlay (context coordinates), on top of the model. */
+  private assertMesh(m: AssertMesh, color: string, opacity: number, name: string): void {
+    if (!m.indices.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(m.positions, 3));
+    geo.setIndex(m.indices);
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity, side: THREE.DoubleSide, depthTest: false, depthWrite: false });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.renderOrder = 60;
+    mesh.userData.ownGeometry = true;
+    mesh.userData.ownMaterial = true;
+    mesh.name = name;
+    this.assertGroup.add(mesh);
+    if (m.edges.length >= 6) {
+      const eg = new LineSegmentsGeometry();
+      eg.setPositions(m.edges);
+      const lm = new LineMaterial({ color: new THREE.Color(color).getHex(), linewidth: 2.2, depthTest: false, transparent: true });
+      lm.resolution.set(this.container.clientWidth, this.container.clientHeight);
+      const l = new LineSegments2(eg, lm);
+      l.renderOrder = 61;
+      l.userData.ownGeometry = true;
+      l.userData.ownMaterial = true;
+      l.name = `${name}-edges`;
+      this.assertGroup.add(l);
+    }
+    const k = name.split(":")[0];
+    this.lastAssertDraw[k] = (this.lastAssertDraw[k] ?? 0) + 1;
+  }
+
+  /** Assertion results of the shown scene (Plan 21 C): intersection bodies red, contact faces
+   *  and lines green, gaps and too small clearances as dimension lines with a label. */
+  private buildAsserts(): void {
+    if (!this.materials) return;
+    this.clearGroup(this.assertGroup);
+    for (const l of this.assertLabels) l.el.remove();
+    this.assertLabels = [];
+    this.lastAssertDraw = {};
+    const st = store.getState();
+    const a = st.asserts;
+    const shown = this.lastShown;
+    if (!a || !shown || a.version !== shown.version) return;
+    const pal = this.materials.palette;
+    const focus = st.assertFocus && st.assertFocus.version === a.version ? st.assertFocus : null;
+    const label = (text: string, at: Vec3, bad: boolean, id: string) => {
+      const el = document.createElement("div");
+      el.className = `assert-label${bad ? " bad" : ""}`;
+      el.setAttribute("data-testid", `assert-label-${id}`);
+      el.textContent = text;
+      this.container.appendChild(el);
+      this.assertLabels.push({ el, at });
+    };
+    const center = (b: { min: Vec3; max: Vec3 }): Vec3 => [(b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2, (b.min[2] + b.max[2]) / 2];
+    for (const r of a.items) {
+      if (!r.checked) continue;
+      r.pairs.forEach((pr, i) => {
+        const id = `${r.node}-${i}`;
+        const focused = focus !== null && focus.node === r.node && focus.pair === i;
+        // intersections are drawn where they are a violation (not the wanted ones of assert_intersect)
+        if (pr.overlap && !pr.ok) this.assertMesh(pr.overlap, pal.overlap, focused ? 0.75 : 0.55, `assert-overlap:${id}`);
+        if (pr.contact_mesh) this.assertMesh(pr.contact_mesh, pal.contact, 0.45, `assert-contact:${id}`);
+        const lc = pr.ok ? pal.contact : pal.overlap;
+        for (const l of pr.contact_lines) {
+          if (l.length === 1) this.measurePointsIn(this.assertGroup, l, lc, 9, `assert-point:${id}`);
+          else this.measureLineIn(this.assertGroup, l, lc, 3, false, `assert-line:${id}`);
+        }
+        const gap = pr.problem === "gap" || pr.problem === "too_close" || pr.problem === "apart";
+        if (gap && pr.points.length === 2 && (pr.distance ?? 0) > 0) {
+          this.measureLineIn(this.assertGroup, pr.points, pal.overlap, focused ? 3.4 : 2.6, false, `assert-gap:${id}`);
+          this.measurePointsIn(this.assertGroup, pr.points, pal.overlap, 9, `assert-gap-point:${id}`);
+        }
+        const at = pr.focus ? center(pr.focus) : pr.points[0];
+        if (!at) return;
+        const d = (pr.distance ?? 0).toFixed(3).replace(/\.?0+$/, "");
+        const text =
+          pr.problem === "overlap"
+            ? pr.volume
+              ? `Schnitt ${pr.volume.toFixed(2).replace(/\.?0+$/, "")} mm³`
+              : "Überschneidung"
+            : pr.problem === "too_close"
+              ? `${d} mm < ${r.clearance}`
+              : pr.problem === "gap"
+                ? `Spalt ${d} mm`
+                : pr.problem === "apart"
+                  ? `kein Schnitt, ${d} mm`
+                  : pr.problem === "line_contact"
+                    ? "Linienkontakt"
+                    : pr.problem === "point_contact"
+                      ? "Punktkontakt"
+                      : pr.contact_area !== null
+                        ? `Kontakt ${pr.contact_area.toFixed(2).replace(/\.?0+$/, "")} mm²`
+                        : null;
+        if (text && (!pr.ok || pr.contact === "face")) label(text, at, !pr.ok, id);
+      });
+    }
+    this.lastAssertDraw.labels = this.assertLabels.length;
+    this.placeAssertLabels();
+  }
+
+  private placeAssertLabels(): void {
+    if (!this.assertLabels.length) return;
+    const rc = this.container.getBoundingClientRect();
+    for (const { el, at } of this.assertLabels) {
+      const p = this.project(at);
+      el.hidden = !p.visible;
+      if (!p.visible) continue;
+      const w = el.offsetWidth || 80;
+      el.style.left = `${Math.round(Math.min(Math.max(2, p.x - rc.left - w / 2), rc.width - w - 2))}px`;
+      el.style.top = `${Math.round(Math.max(2, p.y - rc.top - 30))}px`;
+    }
+  }
+
+  /** The assertion overlay as drawn (test hook). */
+  assertView(): { drawn: Record<string, number>; labels: Array<{ text: string; bad: boolean; visible: boolean }>; keepout: number } {
+    let keepout = 0;
+    this.content.traverse((o) => {
+      if (o.name === "mode:keepout") keepout++;
+    });
+    return { drawn: this.lastAssertDraw, labels: this.assertLabels.map((l) => ({ text: l.el.textContent ?? "", bad: l.el.classList.contains("bad"), visible: !l.el.hidden })), keepout };
+  }
+
+  /** Frames a box (context coordinates): the camera looks at it from its current direction. */
+  frameBox(min: Vec3, max: Vec3): void {
+    const center = new THREE.Vector3((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2);
+    const diag = Math.max(length(sub(max, min)), boxDiagonal(this.modelBox) * 0.15, 1);
+    const dir = this.camera.position.clone().sub(this.controls.target);
+    if (dir.lengthSq() < 1e-9) dir.copy(VIEW_DIRS.iso.dir);
+    dir.normalize();
+    const fov = (this.camera.fov * Math.PI) / 180;
+    const dist = (diag / 2 / Math.sin(fov / 2)) * 2.4;
+    this.autoFit = false;
+    this.controls.target.copy(center);
+    this.camera.position.copy(center.clone().add(dir.multiplyScalar(dist)));
+    this.camera.near = Math.max(0.01, dist / 1000);
+    this.camera.far = Math.max(this.camera.far, dist * 100);
+    this.camera.updateProjectionMatrix();
+    this.controls.update();
+    this.requestRender();
   }
 
   /** Places the labels at their anchors (every frame: the camera moves). */

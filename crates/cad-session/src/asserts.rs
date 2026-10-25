@@ -902,7 +902,7 @@ where
                 let targets = self.target_nodes();
                 sets_b = Vec::new();
                 for (part, n) in targets {
-                    let label = part.unwrap_or_default();
+                    let label = part.filter(|p| p != crate::NO_PART).unwrap_or_default();
                     sets_b.extend(self.sets_of(n, true, &label));
                 }
                 r.bodies = sets_b.len() as u32;
@@ -937,7 +937,7 @@ where
                 }
             }
         }
-        r.cached = cached;
+        r.cached = cached && !checked.is_empty();
         let other: &Vec<BodySet<K::Shape>> = if decl.kind == AssertKind::Keepout { &sets_b } else { &sets_a };
         let (pairs, diags) = self.format_pairs(decl, (range, path), &sets_a, other, &checked);
         r.ok = pairs.iter().all(|p| p.ok);

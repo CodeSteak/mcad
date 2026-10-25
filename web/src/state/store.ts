@@ -3,7 +3,7 @@
 
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
-import type { Diagnostic, MeasureKind, MeasurePick, MeasureSectionInfo, Measurement, RegionSet, Scene, SketchAnswer, SketchPoint, SketchTool } from "../engine/protocol";
+import type { AssertResult, Diagnostic, MeasureKind, MeasurePick, MeasureSectionInfo, Measurement, RegionSet, Scene, SketchAnswer, SketchPoint, SketchTool } from "../engine/protocol";
 import type { ParamOverrides } from "../logic/params";
 import { SECTION_OFF, type SectionState } from "../logic/section";
 
@@ -240,6 +240,14 @@ export interface CadState {
   measurements: StoredMeasurement[];
   /** Measurement selected in the list (highlighted in the view). */
   measureSelected: number | null;
+  /** Results of the geometric assertions (`FromEngine.Asserts`, Plan 21 C). */
+  asserts: { version: number; items: AssertResult[] } | null;
+  /** Keep-out volumes (`assert_keepout`) shown in the view (kept in localStorage). */
+  showKeepout: boolean;
+  /** Violated assertion the user jumped to (framed in the view). */
+  assertFocus: { version: number; node: number; pair: number } | null;
+  /** Export asked while assertions are violated: "Trotzdem exportieren?" */
+  exportConfirm: { what: string; violations: string[]; run: () => Promise<void> } | null;
 }
 
 function initialSettings(): Settings {
@@ -349,6 +357,12 @@ export function setColorsOpen(open: boolean): void {
   else setSideOpen(false);
 }
 
+/** Keep-out volumes on or off (kept in localStorage). */
+export function setShowKeepout(on: boolean): void {
+  keep("cad-keepout", on ? "1" : "0");
+  store.setState({ showKeepout: on });
+}
+
 export function setExportChoice(c: ExportChoice): void {
   keep("cad-export", c);
   store.setState({ exportChoice: c });
@@ -405,6 +419,10 @@ export const store = createStore<CadState>(() => ({
   measure: null,
   measurements: [],
   measureSelected: null,
+  asserts: null,
+  showKeepout: stored("cad-keepout", ["0", "1"], "1") === "1",
+  assertFocus: null,
+  exportConfirm: null,
 }));
 
 export function useCad<T>(sel: (s: CadState) => T): T {

@@ -115,6 +115,15 @@ const hoverTracking = EditorView.domEventHandlers({
   // Ctrl/Cmd+click on a grid or anchor reference jumps to its declaration (a plain click
   // keeps placing the cursor so references stay editable).
   mousedown(e, view) {
+    // click on an assertion warning at the line end: frame the violation in the view
+    const el = e.target as HTMLElement | null;
+    if (e.button === 0 && el?.closest?.(".cm-lineend-assert") && bridge.onAssertClick) {
+      const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }, false);
+      if (project.active === project.main && bridge.onAssertClick(view.state.doc.lineAt(pos).number)) {
+        e.preventDefault();
+        return true;
+      }
+    }
     if (e.button !== 0 || !(e.ctrlKey || e.metaKey)) return false;
     const pos = view.posAtCoords({ x: e.clientX, y: e.clientY }, false);
     // `include <datei>` / `use <datei>`: open the file (paths relative to this file).

@@ -20,6 +20,9 @@ class Bridge {
   dragTimes = new Map<number, number>();
   /** Last drag end with edits: time and source version (fine mesh latency). */
   dragEnd: { at: number; version: number } | null = null;
+  /** Click on an assertion warning at the end of a line of the main file (runtime: jump and
+   *  frame the violation); `true` if it handled the click. */
+  onAssertClick: ((line: number) => boolean) | null = null;
   private indices = new WeakMap<Scene, { rev: number; file: string; idx: SceneIndex }>();
 
   /** Document in the editor (the active project file). */

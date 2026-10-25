@@ -34,6 +34,13 @@ export interface Palette {
   snap: string;
   /** Dimension lines and labels of the measure mode. */
   measure: string;
+  /** Keep-out volume of `assert_keepout`: fill and outline. */
+  keepout: string;
+  keepoutEdge: string;
+  /** Intersection body of a violated assertion. */
+  overlap: string;
+  /** Contact face of `assert_touches`. */
+  contact: string;
 }
 
 export function readPalette(el: HTMLElement = document.documentElement): Palette {
@@ -65,6 +72,10 @@ export function readPalette(el: HTMLElement = document.documentElement): Palette
     cap: v("--view-cap", "#db5c3d"),
     snap: v("--view-snap", "#237a35"),
     measure: v("--view-measure", "#8a5a00"),
+    keepout: v("--view-keepout", "#ca8a04"),
+    keepoutEdge: v("--view-keepout-edge", "#8a5a00"),
+    overlap: v("--view-overlap", "#e03131"),
+    contact: v("--view-contact", "#2f9e44"),
   };
 }
 
@@ -173,12 +184,30 @@ export class Materials {
         // Drawn as thick lines by the viewer (edge segments of the mesh), through the result.
         s = { surface: flat ? this.transparent(p.profile, 0.1, { depthTest: false }) : null, edges: this.lines(p.profile, 1, false), renderOrder: 35, pickable: false };
         break;
+      case "keepout":
+        // hatched (diagonal stripes in screen space), visible through the model; the viewer
+        // adds the dashed outline on top
+        s = { surface: this.hatched(p.keepout), edges: null, renderOrder: 12, pickable: false };
+        break;
       case "translucent":
         s = { surface: this.transparent(p.model, 0.42, { polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }), edges: this.lines(p.edge, 0.45), renderOrder: 6, pickable: true };
         break;
     }
     this.styles.set(key, s);
     return s;
+  }
+
+  /** Transparent surface with diagonal stripes (keep-out volumes). */
+  private hatched(color: string): THREE.MeshStandardMaterial {
+    const m = this.transparent(color, 0.34, { depthTest: false });
+    m.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader.replace(
+        "#include <dithering_fragment>",
+        "#include <dithering_fragment>\n  gl_FragColor.a *= mod(gl_FragCoord.x + gl_FragCoord.y, 9.0) < 3.0 ? 1.0 : 0.3;",
+      );
+    };
+    m.customProgramCacheKey = () => "keepout-hatch";
+    return m;
   }
 
   private vertexColorMaterial(): THREE.Material {

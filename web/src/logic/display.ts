@@ -29,7 +29,9 @@ export type Mode =
   /** Profile of a profile operation / surface of `thicken`: outline, visible through the result. */
   | "profile"
   /** Result of a `loft`: semi-transparent so the profiles stay visible. */
-  | "translucent";
+  | "translucent"
+  /** Keep-out volume of `assert_keepout`: hatched, transparent, dashed outline on top. */
+  | "keepout";
 
 export interface DrawItem {
   node: number;
@@ -149,6 +151,16 @@ export interface PlanInput {
   hidden?: number[];
   /** Is a segment statement on the cursor line (sketches)? */
   segmentActive?: (range: SrcRange) => boolean;
+  /** Draw keep-out volumes (`assert_keepout`; default on). */
+  showKeepout?: boolean;
+}
+
+/** Is `n` a keep-out volume or inside one? */
+export function inKeepout(scene: Scene, n: SceneNode): boolean {
+  for (let cur: SceneNode | null = n, d = 0; cur && d < 256; cur = cur.parent !== null ? scene.nodes[cur.parent] : null, d++) {
+    if (cur.flags.keepout) return true;
+  }
+  return false;
 }
 
 /** The sketch a node belongs to: itself, an ancestor, or (module calls of a sketch module,
@@ -412,7 +424,7 @@ export function plan(input: PlanInput): Plan {
   // Cursor line: the node full, plus what its kind shows.
   for (const n of cursor) {
     if (hasGeometry(n)) {
-      const mode: Mode = n.flags.zone ? "blue" : n.label === "loft" ? "translucent" : n.op_info?.kind === "sketch" ? "profile" : "full";
+      const mode: Mode = n.flags.zone ? "blue" : inKeepout(scene, n) ? "keepout" : n.label === "loft" ? "translucent" : n.op_info?.kind === "sketch" ? "profile" : "full";
       items.push(item(n, mode, "Cursor", n.op_info?.kind === "sketch" ? sketchPlane(n) : n.display_world));
     }
     if (n.label === "difference") {
@@ -475,7 +487,11 @@ export function plan(input: PlanInput): Plan {
 
   // Modifiers stay visible regardless of the cursor.
   for (const n of topmost(scene, (n) => n.flags.highlight)) if (hasGeometry(n)) items.push(item(n, "red", "#"));
-  for (const n of topmost(scene, (n) => n.flags.background)) if (hasGeometry(n)) items.push(item(n, "grey", "%"));
+  for (const n of topmost(scene, (n) => n.flags.background)) {
+    if (!hasGeometry(n)) continue;
+    if (!n.flags.keepout) items.push(item(n, "grey", "%"));
+    else if (input.showKeepout !== false) items.push(item(n, "keepout", "Sperrvolumen"));
+  }
 
   // Failed operations: affected edges red.
   for (const n of nodes) {
