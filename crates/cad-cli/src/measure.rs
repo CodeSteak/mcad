@@ -564,7 +564,7 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
     let mut j = m.base_json("measure");
     let mut t = m.diagnostics_text();
     let Some(sc) = m.scene.clone() else {
-        return Ok(Outcome { json: j, text: t, errors: true });
+        return Ok(Outcome { json: j, text: t, errors: true, exit: None });
     };
     if a.colors {
         let (colors, regions, text) = crate::colors::table(&mut m, &sc, true)?;
@@ -730,6 +730,13 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
             ));
         }
     }
+    // assertions (keep-out volumes are not part of the measured result)
+    let (aj, at) = crate::asserts_summary(&sc, None);
+    if !at.is_empty() {
+        t.push_str("Asserts:\n");
+        t.push_str(&at);
+        j["asserts"] = aj;
+    }
     let errors = m.has_errors();
-    Ok(Outcome { json: j, text: t, errors })
+    Ok(Outcome { json: j, text: t, errors, exit: None })
 }

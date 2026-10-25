@@ -62,6 +62,10 @@ pub(crate) const BUILTIN_MODULES: &[&str] = &[
     "projection",
     "text",
     "import",
+    "assert_keepout",
+    "assert_disjoint",
+    "assert_intersect",
+    "assert_touches",
 ];
 
 const LEAVES: &[&str] = &[
@@ -299,6 +303,9 @@ impl<'a> Ev<'a> {
             "text" => self.m_text(s, a, ctx, dy),
             "import" => self.m_import(s, a, ctx, dy),
             "children" => return self.children_stmt(s, a, ctx),
+            "assert_keepout" | "assert_disjoint" | "assert_intersect" | "assert_touches" => {
+                return self.m_assert_geo(s, n, a, children, ctx, dy);
+            }
             "sketch" => return self.m_sketch(s, a, children, ctx, dy),
             "start" | "line" | "arc" | "bezier" | "close" | "corner" | "hole" => {
                 self.error(name.span, format!("`{n}()` nur innerhalb von `sketch {{ … }}`"));
@@ -364,6 +371,83 @@ impl<'a> Ev<'a> {
         };
         let node = self.node(s, op, ctx);
         self.eval_children(node, &DMat4::IDENTITY, children, ctx, dy)
+    }
+
+    /// `assert_keepout(clearance)`, `assert_disjoint()`, `assert_intersect()`,
+    /// `assert_touches(tol, contact)` (Plan 21 C): a group of the children with a check the
+    /// session runs after the kernel job. The keep-out volume is not part of the result.
+    #[inline(never)]
+    fn m_assert_geo(
+        &mut self,
+        s: &'a Stmt,
+        n: &str,
+        a: &Args<'a>,
+        children: &'a [Stmt],
+        ctx: &Ctx<'a>,
+        dy: &Dyn<'a>,
+    ) -> R<()> {
+        use cad_ir::{AssertDecl, AssertKind, Contact};
+        let kind = match n {
+            "assert_keepout" => AssertKind::Keepout,
+            "assert_disjoint" => AssertKind::Disjoint,
+            "assert_intersect" => AssertKind::Intersect,
+            _ => AssertKind::Touches,
+        };
+        let (mut clearance, mut tol, mut contact) = (0.0, 0.001, Contact::Face);
+        match kind {
+            AssertKind::Keepout => {
+                let p = self.bind(n, a, &["clearance"], 1);
+                if let Some(c) = self.num_of(p[0], "clearance") {
+                    if c < 0.0 {
+                        self.warn(p[0].map_or(s.span, |x| x.expr.span), "`clearance` muss ≥ 0 sein; 0 verwendet");
+                    } else {
+                        clearance = c;
+                    }
+                }
+            }
+            AssertKind::Touches => {
+                let p = self.bind(n, a, &["tol", "contact"], 2);
+                if let Some(t) = self.num_of(p[0], "tol") {
+                    if t <= 0.0 {
+                        self.warn(p[0].map_or(s.span, |x| x.expr.span), "`tol` muss > 0 sein; 0.001 verwendet");
+                    } else {
+                        tol = t;
+                    }
+                }
+                if let Some(arg) = p[1] {
+                    match arg.val.as_str() {
+                        Some("face") => contact = Contact::Face,
+                        Some("any") => contact = Contact::Any,
+                        _ => self.warn(arg.expr.span, "`contact` muss \"face\" oder \"any\" sein; \"face\" verwendet"),
+                    }
+                }
+            }
+            _ => {
+                self.bind(n, a, &[], 0);
+            }
+        }
+        if !children.iter().any(crate::eval::is_geometric) {
+            self.warn(s.span, format!("`{n}()` ohne Kinder prüft nichts"));
+        }
+        let node = self.node(s, Op::Group, ctx);
+        if kind == AssertKind::Keepout {
+            let f = &mut self.nodes[node as usize].flags;
+            f.keepout = true;
+            f.background = true;
+        }
+        self.asserts.push(AssertDecl { node, kind, clearance, tol, contact, stmt: s.id, span: s.span });
+        self.eval_children(node, &DMat4::IDENTITY, children, ctx, dy)?;
+        if kind != AssertKind::Keepout {
+            let geo =
+                self.nodes[node as usize].children.iter().filter(|&&c| !self.nodes[c as usize].flags.disabled).count();
+            if geo == 1 {
+                self.warn(
+                    s.span,
+                    format!("`{n}()` braucht mindestens zwei Kinder (eine for-Schleife zählt als ein Kind)"),
+                );
+            }
+        }
+        Ok(())
     }
 
     fn blend_param(&mut self, a: Option<&ArgV<'a>>, what: &str) -> Option<f64> {

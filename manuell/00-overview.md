@@ -19,6 +19,7 @@ cad export part.scad -o part.step         # .stl / .3mf / .step
 - Text output is German (glossary: `cad usage troubleshooting`); JSON keys are English.
 - `FILE` `-` reads stdin. Lines/columns are 1-based.
 - Exit codes: 0 ok · 1 diagnostics with errors (output complete) · 2 usage error (arguments,
-  file, unknown anchor/part/plane) · 3 kernel/internal error, or no running UI for `cad ui`.
+  file, unknown anchor/part/plane) · 3 kernel/internal error, or no running UI for `cad ui` ·
+  4 `cad export` stopped by a violated assert (`cad usage asserts`, `--ignore-asserts`).
 
 Topics: `cad usage --list`; all pages: `cad usage --all`; prefixes work (`cad usage meas`).

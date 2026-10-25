@@ -658,6 +658,113 @@ pub enum FromEngine {
     Sketch(Box<SketchAnswer>),
     /// Answer to `Measure`.
     Measure(Box<MeasureAnswer>),
+    /// Results of the geometric assertions of `version` (Plan 21 C), sent after the kernel
+    /// job (and its root mesh) together with the updated `Diagnostics`; also in
+    /// `Scene.asserts` of later scenes of the same evaluation. While a handle is dragged the
+    /// checks are skipped (`checked: false`).
+    Asserts {
+        version: u64,
+        items: Vec<AssertResult>,
+    },
+}
+
+/// Kind of a geometric assertion.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum AssertKind {
+    Keepout,
+    Disjoint,
+    Intersect,
+    Touches,
+}
+
+/// One checked statement instance of `assert_keepout`, `assert_disjoint`, `assert_intersect`
+/// or `assert_touches`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct AssertResult {
+    /// The assertion's node (a group of the checked children).
+    pub node: u32,
+    pub kind: AssertKind,
+    pub range: SrcRange,
+    /// No violation (also `true` while unchecked).
+    pub ok: bool,
+    /// The check ran (`false`: skipped while dragging, or the node was not evaluated).
+    pub checked: bool,
+    /// Why nothing was checked, or a remark (`Netz: nur ja/nein`).
+    pub note: Option<String>,
+    /// `assert_keepout(clearance)` in mm.
+    pub clearance: f64,
+    /// `assert_touches(tol)` in mm.
+    pub tol: f64,
+    /// `assert_touches(contact)`: `face` or `any`.
+    pub contact: String,
+    /// Volume below which an intersection counts as none (mm³, relative to the size).
+    pub eps_volume: f64,
+    /// Bodies checked: real bodies of the model (keepout) or children.
+    pub bodies: u32,
+    /// Pairs: keepout only those with a violation, the others every pair of children.
+    pub pairs: Vec<AssertPair>,
+    /// Time of the check in ms (0 when every pair came from the cache).
+    pub ms: f64,
+    /// Every pair came from the engine cache.
+    pub cached: bool,
+}
+
+/// A body of an assertion pair: a child of the assertion or a real body of the model.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct AssertBody {
+    /// Node whose result holds the body.
+    pub node: u32,
+    /// `deckel`, `Zeile 7: cube`, `Sperrvolumen` (German).
+    pub label: String,
+    /// Code lines and instances of the faces involved (like `cad measure`).
+    pub origin: Vec<String>,
+}
+
+/// Check of two bodies.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct AssertPair {
+    pub a: AssertBody,
+    pub b: AssertBody,
+    pub ok: bool,
+    /// `overlap`, `too_close`, `apart`, `gap`, `line_contact`, `point_contact`,
+    /// `unchecked` (`null` when ok).
+    pub problem: Option<String>,
+    /// Text of the result (German), as in the diagnostic.
+    pub message: String,
+    /// Intersection volume in mm³ (`null`: not computed or only known as yes/no for meshes).
+    pub volume: Option<f64>,
+    /// Intersection decided on meshes (yes/no) instead of an exact boolean.
+    pub mesh_based: bool,
+    /// Smallest distance of the tessellations in mm (0 when they touch or overlap).
+    pub distance: Option<f64>,
+    /// Accuracy of `distance` (± mm, sum of the chordal tolerances; 0 for planar faces).
+    pub accuracy: f64,
+    /// Foot points of `distance` (a, b), context coordinates.
+    pub points: Vec<Vec3>,
+    /// `assert_touches`: `face`, `line`, `point`, `mesh` (freeform, mesh-based) or `null`.
+    pub contact: Option<String>,
+    /// Contact area in mm² (`face`).
+    pub contact_area: Option<f64>,
+    /// Contact area exact (planar faces, `region2`) or estimated on the mesh.
+    pub contact_exact: bool,
+    /// Intersection body (red), context coordinates.
+    pub overlap: Option<AssertMesh>,
+    /// Contact faces (green), context coordinates.
+    pub contact_mesh: Option<AssertMesh>,
+    /// Contact lines and outlines of contact faces, context coordinates.
+    pub contact_lines: Vec<Vec<Vec3>>,
+    /// Where to look: bounds of the intersection, the contact or the gap.
+    pub focus: Option<Bounds>,
+}
+
+/// Triangles in context coordinates.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct AssertMesh {
+    pub positions: Vec<f32>,
+    pub indices: Vec<u32>,
+    /// Feature edges as segment pairs (xyz xyz), for the outline.
+    pub edges: Vec<f32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -909,6 +1016,9 @@ pub struct Scene {
     /// The language evaluation was aborted (step budget, recursion, failed assertion).
     pub aborted: bool,
     pub stats: Stats,
+    /// Results of the geometric assertions (empty until checked, see `FromEngine.Asserts`).
+    #[serde(default)]
+    pub asserts: Vec<AssertResult>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -941,6 +1051,10 @@ pub struct NodeFlags {
     pub disabled: bool,
     /// Zone of a fillet/chamfer/shell block: not in the result, shown blue transparent.
     pub zone: bool,
+    /// `assert_keepout`: keep-out volume, not in the result (also `background`), shown
+    /// transparent with its outline in its own colour.
+    #[serde(default)]
+    pub keepout: bool,
 }
 
 /// Edge/face selection of a zone block (`select`).
@@ -1482,6 +1596,11 @@ pub fn typescript() -> String {
         Region,
         ColorSource,
         ColorInfo,
+        AssertKind,
+        AssertResult,
+        AssertBody,
+        AssertPair,
+        AssertMesh,
         Scene,
         NodeStatus,
         Dim,

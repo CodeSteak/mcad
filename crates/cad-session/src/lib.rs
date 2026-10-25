@@ -26,6 +26,7 @@
 //!   (scene nodes, `tag_nodes`, mesh `tri_tags`). With an engine of its own the translation
 //!   is the identity and costs nothing.
 
+mod asserts;
 pub mod convert;
 pub mod measure;
 pub mod protocol;
@@ -154,6 +155,8 @@ pub struct Session<K: Kernel> {
     touched: HashSet<CacheKey>,
     /// Measure models and sections of the last evaluation (Plan 18).
     measure_cache: measure::MeasureCache,
+    /// Version of the finished evaluation whose assertions are still to be checked.
+    asserts_pending: Option<u64>,
 }
 
 impl<K: Kernel> Session<K>
@@ -194,6 +197,7 @@ where
             tags_identity: true,
             touched: HashSet::new(),
             measure_cache: measure::MeasureCache::default(),
+            asserts_pending: None,
         }
     }
 
@@ -291,6 +295,7 @@ where
     pub fn busy(&self) -> bool {
         self.running.is_some()
             || !self.mesh_queue.is_empty()
+            || (self.asserts_pending.is_some() && self.done.is_some())
             || ((!self.export.is_empty() || !self.regions.is_empty()) && self.done.is_some())
     }
 
@@ -631,6 +636,7 @@ where
         out.diagnostics = diags;
 
         self.running = None;
+        self.asserts_pending = None;
         self.engine.set_draft(self.drag.is_some());
         let job = self.engine.start(out.tree.clone());
         let keys: Vec<_> = (0..job.tree().nodes.len() as u32).map(|n| job.key(n)).collect();
@@ -731,6 +737,10 @@ where
         }
         if !items.is_empty() {
             res.push(FromEngine::Meshes { version: items_version, items });
+        }
+        // geometric assertions after the root mesh, before colour regions and exports
+        if res.is_empty() && self.done.is_some() && self.asserts_pending.take().is_some() {
+            return self.run_asserts();
         }
         if res.is_empty()
             && self.done.is_some()
@@ -937,10 +947,23 @@ where
         let mut items = cur.lang_diagnostics.clone();
         items.extend(convert::kernel_diagnostics(&cur.src, &ev));
         self.localize_scene(&mut scene);
-        let res =
+        let mut res =
             vec![FromEngine::Diagnostics { version: r.version, items }, FromEngine::Scene(Box::new(scene.clone()))];
         let root = ev.root();
+        let has_asserts = !ev.tree.asserts.is_empty();
         self.done = Some(Done { version: r.version, ev, scene });
+        if has_asserts {
+            if self.drag.is_some() {
+                // not while dragging (Booleans per frame); the evaluation after the drag checks
+                let items = self.asserts_unchecked("beim Ziehen übersprungen");
+                if let Some(d) = &mut self.done {
+                    d.scene.asserts = items.clone();
+                }
+                res.push(FromEngine::Asserts { version: r.version, items });
+            } else {
+                self.asserts_pending = Some(r.version);
+            }
+        }
         if self.opts.auto_root_mesh
             && let Some(root) = root
         {

@@ -58,6 +58,8 @@ mod op2d;
 pub mod parts;
 mod profile;
 
+pub use profile::fill_loops;
+
 pub use cad_step::{Schema as StepSchema, StepOptions, StepStats};
 use std::any::Any;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -117,12 +119,14 @@ enum Slot {
     Brep(CacheKey, u64, u32),
     /// Colour regions of a node result (key from `colors.rs`).
     Regions(CacheKey),
+    /// Data of a caller (e.g. assertion checks of the session), by a key it computes.
+    Aux(CacheKey),
 }
 
 impl Slot {
     fn key(&self) -> &CacheKey {
         match self {
-            Slot::Node(k) | Slot::Mesh(k, _) | Slot::Mass(k) | Slot::Brep(k, ..) | Slot::Regions(k) => k,
+            Slot::Node(k) | Slot::Mesh(k, _) | Slot::Mass(k) | Slot::Brep(k, ..) | Slot::Regions(k) | Slot::Aux(k) => k,
         }
     }
 }
@@ -133,6 +137,7 @@ enum Cached<S> {
     Mass(MassProps),
     Brep(Rc<cad_kernel::brep::Brep>),
     Regions(Rc<colors::ColorRegions<S>>),
+    Aux(Rc<dyn Any>),
 }
 
 impl<S> Clone for Cached<S> {
@@ -143,6 +148,7 @@ impl<S> Clone for Cached<S> {
             Cached::Mass(m) => Cached::Mass(*m),
             Cached::Brep(b) => Cached::Brep(b.clone()),
             Cached::Regions(r) => Cached::Regions(r.clone()),
+            Cached::Aux(a) => Cached::Aux(a.clone()),
         }
     }
 }
@@ -849,13 +855,28 @@ where
                     st.node_bytes += cost;
                 }
                 // meshes and derived data (mass properties, B-reps for STEP)
-                Slot::Mesh(..) | Slot::Mass(_) | Slot::Brep(..) | Slot::Regions(_) => {
+                Slot::Mesh(..) | Slot::Mass(_) | Slot::Brep(..) | Slot::Regions(_) | Slot::Aux(_) => {
                     st.meshes += 1;
                     st.mesh_bytes += cost;
                 }
             }
         }
         st
+    }
+
+    /// Data a caller stored with [`Engine::aux_insert`] under `key` (`None` if missing,
+    /// evicted or of another type).
+    pub fn aux_get<T: 'static>(&mut self, key: &CacheKey) -> Option<Rc<T>> {
+        match self.cache.get(&Slot::Aux(*key)) {
+            Some(Cached::Aux(a)) => a.downcast::<T>().ok(),
+            _ => None,
+        }
+    }
+
+    /// Stores caller data in the cache (LRU with the node results; `cost`: estimated bytes).
+    /// The key should be derived from node keys ([`KeyHasher`]), so a result is never stale.
+    pub fn aux_insert<T: 'static>(&mut self, key: CacheKey, value: Rc<T>, cost: usize) {
+        self.cache.insert(Slot::Aux(key), Cached::Aux(value), cost);
     }
 
     /// Removes the node results and meshes of these keys from the cache.

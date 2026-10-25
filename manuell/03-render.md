@@ -11,11 +11,16 @@
 | `--perspective [--fov 35]` | default is orthographic |
 | `--part NAME` | only these parts (repeatable) |
 | `--line N`, `--node I`, `--only` | highlight nodes, rest dimmed (`--only`: hidden). Zones blue, subtracted bodies red, selected edges orange, failed edges red |
-| `--show LIST` | `grids, anchors, handles, edges, labels, bbox, dims` or `all`; colours: `regions` (as printed, default with colours) / `faces` (faster) |
+| `--show LIST` | `grids, anchors, handles, edges, labels, bbox, dims, asserts` or `all`; colours: `regions` (as printed, default with colours) / `faces` (faster) |
 | `--section x=V\|y=V\|z=V`, `--section-plane px,py,pz,nx,ny,nz`, `--section-flip` | cut; removes the side the normal points to (`z=10` removes z > 10) |
 | `--xray`, `--theme dark`, `--size WxH`, `--no-axes` | |
 
 - `--show grids` in file context shows only top-level grids; use `--module NAME`.
+- Asserts (always drawn): `assert_keepout` volume translucent yellow, dashed outline on top;
+  intersection bodies of violations red with their edges on top; contact faces/lines of
+  `assert_touches` green; gaps and too small clearances as red lines with foot points. Labels
+  ("Schnitt 100 mm³", "Spalt 0.2 mm", "2 mm < 3") for violations; `--show asserts` labels every
+  pair (also "Kontakt 384 mm²").
 - In `iso`, cut faces of `y=` sections face away: add `--section-flip` or `--view back`.
 - `--json` returns the camera per view (`scale_px_per_mm`) to map pixels to mm.
 

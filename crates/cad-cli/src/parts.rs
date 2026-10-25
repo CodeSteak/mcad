@@ -33,6 +33,7 @@ fn ext(f: p::ExportFormat) -> &'static str {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn export_parts(
     c: &Common,
     output: &Path,
@@ -41,6 +42,7 @@ pub(crate) fn export_parts(
     names: &[String],
     all: bool,
     multicolor: Option<cad_engine::color_export::PackageOptions>,
+    ignore_asserts: bool,
 ) -> Result<Outcome, Fail> {
     let pkg = multicolor.unwrap_or_default();
     let multicolor = multicolor.is_some();
@@ -53,15 +55,20 @@ pub(crate) fn export_parts(
     let mut j = m.base_json("export");
     let Some(scene) = m.scene.clone() else {
         let t = m.diagnostics_text();
-        return Ok(Outcome { json: j, text: t, errors: true });
+        return Ok(Outcome { json: j, text: t, errors: true, exit: None });
     };
     if scene.parts.is_empty() {
         return Err(Fail::Usage(
             "keine Bauteile: benannte Instanzen auf oberster Ebene, z. B. `deckel: deckel();`".into(),
         ));
     }
+    let assert_note = match crate::assert_gate(&m, &mut j, ignore_asserts) {
+        Ok(n) => n,
+        Err(o) => return Ok(o),
+    };
     let volume = |name: &str| scene.parts.iter().find(|pt| pt.name == name).and_then(|pt| pt.volume);
     let mut t = m.diagnostics_text();
+    t.push_str(&assert_note);
     let mut rows = Vec::new();
     if all {
         crate::host::create_dir_all(output).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
@@ -115,5 +122,5 @@ pub(crate) fn export_parts(
     j["multicolor"] = json!(multicolor && fmt == p::ExportFormat::ThreeMf);
     j["parts"] = json!(rows);
     let errors = m.has_errors();
-    Ok(Outcome { json: j, text: t, errors })
+    Ok(Outcome { json: j, text: t, errors, exit: None })
 }

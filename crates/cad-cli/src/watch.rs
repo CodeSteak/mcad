@@ -248,5 +248,5 @@ pub(crate) fn command(c: &Common, a: &WatchArgs) -> Result<Outcome, Fail> {
             break;
         }
     }
-    Ok(Outcome { json: Json::Null, text: String::new(), errors })
+    Ok(Outcome { json: Json::Null, text: String::new(), errors, exit: None })
 }

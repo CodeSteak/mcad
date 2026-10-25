@@ -382,6 +382,29 @@ fn modifiers() {
 }
 
 #[test]
+fn geometric_asserts() {
+    let out = clean(
+        "cube(10);\nassert_keepout(clearance = 0.5) translate([1, 1, 9]) cube(2);\n\
+         assert_touches(tol = 0.01, contact = \"any\") { cube(1); sphere(1); }\n\
+         module m() assert_disjoint() { cube(1); cube(2); }\nm(); m();\n",
+    );
+    let a = &out.tree.asserts;
+    assert_eq!(a.len(), 4, "{a:?}");
+    assert_eq!(a[0].kind, cad_ir::AssertKind::Keepout);
+    assert_eq!(a[0].clearance, 0.5);
+    let k = out.tree.node(a[0].node);
+    assert!(k.flags.keepout && k.flags.background && matches!(k.op, Op::Group));
+    assert!(out.tree.in_keepout(k.children[0]));
+    assert_eq!((a[1].kind, a[1].tol, a[1].contact), (cad_ir::AssertKind::Touches, 0.01, cad_ir::Contact::Any));
+    assert!(!out.tree.node(a[1].node).flags.background);
+    // one per instance
+    assert_eq!(a[2].kind, cad_ir::AssertKind::Disjoint);
+    assert_ne!(a[2].node, a[3].node);
+    // the keep-out volume is not part of the result
+    assert_eq!(out.tree.solid_children(out.tree.root.unwrap()).count(), 4);
+}
+
+#[test]
 fn unsupported_operations_keep_children() {
     let out = run("hull() { cube(1); sphere(1); } import(\"a.obj\"); minkowski() cube(1); projection() cube(1);");
     // hull and minkowski are nodes of their own (the engine builds the exact special cases)

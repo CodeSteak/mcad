@@ -13,5 +13,10 @@
 | `--per-color -o colours.zip` | one STL per colour (and part), `F<slot>_<colour>.stl`, shared coordinates |
 | `--part NAME` (repeatable) | only these parts, in one file |
 | `--all-parts -o dir/ [--format step]` | one file per part (`body.stl`, `k_2.step`; default stl) |
+| `--ignore-asserts` | export although an `assert_…` is violated (warning line `trotz n Assert-Verletzung(en) exportiert`) |
+
+Violated asserts (`cad usage asserts`) stop every variant: exit 4, nothing written, the
+violations listed (`Export abgebrochen: 2 Assert-Verletzung(en), nichts geschrieben:`); JSON
+`aborted: true, violations, asserts`. `assert_keepout` volumes are never exported.
 
 Check colours before a multicolour print: `cad measure FILE --colors`.

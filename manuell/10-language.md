@@ -26,6 +26,7 @@ Additions:
 | `sketch { … }`, `corner`, `fillet2d`, `chamfer2d`, `offset`, `stroke` | exact 2D profiles (`cad usage sketch`) |
 | `text(…)`, `import("x.svg")` | `cad usage text-svg` |
 | `import("x.stl", as = "solid"\|"mesh")` | STL as B-rep or mesh (`cad usage import-stl`) |
+| `assert_keepout(clearance)`, `assert_disjoint()`, `assert_intersect()`, `assert_touches(tol, contact)` | collision checks after evaluation, violation = warning, export stops (`cad usage asserts`) |
 | `loft() { profiles… }` | skin through 2D profiles (`ruled = true` for straight) |
 | `sweep(path = pts, interp = "spline"\|"linear") profile;` | sweep a profile along a path (or an open `sketch` as first child) |
 | `surface(points = grid4x4…)` + `thicken(t)` | free-form surface and its solid |

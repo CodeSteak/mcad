@@ -1,0 +1,33 @@
+// Zweck: Kollisions-Asserts (Plan 21, Phase C) – Prüfungen nach der Auswertung; eine
+// Verletzung ist eine Warnung, `cad export` bricht dann ab (außer mit --ignore-asserts).
+// Asserts sind Gruppen ihrer Kinder und lassen sich schachteln. Das Bauteil auf der Platine
+// (STL als Netz) ist ein Sperrvolumen: gezeigt, aber nicht exportiert und nicht gezählt.
+
+w = 60;   // Gehäuse außen
+d = 40;
+h = 25;
+t = 2;    // Wand
+luft = 1; // Mindestabstand zum Bauteil
+
+module gehaeuse() difference() {
+    cube([w, d, h]);
+    translate([t, t, t]) cube([w - 2 * t, d - 2 * t, h]);
+}
+module deckel() translate([0, 0, h]) cube([w, d, t]);
+// Halter und Kabelführung stecken 1 mm in Boden und Wand
+module halter() translate([t - 1, d / 2 - 5, t - 1]) cube([10, 10, 12]);
+module kabelfuehrung() translate([w - t - 6, d / 2 - 4, t - 1]) cube([7, 8, 6]);
+
+assert_touches() {               // Deckel liegt flächig auf dem Gehäuse
+    assert_intersect() {         // Halter und Kabelführung sind mit dem Gehäuse verbunden
+        g: gehaeuse();
+        assert_disjoint() {      // Halter und Kabelführung berühren sich nicht
+            hl: halter();
+            kf: kabelfuehrung();
+        }
+    }
+    k: deckel();
+}
+
+// Bauteil auf der Platine (Winkel 20 × 10 × 15): 1 mm Luft zu allem
+assert_keepout(clearance = luft) translate([25, 12, t + 2]) import("../stl/winkel.stl", as = "mesh");

@@ -179,6 +179,8 @@ pub(crate) struct Ev<'a> {
     /// `filament(c, n)` declarations (top level of the main file, evaluated before the other
     /// statements so that they take precedence over `color(…, filament = n)`).
     pub filament_decls: Vec<cad_ir::FilamentDecl>,
+    /// Geometric assertions (`assert_keepout`, …) in evaluation order.
+    pub asserts: Vec<cad_ir::AssertDecl>,
     /// The declaration pass runs (`filament()` registers, nothing else is evaluated).
     pub decl_pass: bool,
     /// `filament()` statements seen by the declaration pass.
@@ -275,6 +277,7 @@ impl<'a> Ev<'a> {
             filaments: std::collections::HashMap::new(),
             random_colors: Vec::new(),
             filament_decls: Vec::new(),
+            asserts: Vec::new(),
             decl_pass: false,
             decl_spans: Vec::new(),
             sketch: None,
@@ -757,7 +760,7 @@ impl<'a> Ev<'a> {
             .collect();
         let root = if self.nodes.is_empty() { None } else { Some(self.root_mod.unwrap_or(0)) };
         EvalOutput {
-            tree: Tree { nodes: self.nodes, root, filaments: self.filament_decls },
+            tree: Tree { nodes: self.nodes, root, filaments: self.filament_decls, asserts: self.asserts },
             diagnostics: self.diags,
             hints,
             parts: self.parts,

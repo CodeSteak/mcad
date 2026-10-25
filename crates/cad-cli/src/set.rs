@@ -301,5 +301,5 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
     } else {
         t.push_str(&format!("geschrieben: {}\n", written.join(", ")));
     }
-    Ok(Outcome { json: j, text: t, errors: refused })
+    Ok(Outcome { json: j, text: t, errors: refused, exit: None })
 }

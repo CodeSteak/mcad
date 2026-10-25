@@ -685,6 +685,25 @@ pub(crate) fn region_area(shapes: &[Shape2]) -> f64 {
         .sum()
 }
 
+/// Triangles of the region the closed polylines `loops` enclose (even-odd rule): points and
+/// index triples. For display (contact areas of `assert_touches`).
+pub fn fill_loops(loops: &[Vec<DVec2>]) -> (Vec<DVec2>, Vec<u32>) {
+    let shape: Shape2 = loops.iter().filter(|l| l.len() >= 3).map(|c| to_pts(c)).collect();
+    if shape.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+    let empty: Vec<Shape2> = Vec::new();
+    let shapes = vec![shape].overlay(&empty, OverlayRule::Subject, FillRule::EvenOdd);
+    let (mut pts, mut idx) = (Vec::new(), Vec::new());
+    for sh in &shapes {
+        let tri = sh.triangulate().to_triangulation::<u32>();
+        let base = pts.len() as u32;
+        pts.extend(tri.points.iter().map(|p| DVec2::from_array(*p)));
+        idx.extend(tri.indices.iter().map(|i| base + i));
+    }
+    (pts, idx)
+}
+
 /// Filled, outlined mesh of a 2D expression in the plane z = 0. Each triangle carries the tag
 /// of the first leaf containing its centroid.
 pub(crate) fn region_mesh(e: &Expr2, tol: f64, tag_of: &dyn Fn(NodeIdx) -> Tag) -> Mesh {

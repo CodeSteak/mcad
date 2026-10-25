@@ -504,7 +504,7 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
             let idx = i as u32;
             let (op_instance, label) = match &n.op {
                 Op::ModuleCall { name, instance } => (instance.clone(), name.clone()),
-                o => (None, o.label()),
+                o => (None, tree.assert_of(idx).map_or_else(|| o.label(), |a| a.kind.name().to_string())),
             };
             let base = p::SceneNode {
                 idx,
@@ -519,6 +519,7 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
                     background: n.flags.background,
                     disabled: n.flags.disabled,
                     zone: n.flags.zone,
+                    keepout: n.flags.keepout,
                 },
                 subtracted: is_subtracted(tree, idx),
                 color: n.color.map(p::Rgba),
@@ -858,6 +859,7 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
         tag_nodes,
         echoes,
         aborted: out.aborted,
+        asserts: Vec::new(),
         stats,
     }
 }

@@ -60,6 +60,13 @@ pub(crate) struct Look {
     pub text: [f32; 4],
     pub cap: [f32; 4],
     pub label_background: [f32; 4],
+    /// Keep-out volume (`assert_keepout`): fill and outline.
+    pub keepout: [f32; 4],
+    pub keepout_edge: [f32; 4],
+    /// Intersection body of a violated assertion.
+    pub overlap: [f32; 4],
+    /// Contact face of `assert_touches`.
+    pub contact: [f32; 4],
 }
 
 const fn hex(c: u32, a: f32) -> [f32; 4] {
@@ -95,6 +102,10 @@ pub(crate) const LIGHT: Look = Look {
     text: [0.08, 0.08, 0.12, 1.0],
     cap: [0.86, 0.36, 0.24, 1.0],
     label_background: [1.0, 1.0, 1.0, 0.78],
+    keepout: hex(0xca8a04, 0.22),
+    keepout_edge: hex(0x8a5a00, 1.0),
+    overlap: hex(0xe03131, 0.92),
+    contact: hex(0x2f9e44, 0.9),
 };
 
 pub(crate) const DARK: Look = Look {
@@ -126,6 +137,10 @@ pub(crate) const DARK: Look = Look {
     text: hex(0xe4e7eb, 1.0),
     cap: hex(0xe0694b, 1.0),
     label_background: hex(0x1c1f23, 0.82),
+    keepout: hex(0xfacc15, 0.2),
+    keepout_edge: hex(0xfde047, 1.0),
+    overlap: hex(0xff6b6b, 0.92),
+    contact: hex(0x69db7c, 0.9),
 };
 
 impl Look {
@@ -141,7 +156,8 @@ impl Look {
 pub(crate) const ALL_VIEWS: [&str; 4] = ["iso", "front", "top", "right"];
 /// Grids with more points get no point labels (only plane names).
 const MAX_POINT_LABELS: usize = 48;
-const SHOW: [&str; 9] = ["grids", "anchors", "handles", "edges", "labels", "bbox", "dims", "regions", "faces"];
+const SHOW: [&str; 10] =
+    ["grids", "anchors", "handles", "edges", "labels", "bbox", "dims", "regions", "faces", "asserts"];
 
 /// Selection, camera, overlays, section (shared by `render` and `watch --render`).
 #[derive(Args, Clone, Debug, Default)]
@@ -724,7 +740,9 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
             if n.flags.highlight && !parent_has(&|x| x.flags.highlight) {
                 draws.push(Draw { node: n.idx, color: lk.red, edges: None, node_colors: false, role: "modifier #" });
             }
-            if n.flags.background && !parent_has(&|x| x.flags.background) {
+            if n.flags.keepout && !parent_has(&|x| x.flags.keepout) {
+                draws.push(Draw { node: n.idx, color: lk.keepout, edges: None, node_colors: false, role: "keepout" });
+            } else if n.flags.background && !parent_has(&|x| x.flags.background) {
                 draws.push(Draw { node: n.idx, color: lk.grey, edges: None, node_colors: false, role: "modifier %" });
             }
         }
@@ -762,6 +780,7 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
     let mut meshes = Vec::new();
     let mut triangles = 0usize;
     let mut visible = Vec::new();
+    let mut keepout_lines: Vec<Polyline> = Vec::new();
     for (node, mesh, col) in &region_meshes {
         let n = &sc.nodes[*node as usize];
         triangles += mesh.triangle_count();
@@ -788,6 +807,14 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
             }
         } else {
             meshes.push(((*mesh).clone(), d.color, w, d.edges, cap));
+        }
+        if d.role == "keepout" {
+            // outline on top, dashed: visible inside the model
+            for seg in mesh.edge_segments.chunks_exact(6) {
+                let a = w.transform_point3(DVec3::new(seg[0] as f64, seg[1] as f64, seg[2] as f64));
+                let b = w.transform_point3(DVec3::new(seg[3] as f64, seg[4] as f64, seg[5] as f64));
+                keepout_lines.push(top_line(vec![a, b], lk.keepout_edge, 1.6, true));
+            }
         }
         visible.push(json!({
             "idx": node.idx, "label": node.label, "instance": node.instance, "role": d.role,
@@ -933,11 +960,127 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
             }
         }
     }
+    lines.append(&mut keepout_lines);
+    let n_asserts = if plan.parts.is_empty() {
+        assert_overlay(sc, plan, &mut meshes, (&mut lines, &mut markers, &mut labels))
+    } else {
+        0
+    };
     let counts = json!({
         "grids": n_grids, "grid_points": n_points, "anchors": n_anchors, "handles": n_handles,
-        "labels": labels.len(), "lines": lines.len(), "markers": markers.len(),
+        "labels": labels.len(), "lines": lines.len(), "markers": markers.len(), "asserts": n_asserts,
     });
     Ok(Built { meshes, lines, markers, labels, triangles, visible, highlighted, subject, counts, notes })
+}
+
+/// Mesh of an assertion overlay (context coordinates, flat normals).
+fn assert_mesh(a: &p::AssertMesh) -> Mesh {
+    let mut normals = vec![0.0f32; a.positions.len()];
+    for t in a.indices.chunks_exact(3) {
+        let v = |i: u32| {
+            let k = i as usize * 3;
+            DVec3::new(a.positions[k] as f64, a.positions[k + 1] as f64, a.positions[k + 2] as f64)
+        };
+        let n = (v(t[1]) - v(t[0])).cross(v(t[2]) - v(t[0])).normalize_or_zero();
+        for &i in t {
+            let k = i as usize * 3;
+            normals[k..k + 3].copy_from_slice(&[n.x as f32, n.y as f32, n.z as f32]);
+        }
+    }
+    Mesh { positions: a.positions.clone(), normals, indices: a.indices.clone(), ..Default::default() }
+}
+
+/// Results of `assert_keepout`/`assert_disjoint`/`assert_intersect`/`assert_touches` (Plan
+/// 21 C): intersection bodies red (outline on top), contact faces green, gaps and too small
+/// clearances as dimension lines with foot points. Labels for violations, with
+/// `--show asserts` for every pair. Returns the number of drawn pairs.
+fn assert_overlay(
+    sc: &p::Scene,
+    plan: &Plan,
+    meshes: &mut Vec<Owned>,
+    (lines, markers, labels): (&mut Vec<Polyline>, &mut Vec<Marker>, &mut Vec<Label>),
+) -> usize {
+    let lk = plan.look;
+    let all = plan.shows("asserts");
+    let mut n = 0;
+    for a in sc.asserts.iter().filter(|a| a.checked) {
+        for pr in &a.pairs {
+            let mut drawn = false;
+            if let Some(o) = &pr.overlap
+                && (!pr.ok || all)
+            {
+                meshes.push((assert_mesh(o), lk.overlap, DMat4::IDENTITY, None, true));
+                // feature edges on top: visible inside the bodies
+                for e in o.edges.chunks_exact(6) {
+                    let x = DVec3::new(e[0] as f64, e[1] as f64, e[2] as f64);
+                    let y = DVec3::new(e[3] as f64, e[4] as f64, e[5] as f64);
+                    lines.push(top_line(vec![x, y], lk.failed, 2.0, false));
+                }
+                drawn = true;
+            }
+            if let Some(c) = &pr.contact_mesh {
+                meshes.push((assert_mesh(c), lk.contact, DMat4::IDENTITY, None, true));
+                drawn = true;
+            }
+            let contact_c = if pr.ok { lk.contact } else { lk.failed };
+            for l in &pr.contact_lines {
+                let pts: Vec<DVec3> = l.iter().map(|q| DVec3::from_array(q.0)).collect();
+                if pts.len() == 1 {
+                    markers.push(Marker {
+                        pos: pts[0],
+                        shape: MarkerShape::Dot,
+                        size: 4.5,
+                        color: contact_c,
+                        on_top: true,
+                    });
+                } else {
+                    lines.push(top_line(pts, contact_c, 2.4, false));
+                }
+                drawn = true;
+            }
+            let gap = matches!(pr.problem.as_deref(), Some("gap" | "too_close" | "apart"));
+            if pr.points.len() == 2 && (gap || all) && pr.distance.is_some_and(|d| d > 0.0) {
+                let (pa, pb) = (DVec3::from_array(pr.points[0].0), DVec3::from_array(pr.points[1].0));
+                let col = if pr.ok { lk.dims_label } else { lk.failed };
+                lines.push(top_line(vec![pa, pb], col, 2.0, false));
+                for q in [pa, pb] {
+                    markers.push(Marker { pos: q, shape: MarkerShape::Dot, size: 3.5, color: col, on_top: true });
+                }
+                drawn = true;
+            }
+            if !drawn {
+                continue;
+            }
+            n += 1;
+            if pr.ok && !all {
+                continue;
+            }
+            let pos = pr
+                .focus
+                .as_ref()
+                .map(|b| (DVec3::from_array(b.min.0) + DVec3::from_array(b.max.0)) * 0.5)
+                .or_else(|| pr.points.first().map(|q| DVec3::from_array(q.0)));
+            let Some(pos) = pos else { continue };
+            let text = match pr.problem.as_deref() {
+                Some("overlap") => match pr.volume.filter(|v| *v > 0.0) {
+                    Some(v) => format!("Schnitt {} mm³", num(v)),
+                    None => "Überschneidung".into(),
+                },
+                Some("too_close") => format!("{} mm < {}", num(pr.distance.unwrap_or(0.0)), num(a.clearance)),
+                Some("gap") => format!("Spalt {} mm", num(pr.distance.unwrap_or(0.0))),
+                Some("apart") => format!("kein Schnitt, {} mm", num(pr.distance.unwrap_or(0.0))),
+                Some("line_contact") => "Linienkontakt".into(),
+                Some("point_contact") => "Punktkontakt".into(),
+                _ => match pr.contact_area {
+                    Some(ar) => format!("Kontakt {} mm²", num(ar)),
+                    None => pr.contact.clone().unwrap_or_else(|| "ok".into()),
+                },
+            };
+            let color = if pr.ok { lk.dims_label } else { lk.failed };
+            labels.push(Label { pos, text, color, offset: (8.0, -10.0), priority: 7 });
+        }
+    }
+    n
 }
 
 /// With a section, a model made of parts is drawn part by part instead of as the root's single
@@ -1354,7 +1497,7 @@ pub(crate) fn command(c: &Common, output: &Path, a: &ViewArgs) -> Result<Outcome
     j["line"] = json!(plan.lines.first());
     if m.scene.is_none() {
         let t = m.diagnostics_text();
-        return Ok(Outcome { json: j, text: t, errors: true });
+        return Ok(Outcome { json: j, text: t, errors: true, exit: None });
     }
     let t1 = std::time::Instant::now();
     let (fields, line) = render_model(&mut m, &plan, output)?;
@@ -1368,5 +1511,5 @@ pub(crate) fn command(c: &Common, output: &Path, a: &ViewArgs) -> Result<Outcome
     });
     let mut t = m.diagnostics_text();
     t.push_str(&line);
-    Ok(Outcome { json: j, text: t, errors: m.has_errors() })
+    Ok(Outcome { json: j, text: t, errors: m.has_errors(), exit: None })
 }

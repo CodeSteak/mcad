@@ -22,6 +22,55 @@ pub struct Tree {
     /// slot of a colour for the whole model, before any `color(…, filament = n)`.
     #[serde(default)]
     pub filaments: Vec<FilamentDecl>,
+    /// `assert_keepout`, `assert_disjoint`, `assert_intersect`, `assert_touches` (Plan 21 C):
+    /// the checks the session runs after the kernel job, one per evaluated statement instance.
+    #[serde(default)]
+    pub asserts: Vec<AssertDecl>,
+}
+
+/// A geometric assertion. Its node is a group of the checked children; the node of
+/// `assert_keepout` also has [`Flags::keepout`] (and `background`: not part of the result).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AssertDecl {
+    pub node: NodeIdx,
+    pub kind: AssertKind,
+    /// `assert_keepout(clearance)`: required distance of every real body in mm (0: may touch).
+    pub clearance: f64,
+    /// `assert_touches(tol)`: largest gap that still counts as contact in mm.
+    pub tol: f64,
+    /// `assert_touches(contact)`.
+    pub contact: Contact,
+    pub stmt: StmtId,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum AssertKind {
+    Keepout,
+    Disjoint,
+    Intersect,
+    Touches,
+}
+
+impl AssertKind {
+    /// Name of the module (`assert_keepout`, …).
+    pub fn name(self) -> &'static str {
+        match self {
+            AssertKind::Keepout => "assert_keepout",
+            AssertKind::Disjoint => "assert_disjoint",
+            AssertKind::Intersect => "assert_intersect",
+            AssertKind::Touches => "assert_touches",
+        }
+    }
+}
+
+/// Kind of contact `assert_touches` requires.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum Contact {
+    /// Contact over an area (default): line and point contact are warned about.
+    Face,
+    /// Any contact.
+    Any,
 }
 
 /// `filament("red", 4);`: colour `rgba` prints with slot `slot`.
@@ -46,6 +95,10 @@ pub struct Flags {
     pub disabled: bool,
     /// Zone of a fillet/chamfer/shell block: not part of the result.
     pub zone: bool,
+    /// `assert_keepout`: keep-out volume, not part of the result (set together with
+    /// `background`), shown as such.
+    #[serde(default)]
+    pub keepout: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -481,6 +534,24 @@ impl Op {
 impl Tree {
     pub fn node(&self, i: NodeIdx) -> &Node {
         &self.nodes[i as usize]
+    }
+
+    /// The assertion whose node `i` is.
+    pub fn assert_of(&self, i: NodeIdx) -> Option<&AssertDecl> {
+        self.asserts.iter().find(|a| a.node == i)
+    }
+
+    /// Is `i` inside a keep-out volume (the node itself or an ancestor has [`Flags::keepout`])?
+    pub fn in_keepout(&self, i: NodeIdx) -> bool {
+        let mut cur = Some(i);
+        while let Some(c) = cur {
+            let n = self.node(c);
+            if n.flags.keepout {
+                return true;
+            }
+            cur = n.parent;
+        }
+        false
     }
 
     /// Dimension of a node's result: 2D if it consists of profiles only.

@@ -24,7 +24,8 @@
 //!
 //! Exit codes: 0 ok, 1 diagnostics with severity error (syntax, evaluation or a failed kernel
 //! operation; `set`: change refused), 2 usage error (arguments, unreadable file, unknown
-//! reference), 3 kernel/internal error (tessellation or export failed, panic).
+//! reference), 3 kernel/internal error (tessellation or export failed, panic), 4 `export`
+//! stopped by a violated assertion (`assert_keepout`, …; `--ignore-asserts` exports anyway).
 //!
 //! JSON schema (`schema_version` = `cad_session::PROTOCOL_VERSION`, currently 1). Types such
 //! as `Diagnostic`, `Scene`, `SrcRange`, `Hint`, `Handle` are the protocol types documented in
@@ -35,7 +36,8 @@
 //! common:  { schema_version, command, file, ok, exit_code, context: string|null,
 //!            diagnostics: Diagnostic[], error?: string,
 //!            daemon?: {used: bool, reason: string|null} }   (commands that use the daemon)
-//! check:   + { errors: number, warnings: number }
+//! check:   + { errors: number, warnings: number, violations: number,
+//!            asserts: AssertResult[] (protocol type) }
 //! outline: + { files: [{path, role}], includes: [{file, line, path, use, found}],
 //!            modules: [{name, path, qualified, file, line, end_line,
 //!                       params: [{name, default, default_value, type}],
@@ -45,14 +47,16 @@
 //!            grids: Grid'[] (file level), anchors: [{ref, point, dir, line}],
 //!            instances: [{name, module, file, line, depth, part}],
 //!            parts: [{name, module, line, node, bounds: Bounds|null, volume}],
-//!            counts: {errors, warnings, nodes, modules, parts}, kernel: bool }
+//!            counts: {errors, warnings, nodes, modules, parts}, kernel: bool,
+//!            asserts: [{node, kind, line, file, checked, ok, violations: string[], bodies, note}] }
 //!          Grid' = { name, file, line, planes: [{axis: "x"|"y"|"z", name, value,
 //!                    kind: "literal"|"expression"|"reference"|"implicit", expr}] }
 //! eval:    + { scene: Scene|null }
 //! inspect: + { line, nodes: InspectNode[], hints: Hint[], handles: Handle[], echoes: Echo[] }
 //!          InspectNode = { idx, label, instance, range, status, dim, flags, subtracted,
 //!                          world_bounds: {min,max}|null, volume|null, area|null,
-//!                          selected_edges, opened_faces, hints, messages, cached }
+//!                          selected_edges, opened_faces, hints, messages, cached,
+//!                          assert: AssertResult|null }
 //! render:  + { output, width, height, view, views: [{name, x, y, width, height, camera}],
 //!            camera: Camera, line|null, lines: number[], nodes: number[], parts: string[],
 //!            highlighted: number[], visible_nodes: [{idx, label, instance, role, line, file,
@@ -62,8 +66,9 @@
 //!            timings: {evaluate_ms, eval_ms, kernel_ms, render_ms} }
 //!          Camera = { projection: "ortho"|"perspective", fov_deg|null, azimuth, elevation,
 //!                     dir, up, right, target, eye, scale_px_per_mm, width_mm, height_mm }
-//!          role: base | dimmed | highlighted | zone | subtracted | background | modifier #|%
-//! measure: + { between?: {a: {ref, kind, point}, b: {…}, delta, distance},
+//!          role: base | dimmed | highlighted | zone | subtracted | background | modifier #|% |
+//!                keepout
+//! measure: + { asserts?: (as outline), between?: {a: {ref, kind, point}, b: {…}, delta, distance},
 //!              bounds?: {target, nodes, bounds: Bounds|null},
 //!              volume?: {target, nodes, volume}, area?: {target, nodes, area},
 //!              interference?: {parts, tolerance, method, pairs: [{a, b, bounds_overlap,
@@ -94,6 +99,8 @@
 //! export:  + { output, format: "stl"|"3mf"|"step", bytes, triangles, volume|null, area|null,
 //!            bounds: {min,max}|null, step?: StepStats }   (triangles 0 for STEP)
 //!          with --part/--all-parts: + { parts: [{ name, output, bytes, triangles, volume|null }] }
+//!          always: + { asserts: AssertResult[], violations, ignored_asserts, aborted }
+//!          (aborted: exit 4, nothing written, no output fields)
 //! ```
 //!
 //! Projects: `include <…>`/`use <…>` are read from the file system relative to the including
@@ -281,6 +288,10 @@ pub(crate) enum Cmd {
         /// `F<slot>_<colour>.stl`, all in the same coordinate system).
         #[arg(long, conflicts_with_all = ["single_color", "all_parts"])]
         per_color: bool,
+        /// Export even if an assertion (`assert_keepout`, `assert_disjoint`, `assert_intersect`,
+        /// `assert_touches`) is violated; without it the export stops with exit code 4.
+        #[arg(long)]
+        ignore_asserts: bool,
     },
     /// Compare SMLib ↔ solidcore per node (volume, faces, edges, selected edges) and coverage of
     /// solidcore (development only).
@@ -330,7 +341,12 @@ pub(crate) struct Outcome {
     text: String,
     /// Exit code 1 (diagnostics with errors).
     errors: bool,
+    /// Another exit code (4: `cad export` stopped by an assertion violation).
+    exit: Option<u8>,
 }
+
+/// Exit code of `cad export` when an assertion is violated (nothing written).
+pub(crate) const EXIT_ASSERT: u8 = 4;
 
 /// What a command prints and its exit code (computed here or in the daemon).
 pub(crate) struct Output {
@@ -458,7 +474,7 @@ pub(crate) fn finish(
     let mut stderr = String::new();
     let code = match result {
         Ok(o) => {
-            let code = if o.errors { 1 } else { 0 };
+            let code = o.exit.unwrap_or(if o.errors { 1 } else { 0 });
             if o.json.is_null() {
                 // the command printed its own output (watch)
                 stdout.push_str(&o.text);
@@ -534,10 +550,21 @@ pub(crate) fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
         Cmd::Measure { c, a } => measure::command(c, a),
         Cmd::Watch { c, a } => watch::command(c, a),
         Cmd::Set { a } => set::command(a),
-        Cmd::Export { c, output, format, schema, part, all_parts, single_color, per_color, color_group } => {
+        Cmd::Export {
+            c,
+            output,
+            format,
+            schema,
+            part,
+            all_parts,
+            single_color,
+            per_color,
+            color_group,
+            ignore_asserts,
+        } => {
             let pkg = cad_engine::color_export::PackageOptions { color_group: *color_group };
             if *per_color {
-                export_per_color(c, output, part)
+                export_per_color(c, output, part, *ignore_asserts)
             } else if *all_parts || !part.is_empty() {
                 parts::export_parts(
                     c,
@@ -547,9 +574,10 @@ pub(crate) fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
                     part,
                     *all_parts,
                     (!*single_color).then_some(pkg),
+                    *ignore_asserts,
                 )
             } else {
-                export(c, output, format.as_deref(), schema, (!*single_color).then_some(pkg))
+                export(c, output, format.as_deref(), schema, (!*single_color).then_some(pkg), *ignore_asserts)
             }
         }
         Cmd::DiffKernels { files, .. } => diff::command(files),
@@ -852,9 +880,22 @@ fn check(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     let mut j = m.base_json("check");
     j["errors"] = json!(errors);
     j["warnings"] = json!(warnings);
+    let asserts = m.scene.as_ref().map(|sc| sc.asserts.clone()).unwrap_or_default();
+    j["violations"] = json!(asserts.iter().map(|a| a.pairs.iter().filter(|p| !p.ok).count()).sum::<usize>());
+    j["asserts"] = json!(asserts);
     let mut text = m.diagnostics_text();
+    if !asserts.is_empty() {
+        let checked = asserts.iter().filter(|a| a.checked).count();
+        let bad = asserts.iter().filter(|a| !a.ok).count();
+        let tail = if bad > 0 {
+            format!(" ({} Verletzung(en); cad export bricht dann ab, außer mit --ignore-asserts)", j["violations"])
+        } else {
+            String::new()
+        };
+        text.push_str(&format!("Asserts: {checked} von {} geprüft, {bad} verletzt{tail}\n", asserts.len()));
+    }
     text.push_str(&format!("{}: {errors} Fehler, {warnings} Warnungen\n", m.file));
-    Ok(Outcome { json: j, text, errors: m.has_errors() })
+    Ok(Outcome { json: j, text, errors: m.has_errors(), exit: None })
 }
 
 fn eval(c: &Common) -> Result<Outcome, Fail> {
@@ -957,7 +998,7 @@ fn eval(c: &Common) -> Result<Outcome, Fail> {
         ));
     }
     t.push_str(&m.diagnostics_text());
-    Ok(Outcome { json: j, text: t, errors: m.has_errors() })
+    Ok(Outcome { json: j, text: t, errors: m.has_errors(), exit: None })
 }
 
 fn tree_text(sc: &p::Scene, n: u32, depth: usize, out: &mut String) {
@@ -1028,7 +1069,7 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
     let Some(sc) = m.scene.clone() else {
         j["nodes"] = json!([]);
         t.push_str(&m.diagnostics_text());
-        return Ok(Outcome { json: j, text: t, errors: m.has_errors() });
+        return Ok(Outcome { json: j, text: t, errors: m.has_errors(), exit: None });
     };
     t.push_str(&context_text(&m));
     t.push_str(&format!("Z.{line}: {}\n", m.line_text(line)));
@@ -1063,8 +1104,20 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
         if n.subtracted {
             l.push_str("  [abgezogen]");
         }
+        if n.flags.keepout {
+            l.push_str("  [Sperrvolumen: nicht im Ergebnis]");
+        }
         t.push_str(&l);
         t.push('\n');
+        if n.label.starts_with("assert_") {
+            let (_, at) = asserts_summary(&sc, Some(&[n.idx]));
+            t.push_str(&at.replacen("  ", "      ", 1));
+            if let Some(a) = sc.asserts.iter().find(|a| a.node == n.idx) {
+                for pr in &a.pairs {
+                    t.push_str(&format!("        {} {}\n", if pr.ok { "ok:" } else { "VERLETZT:" }, pr.message));
+                }
+            }
+        }
         if let Some(b) = &wb {
             t.push_str(&format!("      Hülle {} – {}\n", vec3(&b.min), vec3(&b.max)));
         }
@@ -1101,6 +1154,7 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
             "hints": n.hints,
             "messages": n.messages.iter().map(|x| json!({"severity": x.severity, "message": x.message})).collect::<Vec<_>>(),
             "cached": n.cached,
+            "assert": sc.asserts.iter().find(|a| a.node == n.idx),
         }));
     }
     if ids.is_empty() {
@@ -1143,7 +1197,7 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
     j["echoes"] = json!(echoes);
     let errors = m.has_errors();
     m.scene = Some(sc);
-    Ok(Outcome { json: j, text: t, errors })
+    Ok(Outcome { json: j, text: t, errors, exit: None })
 }
 
 fn export(
@@ -1152,6 +1206,7 @@ fn export(
     format: Option<&str>,
     schema: &str,
     multicolor: Option<cad_engine::color_export::PackageOptions>,
+    ignore_asserts: bool,
 ) -> Result<Outcome, Fail> {
     let fmt = match format
         .map(|s| s.to_ascii_lowercase())
@@ -1169,8 +1224,12 @@ fn export(
     let mut j = m.base_json("export");
     if m.scene.is_none() {
         let t = m.diagnostics_text();
-        return Ok(Outcome { json: j, text: t, errors: true });
+        return Ok(Outcome { json: j, text: t, errors: true, exit: None });
     }
+    let assert_note = match assert_gate(&m, &mut j, ignore_asserts) {
+        Ok(n) => n,
+        Err(o) => return Ok(o),
+    };
     let colored = multicolor.is_some() && fmt == p::ExportFormat::ThreeMf;
     let pkg = multicolor.unwrap_or_default();
     let mut notes = Vec::new();
@@ -1215,6 +1274,7 @@ fn export(
         colors_text = text;
     }
     let mut t = m.diagnostics_text();
+    t.push_str(&assert_note);
     let what = match &step {
         Some(st) => format!("{} Körper, {} Flächen, {} Kanten", st.solids + st.sheets, st.faces, st.edges),
         None => format!("{triangles} Dreiecke"),
@@ -1229,11 +1289,11 @@ fn export(
         t.push_str(&format!("3MF mehrfarbig: {} (einfarbig: --single-color)\n", notes.join("; ")));
     }
     t.push_str(&colors_text);
-    Ok(Outcome { json: j, text: t, errors: m.has_errors() })
+    Ok(Outcome { json: j, text: t, errors: m.has_errors(), exit: None })
 }
 
 /// `cad export --per-color -o x.zip`: one STL per colour (and part) in a ZIP.
-fn export_per_color(c: &Common, output: &Path, parts: &[String]) -> Result<Outcome, Fail> {
+fn export_per_color(c: &Common, output: &Path, parts: &[String], ignore_asserts: bool) -> Result<Outcome, Fail> {
     // a ZIP under another extension would be taken for an STL by the slicer
     if !output.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
         return Err(Fail::Usage(format!(
@@ -1245,7 +1305,11 @@ fn export_per_color(c: &Common, output: &Path, parts: &[String]) -> Result<Outco
     let mut j = m.base_json("export");
     let Some(sc) = m.scene.clone() else {
         let t = m.diagnostics_text();
-        return Ok(Outcome { json: j, text: t, errors: true });
+        return Ok(Outcome { json: j, text: t, errors: true, exit: None });
+    };
+    let assert_note = match assert_gate(&m, &mut j, ignore_asserts) {
+        Ok(n) => n,
+        Err(o) => return Ok(o),
     };
     let names = if parts.is_empty() { None } else { Some(parts) };
     let (bytes, st) = m.session.export_colors(p::ExportFormat::Stl, names).map_err(Fail::Kernel)?;
@@ -1260,6 +1324,7 @@ fn export_per_color(c: &Common, output: &Path, parts: &[String]) -> Result<Outco
     j["colors"] = colors;
     j["color_regions"] = regions;
     let mut t = m.diagnostics_text();
+    t.push_str(&assert_note);
     t.push_str(&format!(
         "{}: {} STL (eine je Farbe{}), {} Dreiecke, {} Bytes\n",
         output.display(),
@@ -1269,7 +1334,107 @@ fn export_per_color(c: &Common, output: &Path, parts: &[String]) -> Result<Outco
         bytes.len()
     ));
     t.push_str(&colors_text);
-    Ok(Outcome { json: j, text: t, errors: m.has_errors() })
+    Ok(Outcome { json: j, text: t, errors: m.has_errors(), exit: None })
+}
+
+/// Violated assertions of a loaded model as text lines (`Z.3 assert_disjoint: …`).
+pub(crate) fn assert_violations(m: &Model) -> Vec<String> {
+    let Some(sc) = &m.scene else { return Vec::new() };
+    let mut v = Vec::new();
+    for a in &sc.asserts {
+        for pr in a.pairs.iter().filter(|p| !p.ok) {
+            v.push(format!("{} {}: {}", zl(sc, &a.range), assert_name(a.kind), pr.message));
+        }
+    }
+    v
+}
+
+pub(crate) fn assert_name(k: p::AssertKind) -> &'static str {
+    match k {
+        p::AssertKind::Keepout => "assert_keepout",
+        p::AssertKind::Disjoint => "assert_disjoint",
+        p::AssertKind::Intersect => "assert_intersect",
+        p::AssertKind::Touches => "assert_touches",
+    }
+}
+
+/// Short form of the assertions of a scene for `outline`, `inspect` and `measure` (also
+/// without kernel: then unchecked): JSON rows and text lines `Z.2 assert_keepout(…): …`.
+pub(crate) fn asserts_summary(sc: &p::Scene, only: Option<&[u32]>) -> (Json, String) {
+    let mut rows = Vec::new();
+    let mut t = String::new();
+    for n in sc.nodes.iter().filter(|n| n.label.starts_with("assert_")) {
+        if only.is_some_and(|o| !o.contains(&n.idx)) {
+            continue;
+        }
+        let r = sc.asserts.iter().find(|a| a.node == n.idx);
+        let params = match r {
+            Some(a) => match a.kind {
+                p::AssertKind::Keepout => format!("clearance = {}", num(a.clearance)),
+                p::AssertKind::Touches => format!("tol = {}, contact = \"{}\"", num(a.tol), a.contact),
+                _ => String::new(),
+            },
+            None => String::new(),
+        };
+        let violations: Vec<&str> =
+            r.map(|a| a.pairs.iter().filter(|p| !p.ok).map(|p| p.message.as_str()).collect()).unwrap_or_default();
+        let state = match r {
+            None => "nicht geprüft (ohne Kernel)".to_string(),
+            Some(a) if !a.checked => format!("nicht geprüft ({})", a.note.clone().unwrap_or_default()),
+            Some(_) if violations.is_empty() => {
+                let infos: Vec<&str> = r
+                    .map(|a| a.pairs.iter().filter(|p| p.contact.is_some()).map(|p| p.message.as_str()).collect())
+                    .unwrap_or_default();
+                if infos.is_empty() { "ok".to_string() } else { format!("ok – {}", infos.join("; ")) }
+            }
+            Some(_) => format!("verletzt – {}", violations.join("; ")),
+        };
+        let bodies = r.map(|a| a.bodies).unwrap_or(0);
+        t.push_str(&format!(
+            "  {} {}({params}): {state}{}\n",
+            zl(sc, &n.range),
+            n.label,
+            if r.is_some_and(|a| a.checked) { format!(" [{bodies} Körper]") } else { String::new() }
+        ));
+        rows.push(json!({
+            "node": n.idx,
+            "kind": n.label.trim_start_matches("assert_"),
+            "line": n.range.line,
+            "file": n.range.file,
+            "checked": r.is_some_and(|a| a.checked),
+            "ok": r.is_none_or(|a| a.ok),
+            "violations": violations,
+            "bodies": bodies,
+            "note": r.and_then(|a| a.note.clone()),
+        }));
+    }
+    (json!(rows), t)
+}
+
+/// `cad export` and assertions: with violations the export stops (exit code 4) unless
+/// `--ignore-asserts`; then the text gets a warning line. JSON: `asserts`, `violations`,
+/// `ignored_asserts`, `aborted`.
+pub(crate) fn assert_gate(m: &Model, j: &mut Json, ignore: bool) -> Result<String, Outcome> {
+    let asserts = m.scene.as_ref().map(|sc| sc.asserts.clone()).unwrap_or_default();
+    let v = assert_violations(m);
+    j["asserts"] = json!(asserts);
+    j["violations"] = json!(v.len());
+    j["ignored_asserts"] = json!(ignore && !v.is_empty());
+    j["aborted"] = json!(false);
+    if v.is_empty() {
+        return Ok(String::new());
+    }
+    if ignore {
+        return Ok(format!("Warnung: trotz {} Assert-Verletzung(en) exportiert (--ignore-asserts)\n", v.len()));
+    }
+    j["aborted"] = json!(true);
+    let mut t = m.diagnostics_text();
+    t.push_str(&format!("Export abgebrochen: {} Assert-Verletzung(en), nichts geschrieben:\n", v.len()));
+    for l in &v {
+        t.push_str(&format!("  {l}\n"));
+    }
+    t.push_str("Trotzdem exportieren: --ignore-asserts\n");
+    Err(Outcome { json: j.clone(), text: t, errors: true, exit: Some(EXIT_ASSERT) })
 }
 
 /// Current UTC time as ISO 8601 (STEP header).

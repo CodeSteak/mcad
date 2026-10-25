@@ -33,6 +33,17 @@
 | "union: ein Netz wird nicht vereinigt …", "difference: ein Netz kann nicht beschnitten/abgezogen werden …", "intersection: mit einem Netz nicht möglich …", "fillet: ein Netz kann nicht bearbeitet werden …" | the STL is a mesh (more than 500 faces or `as = "mesh"`): `import(…, as = "solid")` (slow above ~500 faces: `cad usage import-stl`) |
 | "B-Rep aus dem Netz gescheitert (…): als Netz weiter" | the kernel refused the polyhedron; the mesh is shown instead |
 | "hull: Netz mit n Ecken (höchstens 2000 …)" | `hull()` of a large mesh; use a coarser STL |
+| "assert_keepout: X ragt ins Sperrvolumen (Schnittvolumen V mm³)" | a body enters the keep-out volume; move it, or the volume (`cad render` shows the red intersection) |
+| "assert_keepout: X hält den Abstand c mm zum Sperrvolumen nicht ein: d mm …" | closer than `clearance`; foot points in the message; a board the part sits on counts too (start the volume above it) |
+| "assert_disjoint: a und b überschneiden sich (…)" | the pair shares volume; touching is fine |
+| "assert_intersect: a und b schneiden sich nicht (Abstand d mm)" | the children are not one connected piece; touching faces are no intersection – let them overlap or use `assert_touches` |
+| "assert_touches: a berührt b nicht, Spalt X mm" | gap above `tol` (+ mesh accuracy); close it or raise `tol` |
+| "assert_touches: a und b überschneiden sich (V mm³)" | overlap instead of contact |
+| "assert_touches: a berührt b nur mit Linienkontakt (nicht-mannigfaltig, schlecht druckbar …)" | cylinder on a plane, edge on a face: the union is non-manifold; give it a flat, or `contact = "any"` |
+| "… Überlappung nicht prüfbar (…)" (Hinweis) | the kernel boolean failed (faces lying on each other); result undecided, not a violation |
+| "Kontaktart nur netzbasiert bestimmt" | freeform faces: contact found on the mesh only |
+| "`assert_disjoint()` braucht mindestens zwei Kinder (eine for-Schleife zählt als ein Kind)" | put the bodies as separate statements |
+| `cad export` exit 4 "Export abgebrochen: n Assert-Verletzung(en)" | fix the model, or `--ignore-asserts` |
 
 Glossary of the German text output:
 
@@ -63,3 +74,14 @@ Glossary of the German text output:
 | Orientierung korrigiert, gewendet, innen nach außen | orientation corrected, flipped, inside out |
 | B-Rep aus dem Netz, als Netz weiter | B-rep from the mesh, continuing as a mesh |
 | netzbasiert, Netze überschneiden sich | mesh-based, meshes overlap |
+| Sperrvolumen | keep-out volume (`assert_keepout`) |
+| ragt ins Sperrvolumen, hält den Abstand nicht ein | enters the keep-out volume, violates the clearance |
+| Schnittvolumen, überschneiden sich, getrennt | intersection volume, intersect (overlap), apart |
+| schneiden sich (nicht), keine Verbindung | (do not) intersect, not connected |
+| berührt, Spalt | touches, gap |
+| Flächenkontakt, Linienkontakt, Punktkontakt, Kontaktart | face contact, line contact, point contact, kind of contact |
+| nicht-mannigfaltig, schlecht druckbar | non-manifold, hard to print |
+| Überlappung nicht prüfbar | overlap could not be checked |
+| Asserts: n von m geprüft, k verletzt; Assert-Verletzung | asserts: n of m checked, k violated; assert violation |
+| Export abgebrochen, nichts geschrieben, trotzdem exportiert | export stopped, nothing written, exported anyway |
+| beim Ziehen übersprungen, nicht geprüft | skipped while dragging, not checked |

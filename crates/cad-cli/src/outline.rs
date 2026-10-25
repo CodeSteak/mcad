@@ -109,7 +109,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     let Some(file_scene) = m.scene.clone() else {
         let t = m.diagnostics_text();
         j["counts"] = json!({ "errors": m.diagnostics.iter().filter(|d| d.severity == p::Severity::Error).count() });
-        return Ok(Outcome { json: j, text: t, errors: true });
+        return Ok(Outcome { json: j, text: t, errors: true, exit: None });
     };
     // Grids and anchors per module: each module evaluated as context with its defaults
     // (language only, milliseconds).
@@ -429,8 +429,14 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
             sc.nodes.len()
         ));
     }
+    let (asserts_j, asserts_t) = crate::asserts_summary(&sc, None);
+    if !asserts_t.is_empty() {
+        t.push_str("Asserts (Prüfungen nach der Auswertung, Verletzung = Warnung):\n");
+        t.push_str(&asserts_t);
+    }
     t.push_str(&m.diagnostics_text());
 
+    j["asserts"] = asserts_j;
     j["files"] = json!(files);
     j["includes"] = json!(includes);
     j["modules"] = json!(modules);
@@ -448,5 +454,5 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     j["diagnostics"] = json!(m.diagnostics);
     j["ok"] = json!(errors == 0);
     let has_errors = m.has_errors();
-    Ok(Outcome { json: j, text: t, errors: has_errors })
+    Ok(Outcome { json: j, text: t, errors: has_errors, exit: None })
 }

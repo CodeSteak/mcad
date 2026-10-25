@@ -369,6 +369,19 @@ where
         plane: Option<(DVec3, DVec3)>,
         axis: Option<(DVec3, DVec3)>,
     ) -> Vec<String> {
+        self.origin_of(tags, point, plane, axis, &|_| true)
+    }
+
+    /// [`Self::origin`] with only the nodes `keep` accepts (nodes of equal content share a
+    /// tag; the assertion checks know which subtree a body comes from).
+    pub(crate) fn origin_of(
+        &self,
+        tags: &[u32],
+        point: Option<DVec3>,
+        plane: Option<(DVec3, DVec3)>,
+        axis: Option<(DVec3, DVec3)>,
+        keep: &dyn Fn(u32) -> bool,
+    ) -> Vec<String> {
         let Some(d) = &self.done else { return Vec::new() };
         let sc = &d.scene;
         let mut out: Vec<String> = Vec::new();
@@ -381,7 +394,7 @@ where
         for &t in tags {
             let st = self.session_tag(t);
             let Some(tn) = sc.tag_nodes.iter().find(|x| x.tag == st) else { continue };
-            for &n in tn.nodes.iter().take(4) {
+            for &n in tn.nodes.iter().filter(|&&n| keep(n)).take(4) {
                 let node = &sc.nodes[n as usize];
                 let file = node
                     .range

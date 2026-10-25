@@ -334,5 +334,5 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
                      "differ": totals.get("differ").unwrap_or(&0),
                      "failed": totals.get("failed").unwrap_or(&0) },
     });
-    Ok(Outcome { json: j, text, errors: !all_same })
+    Ok(Outcome { json: j, text, errors: !all_same, exit: None })
 }

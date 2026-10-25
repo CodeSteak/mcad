@@ -28,6 +28,23 @@ struct Expect {
 
 const EXPECT: &[Expect] = &[
     Expect {
+        file: "asserts.scad",
+        grids: &[],
+        instances: &[("g", "gehaeuse", &[]), ("hl", "halter", &[]), ("kf", "kabelfuehrung", &[]), ("k", "deckel", &[])],
+        handles: 1,
+        ops: &[("mesh", 1), ("difference", 1)],
+        check: |out| {
+            // nested assertions, the keep-out volume from an STL mesh is not part of the result
+            let kinds: Vec<cad_ir::AssertKind> = out.tree.asserts.iter().map(|a| a.kind).collect();
+            use cad_ir::AssertKind::*;
+            assert_eq!(kinds, [Touches, Intersect, Disjoint, Keepout]);
+            let k = &out.tree.asserts[3];
+            assert_eq!(k.clearance, 1.0);
+            assert!(out.tree.node(k.node).flags.keepout);
+            assert_eq!(out.parts.len(), 4);
+        },
+    },
+    Expect {
         file: "dose_shell.scad",
         grids: &[("g", 6, false)],
         instances: &[("k", "dose", &["rand"])],

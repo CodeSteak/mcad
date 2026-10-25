@@ -2,7 +2,7 @@
 
 | Command | Output |
 | --- | --- |
-| `cad check FILE [--no-kernel]` | `file:line:col: Fehler/Warnung (Syntax/Auswertung/Kernel): …` |
+| `cad check FILE [--no-kernel]` | `file:line:col: Fehler/Warnung (Syntax/Auswertung/Kernel): …`, assert results (`Asserts: 4 von 4 geprüft, 0 verletzt`) |
 | `cad outline FILE [--no-kernel]` | modules + params, grids, anchors, functions, variables, instances, parts (bounds, volume), colours, files |
 | `cad eval FILE` | node tree (index, line, status, bounds), expression values, grids, anchors, `echo` |
 | `cad inspect FILE --line N [--whole-file]` | nodes of line N: bounds, volume/area, selected edges, hints, errors, handles |
@@ -10,7 +10,7 @@
 | `cad measure FILE …` | measurements (`cad usage measure`) |
 | `cad watch FILE …` | re-evaluates on change (`cad usage watch`) |
 | `cad set FILE …` | edits code (`cad usage set`) |
-| `cad export FILE -o …` | STL/3MF/STEP (`cad usage export`) |
+| `cad export FILE -o … [--ignore-asserts]` | STL/3MF/STEP (`cad usage export`); stops with exit 4 on a violated assert (`cad usage asserts`) |
 | `cad ui status\|show\|screenshot` | running desktop UI (`cad usage ui`) |
 | `cad daemon status\|stop\|serve` | cache process (`cad usage daemon`) |
 | `cad usage [TOPIC…] [--all\|--list]` | this manual |

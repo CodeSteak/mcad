@@ -475,7 +475,7 @@ colors?: boolean,
 /**
  * Notes for the user (multi-colour 3MF: objects, material outside parts, slicers).
  */
-notes?: Array<string>, } | { "type": "ColorRegions", version: number, items: Array<RegionSet>, } | { "type": "Error", message: string, version: number | null, node: number | null, } | { "type": "Sketch" } & SketchAnswer | { "type": "Measure" } & MeasureAnswer;
+notes?: Array<string>, } | { "type": "ColorRegions", version: number, items: Array<RegionSet>, } | { "type": "Error", message: string, version: number | null, node: number | null, } | { "type": "Sketch" } & SketchAnswer | { "type": "Measure" } & MeasureAnswer | { "type": "Asserts", version: number, items: Array<AssertResult>, };
 
 export type Severity = "error" | "warning" | "info";
 
@@ -621,6 +621,153 @@ ranges: Array<SrcRange>,
  */
 nodes: Array<number>, };
 
+/**
+ * Kind of a geometric assertion.
+ */
+export type AssertKind = "keepout" | "disjoint" | "intersect" | "touches";
+
+/**
+ * One checked statement instance of `assert_keepout`, `assert_disjoint`, `assert_intersect`
+ * or `assert_touches`.
+ */
+export type AssertResult = { 
+/**
+ * The assertion's node (a group of the checked children).
+ */
+node: number, kind: AssertKind, range: SrcRange, 
+/**
+ * No violation (also `true` while unchecked).
+ */
+ok: boolean, 
+/**
+ * The check ran (`false`: skipped while dragging, or the node was not evaluated).
+ */
+checked: boolean, 
+/**
+ * Why nothing was checked, or a remark (`Netz: nur ja/nein`).
+ */
+note: string | null, 
+/**
+ * `assert_keepout(clearance)` in mm.
+ */
+clearance: number, 
+/**
+ * `assert_touches(tol)` in mm.
+ */
+tol: number, 
+/**
+ * `assert_touches(contact)`: `face` or `any`.
+ */
+contact: string, 
+/**
+ * Volume below which an intersection counts as none (mm³, relative to the size).
+ */
+eps_volume: number, 
+/**
+ * Bodies checked: real bodies of the model (keepout) or children.
+ */
+bodies: number, 
+/**
+ * Pairs: keepout only those with a violation, the others every pair of children.
+ */
+pairs: Array<AssertPair>, 
+/**
+ * Time of the check in ms (0 when every pair came from the cache).
+ */
+ms: number, 
+/**
+ * Every pair came from the engine cache.
+ */
+cached: boolean, };
+
+/**
+ * A body of an assertion pair: a child of the assertion or a real body of the model.
+ */
+export type AssertBody = { 
+/**
+ * Node whose result holds the body.
+ */
+node: number, 
+/**
+ * `deckel`, `Zeile 7: cube`, `Sperrvolumen` (German).
+ */
+label: string, 
+/**
+ * Code lines and instances of the faces involved (like `cad measure`).
+ */
+origin: Array<string>, };
+
+/**
+ * Check of two bodies.
+ */
+export type AssertPair = { a: AssertBody, b: AssertBody, ok: boolean, 
+/**
+ * `overlap`, `too_close`, `apart`, `gap`, `line_contact`, `point_contact`,
+ * `unchecked` (`null` when ok).
+ */
+problem: string | null, 
+/**
+ * Text of the result (German), as in the diagnostic.
+ */
+message: string, 
+/**
+ * Intersection volume in mm³ (`null`: not computed or only known as yes/no for meshes).
+ */
+volume: number | null, 
+/**
+ * Intersection decided on meshes (yes/no) instead of an exact boolean.
+ */
+mesh_based: boolean, 
+/**
+ * Smallest distance of the tessellations in mm (0 when they touch or overlap).
+ */
+distance: number | null, 
+/**
+ * Accuracy of `distance` (± mm, sum of the chordal tolerances; 0 for planar faces).
+ */
+accuracy: number, 
+/**
+ * Foot points of `distance` (a, b), context coordinates.
+ */
+points: Array<Vec3>, 
+/**
+ * `assert_touches`: `face`, `line`, `point`, `mesh` (freeform, mesh-based) or `null`.
+ */
+contact: string | null, 
+/**
+ * Contact area in mm² (`face`).
+ */
+contact_area: number | null, 
+/**
+ * Contact area exact (planar faces, `region2`) or estimated on the mesh.
+ */
+contact_exact: boolean, 
+/**
+ * Intersection body (red), context coordinates.
+ */
+overlap: AssertMesh | null, 
+/**
+ * Contact faces (green), context coordinates.
+ */
+contact_mesh: AssertMesh | null, 
+/**
+ * Contact lines and outlines of contact faces, context coordinates.
+ */
+contact_lines: Array<Array<Vec3>>, 
+/**
+ * Where to look: bounds of the intersection, the contact or the gap.
+ */
+focus: Bounds | null, };
+
+/**
+ * Triangles in context coordinates.
+ */
+export type AssertMesh = { positions: Array<number>, indices: Array<number>, 
+/**
+ * Feature edges as segment pairs (xyz xyz), for the outline.
+ */
+edges: Array<number>, };
+
 export type Scene = { version: number, 
 /**
  * Files of the project, index = id (`SrcRange.file`); file 0 is the main file.
@@ -686,7 +833,11 @@ tag_nodes: Array<TagNodes>, echoes: Array<Echo>,
 /**
  * The language evaluation was aborted (step budget, recursion, failed assertion).
  */
-aborted: boolean, stats: Stats, };
+aborted: boolean, stats: Stats, 
+/**
+ * Results of the geometric assertions (empty until checked, see `FromEngine.Asserts`).
+ */
+asserts: Array<AssertResult>, };
 
 export type NodeStatus = "ok" | "warning" | "error" | "skipped" | "pending";
 
@@ -708,7 +859,12 @@ disabled: boolean,
 /**
  * Zone of a fillet/chamfer/shell block: not in the result, shown blue transparent.
  */
-zone: boolean, };
+zone: boolean, 
+/**
+ * `assert_keepout`: keep-out volume, not in the result (also `background`), shown
+ * transparent with its outline in its own colour.
+ */
+keepout: boolean, };
 
 /**
  * Edge/face selection of a zone block (`select`).

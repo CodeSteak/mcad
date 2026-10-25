@@ -540,5 +540,19 @@ Booleans und Verrundungen melden einen Fehler mit Hinweis `as = "solid"`). Hinwe
 `as = "solid"` erzwingt das B-Rep (langsam: 900 Flächen + ein Boolean ≈ 4 s), `as = "mesh"` das
 Netz. Beispiel: `examples/spec/stl_import.scad`.
 
+**Kollisions-Asserts** (Plan 21 C, `cad usage asserts`): Prüfungen nach der Auswertung,
+Verletzung = Warnung (`cad check` Exit 0, Zeile „Asserts: 4 von 4 geprüft, 0 verletzt“),
+`cad export` bricht dann mit **Exit 4** ab (`--ignore-asserts` exportiert trotzdem).
+`assert_keepout(clearance = 0.5) …` – Sperrvolumen (B-Rep oder STL-Netz): gezeigt (gelb,
+durchscheinend), nie exportiert/gezählt, geprüft gegen alle echten Körper (Schnittvolumen exakt
+per Boolean, Netz nur ja/nein; Abstand < clearance). `assert_disjoint() { a; b; }` (kein Paar
+schneidet sich), `assert_intersect() { … }` (Kinder bilden **eine zusammenhängende** Gruppe;
+Berühren zählt nicht), `assert_touches(tol = 0.001, contact = "face") { … }` (Spalt → „berührt
+nicht“, Überschneidung, nur Linien-/Punktkontakt → Warnung; Kontaktfläche exakt aus `region2`).
+Asserts sind Gruppen und lassen sich schachteln; benannte Instanzen darin bleiben Bauteile.
+`cad render` zeichnet Schnittkörper rot, Kontaktflächen grün, Spalte als Maßlinie
+(`--show asserts` beschriftet alles); `cad inspect --line N` listet die Paare.
+Beispiel: `examples/spec/asserts.scad`.
+
 **Profile:** 2D-Formen (`square`, `rect`, `circle`, `polygon`, `spline`) in `linear_extrude`,
 `rotate_extrude`, `loft`, `sweep`; Freiformflächen mit `surface(points)` + `thicken(t)`.
