@@ -498,7 +498,9 @@ test("S22 Messwerte: Tastendruck bis neue Szene, fps beim Drehen", async ({ page
     evalMsMedian: median(s.metrics.evalMs),
     orbitFps: fps.fps,
   });
-  expect(fps.fps).toBeGreaterThan(5);
+  // Guards against a stalled render loop; the value itself goes into the reports. CI runners
+  // render with SwiftShader on shared CPUs at about 4–6 fps (locally about 12).
+  expect(fps.fps).toBeGreaterThan(process.env.CI ? 2 : 5);
   record({
     id: "S22",
     title: "Messwerte",
