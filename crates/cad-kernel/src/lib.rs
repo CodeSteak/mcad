@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 
 pub mod brep;
 pub mod curve2;
+pub mod hull2;
+pub mod hull3;
 pub mod region2;
 
 pub use curve2::Segment;
