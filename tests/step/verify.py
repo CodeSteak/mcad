@@ -215,7 +215,7 @@ def check(model: Path, mcad: str, out: Path, stl_dir: Path | None, bodies: bool 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("models", nargs="*", type=Path)
-    ap.add_argument("--cad", default=os.environ.get("MCAD", os.environ.get("CAD", str(ROOT / "target" / "release" / "mcad")))))
+    ap.add_argument("--cad", default=os.environ.get("MCAD", os.environ.get("CAD", str(ROOT / "target" / "release" / "mcad"))))
     ap.add_argument("--out", type=Path, default=ROOT / "target" / "step")
     ap.add_argument("--json", type=Path, default=None, help="report file (default <out>/verify-report.json)")
     ap.add_argument("--stl-dir", type=Path, default=None, help="write the read-back shapes as STL here")
