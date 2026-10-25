@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // End-to-end tests of the desktop app (Tauri 2) with tauri-driver + WebKitWebDriver, under
 // Xvfb when there is no display. A small W3C WebDriver client (fetch) drives the real app
-// binary (`cad`, feature gui) with the real native engine process.
+// binary (`mcad`, feature gui) with the real native engine process.
 //
-//   node web/e2e-tauri/desktop.e2e.mjs [--bin target/release/cad] [--only T03] [--out reports/tmp/report11/tauri]
+//   node web/e2e-tauri/desktop.e2e.mjs [--bin target/release/mcad] [--only T03] [--out reports/tmp/report11/tauri]
 //
 // Needs: tauri-driver (cargo install tauri-driver --locked), WebKitWebDriver
 // (webkit2gtk-driver), Xvfb, git. Screenshots, measurements and results go to
@@ -28,7 +28,7 @@ const opt = (name, d) => {
   const i = argv.indexOf(name);
   return i >= 0 ? argv[i + 1] : d;
 };
-const BIN = resolve(opt("--bin", join(ROOT, "target/release/cad")));
+const BIN = resolve(opt("--bin", join(ROOT, "target/release/mcad")));
 const ONLY = opt("--only", null);
 const OUT = resolve(opt("--out", join(ROOT, "reports/tmp/report9")));
 mkdirSync(join(OUT, "img"), { recursive: true });
@@ -112,9 +112,45 @@ function xshot(name) {
   return `${name}.png`;
 }
 
-function cad(...args) {
-  // CAD_NO_DAEMON: no CLI daemon (it would outlive the test run; tests/daemon.rs covers it).
-  const r = spawnSync(BIN, args, { env: { ...process.env, CAD_IPC_DIR: ipcDir, DISPLAY: display, CAD_NO_DAEMON: "1" }, encoding: "utf8" });
+/** Top-level X windows: title (_NET_WM_NAME, UTF-8) and WM_CLASS (libX11 over ctypes; no x11-utils needed). */
+function xwindows() {
+  const py = `
+import ctypes, ctypes.util, json
+x = ctypes.cdll.LoadLibrary(ctypes.util.find_library("X11"))
+class H(ctypes.Structure): _fields_ = [("n", ctypes.c_char_p), ("c", ctypes.c_char_p)]
+x.XOpenDisplay.restype = ctypes.c_void_p
+x.XDefaultRootWindow.restype = ctypes.c_ulong; x.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+x.XQueryTree.argtypes = [ctypes.c_void_p, ctypes.c_ulong] + [ctypes.POINTER(ctypes.c_ulong)] * 2 + [ctypes.POINTER(ctypes.POINTER(ctypes.c_ulong)), ctypes.POINTER(ctypes.c_uint)]
+x.XGetClassHint.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.POINTER(H)]
+x.XInternAtom.restype = ctypes.c_ulong; x.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+x.XGetWindowProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_long, ctypes.c_long, ctypes.c_int, ctypes.c_ulong, ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.POINTER(ctypes.c_ubyte))]
+d = x.XOpenDisplay(None)
+NET = x.XInternAtom(d, b"_NET_WM_NAME", 0); UTF8 = x.XInternAtom(d, b"UTF8_STRING", 0)
+def name(w):
+    t, f, n, a = ctypes.c_ulong(), ctypes.c_int(), ctypes.c_ulong(), ctypes.c_ulong(); p = ctypes.POINTER(ctypes.c_ubyte)()
+    if x.XGetWindowProperty(d, w, NET, 0, 1024, 0, UTF8, ctypes.byref(t), ctypes.byref(f), ctypes.byref(n), ctypes.byref(a), ctypes.byref(p)) == 0 and n.value:
+        return bytes(p[:n.value]).decode(errors="replace")
+    return ""
+r, pa = ctypes.c_ulong(), ctypes.c_ulong(); k = ctypes.POINTER(ctypes.c_ulong)(); n = ctypes.c_uint()
+x.XQueryTree(d, x.XDefaultRootWindow(d), ctypes.byref(r), ctypes.byref(pa), ctypes.byref(k), ctypes.byref(n))
+out = []
+for i in range(n.value):
+    h = H()
+    if x.XGetClassHint(d, k[i], ctypes.byref(h)):
+        out.append({"name": name(k[i]), "res_name": h.n.decode(), "res_class": h.c.decode()})
+print(json.dumps(out, ensure_ascii=False))
+`;
+  const r = spawnSync("python3", ["-I", "-c", py], { env: { ...process.env, DISPLAY: display }, encoding: "utf8" });
+  try {
+    return JSON.parse(r.stdout);
+  } catch {
+    return [];
+  }
+}
+
+function mcad(...args) {
+  // MCAD_NO_DAEMON: no CLI daemon (it would outlive the test run; tests/daemon.rs covers it).
+  const r = spawnSync(BIN, args, { env: { ...process.env, MCAD_IPC_DIR: ipcDir, DISPLAY: display, MCAD_NO_DAEMON: "1" }, encoding: "utf8" });
   return { code: r.status, out: r.stdout, err: r.stderr };
 }
 
@@ -135,7 +171,7 @@ async function startDriver(extraEnv = {}) {
     await sleep(800);
   }
   const td = spawn("tauri-driver", ["--port", String(PORT), "--native-port", String(PORT + 1)], {
-    env: { ...process.env, DISPLAY: display, CAD_IPC_DIR: ipcDir, CAD_WATCHDOG_MS: "3000", ...extraEnv },
+    env: { ...process.env, DISPLAY: display, MCAD_IPC_DIR: ipcDir, MCAD_WATCHDOG_MS: "3000", ...extraEnv },
     stdio: ["ignore", "inherit", "inherit"],
   });
   children.push(td);
@@ -213,17 +249,17 @@ async function test(id, title, f) {
   console.log(`${entry.ok ? "✓" : "✗"} ${id} ${title} (${entry.ms} ms)${entry.ok ? "" : `\n  ${entry.error}`}`);
 }
 
-const MODEL = readFileSync(join(ROOT, "examples/spec/gehaeuse.scad"), "utf8");
+const MODEL = readFileSync(join(ROOT, "examples/spec/gehaeuse.mcad"), "utf8");
 
 async function main() {
   if (!existsSync(BIN)) throw new Error(`${BIN} fehlt (cargo build --release -p cad-cli)`);
   // Project in a git repository: committed state = the example.
   const repo = join(work, "repo");
   mkdirSync(repo, { recursive: true });
-  const file = join(repo, "gehaeuse.scad");
+  const file = join(repo, "gehaeuse.mcad");
   writeFileSync(file, MODEL);
   git(repo, "init", "-q");
-  git(repo, "add", "gehaeuse.scad");
+  git(repo, "add", "gehaeuse.mcad");
   git(repo, "commit", "-q", "-m", "Gehäuse");
   await startDriver();
 
@@ -232,7 +268,7 @@ async function main() {
     started = await startApp([file]);
     const s = started.state;
     check(s.desktop === true, "Tauri-Plattform erkannt (TauriTransport, kein Worker)");
-    check(s.fileName === "gehaeuse.scad", "Datei aus der Kommandozeile geöffnet");
+    check(s.fileName === "gehaeuse.mcad", "Datei aus der Kommandozeile geöffnet");
     check(s.diagnostics.length === 0, "keine Diagnosen");
     const info = await execAsync("const done = arguments[arguments.length - 1]; window.__cad.appInfo().then(done, (e) => done({ error: String(e) }))");
     const disk = await exec("return window.__cad.disk()");
@@ -240,7 +276,7 @@ async function main() {
     const bytes = await exec("return window.__cad.transportBytes()");
     check(bytes > 1000, `Meshes binär über den Kanal (${bytes} Bytes)`);
     metrics.startup = { wallMs: started.wallMs, firstSceneMs: s.metrics.firstSceneMs, appMs: info.started_ms, evalMs: s.metrics.evalMs };
-    e.images.push({ name: await shot("t01-start"), label: "Start mit gehaeuse.scad" });
+    e.images.push({ name: await shot("t01-start"), label: "Start mit gehaeuse.mcad" });
     e.images.push({ name: xshot("t01-fenster"), label: "Fenster unter Xvfb (X-Bildschirmfoto)" });
   });
 
@@ -337,7 +373,7 @@ async function main() {
 
   await test("T05", "Gelöschte und umbenannte Datei", async (check, e) => {
     renameSync(file, file + ".bak");
-    await waitFor("gelöscht-Leiste", async () => (await state()).external["gehaeuse.scad"] === "removed" || null);
+    await waitFor("gelöscht-Leiste", async () => (await state()).external["gehaeuse.mcad"] === "removed" || null);
     e.images.push({ name: await shot("t05-geloescht"), label: "Datei umbenannt/gelöscht: Inhalt bleibt, „Wieder speichern“" });
     await click("[data-testid=external-bar] button[aria-label='Wieder speichern']");
     await waitFor("wieder angelegt", async () => existsSync(file) || null, 10_000);
@@ -347,11 +383,11 @@ async function main() {
     check(Object.keys((await state()).external).length === 0, "keine Leiste mehr");
   });
 
-  await test("T06", "Agent-Ablauf: Datei per Shell ändern, `cad check`, UI folgt (Bildfolge)", async (check, e) => {
+  await test("T06", "Agent-Ablauf: Datei per Shell ändern, `mcad check`, UI folgt (Bildfolge)", async (check, e) => {
     const steps = [
-      { label: "1. Agent ändert w = 60 → 75 und prüft mit `cad check`", edit: (t) => t.replace("k: gehaeuse(w = 60);", "k: gehaeuse(w = 75);") },
+      { label: "1. Agent ändert w = 60 → 75 und prüft mit `mcad check`", edit: (t) => t.replace("k: gehaeuse(w = 60);", "k: gehaeuse(w = 75);") },
       { label: "2. Agent fügt einen zweiten Deckel hinzu", edit: (t) => t + "translate([0, 40, 0]) deckel();\n" },
-      { label: "3. Agent setzt h über `cad set --param gehaeuse.h=30`", set: ["--param", "gehaeuse.h=30"] },
+      { label: "3. Agent setzt h über `mcad set --param gehaeuse.h=30`", set: ["--param", "gehaeuse.h=30"] },
     ];
     metrics.agentSteps = [];
     for (const [i, st] of steps.entries()) {
@@ -359,11 +395,11 @@ async function main() {
       const t0 = Date.now();
       if (st.edit) {
         writeFileSync(file, st.edit(readFileSync(file, "utf8")));
-        const c = cad("check", file, "--json");
-        check(c.code === 0 && JSON.parse(c.out).errors === 0, "`cad check --json`: Exit 0, 0 Fehler");
+        const c = mcad("check", file, "--json");
+        check(c.code === 0 && JSON.parse(c.out).errors === 0, "`mcad check --json`: Exit 0, 0 Fehler");
       } else {
-        const c = cad("set", file, ...st.set);
-        check(c.code === 0, `\`cad set ${st.set.join(" ")}\`: Exit 0${c.err ? ` (${c.err.slice(0, 120)})` : ""}`);
+        const c = mcad("set", file, ...st.set);
+        check(c.code === 0, `\`mcad set ${st.set.join(" ")}\`: Exit 0${c.err ? ` (${c.err.slice(0, 120)})` : ""}`);
       }
       await waitFor(`Schritt ${i + 1}`, async () => {
         const s = await state();
@@ -376,34 +412,34 @@ async function main() {
     }
   });
 
-  await test("T07", "`cad ui status` / `show` / `screenshot` gegen die laufende App", async (check, e) => {
-    const st = cad("ui", "status", "--json");
+  await test("T07", "`mcad ui status` / `show` / `screenshot` gegen die laufende App", async (check, e) => {
+    const st = mcad("ui", "status", "--json");
     check(st.code === 0, `status Exit 0 ${st.err}`);
     const j = JSON.parse(st.out);
     const w = j.uis[0].windows[0];
-    check(w.project.main === "gehaeuse.scad" && w.project.root === repo, "offene Datei und Ordner");
+    check(w.project.main === "gehaeuse.mcad" && w.project.root === repo, "offene Datei und Ordner");
     check(typeof w.cursor.line === "number", "Cursorzeile");
-    const sh = cad("ui", "show", file, "--line", "11", "--json");
+    const sh = mcad("ui", "show", file, "--line", "11", "--json");
     check(sh.code === 0, `show Exit 0 ${sh.err}`);
     check(JSON.parse(sh.out).line === 11, "Cursor in Zeile 11");
-    const st2 = JSON.parse(cad("ui", "status", "--json").out).uis[0].windows[0];
+    const st2 = JSON.parse(mcad("ui", "status", "--json").out).uis[0].windows[0];
     check(st2.cursor.line === 11, "status sieht Zeile 11");
     check(st2.context === "gehaeuse", `Kontextmodul gehaeuse (${st2.context})`);
     check(st2.selection.nodes.length > 0, `ausgewählter Knoten ${JSON.stringify(st2.selection.nodes[0])}`);
     check(Object.keys(st2.params).includes("w"), "Werte der Parameterleiste");
     check(Array.isArray(st2.diagnostics), "Diagnosen");
     const png = join(OUT, "img", "t07-cad-ui-screenshot.png");
-    const sc = cad("ui", "screenshot", "-o", png, "--json");
+    const sc = mcad("ui", "screenshot", "-o", png, "--json");
     check(sc.code === 0, `screenshot Exit 0 ${sc.err}`);
     const buf = readFileSync(png);
     check(buf.subarray(1, 4).toString() === "PNG" && buf.length > 5000, `PNG ${buf.length} Bytes`);
-    const txt = cad("ui", "status");
+    const txt = mcad("ui", "status");
     e.details = { status_text: txt.out, status_json: st2 };
-    e.images.push({ name: "t07-cad-ui-screenshot.png", label: "`cad ui screenshot`: die 3D-Ansicht, wie der Nutzer sie sieht" });
-    e.images.push({ name: await shot("t07-ui-nach-show"), label: "nach `cad ui show gehaeuse.scad --line 11`" });
-    const shm = cad("ui", "show", file, "--module", "deckel", "--json");
+    e.images.push({ name: "t07-cad-ui-screenshot.png", label: "`mcad ui screenshot`: die 3D-Ansicht, wie der Nutzer sie sieht" });
+    e.images.push({ name: await shot("t07-ui-nach-show"), label: "nach `mcad ui show gehaeuse.mcad --line 11`" });
+    const shm = mcad("ui", "show", file, "--module", "deckel", "--json");
     check(shm.code === 0 && JSON.parse(shm.out).module === "deckel", "show --module deckel: Kontext deckel");
-    const shx = cad("ui", "show", file, "--module", "gibtsnicht", "--json");
+    const shx = mcad("ui", "show", file, "--module", "gibtsnicht", "--json");
     check(shx.code === 1, `unbekanntes Modul: Exit ${shx.code} („${JSON.parse(shx.out).error}“)`);
     await exec("window.__cad.setCursorLine(1, 0)");
     await sceneReady();
@@ -431,9 +467,9 @@ async function main() {
     const fps = await execAsync("const done = arguments[arguments.length - 1]; window.__cad.sectionBenchmark(120).then(done)");
     metrics.sectionFpsTauri = fps;
     check(fps.fps > 5, `Ebene verschieben: ${fps.fps.toFixed(1)} fps (WebKitGTK, Software-GL)`);
-    await click("[role=toolbar][aria-label=Schnitt] button[aria-label='Als cad render … kopieren']");
+    await click("[role=toolbar][aria-label=Schnitt] button[aria-label='Als mcad render … kopieren']");
     const cli = (await state()).lastCli;
-    check(cli && cli.startsWith("cad render ") && cli.includes("--section z="), cli);
+    check(cli && cli.startsWith("mcad render ") && cli.includes("--section z="), cli);
     e.details = { cli };
     await click("[role=radiogroup][aria-label=Modus] [role=radio][aria-label=Modell]");
   });
@@ -479,22 +515,22 @@ async function main() {
     await stopApp();
     const proj = join(work, "projekt");
     mkdirSync(join(proj, "lib"), { recursive: true });
-    for (const f of ["gehaeuse.scad", "konstanten.scad", "lib/teile.scad"]) writeFileSync(join(proj, f), readFileSync(join(ROOT, "examples/projekt-gehaeuse", f)));
+    for (const f of ["gehaeuse.mcad", "konstanten.mcad", "lib/teile.mcad"]) writeFileSync(join(proj, f), readFileSync(join(ROOT, "examples/projekt-gehaeuse", f)));
     const st = await startApp([proj]);
-    check(st.state.fileName === "gehaeuse.scad", `Hauptdatei ${st.state.fileName}`);
+    check(st.state.fileName === "gehaeuse.mcad", `Hauptdatei ${st.state.fileName}`);
     const info = await exec("return window.__cad.projectInfo()");
     check(info.paths.length === 3 && info.folder, `3 Dateien (${info.paths.join(", ")})`);
     // external change of an included file updates the scene
     const before = await state();
-    const konst = join(proj, "konstanten.scad");
+    const konst = join(proj, "konstanten.mcad");
     writeFileSync(konst, readFileSync(konst, "utf8").replace(/abstand\s*=\s*\d+/, "abstand = 25"));
     await waitFor("include neu ausgewertet", async () => ((await state()).sentVersion > before.sentVersion ? true : null));
     await sceneReady();
-    check((await exec("return window.__cad.projectInfo().files['konstanten.scad']")).includes("abstand = 25"), "eingebundene Datei neu geladen");
+    check((await exec("return window.__cad.projectInfo().files['konstanten.mcad']")).includes("abstand = 25"), "eingebundene Datei neu geladen");
     // autosave
     await exec("const s = window.__cad.store; s.setState({ settings: { ...s.getState().settings, autoSave: true, autoSaveMs: 300 } })");
     await exec("const c = window.__cad; c.setText(c.text() + '// auto\\n')");
-    await waitFor("automatisch gespeichert", async () => readFileSync(join(proj, "gehaeuse.scad"), "utf8").endsWith("// auto\n") || null, 10_000);
+    await waitFor("automatisch gespeichert", async () => readFileSync(join(proj, "gehaeuse.mcad"), "utf8").endsWith("// auto\n") || null, 10_000);
     check((await state()).dirty.length === 0, "nach dem Autospeichern sauber");
     e.images.push({ name: await shot("t10-ordner"), label: "Ordner als Projekt (3 Dateien), Autospeichern an" });
   });
@@ -533,7 +569,7 @@ async function main() {
 
   // ------------------------------------------------------------ colours, filaments, theme (report 11)
 
-  const MEHR = readFileSync(join(ROOT, "examples/spec/mehrfarbig.scad"), "utf8");
+  const MEHR = readFileSync(join(ROOT, "examples/spec/mehrfarbig.mcad"), "utf8");
   const ensureApp = async () => {
     if (!sid) await startApp([file]);
   };
@@ -627,7 +663,7 @@ async function main() {
     const s2 = await state();
     const slots = s2.colors.map((c) => `${c.label}:${c.filament}`).join(", ");
     check(slots === "red:4, blue:1, green:2", `Slots ${slots}`);
-    // material outside the parts: its own object, the same file as cad export
+    // material outside the parts: its own object, the same file as mcad export
     await exec("window.__cad.setText(arguments[0])", '// F4\nmodule a() color("white") cube([20, 10, 2]);\nteil: a();\ntranslate([0, 20, 0]) color("yellow") cube(5);\n');
     await sceneReady();
     const sum = await hookAsync("exportSummary", "3mf", true);
@@ -943,6 +979,31 @@ async function main() {
     await stopApp();
     await stopDriver();
     await startDriver();
+  });
+
+  await test("T20", "Umbenennung mcad: Fenstertitel, App-ID (WM_CLASS), Kopfleiste; .scad öffnet mit use <….mcad>", async (check, e) => {
+    await stopApp();
+    const dir = join(work, "scad");
+    mkdirSync(join(dir, "lib"), { recursive: true });
+    writeFileSync(join(dir, "lib/teil.mcad"), "module teil(h = 5) { cube([20, 10, h]); }\n");
+    const alt = join(dir, "alt.scad");
+    writeFileSync(alt, "// OpenSCAD-Datei mit einer .mcad-Bibliothek\nuse <lib/teil.mcad>\nteil(4);\n");
+    const st = await startApp([alt]);
+    check(st.state.fileName === "alt.scad", `Datei ${st.state.fileName}`);
+    check(st.state.diagnostics.length === 0, `keine Diagnosen (${JSON.stringify(st.state.diagnostics)})`);
+    const p = await exec("return window.__cad.projectInfo()");
+    check(JSON.stringify(p.paths) === JSON.stringify(["alt.scad", "lib/teil.mcad"]), `Projektdateien ${JSON.stringify(p.paths)}`);
+    const brand = await exec("return document.querySelector('.hd-brand')?.textContent");
+    check(brand === "mcad", `Kopfleiste „${brand}“`);
+    const docTitle = await exec("return document.title");
+    const win = await waitFor("Fenster mit Titel … – mcad", async () => xwindows().find((w) => w.name.endsWith("– mcad")) || null, 15_000);
+    check(win.name === "alt.scad – mcad", `Fenstertitel „${win.name}“`);
+    // GTK: res_name = program name (app id), res_class = the same with a capital first letter
+    check(win.res_name === "dev.mcad.desktop" && win.res_class.toLowerCase() === "dev.mcad.desktop", `WM_CLASS ${win.res_name}/${win.res_class}`);
+    e.details = { window: win, docTitle, brand, paths: p.paths };
+    e.images.push({ name: await shot("t20-mcad"), label: "alt.scad mit use <lib/teil.mcad>, Kopfleiste „mcad“" });
+    e.images.push({ name: xshot("t20-fenster"), label: `Fenster „${win.name}“, WM_CLASS ${win.res_class} (X-Bildschirmfoto)` });
+    await stopApp();
   });
 
   await stopApp();
