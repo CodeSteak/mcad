@@ -540,52 +540,35 @@ test("B11 Parameterleiste: Vorschau, Reset, Als Standard übernehmen", async ({ 
   });
 });
 
-test("B12 Inline-Schieberegler und -Schalter", async ({ page }) => {
+test("B12 Inline-Schalter, kein Schieberegler", async ({ page }) => {
   await openApp(page);
-  const src = "t = 3;\ncube([t * 5, 10, 10]);\n";
-  await loadText(page, src);
-  const sl = page.getByRole("slider", { name: "Wert ziehen" });
-  await expect(sl).toBeVisible();
-  await expect(sl).toHaveValue("3");
-  await screenshotB(page, "b12-vorher", "top");
-  const box = (await sl.boundingBox())!;
-  // Range 0..10: thumb at 30 %.
-  await page.mouse.move(box.x + box.width * 0.3, box.y + box.height / 2);
-  await page.mouse.down();
-  for (const f of [0.4, 0.5, 0.6, 0.7]) {
-    await page.mouse.move(box.x + box.width * f, box.y + box.height / 2);
-    await frame(page);
-  }
-  await waitText(page, `(t) => /^t = [6-8];/.test(t)`);
-  await page.mouse.up();
-  const after = await text(page);
-  const t = Number(after.match(/^t = (\d+);/)![1]);
-  await page.waitForFunction((tv) => {
-    const b = (window as unknown as { __cad: { rootBounds(): { min: number[]; max: number[] } | null } }).__cad.rootBounds();
-    return b !== null && Math.abs(b.max[0] - tv * 5) < 1e-6;
-  }, t);
-  await hook(page, (c) => c.fitAll());
-  await frame(page);
-  await screenshotB(page, "b12-nachher", "top");
-  await hook(page, (c) => c.focusEditor());
-  await page.keyboard.press("Control+z");
-  expect(await text(page)).toBe(src);
+  // Number literals have no inline slider.
+  await loadText(page, "t = 3;\ncube([t * 5, 10, 10]);\n");
+  await waitScene(page);
+  await expect(page.getByTestId("inline-slider")).toHaveCount(0);
   // Bool switch.
   const src2 = "hohl = true;\nif (hohl) cube(10); else sphere(5);\n";
   await loadText(page, src2);
+  await screenshotB(page, "b12-vorher", "top");
   await page.getByRole("checkbox", { name: "Wert umschalten" }).click();
   await waitText(page, `(t) => t.startsWith("hohl = false;")`);
   await waitScene(page);
   const nb = await hook(page, (c) => c.nodeBounds(2));
   expect(nb.some((b) => b.label === "sphere")).toBe(true);
+  await hook(page, (c) => c.fitAll());
+  await frame(page);
+  await screenshotB(page, "b12-nachher", "top");
+  await hook(page, (c) => c.focusEditor());
+  await page.keyboard.press("Control+z");
+  expect(await text(page)).toBe(src2);
   recordB({
     id: "B12",
-    title: "Inline-Regler",
+    title: "Inline-Schalter",
     before: "b12-vorher",
     after: "b12-nachher",
-    codeBefore: "t = 3;\nhohl = true;",
-    codeAfter: `${lines(after, 1)}\nhohl = false;`,
-    caption: `Zahl-Literal einer Zuweisung: kleiner Schieberegler am Zeilenende, mit der Maus von 3 auf ${t} gezogen (Code und Szene folgen live, ein Undo-Schritt). Bool-Literal: Schalter, Klick schreibt false; die Szene wechselt auf den else-Zweig.`,
+    codeBefore: "hohl = true;",
+    codeAfter: "hohl = false;",
+    caption: "Bool-Literal einer Zuweisung: Schalter am Zeilenende, Klick schreibt false; die Szene wechselt auf den else-Zweig. Zahl-Literale haben keinen Inline-Schieberegler (nur in der Parameterleiste).",
   });
 });
 

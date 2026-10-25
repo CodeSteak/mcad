@@ -109,14 +109,12 @@ describe("Engine-Edits auf das aktuelle Dokument abbilden", () => {
   });
 });
 
-describe("Inline-Regler: Literal noch an der Stelle?", () => {
+describe("Inline-Schalter: Literal noch an der Stelle?", () => {
   const doc = Text.of(["t = 3;", "hohl = true;", "x = -2.5;"]);
-  it("prüft Zahl und Bool", () => {
-    expect(literalAt(doc, { from: 4, to: 5, kind: "number", value: 3 })).toBe(true);
-    expect(literalAt(doc, { from: 3, to: 5, kind: "number", value: 3 })).toBe(true);
-    expect(literalAt(doc, { from: 0, to: 1, kind: "number", value: 3 })).toBe(false);
+  it("prüft Bool", () => {
     expect(literalAt(doc, { from: 14, to: 18, kind: "bool", value: true })).toBe(true);
-    expect(literalAt(doc, { from: 24, to: 28, kind: "number", value: -2.5 })).toBe(true);
-    expect(literalAt(doc, { from: 5, to: 5, kind: "number", value: 3 })).toBe(false);
+    expect(literalAt(doc, { from: 13, to: 18, kind: "bool", value: true })).toBe(true);
+    expect(literalAt(doc, { from: 4, to: 5, kind: "bool", value: true })).toBe(false);
+    expect(literalAt(doc, { from: 14, to: 14, kind: "bool", value: true })).toBe(false);
   });
 });

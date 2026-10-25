@@ -519,13 +519,6 @@ input:checked + .cm-switch-knob::after {
   vertical-align: middle;
 }
 
-.cm-litctl input[type="range"] {
-  width: 90px;
-  height: 12px;
-  margin: 0;
-  cursor: ew-resize;
-}
-
 .settings-wrap {
   position: relative;
 }

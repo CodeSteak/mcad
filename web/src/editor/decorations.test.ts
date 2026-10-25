@@ -82,13 +82,11 @@ describe("Editor-Dekorationen", () => {
     expect(lines.get(22)!.segs[0]).toEqual({ kind: "error", text: "Engine hängt" });
   });
 
-  it("Inline-Regler für Zahl- und Bool-Literale bei Zuweisungen", () => {
+  it("Inline-Schalter nur für Bool-Literale bei Zuweisungen", () => {
     const g = fixture("griffe");
     const { controls } = collectLines(g.doc, input({ scene: g.scene }, new VersionMapper(g.source.length)), []);
-    expect([...controls.keys()]).toEqual([12, 13]);
-    const t = controls.get(12)!;
-    expect(t).toMatchObject({ kind: "number", value: 3 });
-    expect(g.doc.sliceString(t.from, t.to)).toBe("3");
+    // Number literals (line 12) have no inline slider.
+    expect([...controls.keys()]).toEqual([13]);
     const b = controls.get(13)!;
     expect(b).toMatchObject({ kind: "bool", value: true });
     expect(g.doc.sliceString(b.from, b.to)).toBe("true");

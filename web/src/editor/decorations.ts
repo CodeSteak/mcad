@@ -137,10 +137,10 @@ export function collectLines(doc: Text, input: DecorationInput, disabled: Array<
       const r = mapRange(m, h.range.from, h.range.to);
       const line = lineOf(doc, r.to);
       lineInfo(lines, line).segs.push({ kind: "hint", text: `= ${h.text}` });
-      // Number literal → slider, bool literal → switch (Spec: Werttypen).
-      if (h.literal && (typeof h.value === "number" || typeof h.value === "boolean") && !controls.has(line)) {
+      // Bool literal → switch (Spec: Werttypen); number literals have no inline slider.
+      if (h.literal && typeof h.value === "boolean" && !controls.has(line)) {
         const lr = mapRange(m, h.literal.from, h.literal.to);
-        const c: LiteralControl = { from: lr.from, to: lr.to, kind: typeof h.value === "number" ? "number" : "bool", value: h.value };
+        const c: LiteralControl = { from: lr.from, to: lr.to, kind: "bool", value: h.value };
         if (literalAt(doc, c) && lineOf(doc, lr.from) === line) controls.set(line, c);
       }
     }
