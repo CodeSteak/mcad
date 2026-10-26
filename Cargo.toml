@@ -26,6 +26,7 @@ cad-render = { path = "crates/cad-render" }
 cad-session = { path = "crates/cad-session" }
 cad-measure = { path = "crates/cad-measure" }
 cad-step = { path = "crates/cad-step" }
+cad-i18n = { path = "crates/cad-i18n" }
 kernel-solidcore = { path = "crates/kernel-solidcore", default-features = false }
 
 [profile.release]

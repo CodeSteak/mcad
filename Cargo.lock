@@ -417,6 +417,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "cad-i18n"
+version = "0.3.0"
+
+[[package]]
 name = "cad-ipc"
 version = "0.3.0"
 dependencies = [
