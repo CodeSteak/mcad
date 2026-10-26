@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="de">
+<html lang='en'>
 <head>
 <meta charset="utf-8">
-<title>Testbericht 3 – UI Phase B</title>
+<title>Test report 3 – UI phase B: handles, snapping, parameter bar</title>
 <style>
   @page { size: A4; margin: 16mm 14mm 16mm 14mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -43,185 +43,185 @@
 </head>
 <body>
 <main>
-<h1>Testbericht 3 – UI Phase B: Griffe, Snap, Parameterleiste</h1>
-<div class="meta">Bearbeiten in der Ansicht · 23. Oktober 2026 · Commit af6edd6</div>
+<h1>Test report 3 – UI phase B: handles, snapping, parameter bar</h1>
+<div class="meta">Editing in the view · 2026-10-23 · Commit af6edd6</div>
 
 <div class="summary">
-  <div>Phase B (Playwright)<b>14 / 14 bestanden</b></div>
-  <div>Phase A (Regression)<b>22 / 22</b></div>
+  <div>Phase B (Playwright)<b>14 / 14 passed</b></div>
+  <div>Phase A (regression)<b>22 / 22</b></div>
   <div>Vitest<b>128 / 128</b></div>
-  <div>Rust (geänderte Crates)<b>33 / 33</b></div>
-  <div>Ziehen → Szene grob (Würfel / Lochplatte)<b>36 ms / 371 ms</b></div>
+  <div>Rust (changed crates)<b>33 / 33</b></div>
+  <div>Drag → coarse scene (cube / perforated plate)<b>36 ms / 371 ms</b></div>
 </div>
 
-<h2>1 Umfang</h2>
-<p>Phase B ergänzt die Browser-UI um das Bearbeiten in der 3D-Ansicht. Der Code bleibt die einzige Quelle: Griffe ändern Literale oder schreiben Rasterreferenzen, die Parameterleiste ändert nur die Vorschau.</p>
+<h2>1 Scope</h2>
+<p>Phase B adds editing in the 3D view to the browser UI. The code remains the single source of truth: handles change literals or write grid references, the parameter bar only changes the preview.</p>
 <ul>
-  <li><b>Griffe</b> der Zeile unter dem Cursor, nur bei Literal oder Variable mit Literal; berechnete Werte werden als gesperrter Griff (grauer Ring) gezeigt. Arten: cube-/square-Ecke, box-/rect-Eckpunkte, Radius (sphere, circle, cylinder, torus), Höhe (cylinder, linear_extrude), cylinder zwischen zwei Punkten, translate-Ziel (Pfeil alt → neu, Griff am Ziel), Drehring pro Achse (rotate), Skalierung an der Hüllenecke, Rasterebenen mit Literal (Griff auf einer Kante der Rasterbox, Ziehen entlang der Achse), Punktvariablen, polygon-/spline-Punkte, Zonenmittelpunkt über translate. Farben: Literal orange, Standardwert eines Modulparameters violett, reine Referenz türkis, gesperrt grau.</li>
-  <li><b>Ziehen:</b> <code>DragStart</code> → <code>Drag</code> (höchstens eine Nachricht in Flug, letzte Position gewinnt) → <code>Edits</code> → Editor wendet sie als Live-Änderung an und sendet den Quelltext sofort; die Engine tesselliert grob, nach <code>DragEnd</code> fein. Ein Ziehvorgang ist ein Undo-Schritt (Live-Änderungen ohne Verlauf, am Ende als ein isoliertes Ereignis). Esc bricht ab.</li>
-  <li><b>Snappen</b> im Bildschirmraum (Fangradius einstellbar, Standard 14 px) auf Rasterpunkte des Moduls und sichtbare Anker (<code>SnapTargets</code>), Ziel hervorgehoben und beschriftet; geschrieben wird die Referenz. 1D-Griffe (Höhe, Radius, Ebene) snappen auf Rasterebenen derselben Achse und schreiben <code>g.name</code> (neu in cad-eval). <b>Alt:</b> kein Snap, Zahlen gerundet auf die Schrittweite (Einstellungen, Standard 1 mm / 15°).</li>
-  <li><b>Parameterleiste</b> neben der Ansicht im Modulkontext: Zahl (Eingabefeld + Schieberegler), Bool (Schalter), Vektor (drei Felder); Reset pro Parameter, Markierung geänderter Werte, „Alle zurücksetzen“, Werte pro Modul bis Sitzungsende, „Als Standard übernehmen“ (<code>SetDefault</code>). Vorschau über <code>SetContext { overrides }</code>.</li>
-  <li><b>Inline-Regler</b> für Zahl- und Bool-Literale von Zuweisungen am Zeilenende (Schieberegler, Schalter); ein Schieberegler-Zug ist ein Undo-Schritt.</li>
-  <li><b>Strg+Klick</b> auf einen Raster- oder Ankerausdruck springt zur Deklaration.</li>
+  <li><b>Handles</b> of the line under the cursor, only for a literal or a variable with a literal; computed values are shown as a locked handle (gray ring). Kinds: cube/square corner, box/rect corner points, radius (sphere, circle, cylinder, torus), height (cylinder, linear_extrude), cylinder between two points, translate target (arrow old → new, handle at the target), rotation ring per axis (rotate), scaling at the bounding box corner, grid planes with a literal (handle on an edge of the grid box, drag along the axis), point variables, polygon/spline points, zone center via translate. Colors: literal orange, default value of a module parameter violet, pure reference turquoise, locked gray.</li>
+  <li><b>Dragging:</b> <code>DragStart</code> → <code>Drag</code> (at most one message in flight, the last position wins) → <code>Edits</code> → the editor applies them as a live change and sends the source immediately; the engine tessellates coarsely, and finely after <code>DragEnd</code>. One drag is one undo step (live changes without history, at the end as one isolated event). Esc cancels.</li>
+  <li><b>Snapping</b> in screen space (snap radius configurable, default 14 px) to grid points of the module and visible anchors (<code>SnapTargets</code>), target highlighted and labeled; the reference is written. 1D handles (height, radius, plane) snap to grid planes of the same axis and write <code>g.name</code> (new in cad-eval). <b>Alt:</b> no snapping, numbers rounded to the step size (settings, default 1 mm / 15°).</li>
+  <li><b>Parameter bar</b> next to the view in module context: number (input field + slider), bool (switch), vector (three fields); reset per parameter, marking of changed values, "Reset all", values per module until the end of the session, "Apply as default" (<code>SetDefault</code>). Preview via <code>SetContext { overrides }</code>.</li>
+  <li><b>Inline controls</b> for number and bool literals of assignments at the end of the line (slider, switch); one slider drag is one undo step.</li>
+  <li><b>Ctrl+click</b> on a grid or anchor expression jumps to the declaration.</li>
 </ul>
-<p class="small">Änderungen an Rust-Crates: <code>cad-eval</code> (gesperrte Griffe als <code>locked_handles</code>, <code>SnapRef::Plane</code> mit Prüfung, dass der Griff nach dem Schreiben exakt auf der Ebene liegt und die Ebene an der Stelle sichtbar ist), <code>cad-session</code> (<code>Drag</code> antwortet immer, <code>SetDragOptions</code>, Szene mit <code>locked_handles</code>), Protokoll-Typen neu erzeugt.</p>
+<p class="small">Changes to Rust crates: <code>cad-eval</code> (locked handles as <code>locked_handles</code>, <code>SnapRef::Plane</code> with a check that after writing, the handle lies exactly on the plane and the plane is visible at that location), <code>cad-session</code> (<code>Drag</code> always answers, <code>SetDragOptions</code>, scene with <code>locked_handles</code>), protocol types regenerated.</p>
 
-<h2>2 Testumgebung</h2>
-<table><tr><th style="width:32mm">Betriebssystem</th><td>Linux 6.18.44-fc-v140 (x64)</td></tr><tr><th style="width:32mm">CPU</th><td>Intel(R) Xeon(R) Processor @ 2.80GHz · 4 Kerne</td></tr><tr><th style="width:32mm">Node.js</th><td>v22.22.0</td></tr><tr><th style="width:32mm">Browser</th><td>Chromium 141.0.7390.37 (headless, Playwright 1.56.1)</td></tr><tr><th style="width:32mm">Grafik</th><td>WebGL über SwiftShader (Software-Rendering, keine GPU)</td></tr><tr><th style="width:32mm">Fenster</th><td>1440 × 900 px, Gerätepixelverhältnis 1</td></tr><tr><th style="width:32mm">Build</th><td>Vite 8.3.5 Produktions-Build, Vorschau-Server (vite preview)</td></tr><tr><th style="width:32mm">Bibliotheken</th><td>React 19.3.1, three.js 0.186.1, CodeMirror 6.43.15, Zustand 5.0.16, Vitest 5.0.5</td></tr><tr><th style="width:32mm">Engine</th><td>cad_wasm_bg.wasm 1.17 MiB, smlib.wasm 4.85 MiB</td></tr><tr><th style="width:32mm">Quelltext</th><td>Branch worktree-agent-a590210bcbc87a815, Commit af6edd6</td></tr></table>
-<p class="small">Die End-to-End-Tests laufen gegen den Produktions-Build mit echten Mausereignissen auf dem Canvas (Playwright <code>mouse.down/move/up</code>, ein Schritt pro Animationsframe). Gewartet wird auf Szenen-Versionen, den Zieh-Zustand und den Editortext über den Testhaken <code>window.__cad</code>, nie auf feste Zeiten. Der Haken liefert nur Bildschirmpositionen (Griffe, Rasterpunkte, Punkte auf Ring oder Achse).</p>
+<h2>2 Test environment</h2>
+<table><tr><th style="width:32mm">Operating system</th><td>Linux 6.18.44-fc-v140 (x64)</td></tr><tr><th style="width:32mm">CPU</th><td>Intel(R) Xeon(R) Processor @ 2.80GHz · 4 cores</td></tr><tr><th style="width:32mm">Node.js</th><td>v22.22.0</td></tr><tr><th style="width:32mm">Browser</th><td>Chromium 141.0.7390.37 (headless, Playwright 1.56.1)</td></tr><tr><th style="width:32mm">Graphics</th><td>WebGL via SwiftShader (software rendering, no GPU)</td></tr><tr><th style="width:32mm">Window</th><td>1440 × 900 px, device pixel ratio 1</td></tr><tr><th style="width:32mm">Build</th><td>Vite 8.3.5 production build, preview server (vite preview)</td></tr><tr><th style="width:32mm">Libraries</th><td>React 19.3.1, three.js 0.186.1, CodeMirror 6.43.15, Zustand 5.0.16, Vitest 5.0.5</td></tr><tr><th style="width:32mm">Engine</th><td>cad_wasm_bg.wasm 1.17 MiB, smlib.wasm 4.85 MiB</td></tr><tr><th style="width:32mm">Source</th><td>Branch worktree-agent-a590210bcbc87a815, commit af6edd6</td></tr></table>
+<p class="small">The end-to-end tests run against the production build with real mouse events on the canvas (Playwright <code>mouse.down/move/up</code>, one step per animation frame). They wait for scene versions, the drag state and the editor text via the test hook <code>window.__cad</code>, never for fixed times. The hook only supplies screen positions (handles, grid points, points on a ring or axis).</p>
 
-<h2>3 Szenarien (Playwright, web/e2e/ui-b.spec.ts)</h2>
+<h2>3 Scenarios (Playwright, web/e2e/ui-b.spec.ts)</h2>
 <table>
-<tr><th>ID</th><th>Szenario</th><th>Ergebnis</th><th>Dauer</th><th>Prüfung</th></tr>
-<tr class="ok"><td>B01</td><td>cube-Ecke ziehen: Literal live, Szene folgt, ein Undo</td><td class="res">bestanden</td><td class="num">7.6 s</td><td>Griff an der Ecke gegenüber dem Ursprung mit der Maus gezogen: das Literal änderte sich live (6 Zwischenstände mit grober Tessellierung), die Szene folgte. Ein Strg+Z stellte „cube([20, 20, 20]);“ wieder her, Strg+Y (Wiederholen) wieder „cube([22, 23, 22]);“.</td></tr>
-<tr class="ok"><td>B02</td><td>translate-Griff auf Rasterpunkt loslassen schreibt g[…]</td><td class="res">bestanden</td><td class="num">13.7 s</td><td>translate-Griff (Ziel des Pfeils) zum Schnittpunkt rechts/hinten/deckel gezogen: Ziel im Fangradius hervorgehoben und beschriftet, beim Loslassen steht die Referenz g[rechts, hinten, deckel] im Code (keine Koordinaten).</td></tr>
-<tr class="ok"><td>B03</td><td>Snap auf Anker schreibt k.ecke</td><td class="res">bestanden</td><td class="num">13.1 s</td><td>Griff des translate-Ziels auf die Raute des Ankers ecke der benannten Instanz k gezogen: Beschriftung „k.ecke“, beim Loslassen wird k.ecke geschrieben.</td></tr>
-<tr class="ok"><td>B04</td><td>Alt-Ziehen: frei, Zahlen auf die Schrittweite gerundet</td><td class="res">bestanden</td><td class="num">17.2 s</td><td>Mit gedrückter Alt-Taste nahe an einen Rasterpunkt gezogen: kein Snap, es werden Zahlen geschrieben, gerundet auf 1 mm (translate([39, 31, 1]) cube(4);). Danach Schrittweite in den Einstellungen auf 0,5 mm gesetzt: translate([37, 28.5, -0.5]) cube(4);.</td></tr>
-<tr class="ok"><td>B05</td><td>Rasterebene mit Literal ziehen</td><td class="res">bestanden</td><td class="num">5.9 s</td><td>Cursor im Rasterblock: alle Ebenen mit Literal als durchgezogene Linie mit Griff. Der Griff der Ebene rechts wurde entlang der x-Achse gezogen; das Literal folgt, Linie und Rasterpunkte wandern mit.</td></tr>
-<tr class="ok"><td>B06</td><td>Höhe snappt auf Rasterebene derselben Achse (g.deckel)</td><td class="res">bestanden</td><td class="num">6.5 s</td><td>Höhengriff des Zylinders an die Rasterebene deckel gezogen: Ebenen derselben Achse sind Snap-Ziele, geschrieben wird g.deckel (neu in cad-eval: SnapRef::Plane).</td></tr>
-<tr class="ok"><td>B07</td><td>rotate-Ring rastet in 15°</td><td class="res">bestanden</td><td class="num">7.8 s</td><td>Drehringe pro Achse; der Griff am z-Ring wurde von 10° bis 52° gezogen. Geschrieben werden nur Vielfache von 15° (Schrittweite für Winkel), am Ende 45°.</td></tr>
-<tr class="ok"><td>B08</td><td>gesperrter Griff bei berechnetem Wert</td><td class="res">bestanden</td><td class="num">2.9 s</td><td>Berechneter Wert [a + 1, 0, 0] * 4: der Griff wird angezeigt (grauer Ring), ist aber gesperrt. Ziehen ändert nichts, die Statuszeile meldet „berechneter Wert – gesperrt“.</td></tr>
-<tr class="ok"><td>B09</td><td>Variable mit Literal: Definition ändert sich, alle Verwendungen bewegen sich</td><td class="res">bestanden</td><td class="num">8.8 s</td><td>translate(p) in Zeile 2 gezogen: geändert wird die Definition von p in Zeile 1, Würfel und Kugel (Zeilen 2 und 3) verschieben sich um denselben Betrag.</td></tr>
-<tr class="ok"><td>B10</td><td>Zonenmittelpunkt über translate snappt auf Raster</td><td class="res">bestanden</td><td class="num">12.3 s</td><td>Cursor auf der Zone (Kugel) im fillet-Block: Griff am Zonenmittelpunkt (translate), auf die Ecke rechts/hinten/deckel gezogen. Die Zone wandert, die ausgewählten Kanten folgen.</td></tr>
-<tr class="ok"><td>B11</td><td>Parameterleiste: Vorschau, Reset, Als Standard übernehmen</td><td class="res">bestanden</td><td class="num">5.0 s</td><td>Cursor in module gehaeuse: Leiste mit w, d, h, t (Eingabefeld + Schieberegler, Reset ↺). w = 60 änderte nur die Vorschau (Code unverändert, Zeile markiert), Reset stellte 40 her; h per Schieberegler auf 31. d = 50 blieb beim Verlassen und Wiederbetreten des Moduls erhalten; „Als Standard übernehmen“ schrieb d = 50 in die Moduldefinition.</td></tr>
-<tr class="ok"><td>B12</td><td>Inline-Schieberegler und -Schalter</td><td class="res">bestanden</td><td class="num">3.7 s</td><td>Zahl-Literal einer Zuweisung: kleiner Schieberegler am Zeilenende, mit der Maus von 3 auf 7 gezogen (Code und Szene folgen live, ein Undo-Schritt). Bool-Literal: Schalter, Klick schreibt false; die Szene wechselt auf den else-Zweig.</td></tr>
-<tr class="ok"><td>B13</td><td>Strg+Klick auf Rasterausdruck springt zur Rasterdeklaration</td><td class="res">bestanden</td><td class="num">1.5 s</td><td>Strg+Klick auf g[links, vorne, boden] (Zeile 11) setzt den Cursor auf die Deklaration grid g (Zeile 4); ein normaler Klick setzt weiter nur den Cursor.</td></tr>
-<tr class="ok"><td>B14</td><td>Messwerte: Latenz Ziehen → Szene (grob/fein), fps beim Ziehen</td><td class="res">bestanden</td><td class="num">25.5 s</td><td>lochplatte (Differenz mit fillet = 1, vier Bohrungen): Ebene oben = t (Standardwert, andere Farbe) 78-mal bewegt, ein Schritt pro Frame. Ziehen → Szene grob: Median 371 ms, p95 738 ms (15 Szenen); Loslassen → feine Szene 202 ms; 21 fps während des Ziehens, 76 Drag-Nachrichten, 0 übersprungen.</td></tr>
+<tr><th>ID</th><th>Scenario</th><th>Result</th><th>Duration</th><th>Check</th></tr>
+<tr class="ok"><td>B01</td><td>Drag cube corner: literal live, scene follows, one undo</td><td class="res">passed</td><td class="num">7.6 s</td><td>Handle at the corner opposite the origin dragged with the mouse: the literal changed live (6 intermediate states with coarse tessellation), the scene followed. One Ctrl+Z restored "cube([20, 20, 20]);", Ctrl+Y (redo) restored "cube([22, 23, 22]);".</td></tr>
+<tr class="ok"><td>B02</td><td>Releasing the translate handle on a grid point writes g[…]</td><td class="res">passed</td><td class="num">13.7 s</td><td>translate handle (target of the arrow) dragged to the intersection point rechts/hinten/deckel: target within the snap radius highlighted and labeled; on release, the code contains the reference g[rechts, hinten, deckel] (no coordinates).</td></tr>
+<tr class="ok"><td>B03</td><td>Snapping to an anchor writes k.ecke</td><td class="res">passed</td><td class="num">13.1 s</td><td>Handle of the translate target dragged onto the diamond of the anchor ecke of the named instance k: label "k.ecke", on release k.ecke is written.</td></tr>
+<tr class="ok"><td>B04</td><td>Alt-drag: free, numbers rounded to the step size</td><td class="res">passed</td><td class="num">17.2 s</td><td>Dragged close to a grid point with the Alt key held: no snapping, numbers are written, rounded to 1 mm (translate([39, 31, 1]) cube(4);). Then step size set to 0.5 mm in the settings: translate([37, 28.5, -0.5]) cube(4);.</td></tr>
+<tr class="ok"><td>B05</td><td>Drag a grid plane with a literal</td><td class="res">passed</td><td class="num">5.9 s</td><td>Cursor in the grid block: all planes with a literal as a solid line with a handle. The handle of the plane rechts was dragged along the x axis; the literal follows, the line and grid points move along.</td></tr>
+<tr class="ok"><td>B06</td><td>Height snaps to a grid plane of the same axis (g.deckel)</td><td class="res">passed</td><td class="num">6.5 s</td><td>Height handle of the cylinder dragged to the grid plane deckel: planes of the same axis are snap targets, g.deckel is written (new in cad-eval: SnapRef::Plane).</td></tr>
+<tr class="ok"><td>B07</td><td>rotate ring snaps in 15° steps</td><td class="res">passed</td><td class="num">7.8 s</td><td>Rotation rings per axis; the handle on the z ring was dragged from 10° to 52°. Only multiples of 15° are written (step size for angles), 45° at the end.</td></tr>
+<tr class="ok"><td>B08</td><td>Locked handle for a computed value</td><td class="res">passed</td><td class="num">2.9 s</td><td>Computed value [a + 1, 0, 0] * 4: the handle is shown (gray ring) but locked. Dragging changes nothing, the status bar reports "computed value – locked" (German UI: „berechneter Wert – gesperrt“).</td></tr>
+<tr class="ok"><td>B09</td><td>Variable with a literal: definition changes, all uses move</td><td class="res">passed</td><td class="num">8.8 s</td><td>translate(p) in line 2 dragged: the definition of p in line 1 changes, cube and sphere (lines 2 and 3) move by the same amount.</td></tr>
+<tr class="ok"><td>B10</td><td>Zone center via translate snaps to the grid</td><td class="res">passed</td><td class="num">12.3 s</td><td>Cursor on the zone (sphere) in the fillet block: handle at the zone center (translate), dragged to the corner rechts/hinten/deckel. The zone moves, the selected edges follow.</td></tr>
+<tr class="ok"><td>B11</td><td>Parameter bar: preview, reset, apply as default</td><td class="res">passed</td><td class="num">5.0 s</td><td>Cursor in module gehaeuse: bar with w, d, h, t (input field + slider, reset ↺). w = 60 changed only the preview (code unchanged, line marked), reset restored 40; h set to 31 via the slider. d = 50 was kept when leaving and re-entering the module; "Apply as default" (German UI: „Als Standard übernehmen“) wrote d = 50 into the module definition.</td></tr>
+<tr class="ok"><td>B12</td><td>Inline slider and switch</td><td class="res">passed</td><td class="num">3.7 s</td><td>Number literal of an assignment: small slider at the end of the line, dragged with the mouse from 3 to 7 (code and scene follow live, one undo step). Bool literal: switch, a click writes false; the scene switches to the else branch.</td></tr>
+<tr class="ok"><td>B13</td><td>Ctrl+click on a grid expression jumps to the grid declaration</td><td class="res">passed</td><td class="num">1.5 s</td><td>Ctrl+click on g[links, vorne, boden] (line 11) sets the cursor on the declaration grid g (line 4); a normal click still only sets the cursor.</td></tr>
+<tr class="ok"><td>B14</td><td>Measurements: latency drag → scene (coarse/fine), fps while dragging</td><td class="res">passed</td><td class="num">25.5 s</td><td>lochplatte (difference with fillet = 1, four holes): plane oben = t (default value, different color) moved 78 times, one step per frame. Drag → coarse scene: median 371 ms, p95 738 ms (15 scenes); release → fine scene 202 ms; 21 fps while dragging, 76 drag messages, 0 skipped.</td></tr>
 </table>
-<p class="small">Regression: die 22 Szenarien aus Phase A (web/e2e/ui.spec.ts) liefen im selben Lauf, 22 bestanden.</p>
+<p class="small">Regression: the 22 scenarios from phase A (web/e2e/ui.spec.ts) ran in the same run, 22 passed.</p>
 
-<h2>4 Unit-Tests</h2>
-<table><tr><th>Vitest-Datei</th><th>bestanden</th><th>Fehlgeschlagen</th></tr><tr class="ok"><td>web/src/editor/decorations.test.ts</td><td class="num">7 / 7</td><td>–</td></tr>
-<tr class="ok"><td>web/src/editor/editGroup.test.ts <span class="tag">neu</span></td><td class="num">7 / 7</td><td>–</td></tr>
+<h2>4 Unit tests</h2>
+<table><tr><th>Vitest file</th><th>passed</th><th>Failed</th></tr><tr class="ok"><td>web/src/editor/decorations.test.ts</td><td class="num">7 / 7</td><td>–</td></tr>
+<tr class="ok"><td>web/src/editor/editGroup.test.ts <span class="tag">new</span></td><td class="num">7 / 7</td><td>–</td></tr>
 <tr class="ok"><td>web/src/editor/lang.test.ts</td><td class="num">42 / 42</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/context.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/display.test.ts</td><td class="num">15 / 15</td><td>–</td></tr>
-<tr class="ok"><td>web/src/logic/drag.test.ts <span class="tag">neu</span></td><td class="num">9 / 9</td><td>–</td></tr>
-<tr class="ok"><td>web/src/logic/format.test.ts <span class="tag">neu</span></td><td class="num">5 / 5</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/drag.test.ts <span class="tag">new</span></td><td class="num">9 / 9</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/format.test.ts <span class="tag">new</span></td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/grids.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
-<tr class="ok"><td>web/src/logic/handles.test.ts <span class="tag">neu</span></td><td class="num">12 / 12</td><td>–</td></tr>
-<tr class="ok"><td>web/src/logic/params.test.ts <span class="tag">neu</span></td><td class="num">7 / 7</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/handles.test.ts <span class="tag">new</span></td><td class="num">12 / 12</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/params.test.ts <span class="tag">new</span></td><td class="num">7 / 7</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/positions.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/sceneIndex.test.ts</td><td class="num">9 / 9</td><td>–</td></tr></table>
-<p class="small">Neu: Snap-Suche im Bildschirmraum, Strahl → Wert (Ebene, Achse, Ring), Vorschau-Rundung, „höchstens ein Drag in Flug“, Rundung und Zahlendarstellung, Undo-Gruppierung mit dem echten CodeMirror-Verlauf, Abbildung der Engine-Edits, Zustand der Parameterleiste, Inline-Regler. Fixture <code>griffe.scad</code> aus der echten Engine.</p>
-<table><tr><th>Rust-Testprogramm</th><th>bestanden</th><th>neue Tests</th></tr><tr class="ok"><td>tests/handles.rs</td><td class="num">24 / 24</td><td><code>computed_values_have_locked_handles</code>, <code>plane_snap_respects_visibility</code>, <code>one_d_handles_snap_to_grid_planes</code>, <code>zone_center_handle_through_translate</code></td></tr>
+<p class="small">New: snap search in screen space, ray → value (plane, axis, ring), preview rounding, "at most one drag in flight", rounding and number formatting, undo grouping with the real CodeMirror history, mapping of the engine edits, state of the parameter bar, inline controls. Fixture <code>griffe.scad</code> from the real engine.</p>
+<table><tr><th>Rust test program</th><th>passed</th><th>new tests</th></tr><tr class="ok"><td>tests/handles.rs</td><td class="num">24 / 24</td><td><code>computed_values_have_locked_handles</code>, <code>plane_snap_respects_visibility</code>, <code>one_d_handles_snap_to_grid_planes</code>, <code>zone_center_handle_through_translate</code></td></tr>
 <tr class="ok"><td>tests/protocol_ts.rs</td><td class="num">1 / 1</td><td>–</td></tr>
 <tr class="ok"><td>tests/session.rs</td><td class="num">8 / 8</td><td><code>drag_always_answers_and_plane_snap</code></td></tr></table>
 
-<h2>5 Messwerte</h2>
-<table><tr><th>Größe</th><th>Wert</th><th>Messung</th></tr><tr><td>Ziehen → Szene, grob (Median)</td><td class="num">371 ms</td><td>Drag-Nachricht bis die Szene des daraus geschriebenen Quelltexts gezeichnet ist, grobe Tessellierung (10 × Toleranz); 15 Szenen</td></tr>
-<tr><td>Ziehen → Szene, grob (p95 / max)</td><td class="num">738 ms / 738 ms</td><td>95-%-Quantil und Maximum derselben Messung</td></tr>
-<tr><td>Loslassen → feine Szene</td><td class="num">202 ms</td><td>pointerup bis die Szene mit feinem Wurzel-Mesh gezeichnet ist (DragEnd, Undo-Gruppe schließen, Neuauswertung aus dem Cache)</td></tr>
-<tr><td>Bildrate beim Ziehen</td><td class="num">21 fps</td><td>requestAnimationFrame-Zähler während des Ziehens (19.9 s); längste Lücke 349 ms</td></tr>
-<tr><td>Mausbewegungen / Drag-Nachrichten</td><td class="num">78 / 76</td><td>höchstens eine Nachricht in Flug, 0 Zwischenstände übersprungen (letzte Position gewinnt)</td></tr>
-<tr><td>Leichtes Modell: Ziehen → Szene grob (Median / p95)</td><td class="num">36 ms / 172 ms</td><td>B01, cube([20, 20, 20]): 6 Szenen; Aufwand von UI, Worker und Protokoll ohne nennenswerte Kernel-Arbeit</td></tr>
-<tr><td>Leichtes Modell: Loslassen → fein / fps</td><td class="num">23 ms / 35 fps</td><td>längste Frame-Lücke 412 ms, 15 Drag-Nachrichten</td></tr>
-<tr><td>Größte Bilddatei im Bericht</td><td class="num">57 KiB</td><td>JPEG, Qualität 82</td></tr></table>
-<p class="small">Oberer Teil: spec/lochplatte.scad, Modul lochplatte, Ebene oben = t (Standardwert). Jede Änderung von t wertet die Differenz mit Verrundung und vier Bohrungen vollständig neu aus (kein Cache-Treffer); die Latenz ist hier von der Kernel-Zeit bestimmt (SetSource → vollständige Szene Median 174 ms). Gleiche gerundete Werte erzeugen keine Änderung; jede Änderung wartet auf ihre Szene, bevor die nächste Position gesendet wird (sonst würde jeder neue Quelltext den laufenden Kernel-Auftrag abbrechen). Die Bildrate ist durch das Software-Rendering (SwiftShader) begrenzt; Phase A maß beim Drehen 14 fps.</p>
+<h2>5 Measurements</h2>
+<table><tr><th>Quantity</th><th>Value</th><th>Measurement</th></tr><tr><td>Drag → scene, coarse (median)</td><td class="num">371 ms</td><td>Drag message until the scene of the source written from it is drawn, coarse tessellation (10 × tolerance); 15 scenes</td></tr>
+<tr><td>Drag → scene, coarse (p95 / max)</td><td class="num">738 ms / 738 ms</td><td>95 % quantile and maximum of the same measurement</td></tr>
+<tr><td>Release → fine scene</td><td class="num">202 ms</td><td>pointerup until the scene with the fine root mesh is drawn (DragEnd, closing the undo group, re-evaluation from the cache)</td></tr>
+<tr><td>Frame rate while dragging</td><td class="num">21 fps</td><td>requestAnimationFrame counter while dragging (19.9 s); longest gap 349 ms</td></tr>
+<tr><td>Mouse moves / drag messages</td><td class="num">78 / 76</td><td>at most one message in flight, 0 intermediate states skipped (last position wins)</td></tr>
+<tr><td>Light model: drag → coarse scene (median / p95)</td><td class="num">36 ms / 172 ms</td><td>B01, cube([20, 20, 20]): 6 scenes; cost of UI, worker and protocol without significant kernel work</td></tr>
+<tr><td>Light model: release → fine / fps</td><td class="num">23 ms / 35 fps</td><td>longest frame gap 412 ms, 15 drag messages</td></tr>
+<tr><td>Largest image file in the report</td><td class="num">57 KiB</td><td>JPEG, quality 82</td></tr></table>
+<p class="small">Upper part: spec/lochplatte.scad, module lochplatte, plane oben = t (default value). Each change of t fully re-evaluates the difference with fillet and four holes (no cache hit); the latency here is determined by the kernel time (SetSource → complete scene median 174 ms). Equal rounded values produce no change; each change waits for its scene before the next position is sent (otherwise every new source would cancel the running kernel job). The frame rate is limited by software rendering (SwiftShader); phase A measured 14 fps while rotating.</p>
 
-<h2>6 Bekannte Grenzen und Abweichungen</h2>
+<h2>6 Known limitations and deviations</h2>
 <ul>
-  <li><b>Sprung zur Rasterdeklaration mit Strg+Klick</b> statt einfachem Klick: ein einfacher Klick muss weiter den Cursor setzen, sonst wären Rasterausdrücke nicht editierbar. Referenzen eines Moduls kennt die UI erst im Modulkontext (Cursor im Modul).</li>
-  <li><b>Ohne Alt</b> wird gesnappt, wenn ein Ziel im Fangradius liegt, sonst werden Zahlen geschrieben (gerundet). Ein Griff, der nur aus Referenzen besteht (z. B. <code>box(g[…], g[…])</code>), wird ohne Alt nie zu Zahlen; er wechselt nur zwischen Zielen.</li>
-  <li><b>Snap von 1D-Griffen</b> nur auf Ebenen, auf denen der Griff nach dem Schreiben von <code>g.name</code> exakt landet (gleicher Ursprung und Maßstab entlang der Achse). Unter einem verschobenen Teilbaum oder bei <code>center = true</code>/<code>d =</code> (Faktor 2) gibt es daher keine Ebenen-Ziele; geschrieben würde sonst ein Ausdruck wie <code>g.deckel - 5</code>, der den Griff sperrt.</li>
-  <li>Punktgriffe werden in der Ebene durch den Griff senkrecht zur Blickrichtung gezogen (2D-Punkte in ihrer xy-Ebene); entlang der Blickrichtung ändert sich nichts. Für eine bestimmte Achse hilft eine Standardansicht.</li>
-  <li>Undo-Gruppe: am Ende des Ziehens wird die Gesamtänderung einmal zurückgenommen und als ein Verlaufseintrag wieder angewendet; dabei entsteht eine zusätzliche Neuauswertung aus dem Cache.</li>
-  <li>Inline-Regler erscheinen nur bei Zuweisungen mit Zahl- oder Bool-Literal (Spec, Werttypen); der Bereich richtet sich nach dem Wert beim Start des Ziehens (0 … 2 × Wert, mindestens 10).</li>
-  <li>Parameter ohne Standardwert werden beim Reset auf 0 / false / [0, 0, 0] gesetzt (Spec-Tabelle); Zeichenketten und Listen sind nur lesbar.</li>
-  <li>Die Messwerte stammen aus headless Chromium mit SwiftShader.</li>
+  <li><b>Jump to the grid declaration with Ctrl+click</b> instead of a plain click: a plain click must still set the cursor, otherwise grid expressions would not be editable. The UI only knows the references of a module in module context (cursor in the module).</li>
+  <li><b>Without Alt</b>, the handle snaps if a target is within the snap radius, otherwise numbers are written (rounded). A handle that consists only of references (e.g. <code>box(g[…], g[…])</code>) never turns into numbers without Alt; it only switches between targets.</li>
+  <li><b>Snapping of 1D handles</b> only to planes on which the handle lands exactly after writing <code>g.name</code> (same origin and scale along the axis). Under a translated subtree or with <code>center = true</code>/<code>d =</code> (factor 2) there are therefore no plane targets; otherwise an expression such as <code>g.deckel - 5</code> would be written, which locks the handle.</li>
+  <li>Point handles are dragged in the plane through the handle perpendicular to the view direction (2D points in their xy plane); nothing changes along the view direction. For a specific axis, a standard view helps.</li>
+  <li>Undo group: at the end of the drag the total change is undone once and re-applied as one history entry; this causes one additional re-evaluation from the cache.</li>
+  <li>Inline controls only appear for assignments with a number or bool literal (spec, value types); the range depends on the value at the start of the drag (0 … 2 × value, at least 10).</li>
+  <li>Parameters without a default value are set to 0 / false / [0, 0, 0] on reset (spec table); strings and lists are read-only.</li>
+  <li>The measurements come from headless Chromium with SwiftShader.</li>
 </ul>
 
-<h2>7 Screenshots und Codeausschnitte</h2>
+<h2>7 Screenshots and code excerpts</h2>
 <section class="sc">
-<h3>B01 cube-Ecke ziehen</h3>
-<div class="pair"><div><div class="lbl">vorher</div><img src="img/b01-vorher.jpg" alt="cube-Ecke ziehen vorher"></div><div><div class="lbl">nachher</div><img src="img/b01-nachher.jpg" alt="cube-Ecke ziehen nachher"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>cube([20, 20, 20]);</pre></div><div><div class="lbl">Code nachher</div><pre>cube([22, 23, 22]);</pre></div></div>
-<p class="cap">Griff an der Ecke gegenüber dem Ursprung mit der Maus gezogen: das Literal änderte sich live (6 Zwischenstände mit grober Tessellierung), die Szene folgte. Ein Strg+Z stellte „cube([20, 20, 20]);“ wieder her, Strg+Y (Wiederholen) wieder „cube([22, 23, 22]);“.</p>
+<h3>B01 Drag cube corner</h3>
+<div class="pair"><div><div class="lbl">before</div><img src="img/b01-vorher.jpg" alt="Drag cube corner, before"></div><div><div class="lbl">after</div><img src="img/b01-nachher.jpg" alt="Drag cube corner, after"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>cube([20, 20, 20]);</pre></div><div><div class="lbl">Code after</div><pre>cube([22, 23, 22]);</pre></div></div>
+<p class="cap">Handle at the corner opposite the origin dragged with the mouse: the literal changed live (6 intermediate states with coarse tessellation), the scene followed. One Ctrl+Z restored "cube([20, 20, 20]);", Ctrl+Y (redo) restored "cube([22, 23, 22]);".</p>
 </section>
 <section class="sc">
-<h3>B02 Snap auf Rasterpunkt</h3>
-<div class="pair"><div><div class="lbl">vorher</div><img src="img/b02-vorher.jpg" alt="Snap auf Rasterpunkt vorher"></div><div><div class="lbl">während</div><img src="img/b02-waehrend.jpg" alt="Snap auf Rasterpunkt während"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>translate([5, 5, 2]) cube(4);</pre></div><div><div class="lbl">Code nachher</div><pre>translate(g[rechts, hinten, deckel]) cube(4);</pre></div></div>
-<p class="cap">translate-Griff (Ziel des Pfeils) zum Schnittpunkt rechts/hinten/deckel gezogen: Ziel im Fangradius hervorgehoben und beschriftet, beim Loslassen steht die Referenz g[rechts, hinten, deckel] im Code (keine Koordinaten).</p>
+<h3>B02 Snap to grid point</h3>
+<div class="pair"><div><div class="lbl">before</div><img src="img/b02-vorher.jpg" alt="Snap to grid point, before"></div><div><div class="lbl">during</div><img src="img/b02-waehrend.jpg" alt="Snap to grid point, during"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>translate([5, 5, 2]) cube(4);</pre></div><div><div class="lbl">Code after</div><pre>translate(g[rechts, hinten, deckel]) cube(4);</pre></div></div>
+<p class="cap">translate handle (target of the arrow) dragged to the intersection point rechts/hinten/deckel: target within the snap radius highlighted and labeled; on release, the code contains the reference g[rechts, hinten, deckel] (no coordinates).</p>
 </section>
 <section class="sc">
-<h3>B03 Snap auf Anker</h3>
-<div class="pair"><div><div class="lbl">vorher</div><img src="img/b03-vorher.jpg" alt="Snap auf Anker vorher"></div><div><div class="lbl">während</div><img src="img/b03-waehrend.jpg" alt="Snap auf Anker während"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>translate([0, 0, 25]) sphere(3);</pre></div><div><div class="lbl">Code nachher</div><pre>translate(k.ecke) sphere(3);</pre></div></div>
-<p class="cap">Griff des translate-Ziels auf die Raute des Ankers ecke der benannten Instanz k gezogen: Beschriftung „k.ecke“, beim Loslassen wird k.ecke geschrieben.</p>
+<h3>B03 Snap to anchor</h3>
+<div class="pair"><div><div class="lbl">before</div><img src="img/b03-vorher.jpg" alt="Snap to anchor, before"></div><div><div class="lbl">during</div><img src="img/b03-waehrend.jpg" alt="Snap to anchor, during"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>translate([0, 0, 25]) sphere(3);</pre></div><div><div class="lbl">Code after</div><pre>translate(k.ecke) sphere(3);</pre></div></div>
+<p class="cap">Handle of the translate target dragged onto the diamond of the anchor ecke of the named instance k: label "k.ecke", on release k.ecke is written.</p>
 </section>
 <section class="sc">
-<h3>B04 Alt-Ziehen</h3>
-<div class="pair"><div><div class="lbl">während</div><img src="img/b04-waehrend.jpg" alt="Alt-Ziehen während"></div><div><div class="lbl">nachher</div><img src="img/b04-nachher.jpg" alt="Alt-Ziehen nachher"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>translate([5, 5, 2]) cube(4);</pre></div><div><div class="lbl">Code nachher</div><pre>translate([39, 31, 1]) cube(4);
+<h3>B04 Alt-drag</h3>
+<div class="pair"><div><div class="lbl">during</div><img src="img/b04-waehrend.jpg" alt="Alt-drag, during"></div><div><div class="lbl">after</div><img src="img/b04-nachher.jpg" alt="Alt-drag, after"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>translate([5, 5, 2]) cube(4);</pre></div><div><div class="lbl">Code after</div><pre>translate([39, 31, 1]) cube(4);
 translate([37, 28.5, -0.5]) cube(4);</pre></div></div>
-<p class="cap">Mit gedrückter Alt-Taste nahe an einen Rasterpunkt gezogen: kein Snap, es werden Zahlen geschrieben, gerundet auf 1 mm (translate([39, 31, 1]) cube(4);). Danach Schrittweite in den Einstellungen auf 0,5 mm gesetzt: translate([37, 28.5, -0.5]) cube(4);.</p>
+<p class="cap">Dragged close to a grid point with the Alt key held: no snapping, numbers are written, rounded to 1 mm (translate([39, 31, 1]) cube(4);). Then step size set to 0.5 mm in the settings: translate([37, 28.5, -0.5]) cube(4);.</p>
 </section>
 <section class="sc">
-<h3>B05 Rasterebene ziehen</h3>
-<div class="pair"><div><div class="lbl">vorher</div><img src="img/b05-vorher.jpg" alt="Rasterebene ziehen vorher"></div><div><div class="lbl">nachher</div><img src="img/b05-nachher.jpg" alt="Rasterebene ziehen nachher"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>    x: links = 0, rechts = 40;</pre></div><div><div class="lbl">Code nachher</div><pre>    x: links = 0, rechts = 52;</pre></div></div>
-<p class="cap">Cursor im Rasterblock: alle Ebenen mit Literal als durchgezogene Linie mit Griff. Der Griff der Ebene rechts wurde entlang der x-Achse gezogen; das Literal folgt, Linie und Rasterpunkte wandern mit.</p>
+<h3>B05 Drag grid plane</h3>
+<div class="pair"><div><div class="lbl">before</div><img src="img/b05-vorher.jpg" alt="Drag grid plane, before"></div><div><div class="lbl">after</div><img src="img/b05-nachher.jpg" alt="Drag grid plane, after"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>    x: links = 0, rechts = 40;</pre></div><div><div class="lbl">Code after</div><pre>    x: links = 0, rechts = 52;</pre></div></div>
+<p class="cap">Cursor in the grid block: all planes with a literal as a solid line with a handle. The handle of the plane rechts was dragged along the x axis; the literal follows, the line and grid points move along.</p>
 </section>
 <section class="sc">
-<h3>B06 1D-Griff snappt auf Ebene</h3>
-<div class="pair"><div><div class="lbl">vorher</div><img src="img/b06-vorher.jpg" alt="1D-Griff snappt auf Ebene vorher"></div><div><div class="lbl">während</div><img src="img/b06-waehrend.jpg" alt="1D-Griff snappt auf Ebene während"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>cylinder(h = 12, r = 4);</pre></div><div><div class="lbl">Code nachher</div><pre>cylinder(h = g.deckel, r = 4);</pre></div></div>
-<p class="cap">Höhengriff des Zylinders an die Rasterebene deckel gezogen: Ebenen derselben Achse sind Snap-Ziele, geschrieben wird g.deckel (neu in cad-eval: SnapRef::Plane).</p>
+<h3>B06 1D handle snaps to plane</h3>
+<div class="pair"><div><div class="lbl">before</div><img src="img/b06-vorher.jpg" alt="1D handle snaps to plane, before"></div><div><div class="lbl">during</div><img src="img/b06-waehrend.jpg" alt="1D handle snaps to plane, during"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>cylinder(h = 12, r = 4);</pre></div><div><div class="lbl">Code after</div><pre>cylinder(h = g.deckel, r = 4);</pre></div></div>
+<p class="cap">Height handle of the cylinder dragged to the grid plane deckel: planes of the same axis are snap targets, g.deckel is written (new in cad-eval: SnapRef::Plane).</p>
 </section>
 <section class="sc">
-<h3>B07 Drehring rastet in 15°</h3>
-<div class="pair"><div><div class="lbl">vorher</div><img src="img/b07-vorher.jpg" alt="Drehring rastet in 15° vorher"></div><div><div class="lbl">nachher</div><img src="img/b07-nachher.jpg" alt="Drehring rastet in 15° nachher"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>rotate([0, 0, 10]) cube([30, 6, 6]);</pre></div><div><div class="lbl">Code nachher</div><pre>rotate([0, 0, 45]) cube([30, 6, 6]);</pre></div></div>
-<p class="cap">Drehringe pro Achse; der Griff am z-Ring wurde von 10° bis 52° gezogen. Geschrieben werden nur Vielfache von 15° (Schrittweite für Winkel), am Ende 45°.</p>
+<h3>B07 Rotation ring snaps in 15° steps</h3>
+<div class="pair"><div><div class="lbl">before</div><img src="img/b07-vorher.jpg" alt="Rotation ring snaps in 15° steps, before"></div><div><div class="lbl">after</div><img src="img/b07-nachher.jpg" alt="Rotation ring snaps in 15° steps, after"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>rotate([0, 0, 10]) cube([30, 6, 6]);</pre></div><div><div class="lbl">Code after</div><pre>rotate([0, 0, 45]) cube([30, 6, 6]);</pre></div></div>
+<p class="cap">Rotation rings per axis; the handle on the z ring was dragged from 10° to 52°. Only multiples of 15° are written (step size for angles), 45° at the end.</p>
 </section>
 <section class="sc">
-<h3>B08 Gesperrter Griff</h3>
-<div class="pair"><div><div class="lbl">vorher</div><img src="img/b08-vorher.jpg" alt="Gesperrter Griff vorher"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>translate([a + 1, 0, 0] * 4) cube(5);</pre></div><div><div class="lbl">Code nachher</div><pre>translate([a + 1, 0, 0] * 4) cube(5);</pre></div></div>
-<p class="cap">Berechneter Wert [a + 1, 0, 0] * 4: der Griff wird angezeigt (grauer Ring), ist aber gesperrt. Ziehen ändert nichts, die Statuszeile meldet „berechneter Wert – gesperrt“.</p>
+<h3>B08 Locked handle</h3>
+<div class="pair"><div><div class="lbl">before</div><img src="img/b08-vorher.jpg" alt="Locked handle, before"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>translate([a + 1, 0, 0] * 4) cube(5);</pre></div><div><div class="lbl">Code after</div><pre>translate([a + 1, 0, 0] * 4) cube(5);</pre></div></div>
+<p class="cap">Computed value [a + 1, 0, 0] * 4: the handle is shown (gray ring) but locked. Dragging changes nothing, the status bar reports "computed value – locked".</p>
 </section>
 <section class="sc">
-<h3>B09 Variable mit Literal</h3>
-<div class="pair"><div><div class="lbl">vorher</div><img src="img/b09-vorher.jpg" alt="Variable mit Literal vorher"></div><div><div class="lbl">nachher</div><img src="img/b09-nachher.jpg" alt="Variable mit Literal nachher"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>p = [10, 0, 5];
+<h3>B09 Variable with a literal</h3>
+<div class="pair"><div><div class="lbl">before</div><img src="img/b09-vorher.jpg" alt="Variable with a literal, before"></div><div><div class="lbl">after</div><img src="img/b09-nachher.jpg" alt="Variable with a literal, after"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>p = [10, 0, 5];
 translate(p) cube(4);
-translate(p) sphere(3);</pre></div><div><div class="lbl">Code nachher</div><pre>p = [15, 4, 4];
+translate(p) sphere(3);</pre></div><div><div class="lbl">Code after</div><pre>p = [15, 4, 4];
 translate(p) cube(4);
 translate(p) sphere(3);</pre></div></div>
-<p class="cap">translate(p) in Zeile 2 gezogen: geändert wird die Definition von p in Zeile 1, Würfel und Kugel (Zeilen 2 und 3) verschieben sich um denselben Betrag.</p>
+<p class="cap">translate(p) in line 2 dragged: the definition of p in line 1 changes, cube and sphere (lines 2 and 3) move by the same amount.</p>
 </section>
 <section class="sc">
-<h3>B10 Zonenmittelpunkt</h3>
-<div class="pair"><div><div class="lbl">vorher</div><img src="img/b10-vorher.jpg" alt="Zonenmittelpunkt vorher"></div><div><div class="lbl">nachher</div><img src="img/b10-nachher.jpg" alt="Zonenmittelpunkt nachher"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>    translate([10, 10, 15]) sphere(4);</pre></div><div><div class="lbl">Code nachher</div><pre>    translate(g[rechts, hinten, deckel]) sphere(4);</pre></div></div>
-<p class="cap">Cursor auf der Zone (Kugel) im fillet-Block: Griff am Zonenmittelpunkt (translate), auf die Ecke rechts/hinten/deckel gezogen. Die Zone wandert, die ausgewählten Kanten folgen.</p>
+<h3>B10 Zone center</h3>
+<div class="pair"><div><div class="lbl">before</div><img src="img/b10-vorher.jpg" alt="Zone center, before"></div><div><div class="lbl">after</div><img src="img/b10-nachher.jpg" alt="Zone center, after"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>    translate([10, 10, 15]) sphere(4);</pre></div><div><div class="lbl">Code after</div><pre>    translate(g[rechts, hinten, deckel]) sphere(4);</pre></div></div>
+<p class="cap">Cursor on the zone (sphere) in the fillet block: handle at the zone center (translate), dragged to the corner rechts/hinten/deckel. The zone moves, the selected edges follow.</p>
 </section>
 <section class="sc">
-<h3>B11 Parameterleiste</h3>
-<div class="pair"><div><div class="lbl">vorher</div><img src="img/b11-vorschau.jpg" alt="Parameterleiste vorher"></div><div><div class="lbl">nachher</div><img src="img/b11-nachher.jpg" alt="Parameterleiste nachher"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>module gehaeuse(w = 40, d = 30, h = 20, t = 3) {</pre></div><div><div class="lbl">Code nachher</div><pre>module gehaeuse(w = 40, d = 50, h = 20, t = 3) {</pre></div></div>
-<p class="cap">Cursor in module gehaeuse: Leiste mit w, d, h, t (Eingabefeld + Schieberegler, Reset ↺). w = 60 änderte nur die Vorschau (Code unverändert, Zeile markiert), Reset stellte 40 her; h per Schieberegler auf 31. d = 50 blieb beim Verlassen und Wiederbetreten des Moduls erhalten; „Als Standard übernehmen“ schrieb d = 50 in die Moduldefinition.</p>
+<h3>B11 Parameter bar</h3>
+<div class="pair"><div><div class="lbl">before</div><img src="img/b11-vorschau.jpg" alt="Parameter bar, before"></div><div><div class="lbl">after</div><img src="img/b11-nachher.jpg" alt="Parameter bar, after"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>module gehaeuse(w = 40, d = 30, h = 20, t = 3) {</pre></div><div><div class="lbl">Code after</div><pre>module gehaeuse(w = 40, d = 50, h = 20, t = 3) {</pre></div></div>
+<p class="cap">Cursor in module gehaeuse: bar with w, d, h, t (input field + slider, reset ↺). w = 60 changed only the preview (code unchanged, line marked), reset restored 40; h set to 31 via the slider. d = 50 was kept when leaving and re-entering the module; "Apply as default" wrote d = 50 into the module definition.</p>
 </section>
 <section class="sc">
-<h3>B12 Inline-Regler</h3>
-<div class="pair"><div><div class="lbl">vorher</div><img src="img/b12-vorher.jpg" alt="Inline-Regler vorher"></div><div><div class="lbl">nachher</div><img src="img/b12-nachher.jpg" alt="Inline-Regler nachher"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>t = 3;
-hohl = true;</pre></div><div><div class="lbl">Code nachher</div><pre>t = 7;
+<h3>B12 Inline controls</h3>
+<div class="pair"><div><div class="lbl">before</div><img src="img/b12-vorher.jpg" alt="Inline controls, before"></div><div><div class="lbl">after</div><img src="img/b12-nachher.jpg" alt="Inline controls, after"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>t = 3;
+hohl = true;</pre></div><div><div class="lbl">Code after</div><pre>t = 7;
 hohl = false;</pre></div></div>
-<p class="cap">Zahl-Literal einer Zuweisung: kleiner Schieberegler am Zeilenende, mit der Maus von 3 auf 7 gezogen (Code und Szene folgen live, ein Undo-Schritt). Bool-Literal: Schalter, Klick schreibt false; die Szene wechselt auf den else-Zweig.</p>
+<p class="cap">Number literal of an assignment: small slider at the end of the line, dragged with the mouse from 3 to 7 (code and scene follow live, one undo step). Bool literal: switch, a click writes false; the scene switches to the else branch.</p>
 </section>
 <section class="sc">
-<h3>B13 Sprung zur Rasterdeklaration</h3>
+<h3>B13 Jump to grid declaration</h3>
 
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>11: box(g[links, vorne, boden], g[rechts, hinten, deckel]);</pre></div><div><div class="lbl">Code nachher</div><pre>4: grid g {   ← Cursor</pre></div></div>
-<p class="cap">Strg+Klick auf g[links, vorne, boden] (Zeile 11) setzt den Cursor auf die Deklaration grid g (Zeile 4); ein normaler Klick setzt weiter nur den Cursor.</p>
+<div class="codes"><div><div class="lbl">Code before</div><pre>11: box(g[links, vorne, boden], g[rechts, hinten, deckel]);</pre></div><div><div class="lbl">Code after</div><pre>4: grid g {   ← Cursor</pre></div></div>
+<p class="cap">Ctrl+click on g[links, vorne, boden] (line 11) sets the cursor on the declaration grid g (line 4); a normal click still only sets the cursor.</p>
 </section>
 <section class="sc">
-<h3>B14 Messwerte beim Ziehen</h3>
-<div class="pair"><div><div class="lbl">während</div><img src="img/b14-waehrend.jpg" alt="Messwerte beim Ziehen während"></div><div><div class="lbl">nachher</div><img src="img/b14-nachher.jpg" alt="Messwerte beim Ziehen nachher"></div></div>
-<div class="codes"><div><div class="lbl">Code vorher</div><pre>module lochplatte(n = 4, pitch = 12, t = 4, rand = 6) {</pre></div><div><div class="lbl">Code nachher</div><pre>module lochplatte(n = 4, pitch = 12, t = 8, rand = 6) {</pre></div></div>
-<p class="cap">lochplatte (Differenz mit fillet = 1, vier Bohrungen): Ebene oben = t (Standardwert, andere Farbe) 78-mal bewegt, ein Schritt pro Frame. Ziehen → Szene grob: Median 371 ms, p95 738 ms (15 Szenen); Loslassen → feine Szene 202 ms; 21 fps während des Ziehens, 76 Drag-Nachrichten, 0 übersprungen.</p>
+<h3>B14 Measurements while dragging</h3>
+<div class="pair"><div><div class="lbl">during</div><img src="img/b14-waehrend.jpg" alt="Measurements while dragging, during"></div><div><div class="lbl">after</div><img src="img/b14-nachher.jpg" alt="Measurements while dragging, after"></div></div>
+<div class="codes"><div><div class="lbl">Code before</div><pre>module lochplatte(n = 4, pitch = 12, t = 4, rand = 6) {</pre></div><div><div class="lbl">Code after</div><pre>module lochplatte(n = 4, pitch = 12, t = 8, rand = 6) {</pre></div></div>
+<p class="cap">lochplatte (difference with fillet = 1, four holes): plane oben = t (default value, different color) moved 78 times, one step per frame. Drag → coarse scene: median 371 ms, p95 738 ms (15 scenes); release → fine scene 202 ms; 21 fps while dragging, 76 drag messages, 0 skipped.</p>
 </section>
 </main>
 </body>

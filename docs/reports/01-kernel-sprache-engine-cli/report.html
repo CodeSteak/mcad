@@ -1,6 +1,6 @@
-<!doctype html><html lang='de'><head><meta charset='utf-8'>
+<!doctype html><html lang='en'><head><meta charset='utf-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1'>
-<title>Testbericht 1: Kernel, Sprache, Engine, CLI</title>
+<title>Test report 1: Kernel, language, engine, CLI</title>
 <style>
 :root { --ink:#1d2129; --muted:#5b6270; --line:#d6d9df; --soft:#f3f4f6; --ok:#1f7a3a; --bad:#b3261e; --acc:#2f5fb3; }
 * { box-sizing: border-box; }
@@ -44,204 +44,204 @@ figcaption b { color: var(--ink); }
   a { color: inherit; text-decoration: none; }
 }
 </style></head><body>
-<h1>Testbericht 1: Kernel, Sprache, Engine, CLI</h1>
-<p class='sub'>controller-cad · Stand 2026-10-23 01:24 · Commit fd8dda6 2026-10-23 01:24 Fassade: bei durchgefallener Prüfung SMLibs eigenes Ergebnis behalten (Branch <code>worktree-agent-a45db6d1ee5be50fc</code>)</p>
+<h1>Test report 1: Kernel, language, engine, CLI</h1>
+<p class='sub'>controller-cad · As of 2026-10-23 01:24 · Commit fd8dda6 2026-10-23 01:24 Facade: keep SMLib's own result when the check fails (branch <code>worktree-agent-a45db6d1ee5be50fc</code>)</p>
 <div class='kpis'>
-<div class='kpi'><b>202</b><span>Rust-Tests bestanden (0 Fehler, 0 ignoriert)</span></div>
-<div class='kpi'><b>33/33</b><span>OpenSCAD-Modelle innerhalb der Toleranz</span></div>
-<div class='kpi'><b>1,58 MiB</b><span>Wasm gesamt, Brotli (SMLib 1,24 MiB, Engine 0,34 MiB)</span></div>
-<div class='kpi'><b>141 ms</b><span>Quelltext → Wurzel-Mesh (Beispiel gehaeuse, Node, kalt)</span></div>
+<div class='kpi'><b>202</b><span>Rust tests passed (0 failed, 0 ignored)</span></div>
+<div class='kpi'><b>33/33</b><span>OpenSCAD models within tolerance</span></div>
+<div class='kpi'><b>1.58 MiB</b><span>Wasm total, Brotli (SMLib 1.24 MiB, engine 0.34 MiB)</span></div>
+<div class='kpi'><b>141 ms</b><span>Source → root mesh (example gehaeuse, Node, cold)</span></div>
 </div>
-<h2>1 Umfang</h2>
-<p>Geprüft werden die vier unteren Schichten der Anwendung (UI nicht Teil dieses Berichts):</p><ul>
-<li><b>Kernel:</b> SMLib/SM_API (NVIDIA usd-brep @ c9c5979) hinter einer C++-Fassade mit flacher C-ABI (Handles, Fehlercodes, Flächen-Tags für die Provenienz), nativ gelinkt und als Emscripten-Wasm (<code>smlib.wasm</code>); Rust-Anbindung <code>kernel-smlib</code>. Operationen: Primitive, Transformationen, Booleans, Fillet/Fase, Extrusion (mit twist/scale), Rotation, Loft, Sweep, NURBS-Fläche, thicken, shell, Kanten/Flächen-Abfragen, Klassifizieren, Tessellierung, Masseeigenschaften.</li>
-<li><b>Sprache:</b> OpenSCAD-Dialekt (<code>cad-syntax</code>, <code>cad-eval</code>): Variablen, Funktionen, Module, <code>children()</code>, <code>for</code>/<code>if</code>/<code>let</code>/<code>each</code>, Listenausdrücke, <code>echo</code>/<code>assert</code>, Modifier, 2D/3D-Primitive, Extrusionen; dazu die Erweiterungen der Spec: Raster (<code>grid</code>), Anker, benannte Instanzen, <code>box()</code> zwischen Rasterpunkten, Fillets/Fasen mit Zonen, Loft, Sweep, Griffe.</li>
-<li><b>Engine:</b> <code>cad-engine</code> wertet den Geometriebaum schrittweise mit Cache (inhaltsbasierte Schlüssel) aus, ordnet Flächen und Kanten Zeilen zu, wählt Kanten über Zonen und exportiert STL/3MF; <code>cad-session</code> stellt das Protokoll für Worker und CLI.</li>
-<li><b>CLI:</b> <code>cad check | eval | inspect | render | export</code> mit <code>--json</code>; <code>render</code> nutzt den Software-Rasterizer <code>cad-render</code>.</li></ul>
-<h2>2 Testumgebung</h2><table>
-<tr><th style='width:22%'>System</th><td>Ubuntu 24.04.5 LTS (Linux 6.18.44-fc-v140), Intel(R) Xeon(R) Processor @ 2.80GHz, 4 Kerne, 16 GiB RAM, Container ohne GPU</td></tr>
+<h2>1 Scope</h2>
+<p>This report covers the four lower layers of the application (the UI is not part of this report):</p><ul>
+<li><b>Kernel:</b> SMLib/SM_API (NVIDIA usd-brep @ c9c5979) behind a C++ facade with a flat C ABI (handles, error codes, face tags for provenance), linked natively and as Emscripten Wasm (<code>smlib.wasm</code>); Rust binding <code>kernel-smlib</code>. Operations: primitives, transformations, booleans, fillet/chamfer, extrusion (with twist/scale), revolve, loft, sweep, NURBS surface, thicken, shell, edge/face queries, classification, tessellation, mass properties.</li>
+<li><b>Language:</b> OpenSCAD dialect (<code>cad-syntax</code>, <code>cad-eval</code>): variables, functions, modules, <code>children()</code>, <code>for</code>/<code>if</code>/<code>let</code>/<code>each</code>, list comprehensions, <code>echo</code>/<code>assert</code>, modifiers, 2D/3D primitives, extrusions; plus the extensions from the spec: grids (<code>grid</code>), anchors, named instances, <code>box()</code> between grid points, fillets/chamfers with zones, loft, sweep, handles.</li>
+<li><b>Engine:</b> <code>cad-engine</code> evaluates the geometry tree incrementally with a cache (content-based keys), maps faces and edges to source lines, selects edges via zones and exports STL/3MF; <code>cad-session</code> provides the protocol for the worker and the CLI.</li>
+<li><b>CLI:</b> <code>cad check | eval | inspect | render | export</code> with <code>--json</code>; <code>render</code> uses the software rasterizer <code>cad-render</code>.</li></ul>
+<h2>2 Test environment</h2><table>
+<tr><th style='width:22%'>System</th><td>Ubuntu 24.04.5 LTS (Linux 6.18.44-fc-v140), Intel(R) Xeon(R) Processor @ 2.80GHz, 4 cores, 16 GiB RAM, container without GPU</td></tr>
 <tr><th style='width:22%'>Rust</th><td>rustc 1.97.0 (2d8144b78 2026-07-07); cargo 1.97.0 (c980f4866 2026-06-30)</td></tr>
-<tr><th style='width:22%'>Kernel</th><td>usd-brep @ c9c5979 (SMLib, SM_API), native vorgebaut: /home/user/controller-cad/smlib/build-native</td></tr>
+<tr><th style='width:22%'>Kernel</th><td>usd-brep @ c9c5979 (SMLib, SM_API), prebuilt natively: /home/user/controller-cad/smlib/build-native</td></tr>
 <tr><th style='width:22%'>Emscripten</th><td>emcc (Emscripten gcc/clang-like replacement + linker emulating GNU ld) 6.0.13 (e13ee988ce3d87a738dd8f3661d02223308c412a)</td></tr>
 <tr><th style='width:22%'>wasm-bindgen</th><td>wasm-bindgen 0.2.129</td></tr>
 <tr><th style='width:22%'>Node</th><td>v22.22.0</td></tr>
-<tr><th style='width:22%'>OpenSCAD (Referenz)</th><td>OpenSCAD version 2021.01; Bilder mit xvfb-run, orthografisch</td></tr>
-<tr><th style='width:22%'>PDF</th><td>Chromium aus Playwright 1.56.1</td></tr>
+<tr><th style='width:22%'>OpenSCAD (reference)</th><td>OpenSCAD version 2021.01; images with xvfb-run, orthographic</td></tr>
+<tr><th style='width:22%'>PDF</th><td>Chromium from Playwright 1.56.1</td></tr>
 <tr><th style='width:22%'>Python</th><td>3.13.16</td></tr>
 </table>
-<p class='small'>Release-Build der CLI: 0,1 s (inkrementell). Alle Zahlen stammen aus einem Lauf von <code>tools/report/report1.py</code>; Zeiten sind Wanduhrzeiten auf dieser Maschine.</p>
-<h2>3 Testergebnisse</h2>
-<h3>3.1 Rust-Tests pro Crate</h3>
-<table><tr><th>Crate</th><th>Inhalt</th><th class='n'>bestanden</th><th class='n'>Fehler</th><th class='n'>ignoriert</th><th class='n'>Testzeit</th><th class='n'>Laufzeit cargo</th><th>Status</th></tr>
-<tr><td><code>cad-cli</code></td><td>CLI</td><td class='n'>7</td><td class='n'>0</td><td class='n'>0</td><td class='n'>2,91 s</td><td class='n'>4,0 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>cad-kernel</code></td><td>Kernel-Trait, Mesh, Export</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0 s</td><td class='n'>0,2 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>cad-render</code></td><td>Software-Rasterizer</td><td class='n'>4</td><td class='n'>0</td><td class='n'>0</td><td class='n'>1,50 s</td><td class='n'>2,4 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>cad-engine</code></td><td>Auswertung, Cache, Provenienz, Zonen</td><td class='n'>31</td><td class='n'>0</td><td class='n'>0</td><td class='n'>6,99 s</td><td class='n'>8,0 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>cad-ir</code></td><td>Geometriebaum, Cache-Schlüssel</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0 s</td><td class='n'>0,2 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>cad-syntax</code></td><td>Lexer, Parser, AST</td><td class='n'>16</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0,00 s</td><td class='n'>0,2 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>cad-eval</code></td><td>Sprachauswertung, Raster, Anker, Griffe</td><td class='n'>102</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0,46 s</td><td class='n'>0,8 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>kernel-smlib</code></td><td>SMLib-Fassade (nativ)</td><td class='n'>31</td><td class='n'>0</td><td class='n'>0</td><td class='n'>6,77 s</td><td class='n'>7,3 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>cad-session</code></td><td>Sitzung, Protokoll</td><td class='n'>8</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0,13 s</td><td class='n'>1,5 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>cad-wasm</code></td><td>Wasm-Einstieg (Worker)</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0 s</td><td class='n'>0,1 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>compat-tests</code></td><td>OpenSCAD-Vergleich Stufe 1</td><td class='n'>3</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0,04 s</td><td class='n'>0,2 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>kernel-mock</code></td><td>Testkernel</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0 s</td><td class='n'>0,1 s</td><td><span class="ok">ok</span></td></tr>
-<tr><th>Summe</th><th></th><th class='n'>202</th><th class='n'>0</th><th class='n'>0</th><th class='n'>18,80 s</th><th class='n'>25,2 s</th><th></th></tr></table>
-<p class='small'>Testzeit: Summe der von den Test-Binaries gemeldeten Zeiten (Debug-Build, SMLib und Fassade optimiert). Laufzeit cargo: <code>cargo test -p &lt;crate&gt;</code> nach vorherigem Build.</p>
-<h3>3.2 Wiederholungsläufe <code>kernel-smlib/tests/kernel.rs</code></h3><table><tr><th>Modus</th><th class='n'>Läufe</th><th class='n'>fehlgeschlagen</th><th>Test</th><th class='n'>Dauer</th></tr>
-<tr><td>seriell (--test-threads=1)</td><td class='n'>30</td><td class='n'>0</td><td>–</td><td class='n'>201 s</td></tr>
-<tr><td>parallel (Standard, 4 Threads)</td><td class='n'>30</td><td class='n'>0</td><td>–</td><td class='n'>201 s</td></tr>
+<p class='small'>Release build of the CLI: 0.1 s (incremental). All numbers come from one run of <code>tools/report/report1.py</code>; times are wall-clock times on this machine.</p>
+<h2>3 Test results</h2>
+<h3>3.1 Rust tests per crate</h3>
+<table><tr><th>Crate</th><th>Content</th><th class='n'>passed</th><th class='n'>failed</th><th class='n'>ignored</th><th class='n'>Test time</th><th class='n'>cargo run time</th><th>Status</th></tr>
+<tr><td><code>cad-cli</code></td><td>CLI</td><td class='n'>7</td><td class='n'>0</td><td class='n'>0</td><td class='n'>2.91 s</td><td class='n'>4.0 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>cad-kernel</code></td><td>Kernel trait, mesh, export</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0 s</td><td class='n'>0.2 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>cad-render</code></td><td>Software rasterizer</td><td class='n'>4</td><td class='n'>0</td><td class='n'>0</td><td class='n'>1.50 s</td><td class='n'>2.4 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>cad-engine</code></td><td>Evaluation, cache, provenance, zones</td><td class='n'>31</td><td class='n'>0</td><td class='n'>0</td><td class='n'>6.99 s</td><td class='n'>8.0 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>cad-ir</code></td><td>Geometry tree, cache keys</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0 s</td><td class='n'>0.2 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>cad-syntax</code></td><td>Lexer, parser, AST</td><td class='n'>16</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0.00 s</td><td class='n'>0.2 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>cad-eval</code></td><td>Language evaluation, grids, anchors, handles</td><td class='n'>102</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0.46 s</td><td class='n'>0.8 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>kernel-smlib</code></td><td>SMLib facade (native)</td><td class='n'>31</td><td class='n'>0</td><td class='n'>0</td><td class='n'>6.77 s</td><td class='n'>7.3 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>cad-session</code></td><td>Session, protocol</td><td class='n'>8</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0.13 s</td><td class='n'>1.5 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>cad-wasm</code></td><td>Wasm entry point (worker)</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0 s</td><td class='n'>0.1 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>compat-tests</code></td><td>OpenSCAD comparison, stage 1</td><td class='n'>3</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0.04 s</td><td class='n'>0.2 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>kernel-mock</code></td><td>Test kernel</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0 s</td><td class='n'>0.1 s</td><td><span class="ok">ok</span></td></tr>
+<tr><th>Total</th><th></th><th class='n'>202</th><th class='n'>0</th><th class='n'>0</th><th class='n'>18.80 s</th><th class='n'>25.2 s</th><th></th></tr></table>
+<p class='small'>Test time: sum of the times reported by the test binaries (debug build, SMLib and facade optimized). cargo run time: <code>cargo test -p &lt;crate&gt;</code> after a prior build.</p>
+<h3>3.2 Repeated runs of <code>kernel-smlib/tests/kernel.rs</code></h3><table><tr><th>Mode</th><th class='n'>Runs</th><th class='n'>failed</th><th>Test</th><th class='n'>Duration</th></tr>
+<tr><td>serial (--test-threads=1)</td><td class='n'>30</td><td class='n'>0</td><td>–</td><td class='n'>201 s</td></tr>
+<tr><td>parallel (default, 4 threads)</td><td class='n'>30</td><td class='n'>0</td><td>–</td><td class='n'>201 s</td></tr>
 <tr><td>parallel (--test-threads=8)</td><td class='n'>30</td><td class='n'>0</td><td>–</td><td class='n'>203 s</td></tr>
 </table>
-<p class='small'>Vor den Korrekturen: 4 von 40 Läufen mit 8 Threads fehlgeschlagen (zu dicker shell). Nach der rand()-Korrektur bei 100 Läufen mit 8 Threads noch je einmal <code>invalid_profiles_fail_cleanly</code> (Speicherfehler in SMLibs shell) und <code>handles_are_released</code> (paralleler Zähler); beides seither behoben.</p>
-<h3>3.3 Kernel als Wasm (Node)</h3>
-<p><code>node crates/kernel-smlib/js/test-node.mjs</code>: 10 von 10 Tests bestanden (ok).</p>
-<table><tr><th>Test</th><th class='n'>Zeit</th><th>Status</th></tr>
-<tr><td>box volume</td><td class='n'>23,1 ms</td><td><span class="ok">ok</span></td></tr>
-<tr><td>box minus cylinder + provenance</td><td class='n'>88,1 ms</td><td><span class="ok">ok</span></td></tr>
-<tr><td>fillet all edges of a box</td><td class='n'>330,8 ms</td><td><span class="ok">ok</span></td></tr>
-<tr><td>fillet too large → error with edges</td><td class='n'>111,3 ms</td><td><span class="ok">ok</span></td></tr>
-<tr><td>classify</td><td class='n'>1,9 ms</td><td><span class="ok">ok</span></td></tr>
-<tr><td>tessellate</td><td class='n'>42,4 ms</td><td><span class="ok">ok</span></td></tr>
-<tr><td>extrude, revolve, mirror</td><td class='n'>76,9 ms</td><td><span class="ok">ok</span></td></tr>
-<tr><td>union of three orthogonal cylinders (checked boolean)</td><td class='n'>497,3 ms</td><td><span class="ok">ok</span></td></tr>
-<tr><td>twisted extrude: rotate, then scale (OpenSCAD)</td><td class='n'>64,8 ms</td><td><span class="ok">ok</span></td></tr>
-<tr><td>invalid handle</td><td class='n'>0,3 ms</td><td><span class="ok">ok</span></td></tr>
+<p class='small'>Before the fixes: 4 of 40 runs with 8 threads failed (shell too thick). After the rand() fix, 100 runs with 8 threads still failed once each in <code>invalid_profiles_fail_cleanly</code> (memory error in SMLib's shell) and <code>handles_are_released</code> (parallel counter); both have been fixed since.</p>
+<h3>3.3 Kernel as Wasm (Node)</h3>
+<p><code>node crates/kernel-smlib/js/test-node.mjs</code>: 10 of 10 tests passed (ok).</p>
+<table><tr><th>Test</th><th class='n'>Time</th><th>Status</th></tr>
+<tr><td>box volume</td><td class='n'>23.1 ms</td><td><span class="ok">ok</span></td></tr>
+<tr><td>box minus cylinder + provenance</td><td class='n'>88.1 ms</td><td><span class="ok">ok</span></td></tr>
+<tr><td>fillet all edges of a box</td><td class='n'>330.8 ms</td><td><span class="ok">ok</span></td></tr>
+<tr><td>fillet too large → error with edges</td><td class='n'>111.3 ms</td><td><span class="ok">ok</span></td></tr>
+<tr><td>classify</td><td class='n'>1.9 ms</td><td><span class="ok">ok</span></td></tr>
+<tr><td>tessellate</td><td class='n'>42.4 ms</td><td><span class="ok">ok</span></td></tr>
+<tr><td>extrude, revolve, mirror</td><td class='n'>76.9 ms</td><td><span class="ok">ok</span></td></tr>
+<tr><td>union of three orthogonal cylinders (checked boolean)</td><td class='n'>497.3 ms</td><td><span class="ok">ok</span></td></tr>
+<tr><td>twisted extrude: rotate, then scale (OpenSCAD)</td><td class='n'>64.8 ms</td><td><span class="ok">ok</span></td></tr>
+<tr><td>invalid handle</td><td class='n'>0.3 ms</td><td><span class="ok">ok</span></td></tr>
 </table>
-<h3>3.4 In diesem Durchgang behobene Fehler</h3><table><tr><th style='width:20%'>Fehler</th><th style='width:40%'>Ursache</th><th style='width:40%'>Behebung, Nachweis</th></tr>
-<tr><td>Union dreier orthogonaler Zylinder: 3237 statt 3800 mm³ (05_nested_booleans)</td><td>SMLib meldet bei (Z ∪ Y) ∪ X Erfolg, verwirft aber den −x-Arm des X-Zylinders (Hülle x ≥ −4); (Z ∪ X) ∪ Y ist richtig, (Y ∪ X) ∪ Z endet mit SM_ERR. Nur bei gleichen Radien (Schnittkurven mit Berührpunkten); mit r = 3,9 oder 4,1 für den dritten Zylinder stimmt es. <code>mass_props</code> und Mesh sind gleich falsch: kein Tessellierungs- oder Exportfehler. Paarweise rechnete die Fassade schon.</td><td>Die Fassade prüft jedes paarweise Ergebnis (Volumen-Ungleichungen, Lage von Proben je 5 pro Fläche dicht innen und außen an den Operandenflächen) und versucht sonst: Operanden tauschen, andere Reihenfolge, zuletzt zweiten Operanden um 10⁻⁶…10⁻⁴ der Modellgröße verschieben; besteht nichts, bleibt SMLibs Ergebnis wie bisher. Tests: <code>kernel.rs</code> und <code>engine.rs::union_of_three_orthogonal_cylinders</code> (alle 6 Reihenfolgen, verschachtelt, als Bohrung), Node-Test.</td></tr>
-<tr><td>linear_extrude mit twist: Hülle 1,25 mm daneben (12_linear_extrude_twist)</td><td>Schnitt t wurde erst skaliert, dann gedreht; OpenSCAD dreht erst und skaliert dann entlang x/y (<code>Scaling(s)·Rotation2D(−twist·t)</code>). Bei <code>scale = [1, 0.5]</code> entstehen andere Querschnitte (y bis 5,08 statt 3,83 mm). Drehsinn und Startwinkel waren richtig. Zusätzlich: Schnitte alle 22,5° (Hüllenfehler 3·10⁻³ mm), und das Mesh lag 2,9 % über dem Volumen, weil SMLib die Sehnenhöhe nur an Dreieckskanten begrenzt.</td><td>Reihenfolge wie OpenSCAD; Schnitte alle 7,5° (Hülle auf 10⁻⁴ mm, Volumen 540,000 von 540). Die Tessellierung misst auf Freiformflächen die Abweichung der Dreiecksmitten und verfeinert bis ≤ 2·tol (höchstens 3 Durchgänge, Dreiecksbudget). Tests: <code>twisted_extrude_with_nonuniform_scale_matches_openscad</code>, <code>twisted_extrude_mesh_volume</code>, <code>engine.rs::linear_extrude_twist_nonuniform_scale_like_openscad</code>.</td></tr>
-<tr><td>Wackliger Test <code>invalid_profiles_fail_cleanly</code></td><td>Zwei Ursachen, beide im zu dicken <code>shell</code> (Würfel 10 mm, Wand 6 mm, muss scheitern). (1) SMLib ruft <code>srand(time(NULL))</code> in <code>SmFace::GetPointsInFace</code> und <code>SmShell::IsInnerShellOf</code> auf: vorher 4 von 40 Läufen (8 Threads) fehlgeschlagen, mit fester Uhrzeit (<code>time()</code> per LD_PRELOAD) 0 von 40. Ein <code>srand</code> vor jeder Operation reicht nicht, SMLib setzt den Startwert mitten in der Operation neu. (2) Danach noch 1 von 100: SMLibs Shell liest bei zu dicker Wand freigegebenen Speicher (valgrind: <i>Invalid read</i> in <code>SmProtoEdge::RemoveProtoVertex</code>; solidcore UB-239/242); je nach Heap scheitert sie, liefert einen Körper oder stürzt ab (Segfault in einer Schleife nach 9 Aufrufen).</td><td>(1) Die Fassade definiert <code>rand()</code>/<code>srand()</code> selbst (statisch gelinkt, nativ und Emscripten): fester Startwert, Neustart bei jedem <code>sc_*</code>-Aufruf. (2) <code>sc_shell</code> lehnt Wände ab, die zwischen zwei gegenüberliegenden ebenen Flächen keinen Platz haben (Abstand ≤ 2·t), bevor SMLib gerufen wird. Dazu lief <code>handles_are_released</code> parallel falsch (prozessweiter Zähler): eigenes Test-Binary. Abschnitt 3.2; Tests <code>determinism.rs</code>, <code>handles.rs</code>.</td></tr>
-<tr><td>Diagonalbänder bei transparent gerenderten abgezogenen Körpern</td><td><code>cad-render</code> sortierte transparente Dreiecke nach dem Schwerpunkt. Wo Dreiecke in der Tiefe überlappen, vor allem bei koplanaren Flächen (abgezogener Körper und sein Hohlraum im gedimmten Ergebnis), wechselt die Reihenfolge entlang der Dreiecksdiagonalen.</td><td>Fragmente werden pro Abtastpunkt nach Tiefe sortiert, koplanare in Szenenreihenfolge (Abb. <i>gehaeuse --line 12</i> in Abschnitt 5). Test: <code>render.rs::transparent_coplanar_faces_have_no_diagonal_bands</code>.</td></tr>
+<h3>3.4 Bugs fixed in this round</h3><table><tr><th style='width:20%'>Bug</th><th style='width:40%'>Cause</th><th style='width:40%'>Fix, evidence</th></tr>
+<tr><td>Union of three orthogonal cylinders: 3237 instead of 3800 mm³ (05_nested_booleans)</td><td>For (Z ∪ Y) ∪ X, SMLib reports success but drops the −x arm of the X cylinder (bounding box x ≥ −4); (Z ∪ X) ∪ Y is correct, (Y ∪ X) ∪ Z ends with SM_ERR. Only with equal radii (intersection curves with touching points); with r = 3.9 or 4.1 for the third cylinder the result is correct. <code>mass_props</code> and the mesh are equally wrong: not a tessellation or export bug. Pairwise, the facade already computed correctly.</td><td>The facade checks every pairwise result (volume inequalities, location of probes, 5 per face, just inside and outside the operand faces) and otherwise tries: swap operands, different order, and finally shift the second operand by 10⁻⁶…10⁻⁴ of the model size; if nothing passes, SMLib's result is kept as before. Tests: <code>kernel.rs</code> and <code>engine.rs::union_of_three_orthogonal_cylinders</code> (all 6 orders, nested, as a hole), Node test.</td></tr>
+<tr><td>linear_extrude with twist: bounding box off by 1.25 mm (12_linear_extrude_twist)</td><td>Section t was scaled first and rotated afterwards; OpenSCAD rotates first and then scales along x/y (<code>Scaling(s)·Rotation2D(−twist·t)</code>). With <code>scale = [1, 0.5]</code> this gives different cross-sections (y up to 5.08 instead of 3.83 mm). Direction of rotation and start angle were correct. In addition: sections every 22.5° (bounding box error 3·10⁻³ mm), and the mesh was 2.9 % above the volume because SMLib limits the chord height only at triangle edges.</td><td>Order as in OpenSCAD; sections every 7.5° (bounding box within 10⁻⁴ mm, volume 540.000 of 540). On freeform surfaces the tessellation measures the deviation of the triangle centers and refines until ≤ 2·tol (at most 3 passes, triangle budget). Tests: <code>twisted_extrude_with_nonuniform_scale_matches_openscad</code>, <code>twisted_extrude_mesh_volume</code>, <code>engine.rs::linear_extrude_twist_nonuniform_scale_like_openscad</code>.</td></tr>
+<tr><td>Flaky test <code>invalid_profiles_fail_cleanly</code></td><td>Two causes, both in the too-thick <code>shell</code> (10 mm cube, 6 mm wall, must fail). (1) SMLib calls <code>srand(time(NULL))</code> in <code>SmFace::GetPointsInFace</code> and <code>SmShell::IsInnerShellOf</code>: before, 4 of 40 runs (8 threads) failed; with a fixed clock (<code>time()</code> via LD_PRELOAD), 0 of 40. An <code>srand</code> before each operation is not enough, because SMLib reseeds in the middle of the operation. (2) After that, still 1 of 100: with a too-thick wall, SMLib's shell reads freed memory (valgrind: <i>Invalid read</i> in <code>SmProtoEdge::RemoveProtoVertex</code>; solidcore UB-239/242); depending on the heap it fails, returns a body, or crashes (segfault in a loop after 9 calls).</td><td>(1) The facade defines <code>rand()</code>/<code>srand()</code> itself (statically linked, native and Emscripten): fixed seed, reset on every <code>sc_*</code> call. (2) <code>sc_shell</code> rejects walls that do not fit between two opposite planar faces (distance ≤ 2·t) before SMLib is called. In addition, <code>handles_are_released</code> failed when run in parallel (process-wide counter): separate test binary. Section 3.2; tests <code>determinism.rs</code>, <code>handles.rs</code>.</td></tr>
+<tr><td>Diagonal bands on subtracted bodies rendered transparent</td><td><code>cad-render</code> sorted transparent triangles by centroid. Where triangles overlap in depth, especially on coplanar faces (subtracted body and its cavity in the dimmed result), the order flips along the triangle diagonals.</td><td>Fragments are sorted by depth per sample, coplanar ones in scene order (figure <i>gehaeuse --line 12</i> in section 5). Test: <code>render.rs::transparent_coplanar_faces_have_no_diagonal_bands</code>.</td></tr>
 </table>
-<h2>4 Vergleich mit OpenSCAD</h2>
-<p><code>tests/openscad-compat/compare.py</code> exportiert jedes Modell als STL (<code>cad export</code>, Sehnentoleranz 0,01 mm) und vergleicht Volumen, Fläche und Hülle mit OpenSCAD 2021.01 (<code>$fn = 128</code> bei Rundungen, siehe <code>tests/openscad-compat/README.md</code>). Toleranzen: Hülle 0,01 mm; Volumen und Fläche 1 % (<i>polygonal</i>) bzw. 2 % (<i>rounded</i>). Ergebnis: <b>33 von 33</b> innerhalb der Toleranz, Laufzeit 11,3 s.</p>
-<table><tr><th>Modell</th><th>Klasse</th><th class='n'>V OpenSCAD [mm³]</th><th class='n'>V unseres [mm³]</th><th class='n'>ΔV</th><th class='n'>ΔA</th><th class='n'>ΔHülle [mm]</th><th class='n'>Dreiecke</th><th class='n'>Zeit</th><th>Status</th></tr>
-<tr><td><code>01_cube_variants</code></td><td>polygonal</td><td class='n'>3 208,0</td><td class='n'>3 208,0</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>60</td><td class='n'>0,05 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>02_sphere_variants</code></td><td>rounded</td><td class='n'>1 016,9</td><td class='n'>1 013,7</td><td class='n'>0,31 %</td><td class='n'>0,15 %</td><td class='n'>0,0015</td><td class='n'>14 912</td><td class='n'>0,81 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>03_cylinder_variants</code></td><td>rounded</td><td class='n'>2 104,0</td><td class='n'>2 101,5</td><td class='n'>0,12 %</td><td class='n'>0,05 %</td><td class='n'>0,0000</td><td class='n'>1 260</td><td class='n'>0,18 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>04_cone_variants</code></td><td>rounded</td><td class='n'>1 342,0</td><td class='n'>1 340,8</td><td class='n'>0,09 %</td><td class='n'>0,05 %</td><td class='n'>0,0000</td><td class='n'>1 010</td><td class='n'>0,12 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>05_nested_booleans</code></td><td>rounded</td><td class='n'>8 310,3</td><td class='n'>8 312,7</td><td class='n'>0,03 %</td><td class='n'>0,02 %</td><td class='n'>0,0000</td><td class='n'>6 688</td><td class='n'>1,52 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>06_hole_grid</code></td><td>rounded</td><td class='n'>6 295,6</td><td class='n'>6 296,7</td><td class='n'>0,02 %</td><td class='n'>0,01 %</td><td class='n'>0,0000</td><td class='n'>6 252</td><td class='n'>1,46 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>07_crown_ring</code></td><td>rounded</td><td class='n'>2 160,7</td><td class='n'>2 160,9</td><td class='n'>0,01 %</td><td class='n'>0,02 %</td><td class='n'>0,0000</td><td class='n'>1 088</td><td class='n'>0,83 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>08_module_children</code></td><td>rounded</td><td class='n'>6 172,5</td><td class='n'>6 171,6</td><td class='n'>0,02 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>2 072</td><td class='n'>0,44 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>09_rotate_mirror</code></td><td>rounded</td><td class='n'>1 460,1</td><td class='n'>1 459,9</td><td class='n'>0,01 %</td><td class='n'>0,01 %</td><td class='n'>0,0000</td><td class='n'>324</td><td class='n'>0,07 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>10_scale_multmatrix</code></td><td>polygonal</td><td class='n'>3 400,0</td><td class='n'>3 400,0</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>48</td><td class='n'>0,05 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>11_linear_extrude_basic</code></td><td>polygonal</td><td class='n'>1 513,0</td><td class='n'>1 513,0</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>32</td><td class='n'>0,02 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>12_linear_extrude_twist</code></td><td>rounded</td><td class='n'>2 688,9</td><td class='n'>2 660,9</td><td class='n'>1,04 %</td><td class='n'>1,49 %</td><td class='n'>0,0000</td><td class='n'>15 730</td><td class='n'>0,54 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>13_rotate_extrude_ring</code></td><td>rounded</td><td class='n'>1 307,1</td><td class='n'>1 306,3</td><td class='n'>0,06 %</td><td class='n'>0,01 %</td><td class='n'>0,0000</td><td class='n'>17 120</td><td class='n'>0,66 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>14_pipe_bend</code></td><td>rounded</td><td class='n'>1 573,9</td><td class='n'>1 572,4</td><td class='n'>0,09 %</td><td class='n'>0,03 %</td><td class='n'>0,0000</td><td class='n'>9 672</td><td class='n'>0,64 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>15_vase</code></td><td>rounded</td><td class='n'>6 362,3</td><td class='n'>6 362,3</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>2 556</td><td class='n'>0,20 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>16_polygon_holes</code></td><td>polygonal</td><td class='n'>2 318,0</td><td class='n'>2 318,0</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>80</td><td class='n'>0,04 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>17_polyhedron</code></td><td>polygonal</td><td class='n'>626,7</td><td class='n'>626,7</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>14</td><td class='n'>0,01 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>18_functions_let</code></td><td>polygonal</td><td class='n'>7 040,0</td><td class='n'>7 040,0</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>52</td><td class='n'>0,05 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>19_hex_nut</code></td><td>rounded</td><td class='n'>264,7</td><td class='n'>264,9</td><td class='n'>0,07 %</td><td class='n'>0,01 %</td><td class='n'>0,0000</td><td class='n'>552</td><td class='n'>0,11 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>20_box_with_lid</code></td><td>rounded</td><td class='n'>20 574,8</td><td class='n'>20 576,1</td><td class='n'>0,01 %</td><td class='n'>0,01 %</td><td class='n'>0,0000</td><td class='n'>2 284</td><td class='n'>0,76 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>21_angle_bracket</code></td><td>rounded</td><td class='n'>10 408,0</td><td class='n'>10 408,3</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>1 088</td><td class='n'>0,32 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>22_gear</code></td><td>rounded</td><td class='n'>6 943,8</td><td class='n'>6 944,3</td><td class='n'>0,01 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>1 616</td><td class='n'>0,37 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>23_shelf_holder</code></td><td>rounded</td><td class='n'>10 423,8</td><td class='n'>10 424,1</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>1 184</td><td class='n'>0,23 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>24_modifiers</code></td><td>rounded</td><td class='n'>3 622,5</td><td class='n'>3 623,2</td><td class='n'>0,02 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>284</td><td class='n'>0,06 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>25_root_modifier</code></td><td>rounded</td><td class='n'>346,5</td><td class='n'>346,4</td><td class='n'>0,05 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>268</td><td class='n'>0,06 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>26_if_else_variants</code></td><td>rounded</td><td class='n'>1 661,6</td><td class='n'>1 660,5</td><td class='n'>0,07 %</td><td class='n'>0,04 %</td><td class='n'>0,0012</td><td class='n'>4 380</td><td class='n'>0,34 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>27_spacers_2d</code></td><td>rounded</td><td class='n'>2 961,5</td><td class='n'>2 961,4</td><td class='n'>0,00 %</td><td class='n'>0,01 %</td><td class='n'>0,0000</td><td class='n'>2 512</td><td class='n'>0,47 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>28_cable_clip</code></td><td>rounded</td><td class='n'>560,9</td><td class='n'>561,0</td><td class='n'>0,02 %</td><td class='n'>0,01 %</td><td class='n'>0,0013</td><td class='n'>796</td><td class='n'>0,20 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>29_assert_strings</code></td><td>rounded</td><td class='n'>1 907,4</td><td class='n'>1 907,5</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>276</td><td class='n'>0,08 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>30_each_ranges</code></td><td>polygonal</td><td class='n'>832,0</td><td class='n'>832,0</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>116</td><td class='n'>0,07 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>31_phone_stand</code></td><td>polygonal</td><td class='n'>40 840,2</td><td class='n'>40 840,2</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>84</td><td class='n'>0,03 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>32_low_fn_shapes</code></td><td>polygonal</td><td class='n'>1 199,0</td><td class='n'>1 199,0</td><td class='n'>0,00 %</td><td class='n'>0,00 %</td><td class='n'>0,0000</td><td class='n'>102</td><td class='n'>0,04 s</td><td><span class="ok">ok</span></td></tr>
-<tr><td><code>33_global_fn</code></td><td>rounded</td><td class='n'>1 625,6</td><td class='n'>1 627,4</td><td class='n'>0,11 %</td><td class='n'>0,04 %</td><td class='n'>0,0060</td><td class='n'>4 860</td><td class='n'>0,35 s</td><td><span class="ok">ok</span></td></tr>
+<h2>4 Comparison with OpenSCAD</h2>
+<p><code>tests/openscad-compat/compare.py</code> exports each model as STL (<code>cad export</code>, chord tolerance 0.01 mm) and compares volume, area and bounding box with OpenSCAD 2021.01 (<code>$fn = 128</code> for round shapes, see <code>tests/openscad-compat/README.md</code>). Tolerances: bounding box 0.01 mm; volume and area 1 % (<i>polygonal</i>) or 2 % (<i>rounded</i>). Result: <b>33 of 33</b> within tolerance, run time 11.3 s.</p>
+<table><tr><th>Model</th><th>Class</th><th class='n'>V OpenSCAD [mm³]</th><th class='n'>V ours [mm³]</th><th class='n'>ΔV</th><th class='n'>ΔA</th><th class='n'>ΔBBox [mm]</th><th class='n'>Triangles</th><th class='n'>Time</th><th>Status</th></tr>
+<tr><td><code>01_cube_variants</code></td><td>polygonal</td><td class='n'>3 208.0</td><td class='n'>3 208.0</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>60</td><td class='n'>0.05 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>02_sphere_variants</code></td><td>rounded</td><td class='n'>1 016.9</td><td class='n'>1 013.7</td><td class='n'>0.31 %</td><td class='n'>0.15 %</td><td class='n'>0.0015</td><td class='n'>14 912</td><td class='n'>0.81 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>03_cylinder_variants</code></td><td>rounded</td><td class='n'>2 104.0</td><td class='n'>2 101.5</td><td class='n'>0.12 %</td><td class='n'>0.05 %</td><td class='n'>0.0000</td><td class='n'>1 260</td><td class='n'>0.18 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>04_cone_variants</code></td><td>rounded</td><td class='n'>1 342.0</td><td class='n'>1 340.8</td><td class='n'>0.09 %</td><td class='n'>0.05 %</td><td class='n'>0.0000</td><td class='n'>1 010</td><td class='n'>0.12 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>05_nested_booleans</code></td><td>rounded</td><td class='n'>8 310.3</td><td class='n'>8 312.7</td><td class='n'>0.03 %</td><td class='n'>0.02 %</td><td class='n'>0.0000</td><td class='n'>6 688</td><td class='n'>1.52 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>06_hole_grid</code></td><td>rounded</td><td class='n'>6 295.6</td><td class='n'>6 296.7</td><td class='n'>0.02 %</td><td class='n'>0.01 %</td><td class='n'>0.0000</td><td class='n'>6 252</td><td class='n'>1.46 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>07_crown_ring</code></td><td>rounded</td><td class='n'>2 160.7</td><td class='n'>2 160.9</td><td class='n'>0.01 %</td><td class='n'>0.02 %</td><td class='n'>0.0000</td><td class='n'>1 088</td><td class='n'>0.83 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>08_module_children</code></td><td>rounded</td><td class='n'>6 172.5</td><td class='n'>6 171.6</td><td class='n'>0.02 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>2 072</td><td class='n'>0.44 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>09_rotate_mirror</code></td><td>rounded</td><td class='n'>1 460.1</td><td class='n'>1 459.9</td><td class='n'>0.01 %</td><td class='n'>0.01 %</td><td class='n'>0.0000</td><td class='n'>324</td><td class='n'>0.07 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>10_scale_multmatrix</code></td><td>polygonal</td><td class='n'>3 400.0</td><td class='n'>3 400.0</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>48</td><td class='n'>0.05 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>11_linear_extrude_basic</code></td><td>polygonal</td><td class='n'>1 513.0</td><td class='n'>1 513.0</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>32</td><td class='n'>0.02 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>12_linear_extrude_twist</code></td><td>rounded</td><td class='n'>2 688.9</td><td class='n'>2 660.9</td><td class='n'>1.04 %</td><td class='n'>1.49 %</td><td class='n'>0.0000</td><td class='n'>15 730</td><td class='n'>0.54 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>13_rotate_extrude_ring</code></td><td>rounded</td><td class='n'>1 307.1</td><td class='n'>1 306.3</td><td class='n'>0.06 %</td><td class='n'>0.01 %</td><td class='n'>0.0000</td><td class='n'>17 120</td><td class='n'>0.66 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>14_pipe_bend</code></td><td>rounded</td><td class='n'>1 573.9</td><td class='n'>1 572.4</td><td class='n'>0.09 %</td><td class='n'>0.03 %</td><td class='n'>0.0000</td><td class='n'>9 672</td><td class='n'>0.64 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>15_vase</code></td><td>rounded</td><td class='n'>6 362.3</td><td class='n'>6 362.3</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>2 556</td><td class='n'>0.20 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>16_polygon_holes</code></td><td>polygonal</td><td class='n'>2 318.0</td><td class='n'>2 318.0</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>80</td><td class='n'>0.04 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>17_polyhedron</code></td><td>polygonal</td><td class='n'>626.7</td><td class='n'>626.7</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>14</td><td class='n'>0.01 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>18_functions_let</code></td><td>polygonal</td><td class='n'>7 040.0</td><td class='n'>7 040.0</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>52</td><td class='n'>0.05 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>19_hex_nut</code></td><td>rounded</td><td class='n'>264.7</td><td class='n'>264.9</td><td class='n'>0.07 %</td><td class='n'>0.01 %</td><td class='n'>0.0000</td><td class='n'>552</td><td class='n'>0.11 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>20_box_with_lid</code></td><td>rounded</td><td class='n'>20 574.8</td><td class='n'>20 576.1</td><td class='n'>0.01 %</td><td class='n'>0.01 %</td><td class='n'>0.0000</td><td class='n'>2 284</td><td class='n'>0.76 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>21_angle_bracket</code></td><td>rounded</td><td class='n'>10 408.0</td><td class='n'>10 408.3</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>1 088</td><td class='n'>0.32 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>22_gear</code></td><td>rounded</td><td class='n'>6 943.8</td><td class='n'>6 944.3</td><td class='n'>0.01 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>1 616</td><td class='n'>0.37 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>23_shelf_holder</code></td><td>rounded</td><td class='n'>10 423.8</td><td class='n'>10 424.1</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>1 184</td><td class='n'>0.23 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>24_modifiers</code></td><td>rounded</td><td class='n'>3 622.5</td><td class='n'>3 623.2</td><td class='n'>0.02 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>284</td><td class='n'>0.06 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>25_root_modifier</code></td><td>rounded</td><td class='n'>346.5</td><td class='n'>346.4</td><td class='n'>0.05 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>268</td><td class='n'>0.06 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>26_if_else_variants</code></td><td>rounded</td><td class='n'>1 661.6</td><td class='n'>1 660.5</td><td class='n'>0.07 %</td><td class='n'>0.04 %</td><td class='n'>0.0012</td><td class='n'>4 380</td><td class='n'>0.34 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>27_spacers_2d</code></td><td>rounded</td><td class='n'>2 961.5</td><td class='n'>2 961.4</td><td class='n'>0.00 %</td><td class='n'>0.01 %</td><td class='n'>0.0000</td><td class='n'>2 512</td><td class='n'>0.47 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>28_cable_clip</code></td><td>rounded</td><td class='n'>560.9</td><td class='n'>561.0</td><td class='n'>0.02 %</td><td class='n'>0.01 %</td><td class='n'>0.0013</td><td class='n'>796</td><td class='n'>0.20 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>29_assert_strings</code></td><td>rounded</td><td class='n'>1 907.4</td><td class='n'>1 907.5</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>276</td><td class='n'>0.08 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>30_each_ranges</code></td><td>polygonal</td><td class='n'>832.0</td><td class='n'>832.0</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>116</td><td class='n'>0.07 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>31_phone_stand</code></td><td>polygonal</td><td class='n'>40 840.2</td><td class='n'>40 840.2</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>84</td><td class='n'>0.03 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>32_low_fn_shapes</code></td><td>polygonal</td><td class='n'>1 199.0</td><td class='n'>1 199.0</td><td class='n'>0.00 %</td><td class='n'>0.00 %</td><td class='n'>0.0000</td><td class='n'>102</td><td class='n'>0.04 s</td><td><span class="ok">ok</span></td></tr>
+<tr><td><code>33_global_fn</code></td><td>rounded</td><td class='n'>1 625.6</td><td class='n'>1 627.4</td><td class='n'>0.11 %</td><td class='n'>0.04 %</td><td class='n'>0.0060</td><td class='n'>4 860</td><td class='n'>0.35 s</td><td><span class="ok">ok</span></td></tr>
 </table>
-<div class='note'><b>Zu 12_linear_extrude_twist:</b> Hier weicht OpenSCADs eigenes Netz vom exakten Körper ab. Exakt sind 1280 + 840 + 540 = 2660 mm³ (verdrillte Querschnitte behalten ihre Fläche); OpenSCAD liefert 2 688,9 mm³, weil es jede verdrillte Seitenfläche in zwei ebene Dreiecke mit fester Diagonale teilt. Unser STL hat 2 660,9 mm³. Die Abweichung von 1,04 % in der Tabelle ist also OpenSCADs Facettierung.</div>
+<div class='note'><b>On 12_linear_extrude_twist:</b> here OpenSCAD's own mesh deviates from the exact body. The exact value is 1280 + 840 + 540 = 2660 mm³ (twisted cross-sections keep their area); OpenSCAD gives 2 688.9 mm³ because it splits every twisted side face into two planar triangles with a fixed diagonal. Our STL has 2 660.9 mm³. The 1.04 % deviation in the table is therefore OpenSCAD's faceting.</div>
 <h2 class='pagebreak'>5 Renderings</h2>
-<p>Alle Bilder 600×450 px, isometrische Ansicht (Blick entlang (−1, 1, −1), orthografisch), <code>cad render &lt;datei&gt; --size 600x450</code>. OpenSCAD-Bilder: <code>openscad -o x.png --render --imgsize=600,450 --viewall --autocenter --projection=ortho --camera=100,-100,100,0,0,0</code> mit denselben <code>-D</code>-Werten wie die Referenz.</p>
-<h3>5.1 Beispiele der Spec (<code>examples/spec/</code>)</h3><p class='small'>Nur mit unserer CLI: Raster, Anker, Fillets und Zonen gibt es in OpenSCAD nicht.</p><div class='grid2'>
-<figure><img src='spec-dose_shell.png' alt='dose_shell'><figcaption><b>dose_shell</b> – shell(t) { körper; zone } – Dose aus einem verrundeten Vollkörper ($fillet), oben geöffnet über die Zone an der Rasterebene deckel; Anker für den Deckel.</figcaption></figure>
-<figure><img src='spec-fase_chamfer.png' alt='fase_chamfer'><figcaption><b>fase_chamfer</b> – Fasen in allen drei Formen – chamfer-Block mit Zone, union(chamfer = …) und $chamfer auf Primitiven; dazu $fillet für einen verrundeten Knopf.</figcaption></figure>
-<figure><img src='spec-fillet_zonen.png' alt='fillet_zonen'><figcaption><b>fillet_zonen</b> – Zonenblock fillet(r) { körper; zone; … } mit Rasterlinie, Rasterebene und Volumenzone, select = &quot;touch&quot;, verschachtelte Blöcke mit zwei Radien.</figcaption></figure>
-<figure><img src='spec-gehaeuse.png' alt='gehaeuse'><figcaption><b>gehaeuse</b> – Spec-Beispiel „gehaeuse“ – Raster g im Modul, Box zwischen Rasterpunkten, Anker nach außen, benannte Instanz k, Deckel am Anker und ein zweites Raster aus k.ecke.x.</figcaption></figure>
-<figure><img src='spec-knauf_mirror.png' alt='knauf_mirror'><figcaption><b>knauf_mirror</b> – Knauf – 2D-Raster für ein Splineprofil, rotate_extrude, torus, difference(fillet = …) an der Bohrung; gespiegelte Kopie an einer Ebene eines skalierten Rasters.</figcaption></figure>
-<figure><img src='spec-lochplatte.png' alt='lochplatte'><figcaption><b>lochplatte</b> – Lochplatte mit indizierten Rasterebenen (Listen), Bohrungen an Rasterpunkten, an Rasterpunkten platziertes zweites Raster und difference(fillet = 1) für die Bohrkanten.</figcaption></figure>
-<figure><img src='spec-loft_sweep.png' alt='loft_sweep'><figcaption><b>loft_sweep</b> – Profiloperationen – loft vom Kreis zum Quadrat (Trichter), sweep eines Kreises entlang eines Spline-Pfads (Griffbügel) und eines linearen Pfads aus Rasterpunkten.</figcaption></figure>
-<figure><img src='spec-winkel_anker.png' alt='winkel_anker'><figcaption><b>winkel_anker</b> – Anker von außen – zwei benannte Instanzen eines Winkels, Schrauben an den Ankern mit rotate(to = dir(k.a)), gedrehte Instanz, Raster aus Ankerkoordinaten.</figcaption></figure>
-<figure><img src='spec-gehaeuse-zeile12.png' alt='gehaeuse --line 12'><figcaption><b>gehaeuse --line 12</b> – Zeile 12: abgezogener Körper rot transparent, Rest gedimmt</figcaption></figure>
+<p>All images 600×450 px, isometric view (looking along (−1, 1, −1), orthographic), <code>cad render &lt;file&gt; --size 600x450</code>. OpenSCAD images: <code>openscad -o x.png --render --imgsize=600,450 --viewall --autocenter --projection=ortho --camera=100,-100,100,0,0,0</code> with the same <code>-D</code> values as the reference.</p>
+<h3>5.1 Examples from the spec (<code>examples/spec/</code>)</h3><p class='small'>Only with our CLI: grids, anchors, fillets and zones do not exist in OpenSCAD.</p><div class='grid2'>
+<figure><img src='spec-dose_shell.png' alt='dose_shell'><figcaption><b>dose_shell</b> – shell(t) { body; zone } – can made from a filleted solid ($fillet), opened at the top via the zone at the grid plane deckel; anchor for the lid.</figcaption></figure>
+<figure><img src='spec-fase_chamfer.png' alt='fase_chamfer'><figcaption><b>fase_chamfer</b> – chamfers in all three forms – chamfer block with zone, union(chamfer = …) and $chamfer on primitives; plus $fillet for a rounded knob.</figcaption></figure>
+<figure><img src='spec-fillet_zonen.png' alt='fillet_zonen'><figcaption><b>fillet_zonen</b> – zone block fillet(r) { body; zone; … } with grid line, grid plane and volume zone, select = &quot;touch&quot;, nested blocks with two radii.</figcaption></figure>
+<figure><img src='spec-gehaeuse.png' alt='gehaeuse'><figcaption><b>gehaeuse</b> – spec example "gehaeuse" (enclosure) – grid g in the module, box between grid points, anchors facing outward, named instance k, lid at the anchor and a second grid from k.ecke.x.</figcaption></figure>
+<figure><img src='spec-knauf_mirror.png' alt='knauf_mirror'><figcaption><b>knauf_mirror</b> – knob – 2D grid for a spline profile, rotate_extrude, torus, difference(fillet = …) at the hole; mirrored copy at a plane of a scaled grid.</figcaption></figure>
+<figure><img src='spec-lochplatte.png' alt='lochplatte'><figcaption><b>lochplatte</b> – perforated plate with indexed grid planes (lists), holes at grid points, a second grid placed at grid points and difference(fillet = 1) for the hole edges.</figcaption></figure>
+<figure><img src='spec-loft_sweep.png' alt='loft_sweep'><figcaption><b>loft_sweep</b> – profile operations – loft from circle to square (funnel), sweep of a circle along a spline path (handle bar) and along a linear path made of grid points.</figcaption></figure>
+<figure><img src='spec-winkel_anker.png' alt='winkel_anker'><figcaption><b>winkel_anker</b> – anchors from outside – two named instances of an angle bracket, screws at the anchors with rotate(to = dir(k.a)), rotated instance, grid from anchor coordinates.</figcaption></figure>
+<figure><img src='spec-gehaeuse-zeile12.png' alt='gehaeuse --line 12'><figcaption><b>gehaeuse --line 12</b> – line 12: subtracted body red and transparent, the rest dimmed</figcaption></figure>
 </div>
-<h3>5.2 OpenSCAD-Modelle: unseres (links) und OpenSCAD (rechts)</h3>
-<div class='pair'><h3><code>05_nested_booleans</code> <span class='small'>verschachtelte Booleans – Würfel mit Kugel geschnitten, Kreuzbohrung abgezogen.</span></h3><div class='grid2'>
+<h3>5.2 OpenSCAD models: ours (left) and OpenSCAD (right)</h3>
+<div class='pair'><h3><code>05_nested_booleans</code> <span class='small'>nested booleans – cube intersected with a sphere, cross hole subtracted.</span></h3><div class='grid2'>
 <figure><img src='compat-05_nested_booleans.png' alt='05_nested_booleans cad render'><figcaption>cad render</figcaption></figure>
 <figure><img src='compat-05_nested_booleans-openscad.png' alt='05_nested_booleans OpenSCAD'><figcaption>OpenSCAD 2021.01</figcaption></figure>
 </div></div>
-<div class='pair'><h3><code>06_hole_grid</code> <span class='small'>Lochrasterplatte – eine for-Schleife mit zwei Variablen erzeugt ein Bohrungsraster.</span></h3><div class='grid2'>
+<div class='pair'><h3><code>06_hole_grid</code> <span class='small'>perforated plate – a for loop with two variables creates a grid of holes.</span></h3><div class='grid2'>
 <figure><img src='compat-06_hole_grid.png' alt='06_hole_grid cad render'><figcaption>cad render</figcaption></figure>
 <figure><img src='compat-06_hole_grid-openscad.png' alt='06_hole_grid OpenSCAD'><figcaption>OpenSCAD 2021.01</figcaption></figure>
 </div></div>
-<div class='pair'><h3><code>07_crown_ring</code> <span class='small'>Zahnkranz-artiger Ring – Zähne per for und rotate gleichmäßig verteilt.</span></h3><div class='grid2'>
+<div class='pair'><h3><code>07_crown_ring</code> <span class='small'>crown-gear-like ring – teeth evenly distributed with for and rotate.</span></h3><div class='grid2'>
 <figure><img src='compat-07_crown_ring.png' alt='07_crown_ring cad render'><figcaption>cad render</figcaption></figure>
 <figure><img src='compat-07_crown_ring-openscad.png' alt='07_crown_ring OpenSCAD'><figcaption>OpenSCAD 2021.01</figcaption></figure>
 </div></div>
-<div class='pair'><h3><code>12_linear_extrude_twist</code> <span class='small'>linear_extrude mit twist und scale – gedrehter Stab und verjüngter Sockel.</span></h3><div class='grid2'>
+<div class='pair'><h3><code>12_linear_extrude_twist</code> <span class='small'>linear_extrude with twist and scale – twisted bar and tapered base.</span></h3><div class='grid2'>
 <figure><img src='compat-12_linear_extrude_twist.png' alt='12_linear_extrude_twist cad render'><figcaption>cad render</figcaption></figure>
 <figure><img src='compat-12_linear_extrude_twist-openscad.png' alt='12_linear_extrude_twist OpenSCAD'><figcaption>OpenSCAD 2021.01</figcaption></figure>
 </div></div>
-<div class='pair'><h3><code>13_rotate_extrude_ring</code> <span class='small'>rotate_extrude eines verschobenen Kreises (Ring) und eines Rechtecks (Scheibe mit Loch).</span></h3><div class='grid2'>
+<div class='pair'><h3><code>13_rotate_extrude_ring</code> <span class='small'>rotate_extrude of an offset circle (ring) and of a rectangle (disc with hole).</span></h3><div class='grid2'>
 <figure><img src='compat-13_rotate_extrude_ring.png' alt='13_rotate_extrude_ring cad render'><figcaption>cad render</figcaption></figure>
 <figure><img src='compat-13_rotate_extrude_ring-openscad.png' alt='13_rotate_extrude_ring OpenSCAD'><figcaption>OpenSCAD 2021.01</figcaption></figure>
 </div></div>
-<div class='pair'><h3><code>14_pipe_bend</code> <span class='small'>Rohrbogen per rotate_extrude(angle = 90) mit zwei geraden Anschlussstücken.</span></h3><div class='grid2'>
+<div class='pair'><h3><code>14_pipe_bend</code> <span class='small'>pipe bend via rotate_extrude(angle = 90) with two straight connecting pieces.</span></h3><div class='grid2'>
 <figure><img src='compat-14_pipe_bend.png' alt='14_pipe_bend cad render'><figcaption>cad render</figcaption></figure>
 <figure><img src='compat-14_pipe_bend-openscad.png' alt='14_pipe_bend OpenSCAD'><figcaption>OpenSCAD 2021.01</figcaption></figure>
 </div></div>
-<div class='pair'><h3><code>15_vase</code> <span class='small'>Vase als rotate_extrude eines Polygonprofils (Wand 2 mm, Boden 2 mm).</span></h3><div class='grid2'>
+<div class='pair'><h3><code>15_vase</code> <span class='small'>vase as rotate_extrude of a polygon profile (wall 2 mm, bottom 2 mm).</span></h3><div class='grid2'>
 <figure><img src='compat-15_vase.png' alt='15_vase cad render'><figcaption>cad render</figcaption></figure>
 <figure><img src='compat-15_vase-openscad.png' alt='15_vase OpenSCAD'><figcaption>OpenSCAD 2021.01</figcaption></figure>
 </div></div>
-<div class='pair'><h3><code>19_hex_nut</code> <span class='small'>Sechskantmutter M5 – $fn = 6 am Aufruf erzeugt das Sechseck, die Bohrung ist rund.</span></h3><div class='grid2'>
+<div class='pair'><h3><code>19_hex_nut</code> <span class='small'>M5 hex nut – $fn = 6 at the call creates the hexagon, the hole is round.</span></h3><div class='grid2'>
 <figure><img src='compat-19_hex_nut.png' alt='19_hex_nut cad render'><figcaption>cad render</figcaption></figure>
 <figure><img src='compat-19_hex_nut-openscad.png' alt='19_hex_nut OpenSCAD'><figcaption>OpenSCAD 2021.01</figcaption></figure>
 </div></div>
-<div class='pair'><h3><code>22_gear</code> <span class='small'>vereinfachtes Stirnrad – Trapezzähne als polygon aus einer Listen-Comprehension.</span></h3><div class='grid2'>
+<div class='pair'><h3><code>22_gear</code> <span class='small'>simplified spur gear – trapezoidal teeth as a polygon from a list comprehension.</span></h3><div class='grid2'>
 <figure><img src='compat-22_gear.png' alt='22_gear cad render'><figcaption>cad render</figcaption></figure>
 <figure><img src='compat-22_gear-openscad.png' alt='22_gear OpenSCAD'><figcaption>OpenSCAD 2021.01</figcaption></figure>
 </div></div>
-<div class='pair'><h3><code>31_phone_stand</code> <span class='small'>Handyständer – geneigte Lehne über rotate, Lippe, Kabelschlitz; Profil per polygon.</span></h3><div class='grid2'>
+<div class='pair'><h3><code>31_phone_stand</code> <span class='small'>phone stand – inclined back rest via rotate, lip, cable slot; profile via polygon.</span></h3><div class='grid2'>
 <figure><img src='compat-31_phone_stand.png' alt='31_phone_stand cad render'><figcaption>cad render</figcaption></figure>
 <figure><img src='compat-31_phone_stand-openscad.png' alt='31_phone_stand OpenSCAD'><figcaption>OpenSCAD 2021.01</figcaption></figure>
 </div></div>
-<h2>6 Messwerte</h2>
-<h3>6.1 Wasm-Größen</h3><table><tr><th>Datei</th><th class='n'>roh</th><th class='n'>gzip −9</th><th class='n'>Brotli q11</th></tr>
+<h2>6 Measurements</h2>
+<h3>6.1 Wasm sizes</h3><table><tr><th>File</th><th class='n'>raw</th><th class='n'>gzip −9</th><th class='n'>Brotli q11</th></tr>
 <tr><td><code>smlib.wasm</code></td><td class='n'>4 993 KiB</td><td class='n'>1 769 KiB</td><td class='n'>1 270 KiB</td></tr>
 <tr><td><code>smlib.js</code></td><td class='n'>14 KiB</td><td class='n'>5 KiB</td><td class='n'>4 KiB</td></tr>
 <tr><td><code>cad_wasm_bg.wasm</code></td><td class='n'>1 186 KiB</td><td class='n'>464 KiB</td><td class='n'>353 KiB</td></tr>
 <tr><td><code>cad_wasm.js</code></td><td class='n'>28 KiB</td><td class='n'>6 KiB</td><td class='n'>5 KiB</td></tr>
-</table><p class='small'><code>smlib.wasm</code>: SMLib + SM_API + Fassade, Emscripten <code>-O3 -fwasm-exceptions</code>; <code>cad_wasm_bg.wasm</code>: Sprache, Engine, Sitzung (wasm-bindgen, wasm-opt −O3).</p>
-<h3>6.2 Ladezeit und Auswertung (Node 22, ein Prozess wie im Worker)</h3>
-<p><code>web/scripts/smoke-node.mjs --json</code> mit dem Beispiel <code>gehaeuse</code>, Median aus 3 Läufen, Schrittbudget 16 ms.</p>
-<table><tr><th>Schritt</th><th class='n'>Zeit</th></tr>
-<tr><td>smlib.wasm laden, kompilieren, initialisieren</td><td class='n'>32,4 ms</td></tr>
-<tr><td>cad_wasm laden und initialisieren</td><td class='n'>32,4 ms</td></tr>
-<tr><td>SetSource → vorläufige Szene (ohne Kernel)</td><td class='n'>20,7 ms</td></tr>
-<tr><td>SetSource → vollständige Szene</td><td class='n'>123,1 ms</td></tr>
-<tr><td>SetSource → Wurzel-Mesh</td><td class='n'>141,3 ms</td></tr>
-<tr><td>Meshes aller Knoten anfordern</td><td class='n'>6,1 ms</td></tr>
-<tr><td>Griff ziehen → TextEdit → neue Szene</td><td class='n'>12 ms</td></tr>
-<tr><td>… → grobes Wurzel-Mesh</td><td class='n'>14,1 ms</td></tr>
-<tr><td>erneutes SetSource (Cache warm) → vorläufige Szene</td><td class='n'>0,9 ms</td></tr>
-<tr><td>erneutes SetSource (Cache warm) → Szene</td><td class='n'>21,9 ms</td></tr>
-<tr><td>erneutes SetSource (Cache warm) → Wurzel-Mesh</td><td class='n'>23,9 ms</td></tr>
-<tr><td>Auswertschritte bis zur vollständigen Szene</td><td class='n'>5</td></tr>
-<tr><td>Dreiecke Wurzel-Mesh / Knoten der Szene</td><td class='n'>40 / 8</td></tr>
+</table><p class='small'><code>smlib.wasm</code>: SMLib + SM_API + facade, Emscripten <code>-O3 -fwasm-exceptions</code>; <code>cad_wasm_bg.wasm</code>: language, engine, session (wasm-bindgen, wasm-opt −O3).</p>
+<h3>6.2 Load time and evaluation (Node 22, one process as in the worker)</h3>
+<p><code>web/scripts/smoke-node.mjs --json</code> with the example <code>gehaeuse</code>, median of 3 runs, step budget 16 ms.</p>
+<table><tr><th>Step</th><th class='n'>Time</th></tr>
+<tr><td>Load, compile, initialize smlib.wasm</td><td class='n'>32.4 ms</td></tr>
+<tr><td>Load and initialize cad_wasm</td><td class='n'>32.4 ms</td></tr>
+<tr><td>SetSource → preliminary scene (without kernel)</td><td class='n'>20.7 ms</td></tr>
+<tr><td>SetSource → complete scene</td><td class='n'>123.1 ms</td></tr>
+<tr><td>SetSource → root mesh</td><td class='n'>141.3 ms</td></tr>
+<tr><td>Request meshes of all nodes</td><td class='n'>6.1 ms</td></tr>
+<tr><td>Drag handle → TextEdit → new scene</td><td class='n'>12 ms</td></tr>
+<tr><td>… → coarse root mesh</td><td class='n'>14.1 ms</td></tr>
+<tr><td>Repeated SetSource (warm cache) → preliminary scene</td><td class='n'>0.9 ms</td></tr>
+<tr><td>Repeated SetSource (warm cache) → scene</td><td class='n'>21.9 ms</td></tr>
+<tr><td>Repeated SetSource (warm cache) → root mesh</td><td class='n'>23.9 ms</td></tr>
+<tr><td>Evaluation steps until the complete scene</td><td class='n'>5</td></tr>
+<tr><td>Triangles of root mesh / nodes of the scene</td><td class='n'>40 / 8</td></tr>
 </table>
-<p>Nur Kernel (<code>test-node.mjs</code>): Datei lesen 4,5 ms, kompilieren, instanziieren und initialisieren 29,0 ms. Szenario: box-cylinder + fillet(5 top edges) + tessellate (1376 triangles): primitives 4.1 ms, boolean 24.4 ms, edges 0.5 ms, fillet 64.3 ms, tessellate 44.3 ms; total incl. load 1410 ms.</p>
-<h3>6.3 Auswertung nativ (CLI)</h3>
-<p><code>cad export</code> je Modell (Prozessstart, Auswertung, Tessellierung, STL): Median 0,20 s, Summe 11,2 s; am längsten <code>05_nested_booleans</code> 1,52 s, <code>06_hole_grid</code> 1,46 s, <code>07_crown_ring</code> 0,83 s.</p>
-<p><code>cad render</code> der Spec-Beispiele (600×450, 2×2-Überabtastung): dose_shell 0,69 s, fase_chamfer 0,26 s, fillet_zonen 0,31 s, gehaeuse 0,06 s, knauf_mirror 2,67 s, lochplatte 0,51 s, loft_sweep 0,47 s, winkel_anker 0,46 s.</p>
-<h2>7 Bekannte Grenzen</h2><ul>
-<li>SMLib-Booleans sind in Sonderlagen unzuverlässig. Die Fassade erkennt falsche Ergebnisse über Stichproben, nicht vollständig: Ein Fehler zwischen allen Probepunkten bleibt unentdeckt. Die Prüfung nutzt SMLibs Punktklassifizierung, die bei gedrehten Splinekörpern selbst irrt (knauf_mirror); besteht keine Variante, bleibt deshalb SMLibs eigenes Ergebnis. Im Verschiebe-Rückfall weicht der zweite Operand um bis zu 10⁻⁴ der Modellgröße ab. Die Prüfung kostet Zeit: <code>cad export</code> aller 41 Beispiele beim Beheben gemessen 13,7 s → 18,9 s (+38 %), am meisten bei Vereinigungen vieler Teile (07_crown_ring ×2,1) und bei knauf_mirror (×1,9, Rückfälle).</li>
-<li>Offene Ergebnisse: Berühren sich Körper an einer Kante, ist die Vereinigung in SMLib kein geschlossener Körper; <code>cad</code> meldet dann Volumen 0 (winkel_anker; das STL ist in Ordnung). knauf_mirror: Der gedrehte Splinekörper minus Bohrung ist offen, Torus und Stift fehlen im Ergebnis, das Fillet an der Bohrung scheitert (SM_ERR) – alles wie vor diesem Durchgang, noch offen.</li>
-<li>Tessellierung von Freiformflächen: Die Verfeinerung setzt eine globale maximale Kantenlänge, damit werden auch ebene Flächen desselben Körpers feiner (12_linear_extrude_twist: 15 730 Dreiecke, OpenSCAD 452).</li>
-<li>Twist-Extrusion ist eine kubische Loft-Annäherung durch Schnitte alle 7,5°. Kreisprofile mit ungleichmäßigem <code>scale</code> und <code>scale = 0</code> (Spitze) werden nicht unterstützt.</li>
-<li>OpenSCAD facettiert, wir rechnen exakt: Volumen runder Teile weichen systematisch um 0,01–0,3 % ab; bei twist liegt OpenSCAD selbst um ~1 % daneben (Abschnitt 4).</li>
-<li>Determinismus: <code>rand()</code> ist fest und prozessweit ersetzt. Speicherfehler in SMLib machen Ergebnisse vom Heap abhängig: Die Shell-Vorprüfung deckt nur ebene, gegenüberliegende Wände ab; schon knapp passende Wände (10-mm-Würfel, t = 4,99) zeigen unter valgrind ungültige Lesezugriffe. Abhilfe bringen erst die Upstream-Korrekturen (tangency-labs/smlib 93efd6d, af8db37) bzw. solidcore.</li>
-<li><code>cad render</code> ist ein Software-Rasterizer (orthografisch, Lambert, 2×2-Überabtastung) ohne Schatten und Perspektive. Transparenz pro Pixel braucht Speicher proportional zur Zahl der Schichten.</li>
-<li>Nicht Teil dieses Berichts: Browser-UI, STEP-Export, Umstieg auf solidcore (M8).</li>
+<p>Kernel only (<code>test-node.mjs</code>): read file 4.5 ms, compile, instantiate and initialize 29.0 ms. Scenario: box-cylinder + fillet(5 top edges) + tessellate (1376 triangles): primitives 4.1 ms, boolean 24.4 ms, edges 0.5 ms, fillet 64.3 ms, tessellate 44.3 ms; total incl. load 1410 ms.</p>
+<h3>6.3 Native evaluation (CLI)</h3>
+<p><code>cad export</code> per model (process start, evaluation, tessellation, STL): median 0.20 s, total 11.2 s; longest <code>05_nested_booleans</code> 1.52 s, <code>06_hole_grid</code> 1.46 s, <code>07_crown_ring</code> 0.83 s.</p>
+<p><code>cad render</code> of the spec examples (600×450, 2×2 supersampling): dose_shell 0.69 s, fase_chamfer 0.26 s, fillet_zonen 0.31 s, gehaeuse 0.06 s, knauf_mirror 2.67 s, lochplatte 0.51 s, loft_sweep 0.47 s, winkel_anker 0.46 s.</p>
+<h2>7 Known limitations</h2><ul>
+<li>SMLib booleans are unreliable in special configurations. The facade detects wrong results by sampling, not completely: an error between all probe points goes undetected. The check uses SMLib's point classification, which itself is wrong for rotated spline bodies (knauf_mirror); if no variant passes, SMLib's own result is therefore kept. In the shift fallback, the second operand deviates by up to 10⁻⁴ of the model size. The check costs time: <code>cad export</code> of all 41 examples, measured during the fix, 13.7 s → 18.9 s (+38 %), most for unions of many parts (07_crown_ring ×2.1) and for knauf_mirror (×1.9, fallbacks).</li>
+<li>Open results: if bodies touch along an edge, the union in SMLib is not a closed body; <code>cad</code> then reports volume 0 (winkel_anker; the STL is fine). knauf_mirror: the rotated spline body minus the hole is open, torus and pin are missing from the result, the fillet at the hole fails (SM_ERR) – all as before this round, still open.</li>
+<li>Tessellation of freeform surfaces: the refinement sets a global maximum edge length, so planar faces of the same body also become finer (12_linear_extrude_twist: 15 730 triangles, OpenSCAD 452).</li>
+<li>Twist extrusion is a cubic loft approximation through sections every 7.5°. Circular profiles with non-uniform <code>scale</code> and <code>scale = 0</code> (apex) are not supported.</li>
+<li>OpenSCAD facets, we compute exactly: volumes of round parts deviate systematically by 0.01–0.3 %; with twist, OpenSCAD itself is off by ~1 % (section 4).</li>
+<li>Determinism: <code>rand()</code> is replaced with a fixed, process-wide implementation. Memory errors in SMLib make results depend on the heap: the shell pre-check only covers planar, opposite walls; walls that barely fit (10 mm cube, t = 4.99) already show invalid reads under valgrind. Only the upstream fixes (tangency-labs/smlib 93efd6d, af8db37) or solidcore will resolve this.</li>
+<li><code>cad render</code> is a software rasterizer (orthographic, Lambert, 2×2 supersampling) without shadows or perspective. Per-pixel transparency needs memory proportional to the number of layers.</li>
+<li>Not part of this report: browser UI, STEP export, switch to solidcore (M8).</li>
 </ul>
-<p class='small'>Erzeugt mit <code>python3 tools/report/report1.py</code> (PDF: <code>tools/report/print-pdf.mjs</code>, Chromium aus Playwright).</p>
+<p class='small'>Generated with <code>python3 tools/report/report1.py</code> (PDF: <code>tools/report/print-pdf.mjs</code>, Chromium from Playwright).</p>
 </body></html>

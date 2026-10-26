@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="de">
+<html lang='en'>
 <head>
 <meta charset="utf-8">
-<title>Testbericht 6 – Projekte, Bauteile, include/use</title>
+<title>Test report 6 – Projects, parts, include/use</title>
 <style>
   @page { size: A4; margin: 16mm 14mm 16mm 14mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -43,38 +43,38 @@
 </head>
 <body>
 <main>
-<h1>Testbericht 6 – Projekte, Bauteile, include/use</h1>
-<div class="meta">Sprache, Engine, CLI und Browser-UI · 23. Oktober 2026 · Commit e4ee224</div>
+<h1>Test report 6 – Projects, parts, include/use</h1>
+<div class="meta">Language, engine, CLI and browser UI · 2026-10-23 · Commit e4ee224</div>
 
 <div class="summary">
-  <div>Phase D (Playwright)<b>9 / 9 bestanden</b></div>
-  <div>Phase A–C (Regression)<b>56 / 56</b></div>
+  <div>Phase D (Playwright)<b>9 / 9 passed</b></div>
+  <div>Phase A–C (regression)<b>56 / 56</b></div>
   <div>Vitest<b>167 / 167</b></div>
   <div>cargo test --workspace<b>274 / 274</b></div>
-  <div>include/use gegen OpenSCAD<b>4 / 4</b></div>
+  <div>include/use against OpenSCAD<b>4 / 4</b></div>
 </div>
 
-<h2>1 Umfang</h2>
+<h2>1 Scope</h2>
 <ul>
-  <li><b><code>include &lt;datei&gt;</code> / <code>use &lt;datei&gt;</code></b> mit OpenSCAD-Semantik: include fügt die Anweisungen der Datei an ihrer Stelle ein (Definitionen, Variablen, Geometrie; die letzte Zuweisung gilt, mit Warnung über die Dateigrenze); use macht nur Module und Funktionen sichtbar, die in ihrer eigenen Datei laufen (sehen deren Variablen und deren eigene use-Bibliotheken, nicht transitiv); eigene Definitionen vor benutzten, von mehreren use gilt das letzte. Pfade relativ zur einbindenden Datei (oder absolut). Zyklen und fehlende Dateien sind Fehler an der include/use-Zeile.</li>
-  <li><b>Datei-IDs in Quellpositionen:</b> jede geladene Datei belegt einen eigenen Bereich der Positionen (Datei <i>f</i> ab <i>f</i>·2<sup>24</sup>, Anweisungs-IDs ab <i>f</i>·2<sup>22</sup>); Diagnosen, Hinweise, Griffe, Spans und Text-Edits kennen damit ihre Datei. Das Protokoll gibt Positionen lokal zur Datei aus (<code>SrcRange.file</code>, <code>Diagnostic.file</code>, <code>Edit.file</code>, <code>Scene.files</code>); Rückschreiben trifft die richtige Datei.</li>
-  <li><b>Datei-Resolver:</b> <code>cad-eval</code> liest Projektdateien über den Trait <code>FileResolver</code> (Dateisystem für die CLI, Map für Session/Wasm). Die Session bekommt die Dateien mit <code>SetFiles</code>/<code>SetFile</code>. Der Engine-Cache ist unverändert (Schlüssel aus dem Inhalt).</li>
-  <li><b>Projekte in der UI:</b> Dateien als Tabs über dem Editor (eigene Undo-Historie je Datei), Hauptdatei wählbar (★), neue Dateien, Entfernen; Ordner öffnen (File System Access API, Speichern schreibt zurück), sonst ZIP hoch- und herunterladen; Autospeichern des ganzen Projekts in IndexedDB; Beispielprojekte im Beispielmenü. Strg+Klick auf den Pfad in include/use öffnet die Datei; Doppelklick auf eine Instanz eines Moduls aus einer anderen Datei öffnet diese in der Definition; Griffe schreiben in die Datei des Literals (auch nicht angezeigte Dateien, ein Undo-Schritt dort); Fläche aus einer anderen Datei: Statuszeile nennt Datei und Zeile, Klick öffnet sie.</li>
-  <li><b>Mehrere Bauteile</b> (Offener Punkt 2, Plan 12.9): benannte Instanzen auf oberster Ebene der Hauptdatei sind Bauteile. Szene mit Hülle und Volumen je Bauteil; Bauteilleiste mit Sichtbarkeit und Export STL/3MF/STEP je Bauteil, alle als ZIP (STL oder STEP) oder ein 3MF mit einem Objekt je Bauteil. STEP (exakte B-Rep, AP242/AP214) geht über denselben Writer wie das ganze Modell: <code>Engine::export_step</code> ist <code>Engine::export_step_nodes</code> der Wurzel, Bauteile werden mit ihrer Lage (<code>display_world</code>) über <code>Kernel::transform</code> und <code>Kernel::brep</code> nach <code>cad_step::write</code> gegeben. CLI: <code>cad export --part name</code> (auch <code>.step</code>, <code>--schema</code>), <code>--all-parts -o ordner/ [--format step]</code>.</li>
-  <li><b>Benannte Instanzen in Schleifen</b> (Plan 12 Punkt 2): <code>for (i = [0:3]) k[i]: halter();</code> → <code>k[2].anker</code>; Index ganzzahlig, Sichtbarkeit wie benannte Instanzen, Snap schreibt <code>k[2].ecke</code>. <code>k: …</code> in einer Schleife bleibt ein Fehler.</li>
-  <li><b>Beispielprojekt</b> <code>examples/projekt-gehaeuse/</code>: gehaeuse.scad (Hauptdatei), konstanten.scad (include), lib/teile.scad (use, mit Schraubdomen <code>dom[i]</code>), Bauteile gehaeuse und deckel.</li>
+  <li><b><code>include &lt;file&gt;</code> / <code>use &lt;file&gt;</code></b> with OpenSCAD semantics: include inserts the statements of the file at its position (definitions, variables, geometry; the last assignment wins, with a warning across the file boundary); use only makes modules and functions visible, which run in their own file (they see that file's variables and its own use libraries, not transitively); own definitions take precedence over used ones, among several use the last one wins. Paths relative to the including file (or absolute). Cycles and missing files are errors at the include/use line.</li>
+  <li><b>File IDs in source positions:</b> each loaded file occupies its own range of positions (file <i>f</i> from <i>f</i>·2<sup>24</sup>, statement IDs from <i>f</i>·2<sup>22</sup>); diagnostics, hints, handles, spans and text edits thus know their file. The protocol outputs positions local to the file (<code>SrcRange.file</code>, <code>Diagnostic.file</code>, <code>Edit.file</code>, <code>Scene.files</code>); writing back hits the correct file.</li>
+  <li><b>File resolver:</b> <code>cad-eval</code> reads project files via the trait <code>FileResolver</code> (file system for the CLI, map for session/Wasm). The session receives the files with <code>SetFiles</code>/<code>SetFile</code>. The engine cache is unchanged (keys from the content).</li>
+  <li><b>Projects in the UI:</b> files as tabs above the editor (separate undo history per file), selectable main file (★), new files, removal; open a folder (File System Access API, saving writes back), otherwise upload and download a ZIP; autosave of the whole project to IndexedDB; example projects in the examples menu. Ctrl+click on the path in include/use opens the file; a double-click on an instance of a module from another file opens that file at the definition; handles write into the file of the literal (also files that are not displayed, one undo step there); face from another file: the status bar names file and line, a click opens it.</li>
+  <li><b>Multiple parts</b> (open item 2, plan 12.9): named instances at the top level of the main file are parts. Scene with bounding box and volume per part; parts bar with visibility and export STL/3MF/STEP per part, all as ZIP (STL or STEP) or one 3MF with one object per part. STEP (exact B-rep, AP242/AP214) goes through the same writer as the whole model: <code>Engine::export_step</code> is <code>Engine::export_step_nodes</code> of the root, parts are passed with their placement (<code>display_world</code>) via <code>Kernel::transform</code> and <code>Kernel::brep</code> to <code>cad_step::write</code>. CLI: <code>cad export --part name</code> (also <code>.step</code>, <code>--schema</code>), <code>--all-parts -o ordner/ [--format step]</code>.</li>
+  <li><b>Named instances in loops</b> (plan 12 item 2): <code>for (i = [0:3]) k[i]: halter();</code> → <code>k[2].anker</code>; integer index, visibility as for named instances, snapping writes <code>k[2].ecke</code>. <code>k: …</code> in a loop remains an error.</li>
+  <li><b>Example project</b> <code>examples/projekt-gehaeuse/</code>: gehaeuse.scad (main file), konstanten.scad (include), lib/teile.scad (use, with screw bosses <code>dom[i]</code>), parts gehaeuse and deckel.</li>
 </ul>
 
-<h2>2 Testumgebung</h2>
-<table><tr><th style="width:32mm">Betriebssystem</th><td>Linux 6.18.44-fc-v153 (x64)</td></tr><tr><th style="width:32mm">CPU</th><td>Intel(R) Xeon(R) Processor @ 2.10GHz · 4 Kerne</td></tr><tr><th style="width:32mm">Node.js</th><td>v22.22.0</td></tr><tr><th style="width:32mm">Browser</th><td>Chromium 141.0.7390.37 (headless, Playwright 1.56.1), WebGL über SwiftShader</td></tr><tr><th style="width:32mm">Fenster</th><td>1440 × 900 px, Gerätepixelverhältnis 1</td></tr><tr><th style="width:32mm">Build</th><td>Vite 8.3.5 Produktions-Build; React 19.3.1, three.js 0.186.1, CodeMirror 6.43.15</td></tr><tr><th style="width:32mm">OpenSCAD</th><td>OpenSCAD version 2021.01</td></tr><tr><th style="width:32mm">Quelltext</th><td>Branch worktree-agent-a7438d365a2b87939, Commit e4ee224</td></tr></table>
+<h2>2 Test environment</h2>
+<table><tr><th style="width:32mm">Operating system</th><td>Linux 6.18.44-fc-v153 (x64)</td></tr><tr><th style="width:32mm">CPU</th><td>Intel(R) Xeon(R) Processor @ 2.10GHz · 4 cores</td></tr><tr><th style="width:32mm">Node.js</th><td>v22.22.0</td></tr><tr><th style="width:32mm">Browser</th><td>Chromium 141.0.7390.37 (headless, Playwright 1.56.1), WebGL via SwiftShader</td></tr><tr><th style="width:32mm">Window</th><td>1440 × 900 px, device pixel ratio 1</td></tr><tr><th style="width:32mm">Build</th><td>Vite 8.3.5 production build; React 19.3.1, three.js 0.186.1, CodeMirror 6.43.15</td></tr><tr><th style="width:32mm">OpenSCAD</th><td>OpenSCAD version 2021.01</td></tr><tr><th style="width:32mm">Source</th><td>Branch worktree-agent-a7438d365a2b87939, commit e4ee224</td></tr></table>
 
-<h2>3 include/use gegen OpenSCAD 2021.01</h2>
-<p class="small">Je Projekt in <code>tests/openscad-compat/projects/</code> die ECHO-Zeilen von <code>cad eval --json main.scad</code> gegen <code>expected.echo</code> (mit <code>openscad -o x.echo main.scad</code> erzeugt) und gegen einen frischen OpenSCAD-Lauf. Derselbe Vergleich läuft als Rust-Test <code>cad-eval/tests/project_openscad.rs</code>.</p>
-<table><tr><th>Projekt</th><th>Dateien</th><th>Echo-Zeilen</th><th>expected.echo</th><th>OpenSCAD jetzt</th></tr><tr class="ok"><td>include_order</td><td><code>a.scad</code> <code>b.scad</code> <code>c.scad</code> <code>lib/inner.scad</code> <code>main.scad</code></td><td class="num">4</td><td class="res">gleich</td><td class="res">gleich</td></tr>
-<tr class="ok"><td>lib_children</td><td><code>main.scad</code> <code>werkzeug.scad</code></td><td class="num">5</td><td class="res">gleich</td><td class="res">gleich</td></tr>
-<tr class="ok"><td>nested_paths</td><td><code>lib/konst.scad</code> <code>lib/teile.scad</code> <code>main.scad</code> <code>shared/basis.scad</code></td><td class="num">6</td><td class="res">gleich</td><td class="res">gleich</td></tr>
-<tr class="ok"><td>use_basics</td><td><code>a.scad</code> <code>b.scad</code> <code>lib/inner.scad</code> <code>main.scad</code></td><td class="num">6</td><td class="res">gleich</td><td class="res">gleich</td></tr></table>
-<div class="osc"><b>include_order</b> – main.scad und Echo (identisch bei OpenSCAD und uns)<div class="pair"><div><pre>use &lt;a.scad&gt;
+<h2>3 include/use against OpenSCAD 2021.01</h2>
+<p class="small">For each project in <code>tests/openscad-compat/projects/</code>, the ECHO lines of <code>cad eval --json main.scad</code> are compared against <code>expected.echo</code> (generated with <code>openscad -o x.echo main.scad</code>) and against a fresh OpenSCAD run. The same comparison runs as the Rust test <code>cad-eval/tests/project_openscad.rs</code>.</p>
+<table><tr><th>Project</th><th>Files</th><th>Echo lines</th><th>expected.echo</th><th>OpenSCAD now</th></tr><tr class="ok"><td>include_order</td><td><code>a.scad</code> <code>b.scad</code> <code>c.scad</code> <code>lib/inner.scad</code> <code>main.scad</code></td><td class="num">4</td><td class="res">equal</td><td class="res">equal</td></tr>
+<tr class="ok"><td>lib_children</td><td><code>main.scad</code> <code>werkzeug.scad</code></td><td class="num">5</td><td class="res">equal</td><td class="res">equal</td></tr>
+<tr class="ok"><td>nested_paths</td><td><code>lib/konst.scad</code> <code>lib/teile.scad</code> <code>main.scad</code> <code>shared/basis.scad</code></td><td class="num">6</td><td class="res">equal</td><td class="res">equal</td></tr>
+<tr class="ok"><td>use_basics</td><td><code>a.scad</code> <code>b.scad</code> <code>lib/inner.scad</code> <code>main.scad</code></td><td class="num">6</td><td class="res">equal</td><td class="res">equal</td></tr></table>
+<div class="osc"><b>include_order</b> – main.scad and echo (identical for OpenSCAD and us)<div class="pair"><div><pre>use &lt;a.scad&gt;
 module m() echo(&quot;own&quot;);
 m();
 x = 5;
@@ -85,7 +85,7 @@ echo(f());</pre></div><div><pre>ECHO: &quot;own&quot;
 ECHO: x = 1, y = 10
 ECHO: &quot;cm&quot;, 1
 ECHO: &quot;b&quot;</pre></div></div></div>
-<div class="osc"><b>lib_children</b> – main.scad und Echo (identisch bei OpenSCAD und uns)<div class="pair"><div><pre>// Library modules with children, $-variables from the caller, functions calling each other
+<div class="osc"><b>lib_children</b> – main.scad and echo (identical for OpenSCAD and us)<div class="pair"><div><pre>// Library modules with children, $-variables from the caller, functions calling each other
 // and recursion inside the library.
 use &lt;werkzeug.scad&gt;
 reihe(3, 5) sphere(1);
@@ -97,7 +97,7 @@ ECHO: 10
 ECHO: 6, $fn = 7
 ECHO: fn = 12, v = 3
 ECHO: versatz = undef</pre></div></div></div>
-<div class="osc"><b>nested_paths</b> – main.scad und Echo (identisch bei OpenSCAD und uns)<div class="pair"><div><pre>// Relative paths: include in a subfolder, which includes from a sibling folder; a used
+<div class="osc"><b>nested_paths</b> – main.scad and echo (identical for OpenSCAD and us)<div class="pair"><div><pre>// Relative paths: include in a subfolder, which includes from a sibling folder; a used
 // library that includes constants relative to itself.
 include &lt;lib/konst.scad&gt;
 use &lt;lib/teile.scad&gt;
@@ -111,7 +111,7 @@ ECHO: teil = 3, innen = 100
 ECHO: innen = 4
 ECHO: i = 0, basis = 1.5
 ECHO: i = 1, basis = 2.5</pre></div></div></div>
-<div class="osc"><b>use_basics</b> – main.scad und Echo (identisch bei OpenSCAD und uns)<div class="pair"><div><pre>use &lt;a.scad&gt;
+<div class="osc"><b>use_basics</b> – main.scad and echo (identical for OpenSCAD and us)<div class="pair"><div><pre>use &lt;a.scad&gt;
 use &lt;b.scad&gt;
 m();
 echo(f());
@@ -126,23 +126,23 @@ ECHO: la = undef
 ECHO: la = 1, fn = 5
 ECHO: &quot;inner&quot;, 7</pre></div></div></div>
 
-<h2>4 Szenarien (Playwright, web/e2e/projekte.spec.ts)</h2>
+<h2>4 Scenarios (Playwright, web/e2e/projekte.spec.ts)</h2>
 <table>
-<tr><th>ID</th><th>Szenario</th><th>Ergebnis</th><th>Dauer</th><th>Geprüft</th></tr>
-<tr class="ok"><td>P01</td><td>Beispielprojekt öffnen: Dateien als Tabs, Hauptdatei, Bauteile</td><td class="res">bestanden</td><td class="num">2.3 s</td><td><ul class="checks"><li>Tabs gehaeuse.scad (aktiv, ★), konstanten.scad, lib/teile.scad</li><li>Scene.files: main, include, use; keine Fehler oder Warnungen</li><li>Bauteile gehaeuse und deckel; Hülle des Deckels ab y = 50</li></ul></td></tr>
-<tr class="ok"><td>P02</td><td>Ordner öffnen (File System Access API), ZIP hoch- und herunterladen</td><td class="res">bestanden</td><td class="num">3.1 s</td><td><ul class="checks"><li>3 Dateien, Hauptdatei gehaeuse.scad, notizen.txt ignoriert</li><li>Strg+S schreibt 3 Dateien (konstanten.scad mit Änderung)</li><li>ZIP mit 3 Einträgen; nach dem Hochladen gleiche Dateien und Bauteile</li></ul></td></tr>
-<tr class="ok"><td>P03</td><td>Datei wechseln: Tabs, Kontext aus der Bibliothek, Undo je Datei</td><td class="res">bestanden</td><td class="num">3.7 s</td><td><ul class="checks"><li>Kontext gehaeuse aus lib/teile.scad</li><li>Änderung bleibt beim Wechsel erhalten</li><li>Undo je Datei</li></ul></td></tr>
-<tr class="ok"><td>P04</td><td>Strg+Klick auf include/use-Pfad öffnet die Datei</td><td class="res">bestanden</td><td class="num">3.1 s</td><td><ul class="checks"><li>Strg+Klick auf &lt;konstanten.scad&gt; → konstanten.scad aktiv</li><li>Strg+Klick auf &lt;lib/teile.scad&gt; → lib/teile.scad aktiv</li><li>einfacher Klick wechselt nicht</li></ul></td></tr>
-<tr class="ok"><td>P05</td><td>Griff ändert die eingebundene Datei (Variable aus include, Literal in der Bibliothek)</td><td class="res">bestanden</td><td class="num">10.2 s</td><td><ul class="checks"><li>Edit mit file = mass.scad, Hauptdatei unverändert</li><li>Hülle = neuer Wert</li><li>Strg+Z in mass.scad → breite = 40</li><li>Radiusgriff in lib/teile.scad schreibt in lib/teile.scad</li></ul></td></tr>
-<tr class="ok"><td>P06</td><td>Hover und Klick über Dateigrenzen, Doppelklick öffnet das Modul der Bibliothek</td><td class="res">bestanden</td><td class="num">3.6 s</td><td><ul class="checks"><li>Hover → status-hover-file mit Datei und Zeile</li><li>Klick → gehaeuse.scad in der Zeile der Fläche</li><li>Doppelklick → lib/teile.scad Zeile 15, Kontext gehaeuse</li></ul></td></tr>
-<tr class="ok"><td>P07</td><td>Bauteilliste: Sichtbarkeit und Export pro Bauteil (STL, 3MF, STEP, ZIP)</td><td class="res">bestanden</td><td class="num">3.4 s</td><td><ul class="checks"><li>Haken aus → Plan ohne Basis, nur gehaeuse</li><li>deckel.stl gültig, min y = 50</li><li>ZIP: gehaeuse.stl, deckel.stl</li><li>3MF: 2 Objekte mit Namen</li><li>deckel.step: ein Körper, Produkt deckel</li><li>ZIP (STEP): gehaeuse.step, deckel.step</li><li>Export STEP des ganzen Modells</li></ul></td></tr>
-<tr class="ok"><td>P08</td><td>k[i]: Anker der Instanzen in der Schleife sichtbar, Snap schreibt k[2].oben</td><td class="res">bestanden</td><td class="num">9.7 s</td><td><ul class="checks"><li>Bauteile k[0] … k[3]</li><li>4 Anker mit Text k[i].oben</li><li>Snap-Text k[2].oben während des Ziehens</li><li>Text translate(k[2].oben) sphere(2);</li></ul></td></tr>
-<tr class="ok"><td>P09</td><td>Fehler in eingebundenen Dateien: fehlende Datei an der Zeile, Syntaxfehler in der Bibliothek</td><td class="res">bestanden</td><td class="num">2.2 s</td><td><ul class="checks"><li>„Datei fehlt.scad nicht gefunden“ in main.scad Zeile 2</li><li>Syntaxfehler mit file = lib.scad</li><li>Tabs mit Fehlerpunkt</li></ul></td></tr>
+<tr><th>ID</th><th>Scenario</th><th>Result</th><th>Duration</th><th>Checked</th></tr>
+<tr class="ok"><td>P01</td><td>Open example project: files as tabs, main file, parts</td><td class="res">passed</td><td class="num">2.3 s</td><td><ul class="checks"><li>tabs gehaeuse.scad (active, ★), konstanten.scad, lib/teile.scad</li><li>Scene.files: main, include, use; no errors or warnings</li><li>parts gehaeuse and deckel; bounding box of the lid from y = 50</li></ul></td></tr>
+<tr class="ok"><td>P02</td><td>Open folder (File System Access API), upload and download ZIP</td><td class="res">passed</td><td class="num">3.1 s</td><td><ul class="checks"><li>3 files, main file gehaeuse.scad, notizen.txt ignored</li><li>Ctrl+S writes 3 files (konstanten.scad with change)</li><li>ZIP with 3 entries; after upload the same files and parts</li></ul></td></tr>
+<tr class="ok"><td>P03</td><td>Switch files: tabs, context from the library, undo per file</td><td class="res">passed</td><td class="num">3.7 s</td><td><ul class="checks"><li>context gehaeuse from lib/teile.scad</li><li>change is kept when switching</li><li>undo per file</li></ul></td></tr>
+<tr class="ok"><td>P04</td><td>Ctrl+click on an include/use path opens the file</td><td class="res">passed</td><td class="num">3.1 s</td><td><ul class="checks"><li>Ctrl+click on &lt;konstanten.scad&gt; → konstanten.scad active</li><li>Ctrl+click on &lt;lib/teile.scad&gt; → lib/teile.scad active</li><li>a plain click does not switch</li></ul></td></tr>
+<tr class="ok"><td>P05</td><td>Handle changes the included file (variable from include, literal in the library)</td><td class="res">passed</td><td class="num">10.2 s</td><td><ul class="checks"><li>edit with file = mass.scad, main file unchanged</li><li>bounding box = new value</li><li>Ctrl+Z in mass.scad → breite = 40</li><li>radius handle in lib/teile.scad writes to lib/teile.scad</li></ul></td></tr>
+<tr class="ok"><td>P06</td><td>Hover and click across file boundaries, double-click opens the library module</td><td class="res">passed</td><td class="num">3.6 s</td><td><ul class="checks"><li>hover → status-hover-file with file and line</li><li>click → gehaeuse.scad at the line of the face</li><li>double-click → lib/teile.scad line 15, context gehaeuse</li></ul></td></tr>
+<tr class="ok"><td>P07</td><td>Parts list: visibility and export per part (STL, 3MF, STEP, ZIP)</td><td class="res">passed</td><td class="num">3.4 s</td><td><ul class="checks"><li>checkbox off → plan without base, only gehaeuse</li><li>deckel.stl valid, min y = 50</li><li>ZIP: gehaeuse.stl, deckel.stl</li><li>3MF: 2 objects with names</li><li>deckel.step: one body, product deckel</li><li>ZIP (STEP): gehaeuse.step, deckel.step</li><li>STEP export of the whole model</li></ul></td></tr>
+<tr class="ok"><td>P08</td><td>k[i]: anchors of the instances in the loop visible, snapping writes k[2].oben</td><td class="res">passed</td><td class="num">9.7 s</td><td><ul class="checks"><li>parts k[0] … k[3]</li><li>4 anchors with text k[i].oben</li><li>snap text k[2].oben while dragging</li><li>text translate(k[2].oben) sphere(2);</li></ul></td></tr>
+<tr class="ok"><td>P09</td><td>Errors in included files: missing file at the line, syntax error in the library</td><td class="res">passed</td><td class="num">2.2 s</td><td><ul class="checks"><li>„Datei fehlt.scad nicht gefunden“ (file fehlt.scad not found) in main.scad line 2</li><li>syntax error with file = lib.scad</li><li>tabs with an error dot</li></ul></td></tr>
 </table>
-<p class="small">Regression im selben Lauf (Phase A–C: ui.spec.ts, ui-b.spec.ts, ui-c.spec.ts): 56 / 56 bestanden.</p>
+<p class="small">Regression in the same run (phase A–C: ui.spec.ts, ui-b.spec.ts, ui-c.spec.ts): 56 / 56 passed.</p>
 
-<h2>5 Unit-, Rust- und CLI-Tests</h2>
-<table><tr><th>Vitest-Datei</th><th>bestanden</th><th>Fehlgeschlagen</th></tr><tr class="ok"><td>web/src/editor/decorations.test.ts</td><td class="num">7 / 7</td><td>–</td></tr>
+<h2>5 Unit, Rust and CLI tests</h2>
+<table><tr><th>Vitest file</th><th>passed</th><th>Failed</th></tr><tr class="ok"><td>web/src/editor/decorations.test.ts</td><td class="num">7 / 7</td><td>–</td></tr>
 <tr class="ok"><td>web/src/editor/editGroup.test.ts</td><td class="num">7 / 7</td><td>–</td></tr>
 <tr class="ok"><td>web/src/editor/lang.test.ts</td><td class="num">47 / 47</td><td>–</td></tr>
 <tr class="ok"><td>web/src/engine/transport.test.ts</td><td class="num">2 / 2</td><td>–</td></tr>
@@ -150,7 +150,7 @@ ECHO: &quot;inner&quot;, 7</pre></div></div></div>
 <tr class="ok"><td>web/src/logic/curves.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/display.test.ts</td><td class="num">23 / 23</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/drag.test.ts</td><td class="num">12 / 12</td><td>–</td></tr>
-<tr class="ok"><td>web/src/logic/files.test.ts <span class="tag">neu</span></td><td class="num">8 / 8</td><td>–</td></tr>
+<tr class="ok"><td>web/src/logic/files.test.ts <span class="tag">new</span></td><td class="num">8 / 8</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/format.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/grids.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/handles.test.ts</td><td class="num">12 / 12</td><td>–</td></tr>
@@ -158,9 +158,9 @@ ECHO: &quot;inner&quot;, 7</pre></div></div></div>
 <tr class="ok"><td>web/src/logic/positions.test.ts</td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/sceneIndex.test.ts</td><td class="num">9 / 9</td><td>–</td></tr>
 <tr class="ok"><td>web/src/logic/zones.test.ts</td><td class="num">4 / 4</td><td>–</td></tr>
-<tr class="ok"><td>web/src/files/zip.test.ts <span class="tag">neu</span></td><td class="num">4 / 4</td><td>–</td></tr></table>
-<table><tr><th>Rust-Testprogramm (cargo test --workspace)</th><th>bestanden</th><th>neue Tests</th></tr><tr class="ok"><td>tests/cli.rs</td><td class="num">9 / 9</td><td>–</td></tr>
-<tr class="ok"><td>tests/projects.rs <span class="tag">neu</span></td><td class="num">3 / 3</td><td><code>diagnostics_name_their_file_and_line</code>, <code>check_and_eval_read_included_and_used_files</code>, <code>export_single_parts_and_all_parts</code></td></tr>
+<tr class="ok"><td>web/src/files/zip.test.ts <span class="tag">new</span></td><td class="num">4 / 4</td><td>–</td></tr></table>
+<table><tr><th>Rust test program (cargo test --workspace)</th><th>passed</th><th>new tests</th></tr><tr class="ok"><td>tests/cli.rs</td><td class="num">9 / 9</td><td>–</td></tr>
+<tr class="ok"><td>tests/projects.rs <span class="tag">new</span></td><td class="num">3 / 3</td><td><code>diagnostics_name_their_file_and_line</code>, <code>check_and_eval_read_included_and_used_files</code>, <code>export_single_parts_and_all_parts</code></td></tr>
 <tr class="ok"><td>src/lib.rs</td><td class="num">7 / 7</td><td>–</td></tr>
 <tr class="ok"><td>tests/draft.rs</td><td class="num">3 / 3</td><td>–</td></tr>
 <tr class="ok"><td>tests/engine.rs</td><td class="num">25 / 25</td><td>–</td></tr>
@@ -171,12 +171,12 @@ ECHO: &quot;inner&quot;, 7</pre></div></div></div>
 <tr class="ok"><td>tests/limits.rs</td><td class="num">8 / 8</td><td>–</td></tr>
 <tr class="ok"><td>tests/openscad_compat.rs</td><td class="num">1 / 1</td><td>–</td></tr>
 <tr class="ok"><td>tests/openscad_deviations.rs</td><td class="num">10 / 10</td><td>–</td></tr>
-<tr class="ok"><td>tests/project.rs <span class="tag">neu</span></td><td class="num">16 / 16</td><td><code>include_assignments_follow_textual_order</code>, <code>drag_writes_into_the_included_file</code>, <code>diamond_include_loads_the_file_twice</code>, <code>diagnostics_of_library_code_know_their_file</code>, <code>include_cycle_is_an_error</code>, <code>missing_file_is_an_error_at_the_line</code>, <code>include_inserts_definitions_variables_and_geometry</code>, <code>module_of_a_used_library_as_context</code>, <code>indexed_named_instance_errors</code>, <code>own_definitions_win_and_includes_bring_their_uses</code>, <code>paths_are_relative_to_the_including_file</code>, <code>indexed_named_instances_in_loops</code>, <code>single_file_eval_reports_includes_as_missing</code>, <code>parts_are_top_level_named_instances</code>, <code>use_imports_modules_and_functions_only</code>, <code>use_without_geometry_and_used_once</code></td></tr>
-<tr class="ok"><td>tests/project_openscad.rs <span class="tag">neu</span></td><td class="num">2 / 2</td><td><code>projects_match_openscad_reference</code>, <code>projects_match_openscad_live</code></td></tr>
+<tr class="ok"><td>tests/project.rs <span class="tag">new</span></td><td class="num">16 / 16</td><td><code>include_assignments_follow_textual_order</code>, <code>drag_writes_into_the_included_file</code>, <code>diamond_include_loads_the_file_twice</code>, <code>diagnostics_of_library_code_know_their_file</code>, <code>include_cycle_is_an_error</code>, <code>missing_file_is_an_error_at_the_line</code>, <code>include_inserts_definitions_variables_and_geometry</code>, <code>module_of_a_used_library_as_context</code>, <code>indexed_named_instance_errors</code>, <code>own_definitions_win_and_includes_bring_their_uses</code>, <code>paths_are_relative_to_the_including_file</code>, <code>indexed_named_instances_in_loops</code>, <code>single_file_eval_reports_includes_as_missing</code>, <code>parts_are_top_level_named_instances</code>, <code>use_imports_modules_and_functions_only</code>, <code>use_without_geometry_and_used_once</code></td></tr>
+<tr class="ok"><td>tests/project_openscad.rs <span class="tag">new</span></td><td class="num">2 / 2</td><td><code>projects_match_openscad_reference</code>, <code>projects_match_openscad_live</code></td></tr>
 <tr class="ok"><td>tests/tree.rs</td><td class="num">24 / 24</td><td>–</td></tr>
 <tr class="ok"><td>src/lib.rs</td><td class="num">5 / 5</td><td>–</td></tr>
 <tr class="ok"><td>tests/render.rs</td><td class="num">4 / 4</td><td>–</td></tr>
-<tr class="ok"><td>tests/project.rs <span class="tag">neu</span></td><td class="num">5 / 5</td><td><code>missing_files_and_syntax_errors_of_other_files</code>, <code>files_ranges_and_parts</code>, <code>set_default_writes_into_the_library</code>, <code>drag_edit_targets_the_included_file</code>, <code>export_parts</code></td></tr>
+<tr class="ok"><td>tests/project.rs <span class="tag">new</span></td><td class="num">5 / 5</td><td><code>missing_files_and_syntax_errors_of_other_files</code>, <code>files_ranges_and_parts</code>, <code>set_default_writes_into_the_library</code>, <code>drag_edit_targets_the_included_file</code>, <code>export_parts</code></td></tr>
 <tr class="ok"><td>tests/protocol_ts.rs</td><td class="num">1 / 1</td><td>–</td></tr>
 <tr class="ok"><td>tests/session.rs</td><td class="num">8 / 8</td><td>–</td></tr>
 <tr class="ok"><td>tests/watchdog.rs</td><td class="num">2 / 2</td><td>–</td></tr>
@@ -191,43 +191,43 @@ ECHO: &quot;inner&quot;, 7</pre></div></div></div>
 <tr class="ok"><td>tests/handles.rs</td><td class="num">1 / 1</td><td>–</td></tr>
 <tr class="ok"><td>tests/kernel.rs</td><td class="num">33 / 33</td><td>–</td></tr>
 <tr class="ok"><td>tests/coverage.rs</td><td class="num">1 / 1</td><td>–</td></tr></table>
-<p class="small">Neu in Rust: Projekte (Resolver, include/use, Zyklus, fehlende Datei, use ohne Geometrie, Rückschreiben in eingebundene Datei, Kontextmodul aus einer Bibliothek, Bauteile, <code>k[i]</code> mit Fehlerfällen), OpenSCAD-Vergleich, Session (SetFiles/SetFile, Datei in Bereichen und Edits, Bauteil-Export), CLI (<code>check</code>/<code>eval</code> mit Dateisystem, Diagnosen mit Pfad, <code>export --part</code>, <code>--all-parts</code>). OpenSCAD-Vergleich der Einzeldateien (compare.py): <code>33/33 files match</code>. STEP-Prüfung mit OpenCASCADE über alle Beispiele (<code>tests/step/verify.py</code>, venv-step): <code>46/46 passed</code>. STEP pro Bauteil, als ZIP und mit <code>--all-parts --format step</code>: Rust-Tests <code>cad-session/tests/project.rs</code> (<code>export_parts</code>) und <code>cad-cli/tests/projects.rs</code>; im Browser P07.</p>
+<p class="small">New in Rust: projects (resolver, include/use, cycle, missing file, use without geometry, writing back into an included file, context module from a library, parts, <code>k[i]</code> with error cases), OpenSCAD comparison, session (SetFiles/SetFile, file in ranges and edits, part export), CLI (<code>check</code>/<code>eval</code> with file system, diagnostics with path, <code>export --part</code>, <code>--all-parts</code>). OpenSCAD comparison of the single files (compare.py): <code>33/33 files match</code>. STEP check with OpenCASCADE over all examples (<code>tests/step/verify.py</code>, venv-step): <code>46/46 passed</code>. STEP per part, as ZIP and with <code>--all-parts --format step</code>: Rust tests <code>cad-session/tests/project.rs</code> (<code>export_parts</code>) and <code>cad-cli/tests/projects.rs</code>; in the browser P07.</p>
 
 
-<h2>6 Abweichungen und Grenzen</h2>
+<h2>6 Deviations and limitations</h2>
 <ul>
-  <li><b>Suchpfad:</b> nur relativ zur einbindenden Datei oder absolut; kein <code>OPENSCADPATH</code>/Bibliotheksordner. Fehlende Dateien und include-Zyklen sind Fehler (OpenSCAD: Warnung, Datei wird übergangen).</li>
-  <li><b>use:</b> Variablen einer Bibliothek werden einmal je Auswertung (lazy) ausgewertet, nicht bei jedem Aufruf neu wie in OpenSCAD; <code>$</code>-Variablen auf oberster Ebene einer Bibliothek gelten in ihren Modulen. Die Geometrie benutzter Dateien wird nicht erzeugt.</li>
-  <li><b>Doppelt eingebundene Datei</b> (über zwei include-Wege) wird zweimal geladen (zwei Datei-IDs, gleicher Pfad); höchstens 255 Dateien, je Datei höchstens 16 MiB.</li>
-  <li><b>Snap-Sichtbarkeit</b> eines in einer eingebundenen Datei benannten Rasters/einer Instanz reicht bis zum Ende dieser Datei (nicht in die einbindende Datei hinein); das Auswerten von <code>k.anker</code> ist davon nicht betroffen.</li>
-  <li><b>Bauteile</b> nur im Dateikontext; ein ausgeblendetes Bauteil innerhalb einer Booleschen Operation lässt sich nicht getrennt ausblenden (der Teilbaum bleibt ganz). Baugruppen sind offen.</li>
-  <li><b>STEP mehrerer Bauteile in einer Datei:</b> ein Produkt (Name: Bauteilnamen mit „ + “) mit allen Körpern, keine Baugruppenstruktur je Bauteil; ein Bauteil, dessen Modul eine implizite Vereinigung ist, besteht aus mehreren Körpern (z. B. Gehäuse mit Schraubdomen).</li>
-  <li><b>solidcore</b> ist jetzt opt-in (<code>--features solidcore</code>); <code>cad diff-kernels</code> ohne das Feature meldet „mit <code>--features solidcore</code> bauen“ (Exit 2).</li>
+  <li><b>Search path:</b> only relative to the including file or absolute; no <code>OPENSCADPATH</code>/library folder. Missing files and include cycles are errors (OpenSCAD: warning, the file is skipped).</li>
+  <li><b>use:</b> variables of a library are evaluated once per evaluation (lazily), not anew on every call as in OpenSCAD; <code>$</code> variables at the top level of a library apply in its modules. The geometry of used files is not generated.</li>
+  <li><b>A file included twice</b> (via two include paths) is loaded twice (two file IDs, same path); at most 255 files, at most 16 MiB per file.</li>
+  <li><b>Snap visibility</b> of a grid/instance named in an included file extends to the end of that file (not into the including file); evaluating <code>k.anker</code> is not affected by this.</li>
+  <li><b>Parts</b> only in file context; a hidden part inside a boolean operation cannot be hidden separately (the subtree stays whole). Assemblies are open.</li>
+  <li><b>STEP of several parts in one file:</b> one product (name: part names joined with " + ") with all bodies, no assembly structure per part; a part whose module is an implicit union consists of several bodies (e.g. an enclosure with screw bosses).</li>
+  <li><b>solidcore</b> is now opt-in (<code>--features solidcore</code>); <code>cad diff-kernels</code> without the feature reports "build with <code>--features solidcore</code>" (exit 2).</li>
 
-  <li><b>Modulnamen</b> gleichen Namens in Hauptdatei und Bibliothek: der Kontext (Parameterleiste) nimmt das Modul der Hauptdatei.</li>
+  <li><b>Module names</b> that are the same in the main file and a library: the context (parameter bar) takes the module of the main file.</li>
 </ul>
 
-<h2>7 Screenshots und Codeausschnitte</h2>
-<p class="small">Größte Bilddatei: 155 KiB (JPEG, Qualität 80).</p>
+<h2>7 Screenshots and code excerpts</h2>
+<p class="small">Largest image file: 155 KiB (JPEG, quality 80).</p>
 <section class="sc">
-<h3>P01 Beispielprojekt öffnen</h3>
-<div class="shot"><div class="lbl">projekt-gehaeuse/: drei Dateien als Tabs, Hauptdatei ★, Bauteilleiste</div><img src="img/p01-projekt.jpg" alt="Beispielprojekt öffnen: projekt-gehaeuse/: drei Dateien als Tabs, Hauptdatei ★, Bauteilleiste"></div>
-<div class="lbl">Code</div><pre>// Zweck: Projekt aus mehreren Dateien – Maße per include (konstanten.scad), Bauteile aus
-// einer Bibliothek per use (lib/teile.scad), zwei Bauteile als benannte Instanzen.
+<h3>P01 Open example project</h3>
+<div class="shot"><div class="lbl">projekt-gehaeuse/: three files as tabs, main file ★, parts bar</div><img src="img/p01-projekt.jpg" alt="Open example project: projekt-gehaeuse/, three files as tabs, main file ★, parts bar"></div>
+<div class="lbl">Code</div><pre>// Purpose: project made of several files – dimensions via include (konstanten.scad), parts from
+// a library via use (lib/teile.scad), two parts as named instances.
 include &lt;konstanten.scad&gt;
 use &lt;lib/teile.scad&gt;
 
 gehaeuse: gehaeuse(w = breite, d = tiefe, h = hoehe, t = wand);
-translate([0, tiefe + abstand, 0]) deckel: deckel(w = breite, d = tiefe, t = wand);</pre><p class="cap">Das Beispielmenü öffnet examples/projekt-gehaeuse/ als Projekt: gehaeuse.scad (Hauptdatei, ★), konstanten.scad (per include) und lib/teile.scad (per use). Die Szene kennt die drei Dateien mit ihrer Rolle; die zwei benannten Instanzen auf oberster Ebene sind die Bauteile.</p>
+translate([0, tiefe + abstand, 0]) deckel: deckel(w = breite, d = tiefe, t = wand);</pre><p class="cap">The examples menu opens examples/projekt-gehaeuse/ as a project: gehaeuse.scad (main file, ★), konstanten.scad (via include) and lib/teile.scad (via use). The scene knows the three files with their role; the two named instances at the top level are the parts.</p>
 </section>
 <section class="sc">
-<h3>P02 Ordner öffnen, speichern, ZIP</h3>
-<div class="shot"><div class="lbl">Ordner „mein-projekt“ geöffnet, konstanten.scad geändert und gespeichert</div><img src="img/p02-ordner.jpg" alt="Ordner öffnen, speichern, ZIP: Ordner „mein-projekt“ geöffnet, konstanten.scad geändert und gespeichert"></div>
-<p class="cap">„Ordner…“ liest alle .scad-Dateien eines Ordners (File System Access API; im Test ein nachgebildeter Ordner mit einer .txt-Datei, die ignoriert wird) und wählt die Hauptdatei: die Datei der obersten Ebene, die keine andere einbindet. Strg+S schreibt alle Dateien zurück in den Ordner. „ZIP ↓“ lädt das Projekt als ZIP herunter, „ZIP laden…“ lädt dieses ZIP wieder hoch (gemeinsamer Ordner wird entfernt, Hauptdatei wieder gehaeuse.scad).</p>
+<h3>P02 Open folder, save, ZIP</h3>
+<div class="shot"><div class="lbl">Folder "mein-projekt" opened, konstanten.scad changed and saved</div><img src="img/p02-ordner.jpg" alt="Open folder, save, ZIP: folder mein-projekt opened, konstanten.scad changed and saved"></div>
+<p class="cap">"Folder…" (German UI: „Ordner…“) reads all .scad files of a folder (File System Access API; in the test a simulated folder with a .txt file that is ignored) and selects the main file: the top-level file that no other file includes. Ctrl+S writes all files back to the folder. "ZIP ↓" downloads the project as a ZIP, "Load ZIP…" (German UI: „ZIP laden…“) uploads this ZIP again (the common folder is removed, main file again gehaeuse.scad).</p>
 </section>
 <section class="sc">
-<h3>P03 Datei wechseln</h3>
-<div class="shot"><div class="lbl">lib/teile.scad im Editor, Cursor im Modul gehaeuse (Kontext)</div><img src="img/p03-bibliothek.jpg" alt="Datei wechseln: lib/teile.scad im Editor, Cursor im Modul gehaeuse (Kontext)"></div>
+<h3>P03 Switch files</h3>
+<div class="shot"><div class="lbl">lib/teile.scad in the editor, cursor in module gehaeuse (context)</div><img src="img/p03-bibliothek.jpg" alt="Switch files: lib/teile.scad in the editor, cursor in module gehaeuse (context)"></div>
 <div class="lbl">Code</div><pre>module gehaeuse(w = 60, d = 40, h = 25, t = 2) {
     grid g {
         x: links = 0, innen_l = t, innen_r = w - t, rechts = w;
@@ -237,52 +237,52 @@ translate([0, tiefe + abstand, 0]) deckel: deckel(w = breite, d = tiefe, t = wan
     difference() {
         box(g[links, vorne, boden], g[rechts, hinten, oben]);
         box(g[innen_l, innen_v, innen_b], g[innen_r, innen_h, oben]);
-    }</pre><p class="cap">Ein Klick auf den Tab lib/teile.scad zeigt die Bibliothek; der Cursor im Modul gehaeuse macht es zum Kontext (Pfadleiste „Datei › gehaeuse“), Raster und Griffe gehören zur Bibliothek. Jede Datei behält ihren Text und ihre eigene Undo-Historie: Strg+Z in der Hauptdatei ändert die Bibliothek nicht, Strg+Z in der Bibliothek nimmt dort die Änderung zurück.</p>
+    }</pre><p class="cap">A click on the tab lib/teile.scad shows the library; the cursor in module gehaeuse makes it the context (breadcrumb "File › gehaeuse"), grid and handles belong to the library. Each file keeps its text and its own undo history: Ctrl+Z in the main file does not change the library, Ctrl+Z in the library undoes the change there.</p>
 </section>
 <section class="sc">
-<h3>P04 Strg+Klick auf include</h3>
-<div class="shot"><div class="lbl">Nach Strg+Klick auf &lt;konstanten.scad&gt;: die Datei ist offen, Werte am Zeilenende</div><img src="img/p04-include.jpg" alt="Strg+Klick auf include: Nach Strg+Klick auf &lt;konstanten.scad&gt;: die Datei ist offen, Werte am Zeilenende"></div>
+<h3>P04 Ctrl+click on include</h3>
+<div class="shot"><div class="lbl">After Ctrl+click on &lt;konstanten.scad&gt;: the file is open, values at the end of the line</div><img src="img/p04-include.jpg" alt="Ctrl+click on include: after Ctrl+click on &lt;konstanten.scad&gt;, the file is open, values at the end of the line"></div>
 <div class="lbl">Code</div><pre>include &lt;konstanten.scad&gt;
-use &lt;lib/teile.scad&gt;</pre><p class="cap">Der Pfad in include &lt;…&gt; und use &lt;…&gt; ist unterstrichen (Titel „Strg+Klick: Datei öffnen“). Strg+Klick öffnet die Datei relativ zur einbindenden Datei; ein einfacher Klick setzt nur den Cursor. In konstanten.scad erscheinen die Werte der Variablen am Zeilenende, weil sie per include in der Dateiauswertung gelten.</p>
+use &lt;lib/teile.scad&gt;</pre><p class="cap">The path in include &lt;…&gt; and use &lt;…&gt; is underlined (tooltip "Ctrl+click: open file", German UI: „Strg+Klick: Datei öffnen“). Ctrl+click opens the file relative to the including file; a plain click only sets the cursor. In konstanten.scad the values of the variables appear at the end of the line, because they apply in the file evaluation via include.</p>
 </section>
 <section class="sc">
-<h3>P05 Griff ändert die eingebundene Datei</h3>
-<div class="shot"><div class="lbl">main.scad, Cursor auf cube([breite, 10, 2]): Eckgriff</div><img src="img/p05-vorher.jpg" alt="Griff ändert die eingebundene Datei: main.scad, Cursor auf cube([breite, 10, 2]): Eckgriff"></div><div class="shot"><div class="lbl">Nach dem Ziehen: mass.scad „breite = 44;“, main.scad unverändert</div><img src="img/p05-nachher.jpg" alt="Griff ändert die eingebundene Datei: Nach dem Ziehen: mass.scad „breite = 44;“, main.scad unverändert"></div>
+<h3>P05 Handle changes the included file</h3>
+<div class="shot"><div class="lbl">main.scad, cursor on cube([breite, 10, 2]): corner handle</div><img src="img/p05-vorher.jpg" alt="Handle changes the included file: main.scad, cursor on cube([breite, 10, 2]), corner handle"></div><div class="shot"><div class="lbl">After dragging: mass.scad "breite = 44;", main.scad unchanged</div><img src="img/p05-nachher.jpg" alt="Handle changes the included file: after dragging, mass.scad breite = 44;, main.scad unchanged"></div>
 <div class="lbl">Code</div><pre>// main.scad
 include &lt;mass.scad&gt;
 cube([breite, 10, 2]);
 // mass.scad
-// Maße
+// dimensions
 breite = 40;
-</pre><p class="cap">Der Eckgriff des Quaders geht über die Variable breite auf das Literal in mass.scad. Ziehen schrieb „breite = 44;“ in mass.scad (nicht in den Editor der Hauptdatei); die Szene folgte. Das Ziehen ist ein Undo-Schritt in mass.scad. Ebenso ändert der Radiusgriff im Modul gehaeuse von lib/teile.scad das Literal r = 2 in Zeile 28 der Bibliothek, gehaeuse.scad bleibt gleich.</p>
+</pre><p class="cap">The corner handle of the cuboid goes through the variable breite to the literal in mass.scad. Dragging wrote "breite = 44;" into mass.scad (not into the editor of the main file); the scene followed. The drag is one undo step in mass.scad. Likewise, the radius handle in module gehaeuse of lib/teile.scad changes the literal r = 2 in line 28 of the library, gehaeuse.scad stays the same.</p>
 </section>
 <section class="sc">
-<h3>P06 Hover und Klick über Dateigrenzen</h3>
-<div class="shot"><div class="lbl">konstanten.scad offen, Maus über dem Modell: „Fläche aus gehaeuse.scad, Zeile …“</div><img src="img/p06-hover.jpg" alt="Hover und Klick über Dateigrenzen: konstanten.scad offen, Maus über dem Modell: „Fläche aus gehaeuse.scad, Zeile …“"></div><div class="shot"><div class="lbl">Doppelklick auf das Gehäuse: lib/teile.scad, Modul gehaeuse</div><img src="img/p06-doppelklick.jpg" alt="Hover und Klick über Dateigrenzen: Doppelklick auf das Gehäuse: lib/teile.scad, Modul gehaeuse"></div>
-<p class="cap">Liegt die Zeile einer Fläche in einer anderen Datei als der im Editor, nennt die Statuszeile Datei und Zeile; ein Klick öffnet die Datei an dieser Stelle. Der Doppelklick auf eine Instanz eines Moduls aus einer anderen Datei (gehaeuse aus lib/teile.scad) öffnet diese Datei in der Moduldefinition, der Kontext wird das Modul.</p>
+<h3>P06 Hover and click across file boundaries</h3>
+<div class="shot"><div class="lbl">konstanten.scad open, mouse over the model: "face from gehaeuse.scad, line …"</div><img src="img/p06-hover.jpg" alt="Hover and click across file boundaries: konstanten.scad open, mouse over the model, face from gehaeuse.scad, line …"></div><div class="shot"><div class="lbl">Double-click on the enclosure: lib/teile.scad, module gehaeuse</div><img src="img/p06-doppelklick.jpg" alt="Hover and click across file boundaries: double-click on the enclosure, lib/teile.scad, module gehaeuse"></div>
+<p class="cap">If the line of a face lies in a different file than the one in the editor, the status bar names file and line (German UI: „Fläche aus gehaeuse.scad, Zeile …“); a click opens the file at that location. A double-click on an instance of a module from another file (gehaeuse from lib/teile.scad) opens that file at the module definition, and the module becomes the context.</p>
 </section>
 <section class="sc">
-<h3>P07 Bauteilliste und Export pro Bauteil</h3>
-<div class="shot"><div class="lbl">Deckel ausgeblendet: nur das Gehäuse wird gezeichnet</div><img src="img/p07-ausgeblendet.jpg" alt="Bauteilliste und Export pro Bauteil: Deckel ausgeblendet: nur das Gehäuse wird gezeichnet"></div><div class="shot"><div class="lbl">Bauteilleiste mit Volumen und Export-Knöpfen</div><img src="img/p07-bauteile.jpg" alt="Bauteilliste und Export pro Bauteil: Bauteilleiste mit Volumen und Export-Knöpfen"></div>
-<p class="cap">Die Bauteilleiste listet die Bauteile mit Volumen (Hülle als Tooltip). Ohne Haken wird das Bauteil nicht gezeichnet (das Modell wird aus den übrigen Teilbäumen zusammengesetzt). Export: deckel.stl (28 Dreiecke, Modellkoordinaten), alle Bauteile als ZIP mit einer STL je Bauteil, ein 3MF mit einem Objekt je Bauteil. STEP (exakte B-Rep, AP242, derselbe Writer wie für das ganze Modell): deckel.step 11900 Bytes (1 Körper), Modell gehaeuse.step 38268 Bytes (6 Körper); alle Bauteile als ZIP mit einer STEP-Datei je Bauteil.</p>
+<h3>P07 Parts list and export per part</h3>
+<div class="shot"><div class="lbl">Lid hidden: only the enclosure is drawn</div><img src="img/p07-ausgeblendet.jpg" alt="Parts list and export per part: lid hidden, only the enclosure is drawn"></div><div class="shot"><div class="lbl">Parts bar with volume and export buttons</div><img src="img/p07-bauteile.jpg" alt="Parts list and export per part: parts bar with volume and export buttons"></div>
+<p class="cap">The parts bar lists the parts with their volume (bounding box as tooltip). Without the checkbox, the part is not drawn (the model is assembled from the remaining subtrees). Export: deckel.stl (28 triangles, model coordinates), all parts as a ZIP with one STL per part, one 3MF with one object per part. STEP (exact B-rep, AP242, the same writer as for the whole model): deckel.step 11900 bytes (1 body), model gehaeuse.step 38268 bytes (6 bodies); all parts as a ZIP with one STEP file per part.</p>
 </section>
 <section class="sc">
-<h3>P08 Benannte Instanzen in der Schleife</h3>
-<div class="shot"><div class="lbl">Cursor auf translate: vier Anker k[0].oben … k[3].oben als Rauten</div><img src="img/p08-anker.jpg" alt="Benannte Instanzen in der Schleife: Cursor auf translate: vier Anker k[0].oben … k[3].oben als Rauten"></div><div class="shot"><div class="lbl">Griff auf k[2].oben losgelassen</div><img src="img/p08-snap.jpg" alt="Benannte Instanzen in der Schleife: Griff auf k[2].oben losgelassen"></div>
+<h3>P08 Named instances in a loop</h3>
+<div class="shot"><div class="lbl">Cursor on translate: four anchors k[0].oben … k[3].oben as diamonds</div><img src="img/p08-anker.jpg" alt="Named instances in a loop: cursor on translate, four anchors k[0].oben … k[3].oben as diamonds"></div><div class="shot"><div class="lbl">Handle released on k[2].oben</div><img src="img/p08-snap.jpg" alt="Named instances in a loop: handle released on k[2].oben"></div>
 <div class="lbl">Code</div><pre>module halter(h = 8) {
     cylinder(h = h, r = 2);
     anchor oben = [0, 0, h], dir = [0, 0, 1];
 }
 for (i = [0:3]) translate([i * 15, 0, 0]) k[i]: halter(h = 6 + 2 * i);
-translate(k[2].oben) sphere(2);</pre><p class="cap">for (i = [0:3]) … k[i]: halter(…) benennt vier Instanzen; ihre Anker sind wie bei benannten Instanzen sichtbar (Rauten) und Snap-Ziele, auf oberster Ebene sind k[0] … k[3] Bauteile. Der translate-Griff auf k[2].oben losgelassen schreibt „translate(k[2].oben)“; die Kugel sitzt bei [30, 0, 10].</p>
+translate(k[2].oben) sphere(2);</pre><p class="cap">for (i = [0:3]) … k[i]: halter(…) names four instances; their anchors are visible as for named instances (diamonds) and are snap targets, at the top level k[0] … k[3] are parts. Releasing the translate handle on k[2].oben writes "translate(k[2].oben)"; the sphere sits at [30, 0, 10].</p>
 </section>
 <section class="sc">
-<h3>P09 Fehler über Dateigrenzen</h3>
-<div class="shot"><div class="lbl">Syntaxfehler in lib.scad: Zeile rot, Tab markiert; fehlende Datei in main.scad</div><img src="img/p09-fehler.jpg" alt="Fehler über Dateigrenzen: Syntaxfehler in lib.scad: Zeile rot, Tab markiert; fehlende Datei in main.scad"></div>
+<h3>P09 Errors across file boundaries</h3>
+<div class="shot"><div class="lbl">Syntax error in lib.scad: line red, tab marked; missing file in main.scad</div><img src="img/p09-fehler.jpg" alt="Errors across file boundaries: syntax error in lib.scad, line red, tab marked; missing file in main.scad"></div>
 <div class="lbl">Code</div><pre>// main.scad
 use &lt;lib.scad&gt;
 include &lt;fehlt.scad&gt;
-teil();</pre><p class="cap">Eine fehlende Datei ist ein Fehler an der include-Zeile der einbindenden Datei. Diagnosen tragen ihre Datei: der Syntaxfehler in lib.scad erscheint dort (Zeile rot) und markiert den Tab; die Ansicht behält den letzten gültigen Stand.</p>
+teil();</pre><p class="cap">A missing file is an error at the include line of the including file. Diagnostics carry their file: the syntax error in lib.scad appears there (line red) and marks the tab; the view keeps the last valid state.</p>
 </section>
 </main>
 </body>
