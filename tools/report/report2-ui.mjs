@@ -77,7 +77,7 @@ const vt = readJson(join(input, "vitest.json"));
 const scenarios = readJson(join(input, "scenarios.json"), []);
 const metrics = readJson(join(input, "metrics.json"), {});
 if (!pw || !hasPhaseA(pw)) {
-  console.error(`fehlt: Ergebnisse von web/e2e/ui.spec.ts in ${join(input, "playwright.json")} (cd web && pnpm e2e)`);
+  console.error(`missing: results of web/e2e/ui.spec.ts in ${join(input, "playwright.json")} (cd web && pnpm e2e)`);
   process.exit(1);
 }
 
@@ -90,7 +90,7 @@ function flatten(suite, acc = []) {
     for (const t of spec.tests ?? []) {
       const r = t.results?.at(-1);
       const id = spec.title.split(" ")[0];
-      acc.push({ id, title: spec.title.slice(id.length + 1), status: r?.status ?? t.status ?? "unbekannt", ms: r?.duration ?? 0, error: r?.error?.message ?? null });
+      acc.push({ id, title: spec.title.slice(id.length + 1), status: r?.status ?? t.status ?? "unknown", ms: r?.duration ?? 0, error: r?.error?.message ?? null });
     }
   }
   return acc;
@@ -146,24 +146,24 @@ const kib = (b) => (b === null ? "–" : `${(b / 1024).toFixed(0)} KiB`);
 const mib = (b) => (b === null ? "–" : `${(b / 1024 / 1024).toFixed(2)} MiB`);
 
 const env = [
-  ["Betriebssystem", `${os.type()} ${os.release()} (${os.arch()})`],
-  ["CPU", `${os.cpus()[0]?.model ?? "–"} · ${os.cpus().length} Kerne`],
+  ["Operating system", `${os.type()} ${os.release()} (${os.arch()})`],
+  ["CPU", `${os.cpus()[0]?.model ?? "–"} · ${os.cpus().length} cores`],
   ["Node.js", process.version],
   ["Browser", `Chromium ${chromiumVersion} (headless, Playwright ${pkgVersion("@playwright/test")})`],
-  ["Grafik", "WebGL über SwiftShader (Software-Rendering, keine GPU)"],
-  ["Fenster", "1440 × 900 px, Gerätepixelverhältnis 1"],
-  ["Build", `Vite ${pkgVersion("vite")} Produktions-Build, Vorschau-Server (vite preview)`],
-  ["Bibliotheken", `React ${pkgVersion("react")}, three.js ${pkgVersion("three")}, CodeMirror ${pkgVersion("@codemirror/view")}, Zustand ${pkgVersion("zustand")}, Vitest ${pkgVersion("vitest")}`],
-  ["Engine", `cad_wasm_bg.wasm ${mib(asset(/^cad_wasm_bg-.*\.wasm$/))}, smlib.wasm ${mib(asset(/^smlib-.*\.wasm$/))} (je einmal im Build)`],
-  ["Quelltext", `Branch ${git("rev-parse", "--abbrev-ref", "HEAD")}, Commit ${git("rev-parse", "--short", "HEAD")}`],
+  ["Graphics", "WebGL via SwiftShader (software rendering, no GPU)"],
+  ["Window", "1440 × 900 px, device pixel ratio 1"],
+  ["Build", `Vite ${pkgVersion("vite")} production build, preview server (vite preview)`],
+  ["Libraries", `React ${pkgVersion("react")}, three.js ${pkgVersion("three")}, CodeMirror ${pkgVersion("@codemirror/view")}, Zustand ${pkgVersion("zustand")}, Vitest ${pkgVersion("vitest")}`],
+  ["Engine", `cad_wasm_bg.wasm ${mib(asset(/^cad_wasm_bg-.*\.wasm$/))}, smlib.wasm ${mib(asset(/^smlib-.*\.wasm$/))} (each once in the build)`],
+  ["Source", `Branch ${git("rev-parse", "--abbrev-ref", "HEAD")}, commit ${git("rev-parse", "--short", "HEAD")}`],
 ];
 
 // ---------------------------------------------------------------- html
 
-const date = new Date().toLocaleDateString("de-DE", { year: "numeric", month: "long", day: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const caption = (id) => scenarios.find((s) => s.id === id);
 
-const statusLabel = (s) => (s === "passed" ? "bestanden" : s === "skipped" ? "übersprungen" : "fehlgeschlagen");
+const statusLabel = (s) => (s === "passed" ? "passed" : s === "skipped" ? "skipped" : "failed");
 const scenarioRows = e2e
   .map((t) => {
     const c = caption(t.id);
@@ -177,26 +177,26 @@ const unitRows = unit
 
 const m = metrics;
 const metricRows = [
-  ["Ladezeit bis zur ersten Szene", fmtMs(m.firstSceneMs), "Navigation bis zum ersten Zeichnen der vollständigen Szene von gehaeuse.scad (Wasm laden, Auswertung, Tessellierung, Rendern)"],
-  ["Erste Auswertung", fmtMs(m.firstEvalMs), "SetSource bis vollständige Szene (kalter Cache)"],
-  ["Tastendruck → neue Szene (Median)", fmtMs(m.editToSceneMedianMs), `App-Messung: letzte Änderung bis zum Zeichnen der neuen Szene; Einzelwerte ${(m.editToSceneMs ?? []).map((v) => Math.round(v)).join(", ")} ms`],
-  ["Tastendruck → neue Szene, Testsicht (Median)", fmtMs(m.keyToSceneE2eMedianMs), "Playwright: Tastendruck bis die Szene im Testhaken sichtbar ist (inkl. Abfrageintervall 50 ms)"],
-  ["Auswertung (Median)", fmtMs(m.evalMsMedian), "SetSource bis vollständige Szene während der Änderungen (warmer Cache)"],
-  ["Bildrate beim Drehen", typeof m.orbitFps === "number" ? `${m.orbitFps.toFixed(0)} fps` : "–", "120 Bilder Kameradrehung um die z-Achse, je Bild ein vollständiges Rendern (SwiftShader)"],
-  ["Größte Bilddatei im Bericht", kib(maxImg), "JPEG, Qualität 82"],
+  ["Load time until first scene", fmtMs(m.firstSceneMs), "Navigation until the first draw of the complete scene of gehaeuse.scad (loading Wasm, evaluation, tessellation, rendering)"],
+  ["First evaluation", fmtMs(m.firstEvalMs), "SetSource until complete scene (cold cache)"],
+  ["Keystroke → new scene (median)", fmtMs(m.editToSceneMedianMs), `In-app measurement: last change until the new scene is drawn; individual values ${(m.editToSceneMs ?? []).map((v) => Math.round(v)).join(", ")} ms`],
+  ["Keystroke → new scene, test view (median)", fmtMs(m.keyToSceneE2eMedianMs), "Playwright: keystroke until the scene is visible in the test hook (incl. 50 ms polling interval)"],
+  ["Evaluation (median)", fmtMs(m.evalMsMedian), "SetSource until complete scene during the changes (warm cache)"],
+  ["Frame rate while rotating", typeof m.orbitFps === "number" ? `${m.orbitFps.toFixed(0)} fps` : "–", "120 frames of camera rotation around the z axis, one full render per frame (SwiftShader)"],
+  ["Largest image file in the report", kib(maxImg), "JPEG, quality 82"],
 ]
   .map(([a, b, c]) => `<tr><td>${esc(a)}</td><td class="num">${esc(b)}</td><td>${esc(c)}</td></tr>`)
   .join("\n");
 
 const figure = (s) => `<figure><img src="img/${esc(s.image)}.jpg" alt="${esc(s.title)}"><figcaption><b>${esc(s.id)} ${esc(s.title)}.</b> ${esc(s.caption)}</figcaption></figure>`;
 const extraCaptions = {
-  "s03a-cursor-deckel": "Cursor auf deckel() in Zeile 22: Modulaufruf voll, Rest gedimmt.",
-  "s07b-doppelklick": "Nach Doppelklick auf das Gehäuse: Cursor in module gehaeuse, Ansicht im Modulkontext.",
-  "s08b-datei": "Nach Klick auf „Datei“ in der Pfadleiste: Cursor auf k: gehaeuse(w = 60), ganze Datei.",
-  "s09b-root-modifier": "25_root_modifier.scad: nur der !-Teilbaum wird gezeigt, Hinweis in der Statuszeile.",
-  "s13a-raster-zeile": "Raster nur mit den Ebenen der Zeile 12 (box zwischen Rasterpunkten).",
-  "s13c-raster-hover": "Hover über g[loch[i], mitte, boden]: Ausdruck markiert, Rasterpunkt hervorgehoben (bei Schleifen der Punkt des ersten Durchlaufs).",
-  "s20b-profil": "27_spacers_2d.scad, Ansicht von oben: Cursor auf square([30, 10]) – 2D-Form als Umriss mit leichter Füllung, Rest gedimmt.",
+  "s03a-cursor-deckel": "Cursor on deckel() in line 22: module call full, rest dimmed.",
+  "s07b-doppelklick": "After a double-click on the enclosure: cursor in module gehaeuse, view in module context.",
+  "s08b-datei": "After a click on \"File\" in the breadcrumb bar: cursor on k: gehaeuse(w = 60), whole file.",
+  "s09b-root-modifier": "25_root_modifier.scad: only the ! subtree is shown, hint in the status bar.",
+  "s13a-raster-zeile": "Grid with only the planes of line 12 (box between grid points).",
+  "s13c-raster-hover": "Hover over g[loch[i], mitte, boden]: expression highlighted, grid point highlighted (in loops, the point of the first iteration).",
+  "s20b-profil": "27_spacers_2d.scad, top view: cursor on square([30, 10]) – 2D shape as outline with a light fill, rest dimmed.",
 };
 const extraFigure = (n) => `<figure><img src="img/${esc(n)}.jpg" alt="${esc(n)}"><figcaption>${esc(extraCaptions[n] ?? n)}</figcaption></figure>`;
 /** Main screenshot of each scenario followed by its further screenshots (same sNN prefix). */
@@ -209,10 +209,10 @@ const figures = images
   .join("\n");
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 2 – UI Phase A</title>
+<title>Test report 2 – UI phase A</title>
 <style>
   @page { size: A4; margin: 16mm 14mm 16mm 14mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -244,56 +244,56 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 2 – UI Phase A</h1>
-<div class="meta">Browser-UI des parametrischen CAD (TypeScript/React, CodeMirror 6, three.js) · ${esc(date)} · Commit ${esc(git("rev-parse", "--short", "HEAD"))}</div>
+<h1>Test report 2 – UI phase A</h1>
+<div class="meta">Browser UI of the parametric CAD (TypeScript/React, CodeMirror 6, three.js) · ${esc(date)} · Commit ${esc(git("rev-parse", "--short", "HEAD"))}</div>
 
 <div class="summary">
-  <div>End-to-End (Playwright)<b>${e2ePassed} / ${e2e.length} bestanden</b></div>
-  <div>Unit-Tests (Vitest)<b>${vt ? `${unitPassed} / ${unitTotal} bestanden` : "nicht gelaufen"}</b></div>
-  <div>Erste Szene<b>${fmtMs(m.firstSceneMs)}</b></div>
-  <div>Tastendruck → Szene<b>${fmtMs(m.editToSceneMedianMs)}</b></div>
+  <div>End-to-end (Playwright)<b>${e2ePassed} / ${e2e.length} passed</b></div>
+  <div>Unit tests (Vitest)<b>${vt ? `${unitPassed} / ${unitTotal} passed` : "not run"}</b></div>
+  <div>First scene<b>${fmtMs(m.firstSceneMs)}</b></div>
+  <div>Keystroke → scene<b>${fmtMs(m.editToSceneMedianMs)}</b></div>
 </div>
 
-<h2>1 Umfang</h2>
-<p>Geprüft wird die Browser-Oberfläche nach Phase A: links der Editor, rechts die 3D-Ansicht mit Pfadleiste, unten die Statuszeile. Die Engine (Rust, Wasm, SMLib-Kernel) läuft in einem Web Worker; die UI wertet nur die Szenenbeschreibung aus und lädt Meshes pro Knoten nach.</p>
+<h2>1 Scope</h2>
+<p>This report covers the browser UI after phase A: the editor on the left, the 3D view with breadcrumb bar on the right, the status bar at the bottom. The engine (Rust, Wasm, SMLib kernel) runs in a web worker; the UI only interprets the scene description and loads meshes per node on demand.</p>
 <ul>
-  <li><b>Editor:</b> Lezer-Grammatik (OpenSCAD mit <code>grid</code>, <code>anchor</code>, <code>k:</code>), Diagnosen (rot unterstrichen, Zeile rot bzw. gelb, Meldung am Zeilenende), Inline-Hinweise (Werte, „4 Kanten“), <code>*</code>-Zeilen ausgegraut, Positionen alter Szenen über <code>ChangeSet.mapPos</code>.</li>
-  <li><b>3D-Ansicht:</b> Meshes pro Knoten mit Cache nach <code>mesh_key</code>, Platzierung über <code>display_world</code>, Kanten als Linien, Drehen/Verschieben/Zoomen, „Alles zeigen“, Standardansichten, Achsenkreuz, Boden.</li>
-  <li><b>Code → Ansicht:</b> Cursor (Knoten voll, Rest gedimmt), Hover über Zeile, difference/intersection/fillet/chamfer/shell, Modifier <code>#</code> <code>%</code> <code>!</code> <code>*</code>, Transformationen mit Koordinatenkreuzen vorher/nachher und Umriss an der Ausgangsposition, 2D-Formen als Umriss mit leichter Füllung.</li>
-  <li><b>Ansicht → Code:</b> Hover über Fläche markiert die Zeile, Klick setzt den Cursor, Doppelklick auf eine Modulinstanz springt in die Definition.</li>
-  <li><b>Modulkontext:</b> <code>SetContext</code> beim Cursor in einer Moduldefinition, Pfadleiste mit Sprung eine Ebene hoch.</li>
-  <li><b>Raster und Anker (lesend):</b> Ebenen am Rand der Hülle, Schnittpunkte, Literal durchgezogen / Ausdruck gestrichelt, Schalter „alle Raster“, Hover über Rasterausdruck, Anker als Rauten mit Pfeil.</li>
-  <li><b>Dateien und Fehler:</b> Autospeichern in IndexedDB, Öffnen/Speichern, Beispielmenü, Export STL/3MF, Syntaxfehler und Watchdog.</li>
+  <li><b>Editor:</b> Lezer grammar (OpenSCAD with <code>grid</code>, <code>anchor</code>, <code>k:</code>), diagnostics (red underline, line red or yellow, message at the end of the line), inline hints (values, "4 edges"), <code>*</code> lines grayed out, positions of old scenes via <code>ChangeSet.mapPos</code>.</li>
+  <li><b>3D view:</b> meshes per node with a cache keyed by <code>mesh_key</code>, placement via <code>display_world</code>, edges as lines, rotate/pan/zoom, "Show all", standard views, axis triad, ground.</li>
+  <li><b>Code → view:</b> cursor (node full, rest dimmed), hover over a line, difference/intersection/fillet/chamfer/shell, modifiers <code>#</code> <code>%</code> <code>!</code> <code>*</code>, transformations with coordinate triads before/after and an outline at the original position, 2D shapes as outline with a light fill.</li>
+  <li><b>View → code:</b> hovering over a face highlights the line, a click sets the cursor, a double-click on a module instance jumps to the definition.</li>
+  <li><b>Module context:</b> <code>SetContext</code> when the cursor is in a module definition, breadcrumb bar with a jump one level up.</li>
+  <li><b>Grids and anchors (read-only):</b> planes at the edge of the bounding box, intersection points, literal solid / expression dashed, toggle "all grids", hover over a grid expression, anchors as diamonds with an arrow.</li>
+  <li><b>Files and errors:</b> autosave to IndexedDB, open/save, examples menu, export STL/3MF, syntax errors and watchdog.</li>
 </ul>
 
-<h2>2 Testumgebung</h2>
+<h2>2 Test environment</h2>
 <table>${env.map(([a, b]) => `<tr><th style="width:32mm">${esc(a)}</th><td>${esc(b)}</td></tr>`).join("")}</table>
-<p class="small">Die End-to-End-Tests laufen gegen den Produktions-Build. Gewartet wird auf Szenen-Versionen und den Darstellungszustand über den Testhaken <code>window.__cad</code>, nicht auf feste Zeiten. Hover und Klick in der Ansicht sind echte Mausereignisse auf dem Canvas; der Haken liefert nur einen Bildpunkt, unter dem eine Fläche der gesuchten Zeile liegt.</p>
+<p class="small">The end-to-end tests run against the production build. They wait for scene versions and the display state via the test hook <code>window.__cad</code>, not for fixed times. Hover and click in the view are real mouse events on the canvas; the hook only supplies a pixel under which a face of the requested line lies.</p>
 
-<h2>3 Szenarien (Playwright)</h2>
+<h2>3 Scenarios (Playwright)</h2>
 <table>
-<tr><th>ID</th><th>Szenario</th><th>Ergebnis</th><th>Dauer</th><th>Prüfung</th></tr>
+<tr><th>ID</th><th>Scenario</th><th>Result</th><th>Duration</th><th>Check</th></tr>
 ${scenarioRows}
 </table>
 
-<h2>4 Unit-Tests (Vitest)</h2>
-${vt ? `<table><tr><th>Datei</th><th>bestanden</th><th>Fehlgeschlagen</th></tr>${unitRows}</table>
-<p class="small">Logik ohne Browser: Lezer-Grammatik auf allen Beispielen, Zuordnung Code ↔ Knoten (Cursor, Fläche → Zeile, Mehrdeutigkeit, Modulkontext), Darstellungszustände, Rasteranzeige, Pfadleiste und Definitionssprung, Editor-Dekorationen, Abbildung alter Positionen. Szenen als Fixtures aus der echten Engine (<code>web/scripts/dump-scene.mjs</code>).</p>` : "<p>Keine Vitest-Ergebnisse gefunden.</p>"}
+<h2>4 Unit tests (Vitest)</h2>
+${vt ? `<table><tr><th>File</th><th>passed</th><th>Failed</th></tr>${unitRows}</table>
+<p class="small">Logic without a browser: Lezer grammar on all examples, mapping code ↔ node (cursor, face → line, ambiguity, module context), display states, grid display, breadcrumb bar and jump to definition, editor decorations, mapping of old positions. Scenes as fixtures from the real engine (<code>web/scripts/dump-scene.mjs</code>).</p>` : "<p>No Vitest results found.</p>"}
 
-<h2>5 Messwerte</h2>
-<table><tr><th>Größe</th><th>Wert</th><th>Messung</th></tr>${metricRows}</table>
-<p class="small">Software-Rendering ohne GPU; auf einem Desktop mit GPU sind Bildraten deutlich höher. Die Zeiten enthalten die Auswertung im Worker (Sprache + Kernel) und das Nachladen der Meshes.</p>
+<h2>5 Measurements</h2>
+<table><tr><th>Quantity</th><th>Value</th><th>Measurement</th></tr>${metricRows}</table>
+<p class="small">Software rendering without GPU; on a desktop with a GPU the frame rates are considerably higher. The times include the evaluation in the worker (language + kernel) and loading the meshes.</p>
 
-<h2>6 Bekannte Grenzen und Abweichungen</h2>
+<h2>6 Known limitations and deviations</h2>
 <ul>
-  <li>Griffe, Ziehen, Snappen und die Parameterleiste sind nicht Teil von Phase A; Raster und Anker werden nur angezeigt.</li>
-  <li>Hover über Kanten wird über die angrenzende Fläche aufgelöst (Kanten tragen keine Knoten-Tags). Union-Kinder erhalten beim Hover einen dünnen Umriss, beim Cursor nicht.</li>
-  <li>Beim Wechsel des Modulkontexts sendet die UI den Quelltext mit neuer Version erneut, damit jede Szenen-Version genau eine Auswertung bezeichnet (Meshes werden pro Version angefordert). Das kostet eine zusätzliche Sprachauswertung von wenigen Millisekunden.</li>
-  <li>Bei Mehrdeutigkeit (gleicher Inhalt an mehreren Stellen, z. B. zwei Deckel) wird über die Lage des Trefferpunkts in den Knotenhüllen getrennt; bleibt sie bestehen, werden alle Zeilen markiert.</li>
-  <li>Rasterausdrücke in Schleifen (z. B. <code>g[loch[i], mitte, boden]</code>) liefert die Szene einmal; beim Hover wird der Punkt des ersten Durchlaufs hervorgehoben.</li>
-  <li>Der Editor bricht lange Zeilen um; Hinweise am Zeilenende können dadurch in eine zweite Bildschirmzeile rutschen.</li>
-  <li>Der Watchdog-Test blockiert den Worker über eine Testnachricht; ein echter hängender Kernel-Aufruf wurde nicht nachgestellt.</li>
-  <li>Die Messwerte stammen aus einem headless Chromium mit SwiftShader und sind nur relativ aussagekräftig.</li>
+  <li>Handles, dragging, snapping and the parameter bar are not part of phase A; grids and anchors are only displayed.</li>
+  <li>Hover over edges is resolved via the adjacent face (edges carry no node tags). Union children get a thin outline on hover, but not with the cursor.</li>
+  <li>When the module context changes, the UI resends the source with a new version so that each scene version denotes exactly one evaluation (meshes are requested per version). This costs one additional language evaluation of a few milliseconds.</li>
+  <li>In case of ambiguity (same content at several places, e.g. two lids), the location of the hit point within the node bounding boxes is used to disambiguate; if it remains ambiguous, all lines are highlighted.</li>
+  <li>Grid expressions in loops (e.g. <code>g[loch[i], mitte, boden]</code>) are reported once by the scene; on hover the point of the first iteration is highlighted.</li>
+  <li>The editor wraps long lines; hints at the end of a line can therefore move to a second screen line.</li>
+  <li>The watchdog test blocks the worker via a test message; a real hanging kernel call was not reproduced.</li>
+  <li>The measurements come from a headless Chromium with SwiftShader and are only meaningful relative to each other.</li>
 </ul>
 
 <div class="figs">
@@ -316,10 +316,10 @@ await page.pdf({
   printBackground: true,
   displayHeaderFooter: true,
   headerTemplate: "<span></span>",
-  footerTemplate: '<div style="font-size:7pt;color:#777;width:100%;text-align:center">Testbericht 2 – UI Phase A · Seite <span class="pageNumber"></span> von <span class="totalPages"></span></div>',
+  footerTemplate: '<div style="font-size:7pt;color:#777;width:100%;text-align:center">Test report 2 – UI phase A · Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>',
   margin: { top: "14mm", bottom: "16mm", left: "12mm", right: "12mm" },
 });
 await browser.close();
-console.log(`report2: ${e2ePassed}/${e2e.length} e2e, ${unitPassed}/${unitTotal} unit, ${images.length + extra.length} Bilder (max ${kib(maxImg)})`);
+console.log(`report2: ${e2ePassed}/${e2e.length} e2e, ${unitPassed}/${unitTotal} unit, ${images.length + extra.length} images (max ${kib(maxImg)})`);
 console.log(`-> ${join(out, "report.html")}`);
 console.log(`-> ${join(out, "report.pdf")}`);

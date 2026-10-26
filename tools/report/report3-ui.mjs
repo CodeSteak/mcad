@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 3 ("UI Phase B: Griffe, Snap, Parameterleiste"): collects the results of the
+// Test report 3 ("UI phase B: handles, snapping, parameter bar"): collects the results of the
 // Phase B tests and writes
 //
 //   docs/reports/03-ui-phase-b/report.html, report.pdf, img/*.jpg
@@ -59,7 +59,7 @@ const scenarios = readJson(join(input, "scenarios.json"), []);
 const metrics = readJson(join(input, "metrics.json"), {});
 const cargo = existsSync(join(input, "cargo.txt")) ? readFileSync(join(input, "cargo.txt"), "utf8") : null;
 if (!pw) {
-  console.error(`fehlt: ${pwFile} (zuerst: cd web && pnpm e2e)`);
+  console.error(`missing: ${pwFile} (first: cd web && pnpm e2e)`);
   process.exit(1);
 }
 
@@ -72,7 +72,7 @@ function flatten(suite, file, acc = []) {
     for (const t of spec.tests ?? []) {
       const r = t.results?.at(-1);
       const id = spec.title.split(" ")[0];
-      acc.push({ id, title: spec.title.slice(id.length + 1), status: r?.status ?? t.status ?? "unbekannt", ms: r?.duration ?? 0, error: r?.error?.message ?? null });
+      acc.push({ id, title: spec.title.slice(id.length + 1), status: r?.status ?? t.status ?? "unknown", ms: r?.duration ?? 0, error: r?.error?.message ?? null });
     }
   }
   return acc;
@@ -82,7 +82,7 @@ const phaseA = flatten(pw, "ui.spec.ts");
 const e2ePassed = e2e.filter((t) => t.status === "passed").length;
 const aPassed = phaseA.filter((t) => t.status === "passed").length;
 if (!e2e.length) {
-  console.error("keine Ergebnisse von web/e2e/ui-b.spec.ts in playwright.json");
+  console.error("no results of web/e2e/ui-b.spec.ts in playwright.json");
   process.exit(1);
 }
 
@@ -151,23 +151,23 @@ const kib = (b) => (b === null ? "–" : `${(b / 1024).toFixed(0)} KiB`);
 const mib = (b) => (b === null ? "–" : `${(b / 1024 / 1024).toFixed(2)} MiB`);
 
 const env = [
-  ["Betriebssystem", `${os.type()} ${os.release()} (${os.arch()})`],
-  ["CPU", `${os.cpus()[0]?.model ?? "–"} · ${os.cpus().length} Kerne`],
+  ["Operating system", `${os.type()} ${os.release()} (${os.arch()})`],
+  ["CPU", `${os.cpus()[0]?.model ?? "–"} · ${os.cpus().length} cores`],
   ["Node.js", process.version],
   ["Browser", `Chromium ${chromiumVersion} (headless, Playwright ${pkgVersion("@playwright/test")})`],
-  ["Grafik", "WebGL über SwiftShader (Software-Rendering, keine GPU)"],
-  ["Fenster", "1440 × 900 px, Gerätepixelverhältnis 1"],
-  ["Build", `Vite ${pkgVersion("vite")} Produktions-Build, Vorschau-Server (vite preview)`],
-  ["Bibliotheken", `React ${pkgVersion("react")}, three.js ${pkgVersion("three")}, CodeMirror ${pkgVersion("@codemirror/view")}, Zustand ${pkgVersion("zustand")}, Vitest ${pkgVersion("vitest")}`],
+  ["Graphics", "WebGL via SwiftShader (software rendering, no GPU)"],
+  ["Window", "1440 × 900 px, device pixel ratio 1"],
+  ["Build", `Vite ${pkgVersion("vite")} production build, preview server (vite preview)`],
+  ["Libraries", `React ${pkgVersion("react")}, three.js ${pkgVersion("three")}, CodeMirror ${pkgVersion("@codemirror/view")}, Zustand ${pkgVersion("zustand")}, Vitest ${pkgVersion("vitest")}`],
   ["Engine", `cad_wasm_bg.wasm ${mib(asset(/^cad_wasm_bg-.*\.wasm$/))}, smlib.wasm ${mib(asset(/^smlib-.*\.wasm$/))}`],
-  ["Quelltext", `Branch ${git("rev-parse", "--abbrev-ref", "HEAD")}, Commit ${git("rev-parse", "--short", "HEAD")}`],
+  ["Source", `Branch ${git("rev-parse", "--abbrev-ref", "HEAD")}, commit ${git("rev-parse", "--short", "HEAD")}`],
 ];
 
 // ---------------------------------------------------------------- html
 
-const date = new Date().toLocaleDateString("de-DE", { year: "numeric", month: "long", day: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const scen = (id) => scenarios.find((s) => s.id === id);
-const statusLabel = (s) => (s === "passed" ? "bestanden" : s === "skipped" ? "übersprungen" : "fehlgeschlagen");
+const statusLabel = (s) => (s === "passed" ? "passed" : s === "skipped" ? "skipped" : "failed");
 
 const scenarioRows = e2e
   .map((t) => {
@@ -177,7 +177,7 @@ const scenarioRows = e2e
   .join("\n");
 
 const unitRows = unit
-  .map((f) => `<tr class="${f.failed.length ? "bad" : "ok"}"><td>${esc(f.file)}${NEW_UNIT.has(f.file) ? " <span class=\"tag\">neu</span>" : ""}</td><td class="num">${f.passed} / ${f.total}</td><td>${f.failed.map(esc).join("<br>") || "–"}</td></tr>`)
+  .map((f) => `<tr class="${f.failed.length ? "bad" : "ok"}"><td>${esc(f.file)}${NEW_UNIT.has(f.file) ? " <span class=\"tag\">new</span>" : ""}</td><td class="num">${f.passed} / ${f.total}</td><td>${f.failed.map(esc).join("<br>") || "–"}</td></tr>`)
   .join("\n");
 
 const rustRows = rustBins
@@ -193,21 +193,21 @@ const d = metrics.drag ?? {};
 const c = metrics.dragCube ?? {};
 
 const metricRows = [
-  ["Ziehen → Szene, grob (Median)", fmtMs(d.coarse?.median), `Drag-Nachricht bis die Szene des daraus geschriebenen Quelltexts gezeichnet ist, grobe Tessellierung (10 × Toleranz); ${d.coarse?.n ?? "–"} Szenen`],
-  ["Ziehen → Szene, grob (p95 / max)", `${fmtMs(d.coarse?.p95)} / ${fmtMs(d.coarse?.max)}`, "95-%-Quantil und Maximum derselben Messung"],
-  ["Loslassen → feine Szene", fmtMs(d.fine?.last), "pointerup bis die Szene mit feinem Wurzel-Mesh gezeichnet ist (DragEnd, Undo-Gruppe schließen, Neuauswertung aus dem Cache)"],
-  ["Bildrate beim Ziehen", typeof d.fps === "number" ? `${d.fps.toFixed(0)} fps` : "–", `requestAnimationFrame-Zähler während des Ziehens (${d.durationMs ? (d.durationMs / 1000).toFixed(1) : "–"} s); längste Lücke ${fmtMs(d.maxGapMs)}`],
-  ["Mausbewegungen / Drag-Nachrichten", `${d.moves ?? "–"} / ${d.sent ?? "–"}`, `höchstens eine Nachricht in Flug, ${d.dropped ?? "–"} Zwischenstände übersprungen (letzte Position gewinnt)`],
-  ["Leichtes Modell: Ziehen → Szene grob (Median / p95)", `${fmtMs(c.coarse?.median)} / ${fmtMs(c.coarse?.p95)}`, `B01, ${c.model ?? "–"}: ${c.coarse?.n ?? "–"} Szenen; Aufwand von UI, Worker und Protokoll ohne nennenswerte Kernel-Arbeit`],
-  ["Leichtes Modell: Loslassen → fein / fps", `${fmtMs(c.fine?.last)} / ${typeof c.fps === "number" ? c.fps.toFixed(0) : "–"} fps`, `längste Frame-Lücke ${fmtMs(c.maxGapMs)}, ${c.sent ?? "–"} Drag-Nachrichten`],
-  ["Größte Bilddatei im Bericht", kib(maxImg), "JPEG, Qualität 82"],
+  ["Drag → scene, coarse (median)", fmtMs(d.coarse?.median), `Drag message until the scene of the source written from it is drawn, coarse tessellation (10 × tolerance); ${d.coarse?.n ?? "–"} scenes`],
+  ["Drag → scene, coarse (p95 / max)", `${fmtMs(d.coarse?.p95)} / ${fmtMs(d.coarse?.max)}`, "95 % quantile and maximum of the same measurement"],
+  ["Release → fine scene", fmtMs(d.fine?.last), "pointerup until the scene with the fine root mesh is drawn (DragEnd, closing the undo group, re-evaluation from the cache)"],
+  ["Frame rate while dragging", typeof d.fps === "number" ? `${d.fps.toFixed(0)} fps` : "–", `requestAnimationFrame counter while dragging (${d.durationMs ? (d.durationMs / 1000).toFixed(1) : "–"} s); longest gap ${fmtMs(d.maxGapMs)}`],
+  ["Mouse moves / drag messages", `${d.moves ?? "–"} / ${d.sent ?? "–"}`, `at most one message in flight, ${d.dropped ?? "–"} intermediate states skipped (last position wins)`],
+  ["Light model: drag → coarse scene (median / p95)", `${fmtMs(c.coarse?.median)} / ${fmtMs(c.coarse?.p95)}`, `B01, ${c.model ?? "–"}: ${c.coarse?.n ?? "–"} scenes; cost of UI, worker and protocol without significant kernel work`],
+  ["Light model: release → fine / fps", `${fmtMs(c.fine?.last)} / ${typeof c.fps === "number" ? c.fps.toFixed(0) : "–"} fps`, `longest frame gap ${fmtMs(c.maxGapMs)}, ${c.sent ?? "–"} drag messages`],
+  ["Largest image file in the report", kib(maxImg), "JPEG, quality 82"],
 ]
   .map(([a, b, c]) => `<tr><td>${esc(a)}</td><td class="num">${esc(b)}</td><td>${esc(c)}</td></tr>`)
   .join("\n");
 
 const code = (s) => (s ? `<pre>${esc(s)}</pre>` : "<pre class=\"none\">–</pre>");
 const shotsFor = (s) => {
-  const imgs = [s.before && { n: s.before, l: s.before.includes("waehrend") ? "während" : "vorher" }, s.after && { n: s.after, l: s.after.includes("waehrend") ? "während" : "nachher" }].filter(Boolean);
+  const imgs = [s.before && { n: s.before, l: s.before.includes("waehrend") ? "during" : "before" }, s.after && { n: s.after, l: s.after.includes("waehrend") ? "during" : "after" }].filter(Boolean);
   if (!imgs.length) return "";
   return `<div class="pair">${imgs.map((i) => `<div><div class="lbl">${esc(i.l)}</div><img src="img/${esc(i.n)}.jpg" alt="${esc(s.title)} ${esc(i.l)}"></div>`).join("")}</div>`;
 };
@@ -218,17 +218,17 @@ const blocks = e2e
     (s) => `<section class="sc">
 <h3>${esc(s.id)} ${esc(s.title)}</h3>
 ${shotsFor(s)}
-${s.codeBefore || s.codeAfter ? `<div class="codes"><div><div class="lbl">Code vorher</div>${code(s.codeBefore)}</div><div><div class="lbl">Code nachher</div>${code(s.codeAfter)}</div></div>` : ""}
+${s.codeBefore || s.codeAfter ? `<div class="codes"><div><div class="lbl">Code before</div>${code(s.codeBefore)}</div><div><div class="lbl">Code after</div>${code(s.codeAfter)}</div></div>` : ""}
 <p class="cap">${esc(s.caption)}</p>
 </section>`,
   )
   .join("\n");
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 3 – UI Phase B</title>
+<title>Test report 3 – UI phase B</title>
 <style>
   @page { size: A4; margin: 16mm 14mm 16mm 14mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -269,62 +269,62 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 3 – UI Phase B: Griffe, Snap, Parameterleiste</h1>
-<div class="meta">Bearbeiten in der Ansicht · ${esc(date)} · Commit ${esc(git("rev-parse", "--short", "HEAD"))}</div>
+<h1>Test report 3 – UI phase B: handles, snapping, parameter bar</h1>
+<div class="meta">Editing in the view · ${esc(date)} · Commit ${esc(git("rev-parse", "--short", "HEAD"))}</div>
 
 <div class="summary">
-  <div>Phase B (Playwright)<b>${e2ePassed} / ${e2e.length} bestanden</b></div>
-  <div>Phase A (Regression)<b>${phaseA.length ? `${aPassed} / ${phaseA.length}` : "–"}</b></div>
+  <div>Phase B (Playwright)<b>${e2ePassed} / ${e2e.length} passed</b></div>
+  <div>Phase A (regression)<b>${phaseA.length ? `${aPassed} / ${phaseA.length}` : "–"}</b></div>
   <div>Vitest<b>${vt ? `${unitPassed} / ${unitTotal}` : "–"}</b></div>
-  <div>Rust (geänderte Crates)<b>${cargo ? `${rustOk} / ${rustTotal}` : "–"}</b></div>
-  <div>Ziehen → Szene grob (Würfel / Lochplatte)<b>${fmtMs(c.coarse?.median)} / ${fmtMs(d.coarse?.median)}</b></div>
+  <div>Rust (changed crates)<b>${cargo ? `${rustOk} / ${rustTotal}` : "–"}</b></div>
+  <div>Drag → coarse scene (cube / perforated plate)<b>${fmtMs(c.coarse?.median)} / ${fmtMs(d.coarse?.median)}</b></div>
 </div>
 
-<h2>1 Umfang</h2>
-<p>Phase B ergänzt die Browser-UI um das Bearbeiten in der 3D-Ansicht. Der Code bleibt die einzige Quelle: Griffe ändern Literale oder schreiben Rasterreferenzen, die Parameterleiste ändert nur die Vorschau.</p>
+<h2>1 Scope</h2>
+<p>Phase B adds editing in the 3D view to the browser UI. The code remains the single source of truth: handles change literals or write grid references, the parameter bar only changes the preview.</p>
 <ul>
-  <li><b>Griffe</b> der Zeile unter dem Cursor, nur bei Literal oder Variable mit Literal; berechnete Werte werden als gesperrter Griff (grauer Ring) gezeigt. Arten: cube-/square-Ecke, box-/rect-Eckpunkte, Radius (sphere, circle, cylinder, torus), Höhe (cylinder, linear_extrude), cylinder zwischen zwei Punkten, translate-Ziel (Pfeil alt → neu, Griff am Ziel), Drehring pro Achse (rotate), Skalierung an der Hüllenecke, Rasterebenen mit Literal (Griff auf einer Kante der Rasterbox, Ziehen entlang der Achse), Punktvariablen, polygon-/spline-Punkte, Zonenmittelpunkt über translate. Farben: Literal orange, Standardwert eines Modulparameters violett, reine Referenz türkis, gesperrt grau.</li>
-  <li><b>Ziehen:</b> <code>DragStart</code> → <code>Drag</code> (höchstens eine Nachricht in Flug, letzte Position gewinnt) → <code>Edits</code> → Editor wendet sie als Live-Änderung an und sendet den Quelltext sofort; die Engine tesselliert grob, nach <code>DragEnd</code> fein. Ein Ziehvorgang ist ein Undo-Schritt (Live-Änderungen ohne Verlauf, am Ende als ein isoliertes Ereignis). Esc bricht ab.</li>
-  <li><b>Snappen</b> im Bildschirmraum (Fangradius einstellbar, Standard 14 px) auf Rasterpunkte des Moduls und sichtbare Anker (<code>SnapTargets</code>), Ziel hervorgehoben und beschriftet; geschrieben wird die Referenz. 1D-Griffe (Höhe, Radius, Ebene) snappen auf Rasterebenen derselben Achse und schreiben <code>g.name</code> (neu in cad-eval). <b>Alt:</b> kein Snap, Zahlen gerundet auf die Schrittweite (Einstellungen, Standard 1 mm / 15°).</li>
-  <li><b>Parameterleiste</b> neben der Ansicht im Modulkontext: Zahl (Eingabefeld + Schieberegler), Bool (Schalter), Vektor (drei Felder); Reset pro Parameter, Markierung geänderter Werte, „Alle zurücksetzen“, Werte pro Modul bis Sitzungsende, „Als Standard übernehmen“ (<code>SetDefault</code>). Vorschau über <code>SetContext { overrides }</code>.</li>
-  <li><b>Inline-Regler</b> für Zahl- und Bool-Literale von Zuweisungen am Zeilenende (Schieberegler, Schalter); ein Schieberegler-Zug ist ein Undo-Schritt.</li>
-  <li><b>Strg+Klick</b> auf einen Raster- oder Ankerausdruck springt zur Deklaration.</li>
+  <li><b>Handles</b> of the line under the cursor, only for a literal or a variable with a literal; computed values are shown as a locked handle (gray ring). Kinds: cube/square corner, box/rect corner points, radius (sphere, circle, cylinder, torus), height (cylinder, linear_extrude), cylinder between two points, translate target (arrow old → new, handle at the target), rotation ring per axis (rotate), scaling at the bounding box corner, grid planes with a literal (handle on an edge of the grid box, drag along the axis), point variables, polygon/spline points, zone center via translate. Colors: literal orange, default value of a module parameter violet, pure reference turquoise, locked gray.</li>
+  <li><b>Dragging:</b> <code>DragStart</code> → <code>Drag</code> (at most one message in flight, the last position wins) → <code>Edits</code> → the editor applies them as a live change and sends the source immediately; the engine tessellates coarsely, and finely after <code>DragEnd</code>. One drag is one undo step (live changes without history, at the end as one isolated event). Esc cancels.</li>
+  <li><b>Snapping</b> in screen space (snap radius configurable, default 14 px) to grid points of the module and visible anchors (<code>SnapTargets</code>), target highlighted and labeled; the reference is written. 1D handles (height, radius, plane) snap to grid planes of the same axis and write <code>g.name</code> (new in cad-eval). <b>Alt:</b> no snapping, numbers rounded to the step size (settings, default 1 mm / 15°).</li>
+  <li><b>Parameter bar</b> next to the view in module context: number (input field + slider), bool (switch), vector (three fields); reset per parameter, marking of changed values, "Reset all", values per module until the end of the session, "Apply as default" (<code>SetDefault</code>). Preview via <code>SetContext { overrides }</code>.</li>
+  <li><b>Inline controls</b> for number and bool literals of assignments at the end of the line (slider, switch); one slider drag is one undo step.</li>
+  <li><b>Ctrl+click</b> on a grid or anchor expression jumps to the declaration.</li>
 </ul>
-<p class="small">Änderungen an Rust-Crates: <code>cad-eval</code> (gesperrte Griffe als <code>locked_handles</code>, <code>SnapRef::Plane</code> mit Prüfung, dass der Griff nach dem Schreiben exakt auf der Ebene liegt und die Ebene an der Stelle sichtbar ist), <code>cad-session</code> (<code>Drag</code> antwortet immer, <code>SetDragOptions</code>, Szene mit <code>locked_handles</code>), Protokoll-Typen neu erzeugt.</p>
+<p class="small">Changes to Rust crates: <code>cad-eval</code> (locked handles as <code>locked_handles</code>, <code>SnapRef::Plane</code> with a check that after writing, the handle lies exactly on the plane and the plane is visible at that location), <code>cad-session</code> (<code>Drag</code> always answers, <code>SetDragOptions</code>, scene with <code>locked_handles</code>), protocol types regenerated.</p>
 
-<h2>2 Testumgebung</h2>
+<h2>2 Test environment</h2>
 <table>${env.map(([a, b]) => `<tr><th style="width:32mm">${esc(a)}</th><td>${esc(b)}</td></tr>`).join("")}</table>
-<p class="small">Die End-to-End-Tests laufen gegen den Produktions-Build mit echten Mausereignissen auf dem Canvas (Playwright <code>mouse.down/move/up</code>, ein Schritt pro Animationsframe). Gewartet wird auf Szenen-Versionen, den Zieh-Zustand und den Editortext über den Testhaken <code>window.__cad</code>, nie auf feste Zeiten. Der Haken liefert nur Bildschirmpositionen (Griffe, Rasterpunkte, Punkte auf Ring oder Achse).</p>
+<p class="small">The end-to-end tests run against the production build with real mouse events on the canvas (Playwright <code>mouse.down/move/up</code>, one step per animation frame). They wait for scene versions, the drag state and the editor text via the test hook <code>window.__cad</code>, never for fixed times. The hook only supplies screen positions (handles, grid points, points on a ring or axis).</p>
 
-<h2>3 Szenarien (Playwright, web/e2e/ui-b.spec.ts)</h2>
+<h2>3 Scenarios (Playwright, web/e2e/ui-b.spec.ts)</h2>
 <table>
-<tr><th>ID</th><th>Szenario</th><th>Ergebnis</th><th>Dauer</th><th>Prüfung</th></tr>
+<tr><th>ID</th><th>Scenario</th><th>Result</th><th>Duration</th><th>Check</th></tr>
 ${scenarioRows}
 </table>
-<p class="small">Regression: die ${phaseA.length} Szenarien aus Phase A (web/e2e/ui.spec.ts) liefen im selben Lauf, ${aPassed} bestanden.</p>
+<p class="small">Regression: the ${phaseA.length} scenarios from phase A (web/e2e/ui.spec.ts) ran in the same run, ${aPassed} passed.</p>
 
-<h2>4 Unit-Tests</h2>
-${vt ? `<table><tr><th>Vitest-Datei</th><th>bestanden</th><th>Fehlgeschlagen</th></tr>${unitRows}</table>
-<p class="small">Neu: Snap-Suche im Bildschirmraum, Strahl → Wert (Ebene, Achse, Ring), Vorschau-Rundung, „höchstens ein Drag in Flug“, Rundung und Zahlendarstellung, Undo-Gruppierung mit dem echten CodeMirror-Verlauf, Abbildung der Engine-Edits, Zustand der Parameterleiste, Inline-Regler. Fixture <code>griffe.scad</code> aus der echten Engine.</p>` : "<p>Keine Vitest-Ergebnisse gefunden.</p>"}
-${cargo ? `<table><tr><th>Rust-Testprogramm</th><th>bestanden</th><th>neue Tests</th></tr>${rustRows}</table>` : ""}
+<h2>4 Unit tests</h2>
+${vt ? `<table><tr><th>Vitest file</th><th>passed</th><th>Failed</th></tr>${unitRows}</table>
+<p class="small">New: snap search in screen space, ray → value (plane, axis, ring), preview rounding, "at most one drag in flight", rounding and number formatting, undo grouping with the real CodeMirror history, mapping of the engine edits, state of the parameter bar, inline controls. Fixture <code>griffe.scad</code> from the real engine.</p>` : "<p>No Vitest results found.</p>"}
+${cargo ? `<table><tr><th>Rust test program</th><th>passed</th><th>new tests</th></tr>${rustRows}</table>` : ""}
 
-<h2>5 Messwerte</h2>
-<table><tr><th>Größe</th><th>Wert</th><th>Messung</th></tr>${metricRows}</table>
-<p class="small">Oberer Teil: ${esc(d.model ?? "–")}. Jede Änderung von t wertet die Differenz mit Verrundung und vier Bohrungen vollständig neu aus (kein Cache-Treffer); die Latenz ist hier von der Kernel-Zeit bestimmt (SetSource → vollständige Szene ${esc((d.evalMs ?? []).length ? `Median ${Math.round([...d.evalMs].sort((x, y) => x - y)[Math.floor(d.evalMs.length / 2)])} ms` : "–")}). Gleiche gerundete Werte erzeugen keine Änderung; jede Änderung wartet auf ihre Szene, bevor die nächste Position gesendet wird (sonst würde jeder neue Quelltext den laufenden Kernel-Auftrag abbrechen). Die Bildrate ist durch das Software-Rendering (SwiftShader) begrenzt; Phase A maß beim Drehen 14 fps.</p>
+<h2>5 Measurements</h2>
+<table><tr><th>Quantity</th><th>Value</th><th>Measurement</th></tr>${metricRows}</table>
+<p class="small">Upper part: ${esc(d.model ?? "–")}. Each change of t fully re-evaluates the difference with fillet and four holes (no cache hit); the latency here is determined by the kernel time (SetSource → complete scene ${esc((d.evalMs ?? []).length ? `median ${Math.round([...d.evalMs].sort((x, y) => x - y)[Math.floor(d.evalMs.length / 2)])} ms` : "–")}). Equal rounded values produce no change; each change waits for its scene before the next position is sent (otherwise every new source would cancel the running kernel job). The frame rate is limited by software rendering (SwiftShader); phase A measured 14 fps while rotating.</p>
 
-<h2>6 Bekannte Grenzen und Abweichungen</h2>
+<h2>6 Known limitations and deviations</h2>
 <ul>
-  <li><b>Sprung zur Rasterdeklaration mit Strg+Klick</b> statt einfachem Klick: ein einfacher Klick muss weiter den Cursor setzen, sonst wären Rasterausdrücke nicht editierbar. Referenzen eines Moduls kennt die UI erst im Modulkontext (Cursor im Modul).</li>
-  <li><b>Ohne Alt</b> wird gesnappt, wenn ein Ziel im Fangradius liegt, sonst werden Zahlen geschrieben (gerundet). Ein Griff, der nur aus Referenzen besteht (z. B. <code>box(g[…], g[…])</code>), wird ohne Alt nie zu Zahlen; er wechselt nur zwischen Zielen.</li>
-  <li><b>Snap von 1D-Griffen</b> nur auf Ebenen, auf denen der Griff nach dem Schreiben von <code>g.name</code> exakt landet (gleicher Ursprung und Maßstab entlang der Achse). Unter einem verschobenen Teilbaum oder bei <code>center = true</code>/<code>d =</code> (Faktor 2) gibt es daher keine Ebenen-Ziele; geschrieben würde sonst ein Ausdruck wie <code>g.deckel - 5</code>, der den Griff sperrt.</li>
-  <li>Punktgriffe werden in der Ebene durch den Griff senkrecht zur Blickrichtung gezogen (2D-Punkte in ihrer xy-Ebene); entlang der Blickrichtung ändert sich nichts. Für eine bestimmte Achse hilft eine Standardansicht.</li>
-  <li>Undo-Gruppe: am Ende des Ziehens wird die Gesamtänderung einmal zurückgenommen und als ein Verlaufseintrag wieder angewendet; dabei entsteht eine zusätzliche Neuauswertung aus dem Cache.</li>
-  <li>Inline-Regler erscheinen nur bei Zuweisungen mit Zahl- oder Bool-Literal (Spec, Werttypen); der Bereich richtet sich nach dem Wert beim Start des Ziehens (0 … 2 × Wert, mindestens 10).</li>
-  <li>Parameter ohne Standardwert werden beim Reset auf 0 / false / [0, 0, 0] gesetzt (Spec-Tabelle); Zeichenketten und Listen sind nur lesbar.</li>
-  <li>Die Messwerte stammen aus headless Chromium mit SwiftShader.</li>
+  <li><b>Jump to the grid declaration with Ctrl+click</b> instead of a plain click: a plain click must still set the cursor, otherwise grid expressions would not be editable. The UI only knows the references of a module in module context (cursor in the module).</li>
+  <li><b>Without Alt</b>, the handle snaps if a target is within the snap radius, otherwise numbers are written (rounded). A handle that consists only of references (e.g. <code>box(g[…], g[…])</code>) never turns into numbers without Alt; it only switches between targets.</li>
+  <li><b>Snapping of 1D handles</b> only to planes on which the handle lands exactly after writing <code>g.name</code> (same origin and scale along the axis). Under a translated subtree or with <code>center = true</code>/<code>d =</code> (factor 2) there are therefore no plane targets; otherwise an expression such as <code>g.deckel - 5</code> would be written, which locks the handle.</li>
+  <li>Point handles are dragged in the plane through the handle perpendicular to the view direction (2D points in their xy plane); nothing changes along the view direction. For a specific axis, a standard view helps.</li>
+  <li>Undo group: at the end of the drag the total change is undone once and re-applied as one history entry; this causes one additional re-evaluation from the cache.</li>
+  <li>Inline controls only appear for assignments with a number or bool literal (spec, value types); the range depends on the value at the start of the drag (0 … 2 × value, at least 10).</li>
+  <li>Parameters without a default value are set to 0 / false / [0, 0, 0] on reset (spec table); strings and lists are read-only.</li>
+  <li>The measurements come from headless Chromium with SwiftShader.</li>
 </ul>
 
-<h2>7 Screenshots und Codeausschnitte</h2>
+<h2>7 Screenshots and code excerpts</h2>
 ${blocks}
 </main>
 </body>
@@ -342,10 +342,10 @@ await page.pdf({
   printBackground: true,
   displayHeaderFooter: true,
   headerTemplate: "<span></span>",
-  footerTemplate: '<div style="font-size:7pt;color:#777;width:100%;text-align:center">Testbericht 3 – UI Phase B · Seite <span class="pageNumber"></span> von <span class="totalPages"></span></div>',
+  footerTemplate: '<div style="font-size:7pt;color:#777;width:100%;text-align:center">Test report 3 – UI phase B · Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>',
   margin: { top: "14mm", bottom: "16mm", left: "12mm", right: "12mm" },
 });
 await browser.close();
-console.log(`report3: ${e2ePassed}/${e2e.length} Phase B, ${aPassed}/${phaseA.length} Phase A, ${unitPassed}/${unitTotal} Vitest, ${rustOk}/${rustTotal} Rust, ${used.size} Bilder (max ${kib(maxImg)})`);
+console.log(`report3: ${e2ePassed}/${e2e.length} phase B, ${aPassed}/${phaseA.length} phase A, ${unitPassed}/${unitTotal} Vitest, ${rustOk}/${rustTotal} Rust, ${used.size} images (max ${kib(maxImg)})`);
 console.log(`-> ${join(out, "report.html")}`);
 console.log(`-> ${join(out, "report.pdf")}`);

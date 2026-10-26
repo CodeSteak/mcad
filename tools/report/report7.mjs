@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 7 ("Kernel-Korrekturen und variabler Radius"): collects the results of the test runs
+// Test report 7 ("Kernel fixes and variable radius"): collects the results of the test runs
 // and writes
 //
 //   docs/reports/07-kernel-variabler-radius/report.html, img/*
@@ -60,7 +60,8 @@ const run = (bin, args) => {
   const r = spawnSync(bin, args, { encoding: "utf8", maxBuffer: 256 << 20 });
   return { code: r.status, out: r.stdout ?? "", err: r.stderr ?? "" };
 };
-const de = (x, d = 3) => Number(x).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d });
+/** Number with decimal point and a space as thousands separator (as in the other reports). */
+const num = (x, d = 3) => Number(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }).replace(/,/g, " ");
 
 rmSync(work, { recursive: true, force: true });
 mkdirSync(work, { recursive: true });
@@ -91,13 +92,14 @@ const write = (name, text) => {
   return f;
 };
 
-/** Diagnostics of `cad check` (errors and warnings, one per line, without the path). */
+/** Diagnostics of `cad check` (errors and warnings, one per line, without the path, "L.<line>: …").
+ *  The CLI before these changes ($CAD_BEFORE) printed German severities, hence both spellings. */
 function check(bin, file) {
   const r = run(bin, ["check", file]);
   return (r.out + r.err)
     .split("\n")
-    .filter((l) => /(Fehler|Warnung) \(/.test(l))
-    .map((l) => l.replace(/^.*?:(\d+):\d+: /, "Z.$1: "));
+    .filter((l) => /(error|warning|Fehler|Warnung) \(/.test(l))
+    .map((l) => l.replace(/^.*?:(\d+):\d+: /, "L.$1: "));
 }
 
 /** PNG rendering (copied into the report); returns the image name or null. */
@@ -178,7 +180,7 @@ const pkg = join(web, "src/wasm-pkg");
 const nativeWasm = [];
 if (existsSync(join(pkg, "cad_wasm_bg.wasm"))) {
   const files = [
-    ["F1 (drei Fälle)", f1File],
+    ["F1 (three cases)", f1File],
     ["F1 (r = 6)", join(work, "f1-d.scad")],
     ["dose_shell.scad", dose],
     ["F2", f2File],
@@ -212,7 +214,7 @@ if (existsSync(join(pkg, "cad_wasm_bg.wasm"))) {
       same = JSON.stringify(a) === JSON.stringify(b);
       if (!same) {
         const i = a.nodes.findIndex((x, k) => JSON.stringify(x) !== JSON.stringify(b.nodes[k]));
-        detail = i >= 0 ? `Knoten ${i}: nativ ${JSON.stringify(a.nodes[i])} / Wasm ${JSON.stringify(b.nodes[i])}` : `Diagnosen: ${a.diags.join("; ")} / ${b.diags.join("; ")}`;
+        detail = i >= 0 ? `node ${i}: native ${JSON.stringify(a.nodes[i])} / Wasm ${JSON.stringify(b.nodes[i])}` : `diagnostics: ${a.diags.join("; ")} / ${b.diags.join("; ")}`;
       }
       const errs = a.nodes.filter((x) => x.status === "error").length;
       nativeWasm.push({ name, same, detail, nodes: a.nodes.length, errs });
@@ -283,7 +285,7 @@ function flatten(suite, acc = []) {
     for (const t of spec.tests ?? []) {
       const r = t.results?.at(-1);
       const id = spec.title.split(" ")[0];
-      acc.push({ file: spec.file ?? suite.file ?? "", id, title: spec.title.slice(id.length + 1), status: r?.status ?? t.status ?? "unbekannt", ms: r?.duration ?? 0, error: r?.error?.message ?? null });
+      acc.push({ file: spec.file ?? suite.file ?? "", id, title: spec.title.slice(id.length + 1), status: r?.status ?? t.status ?? "unknown", ms: r?.duration ?? 0, error: r?.error?.message ?? null });
     }
   }
   return acc;
@@ -317,31 +319,31 @@ const common = timeNames.filter((n) => tBefore[n] && tAfter[n]);
 // ---------------------------------------------------------------- environment
 
 const env = [
-  ["Betriebssystem", `${os.type()} ${os.release()} (${os.arch()})`],
-  ["CPU", `${os.cpus()[0]?.model ?? "–"} · ${os.cpus().length} Kerne`],
+  ["Operating system", `${os.type()} ${os.release()} (${os.arch()})`],
+  ["CPU", `${os.cpus()[0]?.model ?? "–"} · ${os.cpus().length} cores`],
   ["Rust", run("rustc", ["--version"]).out.trim() || "–"],
   ["Node.js", process.version],
   ["Emscripten", (run("bash", ["-c", "source /opt/tools/emsdk/emsdk_env.sh >/dev/null 2>&1; emcc --version | head -1"]).out.trim() || "–")],
-  ["Browser", `Chromium (Playwright ${pkgVersion("@playwright/test")}), WebGL über SwiftShader, 1440 × 900 px`],
-  ["SMLib", "tangency-labs/smlib capi-tess @ 7eba8aa + smlib/patches/0001 (1ed8669 aus capi-solidcraft, nur Quelltext), Fassade ABI 4"],
-  ["Quelltext", `Branch ${git("rev-parse", "--abbrev-ref", "HEAD")}, Commit ${git("rev-parse", "--short", "HEAD")}`],
+  ["Browser", `Chromium (Playwright ${pkgVersion("@playwright/test")}), WebGL via SwiftShader, 1440 × 900 px`],
+  ["SMLib", "tangency-labs/smlib capi-tess @ 7eba8aa + smlib/patches/0001 (1ed8669 from capi-solidcraft, source only), facade ABI 4"],
+  ["Source", `Branch ${git("rev-parse", "--abbrev-ref", "HEAD")}, commit ${git("rev-parse", "--short", "HEAD")}`],
 ];
 
 // ---------------------------------------------------------------- html
 
-const date = new Date().toLocaleDateString("de-DE", { year: "numeric", month: "long", day: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const code = (s) => (s ? `<pre>${esc(s)}</pre>` : "");
 const list = (a) => (a.length ? a.map(esc).join("<br>") : "–");
 const img = (name, label) => (name ? `<figure><img src="img/${esc(name)}.${name.startsWith("e0") ? "jpg" : "png"}" alt="${esc(label)}"><figcaption>${esc(label)}</figcaption></figure>` : `<figure class="missing"><figcaption>${esc(label)}: –</figcaption></figure>`);
-const ba = (key, lbl) => `<div class="pair">${img(imgs[key]?.before, `vorher: ${lbl}`)}${img(imgs[key]?.after, `nachher: ${lbl}`)}</div>`;
-const mm3 = (v) => (v == null ? "–" : `${de(v, 3)} mm³`);
+const ba = (key, lbl) => `<div class="pair">${img(imgs[key]?.before, `before: ${lbl}`)}${img(imgs[key]?.after, `after: ${lbl}`)}</div>`;
+const mm3 = (v) => (v == null ? "–" : `${num(v, 3)} mm³`);
 
 const f1Table = f1Rows
   .map(({ c, want, after, msgsAfter, msgsBefore }) => {
     const v = after?.volume;
     const rel = v != null ? Math.abs(v - want) / want : null;
     const [a, b, h, r, t] = c.dims;
-    return `<tr class="${rel != null && rel < 1e-6 && !msgsAfter.length ? "ok" : "bad"}"><td>${a} × ${b} × ${h}, r ${r}, Wand ${t}</td><td>${list(msgsBefore)}</td><td class="num">${mm3(want)}</td><td class="num">${mm3(v)}</td><td class="num">${rel == null ? "–" : rel.toExponential(1)}</td><td class="num">${after?.step ? `${after.step.faces ?? "–"} Flächen` : "–"}</td><td class="res">${msgsAfter.length ? esc(msgsAfter.join("; ")) : "ok"}</td></tr>`;
+    return `<tr class="${rel != null && rel < 1e-6 && !msgsAfter.length ? "ok" : "bad"}"><td>${a} × ${b} × ${h}, r ${r}, wall ${t}</td><td>${list(msgsBefore)}</td><td class="num">${mm3(want)}</td><td class="num">${mm3(v)}</td><td class="num">${rel == null ? "–" : rel.toExponential(1)}</td><td class="num">${after?.step ? `${after.step.faces ?? "–"} faces` : "–"}</td><td class="res">${msgsAfter.length ? esc(msgsAfter.join("; ")) : "ok"}</td></tr>`;
   })
   .join("\n");
 const timeRows = timeNames
@@ -353,40 +355,40 @@ const timeRows = timeNames
     return `<tr class="${cls}"><td>${esc(n)}</td><td class="num">${b ? `${b.ms} ms${b.rc ? ` (Exit ${b.rc})` : ""}` : "–"}</td><td class="num">${a ? `${a.ms} ms${a.rc ? ` (Exit ${a.rc})` : ""}` : "–"}</td><td class="num">${d == null ? "–" : `${d > 0 ? "+" : ""}${d} ms`}</td></tr>`;
   })
   .join("\n");
-const nwRows = nativeWasm.map((x) => `<tr class="${x.same ? "ok" : "bad"}"><td>${esc(x.name)}</td><td class="num">${x.nodes}</td><td class="num">${x.errs}</td><td class="res">${x.same ? "identisch" : "abweichend"}</td><td>${esc(x.detail)}</td></tr>`).join("\n");
+const nwRows = nativeWasm.map((x) => `<tr class="${x.same ? "ok" : "bad"}"><td>${esc(x.name)}</td><td class="num">${x.nodes}</td><td class="num">${x.errs}</td><td class="res">${x.same ? "identical" : "different"}</td><td>${esc(x.detail)}</td></tr>`).join("\n");
 const rustRows = rustBins
   .map((b) => {
     const name = b.bin.replace(/^.*\/deps\//, "").replace(/-[0-9a-f]{16}$/, "");
     const isNew = NEW_BINS.some((n) => b.bin.endsWith(n));
     const bad = b.tests.filter((t) => t.status === "FAILED").map((t) => t.name);
     const fresh = isNew ? b.tests.map((t) => t.name) : b.tests.filter((t) => NEW_TESTS.has(t.name)).map((t) => t.name);
-    return `<tr class="${bad.length ? "bad" : "ok"}"><td>${esc(name)}${isNew ? ' <span class="tag">neu</span>' : ""}</td><td class="num">${b.tests.filter((t) => t.status === "ok").length} / ${b.tests.length}</td><td>${fresh.map((n) => `<code>${esc(n)}</code>`).join(", ") || "–"}${bad.length ? `<div class="err">${bad.map(esc).join(", ")}</div>` : ""}</td></tr>`;
+    return `<tr class="${bad.length ? "bad" : "ok"}"><td>${esc(name)}${isNew ? ' <span class="tag">new</span>' : ""}</td><td class="num">${b.tests.filter((t) => t.status === "ok").length} / ${b.tests.length}</td><td>${fresh.map((n) => `<code>${esc(n)}</code>`).join(", ") || "–"}${bad.length ? `<div class="err">${bad.map(esc).join(", ")}</div>` : ""}</td></tr>`;
   })
   .join("\n");
 const pwRows = pwNew
   .map((t) => {
     const c = scenarios.find((s) => s.id === t.id);
     const checks = c?.checks?.length ? `<ul class="checks">${c.checks.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : esc(c?.caption ?? "");
-    return `<tr class="${t.status === "passed" ? "ok" : "bad"}"><td>${esc(t.id)}</td><td>${esc(t.title)}</td><td class="res">${t.status === "passed" ? "bestanden" : "fehlgeschlagen"}</td><td class="num">${(t.ms / 1000).toFixed(1)} s</td><td>${checks}${t.error ? `<div class="err">${esc(t.error.split("\n")[0])}</div>` : ""}</td></tr>`;
+    return `<tr class="${t.status === "passed" ? "ok" : "bad"}"><td>${esc(t.id)}</td><td>${esc(t.title)}</td><td class="res">${t.status === "passed" ? "passed" : "failed"}</td><td class="num">${(t.ms / 1000).toFixed(1)} s</td><td>${checks}${t.error ? `<div class="err">${esc(t.error.split("\n")[0])}</div>` : ""}</td></tr>`;
   })
   .join("\n");
 const blocks = scenarios
   .filter((s) => (s.images ?? []).length)
-  .sort((a, b) => a.id.localeCompare(b.id, "de", { numeric: true }))
+  .sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }))
   .map(
     (s) => `<section class="sc"><h3>${esc(s.id)} ${esc(s.title)}</h3>
 ${s.images.map((i) => `<figure><img src="img/${esc(i.name)}.jpg" alt="${esc(i.label)}"><figcaption>${esc(i.label)}</figcaption></figure>`).join("")}
 ${s.code ? `<div class="lbl">Code</div>${code(s.code)}` : ""}<p class="cap">${esc(s.caption)}</p></section>`,
   )
   .join("\n");
-const probeRows = probes.map((p) => `<tr><td class="num">${de(p.x, 1)}</td><td class="num">${de(p.law, 4)}</td><td class="num">${de(p.r, 4)}</td><td class="num">${de(((p.r - p.law) / p.law) * 100, 2)} %</td></tr>`).join("");
+const probeRows = probes.map((p) => `<tr><td class="num">${num(p.x, 1)}</td><td class="num">${num(p.law, 4)}</td><td class="num">${num(p.r, 4)}</td><td class="num">${num(((p.r - p.law) / p.law) * 100, 2)} %</td></tr>`).join("");
 const ms = (n) => tAfter[n]?.ms ?? null;
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 7 – Kernel-Korrekturen und variabler Radius</title>
+<title>Test report 7 – Kernel fixes and variable radius</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -433,125 +435,126 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 7 – Kernel-Korrekturen und variabler Radius</h1>
-<div class="meta">SMLib-Fassade, Engine, Sprache, CLI und Browser-UI · ${esc(date)} · Commit ${esc(git("rev-parse", "--short", "HEAD"))}</div>
+<h1>Test report 7 – Kernel fixes and variable radius</h1>
+<div class="meta">SMLib facade, engine, language, CLI and browser UI · ${esc(date)} · Commit ${esc(git("rev-parse", "--short", "HEAD"))}</div>
 
 <div class="summary">
-  <div>cargo test --workspace<b>${cargoSums.length ? cargoSums.map((s) => `${s.ok}/${s.ok + s.failed}`).join(" · ") : "–"}</b>${cargoSums.length} Läufe</div>
-  <div>cargo clippy<b>${clippy == null ? "–" : `${clippyWarn} Warnungen`}</b>alle schon vorher, keine neuen</div>
+  <div>cargo test --workspace<b>${cargoSums.length ? cargoSums.map((s) => `${s.ok}/${s.ok + s.failed}`).join(" · ") : "–"}</b>${cargoSums.length} runs</div>
+  <div>cargo clippy<b>${clippy == null ? "–" : `${clippyWarn} warnings`}</b>all pre-existing, none new</div>
   <div>Node (smlib.wasm)<b>${nodeLines.length ? `${nodeLines.filter((l) => l.startsWith("ok")).length} / ${nodeLines.length}` : "–"}</b>test-node.mjs</div>
   <div>Vitest<b>${vt ? `${unitPassed} / ${unitTotal}` : "–"}</b></div>
-  <div>Playwright<b>${pwAll.length ? `${passed(pwAll)} / ${pwAll.length}` : "–"}</b>davon neu ${passed(pwNew)} / ${pwNew.length}</div>
-  <div>OpenSCAD-Vergleich<b>${compareLine ? esc((compareLine.match(/\d+\s*\/\s*\d+/) ?? [""])[0]) : "–"}</b>compare.py</div>
+  <div>Playwright<b>${pwAll.length ? `${passed(pwAll)} / ${pwAll.length}` : "–"}</b>of which new ${passed(pwNew)} / ${pwNew.length}</div>
+  <div>OpenSCAD comparison<b>${compareLine ? esc((compareLine.match(/\d+\s*\/\s*\d+/) ?? [""])[0]) : "–"}</b>compare.py</div>
   <div>STEP (OCCT)<b>${stepLine ? esc((stepLine.match(/\d+\/\d+/) ?? [""])[0]) : "–"}</b>verify.py</div>
-  <div>nativ ↔ Wasm<b>${nativeWasm.length ? `${nativeWasm.filter((x) => x.same).length} / ${nativeWasm.length}` : "–"}</b>identische Szenen</div>
+  <div>native ↔ Wasm<b>${nativeWasm.length ? `${nativeWasm.filter((x) => x.same).length} / ${nativeWasm.length}` : "–"}</b>identical scenes</div>
 </div>
 
-<h2>1 Umfang</h2>
+<h2>1 Scope</h2>
 <ul>
-  <li><b>F1</b> <code>shell</code> eines verrundeten Körpers (dose_shell.scad war rot), <b>F2</b> <code>surface(points)</code> mit 2 × 2 oder 3 × 3 Punkten, <b>F3</b> Naht- und Polkanten als eigene Kanten – die drei in Bericht 4, Abschnitt 7 gefundenen Fehler. Dazu <b>F4</b>: fase_chamfer.scad war ebenfalls rot (<code>union(chamfer = 0.5)</code> wählte acht statt zwei Kanten).</li>
-  <li><b>Variabler Radius</b> (Spec „Variabler Radius (Stretch Goal)“): <code>fillet(r = function (p) …) { … }</code> und <code>difference/union/intersection(fillet = function (p) …)</code>; Radius als Funktion der Position, an Stützpunkten jeder Kante ausgewertet, Hinweis „r 2–4“, Fehlerfälle wie beim konstanten Radius. Neues Beispiel <code>tests/models/spec/variabler_radius.scad</code>.</li>
-  <li><b>SMLib</b>: Korrektur 1ed8669 (Zeigertabellen in Einfügereihenfolge) aus dem Fork-Zweig <code>capi-solidcraft</code> als Patch <code>smlib/patches/0001-pointer-maps-insertion-order.patch</code> über 7eba8aa (<code>smlib/fetch.sh</code> wendet ihn an). <b>Fassaden-ABI 4</b> (<code>sc_version()</code> = 4): Kantenflags in <code>sc_edges</code>, <code>sc_law_stations</code>, <code>sc_fillet_var</code>; Kernel-ID <code>smlib-7eba8aa+1/facade-4</code> (neue Cache-Schlüssel).</li>
+  <li><b>F1</b> <code>shell</code> of a filleted body (dose_shell.scad was red), <b>F2</b> <code>surface(points)</code> with 2 × 2 or 3 × 3 points, <b>F3</b> seam and pole edges as separate edges – the three bugs found in report 4, section 7. In addition <b>F4</b>: fase_chamfer.scad was red as well (<code>union(chamfer = 0.5)</code> selected eight instead of two edges).</li>
+  <li><b>Variable radius</b> (spec "Variable radius (stretch goal)"): <code>fillet(r = function (p) …) { … }</code> and <code>difference/union/intersection(fillet = function (p) …)</code>; radius as a function of position, evaluated at stations along each edge, hint "r 2–4", error cases as for the constant radius. New example <code>tests/models/spec/variabler_radius.scad</code>.</li>
+  <li><b>SMLib</b>: fix 1ed8669 (pointer maps in insertion order) from the fork branch <code>capi-solidcraft</code> as patch <code>smlib/patches/0001-pointer-maps-insertion-order.patch</code> on top of 7eba8aa (<code>smlib/fetch.sh</code> applies it). <b>Facade ABI 4</b> (<code>sc_version()</code> = 4): edge flags in <code>sc_edges</code>, <code>sc_law_stations</code>, <code>sc_fillet_var</code>; kernel ID <code>smlib-7eba8aa+1/facade-4</code> (new cache keys).</li>
 </ul>
 
-<h2>2 Testumgebung</h2>
+<h2>2 Test environment</h2>
 <table>${env.map(([a, b]) => `<tr><th style="width:30mm">${esc(a)}</th><td>${esc(b)}</td></tr>`).join("")}</table>
 
-<h2>3 Fehler: Ursache, Korrektur, Nachweis</h2>
+<h2>3 Bugs: cause, fix, evidence</h2>
+<p class="small">Diagnostic and hint texts in the tables below are quoted verbatim from the program output ("L." = line). The CLI before these changes printed German texts ("Fehler" = error, "Warnung" = warning, "Kanten" = edges, "gescheitert" = failed).</p>
 
-<div class="fix"><h3>F1 shell eines verrundeten Körpers</h3><dl>
-<dt>Ursache</dt><dd>Nicht die Vorprüfung „no cavity“ (sie betrifft nur ebene, gegenüberliegende Wände; die Meldung „leaves no cavity“ kam nach SMLib, das einen offenen Körper zurückgab). SMLibs Schalenbildung mit geöffneter Fläche (<code>SmApiShellBrepFull</code> → <code>SmOffsetExecutive::ShellBrep</code>, Zweig mit Öffnung über <code>SmMerge</code>) trägt an verrundeten Körpern nicht: je nach Optionen <code>SM_ERR_NULL_POINTER</code> in <code>SmMerge.cpp:672</code>, ein offener Körper aus den 26 Eingangsflächen, oder ein geschlossener Körper, dessen Randflächen fehlen und dessen innere Rundungen durch verlängerte Flächen ersetzt sind (11–15 Flächen fallen in der Gültigkeitsprüfung durch, Volumen 0,08 % daneben). Welcher Fall eintrat, hing an der Adressreihenfolge von SMLibs Zeigertabellen (daher nativ und Wasm verschieden). Der <i>geschlossene</i> Innenversatz desselben Körpers (<code>SmApiOffsetBrepFull</code>, −t) ist dagegen exakt (Volumen = Minkowski-Formel auf 10<sup>−7</sup>).</dd>
-<dt>Korrektur</dt><dd><code>sc_shell</code> versucht SMLibs Schale; scheitert sie oder überlappt sie sich, baut die Fassade die Schale aus Booleans: <i>Körper − O − P<sub>1</sub> − … − P<sub>k</sub></i>, O der geschlossene Innenversatz, P<sub>i</sub> ein Prisma über der Versatzfläche jeder geöffneten (ebenen) Fläche, von knapp innerhalb des Hohlraums bis über den Körper hinaus (aufgedickte Einzelfläche). Die Seitenwände des Prismas gehen durch den Rand der Versatzfläche: der Öffnungsrand ist das Band zwischen geöffneter Fläche und ihrem Versatz, wie bei SMLibs eigener Schale. Booleans über die geprüften Booleans der Fassade, Ergebnis mit der Gültigkeitsprüfung. Zusätzlich Patch 0001 (1ed8669): SMLibs Zeigertabellen geben Schlüssel in Einfügereihenfolge aus – Ergebnisse hängen nicht mehr von der Heap-Lage ab.</dd>
-<dt>Nachweis</dt><dd>Volumen gegen die geschlossene Form (abgerundeter Quader minus innerer abgerundeter Quader mit r − t minus Wandband unter der ebenen Deckfläche), STEP-Prüfung, gleiche Szenen nativ und Wasm (Abschnitt 5), Rust-Tests <code>shell_of_rounded_boxes</code>, <code>dose_shell_example_is_a_hollow_box</code>, <code>shell_of_a_rounded_box_open_at_the_top</code>, Node-Test, Playwright E03.</dd></dl>
-<table><tr><th>Fall</th><th>vorher (cad check)</th><th>erwartet</th><th>nachher</th><th>rel. Abw.</th><th>STEP</th><th>Diagnosen nachher</th></tr>${f1Table}
-<tr class="${doseAfter ? "ok" : "bad"}"><td>dose_shell.scad (mit Deckel)</td><td>${list(doseBefore)}</td><td class="num">–</td><td class="num">${mm3(doseAfter?.volume)}</td><td class="num">–</td><td class="num">${doseAfter?.step ? `${doseAfter.step.faces ?? "–"} Flächen` : "–"}</td><td class="res">${check(cadNew, dose).length ? "Fehler" : "ok"}</td></tr></table>
-${ba("f1-dose", "dose_shell.scad, Modul dose (Cursor auf shell, Zeile 9)")}
-${ba("f1-faelle", "die drei Fälle aus Bericht 4")}
+<div class="fix"><h3>F1 shell of a filleted body</h3><dl>
+<dt>Cause</dt><dd>Not the "no cavity" pre-check (it only concerns planar, opposite walls; the message "leaves no cavity" came after SMLib had returned an open body). SMLib's shell construction with an opened face (<code>SmApiShellBrepFull</code> → <code>SmOffsetExecutive::ShellBrep</code>, branch with opening via <code>SmMerge</code>) does not hold up on filleted bodies: depending on the options, <code>SM_ERR_NULL_POINTER</code> in <code>SmMerge.cpp:672</code>, an open body made of the 26 input faces, or a closed body whose border faces are missing and whose inner roundings are replaced by extended faces (11–15 faces fail the validity check, volume off by 0.08 %). Which case occurred depended on the address order of SMLib's pointer maps (hence different natively and in Wasm). The <i>closed</i> inward offset of the same body (<code>SmApiOffsetBrepFull</code>, −t), in contrast, is exact (volume = Minkowski formula to 10<sup>−7</sup>).</dd>
+<dt>Fix</dt><dd><code>sc_shell</code> tries SMLib's shell; if it fails or self-overlaps, the facade builds the shell from booleans: <i>body − O − P<sub>1</sub> − … − P<sub>k</sub></i>, O being the closed inward offset, P<sub>i</sub> a prism over the offset face of each opened (planar) face, from just inside the cavity to beyond the body (thickened single face). The side walls of the prism go through the border of the offset face: the opening border is the band between the opened face and its offset, as with SMLib's own shell. Booleans go through the facade's checked booleans, the result through the validity check. In addition patch 0001 (1ed8669): SMLib's pointer maps return keys in insertion order – results no longer depend on the heap layout.</dd>
+<dt>Evidence</dt><dd>Volume against the closed form (rounded cuboid minus inner rounded cuboid with r − t minus the wall band under the planar top face), STEP check, identical scenes native and Wasm (section 5), Rust tests <code>shell_of_rounded_boxes</code>, <code>dose_shell_example_is_a_hollow_box</code>, <code>shell_of_a_rounded_box_open_at_the_top</code>, Node test, Playwright E03.</dd></dl>
+<table><tr><th>Case</th><th>before (cad check)</th><th>expected</th><th>after</th><th>rel. dev.</th><th>STEP</th><th>Diagnostics after</th></tr>${f1Table}
+<tr class="${doseAfter ? "ok" : "bad"}"><td>dose_shell.scad (with lid)</td><td>${list(doseBefore)}</td><td class="num">–</td><td class="num">${mm3(doseAfter?.volume)}</td><td class="num">–</td><td class="num">${doseAfter?.step ? `${doseAfter.step.faces ?? "–"} faces` : "–"}</td><td class="res">${check(cadNew, dose).length ? "error" : "ok"}</td></tr></table>
+${ba("f1-dose", "dose_shell.scad, module dose (cursor on shell, line 9)")}
+${ba("f1-faelle", "the three cases from report 4")}
 </div>
 
-<div class="fix"><h3>F2 surface(points) mit 2 × 2 oder 3 × 3 Punkten</h3><dl>
-<dt>Ursache</dt><dd><code>SmApiCreateSurfaceFromOrderedPoints</code> ruft <code>SmBSplineSurface::ApproximatePoints</code> fest mit Grad 3 in beiden Richtungen auf; das braucht mindestens 4 Punkte je Richtung, sonst <code>SM_ERR</code>.</dd>
-<dt>Korrektur</dt><dd><code>sc_nurbs_surface</code> ruft <code>ApproximatePoints</code> selbst auf, mit Grad min(3, n − 1) je Richtung getrennt: bilinear bei 2, quadratisch bei 3, kubisch ab 4 (ab 4 × 4 unverändert). Mit so vielen Kontrollpunkten wie Punkten interpoliert die Ausgleichsrechnung die Punkte.</dd>
-<dt>Nachweis</dt><dd><code>surfaces_get_the_degree_their_point_count_allows</code> (Grade 1/1, 2/2, 1/3, 3/1, 3/3 im B-Rep, Punkte auf der Fläche), <code>surfaces_from_two_and_three_points_per_direction</code> (ebene Gitter 2 × 2 … 4 × 4: Fläche 400 mm²), Node-Test, Playwright E05.</dd>
-<dt>Meldungen</dt><dd>vorher: ${list(f2Msgs.before)}<br>nachher: ${list(f2Msgs.after)}</dd></dl>
-${ba("f2-flaechen", "2 × 2, 3 × 3 und 2 × 5 Punkte, aufgedickt")}
+<div class="fix"><h3>F2 surface(points) with 2 × 2 or 3 × 3 points</h3><dl>
+<dt>Cause</dt><dd><code>SmApiCreateSurfaceFromOrderedPoints</code> calls <code>SmBSplineSurface::ApproximatePoints</code> with a fixed degree 3 in both directions; that requires at least 4 points per direction, otherwise <code>SM_ERR</code>.</dd>
+<dt>Fix</dt><dd><code>sc_nurbs_surface</code> calls <code>ApproximatePoints</code> itself, with degree min(3, n − 1) separately per direction: bilinear for 2, quadratic for 3, cubic from 4 (unchanged from 4 × 4). With as many control points as points, the least-squares fit interpolates the points.</dd>
+<dt>Evidence</dt><dd><code>surfaces_get_the_degree_their_point_count_allows</code> (degrees 1/1, 2/2, 1/3, 3/1, 3/3 in the B-rep, points on the surface), <code>surfaces_from_two_and_three_points_per_direction</code> (planar grids 2 × 2 … 4 × 4: area 400 mm²), Node test, Playwright E05.</dd>
+<dt>Messages</dt><dd>before: ${list(f2Msgs.before)}<br>after: ${list(f2Msgs.after)}</dd></dl>
+${ba("f2-flaechen", "2 × 2, 3 × 3 and 2 × 5 points, thickened")}
 </div>
 
-<div class="fix"><h3>F3 Naht- und Polkanten zählten als Kanten</h3><dl>
-<dt>Ursache</dt><dd>Die Engine wählte bei <code>$fillet/$chamfer</code> alle Kanten des Primitivs und in Zonen alle Kanten in der Zone. SMLibs Zylinder hat eine Naht (gleiche Fläche auf beiden Seiten), die Kugel eine Naht von Pol zu Pol. Die Fassade übersprang solche Kanten beim Verrunden (<code>GetBlendEdgeuse() == NULL</code>), gezählt und gezeichnet wurden sie trotzdem; bei der Kugel blieb keine Kante übrig → Fehler.</dd>
-<dt>Korrektur</dt><dd><code>sc_edges</code> meldet je Kante Flags, <code>SC_EDGE_SMOOTH</code> = nichts zu verrunden (Naht, Pol, tangential stetiger Übergang innerhalb 2°, offener Rand; SMLibs eigenes Kriterium). <code>EdgeInfo.smooth</code>; die Engine wählt solche Kanten nie – bei <code>$fillet/$chamfer</code>, in Zonen und bei <code>fillet =</code> an Booleans. Ein Primitiv ohne Kante zum Verrunden ergibt „0 Kanten“ als Warnung ohne Wirkung. Auch die tangentialen Ränder früherer Rundungen zählen nicht mehr (verschachtelte Blöcke).</dd>
-<dt>Hinweise</dt><dd>Zylinder vorher: ${list(f3Hints[0].before)} · nachher: ${list(f3Hints[0].after)}<br>Kugel vorher: ${list(f3Hints[1].before)} · nachher: ${list(f3Hints[1].after)}<br>Meldungen vorher: ${list(f3Msgs.before)} · nachher: ${list(f3Msgs.after)}</dd>
-<dt>Nachweis</dt><dd><code>seams_and_poles_are_not_edges</code> (Zylinder 2 Kanten, Volumen mit zwei Fasenringen; Kugel 0 Kanten, Warnung, Volumen unverändert; Zone um den Zylinder 2 Kanten; Vereinigung zweier gleicher Zylinder: 0 neue Kanten), <code>tangent_edges_of_rounds_are_not_selected</code>, <code>edges_flag_seams_poles_and_tangent_edges_as_smooth</code>, Playwright E04 und C05.</dd></dl>
-${ba("f3-zylinder", "cylinder(…, $chamfer = 1), Cursor Zeile 1 (ausgewählte Kanten orange)")}
-${ba("f3-kugel", "sphere(5, $fillet = 1), Cursor Zeile 2")}
+<div class="fix"><h3>F3 Seam and pole edges counted as edges</h3><dl>
+<dt>Cause</dt><dd>For <code>$fillet/$chamfer</code> the engine selected all edges of the primitive, and in zones all edges in the zone. SMLib's cylinder has a seam (same face on both sides), the sphere a seam from pole to pole. The facade skipped such edges when filleting (<code>GetBlendEdgeuse() == NULL</code>), but they were still counted and drawn; for the sphere no edge remained → error.</dd>
+<dt>Fix</dt><dd><code>sc_edges</code> reports flags per edge, <code>SC_EDGE_SMOOTH</code> = nothing to fillet (seam, pole, tangentially continuous transition within 2°, open border; SMLib's own criterion). <code>EdgeInfo.smooth</code>; the engine never selects such edges – for <code>$fillet/$chamfer</code>, in zones and for <code>fillet =</code> on booleans. A primitive without an edge to fillet yields "0 edges" as a warning without effect. The tangent borders of earlier roundings no longer count either (nested blocks).</dd>
+<dt>Hints</dt><dd>Cylinder before: ${list(f3Hints[0].before)} · after: ${list(f3Hints[0].after)}<br>Sphere before: ${list(f3Hints[1].before)} · after: ${list(f3Hints[1].after)}<br>Messages before: ${list(f3Msgs.before)} · after: ${list(f3Msgs.after)}</dd>
+<dt>Evidence</dt><dd><code>seams_and_poles_are_not_edges</code> (cylinder 2 edges, volume with two chamfer rings; sphere 0 edges, warning, volume unchanged; zone around the cylinder 2 edges; union of two equal cylinders: 0 new edges), <code>tangent_edges_of_rounds_are_not_selected</code>, <code>edges_flag_seams_poles_and_tangent_edges_as_smooth</code>, Playwright E04 and C05.</dd></dl>
+${ba("f3-zylinder", "cylinder(…, $chamfer = 1), cursor line 1 (selected edges orange)")}
+${ba("f3-kugel", "sphere(5, $fillet = 1), cursor line 2")}
 </div>
 
-<div class="fix"><h3>F4 fase_chamfer.scad: union(chamfer) wählte acht Kanten</h3><dl>
-<dt>Ursache</dt><dd>„Neue Kanten“ einer Booleschen Operation waren Kanten zwischen Flächen verschiedener Operanden (Flächen-Tags). Teilen sich zwei Operanden eine Ebene (Platte und Turm mit gleicher Vorder- und Rückseite), verschmilzt SMLib die Flächen zu einer mit dem Tag eines Operanden; die sechs alten Turmkanten an Vorder- und Rückseite trennten dann Flächen verschiedener Operanden und galten als neu. Die Fase an diesen Kanten scheiterte (<code>SM_ERR</code>).</dd>
-<dt>Korrektur</dt><dd>Eine Kante, die auf einer Kante eines Operanden liegt, ist nicht neu (Abtastpunkte auf dem Kantenzug eines Operanden, Toleranz 10<sup>−6</sup> der Modellgröße).</dd>
-<dt>Hinweise</dt><dd>vorher: ${list(f4Hints.before)} · nachher: ${list(f4Hints.after)}<br>Meldungen vorher: ${list(f4Msgs.before)} · nachher: ${list(f4Msgs.after)}</dd>
-<dt>Nachweis</dt><dd><code>coplanar_merged_faces_keep_old_edges_old</code> (2 Kanten, Volumen 2502,5 mm³), fase_chamfer.scad fehlerfrei (Stufe 1, STEP, Laufzeittabelle).</dd></dl>
-${ba("f4-union", "union(chamfer = 0.5) aus fase_chamfer.scad, Cursor Zeile 1")}
+<div class="fix"><h3>F4 fase_chamfer.scad: union(chamfer) selected eight edges</h3><dl>
+<dt>Cause</dt><dd>"New edges" of a boolean operation were edges between faces of different operands (face tags). If two operands share a plane (plate and tower with the same front and back face), SMLib merges the faces into one with the tag of one operand; the six old tower edges on the front and back then separated faces of different operands and were considered new. The chamfer on these edges failed (<code>SM_ERR</code>).</dd>
+<dt>Fix</dt><dd>An edge that lies on an edge of an operand is not new (sample points on the edge chain of an operand, tolerance 10<sup>−6</sup> of the model size).</dd>
+<dt>Hints</dt><dd>before: ${list(f4Hints.before)} · after: ${list(f4Hints.after)}<br>Messages before: ${list(f4Msgs.before)} · after: ${list(f4Msgs.after)}</dd>
+<dt>Evidence</dt><dd><code>coplanar_merged_faces_keep_old_edges_old</code> (2 edges, volume 2502.5 mm³), fase_chamfer.scad without errors (stage 1, STEP, run time table).</dd></dl>
+${ba("f4-union", "union(chamfer = 0.5) from fase_chamfer.scad, cursor line 1")}
 </div>
 
-<h2>4 Variabler Radius</h2>
-<h3>Architektur: auswertbare Beschreibung statt Rückruf</h3>
-<p>Die Kanten, an denen der Radius gebraucht wird, gibt es erst, wenn der Kernel den Körper gebaut hat – lange nach der Auswertung, in der Engine. Zwei Wege: ein Rückruf aus der Engine in die Auswertung, oder die Auswertung liefert eine auswertbare Beschreibung der Funktion. Gewählt ist die Beschreibung: <code>cad-eval</code> übersetzt das Funktionsliteral in ein <b>Radiusgesetz</b> (<code>cad_ir::Law</code>), einen kleinen reinen Ausdruck über <code>p</code>. Was nicht von <code>p</code> abhängt (eingefangene Variablen, Rasterebenen, Listenausdrücke, beliebige Builtins), wird dabei schon ausgewertet und ist Konstante; Aufrufe von Benutzerfunktionen und Funktionswerten werden eingesetzt (Parameter als lokale Slots, Tiefe ≤ 16); übrig bleiben Literale, Arithmetik, Vergleiche, <code>&amp;&amp; || ! ?:</code>, <code>let</code>, Indizes, <code>.x/.y/.z</code>, Vektoren und die Mathe-Builtins (<code>sin … lookup</code>).</p>
+<h2>4 Variable radius</h2>
+<h3>Architecture: evaluable description instead of a callback</h3>
+<p>The edges at which the radius is needed only exist once the kernel has built the body – long after the evaluation, in the engine. Two options: a callback from the engine into the evaluation, or the evaluation supplies an evaluable description of the function. The description was chosen: <code>cad-eval</code> translates the function literal into a <b>radius law</b> (<code>cad_ir::Law</code>), a small pure expression over <code>p</code>. Whatever does not depend on <code>p</code> (captured variables, grid planes, list comprehensions, arbitrary builtins) is evaluated at that point and becomes a constant; calls to user functions and function values are inlined (parameters as local slots, depth ≤ 16); what remains are literals, arithmetic, comparisons, <code>&amp;&amp; || ! ?:</code>, <code>let</code>, indices, <code>.x/.y/.z</code>, vectors and the math builtins (<code>sin … lookup</code>).</p>
 <ul>
-  <li>Das Gesetz ist Teil des Baums (serialisierbar, Teil des Cache-Schlüssels): eine geänderte eingefangene Variable ändert den Schlüssel, gleicher Quelltext trifft den Cache. Ein Rückruf bräuchte dafür einen eigenen Schlüssel der Closure samt Umgebung.</li>
-  <li>Die Engine hängt weiter nicht von <code>cad-eval</code> und dessen AST-Lebensdauer ab; Wasm und nativ werten dasselbe Datenobjekt aus, auch aus dem Cache, ohne erneute Auswertung des Quelltexts.</li>
-  <li>Grenze: nur der reine Ausdruckskern ist von <code>p</code> abhängig möglich (keine Texte, keine Listenausdrücke über <code>p</code>, keine Rekursion über <code>p</code>); solche Fälle sind Fehler an der Funktion mit eigener Meldung.</li>
+  <li>The law is part of the tree (serializable, part of the cache key): a changed captured variable changes the key, the same source hits the cache. A callback would need its own key for the closure including its environment.</li>
+  <li>The engine still does not depend on <code>cad-eval</code> and its AST lifetime; Wasm and native evaluate the same data object, also from the cache, without re-evaluating the source.</li>
+  <li>Limitation: only the pure expression core can depend on <code>p</code> (no strings, no list comprehensions over <code>p</code>, no recursion over <code>p</code>); such cases are errors at the function with their own message.</li>
 </ul>
-<h3>Ablauf</h3>
+<h3>Procedure</h3>
 <ol>
-  <li>Auswertung: <code>fillet(r = function …)</code> → <code>Op::Blend { law }</code>, <code>difference(fillet = function …)</code> → <code>Op::Boolean { fillet_law }</code>. <code>chamfer</code> und <code>$fillet</code> mit Funktion: Warnung, nicht unterstützt.</li>
-  <li>Engine: Kantenwahl wie beim konstanten Radius (Zonen, neue Kanten, ohne glatte Kanten); je Kante <i>m</i> Stützpunkte (etwa einer je 1,5 mm, 4 bis 32) von <code>Kernel::law_stations</code>; das Gesetz im System der fillet-/Boolean-Anweisung an jedem Stützpunkt ausgewertet. Radius ≤ 0, keine Zahl → Fehler mit Wert und Position, Kante rot, Körper unverändert. Alle Werte gleich → konstante Verrundung (gleiches Ergebnis wie <code>fillet(r)</code>). Sonst <code>Kernel::fillet_variable</code>; Kernelfehler wie beim konstanten Radius mit dem Bereich („Verrundung gescheitert (8–18 mm): …“). Hinweis am Zeilenende: „r <i>min</i>–<i>max</i>“ der Stützwerte.</li>
-  <li>Fassade (<code>sc_law_stations</code>, <code>sc_fillet_var</code>): das Gesetz einer Kante ist ein geklemmter B-Spline vom Grad min(3, m − 1) über dem normierten Kantenparameter mit gleichmäßigen inneren Knoten, Kontrollradius <i>j</i> am Greville-Punkt t<sub>j</sub> (dort liegen die Stützpunkte). Er bleibt zwischen kleinstem und größtem Wert, ist exakt für konstante und lineare Verläufe und nimmt an den Kantenenden den ersten und letzten Wert an. Als <code>SmBSplineFilletLaw</code> trägt die Gesetzeskurve den Radius als x und t selbst als y (Kontrollpunkte (r<sub>j</sub>, t<sub>j</sub>), also y(t) = t), damit SMLib sie an Ecken über die Kantenenden hinaus verlängern kann. Je Kante SMLibs Variabler-Radius-Löser (<code>SM_FS_VARIABLE_RADIUS</code>), Kanten mit gleichen Werten der konstante.</li>
+  <li>Evaluation: <code>fillet(r = function …)</code> → <code>Op::Blend { law }</code>, <code>difference(fillet = function …)</code> → <code>Op::Boolean { fillet_law }</code>. <code>chamfer</code> and <code>$fillet</code> with a function: warning, not supported.</li>
+  <li>Engine: edge selection as for the constant radius (zones, new edges, without smooth edges); per edge <i>m</i> stations (about one per 1.5 mm, 4 to 32) from <code>Kernel::law_stations</code>; the law is evaluated at each station in the coordinate system of the fillet/boolean statement. Radius ≤ 0 or not a number → error with value and position, edge red, body unchanged. All values equal → constant fillet (same result as <code>fillet(r)</code>). Otherwise <code>Kernel::fillet_variable</code>; kernel errors as for the constant radius, with the range ("fillet failed (8–18 mm): …"). Hint at the end of the line: "r <i>min</i>–<i>max</i>" of the station values.</li>
+  <li>Facade (<code>sc_law_stations</code>, <code>sc_fillet_var</code>): the law of an edge is a clamped B-spline of degree min(3, m − 1) over the normalized edge parameter with uniform interior knots, control radius <i>j</i> at the Greville point t<sub>j</sub> (that is where the stations lie). It stays between the smallest and largest value, is exact for constant and linear profiles and takes the first and last value at the edge ends. As <code>SmBSplineFilletLaw</code>, the law curve carries the radius as x and t itself as y (control points (r<sub>j</sub>, t<sub>j</sub>), i.e. y(t) = t), so that SMLib can extend it beyond the edge ends at corners. Per edge SMLib's variable-radius solver (<code>SM_FS_VARIABLE_RADIUS</code>), edges with equal values use the constant one.</li>
 </ol>
-<h3>Messwerte</h3>
-<table><tr><th>x (mm)</th><th>Gesetz 1 + x/15</th><th>gemessen (Beginn der Deckfläche)</th><th>Abw.</th></tr>${probeRows || "<tr><td colspan=4>–</td></tr>"}</table>
-<p class="small">Eine Kante eines 30 × 20 × 20-Quaders mit linearem Gesetz: Radius gemessen über Punktklassifikation knapp unter der Deckfläche (dort beginnt die Rundung; bei wachsendem Radius liegt die Berührlinie etwas hinter r(x)). Volumen gegen die geschlossene Form 12000 − (1 − π/4)·130: Abweichung &lt; 10<sup>−5</sup> (Rust- und Node-Test).
-${volStep ? `Stufengesetz <code>p.z &lt; 10 ? 2 : 4</code> an allen 12 Kanten eines 30 × 30 × 20-Quaders: ${de(+volStep[2])} mm³, zwischen r = 4 (${de(+volStep[3])} mm³) und r = 2 (${de(+volStep[1])} mm³).` : ""}
-${volPocket ? `Taschenrand mit <code>1 + p.x / 40</code>: ${de(+volPocket[2])} mm³ zwischen r = 1,875 (${de(+volPocket[1])} mm³) und r = 1,125 (${de(+volPocket[3])} mm³).` : ""}
-variabler_radius.scad: ${mm3(vrExport?.volume)}, STEP ${vrExport?.step ? `${vrExport.step.faces ?? "–"} Flächen` : "–"}, <code>cad export</code> ${ms("spec/variabler_radius.scad") ?? "–"} ms.</p>
-<table><tr><th>Zeile</th><th>vorher</th><th>nachher</th></tr>
+<h3>Measurements</h3>
+<table><tr><th>x (mm)</th><th>Law 1 + x/15</th><th>measured (start of the top face)</th><th>Dev.</th></tr>${probeRows || "<tr><td colspan=4>–</td></tr>"}</table>
+<p class="small">One edge of a 30 × 20 × 20 cuboid with a linear law: radius measured via point classification just below the top face (that is where the rounding starts; with a growing radius the tangent line lies slightly behind r(x)). Volume against the closed form 12000 − (1 − π/4)·130: deviation &lt; 10<sup>−5</sup> (Rust and Node test).
+${volStep ? `Step law <code>p.z &lt; 10 ? 2 : 4</code> on all 12 edges of a 30 × 30 × 20 cuboid: ${num(+volStep[2])} mm³, between r = 4 (${num(+volStep[3])} mm³) and r = 2 (${num(+volStep[1])} mm³).` : ""}
+${volPocket ? `Pocket border with <code>1 + p.x / 40</code>: ${num(+volPocket[2])} mm³ between r = 1.875 (${num(+volPocket[1])} mm³) and r = 1.125 (${num(+volPocket[3])} mm³).` : ""}
+variabler_radius.scad: ${mm3(vrExport?.volume)}, STEP ${vrExport?.step ? `${vrExport.step.faces ?? "–"} faces` : "–"}, <code>cad export</code> ${ms("spec/variabler_radius.scad") ?? "–"} ms.</p>
+<table><tr><th>Line</th><th>before</th><th>after</th></tr>
 ${[11, 16, 22].map((l, i) => `<tr><td>${l}</td><td>${list(vrHints[i].before)}</td><td>${list(vrHints[i].after)}</td></tr>`).join("")}
-<tr><td>Diagnosen</td><td>${list(vrMsgs.before)}</td><td>${list(vrMsgs.after)}</td></tr></table>
-${ba("vr-stufe", "variabler_radius.scad, Cursor Zeile 11 (Stufengesetz)")}
-${ba("vr-tasche", "Zeile 16: difference(fillet = function (p) 1 + p.x / 40)")}
-${ba("vr-lookup", "Zeile 22: lookup-Gesetz mit Zone an den Deckelkanten")}
+<tr><td>Diagnostics</td><td>${list(vrMsgs.before)}</td><td>${list(vrMsgs.after)}</td></tr></table>
+${ba("vr-stufe", "variabler_radius.scad, cursor line 11 (step law)")}
+${ba("vr-tasche", "line 16: difference(fillet = function (p) 1 + p.x / 40)")}
+${ba("vr-lookup", "line 22: lookup law with zone at the lid edges")}
 
-<h2>5 Nativ und Wasm</h2>
-<p class="small">Szene von <code>cad eval --json</code> (nativ) gegen <code>web/scripts/dump-scene.mjs</code> (Browser-Engine in Node: cad-wasm + smlib.wasm) je Knoten: Status, Hinweise, Anzahl ausgewählter Kanten, Hülle (10<sup>−4</sup> mm), Meldungen, und die Diagnosen.</p>
-<table><tr><th>Datei</th><th>Knoten</th><th>davon Fehler</th><th>Ergebnis</th><th>Abweichung</th></tr>${nwRows || "<tr><td colspan=5>– (web/src/wasm-pkg fehlt)</td></tr>"}</table>
+<h2>5 Native and Wasm</h2>
+<p class="small">Scene from <code>cad eval --json</code> (native) against <code>web/scripts/dump-scene.mjs</code> (browser engine in Node: cad-wasm + smlib.wasm) per node: status, hints, number of selected edges, bounding box (10<sup>−4</sup> mm), messages, and the diagnostics.</p>
+<table><tr><th>File</th><th>Nodes</th><th>of which errors</th><th>Result</th><th>Deviation</th></tr>${nwRows || "<tr><td colspan=5>– (web/src/wasm-pkg missing)</td></tr>"}</table>
 
-<h2>6 Laufzeiten cad export (alle Beispiele)</h2>
-<p class="small"><code>cad export &lt;datei&gt; -o x.stl</code> (Release, Wandzeit inkl. Start, ein Lauf je Datei, nacheinander) vorher (Stand vor diesem Auftrag) und nachher. Summe über ${common.length} gemeinsame Dateien: vorher ${sum(tBefore, common)} ms, nachher ${sum(tAfter, common)} ms. Exit 1 = Diagnosen mit Fehlern (vorher dose_shell, fase_chamfer).</p>
-<table><tr><th>Datei</th><th>vorher</th><th>nachher</th><th>Δ</th></tr>${timeRows}</table>
+<h2>6 Run times of cad export (all examples)</h2>
+<p class="small"><code>cad export &lt;file&gt; -o x.stl</code> (release, wall-clock time incl. startup, one run per file, sequentially) before (state before this task) and after. Total over ${common.length} common files: before ${sum(tBefore, common)} ms, after ${sum(tAfter, common)} ms. Exit 1 = diagnostics with errors (before: dose_shell, fase_chamfer).</p>
+<table><tr><th>File</th><th>before</th><th>after</th><th>Δ</th></tr>${timeRows}</table>
 
 <h2>7 Tests</h2>
 <ul>
-  <li><b>cargo test --workspace</b> (${cargoSums.length} Läufe, ohne Ausfälle zwischen den Läufen): ${cargoSums.map((s) => `${s.ok} bestanden, ${s.failed} fehlgeschlagen`).join(" · ") || "–"}.</li>
-  <li><b>cargo clippy --workspace --all-targets</b>: ${clippy == null ? "–" : `${clippyWarn} Warnungen, ${clippyErr} Fehler`}; die Warnungen stehen in nicht geänderten Dateien (${clippyFiles.map((f) => `<code>${esc(f)}</code>`).join(", ")}) und bestanden schon vorher – keine neuen.</li>
-  <li><b>node crates/kernel-smlib/js/test-node.mjs</b> (smlib.wasm über die Brücke): ${nodeLines.length ? `${nodeLines.filter((l) => l.startsWith("ok")).length} / ${nodeLines.length}` : "–"}${nodeLines.length ? ` – neu: Kantenflags, surface 2 × 2/3 × 3/2 × 5, shell eines verrundeten Quaders (Volumen auf 10<sup>−6</sup>), variabler Radius (Stützpunkte, lineares Gesetz, Radius ≤ 0)` : ""}.</li>
-  <li><b>OpenSCAD-Vergleich</b> (compare.py): <code>${esc(compareLine ?? "–")}</code>.</li>
-  <li><b>STEP</b> mit OpenCASCADE (<code>tests/step/verify.py</code> über alle Beispiele): <code>${esc(stepLine?.replace(/; report.*$/, "") ?? "–")}</code>.</li>
-  <li><b>Vitest</b>: ${vt ? `${unitPassed} / ${unitTotal}` : "–"}; <b>pnpm typecheck</b> ohne Fehler.</li>
-  <li><b>Playwright</b>: ${pwAll.length ? `${passed(pwAll)} / ${pwAll.length}` : "–"} (bisherige Szenarien ${passed(pwOld)} / ${pwOld.length}, neu ${passed(pwNew)} / ${pwNew.length}).</li>
+  <li><b>cargo test --workspace</b> (${cargoSums.length} runs, no failures between runs): ${cargoSums.map((s) => `${s.ok} passed, ${s.failed} failed`).join(" · ") || "–"}.</li>
+  <li><b>cargo clippy --workspace --all-targets</b>: ${clippy == null ? "–" : `${clippyWarn} warnings, ${clippyErr} errors`}; the warnings are in unchanged files (${clippyFiles.map((f) => `<code>${esc(f)}</code>`).join(", ")}) and existed before – none new.</li>
+  <li><b>node crates/kernel-smlib/js/test-node.mjs</b> (smlib.wasm via the bridge): ${nodeLines.length ? `${nodeLines.filter((l) => l.startsWith("ok")).length} / ${nodeLines.length}` : "–"}${nodeLines.length ? ` – new: edge flags, surface 2 × 2/3 × 3/2 × 5, shell of a filleted cuboid (volume to 10<sup>−6</sup>), variable radius (stations, linear law, radius ≤ 0)` : ""}.</li>
+  <li><b>OpenSCAD comparison</b> (compare.py): <code>${esc(compareLine ?? "–")}</code>.</li>
+  <li><b>STEP</b> with OpenCASCADE (<code>tests/step/verify.py</code> over all examples): <code>${esc(stepLine?.replace(/; report.*$/, "") ?? "–")}</code>.</li>
+  <li><b>Vitest</b>: ${vt ? `${unitPassed} / ${unitTotal}` : "–"}; <b>pnpm typecheck</b> without errors.</li>
+  <li><b>Playwright</b>: ${pwAll.length ? `${passed(pwAll)} / ${pwAll.length}` : "–"} (existing scenarios ${passed(pwOld)} / ${pwOld.length}, new ${passed(pwNew)} / ${pwNew.length}).</li>
 </ul>
-<table><tr><th>ID</th><th>Szenario (web/e2e/ui-e.spec.ts)</th><th>Ergebnis</th><th>Dauer</th><th>Geprüft</th></tr>${pwRows}</table>
-${cargo ? `<table><tr><th>Rust-Testprogramm (letzter Lauf)</th><th>bestanden</th><th>neue Tests</th></tr>${rustRows}</table>` : ""}
+<table><tr><th>ID</th><th>Scenario (web/e2e/ui-e.spec.ts)</th><th>Result</th><th>Duration</th><th>Checked</th></tr>${pwRows}</table>
+${cargo ? `<table><tr><th>Rust test program (last run)</th><th>passed</th><th>new tests</th></tr>${rustRows}</table>` : ""}
 
-<h2>8 Grenzen</h2>
+<h2>8 Limitations</h2>
 <ul>
-  <li><b>shell aus Booleans</b> nur für ebene geöffnete Flächen (das Prisma ist die aufgedickte Versatzfläche); bei gekrümmten geöffneten Flächen bleibt SMLibs Ergebnis bzw. dessen Fehlermeldung. Geschlossene Schalen (ohne Zone) nehmen weiter SMLibs Ergebnis, wenn es gültig ist. Die Booleans kosten Zeit: dose_shell ${tBefore["spec/dose_shell.scad"] ? `${tBefore["spec/dose_shell.scad"].ms} ms (scheiternd) → ${tAfter["spec/dose_shell.scad"]?.ms ?? "–"} ms` : ""} (Abschnitt 6); in smlib.wasm (Node-Test, 90 × 34 × 18, r 3) ${esc(nodeShellMs ?? "–")}.</li>
-  <li><b>Wanddicke ≥ Rundungsradius</b> (r ≤ t, z. B. 30 × 20 × 10 mit r 1, Wand 2): der Innenversatz wäre scharfkantig; SMLibs Versatz scheitert dort in 7eba8aa (<code>SM_ERR</code>, Fork-Commit a252570 nicht übernommen), die Schale bleibt wie vorher ein Fehler (Meldung nennt beide Wege).</li>
-  <li><b>Variabler Radius:</b> SMLibs Variabler-Radius-Löser ist empfindlich. Steile Verläufe mit großem Radius an Taschenecken scheitern („überlappt sich“, z. B. Taschenrand mit 1 + p.x/20, 1,25–2,75), ebenso Kreiskanten mit veränderlichem Radius (<code>SM_ERR</code>); das Beispiel nutzt deshalb 1 + p.x/40. Sprünge (<code>p.z &lt; 10 ? 2 : 4</code> an senkrechten Kanten) werden über etwa drei Stützpunktabstände geglättet; der Hinweis zeigt den Bereich der Stützwerte (lookup-Spitze 4 → „3.9“, weil kein Stützpunkt genau auf x = 20 liegt). Position <code>p</code> im System der fillet-/Boolean-Anweisung. Kein variabler Radius für <code>chamfer</code> und <code>$fillet</code> (Warnung).</li>
-  <li><b>Glatte Kanten:</b> SMLibs Kriterium (Flächen innerhalb 2° tangential) – fast tangentiale Kanten werden nie gewählt. Die Prüfung „alte Kante eines Operanden“ (F4) vergleicht mit den Kantenzügen der Operanden, für gekrümmte Kanten nur so genau wie deren Abtastung (dort bleibt die frühere Wahl).</li>
-  <li><b>SMLib-Patch</b> als Arbeitskopie-Patch über 7eba8aa (der Fork-Commit liegt nicht auf <code>capi-tess</code>); vorgebaute Bibliotheken (<code>SMLIB_PREBUILT</code>) müssen mit dem Patch neu gebaut werden (Header-Änderung, sonst ODR-Bruch). Ein Symlink <code>third_party/smlib</code> wird von <code>fetch.sh</code> nur geprüft.</li>
+  <li><b>shell from booleans</b> only for planar opened faces (the prism is the thickened offset face); for curved opened faces SMLib's result or its error message remains. Closed shells (without a zone) still use SMLib's result if it is valid. The booleans cost time: dose_shell ${tBefore["spec/dose_shell.scad"] ? `${tBefore["spec/dose_shell.scad"].ms} ms (failing) → ${tAfter["spec/dose_shell.scad"]?.ms ?? "–"} ms` : ""} (section 6); in smlib.wasm (Node test, 90 × 34 × 18, r 3) ${esc(nodeShellMs ?? "–")}.</li>
+  <li><b>Wall thickness ≥ rounding radius</b> (r ≤ t, e.g. 30 × 20 × 10 with r 1, wall 2): the inward offset would be sharp-edged; SMLib's offset fails there in 7eba8aa (<code>SM_ERR</code>, fork commit a252570 not adopted), and the shell remains an error as before (the message names both approaches).</li>
+  <li><b>Variable radius:</b> SMLib's variable-radius solver is sensitive. Steep profiles with a large radius at pocket corners fail ("self-overlapping", e.g. pocket border with 1 + p.x/20, 1.25–2.75), as do circular edges with a varying radius (<code>SM_ERR</code>); the example therefore uses 1 + p.x/40. Jumps (<code>p.z &lt; 10 ? 2 : 4</code> on vertical edges) are smoothed over about three station spacings; the hint shows the range of the station values (lookup peak 4 → "3.9", because no station lies exactly at x = 20). Position <code>p</code> in the coordinate system of the fillet/boolean statement. No variable radius for <code>chamfer</code> and <code>$fillet</code> (warning).</li>
+  <li><b>Smooth edges:</b> SMLib's criterion (faces tangent within 2°) – nearly tangent edges are never selected. The check "old edge of an operand" (F4) compares with the edge chains of the operands, for curved edges only as accurately as their sampling (there the earlier selection remains).</li>
+  <li><b>SMLib patch</b> as a working-copy patch on top of 7eba8aa (the fork commit is not on <code>capi-tess</code>); prebuilt libraries (<code>SMLIB_PREBUILT</code>) must be rebuilt with the patch (header change, otherwise ODR violation). A symlink <code>third_party/smlib</code> is only checked by <code>fetch.sh</code>.</li>
 </ul>
 
-<h2>9 Screenshots der Browser-UI</h2>
+<h2>9 Screenshots of the browser UI</h2>
 ${blocks || "<p>–</p>"}
 </main>
 </body>
@@ -560,6 +563,6 @@ ${blocks || "<p>–</p>"}
 
 writeFileSync(join(out, "report.html"), html);
 const sizes = readdirSync(join(out, "img")).map((f) => statSync(join(out, "img", f)).size);
-console.log(`report7: ${f1Rows.length} F1-Fälle, nativ↔Wasm ${nativeWasm.filter((x) => x.same).length}/${nativeWasm.length}, Playwright ${passed(pwAll)}/${pwAll.length}, ${sizes.length} Bilder (max ${(Math.max(0, ...sizes) / 1024).toFixed(0)} KiB)`);
+console.log(`report7: ${f1Rows.length} F1 cases, native↔Wasm ${nativeWasm.filter((x) => x.same).length}/${nativeWasm.length}, Playwright ${passed(pwAll)}/${pwAll.length}, ${sizes.length} images (max ${(Math.max(0, ...sizes) / 1024).toFixed(0)} KiB)`);
 console.log(`-> ${join(out, "report.html")}`);
-console.log(`PDF: node tools/report/print-pdf.mjs ${join(out, "report.html")} ${join(out, "report.pdf")} "Testbericht 7: Kernel-Korrekturen und variabler Radius"`);
+console.log(`PDF: node tools/report/print-pdf.mjs ${join(out, "report.html")} ${join(out, "report.pdf")} "Test report 7: Kernel fixes and variable radius"`);

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 8 ("CLI für Agenten"): runs the new CLI functions on examples, measures run times,
+// Test report 8 ("CLI for agents"): runs the new CLI functions on examples, measures run times,
 // replays the case study (tools/report/report8-fallstudie/) and writes
 //
 //   docs/reports/08-cli-agenten/report.html, img/*
@@ -11,7 +11,7 @@
 // Binary: $CAD (default target/release/mcad).
 //
 //   node tools/report/report8.mjs
-//   node tools/report/print-pdf.mjs docs/reports/08-cli-agenten/report.html docs/reports/08-cli-agenten/report.pdf "Testbericht 8: CLI für Agenten"
+//   node tools/report/print-pdf.mjs docs/reports/08-cli-agenten/report.html docs/reports/08-cli-agenten/report.pdf "Test report 8: CLI for agents"
 
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -37,7 +37,8 @@ const git = (...a) => {
     return "–";
   }
 };
-const de = (x, d = 0) => Number(x).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d });
+/** Number in English format (decimal point, comma as thousands separator). */
+const num = (x, d = 0) => Number(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
 const rel = (p) => relative(root, p);
 
 rmSync(work, { recursive: true, force: true });
@@ -71,7 +72,7 @@ function excerpt(j, keys, maxArr = 3) {
   const cut = (v, depth = 0) => {
     if (Array.isArray(v)) {
       const a = v.slice(0, maxArr).map((x) => cut(x, depth + 1));
-      if (v.length > maxArr) a.push(`… (${v.length - maxArr} weitere)`);
+      if (v.length > maxArr) a.push(`… (${v.length - maxArr} more)`);
       return a;
     }
     if (v && typeof v === "object") {
@@ -109,7 +110,7 @@ const drawn = (name) => pixelStats(name).d;
 const capPixels = (name) => pixelStats(name).c;
 const lines = (s, n = 40) => {
   const l = s.trimEnd().split("\n");
-  return l.length > n ? [...l.slice(0, n), `… (${l.length - n} Zeilen mehr)`].join("\n") : l.join("\n");
+  return l.length > n ? [...l.slice(0, n), `… (${l.length - n} more lines)`].join("\n") : l.join("\n");
 };
 
 // ---------------------------------------------------------------- functions
@@ -127,7 +128,7 @@ const P = ex("projekt-gehaeuse/gehaeuse.scad");
   const a = run(["outline", P]);
   const b = runJson(["outline", G]);
   sec("1 cad outline", [
-    { kind: "p", html: "Ein Aufruf liefert die Struktur eines Projekts: Module mit Datei:Zeile, Parametern (Standardwert, geratener Typ), Raster und Anker je Modul (mit den Standardwerten ausgewertet, Ausdrucksebenen mit Ausdruck und Wert), Funktionen, Variablen der obersten Ebene mit Werten, benannte Instanzen und Bauteile (Hülle, Volumen), <code>include</code>/<code>use</code> und die Diagnosenanzahl. <code>--no-kernel</code> lässt Hüllen und Volumen weg." },
+    { kind: "p", html: "One call returns the structure of a project: modules with file:line, parameters (default value, inferred type), grids and anchors per module (evaluated with the default values, expression planes with expression and value), functions, top-level variables with values, named instances and parts (bounding box, volume), <code>include</code>/<code>use</code> and the diagnostic count. <code>--no-kernel</code> omits bounding boxes and volumes." },
     block(a, { text: true }),
     block(b, { json: ["modules", "parts", "counts"] }),
   ]);
@@ -137,10 +138,10 @@ const P = ex("projekt-gehaeuse/gehaeuse.scad");
 {
   const a = runJson(["render", G, "-o", im("bogen"), "--module", "gehaeuse", "--views", "all", "--show", "grids,anchors,labels,dims", "--size", "1500x1100"]);
   const b = runJson(["render", P, "-o", im("bogen-projekt"), "--views", "iso,front,top,right", "--show", "anchors,labels", "--size", "1500x1100"]);
-  sec("2 cad render: Kontaktbogen", [
-    { kind: "p", html: "<code>--views iso,front,top,right</code> (oder <code>all</code>) setzt beschriftete Teilbilder zu einem Bild zusammen. Alle Teilbilder haben dieselbe Skalierung (px/mm) und denselben Blickpunkt (Mitte des Modells), damit Größen zwischen den Ansichten vergleichbar sind; <code>--size</code> ist die Gesamtgröße. Das JSON nennt je Teilbild Lage und Kamera." },
-    block(a, { json: ["width", "height", "views", "overlays"], image: "bogen", caption: "Spec-Beispiel gehaeuse im Modulkontext: Raster g mit Ebenennamen und Rasterpunkten g[a,b,c], Anker als Rauten mit Richtungspfeil, Maße B/T/H." }),
-    block(b, { image: "bogen-projekt", caption: "Projekt aus drei Dateien im Dateikontext: Anker der benannten Instanzen (gehaeuse.deckel_mitte, dom[i].oben) und Bauteilnamen." }),
+  sec("2 cad render: contact sheet", [
+    { kind: "p", html: "<code>--views iso,front,top,right</code> (or <code>all</code>) combines labelled tiles into one image. All tiles have the same scale (px/mm) and the same target point (center of the model), so sizes are comparable between views; <code>--size</code> is the total size. The JSON gives position and camera per tile." },
+    block(a, { json: ["width", "height", "views", "overlays"], image: "bogen", caption: "Spec example gehaeuse in module context: grid g with plane names and grid points g[a,b,c], anchors as diamonds with direction arrow, dimensions W/D/H." }),
+    block(b, { image: "bogen-projekt", caption: "Project of three files in file context: anchors of the named instances (gehaeuse.deckel_mitte, dom[i].oben) and part names." }),
   ]);
 }
 
@@ -150,15 +151,15 @@ const P = ex("projekt-gehaeuse/gehaeuse.scad");
   const b = runJson(["render", G, "-o", im("kamera-perspektive"), "--perspective", "--fov", "45", "--azimuth", "-30", "--elevation", "20", "--size", "700x500"]);
   const c = runJson(["render", P, "-o", im("auswahl-part"), "--part", "deckel", "--show", "dims", "--size", "700x500"]);
   const d = runJson(["render", G, "-o", im("auswahl-zeilen"), "--line", "22", "--line", "23", "--fit", "line:22", "--zoom", "0.8", "--size", "700x500"]);
-  sec("3 cad render: freie Kamera und Auswahl", [
-    { kind: "p", html: "Kamera: <code>--azimuth</code> (0° von vorn/−y, 90° von rechts/+x), <code>--elevation</code> (90° von oben), <code>--zoom</code>, <code>--target x,y,z</code>, <code>--fit all|part:NAME|line:N</code>, <code>--ortho</code>/<code>--perspective [--fov]</code>. Auswahl: <code>--part NAME</code> (nur Bauteile), <code>--line N</code> und <code>--node I</code> mehrfach (Knoten voll, Rest gedimmt, <code>--only</code> lässt den Rest weg), kombinierbar mit <code>--module</code> und <code>-D</code>." },
+  sec("3 cad render: free camera and selection", [
+    { kind: "p", html: "Camera: <code>--azimuth</code> (0° from the front/−y, 90° from the right/+x), <code>--elevation</code> (90° from above), <code>--zoom</code>, <code>--target x,y,z</code>, <code>--fit all|part:NAME|line:N</code>, <code>--ortho</code>/<code>--perspective [--fov]</code>. Selection: <code>--part NAME</code> (parts only), <code>--line N</code> and <code>--node I</code> repeatable (nodes in full, the rest dimmed, <code>--only</code> omits the rest), combinable with <code>--module</code> and <code>-D</code>." },
     { kind: "pair", items: [
-      block(a, { image: "kamera-azimut", caption: "fillet_zonen.scad --line 12 --azimuth 120 --elevation 30: Zonen blau, ausgewählte Kanten orange." }),
+      block(a, { image: "kamera-azimut", caption: "fillet_zonen.scad --line 12 --azimuth 120 --elevation 30: zones blue, selected edges orange." }),
       block(b, { image: "kamera-perspektive", caption: "gehaeuse --perspective --fov 45 --azimuth -30 --elevation 20" }),
     ] },
     { kind: "pair", items: [
-      block(c, { image: "auswahl-part", caption: "Projekt --part deckel --show dims" }),
-      block(d, { image: "auswahl-zeilen", caption: "--line 22 --line 23 --fit line:22: zwei Zeilen hervorgehoben, eingepasst auf Zeile 22." }),
+      block(c, { image: "auswahl-part", caption: "Project --part deckel --show dims" }),
+      block(d, { image: "auswahl-zeilen", caption: "--line 22 --line 23 --fit line:22: two lines highlighted, fitted to line 22." }),
     ] },
     block(b, { json: ["camera"] }),
     block(d, { json: ["highlighted", "visible_nodes"] }),
@@ -177,10 +178,10 @@ const P = ex("projekt-gehaeuse/gehaeuse.scad");
     rows.push({ s: sh, r });
     tiles.push({ image: `ov-${s}`, caption: `--show ${sh}` });
   }
-  sec("4 cad render: Überlagerungen", [
-    { kind: "p", html: "<code>--show grids,anchors,handles,edges,labels,bbox,dims</code> (oder <code>all</code>): Raster des Kontextmoduls (Ebenen als Rechtecke am Rand des Rasters, Ausdrucksebenen gestrichelt, Schnittpunkte als Punkte, Ebenennamen <code>g.links</code>), Anker als Rauten mit Namen und Pfeil bei <code>dir</code>, Griffe als Quadrate, verdeckte Kanten gestrichelt, <code>labels</code> beschriftet Rasterpunkte <code>g[a,b,c]</code> (bis 48 Punkte je Raster), Griffe und Bauteile, <code>bbox</code> den Hüllquader, <code>dims</code> zusätzlich Breite/Tiefe/Höhe in mm. Beschriftungen, die sich überdecken würden, werden versetzt oder weggelassen." },
-    { kind: "grid", items: [{ image: "ov-ohne", caption: "ohne Überlagerung" }, ...tiles] },
-    { kind: "table", head: ["--show", "Raster", "Rasterpunkte", "Anker", "Griffe", "Beschriftungen", "Linien"], rows: rows.map(({ s, r }) => { const o = r.j?.overlays ?? {}; return [s, o.grids, o.grid_points, o.anchors, o.handles, o.labels, o.lines]; }) },
+  sec("4 cad render: overlays", [
+    { kind: "p", html: "<code>--show grids,anchors,handles,edges,labels,bbox,dims</code> (or <code>all</code>): grids of the context module (planes as rectangles at the edge of the grid, expression planes dashed, intersections as dots, plane names <code>g.links</code>), anchors as diamonds with name and arrow for <code>dir</code>, handles as squares, hidden edges dashed; <code>labels</code> labels grid points <code>g[a,b,c]</code> (up to 48 points per grid), handles and parts, <code>bbox</code> draws the bounding box, <code>dims</code> additionally width/depth/height in mm. Labels that would overlap are shifted or omitted." },
+    { kind: "grid", items: [{ image: "ov-ohne", caption: "no overlay" }, ...tiles] },
+    { kind: "table", head: ["--show", "Grids", "Grid points", "Anchors", "Handles", "Labels", "Lines"], rows: rows.map(({ s, r }) => { const o = r.j?.overlays ?? {}; return [s, o.grids, o.grid_points, o.anchors, o.handles, o.labels, o.lines]; }) },
   ]);
   void base;
 }
@@ -194,24 +195,24 @@ const P = ex("projekt-gehaeuse/gehaeuse.scad");
   const d = runJson(["render", join(fallstudie, "v2.scad"), "-o", im("schnitt-fallstudie"), "--section", "x=20", "--size", "600x450"]);
   const e = runJson(["render", ex("spec/fillet_zonen.scad"), "-o", im("xray"), "--xray", "--size", "600x450"]);
   const f = runJson(["render", P, "-o", im("xray-projekt"), "--xray", "--show", "anchors", "--size", "600x450"]);
-  sec("5 cad render: Schnitt und Röntgen", [
-    { kind: "p", html: "<b>Schnitt:</b> <code>--section x=WERT|y=WERT|z=WERT</code>, <code>--section-plane px,py,pz,nx,ny,nz</code>, <code>--section-flip</code>. Konvention (gleich für die spätere UI): Ebene durch <i>p</i> mit Normale <i>n</i>; entfernt wird die Hälfte, in die <i>n</i> zeigt, es bleibt (q − p)·n ≤ 0. <code>z=10</code> heißt p = (0,0,10), n = +z; <code>--section-flip</code> kehrt n um. Die Schnittfläche wird als schraffierte Kappe in eigener Farbe gezeichnet (Schraffur je Körper abwechselnd), die Schnittkontur als Linie." },
-    { kind: "p", html: "<b>Verfahren: Clipping im Renderer mit Kappe, kein Kernel-Boolean.</b> Die Dreiecke werden an der Ebene geometrisch abgeschnitten (Sutherland–Hodgman je Dreieck, ebenso Kanten). Die Kappe folgt dem Stencil-Prinzip der GPU: für jede Abtastung wird gezählt, wie oft der Sichtstrahl bis zur Ebene die Oberfläche eines Körpers kreuzt (Top-Left-Regel, damit gemeinsame Kanten genau einmal zählen); ist die Zahl ungerade, liegt der Ebenenpunkt im Körper und die Kappe wird in Ebenentiefe geschrieben. Gründe: (1) dasselbe Verfahren wird die UI mit GPU-Clipping und Stencil-Kappe verwenden, Bilder und Konvention stimmen also überein; (2) es braucht keine Kernelarbeit – ein Boolean mit einem Halbraum kostet bei verrundeten Körpern schnell Sekunden und kann scheitern, das Clipping kostet einige ms und gelingt immer; (3) es funktioniert für jede Ebene, auch für Ansichten mehrerer Bauteile. Voraussetzung sind geschlossene Netze; die Tessellierung der B-Rep-Körper ist geschlossen. Offene Flächen (<code>surface</code>) und transparente Körper bekommen keine Kappe." },
+  sec("5 cad render: section and X-ray", [
+    { kind: "p", html: "<b>Section:</b> <code>--section x=VALUE|y=VALUE|z=VALUE</code>, <code>--section-plane px,py,pz,nx,ny,nz</code>, <code>--section-flip</code>. Convention (the same for the later UI): plane through <i>p</i> with normal <i>n</i>; the half that <i>n</i> points into is removed, (q − p)·n ≤ 0 remains. <code>z=10</code> means p = (0,0,10), n = +z; <code>--section-flip</code> reverses n. The section face is drawn as a hatched cap in its own color (hatching alternates per body), the section contour as a line." },
+    { kind: "p", html: "<b>Method: clipping in the renderer with a cap, no kernel boolean.</b> The triangles are clipped geometrically at the plane (Sutherland–Hodgman per triangle, edges likewise). The cap follows the GPU stencil principle: for each sample, the number of times the view ray crosses the surface of a body up to the plane is counted (top-left rule, so shared edges count exactly once); if the count is odd, the plane point lies inside the body and the cap is written at plane depth. Reasons: (1) the UI will use the same method with GPU clipping and a stencil cap, so images and convention match; (2) it needs no kernel work – a boolean with a half-space quickly costs seconds for filleted bodies and can fail, clipping costs a few ms and always succeeds; (3) it works for any plane, also for views of several parts. It requires closed meshes; the tessellation of the B-rep bodies is closed. Open surfaces (<code>surface</code>) and transparent bodies get no cap." },
     { kind: "pair", items: [
-      block(a0, { image: "schnitt-ohne", caption: "ohne Schnitt" }),
-      block(a, { image: "schnitt-z", caption: "--section z=10: obere Hälfte entfernt, Wände geschnitten" }),
+      block(a0, { image: "schnitt-ohne", caption: "no section" }),
+      block(a, { image: "schnitt-z", caption: "--section z=10: upper half removed, walls cut" }),
     ] },
     { kind: "pair", items: [
-      block(b, { image: "schnitt-flip", caption: "--section z=10 --section-flip --view bottom: obere Hälfte bleibt" }),
+      block(b, { image: "schnitt-flip", caption: "--section z=10 --section-flip --view bottom: upper half remains" }),
       block(c, { image: "schnitt-ebene", caption: "flasche.scad --section-plane 0,0,0,1,1,0 --perspective" }),
     ] },
     { kind: "pair", items: [
-      block(d, { image: "schnitt-fallstudie", caption: "Fallstudie --section x=20: Stange in der Bohrung, zwei Kappen mit gegenläufiger Schraffur, Spalt 0,25 mm als Kontur" }),
-      block(e, { image: "xray", caption: "fillet_zonen.scad --xray: alles halbtransparent mit Kanten" }),
+      block(d, { image: "schnitt-fallstudie", caption: "Case study --section x=20: rod in the bore, two caps with opposite hatching, 0.25 mm gap as contour" }),
+      block(e, { image: "xray", caption: "fillet_zonen.scad --xray: everything semi-transparent with edges" }),
     ] },
     block(a, { json: ["section", "bounds"] }),
-    { kind: "p", html: `Sichtbare Fläche (Pixel ≠ Hintergrund, 600×450): ohne Schnitt ${de(drawn("schnitt-ohne"))}, mit <code>--section z=10</code> ${de(drawn("schnitt-z"))} (${de((100 * drawn("schnitt-z")) / Math.max(1, drawn("schnitt-ohne")), 0)} %), davon Kappe ${de(capPixels("schnitt-z"))}. Derselbe Vergleich ist der Test <code>render_section_reduces_visible_area</code>.` },
-    { kind: "figure", image: "xray-projekt", caption: "Projekt --xray --show anchors: Schraubdome und Anker sichtbar durch die Wand" },
+    { kind: "p", html: `Visible area (pixels ≠ background, 600×450): without section ${num(drawn("schnitt-ohne"))}, with <code>--section z=10</code> ${num(drawn("schnitt-z"))} (${num((100 * drawn("schnitt-z")) / Math.max(1, drawn("schnitt-ohne")), 0)} %), of which cap ${num(capPixels("schnitt-z"))}. The same comparison is the test <code>render_section_reduces_visible_area</code>.` },
+    { kind: "figure", image: "xray-projekt", caption: "Project --xray --show anchors: screw bosses and anchors visible through the wall" },
   ]);
   void f;
 }
@@ -227,16 +228,16 @@ const P = ex("projekt-gehaeuse/gehaeuse.scad");
   const e = run(["measure", G, "--between", "g[links,vorne,boden]", "[0,0,0]"]);
   const kr = runJson(["render", K, "-o", im("kollision"), "--show", "labels", "--xray", "--size", "600x400"]);
   sec("6 cad measure", [
-    { kind: "p", html: "<code>--between A B</code> mit Ankern (<code>k.ecke</code>, <code>k[2].ecke</code>, im Modulkontext <code>ecke</code>), Rasterpunkten des Kontextmoduls (<code>g[a,b,c]</code>, Einträge auch Zahlen oder <code>_</code>) und Koordinaten <code>[x,y,z]</code>: Abstand und Differenzvektor. <code>--bounds/--volume/--area ZIEL</code> mit <code>all</code>, <code>part:NAME</code>, <code>line:N</code>, <code>node:I</code>. <code>--interference</code>: paarweise Schnittvolumen aller Bauteile, exakt über den Kernel (Boolean-Schnitt der B-Rep, vorher Test der Hüllquader); Kollision ab <code>--tolerance</code> (Standard 0,001 mm³). <code>--clearance A B</code>: kleinster Abstand zweier Bauteile als exakter Dreieck-Dreieck-Abstand ihrer Tessellierungen (BVH, Toleranz <code>--mesh-tol</code> 0,01 mm, Genauigkeit ± 2·0,01 mm); überschneiden sich die Bauteile, ist der Abstand 0 und <code>collision: true</code>." },
-    { kind: "p", html: "Sollwerte Spec-Beispiel <i>gehaeuse</i>: k.ecke = [60, 30, 20], k.oben = [0, 0, 20] → √(60² + 30²) = 67,082 mm; im Modul g[links,vorne,boden] → g[rechts,hinten,deckel] = √(40² + 30² + 20²) = 53,852 mm; Volumen k = 60·30·20 − 54·30·17 = 8460 mm³. <i>kollision.scad</i>: a und b überlappen 2 × 10 × 10 = 200 mm³, c steht 5 mm neben b." },
+    { kind: "p", html: "<code>--between A B</code> with anchors (<code>k.ecke</code>, <code>k[2].ecke</code>, in module context <code>ecke</code>), grid points of the context module (<code>g[a,b,c]</code>, entries may also be numbers or <code>_</code>) and coordinates <code>[x,y,z]</code>: distance and difference vector. <code>--bounds/--volume/--area TARGET</code> with <code>all</code>, <code>part:NAME</code>, <code>line:N</code>, <code>node:I</code>. <code>--interference</code>: pairwise intersection volume of all parts, exact via the kernel (boolean intersection of the B-rep, bounding boxes tested first); collision from <code>--tolerance</code> (default 0.001 mm³). <code>--clearance A B</code>: smallest distance between two parts as the exact triangle–triangle distance of their tessellations (BVH, tolerance <code>--mesh-tol</code> 0.01 mm, accuracy ± 2·0.01 mm); if the parts intersect, the distance is 0 and <code>collision: true</code>." },
+    { kind: "p", html: "Expected values, spec example <i>gehaeuse</i>: k.ecke = [60, 30, 20], k.oben = [0, 0, 20] → √(60² + 30²) = 67.082 mm; in the module g[links,vorne,boden] → g[rechts,hinten,deckel] = √(40² + 30² + 20²) = 53.852 mm; volume k = 60·30·20 − 54·30·17 = 8460 mm³. <i>kollision.scad</i>: a and b overlap by 2 × 10 × 10 = 200 mm³, c is 5 mm next to b." },
     block(a, { text: true }),
     block(b, { text: true }),
     block(b2, { text: true }),
-    block(e, { text: true, note: "Fehler erwartet: Raster g ist im Dateikontext nicht sichtbar (Exit 2)." }),
+    block(e, { text: true, note: "Error expected: grid g is not visible in file context (exit 2)." }),
     block(c, { text: true }),
     block(c2, { json: ["interference"] }),
     block(d, { json: ["clearance"] }),
-    { kind: "figure", image: "kollision", caption: "kollision.scad --xray --show labels: a und b überlappen, c mit 5 mm Abstand" },
+    { kind: "figure", image: "kollision", caption: "kollision.scad --xray --show labels: a and b overlap, c at 5 mm distance" },
   ]);
   void kr;
 }
@@ -250,11 +251,11 @@ const P = ex("projekt-gehaeuse/gehaeuse.scad");
   const c = run(["set", rel(f), "--literal", "5:30=4"]);
   const d = run(["set", rel(f), "--param", "gehaeuse.t=foo"]);
   sec("7 cad set", [
-    { kind: "p", html: "<code>--param modul.param=wert</code> schreibt einen Standardwert (wie „Als Standard übernehmen“ in der UI, Module auch aus <code>use</code>-Dateien), <code>--literal [datei:]zeile:spalte=wert</code> ersetzt das editierbare Literal an der Stelle – dieselben Literale, die die UI über Griffe, Regler und Rasterebenen ändert. Vor dem Schreiben wird das geänderte Projekt ausgewertet; neue Fehler verhindern das Schreiben (Exit 1, <code>--force</code> überstimmt). Geschrieben wird atomar (temporäre Datei + Umbenennen); <code>--dry-run</code> zeigt nur den Diff." },
+    { kind: "p", html: "<code>--param module.param=value</code> writes a default value (like \"Apply as default\" in the UI, also for modules from <code>use</code> files), <code>--literal [file:]line:col=value</code> replaces the editable literal at that position – the same literals the UI changes via handles, sliders and grid planes. Before writing, the changed project is evaluated; new errors prevent writing (exit 1, <code>--force</code> overrides). Writing is atomic (temporary file + rename); <code>--dry-run</code> only shows the diff." },
     block(a, { text: true }),
     block(b, { json: ["changes", "written", "errors_before", "errors_after"] }),
-    block(c, { text: true, note: "Fehler erwartet: an 5:30 steht `t`, eine Referenz auf einen Parameter, kein Literal (Exit 2)." }),
-    block(d, { text: true, note: "Abgelehnt: die Änderung erzeugt Fehler (Exit 1), die Datei bleibt unverändert." }),
+    block(c, { text: true, note: "Error expected: 5:30 holds `t`, a reference to a parameter, not a literal (exit 2)." }),
+    block(d, { text: true, note: "Rejected: the change produces errors (exit 1), the file stays unchanged." }),
   ]);
 }
 
@@ -262,8 +263,8 @@ const P = ex("projekt-gehaeuse/gehaeuse.scad");
 {
   const a = run([G]);
   const b = run([]);
-  sec("8 Reservierter UI-Einstieg", [
-    { kind: "p", html: "<code>cad datei.scad</code> (Positionsargument, das kein Befehl ist) startet später die Desktop-UI. Heute: Meldung und Exit 2. <code>cad</code> ohne Argumente zeigt die Hilfe (Exit 0). Ein Tippfehler im Befehl ergibt „unbekannter Befehl“." },
+  sec("8 Reserved UI entry point", [
+    { kind: "p", html: "<code>cad file.scad</code> (a positional argument that is not a command) will later start the desktop UI. Today: message and exit 2. <code>cad</code> without arguments shows the help (exit 0). A typo in the command gives \"unknown command\"." },
     block(a, { text: true }),
     block(b, { text: true, maxLines: 22 }),
   ]);
@@ -308,11 +309,11 @@ const watchRuns = [];
   copyFileSync(join(root, "tests/models/spec/variabler_radius.scad"), vr);
   const src = readFileSync(vr, "utf8");
   const res = await watch(vr, [
-    () => writeFileSync(vr, src + "// Kommentar\n"),
+    () => writeFileSync(vr, src + "// comment\n"),
     () => writeFileSync(vr, src.replace("deckel = 20", "deckel = 22")),
     () => writeFileSync(vr, src.replace("1 + p.x / 40", "1 + p.x / 50")),
   ], ["--render", rel(im("watch")), "--views", "iso,top", "--size", "800x400"]);
-  const what = ["Start (alles neu)", "Kommentar angehängt (alles aus dem Cache)", "deckel = 22 (zwei Verrundungen neu)", "Radiusfunktion der Tasche geändert"];
+  const what = ["start (everything new)", "comment appended (everything from the cache)", "deckel = 22 (two fillets rebuilt)", "radius function of the pocket changed"];
   res.forEach((r, i) => watchRuns.push({ file: "variabler_radius.scad", what: what[i] ?? "", r }));
   const dir = join(work, "projekt");
   mkdirSync(join(dir, "lib"), { recursive: true });
@@ -323,14 +324,14 @@ const watchRuns = [];
     () => writeFileSync(join(dir, "konstanten.scad"), konst.replace("abstand = 10", "abstand = 15")),
     () => writeFileSync(join(dir, "lib/teile.scad"), teile.replace("dom_r = 3;", "dom_r = 3.5;")),
   ]);
-  const what2 = ["Start (alles neu)", "konstanten.scad: abstand = 15 (nur Lage des Deckels)", "lib/teile.scad: dom_r = 3.5 (Schraubdome neu)"];
+  const what2 = ["start (everything new)", "konstanten.scad: abstand = 15 (only the position of the lid)", "lib/teile.scad: dom_r = 3.5 (screw bosses rebuilt)"];
   res2.forEach((r, i) => watchRuns.push({ file: "projekt-gehaeuse", what: what2[i] ?? "", r }));
 }
 sec("9 cad watch", [
-  { kind: "p", html: "<code>cad watch DATEI [--json] [--render bild.png …]</code> beobachtet die Datei und alle eingebundenen Dateien (Crate <code>notify</code>, inotify unter Linux; beobachtet werden die Verzeichnisse, damit auch atomares Speichern der Editoren erkannt wird), wertet bei jeder Änderung in derselben Sitzung neu aus und schreibt je Lauf eine JSON-Zeile (Diagnosen, Zeiten, Volumen, Bauteile, Bild). Der Engine-Cache bleibt erhalten: unveränderte Knoten kommen aus dem Cache. Ende mit Strg+C, <code>--once-after-change</code> oder <code>--timeout S</code>." },
-  { kind: "table", head: ["Datei", "Lauf", "Auslöser", "Gesamt ms", "Kernel ms", "Bild ms", "aus Cache / Knoten", "Kernel-Aufrufe", "Volumen mm³"], rows: watchRuns.map(({ file, what, r }) => [file, `${r.run}: ${what}`, (r.changed ?? []).join(", ") || r.trigger, de(r.timings?.total_ms ?? 0, 1), de(r.timings?.kernel_ms ?? 0, 1), r.timings?.render_ms != null ? de(r.timings.render_ms, 1) : "–", `${r.stats?.cache_hits ?? "–"} / ${r.stats?.nodes ?? "–"}`, r.stats?.kernel_calls ?? "–", r.volume != null ? de(r.volume, 1) : "–"]) },
-  { kind: "pre", label: "JSON-Zeile (Lauf 3, gekürzt)", text: watchRuns[2] ? excerpt(watchRuns[2].r, ["command", "run", "trigger", "changed", "ok", "errors", "stats", "volume", "timings", "render"]) : "–" },
-  { kind: "figure", image: "watch", caption: "Bild nach dem letzten Lauf von watch --render … --views iso,top" },
+  { kind: "p", html: "<code>cad watch FILE [--json] [--render image.png …]</code> watches the file and all included files (crate <code>notify</code>, inotify on Linux; the directories are watched so that atomic saves by editors are detected too), re-evaluates in the same session on every change and writes one JSON line per run (diagnostics, timings, volume, parts, image). The engine cache is kept: unchanged nodes come from the cache. Stop with Ctrl+C, <code>--once-after-change</code> or <code>--timeout S</code>." },
+  { kind: "table", head: ["File", "Run", "Trigger", "Total ms", "Kernel ms", "Image ms", "from cache / nodes", "Kernel calls", "Volume mm³"], rows: watchRuns.map(({ file, what, r }) => [file, `${r.run}: ${what}`, (r.changed ?? []).join(", ") || r.trigger, num(r.timings?.total_ms ?? 0, 1), num(r.timings?.kernel_ms ?? 0, 1), r.timings?.render_ms != null ? num(r.timings.render_ms, 1) : "–", `${r.stats?.cache_hits ?? "–"} / ${r.stats?.nodes ?? "–"}`, r.stats?.kernel_calls ?? "–", r.volume != null ? num(r.volume, 1) : "–"]) },
+  { kind: "pre", label: "JSON line (run 3, shortened)", text: watchRuns[2] ? excerpt(watchRuns[2].r, ["command", "run", "trigger", "changed", "ok", "errors", "stats", "volume", "timings", "render"]) : "–" },
+  { kind: "figure", image: "watch", caption: "Image after the last run of watch --render … --views iso,top" },
 ]);
 
 // ---------------------------------------------------------------- timings: repeated calls
@@ -355,7 +356,7 @@ const cmdTimes = [
   ["set --dry-run", ["set", G, "--param", "gehaeuse.w=50", "--dry-run"]],
 ].map(([n, a]) => {
   const r = run(a);
-  return [n, de(r.ms, 0), r.code];
+  return [n, num(r.ms, 0), r.code];
 });
 
 // ---------------------------------------------------------------- case study
@@ -366,18 +367,18 @@ const steps = [];
   const fr = rel(f);
   const step = (title, why, cmds, extra = {}) => steps.push({ title, why, cmds, ...extra });
   copyFileSync(join(fallstudie, "v1.scad"), f);
-  step("Entwurf schreiben", "Erste Fassung mit Raster g (Ebenen für Platte, Ausleger, Bohrung, Schraublöcher), zwei Ankern und den Bauteilen halter und stange.", [], { source: readFileSync(f, "utf8") });
-  step("Prüfen und verstehen", "check meldet keine Fehler; outline zeigt Raster, Anker und Bauteile mit Hülle und Volumen.", [run(["check", fr]), run(["outline", fr])]);
-  step("Ansehen", "Kontaktbogen mit Ankern und Beschriftung: Platte, Ausleger, Bohrung und Stange liegen wie geplant.", [run(["render", fr, "-o", rel(im("fs-1")), "--views", "all", "--show", "anchors,labels", "--size", "1400x1000"])], { image: "fs-1" });
-  step("Nachmessen", "Kollisionen und Abstand Stange ↔ Bohrung: Abstand 0 – die Stange liegt ohne Spiel in der Bohrung (Ø 20 in Ø 20). Fehler im Entwurf gefunden.", [run(["measure", fr, "--interference", "--clearance", "halter", "stange"]), run(["measure", fr, "--between", "halter.schraube", "halter.stange"])]);
-  step("Korrigieren mit cad set", "Spiel 0,5 mm als Standardwert setzen (erst Diff, dann schreiben); danach Abstand 0,25 mm (radial) ± 0,02 mm.", [run(["set", fr, "--param", "halter.spiel=0.5", "--dry-run"]), run(["set", fr, "--param", "halter.spiel=0.5"]), run(["measure", fr, "--clearance", "halter", "stange"])]);
+  step("write the draft", "First version with grid g (planes for plate, arm, bore, screw holes), two anchors and the parts halter and stange.", [], { source: readFileSync(f, "utf8") });
+  step("check and understand", "check reports no errors; outline shows grid, anchors and parts with bounding box and volume.", [run(["check", fr]), run(["outline", fr])]);
+  step("look", "Contact sheet with anchors and labels: plate, arm, bore and rod are positioned as planned.", [run(["render", fr, "-o", rel(im("fs-1")), "--views", "all", "--show", "anchors,labels", "--size", "1400x1000"])], { image: "fs-1" });
+  step("measure", "Collisions and clearance rod ↔ bore: distance 0 – the rod sits in the bore without clearance (Ø 20 in Ø 20). Design error found.", [run(["measure", fr, "--interference", "--clearance", "halter", "stange"]), run(["measure", fr, "--between", "halter.schraube", "halter.stange"])]);
+  step("fix with cad set", "Set a clearance of 0.5 mm as default value (diff first, then write); afterwards the distance is 0.25 mm (radial) ± 0.02 mm.", [run(["set", fr, "--param", "halter.spiel=0.5", "--dry-run"]), run(["set", fr, "--param", "halter.spiel=0.5"]), run(["measure", fr, "--clearance", "halter", "stange"])]);
   const before = readFileSync(f, "utf8");
   copyFileSync(join(fallstudie, "v2.scad"), f);
-  const diff = spawnSync("diff", ["-u", "--label", "vorher", "--label", "nachher", "-", f], { input: before, encoding: "utf8" }).stdout;
-  step("Innenkante verrunden", "Zonenblock fillet(4) um die Innenkante Platte/Ausleger (zone(g[*, platte, arm], d = 2)), mit dem Edit-Werkzeug eingefügt. inspect der fillet-Zeile: genau 1 Kante ausgewählt.", [run(["check", fr]), run(["inspect", fr, "--line", "10"])], { source: diff, sourceLabel: "Änderung (diff)" });
-  step("Raster und Zone ansehen", "Zeile 10 hervorgehoben im Modulkontext, Raster mit Ebenennamen (100 Rasterpunkte: nur Ebenen beschriftet).", [run(["render", fr, "-o", rel(im("fs-2")), "--line", "10", "--views", "iso,right", "--show", "grids,labels", "--size", "1400x620"])], { image: "fs-2" });
-  step("Schnitt durch die Bohrung", "Schnitt x = 20 zeigt Stange und Bohrung mit Spalt; Maße des Ganzen.", [run(["render", fr, "-o", rel(im("fs-3")), "--section", "x=20", "--show", "dims", "--size", "900x650"])], { image: "fs-3" });
-  step("Ausgeben", "Jedes Bauteil als STEP-Datei.", [run(["export", fr, "--all-parts", "-o", rel(join(work, "teile")), "--format", "step"])]);
+  const diff = spawnSync("diff", ["-u", "--label", "before", "--label", "after", "-", f], { input: before, encoding: "utf8" }).stdout;
+  step("fillet the inner edge", "Zone block fillet(4) around the inner edge plate/arm (zone(g[*, platte, arm], d = 2)), inserted with the Edit tool. inspect of the fillet line: exactly 1 edge selected.", [run(["check", fr]), run(["inspect", fr, "--line", "10"])], { source: diff, sourceLabel: "Change (diff)" });
+  step("view grid and zone", "Line 10 highlighted in module context, grid with plane names (100 grid points: only planes labelled).", [run(["render", fr, "-o", rel(im("fs-2")), "--line", "10", "--views", "iso,right", "--show", "grids,labels", "--size", "1400x620"])], { image: "fs-2" });
+  step("section through the bore", "Section x = 20 shows rod and bore with gap; dimensions of the whole.", [run(["render", fr, "-o", rel(im("fs-3")), "--section", "x=20", "--show", "dims", "--size", "900x650"])], { image: "fs-3" });
+  step("export", "Each part as a STEP file.", [run(["export", fr, "--all-parts", "-o", rel(join(work, "teile")), "--format", "step"])]);
 }
 
 // ---------------------------------------------------------------- tests
@@ -407,7 +408,7 @@ void newTests;
 
 // ---------------------------------------------------------------- HTML
 
-const date = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const commit = git("rev-parse", "--short", "HEAD");
 const branch = git("rev-parse", "--abbrev-ref", "HEAD");
 const rustc = (() => {
@@ -420,16 +421,16 @@ const rustc = (() => {
 
 const cmdHtml = (b) => {
   const r = b.r;
-  let h = `<div class="cmd"><pre class="call">$ ${esc(r.cmd)}<span class="t">  ${de(r.ms, 0)} ms, Exit ${r.code}</span></pre>`;
+  let h = `<div class="cmd"><pre class="call">$ ${esc(r.cmd)}<span class="t">  ${num(r.ms, 0)} ms, Exit ${r.code}</span></pre>`;
   if (b.note) h += `<div class="small">${esc(b.note)}</div>`;
   if (b.text) h += `<pre>${esc(lines((r.out + r.err).replaceAll(root + "/", ""), b.maxLines ?? 40))}</pre>`;
-  if (b.json) h += `<div class="lbl">JSON (Auszug: ${esc(b.json.join(", "))})</div><pre>${esc(lines(excerpt(r.j, b.json), 60))}</pre>`;
+  if (b.json) h += `<div class="lbl">JSON (excerpt: ${esc(b.json.join(", "))})</div><pre>${esc(lines(excerpt(r.j, b.json), 60))}</pre>`;
   h += "</div>";
   if (b.image) h += fig(b.image, b.caption);
   return h;
 };
 const fig = (name, caption) =>
-  existsSync(im(name)) ? `<figure><img src="${imRel(name)}"><figcaption>${esc(caption ?? "")}</figcaption></figure>` : `<figure class="missing">${esc(name)} fehlt</figure>`;
+  existsSync(im(name)) ? `<figure><img src="${imRel(name)}"><figcaption>${esc(caption ?? "")}</figcaption></figure>` : `<figure class="missing">${esc(name)} missing</figure>`;
 const itemHtml = (it) => {
   switch (it.kind) {
     case "p":
@@ -451,15 +452,15 @@ const itemHtml = (it) => {
   }
 };
 
-const timingRows = timing.map(({ f, i, wall, t }) => [f.replace("tests/models/", ""), i, de(wall, 0), de(t.evaluate_ms ?? 0, 0), de(t.kernel_ms ?? 0, 0), de(t.render_ms ?? 0, 0)]);
+const timingRows = timing.map(({ f, i, wall, t }) => [f.replace("tests/models/", ""), i, num(wall, 0), num(t.evaluate_ms ?? 0, 0), num(t.kernel_ms ?? 0, 0), num(t.render_ms ?? 0, 0)]);
 const maxWall = Math.max(...timing.map((t) => t.wall));
 const vrWatch = watchRuns.filter((w) => w.file === "variabler_radius.scad");
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 8 – CLI für Agenten</title>
+<title>Test report 8 – CLI for agents</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -502,71 +503,71 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 8 – CLI für Agenten</h1>
-<div class="meta">cad-cli, cad-render, cad-session · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} Kerne (${esc(os.cpus()[0]?.model ?? "")})</div>
+<h1>Test report 8 – CLI for agents</h1>
+<div class="meta">cad-cli, cad-render, cad-session · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} cores (${esc(os.cpus()[0]?.model ?? "")})</div>
 
 <div class="summary">
-  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>${cargoSum ? `${cargoSum.ignored} ignoriert` : ""}</div>
-  <div>neue Tests<b>${agentTests.length}</b>agent.rs, features.rs, geom</div>
-  <div>cargo clippy -D warnings<b class="${clippy != null && !/^(error|warning)/m.test(clippy) ? "ok" : "bad"}">${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "Warnungen" : "sauber"}</b></div>
-  <div>cargo fmt --check<b class="${fmt != null && fmt.trim() === "" ? "ok" : "bad"}">${fmt == null ? "–" : fmt.trim() === "" ? "sauber" : "Abweichungen"}</b></div>
-  <div>render je Aufruf<b>${de(maxWall / 1000, 2)} s</b>max. (2 Läufe × 3 Dateien)</div>
-  <div>watch-Lauf<b>${vrWatch[1] ? de(vrWatch[1].r.timings.total_ms, 0) + " ms" : "–"}</b>Kommentar, alles aus dem Cache</div>
+  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>${cargoSum ? `${cargoSum.ignored} ignored` : ""}</div>
+  <div>new tests<b>${agentTests.length}</b>agent.rs, features.rs, geom</div>
+  <div>cargo clippy -D warnings<b class="${clippy != null && !/^(error|warning)/m.test(clippy) ? "ok" : "bad"}">${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "warnings" : "clean"}</b></div>
+  <div>cargo fmt --check<b class="${fmt != null && fmt.trim() === "" ? "ok" : "bad"}">${fmt == null ? "–" : fmt.trim() === "" ? "clean" : "deviations"}</b></div>
+  <div>render per call<b>${num(maxWall / 1000, 2)} s</b>max. (2 runs × 3 files)</div>
+  <div>watch run<b>${vrWatch[1] ? num(vrWatch[1].r.timings.total_ms, 0) + " ms" : "–"}</b>comment, everything from the cache</div>
 </div>
 
-<h2>Umfang</h2>
-<p>Die CLI <code>cad</code> ist so erweitert, dass ein Agent (z. B. Claude Code) Modelle ganz ohne UI entwickeln und prüfen kann – allein oder während ein Mensch dieselben Dateien in der UI bearbeitet. Neu:</p>
+<h2>Scope</h2>
+<p>The CLI <code>cad</code> is extended so that an agent (e.g. Claude Code) can develop and check models entirely without the UI – alone or while a human edits the same files in the UI. New:</p>
 <table>
-<tr><th>Befehl/Option</th><th>Zweck</th></tr>
-<tr><td><code>cad outline</code></td><td>Übersicht eines Projekts in einem Aufruf</td></tr>
-<tr><td><code>render --views</code></td><td>Kontaktbogen mit beschrifteten Teilbildern gleicher Skalierung</td></tr>
-<tr><td><code>render --azimuth/--elevation/--zoom/--target/--fit/--perspective</code></td><td>Freie Kamera</td></tr>
-<tr><td><code>render --part/--line (mehrfach)/--node/--only</code></td><td>Auswahl, kombinierbar mit <code>--module</code>, <code>-D</code></td></tr>
-<tr><td><code>render --show grids,anchors,handles,edges,labels,bbox,dims</code></td><td>Überlagerungen</td></tr>
-<tr><td><code>render --section/--section-plane/--section-flip</code>, <code>--xray</code></td><td>Schnitt mit gefüllter Kappe, Röntgen</td></tr>
-<tr><td><code>cad measure</code></td><td>Abstände (Anker, Rasterpunkte, Koordinaten), Hülle, Volumen, Fläche, Kollisionen, Bauteilabstand</td></tr>
-<tr><td><code>cad watch</code></td><td>Neu auswerten bei Dateiänderung, eine JSON-Zeile je Lauf, optional Bild</td></tr>
-<tr><td><code>cad set</code></td><td>Standardwert oder Literal über die Engine ändern, geprüft, atomar, <code>--dry-run</code></td></tr>
-<tr><td><code>cad DATEI.scad</code>, <code>cad</code></td><td>UI-Einstieg reserviert (Exit 2 mit Meldung), ohne Argumente Hilfe</td></tr>
+<tr><th>Command/option</th><th>Purpose</th></tr>
+<tr><td><code>cad outline</code></td><td>Overview of a project in one call</td></tr>
+<tr><td><code>render --views</code></td><td>Contact sheet with labelled tiles at the same scale</td></tr>
+<tr><td><code>render --azimuth/--elevation/--zoom/--target/--fit/--perspective</code></td><td>Free camera</td></tr>
+<tr><td><code>render --part/--line (repeatable)/--node/--only</code></td><td>Selection, combinable with <code>--module</code>, <code>-D</code></td></tr>
+<tr><td><code>render --show grids,anchors,handles,edges,labels,bbox,dims</code></td><td>Overlays</td></tr>
+<tr><td><code>render --section/--section-plane/--section-flip</code>, <code>--xray</code></td><td>Section with filled cap, X-ray</td></tr>
+<tr><td><code>cad measure</code></td><td>Distances (anchors, grid points, coordinates), bounding box, volume, area, collisions, part clearance</td></tr>
+<tr><td><code>cad watch</code></td><td>Re-evaluate on file change, one JSON line per run, optional image</td></tr>
+<tr><td><code>cad set</code></td><td>Change a default value or literal through the engine, checked, atomic, <code>--dry-run</code></td></tr>
+<tr><td><code>cad FILE.scad</code>, <code>cad</code></td><td>UI entry point reserved (exit 2 with message), help without arguments</td></tr>
 </table>
-<p>Jeder Befehl hat <code>--json</code> mit festem, versioniertem Schema (<code>schema_version</code> 1, vollständig im Kopf von <code>crates/cad-cli/src/main.rs</code>, Kurzfassung im Skill <code>.claude/skills/cad-cli/SKILL.md</code>) und die bisherigen Exit-Codes (0 ok, 1 Modellfehler, 2 Aufruf, 3 Kernel). Empfohlener Ablauf für Agenten: <b>outline → editieren → check → render --views all --show grids,anchors → inspect/measure → export</b>. Beschriftungen zeichnet <code>cad-render</code> mit einer eingebetteten Bitmap-Schrift (DejaVu Sans Mono, erzeugt von <code>tools/font/gen-font.py</code>), ohne neue Laufzeitabhängigkeit.</p>
+<p>Every command has <code>--json</code> with a fixed, versioned schema (<code>schema_version</code> 1, complete in the header of <code>crates/cad-cli/src/main.rs</code>, short form in the skill <code>.claude/skills/cad-cli/SKILL.md</code>) and the existing exit codes (0 ok, 1 model error, 2 invocation, 3 kernel). Recommended workflow for agents: <b>outline → edit → check → render --views all --show grids,anchors → inspect/measure → export</b>. <code>cad-render</code> draws labels with an embedded bitmap font (DejaVu Sans Mono, generated by <code>tools/font/gen-font.py</code>), without a new runtime dependency.</p>
 
 ${sections.map((s) => `<h2>${esc(s.title)}</h2>\n${s.items.map(itemHtml).join("\n")}`).join("\n")}
 
-<h2>10 Leistung bei wiederholten Aufrufen</h2>
-<p>Jeder CLI-Aufruf startet einen neuen Prozess mit leerem Cache. Gemessen: <code>cad render</code> zweimal hintereinander (Standardansicht 1024×768), Wandzeit des Prozesses und die Zeiten aus dem JSON (<code>timings</code>: Auswerten inkl. Kernel, davon Kernel, Bild inkl. Tessellierung). Prozessstart mit Parser ohne Kernel (<code>check --no-kernel</code>): ${de(baseline.ms, 0)} ms.</p>
-<table><tr><th>Datei</th><th>Lauf</th><th>Wandzeit ms</th><th>Auswerten ms</th><th>davon Kernel ms</th><th>Bild ms</th></tr>
+<h2>10 Performance of repeated calls</h2>
+<p>Every CLI call starts a new process with an empty cache. Measured: <code>cad render</code> twice in a row (default view 1024×768), wall time of the process and the timings from the JSON (<code>timings</code>: evaluation incl. kernel, of which kernel, image incl. tessellation). Process start with parser, without kernel (<code>check --no-kernel</code>): ${num(baseline.ms, 0)} ms.</p>
+<table><tr><th>File</th><th>Run</th><th>Wall time ms</th><th>Evaluation ms</th><th>of which kernel ms</th><th>Image ms</th></tr>
 ${timingRows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>
-<p><b>Entscheidung: kein persistenter Cache zwischen Aufrufen.</b> Der zweite Aufruf ist so schnell wie der erste (kein Cache), ein Aufruf dauert bis ${de(maxWall / 1000, 2)} s – bei <i>variabler_radius</i> an der Grenze von 1 s, fast alles Kernelzeit (Verrundungen) und Tessellierung. Ein Datei-Cache der Kernel-Ergebnisse wäre aufwendig: die Ergebnisse sind Handles auf SMLib-Objekte im Speicher der nativen Bibliothek, ein Cache müsste die B-Rep serialisieren und wieder einlesen (und mit der Provenienz der Flächen und Kanten), was selbst Kernelzeit kostet. Stattdessen <code>cad watch</code>: dieselbe Sitzung bleibt bestehen, der Engine-Cache hält alle Knotenergebnisse; ein Lauf nach einer Änderung kostet nur die geänderten Knoten (Tabelle in Abschnitt 9: ${vrWatch[1] ? de(vrWatch[1].r.timings.total_ms, 0) : "–"} ms für eine Änderung ohne Geometrieeinfluss, ${vrWatch[2] ? de(vrWatch[2].r.timings.total_ms, 0) : "–"} ms wenn zwei verrundete Körper neu entstehen). Der Skill empfiehlt <code>cad watch</code> für Schleifen mit vielen kleinen Schritten.</p>
-<h3>Laufzeit je Befehl (Spec-Beispiel gehaeuse, Wandzeit)</h3>
-<table><tr><th>Befehl</th><th>ms</th><th>Exit</th></tr>${cmdTimes.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>
+<p><b>Decision: no persistent cache between calls.</b> The second call is as fast as the first (no cache); a call takes up to ${num(maxWall / 1000, 2)} s – for <i>variabler_radius</i> at the 1 s limit, almost all of it kernel time (fillets) and tessellation. A file cache of the kernel results would be costly: the results are handles to SMLib objects in the memory of the native library; a cache would have to serialize and re-read the B-rep (together with the provenance of faces and edges), which itself costs kernel time. Instead <code>cad watch</code>: the same session persists, the engine cache holds all node results; a run after a change costs only the changed nodes (table in section 9: ${vrWatch[1] ? num(vrWatch[1].r.timings.total_ms, 0) : "–"} ms for a change without effect on geometry, ${vrWatch[2] ? num(vrWatch[2].r.timings.total_ms, 0) : "–"} ms when two filleted bodies are rebuilt). The skill recommends <code>cad watch</code> for loops with many small steps.</p>
+<h3>Run time per command (spec example gehaeuse, wall time)</h3>
+<table><tr><th>Command</th><th>ms</th><th>Exit</th></tr>${cmdTimes.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>
 
-<h2>11 Fallstudie: Agent entwickelt ein Teil nur mit der CLI</h2>
-<p>Der Agent (dieser Bericht ist von Claude erzeugt) hat einen Wandhalter für eine Stange Ø 20 mm entworfen, ohne die UI zu öffnen: Quelltext mit dem Edit-Werkzeug, alles Weitere mit <code>cad</code>. Die Schritte unten sind die tatsächlich ausgeführten, vom Generator nachgespielt (Fassungen in <code>tools/report/report8-fallstudie/</code>). Der Agent hat dabei die Bilder mit dem Read-Werkzeug angesehen; gefunden wurde ein echter Entwurfsfehler (kein Spiel zwischen Stange und Bohrung), sichtbar nur durch <code>measure --clearance</code>, nicht im Bild.</p>
-${steps.map((s, i) => `<div class="step"><h3>Schritt ${i + 1}: ${esc(s.title)}</h3><p>${esc(s.why)}</p>${s.source ? `<div class="lbl">${esc(s.sourceLabel ?? "Quelltext")}</div><pre>${esc(s.source)}</pre>` : ""}${s.cmds.map((r) => cmdHtml({ r, text: true, maxLines: 24 })).join("")}${s.image ? fig(s.image, "") : ""}</div>`).join("\n")}
-<p>Bilanz: ${steps.reduce((a, s) => a + s.cmds.length, 0)} CLI-Aufrufe, zusammen ${de(steps.reduce((a, s) => a + s.cmds.reduce((b, r) => b + r.ms, 0), 0) / 1000, 1)} s. Was gefehlt hätte ohne die neuen Funktionen: die Abstandsmessung (Spiel), die Rasternamen im Bild (welche Ebene ist <code>arm</code>?) und der Schnitt durch die Bohrung.</p>
+<h2>11 Case study: an agent develops a part using only the CLI</h2>
+<p>The agent (this report was produced by Claude) designed a wall bracket for a Ø 20 mm rod without opening the UI: source code with the Edit tool, everything else with <code>cad</code>. The steps below are the ones actually executed, replayed by the generator (versions in <code>tools/report/report8-fallstudie/</code>). The agent viewed the images with the Read tool; a real design error was found (no clearance between rod and bore), visible only through <code>measure --clearance</code>, not in the image.</p>
+${steps.map((s, i) => `<div class="step"><h3>Step ${i + 1}: ${esc(s.title)}</h3><p>${esc(s.why)}</p>${s.source ? `<div class="lbl">${esc(s.sourceLabel ?? "Source code")}</div><pre>${esc(s.source)}</pre>` : ""}${s.cmds.map((r) => cmdHtml({ r, text: true, maxLines: 24 })).join("")}${s.image ? fig(s.image, "") : ""}</div>`).join("\n")}
+<p>Result: ${steps.reduce((a, s) => a + s.cmds.length, 0)} CLI calls, ${num(steps.reduce((a, s) => a + s.cmds.reduce((b, r) => b + r.ms, 0), 0) / 1000, 1)} s in total. What would have been missing without the new features: the clearance measurement, the grid names in the image (which plane is <code>arm</code>?) and the section through the bore.</p>
 
 <h2>12 Tests</h2>
 <ul>
-<li><code>cargo test --workspace</code>: ${cargoSum ? `${cargoSum.ok} bestanden, ${cargoSum.failed} fehlgeschlagen, ${cargoSum.ignored} ignoriert` : "–"}; <code>cargo clippy --workspace --all-targets -- -D warnings</code>: ${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "Warnungen" : "ohne Befund"}; <code>cargo fmt --check</code>: ${fmt == null ? "–" : fmt.trim() === "" ? "ohne Befund" : "Abweichungen"}.</li>
-<li>Neu in <code>crates/cad-cli/tests/agent.rs</code> (assert_cmd, je Befehl/Option mit JSON-Feldern): outline (Spec-Beispiel, Funktionen/Variablen, Projekt), render (Kontaktbogen: Bildgröße und gleiche Skalierung; freie Kamera; Auswahl; Überlagerungen ändern Pixel; Schnitt verkleinert die sichtbare Fläche und erzeugt Kappenpixel; Röntgen), measure (Anker, Rasterpunkte, Koordinaten gegen Sollwerte des Spec-Beispiels; Hülle, Volumen; Kollision an <code>tests/data/kollision.scad</code>; Abstand), watch (Datei ändern → zweite JSON-Zeile, Cache-Treffer steigen; Text und Timeout), set (Parameter, Literal, Diff, Ablehnung, Projektdateien), UI-Einstieg.</li>
-<li>Neu in <code>crates/cad-render/tests/features.rs</code>: Kamerawinkel = Standardansichten, Schnitt mit Kappe an einem geschlossenen Würfel (von oben ganz Kappe, von unten keine), Perspektive und feste Skalierung, Marker/Beschriftung/Titel/Kontaktbogen; in <code>geom.rs</code>: Dreieck-Dreieck-Abstand an Würfeln (Fläche, Kante, Ecke, Überlappung).</li>
+<li><code>cargo test --workspace</code>: ${cargoSum ? `${cargoSum.ok} passed, ${cargoSum.failed} failed, ${cargoSum.ignored} ignored` : "–"}; <code>cargo clippy --workspace --all-targets -- -D warnings</code>: ${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "warnings" : "no findings"}; <code>cargo fmt --check</code>: ${fmt == null ? "–" : fmt.trim() === "" ? "no findings" : "deviations"}.</li>
+<li>New in <code>crates/cad-cli/tests/agent.rs</code> (assert_cmd, per command/option with JSON fields): outline (spec example, functions/variables, project), render (contact sheet: image size and equal scale; free camera; selection; overlays change pixels; section reduces the visible area and produces cap pixels; X-ray), measure (anchors, grid points, coordinates against expected values of the spec example; bounding box, volume; collision on <code>tests/data/kollision.scad</code>; clearance), watch (change file → second JSON line, cache hits increase; text and timeout), set (parameter, literal, diff, rejection, project files), UI entry point.</li>
+<li>New in <code>crates/cad-render/tests/features.rs</code>: camera angles = standard views, section with cap on a closed cube (all cap from above, none from below), perspective and fixed scale, markers/labels/title/contact sheet; in <code>geom.rs</code>: triangle–triangle distance on cubes (face, edge, vertex, overlap).</li>
 </ul>
-<table><tr><th>Testdatei</th><th>Test</th><th>Ergebnis</th></tr>${agentTests.map((t) => `<tr><td>${esc(t.file.replace(/\(.*$/, "").trim())}</td><td>${esc(t.name)}</td><td class="${t.res === "ok" ? "ok" : "bad"}">${esc(t.res)}</td></tr>`).join("")}</table>
+<table><tr><th>Test file</th><th>Test</th><th>Result</th></tr>${agentTests.map((t) => `<tr><td>${esc(t.file.replace(/\(.*$/, "").trim())}</td><td>${esc(t.name)}</td><td class="${t.res === "ok" ? "ok" : "bad"}">${esc(t.res)}</td></tr>`).join("")}</table>
 
-<h2>13 Grenzen</h2>
+<h2>13 Limitations</h2>
 <ul>
-<li>Schnittkappen setzen geschlossene Netze voraus; bei offenen Flächen (<code>surface</code> ohne <code>thicken</code>) und transparenten Körpern gibt es keine Kappe. Die Kappe ist eben und einfarbig (Schraffur je Körper abwechselnd), keine Materialunterscheidung.</li>
-<li><code>--clearance</code> misst an der Tessellierung (Genauigkeit ± 2·<code>--mesh-tol</code>), <code>--interference</code> exakt über den Kernel; Bauteile, deren Hülle sich nicht überlappt, werden ohne Kernel als kollisionsfrei gezählt.</li>
-<li>Rasterpunkte werden bis 48 Punkte je Raster beschriftet, darüber nur die Ebenen (Hinweis in <code>notes</code>); überdeckte Beschriftungen fallen weg.</li>
-<li><code>outline</code> wertet jedes Modul mit seinen Standardwerten aus; Module mit Pflichtparametern ohne Standardwert zeigen dann ggf. keine Raster (<code>errors_with_defaults</code>).</li>
-<li><code>watch</code> liest bei jeder Änderung alle Projektdateien neu; Änderungen innerhalb der Entprellzeit (<code>--debounce</code>, 60 ms) werden zu einem Lauf zusammengefasst.</li>
-<li>Kein persistenter Cache zwischen Aufrufen (Abschnitt 10).</li>
+<li>Section caps require closed meshes; open surfaces (<code>surface</code> without <code>thicken</code>) and transparent bodies get no cap. The cap is flat and single-colored (hatching alternates per body), no distinction by material.</li>
+<li><code>--clearance</code> measures on the tessellation (accuracy ± 2·<code>--mesh-tol</code>), <code>--interference</code> exactly via the kernel; parts whose bounding boxes do not overlap are counted as collision-free without the kernel.</li>
+<li>Grid points are labelled up to 48 points per grid, above that only the planes (note in <code>notes</code>); overlapped labels are dropped.</li>
+<li><code>outline</code> evaluates each module with its default values; modules with required parameters without a default may then show no grids (<code>errors_with_defaults</code>).</li>
+<li><code>watch</code> re-reads all project files on every change; changes within the debounce time (<code>--debounce</code>, 60 ms) are merged into one run.</li>
+<li>No persistent cache between calls (section 10).</li>
 </ul>
 </main>
 </body>
 </html>
 `;
 writeFileSync(join(out, "report.html"), html);
-console.log(`${rel(join(out, "report.html"))}: ${sections.length} Abschnitte, ${steps.length} Schritte Fallstudie, ${watchRuns.length} watch-Läufe`);
-console.log(`PDF: node tools/report/print-pdf.mjs ${rel(join(out, "report.html"))} ${rel(join(out, "report.pdf"))} "Testbericht 8: CLI für Agenten"`);
+console.log(`${rel(join(out, "report.html"))}: ${sections.length} sections, ${steps.length} case study steps, ${watchRuns.length} watch runs`);
+console.log(`PDF: node tools/report/print-pdf.mjs ${rel(join(out, "report.html"))} ${rel(join(out, "report.pdf"))} "Test report 8: CLI for agents"`);

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 4 ("Verrundung, Fase, Shell und Profiloperationen"): collects the results of the
+// Test report 4 ("Fillet, chamfer, shell and profile operations"): collects the results of the
 // Phase C tests and writes
 //
 //   docs/reports/04-fillet-profile/report.html, report.pdf, img/*.jpg
@@ -70,7 +70,7 @@ if (rerun || !existsSync(join(input, "vitest.json"))) {
   sh(["vitest", "run", "--reporter=default", "--reporter=json", `--outputFile.json=${join(input, "vitest.json")}`]);
 }
 if (rerun) {
-  console.log("report4: Playwright (alle Szenarien) …");
+  console.log("report4: Playwright (all scenarios) …");
   sh(["playwright", "test"]);
 } else if (!hasPhaseC(readJson(pwFile))) {
   console.log("report4: Playwright (web/e2e/ui-c.spec.ts) …");
@@ -83,7 +83,7 @@ const scenarios = readJson(join(input, "scenarios.json"), []);
 const metrics = readJson(join(input, "metrics.json"), {});
 const cargo = existsSync(join(input, "cargo.txt")) ? readFileSync(join(input, "cargo.txt"), "utf8") : null;
 if (!pw || !hasPhaseC(pw)) {
-  console.error(`fehlt: Ergebnisse von web/e2e/ui-c.spec.ts in ${pwFile} (cd web && pnpm e2e)`);
+  console.error(`missing: results of web/e2e/ui-c.spec.ts in ${pwFile} (cd web && pnpm e2e)`);
   process.exit(1);
 }
 
@@ -96,7 +96,7 @@ function flatten(suite, file, acc = []) {
     for (const t of spec.tests ?? []) {
       const r = t.results?.at(-1);
       const id = spec.title.split(" ")[0];
-      acc.push({ id, title: spec.title.slice(id.length + 1), status: r?.status ?? t.status ?? "unbekannt", ms: r?.duration ?? 0, error: r?.error?.message ?? null });
+      acc.push({ id, title: spec.title.slice(id.length + 1), status: r?.status ?? t.status ?? "unknown", ms: r?.duration ?? 0, error: r?.error?.message ?? null });
     }
   }
   return acc;
@@ -168,23 +168,23 @@ const kib = (b) => (b === null ? "–" : `${(b / 1024).toFixed(0)} KiB`);
 const mib = (b) => (b === null ? "–" : `${(b / 1024 / 1024).toFixed(2)} MiB`);
 
 const env = [
-  ["Betriebssystem", `${os.type()} ${os.release()} (${os.arch()})`],
-  ["CPU", `${os.cpus()[0]?.model ?? "–"} · ${os.cpus().length} Kerne`],
+  ["Operating system", `${os.type()} ${os.release()} (${os.arch()})`],
+  ["CPU", `${os.cpus()[0]?.model ?? "–"} · ${os.cpus().length} cores`],
   ["Node.js", process.version],
   ["Browser", `Chromium ${chromiumVersion} (headless, Playwright ${pkgVersion("@playwright/test")})`],
-  ["Grafik", "WebGL über SwiftShader (Software-Rendering, keine GPU)"],
-  ["Fenster", "1440 × 900 px, Gerätepixelverhältnis 1"],
-  ["Build", `Vite ${pkgVersion("vite")} Produktions-Build, Vorschau-Server (vite preview)`],
-  ["Bibliotheken", `React ${pkgVersion("react")}, three.js ${pkgVersion("three")}, CodeMirror ${pkgVersion("@codemirror/view")}, Zustand ${pkgVersion("zustand")}, Vitest ${pkgVersion("vitest")}`],
-  ["Engine", `cad_wasm_bg.wasm ${mib(asset(/^cad_wasm_bg-.*\.wasm$/))}, smlib.wasm ${mib(asset(/^smlib-.*\.wasm$/))} (SMLib-Kernel, Emscripten)`],
-  ["Quelltext", `Branch ${git("rev-parse", "--abbrev-ref", "HEAD")}, Commit ${git("rev-parse", "--short", "HEAD")}`],
+  ["Graphics", "WebGL via SwiftShader (software rendering, no GPU)"],
+  ["Window", "1440 × 900 px, device pixel ratio 1"],
+  ["Build", `Vite ${pkgVersion("vite")} production build, preview server (vite preview)`],
+  ["Libraries", `React ${pkgVersion("react")}, three.js ${pkgVersion("three")}, CodeMirror ${pkgVersion("@codemirror/view")}, Zustand ${pkgVersion("zustand")}, Vitest ${pkgVersion("vitest")}`],
+  ["Engine", `cad_wasm_bg.wasm ${mib(asset(/^cad_wasm_bg-.*\.wasm$/))}, smlib.wasm ${mib(asset(/^smlib-.*\.wasm$/))} (SMLib kernel, Emscripten)`],
+  ["Source", `Branch ${git("rev-parse", "--abbrev-ref", "HEAD")}, commit ${git("rev-parse", "--short", "HEAD")}`],
 ];
 
 // ---------------------------------------------------------------- html
 
-const date = new Date().toLocaleDateString("de-DE", { year: "numeric", month: "long", day: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const scen = (id) => scenarios.find((s) => s.id === id);
-const statusLabel = (s) => (s === "passed" ? "bestanden" : s === "skipped" ? "übersprungen" : "fehlgeschlagen");
+const statusLabel = (s) => (s === "passed" ? "passed" : s === "skipped" ? "skipped" : "failed");
 
 const scenarioRows = e2e
   .map((t) => {
@@ -195,7 +195,7 @@ const scenarioRows = e2e
   .join("\n");
 
 const unitRows = unit
-  .map((f) => `<tr class="${f.failed.length ? "bad" : "ok"}"><td>${esc(f.file)}${NEW_UNIT.has(f.file) ? ' <span class="tag">neu</span>' : CHANGED_UNIT.has(f.file) ? ' <span class="tag alt">erweitert</span>' : ""}</td><td class="num">${f.passed} / ${f.total}</td><td>${f.failed.map(esc).join("<br>") || "–"}</td></tr>`)
+  .map((f) => `<tr class="${f.failed.length ? "bad" : "ok"}"><td>${esc(f.file)}${NEW_UNIT.has(f.file) ? ' <span class="tag">new</span>' : CHANGED_UNIT.has(f.file) ? ' <span class="tag alt">extended</span>' : ""}</td><td class="num">${f.passed} / ${f.total}</td><td>${f.failed.map(esc).join("<br>") || "–"}</td></tr>`)
   .join("\n");
 
 const rustRows = rustBins
@@ -209,15 +209,15 @@ const rustRows = rustBins
 
 const ev = metrics.evalTimes ?? {};
 const metricRows = Object.entries(ev)
-  .map(([, o]) => [o.label, `${fmtMs(o.median)} / ${fmtMs(o.medianTotal)}`, `Kernel-Zeit der vollständigen Szene / SetSource → Szene in der App, Median aus 5 Varianten (Einzelwerte Kernel ${o.kernel.map((v) => Math.round(v)).join(", ")} ms)${o.failed ? `; ${o.failed} von 5 Varianten im Kernel gescheitert (siehe Abschnitt 7)` : ""}`])
-  .concat([["Größte Bilddatei im Bericht", kib(maxImg), "JPEG, Qualität 82"]])
+  .map(([, o]) => [o.label, `${fmtMs(o.median)} / ${fmtMs(o.medianTotal)}`, `Kernel time of the complete scene / SetSource → scene in the app, median of 5 variants (individual kernel values ${o.kernel.map((v) => Math.round(v)).join(", ")} ms)${o.failed ? `; ${o.failed} of 5 variants failed in the kernel (see section 7)` : ""}`])
+  .concat([["Largest image file in the report", kib(maxImg), "JPEG, quality 82"]])
   .map(([a, b, c]) => `<tr><td>${esc(a)}</td><td class="num">${esc(b)}</td><td>${esc(c)}</td></tr>`)
   .join("\n");
 
 const code = (s) => (s ? `<pre>${esc(s)}</pre>` : "");
 const blocks = scenarios
   .filter((s) => (s.images ?? []).length)
-  .sort((a, b) => a.id.localeCompare(b.id, "de", { numeric: true }))
+  .sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }))
   .map((s) => {
     const img = (i) => `<div class="lbl">${esc(i.label)}</div><img src="img/${esc(i.name)}.jpg" alt="${esc(s.title)}: ${esc(i.label)}">`;
     const text = `${s.code ? `<div class="lbl">Code</div>${code(s.code)}` : ""}<p class="cap">${esc(s.caption)}</p>`;
@@ -238,36 +238,36 @@ ${text}
 const BUGS = [
   {
     crate: "kernel-smlib / smlib (sc_shell)",
-    title: "shell eines verrundeten Körpers scheitert; Meldung hängt von der Plattform ab",
+    title: "shell of a filleted body fails; message depends on the platform",
     code: `grid g { z: o = 18; }
 shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 3); zone(g.o, d = 1); }
 shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 5); zone(g.o, d = 1); }
 shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 6); zone(g.o, d = 1); }
-// Maße von tests/models/spec/dose_shell.scad (dort mit grid g { z: o = 30; }):
+// dimensions of tests/models/spec/dose_shell.scad (there with grid g { z: o = 30; }):
 shell(1.5) { box([0, 0, 0], [50, 35, 30], $fillet = 4); zone(g.o, d = 1); }`,
-    text: "Mit dem SMLib-Fork (tangency-labs/smlib, capi-tess @ 7eba8aa) scheitert jede dieser shells, im Browser (Wasm) wie nativ (cad check): $fillet = 3 mit „SmApiShellBrepFull failed: SM_ERR_NULL_POINTER (1006)“, $fillet = 5 und 6 mit „wall thickness 1.6 leaves no cavity (SMLib returned no closed solid)“ bzw. „self-overlapping“, die Maße von dose_shell.scad mit „self-overlapping solid at 10 face(s)“ – dose_shell.scad ist deshalb rot. Für dieselbe Eingabe unterscheiden sich die Meldungen zwischen Wasm und nativ ($fillet = 8: Wasm „self-overlapping“, nativ SM_ERR (1001)). Mit dem vorigen Kernel-Stand meldete $fillet = 5 „ok“ bei leerem Ergebnis und $fillet = 6 „ok“ ohne Außenwand; diese stillen Fehler gibt es nicht mehr. Scharfkantige und gefaste Körper ($chamfer) ergeben korrekte Hohlkörper (griffschale.scad, Messung C18).",
+    text: "With the SMLib fork (tangency-labs/smlib, capi-tess @ 7eba8aa) each of these shells fails, in the browser (Wasm) as well as natively (cad check): $fillet = 3 with \"SmApiShellBrepFull failed: SM_ERR_NULL_POINTER (1006)\", $fillet = 5 and 6 with \"wall thickness 1.6 leaves no cavity (SMLib returned no closed solid)\" and \"self-overlapping\" respectively, the dimensions of dose_shell.scad with \"self-overlapping solid at 10 face(s)\" – dose_shell.scad is therefore red. For the same input the messages differ between Wasm and native ($fillet = 8: Wasm \"self-overlapping\", native SM_ERR (1001)). With the previous kernel state, $fillet = 5 reported \"ok\" with an empty result and $fillet = 6 \"ok\" without an outer wall; these silent errors no longer occur. Sharp-edged and chamfered bodies ($chamfer) give correct hollow bodies (griffschale.scad, measurement C18).",
   },
   {
     crate: "kernel-smlib (nurbs_surface)",
-    title: "surface(points) mit 2 × 2 oder 3 × 3 Kontrollpunkten scheitert",
+    title: "surface(points) with 2 × 2 or 3 × 3 control points fails",
     code: `surface(points = [[[0, 0, 0], [20, 0, 6]], [[0, 20, 6], [20, 20, 0]]]);`,
-    text: "„surface gescheitert: SmApiCreateSurfaceFromOrderedPoints failed: SM_ERR (1001)“, ebenso für 3 × 3. cad-eval nimmt ab 2 × 2 Punkte an, die Spec nennt kein Minimum; 4 × 4 funktioniert. Vorschlag: Grad an die Punktzahl anpassen (wie interp_curve bei drei Pfadpunkten).",
+    text: "\"surface gescheitert: SmApiCreateSurfaceFromOrderedPoints failed: SM_ERR (1001)\" (surface failed), likewise for 3 × 3. cad-eval accepts 2 × 2 points and up, the spec names no minimum; 4 × 4 works. Suggestion: adapt the degree to the number of points (like interp_curve for three path points).",
   },
   {
     crate: "cad-engine ($fillet / $chamfer)",
-    title: "Nahtkanten zählen als eigene Kanten eines Primitivs",
-    code: `cylinder(h = 10, r = 5, $chamfer = 1);   // „3 Kanten“
-sphere(5, $fillet = 1);                    // Fehler`,
-    text: "Beim Zylinder werden Deckel-, Boden- und die Nahtkante ausgewählt („3 Kanten“, gezeichnet 3); bei der Kugel nur die Naht („1 Kante“), und die Verrundung scheitert mit „fillet: none of the edges can be blended (smooth, seam or open edges)“ – Zeile rot statt „0 Kanten“ bzw. ohne Wirkung. Glatte Naht- und Polkanten sollten nicht ausgewählt werden.",
+    title: "Seam edges count as separate edges of a primitive",
+    code: `cylinder(h = 10, r = 5, $chamfer = 1);   // "3 edges"
+sphere(5, $fillet = 1);                    // error`,
+    text: "For the cylinder, the top, bottom and seam edges are selected (\"3 edges\", 3 drawn); for the sphere only the seam (\"1 edge\"), and the fillet fails with \"fillet: none of the edges can be blended (smooth, seam or open edges)\" – line red instead of \"0 edges\" or no effect. Smooth seam and pole edges should not be selected.",
   },
 ];
 const bugBlocks = BUGS.map((b, i) => `<section class="bug"><h3>F${i + 1} ${esc(b.title)}</h3><div class="small"><b>Crate:</b> ${esc(b.crate)}</div>${code(b.code)}<p>${esc(b.text)}</p></section>`).join("\n");
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 4 – Verrundung, Fase, Shell und Profiloperationen</title>
+<title>Test report 4 – Fillet, chamfer, shell and profile operations</title>
 <style>
   @page { size: A4; margin: 16mm 14mm 16mm 14mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -313,72 +313,72 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 4 – Verrundung, Fase, Shell und Profiloperationen</h1>
-<div class="meta">Darstellung in der Browser-UI · ${esc(date)} · Commit ${esc(git("rev-parse", "--short", "HEAD"))}</div>
+<h1>Test report 4 – Fillet, chamfer, shell and profile operations</h1>
+<div class="meta">Display in the browser UI · ${esc(date)} · Commit ${esc(git("rev-parse", "--short", "HEAD"))}</div>
 
 <div class="summary">
-  <div>Phase C (Playwright)<b>${passed(e2e)} / ${e2e.length} bestanden</b></div>
-  <div>Phase A/B (Regression)<b>${phaseAUnique.length + phaseB.length ? `${passed(phaseAUnique) + passed(phaseB)} / ${phaseAUnique.length + phaseB.length}` : "–"}</b></div>
+  <div>Phase C (Playwright)<b>${passed(e2e)} / ${e2e.length} passed</b></div>
+  <div>Phase A/B (regression)<b>${phaseAUnique.length + phaseB.length ? `${passed(phaseAUnique) + passed(phaseB)} / ${phaseAUnique.length + phaseB.length}` : "–"}</b></div>
   <div>Vitest<b>${vt ? `${unitPassed} / ${unitTotal}` : "–"}</b></div>
   <div>cargo test --workspace<b>${cargo ? `${rustOk} / ${rustTotal}` : "–"}</b></div>
-  <div>Fehler in fremden Crates<b>${BUGS.length}</b></div>
+  <div>Bugs in other crates<b>${BUGS.length}</b></div>
 </div>
 
-<h2>1 Umfang</h2>
-<p>Geprüft und vervollständigt wurde die Darstellung der Spec-Abschnitte „Verrundung und Fase“, „Boolesche Operationen“ (Parameter <code>fillet =</code>/<code>chamfer =</code>), „Profiloperationen und Flächen“, „Primitive/2D“ und „Fehler und Warnungen“ sowie zwei offene Punkte aus Phase A/B.</p>
+<h2>1 Scope</h2>
+<p>Tested and completed: the display of the spec sections "Fillet and chamfer", "Boolean operations" (parameters <code>fillet =</code>/<code>chamfer =</code>), "Profile operations and surfaces", "Primitives/2D" and "Errors and warnings", plus two open items from phase A/B.</p>
 <ul>
-  <li><b>fillet/chamfer-Zeile:</b> Zonen blau halbtransparent, ausgewählte Kanten orange, „n Zonen · m Kanten“ am Zeilenende (vorhanden, jetzt mit Pixelprüfung). <b>Neu: Cursor auf einer Zone</b> zeigt nur diese Zone und nur die Kanten des Blocks, die in ihr liegen (in der Ansicht an den Zonen-Meshes geprüft, <code>inside</code>: alle Abtastpunkte, <code>touch</code>: einer); eine Zone über <code>translate</code> ohne Umriss/Koordinatenkreuze der Transformation. Leere Auswahl gelb mit „0 Kanten“, Fehlschlag rot mit roter Kante und Körper ohne Verrundung (Engine), <code>difference(fillet = r)</code>, <code>$fillet</code>/<code>$chamfer</code>, <code>select = "touch"</code> und verschachtelte Blöcke geprüft.</li>
-  <li><b>shell:</b> wie der Zonenblock; <b>neu</b> sind die geöffneten Flächen des Körpers orange gefüllt (Flächen des Körper-Meshes, die vollständig in einer Zone liegen; Anzahl gegen <code>opened_faces</code> der Engine geprüft), auch beim Cursor auf einer Zone.</li>
-  <li><b>Profiloperationen (neu):</b> <code>linear_extrude</code> – Profil als Umriss unten (bei <code>center</code> auf −h/2), Höhengriff oben; <code>rotate_extrude</code> – Profil in der xz-Ebene, Drehachse als gestrichelte Linie, Winkelgriff auf dem Ring; <code>loft</code> – alle Profile als Umrisse an ihrer Lage, Ergebnis halbtransparent; <code>sweep</code> – Pfad als Kurve (kubische Interpolation wie im Kernel), Griffe an Literal-Punkten, Profil am Startpunkt senkrecht zur Starttangente; <code>surface</code> – Kontrollnetz als Linien mit Griffen, Fläche beidseitig; <code>thicken</code> – Fläche als Umriss, Ergebnis voll. Die Griffe (Höhe, Winkel, Pfadpunkte, Kontrollnetz) lieferte cad-eval schon; neu sind ein Test dafür und ihre Darstellung/Prüfung im Browser.</li>
-  <li><b>2D-Formen allein:</b> Umriss mit leichter Füllung in der xy-Ebene; die Warnung bei z-Abweichung von Rasterpunkten erscheint gelb am Zeilenende.</li>
-  <li><b>Neu einpassen:</b> nach einer deutlichen Größenänderung (Diagonale × 1,6 oder Mitte um mehr als die halbe Diagonale verschoben) passt die Ansicht selbst neu ein, solange der Nutzer die Kamera nicht bewegt (und keinen Griff gezogen) hat; sonst erscheint der Knopf „Neu einpassen“.</li>
-  <li><b>Achsgebundenes Ziehen</b> von Punktgriffen: Umschalttaste – Achse des lokalen Systems aus der Mausbewegung; Tasten X/Y/Z – Achse direkt (erneut: frei), auch mitten im Ziehen. Führungslinie in Achsfarbe, Snap nur auf Ziele auf der Achse, die übrigen Komponenten behalten ihren Text.</li>
-  <li><b>Beispiele (neu, im Beispielmenü):</b> griffschale.scad (shell), flasche.scad (rotate_extrude + fillet), lueftungsgitter.scad (linear_extrude + Raster, chamfer =), kabelfuehrung.scad (sweep), freiformdeckel.scad (surface + thicken).</li>
-  <li><b>Entwurfsmodus beim Ziehen (Engine-Stand 58735e2):</b> Verrundungen, die länger als 25 ms brauchen, setzt die Engine beim Ziehen aus (<code>NodeReport.blend_suspended</code>). Die Statuszeile zeigt dann „Verrundung beim Ziehen ausgesetzt (Zeile …)“, am Zeilenende steht derselbe Hinweis; nach dem Loslassen wertet die Engine vollständig aus und der Hinweis verschwindet (C20).</li>
-  <li><b>Watchdog-Sperre (Plan 7.3):</b> die UI merkt sich bei jedem <code>Progress</code> den Schlüssel von <code>current</code>. Beendet der Watchdog den Worker, bekommt der neue Worker vor <code>SetSource</code> <code>{type: "BlockKeys", keys: […]}</code> mit allen bisher hängenden Schlüsseln (die Liste bleibt über weitere Neustarts erhalten) und dann die letzte Quelle erneut; der gesperrte Knoten meldet „Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung“, seine Zeile ist rot (C19, Unit-Test transport.test.ts). Ohne neuen gesperrten Knoten wird die Quelle nicht erneut gesendet, damit dieselbe Eingabe nicht erneut hängt.</li>
-  <li><b>tools/report/report2-ui.mjs</b> läuft wieder eigenständig: fehlen Vitest-Ergebnisse oder enthält das gemeinsame playwright.json keine Phase-A-Szenarien (es hält nur den letzten Lauf), führt es diese Tests selbst aus.</li>
+  <li><b>fillet/chamfer line:</b> zones blue and semi-transparent, selected edges orange, "n zones · m edges" at the end of the line (existing, now with a pixel check). <b>New: cursor on a zone</b> shows only that zone and only the edges of the block that lie in it (checked in the view against the zone meshes, <code>inside</code>: all sample points, <code>touch</code>: one); a zone via <code>translate</code> without the outline/coordinate triads of the transformation. Empty selection yellow with "0 edges", failure red with a red edge and the body without fillet (engine); <code>difference(fillet = r)</code>, <code>$fillet</code>/<code>$chamfer</code>, <code>select = "touch"</code> and nested blocks checked.</li>
+  <li><b>shell:</b> like the zone block; <b>new</b>: the opened faces of the body are filled orange (faces of the body mesh that lie completely in a zone; count checked against the engine's <code>opened_faces</code>), also with the cursor on a zone.</li>
+  <li><b>Profile operations (new):</b> <code>linear_extrude</code> – profile as outline at the bottom (at −h/2 with <code>center</code>), height handle at the top; <code>rotate_extrude</code> – profile in the xz plane, axis of rotation as a dashed line, angle handle on the ring; <code>loft</code> – all profiles as outlines at their location, result semi-transparent; <code>sweep</code> – path as a curve (cubic interpolation as in the kernel), handles at literal points, profile at the start point perpendicular to the start tangent; <code>surface</code> – control net as lines with handles, surface rendered double-sided; <code>thicken</code> – surface as outline, result full. cad-eval already supplied the handles (height, angle, path points, control net); new are a test for them and their display/check in the browser.</li>
+  <li><b>2D shapes alone:</b> outline with a light fill in the xy plane; the warning for a z deviation of grid points appears yellow at the end of the line.</li>
+  <li><b>Refit:</b> after a significant size change (diagonal × 1.6 or center moved by more than half the diagonal) the view refits itself as long as the user has not moved the camera (and not dragged a handle); otherwise the button "Refit" (German UI: „Neu einpassen“) appears.</li>
+  <li><b>Axis-constrained dragging</b> of point handles: Shift key – axis of the local coordinate system from the mouse movement; keys X/Y/Z – axis directly (press again: free), also in the middle of a drag. Guide line in the axis color, snapping only to targets on the axis, the other components keep their text.</li>
+  <li><b>Examples (new, in the examples menu):</b> griffschale.scad (shell), flasche.scad (rotate_extrude + fillet), lueftungsgitter.scad (linear_extrude + grid, chamfer =), kabelfuehrung.scad (sweep), freiformdeckel.scad (surface + thicken).</li>
+  <li><b>Draft mode while dragging (engine state 58735e2):</b> fillets that take longer than 25 ms are suspended by the engine while dragging (<code>NodeReport.blend_suspended</code>). The status bar then shows "fillet suspended while dragging (line …)" (German UI: „Verrundung beim Ziehen ausgesetzt (Zeile …)“), the same hint appears at the end of the line; after release the engine evaluates fully and the hint disappears (C20).</li>
+  <li><b>Watchdog block (plan 7.3):</b> the UI remembers the key of <code>current</code> on every <code>Progress</code>. If the watchdog terminates the worker, the new worker receives <code>{type: "BlockKeys", keys: […]}</code> with all keys that have hung so far before <code>SetSource</code> (the list survives further restarts), and then the last source again; the blocked node reports "timeout, node blocked until the next change" (German UI: „Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung“), its line is red (C19, unit test transport.test.ts). Without a newly blocked node the source is not resent, so that the same input does not hang again.</li>
+  <li><b>tools/report/report2-ui.mjs</b> runs standalone again: if Vitest results are missing or the shared playwright.json contains no phase A scenarios (it only holds the last run), it runs these tests itself.</li>
 </ul>
-<p class="small">Änderungen an Rust-Crates: <code>cad-session</code> – Szenenknoten mit <code>op_info</code> (aufgelöste Parameter von fillet/chamfer/shell inkl. <code>select</code>, zone, linear_extrude, rotate_extrude, loft, sweep-Pfad, surface-Netz, thicken), <code>blend_suspended</code> je Knoten und <code>suspended_blends</code> in den Statistiken (aus dem Entwurfsmodus der Engine), Protokoll-Typen neu erzeugt; <code>cad-eval</code> – beim freien Ziehen werden Literale, deren Wert sich nicht ändert, nicht neu geschrieben (sonst würde das achsgebundene Ziehen z. B. 5.5 zu 6 runden), Tests für Profil-Griffe; <code>compat-tests</code> – Erwartungen für die fünf neuen Beispiele (der Test verlangt einen Eintrag je Datei in tests/models/spec).</p>
+<p class="small">Changes to Rust crates: <code>cad-session</code> – scene nodes with <code>op_info</code> (resolved parameters of fillet/chamfer/shell incl. <code>select</code>, zone, linear_extrude, rotate_extrude, loft, sweep path, surface net, thicken), <code>blend_suspended</code> per node and <code>suspended_blends</code> in the statistics (from the engine's draft mode), protocol types regenerated; <code>cad-eval</code> – during free dragging, literals whose value does not change are not rewritten (otherwise axis-constrained dragging would round e.g. 5.5 to 6), tests for profile handles; <code>compat-tests</code> – expectations for the five new examples (the test requires one entry per file in tests/models/spec).</p>
 
-<h2>2 Testumgebung</h2>
+<h2>2 Test environment</h2>
 <table>${env.map(([a, b]) => `<tr><th style="width:32mm">${esc(a)}</th><td>${esc(b)}</td></tr>`).join("")}</table>
-<p class="small">Die End-to-End-Tests laufen gegen den Produktions-Build mit echten Maus- und Tastaturereignissen. Geprüft wird über den Testhaken <code>window.__cad</code> (Darstellungsplan, gezeichnete Kanten nach Art, Zonen-/Flächenprüfung, Kamera, Griffe, Editortext) und über Pixel: für eine Ebene (z. B. <code>edge:selected</code>, <code>open-faces</code>, <code>mode:profile</code>, <code>guide:path</code>) werden die Bildpunkte gezählt, die sich ändern, wenn sie ausgeblendet wird.</p>
+<p class="small">The end-to-end tests run against the production build with real mouse and keyboard events. Checks go through the test hook <code>window.__cad</code> (display plan, drawn edges by kind, zone/face check, camera, handles, editor text) and through pixels: for a layer (e.g. <code>edge:selected</code>, <code>open-faces</code>, <code>mode:profile</code>, <code>guide:path</code>) the pixels that change when the layer is hidden are counted.</p>
 
-<h2>3 Szenarien (Playwright, web/e2e/ui-c.spec.ts)</h2>
+<h2>3 Scenarios (Playwright, web/e2e/ui-c.spec.ts)</h2>
 <table>
-<tr><th>ID</th><th>Szenario</th><th>Ergebnis</th><th>Dauer</th><th>Geprüft</th></tr>
+<tr><th>ID</th><th>Scenario</th><th>Result</th><th>Duration</th><th>Checked</th></tr>
 ${scenarioRows}
 </table>
-<p class="small">Regression im selben Lauf: Phase A (web/e2e/ui.spec.ts) ${passed(phaseAUnique)} / ${phaseAUnique.length}, Phase B (web/e2e/ui-b.spec.ts) ${passed(phaseB)} / ${phaseB.length} bestanden.</p>
+<p class="small">Regression in the same run: phase A (web/e2e/ui.spec.ts) ${passed(phaseAUnique)} / ${phaseAUnique.length}, phase B (web/e2e/ui-b.spec.ts) ${passed(phaseB)} / ${phaseB.length} passed.</p>
 
-<h2>4 Unit- und Rust-Tests</h2>
-${vt ? `<table><tr><th>Vitest-Datei</th><th>bestanden</th><th>Fehlgeschlagen</th></tr>${unitRows}</table>
-<p class="small">Neu: kubische Pfad-Interpolation, Startrahmen des Profils, Punkt-in-Mesh mit Toleranz, Kanten in einer Zone (inside/touch), geöffnete Flächen, Kriterium für das Neu-Einpassen. Erweitert: Darstellungsplan für Profiloperationen, Zonen und shell (Fixture <code>profile.scad</code> aus der echten Engine), achsgebundenes Ziehen.</p>` : "<p>Keine Vitest-Ergebnisse gefunden.</p>"}
-${cargo ? `<table><tr><th>Rust-Testprogramm (cargo test --workspace)</th><th>bestanden</th><th>neue/geänderte Tests</th></tr>${rustRows}</table>${rustBad.length ? `<p class="err">Fehlgeschlagen: ${rustBad.map(esc).join(", ")}</p>` : ""}` : ""}
+<h2>4 Unit and Rust tests</h2>
+${vt ? `<table><tr><th>Vitest file</th><th>passed</th><th>Failed</th></tr>${unitRows}</table>
+<p class="small">New: cubic path interpolation, start frame of the profile, point-in-mesh with tolerance, edges in a zone (inside/touch), opened faces, criterion for refitting. Extended: display plan for profile operations, zones and shell (fixture <code>profile.scad</code> from the real engine), axis-constrained dragging.</p>` : "<p>No Vitest results found.</p>"}
+${cargo ? `<table><tr><th>Rust test program (cargo test --workspace)</th><th>passed</th><th>new/changed tests</th></tr>${rustRows}</table>${rustBad.length ? `<p class="err">Failed: ${rustBad.map(esc).join(", ")}</p>` : ""}` : ""}
 
-<h2>5 Messwerte</h2>
-<table><tr><th>Modell</th><th>Kernel / gesamt</th><th>Messung</th></tr>${metricRows}</table>
-<p class="small">Jede Variante hat andere Parameter (kein Cache-Treffer im betroffenen Knoten). „Gesamt“ ist SetSource bis zur vollständigen Szene im Worker einschließlich Sprachauswertung und Tessellierung; die Zeiten stammen aus headless Chromium mit SwiftShader auf ${esc(os.cpus().length)} Kernen.</p>
+<h2>5 Measurements</h2>
+<table><tr><th>Model</th><th>Kernel / total</th><th>Measurement</th></tr>${metricRows}</table>
+<p class="small">Each variant has different parameters (no cache hit in the affected node). "Total" is SetSource until the complete scene in the worker, including language evaluation and tessellation; the times come from headless Chromium with SwiftShader on ${esc(os.cpus().length)} cores.</p>
 
-<h2>6 Bekannte Grenzen und Abweichungen</h2>
+<h2>6 Known limitations and deviations</h2>
 <ul>
-  <li><b>Kanten einer Zone, geöffnete Flächen:</b> die Ansicht prüft an den tessellierten Zonen-Meshes (Toleranz 1,5 × Sehnenfehler); die Engine wählt mit der exakten Kernel-Klassifikation. In Grenzfällen (Kante genau auf einer gekrümmten Zonenfläche) kann die Ansicht abweichen; im Test stimmen Anzahl und Engine überein.</li>
-  <li><b>sweep-Pfad:</b> die Kurve wird in der UI nach demselben Verfahren wie in der SMLib-Fassade interpoliert (kubisch, Sehnenlängen, bei drei Punkten zwei Zusatzpunkte); ändert sich das Verfahren im Kernel, weicht die Anzeige ab. Der Startrahmen folgt sc_sweep (x = globales X in die Normalebene projiziert).</li>
-  <li><b>Profil von linear_extrude/rotate_extrude:</b> gezeigt wird das Mesh der direkten Kinder (2D, flach in ihrer Ebene); z-Verschiebungen von 2D-Transformationen gehen dabei wie in der Engine verloren.</li>
-  <li><b>Zone über translate:</b> der Cursor auf der Zone zeigt nur Zone und Kanten, nicht das Koordinatenkreuz der Transformation (Spec-Zeile „Cursor auf einer Zone“ geht vor); der Griff am Zonenmittelpunkt bleibt.</li>
-  <li><b>Neu einpassen:</b> automatisch nur, solange die Kamera seit dem letzten Einpassen nicht gedreht/verschoben/gezoomt und kein Griff gezogen wurde; „Alles zeigen“ und die Standardansichten stellen diesen Zustand wieder her.</li>
-  <li><b>Achsgebunden:</b> Achsen des lokalen Systems des Griffs (bei 2D-Punkten nur x/y); mit Umschalt wartet der Griff, bis 6 px Bewegung die Achse bestimmen. Wird die Achse erst während des Ziehens gewählt, geht die Achslinie durch die aktuelle Lage.</li>
-  <li><b>Offene Fläche neben Körpern</b> auf oberster Ebene ist eine implizite Vereinigung und damit ein Fehler („zuerst thicken“) – Spec-konform, im Test getrennt geladen.</li>
-  <li><b>Watchdog-Sperre:</b> gesperrt wird der Knoten aus dem letzten <code>Progress.current</code> vor dem Hängen; gesperrt ist sein Inhaltsschlüssel, gleiche Knoten an anderer Stelle sind mitgesperrt. Die Liste gilt bis zum Neuladen der Seite; eine Änderung am Knoten ändert den Schlüssel und hebt die Sperre damit auf.</li>
-  <li><b>Entwurfsmodus:</b> der Hinweis zeigt den zuletzt gezeichneten Stand; die Schwelle (25 ms) und die Auswahl der ausgesetzten Verrundungen liegen in der Engine.</li>
-  <li>Einige Ergebnisse hängen am Kernel: dose_shell.scad ist wegen F1 derzeit rot (Zeile rot, Körper ohne shell); griffschale.scad verwendet deshalb $chamfer = 4 (auf beiden Plattformen ein korrekter Hohlkörper); die Tests C08, C17 und C18 prüfen zusätzlich, dass ein „ok“-Knoten Geometrie hat.</li>
+  <li><b>Edges of a zone, opened faces:</b> the view checks against the tessellated zone meshes (tolerance 1.5 × chord error); the engine selects with the exact kernel classification. In borderline cases (edge exactly on a curved zone surface) the view can deviate; in the test, the count matches the engine.</li>
+  <li><b>sweep path:</b> the UI interpolates the curve with the same method as the SMLib facade (cubic, chord lengths, two extra points for three points); if the method in the kernel changes, the display deviates. The start frame follows sc_sweep (x = global X projected into the normal plane).</li>
+  <li><b>Profile of linear_extrude/rotate_extrude:</b> the mesh of the direct children is shown (2D, flat in their plane); z offsets of 2D transformations are lost, as in the engine.</li>
+  <li><b>Zone via translate:</b> the cursor on the zone shows only the zone and its edges, not the coordinate triad of the transformation (the spec line "Cursor on a zone" takes precedence); the handle at the zone center remains.</li>
+  <li><b>Refit:</b> automatic only as long as the camera has not been rotated/panned/zoomed since the last fit and no handle has been dragged; "Show all" and the standard views restore this state.</li>
+  <li><b>Axis-constrained:</b> axes of the handle's local coordinate system (only x/y for 2D points); with Shift the handle waits until 6 px of movement determine the axis. If the axis is only chosen during the drag, the axis line goes through the current position.</li>
+  <li><b>An open surface next to bodies</b> at the top level is an implicit union and thus an error ("thicken first") – as per spec, loaded separately in the test.</li>
+  <li><b>Watchdog block:</b> the node from the last <code>Progress.current</code> before the hang is blocked; what is blocked is its content key, so identical nodes elsewhere are blocked as well. The list applies until the page is reloaded; a change to the node changes the key and thereby lifts the block.</li>
+  <li><b>Draft mode:</b> the hint shows the last drawn state; the threshold (25 ms) and the selection of suspended fillets are in the engine.</li>
+  <li>Some results depend on the kernel: dose_shell.scad is currently red because of F1 (line red, body without shell); griffschale.scad therefore uses $chamfer = 4 (a correct hollow body on both platforms); tests C08, C17 and C18 additionally check that an "ok" node has geometry.</li>
 </ul>
 
-<h2>7 Gefundene Fehler in fremden Crates</h2>
-<p class="small">Nicht behoben (andere Crates als dieser Auftrag); minimale Beispiele zum Nachstellen im Browser oder mit <code>cad check datei.scad</code> (cad-cli, nativer Kernel).</p>
+<h2>7 Bugs found in other crates</h2>
+<p class="small">Not fixed (crates outside this task); minimal examples to reproduce in the browser or with <code>cad check file.scad</code> (cad-cli, native kernel).</p>
 ${bugBlocks}
 
-<h2>8 Screenshots und Codeausschnitte</h2>
+<h2>8 Screenshots and code excerpts</h2>
 ${blocks}
 </main>
 </body>
@@ -396,10 +396,10 @@ await page.pdf({
   printBackground: true,
   displayHeaderFooter: true,
   headerTemplate: "<span></span>",
-  footerTemplate: '<div style="font-size:7pt;color:#777;width:100%;text-align:center">Testbericht 4 – Verrundung, Fase, Shell und Profiloperationen · Seite <span class="pageNumber"></span> von <span class="totalPages"></span></div>',
+  footerTemplate: '<div style="font-size:7pt;color:#777;width:100%;text-align:center">Test report 4 – Fillet, chamfer, shell and profile operations · Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>',
   margin: { top: "14mm", bottom: "16mm", left: "12mm", right: "12mm" },
 });
 await browser.close();
-console.log(`report4: ${passed(e2e)}/${e2e.length} Phase C, ${passed(phaseAUnique)}/${phaseAUnique.length} Phase A, ${passed(phaseB)}/${phaseB.length} Phase B, ${unitPassed}/${unitTotal} Vitest, ${rustOk}/${rustTotal} Rust, ${used.size} Bilder (max ${kib(maxImg)})`);
+console.log(`report4: ${passed(e2e)}/${e2e.length} phase C, ${passed(phaseAUnique)}/${phaseAUnique.length} phase A, ${passed(phaseB)}/${phaseB.length} phase B, ${unitPassed}/${unitTotal} Vitest, ${rustOk}/${rustTotal} Rust, ${used.size} images (max ${kib(maxImg)})`);
 console.log(`-> ${join(out, "report.html")}`);
 console.log(`-> ${join(out, "report.pdf")}`);

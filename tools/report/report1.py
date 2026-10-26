@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate test report 1 „Kernel, Sprache, Engine, CLI“.
+"""Generate test report 1 "Kernel, language, engine, CLI".
 
     python3 tools/report/report1.py                 # measure everything, HTML + images + PDF
     python3 tools/report/report1.py --repeat 30     # additionally repeated runs of kernel-smlib
@@ -58,23 +58,23 @@ IMG = (600, 450)
 # Our iso view looks along (-1, 1, -1); OpenSCAD gets the same direction, orthographic.
 OPENSCAD_CAMERA = "100,-100,100,0,0,0"
 # Remark under the repetition table (findings that the counts alone do not show).
-REPEAT_NOTE = ("Vor den Korrekturen: 4 von 40 Läufen mit 8 Threads fehlgeschlagen (zu dicker shell). Nach der "
-               "rand()-Korrektur bei 100 Läufen mit 8 Threads noch je einmal <code>invalid_profiles_fail_cleanly</code> "
-               "(Speicherfehler in SMLibs shell) und <code>handles_are_released</code> (paralleler Zähler); beides seither behoben.")
+REPEAT_NOTE = ("Before the fixes: 4 of 40 runs with 8 threads failed (shell too thick). After the rand() fix, 100 runs "
+               "with 8 threads still failed once each in <code>invalid_profiles_fail_cleanly</code> "
+               "(memory error in SMLib's shell) and <code>handles_are_released</code> (parallel counter); both have been fixed since.")
 
 CRATE_ROLE = {
-    "cad-syntax": "Lexer, Parser, AST",
-    "cad-eval": "Sprachauswertung, Raster, Anker, Griffe",
-    "cad-ir": "Geometriebaum, Cache-Schlüssel",
-    "cad-kernel": "Kernel-Trait, Mesh, Export",
-    "kernel-mock": "Testkernel",
-    "kernel-smlib": "SMLib-Fassade (nativ)",
-    "cad-engine": "Auswertung, Cache, Provenienz, Zonen",
-    "cad-session": "Sitzung, Protokoll",
-    "cad-render": "Software-Rasterizer",
+    "cad-syntax": "Lexer, parser, AST",
+    "cad-eval": "Language evaluation, grids, anchors, handles",
+    "cad-ir": "Geometry tree, cache keys",
+    "cad-kernel": "Kernel trait, mesh, export",
+    "kernel-mock": "Test kernel",
+    "kernel-smlib": "SMLib facade (native)",
+    "cad-engine": "Evaluation, cache, provenance, zones",
+    "cad-session": "Session, protocol",
+    "cad-render": "Software rasterizer",
     "cad-cli": "CLI",
-    "cad-wasm": "Wasm-Einstieg (Worker)",
-    "compat-tests": "OpenSCAD-Vergleich Stufe 1",
+    "cad-wasm": "Wasm entry point (worker)",
+    "compat-tests": "OpenSCAD comparison, stage 1",
 }
 
 
@@ -103,7 +103,7 @@ def first_line(cmd):
         r = subprocess.run(cmd, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=60)
         return (r.stdout or "").strip().splitlines()[0]
     except Exception as ex:  # noqa: BLE001
-        return f"nicht verfügbar ({ex.__class__.__name__})"
+        return f"not available ({ex.__class__.__name__})"
 
 
 # ---------------------------------------------------------------- measurements
@@ -141,7 +141,7 @@ def environment():
         "date": dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
         "os": osname,
         "kernel": platform.release(),
-        "cpu": f"{cpu}, {os.cpu_count()} Kerne",
+        "cpu": f"{cpu}, {os.cpu_count()} cores",
         "memory": mem,
         "rustc": first_line(["rustc", "--version"]),
         "cargo": first_line(["cargo", "--version"]),
@@ -151,7 +151,7 @@ def environment():
         "wasm_bindgen": first_line(["wasm-bindgen", "--version"]),
         "playwright": pw,
         "python": platform.python_version(),
-        "smlib": "usd-brep @ c9c5979 (SMLib, SM_API), native vorgebaut: " + os.environ.get("SMLIB_PREBUILT", DEFAULT_PREBUILT),
+        "smlib": "usd-brep @ c9c5979 (SMLib, SM_API), prebuilt natively: " + os.environ.get("SMLIB_PREBUILT", DEFAULT_PREBUILT),
         "commit": git,
         "branch": branch,
     }
@@ -228,8 +228,8 @@ def repeat_runs(n):
         return None
     exe = kernel_test_binary()
     out = {}
-    for label, args in (("seriell (--test-threads=1)", ["--test-threads=1"]),
-                        ("parallel (Standard, 4 Threads)", []),
+    for label, args in (("serial (--test-threads=1)", ["--test-threads=1"]),
+                        ("parallel (default, 4 threads)", []),
                         ("parallel (--test-threads=8)", ["--test-threads=8"])):
         fails = 0
         failed_tests = []
@@ -240,7 +240,7 @@ def repeat_runs(n):
             if r.returncode != 0:
                 fails += 1
                 names = re.findall(r"^test (\S+) \.\.\. FAILED", r.stdout, re.M)
-                failed_tests += names or ["(Abbruch)"]
+                failed_tests += names or ["(aborted)"]
                 (WORK / f"repeat-failure-{len(failed_tests)}.log").write_text(r.stdout)
         out[label] = {"runs": n, "failed": fails, "seconds": round(time.monotonic() - t0, 1),
                       "failed_tests": failed_tests}
@@ -364,7 +364,7 @@ def renders(ref):
     dst = OUT / "spec-gehaeuse-zeile12.png"
     run([str(CAD), "render", "tests/models/spec/gehaeuse.scad", "--line", "12", "--size", size, "-o", str(dst)], check=False)
     out.append({"group": "highlight", "name": "gehaeuse --line 12", "file": "tests/models/spec/gehaeuse.scad",
-                "ours": dst.name, "purpose": "Zeile 12: abgezogener Körper rot transparent, Rest gedimmt"})
+                "ours": dst.name, "purpose": "line 12: subtracted body red and transparent, the rest dimmed"})
     for name in COMPAT_RENDERS:
         src = ROOT / "tests/models/openscad-compat" / f"{name}.scad"
         dst = OUT / f"compat-{name}.png"
@@ -428,26 +428,26 @@ def esc(s):
     return html.escape(str(s), quote=True)
 
 
-def de(x, nd=1):
-    """German number format."""
+def num(x, nd=1):
+    """Number format of the reports: decimal point, space as thousands separator."""
     if x is None:
         return "–"
     if isinstance(x, int):
         return f"{x:,}".replace(",", " ")
     s = f"{x:,.{nd}f}"
-    return s.replace(",", " ").replace(".", ",")
+    return s.replace(",", " ")
 
 
 def pct(x, nd=2):
-    return "–" if x is None else de(100.0 * x, nd) + " %"
+    return "–" if x is None else num(100.0 * x, nd) + " %"
 
 
 def kib(n):
-    return "–" if n is None else de(n / 1024.0, 0) + " KiB"
+    return "–" if n is None else num(n / 1024.0, 0) + " KiB"
 
 
 def mib(n):
-    return "–" if n is None else de(n / 1024.0 / 1024.0, 2) + " MiB"
+    return "–" if n is None else num(n / 1024.0 / 1024.0, 2) + " MiB"
 
 
 CSS = """
@@ -496,7 +496,7 @@ figcaption b { color: var(--ink); }
 
 
 def status_cell(ok):
-    return '<span class="ok">ok</span>' if ok else '<span class="bad">Fehler</span>'
+    return '<span class="ok">ok</span>' if ok else '<span class="bad">failed</span>'
 
 
 def html_report(d):
@@ -519,143 +519,145 @@ def html_report(d):
             smoke_t[k] = vals[len(vals) // 2]
     parts = []
     a = parts.append
-    a("<!doctype html><html lang='de'><head><meta charset='utf-8'>")
+    a("<!doctype html><html lang='en'><head><meta charset='utf-8'>")
     a("<meta name='viewport' content='width=device-width, initial-scale=1'>")
-    a("<title>Testbericht 1: Kernel, Sprache, Engine, CLI</title>")
+    a("<title>Test report 1: Kernel, language, engine, CLI</title>")
     a(f"<style>{CSS}</style></head><body>")
-    a("<h1>Testbericht 1: Kernel, Sprache, Engine, CLI</h1>")
-    a(f"<p class='sub'>controller-cad · Stand {esc(env['date'])} · Commit {esc(env['commit'])} "
-      f"(Branch <code>{esc(env['branch'])}</code>)</p>")
+    a("<h1>Test report 1: Kernel, language, engine, CLI</h1>")
+    a(f"<p class='sub'>controller-cad · As of {esc(env['date'])} · Commit {esc(env['commit'])} "
+      f"(branch <code>{esc(env['branch'])}</code>)</p>")
     a("<div class='kpis'>")
-    a(f"<div class='kpi'><b>{de(total_pass)}</b><span>Rust-Tests bestanden ({total_fail} Fehler, {total_ign} ignoriert)</span></div>")
-    a(f"<div class='kpi'><b>{n_ok}/{n_files}</b><span>OpenSCAD-Modelle innerhalb der Toleranz</span></div>")
+    a(f"<div class='kpi'><b>{num(total_pass)}</b><span>Rust tests passed ({total_fail} failed, {total_ign} ignored)</span></div>")
+    a(f"<div class='kpi'><b>{n_ok}/{n_files}</b><span>OpenSCAD models within tolerance</span></div>")
     sm = w["sizes"]["smlib.wasm"]
     cw = w["sizes"]["cad_wasm_bg.wasm"]
     a(f"<div class='kpi'><b>{mib((sm['brotli'] or sm['gzip']) + (cw['brotli'] or cw['gzip']))}</b>"
-      f"<span>Wasm gesamt, Brotli (SMLib {mib(sm['brotli'])}, Engine {mib(cw['brotli'])})</span></div>")
+      f"<span>Wasm total, Brotli (SMLib {mib(sm['brotli'])}, engine {mib(cw['brotli'])})</span></div>")
     st = smoke_t.get("set_source_to_root_mesh_ms")
-    a(f"<div class='kpi'><b>{de(st, 0)} ms</b><span>Quelltext → Wurzel-Mesh (Beispiel gehaeuse, Node, kalt)</span></div>")
+    a(f"<div class='kpi'><b>{num(st, 0)} ms</b><span>Source → root mesh (example gehaeuse, Node, cold)</span></div>")
     a("</div>")
 
     # ---- scope
-    a("<h2>1 Umfang</h2>")
-    a("<p>Geprüft werden die vier unteren Schichten der Anwendung (UI nicht Teil dieses Berichts):</p><ul>")
-    a("<li><b>Kernel:</b> SMLib/SM_API (NVIDIA usd-brep @ c9c5979) hinter einer C++-Fassade mit flacher C-ABI "
-      "(Handles, Fehlercodes, Flächen-Tags für die Provenienz), nativ gelinkt und als Emscripten-Wasm "
-      "(<code>smlib.wasm</code>); Rust-Anbindung <code>kernel-smlib</code>. Operationen: Primitive, Transformationen, "
-      "Booleans, Fillet/Fase, Extrusion (mit twist/scale), Rotation, Loft, Sweep, NURBS-Fläche, thicken, shell, "
-      "Kanten/Flächen-Abfragen, Klassifizieren, Tessellierung, Masseeigenschaften.</li>")
-    a("<li><b>Sprache:</b> OpenSCAD-Dialekt (<code>cad-syntax</code>, <code>cad-eval</code>): Variablen, Funktionen, "
-      "Module, <code>children()</code>, <code>for</code>/<code>if</code>/<code>let</code>/<code>each</code>, "
-      "Listenausdrücke, <code>echo</code>/<code>assert</code>, Modifier, 2D/3D-Primitive, Extrusionen; dazu die "
-      "Erweiterungen der Spec: Raster (<code>grid</code>), Anker, benannte Instanzen, <code>box()</code> zwischen "
-      "Rasterpunkten, Fillets/Fasen mit Zonen, Loft, Sweep, Griffe.</li>")
-    a("<li><b>Engine:</b> <code>cad-engine</code> wertet den Geometriebaum schrittweise mit Cache (inhaltsbasierte "
-      "Schlüssel) aus, ordnet Flächen und Kanten Zeilen zu, wählt Kanten über Zonen und exportiert STL/3MF; "
-      "<code>cad-session</code> stellt das Protokoll für Worker und CLI.</li>")
-    a("<li><b>CLI:</b> <code>cad check | eval | inspect | render | export</code> mit <code>--json</code>; "
-      "<code>render</code> nutzt den Software-Rasterizer <code>cad-render</code>.</li></ul>")
+    a("<h2>1 Scope</h2>")
+    a("<p>This report covers the four lower layers of the application (the UI is not part of this report):</p><ul>")
+    a("<li><b>Kernel:</b> SMLib/SM_API (NVIDIA usd-brep @ c9c5979) behind a C++ facade with a flat C ABI "
+      "(handles, error codes, face tags for provenance), linked natively and as Emscripten Wasm "
+      "(<code>smlib.wasm</code>); Rust binding <code>kernel-smlib</code>. Operations: primitives, transformations, "
+      "booleans, fillet/chamfer, extrusion (with twist/scale), revolve, loft, sweep, NURBS surface, thicken, shell, "
+      "edge/face queries, classification, tessellation, mass properties.</li>")
+    a("<li><b>Language:</b> OpenSCAD dialect (<code>cad-syntax</code>, <code>cad-eval</code>): variables, functions, "
+      "modules, <code>children()</code>, <code>for</code>/<code>if</code>/<code>let</code>/<code>each</code>, "
+      "list comprehensions, <code>echo</code>/<code>assert</code>, modifiers, 2D/3D primitives, extrusions; plus the "
+      "extensions from the spec: grids (<code>grid</code>), anchors, named instances, <code>box()</code> between "
+      "grid points, fillets/chamfers with zones, loft, sweep, handles.</li>")
+    a("<li><b>Engine:</b> <code>cad-engine</code> evaluates the geometry tree incrementally with a cache (content-based "
+      "keys), maps faces and edges to source lines, selects edges via zones and exports STL/3MF; "
+      "<code>cad-session</code> provides the protocol for the worker and the CLI.</li>")
+    a("<li><b>CLI:</b> <code>cad check | eval | inspect | render | export</code> with <code>--json</code>; "
+      "<code>render</code> uses the software rasterizer <code>cad-render</code>.</li></ul>")
 
     # ---- environment
-    a("<h2>2 Testumgebung</h2><table>")
+    a("<h2>2 Test environment</h2><table>")
     rows = [
-        ("System", f"{env['os']} (Linux {env['kernel']}), {env['cpu']}, {env['memory']} RAM, Container ohne GPU"),
+        ("System", f"{env['os']} (Linux {env['kernel']}), {env['cpu']}, {env['memory']} RAM, container without GPU"),
         ("Rust", f"{env['rustc']}; {env['cargo']}"),
         ("Kernel", env["smlib"]),
         ("Emscripten", env["emcc"]),
         ("wasm-bindgen", env["wasm_bindgen"]),
         ("Node", env["node"]),
-        ("OpenSCAD (Referenz)", env["openscad"] + "; Bilder mit xvfb-run, orthografisch"),
-        ("PDF", f"Chromium aus Playwright {env['playwright']}"),
+        ("OpenSCAD (reference)", env["openscad"] + "; images with xvfb-run, orthographic"),
+        ("PDF", f"Chromium from Playwright {env['playwright']}"),
         ("Python", env["python"]),
     ]
     for k, v in rows:
         a(f"<tr><th style='width:22%'>{esc(k)}</th><td>{esc(v)}</td></tr>")
     a("</table>")
-    a(f"<p class='small'>Release-Build der CLI: {de(d['release_build_seconds'])} s (inkrementell). Alle Zahlen stammen "
-      "aus einem Lauf von <code>tools/report/report1.py</code>; Zeiten sind Wanduhrzeiten auf dieser Maschine.</p>")
+    a(f"<p class='small'>Release build of the CLI: {num(d['release_build_seconds'])} s (incremental). All numbers come "
+      "from one run of <code>tools/report/report1.py</code>; times are wall-clock times on this machine.</p>")
 
     # ---- tests
-    a("<h2>3 Testergebnisse</h2>")
-    a("<h3>3.1 Rust-Tests pro Crate</h3>")
-    a("<table><tr><th>Crate</th><th>Inhalt</th><th class='n'>bestanden</th><th class='n'>Fehler</th>"
-      "<th class='n'>ignoriert</th><th class='n'>Testzeit</th><th class='n'>Laufzeit cargo</th><th>Status</th></tr>")
+    a("<h2>3 Test results</h2>")
+    a("<h3>3.1 Rust tests per crate</h3>")
+    a("<table><tr><th>Crate</th><th>Content</th><th class='n'>passed</th><th class='n'>failed</th>"
+      "<th class='n'>ignored</th><th class='n'>Test time</th><th class='n'>cargo run time</th><th>Status</th></tr>")
     for t in tests:
         a(f"<tr><td><code>{esc(t['crate'])}</code></td><td>{esc(CRATE_ROLE.get(t['crate'], ''))}</td>"
           f"<td class='n'>{t['passed']}</td><td class='n'>{t['failed']}</td><td class='n'>{t['ignored']}</td>"
-          f"<td class='n'>{de(t['test_seconds'], 2)} s</td><td class='n'>{de(t['wall_seconds'], 1)} s</td>"
+          f"<td class='n'>{num(t['test_seconds'], 2)} s</td><td class='n'>{num(t['wall_seconds'], 1)} s</td>"
           f"<td>{status_cell(t['ok'])}</td></tr>")
-    a(f"<tr><th>Summe</th><th></th><th class='n'>{total_pass}</th><th class='n'>{total_fail}</th>"
-      f"<th class='n'>{total_ign}</th><th class='n'>{de(total_time, 2)} s</th>"
-      f"<th class='n'>{de(sum(t['wall_seconds'] for t in tests), 1)} s</th><th></th></tr></table>")
-    a("<p class='small'>Testzeit: Summe der von den Test-Binaries gemeldeten Zeiten (Debug-Build, SMLib und Fassade "
-      "optimiert). Laufzeit cargo: <code>cargo test -p &lt;crate&gt;</code> nach vorherigem Build.</p>")
+    a(f"<tr><th>Total</th><th></th><th class='n'>{total_pass}</th><th class='n'>{total_fail}</th>"
+      f"<th class='n'>{total_ign}</th><th class='n'>{num(total_time, 2)} s</th>"
+      f"<th class='n'>{num(sum(t['wall_seconds'] for t in tests), 1)} s</th><th></th></tr></table>")
+    a("<p class='small'>Test time: sum of the times reported by the test binaries (debug build, SMLib and facade "
+      "optimized). cargo run time: <code>cargo test -p &lt;crate&gt;</code> after a prior build.</p>")
     rep = d.get("repeat")
     if rep:
-        a("<h3>3.2 Wiederholungsläufe <code>kernel-smlib/tests/kernel.rs</code></h3><table>"
-          "<tr><th>Modus</th><th class='n'>Läufe</th><th class='n'>fehlgeschlagen</th><th>Test</th>"
-          "<th class='n'>Dauer</th></tr>")
+        a("<h3>3.2 Repeated runs of <code>kernel-smlib/tests/kernel.rs</code></h3><table>"
+          "<tr><th>Mode</th><th class='n'>Runs</th><th class='n'>failed</th><th>Test</th>"
+          "<th class='n'>Duration</th></tr>")
         for k, v in rep.items():
             ft = ", ".join(f"<code>{esc(t)}</code>" for t in v.get("failed_tests", [])) or "–"
             a(f"<tr><td>{esc(k)}</td><td class='n'>{v['runs']}</td><td class='n'>{v['failed']}</td>"
-              f"<td>{ft}</td><td class='n'>{de(v['seconds'], 0)} s</td></tr>")
+              f"<td>{ft}</td><td class='n'>{num(v['seconds'], 0)} s</td></tr>")
         a("</table>")
         if REPEAT_NOTE:
             a(f"<p class='small'>{REPEAT_NOTE}</p>")
-    a("<h3>3.3 Kernel als Wasm (Node)</h3>")
+    a("<h3>3.3 Kernel as Wasm (Node)</h3>")
     nt = w.get("node_tests") or []
-    a(f"<p><code>node crates/kernel-smlib/js/test-node.mjs</code>: {sum(1 for x in nt if x[0] == 'ok')} von {len(nt)} "
-      f"Tests bestanden ({'ok' if w.get('node_test_ok') else 'Fehler'}).</p>")
-    a("<table><tr><th>Test</th><th class='n'>Zeit</th><th>Status</th></tr>")
+    a(f"<p><code>node crates/kernel-smlib/js/test-node.mjs</code>: {sum(1 for x in nt if x[0] == 'ok')} of {len(nt)} "
+      f"tests passed ({'ok' if w.get('node_test_ok') else 'failed'}).</p>")
+    a("<table><tr><th>Test</th><th class='n'>Time</th><th>Status</th></tr>")
     for s, name, ms in nt:
-        a(f"<tr><td>{esc(name)}</td><td class='n'>{de(float(ms), 1)} ms</td><td>{status_cell(s == 'ok')}</td></tr>")
+        a(f"<tr><td>{esc(name)}</td><td class='n'>{num(float(ms), 1)} ms</td><td>{status_cell(s == 'ok')}</td></tr>")
     a("</table>")
 
     # ---- fixed defects
-    a("<h3>3.4 In diesem Durchgang behobene Fehler</h3><table>"
-      "<tr><th style='width:20%'>Fehler</th><th style='width:40%'>Ursache</th><th style='width:40%'>Behebung, Nachweis</th></tr>")
+    a("<h3>3.4 Bugs fixed in this round</h3><table>"
+      "<tr><th style='width:20%'>Bug</th><th style='width:40%'>Cause</th><th style='width:40%'>Fix, evidence</th></tr>")
     fixes = [
-        ("Union dreier orthogonaler Zylinder: 3237 statt 3800 mm³ (05_nested_booleans)",
-         "SMLib meldet bei (Z ∪ Y) ∪ X Erfolg, verwirft aber den −x-Arm des X-Zylinders (Hülle x ≥ −4); "
-         "(Z ∪ X) ∪ Y ist richtig, (Y ∪ X) ∪ Z endet mit SM_ERR. Nur bei gleichen Radien (Schnittkurven mit "
-         "Berührpunkten); mit r = 3,9 oder 4,1 für den dritten Zylinder stimmt es. <code>mass_props</code> und "
-         "Mesh sind gleich falsch: kein Tessellierungs- oder Exportfehler. Paarweise rechnete die Fassade schon.",
-         "Die Fassade prüft jedes paarweise Ergebnis (Volumen-Ungleichungen, Lage von Proben je 5 pro Fläche "
-         "dicht innen und außen an den Operandenflächen) und versucht sonst: Operanden tauschen, andere "
-         "Reihenfolge, zuletzt zweiten Operanden um 10⁻⁶…10⁻⁴ der Modellgröße verschieben; besteht nichts, "
-         "bleibt SMLibs Ergebnis wie bisher. "
-         "Tests: <code>kernel.rs</code> und <code>engine.rs::union_of_three_orthogonal_cylinders</code> "
-         "(alle 6 Reihenfolgen, verschachtelt, als Bohrung), Node-Test."),
-        ("linear_extrude mit twist: Hülle 1,25 mm daneben (12_linear_extrude_twist)",
-         "Schnitt t wurde erst skaliert, dann gedreht; OpenSCAD dreht erst und skaliert dann entlang x/y "
-         "(<code>Scaling(s)·Rotation2D(−twist·t)</code>). Bei <code>scale = [1, 0.5]</code> entstehen andere "
-         "Querschnitte (y bis 5,08 statt 3,83 mm). Drehsinn und Startwinkel waren richtig. Zusätzlich: Schnitte "
-         "alle 22,5° (Hüllenfehler 3·10⁻³ mm), und das Mesh lag 2,9 % über dem Volumen, weil SMLib die "
-         "Sehnenhöhe nur an Dreieckskanten begrenzt.",
-         "Reihenfolge wie OpenSCAD; Schnitte alle 7,5° (Hülle auf 10⁻⁴ mm, Volumen 540,000 von 540). Die "
-         "Tessellierung misst auf Freiformflächen die Abweichung der Dreiecksmitten und verfeinert bis ≤ 2·tol "
-         "(höchstens 3 Durchgänge, Dreiecksbudget). Tests: <code>twisted_extrude_with_nonuniform_scale_matches_openscad</code>, "
+        ("Union of three orthogonal cylinders: 3237 instead of 3800 mm³ (05_nested_booleans)",
+         "For (Z ∪ Y) ∪ X, SMLib reports success but drops the −x arm of the X cylinder (bounding box x ≥ −4); "
+         "(Z ∪ X) ∪ Y is correct, (Y ∪ X) ∪ Z ends with SM_ERR. Only with equal radii (intersection curves with "
+         "touching points); with r = 3.9 or 4.1 for the third cylinder the result is correct. <code>mass_props</code> "
+         "and the mesh are equally wrong: not a tessellation or export bug. Pairwise, the facade already computed "
+         "correctly.",
+         "The facade checks every pairwise result (volume inequalities, location of probes, 5 per face, just "
+         "inside and outside the operand faces) and otherwise tries: swap operands, different order, and finally "
+         "shift the second operand by 10⁻⁶…10⁻⁴ of the model size; if nothing passes, SMLib's result is kept as "
+         "before. "
+         "Tests: <code>kernel.rs</code> and <code>engine.rs::union_of_three_orthogonal_cylinders</code> "
+         "(all 6 orders, nested, as a hole), Node test."),
+        ("linear_extrude with twist: bounding box off by 1.25 mm (12_linear_extrude_twist)",
+         "Section t was scaled first and rotated afterwards; OpenSCAD rotates first and then scales along x/y "
+         "(<code>Scaling(s)·Rotation2D(−twist·t)</code>). With <code>scale = [1, 0.5]</code> this gives different "
+         "cross-sections (y up to 5.08 instead of 3.83 mm). Direction of rotation and start angle were correct. In "
+         "addition: sections every 22.5° (bounding box error 3·10⁻³ mm), and the mesh was 2.9 % above the volume "
+         "because SMLib limits the chord height only at triangle edges.",
+         "Order as in OpenSCAD; sections every 7.5° (bounding box within 10⁻⁴ mm, volume 540.000 of 540). On "
+         "freeform surfaces the tessellation measures the deviation of the triangle centers and refines until "
+         "≤ 2·tol (at most 3 passes, triangle budget). Tests: "
+         "<code>twisted_extrude_with_nonuniform_scale_matches_openscad</code>, "
          "<code>twisted_extrude_mesh_volume</code>, <code>engine.rs::linear_extrude_twist_nonuniform_scale_like_openscad</code>."),
-        ("Wackliger Test <code>invalid_profiles_fail_cleanly</code>",
-         "Zwei Ursachen, beide im zu dicken <code>shell</code> (Würfel 10 mm, Wand 6 mm, muss scheitern). "
-         "(1) SMLib ruft <code>srand(time(NULL))</code> in <code>SmFace::GetPointsInFace</code> und "
-         "<code>SmShell::IsInnerShellOf</code> auf: vorher 4 von 40 Läufen (8 Threads) fehlgeschlagen, mit fester "
-         "Uhrzeit (<code>time()</code> per LD_PRELOAD) 0 von 40. Ein <code>srand</code> vor jeder Operation "
-         "reicht nicht, SMLib setzt den Startwert mitten in der Operation neu. (2) Danach noch 1 von 100: "
-         "SMLibs Shell liest bei zu dicker Wand freigegebenen Speicher (valgrind: <i>Invalid read</i> in "
-         "<code>SmProtoEdge::RemoveProtoVertex</code>; solidcore UB-239/242); je nach Heap scheitert sie, "
-         "liefert einen Körper oder stürzt ab (Segfault in einer Schleife nach 9 Aufrufen).",
-         "(1) Die Fassade definiert <code>rand()</code>/<code>srand()</code> selbst (statisch gelinkt, nativ und "
-         "Emscripten): fester Startwert, Neustart bei jedem <code>sc_*</code>-Aufruf. (2) <code>sc_shell</code> "
-         "lehnt Wände ab, die zwischen zwei gegenüberliegenden ebenen Flächen keinen Platz haben (Abstand ≤ 2·t), "
-         "bevor SMLib gerufen wird. Dazu lief <code>handles_are_released</code> parallel falsch (prozessweiter "
-         "Zähler): eigenes Test-Binary. Abschnitt 3.2; Tests <code>determinism.rs</code>, <code>handles.rs</code>."),
-        ("Diagonalbänder bei transparent gerenderten abgezogenen Körpern",
-         "<code>cad-render</code> sortierte transparente Dreiecke nach dem Schwerpunkt. Wo Dreiecke in der Tiefe "
-         "überlappen, vor allem bei koplanaren Flächen (abgezogener Körper und sein Hohlraum im gedimmten "
-         "Ergebnis), wechselt die Reihenfolge entlang der Dreiecksdiagonalen.",
-         "Fragmente werden pro Abtastpunkt nach Tiefe sortiert, koplanare in Szenenreihenfolge (Abb. "
-         "<i>gehaeuse --line 12</i> in Abschnitt 5). Test: "
+        ("Flaky test <code>invalid_profiles_fail_cleanly</code>",
+         "Two causes, both in the too-thick <code>shell</code> (10 mm cube, 6 mm wall, must fail). "
+         "(1) SMLib calls <code>srand(time(NULL))</code> in <code>SmFace::GetPointsInFace</code> and "
+         "<code>SmShell::IsInnerShellOf</code>: before, 4 of 40 runs (8 threads) failed; with a fixed clock "
+         "(<code>time()</code> via LD_PRELOAD), 0 of 40. An <code>srand</code> before each operation is not "
+         "enough, because SMLib reseeds in the middle of the operation. (2) After that, still 1 of 100: with a "
+         "too-thick wall, SMLib's shell reads freed memory (valgrind: <i>Invalid read</i> in "
+         "<code>SmProtoEdge::RemoveProtoVertex</code>; solidcore UB-239/242); depending on the heap it fails, "
+         "returns a body, or crashes (segfault in a loop after 9 calls).",
+         "(1) The facade defines <code>rand()</code>/<code>srand()</code> itself (statically linked, native and "
+         "Emscripten): fixed seed, reset on every <code>sc_*</code> call. (2) <code>sc_shell</code> rejects walls "
+         "that do not fit between two opposite planar faces (distance ≤ 2·t) before SMLib is called. In addition, "
+         "<code>handles_are_released</code> failed when run in parallel (process-wide counter): separate test "
+         "binary. Section 3.2; tests <code>determinism.rs</code>, <code>handles.rs</code>."),
+        ("Diagonal bands on subtracted bodies rendered transparent",
+         "<code>cad-render</code> sorted transparent triangles by centroid. Where triangles overlap in depth, "
+         "especially on coplanar faces (subtracted body and its cavity in the dimmed result), the order flips "
+         "along the triangle diagonals.",
+         "Fragments are sorted by depth per sample, coplanar ones in scene order (figure "
+         "<i>gehaeuse --line 12</i> in section 5). Test: "
          "<code>render.rs::transparent_coplanar_faces_have_no_diagonal_bands</code>."),
     ]
     for f, c, r in fixes:
@@ -663,48 +665,48 @@ def html_report(d):
     a("</table>")
 
     # ---- compare table
-    a("<h2>4 Vergleich mit OpenSCAD</h2>")
-    a(f"<p><code>tests/openscad-compat/compare.py</code> exportiert jedes Modell als STL "
-      f"(<code>cad export</code>, Sehnentoleranz 0,01 mm) und vergleicht Volumen, Fläche und Hülle mit OpenSCAD 2021.01 "
-      f"(<code>$fn = 128</code> bei Rundungen, siehe <code>tests/openscad-compat/README.md</code>). Toleranzen: Hülle "
-      f"0,01 mm; Volumen und Fläche 1 % (<i>polygonal</i>) bzw. 2 % (<i>rounded</i>). Ergebnis: "
-      f"<b>{n_ok} von {n_files}</b> innerhalb der Toleranz, Laufzeit {de(comp['seconds'])} s.</p>")
-    a("<table><tr><th>Modell</th><th>Klasse</th><th class='n'>V OpenSCAD [mm³]</th><th class='n'>V unseres [mm³]</th>"
-      "<th class='n'>ΔV</th><th class='n'>ΔA</th><th class='n'>ΔHülle [mm]</th><th class='n'>Dreiecke</th>"
-      "<th class='n'>Zeit</th><th>Status</th></tr>")
+    a("<h2>4 Comparison with OpenSCAD</h2>")
+    a(f"<p><code>tests/openscad-compat/compare.py</code> exports each model as STL "
+      f"(<code>cad export</code>, chord tolerance 0.01 mm) and compares volume, area and bounding box with OpenSCAD "
+      f"2021.01 (<code>$fn = 128</code> for round shapes, see <code>tests/openscad-compat/README.md</code>). "
+      f"Tolerances: bounding box 0.01 mm; volume and area 1 % (<i>polygonal</i>) or 2 % (<i>rounded</i>). Result: "
+      f"<b>{n_ok} of {n_files}</b> within tolerance, run time {num(comp['seconds'])} s.</p>")
+    a("<table><tr><th>Model</th><th>Class</th><th class='n'>V OpenSCAD [mm³]</th><th class='n'>V ours [mm³]</th>"
+      "<th class='n'>ΔV</th><th class='n'>ΔA</th><th class='n'>ΔBBox [mm]</th><th class='n'>Triangles</th>"
+      "<th class='n'>Time</th><th>Status</th></tr>")
     for r in comp["results"]:
         dv = r.get("deviation", {})
         ours = r.get("ours") or {}
         refv = r.get("reference") or {}
         a(f"<tr><td><code>{esc(r['file'].removesuffix('.scad'))}</code></td><td>{esc(r.get('class', ''))}</td>"
-          f"<td class='n'>{de(refv.get('volume'), 1)}</td><td class='n'>{de(ours.get('volume'), 1)}</td>"
+          f"<td class='n'>{num(refv.get('volume'), 1)}</td><td class='n'>{num(ours.get('volume'), 1)}</td>"
           f"<td class='n'>{pct(dv.get('volume_rel'))}</td><td class='n'>{pct(dv.get('area_rel'))}</td>"
-          f"<td class='n'>{de(dv.get('bounds_abs'), 4)}</td><td class='n'>{de(ours.get('triangles'))}</td>"
-          f"<td class='n'>{de(r.get('seconds'), 2)} s</td><td>{status_cell(r.get('status') == 'ok')}</td></tr>")
+          f"<td class='n'>{num(dv.get('bounds_abs'), 4)}</td><td class='n'>{num(ours.get('triangles'))}</td>"
+          f"<td class='n'>{num(r.get('seconds'), 2)} s</td><td>{status_cell(r.get('status') == 'ok')}</td></tr>")
     a("</table>")
     r12 = next((r for r in comp["results"] if r["file"].startswith("12_")), None)
     if r12 and r12.get("ours"):
-        a("<div class='note'><b>Zu 12_linear_extrude_twist:</b> Hier weicht OpenSCADs eigenes Netz vom exakten "
-          "Körper ab. Exakt sind 1280 + 840 + 540 = 2660 mm³ (verdrillte Querschnitte behalten ihre Fläche); "
-          f"OpenSCAD liefert {de(r12['reference']['volume'], 1)} mm³, weil es jede verdrillte Seitenfläche in zwei "
-          "ebene Dreiecke mit fester Diagonale teilt. Unser STL hat "
-          f"{de(r12['ours']['volume'], 1)} mm³. Die Abweichung von {pct(r12['deviation']['volume_rel'])} in der "
-          "Tabelle ist also OpenSCADs Facettierung.</div>")
+        a("<div class='note'><b>On 12_linear_extrude_twist:</b> here OpenSCAD's own mesh deviates from the exact "
+          "body. The exact value is 1280 + 840 + 540 = 2660 mm³ (twisted cross-sections keep their area); "
+          f"OpenSCAD gives {num(r12['reference']['volume'], 1)} mm³ because it splits every twisted side face into "
+          "two planar triangles with a fixed diagonal. Our STL has "
+          f"{num(r12['ours']['volume'], 1)} mm³. The {pct(r12['deviation']['volume_rel'])} deviation in the "
+          "table is therefore OpenSCAD's faceting.</div>")
 
     # ---- renders
     a("<h2 class='pagebreak'>5 Renderings</h2>")
-    a(f"<p>Alle Bilder {IMG[0]}×{IMG[1]} px, isometrische Ansicht (Blick entlang (−1, 1, −1), orthografisch), "
-      "<code>cad render &lt;datei&gt; --size 600x450</code>. OpenSCAD-Bilder: <code>openscad -o x.png "
-      "--render --imgsize=600,450 --viewall --autocenter --projection=ortho --camera=100,-100,100,0,0,0</code> mit denselben "
-      "<code>-D</code>-Werten wie die Referenz.</p>")
-    a("<h3>5.1 Beispiele der Spec (<code>tests/models/spec/</code>)</h3><p class='small'>Nur mit unserer CLI: "
-      "Raster, Anker, Fillets und Zonen gibt es in OpenSCAD nicht.</p><div class='grid2'>")
+    a(f"<p>All images {IMG[0]}×{IMG[1]} px, isometric view (looking along (−1, 1, −1), orthographic), "
+      "<code>cad render &lt;file&gt; --size 600x450</code>. OpenSCAD images: <code>openscad -o x.png "
+      "--render --imgsize=600,450 --viewall --autocenter --projection=ortho --camera=100,-100,100,0,0,0</code> with "
+      "the same <code>-D</code> values as the reference.</p>")
+    a("<h3>5.1 Examples from the spec (<code>tests/models/spec/</code>)</h3><p class='small'>Only with our CLI: "
+      "grids, anchors, fillets and zones do not exist in OpenSCAD.</p><div class='grid2'>")
     for it in d["renders"]:
         if it["group"] in ("spec", "highlight"):
             cap = f"<b>{esc(it['name'])}</b> – {esc(it.get('purpose', ''))}"
             a(f"<figure><img src='{esc(it['ours'])}' alt='{esc(it['name'])}'><figcaption>{cap}</figcaption></figure>")
     a("</div>")
-    a("<h3>5.2 OpenSCAD-Modelle: unseres (links) und OpenSCAD (rechts)</h3>")
+    a("<h3>5.2 OpenSCAD models: ours (left) and OpenSCAD (right)</h3>")
     for it in d["renders"]:
         if it["group"] != "compat":
             continue
@@ -714,97 +716,97 @@ def html_report(d):
         if it.get("openscad"):
             a(f"<figure><img src='{esc(it['openscad'])}' alt='{esc(it['name'])} OpenSCAD'><figcaption>OpenSCAD 2021.01</figcaption></figure>")
         else:
-            a("<figure><figcaption>OpenSCAD-Bild nicht verfügbar</figcaption></figure>")
+            a("<figure><figcaption>OpenSCAD image not available</figcaption></figure>")
         a("</div></div>")
 
     # ---- measurements
-    a("<h2>6 Messwerte</h2>")
-    a("<h3>6.1 Wasm-Größen</h3><table><tr><th>Datei</th><th class='n'>roh</th><th class='n'>gzip −9</th>"
+    a("<h2>6 Measurements</h2>")
+    a("<h3>6.1 Wasm sizes</h3><table><tr><th>File</th><th class='n'>raw</th><th class='n'>gzip −9</th>"
       "<th class='n'>Brotli q11</th></tr>")
     for name, s in w["sizes"].items():
         a(f"<tr><td><code>{esc(name)}</code></td><td class='n'>{kib(s['raw'])}</td><td class='n'>{kib(s['gzip'])}</td>"
           f"<td class='n'>{kib(s['brotli'])}</td></tr>")
-    a("</table><p class='small'><code>smlib.wasm</code>: SMLib + SM_API + Fassade, Emscripten <code>-O3 -fwasm-exceptions</code>; "
-      "<code>cad_wasm_bg.wasm</code>: Sprache, Engine, Sitzung (wasm-bindgen, wasm-opt −O3).</p>")
-    a("<h3>6.2 Ladezeit und Auswertung (Node 22, ein Prozess wie im Worker)</h3>")
+    a("</table><p class='small'><code>smlib.wasm</code>: SMLib + SM_API + facade, Emscripten <code>-O3 -fwasm-exceptions</code>; "
+      "<code>cad_wasm_bg.wasm</code>: language, engine, session (wasm-bindgen, wasm-opt −O3).</p>")
+    a("<h3>6.2 Load time and evaluation (Node 22, one process as in the worker)</h3>")
     labels = {
-        "load_smlib_ms": "smlib.wasm laden, kompilieren, initialisieren",
-        "load_cad_wasm_ms": "cad_wasm laden und initialisieren",
-        "set_source_to_preliminary_scene_ms": "SetSource → vorläufige Szene (ohne Kernel)",
-        "set_source_to_scene_ms": "SetSource → vollständige Szene",
-        "set_source_to_root_mesh_ms": "SetSource → Wurzel-Mesh",
-        "request_all_meshes_ms": "Meshes aller Knoten anfordern",
-        "edit_to_scene_ms": "Griff ziehen → TextEdit → neue Szene",
-        "edit_to_coarse_root_mesh_ms": "… → grobes Wurzel-Mesh",
-        "warm_set_source_to_preliminary_scene_ms": "erneutes SetSource (Cache warm) → vorläufige Szene",
-        "warm_set_source_to_scene_ms": "erneutes SetSource (Cache warm) → Szene",
-        "warm_set_source_to_root_mesh_ms": "erneutes SetSource (Cache warm) → Wurzel-Mesh",
+        "load_smlib_ms": "Load, compile, initialize smlib.wasm",
+        "load_cad_wasm_ms": "Load and initialize cad_wasm",
+        "set_source_to_preliminary_scene_ms": "SetSource → preliminary scene (without kernel)",
+        "set_source_to_scene_ms": "SetSource → complete scene",
+        "set_source_to_root_mesh_ms": "SetSource → root mesh",
+        "request_all_meshes_ms": "Request meshes of all nodes",
+        "edit_to_scene_ms": "Drag handle → TextEdit → new scene",
+        "edit_to_coarse_root_mesh_ms": "… → coarse root mesh",
+        "warm_set_source_to_preliminary_scene_ms": "Repeated SetSource (warm cache) → preliminary scene",
+        "warm_set_source_to_scene_ms": "Repeated SetSource (warm cache) → scene",
+        "warm_set_source_to_root_mesh_ms": "Repeated SetSource (warm cache) → root mesh",
     }
     if smoke_t:
-        a(f"<p><code>web/scripts/smoke-node.mjs --json</code> mit dem Beispiel <code>gehaeuse</code>, "
-          f"Median aus {len(smoke)} Läufen, Schrittbudget 16 ms.</p>")
-        a("<table><tr><th>Schritt</th><th class='n'>Zeit</th></tr>")
+        a(f"<p><code>web/scripts/smoke-node.mjs --json</code> with the example <code>gehaeuse</code>, "
+          f"median of {len(smoke)} runs, step budget 16 ms.</p>")
+        a("<table><tr><th>Step</th><th class='n'>Time</th></tr>")
         for k, v in smoke_t.items():
             if k == "steps":
                 continue
-            a(f"<tr><td>{esc(labels.get(k, k))}</td><td class='n'>{de(v, 1)} ms</td></tr>")
+            a(f"<tr><td>{esc(labels.get(k, k))}</td><td class='n'>{num(v, 1)} ms</td></tr>")
         if "steps" in smoke_t:
-            a(f"<tr><td>Auswertschritte bis zur vollständigen Szene</td><td class='n'>{de(int(smoke_t['steps']))}</td></tr>")
-        a(f"<tr><td>Dreiecke Wurzel-Mesh / Knoten der Szene</td><td class='n'>{de(smoke[0].get('triangles_root'))} / {de(smoke[0].get('nodes'))}</td></tr>")
+            a(f"<tr><td>Evaluation steps until the complete scene</td><td class='n'>{num(int(smoke_t['steps']))}</td></tr>")
+        a(f"<tr><td>Triangles of root mesh / nodes of the scene</td><td class='n'>{num(smoke[0].get('triangles_root'))} / {num(smoke[0].get('nodes'))}</td></tr>")
         a("</table>")
     elif w.get("smoke_error"):
-        a(f"<p class='bad'>smoke-node fehlgeschlagen.</p><pre>{esc(w['smoke_error'])}</pre>")
+        a(f"<p class='bad'>smoke-node failed.</p><pre>{esc(w['smoke_error'])}</pre>")
     if "smlib_init_ms" in w:
-        a(f"<p>Nur Kernel (<code>test-node.mjs</code>): Datei lesen {de(w['smlib_read_ms'])} ms, kompilieren, "
-          f"instanziieren und initialisieren {de(w['smlib_init_ms'])} ms. Szenario: {esc(w.get('smlib_scenario', ''))}.</p>")
-    a("<h3>6.3 Auswertung nativ (CLI)</h3>")
+        a(f"<p>Kernel only (<code>test-node.mjs</code>): read file {num(w['smlib_read_ms'])} ms, compile, "
+          f"instantiate and initialize {num(w['smlib_init_ms'])} ms. Scenario: {esc(w.get('smlib_scenario', ''))}.</p>")
+    a("<h3>6.3 Native evaluation (CLI)</h3>")
     secs = [r.get("seconds") for r in comp["results"] if r.get("seconds") is not None]
     if secs:
         secs_sorted = sorted(secs)
         slow = sorted(comp["results"], key=lambda r: -(r.get("seconds") or 0))[:3]
-        a(f"<p><code>cad export</code> je Modell (Prozessstart, Auswertung, Tessellierung, STL): Median "
-          f"{de(secs_sorted[len(secs) // 2], 2)} s, Summe {de(sum(secs), 1)} s; am längsten "
-          + ", ".join(f"<code>{esc(r['file'].removesuffix('.scad'))}</code> {de(r['seconds'], 2)} s" for r in slow)
+        a(f"<p><code>cad export</code> per model (process start, evaluation, tessellation, STL): median "
+          f"{num(secs_sorted[len(secs) // 2], 2)} s, total {num(sum(secs), 1)} s; longest "
+          + ", ".join(f"<code>{esc(r['file'].removesuffix('.scad'))}</code> {num(r['seconds'], 2)} s" for r in slow)
           + ".</p>")
     spec = [it for it in d["renders"] if it["group"] == "spec"]
     if spec:
-        a("<p><code>cad render</code> der Spec-Beispiele (600×450, 2×2-Überabtastung): "
-          + ", ".join(f"{esc(it['name'])} {de(it['seconds'], 2)} s" for it in spec) + ".</p>")
+        a("<p><code>cad render</code> of the spec examples (600×450, 2×2 supersampling): "
+          + ", ".join(f"{esc(it['name'])} {num(it['seconds'], 2)} s" for it in spec) + ".</p>")
 
     # ---- limits
-    a("<h2>7 Bekannte Grenzen</h2><ul>")
+    a("<h2>7 Known limitations</h2><ul>")
     tri12 = (r12 or {}).get("ours", {}).get("triangles")
     limits = [
-        "SMLib-Booleans sind in Sonderlagen unzuverlässig. Die Fassade erkennt falsche Ergebnisse über "
-        "Stichproben, nicht vollständig: Ein Fehler zwischen allen Probepunkten bleibt unentdeckt. Die Prüfung "
-        "nutzt SMLibs Punktklassifizierung, die bei gedrehten Splinekörpern selbst irrt (knauf_mirror); besteht "
-        "keine Variante, bleibt deshalb SMLibs eigenes Ergebnis. Im Verschiebe-Rückfall weicht der zweite "
-        "Operand um bis zu 10⁻⁴ der Modellgröße ab. Die Prüfung kostet Zeit: "
-        "<code>cad export</code> aller 41 Beispiele beim Beheben gemessen 13,7 s → 18,9 s (+38 %), am meisten "
-        "bei Vereinigungen vieler Teile (07_crown_ring ×2,1) und bei knauf_mirror (×1,9, Rückfälle).",
-        "Offene Ergebnisse: Berühren sich Körper an einer Kante, ist die Vereinigung in SMLib kein geschlossener "
-        "Körper; <code>cad</code> meldet dann Volumen 0 (winkel_anker; das STL ist in Ordnung). knauf_mirror: "
-        "Der gedrehte Splinekörper minus Bohrung ist offen, Torus und Stift fehlen im Ergebnis, das Fillet an "
-        "der Bohrung scheitert (SM_ERR) – alles wie vor diesem Durchgang, noch offen.",
-        "Tessellierung von Freiformflächen: Die Verfeinerung setzt eine globale maximale Kantenlänge, damit werden "
-        f"auch ebene Flächen desselben Körpers feiner (12_linear_extrude_twist: {de(tri12)} Dreiecke, OpenSCAD 452).",
-        "Twist-Extrusion ist eine kubische Loft-Annäherung durch Schnitte alle 7,5°. Kreisprofile mit "
-        "ungleichmäßigem <code>scale</code> und <code>scale = 0</code> (Spitze) werden nicht unterstützt.",
-        "OpenSCAD facettiert, wir rechnen exakt: Volumen runder Teile weichen systematisch um 0,01–0,3 % ab; bei "
-        "twist liegt OpenSCAD selbst um ~1 % daneben (Abschnitt 4).",
-        "Determinismus: <code>rand()</code> ist fest und prozessweit ersetzt. Speicherfehler in SMLib machen "
-        "Ergebnisse vom Heap abhängig: Die Shell-Vorprüfung deckt nur ebene, gegenüberliegende Wände ab; schon "
-        "knapp passende Wände (10-mm-Würfel, t = 4,99) zeigen unter valgrind ungültige Lesezugriffe. Abhilfe "
-        "bringen erst die Upstream-Korrekturen (tangency-labs/smlib 93efd6d, af8db37) bzw. solidcore.",
-        "<code>cad render</code> ist ein Software-Rasterizer (orthografisch, Lambert, 2×2-Überabtastung) ohne "
-        "Schatten und Perspektive. Transparenz pro Pixel braucht Speicher proportional zur Zahl der Schichten.",
-        "Nicht Teil dieses Berichts: Browser-UI, STEP-Export, Umstieg auf solidcore (M8).",
+        "SMLib booleans are unreliable in special configurations. The facade detects wrong results by sampling, "
+        "not completely: an error between all probe points goes undetected. The check uses SMLib's point "
+        "classification, which itself is wrong for rotated spline bodies (knauf_mirror); if no variant passes, "
+        "SMLib's own result is therefore kept. In the shift fallback, the second operand deviates by up to 10⁻⁴ "
+        "of the model size. The check costs time: "
+        "<code>cad export</code> of all 41 examples, measured during the fix, 13.7 s → 18.9 s (+38 %), most for "
+        "unions of many parts (07_crown_ring ×2.1) and for knauf_mirror (×1.9, fallbacks).",
+        "Open results: if bodies touch along an edge, the union in SMLib is not a closed body; <code>cad</code> "
+        "then reports volume 0 (winkel_anker; the STL is fine). knauf_mirror: the rotated spline body minus the "
+        "hole is open, torus and pin are missing from the result, the fillet at the hole fails (SM_ERR) – all as "
+        "before this round, still open.",
+        "Tessellation of freeform surfaces: the refinement sets a global maximum edge length, so planar faces of "
+        f"the same body also become finer (12_linear_extrude_twist: {num(tri12)} triangles, OpenSCAD 452).",
+        "Twist extrusion is a cubic loft approximation through sections every 7.5°. Circular profiles with "
+        "non-uniform <code>scale</code> and <code>scale = 0</code> (apex) are not supported.",
+        "OpenSCAD facets, we compute exactly: volumes of round parts deviate systematically by 0.01–0.3 %; with "
+        "twist, OpenSCAD itself is off by ~1 % (section 4).",
+        "Determinism: <code>rand()</code> is replaced with a fixed, process-wide implementation. Memory errors in "
+        "SMLib make results depend on the heap: the shell pre-check only covers planar, opposite walls; walls that "
+        "barely fit (10 mm cube, t = 4.99) already show invalid reads under valgrind. Only the upstream fixes "
+        "(tangency-labs/smlib 93efd6d, af8db37) or solidcore will resolve this.",
+        "<code>cad render</code> is a software rasterizer (orthographic, Lambert, 2×2 supersampling) without "
+        "shadows or perspective. Per-pixel transparency needs memory proportional to the number of layers.",
+        "Not part of this report: browser UI, STEP export, switch to solidcore (M8).",
     ]
     for l in limits:
         a(f"<li>{l}</li>")
     a("</ul>")
-    a("<p class='small'>Erzeugt mit <code>python3 tools/report/report1.py</code> "
-      "(PDF: <code>tools/report/print-pdf.mjs</code>, Chromium aus Playwright).</p>")
+    a("<p class='small'>Generated with <code>python3 tools/report/report1.py</code> "
+      "(PDF: <code>tools/report/print-pdf.mjs</code>, Chromium from Playwright).</p>")
     a("</body></html>")
     return "\n".join(parts)
 

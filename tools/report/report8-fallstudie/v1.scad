@@ -1,5 +1,5 @@
-// Fallstudie Bericht 8: Wandhalter für eine Stange, nur mit der CLI entwickelt.
-// Grundplatte an der Wand (y = 0), Ausleger mit Bohrung für die Stange, zwei Schraublöcher.
+// Case study of report 8: wall bracket for a rod, developed with the CLI only.
+// Base plate on the wall (y = 0), arm with a bore for the rod, two screw holes.
 module halter(b = 40, t = 5, h = 50, a = 30, d = 20, spiel = 0) {
     grid g {
         x: links = 0, loch_l = 10, mitte = b / 2, loch_r = b - 10, rechts = b;

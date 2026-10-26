@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 6 ("Projekte, Bauteile, include/use"): collects the results of the Phase D tests
+// Test report 6 ("Projects, parts, include/use"): collects the results of the Phase D tests
 // and writes
 //
 //   docs/reports/06-projekte-bauteile/report.html, report.pdf, img/*.jpg
@@ -80,7 +80,7 @@ const scenarios = readJson(join(input, "scenarios.json"), []);
 const cargo = existsSync(join(input, "cargo.txt")) ? readFileSync(join(input, "cargo.txt"), "utf8") : null;
 const compare = existsSync(join(input, "compare.txt")) ? readFileSync(join(input, "compare.txt"), "utf8") : null;
 if (!pw || !hasPhaseD(pw)) {
-  console.error(`fehlt: Ergebnisse von web/e2e/projekte.spec.ts in ${pwFile} (cd web && pnpm e2e)`);
+  console.error(`missing: results of web/e2e/projekte.spec.ts in ${pwFile} (cd web && pnpm e2e)`);
   process.exit(1);
 }
 
@@ -93,7 +93,7 @@ function flatten(suite, file, acc = []) {
     for (const t of spec.tests ?? []) {
       const r = t.results?.at(-1);
       const id = spec.title.split(" ")[0];
-      acc.push({ id, title: spec.title.slice(id.length + 1), status: r?.status ?? t.status ?? "unbekannt", ms: r?.duration ?? 0, error: r?.error?.message ?? null });
+      acc.push({ id, title: spec.title.slice(id.length + 1), status: r?.status ?? t.status ?? "unknown", ms: r?.duration ?? 0, error: r?.error?.message ?? null });
     }
   }
   return acc;
@@ -137,7 +137,7 @@ const NEW_RUST_BINS = ["tests/project.rs", "tests/project_openscad.rs", "tests/p
 const NEW_RUST = new Set(["indexed_named_instance", "file_regions", "include_path_span", "file_names", "objects_xml_has_one_object_per_mesh"]);
 const stepVerify = existsSync(join(input, "step-verify.txt")) ? readFileSync(join(input, "step-verify.txt"), "utf8") : null;
 const stepLine = stepVerify?.split("\n").find((l) => /\d+\/\d+ passed/.test(l)) ?? null;
-const compareLine = compare?.split("\n").find((l) => /\d+\s*\/\s*\d+/.test(l) && /(ok|übereinstimm|match)/i.test(l)) ?? compare?.trim().split("\n").at(-1) ?? null;
+const compareLine = compare?.split("\n").find((l) => /\d+\s*\/\s*\d+/.test(l) && /(ok|match)/i.test(l)) ?? compare?.trim().split("\n").at(-1) ?? null;
 
 // ---------------------------------------------------------------- include/use against OpenSCAD
 
@@ -199,23 +199,23 @@ const { chromium } = require("@playwright/test");
 const browser = await chromium.launch({ args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader"] });
 // `openscad --version` prints to stderr.
 const ov = spawnSync("openscad", ["--version"], { encoding: "utf8" });
-const oscVersion = ov.error ? "nicht installiert" : `${ov.stdout ?? ""}${ov.stderr ?? ""}`.trim() || "–";
+const oscVersion = ov.error ? "not installed" : `${ov.stdout ?? ""}${ov.stderr ?? ""}`.trim() || "–";
 const env = [
-  ["Betriebssystem", `${os.type()} ${os.release()} (${os.arch()})`],
-  ["CPU", `${os.cpus()[0]?.model ?? "–"} · ${os.cpus().length} Kerne`],
+  ["Operating system", `${os.type()} ${os.release()} (${os.arch()})`],
+  ["CPU", `${os.cpus()[0]?.model ?? "–"} · ${os.cpus().length} cores`],
   ["Node.js", process.version],
-  ["Browser", `Chromium ${browser.version()} (headless, Playwright ${pkgVersion("@playwright/test")}), WebGL über SwiftShader`],
-  ["Fenster", "1440 × 900 px, Gerätepixelverhältnis 1"],
-  ["Build", `Vite ${pkgVersion("vite")} Produktions-Build; React ${pkgVersion("react")}, three.js ${pkgVersion("three")}, CodeMirror ${pkgVersion("@codemirror/view")}`],
+  ["Browser", `Chromium ${browser.version()} (headless, Playwright ${pkgVersion("@playwright/test")}), WebGL via SwiftShader`],
+  ["Window", "1440 × 900 px, device pixel ratio 1"],
+  ["Build", `Vite ${pkgVersion("vite")} production build; React ${pkgVersion("react")}, three.js ${pkgVersion("three")}, CodeMirror ${pkgVersion("@codemirror/view")}`],
   ["OpenSCAD", oscVersion],
-  ["Quelltext", `Branch ${git("rev-parse", "--abbrev-ref", "HEAD")}, Commit ${git("rev-parse", "--short", "HEAD")}`],
+  ["Source", `Branch ${git("rev-parse", "--abbrev-ref", "HEAD")}, commit ${git("rev-parse", "--short", "HEAD")}`],
 ];
 
 // ---------------------------------------------------------------- html
 
-const date = new Date().toLocaleDateString("de-DE", { year: "numeric", month: "long", day: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const scen = (id) => scenarios.find((s) => s.id === id);
-const statusLabel = (s) => (s === "passed" ? "bestanden" : s === "skipped" ? "übersprungen" : "fehlgeschlagen");
+const statusLabel = (s) => (s === "passed" ? "passed" : s === "skipped" ? "skipped" : "failed");
 const code = (s) => (s ? `<pre>${esc(s)}</pre>` : "");
 
 const scenarioRows = e2e
@@ -227,7 +227,7 @@ const scenarioRows = e2e
   .join("\n");
 
 const unitRows = unit
-  .map((f) => `<tr class="${f.failed.length ? "bad" : "ok"}"><td>${esc(f.file)}${NEW_UNIT.has(f.file) ? ' <span class="tag">neu</span>' : ""}</td><td class="num">${f.passed} / ${f.total}</td><td>${f.failed.map(esc).join("<br>") || "–"}</td></tr>`)
+  .map((f) => `<tr class="${f.failed.length ? "bad" : "ok"}"><td>${esc(f.file)}${NEW_UNIT.has(f.file) ? ' <span class="tag">new</span>' : ""}</td><td class="num">${f.passed} / ${f.total}</td><td>${f.failed.map(esc).join("<br>") || "–"}</td></tr>`)
   .join("\n");
 
 const rustRows = rustBins
@@ -236,26 +236,26 @@ const rustRows = rustBins
     const fresh = isNew ? [] : b.tests.filter((t) => NEW_RUST.has(t.name.replace(/^tests::/, ""))).map((t) => t.name);
     const bad = b.tests.filter((t) => t.status === "FAILED").map((t) => t.name);
     const name = b.bin.replace(/^.*\/deps\//, "").replace(/-[0-9a-f]{16}$/, "");
-    return `<tr class="${bad.length ? "bad" : "ok"}"><td>${esc(name)}${isNew ? ' <span class="tag">neu</span>' : ""}</td><td class="num">${b.tests.filter((t) => t.status === "ok").length} / ${b.tests.length}</td><td>${isNew ? b.tests.map((t) => `<code>${esc(t.name)}</code>`).join(", ") : fresh.map((n) => `<code>${esc(n)}</code>`).join(", ") || "–"}${bad.length ? `<div class="err">${bad.map(esc).join(", ")}</div>` : ""}</td></tr>`;
+    return `<tr class="${bad.length ? "bad" : "ok"}"><td>${esc(name)}${isNew ? ' <span class="tag">new</span>' : ""}</td><td class="num">${b.tests.filter((t) => t.status === "ok").length} / ${b.tests.length}</td><td>${isNew ? b.tests.map((t) => `<code>${esc(t.name)}</code>`).join(", ") : fresh.map((n) => `<code>${esc(n)}</code>`).join(", ") || "–"}${bad.length ? `<div class="err">${bad.map(esc).join(", ")}</div>` : ""}</td></tr>`;
   })
   .join("\n");
 
 const oscRows = osc
   .map(
     (o) =>
-      `<tr class="${o.ok && o.liveOk !== false ? "ok" : "bad"}"><td>${esc(o.name)}</td><td>${o.files.map((f) => `<code>${esc(f)}</code>`).join(" ")}</td><td class="num">${o.expected.length}</td><td class="res">${o.ok ? "gleich" : "abweichend"}</td><td class="res">${o.liveOk === null ? "–" : o.liveOk ? "gleich" : "abweichend"}</td></tr>`,
+      `<tr class="${o.ok && o.liveOk !== false ? "ok" : "bad"}"><td>${esc(o.name)}</td><td>${o.files.map((f) => `<code>${esc(f)}</code>`).join(" ")}</td><td class="num">${o.expected.length}</td><td class="res">${o.ok ? "equal" : "different"}</td><td class="res">${o.liveOk === null ? "–" : o.liveOk ? "equal" : "different"}</td></tr>`,
   )
   .join("\n");
 const oscBlocks = osc
   .map((o) => {
     const main = readFileSync(join(projDir, o.name, "main.scad"), "utf8").trim();
-    return `<div class="osc"><b>${esc(o.name)}</b> – main.scad und Echo (identisch bei OpenSCAD und uns)<div class="pair"><div>${code(main)}</div><div>${code((o.ours ?? []).join("\n"))}</div></div>${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}</div>`;
+    return `<div class="osc"><b>${esc(o.name)}</b> – main.scad and echo (identical for OpenSCAD and us)<div class="pair"><div>${code(main)}</div><div>${code((o.ours ?? []).join("\n"))}</div></div>${o.err ? `<div class="err">${esc(o.err)}</div>` : ""}</div>`;
   })
   .join("\n");
 
 const blocks = scenarios
   .filter((s) => (s.images ?? []).length)
-  .sort((a, b) => a.id.localeCompare(b.id, "de", { numeric: true }))
+  .sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true }))
   .map((s) => {
     const img = (i) => `<div class="lbl">${esc(i.label)}</div><img src="img/${esc(i.name)}.jpg" alt="${esc(s.title)}: ${esc(i.label)}">`;
     const text = `${s.code ? `<div class="lbl">Code</div>${code(s.code)}` : ""}<p class="cap">${esc(s.caption)}</p>`;
@@ -268,10 +268,10 @@ ${text}
   .join("\n");
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 6 – Projekte, Bauteile, include/use</title>
+<title>Test report 6 – Projects, parts, include/use</title>
 <style>
   @page { size: A4; margin: 16mm 14mm 16mm 14mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -312,64 +312,64 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 6 – Projekte, Bauteile, include/use</h1>
-<div class="meta">Sprache, Engine, CLI und Browser-UI · ${esc(date)} · Commit ${esc(git("rev-parse", "--short", "HEAD"))}</div>
+<h1>Test report 6 – Projects, parts, include/use</h1>
+<div class="meta">Language, engine, CLI and browser UI · ${esc(date)} · Commit ${esc(git("rev-parse", "--short", "HEAD"))}</div>
 
 <div class="summary">
-  <div>Phase D (Playwright)<b>${passed(e2e)} / ${e2e.length} bestanden</b></div>
-  <div>Phase A–C (Regression)<b>${regression.length ? `${passed(regression)} / ${regression.length}` : "–"}</b></div>
+  <div>Phase D (Playwright)<b>${passed(e2e)} / ${e2e.length} passed</b></div>
+  <div>Phase A–C (regression)<b>${regression.length ? `${passed(regression)} / ${regression.length}` : "–"}</b></div>
   <div>Vitest<b>${vt ? `${unitPassed} / ${unitTotal}` : "–"}</b></div>
   <div>cargo test --workspace<b>${cargo ? `${rustOk} / ${rustTotal}` : "–"}</b></div>
-  <div>include/use gegen OpenSCAD<b>${oscOk} / ${osc.length}</b></div>
+  <div>include/use against OpenSCAD<b>${oscOk} / ${osc.length}</b></div>
 </div>
 
-<h2>1 Umfang</h2>
+<h2>1 Scope</h2>
 <ul>
-  <li><b><code>include &lt;datei&gt;</code> / <code>use &lt;datei&gt;</code></b> mit OpenSCAD-Semantik: include fügt die Anweisungen der Datei an ihrer Stelle ein (Definitionen, Variablen, Geometrie; die letzte Zuweisung gilt, mit Warnung über die Dateigrenze); use macht nur Module und Funktionen sichtbar, die in ihrer eigenen Datei laufen (sehen deren Variablen und deren eigene use-Bibliotheken, nicht transitiv); eigene Definitionen vor benutzten, von mehreren use gilt das letzte. Pfade relativ zur einbindenden Datei (oder absolut). Zyklen und fehlende Dateien sind Fehler an der include/use-Zeile.</li>
-  <li><b>Datei-IDs in Quellpositionen:</b> jede geladene Datei belegt einen eigenen Bereich der Positionen (Datei <i>f</i> ab <i>f</i>·2<sup>24</sup>, Anweisungs-IDs ab <i>f</i>·2<sup>22</sup>); Diagnosen, Hinweise, Griffe, Spans und Text-Edits kennen damit ihre Datei. Das Protokoll gibt Positionen lokal zur Datei aus (<code>SrcRange.file</code>, <code>Diagnostic.file</code>, <code>Edit.file</code>, <code>Scene.files</code>); Rückschreiben trifft die richtige Datei.</li>
-  <li><b>Datei-Resolver:</b> <code>cad-eval</code> liest Projektdateien über den Trait <code>FileResolver</code> (Dateisystem für die CLI, Map für Session/Wasm). Die Session bekommt die Dateien mit <code>SetFiles</code>/<code>SetFile</code>. Der Engine-Cache ist unverändert (Schlüssel aus dem Inhalt).</li>
-  <li><b>Projekte in der UI:</b> Dateien als Tabs über dem Editor (eigene Undo-Historie je Datei), Hauptdatei wählbar (★), neue Dateien, Entfernen; Ordner öffnen (File System Access API, Speichern schreibt zurück), sonst ZIP hoch- und herunterladen; Autospeichern des ganzen Projekts in IndexedDB; Beispielprojekte im Beispielmenü. Strg+Klick auf den Pfad in include/use öffnet die Datei; Doppelklick auf eine Instanz eines Moduls aus einer anderen Datei öffnet diese in der Definition; Griffe schreiben in die Datei des Literals (auch nicht angezeigte Dateien, ein Undo-Schritt dort); Fläche aus einer anderen Datei: Statuszeile nennt Datei und Zeile, Klick öffnet sie.</li>
-  <li><b>Mehrere Bauteile</b> (Offener Punkt 2, Plan 12.9): benannte Instanzen auf oberster Ebene der Hauptdatei sind Bauteile. Szene mit Hülle und Volumen je Bauteil; Bauteilleiste mit Sichtbarkeit und Export STL/3MF/STEP je Bauteil, alle als ZIP (STL oder STEP) oder ein 3MF mit einem Objekt je Bauteil. STEP (exakte B-Rep, AP242/AP214) geht über denselben Writer wie das ganze Modell: <code>Engine::export_step</code> ist <code>Engine::export_step_nodes</code> der Wurzel, Bauteile werden mit ihrer Lage (<code>display_world</code>) über <code>Kernel::transform</code> und <code>Kernel::brep</code> nach <code>cad_step::write</code> gegeben. CLI: <code>cad export --part name</code> (auch <code>.step</code>, <code>--schema</code>), <code>--all-parts -o ordner/ [--format step]</code>.</li>
-  <li><b>Benannte Instanzen in Schleifen</b> (Plan 12 Punkt 2): <code>for (i = [0:3]) k[i]: halter();</code> → <code>k[2].anker</code>; Index ganzzahlig, Sichtbarkeit wie benannte Instanzen, Snap schreibt <code>k[2].ecke</code>. <code>k: …</code> in einer Schleife bleibt ein Fehler.</li>
-  <li><b>Beispielprojekt</b> <code>tests/models/projekt-gehaeuse/</code>: gehaeuse.scad (Hauptdatei), konstanten.scad (include), lib/teile.scad (use, mit Schraubdomen <code>dom[i]</code>), Bauteile gehaeuse und deckel.</li>
+  <li><b><code>include &lt;file&gt;</code> / <code>use &lt;file&gt;</code></b> with OpenSCAD semantics: include inserts the statements of the file at its position (definitions, variables, geometry; the last assignment wins, with a warning across the file boundary); use only makes modules and functions visible, which run in their own file (they see that file's variables and its own use libraries, not transitively); own definitions take precedence over used ones, among several use the last one wins. Paths relative to the including file (or absolute). Cycles and missing files are errors at the include/use line.</li>
+  <li><b>File IDs in source positions:</b> each loaded file occupies its own range of positions (file <i>f</i> from <i>f</i>·2<sup>24</sup>, statement IDs from <i>f</i>·2<sup>22</sup>); diagnostics, hints, handles, spans and text edits thus know their file. The protocol outputs positions local to the file (<code>SrcRange.file</code>, <code>Diagnostic.file</code>, <code>Edit.file</code>, <code>Scene.files</code>); writing back hits the correct file.</li>
+  <li><b>File resolver:</b> <code>cad-eval</code> reads project files via the trait <code>FileResolver</code> (file system for the CLI, map for session/Wasm). The session receives the files with <code>SetFiles</code>/<code>SetFile</code>. The engine cache is unchanged (keys from the content).</li>
+  <li><b>Projects in the UI:</b> files as tabs above the editor (separate undo history per file), selectable main file (★), new files, removal; open a folder (File System Access API, saving writes back), otherwise upload and download a ZIP; autosave of the whole project to IndexedDB; example projects in the examples menu. Ctrl+click on the path in include/use opens the file; a double-click on an instance of a module from another file opens that file at the definition; handles write into the file of the literal (also files that are not displayed, one undo step there); face from another file: the status bar names file and line, a click opens it.</li>
+  <li><b>Multiple parts</b> (open item 2, plan 12.9): named instances at the top level of the main file are parts. Scene with bounding box and volume per part; parts bar with visibility and export STL/3MF/STEP per part, all as ZIP (STL or STEP) or one 3MF with one object per part. STEP (exact B-rep, AP242/AP214) goes through the same writer as the whole model: <code>Engine::export_step</code> is <code>Engine::export_step_nodes</code> of the root, parts are passed with their placement (<code>display_world</code>) via <code>Kernel::transform</code> and <code>Kernel::brep</code> to <code>cad_step::write</code>. CLI: <code>cad export --part name</code> (also <code>.step</code>, <code>--schema</code>), <code>--all-parts -o parts/ [--format step]</code>.</li>
+  <li><b>Named instances in loops</b> (plan 12 item 2): <code>for (i = [0:3]) k[i]: halter();</code> → <code>k[2].anker</code>; integer index, visibility as for named instances, snapping writes <code>k[2].ecke</code>. <code>k: …</code> in a loop remains an error.</li>
+  <li><b>Example project</b> <code>tests/models/projekt-gehaeuse/</code>: gehaeuse.scad (main file), konstanten.scad (include), lib/teile.scad (use, with screw bosses <code>dom[i]</code>), parts gehaeuse and deckel.</li>
 </ul>
 
-<h2>2 Testumgebung</h2>
+<h2>2 Test environment</h2>
 <table>${env.map(([a, b]) => `<tr><th style="width:32mm">${esc(a)}</th><td>${esc(b)}</td></tr>`).join("")}</table>
 
-<h2>3 include/use gegen OpenSCAD 2021.01</h2>
-<p class="small">Je Projekt in <code>tests/openscad-compat/projects/</code> die ECHO-Zeilen von <code>cad eval --json main.scad</code> gegen <code>expected.echo</code> (mit <code>openscad -o x.echo main.scad</code> erzeugt) und gegen einen frischen OpenSCAD-Lauf. Derselbe Vergleich läuft als Rust-Test <code>cad-eval/tests/project_openscad.rs</code>.</p>
-<table><tr><th>Projekt</th><th>Dateien</th><th>Echo-Zeilen</th><th>expected.echo</th><th>OpenSCAD jetzt</th></tr>${oscRows}</table>
+<h2>3 include/use against OpenSCAD 2021.01</h2>
+<p class="small">For each project in <code>tests/openscad-compat/projects/</code>, the ECHO lines of <code>cad eval --json main.scad</code> are compared against <code>expected.echo</code> (generated with <code>openscad -o x.echo main.scad</code>) and against a fresh OpenSCAD run. The same comparison runs as the Rust test <code>cad-eval/tests/project_openscad.rs</code>.</p>
+<table><tr><th>Project</th><th>Files</th><th>Echo lines</th><th>expected.echo</th><th>OpenSCAD now</th></tr>${oscRows}</table>
 ${oscBlocks}
 
-<h2>4 Szenarien (Playwright, web/e2e/projekte.spec.ts)</h2>
+<h2>4 Scenarios (Playwright, web/e2e/projekte.spec.ts)</h2>
 <table>
-<tr><th>ID</th><th>Szenario</th><th>Ergebnis</th><th>Dauer</th><th>Geprüft</th></tr>
+<tr><th>ID</th><th>Scenario</th><th>Result</th><th>Duration</th><th>Checked</th></tr>
 ${scenarioRows}
 </table>
-<p class="small">Regression im selben Lauf (Phase A–C: ui.spec.ts, ui-b.spec.ts, ui-c.spec.ts): ${passed(regression)} / ${regression.length} bestanden.</p>
+<p class="small">Regression in the same run (phase A–C: ui.spec.ts, ui-b.spec.ts, ui-c.spec.ts): ${passed(regression)} / ${regression.length} passed.</p>
 
-<h2>5 Unit-, Rust- und CLI-Tests</h2>
-${vt ? `<table><tr><th>Vitest-Datei</th><th>bestanden</th><th>Fehlgeschlagen</th></tr>${unitRows}</table>` : "<p>Keine Vitest-Ergebnisse gefunden.</p>"}
-${cargo ? `<table><tr><th>Rust-Testprogramm (cargo test --workspace)</th><th>bestanden</th><th>neue Tests</th></tr>${rustRows}</table>${rustBad.length ? `<p class="err">Fehlgeschlagen: ${rustBad.map(esc).join(", ")}</p>` : ""}` : ""}
-<p class="small">Neu in Rust: Projekte (Resolver, include/use, Zyklus, fehlende Datei, use ohne Geometrie, Rückschreiben in eingebundene Datei, Kontextmodul aus einer Bibliothek, Bauteile, <code>k[i]</code> mit Fehlerfällen), OpenSCAD-Vergleich, Session (SetFiles/SetFile, Datei in Bereichen und Edits, Bauteil-Export), CLI (<code>check</code>/<code>eval</code> mit Dateisystem, Diagnosen mit Pfad, <code>export --part</code>, <code>--all-parts</code>). ${compareLine ? `OpenSCAD-Vergleich der Einzeldateien (compare.py): <code>${esc(compareLine.trim())}</code>.` : ""} ${stepLine ? `STEP-Prüfung mit OpenCASCADE über alle Beispiele (<code>tests/step/verify.py</code>, venv-step): <code>${esc(stepLine.replace(/; report.*$/, "").trim())}</code>.` : ""} STEP pro Bauteil, als ZIP und mit <code>--all-parts --format step</code>: Rust-Tests <code>cad-session/tests/project.rs</code> (<code>export_parts</code>) und <code>cad-cli/tests/projects.rs</code>; im Browser P07.</p>
+<h2>5 Unit, Rust and CLI tests</h2>
+${vt ? `<table><tr><th>Vitest file</th><th>passed</th><th>Failed</th></tr>${unitRows}</table>` : "<p>No Vitest results found.</p>"}
+${cargo ? `<table><tr><th>Rust test program (cargo test --workspace)</th><th>passed</th><th>new tests</th></tr>${rustRows}</table>${rustBad.length ? `<p class="err">Failed: ${rustBad.map(esc).join(", ")}</p>` : ""}` : ""}
+<p class="small">New in Rust: projects (resolver, include/use, cycle, missing file, use without geometry, writing back into an included file, context module from a library, parts, <code>k[i]</code> with error cases), OpenSCAD comparison, session (SetFiles/SetFile, file in ranges and edits, part export), CLI (<code>check</code>/<code>eval</code> with file system, diagnostics with path, <code>export --part</code>, <code>--all-parts</code>). ${compareLine ? `OpenSCAD comparison of the single files (compare.py): <code>${esc(compareLine.trim())}</code>.` : ""} ${stepLine ? `STEP check with OpenCASCADE over all examples (<code>tests/step/verify.py</code>, venv-step): <code>${esc(stepLine.replace(/; report.*$/, "").trim())}</code>.` : ""} STEP per part, as ZIP and with <code>--all-parts --format step</code>: Rust tests <code>cad-session/tests/project.rs</code> (<code>export_parts</code>) and <code>cad-cli/tests/projects.rs</code>; in the browser P07.</p>
 
 
-<h2>6 Abweichungen und Grenzen</h2>
+<h2>6 Deviations and limitations</h2>
 <ul>
-  <li><b>Suchpfad:</b> nur relativ zur einbindenden Datei oder absolut; kein <code>OPENSCADPATH</code>/Bibliotheksordner. Fehlende Dateien und include-Zyklen sind Fehler (OpenSCAD: Warnung, Datei wird übergangen).</li>
-  <li><b>use:</b> Variablen einer Bibliothek werden einmal je Auswertung (lazy) ausgewertet, nicht bei jedem Aufruf neu wie in OpenSCAD; <code>$</code>-Variablen auf oberster Ebene einer Bibliothek gelten in ihren Modulen. Die Geometrie benutzter Dateien wird nicht erzeugt.</li>
-  <li><b>Doppelt eingebundene Datei</b> (über zwei include-Wege) wird zweimal geladen (zwei Datei-IDs, gleicher Pfad); höchstens 255 Dateien, je Datei höchstens 16 MiB.</li>
-  <li><b>Snap-Sichtbarkeit</b> eines in einer eingebundenen Datei benannten Rasters/einer Instanz reicht bis zum Ende dieser Datei (nicht in die einbindende Datei hinein); das Auswerten von <code>k.anker</code> ist davon nicht betroffen.</li>
-  <li><b>Bauteile</b> nur im Dateikontext; ein ausgeblendetes Bauteil innerhalb einer Booleschen Operation lässt sich nicht getrennt ausblenden (der Teilbaum bleibt ganz). Baugruppen sind offen.</li>
-  <li><b>STEP mehrerer Bauteile in einer Datei:</b> ein Produkt (Name: Bauteilnamen mit „ + “) mit allen Körpern, keine Baugruppenstruktur je Bauteil; ein Bauteil, dessen Modul eine implizite Vereinigung ist, besteht aus mehreren Körpern (z. B. Gehäuse mit Schraubdomen).</li>
-  <li><b>solidcore</b> ist jetzt opt-in (<code>--features solidcore</code>); <code>cad diff-kernels</code> ohne das Feature meldet „mit <code>--features solidcore</code> bauen“ (Exit 2).</li>
+  <li><b>Search path:</b> only relative to the including file or absolute; no <code>OPENSCADPATH</code>/library folder. Missing files and include cycles are errors (OpenSCAD: warning, the file is skipped).</li>
+  <li><b>use:</b> variables of a library are evaluated once per evaluation (lazily), not anew on every call as in OpenSCAD; <code>$</code> variables at the top level of a library apply in its modules. The geometry of used files is not generated.</li>
+  <li><b>A file included twice</b> (via two include paths) is loaded twice (two file IDs, same path); at most 255 files, at most 16 MiB per file.</li>
+  <li><b>Snap visibility</b> of a grid/instance named in an included file extends to the end of that file (not into the including file); evaluating <code>k.anker</code> is not affected by this.</li>
+  <li><b>Parts</b> only in file context; a hidden part inside a boolean operation cannot be hidden separately (the subtree stays whole). Assemblies are open.</li>
+  <li><b>STEP of several parts in one file:</b> one product (name: part names joined with " + ") with all bodies, no assembly structure per part; a part whose module is an implicit union consists of several bodies (e.g. an enclosure with screw bosses).</li>
+  <li><b>solidcore</b> is now opt-in (<code>--features solidcore</code>); <code>cad diff-kernels</code> without the feature reports "build with <code>--features solidcore</code>" (exit 2).</li>
 
-  <li><b>Modulnamen</b> gleichen Namens in Hauptdatei und Bibliothek: der Kontext (Parameterleiste) nimmt das Modul der Hauptdatei.</li>
+  <li><b>Module names</b> that are the same in the main file and a library: the context (parameter bar) takes the module of the main file.</li>
 </ul>
 
-<h2>7 Screenshots und Codeausschnitte</h2>
-<p class="small">Größte Bilddatei: ${kib(maxImg)} (JPEG, Qualität 80).</p>
+<h2>7 Screenshots and code excerpts</h2>
+<p class="small">Largest image file: ${kib(maxImg)} (JPEG, quality 80).</p>
 ${blocks}
 </main>
 </body>
@@ -388,10 +388,10 @@ await page.pdf({
   printBackground: true,
   displayHeaderFooter: true,
   headerTemplate: "<span></span>",
-  footerTemplate: '<div style="font-size:7pt;color:#777;width:100%;text-align:center">Testbericht 6 – Projekte, Bauteile, include/use · Seite <span class="pageNumber"></span> von <span class="totalPages"></span></div>',
+  footerTemplate: '<div style="font-size:7pt;color:#777;width:100%;text-align:center">Test report 6 – Projects, parts, include/use · Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>',
   margin: { top: "14mm", bottom: "16mm", left: "12mm", right: "12mm" },
 });
 await browser.close();
-console.log(`report6: ${passed(e2e)}/${e2e.length} Phase D, ${passed(regression)}/${regression.length} Regression, ${unitPassed}/${unitTotal} Vitest, ${rustOk}/${rustTotal} Rust, OpenSCAD ${oscOk}/${osc.length}, ${used.size} Bilder (max ${kib(maxImg)})`);
+console.log(`report6: ${passed(e2e)}/${e2e.length} phase D, ${passed(regression)}/${regression.length} regression, ${unitPassed}/${unitTotal} Vitest, ${rustOk}/${rustTotal} Rust, OpenSCAD ${oscOk}/${osc.length}, ${used.size} images (max ${kib(maxImg)})`);
 console.log(`-> ${join(out, "report.html")}`);
 console.log(`-> ${join(out, "report.pdf")}`);
