@@ -1,0 +1,107 @@
+// Macro pad: 4 × 3 MX keys, rotary encoder, USB-C. Showcase model of the README.
+// Parts: case, plate, knob, cap[0..11]. Keep-out: switch bodies + PCB under the plate.
+//   mcad render macropad.mcad -o pad.png --views all --show grids,anchors
+//   mcad measure macropad.mcad --section z=8 --wall "[1.2, 30, 8]"
+//   mcad export macropad.mcad -o pad.3mf          (multi-colour, one object per part)
+
+cols  = 4;      // keys per row
+rows  = 3;
+pitch = 19.05;  // MX key spacing
+wall  = 2.4;
+h     = 18;     // case height
+r     = 6;      // corner radius in plan view
+plate_t = 1.5;
+margin  = 4;    // plate border around the key field
+enc_w   = 30;   // width of the encoder column
+keepout = true; // check switch bodies + PCB against the case
+
+w = 2 * margin + cols * pitch + enc_w;
+d = 2 * margin + rows * pitch;
+
+// key centres as indexed grid planes, shared by plate, caps and keep-out
+function kx(i) = margin + pitch / 2 + i * pitch;
+function ky(j) = margin + pitch / 2 + j * pitch;
+
+module case() {
+    grid g {
+        x: left = 0, enc = w - margin - enc_w / 2, right = w;
+        y: front = 0, mid = d / 2, back = d;
+        z: bottom = 0, usb = 6, top = h;
+    }
+    difference() {
+        shell(wall) {
+            fillet(wall + 1.5) {                  // bottom edge; radius > wall, else shell fails
+                fillet(r) {                       // vertical corners
+                    box(g[left, front, bottom], g[right, back, top]);
+                    zone(g[left, front, *], d = 1);
+                    zone(g[right, front, *], d = 1);
+                    zone(g[left, back, *], d = 1);
+                    zone(g[right, back, *], d = 1);
+                }
+                zone(g.bottom, d = 1);
+            }
+            zone(g.top, d = 1);                   // open top
+        }
+        // USB-C opening in the back wall
+        translate(g[enc, back, usb]) rotate([90, 0, 0])
+            linear_extrude(2 * wall + 2, center = true) slot([-4.5, 0], [4.5, 0], 1.75);
+    }
+    anchor rim = g[left, front, top], dir = [0, 0, 1];
+}
+
+module plate() {
+    grid g {
+        x: left = 0, key = [for (i = [0 : cols - 1]) kx(i)], enc = w - margin - enc_w / 2, right = w;
+        y: front = 0, row = [for (j = [0 : rows - 1]) ky(j)], back = d;
+        z: bottom = 0, top = plate_t;
+    }
+    difference(fillet = 0.5) {
+        linear_extrude(plate_t) fillet2d(r) square([w, d]);
+        for (i = [0 : cols - 1], j = [0 : rows - 1])
+            box(g[key[i], row[j], bottom] - [7, 7, 1], g[key[i], row[j], top] + [7, 7, 1]);
+        translate(g[enc, row[1], bottom] - [0, 0, 1]) cylinder(h = plate_t + 2, d = 7);
+    }
+    // raised label, printed in a second colour
+    color("teal") translate(g[enc, row[0], top]) linear_extrude(0.6)
+        text("mcad", size = 6, halign = "center", valign = "center");
+    anchor encoder = g[enc, row[1], top], dir = [0, 0, 1];
+    anchor key0 = g[key[0], row[0], top], dir = [0, 0, 1];
+}
+
+module knob(dk = 24, hk = 14, grips = 18) {
+    grid g { z: bottom = 0, top = hk; }
+    color("orange") difference() {
+        fillet(2) {
+            cylinder(h = hk, d = dk);
+            zone(g.top, d = 1);                   // slab around the top face
+        }
+        for (a = [0 : 360 / grips : 359])
+            rotate([0, 0, a]) translate([dk / 2 + 0.6, 0, -1]) cylinder(h = hk - 3, d = 2.4);
+        // D-shaft 6 mm with flat
+        translate([0, 0, -1]) intersection() {
+            cylinder(h = hk - 2, d = 6.1);
+            translate([-3.1, -3.1, 0]) cube([6.2, 5.6, hk]);
+        }
+    }
+}
+
+module keycap() {
+    color("white") loft() {
+        fillet2d(2) square([18, 18], center = true);
+        translate([0, 0, 7.5]) fillet2d(2.5) square([13, 13], center = true);
+    }
+}
+
+case: case();
+translate(case.rim) plate: plate();
+translate(plate.encoder + [0, 0, 7]) knob: knob();      // anchors are global points
+translate(case.rim) {
+    for (i = [0 : cols - 1], j = [0 : rows - 1])
+        translate([kx(i), ky(j), plate_t + 6.5]) cap[j * cols + i]: keycap();
+    // switch bodies and PCB need 0.5 mm air to the case walls
+    if (keepout) assert_keepout(clearance = 0.5) translate([0, 0, -11]) {
+        for (i = [0 : cols - 1], j = [0 : rows - 1])
+            translate([kx(i) - 7, ky(j) - 7, 5]) cube([14, 14, 5.4]);   // 0.6 mm below the plate
+        translate([margin, margin, 0]) cube([w - 2 * margin, d - 2 * margin, 1.6]);
+    }
+}
