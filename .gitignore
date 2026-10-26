@@ -22,3 +22,4 @@ __pycache__/
 /packaging/arch/*.tar.gz
 /packaging/arch/namcap.txt
 /packaging/arch/test/
+web/playwright.local.config.ts
