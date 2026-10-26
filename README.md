@@ -51,7 +51,7 @@ Typical agent loop:
 mcad outline part.mcad                                    # modules, parameters, grids, anchors, parts
 mcad check part.mcad                                      # until 0 errors
 mcad render part.mcad -o v.png --views all --show grids,anchors
-mcad inspect part.mcad --line 34                          # what this line produces
+mcad inspect part.mcad --line 36                          # what this line produces
 mcad measure part.mcad --section z=8 --wall "[1.2,30,8]"  # verify numbers
 mcad export part.mcad -o part.3mf
 ```
@@ -61,9 +61,27 @@ A Claude Code skill for this workflow is in [`.claude/skills/cad-cli/`](.claude/
 Note: text output of the CLI (diagnostics, results) is German for now; `--help`, `mcad usage`
 and all JSON keys are English.
 
+## Tutorial
+
+The models in [`examples/`](examples/) are short and build on each other; each file starts
+with what it shows and commands to try.
+
+| File | Shows |
+| --- | --- |
+| [`01-plate.mcad`](examples/01-plate.mcad) | OpenSCAD basics, parameters, `$fillet` on a primitive |
+| [`02-bracket.mcad`](examples/02-bracket.mcad) | grids, `box(a, b)`, `cylinder(a, b)`, `difference(chamfer = …)` |
+| [`03-tray.mcad`](examples/03-tray.mcad) | fillet zones on grid lines and planes, `shell` |
+| [`04-hook.mcad`](examples/04-hook.mcad) | `sketch` with lines, arcs, `corner`; measuring arcs in a section |
+| [`05-box-lid.mcad`](examples/05-box-lid.mcad) | modules, anchors, parts, loop instances, clearance between parts |
+| [`06-name-tag.mcad`](examples/06-name-tag.mcad) | `text`, `slot`, colours and filament slots, multi-colour 3MF |
+| [`07-mug.mcad`](examples/07-mug.mcad) | `loft`, `sweep`, `union(fillet = …)` |
+| [`08-macropad.mcad`](examples/08-macropad.mcad) | all of it, plus a keep-out assert (below) |
+
+![Tutorial models 01–07](docs/img/readme/tutorial.png)
+
 ## Example: a macro pad
 
-[`examples/macropad/macropad.mcad`](examples/macropad/macropad.mcad): 4 × 3 MX keys, a rotary
+[`examples/08-macropad.mcad`](examples/08-macropad.mcad): 4 × 3 MX keys, a rotary
 encoder, USB-C. 15 parts, four filament colours, about 110 lines. All images below are
 `mcad render … --theme dark`.
 
@@ -93,7 +111,7 @@ translate(case.rim) plate: plate();
 translate(plate.encoder + [0, 0, 7]) knob: knob();
 ```
 
-`mcad render macropad.mcad -o grids.png --module plate --views all --show grids,anchors,labels`:
+`mcad render 08-macropad.mcad -o grids.png --module plate --views all --show grids,anchors,labels`:
 
 ![Grid planes and anchors of the plate](docs/img/readme/grids.png)
 
@@ -119,8 +137,8 @@ shell(wall) {
 }
 ```
 
-`mcad inspect macropad.mcad --line 34` reports `ausgewählte Kanten: 4` (selected edges);
-`mcad render … --line 34` shows the zones in blue and the selected edges in orange:
+`mcad inspect 08-macropad.mcad --line 36` reports `ausgewählte Kanten: 4` (selected edges);
+`mcad render … --line 36` shows the zones in blue and the selected edges in orange:
 
 ![Fillet zones on the vertical corners](docs/img/readme/fillet-zones.png)
 
@@ -130,7 +148,7 @@ Measurements run on the B-rep, not on the mesh. In a section, contours are lines
 with their radii:
 
 ```console
-$ mcad measure macropad.mcad --section z=8 --wall "[1.2, 30, 8]"
+$ mcad measure 08-macropad.mcad --section z=8 --wall "[1.2, 30, 8]"
 Schnitt z = 8 (entfernt z > 8): 1 Bereich(e), Fläche 818.0623 mm² (exakt: Konturen aus Geraden und Kreisen der B-Rep)
   Bogen R 6 · ⌀ 12 bei [6, 59.15, 8] (center@[6,59.15,8])
   Bogen R 3.6 · ⌀ 7.2 bei [6, 59.15, 8] (center@[6,59.15,8])
@@ -162,8 +180,8 @@ if (keepout) assert_keepout(clearance = 0.5) translate([0, 0, -11]) {
 Make the case too low and the check fails; `mcad export` refuses to write (exit 4):
 
 ```console
-$ mcad check macropad.mcad -D h=12
-macropad.mcad:102:18: Warnung (Kernel): assert_keepout: case ragt ins Sperrvolumen (Schnittvolumen 8497.131 mm³) [Zeile 32: shell (Instanz case: case)]
+$ mcad check 08-macropad.mcad -D h=12
+08-macropad.mcad:104:18: Warnung (Kernel): assert_keepout: case ragt ins Sperrvolumen (Schnittvolumen 8497.131 mm³) [Zeile 34: shell (Instanz case: case)]
 Asserts: 1 von 1 geprüft, 1 verletzt (1 Verletzung(en); mcad export bricht dann ab, außer mit --ignore-asserts)
 ```
 
@@ -182,12 +200,12 @@ color("teal") translate(g[enc, row[0], top]) linear_extrude(0.6)
 ```
 
 ```console
-$ mcad measure macropad.mcad --colors
+$ mcad measure 08-macropad.mcad --colors
 Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):
   F1  Standard       #c3c8cf  36938.4663 mm³  45.8 g  (ohne color())
-  F2  teal           #217274  24.1309 mm³  0.03 g  Z.65
-  F3  orange         #dc813b  5810.2486 mm³  7.2 g  Z.73
-  F4  white          #f4f3f0  21417.294 mm³  26.56 g  Z.89
+  F2  teal           #217274  24.1309 mm³  0.03 g  Z.67
+  F3  orange         #dc813b  5810.2486 mm³  7.2 g  Z.75
+  F4  white          #f4f3f0  21417.294 mm³  26.56 g  Z.91
 ```
 
 ![Macro pad from the back with the USB-C opening](docs/img/readme/macropad-colors.png)
@@ -227,7 +245,7 @@ the code layout (German): [`docs/entwicklung.md`](docs/entwicklung.md).
 
 ```sh
 mcad                            # desktop UI
-mcad examples/macropad/macropad.mcad
+mcad examples/08-macropad.mcad
 mcad usage                      # manual for agents
 ```
 
@@ -237,7 +255,8 @@ mcad usage                      # manual for agents
 | --- | --- |
 | `mcad usage`, [`manuell/`](manuell/) | language and CLI reference (English) |
 | [`docs/reports/`](docs/reports/README.md) | test reports per milestone with screenshots and measurements (English) |
-| [`examples/`](examples/) | example models (also test cases; comments partly German) |
+| [`examples/`](examples/) | tutorial models 01–08 |
+| [`tests/models/`](tests/models/) | test models: OpenSCAD comparison, spec cases, everyday parts (comments partly German) |
 | [`docs/technischer-plan.md`](docs/technischer-plan.md) | technical plan and decisions (German) |
 
 ## Architecture

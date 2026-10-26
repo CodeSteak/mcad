@@ -1,0 +1,24 @@
+// 02 – Grids: an angle bracket built between named planes instead of loose numbers.
+// `g[x, y, z]` is a point, `g.name` a plane (or its number in expressions).
+// Try: mcad outline 02-bracket.mcad
+//      mcad render 02-bracket.mcad -o b.png --views all --show grids,labels
+
+w = 40;   // width
+l = 50;   // leg length
+t = 5;    // wall
+
+grid g {
+    x: left = 0, mid = w / 2, right = w;
+    y: back = 0, wall = t, front = l;
+    z: bottom = 0, floor = t, top = l;
+}
+
+difference(chamfer = 0.8) {                    // chamfers the edges the holes create
+    union() {
+        box(g[left, back, bottom], g[right, front, floor]);   // base leg
+        box(g[left, back, bottom], g[right, wall, top]);      // upright leg
+    }
+    // hole through the base, hole through the upright: cylinders between two points
+    cylinder(g[mid, 35, bottom] - [0, 0, 1], g[mid, 35, floor] + [0, 0, 1], d = 5.5);
+    cylinder(g[mid, back, 35] - [0, 1, 0], g[mid, wall, 35] + [0, 1, 0], d = 5.5);
+}

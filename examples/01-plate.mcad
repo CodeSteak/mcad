@@ -1,0 +1,18 @@
+// 01 – Basics: a mounting plate in plain OpenSCAD syntax.
+// Variables at the top are parameters: `mcad set 01-plate.mcad --param holes=6`.
+// Try: mcad check 01-plate.mcad
+//      mcad render 01-plate.mcad -o plate.png --views all
+//      mcad measure 01-plate.mcad --volume all
+
+w = 80;       // width
+d = 30;       // depth
+t = 4;        // thickness
+holes = 4;    // number of holes
+hole_d = 4.5; // M4 clearance
+
+difference() {
+    cube([w, d, t], $fillet = 1);              // $fillet rounds every edge of this primitive
+    for (i = [0 : holes - 1])
+        translate([10 + i * (w - 20) / (holes - 1), d / 2, -1])
+            cylinder(h = t + 2, d = hole_d);   // exact circle, $fn only affects display
+}

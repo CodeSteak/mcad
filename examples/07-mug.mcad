@@ -1,0 +1,35 @@
+// 07 – Loft, sweep, shell: a mug from a rounded square to a circle, with a handle.
+// loft() skins through 2D profiles (equal segment counts), shell() opens it at the rim,
+// sweep() moves a circle along a spline, union(fillet = r) rounds where handle meets body.
+// Try: mcad render 07-mug.mcad -o mug.png --azimuth 60 --elevation 20
+//      mcad render 07-mug.mcad -o cut.png --section y=0 --show dims
+//      mcad measure 07-mug.mcad --volume all
+
+h = 90;          // height
+base = 64;       // side of the rounded square at the bottom
+top_d = 80;      // diameter at the rim
+t = 2.5;         // wall
+reach = 26;      // distance of the handle from the wall
+
+// outer radius on the x axis at height z (the loft is straight between the profiles)
+function wall_x(z) = base / 2 + (top_d / 2 - base / 2) * z / h;
+
+grid g { z: bottom = 0, low = 22, high = 70, rim = h; }
+
+union(fillet = 1.5) {
+    shell(t) {
+        loft() {
+            fillet2d(14) square([base, base], center = true);
+            translate([0, 0, h]) circle(d = top_d);
+        }
+        zone(g.rim, d = 1);                  // open the rim
+    }
+    // handle: both ends run radially into the middle of the wall
+    sweep(path = [[wall_x(g.high) - t / 2, 0, g.high], [wall_x(g.high) + 4, 0, g.high + 0.5],
+                  [wall_x(g.high) + reach * 0.7, 0, g.high + 2],
+                  [wall_x(g.low) + reach, 0, (g.low + g.high) / 2 + 4],
+                  [wall_x(g.low) + reach * 0.6, 0, g.low - 3], [wall_x(g.low) + 4, 0, g.low - 0.5],
+                  [wall_x(g.low) - t / 2, 0, g.low]],
+          interp = "spline")
+        circle(d = 9);
+}

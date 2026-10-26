@@ -1,0 +1,41 @@
+// 05 – Modules, anchors, parts: a bin with a lid and four feet.
+// `anchor` names a point of a module; `name: module();` names the instance, and at the top
+// level that instance is a part (export per part, measure, render by name).
+// Try: mcad outline 05-box-lid.mcad                       (parts and anchors)
+//      mcad measure 05-box-lid.mcad --interference --clearance bin lid
+//      mcad export 05-box-lid.mcad --all-parts -o parts/ --format step
+
+w = 60; d = 40; h = 30;
+t = 2;        // wall
+gap = 0.2;    // play between box and lid
+lift = 8;     // lid shown above the box
+
+// (a user module must not reuse a builtin name such as `box`)
+module bin() {
+    grid g {
+        x: left = 0, right = w;
+        y: front = 0, back = d;
+        z: bottom = 0, top = h;
+    }
+    shell(t) {
+        fillet(3) { box(g[left, front, bottom], g[right, back, top]); zone(g.bottom, d = 1); }
+        zone(g.top, d = 1);
+    }
+    anchor rim = g[left, front, top], dir = [0, 0, 1];
+    anchor base = g[left, front, bottom], dir = [0, 0, -1];
+}
+
+// foot positions relative to the corner of the bin
+function foot_at(k) = [8 + (k % 2) * (w - 16), 8 + floor(k / 2) * (d - 16), 0];
+
+module lid() {
+    cube([w, d, t], $fillet = 0.8);
+    // centering lip that fits inside the walls
+    translate([t + gap, t + gap, -3]) cube([w - 2 * (t + gap), d - 2 * (t + gap), 3]);
+}
+
+module foot() mirror([0, 0, 1]) cylinder(h = 2, d1 = 10, d2 = 8);
+
+bin: bin();
+translate(bin.rim + [0, 0, lift]) lid: lid();
+for (k = [0 : 3]) translate(bin.base + foot_at(k)) feet[k]: foot();   // loop instances need an index

@@ -1,0 +1,18 @@
+// 06 – Text and colours: a two-colour key tag for multi-material printing.
+// color() picks a print colour (16-colour palette), `filament = n` fixes the slot.
+// text() shapes with bundled fonts (Inter, JetBrains Mono, a stencil font as default).
+// Try: mcad measure 06-name-tag.mcad --colors          (volume and mass per colour)
+//      mcad render 06-name-tag.mcad -o tag.png --view top --theme dark
+//      mcad export 06-name-tag.mcad -o tag.3mf           (Bambu Studio, OrcaSlicer)
+
+label = "MCAD";
+l = 60; r = 9;     // length and end radius of the tag
+t = 3;             // base thickness
+relief = 1;        // height of the raised text
+
+color("blue", filament = 1) difference() {
+    linear_extrude(t) slot([0, 0], [l - 2 * r, 0], r);   // stadium shape, exact
+    translate([-r / 2 - 1, 0, -1]) cylinder(h = t + 2, d = 5);   // key ring hole
+}
+color("white", filament = 2) translate([l / 2 - r + 3, 0, t]) linear_extrude(relief)
+    text(label, size = 9, font = "Inter:style=Bold", halign = "center", valign = "center");

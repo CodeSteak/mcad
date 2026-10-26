@@ -1,8 +1,10 @@
-// Macro pad: 4 × 3 MX keys, rotary encoder, USB-C. Showcase model of the README.
-// Parts: case, plate, knob, cap[0..11]. Keep-out: switch bodies + PCB under the plate.
-//   mcad render macropad.mcad -o pad.png --views all --show grids,anchors
-//   mcad measure macropad.mcad --section z=8 --wall "[1.2, 30, 8]"
-//   mcad export macropad.mcad -o pad.3mf          (multi-colour, one object per part)
+// 08 – Everything together: a macro pad with 4 × 3 MX keys, rotary encoder and USB-C.
+// Indexed grid planes for the key field, fillet zones + shell, slot(), text and colours,
+// loft (keycaps), parts attached by anchors, and a keep-out assert for switches and PCB.
+// Try: mcad render 08-macropad.mcad -o pad.png --module plate --views all --show grids,anchors
+//      mcad measure 08-macropad.mcad --section z=8 --wall "[1.2, 30, 8]"
+//      mcad check 08-macropad.mcad -D h=12      (case too low: keep-out violated)
+//      mcad export 08-macropad.mcad -o pad.3mf   (multi-colour, one object per part)
 
 cols  = 4;      // keys per row
 rows  = 3;

@@ -1,0 +1,30 @@
+// 04 – Sketches: a wall hook from an exact 2D profile.
+// Each statement in `sketch { … }` is one segment: line, arc, bezier, spline. corner(r)
+// rounds the corner between the segments around it. Arcs stay arcs, also in STEP.
+// Try: mcad render 04-hook.mcad -o h.png --view front
+//      mcad measure 04-hook.mcad --section z=7 --at "[16, 4, 7]"   (R 16 of the bend)
+
+s   = 6;     // bar width
+t   = 14;    // hook width (extrusion)
+ro  = 16;    // outer bend radius
+top = 70;    // height of the back plate
+tip = 30;    // height of the tip
+
+difference(chamfer = 0.5) {
+    linear_extrude(t) sketch {
+        grid p { x: wall = 0, inner = s, c = ro, out = 2 * ro; y: bend = ro + 4, tip = tip, top = top; }
+        start(p[wall, top]);
+        line(to = p[wall, bend]);                      // back plate, against the wall
+        arc(center = p[c, bend], angle = 180);         // outer bend (positive = counter-clockwise)
+        line(to = p[out, tip]);
+        corner(r = 2);
+        line(by = [-s, 0]);
+        corner(r = 2);
+        line(to = [p.out - s, p.bend]);
+        arc(center = p[c, bend], angle = -180);        // inner bend, back to x = s
+        line(to = p[inner, top]);
+        close();
+    }
+    // screw hole through the back plate: cylinder between two points
+    cylinder([-1, 55, t / 2], [s + 1, 55, t / 2], d = 4.5);
+}

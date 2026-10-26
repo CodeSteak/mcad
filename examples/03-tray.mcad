@@ -1,0 +1,30 @@
+// 03 – Fillet zones and shell: a small tray.
+// fillet(r) { body; zones… } rounds the edges of `body` that lie inside a zone:
+// a cylinder around a grid line (`g[x, y, *]`) or a slab around a plane (`g.top`).
+// shell(t) { body; zones… } hollows the body and removes the faces inside the zones.
+// Try: mcad inspect 03-tray.mcad --line 20     (selected edges: 4)
+//      mcad render 03-tray.mcad -o t.png --line 20   (zones blue, edges orange)
+
+w = 90; d = 60; h = 25;
+r = 10;    // corner radius
+t = 2;     // wall
+
+grid g {
+    x: left = 0, right = w;
+    y: front = 0, back = d;
+    z: bottom = 0, top = h;
+}
+
+shell(t) {
+    fillet(4) {                                // bottom edge (radius > wall)
+        fillet(r) {                            // the four vertical corners
+            box(g[left, front, bottom], g[right, back, top]);
+            zone(g[left, front, *], d = 1);
+            zone(g[right, front, *], d = 1);
+            zone(g[left, back, *], d = 1);
+            zone(g[right, back, *], d = 1);
+        }
+        zone(g.bottom, d = 1);
+    }
+    zone(g.top, d = 1);                        // open the top face
+}
