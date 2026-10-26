@@ -87,24 +87,24 @@ Bericht 8). Empfohlener Ablauf: `outline` → editieren → `check` →
 
 ```sh
 mcad=target/release/mcad
-$cad outline examples/projekt-gehaeuse/gehaeuse.mcad          # Module, Parameter, Raster, Anker, Bauteile
-$cad check examples/spec/gehaeuse.mcad                         # Diagnosen mit Zeile:Spalte
-$cad eval examples/spec/gehaeuse.mcad --json                   # Szene, Raster, Anker, echo
-$cad inspect examples/spec/fillet_zonen.mcad --line 12         # was Zeile 12 erzeugt
-$cad render examples/spec/gehaeuse.mcad -o x.png --module gehaeuse --views all --show grids,anchors,labels
-$cad render examples/spec/gehaeuse.mcad -o s.png --section z=10 --show dims   # Schnitt mit Kappe
-$cad render examples/spec/fillet_zonen.mcad -o f.png --line 12 --azimuth 120 --elevation 30 --xray
-$cad measure examples/spec/gehaeuse.mcad --between k.ecke k.oben --volume part:k
-$cad measure examples/projekt-gehaeuse/gehaeuse.mcad --interference --clearance gehaeuse deckel
-$cad measure examples/spec/lochplatte.mcad --radius "face@[8,6,2]" --at "[18,6,4]"   # R 2 · ⌀ 4, Elemente bei P
-$cad measure examples/spec/gehaeuse.mcad --section z=10 --wall "[0,15,10]"         # Schnitt: Bereiche, Wandstärke 3 mm
-$cad set examples/spec/gehaeuse.mcad --param gehaeuse.w=50 --dry-run   # Standardwert, Diff
+$cad outline tests/models/projekt-gehaeuse/gehaeuse.mcad          # Module, Parameter, Raster, Anker, Bauteile
+$cad check tests/models/spec/gehaeuse.mcad                         # Diagnosen mit Zeile:Spalte
+$cad eval tests/models/spec/gehaeuse.mcad --json                   # Szene, Raster, Anker, echo
+$cad inspect tests/models/spec/fillet_zonen.mcad --line 12         # was Zeile 12 erzeugt
+$cad render tests/models/spec/gehaeuse.mcad -o x.png --module gehaeuse --views all --show grids,anchors,labels
+$cad render tests/models/spec/gehaeuse.mcad -o s.png --section z=10 --show dims   # Schnitt mit Kappe
+$cad render tests/models/spec/fillet_zonen.mcad -o f.png --line 12 --azimuth 120 --elevation 30 --xray
+$cad measure tests/models/spec/gehaeuse.mcad --between k.ecke k.oben --volume part:k
+$cad measure tests/models/projekt-gehaeuse/gehaeuse.mcad --interference --clearance gehaeuse deckel
+$cad measure tests/models/spec/lochplatte.mcad --radius "face@[8,6,2]" --at "[18,6,4]"   # R 2 · ⌀ 4, Elemente bei P
+$cad measure tests/models/spec/gehaeuse.mcad --section z=10 --wall "[0,15,10]"         # Schnitt: Bereiche, Wandstärke 3 mm
+$cad set tests/models/spec/gehaeuse.mcad --param gehaeuse.w=50 --dry-run   # Standardwert, Diff
 $cad watch teil.mcad --json --render teil.png --views all      # neu auswerten bei jeder Änderung
-$cad export examples/spec/flasche.mcad -o flasche.step         # auch .stl, .3mf
-$cad export examples/spec/mehrfarbig.mcad -o druck.3mf          # mehrfarbig (Bambu/Orca), --single-color
-$cad measure examples/spec/mehrfarbig.mcad --colors            # Volumen/Masse je Farbe und Slot
-$cad render examples/spec/mehrfarbig.mcad -o m.png --theme dark --show regions
-$cad export examples/projekt-gehaeuse/gehaeuse.mcad --all-parts -o teile/ --format step
+$cad export tests/models/spec/flasche.mcad -o flasche.step         # auch .stl, .3mf
+$cad export tests/models/spec/mehrfarbig.mcad -o druck.3mf          # mehrfarbig (Bambu/Orca), --single-color
+$cad measure tests/models/spec/mehrfarbig.mcad --colors            # Volumen/Masse je Farbe und Slot
+$cad render tests/models/spec/mehrfarbig.mcad -o m.png --theme dark --show regions
+$cad export tests/models/projekt-gehaeuse/gehaeuse.mcad --all-parts -o teile/ --format step
 $cad daemon status                                             # Daemon: PID, Laufzeit, Cache, Trefferquote
 ```
 
@@ -138,10 +138,10 @@ libayatana-appindicator3-dev librsvg2-dev libxdo-dev`, siehe `scripts/ci/desktop
 (cd web && pnpm install && pnpm build:tauri)   # UI ohne Worker/Wasm -> web/dist-tauri (wird eingebettet)
 cargo build --release -p cad-cli               # target/release/mcad mit UI (ohne UI: --no-default-features)
 mcad                                            # Desktop-UI
-mcad examples/spec/gehaeuse.mcad                # mit Datei (wird beobachtet, Git-Rand)
-mcad examples/projekt-gehaeuse/                 # Ordner als Projekt
+mcad tests/models/spec/gehaeuse.mcad                # mit Datei (wird beobachtet, Git-Rand)
+mcad tests/models/projekt-gehaeuse/                 # Ordner als Projekt
 mcad ui status --json                           # was ist offen (Datei, Cursor, Kontext, Parameter, Diagnosen)
-mcad ui show examples/spec/gehaeuse.mcad --line 11
+mcad ui show tests/models/spec/gehaeuse.mcad --line 11
 mcad ui screenshot -o ansicht.png               # 3D-Ansicht der laufenden UI
 ```
 
@@ -337,9 +337,9 @@ k: halter(w = 50);
 translate(k.oben) rotate(to = dir(k.oben)) cylinder(h = 8, r = 3);
 ```
 
-Weitere Beispiele: `examples/spec/` (Spracherweiterungen, Skizzen: `skizze_*.mcad`, Text: `text_schild.mcad`,
-SVG: `svg_logo.mcad` mit `examples/svg/*.svg`, STL: `stl_import.mcad` mit `examples/stl/`), `examples/openscad-compat/`
-(36 OpenSCAD-Modelle), `examples/projekt-gehaeuse/` (Projekt aus drei Dateien).
+Weitere Beispiele: `tests/models/spec/` (Spracherweiterungen, Skizzen: `skizze_*.mcad`, Text: `text_schild.mcad`,
+SVG: `svg_logo.mcad` mit `tests/models/svg/*.svg`, STL: `stl_import.mcad` mit `tests/models/stl/`), `tests/models/openscad-compat/`
+(36 OpenSCAD-Modelle), `tests/models/projekt-gehaeuse/` (Projekt aus drei Dateien).
 
 ## Verzeichnisstruktur
 

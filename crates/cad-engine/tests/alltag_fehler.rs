@@ -1,4 +1,4 @@
-//! Findings from the everyday models (examples/alltag, Testbericht 13): the minimal examples
+//! Findings from the everyday models (tests/models/alltag, Testbericht 13): the minimal examples
 //! of tests/alltag/fehler through `cad_eval` and the engine with native SMLib. Each test checks
 //! the corrected result, or the clear error where no correct result exists.
 

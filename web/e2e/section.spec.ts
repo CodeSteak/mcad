@@ -14,7 +14,7 @@ import { type CadState, cad, clickLine, frame, hook, mode, openApp, openExample,
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, "../..");
-const MODEL = readFileSync(join(ROOT, "examples/spec/gehaeuse.mcad"), "utf8");
+const MODEL = readFileSync(join(ROOT, "tests/models/spec/gehaeuse.mcad"), "utf8");
 
 interface SectionInfo {
   on: boolean;

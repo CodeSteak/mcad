@@ -25,7 +25,7 @@ Surface types are counted from OCCT's adaptor (GeomAbs_*) for the table.
 Usage (the venv lives outside the repository, e.g. /opt/tools/venv-step):
   /opt/tools/venv-step/bin/python tests/step/verify.py [--cad target/release/mcad]
       [--out target/step] [--json report.json] [--stl-dir DIR] [models...]
-Default models: examples/openscad-compat/*.scad and examples/spec/*.mcad. $MCAD ($CAD) overrides the
+Default models: tests/models/openscad-compat/*.scad and tests/models/spec/*.mcad. $MCAD ($CAD) overrides the
 binary like compare.py. Exit code 0 if every model passes, 1 otherwise, 2 for setup errors.
 """
 
@@ -222,8 +222,8 @@ def main() -> int:
     ap.add_argument("--stl-dir", type=Path, default=None, help="write the read-back shapes as STL here")
     ap.add_argument("--bodies", action="store_true", help="check the default export with separate bodies")
     a = ap.parse_args()
-    models = a.models or sorted((ROOT / "examples" / "openscad-compat").glob("*.scad")) + sorted(
-        (ROOT / "examples" / "spec").glob("*.mcad"))
+    models = a.models or sorted((ROOT / "tests" / "models" / "openscad-compat").glob("*.scad")) + sorted(
+        (ROOT / "tests" / "models" / "spec").glob("*.mcad"))
     if not Path(a.cad).exists() and "/" in a.cad:
         print(f"verify.py: {a.cad} not found (cargo build --release -p cad-cli)", file=sys.stderr)
         return 2

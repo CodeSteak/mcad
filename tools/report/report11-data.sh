@@ -15,7 +15,7 @@ CAD="${CAD:-$ROOT/target/release/mcad}"
 PY3MF="${PY3MF:-python3}"
 OUT="$ROOT/reports/tmp/report11"
 IMG="$ROOT/docs/reports/11-farben-filamente/img"
-EX="examples/spec/mehrfarbig.scad"
+EX="tests/models/spec/mehrfarbig.scad"
 mkdir -p "$OUT" "$IMG"
 export CAD_NO_DAEMON=1
 

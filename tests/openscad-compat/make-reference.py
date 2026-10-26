@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds the OpenSCAD reference data for examples/openscad-compat/*.scad.
+"""Builds the OpenSCAD reference data for tests/models/openscad-compat/*.scad.
 
 For every file:
   openscad -o target/openscad-compat/<name>.stl  [-D '$fn=128'] <file>
@@ -32,7 +32,7 @@ sys.path.insert(0, str(HERE))
 import stl_stats  # noqa: E402
 
 ROOT = HERE.parent.parent
-MODELS = ROOT / "examples" / "openscad-compat"
+MODELS = ROOT / "tests" / "models" / "openscad-compat"
 OUT = ROOT / "target" / "openscad-compat"
 REF = HERE / "reference.json"
 

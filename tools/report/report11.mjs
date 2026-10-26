@@ -67,7 +67,7 @@ const fmt = readText(join(input, "fmt.txt"));
 const compare = readText(join(input, "compare.txt"));
 const step = readText(join(input, "step.txt"));
 const sources = readText(join(input, "sources.sha256"));
-const example = readText(join(root, "examples/spec/mehrfarbig.scad"));
+const example = readText(join(root, "tests/models/spec/mehrfarbig.scad"));
 const css = readText(join(root, "web/src/styles.css")) ?? "";
 
 // images: Playwright (jpg), Tauri (png → jpg with ImageMagick if available)
@@ -460,7 +460,7 @@ ${closest}
 <li><b>Slot in der UI ändern = Text-Edit</b> (<code>SetFilament</code>): jede <code>color()</code>-Anweisung der Farbe mit <code>filament = …</code> bekommt den neuen Wert, sonst die erste <code>, filament = n</code>; „automatisch“ entfernt das Argument. Begründung: der Code bleibt die einzige Quelle (CLI-Export und UI-Export stimmen überein, der Agent sieht dasselbe), Undo und Git-Rand erfassen die Änderung; ein Vorschau-Override wie in der Parameterleiste ginge beim Speichern verloren und wäre für den Export eine zweite Wahrheit.</li>
 </ul>
 
-<h2>4 Beispielmodell <code>examples/spec/mehrfarbig.scad</code></h2>
+<h2>4 Beispielmodell <code>tests/models/spec/mehrfarbig.scad</code></h2>
 <p>Türschild (weiße Platte, Rahmen teal, Schrift „CAD“ als Relief in red mit festem Slot 3, abgezogene Aufhängebohrung) und Spielfigur (blauer Körper aus Sockel und gedrehtem Profil, weißer Kragen, gelber Kopf) als zwei Bauteile.</p>
 <div class="two">${fig(cliImg("cli-hell.png"), "<code>cad render</code> – Farbe je Fläche")}${fig(cliImg("cli-dunkel.png"), "<code>cad render --theme dark</code>")}</div>
 <div class="two">${fig(cliImg("cli-regionen.png"), "<code>--show regions --theme dark</code>: Körper je Farbe")}${fig(cliImg("cli-schnitt.png"), "<code>--section x=80 --part figur --show regions --view right</code>: Schnitt durch die Regionskörper; die Kappen sind wie immer rot schraffiert, die Konturen zeigen die Grenzen zwischen Kopf (gewinnt im Hals), Kragen und Körper")}</div>
@@ -494,7 +494,7 @@ ${colorsTable(measure?.colors?.colors)}
 <pre>${esc((sources ?? "").replace(/\.\/(\S+)/g, (m, f) => f.replace(/_/g, "/").replace(/^([^/]+)\/([^/]+)\//, "$1/$2 ")))}</pre>
 
 <h2>6 Prüfung der 3MF</h2>
-<p><code>tools/report/verify3mf.py</code> auf der Datei von <code>cad export examples/spec/mehrfarbig.scad --part schild --part figur -o mehrfarbig.3mf</code>, erwartete Werte aus <code>cad measure --colors --json</code>:</p>
+<p><code>tools/report/verify3mf.py</code> auf der Datei von <code>cad export tests/models/spec/mehrfarbig.scad --part schild --part figur -o mehrfarbig.3mf</code>, erwartete Werte aus <code>cad measure --colors --json</code>:</p>
 <pre>${esc(verifyText ?? "verify.txt fehlt")}</pre>
 <table><tr><th>Bauteil</th><th>Farbe</th><th>Slot</th><th>Extruder (Bambu-Modell)</th><th>Farbe in 3MF</th><th>Volumen B-Rep</th><th>Volumen Netz</th><th></th></tr>${verifyRows}</table>
 <ul>

@@ -12,6 +12,7 @@ import type { EditTarget } from "../editor/editGroup";
 import { makeState } from "../editor/setup";
 import {
   EXAMPLES,
+  SHOW_TEST_MODELS,
   type Example,
   type ExampleProject,
   type LoadedProject,
@@ -48,7 +49,8 @@ import { MeasureController } from "./measure";
 import { undo, redo } from "@codemirror/commands";
 import { gitMarks } from "../editor/gitGutter";
 
-export const DEFAULT_EXAMPLE = "spec/gehaeuse.mcad";
+/** Model shown at the first start (test builds: the spec housing the e2e tests expect). */
+export const DEFAULT_EXAMPLE = SHOW_TEST_MODELS ? "spec/gehaeuse.mcad" : "05-box-lid.mcad";
 
 export const meshes = new MeshCache();
 const params = new URLSearchParams(location.search);
@@ -418,7 +420,7 @@ export function openLocation(path: string, pos: number): void {
 
 export function openExample(ex: Example): void {
   forgetHandle();
-  // an example importing SVGs of examples/svg: a project with those files (paths below examples/)
+  // an example importing SVGs of tests/models/svg: a project with those files (paths below tests/models/)
   const data = exampleData(ex.path, ex.text);
   if (Object.keys(data).length) loadProject({ name: ex.name, main: ex.path, files: { [ex.path]: ex.text, ...data } });
   else loadText(ex.name, ex.text);

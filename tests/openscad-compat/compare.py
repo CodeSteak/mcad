@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Stage 2 of the OpenSCAD comparison: runs our CLI on every model in
-examples/openscad-compat/ and compares volume, surface area and bounding box with
+tests/models/openscad-compat/ and compares volume, surface area and bounding box with
 tests/openscad-compat/reference.json (built by make-reference.py from OpenSCAD 2021.01).
 
 Commands (templates; placeholders {cad} {src} {out} {name} {stem} {ref_stl}):
@@ -53,7 +53,7 @@ sys.path.insert(0, str(HERE))
 import stl_stats  # noqa: E402
 
 ROOT = HERE.parent.parent
-MODELS = ROOT / "examples" / "openscad-compat"
+MODELS = ROOT / "tests" / "models" / "openscad-compat"
 REF = HERE / "reference.json"
 REF_STL = ROOT / "target" / "openscad-compat"
 OUT = ROOT / "target" / "openscad-compat" / "ours"

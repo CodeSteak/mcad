@@ -70,7 +70,7 @@ test("K02 Beispiel Schablone", async ({ page }) => {
   record17({
     id: "K02",
     title: "Beispiel Schablone",
-    images: [{ name: "k02-schablone", label: "examples/spec/schablone.mcad im Browser (Draufsicht)" }],
+    images: [{ name: "k02-schablone", label: "tests/models/spec/schablone.mcad im Browser (Draufsicht)" }],
     caption: "Platte minus Text: die Innenteile von A, 0, 8, B, 9 hängen über die Stege an der Platte.",
     checks: ["keine Fehler/Warnungen", "Hülle 120 × 44 × 1 mm"],
   });

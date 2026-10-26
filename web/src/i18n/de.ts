@@ -36,6 +36,7 @@ export const de: Messages = {
   "file.unsavedShort": "ungespeichert",
   // examples
   "examples.projects": "Projekte (mehrere Dateien)",
+  "examples.group.tutorial": "Tutorial",
   "examples.group.spec": "Spec-Beispiele",
   "examples.group.openscad-compat": "OpenSCAD-Kompatibilität",
   // export

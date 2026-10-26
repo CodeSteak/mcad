@@ -5,8 +5,8 @@ Hobbymodellen. Umfang: nur Features aus „Voll“ in `docs/technischer-plan.md`
 
 | Ort | Inhalt |
 | --- | --- |
-| `examples/openscad-compat/*.scad` | 36 Modelle, je mit Kopfkommentar `// Zweck: …` (34–36: `offset`) |
-| `examples/spec/*.mcad` | 8 Modelle mit den neuen Sprachfeatures (Raster, Anker, Fillets, …) |
+| `tests/models/openscad-compat/*.scad` | 36 Modelle, je mit Kopfkommentar `// Zweck: …` (34–36: `offset`) |
+| `tests/models/spec/*.mcad` | 8 Modelle mit den neuen Sprachfeatures (Raster, Anker, Fillets, …) |
 | `tests/openscad-compat/make-reference.py` | erzeugt `reference.json` mit OpenSCAD |
 | `tests/openscad-compat/reference.json` | Referenz (eingecheckt): Volumen, Fläche, Hülle, Dreiecke, echo |
 | `tests/openscad-compat/compare.py` | Stufe 2: unsere CLI gegen die Referenz |
@@ -22,7 +22,7 @@ STL- und echo-Dateien liegen unter `target/openscad-compat/` und werden nicht ei
 
    ```sh
    python3 tests/openscad-compat/make-reference.py            # alle Modelle (~2,5 min)
-   python3 tests/openscad-compat/make-reference.py examples/openscad-compat/19_hex_nut.scad
+   python3 tests/openscad-compat/make-reference.py tests/models/openscad-compat/19_hex_nut.scad
    ```
 
    Pro Datei: `openscad -o target/openscad-compat/<name>.stl` und `-o <name>.echo`, dann
@@ -45,7 +45,7 @@ STL- und echo-Dateien liegen unter `target/openscad-compat/` und werden nicht ei
    cargo test -p compat-tests --test openscad_compat -- --nocapture   # mit Tabelle
    ```
 
-   - `openscad_compat`: jede Datei in `examples/openscad-compat/` → `cad_eval::eval_source`
+   - `openscad_compat`: jede Datei in `tests/models/openscad-compat/` → `cad_eval::eval_source`
      ohne Fehler-Diagnosen, kein Abbruch, Baum mit 3D-Geometrie, echo-Zeilen gleich wie
      OpenSCAD. Bekannte Fehler stehen mit Grund in `KNOWN_FAILURES` (der Test schlägt auch
      fehl, wenn ein bekannter Fehler behoben ist, damit der Eintrag verschwindet).
@@ -53,7 +53,7 @@ STL- und echo-Dateien liegen unter `target/openscad-compat/` und werden nicht ei
      Schnitt = Schnitt der Hüllen, Differenz = Hülle des ersten Kinds) gegen OpenSCADs
      Hülle, Toleranz 0,01 mm. Prüft Transformationen, `center`, `r`/`d`, `$fn`-Polygone,
      Modifier und `children()`.
-   - `spec_models`: jede Datei in `examples/spec/` ohne Fehler und Warnungen; erwartete
+   - `spec_models`: jede Datei in `tests/models/spec/` ohne Fehler und Warnungen; erwartete
      Raster (Name, Ebenenzahl), Instanzen mit Ankern, Anzahl Griffe, Knoten (fillet, zone, …)
      und einzelne Werte (Ankerlage nach Instanztransformation, Zonen, Sweep-Pfad).
 

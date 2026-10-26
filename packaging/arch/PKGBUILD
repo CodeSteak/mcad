@@ -90,10 +90,10 @@ check() {
   local mcad="$PWD/target/release/mcad"
   export MCAD_NO_DAEMON=1
   "$mcad" --version
-  "$mcad" check examples/spec/gehaeuse.mcad
-  "$mcad" check examples/openscad-compat/05_nested_booleans.scad   # .scad öffnet weiterhin
-  "$mcad" render examples/spec/gehaeuse.mcad -o "$srcdir/check-gehaeuse.png" --module gehaeuse --views all
-  "$mcad" export examples/spec/flasche.mcad -o "$srcdir/check-flasche.step"
+  "$mcad" check tests/models/spec/gehaeuse.mcad
+  "$mcad" check tests/models/openscad-compat/05_nested_booleans.scad   # .scad öffnet weiterhin
+  "$mcad" render tests/models/spec/gehaeuse.mcad -o "$srcdir/check-gehaeuse.png" --module gehaeuse --views all
+  "$mcad" export tests/models/spec/flasche.mcad -o "$srcdir/check-flasche.step"
   # ohne grafische Sitzung: Meldung und Exit 2 (die UI ist eingebettet, nicht der Platzhalter)
   local rc=0
   env -u DISPLAY -u WAYLAND_DISPLAY "$mcad" >/dev/null 2>&1 || rc=$?

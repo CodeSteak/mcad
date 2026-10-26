@@ -187,7 +187,7 @@ fn touches_gap_and_overlap() {
 
 #[test]
 fn imported_mesh_as_keepout() {
-    let stl = include_str!("../../../examples/stl/winkel.stl");
+    let stl = include_str!("../../../tests/models/stl/winkel.stl");
     let mut s = session();
     s.post(ToEngine::SetFiles { files: [("winkel.stl".to_string(), stl.to_string())].into(), main: None });
     let src = format!("{PLATE}assert_keepout() translate([5, 5, 2]) import(\"winkel.stl\", as = \"mesh\");\n");

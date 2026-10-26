@@ -40,6 +40,7 @@ export const en = {
   "file.unsavedShort": "unsaved",
   // examples
   "examples.projects": "Projects (several files)",
+  "examples.group.tutorial": "Tutorial",
   "examples.group.spec": "Spec examples",
   "examples.group.openscad-compat": "OpenSCAD compatibility",
   // export

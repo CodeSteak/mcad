@@ -765,7 +765,7 @@ fn nurbs_surface_and_thicken() {
 
 // ---------------------------------------------------------------- regressions (report 4)
 
-/// Knob profile of `examples/spec/knauf_mirror.mcad`: a closed spline through two points on
+/// Knob profile of `tests/models/spec/knauf_mirror.mcad`: a closed spline through two points on
 /// the axis. Interpolated as one closed curve it crosses the axis next to them (x down to
 /// -1.6), and SMLib's full-turn sweep returned a self-overlapping solid (volume 172 instead of
 /// ~3200 for r = 10, open booleans, failed fillets). The facade joins the two axis points by a
@@ -823,7 +823,7 @@ fn revolve_spline_crossing_the_axis_fails() {
     assert!(matches!(r, Err(KernelError::InvalidInput(_))), "{r:?}");
 }
 
-/// Bodies touching along an edge (`examples/spec/winkel_anker.mcad`: the ruler cube on the
+/// Bodies touching along an edge (`tests/models/spec/winkel_anker.mcad`: the ruler cube on the
 /// bracket's corner): SMLib's union is non-manifold, not a closed solid (volume 0).
 #[test]
 fn union_of_touching_solids_is_closed() {

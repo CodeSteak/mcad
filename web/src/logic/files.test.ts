@@ -9,7 +9,7 @@ import { dataFileRefs, dataUrl, fileBytes, fileIds, fileText, fromDataUrl, guess
 import { SceneIndex, isOff } from "./sceneIndex";
 import { fixture } from "./__fixtures__/load";
 
-const EX = join(__dirname, "../../../examples/projekt-gehaeuse");
+const EX = join(__dirname, "../../../tests/models/projekt-gehaeuse");
 const read = (p: string) => readFileSync(join(EX, p), "utf8");
 
 describe("Pfade wie die Engine", () => {

@@ -13,7 +13,7 @@ use assert_cmd::Command;
 use serde_json::Value;
 
 fn examples() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples").canonicalize().unwrap()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/models").canonicalize().unwrap()
 }
 
 fn data(name: &str) -> String {

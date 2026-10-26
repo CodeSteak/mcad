@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Regressionsprüfung der Alltagsmodelle (examples/alltag).
+# Regressionsprüfung der Alltagsmodelle (tests/models/alltag).
 #
-# Für jedes Modell (jede .mcad-/.scad-Datei direkt in examples/alltag, bei Baugruppen-Ordnern die Datei
+# Für jedes Modell (jede .mcad-/.scad-Datei direkt in tests/models/alltag, bei Baugruppen-Ordnern die Datei
 # mit dem Namen des Ordners, z. B. gehaeuse/gehaeuse.mcad):
 #   1. `mcad check --json`               – 0 Fehler, Anzahl der Warnungen wie erwartet
 #   2. `mcad export --all-parts` (STEP)  – Bauteile und ihre Volumina (exakte B-Rep) wie erwartet
@@ -54,7 +54,7 @@ while i < len(args):
         muster.append(a)
     i += 1
 
-alltag = os.path.join(root, "examples", "alltag")
+alltag = os.path.join(root, "tests", "models", "alltag")
 expected_path = os.path.join(here, "expected.json")
 MODEL_EXT = (".mcad", ".scad")
 REL_TOL, ABS_TOL = 1e-3, 0.5   # Volumen: 0,1 % oder 0,5 mm³

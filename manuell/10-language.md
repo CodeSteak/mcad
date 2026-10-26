@@ -82,7 +82,7 @@ hull() { sphere(5); translate([0, 0, 15]) sphere(2); }                          
 hull() { cube([10, 10, 4]); translate([20, 5, 0]) cylinder(r = 5, h = 4); }         // prism
 ```
 
-Example model: `examples/spec/hull_minkowski.mcad`.
+Example model: `tests/models/spec/hull_minkowski.mcad`.
 
 ## Example (`box.mcad`, used in other pages)
 

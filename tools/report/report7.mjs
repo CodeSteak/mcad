@@ -130,13 +130,13 @@ const f1File = write(
   "f1-alle.scad",
   "grid g { z: o = 18; }\ngrid h { z: o = 30; }\nshell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 3); zone(g.o, d = 1); }\ntranslate([0, 45, 0]) shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 5); zone(g.o, d = 1); }\ntranslate([100, 0, 0]) shell(1.5) { box([0, 0, 0], [50, 35, 30], $fillet = 4); zone(h.o, d = 1); }\n",
 );
-const dose = join(root, "examples/spec/dose_shell.scad");
+const dose = join(root, "tests/models/spec/dose_shell.scad");
 const doseAfter = exportInfo(cadNew, dose);
 const doseBefore = hasOld ? check(cadOld, dose) : [];
 const f2File = write("f2.scad", F2);
 const f3File = write("f3.scad", F3);
 const f4File = write("f4.scad", F4);
-const vr = join(root, "examples/spec/variabler_radius.scad");
+const vr = join(root, "tests/models/spec/variabler_radius.scad");
 
 const imgs = {};
 const pair = (key, file, args = []) => {
@@ -185,8 +185,8 @@ if (existsSync(join(pkg, "cad_wasm_bg.wasm"))) {
     ["F3", f3File],
     ["F4", f4File],
     ["variabler_radius.scad", vr],
-    ["griffschale.scad", join(root, "examples/spec/griffschale.scad")],
-    ["fillet_zonen.scad", join(root, "examples/spec/fillet_zonen.scad")],
+    ["griffschale.scad", join(root, "tests/models/spec/griffschale.scad")],
+    ["fillet_zonen.scad", join(root, "tests/models/spec/fillet_zonen.scad")],
   ];
   const norm = (scene, diags) => ({
     nodes: scene.nodes.map((n) => ({
@@ -450,7 +450,7 @@ const html = `<!doctype html>
 <h2>1 Umfang</h2>
 <ul>
   <li><b>F1</b> <code>shell</code> eines verrundeten Körpers (dose_shell.scad war rot), <b>F2</b> <code>surface(points)</code> mit 2 × 2 oder 3 × 3 Punkten, <b>F3</b> Naht- und Polkanten als eigene Kanten – die drei in Bericht 4, Abschnitt 7 gefundenen Fehler. Dazu <b>F4</b>: fase_chamfer.scad war ebenfalls rot (<code>union(chamfer = 0.5)</code> wählte acht statt zwei Kanten).</li>
-  <li><b>Variabler Radius</b> (Spec „Variabler Radius (Stretch Goal)“): <code>fillet(r = function (p) …) { … }</code> und <code>difference/union/intersection(fillet = function (p) …)</code>; Radius als Funktion der Position, an Stützpunkten jeder Kante ausgewertet, Hinweis „r 2–4“, Fehlerfälle wie beim konstanten Radius. Neues Beispiel <code>examples/spec/variabler_radius.scad</code>.</li>
+  <li><b>Variabler Radius</b> (Spec „Variabler Radius (Stretch Goal)“): <code>fillet(r = function (p) …) { … }</code> und <code>difference/union/intersection(fillet = function (p) …)</code>; Radius als Funktion der Position, an Stützpunkten jeder Kante ausgewertet, Hinweis „r 2–4“, Fehlerfälle wie beim konstanten Radius. Neues Beispiel <code>tests/models/spec/variabler_radius.scad</code>.</li>
   <li><b>SMLib</b>: Korrektur 1ed8669 (Zeigertabellen in Einfügereihenfolge) aus dem Fork-Zweig <code>capi-solidcraft</code> als Patch <code>smlib/patches/0001-pointer-maps-insertion-order.patch</code> über 7eba8aa (<code>smlib/fetch.sh</code> wendet ihn an). <b>Fassaden-ABI 4</b> (<code>sc_version()</code> = 4): Kantenflags in <code>sc_edges</code>, <code>sc_law_stations</code>, <code>sc_fillet_var</code>; Kernel-ID <code>smlib-7eba8aa+1/facade-4</code> (neue Cache-Schlüssel).</li>
 </ul>
 

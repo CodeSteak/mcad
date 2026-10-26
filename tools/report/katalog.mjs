@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Katalog der Alltagsmodelle (examples/alltag/): misst jedes Modell mit der CLI, rendert Bilder
+// Katalog der Alltagsmodelle (tests/models/alltag/): misst jedes Modell mit der CLI, rendert Bilder
 // und schreibt
 //
 //   docs/modelle/alltagsmodelle.html, docs/modelle/img/*.jpg
@@ -30,7 +30,7 @@ const PLA = 1.24; // g/cm³
 const BG = "#f4f5f7"; // Hintergrund von `cad render` (helles Thema)
 
 // ---------------------------------------------------------------------------------------------
-// Modelle: Reihenfolge wie examples/alltag/README.md. text: 2–4 Sätze; {p} = Standardwert des
+// Modelle: Reihenfolge wie tests/models/alltag/README.md. text: 2–4 Sätze; {p} = Standardwert des
 // Parameters p des Hauptmoduls bzw. der Datei-Variable p, {modul.p} = Parameter eines anderen
 // Moduls, {p|x} = Liste mit „ד verbunden.
 // extra: zusätzliche Bilder der Baugruppen (Schnitt, Anker), pairs: Abstände `measure --clearance`,
@@ -252,7 +252,7 @@ const auffaellig = [];
 
 const daten = [];
 for (const [i, m] of MODELLE.entries()) {
-  const file = join(root, "examples/alltag", m.file);
+  const file = join(root, "tests/models/alltag", m.file);
   const rf = rel(file);
   console.log(`[${i + 1}/${MODELLE.length}] ${rf}`);
   let d = cache[m.id];
@@ -397,16 +397,16 @@ for (const [i, { m, d, rf }] of daten.entries()) {
 const gesamtVol = daten.reduce((s, { d }) => s + d.volume, 0);
 const gesamtTeile = daten.reduce((s, { d }) => s + d.outline.parts.length, 0);
 const nBaugruppen = daten.filter(({ d }) => d.outline.parts.length > 1).length;
-const toc = seiten.map((s) => `<tr><td class="nr">${s.nr}</td><td><a href="#m-${s.d.id}">${esc(s.titel)}</a>${s.baugruppe ? ' <span class="tag sm">Baugruppe</span>' : ""}<br><code class="dim">${esc(s.rf.replace("examples/alltag/", ""))}</code></td><td class="r">${s.d.outline.parts.length}</td><td class="nw">${mm(s.d.bounds)}</td><td class="r nw">${de(masse(s.d.volume), 0)} g</td><td class="r nw">${sec(s.d.kernel_ms)}</td><td class="r">${s.seite}</td></tr>`).join("");
+const toc = seiten.map((s) => `<tr><td class="nr">${s.nr}</td><td><a href="#m-${s.d.id}">${esc(s.titel)}</a>${s.baugruppe ? ' <span class="tag sm">Baugruppe</span>' : ""}<br><code class="dim">${esc(s.rf.replace("tests/models/alltag/", ""))}</code></td><td class="r">${s.d.outline.parts.length}</td><td class="nw">${mm(s.d.bounds)}</td><td class="r nw">${de(masse(s.d.volume), 0)} g</td><td class="r nw">${sec(s.d.kernel_ms)}</td><td class="r">${s.seite}</td></tr>`).join("");
 const grid = seiten.map((s) => `<a class="tile" href="#m-${s.d.id}"><img src="${s.d.img.hero?.file ?? ""}" alt=""><span><em><b>${s.nr}</b> ${esc(s.kurz)}</em><i>S. ${s.seite}</i></span></a>`).join("");
 
 const howtoLines = [
-  ["cad examples/alltag/becher.mcad", "Desktop-UI: Editor und 3D"],
-  ["cad examples/alltag/gehaeuse/", "Baugruppe als Projekt (Ordner)"],
-  ["cad render examples/alltag/becher.mcad -o becher.png --views all", "headless: Bild"],
-  ["cad outline examples/alltag/becher.mcad", "Parameter, Raster, Anker, Bauteile"],
-  ["cad measure examples/alltag/becher.mcad --volume --colors", "Volumen, Masse je Farbe"],
-  ["cad export examples/alltag/zahnrad.mcad --all-parts -o teile/", "STL/STEP/3MF je Bauteil"],
+  ["cad tests/models/alltag/becher.mcad", "Desktop-UI: Editor und 3D"],
+  ["cad tests/models/alltag/gehaeuse/", "Baugruppe als Projekt (Ordner)"],
+  ["cad render tests/models/alltag/becher.mcad -o becher.png --views all", "headless: Bild"],
+  ["cad outline tests/models/alltag/becher.mcad", "Parameter, Raster, Anker, Bauteile"],
+  ["cad measure tests/models/alltag/becher.mcad --volume --colors", "Volumen, Masse je Farbe"],
+  ["cad export tests/models/alltag/zahnrad.mcad --all-parts -o teile/", "STL/STEP/3MF je Bauteil"],
 ];
 const howto = howtoLines.map(([c, k]) => `<code>${esc(c)}</code><span>${esc(k)}</span>`).join("");
 const html = `<!doctype html>
@@ -497,8 +497,8 @@ table.toc code { font-size: 7.6pt; }
 <section class="page title">
   <div class="kicker">Parametrisches CAD · Beispielsammlung</div>
   <h1>Alltagsmodelle<br>Katalog</h1>
-  <p class="lead">${daten.length} parametrische Modelle aus <code>examples/alltag/</code>: Haushalt, Schreibtisch, Werkstatt und typische Maschinenbauteile – vom Becher bis zum Stehlagerbock.</p>
-  <p>Die Sammlung dient zweierlei: als Vorlage für eigene Teile (jedes Modell ist ein Modul mit Standardwerten, alle Maße in mm) und als Testsuite, die die Sprache in der Breite nutzt – Raster und Anker, Verrundung und Fase über Zonen, <code>shell</code>, <code>loft</code>, <code>sweep</code>, Profile, <code>include</code>/<code>use</code>, benannte Instanzen als Bauteile. Die Regression <code>tests/alltag/check.sh</code> prüft alle Modelle; gefundene Fehler und Schwächen stehen in <code>examples/alltag/README.md</code>.</p>
+  <p class="lead">${daten.length} parametrische Modelle aus <code>tests/models/alltag/</code>: Haushalt, Schreibtisch, Werkstatt und typische Maschinenbauteile – vom Becher bis zum Stehlagerbock.</p>
+  <p>Die Sammlung dient zweierlei: als Vorlage für eigene Teile (jedes Modell ist ein Modul mit Standardwerten, alle Maße in mm) und als Testsuite, die die Sprache in der Breite nutzt – Raster und Anker, Verrundung und Fase über Zonen, <code>shell</code>, <code>loft</code>, <code>sweep</code>, Profile, <code>include</code>/<code>use</code>, benannte Instanzen als Bauteile. Die Regression <code>tests/alltag/check.sh</code> prüft alle Modelle; gefundene Fehler und Schwächen stehen in <code>tests/models/alltag/README.md</code>.</p>
   <p>Je Modell zeigt der Katalog eine Seite mit Beschreibung, Rendering, Ansichten, Kenndaten, Parametern und verwendeten Sprachmitteln; Baugruppen haben eine zweite Seite mit Bauteilen, gemessenen Abständen und einem Schnitt bzw. den Ankern. Alle Werte sind mit der CLI gemessen.</p>
   <h3 style="margin-top:6mm">Ein Modell öffnen</h3>
 <div class="howto">${howto}</div>

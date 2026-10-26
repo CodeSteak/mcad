@@ -67,9 +67,9 @@ LetStatement { kw<"let"> "(" commaSep<ForBinding> ")" statement }
 
 ForBinding { VariableName "=" expression }
 
-// `teile.schraube(d = 3);` (modules as namespaces), `sketch { … }` / `hole { … }` without
+// `k[i]: knob();` (indexed instance labels), `teile.schraube(d = 3);` (modules as namespaces), `sketch { … }` / `hole { … }` without
 // arguments (sketches, Plan 17.1; any name is accepted here, the engine checks).
-Instantiation { Modifier* (Label ":")? CallName ("." CallName)* (ArgList statement | Block) }
+Instantiation { Modifier* (Label ("[" expression "]")? ":")? CallName ("." CallName)* (ArgList statement | Block) }
 
 Modifier { "#" | "%" | "!" | "*" }
 

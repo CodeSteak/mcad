@@ -251,7 +251,7 @@ async function test(id, title, f) {
   console.log(`${entry.ok ? "✓" : "✗"} ${id} ${title} (${entry.ms} ms)${entry.ok ? "" : `\n  ${entry.error}`}`);
 }
 
-const MODEL = readFileSync(join(ROOT, "examples/spec/gehaeuse.mcad"), "utf8");
+const MODEL = readFileSync(join(ROOT, "tests/models/spec/gehaeuse.mcad"), "utf8");
 
 async function main() {
   if (!existsSync(BIN)) throw new Error(`${BIN} fehlt (cargo build --release -p cad-cli)`);
@@ -517,7 +517,7 @@ async function main() {
     await stopApp();
     const proj = join(work, "projekt");
     mkdirSync(join(proj, "lib"), { recursive: true });
-    for (const f of ["gehaeuse.mcad", "konstanten.mcad", "lib/teile.mcad"]) writeFileSync(join(proj, f), readFileSync(join(ROOT, "examples/projekt-gehaeuse", f)));
+    for (const f of ["gehaeuse.mcad", "konstanten.mcad", "lib/teile.mcad"]) writeFileSync(join(proj, f), readFileSync(join(ROOT, "tests/models/projekt-gehaeuse", f)));
     const st = await startApp([proj]);
     check(st.state.fileName === "gehaeuse.mcad", `Hauptdatei ${st.state.fileName}`);
     const info = await exec("return window.__cad.projectInfo()");
@@ -571,7 +571,7 @@ async function main() {
 
   // ------------------------------------------------------------ colours, filaments, theme (report 11)
 
-  const MEHR = readFileSync(join(ROOT, "examples/spec/mehrfarbig.mcad"), "utf8");
+  const MEHR = readFileSync(join(ROOT, "tests/models/spec/mehrfarbig.mcad"), "utf8");
   const ensureApp = async () => {
     if (!sid) await startApp([file]);
   };

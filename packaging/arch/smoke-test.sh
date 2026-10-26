@@ -44,37 +44,35 @@ cd "$work/examples"
 export MCAD_NO_DAEMON=1
 
 step "mcad check (Diagnosen)"
-mcad check spec/gehaeuse.mcad
-mcad check spec/text_schild.mcad        # eingebettete Schriften
-mcad check spec/svg_logo.mcad           # SVG-Import
-mcad check openscad-compat/05_nested_booleans.scad   # .scad öffnet weiterhin
+for f in 0*.mcad; do mcad check "$f"; done   # Tutorial, 06: eingebettete Schriften
+cp 01-plate.mcad plate.scad && mcad check plate.scad   # .scad öffnet weiterhin
 
 step "mcad outline"
-mcad outline projekt-gehaeuse/gehaeuse.mcad | head -n 15
+mcad outline 05-box-lid.mcad | head -n 15
 
 step "mcad render (Software-Rasterizer, headless)"
-mcad render spec/gehaeuse.mcad -o "$OUT/gehaeuse.png" --module gehaeuse --views all --show grids,anchors,labels
-mcad render spec/gehaeuse.mcad -o "$OUT/schnitt.png" --section z=10 --show dims
-mcad render spec/text_schild.mcad -o "$OUT/text.png"
+mcad render 08-macropad.mcad -o "$OUT/raster.png" --module plate --views all --show grids,anchors,labels
+mcad render 03-tray.mcad -o "$OUT/schnitt.png" --section z=10 --show dims
+mcad render 06-name-tag.mcad -o "$OUT/text.png"
 file "$OUT"/*.png
 
 step "mcad export STEP, STL, 3MF"
-mcad export spec/flasche.mcad -o "$OUT/flasche.step"
-mcad export spec/gehaeuse.mcad -o "$OUT/gehaeuse.stl"
-mcad export spec/mehrfarbig.mcad -o "$OUT/mehrfarbig.3mf"
-head -c 200 "$OUT/flasche.step" | head -n 3
-ls -l "$OUT"/flasche.step "$OUT"/gehaeuse.stl "$OUT"/mehrfarbig.3mf
+mcad export 04-hook.mcad -o "$OUT/haken.step"
+mcad export 03-tray.mcad -o "$OUT/schale.stl"
+mcad export 06-name-tag.mcad -o "$OUT/schild.3mf"
+head -c 200 "$OUT/haken.step" | head -n 3
+ls -l "$OUT"/haken.step "$OUT"/schale.stl "$OUT"/schild.3mf
 
 step "mcad measure"
-mcad measure spec/gehaeuse.mcad --between k.ecke k.oben --volume part:k
-mcad measure spec/mehrfarbig.mcad --colors | head -n 12
+mcad measure 05-box-lid.mcad --between bin.rim bin.base --volume part:bin
+mcad measure 06-name-tag.mcad --colors | head -n 12
 
 step "Daemon (Start beim ersten Aufruf, Status, Ende)"
 unset MCAD_NO_DAEMON
 export MCAD_IPC_DIR="$work/ipc"
 mkdir -p "$MCAD_IPC_DIR"
-mcad check spec/gehaeuse.mcad
-mcad check spec/gehaeuse.mcad
+mcad check 03-tray.mcad
+mcad check 03-tray.mcad
 mcad daemon status
 mcad daemon stop
 export MCAD_NO_DAEMON=1
@@ -96,8 +94,8 @@ for _ in $(seq 1 50); do xwininfo -root >/dev/null 2>&1 && break; sleep 0.2; don
 ui_try() {
   # $1: Beschreibung; Rest: zusätzliche Umgebung für mcad
   local what="$1"; shift
-  echo "-- Start: mcad spec/gehaeuse.mcad ($what)"
-  env "$@" mcad spec/gehaeuse.mcad >"$OUT/ui.log" 2>&1 &
+  echo "-- Start: mcad 03-tray.mcad ($what)"
+  env "$@" mcad 03-tray.mcad >"$OUT/ui.log" 2>&1 &
   ui=$!
   local ok=1
   for _ in $(seq 1 90); do

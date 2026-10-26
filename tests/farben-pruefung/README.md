@@ -27,7 +27,7 @@ lib3mf), `contrast.py` (WCAG-Kontrast der Token), `deltae.py` (Farbabstände).
   bekommen alle Farben dieser Anweisung denselben Slot. Fall: `cases/slot_mod.scad`, `cases/palette2.scad`.
 - **F3 (mittel)** Flächenfarbe der Ansicht weicht vom Druck ab: (a) Überlappung
   (`cases/r_overlap2.scad`, `r_overlap3.scad`, `img/r_overlap23.png`; auch Rahmen in
-  `examples/spec/mehrfarbig.scad`), (b) Verrundung an Farbgrenze grau gezeigt, rot exportiert
+  `tests/models/spec/mehrfarbig.scad`), (b) Verrundung an Farbgrenze grau gezeigt, rot exportiert
   (`cases/r_fillet2.scad`, `img/r_fillet2*.png`), (c) `linear_extrude(5) color("red") square(10);`
   rot gezeigt, als Standard/Slot 1 exportiert, fehlt in der Farbliste, keine Warnung
   (`cases/r_extrude.scad`, `img/r_extrude_*.png`).

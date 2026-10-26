@@ -22,7 +22,7 @@ CAD=${CAD:-$root/target/release/mcad}
 export CAD_NO_DAEMON=1
 mkdir -p "$out/fehler" "$out/img"
 fe="$root/tests/alltag/fehler"
-al="$root/examples/alltag"
+al="$root/tests/models/alltag"
 
 for f in "$fe"/*.scad; do
   n=$(basename "$f" .scad)

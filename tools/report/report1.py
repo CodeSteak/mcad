@@ -41,7 +41,7 @@ SMLIB_WASM = ROOT / "target" / "smlib-wasm"
 PKG_ROOT = WORK / "wasm-web"  # same layout as web/ (scripts/, src/wasm-pkg/), outside web/
 DEFAULT_PREBUILT = "/home/user/controller-cad/smlib/build-native"
 
-# Models with renders: one per examples/spec file, plus typical OpenSCAD models.
+# Models with renders: one per tests/models/spec file, plus typical OpenSCAD models.
 COMPAT_RENDERS = [
     "05_nested_booleans",
     "06_hole_grid",
@@ -354,22 +354,22 @@ def renders(ref):
     OUT.mkdir(parents=True, exist_ok=True)
     out = []
     size = f"{IMG[0]}x{IMG[1]}"
-    for src in sorted((ROOT / "examples/spec").glob("*.scad")):
+    for src in sorted((ROOT / "tests/models/spec").glob("*.scad")):
         name = src.stem
         dst = OUT / f"spec-{name}.png"
         _, t = run([str(CAD), "render", str(src), "--size", size, "-o", str(dst)], check=False)
-        out.append({"group": "spec", "name": name, "file": f"examples/spec/{src.name}", "ours": dst.name,
+        out.append({"group": "spec", "name": name, "file": f"tests/models/spec/{src.name}", "ours": dst.name,
                     "seconds": round(t, 2), "purpose": purpose(src)})
     # highlighted subtracted body (cad-render transparency)
     dst = OUT / "spec-gehaeuse-zeile12.png"
-    run([str(CAD), "render", "examples/spec/gehaeuse.scad", "--line", "12", "--size", size, "-o", str(dst)], check=False)
-    out.append({"group": "highlight", "name": "gehaeuse --line 12", "file": "examples/spec/gehaeuse.scad",
+    run([str(CAD), "render", "tests/models/spec/gehaeuse.scad", "--line", "12", "--size", size, "-o", str(dst)], check=False)
+    out.append({"group": "highlight", "name": "gehaeuse --line 12", "file": "tests/models/spec/gehaeuse.scad",
                 "ours": dst.name, "purpose": "Zeile 12: abgezogener Körper rot transparent, Rest gedimmt"})
     for name in COMPAT_RENDERS:
-        src = ROOT / "examples/openscad-compat" / f"{name}.scad"
+        src = ROOT / "tests/models/openscad-compat" / f"{name}.scad"
         dst = OUT / f"compat-{name}.png"
         _, t = run([str(CAD), "render", str(src), "--size", size, "-o", str(dst)], check=False)
-        item = {"group": "compat", "name": name, "file": f"examples/openscad-compat/{src.name}", "ours": dst.name,
+        item = {"group": "compat", "name": name, "file": f"tests/models/openscad-compat/{src.name}", "ours": dst.name,
                 "seconds": round(t, 2), "purpose": purpose(src)}
         osc = OUT / f"compat-{name}-openscad.png"
         defines = []
@@ -697,7 +697,7 @@ def html_report(d):
       "<code>cad render &lt;datei&gt; --size 600x450</code>. OpenSCAD-Bilder: <code>openscad -o x.png "
       "--render --imgsize=600,450 --viewall --autocenter --projection=ortho --camera=100,-100,100,0,0,0</code> mit denselben "
       "<code>-D</code>-Werten wie die Referenz.</p>")
-    a("<h3>5.1 Beispiele der Spec (<code>examples/spec/</code>)</h3><p class='small'>Nur mit unserer CLI: "
+    a("<h3>5.1 Beispiele der Spec (<code>tests/models/spec/</code>)</h3><p class='small'>Nur mit unserer CLI: "
       "Raster, Anker, Fillets und Zonen gibt es in OpenSCAD nicht.</p><div class='grid2'>")
     for it in d["renders"]:
         if it["group"] in ("spec", "highlight"):

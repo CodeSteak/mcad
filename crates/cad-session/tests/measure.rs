@@ -1,6 +1,6 @@
 //! Measure mode over the protocol and through `mcad measure` references (Plan 18): snapping
 //! (vertex, edge midpoint, circle centre, edge, face, contour), measurements against
-//! analytic values, sections (wall thickness of the housing from examples/spec), provenance
+//! analytic values, sections (wall thickness of the housing from tests/models/spec), provenance
 //! (grid planes and points, anchors, named instances).
 
 use cad_measure::section::SectionPlane;
@@ -17,7 +17,7 @@ fn session(text: &str) -> Session<SmlibKernel> {
 }
 
 fn example(name: &str) -> String {
-    std::fs::read_to_string(format!("{}/../../examples/spec/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+    std::fs::read_to_string(format!("{}/../../tests/models/spec/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
 }
 
 fn root(s: &Session<SmlibKernel>) -> u32 {

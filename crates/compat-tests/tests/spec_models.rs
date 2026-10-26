@@ -1,4 +1,4 @@
-//! Stage 1 for the spec models in `examples/spec/`: they use the new language features
+//! Stage 1 for the spec models in `tests/models/spec/`: they use the new language features
 //! (grids, anchors and named instances, `rotate(to = …)`, `fillet`/`chamfer` at Booleans
 //! and as zone blocks with `select`, `$fillet`/`$chamfer`, `loft`, `sweep`, `shell`).
 //! Every file evaluates without errors or warnings into 3D geometry, and has the expected
@@ -656,10 +656,10 @@ fn assert_close(v: DVec3, e: [f64; 3]) {
 
 #[test]
 fn spec_models_stage1() {
-    let files = model_files("examples/spec");
+    let files = model_files("tests/models/spec");
     let names: Vec<String> = files.iter().map(|f| file_name(f)).collect();
     let expected: Vec<&str> = EXPECT.iter().map(|e| e.file).collect();
-    assert_eq!(names, expected, "every model in examples/spec needs an entry in EXPECT");
+    assert_eq!(names, expected, "every model in tests/models/spec needs an entry in EXPECT");
 
     for (path, e) in files.iter().zip(EXPECT) {
         let src = std::fs::read_to_string(path).unwrap();

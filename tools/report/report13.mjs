@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Test report 13 ("Korrekturen Geometrie"): the geometry and kernel findings of the everyday
-// models (examples/alltag/README.md, tests/alltag/fehler) – cause, correction, evidence
+// models (tests/models/alltag/README.md, tests/alltag/fehler) – cause, correction, evidence
 // (before/after: volumes and diagnostics of the minimal examples, cad render images), open
 // points, run-time analysis. Writes docs/reports/13-geometrie-korrekturen/report.html.
 //
@@ -288,7 +288,7 @@ const html = `<!doctype html>
 <body>
 <main>
 <h1>Testbericht 13 – Korrekturen Geometrie</h1>
-<div class="meta">Geometrie- und Kernelfehler aus den Alltagsmodellen (<code>examples/alltag/README.md</code>, <code>tests/alltag/fehler/</code>) · SMLib-Fassade, SMLib-Patches 0002/0003, cad-engine, cad-render, cad-cli · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${os.cpus().length} Kerne</div>
+<div class="meta">Geometrie- und Kernelfehler aus den Alltagsmodellen (<code>tests/models/alltag/README.md</code>, <code>tests/alltag/fehler/</code>) · SMLib-Fassade, SMLib-Patches 0002/0003, cad-engine, cad-render, cad-cli · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${os.cpus().length} Kerne</div>
 
 <div class="summary">
   <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>davon ${newTests.length} neue Regressionstests</div>

@@ -8,7 +8,7 @@ use assert_cmd::Command;
 use serde_json::Value;
 
 fn alltag(name: &str) -> String {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/alltag").join(name).display().to_string()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/models/alltag").join(name).display().to_string()
 }
 
 fn fehler(name: &str) -> String {

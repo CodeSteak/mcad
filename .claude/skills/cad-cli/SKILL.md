@@ -322,18 +322,18 @@ Offsets UTF-16). `Bounds = { min, max, size }`. Vollständiges Schema: Kopf von
 ## Beispiele
 
 ```sh
-mcad outline examples/projekt-gehaeuse/gehaeuse.mcad
-mcad render examples/spec/gehaeuse.mcad -o /tmp/g.png --module gehaeuse --views all --show grids,anchors,labels
-mcad render examples/spec/gehaeuse.mcad -o /tmp/s.png --section z=10 --show dims
-mcad render examples/spec/fillet_zonen.mcad -o /tmp/f.png --line 12 --azimuth 120 --elevation 30
-mcad render examples/projekt-gehaeuse/gehaeuse.mcad -o /tmp/d.png --part deckel --xray
-mcad measure examples/spec/gehaeuse.mcad --between k.ecke k.oben --volume part:k
-mcad measure examples/projekt-gehaeuse/gehaeuse.mcad --interference --clearance gehaeuse deckel
-mcad measure examples/spec/lochplatte.mcad --at "[8,6,2]"
-mcad measure examples/spec/lochplatte.mcad --radius "face@[8,6,2]" --distance "center@[6,6,0]" "center@[18,6,0]" --json
-mcad measure examples/spec/gehaeuse.mcad --section z=10 --wall "[0,15,10]" --distance "edge@[3,15,10]" "edge@[57,15,10]"
-mcad measure examples/spec/fase_chamfer.mcad --angle "face@[39.5,12,9.5]" "face@[20,12,10]"
-mcad set examples/spec/gehaeuse.mcad --param gehaeuse.w=50 --dry-run
+mcad outline tests/models/projekt-gehaeuse/gehaeuse.mcad
+mcad render tests/models/spec/gehaeuse.mcad -o /tmp/g.png --module gehaeuse --views all --show grids,anchors,labels
+mcad render tests/models/spec/gehaeuse.mcad -o /tmp/s.png --section z=10 --show dims
+mcad render tests/models/spec/fillet_zonen.mcad -o /tmp/f.png --line 12 --azimuth 120 --elevation 30
+mcad render tests/models/projekt-gehaeuse/gehaeuse.mcad -o /tmp/d.png --part deckel --xray
+mcad measure tests/models/spec/gehaeuse.mcad --between k.ecke k.oben --volume part:k
+mcad measure tests/models/projekt-gehaeuse/gehaeuse.mcad --interference --clearance gehaeuse deckel
+mcad measure tests/models/spec/lochplatte.mcad --at "[8,6,2]"
+mcad measure tests/models/spec/lochplatte.mcad --radius "face@[8,6,2]" --distance "center@[6,6,0]" "center@[18,6,0]" --json
+mcad measure tests/models/spec/gehaeuse.mcad --section z=10 --wall "[0,15,10]" --distance "edge@[3,15,10]" "edge@[57,15,10]"
+mcad measure tests/models/spec/fase_chamfer.mcad --angle "face@[39.5,12,9.5]" "face@[20,12,10]"
+mcad set tests/models/spec/gehaeuse.mcad --param gehaeuse.w=50 --dry-run
 mcad watch teil.mcad --json --render /tmp/teil.png --views all --show grids,anchors &
 ```
 
@@ -552,7 +552,7 @@ STEP facettiert, `measure` Hülle/Volumen/Schnitt/`--clearance`/`--interference`
 Booleans und Verrundungen melden einen Fehler mit Hinweis `as = "solid"`). Hinweis am Knoten
 (`mcad inspect --line N`): „B-Rep: 6 Flächen aus 12 Dreiecken“ bzw. „Netz: 20000 Dreiecke, …“.
 `as = "solid"` erzwingt das B-Rep (langsam: 900 Flächen + ein Boolean ≈ 4 s), `as = "mesh"` das
-Netz. Beispiel: `examples/spec/stl_import.mcad`.
+Netz. Beispiel: `tests/models/spec/stl_import.mcad`.
 
 **Kollisions-Asserts** (Plan 21 C, `mcad usage asserts`): Prüfungen nach der Auswertung,
 Verletzung = Warnung (`mcad check` Exit 0, Zeile „Asserts: 4 von 4 geprüft, 0 verletzt“),
@@ -566,7 +566,7 @@ nicht“, Überschneidung, nur Linien-/Punktkontakt → Warnung; Kontaktfläche 
 Asserts sind Gruppen und lassen sich schachteln; benannte Instanzen darin bleiben Bauteile.
 `mcad render` zeichnet Schnittkörper rot, Kontaktflächen grün, Spalte als Maßlinie
 (`--show asserts` beschriftet alles); `mcad inspect --line N` listet die Paare.
-Beispiel: `examples/spec/asserts.mcad`.
+Beispiel: `tests/models/spec/asserts.mcad`.
 
 **Profile:** 2D-Formen (`square`, `rect`, `circle`, `polygon`, `spline`) in `linear_extrude`,
 `rotate_extrude`, `loft`, `sweep`; Freiformflächen mit `surface(points)` + `thicken(t)`.

@@ -86,11 +86,11 @@ table.toc code { font-size: 7.6pt; }
 <section class="page title">
   <div class="kicker">Parametrisches CAD · Beispielsammlung</div>
   <h1>Alltagsmodelle<br>Katalog</h1>
-  <p class="lead">19 parametrische Modelle aus <code>examples/alltag/</code>: Haushalt, Schreibtisch, Werkstatt und typische Maschinenbauteile – vom Becher bis zum Stehlagerbock.</p>
-  <p>Die Sammlung dient zweierlei: als Vorlage für eigene Teile (jedes Modell ist ein Modul mit Standardwerten, alle Maße in mm) und als Testsuite, die die Sprache in der Breite nutzt – Raster und Anker, Verrundung und Fase über Zonen, <code>shell</code>, <code>loft</code>, <code>sweep</code>, Profile, <code>include</code>/<code>use</code>, benannte Instanzen als Bauteile. Die Regression <code>tests/alltag/check.sh</code> prüft alle Modelle; gefundene Fehler und Schwächen stehen in <code>examples/alltag/README.md</code>.</p>
+  <p class="lead">19 parametrische Modelle aus <code>tests/models/alltag/</code>: Haushalt, Schreibtisch, Werkstatt und typische Maschinenbauteile – vom Becher bis zum Stehlagerbock.</p>
+  <p>Die Sammlung dient zweierlei: als Vorlage für eigene Teile (jedes Modell ist ein Modul mit Standardwerten, alle Maße in mm) und als Testsuite, die die Sprache in der Breite nutzt – Raster und Anker, Verrundung und Fase über Zonen, <code>shell</code>, <code>loft</code>, <code>sweep</code>, Profile, <code>include</code>/<code>use</code>, benannte Instanzen als Bauteile. Die Regression <code>tests/alltag/check.sh</code> prüft alle Modelle; gefundene Fehler und Schwächen stehen in <code>tests/models/alltag/README.md</code>.</p>
   <p>Je Modell zeigt der Katalog eine Seite mit Beschreibung, Rendering, Ansichten, Kenndaten, Parametern und verwendeten Sprachmitteln; Baugruppen haben eine zweite Seite mit Bauteilen, gemessenen Abständen und einem Schnitt bzw. den Ankern. Alle Werte sind mit der CLI gemessen.</p>
   <h3 style="margin-top:6mm">Ein Modell öffnen</h3>
-<div class="howto"><code>cad examples/alltag/becher.scad</code><span>Desktop-UI: Editor und 3D</span><code>cad examples/alltag/gehaeuse/</code><span>Baugruppe als Projekt (Ordner)</span><code>cad render examples/alltag/becher.scad -o becher.png --views all</code><span>headless: Bild</span><code>cad outline examples/alltag/becher.scad</code><span>Parameter, Raster, Anker, Bauteile</span><code>cad measure examples/alltag/becher.scad --volume --colors</code><span>Volumen, Masse je Farbe</span><code>cad export examples/alltag/zahnrad.scad --all-parts -o teile/</code><span>STL/STEP/3MF je Bauteil</span></div>
+<div class="howto"><code>cad tests/models/alltag/becher.scad</code><span>Desktop-UI: Editor und 3D</span><code>cad tests/models/alltag/gehaeuse/</code><span>Baugruppe als Projekt (Ordner)</span><code>cad render tests/models/alltag/becher.scad -o becher.png --views all</code><span>headless: Bild</span><code>cad outline tests/models/alltag/becher.scad</code><span>Parameter, Raster, Anker, Bauteile</span><code>cad measure tests/models/alltag/becher.scad --volume --colors</code><span>Volumen, Masse je Farbe</span><code>cad export tests/models/alltag/zahnrad.scad --all-parts -o teile/</code><span>STL/STEP/3MF je Bauteil</span></div>
   <div class="facts">
     <div><b>19</b><span>Modelle</span></div>
     <div><b>7</b><span>mit mehreren Bauteilen</span></div>
@@ -120,7 +120,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">handystaender()</span><span class="pp"><b>w</b> = 70</span><span class="pp"><b>a</b> = 65</span><span class="pp"><b>lehne</b> = 95</span><span class="pp"><b>t</b> = 5</span><span class="pp"><b>lippe</b> = 12</span><span class="pp"><b>ablage</b> = 14</span><span class="pp"><b>kabel_d</b> = 9</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">Funktion</span><span class="ch">let</span><span class="ch">polygon</span><span class="ch">linear_extrude</span><span class="ch">fillet-Zonen</span><span class="ch">zone</span><span class="ch">box(a, b)</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/handystaender.scad</code><span>headless</span><code>cad render examples/alltag/handystaender.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/handystaender.scad</code><span>headless</span><code>cad render tests/models/alltag/handystaender.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model" id="m-becher">
@@ -133,7 +133,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">becher()</span><span class="pp"><b>ru</b> = 36</span><span class="pp"><b>ro</b> = 41</span><span class="pp"><b>h</b> = 95</span><span class="pp"><b>wand</b> = 2.8</span><span class="pp"><b>boden_r</b> = 6</span><span class="pp"><b>henkel_d</b> = 9</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">Funktion</span><span class="ch">polygon</span><span class="ch">spline</span><span class="ch">rotate_extrude</span><span class="ch">sweep</span><span class="ch">shell</span><span class="ch">fillet-Zonen</span><span class="ch">zone</span><span class="ch">union(fillet)</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/becher.scad</code><span>headless</span><code>cad render examples/alltag/becher.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/becher.scad</code><span>headless</span><code>cad render tests/models/alltag/becher.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model" id="m-kabelclip">
@@ -146,7 +146,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">kabelclip()</span><span class="pp"><b>dicke</b> = 19</span><span class="pp"><b>spiel</b> = 0.4</span><span class="pp"><b>t</b> = 3.5</span><span class="pp"><b>arm_o</b> = 28</span><span class="pp"><b>arm_u</b> = 18</span><span class="pp"><b>n</b> = 4</span><span class="pp"><b>kabel_d</b> = 6</span><span class="pp"><b>pitch</b> = 12</span><span class="pp"><b>block_h</b> = 10</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">indizierte Rasterebenen</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">Listen-Komprehension</span><span class="ch">for</span><span class="ch">polygon</span><span class="ch">linear_extrude</span><span class="ch">fillet-Zonen</span><span class="ch">zone</span><span class="ch">difference(fillet/chamfer)</span><span class="ch">box(a, b)</span><span class="ch">cylinder(a, b, r)</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/kabelclip.scad</code><span>headless</span><code>cad render examples/alltag/kabelclip.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/kabelclip.scad</code><span>headless</span><code>cad render tests/models/alltag/kabelclip.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model" id="m-wandhaken">
@@ -159,7 +159,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">wandhaken()</span><span class="pp"><b>b</b> = 32</span><span class="pp"><b>h</b> = 80</span><span class="pp"><b>t</b> = 6</span><span class="pp"><b>ecke</b> = 8</span><span class="pp"><b>schraube_d</b> = 4.2</span><span class="pp"><b>kopf_d</b> = 8.5</span><span class="pp"><b>haken_d</b> = 9</span><span class="pp"><b>ausladung</b> = 38</span><span class="pp"><b>knauf_d</b> = 14</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">for</span><span class="ch">spline</span><span class="ch">sweep</span><span class="ch">fillet-Zonen</span><span class="ch">chamfer-Zonen</span><span class="ch">zone</span><span class="ch">union(fillet)</span><span class="ch">box(a, b)</span><span class="ch">Kegel (r1, r2)</span><span class="ch">sphere</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/wandhaken.scad</code><span>headless</span><code>cad render examples/alltag/wandhaken.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/wandhaken.scad</code><span>headless</span><code>cad render tests/models/alltag/wandhaken.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model" id="m-seifenschale">
@@ -172,7 +172,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">seifenschale()</span><span class="pp"><b>l</b> = 115</span><span class="pp"><b>b</b> = 80</span><span class="pp"><b>h</b> = 24</span><span class="pp"><b>wand</b> = 2.2</span><span class="pp"><b>ecke</b> = 14</span><span class="pp"><b>n</b> = 7</span><span class="pp"><b>fuss_h</b> = 3</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">indizierte Rasterebenen</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">Listen-Komprehension</span><span class="ch">for</span><span class="ch">shell</span><span class="ch">fillet-Zonen</span><span class="ch">zone</span><span class="ch">difference(fillet/chamfer)</span><span class="ch">box(a, b)</span><span class="ch">cylinder(a, b, r)</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/seifenschale.scad</code><span>headless</span><code>cad render examples/alltag/seifenschale.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/seifenschale.scad</code><span>headless</span><code>cad render tests/models/alltag/seifenschale.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model" id="m-stiftebox">
@@ -185,7 +185,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">stiftebox()</span><span class="pp"><b>faecher</b> = [38, 26, 26]</span><span class="pp"><b>tiefe</b> = 70</span><span class="pp"><b>h</b> = 95</span><span class="pp"><b>wand</b> = 2.4</span><span class="pp"><b>boden</b> = 3</span><span class="pp"><b>vorn_t</b> = 22</span><span class="pp"><b>vorn_h</b> = 45</span><span class="pp"><b>ecke</b> = 5</span><span class="pp"><b>ecke_i</b> = 2</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">Funktion</span><span class="ch">Rekursion</span><span class="ch">Listen-Komprehension</span><span class="ch">for</span><span class="ch">if / ?:</span><span class="ch">fillet-Zonen</span><span class="ch">chamfer-Zonen</span><span class="ch">zone</span><span class="ch">box(a, b)</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/stiftebox.scad</code><span>headless</span><code>cad render examples/alltag/stiftebox.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/stiftebox.scad</code><span>headless</span><code>cad render tests/models/alltag/stiftebox.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model" id="m-tuerstopper">
@@ -198,7 +198,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">tuerstopper()</span><span class="pp"><b>l</b> = 120</span><span class="pp"><b>b</b> = 44</span><span class="pp"><b>h_hinten</b> = 32</span><span class="pp"><b>h_mitte</b> = 14</span><span class="pp"><b>spitze</b> = 3</span><span class="pp"><b>rillen</b> = 6</span><span class="pp"><b>loch_d</b> = 8</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">indizierte Rasterebenen</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">Funktion</span><span class="ch">Listen-Komprehension</span><span class="ch">for</span><span class="ch">polygon</span><span class="ch">loft</span><span class="ch">chamfer-Zonen</span><span class="ch">zone</span><span class="ch">box(a, b)</span><span class="ch">cylinder(a, b, r)</span><span class="ch">sphere</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/tuerstopper.scad</code><span>headless</span><code>cad render examples/alltag/tuerstopper.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/tuerstopper.scad</code><span>headless</span><code>cad render tests/models/alltag/tuerstopper.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model" id="m-topfuntersetzer">
@@ -211,7 +211,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">topfuntersetzer()</span><span class="pp"><b>d</b> = 180</span><span class="pp"><b>h</b> = 8</span><span class="pp"><b>steg</b> = 6</span><span class="pp"><b>ringe</b> = [36, 62, 87]</span><span class="pp"><b>speichen</b> = 8</span><span class="pp"><b>mitte_r</b> = 20</span><span class="pp"><b>fuss_d</b> = 10</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">for</span><span class="ch">rotate_extrude</span><span class="ch">chamfer-Zonen</span><span class="ch">zone</span><span class="ch">box(a, b)</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/topfuntersetzer.scad</code><span>headless</span><code>cad render examples/alltag/topfuntersetzer.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/topfuntersetzer.scad</code><span>headless</span><code>cad render tests/models/alltag/topfuntersetzer.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model" id="m-flansch">
@@ -224,7 +224,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">flansch()</span><span class="pp"><b>d_aussen</b> = 120</span><span class="pp"><b>t</b> = 12</span><span class="pp"><b>d_bund</b> = 60</span><span class="pp"><b>h_bund</b> = 28</span><span class="pp"><b>d_bohrung</b> = 32</span><span class="pp"><b>lk</b> = 90</span><span class="pp"><b>n</b> = 6</span><span class="pp"><b>d_loch</b> = 11</span><span class="pp"><b>nut_t</b> = 1.5</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">for</span><span class="ch">polygon</span><span class="ch">rotate_extrude</span><span class="ch">fillet-Zonen</span><span class="ch">chamfer-Zonen</span><span class="ch">difference(fillet/chamfer)</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/flansch.scad</code><span>headless</span><code>cad render examples/alltag/flansch.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/flansch.scad</code><span>headless</span><code>cad render tests/models/alltag/flansch.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model" id="m-lagerbock">
@@ -237,7 +237,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">lagerbock()</span><span class="pp"><b>l</b> = 80</span><span class="pp"><b>b</b> = 30</span><span class="pp"><b>t</b> = 8</span><span class="pp"><b>achse_h</b> = 30</span><span class="pp"><b>auge_r</b> = 20</span><span class="pp"><b>auge_b</b> = 14</span><span class="pp"><b>lager_d</b> = 22</span><span class="pp"><b>lager_b</b> = 8</span><span class="pp"><b>schulter_d</b> = 18</span><span class="pp"><b>langloch</b> = [6.5, 14]</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">for</span><span class="ch">fillet-Zonen</span><span class="ch">chamfer-Zonen</span><span class="ch">zone</span><span class="ch">difference(fillet/chamfer)</span><span class="ch">box(a, b)</span><span class="ch">cylinder(a, b, r)</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/lagerbock.scad</code><span>headless</span><code>cad render examples/alltag/lagerbock.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/lagerbock.scad</code><span>headless</span><code>cad render tests/models/alltag/lagerbock.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model" id="m-winkel_rippe">
@@ -250,7 +250,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">winkel_rippe()</span><span class="pp"><b>a</b> = 60</span><span class="pp"><b>h</b> = 50</span><span class="pp"><b>b</b> = 40</span><span class="pp"><b>t</b> = 5</span><span class="pp"><b>rippe_t</b> = 4</span><span class="pp"><b>rippe_l</b> = 30</span><span class="pp"><b>n_rippen</b> = 1</span><span class="pp"><b>loch_d</b> = 5.5</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">Listen-Komprehension</span><span class="ch">for</span><span class="ch">polygon</span><span class="ch">linear_extrude</span><span class="ch">fillet-Zonen</span><span class="ch">zone</span><span class="ch">difference(fillet/chamfer)</span><span class="ch">box(a, b)</span><span class="ch">cylinder(a, b, r)</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/winkel_rippe.scad</code><span>headless</span><code>cad render examples/alltag/winkel_rippe.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/winkel_rippe.scad</code><span>headless</span><code>cad render tests/models/alltag/winkel_rippe.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model" id="m-kuehlkoerper">
@@ -263,7 +263,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">kuehlkoerper()</span><span class="pp"><b>l</b> = 60</span><span class="pp"><b>b</b> = 50</span><span class="pp"><b>basis</b> = 5</span><span class="pp"><b>h</b> = 25</span><span class="pp"><b>n</b> = 9</span><span class="pp"><b>rippe_t</b> = 1.8</span><span class="pp"><b>fuss_r</b> = 1.5</span><span class="pp"><b>loch_abstand</b> = 40</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">indizierte Rasterebenen</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">Listen-Komprehension</span><span class="ch">for</span><span class="ch">fillet-Zonen</span><span class="ch">zone</span><span class="ch">box(a, b)</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/kuehlkoerper.scad</code><span>headless</span><code>cad render examples/alltag/kuehlkoerper.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/kuehlkoerper.scad</code><span>headless</span><code>cad render tests/models/alltag/kuehlkoerper.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model" id="m-zahnrad">
@@ -276,7 +276,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">Datei</span><span class="pp"><b>m</b> = 2</span><span class="pp"><b>z1</b> = 20</span><span class="pp"><b>z2</b> = 12</span><span class="grp">zahnrad()</span><span class="pp"><b>m</b> = 2</span><span class="pp"><b>z</b> = 20</span><span class="pp"><b>b</b> = 10</span><span class="pp"><b>bohrung</b> = 8</span><span class="pp"><b>nabe_d</b> = 0</span><span class="pp"><b>nabe_h</b> = 0</span><span class="pp"><b>nut_b</b> = 3</span><span class="pp"><b>nut_t</b> = 1.4</span><span class="pp"><b>d_flach</b> = 0</span><span class="pp"><b>loecher</b> = 0</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">Funktion</span><span class="ch">let</span><span class="ch">Listen-Komprehension</span><span class="ch">each</span><span class="ch">for</span><span class="ch">if / ?:</span><span class="ch">polygon</span><span class="ch">linear_extrude</span><span class="ch">difference(fillet/chamfer)</span><span class="ch">intersection</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/zahnrad.scad</code><span>headless</span><code>cad render examples/alltag/zahnrad.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/zahnrad.scad</code><span>headless</span><code>cad render tests/models/alltag/zahnrad.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model">
@@ -289,7 +289,7 @@ table.toc code { font-size: 7.6pt; }
   <tr><td><code>measure --interference</code></td><td colspan="2">keine Kollision (Toleranz 0,001 mm³)</td></tr>
   </tbody></table>
   <figure class="extra"><img src="img/zahnrad-eingriff.jpg" alt="Draufsicht, 6-fach vergrößert auf die Engstelle des Eingriffs: der Spalt zwischen den Flanken ist das gemessene Flankenspiel."><figcaption>Draufsicht, 6-fach vergrößert auf die Engstelle des Eingriffs: der Spalt zwischen den Flanken ist das gemessene Flankenspiel.</figcaption></figure>
-  <div class="cmd"><span>Prüfen</span><code>cad measure examples/alltag/zahnrad.scad --interference --clearance rad1 rad2</code></div>
+  <div class="cmd"><span>Prüfen</span><code>cad measure tests/models/alltag/zahnrad.scad --interference --clearance rad1 rad2</code></div>
 </section>
 
 <section class="page model" id="m-rohrschelle">
@@ -302,7 +302,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">Datei</span><span class="pp"><b>rohr_d</b> = 32</span><span class="pp"><b>b</b> = 20</span><span class="grp">halbschelle()</span><span class="pp"><b>rohr_d</b> = 32</span><span class="pp"><b>t</b> = 4</span><span class="pp"><b>b</b> = 20</span><span class="pp"><b>lasche</b> = 12</span><span class="pp"><b>lasche_t</b> = 5</span><span class="pp"><b>spalt</b> = 2</span><span class="pp"><b>loch_d</b> = 5.5</span><span class="pp"><b>stutzen</b> = false</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">for</span><span class="ch">if / ?:</span><span class="ch">rotate_extrude</span><span class="ch">chamfer-Zonen</span><span class="ch">zone</span><span class="ch">difference(fillet/chamfer)</span><span class="ch">box(a, b)</span><span class="ch">cylinder(a, b, r)</span><span class="ch">mirror</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/rohrschelle.scad</code><span>headless</span><code>cad render examples/alltag/rohrschelle.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/rohrschelle.scad</code><span>headless</span><code>cad render tests/models/alltag/rohrschelle.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model">
@@ -315,7 +315,7 @@ table.toc code { font-size: 7.6pt; }
   <tr><td><code>measure --interference</code></td><td colspan="2">keine Kollision (Toleranz 0,001 mm³)</td></tr>
   </tbody></table>
   <figure class="extra"><img src="img/rohrschelle-schnitt.jpg" alt="Schnitt x = 10 (Mitte der Schelle, quer zur Rohrachse), Blick von +x: Halbringe mit Laschen und Bohrungen M5, Klemmspalt 2 mm, Stutzen mit Kernloch für M8, Prüfrohr."><figcaption>Schnitt x = 10 (Mitte der Schelle, quer zur Rohrachse), Blick von +x: Halbringe mit Laschen und Bohrungen M5, Klemmspalt 2 mm, Stutzen mit Kernloch für M8, Prüfrohr.</figcaption></figure>
-  <div class="cmd"><span>Prüfen</span><code>cad measure examples/alltag/rohrschelle.scad --interference --clearance oben unten</code></div>
+  <div class="cmd"><span>Prüfen</span><code>cad measure tests/models/alltag/rohrschelle.scad --interference --clearance oben unten</code></div>
 </section>
 
 <section class="page model" id="m-pi_platte">
@@ -328,7 +328,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">pi_platte()</span><span class="pp"><b>l</b> = 100</span><span class="pp"><b>b</b> = 72</span><span class="pp"><b>t</b> = 3</span><span class="pp"><b>ecke</b> = 6</span><span class="pp"><b>hoehe</b> = 6</span><span class="pp"><b>rand_x</b> = 10</span><span class="pp"><b>rand_y</b> = 8</span><span class="pp"><b>schlitze</b> = 6</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">Listen-Komprehension</span><span class="ch">for</span><span class="ch">if / ?:</span><span class="ch">fillet-Zonen</span><span class="ch">zone</span><span class="ch">union(fillet)</span><span class="ch">$fillet</span><span class="ch">box(a, b)</span><span class="ch">Kegel (r1, r2)</span><span class="ch">color</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/pi_platte.scad</code><span>headless</span><code>cad render examples/alltag/pi_platte.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/pi_platte.scad</code><span>headless</span><code>cad render tests/models/alltag/pi_platte.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model">
@@ -341,7 +341,7 @@ table.toc code { font-size: 7.6pt; }
   <tr><td><code>measure --interference</code></td><td colspan="2">keine Kollision (Toleranz 0,001 mm³)</td></tr>
   </tbody></table>
   <figure class="extra"><img src="img/pi_platte-anker.jpg" alt="Platte mit eingeblendeten Ankern (gelb): die Anker oben der Dome tragen die Platine."><figcaption>Platte mit eingeblendeten Ankern (gelb): die Anker oben der Dome tragen die Platine.</figcaption></figure>
-  <div class="cmd"><span>Prüfen</span><code>cad measure examples/alltag/pi_platte.scad --interference --clearance platte pi</code></div>
+  <div class="cmd"><span>Prüfen</span><code>cad measure tests/models/alltag/pi_platte.scad --interference --clearance platte pi</code></div>
 </section>
 
 <section class="page model" id="m-gehaeuse">
@@ -354,7 +354,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">Datei</span><span class="pp"><b>innen_l</b> = 76</span><span class="pp"><b>innen_b</b> = 56</span><span class="pp"><b>hoehe</b> = 32</span><span class="pp"><b>wand</b> = 2</span><span class="pp"><b>ecke</b> = 5</span><span class="pp"><b>deckel_t</b> = 2.5</span><span class="pp"><b>rand_h</b> = 3</span><span class="pp"><b>spiel</b> = 0.2</span><span class="pp"><b>dom_d</b> = 7</span><span class="pp"><b>kern_d</b> = 2.5</span><span class="pp"><b>durch_d</b> = 3.4</span><span class="pp"><b>schraube_l</b> = 12</span><span class="pp"><b>dom_abstand</b> = 3</span><span class="pp"><b>explosion</b> = 0</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">include</span><span class="ch">use</span><span class="ch">Funktion</span><span class="ch">let</span><span class="ch">for</span><span class="ch">if / ?:</span><span class="ch">shell</span><span class="ch">fillet-Zonen</span><span class="ch">zone</span><span class="ch">difference(fillet/chamfer)</span><span class="ch">union(fillet)</span><span class="ch">$fillet</span><span class="ch">box(a, b)</span><span class="ch">cylinder(a, b, r)</span><span class="ch">Kegel (r1, r2)</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/gehaeuse/gehaeuse.scad</code><span>headless</span><code>cad render examples/alltag/gehaeuse/gehaeuse.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/gehaeuse/gehaeuse.scad</code><span>headless</span><code>cad render tests/models/alltag/gehaeuse/gehaeuse.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model">
@@ -367,7 +367,7 @@ table.toc code { font-size: 7.6pt; }
   <tr><td><code>measure --interference</code></td><td colspan="2">keine Kollision (Toleranz 0,001 mm³)</td></tr>
   </tbody></table>
   <figure class="extra"><img src="img/gehaeuse-schnitt.jpg" alt="Schnitt y = 8,5 (durch die vorderen Dome), Blick von vorn: Schraube im Dom, Deckel mit Zentrierrand auf dem Unterteil."><figcaption>Schnitt y = 8,5 (durch die vorderen Dome), Blick von vorn: Schraube im Dom, Deckel mit Zentrierrand auf dem Unterteil.</figcaption></figure>
-  <div class="cmd"><span>Prüfen</span><code>cad measure examples/alltag/gehaeuse/gehaeuse.scad --interference --clearance unterteil deckel</code></div>
+  <div class="cmd"><span>Prüfen</span><code>cad measure tests/models/alltag/gehaeuse/gehaeuse.scad --interference --clearance unterteil deckel</code></div>
 </section>
 
 <section class="page model" id="m-scharnier">
@@ -380,7 +380,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">Datei</span><span class="pp"><b>laenge</b> = 60</span><span class="pp"><b>augen</b> = 5</span><span class="pp"><b>auge_r</b> = 4</span><span class="pp"><b>blatt_t</b> = 2.5</span><span class="pp"><b>spiel</b> = 0.4</span><span class="pp"><b>bohrung_a</b> = 3</span><span class="pp"><b>bohrung_b</b> = 3.4</span><span class="pp"><b>stift_d</b> = 2.95</span><span class="pp"><b>winkel</b> = 180</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">indizierte Rasterebenen</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">include</span><span class="ch">use</span><span class="ch">Funktion</span><span class="ch">for</span><span class="ch">if / ?:</span><span class="ch">fillet-Zonen</span><span class="ch">zone</span><span class="ch">difference(fillet/chamfer)</span><span class="ch">box(a, b)</span><span class="ch">cylinder(a, b, r)</span><span class="ch">Kegel (r1, r2)</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/scharnier/scharnier.scad</code><span>headless</span><code>cad render examples/alltag/scharnier/scharnier.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/scharnier/scharnier.scad</code><span>headless</span><code>cad render tests/models/alltag/scharnier/scharnier.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model">
@@ -393,7 +393,7 @@ table.toc code { font-size: 7.6pt; }
   <tr><td><code>measure --interference</code></td><td colspan="2">keine Kollision (Toleranz 0,001 mm³)</td></tr>
   </tbody></table>
   <div class="extras2"><figure class="extra"><img src="img/scharnier-schnitt.jpg" alt="Schnitt z = 0 (Mittelebene der Blätter), Draufsicht: Augen von A (unten) und B (oben) abwechselnd mit axialem Spiel, Stift in den Bohrungen."><figcaption>Schnitt z = 0 (Mittelebene der Blätter), Draufsicht: Augen von A (unten) und B (oben) abwechselnd mit axialem Spiel, Stift in den Bohrungen.</figcaption></figure><figure class="extra"><img src="img/scharnier-lager.jpg" alt="Schnitt x = 18 (zweites Auge, Blatt B), Blick von +x, 3,5-fach: Stift Ø 2,95 in der Bohrung 3,4 von B; links Blatt A mit Freiraum."><figcaption>Schnitt x = 18 (zweites Auge, Blatt B), Blick von +x, 3,5-fach: Stift Ø 2,95 in der Bohrung 3,4 von B; links Blatt A mit Freiraum.</figcaption></figure></div>
-  <div class="cmd"><span>Prüfen</span><code>cad measure examples/alltag/scharnier/scharnier.scad --interference --clearance a b</code></div>
+  <div class="cmd"><span>Prüfen</span><code>cad measure tests/models/alltag/scharnier/scharnier.scad --interference --clearance a b</code></div>
 </section>
 
 <section class="page model" id="m-pflanztopf">
@@ -406,7 +406,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">Datei</span><span class="pp"><b>topf_unten</b> = 72</span><span class="pp"><b>topf_oben_d</b> = 100</span><span class="pp"><b>topf_h</b> = 90</span><span class="pp"><b>wand</b> = 2.2</span><span class="pp"><b>boden</b> = 3</span><span class="pp"><b>fuss_h</b> = 4</span><span class="pp"><b>spalt</b> = 4</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">include</span><span class="ch">use</span><span class="ch">Funktion</span><span class="ch">let</span><span class="ch">Listen-Komprehension</span><span class="ch">for</span><span class="ch">if / ?:</span><span class="ch">polygon</span><span class="ch">spline</span><span class="ch">rotate_extrude</span><span class="ch">loft</span><span class="ch">shell</span><span class="ch">fillet-Zonen</span><span class="ch">$fillet</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/pflanztopf/pflanztopf.scad</code><span>headless</span><code>cad render examples/alltag/pflanztopf/pflanztopf.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/pflanztopf/pflanztopf.scad</code><span>headless</span><code>cad render tests/models/alltag/pflanztopf/pflanztopf.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model">
@@ -419,7 +419,7 @@ table.toc code { font-size: 7.6pt; }
   <tr><td><code>measure --interference</code></td><td colspan="2">keine Kollision (Toleranz 0,001 mm³)</td></tr>
   </tbody></table>
   <figure class="extra"><img src="img/pflanztopf-schnitt.jpg" alt="Schnitt y = 0, Blick von vorn: Wand des Lofts, Füße und Abflusslöcher, Topf im Untersetzer."><figcaption>Schnitt y = 0, Blick von vorn: Wand des Lofts, Füße und Abflusslöcher, Topf im Untersetzer.</figcaption></figure>
-  <div class="cmd"><span>Prüfen</span><code>cad measure examples/alltag/pflanztopf/pflanztopf.scad --interference --clearance topf untersetzer</code></div>
+  <div class="cmd"><span>Prüfen</span><code>cad measure tests/models/alltag/pflanztopf/pflanztopf.scad --interference --clearance topf untersetzer</code></div>
 </section>
 
 <section class="page model" id="m-schluesselbrett">
@@ -432,7 +432,7 @@ table.toc code { font-size: 7.6pt; }
   </div>
   <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips"><span class="grp">Datei</span><span class="pp"><b>brett_l</b> = 200</span><span class="pp"><b>brett_h</b> = 70</span><span class="pp"><b>brett_t</b> = 12</span><span class="pp"><b>anzahl</b> = 5</span><span class="pp"><b>haken_z</b> = 22</span><span class="pp"><b>zapfen_d</b> = 6</span><span class="pp"><b>zapfen_l</b> = 8</span><span class="pp"><b>bohrung_d</b> = 6.3</span></div></div>
   <div class="block"><h3>Sprachmittel</h3><div class="chips"><span class="ch">Raster (grid)</span><span class="ch">indizierte Rasterebenen</span><span class="ch">Anker</span><span class="ch">Anker mit dir</span><span class="ch">benannte Instanzen</span><span class="ch">include</span><span class="ch">use</span><span class="ch">Funktion</span><span class="ch">Listen-Komprehension</span><span class="ch">for</span><span class="ch">spline</span><span class="ch">sweep</span><span class="ch">fillet-Zonen</span><span class="ch">chamfer-Zonen</span><span class="ch">zone</span><span class="ch">difference(fillet/chamfer)</span><span class="ch">union(fillet)</span><span class="ch">box(a, b)</span><span class="ch">cylinder(a, b, r)</span><span class="ch">sphere</span></div></div>
-  <div class="cmd"><span>Öffnen</span><code>cad examples/alltag/schluesselbrett/schluesselbrett.scad</code><span>headless</span><code>cad render examples/alltag/schluesselbrett/schluesselbrett.scad -o bild.png --views all</code></div>
+  <div class="cmd"><span>Öffnen</span><code>cad tests/models/alltag/schluesselbrett/schluesselbrett.scad</code><span>headless</span><code>cad render tests/models/alltag/schluesselbrett/schluesselbrett.scad -o bild.png --views all</code></div>
 </section>
 
 <section class="page model">
@@ -445,6 +445,6 @@ table.toc code { font-size: 7.6pt; }
   <tr><td><code>measure --interference</code></td><td colspan="2">keine Kollision (Toleranz 0,001 mm³)</td></tr>
   </tbody></table>
   <figure class="extra"><img src="img/schluesselbrett-schnitt.jpg" alt="Schnitt x = 20 (durch Haken h[0]), Blick von +x: Zapfen in der Bohrung, Fase der Vorderkante, Briefrille oben."><figcaption>Schnitt x = 20 (durch Haken h[0]), Blick von +x: Zapfen in der Bohrung, Fase der Vorderkante, Briefrille oben.</figcaption></figure>
-  <div class="cmd"><span>Prüfen</span><code>cad measure examples/alltag/schluesselbrett/schluesselbrett.scad --interference --clearance brett h[0]</code></div>
+  <div class="cmd"><span>Prüfen</span><code>cad measure tests/models/alltag/schluesselbrett/schluesselbrett.scad --interference --clearance brett h[0]</code></div>
 </section>
 </body></html>

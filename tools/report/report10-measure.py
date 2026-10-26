@@ -73,12 +73,12 @@ def main():
             if work.exists():
                 shutil.rmtree(work)
             if copy_dir:
-                shutil.copytree(ROOT / "examples" / copy_dir, work)
+                shutil.copytree(ROOT / "tests" / "models" / copy_dir, work)
                 f = work / Path(rel).name
             else:
                 work.mkdir()
                 f = work / Path(rel).name
-                shutil.copy(ROOT / "examples" / rel, f)
+                shutil.copy(ROOT / "tests" / "models" / rel, f)
             original = f.read_text()
             assert old in original, (rel, old)
             out = tmp / "out"
@@ -119,7 +119,7 @@ def main():
         print(f"cube(1) check: daemon {extra['tiny_check_daemon']['median']:.1f} ms, local {extra['tiny_check_local']['median']:.1f} ms")
         # a short session as shown in the report: verbose output, status, log
         demo = []
-        ex = lambda r: str(ROOT / "examples" / r)
+        ex = lambda r: str(ROOT / "tests" / "models" / r)
         for args in (["check", ex("spec/variabler_radius.scad"), "--verbose"],
                      ["render", ex("spec/variabler_radius.scad"), "-o", str(tmp / "v.png"), "--verbose"],
                      ["export", ex("spec/lochplatte.scad"), "-o", str(tmp / "l.step"), "--verbose"],

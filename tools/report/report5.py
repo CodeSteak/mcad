@@ -79,7 +79,7 @@ def run_all() -> None:
     r = sh([STEP_PY, "tests/step/verify.py", "--cad", str(CAD), "--out", str(WORK), "--stl-dir", str(WORK / "readback")])
     m = re.search(r"(\d+/\d+) passed", r.stdout)
     tests["tests/step/verify.py"] = {"ok": r.returncode == 0, "text": (m.group(0) if m else r.stdout[-200:])}
-    models = sorted((ROOT / "examples" / "openscad-compat").glob("*.scad")) + sorted((ROOT / "examples" / "spec").glob("*.scad"))
+    models = sorted((ROOT / "tests" / "models" / "openscad-compat").glob("*.scad")) + sorted((ROOT / "tests" / "models" / "spec").glob("*.scad"))
     r = sh([str(CAD), "diff-kernels", *map(str, models), "--json"])
     (WORK / "diff-kernels.json").write_text(r.stdout)
     tests["cad diff-kernels (alle Beispiele)"] = {"ok": r.returncode in (0, 1), "text": f"Exit {r.returncode} (1 = nicht alle Knoten gleich)"}

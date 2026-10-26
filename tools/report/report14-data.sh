@@ -17,21 +17,21 @@ export CAD_NO_DAEMON=1
 r() { "$CAD" render "$@" > /dev/null; }
 
 # renderings of the examples
-r examples/spec/skizze_profil.scad -o "$CLI/profil.png" --size 900x560
-r examples/spec/skizze_profil.scad -o "$CLI/profil-oben.png" --size 900x560 --view top
-r examples/spec/skizze_profil.scad -o "$CLI/profil-zeile12.png" --size 900x560 --line 12 --view top --module halter
-r examples/spec/skizze_zahnriemenscheibe.scad -o "$CLI/scheibe.png" --size 700x560
-r examples/spec/skizze_zahnriemenscheibe.scad -o "$CLI/scheibe-oben.png" --size 700x560 --view top
-r examples/spec/skizze_sweep.scad -o "$CLI/sweep.png" --size 900x560
-r examples/spec/skizze_bibliothek.scad -o "$CLI/bibliothek.png" --size 900x560
-r examples/spec/skizze_profil.scad -o "$CLI/profil-schnitt.png" --size 900x560 --section z=2.5 --view top
+r tests/models/spec/skizze_profil.scad -o "$CLI/profil.png" --size 900x560
+r tests/models/spec/skizze_profil.scad -o "$CLI/profil-oben.png" --size 900x560 --view top
+r tests/models/spec/skizze_profil.scad -o "$CLI/profil-zeile12.png" --size 900x560 --line 12 --view top --module halter
+r tests/models/spec/skizze_zahnriemenscheibe.scad -o "$CLI/scheibe.png" --size 700x560
+r tests/models/spec/skizze_zahnriemenscheibe.scad -o "$CLI/scheibe-oben.png" --size 700x560 --view top
+r tests/models/spec/skizze_sweep.scad -o "$CLI/sweep.png" --size 900x560
+r tests/models/spec/skizze_bibliothek.scad -o "$CLI/bibliothek.png" --size 900x560
+r tests/models/spec/skizze_profil.scad -o "$CLI/profil-schnitt.png" --size 900x560 --section z=2.5 --view top
 
 # outline and check output
-"$CAD" outline examples/spec/skizze_bibliothek.scad > "$OUT/outline.txt" 2>&1 || true
-"$CAD" check examples/spec/skizze_profil.scad > "$OUT/check-profil.txt" 2>&1 || true
+"$CAD" outline tests/models/spec/skizze_bibliothek.scad > "$OUT/outline.txt" 2>&1 || true
+"$CAD" check tests/models/spec/skizze_profil.scad > "$OUT/check-profil.txt" 2>&1 || true
 printf 'linear_extrude(2) sketch {\n    start([0, 0]);\n    line(to = [30, 0]);\n    arc(to = [30, 20], r = 5);\n    line(to = [0, 20]);\n}\nlinear_extrude(2) translate([40, 0]) sketch {\n    start([0, 0]);\n    line(to = [10, 10]);\n    line(to = [10, 0]);\n    line(to = [0, 10]);\n    close();\n}\n' > "$CASES/fehler.scad"
 "$CAD" check "$CASES/fehler.scad" > "$OUT/check-fehler.txt" 2>&1 || true
-"$CAD" check examples/spec/skizze_bibliothek.scad --module teile.platte.lochplatte > "$OUT/check-modul.txt" 2>&1 || true
+"$CAD" check tests/models/spec/skizze_bibliothek.scad --module teile.platte.lochplatte > "$OUT/check-modul.txt" 2>&1 || true
 
 # exact volumes: case name, source, formula (python expression)
 cat > "$CASES/list.txt" <<'EOF'
@@ -61,7 +61,7 @@ done < "$CASES/list.txt"
 
 # STEP: curves and surfaces written by the exporter
 : > "$OUT/step.tsv"
-for f in examples/spec/skizze_profil.scad examples/spec/skizze_zahnriemenscheibe.scad examples/spec/skizze_sweep.scad "$CASES/rechteck_halbkreis.scad" "$CASES/torus.scad"; do
+for f in tests/models/spec/skizze_profil.scad tests/models/spec/skizze_zahnriemenscheibe.scad tests/models/spec/skizze_sweep.scad "$CASES/rechteck_halbkreis.scad" "$CASES/torus.scad"; do
   n=$(basename "$f" .scad)
   "$CAD" export "$f" -o "$OUT/$n.step" --json > "$OUT/$n.export.json" 2>/dev/null || true
   python3 - "$n" "$OUT/$n.export.json" "$OUT/$n.step" >> "$OUT/step.tsv" <<'EOF'

@@ -1,4 +1,4 @@
-//! Stage 1 of the OpenSCAD comparison: every file in `examples/openscad-compat/`
+//! Stage 1 of the OpenSCAD comparison: every file in `tests/models/openscad-compat/`
 //! evaluates with `cad_eval::eval_source` without error diagnostics, yields 3D
 //! geometry, and prints the same `echo` lines as OpenSCAD 2021.01.
 //!
@@ -38,7 +38,7 @@ fn echo_problems(ours: &[String], theirs: &[String]) -> Vec<String> {
 #[test]
 fn openscad_models_stage1() {
     let reference = reference();
-    let files = model_files("examples/openscad-compat");
+    let files = model_files("tests/models/openscad-compat");
     assert!(files.len() >= 25, "expected at least 25 models, found {}", files.len());
     let refs = reference["files"].as_object().unwrap();
 

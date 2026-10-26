@@ -46,4 +46,4 @@ Kernel time (sphere-like meshes; the limit 500 keeps import + one Boolean ≲ 2 
 | 4646 | 7.5 s | 107 s | 0 s |
 | 18556 (20000 triangles) | – | – | 0 s (parse + prepare 0.08 s) |
 
-Example model: `examples/spec/stl_import.mcad`.
+Example model: `tests/models/spec/stl_import.mcad`.

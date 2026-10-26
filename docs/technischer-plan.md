@@ -381,7 +381,7 @@ Ein natives Programm `mcad` (Crate `cad-cli`; bis 0.2 hieß das Binary `cad`) au
 - `render` nutzt einen kleinen Software-Rasterizer in Rust (`cad-render`: Z-Buffer, Schattierung, Kantenlinien, Ortho/Perspektive, Marker, Beschriftung mit eingebetteter Bitmap-Schrift). Er braucht keine GPU und läuft damit auch in Containern und CI.
 - Schnitt: Clipping im Renderer mit gefüllter Kappe nach dem Stencil-Prinzip (Kappe, wo der Sichtstrahl bis zur Ebene die Oberfläche ungerade oft kreuzt), kein Kernel-Boolean. Gleiches Verfahren und gleiche Konvention wie die spätere GPU-Schnittansicht der UI: Ebene durch `p` mit Normale `n` entfernt die Hälfte, in die `n` zeigt (es bleibt `(q − p) · n ≤ 0`).
 - **Daemon** (Bericht 10): Kernel-Ergebnisse sind Handles der nativen Bibliothek und nicht serialisierbar; statt eines Cache auf der Platte hält ein Hintergrundprozess den Engine-Cache. `check`, `eval`, `inspect`, `render`, `export`, `outline`, `measure` und `set` verbinden sich über `cad-ipc` (Endpunkt `daemon`, Socket-Ordner 0700, Socket 0600, Peer-UID) mit `mcad daemon serve` oder starten ihn abgekoppelt (neue Sitzung, Ausgabe in `daemon.log`); genau ein Daemon über eine `flock`-Sperre. Der Client schickt Argumente, Arbeitsverzeichnis und stdin; der Daemon führt dieselbe Befehlsfunktion aus (Sitzung auf seiner Engine, Wechsel ins Arbeitsverzeichnis, Dateischreiben wird aufgezeichnet) und liefert stdout, stderr, Exit-Code und die Dateien, die der Client schreibt. Ausgabe wie ohne Daemon, auch die Flächen-Tags: die Sitzung nummeriert sie in der Reihenfolge, in der eine frische Engine sie vergäbe. Eine Engine für alle Projekte (inhaltsbasierte Schlüssel); Grenzen 512 MiB (Knotenergebnisse + Netze; Kosten eines Knotens im Daemon am Heap gemessen, sonst aus der Topologie geschätzt), 16384 Einträge, 8 Projekte, Cache leeren bei RSS über Start + 1,5 × Grenze; Ende nach 15 min ohne Anfrage; Watchdog 30 min (Daemon endet, der Befehl läuft ohne Daemon und meldet das); andere Build-ID ersetzt den Daemon. Aus mit `--no-daemon`, `MCAD_NO_DAEMON=1`, `[daemon] enabled = false` (`$XDG_CONFIG_HOME/mcad/config.toml`); ohne Daemon (Windows, Fehler) rechnet der Befehl still selbst. `mcad daemon status|stop|serve`. `mcad watch` behält seinen eigenen Cache im Prozess.
-- **Umbenennung `cad` → `mcad` (0.3.0):** Binary, Programmname, App-ID `dev.mcad.desktop` (Fenstertitel „… – mcad“, Desktop-Datei `dev.mcad.desktop.desktop`, Dateitypen `text/x-mcad` und `application/x-openscad` in `packaging/linux/mcad.xml`), Arch-Paket `mcad` (ersetzt `controller-cad`), Konfiguration `$XDG_CONFIG_HOME/mcad/config.toml`, Socket-Ordner `$XDG_RUNTIME_DIR/mcad` bzw. `/tmp/mcad-<uid>`, Umgebung `MCAD_*`. Rückfall: `CAD_*` wird gelesen, wenn `MCAD_*` fehlt (`cad_ipc::env_var`), die alte `controller-cad/config.toml`, wenn es die neue nicht gibt; die Liste zuletzt geöffneter Dateien der Desktop-App wird einmal aus dem Ordner der alten App-ID übernommen. Neue Dateien heißen `.mcad` (UI „Neu“, „Speichern unter“, neuer Ordner `main.mcad`, Beispiele, Testdaten); `.scad` öffnet überall (CLI, `include`/`use`, Datei-Dialoge, Ordner-Projekte, Upload, ZIP), gemeinsame Prüfung `cad_eval::is_model_file` bzw. `isModelFile` in der UI. `.scad` bleiben: `examples/openscad-compat/`, `tests/openscad-compat/` (Vergleich mit OpenSCAD), `tests/farben-pruefung/cases/` (Momentaufnahme einer unabhängigen Prüfung mit Bildern und Bericht) und die Fallstudie von Bericht 8. Unverändert: Crate-Namen `cad-*`, Repository `controller-cad`, Schriftname „cad stencil mono“ (steht in Modellen), IndexedDB-Name der Browser-App (gespeicherte Projekte).
+- **Umbenennung `cad` → `mcad` (0.3.0):** Binary, Programmname, App-ID `dev.mcad.desktop` (Fenstertitel „… – mcad“, Desktop-Datei `dev.mcad.desktop.desktop`, Dateitypen `text/x-mcad` und `application/x-openscad` in `packaging/linux/mcad.xml`), Arch-Paket `mcad` (ersetzt `controller-cad`), Konfiguration `$XDG_CONFIG_HOME/mcad/config.toml`, Socket-Ordner `$XDG_RUNTIME_DIR/mcad` bzw. `/tmp/mcad-<uid>`, Umgebung `MCAD_*`. Rückfall: `CAD_*` wird gelesen, wenn `MCAD_*` fehlt (`cad_ipc::env_var`), die alte `controller-cad/config.toml`, wenn es die neue nicht gibt; die Liste zuletzt geöffneter Dateien der Desktop-App wird einmal aus dem Ordner der alten App-ID übernommen. Neue Dateien heißen `.mcad` (UI „Neu“, „Speichern unter“, neuer Ordner `main.mcad`, Beispiele, Testdaten); `.scad` öffnet überall (CLI, `include`/`use`, Datei-Dialoge, Ordner-Projekte, Upload, ZIP), gemeinsame Prüfung `cad_eval::is_model_file` bzw. `isModelFile` in der UI. `.scad` bleiben: `tests/models/openscad-compat/`, `tests/openscad-compat/` (Vergleich mit OpenSCAD), `tests/farben-pruefung/cases/` (Momentaufnahme einer unabhängigen Prüfung mit Bildern und Bericht) und die Fallstudie von Bericht 8. Unverändert: Crate-Namen `cad-*`, Repository `controller-cad`, Schriftname „cad stencil mono“ (steht in Modellen), IndexedDB-Name der Browser-App (gespeicherte Projekte).
 - Dazu eine Anleitung für Claude Code im Repo (`.claude/skills/cad-cli/SKILL.md`): outline → editieren → check → render (Kontaktbogen mit Rastern/Ankern) → inspect/measure → export.
 
 ---
@@ -1104,7 +1104,7 @@ Inhalt steckt in den Konturen des IR: geänderte SVGs ändern den Cache-Schlüss
 beobachtet die Datendateien, die Desktop-App liest und schreibt sie (Schriften dekodiert).
 UI: „⇡ Datei laden“ (SVG, TTF/OTF, .scad), SVGs öffnen im Editor, Schrift-Tabs zeigen einen
 Hinweis; ZIP und Ordner nehmen die Datendateien mit; Einzelbeispiele, die SVGs aus
-`examples/svg` importieren, öffnen als Projekt mit diesen Dateien.
+`tests/models/svg` importieren, öffnen als Projekt mit diesen Dateien.
 
 **Text.** Wie OpenSCAD 2021.01: em = `size` / 0,72; Laufweite, Versatz und die Ausrichtung
 nehmen die Werte des Shapers mal 1000/1024 (OpenSCAD rechnet so; Text bleibt dadurch gleich
@@ -1188,7 +1188,7 @@ nur noch diese); `Font::stencil(bold)`, `FontData::Stencil`. Der bisherige Hinwe
 „Schablonenschrift folgt“ entfällt.
 
 **OpenSCAD-Kompatibilität.** OpenSCAD kennt die Schrift nicht; ohne `font` nimmt es seine
-fontconfig-Standardschrift. Die Vergleichsmodelle (`examples/openscad-compat`,
+fontconfig-Standardschrift. Die Vergleichsmodelle (`tests/models/openscad-compat`,
 `tests/openscad-compat/projects`) enthalten kein `text()`, der Textvergleich (Bericht 16,
 `hull_and_area_like_openscad`) nennt jede Schrift ausdrücklich – keine Abhängigkeit von der
 Standardschrift, keine Änderung nötig. Bewusste Abweichung: Modelle mit `text()` ohne `font`
@@ -1201,7 +1201,7 @@ Glyphe in ihrer Zelle, Flächen (H exakt, o gegen Formel, gegen JetBrains Mono),
 Richtungen, Rückfall; cad-eval: Standardschrift, Parameter, Warnungen; cad-engine
 (`stencil_text.rs`): jede Glyphe über `region_2d` ohne Loch, Volumen = Fläche × Höhe,
 Kernel-Zeit eines Schilds gegen Allerta Stencil (nativ 1,6–1,9 s gegen 3,3–3,6 s: Geraden und
-Kreise statt B-Splines, weniger Kernel-Aufrufe); Beispiel `examples/spec/schablone.mcad`;
+Kreise statt B-Splines, weniger Kernel-Aufrufe); Beispiel `tests/models/spec/schablone.mcad`;
 Playwright K01–K03 (`web/e2e/schablone.spec.ts`). Zeichentafel:
 `cargo run -p cad-font --example stencil_chart -- tafel.svg [strich steg]`.
 
@@ -1466,7 +1466,7 @@ Kegel, Kugel, Torus: Radien und Flächen; Fillet-Zylinder, -Kugel, -Torus einer 
 Fase 45°/135°; Abstände Fläche–Kugel, Punkt–Kugel, windschiefe Kanten; Schnitt durch Bohrungen
 mit exakten Kreisen, Flächen, Wandstärken, schräger Schnitt als Ellipse). `cad-session`
 `tests/measure.rs` (Snap mit Provenienz, Klicks, CLI-Argumente, Lochplatte mit Bohrungs- und
-Verrundungsradien, Gehäuse aus `examples/spec` mit Wandstärke 3 mm im Schnitt, Innenabstand,
+Verrundungsradien, Gehäuse aus `tests/models/spec` mit Wandstärke 3 mm im Schnitt, Innenabstand,
 Bauteilvolumen, Fase, Schnittmodus über das Protokoll). CLI `tests/messen.rs`. Vitest
 `logic/measure.test.ts`. Playwright M01–M11 (`web/e2e/messen.spec.ts`), Tauri T17.
 

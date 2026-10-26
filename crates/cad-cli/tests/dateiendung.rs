@@ -96,7 +96,8 @@ fn mcad_main_file_includes_scad() {
 
 #[test]
 fn openscad_example_stays_scad() {
-    let f = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/openscad-compat/05_nested_booleans.scad");
+    let f =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/models/openscad-compat/05_nested_booleans.scad");
     let f = f.display().to_string();
     assert_eq!(run(&["check", &f], 0)["errors"], 0);
     let dir = tempfile::tempdir().unwrap();

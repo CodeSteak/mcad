@@ -75,7 +75,7 @@ unzip -p "$OUT/plain.3mf" 3D/3dmodel.model | head -c 600 > "$OUT/f8-plain-model.
 "$CAD" export "$C/inc/main_use.scad" --per-color --part teil -o "$OUT/teil.zip" > "$OUT/f9-part.txt" 2>&1 || true
 
 # 3MF of the example for the slicers (no colour group) and with --color-group
-EX="examples/spec/mehrfarbig.scad"
+EX="tests/models/spec/mehrfarbig.scad"
 "$CAD" measure "$EX" --colors --json > "$OUT/measure.json"
 "$CAD" export "$EX" -o "$OUT/mehrfarbig.3mf" > "$OUT/export.txt"
 "$CAD" export "$EX" -o "$OUT/mehrfarbig-cg.3mf" --color-group > "$OUT/export-cg.txt"

@@ -1,4 +1,5 @@
-// End-to-end tests in a real Chromium against the production build (vite build + preview).
+// End-to-end tests in a real Chromium against the production build (vite build + preview),
+// built with VITE_TEST_MODELS=1 so the example menu lists the test models of tests/models/.
 // Browsers come from PLAYWRIGHT_BROWSERS_PATH (preinstalled locally; in CI
 // `playwright install --with-deps chromium`, see .github/workflows/web.yml).
 import { defineConfig, devices, type ReporterDescription } from "@playwright/test";
@@ -29,7 +30,7 @@ export default defineConfig({
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], locale: "de-DE", viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 } }],
   webServer: {
-    command: "pnpm exec vite build && pnpm exec vite preview --port 4173 --strictPort --host 127.0.0.1",
+    command: "VITE_TEST_MODELS=1 pnpm exec vite build && pnpm exec vite preview --port 4173 --strictPort --host 127.0.0.1",
     url: "http://127.0.0.1:4173",
     reuseExistingServer: false,
     timeout: 120_000,

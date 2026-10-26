@@ -39,7 +39,7 @@ fn tree_bounds_match_openscad() {
     let text = std::fs::read_to_string(workspace_root().join("tests/openscad-compat/reference.json")).unwrap();
     let reference: Value = serde_json::from_str(&text).unwrap();
     let mut fails = Vec::new();
-    for path in model_files("examples/openscad-compat") {
+    for path in model_files("tests/models/openscad-compat") {
         let name = file_name(&path);
         let Some(r) = reference["files"].get(&name) else {
             continue;

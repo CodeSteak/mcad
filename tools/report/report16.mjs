@@ -60,7 +60,7 @@ function img(srcPath, dst) {
 }
 const cli = (n) => img(join(input, "cli", `${n}.png`), `cli-${n}.jpg`);
 const pw = (n) => img(join(input, "img", `${n}.jpg`), `ui-${n}.jpg`);
-const svgSrc = (n) => img(join(root, "examples/svg", `${n}.svg`), `src-${n}.svg`);
+const svgSrc = (n) => img(join(root, "tests/models/svg", `${n}.svg`), `src-${n}.svg`);
 const fig = (s, cap) => (s ? `<figure><img src="${s}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(Bild fehlt: ${esc(cap)})</p>`);
 const pair = (a, ca, b, cb) => `<div class="two">${fig(a, ca)}${fig(b, cb)}</div>`;
 
@@ -269,7 +269,7 @@ ${oscText.map(oscRow).join("\n")}
 
 <h2>5 SVG-Import</h2>
 <h3>5.1 Beispiele: Quelle und Ergebnis</h3>
-<p>Links die SVG-Datei, wie der Browser sie zeichnet (Quelle in <code>examples/svg/</code>, eigene Zeichnungen), rechts <code>linear_extrude(2) import("….svg")</code> von oben.</p>
+<p>Links die SVG-Datei, wie der Browser sie zeichnet (Quelle in <code>tests/models/svg/</code>, eigene Zeichnungen), rechts <code>linear_extrude(2) import("….svg")</code> von oben.</p>
 ${[
   ["logo", "Ring aus Halbkreisbögen mit Loch (evenodd), acht gedrehte Rechtecke mit Rundung, Polygon"],
   ["blatt", "kubische Bézier (C, S), Rippe als Gegenlauf (nonzero), Stiel aus Q/T, gedrehte Gruppe"],
@@ -301,10 +301,10 @@ ${oscSvg.map(oscRow).join("\n")}
 </table>
 
 <h2>6 Beispiele</h2>
-<h3><code>examples/spec/text_schild.scad</code></h3>
-<div class="codefig">${pre(src("examples/spec/text_schild.scad"))}<div>${fig(cli("text_schild"), "Schild: Platte aus einer Skizze, Rand, erhabener Text in Inter Bold und Allerta Stencil, vier Farben")}${fig(cli("text_schild-oben"), "von oben")}${pre(T("schild-colors.txt"))}</div></div>
-<h3><code>examples/spec/svg_logo.scad</code></h3>
-<div class="codefig">${pre(src("examples/spec/svg_logo.scad"))}<div>${fig(cli("svg_logo"), "Logo, Blatt (skaliert), Haus als Prägung, aus welle.svg nur id = \"oval\" und id = \"bogen\"")}${fig(cli("svg_logo-oben"), "von oben")}</div></div>
+<h3><code>tests/models/spec/text_schild.scad</code></h3>
+<div class="codefig">${pre(src("tests/models/spec/text_schild.scad"))}<div>${fig(cli("text_schild"), "Schild: Platte aus einer Skizze, Rand, erhabener Text in Inter Bold und Allerta Stencil, vier Farben")}${fig(cli("text_schild-oben"), "von oben")}${pre(T("schild-colors.txt"))}</div></div>
+<h3><code>tests/models/spec/svg_logo.scad</code></h3>
+<div class="codefig">${pre(src("tests/models/spec/svg_logo.scad"))}<div>${fig(cli("svg_logo"), "Logo, Blatt (skaliert), Haus als Prägung, aus welle.svg nur id = \"oval\" und id = \"bogen\"")}${fig(cli("svg_logo-oben"), "von oben")}</div></div>
 <p class="small">STEP von svg_logo: ${esc(T("svg_logo.step-counts.json"))} – Kreise bleiben <code>CIRCLE</code>, extrudierte Bögen <code>CYLINDRICAL_SURFACE</code>.</p>
 
 <h2>7 Messwerte</h2>
@@ -316,8 +316,8 @@ ${timeRow("hello", "„Hello World“ (Inter), extrudiert", "hello")}
 ${timeRow("vierzig", "40 Zeichen (Inter), extrudiert", "40")}
 ${timeRow("vierzig_mono", "40 Zeichen (JetBrains Mono)", null)}
 ${timeRow("platte", "„Hello World“ auf einer Platte (Vereinigung)", null)}
-${timeRow("svg_logo", "examples/spec/svg_logo.scad", null)}
-${timeRow("text_schild", "examples/spec/text_schild.scad", null)}
+${timeRow("svg_logo", "tests/models/spec/svg_logo.scad", null)}
+${timeRow("text_schild", "tests/models/spec/text_schild.scad", null)}
 </table>
 <p>Je Glyphe: Extrusion je Kontur (Außen, Loch), Differenz für Löcher, eine Vereinigung aller Glyphen (sie berühren sich nicht). Teuer ist Text <b>auf</b> einer Fläche: SMLib prägt jede Glyphe in die Deckfläche (Schild: eine Vereinigung von ≈ 9 s nativ). Die neue Farbregion-Regel (Plan 17.10) vermeidet dabei die Booleans mit dem Ganzen; vorher brauchte der Kontaktbogen von T01 nativ 21 s und scheiterte („Schnittmenge gescheitert“), jetzt 4 s.</p>
 <h3>Wasm-Modul</h3>

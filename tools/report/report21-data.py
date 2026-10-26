@@ -129,10 +129,10 @@ def part_a():
         run([MCAD, "render", str(f), "-o", str(out / f"{name}.png"), "--size", "480x360", "--no-axes"])
         print(f"A {name:26} {vol!s:>20} rel={rel if rel is None else f'{rel:+.1e}'} {statistics.median(times):6.0f} ms {hint or warns[:1]}")
     (out / "hull.json").write_text(json.dumps(rows, indent=1, ensure_ascii=False))
-    ex = ROOT / "examples/spec/hull_minkowski.mcad"
+    ex = ROOT / "tests/models/spec/hull_minkowski.mcad"
     run([MCAD, "render", str(ex), "-o", str(out / "beispiel.png"), "--views", "all"])
     run([MCAD, "render", str(ex), "-o", str(out / "beispiel_iso.png"), "--size", "1200x800", "--no-axes"])
-    (out / "beispiel_check.txt").write_text(transcript([MCAD, "check", "examples/spec/hull_minkowski.mcad"], ROOT))
+    (out / "beispiel_check.txt").write_text(transcript([MCAD, "check", "tests/models/spec/hull_minkowski.mcad"], ROOT))
 
 
 # ------------------------------------------------------------------------------ B: STL import
@@ -221,8 +221,8 @@ def part_b():
     run([MCAD, "render", "kombi.mcad", "-o", "kombi_schnitt.png", "--section", "y=10", "--section-flip", "--size", "1000x700", "--no-axes"], out)
     run([MCAD, "render", "kombi.mcad", "-o", "kombi_xray.png", "--xray", "--size", "1000x700", "--no-axes"], out)
     (out / "kombi_measure.txt").write_text(transcript([MCAD, "measure", "kombi.mcad", "--volume", "--interference", "--clearance", "platine", "gehaeuse"], out))
-    shutil.copy(ROOT / "examples/stl/winkel.stl", out / "winkel.stl")
-    ex = (ROOT / "examples/spec/stl_import.mcad").read_text().replace("../stl/winkel.stl", "winkel.stl")
+    shutil.copy(ROOT / "tests/models/stl/winkel.stl", out / "winkel.stl")
+    ex = (ROOT / "tests/models/spec/stl_import.mcad").read_text().replace("../stl/winkel.stl", "winkel.stl")
     (out / "stl_import.mcad").write_text(ex)
     run([MCAD, "render", "stl_import.mcad", "-o", "beispiel.png", "--size", "1000x700", "--no-axes"], out)
     (out / "stl_import_inspect.txt").write_text(transcript([MCAD, "inspect", "stl_import.mcad", "--line", "8"], out, show_exit=False) + transcript([MCAD, "inspect", "stl_import.mcad", "--line", "13"], out, show_exit=False))
@@ -239,7 +239,7 @@ def part_b():
 def part_c():
     out = OUT / "c"
     out.mkdir(parents=True, exist_ok=True)
-    shutil.copy(ROOT / "examples/stl/winkel.stl", out / "winkel.stl")
+    shutil.copy(ROOT / "tests/models/stl/winkel.stl", out / "winkel.stl")
     plate = "cube([40, 30, 3]);\n"
     cases = [
         ("K1", "keepout: Quader ragt in die Platte", f"{plate}assert_keepout() translate([10, 10, 2]) cube([10, 10, 5]);", "overlap", "volume", 100.0, "10·10·1"),
@@ -287,7 +287,7 @@ def part_c():
         print(f"C {cid:4} {'ok ' if ok else 'BAD'} {title:40} {got} {key}={val}")
     (out / "asserts.json").write_text(json.dumps(rows, indent=1, ensure_ascii=False))
     # example model, violation, export exit codes, renders
-    spec = (ROOT / "examples/spec/asserts.mcad").read_text().replace("../stl/winkel.stl", "winkel.stl")
+    spec = (ROOT / "tests/models/spec/asserts.mcad").read_text().replace("../stl/winkel.stl", "winkel.stl")
     (out / "asserts.mcad").write_text(spec)
     bad = spec.replace("luft = 1;", "luft = 3;").replace("cube([10, 10, 12])", "cube([10, 10, 25])")
     (out / "asserts_bad.mcad").write_text(bad)
@@ -318,7 +318,7 @@ def part_d():
         shutil.copy(src / f"{n}.scad", out / f"{n}.scad")
     (out / "pair.scad").write_text("module block(w = 10) cube([w, 10, 10]);\na: block();\ntranslate([10, 0, 0]) b: block();\n")
     (out / "slot.scad").write_text("difference() {\n    cube([40, 20, 4]);\n    translate([0, 0, -1]) linear_extrude(6) slot([10, 10], [30, 10], 3);\n}\n")
-    shutil.copy(ROOT / "examples/spec/fillet_zonen.mcad", out / "fillet_zonen.scad")
+    shutil.copy(ROOT / "tests/models/spec/fillet_zonen.mcad", out / "fillet_zonen.scad")
     for n in ["f09a_absturz_tangentialer_dom", "f08c_differenz_torus_tangential"]:
         shutil.copy(ROOT / f"tests/alltag/fehler/{n}.mcad", out / f"{n}.scad")
     cmds = {

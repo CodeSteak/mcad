@@ -66,7 +66,7 @@ const toScreen = async (page: Page, p: number[]): Promise<Pt> => {
   return { x: s.x, y: s.y };
 };
 
-const EX = "../examples/projekt-gehaeuse";
+const EX = "../tests/models/projekt-gehaeuse";
 const exampleFiles = {
   "gehaeuse.mcad": readFileSync(`${EX}/gehaeuse.mcad`, "utf8"),
   "konstanten.mcad": readFileSync(`${EX}/konstanten.mcad`, "utf8"),
@@ -133,7 +133,7 @@ test("P01 Beispielprojekt öffnen: Dateien als Tabs, Hauptdatei, Bauteile", asyn
     title: "Beispielprojekt öffnen",
     images: [{ name: "p01-projekt", label: "projekt-gehaeuse/: drei Dateien als Tabs, Hauptdatei ★, Bauteilleiste" }],
     code: exampleFiles["gehaeuse.mcad"].trim(),
-    caption: "Das Beispielmenü öffnet examples/projekt-gehaeuse/ als Projekt: gehaeuse.mcad (Hauptdatei, ★), konstanten.mcad (per include) und lib/teile.mcad (per use). Die Szene kennt die drei Dateien mit ihrer Rolle; die zwei benannten Instanzen auf oberster Ebene sind die Bauteile.",
+    caption: "Das Beispielmenü öffnet tests/models/projekt-gehaeuse/ als Projekt: gehaeuse.mcad (Hauptdatei, ★), konstanten.mcad (per include) und lib/teile.mcad (per use). Die Szene kennt die drei Dateien mit ihrer Rolle; die zwei benannten Instanzen auf oberster Ebene sind die Bauteile.",
     checks: [
       "Tabs gehaeuse.mcad (aktiv, ★), konstanten.mcad, lib/teile.mcad",
       "Scene.files: main, include, use; keine Fehler oder Warnungen",

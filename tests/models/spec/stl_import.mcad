@@ -1,4 +1,4 @@
-// Zweck: STL-Import (Plan 21, Phase B) – derselbe Winkel aus examples/stl einmal als B-Rep und
+// Zweck: STL-Import (Plan 21, Phase B) – derselbe Winkel aus tests/models/stl einmal als B-Rep und
 // einmal als reines Netz. Ein geschlossenes Netz mit wenigen Flächen wird automatisch zum
 // B-Rep (Booleans, Verrundungen, Messen, STEP); `as = "mesh"` behält das Netz (Anzeige,
 // Transformationen, Farben, Export STL/3MF, Messen – keine Booleans).

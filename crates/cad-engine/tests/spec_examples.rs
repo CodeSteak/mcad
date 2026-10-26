@@ -107,12 +107,12 @@ teil();
 
 const PI: f64 = std::f64::consts::PI;
 
-/// `examples/spec/knauf_mirror.mcad` (report 1: open body, torus and pin missing, fillet
+/// `tests/models/spec/knauf_mirror.mcad` (report 1: open body, torus and pin missing, fillet
 /// SM_ERR). Cause: the closed spline profile crossed the revolve axis between its two axis
 /// points, which gave self-overlapping revolved solids.
 #[test]
 fn spec_knauf_mirror_file() {
-    let out = eval(include_str!("../../../examples/spec/knauf_mirror.mcad"));
+    let out = eval(include_str!("../../../tests/models/spec/knauf_mirror.mcad"));
     let mut e = engine();
     let ev = e.evaluate(out.tree);
     assert_clean(&ev);
@@ -137,10 +137,10 @@ fn spec_knauf_mirror_file() {
     assert!(total > v15 + v10 + 0.5 * pin && total < v15 + v10 + pin, "{total}");
 }
 
-/// `examples/spec/winkel_anker.mcad` (report 1: union of touching bodies open, volume 0).
+/// `tests/models/spec/winkel_anker.mcad` (report 1: union of touching bodies open, volume 0).
 #[test]
 fn spec_winkel_anker_file() {
-    let out = eval(include_str!("../../../examples/spec/winkel_anker.mcad"));
+    let out = eval(include_str!("../../../tests/models/spec/winkel_anker.mcad"));
     let mut e = engine();
     let ev = e.evaluate(out.tree);
     assert_clean(&ev);

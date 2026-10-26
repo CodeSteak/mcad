@@ -12,7 +12,7 @@ fn data(name: &str) -> String {
 
 fn example() -> String {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/projekt-gehaeuse/gehaeuse.mcad")
+        .join("../../tests/models/projekt-gehaeuse/gehaeuse.mcad")
         .display()
         .to_string()
 }

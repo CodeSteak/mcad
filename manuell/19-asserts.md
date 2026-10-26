@@ -44,13 +44,13 @@ on each other are a SMLib borderline case) is an info "Überlappung nicht prüfb
 | `mcad inspect --line N` | node `[Sperrvolumen: nicht im Ergebnis]`, each pair `ok:` / `VERLETZT:`; JSON `nodes[].assert` |
 
 ```sh
-mcad check examples/spec/asserts.mcad          # Asserts: 4 von 4 geprüft, 0 verletzt
+mcad check tests/models/spec/asserts.mcad          # Asserts: 4 von 4 geprüft, 0 verletzt
 # luft = 3 and a taller holder:
 #   asserts.mcad:21:1: Warnung (Kernel): assert_touches: g + hl + kf und k überschneiden sich (Schnittvolumen 100 mm³)
 #   asserts.mcad:33:1: Warnung (Kernel): assert_keepout: g hält den Abstand 3 mm zum Sperrvolumen nicht ein: 2 mm (± 0.0305) von [42.4444, 12, 2] bis [42.4444, 12, 4] [Zeile 14: box (Instanz g: gehaeuse)]
 mcad export bad.mcad -o x.3mf                  # Export abgebrochen: 2 Assert-Verletzung(en), nichts geschrieben … exit 4
 mcad export bad.mcad -o x.3mf --ignore-asserts # Warnung: trotz 2 Assert-Verletzung(en) exportiert
-mcad render examples/spec/asserts.mcad -o /tmp/a.png --show asserts
+mcad render tests/models/spec/asserts.mcad -o /tmp/a.png --show asserts
 ```
 
-Example model: `examples/spec/asserts.mcad` (housing, lid, holder, cable clip, STL keep-out).
+Example model: `tests/models/spec/asserts.mcad` (housing, lid, holder, cable clip, STL keep-out).

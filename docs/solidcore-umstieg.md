@@ -79,7 +79,7 @@ schalten sich von selbst frei, sobald solidcore richtig rechnet.
 
 ## Vergleich über die Beispiele (`mcad diff-kernels`)
 
-`examples/openscad-compat` und `examples/spec`:
+`tests/models/openscad-compat` und `tests/models/spec`:
 
 | Stand | Dateien | Knoten | gleich | unsupported | blockiert | abweichend | gescheitert |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -181,7 +181,7 @@ SMLib und mit solidcore aus und vergleicht jeden von SMLib ausgewerteten Knoten:
 - „Abdeckung“: je Operation (Knotenlabel) gleich / Knoten, unsupported, blockiert, abweichend.
 
 Exit-Code 0 nur, wenn alle Knoten aller Dateien `same` sind. Umgestellt wird erst, wenn
-`diff-kernels` über alle Beispiele (`examples/openscad-compat`, `examples/spec`) mit 0 endet;
+`diff-kernels` über alle Beispiele (`tests/models/openscad-compat`, `tests/models/spec`) mit 0 endet;
 zusätzlich müssen `tests/openscad-compat/compare.py` und `tests/step/verify.py` mit solidcore
 weiter bestehen (dafür braucht `kernel-solidcore` noch `tessellate` und `brep`).
 

@@ -8,7 +8,7 @@ use assert_cmd::Command;
 use serde_json::Value;
 
 fn example() -> String {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/spec/mehrfarbig.mcad").display().to_string()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/models/spec/mehrfarbig.mcad").display().to_string()
 }
 
 fn run(args: &[&str], code: i32) -> (Value, String) {

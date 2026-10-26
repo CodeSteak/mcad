@@ -1,4 +1,4 @@
-// Zweck: SVG-Import (Plan 17.5, Bericht 16) – Logos und Icons aus examples/svg als exakte 2D-Profile.
+// Zweck: SVG-Import (Plan 17.5, Bericht 16) – Logos und Icons aus tests/models/svg als exakte 2D-Profile.
 // Kreise und Bögen bleiben Kreisbögen, Bézierkurven bleiben Kurven, Löcher nach fill-rule.
 // Einheiten: viewBox + width/height in mm; ohne viewBox Pixel mit dpi (Standard 96).
 

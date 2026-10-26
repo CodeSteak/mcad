@@ -163,8 +163,8 @@ test("T04 Beispiel svg_logo mit seinen SVG-Dateien; Warnungen mit Zeile", async 
   record16({
     id: "T04",
     title: "Beispiel mit SVG-Dateien",
-    images: [{ name: "t04-beispiel", label: "examples/spec/svg_logo.mcad als Projekt mit svg/*.svg" }],
-    caption: "Einzelbeispiele, die SVGs aus examples/svg importieren, öffnen als Projekt mit diesen Dateien.",
+    images: [{ name: "t04-beispiel", label: "tests/models/spec/svg_logo.mcad als Projekt mit svg/*.svg" }],
+    caption: "Einzelbeispiele, die SVGs aus tests/models/svg importieren, öffnen als Projekt mit diesen Dateien.",
     checks: ["4 SVG-Dateien im Projekt", "keine Fehler", "<text> im SVG: Warnung „w.svg:3: …Text…“"],
   });
 });

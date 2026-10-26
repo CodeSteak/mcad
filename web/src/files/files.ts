@@ -1,5 +1,5 @@
 // Files: autosave in IndexedDB, open/save with the File System Access API (Chromium) or
-// upload/download, the example menu (files of examples/), downloads of exports. Projects of
+// upload/download, the example menu (examples/, in test builds also tests/models/), downloads of exports. Projects of
 // several files: autosave of the whole project, folders (File System Access API), ZIP upload
 // and download.
 
@@ -220,13 +220,19 @@ export function projectZip(name: string, files: Record<string, string>): Uint8Ar
 
 // ---------------------------------------------------------------- examples
 
-const raw = import.meta.glob(["../../../examples/**/*.mcad", "../../../examples/**/*.scad"], { query: "?raw", import: "default", eager: true }) as Record<string, string>;
-/** SVGs of examples/svg and ASCII STLs of examples/stl (imported by spec examples; raw text, so binary STL does not work here). */
-const rawSvg = import.meta.glob(["../../../examples/**/*.svg", "../../../examples/**/*.stl"], { query: "?raw", import: "default", eager: true }) as Record<string, string>;
-const EXAMPLE_DATA: Record<string, string> = Object.fromEntries(Object.entries(rawSvg).map(([p, t]) => [p.replace(/^.*examples\//, ""), t]));
+// Tutorial models (examples/*.mcad, menu group "tutorial") and test models (tests/models/,
+// groups by folder). Test models are listed only in test builds: Vitest and Playwright
+// (VITE_TEST_MODELS=1); spec examples import data files relative to tests/models/.
+const rawTutorial = import.meta.glob("../../../examples/*.mcad", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const rawTest = import.meta.glob(["../../../tests/models/**/*.mcad", "../../../tests/models/**/*.scad"], { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+/** SVGs of tests/models/svg and ASCII STLs of tests/models/stl (imported by spec examples; raw text, so binary STL does not work here). */
+const rawSvg = import.meta.glob(["../../../tests/models/**/*.svg", "../../../tests/models/**/*.stl"], { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const EXAMPLE_DATA: Record<string, string> = Object.fromEntries(Object.entries(rawSvg).map(([p, t]) => [p.replace(/^.*tests\/models\//, ""), t]));
+/** Test models in the example menu (test builds only). */
+export const SHOW_TEST_MODELS = import.meta.env.MODE === "test" || import.meta.env.VITE_TEST_MODELS === "1";
 
 /**
- * Data files an example imports (paths relative to examples/), e.g. `spec/svg_logo.mcad` →
+ * Data files an example imports (paths relative to tests/models/), e.g. `spec/svg_logo.mcad` →
  * `{"svg/logo.svg": …}`; empty if it imports none.
  */
 export function exampleData(path: string, text: string): Record<string, string> {
@@ -245,24 +251,31 @@ export interface Example {
   text: string;
 }
 
-export const EXAMPLES: Example[] = Object.entries(raw)
-  .map(([p, text]) => {
-    const rel = p.replace(/^.*examples\//, "");
+const GROUP_ORDER = ["tutorial", "spec"];
+const rank = (g: string) => (GROUP_ORDER.includes(g) ? GROUP_ORDER.indexOf(g) : GROUP_ORDER.length);
+
+export const EXAMPLES: Example[] = [
+  ...Object.entries(rawTutorial).map(([p, text]) => {
+    const name = p.replace(/^.*examples\//, "");
+    return { group: "tutorial", name, path: name, text };
+  }),
+  ...(SHOW_TEST_MODELS ? Object.entries(rawTest) : []).map(([p, text]) => {
+    const rel = p.replace(/^.*tests\/models\//, "");
     const [group, ...rest] = rel.split("/");
     return { group, name: rest.join("/"), path: rel, text };
-  })
-  .sort((a, b) => (a.group === b.group ? a.name.localeCompare(b.name) : a.group === "spec" ? -1 : b.group === "spec" ? 1 : a.group.localeCompare(b.group)));
+  }),
+].sort((a, b) => (a.group === b.group ? a.name.localeCompare(b.name) : rank(a.group) - rank(b.group) || a.group.localeCompare(b.group)));
 
 /** Name of an example group in the menu (unknown groups: the folder name). */
 export function groupLabel(group: string): string {
-  return group === "spec" || group === "openscad-compat" ? t(`examples.group.${group}`) : group;
+  return group === "tutorial" || group === "spec" || group === "openscad-compat" ? t(`examples.group.${group}`) : group;
 }
 
-/** Folders of examples/ besides the single-file groups: projects of several files. */
-const SINGLE_GROUPS = new Set(["spec", "openscad-compat"]);
+/** Folders of tests/models/ besides the single-file groups: projects of several files. */
+const SINGLE_GROUPS = new Set(["tutorial", "spec", "openscad-compat"]);
 
 export interface ExampleProject {
-  /** Folder below examples/. */
+  /** Folder below tests/models/. */
   name: string;
   main: string;
   files: Record<string, string>;

@@ -27,4 +27,7 @@ Model files: `.mcad` for new files (UI "New", "Save as", examples). `.scad` file
 way, also mixed in one project. The program was called `cad` before 0.3.0; old environment
 variables `CAD_*` still work (`mcad usage daemon`).
 
+Tutorial models: `examples/01-plate.mcad` … `08-macropad.mcad` in the repository (installed:
+`/usr/share/doc/mcad/examples`), each a step more complex; test models: `tests/models/`.
+
 Topics: `mcad usage --list`; all pages: `mcad usage --all`; prefixes work (`mcad usage meas`).

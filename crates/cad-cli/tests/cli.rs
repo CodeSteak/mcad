@@ -262,7 +262,7 @@ fn diff_kernels_needs_the_feature() {
 fn diff_kernels_on_examples() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut files: Vec<String> = Vec::new();
-    for d in ["examples/openscad-compat", "examples/spec"] {
+    for d in ["tests/models/openscad-compat", "tests/models/spec"] {
         let mut v: Vec<String> = std::fs::read_dir(root.join(d))
             .unwrap()
             .map(|e| e.unwrap().path())

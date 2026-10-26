@@ -39,7 +39,7 @@ export interface Fixture {
 export function fixture(name: keyof typeof FIXTURES): Fixture {
   const f = JSON.parse(readFileSync(join(__dirname, `${name}.json`), "utf8")) as { scene: Scene; diagnostics: Diagnostic[] };
   const fx = FIXTURES[name];
-  const source = readFileSync(fx.local ? join(__dirname, fx.example) : join(__dirname, "../../../../examples", fx.example), "utf8");
+  const source = readFileSync(fx.local ? join(__dirname, fx.example) : join(__dirname, "../../../../tests/models", fx.example), "utf8");
   return { ...f, source, doc: Text.of(source.split("\n")) };
 }
 

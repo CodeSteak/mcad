@@ -5,7 +5,7 @@
 //! and the engine dropped; the heap bytes this frees are what the cache really held. Prints
 //! one JSON object per model and a summary (test report 10).
 //!
-//!   cargo run --release -p cad-cli --example cache_size -- examples/spec/*.mcad …
+//!   cargo run --release -p cad-cli --example cache_size -- tests/models/spec/*.mcad …
 
 use std::collections::HashSet;
 use std::path::Path;

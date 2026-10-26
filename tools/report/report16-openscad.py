@@ -68,7 +68,7 @@ for font, text, args in [
     code = f'text("{text}", size = 10, font = "{font}"{args});' if "size" not in args else f'text("{text}", font = "{font}"{args});'
     cases.append(("text", f"{font} {text!r}{args}", code))
 for s in ["logo", "blatt", "haus", "welle"]:
-    p = os.path.join(root, "examples/svg", f"{s}.svg")
+    p = os.path.join(root, "tests/models/svg", f"{s}.svg")
     cases.append(("svg", f"{s}.svg", f'import("{p}", dpi = 96);'))
 units = os.path.join(work, "units")
 os.makedirs(units, exist_ok=True)

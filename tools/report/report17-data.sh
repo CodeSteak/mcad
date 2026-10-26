@@ -58,11 +58,11 @@ for f in "$CASES"/alphabet-*.scad; do
 done
 
 # 3. the example stencil: render, export, slice
-r examples/spec/schablone.scad -o "$CLI/schablone.png" --size 1000x560
-r examples/spec/schablone.scad -o "$CLI/schablone-oben.png" --size 1000x420 --view top --no-axes
-"$CAD" measure examples/spec/schablone.scad --volume --bounds > "$OUT/schablone-measure.txt" 2>&1 || true
-"$CAD" export examples/spec/schablone.scad -o "$OUT/schablone.stl" > "$OUT/schablone-export.txt" 2>&1 || true
-"$CAD" export examples/spec/schablone.scad -o "$OUT/schablone.3mf" > /dev/null 2>&1 || true
+r tests/models/spec/schablone.scad -o "$CLI/schablone.png" --size 1000x560
+r tests/models/spec/schablone.scad -o "$CLI/schablone-oben.png" --size 1000x420 --view top --no-axes
+"$CAD" measure tests/models/spec/schablone.scad --volume --bounds > "$OUT/schablone-measure.txt" 2>&1 || true
+"$CAD" export tests/models/spec/schablone.scad -o "$OUT/schablone.stl" > "$OUT/schablone-export.txt" 2>&1 || true
+"$CAD" export tests/models/spec/schablone.scad -o "$OUT/schablone.3mf" > /dev/null 2>&1 || true
 if command -v prusa-slicer > /dev/null; then
   prusa-slicer --export-gcode --layer-height 0.2 --first-layer-height 0.2 --nozzle-diameter 0.4 \
     --output "$OUT/schablone.gcode" "$OUT/schablone.stl" > "$OUT/slicer.txt" 2>&1 || true
@@ -102,8 +102,8 @@ for f in stencil allerta jetbrains; do
   t "vierzig-$f" "linear_extrude(2) text(\"The quick brown fox jumps over the lazy d\"$font);"
   t "schild-$f" "cube([100, 14, 2]); translate([50, 4, 2]) linear_extrude(1.2) text(\"ZUTRITT NUR MIT BRILLE\", size = 4.2, halign = \"center\"$font);"
 done
-t schablone "$(cat examples/spec/schablone.scad)"
+t schablone "$(cat tests/models/spec/schablone.scad)"
 
 # 6. the OpenSCAD comparison models use no text() (independent of the default font)
-grep -l 'text(' examples/openscad-compat/*.scad tests/openscad-compat/projects -r > "$OUT/compat-text.txt" 2>/dev/null || true
+grep -l 'text(' tests/models/openscad-compat/*.scad tests/openscad-compat/projects -r > "$OUT/compat-text.txt" 2>/dev/null || true
 echo "report17 data -> $OUT"

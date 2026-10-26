@@ -10,7 +10,7 @@ use assert_cmd::Command;
 use serde_json::Value;
 
 fn example(name: &str) -> String {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/spec").join(name).display().to_string()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/models/spec").join(name).display().to_string()
 }
 
 fn json(args: &[&str], code: i32) -> Value {

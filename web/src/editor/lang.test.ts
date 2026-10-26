@@ -4,12 +4,17 @@ import { describe, expect, it } from "vitest";
 import { isModelFile } from "../logic/files";
 import { disabledStatements, errorNodes, scadParser } from "./lang";
 
-const root = join(__dirname, "../../../examples");
-const files = ["spec", "openscad-compat"].flatMap((d) =>
-  readdirSync(join(root, d))
+const root = join(__dirname, "../../../tests/models");
+const files = [
+  ...["spec", "openscad-compat"].flatMap((d) =>
+    readdirSync(join(root, d))
+      .filter(isModelFile)
+      .map((f) => join(d, f)),
+  ),
+  ...readdirSync(join(root, "../../examples"))
     .filter(isModelFile)
-    .map((f) => join(d, f)),
-);
+    .map((f) => join("../../examples", f)),
+];
 
 describe("Lezer-Grammatik", () => {
   it("liest alle Beispiele (.mcad und .scad)", () => {

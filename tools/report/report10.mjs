@@ -5,8 +5,8 @@
 //
 // Inputs (gitignored, reports/tmp/report10/):
 //   timings.json      python3 tools/report/report10-measure.py --cad target/release/mcad
-//   cache_size.jsonl  target/release/examples/cache_size examples/spec/*.scad \
-//                       examples/projekt-gehaeuse/gehaeuse.scad examples/openscad-compat/*.scad
+//   cache_size.jsonl  target/release/examples/cache_size tests/models/spec/*.scad \
+//                       tests/models/projekt-gehaeuse/gehaeuse.scad tests/models/openscad-compat/*.scad
 //   cargo.txt         cargo test --workspace --no-fail-fast
 //   daemon-tests.txt  cargo test -p cad-cli --test daemon -- --nocapture --test-threads 1
 //   clippy.txt        cargo clippy --workspace --all-targets -- -D warnings
@@ -286,8 +286,8 @@ ${daemonTimes ? `<p class="small">Im Test <code>autostart_then_cache_hits_and_fa
 <pre>export SMLIB_PREBUILT=$PWD/smlib/build-native
 cargo build --release -p cad-cli --bin cad --example cache_size
 python3 tools/report/report10-measure.py --cad target/release/mcad --repeat ${timings?.meta?.repeat ?? 5}
-target/release/examples/cache_size examples/spec/*.scad examples/projekt-gehaeuse/gehaeuse.scad \\
-    examples/openscad-compat/*.scad &gt; reports/tmp/report10/cache_size.jsonl
+target/release/examples/cache_size tests/models/spec/*.scad tests/models/projekt-gehaeuse/gehaeuse.scad \\
+    tests/models/openscad-compat/*.scad &gt; reports/tmp/report10/cache_size.jsonl
 cargo test --workspace --no-fail-fast &gt; reports/tmp/report10/cargo.txt 2&gt;&amp;1
 cargo test -p cad-cli --test daemon -- --nocapture --test-threads 1 &gt; reports/tmp/report10/daemon-tests.txt 2&gt;&amp;1
 cargo clippy --workspace --all-targets -- -D warnings &gt; reports/tmp/report10/clippy.txt 2&gt;&amp;1

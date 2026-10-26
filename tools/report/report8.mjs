@@ -61,7 +61,7 @@ function runJson(args) {
   } catch {}
   return { ...r, j };
 }
-const ex = (p) => rel(join(root, "examples", p));
+const ex = (p) => rel(join(root, "tests", "models", p));
 const td = (p) => rel(join(root, "crates/cad-cli/tests/data", p));
 const im = (name) => join(img, `${name}.png`);
 const imRel = (name) => `img/${name}.png`;
@@ -305,7 +305,7 @@ function watch(file, edits, extra = []) {
 const watchRuns = [];
 {
   const vr = join(work, "variabler_radius.scad");
-  copyFileSync(join(root, "examples/spec/variabler_radius.scad"), vr);
+  copyFileSync(join(root, "tests/models/spec/variabler_radius.scad"), vr);
   const src = readFileSync(vr, "utf8");
   const res = await watch(vr, [
     () => writeFileSync(vr, src + "// Kommentar\n"),
@@ -316,7 +316,7 @@ const watchRuns = [];
   res.forEach((r, i) => watchRuns.push({ file: "variabler_radius.scad", what: what[i] ?? "", r }));
   const dir = join(work, "projekt");
   mkdirSync(join(dir, "lib"), { recursive: true });
-  for (const f of ["gehaeuse.scad", "konstanten.scad", "lib/teile.scad"]) copyFileSync(join(root, "examples/projekt-gehaeuse", f), join(dir, f));
+  for (const f of ["gehaeuse.scad", "konstanten.scad", "lib/teile.scad"]) copyFileSync(join(root, "tests/models/projekt-gehaeuse", f), join(dir, f));
   const konst = readFileSync(join(dir, "konstanten.scad"), "utf8");
   const teile = readFileSync(join(dir, "lib/teile.scad"), "utf8");
   const res2 = await watch(join(dir, "gehaeuse.scad"), [
@@ -336,13 +336,13 @@ sec("9 cad watch", [
 // ---------------------------------------------------------------- timings: repeated calls
 
 const timing = [];
-for (const f of ["examples/spec/variabler_radius.scad", "examples/projekt-gehaeuse/gehaeuse.scad", "examples/spec/gehaeuse.scad"]) {
+for (const f of ["tests/models/spec/variabler_radius.scad", "tests/models/projekt-gehaeuse/gehaeuse.scad", "tests/models/spec/gehaeuse.scad"]) {
   for (let i = 1; i <= 2; i++) {
     const r = runJson(["render", f, "-o", join(work, "t.png")]);
     timing.push({ f, i, wall: r.ms, t: r.j?.timings ?? {} });
   }
 }
-const baseline = run(["check", "--no-kernel", "examples/spec/gehaeuse.scad"]);
+const baseline = run(["check", "--no-kernel", "tests/models/spec/gehaeuse.scad"]);
 const cmdTimes = [
   ["outline", ["outline", G]],
   ["check", ["check", G]],
@@ -451,7 +451,7 @@ const itemHtml = (it) => {
   }
 };
 
-const timingRows = timing.map(({ f, i, wall, t }) => [f.replace("examples/", ""), i, de(wall, 0), de(t.evaluate_ms ?? 0, 0), de(t.kernel_ms ?? 0, 0), de(t.render_ms ?? 0, 0)]);
+const timingRows = timing.map(({ f, i, wall, t }) => [f.replace("tests/models/", ""), i, de(wall, 0), de(t.evaluate_ms ?? 0, 0), de(t.kernel_ms ?? 0, 0), de(t.render_ms ?? 0, 0)]);
 const maxWall = Math.max(...timing.map((t) => t.wall));
 const vrWatch = watchRuns.filter((w) => w.file === "variabler_radius.scad");
 

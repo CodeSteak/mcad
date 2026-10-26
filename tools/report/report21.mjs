@@ -443,7 +443,7 @@ ${spikeTable}
 <tr><td><code>minkowski</code> 3D</td><td>Körper + Kugel; <code>linear_extrude</code> + <code>cylinder</code> (parallele Prismen); zwei konvexe ebene Körper; ein Kind</td><td>Offset; Prisma der 2D-Summe; Polyeder; das Kind</td></tr>
 <tr><td>sonst</td><td>z. B. Kugeln verschiedener Radien nicht auf einer Achse, Tetraeder + Kugel, Torus, <code>$fillet</code>-Primitive</td><td>Warnung „hull: &lt;Grund&gt;; Kinder werden unverändert gezeigt“</td></tr>
 </table>
-<div class="codefig"><div>${pre((readText(join(root, "examples/spec/hull_minkowski.mcad")) ?? "").split("\n").filter((l) => !l.startsWith("//")).join("\n"))}${term(readText(join(data, "a/beispiel_check.txt")))}</div><div>${fig(dimg("a", "beispiel_iso.png", 1000), "`examples/spec/hull_minkowski.mcad`, `mcad render` (iso): Platte als 2D-Hülle von vier Kreisen mit Langlöchern, abgerundeter Block (Würfel ⊕ Kugel), Griff als Kapsel, Lasche (Quader + Zylinder gleicher Höhe), Kissen aus acht gleich großen Kugeln, Leiste aus `linear_extrude` ⊕ `cylinder`")}</div></div>
+<div class="codefig"><div>${pre((readText(join(root, "tests/models/spec/hull_minkowski.mcad")) ?? "").split("\n").filter((l) => !l.startsWith("//")).join("\n"))}${term(readText(join(data, "a/beispiel_check.txt")))}</div><div>${fig(dimg("a", "beispiel_iso.png", 1000), "`tests/models/spec/hull_minkowski.mcad`, `mcad render` (iso): Platte als 2D-Hülle von vier Kreisen mit Langlöchern, abgerundeter Block (Würfel ⊕ Kugel), Griff als Kapsel, Lasche (Quader + Zylinder gleicher Höhe), Kissen aus acht gleich großen Kugeln, Leiste aus `linear_extrude` ⊕ `cylinder`")}</div></div>
 
 <h3>Messwerte gegen Formel</h3>
 <p>Volumen über <code>mcad measure --volume</code> (exakte B-Rep, Massen-Eigenschaften des Kernels); 2D-Fälle um 1 extrudiert, das Volumen ist die Fläche. Zeit = ganzer CLI-Aufruf ohne Daemon (Parsen, Auswertung, Kernel, Volumen), Median aus 3 Läufen.</p>
@@ -469,7 +469,7 @@ import("teil.stl", center = true, scale = 25.4); // Zoll → mm, Hülle um den U
 <tr><td>Netz (<code>mesh</code>)</td><td>&gt; 500 Flächen, offen, nicht mannigfaltig</td><td>Anzeige, Transformationen, <code>color</code>, Bauteile, <code>hull</code> (≤ 2000 Ecken), STL/3MF, STEP facettiert, Hülle/Volumen/Fläche/Schnitt, <code>--clearance</code>, <code>--interference</code> (ja/nein)</td><td>Booleans, <code>fillet</code>/<code>chamfer</code>/<code>shell</code>, <code>minkowski</code>, <code>thicken</code> – Fehler bzw. Warnung mit Hinweis <code>as = "solid"</code></td></tr>
 </table>
 <p>Aufbereitung in jedem Modus (<code>cad-stl</code>): Ecken verschweißen (10⁻⁶ der Diagonale), NaN-, entartete und doppelte Dreiecke verwerfen, Orientierung einheitlich nach außen, koplanare Nachbarn zu ebenen Flächen zusammenfassen, Ecken auf die Ebenen ihrer Flächen ziehen. ASCII und binär (binär an der Größe 84 + 50·n erkannt, auch mit „solid“-Kopf).</p>
-<div class="three">${fig(dimg("b", "beispiel.png", 900), "`examples/spec/stl_import.mcad`: derselbe Winkel als B-Rep mit Bohrung (blau) und gespiegelt als Netz (orange)")}${fig(dimg("b", "solid_kugel1000_boolean.png", 700), "Kugel-STL (968 Dreiecke, 890 Flächen) mit `as = \"solid\"` minus Zylinder")}${fig(dimg("b", "netz_kugel20000.png", 700), "Kugel mit 20 000 Dreiecken automatisch als Netz (Kanten erst ab 20°)")}</div>${term((readText(join(data, "b/stl_import_inspect.txt")) ?? "").split("\n").filter((l) => /^\$|^Z\.|Hinweis/.test(l)).join("\n"))}
+<div class="three">${fig(dimg("b", "beispiel.png", 900), "`tests/models/spec/stl_import.mcad`: derselbe Winkel als B-Rep mit Bohrung (blau) und gespiegelt als Netz (orange)")}${fig(dimg("b", "solid_kugel1000_boolean.png", 700), "Kugel-STL (968 Dreiecke, 890 Flächen) mit `as = \"solid\"` minus Zylinder")}${fig(dimg("b", "netz_kugel20000.png", 700), "Kugel mit 20 000 Dreiecken automatisch als Netz (Kanten erst ab 20°)")}</div>${term((readText(join(data, "b/stl_import_inspect.txt")) ?? "").split("\n").filter((l) => /^\$|^Z\.|Hinweis/.test(l)).join("\n"))}
 
 <h3>Laufzeit und Grenze 500 Flächen</h3>
 ${stlChart()}
@@ -492,7 +492,7 @@ ${term(readText(join(data, "b/kombi_measure.txt")))}
 
 <h2>5 Phase C: Kollisions-Asserts</h2>
 <h3>Sprache</h3>
-<div class="codefig"><div>${pre((readText(join(root, "examples/spec/asserts.mcad")) ?? "").split("\n").filter((l) => !l.startsWith("//")).join("\n").trim())}</div><div>
+<div class="codefig"><div>${pre((readText(join(root, "tests/models/spec/asserts.mcad")) ?? "").split("\n").filter((l) => !l.startsWith("//")).join("\n").trim())}</div><div>
 <table><tr><th>Assert</th><th>Verletzung (Warnung)</th></tr>
 <tr><td><code>assert_keepout(clearance = 0)</code></td><td>ein echter Körper schneidet das Sperrvolumen (Volumen &gt; ε) oder ist näher als <code>clearance</code>; das Sperrvolumen wird gezeigt, aber nicht exportiert, gezählt oder verrechnet</td></tr>
 <tr><td><code>assert_disjoint()</code></td><td>ein Paar der Kinder schneidet sich</td></tr>
@@ -570,7 +570,7 @@ ${stepOverlap.length ? `<p class="small">Mit Hinweis „Objekte überschneiden s
 <tr><td>Repository <code>controller-cad</code>, Docker-Image/Volume der Arch-Bauumgebung</td><td>Name des Repositorys und der Bau-Infrastruktur</td></tr>
 <tr><td>IndexedDB-Name <code>controller-cad</code> (Browser)</td><td>dort liegen die gespeicherten Projekte der Nutzer</td></tr>
 <tr><td>Schriftname „cad stencil mono“</td><td>steht in Modellen</td></tr>
-<tr><td><code>examples/openscad-compat/*.scad</code>, <code>tests/openscad-compat</code>, <code>tests/farben-pruefung</code>, Fallstudie Bericht 8</td><td>werden mit OpenSCAD verglichen bzw. sind Momentaufnahmen; prüfen nebenbei, dass <code>.scad</code> weiter geht</td></tr>
+<tr><td><code>tests/models/openscad-compat/*.scad</code>, <code>tests/openscad-compat</code>, <code>tests/farben-pruefung</code>, Fallstudie Bericht 8</td><td>werden mit OpenSCAD verglichen bzw. sind Momentaufnahmen; prüfen nebenbei, dass <code>.scad</code> weiter geht</td></tr>
 <tr><td>Berichte <code>docs/reports/**</code></td><td>Momentaufnahmen</td></tr>
 </table>
 ${term(readText(join(data, "e/dateien.txt")))}

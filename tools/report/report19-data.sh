@@ -15,7 +15,7 @@ CLI="$OUT/cli"
 CASES="$OUT/cases"
 mkdir -p "$OUT" "$CLI" "$CASES"
 export CAD_NO_DAEMON=1
-S=examples/spec
+S=tests/models/spec
 
 # runs a command, keeps its text (with the command line) and its time
 run() { # name args…
@@ -68,7 +68,7 @@ Schnitt, Fläche des Bereichs	difference() { cube([20, 20, 6]); translate([10, 1
 Schnitt, Wandstärke Bohrung–Rand	difference() { cube([20, 20, 6]); translate([10, 10, -1]) cylinder(h = 8, r = 3); }	--section z=3 --wall [7,10,3]	wall	7
 Schräger Schnitt (45°) durch Bohrung r 3: große Halbachse	difference() { cube([20, 20, 10]); translate([10, 10, -1]) cylinder(h = 12, r = 3); }	--section-plane 10,10,5,1,0,1 --radius edge@[10,13,5]	radius	3*sqrt(2)
 Schräger Schnitt (45°): kleine Halbachse	difference() { cube([20, 20, 10]); translate([10, 10, -1]) cylinder(h = 12, r = 3); }	--section-plane 10,10,5,1,0,1 --radius edge@[10,13,5]	minor	3
-Gehäuse: Wandstärke im Schnitt z 10	include <../../../../examples/spec/gehaeuse.scad>	--section z=10 --wall [0,15,10]	wall	3
+Gehäuse: Wandstärke im Schnitt z 10	include <../../../../tests/models/spec/gehaeuse.scad>	--section z=10 --wall [0,15,10]	wall	3
 EOF
 python3 - "$CAD" "$CASES" "$OUT/analytic.json" <<'EOF'
 import json, math, subprocess, sys
