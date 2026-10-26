@@ -106,7 +106,7 @@ fn unknown_name_warns_and_gets_a_stable_random_colour() {
 /// equal and merged into one entry and slot).
 #[test]
 fn random_colours_do_not_collide_in_a_model() {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/farben-pruefung/cases/randnames.scad");
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/color-review/cases/randnames.scad");
     let src = std::fs::read_to_string(path).unwrap();
     let out = run(&src);
     let mut by_name: Vec<(String, [u8; 3])> = Vec::new();

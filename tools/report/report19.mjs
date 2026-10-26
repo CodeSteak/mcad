@@ -262,13 +262,13 @@ ${t17 ? `<p>Result: <span class="${t17.ok ? "ok" : "bad"}">${t17.ok ? "passed" :
 <h2>8 CLI: <code>cad measure</code></h2>
 <p>The same measurements without UI, for agents with <code>--json</code>. Output from <code>tools/report/report19-data.sh</code> (release binary, without daemon; times per call as the mean of 3 runs including loading and kernel).</p>
 <h3>Housing in section z = 10: regions, wall thickness, inner dimension (${num(times["housing-section"])} ms)</h3>
-<div class="two"><div>${term(cliTxt("housing-section") ?? "(missing)")}</div><div>${fig(cliImg("housing-section.png"), "`cad render gehaeuse.scad --section z=10 --view top`: the two wall regions")}</div></div>
+<div class="two"><div>${term(cliTxt("housing-section") ?? "(missing)")}</div><div>${fig(cliImg("housing-section.png"), "`cad render housing.mcad --section z=10 --view top`: the two wall regions")}</div></div>
 <h3>Housing: inner distance, part, edge length (${num(times["housing-3d"])} ms)</h3>
 ${term(cliTxt("housing-3d") ?? "(missing)")}
 <h3>Hole plate: bore, fillet, pitch (${num(times["plate-radius"])} ms)</h3>
 ${term(cliTxt("plate-radius") ?? "(missing)")}
 <h3>Hole plate in section z = 2: circles, area, radius, wall (${num(times["plate-section"])} ms)</h3>
-<div class="two"><div>${term(cliTxt("plate-section") ?? "(missing)")}</div><div>${fig(cliImg("plate-section.png"), "`cad render lochplatte.scad --section z=2 --view top`")}</div></div>
+<div class="two"><div>${term(cliTxt("plate-section") ?? "(missing)")}</div><div>${fig(cliImg("plate-section.png"), "`cad render hole_plate.mcad --section z=2 --view top`")}</div></div>
 <h3>What lies at P: <code>--at</code> (${num(times["plate-at"])} ms)</h3>
 ${term(cliTxt("plate-at") ?? "(missing)")}
 <h3>Angle of a chamfer (${num(times["chamfer-angle"])} ms)</h3>

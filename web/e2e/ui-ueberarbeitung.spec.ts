@@ -99,7 +99,7 @@ test("U01 Leisten bei 1280, 1440 und 1920 px, hell und dunkel: kein Umbruch, nic
   const all: Record<string, unknown> = {};
   const problems: string[] = [];
   await openApp(page);
-  await openExample(page, "spec/mehrfarbig.mcad");
+  await openExample(page, "spec/multicolor.mcad");
   for (const theme of ["light", "dark"] as const) {
     await setTheme(page, theme);
     for (const w of widths) {
@@ -119,9 +119,9 @@ test("U01 Leisten bei 1280, 1440 und 1920 px, hell und dunkel: kein Umbruch, nic
     }
   }
   // the sketch bar (drawing needs the sketch at the cursor)
-  await openExample(page, "spec/skizze_deckel.mcad");
+  await openExample(page, "spec/sketch_lid.mcad");
   await clickLine(page, 14, 4);
-  await waitScene(page, { context: "umriss" });
+  await waitScene(page, { context: "outline" });
   for (const theme of ["light", "dark"] as const) {
     await setTheme(page, theme);
     for (const w of widths) {
@@ -188,11 +188,11 @@ test("U02 Kopfleiste: Datei-Menü per Tastatur, Export merkt das Format (Strg+E)
   await expect(menuItem(page, "3MF mehrfarbig")).toHaveAttribute("aria-checked", "true");
   await screenshot20(page, "u02-export-menue");
   const [dl] = await Promise.all([page.waitForEvent("download"), menuItem(page, "STL").click()]);
-  expect(dl.suggestedFilename()).toBe("gehaeuse.stl");
+  expect(dl.suggestedFilename()).toBe("housing.stl");
   await expect(page.getByRole("button", { name: "Exportieren: STL", exact: true })).toBeVisible();
   await page.locator(".cm-content").click();
   const [dl2] = await Promise.all([page.waitForEvent("download"), page.keyboard.press("Control+e")]);
-  expect(dl2.suggestedFilename()).toBe("gehaeuse.stl");
+  expect(dl2.suggestedFilename()).toBe("housing.stl");
   await page.reload();
   await waitScene(page);
   await expect(page.getByRole("button", { name: "Exportieren: STL", exact: true })).toBeVisible();
@@ -221,13 +221,13 @@ test("U02 Kopfleiste: Datei-Menü per Tastatur, Export merkt das Format (Strg+E)
       { name: "u02-beispiele", label: "Beispiele mit Untermenü" },
       { name: "u02-thema-menue", label: "Thema" },
     ],
-    checks: ["8 Einträge im Datei-Menü", "Export STL per Menü und per Strg+E (gehaeuse.stl)", "Format nach Neuladen erhalten"],
+    checks: ["8 Einträge im Datei-Menü", "Export STL per Menü und per Strg+E (housing.stl)", "Format nach Neuladen erhalten"],
   });
 });
 
 test("U03 Editor: nur Tabs und „+“, Kontextmenü Als Hauptdatei und Schließen", async ({ page }) => {
   await openApp(page);
-  await openExampleProject(page, "projekt-gehaeuse");
+  await openExampleProject(page, "project-housing");
   await page.waitForFunction(() => (window as unknown as { __cad: { projectInfo(): { paths: string[] } } }).__cad.projectInfo().paths.length === 3);
   await waitScene(page, { context: null });
   const tabs = page.getByRole("tablist", { name: "Dateien des Projekts" });
@@ -237,14 +237,14 @@ test("U03 Editor: nur Tabs und „+“, Kontextmenü Als Hauptdatei und Schließ
   await pickMenu(page, "Datei hinzufügen", "Neue Datei …");
   await expect(fileTab(page, "lib/neu.scad")).toHaveAttribute("aria-selected", "true");
   // context menu on a tab (right click)
-  await fileTab(page, "konstanten.mcad").click({ button: "right" });
-  await expect(page.getByRole("menu", { name: "Datei konstanten.mcad" })).toBeVisible();
+  await fileTab(page, "constants.mcad").click({ button: "right" });
+  await expect(page.getByRole("menu", { name: "Datei constants.mcad" })).toBeVisible();
   await screenshot20(page, "u03-tab-kontextmenue");
   await menuItem(page, "Als Hauptdatei").click();
-  await page.waitForFunction(() => (window as unknown as { __cad: { projectInfo(): { main: string } } }).__cad.projectInfo().main === "konstanten.mcad");
-  await expect(fileTab(page, "konstanten.mcad").locator(".star")).toBeVisible();
+  await page.waitForFunction(() => (window as unknown as { __cad: { projectInfo(): { main: string } } }).__cad.projectInfo().main === "constants.mcad");
+  await expect(fileTab(page, "constants.mcad").locator(".star")).toBeVisible();
   // the main file can't be closed; another one can (with confirmation)
-  await fileTab(page, "konstanten.mcad").click({ button: "right" });
+  await fileTab(page, "constants.mcad").click({ button: "right" });
   await expect(menuItem(page, "Schließen")).toHaveAttribute("aria-disabled", "true");
   await page.keyboard.press("Escape");
   // keyboard: Umschalt+F10 on the focused tab opens the same menu
@@ -256,10 +256,10 @@ test("U03 Editor: nur Tabs und „+“, Kontextmenü Als Hauptdatei und Schließ
   await expect(menuItem(page, "Schließen")).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(fileTab(page, "lib/neu.scad")).toHaveCount(0);
-  // back to gehaeuse.mcad as main file (the "+" menu holds the actions of the shown file)
-  await fileTab(page, "gehaeuse.mcad").click();
+  // back to housing.mcad as main file (the "+" menu holds the actions of the shown file)
+  await fileTab(page, "housing.mcad").click();
   await pickMenu(page, "Datei hinzufügen", "Als Hauptdatei");
-  await page.waitForFunction(() => (window as unknown as { __cad: { projectInfo(): { main: string } } }).__cad.projectInfo().main === "gehaeuse.mcad");
+  await page.waitForFunction(() => (window as unknown as { __cad: { projectInfo(): { main: string } } }).__cad.projectInfo().main === "housing.mcad");
   await screenshot20(page, "u03-editor", "section.editorpane");
   record20({
     id: "U03",
@@ -324,9 +324,9 @@ test("U04 Modus: genau einer aktiv, Schnitt bleibt beim Messen im Schnitt", asyn
 
 test("U05 Skizzen-Kontextleiste: Gruppen, Bogen-Menü, Tastenkürzel, Fertig", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/skizze_deckel.mcad");
+  await openExample(page, "spec/sketch_lid.mcad");
   await clickLine(page, 14, 4);
-  await waitScene(page, { context: "umriss" });
+  await waitScene(page, { context: "outline" });
   await mode(page, "Skizze").click();
   await expect(sketchBar(page)).toBeVisible();
   const tool = () => page.evaluate(() => (window as unknown as W).__cad.sketch()!.tool);
@@ -449,9 +449,9 @@ test("U07 Seitenpanel: Reiter, einklappen, Bauteile mit „ohne Bauteil“, Para
   await page.getByRole("button", { name: "Seitenpanel einblenden" }).click();
   await expect(sideTab(page, "Messen")).toHaveAttribute("aria-selected", "true");
   // module context: the tab "Parameter" appears and is chosen, back in the file the last tab
-  await openExample(page, "spec/gehaeuse.mcad");
+  await openExample(page, "spec/housing.mcad");
   await clickLine(page, 10, 6);
-  await waitScene(page, { context: "gehaeuse" });
+  await waitScene(page, { context: "housing" });
   await expect(sideTab(page, "Parameter")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("region", { name: "Parameterleiste" })).toBeVisible();
   await screenshot20(page, "u07-parameter", ".sidepanel");
@@ -460,7 +460,7 @@ test("U07 Seitenpanel: Reiter, einklappen, Bauteile mit „ohne Bauteil“, Para
   await expect(sideTab(page, "Parameter")).toHaveCount(0);
   await expect(sideTab(page, "Messen")).toHaveAttribute("aria-selected", "true");
   const s = await cad(page);
-  expect(s.fileName).toBe("gehaeuse.mcad");
+  expect(s.fileName).toBe("housing.mcad");
   record20({
     id: "U07",
     title: "Seitenpanel",
@@ -493,7 +493,7 @@ test("U08 Tastatur: Tab erreicht alle Bedienelemente der Leisten", async ({ page
     });
     seen.push(n);
   }
-  const want = ["Datei", "Beispiele", "Speichern", "Exportieren: 3MF mehrfarbig", "Exportformat", "Farbschema", "Einstellungen", "gehaeuse.mcad", "Datei hinzufügen", "Editor", "Modell", "Einpassen", "Ansicht", "Alle Raster", "Bauteile", "Seitenpanel ausblenden"];
+  const want = ["Datei", "Beispiele", "Speichern", "Exportieren: 3MF mehrfarbig", "Exportformat", "Farbschema", "Einstellungen", "housing.mcad", "Datei hinzufügen", "Editor", "Modell", "Einpassen", "Ansicht", "Alle Raster", "Bauteile", "Seitenpanel ausblenden"];
   for (const w of want) expect(seen, `Tab erreicht ${w}`).toContain(w);
   // focus ring in the accent colour
   await page.getByRole("button", { name: "Einpassen" }).focus();

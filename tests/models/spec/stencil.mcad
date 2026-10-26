@@ -1,0 +1,20 @@
+// Purpose: spray stencil with the default font "cad stencil mono" (plan 17.4, report 17) – the
+// text is cut out of a thin plate; the bridges of the font hold the inner parts
+// of O, A, B, 0, 8 … to the plate, nothing falls out. Without `font` the stencil font applies;
+// `stroke_width` (stroke width) and `bridge_width` (bridge width) in mm, `bridge_width = 0` without bridges.
+
+width = 120;
+height = 44;
+thickness = 1;
+r = 4;                // Corner radius
+cap_h = 12;           // Cap height
+stroke_w = 1.7;       // Stroke width (default 0.14 · size)
+bridge = 1.2;         // Bridge width (print: at least two nozzle widths)
+
+difference() {
+    linear_extrude(thickness) offset(r = r) offset(delta = -r) square([width, height]);
+    translate([width / 2, 27, -1]) linear_extrude(thickness + 2)
+        text("PAINT 08", size = cap_h, halign = "center", stroke_width = stroke_w, bridge_width = bridge);
+    translate([width / 2, 8, -1]) linear_extrude(thickness + 2)
+        text("RAL 9005 B", size = 8, halign = "center", bridge_width = bridge);
+}

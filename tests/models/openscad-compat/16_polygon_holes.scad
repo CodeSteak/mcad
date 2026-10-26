@@ -1,4 +1,4 @@
-// Zweck: polygon with holes via paths – perforated sheet/sign with two windows, extruded.
+// Purpose: polygon with holes via paths – perforated sheet/sign with two windows, extruded.
 pts = [
     [0, 0], [40, 0], [40, 25], [0, 25],      // outside
     [5, 5], [15, 5], [15, 20], [5, 20],      // Window 1

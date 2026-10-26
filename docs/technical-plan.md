@@ -381,7 +381,7 @@ A native program `mcad` (crate `cad-cli`; up to 0.2 the binary was called `cad`)
 - `render` uses a small software rasteriser in Rust (`cad-render`: Z-buffer, shading, edge lines, ortho/perspective, markers, labels with an embedded bitmap font). It needs no GPU and therefore also runs in containers and CI.
 - Section: clipping in the renderer with a filled cap using the stencil principle (cap where the view ray crosses the surface an odd number of times up to the plane), no kernel boolean. Same method and same convention as the later GPU section view of the UI: the plane through `p` with normal `n` removes the half that `n` points into (`(q − p) · n ≤ 0` remains).
 - **Daemon** (report 10): kernel results are handles of the native library and cannot be serialised; instead of an on-disk cache, a background process holds the engine cache. `check`, `eval`, `inspect`, `render`, `export`, `outline`, `measure` and `set` connect via `cad-ipc` (endpoint `daemon`, socket folder 0700, socket 0600, peer UID) to `mcad daemon serve` or start it detached (new session, output to `daemon.log`); exactly one daemon via an `flock` lock. The client sends arguments, working directory and stdin; the daemon runs the same command function (session on its engine, change into the working directory, file writes are recorded) and returns stdout, stderr, exit code and the files the client writes. Output is the same as without the daemon, including the face tags: the session numbers them in the order a fresh engine would assign them. One engine for all projects (content-based keys); limits 512 MiB (node results + meshes; cost of a node measured on the heap in the daemon, otherwise estimated from the topology), 16384 entries, 8 projects, cache cleared when RSS exceeds start + 1.5 × limit; exit after 15 min without a request; watchdog 30 min (the daemon exits, the command runs without the daemon and reports this); a different build ID replaces the daemon. Disabled with `--no-daemon`, `MCAD_NO_DAEMON=1`, `[daemon] enabled = false` (`$XDG_CONFIG_HOME/mcad/config.toml`); without a daemon (Windows, errors) the command silently computes itself. `mcad daemon status|stop|serve`. `mcad watch` keeps its own in-process cache.
-- **Rename `cad` → `mcad` (0.3.0):** binary, program name, app ID `dev.mcad.desktop` (window title "… – mcad", desktop file `dev.mcad.desktop.desktop`, file types `text/x-mcad` and `application/x-openscad` in `packaging/linux/mcad.xml`), Arch package `mcad` (replaces `controller-cad`), configuration `$XDG_CONFIG_HOME/mcad/config.toml`, socket folder `$XDG_RUNTIME_DIR/mcad` or `/tmp/mcad-<uid>`, environment `MCAD_*`. Fallback: `CAD_*` is read if `MCAD_*` is missing (`cad_ipc::env_var`), the old `controller-cad/config.toml` if the new one does not exist; the desktop app's list of recently opened files is taken over once from the folder of the old app ID. New files are named `.mcad` (UI "Neu" (New), "Speichern unter" (Save as), new folder `main.mcad`, examples, test data); `.scad` opens everywhere (CLI, `include`/`use`, file dialogs, folder projects, upload, ZIP), shared check `cad_eval::is_model_file` or `isModelFile` in the UI. These stay `.scad`: `tests/models/openscad-compat/`, `tests/openscad-compat/` (comparison with OpenSCAD), `tests/farben-pruefung/cases/` (snapshot of an independent review with images and report) and the case study of report 8. Unchanged: crate names `cad-*`, repository `controller-cad`, font name "cad stencil mono" (appears in models), IndexedDB name of the browser app (saved projects).
+- **Rename `cad` → `mcad` (0.3.0):** binary, program name, app ID `dev.mcad.desktop` (window title "… – mcad", desktop file `dev.mcad.desktop.desktop`, file types `text/x-mcad` and `application/x-openscad` in `packaging/linux/mcad.xml`), Arch package `mcad` (replaces `controller-cad`), configuration `$XDG_CONFIG_HOME/mcad/config.toml`, socket folder `$XDG_RUNTIME_DIR/mcad` or `/tmp/mcad-<uid>`, environment `MCAD_*`. Fallback: `CAD_*` is read if `MCAD_*` is missing (`cad_ipc::env_var`), the old `controller-cad/config.toml` if the new one does not exist; the desktop app's list of recently opened files is taken over once from the folder of the old app ID. New files are named `.mcad` (UI "Neu" (New), "Speichern unter" (Save as), new folder `main.mcad`, examples, test data); `.scad` opens everywhere (CLI, `include`/`use`, file dialogs, folder projects, upload, ZIP), shared check `cad_eval::is_model_file` or `isModelFile` in the UI. These stay `.scad`: `tests/models/openscad-compat/`, `tests/openscad-compat/` (comparison with OpenSCAD), `tests/color-review/cases/` (snapshot of an independent review with images and report) and the case study of report 8. Unchanged: crate names `cad-*`, repository `controller-cad`, font name "cad stencil mono" (appears in models), IndexedDB name of the browser app (saved projects).
 - In addition, a guide for Claude Code in the repo (`.claude/skills/cad-cli/SKILL.md`): outline → edit → check → render (contact sheet with grids/anchors) → inspect/measure → export.
 
 ---
@@ -441,7 +441,7 @@ smlib/
 third_party/smlib/  SMLib sources (not checked in)
 web/
   src/app/  src/editor/  src/view/  src/engine/  src/logic/  src/files/  src/state/  src/platform/  e2e/  e2e-tauri/  scripts/
-examples/           example files (also test cases): spec/, openscad-compat/, projekt-gehaeuse/
+examples/           example files (also test cases): spec/, openscad-compat/, project-housing/
 tests/              openscad-compat/ (reference, compare.py), step/verify.py
 tools/report/       generators for the test reports
 scripts/ci/         steps of the CI workflows
@@ -1130,9 +1130,9 @@ Multi-colour text on a plate: seconds instead of minutes or abort by the watchdo
 are written by the writer as `SURFACE_OF_LINEAR_EXTRUSION` of an `ELLIPSE` (`cad-step`,
 `elliptic_extrusion`: conic through five sample points, checked at 65): OpenCASCADE
 integrated the extrusion of the rational B-spline wrongly by 3.6·10⁻³. Open: OpenCASCADE measures the extrusion of a
-quadratic Q/T wave (`welle.svg`, `id = "welle"`) 3 % too small (kernel
+quadratic Q/T wave (`wave.svg`, `id = "wave"`) 3 % too small (kernel
 652.25 mm², analytic 652.19 mm²); `svg_logo.mcad` therefore uses only the ellipse and arc from
-`welle.svg`.
+`wave.svg`.
 
 **Limitations.** Kernel time grows strongly with the number of glyphs on one shared face
 (union plate ∪ text in SMLib: 9 glyphs ≈ 1.5 s, 28 ≈ 9 s native); contours that intersect
@@ -1200,7 +1200,7 @@ glyph within its cell, areas (H exact, o against formula, against JetBrains Mono
 directions, fallback; cad-eval: default font, parameters, warnings; cad-engine
 (`stencil_text.rs`): each glyph via `region_2d` without a hole, volume = area × height,
 kernel time of a sign against Allerta Stencil (native 1.6–1.9 s against 3.3–3.6 s: lines and
-circles instead of B-splines, fewer kernel calls); example `tests/models/spec/schablone.mcad`;
+circles instead of B-splines, fewer kernel calls); example `tests/models/spec/stencil.mcad`;
 Playwright K01–K03 (`web/e2e/schablone.spec.ts`). Character chart:
 `cargo run -p cad-font --example stencil_chart -- tafel.svg [strich steg]`.
 
@@ -1421,8 +1421,8 @@ region under the mouse.
 
 **Provenance.** For each selection: the lines of the nodes of the face tags (for edges, of both
 faces, for vertices, of all adjacent ones), with named instance and module (`Zeile 11: box (Instanz
-k: gehaeuse)`); grid points (`g[b, h, o]`), grid lines for axes (`g[loch[0], mitte, *]`),
-grid planes for planar faces (`g.innen_l`) and anchors (`k.ecke`) on which the element lies
+k: housing)`); grid points (`g[b, h, o]`), grid lines for axes (`g[hole[0], mid, *]`),
+grid planes for planar faces (`g.inner_left`) and anchors (`k.corner`) on which the element lies
 (tolerance 10⁻⁶ relative, all grids of the scene).
 
 **Protocol** (7.1). `Measure { id, kind, picks, ray?, hit?, pixel, snap_px, free, click,

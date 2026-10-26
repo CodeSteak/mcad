@@ -1,4 +1,4 @@
-// Zweck: modifiers – # highlights (stays in the result), % is helper geometry, * is not shown.
+// Purpose: modifiers – # highlights (stays in the result), % is helper geometry, * is not shown.
 difference() {
     cube([20, 20, 10]);
     # translate([10, 10, -1]) cylinder(h = 12, r = 4);

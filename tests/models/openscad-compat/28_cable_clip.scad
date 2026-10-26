@@ -1,4 +1,4 @@
-// Zweck: cable clip – ring with opening, screw tab; intersection cuts the opening.
+// Purpose: cable clip – ring with opening, screw tab; intersection cuts the opening.
 d_cable = 8; wall = 2; w = 8;
 r_o = d_cable / 2 + wall;
 difference() {

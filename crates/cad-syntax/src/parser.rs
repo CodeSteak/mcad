@@ -113,7 +113,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Module name, possibly qualified by enclosing modules: `teile.schraube`, `a.b.c`. The
+    /// Module name, possibly qualified by enclosing modules: `parts.screw`, `a.b.c`. The
     /// parts are joined with `.` into one identifier whose span covers the whole path.
     fn qualified_ident(&mut self) -> PResult<Ident> {
         let mut id = self.ident()?;

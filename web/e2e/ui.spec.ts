@@ -12,13 +12,13 @@ test.beforeEach(async ({ page }) => {
 
 test("S01 Laden: Editor, Ansicht und erste Szene", async ({ page }) => {
   const s = await openApp(page);
-  expect(s.fileName).toBe("gehaeuse.mcad");
+  expect(s.fileName).toBe("housing.mcad");
   expect(s.view!.objects).toBeGreaterThan(0);
   expect(s.view!.plan.base).toBe("full");
   // Anchors of the named instance k (diamonds).
   expect(s.view!.plan.anchors).toBe(2);
   await expect(page.getByTestId("status-errors")).toHaveText("0 Fehler · 0 Warnungen");
-  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toHaveText("gehaeuse.mcad");
+  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toHaveText("housing.mcad");
   const nav = await page.evaluate(() => performance.getEntriesByType("navigation")[0]?.startTime ?? 0);
   writeMetrics({ firstSceneMs: s.metrics.firstSceneMs! - nav, firstEvalMs: s.metrics.evalMs[0] });
   await screenshot(page, "s01-laden");
@@ -26,24 +26,24 @@ test("S01 Laden: Editor, Ansicht und erste Szene", async ({ page }) => {
     id: "S01",
     title: "Laden",
     image: "s01-laden",
-    caption: "Startzustand: Spec-Beispiel gehaeuse.mcad links im Editor, rechts die Szene mit Boden, Achsenkreuz und den Ankern der benannten Instanz k (Rauten, mit Pfeil bei dir).",
+    caption: "Startzustand: Spec-Beispiel housing.mcad links im Editor, rechts die Szene mit Boden, Achsenkreuz und den Ankern der benannten Instanz k (Rauten, mit Pfeil bei dir).",
   });
 });
 
 test("S02 Beispiel öffnen", async ({ page }) => {
   await openApp(page);
   const v0 = (await cad(page)).shownVersion!;
-  const s = await openExample(page, "spec/lochplatte.mcad");
+  const s = await openExample(page, "spec/hole_plate.mcad");
   expect(s.shownVersion).toBeGreaterThan(v0);
-  expect(s.fileName).toBe("lochplatte.mcad");
-  await expect(lineEl(page, 3)).toContainText("module lochplatte");
+  expect(s.fileName).toBe("hole_plate.mcad");
+  await expect(lineEl(page, 3)).toContainText("module hole_plate");
   expect(s.view!.objects).toBeGreaterThan(0);
   await screenshot(page, "s02-beispiel");
   record({
     id: "S02",
     title: "Beispiel öffnen",
     image: "s02-beispiel",
-    caption: "Beispielmenü → spec/lochplatte.mcad: der Editor lädt die Datei, die Ansicht zeigt nach der Auswertung die Platte mit Bohrungen, Lasche und den Anker p.erstes_loch.",
+    caption: "Beispielmenü → spec/hole_plate.mcad: der Editor lädt die Datei, die Ansicht zeigt nach der Auswertung die Platte mit Bohrungen, Lasche und den Anker p.first_hole.",
   });
 });
 
@@ -52,13 +52,13 @@ test("S03 Cursor in Zeile: Knoten voll, Rest gedimmt, Transformation mit Koordin
   await clickLine(page, 22, 20);
   let s = await waitView(page, "(s) => s.view.selection.line === 22 && s.view.plan.base === 'dim'");
   expect(s.view!.plan.items.some((i) => i.mode === "full" && i.line === 22)).toBe(true);
-  // Cursor on `deckel()`: the module call is selected, the rest of the module dimmed.
-  await screenshot(page, "s03a-cursor-deckel");
+  // Cursor on `lid()`: the module call is selected, the rest of the module dimmed.
+  await screenshot(page, "s03a-cursor-lid");
   await clickLine(page, 22, 2);
   s = await waitView(page, "(s) => s.view.selection.line === 22 && s.view.plan.frames === 2");
   const labels = s.view!.plan.items.map((i) => `${i.mode}:${i.label}`);
   expect(labels).toContain("full:translate");
-  expect(labels).toContain("outline:deckel");
+  expect(labels).toContain("outline:lid");
   expect(s.view!.plan.base).toBe("dim");
   await screenshot(page, "s03b-cursor-translate");
   // Pixel check: the dimmed base is lighter/transparent compared with the full drawing.
@@ -66,7 +66,7 @@ test("S03 Cursor in Zeile: Knoten voll, Rest gedimmt, Transformation mit Koordin
     id: "S03",
     title: "Cursor in Zeile",
     image: "s03b-cursor-translate",
-    caption: "Cursor auf translate(k.ecke) in Zeile 22: Teilbaum am Ziel voll, an der Ausgangsposition als Umriss; Koordinatenkreuz vorher gestrichelt, nachher durchgezogen, Pfeil vom alten zum neuen Ursprung; Rest des Modells gedimmt.",
+    caption: "Cursor auf translate(k.corner) in Zeile 22: Teilbaum am Ziel voll, an der Ausgangsposition als Umriss; Koordinatenkreuz vorher gestrichelt, nachher durchgezogen, Pfeil vom alten zum neuen Ursprung; Rest des Modells gedimmt.",
   });
 });
 
@@ -107,25 +107,25 @@ test("S04 Pixelprüfung: Dimmen verändert die Darstellung", async ({ page }) =>
 test("S05 Modulkontext, Differenz: abgezogener Körper rot", async ({ page }) => {
   await openApp(page);
   await clickLine(page, 10, 6);
-  const s = await waitScene(page, { context: "gehaeuse" });
-  expect(s.path).toEqual(["gehaeuse"]);
+  const s = await waitScene(page, { context: "housing" });
+  expect(s.path).toEqual(["housing"]);
   const st = await waitView(page, "(s) => s.view.selection.line === 10 && s.view.plan.items.some(i => i.mode === 'red')");
   const red = st.view!.plan.items.filter((i) => i.mode === "red");
   expect(red.map((i) => i.line)).toEqual([12]);
-  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toContainText("gehaeuse.mcad›gehaeuse");
+  await expect(page.getByRole("navigation", { name: "Pfadleiste" })).toContainText("housing.mcad›housing");
   await screenshot(page, "s05-difference");
   record({
     id: "S05",
     title: "Modulkontext und difference",
     image: "s05-difference",
-    caption: "Cursor in Zeile 10 (difference) innerhalb von module gehaeuse: Kontext wechselt auf das Modul (Pfadleiste „Datei › gehaeuse“, eigenes System, Raster g eingeblendet); Ergebnis voll, abgezogene Box aus Zeile 12 rot halbtransparent.",
+    caption: "Cursor in Zeile 10 (difference) innerhalb von module housing: Kontext wechselt auf das Modul (Pfadleiste „Datei › housing“, eigenes System, Raster g eingeblendet); Ergebnis voll, abgezogene Box aus Zeile 12 rot halbtransparent.",
   });
 });
 
 test("S06 Hover über Zeile: Knoten halbtransparent", async ({ page }) => {
   await openApp(page);
   await clickLine(page, 11, 4);
-  await waitScene(page, { context: "gehaeuse" });
+  await waitScene(page, { context: "housing" });
   await lineEl(page, 12).hover({ position: { x: 60, y: 8 } });
   const s = await waitView(page, "(s) => s.view.plan.items.some(i => i.mode === 'hover' && i.line === 12)");
   expect(s.view!.hoverNodes.length).toBeGreaterThan(0);
@@ -151,12 +151,12 @@ test("S07 Hover über Fläche markiert Zeile, Klick setzt Cursor, Doppelklick sp
   await page.mouse.click(pt!.x, pt!.y);
   const s = await waitView(page, "(s) => s.view.selection.line === 22");
   expect(s.view!.selection.nodes.length).toBeGreaterThan(0);
-  // Body of k (line 21): double click opens the definition of gehaeuse.
+  // Body of k (line 21): double click opens the definition of housing.
   const pk = await page.evaluate(() => (window as unknown as { __cad: { findPointForLine(l: number): { x: number; y: number } | null } }).__cad.findPointForLine(21));
   expect(pk).not.toBeNull();
   await page.mouse.dblclick(pk!.x, pk!.y);
-  const d = await waitScene(page, { context: "gehaeuse" });
-  expect(d.path).toEqual(["gehaeuse"]);
+  const d = await waitScene(page, { context: "housing" });
+  expect(d.path).toEqual(["housing"]);
   const line = await page.evaluate(() => {
     const c = (window as unknown as { __cad: { bridge: { doc(): { lineAt(p: number): { number: number } } }; state(): { cursor: number } } }).__cad;
     return c.bridge.doc().lineAt(c.state().cursor).number;
@@ -168,16 +168,16 @@ test("S07 Hover über Fläche markiert Zeile, Klick setzt Cursor, Doppelklick sp
     id: "S07",
     title: "Ansicht → Code",
     image: "s07a-hover-flaeche",
-    caption: "Maus über der Fläche des Deckels an k.ecke: Zeile 22 im Editor wird hervorgehoben (Fläche → tri_tags → tag_nodes → Knoten → Zeile). Klick setzt den Cursor in Zeile 22, Doppelklick auf das Gehäuse springt in module gehaeuse.",
+    caption: "Maus über der Fläche des Deckels an k.corner: Zeile 22 im Editor wird hervorgehoben (Fläche → tri_tags → tag_nodes → Knoten → Zeile). Klick setzt den Cursor in Zeile 22, Doppelklick auf das Gehäuse springt in module housing.",
   });
 });
 
 test("S08 Pfadleiste: Klick springt eine Ebene hoch", async ({ page }) => {
   await openApp(page);
   await clickLine(page, 11, 4);
-  await waitScene(page, { context: "gehaeuse" });
+  await waitScene(page, { context: "housing" });
   await screenshot(page, "s08a-modulkontext");
-  await page.getByRole("navigation", { name: "Pfadleiste" }).getByRole("button", { name: "Zur Datei gehaeuse.mcad" }).click();
+  await page.getByRole("navigation", { name: "Pfadleiste" }).getByRole("button", { name: "Zur Datei housing.mcad" }).click();
   const s = await waitScene(page, { context: null });
   expect(s.path).toEqual([]);
   expect(s.view!.selection.line).toBe(21);
@@ -186,7 +186,7 @@ test("S08 Pfadleiste: Klick springt eine Ebene hoch", async ({ page }) => {
     id: "S08",
     title: "Pfadleiste",
     image: "s08a-modulkontext",
-    caption: "Modulkontext gehaeuse: nur das Modul in seinem eigenen System mit Raster g (Schnittpunkte, verwendete Ebenen der Zeile). Klick auf „Datei“ setzt den Cursor auf den Aufruf k: gehaeuse(w = 60) (Zeile 21) und zeigt wieder die ganze Datei.",
+    caption: "Modulkontext housing: nur das Modul in seinem eigenen System mit Raster g (Schnittpunkte, verwendete Ebenen der Zeile). Klick auf „Datei“ setzt den Cursor auf den Aufruf k: housing(w = 60) (Zeile 21) und zeigt wieder die ganze Datei.",
   });
 });
 
@@ -262,13 +262,13 @@ test("S11 Gescheiterte Operation: Zeile rot, Meldung am Zeilenende", async ({ pa
 test("S12 Export STL und 3MF", async ({ page }) => {
   await openApp(page);
   const [dl] = await Promise.all([page.waitForEvent("download"), exportAs(page, "STL")]);
-  expect(dl.suggestedFilename()).toBe("gehaeuse.stl");
+  expect(dl.suggestedFilename()).toBe("housing.stl");
   const stl = readFileSync((await dl.path())!);
   const tris = stl.readUInt32LE(80);
   expect(tris).toBeGreaterThan(0);
   expect(stl.length).toBe(84 + 50 * tris);
   const [dl2] = await Promise.all([page.waitForEvent("download"), exportAs(page, "3MF mehrfarbig")]);
-  expect(dl2.suggestedFilename()).toBe("gehaeuse.3mf");
+  expect(dl2.suggestedFilename()).toBe("housing.3mf");
   const mf = readFileSync((await dl2.path())!);
   expect(mf.subarray(0, 2).toString()).toBe("PK");
   await expect(page.getByTestId("status-notice")).toContainText("Exportiert");
@@ -277,15 +277,15 @@ test("S12 Export STL und 3MF", async ({ page }) => {
     id: "S12",
     title: "Export",
     image: "s12-export",
-    caption: `Export STL: gehaeuse.stl, ${tris} Dreiecke, ${stl.length} Byte (binär, 84 + 50·n). Export 3MF: gehaeuse.3mf (ZIP, ${mf.length} Byte). Die Statuszeile meldet den Export.`,
+    caption: `Export STL: housing.stl, ${tris} Dreiecke, ${stl.length} Byte (binär, 84 + 50·n). Export 3MF: housing.3mf (ZIP, ${mf.length} Byte). Die Statuszeile meldet den Export.`,
   });
 });
 
 test("S13 Raster: verwendete Ebenen, alle Raster, Hover über Rasterausdruck", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/lochplatte.mcad");
+  await openExample(page, "spec/hole_plate.mcad");
   await clickLine(page, 12, 10);
-  let s = await waitScene(page, { context: "lochplatte" });
+  let s = await waitScene(page, { context: "hole_plate" });
   s = await waitView(page, "(s) => s.view.selection.line === 12 && s.view.grid.lines > 0");
   const used = s.view!.grid.lines;
   expect(used).toBe(6);
@@ -297,8 +297,8 @@ test("S13 Raster: verwendete Ebenen, alle Raster, Hover über Rasterausdruck", a
   expect(s.view!.grid.dashed).toBeGreaterThan(0);
   await screenshot(page, "s13b-alle-raster");
   await page.getByRole("button", { name: "Alle Raster", exact: true }).click();
-  // Hover over `g[loch[i], mitte, boden]` in line 14.
-  // Column 24 is inside `g[loch[i], mitte, boden]`.
+  // Hover over `g[hole[i], mid, floor]` in line 14.
+  // Column 24 is inside `g[hole[i], mid, floor]`.
   await hoverText(page, 14, 26);
   s = await waitView(page, "(s) => s.view.grid.highlight.includes('point')");
   await expect(page.locator(".cm-ref-hover").first()).toBeVisible();
@@ -307,21 +307,21 @@ test("S13 Raster: verwendete Ebenen, alle Raster, Hover über Rasterausdruck", a
     id: "S13",
     title: "Raster",
     image: "s13b-alle-raster",
-    caption: "Modul lochplatte, Schalter „alle Raster“: Ebenen als dünne Linien am Rand der Bauteilhülle (Literal durchgezogen, Ausdruck gestrichelt), Schnittpunkte als Punkte. Ohne Schalter nur die 6 Ebenen der Zeile 12; Hover über g[loch[i], mitte, boden] hebt den Punkt hervor.",
+    caption: "Modul hole_plate, Schalter „alle Raster“: Ebenen als dünne Linien am Rand der Bauteilhülle (Literal durchgezogen, Ausdruck gestrichelt), Schnittpunkte als Punkte. Ohne Schalter nur die 6 Ebenen der Zeile 12; Hover über g[hole[i], mid, floor] hebt den Punkt hervor.",
   });
 });
 
 test("S14 Anker benannter Instanzen", async ({ page }) => {
   await openApp(page);
-  const s = await openExample(page, "spec/winkel_anker.mcad");
-  // a: winkel(), b: winkel(l = 40): 3 anchors each.
+  const s = await openExample(page, "spec/angle_anchor.mcad");
+  // a: bracket(), b: bracket(l = 40): 3 anchors each.
   expect(s.view!.plan.anchors).toBe(6);
-  // Hover over the reference `a.boden_loch` (line 26) highlights that anchor.
+  // Hover over the reference `a.base_hole` (line 26) highlights that anchor.
   await clickLine(page, 31, 0);
   await waitView(page, "(s) => s.view.selection.line === 31");
   await hoverText(page, 26, 14);
   await waitView(page, "(s) => s.view.plan.activeAnchors === 1");
-  await expect(page.locator(".cm-ref-hover").first()).toHaveText("a.boden_loch");
+  await expect(page.locator(".cm-ref-hover").first()).toHaveText("a.base_hole");
   // Cursor on the named instance a: its anchors are highlighted.
   await page.mouse.move(5, 5);
   await clickLine(page, 23, 4);
@@ -331,13 +331,13 @@ test("S14 Anker benannter Instanzen", async ({ page }) => {
     id: "S14",
     title: "Anker",
     image: "s14-anker",
-    caption: "winkel_anker.mcad: Anker der benannten Instanzen a und b als Rauten, mit Pfeil bei dir. Hover über a.boden_loch hebt diesen Anker hervor; Cursor auf a: winkel() hebt die drei Anker der Instanz hervor.",
+    caption: "angle_anchor.mcad: Anker der benannten Instanzen a und b als Rauten, mit Pfeil bei dir. Hover über a.base_hole hebt diesen Anker hervor; Cursor auf a: bracket() hebt die drei Anker der Instanz hervor.",
   });
 });
 
 test("S15 Fillet-Zonen blau, ausgewählte Kanten farbig, Inline-Hinweis", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/fillet_zonen.mcad");
+  await openExample(page, "spec/fillet_zones.mcad");
   await clickLine(page, 12, 10);
   await waitScene(page, { context: "block" });
   const s = await waitView(page, "(s) => s.view.selection.line === 12 && s.view.plan.items.some(i => i.mode === 'blue')");
@@ -364,7 +364,7 @@ test("S16 Positionen alter Szenen werden beim Tippen weitergeführt", async ({ p
   await page.waitForFunction(() => !(window as unknown as { __cad: { state(): { pendingSend: boolean } } }).__cad.state().pendingSend);
   const s = await cad(page);
   expect(s.shownVersion).toBeLessThan(s.sentVersion);
-  // The old scene's node of `translate(k.ecke)` is now on line 24.
+  // The old scene's node of `translate(k.corner)` is now on line 24.
   await clickLine(page, 24, 2);
   const v = await waitView(page, "(s) => s.view.selection.line === 24 && s.view.selection.nodes.length > 0", null, { meshes: false });
   expect(v.shownVersion).toBeLessThan(v.sentVersion);
@@ -374,7 +374,7 @@ test("S16 Positionen alter Szenen werden beim Tippen weitergeführt", async ({ p
   record({
     id: "S16",
     title: "Positionen alter Szenen",
-    caption: "Zwei Zeilen oben eingefügt, während die Engine 1,5 s blockiert ist: Der Cursor in Zeile 24 wählt noch in der alten Szene den Knoten translate(k.ecke) (früher Zeile 22) – Quellpositionen werden über ChangeSet.mapPos weitergeführt, bis die neue Szene da ist.",
+    caption: "Zwei Zeilen oben eingefügt, während die Engine 1,5 s blockiert ist: Der Cursor in Zeile 24 wählt noch in der alten Szene den Knoten translate(k.corner) (früher Zeile 22) – Quellpositionen werden über ChangeSet.mapPos weitergeführt, bis die neue Szene da ist.",
   });
 });
 
@@ -423,7 +423,7 @@ test("S19 Dunkles Thema und Standardansichten", async ({ page }) => {
   await clickLine(page, 21, 4);
   await waitView(page, "(s) => s.view.selection.line === 21");
   await screenshot(page, "s19-dunkel");
-  record({ id: "S19", title: "Dunkles Thema", image: "s19-dunkel", caption: "Dunkles Thema, Iso-Ansicht, Cursor auf k: gehaeuse(w = 60): Instanz voll, Anker der Instanz hervorgehoben, Rest gedimmt." });
+  record({ id: "S19", title: "Dunkles Thema", image: "s19-dunkel", caption: "Dunkles Thema, Iso-Ansicht, Cursor auf k: housing(w = 60): Instanz voll, Anker der Instanz hervorgehoben, Rest gedimmt." });
 });
 
 test("S20 intersection und 2D-Formen", async ({ page }) => {

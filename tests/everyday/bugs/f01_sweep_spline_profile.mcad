@@ -1,0 +1,8 @@
+// F1: sweep along a curved path rejects a closed spline profile although it
+// lies symmetric about the origin ("profile that is not centred on its origin"). The check
+// in smlib/facade/sc_facade.cpp takes the hull of the NURBS curves and requires a deviation
+// ≤ 1e-9. Polygon and circle work. Workaround: circle (mug handle).
+// Status (report 13): fixed – SMLib puts the centre of the control-point hull onto the
+// path; smlib/patches/0003 lets the facade supply the origin of the profile.
+// EXPECT: error-free
+sweep(path = [[0, 0, 0], [20, 0, 10], [40, 0, 0]]) spline([[5, 0], [0, 3], [-5, 0], [0, -3]]);

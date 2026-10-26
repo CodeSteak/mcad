@@ -1,4 +1,4 @@
-// Zweck: polyhedron – pyramid and wedge with planar faces (faces clockwise seen from outside).
+// Purpose: polyhedron – pyramid and wedge with planar faces (faces clockwise seen from outside).
 polyhedron(
     points = [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0], [5, 5, 8]],
     faces = [[0, 1, 4], [1, 2, 4], [2, 3, 4], [3, 0, 4], [1, 0, 3, 2]]

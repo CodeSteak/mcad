@@ -1,4 +1,4 @@
-// Zweck: cube in all forms – number, vector, center = true/false, positional arguments.
+// Purpose: cube in all forms – number, vector, center = true/false, positional arguments.
 cube(10);
 translate([15, 0, 0]) cube([20, 10, 5]);
 translate([50, 5, 5]) cube([8, 10, 10], center = true);

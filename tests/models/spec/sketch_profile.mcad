@@ -1,0 +1,38 @@
+// Purpose: sketches with arcs (plan 17.1) – a holder as a sketch of lines and arcs, with a
+// grid in the sketch, one bore (reverse direction, winding rule) and an oblong hole
+// (`hole { … }`), extruded; next to it, a knob made from a sketch with a tangential arc and
+// a cubic Bézier curve, then rotated about the z axis
+module holder(l = 60, b = 24, r_hole = 4) sketch {
+    grid s {
+        x: left = 0, arc_x = l - b / 2;
+        y: bottom = 0, mid = b / 2, top = b;
+    }
+    start(s[left, bottom]);
+    line(to = s[arc_x, bottom]);
+    arc(to = s[arc_x, top], r = b / 2);        // Semicircle at end
+    line(to = s[left, top]);
+    close();
+    // Bore around the arc centre, running clockwise: it is a hole (winding rule).
+    start([l - b / 2 + r_hole, b / 2]);
+    arc(to = [l - b / 2 - r_hole, b / 2], r = r_hole, cw = true);
+    arc(to = [l - b / 2 + r_hole, b / 2], r = r_hole, cw = true);
+    // Slot: a hole in either running direction
+    hole {
+        start([10, b / 2 - 3]);
+        line(to = [26, b / 2 - 3]);
+        arc(to = [26, b / 2 + 3], r = 3);
+        line(to = [10, b / 2 + 3]);
+        arc(to = [10, b / 2 - 3], r = 3);
+    }
+}
+
+linear_extrude(5) holder();
+
+translate([90, 12, 0]) rotate_extrude() sketch {
+    start([0, 0]);
+    line(to = [14, 0]);
+    line(to = [14, 8]);
+    arc(to = [12, 10]);                         // tangent to the straight.
+    bezier(c1 = [6, 10], c2 = [5, 16], to = [0, 16]);
+    close();                                    // and back along the axis.
+}

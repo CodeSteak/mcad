@@ -717,7 +717,7 @@ impl<'a> Ev<'a> {
         info.def_stmt = Some(def.stmt);
         info.def_span = Some(def.span);
         info.path = path.iter().map(|m| m.name.name.clone()).collect();
-        // nested modules by their path (`teile.schraube`, Plan 17.2)
+        // nested modules by their path (`parts.screw`, Plan 17.2)
         info.module = Some(info.path.join("."));
 
         let (root, mut dy) = match lib {

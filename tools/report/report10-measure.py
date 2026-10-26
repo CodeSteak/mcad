@@ -29,9 +29,9 @@ ROOT = Path(__file__).resolve().parents[2]
 
 # model, directory to copy, (old, new) for the small change
 MODELS = [
-    ("spec/variabler_radius.scad", None, ("translate([5, 8, 4]) cube([30, 14, 10]);", "translate([5, 8, 4]) cube([30, 15, 10]);")),
-    ("projekt-gehaeuse/gehaeuse.scad", "projekt-gehaeuse", ("translate([0, tiefe + abstand, 0])", "translate([0, tiefe + abstand + 1, 0])")),
-    ("spec/lochplatte.scad", None, ("cylinder(h = 6, d = 3.5)", "cylinder(h = 6, d = 3.6)")),
+    ("spec/variable_radius.mcad", None, ("translate([5, 8, 4]) cube([30, 14, 10]);", "translate([5, 8, 4]) cube([30, 15, 10]);")),
+    ("projekt-gehaeuse/housing.mcad", "projekt-gehaeuse", ("translate([0, tiefe + abstand, 0])", "translate([0, tiefe + abstand + 1, 0])")),
+    ("spec/hole_plate.mcad", None, ("cylinder(h = 6, d = 3.5)", "cylinder(h = 6, d = 3.6)")),
 ]
 
 COMMANDS = {
@@ -120,10 +120,10 @@ def main():
         # a short session as shown in the report: verbose output, status, log
         demo = []
         ex = lambda r: str(ROOT / "tests" / "models" / r)
-        for args in (["check", ex("spec/variabler_radius.scad"), "--verbose"],
-                     ["render", ex("spec/variabler_radius.scad"), "-o", str(tmp / "v.png"), "--verbose"],
-                     ["export", ex("spec/lochplatte.scad"), "-o", str(tmp / "l.step"), "--verbose"],
-                     ["check", ex("spec/lochplatte.scad"), "--json"],
+        for args in (["check", ex("spec/variable_radius.mcad"), "--verbose"],
+                     ["render", ex("spec/variable_radius.mcad"), "-o", str(tmp / "v.png"), "--verbose"],
+                     ["export", ex("spec/hole_plate.mcad"), "-o", str(tmp / "l.step"), "--verbose"],
+                     ["check", ex("spec/hole_plate.mcad"), "--json"],
                      ["daemon", "status"]):
             dt, p = run(args)
             shown = " ".join(x.replace(str(ROOT) + "/", "").replace(str(tmp) + "/", "") for x in args)

@@ -1,5 +1,5 @@
 // Corrections of the colour functions (test report 12, findings F1–F9 of the independent
-// review in tests/farben-pruefung/): the view shows each instance in its own colour and the
+// review in tests/color-review/): the view shows each instance in its own colour and the
 // colour regions as printed, the slot choice of a parameter colour writes a filament table,
 // material outside parts is exported, no colour group in the 3MF.
 
@@ -11,7 +11,7 @@ import { cad, hook, loadText, openApp, record12, screenshot12, sideTab, waitScen
 
 test.setTimeout(180_000);
 
-const CASES = join(dirname(fileURLToPath(import.meta.url)), "../../tests/farben-pruefung/cases");
+const CASES = join(dirname(fileURLToPath(import.meta.url)), "../../tests/color-review/cases");
 // a comment first: the cursor (line 1) selects no statement, the whole model is shown full
 const caseText = (name: string) => `// ${name}\n${readFileSync(join(CASES, name), "utf8")}`;
 

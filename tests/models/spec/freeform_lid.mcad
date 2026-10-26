@@ -1,0 +1,21 @@
+// Purpose: free-form lid – surface(points) from a 4 × 4 control net (border on the
+// grid planes, bulge as literals), thicken(t) to a solid and a rounded mounting strip.
+module lid(w = 60, d = 40, t = 2, bulge = 9) {
+    grid g {
+        x: a = 0, b = w / 3, c = 2 * w / 3, e = w;
+        y: v = 0, m1 = d / 3, m2 = 2 * d / 3, h = d;
+        z: rim = 0;
+    }
+
+    thicken(t)
+        surface(points = [
+            [g[a, v, rim], g[b, v, rim] + [0, 0, 2], g[c, v, rim] + [0, 0, 2], g[e, v, rim]],
+            [g[a, m1, rim] + [0, 0, 2], [20, 13, bulge], [40, 13, bulge], g[e, m1, rim] + [0, 0, 2]],
+            [g[a, m2, rim] + [0, 0, 2], [20, 27, bulge], [40, 27, 12], g[e, m2, rim] + [0, 0, 2]],
+            [g[a, h, rim], g[b, h, rim] + [0, 0, 2], g[c, h, rim] + [0, 0, 2], g[e, h, rim]]
+        ]);
+
+    translate([0, -6, -3]) cube([w, 6, 3], $fillet = 0.8);
+}
+
+lid();

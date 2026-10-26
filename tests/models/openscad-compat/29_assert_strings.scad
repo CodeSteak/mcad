@@ -1,10 +1,10 @@
-// Zweck: assert, strings and str() – name plate blank with parameter check.
-label = "Werkstatt";
+// Purpose: assert, strings and str() – name plate blank with parameter check.
+label = "Warehouse";
 w = len(label) * 6 + 10;
 h = 15;
-assert(w > 20, "Schild zu kurz");
+assert(w > 20, "Sign too short");
 assert(is_string(label));
-echo(str("Schild ", label, ": ", w, " x ", h, " mm"));
+echo(str("Sign ", label, ": ", w, " x ", h, " mm"));
 echo(chars = [for (c = label) c], upper_first = ord(label[0]) < 97);
 difference() {
     cube([w, h, 2]);

@@ -148,7 +148,7 @@ fn used(out: &Output) -> bool {
 #[test]
 fn autostart_then_cache_hits_and_faster() {
     let env = Env::new();
-    let f = ex("spec/variabler_radius.mcad");
+    let f = ex("spec/variable_radius.mcad");
     assert_eq!(env.status()["running"], false);
     let t0 = Instant::now();
     let a = env.run(&["eval", &f, "--json"]);
@@ -189,20 +189,20 @@ fn output_identical_with_and_without_daemon() {
     std::fs::create_dir(&out).unwrap();
     let o = |n: &str| out.join(n).display().to_string();
     // warm the daemon with other models first: tags and cache state differ from a fresh process
-    for f in ["spec/fillet_zonen.mcad", "spec/flasche.mcad", "spec/lochplatte.mcad"] {
+    for f in ["spec/fillet_zones.mcad", "spec/bottle.mcad", "spec/hole_plate.mcad"] {
         assert!(used(&env.run(&["check", &ex(f), "--json"])));
     }
-    let gehaeuse = ex("spec/gehaeuse.mcad");
-    let projekt = ex("projekt-gehaeuse/gehaeuse.mcad");
-    let vr = ex("spec/variabler_radius.mcad");
+    let housing = ex("spec/housing.mcad");
+    let project = ex("project-housing/housing.mcad");
+    let vr = ex("spec/variable_radius.mcad");
     let cases: Vec<Vec<String>> = vec![
-        vec!["check".into(), gehaeuse.clone()],
+        vec!["check".into(), housing.clone()],
         vec!["check".into(), data("syntax_fehler.mcad")],
         vec!["check".into(), data("fillet_zu_gross.mcad")],
-        vec!["eval".into(), gehaeuse.clone()],
-        vec!["eval".into(), projekt.clone(), "--module".into(), "deckel".into()],
-        vec!["inspect".into(), ex("spec/fillet_zonen.mcad"), "--line".into(), "12".into()],
-        vec!["outline".into(), projekt.clone()],
+        vec!["eval".into(), housing.clone()],
+        vec!["eval".into(), project.clone(), "--module".into(), "lid".into()],
+        vec!["inspect".into(), ex("spec/fillet_zones.mcad"), "--line".into(), "12".into()],
+        vec!["outline".into(), project.clone()],
         // -D without a module: top-level assignments
         vec!["measure".into(), data("variablen.mcad"), "-D".into(), "w=40".into(), "--volume".into(), "all".into()],
         vec!["check".into(), data("variablen.mcad"), "-D".into(), "nix=1".into()],
@@ -218,23 +218,23 @@ fn output_identical_with_and_without_daemon() {
         vec!["check".into(), data("halter.mcad"), "-m".into(), "halter(1, 2, 3, 4)".into()],
         vec![
             "measure".into(),
-            gehaeuse.clone(),
+            housing.clone(),
             "--between".into(),
-            "k.ecke".into(),
-            "k.oben".into(),
+            "k.corner".into(),
+            "k.top".into(),
             "--volume".into(),
             "part:k".into(),
         ],
         vec![
             "measure".into(),
-            projekt.clone(),
+            project.clone(),
             "--interference".into(),
             "--clearance".into(),
-            "gehaeuse".into(),
-            "deckel".into(),
+            "housing".into(),
+            "lid".into(),
         ],
-        vec!["set".into(), gehaeuse.clone(), "--param".into(), "gehaeuse.w=50".into(), "--dry-run".into()],
-        vec!["export".into(), gehaeuse.clone(), "--part".into(), "gibtsnicht".into(), "-o".into(), o("x.stl")],
+        vec!["set".into(), housing.clone(), "--param".into(), "housing.w=50".into(), "--dry-run".into()],
+        vec!["export".into(), housing.clone(), "--part".into(), "gibtsnicht".into(), "-o".into(), o("x.stl")],
     ];
     // in both languages (alternating: the daemon's cache serves both)
     for args in &cases {
@@ -273,17 +273,17 @@ fn output_identical_with_and_without_daemon() {
             vec!["r.png"],
         ),
         (
-            vec!["render".into(), gehaeuse.clone(), "--section".into(), "z=10".into(), "--show".into(), "dims".into()],
+            vec!["render".into(), housing.clone(), "--section".into(), "z=10".into(), "--show".into(), "dims".into()],
             vec!["s.png"],
         ),
         (
-            vec!["render".into(), ex("spec/fillet_zonen.mcad"), "--line".into(), "12".into(), "--xray".into()],
+            vec!["render".into(), ex("spec/fillet_zones.mcad"), "--line".into(), "12".into(), "--xray".into()],
             vec!["l.png"],
         ),
         (vec!["export".into(), vr.clone()], vec!["v.stl"]),
-        (vec!["export".into(), gehaeuse.clone()], vec!["g.3mf"]),
-        (vec!["export".into(), projekt.clone()], vec!["p.step"]),
-        (vec!["export".into(), ex("spec/lochplatte.mcad")], vec!["l.step"]),
+        (vec!["export".into(), housing.clone()], vec!["g.3mf"]),
+        (vec!["export".into(), project.clone()], vec!["p.step"]),
+        (vec!["export".into(), ex("spec/hole_plate.mcad")], vec!["l.step"]),
     ];
     for (args, outs) in &files {
         let target = o(outs[0]);
@@ -311,8 +311,8 @@ fn output_identical_with_and_without_daemon() {
     // all parts into a directory (created by the client)
     let dir_l = o("teile_l");
     let dir_d = o("teile_d");
-    let l = env.local(&["export", &projekt, "--all-parts", "-o", &dir_l, "--format", "stl"]);
-    let d = env.run(&["export", &projekt, "--all-parts", "-o", &dir_d, "--format", "stl"]);
+    let l = env.local(&["export", &project, "--all-parts", "-o", &dir_l, "--format", "stl"]);
+    let d = env.run(&["export", &project, "--all-parts", "-o", &dir_d, "--format", "stl"]);
     assert_same(&l, &d, "all-parts");
     let mut names: Vec<String> =
         std::fs::read_dir(&dir_l).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
@@ -338,11 +338,11 @@ fn relative_paths_and_stdin() {
         }
         c.args(args).output().unwrap()
     };
-    let a = run_in(&["check", "projekt-gehaeuse/gehaeuse.mcad"], true);
-    let b = run_in(&["check", "projekt-gehaeuse/gehaeuse.mcad"], false);
+    let a = run_in(&["check", "project-housing/housing.mcad"], true);
+    let b = run_in(&["check", "project-housing/housing.mcad"], false);
     assert_same(&a, &b, "relative");
     assert_eq!(text(&a.stdout), text(&b.stdout));
-    assert!(text(&b.stdout).starts_with("projekt-gehaeuse/gehaeuse.mcad"), "{}", text(&b.stdout));
+    assert!(text(&b.stdout).starts_with("project-housing/housing.mcad"), "{}", text(&b.stdout));
     assert_eq!(env.status()["requests"], 1);
 
     let src = "cube(5);\ntranslate([10, 0, 0]) sphere(2);\n";
@@ -383,7 +383,7 @@ fn daemon_pids(ipc: &Path) -> Vec<u32> {
 #[test]
 fn parallel_starts_give_one_daemon() {
     let env = Env::new();
-    let f = ex("spec/lochplatte.mcad");
+    let f = ex("spec/hole_plate.mcad");
     let mut children = Vec::new();
     for _ in 0..6 {
         let mut c = std::process::Command::new(assert_cmd::cargo::cargo_bin("mcad"));
@@ -424,7 +424,7 @@ fn parallel_starts_give_one_daemon() {
 #[test]
 fn idle_end_removes_socket_and_lock() {
     let env = Env::new().with("MCAD_DAEMON_IDLE_SECS", "1");
-    assert!(used(&env.run(&["check", &ex("spec/gehaeuse.mcad"), "--json"])));
+    assert!(used(&env.run(&["check", &ex("spec/housing.mcad"), "--json"])));
     let pid = env.status()["pid"].as_u64().unwrap();
     assert!(env.ipc().join("daemon.sock").exists());
     assert!(env.ipc().join("daemon.lock").exists());
@@ -440,7 +440,7 @@ fn idle_end_removes_socket_and_lock() {
 #[test]
 fn version_change_replaces_daemon() {
     let env = Env::new();
-    let f = ex("spec/gehaeuse.mcad");
+    let f = ex("spec/housing.mcad");
     let with_build = |b: &str, args: &[&str]| env.cmd().env("MCAD_DAEMON_BUILD_ID", b).args(args).output().unwrap();
     assert!(used(&with_build("test-a", &["check", &f, "--json"])));
     let st = env.status();
@@ -461,7 +461,7 @@ fn version_change_replaces_daemon() {
 #[test]
 fn switched_off_by_flag_env_and_config() {
     let env = Env::new();
-    let f = ex("spec/gehaeuse.mcad");
+    let f = ex("spec/housing.mcad");
     let o = env.run(&["--no-daemon", "check", &f, "--json"]);
     let j = json(&o);
     assert_eq!(j["daemon"]["used"], false);
@@ -524,7 +524,7 @@ fn switched_off_by_flag_env_and_config() {
 
 #[test]
 fn fallback_when_socket_is_broken() {
-    let f = ex("spec/gehaeuse.mcad");
+    let f = ex("spec/housing.mcad");
     let env = Env::new();
     let reference = env.local(&["check", &f]);
     // 1. socket directory is a file
@@ -568,13 +568,13 @@ fn fallback_when_socket_is_broken() {
 fn cache_limit_and_project_limit() {
     let env = Env::new().with("MCAD_DAEMON_CACHE_MB", "1").with("MCAD_DAEMON_MAX_PROJECTS", "2");
     let models = [
-        "spec/fillet_zonen.mcad",
-        "spec/flasche.mcad",
-        "spec/lochplatte.mcad",
-        "spec/gehaeuse.mcad",
-        "spec/knauf_mirror.mcad",
-        "spec/winkel_anker.mcad",
-        "spec/kabelfuehrung.mcad",
+        "spec/fillet_zones.mcad",
+        "spec/bottle.mcad",
+        "spec/hole_plate.mcad",
+        "spec/housing.mcad",
+        "spec/knob_mirror.mcad",
+        "spec/angle_anchor.mcad",
+        "spec/cable_guide.mcad",
     ];
     let out = env.path("x.stl");
     for m in models {
@@ -644,7 +644,7 @@ fn status_and_stop() {
     let env = Env::new();
     let o = env.run(&["daemon", "status"]);
     assert!(text(&o.stdout).starts_with("kein Daemon"), "{}", text(&o.stdout));
-    env.run(&["render", &ex("spec/gehaeuse.mcad"), "-o", &env.path("g.png").display().to_string()]);
+    env.run(&["render", &ex("spec/housing.mcad"), "-o", &env.path("g.png").display().to_string()]);
     let st = env.status();
     for k in ["pid", "version", "build_id", "uptime_s", "idle_s", "idle_limit_s", "requests", "projects", "rss_bytes"] {
         assert!(!st[k].is_null(), "{k}: {st}");
@@ -669,7 +669,7 @@ fn status_and_stop() {
 #[test]
 fn watchdog_ends_daemon_and_command_runs_locally() {
     let env = Env::new().with("MCAD_DAEMON_WATCHDOG_SECS", "1");
-    let f = ex("spec/gehaeuse.mcad");
+    let f = ex("spec/housing.mcad");
     let reference = env.local(&["check", &f]);
     assert!(used(&env.run(&["check", &f, "--json"])));
     let pid = env.status()["pid"].as_u64().unwrap();
@@ -706,7 +706,7 @@ fn long_ipc_dir_uses_short_socket_path() {
     std::fs::create_dir_all(&long).unwrap();
     assert!(long.join("daemon.sock").as_os_str().len() > 107, "{}", long.display());
     env.vars.push(("MCAD_IPC_DIR".into(), long.display().to_string()));
-    let o = env.run(&["check", &ex("spec/gehaeuse.mcad"), "--json"]);
+    let o = env.run(&["check", &ex("spec/housing.mcad"), "--json"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
     assert!(used(&o), "Daemon nicht verwendet: {}", text(&o.stderr));
     let st = env.status();
@@ -721,7 +721,7 @@ fn long_ipc_dir_uses_short_socket_path() {
     assert!(t.contains(&sock) && t.contains("Ersatzpfad"), "{t}");
     // the next call reaches the same daemon
     let pid = st["pid"].as_u64().unwrap();
-    assert!(used(&env.run(&["check", &ex("spec/gehaeuse.mcad"), "--json"])));
+    assert!(used(&env.run(&["check", &ex("spec/housing.mcad"), "--json"])));
     assert_eq!(env.status()["pid"].as_u64(), Some(pid));
     let o = env.run(&["daemon", "stop", "--json"]);
     assert_eq!(json(&o)["stopped"], true);
@@ -736,7 +736,7 @@ fn long_ipc_dir_uses_short_socket_path() {
 #[test]
 fn language_switch_in_one_daemon() {
     let env = Env::new();
-    let f = ex("spec/fillet_zonen.mcad");
+    let f = ex("spec/fillet_zones.mcad");
     let bad = data("fillet_zu_gross.mcad");
     let run = |lang: &str, args: &[&str]| {
         let mut c = env.cmd();

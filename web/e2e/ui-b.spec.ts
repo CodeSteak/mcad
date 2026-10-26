@@ -467,7 +467,7 @@ test("B11 Parameterleiste: Vorschau, Reset, Als Standard übernehmen", async ({ 
   await openApp(page);
   const src0 = await text(page);
   await clickLine(page, 10, 6);
-  await waitScene(page, { context: "gehaeuse" });
+  await waitScene(page, { context: "housing" });
   const bar = page.getByRole("region", { name: "Parameterleiste" });
   await expect(bar).toBeVisible();
   await expect(bar.getByTestId("param-w")).toBeVisible();
@@ -479,7 +479,7 @@ test("B11 Parameterleiste: Vorschau, Reset, Als Standard übernehmen", async ({ 
     const b = (window as unknown as { __cad: { rootBounds(): { min: number[]; max: number[] } | null } }).__cad.rootBounds();
     return b !== null && Math.abs(b.max[0] - b.min[0] - 60) < 1e-6;
   });
-  await waitScene(page, { context: "gehaeuse" });
+  await waitScene(page, { context: "housing" });
   expect(await text(page)).toBe(src0);
   await expect(bar.getByTestId("param-w")).toHaveClass(/changed/);
   await screenshotB(page, "b11-vorschau");
@@ -513,14 +513,14 @@ test("B11 Parameterleiste: Vorschau, Reset, Als Standard übernehmen", async ({ 
   await waitScene(page, { context: null });
   await expect(page.getByRole("region", { name: "Parameterleiste" })).toHaveCount(0);
   await clickLine(page, 10, 6);
-  await waitScene(page, { context: "gehaeuse" });
+  await waitScene(page, { context: "housing" });
   await expect(page.getByRole("textbox", { name: "d Wert" })).toHaveValue("50");
   await expect(page.getByTestId("param-d")).toHaveClass(/changed/);
   // "Als Standard übernehmen" writes the default into the module definition.
   await page.getByTestId("param-d").getByRole("button", { name: "Als Standard übernehmen" }).click();
-  await waitText(page, `(t) => t.includes("module gehaeuse(w = 40, d = 50, h = 20, t = 3)")`);
+  await waitText(page, `(t) => t.includes("module housing(w = 40, d = 50, h = 20, t = 3)")`);
   await expect(page.getByTestId("param-d")).not.toHaveClass(/changed/);
-  await waitScene(page, { context: "gehaeuse" });
+  await waitScene(page, { context: "housing" });
   const after = await text(page);
   await screenshotB(page, "b11-nachher");
   // "Alle zurücksetzen": h back to its default.
@@ -536,7 +536,7 @@ test("B11 Parameterleiste: Vorschau, Reset, Als Standard übernehmen", async ({ 
     after: "b11-nachher",
     codeBefore: lines(src0, 3),
     codeAfter: lines(after, 3),
-    caption: `Cursor in module gehaeuse: Leiste mit w, d, h, t (Eingabefeld + Schieberegler, Reset ↺). w = 60 änderte nur die Vorschau (Code unverändert, Zeile markiert), Reset stellte 40 her; h per Schieberegler auf ${hval}. d = 50 blieb beim Verlassen und Wiederbetreten des Moduls erhalten; „Als Standard übernehmen“ schrieb d = 50 in die Moduldefinition.`,
+    caption: `Cursor in module housing: Leiste mit w, d, h, t (Eingabefeld + Schieberegler, Reset ↺). w = 60 änderte nur die Vorschau (Code unverändert, Zeile markiert), Reset stellte 40 her; h per Schieberegler auf ${hval}. d = 50 blieb beim Verlassen und Wiederbetreten des Moduls erhalten; „Als Standard übernehmen“ schrieb d = 50 in die Moduldefinition.`,
   });
 });
 
@@ -577,7 +577,7 @@ test("B13 Strg+Klick auf Rasterausdruck springt zur Rasterdeklaration", async ({
   // The references of a module are known once the cursor is in it (module context).
   const src0 = await text(page);
   await clickLine(page, 11, 0);
-  await waitScene(page, { context: "gehaeuse" });
+  await waitScene(page, { context: "housing" });
   const p = await page.evaluate(() => (window as unknown as { __cad: { coordsOf(l: number, c: number): { x: number; y: number } | null } }).__cad.coordsOf(11, 14));
   await page.mouse.move(p!.x, p!.y);
   await page.keyboard.down("Control");
@@ -592,16 +592,16 @@ test("B13 Strg+Klick auf Rasterausdruck springt zur Rasterdeklaration", async ({
     title: "Sprung zur Rasterdeklaration",
     codeBefore: `11: ${lines(src0, 11).trim()}`,
     codeAfter: `4: ${lines(src0, 4).trim()}   ← Cursor`,
-    caption: "Strg+Klick auf g[links, vorne, boden] (Zeile 11) setzt den Cursor auf die Deklaration grid g (Zeile 4); ein normaler Klick setzt weiter nur den Cursor.",
+    caption: "Strg+Klick auf g[left, front, floor] (Zeile 11) setzt den Cursor auf die Deklaration grid g (Zeile 4); ein normaler Klick setzt weiter nur den Cursor.",
   });
 });
 
 test("B14 Messwerte: Latenz Ziehen → Szene (grob/fein), fps beim Ziehen", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/lochplatte.mcad");
-  // Module context: drag the plate thickness plane `oben = t` (default of t) up and down.
+  await openExample(page, "spec/hole_plate.mcad");
+  // Module context: drag the plate thickness plane `top = t` (default of t) up and down.
   await clickLine(page, 8, 12);
-  await waitScene(page, { context: "lochplatte" });
+  await waitScene(page, { context: "hole_plate" });
   await hook(page, (c) => c.setView("iso"));
   const hs = await waitHandles(page, "(hs) => hs.some(h => h.kind === 'plane' && h.axis === 2 && h.value[0] === 4)");
   const top = hs.find((h) => h.kind === "plane" && h.axis === 2 && h.value[0] === 4)!;
@@ -625,11 +625,11 @@ test("B14 Messwerte: Latenz Ziehen → Szene (grob/fein), fps beim Ziehen", asyn
   const med = sorted[Math.floor(sorted.length / 2)];
   const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))];
   const after = await text(page);
-  expect(lines(after, 3)).toMatch(/module lochplatte\(n = 4, pitch = 12, t = \d+, rand = 6\)/);
+  expect(lines(after, 3)).toMatch(/module hole_plate\(n = 4, pitch = 12, t = \d+, margin = 6\)/);
   expect(coarse.length).toBeGreaterThan(5);
   writeMetricsB({
     drag: {
-      model: "spec/lochplatte.mcad, Modul lochplatte, Ebene oben = t (Standardwert)",
+      model: "spec/hole_plate.mcad, Modul hole_plate, Ebene top = t (Standardwert)",
       moves: path.length,
       sent: fps.sent,
       dropped: fps.dropped,
@@ -647,8 +647,8 @@ test("B14 Messwerte: Latenz Ziehen → Szene (grob/fein), fps beim Ziehen", asyn
     title: "Messwerte beim Ziehen",
     before: "b14-waehrend",
     after: "b14-nachher",
-    codeBefore: "module lochplatte(n = 4, pitch = 12, t = 4, rand = 6) {",
+    codeBefore: "module hole_plate(n = 4, pitch = 12, t = 4, margin = 6) {",
     codeAfter: lines(after, 3),
-    caption: `lochplatte (Differenz mit fillet = 1, vier Bohrungen): Ebene oben = t (Standardwert, andere Farbe) ${path.length}-mal bewegt, ein Schritt pro Frame. Ziehen → Szene grob: Median ${med.toFixed(0)} ms, p95 ${p95.toFixed(0)} ms (${coarse.length} Szenen); Loslassen → feine Szene ${fine.at(-1)!.toFixed(0)} ms; ${fps.fps.toFixed(0)} fps während des Ziehens, ${fps.sent} Drag-Nachrichten, ${fps.dropped} übersprungen.`,
+    caption: `hole_plate (Differenz mit fillet = 1, vier Bohrungen): Ebene top = t (Standardwert, andere Farbe) ${path.length}-mal bewegt, ein Schritt pro Frame. Ziehen → Szene grob: Median ${med.toFixed(0)} ms, p95 ${p95.toFixed(0)} ms (${coarse.length} Szenen); Loslassen → feine Szene ${fine.at(-1)!.toFixed(0)} ms; ${fps.fps.toFixed(0)} fps während des Ziehens, ${fps.sent} Drag-Nachrichten, ${fps.dropped} übersprungen.`,
   });
 });

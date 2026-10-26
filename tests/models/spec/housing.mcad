@@ -1,0 +1,27 @@
+// Purpose: spec example "housing" – grid g in the module, box between grid points, anchor
+// pointing out, named instance k, lid at the anchor and a second grid made of k.corner.x
+module housing(w = 40, d = 30, h = 20, t = 3) {
+    grid g {
+        x: left = 0, inner_left = t, inner_right = w - t, right = w;
+        y: front = 0, back = d;
+        z: floor = 0, lid = h;
+    }
+
+    difference() {
+        box(g[left, front, floor], g[right, back, lid]);
+        box(g[inner_left, front, t], g[inner_right, back, lid]);
+    }
+
+    anchor corner = g[right, back, lid];
+    anchor top = g[left, front, lid], dir = [0, 0, 1];
+}
+
+module lid() cube([10, 10, 2]);
+
+k: housing(w = 60);
+translate(k.corner) lid();
+translate(k.top) rotate(to = dir(k.top)) lid();
+
+grid h {
+    x: rim = k.corner.x;
+}

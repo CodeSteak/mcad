@@ -15,7 +15,7 @@ CAD="${CAD:-$ROOT/target/release/mcad}"
 PY3MF="${PY3MF:-python3}"
 OUT="$ROOT/reports/tmp/report11"
 IMG="$ROOT/docs/reports/11-farben-filamente/img"
-EX="tests/models/spec/mehrfarbig.scad"
+EX="tests/models/spec/multicolor.mcad"
 mkdir -p "$OUT" "$IMG"
 export CAD_NO_DAEMON=1
 
@@ -25,9 +25,9 @@ python3 tools/palette/palette.py --json "$OUT/palette.json" > "$OUT/palette.txt"
 "$CAD" outline "$EX" --json > "$OUT/outline.json"
 "$CAD" measure "$EX" --colors --json > "$OUT/measure.json"
 "$CAD" measure "$EX" --colors > "$OUT/measure.txt"
-"$CAD" export "$EX" --part schild --part figur -o "$OUT/mehrfarbig.3mf" > "$OUT/export.txt"
-"$CAD" export "$EX" --part schild --part figur -o "$OUT/mehrfarbig.3mf" --json > "$OUT/export.json"
-"$CAD" export "$EX" --per-color --part schild --part figur -o "$OUT/mehrfarbig-farben.zip" > "$OUT/export-zip.txt"
+"$CAD" export "$EX" --part door_sign --part figure -o "$OUT/mehrfarbig.3mf" > "$OUT/export.txt"
+"$CAD" export "$EX" --part door_sign --part figure -o "$OUT/mehrfarbig.3mf" --json > "$OUT/export.json"
+"$CAD" export "$EX" --per-color --part door_sign --part figure -o "$OUT/mehrfarbig-farben.zip" > "$OUT/export-zip.txt"
 "$CAD" export "$EX" -o "$OUT/modell.3mf" > "$OUT/export-root.txt"
 unzip -p "$OUT/mehrfarbig.3mf" 3D/3dmodel.model > "$OUT/3dmodel.model"
 unzip -p "$OUT/mehrfarbig.3mf" Metadata/model_settings.config > "$OUT/model_settings.config"
@@ -46,7 +46,7 @@ printf 'color("lightblue") cube(1);\ncolor("Rot") translate([2, 0, 0]) cube(1);\
 "$CAD" render "$EX" -o "$IMG/cli-dunkel.png" --size 900x560 --theme dark > /dev/null
 "$CAD" render "$EX" -o "$IMG/cli-regionen.png" --size 900x560 --show regions --theme dark > /dev/null
 "$CAD" render "$EX" -o "$IMG/cli-ansichten.png" --views iso,front,top,right --size 1400x900 > /dev/null
-"$CAD" render "$EX" -o "$IMG/cli-schnitt.png" --size 900x560 --section x=80 --part figur --show regions --view right > /dev/null
+"$CAD" render "$EX" -o "$IMG/cli-schnitt.png" --size 900x560 --section x=80 --part figure --show regions --view right > /dev/null
 
 # sources of the 3MF assumptions (fetched files, hashes)
 SRC="$OUT/sources"

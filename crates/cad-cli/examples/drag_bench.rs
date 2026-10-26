@@ -1,5 +1,5 @@
-//! Native measurement of "drag → coarse scene" (Testbericht 3, B14): the module `lochplatte`
-//! of `tests/models/spec/lochplatte.mcad` is evaluated in its module context, then its plate
+//! Native measurement of "drag → coarse scene" (Testbericht 3, B14): the module `hole_plate`
+//! of `tests/models/spec/hole_plate.mcad` is evaluated in its module context, then its plate
 //! thickness `t` is changed in steps while a drag is active (coarse tessellation), each change
 //! as a new source text that is evaluated to idle (kernel job + coarse root mesh), as the UI
 //! does it. Prints median/p95 per change and the kernel time per method.
@@ -18,8 +18,8 @@ use kernel_smlib::SmlibKernel;
 
 fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
-    let file = a.first().cloned().unwrap_or_else(|| "tests/models/spec/lochplatte.mcad".into());
-    let module = a.get(1).cloned().unwrap_or_else(|| "lochplatte".into());
+    let file = a.first().cloned().unwrap_or_else(|| "tests/models/spec/hole_plate.mcad".into());
+    let module = a.get(1).cloned().unwrap_or_else(|| "hole_plate".into());
     let param = a.get(2).cloned().unwrap_or_else(|| "t".into());
     let from: f64 = a.get(3).map(|s| s.parse().unwrap()).unwrap_or(4.0);
     let to: f64 = a.get(4).map(|s| s.parse().unwrap()).unwrap_or(10.0);

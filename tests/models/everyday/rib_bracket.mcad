@@ -1,0 +1,48 @@
+// Purpose: mounting bracket 60 × 50 mm with stiffening rib(s) – legs as box between
+// grid points, ribs as extruded triangles at indexed grid planes (for), inner edge
+// and rib joints rounded via zones at grid lines in one block (corner transitions),
+// outer corners of the legs via zones, holes (M5) with difference(chamfer = …). Dimensions in mm.
+module rib_bracket(a = 60, h = 50, b = 40, t = 5, rib_t = 4, rib_l = 30, n_ribs = 1,
+                   hole_d = 5.5) {
+    grid g {
+        x: outer = 0, inner = t, hole_x = t + (a - t) * 0.6, end = a;
+        y: front = 0, hole_left = b * 0.25, hole_right = b * 0.75, back = b,
+           rib = [for (i = [0 : n_ribs - 1]) (i + 1) * b / (n_ribs + 1) - rib_t / 2],
+           rib_end = [for (i = [0 : n_ribs - 1]) (i + 1) * b / (n_ribs + 1) + rib_t / 2];
+        z: bottom = 0, inner_z = t, hole_z = t + (h - t) * 0.6, top = h;
+    }
+
+    difference(chamfer = 0.5) {
+        fillet(4) {
+            fillet(2) {
+                union() {
+                    box(g[outer, front, bottom], g[end, back, inner_z]);     // Base leg
+                    box(g[outer, front, bottom], g[inner, back, top]);        // Wall leg
+                    for (i = [0 : n_ribs - 1])
+                        translate(g[inner, rib_end[i], inner_z]) rotate([90, 0, 0]) linear_extrude(rib_t)
+                            polygon([[-1, -1], [rib_l, -1], [-1, rib_l]]);
+                }
+                zone(g[inner, *, inner_z], d = 1);           // Inner edge between the ribs
+                for (i = [0 : n_ribs - 1]) {
+                    zone(g[*, rib[i], inner_z], d = 1);      // Rib on the base leg
+                    zone(g[*, rib_end[i], inner_z], d = 1);
+                    zone(g[inner, rib[i], *], d = 1);        // Rib on the wall
+                    zone(g[inner, rib_end[i], *], d = 1);
+                }
+            }
+            zone(g[end, front, *], d = 1);                   // Corners of the base leg
+            zone(g[end, back, *], d = 1);
+            zone(g[*, front, top], d = 1);                   // Corners of the wall leg
+            zone(g[*, back, top], d = 1);
+        }
+        for (y = [g.hole_left, g.hole_right]) {
+            cylinder([g.hole_x, y, -1], [g.hole_x, y, t + 1], d = hole_d);
+            cylinder([-1, y, g.hole_z], [t + 1, y, g.hole_z], d = hole_d);
+        }
+    }
+
+    anchor base_hole = g[hole_x, hole_left, inner_z], dir = [0, 0, 1];
+    anchor wall_hole = g[inner, hole_left, hole_z], dir = [1, 0, 0];
+}
+
+w: rib_bracket();

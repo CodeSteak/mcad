@@ -224,8 +224,8 @@ def part_b():
     run([MCAD, "render", "kombi.mcad", "-o", "kombi_schnitt.png", "--section", "y=10", "--section-flip", "--size", "1000x700", "--no-axes"], out)
     run([MCAD, "render", "kombi.mcad", "-o", "kombi_xray.png", "--xray", "--size", "1000x700", "--no-axes"], out)
     (out / "kombi_measure.txt").write_text(transcript([MCAD, "measure", "kombi.mcad", "--volume", "--interference", "--clearance", "platine", "gehaeuse"], out))
-    shutil.copy(ROOT / "tests/models/stl/winkel.stl", out / "winkel.stl")
-    ex = (ROOT / "tests/models/spec/stl_import.mcad").read_text().replace("../stl/winkel.stl", "winkel.stl")
+    shutil.copy(ROOT / "tests/models/stl/bracket.stl", out / "bracket.stl")
+    ex = (ROOT / "tests/models/spec/stl_import.mcad").read_text().replace("../stl/bracket.stl", "bracket.stl")
     (out / "stl_import.mcad").write_text(ex)
     run([MCAD, "render", "stl_import.mcad", "-o", "beispiel.png", "--size", "1000x700", "--no-axes"], out)
     (out / "stl_import_inspect.txt").write_text(transcript([MCAD, "inspect", "stl_import.mcad", "--line", "8"], out, show_exit=False) + transcript([MCAD, "inspect", "stl_import.mcad", "--line", "13"], out, show_exit=False))
@@ -242,7 +242,7 @@ def part_b():
 def part_c():
     out = OUT / "c"
     out.mkdir(parents=True, exist_ok=True)
-    shutil.copy(ROOT / "tests/models/stl/winkel.stl", out / "winkel.stl")
+    shutil.copy(ROOT / "tests/models/stl/bracket.stl", out / "bracket.stl")
     plate = "cube([40, 30, 3]);\n"
     cases = [
         ("K1", "keepout: cuboid protrudes into the plate", f"{plate}assert_keepout() translate([10, 10, 2]) cube([10, 10, 5]);", "overlap", "volume", 100.0, "10·10·1"),
@@ -250,7 +250,7 @@ def part_c():
         ("K3", "keepout: clearance 0.5, distance 1", f"{plate}assert_keepout(clearance = 0.5) translate([10, 10, 4]) cube(5);", None, None, None, "distance 1 > 0.5"),
         ("K4", "keepout: touching at clearance 0", f"{plate}assert_keepout() translate([10, 10, 3]) cube(5);", None, None, None, "distance 0"),
         ("K5", "keepout: sphere r 2 half in the plate", f"{plate}assert_keepout() translate([20, 15, 3]) sphere(2);", "overlap", "volume", 2 / 3 * pi * 8, "2/3·π·r³"),
-        ("K6", "keepout: STL as mesh in the plate", f'{plate}assert_keepout() translate([5, 5, 2]) import("winkel.stl", as = "mesh");', "overlap", "volume", None, "mesh: yes/no only"),
+        ("K6", "keepout: STL as mesh in the plate", f'{plate}assert_keepout() translate([5, 5, 2]) import("bracket.stl", as = "mesh");', "overlap", "volume", None, "mesh: yes/no only"),
         ("K7", "keepout: two parts, only b in the keep-out volume", "module t(x) translate([x, 0, 0]) cube(10);\na: t(0);\nb: t(20);\nassert_keepout() translate([25, 5, 5]) cube(10);", "overlap", "volume", 125.0, "5·5·5"),
         ("D1", "disjoint: overlapping", "assert_disjoint() { cube(10); translate([8, 0, 0]) cube(10); }", "overlap", "volume", 200.0, "2·10·10"),
         ("D2", "disjoint: touching", "assert_disjoint() { cube(10); translate([10, 0, 0]) cube(10); }", None, None, None, "touching allowed"),
@@ -290,7 +290,7 @@ def part_c():
         print(f"C {cid:4} {'ok ' if ok else 'BAD'} {title:40} {got} {key}={val}")
     (out / "asserts.json").write_text(json.dumps(rows, indent=1, ensure_ascii=False))
     # example model, violation, export exit codes, renders
-    spec = (ROOT / "tests/models/spec/asserts.mcad").read_text().replace("../stl/winkel.stl", "winkel.stl")
+    spec = (ROOT / "tests/models/spec/asserts.mcad").read_text().replace("../stl/bracket.stl", "bracket.stl")
     (out / "asserts.mcad").write_text(spec)
     bad = spec.replace("luft = 1;", "luft = 3;").replace("cube([10, 10, 12])", "cube([10, 10, 25])")
     (out / "asserts_bad.mcad").write_text(bad)
@@ -321,11 +321,11 @@ def part_d():
         shutil.copy(src / f"{n}.scad", out / f"{n}.scad")
     (out / "pair.scad").write_text("module block(w = 10) cube([w, 10, 10]);\na: block();\ntranslate([10, 0, 0]) b: block();\n")
     (out / "slot.scad").write_text("difference() {\n    cube([40, 20, 4]);\n    translate([0, 0, -1]) linear_extrude(6) slot([10, 10], [30, 10], 3);\n}\n")
-    shutil.copy(ROOT / "tests/models/spec/fillet_zonen.mcad", out / "fillet_zonen.scad")
-    for n in ["f09a_absturz_tangentialer_dom", "f08c_differenz_torus_tangential"]:
-        shutil.copy(ROOT / f"tests/alltag/fehler/{n}.mcad", out / f"{n}.scad")
+    shutil.copy(ROOT / "tests/models/spec/fillet_zones.mcad", out / "fillet_zones.scad")
+    for n in ["f09a_crash_tangential_boss", "f08c_difference_torus_tangential"]:
+        shutil.copy(ROOT / f"tests/everyday/bugs/{n}.mcad", out / f"{n}.scad")
     cmds = {
-        "d1": [["check", "dom_rippe.scad"], ["check", "f09a_absturz_tangentialer_dom.scad"], ["check", "f08c_differenz_torus_tangential.scad"]],
+        "d1": [["check", "dom_rippe.scad"], ["check", "f09a_crash_tangential_boss.scad"], ["check", "f08c_difference_torus_tangential.scad"]],
         "d2": [["measure", "teil.scad", "-D", "w=40", "--volume", "all"], ["check", "teil.scad", "-D", "breite=3"]],
         "d3": [["export", "pair.scad", "-o", "pair.step"]],
         "d3m": [["export", "pair.scad", "-o", "pair_merge.step", "--merge"]],
@@ -348,7 +348,7 @@ def part_d():
             (out / f"{key}-{label}.txt").write_text(txt)
         p, _ = run([binary, "check", "dom_rippe.scad", "--json"], out)
         (out / f"d1-{label}.json").write_text(p.stdout)
-        p, _ = run([binary, "inspect", "fillet_zonen.scad", "--line", "12", "--json"], out)
+        p, _ = run([binary, "inspect", "fillet_zones.scad", "--line", "12", "--json"], out)
         try:
             j = json.loads(p.stdout)
             n = j["nodes"][0]
@@ -358,7 +358,7 @@ def part_d():
             summary = dict(error=str(e))
         (out / f"d6-{label}.json").write_text(json.dumps(summary, ensure_ascii=False))
         run([binary, "render", "dom_rippe.scad", "-o", f"dom_rippe-{label}.png", "--size", "900x650", "--no-axes"], out)
-        run([binary, "render", "f08c_differenz_torus_tangential.scad", "-o", f"f08c-{label}.png", "--size", "900x650", "--no-axes"], out)
+        run([binary, "render", "f08c_difference_torus_tangential.scad", "-o", f"f08c-{label}.png", "--size", "900x650", "--no-axes"], out)
         print(f"D {label} done")
 
 

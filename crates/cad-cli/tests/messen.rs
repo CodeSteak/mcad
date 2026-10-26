@@ -52,7 +52,7 @@ fn value(m: &Value, key: &str) -> f64 {
 
 #[test]
 fn housing_section_wall_and_distances() {
-    let g = example("spec/gehaeuse.mcad");
+    let g = example("spec/housing.mcad");
     let v = json(
         &["measure", &g, "--section", "z=10", "--wall", "[0,15,10]", "--distance", "edge@[3,15,10]", "edge@[57,15,10]"],
         0,
@@ -79,8 +79,8 @@ fn housing_section_wall_and_distances() {
     close(f(&d["value"]), 54.0, 1e-12);
     assert!(d["details"].as_array().unwrap().iter().any(|x| x == "parallele Ebenen: Normalabstand"), "{d}");
     let origin = d["picks"][0]["origin"].as_array().unwrap();
-    assert!(origin.iter().any(|x| x.as_str().unwrap().contains("Instanz k: gehaeuse")), "{origin:?}");
-    assert!(origin.iter().any(|x| x == "Rasterebene g.innen_l"), "{origin:?}");
+    assert!(origin.iter().any(|x| x.as_str().unwrap().contains("Instanz k: housing")), "{origin:?}");
+    assert!(origin.iter().any(|x| x == "Rasterebene g.inner_left"), "{origin:?}");
     // body of the part k: 60·30·20 − 54·30·17
     let v = json(&["measure", &g, "--body", "face@[0,15,10]"], 0);
     let b = &v["measurements"][0];
@@ -94,7 +94,7 @@ fn housing_section_wall_and_distances() {
 
 #[test]
 fn hole_plate_radii_bores_fillets_and_pitch() {
-    let l = example("spec/lochplatte.mcad");
+    let l = example("spec/hole_plate.mcad");
     let v = json(
         &[
             "measure",
@@ -136,7 +136,7 @@ fn hole_plate_radii_bores_fillets_and_pitch() {
 
 #[test]
 fn chamfer_angle_and_at() {
-    let c = example("spec/fase_chamfer.mcad");
+    let c = example("spec/chamfers.mcad");
     let v = json(&["measure", &c, "--angle", "face@[39.5,12,9.5]", "face@[20,12,10]"], 0);
     let a = &v["measurements"][0];
     close(f(&a["value"]), 45.0, 1e-9);
@@ -154,7 +154,7 @@ fn chamfer_angle_and_at() {
 
 #[test]
 fn usage_errors() {
-    let g = example("spec/gehaeuse.mcad");
+    let g = example("spec/housing.mcad");
     // --wall needs a section
     json(&["measure", &g, "--wall", "[0,15,10]"], 2);
     // face@ inside a section, unknown prefix

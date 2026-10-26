@@ -44,13 +44,13 @@ for s in logo blatt haus welle; do
   r "$CASES/svg-$s.scad" -o "$CLI/svg-$s.png" --view top --size 700x560 --no-axes
   "$CAD" check "$CASES/svg-$s.scad" > "$OUT/svg-$s.check.txt" 2>&1 || true
 done
-r tests/models/spec/svg_logo.scad -o "$CLI/svg_logo.png" --size 1000x640
-r tests/models/spec/svg_logo.scad -o "$CLI/svg_logo-oben.png" --size 1000x640 --view top
-r tests/models/spec/text_schild.scad -o "$CLI/text_schild.png" --size 1000x640
-r tests/models/spec/text_schild.scad -o "$CLI/text_schild-oben.png" --size 1000x640 --view top
-"$CAD" measure tests/models/spec/text_schild.scad --colors > "$OUT/schild-colors.txt" 2>&1 || true
-"$CAD" export tests/models/spec/text_schild.scad -o "$OUT/text_schild.3mf" > "$OUT/schild-3mf.txt" 2>&1 || true
-"$CAD" export tests/models/spec/svg_logo.scad -o "$OUT/svg_logo.step" --json > "$OUT/svg_logo.export.json" 2>/dev/null || true
+r tests/models/spec/svg_logo.mcad -o "$CLI/svg_logo.png" --size 1000x640
+r tests/models/spec/svg_logo.mcad -o "$CLI/svg_logo-oben.png" --size 1000x640 --view top
+r tests/models/spec/text_sign.mcad -o "$CLI/text_schild.png" --size 1000x640
+r tests/models/spec/text_sign.mcad -o "$CLI/text_schild-oben.png" --size 1000x640 --view top
+"$CAD" measure tests/models/spec/text_sign.mcad --colors > "$OUT/schild-colors.txt" 2>&1 || true
+"$CAD" export tests/models/spec/text_sign.mcad -o "$OUT/text_schild.3mf" > "$OUT/schild-3mf.txt" 2>&1 || true
+"$CAD" export tests/models/spec/svg_logo.mcad -o "$OUT/svg_logo.step" --json > "$OUT/svg_logo.export.json" 2>/dev/null || true
 python3 - "$OUT/svg_logo.step" > "$OUT/svg_logo.step-counts.json" <<'EOF'
 import json, re, sys
 t = open(sys.argv[1]).read()
@@ -85,8 +85,8 @@ t hello 'linear_extrude(2) text("Hello World", font = "Inter");'
 t vierzig 'linear_extrude(2) text("The quick brown fox jumps over the lazy d", font = "Inter");'
 t vierzig_mono 'linear_extrude(2) text("The quick brown fox jumps over the lazy d");'
 t platte 'cube([100, 20, 3]); translate([2, 5, 3]) linear_extrude(1) text("Hello World", font = "Inter");'
-t svg_logo "$(cat tests/models/spec/svg_logo.scad | sed 's#\.\./svg/#../../../../tests/models/svg/#g')"
-t text_schild "$(cat tests/models/spec/text_schild.scad)"
+t svg_logo "$(cat tests/models/spec/svg_logo.mcad | sed 's#\.\./svg/#../../../../tests/models/svg/#g')"
+t text_schild "$(cat tests/models/spec/text_sign.mcad)"
 
 # OpenSCAD comparison
 python3 tools/report/report16-openscad.py "$OUT" "$CAD"

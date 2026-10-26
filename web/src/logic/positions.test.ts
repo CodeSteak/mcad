@@ -43,7 +43,7 @@ describe("VersionMapper (alte Quellpositionen)", () => {
   });
 
   it("Knoten einer alten Szene bleiben beim Tippen an ihrer Zeile", () => {
-    const f = fixture("gehaeuse");
+    const f = fixture("housing");
     const m = new VersionMapper(f.source.length);
     m.mark(f.scene.version, f.source.length);
     // Two new lines at the top of the document.
@@ -52,7 +52,7 @@ describe("VersionMapper (alte Quellpositionen)", () => {
     m.apply(tr.changes);
     const doc: Text = tr.newDoc;
     const idx = new SceneIndex(f.scene, m.mapper(f.scene.version));
-    // `translate(k.ecke) deckel();` was line 22, now 24.
+    // `translate(k.corner) lid();` was line 22, now 24.
     const sel = idx.select(doc, pos(doc, 24, 2));
     expect(sel.nodes.map((n) => f.scene.nodes[n].label)).toEqual(["translate"]);
     expect(idx.linesOf(doc, sel.nodes)).toEqual([24]);

@@ -1,4 +1,4 @@
-// Zweck: vase as rotate_extrude of a polygon profile (wall 2 mm, bottom 2 mm).
+// Purpose: vase as rotate_extrude of a polygon profile (wall 2 mm, bottom 2 mm).
 h = 40;
 wall = 2;
 outer = [[12, 0], [15, 10], [11, 25], [9, 35], [11, h]];

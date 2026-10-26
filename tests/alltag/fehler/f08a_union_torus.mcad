@@ -1,9 +1,0 @@
-// F8a: union cylinder + torus that cuts the top face: result is two
-// overlapping bodies (STEP: „2 bodies“), volume 6049.65 instead of 5852.26 mm³, without a message.
-// Status (report 13): fixed – SmBrep::Transform set all tolerances to 0 for bodies with only
-// one vertex; the facade transforms rigidly without changing tolerances.
-// SOLL-VOLUMEN: 5852.26 1
-union() {
-    cylinder(h = 2, r = 30);
-    translate([0, 0, 2]) torus(20, 1);
-}

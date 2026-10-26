@@ -1,7 +1,7 @@
 {
  "files": {
   "01_cube_variants.scad": {
-   "source_fnv1a64": "25d2e095c898cf1f",
+   "source_fnv1a64": "56e248abecdd458d",
    "class": "polygonal",
    "round_features": [],
    "defines": [],
@@ -24,7 +24,7 @@
    "openscad_warnings": []
   },
   "02_sphere_variants.scad": {
-   "source_fnv1a64": "fc7cef39ccf1ce3c",
+   "source_fnv1a64": "4db165da8e2e2222",
    "class": "rounded",
    "round_features": [
     "sphere"
@@ -51,7 +51,7 @@
    "openscad_warnings": []
   },
   "03_cylinder_variants.scad": {
-   "source_fnv1a64": "083051b34928b385",
+   "source_fnv1a64": "b4202ad76562b3db",
    "class": "rounded",
    "round_features": [
     "cylinder"
@@ -78,7 +78,7 @@
    "openscad_warnings": []
   },
   "04_cone_variants.scad": {
-   "source_fnv1a64": "ff3ac7f1280e155f",
+   "source_fnv1a64": "ad8df27e722cf749",
    "class": "rounded",
    "round_features": [
     "cylinder"
@@ -105,7 +105,7 @@
    "openscad_warnings": []
   },
   "05_nested_booleans.scad": {
-   "source_fnv1a64": "31019eb017acc1cf",
+   "source_fnv1a64": "d3f233d389a5453d",
    "class": "rounded",
    "round_features": [
     "cylinder",
@@ -133,7 +133,7 @@
    "openscad_warnings": []
   },
   "06_hole_grid.scad": {
-   "source_fnv1a64": "96fdd971b47f58c5",
+   "source_fnv1a64": "7d5102199e938e27",
    "class": "rounded",
    "round_features": [
     "cylinder"
@@ -162,7 +162,7 @@
    "openscad_warnings": []
   },
   "07_crown_ring.scad": {
-   "source_fnv1a64": "5e1ac244b0876350",
+   "source_fnv1a64": "873647a9d68f465e",
    "class": "rounded",
    "round_features": [
     "cylinder"
@@ -189,7 +189,7 @@
    "openscad_warnings": []
   },
   "08_module_children.scad": {
-   "source_fnv1a64": "e2fdc9f1a2d27bfc",
+   "source_fnv1a64": "154db80b2ec0c23e",
    "class": "rounded",
    "round_features": [
     "cylinder"
@@ -216,7 +216,7 @@
    "openscad_warnings": []
   },
   "09_rotate_mirror.scad": {
-   "source_fnv1a64": "17a5a25bdeea391f",
+   "source_fnv1a64": "9120102b7623d669",
    "class": "rounded",
    "round_features": [
     "cylinder"
@@ -243,7 +243,7 @@
    "openscad_warnings": []
   },
   "10_scale_multmatrix.scad": {
-   "source_fnv1a64": "34cf9cf9b34b7b2e",
+   "source_fnv1a64": "72ba50d14ac43f8c",
    "class": "polygonal",
    "round_features": [],
    "defines": [],
@@ -266,7 +266,7 @@
    "openscad_warnings": []
   },
   "11_linear_extrude_basic.scad": {
-   "source_fnv1a64": "71af8ec104397a06",
+   "source_fnv1a64": "ec61a83c0661cdc8",
    "class": "polygonal",
    "round_features": [],
    "defines": [],
@@ -289,7 +289,7 @@
    "openscad_warnings": []
   },
   "12_linear_extrude_twist.scad": {
-   "source_fnv1a64": "23b2d9456b28f083",
+   "source_fnv1a64": "d60e8add6176b9f5",
    "class": "rounded",
    "round_features": [
     "linear_extrude(twist)"
@@ -316,7 +316,7 @@
    "openscad_warnings": []
   },
   "13_rotate_extrude_ring.scad": {
-   "source_fnv1a64": "ae7ab8c27504e6d6",
+   "source_fnv1a64": "9f52ebaaa28f9914",
    "class": "rounded",
    "round_features": [
     "circle",
@@ -344,7 +344,7 @@
    "openscad_warnings": []
   },
   "14_pipe_bend.scad": {
-   "source_fnv1a64": "3238064df29eb08e",
+   "source_fnv1a64": "754c20ed1339f0a0",
    "class": "rounded",
    "round_features": [
     "circle",
@@ -372,7 +372,7 @@
    "openscad_warnings": []
   },
   "15_vase.scad": {
-   "source_fnv1a64": "bdab5ffd80aeb19f",
+   "source_fnv1a64": "7b102a0afe66d61d",
    "class": "rounded",
    "round_features": [
     "rotate_extrude"
@@ -401,7 +401,7 @@
    "openscad_warnings": []
   },
   "16_polygon_holes.scad": {
-   "source_fnv1a64": "7e511019c8478272",
+   "source_fnv1a64": "0860e204b4952b0c",
    "class": "polygonal",
    "round_features": [],
    "defines": [],
@@ -424,7 +424,7 @@
    "openscad_warnings": []
   },
   "17_polyhedron.scad": {
-   "source_fnv1a64": "64ffeb687e7750fd",
+   "source_fnv1a64": "0904a6297aacbaeb",
    "class": "polygonal",
    "round_features": [],
    "defines": [],
@@ -447,7 +447,7 @@
    "openscad_warnings": []
   },
   "18_functions_let.scad": {
-   "source_fnv1a64": "756949ecae59af1f",
+   "source_fnv1a64": "a60ba4db7a83f679",
    "class": "polygonal",
    "round_features": [],
    "defines": [],
@@ -473,7 +473,7 @@
    "openscad_warnings": []
   },
   "19_hex_nut.scad": {
-   "source_fnv1a64": "422e53df5020de5d",
+   "source_fnv1a64": "b25b211b08a2b826",
    "class": "rounded",
    "round_features": [
     "cylinder"
@@ -497,12 +497,12 @@
    },
    "triangles": 1064,
    "echo": [
-    "eckmass = 9.2376"
+    "across_corners = 9.2376"
    ],
    "openscad_warnings": []
   },
   "20_box_with_lid.scad": {
-   "source_fnv1a64": "50bd16378176d5e5",
+   "source_fnv1a64": "ddac7e01a0ae853f",
    "class": "rounded",
    "round_features": [
     "cylinder"
@@ -531,7 +531,7 @@
    "openscad_warnings": []
   },
   "21_angle_bracket.scad": {
-   "source_fnv1a64": "bc8436dab4d819a6",
+   "source_fnv1a64": "70b9784805fb399c",
    "class": "rounded",
    "round_features": [
     "circle",
@@ -559,7 +559,7 @@
    "openscad_warnings": []
   },
   "22_gear.scad": {
-   "source_fnv1a64": "5ecc7f201b7f58b7",
+   "source_fnv1a64": "f89646162b670ca5",
    "class": "rounded",
    "round_features": [
     "cylinder"
@@ -588,7 +588,7 @@
    "openscad_warnings": []
   },
   "23_shelf_holder.scad": {
-   "source_fnv1a64": "85c7b7c0647fef13",
+   "source_fnv1a64": "6b81c677c2a0e46d",
    "class": "rounded",
    "round_features": [
     "cylinder"
@@ -615,7 +615,7 @@
    "openscad_warnings": []
   },
   "24_modifiers.scad": {
-   "source_fnv1a64": "aec43caf4e736f13",
+   "source_fnv1a64": "4288fef439734251",
    "class": "rounded",
    "round_features": [
     "cylinder",
@@ -643,7 +643,7 @@
    "openscad_warnings": []
   },
   "25_root_modifier.scad": {
-   "source_fnv1a64": "c5b9f81890b30ac3",
+   "source_fnv1a64": "eb9509d5070b7a35",
    "class": "rounded",
    "round_features": [
     "cylinder",
@@ -671,7 +671,7 @@
    "openscad_warnings": []
   },
   "26_if_else_variants.scad": {
-   "source_fnv1a64": "05e48505506e55a4",
+   "source_fnv1a64": "bc5b4e67e2e06de2",
    "class": "rounded",
    "round_features": [
     "cylinder",
@@ -699,7 +699,7 @@
    "openscad_warnings": []
   },
   "27_spacers_2d.scad": {
-   "source_fnv1a64": "1a2e5953a743680b",
+   "source_fnv1a64": "b0c5b1905ad1931d",
    "class": "rounded",
    "round_features": [
     "circle"
@@ -726,7 +726,7 @@
    "openscad_warnings": []
   },
   "28_cable_clip.scad": {
-   "source_fnv1a64": "2e3abcb482080b0a",
+   "source_fnv1a64": "8c50bea5de314a9c",
    "class": "rounded",
    "round_features": [
     "cylinder"
@@ -753,7 +753,7 @@
    "openscad_warnings": []
   },
   "29_assert_strings.scad": {
-   "source_fnv1a64": "483a449da09360a3",
+   "source_fnv1a64": "3955ed002daf9d24",
    "class": "rounded",
    "round_features": [
     "cylinder"
@@ -777,13 +777,13 @@
    },
    "triangles": 1044,
    "echo": [
-    "\"Schild Werkstatt: 64 x 15 mm\"",
-    "chars = [\"W\", \"e\", \"r\", \"k\", \"s\", \"t\", \"a\", \"t\", \"t\"], upper_first = true"
+    "\"Sign Warehouse: 64 x 15 mm\"",
+    "chars = [\"W\", \"a\", \"r\", \"e\", \"h\", \"o\", \"u\", \"s\", \"e\"], upper_first = true"
    ],
    "openscad_warnings": []
   },
   "30_each_ranges.scad": {
-   "source_fnv1a64": "3463026bb348a4d7",
+   "source_fnv1a64": "b324718da5d91ee9",
    "class": "polygonal",
    "round_features": [],
    "defines": [],
@@ -809,7 +809,7 @@
    "openscad_warnings": []
   },
   "31_phone_stand.scad": {
-   "source_fnv1a64": "dec5443eccc60b73",
+   "source_fnv1a64": "13fe74a16a7743e1",
    "class": "polygonal",
    "round_features": [],
    "defines": [],
@@ -832,7 +832,7 @@
    "openscad_warnings": []
   },
   "32_low_fn_shapes.scad": {
-   "source_fnv1a64": "f7d659be193b643d",
+   "source_fnv1a64": "9bcb14422bd22783",
    "class": "polygonal",
    "round_features": [],
    "defines": [],
@@ -855,7 +855,7 @@
    "openscad_warnings": []
   },
   "33_global_fn.scad": {
-   "source_fnv1a64": "8ff83cf0c1dfed86",
+   "source_fnv1a64": "bbe1061909eee940",
    "class": "rounded",
    "round_features": [
     "cylinder",
@@ -881,7 +881,7 @@
    "openscad_warnings": []
   },
   "34_offset_round.scad": {
-   "source_fnv1a64": "c5652763f9d5f412",
+   "source_fnv1a64": "6b0f3abe08d0ae69",
    "class": "rounded",
    "round_features": [
     "circle",
@@ -909,7 +909,7 @@
    "openscad_warnings": []
   },
   "35_offset_delta.scad": {
-   "source_fnv1a64": "deb468623c3a1579",
+   "source_fnv1a64": "eec0803d3cb952ff",
    "class": "polygonal",
    "round_features": [],
    "defines": [],
@@ -932,7 +932,7 @@
    "openscad_warnings": []
   },
   "36_offset_holes.scad": {
-   "source_fnv1a64": "38117425664241d9",
+   "source_fnv1a64": "d4f18229271ca7dd",
    "class": "rounded",
    "round_features": [
     "circle",

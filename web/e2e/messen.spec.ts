@@ -274,7 +274,7 @@ test("M04 Winkel einer Fase und zweier Flächen", async ({ page }) => {
 
 test("M05 Länge, Fläche, Körper/Bauteil mit Hülle", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/gehaeuse.mcad");
+  await openExample(page, "spec/housing.mcad");
   await waitScene(page);
   await enter(page, "length");
   let m = await clickAt(page, [{ p: [60, 15, 20], kind: "edge" }]);
@@ -296,7 +296,7 @@ test("M05 Länge, Fläche, Körper/Bauteil mit Hülle", async ({ page }) => {
     id: "M05",
     title: "Länge, Fläche, Körper",
     images: [{ name: "m05-koerper", label: "Kantenlänge 30 mm, Fläche 600 mm², Bauteil k: Volumen und Hülle 60 × 30 × 20" }],
-    code: "tests/models/spec/gehaeuse.mcad",
+    code: "tests/models/spec/housing.mcad",
     caption:
       "Länge einer Kante (exakt für Geraden und Bögen, sonst Gauß-Legendre), Fläche einer Fläche (eben exakt über den Rand, gekrümmt über projizierte Unterteilung), Körper: das Bauteil der gewählten Fläche (benannte Instanz k) mit Volumen und Oberfläche aus dem Kernel und der Hülle aus der B-Rep (gestrichelte Box).",
     checks: ["Länge 30 mm", "Fläche 600 mm²", "Bauteil k: 8460 mm³, 60 × 30 × 20"],
@@ -392,17 +392,17 @@ test("M07 Mehrere Messungen: Auswahl, Löschen, Kopieren als Text, Kommentar und
 
 test("M08 Provenienz: Rasterlinie einer Bohrung, Instanz, Anker", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/lochplatte.mcad");
+  await openExample(page, "spec/hole_plate.mcad");
   await waitScene(page);
   await page.evaluate(() => (window as unknown as W).__cad.setView("top"));
   await waitScene(page);
   await enter(page, "distance");
   const h = await hoverAt(page, [18, 6, 4], "center");
-  expect(h.hover!.origin.join("\n")).toContain("Instanz p: lochplatte");
+  expect(h.hover!.origin.join("\n")).toContain("Instanz p: hole_plate");
   await screenshot19(page, "m08-kreismitte", "view");
   const m = await clickAt(page, [{ p: [18, 6, 4], kind: "center" }, { p: [30, 6, 4], kind: "center" }]);
   expect(m.results[0].value).toBeCloseTo(12, 9);
-  await expect(page.getByTestId(`measure-origin-${m.results[0].id}`)).toContainText("lochplatte");
+  await expect(page.getByTestId(`measure-origin-${m.results[0].id}`)).toContainText("hole_plate");
   await screenshot19(page, "m08-provenienz", "full");
   record19({
     id: "M08",
@@ -411,9 +411,9 @@ test("M08 Provenienz: Rasterlinie einer Bohrung, Instanz, Anker", async ({ page 
       { name: "m08-kreismitte", label: "Kreismitte einer Bohrung (Fase/Verrundung) mit Herkunft" },
       { name: "m08-provenienz", label: "Abstand der Kreismitten = Teilung 12 mm, Herkunft in der Liste" },
     ],
-    code: "tests/models/spec/lochplatte.mcad",
+    code: "tests/models/spec/hole_plate.mcad",
     caption:
-      "Zu jedem gewählten Element nennt die Engine die Codezeilen der Flächen (Tags → Knoten), die benannte Instanz (p: lochplatte) und Raster oder Anker, auf denen es liegt: Rasterpunkte und -ebenen, Rasterlinien für Achsen (g[loch[0], mitte, *]), Anker (p.erstes_loch).",
+      "Zu jedem gewählten Element nennt die Engine die Codezeilen der Flächen (Tags → Knoten), die benannte Instanz (p: hole_plate) und Raster oder Anker, auf denen es liegt: Rasterpunkte und -ebenen, Rasterlinien für Achsen (g[hole[0], mid, *]), Anker (p.first_hole).",
     checks: ["Kreismitte mit Instanz p", "Abstand 12 mm = pitch"],
   });
 });
@@ -442,7 +442,7 @@ test("M09 Dunkles Thema: Beschriftungen lesbar", async ({ page }) => {
 
 test("M10 Antwortzeiten beim Fahren mit der Maus", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/lochplatte.mcad");
+  await openExample(page, "spec/hole_plate.mcad");
   await waitScene(page);
   await enter(page);
   const a = await scr(page, [2, 2, 4]);

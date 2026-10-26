@@ -1,9 +1,10 @@
 // Prints the complete scene (JSON) of a .scad file, evaluated with the browser engine in Node.
 //
-//   node web/scripts/dump-scene.mjs <file.scad> [--module name] [--meshes] [--summary] [--project]
+//   node web/scripts/dump-scene.mjs <file.mcad> [--module name] [--lang de|en] [--meshes] [--summary] [--project]
 //
-// Used to inspect scenes and to write Vitest fixtures. `--project`: every .scad file below the
-// file's folder is a project file (`SetFiles`; include/use resolve relative to the file).
+// Used to inspect scenes and to write Vitest fixtures (those use `--lang de`: the tests check German
+// hints). `--project`: every model file below the file's folder is a project file (`SetFiles`;
+// include/use resolve relative to the file).
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, dirname, join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -13,14 +14,16 @@ const pkg = join(here, "../src/wasm-pkg");
 const args = process.argv.slice(2);
 const mi = args.indexOf("--module");
 const module = mi >= 0 ? args[mi + 1] : undefined;
-const file = args.find((a, i) => !a.startsWith("--") && !(mi >= 0 && i === mi + 1));
+const li = args.indexOf("--lang");
+const lang = li >= 0 ? args[li + 1] : process.env.MCAD_LANG;
+const file = args.find((a, i) => !a.startsWith("--") && !(mi >= 0 && i === mi + 1) && !(li >= 0 && i === li + 1));
 const withMeshes = args.includes("--meshes");
 const summary = args.includes("--summary");
 
 const { default: createSmlib } = await import(pathToFileURL(join(pkg, "smlib.js")).href);
 const { initSmlib } = await import(pathToFileURL(join(pkg, "smlib-bridge.js")).href);
 await initSmlib(createSmlib, { wasmBinary: readFileSync(join(pkg, "smlib.wasm")) });
-const mcad = await import(pathToFileURL(join(pkg, "cad_wasm.js")).href);
+const cad = await import(pathToFileURL(join(pkg, "cad_wasm.js")).href);
 await cad.default({ module_or_path: readFileSync(join(pkg, "cad_wasm_bg.wasm")) });
 const s = new cad.Session();
 
@@ -28,6 +31,7 @@ const out = [];
 const run = () => {
   while (s.busy()) out.push(...s.step(1000));
 };
+if (lang) s.post({ type: "SetLang", lang });
 if (module) s.post({ type: "SetContext", module, overrides: {} });
 if (args.includes("--project")) {
   const root = dirname(file);
@@ -36,7 +40,7 @@ if (args.includes("--project")) {
     for (const n of readdirSync(d)) {
       const p = join(d, n);
       if (statSync(p).isDirectory()) walk(p);
-      else if (n.endsWith(".scad") && p !== file) files[relative(root, p).split("\\").join("/")] = readFileSync(p, "utf8");
+      else if ((n.endsWith(".scad") || n.endsWith(".mcad")) && p !== file) files[relative(root, p).split("\\").join("/")] = readFileSync(p, "utf8");
     }
   };
   walk(root);

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Example icon (own drawing, free): house with windows and door as holes (evenodd),
+     relative commands (h, v, l), chimney as a rounded rectangle, nested groups -->
+<svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="50mm" viewBox="0 0 60 50">
+  <g id="house" transform="translate(5 2)">
+    <path id="roof" d="M 0 22 L 25 2 L 50 22 h -6 L 25 8.5 L 6 22 Z"/>
+    <path id="wall" fill-rule="evenodd"
+          d="M 6 21 h 38 v 25 h -38 z
+             m 5 5 h 8 v 7 h -8 z
+             m 20 0 h 8 v 7 h -8 z
+             m -10 9 h 8 v 9 h -8 z"/>
+    <rect id="chimney" x="34" y="4" width="5" height="10" rx="1"/>
+    <g id="sun" transform="translate(48 5) scale(0.8)">
+      <circle cx="0" cy="0" r="4"/>
+    </g>
+  </g>
+</svg>

@@ -74,7 +74,7 @@ async function cursorOn(page: Page, l: number, col: number, context: string | nu
 
 test("C01 fillet-Zeile: Zonen blau, ausgewählte Kanten farbig, Anzahl am Zeilenende", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/fillet_zonen.mcad");
+  await openExample(page, "spec/fillet_zones.mcad");
   const s = await cursorOn(page, 12, 10, "block", "(s) => s.view.plan.items.some(i => i.mode === 'blue')");
   expect(modes(s)).toEqual(["full@12", "blue@17", "blue@18"]);
   expect(view(s).edgeKinds.selected).toBe(2);
@@ -89,14 +89,14 @@ test("C01 fillet-Zeile: Zonen blau, ausgewählte Kanten farbig, Anzahl am Zeilen
     title: "fillet-Zeile",
     images: [{ name: "c01-fillet", label: "Cursor auf fillet(2)" }],
     code: lines(await text(page), 11, 21),
-    caption: "fillet_zonen.mcad, Modul block, Cursor auf fillet(2) (Zeile 12): Körper voll, Rest gedimmt; die beiden Zonen (Zylinder um die Rasterlinie g[rechts, *, deckel] und die Kugel über der Bohrung) blau halbtransparent, die zwei ausgewählten Kanten orange; am Zeilenende „2 Zonen · 2 Kanten“.",
+    caption: "fillet_zones.mcad, Modul block, Cursor auf fillet(2) (Zeile 12): Körper voll, Rest gedimmt; die beiden Zonen (Zylinder um die Rasterlinie g[right, *, lid] und die Kugel über der Bohrung) blau halbtransparent, die zwei ausgewählten Kanten orange; am Zeilenende „2 Zonen · 2 Kanten“.",
     checks: [`Darstellung: ${modes(s).join(", ")}`, `ausgewählte Kanten gezeichnet: ${view(s).edgeKinds.selected}`, `Pixel der Kanten: ${orange}, der Zonen: ${blue} (Differenz mit/ohne Ebene)`],
   });
 });
 
 test("C02 Cursor auf einer Zone: nur diese Zone und ihre Kanten", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/fillet_zonen.mcad");
+  await openExample(page, "spec/fillet_zones.mcad");
   let s = await cursorOn(page, 18, 6, "block", "(s) => s.view.zoneEdges !== null");
   expect(modes(s)).toEqual(["blue@18"]);
   expect(view(s).zoneEdges).toMatchObject({ inZone: 1, total: 2 });
@@ -201,7 +201,7 @@ test("C05 difference(fillet = r) und $fillet am Primitiv", async ({ page }) => {
 
 test("C06 select = \"touch\" und verschachtelte Blöcke", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/fillet_zonen.mcad");
+  await openExample(page, "spec/fillet_zones.mcad");
   // touch: the zone (vertical grid line) only touches four of the edges.
   let s = await cursorOn(page, 23, 30, "block", "(s) => s.view.edgeKinds.selected > 0");
   expect(view(s).edgeKinds.selected).toBe(5);
@@ -225,14 +225,14 @@ test("C06 select = \"touch\" und verschachtelte Blöcke", async ({ page }) => {
       { name: "c06-aussen", label: "äußerer Block fillet(1)" },
     ],
     code: lines(await text(page), 11, 26),
-    caption: "select = \"touch\": die Zone um die senkrechte Rasterlinie g[links, vorne, *] erfasst die senkrechte Kante und die vier Kanten, die sie an den Enden berühren (auf ganzer Länge), „5 Kanten“; Cursor auf der Zone: alle 5 in dieser Zone. Verschachtelt: der innere Block fillet(2) wählt 2 Kanten, der äußere fillet(1) mit der Zone g.boden die 5 Bodenkanten (vier Außenkanten und die Bohrungskante).",
+    caption: "select = \"touch\": die Zone um die senkrechte Rasterlinie g[left, front, *] erfasst die senkrechte Kante und die vier Kanten, die sie an den Enden berühren (auf ganzer Länge), „5 Kanten“; Cursor auf der Zone: alle 5 in dieser Zone. Verschachtelt: der innere Block fillet(2) wählt 2 Kanten, der äußere fillet(1) mit der Zone g.boden die 5 Bodenkanten (vier Außenkanten und die Bohrungskante).",
     checks: ["touch: 5 Kanten, Zone: 5 von 5", "äußerer Block: 5 Kanten, eine Zone (blue@20)", "innerer Block: 2 Kanten"],
   });
 });
 
 test("C07 chamfer in allen drei Formen", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/fase_chamfer.mcad");
+  await openExample(page, "spec/chamfers.mcad");
   let s = await cursorOn(page, 9, 3, null, "(s) => s.view.edgeKinds.selected > 0");
   expect(modes(s)).toEqual(["full@9", "blue@11"]);
   await expect(lineHint(page, 9)).toContainText("Kanten");
@@ -255,8 +255,8 @@ test("C07 chamfer in allen drei Formen", async ({ page }) => {
 
 test("C08 shell: Zone blau, geöffnete Flächen farbig", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/griffschale.mcad");
-  let s = await cursorOn(page, 12, 10, "griffschale", "(s) => s.view.openFaces.length > 0");
+  await openExample(page, "spec/grip_shell.mcad");
+  let s = await cursorOn(page, 12, 10, "grip_shell", "(s) => s.view.openFaces.length > 0");
   expect(modes(s)).toEqual(["full@12", "blue@14"]);
   const sh = (await nodesOnLine(page, 12)).find((x) => x.label === "shell")!;
   expect(sh.status).toBe("ok");
@@ -267,7 +267,7 @@ test("C08 shell: Zone blau, geöffnete Flächen farbig", async ({ page }) => {
   const open = (await layerPixels(page, "open-faces")).changed;
   expect(open).toBeGreaterThan(1000);
   await screenshotC(page, "c08-shell");
-  s = await cursorOn(page, 14, 10, "griffschale", "(s) => s.view.openFaces.length > 0");
+  s = await cursorOn(page, 14, 10, "grip_shell", "(s) => s.view.openFaces.length > 0");
   expect(modes(s)).toEqual(["blue@14"]);
   expect(view(s).openFaces[0].faces).toBe(1);
   await screenshotC(page, "c08-shell-zone");
@@ -275,11 +275,11 @@ test("C08 shell: Zone blau, geöffnete Flächen farbig", async ({ page }) => {
     id: "C08",
     title: "shell",
     images: [
-      { name: "c08-shell", label: "Cursor auf shell(wand)" },
+      { name: "c08-shell", label: "Cursor auf shell(wall)" },
       { name: "c08-shell-zone", label: "Cursor auf der Zone" },
     ],
     code: lines(await text(page), 11, 17),
-    caption: "griffschale.mcad (neu), Modul griffschale: Cursor auf shell(wand): Hohlkörper voll, Zone (Platte um g.oben) blau, die geöffnete Oberseite des Körpers orange – in der Ansicht aus den Zonen-Meshes bestimmt (1 Fläche, wie die Engine meldet); „1 Zone · 1 Fläche geöffnet“ am Zeilenende. Cursor auf der Zone: nur diese Zone und ihre Fläche.",
+    caption: "grip_shell.mcad (neu), Modul grip_shell: Cursor auf shell(wall): Hohlkörper voll, Zone (Platte um g.top) blau, die geöffnete Oberseite des Körpers orange – in der Ansicht aus den Zonen-Meshes bestimmt (1 Fläche, wie die Engine meldet); „1 Zone · 1 Fläche geöffnet“ am Zeilenende. Cursor auf der Zone: nur diese Zone und ihre Fläche.",
     checks: [`geöffnete Flächen Ansicht/Engine: ${view(s).openFaces[0].faces}/${view(s).openFaces[0].engine}`, `Pixel der geöffneten Fläche: ${open}`],
   });
 });
@@ -639,11 +639,11 @@ test("C16 Punktgriff achsgebunden ziehen (Umschalttaste, X/Y/Z)", async ({ page 
 // ---------------------------------------------------------------- examples, measurements
 
 const NEW_EXAMPLES: Array<{ path: string; line: number; col: number; context: string | null; what: string }> = [
-  { path: "spec/griffschale.mcad", line: 12, col: 10, context: "griffschale", what: "shell mit Zone g.oben, Kabelausgang per difference, Schraubdome mit difference(fillet = 0.5)" },
-  { path: "spec/flasche.mcad", line: 11, col: 10, context: "flasche", what: "rotate_extrude eines Polygons aus Rasterpunkten, fillet(3) mit zwei Zonen, Teilumlauf 270°" },
-  { path: "spec/lueftungsgitter.mcad", line: 12, col: 10, context: "gitter", what: "linear_extrude für Rahmen und Schlitze an indizierten Rasterebenen, difference(chamfer = 0.6)" },
-  { path: "spec/kabelfuehrung.mcad", line: 16, col: 3, context: null, what: "sweep eines U-Profils entlang eines Spline-Pfads aus Rasterpunkten und Literalen, linearer Kanal" },
-  { path: "spec/freiformdeckel.mcad", line: 11, col: 10, context: "deckel", what: "surface aus einem 4 × 4-Netz (Rasterrand, Wölbung als Literale), thicken(2)" },
+  { path: "spec/grip_shell.mcad", line: 12, col: 10, context: "grip_shell", what: "shell mit Zone g.top, Kabelausgang per difference, Schraubdome mit difference(fillet = 0.5)" },
+  { path: "spec/bottle.mcad", line: 11, col: 10, context: "bottle", what: "rotate_extrude eines Polygons aus Rasterpunkten, fillet(3) mit zwei Zonen, Teilumlauf 270°" },
+  { path: "spec/vent_grille.mcad", line: 12, col: 10, context: "grille", what: "linear_extrude für Rahmen und Schlitze an indizierten Rasterebenen, difference(chamfer = 0.6)" },
+  { path: "spec/cable_guide.mcad", line: 16, col: 3, context: null, what: "sweep eines U-Profils entlang eines Spline-Pfads aus Rasterpunkten und Literalen, linearer Kanal" },
+  { path: "spec/freeform_lid.mcad", line: 11, col: 10, context: "lid", what: "surface aus einem 4 × 4-Netz (Rasterrand, Wölbung als Literale), thicken(2)" },
 ];
 
 test("C17 Neue Beispiele im Menü", async ({ page }) => {

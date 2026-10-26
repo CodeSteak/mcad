@@ -1,0 +1,51 @@
+// Purpose: flange plate with collar and bolt circle (DN 25-like, 6 × M10) – cross-section as
+// polygon from a 2D grid, rotate_extrude; collar/disc transition rounded via a ring zone
+// (own module as zone), bore edges and outer edges chamfered via volume zones,
+// through holes on the bolt circle via for/rotate and sealing groove with difference(chamfer = …).
+// Dimensions in mm. (torus() as a zone selects no edges, see README: F7.)
+
+// Zone: flat ring around the circle with radius r at height z
+module ring_zone(r, z, d = 2) {
+    translate([0, 0, z]) difference() {
+        cylinder(h = d, r = r + d / 2, center = true);
+        cylinder(h = 2 * d, r = r - d / 2, center = true);
+    }
+}
+module flange(d_outer = 120, t = 12, d_collar = 60, h_collar = 28, d_bore = 32,
+              bcd = 90, n = 6, d_hole = 11, groove_t = 1.5) {
+    // Cross-section: x = radius, y = height
+    grid p {
+        x: bore = d_bore / 2, collar = d_collar / 2, outer = d_outer / 2;
+        y: bottom = 0, disc = t, collar_top = h_collar;
+    }
+    grid g {
+        x: axis = 0, collar = d_collar / 2, bolt_circle = bcd / 2, outer = d_outer / 2;
+        z: bottom = 0, disc = t, collar_top = h_collar;
+    }
+
+    difference(chamfer = 0.8) {
+        chamfer(1.5) {
+            fillet(4) {
+                rotate_extrude()
+                    polygon([p[bore, bottom], p[outer, bottom], p[outer, disc], p[collar, disc],
+                             p[collar, collar_top], p[bore, collar_top]]);
+                ring_zone(g.collar, g.disc);                        // Fillet collar/disc
+            }
+            cylinder(h = 3 * h_collar, r = d_bore / 2 + 1, center = true);  // both bore edges
+            ring_zone(g.outer, g.disc);                                       // Outer edge at the top
+            ring_zone(g.collar, g.collar_top);                                // Collar edge at the top
+        }
+        for (i = [0 : n - 1])
+            rotate([0, 0, i * 360 / n + 30]) translate([g.bolt_circle, 0, -1]) cylinder(h = t + 2, d = d_hole);
+        // Sealing groove on the underside
+        translate([0, 0, -1]) difference() {
+            cylinder(h = groove_t + 1, r = d_bore / 2 + 9);
+            translate([0, 0, -1]) cylinder(h = groove_t + 3, r = d_bore / 2 + 5);
+        }
+    }
+
+    anchor top = g[axis, _, collar_top], dir = [0, 0, 1];
+    anchor seal_face = g[axis, _, bottom], dir = [0, 0, -1];
+}
+
+f: flange();

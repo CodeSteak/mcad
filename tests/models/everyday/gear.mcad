@@ -1,0 +1,57 @@
+// Purpose: spur gear pair module 2 (20 and 12 teeth, centre distance 32 mm) – involute flanks as
+// polygon from list functions (involute angle, tooth thickness over radius), linear_extrude;
+// gear 1 with hub, keyway and lightening holes (for), gear 2 with a D bore for a
+// 5 mm motor shaft. Both gears as parts in mesh (check the backlash with
+// `mcad measure --clearance gear1 gear2`). Bore edges with difference(chamfer = …). Dimensions in mm.
+
+function inv(a) = tan(a) - a * PI / 180;                // Involute function (a in degrees)
+function tooth_half_angle(m, z, rho, alpha, backlash) =      // Half the tooth thickness in degrees at radius rho
+    let (r = m * z / 2, rb = r * cos(alpha), a_rho = acos(min(1, rb / rho)))
+    90 / z - (backlash / 2) / r * 180 / PI + (inv(alpha) - inv(a_rho)) * 180 / PI;
+function tooth_profile(m, z, alpha = 20, backlash = 0.1, n = 5) =
+    let (r = m * z / 2, ra = r + m, rf = r - 1.25 * m, rb = r * cos(alpha), r0 = max(rb, rf),
+         radii = [for (i = [0 : n]) r0 + (ra - r0) * i / n])
+    [for (k = [0 : z - 1])
+        let (mid = k * 360 / z,
+             f1 = [for (rho = radii) [rho, mid - tooth_half_angle(m, z, rho, alpha, backlash)]],
+             f2 = [for (j = [n : -1 : 0]) let (rho = radii[j]) [rho, mid + tooth_half_angle(m, z, rho, alpha, backlash)]],
+             gap = mid + 180 / z)
+        each concat([[rf, mid - tooth_half_angle(m, z, r0, alpha, backlash)]], f1, f2,
+                    [[rf, mid + tooth_half_angle(m, z, r0, alpha, backlash)], [rf, gap]])]
+    ;
+function polar(p) = [p[0] * cos(p[1]), p[0] * sin(p[1])];
+
+module gear(m = 2, z = 20, b = 10, bore = 8, hub_d = 0, hub_h = 0, key_b = 3, key_t = 1.4,
+            d_flat = 0, holes = 0) {
+    r = m * z / 2;
+    grid g {
+        x: axis = 0, pitch_circle = r, tip = r + m, root = r - 1.25 * m;
+        z: bottom = 0, top = b, hub_top = b + hub_h;
+    }
+    difference(chamfer = 0.4) {
+        union() {
+            linear_extrude(b) polygon([for (p = tooth_profile(m, z)) polar(p)]);
+            if (hub_h > 0) cylinder(h = g.hub_top, d = hub_d);
+        }
+        // Bore; with d_flat > 0 as a D profile (circle, flattened at the bottom at y = -d_flat)
+        intersection() {
+            translate([0, 0, -1]) cylinder(h = g.hub_top + 2, d = bore);
+            if (d_flat > 0) translate([-bore, -d_flat, -2]) cube([2 * bore, 2 * bore, g.hub_top + 4]);
+        }
+        if (key_b > 0)
+            translate([-key_b / 2, 0, -1]) cube([key_b, bore / 2 + key_t, g.hub_top + 2]);
+        if (holes > 0) for (i = [0 : holes - 1])
+            rotate([0, 0, i * 360 / holes + 180 / z])
+                translate([(g.root + hub_d / 2) / 2, 0, -1]) cylinder(h = b + 2, d = (g.root - hub_d / 2) * 0.55);
+    }
+    anchor axis = g[axis, _, top], dir = [0, 0, 1];
+}
+
+m = 2;
+z1 = 20;
+z2 = 12;
+center_distance = m * (z1 + z2) / 2;
+
+gear1: gear(m = m, z = z1, bore = 8, hub_d = 18, hub_h = 6, holes = 5);
+translate([center_distance, 0, 0]) rotate([0, 0, 180 + 180 / z2])
+    gear2: gear(m = m, z = z2, bore = 5, key_b = 0, d_flat = 2);

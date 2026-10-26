@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Catalogue of the everyday models (tests/models/alltag/): measures every model with the CLI, renders images
+// Catalogue of the everyday models (tests/models/everyday/): measures every model with the CLI, renders images
 // and writes
 //
 //   docs/models/everyday-models.html, docs/models/img/*.jpg
@@ -30,104 +30,104 @@ const PLA = 1.24; // g/cm³
 const BG = "#f4f5f7"; // background of `cad render` (light theme)
 
 // ---------------------------------------------------------------------------------------------
-// Models: order as in tests/models/alltag/README.md. text: 2–4 sentences; {p} = default of
+// Models: order as in tests/models/everyday/README.md. text: 2–4 sentences; {p} = default of
 // parameter p of the main module or of the file variable p, {modul.p} = parameter of another
 // module, {p|x} = list joined with " × ".
 // extra: additional images of the assemblies (section, anchors), pairs: distances `measure --clearance`,
 // view: [azimuth, elevation] instead of iso where iso shows the back.
 const MODELLE = [
   {
-    id: "handystaender", file: "handystaender.mcad", titel: "Phone stand", view: [-50, 30], // iso shows the back
-    text: "Stand for a phone up to 12 mm thick. The side profile is a polygon of points of a 2D grid and is extruded over the width w = {w} mm; the backrest ({lehne} mm, wall t = {t} mm) is at an angle a = {a}° to the horizontal, a triangular window lightens it. A cable hole Ø {kabel_d} mm with a channel under the base takes the charging cable. Inner corners of lip and shelf as well as the top edge of the lip are filleted with two radii via zones on grid lines.",
+    id: "phone_stand", file: "phone_stand.mcad", titel: "Phone stand", view: [-50, 30], // iso shows the back
+    text: "Stand for a phone up to 12 mm thick. The side profile is a polygon of points of a 2D grid and is extruded over the width w = {w} mm; the backrest ({backrest} mm, wall t = {t} mm) is at an angle a = {a}° to the horizontal, a triangular window lightens it. A cable hole Ø {cable_d} mm with a channel under the base takes the charging cable. Inner corners of lip and shelf as well as the top edge of the lip are filleted with two radii via zones on grid lines.",
   },
   {
-    id: "becher", file: "becher.mcad", titel: "Mug with handle",
-    text: "Drinking mug as a conical solid of revolution (radius at the bottom ru = {ru} mm, at the top ro = {ro} mm, height h = {h} mm), opened at the top with shell and a {wand} mm wall. The bottom edge is filleted with r {boden_r} mm via a zone on the bottom plane, the drinking rim via a second zone. The handle (Ø {henkel_d} mm) is a sweep of a circle along a spline path whose ends sit radially in the wall, attached with union(fillet = …).",
+    id: "mug", file: "mug.mcad", titel: "Mug with handle",
+    text: "Drinking mug as a conical solid of revolution (radius at the bottom r_bottom = {r_bottom} mm, at the top r_top = {r_top} mm, height h = {h} mm), opened at the top with shell and a {wall} mm wall. The bottom edge is filleted with r {floor_r} mm via a zone on the bottom plane, the drinking rim via a second zone. The handle (Ø {handle_d} mm) is a sweep of a circle along a spline path whose ends sit radially in the wall, attached with union(fillet = …).",
   },
   {
-    id: "kabelclip", file: "kabelclip.mcad", titel: "Cable clip for the desk edge", kurz: "Cable clip",
-    text: "Cable holder that clips onto a desk top of dicke = {dicke} mm (clearance {spiel} mm). The C clamp is an extruded profile (wall {t} mm, arms {arm_o} and {arm_u} mm) with a clamping bump; above it sits a block with n = {n} cable channels Ø {kabel_d} mm at a pitch of {pitch} mm, inserted from the top. The channels lie on indexed grid planes, their edges are filleted with difference(fillet = …), the inner corners of the clamp via zones.",
+    id: "cable_clip", file: "cable_clip.mcad", titel: "Cable clip for the desk edge", kurz: "Cable clip",
+    text: "Cable holder that clips onto a desk top of thickness = {thickness} mm (clearance {clearance} mm). The C clamp is an extruded profile (wall {t} mm, arms {arm_top} and {arm_bottom} mm) with a clamping bump; above it sits a block with n = {n} cable channels Ø {cable_d} mm at a pitch of {pitch} mm, inserted from the top. The channels lie on indexed grid planes, their edges are filleted with difference(fillet = …), the inner corners of the clamp via zones.",
   },
   {
-    id: "wandhaken", file: "wandhaken.mcad", titel: "Wall hook",
-    text: "Hook for a jacket or towel: wall plate {b} × {h} × {t} mm with filleted corners (r {ecke} mm), chamfered front edge and two countersunk holes (Ø {schraube_d} mm, head Ø {kopf_d} mm). Chamfer and fillet are nested, so that the chamfer also covers the boundary edges of the fillet. The hook (Ø {haken_d} mm, reach {ausladung} mm) is a sweep along a spline path with a ball knob Ø {knauf_d} mm, attached with union(fillet = …).",
+    id: "wall_hook", file: "wall_hook.mcad", titel: "Wall hook",
+    text: "Hook for a jacket or towel: wall plate {b} × {h} × {t} mm with filleted corners (r {corner} mm), chamfered front edge and two countersunk holes (Ø {screw_d} mm, head Ø {head_d} mm). Chamfer and fillet are nested, so that the chamfer also covers the boundary edges of the fillet. The hook (Ø {hook_d} mm, reach {reach} mm) is a sweep along a spline path with a ball knob Ø {knob_d} mm, attached with union(fillet = …).",
   },
   {
-    id: "seifenschale", file: "seifenschale.mcad", titel: "Soap dish",
-    text: "Soap dish {l} × {b} × {h} mm with drainage. The tray is a box whose vertical corners (r {ecke} mm) and bottom edges are filleted via nested zones and which shell (wall {wand} mm) opens at the top. n = {n} round support ribs are cylinder(a, b, r) between grid points, with drainage slots with filleted edges between them; underneath stand four feet ({fuss_h} mm).",
+    id: "soap_dish", file: "soap_dish.mcad", titel: "Soap dish",
+    text: "Soap dish {l} × {b} × {h} mm with drainage. The tray is a box whose vertical corners (r {corner} mm) and bottom edges are filleted via nested zones and which shell (wall {wall} mm) opens at the top. n = {n} round support ribs are cylinder(a, b, r) between grid points, with drainage slots with filleted edges between them; underneath stand four feet ({foot_h} mm).",
   },
   {
-    id: "stiftebox", file: "stiftebox.mcad", titel: "Pen box",
-    text: "Pen box with three tall compartments (widths {faecher} mm, depth {tiefe} mm, height {h} mm) and a low front compartment ({vorn_t} mm deep, {vorn_h} mm high), wall {wand} mm. The compartment boundaries are indexed grid planes computed by a recursive function from the list of compartment widths. Four nested zone blocks fillet the vertical edges (outside r {ecke} mm, pockets r {ecke_i} mm) and the pocket floors and chamfer the rear top edges; the top edges of the front compartment stay sharp (kernel limit F6).",
+    id: "pen_box", file: "pen_box.mcad", titel: "Pen box",
+    text: "Pen box with three tall compartments (widths {compartments} mm, depth {depth} mm, height {h} mm) and a low front compartment ({front_t} mm deep, {front_h} mm high), wall {wall} mm. The compartment boundaries are indexed grid planes computed by a recursive function from the list of compartment widths. Four nested zone blocks fillet the vertical edges (outside r {corner} mm, pockets r {corner_inner} mm) and the pocket floors and chamfer the rear top edges; the top edges of the front compartment stay sharp (kernel limit F6).",
   },
   {
-    id: "tuerstopper", file: "tuerstopper.mcad", titel: "Door stop",
-    text: "Wedge {l} mm long, {b} mm wide and {h_hinten} mm high at the back. The body is a loft through three trapezoid profiles (height at the back, middle {h_mitte} mm, tip {spitze} mm), laid flat with rotate([90, 0, 90]); its bottom edge is chamfered beforehand via a zone on the bottom plane. On top there is a finger recess, underneath {rillen} transverse grooves against slipping, at the back a hanging hole Ø {loch_d} mm.",
+    id: "door_stop", file: "door_stop.mcad", titel: "Door stop",
+    text: "Wedge {l} mm long, {b} mm wide and {h_back} mm high at the back. The body is a loft through three trapezoid profiles (height at the back, middle {h_mid} mm, tip {tip} mm), laid flat with rotate([90, 0, 90]); its bottom edge is chamfered beforehand via a zone on the bottom plane. On top there is a finger recess, underneath {grooves} transverse grooves against slipping, at the back a hanging hole Ø {hole_d} mm.",
   },
   {
-    id: "topfuntersetzer", file: "topfuntersetzer.mcad", titel: "Pot trivet",
-    text: "Trivet Ø {d} mm, {h} mm high: three concentric rings (centre radii {ringe} mm, web {steg} mm) as rotate_extrude of a rectangle in a for loop, connected by {speichen} spokes and a centre disc (r {mitte_r} mm). All top edges of rings and spokes are chamfered in one block via a zone on the top plane; underneath there are three recesses for rubber feet Ø {fuss_d} mm.",
+    id: "trivet", file: "trivet.mcad", titel: "Pot trivet",
+    text: "Trivet Ø {d} mm, {h} mm high: three concentric rings (centre radii {rings} mm, web {web} mm) as rotate_extrude of a rectangle in a for loop, connected by {spokes} spokes and a centre disc (r {hub_r} mm). All top edges of rings and spokes are chamfered in one block via a zone on the top plane; underneath there are three recesses for rubber feet Ø {foot_d} mm.",
   },
   {
-    id: "flansch", file: "flansch.mcad", titel: "Flange plate",
-    text: "Flange Ø {d_aussen} mm, {t} mm thick, with collar Ø {d_bund} mm (height {h_bund} mm) and bore Ø {d_bohrung} mm. The cross-section is a polygon from a 2D grid, revolved with rotate_extrude; on the bolt circle Ø {lk} mm lie {n} through holes Ø {d_loch} mm (M10), plus a sealing groove {nut_t} mm deep. The transition collar/disc is filleted by a dedicated module used as a zone (ringzone), bore and outer edges are chamfered via volume zones.",
+    id: "flange", file: "flange.mcad", titel: "Flange plate",
+    text: "Flange Ø {d_outer} mm, {t} mm thick, with collar Ø {d_collar} mm (height {h_collar} mm) and bore Ø {d_bore} mm. The cross-section is a polygon from a 2D grid, revolved with rotate_extrude; on the bolt circle Ø {bcd} mm lie {n} through holes Ø {d_hole} mm (M10), plus a sealing groove {groove_t} mm deep. The transition collar/disc is filleted by a dedicated module used as a zone (ring_zone), bore and outer edges are chamfered via volume zones.",
   },
   {
-    id: "lagerbock", file: "lagerbock.mcad", titel: "Pillow block 608",
-    text: "Bearing block for a 608 deep-groove ball bearing ({lager_d} × {lager_b} mm), axis height {achse_h} mm. The base plate {l} × {b} × {t} mm has two slots for M6 ({langloch|x} mm, helper module) for alignment; the bearing eye (r {auge_r} mm, {auge_b} mm wide) is a box with a tangentially adjoining cylinder(a, b, r) and has a stop shoulder Ø {schulter_d} mm. The fillets around the eye are created via zones on grid lines in x, y and z.",
+    id: "pillow_block", file: "pillow_block.mcad", titel: "Pillow block 608",
+    text: "Bearing block for a 608 deep-groove ball bearing ({bearing_d} × {bearing_b} mm), axis height {axis_h} mm. The base plate {l} × {b} × {t} mm has two slots for M6 ({slot_size|x} mm, helper module) for alignment; the bearing eye (r {eye_r} mm, {eye_w} mm wide) is a box with a tangentially adjoining cylinder(a, b, r) and has a stop shoulder Ø {shoulder_d} mm. The fillets around the eye are created via zones on grid lines in x, y and z.",
   },
   {
-    id: "winkel_rippe", file: "winkel_rippe.mcad", titel: "Mounting bracket with rib", kurz: "Mounting bracket",
-    text: "Bracket with legs of {a} and {h} mm, {b} mm wide and {t} mm thick, with n_rippen = {n_rippen} stiffening rib ({rippe_t} mm thick, {rippe_l} mm long). The ribs are extruded triangles on indexed grid planes; inner edge and rib joints are filleted in one zone block, so that the corner transitions run cleanly. The holes Ø {loch_d} mm (M5) are chamfered with difference(chamfer = …).",
+    id: "rib_bracket", file: "rib_bracket.mcad", titel: "Mounting bracket with rib", kurz: "Mounting bracket",
+    text: "Bracket with legs of {a} and {h} mm, {b} mm wide and {t} mm thick, with n_ribs = {n_ribs} stiffening rib ({rib_t} mm thick, {rib_l} mm long). The ribs are extruded triangles on indexed grid planes; inner edge and rib joints are filleted in one zone block, so that the corner transitions run cleanly. The holes Ø {hole_d} mm (M5) are chamfered with difference(chamfer = …).",
   },
   {
-    id: "kuehlkoerper", file: "kuehlkoerper.mcad", titel: "Heat sink",
-    text: "Extruded heat sink {l} × {b} mm, base plate {basis} mm, total height {h} mm, with n = {n} fins of {rippe_t} mm each. The fin positions are indexed grid planes from a list; the fin roots are filleted via zones on grid lines in a for loop (r {fuss_r} mm), the tips almost fully rounded via a zone on the tip plane. Two M3 holes {loch_abstand} mm apart lie between the fins, an anchor marks the heat source.",
+    id: "heat_sink", file: "heat_sink.mcad", titel: "Heat sink",
+    text: "Extruded heat sink {l} × {b} mm, base plate {base} mm, total height {h} mm, with n = {n} fins of {fin_t} mm each. The fin positions are indexed grid planes from a list; the fin roots are filleted via zones on grid lines in a for loop (r {foot_r} mm), the tips almost fully rounded via a zone on the tip plane. Two M3 holes {hole_spacing} mm apart lie between the fins, an anchor marks the heat source.",
   },
   {
-    id: "zahnrad", file: "zahnrad.mcad", titel: "Spur gear pair",
-    text: "Two meshing spur gears with module m = {m} mm and {z1} and {z2} teeth, centre distance {achsabstand} mm, width {zahnrad.b} mm. The involute flanks are created as a polygon from list functions (let, each, concat) and extruded linearly; the tooth thickness is slightly reduced for backlash. Gear 1 has a hub, keyway and lightening holes, gear 2 a D bore for a 5 mm motor shaft.",
-    pairs: [["rad1", "rad2", "Backlash"]],
-    extra: [{ name: "eingriff", args: ["--view", "top", "--fit", "all", "--zoom", "6", "--target", "18.6,-4.2,10"], caption: "Top view, magnified 6× on the narrowest point of the mesh: the gap between the flanks is the measured backlash." }],
+    id: "gear", file: "gear.mcad", titel: "Spur gear pair",
+    text: "Two meshing spur gears with module m = {m} mm and {z1} and {z2} teeth, centre distance {center_distance} mm, width {gear.b} mm. The involute flanks are created as a polygon from list functions (let, each, concat) and extruded linearly; the tooth thickness is slightly reduced for backlash. Gear 1 has a hub, keyway and lightening holes, gear 2 a D bore for a 5 mm motor shaft.",
+    pairs: [["gear1", "gear2", "Backlash"]],
+    extra: [{ name: "mesh", args: ["--view", "top", "--fit", "all", "--zoom", "6", "--target", "18.6,-4.2,10"], caption: "Top view, magnified 6× on the narrowest point of the mesh: the gap between the flanks is the measured backlash." }],
   },
   {
-    id: "rohrschelle", file: "rohrschelle.mcad", titel: "Pipe clamp",
-    text: "Two-part clamp for a pipe Ø {rohr_d} mm: the half rings ({halbschelle.t} mm thick, {b} mm wide) are rotate_extrude(angle = 180) of a rectangle, with lugs and holes Ø {halbschelle.loch_d} mm (M5); the lower part (mirror) carries a boss with a pilot hole for M8. Upper part, lower part and a test pipe are parts in a jointly rotated block. In the open state there is a {halbschelle.spalt} mm gap at the lugs.",
-    pairs: [["oben", "unten", "Clamping gap at the lugs"], ["oben", "rohr", "Pipe touches the upper part"], ["unten", "rohr", "Pipe touches the lower part"]],
-    extra: [{ name: "schnitt", args: ["--section", "x=10", "--view", "right"], caption: "Section x = 10 (middle of the clamp, across the pipe axis), view from +x: half rings with lugs and M5 holes, clamping gap 2 mm, boss with pilot hole for M8, test pipe." }],
+    id: "pipe_clamp", file: "pipe_clamp.mcad", titel: "Pipe clamp",
+    text: "Two-part clamp for a pipe Ø {pipe_d} mm: the half rings ({half_clamp.t} mm thick, {b} mm wide) are rotate_extrude(angle = 180) of a rectangle, with lugs and holes Ø {half_clamp.hole_d} mm (M5); the lower part (mirror) carries a boss with a pilot hole for M8. Upper part, lower part and a test pipe are parts in a jointly rotated block. In the open state there is a {half_clamp.gap} mm gap at the lugs.",
+    pairs: [["top", "bottom", "Clamping gap at the lugs"], ["top", "pipe", "Pipe touches the upper part"], ["bottom", "pipe", "Pipe touches the lower part"]],
+    extra: [{ name: "section", args: ["--section", "x=10", "--view", "right"], caption: "Section x = 10 (middle of the clamp, across the pipe axis), view from +x: half rings with lugs and M5 holes, clamping gap 2 mm, boss with pilot hole for M8, test pipe." }],
   },
   {
-    id: "pi_platte", file: "pi_platte.mcad", titel: "Raspberry Pi mounting plate", kurz: "Raspberry Pi plate",
-    text: "Plate {l} × {b} × {t} mm for a Raspberry Pi (hole pattern 58 × 49 mm, M2.5). The standoffs ({hoehe} mm) are a separate module with an anchor, placed in the loop as named instances dom[i] and attached with union(fillet = …). In addition there are {schlitze} ventilation slots, four M4 mounting holes with countersink and filleted corners (r {ecke} mm). A coloured board dummy 85 × 56 × 1.6 mm sits as a second part on the anchor of the plate.",
-    pairs: [["platte", "pi", "Board rests on the bosses"]],
-    extra: [{ name: "anker", args: ["--show", "anchors", "--part", "platte"], caption: "Plate with anchors shown (yellow): the anchors oben of the bosses carry the board." }],
+    id: "pi_plate", file: "pi_plate.mcad", titel: "Raspberry Pi mounting plate", kurz: "Raspberry Pi plate",
+    text: "Plate {l} × {b} × {t} mm for a Raspberry Pi (hole pattern 58 × 49 mm, M2.5). The standoffs ({height} mm) are a separate module with an anchor, placed in the loop as named instances boss[i] and attached with union(fillet = …). In addition there are {slots} ventilation slots, four M4 mounting holes with countersink and filleted corners (r {corner} mm). A coloured board dummy 85 × 56 × 1.6 mm sits as a second part on the anchor of the plate.",
+    pairs: [["plate", "pi", "Board rests on the bosses"]],
+    extra: [{ name: "anchors", args: ["--show", "anchors", "--part", "plate"], caption: "Plate with anchors shown (yellow): the anchors top of the bosses carry the board." }],
   },
   {
-    id: "gehaeuse", file: "gehaeuse/gehaeuse.mcad", titel: "Electronics enclosure",
-    text: "Enclosure for a 70 × 50 mm board: inside {innen_l} × {innen_b} mm, height {hoehe} mm, wall {wand} mm, corners r {ecke} mm. The base is a filleted box opened by shell; four screw bosses (pilot hole Ø {kern_d} mm) are attached as dom[i] with union(fillet = …). The lid ({deckel_t} mm, centring rim {rand_h} mm, clearance {spiel} mm) sits on the anchor deckel_auflage, the M3 screws are parts s[0] … s[3]. Dimensions are in masse.mcad (include), parts in teile.mcad (use); explosion > 0 pulls the assembly apart.",
-    pairs: [["unterteil", "deckel", "Lid rests on the base"], ["s[0]", "deckel", "Screw head rests on the lid"], ["s[0]", "unterteil", "Shank in the pilot hole"]],
-    extra: [{ name: "schnitt", args: ["--section", "y=8.5", "--section-flip", "--view", "front"], caption: "Section y = 8.5 (through the front bosses), view from the front: screw in the boss, lid with centring rim on the base." }],
+    id: "housing", file: "housing/housing.mcad", titel: "Electronics enclosure",
+    text: "Enclosure for a 70 × 50 mm board: inside {inner_l} × {inner_w} mm, height {height} mm, wall {wall} mm, corners r {corner} mm. The base is a filleted box opened by shell; four screw bosses (pilot hole Ø {core_d} mm) are attached as boss[i] with union(fillet = …). The lid ({lid_t} mm, centring rim {rim_h} mm, clearance {clearance} mm) sits on the anchor lid_seat, the M3 screws are parts s[0] … s[3]. Dimensions are in dimensions.mcad (include), parts in parts.mcad (use); explosion > 0 pulls the assembly apart.",
+    pairs: [["base", "lid", "Lid rests on the base"], ["s[0]", "lid", "Screw head rests on the lid"], ["s[0]", "base", "Shank in the pilot hole"]],
+    extra: [{ name: "section", args: ["--section", "y=8.5", "--section-flip", "--view", "front"], caption: "Section y = 8.5 (through the front bosses), view from the front: screw in the boss, lid with centring rim on the base." }],
   },
   {
-    id: "scharnier", file: "scharnier/scharnier.mcad", titel: "Hinge",
-    text: "Printable {laenge} mm hinge made of leaf A, leaf B and pin with {augen} knuckles (r {auge_r} mm, leaf thickness {blatt_t} mm). The knuckles of both leaves come from the same function, so that the clearance of {spiel} mm is the same everywhere; the gaps are created by for with a step. Leaf A has the {bohrung_a} mm hole (pin glued in), leaf B {bohrung_b} mm (rotates freely), the pin Ø {stift_d} mm. The variable winkel = {winkel}° rotates leaf B about the axis.",
-    pairs: [["a", "b", "Clearance of the knuckles"], ["stift", "b", "Bearing clearance"], ["stift", "a", "Pin head touches"]],
+    id: "hinge", file: "hinge/hinge.mcad", titel: "Hinge",
+    text: "Printable {length} mm hinge made of leaf A, leaf B and pin with {knuckles} knuckles (r {knuckle_r} mm, leaf thickness {leaf_t} mm). The knuckles of both leaves come from the same function, so that the clearance of {clearance} mm is the same everywhere; the gaps are created by for with a step. Leaf A has the {bore_a} mm hole (pin glued in), leaf B {bore_b} mm (rotates freely), the pin Ø {pin_d} mm. The variable angle = {angle}° rotates leaf B about the axis.",
+    pairs: [["a", "b", "Clearance of the knuckles"], ["pin", "b", "Bearing clearance"], ["pin", "a", "Pin head touches"]],
     extra: [
-      { name: "schnitt", args: ["--section", "z=0", "--view", "top"], caption: "Section z = 0 (mid-plane of the leaves), top view: knuckles of A (bottom) and B (top) alternating with axial clearance, pin in the holes." },
-      { name: "lager", args: ["--section", "x=18", "--view", "right", "--zoom", "3.5", "--target", "18,0,0"], caption: "Section x = 18 (second knuckle, leaf B), view from +x, 3.5×: pin Ø 2.95 in the 3.4 hole of B; on the left leaf A with clearance." },
+      { name: "section", args: ["--section", "z=0", "--view", "top"], caption: "Section z = 0 (mid-plane of the leaves), top view: knuckles of A (bottom) and B (top) alternating with axial clearance, pin in the holes." },
+      { name: "bearing", args: ["--section", "x=18", "--view", "right", "--zoom", "3.5", "--target", "18,0,0"], caption: "Section x = 18 (second knuckle, leaf B), view from +x, 3.5×: pin Ø 2.95 in the 3.4 hole of B; on the left leaf A with clearance." },
     ],
   },
   {
-    id: "pflanztopf", file: "pflanztopf/pflanztopf.mcad", titel: "Plant pot with saucer", kurz: "Plant pot",
-    text: "The pot goes by loft from a rounded square ({topf_unten} mm, superellipse as a spline from a function) to the round opening Ø {topf_oben_d} mm, height {topf_h} mm, wall {wand} mm, bottom {boden} mm; it stands on {fuss_h} mm high feet and has drainage holes. The wall is the difference of two lofts. The saucer is a rotate_extrude, opened at the top with shell and filleted via zones. The pot stands with the anchor aufstand on the anchor boden of the saucer.",
-    pairs: [["topf", "untersetzer", "Feet stand on the saucer base"]],
-    extra: [{ name: "schnitt", args: ["--section", "y=0", "--section-flip", "--view", "front"], caption: "Section y = 0, view from the front: wall of the loft, feet and drainage holes, pot in the saucer." }],
+    id: "planter", file: "planter/planter.mcad", titel: "Plant pot with saucer", kurz: "Plant pot",
+    text: "The pot goes by loft from a rounded square ({pot_bottom} mm, superellipse as a spline from a function) to the round opening Ø {pot_top_d} mm, height {pot_h} mm, wall {wall} mm, bottom {floor_t} mm; it stands on {foot_h} mm high feet and has drainage holes. The wall is the difference of two lofts. The saucer is a rotate_extrude, opened at the top with shell and filleted via zones. The pot stands with the anchor footing on the anchor floor of the saucer.",
+    pairs: [["pot", "saucer", "Feet stand on the saucer base"]],
+    extra: [{ name: "section", args: ["--section", "y=0", "--section-flip", "--view", "front"], caption: "Section y = 0, view from the front: wall of the loft, feet and drainage holes, pot in the saucer." }],
   },
   {
-    id: "schluesselbrett", file: "schluesselbrett/schluesselbrett.mcad", titel: "Key rack",
-    text: "Board {brett_l} × {brett_h} × {brett_t} mm with {anzahl} glued-in hooks. It has corners filleted via zones and a chamfered front edge, two keyhole hangers at the back and a letter slot on top. The hooks are a sweep along a spline path with a ball knob; their peg Ø {zapfen_d} mm sits in a hole Ø {bohrung_d} mm (glue gap). The hooks are parts h[0] … h[4] from a for loop, the dimensions are in masse.mcad.",
-    pairs: [["brett", "h[0]", "Peg in the hole (glue gap)"]],
-    extra: [{ name: "schnitt", args: ["--section", "x=20", "--view", "right"], caption: "Section x = 20 (through hook h[0]), view from +x: peg in the hole, chamfer of the front edge, letter slot on top." }],
+    id: "key_rack", file: "key_rack/key_rack.mcad", titel: "Key rack",
+    text: "Board {board_l} × {board_h} × {board_t} mm with {count} glued-in hooks. It has corners filleted via zones and a chamfered front edge, two keyhole hangers at the back and a letter slot on top. The hooks are a sweep along a spline path with a ball knob; their peg Ø {peg_d} mm sits in a hole Ø {bore_d} mm (glue gap). The hooks are parts h[0] … h[4] from a for loop, the dimensions are in dimensions.mcad.",
+    pairs: [["board", "h[0]", "Peg in the hole (glue gap)"]],
+    extra: [{ name: "section", args: ["--section", "x=20", "--view", "right"], caption: "Section x = 20 (through hook h[0]), view from +x: peg in the hole, chamfer of the front edge, letter slot on top." }],
   },
 ];
 
@@ -252,7 +252,7 @@ const auffaellig = [];
 
 const daten = [];
 for (const [i, m] of MODELLE.entries()) {
-  const file = join(root, "tests/models/alltag", m.file);
+  const file = join(root, "tests/models/everyday", m.file);
   const rf = rel(file);
   console.log(`[${i + 1}/${MODELLE.length}] ${rf}`);
   let d = cache[m.id];
@@ -286,7 +286,7 @@ for (const [i, m] of MODELLE.entries()) {
     const r1 = run(["render", rf, "-o", hero, ...view, "--perspective", "--size", "1600x1200", "--no-axes", "--json"]);
     d.render_ms = r1.j?.timings ?? null;
     d.hero = r1.code === 0;
-    const sheet = join(work, `${m.id}-ansichten.png`);
+    const sheet = join(work, `${m.id}-views.png`);
     d.sheet = run(["render", rf, "-o", sheet, "--views", "all", "--size", "1200x900", "--no-axes"]).code === 0;
     d.extra = [];
     for (const x of m.extra ?? []) {
@@ -301,7 +301,7 @@ for (const [i, m] of MODELLE.entries()) {
   // JPEGs (always rebuilt, fast)
   d.img = {};
   if (d.hero) d.img.hero = { file: `img/${m.id}.jpg`, bytes: fitJpeg(join(work, `${m.id}.png`), join(img, `${m.id}.jpg`), 1200, 900) };
-  if (d.sheet) d.img.sheet = { file: `img/${m.id}-ansichten.jpg`, bytes: toJpeg(join(work, `${m.id}-ansichten.png`), join(img, `${m.id}-ansichten.jpg`), 800) };
+  if (d.sheet) d.img.sheet = { file: `img/${m.id}-views.jpg`, bytes: toJpeg(join(work, `${m.id}-views.png`), join(img, `${m.id}-views.jpg`), 800) };
   for (const x of d.extra) if (x.ok) d.img[x.name] = { file: `img/${m.id}-${x.name}.jpg`, bytes: fitJpeg(join(work, `${m.id}-${x.name}.png`), join(img, `${m.id}-${x.name}.jpg`), 1200, 900, 0.04) };
   daten.push({ m, d, rf, dir: dirname(file) });
 }
@@ -397,16 +397,16 @@ for (const [i, { m, d, rf }] of daten.entries()) {
 const gesamtVol = daten.reduce((s, { d }) => s + d.volume, 0);
 const gesamtTeile = daten.reduce((s, { d }) => s + d.outline.parts.length, 0);
 const nBaugruppen = daten.filter(({ d }) => d.outline.parts.length > 1).length;
-const toc = seiten.map((s) => `<tr><td class="nr">${s.nr}</td><td><a href="#m-${s.d.id}">${esc(s.titel)}</a>${s.baugruppe ? ' <span class="tag sm">Assembly</span>' : ""}<br><code class="dim">${esc(s.rf.replace("tests/models/alltag/", ""))}</code></td><td class="r">${s.d.outline.parts.length}</td><td class="nw">${mm(s.d.bounds)}</td><td class="r nw">${fmtNum(masse(s.d.volume), 0)} g</td><td class="r nw">${sec(s.d.kernel_ms)}</td><td class="r">${s.seite}</td></tr>`).join("");
+const toc = seiten.map((s) => `<tr><td class="nr">${s.nr}</td><td><a href="#m-${s.d.id}">${esc(s.titel)}</a>${s.baugruppe ? ' <span class="tag sm">Assembly</span>' : ""}<br><code class="dim">${esc(s.rf.replace("tests/models/everyday/", ""))}</code></td><td class="r">${s.d.outline.parts.length}</td><td class="nw">${mm(s.d.bounds)}</td><td class="r nw">${fmtNum(masse(s.d.volume), 0)} g</td><td class="r nw">${sec(s.d.kernel_ms)}</td><td class="r">${s.seite}</td></tr>`).join("");
 const grid = seiten.map((s) => `<a class="tile" href="#m-${s.d.id}"><img src="${s.d.img.hero?.file ?? ""}" alt=""><span><em><b>${s.nr}</b> ${esc(s.kurz)}</em><i>p. ${s.seite}</i></span></a>`).join("");
 
 const howtoLines = [
-  ["cad tests/models/alltag/becher.mcad", "desktop UI: editor and 3D"],
-  ["cad tests/models/alltag/gehaeuse/", "assembly as project (folder)"],
-  ["cad render tests/models/alltag/becher.mcad -o becher.png --views all", "headless: image"],
-  ["cad outline tests/models/alltag/becher.mcad", "parameters, grids, anchors, parts"],
-  ["cad measure tests/models/alltag/becher.mcad --volume --colors", "volume, mass per colour"],
-  ["cad export tests/models/alltag/zahnrad.mcad --all-parts -o teile/", "STL/STEP/3MF per part"],
+  ["mcad tests/models/everyday/mug.mcad", "desktop UI: editor and 3D"],
+  ["mcad tests/models/everyday/housing/", "assembly as project (folder)"],
+  ["mcad render tests/models/everyday/mug.mcad -o mug.png --views all", "headless: image"],
+  ["mcad outline tests/models/everyday/mug.mcad", "parameters, grids, anchors, parts"],
+  ["mcad measure tests/models/everyday/mug.mcad --volume --colors", "volume, mass per colour"],
+  ["mcad export tests/models/everyday/gear.mcad --all-parts -o parts/", "STL/STEP/3MF per part"],
 ];
 const howto = howtoLines.map(([c, k]) => `<code>${esc(c)}</code><span>${esc(k)}</span>`).join("");
 const html = `<!doctype html>
@@ -497,8 +497,8 @@ table.toc code { font-size: 7.6pt; }
 <section class="page title">
   <div class="kicker">Parametric CAD · example collection</div>
   <h1>Everyday models<br>Catalogue</h1>
-  <p class="lead">${daten.length} parametric models from <code>tests/models/alltag/</code>: household, desk, workshop and typical machine parts – from the mug to the pillow block bearing.</p>
-  <p>The collection serves two purposes: as a template for your own parts (every model is a module with default values, all dimensions in mm) and as a test suite that uses the language broadly – grids and anchors, fillet and chamfer via zones, <code>shell</code>, <code>loft</code>, <code>sweep</code>, profiles, <code>include</code>/<code>use</code>, named instances as parts. The regression <code>tests/alltag/check.sh</code> checks all models; bugs and weaknesses found are listed in <code>tests/models/alltag/README.md</code>.</p>
+  <p class="lead">${daten.length} parametric models from <code>tests/models/everyday/</code>: household, desk, workshop and typical machine parts – from the mug to the pillow block bearing.</p>
+  <p>The collection serves two purposes: as a template for your own parts (every model is a module with default values, all dimensions in mm) and as a test suite that uses the language broadly – grids and anchors, fillet and chamfer via zones, <code>shell</code>, <code>loft</code>, <code>sweep</code>, profiles, <code>include</code>/<code>use</code>, named instances as parts. The regression <code>tests/everyday/check.sh</code> checks all models; bugs and weaknesses found are listed in <code>tests/models/everyday/README.md</code>.</p>
   <p>For each model the catalogue shows a page with description, rendering, views, key data, parameters and the language features used; assemblies have a second page with parts, measured distances and a section or the anchors. All values are measured with the CLI.</p>
   <h3 style="margin-top:6mm">Opening a model</h3>
 <div class="howto">${howto}</div>

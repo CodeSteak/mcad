@@ -40,14 +40,14 @@ on each other are a SMLib borderline case) is an info "overlap could not be chec
 | `mcad check` | warnings `assert_touches: a and b overlap (…)`, line `Asserts: 4 of 4 checked, 1 violated`; JSON `asserts`, `violations` |
 | `mcad export` | violation → exit 4, nothing written, list of violations; `--ignore-asserts` writes anyway (warning line); keep-out volumes never exported |
 | `mcad render` | keep-out translucent yellow with dashed outline on top; intersection bodies red (edges on top), contact faces/lines green, gaps and clearances as lines with foot points; labels for violations, `--show asserts` labels every pair |
-| `mcad outline` / `measure` | section `Asserts` (`line 21 assert_touches(tol = 0.001, contact = "face"): ok – g + hl + kf touches k: face contact 384 mm²`); JSON `asserts` |
+| `mcad outline` / `measure` | section `Asserts` (`line 21 assert_touches(tol = 0.001, contact = "face"): ok – g + holder + guide touches k: face contact 384 mm²`); JSON `asserts` |
 | `mcad inspect --line N` | node `[keep-out volume: not in the result]`, each pair `ok:` / `VIOLATED:`; JSON `nodes[].assert` |
 
 ```sh
 mcad check tests/models/spec/asserts.mcad          # Asserts: 4 of 4 checked, 0 violated
-# luft = 3 and a taller holder:
-#   asserts.mcad:21:1: warning (kernel): assert_touches: g + hl + kf and k overlap (intersection volume 100 mm³)
-#   asserts.mcad:33:1: warning (kernel): assert_keepout: g violates the clearance 3 mm to the keep-out volume: 2 mm (± 0.0305) from [42.4444, 12, 2] to [42.4444, 12, 4] [line 14: box (instance g: gehaeuse)]
+# min_gap = 3 and a taller holder:
+#   asserts.mcad:21:1: warning (kernel): assert_touches: g + holder + guide and k overlap (intersection volume 100 mm³)
+#   asserts.mcad:33:1: warning (kernel): assert_keepout: g violates the clearance 3 mm to the keep-out volume: 2 mm (± 0.0305) from [42.4444, 12, 2] to [42.4444, 12, 4] [line 14: box (instance g: housing)]
 mcad export bad.mcad -o x.3mf                  # export stopped: 2 assert violation(s), nothing written: … exit 4
 mcad export bad.mcad -o x.3mf --ignore-asserts # warning: exported despite 2 assert violation(s) (--ignore-asserts)
 mcad render tests/models/spec/asserts.mcad -o /tmp/a.png --show asserts

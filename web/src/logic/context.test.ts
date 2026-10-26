@@ -4,25 +4,25 @@ import { SceneIndex } from "./sceneIndex";
 import { fixture, pos } from "./__fixtures__/load";
 
 describe("Modulkontext und Pfadleiste", () => {
-  const f = fixture("gehaeuse-modul");
+  const f = fixture("housing-module");
   const idx = new SceneIndex(f.scene);
   const mods = moduleSpans(idx);
 
   it("Pfadleiste aus dem Kontext", () => {
-    expect(pathSegments(f.scene, "gehaeuse.mcad")).toEqual(["gehaeuse.mcad", "gehaeuse"]);
+    expect(pathSegments(f.scene, "housing.mcad")).toEqual(["housing.mcad", "housing"]);
     expect(pathSegments(null, "x.scad")).toEqual(["x.scad"]);
   });
 
   it("eine Ebene hoch: Aufruf des Moduls in der Datei", () => {
-    const p = jumpUpTarget(f.source, mods, ["gehaeuse"], 0)!;
+    const p = jumpUpTarget(f.source, mods, ["housing"], 0)!;
     expect(f.doc.lineAt(p).number).toBe(21);
-    expect(f.source.slice(p, p + 9)).toBe("gehaeuse(");
+    expect(f.source.slice(p, p + 8)).toBe("housing(");
   });
 
   it("ohne Aufruf: hinter die Definition", () => {
-    const src = f.source.replace("k: gehaeuse(w = 60);", "k: cube(1);");
-    const p = jumpUpTarget(src, mods, ["gehaeuse"], 0)!;
-    expect(p).toBe(mods.find((m) => m.name === "gehaeuse")!.to + 1);
+    const src = f.source.replace("k: housing(w = 60);", "k: cube(1);");
+    const p = jumpUpTarget(src, mods, ["housing"], 0)!;
+    expect(p).toBe(mods.find((m) => m.name === "housing")!.to + 1);
   });
 
   it("Aufrufe in Kommentaren und Definitionen zählen nicht", () => {
@@ -35,11 +35,11 @@ describe("Modulkontext und Pfadleiste", () => {
   });
 
   it("Definition: Sprung in den Rumpf", () => {
-    const mod = f.scene.modules.find((m) => m.name === "gehaeuse")!;
+    const mod = f.scene.modules.find((m) => m.name === "housing")!;
     const p = definitionTarget(f.source, idx.range(mod.body_range));
     expect(f.doc.lineAt(p).number).toBe(4);
     expect(p).toBe(pos(f.doc, 4, 4));
-    const deckel = f.scene.modules.find((m) => m.name === "deckel")!;
-    expect(f.source.slice(definitionTarget(f.source, idx.range(deckel.body_range))).startsWith("cube(")).toBe(true);
+    const lid = f.scene.modules.find((m) => m.name === "lid")!;
+    expect(f.source.slice(definitionTarget(f.source, idx.range(lid.body_range))).startsWith("cube(")).toBe(true);
   });
 });

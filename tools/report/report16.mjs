@@ -10,7 +10,7 @@
 //   playwright.json                                 whole suite (pnpm e2e; copy of reports/tmp/report2/playwright.json)
 //   vitest.txt, typecheck.txt                       cd web && pnpm test, pnpm typecheck
 //   cargo.txt, clippy.txt, fmt.txt                  cargo test --workspace --no-fail-fast, clippy -D warnings, fmt --check
-//   compare.txt, step.txt, alltag.txt, node-test.txt compare.py --eval, verify.py, tests/alltag/check.sh, test-node.mjs
+//   compare.txt, step.txt, alltag.txt, node-test.txt compare.py --eval, verify.py, tests/everyday/check.sh, test-node.mjs
 //   wasm.json                                       {"before": {raw, gzip}, "after": {raw, gzip}, "fonts": bytes}
 //
 //   node tools/report/report16.mjs
@@ -303,10 +303,10 @@ ${oscSvg.map(oscRow).join("\n")}
 </table>
 
 <h2>6 Examples</h2>
-<h3><code>tests/models/spec/text_schild.scad</code></h3>
-<div class="codefig">${pre(src("tests/models/spec/text_schild.scad"))}<div>${fig(cli("text_schild"), "Sign: plate from a sketch, rim, raised text in Inter Bold and Allerta Stencil, four colors")}${fig(cli("text_schild-oben"), "top view")}${pre(T("schild-colors.txt"))}</div></div>
-<h3><code>tests/models/spec/svg_logo.scad</code></h3>
-<div class="codefig">${pre(src("tests/models/spec/svg_logo.scad"))}<div>${fig(cli("svg_logo"), "Logo, leaf (scaled), house as an engraving, from welle.svg only id = \"oval\" and id = \"bogen\"")}${fig(cli("svg_logo-oben"), "top view")}</div></div>
+<h3><code>tests/models/spec/text_sign.mcad</code></h3>
+<div class="codefig">${pre(src("tests/models/spec/text_sign.mcad"))}<div>${fig(cli("text_schild"), "Sign: plate from a sketch, rim, raised text in Inter Bold and Allerta Stencil, four colors")}${fig(cli("text_schild-oben"), "top view")}${pre(T("schild-colors.txt"))}</div></div>
+<h3><code>tests/models/spec/svg_logo.mcad</code></h3>
+<div class="codefig">${pre(src("tests/models/spec/svg_logo.mcad"))}<div>${fig(cli("svg_logo"), "Logo, leaf (scaled), house as an engraving, from wave.svg only id = \"oval\" and id = \"bogen\"")}${fig(cli("svg_logo-oben"), "top view")}</div></div>
 <p class="small">STEP of svg_logo: ${esc(T("svg_logo.step-counts.json"))} – circles stay <code>CIRCLE</code>, extruded arcs <code>CYLINDRICAL_SURFACE</code>.</p>
 
 <h2>7 Measurements</h2>
@@ -318,8 +318,8 @@ ${timeRow("hello", "\"Hello World\" (Inter), extruded", "hello")}
 ${timeRow("vierzig", "40 characters (Inter), extruded", "40")}
 ${timeRow("vierzig_mono", "40 characters (JetBrains Mono)", null)}
 ${timeRow("platte", "\"Hello World\" on a plate (union)", null)}
-${timeRow("svg_logo", "tests/models/spec/svg_logo.scad", null)}
-${timeRow("text_schild", "tests/models/spec/text_schild.scad", null)}
+${timeRow("svg_logo", "tests/models/spec/svg_logo.mcad", null)}
+${timeRow("text_schild", "tests/models/spec/text_sign.mcad", null)}
 </table>
 <p>Per glyph: one extrusion per contour (outer, hole), difference for holes, one union of all glyphs (they do not touch). Text <b>on</b> a face is expensive: SMLib imprints each glyph into the top face (sign: one union of ≈ 9 s native). The new color region rule (plan 17.10) avoids the Booleans with the whole here; before, the contact sheet of T01 took 21 s natively and failed ("intersection failed"), now 4 s.</p>
 <h3>Wasm module</h3>
@@ -338,7 +338,7 @@ ${scenarios.map((s) => `<h3>${esc(s.id)} ${esc(s.title)}</h3><p>${md(s.caption)}
 <tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>${pwStats ? `${pwStats.passed} / ${pwStats.total}${pwStats.failed.length ? ` – failed: ${pwStats.failed.map((f) => esc(f.title)).join(", ")}` : ""}` : "–"}${flaky ? ` · ${md(flaky.trim())}` : ""}</td></tr>
 <tr><td><code>tests/openscad-compat/compare.py --eval</code></td><td>${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"}</td></tr>
 <tr><td><code>tests/step/verify.py</code> (OpenCASCADE)</td><td>${esc(stepSum ?? "–")}</td></tr>
-<tr><td><code>tests/alltag/check.sh</code></td><td>${esc(alltagLine ?? "–")}</td></tr>
+<tr><td><code>tests/everyday/check.sh</code></td><td>${esc(alltagLine ?? "–")}</td></tr>
 <tr><td><code>node crates/kernel-smlib/js/test-node.mjs</code></td><td>${nodeTest && /all node tests passed/.test(nodeTest) ? "passed" : "–"}</td></tr>
 </table>
 <p>New or changed Rust tests (${newTests.length}):</p>
@@ -353,7 +353,7 @@ ${scenarios.map((s) => `<h3>${esc(s.id)} ${esc(s.title)}</h3><p>${md(s.caption)}
 <li>SVG: no text, no <code>use</code> clones, no CSS classes, no strokes as areas, no masks/clip paths; percent and em lengths are treated like plain numbers.</li>
 <li>File names must appear as strings in the project (a name composed at run time is not loaded).</li>
 <li>Found with the logo: the facade computed unions of extruded sketch arcs over 90° wrongly (sketches step 1); fixed in step 2 (<code>profile::split_arcs</code>), the interim workaround in the import was removed.</li>
-<li>STEP: the writer now writes extrusions of elliptical arcs as an extrusion of an <code>ELLIPSE</code> (OpenCASCADE had integrated the rational B-spline wrongly by 3.6·10<sup>−3</sup>). Open: OpenCASCADE measures the extrusion of the quadratic Q/T wave from <code>welle.svg</code> 3 % too small (kernel 652.25 mm², analytical 652.19 mm²) – <code>svg_logo.scad</code> therefore takes only the ellipse and the arc from <code>welle.svg</code>; the wave itself is shown in 5.1.</li>
+<li>STEP: the writer now writes extrusions of elliptical arcs as an extrusion of an <code>ELLIPSE</code> (OpenCASCADE had integrated the rational B-spline wrongly by 3.6·10<sup>−3</sup>). Open: OpenCASCADE measures the extrusion of the quadratic Q/T wave from <code>wave.svg</code> 3 % too small (kernel 652.25 mm², analytical 652.19 mm²) – <code>svg_logo.mcad</code> therefore takes only the ellipse and the arc from <code>wave.svg</code>; the wave itself is shown in 5.1.</li>
 <li>Default alignment of vertical text as in OpenSCAD (shaper offset); <code>valign</code> by the actual glyph bounding box (OpenSCAD: rasterized FreeType metrics, ≤ 0.005 mm).</li>
 </ul>
 </main>

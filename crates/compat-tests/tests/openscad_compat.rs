@@ -50,8 +50,8 @@ fn openscad_models_stage1() {
         let mut problems = Vec::new();
 
         let head = src.lines().next().unwrap_or("");
-        if !head.starts_with("// Zweck:") {
-            problems.push("missing header comment `// Zweck: …`".to_string());
+        if !head.starts_with("// Purpose:") {
+            problems.push("missing header comment `// Purpose: …`".to_string());
         }
         let out = eval(&src);
         problems.extend(stage1_problems(&src, &out));

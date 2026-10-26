@@ -1,0 +1,16 @@
+// F6 (kernel weakness): chamfer/rounding of the edges of a plane fails when a convex
+// edge ends at a short concave one (step in front of a high wall): "chamfer failed:
+// SM_ERR (1001)"; `mcad render --line 5` shows the concave edge in red. Likewise: rib feet with
+// short outer edges (heat sink), top edges of the front compartment (pen box).
+// Status (report 13): open – SMLib corner type convex/concave; message marks the edge.
+// EXPECT: error-free
+chamfer(0.5) {
+    difference() {
+        union() {
+            cube([40, 30, 20]);
+            translate([0, 20, 0]) cube([40, 10, 50]);
+        }
+        translate([3, 3, 3]) cube([34, 17, 30]);
+    }
+    translate([20, 15, 20]) cube([60, 60, 0.5], center = true);
+}

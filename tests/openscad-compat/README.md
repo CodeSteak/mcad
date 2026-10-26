@@ -5,7 +5,7 @@ hobby models. Scope: only features from „Voll“ (full) in `docs/technical-pla
 
 | Location | Content |
 | --- | --- |
-| `tests/models/openscad-compat/*.scad` | 36 models, each with a header comment `// Zweck: …` (purpose) (34–36: `offset`) |
+| `tests/models/openscad-compat/*.scad` | 36 models, each with a header comment `// Purpose: …` (34–36: `offset`) |
 | `tests/models/spec/*.mcad` | 8 models with the new language features (grids, anchors, fillets, …) |
 | `tests/openscad-compat/make-reference.py` | generates `reference.json` with OpenSCAD |
 | `tests/openscad-compat/reference.json` | reference (checked in): volume, area, bounding box, triangles, echo |

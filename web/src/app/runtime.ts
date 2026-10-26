@@ -50,7 +50,7 @@ import { undo, redo } from "@codemirror/commands";
 import { gitMarks } from "../editor/gitGutter";
 
 /** Model shown at the first start (test builds: the spec housing the e2e tests expect). */
-export const DEFAULT_EXAMPLE = SHOW_TEST_MODELS ? "spec/gehaeuse.mcad" : "05-box-lid.mcad";
+export const DEFAULT_EXAMPLE = SHOW_TEST_MODELS ? "spec/housing.mcad" : "05-box-lid.mcad";
 
 export const meshes = new MeshCache();
 const params = new URLSearchParams(location.search);

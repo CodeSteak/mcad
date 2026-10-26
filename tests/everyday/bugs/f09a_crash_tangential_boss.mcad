@@ -1,0 +1,11 @@
+// F9a: CRASH (segmentation fault, exit 139) of `mcad check`: union(fillet = …) of plate,
+// wall and a cylinder that touches the wall tangentially (screw boss at the wall). Without
+// fillet or with a gap to the wall no crash. Avoided in the enclosure (bosses free-standing).
+// Status (report 13): fixed – no crash (smlib/patches/0002: missing corner type was a
+// type mix-up in SmFilletExecutive); the contact along a line is reported.
+// EXPECT-ERROR: touch tangentially
+union(fillet = 1) {
+    cube([20, 20, 2]);
+    cube([2, 20, 10]);
+    translate([5.5, 10, 0]) cylinder(h = 10, r = 3.5);
+}

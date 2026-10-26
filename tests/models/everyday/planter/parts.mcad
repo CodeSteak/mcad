@@ -1,0 +1,58 @@
+// Parts: plant pot (loft from the rounded square to the circle) and saucer
+// (rotate_extrude, opened with shell). Pulled in via use; dimensions from dimensions.mcad.
+include <dimensions.mcad>
+
+module pot(bottom = pot_bottom, top_d = pot_top_d, h = pot_h, t = wall, b = floor_t, fh = foot_h) {
+    grid g {
+        x: mid = 0, foot = bottom / 2 - 9;
+        y: mid_y = 0;
+        z: footing = 0, floor_bottom = fh, floor_top = fh + b, rim = fh + h;
+    }
+    difference() {
+        union() {
+            // Hollow body as the difference of two lofts (shell of such a loft fails, README: F12)
+            difference() {
+                translate([0, 0, g.floor_bottom]) loft() {
+                    spline(superellipse(bottom / 2));
+                    translate([0, 0, h]) circle(d = top_d);
+                }
+                translate([0, 0, g.floor_top]) loft() {
+                    spline(superellipse(bottom / 2 - t));
+                    translate([0, 0, h - b + 1]) circle(d = top_d - 2 * t);
+                }
+            }
+            // four feet under the corners
+            for (a = [45 : 90 : 315])
+                rotate([0, 0, a]) translate([g.foot * sqrt(2) * 0.85, 0, g.footing])
+                    cylinder(h = fh + 0.5, d = 10, $fillet = 1);
+        }
+        // Drain holes: centre and four on a circle
+        translate([0, 0, -1]) cylinder(h = fh + b + 2, d = 10);
+        for (a = [0 : 90 : 270])
+            rotate([0, 0, a]) translate([18, 0, -1]) cylinder(h = fh + b + 2, d = 6);
+    }
+    anchor footing = g[mid, mid_y, footing], dir = [0, 0, -1];
+}
+
+module saucer(d_inner = 0, h = 16, t = 2.4, rim_r = 1.2) {
+    // Inner diameter from the diagonal of the pot bottom plus gap
+    di = d_inner > 0 ? d_inner : pot_bottom * 1.25 + 2 * gap;
+    grid p {   // Profile: x = radius, y = height
+        x: axis = 0, floor_r = di / 2 + t, rim = di / 2 + t + 6;
+        y: bottom = 0, top = h;
+    }
+    grid g {
+        z: bottom = 0, floor_top = t, top = h;
+    }
+    fillet(rim_r) {
+        shell(t) {
+            fillet(6) {
+                rotate_extrude() polygon([p[axis, bottom], p[floor_r, bottom], p[rim, top], p[axis, top]]);
+                translate([0, 0, g.bottom]) cylinder(h = 1, r = p.rim + 5, center = true);   // Bottom edge
+            }
+            translate([0, 0, g.top]) cylinder(h = 1, r = p.rim + 5, center = true);         // open at the top
+        }
+        translate([0, 0, g.top]) cylinder(h = 1, r = p.rim + 5, center = true);             // Round the rim
+    }
+    anchor floor = [0, 0, g.floor_top], dir = [0, 0, 1];
+}

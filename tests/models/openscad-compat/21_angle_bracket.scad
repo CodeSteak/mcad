@@ -1,4 +1,4 @@
-// Zweck: angle bracket (L holder) with stiffening rib and slots.
+// Purpose: angle bracket (L holder) with stiffening rib and slots.
 w = 30; l = 40; t = 4;
 // Slot without hull(): two circles and a rectangle
 module slot(len, d) {

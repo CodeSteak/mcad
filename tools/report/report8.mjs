@@ -119,9 +119,9 @@ const sections = [];
 const sec = (title, items) => sections.push({ title, items });
 const block = (r, opts = {}) => ({ kind: "cmd", r, ...opts });
 
-const G = td("gehaeuse.scad");
+const G = td("gehaeuse.mcad");
 const K = td("kollision.scad");
-const P = ex("projekt-gehaeuse/gehaeuse.scad");
+const P = ex("project-housing/housing.mcad");
 
 // outline
 {
@@ -141,24 +141,24 @@ const P = ex("projekt-gehaeuse/gehaeuse.scad");
   sec("2 cad render: contact sheet", [
     { kind: "p", html: "<code>--views iso,front,top,right</code> (or <code>all</code>) combines labelled tiles into one image. All tiles have the same scale (px/mm) and the same target point (center of the model), so sizes are comparable between views; <code>--size</code> is the total size. The JSON gives position and camera per tile." },
     block(a, { json: ["width", "height", "views", "overlays"], image: "bogen", caption: "Spec example gehaeuse in module context: grid g with plane names and grid points g[a,b,c], anchors as diamonds with direction arrow, dimensions W/D/H." }),
-    block(b, { image: "bogen-projekt", caption: "Project of three files in file context: anchors of the named instances (gehaeuse.deckel_mitte, dom[i].oben) and part names." }),
+    block(b, { image: "bogen-projekt", caption: "Project of three files in file context: anchors of the named instances (housing.lid_mid, boss[i].top) and part names." }),
   ]);
 }
 
 // render: free camera and selection
 {
-  const a = runJson(["render", ex("spec/fillet_zonen.scad"), "-o", im("kamera-azimut"), "--line", "12", "--azimuth", "120", "--elevation", "30", "--size", "700x500"]);
+  const a = runJson(["render", ex("spec/fillet_zones.mcad"), "-o", im("kamera-azimut"), "--line", "12", "--azimuth", "120", "--elevation", "30", "--size", "700x500"]);
   const b = runJson(["render", G, "-o", im("kamera-perspektive"), "--perspective", "--fov", "45", "--azimuth", "-30", "--elevation", "20", "--size", "700x500"]);
-  const c = runJson(["render", P, "-o", im("auswahl-part"), "--part", "deckel", "--show", "dims", "--size", "700x500"]);
+  const c = runJson(["render", P, "-o", im("auswahl-part"), "--part", "lid", "--show", "dims", "--size", "700x500"]);
   const d = runJson(["render", G, "-o", im("auswahl-zeilen"), "--line", "22", "--line", "23", "--fit", "line:22", "--zoom", "0.8", "--size", "700x500"]);
   sec("3 cad render: free camera and selection", [
     { kind: "p", html: "Camera: <code>--azimuth</code> (0° from the front/−y, 90° from the right/+x), <code>--elevation</code> (90° from above), <code>--zoom</code>, <code>--target x,y,z</code>, <code>--fit all|part:NAME|line:N</code>, <code>--ortho</code>/<code>--perspective [--fov]</code>. Selection: <code>--part NAME</code> (parts only), <code>--line N</code> and <code>--node I</code> repeatable (nodes in full, the rest dimmed, <code>--only</code> omits the rest), combinable with <code>--module</code> and <code>-D</code>." },
     { kind: "pair", items: [
-      block(a, { image: "kamera-azimut", caption: "fillet_zonen.scad --line 12 --azimuth 120 --elevation 30: zones blue, selected edges orange." }),
+      block(a, { image: "kamera-azimut", caption: "fillet_zones.mcad --line 12 --azimuth 120 --elevation 30: zones blue, selected edges orange." }),
       block(b, { image: "kamera-perspektive", caption: "gehaeuse --perspective --fov 45 --azimuth -30 --elevation 20" }),
     ] },
     { kind: "pair", items: [
-      block(c, { image: "auswahl-part", caption: "Project --part deckel --show dims" }),
+      block(c, { image: "auswahl-part", caption: "Project --part lid --show dims" }),
       block(d, { image: "auswahl-zeilen", caption: "--line 22 --line 23 --fit line:22: two lines highlighted, fitted to line 22." }),
     ] },
     block(b, { json: ["camera"] }),
@@ -191,9 +191,9 @@ const P = ex("projekt-gehaeuse/gehaeuse.scad");
   const a = runJson(["render", G, "-o", im("schnitt-z"), "--section", "z=10", "--size", "600x450"]);
   const a0 = runJson(["render", G, "-o", im("schnitt-ohne"), "--size", "600x450"]);
   const b = runJson(["render", G, "-o", im("schnitt-flip"), "--section", "z=10", "--section-flip", "--view", "bottom", "--size", "600x450"]);
-  const c = runJson(["render", ex("spec/flasche.scad"), "-o", im("schnitt-ebene"), "--section-plane", "0,0,0,1,1,0", "--perspective", "--size", "600x450"]);
+  const c = runJson(["render", ex("spec/bottle.mcad"), "-o", im("schnitt-ebene"), "--section-plane", "0,0,0,1,1,0", "--perspective", "--size", "600x450"]);
   const d = runJson(["render", join(fallstudie, "v2.scad"), "-o", im("schnitt-fallstudie"), "--section", "x=20", "--size", "600x450"]);
-  const e = runJson(["render", ex("spec/fillet_zonen.scad"), "-o", im("xray"), "--xray", "--size", "600x450"]);
+  const e = runJson(["render", ex("spec/fillet_zones.mcad"), "-o", im("xray"), "--xray", "--size", "600x450"]);
   const f = runJson(["render", P, "-o", im("xray-projekt"), "--xray", "--show", "anchors", "--size", "600x450"]);
   sec("5 cad render: section and X-ray", [
     { kind: "p", html: "<b>Section:</b> <code>--section x=VALUE|y=VALUE|z=VALUE</code>, <code>--section-plane px,py,pz,nx,ny,nz</code>, <code>--section-flip</code>. Convention (the same for the later UI): plane through <i>p</i> with normal <i>n</i>; the half that <i>n</i> points into is removed, (q − p)·n ≤ 0 remains. <code>z=10</code> means p = (0,0,10), n = +z; <code>--section-flip</code> reverses n. The section face is drawn as a hatched cap in its own color (hatching alternates per body), the section contour as a line." },
@@ -204,11 +204,11 @@ const P = ex("projekt-gehaeuse/gehaeuse.scad");
     ] },
     { kind: "pair", items: [
       block(b, { image: "schnitt-flip", caption: "--section z=10 --section-flip --view bottom: upper half remains" }),
-      block(c, { image: "schnitt-ebene", caption: "flasche.scad --section-plane 0,0,0,1,1,0 --perspective" }),
+      block(c, { image: "schnitt-ebene", caption: "bottle.mcad --section-plane 0,0,0,1,1,0 --perspective" }),
     ] },
     { kind: "pair", items: [
       block(d, { image: "schnitt-fallstudie", caption: "Case study --section x=20: rod in the bore, two caps with opposite hatching, 0.25 mm gap as contour" }),
-      block(e, { image: "xray", caption: "fillet_zonen.scad --xray: everything semi-transparent with edges" }),
+      block(e, { image: "xray", caption: "fillet_zones.mcad --xray: everything semi-transparent with edges" }),
     ] },
     block(a, { json: ["section", "bounds"] }),
     { kind: "p", html: `Visible area (pixels ≠ background, 600×450): without section ${num(drawn("schnitt-ohne"))}, with <code>--section z=10</code> ${num(drawn("schnitt-z"))} (${num((100 * drawn("schnitt-z")) / Math.max(1, drawn("schnitt-ohne")), 0)} %), of which cap ${num(capPixels("schnitt-z"))}. The same comparison is the test <code>render_section_reduces_visible_area</code>.` },
@@ -224,7 +224,7 @@ const P = ex("projekt-gehaeuse/gehaeuse.scad");
   const b2 = run(["measure", G, "--module", "gehaeuse", "-D", "w=60", "--between", "ecke", "[0,0,0]"]);
   const c = run(["measure", K, "--interference", "--clearance", "b", "c"]);
   const c2 = runJson(["measure", K, "--interference"]);
-  const d = runJson(["measure", P, "--interference", "--clearance", "gehaeuse", "deckel"]);
+  const d = runJson(["measure", P, "--interference", "--clearance", "housing", "lid"]);
   const e = run(["measure", G, "--between", "g[links,vorne,boden]", "[0,0,0]"]);
   const kr = runJson(["render", K, "-o", im("kollision"), "--show", "labels", "--xray", "--size", "600x400"]);
   sec("6 cad measure", [
@@ -305,26 +305,26 @@ function watch(file, edits, extra = []) {
 
 const watchRuns = [];
 {
-  const vr = join(work, "variabler_radius.scad");
-  copyFileSync(join(root, "tests/models/spec/variabler_radius.scad"), vr);
+  const vr = join(work, "variable_radius.mcad");
+  copyFileSync(join(root, "tests/models/spec/variable_radius.mcad"), vr);
   const src = readFileSync(vr, "utf8");
   const res = await watch(vr, [
     () => writeFileSync(vr, src + "// comment\n"),
-    () => writeFileSync(vr, src.replace("deckel = 20", "deckel = 22")),
+    () => writeFileSync(vr, src.replace("lid = 20", "lid = 22")),
     () => writeFileSync(vr, src.replace("1 + p.x / 40", "1 + p.x / 50")),
   ], ["--render", rel(im("watch")), "--views", "iso,top", "--size", "800x400"]);
-  const what = ["start (everything new)", "comment appended (everything from the cache)", "deckel = 22 (two fillets rebuilt)", "radius function of the pocket changed"];
-  res.forEach((r, i) => watchRuns.push({ file: "variabler_radius.scad", what: what[i] ?? "", r }));
+  const what = ["start (everything new)", "comment appended (everything from the cache)", "lid = 22 (two fillets rebuilt)", "radius function of the pocket changed"];
+  res.forEach((r, i) => watchRuns.push({ file: "variable_radius.mcad", what: what[i] ?? "", r }));
   const dir = join(work, "projekt");
   mkdirSync(join(dir, "lib"), { recursive: true });
-  for (const f of ["gehaeuse.scad", "konstanten.scad", "lib/teile.scad"]) copyFileSync(join(root, "tests/models/projekt-gehaeuse", f), join(dir, f));
-  const konst = readFileSync(join(dir, "konstanten.scad"), "utf8");
-  const teile = readFileSync(join(dir, "lib/teile.scad"), "utf8");
-  const res2 = await watch(join(dir, "gehaeuse.scad"), [
-    () => writeFileSync(join(dir, "konstanten.scad"), konst.replace("abstand = 10", "abstand = 15")),
-    () => writeFileSync(join(dir, "lib/teile.scad"), teile.replace("dom_r = 3;", "dom_r = 3.5;")),
+  for (const f of ["housing.mcad", "constants.mcad", "lib/parts.mcad"]) copyFileSync(join(root, "tests/models/project-housing", f), join(dir, f));
+  const konst = readFileSync(join(dir, "constants.mcad"), "utf8");
+  const teile = readFileSync(join(dir, "lib/parts.mcad"), "utf8");
+  const res2 = await watch(join(dir, "housing.mcad"), [
+    () => writeFileSync(join(dir, "constants.mcad"), konst.replace("abstand = 10", "abstand = 15")),
+    () => writeFileSync(join(dir, "lib/parts.mcad"), teile.replace("dom_r = 3;", "dom_r = 3.5;")),
   ]);
-  const what2 = ["start (everything new)", "konstanten.scad: abstand = 15 (only the position of the lid)", "lib/teile.scad: dom_r = 3.5 (screw bosses rebuilt)"];
+  const what2 = ["start (everything new)", "constants.mcad: abstand = 15 (only the position of the lid)", "lib/parts.mcad: dom_r = 3.5 (screw bosses rebuilt)"];
   res2.forEach((r, i) => watchRuns.push({ file: "projekt-gehaeuse", what: what2[i] ?? "", r }));
 }
 sec("9 cad watch", [
@@ -337,13 +337,13 @@ sec("9 cad watch", [
 // ---------------------------------------------------------------- timings: repeated calls
 
 const timing = [];
-for (const f of ["tests/models/spec/variabler_radius.scad", "tests/models/projekt-gehaeuse/gehaeuse.scad", "tests/models/spec/gehaeuse.scad"]) {
+for (const f of ["tests/models/spec/variable_radius.mcad", "tests/models/project-housing/housing.mcad", "tests/models/spec/housing.mcad"]) {
   for (let i = 1; i <= 2; i++) {
     const r = runJson(["render", f, "-o", join(work, "t.png")]);
     timing.push({ f, i, wall: r.ms, t: r.j?.timings ?? {} });
   }
 }
-const baseline = run(["check", "--no-kernel", "tests/models/spec/gehaeuse.scad"]);
+const baseline = run(["check", "--no-kernel", "tests/models/spec/housing.mcad"]);
 const cmdTimes = [
   ["outline", ["outline", G]],
   ["check", ["check", G]],
@@ -454,7 +454,7 @@ const itemHtml = (it) => {
 
 const timingRows = timing.map(({ f, i, wall, t }) => [f.replace("tests/models/", ""), i, num(wall, 0), num(t.evaluate_ms ?? 0, 0), num(t.kernel_ms ?? 0, 0), num(t.render_ms ?? 0, 0)]);
 const maxWall = Math.max(...timing.map((t) => t.wall));
-const vrWatch = watchRuns.filter((w) => w.file === "variabler_radius.scad");
+const vrWatch = watchRuns.filter((w) => w.file === "variable_radius.mcad");
 
 const html = `<!doctype html>
 <html lang="en">

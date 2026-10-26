@@ -108,12 +108,12 @@ teil();
 
 const PI: f64 = std::f64::consts::PI;
 
-/// `tests/models/spec/knauf_mirror.mcad` (report 1: open body, torus and pin missing, fillet
+/// `tests/models/spec/knob_mirror.mcad` (report 1: open body, torus and pin missing, fillet
 /// SM_ERR). Cause: the closed spline profile crossed the revolve axis between its two axis
 /// points, which gave self-overlapping revolved solids.
 #[test]
-fn spec_knauf_mirror_file() {
-    let out = eval(include_str!("../../../tests/models/spec/knauf_mirror.mcad"));
+fn spec_knob_mirror_file() {
+    let out = eval(include_str!("../../../tests/models/spec/knob_mirror.mcad"));
     let mut e = engine();
     let ev = e.evaluate(out.tree);
     assert_clean(&ev);
@@ -122,13 +122,13 @@ fn spec_knauf_mirror_file() {
     let shape = ev.parts(root)[0].shape.clone();
     assert!(e.kernel_mut().inner.is_solid(&shape));
     let knobs: Vec<u32> = (0..ev.tree.nodes.len() as u32)
-        .filter(|&i| matches!(&ev.tree.node(i).op, Op::ModuleCall { name, .. } if name == "knauf"))
+        .filter(|&i| matches!(&ev.tree.node(i).op, Op::ModuleCall { name, .. } if name == "knob"))
         .collect();
     assert_eq!(knobs.len(), 2);
     let (v15, v10) = (volume(&mut e, &ev, knobs[0]), volume(&mut e, &ev, knobs[1]));
     // revolved knob minus bore; the r = 10 copy was 172 mm³ before
-    assert!(v15 > 11000.0 && v15 < 11600.0, "knauf r = 15: {v15}");
-    assert!(v10 > 4200.0 && v10 < 4700.0, "knauf r = 10: {v10}");
+    assert!(v15 > 11000.0 && v15 < 11600.0, "knob r = 15: {v15}");
+    assert!(v10 > 4200.0 && v10 < 4700.0, "knob r = 10: {v10}");
     // the torus lies inside the knob (the spline bulges to z = 22.7 above it); the pin
     // (z 20..23) sticks out of its top
     let (lo, hi) = ev.report(root).bounds.unwrap();
@@ -138,10 +138,10 @@ fn spec_knauf_mirror_file() {
     assert!(total > v15 + v10 + 0.5 * pin && total < v15 + v10 + pin, "{total}");
 }
 
-/// `tests/models/spec/winkel_anker.mcad` (report 1: union of touching bodies open, volume 0).
+/// `tests/models/spec/angle_anchor.mcad` (report 1: union of touching bodies open, volume 0).
 #[test]
-fn spec_winkel_anker_file() {
-    let out = eval(include_str!("../../../tests/models/spec/winkel_anker.mcad"));
+fn spec_angle_anchor_file() {
+    let out = eval(include_str!("../../../tests/models/spec/angle_anchor.mcad"));
     let mut e = engine();
     let ev = e.evaluate(out.tree);
     assert_clean(&ev);
@@ -153,5 +153,5 @@ fn spec_winkel_anker_file() {
     let head = PI * 9.0 * 2.0;
     let shank = |l: f64| PI * 2.25 * l;
     let want = 3420.0 + 4620.0 + (head + shank(10.0)) + 2.0 * (head + shank(8.0)) - 3.0 * shank(3.0) + 8.0;
-    assert_approx("winkel_anker", root_volume(&mut e, &ev), want, 1e-6);
+    assert_approx("angle_anchor", root_volume(&mut e, &ev), want, 1e-6);
 }

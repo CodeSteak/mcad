@@ -196,10 +196,10 @@ fn touches_gap_and_overlap() {
 #[test]
 fn imported_mesh_as_keepout() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
-    let stl = include_str!("../../../tests/models/stl/winkel.stl");
+    let stl = include_str!("../../../tests/models/stl/bracket.stl");
     let mut s = session();
-    s.post(ToEngine::SetFiles { files: [("winkel.stl".to_string(), stl.to_string())].into(), main: None });
-    let src = format!("{PLATE}assert_keepout() translate([5, 5, 2]) import(\"winkel.stl\", as = \"mesh\");\n");
+    s.post(ToEngine::SetFiles { files: [("bracket.stl".to_string(), stl.to_string())].into(), main: None });
+    let src = format!("{PLATE}assert_keepout() translate([5, 5, 2]) import(\"bracket.stl\", as = \"mesh\");\n");
     let (r, _) = run(&mut s, &src, 1);
     let a = &r[0];
     assert!(!a.ok, "{a:?}");

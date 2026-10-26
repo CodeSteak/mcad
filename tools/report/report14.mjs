@@ -9,7 +9,7 @@
 //   playwright.json, playwright.txt                             whole suite (pnpm e2e; copy of reports/tmp/report2/playwright.json)
 //   vitest.txt, typecheck.txt                                   cd web && pnpm test, pnpm typecheck
 //   cargo.txt, clippy.txt, fmt.txt                              cargo test --workspace --no-fail-fast, clippy -D warnings, fmt --check
-//   compare.txt, step.txt, alltag.txt, node-test.txt            compare.py --eval, verify.py, tests/alltag/check.sh, test-node.mjs
+//   compare.txt, step.txt, alltag.txt, node-test.txt            compare.py --eval, verify.py, tests/everyday/check.sh, test-node.mjs
 //
 //   node tools/report/report14.mjs
 //   node tools/report/print-pdf.mjs docs/reports/14-skizzen/report.html docs/reports/14-skizzen/report.pdf "Test report 14: sketches and namespaces"
@@ -202,7 +202,7 @@ const html = `<!doctype html>
   <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "clean" : "finding"} · ${fmt == null ? "–" : fmtOk ? "clean" : "diff"}</b>-D warnings</div>
   <div>Vitest · Playwright<b class="${pwStats && pwStats.failed.length === 0 ? "ok" : "bad"}">${vitestSum ?? "–"} · ${pwStats ? `${pwStats.passed} / ${pwStats.total}` : "–"}</b>new: S01–S05</div>
   <div>OpenSCAD · STEP<b class="${compareSum && compareSum[0] === compareSum[1] ? "ok" : "bad"}">${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"} · ${esc(stepSum?.match(/\d+\/\d+/)?.[0] ?? "–")}</b>compare.py · verify.py (OCCT)</div>
-  <div>Everyday models<b class="${noProblems(alltag) ? "ok" : "bad"}">${noProblems(alltag) ? "unchanged" : "–"}</b>tests/alltag/check.sh</div>
+  <div>Everyday models<b class="${noProblems(alltag) ? "ok" : "bad"}">${noProblems(alltag) ? "unchanged" : "–"}</b>tests/everyday/check.sh</div>
   <div>Wasm kernel (Node)<b class="${nodeTest && /all node tests passed/.test(nodeTest) ? "ok" : "bad"}">${nodeTest && /all node tests passed/.test(nodeTest) ? "passed" : "–"}</b>test-node.mjs</div>
 </div>
 
@@ -228,13 +228,13 @@ const html = `<!doctype html>
 </table>
 <p><b>Holes and multiple contours:</b> winding rule <i>nonzero</i>; a contour is a boundary where the winding number is ≠ 0 on one side only; islands in holes via nesting. <b>Sweep:</b> without <code>path</code>, an open sketch (<code>sketch(closed = false)</code>) among the children is the path. <b>Loft:</b> equal segment count → segment by segment (each segment one face, matched via <code>start</code>); otherwise each section becomes a closed B-spline starting at the +x ray from the centroid (as for circles/polygons), so nothing twists.</p>
 <h3>Examples (<code>tests/models/spec/skizze_*.scad</code>)</h3>
-<div class="codefig">${pre(src("tests/models/spec/skizze_profil.scad"))}<div>${fig(cli("profil"), "skizze_profil.scad: bracket (arcs, bore in reverse direction, slot via `hole`), knob (tangential arc, cubic Bézier)")}${fig(cli("profil-oben"), "top view")}</div></div>
-<div class="codefig">${pre(src("tests/models/spec/skizze_zahnriemenscheibe.scad"))}<div>${fig(cli("scheibe"), "skizze_zahnriemenscheibe.scad: 20 tooth gaps via a loop (arc through a point + arc around the center), hub as a second contour")}${fig(cli("scheibe-oben"), "top view")}</div></div>
-<div class="codefig">${pre(src("tests/models/spec/skizze_sweep.scad"))}${fig(cli("sweep"), "skizze_sweep.scad: pipe bend (smooth path: one curve chain, annulus as profile), frame along a path with corners (miter)")}</div>
+<div class="codefig">${pre(src("tests/models/spec/sketch_profile.mcad"))}<div>${fig(cli("profil"), "sketch_profile.mcad: bracket (arcs, bore in reverse direction, slot via `hole`), knob (tangential arc, cubic Bézier)")}${fig(cli("profil-oben"), "top view")}</div></div>
+<div class="codefig">${pre(src("tests/models/spec/sketch_timing_pulley.mcad"))}<div>${fig(cli("scheibe"), "sketch_timing_pulley.mcad: 20 tooth gaps via a loop (arc through a point + arc around the center), hub as a second contour")}${fig(cli("scheibe-oben"), "top view")}</div></div>
+<div class="codefig">${pre(src("tests/models/spec/sketch_sweep.mcad"))}${fig(cli("sweep"), "sketch_sweep.mcad: pipe bend (smooth path: one curve chain, annulus as profile), frame along a path with corners (miter)")}</div>
 
 <h2>3 Modules as namespaces</h2>
 <p><code>module name { … }</code> without parentheses; calls <code>a.b.c(…)</code>, also named (<code>k: teile.schraube();</code>). The first part is looked up lexically, each further part only directly in the body of the previous module. The body is the namespace, with the parameters of the outer module at their default values; it belongs to no instance – the inner module does not see the grids, named instances and anchors of the outer one, and the geometry of the outer module is not created. <b>Decision on functions/constants:</b> reachable (<code>teile.kopf(d)</code>, <code>teile.M3</code>) – libraries bundle helper functions and dimensions with their modules without a separate file; OpenSCAD has no dot after module names (no conflict); a variable of the same name shadows the module. Context: <code>cad --module teile.platte.lochplatte</code>, UI breadcrumb "teile › rohr" (S05).</p>
-<div class="codefig">${pre(src("tests/models/spec/skizze_bibliothek.scad"))}<div>${fig(cli("bibliothek"), "skizze_bibliothek.scad: profile.stern(), profile.langloch(), teile.platte.lochplatte(n = 4), teile.schraube(), disc with d = teile.kopf(teile.M3)")}${pre(T("outline.txt").split("\n").slice(0, 12).join("\n"))}${pre(T("check-modul.txt"))}</div></div>
+<div class="codefig">${pre(src("tests/models/spec/sketch_library.mcad"))}<div>${fig(cli("bibliothek"), "sketch_library.mcad: profile.star(), profile.oblong(), parts.plate.hole_plate(n = 4), parts.screw(), disc with d = parts.head(parts.M3)")}${pre(T("outline.txt").split("\n").slice(0, 12).join("\n"))}${pre(T("check-modul.txt"))}</div></div>
 
 <h2>4 Kernel integration</h2>
 <ul>
@@ -275,7 +275,7 @@ ${scenarios.map((s) => `<h3>${esc(s.id)} ${esc(s.title)}</h3><p>${md(s.caption)}
 <tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>${pwStats ? `${pwStats.passed} / ${pwStats.total}${pwStats.failed.length ? ` – failed: ${pwStats.failed.map((f) => esc(f.title)).join(", ")}` : ""}` : "–"}${flaky ? ` · ${md(flaky.trim())}` : ""}</td></tr>
 <tr><td><code>tests/openscad-compat/compare.py --eval</code></td><td>${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"}</td></tr>
 <tr><td><code>tests/step/verify.py</code> (OpenCASCADE)</td><td>${esc(stepSum ?? "–")}</td></tr>
-<tr><td><code>tests/alltag/check.sh</code></td><td>${esc(alltagLine ?? "–")}</td></tr>
+<tr><td><code>tests/everyday/check.sh</code></td><td>${esc(alltagLine ?? "–")}</td></tr>
 <tr><td><code>node crates/kernel-smlib/js/test-node.mjs</code></td><td>${nodeTest && /all node tests passed/.test(nodeTest) ? "passed" : "–"}</td></tr>
 </table>
 <p>New or extended Rust tests (${newTests.length}):</p>

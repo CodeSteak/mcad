@@ -1,23 +1,23 @@
-// Zweck: SVG import (plan 17.5, report 16) – logos and icons from tests/models/svg as exact 2D profiles.
+// Purpose: SVG import (plan 17.5, report 16) – logos and icons from tests/models/svg as exact 2D profiles.
 // Circles and arcs stay circular arcs, Bézier curves stay curves, holes by fill-rule.
 // Units: viewBox + width/height in mm; without viewBox pixels with dpi (default 96).
 
-dicke = 3;
+thickness = 3;
 
 // Logo, centred on the origin (center = true)
-color("blue") linear_extrude(dicke) import("../svg/logo.svg", center = true);
+color("blue") linear_extrude(thickness) import("../svg/logo.svg", center = true);
 
 // Leaf, scaled down to 70 %
 translate([45, 0, 0])
-    color("green") linear_extrude(dicke) import("../svg/blatt.svg", center = true, scale = 0.7);
+    color("green") linear_extrude(thickness) import("../svg/leaf.svg", center = true, scale = 0.7);
 
 // House as an embossing in a plate
 translate([0, -50, 0]) difference() {
-    color("silver") translate([-34, -27, 0]) cube([68, 54, dicke]);
-    color("red") translate([0, 0, dicke - 1]) linear_extrude(2) import("../svg/haus.svg", center = true);
+    color("silver") translate([-34, -27, 0]) cube([68, 54, thickness]);
+    color("red") translate([0, 0, thickness - 1]) linear_extrude(2) import("../svg/house.svg", center = true);
 }
 
 // Only single elements of the SVG (id): non-uniformly scaled circle (exact elliptic arcs),
 // rotated elliptic arc
-translate([70, -35, 0]) color("orange") linear_extrude(dicke) import("../svg/welle.svg", id = "oval", center = true);
-translate([70, -60, 0]) color("teal") linear_extrude(dicke / 2) import("../svg/welle.svg", id = "bogen", center = true);
+translate([70, -35, 0]) color("orange") linear_extrude(thickness) import("../svg/wave.svg", id = "oval", center = true);
+translate([70, -60, 0]) color("teal") linear_extrude(thickness / 2) import("../svg/wave.svg", id = "arc", center = true);

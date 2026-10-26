@@ -1,25 +1,25 @@
-// Zweck: hull() and minkowski() in their exact special cases (plan 21): plate with round
+// Purpose: hull() and minkowski() in their exact special cases (plan 21): plate with round
 // corners and slots (2D hull), rounded block (minkowski with sphere), grip as a capsule
 // (spheres on an axis), tab of box and cylinder of equal height (prism), cushion of
 // equal spheres (hull of the centres + offset) and a strip of linear_extrude +
 // cylinder (Minkowski sum of two prisms).
-module langloch(l = 20, d = 6) {
+module oblong(l = 20, d = 6) {
     hull() {
         circle(d = d);
         translate([l, 0]) circle(d = d);
     }
 }
 
-module platte(w = 60, t = 30, h = 4, r = 5) {
+module plate(w = 60, t = 30, h = 4, r = 5) {
     difference() {
         linear_extrude(h) hull() {
             for (x = [0, w], y = [0, t]) translate([x, y]) circle(r);
         }
-        for (y = [t / 4, 3 * t / 4]) translate([w / 4, y, -1]) linear_extrude(h + 2) langloch(w / 2, 5);
+        for (y = [t / 4, 3 * t / 4]) translate([w / 4, y, -1]) linear_extrude(h + 2) oblong(w / 2, 5);
     }
 }
 
-platte();
+plate();
 translate([0, 50, 0]) minkowski() {
     cube([20, 20, 10]);
     sphere(2);

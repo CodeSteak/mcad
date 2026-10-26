@@ -1,0 +1,29 @@
+// Purpose: grip shell – shell(t) { body; zone } with the zone at the top grid plane (the
+// top side is opened), body chamfered with $chamfer, cable exit via difference,
+// screw bosses at indexed grid planes with difference(fillet = …) for the bore edges.
+module grip_shell(l = 90, b = 34, h = 18, wall = 1.6) {
+    grid g {
+        x: back = 0, front = l, boss = [l * 0.2, l * 0.8];
+        y: left = 0, right = b, mid = b / 2;
+        z: floor = 0, top = h;
+    }
+
+    difference() {
+        shell(wall) {
+            box(g[back, left, floor], g[front, right, top], $chamfer = 4);
+            zone(g.top, d = 1);    // Lid side open
+        }
+        translate(g[front, mid, 9]) cube([8, 10, 6], center = true); // Cable exit
+    }
+
+    // Screw bosses with rounded bore edge
+    for (i = [0 : 1])
+        difference(fillet = 0.5) {
+            translate(g[boss[i], mid, floor]) cylinder(h = h - 2, r = 3.5);
+            translate(g[boss[i], mid, 4]) cylinder(h = h, r = 1.2);
+        }
+
+    anchor lid = g[back, left, top], dir = [0, 0, 1];
+}
+
+s: grip_shell();

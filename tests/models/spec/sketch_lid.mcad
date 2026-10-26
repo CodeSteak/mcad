@@ -1,0 +1,32 @@
+// Purpose: enclosure lid (plan 17.3) – its outline is a sketch with rounded-off corners
+// (`corner`), the plug-in rim a ring made of two inward offsets of the same outline
+// (`offset(r = -…)`: the corner radii get smaller but they remain exact arcs), plus four
+// screw holes in the 4 corners.
+l = 80;           // Exterior
+b = 50;
+r = 6;            // Corner r, outer
+wall = 2;         // Wall thickness of case.
+clearance = 0.2;  // Gap between plug-in rim and wall
+web = 1.5;        // Width of the plug rim
+
+module outline() sketch {
+    start([0, 0]);
+    corner(r = r);
+    line(to = [l, 0]);
+    corner(r = r);
+    line(to = [l, b]);
+    corner(r = r);
+    line(to = [0, b]);
+    corner(r = r);
+    close();
+}
+
+difference() {
+    linear_extrude(2) outline();
+    for (p = [[r, r], [l - r, r], [l - r, b - r], [r, b - r]])
+        translate([p[0], p[1], -1]) cylinder(h = 4, d = 2.5);
+}
+translate([0, 0, 2]) linear_extrude(5) difference() {
+    offset(r = -(wall + clearance)) outline();
+    offset(r = -(wall + clearance + web)) outline();
+}

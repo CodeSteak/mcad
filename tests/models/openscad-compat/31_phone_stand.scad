@@ -1,4 +1,4 @@
-// Zweck: phone stand – tilted backrest via rotate, lip, cable slot; profile via polygon.
+// Purpose: phone stand – tilted backrest via rotate, lip, cable slot; profile via polygon.
 angle = 65; depth = 60; width = 70; t = 5;
 lean = 80;
 module profile() polygon([

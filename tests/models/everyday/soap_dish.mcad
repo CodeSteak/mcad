@@ -1,0 +1,44 @@
+// Purpose: soap dish with drain – tub from a box, vertical corners and bottom edges
+// rounded via zones (nested, two radii), opened at the top with shell; round support ribs
+// as cylinder(a, b, r) between grid points, drain slots between the ribs
+// (difference(fillet = …)), four feet. Dimensions in mm.
+module soap_dish(l = 115, b = 80, h = 24, wall = 2.2, corner = 14, n = 7, foot_h = 3) {
+    pitch = (l - 2 * corner) / (n - 1);
+    grid g {
+        x: left = 0, mid_x = l / 2, right = l, rib = [for (i = [0 : n - 1]) corner + i * pitch],
+           slot = [for (i = [0 : n - 2]) corner + (i + 0.5) * pitch];
+        y: front = 0, back = b, r_v = 12, r_h = b - 12, mid = b / 2;
+        z: foot = 0, floor = foot_h, inner = foot_h + wall, rim = foot_h + h;
+    }
+
+    difference(fillet = 0.6) {
+        union() {
+            shell(wall) {
+                fillet(5) {
+                    fillet(corner) {
+                        box(g[left, front, floor], g[right, back, rim]);
+                        zone(g[left, front, *], d = 1);
+                        zone(g[right, front, *], d = 1);
+                        zone(g[left, back, *], d = 1);
+                        zone(g[right, back, *], d = 1);
+                    }
+                    zone(g.floor, d = 1);
+                }
+                zone(g.rim, d = 1);    // open at the top
+            }
+            // Support ribs (soap stays dry)
+            for (i = [0 : n - 1])
+                cylinder(g[rib[i], r_v, inner], g[rib[i], r_h, inner], r = 2);
+            // Feet
+            for (x = [g.left + corner, g.right - corner], y = [g.front + corner, g.back - corner])
+                translate([x, y, g.foot]) cylinder(h = foot_h + 1, d = 10);
+        }
+        // Drain slots in the bottom between the ribs
+        for (i = [0 : n - 2])
+            box(g[slot[i], r_v, foot] + [-2, 8, -1], g[slot[i], r_h, inner] + [2, -8, 1]);
+    }
+
+    anchor rest = g[mid_x, mid, inner] + [0, 0, 2], dir = [0, 0, 1];
+}
+
+dish: soap_dish();

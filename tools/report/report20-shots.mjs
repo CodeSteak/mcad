@@ -52,7 +52,7 @@ async function openProject(page) {
     await page.getByRole("menuitem", { name: /^(Projects \(several files\)|Projekte \(mehrere Dateien\))$/ }).click();
     await page.getByRole("menuitem", { name: /projekt-gehaeuse/ }).click();
   }
-  await page.waitForFunction(() => window.__cad.state().fileName === "gehaeuse.scad");
+  await page.waitForFunction(() => window.__cad.state().fileName === "housing.mcad");
   await ready(page);
 }
 
@@ -92,7 +92,7 @@ for (const theme of ["light", "dark"]) {
     await page.goto(URL);
     await page.evaluate((t) => window.__cad.setThemePref(t), theme);
     await ready(page);
-    await open(page, "spec/mehrfarbig.scad");
+    await open(page, "spec/multicolor.mcad");
     const t = theme === "light" ? "hell" : "dunkel";
     await shot(page, `kopf-${width}-${t}`, HEADER);
     info[`${width}-${t}`] = await overflow(page);
@@ -126,7 +126,7 @@ for (const theme of ["light", "dark"]) {
     await shot(page, `ansicht-messen-${t}`, VIEW);
     await page.evaluate(() => window.__cad.measureExit());
     // sketch
-    await open(page, "spec/skizze_deckel.scad");
+    await open(page, "spec/sketch_lid.mcad");
     await page.evaluate(() => window.__cad.setCursorLine(14));
     await page.waitForTimeout(300);
     await page.evaluate(() => window.__cad.sketchEnter("line"));

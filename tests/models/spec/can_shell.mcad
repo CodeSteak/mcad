@@ -1,0 +1,21 @@
+// Purpose: shell(t) { body; zone } – box from a rounded solid ($fillet),
+// opened at the top via the zone at the grid plane lid; anchor for the lid.
+module can(w = 50, d = 35, h = 30, wall = 1.5) {
+    grid g {
+        x: left = 0, right = w;
+        y: front = 0, back = d;
+        z: floor = 0, lid = h;
+    }
+    shell(wall) {
+        box(g[left, front, floor], g[right, back, lid], $fillet = 4);
+        zone(g.lid, d = 1);
+    }
+    anchor rim = g[left, front, lid], dir = [0, 0, 1];
+}
+
+module lid(w = 50, d = 35) {
+    cube([w, d, 2], $fillet = 0.8);
+}
+
+k: can();
+translate(k.rim + [0, 0, 5]) rotate(to = dir(k.rim)) lid();

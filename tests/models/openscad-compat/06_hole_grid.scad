@@ -1,4 +1,4 @@
-// Zweck: perforated plate – a for loop with two variables creates a grid of holes.
+// Purpose: perforated plate – a for loop with two variables creates a grid of holes.
 nx = 6;
 ny = 4;
 pitch = 10;

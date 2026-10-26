@@ -1,0 +1,23 @@
+// Purpose: knob – 2D grid for a spline profile, rotate_extrude, torus, difference(fillet = …)
+// at the bore; mirrored copy at a plane of a scaled grid.
+module knob(r = 15, h = 20) {
+    grid p {
+        x: axis = 0, waist = r * 0.6, outer = r;
+        y: foot = 0, mid = h / 2, head = h;
+    }
+    difference(fillet = 0.5) {
+        rotate_extrude()
+            spline([p[axis, foot], p[outer, foot], p[waist, mid], p[outer, head], p[axis, head]]);
+        translate([0, 0, -1]) cylinder(h = h / 2, d = 6);
+    }
+    translate([0, 0, p.head]) torus(r * 0.8, 1.5);
+    anchor top = [0, 0, p.head], dir = [0, 0, 1];
+}
+
+scale(2) grid s {
+    x: mirror_plane = 20;
+}
+
+k: knob();
+mirror(s.mirror_plane) knob(r = 10);
+translate(k.top) rotate(to = dir(k.top)) cylinder(h = 3, r = 2);

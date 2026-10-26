@@ -1,4 +1,4 @@
-// Zweck: simplified spur gear – trapezoid teeth as polygon from a list comprehension.
+// Purpose: simplified spur gear – trapezoid teeth as polygon from a list comprehension.
 z = 20;          // Number of teeth
 m = 2;           // Module
 r_p = z * m / 2; // Pitch circle

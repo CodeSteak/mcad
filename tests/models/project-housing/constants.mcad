@@ -1,0 +1,6 @@
+// Dimensions of the enclosure (pulled in with include: the variables apply in housing.mcad)
+width = 60;
+depth = 40;
+height = 25;
+wall = 2;
+spacing = 10;

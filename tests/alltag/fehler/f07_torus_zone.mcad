@@ -1,9 +1,0 @@
-// F7: torus() as a zone selects no edge („0 edges“) although the upper circular edge lies exactly on
-// the core line of the torus (also with tube radius 2). A flat ring (difference of two
-// cylinders) as a zone selects it. Workaround: module ringzone() in the flange.
-// Status (report 13): fixed – cause: tolerance 0 of the moved torus (see F8).
-// SOLL: keine Warnungen
-fillet(1) {
-    cylinder(h = 10, r = 20);
-    translate([0, 0, 10]) torus(20, 1);
-}

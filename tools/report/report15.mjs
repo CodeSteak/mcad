@@ -11,7 +11,7 @@
 //   playwright.json                                             whole suite (pnpm e2e; copy of reports/tmp/report2/playwright.json)
 //   vitest.txt, typecheck.txt                                   cd web && pnpm test, pnpm typecheck
 //   cargo.txt, clippy.txt, fmt.txt                              cargo test --workspace --no-fail-fast, clippy -D warnings, fmt --check
-//   compare.txt, step.txt, alltag.txt, node-test.txt            compare.py --eval, verify.py, tests/alltag/check.sh, test-node.mjs
+//   compare.txt, step.txt, alltag.txt, node-test.txt            compare.py --eval, verify.py, tests/everyday/check.sh, test-node.mjs
 //
 //   node tools/report/report15.mjs
 //   node tools/report/print-pdf.mjs docs/reports/15-skizzen-ecken-offset/report.html docs/reports/15-skizzen-ecken-offset/report.pdf "Test report 15: Sketches – corners, offset, stroke"
@@ -106,7 +106,7 @@ const stepSum = step ? (/\d+\/\d+ passed/.exec(step)?.[0] ?? null) : null;
 const stepNew = step ? step.split("\n").filter((l) => /^(model|skizze_(deckel|halter|kabelkanal)|3[456]_)/.test(l)) : [];
 const alltag = readText(join(input, "alltag.txt"));
 const alltagLine = alltag ? alltag.trim().split("\n").at(-1) : null;
-// tests/alltag/check.sh summary line: "N models, 0 with problems, …" (older runs: "0 mit Problemen")
+// tests/everyday/check.sh summary line: "N models, 0 with problems, …" (older runs: "0 mit Problemen")
 const alltagOk = alltag != null && /\b0 (with problems|mit Problemen)/.test(alltag);
 const nodeTest = readText(join(input, "node-test.txt"));
 const scenarios = (readJson(join(input, "scenarios.json")) ?? []).sort((a, b) => a.id.localeCompare(b.id));
@@ -281,7 +281,7 @@ ${pre(T("check-fehler.txt"))}
 
 <h2>3 fillet2d and chamfer2d</h2>
 <p><code>fillet2d(r) { profil; zone; … }</code> / <code>chamfer2d(d)</code>: the first child is the profile (any origin: <code>square</code>, <code>polygon</code>, sketches, 2D Booleans), further children are zones (2D shapes and <code>zone(linie | ebene, d)</code>). Corners are joints with a kink, convex and concave; the fillet lies on the inner side of the kink (convex: material removed, concave: material added). <b>Selection</b> as in 3D: <code>select = "inside"</code> (default) – the corner point lies in a zone; <code>"touch"</code> – also when only the replaced piece of the profile touches a zone. Inline hint "n corners", an empty selection is a warning, radii that are too large are errors per corner (the remaining corners are rounded). Nested blocks act from the inside out; the transitions of a fillet are tangential and do not count. A single closed contour keeps its segments (splines stay splines); everything else goes through the exact region.</p>
-<div class="codefig">${pre(src("tests/models/spec/skizze_halter.scad"))}<div>${fig(cli("halter"), "skizze_halter.scad: inner corner r 5 (zone), all other corners r 1, slots from `stroke`")}${fig(cli("halter-fillet"), "`--line 18` from above: the five new corner arcs of the outer block")}</div></div>
+<div class="codefig">${pre(src("tests/models/spec/sketch_holder.mcad"))}<div>${fig(cli("halter"), "sketch_holder.mcad: inner corner r 5 (zone), all other corners r 1, slots from `stroke`")}${fig(cli("halter-fillet"), "`--line 18` from above: the five new corner arcs of the outer block")}</div></div>
 ${pre(T("inspect-halter.txt").split("\n").slice(0, 14).join("\n"))}
 
 <h2>4 offset: semantics and comparison with OpenSCAD</h2>
@@ -294,11 +294,11 @@ ${osc.map((r) => `<tr><td>${esc(ONAMES[r.name] ?? r.name)}</td><td class="n">${n
 <p class="small">Where a formula exists, the deviation of our values from it is the integration accuracy of SMLib (section 7); that of OpenSCAD is the faceting (circular arcs as 128-gons: chords inside, slightly less area) or Clipper's integer coordinates (chamfer of the square: 3·10<sup>−7</sup>).</p>
 <p><b>compare.py</b> with the new models (<code>tests/models/openscad-compat/34_offset_round.scad</code>, <code>35_offset_delta.scad</code>, <code>36_offset_holes.scad</code>; reference generated with <code>make-reference.py</code> only for these files, <code>stl_stats.classify</code> counts <code>offset(r)</code> as rounded):</p>
 ${pre(compareNew.join("\n"))}
-<div class="codefig">${pre(src("tests/models/spec/skizze_deckel.scad"))}<div>${fig(cli("deckel"), "skizze_deckel.scad: outline with four `corner(r = 6)`, plug-in rim as a ring of two inward offsets")}${fig(cli("deckel-offset"), "`--line 30`: source contour and offset contour (dashed); the corner radii 6 → 3.8 stay arcs")}</div></div>
+<div class="codefig">${pre(src("tests/models/spec/sketch_lid.mcad"))}<div>${fig(cli("deckel"), "sketch_lid.mcad: outline with four `corner(r = 6)`, plug-in rim as a ring of two inward offsets")}${fig(cli("deckel-offset"), "`--line 30`: source contour and offset contour (dashed); the corner radii 6 → 3.8 stay arcs")}</div></div>
 
 <h2>5 stroke</h2>
 <p><code>stroke(w, cap = "round" | "flat" | "square", join = "round" | "miter" | "bevel")</code> (default round/round): children are open sketches (paths; a contour that ends at its start is closed) and arbitrary 2D profiles (their boundary as closed paths: <code>stroke(1) circle(5)</code> is a ring). Bands of half the width along the segments (line: rectangle, arc: annular sector), joins round, mitered (up to 4 half-widths like SVG's <code>stroke-miterlimit</code>, otherwise bevel) or beveled, ends round, flat or extended by w/2; crossing paths are united.</p>
-<div class="codefig">${pre(src("tests/models/spec/skizze_kabelkanal.scad"))}<div>${fig(cli("kabelkanal"), "skizze_kabelkanal.scad: floor and walls from `stroke` of a path with a tangential arc and `corner(r = 12)`, ribs as a zigzag with miter joins")}${fig(cli("kabelkanal-stroke"), "`--line 22`: center line of the floor")}</div></div>
+<div class="codefig">${pre(src("tests/models/spec/sketch_cable_duct.mcad"))}<div>${fig(cli("kabelkanal"), "sketch_cable_duct.mcad: floor and walls from `stroke` of a path with a tangential arc and `corner(r = 12)`, ribs as a zigzag with miter joins")}${fig(cli("kabelkanal-stroke"), "`--line 22`: center line of the floor")}</div></div>
 
 <h2>6 Kernel: exact 2D regions</h2>
 <ul>
@@ -336,7 +336,7 @@ ${scenarios.map((s) => `<h3>${esc(s.id)} ${esc(s.title)}</h3><p>${md(s.caption)}
 <tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>${pwStats ? `${pwStats.passed} / ${pwStats.total}${pwStats.failed.length ? ` – failed: ${pwStats.failed.map((f) => esc(f.title)).join(", ")}` : ""}` : "–"}${flaky ? ` · ${md(flaky.trim())}` : ""}</td></tr>
 <tr><td><code>tests/openscad-compat/compare.py --eval</code></td><td>${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"}</td></tr>
 <tr><td><code>tests/step/verify.py</code> (OpenCASCADE)</td><td>${esc(stepSum ?? "–")}</td></tr>
-<tr><td><code>tests/alltag/check.sh</code></td><td>${esc(alltagLine ?? "–")}</td></tr>
+<tr><td><code>tests/everyday/check.sh</code></td><td>${esc(alltagLine ?? "–")}</td></tr>
 <tr><td><code>node crates/kernel-smlib/js/test-node.mjs</code></td><td>${nodeTest && /all node tests passed/.test(nodeTest) ? "passed" : "–"}</td></tr>
 </table>
 <p>New or extended Rust tests (${newTests.length}):</p>

@@ -1,0 +1,12 @@
+// Dimensions of the key rack (via include): board, hooks, fit peg ↔ bore
+board_l = 200;
+board_h = 70;
+board_t = 12;
+count = 5;               // Hooks
+hook_z = 22;             // Height of the row of hooks above the bottom edge
+peg_d = 6;               // Peg on the hook (glued in)
+peg_l = 8;
+bore_d = 6.3;            // Bore in the board (0.15 mm radial clearance for glue)
+
+// x position of hook i (evenly spaced, half a pitch at each edge)
+function hook_x(i) = board_l / count * (i + 0.5);

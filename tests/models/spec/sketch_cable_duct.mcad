@@ -1,0 +1,31 @@
+// Purpose: cable duct along a path (plan 17.3) – the path is an open sketch that is made of
+// lines, a tangential arc and a rounded corner (`corner`); from this path, `stroke` makes
+// the bottom (full width, flat ends) and the walls (a difference with a narrower stroke whose
+// square ends reach beyond the duct, so that the ends remain open); in addition, there are
+// ribs in the bottom as zigzag with mitres.
+width = 16;   // outer
+wall = 2;
+height = 12;
+floor_t = 2;
+
+module route() {
+    sketch(closed = false) {
+        start([0, 0]);
+        line(to = [40, 0]);
+        arc(to = [60, 20]);          // tangential: quarter arc, r = 20
+        line(to = [60, 50]);
+        corner(r = 12);
+        line(to = [20, 50]);
+    }
+}
+
+linear_extrude(floor_t) stroke(width, cap = "flat") route();
+linear_extrude(height) difference() {
+    stroke(width, cap = "flat") route();
+    stroke(width - 2 * wall, cap = "square") route();
+}
+// Ribs on the bottom of the first straight piece
+translate([0, 0, floor_t]) linear_extrude(1) stroke(1.2, cap = "round", join = "miter") sketch(closed = false) {
+    start([4, -4]);
+    for (i = [1 : 8]) line(to = [4 + 4 * i, i % 2 == 0 ? -4 : 4]);
+}

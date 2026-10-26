@@ -1,0 +1,58 @@
+// Purpose: pillow block for a 608 deep-groove ball bearing (22 × 8 mm) – base plate with two
+// slots (M6, alignment, own module), bearing eye from a box and a tangentially
+// adjoining cylinder(a, b, r) between grid points, bearing seat with a stop shoulder. Eye/plate transitions and vertical
+// plate corners rounded via zones at grid lines, plate top edge via a zone, edges
+// of the bearing seat and slots chamfered with difference(chamfer = …). Dimensions in mm.
+
+module pillow_block(l = 80, b = 30, t = 8, axis_h = 30, eye_r = 20, eye_w = 14,
+                    bearing_d = 22, bearing_b = 8, shoulder_d = 18, slot_size = [6.5, 14]) {
+    grid g {
+        x: left = 0, hole_left = 10, eye_left = l / 2 - eye_r, mid = l / 2, eye_right = l / 2 + eye_r,
+           hole_right = l - 10, right = l;
+        y: front = 0, eye_front = (b - eye_w) / 2, mid_y = b / 2, eye_back = (b + eye_w) / 2, back = b;
+        z: bottom = 0, plate = t, axis = axis_h;
+    }
+    difference(chamfer = 0.5) {
+        chamfer(0.6) {
+            fillet(3) {
+                fillet(5) {
+                    union() {
+                        box(g[left, front, bottom], g[right, back, plate]);
+                        box(g[eye_left, eye_front, bottom], g[eye_right, eye_back, axis]);
+                        cylinder(g[mid, eye_front, axis], g[mid, eye_back, axis], r = eye_r);
+                    }
+                    zone(g[left, front, *], d = 1);
+                    zone(g[right, front, *], d = 1);
+                    zone(g[left, back, *], d = 1);
+                    zone(g[right, back, *], d = 1);
+                }
+                // Fillets between eye and plate (grid lines along x and y)
+                zone(g[*, eye_front, plate], d = 1);
+                zone(g[*, eye_back, plate], d = 1);
+                zone(g[eye_left, *, plate], d = 1);
+                zone(g[eye_right, *, plate], d = 1);
+            }
+            zone(g.plate, d = 0.5);       // Top edge of the plate
+        }
+        // Bearing seat from the front, shoulder at the back
+        cylinder(g[mid, eye_front, axis] - [0, 1, 0], g[mid, eye_front, axis] + [0, bearing_b, 0], d = bearing_d);
+        cylinder(g[mid, eye_front, axis], g[mid, eye_back, axis] + [0, 1, 0], d = shoulder_d);
+        // Slots
+        for (x = [g.hole_left, g.hole_right])
+            hull_slot([x, g.mid_y, -1], slot_size[0], slot_size[1], t + 2);
+    }
+
+    anchor bearing = g[mid, eye_front, axis], dir = [0, -1, 0];
+    anchor foot_l = g[hole_left, mid_y, plate], dir = [0, 0, 1];
+}
+
+// Slot across the plate (in y): two cylinders and a box, length s between the centres
+module hull_slot(p, d, s, h) {
+    translate(p) {
+        translate([0, -s / 2 + d / 2, 0]) cylinder(h = h, d = d);
+        translate([0, s / 2 - d / 2, 0]) cylinder(h = h, d = d);
+        translate([-d / 2, -s / 2 + d / 2, 0]) cube([d, s - d, h]);
+    }
+}
+
+block: pillow_block();

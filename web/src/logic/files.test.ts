@@ -9,7 +9,7 @@ import { dataFileRefs, dataUrl, fileBytes, fileIds, fileText, fromDataUrl, guess
 import { SceneIndex, isOff } from "./sceneIndex";
 import { fixture } from "./__fixtures__/load";
 
-const EX = join(__dirname, "../../../tests/models/projekt-gehaeuse");
+const EX = join(__dirname, "../../../tests/models/project-housing");
 const read = (p: string) => readFileSync(join(EX, p), "utf8");
 
 describe("Pfade wie die Engine", () => {
@@ -35,8 +35,8 @@ describe("Pfade wie die Engine", () => {
   });
 
   it("Hauptdatei eines Ordners", () => {
-    const files = { "gehaeuse.mcad": read("gehaeuse.mcad"), "konstanten.mcad": read("konstanten.mcad"), "lib/teile.mcad": read("lib/teile.mcad") };
-    expect(guessMain(files)).toBe("gehaeuse.mcad");
+    const files = { "housing.mcad": read("housing.mcad"), "constants.mcad": read("constants.mcad"), "lib/parts.mcad": read("lib/parts.mcad") };
+    expect(guessMain(files)).toBe("housing.mcad");
     expect(guessMain({ "b.scad": "cube(1);", "a.scad": "include <b.scad>" })).toBe("a.scad");
     expect(guessMain({ "x.txt": "" })).toBeNull();
     // .mcad and .scad mixed in one project
@@ -58,72 +58,72 @@ describe("Pfade wie die Engine", () => {
 });
 
 describe("Szene eines Projekts", () => {
-  const f = fixture("projekt");
+  const f = fixture("project");
   const s = f.scene;
 
   it("Dateien, Bauteile, include-Anweisungen", () => {
     expect(s.files.map((x) => [x.id, x.path, x.role])).toEqual([
-      [0, "gehaeuse.mcad", "main"],
-      [1, "konstanten.mcad", "include"],
-      [2, "lib/teile.mcad", "use"],
+      [0, "housing.mcad", "main"],
+      [1, "constants.mcad", "include"],
+      [2, "lib/parts.mcad", "use"],
     ]);
-    expect(s.parts.map((p) => p.name)).toEqual(["gehaeuse", "deckel"]);
+    expect(s.parts.map((p) => p.name)).toEqual(["housing", "lid"]);
     expect(s.includes.map((i) => [i.target, i.is_use, i.found])).toEqual([
-      ["konstanten.mcad", false, true],
-      ["lib/teile.mcad", true, true],
+      ["constants.mcad", false, true],
+      ["lib/parts.mcad", true, true],
     ]);
-    expect(fileIds(s, "lib/teile.mcad", "gehaeuse.mcad")).toEqual(new Set([2]));
-    expect(fileIds(s, "gehaeuse.mcad", "gehaeuse.mcad")).toEqual(new Set([0]));
+    expect(fileIds(s, "lib/parts.mcad", "housing.mcad")).toEqual(new Set([2]));
+    expect(fileIds(s, "housing.mcad", "housing.mcad")).toEqual(new Set([0]));
   });
 
   it("Index der Hauptdatei: Bereiche anderer Dateien zählen nicht", () => {
-    const idx = new SceneIndex(s, undefined, fileIds(s, "gehaeuse.mcad", "gehaeuse.mcad"));
+    const idx = new SceneIndex(s, undefined, fileIds(s, "housing.mcad", "housing.mcad"));
     const hint = s.hints.find((h) => h.text === "60")!;
     expect(hint.range.file).toBe(1);
     expect(isOff(idx.range(hint.range))).toBe(true);
-    const call = s.nodes.find((n) => n.instance === "gehaeuse")!;
+    const call = s.nodes.find((n) => n.instance === "housing")!;
     expect(idx.linesOf(f.doc, [call.idx])).toEqual([6]);
     // A node of the library maps to no line of the main file.
     const libNode = s.nodes.find((n) => n.range.file === 2)!;
     expect(idx.linesOf(f.doc, [libNode.idx])).toEqual([]);
   });
 
-  it("Index der Bibliothek: Module und Zeilen in lib/teile.mcad", () => {
-    const lib = read("lib/teile.mcad");
+  it("Index der Bibliothek: Module und Zeilen in lib/parts.mcad", () => {
+    const lib = read("lib/parts.mcad");
     const doc = Text.of(lib.split("\n"));
-    const m = fixture("projekt-modul").scene;
-    const idx = new SceneIndex(m, undefined, fileIds(m, "lib/teile.mcad", "gehaeuse.mcad"));
+    const m = fixture("project-module").scene;
+    const idx = new SceneIndex(m, undefined, fileIds(m, "lib/parts.mcad", "housing.mcad"));
     const pos = doc.line(17).from + 6;
-    expect(idx.moduleAt(pos)).toBe("gehaeuse");
+    expect(idx.moduleAt(pos)).toBe("housing");
     const sel = idx.select(doc, doc.line(21).from + 10);
     expect(sel.nodes.length).toBeGreaterThan(0);
-    expect(rangePath(m, m.nodes[sel.nodes[0]].range, "gehaeuse.mcad")).toBe("lib/teile.mcad");
+    expect(rangePath(m, m.nodes[sel.nodes[0]].range, "housing.mcad")).toBe("lib/parts.mcad");
   });
 
   it("Dekorationen nur für die Datei im Editor", () => {
-    const konst = read("konstanten.mcad");
-    const doc = Text.of(konst.split("\n"));
+    const consts = read("constants.mcad");
+    const doc = Text.of(consts.split("\n"));
     const base = { complete: null, diagnostics: { version: 0, items: [] }, mapper: new VersionMapper(doc.length), engineError: null, viewHoverLines: [], hoverLine: null, hoverRef: null };
-    const inKonst = collectLines(doc, { ...base, scene: s, activeFile: "konstanten.mcad", mainFile: "gehaeuse.mcad" }, []);
-    expect(inKonst.lines.get(2)?.segs).toEqual([{ kind: "hint", text: "= 60" }]);
-    // The same scene seen from the main file: no hints of konstanten.mcad on its lines.
+    const inConsts = collectLines(doc, { ...base, scene: s, activeFile: "constants.mcad", mainFile: "housing.mcad" }, []);
+    expect(inConsts.lines.get(2)?.segs).toEqual([{ kind: "hint", text: "= 60" }]);
+    // The same scene seen from the main file: no hints of constants.mcad on its lines.
     const main = Text.of(f.source.split("\n"));
-    const inMain = collectLines(main, { ...base, scene: s, activeFile: "gehaeuse.mcad", mainFile: "gehaeuse.mcad" }, []);
+    const inMain = collectLines(main, { ...base, scene: s, activeFile: "housing.mcad", mainFile: "housing.mcad" }, []);
     expect([...inMain.lines.values()].flatMap((l) => l.segs).filter((x) => x.kind === "hint")).toEqual([]);
     // Diagnostics name their file.
-    const d = { severity: "error" as const, message: "x", source: "eval" as const, node: null, file: "lib/teile.mcad", range: { from: 0, to: 1, line: 1, col: 1, end_line: 1, end_col: 2 } };
-    const lines = collectLines(main, { ...base, scene: null, diagnostics: { version: 0, items: [d] }, activeFile: "gehaeuse.mcad", mainFile: "gehaeuse.mcad" }, []).lines;
+    const d = { severity: "error" as const, message: "x", source: "eval" as const, node: null, file: "lib/parts.mcad", range: { from: 0, to: 1, line: 1, col: 1, end_line: 1, end_col: 2 } };
+    const lines = collectLines(main, { ...base, scene: null, diagnostics: { version: 0, items: [d] }, activeFile: "housing.mcad", mainFile: "housing.mcad" }, []).lines;
     expect(lines.size).toBe(0);
   });
 
   it("ausgeblendete Bauteile: Modell in Teilen ohne sie", () => {
-    const deckel = s.parts.find((p) => p.name === "deckel")!;
-    const pieces = visiblePieces(s, [deckel.node]);
+    const lid = s.parts.find((p) => p.name === "lid")!;
+    const pieces = visiblePieces(s, [lid.node]);
     const labels = pieces.map((n) => n.instance ?? n.label);
-    expect(labels).toEqual(["gehaeuse"]);
-    const p = plan({ scene: s, cursor: [], hover: [], hidden: [deckel.node] });
+    expect(labels).toEqual(["housing"]);
+    const p = plan({ scene: s, cursor: [], hover: [], hidden: [lid.node] });
     expect(p.base).toBeNull();
-    expect(p.items.map((i) => s.nodes[i.node].instance)).toEqual(["gehaeuse"]);
+    expect(p.items.map((i) => s.nodes[i.node].instance)).toEqual(["housing"]);
     expect(plan({ scene: s, cursor: [], hover: [] }).base).not.toBeNull();
   });
 });

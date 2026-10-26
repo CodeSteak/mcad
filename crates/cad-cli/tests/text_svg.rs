@@ -50,7 +50,7 @@ const RECT: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20mm" heigh
 
 #[test]
 fn examples_check_clean() {
-    for f in ["svg_logo.mcad", "text_schild.mcad"] {
+    for f in ["svg_logo.mcad", "text_sign.mcad"] {
         let v = json(&["check", &example(f)], 0);
         assert_eq!((v["errors"].as_u64(), v["warnings"].as_u64()), (Some(0), Some(0)), "{f}: {v}");
     }

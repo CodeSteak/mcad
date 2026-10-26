@@ -1,4 +1,4 @@
-// Zweck: electronics box with lid and four screw bosses; lid lies next to it, ready to print.
+// Purpose: electronics box with lid and four screw bosses; lid lies next to it, ready to print.
 w = 60; d = 40; h = 25; t = 2;
 dome_d = 6; screw_d = 2.5; inset = 4.5;   // Bosses overlap the wall (no touching point)
 

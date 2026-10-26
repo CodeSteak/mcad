@@ -161,13 +161,13 @@ fn outline_functions_variables_and_projects() {
     assert_eq!(params[0]["type"], "vector");
     assert_eq!(params[1]["type"], "bool");
     // project: include/use, modules from the library with their file
-    let v = json(&["outline", &example("projekt-gehaeuse/gehaeuse.mcad")], 0);
+    let v = json(&["outline", &example("project-housing/housing.mcad")], 0);
     let inc = v["includes"].as_array().unwrap();
     assert_eq!(inc.len(), 2);
-    assert!(inc.iter().any(|i| i["use"] == true && i["path"] == "lib/teile.mcad" && i["found"] == true));
-    let g = v["modules"].as_array().unwrap().iter().find(|m| m["name"] == "gehaeuse").unwrap();
-    assert_eq!(g["file"], "lib/teile.mcad");
-    assert!(v["variables"].as_array().unwrap().iter().any(|x| x["name"] == "breite" && x["file"] == "konstanten.mcad"));
+    assert!(inc.iter().any(|i| i["use"] == true && i["path"] == "lib/parts.mcad" && i["found"] == true));
+    let g = v["modules"].as_array().unwrap().iter().find(|m| m["name"] == "housing").unwrap();
+    assert_eq!(g["file"], "lib/parts.mcad");
+    assert!(v["variables"].as_array().unwrap().iter().any(|x| x["name"] == "width" && x["file"] == "constants.mcad"));
     assert_eq!(v["parts"].as_array().unwrap().len(), 2);
 }
 
@@ -449,7 +449,7 @@ fn measure_interference_and_clearance() {
     assert_eq!(v["clearance"]["distance"], 0.0);
     // the project example has no collisions
     let v = json(
-        &["measure", &example("projekt-gehaeuse/gehaeuse.mcad"), "--interference", "--clearance", "gehaeuse", "deckel"],
+        &["measure", &example("project-housing/housing.mcad"), "--interference", "--clearance", "housing", "lid"],
         0,
     );
     assert!(v["interference"]["collisions"].as_array().unwrap().is_empty());
@@ -574,25 +574,25 @@ fn set_param_and_literal() {
 #[test]
 fn set_in_project_file() {
     let dir = tempfile::tempdir().unwrap();
-    let src = PathBuf::from(example("projekt-gehaeuse"));
-    for f in ["gehaeuse.mcad", "konstanten.mcad", "lib/teile.mcad"] {
+    let src = PathBuf::from(example("project-housing"));
+    for f in ["housing.mcad", "constants.mcad", "lib/parts.mcad"] {
         let to = dir.path().join(f);
         std::fs::create_dir_all(to.parent().unwrap()).unwrap();
         std::fs::copy(src.join(f), &to).unwrap();
     }
-    let main = dir.path().join("gehaeuse.mcad").display().to_string();
-    // the module lives in lib/teile.mcad (use): its default is changed there
-    let v = json(&["set", &main, "--param", "schraubdom.h=12"], 0);
-    assert!(v["changes"][0]["file"].as_str().unwrap().ends_with("lib/teile.mcad"));
-    assert!(std::fs::read_to_string(dir.path().join("lib/teile.mcad")).unwrap().contains("schraubdom(h = 12)"));
+    let main = dir.path().join("housing.mcad").display().to_string();
+    // the module lives in lib/parts.mcad (use): its default is changed there
+    let v = json(&["set", &main, "--param", "screw_boss.h=12"], 0);
+    assert!(v["changes"][0]["file"].as_str().unwrap().ends_with("lib/parts.mcad"));
+    assert!(std::fs::read_to_string(dir.path().join("lib/parts.mcad")).unwrap().contains("screw_boss(h = 12)"));
     // literal in the included file by path
-    let konst = std::fs::read_to_string(dir.path().join("konstanten.mcad")).unwrap();
-    let line = konst.lines().position(|l| l.starts_with("abstand")).unwrap() + 1;
-    let spec = format!("konstanten.mcad:{line}:11=15");
+    let consts = std::fs::read_to_string(dir.path().join("constants.mcad")).unwrap();
+    let line = consts.lines().position(|l| l.starts_with("spacing")).unwrap() + 1;
+    let spec = format!("constants.mcad:{line}:11=15");
     let v = json(&["set", &main, "--literal", &spec], 0);
     assert_eq!(v["changes"][0]["old"], "10");
     let o = json(&["outline", &main], 0);
-    let p = o["parts"].as_array().unwrap().iter().find(|p| p["name"] == "deckel").unwrap().clone();
+    let p = o["parts"].as_array().unwrap().iter().find(|p| p["name"] == "lid").unwrap().clone();
     assert_eq!(p["bounds"]["min"][1], 55.0);
 }
 

@@ -37,14 +37,14 @@ run() { # name args…
 : > "$CLI/times.txt"
 
 # 1. every kind on the spec examples
-run housing-section measure "$S/gehaeuse.scad" --section z=10 --wall "[0,15,10]" --distance "edge@[3,15,10]" "edge@[57,15,10]"
-run housing-3d measure "$S/gehaeuse.scad" --distance "face@[3,15,10]" "face@[57,15,10]" --body "face@[0,15,10]" --length "edge@[60,15,20]"
-run plate-radius measure "$S/lochplatte.scad" --radius "face@[8,6,2]" --radius "face@[8.292893,6,3.707107]" --distance "center@[6,6,0]" "center@[18,6,0]"
-run plate-at measure "$S/lochplatte.scad" --at "[8,6,2]"
-run plate-section measure "$S/lochplatte.scad" --section z=2 --radius "edge@[8,6,2]" --wall "[8,6,2]"
-run chamfer-angle measure "$S/fase_chamfer.scad" --angle "face@[39.5,12,9.5]" "face@[20,12,10]" --angle "face@[20,12,10]" "face@[40,12,5]"
-"$CAD" render "$S/lochplatte.scad" -o "$CLI/plate-section.png" --section z=2 --view top --size 900x420 --no-axes > /dev/null 2>&1 || true
-"$CAD" render "$S/gehaeuse.scad" -o "$CLI/housing-section.png" --section z=10 --view top --size 900x520 --no-axes > /dev/null 2>&1 || true
+run housing-section measure "$S/housing.mcad" --section z=10 --wall "[0,15,10]" --distance "edge@[3,15,10]" "edge@[57,15,10]"
+run housing-3d measure "$S/housing.mcad" --distance "face@[3,15,10]" "face@[57,15,10]" --body "face@[0,15,10]" --length "edge@[60,15,20]"
+run plate-radius measure "$S/hole_plate.mcad" --radius "face@[8,6,2]" --radius "face@[8.292893,6,3.707107]" --distance "center@[6,6,0]" "center@[18,6,0]"
+run plate-at measure "$S/hole_plate.mcad" --at "[8,6,2]"
+run plate-section measure "$S/hole_plate.mcad" --section z=2 --radius "edge@[8,6,2]" --wall "[8,6,2]"
+run chamfer-angle measure "$S/chamfers.mcad" --angle "face@[39.5,12,9.5]" "face@[20,12,10]" --angle "face@[20,12,10]" "face@[40,12,5]"
+"$CAD" render "$S/hole_plate.mcad" -o "$CLI/plate-section.png" --section z=2 --view top --size 900x420 --no-axes > /dev/null 2>&1 || true
+"$CAD" render "$S/housing.mcad" -o "$CLI/housing-section.png" --section z=10 --view top --size 900x520 --no-axes > /dev/null 2>&1 || true
 
 # 2. analytic models: name | source | cad measure arguments | key | expected (python expression)
 cat > "$CASES/list.tsv" <<'EOF'
@@ -68,7 +68,7 @@ Section, area of the region	difference() { cube([20, 20, 6]); translate([10, 10,
 Section, wall thickness bore–edge	difference() { cube([20, 20, 6]); translate([10, 10, -1]) cylinder(h = 8, r = 3); }	--section z=3 --wall [7,10,3]	wall	7
 Oblique section (45°) through bore r 3: semi-major axis	difference() { cube([20, 20, 10]); translate([10, 10, -1]) cylinder(h = 12, r = 3); }	--section-plane 10,10,5,1,0,1 --radius edge@[10,13,5]	radius	3*sqrt(2)
 Oblique section (45°): semi-minor axis	difference() { cube([20, 20, 10]); translate([10, 10, -1]) cylinder(h = 12, r = 3); }	--section-plane 10,10,5,1,0,1 --radius edge@[10,13,5]	minor	3
-Housing: wall thickness in section z 10	include <../../../../tests/models/spec/gehaeuse.scad>	--section z=10 --wall [0,15,10]	wall	3
+Housing: wall thickness in section z 10	include <../../../../tests/models/spec/housing.mcad>	--section z=10 --wall [0,15,10]	wall	3
 EOF
 python3 - "$CAD" "$CASES" "$OUT/analytic.json" <<'EOF'
 import json, math, subprocess, sys

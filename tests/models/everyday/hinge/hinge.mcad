@@ -1,0 +1,14 @@
+// Purpose: printable 60 mm hinge of three parts (leaf A, leaf B, pin) – dimensions via
+// include, parts via use; the knuckles of both leaves from the same function (axial clearance),
+// clearances via for, leaf B rotated about the axis to the opening angle. Check:
+// `mcad measure hinge.mcad --interference --clearance a b` (clearance 0.4 mm) and pin ↔ B.
+// Dimensions in mm.
+include <dimensions.mcad>
+use <parts.mcad>
+
+angle = 180;     // Opening angle between the leaves (180 = flat; below approx. 40° the leaves touch)
+
+a: leaf(side = 0, l = length, n = knuckles, r = knuckle_r, t = leaf_t, clearance = clearance, bore = bore_a);
+rotate([180 - angle, 0, 0])
+    b: leaf(side = 1, l = length, n = knuckles, r = knuckle_r, t = leaf_t, clearance = clearance, bore = bore_b);
+translate(a.axis_start) pin: pin(l = length, d = pin_d);

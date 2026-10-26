@@ -10,7 +10,7 @@ import { contextModule } from "./params";
 import { SceneIndex } from "./sceneIndex";
 import { fixture, pos } from "./__fixtures__/load";
 
-function planAt(name: "skizze" | "skizze-modul", line: number, col = 4) {
+function planAt(name: "sketch" | "sketch-module", line: number, col = 4) {
   const f = fixture(name);
   const idx = new SceneIndex(f.scene);
   const at = pos(f.doc, line, col);
@@ -25,8 +25,8 @@ function planAt(name: "skizze" | "skizze-modul", line: number, col = 4) {
 
 describe("Skizze unter dem Cursor", () => {
   it("Segmentzeile: Skizze in ihrer Ebene, Segment der Zeile hervorgehoben", () => {
-    // line 12: `arc(to = s[bogen, oben], r = b / 2);` in module halter
-    const { f, p } = planAt("skizze-modul", 12);
+    // line 12: `arc(to = s[arc_x, top], r = b / 2);` in module holder
+    const { f, p } = planAt("sketch-module", 12);
     expect(p.sketches).toHaveLength(1);
     const sk = p.sketches[0];
     expect(f.scene.nodes[sk.node].label).toBe("sketch");
@@ -46,14 +46,14 @@ describe("Skizze unter dem Cursor", () => {
   });
 
   it("Zeile im `hole`-Block: Skizze über die Gruppe gefunden", () => {
-    const { f, sel, p } = planAt("skizze-modul", 22);
+    const { f, sel, p } = planAt("sketch-module", 22);
     expect(f.scene.nodes[sel.nodes[0]].label).toBe("group");
     expect(sketchesFor(f.scene, f.scene.nodes[sel.nodes[0]]).map((n) => n.label)).toEqual(["sketch"]);
     expect(p.sketches[0].segments.filter((g) => g.active).map((g) => g.kind)).toEqual(["line"]);
   });
 
   it("Bézier: Kontrollpolygon als Hilfslinie", () => {
-    const { p } = planAt("skizze", 36);
+    const { p } = planAt("sketch", 36);
     const sk = p.sketches[0];
     expect(sk.segments.filter((g) => g.active).map((g) => g.kind)).toEqual(["bezier"]);
     // start, two control points, end
@@ -61,7 +61,7 @@ describe("Skizze unter dem Cursor", () => {
   });
 
   it("Aufruf eines Skizzen-Moduls zeigt die Skizze, ohne hervorgehobenes Segment", () => {
-    const { p } = planAt("skizze", 29, 0);
+    const { p } = planAt("sketch", 29, 0);
     expect(p.sketches).toHaveLength(1);
     expect(p.sketches[0].segments.some((g) => g.active)).toBe(false);
   });
@@ -69,7 +69,7 @@ describe("Skizze unter dem Cursor", () => {
 
 describe("Griffe der Segmente", () => {
   it("Segmentzeile: Griffe dieses Segments; Zeile `sketch`: alle Segmentgriffe", () => {
-    const f = fixture("skizze-modul");
+    const f = fixture("sketch-module");
     const idx = new SceneIndex(f.scene);
     const at = (line: number, col = 4) => {
       const p = pos(f.doc, line, col);
@@ -86,13 +86,13 @@ describe("Griffe der Segmente", () => {
 
 describe("Module als Namensräume", () => {
   it("Modul unter dem Cursor mit Pfad, Signatur des Kontextmoduls", () => {
-    const f = fixture("bibliothek");
+    const f = fixture("library");
     const idx = new SceneIndex(f.scene);
-    expect(idx.moduleAt(pos(f.doc, 7, 8))).toBe("profile.stern");
-    expect(idx.moduleAt(pos(f.doc, 33, 12))).toBe("teile.platte.lochplatte");
-    expect(idx.moduleAt(pos(f.doc, 26, 8))).toBe("teile.schraube");
-    expect(idx.moduleAt(pos(f.doc, 22, 4))).toBe("teile");
-    const scene = { ...f.scene, context: { ...f.scene.context, module: "teile.platte.lochplatte", path: ["teile", "platte", "lochplatte"] } };
+    expect(idx.moduleAt(pos(f.doc, 7, 8))).toBe("profile.star");
+    expect(idx.moduleAt(pos(f.doc, 33, 12))).toBe("parts.plate.hole_plate");
+    expect(idx.moduleAt(pos(f.doc, 26, 8))).toBe("parts.screw");
+    expect(idx.moduleAt(pos(f.doc, 22, 4))).toBe("parts");
+    const scene = { ...f.scene, context: { ...f.scene.context, module: "parts.plate.hole_plate", path: ["parts", "plate", "hole_plate"] } };
     expect(contextModule(scene)?.params.map((p) => p.name)).toEqual(["n"]);
   });
 });

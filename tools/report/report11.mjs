@@ -67,7 +67,7 @@ const fmt = readText(join(input, "fmt.txt"));
 const compare = readText(join(input, "compare.txt"));
 const step = readText(join(input, "step.txt"));
 const sources = readText(join(input, "sources.sha256"));
-const example = readText(join(root, "tests/models/spec/mehrfarbig.scad"));
+const example = readText(join(root, "tests/models/spec/multicolor.mcad"));
 const css = readText(join(root, "web/src/styles.css")) ?? "";
 
 // images: Playwright (jpg), Tauri (png → jpg with ImageMagick if available)
@@ -460,10 +460,10 @@ ${closest}
 <li><b>Changing the slot in the UI = text edit</b> (<code>SetFilament</code>): every <code>color()</code> statement of the color with <code>filament = …</code> gets the new value, otherwise the first one gets <code>, filament = n</code>; "automatic" removes the argument. Reason: the code stays the only source (CLI export and UI export agree, the agent sees the same), undo and the Git gutter capture the change; a preview override as in the parameter bar would be lost on saving and would be a second source of truth for the export.</li>
 </ul>
 
-<h2>4 Example model <code>tests/models/spec/mehrfarbig.scad</code></h2>
+<h2>4 Example model <code>tests/models/spec/multicolor.mcad</code></h2>
 <p>Door sign (white plate, frame teal, lettering "CAD" as relief in red with fixed slot 3, subtracted hanging hole) and game piece (blue body of base and revolved profile, white collar, yellow head) as two parts.</p>
 <div class="two">${fig(cliImg("cli-hell.png"), "<code>cad render</code> – color per face")}${fig(cliImg("cli-dunkel.png"), "<code>cad render --theme dark</code>")}</div>
-<div class="two">${fig(cliImg("cli-regionen.png"), "<code>--show regions --theme dark</code>: bodies per color")}${fig(cliImg("cli-schnitt.png"), "<code>--section x=80 --part figur --show regions --view right</code>: section through the region bodies; the caps are hatched red as always, the contours show the boundaries between head (wins in the neck), collar and body")}</div>
+<div class="two">${fig(cliImg("cli-regionen.png"), "<code>--show regions --theme dark</code>: bodies per color")}${fig(cliImg("cli-schnitt.png"), "<code>--section x=80 --part figure --show regions --view right</code>: section through the region bodies; the caps are hatched red as always, the contours show the boundaries between head (wins in the neck), collar and body")}</div>
 ${fig(cliImg("cli-ansichten.png"), "Contact sheet iso, front, top, right")}
 <h3>Colors and volumes (<code>cad measure --colors</code>)</h3>
 ${colorsTable(measure?.colors?.colors)}
@@ -494,7 +494,7 @@ ${colorsTable(measure?.colors?.colors)}
 <pre>${esc((sources ?? "").replace(/\.\/(\S+)/g, (m, f) => f.replace(/_/g, "/").replace(/^([^/]+)\/([^/]+)\//, "$1/$2 ")))}</pre>
 
 <h2>6 Verification of the 3MF</h2>
-<p><code>tools/report/verify3mf.py</code> on the file from <code>cad export tests/models/spec/mehrfarbig.scad --part schild --part figur -o mehrfarbig.3mf</code>, expected values from <code>cad measure --colors --json</code>:</p>
+<p><code>tools/report/verify3mf.py</code> on the file from <code>cad export tests/models/spec/multicolor.mcad --part door_sign --part figure -o mehrfarbig.3mf</code>, expected values from <code>cad measure --colors --json</code>:</p>
 <pre>${esc(verifyText ?? "verify.txt missing")}</pre>
 <table><tr><th>Part</th><th>Color</th><th>Slot</th><th>Extruder (Bambu model)</th><th>Color in 3MF</th><th>Volume B-rep</th><th>Volume mesh</th><th></th></tr>${verifyRows}</table>
 <ul>

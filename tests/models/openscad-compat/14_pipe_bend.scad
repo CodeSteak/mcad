@@ -1,4 +1,4 @@
-// Zweck: pipe bend via rotate_extrude(angle = 90) with two straight connectors.
+// Purpose: pipe bend via rotate_extrude(angle = 90) with two straight connectors.
 r_bend = 20;
 d_out = 8;
 wall = 1.5;

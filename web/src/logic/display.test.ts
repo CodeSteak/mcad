@@ -18,30 +18,30 @@ function planAt(name: Parameters<typeof fixture>[0], line: number, col: number, 
 
 describe("Darstellungszustände", () => {
   it("ohne Auswahl: Modell voll, Anker benannter Instanzen", () => {
-    const f = fixture("gehaeuse");
+    const f = fixture("housing");
     const p = plan({ scene: f.scene, cursor: [], hover: [] });
     expect(p.base?.mode).toBe("full");
     expect(p.items).toEqual([]);
-    expect(p.anchors.map((a) => a.anchor.text)).toEqual(["k.ecke", "k.oben"]);
+    expect(p.anchors.map((a) => a.anchor.text)).toEqual(["k.corner", "k.top"]);
     expect(p.status).toBeNull();
   });
 
   it("Cursor auf Zeile mit Geometrie: Knoten voll, Rest gedimmt", () => {
-    const { f, p } = planAt("gehaeuse", 21, 0);
+    const { f, p } = planAt("housing", 21, 0);
     expect(p.base?.mode).toBe("dim");
-    expect(modes(f, p)).toEqual(["full:gehaeuse@21"]);
+    expect(modes(f, p)).toEqual(["full:housing@21"]);
     // Anchors of the selected instance are active.
     expect(p.anchors.filter((a) => a.active)).toHaveLength(2);
   });
 
   it("Cursor auf Zeile ohne Geometrie dimmt nicht", () => {
-    const { p } = planAt("gehaeuse", 26, 4);
+    const { p } = planAt("housing", 26, 4);
     expect(p.base?.mode).toBe("full");
   });
 
   it("Transformation: Kreuz vorher gestrichelt, nachher durchgezogen, Umriss am Ursprung", () => {
-    const { f, p } = planAt("gehaeuse", 22, 2);
-    expect(modes(f, p)).toEqual(["full:translate@22", "outline:deckel@22"]);
+    const { f, p } = planAt("housing", 22, 2);
+    expect(modes(f, p)).toEqual(["full:translate@22", "outline:lid@22"]);
     expect(p.frames.map((x) => x.dashed)).toEqual([true, false]);
     expect(p.frames[0].matrix.slice(12, 15)).toEqual([0, 0, 0]);
     expect(p.frames[1].matrix.slice(12, 15)).toEqual([60, 30, 20]);
@@ -50,24 +50,24 @@ describe("Darstellungszustände", () => {
   });
 
   it("difference: abgezogene Körper rot", () => {
-    const { f, p } = planAt("gehaeuse-modul", 10, 6);
+    const { f, p } = planAt("housing-module", 10, 6);
     expect(modes(f, p)).toEqual(["full:difference@10", "red:box@12"]);
   });
 
   it("Hover über Zeile: halbtransparent, auch wenn abgezogen", () => {
-    const { f, p } = planAt("gehaeuse-modul", 11, 6, 12);
+    const { f, p } = planAt("housing-module", 11, 6, 12);
     expect(modes(f, p)).toEqual(["full:box@11", "hover:box@12"]);
   });
 
   it("fillet: Zonen blau, ausgewählte Kanten", () => {
-    const { f, p } = planAt("fillet-modul", 12, 10);
+    const { f, p } = planAt("fillet-module", 12, 10);
     expect(modes(f, p)).toEqual(["full:fillet@12", "blue:zone@17", "blue:translate@18"]);
     expect(p.edges.length).toBeGreaterThan(0);
     expect(p.edges.every((e) => e.kind === "selected")).toBe(true);
   });
 
   it("Cursor auf einer Zone: nur diese Zone blau, Kanten des Blocks zur Prüfung", () => {
-    const { f, p } = planAt("fillet-modul", 17, 10);
+    const { f, p } = planAt("fillet-module", 17, 10);
     expect(modes(f, p)).toEqual(["blue:zone@17"]);
     // The block's edges are not drawn as such; the viewer keeps those in this zone.
     expect(p.edges).toEqual([]);
@@ -77,13 +77,13 @@ describe("Darstellungszustände", () => {
   });
 
   it("Zone über translate: ohne Umriss und Koordinatenkreuze der Transformation", () => {
-    const { f, p } = planAt("fillet-modul", 18, 6);
+    const { f, p } = planAt("fillet-module", 18, 6);
     expect(modes(f, p)).toEqual(["blue:translate@18"]);
     expect(p.frames).toEqual([]);
   });
 
   it("select = touch kommt aus op_info", () => {
-    const { p } = planAt("fillet-modul", 25, 8);
+    const { p } = planAt("fillet-module", 25, 8);
     expect(p.zoneEdges?.select).toBe("touch");
     expect(p.zoneEdges?.edges.length).toBe(5);
   });
@@ -195,24 +195,24 @@ describe("Darstellungszustände", () => {
   });
 
   it("Maus in der Ansicht: Knoten mit Kanten in Akzentfarbe", () => {
-    const f = fixture("gehaeuse");
+    const f = fixture("housing");
     const p = plan({ scene: f.scene, cursor: [], hover: [], picked: [1] });
-    expect(modes(f, p)).toEqual(["picked:gehaeuse@21"]);
+    expect(modes(f, p)).toEqual(["picked:housing@21"]);
   });
 
   it("Hover über Ankerreferenz hebt den Anker hervor", () => {
-    const f = fixture("winkel");
+    const f = fixture("angle-anchor");
     const p = plan({ scene: f.scene, cursor: [], hover: [], hoverAnchor: { inst: 1, anchor: 0 } });
     expect(p.anchors).toHaveLength(6);
-    expect(p.anchors.filter((a) => a.active).map((a) => a.anchor.text)).toEqual(["a.boden_loch"]);
+    expect(p.anchors.filter((a) => a.active).map((a) => a.anchor.text)).toEqual(["a.base_hole"]);
   });
 });
 
 describe("Fehlerstellen", () => {
   it("Boolean mit Berührung: Kanten rot, Stelle als Punkt in Weltkoordinaten", () => {
-    const f = fixture("gehaeuse");
+    const f = fixture("housing");
     const scene = structuredClone(f.scene);
-    const n = scene.nodes.find((x) => x.label === "deckel")!;
+    const n = scene.nodes.find((x) => x.label === "lid")!;
     n.messages = [{ severity: "error", message: "Vereinigung gescheitert: …", edges: [[[0, 0, 0], [0, 0, 2]]], at: [0, 0, 1] }];
     const p = plan({ scene, cursor: [], hover: [] });
     expect(p.failures).toEqual([{ node: n.idx, point: apply(n.display_world, [0, 0, 1]) }]);

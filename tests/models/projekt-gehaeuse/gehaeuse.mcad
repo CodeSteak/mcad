@@ -1,7 +1,0 @@
-// Zweck: project of several files – dimensions via include (konstanten.mcad), parts from
-// a library via use (lib/teile.mcad), the two parts as named instances, top level.
-include <konstanten.mcad>
-use <lib/teile.mcad>
-
-gehaeuse: gehaeuse(w = breite, d = tiefe, h = hoehe, t = wand);
-translate([0, tiefe + abstand, 0]) deckel: deckel(w = breite, d = tiefe, t = wand);

@@ -1,4 +1,4 @@
-// Zweck: modifier ! – nothing but the marked subtree gets evaluated and exported.
+// Purpose: modifier ! – nothing but the marked subtree gets evaluated and exported.
 cube(50);
 translate([100, 0, 0]) ! union() {
     cube([10, 10, 2]);

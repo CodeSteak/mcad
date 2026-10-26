@@ -1,9 +1,9 @@
-// Zweck: profile operations – loft from circle to square (funnel), sweep of a circle
+// Purpose: profile operations – loft from circle to square (funnel), sweep of a circle
 // along a spline path (grip bow) and of a linear path from grid points.
 grid g {
-    x: links = 0, mitte = 20, rechts = 40;
-    y: vorne = 0;
-    z: unten = 0, oben = 15;
+    x: left = 0, mid = 20, right = 40;
+    y: front = 0;
+    z: bottom = 0, top = 15;
 }
 
 loft() {
@@ -13,7 +13,7 @@ loft() {
 }
 
 translate([30, 0, 0])
-    sweep(path = [g[links, vorne, unten], g[mitte, vorne, oben], g[rechts, vorne, unten]], interp = "spline")
+    sweep(path = [g[left, front, bottom], g[mid, front, top], g[right, front, bottom]], interp = "spline")
         circle(2);
 
 translate([30, 20, 0])

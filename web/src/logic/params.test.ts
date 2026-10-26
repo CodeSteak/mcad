@@ -3,7 +3,7 @@ import type { Module, Param } from "../engine/protocol";
 import { fixture } from "./__fixtures__/load";
 import { contextModule, controlOf, dropOverride, paramRows, resetAll, resetOverride, resetValue, setOverride, sliderRange } from "./params";
 
-const f = fixture("gehaeuse-modul");
+const f = fixture("housing-module");
 const sig = contextModule(f.scene)!;
 const used = f.scene.context.params;
 
@@ -18,7 +18,7 @@ const param = (name: string, ty: Param["ty"], def: Param["default_value"] | null
 
 describe("Parameterleiste: Zeilen aus der Modulsignatur", () => {
   it("Kontextmodul und Zeilen", () => {
-    expect(sig.name).toBe("gehaeuse");
+    expect(sig.name).toBe("housing");
     const rows = paramRows(sig, used, undefined);
     expect(rows.map((r) => [r.name, r.control, r.value, r.changed])).toEqual([
       ["w", "number", 40, false],
@@ -31,21 +31,21 @@ describe("Parameterleiste: Zeilen aus der Modulsignatur", () => {
   });
 
   it("temporäre Werte pro Modul, geändert markiert", () => {
-    let ov = setOverride({}, "gehaeuse", "w", 60);
-    ov = setOverride(ov, "deckel", "x", 1);
-    const rows = paramRows(sig, used, ov.gehaeuse);
+    let ov = setOverride({}, "housing", "w", 60);
+    ov = setOverride(ov, "lid", "x", 1);
+    const rows = paramRows(sig, used, ov.housing);
     expect(rows[0]).toMatchObject({ value: 60, changed: true, overridden: true });
     expect(rows[1]).toMatchObject({ value: 30, changed: false });
     // Same value as the default: not marked.
-    const same = paramRows(sig, used, setOverride({}, "gehaeuse", "w", 40).gehaeuse);
+    const same = paramRows(sig, used, setOverride({}, "housing", "w", 40).housing);
     expect(same[0].changed).toBe(false);
-    expect(ov.deckel).toEqual({ x: 1 });
+    expect(ov.lid).toEqual({ x: 1 });
   });
 
   it("Reset auf den Standardwert, ohne Standardwert auf 0 / false / [0, 0, 0]", () => {
-    const ov = setOverride({}, "gehaeuse", "w", 60);
+    const ov = setOverride({}, "housing", "w", 60);
     const wp = sig.params[0];
-    expect(resetOverride(ov, "gehaeuse", wp, "number").gehaeuse).toEqual({});
+    expect(resetOverride(ov, "housing", wp, "number").housing).toEqual({});
     const n = param("n", "unknown", null);
     const b = param("b", "unknown", null);
     const v = param("v", "unknown", null);
@@ -58,17 +58,17 @@ describe("Parameterleiste: Zeilen aus der Modulsignatur", () => {
 
   it("alle zurücksetzen", () => {
     const m: Module = { ...sig, params: [...sig.params, param("n", "unknown", null)] };
-    let ov = setOverride({}, "gehaeuse", "w", 60);
-    ov = setOverride(ov, "gehaeuse", "n", 5);
+    let ov = setOverride({}, "housing", "w", 60);
+    ov = setOverride(ov, "housing", "n", 5);
     const r = resetAll(ov, m, used);
-    expect(r.gehaeuse).toEqual({ n: 0 });
-    const rows = paramRows(m, used, r.gehaeuse);
+    expect(r.housing).toEqual({ n: 0 });
+    const rows = paramRows(m, used, r.housing);
     expect(rows.every((x) => !x.changed)).toBe(true);
   });
 
   it("nach „Als Standard übernehmen“ fällt der temporäre Wert weg", () => {
-    const ov = setOverride(setOverride({}, "gehaeuse", "w", 60), "gehaeuse", "d", 50);
-    expect(dropOverride(ov, "gehaeuse", "d").gehaeuse).toEqual({ w: 60 });
+    const ov = setOverride(setOverride({}, "housing", "w", 60), "housing", "d", 50);
+    expect(dropOverride(ov, "housing", "d").housing).toEqual({ w: 60 });
   });
 
   it("Bedienelemente nach Typ", () => {

@@ -1,4 +1,4 @@
-// Zweck: $fn = 3…12 at the call yields polygons as in OpenSCAD – triangle, octagon, pyramid, 2D pentagon.
+// Purpose: $fn = 3…12 at the call yields polygons as in OpenSCAD – triangle, octagon, pyramid, 2D pentagon.
 cylinder(h = 5, r = 6, $fn = 3);
 translate([15, 0, 0]) cylinder(h = 5, d = 10, $fn = 8);
 translate([30, 0, 0]) cylinder(h = 8, r1 = 5, r2 = 0, $fn = 4);

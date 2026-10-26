@@ -339,7 +339,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     }
 
     // named instances, parts, anchors in file coordinates. A name given inside a module body
-    // (`dom[0]: dom();` in `pi_platte`) belongs to that module, not to the file: such instances
+    // (`boss[0]: standoff();` in `pi_plate`) belongs to that module, not to the file: such instances
     // are listed separately, with the module that names them ("scope": "module").
     let named_all: Vec<&p::Instance> = sc.instances.iter().filter(|i| i.label.is_some() && i.id != 0).collect();
     let in_module = |i: &p::Instance| i.depth > 1;

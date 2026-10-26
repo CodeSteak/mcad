@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Example icon (own drawing, free): leaf of cubic Bézier curves (C, S) with a
+     cut-out midrib (reverse direction, nonzero), stem of quadratic curves (Q, T),
+     rotated -->
+<svg xmlns="http://www.w3.org/2000/svg" width="30mm" height="44mm" viewBox="0 0 60 88">
+  <g transform="rotate(-15 30 44)">
+    <path id="leaf"
+          d="M 30 4 C 45 12 56 28 54 40 S 42 64 30 70 C 18 64 8 52 6 40 S 15 12 30 4 Z
+             M 30 14 L 28.5 60 L 31.5 60 Z"/>
+    <path id="stem" d="M 29 68 Q 30 74 27 79 T 23 82 L 22 80.5 Q 25.5 78 26 74 T 27 68 Z"/>
+  </g>
+</svg>

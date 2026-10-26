@@ -1,0 +1,91 @@
+// Parts of the electronics enclosure (pulled in via use: only modules and functions are visible in the
+// main file). The defaults come from dimensions.mcad, included here.
+include <dimensions.mcad>
+
+module screw_boss(h = 20, d = 7, core = 2.5, depth = 12) {
+    difference() {
+        cylinder(h = h, d = d);
+        translate([0, 0, h - depth]) cylinder(h = depth + 1, d = core);
+    }
+    anchor top = [0, 0, h], dir = [0, 0, 1];
+}
+
+// Base: rounded box, opened at the top with shell, four bosses in the inner corners,
+// cable entry in the left end wall
+module base(l = outer_l, b = outer_w, h = height, t = wall, r = corner, cable_d = 8) {
+    grid g {
+        x: left = 0, inner_left = t, mid = l / 2, inner_right = l - t, right = l;
+        y: front = 0, inner_front = t, mid_y = b / 2, inner_back = b - t, back = b;
+        z: floor = 0, inner_floor = t, cable = h / 2, top = h;
+    }
+    difference(chamfer = 0.5) {
+        union(fillet = 1) {
+            shell(t) {
+                fillet(t + 1.5) {     // Radius > wall thickness, otherwise the inner radius is 0
+                    fillet(r) {
+                        box(g[left, front, floor], g[right, back, top]);
+                        zone(g[left, front, *], d = 1);
+                        zone(g[right, front, *], d = 1);
+                        zone(g[left, back, *], d = 1);
+                        zone(g[right, back, *], d = 1);
+                    }
+                    zone(g.floor, d = 1);
+                }
+                zone(g.top, d = 1);
+            }
+            for (i = [0 : 3])
+                translate([boss_pos(i).x, boss_pos(i).y, g.inner_floor - 0.5])
+                    boss[i]: screw_boss(h = h - t + 0.5, d = boss_d, core = core_d);
+        }
+        cylinder(g[left, mid_y, cable] - [1, 0, 0], g[inner_left, mid_y, cable] + [1, 0, 0], d = cable_d);
+    }
+    anchor lid_seat = g[left, front, top], dir = [0, 0, 1];
+    anchor cable = g[left, mid_y, cable], dir = [-1, 0, 0];
+}
+
+// Lid: plate with rounded corners, centring rim (cut out at the corners for the bosses),
+// through holes above the bosses
+module lid(l = outer_l, b = outer_w, t = lid_t, r = corner, rim = rim_h, s = clearance) {
+    grid g {
+        x: left = 0, rim_left = wall + s, rim_right = l - wall - s, right = l;
+        y: front = 0, rim_front = wall + s, rim_back = b - wall - s, back = b;
+        z: rim_bottom = -rim, bottom = 0, top = t;
+    }
+    difference(chamfer = 0.3) {
+        union() {
+            fillet(1) {
+                fillet(r) {
+                    box(g[left, front, bottom], g[right, back, top]);
+                    zone(g[left, front, *], d = 1);
+                    zone(g[right, front, *], d = 1);
+                    zone(g[left, back, *], d = 1);
+                    zone(g[right, back, *], d = 1);
+                }
+                zone(g.top, d = 0.5);
+            }
+            // Centring rim 1.5 mm wide
+            difference() {
+                box(g[rim_left, rim_front, rim_bottom], g[rim_right, rim_back, bottom] + [0, 0, 0.5]);
+                box(g[rim_left, rim_front, rim_bottom] + [1.5, 1.5, -1], g[rim_right, rim_back, bottom] - [1.5, 1.5, -1]);
+                for (i = [0 : 3])   // Corners free (bosses and rounded inner corners of the base)
+                    translate([boss_pos(i).x, boss_pos(i).y, 0])
+                        cube([2 * (boss_pos(0).x - wall) + 1, 2 * (boss_pos(0).y - wall) + 1, 3 * rim], center = true);
+            }
+        }
+        for (i = [0 : 3])
+            translate([boss_pos(i).x, boss_pos(i).y, -1]) cylinder(h = t + 2, d = through_d);
+    }
+}
+
+// Pan head screw M3, simplified: shank with core diameter 2.4 (thread not modelled)
+module screw(l = screw_l) {
+    difference() {
+        cylinder(h = 2.2, d = 5.5, $fillet = 0.5);
+        translate([0, 0, 1.4]) cube([3, 0.6, 2], center = true);
+        translate([0, 0, 1.4]) cube([0.6, 3, 2], center = true);
+    }
+    translate([0, 0, -l]) union() {
+        translate([0, 0, 1]) cylinder(h = l - 1 + 0.01, d = 2.4);
+        cylinder(h = 1, r1 = 0.6, r2 = 1.2);
+    }
+}

@@ -1,4 +1,4 @@
-// Zweck: crown-gear-like ring – teeth evenly spaced via for and rotate.
+// Purpose: crown-gear-like ring – teeth evenly spaced via for and rotate.
 teeth = 16;
 r_in = 12;
 r_out = 16;

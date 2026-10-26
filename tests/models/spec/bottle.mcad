@@ -1,0 +1,20 @@
+// Purpose: bottle – rotate_extrude of a polygon profile (profile x = radius, profile y = height;
+// shown in the xz plane with the rotation axis z), partial revolution as a cutaway next to it,
+// rounding of the shoulder and bottom edge via zones around the grid planes.
+module bottle(r = 22, h = 80, neck = 9, hh = 16, angle = 360) {
+    grid g {
+        x: axis = 0, inner = neck, outer = r;
+        y: floor = 0, shoulder = h - hh - 10, neck_bottom = h - hh, top = h;
+    }
+
+    fillet(3) {
+        rotate_extrude(angle = angle)
+            polygon([g[axis, floor, _], g[outer, floor, _], g[outer, shoulder, _],
+                     g[inner, neck_bottom, _], g[inner, top, _], g[axis, top, _]]);
+        translate([0, 0, g.shoulder]) cylinder(h = 2, r = r + 2, center = true); // Shoulder edge
+        translate([0, 0, g.floor]) cylinder(h = 1, r = r + 2, center = true);    // Bottom edge
+    }
+}
+
+bottle();
+translate([60, 0, 0]) bottle(angle = 270);

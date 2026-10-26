@@ -8,7 +8,7 @@ use assert_cmd::Command;
 use serde_json::Value;
 
 fn example() -> String {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/models/spec/mehrfarbig.mcad").display().to_string()
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/models/spec/multicolor.mcad").display().to_string()
 }
 
 fn run(args: &[&str], code: i32) -> (Value, String) {
@@ -69,7 +69,7 @@ fn outline_lists_colours_slots_and_volumes() {
     assert_eq!(v["counts"]["colors"], 5);
     assert!(t.contains("Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):"), "{t}");
     assert!(t.contains("F3  red") && t.contains("filament = 3"), "{t}");
-    assert!(t.contains("schild: F1 white"), "{t}");
+    assert!(t.contains("door_sign: F1 white"), "{t}");
     // without kernel: no volumes
     let (v, _) = run(&["outline", "--no-kernel", &example()], 0);
     assert!(v["colors"][0]["volume"].is_null());
@@ -86,7 +86,7 @@ fn measure_colours() {
     assert!((vol - 208.8).abs() < 1e-6, "{vol}");
     assert!((red["mass_g"].as_f64().unwrap() - vol * 1.24e-3).abs() < 1e-9);
     let parts: Vec<&str> = c["parts"].as_array().unwrap().iter().map(|p| p["part"].as_str().unwrap()).collect();
-    assert_eq!(parts, ["schild", "figur"]);
+    assert_eq!(parts, ["door_sign", "figure"]);
     assert!(t.contains("F4  blue"), "{t}");
 }
 
@@ -102,7 +102,7 @@ fn export_multicolour_single_and_per_colour() {
     // Bericht 12: one object per part also without --part, no colour group (Bambu dialog)
     assert_eq!(s.matches("<m:color ").count(), 0);
     assert_eq!(s.matches("<item ").count(), 2, "one object per part");
-    assert!(t.contains("2 Objekte (schild, figur)") && t.contains("ohne Farbdialog"), "{t}");
+    assert!(t.contains("2 Objekte (door_sign, figure)") && t.contains("ohne Farbdialog"), "{t}");
     // --color-group: the colour group for other viewers, with the hint for Bambu Studio
     let (v, t) = run(&["export", &example(), "--color-group", "-o", &mf.display().to_string()], 0);
     assert_eq!(v["color_group"], true);
@@ -111,7 +111,7 @@ fn export_multicolour_single_and_per_colour() {
     assert_eq!(s.matches("<m:color ").count(), 5);
     // parts: one object per part, one volume per colour
     let (v, _) =
-        run(&["export", &example(), "--part", "schild", "--part", "figur", "-o", &mf.display().to_string()], 0);
+        run(&["export", &example(), "--part", "door_sign", "--part", "figure", "-o", &mf.display().to_string()], 0);
     assert_eq!(v["multicolor"], true);
     let s = String::from_utf8_lossy(&std::fs::read(&mf).unwrap()).into_owned();
     assert_eq!(s.matches("<item ").count(), 2);
@@ -124,13 +124,23 @@ fn export_multicolour_single_and_per_colour() {
     // one STL per colour and part
     let zip = dir.path().join("farben.zip");
     let (v, t) = run(
-        &["export", &example(), "--per-color", "--part", "schild", "--part", "figur", "-o", &zip.display().to_string()],
+        &[
+            "export",
+            &example(),
+            "--per-color",
+            "--part",
+            "door_sign",
+            "--part",
+            "figure",
+            "-o",
+            &zip.display().to_string(),
+        ],
         0,
     );
     assert_eq!(v["per_color"], true);
     assert_eq!(v["files"], 6);
     let s = String::from_utf8_lossy(&std::fs::read(&zip).unwrap()).into_owned();
-    for f in ["schild_F1_white.stl", "schild_F3_red.stl", "figur_F4_blue.stl", "figur_F5_yellow.stl"] {
+    for f in ["door_sign_F1_white.stl", "door_sign_F3_red.stl", "figure_F4_blue.stl", "figure_F5_yellow.stl"] {
         assert!(s.contains(f), "{f}");
     }
     assert!(t.contains("6 STL (eine je Farbe und Bauteil)"), "{t}");

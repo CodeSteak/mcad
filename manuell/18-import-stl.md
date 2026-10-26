@@ -1,7 +1,7 @@
 # STL import
 
 ```
-import("../stl/winkel.stl");                     // closed, ≤ 500 faces: B-rep (Booleans work)
+import("../stl/bracket.stl");                     // closed, ≤ 500 faces: B-rep (Booleans work)
 import("board.stl", as = "mesh");                // keep it a mesh (display, export, measure)
 import("part.stl", center = true, scale = 25.4); // inch file → mm, bounds centred at the origin
 ```

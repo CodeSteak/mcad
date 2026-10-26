@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Test report 12 ("fixes for colors and daemon"): the findings F1–F9 of the independent
-// review (tests/farben-pruefung/README.md) and the daemon socket path – cause, correction,
+// review (tests/color-review/README.md) and the daemon socket path – cause, correction,
 // evidence (before: the reviewer's images, after: CLI and UI), Bambu Studio result, limits.
 // Writes docs/reports/12-farben-korrekturen/report.html (images in img/).
 //
@@ -11,7 +11,7 @@
 //   vitest.txt, typecheck.txt                       cd web && pnpm test, pnpm typecheck
 //   tauri/tauri-e2e.json, tauri/img/*.png           node web/e2e-tauri/desktop.e2e.mjs --bin target/release/mcad --out reports/tmp/report12/tauri
 //   cargo.txt, clippy.txt, fmt.txt                  cargo test --workspace --no-fail-fast, clippy -D warnings, fmt --check
-//   compare.txt, step.txt, alltag.txt               tests/openscad-compat/compare.py, tests/step/verify.py, tests/alltag/check.sh
+//   compare.txt, step.txt, alltag.txt               tests/openscad-compat/compare.py, tests/step/verify.py, tests/everyday/check.sh
 //
 //   node tools/report/report12.mjs
 //   node tools/report/print-pdf.mjs docs/reports/12-farben-korrekturen/report.html docs/reports/12-farben-korrekturen/report.pdf "Test report 12: fixes for colors and daemon"
@@ -59,7 +59,7 @@ function img(src, dst) {
   copyFileSync(src, join(imgDir, dst));
   return `img/${dst}`;
 }
-const before = (n) => img(join(root, "tests/farben-pruefung/img", n), `vorher-${n.replace(/\.png$/, ".jpg")}`);
+const before = (n) => img(join(root, "tests/color-review/img", n), `vorher-${n.replace(/\.png$/, ".jpg")}`);
 const cli = (n) => img(join(input, "cli", `${n}.png`), `cli-${n}.jpg`);
 const pw = (n) => img(join(input, "img", `${n}.jpg`), `ui-${n}.jpg`);
 const tauriImg = (n) => img(join(input, "tauri/img", n), `tauri-${n.replace(/\.png$/, ".jpg")}`);
@@ -217,7 +217,7 @@ const html = `<!doctype html>
 <body>
 <main>
 <h1>Test report 12 – fixes for colors and daemon</h1>
-<div class="meta">Findings F1–F9 of the independent review (<code>tests/farben-pruefung/</code>) and daemon socket path · cad-eval, cad-engine, cad-session, cad-cli, cad-ipc, web · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} cores</div>
+<div class="meta">Findings F1–F9 of the independent review (<code>tests/color-review/</code>) and daemon socket path · cad-eval, cad-engine, cad-session, cad-cli, cad-ipc, web · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} cores</div>
 
 <div class="summary">
   <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>of which ${newTests.length} new regression tests</div>
@@ -225,12 +225,12 @@ const html = `<!doctype html>
   <div>Vitest · Playwright<b class="${pwStats && pwStats.failed.length === 0 ? "ok" : "bad"}">${vitestSum ?? "–"} · ${pwStats ? `${pwStats.passed} / ${pwStats.total}` : "–"}</b>new: G01–G04</div>
   <div>Tauri-E2E<b class="${tauri && tauriOk === tauri.results.length && !tauri.fatal ? "ok" : "bad"}">${tauri ? `${tauriOk} / ${tauri.results.length}` : "–"}</b>new: T15</div>
   <div>OpenSCAD · STEP<b class="${compareSum && compareSum[0] === compareSum[1] ? "ok" : "bad"}">${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"} · ${esc(stepSum?.match(/\d+\/\d+/)?.[0] ?? "–")}</b>compare.py · verify.py</div>
-  <div>Everyday models<b class="${alltag && !/FEHL|ERROR|FAIL|weicht ab|abweichend|deviat/i.test(alltag) ? "ok" : "bad"}">${alltag ? "unchanged" : "–"}</b>tests/alltag/check.sh</div>
+  <div>Everyday models<b class="${alltag && !/FEHL|ERROR|FAIL|weicht ab|abweichend|deviat/i.test(alltag) ? "ok" : "bad"}">${alltag ? "unchanged" : "–"}</b>tests/everyday/check.sh</div>
   <div>3MF (lib3mf, trimesh)<b class="${verify?.ok ? "ok" : "bad"}">${verify ? (verify.ok ? "passed" : "error") : "–"}</b>Bambu color dialog: ${verify ? (verify.bambu_model?.color_dialog ? "yes" : "no") : "–"}</div>
 </div>
 
 <h2>1 Task and result</h2>
-<p>An independent test agent reviewed the color features from report 11 and reported nine findings (F1–F9) and one daemon bug (<code>tests/farben-pruefung/README.md</code>, test cases in <code>cases/</code>, images in <code>img/</code>). All findings are fixed; each has a regression test in Rust, the UI findings additionally in Vitest, Playwright and Tauri E2E. The review's test cases all run as <code>crates/cad-cli/tests/farben_pruefung.rs</code> (each file: no errors, region volume = part volume, random colors at a distance from the palette). "Before" images are the reviewer's (commit d8fe983), "after" images are from the CLI and UI of this commit.</p>
+<p>An independent test agent reviewed the color features from report 11 and reported nine findings (F1–F9) and one daemon bug (<code>tests/color-review/README.md</code>, test cases in <code>cases/</code>, images in <code>img/</code>). All findings are fixed; each has a regression test in Rust, the UI findings additionally in Vitest, Playwright and Tauri E2E. The review's test cases all run as <code>crates/cad-cli/tests/color_review.rs</code> (each file: no errors, region volume = part volume, random colors at a distance from the palette). "Before" images are the reviewer's (commit d8fe983), "after" images are from the CLI and UI of this commit.</p>
 <table>
 <tr><th>No.</th><th>Severity</th><th>Finding</th><th>Status</th></tr>
 ${status.map(([n, s, b, st]) => `<tr><td>${n}</td><td>${esc(s)}</td><td>${md(b)}</td><td class="ok">${esc(st)}</td></tr>`).join("\n")}
@@ -383,7 +383,7 @@ ${tauri ? (() => {
 <tr><td>Tauri-E2E (<code>web/e2e-tauri/desktop.e2e.mjs</code>)</td><td>${tauri ? `${tauriOk} / ${tauri.results.length}${tauri.results.filter((r) => !r.ok).map((r) => ` – ${esc(r.id)} failed`).join("")}` : "–"}</td></tr>
 <tr><td><code>tests/openscad-compat/compare.py</code></td><td>${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"}</td></tr>
 <tr><td><code>tests/step/verify.py</code></td><td>${esc(stepSum ?? "–")}</td></tr>
-<tr><td><code>tests/alltag/check.sh</code> (volumes of the everyday models)</td><td>${esc(alltagLine ?? "–")}</td></tr>
+<tr><td><code>tests/everyday/check.sh</code> (volumes of the everyday models)</td><td>${esc(alltagLine ?? "–")}</td></tr>
 </table>
 <p>New Rust tests:</p>
 <ul>${newTests.map((t) => `<li><code>${esc(t.name)}</code> ${t.res === "ok" ? '<span class="ok">ok</span>' : '<span class="bad">FAILED</span>'}</li>`).join("")}</ul>

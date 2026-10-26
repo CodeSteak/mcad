@@ -1,0 +1,8 @@
+// F8b: union cylinder + rotate_extrude of a circle (ring, half immersed): the ring
+// is missing from the result (volume 5654.87 = cylinder only, section without ring), no message.
+// Status (report 13): fixed (cause as in F8a).
+// EXPECT-VOLUME: 5852.26 1
+union() {
+    cylinder(h = 2, r = 30);
+    translate([0, 0, 2]) rotate_extrude() translate([20, 0]) circle(1);
+}

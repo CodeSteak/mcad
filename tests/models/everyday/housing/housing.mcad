@@ -1,0 +1,15 @@
+// Purpose: electronics enclosure with lid and four screws (assembly of three files) –
+// dimensions via include (dimensions.mcad), parts via use (parts.mcad). Base with shell and
+// bosses (named instances boss[i] in the module), lid at the base's anchor, screws as
+// parts s[0] … s[3] in a loop. `explosion` > 0 moves lid and screws
+// apart (view); at 0 the assembly is closed (check the fit:
+// `mcad measure housing.mcad --interference --clearance base lid`). Dimensions in mm.
+include <dimensions.mcad>
+use <parts.mcad>
+
+explosion = 0;
+
+base: base();
+translate(base.lid_seat + [0, 0, explosion]) lid: lid();
+for (i = [0 : 3])
+    translate([boss_pos(i).x, boss_pos(i).y, height + lid_t + 2 * explosion]) s[i]: screw();

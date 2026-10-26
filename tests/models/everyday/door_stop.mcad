@@ -1,0 +1,38 @@
+// Purpose: door stop (wedge) – loft through three trapezoid profiles (smooth, not ruled) along the
+// length, laid down with rotate([90, 0, 90]); finger recess on top, cross grooves underneath
+// against slipping (for), hanging hole at the back; bottom edge of the loft chamfered beforehand
+// via a zone at the bottom plane. Dimensions in mm.
+
+// Trapezoid: bottom width wb, top width wt, height h (profile x = width, profile y = height)
+function trapezoid(wb, wt, h) = [[-wb / 2, 0], [wb / 2, 0], [wt / 2, h], [-wt / 2, h]];
+
+module door_stop(l = 120, b = 44, h_back = 32, h_mid = 14, tip = 3, grooves = 6,
+                 hole_d = 8) {
+    grid g {
+        x: back = 0, hole = 12, mid = l / 2, front = l, groove = [for (i = [0 : grooves - 1]) 25 + i * 14];
+        y: left = -b / 2, axis = 0, right = b / 2;
+        z: floor = 0, hole_z = h_back / 2, top = h_back;
+    }
+
+    difference() {
+        chamfer(1) {
+            rotate([90, 0, 90]) loft() {
+                polygon(trapezoid(b, b - 10, h_back));
+                translate([0, 0, l / 2]) polygon(trapezoid(b - 2, b - 14, h_mid));
+                translate([0, 0, l]) polygon(trapezoid(b - 4, b - 16, tip));
+            }
+            zone(g.floor, d = 0.5);
+        }
+        // Cross grooves underneath
+        for (i = [0 : grooves - 1])
+            box(g[groove[i], left, floor] - [1.5, 1, 1], g[groove[i], right, floor] + [1.5, 1, 1]);
+        // Hanging hole across the high end
+        cylinder(g[hole, left, hole_z] - [0, 1, 0], g[hole, right, hole_z] + [0, 1, 0], d = hole_d);
+        // Finger recess on top (a sphere cuts a shallow dent)
+        translate(g[hole, axis, top] + [18, 0, 20.5]) sphere(30);
+    }
+
+    anchor tip = g[front, axis, floor], dir = [1, 0, 0];
+}
+
+stopper: door_stop();

@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 // Test report 13 ("geometry fixes"): the geometry and kernel findings of the everyday
-// models (tests/models/alltag/README.md, tests/alltag/fehler) – cause, correction, evidence
+// models (tests/models/everyday/README.md, tests/everyday/bugs) – cause, correction, evidence
 // (before/after: volumes and diagnostics of the minimal examples, cad render images), open
 // points, run-time analysis. Writes docs/reports/13-geometrie-korrekturen/report.html.
 //
 // Inputs (gitignored, reports/tmp/report13/):
 //   fehler/*.json, img/*.png, zeit.*.json, fehler.txt    CAD_OLD=… tools/report/report13-data.sh
 //   profil.txt                                           gdb stack samples of `cad check
-//                                                        schluesselbrett.scad` (poor man's profiler)
+//                                                        key_rack.mcad` (poor man's profiler)
 //   cargo.txt, clippy.txt, fmt.txt, node.txt              cargo test --workspace --no-fail-fast,
 //                                                        cargo clippy --workspace --all-targets -- -D warnings,
 //                                                        cargo fmt --all --check,
 //                                                        node crates/kernel-smlib/js/test-node.mjs DIR
 //   compare.txt, step.txt, alltag.txt                    tests/openscad-compat/compare.py,
-//                                                        tests/step/verify.py, tests/alltag/check.sh --fehler
+//                                                        tests/step/verify.py, tests/everyday/check.sh --bugs
 //
 //   node tools/report/report13.mjs
 //   node tools/report/print-pdf.mjs docs/reports/13-geometrie-korrekturen/report.html docs/reports/13-geometrie-korrekturen/report.pdf "Test report 13: geometry fixes"
@@ -70,10 +70,10 @@ const pair = (n, cb, ca) => `<div class="two">${fig(shot(n, "vorher"), `Before: 
 
 // ------------------------------------------------------------------------------- minimal examples
 
-const fehlerDir = join(root, "tests/alltag/fehler");
-const examples = readdirSync(fehlerDir).filter((f) => f.endsWith(".scad")).sort();
+const fehlerDir = join(root, "tests/everyday/bugs");
+const examples = readdirSync(fehlerDir).filter((f) => f.endsWith(".mcad")).sort();
 const result = (name, v) => {
-  const j = readJson(join(input, "fehler", `${name.replace(/\.scad$/, "")}.${v}.json`));
+  const j = readJson(join(input, "fehler", `${name.replace(/\.mcad$/, "")}.${v}.json`));
   if (!j) return { missing: true };
   if (j.crash) return { crash: true };
   const errs = (j.diagnostics ?? []).filter((d) => d.severity === "error");
@@ -154,7 +154,7 @@ const findings = [
   {
     id: "F9",
     title: "crash with union(fillet) and tangential contact",
-    files: ["f09a_absturz_tangentialer_dom.scad", "f09b_absturz_zapfen_sweep.scad"],
+    files: ["f09a_crash_tangential_boss.mcad", "f09b_crash_peg_sweep.mcad"],
     cause: "In `SmFilletExecutive::CreateFilletCorners` (SMLib) a corner type is chosen for each vertex of the edges to be filleted. If there is no suitable one (`SmFilletCorner::Create` returns NULL, \"Unimplemented corner case\"), the vertex was skipped with `continue` – but the table `m_vVertexCornerMap` still held the list of its edges for it (`SmTArray<SmEdgeuse*>*`). `GetFilletCornerOfVertex` later returned this list as `SmFilletCorner*`; `CollectTangentEdgeSequence` called virtual methods on it → access to address 0x2f08 (gdb with debug objects, valgrind: \"not stack'd, malloc'd or free'd\"). In F9a the missing corner type is the tangential contact boss/wall, in F9b the nearly tangential circular edge pin/sweep.",
     fix: "**smlib/patches/0002-fillet-missing-corner.patch:** without a corner type the entry is removed and the fillet ends with `SM_ERR_INVALID_INPUT`, the edge is recorded in `SmFilletErrorInfo`. The facade translates this into \"SMLib cannot blend the corner where these edges meet (faces that touch tangentially there?)\" with the edge (red in `render --line`). In F9a the union already reports the tangential contact (see F8c): boss and wall touch along a line, there is no manifold result. The daemon fallback was no solution: the crash comes from the process itself.",
     tests: /^(f09_|fillet_at_a_nearly)/,
@@ -162,7 +162,7 @@ const findings = [
   {
     id: "F8",
     title: "booleans with torus and rotate_extrude",
-    files: ["f08a_union_torus.scad", "f08b_union_ring_verloren.scad", "f08c_differenz_torus_tangential.scad"],
+    files: ["f08a_union_torus.mcad", "f08b_union_ring_lost.mcad", "f08c_difference_torus_tangential.mcad"],
     img: [["f08a", "two overlapping bodies, no intersection with the top face", "one body, the ring half inside the plate"], ["f08b", "ring missing", "ring present"], ["f08c", "volume 0 without message", "error message, plate remains"]],
     cause: "Not the torus itself but its **transformation**: the facade called `SmBrep::Transform(m, TRUE)`; with `TRUE` SMLib derives the model size from the bounding box of the *vertices* and sets all tolerances (vertices, edges, faces, and those of the global context) from it. A torus and the solid of revolution of a circle have exactly one vertex – bounding box 0, tolerance 0. With tolerance 0 the surface intersection misses every intersection curve: union = both bodies side by side (F8a, 6049.65 mm³ = sum), ring lost (F8b), intersection empty. Verified: the same torus created directly at z = 2 intersects correctly, moved (or only rotated or scaled) it does not; the geometry (B-rep stream) is identical, only the tolerances 1e-5 → 0 differ. F7 (torus as zone selects no edge) has the same cause.",
     fix: "`apply_matrix` transforms with `Transform(m, FALSE)`: rigid motions leave the tolerances unchanged; with scaling the facade sets them from the whole (loose) bounding box of the body, the context stays untouched. F8c: the torus touches top and bottom face tangentially along two circles; the result is not manifold (SMLib returns it with the correct volume 5260.36 mm³, but not closed; `measure` showed 0). The boolean check no longer accepts a non-closed result of two closed bodies as a \"last resort\" but reports \"the result is not a closed solid: the operands touch tangentially or along an edge there (let them overlap a little or keep a gap)\". If the bodies only touch (interiors do not overlap), a − b = a and a ∩ b = empty apply instead of a non-manifold body.",
@@ -171,7 +171,7 @@ const findings = [
   {
     id: "F5",
     title: "chamfer via zone on the filleted box: volume 0, status ok",
-    files: ["f05_fase_volumen_null.scad"],
+    files: ["f05_chamfer_volume_zero.mcad"],
     img: [["f05", "open shell (26 faces), volume 0, no message", "error message, body without chamfer remains"]],
     cause: "SMLib returns `SM_SUCCESS` and an open shell: the top face is missing. The reason is the geometry: at the corners the wall between outer radius 6 and the sharp inner corner is only 6 − 3√2 ≈ 1.76 mm thick; the outer chamfer takes 0.8 mm, the inner chamfer at the sharp corner 0.8·√2 ≈ 1.13 mm – the chamfers intersect, the top face falls apart. Re-measured: `chamfer(0.7)` works, `chamfer(0.75)` does not (computed limit 0.73). Chamfers of the outer and of the inner edge each work on their own.",
     fix: "The facade checks every result of a fillet/chamfer (`blend_core`): closed shell if the input was closed; volume > 0 and volume change at most as large as a fillet of this size can cause near the edges (20 r² per mm of edge length + 10 r³ per edge + 2 %). Violated → \"SMLib returned a body that is not closed (faces missing): the blends of neighbouring edges collide, size too large for the wall between them?\" with the edges. In addition: if the selection fails as a whole and splits into separate edge chains (without a shared vertex), the chains are filleted one after another (edges found again in the intermediate body via their geometry) – futile here because the chamfers really collide, but helpful where SMLib only fails on the combination.",
@@ -180,7 +180,7 @@ const findings = [
   {
     id: "F10",
     title: "union(fillet) of filleted shell and boss: only the boss",
-    files: ["f10_union_fillet_schale_verloren.scad"],
+    files: ["f10_union_fillet_shell_lost.mcad"],
     img: [["f10", "only boss with fillet, volume 0", "error message, union without fillet remains"]],
     cause: "The union itself is correct (26,043 mm³). The concave fillet r 1 around the boss (7.5 mm from the inner corner) runs onto the bottom fillet of the shell (inner radius 1.5 between x = 2 and 3.5); SMLib then returns an open body consisting of boss and fillet.",
     fix: "The plausibility check of the fillet (F5) detects the open shell: error with the edges, the union without the concave fillet remains (instead of volume 0 without message). A correctly computed fillet across two faces remains open (SMLib).",
@@ -189,7 +189,7 @@ const findings = [
   {
     id: "F1",
     title: "sweep with symmetric spline profile \"not centred\"",
-    files: ["f01_sweep_spline_profil.scad"],
+    files: ["f01_sweep_spline_profile.mcad"],
     img: [["f01", "rejected (no body)", "sweep of the ellipse"]],
     cause: "SMLib (`CreateCurveSweep`, `bMoveProfileCenterToPath`) places the center of the bounding box of the profile curves on the path. `CalculateBoundingBox` of a B-spline curve is the bounding box of its *control points*: for the closed interpolating spline through (5,0) (0,3) (−5,0) (0,−3) x −15…5, although the curve itself is symmetric (sampled ±5, ±3.08). The facade rejected every such \"off-center\" profile on a curved path.",
     fix: "**smlib/patches/0003-sweep-profile-reference-point.patch:** `SmSweepOptions` gets `bUseProfileRefPoint`/`sProfileRefPoint`; the facade specifies the origin of the profile frame (path start). Any profile, including deliberately off-center ones (circle at (0, 4)), thus follows the path with its origin; the shift after the sweep on straight paths is no longer needed. Only the mitered variant for planar polyline paths lacks the option (the message names the workaround: spline path).",
@@ -198,7 +198,7 @@ const findings = [
   {
     id: "F2",
     title: "cylinder ∪ curved sweep: NULL_POINTER, duplicate diagnostic",
-    files: ["f02_union_zylinder_sweep.scad"],
+    files: ["f02_union_cylinder_sweep.mcad"],
     cause: "The sweep is valid (closed, no overlapping faces) and unites with cuboids, even when they cut the end cap. With the cylinder (also as NURBS, also rotated) SMLib's surface intersection fails near the tilted end cap (cap x 16.3…21.7 intersects r = 20). The facade tries orderings and offsets of 1e-6…1e-4 – without success. The duplicate message came from the engine: the failed union returns its operands, the root unites them again and fails a second time.",
     fix: "Engine: pieces from a failed boolean operation carry a marker (`NodeOutput::unmerged`); if the union in the parent node fails on them again, this is not reported a second time. The kernel bug itself remains open.",
     tests: /^f02_/,
@@ -206,7 +206,7 @@ const findings = [
   {
     id: "F3, F4",
     title: "sweep of a 16-gon \"not a closed solid\"; union(fillet) on a 32-gon sweep",
-    files: ["f03_sweep_polygon16.scad", "f04_union_fillet_sweep_polygon.scad"],
+    files: ["f03_sweep_polygon16.mcad", "f04_union_fillet_sweep_polygon.mcad"],
     cause: "SMLib builds one side face per polygon side; between some neighbors, twin edges at distance 0 stay unstitched (1 face each). `StitchFaces`/`SmApiStitchAdvanced` with tolerance 1e-5…1e-3 do not stitch them either (0 stitched). On other paths 12- or 32-gons are affected. F4: the fillet of the 32 facet edges at the circular edge fails (`SM_ERR`).",
     fix: "Message with cause: \"SMLib left 3 seam(s) between the side faces of the polygon profile open (SMLib limitation on curved paths; circle() or a spline() profile work)\". A fix in SMLib (construction of the side faces in the sweep) remains open.",
     tests: /^f03_/,
@@ -214,7 +214,7 @@ const findings = [
   {
     id: "F13",
     title: "message for shell of a body with fillet ≤ wall thickness",
-    files: ["f13_shell_verrundung.scad"],
+    files: ["f13_shell_fillet.mcad"],
     cause: "The inner surface of a convex fillet with radius r < t degenerates when offset by t; SMLib only reports SM_ERR, the fallback via booleans fails as well.",
     fix: "If both paths fail, the facade determines the smallest convex radius of curvature of the faces that are not opened (normal differences on a 7×7 grid per face) and names it: \"wall thickness 2 is not smaller than the radius of a convex rounding of the body (about 2): the inner surface degenerates there (rounding radius must be > wall thickness)\".",
     tests: /^f13_/,
@@ -222,7 +222,7 @@ const findings = [
   {
     id: "F6, F11, F12, F15",
     title: "kernel bugs with message, without fix",
-    files: ["f06_fase_konkave_ecke.scad", "f11_stift_deckungsgleich.scad", "f12_shell_loft_quadrat_kreis.scad", "f15_knauf_kehle.scad"],
+    files: ["f06_chamfer_concave_corner.mcad", "f11_pin_coincident.mcad", "f12_shell_loft_square_circle.mcad", "f15_knob_fillet.mcad"],
     cause: "F6: SMLib has no working corner type for the corner \"convex edge ends at a short concave edge\" (SM_ERR; the chain is connected, filleting one after another does not help). F11: coincident cylinder surfaces (pin 3.0 in bore 3.0); offsets of 1e-6…1e-4 of the model size change nothing. F12: `SmApiShellBrepFull` of the loft square → circle (NULL_POINTER in SmMerge) and the fallback via booleans fail. F15: fillet sweep d 6 / sphere d 9 (SM_ERR) – with d 10 it works.",
     fix: "No fix within the scope of this report; the messages mark the edges (F6, F15) or name the operation. Workarounds: zones on grid lines instead of on the plane (F6), 0.05 mm clearance (F11), difference of two lofts (F12), sphere d 10 (F15).",
     tests: /^$/,
@@ -237,7 +237,7 @@ const findingHtml = findings
   .map(
     (f) => `<section class="finding">
 <h3>${esc(f.id)} – ${esc(f.title)}</h3>
-<dl class="f"><dt>Examples</dt><dd>${f.files.map((x) => `<code>tests/alltag/fehler/${esc(x)}</code>`).join(", ")}</dd>
+<dl class="f"><dt>Examples</dt><dd>${f.files.map((x) => `<code>tests/everyday/bugs/${esc(x)}</code>`).join(", ")}</dd>
 <dt>Cause</dt><dd>${md(f.cause)}</dd>
 <dt>Fix</dt><dd>${md(f.fix)}</dd>
 <dt>Evidence</dt><dd>${f.files.map((x) => `<code>${esc(x.replace(/\.scad$/, ""))}</code>: before ${cell(result(x, "vorher"))} → after ${cell(result(x, "nachher"))}`).join("<br>")}<br>Tests: ${testsOf(f.tests)}</dd></dl>
@@ -289,7 +289,7 @@ const html = `<!doctype html>
 <body>
 <main>
 <h1>Test report 13 – geometry fixes</h1>
-<div class="meta">Geometry and kernel bugs from the everyday models (<code>tests/models/alltag/README.md</code>, <code>tests/alltag/fehler/</code>) · SMLib facade, SMLib patches 0002/0003, cad-engine, cad-render, cad-cli · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${os.cpus().length} cores</div>
+<div class="meta">Geometry and kernel bugs from the everyday models (<code>tests/models/everyday/README.md</code>, <code>tests/everyday/bugs/</code>) · SMLib facade, SMLib patches 0002/0003, cad-engine, cad-render, cad-cli · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${os.cpus().length} cores</div>
 
 <div class="summary">
   <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>of which ${newTests.length} new regression tests</div>
@@ -302,7 +302,7 @@ const html = `<!doctype html>
 </div>
 
 <h2>1 Overview</h2>
-<p>The everyday models found one crash, four silently wrong results and a number of kernel bugs. Each minimal example in <code>tests/alltag/fehler/</code> now carries its expected state in its header (<code>// SOLL: fehlerfrei</code> = error-free, <code>SOLL-VOLUMEN</code> = expected volume, <code>SOLL-FEHLER: Text</code> = expected error – where there is no correct result, a clear message is the goal); <code>tests/alltag/check.sh --fehler</code> reports "fixed" or "open" per example. The table shows both states (before: state before the fixes, commit <code>cba3ab4</code>; after: this commit), <code>cad measure --volume --json</code>.</p>
+<p>The everyday models found one crash, four silently wrong results and a number of kernel bugs. Each minimal example in <code>tests/everyday/bugs/</code> now carries its expected state in its header (<code>// EXPECT: error-free</code>, <code>EXPECT-VOLUME</code> = expected volume, <code>EXPECT-ERROR: text</code> = expected error – where there is no correct result, a clear message is the goal); <code>tests/everyday/check.sh --bugs</code> reports "fixed" or "open" per example. The table shows both states (before: state before the fixes, commit <code>cba3ab4</code>; after: this commit), <code>cad measure --volume --json</code>.</p>
 <table><tr><th>Example</th><th>Expected</th><th>before</th><th>after</th><th>check.sh</th></tr>
 ${overviewRows}
 </table>
@@ -330,7 +330,7 @@ ${findingHtml}
 ${pair("s1", "grid p in the xy plane, 95 mm behind the cup", "grid p in the profile plane: p.unten at r 36, p.oben at r 41")}
 <p><b>UI (not changed, <code>web/</code>):</b> the 3D view draws grids from <code>Scene.grids[].frame</code>. For the same fix it would need either the rule above (references from <code>Scene.refs</code> → 2D nodes → <code>op_info.kind == "rotate_extrude"</code>) or, better, a frame that the scene supplies per grid (<code>Grid.display_frame</code>, computed in <code>cad-session</code> by the same rule). For dragging/snapping to grid points the handles would have to be mapped into the profile plane as well.</p>
 <h3>S3 – outline and visibility</h3>
-<p><code>cad outline</code> listed instances named in the body of a module (<code>dom[0]</code> … in <code>pi_platte</code>) under the file's "named instances" and their anchors as file anchors. Now: a separate section "named instances in modules (visible only there)" grouped by module; in the JSON <code>scope: "file" | "module"</code> and <code>in_module</code>; anchors only of the file instances. That <code>measure --between dom[0].oben …</code> still works in file context is language semantics (cad-eval) and remains a proposal: resolve such names only via the instance chain (<code>platte.dom[0].oben</code>) or with a warning.</p>
+<p><code>cad outline</code> listed instances named in the body of a module (<code>boss[0]</code> … in <code>pi_plate</code>) under the file's "named instances" and their anchors as file anchors. Now: a separate section "named instances in modules (visible only there)" grouped by module; in the JSON <code>scope: "file" | "module"</code> and <code>in_module</code>; anchors only of the file instances. That <code>measure --between dom[0].oben …</code> still works in file context is language semantics (cad-eval) and remains a proposal: resolve such names only via the instance chain (<code>platte.dom[0].oben</code>) or with a warning.</p>
 <h3>S4 – section caps and grid labels</h3>
 <p>A model made of parts was drawn in section as one mesh of the root: the caps of touching parts merged. Now, as soon as the parts make up the whole model, it is drawn per part: its own cap with alternating hatching and its own section contour. Grid labels: rows of indexed planes (<code>rippe[0]</code> … <code>rippe[7]</code>) get one label <code>g.rippe[0..7]</code>; 3 px remain between labels (before, they could touch directly).</p>
 ${pair("s4", "lid and lower part one cap", "lid separated (contour, opposite hatching)")}
@@ -343,10 +343,10 @@ ${pair("s4b", "one label per rib", "one label per row")}
 </ul>
 
 <h2>5 Run time</h2>
-<p><b>Finding:</b> key rack 4.0 s kernel, but ≈ 16 s per evaluation. <b>Measurement:</b> stack samples with gdb (every ~0.8 s) during <code>cad check schluesselbrett.scad</code>:</p>
+<p><b>Finding:</b> key rack 4.0 s kernel, but ≈ 16 s per evaluation. <b>Measurement:</b> stack samples with gdb (every ~0.8 s) during <code>cad check key_rack.mcad</code>:</p>
 ${pre(T("profil.txt"))}
 <p><b>Cause:</b> after the kernel run the session computes the volume of each part (part list of the scene, <code>part_volumes</code>); after the mass properties (1e-4), <code>sc_mass_props</code> additionally called <code>SmApiBrepComputeVolume(…, 1e-8)</code>. The accuracy 1e-8 costs about 11 s for the swept hooks via adaptive Runge–Kutta integration per face (<code>SmFace::ComputePreciseProperties</code>). Measured relative volume error: 1e-6 → ≤ 4.4e-6, 1e-7 → ≤ 1.1e-7, 1e-8 → ≤ 1.5e-8 (sphere, torus, cone). <b>Fix:</b> 1e-6 (part volumes are displayed to 0.1 mm³; checks use 0.1 %).</p>
-<table><tr><th>cad render schluesselbrett.scad (median of ${zn?.n ?? "–"})</th><th>before</th><th>after</th></tr>
+<table><tr><th>cad render key_rack.mcad (median of ${zn?.n ?? "–"})</th><th>before</th><th>after</th></tr>
 <tr><td>Evaluation (evaluate_ms, without image)</td><td class="n">${zv ? num(zv.evaluate, 0) : "–"} ms</td><td class="n">${zn ? num(zn.evaluate, 0) : "–"} ms</td></tr>
 <tr><td>of which kernel run (kernel_ms)</td><td class="n">${zv ? num(zv.kernel, 0) : "–"} ms</td><td class="n">${zn ? num(zn.kernel, 0) : "–"} ms</td></tr>
 <tr><td>Image (render_ms)</td><td class="n">${zv ? num(zv.render, 0) : "–"} ms</td><td class="n">${zn ? num(zn.render, 0) : "–"} ms</td></tr></table>
@@ -364,7 +364,7 @@ ${pre(T("profil.txt"))}
 <h2>7 Test runs</h2>
 <h3>New regression tests</h3>
 <p>${newTests.map((t) => `<code>${esc(t.name)}</code> ${t.res === "ok" ? '<span class="ok">ok</span>' : '<span class="bad">FAILED</span>'}`).join(", ") || "–"}</p>
-<p class="small">Kernel: <code>crates/kernel-smlib/tests/alltag.rs</code>; engine: <code>crates/cad-engine/tests/alltag_fehler.rs</code> (reads the minimal examples); CLI: <code>crates/cad-cli/tests/geometrie.rs</code>.</p>
+<p class="small">Kernel: <code>crates/kernel-smlib/tests/everyday.rs</code>; engine: <code>crates/cad-engine/tests/everyday_bugs.rs</code> (reads the minimal examples); CLI: <code>crates/cad-cli/tests/geometrie.rs</code>.</p>
 <h3>Bug examples (check.sh --fehler)</h3>
 ${pre(fehlerTxt.split("\n").filter((l) => /^\s+(behoben|offen|fixed|open)|Fehlerbeispiele|[Bb]ug examples/.test(l)).join("\n") || "(missing)")}
 <h3>Everyday models, OpenSCAD comparison, STEP</h3>

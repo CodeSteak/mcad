@@ -8,7 +8,7 @@ import { cad, clickLine, loadText, menuItem, openApp, openExample, record11, scr
 
 type Hook = { __cad: { text(): string; state(): { colors: Array<{ label: string; filament: number; explicit: boolean; key: string; source: string }> } } };
 
-const EXAMPLE = "spec/mehrfarbig.mcad";
+const EXAMPLE = "spec/multicolor.mcad";
 
 // Region meshes, canvas screenshots and pixel counts take a while with SwiftShader.
 test.setTimeout(180_000);
@@ -110,7 +110,7 @@ test("F01 Farbliste: Palette, Slots, Volumen und Masse, Farbe je Fläche", async
   await expect(page.getByRole("combobox", { name: "Filament für teal" }).locator("option").first()).toHaveText("2 (auto)");
   // volumes add up to the part volumes
   const regions = s.regions!;
-  expect(regions.items.map((x) => x.part)).toEqual(["schild", "figur"]);
+  expect(regions.items.map((x) => x.part)).toEqual(["door_sign", "figure"]);
   for (const set of regions.items) {
     const sum = set.regions.reduce((a, r) => a + r.volume, 0);
     expect(Math.abs(sum - set.total)).toBeLessThan(1e-6 * sum);
@@ -132,7 +132,7 @@ test("F01 Farbliste: Palette, Slots, Volumen und Masse, Farbe je Fläche", async
   record11({
     id: "F01",
     title: "Farbliste mit Slots, Volumen, Masse",
-    caption: "Beispiel mehrfarbig.mcad: fünf Farben in Reihenfolge des ersten Auftretens, red mit filament = 3 fest, die anderen automatisch (1, 2, 4, 5). Volumen je Farbe aus den Farbregionen beider Bauteile, Masse bei PLA 1,24 g/cm³. In der 3D-Ansicht trägt jede Fläche die Farbe ihres color()-Aufrufs.",
+    caption: "Beispiel multicolor.mcad: fünf Farben in Reihenfolge des ersten Auftretens, red mit filament = 3 fest, die anderen automatisch (1, 2, 4, 5). Volumen je Farbe aus den Farbregionen beider Bauteile, Masse bei PLA 1,24 g/cm³. In der 3D-Ansicht trägt jede Fläche die Farbe ihres color()-Aufrufs.",
     images: [
       { name: "f01-farbliste-hell", label: "helles Thema, Farbliste rechts" },
       { name: "f01-panel-hell", label: "Farbliste" },
@@ -179,7 +179,7 @@ test("F02 Slot ändern schreibt filament = n in den Code", async ({ page }) => {
 test("F03 Export mehrfarbig: 3MF und STL je Farbe", async ({ page }) => {
   await openModel(page);
   const [dl] = await Promise.all([page.waitForEvent("download"), colorsRegion(page).getByRole("button", { name: "3MF mehrfarbig" }).click()]);
-  expect(dl.suggestedFilename()).toBe("mehrfarbig.3mf");
+  expect(dl.suggestedFilename()).toBe("multicolor.3mf");
   const bytes = readFileSync((await dl.path())!);
   const t = bytes.toString("utf8");
   expect(bytes.subarray(0, 2).toString()).toBe("PK");
@@ -189,19 +189,19 @@ test("F03 Export mehrfarbig: 3MF und STL je Farbe", async ({ page }) => {
   expect((t.match(/<item /g) ?? []).length).toBe(2);
   expect((t.match(/<component /g) ?? []).length).toBe(6);
   expect(t).toContain("Metadata/model_settings.config");
-  expect(t).toContain('<metadata key="name" value="schild – red"/>\n      <metadata key="extruder" value="3"/>');
+  expect(t).toContain('<metadata key="name" value="door_sign – red"/>\n      <metadata key="extruder" value="3"/>');
   const [dz] = await Promise.all([page.waitForEvent("download"), colorsRegion(page).getByRole("button", { name: "STL je Farbe (ZIP)" }).click()]);
-  expect(dz.suggestedFilename()).toBe("mehrfarbig-farben.zip");
+  expect(dz.suggestedFilename()).toBe("multicolor-farben.zip");
   const z = readFileSync((await dz.path())!).toString("latin1");
-  for (const f of ["schild_F1_white.stl", "schild_F2_teal.stl", "schild_F3_red.stl", "figur_F4_blue.stl", "figur_F1_white.stl", "figur_F5_yellow.stl"]) expect(z).toContain(f);
+  for (const f of ["door_sign_F1_white.stl", "door_sign_F2_teal.stl", "door_sign_F3_red.stl", "figure_F4_blue.stl", "figure_F1_white.stl", "figure_F5_yellow.stl"]) expect(z).toContain(f);
   const [ds] = await Promise.all([page.waitForEvent("download"), colorsRegion(page).getByRole("button", { name: "3MF einfarbig" }).click()]);
   expect(readFileSync((await ds.path())!).toString("latin1")).not.toContain("colorgroup");
   record11({
     id: "F03",
     title: "Export für Bambu Studio / OrcaSlicer",
-    caption: "„3MF mehrfarbig“: ein Objekt je Bauteil (schild, figur), darin ein Teil je Farbe ohne Verschiebung, Farbgruppe mit fünf Farben, Metadata/model_settings.config mit extruder je Teil. „STL je Farbe“: ZIP mit sechs Dateien F<slot>_<farbe>.stl. „3MF einfarbig“ ohne Farben.",
+    caption: "„3MF mehrfarbig“: ein Objekt je Bauteil (door_sign, figure), darin ein Teil je Farbe ohne Verschiebung, Farbgruppe mit fünf Farben, Metadata/model_settings.config mit extruder je Teil. „STL je Farbe“: ZIP mit sechs Dateien F<slot>_<farbe>.stl. „3MF einfarbig“ ohne Farben.",
     images: [],
-    checks: ["2 Build-Items, 6 Komponenten, keine Farbgruppe (Bericht 12)", "schild – red → extruder 3", "ZIP mit 6 STL (Bauteil_F<slot>_<farbe>.stl)", "einfarbig ohne colorgroup"],
+    checks: ["2 Build-Items, 6 Komponenten, keine Farbgruppe (Bericht 12)", "door_sign – red → extruder 3", "ZIP mit 6 STL (Bauteil_F<slot>_<farbe>.stl)", "einfarbig ohne colorgroup"],
   });
 });
 

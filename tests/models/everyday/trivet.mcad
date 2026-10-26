@@ -1,0 +1,32 @@
+// Purpose: trivet Ø 180 mm – three concentric rings (rotate_extrude of a rectangle,
+// radii from a list), spokes via for/rotate, centre disc with bolt circle; top edges
+// chamfered via a zone at the top plane (rings and spokes in one block), three
+// recesses for rubber feet at the bottom. Dimensions in mm.
+module trivet(d = 180, h = 8, web = 6, rings = [36, 62, 87], spokes = 8, hub_r = 20,
+              foot_d = 10) {
+    grid g {
+        x: axis = 0, ring = rings, outer = d / 2;
+        z: bottom = 0, recess = 1.5, top = h;
+    }
+    difference() {
+        chamfer(0.8) {
+            union() {
+                for (i = [0 : len(rings) - 1])
+                    rotate_extrude() translate([g.ring[i] - web / 2, 0]) square([web, h]);
+                for (i = [0 : spokes - 1])
+                    rotate([0, 0, i * 360 / spokes + 360 / spokes / 2])
+                        box([hub_r - 1, -web / 2, 0], [g.ring[len(rings) - 1], web / 2, h]);
+                cylinder(h = h, r = hub_r);
+            }
+            zone(g.top, d = 0.5);
+        }
+        // Hole circle in the centre disc (steam, saving material)
+        for (i = [0 : 5]) rotate([0, 0, i * 60]) translate([hub_r * 0.55, 0, -1]) cylinder(h = h + 2, d = 6);
+        // Recesses for adhesive rubber feet on the outer ring
+        for (i = [0 : 2]) rotate([0, 0, i * 120]) translate([g.ring[len(rings) - 1], 0, -1])
+            cylinder(h = g.recess + 1, d = foot_d);
+    }
+    anchor rest = g[axis, _, top], dir = [0, 0, 1];
+}
+
+u: trivet();

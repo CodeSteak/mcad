@@ -1,5 +1,5 @@
 // Test fixtures: scenes of the example files, evaluated with the browser engine in Node
-// (regenerate: node web/scripts/dump-scene.mjs <file> [--module m] > <fixture>.json).
+// (regenerate: node web/scripts/dump-scene.mjs <file> --lang de [--module m] [--project] > <fixture>.json).
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -9,24 +9,24 @@ import type { Diagnostic, Scene } from "../../engine/protocol";
 const FIXTURES: Record<string, { example: string; local?: boolean }> = {
   griffe: { example: "griffe.mcad", local: true },
   profile: { example: "profile.mcad", local: true },
-  gehaeuse: { example: "spec/gehaeuse.mcad" },
-  "gehaeuse-modul": { example: "spec/gehaeuse.mcad" },
+  housing: { example: "spec/housing.mcad" },
+  "housing-module": { example: "spec/housing.mcad" },
   modifiers: { example: "openscad-compat/24_modifiers.scad" },
   "root-modifier": { example: "openscad-compat/25_root_modifier.scad" },
-  "lochplatte-modul": { example: "spec/lochplatte.mcad" },
-  "fillet-modul": { example: "spec/fillet_zonen.mcad" },
-  winkel: { example: "spec/winkel_anker.mcad" },
+  "hole-plate-module": { example: "spec/hole_plate.mcad" },
+  "fillet-module": { example: "spec/fillet_zones.mcad" },
+  "angle-anchor": { example: "spec/angle_anchor.mcad" },
   nested: { example: "openscad-compat/05_nested_booleans.scad" },
   "spacers-2d": { example: "openscad-compat/27_spacers_2d.scad" },
-  projekt: { example: "projekt-gehaeuse/gehaeuse.mcad" },
-  "projekt-modul": { example: "projekt-gehaeuse/gehaeuse.mcad" },
-  skizze: { example: "spec/skizze_profil.mcad" },
-  "skizze-modul": { example: "spec/skizze_profil.mcad" },
-  bibliothek: { example: "spec/skizze_bibliothek.mcad" },
-  "skizze-deckel": { example: "spec/skizze_deckel.mcad" },
-  "skizze-halter": { example: "spec/skizze_halter.mcad" },
-  "skizze-kabelkanal": { example: "spec/skizze_kabelkanal.mcad" },
-  "skizze-pfad": { example: "spec/skizze_kabelkanal.mcad" },
+  project: { example: "project-housing/housing.mcad" },
+  "project-module": { example: "project-housing/housing.mcad" },
+  sketch: { example: "spec/sketch_profile.mcad" },
+  "sketch-module": { example: "spec/sketch_profile.mcad" },
+  library: { example: "spec/sketch_library.mcad" },
+  "sketch-lid": { example: "spec/sketch_lid.mcad" },
+  "sketch-holder": { example: "spec/sketch_holder.mcad" },
+  "sketch-cable-duct": { example: "spec/sketch_cable_duct.mcad" },
+  "sketch-path": { example: "spec/sketch_cable_duct.mcad" },
 };
 
 export interface Fixture {

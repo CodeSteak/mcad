@@ -1,5 +1,5 @@
-//! Modules as namespaces (Plan 17.2): `teile.schraube(d = 3);`, `a.b.c();` and, in
-//! expressions, functions and constants defined in a module body: `geo.flaeche(2)`, `geo.M3`.
+//! Modules as namespaces (Plan 17.2): `parts.screw(d = 3);`, `a.b.c();` and, in
+//! expressions, functions and constants defined in a module body: `geo.area(2)`, `geo.M3`.
 //!
 //! A path `a.b` is resolved from the module `a` visible at the call: its body is the
 //! namespace, entered with `a`'s parameters at their defaults (like the lexical scope a nested

@@ -1,0 +1,9 @@
+// Dimensions of the hinge (via include): length, knuckles, clearances
+length = 60;
+knuckles = 5;           // Number of knuckles (odd: A outside)
+knuckle_r = 4;          // Outer radius of the knuckles
+leaf_t = 2.5;           // Leaf thickness
+clearance = 0.4;        // Axial and radial clearance between A and B
+bore_a = 3.0;           // Bore of leaf A (pin is glued in)
+bore_b = 3.4;           // Bore of leaf B (turns freely on the pin)
+pin_d = 2.95;           // (3.0 in 3.0: coincident cylinders, union fails, README: F11)

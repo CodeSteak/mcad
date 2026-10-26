@@ -1,33 +1,33 @@
-// Zweck: collision asserts (plan 21, phase C) – checks after evaluation; a
+// Purpose: collision asserts (plan 21, phase C) – checks after evaluation; a
 // violation is a warning, `mcad export` then aborts (unless --ignore-asserts).
 // Asserts are groups of their children and can be nested. The component on the board
 // (STL as a mesh) is a keep-out volume: shown, but neither exported nor counted.
 
-w = 60;   // Enclosure outside
+w = 60;      // Enclosure outside
 d = 40;
 h = 25;
-t = 2;    // Wall
-luft = 1; // Minimum distance to the component
+t = 2;       // Wall
+min_gap = 1; // Minimum distance to the component
 
-module gehaeuse() difference() {
+module housing() difference() {
     cube([w, d, h]);
     translate([t, t, t]) cube([w - 2 * t, d - 2 * t, h]);
 }
-module deckel() translate([0, 0, h]) cube([w, d, t]);
+module lid() translate([0, 0, h]) cube([w, d, t]);
 // Holder and cable guide reach 1 mm into the bottom and wall
-module halter() translate([t - 1, d / 2 - 5, t - 1]) cube([10, 10, 12]);
-module kabelfuehrung() translate([w - t - 6, d / 2 - 4, t - 1]) cube([7, 8, 6]);
+module holder() translate([t - 1, d / 2 - 5, t - 1]) cube([10, 10, 12]);
+module cable_guide() translate([w - t - 6, d / 2 - 4, t - 1]) cube([7, 8, 6]);
 
 assert_touches() {               // Lid lies flat on the enclosure
     assert_intersect() {         // Holder and cable guide are joined to the enclosure
-        g: gehaeuse();
+        g: housing();
         assert_disjoint() {      // Holder and cable guide do not touch
-            hl: halter();
-            kf: kabelfuehrung();
+            holder: holder();
+            guide: cable_guide();
         }
     }
-    k: deckel();
+    k: lid();
 }
 
 // Component on the board (bracket 20 × 10 × 15): 1 mm clearance to everything
-assert_keepout(clearance = luft) translate([25, 12, t + 2]) import("../stl/winkel.stl", as = "mesh");
+assert_keepout(clearance = min_gap) translate([25, 12, t + 2]) import("../stl/bracket.stl", as = "mesh");

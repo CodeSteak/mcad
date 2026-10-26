@@ -1,0 +1,74 @@
+// Purpose: multi-colour printing (report 11) – door sign with relief lettering and a game piece as
+// two parts, colours from the palette, one fixed filament slot; export as 3MF with one
+// part per colour for Bambu Studio / OrcaSlicer.
+
+// Block letters from bars: s = stroke width, b × h = letter cell.
+module bar(x, y, w, h, t) translate([x, y, 0]) cube([w, h, t]);
+
+module letter(c, b = 8, h = 12, s = 2, t = 1.2) {
+    if (c == "C") {
+        bar(0, 0, s, h, t);
+        bar(0, h - s, b, s, t);
+        bar(0, 0, b, s, t);
+    } else if (c == "A") {
+        bar(0, 0, s, h, t);
+        bar(b - s, 0, s, h, t);
+        bar(0, h - s, b, s, t);
+        bar(0, h / 2 - s / 2, b, s, t);
+    } else if (c == "D") {
+        // Bars overlap (touching edges only would not give a closed solid)
+        bar(0, 0, s, h, t);
+        bar(0, h - s, b - s / 2, s, t);
+        bar(0, 0, b - s / 2, s, t);
+        bar(b - s, s / 2, s, h - s, t);
+    }
+}
+
+module door_sign(w = 60, d = 28, t = 3, rim = 2.5) {
+    grid g {
+        x: left = 0, lettering = 15, right = w;
+        y: front = 0, baseline = 8, back = d;
+        z: floor = 0, top = t;
+    }
+    difference() {
+        union() {
+            // Base plate white, frame petrol (sits on the plate)
+            color("white") box(g[left, front, floor], g[right, back, top]);
+            color("teal") difference() {
+                box(g[left, front, top] - [0, 0, 0.5], g[right, back, top] + [0, 0, 1]);
+                box(g[left, front, top] + [rim, rim, -1], g[right, back, top] - [rim, rim, -2]);
+            }
+            // Relief lettering red, fixed to filament 3
+            color("red", filament = 3)
+                for (i = [0:2]) translate(g[lettering, baseline, top] + [i * 11, 0, -0.2]) letter(["C", "A", "D"][i]);
+        }
+        // Hanging hole: subtracted, applies to all colours
+        translate(g[left, back, floor] + [6, -6, -1]) cylinder(h = t + 3, r = 1.6);
+    }
+}
+
+module game_piece(r = 9, h = 26) {
+    grid p {
+        x: axis = 0, neck = r * 0.3, rim = r * 0.85, foot = r;
+        y: floor = 0, plinth = 4, mid = h * 0.55, head = h * 0.8;
+    }
+    // Profile: from the rim of the base to the neck (square), then straight up to the head
+    z0 = p.plinth - 1;
+    profile = concat(
+        [[0, z0]],
+        [for (i = [0:16]) let (t = i / 16) [p.neck + (p.rim - p.neck) * (1 - t) * (1 - t), z0 + t * (p.mid - z0)]],
+        [[p.neck, p.head], [0, p.head]]);
+    color("blue") {
+        cylinder(h = p.plinth, r = p.foot);
+        rotate_extrude() polygon(profile);
+    }
+    // white collar and yellow head: later statements win where they overlap
+    color("white") translate([0, 0, p.mid - 1]) cylinder(h = 2, r = r * 0.5);
+    color("yellow") translate([0, 0, p.head + 2.5]) sphere(r * 0.42);
+}
+
+// Game piece next to the sign (own part = own object in the slicer)
+module figure(at = [80, 14, 0]) translate(at) game_piece();
+
+door_sign: door_sign();
+figure: figure();

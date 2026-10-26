@@ -1,0 +1,26 @@
+// F5: chamfer via a zone on the top edge of a box with rounded vertical corners
+// (r 6, wall 3): status ok, 0 errors, but volume 0 mm³ – the shell is open (STEP with
+// 26 faces). With fillet(2) instead of fillet(6) or chamfer(0.4) the volume is right
+// (~20 000 mm³). A kernel result without a closed shell should be an error.
+// Status (report 13): fixed – the chamfers of the inner and outer edge collide at the
+// corners (wall at the corner 1.76 mm < 0.8 + 0.8·√2); instead of volume 0 without a message now an
+// error. chamfer(0.7) works.
+// EXPECT-ERROR: not closed
+grid g {
+    x: l = 0, r = 40;
+    y: v = 0, h = 30;
+    z: u = 0, o = 50;
+}
+chamfer(0.8) {
+    fillet(6) {
+        difference() {
+            box(g[l, v, u], g[r, h, o]);
+            translate([3, 3, 3]) cube([34, 24, 50]);
+        }
+        zone(g[l, v, *], d = 1);
+        zone(g[r, v, *], d = 1);
+        zone(g[l, h, *], d = 1);
+        zone(g[r, h, *], d = 1);
+    }
+    zone(g.o, d = 0.5);
+}

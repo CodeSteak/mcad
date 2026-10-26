@@ -1,0 +1,25 @@
+// Purpose: ventilation grille – frame via linear_extrude of a rectangle with a cutout,
+// slots at indexed grid planes (linear_extrude in difference), chamfer on the new
+// edges (difference(chamfer = …)) and mounting tabs.
+module grille(w = 80, d = 50, t = 3, n = 7, slot_w = 4) {
+    grid g {
+        x: left = 0, right = w, s = [for (i = [0 : n - 1]) 10 + i * (w - 20) / (n - 1)];
+        y: front = 0, back = d, inner_front = 8, inner_back = d - 8;
+        z: floor = 0, top = t;
+    }
+
+    difference(chamfer = 0.6) {
+        linear_extrude(t) square([w, d]);
+        for (i = [0 : n - 1])
+            translate(g[s[i], inner_front, -1])
+                linear_extrude(t + 2) translate([-slot_w / 2, 0]) square([slot_w, d - 16]);
+    }
+
+    // Tabs left and right
+    for (x = [-8, w])
+        translate([x, d / 2 - 6, 0]) linear_extrude(t / 2) square([8, 12]);
+
+    anchor mid = g[left, front, top] + [w / 2, d / 2, 0], dir = [0, 0, 1];
+}
+
+grille();

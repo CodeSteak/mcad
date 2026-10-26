@@ -1,4 +1,4 @@
-// Zweck: if/else and ?: select variants of a knob (round, square, with/without bore).
+// Purpose: if/else and ?: select variants of a knob (round, square, with/without bore).
 module knob(style = "round", hole = true, size = 10) {
     difference() {
         if (style == "round") cylinder(h = 6, d = size);

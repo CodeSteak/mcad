@@ -1,0 +1,8 @@
+// F15: union(fillet = …) of sweep (circle d 6) and sphere d 9 at the path end fails for every
+// radius (also 0.6); with sphere d 10 it works. Fragile, without a visible geometric reason.
+// Status (report 13): open – rounding sweep/sphere (SMLib).
+// EXPECT: error-free
+union(fillet = 1) {
+    sweep(path = [[0, 0, 0], [0, -13, -1], [0, -22, 4], [0, -23, 10]]) circle(d = 6);
+    translate([0, -23, 10]) sphere(d = 9);
+}

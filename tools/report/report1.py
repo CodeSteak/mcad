@@ -354,7 +354,7 @@ def renders(ref):
     OUT.mkdir(parents=True, exist_ok=True)
     out = []
     size = f"{IMG[0]}x{IMG[1]}"
-    for src in sorted((ROOT / "tests/models/spec").glob("*.scad")):
+    for src in sorted((ROOT / "tests/models/spec").glob("*.mcad")):
         name = src.stem
         dst = OUT / f"spec-{name}.png"
         _, t = run([str(CAD), "render", str(src), "--size", size, "-o", str(dst)], check=False)
@@ -362,8 +362,8 @@ def renders(ref):
                     "seconds": round(t, 2), "purpose": purpose(src)})
     # highlighted subtracted body (cad-render transparency)
     dst = OUT / "spec-gehaeuse-zeile12.png"
-    run([str(CAD), "render", "tests/models/spec/gehaeuse.scad", "--line", "12", "--size", size, "-o", str(dst)], check=False)
-    out.append({"group": "highlight", "name": "gehaeuse --line 12", "file": "tests/models/spec/gehaeuse.scad",
+    run([str(CAD), "render", "tests/models/spec/housing.mcad", "--line", "12", "--size", size, "-o", str(dst)], check=False)
+    out.append({"group": "highlight", "name": "housing --line 12", "file": "tests/models/spec/housing.mcad",
                 "ours": dst.name, "purpose": "line 12: subtracted body red and transparent, the rest dimmed"})
     for name in COMPAT_RENDERS:
         src = ROOT / "tests/models/openscad-compat" / f"{name}.scad"

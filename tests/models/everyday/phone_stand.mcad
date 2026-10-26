@@ -1,0 +1,62 @@
+// Purpose: desk phone stand – side profile as a polygon from a 2D grid,
+// linear_extrude across the width, triangular window (corners via a function for the
+// intersection of two lines), cable hole with a channel under the base. The inner corners of lip and
+// shelf and the top edge of the lip are rounded via zones at grid lines (two radii).
+// Dimensions in mm; phone up to 12 mm thick, tilt a of the backrest against the horizontal.
+
+// Intersection of the lines p1 + s·d1 and p2 + u·d2 (2D)
+function line_intersect(p1, d1, p2, d2) =
+    let (den = d1.x * d2.y - d1.y * d2.x,
+         s = ((p2.x - p1.x) * d2.y - (p2.y - p1.y) * d2.x) / den)
+    p1 + s * d1;
+
+module phone_stand(w = 70, a = 65, backrest = 95, t = 5, lip = 12, shelf = 14, cable_d = 9) {
+    x0 = t + shelf;                                           // Start of the backrest
+    d = [cos(a), sin(a)];                                     // Direction of the backrest
+    n = [sin(a), -cos(a)];                                    // Normal of the backrest, pointing back and down
+    apex = [x0 + backrest * cos(a), t + backrest * sin(a)];   // Front top edge of the backrest
+    foot = apex.x + t * n.x + 18;                             // Rear end of the base
+    e = (apex + t * n - [foot, t]) / norm(apex + t * n - [foot, t]);  // Direction of the strut
+
+    // Side profile (x to the back, y up)
+    grid p {
+        x: front = 0, lip_inner = t, backrest_bottom = x0, top_front = apex.x, top_back = apex.x + t * n.x, back = foot;
+        y: floor = 0, seat = t, lip_top = t + lip, top_low = apex.y + t * n.y, top = apex.y;
+    }
+    // The same in space (y = width) for zones and holes
+    grid g {
+        x: front = 0, lip_inner = t, backrest_bottom = x0, hole = t + shelf / 2, back = foot;
+        y: left = 0, mid = w / 2, right = w;
+        z: floor = 0, seat = t, lip_top = t + lip;
+    }
+
+    // Window: triangle between backrest, base and strut, each inset by the wall thickness t
+    l1 = p[backrest_bottom, seat] + t * n;
+    l3 = [foot, t] + t * [-e.y, e.x];
+    fa = line_intersect(l1, d, [0, 2 * t], [1, 0]);
+    fb = line_intersect([0, 2 * t], [1, 0], l3, e);
+    fc = line_intersect(l1, d, l3, e);
+
+    fillet(1.5) {
+        fillet(3) {
+            difference() {
+                translate([0, w, 0]) rotate([90, 0, 0]) linear_extrude(w)
+                    polygon([p[front, floor], p[back, floor], p[back, seat], p[top_back, top_low],
+                             p[top_front, top], p[backrest_bottom, seat], p[lip_inner, seat], p[lip_inner, lip_top],
+                             p[front, lip_top]]);
+                translate([0, w + 1, 0]) rotate([90, 0, 0]) linear_extrude(w + 2) polygon([fa, fb, fc]);
+                // Cable: vertical hole in the shelf and channel under the base to the back
+                translate(g[hole, mid, floor] - [0, 0, 1]) cylinder(h = t + 2, d = cable_d);
+                box(g[hole, mid, floor] - [0, cable_d / 2, 1], g[back, mid, floor] + [1, cable_d / 2, 3]);
+            }
+            zone(g[lip_inner, *, seat], d = 2);         // Inner corner lip/shelf
+            zone(g[backrest_bottom, *, seat], d = 2);   // Inner corner shelf/backrest
+        }
+        zone(g[front, *, lip_top], d = 2);              // Top edge of the lip outside
+        zone(g[lip_inner, *, lip_top], d = 2);          // Top edge of the lip inside
+    }
+
+    anchor shelf_mid = g[hole, mid, seat], dir = [0, 0, 1];
+}
+
+stand: phone_stand();

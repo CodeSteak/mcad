@@ -209,17 +209,13 @@ fn distance_by_clicks_parallel_planes_and_cli() {
 #[test]
 fn radius_of_bores_and_fillets_in_the_hole_plate() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
-    let mut s = session(&example("lochplatte.mcad"));
+    let mut s = session(&example("hole_plate.mcad"));
     // bore d = 4 at x = 6, y = 6 (first hole)
     let r = by_refs(&mut s, MeasureKind::Radius, &["face@[8,6,2]"], None);
     assert!((r.value - 2.0).abs() < 1e-9, "{r:?}");
     assert!((value(&r, "diameter") - 4.0).abs() < 1e-9);
     assert!(r.label.starts_with("R 2 · ⌀ 4"), "{}", r.label);
-    assert!(
-        r.picks[0].origin.iter().any(|x| x.contains("Rasterlinie g[loch[0], mitte, *]")),
-        "{:?}",
-        r.picks[0].origin
-    );
+    assert!(r.picks[0].origin.iter().any(|x| x.contains("Rasterlinie g[hole[0], mid, *]")), "{:?}", r.picks[0].origin);
     // fillet 1 mm at the upper bore edge: tube radius 1 around a circle of radius 3
     let c = std::f64::consts::FRAC_1_SQRT_2;
     let q = DVec3::new(6.0 + 3.0 - c, 6.0, 3.0 + c);
@@ -241,9 +237,9 @@ fn radius_of_bores_and_fillets_in_the_hole_plate() {
 #[test]
 fn housing_wall_thickness_in_the_section_and_inner_distance() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
-    let mut s = session(&example("gehaeuse.mcad"));
+    let mut s = session(&example("housing.mcad"));
     let plane = SectionPlane::new(DVec3::new(0.0, 0.0, 10.0), DVec3::Z);
-    // the side walls of k: gehaeuse(w = 60) are t = 3 thick
+    // the side walls of k: housing(w = 60) are t = 3 thick
     let w = by_refs(&mut s, MeasureKind::Wall, &["[0,15,10]"], Some(plane));
     assert!((w.value - 3.0).abs() < 1e-12, "{w:?}");
     assert!(w.exact);
@@ -256,7 +252,7 @@ fn housing_wall_thickness_in_the_section_and_inner_distance() {
     // distance of the inner faces: 60 − 2·3
     let d = by_refs(&mut s, MeasureKind::Distance, &["face@[3,15,10]", "face@[57,15,10]"], None);
     assert!((d.value - 54.0).abs() < 1e-12 && d.exact, "{d:?}");
-    assert!(d.picks[0].origin.iter().any(|x| x.contains("Instanz k: gehaeuse")), "{:?}", d.picks[0].origin);
+    assert!(d.picks[0].origin.iter().any(|x| x.contains("Instanz k: housing")), "{:?}", d.picks[0].origin);
     // in the section: contour segments
     let d = by_refs(&mut s, MeasureKind::Distance, &["edge@[3,15,10]", "edge@[57,15,10]"], Some(plane));
     assert!((d.value - 54.0).abs() < 1e-12, "{d:?}");
@@ -267,13 +263,13 @@ fn housing_wall_thickness_in_the_section_and_inner_distance() {
     // anchor as a point
     let r = s.measure_model(root(&s)).unwrap();
     let pk = s.measure_ref(&r, None, "vertex@[60,30,20]", &parse_point).unwrap();
-    assert!(pk.origin.iter().any(|x| x == "Anker k.ecke"), "{:?}", pk.origin);
+    assert!(pk.origin.iter().any(|x| x == "Anker k.corner"), "{:?}", pk.origin);
 }
 
 #[test]
 fn angle_of_a_chamfer() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
-    let mut s = session(&example("fase_chamfer.mcad"));
+    let mut s = session(&example("chamfers.mcad"));
     // chamfer(1) on the top edges of box(g[a, v, u], g[b, h, o]) (40 × 25 × 10)
     let a = by_refs(&mut s, MeasureKind::Angle, &["face@[39.5,12,9.5]", "face@[20,12,10]"], None);
     assert!((a.value - 45.0).abs() < 1e-9, "{a:?}");

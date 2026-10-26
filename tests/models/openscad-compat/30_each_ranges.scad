@@ -1,4 +1,4 @@
-// Zweck: each, ranges with step, nested and C-style for expressions – comb structure.
+// Purpose: each, ranges with step, nested and C-style for expressions – comb structure.
 xs = [each [0 : 4 : 16], each [24, 30]];
 hs = [for (i = 0, h = 4; i < len(xs); i = i + 1, h = h + 2) h];
 pairs = [for (i = [0 : 1], j = [i : 2]) [i, j]];

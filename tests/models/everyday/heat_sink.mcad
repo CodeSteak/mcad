@@ -1,0 +1,42 @@
+// Purpose: extruded heat sink 60 × 50 mm with fins – fin positions as indexed grid planes
+// from lists, fins via for as box between grid points, fin feet rounded via zones at
+// grid lines (in a for loop), fin tips almost fully rounded via a zone at the tip plane;
+// two M3 mounting holes between the fins, anchor for the
+// heat source. Dimensions in mm.
+module heat_sink(l = 60, b = 50, base = 5, h = 25, n = 9, fin_t = 1.8, foot_r = 1.5,
+                 hole_spacing = 40) {
+    pitch = (b - fin_t) / (n - 1);
+    grid g {
+        x: front = 0, mid_x = l / 2, back = l, hole = [l / 2 - hole_spacing / 2, l / 2 + hole_spacing / 2];
+        y: left = 0, mid = b / 2, right = b,
+           fin = [for (i = [0 : n - 1]) i * pitch], fin_end = [for (i = [0 : n - 1]) i * pitch + fin_t];
+        z: bottom = 0, base_top = base, tip = h;
+    }
+
+    difference() {
+        fillet(fin_t / 2 - 0.05) {
+            fillet(foot_r) {
+                union() {
+                    box(g[front, left, bottom], g[back, right, base_top]);
+                    for (i = [0 : n - 1])
+                        box(g[front, fin[i], base_top] - [0, 0, 0.5], g[back, fin_end[i], tip]);
+                }
+                // Fin feet: only the fillets along x (a zone at the base plane also catches the
+                // short outer edges between the fins, the rounding then fails, README: F6)
+                for (i = [0 : n - 2]) {
+                    zone(g[*, fin_end[i], base_top], d = 0.5);
+                    zone(g[*, fin[i + 1], base_top], d = 0.5);
+                }
+            }
+            zone(g.tip, d = 0.5);
+        }
+        // Mounting: 3.2 mm hole in the middle between two fins
+        i0 = floor((n - 1) / 2);
+        for (x = [g.hole[0], g.hole[1]])
+            translate([x, (g.fin_end[i0] + g.fin[i0 + 1]) / 2, -1]) cylinder(h = base + 2, d = 3.2);
+    }
+
+    anchor source = g[mid_x, mid, bottom], dir = [0, 0, -1];
+}
+
+hs: heat_sink();

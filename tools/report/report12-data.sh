@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Data of test report 12 ("fixes for colors and daemon") that come from the CLI and the
-# checking scripts: outputs and images per finding of tests/farben-pruefung/ (after the fix;
-# the images before are the reviewer's in tests/farben-pruefung/img/), the 3MF check, the
+# checking scripts: outputs and images per finding of tests/color-review/ (after the fix;
+# the images before are the reviewer's in tests/color-review/img/), the 3MF check, the
 # daemon with a long CAD_IPC_DIR and the slicer sources. Writes reports/tmp/report12/.
 #
 #   CAD=target/debug/mcad PY3MF=/path/venv/bin/python tools/report/report12-data.sh
@@ -14,7 +14,7 @@ CAD="${CAD:-$ROOT/target/release/mcad}"
 PY3MF="${PY3MF:-python3}"
 OUT="$ROOT/reports/tmp/report12"
 CLI="$OUT/cli"
-C="tests/farben-pruefung/cases"
+C="tests/color-review/cases"
 mkdir -p "$OUT" "$CLI"
 export CAD_NO_DAEMON=1
 r() { "$CAD" render "$@" > /dev/null; }
@@ -75,13 +75,13 @@ unzip -p "$OUT/plain.3mf" 3D/3dmodel.model | head -c 600 > "$OUT/f8-plain-model.
 "$CAD" export "$C/inc/main_use.scad" --per-color --part teil -o "$OUT/teil.zip" > "$OUT/f9-part.txt" 2>&1 || true
 
 # 3MF of the example for the slicers (no colour group) and with --color-group
-EX="tests/models/spec/mehrfarbig.scad"
+EX="tests/models/spec/multicolor.mcad"
 "$CAD" measure "$EX" --colors --json > "$OUT/measure.json"
 "$CAD" export "$EX" -o "$OUT/mehrfarbig.3mf" > "$OUT/export.txt"
 "$CAD" export "$EX" -o "$OUT/mehrfarbig-cg.3mf" --color-group > "$OUT/export-cg.txt"
 "$PY3MF" tools/report/verify3mf.py "$OUT/mehrfarbig.3mf" --expect "$OUT/measure.json" --json "$OUT/verify.json" > "$OUT/verify.txt" 2>&1 || true
 "$PY3MF" tools/report/verify3mf.py "$OUT/mehrfarbig-cg.3mf" --expect "$OUT/measure.json" --json "$OUT/verify-cg.json" > "$OUT/verify-cg.txt" 2>&1 || true
-"$PY3MF" tests/farben-pruefung/check3mf.py "$OUT/main_use.3mf" > "$OUT/check3mf-main_use.txt" 2>&1 || true
+"$PY3MF" tests/color-review/check3mf.py "$OUT/main_use.3mf" > "$OUT/check3mf-main_use.txt" 2>&1 || true
 
 # daemon with a long CAD_IPC_DIR (socket path > 107 bytes)
 LONG="$(mktemp -d)/a-very-long-directory-name-for-the-socket-of-the-background-process-so-that-it-is-long-enough/ipc"

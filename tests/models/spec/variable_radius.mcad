@@ -1,0 +1,25 @@
+// Purpose: variable radius – fillet(r = function (p) …) { body; zones } and
+// difference(fillet = function (p) …): the radius is a function of the position p
+// (in the system of the fillet/difference statement), evaluated along each edge.
+grid g {
+    x: left = 0, right = 40;
+    y: front = 0, back = 30;
+    z: floor = 0, mid = 10, lid = 20;
+}
+
+// below the middle radius 2, above it 4; the vertical edges go continuously from 2 to 4
+fillet(r = function (p) p.z < g.mid ? 2 : 4) {
+    box(g[left, front, floor], g[right, back, lid]);
+}
+
+// Pocket with a rounded rim, the radius grows along x (1.125 to 1.875 at the edge)
+translate([60, 0, 0]) difference(fillet = function (p) 1 + p.x / 40) {
+    cube([40, 30, 10]);
+    translate([5, 8, 4]) cube([30, 14, 10]);
+}
+
+// only the four lid edges, radius from a table (lookup) over x
+translate([120, 0, 0]) fillet(r = function (p) lookup(p.x, [[0, 1.5], [20, 4], [40, 1.5]])) {
+    box(g[left, front, floor], g[right, back, lid]);
+    zone(g.lid, d = 1);
+}

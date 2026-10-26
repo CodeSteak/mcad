@@ -1,0 +1,53 @@
+// Purpose: two-part pipe clamp for a 32 mm pipe – half rings as rotate_extrude(angle = 180)
+// of a rectangle, tabs with M5 holes, lower part with M8 connecting stud (pilot hole 6.8),
+// hole edges with difference(chamfer = …), half-ring edges chamfered via zones.
+// Assembly: upper part, lower part and a test pipe as parts; when open, the gap
+// `gap` opens at the tabs (collision/distance with `mcad measure`). Dimensions in mm.
+module half_clamp(pipe_d = 32, t = 4, b = 20, tab = 12, tab_t = 5, gap = 2, hole_d = 5.5,
+                  stud = false) {
+    ri = pipe_d / 2;
+    ro = ri + t;
+    grid g {
+        x: tab_left = -ro - tab, inner_left = -ri, axis = 0, inner_right = ri, tab_right = ro + tab,
+           hole_left = -ro - tab / 2, hole_right = ro + tab / 2;
+        y: parting = gap / 2, tab_top = gap / 2 + tab_t, apex = gap / 2 + ro;
+        z: front = 0, mid = b / 2, back = b;
+    }
+    difference(chamfer = 0.4) {
+        union() {
+            chamfer(0.6) {
+                translate([0, g.parting, 0]) rotate_extrude(angle = 180) translate([ri, 0]) square([t, b]);
+                zone(g.front, d = 0.5);
+                zone(g.back, d = 0.5);
+            }
+            box(g[tab_left, parting, front], g[inner_left, tab_top, back]);
+            box(g[inner_right, parting, front], g[tab_right, tab_top, back]);
+            if (stud)
+                cylinder(g[axis, apex, mid] - [0, t, 0], g[axis, apex, mid] + [0, 10, 0], d = 14);
+        }
+        // Keep the pipe clear (tabs and stud would protrude into it otherwise)
+        translate([0, 0, -1]) cylinder(h = b + 2, r = ri);
+        for (x = [g.hole_left, g.hole_right])
+            cylinder([x, g.parting - 1, g.mid], [x, g.tab_top + 1, g.mid], d = hole_d);
+        if (stud)
+            cylinder(g[axis, apex, mid] - [0, 1, 0], g[axis, apex, mid] + [0, 11, 0], d = 6.8);
+    }
+    anchor apex = g[axis, apex, mid] + [0, stud ? 10 : 0, 0], dir = [0, 1, 0];  // Stud end or apex
+    anchor hole = g[hole_right, tab_top, mid], dir = [0, 1, 0];
+}
+
+module test_pipe(d = 32, l = 60) {
+    translate([0, 0, -l / 2]) difference() {
+        cylinder(h = l, d = d);
+        translate([0, 0, -1]) cylinder(h = l + 2, d = d - 4);
+    }
+}
+
+pipe_d = 32;
+b = 20;
+// Pipe axis along x, stud pointing down (wall mounting on the ceiling or floor)
+rotate([0, 90, 0]) rotate([0, 0, 90]) {
+    top: half_clamp(pipe_d = pipe_d, b = b);
+    mirror([0, 1, 0]) bottom: half_clamp(pipe_d = pipe_d, b = b, stud = true);
+    translate([0, 0, b / 2]) pipe: test_pipe(d = pipe_d);
+}

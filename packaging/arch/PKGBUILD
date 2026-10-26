@@ -90,10 +90,10 @@ check() {
   local mcad="$PWD/target/release/mcad"
   export MCAD_NO_DAEMON=1
   "$mcad" --version
-  "$mcad" check tests/models/spec/gehaeuse.mcad
+  "$mcad" check tests/models/spec/housing.mcad
   "$mcad" check tests/models/openscad-compat/05_nested_booleans.scad   # .scad still opens
-  "$mcad" render tests/models/spec/gehaeuse.mcad -o "$srcdir/check-gehaeuse.png" --module gehaeuse --views all
-  "$mcad" export tests/models/spec/flasche.mcad -o "$srcdir/check-flasche.step"
+  "$mcad" render tests/models/spec/housing.mcad -o "$srcdir/check-housing.png" --module housing --views all
+  "$mcad" export tests/models/spec/bottle.mcad -o "$srcdir/check-bottle.step"
   # without a graphical session: message and exit 2 (the UI is embedded, not the placeholder)
   local rc=0
   env -u DISPLAY -u WAYLAND_DISPLAY "$mcad" >/dev/null 2>&1 || rc=$?

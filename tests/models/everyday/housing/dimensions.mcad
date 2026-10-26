@@ -1,0 +1,23 @@
+// Dimensions of the electronics enclosure (pulled in via include: variables and functions apply in
+// the main file). Inner dimensions for a 70 × 50 mm board, M3 screws (self-tapping).
+inner_l = 76;          // Inner length
+inner_w = 56;          // Inner width
+height = 32;           // Height of the base (outside)
+wall = 2;              // Wall thickness
+corner = 5;            // Radius of the vertical outer edges
+lid_t = 2.5;           // Lid thickness
+rim_h = 3;             // Height of the centring rim on the lid
+clearance = 0.2;       // Clearance centring rim ↔ inner wall
+boss_d = 7;            // Screw boss outside
+core_d = 2.5;          // Pilot hole in the boss (M3 in plastic)
+through_d = 3.4;       // Through hole in the lid
+screw_l = 12;          // Screw length under the head
+
+outer_l = inner_l + 2 * wall;
+outer_w = inner_w + 2 * wall;
+
+boss_gap = 3;       // Gap boss ↔ inner wall: boss foot with fillet stays on the flat bottom (README: F9, F10)
+
+// Centre of screw boss i (0 … 3) in the base's system, in the inner corners
+function boss_pos(i) = let (a = wall + boss_gap + boss_d / 2)
+    [i % 2 == 0 ? a : outer_l - a, i < 2 ? a : outer_w - a];

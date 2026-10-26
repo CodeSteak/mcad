@@ -1,0 +1,44 @@
+// Purpose: cable holder that clips onto the desk edge – C-clamp as an extruded
+// profile with a clamping bump, above it a block with n cable channels (entry slot from above).
+// Channels at indexed grid planes, channel edges rounded with difference(fillet = …),
+// inner corners of the clamp via zones at grid lines. Dimensions in mm (board 19 mm + play).
+module cable_clip(thickness = 19, clearance = 0.4, t = 3.5, arm_top = 28, arm_bottom = 18, n = 4,
+                  cable_d = 6, pitch = 12, block_h = 10) {
+    w = n * pitch + 4;
+    grid p {   // Profile of the clamp: x = into the desk, y = height
+        x: outer = -t, edge = 0, end_bottom = arm_bottom, end_top = arm_top;
+        y: bottom = -t, plate_bottom = 0, plate_top = thickness + clearance, top = thickness + clearance + t;
+    }
+    grid g {
+        x: outer = -t, edge = 0, bump = arm_bottom - 4, block_end = arm_top;
+        y: left = 0, right = w, channel = [for (i = [0 : n - 1]) 2 + pitch / 2 + i * pitch];
+        z: bottom = -t, plate_bottom = 0, plate_top = thickness + clearance, top = thickness + clearance + t,
+           axis = thickness + clearance + t + block_h / 2, lid = thickness + clearance + t + block_h;
+    }
+
+    difference(fillet = 0.6) {
+        union() {
+            fillet(1.5) {
+                translate([0, w, 0]) rotate([90, 0, 0]) linear_extrude(w)
+                    polygon([p[outer, bottom], p[end_bottom, bottom], p[end_bottom, plate_bottom], p[edge, plate_bottom],
+                             p[edge, plate_top], p[end_top, plate_top], p[end_top, top], p[outer, top]]);
+                zone(g[edge, *, plate_bottom], d = 2);
+                zone(g[edge, *, plate_top], d = 2);
+            }
+            // Clamping bump on the lower arm (presses against the board from below)
+            translate(g[bump, left, plate_bottom]) rotate([-90, 0, 0])
+                cylinder(h = w, r = 1.2);
+            box(g[outer, left, top] - [0, 0, 1], g[block_end, right, lid]);
+        }
+        for (i = [0 : n - 1]) {
+            cylinder(g[outer, channel[i], axis] - [1, 0, 0], g[block_end, channel[i], axis] + [1, 0, 0],
+                     r = cable_d / 2 + 0.25);
+            box(g[outer, channel[i], axis] - [1, cable_d * 0.35, 0],
+                g[block_end, channel[i], lid] + [1, cable_d * 0.35, 1]);
+        }
+    }
+
+    anchor desk_edge = g[edge, left, plate_top], dir = [0, 0, 1];
+}
+
+clip: cable_clip();

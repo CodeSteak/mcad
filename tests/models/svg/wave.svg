@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Example (own drawing, free): wave of quadratic curves (Q, T), ellipse,
+     non-uniformly scaled circle (elliptic arcs), sheared rectangle (skewX), rotated
+     elliptic arc (A with rotation) -->
+<svg xmlns="http://www.w3.org/2000/svg" width="55mm" height="35mm" viewBox="0 0 110 70">
+  <path id="wave" d="M 5 22 Q 17.5 8 30 22 T 55 22 T 80 22 T 105 22 L 105 30 Q 92.5 44 80 30 T 55 30 T 30 30 T 5 30 Z"/>
+  <ellipse id="ellipse" cx="15" cy="58" rx="10" ry="6"/>
+  <circle id="oval" cx="0" cy="0" r="5" transform="translate(42 58) scale(2 1)"/>
+  <rect id="skewed" x="0" y="0" width="10" height="12" transform="translate(62 52) skewX(-20)"/>
+  <path id="arc" d="M 78 64 A 10 6 -30 0 1 96 56 L 90 66 Z"/>
+</svg>

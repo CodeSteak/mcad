@@ -1,0 +1,7 @@
+// Purpose: project of several files – dimensions via include (constants.mcad), parts from
+// a library via use (lib/parts.mcad), the two parts as named instances, top level.
+include <constants.mcad>
+use <lib/parts.mcad>
+
+housing: housing(w = width, d = depth, h = height, t = wall);
+translate([0, depth + spacing, 0]) lid: lid(w = width, d = depth, t = wall);

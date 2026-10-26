@@ -65,7 +65,7 @@ describe("Editor-Dekorationen", () => {
   });
 
   it("Inline-Hinweise: Werte und Kantenanzahl", () => {
-    const f = fixture("fillet-modul");
+    const f = fixture("fillet-module");
     const { lines } = collectLines(f.doc, input({ scene: f.scene, complete: f.scene }, new VersionMapper(f.source.length)), []);
     expect(lines.get(9)!.segs).toEqual([{ kind: "hint", text: "= [15, 10, 0]" }]);
     expect(lines.get(12)!.segs).toEqual([{ kind: "hint", text: "2 Zonen · 2 Kanten" }]);
@@ -83,7 +83,7 @@ describe("Editor-Dekorationen", () => {
   });
 
   it("Watchdog-Fehler an einem Knoten färbt dessen Zeile", () => {
-    const f = fixture("gehaeuse");
+    const f = fixture("housing");
     const node = f.scene.nodes.find((n) => n.range.line === 22)!.idx;
     const { lines } = collectLines(f.doc, input({ complete: f.scene, engineError: { node, version: 1, message: "Engine hängt" } }, new VersionMapper(f.source.length)), []);
     expect(lines.get(22)!.classes.has("cm-l-error")).toBe(true);

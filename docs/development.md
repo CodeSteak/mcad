@@ -87,24 +87,24 @@ report 8). Recommended workflow: `outline` → edit → `check` →
 
 ```sh
 mcad=target/release/mcad
-$mcad outline tests/models/projekt-gehaeuse/gehaeuse.mcad          # modules, parameters, grids, anchors, parts
-$mcad check tests/models/spec/gehaeuse.mcad                         # diagnostics with line:column
-$mcad eval tests/models/spec/gehaeuse.mcad --json                   # scene, grids, anchors, echo
-$mcad inspect tests/models/spec/fillet_zonen.mcad --line 12         # what line 12 produces
-$mcad render tests/models/spec/gehaeuse.mcad -o x.png --module gehaeuse --views all --show grids,anchors,labels
-$mcad render tests/models/spec/gehaeuse.mcad -o s.png --section z=10 --show dims   # section with cap
-$mcad render tests/models/spec/fillet_zonen.mcad -o f.png --line 12 --azimuth 120 --elevation 30 --xray
-$mcad measure tests/models/spec/gehaeuse.mcad --between k.ecke k.oben --volume part:k
-$mcad measure tests/models/projekt-gehaeuse/gehaeuse.mcad --interference --clearance gehaeuse deckel
-$mcad measure tests/models/spec/lochplatte.mcad --radius "face@[8,6,2]" --at "[18,6,4]"   # R 2 · ⌀ 4, elements at P
-$mcad measure tests/models/spec/gehaeuse.mcad --section z=10 --wall "[0,15,10]"         # section: regions, wall thickness 3 mm
-$mcad set tests/models/spec/gehaeuse.mcad --param gehaeuse.w=50 --dry-run   # default value, diff
+$mcad outline tests/models/project-housing/housing.mcad          # modules, parameters, grids, anchors, parts
+$mcad check tests/models/spec/housing.mcad                         # diagnostics with line:column
+$mcad eval tests/models/spec/housing.mcad --json                   # scene, grids, anchors, echo
+$mcad inspect tests/models/spec/fillet_zones.mcad --line 12         # what line 12 produces
+$mcad render tests/models/spec/housing.mcad -o x.png --module housing --views all --show grids,anchors,labels
+$mcad render tests/models/spec/housing.mcad -o s.png --section z=10 --show dims   # section with cap
+$mcad render tests/models/spec/fillet_zones.mcad -o f.png --line 12 --azimuth 120 --elevation 30 --xray
+$mcad measure tests/models/spec/housing.mcad --between k.corner k.top --volume part:k
+$mcad measure tests/models/project-housing/housing.mcad --interference --clearance housing lid
+$mcad measure tests/models/spec/hole_plate.mcad --radius "face@[8,6,2]" --at "[18,6,4]"   # R 2 · ⌀ 4, elements at P
+$mcad measure tests/models/spec/housing.mcad --section z=10 --wall "[0,15,10]"         # section: regions, wall thickness 3 mm
+$mcad set tests/models/spec/housing.mcad --param housing.w=50 --dry-run   # default value, diff
 $mcad watch teil.mcad --json --render teil.png --views all      # re-evaluate on every change
-$mcad export tests/models/spec/flasche.mcad -o flasche.step         # also .stl, .3mf
-$mcad export tests/models/spec/mehrfarbig.mcad -o druck.3mf          # multi-colour (Bambu/Orca), --single-color
-$mcad measure tests/models/spec/mehrfarbig.mcad --colors            # volume/mass per colour and slot
-$mcad render tests/models/spec/mehrfarbig.mcad -o m.png --theme dark --show regions
-$mcad export tests/models/projekt-gehaeuse/gehaeuse.mcad --all-parts -o teile/ --format step
+$mcad export tests/models/spec/bottle.mcad -o bottle.step         # also .stl, .3mf
+$mcad export tests/models/spec/multicolor.mcad -o druck.3mf          # multi-colour (Bambu/Orca), --single-color
+$mcad measure tests/models/spec/multicolor.mcad --colors            # volume/mass per colour and slot
+$mcad render tests/models/spec/multicolor.mcad -o m.png --theme dark --show regions
+$mcad export tests/models/project-housing/housing.mcad --all-parts -o parts/ --format step
 $mcad daemon status                                             # daemon: PID, uptime, cache, hit rate
 ```
 
@@ -138,10 +138,10 @@ libayatana-appindicator3-dev librsvg2-dev libxdo-dev`, see `scripts/ci/desktop.s
 (cd web && pnpm install && pnpm build:tauri)   # UI without worker/Wasm -> web/dist-tauri (gets embedded)
 cargo build --release -p cad-cli               # target/release/mcad with UI (without UI: --no-default-features)
 mcad                                            # desktop UI
-mcad tests/models/spec/gehaeuse.mcad                # with file (watched, Git gutter)
-mcad tests/models/projekt-gehaeuse/                 # folder as project
+mcad tests/models/spec/housing.mcad                # with file (watched, Git gutter)
+mcad tests/models/project-housing/                 # folder as project
 mcad ui status --json                           # what is open (file, cursor, context, parameters, diagnostics)
-mcad ui show tests/models/spec/gehaeuse.mcad --line 11
+mcad ui show tests/models/spec/housing.mcad --line 11
 mcad ui screenshot -o ansicht.png               # 3D view of the running UI
 ```
 
@@ -337,9 +337,9 @@ k: halter(w = 50);
 translate(k.oben) rotate(to = dir(k.oben)) cylinder(h = 8, r = 3);
 ```
 
-More examples: `tests/models/spec/` (language extensions, sketches: `skizze_*.mcad`, text: `text_schild.mcad`,
+More examples: `tests/models/spec/` (language extensions, sketches: `sketch_*.mcad`, text: `text_sign.mcad`,
 SVG: `svg_logo.mcad` with `tests/models/svg/*.svg`, STL: `stl_import.mcad` with `tests/models/stl/`), `tests/models/openscad-compat/`
-(36 OpenSCAD models), `tests/models/projekt-gehaeuse/` (project of three files).
+(36 OpenSCAD models), `tests/models/project-housing/` (project of three files).
 
 ## Directory structure
 

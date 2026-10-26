@@ -18,12 +18,12 @@ export CAD_NO_DAEMON=1
 r() { "$CAD" render "$@" > /dev/null; }
 
 # renderings of the examples
-r tests/models/spec/skizze_deckel.scad -o "$CLI/deckel.png" --size 900x560
-r tests/models/spec/skizze_deckel.scad -o "$CLI/deckel-offset.png" --size 900x560 --view top --line 30
-r tests/models/spec/skizze_halter.scad -o "$CLI/halter.png" --size 900x560
-r tests/models/spec/skizze_halter.scad -o "$CLI/halter-fillet.png" --size 900x560 --view top --line 18
-r tests/models/spec/skizze_kabelkanal.scad -o "$CLI/kabelkanal.png" --size 900x560
-r tests/models/spec/skizze_kabelkanal.scad -o "$CLI/kabelkanal-stroke.png" --size 900x560 --view top --line 22
+r tests/models/spec/sketch_lid.mcad -o "$CLI/deckel.png" --size 900x560
+r tests/models/spec/sketch_lid.mcad -o "$CLI/deckel-offset.png" --size 900x560 --view top --line 30
+r tests/models/spec/sketch_holder.mcad -o "$CLI/halter.png" --size 900x560
+r tests/models/spec/sketch_holder.mcad -o "$CLI/halter-fillet.png" --size 900x560 --view top --line 18
+r tests/models/spec/sketch_cable_duct.mcad -o "$CLI/kabelkanal.png" --size 900x560
+r tests/models/spec/sketch_cable_duct.mcad -o "$CLI/kabelkanal-stroke.png" --size 900x560 --view top --line 22
 r crates/cad-cli/tests/data/skizze_ecken.scad -o "$CLI/ecken-handles.png" --size 900x560 --view top --line 5 --show handles
 r crates/cad-cli/tests/data/skizze_ecken.scad -o "$CLI/ecken-offset.png" --size 900x560 --view top --line 13 --show handles
 
@@ -83,11 +83,11 @@ EOF
 "$CAD" check "$CASES/fehler.scad" > "$OUT/check-fehler.txt" 2>&1 || true
 
 # inspect: hints of fillet2d
-"$CAD" inspect tests/models/spec/skizze_halter.scad --line 18 > "$OUT/inspect-halter.txt" 2>&1 || true
+"$CAD" inspect tests/models/spec/sketch_holder.mcad --line 18 > "$OUT/inspect-halter.txt" 2>&1 || true
 
 # STEP: curves and surfaces written by the exporter
 : > "$OUT/step.tsv"
-for f in tests/models/spec/skizze_deckel.scad tests/models/spec/skizze_halter.scad tests/models/spec/skizze_kabelkanal.scad tests/models/openscad-compat/34_offset_round.scad tests/models/openscad-compat/36_offset_holes.scad; do
+for f in tests/models/spec/sketch_lid.mcad tests/models/spec/sketch_holder.mcad tests/models/spec/sketch_cable_duct.mcad tests/models/openscad-compat/34_offset_round.scad tests/models/openscad-compat/36_offset_holes.scad; do
   n=$(basename "$f" .scad)
   "$CAD" export "$f" -o "$OUT/$n.step" --json > "$OUT/$n.export.json" 2>/dev/null || true
   python3 - "$n" "$OUT/$n.export.json" "$OUT/$n.step" >> "$OUT/step.tsv" <<'EOF'
@@ -127,7 +127,7 @@ for f in zeit2d zeit3d; do
   done
   printf '%s\t%s\n' "$f" "$best" >> "$OUT/timings.tsv"
 done
-for f in tests/models/spec/skizze_deckel.scad tests/models/spec/skizze_halter.scad tests/models/spec/skizze_kabelkanal.scad; do
+for f in tests/models/spec/sketch_lid.mcad tests/models/spec/sketch_holder.mcad tests/models/spec/sketch_cable_duct.mcad; do
   s=$(date +%s%N); "$CAD" check "$f" > /dev/null 2>&1 || true; e=$(date +%s%N)
   printf '%s\t%s\n' "$(basename "$f" .scad)" "$(( (e - s) / 1000000 ))" >> "$OUT/timings.tsv"
 done

@@ -33,7 +33,7 @@ describe("Lezer-Grammatik", () => {
 
   it("erkennt Raster, Anker, Label und Modifier", () => {
     const text =
-      "grid g { x: a = 0, b = w - t; }\nk: gehaeuse(w = 60);\nanchor e = g[a, *, _], dir = [0, 0, 1];\n* translate([1, 0, 0]) cube(2);\n";
+      "grid g { x: a = 0, b = w - t; }\nk: housing(w = 60);\nanchor e = g[a, *, _], dir = [0, 0, 1];\n* translate([1, 0, 0]) cube(2);\n";
     const tree = scadParser.parse(text);
     const names: string[] = [];
     tree.iterate({ enter: (n) => void names.push(n.name) });

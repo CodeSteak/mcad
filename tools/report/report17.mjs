@@ -258,8 +258,8 @@ ${pre(src("reports/tmp/report17/cases/schild-stencil.scad"))}
 </table>
 
 <h2>6 Example: stencil</h2>
-<p><code>tests/models/spec/schablone.scad</code>: text cut out of a 1 mm thin plate. Without bridges the inner parts of A, 0, 8, B, 9 would fall out; with the stencil font they stay attached to the plate.</p>
-<div class="codefig">${pre(src("tests/models/spec/schablone.scad"))}<div>${fig(cli("schablone"), "rendered (iso)")}${fig(cli("schablone-oben"), "top view")}</div></div>
+<p><code>tests/models/spec/stencil.mcad</code>: text cut out of a 1 mm thin plate. Without bridges the inner parts of A, 0, 8, B, 9 would fall out; with the stencil font they stay attached to the plate.</p>
+<div class="codefig">${pre(src("tests/models/spec/stencil.mcad"))}<div>${fig(cli("schablone"), "rendered (iso)")}${fig(cli("schablone-oben"), "top view")}</div></div>
 <h3>Printed: G-code from PrusaSlicer</h3>
 <p>A real print is not possible in this environment; instead: STL exported (<code>cad export</code>), sliced to G-code with PrusaSlicer 2.7 (default profile, layer 0.2 mm, nozzle 0.4 mm), and the top layer drawn from the G-code (<code>tools/report/report17-gcode.py</code>): every island of the plate is connected to the rest, the bridges (1.2 mm = 3 nozzle widths) are printed as separate paths.</p>
 ${fig(cli("schablone-gcode"), `top layer (z = ${gcode?.top_z ?? "–"} mm) from the G-code, ${gcode?.layers ?? "–"} layers, estimated print time ${gcode?.["estimated printing time (normal mode)"] ?? "–"}, filament ${gcode?.["filament used [mm]"] ?? "–"} mm`)}
@@ -309,7 +309,7 @@ ${c16 ? pre(c16) : ""}
 </table>
 <p>New or changed Rust tests (${newTests.length}):</p>
 <p class="small">${newTests.map((x) => `<code>${esc(x.name)}</code> ${x.res === "ok" ? '<span class="ok">ok</span>' : '<span class="bad">FAILED</span>'}`).join(" · ")}</p>
-<p class="small">cad-font: coverage (<code>required_chars_in_every_font</code> with both styles), no holes/slivers/overlaps for 8 parameter combinations, closed counters without bridges, metrics (cap height = size, advance = JetBrains Mono, every glyph in its cell), areas (H exact, o against formula, alphabet against JetBrains Mono, stroke/bridge/Bold/size), alignment, directions, fallback, font names. cad-eval: default font, parameters, warnings. cad-engine: every glyph as a profile without a hole (Regular, Bold), volume = area × height, kernel time of the sign against Allerta Stencil. compat-tests: example <code>schablone.scad</code>.</p>
+<p class="small">cad-font: coverage (<code>required_chars_in_every_font</code> with both styles), no holes/slivers/overlaps for 8 parameter combinations, closed counters without bridges, metrics (cap height = size, advance = JetBrains Mono, every glyph in its cell), areas (H exact, o against formula, alphabet against JetBrains Mono, stroke/bridge/Bold/size), alignment, directions, fallback, font names. cad-eval: default font, parameters, warnings. cad-engine: every glyph as a profile without a hole (Regular, Bold), volume = area × height, kernel time of the sign against Allerta Stencil. compat-tests: example <code>stencil.mcad</code>.</p>
 
 <h2>12 Limitations</h2>
 <ul>

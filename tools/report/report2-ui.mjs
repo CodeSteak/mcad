@@ -177,7 +177,7 @@ const unitRows = unit
 
 const m = metrics;
 const metricRows = [
-  ["Load time until first scene", fmtMs(m.firstSceneMs), "Navigation until the first draw of the complete scene of gehaeuse.scad (loading Wasm, evaluation, tessellation, rendering)"],
+  ["Load time until first scene", fmtMs(m.firstSceneMs), "Navigation until the first draw of the complete scene of housing.mcad (loading Wasm, evaluation, tessellation, rendering)"],
   ["First evaluation", fmtMs(m.firstEvalMs), "SetSource until complete scene (cold cache)"],
   ["Keystroke → new scene (median)", fmtMs(m.editToSceneMedianMs), `In-app measurement: last change until the new scene is drawn; individual values ${(m.editToSceneMs ?? []).map((v) => Math.round(v)).join(", ")} ms`],
   ["Keystroke → new scene, test view (median)", fmtMs(m.keyToSceneE2eMedianMs), "Playwright: keystroke until the scene is visible in the test hook (incl. 50 ms polling interval)"],

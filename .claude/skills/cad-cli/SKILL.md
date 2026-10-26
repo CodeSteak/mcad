@@ -152,12 +152,12 @@ and checks with the CLI. The UI watches the file and all included files:
 | `mcad set DATEI --param modul.param=wert \| --literal [datei:]zeile:spalte=wert [--dry-run]` | change code via the engine (below) |
 | `mcad export DATEI -o teil.stl\|teil.3mf\|teil.step [--schema ap214] [--merge]` | export file (STEP: exact B-Rep, AP242, face colours from the colour regions, one named body per part and per top-level object outside the parts – touching parts stay separate, intersecting ones are united into one body “a + b” (note); `--merge`: one merged body as before; 3MF: **multi-colour**, one object per part + "no part", one part per colour with filament slot for Bambu Studio/OrcaSlicer, without colour group; `--color-group` with colour group for other programs – Bambu then opens a colour dialog, "Cancel" keeps the slots; single colour with `--single-color`) |
 | `mcad export DATEI --per-color [--part NAME]… -o farben.zip` | ZIP with one STL per colour (and part): `F<slot>_<farbe>.stl`, all in the same coordinate system (extension `.zip` required) |
-| `mcad export DATEI --part NAME [--part NAME2] -o …` | only these parts (named instances at top level, e.g. `deckel`, `k[2]`) |
-| `mcad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | each part as a separate file (`deckel.stl`, `k_2.step`) |
+| `mcad export DATEI --part NAME [--part NAME2] -o …` | only these parts (named instances at top level, e.g. `lid`, `k[2]`) |
+| `mcad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | each part as a separate file (`lid.stl`, `k_2.step`) |
 | `mcad diff-kernels DATEI…` | comparison SMLib ↔ solidcore (development only, `--features solidcore`) |
 
-Common options: `--json`, `--module m` (module as context, nested `aussen.innen`;
-with arguments as in the code `-m 'halter(30, h = 5)'`, `-m 'teile.schraube(d = 3)'` – expressions
+Common options: `--json`, `--module m` (module as context, nested `outer.inner`;
+with arguments as in the code `-m 'holder(30, h = 5)'`, `-m 'parts.screw(d = 3)'` – expressions
 see variables and functions of the file, can be combined with `-D` for other parameters),
 `-D name=wert` (parameter of the context module, value as JSON: `-D w=60`, `-D hohl=true`,
 `-D p=[1,2,3]`). Without a module context, `-D` sets top-level assignments of the main file
@@ -182,7 +182,7 @@ file context.
 | `--ortho` (default) / `--perspective [--fov 35]` | projection |
 | `--part NAME` (repeatable) | only these parts |
 | `--line N` (repeatable), `--node I` (repeatable), `--only` | nodes in full, the rest dimmed (omitted with `--only`); zones blue, subtracted bodies red semi-transparent, selected edges orange, failed edges red |
-| `--show grids,anchors,handles,edges,labels,bbox,dims` (or `all`) | overlays: grids of the context module (planes as rectangles at the edge, expression planes dashed, intersection points as dots, plane names `g.links`), anchors as yellow diamonds with name and direction arrow, handles as orange squares, hidden edges dashed, `labels`: grid points `g[a,b,c]`, handles, part names; bounding box, `dims`: dimensions W/D/H in mm |
+| `--show grids,anchors,handles,edges,labels,bbox,dims` (or `all`) | overlays: grids of the context module (planes as rectangles at the edge, expression planes dashed, intersection points as dots, plane names `g.left`), anchors as yellow diamonds with name and direction arrow, handles as orange squares, hidden edges dashed, `labels`: grid points `g[a,b,c]`, handles, part names; bounding box, `dims`: dimensions W/D/H in mm |
 | `--section x=WERT\|y=WERT\|z=WERT` | section at an axis plane, cut face filled (red hatched) |
 | `--section-plane px,py,pz,nx,ny,nz` | section at an arbitrary plane (point, normal) |
 | `--section-flip` | keep the other half |
@@ -206,7 +206,7 @@ the module definition.
 
 | Option | Result |
 | --- | --- |
-| `--between A B` | distance and difference vector. A/B: anchor `k.ecke`, `k[2].ecke` (in module context also `ecke`), grid point in the context `g[rechts, hinten, deckel]` (entries also numbers or `_`), coordinate `[x,y,z]` |
+| `--between A B` | distance and difference vector. A/B: anchor `k.corner`, `k[2].corner` (in module context also `corner`), grid point in the context `g[right, back, lid]` (entries also numbers or `_`), coordinate `[x,y,z]` |
 | `--bounds [ZIEL]` | axis-aligned bounding box (min, max, size) |
 | `--volume [ZIEL]`, `--area [ZIEL]` | volume mm³ / area mm² (kernel, exact) |
 | `--colors` | colour regions: volume and mass (PLA 1.24 g/cm³) per colour and filament slot, per part (sum = part volume) |
@@ -228,16 +228,16 @@ to the section contour and `region@P` to the region containing P (`face@`/`body@
 available). Order of the results in `measurements`: distances, radii, angles, lengths,
 area, body, wall thicknesses. Each measurement has `text` (lines as in the UI), `cli` (the
 arguments that repeat it) and `picks[].origin` (origin: `line 11: box (instance k:
-gehaeuse)`, `grid plane g.innen_l`, `grid point g[b, h, o]`, `grid line g[loch[0],
-mitte, *]`, `anchor k.ecke`). The UI ("Measure", "Copy as mcad measure") produces the same
+housing)`, `grid plane g.inner_left`, `grid point g[b, h, o]`, `grid line g[hole[0],
+mid, *]`, `anchor k.corner`). The UI ("Measure", "Copy as mcad measure") produces the same
 calls.
 
-Example (spec `gehaeuse`): `mcad measure gehaeuse.mcad --between k.ecke k.oben` → 67.082 mm,
-Δ [−60, −30, 0]; `mcad measure gehaeuse.mcad --module gehaeuse --between "g[links,vorne,boden]" "g[rechts,hinten,deckel]"` → 53.852 mm.
-Wall thickness: `mcad measure gehaeuse.mcad --section z=10 --wall "[0,15,10]"` → 3 mm (two regions
+Example (spec `housing`): `mcad measure housing.mcad --between k.corner k.top` → 67.082 mm,
+Δ [−60, −30, 0]; `mcad measure housing.mcad --module housing --between "g[left,front,floor]" "g[right,back,lid]"` → 53.852 mm.
+Wall thickness: `mcad measure housing.mcad --section z=10 --wall "[0,15,10]"` → 3 mm (two regions
 of 90 mm² each, smallest wall ≈ 3 mm); inner dimension: `--distance "face@[3,15,10]" "face@[57,15,10]"` →
-54 mm (parallel planes); perforated plate: `mcad measure lochplatte.mcad --radius "face@[8,6,2]"` →
-R 2 · ⌀ 4 (axis through [6, 6, …], grid line g[loch[0], mitte, *]), `--section z=2` → four
+54 mm (parallel planes); perforated plate: `mcad measure hole_plate.mcad --radius "face@[8,6,2]"` →
+R 2 · ⌀ 4 (axis through [6, 6, …], grid line g[hole[0], mid, *]), `--section z=2` → four
 circles R 2, `--distance "center@[6,6,0]" "center@[18,6,0]"` → 12 mm.
 
 ### `watch`
@@ -251,11 +251,11 @@ change) or `--timeout S` (S seconds without a change).
 
 ### `set`
 
-- `mcad set datei.mcad --param gehaeuse.w=50` writes the default value (like "Use as
-  default" in the UI; module also from `use` files, nested `aussen::innen.p`).
+- `mcad set datei.mcad --param housing.w=50` writes the default value (like "Use as
+  default" in the UI; module also from `use` files, nested `outer::inner.p`).
 - `mcad set datei.mcad --literal 21:17=70` replaces the editable literal at line:column
   (column anywhere in the literal; the literals the UI changes: variable values, handles,
-  grid planes, default values); in project files `--literal lib/teile.mcad:12:20=4`.
+  grid planes, default values); in project files `--literal lib/parts.mcad:12:20=4`.
 - Several `--param`/`--literal` in one call; `--dry-run` only shows the diff. Before
   writing, the changed project is evaluated: if the change produces new errors,
   nothing is written (exit 1, `refused: true`), except with `--force`. Writing is atomic
@@ -285,7 +285,7 @@ offsets UTF-16). `Bounds = { min, max, size }`. Complete schema: header of
   [{name, expr, value, text, literal (range|null), file, line}], grids, anchors: [{ref, point, dir}],
   instances: [{name, module, line, part (part name|null)}], parts: [{name, module, bounds, volume}], counts }`
 - `eval`: `+ { scene }` – complete scene as in the protocol (`web/src/engine/protocol.ts`,
-  type `Scene`): `nodes[]`, `grids[]`, `anchors[]` (`text` = `k.ecke`), `hints[]`, `handles[]`,
+  type `Scene`): `nodes[]`, `grids[]`, `anchors[]` (`text` = `k.corner`), `hints[]`, `handles[]`,
   `modules[]`, `echoes[]`, `context.params`, `stats`.
 - `inspect`: `+ { line, nodes: [{ idx, label, instance, range, status, dim, flags, subtracted,
   world_bounds, volume, area, selected_edges (polylines, world), selected_edge_count, opened_faces,
@@ -328,18 +328,18 @@ offsets UTF-16). `Bounds = { min, max, size }`. Complete schema: header of
 ## Examples
 
 ```sh
-mcad outline tests/models/projekt-gehaeuse/gehaeuse.mcad
-mcad render tests/models/spec/gehaeuse.mcad -o /tmp/g.png --module gehaeuse --views all --show grids,anchors,labels
-mcad render tests/models/spec/gehaeuse.mcad -o /tmp/s.png --section z=10 --show dims
-mcad render tests/models/spec/fillet_zonen.mcad -o /tmp/f.png --line 12 --azimuth 120 --elevation 30
-mcad render tests/models/projekt-gehaeuse/gehaeuse.mcad -o /tmp/d.png --part deckel --xray
-mcad measure tests/models/spec/gehaeuse.mcad --between k.ecke k.oben --volume part:k
-mcad measure tests/models/projekt-gehaeuse/gehaeuse.mcad --interference --clearance gehaeuse deckel
-mcad measure tests/models/spec/lochplatte.mcad --at "[8,6,2]"
-mcad measure tests/models/spec/lochplatte.mcad --radius "face@[8,6,2]" --distance "center@[6,6,0]" "center@[18,6,0]" --json
-mcad measure tests/models/spec/gehaeuse.mcad --section z=10 --wall "[0,15,10]" --distance "edge@[3,15,10]" "edge@[57,15,10]"
-mcad measure tests/models/spec/fase_chamfer.mcad --angle "face@[39.5,12,9.5]" "face@[20,12,10]"
-mcad set tests/models/spec/gehaeuse.mcad --param gehaeuse.w=50 --dry-run
+mcad outline tests/models/project-housing/housing.mcad
+mcad render tests/models/spec/housing.mcad -o /tmp/g.png --module housing --views all --show grids,anchors,labels
+mcad render tests/models/spec/housing.mcad -o /tmp/s.png --section z=10 --show dims
+mcad render tests/models/spec/fillet_zones.mcad -o /tmp/f.png --line 12 --azimuth 120 --elevation 30
+mcad render tests/models/project-housing/housing.mcad -o /tmp/d.png --part lid --xray
+mcad measure tests/models/spec/housing.mcad --between k.corner k.top --volume part:k
+mcad measure tests/models/project-housing/housing.mcad --interference --clearance housing lid
+mcad measure tests/models/spec/hole_plate.mcad --at "[8,6,2]"
+mcad measure tests/models/spec/hole_plate.mcad --radius "face@[8,6,2]" --distance "center@[6,6,0]" "center@[18,6,0]" --json
+mcad measure tests/models/spec/housing.mcad --section z=10 --wall "[0,15,10]" --distance "edge@[3,15,10]" "edge@[57,15,10]"
+mcad measure tests/models/spec/chamfers.mcad --angle "face@[39.5,12,9.5]" "face@[20,12,10]"
+mcad set tests/models/spec/housing.mcad --param housing.w=50 --dry-run
 mcad watch teil.mcad --json --render /tmp/teil.png --views all --show grids,anchors &
 ```
 
@@ -356,33 +356,33 @@ lists. B-Rep kernel: exact cylinders/spheres, `$fn` only affects display.
 axis, `*` for line/plane, `g.name` as number or plane):
 
 ```
-module gehaeuse(w = 40, d = 30, h = 20, t = 3) {
+module housing(w = 40, d = 30, h = 20, t = 3) {
     grid g {
-        x: links = 0, innen_l = t, innen_r = w - t, rechts = w;
-        y: vorne = 0, hinten = d;
-        z: boden = 0, deckel = h;
+        x: left = 0, inner_left = t, inner_right = w - t, right = w;
+        y: front = 0, back = d;
+        z: floor = 0, lid = h;
     }
     difference() {
-        box(g[links, vorne, boden], g[rechts, hinten, deckel]);
-        box(g[innen_l, vorne, t], g[innen_r, hinten, deckel]);
+        box(g[left, front, floor], g[right, back, lid]);
+        box(g[inner_left, front, t], g[inner_right, back, lid]);
     }
-    anchor ecke = g[rechts, hinten, deckel];
-    anchor oben = g[links, vorne, deckel], dir = [0, 0, 1];
+    anchor corner = g[right, back, lid];
+    anchor top = g[left, front, lid], dir = [0, 0, 1];
 }
 ```
 
-Lists create indexed planes: `x: loch = [for (i = [0:3]) 6 + i * 12];` → `g[loch[2], …]`.
-Transformations before `grid` place the grid: `translate(g[rechts, vorne, boden]) grid l { … }`.
+Lists create indexed planes: `x: hole = [for (i = [0:3]) 6 + i * 12];` → `g[hole[2], …]`.
+Transformations before `grid` place the grid: `translate(g[right, front, floor]) grid l { … }`.
 
-**Anchors and named instances:** `k: gehaeuse(w = 60);` names the instance; `k.ecke` is a
-point in the current coordinate system, `dir(k.oben)` the direction, `rotate(to = v)` rotates z onto `v`. In
-loops with an index: `for (i = [0:3]) k[i]: halter();` → `k[2].oben` (integer index).
+**Anchors and named instances:** `k: housing(w = 60);` names the instance; `k.corner` is a
+point in the current coordinate system, `dir(k.top)` the direction, `rotate(to = v)` rotates z onto `v`. In
+loops with an index: `for (i = [0:3]) k[i]: holder();` → `k[2].top` (integer index).
 Named instances at top level of the main file are parts (export names):
 
 ```
-k: gehaeuse(w = 60);
-translate(k.ecke) cube([10, 10, 2]);
-translate(k.oben) rotate(to = dir(k.oben)) cylinder(h = 5, r = 1);
+k: housing(w = 60);
+translate(k.corner) cube([10, 10, 2]);
+translate(k.top) rotate(to = dir(k.top)) cylinder(h = 5, r = 1);
 ```
 
 **Fillet/chamfer** – three forms:
@@ -391,9 +391,9 @@ translate(k.oben) rotate(to = dir(k.oben)) cylinder(h = 5, r = 1);
 difference(fillet = 1) { cube(20); translate([10, 10, -1]) cylinder(h = 22, r = 4); } // new edges
 cube(20, $fillet = 1);                                   // own edges of each primitive
 fillet(2) {                                              // zone block: 1st child body, rest zones
-    box(g[links, vorne, boden], g[rechts, hinten, deckel]);
-    zone(g[rechts, *, deckel], d = 2);                   // cylinder around a grid line
-    zone(g.boden, d = 1);                                // slab around a grid plane
+    box(g[left, front, floor], g[right, back, lid]);
+    zone(g[right, *, lid], d = 2);                   // cylinder around a grid line
+    zone(g.floor, d = 1);                                // slab around a grid plane
     translate([15, 10, 15]) sphere(6);                   // any volume as a zone
 }
 fillet(1.5, select = "touch") { … }                      // also touching edges
@@ -461,7 +461,7 @@ linear_extrude(5) sketch {
     start([10, 5]); …                     // further contour: hole by winding rule (opposite direction)
     hole { start(…); …; }                 // hole in either direction
 }
-module profil(b = 40) sketch { … }        // named sketch; for/if/let and modules with segments
+module profile(b = 40) sketch { … }        // named sketch; for/if/let and modules with segments
 sweep() { sketch(closed = false) { start([0, 0]); line(to = [30, 0]); arc(to = [45, 15]); } circle(2); }
 ```
 
@@ -486,7 +486,7 @@ sketch {
     close();
 }
 fillet2d(2) square([30, 20]);                       // all corners, convex and concave
-fillet2d(5) { profil(); translate([6, 6]) circle(1); }   // only corners in 2D zones (select = "touch")
+fillet2d(5) { profile(); translate([6, 6]) circle(1); }   // only corners in 2D zones (select = "touch")
 chamfer2d(1) polygon(…);
 offset(r = 2) …;  offset(-1) …;  offset(delta = 1, chamfer = true) …;   // as in OpenSCAD
 stroke(2, cap = "round" | "flat" | "square", join = "round" | "miter" | "bevel")
@@ -516,11 +516,11 @@ linear_extrude(3) hull() { circle(3); translate([20, 0]) circle(3); }           
 minkowski() { cube([20, 10, 5]); sphere(2); }
 ```
 
-**Modules as namespaces:** `module teile { M3 = 3.2; function kopf(d) = 1.8 * d;
-module schraube(d = 3) { … } }` (braces may be omitted) → `teile.schraube(d = 4);`,
-`k: teile.schraube();`, `a.b.c();`, `teile.kopf(teile.M3)`. The inner module sees the parameters
-of the outer one with default values, not its grids/instances. `mcad --module teile.schraube`,
-`mcad set --param teile.schraube.d=4`; `mcad outline` shows modules and functions with their path.
+**Modules as namespaces:** `module parts { M3 = 3.2; function head(d) = 1.8 * d;
+module screw(d = 3) { … } }` (braces may be omitted) → `parts.screw(d = 4);`,
+`k: parts.screw();`, `a.b.c();`, `parts.head(parts.M3)`. The inner module sees the parameters
+of the outer one with default values, not its grids/instances. `mcad --module parts.screw`,
+`mcad set --param parts.screw.d=4`; `mcad outline` shows modules and functions with their path.
 
 **Text and SVG** (plan 17.4/17.5, report 16):
 

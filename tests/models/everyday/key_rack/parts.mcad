@@ -1,0 +1,49 @@
+// Parts of the key rack (pulled in via use). The front of the board is y = 0, the wall
+// lies at y = t; hooks point towards -y.
+include <dimensions.mcad>
+
+module board(l = board_l, h = board_h, t = board_t, n = count, corner = 8) {
+    grid g {
+        x: left = 0, right = l, hook = [for (i = [0 : n - 1]) hook_x(i)], hanger = [l * 0.15, l * 0.85];
+        y: front = 0, back = t;
+        z: bottom = 0, row = hook_z, hanger_z = h - 32, shelf = h - 12, top = h;
+    }
+    difference(chamfer = 0.5) {
+        chamfer(1.5) {
+            fillet(corner) {
+                box(g[left, front, bottom], g[right, back, top]);
+                zone(g[left, *, bottom], d = 1);
+                zone(g[right, *, bottom], d = 1);
+                zone(g[left, *, top], d = 1);
+                zone(g[right, *, top], d = 1);
+            }
+            zone(g.front, d = 1);
+        }
+        // Bores for the hook pegs
+        for (i = [0 : n - 1])
+            cylinder(g[hook[i], front, row] - [0, 1, 0], g[hook[i], front, row] + [0, peg_l + 1, 0],
+                     d = bore_d);
+        // Keyhole hanger at the back: entry hole 10 mm, slot 4.5 mm upwards,
+        // undercut 8.5 mm for the screw head
+        for (i = [0 : 1]) {
+            cylinder(g[hanger[i], back, hanger_z] + [0, 1, 0], g[hanger[i], back, hanger_z] - [0, 7, 0], d = 10);
+            box(g[hanger[i], back, hanger_z] + [-2.25, 1, 0], g[hanger[i], back, hanger_z] + [2.25, -7, 10]);
+            box(g[hanger[i], back, hanger_z] + [-4.25, -3.5, 0], g[hanger[i], back, hanger_z] + [4.25, -7, 10]);
+        }
+        // Groove on top for letters
+        box(g[left, front, shelf] + [10, 3, 0], g[right, back, top] + [-10, -3, 1]);
+    }
+}
+
+module hook(d = 6, peg = peg_d, pl = peg_l, reach = 22, knob_d = 10) {
+    // Peg without fillet (it would lie in the chamfer of the bore); union(fillet) across the almost
+    // tangential joint peg/arc crashes the CLI (README: F9)
+    cylinder([0, -1, 0], [0, pl, 0], d = peg);
+    union(fillet = 1) {
+        sweep(path = [[0, 0, 0], [0, -reach * 0.6, -1], [0, -reach, 4], [0, -reach - 1, 10]],
+              interp = "spline")
+            circle(d = d);
+        translate([0, -reach - 1, 10]) sphere(d = knob_d);
+    }
+    anchor tip = [0, -reach - 1, 10], dir = [0, 0, 1];
+}

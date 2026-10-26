@@ -141,7 +141,7 @@ test("T04 Beispiel svg_logo mit seinen SVG-Dateien; Warnungen mit Zeile", async 
   await waitScene(page, { minVersion: v0 + 1 });
   const p = await info(page);
   expect(p.main).toBe("spec/svg_logo.mcad");
-  expect(p.paths).toEqual(expect.arrayContaining(["svg/logo.svg", "svg/blatt.svg", "svg/haus.svg", "svg/welle.svg"]));
+  expect(p.paths).toEqual(expect.arrayContaining(["svg/logo.svg", "svg/leaf.svg", "svg/house.svg", "svg/wave.svg"]));
   expect(await errors(page)).toEqual([]);
   await hook(page, (c) => c.setView("iso"));
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));

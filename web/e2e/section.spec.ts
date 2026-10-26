@@ -14,7 +14,7 @@ import { type CadState, cad, clickLine, frame, hook, mode, openApp, openExample,
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, "../..");
-const MODEL = readFileSync(join(ROOT, "tests/models/spec/gehaeuse.mcad"), "utf8");
+const MODEL = readFileSync(join(ROOT, "tests/models/spec/housing.mcad"), "utf8");
 
 interface SectionInfo {
   on: boolean;
@@ -100,16 +100,16 @@ test("X01 Schnitt z: gefüllte Kappe, Kontur, Statuszeile, Picking nur auf der b
 
 test("X02 Ebene am Griff ziehen: rastet auf Rasterebene und Anker, Alt frei", async ({ page }) => {
   await openApp(page);
-  // module context: grid g (z: boden = 0, deckel = 20) of gehaeuse
+  // module context: grid g (z: floor = 0, lid = 20) of housing
   await clickLine(page, 11, 8);
-  await waitScene(page, { context: "gehaeuse" });
+  await waitScene(page, { context: "housing" });
   await hook(page, (c) => c.setView("front"));
   await waitView(page, "() => true");
   const i = await sectionOn(page);
   expect(i.grip).not.toBeNull();
   const g = i.grip!;
   const at = (z: number) => page.evaluate(([w, zz]) => (window as unknown as W).__cad.project([w[0], w[1], zz]), [i.gripWorld, z] as const);
-  // drag up to the plane deckel (z = 20)
+  // drag up to the plane lid (z = 20)
   const target = await at(20);
   await page.mouse.move(g.x, g.y);
   await page.mouse.down();
@@ -120,13 +120,13 @@ test("X02 Ebene am Griff ziehen: rastet auf Rasterebene und Anker, Alt frei", as
   }
   const mid = await info(page);
   expect(mid.dragging).toBe(true);
-  expect(mid.snap).toBe("g.deckel");
+  expect(mid.snap).toBe("g.lid");
   expect(mid.point[2]).toBe(20);
-  await expect(page.getByTestId("snap-label")).toHaveText("g.deckel");
-  await screenshot9(page, "x02-rasten-deckel");
+  await expect(page.getByTestId("snap-label")).toHaveText("g.lid");
+  await screenshot9(page, "x02-rasten-lid");
   await page.mouse.up();
-  await expect(page.getByTestId("status-section")).toContainText("Schnitt z = 20 · entfernt z > 20 · g.deckel");
-  // anchors: `ecke` and `oben` lie in z = 20 as well; z = 0 is the grid plane boden
+  await expect(page.getByTestId("status-section")).toContainText("Schnitt z = 20 · entfernt z > 20 · g.lid");
+  // anchors: `corner` and `top` lie in z = 20 as well; z = 0 is the grid plane floor
   const lower = await at(0.4);
   const g2 = (await info(page)).grip!;
   await page.mouse.move(g2.x, g2.y);
@@ -137,7 +137,7 @@ test("X02 Ebene am Griff ziehen: rastet auf Rasterebene und Anker, Alt frei", as
   }
   await page.mouse.up();
   let s = await info(page);
-  expect(s.snap).toBe("g.boden");
+  expect(s.snap).toBe("g.floor");
   expect(s.point[2]).toBe(0);
   // Alt: free (rounded to 0.1 mm), no snap
   const free = await at(13.37);
@@ -163,12 +163,12 @@ test("X02 Ebene am Griff ziehen: rastet auf Rasterebene und Anker, Alt frei", as
   record9({
     id: "X02",
     title: "Ebene ziehen und rasten",
-    caption: "Im Modulkontext gehaeuse (Raster g): Griff (blauer Punkt) nach oben gezogen, die Ebene rastet auf g.deckel (z = 20, grünes Etikett), nach unten auf g.boden; mit Alt frei (auf 0,1 mm gerundet).",
+    caption: "Im Modulkontext housing (Raster g): Griff (blauer Punkt) nach oben gezogen, die Ebene rastet auf g.lid (z = 20, grünes Etikett), nach unten auf g.floor; mit Alt frei (auf 0,1 mm gerundet).",
     images: [
-      { name: "x02-rasten-deckel", label: "beim Ziehen: rastet auf g.deckel" },
+      { name: "x02-rasten-lid", label: "beim Ziehen: rastet auf g.lid" },
       { name: "x02-frei", label: "mit Alt frei gezogen" },
     ],
-    checks: [`Rasten: ${mid.snap} (z = ${mid.point[2]}), g.boden (z = 0)`, `frei: z = ${s.point[2]}`, `fps beim Ziehen: ${fps.map((f) => f.fps.toFixed(0)).join(", ")}`],
+    checks: [`Rasten: ${mid.snap} (z = ${mid.point[2]}), g.floor (z = 0)`, `frei: z = ${s.point[2]}`, `fps beim Ziehen: ${fps.map((f) => f.fps.toFixed(0)).join(", ")}`],
   });
 });
 
@@ -221,7 +221,7 @@ test("X03 Umkehren, Achsen, freie Ebene aus Blickrichtung und per Eingabe", asyn
 test("X04 Mit Hervorhebung, Zonen, transparenten Körpern (ohne Kappe) und Griffen", async ({ page }) => {
   await openApp(page);
   await clickLine(page, 11, 8);
-  await waitScene(page, { context: "gehaeuse" });
+  await waitScene(page, { context: "housing" });
   await hook(page, (c) => c.setView("iso"));
   await sectionOn(page);
   let s = await cad(page);
@@ -237,7 +237,7 @@ test("X04 Mit Hervorhebung, Zonen, transparenten Körpern (ohne Kappe) und Griff
   expect(i.caps).toBe(s.view!.plan.items.filter((it) => it.mode === "full").length);
   await screenshot9(page, "x04-abgezogen");
   // zones: fillet example, cursor on a zone
-  await openExample(page, "spec/fillet_zonen.mcad");
+  await openExample(page, "spec/fillet_zones.mcad");
   const text = await hook(page, (c) => c.text());
   const zl = text.split("\n").findIndex((l) => l.includes("zone(")) + 1;
   await clickLine(page, zl, 10);
@@ -277,11 +277,11 @@ test("X05 Kopierter CLI-Aufruf ergibt im CLI denselben Schnitt (Pixelanteil der 
   await sectionBar(page).getByRole("button", { name: "Als mcad render … kopieren" }).click();
   const st = (await cad(page)) as CadState & { lastCli: string };
   const cli = st.lastCli;
-  expect(cli).toMatch(/^mcad render gehaeuse\.mcad -o schnitt\.png --section z=12 --azimuth [\d.]+ --elevation [\d.]+$/);
+  expect(cli).toMatch(/^mcad render housing\.mcad -o schnitt\.png --section z=12 --azimuth [\d.]+ --elevation [\d.]+$/);
   const web = await pixels(page, await canvasPng(page));
   // run the copied call (file and output into a temporary directory)
   const dir = mkdtempSync(join(tmpdir(), "cad-x05-"));
-  writeFileSync(join(dir, "gehaeuse.mcad"), MODEL);
+  writeFileSync(join(dir, "housing.mcad"), MODEL);
   const box = (await page.getByTestId("viewport-canvas").boundingBox())!;
   const args = cli.split(" ").slice(1);
   const r = spawnSync(bin!, [...args, "--size", `${Math.round(box.width)}x${Math.round(box.height)}`, "--no-axes"], { cwd: dir, encoding: "utf8" });
@@ -308,7 +308,7 @@ test("X05 Kopierter CLI-Aufruf ergibt im CLI denselben Schnitt (Pixelanteil der 
 
 test("X06 fps beim Verschieben der Ebene", async ({ page }) => {
   await openApp(page);
-  await openExample(page, "spec/fillet_zonen.mcad");
+  await openExample(page, "spec/fillet_zones.mcad");
   await hook(page, (c) => c.setView("iso"));
   const plain = await page.evaluate(() => (window as unknown as { __cad: { orbitBenchmark(n: number): Promise<{ fps: number }> } }).__cad.orbitBenchmark(120));
   await sectionOn(page);
@@ -328,8 +328,8 @@ test("X06 fps beim Verschieben der Ebene", async ({ page }) => {
 test("X07 Tastendruck → Szene im Browser (Wasm), gleiche Änderungen wie in Tauri", async ({ page }) => {
   test.setTimeout(240_000);
   await openApp(page);
-  // after "w = 60" in `k: gehaeuse(w = 60);`: Backspace / digit, always a valid model
-  await clickLine(page, 21, 18);
+  // after "w = 60" in `k: housing(w = 60);`: Backspace / digit, always a valid model
+  await clickLine(page, 21, 17);
   const m0 = (await cad(page)).metrics;
   const before = m0.editToScene.length;
   const beforeEval = m0.evalMs.length;

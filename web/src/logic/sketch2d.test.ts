@@ -8,7 +8,7 @@ import { handlesForCursor } from "./handles";
 import { SceneIndex } from "./sceneIndex";
 import { fixture, pos } from "./__fixtures__/load";
 
-type Name = "skizze-deckel" | "skizze-halter" | "skizze-kabelkanal";
+type Name = "sketch-lid" | "sketch-holder" | "sketch-cable-duct";
 
 function planAt(name: Name, line: number, col = 4) {
   const f = fixture(name);
@@ -19,8 +19,8 @@ function planAt(name: Name, line: number, col = 4) {
 
 describe("offset, stroke, fillet2d unter dem Cursor", () => {
   it("offset: Ausgangskontur als Profil, Offset-Kontur gestrichelt", () => {
-    // line 30: `offset(r = -(wand + spiel)) umriss();`
-    const { f, sel, p } = planAt("skizze-deckel", 30, 6);
+    // line 30: `offset(r = -(wall + clearance)) outline();`
+    const { f, sel, p } = planAt("sketch-lid", 30, 6);
     const n = f.scene.nodes[sel.nodes[0]];
     expect(n.label).toBe("offset");
     expect(n.op_info).toEqual({ kind: "offset", round: true, d: -2.2, chamfer: false });
@@ -34,12 +34,12 @@ describe("offset, stroke, fillet2d unter dem Cursor", () => {
     expect(Math.max(...xs)).toBeCloseTo(77.8, 6);
     expect(Math.max(...ys)).toBeCloseTo(47.8, 6);
     // the input (the outline module) drawn as profile
-    expect(p.items.some((i) => i.mode === "profile" && f.scene.nodes[i.node].label === "umriss")).toBe(true);
+    expect(p.items.some((i) => i.mode === "profile" && f.scene.nodes[i.node].label === "outline")).toBe(true);
   });
 
   it("stroke: Mittellinie gestrichelt, Pfad als Profil", () => {
-    // line 22: `linear_extrude(boden) stroke(breite, cap = "flat") pfad();` – the stroke node
-    const f = fixture("skizze-kabelkanal");
+    // line 22: `linear_extrude(floor_t) stroke(width, cap = "flat") route();` – the stroke node
+    const f = fixture("sketch-cable-duct");
     const stroke = f.scene.nodes.find((n) => n.label === "stroke" && n.range.line === 22)!;
     const p = plan({ scene: f.scene, cursor: [stroke.idx], hover: [] });
     expect(stroke.op_info).toEqual({ kind: "stroke", w: 16, cap: "flat", join: "round" });
@@ -56,8 +56,8 @@ describe("offset, stroke, fillet2d unter dem Cursor", () => {
   });
 
   it("fillet2d: Zone blau, neue Eckbögen als ausgewählte Kanten, Hinweis", () => {
-    // line 19: `fillet2d(r_innen) {` (inner block with the zone)
-    const { f, sel, p } = planAt("skizze-halter", 19, 10);
+    // line 19: `fillet2d(r_inner) {` (inner block with the zone)
+    const { f, sel, p } = planAt("sketch-holder", 19, 10);
     const n = f.scene.nodes[sel.nodes[0]];
     expect(n.label).toBe("fillet2d");
     expect(n.op_info).toEqual({ kind: "blend2d", chamfer: false, r: 5, select: "inside" });
@@ -72,8 +72,8 @@ describe("offset, stroke, fillet2d unter dem Cursor", () => {
   });
 
   it("corner(): Radius-Griff auf der Verrundung", () => {
-    // module pfad as context, line 17: `corner(r = 12);`
-    const f = fixture("skizze-pfad");
+    // module route as context, line 17: `corner(r = 12);`
+    const f = fixture("sketch-path");
     const idx = new SceneIndex(f.scene);
     const at = pos(f.doc, 17, 6);
     const hs = handlesForCursor(f.scene, idx, f.doc, at, idx.select(f.doc, at));

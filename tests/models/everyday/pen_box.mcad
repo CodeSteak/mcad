@@ -1,0 +1,64 @@
+// Purpose: desk pen box with compartments – compartment borders as indexed grid planes
+// from lists (compartment widths as parameters), pockets as box between grid points; four
+// nested zone blocks: vertical outer and pocket edges (grid lines, zones in a
+// for loop), pocket bottoms (plate around the inner bottom plane) and the rear top edges (chamfer at
+// the lid plane). Front compartment lower; its top edges stay sharp (README: F6).
+// Dimensions in mm.
+
+// Sum of the first n entries of a list
+function sum_first(v, n) = n <= 0 ? 0 : v[n - 1] + sum_first(v, n - 1);
+
+module pen_box(compartments = [38, 26, 26], depth = 70, h = 95, wall = 2.4, floor_t = 3,
+               front_t = 22, front_h = 45, corner = 5, corner_inner = 2) {
+    n = len(compartments);
+    w = sum_first(compartments, n) + (n + 1) * wall;
+    grid g {
+        x: left = 0, right = w,
+           from = [for (i = [0 : n - 1]) wall + sum_first(compartments, i) + i * wall],
+           to = [for (i = [0 : n - 1]) wall + sum_first(compartments, i + 1) + i * wall];
+        y: front = 0, front_inner = wall, web_front = wall + front_t, web_back = 2 * wall + front_t,
+           back_inner = depth - wall, back = depth;
+        z: bottom = 0, floor_inner = floor_t, low = front_h, top = h;
+    }
+
+    chamfer(0.6) {
+        fillet(1.5) {
+          fillet(corner_inner) {
+            fillet(corner) {
+                difference() {
+                    union() {
+                        box(g[left, web_front, bottom], g[right, back, top]);
+                        box(g[left, front, bottom], g[right, web_back, low]);
+                    }
+                    // tall compartments at the back
+                    for (i = [0 : n - 1])
+                        box(g[from[i], web_back, floor_inner], g[to[i], back_inner, top] + [0, 0, 1]);
+                    // one continuous flat compartment at the front (eraser, clips)
+                    box(g[from[0], front_inner, floor_inner], g[to[n - 1], web_front, low] + [0, 0, 1]);
+                }
+                zone(g[left, front, *], d = 1);
+                zone(g[right, front, *], d = 1);
+                zone(g[left, back, *], d = 1);
+                zone(g[right, back, *], d = 1);
+            }
+            // vertical inner corners of all pockets
+            for (i = [0 : n - 1]) {
+                zone(g[from[i], web_back, *], d = 1);
+                zone(g[to[i], web_back, *], d = 1);
+                zone(g[from[i], back_inner, *], d = 1);
+                zone(g[to[i], back_inner, *], d = 1);
+            }
+            zone(g[from[0], front_inner, *], d = 1);
+            zone(g[to[n - 1], front_inner, *], d = 1);
+            zone(g[from[0], web_front, *], d = 1);
+            zone(g[to[n - 1], web_front, *], d = 1);
+          }
+          zone(g.floor_inner, d = 0.5);         // Edges of the pocket bottoms
+        }
+        zone(g.top, d = 0.5);                   // Top edges at the back
+    }
+
+    anchor compartment_mid = g[from[0], back_inner, floor_inner] + [compartments[0] / 2, -depth / 3, 0], dir = [0, 0, 1];
+}
+
+box_: pen_box();

@@ -1,0 +1,47 @@
+// Parts of the hinge (pulled in via use). Axis along x through the origin, leaves in
+// the xy plane (mid plane z = 0): leaf A towards -y, leaf B towards +y. The knuckles divide
+// the length l into n equal sections; A carries the even, B the odd sections.
+
+// Section i of the knuckles: [x0, x1], with axial clearance s at each inner joint
+function knuckle(i, l, n, s) = [i * l / n + (i == 0 ? 0 : s / 2), (i + 1) * l / n - (i == n - 1 ? 0 : s / 2)];
+
+module leaf(side = 0, l = 60, width = 25, t = 2.5, r = 4, n = 5, clearance = 0.4, bore = 3,
+            hole_d = 3.5, head_d = 7) {
+    direction = side == 0 ? -1 : 1;
+    grid g {
+        x: start = 0, hole = [l * 0.2, l * 0.8], end = l;
+        y: axis = 0, root = direction * r * 0.75, leaf = direction * (width + r), hole_y = direction * (r + width * 0.55);
+        z: bottom = -t / 2, mid = 0, top = t / 2;
+    }
+    difference() {
+        difference(chamfer = 0.3) {
+            union() {
+                fillet(3) {
+                    box(g[start, root, bottom], g[end, leaf, top]);   // starts in the knuckle, not at the bore
+                    zone(g[start, leaf, *], d = 1);
+                    zone(g[end, leaf, *], d = 1);
+                }
+                for (i = [side : 2 : n - 1])
+                    cylinder([knuckle(i, l, n, clearance)[0], 0, 0], [knuckle(i, l, n, clearance)[1], 0, 0], r = r);
+            }
+            // Bore for the pin
+            cylinder(g[start, axis, mid] - [1, 0, 0], g[end, axis, mid] + [1, 0, 0], d = bore);
+            // Countersunk holes (3.5 mm screw), countersink on the +z side
+            for (x = [g.hole[0], g.hole[1]]) {
+                translate([x, g.hole_y, -t]) cylinder(h = 2 * t, d = hole_d);
+                translate([x, g.hole_y, g.top - (head_d - hole_d) / 2])
+                    cylinder(h = (head_d - hole_d) / 2 + 0.01, d1 = hole_d, d2 = head_d);
+            }
+        }
+        // Clearance for the knuckles of the other leaf (axial and radial clearance s)
+        for (i = [1 - side : 2 : n - 1])
+            cylinder([knuckle(i, l, n, clearance)[0] - clearance, 0, 0], [knuckle(i, l, n, clearance)[1] + clearance, 0, 0],
+                     r = r + clearance);
+    }
+    anchor axis_start = g[start, axis, mid], dir = [1, 0, 0];
+}
+
+module pin(l = 60, d = 3, head = 1) {
+    cylinder([0, 0, 0], [l, 0, 0], d = d);
+    cylinder([-head, 0, 0], [0, 0, 0], d = d + 2);   // Head as an axial stop
+}

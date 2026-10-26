@@ -28,9 +28,38 @@ struct Expect {
 
 const EXPECT: &[Expect] = &[
     Expect {
+        file: "angle_anchor.mcad",
+        grids: &[("g", 10, false), ("g", 10, false), ("m", 4, true)],
+        instances: &[
+            ("a", "bracket", &["base_hole", "wall_hole", "tip"]),
+            ("b", "bracket", &["base_hole", "wall_hole", "tip"]),
+        ],
+        handles: 12,
+        ops: &[("screw", 3), ("union", 2)],
+        check: |out| {
+            // Anchors of b in file coordinates: translate([0, 40, 0]) rotate([0, 0, 90]).
+            let b = instance(out, "b");
+            assert_close(b.matrix.transform_point3(b.anchors[1].point), [-10.0, 43.0, 32.0]);
+            assert_close(b.matrix.transform_vector3(b.anchors[1].dir.unwrap()), [0.0, 1.0, 0.0]);
+            let m = out.grid_by_name("m").unwrap();
+            let v: Vec<(&str, f64)> = m.planes.iter().map(|p| (p.name.as_str(), p.value)).collect();
+            assert_eq!(&v[..3], [("tip_b", -20.0), ("tip_a", 30.0), ("y0", 20.0)]);
+            // The screw at b.wall_hole points along the anchor direction (+y in file coordinates).
+            let screws = nodes_with(out, "screw");
+            let w = out.tree.node(screws[2]).world;
+            assert_close(w.transform_point3(DVec3::ZERO), [-10.0, 43.0, 32.0]);
+            assert_close(w.transform_vector3(DVec3::Z), [0.0, 1.0, 0.0]);
+        },
+    },
+    Expect {
         file: "asserts.mcad",
         grids: &[],
-        instances: &[("g", "gehaeuse", &[]), ("hl", "halter", &[]), ("kf", "kabelfuehrung", &[]), ("k", "deckel", &[])],
+        instances: &[
+            ("g", "housing", &[]),
+            ("holder", "holder", &[]),
+            ("guide", "cable_guide", &[]),
+            ("k", "lid", &[]),
+        ],
         handles: 1,
         ops: &[("mesh", 1), ("difference", 1)],
         check: |out| {
@@ -45,9 +74,54 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "dose_shell.mcad",
+        file: "bottle.mcad",
+        grids: &[("g", 8, false), ("g", 8, false)],
+        instances: &[],
+        handles: 1,
+        ops: &[("rotate_extrude", 2), ("fillet", 2), ("polygon", 2), ("cylinder", 4)],
+        check: |out| {
+            let angles: Vec<f64> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| if let Op::RotateExtrude { angle } = n.op { Some(angle) } else { None })
+                .collect();
+            assert_eq!(angles, [360.0, 270.0]);
+            let f: Vec<f64> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| if let Op::Blend { r, .. } = n.op { Some(r) } else { None })
+                .collect();
+            assert_eq!(f, [3.0, 3.0]);
+        },
+    },
+    Expect {
+        file: "cable_guide.mcad",
+        grids: &[("g", 7, true)],
+        instances: &[],
+        handles: 17,
+        ops: &[("sweep", 2), ("polygon", 2), ("box", 2)],
+        check: |out| {
+            let sweeps: Vec<(&Vec<DVec3>, PathInterp)> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match &n.op {
+                    Op::Sweep { path, interp } => Some((path, *interp)),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(sweeps[0].1, PathInterp::Spline);
+            assert_eq!(sweeps[0].0.len(), 4);
+            assert_close(sweeps[0].0[2], [40.0, 25.0, 20.0]);
+            assert_eq!(sweeps[1].1, PathInterp::Linear);
+        },
+    },
+    Expect {
+        file: "can_shell.mcad",
         grids: &[("g", 6, false)],
-        instances: &[("k", "dose", &["rand"])],
+        instances: &[("k", "can", &["rim"])],
         handles: 0,
         ops: &[("shell", 1), ("zone", 1), ("box", 2)],
         check: |out| {
@@ -60,7 +134,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "fase_chamfer.mcad",
+        file: "chamfers.mcad",
         grids: &[("g", 6, true)],
         instances: &[],
         handles: 17,
@@ -76,7 +150,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "fillet_zonen.mcad",
+        file: "fillet_zones.mcad",
         grids: &[("g", 6, false)],
         instances: &[],
         handles: 0,
@@ -108,30 +182,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "flasche.mcad",
-        grids: &[("g", 8, false), ("g", 8, false)],
-        instances: &[],
-        handles: 1,
-        ops: &[("rotate_extrude", 2), ("fillet", 2), ("polygon", 2), ("cylinder", 4)],
-        check: |out| {
-            let angles: Vec<f64> = out
-                .tree
-                .nodes
-                .iter()
-                .filter_map(|n| if let Op::RotateExtrude { angle } = n.op { Some(angle) } else { None })
-                .collect();
-            assert_eq!(angles, [360.0, 270.0]);
-            let f: Vec<f64> = out
-                .tree
-                .nodes
-                .iter()
-                .filter_map(|n| if let Op::Blend { r, .. } = n.op { Some(r) } else { None })
-                .collect();
-            assert_eq!(f, [3.0, 3.0]);
-        },
-    },
-    Expect {
-        file: "freiformdeckel.mcad",
+        file: "freeform_lid.mcad",
         grids: &[("g", 9, false)],
         instances: &[],
         handles: 0,
@@ -149,25 +200,9 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "gehaeuse.mcad",
-        grids: &[("g", 8, false), ("h", 3, true)],
-        instances: &[("k", "gehaeuse", &["ecke", "oben"])],
-        handles: 3,
-        ops: &[("difference", 1), ("box", 4), ("deckel", 2)],
-        check: |out| {
-            let k = instance(out, "k");
-            assert_close(k.anchors[0].point, [60.0, 30.0, 20.0]);
-            assert_eq!(k.anchors[1].dir, Some(DVec3::Z));
-            let h = out.grid_by_name("h").unwrap();
-            assert_eq!(h.planes.iter().find(|p| p.name == "rand").unwrap().value, 60.0);
-            let lid = nodes_with(out, "box")[2];
-            assert_close(out.tree.node(lid).world.transform_point3(DVec3::ZERO), [60.0, 30.0, 20.0]);
-        },
-    },
-    Expect {
-        file: "griffschale.mcad",
+        file: "grip_shell.mcad",
         grids: &[("g", 9, false)],
-        instances: &[("s", "griffschale", &["deckel"])],
+        instances: &[("s", "grip_shell", &["lid"])],
         handles: 0,
         ops: &[("shell", 1), ("zone", 1), ("difference", 3), ("cylinder", 4)],
         check: |out| {
@@ -176,8 +211,43 @@ const EXPECT: &[Expect] = &[
             let f = out.tree.nodes.iter().filter(|n| matches!(n.op, Op::Boolean { fillet: Some(f), .. } if f == 0.5));
             assert_eq!(f.count(), 2);
             let g = out.grid_by_name("g").unwrap();
-            let dom: Vec<f64> = g.planes.iter().filter(|p| p.base == "dom").map(|p| p.value).collect();
-            assert_eq!(dom, [18.0, 72.0]);
+            let boss: Vec<f64> = g.planes.iter().filter(|p| p.base == "boss").map(|p| p.value).collect();
+            assert_eq!(boss, [18.0, 72.0]);
+        },
+    },
+    Expect {
+        file: "hole_plate.mcad",
+        grids: &[("g", 11, false), ("l", 5, false)],
+        instances: &[("p", "hole_plate", &["first_hole", "tab"])],
+        handles: 3,
+        ops: &[("difference", 1), ("cylinder", 5), ("box", 2)],
+        check: |out| {
+            assert!(has_op(out, |o| matches!(o, Op::Boolean { fillet: Some(f), .. } if *f == 1.0)));
+            let g = out.grid_by_name("g").unwrap();
+            let hole: Vec<f64> = g.planes.iter().filter(|p| p.base == "hole").map(|p| p.value).collect();
+            assert_eq!(hole, [6.0, 18.0, 30.0, 42.0]);
+            let p = instance(out, "p");
+            assert_close(p.anchors[1].point, [58.0, 12.0, 0.0]);
+            // Holes at the grid points.
+            let xs: Vec<f64> =
+                nodes_with(out, "cylinder")[..4].iter().map(|&c| out.tree.node(c).world.w_axis.x).collect();
+            assert_eq!(xs, [6.0, 18.0, 30.0, 42.0]);
+        },
+    },
+    Expect {
+        file: "housing.mcad",
+        grids: &[("g", 8, false), ("h", 3, true)],
+        instances: &[("k", "housing", &["corner", "top"])],
+        handles: 3,
+        ops: &[("difference", 1), ("box", 4), ("lid", 2)],
+        check: |out| {
+            let k = instance(out, "k");
+            assert_close(k.anchors[0].point, [60.0, 30.0, 20.0]);
+            assert_eq!(k.anchors[1].dir, Some(DVec3::Z));
+            let h = out.grid_by_name("h").unwrap();
+            assert_eq!(h.planes.iter().find(|p| p.name == "rim").unwrap().value, 60.0);
+            let lid = nodes_with(out, "box")[2];
+            assert_close(out.tree.node(lid).world.transform_point3(DVec3::ZERO), [60.0, 30.0, 20.0]);
         },
     },
     Expect {
@@ -193,31 +263,9 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "kabelfuehrung.mcad",
-        grids: &[("g", 7, true)],
-        instances: &[],
-        handles: 17,
-        ops: &[("sweep", 2), ("polygon", 2), ("box", 2)],
-        check: |out| {
-            let sweeps: Vec<(&Vec<DVec3>, PathInterp)> = out
-                .tree
-                .nodes
-                .iter()
-                .filter_map(|n| match &n.op {
-                    Op::Sweep { path, interp } => Some((path, *interp)),
-                    _ => None,
-                })
-                .collect();
-            assert_eq!(sweeps[0].1, PathInterp::Spline);
-            assert_eq!(sweeps[0].0.len(), 4);
-            assert_close(sweeps[0].0[2], [40.0, 25.0, 20.0]);
-            assert_eq!(sweeps[1].1, PathInterp::Linear);
-        },
-    },
-    Expect {
-        file: "knauf_mirror.mcad",
+        file: "knob_mirror.mcad",
         grids: &[("s", 3, true), ("p", 7, false), ("p", 7, false)],
-        instances: &[("k", "knauf", &["oben"]), ("", "knauf", &["oben"])],
+        instances: &[("k", "knob", &["top"]), ("", "knob", &["top"])],
         handles: 5,
         ops: &[("rotate_extrude", 2), ("spline", 2), ("torus", 2), ("mirror", 1)],
         check: |out| {
@@ -229,7 +277,7 @@ const EXPECT: &[Expect] = &[
                     .count()
                     == 2
             );
-            // mirror(s.spiegel): plane x = 20 of a grid scaled by 2 → x = 40.
+            // mirror(s.mirror_plane): plane x = 20 of a grid scaled by 2 → x = 40.
             let m = out
                 .tree
                 .nodes
@@ -241,26 +289,7 @@ const EXPECT: &[Expect] = &[
                 .unwrap();
             assert_close(m.transform_point3(DVec3::new(0.0, 1.0, 2.0)), [80.0, 1.0, 2.0]);
             let p = out.grids.iter().find(|g| g.name == "p").unwrap();
-            assert_eq!(p.planes.iter().find(|p| p.name == "taille").unwrap().value, 9.0);
-        },
-    },
-    Expect {
-        file: "lochplatte.mcad",
-        grids: &[("g", 11, false), ("l", 5, false)],
-        instances: &[("p", "lochplatte", &["erstes_loch", "lasche"])],
-        handles: 3,
-        ops: &[("difference", 1), ("cylinder", 5), ("box", 2)],
-        check: |out| {
-            assert!(has_op(out, |o| matches!(o, Op::Boolean { fillet: Some(f), .. } if *f == 1.0)));
-            let g = out.grid_by_name("g").unwrap();
-            let loch: Vec<f64> = g.planes.iter().filter(|p| p.base == "loch").map(|p| p.value).collect();
-            assert_eq!(loch, [6.0, 18.0, 30.0, 42.0]);
-            let p = instance(out, "p");
-            assert_close(p.anchors[1].point, [58.0, 12.0, 0.0]);
-            // Holes at the grid points.
-            let xs: Vec<f64> =
-                nodes_with(out, "cylinder")[..4].iter().map(|&c| out.tree.node(c).world.w_axis.x).collect();
-            assert_eq!(xs, [6.0, 18.0, 30.0, 42.0]);
+            assert_eq!(p.planes.iter().find(|p| p.name == "waist").unwrap().value, 9.0);
         },
     },
     Expect {
@@ -287,23 +316,9 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "lueftungsgitter.mcad",
-        grids: &[("g", 15, false)],
-        instances: &[("", "gitter", &["mitte"])],
-        handles: 0,
-        ops: &[("linear_extrude", 10), ("difference", 1), ("rect", 10)],
-        check: |out| {
-            assert!(has_op(out, |o| matches!(o, Op::Boolean { chamfer: Some(c), fillet: None, .. } if *c == 0.6)));
-            let g = out.grid_by_name("g").unwrap();
-            let s: Vec<f64> = g.planes.iter().filter(|p| p.base == "s").map(|p| p.value).collect();
-            assert_eq!(s.len(), 7);
-            assert_eq!((s[0], s[6]), (10.0, 70.0));
-        },
-    },
-    Expect {
-        file: "mehrfarbig.mcad",
+        file: "multicolor.mcad",
         grids: &[("g", 8, false), ("p", 9, false)],
-        instances: &[("schild", "schild", &[]), ("figur", "figur", &[])],
+        instances: &[("door_sign", "door_sign", &[]), ("figure", "figure", &[])],
         handles: 0,
         ops: &[("color", 6), ("difference", 2), ("rotate_extrude", 1)],
         check: |out| {
@@ -331,106 +346,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "schablone.mcad",
-        grids: &[],
-        instances: &[],
-        handles: 4,
-        ops: &[("linear_extrude", 3), ("difference", 1), ("offset", 2)],
-        check: |out| {
-            // the default font is the stencil font: glyphs of lines and arcs without holes,
-            // "LACK 08" 6 glyphs and "RAL 9005 B" 8 glyphs (no glyph for spaces)
-            let glyphs: Vec<&Vec<cad_ir::Contour>> = out
-                .tree
-                .nodes
-                .iter()
-                .filter_map(|n| match &n.op {
-                    Op::Profile(cad_ir::Profile::Sketch { contours, .. }) => Some(contours),
-                    _ => None,
-                })
-                .collect();
-            assert_eq!(glyphs.len(), 6 + 8);
-            for c in glyphs.iter().flat_map(|g| g.iter()) {
-                assert!(c.segs.iter().all(|s| matches!(s.kind(), "line" | "arc")), "lines and arcs");
-                let pts: Vec<_> = c.segs.iter().flat_map(|s| s.to_kernel().unwrap().sample(1e-3)).collect();
-                let a: f64 = (0..pts.len()).map(|i| pts[i].perp_dot(pts[(i + 1) % pts.len()])).sum();
-                assert!(a > 0.0, "outer contours only (no holes)");
-            }
-        },
-    },
-    Expect {
-        file: "skizze_bibliothek.mcad",
-        grids: &[],
-        instances: &[],
-        handles: 10,
-        ops: &[("sketch", 2), ("linear_extrude", 2), ("lochplatte", 1), ("schraube", 4)],
-        check: |out| {
-            // qualified calls: the instances know their module (not the namespace)
-            let mods: Vec<&str> = out.instances[1..].iter().map(|i| i.module.as_str()).collect();
-            assert_eq!(mods, ["stern", "langloch", "lochplatte", "schraube", "schraube", "schraube", "schraube"]);
-            // `raster` of the enclosing module with its default: a 40 × 10 plate
-            let plate = out.tree.nodes.iter().find_map(|n| match &n.op {
-                Op::Prim { prim: cad_ir::Prim::Box { max, .. }, .. } => Some(*max),
-                _ => None,
-            });
-            assert_eq!(plate, Some(DVec3::new(40.0, 10.0, 3.0)));
-            // teile.kopf(teile.M3)
-            assert!(has_op(
-                out,
-                |o| matches!(o, Op::Prim { prim: cad_ir::Prim::Cylinder { r1, .. }, .. } if (*r1 - 1.8 * 3.2 / 2.0).abs() < 1e-12)
-            ));
-        },
-    },
-    Expect {
-        file: "skizze_deckel.mcad",
-        grids: &[],
-        instances: &[],
-        handles: 15,
-        ops: &[("sketch", 3), ("offset", 2), ("difference", 2), ("cylinder", 4)],
-        check: |out| {
-            // the outline with four rounded corners: 4 lines + 4 arcs
-            let n = out.tree.nodes.iter().find_map(|n| match &n.op {
-                Op::Profile(cad_ir::Profile::Sketch { contours, .. }) => Some(contours.clone()),
-                _ => None,
-            });
-            let kinds: Vec<&str> = n.as_ref().unwrap()[0].segs.iter().map(|g| g.kind()).collect();
-            assert_eq!(kinds, ["line", "arc", "line", "arc", "line", "arc", "line", "arc"]);
-            let offs: Vec<f64> = out
-                .tree
-                .nodes
-                .iter()
-                .filter_map(|n| match n.op {
-                    Op::Offset { round: true, d, .. } => Some(d),
-                    _ => None,
-                })
-                .collect();
-            assert_eq!(offs.len(), 2);
-            assert!((offs[0] + 2.2).abs() < 1e-12 && (offs[1] + 3.7).abs() < 1e-12, "{offs:?}");
-        },
-    },
-    Expect {
-        file: "skizze_halter.mcad",
-        grids: &[],
-        instances: &[],
-        handles: 11,
-        ops: &[("fillet2d", 2), ("stroke", 2), ("sketch", 2), ("polygon", 1)],
-        check: |out| {
-            let r: Vec<f64> = out
-                .tree
-                .nodes
-                .iter()
-                .filter_map(|n| match n.op {
-                    Op::Blend2 { kind: BlendKind::Fillet, r, .. } => Some(r),
-                    _ => None,
-                })
-                .collect();
-            assert_eq!(r, [1.0, 5.0]);
-            // the zone of the inner block
-            let z = out.tree.nodes.iter().filter(|n| n.flags.zone).count();
-            assert_eq!(z, 1);
-        },
-    },
-    Expect {
-        file: "skizze_kabelkanal.mcad",
+        file: "sketch_cable_duct.mcad",
         grids: &[],
         instances: &[],
         handles: 6,
@@ -457,7 +373,79 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "skizze_profil.mcad",
+        file: "sketch_holder.mcad",
+        grids: &[],
+        instances: &[],
+        handles: 11,
+        ops: &[("fillet2d", 2), ("stroke", 2), ("sketch", 2), ("polygon", 1)],
+        check: |out| {
+            let r: Vec<f64> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match n.op {
+                    Op::Blend2 { kind: BlendKind::Fillet, r, .. } => Some(r),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(r, [1.0, 5.0]);
+            // the zone of the inner block
+            let z = out.tree.nodes.iter().filter(|n| n.flags.zone).count();
+            assert_eq!(z, 1);
+        },
+    },
+    Expect {
+        file: "sketch_library.mcad",
+        grids: &[],
+        instances: &[],
+        handles: 10,
+        ops: &[("sketch", 2), ("linear_extrude", 2), ("hole_plate", 1), ("screw", 4)],
+        check: |out| {
+            // qualified calls: the instances know their module (not the namespace)
+            let mods: Vec<&str> = out.instances[1..].iter().map(|i| i.module.as_str()).collect();
+            assert_eq!(mods, ["star", "oblong", "hole_plate", "screw", "screw", "screw", "screw"]);
+            // `pitch` of the enclosing module with its default: a 40 × 10 plate
+            let plate = out.tree.nodes.iter().find_map(|n| match &n.op {
+                Op::Prim { prim: cad_ir::Prim::Box { max, .. }, .. } => Some(*max),
+                _ => None,
+            });
+            assert_eq!(plate, Some(DVec3::new(40.0, 10.0, 3.0)));
+            // parts.head(parts.M3)
+            assert!(has_op(
+                out,
+                |o| matches!(o, Op::Prim { prim: cad_ir::Prim::Cylinder { r1, .. }, .. } if (*r1 - 1.8 * 3.2 / 2.0).abs() < 1e-12)
+            ));
+        },
+    },
+    Expect {
+        file: "sketch_lid.mcad",
+        grids: &[],
+        instances: &[],
+        handles: 15,
+        ops: &[("sketch", 3), ("offset", 2), ("difference", 2), ("cylinder", 4)],
+        check: |out| {
+            // the outline with four rounded corners: 4 lines + 4 arcs
+            let n = out.tree.nodes.iter().find_map(|n| match &n.op {
+                Op::Profile(cad_ir::Profile::Sketch { contours, .. }) => Some(contours.clone()),
+                _ => None,
+            });
+            let kinds: Vec<&str> = n.as_ref().unwrap()[0].segs.iter().map(|g| g.kind()).collect();
+            assert_eq!(kinds, ["line", "arc", "line", "arc", "line", "arc", "line", "arc"]);
+            let offs: Vec<f64> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match n.op {
+                    Op::Offset { round: true, d, .. } => Some(d),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(offs.len(), 2);
+            assert!((offs[0] + 2.2).abs() < 1e-12 && (offs[1] + 3.7).abs() < 1e-12, "{offs:?}");
+        },
+    },
+    Expect {
+        file: "sketch_profile.mcad",
         grids: &[("s", 6, false)],
         instances: &[],
         handles: 9,
@@ -482,7 +470,7 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "skizze_sweep.mcad",
+        file: "sketch_sweep.mcad",
         grids: &[],
         instances: &[],
         handles: 15,
@@ -497,11 +485,11 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "skizze_zahnriemenscheibe.mcad",
+        file: "sketch_timing_pulley.mcad",
         grids: &[],
         instances: &[],
         handles: 0,
-        ops: &[("sketch", 1), ("scheibe", 1), ("cylinder", 4)],
+        ops: &[("sketch", 1), ("pulley", 1), ("cylinder", 4)],
         check: |out| {
             let n = out.tree.nodes.iter().find_map(|n| match &n.op {
                 Op::Profile(cad_ir::Profile::Sketch { contours, .. }) => Some(contours.clone()),
@@ -511,6 +499,33 @@ const EXPECT: &[Expect] = &[
             // 20 teeth: two arcs each; the bore: two arcs (a second contour)
             assert_eq!(c.iter().map(|c| c.segs.len()).collect::<Vec<_>>(), [40, 2]);
             assert!(c.iter().all(|c| c.closed && c.segs.iter().all(|g| g.kind() == "arc")));
+        },
+    },
+    Expect {
+        file: "stencil.mcad",
+        grids: &[],
+        instances: &[],
+        handles: 4,
+        ops: &[("linear_extrude", 3), ("difference", 1), ("offset", 2)],
+        check: |out| {
+            // the default font is the stencil font: glyphs of lines and arcs without holes,
+            // "PAINT 08" 7 glyphs and "RAL 9005 B" 8 glyphs (no glyph for spaces)
+            let glyphs: Vec<&Vec<cad_ir::Contour>> = out
+                .tree
+                .nodes
+                .iter()
+                .filter_map(|n| match &n.op {
+                    Op::Profile(cad_ir::Profile::Sketch { contours, .. }) => Some(contours),
+                    _ => None,
+                })
+                .collect();
+            assert_eq!(glyphs.len(), 7 + 8);
+            for c in glyphs.iter().flat_map(|g| g.iter()) {
+                assert!(c.segs.iter().all(|s| matches!(s.kind(), "line" | "arc")), "lines and arcs");
+                let pts: Vec<_> = c.segs.iter().flat_map(|s| s.to_kernel().unwrap().sample(1e-3)).collect();
+                let a: f64 = (0..pts.len()).map(|i| pts[i].perp_dot(pts[(i + 1) % pts.len()])).sum();
+                assert!(a > 0.0, "outer contours only (no holes)");
+            }
         },
     },
     Expect {
@@ -561,13 +576,13 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "text_schild.mcad",
+        file: "text_sign.mcad",
         grids: &[],
         instances: &[],
         handles: 8,
-        ops: &[("linear_extrude", 4), ("color", 4), ("platte", 3)],
+        ops: &[("linear_extrude", 4), ("color", 4), ("plate", 3)],
         check: |out| {
-            // glyphs: "Werkstatt" 9, "ZUTRITT NUR MIT BRILLE" 19 (Allerta Stencil: letters in
+            // glyphs: "Workshop" 8, "SAFETY GLASSES REQUIRED" 21 (Allerta Stencil: letters in
             // several parts are one glyph each)
             let glyphs = out
                 .tree
@@ -577,11 +592,11 @@ const EXPECT: &[Expect] = &[
                     matches!(&n.op, Op::Profile(cad_ir::Profile::Sketch { .. })) && n.stmt != out.tree.nodes[0].stmt
                 })
                 .count();
-            assert_eq!(glyphs, 3 + 9 + 19, "3 plate sketches + glyphs");
+            assert_eq!(glyphs, 3 + 8 + 21, "3 plate sketches + glyphs");
         },
     },
     Expect {
-        file: "variabler_radius.mcad",
+        file: "variable_radius.mcad",
         grids: &[("g", 7, true)],
         instances: &[],
         handles: 16,
@@ -599,7 +614,7 @@ const EXPECT: &[Expect] = &[
                 .collect();
             assert_eq!(laws.len(), 3);
             let r = |l: &cad_ir::Law, x: f64, z: f64| l.eval(DVec3::new(x, 0.0, z)).unwrap();
-            // p.z < g.mitte ? 2 : 4 (the grid plane captured as its value 10)
+            // p.z < g.mid ? 2 : 4 (the grid plane captured as its value 10)
             assert_eq!((r(laws[0], 0.0, 5.0), r(laws[0], 0.0, 15.0)), (2.0, 4.0));
             // 1 + p.x / 40 in the difference's own system
             assert_eq!(r(laws[1], 20.0, 0.0), 1.5);
@@ -608,27 +623,17 @@ const EXPECT: &[Expect] = &[
         },
     },
     Expect {
-        file: "winkel_anker.mcad",
-        grids: &[("g", 10, false), ("g", 10, false), ("m", 4, true)],
-        instances: &[
-            ("a", "winkel", &["boden_loch", "wand_loch", "spitze"]),
-            ("b", "winkel", &["boden_loch", "wand_loch", "spitze"]),
-        ],
-        handles: 12,
-        ops: &[("schraube", 3), ("union", 2)],
+        file: "vent_grille.mcad",
+        grids: &[("g", 15, false)],
+        instances: &[("", "grille", &["mid"])],
+        handles: 0,
+        ops: &[("linear_extrude", 10), ("difference", 1), ("rect", 10)],
         check: |out| {
-            // Anchors of b in file coordinates: translate([0, 40, 0]) rotate([0, 0, 90]).
-            let b = instance(out, "b");
-            assert_close(b.matrix.transform_point3(b.anchors[1].point), [-10.0, 43.0, 32.0]);
-            assert_close(b.matrix.transform_vector3(b.anchors[1].dir.unwrap()), [0.0, 1.0, 0.0]);
-            let m = out.grid_by_name("m").unwrap();
-            let v: Vec<(&str, f64)> = m.planes.iter().map(|p| (p.name.as_str(), p.value)).collect();
-            assert_eq!(&v[..3], [("bis", -20.0), ("von", 30.0), ("y0", 20.0)]);
-            // The screw at b.wand_loch points along the anchor direction (+y in file coordinates).
-            let screws = nodes_with(out, "schraube");
-            let w = out.tree.node(screws[2]).world;
-            assert_close(w.transform_point3(DVec3::ZERO), [-10.0, 43.0, 32.0]);
-            assert_close(w.transform_vector3(DVec3::Z), [0.0, 1.0, 0.0]);
+            assert!(has_op(out, |o| matches!(o, Op::Boolean { chamfer: Some(c), fillet: None, .. } if *c == 0.6)));
+            let g = out.grid_by_name("g").unwrap();
+            let s: Vec<f64> = g.planes.iter().filter(|p| p.base == "s").map(|p| p.value).collect();
+            assert_eq!(s.len(), 7);
+            assert_eq!((s[0], s[6]), (10.0, 70.0));
         },
     },
 ];
@@ -663,7 +668,7 @@ fn spec_models_stage1() {
 
     for (path, e) in files.iter().zip(EXPECT) {
         let src = std::fs::read_to_string(path).unwrap();
-        assert!(src.starts_with("// Zweck:"), "{}: missing header comment", e.file);
+        assert!(src.starts_with("// Purpose:"), "{}: missing header comment", e.file);
         let out = eval_file(path, &src);
         let problems = stage1_problems(&src, &out);
         assert!(problems.is_empty(), "{}: {problems:#?}", e.file);

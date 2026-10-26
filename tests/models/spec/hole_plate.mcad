@@ -1,0 +1,29 @@
+// Purpose: perforated plate with indexed grid planes (lists), bore holes at grid points,
+// a second grid placed at grid points and difference(fillet = 1) for the edges of the bores.
+module hole_plate(n = 4, pitch = 12, t = 4, margin = 6) {
+    w = 2 * margin + (n - 1) * pitch;
+    grid g {
+        x: left = 0, right = w, hole = [for (i = [0 : n - 1]) margin + i * pitch];
+        y: front = 0, back = 2 * margin, mid = margin;
+        z: floor = 0, top = t;
+    }
+
+    difference(fillet = 1) {
+        box(g[left, front, floor], g[right, back, top]);
+        for (i = [0 : n - 1])
+            translate(g[hole[i], mid, floor]) translate([0, 0, -1]) cylinder(h = t + 2, d = 4);
+    }
+
+    // Grid for the tab, placed at the right-hand edge.
+    translate(g[right, front, floor]) grid l {
+        x: start = 0, end = 10;
+        y: v = 0, h = 2 * margin;
+    }
+    box(l[start, v, _], l[end, h, _] + [0, 0, t / 2]);
+
+    anchor first_hole = g[hole[0], mid, top], dir = [0, 0, 1];
+    anchor tab = l[end, h, _];
+}
+
+p: hole_plate();
+translate(p.first_hole) rotate(to = dir(p.first_hole)) cylinder(h = 6, d = 3.5);

@@ -132,13 +132,13 @@ const f1File = write(
   "f1-alle.scad",
   "grid g { z: o = 18; }\ngrid h { z: o = 30; }\nshell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 3); zone(g.o, d = 1); }\ntranslate([0, 45, 0]) shell(1.6) { box([0, 0, 0], [90, 34, 18], $fillet = 5); zone(g.o, d = 1); }\ntranslate([100, 0, 0]) shell(1.5) { box([0, 0, 0], [50, 35, 30], $fillet = 4); zone(h.o, d = 1); }\n",
 );
-const dose = join(root, "tests/models/spec/dose_shell.scad");
+const dose = join(root, "tests/models/spec/can_shell.mcad");
 const doseAfter = exportInfo(cadNew, dose);
 const doseBefore = hasOld ? check(cadOld, dose) : [];
 const f2File = write("f2.scad", F2);
 const f3File = write("f3.scad", F3);
 const f4File = write("f4.scad", F4);
-const vr = join(root, "tests/models/spec/variabler_radius.scad");
+const vr = join(root, "tests/models/spec/variable_radius.mcad");
 
 const imgs = {};
 const pair = (key, file, args = []) => {
@@ -182,13 +182,13 @@ if (existsSync(join(pkg, "cad_wasm_bg.wasm"))) {
   const files = [
     ["F1 (three cases)", f1File],
     ["F1 (r = 6)", join(work, "f1-d.scad")],
-    ["dose_shell.scad", dose],
+    ["can_shell.mcad", dose],
     ["F2", f2File],
     ["F3", f3File],
     ["F4", f4File],
-    ["variabler_radius.scad", vr],
-    ["griffschale.scad", join(root, "tests/models/spec/griffschale.scad")],
-    ["fillet_zonen.scad", join(root, "tests/models/spec/fillet_zonen.scad")],
+    ["variable_radius.mcad", vr],
+    ["grip_shell.mcad", join(root, "tests/models/spec/grip_shell.mcad")],
+    ["fillet_zones.mcad", join(root, "tests/models/spec/fillet_zones.mcad")],
   ];
   const norm = (scene, diags) => ({
     nodes: scene.nodes.map((n) => ({
@@ -451,8 +451,8 @@ const html = `<!doctype html>
 
 <h2>1 Scope</h2>
 <ul>
-  <li><b>F1</b> <code>shell</code> of a filleted body (dose_shell.scad was red), <b>F2</b> <code>surface(points)</code> with 2 × 2 or 3 × 3 points, <b>F3</b> seam and pole edges as separate edges – the three bugs found in report 4, section 7. In addition <b>F4</b>: fase_chamfer.scad was red as well (<code>union(chamfer = 0.5)</code> selected eight instead of two edges).</li>
-  <li><b>Variable radius</b> (spec "Variable radius (stretch goal)"): <code>fillet(r = function (p) …) { … }</code> and <code>difference/union/intersection(fillet = function (p) …)</code>; radius as a function of position, evaluated at stations along each edge, hint "r 2–4", error cases as for the constant radius. New example <code>tests/models/spec/variabler_radius.scad</code>.</li>
+  <li><b>F1</b> <code>shell</code> of a filleted body (can_shell.mcad was red), <b>F2</b> <code>surface(points)</code> with 2 × 2 or 3 × 3 points, <b>F3</b> seam and pole edges as separate edges – the three bugs found in report 4, section 7. In addition <b>F4</b>: chamfers.mcad was red as well (<code>union(chamfer = 0.5)</code> selected eight instead of two edges).</li>
+  <li><b>Variable radius</b> (spec "Variable radius (stretch goal)"): <code>fillet(r = function (p) …) { … }</code> and <code>difference/union/intersection(fillet = function (p) …)</code>; radius as a function of position, evaluated at stations along each edge, hint "r 2–4", error cases as for the constant radius. New example <code>tests/models/spec/variable_radius.mcad</code>.</li>
   <li><b>SMLib</b>: fix 1ed8669 (pointer maps in insertion order) from the fork branch <code>capi-solidcraft</code> as patch <code>smlib/patches/0001-pointer-maps-insertion-order.patch</code> on top of 7eba8aa (<code>smlib/fetch.sh</code> applies it). <b>Facade ABI 4</b> (<code>sc_version()</code> = 4): edge flags in <code>sc_edges</code>, <code>sc_law_stations</code>, <code>sc_fillet_var</code>; kernel ID <code>smlib-7eba8aa+1/facade-4</code> (new cache keys).</li>
 </ul>
 
@@ -467,8 +467,8 @@ const html = `<!doctype html>
 <dt>Fix</dt><dd><code>sc_shell</code> tries SMLib's shell; if it fails or self-overlaps, the facade builds the shell from booleans: <i>body − O − P<sub>1</sub> − … − P<sub>k</sub></i>, O being the closed inward offset, P<sub>i</sub> a prism over the offset face of each opened (planar) face, from just inside the cavity to beyond the body (thickened single face). The side walls of the prism go through the border of the offset face: the opening border is the band between the opened face and its offset, as with SMLib's own shell. Booleans go through the facade's checked booleans, the result through the validity check. In addition patch 0001 (1ed8669): SMLib's pointer maps return keys in insertion order – results no longer depend on the heap layout.</dd>
 <dt>Evidence</dt><dd>Volume against the closed form (rounded cuboid minus inner rounded cuboid with r − t minus the wall band under the planar top face), STEP check, identical scenes native and Wasm (section 5), Rust tests <code>shell_of_rounded_boxes</code>, <code>dose_shell_example_is_a_hollow_box</code>, <code>shell_of_a_rounded_box_open_at_the_top</code>, Node test, Playwright E03.</dd></dl>
 <table><tr><th>Case</th><th>before (cad check)</th><th>expected</th><th>after</th><th>rel. dev.</th><th>STEP</th><th>Diagnostics after</th></tr>${f1Table}
-<tr class="${doseAfter ? "ok" : "bad"}"><td>dose_shell.scad (with lid)</td><td>${list(doseBefore)}</td><td class="num">–</td><td class="num">${mm3(doseAfter?.volume)}</td><td class="num">–</td><td class="num">${doseAfter?.step ? `${doseAfter.step.faces ?? "–"} faces` : "–"}</td><td class="res">${check(cadNew, dose).length ? "error" : "ok"}</td></tr></table>
-${ba("f1-dose", "dose_shell.scad, module dose (cursor on shell, line 9)")}
+<tr class="${doseAfter ? "ok" : "bad"}"><td>can_shell.mcad (with lid)</td><td>${list(doseBefore)}</td><td class="num">–</td><td class="num">${mm3(doseAfter?.volume)}</td><td class="num">–</td><td class="num">${doseAfter?.step ? `${doseAfter.step.faces ?? "–"} faces` : "–"}</td><td class="res">${check(cadNew, dose).length ? "error" : "ok"}</td></tr></table>
+${ba("f1-dose", "can_shell.mcad, module dose (cursor on shell, line 9)")}
 ${ba("f1-faelle", "the three cases from report 4")}
 </div>
 
@@ -489,12 +489,12 @@ ${ba("f3-zylinder", "cylinder(…, $chamfer = 1), cursor line 1 (selected edges 
 ${ba("f3-kugel", "sphere(5, $fillet = 1), cursor line 2")}
 </div>
 
-<div class="fix"><h3>F4 fase_chamfer.scad: union(chamfer) selected eight edges</h3><dl>
+<div class="fix"><h3>F4 chamfers.mcad: union(chamfer) selected eight edges</h3><dl>
 <dt>Cause</dt><dd>"New edges" of a boolean operation were edges between faces of different operands (face tags). If two operands share a plane (plate and tower with the same front and back face), SMLib merges the faces into one with the tag of one operand; the six old tower edges on the front and back then separated faces of different operands and were considered new. The chamfer on these edges failed (<code>SM_ERR</code>).</dd>
 <dt>Fix</dt><dd>An edge that lies on an edge of an operand is not new (sample points on the edge chain of an operand, tolerance 10<sup>−6</sup> of the model size).</dd>
 <dt>Hints</dt><dd>before: ${list(f4Hints.before)} · after: ${list(f4Hints.after)}<br>Messages before: ${list(f4Msgs.before)} · after: ${list(f4Msgs.after)}</dd>
-<dt>Evidence</dt><dd><code>coplanar_merged_faces_keep_old_edges_old</code> (2 edges, volume 2502.5 mm³), fase_chamfer.scad without errors (stage 1, STEP, run time table).</dd></dl>
-${ba("f4-union", "union(chamfer = 0.5) from fase_chamfer.scad, cursor line 1")}
+<dt>Evidence</dt><dd><code>coplanar_merged_faces_keep_old_edges_old</code> (2 edges, volume 2502.5 mm³), chamfers.mcad without errors (stage 1, STEP, run time table).</dd></dl>
+${ba("f4-union", "union(chamfer = 0.5) from chamfers.mcad, cursor line 1")}
 </div>
 
 <h2>4 Variable radius</h2>
@@ -516,11 +516,11 @@ ${ba("f4-union", "union(chamfer = 0.5) from fase_chamfer.scad, cursor line 1")}
 <p class="small">One edge of a 30 × 20 × 20 cuboid with a linear law: radius measured via point classification just below the top face (that is where the rounding starts; with a growing radius the tangent line lies slightly behind r(x)). Volume against the closed form 12000 − (1 − π/4)·130: deviation &lt; 10<sup>−5</sup> (Rust and Node test).
 ${volStep ? `Step law <code>p.z &lt; 10 ? 2 : 4</code> on all 12 edges of a 30 × 30 × 20 cuboid: ${num(+volStep[2])} mm³, between r = 4 (${num(+volStep[3])} mm³) and r = 2 (${num(+volStep[1])} mm³).` : ""}
 ${volPocket ? `Pocket border with <code>1 + p.x / 40</code>: ${num(+volPocket[2])} mm³ between r = 1.875 (${num(+volPocket[1])} mm³) and r = 1.125 (${num(+volPocket[3])} mm³).` : ""}
-variabler_radius.scad: ${mm3(vrExport?.volume)}, STEP ${vrExport?.step ? `${vrExport.step.faces ?? "–"} faces` : "–"}, <code>cad export</code> ${ms("spec/variabler_radius.scad") ?? "–"} ms.</p>
+variable_radius.mcad: ${mm3(vrExport?.volume)}, STEP ${vrExport?.step ? `${vrExport.step.faces ?? "–"} faces` : "–"}, <code>cad export</code> ${ms("spec/variable_radius.mcad") ?? "–"} ms.</p>
 <table><tr><th>Line</th><th>before</th><th>after</th></tr>
 ${[11, 16, 22].map((l, i) => `<tr><td>${l}</td><td>${list(vrHints[i].before)}</td><td>${list(vrHints[i].after)}</td></tr>`).join("")}
 <tr><td>Diagnostics</td><td>${list(vrMsgs.before)}</td><td>${list(vrMsgs.after)}</td></tr></table>
-${ba("vr-stufe", "variabler_radius.scad, cursor line 11 (step law)")}
+${ba("vr-stufe", "variable_radius.mcad, cursor line 11 (step law)")}
 ${ba("vr-tasche", "line 16: difference(fillet = function (p) 1 + p.x / 40)")}
 ${ba("vr-lookup", "line 22: lookup law with zone at the lid edges")}
 
@@ -547,7 +547,7 @@ ${cargo ? `<table><tr><th>Rust test program (last run)</th><th>passed</th><th>ne
 
 <h2>8 Limitations</h2>
 <ul>
-  <li><b>shell from booleans</b> only for planar opened faces (the prism is the thickened offset face); for curved opened faces SMLib's result or its error message remains. Closed shells (without a zone) still use SMLib's result if it is valid. The booleans cost time: dose_shell ${tBefore["spec/dose_shell.scad"] ? `${tBefore["spec/dose_shell.scad"].ms} ms (failing) → ${tAfter["spec/dose_shell.scad"]?.ms ?? "–"} ms` : ""} (section 6); in smlib.wasm (Node test, 90 × 34 × 18, r 3) ${esc(nodeShellMs ?? "–")}.</li>
+  <li><b>shell from booleans</b> only for planar opened faces (the prism is the thickened offset face); for curved opened faces SMLib's result or its error message remains. Closed shells (without a zone) still use SMLib's result if it is valid. The booleans cost time: dose_shell ${tBefore["spec/can_shell.mcad"] ? `${tBefore["spec/can_shell.mcad"].ms} ms (failing) → ${tAfter["spec/can_shell.mcad"]?.ms ?? "–"} ms` : ""} (section 6); in smlib.wasm (Node test, 90 × 34 × 18, r 3) ${esc(nodeShellMs ?? "–")}.</li>
   <li><b>Wall thickness ≥ rounding radius</b> (r ≤ t, e.g. 30 × 20 × 10 with r 1, wall 2): the inward offset would be sharp-edged; SMLib's offset fails there in 7eba8aa (<code>SM_ERR</code>, fork commit a252570 not adopted), and the shell remains an error as before (the message names both approaches).</li>
   <li><b>Variable radius:</b> SMLib's variable-radius solver is sensitive. Steep profiles with a large radius at pocket corners fail ("self-overlapping", e.g. pocket border with 1 + p.x/20, 1.25–2.75), as do circular edges with a varying radius (<code>SM_ERR</code>); the example therefore uses 1 + p.x/40. Jumps (<code>p.z &lt; 10 ? 2 : 4</code> on vertical edges) are smoothed over about three station spacings; the hint shows the range of the station values (lookup peak 4 → "3.9", because no station lies exactly at x = 20). Position <code>p</code> in the coordinate system of the fillet/boolean statement. No variable radius for <code>chamfer</code> and <code>$fillet</code> (warning).</li>
   <li><b>Smooth edges:</b> SMLib's criterion (faces tangent within 2°) – nearly tangent edges are never selected. The check "old edge of an operand" (F4) compares with the edge chains of the operands, for curved edges only as accurately as their sampling (there the earlier selection remains).</li>

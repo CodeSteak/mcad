@@ -1,0 +1,48 @@
+// Purpose: mug with handle (approx. 370 ml when full) – conical solid of revolution (rotate_extrude), bottom
+// rounded via a zone at the bottom plane, opened at the top with shell, drinking rim rounded via a
+// second zone; handle as a sweep of a circle along a spline path (ends
+// radial in the wall), attached with union(fillet = …). Dimensions in mm.
+
+// Radius of the outer wall at height z (linear from bottom to top)
+function radius_at(z, r_bottom, r_top, h) = r_bottom + (r_top - r_bottom) * z / h;
+
+module mug(r_bottom = 36, r_top = 41, h = 95, wall = 2.8, floor_r = 6, handle_d = 9) {
+    // Profile of the solid of revolution: x = radius, y = height
+    grid p {
+        x: axis = 0, bottom = r_bottom, top = r_top;
+        y: floor = 0, rim = h;
+    }
+    // Space: zones and handle
+    grid g {
+        x: axis = 0;
+        z: floor = 0, handle_bottom = 22, handle_top = h - 18, rim = h;
+    }
+    r1 = radius_at(g.handle_bottom, r_bottom, r_top, h);
+    r2 = radius_at(g.handle_top, r_bottom, r_top, h);
+    span = 30;    // Distance of the handle from the wall
+
+    union(fillet = 1.5) {
+        fillet(1.2) {
+            shell(wall) {
+                fillet(floor_r) {
+                    rotate_extrude()
+                        polygon([p[axis, floor], p[bottom, floor], p[top, rim], p[axis, rim]]);
+                    zone(g.floor, d = 1);
+                }
+                zone(g.rim, d = 1);      // Open the top
+            }
+            zone(g.rim, d = 1);          // Round the drinking rim inside and outside
+        }
+        sweep(path = [[r2 - wall / 2, 0, g.handle_top], [r2 + 4, 0, g.handle_top + 0.5],
+                      [r2 + span * 0.6, 0, g.handle_top + 3],
+                      [r_top + span, 0, (g.handle_bottom + g.handle_top) / 2 + 6],
+                      [r1 + span * 0.6, 0, g.handle_bottom - 3], [r1 + 4, 0, g.handle_bottom - 0.5],
+                      [r1 - wall / 2, 0, g.handle_bottom]],
+              interp = "spline")
+            circle(d = handle_d);   // elliptic would only work as a polygon (README: F1/F3)
+    }
+
+    anchor rim_mid = g[axis, _, rim], dir = [0, 0, 1];
+}
+
+b: mug();

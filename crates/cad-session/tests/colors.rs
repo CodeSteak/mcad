@@ -158,11 +158,9 @@ fn slots(sc: &Scene) -> Vec<(String, u32, bool)> {
 #[test]
 fn set_filament_of_a_parameter_colour_writes_a_table() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
-    let src = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../tests/farben-pruefung/cases/slot_mod.scad"
-    ))
-    .unwrap();
+    let src =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/color-review/cases/slot_mod.scad"))
+            .unwrap();
     let mut s = session();
     let r = run(&mut s, &src);
     assert_eq!(

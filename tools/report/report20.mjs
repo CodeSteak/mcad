@@ -281,9 +281,9 @@ ${pair(before("editor-dunkel", 800), after("editor-dunkel", 800), "the same, dar
 ${scen("U03")}
 
 <h2 class="page">4. View and modes</h2>
-${pair(before("ansicht-modell-hell", 900), after("ansicht-modell-hell", 900), "model (mehrfarbig.scad), light")}
+${pair(before("ansicht-modell-hell", 900), after("ansicht-modell-hell", 900), "model (multicolor.mcad), light")}
 ${pair(before("ansicht-schnitt-dunkel", 900), after("ansicht-schnitt-dunkel", 900), "section z, dark")}
-${pair(before("ansicht-skizze-hell", 900), after("ansicht-skizze-hell", 900), "sketch (skizze_deckel.scad, tool line), light")}
+${pair(before("ansicht-skizze-hell", 900), after("ansicht-skizze-hell", 900), "sketch (sketch_lid.mcad, tool line), light")}
 ${pair(before("ansicht-messen-hell", 900), after("ansicht-messen-hell", 900), "measure, light")}
 ${scen("U04")}
 ${scen("U05")}

@@ -1,0 +1,9 @@
+// F11: hinge with pin 3.0 in bore 3.0 (coincident cylinders): the union
+// of all parts (root, l. 1) fails with SM_ERR_NULL_POINTER, `--interference` reports
+// 0.24 mm³ collision a ↔ pin. Not reduced further (a single knuckle with pin works).
+// Status (report 13): open – coincident cylinder surfaces (SMLib boolean).
+// EXPECT: error-free
+use <../../../tests/models/everyday/hinge/parts.mcad>
+a: leaf(side = 0, bore = 3.0);
+b: leaf(side = 1, bore = 3.4);
+pin: pin(l = 60, d = 3.0);

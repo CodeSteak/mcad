@@ -488,7 +488,7 @@ where
     /// transforms and plain unions (the tight box of a union is the union of the tight
     /// boxes; a failed union returns its inputs) whose children are placed by axis-aligned
     /// matrices. `None`: ask the kernel. The tight box costs more than the union itself on
-    /// bodies with rounds (lochplatte: 5 ms per call).
+    /// bodies with rounds (hole_plate: 5 ms per call).
     fn derived_bounds(&mut self) -> Option<Option<(DVec3, DVec3)>> {
         let tree = self.ctx.tree;
         let node = tree.node(self.idx);

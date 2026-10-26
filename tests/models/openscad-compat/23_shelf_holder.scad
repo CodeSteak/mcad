@@ -1,4 +1,4 @@
-// Zweck: shelf bracket – profile via polygon, linear_extrude, screw holes with countersink (cone).
+// Purpose: shelf bracket – profile via polygon, linear_extrude, screw holes with countersink (cone).
 l = 50; h = 40; t = 5; b = 20;
 module countersink() {
     cylinder(h = t + 2, d = 4);

@@ -1,0 +1,35 @@
+// Purpose: anchors from outside – two named instances of a bracket, screws at their anchors
+// with rotate(to = dir(k.a)), rotated instance, grid of anchor coordinates.
+module bracket(l = 30, b = 20, t = 3) {
+    grid g {
+        x: inner = t, outer = 0, end = l, hole_x = l - 8;
+        y: front = 0, back = b, mid = b / 2;
+        z: bottom = 0, top = l, hole_z = l - 8;
+    }
+    union() {
+        box(g[outer, front, bottom], g[end, back, bottom] + [0, 0, t]);
+        box(g[outer, front, bottom], g[inner, back, top]);
+    }
+    anchor base_hole = g[hole_x, mid, bottom] + [0, 0, t], dir = [0, 0, 1];
+    anchor wall_hole = g[inner, mid, hole_z], dir = [1, 0, 0];
+    anchor tip = g[end, back, bottom];
+}
+
+module screw(l = 10) {
+    cylinder(h = 2, d = 6);
+    translate([0, 0, -l]) cylinder(h = l, d = 3);
+}
+
+a: bracket();
+translate([0, 40, 0]) rotate([0, 0, 90]) b: bracket(l = 40);
+
+translate(a.base_hole) rotate(to = dir(a.base_hole)) screw();
+translate(a.wall_hole) rotate(to = dir(a.wall_hole)) screw(8);
+translate(b.wall_hole) rotate(to = dir(b.wall_hole)) screw(8);
+
+// A ruler between the tips of both brackets
+grid m {
+    x: tip_a = a.tip.x, tip_b = b.tip.x;
+    y: y0 = a.tip.y;
+}
+translate(m[tip_a, y0, _]) cube([2, 2, 2]);

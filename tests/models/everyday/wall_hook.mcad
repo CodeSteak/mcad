@@ -1,0 +1,42 @@
+// Purpose: wall hook (jacket, towel) – wall plate with corners rounded via zones and a
+// chamfered front edge (nested: chamfer catches the boundary edges of the rounding),
+// two countersunk holes (cone, 4 mm screws), hook as a sweep of a circle along a
+// spline path, ball knob at the end, attached with union(fillet = …). Dimensions in mm, wall = plane y = 0.
+module wall_hook(b = 32, h = 80, t = 6, corner = 8, screw_d = 4.2, head_d = 8.5,
+                 hook_d = 9, reach = 38, knob_d = 14) {
+    grid g {
+        x: left = 0, mid = b / 2, right = b;
+        y: wall = 0, front = t;
+        z: bottom = 0, hole_bottom = 15, hook = h * 0.45, hole_top = h - 15, top = h;
+    }
+
+    difference() {
+        union(fillet = 2.5) {
+            chamfer(1) {
+                fillet(corner) {
+                    box(g[left, wall, bottom], g[right, front, top]);
+                    zone(g[left, *, bottom], d = 1);
+                    zone(g[right, *, bottom], d = 1);
+                    zone(g[left, *, top], d = 1);
+                    zone(g[right, *, top], d = 1);
+                }
+                zone(g.front, d = 1);
+            }
+            sweep(path = [g[mid, front, hook] - [0, 2, 0], g[mid, front, hook] + [0, 12, -2],
+                          g[mid, front, hook] + [0, reach - 8, 4],
+                          g[mid, front, hook] + [0, reach, 18]], interp = "spline")
+                circle(d = hook_d);
+            translate(g[mid, front, hook] + [0, reach, 18]) sphere(d = knob_d);
+        }
+        // 90° countersunk holes: through hole plus cone up to the front
+        for (z = [g.hole_bottom, g.hole_top]) {
+            translate([g.mid, -1, z]) rotate([-90, 0, 0]) cylinder(h = t + 2, d = screw_d);
+            translate([g.mid, t - (head_d - screw_d) / 2, z]) rotate([-90, 0, 0])
+                cylinder(h = (head_d - screw_d) / 2 + 0.01, r1 = screw_d / 2, r2 = head_d / 2);
+        }
+    }
+
+    anchor knob = g[mid, front, hook] + [0, reach, 18], dir = [0, 1, 1];
+}
+
+hook: wall_hook();

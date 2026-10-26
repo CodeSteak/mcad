@@ -1,0 +1,24 @@
+// Purpose: cable guide – sweep of a U profile (centred on its origin) along a
+// spline path of grid points and literals; a second channel follows a linear path.
+// Retaining blocks at the grid points.
+grid g {
+    x: start = 0, mid = 40, end = 90;
+    y: front = 0, shifted = 25;
+    z: bottom = 0, top = 20;
+}
+
+module u_profile(b = 10, h = 8, t = 1.5) {
+    // Bounding box centre at the origin (SMLib moves the profile centre onto the path)
+    translate([-b / 2, -h / 2])
+        polygon([[0, 0], [b, 0], [b, h], [b - t, h], [b - t, t], [t, t], [t, h], [0, h]]);
+}
+
+sweep(path = [g[start, front, bottom], [20, 5, 12], g[mid, shifted, top], g[end, shifted, bottom]], interp = "spline")
+    u_profile();
+
+translate([0, 50, 0])
+    sweep(path = [[0, 0, 0], [50, 0, 0], [50, 30, 0]], interp = "linear")
+        u_profile(b = 8, h = 6);
+
+for (p = [g[start, front, bottom], g[end, shifted, bottom]])
+    translate(p - [6, 6, 10]) cube([12, 12, 6]);

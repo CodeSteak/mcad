@@ -251,17 +251,17 @@ async function test(id, title, f) {
   console.log(`${entry.ok ? "✓" : "✗"} ${id} ${title} (${entry.ms} ms)${entry.ok ? "" : `\n  ${entry.error}`}`);
 }
 
-const MODEL = readFileSync(join(ROOT, "tests/models/spec/gehaeuse.mcad"), "utf8");
+const MODEL = readFileSync(join(ROOT, "tests/models/spec/housing.mcad"), "utf8");
 
 async function main() {
   if (!existsSync(BIN)) throw new Error(`${BIN} fehlt (cargo build --release -p cad-cli)`);
   // Project in a git repository: committed state = the example.
   const repo = join(work, "repo");
   mkdirSync(repo, { recursive: true });
-  const file = join(repo, "gehaeuse.mcad");
+  const file = join(repo, "housing.mcad");
   writeFileSync(file, MODEL);
   git(repo, "init", "-q");
-  git(repo, "add", "gehaeuse.mcad");
+  git(repo, "add", "housing.mcad");
   git(repo, "commit", "-q", "-m", "Gehäuse");
   await startDriver();
 
@@ -270,7 +270,7 @@ async function main() {
     started = await startApp([file]);
     const s = started.state;
     check(s.desktop === true, "Tauri-Plattform erkannt (TauriTransport, kein Worker)");
-    check(s.fileName === "gehaeuse.mcad", "Datei aus der Kommandozeile geöffnet");
+    check(s.fileName === "housing.mcad", "Datei aus der Kommandozeile geöffnet");
     check(s.diagnostics.length === 0, "keine Diagnosen");
     const info = await execAsync("const done = arguments[arguments.length - 1]; window.__cad.appInfo().then(done, (e) => done({ error: String(e) }))");
     const disk = await exec("return window.__cad.disk()");
@@ -278,7 +278,7 @@ async function main() {
     const bytes = await exec("return window.__cad.transportBytes()");
     check(bytes > 1000, `Meshes binär über den Kanal (${bytes} Bytes)`);
     metrics.startup = { wallMs: started.wallMs, firstSceneMs: s.metrics.firstSceneMs, appMs: info.started_ms, evalMs: s.metrics.evalMs };
-    e.images.push({ name: await shot("t01-start"), label: "Start mit gehaeuse.mcad" });
+    e.images.push({ name: await shot("t01-start"), label: "Start mit housing.mcad" });
     e.images.push({ name: xshot("t01-fenster"), label: "Fenster unter Xvfb (X-Bildschirmfoto)" });
   });
 
@@ -286,7 +286,7 @@ async function main() {
     const s0 = await state();
     // cursor somewhere in the middle (it must stay)
     await exec("window.__cad.setCursorLine(24, 0)");
-    const changed = MODEL.replace("k: gehaeuse(w = 60);", "k: gehaeuse(w = 90);");
+    const changed = MODEL.replace("k: housing(w = 60);", "k: housing(w = 90);");
     check(changed !== MODEL, "Teständerung trifft");
     e.images.push({ name: await shot("t02-vorher"), label: "vorher (w = 60)" });
     const t0 = Date.now();
@@ -319,7 +319,7 @@ async function main() {
     }, 15_000);
     check(marks.lines.some((l) => l.kind === "modified"), "geänderte Zeile 21 (w = 90) blau markiert");
     // add a line and delete one in the buffer (typing), markers follow
-    await exec("const c = window.__cad; const t = c.text().replace('module deckel() cube([10, 10, 2]);\\n', '').replace('grid h {', '// neu: Hilfsraster\\ngrid h {'); c.setText(t)");
+    await exec("const c = window.__cad; const t = c.text().replace('module lid() cube([10, 10, 2]);\\n', '').replace('grid h {', '// neu: Hilfsraster\\ngrid h {'); c.setText(t)");
     const m2 = await waitFor("Markierungen nach Tippen", async () => {
       const m = await exec("return window.__cad.gitMarks()");
       return m && m.lines.some((l) => l.kind === "added") && m.lines.some((l) => l.kind.startsWith("deleted")) ? m : null;
@@ -343,7 +343,7 @@ async function main() {
   await test("T04", "Externe Änderung bei ungespeicherten Änderungen: Hinweisleiste, Vergleichen, Meine behalten, Speichern ohne Schleife", async (check, e) => {
     const mine = await exec("return window.__cad.text()");
     check((await exec("return window.__cad.disk().dirty")).length === 1, "Puffer ist ungespeichert");
-    const disk2 = MODEL.replace("k: gehaeuse(w = 60);", "k: gehaeuse(w = 70);");
+    const disk2 = MODEL.replace("k: housing(w = 60);", "k: housing(w = 70);");
     writeFileSync(file, disk2);
     await waitFor("Hinweisleiste", () => exists("[data-testid=external-bar]"));
     check((await exec("return window.__cad.text()")) === mine, "Editor behält den eigenen Stand");
@@ -375,7 +375,7 @@ async function main() {
 
   await test("T05", "Gelöschte und umbenannte Datei", async (check, e) => {
     renameSync(file, file + ".bak");
-    await waitFor("gelöscht-Leiste", async () => (await state()).external["gehaeuse.mcad"] === "removed" || null);
+    await waitFor("gelöscht-Leiste", async () => (await state()).external["housing.mcad"] === "removed" || null);
     e.images.push({ name: await shot("t05-geloescht"), label: "Datei umbenannt/gelöscht: Inhalt bleibt, „Wieder speichern“" });
     await click("[data-testid=external-bar] button[aria-label='Wieder speichern']");
     await waitFor("wieder angelegt", async () => existsSync(file) || null, 10_000);
@@ -387,9 +387,9 @@ async function main() {
 
   await test("T06", "Agent-Ablauf: Datei per Shell ändern, `mcad check`, UI folgt (Bildfolge)", async (check, e) => {
     const steps = [
-      { label: "1. Agent ändert w = 60 → 75 und prüft mit `mcad check`", edit: (t) => t.replace("k: gehaeuse(w = 60);", "k: gehaeuse(w = 75);") },
-      { label: "2. Agent fügt einen zweiten Deckel hinzu", edit: (t) => t + "translate([0, 40, 0]) deckel();\n" },
-      { label: "3. Agent setzt h über `mcad set --param gehaeuse.h=30`", set: ["--param", "gehaeuse.h=30"] },
+      { label: "1. Agent ändert w = 60 → 75 und prüft mit `mcad check`", edit: (t) => t.replace("k: housing(w = 60);", "k: housing(w = 75);") },
+      { label: "2. Agent fügt einen zweiten Deckel hinzu", edit: (t) => t + "translate([0, 40, 0]) lid();\n" },
+      { label: "3. Agent setzt h über `mcad set --param housing.h=30`", set: ["--param", "housing.h=30"] },
     ];
     metrics.agentSteps = [];
     for (const [i, st] of steps.entries()) {
@@ -419,14 +419,14 @@ async function main() {
     check(st.code === 0, `status Exit 0 ${st.err}`);
     const j = JSON.parse(st.out);
     const w = j.uis[0].windows[0];
-    check(w.project.main === "gehaeuse.mcad" && w.project.root === repo, "offene Datei und Ordner");
+    check(w.project.main === "housing.mcad" && w.project.root === repo, "offene Datei und Ordner");
     check(typeof w.cursor.line === "number", "Cursorzeile");
     const sh = mcad("ui", "show", file, "--line", "11", "--json");
     check(sh.code === 0, `show Exit 0 ${sh.err}`);
     check(JSON.parse(sh.out).line === 11, "Cursor in Zeile 11");
     const st2 = JSON.parse(mcad("ui", "status", "--json").out).uis[0].windows[0];
     check(st2.cursor.line === 11, "status sieht Zeile 11");
-    check(st2.context === "gehaeuse", `Kontextmodul gehaeuse (${st2.context})`);
+    check(st2.context === "housing", `Kontextmodul housing (${st2.context})`);
     check(st2.selection.nodes.length > 0, `ausgewählter Knoten ${JSON.stringify(st2.selection.nodes[0])}`);
     check(Object.keys(st2.params).includes("w"), "Werte der Parameterleiste");
     check(Array.isArray(st2.diagnostics), "Diagnosen");
@@ -438,9 +438,9 @@ async function main() {
     const txt = mcad("ui", "status");
     e.details = { status_text: txt.out, status_json: st2 };
     e.images.push({ name: "t07-cad-ui-screenshot.png", label: "`mcad ui screenshot`: die 3D-Ansicht, wie der Nutzer sie sieht" });
-    e.images.push({ name: await shot("t07-ui-nach-show"), label: "nach `mcad ui show gehaeuse.mcad --line 11`" });
-    const shm = mcad("ui", "show", file, "--module", "deckel", "--json");
-    check(shm.code === 0 && JSON.parse(shm.out).module === "deckel", "show --module deckel: Kontext deckel");
+    e.images.push({ name: await shot("t07-ui-nach-show"), label: "nach `mcad ui show housing.mcad --line 11`" });
+    const shm = mcad("ui", "show", file, "--module", "lid", "--json");
+    check(shm.code === 0 && JSON.parse(shm.out).module === "lid", "show --module lid: Kontext lid");
     const shx = mcad("ui", "show", file, "--module", "gibtsnicht", "--json");
     check(shx.code === 1, `unbekanntes Modul: Exit ${shx.code} („${JSON.parse(shx.out).error}“)`);
     await exec("window.__cad.setCursorLine(1, 0)");
@@ -515,33 +515,33 @@ async function main() {
 
   await test("T10", "Ordner als Projekt, Autospeichern", async (check, e) => {
     await stopApp();
-    const proj = join(work, "projekt");
+    const proj = join(work, "project");
     mkdirSync(join(proj, "lib"), { recursive: true });
-    for (const f of ["gehaeuse.mcad", "konstanten.mcad", "lib/teile.mcad"]) writeFileSync(join(proj, f), readFileSync(join(ROOT, "tests/models/projekt-gehaeuse", f)));
+    for (const f of ["housing.mcad", "constants.mcad", "lib/parts.mcad"]) writeFileSync(join(proj, f), readFileSync(join(ROOT, "tests/models/project-housing", f)));
     const st = await startApp([proj]);
-    check(st.state.fileName === "gehaeuse.mcad", `Hauptdatei ${st.state.fileName}`);
+    check(st.state.fileName === "housing.mcad", `Hauptdatei ${st.state.fileName}`);
     const info = await exec("return window.__cad.projectInfo()");
     check(info.paths.length === 3 && info.folder, `3 Dateien (${info.paths.join(", ")})`);
     // external change of an included file updates the scene
     const before = await state();
-    const konst = join(proj, "konstanten.mcad");
-    writeFileSync(konst, readFileSync(konst, "utf8").replace(/abstand\s*=\s*\d+/, "abstand = 25"));
+    const consts = join(proj, "constants.mcad");
+    writeFileSync(consts, readFileSync(consts, "utf8").replace(/spacing\s*=\s*\d+/, "spacing = 25"));
     await waitFor("include neu ausgewertet", async () => ((await state()).sentVersion > before.sentVersion ? true : null));
     await sceneReady();
-    check((await exec("return window.__cad.projectInfo().files['konstanten.mcad']")).includes("abstand = 25"), "eingebundene Datei neu geladen");
+    check((await exec("return window.__cad.projectInfo().files['constants.mcad']")).includes("spacing = 25"), "eingebundene Datei neu geladen");
     // autosave
     await exec("const s = window.__cad.store; s.setState({ settings: { ...s.getState().settings, autoSave: true, autoSaveMs: 300 } })");
     await exec("const c = window.__cad; c.setText(c.text() + '// auto\\n')");
-    await waitFor("automatisch gespeichert", async () => readFileSync(join(proj, "gehaeuse.mcad"), "utf8").endsWith("// auto\n") || null, 10_000);
+    await waitFor("automatisch gespeichert", async () => readFileSync(join(proj, "housing.mcad"), "utf8").endsWith("// auto\n") || null, 10_000);
     check((await state()).dirty.length === 0, "nach dem Autospeichern sauber");
     e.images.push({ name: await shot("t10-ordner"), label: "Ordner als Projekt (3 Dateien), Autospeichern an" });
   });
 
   await test("T11", "Tastendruck → Szene nativ (Messung)", async (check) => {
-    // after "w = 60" in `k: gehaeuse(w = 60);`: Backspace / digit, always a valid model
+    // after "w = 60" in `k: housing(w = 60);`: Backspace / digit, always a valid model
     await exec("window.__cad.setText(arguments[0])", MODEL);
     await sceneReady();
-    await exec("window.__cad.setCursorLine(21, 18)");
+    await exec("window.__cad.setCursorLine(21, 17)");
     const keys = [];
     const m0 = (await state()).metrics;
     const before = m0.editToScene.length;
@@ -571,7 +571,7 @@ async function main() {
 
   // ------------------------------------------------------------ colours, filaments, theme (report 11)
 
-  const MEHR = readFileSync(join(ROOT, "tests/models/spec/mehrfarbig.mcad"), "utf8");
+  const MEHR = readFileSync(join(ROOT, "tests/models/spec/multicolor.mcad"), "utf8");
   const ensureApp = async () => {
     if (!sid) await startApp([file]);
   };
@@ -603,11 +603,11 @@ async function main() {
     check(teal.filament === 5 && teal.explicit, "teal fest auf Slot 5");
     check(s2.dirty.length >= 1, "Datei als geändert markiert");
     // multi-colour 3MF over the native engine
-    const sum = await hookAsync("exportSummary", "3mf", undefined, ["schild", "figur"]);
+    const sum = await hookAsync("exportSummary", "3mf", undefined, ["door_sign", "figure"]);
     // Bericht 12: no colour group (Bambu Studio keeps the slots without its colour dialog)
     check(!sum.colorGroup && sum.mColors === 0 && sum.items === 2 && sum.components === 6 && sum.modelSettings, `3MF: ${JSON.stringify(sum)}`);
     check(sum.extruders.includes(5) && sum.extruders.includes(3), `extruder je Teil ${sum.extruders.join(",")}`);
-    const zip = await hookAsync("exportSummary", "stl", true, ["schild", "figur"]);
+    const zip = await hookAsync("exportSummary", "stl", true, ["door_sign", "figure"]);
     check(zip.files.length === 6, `STL je Farbe: ${zip.files.join(", ")}`);
     e.details = { colors: s2.colors, export3mf: sum, stlZip: zip };
     e.images.push({ name: await shot("t12-slot"), label: "teal auf Slot 5: Code geändert" });
@@ -643,7 +643,7 @@ async function main() {
   await test("T15", "Bericht 12 in Tauri: Farbregionen je Instanz, filament()-Tabelle, Objekt „no part“, 3MF ohne Farbgruppe", async (check, e) => {
     await ensureApp();
     await exec("window.__cad.setThemePref('light'); window.__cad.store.setState({ sideOpen: true, sideTab: 'colors', showRegions: true })");
-    const pal2 = `// pal2\n${readFileSync(join(ROOT, "tests/farben-pruefung/cases/pal2.scad"), "utf8")}`;
+    const pal2 = `// pal2\n${readFileSync(join(ROOT, "tests/color-review/cases/pal2.scad"), "utf8")}`;
     await exec("window.__cad.setText(arguments[0])", pal2);
     await sceneReady();
     const v = await waitFor("drei Farbregionen", async () => {
@@ -653,7 +653,7 @@ async function main() {
     check(v.colors.map((c) => c.label).join(",") === "red,blue,green", `Farben ${v.colors.map((c) => c.label).join(", ")}`);
     e.images.push({ name: await shot("t15-pal2"), label: "pal2.scad: drei gleiche Würfel in drei Farben (Farbregionen)" });
     // slot of a parameter colour: filament("red", 4); at the top, not filament = 4 at color(c)
-    const slotMod = `// slot_mod\n${readFileSync(join(ROOT, "tests/farben-pruefung/cases/slot_mod.scad"), "utf8")}`;
+    const slotMod = `// slot_mod\n${readFileSync(join(ROOT, "tests/color-review/cases/slot_mod.scad"), "utf8")}`;
     await exec("window.__cad.setText(arguments[0])", slotMod);
     await sceneReady();
     await waitFor("Farbliste", async () => (await exists("select[aria-label='Filament für red']")) || null);

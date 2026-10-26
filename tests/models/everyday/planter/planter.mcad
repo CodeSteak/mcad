@@ -1,0 +1,10 @@
+// Purpose: plant pot with saucer (assembly) – pot as a loft from the rounded square
+// (superellipse as spline, points from a function) to the round opening, feet and
+// drain holes; saucer as rotate_extrude opened at the top with shell and rounded via
+// zones. The pot stands with the anchor `footing` on the anchor `floor` of the saucer.
+// Check: `mcad measure planter.mcad --interference --clearance pot saucer`. Dimensions in mm.
+include <dimensions.mcad>
+use <parts.mcad>
+
+saucer: saucer();
+translate(saucer.floor) pot: pot();

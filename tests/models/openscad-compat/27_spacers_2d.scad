@@ -1,4 +1,4 @@
-// Zweck: 2D booleans on circle/square ahead of linear_extrude – spacer discs in multiple sizes.
+// Purpose: 2D booleans on circle/square ahead of linear_extrude – spacer discs in multiple sizes.
 sizes = [[8, 3, 2], [10, 4, 3], [12, 5, 4], [16, 6.4, 5]];   // [outside, inside, h]
 for (i = [0 : len(sizes) - 1]) {
     s = sizes[i];

@@ -1,0 +1,37 @@
+// Library (pulled in with use): only modules and functions are visible, the variables
+// and the geometry of this file are not.
+clearance = 0.2;
+boss_r = 3;
+
+module screw_boss(h = 10) {
+    difference() {
+        cylinder(h = h, r = boss_r);
+        cylinder(h = h + 1, r = 1.2);
+    }
+    anchor top = [0, 0, h], dir = [0, 0, 1];
+}
+
+module housing(w = 60, d = 40, h = 25, t = 2) {
+    grid g {
+        x: left = 0, inner_left = t, inner_right = w - t, right = w;
+        y: front = 0, inner_front = t, inner_back = d - t, back = d;
+        z: floor = 0, inner_floor = t, top = h;
+    }
+    difference() {
+        box(g[left, front, floor], g[right, back, top]);
+        box(g[inner_left, inner_front, inner_floor], g[inner_right, inner_back, top]);
+    }
+    // Four screw bosses as named instances in the loop: boss[0] … boss[3]
+    for (i = [0:3])
+        translate([i % 2 == 0 ? t + boss_r : w - t - boss_r, i < 2 ? t + boss_r : d - t - boss_r, t])
+            boss[i]: screw_boss(h = h - t - 4);
+    translate([w / 2, d / 2, t]) cylinder(h = 3, r = 2);
+    anchor lid_mid = g[inner_left, inner_front, top], dir = [0, 0, 1];
+}
+
+module lid(w = 60, d = 40, t = 2) {
+    cube([w, d, t]);
+    translate([t + clearance, t + clearance, t]) cube([w - 2 * (t + clearance), d - 2 * (t + clearance), 3]);
+}
+
+housing();

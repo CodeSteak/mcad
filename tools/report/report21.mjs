@@ -370,7 +370,7 @@ const testRows = [
   ["`MCAD=target/release/mcad python3 tests/openscad-compat/compare.py --eval`", compatSum ? resCell(compatSum[1] === compatSum[2] && rcOk("compat"), `${compatSum[1]} / ${compatSum[2]}`) : "–", dur("compat")],
   ["`tests/step/verify.py` (OCCT, cadquery-ocp 8.0.1.1, `--merge` against the root)", stepSum ? resCell(stepSum[1] === stepSum[2], `${stepSum[1]} / ${stepSum[2]}`) : "–", dur("step")],
   ["`tests/step/verify.py --bodies` (new default: body per part/object)", stepBodiesSum ? resCell(stepBodiesSum[1] === stepBodiesSum[2], `${stepBodiesSum[1]} / ${stepBodiesSum[2]}`) : "–", dur("step-bodies")],
-  ["`tests/alltag/check.sh -j 4` (everyday models: check, parts, export)", alltagLast ? resCell(rcOk("alltag"), alltagLast) : "–", dur("alltag")],
+  ["`tests/everyday/check.sh -j 4` (everyday models: check, parts, export)", alltagLast ? resCell(rcOk("alltag"), alltagLast) : "–", dur("alltag")],
 ]
   .map(([c, r, d]) => `<tr><td>${md(c)}</td><td>${r}</td><td class="n">${esc(d)}</td></tr>`)
   .join("");
@@ -486,7 +486,7 @@ ${hullGrid}
 
 <h2>3 Phase B: <code>import("x.stl")</code></h2>
 <h3>Language and modes</h3>
-${pre(`import("../stl/winkel.stl");                     // closed, ≤ 500 faces: B-rep (Booleans work)
+${pre(`import("../stl/bracket.stl");                     // closed, ≤ 500 faces: B-rep (Booleans work)
 import("platine.stl", as = "mesh");              // pure mesh (display, export, measuring)
 import("teil.stl", center = true, scale = 25.4); // inch → mm, bounding box around the origin`)}
 <table>
@@ -596,7 +596,7 @@ ${stepOverlap.length ? `<p class="small">With the notice "objects overlap" (fina
 <tr><td>Repository <code>controller-cad</code>, Docker image/volume of the Arch build environment</td><td>name of the repository and of the build infrastructure</td></tr>
 <tr><td>IndexedDB name <code>controller-cad</code> (browser)</td><td>holds the users' saved projects</td></tr>
 <tr><td>Font name "cad stencil mono"</td><td>appears in models</td></tr>
-<tr><td><code>tests/models/openscad-compat/*.scad</code>, <code>tests/openscad-compat</code>, <code>tests/farben-pruefung</code>, case study report 8</td><td>are compared with OpenSCAD or are snapshots; incidentally check that <code>.scad</code> still works</td></tr>
+<tr><td><code>tests/models/openscad-compat/*.scad</code>, <code>tests/openscad-compat</code>, <code>tests/color-review</code>, case study report 8</td><td>are compared with OpenSCAD or are snapshots; incidentally check that <code>.scad</code> still works</td></tr>
 <tr><td>Reports <code>docs/reports/**</code></td><td>snapshots</td></tr>
 </table>
 ${term(readText(join(data, "e/dateien.txt")))}
