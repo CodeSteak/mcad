@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Independent check of a multi-colour 3MF from `cad export` (Bericht 11).
+"""Independent check of a multi-colour 3MF from `cad export` (report 11).
 
-Usage: verify3mf.py DATEI.3mf [--expect measure.json] [--json out.json]
+Usage: verify3mf.py FILE.3mf [--expect measure.json] [--json out.json]
 
 1. lib3mf (official 3MF consortium library, `pip install lib3mf`): reads the package and
    reports warnings, objects, components (transforms), the colour group, object-level
    properties, manifoldness and mesh volumes.
 2. trimesh (`pip install trimesh networkx lxml`): loads the scene, volume per geometry.
 3. A model of the Bambu Studio / OrcaSlicer importer, written from
-   `src/libslic3r/Format/bbs_3mf.cpp` (23.10.2026): tags compared literally (`m:colorgroup`,
+   `src/libslic3r/Format/bbs_3mf.cpp` (2026-10-23): tags compared literally (`m:colorgroup`,
    `m:color`), build item → components → sub-objects (`_generate_current_object_list`),
    `Metadata/model_settings.config` `<part id>` matched to the sub-object id
    (`_generate_volumes_new`), volume `extruder` from the part metadata; objects with a single
@@ -89,7 +89,7 @@ def check_lib3mf(path, out):
     res.update(meshes=meshes, components=comps, items=items)
     ok = not res["warnings"] and all(x["manifold"] for x in meshes.values())
     ok = ok and all(not any(c["transforms"]) for c in comps.values()) and all(not i["transform"] for i in items)
-    # colours are optional (Bericht 12: no colour group by default); if there is a group, every
+    # colours are optional (report 12: no colour group by default); if there is a group, every
     # colour mesh needs one
     ok = ok and (not colors or all(x["color"] for x in meshes.values()))
     res["ok"] = ok
@@ -186,7 +186,7 @@ def bambu_import(path, out):
             vols[0]["extruder"] = obj_ext or "1"
         result.append({"object": oid, "name": (c or {}).get("meta", {}).get("name", o["name"]),
                        "extruder": obj_ext, "volumes": vols})
-    # Plater.cpp (Bericht 12): a foreign 3MF with a colour group and triangle colours opens the
+    # Plater.cpp (report 12): a foreign 3MF with a colour group and triangle colours opens the
     # colour dialog, whose OK replaces the extruders; without it the slots stay.
     dialog = bool(groups) and any(objects[s]["pid"] in groups for o in objects.values() for s in (o["components"] or []))
     out["bambu_model"] = {"application": app, "treated_as_bambu_project": is_bbl,
@@ -268,21 +268,21 @@ def main():
     if a.json:
         json.dump(out, open(a.json, "w"), indent=1)
     lm = out["lib3mf"]
-    print(f"lib3mf {lm['version']}: {len(lm['meshes'])} Netze, {len(lm['components'])} Komponentenobjekte, "
-          f"{len(lm['items'])} Build-Items, {len(lm['colors'])} Farben, Warnungen {len(lm['warnings'])}, "
-          f"alle mannigfaltig: {all(m['manifold'] for m in lm['meshes'].values())}")
+    print(f"lib3mf {lm['version']}: {len(lm['meshes'])} meshes, {len(lm['components'])} component objects, "
+          f"{len(lm['items'])} build items, {len(lm['colors'])} colours, warnings {len(lm['warnings'])}, "
+          f"all manifold: {all(m['manifold'] for m in lm['meshes'].values())}")
     tm = out["trimesh"]
-    print(f"trimesh {tm['version']}: {tm['geometries']} Geometrien, wasserdicht: {tm['watertight']}")
+    print(f"trimesh {tm['version']}: {tm['geometries']} geometries, watertight: {tm['watertight']}")
     for o in out["bambu_model"]["objects"]:
-        vols = ", ".join(f"{v['name']} → Extruder {v['extruder']} {v['color']}" for v in o["volumes"])
-        print(f"Bambu/Orca-Import (Modell): Objekt {o['name']}: {vols}")
+        vols = ", ".join(f"{v['name']} → extruder {v['extruder']} {v['color']}" for v in o["volumes"])
+        print(f"Bambu/Orca import (model): object {o['name']}: {vols}")
     if out.get("prusaslicer"):
         ps = out["prusaslicer"]
-        print(f"PrusaSlicer ({ps['version']}): {ps['objects']} Objekte, Exit {ps['exit']}")
+        print(f"PrusaSlicer ({ps['version']}): {ps['objects']} objects, exit {ps['exit']}")
     for r in out.get("expect", []):
-        print(f"  {r['part']} {r['color']}: F{r['filament']} Bambu {r['extruder_bambu']}, B-Rep {r['volume_brep']:.2f} "
-              f"Netz {r['volume_mesh']:.2f} mm³ {'ok' if r['ok'] else 'FEHLER'}")
-    print("alle Prüfungen bestanden" if out["ok"] else f"FEHLER: {results}")
+        print(f"  {r['part']} {r['color']}: F{r['filament']} Bambu {r['extruder_bambu']}, B-rep {r['volume_brep']:.2f} "
+              f"mesh {r['volume_mesh']:.2f} mm³ {'ok' if r['ok'] else 'ERROR'}")
+    print("all checks passed" if out["ok"] else f"ERROR: {results}")
     sys.exit(0 if out["ok"] else 1)
 
 

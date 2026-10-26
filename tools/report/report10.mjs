@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 10 ("CLI-Daemon"): collects the results of the test runs and writes
+// Test report 10 ("CLI daemon"): collects the results of the test runs and writes
 //
 //   docs/reports/10-cli-daemon/report.html
 //
@@ -13,7 +13,7 @@
 //   fmt.txt           cargo fmt --all --check (empty = ok)
 //
 //   node tools/report/report10.mjs
-//   node tools/report/print-pdf.mjs docs/reports/10-cli-daemon/report.html docs/reports/10-cli-daemon/report.pdf "Testbericht 10: CLI-Daemon"
+//   node tools/report/print-pdf.mjs docs/reports/10-cli-daemon/report.html docs/reports/10-cli-daemon/report.pdf "Test report 10: CLI daemon"
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -37,8 +37,8 @@ const git = (...a) => {
     return "–";
   }
 };
-const de = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d }));
-const mib = (b, d = 1) => de(b / 1048576, d);
+const num = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
+const mib = (b, d = 1) => num(b / 1048576, d);
 
 const timings = readJson(join(input, "timings.json"));
 const sizes = (readText(join(input, "cache_size.jsonl")) ?? "").split("\n").filter(Boolean).map((l) => JSON.parse(l));
@@ -73,7 +73,7 @@ const ipcRes = testsOf(cargo, "tests/ipc.rs").filter((t) => t.name.includes("loc
 const unitRes = (cargo ? [...cargo.matchAll(/^test ((?:config|cache)::tests::\S+) \.\.\. (ok|FAILED)$/gm)] : []).map((m) => ({ name: m[1], res: m[2] }));
 const daemonTimes = daemonTests ? [...daemonTests.matchAll(/first ([\d.]+)(ms|s), second ([\d.]+)(ms|s)/g)].map((m) => ({ first: +m[1] * (m[2] === "s" ? 1000 : 1), second: +m[3] * (m[4] === "s" ? 1000 : 1) }))[0] : null;
 
-const date = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const commit = git("rev-parse", "--short", "HEAD");
 const branch = git("rev-parse", "--abbrev-ref", "HEAD");
 const rustc = (() => {
@@ -87,7 +87,7 @@ const rustc = (() => {
 const rows = timings?.rows ?? [];
 const models = [...new Set(rows.map((r) => r.model))];
 const cmdName = { check: "check", render: "render -o x.png", export_step: "export -o x.step" };
-const cell = (s) => (s ? `<b>${de(s.median)}</b> <span class="small">${de(s.min)}–${de(s.max)}</span>` : "–");
+const cell = (s) => (s ? `<b>${num(s.median)}</b> <span class="small">${num(s.min)}–${num(s.max)}</span>` : "–");
 const speedup = (r) => (r?.cold && r?.warm ? r.cold.median / r.warm.median : null);
 const maxBy = (k) => rows.reduce((m, r) => Math.max(m, r[k]?.median ?? 0), 0);
 const minSpeed = rows.length ? Math.min(...rows.map(speedup)) : null;
@@ -99,26 +99,26 @@ const warmRender = renderRows.map((r) => r.warm.median);
 const startDiffs = rows.map((r) => r.start.median - r.cold.median);
 const startExtra = startDiffs.length ? [...startDiffs].sort((a, b) => a - b)[Math.floor(startDiffs.length / 2)] : null;
 const md = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>");
-const timingTable = `<table><tr><th>Modell</th><th>Befehl</th><th>kalt ohne Daemon</th><th>1. Aufruf mit Daemon (inkl. Start)</th><th>2. Aufruf</th><th>2. Aufruf nach kleiner Änderung</th><th>kalt ÷ 2.</th></tr>
+const timingTable = `<table><tr><th>Model</th><th>Command</th><th>cold without daemon</th><th>1st call with daemon (incl. start)</th><th>2nd call</th><th>2nd call after small change</th><th>cold ÷ 2nd</th></tr>
 ${rows
   .map(
     (r) =>
-      `<tr><td>${esc(r.model)}</td><td><code>${esc(cmdName[r.command] ?? r.command)}</code></td><td>${cell(r.cold)}</td><td>${cell(r.start)}</td><td>${cell(r.warm)}</td><td>${cell(r.changed)}</td><td>${de(speedup(r), 1)}×</td></tr>`,
+      `<tr><td>${esc(r.model)}</td><td><code>${esc(cmdName[r.command] ?? r.command)}</code></td><td>${cell(r.cold)}</td><td>${cell(r.start)}</td><td>${cell(r.warm)}</td><td>${cell(r.changed)}</td><td>${num(speedup(r), 1)}×</td></tr>`,
   )
   .join("\n")}</table>`;
 
 const changes = {
-  "spec/variabler_radius.scad": "Tasche <code>cube([30, 14, 10])</code> → <code>[30, 15, 10]</code> (ein Körper von dreien neu, mit variabler Verrundung)",
-  "projekt-gehaeuse/gehaeuse.scad": "Deckel um 1 mm verschoben (<code>tiefe + abstand + 1</code>; nur die Wurzel neu)",
-  "spec/lochplatte.scad": "Stift <code>d = 3.5</code> → <code>3.6</code> (Zylinder und Wurzel neu)",
+  "spec/variabler_radius.scad": "pocket <code>cube([30, 14, 10])</code> → <code>[30, 15, 10]</code> (one body of three rebuilt, with variable fillet)",
+  "projekt-gehaeuse/gehaeuse.scad": "lid moved by 1 mm (<code>tiefe + abstand + 1</code>; only the root rebuilt)",
+  "spec/lochplatte.scad": "pin <code>d = 3.5</code> → <code>3.6</code> (cylinder and root rebuilt)",
 };
 
 const sizeTable = (() => {
   const top = [...sizeRows].sort((a, b) => b.freed - a.freed).slice(0, 8);
-  const r = (x) => `<tr><td>${esc(x.file.replace(/^.*examples\//, ""))}</td><td>${x.breps}</td><td>${x.faces}</td><td>${x.edges}</td><td>${mib(x.freed, 2)}</td><td>${mib(x.estimate_topology, 2)} (${de(x.estimate_topology / x.freed, 2)})</td><td>${mib(x.estimate_probe, 2)} (${de(x.estimate_probe / x.freed, 2)})</td></tr>`;
-  return `<table><tr><th>Modell</th><th>Breps</th><th>Flächen</th><th>Kanten</th><th>gehalten (MiB)</th><th>Schätzung Topologie (÷ gehalten)</th><th>Daemon: Heap-Messung (÷ gehalten)</th></tr>
+  const r = (x) => `<tr><td>${esc(x.file.replace(/^.*examples\//, ""))}</td><td>${x.breps}</td><td>${x.faces}</td><td>${x.edges}</td><td>${mib(x.freed, 2)}</td><td>${mib(x.estimate_topology, 2)} (${num(x.estimate_topology / x.freed, 2)})</td><td>${mib(x.estimate_probe, 2)} (${num(x.estimate_probe / x.freed, 2)})</td></tr>`;
+  return `<table><tr><th>Model</th><th>Breps</th><th>Faces</th><th>Edges</th><th>held (MiB)</th><th>topology estimate (÷ held)</th><th>daemon: heap measurement (÷ held)</th></tr>
 ${top.map(r).join("\n")}
-${sizeSum ? `<tr><th>alle ${sizeSum.models} Modelle</th><th>${sizeSum.breps}</th><th>${sizeSum.faces}</th><th>${sizeSum.edges}</th><th>${mib(sizeSum.freed, 1)}</th><th>${mib(sizeSum.estimate_topology, 1)} (${de(sizeSum.estimate_topology / sizeSum.freed, 2)})</th><th>${mib(sizeSum.estimate_probe, 1)} (${de(sizeSum.estimate_probe / sizeSum.freed, 2)})</th></tr>` : ""}</table>`;
+${sizeSum ? `<tr><th>all ${sizeSum.models} models</th><th>${sizeSum.breps}</th><th>${sizeSum.faces}</th><th>${sizeSum.edges}</th><th>${mib(sizeSum.freed, 1)}</th><th>${mib(sizeSum.estimate_topology, 1)} (${num(sizeSum.estimate_topology / sizeSum.freed, 2)})</th><th>${mib(sizeSum.estimate_probe, 1)} (${num(sizeSum.estimate_probe / sizeSum.freed, 2)})</th></tr>` : ""}</table>`;
 })();
 const ratios = sizeRows.map((x) => x.estimate_probe / x.freed).sort((a, b) => a - b);
 const topoRatios = sizeRows.map((x) => x.estimate_topology / x.freed).sort((a, b) => a - b);
@@ -126,18 +126,18 @@ const perFace = sizeRows.map((x) => x.freed / x.faces).sort((a, b) => a - b);
 const med = (a) => (a.length ? a[Math.floor(a.length / 2)] : null);
 
 const testDesc = {
-  autostart_then_cache_hits_and_faster: "erster Aufruf startet den Daemon (`daemon.used`), zweiter Aufruf: alle Knoten aus dem Cache, 0 Kernel-Aufrufe, gleiche Ausgabe, Trefferzähler steigt, messbar schneller",
-  output_identical_with_and_without_daemon: "Daemon erst mit drei anderen Modellen gefüllt; dann je Befehl lokal, 1. und 2. Aufruf mit Daemon: check (ok, Syntaxfehler, Kernelfehler), eval, eval --module, inspect, outline, measure (Abstand/Volumen, Kollision/Abstand), set --dry-run, export mit unbekanntem Bauteil (Exit 2) – Text und JSON; render (Kontaktbogen, Schnitt, Röntgen) PNG byteweise, STL, 3MF, STEP (ohne Zeitstempel), --all-parts in einen Ordner",
-  relative_paths_and_stdin: "relativer Pfad mit anderem Arbeitsverzeichnis (gleiche Ausgabe), Quelltext über stdin (`-`)",
-  parallel_starts_give_one_daemon: "sechs gleichzeitige Aufrufe ohne Daemon: alle nutzen den Daemon, genau ein Prozess `cad daemon serve` bleibt",
-  idle_end_removes_socket_and_lock: "Leerlauf 1 s: Daemon endet, Socket und Sperrdatei entfernt, Log „ohne Anfrage“",
-  version_change_replaces_daemon: "Build-ID a → b: Client beendet den alten Daemon und startet einen neuen; `status` eines dritten Builds meldet die Abweichung",
-  switched_off_by_flag_env_and_config: "`--no-daemon` (vor und nach dem Befehl), `CAD_NO_DAEMON=1`, `[daemon] enabled = false`: kein Daemon, Grund in `daemon.reason`, Text still, `--verbose` nennt den Grund",
-  fallback_when_socket_is_broken: "Socket-Ordner ist eine Datei; fremder Prozess am Socket, der jede Verbindung schließt; veralteter Socket ohne Prozess (wird ersetzt)",
-  cache_limit_and_project_limit: "Grenze 1 MiB und 2 Projekte bei 7 Modellen: Verdrängungen, Größe unter der Grenze (oder nur der neueste Eintrag), 5 Projekte verdrängt; 512 MiB: nichts verdrängt",
-  changed_files_are_never_stale: "Hauptdatei, eingebundene Datei, Rückkehr zu altem Stand, `set` über den Client, Syntaxfehler und Korrektur – jedes Ergebnis passt zum aktuellen Inhalt",
-  status_and_stop: "`daemon status` (Text, JSON-Felder), `daemon stop` (PID, Socket entfernt), zweites `stop`: „kein Daemon“",
-  watchdog_ends_daemon_and_command_runs_locally: "Watchdog 1 s, künstlich hängender Befehl (8 s): Daemon endet, Befehl läuft ohne Daemon mit gleicher Ausgabe, Meldung auf stderr, nächster Aufruf startet einen neuen Daemon",
+  autostart_then_cache_hits_and_faster: "first call starts the daemon (`daemon.used`), second call: all nodes from the cache, 0 kernel calls, same output, hit counter increases, measurably faster",
+  output_identical_with_and_without_daemon: "daemon first filled with three other models; then per command locally, 1st and 2nd call with daemon: check (ok, syntax error, kernel error), eval, eval --module, inspect, outline, measure (distance/volume, collision/clearance), set --dry-run, export with unknown part (exit 2) – text and JSON; render (contact sheet, section, X-ray) PNG byte by byte, STL, 3MF, STEP (without timestamp), --all-parts into a folder",
+  relative_paths_and_stdin: "relative path with another working directory (same output), source via stdin (`-`)",
+  parallel_starts_give_one_daemon: "six simultaneous calls without daemon: all use the daemon, exactly one `cad daemon serve` process remains",
+  idle_end_removes_socket_and_lock: "idle 1 s: daemon exits, socket and lock file removed, log \"without request\"",
+  version_change_replaces_daemon: "build ID a → b: client stops the old daemon and starts a new one; `status` of a third build reports the mismatch",
+  switched_off_by_flag_env_and_config: "`--no-daemon` (before and after the command), `CAD_NO_DAEMON=1`, `[daemon] enabled = false`: no daemon, reason in `daemon.reason`, text silent, `--verbose` names the reason",
+  fallback_when_socket_is_broken: "socket folder is a file; foreign process on the socket that closes every connection; stale socket without process (gets replaced)",
+  cache_limit_and_project_limit: "limit 1 MiB and 2 projects with 7 models: evictions, size below the limit (or only the newest entry), 5 projects evicted; 512 MiB: nothing evicted",
+  changed_files_are_never_stale: "main file, included file, return to an old state, `set` via the client, syntax error and fix – every result matches the current content",
+  status_and_stop: "`daemon status` (text, JSON fields), `daemon stop` (PID, socket removed), second `stop`: \"no daemon\"",
+  watchdog_ends_daemon_and_command_runs_locally: "watchdog 1 s, artificially hanging command (8 s): daemon exits, command runs without daemon with the same output, message on stderr, next call starts a new daemon",
 };
 
 const demo = timings?.demo ?? [];
@@ -147,10 +147,10 @@ const demoText = demo
 const logText = (timings?.log ?? "").split("\n").filter(Boolean).slice(-6).join("\n");
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 10 – CLI-Daemon</title>
+<title>Test report 10 – CLI daemon</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -180,109 +180,109 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 10 – CLI-Daemon</h1>
-<div class="meta">cad-cli (daemon, client, host, config), cad-ipc, cad-engine, cad-session, kernel-smlib · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} Kerne (${esc(os.cpus()[0]?.model ?? "")}) · Messung mit <code>target/release/mcad</code></div>
+<h1>Test report 10 – CLI daemon</h1>
+<div class="meta">cad-cli (daemon, client, host, config), cad-ipc, cad-engine, cad-session, kernel-smlib · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} cores (${esc(os.cpus()[0]?.model ?? "")}) · measured with <code>target/release/mcad</code></div>
 
 <div class="summary">
-  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>${cargoSum ? `${cargoSum.ignored} ignoriert` : ""}</div>
+  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>${cargoSum ? `${cargoSum.ignored} ignored` : ""}</div>
   <div>Daemon-Tests<b class="${daemonRes.length && daemonRes.every((t) => t.res === "ok") ? "ok" : "bad"}">${daemonRes.filter((t) => t.res === "ok").length} / ${daemonRes.length}</b><code>crates/cad-cli/tests/daemon.rs</code></div>
-  <div>clippy · fmt<b class="${clippy != null && !/^(error|warning)/m.test(clippy) && fmt != null && fmt.trim() === "" ? "ok" : "bad"}">${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "Befund" : "sauber"} · ${fmt == null ? "–" : fmt.trim() === "" ? "sauber" : "Abw."}</b>-D warnings</div>
-  <div><code>render</code> kalt → 2. Aufruf<b>${de(Math.min(...coldRender))}–${de(Math.max(...coldRender))} → ${de(Math.min(...warmRender))}–${de(Math.max(...warmRender))} ms</b>Median, drei Modelle</div>
-  <div>Beschleunigung 2. Aufruf<b>${de(minSpeed, 1)}–${de(maxSpeed, 1)}×</b>über alle 9 Messreihen</div>
-  <div>Leerer Aufruf (cube)<b>${de(timings?.tiny_check_daemon?.median, 1)} / ${de(timings?.tiny_check_local?.median, 1)} ms</b>mit / ohne Daemon</div>
-  <div>Speicherschätzung<b>${de(med(ratios), 2)}× (${de(ratios[0], 2)}–${de(ratios.at(-1), 2)})</b>Heap-Messung ÷ gehalten, ${sizeRows.length} Modelle</div>
+  <div>clippy · fmt<b class="${clippy != null && !/^(error|warning)/m.test(clippy) && fmt != null && fmt.trim() === "" ? "ok" : "bad"}">${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "finding" : "clean"} · ${fmt == null ? "–" : fmt.trim() === "" ? "clean" : "diff"}</b>-D warnings</div>
+  <div><code>render</code> cold → 2nd call<b>${num(Math.min(...coldRender))}–${num(Math.max(...coldRender))} → ${num(Math.min(...warmRender))}–${num(Math.max(...warmRender))} ms</b>median, three models</div>
+  <div>Speed-up 2nd call<b>${num(minSpeed, 1)}–${num(maxSpeed, 1)}×</b>over all 9 series</div>
+  <div>Empty call (cube)<b>${num(timings?.tiny_check_daemon?.median, 1)} / ${num(timings?.tiny_check_local?.median, 1)} ms</b>with / without daemon</div>
+  <div>Memory estimate<b>${num(med(ratios), 2)}× (${num(ratios[0], 2)}–${num(ratios.at(-1), 2)})</b>heap measurement ÷ held, ${sizeRows.length} models</div>
 </div>
 
-<h2>1 Auftrag und Ergebnis</h2>
-<p>Bericht 8 maß für einen einzelnen <code>cad render</code> 0,4–1,1 s, davon der Kernel bis 640 ms; <code>cad watch</code> mit warmem Cache 24 ms. Jeder CLI-Aufruf begann mit leerem Cache. Jetzt hält ein Hintergrundprozess <code>cad daemon serve</code> den Engine-Cache über Aufrufe hinweg: der erste rechnende Befehl startet ihn, nach 15 min ohne Anfrage endet er, die Cache-Größe ist begrenzt, und mit <code>--no-daemon</code>, <code>CAD_NO_DAEMON=1</code> oder <code>[daemon] enabled = false</code> ist er aus. Ausgabe, Exit-Codes, Dateien und JSON sind dieselben wie ohne Daemon; ein zweiter Aufruf auf derselben Datei braucht ${de(Math.min(...rows.map((r) => r.warm.median)))}–${de(maxBy("warm"))} ms statt ${de(Math.min(...rows.map((r) => r.cold.median)))}–${de(maxBy("cold"))} ms.</p>
+<h2>1 Task and result</h2>
+<p>Report 8 measured 0.4–1.1 s for a single <code>cad render</code>, of which the kernel took up to 640 ms; <code>cad watch</code> with a warm cache 24 ms. Every CLI call started with an empty cache. Now a background process <code>cad daemon serve</code> keeps the engine cache across calls: the first computing command starts it, it ends after 15 min without a request, the cache size is limited, and it is off with <code>--no-daemon</code>, <code>CAD_NO_DAEMON=1</code> or <code>[daemon] enabled = false</code>. Output, exit codes, files and JSON are the same as without the daemon; a second call on the same file takes ${num(Math.min(...rows.map((r) => r.warm.median)))}–${num(maxBy("warm"))} ms instead of ${num(Math.min(...rows.map((r) => r.cold.median)))}–${num(maxBy("cold"))} ms.</p>
 
-<h2>2 Architektur</h2>
-<pre>cad check|eval|inspect|render|export|outline|measure|set …     (Client, jeder Aufruf ein Prozess)
+<h2>2 Architecture</h2>
+<pre>cad check|eval|inspect|render|export|outline|measure|set …     (client, one process per call)
   1 cad-ipc: connect("daemon") → hello {proto, build_id, pid}
-      kein Daemon  → cad daemon serve starten (setsid, stdin /dev/null, stdout/stderr → daemon.log),
-                      bis 5 s auf hello warten
-      andere Build-ID → stop (graceful, nach 3 s SIGKILL), neuen starten
-      Fehler (kein Ordner, fremder Socket, Windows) → still lokal rechnen
-  2 run {argv, cwd, stdin?} ─────────▶  Verbindungs-Thread ── Kanal ──▶ Arbeits-Thread (256 MiB Stack)
-     ◀── accepted, wait (1 s Takt)       (je Verbindung)                 eine Engine&lt;SmlibKernel&gt; für alle Projekte
-     ◀── stdout, stderr, exit, Dateien                                   chdir(cwd); Cli::try_parse_from(argv);
-  3 Dateien schreiben (atomar bei set),                                  run(&amp;cmd) mit Sitzung auf der Engine
-    stdout/stderr ausgeben, Exit-Code                                    (host.rs: Dateien aufzeichnen, stdin)
-                                         Überwachungs-Thread: Leerlauf 15 min, Watchdog 60 s, Socket vorhanden?
-daemon.lock (flock, PID + Build) · daemon.sock (0600) · daemon.log  in  $CAD_IPC_DIR | $XDG_RUNTIME_DIR/controller-cad | /tmp/controller-cad-&lt;uid&gt;</pre>
+      no daemon     → start cad daemon serve (setsid, stdin /dev/null, stdout/stderr → daemon.log),
+                      wait up to 5 s for hello
+      other build ID → stop (graceful, SIGKILL after 3 s), start a new one
+      error (no folder, foreign socket, Windows) → silently compute locally
+  2 run {argv, cwd, stdin?} ─────────▶  connection thread ── channel ──▶ worker thread (256 MiB stack)
+     ◀── accepted, wait (1 s tick)       (per connection)                one Engine&lt;SmlibKernel&gt; for all projects
+     ◀── stdout, stderr, exit, files                                     chdir(cwd); Cli::try_parse_from(argv);
+  3 write files (atomic for set),                                        run(&amp;cmd) with a session on the engine
+    print stdout/stderr, exit code                                       (host.rs: record files, stdin)
+                                         monitor thread: idle 15 min, watchdog 60 s, socket present?
+daemon.lock (flock, PID + build) · daemon.sock (0600) · daemon.log  in  $CAD_IPC_DIR | $XDG_RUNTIME_DIR/controller-cad | /tmp/controller-cad-&lt;uid&gt;</pre>
 <ul>
-<li><b>Gleicher Code mit und ohne Daemon.</b> Die Befehle der CLI laufen unverändert; drei Stellen gehen über <code>host.rs</code>: <code>load()</code> holt eine Sitzung über <code>host::new_session</code> (im Daemon auf dessen Engine, <code>Session::with_engine</code>; beim Ende des Befehls gibt <code>host::Pooled</code> die Engine zurück), stdin kommt vom Client, und Dateischreiben (<code>render</code>-PNG, <code>export</code>, <code>--all-parts</code>-Ordner, <code>set</code> atomar) wird im Daemon aufgezeichnet und vom Client ausgeführt. Ausgabe und Exit-Code baut dieselbe Funktion <code>finish()</code> im Daemon wie lokal. Schlägt das Schreiben beim Client fehl, rechnet er lokal neu und gibt so dieselbe Fehlermeldung.</li>
-<li><b>Gleiche Flächen-Tags.</b> Die Engine vergibt Tags in der Reihenfolge, in der sie Knoteninhalte zum ersten Mal sieht; in einer Engine, die schon andere Modelle gerechnet hat, sind die Nummern andere als in einem frischen Prozess (sichtbar in <code>eval --json</code>: <code>nodes[].tag</code>, <code>tag_nodes</code>). Die Sitzung nummeriert Tags deshalb selbst in der Reihenfolge ihrer Jobs – genau die Nummern einer frischen Engine – und übersetzt Szene und Meshes (<code>render</code> färbt über diese Zuordnung). Mit eigener Engine ist die Übersetzung die Identität und kostet nichts (Browser, Desktop).</li>
-<li><b>Arbeitsverzeichnis:</b> der Daemon wechselt vor jedem Befehl in das Verzeichnis des Clients (danach nach <code>/</code>); relative Pfade, Meldungen und <code>include</code> verhalten sich wie lokal. Ein Arbeits-Thread, die Befehle laufen nacheinander (SMLib hat globalen Zustand).</li>
-<li><b>Genau ein Daemon:</b> <code>flock</code> auf <code>daemon.lock</code> (neu in <code>cad-ipc</code>: <code>LockFile</code>, Datei beim Ende entfernt, Inode-Prüfung gegen das Entfernen durch den Vorgänger). Wer die Sperre nicht bekommt, wartet bis 10 s und endet, sobald ein Daemon antwortet; mehrere gleichzeitige Clients starten so höchstens Prozesse, die sofort wieder gehen.</li>
-<li><b>Version:</b> <code>hello</code> liefert Protokoll und Build-ID (Version + Größe und Änderungszeit des Programms); bei Abweichung beendet der Client den alten Daemon und startet einen neuen.</li>
-<li><b>Watchdog:</b> läuft ein Befehl länger als 60 s, meldet der Daemon den wartenden Clients „watchdog“ und endet (der hängende Kernel-Aufruf lässt sich nicht abbrechen, wie beim Engine-Prozess der Desktop-App). Der Client wiederholt den Befehl ohne Daemon und schreibt das auf stderr. Ohne Lebenszeichen 10 s (<code>wait</code> kommt jede Sekunde) beendet der Client den Daemon (SIGKILL) und rechnet selbst.</li>
-<li><b>Sicherheit:</b> nur der Unix-Socket aus <code>cad-ipc</code> (Ordner 0700 des Benutzers, Socket 0600, Peer-UID), kein Netzwerk; Anfragen nur <code>hello</code>, <code>run</code>, <code>status</code>, <code>stop</code>; <code>run</code> nur für die acht Befehle (mit dem Parser der CLI geprüft). Der Daemon liest Dateien als derselbe Benutzer und schreibt keine.</li>
+<li><b>Same code with and without the daemon.</b> The CLI commands run unchanged; three places go through <code>host.rs</code>: <code>load()</code> gets a session via <code>host::new_session</code> (in the daemon on its engine, <code>Session::with_engine</code>; when the command ends, <code>host::Pooled</code> returns the engine), stdin comes from the client, and file writes (<code>render</code> PNG, <code>export</code>, <code>--all-parts</code> folder, <code>set</code> atomic) are recorded in the daemon and executed by the client. Output and exit code are built by the same function <code>finish()</code> in the daemon as locally. If writing fails on the client, it recomputes locally and thus gives the same error message.</li>
+<li><b>Same face tags.</b> The engine assigns tags in the order in which it first sees node contents; in an engine that has already computed other models, the numbers differ from those in a fresh process (visible in <code>eval --json</code>: <code>nodes[].tag</code>, <code>tag_nodes</code>). The session therefore numbers tags itself in the order of its jobs – exactly the numbers of a fresh engine – and translates scene and meshes (<code>render</code> colors via this mapping). With its own engine the translation is the identity and costs nothing (browser, desktop).</li>
+<li><b>Working directory:</b> before each command the daemon changes to the client's directory (afterwards to <code>/</code>); relative paths, messages and <code>include</code> behave as locally. One worker thread, commands run one after another (SMLib has global state).</li>
+<li><b>Exactly one daemon:</b> <code>flock</code> on <code>daemon.lock</code> (new in <code>cad-ipc</code>: <code>LockFile</code>, file removed at the end, inode check against removal by the predecessor). A process that does not get the lock waits up to 10 s and exits as soon as a daemon responds; several simultaneous clients therefore at most start processes that exit again immediately.</li>
+<li><b>Version:</b> <code>hello</code> returns protocol and build ID (version + size and modification time of the executable); on mismatch the client stops the old daemon and starts a new one.</li>
+<li><b>Watchdog:</b> if a command runs longer than 60 s, the daemon reports "watchdog" to the waiting clients and exits (the hanging kernel call cannot be aborted, as with the engine process of the desktop app). The client repeats the command without the daemon and says so on stderr. After 10 s without a sign of life (<code>wait</code> arrives every second) the client kills the daemon (SIGKILL) and computes itself.</li>
+<li><b>Security:</b> only the Unix socket from <code>cad-ipc</code> (user's folder 0700, socket 0600, peer UID), no network; requests only <code>hello</code>, <code>run</code>, <code>status</code>, <code>stop</code>; <code>run</code> only for the eight commands (checked with the CLI parser). The daemon reads files as the same user and writes none.</li>
 </ul>
-<h3>Beispiel</h3>
+<h3>Example</h3>
 <pre>${esc(demoText)}</pre>
-<p class="small">Log (<code>daemon.log</code> im Socket-Ordner):</p>
+<p class="small">Log (<code>daemon.log</code> in the socket folder):</p>
 <pre>${esc(logText)}</pre>
 
-<h2>3 Grenzen und Konfiguration</h2>
-<table><tr><th>Einstellung</th><th>Standard</th><th>Datei <code>[daemon]</code></th><th>Umgebung</th><th><code>cad daemon serve</code></th></tr>
-<tr><td>Daemon an/aus</td><td>an</td><td><code>enabled = false</code> (oder <code>daemon = false</code> oben)</td><td><code>CAD_NO_DAEMON=1</code></td><td>– (je Aufruf <code>--no-daemon</code>)</td></tr>
-<tr><td>Cache (Knotenergebnisse + Meshes)</td><td>512 MiB</td><td><code>cache_mb</code></td><td><code>CAD_DAEMON_CACHE_MB</code></td><td><code>--cache-mb</code></td></tr>
-<tr><td>Einträge</td><td>16384</td><td><code>cache_entries</code></td><td><code>CAD_DAEMON_CACHE_ENTRIES</code></td><td>–</td></tr>
-<tr><td>Projekte im Cache</td><td>8</td><td><code>max_projects</code></td><td><code>CAD_DAEMON_MAX_PROJECTS</code></td><td><code>--max-projects</code></td></tr>
-<tr><td>Leerlauf bis Ende</td><td>15 min</td><td><code>idle_minutes</code>, <code>idle_secs</code></td><td><code>CAD_DAEMON_IDLE_MINUTES</code>, <code>_IDLE_SECS</code></td><td><code>--idle-minutes</code>, <code>--idle-secs</code></td></tr>
+<h2>3 Limits and configuration</h2>
+<table><tr><th>Setting</th><th>Default</th><th>File <code>[daemon]</code></th><th>Environment</th><th><code>cad daemon serve</code></th></tr>
+<tr><td>Daemon on/off</td><td>on</td><td><code>enabled = false</code> (or <code>daemon = false</code> at top level)</td><td><code>CAD_NO_DAEMON=1</code></td><td>– (per call <code>--no-daemon</code>)</td></tr>
+<tr><td>Cache (node results + meshes)</td><td>512 MiB</td><td><code>cache_mb</code></td><td><code>CAD_DAEMON_CACHE_MB</code></td><td><code>--cache-mb</code></td></tr>
+<tr><td>Entries</td><td>16384</td><td><code>cache_entries</code></td><td><code>CAD_DAEMON_CACHE_ENTRIES</code></td><td>–</td></tr>
+<tr><td>Projects in the cache</td><td>8</td><td><code>max_projects</code></td><td><code>CAD_DAEMON_MAX_PROJECTS</code></td><td><code>--max-projects</code></td></tr>
+<tr><td>Idle time until exit</td><td>15 min</td><td><code>idle_minutes</code>, <code>idle_secs</code></td><td><code>CAD_DAEMON_IDLE_MINUTES</code>, <code>_IDLE_SECS</code></td><td><code>--idle-minutes</code>, <code>--idle-secs</code></td></tr>
 <tr><td>Watchdog</td><td>60 s</td><td><code>watchdog_secs</code></td><td><code>CAD_DAEMON_WATCHDOG_SECS</code></td><td><code>--watchdog-secs</code></td></tr>
-<tr><td>RSS-Grenze</td><td>Start + 1,5 × Cache</td><td><code>rss_factor</code></td><td><code>CAD_DAEMON_RSS_FACTOR</code></td><td>–</td></tr>
+<tr><td>RSS limit</td><td>start + 1.5 × cache</td><td><code>rss_factor</code></td><td><code>CAD_DAEMON_RSS_FACTOR</code></td><td>–</td></tr>
 </table>
-<p>Datei: <code>$CAD_CONFIG</code>, sonst <code>$XDG_CONFIG_HOME/controller-cad/config.toml</code>, sonst <code>~/.config/controller-cad/config.toml</code>; Vorrang Argumente &gt; Umgebung &gt; Datei &gt; Standard; ungültige Werte werden ignoriert (Log, mit <code>--verbose</code> auf stderr).</p>
+<p>File: <code>$CAD_CONFIG</code>, else <code>$XDG_CONFIG_HOME/controller-cad/config.toml</code>, else <code>~/.config/controller-cad/config.toml</code>; precedence arguments &gt; environment &gt; file &gt; default; invalid values are ignored (log, with <code>--verbose</code> on stderr).</p>
 <ul>
-<li><b>Cache:</b> ein LRU der Engine für Knotenergebnisse und Meshes zusammen (vorher: 4096 Knoten ohne Größe, Meshes 256 MiB getrennt), mit Bytegrenze und Eintragsgrenze; der neueste Eintrag bleibt auch, wenn er allein darüber liegt. Eine Engine für alle Projekte, die Schlüssel sind inhaltsbasiert.</li>
-<li><b>Projekte:</b> je Hauptdatei (absoluter Pfad; stdin je Arbeitsverzeichnis) merkt sich der Daemon die Schlüssel, die ihre Befehle berührt haben. Beim 9. Projekt verliert das am längsten unbenutzte seine Einträge, soweit kein anderes gehaltenes Projekt sie nutzt.</li>
-<li><b>RSS:</b> nach jeder Anfrage aus <code>/proc/self/statm</code>; über Start-RSS + 1,5 × Cache-Grenze wird der Cache geleert und freier Speicher mit <code>malloc_trim</code> zurückgegeben. Die Start-RSS (rund 35–40 MiB: Programm, SMLib, Tauri-Bibliotheken) zählt nicht gegen die Grenze, sonst griffe eine kleine Grenze immer.</li>
-<li><b>Lebensdauer:</b> Ende nach 15 min ohne <code>run</code> (<code>status</code> zählt nicht), nach <code>cad daemon stop</code> (wartet auf laufende Befehle), wenn der Socket entfernt oder ersetzt wird (z. B. Testordner gelöscht), nach dem Watchdog; Socket und Sperrdatei werden entfernt.</li>
+<li><b>Cache:</b> one LRU of the engine for node results and meshes together (before: 4096 nodes without size, meshes 256 MiB separately), with a byte limit and an entry limit; the newest entry stays even if it alone exceeds the limit. One engine for all projects; the keys are content-based.</li>
+<li><b>Projects:</b> per main file (absolute path; stdin per working directory) the daemon remembers the keys its commands touched. With the 9th project, the least recently used one loses its entries unless another held project uses them.</li>
+<li><b>RSS:</b> after each request from <code>/proc/self/statm</code>; above start RSS + 1.5 × cache limit the cache is cleared and free memory returned with <code>malloc_trim</code>. The start RSS (about 35–40 MiB: executable, SMLib, Tauri libraries) does not count against the limit, otherwise a small limit would always trigger.</li>
+<li><b>Lifetime:</b> exit after 15 min without <code>run</code> (<code>status</code> does not count), after <code>cad daemon stop</code> (waits for running commands), when the socket is removed or replaced (e.g. test folder deleted), after the watchdog; socket and lock file are removed.</li>
 </ul>
 
-<h3>Speicherschätzung</h3>
-<p>Kernel-Ergebnisse sind Handles in SMLib; ihre Größe kennt nur der C++-Heap. Gemessen mit <code>crates/cad-cli/examples/cache_size.rs</code>: jedes der ${sizeRows.length} Beispielmodelle mit frischer Engine auswerten, dann die Engine fallen lassen und die freigegebenen Heap-Bytes zählen (glibc <code>mallinfo2</code>). Die Breps halten ${de(perFace[0] / 1024)}–${de(perFace.at(-1) / 1024)} KiB je Fläche (Median ${de(med(perFace) / 1024)} KiB), Freiformflächen und variable Verrundungen am meisten. Die erste Schätzung aus der Topologie (4 KiB + 3 KiB/Fläche + 1 KiB/Kante) lag um den Faktor 6 zu niedrig. Jetzt: <code>Kernel::shape_bytes</code> für SMLib 8 KiB + 32 KiB je Fläche + 1 KiB je Kante (Summe über alle Beispiele ${sizeSum ? de(sizeSum.estimate_topology / sizeSum.freed, 2) : "–"}×, je Modell ${de(topoRatios[0], 2)}–${de(topoRatios.at(-1), 2)}×) und im Daemon zusätzlich eine Messung je Knoten: Heap nach minus vor der Auswertung des Knotens (<code>Engine::set_heap_probe</code>), was die neuen Breps des Knotens samt SMLib-Zwischendaten erfasst. Damit liegt die Schätzung je Modell bei ${de(ratios[0], 2)}–${de(ratios.at(-1), 2)}× des tatsächlich Gehaltenen (Median ${de(med(ratios), 2)}), nie darunter.</p>
+<h3>Memory estimate</h3>
+<p>Kernel results are handles in SMLib; only the C++ heap knows their size. Measured with <code>crates/cad-cli/examples/cache_size.rs</code>: evaluate each of the ${sizeRows.length} example models with a fresh engine, then drop the engine and count the freed heap bytes (glibc <code>mallinfo2</code>). The breps hold ${num(perFace[0] / 1024)}–${num(perFace.at(-1) / 1024)} KiB per face (median ${num(med(perFace) / 1024)} KiB), free-form surfaces and variable fillets the most. The first estimate from the topology (4 KiB + 3 KiB/face + 1 KiB/edge) was too low by a factor of 6. Now: <code>Kernel::shape_bytes</code> for SMLib 8 KiB + 32 KiB per face + 1 KiB per edge (sum over all examples ${sizeSum ? num(sizeSum.estimate_topology / sizeSum.freed, 2) : "–"}×, per model ${num(topoRatios[0], 2)}–${num(topoRatios.at(-1), 2)}×) and in the daemon additionally a measurement per node: heap after minus before the evaluation of the node (<code>Engine::set_heap_probe</code>), which captures the new breps of the node including SMLib intermediate data. The estimate per model is thus ${num(ratios[0], 2)}–${num(ratios.at(-1), 2)}× of what is actually held (median ${num(med(ratios), 2)}), never below.</p>
 ${sizeTable}
-<p class="small">Die acht größten Modelle; „gehalten“ = beim Verwerfen der Engine freigegeben. Meshes zählen mit 4 Byte je Array-Element (genau).</p>
+<p class="small">The eight largest models; "held" = freed when the engine is dropped. Meshes count 4 bytes per array element (exact).</p>
 
-<h2>4 Messung</h2>
-<p>Je Zeile ${timings?.meta?.repeat ?? "–"} Wiederholungen, jede mit gestopptem Daemon und frischer Kopie der Datei; Median (fett), daneben Minimum–Maximum, Wanduhrzeit des <code>cad</code>-Prozesses in ms (${esc(timings?.meta?.date ?? "")}, ${timings?.meta?.cpus ?? "–"} Kerne). „Kalt ohne Daemon“ = Verhalten bis Bericht 9. Kleine Änderungen:</p>
+<h2>4 Measurement</h2>
+<p>${timings?.meta?.repeat ?? "–"} repetitions per row, each with a stopped daemon and a fresh copy of the file; median (bold), next to it minimum–maximum, wall-clock time of the <code>cad</code> process in ms (${esc(timings?.meta?.date ?? "")}, ${timings?.meta?.cpus ?? "–"} cores). "Cold without daemon" = behavior up to report 9. Small changes:</p>
 <ul>${models.map((m) => `<li><code>${esc(m)}</code>: ${changes[m] ?? ""}</li>`).join("")}</ul>
 ${timingTable}
 <ul>
-<li>Der 1. Aufruf mit Daemon kostet etwa so viel wie kalt ohne Daemon: im Median ${de(startExtra)} ms mehr (Prozessstart des Daemons, Warten auf <code>hello</code>, eine zusätzliche Übertragung), je Messreihe ${de(Math.min(...startDiffs))} bis +${de(Math.max(...startDiffs))} ms – innerhalb der Streuung der Kaltzeit.</li>
-<li>Der 2. Aufruf rechnet nichts im Kernel: <code>check</code> braucht nur Parser, Auswertung und den Weg über den Socket; <code>render</code> zusätzlich Rasterisierung und PNG (das Mesh kommt aus dem Cache), <code>export -o x.step</code> den STEP-Writer.</li>
-<li>Nach einer kleinen Änderung rechnet der Kernel nur die betroffenen Knoten (Spalte „nach kleiner Änderung“). Bei <code>variabler_radius</code> dominiert die eine neue variable Verrundung; beim STEP-Export kommt die B-Rep der geänderten Wurzel dazu, die neu aus SMLib gelesen und geschrieben wird.</li>
-<li>Ein leerer Aufruf (<code>check</code> von <code>cube(1)</code>) kostet mit Daemon ${de(timings?.tiny_check_daemon?.median, 1)} ms, ohne ${de(timings?.tiny_check_local?.median, 1)} ms: Prozessstart des Clients und Socket statt SMLib-Initialisierung im Prozess.</li>
+<li>The 1st call with the daemon costs about as much as cold without the daemon: median ${num(startExtra)} ms more (process start of the daemon, waiting for <code>hello</code>, one additional transfer), per series ${num(Math.min(...startDiffs))} to +${num(Math.max(...startDiffs))} ms – within the spread of the cold time.</li>
+<li>The 2nd call computes nothing in the kernel: <code>check</code> needs only parser, evaluation and the round trip over the socket; <code>render</code> additionally rasterization and PNG (the mesh comes from the cache), <code>export -o x.step</code> the STEP writer.</li>
+<li>After a small change the kernel computes only the affected nodes (column "after small change"). For <code>variabler_radius</code> the one new variable fillet dominates; for the STEP export the B-rep of the changed root is added, which is read anew from SMLib and written.</li>
+<li>An empty call (<code>check</code> of <code>cube(1)</code>) costs ${num(timings?.tiny_check_daemon?.median, 1)} ms with the daemon, ${num(timings?.tiny_check_local?.median, 1)} ms without: process start of the client and socket instead of SMLib initialization in the process.</li>
 </ul>
 
 <h2>5 Tests</h2>
 <ul>
-<li><code>cargo test --workspace</code>: ${cargoSum ? `${cargoSum.ok} bestanden, ${cargoSum.failed} fehlgeschlagen, ${cargoSum.ignored} ignoriert` : "–"}; <code>cargo clippy --workspace --all-targets -- -D warnings</code>: ${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "Befund" : "ohne Befund"}; <code>cargo fmt --all --check</code>: ${fmt == null ? "–" : fmt.trim() === "" ? "ohne Befund" : "Abweichungen"}.</li>
-<li>Jeder Test hat einen eigenen Socket-Ordner (<code>CAD_IPC_DIR</code> in einem temporären Verzeichnis) und beendet seinen Daemon (Guard mit <code>cad daemon stop</code>); löscht der Test den Ordner, endet der Daemon spätestens 0,5 s später von selbst (Socket fehlt). Die übrigen CLI-Tests (<code>cli.rs</code>, <code>agent.rs</code>, <code>projects.rs</code>) laufen mit <code>CAD_NO_DAEMON=1</code>.</li>
-<li>CI: <code>scripts/ci/rust.sh test</code> prüft nach <code>cargo test</code>, dass kein <code>cad daemon serve</code> übrig ist (in CI, sonst Fehler); <code>scripts/ci/compat.sh compare|step</code> laufen jetzt über den Daemon (eigener Socket-Ordner, danach <code>status</code> und <code>stop</code>), so prüfen der OpenSCAD-Vergleich und die STEP-Prüfung mit OpenCASCADE auch die Ausgabe des Daemons; die Tauri-E2E-Tests rufen <code>cad</code> mit <code>CAD_NO_DAEMON=1</code> auf.</li>
+<li><code>cargo test --workspace</code>: ${cargoSum ? `${cargoSum.ok} passed, ${cargoSum.failed} failed, ${cargoSum.ignored} ignored` : "–"}; <code>cargo clippy --workspace --all-targets -- -D warnings</code>: ${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "finding" : "no findings"}; <code>cargo fmt --all --check</code>: ${fmt == null ? "–" : fmt.trim() === "" ? "no findings" : "differences"}.</li>
+<li>Each test has its own socket folder (<code>CAD_IPC_DIR</code> in a temporary directory) and stops its daemon (guard with <code>cad daemon stop</code>); if the test deletes the folder, the daemon exits by itself at most 0.5 s later (socket missing). The other CLI tests (<code>cli.rs</code>, <code>agent.rs</code>, <code>projects.rs</code>) run with <code>CAD_NO_DAEMON=1</code>.</li>
+<li>CI: <code>scripts/ci/rust.sh test</code> checks after <code>cargo test</code> that no <code>cad daemon serve</code> is left over (in CI, error otherwise); <code>scripts/ci/compat.sh compare|step</code> now run through the daemon (own socket folder, then <code>status</code> and <code>stop</code>), so the OpenSCAD comparison and the STEP check with OpenCASCADE also check the daemon's output; the Tauri E2E tests call <code>cad</code> with <code>CAD_NO_DAEMON=1</code>.</li>
 </ul>
-<table><tr><th>Test (<code>crates/cad-cli/tests/daemon.rs</code>)</th><th>Prüft</th><th>Ergebnis</th></tr>
+<table><tr><th>Test (<code>crates/cad-cli/tests/daemon.rs</code>)</th><th>Checks</th><th>Result</th></tr>
 ${daemonRes.map((t) => `<tr><td><code>${esc(t.name)}</code></td><td>${md(testDesc[t.name] ?? "")}</td><td class="${t.res === "ok" ? "ok" : "bad"}">${esc(t.res)}</td></tr>`).join("\n")}
-${[...ipcRes, ...unitRes].map((t) => `<tr><td><code>${esc(t.name)}</code></td><td>${t.name.includes("lock") ? "<code>cad-ipc</code>: Sperrdatei exklusiv (auch im selben Prozess), 0600, beim Ende entfernt" : t.name.startsWith("config") ? "Konfigurationsdatei: Werte, unbekannte Schlüssel, <code>daemon = false</code>, <code>enabled = false</code>, kaputtes TOML" : "LRU: Eintragsgrenze, <code>retain</code>, Verdrängungszähler"}</td><td class="${t.res === "ok" ? "ok" : "bad"}">${esc(t.res)}</td></tr>`).join("\n")}
+${[...ipcRes, ...unitRes].map((t) => `<tr><td><code>${esc(t.name)}</code></td><td>${t.name.includes("lock") ? "<code>cad-ipc</code>: lock file exclusive (also within the same process), 0600, removed at the end" : t.name.startsWith("config") ? "configuration file: values, unknown keys, <code>daemon = false</code>, <code>enabled = false</code>, broken TOML" : "LRU: entry limit, <code>retain</code>, eviction counter"}</td><td class="${t.res === "ok" ? "ok" : "bad"}">${esc(t.res)}</td></tr>`).join("\n")}
 </table>
-${daemonTimes ? `<p class="small">Im Test <code>autostart_then_cache_hits_and_faster</code> (Debug-Build, <code>eval --json</code> von <code>variabler_radius</code>): 1. Aufruf ${de(daemonTimes.first)} ms, 2. Aufruf ${de(daemonTimes.second)} ms.</p>` : ""}
+${daemonTimes ? `<p class="small">In the test <code>autostart_then_cache_hits_and_faster</code> (debug build, <code>eval --json</code> of <code>variabler_radius</code>): 1st call ${num(daemonTimes.first)} ms, 2nd call ${num(daemonTimes.second)} ms.</p>` : ""}
 
-<h2>6 Bekannte Grenzen</h2>
+<h2>6 Known limitations</h2>
 <ul>
-<li>Nur Unix (Linux, macOS; Peer-UID-Prüfung nur unter Linux, sonst schützt der 0700-Ordner). Unter Windows rechnet jeder Befehl selbst, still.</li>
-<li>Ein Arbeits-Thread: gleichzeitige CLI-Aufrufe warten aufeinander (ohne Daemon liefen sie parallel in eigenen Prozessen); <code>wait</code>-Ereignisse halten die Clients am Leben.</li>
-<li>Der Watchdog trifft auch einen legitim langen Befehl (&gt; 60 s): der Daemon endet, der Befehl läuft ein zweites Mal ohne Daemon. Ein Absturz im Kernel (Signal) beendet den Daemon ebenso; die lokale Wiederholung kann genauso abstürzen. Getestet ist der Watchdog mit einer künstlichen Verzögerung (<code>CAD_DAEMON_DEBUG_HANG_MS</code>), nicht mit einem echten hängenden SMLib-Aufruf.</li>
-<li>Speichermessung je Knoten nur mit glibc; Allokationen anderer Threads (Verbindungen) zählen mit. Ohne glibc gilt die Topologie-Schätzung (je Modell Faktor ${de(topoRatios[0], 1)}–${de(topoRatios.at(-1), 1)}). Die RSS wird nach jeder Anfrage geprüft, nicht während einer Auswertung.</li>
-<li>Abweichungen zur Ausgabe ohne Daemon: das zusätzliche JSON-Feld <code>daemon</code>; Zähler und Zeiten (<code>stats.cache_hits</code>, <code>kernel_calls</code>, <code>cached</code>, <code>*_ms</code>, <code>timings</code>, die Zeile „Statistik“ von <code>eval</code>) zeigen, was tatsächlich passiert ist. Bei einer Panik sind Meldung und Exit-Code gleich, die Panikmeldung des Laufzeitsystems steht aber im Log statt auf stderr.</li>
-<li>Build-ID aus Größe und Änderungszeit des Programms: wechseln sich zwei <code>cad</code>-Binaries ab (Debug und Release), ersetzen sie einander den Daemon (Cache weg). Ein alter Daemon, der noch rechnet, wird nach 3 s hart beendet; dessen Client rechnet dann selbst.</li>
-<li>Die Tag-Tabelle der Engine wächst weiter (ein Eintrag je gesehenem Knoteninhalt); nach 2²⁰ Tags ersetzt der Daemon die Engine samt Cache.</li>
-<li><code>cad watch</code> nutzt den Daemon nicht (eigener Cache im Prozess); <code>cad set</code> prüft die Änderung mit einer zweiten, kernel-losen Sitzung ohne Cache (wie bisher).</li>
+<li>Unix only (Linux, macOS; peer UID check only on Linux, otherwise the 0700 folder protects). On Windows every command computes by itself, silently.</li>
+<li>One worker thread: simultaneous CLI calls wait for each other (without the daemon they would run in parallel in separate processes); <code>wait</code> events keep the clients alive.</li>
+<li>The watchdog also hits a legitimately long command (&gt; 60 s): the daemon exits, the command runs a second time without the daemon. A crash in the kernel (signal) also ends the daemon; the local repetition can crash the same way. The watchdog is tested with an artificial delay (<code>CAD_DAEMON_DEBUG_HANG_MS</code>), not with a real hanging SMLib call.</li>
+<li>Memory measurement per node only with glibc; allocations of other threads (connections) are counted too. Without glibc the topology estimate applies (per model factor ${num(topoRatios[0], 1)}–${num(topoRatios.at(-1), 1)}). The RSS is checked after each request, not during an evaluation.</li>
+<li>Differences from the output without the daemon: the additional JSON field <code>daemon</code>; counters and timings (<code>stats.cache_hits</code>, <code>kernel_calls</code>, <code>cached</code>, <code>*_ms</code>, <code>timings</code>, the statistics line of <code>eval</code>) show what actually happened. On a panic, message and exit code are the same, but the runtime's panic message goes to the log instead of stderr.</li>
+<li>Build ID from size and modification time of the executable: if two <code>cad</code> binaries alternate (debug and release), they replace each other's daemon (cache lost). An old daemon that is still computing is killed after 3 s; its client then computes itself.</li>
+<li>The engine's tag table keeps growing (one entry per node content seen); after 2²⁰ tags the daemon replaces the engine together with its cache.</li>
+<li><code>cad watch</code> does not use the daemon (own cache in the process); <code>cad set</code> checks the change with a second, kernel-less session without cache (as before).</li>
 </ul>
 
-<h2>7 Reproduktion</h2>
+<h2>7 Reproduction</h2>
 <pre>export SMLIB_PREBUILT=$PWD/smlib/build-native
 cargo build --release -p cad-cli --bin cad --example cache_size
 python3 tools/report/report10-measure.py --cad target/release/mcad --repeat ${timings?.meta?.repeat ?? 5}
@@ -293,10 +293,10 @@ cargo test -p cad-cli --test daemon -- --nocapture --test-threads 1 &gt; reports
 cargo clippy --workspace --all-targets -- -D warnings &gt; reports/tmp/report10/clippy.txt 2&gt;&amp;1
 cargo fmt --all --check &gt; reports/tmp/report10/fmt.txt
 node tools/report/report10.mjs
-node tools/report/print-pdf.mjs docs/reports/10-cli-daemon/report.html docs/reports/10-cli-daemon/report.pdf "Testbericht 10: CLI-Daemon"</pre>
+node tools/report/print-pdf.mjs docs/reports/10-cli-daemon/report.html docs/reports/10-cli-daemon/report.pdf "Test report 10: CLI daemon"</pre>
 </main>
 </body>
 </html>
 `;
 writeFileSync(join(out, "report.html"), html);
-console.log(`${relative(root, join(out, "report.html"))}: ${rows.length} Messreihen, Rust ${cargoSum?.ok ?? "–"}, Daemon-Tests ${daemonRes.length}`);
+console.log(`${relative(root, join(out, "report.html"))}: ${rows.length} measurement series, Rust ${cargoSum?.ok ?? "–"}, daemon tests ${daemonRes.length}`);

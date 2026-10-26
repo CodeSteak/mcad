@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Inputs of test report 13 ("Korrekturen Geometrie") in reports/tmp/report13/:
+# Inputs of test report 13 ("geometry fixes") in reports/tmp/report13/:
 #   fehler/<name>.{vorher,nachher}.json   cad measure --volume --json of each example in
 #                                          tests/alltag/fehler (before/after)
 #   img/<name>.{vorher,nachher}.png        cad render of the examples and of S1/S4 views
@@ -18,7 +18,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 out="$root/reports/tmp/report13"
 CAD=${CAD:-$root/target/release/mcad}
-: "${CAD_OLD:?CAD_OLD=<cad before the corrections> setzen}"
+: "${CAD_OLD:?CAD_OLD=<cad before the corrections> must be set}"
 export CAD_NO_DAEMON=1
 mkdir -p "$out/fehler" "$out/img"
 fe="$root/tests/alltag/fehler"
@@ -52,7 +52,7 @@ render s1 "$al/becher.scad" "$al" --module becher --show grids --view front
 render s4 "$al/gehaeuse/gehaeuse.scad" "$al/gehaeuse" --section x=30 --view right
 render s4b "$al/kuehlkoerper.scad" "$al" --module kuehlkoerper --show grids
 
-# run time of the Schlüsselbrett: 3 renders each
+# run time of the key rack (schluesselbrett): 3 renders each
 for v in vorher nachher; do
   bin=$CAD; [ $v = vorher ] && bin=$CAD_OLD
   echo "[" > "$out/zeit.$v.json"

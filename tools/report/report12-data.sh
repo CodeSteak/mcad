@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Data of test report 12 ("Korrekturen Farben und Daemon") that come from the CLI and the
+# Data of test report 12 ("fixes for colors and daemon") that come from the CLI and the
 # checking scripts: outputs and images per finding of tests/farben-pruefung/ (after the fix;
 # the images before are the reviewer's in tests/farben-pruefung/img/), the 3MF check, the
 # daemon with a long CAD_IPC_DIR and the slicer sources. Writes reports/tmp/report12/.
 #
-#   CAD=target/debug/mcad PY3MF=/pfad/venv/bin/python tools/report/report12-data.sh
+#   CAD=target/debug/mcad PY3MF=/path/venv/bin/python tools/report/report12-data.sh
 #
 # PY3MF: Python with lib3mf and trimesh (pip install lib3mf trimesh networkx lxml).
 set -euo pipefail
@@ -41,7 +41,7 @@ def col(i, d=0):
             return c
 cnt = collections.Counter(col(re.search(r"\(#(\d+)\)", v).group(1)) for v in ents.values() if v.startswith("STYLED_ITEM('color'"))
 for c, n in sorted(cnt.items()):
-    print(f"{c}: {n} Flächen")
+    print(f"{c}: {n} faces")
 EOF
 
 # F2: slot table (the CLI shows the result of the UI edit: the table in the code)
@@ -84,12 +84,12 @@ EX="tests/models/spec/mehrfarbig.scad"
 "$PY3MF" tests/farben-pruefung/check3mf.py "$OUT/main_use.3mf" > "$OUT/check3mf-main_use.txt" 2>&1 || true
 
 # daemon with a long CAD_IPC_DIR (socket path > 107 bytes)
-LONG="$(mktemp -d)/ein-sehr-langer-verzeichnisname-fuer-den-socket-des-hintergrundprozesses-damit-es-reicht/ipc"
+LONG="$(mktemp -d)/a-very-long-directory-name-for-the-socket-of-the-background-process-so-that-it-is-long-enough/ipc"
 mkdir -p "$LONG"
 (
   unset CAD_NO_DAEMON
   export CAD_IPC_DIR="$LONG"
-  echo "CAD_IPC_DIR: $LONG ($(( ${#LONG} + 12 )) Byte bis daemon.sock)"
+  echo "CAD_IPC_DIR: $LONG ($(( ${#LONG} + 12 )) bytes up to daemon.sock)"
   "$CAD" check "$EX" --verbose 2>&1 | grep -i daemon || true
   "$CAD" daemon status
   "$CAD" daemon stop
@@ -110,18 +110,18 @@ for u in \
 done
 ( cd "$SRC" && sha256sum ./* > ../sources.sha256 )
 {
-  echo "== BambuStudio Plater.cpp: Farbdialog für fremde 3MF"
+  echo "== BambuStudio Plater.cpp: colour dialog for foreign 3MF"
   grep -n "color_group_map.empty() && !volume_color_data.empty()" "$SRC/bambulab_BambuStudio_master_src_slic3r_GUI_Plater.cpp" || true
-  echo "== BambuStudio bbs_3mf.cpp: Dreiecksfarben nur aus pid/pindex"
+  echo "== BambuStudio bbs_3mf.cpp: triangle colours only from pid/pindex"
   grep -n "triangle_colors.size() == triangles_count" "$SRC/bambulab_BambuStudio_master_src_libslic3r_Format_bbs_3mf.cpp" || true
   grep -n 'boost::starts_with(m_curr_characters, "BambuStudio-")' "$SRC/bambulab_BambuStudio_master_src_libslic3r_Format_bbs_3mf.cpp" || true
-  echo "== BambuStudio bbs_3mf.cpp: model_settings.config für alle Dateien"
+  echo "== BambuStudio bbs_3mf.cpp: model_settings.config for all files"
   grep -n "iequals(name, BBS_MODEL_CONFIG_FILE)" "$SRC/bambulab_BambuStudio_master_src_libslic3r_Format_bbs_3mf.cpp" || true
-  echo "== BambuStudio ObjColorDialog.cpp: OK überschreibt extruder"
+  echo "== BambuStudio ObjColorDialog.cpp: OK overwrites extruder"
   grep -n "apply_volume_filament_ids\|volume->config.set(\"extruder\"" "$SRC/bambulab_BambuStudio_master_src_slic3r_GUI_ObjColorDialog.cpp" || true
-  echo "== OrcaSlicer bbs_3mf.cpp: Farbgruppe nur ohne Volumen-Metadaten"
+  echo "== OrcaSlicer bbs_3mf.cpp: colour group only without volume metadata"
   grep -n "color_group_id_to_extruder_id_map.find" "$SRC/SoftFever_OrcaSlicer_main_src_libslic3r_Format_bbs_3mf.cpp" || true
-  echo "== OrcaSlicer Plater.cpp: Vorkommen von color_group_map (0: kein Farbdialog für 3MF)"
+  echo "== OrcaSlicer Plater.cpp: occurrences of color_group_map (0: no colour dialog for 3MF)"
   grep -c "color_group_map" "$SRC/SoftFever_OrcaSlicer_main_src_slic3r_GUI_Plater.cpp" || true
 } > "$OUT/sources.txt"
 echo "report12 data: $OUT"

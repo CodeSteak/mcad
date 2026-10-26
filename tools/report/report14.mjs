@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 14 ("Skizzen und Namensräume", Plan 17.7 Schritt 1): sketches with mixed
+// Test report 14 ("sketches and namespaces", plan 17.7 step 1): sketches with mixed
 // contours (lines, arcs, Bézier curves, splines) through the kernel, modules as namespaces,
 // display and handles in the UI. Writes docs/reports/14-skizzen/report.html (images in img/).
 //
@@ -12,7 +12,7 @@
 //   compare.txt, step.txt, alltag.txt, node-test.txt            compare.py --eval, verify.py, tests/alltag/check.sh, test-node.mjs
 //
 //   node tools/report/report14.mjs
-//   node tools/report/print-pdf.mjs docs/reports/14-skizzen/report.html docs/reports/14-skizzen/report.pdf "Testbericht 14: Skizzen und Namensräume"
+//   node tools/report/print-pdf.mjs docs/reports/14-skizzen/report.html docs/reports/14-skizzen/report.pdf "Test report 14: sketches and namespaces"
 
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -37,12 +37,12 @@ const git = (...a) => {
     return "–";
   }
 };
-const de = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d }));
+const num = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const sci = (x) => (x === null || x === undefined || !Number.isFinite(x) ? "–" : x === 0 ? "0" : x.toExponential(1).replace("e", "·10^").replace(/\^(-?)\+?(\d+)/, (_, s, n) => `<sup>${s === "-" ? "−" : ""}${n}</sup>`));
 const md = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>");
-const T = (name) => readText(join(input, name))?.replaceAll(`${input}/`, "").replaceAll(`${root}/`, "") ?? "(fehlt)";
+const T = (name) => readText(join(input, name))?.replaceAll(`${input}/`, "").replaceAll(`${root}/`, "") ?? "(missing)";
 const pre = (t) => `<pre>${esc(t.trimEnd())}</pre>`;
-const src = (p) => readText(join(root, p)) ?? "(fehlt)";
+const src = (p) => readText(join(root, p)) ?? "(missing)";
 
 function img(srcPath, dst) {
   if (!existsSync(srcPath)) return null;
@@ -59,7 +59,7 @@ function img(srcPath, dst) {
 }
 const cli = (n) => img(join(input, "cli", `${n}.png`), `cli-${n}.jpg`);
 const pw = (n) => img(join(input, "img", `${n}.jpg`), `ui-${n}.jpg`);
-const fig = (s, cap) => (s ? `<figure><img src="${s}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(Bild fehlt: ${esc(cap)})</p>`);
+const fig = (s, cap) => (s ? `<figure><img src="${s}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(image missing: ${esc(cap)})</p>`);
 const pair = (a, ca, b, cb) => `<div class="two">${fig(a, ca)}${fig(b, cb)}</div>`;
 
 // ------------------------------------------------------------------------------- test summaries
@@ -127,7 +127,7 @@ const steps = (readText(join(input, "step.tsv")) ?? "")
     return { name, cnt: JSON.parse(cnt), info: JSON.parse(info), vol: Number(vol) };
   });
 
-const date = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const commit = git("rev-parse", "--short", "HEAD");
 const branch = git("rev-parse", "--abbrev-ref", "HEAD");
 const rustc = (() => {
@@ -139,25 +139,26 @@ const rustc = (() => {
 })();
 
 const VNAMES = {
-  rechteck_halbkreis: "Rechteck 40 × 20 + Halbkreis r 20 (Endpunkt + Radius), h 5",
-  tangentialbogen: "dasselbe mit tangentialem Bogen",
-  mittelpunkt_winkel: "dasselbe mit Mittelpunkt + Winkel",
-  kugel: "rotate_extrude eines Halbkreises: Kugel r 7",
-  torus: "rotate_extrude zweier Bögen: Torus R 20, r 4",
-  ring_windung: "Quadrat 20 minus Kreis r 5 (Gegenlauf, nonzero)",
-  ring_hole: "dasselbe mit `hole { … }`",
-  bezier_quadratisch: "Quadrat 4 + quadratische Bézier-Kappe (Parabel 2/3 · b · h)",
-  stern_schleife: "Stern aus 12 Geraden per Schleife in einem Skizzen-Modul",
-  rohr_pfad: "sweep eines Kreises r 2 entlang Gerade–Bogen–Gerade (Pappus)",
-  gehrung_pfad: "sweep eines Quadrats 2 entlang einer Ecke (Gehrung)",
-  twist_bogen: "linear_extrude(twist = 90) eines Langlochs (Volumen ohne twist)",
+  rechteck_halbkreis: "Rectangle 40 × 20 + half circle r 20 (end point + radius), h 5",
+  tangentialbogen: "same with tangential arc",
+  mittelpunkt_winkel: "same with center + angle",
+  kugel: "rotate_extrude of a half circle: sphere r 7",
+  torus: "rotate_extrude of two arcs: torus R 20, r 4",
+  ring_windung: "Square 20 minus circle r 5 (reverse direction, nonzero)",
+  ring_hole: "same with `hole { … }`",
+  bezier_quadratisch: "Square 4 + quadratic Bézier cap (parabola 2/3 · b · h)",
+  stern_schleife: "Star of 12 lines via a loop in a sketch module",
+  rohr_pfad: "sweep of a circle r 2 along line–arc–line (Pappus)",
+  gehrung_pfad: "sweep of a square 2 along a corner (miter)",
+  twist_bogen: "linear_extrude(twist = 90) of a slot (volume without twist)",
 };
+const noProblems = (t) => /\b0 (mit Problemen|with problems)/.test(t ?? "");
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 14 – Skizzen und Namensräume</title>
+<title>Test report 14 – Sketches and namespaces</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -193,107 +194,107 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 14 – Skizzen und Namensräume</h1>
-<div class="meta">Plan 17.7, Schritt 1: <code>sketch { … }</code> mit gemischten Konturen, Module als Namensräume · cad-syntax, cad-eval, cad-ir, cad-kernel, cad-engine, kernel-smlib (Fassade <code>sc_sketch.cpp</code>), cad-step, cad-session, cad-cli, web · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} Kerne</div>
+<h1>Test report 14 – Sketches and namespaces</h1>
+<div class="meta">Plan 17.7, step 1: <code>sketch { … }</code> with mixed contours, modules as namespaces · cad-syntax, cad-eval, cad-ir, cad-kernel, cad-engine, kernel-smlib (facade <code>sc_sketch.cpp</code>), cad-step, cad-session, cad-cli, web · ${esc(date)} · branch ${esc(branch)} · commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} cores</div>
 
 <div class="summary">
-  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>davon ${newTests.length} neu/erweitert</div>
-  <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "sauber" : "Befund"} · ${fmt == null ? "–" : fmtOk ? "sauber" : "Abw."}</b>-D warnings</div>
-  <div>Vitest · Playwright<b class="${pwStats && pwStats.failed.length === 0 ? "ok" : "bad"}">${vitestSum ?? "–"} · ${pwStats ? `${pwStats.passed} / ${pwStats.total}` : "–"}</b>neu: S01–S05</div>
+  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>${newTests.length} of them new/extended</div>
+  <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "clean" : "finding"} · ${fmt == null ? "–" : fmtOk ? "clean" : "diff"}</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="${pwStats && pwStats.failed.length === 0 ? "ok" : "bad"}">${vitestSum ?? "–"} · ${pwStats ? `${pwStats.passed} / ${pwStats.total}` : "–"}</b>new: S01–S05</div>
   <div>OpenSCAD · STEP<b class="${compareSum && compareSum[0] === compareSum[1] ? "ok" : "bad"}">${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"} · ${esc(stepSum?.match(/\d+\/\d+/)?.[0] ?? "–")}</b>compare.py · verify.py (OCCT)</div>
-  <div>Alltagsmodelle<b class="${alltag && /0 mit Problemen/.test(alltag) ? "ok" : "bad"}">${alltag && /0 mit Problemen/.test(alltag) ? "unverändert" : "–"}</b>tests/alltag/check.sh</div>
-  <div>Wasm-Kernel (Node)<b class="${nodeTest && /all node tests passed/.test(nodeTest) ? "ok" : "bad"}">${nodeTest && /all node tests passed/.test(nodeTest) ? "bestanden" : "–"}</b>test-node.mjs</div>
+  <div>Everyday models<b class="${noProblems(alltag) ? "ok" : "bad"}">${noProblems(alltag) ? "unchanged" : "–"}</b>tests/alltag/check.sh</div>
+  <div>Wasm kernel (Node)<b class="${nodeTest && /all node tests passed/.test(nodeTest) ? "ok" : "bad"}">${nodeTest && /all node tests passed/.test(nodeTest) ? "passed" : "–"}</b>test-node.mjs</div>
 </div>
 
-<h2>1 Auftrag und Ergebnis</h2>
-<p>Schritt 1 von Plan 17: <b>Skizzen</b> – ein 2D-Block aus Segmenten (Geraden, Kreisbögen, Bézier-Kurven, Splines), jede Zeile ein Segment mit eigener Darstellung, eigenen Griffen und eigenen Fehlern – als Profil für <code>linear_extrude</code>, <code>rotate_extrude</code>, <code>loft</code> und <code>sweep</code> (auch als Pfad), exakt durch den Kernel bis in STEP; und <b>Module als Namensräume</b> (<code>teile.schraube(d = 3)</code>). Der Zeichenmodus (Schritt 4) und <code>corner</code>/<code>offset</code>/<code>stroke</code> (Schritt 2) gehören nicht dazu; <code>corner()</code> ist reserviert (Warnung).</p>
+<h2>1 Task and result</h2>
+<p>Step 1 of plan 17: <b>sketches</b> – a 2D block of segments (lines, circular arcs, Bézier curves, splines), each line of code one segment with its own display, its own handles and its own errors – as a profile for <code>linear_extrude</code>, <code>rotate_extrude</code>, <code>loft</code> and <code>sweep</code> (also as a path), exact through the kernel all the way to STEP; and <b>modules as namespaces</b> (<code>teile.schraube(d = 3)</code>). Draw mode (step 4) and <code>corner</code>/<code>offset</code>/<code>stroke</code> (step 2) are not part of this; <code>corner()</code> is reserved (warning).</p>
 <ul>
-<li>Volumen gegen Formeln (Abschnitt 5): alle Fälle innerhalb der Integrationsgenauigkeit von SMLib (≤ ${sci(Math.max(...volumes.filter((v) => v.name !== "twist_bogen").map((v) => v.rel)))} relativ; die twist-Extrusion ist eine kubische Loft-Näherung wie bisher).</li>
-<li>STEP: Bögen als <code>CIRCLE</code>, Geraden als <code>LINE</code>, extrudierte Bögen als <code>CYLINDRICAL_SURFACE</code>, keine angenäherten Kanten; OpenCASCADE liest alle vier neuen Beispiele mit gleichem Volumen (≤ 10<sup>−6</sup>).</li>
-<li>OpenSCAD-Dateien unverändert: compare.py ${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"}; Benutzermodule namens <code>line</code>/<code>arc</code> und <code>spline(points)</code> außerhalb von Skizzen verhalten sich wie vorher (Tests).</li>
+<li>Volumes against formulas (section 5): all cases within the integration accuracy of SMLib (≤ ${sci(Math.max(...volumes.filter((v) => v.name !== "twist_bogen").map((v) => v.rel)))} relative; the twist extrusion is a cubic loft approximation as before).</li>
+<li>STEP: arcs as <code>CIRCLE</code>, lines as <code>LINE</code>, extruded arcs as <code>CYLINDRICAL_SURFACE</code>, no approximated edges; OpenCASCADE reads all four new examples with the same volume (≤ 10<sup>−6</sup>).</li>
+<li>OpenSCAD files unchanged: compare.py ${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"}; user modules named <code>line</code>/<code>arc</code> and <code>spline(points)</code> outside sketches behave as before (tests).</li>
 </ul>
 
-<h2>2 Skizzen: Sprache</h2>
-<p>Entscheidungen (Plan 17.8): <code>sketch</code> ist ein eingebautes 2D-Modul; <code>sketch {</code> und <code>hole {</code> gehen ohne Klammern; Segmente sind gewöhnliche Anweisungen, die an die gerade ausgewertete Skizze anhängen – auch aus Modulen und Schleifen heraus. In einer Skizze haben Segmentnamen Vorrang vor gleichnamigen Benutzermodulen, außerhalb bleibt alles wie in OpenSCAD. Andere Geometrie und Transformationen in einer Skizze sind ein Fehler. Jede Skizze ist <b>ein</b> Knoten <code>Profile::Sketch</code>; die Anweisungen der Segmente stehen in <code>EvalOutput::sketches</code>, damit der Cache-Schlüssel nicht von Quellpositionen abhängt.</p>
+<h2>2 Sketches: language</h2>
+<p>Decisions (plan 17.8): <code>sketch</code> is a built-in 2D module; <code>sketch {</code> and <code>hole {</code> work without parentheses; segments are ordinary statements that append to the sketch currently being evaluated – also from within modules and loops. Inside a sketch, segment names take precedence over user modules of the same name; outside, everything stays as in OpenSCAD. Other geometry and transformations inside a sketch are an error. Each sketch is <b>one</b> node <code>Profile::Sketch</code>; the segment statements are stored in <code>EvalOutput::sketches</code> so that the cache key does not depend on source positions.</p>
 <table>
-<tr><th>Segment</th><th>Formen</th></tr>
-<tr><td><code>start(p)</code></td><td>beginnt eine Kontur; Punkte dürfen Rasterpunkte und Anker sein (z ≠ 0: Warnung, projiziert)</td></tr>
-<tr><td><code>line</code></td><td><code>to = p</code>, <code>by = v</code> (relativ), <code>length = l, angle = a</code>; <code>length</code> allein setzt die Richtung fort</td></tr>
-<tr><td><code>arc</code></td><td><code>to, r [, large, cw]</code> wie SVG · <code>center, angle</code> (Grad, Vorzeichen = Richtung) · <code>center, to</code> · <code>through, to</code> · <code>to</code> allein = tangential</td></tr>
-<tr><td><code>bezier</code></td><td><code>c1, to</code> (quadratisch) · <code>c1, c2, to</code> (kubisch)</td></tr>
-<tr><td><code>spline</code></td><td>Punkte nach dem aktuellen Punkt, <code>tangent = true | v</code>, <code>end_tangent = v</code>; kubische globale Interpolation (Sehnenlänge, gemittelte Knoten)</td></tr>
-<tr><td><code>close()</code></td><td>Gerade zum Start; endet die Kontur am Start, ist sie auch ohne <code>close()</code> geschlossen</td></tr>
-<tr><td><code>hole { … }</code></td><td>Konturen darin sind Löcher (in jeder Laufrichtung)</td></tr>
+<tr><th>Segment</th><th>Forms</th></tr>
+<tr><td><code>start(p)</code></td><td>starts a contour; points may be grid points and anchors (z ≠ 0: warning, projected)</td></tr>
+<tr><td><code>line</code></td><td><code>to = p</code>, <code>by = v</code> (relative), <code>length = l, angle = a</code>; <code>length</code> alone continues the current direction</td></tr>
+<tr><td><code>arc</code></td><td><code>to, r [, large, cw]</code> as in SVG · <code>center, angle</code> (degrees, sign = direction) · <code>center, to</code> · <code>through, to</code> · <code>to</code> alone = tangential</td></tr>
+<tr><td><code>bezier</code></td><td><code>c1, to</code> (quadratic) · <code>c1, c2, to</code> (cubic)</td></tr>
+<tr><td><code>spline</code></td><td>points after the current point, <code>tangent = true | v</code>, <code>end_tangent = v</code>; cubic global interpolation (chord length, averaged knots)</td></tr>
+<tr><td><code>close()</code></td><td>line back to the start; if the contour ends at the start, it is closed even without <code>close()</code></td></tr>
+<tr><td><code>hole { … }</code></td><td>contours inside are holes (in either direction)</td></tr>
 </table>
-<p><b>Löcher und mehrere Konturen:</b> Windungsregel <i>nonzero</i>; eine Kontur ist Rand, wo die Windungszahl nur auf einer Seite ≠ 0 ist; Inseln in Löchern über die Verschachtelung. <b>Sweep:</b> ohne <code>path</code> ist eine offene Skizze (<code>sketch(closed = false)</code>) unter den Kindern der Pfad. <b>Loft:</b> gleiche Segmentzahl → Segment für Segment (jedes Segment eine Fläche, Zuordnung durch <code>start</code>); sonst wird jeder Abschnitt eine geschlossene B-Spline, die am +x-Strahl vom Schwerpunkt beginnt (wie Kreise/Polygone), damit nichts verdreht.</p>
-<h3>Beispiele (<code>tests/models/spec/skizze_*.scad</code>)</h3>
-<div class="codefig">${pre(src("tests/models/spec/skizze_profil.scad"))}<div>${fig(cli("profil"), "skizze_profil.scad: Halter (Bögen, Bohrung im Gegenlauf, Langloch per `hole`), Drehknopf (tangentialer Bogen, kubische Bézier)")}${fig(cli("profil-oben"), "von oben")}</div></div>
-<div class="codefig">${pre(src("tests/models/spec/skizze_zahnriemenscheibe.scad"))}<div>${fig(cli("scheibe"), "skizze_zahnriemenscheibe.scad: 20 Zahnlücken per Schleife (Bogen durch einen Punkt + Bogen um die Mitte), Nabe als zweite Kontur")}${fig(cli("scheibe-oben"), "von oben")}</div></div>
-<div class="codefig">${pre(src("tests/models/spec/skizze_sweep.scad"))}${fig(cli("sweep"), "skizze_sweep.scad: Rohrbogen (glatter Pfad: ein Kurvenzug, Kreisring als Profil), Rahmen entlang eines Pfads mit Ecken (Gehrung)")}</div>
+<p><b>Holes and multiple contours:</b> winding rule <i>nonzero</i>; a contour is a boundary where the winding number is ≠ 0 on one side only; islands in holes via nesting. <b>Sweep:</b> without <code>path</code>, an open sketch (<code>sketch(closed = false)</code>) among the children is the path. <b>Loft:</b> equal segment count → segment by segment (each segment one face, matched via <code>start</code>); otherwise each section becomes a closed B-spline starting at the +x ray from the centroid (as for circles/polygons), so nothing twists.</p>
+<h3>Examples (<code>tests/models/spec/skizze_*.scad</code>)</h3>
+<div class="codefig">${pre(src("tests/models/spec/skizze_profil.scad"))}<div>${fig(cli("profil"), "skizze_profil.scad: bracket (arcs, bore in reverse direction, slot via `hole`), knob (tangential arc, cubic Bézier)")}${fig(cli("profil-oben"), "top view")}</div></div>
+<div class="codefig">${pre(src("tests/models/spec/skizze_zahnriemenscheibe.scad"))}<div>${fig(cli("scheibe"), "skizze_zahnriemenscheibe.scad: 20 tooth gaps via a loop (arc through a point + arc around the center), hub as a second contour")}${fig(cli("scheibe-oben"), "top view")}</div></div>
+<div class="codefig">${pre(src("tests/models/spec/skizze_sweep.scad"))}${fig(cli("sweep"), "skizze_sweep.scad: pipe bend (smooth path: one curve chain, annulus as profile), frame along a path with corners (miter)")}</div>
 
-<h2>3 Module als Namensräume</h2>
-<p><code>module name { … }</code> ohne Klammern; Aufrufe <code>a.b.c(…)</code>, auch benannt (<code>k: teile.schraube();</code>). Der erste Teil wird lexikalisch gesucht, jeder weitere nur direkt im Körper des vorigen Moduls. Der Körper ist der Namensraum, mit den Parametern des äußeren Moduls auf ihren Standardwerten; er gehört zu keiner Instanz – Raster, benannte Instanzen und Anker des äußeren Moduls sieht das innere nicht, die Geometrie des äußeren entsteht nicht. <b>Entscheidung Funktionen/Konstanten:</b> erreichbar (<code>teile.kopf(d)</code>, <code>teile.M3</code>) – Bibliotheken bündeln Hilfsfunktionen und Maße mit ihren Modulen ohne eigene Datei; OpenSCAD kennt keinen Punkt hinter Modulnamen (kein Konflikt), eine Variable gleichen Namens verdeckt das Modul. Kontext: <code>cad --module teile.platte.lochplatte</code>, UI-Pfadleiste „teile › rohr“ (S05).</p>
-<div class="codefig">${pre(src("tests/models/spec/skizze_bibliothek.scad"))}<div>${fig(cli("bibliothek"), "skizze_bibliothek.scad: profile.stern(), profile.langloch(), teile.platte.lochplatte(n = 4), teile.schraube(), Scheibe mit d = teile.kopf(teile.M3)")}${pre(T("outline.txt").split("\n").slice(0, 12).join("\n"))}${pre(T("check-modul.txt"))}</div></div>
+<h2>3 Modules as namespaces</h2>
+<p><code>module name { … }</code> without parentheses; calls <code>a.b.c(…)</code>, also named (<code>k: teile.schraube();</code>). The first part is looked up lexically, each further part only directly in the body of the previous module. The body is the namespace, with the parameters of the outer module at their default values; it belongs to no instance – the inner module does not see the grids, named instances and anchors of the outer one, and the geometry of the outer module is not created. <b>Decision on functions/constants:</b> reachable (<code>teile.kopf(d)</code>, <code>teile.M3</code>) – libraries bundle helper functions and dimensions with their modules without a separate file; OpenSCAD has no dot after module names (no conflict); a variable of the same name shadows the module. Context: <code>cad --module teile.platte.lochplatte</code>, UI breadcrumb "teile › rohr" (S05).</p>
+<div class="codefig">${pre(src("tests/models/spec/skizze_bibliothek.scad"))}<div>${fig(cli("bibliothek"), "skizze_bibliothek.scad: profile.stern(), profile.langloch(), teile.platte.lochplatte(n = 4), teile.schraube(), disc with d = teile.kopf(teile.M3)")}${pre(T("outline.txt").split("\n").slice(0, 12).join("\n"))}${pre(T("check-modul.txt"))}</div></div>
 
-<h2>4 Kernel-Anbindung</h2>
+<h2>4 Kernel integration</h2>
 <ul>
-<li><code>cad_kernel::Segment::{Line, Arc, Nurbs}</code> (<code>curve2.rs</code>): NURBS-Form, affine Abbildung (Bögen bleiben unter Ähnlichkeiten Bögen, sonst exakte rationale Ellipsenbögen), Abtastung, globale Interpolation, Verbinden zu einer B-Spline (Bézier-Zerlegung, Graderhöhung); <code>Loop::Composite</code>, <code>PlacedPath</code>, <code>Kernel::sweep_path</code>.</li>
-<li>Fassade <code>smlib/facade/sc_sketch.cpp</code>, eingebunden am Ende von <code>sc_facade.cpp</code> (nutzt dessen interne Hilfen; allein übersetzt leer). Schleifenart 3: Geraden → <code>SmLine</code>, Bögen → rationale quadratische B-Splines (<code>SM_CF_CIRCULAR_ARC</code>), Bézier/Splines → B-Splines; Stöße exakt verschweißt. Änderungen an bestehenden Funktionen: ein Feld in <code>Loop</code>, je ein Zweig in <code>parse_loops</code>/<code>loop_curves</code>, die Bedingung im twist-Zweig von <code>sc_extrude</code>, <code>loft_segmentwise</code> in <code>sc_loft</code>. Neu: <code>sc_sketch_sweep</code> (glatter Pfad: Kurven-Sweep mit Profil-Bezugspunkt aus Patch 0003; Ecken: Gehrung).</li>
-<li>STEP: SMLib hält extrudierte Bögen als <code>SmSurfOfExtrusion</code> der exakten B-Spline; OpenCASCADE rechnete auf solchen Flächen (ohne p-Kurven) bis 2,5·10<sup>−3</sup> falsche Volumen. Der Writer schreibt eine Extrusion eines Kreisbogens längs seiner Achse deshalb als <code>CYLINDRICAL_SURFACE</code> (Orientierung angepasst) – danach stimmt OCCT auf 10<sup>−9</sup> bzw. die Kernel-Genauigkeit.</li>
+<li><code>cad_kernel::Segment::{Line, Arc, Nurbs}</code> (<code>curve2.rs</code>): NURBS form, affine mapping (arcs stay arcs under similarity transforms, otherwise exact rational elliptical arcs), sampling, global interpolation, joining into one B-spline (Bézier decomposition, degree elevation); <code>Loop::Composite</code>, <code>PlacedPath</code>, <code>Kernel::sweep_path</code>.</li>
+<li>Facade <code>smlib/facade/sc_sketch.cpp</code>, included at the end of <code>sc_facade.cpp</code> (uses its internal helpers; compiled on its own it is empty). Loop kind 3: lines → <code>SmLine</code>, arcs → rational quadratic B-splines (<code>SM_CF_CIRCULAR_ARC</code>), Bézier/splines → B-splines; joints welded exactly. Changes to existing functions: one field in <code>Loop</code>, one branch each in <code>parse_loops</code>/<code>loop_curves</code>, the condition in the twist branch of <code>sc_extrude</code>, <code>loft_segmentwise</code> in <code>sc_loft</code>. New: <code>sc_sketch_sweep</code> (smooth path: curve sweep with profile reference point from patch 0003; corners: miter).</li>
+<li>STEP: SMLib stores extruded arcs as <code>SmSurfOfExtrusion</code> of the exact B-spline; on such surfaces (without p-curves) OpenCASCADE computed volumes that were wrong by up to 2.5·10<sup>−3</sup>. The writer therefore writes an extrusion of a circular arc along its axis as <code>CYLINDRICAL_SURFACE</code> (orientation adjusted) – after that OCCT agrees to 10<sup>−9</sup> or to the kernel accuracy, respectively.</li>
 </ul>
 <table>
-<tr><th>Modell</th><th>Flächen</th><th>CIRCLE</th><th>LINE</th><th>B-Spline-Kurven</th><th>Flächentypen</th><th>angenähert</th></tr>
+<tr><th>Model</th><th>Faces</th><th>CIRCLE</th><th>LINE</th><th>B-spline curves</th><th>Surface types</th><th>approximated</th></tr>
 ${steps.map((s) => `<tr><td>${esc(s.name)}</td><td class="n">${esc(s.info.faces)}</td><td class="n">${s.cnt.CIRCLE}</td><td class="n">${s.cnt.LINE}</td><td class="n">${s.cnt.B_SPLINE_CURVE_WITH_KNOTS}</td><td>${esc(Object.entries(s.info.surfaces ?? {}).map(([k, v]) => `${k} ${v}`).join(", "))}</td><td class="n">${esc(s.info.approximated_edges)} / ${esc(s.info.approximated_faces)}</td></tr>`).join("\n")}
 </table>
-<p>OpenCASCADE (<code>tests/step/verify.py</code>) für die neuen Beispiele (Spalten: Körper, Flächen, V Kernel, V OCCT, dV, dA, dBox):</p>
+<p>OpenCASCADE (<code>tests/step/verify.py</code>) for the new examples (columns: bodies, faces, V kernel, V OCCT, dV, dA, dBox):</p>
 ${pre(stepSketch.join("\n"))}
 
-<h2>5 Messwerte: Volumen gegen Formeln</h2>
-<p>Je Fall eine kleine Datei (<code>reports/tmp/report14/cases/</code>), <code>cad measure --volume</code> mit dem Release-Build (Zeit: ganzer CLI-Aufruf ohne Daemon). Die Geometrie ist exakt; die Abweichung ist die der Volumenintegration in SMLib.</p>
+<h2>5 Measurements: volumes against formulas</h2>
+<p>One small file per case (<code>reports/tmp/report14/cases/</code>), <code>cad measure --volume</code> with the release build (time: whole CLI call without daemon). The geometry is exact; the deviation is that of the volume integration in SMLib.</p>
 <table>
-<tr><th>Fall</th><th>Kernel mm³</th><th>Formel mm³</th><th>rel. Abw.</th><th>ms</th></tr>
-${volumes.map((v) => `<tr><td>${md(VNAMES[v.name] ?? v.name)}</td><td class="n">${de(v.got, 4)}</td><td class="n">${de(v.want, 4)}</td><td class="n">${sci(v.rel)}</td><td class="n">${de(v.ms)}</td></tr>`).join("\n")}
+<tr><th>Case</th><th>Kernel mm³</th><th>Formula mm³</th><th>rel. dev.</th><th>ms</th></tr>
+${volumes.map((v) => `<tr><td>${md(VNAMES[v.name] ?? v.name)}</td><td class="n">${num(v.got, 4)}</td><td class="n">${num(v.want, 4)}</td><td class="n">${sci(v.rel)}</td><td class="n">${num(v.ms)}</td></tr>`).join("\n")}
 </table>
-<p class="small">twist: die Extrusion mit Verdrehung ist (wie bisher für alle Profile) eine kubische Loft-Näherung durch Schnitte alle 7,5°.</p>
+<p class="small">twist: the extrusion with twist is (as before for all profiles) a cubic loft approximation through sections every 7.5°.</p>
 
-<h2>6 Fehler je Segmentzeile</h2>
+<h2>6 Errors per segment line</h2>
 ${pre(T("cases/fehler.scad"))}
 ${pre(T("check-fehler.txt"))}
-<p>Geprüft werden: Kontur nicht geschlossen (die Skizze bleibt mit einer rot gestrichelten Schlusslinie sichtbar), Selbstüberschneidung (an der späteren Zeile, mit Verweis), unmöglicher Bogen (Radius &lt; halbe Sehne, drei Punkte auf einer Geraden, tangential auf der Tangente, Winkel 0 oder &gt; 360°), Kontur ohne Fläche, Segment vor <code>start</code>/nach <code>close()</code>. Eine sich schneidende Kontur meldet zusätzlich der Kernel an der Extrusion.</p>
+<p>Checked are: contour not closed (the sketch stays visible with a red dashed closing line), self-intersection (reported at the later line, with a reference), impossible arc (radius &lt; half chord, three collinear points, tangential along the tangent, angle 0 or &gt; 360°), contour without area, segment before <code>start</code>/after <code>close()</code>. A self-intersecting contour is additionally reported by the kernel at the extrusion.</p>
 
-<h2>7 UI: Darstellung und Griffe</h2>
-<p>Steht der Cursor in einer Skizze (Segmentzeile, Schleife, <code>hole</code>, Aufruf eines Skizzen-Moduls), zeichnet die Ansicht sie in ihrer Ebene: Netz als Umriss mit leichter Füllung (durch den Körper sichtbar), Segmente als Linien, das Segment der Cursorzeile dick in der Akzentfarbe, Fehler rot, Kontrollpolygone und Bogenmittelpunkte gestrichelt, Start als Ring mit Richtungspfeil, Ende offener Konturen als Quadrat. Griffe: End-/Startpunkte (Literal oder Raster-Snap; <code>line(by = …)</code> relativ, ohne Snap), Bogenradius, Mittelpunkt, Durchgangspunkt, Bézier-Kontrollpunkte, Spline-Punkte. Prüfungen über den Zustand der UI (<code>window.__cad</code>) und Pixel der Ebenen.</p>
+<h2>7 UI: display and handles</h2>
+<p>When the cursor is in a sketch (segment line, loop, <code>hole</code>, call of a sketch module), the view draws it in its plane: mesh as an outline with a light fill (visible through the body), segments as lines, the segment of the cursor line thick in the accent color, errors red, control polygons and arc centers dashed, the start as a ring with a direction arrow, the end of open contours as a square. Handles: end/start points (literal or grid snap; <code>line(by = …)</code> relative, without snap), arc radius, center, through point, Bézier control points, spline points. Checks via the UI state (<code>window.__cad</code>) and pixels of the layers.</p>
 ${scenarios.map((s) => `<h3>${esc(s.id)} ${esc(s.title)}</h3><p>${md(s.caption)}</p>${(s.images ?? []).length === 2 ? pair(pw(s.images[0].name), s.images[0].label, pw(s.images[1].name), s.images[1].label) : (s.images ?? []).map((i) => fig(pw(i.name), i.label)).join("")}${s.code && s.code.split("\n").length <= 16 ? pre(s.code) : ""}<ul>${(s.checks ?? []).map((c) => `<li>${md(c)}</li>`).join("")}</ul>`).join("\n")}
 
-<h2>8 Testläufe</h2>
+<h2>8 Test runs</h2>
 <table>
-<tr><th>Lauf</th><th>Ergebnis</th></tr>
-<tr><td><code>cargo test --workspace --no-fail-fast</code></td><td>${cargoSum ? `${cargoSum.ok} bestanden, ${cargoSum.failed} fehlgeschlagen` : "–"}</td></tr>
-<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>${clippyOk ? "sauber" : "Befund"} · ${fmtOk ? "sauber" : "Abweichung"}</td></tr>
-<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>${readText(join(input, "typecheck.txt")) !== null ? (/error TS/i.test(readText(join(input, "typecheck.txt"))) ? "Fehler" : "sauber") : "–"} · ${vitestSum ?? "–"} bestanden</td></tr>
-<tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>${pwStats ? `${pwStats.passed} / ${pwStats.total}${pwStats.failed.length ? ` – fehlgeschlagen: ${pwStats.failed.map((f) => esc(f.title)).join(", ")}` : ""}` : "–"}${flaky ? ` · ${md(flaky.trim())}` : ""}</td></tr>
+<tr><th>Run</th><th>Result</th></tr>
+<tr><td><code>cargo test --workspace --no-fail-fast</code></td><td>${cargoSum ? `${cargoSum.ok} passed, ${cargoSum.failed} failed` : "–"}</td></tr>
+<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>${clippyOk ? "clean" : "finding"} · ${fmtOk ? "clean" : "difference"}</td></tr>
+<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>${readText(join(input, "typecheck.txt")) !== null ? (/error TS/i.test(readText(join(input, "typecheck.txt"))) ? "error" : "clean") : "–"} · ${vitestSum ?? "–"} passed</td></tr>
+<tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>${pwStats ? `${pwStats.passed} / ${pwStats.total}${pwStats.failed.length ? ` – failed: ${pwStats.failed.map((f) => esc(f.title)).join(", ")}` : ""}` : "–"}${flaky ? ` · ${md(flaky.trim())}` : ""}</td></tr>
 <tr><td><code>tests/openscad-compat/compare.py --eval</code></td><td>${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"}</td></tr>
 <tr><td><code>tests/step/verify.py</code> (OpenCASCADE)</td><td>${esc(stepSum ?? "–")}</td></tr>
 <tr><td><code>tests/alltag/check.sh</code></td><td>${esc(alltagLine ?? "–")}</td></tr>
-<tr><td><code>node crates/kernel-smlib/js/test-node.mjs</code></td><td>${nodeTest && /all node tests passed/.test(nodeTest) ? "bestanden" : "–"}</td></tr>
+<tr><td><code>node crates/kernel-smlib/js/test-node.mjs</code></td><td>${nodeTest && /all node tests passed/.test(nodeTest) ? "passed" : "–"}</td></tr>
 </table>
-<p>Neue bzw. erweiterte Rust-Tests (${newTests.length}):</p>
+<p>New or extended Rust tests (${newTests.length}):</p>
 <p class="small">${newTests.map((t) => `<code>${esc(t.name)}</code> ${t.res === "ok" ? '<span class="ok">ok</span>' : '<span class="bad">FAILED</span>'}`).join(" · ")}</p>
-<p class="small">Vitest: <code>web/src/logic/sketch.test.ts</code> (Skizze unter dem Cursor, Hilfslinien, Griffe der Segmente, Modul mit Pfad); Lezer-Grammatik für <code>sketch {</code>, Module ohne Klammern und <code>a.b()</code>. CLI: <code>sketch_and_namespaces</code> (Volumen, Funktion im Namensraum, <code>outline</code>, <code>--module teile.platte</code>, Fehler je Zeile).</p>
+<p class="small">Vitest: <code>web/src/logic/sketch.test.ts</code> (sketch under the cursor, helper lines, segment handles, module with path); Lezer grammar for <code>sketch {</code>, modules without parentheses and <code>a.b()</code>. CLI: <code>sketch_and_namespaces</code> (volume, function in a namespace, <code>outline</code>, <code>--module teile.platte</code>, errors per line).</p>
 
-<h2>9 Grenzen</h2>
+<h2>9 Limitations</h2>
 <ul>
-<li><code>corner</code>, <code>fillet2d</code>, <code>offset</code>, <code>stroke</code> fehlen (Schritt 2); keine Transformationen innerhalb einer Skizze (ein in der Skizze aufgerufenes Modul zeichnet in Skizzenkoordinaten).</li>
-<li>Selbstüberschneidung wird auf abgetasteten Polylinien geprüft (Toleranz relativ zur Skizzengröße); Überschneidungen zwischen Konturen sind erlaubt (nonzero); die Verschachtelung von Löchern und Inseln setzt sich nicht schneidende Konturen voraus.</li>
-<li>Sweep entlang einer Skizze mit Ecken nur als Gehrung und mit um den Ursprung zentriertem Profil; geschlossene Pfade nicht.</li>
-<li>Loft mit verschiedener Segmentzahl verbindet jeden Abschnitt zu einer Kurve (C0 an den Stößen): die Flächen folgen nicht mehr den Segmenten.</li>
-<li>STEP: nur Extrusionen von Kreisbögen werden als Zylinder geschrieben; Rotationsflächen von Bögen bleiben <code>SURFACE_OF_REVOLUTION</code> der exakten Kurve (Kugel/Torus nicht erkannt; OCCT liest sie richtig).</li>
-<li><code>cad render --line N</code> einer Segmentzeile hebt die ganze Skizze hervor; die Hervorhebung des einzelnen Segments gibt es nur in der UI.</li>
-<li>Namensräume: Konstanten werden je Zugriff in einem neuen Namensraum ausgewertet (keine Zwischenspeicherung); <code>--module name</code> ohne Pfad nimmt das erste Modul des Namens.</li>
+<li><code>corner</code>, <code>fillet2d</code>, <code>offset</code>, <code>stroke</code> are missing (step 2); no transformations inside a sketch (a module called in a sketch draws in sketch coordinates).</li>
+<li>Self-intersection is checked on sampled polylines (tolerance relative to the sketch size); intersections between contours are allowed (nonzero); the nesting of holes and islands assumes non-intersecting contours.</li>
+<li>Sweep along a sketch with corners only as a miter and with the profile centered on the origin; closed paths are not supported.</li>
+<li>Loft with different segment counts joins each section into one curve (C0 at the joints): the faces no longer follow the segments.</li>
+<li>STEP: only extrusions of circular arcs are written as cylinders; surfaces of revolution of arcs remain <code>SURFACE_OF_REVOLUTION</code> of the exact curve (sphere/torus not recognized; OCCT reads them correctly).</li>
+<li><code>cad render --line N</code> of a segment line highlights the whole sketch; highlighting of the single segment exists only in the UI.</li>
+<li>Namespaces: constants are evaluated in a new namespace on each access (no caching); <code>--module name</code> without a path takes the first module of that name.</li>
 </ul>
 </main>
 </body>
 </html>
 `;
 writeFileSync(join(out, "report.html"), html);
-console.log(`${join(out, "report.html")}: ${html.length} Zeichen, ${scenarios.length} Szenarien, ${volumes.length} Volumenfälle`);
+console.log(`${join(out, "report.html")}: ${html.length} characters, ${scenarios.length} scenarios, ${volumes.length} volume cases`);

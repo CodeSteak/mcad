@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Data of test report 14 ("Skizzen und Namensräume") from the CLI: renderings of the sketch
+# Data of test report 14 ("sketches and namespaces") from the CLI: renderings of the sketch
 # examples (views, a highlighted segment line), exact volumes of sketch cases against their
 # formulas, STEP statistics (exact circles and lines), outline of the namespace library, errors
 # per segment line. Writes reports/tmp/report14/.

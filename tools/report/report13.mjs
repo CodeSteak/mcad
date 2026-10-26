@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 13 ("Korrekturen Geometrie"): the geometry and kernel findings of the everyday
+// Test report 13 ("geometry fixes"): the geometry and kernel findings of the everyday
 // models (tests/models/alltag/README.md, tests/alltag/fehler) – cause, correction, evidence
 // (before/after: volumes and diagnostics of the minimal examples, cad render images), open
 // points, run-time analysis. Writes docs/reports/13-geometrie-korrekturen/report.html.
@@ -16,7 +16,7 @@
 //                                                        tests/step/verify.py, tests/alltag/check.sh --fehler
 //
 //   node tools/report/report13.mjs
-//   node tools/report/print-pdf.mjs docs/reports/13-geometrie-korrekturen/report.html docs/reports/13-geometrie-korrekturen/report.pdf "Testbericht 13: Korrekturen Geometrie"
+//   node tools/report/print-pdf.mjs docs/reports/13-geometrie-korrekturen/report.html docs/reports/13-geometrie-korrekturen/report.pdf "Test report 13: geometry fixes"
 
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -47,9 +47,9 @@ const git = (...a) => {
     return "–";
   }
 };
-const de = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d }));
+const num = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const md = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\*([^*\s][^*]*)\*/g, "<i>$1</i>");
-const T = (name) => readText(join(input, name))?.replaceAll(`${input}/`, "").replaceAll(`${root}/`, "") ?? "(fehlt)";
+const T = (name) => readText(join(input, name))?.replaceAll(`${input}/`, "").replaceAll(`${root}/`, "") ?? "(missing)";
 const pre = (t) => `<pre>${esc(t.trimEnd())}</pre>`;
 
 // ------------------------------------------------------------------------------- images
@@ -65,8 +65,8 @@ function img(src, dst) {
   return `img/${dst}`;
 }
 const shot = (n, v) => img(join(input, "img", `${n}.${v}.png`), `${n}-${v}.jpg`);
-const fig = (src, cap) => (src ? `<figure><img src="${src}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(Bild fehlt: ${esc(cap)})</p>`);
-const pair = (n, cb, ca) => `<div class="two">${fig(shot(n, "vorher"), `Vorher: ${cb}`)}${fig(shot(n, "nachher"), `Nachher: ${ca}`)}</div>`;
+const fig = (src, cap) => (src ? `<figure><img src="${src}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(image missing: ${esc(cap)})</p>`);
+const pair = (n, cb, ca) => `<div class="two">${fig(shot(n, "vorher"), `Before: ${cb}`)}${fig(shot(n, "nachher"), `After: ${ca}`)}</div>`;
 
 // ------------------------------------------------------------------------------- minimal examples
 
@@ -82,21 +82,22 @@ const result = (name, v) => {
 };
 const cell = (r) => {
   if (r.missing) return "–";
-  if (r.crash) return '<span class="bad">Absturz (Exit 139), keine Ausgabe</span>';
-  const v = `V ${de(r.volume, 1)} mm³`;
-  if (r.errs.length) return `${v}<br><span class="small">${r.errs.length} Fehler: ${esc(r.errs[0].message.slice(0, 150))}${r.errs.length > 1 ? " …" : ""}</span>`;
-  if (r.warns.length) return `${v}<br><span class="small">Warnung: ${esc(r.warns[0].message.slice(0, 120))}</span>`;
-  return `${v}<br><span class="small">keine Meldung</span>`;
+  if (r.crash) return '<span class="bad">crash (exit 139), no output</span>';
+  const v = `V ${num(r.volume, 1)} mm³`;
+  if (r.errs.length) return `${v}<br><span class="small">${r.errs.length} ${r.errs.length === 1 ? "error" : "errors"}: ${esc(r.errs[0].message.slice(0, 150))}${r.errs.length > 1 ? " …" : ""}</span>`;
+  if (r.warns.length) return `${v}<br><span class="small">warning: ${esc(r.warns[0].message.slice(0, 120))}</span>`;
+  return `${v}<br><span class="small">no message</span>`;
 };
 const fehlerTxt = readText(join(input, "fehler.txt")) ?? readText(join(input, "alltag.txt")) ?? "";
 const checkState = (name) => {
   const l = fehlerTxt.split("\n").find((x) => x.includes(name));
   if (!l) return "–";
-  return l.trim().startsWith("behoben") ? '<span class="ok">behoben</span>' : '<span class="bad">offen</span>';
+  // check.sh prints "behoben"/"offen" (German) or "fixed"/"open"
+  return /^(behoben|fixed)/.test(l.trim()) ? '<span class="ok">fixed</span>' : '<span class="bad">open</span>';
 };
 const soll = (name) => {
   const t = readFileSync(join(fehlerDir, name), "utf8");
-  return [...t.matchAll(/^\/\/ (SOLL[^\n]*)$/gm)].map((m) => m[1]).join("; ");
+  return [...t.matchAll(/^\/\/ ((?:SOLL|EXPECT)[^\n]*)$/gm)].map((m) => m[1]).join("; ");
 };
 
 // ------------------------------------------------------------------------------- run time
@@ -140,10 +141,10 @@ const compareSum = compare ? (/(\d+\/\d+) files match/.exec(compare)?.[1] ?? nul
 const step = readText(join(input, "step.txt"));
 const stepSum = step ? (/\d+\/\d+ passed/.exec(step)?.[0] ?? null) : null;
 const alltag = readText(join(input, "alltag.txt"));
-const alltagLine = alltag ? (alltag.split("\n").find((l) => /Modelle, \d+ mit Problemen/.test(l)) ?? "–") : "–";
-const fehlerLine = fehlerTxt ? (fehlerTxt.split("\n").find((l) => /behoben, \d+ offen/.test(l))?.trim() ?? "–") : "–";
+const alltagLine = alltag ? (alltag.split("\n").find((l) => /(Modelle, \d+ mit Problemen|models, \d+ with problems)/.test(l)) ?? "–") : "–";
+const fehlerLine = fehlerTxt ? (fehlerTxt.split("\n").find((l) => /(behoben, \d+ offen|fixed, \d+ open)/.test(l))?.trim() ?? "–") : "–";
 
-const date = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const commit = git("rev-parse", "--short", "HEAD");
 const branch = git("rev-parse", "--abbrev-ref", "HEAD");
 
@@ -152,78 +153,78 @@ const branch = git("rev-parse", "--abbrev-ref", "HEAD");
 const findings = [
   {
     id: "F9",
-    title: "Absturz bei union(fillet) mit tangentialem Kontakt",
+    title: "crash with union(fillet) and tangential contact",
     files: ["f09a_absturz_tangentialer_dom.scad", "f09b_absturz_zapfen_sweep.scad"],
-    cause: "In `SmFilletExecutive::CreateFilletCorners` (SMLib) wird für jeden Eckpunkt der zu verrundenden Kanten ein Ecktyp gewählt. Gibt es keinen passenden (`SmFilletCorner::Create` liefert NULL, „Unimplemented corner case“), wurde der Eckpunkt mit `continue` übergangen – die Tabelle `m_vVertexCornerMap` enthielt für ihn aber weiter die Liste seiner Kanten (`SmTArray<SmEdgeuse*>*`). `GetFilletCornerOfVertex` gab diese Liste später als `SmFilletCorner*` zurück; `CollectTangentEdgeSequence` rief darauf virtuelle Methoden auf → Zugriff auf Adresse 0x2f08 (gdb mit Debug-Objekten, valgrind: „not stack'd, malloc'd or free'd“). Bei F9a ist ein Ecktyp der tangentialen Berührung Dom/Wand, bei F9b die fast tangentiale Kreiskante Zapfen/Sweep.",
-    fix: "**smlib/patches/0002-fillet-missing-corner.patch:** ohne Ecktyp wird der Eintrag entfernt und die Verrundung mit `SM_ERR_INVALID_INPUT` beendet, die Kante im `SmFilletErrorInfo` vermerkt. Die Fassade übersetzt das in „SMLib cannot blend the corner where these edges meet (faces that touch tangentially there?)“ mit der Kante (rot in `render --line`). Bei F9a meldet schon die Vereinigung den tangentialen Kontakt (siehe F8c): Dom und Wand berühren sich entlang einer Linie, ein mannigfaltiges Ergebnis gibt es nicht. Der Daemon-Rückfall war keine Lösung: der Absturz kommt aus dem Prozess selbst.",
+    cause: "In `SmFilletExecutive::CreateFilletCorners` (SMLib) a corner type is chosen for each vertex of the edges to be filleted. If there is no suitable one (`SmFilletCorner::Create` returns NULL, \"Unimplemented corner case\"), the vertex was skipped with `continue` – but the table `m_vVertexCornerMap` still held the list of its edges for it (`SmTArray<SmEdgeuse*>*`). `GetFilletCornerOfVertex` later returned this list as `SmFilletCorner*`; `CollectTangentEdgeSequence` called virtual methods on it → access to address 0x2f08 (gdb with debug objects, valgrind: \"not stack'd, malloc'd or free'd\"). In F9a the missing corner type is the tangential contact boss/wall, in F9b the nearly tangential circular edge pin/sweep.",
+    fix: "**smlib/patches/0002-fillet-missing-corner.patch:** without a corner type the entry is removed and the fillet ends with `SM_ERR_INVALID_INPUT`, the edge is recorded in `SmFilletErrorInfo`. The facade translates this into \"SMLib cannot blend the corner where these edges meet (faces that touch tangentially there?)\" with the edge (red in `render --line`). In F9a the union already reports the tangential contact (see F8c): boss and wall touch along a line, there is no manifold result. The daemon fallback was no solution: the crash comes from the process itself.",
     tests: /^(f09_|fillet_at_a_nearly)/,
   },
   {
     id: "F8",
-    title: "Booleans mit Torus und rotate_extrude",
+    title: "booleans with torus and rotate_extrude",
     files: ["f08a_union_torus.scad", "f08b_union_ring_verloren.scad", "f08c_differenz_torus_tangential.scad"],
-    img: [["f08a", "zwei sich überlappende Körper, kein Schnitt mit der Deckfläche", "ein Körper, der Ring halb in der Platte"], ["f08b", "Ring fehlt", "Ring vorhanden"], ["f08c", "Volumen 0 ohne Meldung", "Fehlermeldung, Platte bleibt"]],
-    cause: "Nicht der Torus selbst, sondern seine **Transformation**: Die Fassade rief `SmBrep::Transform(m, TRUE)`; mit `TRUE` leitet SMLib die Modellgröße aus der Hülle der *Eckpunkte* ab und setzt alle Toleranzen (Eckpunkte, Kanten, Flächen, außerdem die des globalen Kontexts) daraus. Ein Torus und der Rotationskörper eines Kreises haben genau einen Eckpunkt – Hülle 0, Toleranz 0. Mit Toleranz 0 verfehlt der Flächenschnitt jede Schnittkurve: Vereinigung = beide Körper nebeneinander (F8a, 6049,65 mm³ = Summe), Ring verloren (F8b), Schnittmenge leer. Nachgewiesen: derselbe Torus direkt bei z = 2 erzeugt schneidet richtig, verschoben (auch nur gedreht oder skaliert) nicht; die Geometrie (B-Rep-Strom) ist identisch, nur die Toleranzen 1e-5 → 0 unterscheiden sich. F7 (Torus als Zone wählt keine Kante) hat dieselbe Ursache.",
-    fix: "`apply_matrix` transformiert mit `Transform(m, FALSE)`: starre Bewegungen lassen die Toleranzen unverändert; bei Skalierung setzt die Fassade sie aus der ganzen (losen) Hülle des Körpers, der Kontext bleibt unberührt. F8c: Der Torus berührt Deck- und Bodenfläche tangential entlang zweier Kreise; das Ergebnis ist nicht mannigfaltig (SMLib liefert es mit richtigem Volumen 5260,36 mm³, aber nicht geschlossen, `measure` zeigte 0). Die Prüfung der Booleans nimmt ein nicht geschlossenes Ergebnis zweier geschlossener Körper nicht mehr als „letzten Ausweg“ an, sondern meldet „the result is not a closed solid: the operands touch tangentially or along an edge there (let them overlap a little or keep a gap)“. Berühren sich die Körper nur (Innenräume überlappen nicht), gilt a − b = a und a ∩ b = leer statt eines nicht mannigfaltigen Körpers.",
+    img: [["f08a", "two overlapping bodies, no intersection with the top face", "one body, the ring half inside the plate"], ["f08b", "ring missing", "ring present"], ["f08c", "volume 0 without message", "error message, plate remains"]],
+    cause: "Not the torus itself but its **transformation**: the facade called `SmBrep::Transform(m, TRUE)`; with `TRUE` SMLib derives the model size from the bounding box of the *vertices* and sets all tolerances (vertices, edges, faces, and those of the global context) from it. A torus and the solid of revolution of a circle have exactly one vertex – bounding box 0, tolerance 0. With tolerance 0 the surface intersection misses every intersection curve: union = both bodies side by side (F8a, 6049.65 mm³ = sum), ring lost (F8b), intersection empty. Verified: the same torus created directly at z = 2 intersects correctly, moved (or only rotated or scaled) it does not; the geometry (B-rep stream) is identical, only the tolerances 1e-5 → 0 differ. F7 (torus as zone selects no edge) has the same cause.",
+    fix: "`apply_matrix` transforms with `Transform(m, FALSE)`: rigid motions leave the tolerances unchanged; with scaling the facade sets them from the whole (loose) bounding box of the body, the context stays untouched. F8c: the torus touches top and bottom face tangentially along two circles; the result is not manifold (SMLib returns it with the correct volume 5260.36 mm³, but not closed; `measure` showed 0). The boolean check no longer accepts a non-closed result of two closed bodies as a \"last resort\" but reports \"the result is not a closed solid: the operands touch tangentially or along an edge there (let them overlap a little or keep a gap)\". If the bodies only touch (interiors do not overlap), a − b = a and a ∩ b = empty apply instead of a non-manifold body.",
     tests: /^(f08_|f07_|moved_|tangent_torus|difference_of_bodies)/,
   },
   {
     id: "F5",
-    title: "Fase über Zone am verrundeten Kasten: Volumen 0, Status ok",
+    title: "chamfer via zone on the filleted box: volume 0, status ok",
     files: ["f05_fase_volumen_null.scad"],
-    img: [["f05", "offene Hülle (26 Flächen), Volumen 0, keine Meldung", "Fehlermeldung, Körper ohne Fase bleibt"]],
-    cause: "SMLib liefert `SM_SUCCESS` und eine offene Hülle: die Deckfläche fehlt. Grund ist die Geometrie: An den Ecken ist die Wand zwischen Außenradius 6 und der scharfen Innenecke nur 6 − 3√2 ≈ 1,76 mm dick; die Außenfase nimmt 0,8 mm, die Innenfase an der scharfen Ecke 0,8·√2 ≈ 1,13 mm – die Fasen überschneiden sich, die Deckfläche zerfällt. Nachgemessen: `chamfer(0.7)` geht, `chamfer(0.75)` nicht (Grenze rechnerisch 0,73). Fasen der äußeren und der inneren Kante je allein gehen.",
-    fix: "Die Fassade prüft jedes Ergebnis einer Verrundung/Fase (`blend_core`): geschlossene Hülle, wenn der Eingang geschlossen war; Volumen > 0 und Volumenänderung höchstens so groß, wie eine Verrundung dieser Größe sie nahe den Kanten bewirken kann (20 r² je mm Kantenlänge + 10 r³ je Kante + 2 %). Verletzt → „SMLib returned a body that is not closed (faces missing): the blends of neighbouring edges collide, size too large for the wall between them?“ mit den Kanten. Zusätzlich: scheitert die Auswahl als Ganzes und zerfällt sie in getrennte Kantenketten (ohne gemeinsamen Eckpunkt), werden die Ketten nacheinander verrundet (Kanten im Zwischenkörper über ihre Geometrie wiedergefunden) – hier vergeblich, weil die Fasen wirklich kollidieren, aber hilfreich, wo SMLib nur an der Menge scheitert.",
+    img: [["f05", "open shell (26 faces), volume 0, no message", "error message, body without chamfer remains"]],
+    cause: "SMLib returns `SM_SUCCESS` and an open shell: the top face is missing. The reason is the geometry: at the corners the wall between outer radius 6 and the sharp inner corner is only 6 − 3√2 ≈ 1.76 mm thick; the outer chamfer takes 0.8 mm, the inner chamfer at the sharp corner 0.8·√2 ≈ 1.13 mm – the chamfers intersect, the top face falls apart. Re-measured: `chamfer(0.7)` works, `chamfer(0.75)` does not (computed limit 0.73). Chamfers of the outer and of the inner edge each work on their own.",
+    fix: "The facade checks every result of a fillet/chamfer (`blend_core`): closed shell if the input was closed; volume > 0 and volume change at most as large as a fillet of this size can cause near the edges (20 r² per mm of edge length + 10 r³ per edge + 2 %). Violated → \"SMLib returned a body that is not closed (faces missing): the blends of neighbouring edges collide, size too large for the wall between them?\" with the edges. In addition: if the selection fails as a whole and splits into separate edge chains (without a shared vertex), the chains are filleted one after another (edges found again in the intermediate body via their geometry) – futile here because the chamfers really collide, but helpful where SMLib only fails on the combination.",
     tests: /^(f05_|chamfer_result_must)/,
   },
   {
     id: "F10",
-    title: "union(fillet) aus verrundeter Schale und Dom: nur der Dom",
+    title: "union(fillet) of filleted shell and boss: only the boss",
     files: ["f10_union_fillet_schale_verloren.scad"],
-    img: [["f10", "nur Dom mit Kehle, Volumen 0", "Fehlermeldung, Vereinigung ohne Kehle bleibt"]],
-    cause: "Die Vereinigung selbst ist richtig (26 043 mm³). Die Kehle r 1 um den Dom (7,5 mm von der Innenecke) läuft auf die Bodenverrundung der Schale (Innenradius 1,5 zwischen x = 2 und 3,5); SMLib gibt dann einen offenen Körper aus Dom und Kehle zurück.",
-    fix: "Die Plausibilitätsprüfung der Verrundung (F5) erkennt die offene Hülle: Fehler mit den Kanten, die Vereinigung ohne Kehle bleibt (statt Volumen 0 ohne Meldung). Eine richtig gerechnete Kehle über zwei Flächen bleibt offen (SMLib).",
+    img: [["f10", "only boss with fillet, volume 0", "error message, union without fillet remains"]],
+    cause: "The union itself is correct (26,043 mm³). The concave fillet r 1 around the boss (7.5 mm from the inner corner) runs onto the bottom fillet of the shell (inner radius 1.5 between x = 2 and 3.5); SMLib then returns an open body consisting of boss and fillet.",
+    fix: "The plausibility check of the fillet (F5) detects the open shell: error with the edges, the union without the concave fillet remains (instead of volume 0 without message). A correctly computed fillet across two faces remains open (SMLib).",
     tests: /^f10_/,
   },
   {
     id: "F1",
-    title: "sweep mit symmetrischem Spline-Profil „not centred“",
+    title: "sweep with symmetric spline profile \"not centred\"",
     files: ["f01_sweep_spline_profil.scad"],
-    img: [["f01", "abgelehnt (kein Körper)", "Sweep der Ellipse"]],
-    cause: "SMLib (`CreateCurveSweep`, `bMoveProfileCenterToPath`) setzt den Mittelpunkt der Hülle der Profilkurven auf den Pfad. `CalculateBoundingBox` einer B-Spline-Kurve ist die Hülle ihrer *Kontrollpunkte*: für den geschlossenen Interpolationsspline durch (5,0) (0,3) (−5,0) (0,−3) x −15…5, obwohl die Kurve selbst symmetrisch ist (abgetastet ±5, ±3,08). Die Fassade lehnte jedes so „außermittige“ Profil auf gekrümmtem Pfad ab.",
-    fix: "**smlib/patches/0003-sweep-profile-reference-point.patch:** `SmSweepOptions` erhält `bUseProfileRefPoint`/`sProfileRefPoint`; die Fassade gibt den Ursprung des Profilrahmens (Pfadanfang) vor. Damit folgen beliebige, auch bewusst außermittige Profile (Kreis bei (0, 4)) dem Pfad mit ihrem Ursprung; das Verschieben nach dem Sweep auf geraden Pfaden entfällt. Nur die Gehrungs-Variante für ebene Polylinien-Pfade hat die Option nicht (Meldung nennt den Ausweg Spline-Pfad).",
+    img: [["f01", "rejected (no body)", "sweep of the ellipse"]],
+    cause: "SMLib (`CreateCurveSweep`, `bMoveProfileCenterToPath`) places the center of the bounding box of the profile curves on the path. `CalculateBoundingBox` of a B-spline curve is the bounding box of its *control points*: for the closed interpolating spline through (5,0) (0,3) (−5,0) (0,−3) x −15…5, although the curve itself is symmetric (sampled ±5, ±3.08). The facade rejected every such \"off-center\" profile on a curved path.",
+    fix: "**smlib/patches/0003-sweep-profile-reference-point.patch:** `SmSweepOptions` gets `bUseProfileRefPoint`/`sProfileRefPoint`; the facade specifies the origin of the profile frame (path start). Any profile, including deliberately off-center ones (circle at (0, 4)), thus follows the path with its origin; the shift after the sweep on straight paths is no longer needed. Only the mitered variant for planar polyline paths lacks the option (the message names the workaround: spline path).",
     tests: /^(f01_|sweep_of_off_centre)/,
   },
   {
     id: "F2",
-    title: "Zylinder ∪ gekrümmter Sweep: NULL_POINTER, doppelte Diagnose",
+    title: "cylinder ∪ curved sweep: NULL_POINTER, duplicate diagnostic",
     files: ["f02_union_zylinder_sweep.scad"],
-    cause: "Der Sweep ist gültig (geschlossen, keine sich überlappenden Flächen) und vereinigt sich mit Quadern, auch wenn diese die Endkappe schneiden. Mit dem Zylinder (auch als NURBS, auch gedreht) scheitert SMLibs Flächenschnitt nahe der gekippten Endkappe (Kappe x 16,3…21,7 schneidet r = 20). Die Fassade versucht Reihenfolgen und Verschiebungen 1e-6…1e-4 – ohne Erfolg. Die doppelte Meldung kam aus der Engine: die gescheiterte Vereinigung gibt ihre Operanden zurück, die Wurzel vereinigt sie erneut und scheitert ein zweites Mal.",
-    fix: "Engine: Teile aus einer gescheiterten Boolean-Operation tragen eine Markierung (`NodeOutput::unmerged`); scheitert die Vereinigung im Elternknoten an ihnen erneut, wird das nicht noch einmal gemeldet. Der Kernel-Fehler selbst bleibt offen.",
+    cause: "The sweep is valid (closed, no overlapping faces) and unites with cuboids, even when they cut the end cap. With the cylinder (also as NURBS, also rotated) SMLib's surface intersection fails near the tilted end cap (cap x 16.3…21.7 intersects r = 20). The facade tries orderings and offsets of 1e-6…1e-4 – without success. The duplicate message came from the engine: the failed union returns its operands, the root unites them again and fails a second time.",
+    fix: "Engine: pieces from a failed boolean operation carry a marker (`NodeOutput::unmerged`); if the union in the parent node fails on them again, this is not reported a second time. The kernel bug itself remains open.",
     tests: /^f02_/,
   },
   {
     id: "F3, F4",
-    title: "Sweep eines 16-Ecks „not a closed solid“; union(fillet) an 32-Eck-Sweep",
+    title: "sweep of a 16-gon \"not a closed solid\"; union(fillet) on a 32-gon sweep",
     files: ["f03_sweep_polygon16.scad", "f04_union_fillet_sweep_polygon.scad"],
-    cause: "SMLib baut je Polygonseite eine Seitenfläche; zwischen einigen Nachbarn bleiben Zwillingskanten mit Abstand 0 unverklebt (je 1 Fläche). `StitchFaces`/`SmApiStitchAdvanced` mit Toleranz 1e-5…1e-3 kleben sie ebenfalls nicht (0 geklebt). Auf anderen Pfaden betrifft es 12- oder 32-Ecke. F4: die Verrundung der 32 Facettenkanten an der Kreiskante scheitert (`SM_ERR`).",
-    fix: "Meldung mit Ursache: „SMLib left 3 seam(s) between the side faces of the polygon profile open (SMLib limitation on curved paths; circle() or a spline() profile work)“. Eine Korrektur in SMLib (Aufbau der Seitenflächen im Sweep) bleibt offen.",
+    cause: "SMLib builds one side face per polygon side; between some neighbors, twin edges at distance 0 stay unstitched (1 face each). `StitchFaces`/`SmApiStitchAdvanced` with tolerance 1e-5…1e-3 do not stitch them either (0 stitched). On other paths 12- or 32-gons are affected. F4: the fillet of the 32 facet edges at the circular edge fails (`SM_ERR`).",
+    fix: "Message with cause: \"SMLib left 3 seam(s) between the side faces of the polygon profile open (SMLib limitation on curved paths; circle() or a spline() profile work)\". A fix in SMLib (construction of the side faces in the sweep) remains open.",
     tests: /^f03_/,
   },
   {
     id: "F13",
-    title: "Meldung bei shell eines Körpers mit Verrundung ≤ Wandstärke",
+    title: "message for shell of a body with fillet ≤ wall thickness",
     files: ["f13_shell_verrundung.scad"],
-    cause: "Die Innenfläche einer konvexen Verrundung mit Radius r < t entartet beim Versatz um t; SMLib meldet nur SM_ERR, der Ersatzweg über Booleans scheitert ebenso.",
-    fix: "Scheitern beide Wege, bestimmt die Fassade den kleinsten konvexen Krümmungsradius der nicht geöffneten Flächen (Normalen-Differenzen auf einem 7×7-Raster je Fläche) und nennt ihn: „wall thickness 2 is not smaller than the radius of a convex rounding of the body (about 2): the inner surface degenerates there (rounding radius must be > wall thickness)“.",
+    cause: "The inner surface of a convex fillet with radius r < t degenerates when offset by t; SMLib only reports SM_ERR, the fallback via booleans fails as well.",
+    fix: "If both paths fail, the facade determines the smallest convex radius of curvature of the faces that are not opened (normal differences on a 7×7 grid per face) and names it: \"wall thickness 2 is not smaller than the radius of a convex rounding of the body (about 2): the inner surface degenerates there (rounding radius must be > wall thickness)\".",
     tests: /^f13_/,
   },
   {
     id: "F6, F11, F12, F15",
-    title: "Kernel-Fehler mit Meldung, ohne Korrektur",
+    title: "kernel bugs with message, without fix",
     files: ["f06_fase_konkave_ecke.scad", "f11_stift_deckungsgleich.scad", "f12_shell_loft_quadrat_kreis.scad", "f15_knauf_kehle.scad"],
-    cause: "F6: SMLib hat für die Ecke „konvexe Kante endet an kurzer konkaver Kante“ keinen funktionierenden Ecktyp (SM_ERR; die Kette ist zusammenhängend, das Nacheinander hilft nicht). F11: deckungsgleiche Zylinderflächen (Stift 3,0 in Bohrung 3,0); Verschiebungen um 1e-6…1e-4 der Modellgröße ändern daran nichts. F12: `SmApiShellBrepFull` des Lofts Quadrat → Kreis (NULL_POINTER in SmMerge) und der Ersatzweg über Booleans scheitern. F15: Verrundung Sweep d 6 / Kugel d 9 (SM_ERR) – mit d 10 geht es.",
-    fix: "Keine Korrektur im Rahmen dieses Berichts; die Meldungen markieren die Kanten (F6, F15) bzw. nennen die Operation. Umgehungen: Zonen an Rasterlinien statt an der Ebene (F6), 0,05 mm Spiel (F11), Differenz zweier Lofts (F12), Kugel d 10 (F15).",
+    cause: "F6: SMLib has no working corner type for the corner \"convex edge ends at a short concave edge\" (SM_ERR; the chain is connected, filleting one after another does not help). F11: coincident cylinder surfaces (pin 3.0 in bore 3.0); offsets of 1e-6…1e-4 of the model size change nothing. F12: `SmApiShellBrepFull` of the loft square → circle (NULL_POINTER in SmMerge) and the fallback via booleans fail. F15: fillet sweep d 6 / sphere d 9 (SM_ERR) – with d 10 it works.",
+    fix: "No fix within the scope of this report; the messages mark the edges (F6, F15) or name the operation. Workarounds: zones on grid lines instead of on the plane (F6), 0.05 mm clearance (F11), difference of two lofts (F12), sphere d 10 (F15).",
     tests: /^$/,
   },
 ];
@@ -236,20 +237,20 @@ const findingHtml = findings
   .map(
     (f) => `<section class="finding">
 <h3>${esc(f.id)} – ${esc(f.title)}</h3>
-<dl class="f"><dt>Beispiele</dt><dd>${f.files.map((x) => `<code>tests/alltag/fehler/${esc(x)}</code>`).join(", ")}</dd>
-<dt>Ursache</dt><dd>${md(f.cause)}</dd>
-<dt>Korrektur</dt><dd>${md(f.fix)}</dd>
-<dt>Nachweis</dt><dd>${f.files.map((x) => `<code>${esc(x.replace(/\.scad$/, ""))}</code>: vorher ${cell(result(x, "vorher"))} → nachher ${cell(result(x, "nachher"))}`).join("<br>")}<br>Tests: ${testsOf(f.tests)}</dd></dl>
+<dl class="f"><dt>Examples</dt><dd>${f.files.map((x) => `<code>tests/alltag/fehler/${esc(x)}</code>`).join(", ")}</dd>
+<dt>Cause</dt><dd>${md(f.cause)}</dd>
+<dt>Fix</dt><dd>${md(f.fix)}</dd>
+<dt>Evidence</dt><dd>${f.files.map((x) => `<code>${esc(x.replace(/\.scad$/, ""))}</code>: before ${cell(result(x, "vorher"))} → after ${cell(result(x, "nachher"))}`).join("<br>")}<br>Tests: ${testsOf(f.tests)}</dd></dl>
 ${(f.img ?? []).map(([n, b, a]) => pair(n, b, a)).join("\n")}
 </section>`,
   )
   .join("\n");
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 13 – Korrekturen Geometrie</title>
+<title>Test report 13 – geometry fixes</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -287,92 +288,92 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 13 – Korrekturen Geometrie</h1>
-<div class="meta">Geometrie- und Kernelfehler aus den Alltagsmodellen (<code>tests/models/alltag/README.md</code>, <code>tests/alltag/fehler/</code>) · SMLib-Fassade, SMLib-Patches 0002/0003, cad-engine, cad-render, cad-cli · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${os.cpus().length} Kerne</div>
+<h1>Test report 13 – geometry fixes</h1>
+<div class="meta">Geometry and kernel bugs from the everyday models (<code>tests/models/alltag/README.md</code>, <code>tests/alltag/fehler/</code>) · SMLib facade, SMLib patches 0002/0003, cad-engine, cad-render, cad-cli · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${os.cpus().length} cores</div>
 
 <div class="summary">
-  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>davon ${newTests.length} neue Regressionstests</div>
-  <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "sauber" : "Befund"} · ${fmt == null ? "–" : fmtOk ? "sauber" : "Abw."}</b>-D warnings</div>
-  <div>Wasm-Kernel (Node)<b class="${nodeOk ? "ok" : "bad"}">${node == null ? "–" : nodeOk ? "bestanden" : "Fehler"}</b>Fassade neu gebaut</div>
+  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>of which ${newTests.length} new regression tests</div>
+  <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "clean" : "finding"} · ${fmt == null ? "–" : fmtOk ? "clean" : "diff"}</b>-D warnings</div>
+  <div>Wasm kernel (Node)<b class="${nodeOk ? "ok" : "bad"}">${node == null ? "–" : nodeOk ? "passed" : "error"}</b>facade rebuilt</div>
   <div>OpenSCAD · STEP<b class="ok">${esc(compareSum ?? "–")} · ${esc(stepSum ?? "–")}</b>compare.py, verify.py</div>
-  <div>Alltagsmodelle<b class="${/ 0 mit Problemen/.test(alltagLine) ? "ok" : "bad"}">${esc(alltagLine.split(",").slice(0, 2).join(","))}</b>Volumina unverändert</div>
-  <div>Fehlerbeispiele<b>${esc(fehlerLine)}</b>gegen ihren Soll-Zustand</div>
-  <div>Schlüsselbrett<b class="ok">${zv && zn ? `${de(zv.evaluate / 1000, 1)} → ${de(zn.evaluate / 1000, 1)} s` : "–"}</b>Auswertung je Aufruf</div>
+  <div>Everyday models<b class="${/ 0 (mit Problemen|with problems)/.test(alltagLine) ? "ok" : "bad"}">${esc(alltagLine.split(",").slice(0, 2).join(","))}</b>volumes unchanged</div>
+  <div>Bug examples<b>${esc(fehlerLine)}</b>against their expected state</div>
+  <div>Key rack<b class="ok">${zv && zn ? `${num(zv.evaluate / 1000, 1)} → ${num(zn.evaluate / 1000, 1)} s` : "–"}</b>evaluation per call</div>
 </div>
 
-<h2>1 Überblick</h2>
-<p>Die Alltagsmodelle fanden einen Absturz, vier still falsche Ergebnisse und eine Reihe von Kernelfehlern. Jedes Minimalbeispiel in <code>tests/alltag/fehler/</code> trägt jetzt im Kopf seinen Soll-Zustand (<code>// SOLL: fehlerfrei</code>, <code>SOLL-VOLUMEN</code>, <code>SOLL-FEHLER: Text</code> – wo es kein richtiges Ergebnis gibt, ist eine klare Meldung das Ziel); <code>tests/alltag/check.sh --fehler</code> meldet je Beispiel „behoben“ oder „offen“. Die Tabelle zeigt beide Stände (vorher: Stand vor den Korrekturen, Commit <code>cba3ab4</code>; nachher: dieser Commit), <code>cad measure --volume --json</code>.</p>
-<table><tr><th>Beispiel</th><th>Soll</th><th>vorher</th><th>nachher</th><th>check.sh</th></tr>
+<h2>1 Overview</h2>
+<p>The everyday models found one crash, four silently wrong results and a number of kernel bugs. Each minimal example in <code>tests/alltag/fehler/</code> now carries its expected state in its header (<code>// SOLL: fehlerfrei</code> = error-free, <code>SOLL-VOLUMEN</code> = expected volume, <code>SOLL-FEHLER: Text</code> = expected error – where there is no correct result, a clear message is the goal); <code>tests/alltag/check.sh --fehler</code> reports "fixed" or "open" per example. The table shows both states (before: state before the fixes, commit <code>cba3ab4</code>; after: this commit), <code>cad measure --volume --json</code>.</p>
+<table><tr><th>Example</th><th>Expected</th><th>before</th><th>after</th><th>check.sh</th></tr>
 ${overviewRows}
 </table>
-<p><b>Nichts mehr still falsch:</b> Von den Befunden mit falschem Ergebnis ohne Meldung (F5, F8a–c, F10) sind F8a/F8b richtig gerechnet, F5, F8c und F10 werden gemeldet (F5 und F8c haben kein richtiges Ergebnis: kollidierende Fasen, tangentiale Berührung). Kein Beispiel stürzt mehr ab.</p>
+<p><b>Nothing silently wrong any more:</b> of the findings with a wrong result and no message (F5, F8a–c, F10), F8a/F8b are now computed correctly, F5, F8c and F10 are reported (F5 and F8c have no correct result: colliding chamfers, tangential contact). No example crashes any more.</p>
 
-<h2>2 Korrekturen in der Fassade und in SMLib</h2>
-<table><tr><th>Stelle</th><th>Änderung</th><th>Befunde</th></tr>
-<tr><td><code>smlib/patches/0002-fillet-missing-corner.patch</code></td><td>SmFilletExecutive::CreateFilletCorners: Eckpunkt ohne Ecktyp → Fehler statt Typverwechslung (Absturz)</td><td>F9</td></tr>
-<tr><td><code>smlib/patches/0003-sweep-profile-reference-point.patch</code></td><td>SmSweepOptions::bUseProfileRefPoint/sProfileRefPoint: Bezugspunkt des Profils beim Kurven-Sweep vorgeben</td><td>F1</td></tr>
-<tr><td><code>apply_matrix</code></td><td>Transform(m, FALSE): starre Bewegungen behalten die Toleranzen, Skalierung setzt sie aus der ganzen Hülle; Kontext unberührt</td><td>F7, F8a, F8b</td></tr>
-<tr><td><code>checked_boolean</code></td><td>nicht geschlossenes Ergebnis zweier geschlossener Körper oder unmögliches Volumen → Fehler statt „letzter Ausweg“; nur berührende Körper: a − b = a, a ∩ b = leer</td><td>F8c, F9a</td></tr>
-<tr><td><code>blend_core</code>, <code>do_fillet_like</code></td><td>Ergebnis einer Verrundung/Fase: geschlossen, Volumen plausibel; getrennte Kantenketten nacheinander; Meldung für fehlenden Ecktyp</td><td>F5, F10, F9b</td></tr>
-<tr><td><code>sc_sweep</code></td><td>Profilursprung als Bezugspunkt (0003); offene Seitennähte bei Polygonprofilen mit Ursache gemeldet</td><td>F1, F3</td></tr>
-<tr><td><code>sc_shell</code></td><td>Meldung mit kleinstem konvexem Radius ≤ Wandstärke</td><td>F13</td></tr>
-<tr><td><code>sc_mass_props</code></td><td>Volumen mit relativer Genauigkeit 1e-6 statt 1e-8 (Fehler ≤ 5e-6 gemessen)</td><td>Laufzeit</td></tr>
+<h2>2 Fixes in the facade and in SMLib</h2>
+<table><tr><th>Location</th><th>Change</th><th>Findings</th></tr>
+<tr><td><code>smlib/patches/0002-fillet-missing-corner.patch</code></td><td>SmFilletExecutive::CreateFilletCorners: vertex without corner type → error instead of type confusion (crash)</td><td>F9</td></tr>
+<tr><td><code>smlib/patches/0003-sweep-profile-reference-point.patch</code></td><td>SmSweepOptions::bUseProfileRefPoint/sProfileRefPoint: specify the reference point of the profile for curve sweeps</td><td>F1</td></tr>
+<tr><td><code>apply_matrix</code></td><td>Transform(m, FALSE): rigid motions keep the tolerances, scaling sets them from the whole bounding box; context untouched</td><td>F7, F8a, F8b</td></tr>
+<tr><td><code>checked_boolean</code></td><td>non-closed result of two closed bodies or impossible volume → error instead of "last resort"; merely touching bodies: a − b = a, a ∩ b = empty</td><td>F8c, F9a</td></tr>
+<tr><td><code>blend_core</code>, <code>do_fillet_like</code></td><td>result of a fillet/chamfer: closed, volume plausible; separate edge chains one after another; message for a missing corner type</td><td>F5, F10, F9b</td></tr>
+<tr><td><code>sc_sweep</code></td><td>profile origin as reference point (0003); open side seams of polygon profiles reported with cause</td><td>F1, F3</td></tr>
+<tr><td><code>sc_shell</code></td><td>message with the smallest convex radius ≤ wall thickness</td><td>F13</td></tr>
+<tr><td><code>sc_mass_props</code></td><td>volume with relative accuracy 1e-6 instead of 1e-8 (error ≤ 5e-6 measured)</td><td>run time</td></tr>
 </table>
-<p class="small">Die Patches liegen unter <code>smlib/patches/</code>, <code>smlib/fetch.sh</code> wendet sie der Reihe nach an. Native Bibliotheken: <code>smlib/build-native.sh</code>; der Wasm-Kernel ist neu gebaut (<code>smlib/build-wasm.sh</code>) und besteht <code>node crates/kernel-smlib/js/test-node.mjs</code>.</p>
+<p class="small">The patches are in <code>smlib/patches/</code>; <code>smlib/fetch.sh</code> applies them in order. Native libraries: <code>smlib/build-native.sh</code>; the Wasm kernel is rebuilt (<code>smlib/build-wasm.sh</code>) and passes <code>node crates/kernel-smlib/js/test-node.mjs</code>.</p>
 
-<h2>3 Befunde im Einzelnen</h2>
+<h2>3 Findings in detail</h2>
 ${findingHtml}
 
-<h2>4 Darstellung und CLI (S1–S4)</h2>
-<h3>S1 – Profilraster bei rotate_extrude</h3>
-<p><b>Ursache:</b> Ein 2D-Raster (x = Radius, y = Höhe) wird im System seines Moduls gezeichnet, also in der xy-Ebene; das Profil liegt nach <code>rotate_extrude</code> in der xz-Ebene. <b>Korrektur (CLI):</b> <code>cad render --show grids</code> prüft für jedes Raster seine Bezüge (<code>Scene.refs</code>): liegen alle in 2D-Knoten unter demselben <code>rotate_extrude</code>, wird das Raster in dessen Profilebene gezeichnet (Rahmen RE · Rx(90°) · RE⁻¹ · N · frame_module) und ein Hinweis ausgegeben. Raster mit Bezügen außerhalb (oder über Variablen) bleiben, wie sie sind.</p>
-${pair("s1", "Raster p in der xy-Ebene, 95 mm hinter dem Becher", "Raster p in der Profilebene: p.unten bei r 36, p.oben bei r 41")}
-<p><b>UI (nicht geändert, <code>web/</code>):</b> Die 3D-Ansicht zeichnet Raster aus <code>Scene.grids[].frame</code>. Für dieselbe Korrektur bräuchte sie entweder die Regel oben (Bezüge aus <code>Scene.refs</code> → 2D-Knoten → <code>op_info.kind == "rotate_extrude"</code>) oder besser einen Rahmen, den die Szene je Raster mitliefert (<code>Grid.display_frame</code>, in <code>cad-session</code> nach derselben Regel berechnet). Zum Ziehen/Einrasten an Rasterpunkten müssten die Griffe ebenso in die Profilebene abgebildet werden.</p>
-<h3>S3 – outline und Sichtbarkeit</h3>
-<p><code>cad outline</code> führte Instanzen, die im Rumpf eines Moduls benannt werden (<code>dom[0]</code> … in <code>pi_platte</code>), unter „Benannte Instanzen“ der Datei und ihre Anker als Datei-Anker. Jetzt: eigener Abschnitt „Benannte Instanzen in Modulen (nur dort sichtbar)“ gruppiert nach Modul; im JSON <code>scope: "file" | "module"</code> und <code>in_module</code>; Anker nur der Datei-Instanzen. Dass <code>measure --between dom[0].oben …</code> im Dateikontext noch funktioniert, ist Sprachsemantik (cad-eval) und bleibt als Vorschlag: solche Namen nur über die Instanzkette (<code>platte.dom[0].oben</code>) oder mit Warnung auflösen.</p>
-<h3>S4 – Schnittkappen und Rasterbeschriftung</h3>
-<p>Ein Modell aus Bauteilen wurde im Schnitt als ein Netz der Wurzel gezeichnet: die Kappen berührender Bauteile verschmolzen. Jetzt wird es, sobald die Bauteile das ganze Modell ausmachen, je Bauteil gezeichnet: eigene Kappe mit wechselnder Schraffur und eigener Schnittkontur. Rasterbeschriftungen: Reihen indizierter Ebenen (<code>rippe[0]</code> … <code>rippe[7]</code>) erhalten eine Beschriftung <code>g.rippe[0..7]</code>; zwischen Beschriftungen bleiben 3 px (vorher konnten sie direkt aneinanderstoßen).</p>
-${pair("s4", "Deckel und Unterteil eine Kappe", "Deckel abgesetzt (Kontur, Gegenschraffur)")}
-${pair("s4b", "je Rippe eine Beschriftung", "eine Beschriftung je Reihe")}
-<h3>S2 – Ebenennamen als Werte, Anker-Listen (nur Bewertung)</h3>
+<h2>4 Display and CLI (S1–S4)</h2>
+<h3>S1 – profile grid with rotate_extrude</h3>
+<p><b>Cause:</b> a 2D grid (x = radius, y = height) is drawn in the coordinate system of its module, i.e. in the xy plane; after <code>rotate_extrude</code> the profile lies in the xz plane. <b>Fix (CLI):</b> <code>cad render --show grids</code> checks the references of each grid (<code>Scene.refs</code>): if all lie in 2D nodes below the same <code>rotate_extrude</code>, the grid is drawn in its profile plane (frame RE · Rx(90°) · RE⁻¹ · N · frame_module) and a note is printed. Grids with references outside (or via variables) stay as they are.</p>
+${pair("s1", "grid p in the xy plane, 95 mm behind the cup", "grid p in the profile plane: p.unten at r 36, p.oben at r 41")}
+<p><b>UI (not changed, <code>web/</code>):</b> the 3D view draws grids from <code>Scene.grids[].frame</code>. For the same fix it would need either the rule above (references from <code>Scene.refs</code> → 2D nodes → <code>op_info.kind == "rotate_extrude"</code>) or, better, a frame that the scene supplies per grid (<code>Grid.display_frame</code>, computed in <code>cad-session</code> by the same rule). For dragging/snapping to grid points the handles would have to be mapped into the profile plane as well.</p>
+<h3>S3 – outline and visibility</h3>
+<p><code>cad outline</code> listed instances named in the body of a module (<code>dom[0]</code> … in <code>pi_platte</code>) under the file's "named instances" and their anchors as file anchors. Now: a separate section "named instances in modules (visible only there)" grouped by module; in the JSON <code>scope: "file" | "module"</code> and <code>in_module</code>; anchors only of the file instances. That <code>measure --between dom[0].oben …</code> still works in file context is language semantics (cad-eval) and remains a proposal: resolve such names only via the instance chain (<code>platte.dom[0].oben</code>) or with a warning.</p>
+<h3>S4 – section caps and grid labels</h3>
+<p>A model made of parts was drawn in section as one mesh of the root: the caps of touching parts merged. Now, as soon as the parts make up the whole model, it is drawn per part: its own cap with alternating hatching and its own section contour. Grid labels: rows of indexed planes (<code>rippe[0]</code> … <code>rippe[7]</code>) get one label <code>g.rippe[0..7]</code>; 3 px remain between labels (before, they could touch directly).</p>
+${pair("s4", "lid and lower part one cap", "lid separated (contour, opposite hatching)")}
+${pair("s4b", "one label per rib", "one label per row")}
+<h3>S2 – plane names as values, anchor lists (assessment only)</h3>
 <ul>
-<li><b>Ebenennamen als Werte</b> (<code>g[i % 2 == 0 ? loch_l : loch_r, …]</code>): Die Namen in <code>g[…]</code> sind heute Selektoren, keine Ausdrücke; die Umgehung über Zahlen (<code>g.loch_l</code>) verliert die Rasterbindung (Snap, Ziehen). <b>Vorschlag:</b> ein Wert-Typ „Ebene“ (<code>g.loch_l</code> ergibt weiter die Zahl, aber <code>plane(g.loch_l)</code> bzw. ein Selektor-Ausdruck <code>g[sel(i % 2 == 0 ? "loch_l" : "loch_r"), …]</code>), den <code>g[…]</code> annimmt; so bleibt die Herkunft für Griffe erhalten. Aufwand mittel (cad-eval: Selektorauswertung, Drag-Rückschreiben nur für literale Selektoren).</li>
-<li><b>Anker-Listen</b> (<code>anchor loch[i] = …</code> in einer Schleife): passt zur bestehenden Indizierung von Instanzen (<code>k[i]</code>) und Ebenen (<code>rippe[i]</code>). <b>Vorschlag:</b> gleiche Regel wie bei Ebenen (Name + Index, außen <code>k.loch[2]</code>), Snap-Ziele je Element. Aufwand gering bis mittel.</li>
-<li><b>Rasterlokale Koordinaten</b> für Profile in gedrehten Ebenen (S1): ein Raster mit eigenem Rahmen (<code>grid p in xz { … }</code>) würde S1 auch in der Sprache lösen.</li>
+<li><b>Plane names as values</b> (<code>g[i % 2 == 0 ? loch_l : loch_r, …]</code>): the names in <code>g[…]</code> are selectors today, not expressions; the workaround via numbers (<code>g.loch_l</code>) loses the grid binding (snap, dragging). <b>Proposal:</b> a value type "plane" (<code>g.loch_l</code> still yields the number, but <code>plane(g.loch_l)</code> or a selector expression <code>g[sel(i % 2 == 0 ? "loch_l" : "loch_r"), …]</code>) that <code>g[…]</code> accepts; this keeps the origin for handles. Effort medium (cad-eval: selector evaluation, drag write-back only for literal selectors).</li>
+<li><b>Anchor lists</b> (<code>anchor loch[i] = …</code> in a loop): fits the existing indexing of instances (<code>k[i]</code>) and planes (<code>rippe[i]</code>). <b>Proposal:</b> the same rule as for planes (name + index, outside <code>k.loch[2]</code>), snap targets per element. Effort low to medium.</li>
+<li><b>Grid-local coordinates</b> for profiles in rotated planes (S1): a grid with its own frame (<code>grid p in xz { … }</code>) would also solve S1 in the language.</li>
 </ul>
 
-<h2>5 Laufzeit</h2>
-<p><b>Befund:</b> Schlüsselbrett 4,0 s Kernel, aber ≈ 16 s je Auswertung. <b>Messung:</b> Stapelproben mit gdb (alle ~0,8 s) während <code>cad check schluesselbrett.scad</code>:</p>
+<h2>5 Run time</h2>
+<p><b>Finding:</b> key rack 4.0 s kernel, but ≈ 16 s per evaluation. <b>Measurement:</b> stack samples with gdb (every ~0.8 s) during <code>cad check schluesselbrett.scad</code>:</p>
 ${pre(T("profil.txt"))}
-<p><b>Ursache:</b> Nach dem Kernel-Lauf berechnet die Sitzung das Volumen jedes Bauteils (Bauteilliste der Szene, <code>part_volumes</code>); <code>sc_mass_props</code> rief nach den Masseeigenschaften (1e-4) zusätzlich <code>SmApiBrepComputeVolume(…, 1e-8)</code>. Die Genauigkeit 1e-8 kostet über adaptive Runge-Kutta-Integration je Fläche (<code>SmFace::ComputePreciseProperties</code>) bei den gesweepten Haken rund 11 s. Gemessener relativer Volumenfehler: 1e-6 → ≤ 4,4e-6, 1e-7 → ≤ 1,1e-7, 1e-8 → ≤ 1,5e-8 (Kugel, Torus, Kegel). <b>Korrektur:</b> 1e-6 (Bauteilvolumina werden mit 0,1 mm³ angezeigt; Prüfungen nutzen 0,1 %).</p>
-<table><tr><th>cad render schluesselbrett.scad (Median von ${zn?.n ?? "–"})</th><th>vorher</th><th>nachher</th></tr>
-<tr><td>Auswertung (evaluate_ms, ohne Bild)</td><td class="n">${zv ? de(zv.evaluate, 0) : "–"} ms</td><td class="n">${zn ? de(zn.evaluate, 0) : "–"} ms</td></tr>
-<tr><td>davon Kernel-Lauf (kernel_ms)</td><td class="n">${zv ? de(zv.kernel, 0) : "–"} ms</td><td class="n">${zn ? de(zn.kernel, 0) : "–"} ms</td></tr>
-<tr><td>Bild (render_ms)</td><td class="n">${zv ? de(zv.render, 0) : "–"} ms</td><td class="n">${zn ? de(zn.render, 0) : "–"} ms</td></tr></table>
-<p class="small">Der Rest zwischen Kernel und Auswertung sind jetzt im Wesentlichen die Bauteilvolumina (1e-6) und Tessellierung/Szene. Weiter ginge es, die Volumina nur zu berechnen, wenn sie gebraucht werden (<code>outline</code>, <code>measure</code>, UI-Bauteilliste), oder sie aus den Masseeigenschaften (1e-4) zu nehmen.</p>
+<p><b>Cause:</b> after the kernel run the session computes the volume of each part (part list of the scene, <code>part_volumes</code>); after the mass properties (1e-4), <code>sc_mass_props</code> additionally called <code>SmApiBrepComputeVolume(…, 1e-8)</code>. The accuracy 1e-8 costs about 11 s for the swept hooks via adaptive Runge–Kutta integration per face (<code>SmFace::ComputePreciseProperties</code>). Measured relative volume error: 1e-6 → ≤ 4.4e-6, 1e-7 → ≤ 1.1e-7, 1e-8 → ≤ 1.5e-8 (sphere, torus, cone). <b>Fix:</b> 1e-6 (part volumes are displayed to 0.1 mm³; checks use 0.1 %).</p>
+<table><tr><th>cad render schluesselbrett.scad (median of ${zn?.n ?? "–"})</th><th>before</th><th>after</th></tr>
+<tr><td>Evaluation (evaluate_ms, without image)</td><td class="n">${zv ? num(zv.evaluate, 0) : "–"} ms</td><td class="n">${zn ? num(zn.evaluate, 0) : "–"} ms</td></tr>
+<tr><td>of which kernel run (kernel_ms)</td><td class="n">${zv ? num(zv.kernel, 0) : "–"} ms</td><td class="n">${zn ? num(zn.kernel, 0) : "–"} ms</td></tr>
+<tr><td>Image (render_ms)</td><td class="n">${zv ? num(zv.render, 0) : "–"} ms</td><td class="n">${zn ? num(zn.render, 0) : "–"} ms</td></tr></table>
+<p class="small">The remainder between kernel and evaluation is now mainly the part volumes (1e-6) and tessellation/scene. A further step would be to compute the volumes only when they are needed (<code>outline</code>, <code>measure</code>, UI part list), or to take them from the mass properties (1e-4).</p>
 
-<h2>6 Offen</h2>
+<h2>6 Open</h2>
 <ul>
-<li>F2 (Zylinder ∪ gekrümmter Sweep), F3/F4 (Sweeps von Polygonprofilen), F6 (Ecktyp konvex/konkav), F11 (deckungsgleiche Zylinder), F12 (shell eines Lofts), F15 (Kehle Sweep/Kugel): SMLib-Fehler; Meldungen und Umgehungen wie oben.</li>
-<li>F10: die Kehle über zwei Flächen wird gemeldet, nicht gerechnet.</li>
-<li>F5, F8c, F9a haben kein richtiges Ergebnis (Kollision, tangentiale Berührung); ein automatisches „ein wenig überlappen“ wäre möglich, verändert aber die Geometrie ohne Auftrag.</li>
-<li>S1 in der UI (Vorschlag oben), S2 und die Sichtbarkeit von <code>dom[0].oben</code> im Dateikontext (Sprachsemantik).</li>
-<li>Die Prüfung der Verrundung stützt sich auf grobe Volumina (1e-2); Fehler, die das Volumen nur wenig ändern, bleiben unerkannt.</li>
+<li>F2 (cylinder ∪ curved sweep), F3/F4 (sweeps of polygon profiles), F6 (corner type convex/concave), F11 (coincident cylinders), F12 (shell of a loft), F15 (fillet sweep/sphere): SMLib bugs; messages and workarounds as above.</li>
+<li>F10: the fillet across two faces is reported, not computed.</li>
+<li>F5, F8c, F9a have no correct result (collision, tangential contact); an automatic "overlap a little" would be possible, but changes the geometry without being asked to.</li>
+<li>S1 in the UI (proposal above), S2 and the visibility of <code>dom[0].oben</code> in file context (language semantics).</li>
+<li>The fillet check relies on coarse volumes (1e-2); errors that change the volume only slightly go undetected.</li>
 </ul>
 
-<h2>7 Testläufe</h2>
-<h3>Neue Regressionstests</h3>
+<h2>7 Test runs</h2>
+<h3>New regression tests</h3>
 <p>${newTests.map((t) => `<code>${esc(t.name)}</code> ${t.res === "ok" ? '<span class="ok">ok</span>' : '<span class="bad">FAILED</span>'}`).join(", ") || "–"}</p>
-<p class="small">Kernel: <code>crates/kernel-smlib/tests/alltag.rs</code>; Engine: <code>crates/cad-engine/tests/alltag_fehler.rs</code> (liest die Minimalbeispiele); CLI: <code>crates/cad-cli/tests/geometrie.rs</code>.</p>
-<h3>Fehlerbeispiele (check.sh --fehler)</h3>
-${pre(fehlerTxt.split("\n").filter((l) => /^\s+(behoben|offen)|Fehlerbeispiele/.test(l)).join("\n") || "(fehlt)")}
-<h3>Alltagsmodelle, OpenSCAD-Vergleich, STEP</h3>
+<p class="small">Kernel: <code>crates/kernel-smlib/tests/alltag.rs</code>; engine: <code>crates/cad-engine/tests/alltag_fehler.rs</code> (reads the minimal examples); CLI: <code>crates/cad-cli/tests/geometrie.rs</code>.</p>
+<h3>Bug examples (check.sh --fehler)</h3>
+${pre(fehlerTxt.split("\n").filter((l) => /^\s+(behoben|offen|fixed|open)|Fehlerbeispiele|[Bb]ug examples/.test(l)).join("\n") || "(missing)")}
+<h3>Everyday models, OpenSCAD comparison, STEP</h3>
 ${pre([alltagLine, compareSum ? `compare.py: ${compareSum} files match` : "compare.py: –", stepSum ? `verify.py: ${stepSum}` : "verify.py: –"].join("\n"))}
 <h3>cargo test, clippy, fmt, Wasm</h3>
-${pre([cargoSum ? `cargo test --workspace: ${cargoSum.ok} passed, ${cargoSum.failed} failed` : "cargo test: –", `clippy -D warnings: ${clippy == null ? "–" : clippyOk ? "sauber" : "Befund"}`, `fmt --check: ${fmt == null ? "–" : fmtOk ? "sauber" : "Abweichung"}`, `node test-node.mjs: ${node == null ? "–" : nodeOk ? "all node tests passed" : "Fehler"}`].join("\n"))}
+${pre([cargoSum ? `cargo test --workspace: ${cargoSum.ok} passed, ${cargoSum.failed} failed` : "cargo test: –", `clippy -D warnings: ${clippy == null ? "–" : clippyOk ? "clean" : "finding"}`, `fmt --check: ${fmt == null ? "–" : fmtOk ? "clean" : "difference"}`, `node test-node.mjs: ${node == null ? "–" : nodeOk ? "all node tests passed" : "error"}`].join("\n"))}
 </main>
 </body>
 </html>
 `;
 writeFileSync(join(out, "report.html"), html);
-console.log(`${join(out, "report.html")}: ${html.length} Zeichen, ${examples.length} Beispiele, ${newTests.length} neue Tests`);
+console.log(`${join(out, "report.html")}: ${html.length} characters, ${examples.length} examples, ${newTests.length} new tests`);

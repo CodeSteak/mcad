@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Data of test report 11 ("Farben, Multi-Filament-3MF, dunkles Thema") that come from the CLI
+# Data of test report 11 ("colors, multi-filament 3MF, dark theme") that come from the CLI
 # and the checking scripts; writes reports/tmp/report11/ (gitignored) and the CLI images to
 # docs/reports/11-farben-filamente/img/.
 #
-#   CAD=target/release/mcad PY3MF=/pfad/venv/bin/python tools/report/report11-data.sh
+#   CAD=target/release/mcad PY3MF=/path/venv/bin/python tools/report/report11-data.sh
 #
 # PY3MF: Python with lib3mf and trimesh (pip install lib3mf trimesh networkx lxml).
 # The test runs (cargo, Playwright, Tauri-E2E, compare.py, verify.py) are listed in

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 9 ("Desktop-App, Dateibeobachter, Git, Schnittansicht, CLI↔UI"): collects the
+// Test report 9 ("desktop app, file watcher, Git, section view, CLI↔UI"): collects the
 // results of the test runs and writes
 //
 //   docs/reports/09-desktop-schnitt/report.html, img/*
@@ -18,7 +18,7 @@
 // and reports/tmp/report2/playwright.json (Playwright JSON reporter of `pnpm e2e`).
 //
 //   node tools/report/report9.mjs
-//   node tools/report/print-pdf.mjs docs/reports/09-desktop-schnitt/report.html docs/reports/09-desktop-schnitt/report.pdf "Testbericht 9: Desktop-App, Dateibeobachter, Git, Schnittansicht, CLI↔UI"
+//   node tools/report/print-pdf.mjs docs/reports/09-desktop-schnitt/report.html docs/reports/09-desktop-schnitt/report.pdf "Test report 9: desktop app, file watcher, Git, section view, CLI↔UI"
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -42,7 +42,7 @@ const git = (...a) => {
     return "–";
   }
 };
-const de = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d }));
+const num = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const median = (a) => {
   if (!a || !a.length) return null;
   const s = [...a].sort((x, y) => x - y);
@@ -67,7 +67,7 @@ function pic(name) {
 }
 const fig = (name, caption) => {
   const p = pic(name);
-  return p ? `<figure><img src="${p}"><figcaption>${esc(caption ?? "")}</figcaption></figure>` : `<figure class="missing">${esc(name)} fehlt</figure>`;
+  return p ? `<figure><img src="${p}"><figcaption>${esc(caption ?? "")}</figcaption></figure>` : `<figure class="missing">${esc(name)} missing</figure>`;
 };
 
 // ---------------------------------------------------------------- inputs
@@ -116,7 +116,7 @@ const pwSum = (() => {
 const tauriOk = tauri ? tauri.results.filter((r) => r.ok).length : 0;
 const tm = tauri?.metrics ?? {};
 
-const date = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const commit = git("rev-parse", "--short", "HEAD");
 const branch = git("rev-parse", "--abbrev-ref", "HEAD");
 const rustc = (() => {
@@ -140,17 +140,17 @@ const tauriTest = (id) => tauri?.results.find((r) => r.id === id);
 const checksHtml = (checks) => (checks?.length ? `<ul class="checks">${checks.map((c) => `<li class="${c.ok === false ? "bad" : "ok"}">${esc(c.text ?? c)}</li>`).join("")}</ul>` : "");
 function tauriSection(id, intro) {
   const t = tauriTest(id);
-  if (!t) return `<p class="bad">${esc(id)}: nicht gelaufen</p>`;
+  if (!t) return `<p class="bad">${esc(id)}: not run</p>`;
   const imgs = t.images ?? [];
-  return `<div class="step"><h3>${esc(id)} ${esc(t.title)} <span class="${t.ok ? "ok" : "bad"}">${t.ok ? "bestanden" : "fehlgeschlagen"}</span> <span class="small">${de(t.ms)} ms</span></h3>
+  return `<div class="step"><h3>${esc(id)} ${esc(t.title)} <span class="${t.ok ? "ok" : "bad"}">${t.ok ? "passed" : "failed"}</span> <span class="small">${num(t.ms)} ms</span></h3>
 ${intro ? `<p>${intro}</p>` : ""}${checksHtml(t.checks)}${t.error ? `<pre>${esc(t.error)}</pre>` : ""}
 ${imgs.length ? `<div class="${imgs.length > 1 ? "pair" : ""}">${imgs.map((i) => fig(i.name, i.label)).join("")}</div>` : ""}</div>`;
 }
 function scenSection(id) {
   const s = scen.find((x) => x.id === id);
-  if (!s) return `<p class="bad">${esc(id)} fehlt</p>`;
+  if (!s) return `<p class="bad">${esc(id)} missing</p>`;
   const st = pwSum?.section.find((t) => t.title.startsWith(id));
-  return `<div class="step"><h3>${esc(id)} ${esc(s.title)} ${st ? `<span class="${st.status === "passed" ? "ok" : "bad"}">${st.status === "passed" ? "bestanden" : st.status}</span>` : ""}</h3><p>${esc(s.caption)}</p>${checksHtml(s.checks)}
+  return `<div class="step"><h3>${esc(id)} ${esc(s.title)} ${st ? `<span class="${st.status === "passed" ? "ok" : "bad"}">${st.status === "passed" ? "passed" : st.status}</span>` : ""}</h3><p>${esc(s.caption)}</p>${checksHtml(s.checks)}
 ${s.images?.length ? `<div class="${s.images.length > 1 ? (s.images.length > 2 ? "tri" : "pair") : ""}">${s.images.map((i) => fig(i.name, i.label)).join("")}</div>` : ""}</div>`;
 }
 
@@ -162,10 +162,10 @@ const kWasm = metrics.keystrokeToSceneWasm ?? [];
 const agentSteps = tm.agentSteps ?? [];
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 9 – Desktop-App, Dateibeobachter, Git, Schnittansicht, CLI↔UI</title>
+<title>Test report 9 – desktop app, file watcher, Git, section view, CLI↔UI</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -206,105 +206,105 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 9 – Desktop-App, Dateibeobachter, Git, Schnittansicht, CLI↔UI</h1>
-<div class="meta">cad-app (Tauri 2), cad-desktop, cad-ipc, cad-cli, web · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · WebKitGTK ${esc(webkit)} · ${os.cpus().length} Kerne (${esc(os.cpus()[0]?.model ?? "")}) · Xvfb ohne GPU</div>
+<h1>Test report 9 – desktop app, file watcher, Git, section view, CLI↔UI</h1>
+<div class="meta">cad-app (Tauri 2), cad-desktop, cad-ipc, cad-cli, web · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · WebKitGTK ${esc(webkit)} · ${os.cpus().length} cores (${esc(os.cpus()[0]?.model ?? "")}) · Xvfb without GPU</div>
 
 <div class="summary">
-  <div>Tauri-E2E (tauri-driver, Xvfb)<b class="${tauri && tauriOk === tauri.results.length ? "ok" : "bad"}">${tauri ? `${tauriOk} / ${tauri.results.length}` : "–"}</b>echte App, echter Kernel</div>
-  <div>Playwright (Chromium)<b class="${pwSum && pwSum.passed + pwSum.skipped === pwSum.total ? "ok" : "bad"}">${pwSum ? `${pwSum.passed} / ${pwSum.total}` : "–"}</b>davon ${pwSum ? pwSum.section.length : "–"} Schnitt, ${pwSum ? pwSum.total - pwSum.section.length : "–"} bisherige</div>
-  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>${cargoSum ? `${cargoSum.ignored} ignoriert` : ""}</div>
-  <div>clippy · fmt · actionlint<b class="${clippy != null && !/^(error|warning)/m.test(clippy) && fmt != null && fmt.trim() === "" ? "ok" : "bad"}">${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "Befund" : "sauber"} · ${fmt == null ? "–" : fmt.trim() === "" ? "sauber" : "Abw."} · ${actionlint == null ? "–" : actionlint.trim() === "" ? "sauber" : "Befund"}</b></div>
-  <div>Start bis Szene<b>${de(tm.startup?.wallMs)} ms</b>Sitzung → erste vollständige Szene</div>
-  <div>Tastendruck → Szene (Median)<b>${de(median(kNative))} / ${de(median(kWasm))} ms</b>nativ (Tauri) / Wasm (Chromium)</div>
-  <div>Kernel-lastige Änderung<b>${de(median(tm.heavyEvalNative ?? []))} / ${de(median(metrics.heavyEvalWasm ?? []))} ms</b>nativ / Wasm (Median)</div>
-  <div>Schnitt verschieben<b>${de(metrics.sectionMoveFps?.fps, 1)} fps</b>Chromium SwiftShader; Tauri ${de(tm.sectionFpsTauri?.fps, 1)}</div>
+  <div>Tauri-E2E (tauri-driver, Xvfb)<b class="${tauri && tauriOk === tauri.results.length ? "ok" : "bad"}">${tauri ? `${tauriOk} / ${tauri.results.length}` : "–"}</b>real app, real kernel</div>
+  <div>Playwright (Chromium)<b class="${pwSum && pwSum.passed + pwSum.skipped === pwSum.total ? "ok" : "bad"}">${pwSum ? `${pwSum.passed} / ${pwSum.total}` : "–"}</b>of which ${pwSum ? pwSum.section.length : "–"} section, ${pwSum ? pwSum.total - pwSum.section.length : "–"} existing</div>
+  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>${cargoSum ? `${cargoSum.ignored} ignored` : ""}</div>
+  <div>clippy · fmt · actionlint<b class="${clippy != null && !/^(error|warning)/m.test(clippy) && fmt != null && fmt.trim() === "" ? "ok" : "bad"}">${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "finding" : "clean"} · ${fmt == null ? "–" : fmt.trim() === "" ? "clean" : "diff"} · ${actionlint == null ? "–" : actionlint.trim() === "" ? "clean" : "finding"}</b></div>
+  <div>Start to scene<b>${num(tm.startup?.wallMs)} ms</b>session → first complete scene</div>
+  <div>Keystroke → scene (median)<b>${num(median(kNative))} / ${num(median(kWasm))} ms</b>native (Tauri) / Wasm (Chromium)</div>
+  <div>Kernel-heavy change<b>${num(median(tm.heavyEvalNative ?? []))} / ${num(median(metrics.heavyEvalWasm ?? []))} ms</b>native / Wasm (median)</div>
+  <div>Moving the section<b>${num(metrics.sectionMoveFps?.fps, 1)} fps</b>Chromium SwiftShader; Tauri ${num(tm.sectionFpsTauri?.fps, 1)}</div>
 </div>
 
-<h2>1 Umfang und Architektur</h2>
-<p>Die Desktop-Version läuft mit derselben React-App wie der Browser; neu sind die Tauri-App (<code>crates/cad-app</code>), das Backend ohne Tauri (<code>crates/cad-desktop</code>: Engine-Prozess mit Supervisor, Binärformat, Dateien, Beobachter, Git), die lokale IPC (<code>crates/cad-ipc</code>) und im Web <code>TauriTransport</code>, die Desktop-Plattform und die Schnittansicht (Browser und Desktop).</p>
-<pre>cad datei.scad  (App-Prozess, Feature gui)
-  Hauptthread: Tauri-Ereignisschleife + Webview (React-App, TauriTransport statt Worker)
-  Befehle: engine_post · open/save/save_as · watch_files · git_hunks · ui_reply · …
-  Kanal (Tauri 2, roh): binäre Batches  ◀──────────── stdout ── cad engine-host (Engine-Prozess)
-  Supervisor (cad-desktop::engine) ───── stdin: post [ToEngine…] ─▶  Engine-Thread 256 MiB Stack:
-    Watchdog 15 s: Prozess beenden + neu starten, BlockKeys          Session::post / step(16 ms)
-  cad-watch: notify → file-changed / file-removed                    SMLib nativ (FFI)
-  cad-ui-ipc: Unix-Socket ui-&lt;pid&gt; (cad-ipc) ◀── cad ui status | show | screenshot</pre>
+<h2>1 Scope and architecture</h2>
+<p>The desktop version runs the same React app as the browser; new are the Tauri app (<code>crates/cad-app</code>), the backend without Tauri (<code>crates/cad-desktop</code>: engine process with supervisor, binary format, files, watcher, Git), the local IPC (<code>crates/cad-ipc</code>) and, in the web app, <code>TauriTransport</code>, the desktop platform and the section view (browser and desktop).</p>
+<pre>cad datei.scad  (app process, feature gui)
+  Main thread: Tauri event loop + webview (React app, TauriTransport instead of worker)
+  Commands: engine_post · open/save/save_as · watch_files · git_hunks · ui_reply · …
+  Channel (Tauri 2, raw): binary batches  ◀────────── stdout ── cad engine-host (engine process)
+  Supervisor (cad-desktop::engine) ───── stdin: post [ToEngine…] ─▶  engine thread 256 MiB stack:
+    Watchdog 15 s: kill process + restart, BlockKeys                 Session::post / step(16 ms)
+  cad-watch: notify → file-changed / file-removed                    SMLib native (FFI)
+  cad-ui-ipc: Unix socket ui-&lt;pid&gt; (cad-ipc) ◀── cad ui status | show | screenshot</pre>
 <ul>
-<li><b>Engine:</b> native <code>cad-session</code> mit nativ gelinktem SMLib in einem eigenen Prozess (<code>cad engine-host</code>, dasselbe Binary), darin ein Engine-Thread mit 256 MiB Stack und dieselbe Schleife wie der Worker (Nachrichten posten, ein <code>SetSource</code> vor einem weiteren entfällt, dann <code>step(16 ms)</code>, dazwischen neue Nachrichten). Ein Prozess statt nur eines Threads, weil SMLib und seine C-Fassade globalen Zustand haben (Handle-Tabelle, Meldungen): ein hängender Aufruf lässt sich nur mit dem Prozess beenden, ein Ersatz-Thread daneben teilte den Zustand. Der Watchdog im App-Prozess zählt gesendete und übernommene Nachrichten (<code>seen</code>) und ersetzt die Engine nach 15 s ohne Antwort, mit denselben <code>BlockKeys</code>/<code>SetFiles</code>/<code>SetContext</code>/<code>SetSource</code> wie <code>WorkerTransport</code>.</li>
-<li><b>Transport:</b> <code>EngineTransport</code> bleibt; <code>TauriTransport</code> bündelt UI-Nachrichten je Microtask in einen Befehl <code>engine_post</code> (Reihenfolge bleibt) und empfängt Batches über einen Tauri-2-Kanal als <code>ArrayBuffer</code>: <code>[u32 Kopflänge][u32 Datenlänge][Kopf-JSON][Daten]</code>, Mesh-Arrays als <code>{"$b": [offset, länge, typ]}</code>, im Webview Typed-Array-Sichten ohne Kopie. Die Desktop-UI wird ohne Worker und Wasm gebaut (<code>pnpm build:tauri</code>) und ins Binary eingebettet.</li>
-<li><b>Ein Binary:</b> <code>cad</code> mit Feature <code>gui</code> (Standard). <code>cad</code>, <code>cad datei.scad</code>, <code>cad ordner/</code> starten die UI; ohne <code>DISPLAY</code>/<code>WAYLAND_DISPLAY</code> oder ohne <code>gui</code>: Meldung mit den headless Befehlen, Exit 2. Alle Unterbefehle bleiben.</li>
-<li><b>IPC (<code>cad-ipc</code>, wiederverwendbar):</b> Endpunkte als Unix-Sockets in <code>$CAD_IPC_DIR</code> bzw. <code>$XDG_RUNTIME_DIR/controller-cad</code> bzw. <code>$TMPDIR/controller-cad-&lt;uid&gt;</code> (Ordner 0700, Eigentümer geprüft, Sockets 0600, Peer-UID geprüft); Rahmen mit Versionsfeld <code>v</code>, Arten Anfrage/Antwort/Ereignis, Binärteil; veraltete Sockets (Verbindung abgewiesen) werden beim Binden, Verbinden und Auflisten entfernt. API: <code>Server::bind(name)</code>, <code>Server::serve(handler)</code>, <code>connect(name)</code>, <code>Conn::request/request_with/respond/send_event/next_event</code>, <code>list(prefix)</code>.</li>
+<li><b>Engine:</b> native <code>cad-session</code> with natively linked SMLib in a separate process (<code>cad engine-host</code>, the same binary), containing an engine thread with a 256 MiB stack and the same loop as the worker (post messages, a <code>SetSource</code> followed by another one is dropped, then <code>step(16 ms)</code>, new messages in between). A process rather than just a thread, because SMLib and its C facade have global state (handle table, messages): a hanging call can only be ended together with the process; a replacement thread next to it would share the state. The watchdog in the app process counts sent and accepted messages (<code>seen</code>) and replaces the engine after 15 s without a response, with the same <code>BlockKeys</code>/<code>SetFiles</code>/<code>SetContext</code>/<code>SetSource</code> as <code>WorkerTransport</code>.</li>
+<li><b>Transport:</b> <code>EngineTransport</code> stays; <code>TauriTransport</code> bundles UI messages per microtask into one <code>engine_post</code> command (order is kept) and receives batches over a Tauri 2 channel as <code>ArrayBuffer</code>: <code>[u32 Kopflänge][u32 Datenlänge][Kopf-JSON][Daten]</code> (header length, data length, header JSON, data), mesh arrays as <code>{"$b": [offset, länge, typ]}</code>, typed-array views without copying in the webview. The desktop UI is built without worker and Wasm (<code>pnpm build:tauri</code>) and embedded in the binary.</li>
+<li><b>One binary:</b> <code>cad</code> with feature <code>gui</code> (default). <code>cad</code>, <code>cad datei.scad</code>, <code>cad ordner/</code> start the UI; without <code>DISPLAY</code>/<code>WAYLAND_DISPLAY</code> or without <code>gui</code>: message listing the headless commands, exit 2. All subcommands remain.</li>
+<li><b>IPC (<code>cad-ipc</code>, reusable):</b> endpoints as Unix sockets in <code>$CAD_IPC_DIR</code>, else <code>$XDG_RUNTIME_DIR/controller-cad</code>, else <code>$TMPDIR/controller-cad-&lt;uid&gt;</code> (folder 0700, owner checked, sockets 0600, peer UID checked); frames with version field <code>v</code>, kinds request/response/event, binary part; stale sockets (connection refused) are removed on bind, connect and list. API: <code>Server::bind(name)</code>, <code>Server::serve(handler)</code>, <code>connect(name)</code>, <code>Conn::request/request_with/respond/send_event/next_event</code>, <code>list(prefix)</code>.</li>
 </ul>
 
-<h2>2 Entscheidungen</h2>
+<h2>2 Decisions</h2>
 <table>
-<tr><th>Thema</th><th>Entscheidung</th><th>Begründung</th></tr>
-<tr><td>Git-Anbindung</td><td><code>git</code>-Befehl für die HEAD-Fassung (<code>rev-parse</code>, <code>show HEAD:pfad</code>), Diff im Prozess mit <code>similar</code></td><td>Ein Blob je Datei und HEAD-Stand (gecacht, HEAD höchstens alle 5 s neu geprüft); Tippen startet keinen Prozess. <code>git2</code> bräuchte libgit2 (C-Build), <code>gix</code> brächte weit über hundert Crates in jedes Binary; <code>git</code> ist überall da, wo es Repositories gibt. Unversionierte oder nicht in HEAD enthaltene Dateien: keine Markierung.</td></tr>
-<tr><td>Feature <code>gui</code></td><td>Standard an</td><td>Der Workspace enthält <code>cad-app</code> ohnehin (<code>cargo test --workspace</code> baut es), der Mehraufwand sind nur die WebKitGTK-Pakete unter Linux (CI: <code>scripts/ci/desktop.sh deps</code>). Headless: <code>--no-default-features</code>. Ohne <code>web/dist-tauri</code> bettet der Build eine Platzhalterseite ein.</td></tr>
-<tr><td>Engine</td><td>eigener Prozess, darin Thread mit großem Stack</td><td>siehe Abschnitt 1 (globaler SMLib-Zustand, Watchdog)</td></tr>
-<tr><td>Automatisch speichern</td><td>Standard aus, Verzögerung einstellbar (1000 ms)</td><td>Wer gleichzeitig mit einem Agenten an der Datei arbeitet, soll entscheiden, wann sein Stand auf der Platte landet; die Hinweisleiste schützt beide Seiten.</td></tr>
-<tr><td>Beobachter</td><td><code>notify</code> auf die Ordner (nicht die Dateien), Inhaltsvergleich per Hash</td><td>atomares Speichern (Editoren, <code>cad set</code>) ersetzt die Datei; eigene Speichervorgänge melden den neuen Inhalt vorher an und kommen nie als „extern“ zurück.</td></tr>
-<tr><td>Neu laden</td><td>als kleinste Zeilenänderungen, eigener Undo-Schritt (<code>isolateHistory</code>)</td><td>Cursor, Auswahl und Scrollposition bleiben, Strg+Z stellt den eigenen Stand wieder her.</td></tr>
+<tr><th>Topic</th><th>Decision</th><th>Reason</th></tr>
+<tr><td>Git integration</td><td><code>git</code> command for the HEAD version (<code>rev-parse</code>, <code>show HEAD:pfad</code>), diff in-process with <code>similar</code></td><td>One blob per file and HEAD state (cached, HEAD re-checked at most every 5 s); typing does not start a process. <code>git2</code> would need libgit2 (C build), <code>gix</code> would add well over a hundred crates to every binary; <code>git</code> is present wherever there are repositories. Untracked files or files not in HEAD: no markers.</td></tr>
+<tr><td>Feature <code>gui</code></td><td>on by default</td><td>The workspace contains <code>cad-app</code> anyway (<code>cargo test --workspace</code> builds it); the only extra cost is the WebKitGTK packages on Linux (CI: <code>scripts/ci/desktop.sh deps</code>). Headless: <code>--no-default-features</code>. Without <code>web/dist-tauri</code> the build embeds a placeholder page.</td></tr>
+<tr><td>Engine</td><td>separate process, containing a thread with a large stack</td><td>see section 1 (global SMLib state, watchdog)</td></tr>
+<tr><td>Auto-save</td><td>off by default, delay configurable (1000 ms)</td><td>Whoever works on the file at the same time as an agent should decide when their state reaches the disk; the notification bar protects both sides.</td></tr>
+<tr><td>Watcher</td><td><code>notify</code> on the folders (not the files), content comparison by hash</td><td>atomic saving (editors, <code>cad set</code>) replaces the file; the app's own saves register the new content beforehand and never come back as "external".</td></tr>
+<tr><td>Reload</td><td>as minimal line changes, separate undo step (<code>isolateHistory</code>)</td><td>Cursor, selection and scroll position are kept; Ctrl+Z restores the user's own state.</td></tr>
 </table>
 
-<h2>3 Desktop-App (Tauri-E2E mit tauri-driver und WebKitWebDriver unter Xvfb)</h2>
-<p>${tauri ? `Binary <code>${esc(relative(root, tauri.bin))}</code>, ${tauriOk}/${tauri.results.length} bestanden${tauri.fatal ? `, Abbruch: ${esc(tauri.fatal)}` : ""}.` : "nicht gelaufen"} Der Lauf startet die echte App mit Datei über WebDriver, ändert Dateien per Shell, benutzt die echte CLI (<code>cad check</code>, <code>cad set</code>, <code>cad ui …</code>) und ein temporäres Git-Repository. tauri-driver lief unter Xvfb stabil; Bilder: WebDriver-Bildschirmfotos des Webviews und ein X-Bildschirmfoto des Fensters.</p>
+<h2>3 Desktop app (Tauri E2E with tauri-driver and WebKitWebDriver under Xvfb)</h2>
+<p>${tauri ? `Binary <code>${esc(relative(root, tauri.bin))}</code>, ${tauriOk}/${tauri.results.length} passed${tauri.fatal ? `, aborted: ${esc(tauri.fatal)}` : ""}.` : "not run"} The run starts the real app with a file via WebDriver, changes files from the shell, uses the real CLI (<code>cad check</code>, <code>cad set</code>, <code>cad ui …</code>) and a temporary Git repository. tauri-driver ran stably under Xvfb; images: WebDriver screenshots of the webview and an X screenshot of the window.</p>
 ${tauriSection("T01")}
-${tauriSection("T02", "Die Datei wird außerhalb geändert (<code>k: gehaeuse(w = 60)</code> → <code>w = 90</code>), der Editor hat keine ungespeicherten Änderungen.")}
-${tauriSection("T03", "Puffer gegen HEAD: Zeile 21 geändert (blau), eine neue Kommentarzeile (grün), das Modul <code>deckel</code> gelöscht (rotes Dreieck zwischen den Zeilen). Die Markierungen sind 3 px breit mit Deckkraft 0,5–0,55 (hell/dunkel abgestimmt); der Titel (Hover) zeigt die alten Zeilen.")}
+${tauriSection("T02", "The file is changed externally (<code>k: gehaeuse(w = 60)</code> → <code>w = 90</code>); the editor has no unsaved changes.")}
+${tauriSection("T03", "Buffer against HEAD: line 21 changed (blue), one new comment line (green), the module <code>deckel</code> deleted (red triangle between the lines). The markers are 3 px wide with opacity 0.5–0.55 (tuned for light/dark); the title (hover) shows the old lines.")}
 ${tauriSection("T04")}
 ${tauriSection("T05")}
 
-<h2>4 Ablauf „Agent ändert Datei → UI aktualisiert sich“</h2>
-<p>Der Nutzer hat die Datei in der UI offen, ein Agent ändert sie per Shell und prüft mit der CLI. Jedes Bild ist die UI nach dem Schritt, ohne dass in der UI etwas getan wurde. Zeit vom Schreiben bis zur gezeichneten Szene: ${agentSteps.map((s) => `${de(s.ms)} ms`).join(", ") || "–"} (inkl. <code>cad check</code>/<code>cad set</code>).</p>
+<h2>4 Workflow "agent changes file → UI updates"</h2>
+<p>The user has the file open in the UI; an agent changes it from the shell and checks it with the CLI. Each image is the UI after the step, without any action in the UI. Time from writing to the drawn scene: ${agentSteps.map((s) => `${num(s.ms)} ms`).join(", ") || "–"} (incl. <code>cad check</code>/<code>cad set</code>).</p>
 ${tauriSection("T06")}
-${tauriSection("T07", "Kopplung CLI ↔ laufende UI über <code>cad-ipc</code>.")}
-${statusText ? `<div class="small">Ausgabe von <code>cad ui status</code>:</div><pre>${esc(statusText.replace(/\/tmp\/cad-desktop-e2e-[^/\s]+/g, "/tmp/…"))}</pre>` : ""}
-${tauriSection("T09", "Hängender Kernel (Testnachricht <code>__debugHang</code> im Engine-Prozess, Watchdog für den Test 3 s): (a) im Leerlauf, (b) während eines langsamen Kernel-Jobs (8×8 Bohrungen mit Verrundung, nativ ~3,6 s).")}
+${tauriSection("T07", "Coupling CLI ↔ running UI via <code>cad-ipc</code>.")}
+${statusText ? `<div class="small">Output of <code>cad ui status</code>:</div><pre>${esc(statusText.replace(/\/tmp\/cad-desktop-e2e-[^/\s]+/g, "/tmp/…"))}</pre>` : ""}
+${tauriSection("T09", "Hanging kernel (test message <code>__debugHang</code> in the engine process, watchdog 3 s for the test): (a) when idle, (b) during a slow kernel job (8×8 holes with fillet, native ~3.6 s).")}
 ${tauriSection("T10")}
 ${tauriSection("T11")}
 
-<h2>5 3D-Schnittansicht</h2>
-<p>Werkzeug „Schnitt“ in der Ansicht (Browser und Tauri): Ebene X/Y/Z durch die Modellmitte oder frei (Normale aus der Blickrichtung oder per Eingabe), Griff (blauer Punkt) zum Ziehen entlang der Normalen mit Rasten auf Rasterebenen des Kontextmoduls und auf Anker (Alt: frei, 0,1 mm), Umkehren, gefüllte Kappe und Kontur. Verfahren wie im CLI-Renderer: Clipping-Ebene an allen Modellmaterialien, je undurchsichtigem Körper ein Paritäts-Pass (Stencil <code>INVERT</code> über alle Fragmente des abgeschnittenen Netzes) und ein großes Viereck in der Ebene, das die Kappe zeichnet, wo das Bit gesetzt ist (tiefengetestet, schraffiert, Richtung je Körper wechselnd). Konvention exakt wie <code>cad render --section</code>: Ebene durch p mit Normale n, entfernt wird die Seite, in die n zeigt; „Als <code>cad render …</code> kopieren“ schreibt <code>--section a=v [--section-flip]</code> bzw. <code>--section-plane p,n</code> mit <code>--module</code> und der Kamera (<code>--azimuth/--elevation</code>).</p>
+<h2>5 3D section view</h2>
+<p>Tool "Section" (German UI: „Schnitt“) in the view (browser and Tauri): plane X/Y/Z through the model center or free (normal from the view direction or entered), handle (blue dot) for dragging along the normal with snapping to grid planes of the context module and to anchors (Alt: free, 0.1 mm), flip, filled cap and contour. Method as in the CLI renderer: clipping plane on all model materials, per opaque body one parity pass (stencil <code>INVERT</code> over all fragments of the clipped mesh) and a large quad in the plane that draws the cap where the bit is set (depth-tested, hatched, direction alternating per body). Convention exactly as <code>cad render --section</code>: plane through p with normal n, the side n points into is removed; "Copy as <code>cad render …</code>" writes <code>--section a=v [--section-flip]</code> or <code>--section-plane p,n</code> with <code>--module</code> and the camera (<code>--azimuth/--elevation</code>).</p>
 ${["X01", "X02", "X03", "X04", "X05", "X06"].map(scenSection).join("\n")}
 ${tauriSection("T08")}
-${sectionCli ? `<p>Kopierter Aufruf in Tauri: <code>${esc(sectionCli.replace(/\/tmp\/cad-desktop-e2e-[^/\s]+/g, "/tmp/…"))}</code></p>` : ""}
+${sectionCli ? `<p>Copied call in Tauri: <code>${esc(sectionCli.replace(/\/tmp\/cad-desktop-e2e-[^/\s]+/g, "/tmp/…"))}</code></p>` : ""}
 
-<h2>6 Messwerte</h2>
+<h2>6 Measurements</h2>
 <table>
-<tr><th>Messung</th><th>Wert</th><th>Bemerkung</th></tr>
-<tr><td>Start der App bis erste vollständige Szene</td><td>${de(tm.startup?.wallMs)} ms</td><td>WebDriver-Sitzung anlegen (Prozessstart, Webview, Engine-Prozess, SMLib) bis die Szene gezeichnet ist; davon im Webview bis zur ersten Szene ${de(tm.startup?.firstSceneMs)} ms</td></tr>
-<tr><td>Tastendruck → Szene, nativ (Tauri)</td><td>Median ${de(median(kNative))} ms (${kNative.map((x) => de(x)).join(", ")})</td><td>Backspace/Ziffer in <code>w = 60</code> (gehaeuse), echte Tastendrücke über WebDriver; Zeit von der Editoränderung bis die Szene gezeichnet ist (inkl. 8 ms Entprellung, WebKitGTK mit Software-GL)</td></tr>
-<tr><td>Tastendruck → Szene, Wasm (Chromium)</td><td>Median ${de(median(kWasm))} ms (${kWasm.map((x) => de(x)).join(", ")})</td><td>dieselbe Änderung im Browser (Worker, smlib.wasm), headless Chromium mit SwiftShader</td></tr>
-<tr><td>davon Engine (SetSource → vollständige Szene)</td><td>nativ Median ${de(median(tm.keystrokeEvalNative ?? []))} ms, Wasm Median ${de(median(metrics.keystrokeEvalWasm ?? []))} ms</td><td>Auswertung und Kernel ohne Zeichnen, gleiche Tastendrücke</td></tr>
-<tr><td>Kernel-lastige Änderung (16 Bohrungen mit Verrundung, Radius 2 → 2,5 → 3)</td><td>nativ ${(tm.heavyEvalNative ?? []).map((x) => de(x)).join(" / ")} ms, Wasm ${(metrics.heavyEvalWasm ?? []).map((x) => de(x)).join(" / ")} ms</td><td>SetSource → vollständige Szene; erster Wert inkl. leerem Cache für das neue Modell</td></tr>
-<tr><td>Externe Änderung → Szene</td><td>${de(tm.externalToScene)} ms</td><td>Datei schreiben bis neue Szene gezeichnet (Entprellung 50 ms im Beobachter)</td></tr>
-<tr><td>Schnittebene verschieben (Chromium)</td><td>${de(metrics.sectionMoveFps?.fps, 1)} fps</td><td>fillet_zonen, 120 Bilder, jede Lage neu (Kappe, Kontur); Drehen ohne Schnitt ${de(metrics.orbitFpsNoSection?.fps, 1)} fps, mit Schnitt ${de(metrics.orbitFpsWithSection?.fps, 1)} fps – Software-GL ohne GPU, das 60-fps-Ziel betrifft GPUs</td></tr>
-<tr><td>Schnittebene verschieben (Tauri)</td><td>${de(tm.sectionFpsTauri?.fps, 1)} fps</td><td>gehaeuse, WebKitGTK unter Xvfb (llvmpipe)</td></tr>
-<tr><td>Ziehen am Griff (Chromium)</td><td>${(metrics.sectionDragFps ?? []).map((f) => `${de(f.fps, 0)} fps`).join(", ") || "–"}</td><td>X02: drei echte Mausziehvorgänge (je ~12 Bewegungen), Bildrate der Ansicht während des Ziehens</td></tr>
-<tr><td>Kappenanteil UI ↔ CLI</td><td>${metrics.cliCompare ? `${de(metrics.cliCompare.web.share * 100, 1)} % / ${de(metrics.cliCompare.cliPx.share * 100, 1)} %` : "–"}</td><td>Anteil der Kappenpixel an den gezeichneten Pixeln, Abweichung ${metrics.cliCompare ? de(metrics.cliCompare.rel * 100, 0) : "–"} % (Grenze 35 %)</td></tr>
+<tr><th>Measurement</th><th>Value</th><th>Remark</th></tr>
+<tr><td>App start to first complete scene</td><td>${num(tm.startup?.wallMs)} ms</td><td>create WebDriver session (process start, webview, engine process, SMLib) until the scene is drawn; of which in the webview until the first scene ${num(tm.startup?.firstSceneMs)} ms</td></tr>
+<tr><td>Keystroke → scene, native (Tauri)</td><td>median ${num(median(kNative))} ms (${kNative.map((x) => num(x)).join(", ")})</td><td>Backspace/digit in <code>w = 60</code> (gehaeuse), real keystrokes via WebDriver; time from the editor change until the scene is drawn (incl. 8 ms debounce, WebKitGTK with software GL)</td></tr>
+<tr><td>Keystroke → scene, Wasm (Chromium)</td><td>median ${num(median(kWasm))} ms (${kWasm.map((x) => num(x)).join(", ")})</td><td>the same change in the browser (worker, smlib.wasm), headless Chromium with SwiftShader</td></tr>
+<tr><td>of which engine (SetSource → complete scene)</td><td>native median ${num(median(tm.keystrokeEvalNative ?? []))} ms, Wasm median ${num(median(metrics.keystrokeEvalWasm ?? []))} ms</td><td>evaluation and kernel without drawing, same keystrokes</td></tr>
+<tr><td>Kernel-heavy change (16 holes with fillet, radius 2 → 2.5 → 3)</td><td>native ${(tm.heavyEvalNative ?? []).map((x) => num(x)).join(" / ")} ms, Wasm ${(metrics.heavyEvalWasm ?? []).map((x) => num(x)).join(" / ")} ms</td><td>SetSource → complete scene; first value incl. empty cache for the new model</td></tr>
+<tr><td>External change → scene</td><td>${num(tm.externalToScene)} ms</td><td>write file until new scene drawn (debounce 50 ms in the watcher)</td></tr>
+<tr><td>Moving the section plane (Chromium)</td><td>${num(metrics.sectionMoveFps?.fps, 1)} fps</td><td>fillet_zonen, 120 frames, each position new (cap, contour); rotating without section ${num(metrics.orbitFpsNoSection?.fps, 1)} fps, with section ${num(metrics.orbitFpsWithSection?.fps, 1)} fps – software GL without GPU, the 60 fps target applies to GPUs</td></tr>
+<tr><td>Moving the section plane (Tauri)</td><td>${num(tm.sectionFpsTauri?.fps, 1)} fps</td><td>gehaeuse, WebKitGTK under Xvfb (llvmpipe)</td></tr>
+<tr><td>Dragging the handle (Chromium)</td><td>${(metrics.sectionDragFps ?? []).map((f) => `${num(f.fps, 0)} fps`).join(", ") || "–"}</td><td>X02: three real mouse drags (~12 moves each), frame rate of the view while dragging</td></tr>
+<tr><td>Cap share UI ↔ CLI</td><td>${metrics.cliCompare ? `${num(metrics.cliCompare.web.share * 100, 1)} % / ${num(metrics.cliCompare.cliPx.share * 100, 1)} %` : "–"}</td><td>share of cap pixels in the drawn pixels, deviation ${metrics.cliCompare ? num(metrics.cliCompare.rel * 100, 0) : "–"} % (limit 35 %)</td></tr>
 </table>
-<p>Bei kleinen Änderungen (Tastendruck in <i>gehaeuse</i>, Kernel fast nur aus dem Cache) ist die Desktop-App nicht schneller: die Engine rechnet nur wenige Millisekunden, die Zeit bestimmen Entprellung, der Weg über Tauri-Befehl, Engine-Prozess und Kanal (nativ ${de(median(tm.keystrokeEvalNative ?? []))} ms gegen ${de(median(metrics.keystrokeEvalWasm ?? []))} ms im Worker) und das Software-Rendering von WebKitGTK unter Xvfb. Sobald der Kernel rechnet, gewinnt der native Kernel deutlich (Zeile „Kernel-lastige Änderung“). Alle Messungen ohne GPU; nur relativ aussagekräftig.</p>
+<p>For small changes (keystroke in <i>gehaeuse</i>, kernel almost entirely from the cache) the desktop app is not faster: the engine computes for only a few milliseconds; the time is dominated by debounce, the path via Tauri command, engine process and channel (native ${num(median(tm.keystrokeEvalNative ?? []))} ms against ${num(median(metrics.keystrokeEvalWasm ?? []))} ms in the worker) and the software rendering of WebKitGTK under Xvfb. As soon as the kernel computes, the native kernel wins clearly (row "Kernel-heavy change"). All measurements without GPU; meaningful only relative to each other.</p>
 
 <h2>7 Tests</h2>
 <ul>
-<li><code>cargo test --workspace</code>: ${cargoSum ? `${cargoSum.ok} bestanden, ${cargoSum.failed} fehlgeschlagen, ${cargoSum.ignored} ignoriert` : "–"}; <code>cargo clippy --workspace --all-targets -- -D warnings</code>: ${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "Befund" : "ohne Befund"}; <code>cargo fmt --check</code>: ${fmt == null ? "–" : fmt.trim() === "" ? "ohne Befund" : "Abweichungen"}.</li>
-<li>Web: <code>pnpm typecheck</code> ${typecheck == null ? "–" : typecheck.trim() === "" || /error/i.test(typecheck) === false ? "ohne Befund" : "Befund"}; Vitest ${esc(vitestSum ?? "–")} (neu: <code>tauriTransport.test.ts</code>, <code>textDiff.test.ts</code>, <code>section.test.ts</code>); Playwright ${pwSum ? `${pwSum.passed}/${pwSum.total}` : "–"} (alle bisherigen ${pwSum ? pwSum.total - pwSum.section.length : "–"} Szenarien und ${pwSum ? pwSum.section.length : "–"} neue zur Schnittansicht).</li>
-<li>CI: Workflow <code>rust</code> installiert die Tauri-Pakete (<code>scripts/ci/desktop.sh deps</code>), neuer Workflow <code>desktop</code> (UI für Tauri, Release-Build, Tauri-E2E unter Xvfb, Ergebnisse als Artefakt); <code>actionlint</code> 1.7.7 über alle Workflows: ${actionlint == null ? "–" : actionlint.trim() === "" ? "ohne Befund" : esc(actionlint)}.</li>
+<li><code>cargo test --workspace</code>: ${cargoSum ? `${cargoSum.ok} passed, ${cargoSum.failed} failed, ${cargoSum.ignored} ignored` : "–"}; <code>cargo clippy --workspace --all-targets -- -D warnings</code>: ${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "finding" : "no findings"}; <code>cargo fmt --check</code>: ${fmt == null ? "–" : fmt.trim() === "" ? "no findings" : "differences"}.</li>
+<li>Web: <code>pnpm typecheck</code> ${typecheck == null ? "–" : typecheck.trim() === "" || /error/i.test(typecheck) === false ? "no findings" : "finding"}; Vitest ${esc(vitestSum ?? "–")} (new: <code>tauriTransport.test.ts</code>, <code>textDiff.test.ts</code>, <code>section.test.ts</code>); Playwright ${pwSum ? `${pwSum.passed}/${pwSum.total}` : "–"} (all ${pwSum ? pwSum.total - pwSum.section.length : "–"} existing scenarios and ${pwSum ? pwSum.section.length : "–"} new ones for the section view).</li>
+<li>CI: workflow <code>rust</code> installs the Tauri packages (<code>scripts/ci/desktop.sh deps</code>), new workflow <code>desktop</code> (UI for Tauri, release build, Tauri E2E under Xvfb, results as artifact); <code>actionlint</code> 1.7.7 over all workflows: ${actionlint == null ? "–" : actionlint.trim() === "" ? "no findings" : esc(actionlint)}.</li>
 </ul>
-<table><tr><th>Rust-Test (neu)</th><th>Datei</th><th>Ergebnis</th></tr>${newRust.map((t) => `<tr><td>${esc(t.name)}</td><td>${esc(t.file)}</td><td class="${t.res === "ok" ? "ok" : "bad"}">${esc(t.res)}</td></tr>`).join("")}</table>
-<p class="small">Backend (<code>cad-desktop/tests/backend.rs</code>): Datei öffnen mit includes, Ordner und Wahl der Hauptdatei, atomares Speichern und zuletzt geöffnet, Beobachter (externe Änderung, eigene Speicherung ignoriert, atomares Ersetzen, gleicher Inhalt, include, fremde Dateien, gelöscht/wieder angelegt, umbenannt), Git-Hunks (Arten, CRLF, Ende) und HEAD-Basis in einem temporären Repository (unversioniert, neuer Commit, Unterordner), Binärformat, Supervisor (Auswertung, Meshes, Watchdog mit Sperre, Watchdog im Leerlauf). IPC (<code>cad-ipc/tests/ipc.rs</code>): Rahmen, Version, Anfrage/Antwort/Ereignis, veraltete Sockets, Rechte, mehrere Clients. CLI (<code>agent.rs</code>, <code>launch.rs</code>): kein Display → Exit 2 + Meldung, <code>cad ui …</code> ohne UI → Exit 3, <code>cad ui</code> gegen einen Test-Endpunkt.</p>
+<table><tr><th>Rust test (new)</th><th>File</th><th>Result</th></tr>${newRust.map((t) => `<tr><td>${esc(t.name)}</td><td>${esc(t.file)}</td><td class="${t.res === "ok" ? "ok" : "bad"}">${esc(t.res)}</td></tr>`).join("")}</table>
+<p class="small">Backend (<code>cad-desktop/tests/backend.rs</code>): open file with includes, folder and choice of main file, atomic save and recently opened, watcher (external change, own save ignored, atomic replace, same content, include, unrelated files, deleted/recreated, renamed), Git hunks (kinds, CRLF, end of file) and HEAD base in a temporary repository (untracked, new commit, subfolder), binary format, supervisor (evaluation, meshes, watchdog with block, watchdog when idle). IPC (<code>cad-ipc/tests/ipc.rs</code>): frames, version, request/response/event, stale sockets, permissions, multiple clients. CLI (<code>agent.rs</code>, <code>launch.rs</code>): no display → exit 2 + message, <code>cad ui …</code> without UI → exit 3, <code>cad ui</code> against a test endpoint.</p>
 
-<h2>8 Bekannte Grenzen</h2>
+<h2>8 Known limitations</h2>
 <ul>
-<li>Steuer-IPC nur unter Unix (Linux, macOS); unter Windows meldet <code>cad-ipc</code> „nicht umgesetzt“ (Named Pipes fehlen), die App selbst ist dort ungetestet. Ein Fenster je App-Prozess; <code>cad datei.scad</code> startet einen weiteren Prozess statt das laufende Fenster zu nutzen (<code>cad ui show</code> tut das).</li>
-<li>Watchdog-Tests blockieren den Engine-Prozess über eine Testnachricht; ein echter hängender SMLib-Aufruf wurde nicht nachgestellt. Die Sperre gilt bis zum Neustart der App.</li>
-<li>Beobachter: Umbenennen erscheint als Löschen (Leiste „gelöscht oder umbenannt“), der neue Name wird nicht verfolgt; eine externe Änderung auf genau den Inhalt der UI bleibt (gewollt) unbemerkt.</li>
-<li>Git nur gegen HEAD (nicht gegen den Index), über den <code>git</code>-Befehl; ohne <code>git</code> keine Markierungen.</li>
-<li>Native Dialoge (Öffnen, Ordner, Speichern unter) sind in den E2E-Tests nicht automatisiert; geprüft sind Öffnen über die Kommandozeile, <code>cad ui show</code>, zuletzt geöffnet (Rust) und Speichern.</li>
-<li>Schnitt: eine Ebene; Kappen nur für undurchsichtige, geschlossene Körper; Kontur auf der CPU je Lage; Griffe, Raster und Anker werden nicht abgeschnitten. Der kopierte CLI-Aufruf trifft Schnitt und Blickrichtung, nicht den Bildausschnitt (UI perspektivisch, CLI orthografisch).</li>
-<li>Messwerte ohne GPU (Xvfb/llvmpipe, SwiftShader).</li>
+<li>Control IPC only on Unix (Linux, macOS); on Windows <code>cad-ipc</code> reports "not implemented" (named pipes missing), the app itself is untested there. One window per app process; <code>cad datei.scad</code> starts another process instead of using the running window (<code>cad ui show</code> does that).</li>
+<li>Watchdog tests block the engine process via a test message; a real hanging SMLib call was not reproduced. The block lasts until the app is restarted.</li>
+<li>Watcher: renaming appears as deletion (bar "deleted or renamed"), the new name is not tracked; an external change to exactly the content of the UI goes unnoticed (intended).</li>
+<li>Git only against HEAD (not against the index), via the <code>git</code> command; without <code>git</code> no markers.</li>
+<li>Native dialogs (Open, Folder, Save as) are not automated in the E2E tests; tested are opening via the command line, <code>cad ui show</code>, recently opened (Rust) and saving.</li>
+<li>Section: one plane; caps only for opaque, closed bodies; contour on the CPU per position; handles, grids and anchors are not clipped. The copied CLI call reproduces section and view direction, not the framing (UI perspective, CLI orthographic).</li>
+<li>Measurements without GPU (Xvfb/llvmpipe, SwiftShader).</li>
 </ul>
 </main>
 </body>

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 12 ("Korrekturen Farben und Daemon"): the findings F1–F9 of the independent
+// Test report 12 ("fixes for colors and daemon"): the findings F1–F9 of the independent
 // review (tests/farben-pruefung/README.md) and the daemon socket path – cause, correction,
 // evidence (before: the reviewer's images, after: CLI and UI), Bambu Studio result, limits.
 // Writes docs/reports/12-farben-korrekturen/report.html (images in img/).
@@ -14,7 +14,7 @@
 //   compare.txt, step.txt, alltag.txt               tests/openscad-compat/compare.py, tests/step/verify.py, tests/alltag/check.sh
 //
 //   node tools/report/report12.mjs
-//   node tools/report/print-pdf.mjs docs/reports/12-farben-korrekturen/report.html docs/reports/12-farben-korrekturen/report.pdf "Testbericht 12: Korrekturen Farben und Daemon"
+//   node tools/report/print-pdf.mjs docs/reports/12-farben-korrekturen/report.html docs/reports/12-farben-korrekturen/report.pdf "Test report 12: fixes for colors and daemon"
 
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -39,9 +39,9 @@ const git = (...a) => {
     return "–";
   }
 };
-const de = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d }));
+const num = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const md = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>");
-const T = (name) => readText(join(input, name))?.replaceAll(`${input}/`, "").replaceAll(`${root}/`, "") ?? "(fehlt)";
+const T = (name) => readText(join(input, name))?.replaceAll(`${input}/`, "").replaceAll(`${root}/`, "") ?? "(missing)";
 const pre = (t) => `<pre>${esc(t.trimEnd())}</pre>`;
 
 // ------------------------------------------------------------------------------- images
@@ -63,7 +63,7 @@ const before = (n) => img(join(root, "tests/farben-pruefung/img", n), `vorher-${
 const cli = (n) => img(join(input, "cli", `${n}.png`), `cli-${n}.jpg`);
 const pw = (n) => img(join(input, "img", `${n}.jpg`), `ui-${n}.jpg`);
 const tauriImg = (n) => img(join(input, "tauri/img", n), `tauri-${n.replace(/\.png$/, ".jpg")}`);
-const fig = (src, cap) => (src ? `<figure><img src="${src}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(Bild fehlt: ${esc(cap)})</p>`);
+const fig = (src, cap) => (src ? `<figure><img src="${src}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(image missing: ${esc(cap)})</p>`);
 const pair = (a, ca, b, cb) => `<div class="two">${fig(a, ca)}${fig(b, cb)}</div>`;
 
 // ------------------------------------------------------------------------------- test summaries
@@ -108,14 +108,14 @@ const compareSum = compare ? /(\d+)\/(\d+)/.exec(compare.split("\n").reverse().f
 const step = readText(join(input, "step.txt"));
 const stepSum = step ? (/\d+\/\d+ passed/.exec(step)?.[0] ?? null) : null;
 const alltag = readText(join(input, "alltag.txt"));
-const alltagLine = alltag ? (alltag.trim().split("\n").reverse().find((l) => /bestanden|abweich|Modelle/i.test(l)) ?? alltag.trim().split("\n").at(-1)) : null;
+const alltagLine = alltag ? (alltag.trim().split("\n").reverse().find((l) => /passed|bestanden|deviat|abweich|models|Modelle/i.test(l)) ?? alltag.trim().split("\n").at(-1)) : null;
 const verify = readJson(join(input, "verify.json"));
 const verifyCg = readJson(join(input, "verify-cg.json"));
 const scenarios = (readJson(join(input, "scenarios.json")) ?? []).sort((a, b) => a.id.localeCompare(b.id));
 const scen = (id) => scenarios.find((s) => s.id === id);
 const rand = readJson(join(input, "f5-randnames.json"));
 
-const date = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const commit = git("rev-parse", "--short", "HEAD");
 const branch = git("rev-parse", "--abbrev-ref", "HEAD");
 const rustc = (() => {
@@ -157,26 +157,26 @@ const f5 = (() => {
 // ------------------------------------------------------------------------------- findings
 
 const status = [
-  ["F1", "hoch", "Gleiche Geometrie in verschiedenen Farben: Ansicht und STEP in der ersten Farbe", "behoben"],
-  ["F2", "hoch", "Slotwahl in der UI an einem color() mit Parameter-/Schleifenfarbe färbte alle Farben", "behoben (filament()-Tabelle)"],
-  ["F3", "mittel", "Ansicht ≠ Druck (Überlappung, Verrundung an Farbgrenze, color() im 2D-Profil)", "behoben (Regionen in der Ansicht; gemischte 2D-Farben: Warnung)"],
-  ["F4", "mittel", "Material außerhalb von Bauteilen: UI ließ es weg, CLI-Meldung falsch", "behoben"],
-  ["F5", "mittel", "Zufallsfarben kollidieren", "behoben"],
-  ["F6", "mittel/niedrig", "Splitter bei gleichfarbigen Nachbarn", "behoben"],
-  ["F7", "niedrig", "Alpha-Varianten, stilles Klemmen, transparent, leerer Name", "behoben (Regeln + Warnungen)"],
-  ["F8", "niedrig", "> 16 Slots, geteilte Slots ohne Hinweis, Farbgruppe bei einfarbig", "behoben"],
-  ["F9", "niedrig", "--per-color mit .stl, Farbliste bei --part, Dateiname bei use/include", "behoben"],
-  ["D", "–", "Daemon startet bei zu langem Socketpfad still nicht", "behoben (Ersatzpfad)"],
-  ["B", "–", "Bambu Studio: Farbdialog überschreibt Slots", "vermieden (3MF ohne Farbgruppe)"],
+  ["F1", "high", "Same geometry in different colors: view and STEP in the first color", "fixed"],
+  ["F2", "high", "Slot choice in the UI on a color() with a parameter/loop color affected all colors", "fixed (filament() table)"],
+  ["F3", "medium", "View ≠ print (overlap, fillet at a color boundary, color() in the 2D profile)", "fixed (regions in the view; mixed 2D colors: warning)"],
+  ["F4", "medium", "Material outside parts: UI omitted it, CLI message wrong", "fixed"],
+  ["F5", "medium", "Random colors collide", "fixed"],
+  ["F6", "medium/low", "Slivers between neighbors of the same color", "fixed"],
+  ["F7", "low", "Alpha variants, silent clamping, transparent, empty name", "fixed (rules + warnings)"],
+  ["F8", "low", "> 16 slots, shared slots without notice, color group for single-color", "fixed"],
+  ["F9", "low", "--per-color with .stl, color list with --part, file name with use/include", "fixed"],
+  ["D", "–", "Daemon silently fails to start with a socket path that is too long", "fixed (substitute path)"],
+  ["B", "–", "Bambu Studio: color dialog overwrites slots", "avoided (3MF without color group)"],
 ];
 
 const testsOf = (re) => newTests.filter((t) => re.test(t.name)).map((t) => `<code>${esc(t.name)}</code> ${t.res === "ok" ? '<span class="ok">ok</span>' : '<span class="bad">FAILED</span>'}`).join(", ") || "–";
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 12 – Korrekturen Farben und Daemon</title>
+<title>Test report 12 – fixes for colors and daemon</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -216,113 +216,113 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 12 – Korrekturen Farben und Daemon</h1>
-<div class="meta">Befunde F1–F9 der unabhängigen Prüfung (<code>tests/farben-pruefung/</code>) und Daemon-Socketpfad · cad-eval, cad-engine, cad-session, cad-cli, cad-ipc, web · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} Kerne</div>
+<h1>Test report 12 – fixes for colors and daemon</h1>
+<div class="meta">Findings F1–F9 of the independent review (<code>tests/farben-pruefung/</code>) and daemon socket path · cad-eval, cad-engine, cad-session, cad-cli, cad-ipc, web · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} cores</div>
 
 <div class="summary">
-  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>davon ${newTests.length} neue Regressionstests</div>
-  <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "sauber" : "Befund"} · ${fmt == null ? "–" : fmtOk ? "sauber" : "Abw."}</b>-D warnings</div>
-  <div>Vitest · Playwright<b class="${pwStats && pwStats.failed.length === 0 ? "ok" : "bad"}">${vitestSum ?? "–"} · ${pwStats ? `${pwStats.passed} / ${pwStats.total}` : "–"}</b>neu: G01–G04</div>
-  <div>Tauri-E2E<b class="${tauri && tauriOk === tauri.results.length && !tauri.fatal ? "ok" : "bad"}">${tauri ? `${tauriOk} / ${tauri.results.length}` : "–"}</b>neu: T15</div>
+  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>of which ${newTests.length} new regression tests</div>
+  <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "clean" : "finding"} · ${fmt == null ? "–" : fmtOk ? "clean" : "diff"}</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="${pwStats && pwStats.failed.length === 0 ? "ok" : "bad"}">${vitestSum ?? "–"} · ${pwStats ? `${pwStats.passed} / ${pwStats.total}` : "–"}</b>new: G01–G04</div>
+  <div>Tauri-E2E<b class="${tauri && tauriOk === tauri.results.length && !tauri.fatal ? "ok" : "bad"}">${tauri ? `${tauriOk} / ${tauri.results.length}` : "–"}</b>new: T15</div>
   <div>OpenSCAD · STEP<b class="${compareSum && compareSum[0] === compareSum[1] ? "ok" : "bad"}">${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"} · ${esc(stepSum?.match(/\d+\/\d+/)?.[0] ?? "–")}</b>compare.py · verify.py</div>
-  <div>Alltagsmodelle<b class="${alltag && !/FEHL|weicht ab|abweichend/i.test(alltag) ? "ok" : "bad"}">${alltag ? "unverändert" : "–"}</b>tests/alltag/check.sh</div>
-  <div>3MF (lib3mf, trimesh)<b class="${verify?.ok ? "ok" : "bad"}">${verify ? (verify.ok ? "bestanden" : "Fehler") : "–"}</b>Farbdialog Bambu: ${verify ? (verify.bambu_model?.color_dialog ? "ja" : "nein") : "–"}</div>
+  <div>Everyday models<b class="${alltag && !/FEHL|ERROR|FAIL|weicht ab|abweichend|deviat/i.test(alltag) ? "ok" : "bad"}">${alltag ? "unchanged" : "–"}</b>tests/alltag/check.sh</div>
+  <div>3MF (lib3mf, trimesh)<b class="${verify?.ok ? "ok" : "bad"}">${verify ? (verify.ok ? "passed" : "error") : "–"}</b>Bambu color dialog: ${verify ? (verify.bambu_model?.color_dialog ? "yes" : "no") : "–"}</div>
 </div>
 
-<h2>1 Auftrag und Ergebnis</h2>
-<p>Ein unabhängiger Test-Agent hat die Farbfunktionen aus Bericht 11 geprüft und neun Befunde (F1–F9) sowie einen Daemon-Fehler gemeldet (<code>tests/farben-pruefung/README.md</code>, Testfälle in <code>cases/</code>, Bilder in <code>img/</code>). Alle Befunde sind behoben; jeder hat einen Regressionstest in Rust, die UI-Befunde zusätzlich in Vitest, Playwright und Tauri-E2E. Die Testfälle der Prüfung laufen vollständig als <code>crates/cad-cli/tests/farben_pruefung.rs</code> (jede Datei: keine Fehler, Regionsvolumen = Bauteilvolumen, Zufallsfarben mit Abstand zur Palette). „Vorher“-Bilder sind die des Prüfers (Commit d8fe983), „nachher“ die CLI und UI dieses Commits.</p>
+<h2>1 Task and result</h2>
+<p>An independent test agent reviewed the color features from report 11 and reported nine findings (F1–F9) and one daemon bug (<code>tests/farben-pruefung/README.md</code>, test cases in <code>cases/</code>, images in <code>img/</code>). All findings are fixed; each has a regression test in Rust, the UI findings additionally in Vitest, Playwright and Tauri E2E. The review's test cases all run as <code>crates/cad-cli/tests/farben_pruefung.rs</code> (each file: no errors, region volume = part volume, random colors at a distance from the palette). "Before" images are the reviewer's (commit d8fe983), "after" images are from the CLI and UI of this commit.</p>
 <table>
-<tr><th>Nr.</th><th>Schwere</th><th>Befund</th><th>Status</th></tr>
+<tr><th>No.</th><th>Severity</th><th>Finding</th><th>Status</th></tr>
 ${status.map(([n, s, b, st]) => `<tr><td>${n}</td><td>${esc(s)}</td><td>${md(b)}</td><td class="ok">${esc(st)}</td></tr>`).join("\n")}
 </table>
 
-<h2>2 Befunde</h2>
+<h2>2 Findings</h2>
 
 <section class="finding">
-<h3>F1 (hoch) – gleiche Geometrie, verschiedene Farben</h3>
+<h3>F1 (high) – same geometry, different colors</h3>
 <dl class="f">
-<dt>Ursache</dt><dd>Der Cache-Schlüssel eines Knotens enthält die Farbe nicht (Absicht: eine neue Farbe rechnet nichts neu). <code>color("red") cube(5)</code> und <code>translate(…) color("blue") cube(5)</code> haben daher denselben Würfelknoten-Inhalt, dasselbe Flächen-Tag und – aus dem Cache – dieselben Kernel-Flächen. Ansicht (<code>tagColors</code>: Tag → erster Knoten mit Farbe) und STEP (<code>nodes_for_tag(tag).first()</code>) nahmen für alle Flächen dieses Tags die erste Farbe. Das 3MF war richtig, weil die Farbregionen die Instanzen einzeln platzieren.</dd>
-<dt>Korrektur</dt><dd>Die Cache-Wiederverwendung bleibt; die Farbe wird über Instanzen und Regionen zugeordnet: (1) die Ansicht zeigt bei Modellen mit Farben die <b>Farbregionen</b> (die Körper des 3MF), sobald sie gerechnet sind (UI „Farbregionen zeigen“, jetzt Standard; <code>cad render</code> ohne <code>--show faces</code>); (2) die Farbe je Fläche (davor, für hervorgehobene Teilbäume und <code>--show faces</code>) nimmt nur Knoten unterhalb des gezeichneten Knotens und unter mehreren gleichen Inhalts den, dessen Hülle das Dreieck enthält (<code>faceColors</code> in <code>web/src/logic/colors.ts</code>, <code>face_colors</code> in <code>cad-cli/src/render.rs</code>); (3) STEP-Flächenfarben kommen aus der Regelmenge der Regionen ohne Boolean: Abtastpunkte jeder Fläche gegen das platzierte Material jedes Farbknotens (<code>kernel.classify</code>), der späteste gewinnt (<code>Engine::face_region_colors</code>), als synthetische Tags in einer Kopie der B-Rep.</dd>
-<dt>Tests</dt><dd>${testsOf(/^f1_|^all_review/)}; Vitest „Bericht 12 F1“; Playwright G01; Tauri T15.</dd>
+<dt>Cause</dt><dd>The cache key of a node does not contain the color (intended: a new color recomputes nothing). <code>color("red") cube(5)</code> and <code>translate(…) color("blue") cube(5)</code> therefore have the same cube node content, the same face tag and – from the cache – the same kernel faces. The view (<code>tagColors</code>: tag → first node with color) and STEP (<code>nodes_for_tag(tag).first()</code>) took the first color for all faces of this tag. The 3MF was correct because the color regions place the instances individually.</dd>
+<dt>Fix</dt><dd>Cache reuse stays; the color is assigned via instances and regions: (1) for models with colors the view shows the <b>color regions</b> (the bodies of the 3MF) as soon as they are computed (UI "Show color regions", now the default; <code>cad render</code> without <code>--show faces</code>); (2) the color per face (before that, for highlighted subtrees and <code>--show faces</code>) only takes nodes below the drawn node and, among several with the same content, the one whose bounding box contains the triangle (<code>faceColors</code> in <code>web/src/logic/colors.ts</code>, <code>face_colors</code> in <code>cad-cli/src/render.rs</code>); (3) STEP face colors come from the rule set of the regions without boolean: sample points of each face against the placed material of each color node (<code>kernel.classify</code>), the latest wins (<code>Engine::face_region_colors</code>), as synthetic tags in a copy of the B-rep.</dd>
+<dt>Tests</dt><dd>${testsOf(/^f1_|^all_review/)}; Vitest "report 12 F1"; Playwright G01; Tauri T15.</dd>
 </dl>
-${pair(before("pal2.png"), "vorher: pal2.scad, drei rote Würfel (Prüfer)", cli("f1-pal2"), "nachher: `cad render` (Farbregionen)")}
-${pair(cli("f1-pal2-flaechen"), "nachher: `--show faces` (Farbe je Fläche je Instanz)", cli("f1-palette"), "nachher: palette.scad, 16 gleiche Kacheln in einer Schleife")}
-<p>STEP von pal2.scad (Flächen je Farbe):</p>${pre(T("f1-step.txt"))}
-${fig(pw("g01-flaechen"), "UI: Farbe je Fläche mit „Farbregionen zeigen“ aus – jede Instanz in ihrer Farbe")}
-<p class="small">Grenze: die Farbe je Fläche ist eine Näherung (Hüllen-Test; bei überlappenden Hüllen gleich geformter Körper verschiedener Farbe die spätere). Exakt sind die Regionen, die die Ansicht nach der Rechnung zeigt; in STEP bekommt eine über eine Farbgrenze verschmolzene Fläche eine Farbe (Mehrheit der Abtastpunkte).</p>
+${pair(before("pal2.png"), "before: pal2.scad, three red cubes (reviewer)", cli("f1-pal2"), "after: `cad render` (color regions)")}
+${pair(cli("f1-pal2-flaechen"), "after: `--show faces` (color per face per instance)", cli("f1-palette"), "after: palette.scad, 16 identical tiles in a loop")}
+<p>STEP of pal2.scad (faces per color):</p>${pre(T("f1-step.txt"))}
+${fig(pw("g01-flaechen"), "UI: color per face with \"Show color regions\" off – each instance in its color")}
+<p class="small">Limitation: the color per face is an approximation (bounding box test; with overlapping bounding boxes of identically shaped bodies of different color, the later one). Exact are the regions that the view shows after the computation; in STEP a face merged across a color boundary gets one color (majority of the sample points).</p>
 </section>
 
 <section class="finding">
-<h3>F2 (hoch) – Slotwahl bei Parameter- oder Schleifenfarbe</h3>
+<h3>F2 (high) – slot choice with a parameter or loop color</h3>
 <dl class="f">
-<dt>Ursache</dt><dd><code>SetFilament</code> schrieb <code>filament = n</code> an die erste <code>color()</code>-Anweisung der Farbe. Bei <code>module bar(c) color(c) …</code> oder <code>for (i) color(names[i]) …</code> färbt diese Anweisung mehrere Farben – alle bekamen den Slot (bzw. die erste Angabe gewann mit Warnung).</dd>
-<dt>Entscheidung</dt><dd>Eine Slot-Tabelle im Code: <code>filament("red", 4);</code> auf oberster Ebene der Hauptdatei, eine Anweisung je Farbe. Begründung: der Code bleibt die einzige Quelle (CLI und UI exportieren dasselbe, Undo/Git sehen die Änderung, ein Agent liest es mit); die Tabelle gilt für genau eine Farbe und ist unabhängig davon, wo die Farbe entsteht (Parameter, Schleife, Bibliothek); es ist ein gewöhnlicher Modulaufruf (keine neue Syntax, OpenSCAD meldet nur ein unbekanntes Modul); ein Block <code>filaments { … }</code> bräuchte Parser-Änderungen, <code>$filaments = […]</code> hätte die Gültigkeitsregeln von <code>$</code>-Variablen und ließe sich an jeder Stelle überschreiben. Die UI schreibt <code>filament = n</code> weiter an die Anweisung, wenn <b>alle</b> Anweisungen der Farbe sie als Literal nennen (lesbar am Ort), sonst die Tabellenzeile; gibt es eine Tabellenzeile, ändert sie deren Slot, „automatisch“ entfernt die Zeile.</dd>
-<dt>Regeln</dt><dd>Die Tabelle wird vor allen anderen Anweisungen ausgewertet (eigener Durchlauf) und hat Vorrang; ein widersprechendes <code>filament = m</code> warnt und wird ignoriert; <code>filament()</code> in Modulen, Schleifen oder Bibliotheken warnt („nur auf oberster Ebene der Hauptdatei“); ein eigenes Modul <code>filament</code> des Nutzers hat Vorrang.</dd>
+<dt>Cause</dt><dd><code>SetFilament</code> wrote <code>filament = n</code> on the first <code>color()</code> statement of the color. With <code>module bar(c) color(c) …</code> or <code>for (i) color(names[i]) …</code> this statement colors several colors – all of them got the slot (or the first specification won with a warning).</dd>
+<dt>Decision</dt><dd>A slot table in the code: <code>filament("red", 4);</code> at the top level of the main file, one statement per color. Reason: the code stays the only source (CLI and UI export the same, undo/Git see the change, an agent reads it too); the table applies to exactly one color and is independent of where the color arises (parameter, loop, library); it is an ordinary module call (no new syntax, OpenSCAD only reports an unknown module); a block <code>filaments { … }</code> would need parser changes, <code>$filaments = […]</code> would have the scoping rules of <code>$</code> variables and could be overridden anywhere. The UI still writes <code>filament = n</code> on the statement if <b>all</b> statements of the color name it as a literal (readable in place), otherwise the table line; if there is a table line, it changes its slot, "automatic" removes the line.</dd>
+<dt>Rules</dt><dd>The table is evaluated before all other statements (separate pass) and takes precedence; a contradicting <code>filament = m</code> warns and is ignored; <code>filament()</code> in modules, loops or libraries warns ("applies only at the top level of the main file"); a user's own module <code>filament</code> takes precedence.</dd>
 <dt>Tests</dt><dd>${testsOf(/set_filament_of_a_parameter|filament_table_rules|filament_declarations/)}; Playwright G02; Tauri T15.</dd>
 </dl>
-${fig(pw("g02-tabelle"), "UI nach Slot 4 für red in slot_mod.scad: `filament(\"red\", 4);` im Code, blue und green automatisch (vorher bekamen alle drei Slot 4)")}
-<p><code>cad outline</code> der Datei mit Tabelle:</p>${pre(T("f2-outline.txt").split("\n").filter((l) => /Farben|F\d/.test(l)).join("\n"))}
+${fig(pw("g02-tabelle"), "UI after slot 4 for red in slot_mod.scad: `filament(\"red\", 4);` in the code, blue and green automatic (before, all three got slot 4)")}
+<p><code>cad outline</code> of the file with table:</p>${pre(T("f2-outline.txt").split("\n").filter((l) => /Colou?rs|Farben|F\d/.test(l)).join("\n"))}
 </section>
 
 <section class="finding">
-<h3>F3 (mittel) – Ansicht ≠ Druck</h3>
+<h3>F3 (medium) – view ≠ print</h3>
 <dl class="f">
-<dt>Ursache</dt><dd>(a) Bei Überlappung verschmilzt der Kernel koplanare Flächen beider Körper zu einer Fläche mit einem Tag – die Farbe je Fläche kann die Farbgrenze nicht zeigen. (b) Die Verrundung an einer Farbgrenze gehört dem ungefärbten <code>union</code>-Knoten (grau gezeigt), die Regionen geben sie der Restfarbe (rot). (c) <code>color()</code> im 2D-Profil: die Ansicht zeigte die Farbe des 2D-Blatts, die Farbtabelle sah unter Profiloperationen nicht nach (Standard, ohne Eintrag, ohne Warnung).</dd>
-<dt>Korrektur</dt><dd>(a, b) Die Ansicht zeigt die Farbregionen (F1). (c) Haben alle 2D-Blätter einer Extrusion ohne eigene Farbe dieselbe Farbe, ist die Extrusion ein Körper dieser Farbe (wie <code>color()</code> um sie); gemischte 2D-Farben werden nicht getrennt: ein Körper in Standard und die Warnung „Farben im 2D-Profil von linear_extrude werden nicht getrennt …“.</dd>
+<dt>Cause</dt><dd>(a) With overlap the kernel merges coplanar faces of both bodies into one face with one tag – the color per face cannot show the color boundary. (b) The fillet at a color boundary belongs to the uncolored <code>union</code> node (shown gray), the regions give it the remainder color (red). (c) <code>color()</code> in the 2D profile: the view showed the color of the 2D leaf, the color table did not look below profile operations (default, no entry, no warning).</dd>
+<dt>Fix</dt><dd>(a, b) The view shows the color regions (F1). (c) If all 2D leaves of an extrusion without its own color have the same color, the extrusion is a body of that color (as with <code>color()</code> around it); mixed 2D colors are not separated: one body in the default color and the warning "colours in the 2D profile of linear_extrude are not separated …".</dd>
 <dt>Tests</dt><dd>${testsOf(/^f3_/)}; Playwright G03.</dd>
 </dl>
-${pair(before("r_overlap23.png"), "vorher: r_overlap2/3 (links), Regionen (rechts) – Prüfer", cli("f3-overlap3"), "nachher: r_overlap3.scad, blau besitzt die Überlappung")}
-${pair(before("r_fillet2.png"), "vorher: Verrundung grau, exportiert rot (Prüfer)", cli("f3-fillet2"), "nachher: Verrundung rot wie im Druck")}
-${pair(before("r_extrude_faces.png"), "vorher: 2D-Farbe gezeigt, als Standard exportiert (Prüfer)", cli("f3-extrude"), "nachher: rot und blau wie exportiert, gemischtes Profil Standard mit Warnung")}
+${pair(before("r_overlap23.png"), "before: r_overlap2/3 (left), regions (right) – reviewer", cli("f3-overlap3"), "after: r_overlap3.scad, blue owns the overlap")}
+${pair(before("r_fillet2.png"), "before: fillet gray, exported red (reviewer)", cli("f3-fillet2"), "after: fillet red as in the print")}
+${pair(before("r_extrude_faces.png"), "before: 2D color shown, exported as default (reviewer)", cli("f3-extrude"), "after: red and blue as exported, mixed profile default with warning")}
 ${pre(T("f3-extrude.txt"))}
-<p class="small">Grenze: gemischte Farben in einem 2D-Profil unter einer Extrusion werden nicht in Körper je Farbe geteilt (Warnung; Abhilfe: je Farbe extrudieren).</p>
+<p class="small">Limitation: mixed colors in a 2D profile below an extrusion are not split into bodies per color (warning; remedy: extrude per color).</p>
 </section>
 
 <section class="finding">
-<h3>F4 (mittel) – Material außerhalb von Bauteilen</h3>
+<h3>F4 (medium) – material outside parts</h3>
 <dl class="f">
-<dt>Ursache</dt><dd>Farbliste und UI-Export nahmen nur die Bauteile (Rest: 0 mm³, im 3MF weggelassen); der CLI-Export ohne <code>--part</code> nahm die Wurzel als ein Objekt und meldete trotzdem „je Bauteil ein Objekt“.</dd>
-<dt>Korrektur</dt><dd>Die Regionen umfassen die Bauteile und die obersten Knoten, die weder Bauteil sind noch eines enthalten („ohne Bauteil“, <code>cad_session::rest_nodes</code>); der Standard-Export (CLI ohne <code>--part</code> und UI, beide <code>Session::export_colors</code>) schreibt je Bauteil ein Objekt und das Objekt „ohne Bauteil“ – die Dateien von CLI und UI sind gleich. Die Meldung zählt die Objekte auf (<code>color_export_notes</code>), die UI zeigt sie in der Statuszeile.</dd>
+<dt>Cause</dt><dd>Color list and UI export only took the parts (rest: 0 mm³, omitted in the 3MF); the CLI export without <code>--part</code> took the root as one object and still reported "one object per part".</dd>
+<dt>Fix</dt><dd>The regions comprise the parts and the top-level nodes that are neither a part nor contain one ("outside any part", <code>cad_session::rest_nodes</code>); the default export (CLI without <code>--part</code> and UI, both <code>Session::export_colors</code>) writes one object per part plus the object "outside any part" – the files from CLI and UI are identical. The message lists the objects (<code>color_export_notes</code>), the UI shows them in the status line.</dd>
 <dt>Tests</dt><dd>${testsOf(/^f4_|material_outside/)}; Playwright G04; Tauri T15.</dd>
 </dl>
 ${pre(T("f4-export.txt"))}
 </section>
 
 <section class="finding">
-<h3>F5 (mittel) – Zufallsfarben kollidieren</h3>
+<h3>F5 (medium) – random colors collide</h3>
 <dl class="f">
-<dt>Ursache</dt><dd>Nur der Farbton kam aus dem Hash (L, C fest): Namen fielen auf denselben Wert (<code>baz</code>/<code>violet</code>, <code>x</code>/<code>rose</code>) und wurden zu einem Eintrag und Slot zusammengelegt; andere lagen nah an Palettenfarben.</dd>
-<dt>Korrektur</dt><dd>Farbton, Helligkeit (0,45–0,80) und Chroma (0,06–0,16) aus dem Hash; eine Kandidatenfolge je Name (SplitMix64); gewählt wird der erste Kandidat mit ΔE<sub>OK</sub> ≥ 0,07 zu Palette und Standard und – im Modell, in Reihenfolge des ersten Auftretens – ≥ 0,06 zu den Zufallsfarben anderer Namen. Verschiedene Namen fallen so nie zufällig zusammen; zusammengelegt wird nur bei exakt gleichem Wert (z. B. <code>"#f00"</code> und <code>[1, 0, 0]</code>).</dd>
-<dt>Nachweis</dt><dd>${f5 ? `randnames.scad: ${f5.n} unbekannte Namen (36 Anweisungen, rot/Rot/ROT ist ein Name), ${f5.all} Einträge auf ${f5.slots} verschiedenen Slots; kleinster Abstand zweier Zufallsfarben ΔE<sub>OK</sub> ${de(f5.minPair.d, 3)} (${esc(f5.minPair.a)}/${esc(f5.minPair.b)}), zur Palette ${de(f5.minPal.d, 3)} (${esc(f5.minPal.a)} ↔ ${esc(f5.minPal.b)}).` : "–"}</dd>
+<dt>Cause</dt><dd>Only the hue came from the hash (L, C fixed): names fell onto the same value (<code>baz</code>/<code>violet</code>, <code>x</code>/<code>rose</code>) and were merged into one entry and slot; others lay close to palette colors.</dd>
+<dt>Fix</dt><dd>Hue, lightness (0.45–0.80) and chroma (0.06–0.16) from the hash; one candidate sequence per name (SplitMix64); the first candidate with ΔE<sub>OK</sub> ≥ 0.07 to palette and default and – within the model, in order of first occurrence – ≥ 0.06 to the random colors of other names is chosen. Different names thus never coincide by chance; entries are merged only for exactly the same value (e.g. <code>"#f00"</code> and <code>[1, 0, 0]</code>).</dd>
+<dt>Evidence</dt><dd>${f5 ? `randnames.scad: ${f5.n} unknown names (36 statements, rot/Rot/ROT is one name), ${f5.all} entries on ${f5.slots} different slots; smallest distance between two random colors ΔE<sub>OK</sub> ${num(f5.minPair.d, 3)} (${esc(f5.minPair.a)}/${esc(f5.minPair.b)}), to the palette ${num(f5.minPal.d, 3)} (${esc(f5.minPal.a)} ↔ ${esc(f5.minPal.b)}).` : "–"}</dd>
 <dt>Tests</dt><dd>${testsOf(/^f5_|random_colours_do_not/)}.</dd>
 </dl>
 ${f5 ? `<p>${f5.rows.map((r) => `<span class="sw" style="background:${esc(r.key)}"></span>${esc(r.label)}`).join(" · ")}</p>` : ""}
-<p class="small">Grenze: weicht ein Name im Modell aus, hängt seine Farbe von den Namen davor ab (deterministisch, aber nicht modellübergreifend gleich).</p>
+<p class="small">Limitation: if a name has to move away within the model, its color depends on the names before it (deterministic, but not the same across models).</p>
 </section>
 
 <section class="finding">
-<h3>F6 – Splitter bei gleichfarbigen Nachbarn</h3>
+<h3>F6 – slivers between neighbors of the same color</h3>
 <dl class="f">
-<dt>Ursache</dt><dd><code>Stück(C) = R ∩ M(C) − ⋃ M(später)</code> zog auch einen berührenden späteren Körper derselben Farbe ab; an der Berührfläche blieben dünne Splitter (0,00016 mm), die nach dem Vereinigen überlappten: r_touch.scad rot 2000,032 statt 2000 mm³, ohne Warnung.</dd>
-<dt>Korrektur</dt><dd>Abgezogen wird nur das Material späterer Farbknoten <b>anderer</b> Farbe; die Stücke einer Farbe werden wie bisher vereinigt. Die Zuordnung ist dieselbe (gleiche Farbe), die Splitter entfallen.</dd>
-<dt>Tests</dt><dd>${testsOf(/^f6_|all_review/)} (alle Fälle: Summe = Volumen auf 10⁻⁶).</dd>
+<dt>Cause</dt><dd><code>piece(C) = R ∩ M(C) − ⋃ M(later)</code> also subtracted a touching later body of the same color; thin slivers (0.00016 mm) remained at the contact face, which overlapped after the union: r_touch.scad red 2000.032 instead of 2000 mm³, without warning.</dd>
+<dt>Fix</dt><dd>Only the material of later color nodes of a <b>different</b> color is subtracted; the pieces of one color are united as before. The assignment is the same (same color), the slivers disappear.</dd>
+<dt>Tests</dt><dd>${testsOf(/^f6_|all_review/)} (all cases: sum = volume to 10⁻⁶).</dd>
 </dl>
 ${pre(T("m-r_touch.txt"))}
 </section>
 
 <section class="finding">
-<h3>F7 – Alpha, Klemmen, transparent, leerer Name</h3>
+<h3>F7 – alpha, clamping, transparent, empty name</h3>
 <dl class="f">
-<dt>Regeln</dt><dd>Die Identität einer Druckfarbe ist ihr RGB-Wert: <code>alpha</code> wirkt nur in der Ansicht (die Farbregion wird transparent gezeichnet), <code>color("red", alpha = 0.5)</code> ist der Eintrag <code>red</code> (ein Slot, die Konfliktprüfung sieht über Alpha). Vektorwerte und <code>alpha</code> außerhalb 0–1 werden mit Warnung geklemmt (bei 0–255-Werten mit Hinweis auf <code>"#rrggbb"</code>). <code>color("transparent")</code> ist keine Druckfarbe: Warnung, das Material bleibt Standard (kein Filament <code>#00000000</code>); <code>color("")</code> und <code>color()</code> warnen und färben nicht.</dd>
+<dt>Rules</dt><dd>The identity of a print color is its RGB value: <code>alpha</code> only affects the view (the color region is drawn transparent), <code>color("red", alpha = 0.5)</code> is the entry <code>red</code> (one slot, the conflict check ignores alpha). Vector values and <code>alpha</code> outside 0–1 are clamped with a warning (for 0–255 values with a hint to <code>"#rrggbb"</code>). <code>color("transparent")</code> is not a print color: warning, the material stays default (no filament <code>#00000000</code>); <code>color("")</code> and <code>color()</code> warn and do not color.</dd>
 <dt>Tests</dt><dd>${testsOf(/^f7_/)}.</dd>
 </dl>
 ${pre(T("m-values.txt"))}
 </section>
 
 <section class="finding">
-<h3>F8 – Slots über 16, geteilte Slots, einfarbiges 3MF</h3>
+<h3>F8 – slots above 16, shared slots, single-color 3MF</h3>
 <dl class="f">
-<dt>Korrektur</dt><dd>Die Farbtabelle meldet automatische Slots über 16 als Warnung („mehr als 16 Filamente …“), zwei Farben auf demselben festen Slot und einen festen Slot 1 neben Standard als Hinweis (Info). Das 3MF hat keine Farbgruppe mehr (Abschnitt 3), auch nicht mit <code>--color-group</code> bei nur einer Farbe.</dd>
+<dt>Fix</dt><dd>The color table reports automatic slots above 16 as a warning ("more than 16 filaments …"), two colors on the same fixed slot and a fixed slot 1 next to the default as a notice (info). The 3MF no longer has a color group (section 3), not even with <code>--color-group</code> when there is only one color.</dd>
 <dt>Tests</dt><dd>${testsOf(/^f8_|no_color_group/)}.</dd>
 </dl>
 ${pre(T("m-f1.txt"))}
@@ -331,75 +331,75 @@ ${pre(T("m-f1.txt"))}
 <section class="finding">
 <h3>F9 – --per-color, --part, use/include</h3>
 <dl class="f">
-<dt>Korrektur</dt><dd><code>--per-color</code> verlangt die Endung <code>.zip</code> (sonst Exit 2 mit Vorschlag); <code>--per-color --part</code> zeigt nur die Farben und Volumen der gewählten Bauteile; die Farbliste nennt Zeilen anderer Dateien als <code>lib.scad:1</code> (CLI und UI; in der UI öffnet der Klick die Datei an der Stelle).</dd>
-<dt>Tests</dt><dd>${testsOf(/^f9_/)}; Vitest „Bericht 12 F9“.</dd>
+<dt>Fix</dt><dd><code>--per-color</code> requires the extension <code>.zip</code> (otherwise exit 2 with a suggestion); <code>--per-color --part</code> shows only the colors and volumes of the selected parts; the color list names lines of other files as <code>lib.scad:1</code> (CLI and UI; in the UI a click opens the file at that position).</dd>
+<dt>Tests</dt><dd>${testsOf(/^f9_/)}; Vitest "report 12 F9".</dd>
 </dl>
 ${pre(T("f9-stl.txt") + "\n" + T("f9-part.txt"))}
 </section>
 
 <section class="finding">
-<h3>Daemon – Socketpfad länger als die Unix-Grenze</h3>
+<h3>Daemon – socket path longer than the Unix limit</h3>
 <dl class="f">
-<dt>Ursache</dt><dd><code>sun_path</code> fasst 108 Byte (Linux; 107 ohne NUL). Mit einem tiefen <code>CAD_IPC_DIR</code> scheiterte <code>bind</code> („path must be shorter than SUN_LEN“), der Client rechnete still ohne Daemon.</dd>
-<dt>Korrektur</dt><dd><code>cad_ipc::socket_path_in</code>: ist <code>&lt;dir&gt;/&lt;name&gt;.sock</code> zu lang, liegt der Socket in <code>/tmp/cad-&lt;uid&gt;/&lt;hash&gt;-&lt;name&gt;.sock</code> (Verzeichnis mit denselben Prüfungen: 0700, eigener Benutzer, kein Symlink; <code>hash</code> = FNV-1a des kanonischen Laufzeitverzeichnisses, damit sich mehrere lange Verzeichnisse nicht stören). Sperr- und Logdatei bleiben im Laufzeitverzeichnis; <code>list</code> findet auch Ersatz-Sockets (UI-Endpunkte); <code>cad daemon status</code> zeigt den Pfad mit „Ersatzpfad“ (JSON <code>socket_substitute</code>), das Log nennt ihn.</dd>
+<dt>Cause</dt><dd><code>sun_path</code> holds 108 bytes (Linux; 107 without NUL). With a deep <code>CAD_IPC_DIR</code>, <code>bind</code> failed ("path must be shorter than SUN_LEN") and the client silently computed without the daemon.</dd>
+<dt>Fix</dt><dd><code>cad_ipc::socket_path_in</code>: if <code>&lt;dir&gt;/&lt;name&gt;.sock</code> is too long, the socket is placed in <code>/tmp/cad-&lt;uid&gt;/&lt;hash&gt;-&lt;name&gt;.sock</code> (directory with the same checks: 0700, own user, no symlink; <code>hash</code> = FNV-1a of the canonical runtime directory, so that several long directories do not interfere). Lock and log file stay in the runtime directory; <code>list</code> also finds substitute sockets (UI endpoints); <code>cad daemon status</code> shows the path with "substitute path" (JSON <code>socket_substitute</code>), the log names it.</dd>
 <dt>Tests</dt><dd>${testsOf(/long_ipc/)}.</dd>
 </dl>
 ${pre(T("daemon-long.txt"))}
 </section>
 
-<h2>3 Bambu Studio: Farbdialog und Slots</h2>
-<p>Quellen abgerufen am ${esc(date)} (<code>raw.githubusercontent.com</code>, BambuStudio <code>master</code>, OrcaSlicer <code>main</code>; Prüfsummen in <code>reports/tmp/report12/sources.sha256</code>):</p>
+<h2>3 Bambu Studio: color dialog and slots</h2>
+<p>Sources retrieved on ${esc(date)} (<code>raw.githubusercontent.com</code>, BambuStudio <code>master</code>, OrcaSlicer <code>main</code>; checksums in <code>reports/tmp/report12/sources.sha256</code>):</p>
 ${pre(T("sources.txt"))}
 <ul>
-<li><b>Bedingung des Dialogs</b> (<code>Plater.cpp</code>): <code>load_model &amp;&amp; !color_group_map.empty() &amp;&amp; !volume_color_data.empty() &amp;&amp; en_3mf_file_type != From_BBS</code>. <code>volume_color_data</code> füllt der Importer nur für Teile, deren Dreiecke über <code>pid</code>/<code>pindex</code> eine Farbe haben (<code>bbs_3mf.cpp</code>, <code>triangle_colors.size() == triangles_count</code>).</li>
-<li><b>OK im Dialog</b> ruft <code>apply_volume_filament_ids</code> und setzt <code>extruder</code> jedes Teils neu; „Abbrechen“ und Schließen lassen ihn.</li>
-<li><b><code>Metadata/model_settings.config</code></b> liest der Importer für alle 3MF (nicht an die Versionsprüfung gebunden) und übernimmt <code>extruder</code> je Teil und Objekt.</li>
-<li><b>Wege, den Dialog zu vermeiden:</b> (1) keine Farbgruppe – gewählt; (2) <code>Application = BambuStudio-…</code> – verworfen: gibt einen fremden Hersteller an, schaltet die Projekt-Pfade des Importers ein (Versionsprüfung, erwartete Projektdateien, Platten) und könnte bei neuen Bambu-Versionen brechen; (3) <code>project_settings.config</code> mit <code>filament_colour</code> – verworfen: wird für fremde Dateien nicht geladen (<code>dont_load_config</code> ohne Bambu-Version), OrcaSlicer würde es über Drucker- und Prozesseinstellungen legen; (4) Paint-Daten (<code>mmu_segmentation</code>) – unnötig, die Teile tragen den Slot bereits.</li>
-<li><b>OrcaSlicer</b> hat diesen Dialog nicht; Farbgruppen nutzt sein Importer nur für Objekte ohne Volumen-Metadaten (<code>color_group_id_to_extruder_id_map</code>), mit <code>model_settings.config</code> gelten die <code>extruder</code>-Werte. Der Verzicht auf die Farbgruppe ist also mit Orca verträglich.</li>
+<li><b>Condition of the dialog</b> (<code>Plater.cpp</code>): <code>load_model &amp;&amp; !color_group_map.empty() &amp;&amp; !volume_color_data.empty() &amp;&amp; en_3mf_file_type != From_BBS</code>. The importer fills <code>volume_color_data</code> only for sub-parts whose triangles have a color via <code>pid</code>/<code>pindex</code> (<code>bbs_3mf.cpp</code>, <code>triangle_colors.size() == triangles_count</code>).</li>
+<li><b>OK in the dialog</b> calls <code>apply_volume_filament_ids</code> and resets <code>extruder</code> of every sub-part; "Cancel" and closing leave it.</li>
+<li><b><code>Metadata/model_settings.config</code></b> is read by the importer for all 3MF files (not tied to the version check), and it takes over <code>extruder</code> per sub-part and object.</li>
+<li><b>Ways to avoid the dialog:</b> (1) no color group – chosen; (2) <code>Application = BambuStudio-…</code> – rejected: claims a foreign vendor, switches on the importer's project paths (version check, expected project files, plates) and could break with new Bambu versions; (3) <code>project_settings.config</code> with <code>filament_colour</code> – rejected: not loaded for foreign files (<code>dont_load_config</code> without Bambu version), OrcaSlicer would apply it over printer and process settings; (4) paint data (<code>mmu_segmentation</code>) – unnecessary, the sub-parts already carry the slot.</li>
+<li><b>OrcaSlicer</b> does not have this dialog; its importer uses color groups only for objects without volume metadata (<code>color_group_id_to_extruder_id_map</code>), with <code>model_settings.config</code> the <code>extruder</code> values apply. Dropping the color group is therefore compatible with Orca.</li>
 </ul>
-<p><b>Umsetzung:</b> das mehrfarbige 3MF hat keine <code>m:colorgroup</code> und keine <code>pid</code>/<code>pindex</code> mehr; die Slots stehen nur in <code>model_settings.config</code>. Die Farben der Slots kommen in Bambu Studio aus den Filamenten des Druckers (AMS). Für Programme, die 3MF-Farben anzeigen, schreibt <code>cad export --color-group</code> die Farbgruppe weiter; die Meldung sagt dann „Bambu Studio öffnet einen Farbdialog – dort ‚Abbrechen‘ wählen“.</p>
+<p><b>Implementation:</b> the multi-color 3MF no longer has <code>m:colorgroup</code> nor <code>pid</code>/<code>pindex</code>; the slots are only in <code>model_settings.config</code>. In Bambu Studio the colors of the slots come from the printer's filaments (AMS). For programs that display 3MF colors, <code>cad export --color-group</code> still writes the color group; the message then says "Bambu Studio opens a colour dialog – choose “Cancel” there".</p>
 <table>
-<tr><th>Datei</th><th>lib3mf</th><th>trimesh</th><th>Bambu-Modell: extruder je Teil</th><th>Farbdialog (Modell von Plater.cpp)</th></tr>
-<tr><td>mehrfarbig.3mf (Standard)</td><td>${verify ? (verify.results?.lib3mf ? '<span class="ok">ok</span>' : '<span class="bad">Fehler</span>') : "–"}</td><td>${verify ? (verify.results?.trimesh ? '<span class="ok">dicht</span>' : '<span class="bad">offen</span>') : "–"}</td><td>${esc(verify?.bambu_model?.objects?.map((o) => `${o.name}: ${o.volumes.map((v) => v.extruder).join("/")}`).join(", ") ?? "–")}</td><td>${verify ? (verify.bambu_model?.color_dialog ? "öffnet" : '<span class="ok">öffnet nicht</span>') : "–"}</td></tr>
-<tr><td>mehrfarbig-cg.3mf (<code>--color-group</code>)</td><td>${verifyCg ? (verifyCg.results?.lib3mf ? '<span class="ok">ok</span>' : '<span class="bad">Fehler</span>') : "–"}</td><td>${verifyCg ? (verifyCg.results?.trimesh ? '<span class="ok">dicht</span>' : '<span class="bad">offen</span>') : "–"}</td><td>${esc(verifyCg?.bambu_model?.objects?.map((o) => `${o.name}: ${o.volumes.map((v) => v.extruder).join("/")}`).join(", ") ?? "–")}</td><td>${verifyCg ? (verifyCg.bambu_model?.color_dialog ? "öffnet („Abbrechen“ behält Slots)" : "öffnet nicht") : "–"}</td></tr>
+<tr><th>File</th><th>lib3mf</th><th>trimesh</th><th>Bambu model: extruder per sub-part</th><th>Color dialog (model of Plater.cpp)</th></tr>
+<tr><td>mehrfarbig.3mf (default)</td><td>${verify ? (verify.results?.lib3mf ? '<span class="ok">ok</span>' : '<span class="bad">error</span>') : "–"}</td><td>${verify ? (verify.results?.trimesh ? '<span class="ok">watertight</span>' : '<span class="bad">open</span>') : "–"}</td><td>${esc(verify?.bambu_model?.objects?.map((o) => `${o.name}: ${o.volumes.map((v) => v.extruder).join("/")}`).join(", ") ?? "–")}</td><td>${verify ? (verify.bambu_model?.color_dialog ? "opens" : '<span class="ok">does not open</span>') : "–"}</td></tr>
+<tr><td>mehrfarbig-cg.3mf (<code>--color-group</code>)</td><td>${verifyCg ? (verifyCg.results?.lib3mf ? '<span class="ok">ok</span>' : '<span class="bad">error</span>') : "–"}</td><td>${verifyCg ? (verifyCg.results?.trimesh ? '<span class="ok">watertight</span>' : '<span class="bad">open</span>') : "–"}</td><td>${esc(verifyCg?.bambu_model?.objects?.map((o) => `${o.name}: ${o.volumes.map((v) => v.extruder).join("/")}`).join(", ") ?? "–")}</td><td>${verifyCg ? (verifyCg.bambu_model?.color_dialog ? "opens (\"Cancel\" keeps slots)" : "does not open") : "–"}</td></tr>
 </table>
 ${pre(T("export.txt"))}
-<p class="small">Grenze: am Programm selbst (Bambu Studio, OrcaSlicer) nicht geprüft – kein grafisches Programm im Container. Ob Bambu Studio fehlende Filamente beim Laden ergänzt, wenn ein Teil Slot 5 nutzt und das Projekt nur vier Filamente hat, hängt vom Ladeweg ab (<code>Plater.cpp</code>: bei „nur Geometrie“ werden Filamente bis zur höchsten Nummer angelegt).</p>
+<p class="small">Limitation: not checked in the programs themselves (Bambu Studio, OrcaSlicer) – no graphical program in the container. Whether Bambu Studio adds missing filaments on loading when a sub-part uses slot 5 and the project has only four filaments depends on the loading path (<code>Plater.cpp</code>: with "geometry only", filaments up to the highest number are created).</p>
 
-<h2>4 UI und Desktop</h2>
+<h2>4 UI and desktop</h2>
 ${scenarios.map((s) => `<h3>${esc(s.id)} ${esc(s.title)}</h3><p>${md(s.caption)}</p>${(s.images ?? []).map((i) => fig(pw(i.name), i.label)).join("")}<ul>${(s.checks ?? []).map((c) => `<li>${md(c)}</li>`).join("")}</ul>`).join("\n")}
 ${tauri ? (() => {
   const t15 = tauri.results.find((r) => r.id === "T15");
   return t15 ? `<h3>T15 (Tauri) ${esc(t15.title)}</h3><ul>${t15.checks.map((c) => `<li class="${c.ok ? "" : "bad"}">${md(c.text)}</li>`).join("")}</ul>${t15.images.map((i) => fig(tauriImg(i.name), i.label)).join("")}` : "";
 })() : ""}
 
-<h2>5 Testläufe</h2>
+<h2>5 Test runs</h2>
 <table>
-<tr><th>Lauf</th><th>Ergebnis</th></tr>
-<tr><td><code>cargo test --workspace --no-fail-fast</code></td><td>${cargoSum ? `${cargoSum.ok} bestanden, ${cargoSum.failed} fehlgeschlagen` : "–"}</td></tr>
-<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>${clippyOk ? "sauber" : "Befund"} · ${fmtOk ? "sauber" : "Abweichung"}</td></tr>
-<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>${readText(join(input, "typecheck.txt")) !== null ? (/error/i.test(readText(join(input, "typecheck.txt"))) ? "Fehler" : "sauber") : "–"} · ${vitestSum ?? "–"} bestanden</td></tr>
-<tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>${pwStats ? `${pwStats.passed} / ${pwStats.total}${pwStats.failed.length ? ` – fehlgeschlagen: ${pwStats.failed.map((f) => esc(f.title)).join(", ")}` : ""}` : "–"}</td></tr>
-<tr><td>Tauri-E2E (<code>web/e2e-tauri/desktop.e2e.mjs</code>)</td><td>${tauri ? `${tauriOk} / ${tauri.results.length}${tauri.results.filter((r) => !r.ok).map((r) => ` – ${esc(r.id)} fehlgeschlagen`).join("")}` : "–"}</td></tr>
+<tr><th>Run</th><th>Result</th></tr>
+<tr><td><code>cargo test --workspace --no-fail-fast</code></td><td>${cargoSum ? `${cargoSum.ok} passed, ${cargoSum.failed} failed` : "–"}</td></tr>
+<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>${clippyOk ? "clean" : "finding"} · ${fmtOk ? "clean" : "difference"}</td></tr>
+<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>${readText(join(input, "typecheck.txt")) !== null ? (/error/i.test(readText(join(input, "typecheck.txt"))) ? "error" : "clean") : "–"} · ${vitestSum ?? "–"} passed</td></tr>
+<tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>${pwStats ? `${pwStats.passed} / ${pwStats.total}${pwStats.failed.length ? ` – failed: ${pwStats.failed.map((f) => esc(f.title)).join(", ")}` : ""}` : "–"}</td></tr>
+<tr><td>Tauri-E2E (<code>web/e2e-tauri/desktop.e2e.mjs</code>)</td><td>${tauri ? `${tauriOk} / ${tauri.results.length}${tauri.results.filter((r) => !r.ok).map((r) => ` – ${esc(r.id)} failed`).join("")}` : "–"}</td></tr>
 <tr><td><code>tests/openscad-compat/compare.py</code></td><td>${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"}</td></tr>
 <tr><td><code>tests/step/verify.py</code></td><td>${esc(stepSum ?? "–")}</td></tr>
-<tr><td><code>tests/alltag/check.sh</code> (Volumen der Alltagsmodelle)</td><td>${esc(alltagLine ?? "–")}</td></tr>
+<tr><td><code>tests/alltag/check.sh</code> (volumes of the everyday models)</td><td>${esc(alltagLine ?? "–")}</td></tr>
 </table>
-<p>Neue Rust-Tests:</p>
+<p>New Rust tests:</p>
 <ul>${newTests.map((t) => `<li><code>${esc(t.name)}</code> ${t.res === "ok" ? '<span class="ok">ok</span>' : '<span class="bad">FAILED</span>'}</li>`).join("")}</ul>
 
-<h2>6 Grenzen</h2>
+<h2>6 Limitations</h2>
 <ul>
-<li>Die Ansicht zeigt die exakten Regionen erst nach ihrer Berechnung (Booleans je Farbknoten, gecacht); bis dahin, beim Ziehen und für den hervorgehobenen Teilbaum unter dem Cursor gilt die genäherte Farbe je Fläche. Ist der Cursor auf einer Anweisung, wird der Rest gedimmt gezeigt (wie bisher).</li>
-<li>STEP teilt keine Flächen an Farbgrenzen (eine verschmolzene Fläche bekommt die Mehrheitsfarbe).</li>
-<li>Gemischte Farben in einem 2D-Profil unter einer Extrusion werden nicht getrennt (Warnung).</li>
-<li>Zufallsfarben, die im Modell ausweichen, hängen von den Namen davor ab.</li>
-<li>Bambu Studio und OrcaSlicer wurden nicht am Programm geprüft, sondern über ihren Quellcode und ein Modell des Importers (<code>tools/report/verify3mf.py</code>).</li>
-<li>Der Ersatz-Socket liegt fest unter <code>/tmp</code> (nicht <code>$TMPDIR</code>, das selbst lang sein kann).</li>
+<li>The view shows the exact regions only after they are computed (booleans per color node, cached); until then, while dragging and for the highlighted subtree under the cursor, the approximated color per face applies. If the cursor is on a statement, the rest is shown dimmed (as before).</li>
+<li>STEP does not split faces at color boundaries (a merged face gets the majority color).</li>
+<li>Mixed colors in a 2D profile below an extrusion are not separated (warning).</li>
+<li>Random colors that have to move away within the model depend on the names before them.</li>
+<li>Bambu Studio and OrcaSlicer were not checked in the programs themselves, but via their source code and a model of the importer (<code>tools/report/verify3mf.py</code>).</li>
+<li>The substitute socket is always under <code>/tmp</code> (not <code>$TMPDIR</code>, which can itself be long).</li>
 </ul>
 </main>
 </body>
 </html>
 `;
 writeFileSync(join(out, "report.html"), html);
-console.log(`${join(out, "report.html")}: ${html.length} Zeichen, ${scenarios.length} Szenarien, Tauri ${tauriOk ?? "–"}`);
+console.log(`${join(out, "report.html")}: ${html.length} characters, ${scenarios.length} scenarios, Tauri ${tauriOk ?? "–"}`);
