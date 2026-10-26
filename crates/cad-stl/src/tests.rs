@@ -35,6 +35,7 @@ fn binary_starting_with_solid() {
 
 #[test]
 fn broken_files() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     assert!(parse(b"").unwrap_err().contains("leer"));
     assert!(parse(b"hello").unwrap_err().contains("keine STL"));
     let mut bin = write_binary("x", &cube_tris(1.0));
@@ -52,6 +53,23 @@ fn broken_files() {
     // empty solid: parsed, 0 triangles (prepare reports it)
     assert!(parse(b"solid leer\nendsolid leer\n").unwrap().triangles.is_empty());
     assert!(prepare(&[]).unwrap_err().contains("0 Dreiecke"));
+}
+
+#[test]
+fn broken_files_english() {
+    let _en = cad_i18n::scoped(cad_i18n::Lang::En);
+    assert_eq!(parse(b"").unwrap_err(), "empty file");
+    assert!(parse(b"hello").unwrap_err().starts_with("not an STL file"));
+    let mut bin = write_binary("x", &cube_tris(1.0));
+    bin.truncate(bin.len() - 7);
+    assert!(parse(&bin).unwrap_err().starts_with("binary STL truncated"), "{:?}", parse(&bin));
+    let e =
+        parse(b"solid x\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nendloop\nendfacet\nendsolid\n")
+            .unwrap_err();
+    assert!(e.contains("2 instead of 3"), "{e}");
+    let e = parse(b"solid x\nfacet normal 0 0 1\nouter loop\nvertex 0 0 a\n").unwrap_err();
+    assert_eq!(e, "line 4: `a` is not a number");
+    assert_eq!(prepare(&[]).unwrap_err(), "0 triangles in the file");
 }
 
 #[test]

@@ -1,6 +1,7 @@
 //! Operators with OpenSCAD semantics. Results are always [`Origin::Computed`].
 //! An `Err` carries a warning; the result is then `undef`.
 
+use cad_i18n::{tr, trs};
 use std::cmp::Ordering;
 use std::rc::Rc;
 
@@ -11,7 +12,7 @@ use crate::value::{Val, Value, values_eq};
 type Res<'a> = Result<Val<'a>, String>;
 
 fn undefined_op(op: &str, a: &Val, b: &Val) -> String {
-    format!("undefinierte Operation ({} {op} {})", a.type_de(), b.type_de())
+    tr!("undefinierte Operation ({} {op} {})", "undefined operation ({} {op} {})", a.type_de(), b.type_de())
 }
 
 fn op_sym(op: BinOp) -> &'static str {
@@ -82,7 +83,11 @@ fn mul<'a>(a: &Val<'a>, b: &Val<'a>) -> Res<'a> {
         (_, Value::List(l)) if a.as_num().is_some() => Ok(scale_list(l, a.as_num().unwrap(), false, false)),
         (Value::List(x), Value::List(y)) => {
             if x.is_empty() || y.is_empty() {
-                return Err("Multiplikation mit leerem Vektor ist undefiniert".into());
+                return Err(trs!(
+                    "Multiplikation mit leerem Vektor ist undefiniert",
+                    "multiplication with an empty vector is undefined"
+                )
+                .into());
             }
             if let (Some(u), Some(v)) = (nums(x), nums(y)) {
                 if u.len() != v.len() {
@@ -92,8 +97,9 @@ fn mul<'a>(a: &Val<'a>, b: &Val<'a>) -> Res<'a> {
             }
             if let (Some(m), Some(v)) = (matrix(x), nums(y)) {
                 if m.iter().any(|r| r.len() != v.len()) {
-                    return Err(format!(
+                    return Err(tr!(
                         "Matrix * Vektor: Spaltenzahl der Matrix ≠ Länge des Vektors ({} ≠ {})",
+                        "matrix * vector: column count of the matrix ≠ length of the vector ({} ≠ {})",
                         m[0].len(),
                         v.len()
                     ));
@@ -211,7 +217,9 @@ fn neg<'a>(a: &Val<'a>) -> Option<Val<'a>> {
 pub(crate) fn unop<'a>(op: UnOp, a: &Val<'a>) -> Res<'a> {
     match op {
         UnOp::Not => Ok(Val::bool(!a.truthy())),
-        UnOp::Neg => neg(a).ok_or_else(|| format!("undefinierte Operation (-{})", a.type_de())),
+        UnOp::Neg => {
+            neg(a).ok_or_else(|| tr!("undefinierte Operation (-{})", "undefined operation (-{})", a.type_de()))
+        }
         // OpenSCAD: unary `+` returns its operand unchanged, whatever its type.
         UnOp::Plus => Ok(match a.as_num() {
             Some(x) => Val::num(x),

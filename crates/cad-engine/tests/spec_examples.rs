@@ -56,6 +56,7 @@ translate(k.ecke) deckel();
 
 #[test]
 fn spec_fillet_zone_block() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = r#"
 module teil(w = 20, h = 20) {
     grid g {

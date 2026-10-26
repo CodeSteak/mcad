@@ -41,6 +41,7 @@ const LOGO: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="40mm" heigh
 
 #[test]
 fn import_svg_gives_sketch_profiles() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let (p, out) = run("linear_extrude(2) import(\"logo.svg\");", &[("logo.svg", LOGO)]);
     assert!(msgs(&out, Severity::Error).is_empty(), "{:?}", out.diagnostics);
     assert!(p.assets.contains_key("logo.svg"));
@@ -62,6 +63,7 @@ fn import_svg_gives_sketch_profiles() {
 
 #[test]
 fn import_relative_to_the_file_and_errors() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let lib = "module logo() import(\"bilder/logo.svg\");";
     let (_, out) = run("use <lib/teile.mcad>\nlogo();", &[("lib/teile.mcad", lib), ("lib/bilder/logo.svg", LOGO)]);
     assert!(msgs(&out, Severity::Error).is_empty(), "{:?}", out.diagnostics);
@@ -87,6 +89,7 @@ fn import_relative_to_the_file_and_errors() {
 
 #[test]
 fn import_open_paths_are_a_path() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L10 0 L10 10"/></svg>"#;
     let (_, out) = run("import(\"p.svg\");", &[("p.svg", svg)]);
     assert_eq!(sketches(&out), vec![(1, false)]);
@@ -105,6 +108,7 @@ fn changed_svg_changes_the_tree() {
 
 #[test]
 fn text_profiles_and_fonts() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let (_, out) = run("linear_extrude(1) text(\"Ob\", size = 10, font = \"Inter\");", &[]);
     assert!(out.diagnostics.is_empty(), "{:?}", out.diagnostics);
     // one profile per glyph; O and b have a hole each
@@ -144,6 +148,7 @@ fn text_profiles_and_fonts() {
 /// Stencil font parameters `stroke_width` and `bridge_width` (mm): area, limits, other fonts.
 #[test]
 fn text_stencil_parameters() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let area = |src: &str| {
         let (_, out) = run(src, &[]);
         let a: f64 = out
@@ -183,6 +188,7 @@ fn text_stencil_parameters() {
 
 #[test]
 fn text_with_a_font_file() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // binary files of text projects are data URLs
     let ttf = cad_font::BUILTIN.iter().find(|b| b.family == "Allerta Stencil").unwrap().data;
     let url = data_url("font/ttf", ttf);

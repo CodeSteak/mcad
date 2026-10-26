@@ -269,8 +269,11 @@ impl<'a> Val<'a> {
         }
     }
 
-    /// Type name for messages.
+    /// Type name for messages, in the current language.
     pub fn type_de(&self) -> &'static str {
+        if !cad_i18n::is_de() {
+            return self.type_name();
+        }
         match &self.v {
             Value::Undef => "undef",
             Value::Bool(_) => "Bool",

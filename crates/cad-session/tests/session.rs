@@ -89,6 +89,7 @@ fn set_source(s: &mut Session<SmlibKernel>, text: &str, version: u64) -> Vec<Fro
 
 #[test]
 fn gehaeuse_flow() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let first = s.post(ToEngine::SetSource { text: GEHAEUSE.into(), version: 1 });
     // Diagnostics, preliminary scene, progress
@@ -178,6 +179,7 @@ fn gehaeuse_flow() {
 
 #[test]
 fn snap_writes_reference() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     s.post(ToEngine::SetContext { module: Some("gehaeuse".into()), overrides: BTreeMap::new() });
     let r = set_source(&mut s, GEHAEUSE, 1);
@@ -204,6 +206,7 @@ fn snap_writes_reference() {
 
 #[test]
 fn context_overrides_and_default() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let mut ov = BTreeMap::new();
     ov.insert("w".to_string(), Value::Num(80.0));
@@ -228,6 +231,7 @@ fn context_overrides_and_default() {
 
 #[test]
 fn syntax_error_keeps_scene_and_utf16_ranges() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let src = "// Größe\ncube(10);\n";
     let r = set_source(&mut s, src, 1);
@@ -253,6 +257,7 @@ fn syntax_error_keeps_scene_and_utf16_ranges() {
 
 #[test]
 fn new_source_aborts_running_job() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let a = "difference() { cube(20); translate([10, 10, -1]) cylinder(h = 30, r = 5); }\n";
     let first = s.post(ToEngine::SetSource { text: a.into(), version: 1 });
@@ -287,6 +292,7 @@ fn new_source_aborts_running_job() {
 
 #[test]
 fn kernel_diagnostics_and_cancel() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     // fillet radius too large: kernel error at the fillet node
     let src = "fillet(30) cube(10);\n";
@@ -309,6 +315,7 @@ fn kernel_diagnostics_and_cancel() {
 
 #[test]
 fn protocol_json_roundtrip() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let m: ToEngine =
         serde_json::from_str(r#"{"type":"SetContext","module":"a","overrides":{"w":60,"b":true,"v":[1,2,3]}}"#)
             .unwrap();
@@ -337,6 +344,7 @@ translate([1, 0, 0] * 2) cube(2);
 
 #[test]
 fn drag_always_answers_and_plane_snap() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let r = set_source(&mut s, PLANES, 1);
     let scene = *scenes(&r).last().unwrap();
@@ -370,4 +378,44 @@ fn drag_always_answers_and_plane_snap() {
     assert_eq!(s.options().drag.step_mm, 0.5);
     assert_eq!(s.options().drag.step_deg, 5.0);
     assert!(s.post(ToEngine::DragEnd { handle: h.id, target: None }).is_empty());
+}
+
+/// Texts follow the thread's language: a session that evaluated in German answers in English
+/// after a switch (cached node results with texts are computed again) and in German again.
+#[test]
+fn language_switch_recomputes_cached_texts() {
+    use cad_i18n::{Lang, scoped};
+    let src =
+        std::fs::read_to_string(format!("{}/../cad-cli/tests/data/fillet_zonen.mcad", env!("CARGO_MANIFEST_DIR")))
+            .unwrap();
+    let mut s = session();
+    let mut run = |v: u64| -> (Vec<String>, Stats) {
+        let mut msgs = s.post(ToEngine::SetSource { text: src.clone(), version: v });
+        msgs.extend(s.run_to_idle());
+        let sc = scenes(&msgs).last().copied().cloned().unwrap();
+        (sc.nodes.iter().flat_map(|n| n.hints.clone()).collect(), sc.stats)
+    };
+    let (de, _) = {
+        let _g = scoped(Lang::De);
+        run(1)
+    };
+    let (en, st) = {
+        let _g = scoped(Lang::En);
+        run(2)
+    };
+    let (de2, _) = {
+        let _g = scoped(Lang::De);
+        run(3)
+    };
+    assert!(de.iter().any(|h| h.ends_with(" Kanten")), "{de:?}");
+    assert!(en.iter().any(|h| h.ends_with(" edges")), "{en:?}");
+    assert!(!en.iter().any(|h| h.contains("Kanten")), "{en:?}");
+    assert_eq!(de, de2);
+    // computed again, not the German results from the cache
+    assert!(st.kernel_calls > 0, "{st:?}");
+    // the same language again: everything cached
+    let _g = scoped(Lang::De);
+    let (de3, st) = run(4);
+    assert_eq!(de3, de);
+    assert_eq!(st.kernel_calls, 0, "{st:?}");
 }

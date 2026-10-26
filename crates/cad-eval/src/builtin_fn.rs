@@ -1,5 +1,6 @@
 //! Built-in functions (OpenSCAD set plus `dir()`).
 
+use cad_i18n::{tr, trs};
 use std::cmp::Ordering;
 
 use cad_syntax::ast::Expr;
@@ -72,14 +73,23 @@ impl<'a> Ev<'a> {
             "min" | "max" => match min_max(&pos, name == "max") {
                 Some(v) => v,
                 None => {
-                    self.warn(span, format!("{name}(): Argumente sind weder Zahlen noch ein Vektor"));
+                    self.warn(
+                        span,
+                        tr!(
+                            "{name}(): Argumente sind weder Zahlen noch ein Vektor",
+                            "{name}(): arguments are neither numbers nor a vector"
+                        ),
+                    );
                     Val::undef()
                 }
             },
             "norm" => match pos.first().and_then(|v| nums(v)) {
                 Some(l) => Val::num(l.iter().map(|x| x * x).sum::<f64>().sqrt()),
                 None => {
-                    self.warn(span, "norm(): Argument ist kein Zahlenvektor");
+                    self.warn(
+                        span,
+                        trs!("norm(): Argument ist kein Zahlenvektor", "norm(): argument is not a number vector"),
+                    );
                     Val::undef()
                 }
             },
@@ -91,7 +101,13 @@ impl<'a> Ev<'a> {
                 ]),
                 (Some(x), Some(y)) if x.len() == 2 && y.len() == 2 => Val::num(x[0] * y[1] - x[1] * y[0]),
                 _ => {
-                    self.warn(span, "cross(): braucht zwei Zahlenvektoren der Länge 2 oder 3");
+                    self.warn(
+                        span,
+                        trs!(
+                            "cross(): braucht zwei Zahlenvektoren der Länge 2 oder 3",
+                            "cross(): needs two number vectors of length 2 or 3"
+                        ),
+                    );
                     Val::undef()
                 }
             },
@@ -99,7 +115,13 @@ impl<'a> Ev<'a> {
                 Some(Value::List(l)) => Val::num(l.len() as f64),
                 Some(Value::Str(s)) => Val::num(s.chars().count() as f64),
                 _ => {
-                    self.warn(span, "len(): Argument ist weder Vektor noch String");
+                    self.warn(
+                        span,
+                        trs!(
+                            "len(): Argument ist weder Vektor noch String",
+                            "len(): argument is neither vector nor string"
+                        ),
+                    );
                     Val::undef()
                 }
             },
@@ -154,7 +176,7 @@ impl<'a> Ev<'a> {
                     None => Val::undef(),
                 },
                 Some(_) => {
-                    self.warn(span, "ord(): Argument ist kein String");
+                    self.warn(span, trs!("ord(): Argument ist kein String", "ord(): argument is not a string"));
                     Val::undef()
                 }
                 None => Val::undef(),
@@ -166,7 +188,13 @@ impl<'a> Ev<'a> {
                     arg(1, "max_value").and_then(|v| v.as_num()),
                     arg(2, "value_count").and_then(|v| v.as_num()),
                 ) else {
-                    self.warn(span, "rands() braucht `min_value`, `max_value` und `value_count`");
+                    self.warn(
+                        span,
+                        trs!(
+                            "rands() braucht `min_value`, `max_value` und `value_count`",
+                            "rands() needs `min_value`, `max_value` and `value_count`"
+                        ),
+                    );
                     return Ok(Some(Val::undef()));
                 };
                 // OpenSCAD takes |value_count|, truncated.
@@ -196,7 +224,7 @@ impl<'a> Ev<'a> {
                     self.anchor_dir(&v, span)
                 }
                 None => {
-                    self.error(span, "dir() erwartet einen Anker");
+                    self.error(span, trs!("dir() erwartet einen Anker", "dir() expects an anchor"));
                     Val::undef()
                 }
             },
@@ -211,7 +239,13 @@ impl<'a> Ev<'a> {
     /// too short for `index_col_num` ends a string search with an empty result.
     fn search(&mut self, a: &Args<'a>, span: cad_syntax::Span) -> Val<'a> {
         let (Some(m), Some(hay)) = (a.get(0, "match_value"), a.get(1, "string_or_vector")) else {
-            self.warn(span, "search() braucht `match_value` und `string_or_vector`");
+            self.warn(
+                span,
+                trs!(
+                    "search() braucht `match_value` und `string_or_vector`",
+                    "search() needs `match_value` and `string_or_vector`"
+                ),
+            );
             return Val::undef();
         };
         // Given but not a number counts as 0 (OpenSCAD's `toDouble()`).
@@ -253,13 +287,19 @@ impl<'a> Ev<'a> {
                             }
                         }
                         if found.is_empty() {
-                            self.warn(span, format!("search(): \"{c}\" nicht gefunden"));
+                            self.warn(span, tr!("search(): \"{c}\" nicht gefunden", "search(): \"{c}\" not found"));
                         }
                     } else {
                         for (j, e) in table.iter().enumerate() {
                             let Some(x) = e.as_list().and_then(|l| l.get(col)) else {
                                 let (txt, k) = (to_display(e), col + 1);
-                                self.warn(span, format!("search(): Eintrag {j} ({txt}) hat weniger als {k} Werte"));
+                                self.warn(
+                                    span,
+                                    tr!(
+                                        "search(): Eintrag {j} ({txt}) hat weniger als {k} Werte",
+                                        "search(): entry {j} ({txt}) has fewer than {k} values"
+                                    ),
+                                );
                                 return Val::list(vec![]);
                             };
                             if to_str(x).starts_with(c) {
@@ -297,7 +337,13 @@ impl<'a> Ev<'a> {
             }
             _ => {
                 let t = m.type_name();
-                self.warn(span, format!("search(): Suchwert vom Typ {t} nicht möglich"));
+                self.warn(
+                    span,
+                    tr!(
+                        "search(): Suchwert vom Typ {t} nicht möglich",
+                        "search(): search value of type {t} not possible"
+                    ),
+                );
                 return Val::undef();
             }
         }
@@ -347,7 +393,7 @@ fn vec2(v: &Val) -> Option<(f64, f64)> {
 fn lookup<'a>(key: Option<&Val<'a>>, table: Option<&Val<'a>>) -> Result<Val<'a>, String> {
     let Some(p) = key.and_then(|k| k.as_num()).filter(|p| p.is_finite()) else {
         let k = key.map_or("undef".into(), to_display);
-        return Err(format!("lookup(): Schlüssel {k} ist keine Zahl"));
+        return Err(tr!("lookup(): Schlüssel {k} ist keine Zahl", "lookup(): key {k} is not a number"));
     };
     let Some(t) = table.and_then(|t| t.as_list()) else { return Ok(Val::undef()) };
     let Some(first) = t.first().and_then(vec2) else {

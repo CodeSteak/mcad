@@ -7,7 +7,16 @@ use common::*;
 
 /// Runs `f` on a thread with a large stack (deep recursion tests).
 fn big_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
-    std::thread::Builder::new().stack_size(512 << 20).spawn(f).unwrap().join().unwrap()
+    let lang = cad_i18n::lang();
+    std::thread::Builder::new()
+        .stack_size(512 << 20)
+        .spawn(move || {
+            cad_i18n::set_lang(lang);
+            f()
+        })
+        .unwrap()
+        .join()
+        .unwrap()
 }
 
 fn deep_opts() -> EvalOptions {
@@ -16,6 +25,7 @@ fn deep_opts() -> EvalOptions {
 
 #[test]
 fn module_recursion_limit() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let msg = big_stack(|| {
         let out = run_with("module r(n) { cube(1); r(n + 1); } r(0);", &deep_opts());
         assert!(out.aborted);
@@ -26,12 +36,19 @@ fn module_recursion_limit() {
 
 #[test]
 fn function_recursion_limit() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let msg = big_stack(|| {
         let out = run_with("function f(n) = 1 + f(n + 1); echo(f(0));", &deep_opts());
         assert!(out.aborted);
         errors(&out)
     });
     assert!(msg.iter().any(|m| m.contains("Funktion `f` mehr als 2000 Ebenen tief aufgerufen")), "{msg:?}");
+}
+
+#[test]
+fn recursion_limit_in_english() {
+    let msg = big_stack(|| errors(&run_with("module r(n) { cube(1); r(n + 1); } r(0);", &deep_opts())));
+    assert!(msg.iter().any(|m| m.contains("module `r` nested more than 1000 levels")), "{msg:?}");
 }
 
 #[test]
@@ -45,6 +62,7 @@ fn recursion_within_limits_works() {
 
 #[test]
 fn stack_guard_reports_instead_of_overflowing() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // Default options on a normal test thread: deep recursion hits the stack guard (or
     // the depth limit) and reports an error.
     let out = run("function f(n) = 1 + f(n + 1); echo(f(0));");
@@ -65,6 +83,7 @@ fn tail_calls_do_not_recurse() {
 
 #[test]
 fn step_budget() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let opts = EvalOptions { max_steps: 100_000, ..Default::default() };
     let out = run_with("function f(n) = n == 0 ? 0 : f(n - 1); echo(f(1e9));", &opts);
     assert!(out.aborted);
@@ -85,6 +104,7 @@ fn step_budget() {
 
 #[test]
 fn huge_ranges_and_lists_are_rejected() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("x = [for (i = [0:1e9]) i];");
     assert!(has_error(&out, "Bereich hat zu viele Elemente"));
     let opts = EvalOptions { max_list_len: 1000, ..Default::default() };

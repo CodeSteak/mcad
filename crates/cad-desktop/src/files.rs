@@ -45,8 +45,9 @@ pub fn abs_path(root: &Path, rel: &str) -> PathBuf {
 
 pub fn read_text(path: &Path) -> io::Result<String> {
     let b = std::fs::read(path)?;
-    String::from_utf8(b)
-        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, format!("{}: kein UTF-8", path.display())))
+    String::from_utf8(b).map_err(|_| {
+        io::Error::new(io::ErrorKind::InvalidData, cad_i18n::tr!("{}: kein UTF-8", "{}: not UTF-8", path.display()))
+    })
 }
 
 /// Bytes a project text stands for: binary files (fonts) are kept as `data:…;base64,…` URLs
@@ -178,7 +179,10 @@ pub fn choose_main(files: &BTreeMap<String, String>, hint: Option<&str>) -> Opti
 pub fn open_folder(dir: &Path, main: Option<&Path>) -> io::Result<OpenedProject> {
     let root = std::path::absolute(dir)?;
     if !root.is_dir() {
-        return Err(io::Error::new(io::ErrorKind::NotFound, format!("{} ist kein Ordner", root.display())));
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            cad_i18n::tr!("{} ist kein Ordner", "{} is not a folder", root.display()),
+        ));
     }
     let mut files = BTreeMap::new();
     for rel in scan_models(&root, 500)? {

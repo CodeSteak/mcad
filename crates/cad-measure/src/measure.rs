@@ -9,6 +9,7 @@
 
 use std::f64::consts::PI;
 
+use cad_i18n::{tr, trs};
 use cad_kernel::brep::Surface;
 use glam::DVec3;
 
@@ -189,38 +190,47 @@ enum Dir {
 
 fn dir_of(g: &Geo, at: DVec3) -> Result<(Dir, &'static str), String> {
     match g {
-        Geo::Point(_) => Err("Ein Punkt hat keine Richtung: Kante oder Fläche wählen".into()),
+        Geo::Point(_) => Err(trs!(
+            "Ein Punkt hat keine Richtung: Kante oder Fläche wählen",
+            "a point has no direction: pick an edge or a face"
+        )
+        .into()),
         Geo::Curve(c) => {
             if let Some(d) = c.line_dir() {
-                return Ok((Dir::Line { p: c.start(), d }, "Gerade"));
+                return Ok((Dir::Line { p: c.start(), d }, trs!("Gerade", "line")));
             }
             if let Some((o, z, _, _)) = c.circle() {
-                return Ok((Dir::Plane { p: o, n: z }, "Kreisebene"));
+                return Ok((Dir::Plane { p: o, n: z }, trs!("Kreisebene", "circle plane")));
             }
             if let Some(n) = c.plane_normal() {
-                return Ok((Dir::Plane { p: c.start(), n }, "Kurvenebene"));
+                return Ok((Dir::Plane { p: c.start(), n }, trs!("Kurvenebene", "curve plane")));
             }
             let (s, q) = c.closest(at);
-            Ok((Dir::Line { p: q, d: c.tangent(s) }, "Tangente"))
+            Ok((Dir::Line { p: q, d: c.tangent(s) }, trs!("Tangente", "tangent")))
         }
         Geo::Face { body, face } => {
             let f = &body.faces[*face];
             match &f.surface {
-                Surface::Plane { frame } => {
-                    Ok((Dir::Plane { p: frame.origin, n: if f.same_sense { frame.z } else { -frame.z } }, "Ebene"))
-                }
+                Surface::Plane { frame } => Ok((
+                    Dir::Plane { p: frame.origin, n: if f.same_sense { frame.z } else { -frame.z } },
+                    trs!("Ebene", "plane"),
+                )),
                 s @ (Surface::Cylinder { .. }
                 | Surface::Cone { .. }
                 | Surface::Torus { .. }
                 | Surface::Revolution { .. }) => {
                     let (o, z) = surface::axis(s).expect("axis");
-                    Ok((Dir::Line { p: o, d: z }, "Achse"))
+                    Ok((Dir::Line { p: o, d: z }, trs!("Achse", "axis")))
                 }
-                Surface::Sphere { .. } => Err("Eine Kugel hat keine Richtung".into()),
+                Surface::Sphere { .. } => {
+                    Err(trs!("Eine Kugel hat keine Richtung", "a sphere has no direction").into())
+                }
                 _ => {
                     let (q, _) = body.face_closest(*face, at);
-                    let n = body.face_normal(*face, q).ok_or("keine Normale an dieser Stelle")?;
-                    Ok((Dir::Plane { p: q, n }, "Tangentialebene"))
+                    let n = body
+                        .face_normal(*face, q)
+                        .ok_or(trs!("keine Normale an dieser Stelle", "no normal at this place"))?;
+                    Ok((Dir::Plane { p: q, n }, trs!("Tangentialebene", "tangent plane")))
                 }
             }
         }
@@ -575,11 +585,14 @@ fn principal_radii(s: &cad_kernel::brep::BSplineSurface, u: f64, v: f64) -> Opti
 pub fn radius(g: &Geo, at: DVec3) -> Result<RadiusResult, String> {
     let exact = |radius: Radius, source: &'static str| Ok(RadiusResult { radius, exact: true, dev: 0.0, source });
     match g {
-        Geo::Point(_) => Err("Radius: Kreiskante oder runde Fläche wählen".into()),
+        Geo::Point(_) => {
+            Err(trs!("Radius: Kreiskante oder runde Fläche wählen", "radius: pick a circular edge or a round face")
+                .into())
+        }
         Geo::Curve(c) => match c {
             EdgeCurve::Arc { frame, r, sweep, .. } => {
                 let (_, q) = c.closest(at);
-                let src = if c.kind() == "circle" { "Kreis" } else { "Kreisbogen" };
+                let src = if c.kind() == "circle" { trs!("Kreis", "circle") } else { trs!("Kreisbogen", "arc") };
                 exact(
                     Radius::Circle { centre: frame.origin, axis: frame.z, r: *r, sweep_deg: sweep * 180.0 / PI, at: q },
                     src,
@@ -587,20 +600,32 @@ pub fn radius(g: &Geo, at: DVec3) -> Result<RadiusResult, String> {
             }
             EdgeCurve::Ellipse { frame, r1, r2, .. } => {
                 let (_, q) = c.closest(at);
-                exact(Radius::Ellipse { centre: frame.origin, axis: frame.z, r1: *r1, r2: *r2, at: q }, "Ellipse")
+                exact(
+                    Radius::Ellipse { centre: frame.origin, axis: frame.z, r1: *r1, r2: *r2, at: q },
+                    trs!("Ellipse", "ellipse"),
+                )
             }
-            EdgeCurve::Line { .. } => Err("Radius: die Kante ist eine Gerade – keine Kreiskante".into()),
+            EdgeCurve::Line { .. } => Err(trs!(
+                "Radius: die Kante ist eine Gerade – keine Kreiskante",
+                "radius: the edge is a line – not a circular edge"
+            )
+            .into()),
             _ => {
                 let pts = c.sample(64);
-                let (centre, axis, r, dev) = fit_circle(&pts, 1e-6)
-                    .ok_or_else(|| format!("Radius: die Kante ist eine {} – keine Kreiskante", curve_name(c)))?;
+                let (centre, axis, r, dev) = fit_circle(&pts, 1e-6).ok_or_else(|| {
+                    tr!(
+                        "Radius: die Kante ist eine {} – keine Kreiskante",
+                        "radius: the edge is a {} – not a circular edge",
+                        curve_name(c)
+                    )
+                })?;
                 let (_, q) = c.closest(at);
                 let sweep: f64 = pts.windows(2).map(|w| angle_between(w[0] - centre, w[1] - centre)).sum();
                 Ok(RadiusResult {
                     radius: Radius::Circle { centre, axis, r, sweep_deg: sweep * 180.0 / PI, at: q },
                     exact: false,
                     dev,
-                    source: "Kurve (Kreis erkannt)",
+                    source: trs!("Kurve (Kreis erkannt)", "curve (circle recognised)"),
                 })
             }
         },
@@ -615,7 +640,9 @@ pub fn radius(g: &Geo, at: DVec3) -> Result<RadiusResult, String> {
                 Radius::Cylinder { axis_a: o + z * lo, axis_b: o + z * hi, dir: z, r, at: q, foot }
             };
             match &f.surface {
-                Surface::Cylinder { frame, r } => exact(cylinder(frame.origin, frame.z, *r), "Zylinder"),
+                Surface::Cylinder { frame, r } => {
+                    exact(cylinder(frame.origin, frame.z, *r), trs!("Zylinder", "cylinder"))
+                }
                 Surface::Cone { frame, r, semi_angle } => {
                     let (lo, hi) = axis_extent(pts(), frame.origin, frame.z);
                     let h = (q - frame.origin).dot(frame.z);
@@ -631,10 +658,12 @@ pub fn radius(g: &Geo, at: DVec3) -> Result<RadiusResult, String> {
                             at: q,
                             foot,
                         },
-                        "Kegel",
+                        trs!("Kegel", "cone"),
                     )
                 }
-                Surface::Sphere { frame, r } => exact(Radius::Sphere { centre: frame.origin, r: *r, at: q }, "Kugel"),
+                Surface::Sphere { frame, r } => {
+                    exact(Radius::Sphere { centre: frame.origin, r: *r, at: q }, trs!("Kugel", "sphere"))
+                }
                 Surface::Torus { frame, major, minor } => {
                     let d = q - frame.origin;
                     let e = (d - frame.z * d.dot(frame.z)).try_normalize().unwrap_or(frame.x);
@@ -647,7 +676,7 @@ pub fn radius(g: &Geo, at: DVec3) -> Result<RadiusResult, String> {
                             tube: frame.origin + e * *major,
                             at: q,
                         },
-                        "Torus",
+                        trs!("Torus", "torus"),
                     )
                 }
                 Surface::Revolution { curve, axis_origin, axis_dir } => {
@@ -672,60 +701,83 @@ pub fn radius(g: &Geo, at: DVec3) -> Result<RadiusResult, String> {
                             radius: Radius::Torus { centre, axis: z, major, minor: r, tube: centre + e * major, at: q },
                             exact: dev <= 1e-9 * r.max(1.0),
                             dev,
-                            source: "Rotationsfläche (Kreisbogen)",
+                            source: trs!("Rotationsfläche (Kreisbogen)", "surface of revolution (arc)"),
                         });
                     }
                     // straight generator parallel to the axis: a cylinder
                     let rs: Vec<f64> = gpts.iter().map(|p| radial(*p).0.length()).collect();
                     let (rmin, rmax) = rs.iter().fold((f64::INFINITY, 0.0f64), |(a, b), &x| (a.min(x), b.max(x)));
                     if rmax - rmin <= 1e-9 * rmax.max(1.0) {
-                        return exact(cylinder(*axis_origin, z, 0.5 * (rmin + rmax)), "Rotationsfläche (Zylinder)");
+                        return exact(
+                            cylinder(*axis_origin, z, 0.5 * (rmin + rmax)),
+                            trs!("Rotationsfläche (Zylinder)", "surface of revolution (cylinder)"),
+                        );
                     }
-                    Err("Radius: Rotationsfläche ohne Kreisbogen als Erzeugende".into())
+                    Err(trs!(
+                        "Radius: Rotationsfläche ohne Kreisbogen als Erzeugende",
+                        "radius: surface of revolution without an arc as generator"
+                    )
+                    .into())
                 }
                 Surface::Extrusion { curve, dir } => {
-                    let d = dir.try_normalize().ok_or("Radius: Extrusion ohne Richtung")?;
+                    let d = dir
+                        .try_normalize()
+                        .ok_or(trs!("Radius: Extrusion ohne Richtung", "radius: extrusion without direction"))?;
                     let (t0, t1) = curve.domain();
                     let gpts: Vec<DVec3> = (0..=64).map(|i| curve.eval(t0 + (t1 - t0) * i as f64 / 64.0)).collect();
-                    let (c, nrm, r, dev) = fit_circle(&gpts, 1e-6).ok_or("Radius: Extrusionsfläche ohne Kreisbogen")?;
+                    let (c, nrm, r, dev) = fit_circle(&gpts, 1e-6).ok_or(trs!(
+                        "Radius: Extrusionsfläche ohne Kreisbogen",
+                        "radius: extrusion surface without an arc"
+                    ))?;
                     if nrm.cross(d).length() > 1e-6 {
-                        return Err("Radius: schräg extrudierter Kreisbogen".into());
+                        return Err(
+                            trs!("Radius: schräg extrudierter Kreisbogen", "radius: obliquely extruded arc").into()
+                        );
                     }
                     Ok(RadiusResult {
                         radius: cylinder(c, d, r),
                         exact: dev <= 1e-9 * r.max(1.0),
                         dev,
-                        source: "Extrusionsfläche (Kreisbogen)",
+                        source: trs!("Extrusionsfläche (Kreisbogen)", "extrusion surface (arc)"),
                     })
                 }
                 Surface::BSpline(bs) => {
                     let (u, v, p) = surface::bspline_project(bs, q);
-                    let (r_min, r_max, n) = principal_radii(bs, u, v).ok_or("Radius: Krümmung nicht bestimmbar")?;
+                    let (r_min, r_max, n) = principal_radii(bs, u, v)
+                        .ok_or(trs!("Radius: Krümmung nicht bestimmbar", "radius: curvature cannot be determined"))?;
                     if !r_min.is_finite() {
-                        return Err("Radius: die Fläche ist an dieser Stelle eben".into());
+                        return Err(trs!(
+                            "Radius: die Fläche ist an dieser Stelle eben",
+                            "radius: the face is flat at this place"
+                        )
+                        .into());
                     }
                     Ok(RadiusResult {
                         radius: Radius::Curvature { r_min, r_max, centre: p + n * r_min, at: p },
                         exact: false,
                         dev: 0.0,
-                        source: "Freiformfläche (Krümmung)",
+                        source: trs!("Freiformfläche (Krümmung)", "free-form surface (curvature)"),
                     })
                 }
-                s => Err(format!("Radius: die Fläche ist eine {} – kein Radius", surface::kind_name(s))),
+                s => Err(tr!(
+                    "Radius: die Fläche ist eine {} – kein Radius",
+                    "radius: the face is a {} – no radius",
+                    surface::kind_name(s)
+                )),
             }
         }
     }
 }
 
-/// German name of a curve kind.
+/// Name of a curve kind, in the current language.
 pub fn curve_name(c: &EdgeCurve) -> &'static str {
     match c.kind() {
-        "line" => "Gerade",
-        "arc" => "Kreisbogen",
-        "circle" => "Kreis",
-        "ellipse" => "Ellipse",
-        "spline" => "Freiformkurve",
-        _ => "Polylinie",
+        "line" => trs!("Gerade", "line"),
+        "arc" => trs!("Kreisbogen", "arc"),
+        "circle" => trs!("Kreis", "circle"),
+        "ellipse" => trs!("Ellipse", "ellipse"),
+        "spline" => trs!("Freiformkurve", "free-form curve"),
+        _ => trs!("Polylinie", "polyline"),
     }
 }
 

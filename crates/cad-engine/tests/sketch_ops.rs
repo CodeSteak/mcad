@@ -54,6 +54,7 @@ fn rectangle_with_rounded_corners() {
 
 #[test]
 fn concave_corners_and_zones() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // L-shape: the concave corner rounded adds (1 − π/4) r², convex corners remove it
     let l = "polygon([[0, 0], [20, 0], [20, 8], [8, 8], [8, 20], [0, 20]])";
     let base = 400.0 - 144.0;
@@ -148,6 +149,7 @@ fn bezier_corner_and_offset_of_spline() {
 
 #[test]
 fn errors_at_the_operation() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     // radius too large for a corner of a 10 × 2 rectangle: error at fillet2d, other corners done
     let ev = e.evaluate(tree("linear_extrude(1) fillet2d(1.5) square([10, 2]);"));

@@ -40,6 +40,7 @@ fn apply(text: &str, edits: &[Edit]) -> String {
 
 #[test]
 fn scene_lists_colours_with_slots() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let r = run(&mut s, SCHILD);
     let sc = last_scene(&r);
@@ -68,6 +69,7 @@ fn scene_lists_colours_with_slots() {
 
 #[test]
 fn colour_regions_with_meshes() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     run(&mut s, SCHILD);
     s.post(ToEngine::RequestColorRegions { meshes: true, coarse: None, version: Some(1) });
@@ -91,6 +93,7 @@ fn colour_regions_with_meshes() {
 
 #[test]
 fn set_filament_writes_the_code() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     run(&mut s, SCHILD);
     let r = s.post(ToEngine::SetFilament { color: "#c74240".into(), filament: Some(4) });
@@ -116,6 +119,7 @@ fn set_filament_writes_the_code() {
 
 #[test]
 fn multicolour_exports() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     run(&mut s, SCHILD);
     s.post(ToEngine::Export { format: ExportFormat::ThreeMf, parts: None, zip: None, colors: None });
@@ -153,6 +157,7 @@ fn slots(sc: &Scene) -> Vec<(String, u32, bool)> {
 /// table at the top of the file instead; only the chosen colour moves.
 #[test]
 fn set_filament_of_a_parameter_colour_writes_a_table() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../tests/farben-pruefung/cases/slot_mod.scad"
@@ -191,6 +196,7 @@ fn set_filament_of_a_parameter_colour_writes_a_table() {
 /// literal colour keeps `filament = n` at its statement; the table wins over `filament = m`.
 #[test]
 fn filament_table_rules() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = "names = [\"red\", \"blue\"];\nfor (i = [0:1]) translate([i * 10, 0, 0]) color(names[i]) cube(5);\ncolor(\"teal\") translate([0, 10, 0]) cube(5);\n";
     let mut s = session();
     run(&mut s, src);
@@ -216,6 +222,7 @@ fn filament_table_rules() {
 /// export and has a volume in the colour regions; the export names its objects.
 #[test]
 fn material_outside_parts_is_exported() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = "module a() color(\"red\") cube(5);\nteil: a();\ntranslate([10, 0, 0]) color(\"blue\") cube(4);\n";
     let mut s = session();
     run(&mut s, src);

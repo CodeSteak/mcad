@@ -11,7 +11,14 @@ fn examples() -> PathBuf {
 }
 
 fn json(args: &[&str]) -> Value {
-    let out = Command::cargo_bin("mcad").unwrap().env("MCAD_NO_DAEMON", "1").args(args).arg("--json").output().unwrap();
+    let out = Command::cargo_bin("mcad")
+        .unwrap()
+        .env("MCAD_LANG", "de")
+        .env("MCAD_NO_DAEMON", "1")
+        .args(args)
+        .arg("--json")
+        .output()
+        .unwrap();
     assert_eq!(
         out.status.code(),
         Some(0),

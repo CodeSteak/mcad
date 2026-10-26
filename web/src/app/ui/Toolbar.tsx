@@ -1,4 +1,4 @@
-// Tool bars: groups (2 px apart) separated by a line and 12 px (docs/konzepte/ui-ueberarbeitung,
+// Tool bars: groups (2 px apart) separated by a line and 12 px (docs/concepts/ui-redesign,
 // "Gruppen"). `Toolbar` is a WAI-ARIA toolbar with a name; floating bars in the 3D view get the
 // `float` look (panel background, border, shadow).
 

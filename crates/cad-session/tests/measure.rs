@@ -127,6 +127,7 @@ const BOX: &str =
 
 #[test]
 fn snaps_vertices_midpoints_faces_with_provenance() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session(BOX);
     let (o, d) = down(10.0, 5.0);
     let a = over(&mut s, MeasureKind::Distance, vec![], o, d, false, None);
@@ -156,8 +157,24 @@ fn snaps_vertices_midpoints_faces_with_provenance() {
     assert!(over(&mut s, MeasureKind::Radius, vec![], o, d, false, None).hover.is_none());
 }
 
+/// The same measurement in English (the default language).
+#[test]
+fn distance_texts_in_english() {
+    let mut s = session(BOX);
+    let (o, d) = down(10.0, 5.0);
+    let a = over(&mut s, MeasureKind::Distance, vec![], o, d, true, None);
+    assert!(a.prompt.contains("second element"), "{}", a.prompt);
+    let a = over(&mut s, MeasureKind::Distance, a.picks, DVec3::new(10.0, 5.0, -100.0), DVec3::Z, true, None);
+    let r = a.result.expect("result");
+    assert_eq!(r.title, "Distance");
+    assert!(r.details.iter().any(|x| x.contains("parallel planes: normal distance")), "{:?}", r.details);
+    assert!(r.text.starts_with("Distance face · "), "{}", r.text);
+    assert!(!r.text.contains("Fläche"), "{}", r.text);
+}
+
 #[test]
 fn distance_by_clicks_parallel_planes_and_cli() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session(BOX);
     let (o, d) = down(10.0, 5.0);
     let a = over(&mut s, MeasureKind::Distance, vec![], o, d, true, None);
@@ -191,6 +208,7 @@ fn distance_by_clicks_parallel_planes_and_cli() {
 
 #[test]
 fn radius_of_bores_and_fillets_in_the_hole_plate() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session(&example("lochplatte.mcad"));
     // bore d = 4 at x = 6, y = 6 (first hole)
     let r = by_refs(&mut s, MeasureKind::Radius, &["face@[8,6,2]"], None);
@@ -222,6 +240,7 @@ fn radius_of_bores_and_fillets_in_the_hole_plate() {
 
 #[test]
 fn housing_wall_thickness_in_the_section_and_inner_distance() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session(&example("gehaeuse.mcad"));
     let plane = SectionPlane::new(DVec3::new(0.0, 0.0, 10.0), DVec3::Z);
     // the side walls of k: gehaeuse(w = 60) are t = 3 thick
@@ -253,6 +272,7 @@ fn housing_wall_thickness_in_the_section_and_inner_distance() {
 
 #[test]
 fn angle_of_a_chamfer() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session(&example("fase_chamfer.mcad"));
     // chamfer(1) on the top edges of box(g[a, v, u], g[b, h, o]) (40 × 25 × 10)
     let a = by_refs(&mut s, MeasureKind::Angle, &["face@[39.5,12,9.5]", "face@[20,12,10]"], None);
@@ -265,6 +285,7 @@ fn angle_of_a_chamfer() {
 
 #[test]
 fn section_mode_over_the_protocol() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = "difference() {\n  cube([30, 20, 6]);\n  translate([10, 10, -1]) cylinder(h = 8, r = 3);\n}\n";
     let mut s = session(src);
     let sec = SectionPlaneRef { point: Vec3([0.0, 0.0, 3.0]), normal: Vec3([0.0, 0.0, 1.0]) };

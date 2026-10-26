@@ -429,6 +429,7 @@ export const de: Messages = {
   // sketch controller
   "sketch.onlyMain": "Skizzen-Editor: nur in der Hauptdatei (Tab der Hauptdatei öffnen)",
   // engine
+  "engine.error": "Engine-Fehler",
   "engine.hung": "Engine reagiert seit {time} nicht (Kernel hängt)",
   "engine.restarted": "Engine neu gestartet, Cache verworfen",
   "engine.nodeBlocked": "Knoten gesperrt",

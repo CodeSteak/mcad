@@ -12,6 +12,8 @@
 //!   convention); `--xray`: everything transparent with edges.
 
 use std::collections::HashMap;
+
+use cad_i18n::{tr, trs};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -238,7 +240,8 @@ pub(crate) struct ViewArgs {
 }
 
 pub(crate) fn parse_size(s: &str) -> Result<(u32, u32), Fail> {
-    let bad = || Fail::Usage(format!("--size {s}: erwartet BxH, z. B. 1024x768"));
+    let bad =
+        || Fail::Usage(tr!("--size {s}: erwartet BxH, z. B. 1024x768", "--size {s}: expected WxH, e.g. 1024x768"));
     let (w, h) = s.split_once(['x', 'X']).ok_or_else(bad)?;
     let w: u32 = w.trim().parse().map_err(|_| bad())?;
     let h: u32 = h.trim().parse().map_err(|_| bad())?;
@@ -253,7 +256,10 @@ pub(crate) fn parse_vec(s: &str, n: usize, what: &str) -> Result<Vec<f64>, Fail>
     let v: Result<Vec<f64>, _> = t.split(',').map(|x| x.trim().parse::<f64>()).collect();
     match v {
         Ok(v) if v.len() == n && v.iter().all(|x| x.is_finite()) => Ok(v),
-        _ => Err(Fail::Usage(format!("{what} {s}: erwartet {n} Zahlen mit Komma"))),
+        _ => Err(Fail::Usage(tr!(
+            "{what} {s}: erwartet {n} Zahlen mit Komma",
+            "{what} {s}: expected {n} comma-separated numbers"
+        ))),
     }
 }
 
@@ -264,9 +270,19 @@ pub(crate) fn parse_vec(s: &str, n: usize, what: &str) -> Result<Vec<f64>, Fail>
 /// normal +x (removes x > WERT), likewise y and z; `--section-flip` reverses the normal.
 pub(crate) fn parse_section(sec: Option<&str>, plane: Option<&str>, flip: bool) -> Result<Option<Section>, Fail> {
     let s = match (sec, plane) {
-        (Some(_), Some(_)) => return Err(Fail::Usage("--section und --section-plane schließen sich aus".into())),
+        (Some(_), Some(_)) => {
+            return Err(Fail::Usage(tr!(
+                "--section und --section-plane schließen sich aus",
+                "--section and --section-plane exclude each other"
+            )));
+        }
         (Some(s), None) => {
-            let bad = || Fail::Usage(format!("--section {s}: erwartet x=WERT, y=WERT oder z=WERT"));
+            let bad = || {
+                Fail::Usage(tr!(
+                    "--section {s}: erwartet x=WERT, y=WERT oder z=WERT",
+                    "--section {s}: expected x=VALUE, y=VALUE or z=VALUE"
+                ))
+            };
             let (a, v) = s.split_once('=').ok_or_else(bad)?;
             let v: f64 = v.trim().parse().map_err(|_| bad())?;
             let n = match a.trim() {
@@ -281,13 +297,19 @@ pub(crate) fn parse_section(sec: Option<&str>, plane: Option<&str>, flip: bool) 
             let v = parse_vec(pl, 6, "--section-plane")?;
             let n = DVec3::new(v[3], v[4], v[5]);
             if n.length() < 1e-12 {
-                return Err(Fail::Usage("--section-plane: Normale ist null".into()));
+                return Err(Fail::Usage(tr!(
+                    "--section-plane: Normale ist null",
+                    "--section-plane: the normal is zero"
+                )));
             }
             Section { point: DVec3::new(v[0], v[1], v[2]), normal: n.normalize() }
         }
         (None, None) => {
             if flip {
-                return Err(Fail::Usage("--section-flip braucht --section oder --section-plane".into()));
+                return Err(Fail::Usage(tr!(
+                    "--section-flip braucht --section oder --section-plane",
+                    "--section-flip needs --section or --section-plane"
+                )));
             }
             return Ok(None);
         }
@@ -319,8 +341,12 @@ pub(crate) struct Plan {
 impl Plan {
     pub fn from_args(a: &ViewArgs) -> Result<Plan, Fail> {
         let one = |name: &str| {
-            View::from_name(name)
-                .ok_or_else(|| Fail::Usage(format!("--view {name}: iso, front, back, top, bottom, left oder right")))
+            View::from_name(name).ok_or_else(|| {
+                Fail::Usage(tr!(
+                    "--view {name}: iso, front, back, top, bottom, left oder right",
+                    "--view {name}: iso, front, back, top, bottom, left or right"
+                ))
+            })
         };
         let (views, sheet) = match &a.views {
             Some(v) => {
@@ -330,11 +356,13 @@ impl Plan {
                     v.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
                 };
                 if names.is_empty() {
-                    return Err(Fail::Usage("--views: keine Ansicht".into()));
+                    return Err(Fail::Usage(tr!("--views: keine Ansicht", "--views: no view")));
                 }
                 let mut out = Vec::new();
                 for n in names {
-                    let view = one(&n).map_err(|_| Fail::Usage(format!("--views: unbekannte Ansicht {n}")))?;
+                    let view = one(&n).map_err(|_| {
+                        Fail::Usage(tr!("--views: unbekannte Ansicht {n}", "--views: unknown view {n}"))
+                    })?;
                     out.push((n, view));
                 }
                 (out, true)
@@ -363,17 +391,17 @@ impl Plan {
             } else if SHOW.contains(&s) {
                 show.push(s.to_string());
             } else if !s.is_empty() {
-                return Err(Fail::Usage(format!("--show {s}: erwartet {}", SHOW.join(", "))));
+                return Err(Fail::Usage(tr!("--show {s}: erwartet {}", "--show {s}: expected {}", SHOW.join(", "))));
             }
         }
         show.dedup();
         if let Some(z) = a.zoom
             && !(z.is_finite() && z > 0.0)
         {
-            return Err(Fail::Usage(format!("--zoom {z}: muss positiv sein")));
+            return Err(Fail::Usage(tr!("--zoom {z}: muss positiv sein", "--zoom {z}: must be positive")));
         }
         if !(a.fov > 1.0 && a.fov < 170.0) {
-            return Err(Fail::Usage(format!("--fov {}: 1…170 Grad", a.fov)));
+            return Err(Fail::Usage(tr!("--fov {}: 1…170 Grad", "--fov {}: 1…170 degrees", a.fov)));
         }
         let target = match &a.target {
             Some(t) => {
@@ -401,7 +429,7 @@ impl Plan {
             look: match a.theme.trim().to_ascii_lowercase().as_str() {
                 "light" | "hell" | "" => &LIGHT,
                 "dark" | "dunkel" => &DARK,
-                t => return Err(Fail::Usage(format!("--theme {t}: light oder dark"))),
+                t => return Err(Fail::Usage(tr!("--theme {t}: light oder dark", "--theme {t}: light or dark"))),
             },
         })
     }
@@ -591,17 +619,30 @@ pub(crate) fn target_nodes(sc: &p::Scene, spec: &str) -> Result<Vec<u32>, Fail> 
         return Ok(sc.root.into_iter().collect());
     }
     if let Some(l) = spec.strip_prefix("line:") {
-        let l: u32 = l.trim().parse().map_err(|_| Fail::Usage(format!("{spec}: erwartet line:ZEILE")))?;
+        let l: u32 = l
+            .trim()
+            .parse()
+            .map_err(|_| Fail::Usage(tr!("{spec}: erwartet line:ZEILE", "{spec}: expected line:LINE")))?;
         let n = nodes_at_line(sc, l);
         if n.is_empty() {
-            return Err(Fail::Usage(format!("{spec}: Zeile {l} erzeugt keine Geometrie")));
+            return Err(Fail::Usage(tr!(
+                "{spec}: Zeile {l} erzeugt keine Geometrie",
+                "{spec}: line {l} produces no geometry"
+            )));
         }
         return Ok(n);
     }
     if let Some(i) = spec.strip_prefix("node:") {
-        let i: u32 = i.trim().parse().map_err(|_| Fail::Usage(format!("{spec}: erwartet node:INDEX")))?;
+        let i: u32 = i
+            .trim()
+            .parse()
+            .map_err(|_| Fail::Usage(tr!("{spec}: erwartet node:INDEX", "{spec}: expected node:INDEX")))?;
         if i as usize >= sc.nodes.len() {
-            return Err(Fail::Usage(format!("{spec}: Knoten {i} existiert nicht ({} Knoten)", sc.nodes.len())));
+            return Err(Fail::Usage(tr!(
+                "{spec}: Knoten {i} existiert nicht ({} Knoten)",
+                "{spec}: node {i} does not exist ({} nodes)",
+                sc.nodes.len()
+            )));
         }
         return Ok(vec![i]);
     }
@@ -610,9 +651,10 @@ pub(crate) fn target_nodes(sc: &p::Scene, spec: &str) -> Result<Vec<u32>, Fail> 
         Some(pt) => Ok(vec![pt.node]),
         None => {
             let known: Vec<&str> = sc.parts.iter().map(|p| p.name.as_str()).collect();
-            Err(Fail::Usage(format!(
+            Err(Fail::Usage(tr!(
                 "Bauteil `{name}` nicht gefunden (Bauteile: {}; Ziele: all, part:NAME, line:N, node:I)",
-                if known.is_empty() { "keine".to_string() } else { known.join(", ") }
+                "part `{name}` not found (parts: {}; targets: all, part:NAME, line:N, node:I)",
+                if known.is_empty() { trs!("keine", "none").to_string() } else { known.join(", ") }
             )))
         }
     }
@@ -647,7 +689,11 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
     }
     for &n in &plan.nodes {
         if n as usize >= sc.nodes.len() {
-            return Err(Fail::Usage(format!("--node {n}: Knoten existiert nicht ({} Knoten)", sc.nodes.len())));
+            return Err(Fail::Usage(tr!(
+                "--node {n}: Knoten existiert nicht ({} Knoten)",
+                "--node {n}: node does not exist ({} nodes)",
+                sc.nodes.len()
+            )));
         }
         if !highlighted.contains(&n) {
             highlighted.push(n);
@@ -839,21 +885,26 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
     if plan.shows("grids") {
         let grids: Vec<&p::Grid> = sc.grids.iter().filter(|g| g.in_context).collect();
         if grids.is_empty() {
-            notes.push("keine Raster im Kontext (Raster gelten nur in ihrem Modul: --module NAME)".into());
+            notes.push(tr!(
+                "keine Raster im Kontext (Raster gelten nur in ihrem Modul: --module NAME)",
+                "no grids in the context (grids hold only in their module: --module NAME)"
+            ));
         }
         for g in grids {
             let n: usize = (0..3u8).map(|a| g.planes.iter().filter(|pl| pl.axis == a).count().max(1)).product();
             if labels_on && n > MAX_POINT_LABELS {
-                notes.push(format!(
+                notes.push(tr!(
                     "Raster {}: {n} Punkte, nur Ebenen beschriftet (Punkte bis {MAX_POINT_LABELS}; --view und --zoom für Details)",
+                    "grid {}: {n} points, only planes labelled (points up to {MAX_POINT_LABELS}; --view and --zoom for details)",
                     g.name
                 ));
             }
             n_grids += 1;
             let frame = profile_grid_frame(sc, g);
             if frame.is_some() {
-                notes.push(format!(
+                notes.push(tr!(
                     "Raster {}: in der Profilebene von rotate_extrude gezeichnet (x = Radius, y = Höhe)",
+                    "grid {}: drawn in the profile plane of rotate_extrude (x = radius, y = height)",
                     g.name
                 ));
             }
@@ -892,16 +943,16 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
             markers.push(Marker { pos: pnt, shape: MarkerShape::Square, size: 3.5, color: lk.handle, on_top: true });
             if labels_on {
                 let kind = match h.kind {
-                    p::HandleKind::Point => "Punkt",
-                    p::HandleKind::Radius => "Radius",
-                    p::HandleKind::Height => "Höhe",
-                    p::HandleKind::Angle { .. } => "Winkel",
-                    p::HandleKind::Plane { .. } => "Ebene",
-                    p::HandleKind::Scale { .. } => "Skala",
+                    p::HandleKind::Point => trs!("Punkt", "point"),
+                    p::HandleKind::Radius => trs!("Radius", "radius"),
+                    p::HandleKind::Height => trs!("Höhe", "height"),
+                    p::HandleKind::Angle { .. } => trs!("Winkel", "angle"),
+                    p::HandleKind::Plane { .. } => trs!("Ebene", "plane"),
+                    p::HandleKind::Scale { .. } => trs!("Skala", "scale"),
                 };
                 labels.push(Label {
                     pos: pnt,
-                    text: format!("{kind} Z.{}", h.range.line),
+                    text: tr!("{kind} Z.{}", "{kind} l.{}", h.range.line),
                     color: lk.handle_label,
                     offset: (6.0, 4.0),
                     priority: 0,
@@ -969,8 +1020,9 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
     };
     let n_failures = failure_overlay(sc, &m.diagnostics, *lk, (&mut lines, &mut markers, &mut labels));
     if n_failures > 0 {
-        notes.push(format!(
-            "{n_failures} Fehlerstelle(n) rot markiert (Operanden berühren sich tangential; Diagnose: at)"
+        notes.push(tr!(
+            "{n_failures} Fehlerstelle(n) rot markiert (Operanden berühren sich tangential; Diagnose: at)",
+            "{n_failures} error place(s) marked red (operands touch tangentially; diagnostic: at)"
         ));
     }
     let counts = json!({
@@ -1014,7 +1066,7 @@ fn failure_overlay(
             let lines_text = if ops.is_empty() { node.range.line.to_string() } else { ops.join(" + ") };
             labels.push(Label {
                 pos,
-                text: format!("Berührung Z.{lines_text}"),
+                text: tr!("Berührung Z.{lines_text}", "contact l.{lines_text}"),
                 color: lk.failed,
                 offset: (9.0, -16.0),
                 priority: 7,
@@ -1116,17 +1168,17 @@ fn assert_overlay(
             let Some(pos) = pos else { continue };
             let text = match pr.problem.as_deref() {
                 Some("overlap") => match pr.volume.filter(|v| *v > 0.0) {
-                    Some(v) => format!("Schnitt {} mm³", num(v)),
-                    None => "Überschneidung".into(),
+                    Some(v) => tr!("Schnitt {} mm³", "intersection {} mm³", num(v)),
+                    None => tr!("Überschneidung", "overlap"),
                 },
                 Some("too_close") => format!("{} mm < {}", num(pr.distance.unwrap_or(0.0)), num(a.clearance)),
-                Some("gap") => format!("Spalt {} mm", num(pr.distance.unwrap_or(0.0))),
-                Some("apart") => format!("kein Schnitt, {} mm", num(pr.distance.unwrap_or(0.0))),
-                Some("line_contact") => "Linienkontakt".into(),
-                Some("point_contact") => "Punktkontakt".into(),
+                Some("gap") => tr!("Spalt {} mm", "gap {} mm", num(pr.distance.unwrap_or(0.0))),
+                Some("apart") => tr!("kein Schnitt, {} mm", "no intersection, {} mm", num(pr.distance.unwrap_or(0.0))),
+                Some("line_contact") => tr!("Linienkontakt", "line contact"),
+                Some("point_contact") => tr!("Punktkontakt", "point contact"),
                 _ => match (pr.contact_area, pr.volume.filter(|v| *v > 0.0)) {
-                    (Some(ar), _) => format!("Kontakt {} mm²", num(ar)),
-                    (None, Some(v)) => format!("Schnitt {} mm³", num(v)),
+                    (Some(ar), _) => tr!("Kontakt {} mm²", "contact {} mm²", num(ar)),
+                    (None, Some(v)) => tr!("Schnitt {} mm³", "intersection {} mm³", num(v)),
                     _ => match &pr.contact {
                         Some(c) => c.clone(),
                         None => continue,
@@ -1375,7 +1427,9 @@ fn camera_json(c: &CameraInfo) -> Json {
 
 /// Renders the evaluated model `m` with `plan` into `output`; (JSON fields, text line).
 pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<(Json, String), Fail> {
-    let Some(sc) = m.scene.clone() else { return Err(Fail::Usage("keine Szene (Syntaxfehler)".into())) };
+    let Some(sc) = m.scene.clone() else {
+        return Err(Fail::Usage(tr!("keine Szene (Syntaxfehler)", "no scene (syntax error)")));
+    };
     let built = build(m, &sc, plan)?;
     let items: Vec<Item> = built
         .meshes
@@ -1500,7 +1554,7 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
         output.display(),
         img.width,
         img.height,
-        if plan.sheet { "Ansichten" } else { "Ansicht" },
+        if plan.sheet { trs!("Ansichten", "views") } else { trs!("Ansicht", "view") },
         plan.views.iter().map(|v| v.0.as_str()).collect::<Vec<_>>().join(", ")
     );
     if !plan.lines.is_empty() || !plan.nodes.is_empty() {
@@ -1508,35 +1562,40 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
             built.highlighted.iter().map(|&h| format!("[{}] {}", h, sc.nodes[h as usize].label)).collect();
         let what = plan.lines.iter().map(|l| l.to_string()).collect::<Vec<_>>().join(", ");
         if labels.is_empty() {
-            t.push_str(&format!(", Zeile {what}: keine Geometrie"));
+            t.push_str(&tr!(", Zeile {what}: keine Geometrie", ", line {what}: no geometry"));
         } else if what.is_empty() {
-            t.push_str(&format!(", Knoten: {}", labels.join(", ")));
+            t.push_str(&tr!(", Knoten: {}", ", nodes: {}", labels.join(", ")));
         } else {
-            t.push_str(&format!(", Zeile {what}: {}", labels.join(", ")));
+            t.push_str(&tr!(", Zeile {what}: {}", ", line {what}: {}", labels.join(", ")));
         }
     }
     if !plan.parts.is_empty() {
-        t.push_str(&format!(", Bauteil {}", plan.parts.join(", ")));
+        t.push_str(&tr!(", Bauteil {}", ", part {}", plan.parts.join(", ")));
     }
     if let Some(ctx) = &m.context {
-        t.push_str(&format!(", Kontext Modul {ctx}"));
+        t.push_str(&tr!(", Kontext Modul {ctx}", ", context module {ctx}"));
     }
     if let Some(s) = plan.section {
-        t.push_str(&format!(", Schnitt durch {} Normale {}", vec3d(s.point), vec3d(s.normal)));
+        t.push_str(&tr!(
+            ", Schnitt durch {} Normale {}",
+            ", section through {} normal {}",
+            vec3d(s.point),
+            vec3d(s.normal)
+        ));
     }
     if plan.xray {
-        t.push_str(", Röntgen");
+        t.push_str(trs!(", Röntgen", ", x-ray"));
     }
     if plan.look.theme == Theme::Dark {
-        t.push_str(", dunkel");
+        t.push_str(trs!(", dunkel", ", dark"));
     }
     if let Some(b) = &built.subject {
         let s: Vec<String> = (0..3).map(|i| num(b.max.0[i] - b.min.0[i])).collect();
-        t.push_str(&format!(", Hülle {} mm", s.join(" × ")));
+        t.push_str(&tr!(", Hülle {} mm", ", bounds {} mm", s.join(" × ")));
     }
     t.push('\n');
     for n in &built.notes {
-        t.push_str(&format!("Hinweis: {n}\n"));
+        t.push_str(&tr!("Hinweis: {n}\n", "note: {n}\n"));
     }
     Ok((j, t))
 }

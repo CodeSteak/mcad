@@ -422,3 +422,17 @@ fn stencil_layout_features() {
     let p = TextParams { text: "x".into(), script: Some("nope!".into()), ..Default::default() };
     assert!(layout(&Font::stencil(false), &p).is_err());
 }
+
+#[test]
+fn errors_in_both_languages() {
+    let (font, _) = select(&FontName::parse("JetBrains Mono"));
+    let p = TextParams { text: "x".into(), script: Some("klingon?".into()), ..Default::default() };
+    {
+        let _en = cad_i18n::scoped(cad_i18n::Lang::En);
+        assert_eq!(layout(&font, &p).unwrap_err(), "unknown script \"klingon?\"");
+        assert!(Font::from_data(Arc::from(&b"xx"[..]), 0).err().unwrap().starts_with("font file not readable"));
+    }
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
+    assert_eq!(layout(&font, &p).unwrap_err(), "unbekannte Schrift (script) \"klingon?\"");
+    assert!(Font::from_data(Arc::from(&b"xx"[..]), 0).err().unwrap().starts_with("Schriftdatei nicht lesbar"));
+}

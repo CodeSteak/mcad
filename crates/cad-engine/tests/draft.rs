@@ -4,7 +4,10 @@ mod common;
 
 use std::f64::consts::PI;
 
-use cad_engine::{BLOCKED_MESSAGE, CountingKernel, Engine, EngineConfig, SUSPENDED_HINT, Status, std_clock};
+use cad_engine::{
+    BLOCKED_MESSAGE, BLOCKED_MESSAGE_EN, CountingKernel, Engine, EngineConfig, SUSPENDED_HINT_EN, Status,
+    blocked_message, std_clock, suspended_hint,
+};
 use cad_eval::{EvalOptions, eval_source};
 use cad_ir::{NodeIdx, Op, Tree};
 use common::*;
@@ -59,8 +62,8 @@ fn draft_mode_suspends_slow_blends() {
     assert_eq!(ev.stats.suspended_blends, 1);
     let r = ev.report(n);
     assert!(r.blend_suspended);
-    assert!(r.hints.iter().any(|h| h == SUSPENDED_HINT), "{:?}", r.hints);
-    assert!(r.hints.iter().any(|h| h == "8 Kanten"), "edges are still selected: {:?}", r.hints);
+    assert!(r.hints.iter().any(|h| h == suspended_hint() && h == SUSPENDED_HINT_EN), "{:?}", r.hints);
+    assert!(r.hints.iter().any(|h| h == "8 edges"), "edges are still selected: {:?}", r.hints);
     assert_eq!(r.status, Status::Ok);
     assert!(errors(&ev).is_empty() && warnings(&ev).is_empty());
     assert_approx("body without fillet", root_volume(&mut e, &ev), plain_volume(5.0), 1e-6);
@@ -116,7 +119,12 @@ fn blocked_key_is_not_computed_until_it_changes() {
     let r = ev.report(n);
     assert!(r.blocked);
     assert_eq!(r.status, Status::Error);
-    assert_eq!(errors(&ev), vec![BLOCKED_MESSAGE.to_string()]);
+    assert_eq!(errors(&ev), vec![blocked_message().to_string()]);
+    assert_eq!(blocked_message(), BLOCKED_MESSAGE_EN);
+    {
+        let _de = cad_i18n::scoped(cad_i18n::Lang::De);
+        assert_eq!(blocked_message(), BLOCKED_MESSAGE);
+    }
     assert_eq!(ev.stats.blocked, 1);
     assert!(ev.parts(n).is_empty());
     // the children were computed

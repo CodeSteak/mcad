@@ -10,6 +10,7 @@
 //! and arcs with bridges (no holes), used without `font` and for unknown families. Characters a
 //! font lacks come from JetBrains Mono ([`fallback_font`]).
 
+use cad_i18n::{tr, trs};
 use cad_outline::{Contour, Seg};
 use glam::DVec2;
 use rustybuzz::ttf_parser;
@@ -191,7 +192,8 @@ impl Font {
 
     /// A font file's contents (`index`: face in a collection). Checks that it parses.
     pub fn from_data(data: Arc<[u8]>, index: u32) -> Result<Font, String> {
-        ttf_parser::Face::parse(&data, index).map_err(|e| format!("Schriftdatei nicht lesbar ({e})"))?;
+        ttf_parser::Face::parse(&data, index)
+            .map_err(|e| tr!("Schriftdatei nicht lesbar ({e})", "font file not readable ({e})"))?;
         let key = fnv(&data) ^ (index as u64).rotate_left(48) | 1 << 63;
         Ok(Font { data: FontData::Shared(data), index, key })
     }
@@ -511,7 +513,10 @@ pub fn layout(font: &Font, p: &TextParams) -> Result<Layout, String> {
     };
     let face = match stencil_bold {
         Some(_) => None,
-        None => Some(rustybuzz::Face::from_slice(font.data.bytes(), font.index).ok_or("Schriftdatei nicht lesbar")?),
+        None => Some(
+            rustybuzz::Face::from_slice(font.data.bytes(), font.index)
+                .ok_or(trs!("Schriftdatei nicht lesbar", "font file not readable"))?,
+        ),
     };
     let has_glyph = |c: char| match &face {
         Some(f) => f.glyph_index(c).is_some(),
@@ -519,7 +524,8 @@ pub fn layout(font: &Font, p: &TextParams) -> Result<Layout, String> {
     };
     let fb_font = fallback_font(font);
     let use_fb = fb_font.key != font.key;
-    let fb_face = rustybuzz::Face::from_slice(fb_font.data.bytes(), 0).ok_or("Ersatzschrift nicht lesbar")?;
+    let fb_face = rustybuzz::Face::from_slice(fb_font.data.bytes(), 0)
+        .ok_or(trs!("Ersatzschrift nicht lesbar", "fallback font not readable"))?;
     // direction, script and language of the whole text
     let mut probe = rustybuzz::UnicodeBuffer::new();
     probe.push_str(&p.text);
@@ -532,10 +538,15 @@ pub fn layout(font: &Font, p: &TextParams) -> Result<Layout, String> {
         });
     }
     if let Some(s) = &p.script {
-        probe.set_script(script_of(s).ok_or_else(|| format!("unbekannte Schrift (script) \"{s}\""))?);
+        probe.set_script(
+            script_of(s).ok_or_else(|| tr!("unbekannte Schrift (script) \"{s}\"", "unknown script \"{s}\""))?,
+        );
     }
     let lang = match &p.language {
-        Some(l) => Some(l.parse::<rustybuzz::Language>().map_err(|_| format!("unbekannte Sprache \"{l}\""))?),
+        Some(l) => Some(
+            l.parse::<rustybuzz::Language>()
+                .map_err(|_| tr!("unbekannte Sprache \"{l}\"", "unknown language \"{l}\""))?,
+        ),
         None => None,
     };
     probe.guess_segment_properties();

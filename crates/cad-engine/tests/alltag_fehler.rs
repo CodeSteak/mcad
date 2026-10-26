@@ -95,6 +95,7 @@ fn f05_chamfer_that_leaves_an_open_shell_is_an_error() {
 
 #[test]
 fn f10_union_fillet_that_loses_the_shell_is_an_error() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let (errs, _, v) = run(&fehler("f10_union_fillet_schale_verloren.mcad"));
     assert_error(&errs, "Verrundung gescheitert");
     assert!(v > 20000.0, "the union without the fillet stays: {v}");
@@ -147,6 +148,7 @@ fn f09_tangent_contact_under_union_fillet_fails_cleanly() {
 /// coordinates) – for the implicit union, `union`, `difference` and `intersection`.
 #[test]
 fn tangent_contact_names_the_operands_and_the_place() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let place = |src: &str| {
         let mut e = engine();
         let t = tree(src);
@@ -196,4 +198,22 @@ fn tangent_contact_names_the_operands_and_the_place() {
 fn f13_shell_thicker_than_a_rounding_names_the_radius() {
     let (errs, _, _) = run(&fehler("f13_shell_verrundung.mcad"));
     assert_error(&errs, "radius of a convex rounding");
+}
+
+#[test]
+fn tangent_contact_message_in_english() {
+    let _en = cad_i18n::scoped(cad_i18n::Lang::En);
+    let mut e = engine();
+    let ev = e.evaluate(tree(
+        "difference() { cube([20, 20, 10]); translate([5.5, 10, -1]) cylinder(h = 12, r = 3.5); translate([-1, -1, -1]) cube([3, 22, 12]); }",
+    ));
+    let d = ev.diagnostics().find(|d| d.at.is_some()).expect("place").clone();
+    assert!(
+        d.message.starts_with("difference failed: cylinder and box touch tangentially at [2, 10, 5]"),
+        "{}",
+        d.message
+    );
+    let ev = e.evaluate(tree(&fehler("f08c_differenz_torus_tangential.mcad")));
+    let d = ev.diagnostics().find(|d| d.at.is_some()).expect("place").clone();
+    assert!(d.message.contains("(and 1 more place)"), "{}", d.message);
 }

@@ -1,4 +1,4 @@
-// Side panel on the right (docs/konzepte/ui-ueberarbeitung, Abschnitt 4): collapsible, tabs
+// Side panel on the right (docs/concepts/ui-redesign, Abschnitt 4): collapsible, tabs
 // "Bauteile" (visibility, volume, export per part in the ⋯ menu, "ohne Bauteil", sum),
 // "Farben" (the colour list), "Messen" (the measurements) and – in a module context –
 // "Parameter" (the parameter bar). The rows "Datei …" and "Bauteile …" above the view are gone.

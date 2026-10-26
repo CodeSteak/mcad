@@ -76,7 +76,7 @@ volume: number | null, };
 /**
  * Message from the UI to the engine.
  */
-export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, colors?: boolean, } | { "type": "RequestColorRegions", meshes: boolean, coarse?: boolean, version?: number, } | { "type": "SetFilament", color: string, filament?: number, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, } | { "type": "Sketch" } & SketchRequest | { "type": "Measure" } & MeasureRequest;
+export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetLang", lang: string, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, colors?: boolean, } | { "type": "RequestColorRegions", meshes: boolean, coarse?: boolean, version?: number, } | { "type": "SetFilament", color: string, filament?: number, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, } | { "type": "Sketch" } & SketchRequest | { "type": "Measure" } & MeasureRequest;
 
 /**
  * Tools of the sketch editor.
@@ -698,7 +698,7 @@ export type AssertBody = {
  */
 node: number, 
 /**
- * `deckel`, `Zeile 7: cube`, `Sperrvolumen` (German).
+ * `deckel`, `line 7: cube`, `keep-out volume` (in the engine language, `SetLang`).
  */
 label: string, 
 /**
@@ -716,7 +716,7 @@ export type AssertPair = { a: AssertBody, b: AssertBody, ok: boolean,
  */
 problem: string | null, 
 /**
- * Text of the result (German), as in the diagnostic.
+ * Text of the result (engine language), as in the diagnostic.
  */
 message: string, 
 /**

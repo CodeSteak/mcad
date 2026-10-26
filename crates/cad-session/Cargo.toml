@@ -13,6 +13,7 @@ cad-ir.workspace = true
 cad-kernel.workspace = true
 cad-engine.workspace = true
 cad-measure.workspace = true
+cad-i18n.workspace = true
 glam.workspace = true
 serde.workspace = true
 ts-rs = { version = "12", default-features = false, features = ["serde-compat"] }

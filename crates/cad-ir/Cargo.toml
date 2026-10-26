@@ -11,3 +11,4 @@ serde.workspace = true
 blake3.workspace = true
 cad-syntax.workspace = true
 cad-kernel.workspace = true
+cad-i18n.workspace = true

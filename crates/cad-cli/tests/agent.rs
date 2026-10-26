@@ -20,6 +20,7 @@ fn example(rel: &str) -> String {
 fn mcad() -> Command {
     // without daemon (tests/daemon.rs covers it, with a socket directory of its own)
     let mut c = Command::cargo_bin("mcad").unwrap();
+    c.env("MCAD_LANG", "de");
     c.env("MCAD_NO_DAEMON", "1");
     c
 }
@@ -464,6 +465,7 @@ fn watch_reports_a_second_run_after_a_change() {
     std::fs::write(&file, std::fs::read_to_string(data("gehaeuse.mcad")).unwrap()).unwrap();
     let img = dir.path().join("w.png");
     let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("mcad"))
+        .env("MCAD_LANG", "de")
         .args(["watch", &file.display().to_string(), "--json", "--once-after-change", "--timeout", "60"])
         .args(["--render", &img.display().to_string(), "--size", "200x150"])
         .stdout(Stdio::piped())

@@ -15,6 +15,7 @@
 //! (`cad_syntax::FILE_SHIFT`), so diagnostics, hints, handles and text edits know their file.
 //! A file included twice is loaded twice (two ids, same path); a used file once.
 
+use cad_i18n::{tr, trs};
 use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
@@ -52,7 +53,7 @@ pub fn decode_data_url(t: &str) -> Option<Result<Vec<u8>, String>> {
     if !head.ends_with(";base64") {
         return None;
     }
-    Some(base64_decode(data.trim()).ok_or_else(|| "ungültige base64-Daten".to_string()))
+    Some(base64_decode(data.trim()).ok_or_else(|| trs!("ungültige base64-Daten", "invalid base64 data").to_string()))
 }
 
 /// A `data:` URL of `bytes` (how binary files are kept in text projects).
@@ -122,19 +123,19 @@ pub struct NoFiles;
 
 impl FileResolver for NoFiles {
     fn read(&self, _path: &str) -> Result<String, String> {
-        Err("keine Projektdateien".into())
+        Err(trs!("keine Projektdateien", "no project files").into())
     }
 }
 
 impl FileResolver for BTreeMap<String, String> {
     fn read(&self, path: &str) -> Result<String, String> {
-        self.get(path).cloned().ok_or_else(|| "nicht im Projekt".into())
+        self.get(path).cloned().ok_or_else(|| trs!("nicht im Projekt", "not in the project").into())
     }
 }
 
 impl FileResolver for HashMap<String, String> {
     fn read(&self, path: &str) -> Result<String, String> {
-        self.get(path).cloned().ok_or_else(|| "nicht im Projekt".into())
+        self.get(path).cloned().ok_or_else(|| trs!("nicht im Projekt", "not in the project").into())
     }
 }
 
@@ -423,11 +424,20 @@ impl Loader<'_> {
     fn add_file(&mut self, path: &str, text: String, role: FileRole, at: Span) -> Option<(FileId, File)> {
         let id = self.files.len() as FileId;
         if id > MAX_FILES {
-            self.link.push(Diagnostic::error(at, format!("zu viele Projektdateien (höchstens {MAX_FILES})")));
+            self.link.push(Diagnostic::error(
+                at,
+                tr!("zu viele Projektdateien (höchstens {MAX_FILES})", "too many project files (at most {MAX_FILES})"),
+            ));
             return None;
         }
         if text.len() > MAX_FILE_LEN {
-            self.link.push(Diagnostic::error(at, format!("`{path}` ist zu groß (höchstens {MAX_FILE_LEN} Bytes)")));
+            self.link.push(Diagnostic::error(
+                at,
+                tr!(
+                    "`{path}` ist zu groß (höchstens {MAX_FILE_LEN} Bytes)",
+                    "`{path}` is too large (at most {MAX_FILE_LEN} bytes)"
+                ),
+            ));
             return None;
         }
         let (ast, mut diags) = cad_syntax::parse_file(&text, id);
@@ -460,14 +470,17 @@ impl Loader<'_> {
                     if let Some(i) = stack.iter().position(|p| *p == target) {
                         let mut chain: Vec<&str> = stack[i..].iter().map(|s| s.as_str()).collect();
                         chain.push(&target);
-                        self.link
-                            .push(Diagnostic::error(path_span, format!("zyklisches `include`: {}", chain.join(" → "))));
+                        self.link.push(Diagnostic::error(
+                            path_span,
+                            tr!("zyklisches `include`: {}", "cyclic `include`: {}", chain.join(" → ")),
+                        ));
                         continue;
                     }
                     match self.read(&target) {
-                        Err(why) => self
-                            .link
-                            .push(Diagnostic::error(path_span, format!("Datei `{target}` nicht gefunden ({why})"))),
+                        Err(why) => self.link.push(Diagnostic::error(
+                            path_span,
+                            tr!("Datei `{target}` nicht gefunden ({why})", "file `{target}` not found ({why})"),
+                        )),
                         Ok(text) => {
                             if let Some((_, ast)) = self.add_file(&target, text, FileRole::Include, at) {
                                 stack.push(target.clone());
@@ -558,7 +571,10 @@ impl Loader<'_> {
         let text = match self.read(path) {
             Ok(t) => t,
             Err(why) => {
-                self.link.push(Diagnostic::error(at, format!("Datei `{path}` nicht gefunden ({why})")));
+                self.link.push(Diagnostic::error(
+                    at,
+                    tr!("Datei `{path}` nicht gefunden ({why})", "file `{path}` not found ({why})"),
+                ));
                 return None;
             }
         };
@@ -636,7 +652,11 @@ fn load_assets(
             }
             let res = resolver.read_bytes(&path).and_then(|b| {
                 if b.len() > MAX_ASSET_LEN {
-                    Err(format!("zu groß ({} Bytes, höchstens {MAX_ASSET_LEN})", b.len()))
+                    Err(tr!(
+                        "zu groß ({} Bytes, höchstens {MAX_ASSET_LEN})",
+                        "too large ({} bytes, at most {MAX_ASSET_LEN})",
+                        b.len()
+                    ))
                 } else {
                     Ok(std::sync::Arc::<[u8]>::from(b))
                 }

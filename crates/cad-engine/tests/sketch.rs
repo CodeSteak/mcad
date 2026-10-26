@@ -134,6 +134,7 @@ fn sketch_modules_loops_and_twist() {
 
 #[test]
 fn sweep_along_open_sketch_path() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // smooth path: line, tangent quarter arc (radius 10), line; tube of radius 2
     let src = "sweep() {\n sketch(closed = false) { start([0, 0]); line(to = [20, 0]); arc(to = [30, 10]); line(by = [0, 15]); }\n circle(2);\n}";
     let len = 20.0 + PI * 10.0 / 2.0 + 15.0;

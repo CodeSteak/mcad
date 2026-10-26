@@ -48,6 +48,7 @@ fn start(s: &mut Session<SmlibKernel>) -> Scene {
 
 #[test]
 fn files_ranges_and_parts() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let sc = start(&mut s);
     assert!(sc.complete);
@@ -81,6 +82,7 @@ fn files_ranges_and_parts() {
 
 #[test]
 fn drag_edit_targets_the_included_file() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let sc = start(&mut s);
     // Context: module gehaeuse of the library; its height default lives in lib/teile.mcad.
@@ -110,6 +112,7 @@ fn drag_edit_targets_the_included_file() {
 
 #[test]
 fn set_default_writes_into_the_library() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     start(&mut s);
     let r = s.post(ToEngine::SetDefault { module: "deckel".into(), param: "w".into(), value: Value::Num(55.0) });
@@ -120,6 +123,7 @@ fn set_default_writes_into_the_library() {
 
 #[test]
 fn missing_files_and_syntax_errors_of_other_files() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     s.post(ToEngine::SetFiles { files: BTreeMap::new(), main: None });
     let mut m = s.post(ToEngine::SetSource { text: "cube(1);\ninclude <weg.scad>\n".into(), version: 1 });
@@ -141,6 +145,7 @@ fn missing_files_and_syntax_errors_of_other_files() {
 
 #[test]
 fn export_parts() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     start(&mut s);
     s.post(ToEngine::Export { format: ExportFormat::Stl, parts: Some(vec!["deckel".into()]), zip: None, colors: None });

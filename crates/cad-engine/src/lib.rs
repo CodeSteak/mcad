@@ -60,6 +60,7 @@ mod profile;
 
 pub use profile::fill_loops;
 
+use cad_i18n::{tr, trs};
 pub use cad_step::{Schema as StepSchema, StepOptions, StepStats};
 use std::any::Any;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -74,12 +75,20 @@ use serde::Serialize;
 
 pub use cache::Lru;
 pub use counting::CountingKernel;
-pub use eval::SUSPENDED_HINT;
+pub use eval::{SUSPENDED_HINT, SUSPENDED_HINT_EN, suspended_hint};
 pub use key::{CacheKey, KeyHasher};
 pub use parts::{NodeFormat, part_file_name};
 
-/// Error of a node whose key is blocked (see [`Engine::block_keys`]).
+/// Error of a node whose key is blocked (see [`Engine::block_keys`]), German;
+/// [`blocked_message`] gives the text in the current language.
 pub const BLOCKED_MESSAGE: &str = "Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung";
+/// English text of [`BLOCKED_MESSAGE`].
+pub const BLOCKED_MESSAGE_EN: &str = "timeout, node blocked until the next change";
+
+/// [`BLOCKED_MESSAGE`] in the current language.
+pub fn blocked_message() -> &'static str {
+    if cad_i18n::is_de() { BLOCKED_MESSAGE } else { BLOCKED_MESSAGE_EN }
+}
 
 /// Default display tolerance in mm when neither the call nor `$tol` gives one.
 pub const DEFAULT_TOL: f64 = 0.05;
@@ -276,12 +285,12 @@ pub fn object_label(tree: &Tree, n: NodeIdx) -> String {
     }
 }
 
-/// "a und b", "a, b und c" (German list of operands).
+/// "a and b", "a, b and c" (list of operands; German "a und b").
 pub fn operand_list(names: &[String]) -> String {
     match names {
-        [] => "die Operanden".into(),
+        [] => trs!("die Operanden", "the operands").into(),
         [a] => a.clone(),
-        [rest @ .., last] => format!("{} und {last}", rest.join(", ")),
+        [rest @ .., last] => tr!("{} und {last}", "{} and {last}", rest.join(", ")),
     }
 }
 
@@ -548,6 +557,8 @@ pub struct Engine<K: Kernel> {
     blend_ms: HashMap<u64, f64>,
     blocked: HashSet<CacheKey>,
     heap_probe: Option<HeapProbe>,
+    /// Language of the texts in the cached node results (see [`Engine::start`]).
+    lang: cad_i18n::Lang,
 }
 
 /// Bytes in use on the heap (e.g. glibc `mallinfo2`), see [`Engine::set_heap_probe`].
@@ -721,7 +732,7 @@ impl<S: Clone + 'static> Job<S> {
             tags: vec![self.tags[idx as usize]].into(),
             dim: if two_d { dim } else { Some(Dim::Three) },
             bounds: None,
-            diags: vec![Diag { severity: Severity::Error, message: BLOCKED_MESSAGE.into(), ..Default::default() }],
+            diags: vec![Diag { severity: Severity::Error, message: blocked_message().into(), ..Default::default() }],
             hints: Vec::new(),
             selected_edges: Vec::new(),
             guides: Vec::new(),
@@ -835,6 +846,7 @@ where
             draft: false,
             blend_ms: HashMap::new(),
             heap_probe: None,
+            lang: cad_i18n::lang(),
         }
     }
 
@@ -990,6 +1002,13 @@ where
 
     /// Starts an evaluation. Computes keys and the evaluation order; no kernel calls.
     pub fn start(&mut self, tree: Tree) -> Job<K::Shape> {
+        // Cached node results, colour regions and caller data hold texts (diagnostics, hints):
+        // another language computes them again; geometry (meshes, mass, B-reps) stays.
+        let lang = cad_i18n::lang();
+        if lang != self.lang {
+            self.lang = lang;
+            self.cache.retain(|k, _| matches!(k, Slot::Mesh(..) | Slot::Mass(_) | Slot::Brep(..)));
+        }
         let tree = Rc::new(tree);
         let n = tree.nodes.len();
         let order = eval::post_order(&tree);
@@ -1061,7 +1080,7 @@ where
     ) -> Result<Rc<Mesh>, String> {
         let tol = self.tol_for(ev, node, tol);
         let Some(out) = ev.outputs.get(node as usize).and_then(|o| o.clone()) else {
-            return Err(format!("Knoten {node} wurde nicht ausgewertet"));
+            return Err(tr!("Knoten {node} wurde nicht ausgewertet", "node {node} was not evaluated"));
         };
         let mkey = Slot::Mesh(ev.reports[node as usize].key, key::canon_f64(tol));
         if let Some(Cached::Mesh(m)) = self.cache.get(&mkey) {
@@ -1124,14 +1143,18 @@ where
         opts: &cad_step::StepOptions,
     ) -> Result<(Vec<u8>, cad_step::StepStats), String> {
         // The root's display system is the context system: the same writer as for parts.
-        let root = ev.root().ok_or("kein Ergebnis")?;
+        let root = ev.root().ok_or(trs!("kein Ergebnis", "no result"))?;
         self.export_step_nodes(ev, &[root], opts)
     }
 
     fn export_mesh(&mut self, ev: &Evaluation<K::Shape>, tol: Option<f64>) -> Result<Rc<Mesh>, String> {
-        let root = ev.root().ok_or("kein Ergebnis")?;
+        let root = ev.root().ok_or(trs!("kein Ergebnis", "no result"))?;
         if ev.reports[root as usize].dim == Some(Dim::Two) {
-            return Err("2D-Ergebnis kann nicht als Körper exportiert werden".into());
+            return Err(trs!(
+                "2D-Ergebnis kann nicht als Körper exportiert werden",
+                "a 2D result cannot be exported as a body"
+            )
+            .into());
         }
         self.tessellate(ev, root, Some(tol.unwrap_or(0.01)))
     }
@@ -1202,7 +1225,7 @@ where
         point: DVec3,
         normal: DVec3,
     ) -> Result<Vec<(usize, Option<cad_kernel::brep::Brep>)>, String> {
-        let n = normal.try_normalize().ok_or("Schnitt: Normale ist null")?;
+        let n = normal.try_normalize().ok_or(trs!("Schnitt: Normale ist null", "section: the normal is zero"))?;
         let x = n.any_orthonormal_vector();
         let y = n.cross(x);
         let frame = DMat4::from_cols(x.extend(0.0), y.extend(0.0), n.extend(0.0), point.extend(1.0));
@@ -1227,7 +1250,7 @@ where
             let cut = self
                 .kernel
                 .boolean(cad_kernel::BoolOp::Intersection, &[s.clone(), b], 0)
-                .map_err(|e| format!("Schnitt im Kernel: {e}"))?;
+                .map_err(|e| tr!("Schnitt im Kernel: {e}", "section in the kernel: {e}"))?;
             if self.kernel.is_empty(&cut) {
                 out.push((i, None));
                 continue;
@@ -1261,7 +1284,7 @@ where
         }
         let n = ev.parts(node).len();
         if part >= n {
-            let mp = ev.meshes(node).get(part - n).ok_or("kein solcher Teil")?;
+            let mp = ev.meshes(node).get(part - n).ok_or(trs!("kein solcher Teil", "no such part"))?;
             let b = Rc::new(mp.mesh.brep(&(*world * mp.place), mp.tag));
             self.cache.insert(slot, Cached::Brep(b.clone()), brep_bytes(&b));
             return Ok(b);

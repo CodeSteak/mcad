@@ -129,6 +129,7 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use cad_i18n::{tr, trs};
 use cad_session::protocol::{self as p, FromEngine, ToEngine};
 use cad_session::{PROTOCOL_VERSION, SessionOptions};
 use clap::{Args, Parser, Subcommand};
@@ -172,6 +173,10 @@ pub(crate) struct Cli {
     /// Daemon messages on stderr (used or not and why, cache hits).
     #[arg(long, global = true)]
     verbose: bool,
+    /// Language of the output (diagnostics, results, messages): `en` or `de`. Default: MCAD_LANG,
+    /// else the locale (LC_ALL, LC_MESSAGES, LANG): German for `de*`, otherwise English.
+    #[arg(long, global = true, value_name = "en|de", value_parser = ["en", "de"])]
+    lang: Option<String>,
 }
 
 #[derive(Args, Clone)]
@@ -382,8 +387,15 @@ pub(crate) struct DaemonInfo {
     pub reason: Option<String>,
 }
 
+/// Language of this run: `--lang`, else [`cad_i18n::Lang::from_env`].
+pub(crate) fn cli_lang(arg: Option<&str>) -> cad_i18n::Lang {
+    arg.and_then(cad_i18n::Lang::parse).unwrap_or_else(cad_i18n::Lang::from_env)
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    let lang = cli_lang(cli.lang.as_deref());
+    cad_i18n::set_lang(lang);
     let Some(cmd) = cli.cmd else {
         // `mcad` alone: the desktop UI.
         return launch::run(None);
@@ -408,10 +420,20 @@ fn main() -> ExitCode {
             }
             if looks_like_path {
                 eprintln!(
-                    "mcad: `mcad {first}` öffnet die UI und nimmt keine weiteren Argumente. Befehle: {COMMANDS} (mcad --help)"
+                    "{}",
+                    tr!(
+                        "mcad: `mcad {first}` öffnet die UI und nimmt keine weiteren Argumente. Befehle: {COMMANDS} (mcad --help)",
+                        "mcad: `mcad {first}` opens the UI and takes no further arguments. Commands: {COMMANDS} (mcad --help)"
+                    )
                 );
             } else {
-                eprintln!("mcad: unbekannter Befehl `{first}`. Befehle: {COMMANDS} (mcad --help)");
+                eprintln!(
+                    "{}",
+                    tr!(
+                        "mcad: unbekannter Befehl `{first}`. Befehle: {COMMANDS} (mcad --help)",
+                        "mcad: unknown command `{first}`. Commands: {COMMANDS} (mcad --help)"
+                    )
+                );
             }
             return ExitCode::from(2);
         }
@@ -422,14 +444,17 @@ fn main() -> ExitCode {
     let mut info = None;
     if daemon::eligible(&cmd) {
         let argv: Vec<OsString> = std::env::args_os().skip(1).collect();
-        match client::run(&argv, uses_stdin(&cmd), cli.no_daemon, cli.verbose) {
+        match client::run(&argv, uses_stdin(&cmd), cli.no_daemon, cli.verbose, lang) {
             client::Attempt::Done(out) => return out.emit(),
             client::Attempt::Local(i) => info = Some(i),
         }
     }
-    let worker = std::thread::Builder::new().stack_size(EVAL_STACK).name("cad-eval".into()).spawn(move || run(&cmd));
+    let worker = std::thread::Builder::new().stack_size(EVAL_STACK).name("cad-eval".into()).spawn(move || {
+        cad_i18n::set_lang(lang);
+        run(&cmd)
+    });
     let result = match worker {
-        Ok(h) => h.join().unwrap_or_else(|e| Err(Fail::Kernel(format!("interner Fehler: {}", panic_text(&*e))))),
+        Ok(h) => h.join().unwrap_or_else(|e| Err(Fail::Kernel(internal_error(&*e)))),
         Err(e) => Err(Fail::Kernel(format!("Thread: {e}"))),
     };
     finish(name, json_mode, result, info.as_ref()).emit()
@@ -439,7 +464,17 @@ pub(crate) fn panic_text(e: &(dyn std::any::Any + Send)) -> String {
     e.downcast_ref::<String>()
         .cloned()
         .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
-        .unwrap_or_else(|| "Panik".into())
+        .unwrap_or_else(|| trs!("Panik", "panic").into())
+}
+
+/// "internal error: <panic>".
+pub(crate) fn internal_error(e: &(dyn std::any::Any + Send)) -> String {
+    tr!("interner Fehler: {}", "internal error: {}", panic_text(e))
+}
+
+/// `n` with the singular or plural noun (English texts).
+pub(crate) fn plural(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
 }
 
 /// `--json` of a command.
@@ -656,14 +691,14 @@ impl Model {
         let mut s = String::new();
         for d in &self.diagnostics {
             let sev = match d.severity {
-                p::Severity::Error => "Fehler",
-                p::Severity::Warning => "Warnung",
-                p::Severity::Info => "Info",
+                p::Severity::Error => trs!("Fehler", "error"),
+                p::Severity::Warning => trs!("Warnung", "warning"),
+                p::Severity::Info => trs!("Info", "info"),
             };
             let src = match d.source {
-                p::DiagSource::Syntax => "Syntax",
-                p::DiagSource::Eval => "Auswertung",
-                p::DiagSource::Kernel => "Kernel",
+                p::DiagSource::Syntax => trs!("Syntax", "syntax"),
+                p::DiagSource::Eval => trs!("Auswertung", "evaluation"),
+                p::DiagSource::Kernel => trs!("Kernel", "kernel"),
             };
             let file = match &d.file {
                 Some(f) => self.file_display(f),
@@ -691,23 +726,25 @@ impl Model {
     /// "Z.n  text" of a range, with the file for ranges in other project files.
     pub fn range_line(&self, r: &p::SrcRange) -> String {
         match r.file {
-            None | Some(0) => format!("Z.{:<4} {}", r.line, self.line_text(r.line)),
+            None | Some(0) => tr!("Z.{:<4} {}", "line {:<4} {}", r.line, self.line_text(r.line)),
             Some(id) => {
                 let cur = self.session.current();
                 let f = cur.and_then(|c| c.proj.file(id));
                 let path = f.map(|f| f.path.clone()).unwrap_or_default();
                 let text = f.and_then(|f| f.text.lines().nth(r.line.saturating_sub(1) as usize)).unwrap_or("").trim();
-                format!("{path} Z.{} {text}", r.line)
+                tr!("{path} Z.{} {text}", "{path} line {} {text}", r.line)
             }
         }
     }
 }
 
 fn parse_define(d: &str) -> Result<(String, p::Value), Fail> {
-    let (k, v) = d.split_once('=').ok_or_else(|| Fail::Usage(format!("-D {d}: erwartet NAME=WERT")))?;
+    let (k, v) = d
+        .split_once('=')
+        .ok_or_else(|| Fail::Usage(tr!("-D {d}: erwartet NAME=WERT", "-D {d}: expected NAME=VALUE")))?;
     let k = k.trim();
     if k.is_empty() {
-        return Err(Fail::Usage(format!("-D {d}: Name fehlt")));
+        return Err(Fail::Usage(tr!("-D {d}: Name fehlt", "-D {d}: name missing")));
     }
     let v = v.trim();
     let val = serde_json::from_str::<p::Value>(v).unwrap_or_else(|_| p::Value::Str(v.to_string()));
@@ -766,10 +803,13 @@ fn split_module_call(m: &str) -> Result<(Option<String>, Option<String>), Fail> 
     let Some(open) = m.find('(') else { return Ok((Some(m.to_string()), None)) };
     let name = m[..open].trim();
     let Some(args) = m[open + 1..].strip_suffix(')') else {
-        return Err(Fail::Usage(format!("-m {m}: erwartet NAME oder NAME(argumente)")));
+        return Err(Fail::Usage(tr!(
+            "-m {m}: erwartet NAME oder NAME(argumente)",
+            "-m {m}: expected NAME or NAME(arguments)"
+        )));
     };
     if name.is_empty() {
-        return Err(Fail::Usage(format!("-m {m}: Modulname fehlt")));
+        return Err(Fail::Usage(tr!("-m {m}: Modulname fehlt", "-m {m}: module name missing")));
     }
     Ok((Some(name.to_string()), Some(args.to_string())))
 }
@@ -786,16 +826,17 @@ fn bind_module_args(
 ) -> Result<Vec<(String, p::Value)>, Fail> {
     use cad_syntax::ast::StmtKind;
     let call = format!("-m '{name}({args})'");
-    let params = cad_eval::module_params(proj, name)
-        .ok_or_else(|| Fail::Usage(format!("{call}: Modul `{name}` nicht gefunden")))?;
+    let params = cad_eval::module_params(proj, name).ok_or_else(|| {
+        Fail::Usage(tr!("{call}: Modul `{name}` nicht gefunden", "{call}: module `{name}` not found"))
+    })?;
     let src = format!("m({args});");
     let (f, d) = cad_syntax::parse(&src);
     if let Some(e) = d.iter().find(|d| d.severity == cad_syntax::Severity::Error) {
-        return Err(Fail::Usage(format!("{call}: Syntax: {}", e.message)));
+        return Err(Fail::Usage(tr!("{call}: Syntax: {}", "{call}: syntax: {}", e.message)));
     }
     let Some(StmtKind::Call { args: list, .. }) = f.stmts.first().map(|s| &s.kind).filter(|_| f.stmts.len() == 1)
     else {
-        return Err(Fail::Usage(format!("{call}: erwartet NAME(argumente)")));
+        return Err(Fail::Usage(tr!("{call}: erwartet NAME(argumente)", "{call}: expected NAME(arguments)")));
     };
     let mut names: Vec<String> = Vec::new();
     let mut exprs: Vec<String> = Vec::new();
@@ -804,9 +845,10 @@ fn bind_module_args(
         let pname = match &a.name {
             Some(n) => {
                 if !params.contains(&n.name) {
-                    let known = if params.is_empty() { "keine".into() } else { params.join(", ") };
-                    return Err(Fail::Usage(format!(
+                    let known = if params.is_empty() { trs!("keine", "none").into() } else { params.join(", ") };
+                    return Err(Fail::Usage(tr!(
                         "{call}: Modul `{name}` hat keinen Parameter `{}` (Parameter: {known})",
+                        "{call}: module `{name}` has no parameter `{}` (parameters: {known})",
                         n.name
                     )));
                 }
@@ -814,8 +856,9 @@ fn bind_module_args(
             }
             None => {
                 let Some(p) = params.get(positional) else {
-                    return Err(Fail::Usage(format!(
+                    return Err(Fail::Usage(tr!(
                         "{call}: zu viele Positionsargumente – `{name}` hat {} Parameter ({})",
+                        "{call}: too many positional arguments – `{name}` has {} parameters ({})",
                         params.len(),
                         params.join(", ")
                     )));
@@ -825,11 +868,15 @@ fn bind_module_args(
             }
         };
         if names.contains(&pname) {
-            return Err(Fail::Usage(format!("{call}: Parameter `{pname}` doppelt angegeben")));
+            return Err(Fail::Usage(tr!(
+                "{call}: Parameter `{pname}` doppelt angegeben",
+                "{call}: parameter `{pname}` given twice"
+            )));
         }
         if defines.contains_key(&pname) {
-            return Err(Fail::Usage(format!(
-                "{call}: Parameter `{pname}` steht im Aufruf und in -D {pname}=… (nur eines angeben)"
+            return Err(Fail::Usage(tr!(
+                "{call}: Parameter `{pname}` steht im Aufruf und in -D {pname}=… (nur eines angeben)",
+                "{call}: parameter `{pname}` is in the call and in -D {pname}=… (give only one)"
             )));
         }
         names.push(pname);
@@ -840,7 +887,12 @@ fn bind_module_args(
     for ((pname, v), text) in names.into_iter().zip(cad_eval::eval_top_level(proj, &opts, &exprs)).zip(&exprs) {
         match v {
             Ok(v) => out.push((pname, cad_session::convert::value(&v))),
-            Err(e) => return Err(Fail::Usage(format!("{call}: Argument `{pname}` = {text}: {e}"))),
+            Err(e) => {
+                return Err(Fail::Usage(tr!(
+                    "{call}: Argument `{pname}` = {text}: {e}",
+                    "{call}: argument `{pname}` = {text}: {e}"
+                )));
+            }
         }
     }
     Ok(out)
@@ -876,7 +928,9 @@ pub(crate) fn load(c: &Common, line: Option<u32>, whole_file: bool, kernel: bool
         // `-m 'halter(30, h = 5)'`: the arguments become overrides (language only, no kernel)
         s.post(ToEngine::SetSource { text: text.clone(), version: 1 });
         s.post(ToEngine::Cancel);
-        let cur = s.current().ok_or_else(|| Fail::Usage("-m: Datei nicht auswertbar".into()))?;
+        let cur = s
+            .current()
+            .ok_or_else(|| Fail::Usage(tr!("-m: Datei nicht auswertbar", "-m: file cannot be evaluated")))?;
         let bound = bind_module_args(&cur.proj, name, args, &defines)?;
         defines.extend(bound);
     }
@@ -941,28 +995,28 @@ pub(crate) fn world_bounds(b: &p::Bounds, m: &DMat4) -> p::Bounds {
     p::Bounds { min: p::Vec3(wlo.to_array()), max: p::Vec3(whi.to_array()) }
 }
 
-/// "Z.n", with the file's path for ranges in other project files.
+/// "Z.n" / "line n", with the file's path for ranges in other project files.
 pub(crate) fn zl(sc: &p::Scene, r: &p::SrcRange) -> String {
     match r.file.and_then(|f| sc.files.get(f as usize)).filter(|f| f.id != 0) {
-        Some(f) => format!("{} Z.{}", f.path, r.line),
-        None => format!("Z.{}", r.line),
+        Some(f) => tr!("{} Z.{}", "{} line {}", f.path, r.line),
+        None => tr!("Z.{}", "line {}", r.line),
     }
 }
 
 fn status_text(s: p::NodeStatus) -> &'static str {
     match s {
         p::NodeStatus::Ok => "ok",
-        p::NodeStatus::Warning => "Warnung",
-        p::NodeStatus::Error => "Fehler",
-        p::NodeStatus::Skipped => "übersprungen",
-        p::NodeStatus::Pending => "offen",
+        p::NodeStatus::Warning => trs!("Warnung", "warning"),
+        p::NodeStatus::Error => trs!("Fehler", "error"),
+        p::NodeStatus::Skipped => trs!("übersprungen", "skipped"),
+        p::NodeStatus::Pending => trs!("offen", "pending"),
     }
 }
 
 fn context_text(m: &Model) -> String {
     let Some(sc) = &m.scene else { return String::new() };
     match &sc.context.module {
-        None => "Kontext: Datei\n".into(),
+        None => tr!("Kontext: Datei\n", "Context: file\n"),
         Some(name) => {
             let params: Vec<String> = sc
                 .context
@@ -972,7 +1026,7 @@ fn context_text(m: &Model) -> String {
                     format!("{} = {}{}", pv.name, value_text(&pv.value), if pv.overridden { " (-D)" } else { "" })
                 })
                 .collect();
-            format!("Kontext: Modul {name}({})\n", params.join(", "))
+            tr!("Kontext: Modul {name}({})\n", "Context: module {name}({})\n", params.join(", "))
         }
     }
 }
@@ -1008,13 +1062,25 @@ fn check(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         let checked = asserts.iter().filter(|a| a.checked).count();
         let bad = asserts.iter().filter(|a| !a.ok).count();
         let tail = if bad > 0 {
-            format!(" ({} Verletzung(en); mcad export bricht dann ab, außer mit --ignore-asserts)", j["violations"])
+            tr!(
+                " ({} Verletzung(en); mcad export bricht dann ab, außer mit --ignore-asserts)",
+                " ({} violation(s); mcad export then stops unless --ignore-asserts)",
+                j["violations"]
+            )
         } else {
             String::new()
         };
-        text.push_str(&format!("Asserts: {checked} von {} geprüft, {bad} verletzt{tail}\n", asserts.len()));
+        text.push_str(&tr!(
+            "Asserts: {checked} von {} geprüft, {bad} verletzt{tail}\n",
+            "Asserts: {checked} of {} checked, {bad} violated{tail}\n",
+            asserts.len()
+        ));
     }
-    text.push_str(&format!("{}: {errors} Fehler, {warnings} Warnungen\n", m.file));
+    text.push_str(&tr!(
+        "{}: {errors} Fehler, {warnings} Warnungen\n",
+        "{}: {errors} errors, {warnings} warnings\n",
+        m.file
+    ));
     Ok(Outcome { json: j, text, errors: m.has_errors(), exit: None })
 }
 
@@ -1025,33 +1091,33 @@ fn eval(c: &Common) -> Result<Outcome, Fail> {
     let mut t = String::new();
     if let Some(sc) = &m.scene {
         t.push_str(&context_text(&m));
-        t.push_str("Baum:\n");
+        t.push_str(trs!("Baum:\n", "Tree:\n"));
         if let Some(root) = sc.root {
             tree_text(sc, root, 1, &mut t);
         }
         if !sc.hints.is_empty() {
-            t.push_str("Werte:\n");
+            t.push_str(trs!("Werte:\n", "Values:\n"));
             for h in sc.hints.iter().filter(|h| h.in_context) {
                 t.push_str(&format!("  {}  → {}\n", m.range_line(&h.range), h.text));
             }
         }
         if !sc.parts.is_empty() {
-            t.push_str("Bauteile:\n");
+            t.push_str(trs!("Bauteile:\n", "Parts:\n"));
             for pt in &sc.parts {
                 let b = pt
                     .bounds
                     .as_ref()
-                    .map(|b| format!("  Hülle {}–{}", vec3(&b.min), vec3(&b.max)))
+                    .map(|b| tr!("  Hülle {}–{}", "  bounds {}–{}", vec3(&b.min), vec3(&b.max)))
                     .unwrap_or_default();
-                let v = pt.volume.map(|v| format!("  Volumen {} mm³", num(v))).unwrap_or_default();
-                t.push_str(&format!("  {}  Z.{}{b}{v}\n", pt.name, pt.range.line));
+                let v = pt.volume.map(|v| tr!("  Volumen {} mm³", "  volume {} mm³", num(v))).unwrap_or_default();
+                t.push_str(&tr!("  {}  Z.{}{b}{v}\n", "  {}  line {}{b}{v}\n", pt.name, pt.range.line));
             }
         }
         if sc.files.len() > 1 {
-            t.push_str("Dateien:\n");
+            t.push_str(trs!("Dateien:\n", "Files:\n"));
             for f in &sc.files {
                 let role = match f.role {
-                    p::FileRole::Main => "Hauptdatei",
+                    p::FileRole::Main => trs!("Hauptdatei", "main file"),
                     p::FileRole::Include => "include",
                     p::FileRole::Use => "use",
                 };
@@ -1059,15 +1125,19 @@ fn eval(c: &Common) -> Result<Outcome, Fail> {
             }
         }
         if !sc.grids.is_empty() {
-            t.push_str("Raster:\n");
+            t.push_str(trs!("Raster:\n", "Grids:\n"));
             for g in &sc.grids {
                 let module = &sc.instances.get(g.module_inst as usize).map(|i| i.module.as_str()).unwrap_or("");
                 t.push_str(&format!(
                     "  {} ({}, {}{}):\n",
                     g.name,
                     zl(sc, &g.range),
-                    if module.is_empty() { "Datei".to_string() } else { format!("Modul {module}") },
-                    if g.in_context { "" } else { ", nicht im Kontext" }
+                    if module.is_empty() {
+                        trs!("Datei", "file").to_string()
+                    } else {
+                        tr!("Modul {module}", "module {module}")
+                    },
+                    if g.in_context { "" } else { trs!(", nicht im Kontext", ", not in the context") }
                 ));
                 for axis in 0..3u8 {
                     let planes: Vec<String> = g
@@ -1078,11 +1148,11 @@ fn eval(c: &Common) -> Result<Outcome, Fail> {
                             let kind = if pl.implicit {
                                 ""
                             } else if pl.literal.is_some() {
-                                " (Literal)"
+                                trs!(" (Literal)", " (literal)")
                             } else if pl.is_ref {
-                                " (Referenz)"
+                                trs!(" (Referenz)", " (reference)")
                             } else {
-                                " (Ausdruck)"
+                                trs!(" (Ausdruck)", " (expression)")
                             };
                             format!("{} = {}{kind}", pl.name, num(pl.value))
                         })
@@ -1092,7 +1162,7 @@ fn eval(c: &Common) -> Result<Outcome, Fail> {
             }
         }
         if !sc.anchors.is_empty() {
-            t.push_str("Anker (Kontextkoordinaten):\n");
+            t.push_str(trs!("Anker (Kontextkoordinaten):\n", "Anchors (context coordinates):\n"));
             for a in &sc.anchors {
                 let name = a.text.clone().unwrap_or_else(|| {
                     let module = sc.instances.get(a.inst as usize).map(|i| i.module.clone()).unwrap_or_default();
@@ -1108,8 +1178,9 @@ fn eval(c: &Common) -> Result<Outcome, Fail> {
                 t.push_str(&format!("  {}: ECHO: {}\n", zl(sc, &e.range), e.text));
             }
         }
-        t.push_str(&format!(
+        t.push_str(&tr!(
             "Statistik: {} Knoten, {} aus dem Cache, {} Kernel-Aufrufe, Auswertung {} ms, Kernel {} ms\n",
+            "Statistics: {} nodes, {} from the cache, {} kernel calls, evaluation {} ms, kernel {} ms\n",
             sc.stats.nodes,
             sc.stats.cache_hits,
             sc.stats.kernel_calls,
@@ -1141,10 +1212,10 @@ fn tree_text(sc: &p::Scene, n: u32, depth: usize, out: &mut String) {
         flags.push("*");
     }
     if node.flags.zone {
-        flags.push("Zone");
+        flags.push(trs!("Zone", "zone"));
     }
     if node.subtracted {
-        flags.push("abgezogen");
+        flags.push(trs!("abgezogen", "subtracted"));
     }
     if !flags.is_empty() {
         line.push_str(&format!("  [{}]", flags.join(", ")));
@@ -1152,10 +1223,10 @@ fn tree_text(sc: &p::Scene, n: u32, depth: usize, out: &mut String) {
     line.push_str(&format!("  {}", status_text(node.status)));
     if let Some(b) = &node.bounds {
         let wb = world_bounds(b, &mat(&node.display_world));
-        line.push_str(&format!("  Hülle {}–{}", vec3(&wb.min), vec3(&wb.max)));
+        line.push_str(&tr!("  Hülle {}–{}", "  bounds {}–{}", vec3(&wb.min), vec3(&wb.max)));
     }
     for h in &node.hints {
-        line.push_str(&format!("  „{h}“"));
+        line.push_str(&tr!("  „{h}“", "  “{h}”"));
     }
     for msg in &node.messages {
         line.push_str(&format!("  ! {}", msg.message));
@@ -1192,7 +1263,7 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
         return Ok(Outcome { json: j, text: t, errors: m.has_errors(), exit: None });
     };
     t.push_str(&context_text(&m));
-    t.push_str(&format!("Z.{line}: {}\n", m.line_text(line)));
+    t.push_str(&tr!("Z.{line}: {}\n", "line {line}: {}\n", m.line_text(line)));
     let ids = nodes_at_line(&sc, line);
     let mut nodes = Vec::new();
     for &i in &ids {
@@ -1211,8 +1282,9 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
         if let Some(inst) = &n.instance {
             l.push_str(&format!(" ({inst})"));
         }
-        l.push_str(&format!(
+        l.push_str(&tr!(
             "  Z.{}:{}–{}:{}  {}",
+            "  line {}:{}–{}:{}  {}",
             n.range.line,
             n.range.col,
             n.range.end_line,
@@ -1220,13 +1292,13 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
             status_text(n.status)
         ));
         if n.flags.zone {
-            l.push_str("  [Zone]");
+            l.push_str(trs!("  [Zone]", "  [zone]"));
         }
         if n.subtracted {
-            l.push_str("  [abgezogen]");
+            l.push_str(trs!("  [abgezogen]", "  [subtracted]"));
         }
         if n.flags.keepout {
-            l.push_str("  [Sperrvolumen: nicht im Ergebnis]");
+            l.push_str(trs!("  [Sperrvolumen: nicht im Ergebnis]", "  [keep-out volume: not in the result]"));
         }
         t.push_str(&l);
         t.push('\n');
@@ -1235,27 +1307,37 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
             t.push_str(&at.replacen("  ", "      ", 1));
             if let Some(a) = sc.asserts.iter().find(|a| a.node == n.idx) {
                 for pr in &a.pairs {
-                    t.push_str(&format!("        {} {}\n", if pr.ok { "ok:" } else { "VERLETZT:" }, pr.message));
+                    t.push_str(&format!(
+                        "        {} {}\n",
+                        if pr.ok { "ok:" } else { trs!("VERLETZT:", "VIOLATED:") },
+                        pr.message
+                    ));
                 }
             }
         }
         if let Some(b) = &wb {
-            t.push_str(&format!("      Hülle {} – {}\n", vec3(&b.min), vec3(&b.max)));
+            t.push_str(&tr!("      Hülle {} – {}\n", "      bounds {} – {}\n", vec3(&b.min), vec3(&b.max)));
         }
         if let (Some(v), Some(a)) = (volume, area) {
-            t.push_str(&format!("      Volumen {} mm³, Fläche {} mm²\n", num(v), num(a)));
+            t.push_str(&tr!(
+                "      Volumen {} mm³, Fläche {} mm²\n",
+                "      volume {} mm³, area {} mm²\n",
+                num(v),
+                num(a)
+            ));
         }
         if !n.selected_edges.is_empty() {
-            t.push_str(&format!("      ausgewählte Kanten: {}\n", n.selected_edges.len()));
+            t.push_str(&tr!("      ausgewählte Kanten: {}\n", "      selected edges: {}\n", n.selected_edges.len()));
         }
         if n.opened_faces > 0 {
-            t.push_str(&format!("      geöffnete Flächen: {}\n", n.opened_faces));
+            t.push_str(&tr!("      geöffnete Flächen: {}\n", "      opened faces: {}\n", n.opened_faces));
         }
         for h in &n.hints {
-            t.push_str(&format!("      Hinweis: {h}\n"));
+            t.push_str(&tr!("      Hinweis: {h}\n", "      hint: {h}\n"));
         }
         for msg in &n.messages {
-            let sev = if msg.severity == p::Severity::Error { "Fehler" } else { "Warnung" };
+            let sev =
+                if msg.severity == p::Severity::Error { trs!("Fehler", "error") } else { trs!("Warnung", "warning") };
             t.push_str(&format!("      {sev}: {}\n", msg.message));
         }
         nodes.push(json!({
@@ -1280,24 +1362,26 @@ fn inspect(c: &Common, line: u32, whole_file: bool) -> Result<Outcome, Fail> {
         }));
     }
     if ids.is_empty() {
-        t.push_str("  keine Geometrie\n");
+        t.push_str(trs!("  keine Geometrie\n", "  no geometry\n"));
     }
     let hints: Vec<&p::Hint> = sc.hints.iter().filter(|h| h.range.line == line).collect();
     for h in &hints {
-        t.push_str(&format!("  Wert: {}{}\n", h.text, if h.literal.is_some() { " (Literal, ziehbar)" } else { "" }));
+        let lit = if h.literal.is_some() { trs!(" (Literal, ziehbar)", " (literal, draggable)") } else { "" };
+        t.push_str(&tr!("  Wert: {}{lit}\n", "  value: {}{lit}\n", h.text));
     }
     let handles: Vec<&p::Handle> = sc.handles.iter().filter(|h| h.range.line == line).collect();
     for h in &handles {
         let editable = h.comps.iter().filter(|c| c.is_some()).count();
         let what = if editable > 0 {
-            format!("{editable} Literal(e)")
+            tr!("{editable} Literal(e)", "{editable} literal(s)")
         } else if h.has_ref {
-            "Referenz".into()
+            tr!("Referenz", "reference")
         } else {
-            "gesperrt".into()
+            tr!("gesperrt", "locked")
         };
-        t.push_str(&format!(
+        t.push_str(&tr!(
             "  Griff {:?} #{}: Wert {:?} bei {} ({what})\n",
+            "  handle {:?} #{}: value {:?} at {} ({what})\n",
             h.kind,
             h.index,
             h.value.iter().map(|v| num(*v)).collect::<Vec<_>>(),
@@ -1338,11 +1422,25 @@ fn export(
         Some(f) if f == "stl" => p::ExportFormat::Stl,
         Some(f) if f == "3mf" => p::ExportFormat::ThreeMf,
         Some(f) if f == "step" || f == "stp" => p::ExportFormat::Step,
-        Some(f) => return Err(Fail::Usage(format!("unbekanntes Exportformat: {f} (stl, 3mf oder step)"))),
-        None => return Err(Fail::Usage("Exportformat fehlt (Endung .stl/.3mf/.step oder --format)".into())),
+        Some(f) => {
+            return Err(Fail::Usage(tr!(
+                "unbekanntes Exportformat: {f} (stl, 3mf oder step)",
+                "unknown export format: {f} (stl, 3mf or step)"
+            )));
+        }
+        None => {
+            return Err(Fail::Usage(tr!(
+                "Exportformat fehlt (Endung .stl/.3mf/.step oder --format)",
+                "export format missing (extension .stl/.3mf/.step or --format)"
+            )));
+        }
     };
-    let schema = cad_engine::StepSchema::parse(schema)
-        .ok_or_else(|| Fail::Usage(format!("unbekanntes STEP-Schema: {schema} (ap242 oder ap214)")))?;
+    let schema = cad_engine::StepSchema::parse(schema).ok_or_else(|| {
+        Fail::Usage(tr!(
+            "unbekanntes STEP-Schema: {schema} (ap242 oder ap214)",
+            "unknown STEP schema: {schema} (ap242 or ap214)"
+        ))
+    })?;
     let mut m = load(c, None, true, true)?;
     let mut j = m.base_json("export");
     if m.scene.is_none() {
@@ -1361,19 +1459,24 @@ fn export(
         let opts = cad_engine::StepOptions { schema, name, timestamp: utc_timestamp(), ..Default::default() };
         let (bytes, st, sn) = m.session.export_step_with_notes(&opts, merge).map_err(Fail::Kernel)?;
         for g in &sn.fused {
-            notes.push(format!(
+            notes.push(tr!(
                 "Körper {} überschneiden sich: als ein Körper „{}“ geschrieben (berührende bleiben getrennt; alles verschmolzen: --merge)",
+                "bodies {} overlap: written as one body “{}” (touching ones stay apart; everything fused: --merge)",
                 g.join(", "),
                 g.join(" + ")
             ));
         }
         for (name, e) in &sn.apart {
-            notes.push(format!(
-                "Körper „{name}“ überschneiden sich, Vereinigung gescheitert ({e}): getrennt geschrieben"
+            notes.push(tr!(
+                "Körper „{name}“ überschneiden sich, Vereinigung gescheitert ({e}): getrennt geschrieben",
+                "bodies “{name}” overlap, union failed ({e}): written apart"
             ));
         }
         for (a, b, e) in &sn.unchecked {
-            notes.push(format!("Überschneidung von {a} und {b} nicht prüfbar ({e}): getrennt geschrieben"));
+            notes.push(tr!(
+                "Überschneidung von {a} und {b} nicht prüfbar ({e}): getrennt geschrieben",
+                "overlap of {a} and {b} could not be checked ({e}): written apart"
+            ));
         }
         (bytes, 0, Some(st))
     } else if colored {
@@ -1415,27 +1518,41 @@ fn export(
     let mut t = m.diagnostics_text();
     t.push_str(&assert_note);
     let what = match &step {
-        Some(st) if st.bodies.len() > 1 => format!(
+        Some(st) if st.bodies.len() > 1 => tr!(
             "{} Körper ({}), {} Flächen, {} Kanten",
+            "{} bodies ({}), {} faces, {} edges",
             st.solids + st.sheets,
             st.bodies.join(", "),
             st.faces,
             st.edges
         ),
-        Some(st) => format!("{} Körper, {} Flächen, {} Kanten", st.solids + st.sheets, st.faces, st.edges),
-        None => format!("{triangles} Dreiecke"),
+        Some(st) if cad_i18n::is_de() => {
+            format!("{} Körper, {} Flächen, {} Kanten", st.solids + st.sheets, st.faces, st.edges)
+        }
+        Some(st) => format!(
+            "{}, {}, {}",
+            plural(st.solids + st.sheets, "body", "bodies"),
+            plural(st.faces, "face", "faces"),
+            plural(st.edges, "edge", "edges")
+        ),
+        None => tr!("{triangles} Dreiecke", "{triangles} triangles"),
     };
-    t.push_str(&format!(
+    t.push_str(&tr!(
         "{}: {what}, {} Bytes{}\n",
+        "{}: {what}, {} bytes{}\n",
         output.display(),
         bytes.len(),
-        mp.map(|mp| format!(", Volumen {} mm³", num(mp.volume))).unwrap_or_default()
+        mp.map(|mp| tr!(", Volumen {} mm³", ", volume {} mm³", num(mp.volume))).unwrap_or_default()
     ));
     if colored {
-        t.push_str(&format!("3MF mehrfarbig: {} (einfarbig: --single-color)\n", notes.join("; ")));
+        t.push_str(&tr!(
+            "3MF mehrfarbig: {} (einfarbig: --single-color)\n",
+            "3MF multicolour: {} (single colour: --single-color)\n",
+            notes.join("; ")
+        ));
     } else {
         for n in &notes {
-            t.push_str(&format!("Hinweis: {n}\n"));
+            t.push_str(&tr!("Hinweis: {n}\n", "note: {n}\n"));
         }
     }
     t.push_str(&colors_text);
@@ -1446,8 +1563,9 @@ fn export(
 fn export_per_color(c: &Common, output: &Path, parts: &[String], ignore_asserts: bool) -> Result<Outcome, Fail> {
     // a ZIP under another extension would be taken for an STL by the slicer
     if !output.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("zip")) {
-        return Err(Fail::Usage(format!(
+        return Err(Fail::Usage(tr!(
             "--per-color schreibt eine ZIP-Datei mit einem STL je Farbe: -o {}",
+            "--per-color writes a ZIP file with one STL per colour: -o {}",
             output.with_extension("zip").display()
         )));
     }
@@ -1475,11 +1593,12 @@ fn export_per_color(c: &Common, output: &Path, parts: &[String], ignore_asserts:
     j["color_regions"] = regions;
     let mut t = m.diagnostics_text();
     t.push_str(&assert_note);
-    t.push_str(&format!(
+    t.push_str(&tr!(
         "{}: {} STL (eine je Farbe{}), {} Dreiecke, {} Bytes\n",
+        "{}: {} STL (one per colour{}), {} triangles, {} bytes\n",
         output.display(),
         st.parts,
-        if st.objects > 1 { " und Bauteil" } else { "" },
+        if st.objects > 1 { trs!(" und Bauteil", " and part") } else { "" },
         st.triangles,
         bytes.len()
     ));
@@ -1529,22 +1648,24 @@ pub(crate) fn asserts_summary(sc: &p::Scene, only: Option<&[u32]>) -> (Json, Str
         let violations: Vec<&str> =
             r.map(|a| a.pairs.iter().filter(|p| !p.ok).map(|p| p.message.as_str()).collect()).unwrap_or_default();
         let state = match r {
-            None => "nicht geprüft (ohne Kernel)".to_string(),
-            Some(a) if !a.checked => format!("nicht geprüft ({})", a.note.clone().unwrap_or_default()),
+            None => tr!("nicht geprüft (ohne Kernel)", "not checked (without kernel)"),
+            Some(a) if !a.checked => {
+                tr!("nicht geprüft ({})", "not checked ({})", a.note.clone().unwrap_or_default())
+            }
             Some(_) if violations.is_empty() => {
                 let infos: Vec<&str> = r
                     .map(|a| a.pairs.iter().filter(|p| p.contact.is_some()).map(|p| p.message.as_str()).collect())
                     .unwrap_or_default();
                 if infos.is_empty() { "ok".to_string() } else { format!("ok – {}", infos.join("; ")) }
             }
-            Some(_) => format!("verletzt – {}", violations.join("; ")),
+            Some(_) => tr!("verletzt – {}", "violated – {}", violations.join("; ")),
         };
         let bodies = r.map(|a| a.bodies).unwrap_or(0);
         t.push_str(&format!(
             "  {} {}({params}): {state}{}\n",
             zl(sc, &n.range),
             n.label,
-            if r.is_some_and(|a| a.checked) { format!(" [{bodies} Körper]") } else { String::new() }
+            if r.is_some_and(|a| a.checked) { tr!(" [{bodies} Körper]", " [{bodies} bodies]") } else { String::new() }
         ));
         rows.push(json!({
             "node": n.idx,
@@ -1575,15 +1696,23 @@ pub(crate) fn assert_gate(m: &Model, j: &mut Json, ignore: bool) -> Result<Strin
         return Ok(String::new());
     }
     if ignore {
-        return Ok(format!("Warnung: trotz {} Assert-Verletzung(en) exportiert (--ignore-asserts)\n", v.len()));
+        return Ok(tr!(
+            "Warnung: trotz {} Assert-Verletzung(en) exportiert (--ignore-asserts)\n",
+            "warning: exported despite {} assert violation(s) (--ignore-asserts)\n",
+            v.len()
+        ));
     }
     j["aborted"] = json!(true);
     let mut t = m.diagnostics_text();
-    t.push_str(&format!("Export abgebrochen: {} Assert-Verletzung(en), nichts geschrieben:\n", v.len()));
+    t.push_str(&tr!(
+        "Export abgebrochen: {} Assert-Verletzung(en), nichts geschrieben:\n",
+        "export stopped: {} assert violation(s), nothing written:\n",
+        v.len()
+    ));
     for l in &v {
         t.push_str(&format!("  {l}\n"));
     }
-    t.push_str("Trotzdem exportieren: --ignore-asserts\n");
+    t.push_str(trs!("Trotzdem exportieren: --ignore-asserts\n", "export anyway: --ignore-asserts\n"));
     Err(Outcome { json: j.clone(), text: t, errors: true, exit: Some(EXIT_ASSERT) })
 }
 

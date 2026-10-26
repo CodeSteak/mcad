@@ -51,6 +51,7 @@ fn two_items_for_2d_grids() {
 
 #[test]
 fn grid_errors() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let cases: &[(&str, &str)] = &[
         ("grid g { x: a = 0; y: a = 1; }", "Ebenenname `a` in Raster `g` schon vergeben"),
         ("grid g { x: a = 0; } cube(g[a, b, _]);", "hat keine Ebene `b`"),
@@ -78,6 +79,7 @@ fn grid_errors() {
 
 #[test]
 fn lines_and_planes_are_not_values() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run(
         "grid g { x: a = 1; y: b = 2; z: c = 3; } l = g[a, *, c]; echo(l + 1); translate(g[*, *, c]) cube(1); echo(g.c + 1, g[*, *, c] == g[*, *, c]);",
     );
@@ -129,6 +131,7 @@ fn grid_inside_module_frames() {
 
 #[test]
 fn mirror_at_grid_plane() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = clean("grid g { x: m = 10; } mirror(g.m) cube(1); mirror(g[m, *, *]) cube(1);");
     let ms: Vec<DMat4> =
         out.tree.nodes.iter().filter_map(|n| if let Op::Transform { m, .. } = n.op { Some(m) } else { None }).collect();
@@ -141,6 +144,7 @@ fn mirror_at_grid_plane() {
 
 #[test]
 fn visibility_of_grids() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // Visible from the declaration to the end of the module, also in nested blocks.
     let ok = "module m() { translate([1, 0, 0]) { grid g { x: a = 1; } } if (true) { translate(g[a, _, _]) cube(1); } } m();";
     clean(ok);
@@ -198,6 +202,7 @@ fn anchors_from_outside() {
 
 #[test]
 fn anchor_errors() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let cases: &[(&str, &str)] = &[
         ("module p() { anchor a = [0, 0, 0]; } k: p(); echo(dir(k.a));", "hat keine Richtung"),
         ("module p() { anchor a = [0, 0, 0]; } k: p(); echo(k.b);", "hat keinen Anker `b`"),
@@ -217,6 +222,7 @@ fn anchor_errors() {
 
 #[test]
 fn named_instance_visibility() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("echo(k.a); module p() { anchor a = [1, 0, 0]; } k: p();");
     assert!(has_warning(&out, "unbekannte Variable `k`"));
     let out = run("module p() { anchor a = [1, 0, 0]; } module q() echo(k.a); k: p(); q();");
@@ -247,4 +253,18 @@ fn transforms_of_calls_move_anchors_and_grids() {
     assert_eq!(g.frame, DMat4::from_translation(DVec3::new(0.0, 0.0, 7.0)));
     let k = &out.instances[1];
     assert_eq!(k.world, DMat4::from_translation(DVec3::new(0.0, 0.0, 7.0)));
+}
+
+#[test]
+fn grid_errors_in_english() {
+    let cases: &[(&str, &str)] = &[
+        ("grid g { x: a = 0; y: a = 1; }", "plane name `a` already used in grid `g`"),
+        ("grid g { x: a = 0; } cube(g[a, b, _]);", "grid `g` has no plane `b`"),
+        ("grid g { x: l = [1, 2]; } cube(g[l[5], _, _]);", "plane index 5 out of range"),
+        ("for (i = [0:1]) grid g { x: a = i; }", "grids are not allowed in for loops"),
+    ];
+    for (src, msg) in cases {
+        let out = run(src);
+        assert!(has_error(&out, msg), "{src}: expected error containing {msg:?}, got {:?}", out.diagnostics);
+    }
 }

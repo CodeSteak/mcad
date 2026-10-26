@@ -30,6 +30,7 @@ use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use cad_i18n::{tr, trs};
 use cad_ipc::{Frame, Kind, read_frame, write_frame};
 use cad_kernel::Kernel;
 use cad_session::protocol::{FromEngine, ToEngine};
@@ -48,7 +49,7 @@ pub enum Input {
     Post(ToEngine),
     /// Test aid: blocks the engine like a hanging kernel call.
     Hang(u64),
-    /// A message that could not be parsed.
+    /// A message that could not be parsed (the parser's error).
     Bad(String),
 }
 
@@ -90,7 +91,11 @@ pub fn engine_loop<K: Kernel>(
                     }
                     std::thread::sleep(Duration::from_millis(ms))
                 }
-                Input::Bad(e) => out.push(FromEngine::Error { message: e, version: None, node: None }),
+                Input::Bad(e) => out.push(FromEngine::Error {
+                    message: tr!("ungültige Nachricht: {e}", "invalid message: {e}"),
+                    version: None,
+                    node: None,
+                }),
             }
         }
         if session.busy() {
@@ -136,11 +141,11 @@ where
                                 }
                                 match serde_json::from_value::<ToEngine>(m.clone()) {
                                     Ok(m) => Input::Post(m),
-                                    Err(e) => Input::Bad(format!("ungültige Nachricht: {e}")),
+                                    Err(e) => Input::Bad(e.to_string()),
                                 }
                             })
                             .collect(),
-                        _ => vec![Input::Bad("post: erwartet eine Liste".into())],
+                        _ => vec![Input::Bad("post: [ToEngine]".into())],
                     },
                     "debug_hang" => vec![Input::Hang(f.header.body["ms"].as_u64().unwrap_or(0))],
                     _ => continue,
@@ -151,7 +156,10 @@ where
             }
         })
         .expect("thread");
+    // the caller's language until the UI sends `SetLang`
+    let lang = cad_i18n::lang();
     let engine = std::thread::Builder::new().name("cad-engine".into()).stack_size(ENGINE_STACK).spawn(move || {
+        cad_i18n::set_lang(lang);
         let mut output = output;
         let session = Session::new(make_kernel(), session_options(), std_clock());
         if write_frame(&mut output, &Frame::event("ready", json!({ "protocol": cad_session::PROTOCOL_VERSION })))
@@ -297,6 +305,9 @@ struct State {
     files: Option<(BTreeMap<String, String>, Option<String>)>,
     last_source: Option<ToEngine>,
     last_version: Option<u64>,
+    /// The last `SetLang` (replayed first) and the language of the supervisor's own messages.
+    last_lang: Option<ToEngine>,
+    lang: cad_i18n::Lang,
     blocked: Vec<String>,
     last_progress: Option<ProgressInfo>,
     restarts: u32,
@@ -329,6 +340,8 @@ impl Supervisor {
                 files: None,
                 last_source: None,
                 last_version: None,
+                last_lang: None,
+                lang: cad_i18n::lang(),
                 blocked: Vec::new(),
                 last_progress: None,
                 restarts: 0,
@@ -357,7 +370,13 @@ impl Supervisor {
                     }
                     if st.busy && st.deadline.is_some_and(|d| Instant::now() >= d) {
                         let t = if st.ready { s.opts.watchdog } else { s.opts.startup.max(s.opts.watchdog) };
-                        s.restart(&mut st, &format!("Engine reagiert seit {} nicht (Kernel hängt)", dur_text(t)));
+                        let _lang = cad_i18n::scoped(st.lang);
+                        let why = tr!(
+                            "Engine reagiert seit {} nicht (Kernel hängt)",
+                            "Engine not responding for {} (kernel hangs)",
+                            dur_text(t)
+                        );
+                        s.restart(&mut st, &why);
                     }
                 }
             })
@@ -394,7 +413,8 @@ impl Supervisor {
                                 Ok(None) | Err(_) => {
                                     let mut st = s.st.lock().unwrap();
                                     if st.generation == generation && !st.stopped {
-                                        s.restart(&mut st, "Engine-Prozess beendet");
+                                        let _lang = cad_i18n::scoped(st.lang);
+                                        s.restart(&mut st, trs!("Engine-Prozess beendet", "engine process ended"));
                                     }
                                     return;
                                 }
@@ -408,10 +428,9 @@ impl Supervisor {
                 st.kill = None;
                 st.busy = false;
                 st.deadline = None;
-                (self.sink)(wire::encode_batch(
-                    &[FromEngine::Error { message: format!("Engine startet nicht: {e}"), version: None, node: None }],
-                    false,
-                ));
+                let _lang = cad_i18n::scoped(st.lang);
+                let message = tr!("Engine startet nicht: {e}", "engine does not start: {e}");
+                (self.sink)(wire::encode_batch(&[FromEngine::Error { message, version: None, node: None }], false));
             }
         }
     }
@@ -505,6 +524,10 @@ impl Supervisor {
                 st.last_version = Some(*version);
                 st.last_source = Some(m.clone());
             }
+            ToEngine::SetLang { lang } => {
+                st.lang = cad_i18n::Lang::parse(lang).unwrap_or_default();
+                st.last_lang = Some(m.clone());
+            }
             _ => {}
         }
     }
@@ -559,13 +582,14 @@ impl Supervisor {
     }
 
     fn restart(self: &Arc<Self>, st: &mut State, reason: &str) {
+        let _lang = cad_i18n::scoped(st.lang);
         if let Some(mut k) = st.kill.take() {
             k();
         }
         st.input = None;
         st.restarts += 1;
         let cur = st.last_progress.take();
-        let where_ = cur.as_ref().and_then(|c| c.line).map(|l| format!(" (Zeile {l})")).unwrap_or_default();
+        let where_ = cur.as_ref().and_then(|c| c.line).map(|l| tr!(" (Zeile {l})", " (line {l})")).unwrap_or_default();
         let key = cur.as_ref().and_then(|c| c.key.clone());
         let fresh = key.as_ref().is_some_and(|k| !st.blocked.contains(k));
         if let Some(k) = &key
@@ -573,14 +597,18 @@ impl Supervisor {
         {
             st.blocked.push(k.clone());
         }
-        let msg = format!(
+        let msg = tr!(
             "{reason}{where_}; Engine neu gestartet, Cache verworfen{}",
-            if fresh { ", Knoten gesperrt" } else { "" }
+            "{reason}{where_}; engine restarted, cache discarded{}",
+            if fresh { trs!(", Knoten gesperrt", ", node blocked") } else { "" }
         );
         let version = cur.as_ref().and_then(|c| c.version).or(st.last_version);
         let node = cur.as_ref().and_then(|c| c.node);
         (self.sink)(wire::encode_batch(&[FromEngine::Error { message: msg, version, node }], false));
         let mut replay = Vec::new();
+        if let Some(l) = &st.last_lang {
+            replay.push(l.clone());
+        }
         if !st.blocked.is_empty() {
             replay.push(ToEngine::BlockKeys { keys: st.blocked.clone() });
         }

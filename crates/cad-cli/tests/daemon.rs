@@ -52,6 +52,7 @@ impl Env {
 
     fn cmd(&self) -> Command {
         let mut c = Command::cargo_bin("mcad").unwrap();
+        c.env("MCAD_LANG", "de");
         c.env("MCAD_IPC_DIR", self.ipc())
             .env("MCAD_CONFIG", self.tmp.path().join("keine-config.toml"))
             .env_remove("MCAD_NO_DAEMON")
@@ -127,7 +128,7 @@ fn normalized(mut v: Value) -> Value {
 
 /// Text output without the timing line of `eval`.
 fn normalized_text(s: &str) -> String {
-    s.lines().filter(|l| !l.starts_with("Statistik:")).collect::<Vec<_>>().join("\n")
+    s.lines().filter(|l| !l.starts_with("Statistik:") && !l.starts_with("Statistics:")).collect::<Vec<_>>().join("\n")
 }
 
 /// STEP without the time stamp in the header.
@@ -235,10 +236,12 @@ fn output_identical_with_and_without_daemon() {
         vec!["set".into(), gehaeuse.clone(), "--param".into(), "gehaeuse.w=50".into(), "--dry-run".into()],
         vec!["export".into(), gehaeuse.clone(), "--part".into(), "gibtsnicht".into(), "-o".into(), o("x.stl")],
     ];
+    // in both languages (alternating: the daemon's cache serves both)
     for args in &cases {
         let a: Vec<&str> = args.iter().map(String::as_str).collect();
-        for mode in [false, true] {
+        for (lang, mode) in [("de", false), ("en", false), ("de", true), ("en", true)] {
             let mut aa = a.clone();
+            aa.extend(["--lang", lang]);
             if mode {
                 aa.push("--json");
             }
@@ -384,7 +387,8 @@ fn parallel_starts_give_one_daemon() {
     let mut children = Vec::new();
     for _ in 0..6 {
         let mut c = std::process::Command::new(assert_cmd::cargo::cargo_bin("mcad"));
-        c.env("MCAD_IPC_DIR", env.ipc())
+        c.env("MCAD_LANG", "de")
+            .env("MCAD_IPC_DIR", env.ipc())
             .env("MCAD_CONFIG", env.path("keine.toml"))
             .env_remove("MCAD_NO_DAEMON")
             .env_remove("MCAD_DAEMON_BUILD_ID")
@@ -724,4 +728,42 @@ fn long_ipc_dir_uses_short_socket_path() {
     assert!(!Path::new(&sock).exists(), "Ersatz-Socket bleibt liegen");
     let o = env.run(&["daemon", "status"]);
     assert!(text(&o.stdout).starts_with("kein Daemon"), "{}", text(&o.stdout));
+}
+
+/// One daemon, German then English then German: the answers follow the client's language
+/// (`MCAD_LANG` or `--lang`) and equal the local run; cached results never carry the other
+/// language.
+#[test]
+fn language_switch_in_one_daemon() {
+    let env = Env::new();
+    let f = ex("spec/fillet_zonen.mcad");
+    let bad = data("fillet_zu_gross.mcad");
+    let run = |lang: &str, args: &[&str]| {
+        let mut c = env.cmd();
+        c.env("MCAD_LANG", lang).args(args);
+        c.output().unwrap()
+    };
+    let local = |lang: &str, args: &[&str]| {
+        let mut c = env.cmd();
+        c.env("MCAD_LANG", lang).env("MCAD_NO_DAEMON", "1").args(args);
+        c.output().unwrap()
+    };
+    for (lang, word, other) in [("de", "Kanten", " edges"), ("en", " edges", "Kanten"), ("de", "Kanten", " edges")] {
+        let args = ["inspect", f.as_str(), "--line", "12"];
+        let d = run(lang, &args);
+        let l = local(lang, &args);
+        assert_same(&l, &d, lang);
+        let t = text(&d.stdout);
+        assert_eq!(t, text(&l.stdout), "{lang}");
+        assert!(t.contains(word) && !t.contains(other), "{lang}: {t}");
+        let d = run(lang, &["check", bad.as_str()]);
+        let l = local(lang, &["check", bad.as_str()]);
+        assert_same(&l, &d, lang);
+        assert_eq!(text(&d.stdout), text(&l.stdout), "{lang}");
+        let j = run(lang, &["check", bad.as_str(), "--json"]);
+        assert!(used(&j), "{lang}");
+    }
+    // --lang wins over MCAD_LANG
+    let d = run("de", &["check", bad.as_str(), "--lang", "en"]);
+    assert!(text(&d.stdout).contains(" errors, "), "{}", text(&d.stdout));
 }

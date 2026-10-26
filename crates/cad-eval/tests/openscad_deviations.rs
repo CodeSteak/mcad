@@ -134,6 +134,7 @@ fn profiles(out: &cad_eval::EvalOutput) -> Vec<&Profile> {
 
 #[test]
 fn diameter_wins_over_radius() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // OpenSCAD: sphere r = 2 (bbox ±1.85 at $fn = 0), cylinder r1 = 4 / r2 = 1,
     // circle r = 3, each with "Ignoring radius variable … as diameter … is defined too".
     let src = "sphere(r = 5, d = 4);\ncylinder(h = 1, r = 5, d = 4);\ncylinder(h = 1, r1 = 3, d1 = 8, r2 = 1);\n\
@@ -175,6 +176,7 @@ fn small_fn_is_clamped_to_three() {
 
 #[test]
 fn fn_at_an_extrusion_applies_to_its_circles() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // OpenSCAD: `linear_extrude(1, $fn = 6) circle(1)` is a hexagonal prism (12 vertices).
     let out = run("linear_extrude(1, $fn = 6) circle(1);");
     let Profile::Polygon { loops } = profiles(&out)[0] else { panic!("{:?}", profiles(&out)) };
@@ -199,6 +201,7 @@ fn fn_at_an_extrusion_applies_to_its_circles() {
 
 #[test]
 fn degenerate_extrusions_are_empty() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // OpenSCAD exports nothing for these.
     for src in [
         "linear_extrude(height = -3) square(1);",
@@ -218,6 +221,7 @@ fn degenerate_extrusions_are_empty() {
 
 #[test]
 fn rotate_extrude_angle_like_openscad() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let angle = |src: &str| {
         let out = run(src);
         out.tree
@@ -242,6 +246,7 @@ fn rotate_extrude_angle_like_openscad() {
 
 #[test]
 fn invalid_primitive_dimensions_give_nothing() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // OpenSCAD exports nothing for each of these.
     for src in [
         "cube(-1);",
@@ -291,6 +296,7 @@ fn only_true_centers() {
 
 #[test]
 fn negative_extrude_scale_becomes_zero() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // OpenSCAD: `scale = [2, -1]` extrudes to a wedge (top edge of length 2, 6 vertices).
     let out = run("linear_extrude(1, scale = [2, -1]) square(1);");
     let s = out

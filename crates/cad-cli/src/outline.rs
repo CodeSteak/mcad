@@ -3,6 +3,7 @@
 //! variables with values, grids and anchors of the file, named instances and parts (bounds,
 //! volume), files and `include`/`use`, diagnostics.
 
+use cad_i18n::{tr, trs};
 use cad_session::protocol::{self as p, ToEngine};
 use cad_syntax::ast::{Param, Stmt, StmtKind};
 use serde_json::{Value as Json, json};
@@ -23,7 +24,11 @@ fn ty(t: p::ParamType) -> &'static str {
     }
 }
 
-fn ty_de(t: &str) -> &'static str {
+/// Type name in the text output (German, or the JSON name in English).
+fn ty_text(t: &'static str) -> &'static str {
+    if !cad_i18n::is_de() {
+        return if t == "unknown" { "?" } else { t };
+    }
     match t {
         "number" => "Zahl",
         "bool" => "Bool",
@@ -90,7 +95,7 @@ fn grid_text(g: &p::Grid, proj: &cad_eval::Project) -> String {
             axes.push(format!("{}: {}", ["x", "y", "z"][a as usize], planes.join(", ")));
         }
     }
-    format!("Raster {} (Z.{}): {}", g.name, g.range.line, axes.join("; "))
+    tr!("Raster {} (Z.{}): {}", "grid {} (line {}): {}", g.name, g.range.line, axes.join("; "))
 }
 
 fn params_text(params: &[Param], src: &dyn Fn(cad_syntax::Span) -> String) -> Vec<Json> {
@@ -102,9 +107,10 @@ fn params_text(params: &[Param], src: &dyn Fn(cad_syntax::Span) -> String) -> Ve
 
 pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     if c.module.is_some() {
-        return Err(Fail::Usage(
-            "outline zeigt immer das ganze Projekt (ohne --module; -D setzt Variablen der Datei)".into(),
-        ));
+        return Err(Fail::Usage(tr!(
+            "outline zeigt immer das ganze Projekt (ohne --module; -D setzt Variablen der Datei)",
+            "outline always shows the whole project (without --module; -D sets variables of the file)"
+        )));
     }
     let defines = crate::defines(c)?;
     let mut m = load(c, None, true, false)?;
@@ -153,14 +159,14 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     }
     let sc = if kernel { m.session.done().map(|d| d.scene.clone()).unwrap_or(file_scene) } else { file_scene };
     let (colors, color_regions, colors_text) = crate::colors::table(&mut m, &sc, kernel)?;
-    let cur = m.session.current().ok_or_else(|| Fail::Kernel("keine Auswertung".into()))?;
+    let cur = m.session.current().ok_or_else(|| Fail::Kernel(tr!("keine Auswertung", "no evaluation")))?;
     let proj = &cur.proj;
     let src = |s: cad_syntax::Span| proj.text(s).to_string();
 
     let mut t = String::new();
     let errors = m.diagnostics.iter().filter(|d| d.severity == p::Severity::Error).count();
     let warnings = m.diagnostics.iter().filter(|d| d.severity == p::Severity::Warning).count();
-    t.push_str(&format!("{}: {} Fehler, {} Warnungen\n", m.file, errors, warnings));
+    t.push_str(&tr!("{}: {} Fehler, {} Warnungen\n", "{}: {} errors, {} warnings\n", m.file, errors, warnings));
 
     // files and includes
     let files: Vec<Json> = sc.files.iter().map(|f| json!({ "path": f.path, "role": f.role })).collect();
@@ -170,7 +176,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         .map(|i| json!({ "file": file_path(&sc, &i.range), "line": i.range.line, "path": i.target, "use": i.is_use, "found": i.found }))
         .collect();
     if !sc.includes.is_empty() {
-        t.push_str("Dateien:\n");
+        t.push_str(trs!("Dateien:\n", "Files:\n"));
         for i in &sc.includes {
             t.push_str(&format!(
                 "  {} <{}>  {}:{}{}\n",
@@ -178,7 +184,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
                 i.target,
                 file_path(&sc, &i.range),
                 i.range.line,
-                if i.found { "" } else { "  (nicht gefunden)" }
+                if i.found { "" } else { trs!("  (nicht gefunden)", "  (not found)") }
             ));
         }
     }
@@ -186,7 +192,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     // modules
     let mut modules = Vec::new();
     if !sc.modules.is_empty() {
-        t.push_str("Module:\n");
+        t.push_str(trs!("Module:\n", "Modules:\n"));
     }
     for (k, md) in sc.modules.iter().enumerate() {
         let (grids, anchors, errs) = per_module.get(k).cloned().unwrap_or_default();
@@ -199,8 +205,8 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
             .params
             .iter()
             .map(|pa| match &pa.default_text {
-                Some(d) => format!("{} = {d}: {}", pa.name, ty_de(ty(pa.ty))),
-                None => format!("{}: {}", pa.name, ty_de(ty(pa.ty))),
+                Some(d) => format!("{} = {d}: {}", pa.name, ty_text(ty(pa.ty))),
+                None => format!("{}: {}", pa.name, ty_text(ty(pa.ty))),
             })
             .collect();
         let mut qual = md.path.clone();
@@ -221,13 +227,13 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
                 .iter()
                 .map(|a| {
                     let dir = a.dir.as_ref().map(|d| format!(" dir {}", vec3(d))).unwrap_or_default();
-                    format!("{} = {}{dir} (Z.{})", a.name, vec3(&a.point), a.range.line)
+                    tr!("{} = {}{dir} (Z.{})", "{} = {}{dir} (line {})", a.name, vec3(&a.point), a.range.line)
                 })
                 .collect();
-            t.push_str(&format!("    Anker: {}\n", a.join(", ")));
+            t.push_str(&tr!("    Anker: {}\n", "    anchors: {}\n", a.join(", ")));
         }
         if errs > 0 {
-            t.push_str(&format!("    ({errs} Fehler mit Standardwerten)\n"));
+            t.push_str(&tr!("    ({errs} Fehler mit Standardwerten)\n", "    ({errs} errors with the defaults)\n"));
         }
         modules.push(json!({
             "name": md.name, "path": md.path, "qualified": qual.join("."),
@@ -291,7 +297,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         visit(&l.ast.stmts, true, &mut functions, &mut variables);
     }
     if !functions.is_empty() {
-        t.push_str("Funktionen:\n");
+        t.push_str(trs!("Funktionen:\n", "Functions:\n"));
         for f in &functions {
             let ps: Vec<String> = f["params"]
                 .as_array()
@@ -313,14 +319,17 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         }
     }
     if !variables.is_empty() {
-        t.push_str("Variablen:\n");
+        t.push_str(trs!("Variablen:\n", "Variables:\n"));
         for v in &variables {
             let val = v["text"].as_str().map(|s| s.to_string()).unwrap_or_else(|| "?".into());
             let expr = v["expr"].as_str().unwrap_or("");
             let shown = if expr == val { val.clone() } else { format!("{expr}  → {val}") };
             let file = v["file"].as_str().unwrap_or("");
-            let at =
-                if file == proj.files[0].path { format!("Z.{}", v["line"]) } else { format!("{file}:{}", v["line"]) };
+            let at = if file == proj.files[0].path {
+                tr!("Z.{}", "line {}", v["line"])
+            } else {
+                format!("{file}:{}", v["line"])
+            };
             t.push_str(&format!("  {} = {shown}  {at}\n", v["name"].as_str().unwrap_or("")));
         }
     }
@@ -361,18 +370,18 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         })
         .collect();
     if !named.is_empty() {
-        t.push_str("Benannte Instanzen:\n");
+        t.push_str(trs!("Benannte Instanzen:\n", "Named instances:\n"));
         for i in &named {
             let r = i.call_range.unwrap_or_default();
             let part = sc.parts.iter().find(|pt| pt.inst == i.id);
-            let mut l = format!("  {}: {}  Z.{}", i.label.as_deref().unwrap_or(""), i.module, r.line);
+            let mut l = tr!("  {}: {}  Z.{}", "  {}: {}  line {}", i.label.as_deref().unwrap_or(""), i.module, r.line);
             if let Some(pt) = part {
-                l.push_str("  Bauteil");
+                l.push_str(trs!("  Bauteil", "  part"));
                 if let Some(b) = &pt.bounds {
-                    l.push_str(&format!(", Hülle {}–{}", vec3(&b.min), vec3(&b.max)));
+                    l.push_str(&tr!(", Hülle {}–{}", ", bounds {}–{}", vec3(&b.min), vec3(&b.max)));
                 }
                 if let Some(v) = pt.volume {
-                    l.push_str(&format!(", Volumen {} mm³", num(v)));
+                    l.push_str(&tr!(", Volumen {} mm³", ", volume {} mm³", num(v)));
                 }
             }
             t.push_str(&l);
@@ -394,7 +403,10 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
                 None => groups.push((m, vec![item])),
             }
         }
-        t.push_str("Benannte Instanzen in Modulen (nur dort sichtbar):\n");
+        t.push_str(trs!(
+            "Benannte Instanzen in Modulen (nur dort sichtbar):\n",
+            "Named instances in modules (visible only there):\n"
+        ));
         for (m, items) in &groups {
             t.push_str(&format!("  in {m}: {}\n", items.join(", ")));
         }
@@ -416,7 +428,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
                 a.text.as_ref().map(|tx| format!("{tx} = {}{dir}", vec3(&a.point)))
             })
             .collect();
-        t.push_str(&format!("Anker: {}\n", a.join(", ")));
+        t.push_str(&tr!("Anker: {}\n", "Anchors: {}\n", a.join(", ")));
     }
     t.push_str(&colors_text);
     if let Some(root) = sc.root.and_then(|r| sc.nodes.get(r as usize))
@@ -424,8 +436,9 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     {
         let wb = crate::world_bounds(b, &crate::mat(&root.display_world));
         let s: Vec<String> = (0..3).map(|i| num(wb.max.0[i] - wb.min.0[i])).collect();
-        t.push_str(&format!(
+        t.push_str(&tr!(
             "Gesamt: Hülle {}–{} ({} mm), {} Knoten\n",
+            "Total: bounds {}–{} ({} mm), {} nodes\n",
             vec3(&wb.min),
             vec3(&wb.max),
             s.join(" × "),
@@ -434,7 +447,10 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     }
     let (asserts_j, asserts_t) = crate::asserts_summary(&sc, None);
     if !asserts_t.is_empty() {
-        t.push_str("Asserts (Prüfungen nach der Auswertung, Verletzung = Warnung):\n");
+        t.push_str(trs!(
+            "Asserts (Prüfungen nach der Auswertung, Verletzung = Warnung):\n",
+            "Asserts (checks after the evaluation, violation = warning):\n"
+        ));
         t.push_str(&asserts_t);
     }
     t.push_str(&m.diagnostics_text());

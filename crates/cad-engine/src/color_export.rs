@@ -32,6 +32,7 @@
 
 use std::fmt::Write as _;
 
+use cad_i18n::{tr, trs};
 use cad_ir::{Dim, NodeIdx};
 use cad_kernel::Mesh;
 
@@ -217,15 +218,25 @@ where
         let mut entry_color: Vec<Option<usize>> = vec![None; table.entries.len()];
         let mut objects = Vec::new();
         for (name, n) in nodes {
-            let r = ev.reports.get(*n as usize).ok_or_else(|| format!("Knoten {n} existiert nicht"))?;
+            let r = ev
+                .reports
+                .get(*n as usize)
+                .ok_or_else(|| tr!("Knoten {n} existiert nicht", "node {n} does not exist"))?;
             if r.dim == Some(Dim::Two) {
-                return Err("2D-Ergebnis kann nicht als Körper exportiert werden".into());
+                return Err(trs!(
+                    "2D-Ergebnis kann nicht als Körper exportiert werden",
+                    "a 2D result cannot be exported as a body"
+                )
+                .into());
             }
             let world = r.display_world;
             let regions = self.color_regions(ev, *n)?;
             let mut parts = Vec::new();
             for (i, reg) in regions.regions.iter().enumerate() {
-                let e = table.entry_of(reg.color).ok_or("Farbe der Region fehlt in der Farbtabelle")?;
+                let e = table.entry_of(reg.color).ok_or(trs!(
+                    "Farbe der Region fehlt in der Farbtabelle",
+                    "colour of the region missing from the colour table"
+                ))?;
                 let ci = match entry_color[e] {
                     Some(ci) => ci,
                     None => {
@@ -265,7 +276,7 @@ where
         opts: PackageOptions,
     ) -> Result<(Vec<u8>, ColorExportStats), String> {
         if nodes.is_empty() {
-            return Err("keine Bauteile gewählt".into());
+            return Err(trs!("keine Bauteile gewählt", "no parts selected").into());
         }
         let (objects, colors) = self.color_objects(ev, nodes, tol, table)?;
         let st = stats(&objects, &colors);
@@ -282,7 +293,7 @@ where
         table: &ColorTable,
     ) -> Result<(Vec<u8>, ColorExportStats), String> {
         if nodes.is_empty() {
-            return Err("keine Bauteile gewählt".into());
+            return Err(trs!("keine Bauteile gewählt", "no parts selected").into());
         }
         let (objects, colors) = self.color_objects(ev, nodes, tol, table)?;
         let st = stats(&objects, &colors);

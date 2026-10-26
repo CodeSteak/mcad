@@ -87,4 +87,14 @@ describe("Watchdog: hängende Knoten sperren", () => {
     workers[3].out({ kind: "ready" });
     expect(workers[3].posted.map((m) => m.type)).toEqual(["BlockKeys"]);
   });
+
+  it("SetLang geht zuerst an jeden neuen Worker", () => {
+    t.send({ type: "SetLang", lang: "de" });
+    t.send({ type: "SetSource", text: "x", version: 1 });
+    workers[0].out({ kind: "out", msgs: [progress("cc", 2)], busy: true });
+    vi.advanceTimersByTime(1001);
+    workers[1].out({ kind: "ready" });
+    expect(workers[1].posted.map((m) => m.type)).toEqual(["SetLang", "BlockKeys", "SetSource"]);
+    expect(workers[1].posted[0]).toEqual({ type: "SetLang", lang: "de" });
+  });
 });

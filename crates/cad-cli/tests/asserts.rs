@@ -14,7 +14,13 @@ fn example(name: &str) -> String {
 }
 
 fn run(args: &[&str]) -> (i32, String) {
-    let out = Command::cargo_bin("mcad").unwrap().env("MCAD_NO_DAEMON", "1").args(args).output().unwrap();
+    let out = Command::cargo_bin("mcad")
+        .unwrap()
+        .env("MCAD_LANG", "de")
+        .env("MCAD_NO_DAEMON", "1")
+        .args(args)
+        .output()
+        .unwrap();
     (
         out.status.code().unwrap_or(-1),
         String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr),

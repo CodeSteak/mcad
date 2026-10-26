@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 # targets the crate is empty so `cargo test --workspace` stays native.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 cad-session.workspace = true
+cad-i18n.workspace = true
 kernel-smlib = { path = "../kernel-smlib", default-features = false, features = ["wasm"] }
 wasm-bindgen = "0.2.100"
 js-sys = "0.3"

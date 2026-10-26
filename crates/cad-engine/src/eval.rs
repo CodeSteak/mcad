@@ -1,5 +1,6 @@
 //! Evaluation of single nodes, cache keys and evaluation order.
 
+use cad_i18n::{tr, trs};
 use std::any::Any;
 use std::rc::Rc;
 
@@ -93,7 +94,15 @@ pub(crate) struct Ctx<'a, S> {
 }
 
 /// Hint of a blend node whose rounding/chamfer was left out while dragging.
+/// German text; [`suspended_hint`] gives the text in the current language.
 pub const SUSPENDED_HINT: &str = "Verrundung beim Ziehen ausgesetzt";
+/// English text of [`SUSPENDED_HINT`].
+pub const SUSPENDED_HINT_EN: &str = "fillet suspended while dragging";
+
+/// [`SUSPENDED_HINT`] in the current language.
+pub fn suspended_hint() -> &'static str {
+    if cad_i18n::is_de() { SUSPENDED_HINT } else { SUSPENDED_HINT_EN }
+}
 
 // ---------------------------------------------------------------- order and keys
 
@@ -539,7 +548,7 @@ where
         for p in &o.parts {
             match self.run.call(|k| k.transform(&p.shape, &m))? {
                 Ok(s) => out.push(Part { shape: s, solid: p.solid }),
-                Err(e) => self.error(format!("Transformation gescheitert: {e}")),
+                Err(e) => self.error(tr!("Transformation gescheitert: {e}", "transform failed: {e}")),
             }
         }
         Ok(out)
@@ -578,7 +587,7 @@ where
             v.push(c);
         }
         if skipped_2d {
-            self.warn("2D-Form in 3D-Kontext wird ignoriert");
+            self.warn(trs!("2D-Form in 3D-Kontext wird ignoriert", "2D shape in 3D context is ignored"));
         }
         v
     }
@@ -609,7 +618,7 @@ where
             _ => Vec::new(),
         };
         let Some(first) = places.first() else {
-            self.error(format!("{what} gescheitert: {e}"));
+            self.error(tr!("{what} gescheitert: {e}", "{what} failed: {e}"));
             return Ok(());
         };
         // middle of the first place (two middle points averaged: the middle of a line)
@@ -640,13 +649,16 @@ where
         }
         let more = match places.len() {
             1 => String::new(),
-            2 => " (und 1 weitere Stelle)".into(),
-            n => format!(" (und {} weitere Stellen)", n - 1),
+            2 => trs!(" (und 1 weitere Stelle)", " (and 1 more place)").into(),
+            n => tr!(" (und {} weitere Stellen)", " (and {} more places)", n - 1),
         };
-        let who = if touching.len() >= 2 { "{nodes}" } else { "die Operanden" };
+        let who = if touching.len() >= 2 { "{nodes}" } else { trs!("die Operanden", "the operands") };
         self.diags.push(Diag {
             severity: Severity::Error,
-            message: format!("{what} gescheitert: {who} berühren sich tangential bei {{at}}{more}: {e}"),
+            message: tr!(
+                "{what} gescheitert: {who} berühren sich tangential bei {{at}}{more}: {e}",
+                "{what} failed: {who} touch tangentially at {{at}}{more}: {e}"
+            ),
             edges: places,
             at: Some(at),
             nodes: if touching.len() >= 2 { touching } else { Vec::new() },
@@ -656,7 +668,10 @@ where
 
     fn check_solid(&mut self, parts: &[Part<K::Shape>]) -> bool {
         if parts.len() > 1 && parts.iter().any(|p| !p.solid) {
-            self.error("Offene Fläche kann nicht in einem Boolean verwendet werden (zuerst thicken)");
+            self.error(trs!(
+                "Offene Fläche kann nicht in einem Boolean verwendet werden (zuerst thicken)",
+                "open surface cannot be used in a Boolean (thicken it first)"
+            ));
             return false;
         }
         true
@@ -684,7 +699,7 @@ where
             Err(e) => {
                 // operands of a Boolean that already failed below: same cause, reported there
                 if !self.unmerged_in {
-                    self.boolean_error("Vereinigung", &e, &shapes, owners)?;
+                    self.boolean_error(trs!("Vereinigung", "union"), &e, &shapes, owners)?;
                 }
                 self.unmerged = true;
                 Ok(parts)
@@ -738,7 +753,7 @@ where
                 match self.run.call(|k| k.boolean(BoolOp::Difference, &shapes, tag))? {
                     Ok(s) => Ok(vec![Part { shape: s, solid: true }]),
                     Err(e) => {
-                        self.boolean_error("Differenz", &e, &shapes, &own)?;
+                        self.boolean_error(trs!("Differenz", "difference"), &e, &shapes, &own)?;
                         self.unmerged = true;
                         Ok(base)
                     }
@@ -767,7 +782,7 @@ where
                 match self.run.call(|k| k.boolean(BoolOp::Intersection, &shapes, tag))? {
                     Ok(s) => Ok(vec![Part { shape: s, solid: true }]),
                     Err(e) => {
-                        self.boolean_error("Schnittmenge", &e, &shapes, &own)?;
+                        self.boolean_error(trs!("Schnittmenge", "intersection"), &e, &shapes, &own)?;
                         self.unmerged = true;
                         Ok(all)
                     }
@@ -788,7 +803,7 @@ where
         if self.ctx.skip.get(self.idx as usize).copied().unwrap_or(false) {
             if !self.suspended {
                 self.suspended = true;
-                self.hints.push(SUSPENDED_HINT.into());
+                self.hints.push(suspended_hint().into());
             }
             return Ok(part.clone());
         }
@@ -802,8 +817,8 @@ where
             Ok(s) => Ok(Part { shape: s, solid: part.solid }),
             Err(e) => {
                 let what = match kind {
-                    BlendKind::Fillet => "Verrundung",
-                    BlendKind::Chamfer => "Fase",
+                    BlendKind::Fillet => trs!("Verrundung", "fillet"),
+                    BlendKind::Chamfer => trs!("Fase", "chamfer"),
                 };
                 let bad: Vec<Vec<DVec3>> = match &e {
                     KernelError::Failed { edges, .. } if !edges.is_empty() => {
@@ -811,7 +826,7 @@ where
                     }
                     _ => sel.iter().map(|x| x.points.clone()).collect(),
                 };
-                self.error_edges(format!("{what} gescheitert ({r} mm): {e}"), bad);
+                self.error_edges(tr!("{what} gescheitert ({r} mm): {e}", "{what} failed ({r} mm): {e}"), bad);
                 Ok(part.clone())
             }
         }
@@ -836,7 +851,10 @@ where
             Ok(s) => s,
             Err(e) => {
                 let edges = sel.iter().map(|x| x.points.clone()).collect();
-                self.error_edges(format!("Verrundung gescheitert (variabler Radius): {e}"), edges);
+                self.error_edges(
+                    tr!("Verrundung gescheitert (variabler Radius): {e}", "fillet failed (variable radius): {e}"),
+                    edges,
+                );
                 return Ok(part.clone());
             }
         };
@@ -852,7 +870,10 @@ where
                         rs.push(r);
                     }
                     Ok(r) => {
-                        bad.get_or_insert((format!("Radius {} ≤ 0 bei {}", fmt_num(r), cad_ir::law::fmt_point(p)), i));
+                        bad.get_or_insert((
+                            tr!("Radius {} ≤ 0 bei {}", "radius {} ≤ 0 at {}", fmt_num(r), cad_ir::law::fmt_point(p)),
+                            i,
+                        ));
                     }
                     Err(msg) => {
                         bad.get_or_insert((msg, i));
@@ -862,13 +883,16 @@ where
             radii.push(rs);
         }
         if let Some((msg, i)) = bad {
-            self.error_edges(format!("Verrundung gescheitert (variabler Radius): {msg}"), vec![sel[i].points.clone()]);
+            self.error_edges(
+                tr!("Verrundung gescheitert (variabler Radius): {msg}", "fillet failed (variable radius): {msg}"),
+                vec![sel[i].points.clone()],
+            );
             return Ok(part.clone());
         }
         if self.ctx.skip.get(self.idx as usize).copied().unwrap_or(false) {
             if !self.suspended {
                 self.suspended = true;
-                self.hints.push(SUSPENDED_HINT.into());
+                self.hints.push(suspended_hint().into());
             }
             return Ok(part.clone());
         }
@@ -893,7 +917,10 @@ where
                     }
                     _ => sel.iter().map(|x| x.points.clone()).collect(),
                 };
-                self.error_edges(format!("Verrundung gescheitert ({} mm): {e}", radius_range(lo, hi)), bad);
+                self.error_edges(
+                    tr!("Verrundung gescheitert ({} mm): {e}", "fillet failed ({} mm): {e}", radius_range(lo, hi)),
+                    bad,
+                );
                 Ok(part.clone())
             }
         }
@@ -952,8 +979,11 @@ where
                         self.new_edge_blend(&kids, &inputs, parts, kind, r, fillet_law.as_deref())
                     }
                     Some(_) if !failed => {
-                        self.warn("0 Kanten: die Operation erzeugt keine neuen Kanten");
-                        self.hints.push("0 Kanten".into());
+                        self.warn(trs!(
+                            "0 Kanten: die Operation erzeugt keine neuen Kanten",
+                            "0 edges: the operation creates no new edges"
+                        ));
+                        self.hints.push(trs!("0 Kanten", "0 edges").into());
                         Ok(parts)
                     }
                     _ => Ok(parts),
@@ -962,8 +992,9 @@ where
             Op::Blend { .. } | Op::Shell { .. } if node.children.first().is_some_and(|&b| self.has_meshes(b)) => {
                 let body = node.children[0];
                 let what = node.op.label();
-                self.error(format!(
-                    "{what}: ein Netz kann nicht bearbeitet werden – import(…, as = \"solid\") für einen B-Rep-Körper"
+                self.error(tr!(
+                    "{what}: ein Netz kann nicht bearbeitet werden – import(…, as = \"solid\") für einen B-Rep-Körper",
+                    "{what}: a mesh cannot be modified – import(…, as = \"solid\") for a B-rep body"
                 ));
                 self.meshes = self.child_meshes(body);
                 self.contrib(body)
@@ -973,7 +1004,7 @@ where
             Op::Zone(z) => self.zone(z),
             Op::LinearExtrude { h, twist, scale, center } => {
                 if *h <= 0.0 {
-                    self.error(format!("linear_extrude: Höhe {h} ≤ 0"));
+                    self.error(tr!("linear_extrude: Höhe {h} ≤ 0", "linear_extrude: height {h} ≤ 0"));
                     return Ok(Vec::new());
                 }
                 let z0 = if *center { -h / 2.0 } else { 0.0 };
@@ -989,7 +1020,7 @@ where
             Op::Sweep { path, .. } if path.is_empty() => self.sweep_sketch_path(),
             Op::Sweep { path, interp } => {
                 if path.len() < 2 {
-                    self.error("sweep: Pfad braucht mindestens 2 Punkte");
+                    self.error(trs!("sweep: Pfad braucht mindestens 2 Punkte", "sweep: path needs at least 2 points"));
                     return Ok(Vec::new());
                 }
                 self.lifted(&LiftMode::Sweep { path: path.clone(), interp: *interp })
@@ -998,27 +1029,30 @@ where
             Op::Surface { rows } => match self.run.call(|k| k.nurbs_surface(rows, tag))? {
                 Ok(s) => Ok(vec![Part { shape: s, solid: false }]),
                 Err(e) => {
-                    self.error(format!("surface gescheitert: {e}"));
+                    self.error(tr!("surface gescheitert: {e}", "surface failed: {e}"));
                     Ok(Vec::new())
                 }
             },
             Op::Thicken { t } => {
                 self.meshes = self.kid_meshes();
                 if !self.meshes.is_empty() {
-                    self.error("thicken: ein Netz ist keine offene Fläche (unverändert)");
+                    self.error(trs!(
+                        "thicken: ein Netz ist keine offene Fläche (unverändert)",
+                        "thicken: a mesh is not an open surface (unchanged)"
+                    ));
                 }
                 let parts = self.all_children_parts()?;
                 let mut out = Vec::new();
                 for p in parts {
                     if p.solid {
-                        self.error("thicken erwartet eine offene Fläche");
+                        self.error(trs!("thicken erwartet eine offene Fläche", "thicken expects an open surface"));
                         out.push(p);
                         continue;
                     }
                     match self.run.call(|k| k.thicken(&p.shape, *t, tag))? {
                         Ok(s) => out.push(Part { shape: s, solid: true }),
                         Err(e) => {
-                            self.error(format!("thicken gescheitert: {e}"));
+                            self.error(tr!("thicken gescheitert: {e}", "thicken failed: {e}"));
                             out.push(p);
                         }
                     }
@@ -1048,7 +1082,7 @@ where
                     match self.run.call(|k| k.transform(&p.shape, &m))? {
                         Ok(sh) => out.push(Part { shape: sh, solid: p.solid }),
                         Err(e) => {
-                            self.error(format!("resize gescheitert: {e}"));
+                            self.error(tr!("resize gescheitert: {e}", "resize failed: {e}"));
                             out.push(p);
                         }
                     }
@@ -1075,7 +1109,8 @@ where
             return self.union(parts, self.tag);
         }
         let plan = if !is_hull && kids.iter().any(|&c| self.has_meshes(c)) {
-            Err("Netz als Kind (import mit as = \"solid\")".to_string())
+            Err(trs!("Netz als Kind (import mit as = \"solid\")", "mesh as a child (import with as = \"solid\")")
+                .to_string())
         } else if is_hull {
             let mut bodies = Vec::new();
             kids.iter()
@@ -1105,7 +1140,10 @@ where
         match res {
             Ok(parts) => Ok(parts),
             Err(why) => {
-                self.warn(format!("{what}: {why}; Kinder werden unverändert gezeigt"));
+                self.warn(tr!(
+                    "{what}: {why}; Kinder werden unverändert gezeigt",
+                    "{what}: {why}; children shown unchanged"
+                ));
                 self.meshes = self.kid_meshes();
                 let mut parts = Vec::new();
                 let mut owners = Vec::new();
@@ -1139,13 +1177,17 @@ where
             if parts.is_empty() || s.diags[errs..].iter().any(|d| d.severity == Severity::Error) {
                 let msg = s.diags[errs..].iter().map(|d| d.message.clone()).collect::<Vec<_>>().join("; ");
                 s.diags.truncate(errs);
-                return Ok(Err(if msg.is_empty() { "Kernel lieferte keinen Körper".into() } else { msg }));
+                return Ok(Err(if msg.is_empty() {
+                    trs!("Kernel lieferte keinen Körper", "kernel returned no body").into()
+                } else {
+                    msg
+                }));
             }
             let mut out = Vec::new();
             for p in parts {
                 match s.run.call(|k| k.transform(&p.shape, frame))? {
                     Ok(sh) => out.push(Part { shape: sh, solid: true }),
-                    Err(e) => return Ok(Err(format!("Platzierung gescheitert: {e}"))),
+                    Err(e) => return Ok(Err(tr!("Platzierung gescheitert: {e}", "placement failed: {e}"))),
                 }
             }
             Ok(Ok(out))
@@ -1155,7 +1197,7 @@ where
                 .run
                 .call(|k| k.make_polyhedron(&h.points, &h.planar_faces(), tag))?
                 .map(|s| vec![Part { shape: s, solid: true }])
-                .map_err(|e| format!("Polyeder gescheitert: {e}")),
+                .map_err(|e| tr!("Polyeder gescheitert: {e}", "polyhedron failed: {e}")),
             Plan::Revolve { frame, section } => {
                 return lifted(self, section, &LiftMode::Revolve { angle: std::f64::consts::TAU }, frame);
             }
@@ -1166,12 +1208,12 @@ where
             Plan::Spheres { hull, r } => {
                 let poly = self.run.call(|k| k.make_polyhedron(&hull.points, &hull.planar_faces(), tag))?;
                 match poly {
-                    Ok(p) => self
-                        .run
-                        .call(|k| k.offset(&p, *r, tag))?
-                        .map(|s| vec![Part { shape: s, solid: true }])
-                        .map_err(|e| format!("Offset der Hülle der Mittelpunkte: {e}")),
-                    Err(e) => Err(format!("Polyeder gescheitert: {e}")),
+                    Ok(p) => {
+                        self.run.call(|k| k.offset(&p, *r, tag))?.map(|s| vec![Part { shape: s, solid: true }]).map_err(
+                            |e| tr!("Offset der Hülle der Mittelpunkte: {e}", "offset of the hull of the centres: {e}"),
+                        )
+                    }
+                    Err(e) => Err(tr!("Polyeder gescheitert: {e}", "polyhedron failed: {e}")),
                 }
             }
             Plan::Sphere { c, r } => {
@@ -1179,22 +1221,26 @@ where
                 self.run
                     .call(|k| k.make_sphere(*r, tag).and_then(|s| k.transform(&s, &m)))?
                     .map(|s| vec![Part { shape: s, solid: true }])
-                    .map_err(|e| format!("Kugel gescheitert: {e}"))
+                    .map_err(|e| tr!("Kugel gescheitert: {e}", "sphere failed: {e}"))
             }
             Plan::Offset { child, r, shift } => {
                 let parts = self.contrib(kids[*child])?;
                 let parts = self.union(parts, tag)?;
                 if parts.len() != 1 || !parts[0].solid {
-                    return Ok(Err("der Körper ist kein geschlossener Volumenkörper".into()));
+                    return Ok(Err(trs!(
+                        "der Körper ist kein geschlossener Volumenkörper",
+                        "the body is not a closed solid"
+                    )
+                    .into()));
                 }
                 let res = self.run.call(|k| k.offset(&parts[0].shape, *r, tag))?;
                 match res {
                     Ok(s) if *shift == DVec3::ZERO => Ok(vec![Part { shape: s, solid: true }]),
                     Ok(s) => match self.run.call(|k| k.transform(&s, &DMat4::from_translation(*shift)))? {
                         Ok(s) => Ok(vec![Part { shape: s, solid: true }]),
-                        Err(e) => Err(format!("Platzierung gescheitert: {e}")),
+                        Err(e) => Err(tr!("Platzierung gescheitert: {e}", "placement failed: {e}")),
                     },
-                    Err(e) => Err(format!("Offset {r}: {e}")),
+                    Err(e) => Err(tr!("Offset {r}: {e}", "offset {r}: {e}")),
                 }
             }
         })
@@ -1203,12 +1249,16 @@ where
     /// Diagnostics and meshes of a Boolean with mesh children (`kids` are the contributing
     /// children). `false`: leave the operation out (intersection).
     fn mesh_boolean(&mut self, op: BoolOp, kids: &[NodeIdx]) -> bool {
-        const HINT: &str = "import(…, as = \"solid\") für einen B-Rep-Körper";
+        let hint =
+            trs!("import(…, as = \"solid\") für einen B-Rep-Körper", "import(…, as = \"solid\") for a B-rep body");
         match op {
             BoolOp::Union => {
                 self.meshes = self.kid_meshes();
                 if kids.len() > 1 {
-                    self.warn(format!("union: ein Netz wird nicht vereinigt, nur daneben gezeigt – {HINT}"));
+                    self.warn(tr!(
+                        "union: ein Netz wird nicht vereinigt, nur daneben gezeigt – {hint}",
+                        "union: a mesh is not united, only shown next to it – {hint}"
+                    ));
                 }
                 true
             }
@@ -1216,18 +1266,27 @@ where
                 if self.has_meshes(kids[0]) {
                     self.meshes = self.child_meshes(kids[0]);
                     if kids.len() > 1 {
-                        self.error(format!("difference: ein Netz kann nicht beschnitten werden – {HINT}"));
+                        self.error(tr!(
+                            "difference: ein Netz kann nicht beschnitten werden – {hint}",
+                            "difference: a mesh cannot be cut – {hint}"
+                        ));
                     }
                 }
                 if kids[1..].iter().any(|&c| self.has_meshes(c)) {
-                    self.error(format!("difference: ein Netz kann nicht abgezogen werden (weggelassen) – {HINT}"));
+                    self.error(tr!(
+                        "difference: ein Netz kann nicht abgezogen werden (weggelassen) – {hint}",
+                        "difference: a mesh cannot be subtracted (left out) – {hint}"
+                    ));
                 }
                 true
             }
             BoolOp::Intersection => {
                 self.meshes = self.kid_meshes();
                 if kids.len() > 1 {
-                    self.error(format!("intersection: mit einem Netz nicht möglich, Kinder unverändert – {HINT}"));
+                    self.error(tr!(
+                        "intersection: mit einem Netz nicht möglich, Kinder unverändert – {hint}",
+                        "intersection: not possible with a mesh, children unchanged – {hint}"
+                    ));
                     return false;
                 }
                 true
@@ -1248,9 +1307,14 @@ where
         let m = &mesh.mesh;
         let as_mesh = |s: &mut Self| {
             s.meshes.push(MeshPart { mesh: m.clone(), place: *place, tag: s.tag });
-            s.hints.push(format!("Netz: {} Dreiecke, {} Flächen", m.triangle_count(), m.face_count()));
+            s.hints.push(tr!(
+                "Netz: {} Dreiecke, {} Flächen",
+                "mesh: {} triangles, {} faces",
+                m.triangle_count(),
+                m.face_count()
+            ));
             if blend.is_some_and(|(_, r)| r > 0.0) {
-                s.warn("$fillet/$chamfer wirken nicht auf ein Netz");
+                s.warn(trs!("$fillet/$chamfer wirken nicht auf ein Netz", "$fillet/$chamfer have no effect on a mesh"));
             }
         };
         if mode == MeshMode::Mesh {
@@ -1263,7 +1327,10 @@ where
         if parts.is_empty() {
             // the kernel failed (error already added): show the mesh instead
             let msg = self.diags.drain(diags..).map(|d| d.message).collect::<Vec<_>>().join("; ");
-            let text = format!("B-Rep aus dem Netz gescheitert ({msg}): als Netz weiter, ohne Booleans");
+            let text = tr!(
+                "B-Rep aus dem Netz gescheitert ({msg}): als Netz weiter, ohne Booleans",
+                "B-rep from the mesh failed ({msg}): continuing as a mesh, without Booleans"
+            );
             if mode == MeshMode::Solid {
                 self.error(text)
             } else {
@@ -1272,7 +1339,12 @@ where
             as_mesh(self);
             return Ok(Vec::new());
         }
-        self.hints.push(format!("B-Rep: {} Flächen aus {} Dreiecken", m.face_count(), m.triangle_count()));
+        self.hints.push(tr!(
+            "B-Rep: {} Flächen aus {} Dreiecken",
+            "B-rep: {} faces from {} triangles",
+            m.face_count(),
+            m.triangle_count()
+        ));
         Ok(parts)
     }
 
@@ -1289,7 +1361,7 @@ where
         let mut part = match res {
             Ok(s) => Part { shape: s, solid: true },
             Err(e) => {
-                self.error(format!("{} gescheitert: {e}", self.tree().node(self.idx).op.label()));
+                self.error(tr!("{} gescheitert: {e}", "{} failed: {e}", self.tree().node(self.idx).op.label()));
                 return Ok(Vec::new());
             }
         };
@@ -1301,9 +1373,12 @@ where
                 Ok(edges) => {
                     // seams, poles and tangent edges are not edges to blend
                     let sel: Vec<&EdgeInfo> = edges.iter().filter(|e| !e.smooth).collect();
-                    self.hints.push(plural(sel.len(), "Kante", "Kanten"));
+                    self.hints.push(plural(sel.len(), trs!("Kante", "edge"), trs!("Kanten", "edges")));
                     if sel.is_empty() {
-                        self.warn("0 Kanten: das Primitiv hat keine Kanten zum Verrunden");
+                        self.warn(trs!(
+                            "0 Kanten: das Primitiv hat keine Kanten zum Verrunden",
+                            "0 edges: the primitive has no edges to blend"
+                        ));
                     } else {
                         part = self.blend_part(&part, kind, r, &sel, tag)?;
                         let pl: Vec<_> = sel.iter().map(|e| e.points.clone()).collect();
@@ -1311,13 +1386,13 @@ where
                             .extend(pl.into_iter().map(|p| p.iter().map(|q| place.transform_point3(*q)).collect()));
                     }
                 }
-                Err(e) => self.error(format!("Kantenabfrage gescheitert: {e}")),
+                Err(e) => self.error(tr!("Kantenabfrage gescheitert: {e}", "edge query failed: {e}")),
             }
         }
         if !is_identity(place) {
             match self.run.call(|k| k.transform(&part.shape, place))? {
                 Ok(s) => part.shape = s,
-                Err(e) => self.error(format!("Platzierung gescheitert: {e}")),
+                Err(e) => self.error(tr!("Platzierung gescheitert: {e}", "placement failed: {e}")),
             }
         }
         Ok(vec![part])
@@ -1340,7 +1415,7 @@ where
         let edges = match self.run.call(|k| k.edges(&part.shape, samples))? {
             Ok(e) => e,
             Err(e) => {
-                self.error(format!("Kantenabfrage gescheitert: {e}"));
+                self.error(tr!("Kantenabfrage gescheitert: {e}", "edge query failed: {e}"));
                 return Ok(parts);
             }
         };
@@ -1367,16 +1442,16 @@ where
                 match self.run.call(|k| k.edges(&p.shape, samples))? {
                     Ok(es) => old.extend(es.into_iter().map(|e| e.points)),
                     Err(e) => {
-                        self.error(format!("Kantenabfrage gescheitert: {e}"));
+                        self.error(tr!("Kantenabfrage gescheitert: {e}", "edge query failed: {e}"));
                         return Ok(parts);
                     }
                 }
             }
         }
         let sel: Vec<&EdgeInfo> = cand.into_iter().filter(|e| !on_polylines(&e.points, &old)).collect();
-        self.hints.push(plural(sel.len(), "Kante", "Kanten"));
+        self.hints.push(plural(sel.len(), trs!("Kante", "edge"), trs!("Kanten", "edges")));
         if sel.is_empty() {
-            self.warn("0 Kanten: keine neuen Kanten gefunden");
+            self.warn(trs!("0 Kanten: keine neuen Kanten gefunden", "0 edges: no new edges found"));
             return Ok(parts);
         }
         self.selected.extend(sel.iter().map(|e| e.points.clone()));
@@ -1405,7 +1480,10 @@ where
                             *h |= matches!(c, Class::Inside | Class::On);
                         }
                     }
-                    Err(e) => self.error(format!("Klassifizierung gegen Zone gescheitert: {e}")),
+                    Err(e) => self.error(tr!(
+                        "Klassifizierung gegen Zone gescheitert: {e}",
+                        "classification against the zone failed: {e}"
+                    )),
                 }
             }
         }
@@ -1423,11 +1501,11 @@ where
         let tree = self.ctx.tree;
         let node = tree.node(self.idx);
         let Some(&body) = node.children.first() else {
-            self.error("Zonenblock ohne Körper");
+            self.error(trs!("Zonenblock ohne Körper", "zone block without a body"));
             return Ok(Vec::new());
         };
         if tree.node(body).flags.disabled {
-            self.error("Körper des Zonenblocks ist deaktiviert");
+            self.error(trs!("Körper des Zonenblocks ist deaktiviert", "body of the zone block is disabled"));
             return Ok(Vec::new());
         }
         let body_local = tree.node(body).local;
@@ -1438,7 +1516,7 @@ where
             .map(|&z| (z, tree.node(z).local.inverse() * body_local))
             .collect();
         if !zones.is_empty() {
-            self.hints.push(plural(zones.len(), "Zone", "Zonen"));
+            self.hints.push(plural(zones.len(), trs!("Zone", "zone"), trs!("Zonen", "zones")));
         }
         let tag = self.tag;
         let mut out = Vec::new();
@@ -1451,7 +1529,7 @@ where
                     // seams, poles and tangent edges are never selected
                     Ok(e) => e.into_iter().filter(|e| !e.smooth).collect::<Vec<_>>(),
                     Err(e) => {
-                        self.error(format!("Kantenabfrage gescheitert: {e}"));
+                        self.error(tr!("Kantenabfrage gescheitert: {e}", "edge query failed: {e}"));
                         out.push(part.clone());
                         continue;
                     }
@@ -1496,7 +1574,7 @@ where
                     match self.run.call(|k| k.faces(&part.shape, samples))? {
                         Ok(f) => f,
                         Err(e) => {
-                            self.error(format!("Flächenabfrage gescheitert: {e}"));
+                            self.error(tr!("Flächenabfrage gescheitert: {e}", "face query failed: {e}"));
                             out.push(part.clone());
                             continue;
                         }
@@ -1524,24 +1602,28 @@ where
                 match self.run.call(|k| k.shell(&part.shape, t, &open, tag))? {
                     Ok(s) => out.push(Part { shape: s, solid: part.solid }),
                     Err(e) => {
-                        self.error(format!("shell gescheitert ({t} mm): {e}"));
+                        self.error(tr!("shell gescheitert ({t} mm): {e}", "shell failed ({t} mm): {e}"));
                         out.push(part.clone());
                     }
                 }
             }
         }
         if blend.is_some() {
-            self.hints.push(plural(count, "Kante", "Kanten"));
+            self.hints.push(plural(count, trs!("Kante", "edge"), trs!("Kanten", "edges")));
             if count == 0 && !body_parts.is_empty() {
-                self.warn("0 Kanten");
+                self.warn(trs!("0 Kanten", "0 edges"));
             }
             if law.is_some() {
                 self.push_radius_hint(range);
             }
         } else {
-            self.hints.push(plural(count, "Fläche geöffnet", "Flächen geöffnet"));
+            self.hints.push(plural(
+                count,
+                trs!("Fläche geöffnet", "face opened"),
+                trs!("Flächen geöffnet", "faces opened"),
+            ));
             if count == 0 && !zones.is_empty() && !body_parts.is_empty() {
-                self.warn("0 Flächen");
+                self.warn(trs!("0 Flächen", "0 faces"));
             }
         }
         // Into this node's system.
@@ -1552,7 +1634,7 @@ where
         for p in out {
             match self.run.call(|k| k.transform(&p.shape, &body_local))? {
                 Ok(s) => res.push(Part { shape: s, solid: p.solid }),
-                Err(e) => self.error(format!("Transformation gescheitert: {e}")),
+                Err(e) => self.error(tr!("Transformation gescheitert: {e}", "transform failed: {e}")),
             }
         }
         Ok(res)
@@ -1562,11 +1644,14 @@ where
     fn zone(&mut self, z: &ZoneShape) -> R<Vec<Part<K::Shape>>> {
         let tree = self.ctx.tree;
         let Some((_, body, path)) = zone_block(tree, self.idx) else {
-            self.warn("zone() außerhalb eines fillet/chamfer/shell-Blocks wird ignoriert");
+            self.warn(trs!(
+                "zone() außerhalb eines fillet/chamfer/shell-Blocks wird ignoriert",
+                "zone() outside a fillet/chamfer/shell block is ignored"
+            ));
             return Ok(Vec::new());
         };
         let Some(bb) = self.output(body).and_then(|o| o.bounds) else {
-            self.warn("Zone: Körper ist leer");
+            self.warn(trs!("Zone: Körper ist leer", "zone: the body is empty"));
             return Ok(Vec::new());
         };
         let rel = path.inverse() * tree.node(body).local;
@@ -1575,7 +1660,10 @@ where
         match z {
             ZoneShape::Line { point, dir, d } => {
                 if *d <= 0.0 || dir.length() < 1e-12 {
-                    self.error("zone: Durchmesser und Richtung müssen > 0 sein");
+                    self.error(trs!(
+                        "zone: Durchmesser und Richtung müssen > 0 sein",
+                        "zone: diameter and direction must be > 0"
+                    ));
                     return Ok(Vec::new());
                 }
                 let dir = dir.normalize();
@@ -1594,7 +1682,7 @@ where
                     }
                 }
                 if t1 - t0 <= 1e-9 {
-                    self.warn("Zone trifft den Körper nicht");
+                    self.warn(trs!("Zone trifft den Körper nicht", "zone does not hit the body"));
                     return Ok(Vec::new());
                 }
                 let m = DMat4::from_translation(*point + dir * t0)
@@ -1602,21 +1690,24 @@ where
                 let s = match self.run.call(|k| k.make_cylinder(t1 - t0, d / 2.0, d / 2.0, tag))? {
                     Ok(s) => s,
                     Err(e) => {
-                        self.error(format!("Zone gescheitert: {e}"));
+                        self.error(tr!("Zone gescheitert: {e}", "zone failed: {e}"));
                         return Ok(Vec::new());
                     }
                 };
                 match self.run.call(|k| k.transform(&s, &m))? {
                     Ok(s) => Ok(vec![Part { shape: s, solid: true }]),
                     Err(e) => {
-                        self.error(format!("Zone gescheitert: {e}"));
+                        self.error(tr!("Zone gescheitert: {e}", "zone failed: {e}"));
                         Ok(Vec::new())
                     }
                 }
             }
             ZoneShape::Plane { point, normal, d } => {
                 if *d <= 0.0 || normal.length() < 1e-12 {
-                    self.error("zone: Dicke und Normale müssen > 0 sein");
+                    self.error(trs!(
+                        "zone: Dicke und Normale müssen > 0 sein",
+                        "zone: thickness and normal must be > 0"
+                    ));
                     return Ok(Vec::new());
                 }
                 let n = normal.normalize();
@@ -1637,7 +1728,7 @@ where
                 }
                 let h = d / 2.0;
                 if uhi.z < -h || ulo.z > h {
-                    self.warn("Zone trifft den Körper nicht");
+                    self.warn(trs!("Zone trifft den Körper nicht", "zone does not hit the body"));
                     return Ok(Vec::new());
                 }
                 let frame = DMat4::from_cols(u.extend(0.0), v.extend(0.0), n.extend(0.0), point.extend(1.0));
@@ -1645,14 +1736,14 @@ where
                 let s = match self.run.call(|k| k.make_box(bmin, bmax, tag))? {
                     Ok(s) => s,
                     Err(e) => {
-                        self.error(format!("Zone gescheitert: {e}"));
+                        self.error(tr!("Zone gescheitert: {e}", "zone failed: {e}"));
                         return Ok(Vec::new());
                     }
                 };
                 match self.run.call(|k| k.transform(&s, &frame))? {
                     Ok(s) => Ok(vec![Part { shape: s, solid: true }]),
                     Err(e) => {
-                        self.error(format!("Zone gescheitert: {e}"));
+                        self.error(tr!("Zone gescheitert: {e}", "zone failed: {e}"));
                         Ok(Vec::new())
                     }
                 }
@@ -1669,11 +1760,18 @@ where
         let mut warn = Vec::new();
         for c in tree.solid_children(self.idx) {
             if tree.dim(c) == Some(Dim::Three) {
-                self.error(format!("{} erwartet 2D-Profile als Kinder", tree.node(self.idx).op.label()));
+                self.error(tr!(
+                    "{} erwartet 2D-Profile als Kinder",
+                    "{} expects 2D profiles as children",
+                    tree.node(self.idx).op.label()
+                ));
                 return None;
             }
             if profile::open_sketch_in(tree, c) {
-                self.error("offene Skizze ist kein Profil (nur als `sweep`-Pfad)");
+                self.error(trs!(
+                    "offene Skizze ist kein Profil (nur als `sweep`-Pfad)",
+                    "open sketch is not a profile (only as a `sweep` path)"
+                ));
                 return None;
             }
             match profile::lift(tree, c, tree.node(c).local, &mut warn) {
@@ -1688,7 +1786,7 @@ where
             self.warn(w);
         }
         if args.is_empty() {
-            self.warn("kein Profil");
+            self.warn(trs!("kein Profil", "no profile"));
             return None;
         }
         Some(Expr2::Op(BoolOp::Union, args))
@@ -1734,7 +1832,10 @@ where
             })
             .collect();
         if approx {
-            self.warn("Kreis unter ungleichmäßiger Skalierung wird als Spline angenähert");
+            self.warn(trs!(
+                "Kreis unter ungleichmäßiger Skalierung wird als Spline angenähert",
+                "circle under non-uniform scale is approximated by a spline"
+            ));
         }
         Some(out)
     }
@@ -1748,9 +1849,15 @@ where
                     (DMat4::from_translation(DVec3::new(0.0, 0.0, *z0)), profile::affine2(&l.m))
                 } else {
                     if *twist != 0.0 || *scale != DVec2::ONE {
-                        self.warn("Profil liegt nicht in der xy-Ebene: twist/scale wirken um seine eigene Normale");
+                        self.warn(trs!(
+                            "Profil liegt nicht in der xy-Ebene: twist/scale wirken um seine eigene Normale",
+                            "profile not in the xy plane: twist/scale act about its own normal"
+                        ));
                     } else {
-                        self.warn("Profil liegt nicht in der xy-Ebene: Extrusion entlang seiner Normale");
+                        self.warn(trs!(
+                            "Profil liegt nicht in der xy-Ebene: Extrusion entlang seiner Normale",
+                            "profile not in the xy plane: extruded along its normal"
+                        ));
                     }
                     let (f, a) = profile::split_frame(&l.m);
                     (DMat4::from_translation(DVec3::new(0.0, 0.0, *z0)) * f, a)
@@ -1758,7 +1865,10 @@ where
             }
             LiftMode::Revolve { .. } => {
                 if !planar {
-                    self.warn("Profil liegt nicht in der xy-Ebene und wird projiziert");
+                    self.warn(trs!(
+                        "Profil liegt nicht in der xy-Ebene und wird projiziert",
+                        "profile not in the xy plane, projected"
+                    ));
                 }
                 // Profile xy → xz (x → x, y → z).
                 let r = DMat4::from_cols(
@@ -1771,7 +1881,10 @@ where
             }
             LiftMode::Sweep { .. } | LiftMode::SweepPath { .. } => {
                 if !planar {
-                    self.warn("Profil liegt nicht in der xy-Ebene und wird projiziert");
+                    self.warn(trs!(
+                        "Profil liegt nicht in der xy-Ebene und wird projiziert",
+                        "profile not in the xy plane, projected"
+                    ));
                 }
                 (DMat4::IDENTITY, profile::affine2(&l.m))
             }
@@ -1790,7 +1903,7 @@ where
                 Ok(s) => solids.push(Part { shape: s, solid: true }),
                 Err(e) => {
                     let what = self.tree().node(self.idx).op.label();
-                    self.error(format!("{what} gescheitert: {e}"));
+                    self.error(tr!("{what} gescheitert: {e}", "{what} failed: {e}"));
                     if solids.is_empty() {
                         return Ok(Vec::new());
                     }
@@ -1817,15 +1930,25 @@ where
             .filter_map(|&c| find_open_sketch(tree, c, tree.node(c).local).map(|(s, m)| (c, s, m)))
             .collect();
         let Some(&(path_child, sk, m)) = paths.first() else {
-            self.error("sweep braucht `path` oder einen offenen Skizzenpfad `sketch(closed = false) { … }` als Kind");
+            self.error(trs!(
+                "sweep braucht `path` oder einen offenen Skizzenpfad `sketch(closed = false) { … }` als Kind",
+                "sweep needs `path` or an open sketch path `sketch(closed = false) { … }` as a child"
+            ));
             return Ok(Vec::new());
         };
         if paths.len() > 1 {
-            self.warn("sweep: mehrere offene Skizzen, die erste ist der Pfad");
+            self.warn(trs!(
+                "sweep: mehrere offene Skizzen, die erste ist der Pfad",
+                "sweep: several open sketches, the first is the path"
+            ));
         }
         let Op::Profile(cad_ir::Profile::Sketch { contours, .. }) = &tree.node(sk).op else { return Ok(Vec::new()) };
         if contours.len() != 1 {
-            self.error(format!("sweep: der Skizzenpfad braucht genau eine Kontur (hat {})", contours.len()));
+            self.error(tr!(
+                "sweep: der Skizzenpfad braucht genau eine Kontur (hat {})",
+                "sweep: the sketch path needs exactly one contour (has {})",
+                contours.len()
+            ));
             return Ok(Vec::new());
         }
         let segs = match profile::contour_segments(&contours[0]) {
@@ -1839,7 +1962,7 @@ where
         let mut warn = Vec::new();
         for &c in kids.iter().filter(|&&c| c != path_child) {
             if tree.dim(c) == Some(Dim::Three) {
-                self.error("sweep erwartet 2D-Profile als Kinder");
+                self.error(trs!("sweep erwartet 2D-Profile als Kinder", "sweep expects 2D profiles as children"));
                 return Ok(Vec::new());
             }
             match profile::lift(tree, c, tree.node(c).local, &mut warn) {
@@ -1854,7 +1977,7 @@ where
             self.warn(w);
         }
         if args.is_empty() {
-            self.warn("kein Profil");
+            self.warn(trs!("kein Profil", "no profile"));
             return Ok(Vec::new());
         }
         let mode = LiftMode::SweepPath { path: cad_kernel::PlacedPath { segs, frame: m } };
@@ -1867,11 +1990,14 @@ where
         let mut warn = Vec::new();
         for c in tree.solid_children(self.idx) {
             if tree.dim(c) == Some(Dim::Three) {
-                self.error("loft erwartet 2D-Profile als Kinder");
+                self.error(trs!("loft erwartet 2D-Profile als Kinder", "loft expects 2D profiles as children"));
                 return Ok(Vec::new());
             }
             if profile::open_sketch_in(tree, c) {
-                self.error("offene Skizze ist kein Profil (nur als `sweep`-Pfad)");
+                self.error(trs!(
+                    "offene Skizze ist kein Profil (nur als `sweep`-Pfad)",
+                    "open sketch is not a profile (only as a `sweep` path)"
+                ));
                 return Ok(Vec::new());
             }
             let e = match profile::lift(tree, c, tree.node(c).local, &mut warn) {
@@ -1889,13 +2015,20 @@ where
                     let (frame, a) = profile::split_frame(&leaves[0].m);
                     let (lp, approx) = profile::map_loop(&lps[0], &a);
                     if approx {
-                        warn.push("Kreis unter ungleichmäßiger Skalierung wird als Spline angenähert".into());
+                        warn.push(
+                            trs!(
+                                "Kreis unter ungleichmäßiger Skalierung wird als Spline angenähert",
+                                "circle under non-uniform scale is approximated by a spline"
+                            )
+                            .into(),
+                        );
                     }
                     sections.push(PlacedLoop { lp: profile::loft_normalize(lp), frame });
                 }
                 _ => {
-                    self.error(format!(
+                    self.error(tr!(
                         "loft: jedes Kind muss genau eine geschlossene Kontur sein (Kind {} ist es nicht)",
+                        "loft: every child must be exactly one closed contour ({} is not)",
                         tree.node(c).op.label()
                     ));
                     return Ok(Vec::new());
@@ -1906,14 +2039,14 @@ where
             self.warn(w);
         }
         if sections.len() < 2 {
-            self.error("loft braucht mindestens 2 Profile");
+            self.error(trs!("loft braucht mindestens 2 Profile", "loft needs at least 2 profiles"));
             return Ok(Vec::new());
         }
         let tag = self.tag;
         match self.run.call(|k| k.loft(&sections, ruled, tag))? {
             Ok(s) => Ok(vec![Part { shape: s, solid: true }]),
             Err(e) => {
-                self.error(format!("loft gescheitert: {e}"));
+                self.error(tr!("loft gescheitert: {e}", "loft failed: {e}"));
                 Ok(Vec::new())
             }
         }

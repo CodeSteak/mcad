@@ -3,6 +3,7 @@
 
 use std::path::Path;
 
+use cad_i18n::tr;
 use cad_session::protocol as p;
 use serde_json::json;
 
@@ -20,8 +21,14 @@ fn format_of(format: Option<&str>, output: &Path, dir: bool) -> Result<p::Export
         Some("stl") => Ok(p::ExportFormat::Stl),
         Some("3mf") => Ok(p::ExportFormat::ThreeMf),
         Some("step" | "stp") => Ok(p::ExportFormat::Step),
-        Some(f) => Err(Fail::Usage(format!("unbekanntes Exportformat: {f} (stl, 3mf oder step)"))),
-        None => Err(Fail::Usage("Exportformat fehlt (Endung .stl/.3mf/.step oder --format)".into())),
+        Some(f) => Err(Fail::Usage(tr!(
+            "unbekanntes Exportformat: {f} (stl, 3mf oder step)",
+            "unknown export format: {f} (stl, 3mf or step)"
+        ))),
+        None => Err(Fail::Usage(tr!(
+            "Exportformat fehlt (Endung .stl/.3mf/.step oder --format)",
+            "export format missing (extension .stl/.3mf/.step or --format)"
+        ))),
     }
 }
 
@@ -47,8 +54,12 @@ pub(crate) fn export_parts(
     let pkg = multicolor.unwrap_or_default();
     let multicolor = multicolor.is_some();
     let fmt = format_of(format, output, all)?;
-    let schema = cad_engine::StepSchema::parse(schema)
-        .ok_or_else(|| Fail::Usage(format!("unbekanntes STEP-Schema: {schema} (ap242 oder ap214)")))?;
+    let schema = cad_engine::StepSchema::parse(schema).ok_or_else(|| {
+        Fail::Usage(tr!(
+            "unbekanntes STEP-Schema: {schema} (ap242 oder ap214)",
+            "unknown STEP schema: {schema} (ap242 or ap214)"
+        ))
+    })?;
     // STEP header: product name = part name(s) (the engine joins them), time of the export.
     let step = cad_engine::StepOptions { schema, timestamp: utc_timestamp(), ..Default::default() };
     let mut m = load(c, None, true, true)?;
@@ -58,9 +69,10 @@ pub(crate) fn export_parts(
         return Ok(Outcome { json: j, text: t, errors: true, exit: None });
     };
     if scene.parts.is_empty() {
-        return Err(Fail::Usage(
-            "keine Bauteile: benannte Instanzen auf oberster Ebene, z. B. `deckel: deckel();`".into(),
-        ));
+        return Err(Fail::Usage(tr!(
+            "keine Bauteile: benannte Instanzen auf oberster Ebene, z. B. `deckel: deckel();`",
+            "no parts: named instances at the top level, e.g. `lid: lid();`"
+        )));
     }
     let assert_note = match crate::assert_gate(&m, &mut j, ignore_asserts) {
         Ok(n) => n,
@@ -84,13 +96,14 @@ pub(crate) fn export_parts(
             };
             let file = output.join(cad_session::part_file_name(&pt.name, ext(fmt)));
             crate::host::write_file(&file, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", file.display())))?;
-            t.push_str(&format!(
+            t.push_str(&tr!(
                 "{}: {} ({} Dreiecke, {} Bytes{})\n",
+                "{}: {} ({} triangles, {} bytes{})\n",
                 pt.name,
                 file.display(),
                 tris,
                 bytes.len(),
-                pt.volume.map(|v| format!(", Volumen {} mm³", num(v))).unwrap_or_default()
+                pt.volume.map(|v| tr!(", Volumen {} mm³", ", volume {} mm³", num(v))).unwrap_or_default()
             ));
             rows.push(json!({
                 "name": pt.name, "output": file.display().to_string(), "bytes": bytes.len(),
@@ -108,7 +121,14 @@ pub(crate) fn export_parts(
             m.session.export_parts_with(fmt, names, false, &step).map_err(Fail::Kernel)?
         };
         crate::host::write_file(output, &bytes).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
-        t.push_str(&format!("{}: {} ({} Dreiecke, {} Bytes)\n", names.join(", "), output.display(), tris, bytes.len()));
+        t.push_str(&tr!(
+            "{}: {} ({} Dreiecke, {} Bytes)\n",
+            "{}: {} ({} triangles, {} bytes)\n",
+            names.join(", "),
+            output.display(),
+            tris,
+            bytes.len()
+        ));
         for n in names {
             rows.push(json!({ "name": n, "output": output.display().to_string(), "volume": volume(n) }));
         }

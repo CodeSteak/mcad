@@ -41,6 +41,7 @@ fn open_shell(a: f64, b: f64, c: f64, r: f64, t: f64) -> f64 {
 
 #[test]
 fn shell_of_rounded_boxes() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     for (a, b, c, r, t) in [(90.0, 34.0, 18.0, 3.0, 1.6), (90.0, 34.0, 18.0, 5.0, 1.6), (50.0, 35.0, 30.0, 4.0, 1.5)] {
         let src = format!(
             "grid g {{ z: o = {c}; }}\nshell({t}) {{ box([0, 0, 0], [{a}, {b}, {c}], $fillet = {r}); zone(g.o, d = 1); }}"
@@ -83,6 +84,7 @@ fn dose_shell_example_is_a_hollow_box() {
 
 #[test]
 fn shell_too_thick_still_fails() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = "grid g { z: o = 10; }\nshell(6) { box([0, 0, 0], [20, 20, 10], $fillet = 2); zone(g.o, d = 1); }";
     let mut e = engine();
     let ev = e.evaluate(tree(src));
@@ -130,6 +132,7 @@ fn surfaces_from_two_and_three_points_per_direction() {
 
 #[test]
 fn seams_and_poles_are_not_edges() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     let ev = e.evaluate(tree("cylinder(h = 10, r = 5, $chamfer = 1);"));
     assert_clean(&ev);
@@ -167,6 +170,7 @@ fn seams_and_poles_are_not_edges() {
 
 #[test]
 fn tangent_edges_of_rounds_are_not_selected() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // all edges of a rounded box are tangent: nothing left to round
     let mut e = engine();
     let ev = e.evaluate(tree("fillet(1) { cube(20, $fillet = 2); }"));
@@ -177,6 +181,7 @@ fn tangent_edges_of_rounds_are_not_selected() {
 
 #[test]
 fn coplanar_merged_faces_keep_old_edges_old() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // union(chamfer) of a slab and a tower sharing the front plane: only the two concave
     // edges where the tower meets the slab's top are new
     let src = "union(chamfer = 0.5) { cube([30, 10, 5]); translate([10, 0, 0]) cube([10, 10, 15]); }";
@@ -208,6 +213,7 @@ fn probe_radius(e: &mut E, shape: &kernel_smlib::Shape, x: f64) -> f64 {
 
 #[test]
 fn variable_radius_linear_law_on_one_edge() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = r#"
 grid g { x: a = 0, b = 30; y: v = 0, h = 20; z: u = 0, o = 20; }
 fillet(r = function (p) 1 + p.x / 15) {
@@ -260,6 +266,7 @@ fn variable_radius_step_law_between_constant_radii() {
 
 #[test]
 fn variable_radius_captured_values_user_functions_and_booleans() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = r#"
 lo = 1;
 function steigung(x, k = 40) = x / k;
@@ -293,6 +300,7 @@ tasche(function (p) let(s = steigung(p.x)) lo + s);
 
 #[test]
 fn variable_radius_errors_like_constant_radius() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     // radius <= 0 somewhere: error with the position, body unchanged
     let ev = e.evaluate(tree("fillet(r = function (p) p.x - 5) { cube(20); }"));

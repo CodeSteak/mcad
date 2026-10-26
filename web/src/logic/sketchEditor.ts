@@ -22,7 +22,7 @@ export const SKETCH_TOOLS: Array<{ tool: SketchTool; label: string; title: strin
   },
 }));
 
-/** Shortcuts of the tools (docs/konzepte/ui-ueberarbeitung, Abschnitt 5). */
+/** Shortcuts of the tools (docs/concepts/ui-redesign, Abschnitt 5). */
 export const SKETCH_TOOL_KEYS: Partial<Record<SketchTool, string>> = {
   select: "V",
   line: "L",

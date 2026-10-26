@@ -65,6 +65,7 @@ fn include_inserts_definitions_variables_and_geometry() {
 
 #[test]
 fn include_assignments_follow_textual_order() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // OpenSCAD: the last assignment of the (spliced) file wins, with a warning.
     let (_, out) = project("x = 5;\ninclude <c.scad>\necho(x = x, y = y);", &[("c.scad", "x = 1;\ny = x * 10;")]);
     assert_eq!(echoes(&out), ["x = 1, y = 10"]);
@@ -79,6 +80,7 @@ fn include_assignments_follow_textual_order() {
 
 #[test]
 fn use_imports_modules_and_functions_only() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let lib = "module m() echo(\"a\");\nfunction f() = \"a\";\nla = 1;\nfunction getla() = la;\n\
                module showla() echo(la = la, fn = $fn);\ncube(1);\nuse <lib/inner.scad>\nmodule callinner() inner();";
     let (_, out) = project(
@@ -126,6 +128,7 @@ fn use_without_geometry_and_used_once() {
 
 #[test]
 fn include_cycle_is_an_error() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let (p, out) = project(
         "include <a.scad>\ncube(1);",
         &[("a.scad", "include <b.scad>\nz = 1;"), ("b.scad", "include <a.scad>\n")],
@@ -146,6 +149,7 @@ fn include_cycle_is_an_error() {
 
 #[test]
 fn missing_file_is_an_error_at_the_line() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let (p, out) = project("cube(1);\ninclude <fehlt.scad>\nuse <lib/fehlt2.scad>\n", &[]);
     let errs: Vec<_> = out.diagnostics.iter().filter(|d| d.severity == Severity::Error).collect();
     assert_eq!(errs.len(), 2, "{errs:?}");
@@ -284,6 +288,7 @@ fn indexed_named_instances_in_loops() {
 
 #[test]
 fn indexed_named_instance_errors() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let m = "module p() { anchor a = [1, 0, 0]; }\n";
     for (src, msg) in [
         ("for (i = [0:1]) k: p();", "benannte Instanzen sind in for-Schleifen nicht erlaubt (`k[i]: …` verwenden)"),
@@ -310,7 +315,15 @@ fn indexed_named_instance_errors() {
 
 #[test]
 fn single_file_eval_reports_includes_as_missing() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = eval_source("include <x.scad>\ncube(1);", &EvalOptions::default());
     assert!(has_error(&out, "Datei `x.scad` nicht gefunden"));
     assert_eq!(nodes_by_label(&out, "box").len(), 1);
+}
+
+#[test]
+fn missing_file_in_english() {
+    let (_, out) = project("cube(1);\ninclude <fehlt.scad>\n", &[]);
+    let e = out.diagnostics.iter().find(|d| d.severity == Severity::Error).unwrap();
+    assert!(e.message.starts_with("file `fehlt.scad` not found"), "{}", e.message);
 }

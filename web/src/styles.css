@@ -995,7 +995,7 @@ input[type="range"] {
 /* ---------------------------------------------------------------- measure mode (Plan 18) */
 
 /* Context bar of the measure mode: like the sketch and section bars for now; the UI overhaul
-   moves `.contextbar` top left under the toolbar (docs/konzepte/ui-ueberarbeitung). */
+   moves `.contextbar` top left under the toolbar (docs/concepts/ui-redesign). */
 
 .st-note.measure {
   color: var(--view-accent);
@@ -1142,7 +1142,7 @@ input[type="range"] {
 
 
 /* ================================================================ UI overhaul
-   (docs/konzepte/ui-ueberarbeitung): one control height (26 px), radius 6 px, Inter 12 px,
+   (docs/concepts/ui-redesign): one control height (26 px), radius 6 px, Inter 12 px,
    building blocks in src/app/ui/ (Button, IconButton, Segmented, Menu, Toolbar). */
 
 /* Inter 4.1 (SIL OFL 1.1), the copy that cad-font embeds for text(): same widths in Chromium and

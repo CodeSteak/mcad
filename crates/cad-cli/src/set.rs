@@ -13,6 +13,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use cad_i18n::{tr, trs};
 use cad_session::protocol::{self as p, ToEngine};
 use cad_session::{PROTOCOL_VERSION, Session, SessionOptions, std_clock};
 use clap::Args;
@@ -79,23 +80,32 @@ fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
 
 pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
     if a.param.is_empty() && a.literal.is_empty() {
-        return Err(Fail::Usage("nichts zu ändern: --param modul.param=wert oder --literal zeile:spalte=wert".into()));
+        return Err(Fail::Usage(tr!(
+            "nichts zu ändern: --param modul.param=wert oder --literal zeile:spalte=wert",
+            "nothing to change: --param module.param=value or --literal line:col=value"
+        )));
     }
     if a.file.as_os_str() == "-" {
-        return Err(Fail::Usage("set braucht eine Datei (nicht stdin)".into()));
+        return Err(Fail::Usage(tr!("set braucht eine Datei (nicht stdin)", "set needs a file (not stdin)")));
     }
     let c = Common { file: a.file.clone(), json: a.json, module: None, define: Vec::new() };
     let mut m = load(&c, None, true, false)?;
     let errors_before = errors_of(&m.diagnostics);
     let Some(file_scene) = m.scene.clone() else {
-        return Err(Fail::Usage(format!("{}: Syntaxfehler, erst beheben (mcad check)", m.file)));
+        return Err(Fail::Usage(tr!(
+            "{}: Syntaxfehler, erst beheben (mcad check)",
+            "{}: syntax error, fix it first (mcad check)",
+            m.file
+        )));
     };
-    let cur = m.session.current().ok_or_else(|| Fail::Kernel("keine Auswertung".into()))?;
+    let cur = m.session.current().ok_or_else(|| Fail::Kernel(tr!("keine Auswertung", "no evaluation")))?;
     let proj = cur.proj.clone();
     let mut changes: Vec<Change> = Vec::new();
 
     for spec in &a.param {
-        let bad = || Fail::Usage(format!("--param {spec}: erwartet modul.param=wert"));
+        let bad = || {
+            Fail::Usage(tr!("--param {spec}: erwartet modul.param=wert", "--param {spec}: expected module.param=value"))
+        };
         let (lhs, value) = spec.split_once('=').ok_or_else(bad)?;
         let (module, param) = lhs.trim().rsplit_once('.').ok_or_else(bad)?;
         let value = value.trim();
@@ -103,7 +113,10 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
             return Err(bad());
         }
         let e = cad_eval::set_default_edit_project(&proj, module, param, value).ok_or_else(|| {
-            Fail::Usage(format!("--param {spec}: Parameter `{param}` von Modul `{module}` nicht gefunden"))
+            Fail::Usage(tr!(
+                "--param {spec}: Parameter `{param}` von Modul `{module}` nicht gefunden",
+                "--param {spec}: parameter `{param}` of module `{module}` not found"
+            ))
         })?;
         let l = e.span.local();
         changes.push(Change {
@@ -117,7 +130,12 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
     }
 
     for spec in &a.literal {
-        let bad = || Fail::Usage(format!("--literal {spec}: erwartet [datei:]zeile:spalte=wert"));
+        let bad = || {
+            Fail::Usage(tr!(
+                "--literal {spec}: erwartet [datei:]zeile:spalte=wert",
+                "--literal {spec}: expected [file:]line:col=value"
+            ))
+        };
         let (pos, value) = spec.split_once('=').ok_or_else(bad)?;
         let mut it = pos.rsplitn(3, ':');
         let col: u32 = it.next().and_then(|s| s.trim().parse().ok()).ok_or_else(bad)?;
@@ -137,16 +155,21 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
                     .map(|sf| sf.id)
                     .ok_or_else(|| {
                         let known: Vec<&str> = proj.files.iter().map(|f| f.path.as_str()).collect();
-                        Fail::Usage(format!(
+                        Fail::Usage(tr!(
                             "--literal {spec}: Datei `{f}` gehört nicht zum Projekt ({})",
+                            "--literal {spec}: file `{f}` is not part of the project ({})",
                             known.join(", ")
                         ))
                     })?
             }
         };
         let sf = &proj.files[file_id as usize];
-        let at = offset_of(&sf.text, line, col)
-            .ok_or_else(|| Fail::Usage(format!("--literal {spec}: Position außerhalb der Datei")))?;
+        let at = offset_of(&sf.text, line, col).ok_or_else(|| {
+            Fail::Usage(tr!(
+                "--literal {spec}: Position außerhalb der Datei",
+                "--literal {spec}: position outside the file"
+            ))
+        })?;
         // the context in which the UI edits this line: the module whose definition contains it
         let module = file_scene
             .modules
@@ -191,13 +214,14 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
                 })
                 .collect();
             on_line.dedup();
-            return Err(Fail::Usage(format!(
-                "--literal {spec}: an {line}:{col} steht kein editierbares Literal{}",
-                if on_line.is_empty() {
-                    String::new()
-                } else {
-                    format!(" (Literale der Zeile: {})", on_line.join(", "))
-                }
+            let known = if on_line.is_empty() {
+                String::new()
+            } else {
+                tr!(" (Literale der Zeile: {})", " (literals of the line: {})", on_line.join(", "))
+            };
+            return Err(Fail::Usage(tr!(
+                "--literal {spec}: an {line}:{col} steht kein editierbares Literal{known}",
+                "--literal {spec}: there is no editable literal at {line}:{col}{known}"
             )));
         };
         changes.push(Change {
@@ -220,7 +244,12 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
         chs.sort_by_key(|c| std::cmp::Reverse(c.from));
         for w in chs.windows(2) {
             if w[1].to > w[0].from {
-                return Err(Fail::Usage(format!("Änderungen überlappen: {} und {}", w[1].spec, w[0].spec)));
+                return Err(Fail::Usage(tr!(
+                    "Änderungen überlappen: {} und {}",
+                    "changes overlap: {} and {}",
+                    w[1].spec,
+                    w[0].spec
+                )));
             }
         }
         let mut s = proj.files[*id as usize].text.clone();
@@ -290,16 +319,17 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
     });
     let mut t = diff.clone();
     if refused {
-        t.push_str(&format!(
-            "nicht geschrieben: die Änderung erzeugt Fehler ({errors_before} → {errors_after}); --force schreibt trotzdem\n"
+        t.push_str(&tr!(
+            "nicht geschrieben: die Änderung erzeugt Fehler ({errors_before} → {errors_after}); --force schreibt trotzdem\n",
+            "not written: the change causes errors ({errors_before} → {errors_after}); --force writes anyway\n"
         ));
         let mut tmp = m;
         tmp.diagnostics = diags_after;
         t.push_str(&tmp.diagnostics_text());
     } else if a.dry_run {
-        t.push_str("(--dry-run: nichts geschrieben)\n");
+        t.push_str(trs!("(--dry-run: nichts geschrieben)\n", "(--dry-run: nothing written)\n"));
     } else {
-        t.push_str(&format!("geschrieben: {}\n", written.join(", ")));
+        t.push_str(&tr!("geschrieben: {}\n", "written: {}\n", written.join(", ")));
     }
     Ok(Outcome { json: j, text: t, errors: refused, exit: None })
 }

@@ -1,5 +1,6 @@
 //! Writing UI changes back into the source (Spec: Griffe und Rückschreiben).
 
+use cad_i18n::{tr, trs};
 use std::collections::BTreeMap;
 
 use cad_syntax::Span;
@@ -561,7 +562,7 @@ pub fn filament_set_edits(
         .collect();
     if let SlotSource::Decl(sp) = source {
         let Some(st) = decls.iter().find(|s| s.span == sp) else {
-            return Err("filament()-Anweisung nicht gefunden".into());
+            return Err(trs!("filament()-Anweisung nicht gefunden", "filament() statement not found").into());
         };
         let K::Call { args, .. } = &st.kind else { unreachable!() };
         return Ok(match filament {
@@ -572,7 +573,9 @@ pub fn filament_set_edits(
                     .or_else(|| args.iter().filter(|a| a.name.is_none()).nth(1));
                 match slot {
                     Some(a) => vec![TextEdit { span: a.value.span, text: n.to_string() }],
-                    None => return Err("filament(): Slot-Argument fehlt".into()),
+                    None => {
+                        return Err(trs!("filament(): Slot-Argument fehlt", "filament(): slot argument missing").into());
+                    }
                 }
             }
             None => {
@@ -598,8 +601,9 @@ pub fn filament_set_edits(
     }
     match filament {
         None => match source {
-            SlotSource::Color(sp) if !literal.contains(&sp) => Err(format!(
+            SlotSource::Color(sp) if !literal.contains(&sp) => Err(tr!(
                 "der Slot steht in Zeile {} als filament = … an einem color(), das mehrere Farben färbt – dort entfernen",
+                "the slot is set in line {} as filament = … on a color() that colours several colours – remove it there",
                 proj.line(sp)
             )),
             _ => Ok(filament_edits(proj, &literal, None)),

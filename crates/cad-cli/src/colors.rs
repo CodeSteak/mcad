@@ -1,6 +1,7 @@
 //! Colours, filament slots and colour regions in `outline`, `measure --colors` and `export`
 //! (Plan 16): one table for text and JSON.
 
+use cad_i18n::{tr, trs};
 use cad_session::protocol as p;
 use serde_json::{Value as Json, json};
 
@@ -26,7 +27,7 @@ fn source(s: p::ColorSource) -> &'static str {
 /// "Z.n" of a range, with the file name for ranges in other project files (`use`/`include`).
 fn line_ref(sc: &p::Scene, r: &p::SrcRange) -> String {
     match r.file {
-        None | Some(0) => format!("Z.{}", r.line),
+        None | Some(0) => tr!("Z.{}", "line {}", r.line),
         Some(id) => {
             let f = sc.files.iter().find(|f| f.id == id).map(|f| f.path.as_str()).unwrap_or("?");
             format!("{f}:{}", r.line)
@@ -92,7 +93,10 @@ pub(crate) fn table_of(
     };
     let mut t = String::new();
     if !shown.is_empty() {
-        t.push_str("Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):\n");
+        t.push_str(trs!(
+            "Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):\n",
+            "Colours (filament, colour, volume, mass PLA 1.24 g/cm³):\n"
+        ));
         for c in &shown {
             let v = volume_of(&c.key);
             let lines: Vec<String> = c.ranges.iter().map(|r| line_ref(sc, r)).collect();
@@ -104,8 +108,10 @@ pub(crate) fn table_of(
                 l.push_str(&format!("  {}", lines.join(", ")));
             }
             match c.source {
-                p::ColorSource::Default => l.push_str("  (ohne color())"),
-                p::ColorSource::Random => l.push_str("  (unbekannter Name: Zufallsfarbe)"),
+                p::ColorSource::Default => l.push_str(trs!("  (ohne color())", "  (without color())")),
+                p::ColorSource::Random => {
+                    l.push_str(trs!("  (unbekannter Name: Zufallsfarbe)", "  (unknown name: random colour)"))
+                }
                 _ => {}
             }
             if c.explicit {
@@ -115,7 +121,7 @@ pub(crate) fn table_of(
             t.push('\n');
         }
         for w in sets.iter().flatten().filter_map(|s| s.warning.as_ref()) {
-            t.push_str(&format!("  Warnung: {w}\n"));
+            t.push_str(&tr!("  Warnung: {w}\n", "  warning: {w}\n"));
         }
         if let Some(s) = &sets
             && s.len() > 1
@@ -138,7 +144,13 @@ pub(crate) fn table_of(
                     }
                 }
                 let parts: Vec<String> = acc.iter().map(|(f, l, v)| format!("F{f} {l} {} mm³", num(*v))).collect();
-                t.push_str(&format!("  {}: {}\n", name.map_or("Modell", |n| n.as_str()), parts.join(", ")));
+                let name = match name {
+                    None => trs!("Modell", "model"),
+                    // the material outside the parts (a fixed name, see cad_session::NO_PART)
+                    Some(n) if n == cad_session::NO_PART && !cad_i18n::is_de() => "outside any part",
+                    Some(n) => n.as_str(),
+                };
+                t.push_str(&format!("  {name}: {}\n", parts.join(", ")));
             }
         }
     }

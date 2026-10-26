@@ -1,4 +1,4 @@
-// Menus (docs/konzepte/ui-ueberarbeitung: "Selten Genutztes in Menüs"): a button that opens a
+// Menus (docs/concepts/ui-redesign: "Selten Genutztes in Menüs"): a button that opens a
 // menu (`MenuButton`), a split button (main action + menu, `SplitButton`) and a context menu
 // (`ContextMenu`). The popups render into <body> with fixed position (never cut off by a
 // scrolling bar), follow the WAI-ARIA menu pattern (roles menu/menuitem…, arrow keys, Home/End,

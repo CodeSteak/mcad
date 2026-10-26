@@ -7,6 +7,7 @@ publish.workspace = true
 description = "SVG import (subset): shapes, paths and transforms as exact 2D contours in millimetres"
 
 [dependencies]
+cad-i18n.workspace = true
 glam.workspace = true
 cad-outline = { path = "../cad-outline" }
 roxmltree = "0.21"

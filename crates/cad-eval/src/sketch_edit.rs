@@ -8,6 +8,7 @@
 //! ([`delete_segment`]) and the drawing raster ([`raster`]). The code stays the only source:
 //! every action is a [`TextEdit`] of the main file.
 
+use cad_i18n::{tr, trs};
 use cad_ir::{NodeIdx, Op, Profile, Seg, Tree};
 use cad_kernel::Segment;
 use cad_kernel::region2::{CornerKind, round_corner};
@@ -135,22 +136,22 @@ impl SnapKind {
         }
     }
 
-    /// German label for the status line.
+    /// Label for the status line (current language).
     pub fn label(self) -> &'static str {
         match self {
-            SnapKind::Grid => "Rasterpunkt",
-            SnapKind::Anchor => "Anker",
-            SnapKind::Start => "Anfang (schließt)",
-            SnapKind::End => "Endpunkt",
-            SnapKind::Center => "Mittelpunkt",
-            SnapKind::Intersection => "Schnittpunkt",
-            SnapKind::Mid => "Mitte",
-            SnapKind::Vertex => "Ecke",
+            SnapKind::Grid => trs!("Rasterpunkt", "grid point"),
+            SnapKind::Anchor => trs!("Anker", "anchor"),
+            SnapKind::Start => trs!("Anfang (schließt)", "start (closes)"),
+            SnapKind::End => trs!("Endpunkt", "end point"),
+            SnapKind::Center => trs!("Mittelpunkt", "centre"),
+            SnapKind::Intersection => trs!("Schnittpunkt", "intersection"),
+            SnapKind::Mid => trs!("Mitte", "midpoint"),
+            SnapKind::Vertex => trs!("Ecke", "corner"),
             SnapKind::Tangent => "tangential",
             SnapKind::Horizontal => "horizontal",
-            SnapKind::Vertical => "vertikal",
-            SnapKind::GridLine => "Rasterlinie",
-            SnapKind::Step => "Schrittweite",
+            SnapKind::Vertical => trs!("vertikal", "vertical"),
+            SnapKind::GridLine => trs!("Rasterlinie", "grid line"),
+            SnapKind::Step => trs!("Schrittweite", "step"),
         }
     }
 }
@@ -919,7 +920,7 @@ pub fn snap(out: &EvalOutput, place: &Place, q: DVec2, o: &SnapOpts) -> Snapped 
                 let pick = Pick { p, text: point_text(p), kind: SnapKind::Tangent, grid: None };
                 return Snapped {
                     pick,
-                    label: format!("tangential, Länge {}", fmt_literal(len, o.step)),
+                    label: tr!("tangential, Länge {}", "tangential, length {}", fmt_literal(len, o.step)),
                     guides: vec![vec![from, from + d * (len + o.tol * 4.0)]],
                 };
             }
@@ -1014,35 +1015,48 @@ fn eps(p: DVec2) -> f64 {
 // tools: prompts, previews, code
 // ------------------------------------------------------------------------------------------
 
-/// German prompt of a tool at a stage.
+/// Prompt of a tool at a stage (current language).
 pub fn prompt(place: &Place, tool: SketchTool, picks: &[Pick]) -> String {
     let n = picks.len();
     let s = match tool {
-        SketchTool::Select => "Auswahl: Segment anklicken (Entf löscht), Griffe ziehen",
-        SketchTool::Line if n == 0 => "Linie: Anfangspunkt",
-        SketchTool::Line => "Linie: nächster Punkt (Klick auf den Anfang schließt, Esc beendet)",
-        SketchTool::ArcThrough if n == 0 => "Bogen (3 Punkte): Anfangspunkt",
-        SketchTool::ArcThrough if n == 1 => "Bogen (3 Punkte): Punkt auf dem Bogen",
-        SketchTool::ArcThrough => "Bogen (3 Punkte): Endpunkt",
-        SketchTool::ArcCenter if n == 0 => "Bogen (Mittelpunkt): Anfangspunkt",
-        SketchTool::ArcCenter if n == 1 => "Bogen (Mittelpunkt): Mittelpunkt",
-        SketchTool::ArcCenter => "Bogen (Mittelpunkt): Endwinkel",
-        SketchTool::ArcTangent if place.cur.as_ref().is_some_and(|c| c.tangent.is_some()) => {
-            "Bogen (tangential): Endpunkt"
+        SketchTool::Select => trs!(
+            "Auswahl: Segment anklicken (Entf löscht), Griffe ziehen",
+            "Select: click a segment (Del deletes), drag handles"
+        ),
+        SketchTool::Line if n == 0 => trs!("Linie: Anfangspunkt", "Line: start point"),
+        SketchTool::Line => trs!(
+            "Linie: nächster Punkt (Klick auf den Anfang schließt, Esc beendet)",
+            "Line: next point (click on the start closes, Esc ends)"
+        ),
+        SketchTool::ArcThrough if n == 0 => trs!("Bogen (3 Punkte): Anfangspunkt", "Arc (3 points): start point"),
+        SketchTool::ArcThrough if n == 1 => {
+            trs!("Bogen (3 Punkte): Punkt auf dem Bogen", "Arc (3 points): point on the arc")
         }
-        SketchTool::ArcTangent => "Bogen (tangential): braucht eine offene Kontur mit einem Segment",
-        SketchTool::Bezier if n == 0 => "Bézier: Anfangspunkt",
-        SketchTool::Bezier if n == 1 => "Bézier: Kontrollpunkt 1",
-        SketchTool::Bezier if n == 2 => "Bézier: Kontrollpunkt 2",
-        SketchTool::Bezier => "Bézier: Endpunkt",
-        SketchTool::Rect if n == 0 => "Rechteck: erste Ecke",
-        SketchTool::Rect => "Rechteck: gegenüberliegende Ecke",
-        SketchTool::Circle if n == 0 => "Kreis: Mittelpunkt",
-        SketchTool::Circle => "Kreis: Punkt auf dem Kreis",
-        SketchTool::Corner if n == 0 => "Ecke runden: Ecke wählen",
-        SketchTool::Corner => "Ecke runden: Radius (Abstand zur Ecke)",
-        SketchTool::Close => "Schließen",
-        SketchTool::Delete => "Segment löschen",
+        SketchTool::ArcThrough => trs!("Bogen (3 Punkte): Endpunkt", "Arc (3 points): end point"),
+        SketchTool::ArcCenter if n == 0 => trs!("Bogen (Mittelpunkt): Anfangspunkt", "Arc (centre): start point"),
+        SketchTool::ArcCenter if n == 1 => trs!("Bogen (Mittelpunkt): Mittelpunkt", "Arc (centre): centre"),
+        SketchTool::ArcCenter => trs!("Bogen (Mittelpunkt): Endwinkel", "Arc (centre): end angle"),
+        SketchTool::ArcTangent if place.cur.as_ref().is_some_and(|c| c.tangent.is_some()) => {
+            trs!("Bogen (tangential): Endpunkt", "Arc (tangential): end point")
+        }
+        SketchTool::ArcTangent => trs!(
+            "Bogen (tangential): braucht eine offene Kontur mit einem Segment",
+            "Arc (tangential): needs an open contour with a segment"
+        ),
+        SketchTool::Bezier if n == 0 => trs!("Bézier: Anfangspunkt", "Bézier: start point"),
+        SketchTool::Bezier if n == 1 => trs!("Bézier: Kontrollpunkt 1", "Bézier: control point 1"),
+        SketchTool::Bezier if n == 2 => trs!("Bézier: Kontrollpunkt 2", "Bézier: control point 2"),
+        SketchTool::Bezier => trs!("Bézier: Endpunkt", "Bézier: end point"),
+        SketchTool::Rect if n == 0 => trs!("Rechteck: erste Ecke", "Rectangle: first corner"),
+        SketchTool::Rect => trs!("Rechteck: gegenüberliegende Ecke", "Rectangle: opposite corner"),
+        SketchTool::Circle if n == 0 => trs!("Kreis: Mittelpunkt", "Circle: centre"),
+        SketchTool::Circle => trs!("Kreis: Punkt auf dem Kreis", "Circle: point on the circle"),
+        SketchTool::Corner if n == 0 => trs!("Ecke runden: Ecke wählen", "Round corner: pick a corner"),
+        SketchTool::Corner => {
+            trs!("Ecke runden: Radius (Abstand zur Ecke)", "Round corner: radius (distance to the corner)")
+        }
+        SketchTool::Close => trs!("Schließen", "Close"),
+        SketchTool::Delete => trs!("Segment löschen", "Delete segment"),
     };
     s.to_string()
 }
@@ -1249,7 +1263,9 @@ pub fn click(
     let start = |p0: &Pick| format!("start({});", p0.text);
     let same = |a: &Pick, b: &Pick| a.p.distance(b.p) <= eps(a.p);
     match tool {
-        SketchTool::Select | SketchTool::Close | SketchTool::Delete => Err("kein Zeichenwerkzeug".into()),
+        SketchTool::Select | SketchTool::Close | SketchTool::Delete => {
+            Err(trs!("kein Zeichenwerkzeug", "not a drawing tool").into())
+        }
         SketchTool::Line => {
             if n < 2 {
                 return Ok(Click::More(picks.to_vec()));
@@ -1285,7 +1301,11 @@ pub fn click(
             }
             let (p0, m, p1) = (&picks[n - 3], &picks[n - 2], &picks[n - 1]);
             if arc_through(p0.p, m.p, p1.p).is_none() || same(p0, p1) {
-                return Err("die drei Punkte liegen auf einer Geraden".into());
+                return Err(trs!(
+                    "die drei Punkte liegen auf einer Geraden",
+                    "the three points lie on a straight line"
+                )
+                .into());
             }
             let ns = need_start(p0);
             let mut stmts = Vec::new();
@@ -1300,7 +1320,7 @@ pub fn click(
         SketchTool::ArcCenter => {
             if n < 3 {
                 if n == 2 && same(&picks[0], &picks[1]) {
-                    return Err("Mittelpunkt liegt auf dem Anfangspunkt".into());
+                    return Err(trs!("Mittelpunkt liegt auf dem Anfangspunkt", "centre lies on the start point").into());
                 }
                 return Ok(Click::More(picks.to_vec()));
             }
@@ -1313,7 +1333,7 @@ pub fn click(
             }
             let end = if p1.kind.is_point() && !same(c, p1) {
                 if sw.abs() < 1e-9 {
-                    return Err("Endpunkt gleich Anfangspunkt".into());
+                    return Err(trs!("Endpunkt gleich Anfangspunkt", "end point equals start point").into());
                 }
                 let cw = if sw < 0.0 { ", cw = true" } else { "" };
                 stmts.push(format!("arc(center = {}, to = {}{cw});", c.text, p1.text));
@@ -1322,7 +1342,7 @@ pub fn click(
             } else {
                 let a = round_deg(sw, step_deg);
                 if a.abs() < 1e-9 {
-                    return Err("Winkel 0°".into());
+                    return Err(trs!("Winkel 0°", "angle 0°").into());
                 }
                 stmts.push(format!("arc(center = {}, angle = {});", c.text, fmt_num(a)));
                 let r = p0.p.distance(c.p);
@@ -1335,11 +1355,19 @@ pub fn click(
         }
         SketchTool::ArcTangent => {
             let Some(c) = place.cur.as_ref().filter(|c| c.tangent.is_some()) else {
-                return Err("tangentialer Bogen braucht eine offene Kontur mit einem Segment".into());
+                return Err(trs!(
+                    "tangentialer Bogen braucht eine offene Kontur mit einem Segment",
+                    "tangential arc needs an open contour with a segment"
+                )
+                .into());
             };
             let p1 = &picks[n - 1];
             if tangent_arc(c.end, c.tangent.unwrap_or(DVec2::X), p1.p).is_none() {
-                return Err("Endpunkt liegt auf der Tangente (Linie verwenden)".into());
+                return Err(trs!(
+                    "Endpunkt liegt auf der Tangente (Linie verwenden)",
+                    "end point lies on the tangent (use a line)"
+                )
+                .into());
             }
             let a = insert(place, &[format!("arc(to = {});", p1.text)], false);
             Ok(Click::Done(a))
@@ -1365,7 +1393,7 @@ pub fn click(
             }
             let (a, b) = (&picks[n - 2], &picks[n - 1]);
             if (a.p.x - b.p.x).abs() <= eps(a.p) || (a.p.y - b.p.y).abs() <= eps(a.p) {
-                return Err("Rechteck ohne Fläche".into());
+                return Err(trs!("Rechteck ohne Fläche", "rectangle without area").into());
             }
             let (c1, c2) = rect_corners(out, a, b);
             let stmts = vec![
@@ -1403,10 +1431,12 @@ pub fn click(
 /// `corner(r = …)` at a vertex: after the segment ending there (or after `start` for the start
 /// vertex); an existing `corner()` there gets the new radius.
 fn corner_edit(proj: &Project, place: &Place, v: &Pick, at: &Pick, step: f64) -> Result<Action, String> {
-    let info = place.info.ok_or("keine Skizze")?;
+    let info = place.info.ok_or(trs!("keine Skizze", "no sketch"))?;
     let text = proj.main_text();
-    let (p, si, ..) =
-        vertices(info).into_iter().find(|x| x.0.distance(v.p) <= eps(v.p)).ok_or("keine Ecke an diesem Punkt")?;
+    let (p, si, ..) = vertices(info)
+        .into_iter()
+        .find(|x| x.0.distance(v.p) <= eps(v.p))
+        .ok_or(trs!("keine Ecke an diesem Punkt", "no corner at this point"))?;
     let r = corner_radius(p, at.p, step);
     let rt = fmt_literal(r, step);
     // an existing corner() right after the segment
@@ -1421,9 +1451,10 @@ fn corner_edit(proj: &Project, place: &Place, v: &Pick, at: &Pick, step: f64) ->
         return Ok(Action { edits: vec![e], select: Some((0, rt.len())), points: Vec::new() });
     }
     let (bi, k) =
-        direct_child(&place.blocks, info.steps[si].span).filter(|(_, k)| k.span == info.steps[si].span).ok_or(
+        direct_child(&place.blocks, info.steps[si].span).filter(|(_, k)| k.span == info.steps[si].span).ok_or(trs!(
             "die Ecke gehört zu einer Anweisung in einer Schleife oder einem Modul: corner() dort von Hand einfügen",
-        )?;
+            "the corner belongs to a statement in a loop or a module: insert corner() there by hand"
+        ))?;
     let ins = after_stmt(text, k, &place.blocks[bi].1.indent);
     let (e, end) = ins.edit(&[format!("corner(r = {rt});")]);
     Ok(Action { edits: vec![e], select: Some((0, end)), points: Vec::new() })
@@ -1433,8 +1464,8 @@ fn corner_edit(proj: &Project, place: &Place, v: &Pick, at: &Pick, step: f64) ->
 pub fn close(place: &Place) -> Result<Action, String> {
     match &place.cur {
         Some(c) if c.segs >= 1 => Ok(insert(place, &["close();".into()], false)),
-        Some(_) => Err("Kontur ohne Segmente".into()),
-        None => Err("keine offene Kontur an dieser Stelle".into()),
+        Some(_) => Err(trs!("Kontur ohne Segmente", "contour without segments").into()),
+        None => Err(trs!("keine offene Kontur an dieser Stelle", "no open contour at this place").into()),
     }
 }
 
@@ -1461,7 +1492,7 @@ fn remove_stmt(text: &str, span: Span) -> Span {
 /// line). The only segment of a contour takes the contour with it (`start`, `close`,
 /// `corner`); a `corner()` right after the segment goes as well.
 pub fn delete_segment(proj: &Project, place: &Place, cursor: u32) -> Result<Vec<TextEdit>, String> {
-    let info = place.info.ok_or("keine Skizze am Cursor")?;
+    let info = place.info.ok_or(trs!("keine Skizze am Cursor", "no sketch at the cursor"))?;
     let text = proj.main_text();
     let (ls, le) = (line_start(text, cursor.min(text.len() as u32)), line_end(text, cursor.min(text.len() as u32)));
     let is_seg =
@@ -1475,7 +1506,7 @@ pub fn delete_segment(proj: &Project, place: &Place, cursor: u32) -> Result<Vec<
                 .iter()
                 .position(|s| is_seg(s) && inside(s, info.span) && ls <= s.span.start && s.span.start <= le)
         })
-        .ok_or("kein Segment am Cursor")?;
+        .ok_or(trs!("kein Segment am Cursor", "no segment at the cursor"))?;
     let st = &info.steps[i];
     let mut spans = vec![st.span];
     let geo = |s: &SketchStep| s.seg.is_some();
@@ -1493,7 +1524,11 @@ pub fn delete_segment(proj: &Project, place: &Place, cursor: u32) -> Result<Vec<
     for sp in spans {
         let Some((_, k)) = direct_child(&place.blocks, sp).filter(|(_, k)| k.span == sp) else {
             if sp == st.span {
-                return Err("das Segment steht in einer Schleife oder einem Modul: dort von Hand löschen".into());
+                return Err(trs!(
+                    "das Segment steht in einer Schleife oder einem Modul: dort von Hand löschen",
+                    "the segment is in a loop or a module: delete it there by hand"
+                )
+                .into());
             }
             continue;
         };

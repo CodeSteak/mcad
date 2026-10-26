@@ -1,4 +1,4 @@
-// Buttons of the UI (docs/konzepte/ui-ueberarbeitung): one height (26 px, `--ctl-h`),
+// Buttons of the UI (docs/concepts/ui-redesign): one height (26 px, `--ctl-h`),
 // radius 6 px, four kinds:
 //   primary  – filled with the accent, at most one per area ("Speichern", "Fertig")
 //   standard – with a border

@@ -21,6 +21,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
+use cad_i18n::{tr, trs};
 use cad_kernel::Kernel;
 use cad_session::protocol::{self as p, ToEngine};
 use cad_session::{PROTOCOL_VERSION, Session, SessionOptions, std_clock};
@@ -111,7 +112,7 @@ where
                     }
                     (Err(e), _) | (_, Err(e)) => {
                         ok = false;
-                        query_err.get_or_insert(format!("Abfrage Flächen/Kanten: {e}"));
+                        query_err.get_or_insert(tr!("Abfrage Flächen/Kanten: {e}", "query faces/edges: {e}"));
                     }
                 }
             }
@@ -122,7 +123,7 @@ where
             match s.mass_props(n.idx) {
                 Ok(mp) => m.volume = Some(mp.volume),
                 Err(e) if !parts.is_empty() => {
-                    query_err.get_or_insert(format!("Abfrage Volumen: {e}"));
+                    query_err.get_or_insert(tr!("Abfrage Volumen: {e}", "query volume: {e}"));
                 }
                 Err(_) => {}
             }
@@ -192,7 +193,7 @@ fn compare(a: &Metrics, b: &Metrics, notes: &mut Vec<String>) -> &'static str {
 
 pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     if files.is_empty() {
-        return Err(Fail::Usage("diff-kernels: keine Dateien".into()));
+        return Err(Fail::Usage(tr!("diff-kernels: keine Dateien", "diff-kernels: no files")));
     }
     let mut out_files = Vec::new();
     let mut coverage: BTreeMap<String, BTreeMap<&'static str, usize>> = BTreeMap::new();
@@ -275,8 +276,9 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
             });
         }
         let name = f.display().to_string();
-        text.push_str(&format!(
+        text.push_str(&tr!(
             "{name}: {} Knoten, gleich {}, unsupported {}, blockiert {}, abweichend {}, gescheitert {}\n",
+            "{name}: {} nodes, same {}, unsupported {}, blocked {}, differ {}, failed {}\n",
             diffs.iter().filter(|d| d.verdict != "skipped").count(),
             counts.get("same").unwrap_or(&0),
             counts.get("unsupported").unwrap_or(&0),
@@ -285,7 +287,14 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
             counts.get("failed").unwrap_or(&0),
         ));
         for d in diffs.iter().filter(|d| d.verdict == "differ" || d.verdict == "failed") {
-            text.push_str(&format!("  Zeile {} {} [{}]: {}\n", d.line, d.label, d.verdict, d.notes.join("; ")));
+            text.push_str(&tr!(
+                "  Zeile {} {} [{}]: {}\n",
+                "  line {} {} [{}]: {}\n",
+                d.line,
+                d.label,
+                d.verdict,
+                d.notes.join("; ")
+            ));
         }
         out_files.push(json!({
             "file": name,
@@ -297,7 +306,10 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
             "failed": counts.get("failed").unwrap_or(&0),
         }));
     }
-    text.push_str("\nAbdeckung solidcore je Operation (gleich / Knoten; unsupported, blockiert, abweichend):\n");
+    text.push_str(trs!(
+        "\nAbdeckung solidcore je Operation (gleich / Knoten; unsupported, blockiert, abweichend):\n",
+        "\nCoverage of solidcore per operation (same / nodes; unsupported, blocked, differ):\n"
+    ));
     for (label, c) in &coverage {
         let g = |k: &str| c.get(k).copied().unwrap_or(0);
         text.push_str(&format!(
@@ -311,8 +323,9 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     }
     let n: usize =
         ["same", "unsupported", "blocked", "differ", "failed"].iter().map(|k| totals.get(k).unwrap_or(&0)).sum();
-    text.push_str(&format!(
+    text.push_str(&tr!(
         "\nGesamt: {n} Knoten, gleich {}, unsupported {}, blockiert {}, abweichend {}, gescheitert {}\n",
+        "\nTotal: {n} nodes, same {}, unsupported {}, blocked {}, differ {}, failed {}\n",
         totals.get("same").unwrap_or(&0),
         totals.get("unsupported").unwrap_or(&0),
         totals.get("blocked").unwrap_or(&0),

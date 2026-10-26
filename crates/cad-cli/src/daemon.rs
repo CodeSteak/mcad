@@ -43,6 +43,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use cad_engine::{CacheKey, CacheStats, Engine, EngineConfig};
+use cad_i18n::{tr, trs};
 use cad_ipc::{Conn, Frame, Kind, LockFile, Server};
 use clap::{Args, Parser, Subcommand};
 use kernel_smlib::SmlibKernel;
@@ -218,7 +219,8 @@ fn log(msg: &str) {
 }
 
 fn mib(b: u64) -> String {
-    format!("{:.1}", b as f64 / (1 << 20) as f64).replace('.', ",")
+    let s = format!("{:.1}", b as f64 / (1 << 20) as f64);
+    if cad_i18n::is_de() { s.replace('.', ",") } else { s }
 }
 
 fn dur_text(d: Duration) -> String {
@@ -239,6 +241,8 @@ fn dur_text(d: Duration) -> String {
 // ------------------------------------------------------------------------------------------
 
 struct Job {
+    /// Language of the client: the answer is in it.
+    lang: cad_i18n::Lang,
     argv: Vec<String>,
     cwd: PathBuf,
     stdin: Option<String>,
@@ -293,7 +297,7 @@ impl Shared {
 
     /// Removes socket (if still ours) and lock, then exits.
     fn exit(&self, code: i32, why: &str) -> ! {
-        log(&format!("Ende ({why})"));
+        log(&tr!("Ende ({why})", "end ({why})"));
         if self.socket_ino.is_some() && socket_ino(&self.socket) == self.socket_ino {
             let _ = std::fs::remove_file(&self.socket);
         }
@@ -369,7 +373,10 @@ fn serve(a: &ServeArgs) -> ExitCode {
     if let Some(v) = a.cache_mb
         && !cfg.set_cache_mb(v)
     {
-        eprintln!("mcad daemon serve: --cache-mb {v}: mindestens 1");
+        eprintln!(
+            "{}",
+            tr!("mcad daemon serve: --cache-mb {v}: mindestens 1", "mcad daemon serve: --cache-mb {v}: at least 1")
+        );
         return ExitCode::from(2);
     }
     if let Some(v) = a.idle_minutes {
@@ -385,7 +392,7 @@ fn serve(a: &ServeArgs) -> ExitCode {
         cfg.set_watchdog(v);
     }
     for w in &cfg.warnings {
-        log(&format!("Konfiguration: {w}"));
+        log(&tr!("Konfiguration: {w}", "configuration: {w}"));
     }
     let dir = match cad_ipc::runtime_dir() {
         Ok(d) => std::fs::canonicalize(&d).unwrap_or(d),
@@ -403,8 +410,9 @@ fn serve(a: &ServeArgs) -> ExitCode {
         }
     };
     if cad_ipc::is_substitute(&dir, ENDPOINT) {
-        log(&format!(
+        log(&tr!(
             "Socketpfad in {} wäre länger als {} Byte: Ersatz {}",
+            "socket path in {} would be longer than {} bytes: substitute {}",
             dir.display(),
             cad_ipc::MAX_SOCKET_PATH,
             socket.display()
@@ -419,11 +427,25 @@ fn serve(a: &ServeArgs) -> ExitCode {
             Ok(Some(l)) => break l,
             Ok(None) => {
                 if cad_ipc::connect_path(&socket).is_ok() {
-                    eprintln!("mcad daemon serve: läuft bereits ({})", socket.display());
+                    eprintln!(
+                        "{}",
+                        tr!(
+                            "mcad daemon serve: läuft bereits ({})",
+                            "mcad daemon serve: already running ({})",
+                            socket.display()
+                        )
+                    );
                     return ExitCode::SUCCESS;
                 }
                 if t0.elapsed() > Duration::from_secs(10) {
-                    eprintln!("mcad daemon serve: {} ist gesperrt", lock_path.display());
+                    eprintln!(
+                        "{}",
+                        tr!(
+                            "mcad daemon serve: {} ist gesperrt",
+                            "mcad daemon serve: {} is locked",
+                            lock_path.display()
+                        )
+                    );
                     return ExitCode::from(3);
                 }
                 std::thread::sleep(Duration::from_millis(20));
@@ -455,8 +477,9 @@ fn serve(a: &ServeArgs) -> ExitCode {
         lock: Mutex::new(Some(lock)),
         cfg,
     });
-    log(&format!(
+    log(&tr!(
         "Start: Version {}, Build {}, Cache {} MiB / {} Einträge, {} Projekte, Leerlauf {} s, Watchdog {} s, RSS {} MiB",
+        "start: version {}, build {}, cache {} MiB / {} entries, {} projects, idle {} s, watchdog {} s, RSS {} MiB",
         env!("CARGO_PKG_VERSION"),
         shared.build_id,
         shared.cfg.cache_mb,
@@ -469,22 +492,28 @@ fn serve(a: &ServeArgs) -> ExitCode {
 
     let (tx, rx) = channel::<Job>();
     let w = shared.clone();
-    let worker = std::thread::Builder::new()
-        .stack_size(crate::EVAL_STACK)
-        .name("cad-daemon-engine".into())
-        .spawn(move || worker_loop(&w, rx));
+    // the daemon's own messages (log) in its language; each request runs in the client's
+    let lang = cad_i18n::lang();
+    let worker =
+        std::thread::Builder::new().stack_size(crate::EVAL_STACK).name("cad-daemon-engine".into()).spawn(move || {
+            cad_i18n::set_lang(lang);
+            worker_loop(&w, rx)
+        });
     if let Err(e) = worker {
         eprintln!("mcad daemon serve: Thread: {e}");
         return ExitCode::from(3);
     }
     let m = shared.clone();
-    let _ = std::thread::Builder::new().name("cad-daemon-monitor".into()).spawn(move || monitor(&m));
+    let _ = std::thread::Builder::new().name("cad-daemon-monitor".into()).spawn(move || {
+        cad_i18n::set_lang(lang);
+        monitor(&m)
+    });
 
     loop {
         let conn = match server.accept() {
             Ok(c) => c,
             Err(cad_ipc::Error::Unsafe(e)) => {
-                log(&format!("abgewiesen: {e}"));
+                log(&tr!("abgewiesen: {e}", "rejected: {e}"));
                 continue;
             }
             Err(e) => {
@@ -495,7 +524,10 @@ fn serve(a: &ServeArgs) -> ExitCode {
         };
         let s = shared.clone();
         let tx = tx.clone();
-        let _ = std::thread::Builder::new().name("cad-daemon-conn".into()).spawn(move || handle(&s, conn, &tx));
+        let _ = std::thread::Builder::new().name("cad-daemon-conn".into()).spawn(move || {
+            cad_i18n::set_lang(lang);
+            handle(&s, conn, &tx)
+        });
     }
 }
 
@@ -509,8 +541,9 @@ fn monitor(s: &Arc<Shared>) {
         if let Some(t) = st.busy_since
             && t.elapsed() > s.cfg.watchdog
         {
-            let msg = format!(
+            let msg = tr!(
                 "Watchdog: `mcad {}` läuft seit {} (hängender Kernel-Aufruf?), Daemon beendet",
+                "watchdog: `mcad {}` has been running for {} (hanging kernel call?), daemon ended",
                 st.current.clone().unwrap_or_default(),
                 dur_text(s.cfg.watchdog)
             );
@@ -526,13 +559,13 @@ fn monitor(s: &Arc<Shared>) {
         if st.pending == 0 && !st.shutting_down && idle > s.cfg.idle {
             st.shutting_down = true;
             drop(st);
-            s.exit(0, &format!("{} ohne Anfrage", dur_text(s.cfg.idle)));
+            s.exit(0, &tr!("{} ohne Anfrage", "{} without a request", dur_text(s.cfg.idle)));
         }
         drop(st);
         if last_sock.elapsed() > Duration::from_millis(500) {
             last_sock = Instant::now();
             if socket_ino(&s.socket) != s.socket_ino {
-                s.exit(0, "Socket entfernt oder ersetzt");
+                s.exit(0, trs!("Socket entfernt oder ersetzt", "socket removed or replaced"));
             }
         }
     }
@@ -566,11 +599,14 @@ fn handle(s: &Arc<Shared>, mut conn: Conn, tx: &Sender<Job>) {
                 if idle {
                     s.exit(0, "mcad daemon stop");
                 }
-                log("Stopp angefordert, warte auf laufende Befehle");
+                log(trs!(
+                    "Stopp angefordert, warte auf laufende Befehle",
+                    "stop requested, waiting for running commands"
+                ));
                 Ok(())
             }
             "run" => run_request(s, &mut conn, &f, tx),
-            m => conn.respond_err(&h, &format!("unbekannte Anfrage `{m}`")),
+            m => conn.respond_err(&h, &tr!("unbekannte Anfrage `{m}`", "unknown request `{m}`")),
         };
         if r.is_err() {
             return;
@@ -581,20 +617,23 @@ fn handle(s: &Arc<Shared>, mut conn: Conn, tx: &Sender<Job>) {
 fn run_request(s: &Arc<Shared>, conn: &mut Conn, f: &Frame, tx: &Sender<Job>) -> cad_ipc::Result<()> {
     let h = &f.header;
     let b = &h.body;
+    // the client's language: messages of this request and its command output
+    let lang = b["lang"].as_str().and_then(cad_i18n::Lang::parse).unwrap_or_default();
+    let _lang = cad_i18n::scoped(lang);
     if b["proto"].as_u64() != Some(DAEMON_PROTO as u64) || b["build_id"].as_str() != Some(s.build_id.as_str()) {
-        return conn.respond_err(h, &format!("version: Daemon hat Build {}", s.build_id));
+        return conn.respond_err(h, &tr!("version: Daemon hat Build {}", "version: daemon has build {}", s.build_id));
     }
     let argv: Vec<String> = b["argv"]
         .as_array()
         .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
         .unwrap_or_default();
     let Some(cwd) = b["cwd"].as_str().map(PathBuf::from) else {
-        return conn.respond_err(h, "run: cwd fehlt");
+        return conn.respond_err(h, trs!("run: cwd fehlt", "run: cwd missing"));
     };
     let stdin = if b["stdin"].as_bool() == Some(true) {
         match String::from_utf8(f.data.clone()) {
             Ok(t) => Some(t),
-            Err(_) => return conn.respond_err(h, "run: stdin ist kein UTF-8"),
+            Err(_) => return conn.respond_err(h, trs!("run: stdin ist kein UTF-8", "run: stdin is not UTF-8")),
         }
     } else {
         None
@@ -604,14 +643,14 @@ fn run_request(s: &Arc<Shared>, conn: &mut Conn, f: &Frame, tx: &Sender<Job>) ->
         let mut st = s.state.lock().unwrap();
         if st.shutting_down {
             drop(st);
-            return conn.respond_err(h, "shutdown: Daemon endet");
+            return conn.respond_err(h, trs!("shutdown: Daemon endet", "shutdown: daemon ending"));
         }
         st.pending += 1;
-        let job = Job { argv, cwd, stdin, hang_ms: b["hang_ms"].as_u64().unwrap_or(0), reply: rtx };
+        let job = Job { lang, argv, cwd, stdin, hang_ms: b["hang_ms"].as_u64().unwrap_or(0), reply: rtx };
         if tx.send(job).is_err() {
             st.pending -= 1;
             drop(st);
-            return conn.respond_err(h, "shutdown: Daemon-Thread beendet");
+            return conn.respond_err(h, trs!("shutdown: Daemon-Thread beendet", "shutdown: daemon thread ended"));
         }
     }
     let _ = conn.send_event("accepted", json!({}));
@@ -645,11 +684,17 @@ fn run_request(s: &Arc<Shared>, conn: &mut Conn, f: &Frame, tx: &Sender<Job>) ->
                 }
                 if conn.send_event("wait", json!({})).is_err() {
                     // client gone; the job still runs (its answer is dropped)
-                    return Err(cad_ipc::Error::Protocol("Client weg".into()));
+                    return Err(cad_ipc::Error::Protocol(tr!("Client weg", "client gone")));
                 }
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                let msg = s.state.lock().unwrap().dying.clone().unwrap_or_else(|| "Daemon-Thread beendet".into());
+                let msg = s
+                    .state
+                    .lock()
+                    .unwrap()
+                    .dying
+                    .clone()
+                    .unwrap_or_else(|| tr!("Daemon-Thread beendet", "daemon thread ended"));
                 return conn.respond_err(h, &format!("watchdog: {msg}"));
             }
         }
@@ -734,7 +779,10 @@ fn worker_loop(s: &Arc<Shared>, rx: Receiver<Job>) {
             // start afresh after very long use.
             Some(e) if !panicked && e.tag_count() < MAX_TAGS => e,
             Some(_) if !panicked => {
-                log("Tag-Tabelle voll: neue Engine (Cache geleert)");
+                log(trs!(
+                    "Tag-Tabelle voll: neue Engine (Cache geleert)",
+                    "tag table full: new engine (cache cleared)"
+                ));
                 new_engine(&s.cfg)
             }
             _ => new_engine(&s.cfg),
@@ -758,7 +806,7 @@ fn worker_loop(s: &Arc<Shared>, rx: Receiver<Job>) {
                 let drop: HashSet<CacheKey> = keys.into_iter().filter(|k| !keep.contains(k)).collect();
                 let n = eng.evict_keys(&drop);
                 project_evictions += 1;
-                log(&format!("Projekt {old} verdrängt ({n} Einträge)"));
+                log(&tr!("Projekt {old} verdrängt ({n} Einträge)", "project {old} evicted ({n} entries)"));
             }
         }
         // memory
@@ -768,8 +816,9 @@ fn worker_loop(s: &Arc<Shared>, rx: Receiver<Job>) {
             eng.clear_cache();
             trim_heap();
             rss_clear = true;
-            log(&format!(
+            log(&tr!(
                 "RSS {} MiB über {} MiB: Cache geleert, jetzt {} MiB",
+                "RSS {} MiB above {} MiB: cache cleared, now {} MiB",
                 mib(rss),
                 mib(s.rss_limit()),
                 mib(rss_bytes())
@@ -779,8 +828,9 @@ fn worker_loop(s: &Arc<Shared>, rx: Receiver<Job>) {
         let hits = after.hits - before.hits.min(after.hits);
         let misses = after.misses - before.misses.min(after.misses);
         let ms = t0.elapsed().as_secs_f64() * 1000.0;
-        log(&format!(
+        log(&tr!(
             "`mcad {}` → {} in {:.0} ms, Cache {} Treffer / {} neu, {} Einträge, {} MiB",
+            "`mcad {}` → {} in {:.0} ms, cache {} hits / {} new, {} entries, {} MiB",
             job.argv.join(" "),
             reply.out.code,
             ms,
@@ -812,7 +862,7 @@ fn worker_loop(s: &Arc<Shared>, rx: Receiver<Job>) {
             drop(st);
             // give the connection thread a moment to send the answer
             std::thread::sleep(Duration::from_millis(100));
-            s.exit(0, "nach Stopp");
+            s.exit(0, trs!("nach Stopp", "after stop"));
         }
     }
 }
@@ -826,13 +876,19 @@ fn finish_job(_s: &Shared, mut st: std::sync::MutexGuard<'_, State>) {
 
 type Executed = (Reply, Ctx, Option<String>, bool);
 
-/// Runs one request with the CLI's command code (in the client's working directory).
+/// Runs one request with the CLI's command code (in the client's working directory and
+/// language).
 fn execute(job: &Job, engine: Engine<SmlibKernel>) -> Result<Executed, String> {
+    let _lang = cad_i18n::scoped(job.lang);
     let cli = Cli::try_parse_from(std::iter::once("mcad".to_string()).chain(job.argv.iter().cloned()))
-        .map_err(|e| format!("Argumente: {e}"))?;
-    let Some(cmd) = cli.cmd else { return Err("kein Befehl".into()) };
+        .map_err(|e| tr!("Argumente: {e}", "arguments: {e}"))?;
+    let Some(cmd) = cli.cmd else { return Err(tr!("kein Befehl", "no command")) };
     if !eligible(&cmd) {
-        return Err(format!("`mcad {}` läuft nicht im Daemon", crate::command_name(&cmd)));
+        return Err(tr!(
+            "`mcad {}` läuft nicht im Daemon",
+            "`mcad {}` does not run in the daemon",
+            crate::command_name(&cmd)
+        ));
     }
     std::env::set_current_dir(&job.cwd).map_err(|e| format!("{}: {e}", job.cwd.display()))?;
     let project = project_id(&cmd, &job.cwd);
@@ -846,7 +902,7 @@ fn execute(job: &Job, engine: Engine<SmlibKernel>) -> Result<Executed, String> {
         Ok((r, ctx)) => (r, ctx, false),
         Err(e) => {
             let ctx = host::take_ctx().unwrap_or_default();
-            (Err(crate::Fail::Kernel(format!("interner Fehler: {}", crate::panic_text(&*e)))), ctx, true)
+            (Err(crate::Fail::Kernel(crate::internal_error(&*e))), ctx, true)
         }
     };
     let out = crate::finish(name, json_mode, result, Some(&info));
@@ -870,7 +926,7 @@ fn status(as_json: bool) -> ExitCode {
             if as_json {
                 println!("{}", serde_json::to_string_pretty(&not_running_json("daemon status")).unwrap());
             } else {
-                println!("kein Daemon ({})", p.display());
+                println!("{}", tr!("kein Daemon ({})", "no daemon ({})", p.display()));
             }
             return ExitCode::SUCCESS;
         }
@@ -901,32 +957,40 @@ fn status(as_json: bool) -> ExitCode {
     let c = &st["cache"];
     let cf = |k: &str| c[k].as_f64().unwrap_or(0.0);
     let mut t = String::new();
-    t.push_str(&format!(
+    t.push_str(&tr!(
         "Daemon läuft: pid {}, Version {} (Build {}{})\n",
+        "daemon running: pid {}, version {} (build {}{})\n",
         st["pid"],
         st["version"].as_str().unwrap_or("?"),
         st["build_id"].as_str().unwrap_or("?"),
-        if st["build_id"].as_str() == Some(build_id().as_str()) { "" } else { ", anders als dieses mcad" }
+        if st["build_id"].as_str() == Some(build_id().as_str()) {
+            ""
+        } else {
+            trs!(", anders als dieses mcad", ", other than this mcad")
+        }
     ));
-    t.push_str(&format!(
+    t.push_str(&tr!(
         "Laufzeit {}, Leerlauf {} (Ende nach {} ohne Anfrage), Watchdog {} s\n",
+        "uptime {}, idle {} (ends after {} without a request), watchdog {} s\n",
         dur_text(Duration::from_secs_f64(f("uptime_s"))),
         dur_text(Duration::from_secs_f64(f("idle_s"))),
         dur_text(Duration::from_secs_f64(f("idle_limit_s"))),
         f("watchdog_s")
     ));
-    t.push_str(&format!(
+    t.push_str(&tr!(
         "Anfragen: {}{}, Projekte {} von {} ({} verdrängt){}\n",
+        "requests: {}{}, projects {} of {} ({} evicted){}\n",
         st["requests"],
-        if f("failed") > 0.0 { format!(" ({} fehlgeschlagen)", st["failed"]) } else { String::new() },
+        if f("failed") > 0.0 { tr!(" ({} fehlgeschlagen)", " ({} failed)", st["failed"]) } else { String::new() },
         st["projects"],
         st["max_projects"],
         st["project_evictions"],
-        st["current"].as_str().map(|c| format!(", läuft: mcad {c}")).unwrap_or_default()
+        st["current"].as_str().map(|c| tr!(", läuft: mcad {c}", ", running: mcad {c}")).unwrap_or_default()
     ));
     let rate = c["hit_rate"].as_f64().map(|r| format!("{:.0} %", r * 100.0)).unwrap_or_else(|| "–".into());
-    t.push_str(&format!(
+    t.push_str(&tr!(
         "Cache: {} Knoten + {} Netze/abgeleitete, {} MiB von {} MiB, Trefferquote {rate} ({} Treffer, {} neu berechnet), {} verdrängt\n",
+        "cache: {} nodes + {} meshes/derived, {} MiB of {} MiB, hit rate {rate} ({} hits, {} recomputed), {} evicted\n",
         c["nodes"],
         c["meshes"],
         mib(cf("bytes") as u64),
@@ -935,18 +999,24 @@ fn status(as_json: bool) -> ExitCode {
         c["misses"],
         c["evictions"]
     ));
-    t.push_str(&format!(
+    t.push_str(&tr!(
         "Speicher (RSS): {} MiB, Start {} MiB, Cache wird geleert über {} MiB ({}× geleert)\n",
+        "memory (RSS): {} MiB, start {} MiB, cache is cleared above {} MiB (cleared {}×)\n",
         mib(f("rss_bytes") as u64),
         mib(f("rss_start_bytes") as u64),
         mib(f("rss_limit_bytes") as u64),
         st["rss_clears"]
     ));
-    t.push_str(&format!(
+    t.push_str(&tr!(
         "Socket {}{}, Log {}\n",
+        "socket {}{}, log {}\n",
         st["socket"].as_str().unwrap_or(""),
         if st["socket_substitute"].as_bool() == Some(true) {
-            format!(" (Ersatzpfad: Pfad im IPC-Verzeichnis länger als {} Byte)", cad_ipc::MAX_SOCKET_PATH)
+            tr!(
+                " (Ersatzpfad: Pfad im IPC-Verzeichnis länger als {} Byte)",
+                " (substitute path: path in the IPC directory longer than {} bytes)",
+                cad_ipc::MAX_SOCKET_PATH
+            )
         } else {
             String::new()
         },
@@ -971,7 +1041,9 @@ pub fn stop_daemon(conn: Option<Conn>, wait: Duration) -> Result<Option<u32>, St
         Ok(f) => f.header.body["pid"].as_u64().map(|p| p as u32),
         Err(_) => lock_pid(),
     };
-    let Some(pid) = pid else { return Err("Daemon antwortet nicht, PID unbekannt".into()) };
+    let Some(pid) = pid else {
+        return Err(tr!("Daemon antwortet nicht, PID unbekannt", "daemon does not answer, PID unknown"));
+    };
     if !wait_gone(pid, wait) {
         kill_hard(pid);
         wait_gone(pid, Duration::from_secs(2));
@@ -988,8 +1060,12 @@ pub fn lock_pid() -> Option<u32> {
 fn stop(as_json: bool) -> ExitCode {
     let r = stop_daemon(None, Duration::from_secs(30));
     let (code, text, j) = match r {
-        Ok(None) => (0, "kein Daemon\n".to_string(), json!({"stopped": false, "pid": null})),
-        Ok(Some(pid)) => (0, format!("Daemon beendet (pid {pid})\n"), json!({"stopped": true, "pid": pid})),
+        Ok(None) => (0, tr!("kein Daemon\n", "no daemon\n"), json!({"stopped": false, "pid": null})),
+        Ok(Some(pid)) => (
+            0,
+            tr!("Daemon beendet (pid {pid})\n", "daemon stopped (pid {pid})\n"),
+            json!({"stopped": true, "pid": pid}),
+        ),
         Err(e) => (3, format!("mcad daemon stop: {e}\n"), json!({"stopped": false, "error": e})),
     };
     if as_json {

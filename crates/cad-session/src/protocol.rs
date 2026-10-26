@@ -132,6 +132,11 @@ pub enum ToEngine {
     /// Rounding steps of free drags (Alt): lengths in mm, angles in degrees (0 = no rounding).
     /// Answers nothing.
     SetDragOptions { step_mm: f64, step_deg: f64 },
+    /// Language of the engine's texts (diagnostics, hints, measure and sketch prompts,
+    /// errors): `"en"` or `"de"` (also `de-DE` …; anything else: English). The UI sends it at
+    /// start and on every change of its language, then its source again so the texts switch.
+    /// Answers nothing.
+    SetLang { lang: String },
     /// "Als Standard übernehmen": write `value` as the default of `param` of `module`.
     /// Answers `Edits`.
     SetDefault { module: String, param: String, value: Value },
@@ -716,7 +721,7 @@ pub struct AssertResult {
 pub struct AssertBody {
     /// Node whose result holds the body.
     pub node: u32,
-    /// `deckel`, `Zeile 7: cube`, `Sperrvolumen` (German).
+    /// `deckel`, `line 7: cube`, `keep-out volume` (in the engine language, `SetLang`).
     pub label: String,
     /// Code lines and instances of the faces involved (like `mcad measure`).
     pub origin: Vec<String>,
@@ -731,7 +736,7 @@ pub struct AssertPair {
     /// `overlap`, `too_close`, `apart`, `gap`, `line_contact`, `point_contact`,
     /// `unchecked` (`null` when ok).
     pub problem: Option<String>,
-    /// Text of the result (German), as in the diagnostic.
+    /// Text of the result (engine language), as in the diagnostic.
     pub message: String,
     /// Intersection volume in mm³ (`null`: not computed or only known as yes/no for meshes).
     pub volume: Option<f64>,

@@ -159,9 +159,11 @@ async fn open_dialog(
 ) -> Result<Option<OpenedProject>, String> {
     let d = app.dialog().file();
     let picked = if folder {
-        d.set_title("Ordner als Projekt öffnen").blocking_pick_folder()
+        d.set_title(cad_i18n::trs!("Ordner als Projekt öffnen", "Open folder as project")).blocking_pick_folder()
     } else {
-        d.set_title("Datei öffnen").add_filter("CAD-Modelle", files::MODEL_EXTENSIONS).blocking_pick_file()
+        d.set_title(cad_i18n::trs!("Datei öffnen", "Open file"))
+            .add_filter(cad_i18n::trs!("CAD-Modelle", "CAD models"), files::MODEL_EXTENSIONS)
+            .blocking_pick_file()
     };
     let Some(p) = picked.and_then(|p| p.into_path().ok()) else { return Ok(None) };
     opened(&state, &p).map(Some)
@@ -281,7 +283,9 @@ fn ask_webview(app: &AppHandle, method: &str, body: Json, timeout: Duration) -> 
     state.replies.lock().unwrap().insert(id, tx);
     app.emit_to("main", "ui-request", json!({ "id": id, "method": method, "body": body }))
         .map_err(|e| e.to_string())?;
-    let r = rx.recv_timeout(timeout).map_err(|_| "die Oberfläche antwortet nicht".to_string());
+    let r = rx
+        .recv_timeout(timeout)
+        .map_err(|_| cad_i18n::trs!("die Oberfläche antwortet nicht", "the UI does not answer").to_string());
     state.replies.lock().unwrap().remove(&id);
     let r = r?;
     match r.get("error").and_then(Json::as_str) {
@@ -307,7 +311,7 @@ fn b64_decode(s: &str) -> Result<Vec<u8>, String> {
     for chunk in bytes.chunks(4) {
         let mut n = 0u32;
         for (i, &c) in chunk.iter().enumerate() {
-            n |= val(c).ok_or("ungültiges Base64")? << (18 - 6 * i);
+            n |= val(c).ok_or(cad_i18n::trs!("ungültiges Base64", "invalid Base64"))? << (18 - 6 * i);
         }
         out.push((n >> 16) as u8);
         if chunk.len() > 2 {
@@ -346,7 +350,7 @@ fn serve_control(app: AppHandle, server: cad_ipc::Server) {
                 let png = b64_decode(r["png"].as_str().ok_or("kein Bild")?)?;
                 Ok((json!({ "width": r["width"], "height": r["height"], "mime": "image/png" }), png))
             }
-            m => Err(format!("unbekannte Anfrage `{m}`")),
+            m => Err(cad_i18n::tr!("unbekannte Anfrage `{m}`", "unknown request `{m}`")),
         }
     });
 }
@@ -428,7 +432,15 @@ pub fn run(opts: LaunchOptions) -> i32 {
                     WatchEvent::Removed { path } => h2.emit_to("main", "file-removed", json!({ "path": path })),
                 };
             })
-            .map_err(|e| eprintln!("mcad: Dateibeobachter nicht verfügbar: {e}"))
+            .map_err(|e| {
+                eprintln!(
+                    "{}",
+                    cad_i18n::tr!(
+                        "mcad: Dateibeobachter nicht verfügbar: {e}",
+                        "mcad: file watcher not available: {e}"
+                    )
+                )
+            })
             .ok();
             let config_dir = app.path().app_config_dir().unwrap_or_else(|_| std::env::temp_dir().join("mcad"));
             let recent_file = config_dir.join("recent.json");
@@ -472,7 +484,13 @@ pub fn run(opts: LaunchOptions) -> i32 {
                         .name("cad-ui-ipc".into())
                         .spawn(move || serve_control(handle, server))?;
                 }
-                Err(e) => eprintln!("mcad: Steuerung über `mcad ui` nicht verfügbar: {e}"),
+                Err(e) => eprintln!(
+                    "{}",
+                    cad_i18n::tr!(
+                        "mcad: Steuerung über `mcad ui` nicht verfügbar: {e}",
+                        "mcad: control through `mcad ui` not available: {e}"
+                    )
+                ),
             }
             Ok(())
         })

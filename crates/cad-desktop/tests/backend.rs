@@ -19,6 +19,7 @@ use serde_json::Value as Json;
 
 #[test]
 fn open_file_loads_includes() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let d = tempfile::tempdir().unwrap();
     std::fs::create_dir(d.path().join("lib")).unwrap();
     std::fs::write(d.path().join("lib/teile.mcad"), "module t() { cube(2); }\n").unwrap();
@@ -34,6 +35,7 @@ fn open_file_loads_includes() {
 
 #[test]
 fn open_folder_chooses_main() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let d = tempfile::tempdir().unwrap();
     std::fs::create_dir(d.path().join("lib")).unwrap();
     std::fs::create_dir(d.path().join(".git")).unwrap();
@@ -59,6 +61,7 @@ fn open_folder_chooses_main() {
 
 #[test]
 fn open_folder_mixes_mcad_and_scad() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let d = tempfile::tempdir().unwrap();
     std::fs::create_dir(d.path().join("lib")).unwrap();
     std::fs::write(d.path().join("lib/a.scad"), "module a() { cube(1); }\n").unwrap();
@@ -77,6 +80,7 @@ fn open_folder_mixes_mcad_and_scad() {
 
 #[test]
 fn atomic_write_and_recent() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let d = tempfile::tempdir().unwrap();
     let f = d.path().join("sub/x.scad");
     write_atomic(&f, "cube(1);\n").unwrap();
@@ -112,6 +116,7 @@ fn next(rx: &Receiver<WatchEvent>, ms: u64) -> Option<WatchEvent> {
 
 #[test]
 fn watcher_reports_external_changes_only() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let d = tempfile::tempdir().unwrap();
     let f = d.path().join("teil.scad");
     let inc = d.path().join("inc.scad");
@@ -162,6 +167,7 @@ fn watcher_reports_external_changes_only() {
 
 #[test]
 fn diff_hunks_kinds() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let base = "a\nb\nc\nd\ne\n";
     assert!(diff_hunks(base, base).is_empty());
     // CRLF and a missing final newline are no change
@@ -196,6 +202,7 @@ fn sh_git(dir: &Path, args: &[&str]) {
 
 #[test]
 fn head_base_of_tracked_and_untracked_files() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let d = tempfile::tempdir().unwrap();
     let f = d.path().join("teil.scad");
     let neu = d.path().join("neu.scad");
@@ -233,6 +240,7 @@ fn head_base_of_tracked_and_untracked_files() {
 
 #[test]
 fn wire_batch_has_binary_meshes() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mesh = MeshData {
         node: 3,
         nodes: vec![3, 4],
@@ -317,6 +325,7 @@ fn wait_for(got: &Got, what: &str, f: impl Fn(&Json) -> bool) -> Json {
 
 #[test]
 fn supervisor_evaluates_and_sends_meshes() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let (s, got) = supervisor(15_000);
     s.send(vec![
         ToEngine::SetSource { text: "cube(1);".into(), version: 1 },
@@ -337,6 +346,7 @@ fn supervisor_evaluates_and_sends_meshes() {
 
 #[test]
 fn supervisor_watchdog_when_idle_engine_hangs() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // A hang without a running job: restart without blocking anything, the source is not
     // sent again (it would hang again).
     let (s, got) = supervisor(800);
@@ -352,6 +362,7 @@ fn supervisor_watchdog_when_idle_engine_hangs() {
 
 #[test]
 fn supervisor_watchdog_replaces_engine_and_blocks_key() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let (s, got) = supervisor(1200);
     let src = "difference() { cube(10); translate([2,2,-1]) cylinder(h = 12, r = 2); }\n";
     // The engine "hangs" right after the job started (one batch, like setSource + debugHang
@@ -384,5 +395,34 @@ fn supervisor_watchdog_replaces_engine_and_blocks_key() {
     s.send(vec![ToEngine::SetSource { text: "cube(3);".into(), version: 2 }]);
     let ok = wait_for(&got, "neue Szene", |m| m["type"] == "Scene" && m["complete"] == true && m["version"] == 2);
     assert!(ok["nodes"].as_array().unwrap().iter().all(|n| n["status"] != "error"));
+    s.shutdown();
+}
+
+/// `SetLang` switches the engine's texts and the supervisor's own messages; a new engine
+/// gets it first (replay after a restart).
+#[test]
+fn supervisor_follows_set_lang_also_after_restart() {
+    let (s, got) = supervisor(800);
+    let diag = |got: &Got, version: u64, word: &str| {
+        wait_for(got, word, |m| {
+            m["type"] == "Diagnostics"
+                && m["version"] == version
+                && m["items"]
+                    .as_array()
+                    .is_some_and(|it| it.iter().any(|d| d["message"].as_str().unwrap_or("").contains(word)))
+        })
+    };
+    s.send(vec![ToEngine::SetLang { lang: "de".into() }, ToEngine::SetSource { text: "cube(y);".into(), version: 1 }]);
+    diag(&got, 1, "unbekannte Variable");
+    s.send(vec![ToEngine::SetLang { lang: "en".into() }, ToEngine::SetSource { text: "cube(y);".into(), version: 2 }]);
+    diag(&got, 2, "unknown variable");
+    s.send(vec![ToEngine::SetLang { lang: "de".into() }, ToEngine::SetSource { text: "cube(y);".into(), version: 3 }]);
+    wait_for(&got, "Szene", |m| m["type"] == "Scene" && m["complete"] == true && m["version"] == 3);
+    s.debug_hang(5000);
+    let err = wait_for(&got, "Fehler", |m| m["type"] == "Error");
+    assert!(err["message"].as_str().unwrap().contains("neu gestartet"), "{err}");
+    // the new engine speaks German too
+    s.send(vec![ToEngine::SetSource { text: "cube(z);".into(), version: 4 }]);
+    diag(&got, 4, "unbekannte Variable");
     s.shutdown();
 }

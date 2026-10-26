@@ -104,6 +104,7 @@ fn arc_forms() {
 
 #[test]
 fn errors_per_segment_line() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // not closed
     let src = "sketch {\n start([0, 0]);\n line(to = [10, 0]);\n line(to = [10, 10]);\n}";
     let out = run(src);
@@ -210,6 +211,7 @@ fn corner_rules() {
 
 #[test]
 fn corner_errors_at_the_line() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = "sketch {\n start([0, 0]);\n line(to = [4, 0]);\n corner(r = 5);\n line(to = [4, 4]);\n line(to = [0, 4]);\n close();\n}";
     let out = run(src);
     let e = errors_at(&out, src);
@@ -281,6 +283,7 @@ fn corner_radius_handle() {
 
 #[test]
 fn loops_variables_grids_and_modules_in_a_sketch() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = "module zahn(i, n) {\n a = 360 * i / n;\n line(to = [12 * cos(a + 4), 12 * sin(a + 4)]);\n line(to = [12 * cos(a + 360 / n - 4), 12 * sin(a + 360 / n - 4)]);\n line(to = [10 * cos(a + 360 / n), 10 * sin(a + 360 / n)]);\n}\nn = 12;\nlinear_extrude(4) sketch {\n grid s { x: l = 0, r = 10; y: u = 0; }\n start(s[r, u]);\n for (i = [0 : n - 1]) zahn(i, n);\n if (n > 3) close();\n}";
     let out = clean(src);
     let (cs, _) = sketch_of(&out);
@@ -402,6 +405,7 @@ fn qualified_module_calls() {
 
 #[test]
 fn namespace_visibility_and_errors() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // grids of the outer module are not visible in the inner one
     let src = format!("{NS}module x {{}}\nteile.mutter.m3();");
     clean(&src);
@@ -450,6 +454,7 @@ fn openscad_files_are_unaffected() {
 
 #[test]
 fn arguments_of_2d_operations() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let op = |src: &str| -> Op {
         let out = clean(src);
         out.tree
@@ -492,4 +497,18 @@ fn arguments_of_2d_operations() {
     assert!(kids[1..].iter().all(|&k| out.tree.nodes[k as usize].flags.zone));
     assert_eq!(out.tree.dim(n as u32), Some(cad_ir::Dim::Two));
     assert!(has_error(&run("fillet2d() square(5);"), "braucht einen Radius"));
+}
+
+#[test]
+fn errors_in_english() {
+    let src = "sketch {\n start([0, 0]);\n line(to = [10, 0]);\n line(to = [10, 10]);\n}";
+    let e = errors_at(&run(src), src);
+    assert!(e.iter().any(|(l, m)| *l == 4 && m.starts_with("contour not closed")), "{e:?}");
+    let src = "sketch {\n start([0, 0]);\n arc(to = [10, 0], r = 4);\n close();\n}";
+    let e = errors_at(&run(src), src);
+    assert!(e.iter().any(|(l, m)| *l == 3 && m.contains("smaller than half the chord")), "{e:?}");
+    let src =
+        "sketch {\n start([0, 0]);\n line(to = [10, 10]);\n line(to = [10, 0]);\n line(to = [0, 10]);\n close();\n}";
+    let e = errors_at(&run(src), src);
+    assert!(e.iter().any(|(l, m)| *l == 5 && m.contains("self-intersection") && m.contains("line 3")), "{e:?}");
 }

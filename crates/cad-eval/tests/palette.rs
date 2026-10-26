@@ -64,6 +64,7 @@ fn palette_names_case_insensitive() {
 
 #[test]
 fn unknown_name_warns_and_gets_a_stable_random_colour() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = "color(\"lightgoldenrodyellow\") cube(1);\ncolor(\"Rot\") cube(1);";
     let out = run(src);
     let w = warnings(&out);
@@ -148,6 +149,7 @@ fn random_colours_do_not_collide_in_a_model() {
 
 #[test]
 fn hex_vectors_and_alpha_stay_exact() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let c = colors(
         "color(\"#12ab34\") cube(1); color(\"#abc\") cube(1); color(\"#11223380\") cube(1); color([0.1, 0.2, 0.3]) cube(1); color(\"teal\", alpha = 0.5) cube(1); color([1, 0, 0, 0.25]) cube(1);",
     );
@@ -164,6 +166,7 @@ fn hex_vectors_and_alpha_stay_exact() {
 
 #[test]
 fn filament_parameter() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run(
         "color(\"teal\", filament = 2) cube(1);\ncolor(\"red\") cube(1);\ncolor(\"teal\", filament = 3) cube(2);\ncolor(\"blue\", filament = 0) cube(1);\ncolor(\"blue\", filament = 1.5) cube(1);\ncolor(\"teal\", 1, 2) cube(3);",
     );
@@ -262,6 +265,7 @@ fn scale(c: [u8; 3], k: f64) -> [u8; 3] {
 /// first); invalid slots warn once; a user module named `filament` keeps working.
 #[test]
 fn filament_declarations() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("color(\"red\", filament = 2) cube(1);\nfilament(\"red\", 4);\nfilament(\"#2e65b9\", 17);\n");
     assert_eq!(out.tree.filaments.len(), 1);
     assert_eq!((out.tree.filaments[0].slot, out.tree.filaments[0].name.as_deref()), (4, Some("red")));
@@ -273,4 +277,15 @@ fn filament_declarations() {
     assert!(out.tree.filaments.is_empty());
     assert!(warnings(&out).is_empty(), "{:?}", warnings(&out));
     assert_eq!(out.tree.nodes.iter().filter(|n| matches!(n.op, Op::Prim { .. })).count(), 1);
+}
+
+#[test]
+fn unknown_name_warns_in_english() {
+    let out = run("color(\"lightgoldenrodyellow\") cube(1);");
+    let w = warnings(&out);
+    assert!(
+        w[0].starts_with("colour `lightgoldenrodyellow` unknown – random colour (palette: red, orange"),
+        "{}",
+        w[0]
+    );
 }

@@ -65,6 +65,7 @@ fn boolean_parameter_and_trig() {
 
 #[test]
 fn unsupported_parts_are_errors() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("fillet(r = function (p) str(p.x)) cube(20);");
     assert!(has_error(&out, "Radiusfunktion"), "{:?}", errors(&out));
     let out = run("fillet(r = function (p) [for (i = [0:p.x]) i][0]) cube(20);");

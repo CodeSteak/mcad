@@ -7,6 +7,8 @@
 //! * `post(msg)`: one `ToEngine` message (plain JS object) → array of `FromEngine` messages.
 //! * `step(budget_ms)`: kernel work for about `budget_ms` milliseconds (clock:
 //!   `performance.now()`) → array of messages. Call while `busy()`.
+//! * Language of the engine's texts: `post({ type: "SetLang", lang: "de" })` (the UI sends its
+//!   language at start and on every change, then the source again).
 //!
 //! Messages are converted with `serde-wasm-bindgen` (no JSON); `Meshes` arrays and export
 //! bytes are `Float32Array`/`Uint32Array`/`Uint8Array` with their own buffers, ready to be
@@ -149,8 +151,8 @@ impl Session {
 
     /// Handles one `ToEngine` message; returns `FromEngine[]`.
     pub fn post(&mut self, msg: JsValue) -> Result<Array, JsValue> {
-        let m: ToEngine =
-            serde_wasm_bindgen::from_value(msg).map_err(|e| JsValue::from_str(&format!("ungültige Nachricht: {e}")))?;
+        let m: ToEngine = serde_wasm_bindgen::from_value(msg)
+            .map_err(|e| JsValue::from_str(&cad_i18n::tr!("ungültige Nachricht: {e}", "invalid message: {e}")))?;
         to_js(self.inner.post(m))
     }
 

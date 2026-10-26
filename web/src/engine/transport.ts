@@ -64,6 +64,8 @@ export class WorkerTransport implements EngineTransport {
   private busy = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private lastContext: ToEngine | null = null;
+  /** The last `SetLang` (sent first to every new worker). */
+  private lastLang: ToEngine | null = null;
   private lastSource: ToEngine | null = null;
   /** Project files as the engine has them (`SetFiles` with the later `SetFile`s folded in). */
   private files: { files: Record<string, string>; main?: string } | null = null;
@@ -88,6 +90,7 @@ export class WorkerTransport implements EngineTransport {
   send(msg: ToEngine): void {
     if (this.disposed) return;
     if (msg.type === "SetContext") this.lastContext = msg;
+    if (msg.type === "SetLang") this.lastLang = msg;
     if (msg.type === "SetFiles") this.files = { files: { ...msg.files }, main: msg.main };
     if (msg.type === "SetFile") {
       this.files ??= { files: {} };
@@ -128,7 +131,7 @@ export class WorkerTransport implements EngineTransport {
     w.onmessage = (e: MessageEvent<WorkerOut>) => this.receive(w, e.data);
     w.onerror = (e: ErrorEvent) => {
       e.preventDefault();
-      this.restart(`Engine-Fehler: ${e.message}`);
+      this.restart(`${t("engine.error")}: ${e.message}`);
     };
     // Loading smlib.wasm + cad-wasm can take a while: watch it too.
     this.busy = true;
@@ -198,6 +201,7 @@ export class WorkerTransport implements EngineTransport {
     });
     this.lastProgress = null;
     const pending: ToEngine[] = [];
+    if (this.lastLang) pending.push(this.lastLang);
     if (this.blockedKeys.size) pending.push({ type: "BlockKeys", keys: [...this.blockedKeys] });
     if (this.files) pending.push({ type: "SetFiles", files: { ...this.files.files }, main: this.files.main });
 

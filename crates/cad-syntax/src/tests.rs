@@ -165,10 +165,21 @@ fn identifiers_may_start_with_digits() {
 
 #[test]
 fn messages_are_german() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let (_, d) = parse("cube(1;");
     assert!(d[0].message.contains("erwartet, gefunden"), "{d:?}");
     let (_, d) = parse("a = \"x;");
     assert!(d.iter().any(|d| d.message == "String nicht geschlossen"), "{d:?}");
+}
+
+#[test]
+fn messages_in_english() {
+    let (_, d) = parse("cube(1;");
+    assert_eq!(d[0].message, "expected `)` or `,`, found `;`", "{d:?}");
+    let (_, d) = parse("a = \"x;");
+    assert!(d.iter().any(|d| d.message == "string not closed"), "{d:?}");
+    let (_, d) = parse("a = 1; /* x");
+    assert!(d.iter().any(|d| d.message == "comment not closed"), "{d:?}");
 }
 
 #[test]

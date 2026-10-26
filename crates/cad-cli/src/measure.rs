@@ -12,6 +12,7 @@
 //! P). Points as in `--between` (anchor, grid point, `[x,y,z]`). The UI copies its
 //! measurements in this form ("Als mcad measure kopieren").
 
+use cad_i18n::{tr, trs};
 use cad_kernel::{BoolOp, Kernel};
 use cad_measure::section::SectionPlane;
 use cad_measure::{EdgeCurve, Section};
@@ -102,7 +103,7 @@ pub(crate) struct MeasureArgs {
 pub(crate) fn resolve_point(sc: &p::Scene, s: &str) -> Result<(DVec3, String), Fail> {
     let s = s.trim();
     if s.starts_with('[') {
-        let v = parse_vec(s, 3, "Koordinate")?;
+        let v = parse_vec(s, 3, trs!("Koordinate", "coordinate"))?;
         return Ok((DVec3::new(v[0], v[1], v[2]), "Koordinate".into()));
     }
     // grid point g[a, b, c]
@@ -114,12 +115,16 @@ pub(crate) fn resolve_point(sc: &p::Scene, s: &str) -> Result<(DVec3, String), F
         let name = s[..open].trim();
         let entries: Vec<&str> = s[open + 1..s.len() - 1].split(',').map(|e| e.trim()).collect();
         if entries.len() != 3 {
-            return Err(Fail::Usage(format!("{s}: Rasterpunkt braucht drei Einträge")));
+            return Err(Fail::Usage(tr!(
+                "{s}: Rasterpunkt braucht drei Einträge",
+                "{s}: a grid point needs three entries"
+            )));
         }
         let candidates: Vec<&p::Grid> = sc.grids.iter().filter(|g| g.name == name).collect();
         let g = candidates.iter().find(|g| g.in_context).copied().ok_or_else(|| {
-            Fail::Usage(format!(
-                "{s}: Raster `{name}` ist nicht im Kontext (Raster gelten nur in ihrem Modul: --module NAME)"
+            Fail::Usage(tr!(
+                "{s}: Raster `{name}` ist nicht im Kontext (Raster gelten nur in ihrem Modul: --module NAME)",
+                "{s}: grid `{name}` is not in the context (grids hold only in their module: --module NAME)"
             ))
         })?;
         let mut local = DVec3::ZERO;
@@ -132,8 +137,9 @@ pub(crate) fn resolve_point(sc: &p::Scene, s: &str) -> Result<(DVec3, String), F
                 let pl = g.planes.iter().find(|pl| pl.axis == a as u8 && pl.name == *e).ok_or_else(|| {
                     let names: Vec<&str> =
                         g.planes.iter().filter(|pl| pl.axis == a as u8).map(|pl| pl.name.as_str()).collect();
-                    Fail::Usage(format!(
+                    Fail::Usage(tr!(
                         "{s}: Ebene `{e}` gibt es auf Achse {} nicht (Ebenen: {})",
+                        "{s}: there is no plane `{e}` on axis {} (planes: {})",
                         ["x", "y", "z"][a],
                         names.join(", ")
                     ))
@@ -154,9 +160,10 @@ pub(crate) fn resolve_point(sc: &p::Scene, s: &str) -> Result<(DVec3, String), F
         None => {
             let known: Vec<String> =
                 sc.anchors.iter().map(|a| a.text.clone().unwrap_or_else(|| a.name.clone())).collect();
-            Err(Fail::Usage(format!(
+            Err(Fail::Usage(tr!(
                 "Punkt `{s}` nicht gefunden: erwartet Anker ({}), Rasterpunkt g[a,b,c] im Kontext oder [x,y,z]",
-                if known.is_empty() { "keine".into() } else { known.join(", ") }
+                "point `{s}` not found: expected an anchor ({}), a grid point g[a,b,c] in the context or [x,y,z]",
+                if known.is_empty() { trs!("keine", "none").into() } else { known.join(", ") }
             )))
         }
     }
@@ -222,7 +229,7 @@ fn intersection_volume(m: &mut Model, a: u32, b: u32) -> Result<f64, String> {
             }
             Ok(v)
         })
-        .unwrap_or_else(|| Err("keine Auswertung".into()))
+        .unwrap_or_else(|| Err(tr!("keine Auswertung", "no evaluation")))
 }
 
 /// Does the result of a node hold a mesh without B-rep (`import("x.stl")` as a mesh)?
@@ -259,10 +266,16 @@ fn plane_text(s: &SectionPlane) -> String {
     for (i, a) in ["x", "y", "z"].iter().enumerate() {
         if (n[i].abs() - 1.0).abs() < 1e-12 {
             let v = num(s.point[i]);
-            return format!("{a} = {v} (entfernt {a} {} {v})", if n[i] > 0.0 { ">" } else { "<" });
+            let op = if n[i] > 0.0 { ">" } else { "<" };
+            return tr!("{a} = {v} (entfernt {a} {op} {v})", "{a} = {v} (removes {a} {op} {v})");
         }
     }
-    format!("durch {} mit Normale {} (entfernt die Seite, in die sie zeigt)", vec_text(s.point), vec_text(n))
+    tr!(
+        "durch {} mit Normale {} (entfernt die Seite, in die sie zeigt)",
+        "through {} with normal {} (removes the side it points to)",
+        vec_text(s.point),
+        vec_text(n)
+    )
 }
 
 fn seg_json(c: &EdgeCurve) -> Json {
@@ -290,18 +303,26 @@ fn seg_json(c: &EdgeCurve) -> Json {
 /// Summary of a section: regions with areas, contours with their segments, circles (bores),
 /// smallest wall thickness (estimate over sample points).
 fn section_summary(s: &Section) -> (Json, String) {
-    let mut t = format!(
-        "Schnitt {}: {} Bereich(e), Fläche {} mm²{}\n",
+    let how = if s.exact && s.max_dev == 0.0 {
+        tr!(
+            " (exakt: Konturen aus Geraden und Kreisen der B-Rep)",
+            " (exact: contours of lines and circles of the B-rep)"
+        )
+    } else if s.exact {
+        tr!(
+            " (exakt in geschlossener Form; die Kernel-Kurven weichen bis {} mm ab)",
+            " (exact in closed form; the kernel curves deviate up to {} mm)",
+            num_e(s.max_dev)
+        )
+    } else {
+        tr!(" (Konturen teils als Kernel-Kurven)", " (contours partly as kernel curves)")
+    };
+    let mut t = tr!(
+        "Schnitt {}: {} Bereich(e), Fläche {} mm²{how}\n",
+        "section {}: {} region(s), area {} mm²{how}\n",
         plane_text(&s.plane),
         s.regions.len(),
-        num(s.area()),
-        if s.exact && s.max_dev == 0.0 {
-            " (exakt: Konturen aus Geraden und Kreisen der B-Rep)".to_string()
-        } else if s.exact {
-            format!(" (exakt in geschlossener Form; die Kernel-Kurven weichen bis {} mm ab)", num_e(s.max_dev))
-        } else {
-            " (Konturen teils als Kernel-Kurven)".to_string()
-        }
+        num(s.area())
     );
     let mut regions = Vec::new();
     for (ri, r) in s.regions.iter().enumerate() {
@@ -329,8 +350,9 @@ fn section_summary(s: &Section) -> (Json, String) {
                 })
             })
             .collect();
-        t.push_str(&format!(
+        t.push_str(&tr!(
             "  Bereich {}: {} mm², Hülle {} – {}, {} Loch/Löcher\n",
+            "  region {}: {} mm², bounds {} – {}, {} hole(s)\n",
             ri + 1,
             num(r.area),
             vec_text(lo),
@@ -361,9 +383,10 @@ fn section_summary(s: &Section) -> (Json, String) {
         }
     }
     for (o, r, full, _) in &circles {
-        t.push_str(&format!(
+        t.push_str(&tr!(
             "  {} R {} · ⌀ {} bei {} (center@{})\n",
-            if *full { "Kreis" } else { "Bogen" },
+            "  {} R {} · ⌀ {} at {} (center@{})\n",
+            if *full { trs!("Kreis", "circle") } else { trs!("Bogen", "arc") },
             num(*r),
             num(2.0 * r),
             vec_text(*o),
@@ -372,8 +395,9 @@ fn section_summary(s: &Section) -> (Json, String) {
     }
     let min_wall = s.min_wall(8);
     if let Some(w) = &min_wall {
-        t.push_str(&format!(
+        t.push_str(&tr!(
             "  kleinste Wandstärke ≈ {} mm von {} bis {} (8 Stellen je Konturabschnitt; genau: --wall P)\n",
+            "  smallest wall thickness ≈ {} mm from {} to {} (8 places per contour segment; exact: --wall P)\n",
             num(w.thickness),
             vec_text(w.from),
             vec_text(w.to)
@@ -429,15 +453,19 @@ fn exact_measures(m: &mut Model, sc: &p::Scene, a: &MeasureArgs, j: &mut Json, t
         return Ok(());
     }
     if !a.wall.is_empty() && plane.is_none() {
-        return Err(Fail::Usage("--wall braucht --section oder --section-plane".into()));
+        return Err(Fail::Usage(tr!(
+            "--wall braucht --section oder --section-plane",
+            "--wall needs --section or --section-plane"
+        )));
     }
-    let root = sc.root.ok_or_else(|| Fail::Usage("kein Ergebnis zum Messen".into()))?;
+    let root = sc.root.ok_or_else(|| Fail::Usage(tr!("kein Ergebnis zum Messen", "no result to measure")))?;
     let model = m.session.measure_model(root).map_err(Fail::Usage)?;
     let sec_rc = plane.as_ref().map(|pl| m.session.measure_section(root, pl));
     let sec = match &sec_rc {
         Some(rc) => match rc.as_ref() {
             Ok(s) => Some(s),
-            Err(e) if e.contains("trifft") => return Err(Fail::Usage(e.clone())),
+            // the plane misses the model: a usage error
+            Err(e) if e.contains("trifft") || e.contains("misses") => return Err(Fail::Usage(e.clone())),
             Err(e) => return Err(Fail::Kernel(e.clone())),
         },
         None => None,
@@ -514,12 +542,18 @@ fn exact_measures(m: &mut Model, sc: &p::Scene, a: &MeasureArgs, j: &mut Json, t
             &["vertex", "mid", "center", "edge", "face"]
         };
         let mut found = Vec::new();
-        t.push_str(&format!("Bei {}:\n", vec_text(q)));
+        t.push_str(&tr!("Bei {}:\n", "At {}:\n", vec_text(q)));
         for k in kinds {
             let refs = format!("{k}@[{},{},{}]", q.x, q.y, q.z);
             let Ok(pk) = m.session.measure_ref(&model, sec, &refs, &resolve) else { continue };
             let d = DVec3::from_array(pk.point.0).distance(q);
-            t.push_str(&format!("  {:<28} {} ({} mm entfernt)\n", pk.reference, pk.label, num(d)));
+            t.push_str(&tr!(
+                "  {:<28} {} ({} mm entfernt)\n",
+                "  {:<28} {} ({} mm away)\n",
+                pk.reference,
+                pk.label,
+                num(d)
+            ));
             for o in &pk.origin {
                 t.push_str(&format!("  {:<28} {o}\n", ""));
             }
@@ -554,11 +588,12 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
         && !a.colors
         && !exact;
     if nothing {
-        return Err(Fail::Usage(
+        return Err(Fail::Usage(tr!(
             "nichts zu messen: --distance A B, --radius R, --angle A B, --length R, --body R, --section …, --wall P, --at P, \
-             --between A B, --bounds, --volume, --area, --interference, --clearance A B oder --colors"
-                .into(),
-        ));
+             --between A B, --bounds, --volume, --area, --interference, --clearance A B oder --colors",
+            "nothing to measure: --distance A B, --radius R, --angle A B, --length R, --body R, --section …, --wall P, --at P, \
+             --between A B, --bounds, --volume, --area, --interference, --clearance A B or --colors"
+        )));
     }
     let mut m = load(c, None, true, true)?;
     let mut j = m.base_json("measure");
@@ -570,7 +605,7 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
         let (colors, regions, text) = crate::colors::table(&mut m, &sc, true)?;
         j["colors"] = json!({ "colors": colors, "parts": regions, "density_g_cm3": crate::colors::PLA_DENSITY });
         if text.is_empty() {
-            t.push_str("Farben: keine (leeres Modell)\n");
+            t.push_str(trs!("Farben: keine (leeres Modell)\n", "Colours: none (empty model)\n"));
         }
         t.push_str(&text);
     }
@@ -584,8 +619,9 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
             "delta": d.to_array(),
             "distance": d.length(),
         });
-        t.push_str(&format!(
+        t.push_str(&tr!(
             "Abstand {} {} → {} {}: {} mm (Δ {})\n",
+            "Distance {} {} → {} {}: {} mm (Δ {})\n",
             a.between[0],
             vec3d(pa),
             a.between[1],
@@ -604,14 +640,15 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
         match &b {
             Some(b) => {
                 let s: Vec<String> = (0..3).map(|i| num(b.max.0[i] - b.min.0[i])).collect();
-                t.push_str(&format!(
+                t.push_str(&tr!(
                     "Hülle {spec}: {} – {}, Größe {} mm\n",
+                    "Bounds {spec}: {} – {}, size {} mm\n",
                     crate::vec3(&b.min),
                     crate::vec3(&b.max),
                     s.join(" × ")
                 ));
             }
-            None => t.push_str(&format!("Hülle {spec}: keine Geometrie\n")),
+            None => t.push_str(&tr!("Hülle {spec}: keine Geometrie\n", "Bounds {spec}: no geometry\n")),
         }
     }
     for (key, spec) in [("volume", &a.volume), ("area", &a.area)] {
@@ -627,10 +664,10 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
         let (v, ar) = mass(&mut m, &nodes)?;
         if key == "volume" {
             j["volume"] = json!({ "target": spec, "nodes": nodes, "volume": v });
-            t.push_str(&format!("Volumen {spec}: {} mm³\n", num(v)));
+            t.push_str(&tr!("Volumen {spec}: {} mm³\n", "Volume {spec}: {} mm³\n", num(v)));
         } else {
             j["area"] = json!({ "target": spec, "nodes": nodes, "area": ar });
-            t.push_str(&format!("Fläche {spec}: {} mm²\n", num(ar)));
+            t.push_str(&tr!("Fläche {spec}: {} mm²\n", "Area {spec}: {} mm²\n", num(ar)));
         }
     }
     if a.interference {
@@ -655,7 +692,13 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
                         );
                         if hit {
                             collisions.push(json!({ "a": pa.name, "b": pb.name, "volume": v }));
-                            t.push_str(&format!("Kollision {} ↔ {}: {} mm³\n", pa.name, pb.name, num(v)));
+                            t.push_str(&tr!(
+                                "Kollision {} ↔ {}: {} mm³\n",
+                                "Collision {} ↔ {}: {} mm³\n",
+                                pa.name,
+                                pb.name,
+                                num(v)
+                            ));
                         }
                     }
                     // a mesh without B-rep: overlap yes/no, no volume
@@ -664,9 +707,11 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
                             "collision": hit, "method": "mesh" }));
                         if hit {
                             collisions.push(json!({ "a": pa.name, "b": pb.name, "volume": null, "method": "mesh" }));
-                            t.push_str(&format!(
+                            t.push_str(&tr!(
                                 "Kollision {} ↔ {}: Netze überschneiden sich (netzbasiert, Volumen unbekannt)\n",
-                                pa.name, pb.name
+                                "Collision {} ↔ {}: meshes overlap (mesh-based, volume unknown)\n",
+                                pa.name,
+                                pb.name
                             ));
                         }
                     }
@@ -674,8 +719,9 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
             }
         }
         if collisions.is_empty() {
-            t.push_str(&format!(
+            t.push_str(&tr!(
                 "Keine Kollisionen ({} Bauteile, {} Paare mit überlappender Hülle geprüft, Toleranz {} mm³)\n",
+                "No collisions ({} parts, {} pairs with overlapping bounds checked, tolerance {} mm³)\n",
                 parts.len(),
                 checked,
                 num(a.tolerance)
@@ -696,8 +742,8 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
             Ok(cad_measure::dist::triangles(&mesh, &mat(&sc.nodes[n as usize].display_world)))
         };
         let (ta, tb) = (tris(&mut m, na)?, tris(&mut m, nb)?);
-        let d =
-            cad_measure::dist::min_distance(&ta, &tb).ok_or_else(|| Fail::Usage("Bauteil ohne Geometrie".into()))?;
+        let d = cad_measure::dist::min_distance(&ta, &tb)
+            .ok_or_else(|| Fail::Usage(tr!("Bauteil ohne Geometrie", "part without geometry")))?;
         let (inter, collide) = match collision(&mut m, &sc, na, nb, tol)? {
             Ok(v) => (Some(v), v > a.tolerance),
             Err(hit) => (None, hit),
@@ -712,14 +758,17 @@ pub(crate) fn command(c: &Common, a: &MeasureArgs) -> Result<Outcome, Fail> {
             "method": "minimum triangle–triangle distance of both tessellations",
         });
         if collide {
-            let how = inter.map_or_else(|| "netzbasiert".to_string(), |v| format!("{} mm³", num(v)));
-            t.push_str(&format!(
+            let how = inter.map_or_else(|| tr!("netzbasiert", "mesh-based"), |v| format!("{} mm³", num(v)));
+            t.push_str(&tr!(
                 "Abstand {} ↔ {}: 0 mm – die Bauteile überschneiden sich ({how})\n",
-                a.clearance[0], a.clearance[1],
+                "Clearance {} ↔ {}: 0 mm – the parts overlap ({how})\n",
+                a.clearance[0],
+                a.clearance[1],
             ));
         } else {
-            t.push_str(&format!(
+            t.push_str(&tr!(
                 "Abstand {} ↔ {}: {} mm (± {} mm, Tessellierung {} mm), zwischen {} und {}\n",
+                "Clearance {} ↔ {}: {} mm (± {} mm, tessellation {} mm), between {} and {}\n",
                 a.clearance[0],
                 a.clearance[1],
                 num(d.dist),

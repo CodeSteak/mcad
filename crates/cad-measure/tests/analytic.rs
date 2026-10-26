@@ -296,3 +296,21 @@ fn section_through_bores_and_wall() {
     assert!(close(r1.max(r2), 3.0 * 2f64.sqrt(), 1e-9) && close(r1.min(r2), 3.0, 1e-9), "{r1} {r2}");
     assert!(e.exact, "{e:?}");
 }
+
+#[test]
+fn names_and_errors_in_both_languages() {
+    let mut k = k();
+    let s = k.make_cylinder(10.0, 3.0, 3.0, 1).unwrap();
+    let b = body(&mut k, &s);
+    let side = face(&b, DVec3::new(3.0, 0.0, 5.0));
+    let top = face(&b, DVec3::new(0.5, 0.5, 10.0));
+    let at = DVec3::new(3.1, 0.1, 5.0);
+    {
+        let _en = cad_i18n::scoped(cad_i18n::Lang::En);
+        assert_eq!(radius(&side, at).unwrap().source, "cylinder");
+        assert_eq!(radius(&top, at).unwrap_err(), "radius: the face is a plane – no radius");
+    }
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
+    assert_eq!(radius(&side, at).unwrap().source, "Zylinder");
+    assert_eq!(radius(&top, at).unwrap_err(), "Radius: die Fläche ist eine Ebene – kein Radius");
+}

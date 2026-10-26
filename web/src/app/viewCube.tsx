@@ -1,4 +1,4 @@
-// Clickable view cube in the lower right corner of the 3D view (docs/konzepte/ui-ueberarbeitung,
+// Clickable view cube in the lower right corner of the 3D view (docs/concepts/ui-redesign,
 // Frage 4, Option A), instead of the axis gizmo: it turns with the camera; a click on a face
 // looks onto it, on an edge or a corner along the diagonal (3 × 3 cells per face: centre =
 // face, edge bands = edges, corners = corners). The small axis triad next to it shows x, y, z.

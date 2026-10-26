@@ -26,6 +26,7 @@ fn arithmetic() {
 
 #[test]
 fn undefined_operations_warn() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("echo(\"x\" * 2, undef + 1, true + 1, 1 + [1]);");
     assert_eq!(echoes(&out), ["undef, undef, undef, undef"]);
     assert!(has_warning(&out, "undefinierte Operation (String * Zahl)"));
@@ -67,6 +68,7 @@ fn trig_is_exact_at_special_angles() {
 
 #[test]
 fn math_functions() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     assert_eq!(
         ev("round(2.5), round(-2.5), floor(-1.5), ceil(1.2), sign(-3), abs(-2), pow(2,10)"),
         "3, -3, -2, 2, -1, 2, 1024"
@@ -130,6 +132,7 @@ fn search_function() {
 
 #[test]
 fn ranges() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     assert_eq!(ev("[1:3], [0:0.5:2], [0:-1:-3]"), "[1 : 1 : 3], [0 : 0.5 : 2], [0 : -1 : -3]");
     assert_eq!(ev("[for (i=[0:0.1:1]) i]"), "[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]");
     assert_eq!(
@@ -189,6 +192,7 @@ fn echo_named_args_and_nesting() {
 
 #[test]
 fn variables_are_lazy_and_last_assignment_wins() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = "echo(s); s = 5; cube(s);";
     let out = clean(src);
     assert_eq!(echoes(&out), ["5"]);
@@ -201,12 +205,14 @@ fn variables_are_lazy_and_last_assignment_wins() {
 
 #[test]
 fn recursive_definition_is_detected() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("a = b + 1; b = a + 1; echo(a);");
     assert!(has_warning(&out, "rekursive Definition"));
 }
 
 #[test]
 fn unknown_names_warn() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("echo(nope, f(1));");
     assert_eq!(echoes(&out), ["undef, undef"]);
     assert!(has_warning(&out, "unbekannte Variable `nope`"));
@@ -221,6 +227,7 @@ fn block_scopes_shadow() {
 
 #[test]
 fn module_parameters_and_defaults() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = "module m(a = 1, b = 2) { echo(a, b); } m(); m(5); m(b = 3); m(1, 2);";
     let out = clean(src);
     assert_eq!(echoes(&out), ["1, 2", "5, 2", "1, 3", "1, 2"]);
@@ -289,6 +296,7 @@ fn rands_is_deterministic() {
 
 #[test]
 fn assert_failure_aborts() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("x = 1; assert(x == 2, \"x must be 2\"); echo(\"after\");");
     assert!(out.aborted);
     assert!(has_error(&out, "assert 'x == 2' fehlgeschlagen: x must be 2"));
@@ -306,4 +314,18 @@ fn echo_expression() {
 #[test]
 fn pi_constant() {
     assert_eq!(ev("PI"), "3.14159");
+}
+
+#[test]
+fn messages_in_english() {
+    let out = run("echo(nope, f(1));");
+    assert!(has_warning(&out, "unknown variable `nope`"));
+    assert!(has_warning(&out, "unknown function `f`"));
+    let out = run("x = 1; assert(x == 2, \"x must be 2\"); echo(\"after\");");
+    assert!(has_error(&out, "assert 'x == 2' failed: x must be 2"));
+    let out = run("x = [1]; echo(x[0](2));");
+    assert!(has_warning(&out, "number is not callable"), "{:?}", out.diagnostics);
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
+    let out = run("x = [1]; echo(x[0](2));");
+    assert!(has_warning(&out, "Zahl ist nicht aufrufbar"), "{:?}", out.diagnostics);
 }

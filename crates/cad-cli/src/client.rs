@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
+use cad_i18n::{tr, trs};
 use cad_ipc::{Conn, Frame, Kind};
 use serde_json::{Value as Json, json};
 
@@ -50,7 +51,10 @@ fn hello(conn: &mut Conn) -> Result<Hello, String> {
     let f = conn.request("hello", json!({"proto": DAEMON_PROTO})).map_err(|e| format!("hello: {e}"))?;
     let b = &f.header.body;
     if b["proto"].as_u64() != Some(DAEMON_PROTO as u64) {
-        return Ok(Hello { build_id: format!("Protokoll {}", b["proto"]), pid: b["pid"].as_u64().unwrap_or(0) as u32 });
+        return Ok(Hello {
+            build_id: tr!("Protokoll {}", "protocol {}", b["proto"]),
+            pid: b["pid"].as_u64().unwrap_or(0) as u32,
+        });
     }
     Ok(Hello {
         build_id: b["build_id"].as_str().unwrap_or_default().to_string(),
@@ -115,33 +119,60 @@ fn ensure(verbose: bool) -> Result<(Conn, u32), String> {
         Some((c, h)) if h.build_id == me => return Ok((c, h.pid)),
         Some((c, h)) => {
             if verbose {
-                eprintln!("mcad: Daemon pid {} hat Build {}, dieses mcad {me}: wird ersetzt", h.pid, h.build_id);
+                eprintln!(
+                    "{}",
+                    tr!(
+                        "mcad: Daemon pid {} hat Build {}, dieses mcad {me}: wird ersetzt",
+                        "mcad: daemon pid {} has build {}, this mcad {me}: replacing it",
+                        h.pid,
+                        h.build_id
+                    )
+                );
             }
-            daemon::stop_daemon(Some(c), Duration::from_secs(3)).map_err(|e| format!("alter Daemon: {e}"))?;
+            daemon::stop_daemon(Some(c), Duration::from_secs(3))
+                .map_err(|e| tr!("alter Daemon: {e}", "old daemon: {e}"))?;
         }
         None => {}
     }
     let dir = cad_ipc::runtime_dir().map_err(|e| e.to_string())?;
     let dir = std::fs::canonicalize(&dir).unwrap_or(dir);
-    let mut child = spawn(&dir).map_err(|e| format!("Start: {e}"))?;
+    let mut child = spawn(&dir).map_err(|e| tr!("Start: {e}", "start: {e}"))?;
     if verbose {
-        eprintln!("mcad: Daemon gestartet (pid {}, Log {})", child.id(), dir.join("daemon.log").display());
+        eprintln!(
+            "{}",
+            tr!(
+                "mcad: Daemon gestartet (pid {}, Log {})",
+                "mcad: daemon started (pid {}, log {})",
+                child.id(),
+                dir.join("daemon.log").display()
+            )
+        );
     }
     let t0 = Instant::now();
     loop {
         match connect() {
             Ok(Some((c, h))) if h.build_id == me => return Ok((c, h.pid)),
-            Ok(Some((_, h))) => return Err(format!("anderer Daemon (Build {}) kam zuvor", h.build_id)),
+            Ok(Some((_, h))) => {
+                return Err(tr!(
+                    "anderer Daemon (Build {}) kam zuvor",
+                    "another daemon (build {}) came first",
+                    h.build_id
+                ));
+            }
             Ok(None) => {}
             Err(e) => return Err(e),
         }
         if let Ok(Some(st)) = child.try_wait()
             && !st.success()
         {
-            return Err(format!("Start fehlgeschlagen ({st}), siehe {}", dir.join("daemon.log").display()));
+            return Err(tr!(
+                "Start fehlgeschlagen ({st}), siehe {}",
+                "start failed ({st}), see {}",
+                dir.join("daemon.log").display()
+            ));
         }
         if t0.elapsed() > START_TIMEOUT {
-            return Err(format!("keine Antwort nach {} s", START_TIMEOUT.as_secs()));
+            return Err(tr!("keine Antwort nach {} s", "no answer after {} s", START_TIMEOUT.as_secs()));
         }
         std::thread::sleep(Duration::from_millis(5));
     }
@@ -156,31 +187,36 @@ struct Answer {
 
 fn request(conn: &mut Conn, pid: u32, argv: &[String], cwd: &Path, stdin: Option<&str>) -> Result<Answer, Fail> {
     let hang_ms: u64 = cad_ipc::env_var("DAEMON_DEBUG_HANG_MS").and_then(|v| v.parse().ok()).unwrap_or(0);
+    // the language of this client: the daemon answers in it
     let body = json!({
         "proto": DAEMON_PROTO, "build_id": build_id(), "argv": argv, "cwd": cwd.to_string_lossy(),
-        "stdin": stdin.is_some(), "hang_ms": hang_ms,
+        "stdin": stdin.is_some(), "hang_ms": hang_ms, "lang": cad_i18n::lang().code(),
     });
     let _ = conn.set_timeout(Some(SILENCE_TIMEOUT));
     let req = Frame::request(1, "run", body).with_data(stdin.map(|s| s.as_bytes().to_vec()).unwrap_or_default());
     if let Err(e) = conn.send(&req) {
-        return Err(Fail::Retry(format!("senden: {e}")));
+        return Err(Fail::Retry(tr!("senden: {e}", "send: {e}")));
     }
     let mut accepted = false;
     loop {
         let f = match conn.recv() {
             Ok(Some(f)) => f,
             Ok(None) if accepted => {
-                return Err(Fail::Loud(format!("Daemon (pid {pid}) hat die Verbindung während des Befehls beendet")));
+                return Err(Fail::Loud(tr!(
+                    "Daemon (pid {pid}) hat die Verbindung während des Befehls beendet",
+                    "daemon (pid {pid}) closed the connection during the command"
+                )));
             }
-            Ok(None) => return Err(Fail::Retry("Verbindung beendet".into())),
+            Ok(None) => return Err(Fail::Retry(tr!("Verbindung beendet", "connection closed"))),
             Err(cad_ipc::Error::Timeout) => {
                 daemon::kill_hard(pid);
-                return Err(Fail::Loud(format!(
+                return Err(Fail::Loud(tr!(
                     "Daemon (pid {pid}) antwortet seit {} s nicht, beendet",
+                    "daemon (pid {pid}) has not answered for {} s, killed",
                     SILENCE_TIMEOUT.as_secs()
                 )));
             }
-            Err(e) if accepted => return Err(Fail::Loud(format!("Daemon (pid {pid}): {e}"))),
+            Err(e) if accepted => return Err(Fail::Loud(tr!("Daemon (pid {pid}): {e}", "daemon (pid {pid}): {e}"))),
             Err(e) => return Err(Fail::Retry(e.to_string())),
         };
         match f.header.kind {
@@ -194,9 +230,10 @@ fn request(conn: &mut Conn, pid: u32, argv: &[String], cwd: &Path, stdin: Option
                     if e.starts_with("watchdog") {
                         return Err(Fail::Loud(e.trim_start_matches("watchdog: ").to_string()));
                     }
-                    return Err(Fail::Quiet(format!("Daemon: {e}")));
+                    return Err(Fail::Quiet(tr!("Daemon: {e}", "daemon: {e}")));
                 }
-                return decode(&f).map_err(|e| Fail::Quiet(format!("Antwort des Daemons: {e}")));
+                return decode(&f)
+                    .map_err(|e| Fail::Quiet(tr!("Antwort des Daemons: {e}", "answer of the daemon: {e}")));
             }
             Kind::Request => {}
         }
@@ -205,39 +242,51 @@ fn request(conn: &mut Conn, pid: u32, argv: &[String], cwd: &Path, stdin: Option
 
 fn decode(f: &Frame) -> Result<Answer, String> {
     let b = &f.header.body;
-    let n = |k: &str| b[k].as_u64().map(|v| v as usize).ok_or_else(|| format!("{k} fehlt"));
+    let n = |k: &str| b[k].as_u64().map(|v| v as usize).ok_or_else(|| missing(k));
     let (so, se) = (n("stdout_len")?, n("stderr_len")?);
-    let code = b["exit_code"].as_u64().ok_or("exit_code fehlt")? as u8;
+    let code = b["exit_code"].as_u64().ok_or_else(|| missing("exit_code"))? as u8;
     let mut pos = 0;
     let mut take = |len: usize| -> Result<Vec<u8>, String> {
         let end = pos + len;
-        let s = f.data.get(pos..end).ok_or("Daten zu kurz")?.to_vec();
+        let s = f.data.get(pos..end).ok_or_else(|| tr!("Daten zu kurz", "data too short"))?.to_vec();
         pos = end;
         Ok(s)
     };
     let stdout = take(so)?;
     let stderr = take(se)?;
     let mut ops = Vec::new();
-    for e in b["files"].as_array().ok_or("files fehlt")? {
-        let path = PathBuf::from(e["path"].as_str().ok_or("path fehlt")?);
+    for e in b["files"].as_array().ok_or_else(|| missing("files"))? {
+        let path = PathBuf::from(e["path"].as_str().ok_or_else(|| missing("path"))?);
         let len = e["len"].as_u64().unwrap_or(0) as usize;
         ops.push(match e["op"].as_str() {
             Some("mkdir") => FileOp::Mkdir(path),
             Some("write") => FileOp::Write(path, take(len)?),
             Some("atomic") => FileOp::Atomic(path, take(len)?),
-            other => return Err(format!("unbekannte Dateioperation {other:?}")),
+            other => return Err(tr!("unbekannte Dateioperation {other:?}", "unknown file operation {other:?}")),
         });
     }
     Ok(Answer { out: Output { stdout, stderr, code }, ops, info: b["info"].clone() })
 }
 
-/// Tries to run the command (`argv` without the program name) in the daemon.
-pub fn run(argv: &[OsString], uses_stdin: bool, no_daemon: bool, verbose: bool) -> Attempt {
+fn missing(k: &str) -> String {
+    tr!("{k} fehlt", "{k} missing")
+}
+
+/// Tries to run the command (`argv` without the program name) in the daemon; it answers in
+/// `lang` (the language of this process, also the thread's).
+pub fn run(argv: &[OsString], uses_stdin: bool, no_daemon: bool, verbose: bool, lang: cad_i18n::Lang) -> Attempt {
+    let _lang = cad_i18n::scoped(lang);
     let local = |reason: String, loud: bool| {
         if loud {
-            eprintln!("mcad: {reason}; der Befehl läuft ohne Daemon");
+            eprintln!(
+                "{}",
+                tr!(
+                    "mcad: {reason}; der Befehl läuft ohne Daemon",
+                    "mcad: {reason}; the command runs without the daemon"
+                )
+            );
         } else if verbose {
-            eprintln!("mcad: ohne Daemon: {reason}");
+            eprintln!("{}", tr!("mcad: ohne Daemon: {reason}", "mcad: without daemon: {reason}"));
         }
         Attempt::Local(DaemonInfo { used: false, reason: Some(reason) })
     };
@@ -247,21 +296,22 @@ pub fn run(argv: &[OsString], uses_stdin: bool, no_daemon: bool, verbose: bool) 
     let cfg = DaemonConfig::load();
     if verbose {
         for w in &cfg.warnings {
-            eprintln!("mcad: Konfiguration: {w}");
+            eprintln!("{}", tr!("mcad: Konfiguration: {w}", "mcad: configuration: {w}"));
         }
     }
     if !cfg.enabled {
-        return local(format!("abgeschaltet ({})", cfg.disabled_by.as_deref().unwrap_or("Konfiguration")), false);
+        let by = cfg.disabled_by.clone().unwrap_or_else(|| trs!("Konfiguration", "configuration").into());
+        return local(tr!("abgeschaltet ({by})", "switched off ({by})"), false);
     }
     if !cfg!(unix) {
-        return local("Daemon nur unter Unix".into(), false);
+        return local(tr!("Daemon nur unter Unix", "daemon only on Unix"), false);
     }
     let Some(args) = argv.iter().map(|a| a.to_str().map(String::from)).collect::<Option<Vec<String>>>() else {
-        return local("Argumente sind kein UTF-8".into(), false);
+        return local(tr!("Argumente sind kein UTF-8", "arguments are not UTF-8"), false);
     };
     let cwd = match std::env::current_dir() {
         Ok(d) => d,
-        Err(e) => return local(format!("Arbeitsverzeichnis: {e}"), false),
+        Err(e) => return local(tr!("Arbeitsverzeichnis: {e}", "working directory: {e}"), false),
     };
     let stdin = if uses_stdin {
         match host::read_stdin() {
@@ -279,27 +329,31 @@ pub fn run(argv: &[OsString], uses_stdin: bool, no_daemon: bool, verbose: bool) 
     for _ in 0..2 {
         let (mut conn, pid) = match ensure(verbose) {
             Ok(c) => c,
-            Err(e) => return local(format!("Daemon nicht verfügbar: {e}"), false),
+            Err(e) => return local(tr!("Daemon nicht verfügbar: {e}", "daemon not available: {e}"), false),
         };
         match request(&mut conn, pid, &args, &cwd, stdin.as_deref()) {
             Ok(a) => {
                 for op in &a.ops {
                     if let Err(e) = host::apply(op) {
                         // The local run gives the same error with the same message.
-                        return local(format!("Datei schreiben: {e}"), false);
+                        return local(tr!("Datei schreiben: {e}", "write file: {e}"), false);
                     }
                 }
                 if verbose {
                     let mib = format!("{:.1}", a.info["cache_bytes"].as_f64().unwrap_or(0.0) / (1 << 20) as f64);
-                    eprintln!(
-                        "mcad: Daemon pid {}: {:.0} ms, Cache {} Treffer / {} neu, {} Einträge, {} MiB",
-                        a.info["pid"],
-                        a.info["ms"].as_f64().unwrap_or(0.0),
-                        a.info["cache_hits"],
-                        a.info["cache_misses"],
-                        a.info["cache_entries"],
-                        mib.replace('.', ",")
-                    );
+                    let (pid, ms) = (&a.info["pid"], a.info["ms"].as_f64().unwrap_or(0.0));
+                    let (hits, misses, entries) =
+                        (&a.info["cache_hits"], &a.info["cache_misses"], &a.info["cache_entries"]);
+                    if cad_i18n::is_de() {
+                        eprintln!(
+                            "mcad: Daemon pid {pid}: {ms:.0} ms, Cache {hits} Treffer / {misses} neu, {entries} Einträge, {} MiB",
+                            mib.replace('.', ",")
+                        );
+                    } else {
+                        eprintln!(
+                            "mcad: daemon pid {pid}: {ms:.0} ms, cache {hits} hits / {misses} new, {entries} entries, {mib} MiB"
+                        );
+                    }
                 }
                 return Attempt::Done(a.out);
             }
@@ -308,5 +362,5 @@ pub fn run(argv: &[OsString], uses_stdin: bool, no_daemon: bool, verbose: bool) 
             Err(Fail::Loud(e)) => return local(e, true),
         }
     }
-    local(format!("Daemon nicht verfügbar: {last}"), false)
+    local(tr!("Daemon nicht verfügbar: {last}", "daemon not available: {last}"), false)
 }

@@ -2,7 +2,8 @@
 // every key), `t(key, params)` with `{name}` placeholders and plural forms, and `useLang()` for
 // React (the app root subscribes, so a switch re-renders the whole tree). The choice ("System",
 // English, Deutsch) is kept in localStorage like the theme (state/store.ts: `setLangPref`).
-// Texts that come from the engine (diagnostics, measurement texts, prompts) are not translated.
+// Texts that come from the engine (diagnostics, measurement texts, prompts) are made by the
+// engine in the UI language: EngineClient sends `SetLang` at start and on every switch.
 
 import { useSyncExternalStore } from "react";
 import { de } from "./de.ts";

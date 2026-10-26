@@ -5,6 +5,7 @@ use std::rc::Rc;
 use crate::ast::*;
 use crate::lexer::{Tok, Token};
 use crate::{Diagnostic, Span};
+use cad_i18n::{tr, trs};
 
 pub struct Parser<'a> {
     toks: &'a [Token],
@@ -31,7 +32,7 @@ impl<'a> Parser<'a> {
         while !self.at(&Tok::Eof) {
             if self.at(&Tok::RBrace) {
                 let sp = self.span();
-                self.error(sp, "unerwartetes `}`");
+                self.error(sp, trs!("unerwartetes `}`", "unexpected `}`"));
                 self.bump();
                 continue;
             }
@@ -93,7 +94,7 @@ impl<'a> Parser<'a> {
             Ok(self.bump().span)
         } else {
             let sp = self.span();
-            self.error(sp, format!("{what} erwartet, gefunden: {}", describe(self.peek())));
+            self.error(sp, tr!("{what} erwartet, gefunden: {}", "expected {what}, found {}", describe(self.peek())));
             Err(())
         }
     }
@@ -104,7 +105,10 @@ impl<'a> Parser<'a> {
             Ok(Ident { name, span })
         } else {
             let sp = self.span();
-            self.error(sp, format!("Bezeichner erwartet, gefunden: {}", describe(self.peek())));
+            self.error(
+                sp,
+                tr!("Bezeichner erwartet, gefunden: {}", "expected identifier, found {}", describe(self.peek())),
+            );
             Err(())
         }
     }
@@ -213,7 +217,7 @@ impl<'a> Parser<'a> {
                         }
                         _ => {
                             let sp = self.span();
-                            self.error(sp, "`<Pfad>` erwartet");
+                            self.error(sp, trs!("`<Pfad>` erwartet", "expected `<path>`"));
                             return Err(());
                         }
                     };
@@ -235,7 +239,7 @@ impl<'a> Parser<'a> {
                     if self.eat(&Tok::Comma) {
                         let kw = self.ident()?;
                         if kw.name != "dir" {
-                            self.error(kw.span, "`dir = …` erwartet");
+                            self.error(kw.span, trs!("`dir = …` erwartet", "expected `dir = …`"));
                             return Err(());
                         }
                         self.expect(&Tok::Assign, "`=`")?;
@@ -296,7 +300,10 @@ impl<'a> Parser<'a> {
             Tok::Not | Tok::Hash | Tok::Percent | Tok::Star => self.instantiation(),
             other => {
                 let sp = self.span();
-                self.error(sp, format!("Anweisung erwartet, gefunden: {}", describe(&other)));
+                self.error(
+                    sp,
+                    tr!("Anweisung erwartet, gefunden: {}", "expected statement, found {}", describe(&other)),
+                );
                 Err(())
             }
         }
@@ -339,7 +346,7 @@ impl<'a> Parser<'a> {
                     return Ok(out);
                 }
                 Tok::Eof => {
-                    self.error(open, "`{` nicht geschlossen");
+                    self.error(open, trs!("`{` nicht geschlossen", "`{` not closed"));
                     return Ok(out);
                 }
                 _ => out.push(self.stmt_recover()),
@@ -395,7 +402,7 @@ impl<'a> Parser<'a> {
             let default = if self.eat(&Tok::Assign) { Some(self.expr()?) } else { None };
             out.push(Param { name, default, span: self.span_from(start) });
             if !self.eat(&Tok::Comma) {
-                self.expect(&Tok::RParen, "`)` oder `,`")?;
+                self.expect(&Tok::RParen, trs!("`)` oder `,`", "`)` or `,`"))?;
                 return Ok(out);
             }
         }
@@ -419,7 +426,7 @@ impl<'a> Parser<'a> {
             let value = self.expr()?;
             out.push(Arg { name, value, span: self.span_from(start) });
             if !self.eat(&Tok::Comma) {
-                self.expect(&Tok::RParen, "`)` oder `,`")?;
+                self.expect(&Tok::RParen, trs!("`)` oder `,`", "`)` or `,`"))?;
                 return Ok(out);
             }
         }
@@ -437,7 +444,7 @@ impl<'a> Parser<'a> {
             let value = self.expr()?;
             out.push(Assignment { name, value, span: self.span_from(start) });
             if !self.eat(&Tok::Comma) {
-                self.expect(close, "schließende Klammer oder `,`")?;
+                self.expect(close, trs!("schließende Klammer oder `,`", "closing bracket or `,`"))?;
                 return Ok(out);
             }
         }
@@ -466,7 +473,10 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let sp = self.span();
-                self.error(sp, format!("Modulaufruf erwartet, gefunden: {}", describe(self.peek())));
+                self.error(
+                    sp,
+                    tr!("Modulaufruf erwartet, gefunden: {}", "expected module call, found {}", describe(self.peek())),
+                );
                 return Err(());
             }
         };
@@ -533,13 +543,13 @@ impl<'a> Parser<'a> {
             Tok::Semi | Tok::LBrace => self.stmt(),
             Tok::Ident(w) if w == "module" || w == "function" => {
                 let sp = self.span();
-                self.error(sp, "Definition hier nicht erlaubt");
+                self.error(sp, trs!("Definition hier nicht erlaubt", "definition not allowed here"));
                 Err(())
             }
             Tok::Ident(_) if self.peek_at(1) == &Tok::Colon || self.indexed_name_ahead() => self.stmt(),
             Tok::Ident(_) if self.peek_at(1) == &Tok::Assign => {
                 let sp = self.span();
-                self.error(sp, "Zuweisung als Kind nicht erlaubt");
+                self.error(sp, trs!("Zuweisung als Kind nicht erlaubt", "assignment not allowed as child"));
                 Err(())
             }
             _ => self.instantiation(),
@@ -558,7 +568,7 @@ impl<'a> Parser<'a> {
                     break;
                 }
                 Tok::Eof => {
-                    self.error(open, "Raster nicht geschlossen");
+                    self.error(open, trs!("Raster nicht geschlossen", "grid not closed"));
                     return Err(());
                 }
                 Tok::Ident(ax) => {
@@ -568,7 +578,7 @@ impl<'a> Parser<'a> {
                         "z" => Axis::Z,
                         _ => {
                             let sp = self.span();
-                            self.error(sp, "Achse `x`, `y` oder `z` erwartet");
+                            self.error(sp, trs!("Achse `x`, `y` oder `z` erwartet", "expected axis `x`, `y` or `z`"));
                             return Err(());
                         }
                     };
@@ -583,13 +593,13 @@ impl<'a> Parser<'a> {
                         if self.eat(&Tok::Comma) {
                             continue;
                         }
-                        self.expect(&Tok::Semi, "`;` oder `,`")?;
+                        self.expect(&Tok::Semi, trs!("`;` oder `,`", "`;` or `,`"))?;
                         break;
                     }
                 }
                 other => {
                     let sp = self.span();
-                    self.error(sp, format!("Achse erwartet, gefunden: {}", describe(&other)));
+                    self.error(sp, tr!("Achse erwartet, gefunden: {}", "expected axis, found {}", describe(&other)));
                     return Err(());
                 }
             }
@@ -759,7 +769,10 @@ impl<'a> Parser<'a> {
             }
             Tok::LBracket => self.vector(),
             other => {
-                self.error(sp, format!("Ausdruck erwartet, gefunden: {}", describe(&other)));
+                self.error(
+                    sp,
+                    tr!("Ausdruck erwartet, gefunden: {}", "expected expression, found {}", describe(&other)),
+                );
                 Err(())
             }
         }
@@ -797,7 +810,7 @@ impl<'a> Parser<'a> {
             if self.eat(&Tok::RBracket) {
                 return Ok(());
             }
-            self.expect(&Tok::Comma, "`,` oder `]`")?;
+            self.expect(&Tok::Comma, trs!("`,` oder `]`", "`,` or `]`"))?;
             if self.eat(&Tok::RBracket) {
                 return Ok(());
             }
@@ -901,11 +914,11 @@ impl<'a> Parser<'a> {
 
 fn describe(t: &Tok) -> String {
     match t {
-        Tok::Number(v) => format!("Zahl `{v}`"),
-        Tok::Str(_) => "String".into(),
+        Tok::Number(v) => tr!("Zahl `{v}`", "number `{v}`"),
+        Tok::Str(_) => trs!("String", "string").into(),
         Tok::Ident(w) => format!("`{w}`"),
-        Tok::Path(_) => "Pfad".into(),
-        Tok::Eof => "Dateiende".into(),
+        Tok::Path(_) => trs!("Pfad", "path").into(),
+        Tok::Eof => trs!("Dateiende", "end of file").into(),
         other => format!("`{}`", tok_text(other)),
     }
 }

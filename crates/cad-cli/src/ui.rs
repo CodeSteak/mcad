@@ -7,6 +7,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use cad_desktop::uictl;
+use cad_i18n::{tr, trs};
 use clap::Subcommand;
 use serde_json::{Value as Json, json};
 
@@ -45,8 +46,12 @@ pub enum UiCmd {
     },
 }
 
-const NO_UI: &str =
-    "keine laufende Desktop-UI (starten mit `mcad` oder `mcad datei.mcad`; headless: mcad check/render/…)";
+fn no_ui() -> String {
+    tr!(
+        "keine laufende Desktop-UI (starten mit `mcad` oder `mcad datei.mcad`; headless: mcad check/render/…)",
+        "no desktop UI running (start it with `mcad` or `mcad file.mcad`; headless: mcad check/render/…)"
+    )
+}
 
 fn fail(json_mode: bool, cmd: &str, code: u8, msg: &str) -> ExitCode {
     if json_mode {
@@ -68,7 +73,7 @@ fn fail(json_mode: bool, cmd: &str, code: u8, msg: &str) -> ExitCode {
 fn pick(file: Option<&Path>) -> Result<Vec<(String, PathBuf)>, String> {
     let mut all = uictl::running().map_err(|e| e.to_string())?;
     if all.is_empty() {
-        return Err(NO_UI.into());
+        return Err(no_ui());
     }
     // newest first (highest pid is not reliable; use the socket's mtime)
     all.sort_by_key(|(_, p)| std::cmp::Reverse(std::fs::metadata(p).and_then(|m| m.modified()).ok()));
@@ -101,18 +106,20 @@ fn status_text(r: &Json) -> String {
     t.push_str(&format!("UI pid {} ({})\n", r["pid"], r["endpoint"].as_str().unwrap_or("")));
     for w in r["windows"].as_array().into_iter().flatten() {
         let pr = &w["project"];
-        t.push_str(&format!(
+        t.push_str(&tr!(
             "  Projekt {} (Hauptdatei {}){}\n",
+            "  project {} (main file {}){}\n",
             pr["root"].as_str().unwrap_or("–"),
             pr["main"].as_str().unwrap_or("–"),
-            if pr["folder"] == true { ", Ordner" } else { "" }
+            if pr["folder"] == true { trs!(", Ordner", ", folder") } else { "" }
         ));
         let files: Vec<String> =
             pr["files"].as_array().into_iter().flatten().filter_map(|f| f.as_str().map(String::from)).collect();
         let dirty: Vec<String> =
             w["dirty"].as_array().into_iter().flatten().filter_map(|f| f.as_str().map(String::from)).collect();
-        t.push_str(&format!(
+        t.push_str(&tr!(
             "  Dateien: {}\n",
+            "  files: {}\n",
             files
                 .iter()
                 .map(|f| if dirty.contains(f) { format!("{f}*") } else { f.clone() })
@@ -120,8 +127,9 @@ fn status_text(r: &Json) -> String {
                 .join(", ")
         ));
         let c = &w["cursor"];
-        t.push_str(&format!(
+        t.push_str(&tr!(
             "  Cursor: {} Zeile {} Spalte {}\n",
+            "  cursor: {} line {} column {}\n",
             c["file"].as_str().unwrap_or("–"),
             c["line"],
             c["col"]
@@ -129,23 +137,27 @@ fn status_text(r: &Json) -> String {
         if let Some(sel) = w["selection"]["nodes"].as_array().filter(|a| !a.is_empty()) {
             let s: Vec<String> =
                 sel.iter().map(|n| format!("[{}] {}", n["idx"], n["label"].as_str().unwrap_or(""))).collect();
-            t.push_str(&format!("  Auswahl: {}\n", s.join(", ")));
+            t.push_str(&tr!("  Auswahl: {}\n", "  selection: {}\n", s.join(", ")));
         }
-        t.push_str(&format!(
+        t.push_str(&tr!(
             "  Kontext: {}\n",
-            w["context"].as_str().map(|m| format!("Modul {m}")).unwrap_or_else(|| "Datei".into())
+            "  context: {}\n",
+            w["context"].as_str().map(|m| tr!("Modul {m}", "module {m}")).unwrap_or_else(|| tr!("Datei", "file"))
         ));
         if let Some(p) = w["params"].as_object().filter(|p| !p.is_empty()) {
             let s: Vec<String> = p.iter().map(|(k, v)| format!("{k} = {v}")).collect();
-            t.push_str(&format!("  Parameterleiste: {}\n", s.join(", ")));
+            t.push_str(&tr!("  Parameterleiste: {}\n", "  parameter bar: {}\n", s.join(", ")));
         }
         if !w["section"].is_null() {
-            t.push_str(&format!("  Schnitt: {}\n", w["section"]["cli"].as_str().unwrap_or("")));
+            t.push_str(&tr!("  Schnitt: {}\n", "  section: {}\n", w["section"]["cli"].as_str().unwrap_or("")));
         }
         let diags = w["diagnostics"].as_array().cloned().unwrap_or_default();
         let errors = diags.iter().filter(|d| d["severity"] == "error").count();
         let warnings = diags.iter().filter(|d| d["severity"] == "warning").count();
-        t.push_str(&format!("  Diagnosen: {errors} Fehler, {warnings} Warnungen\n"));
+        t.push_str(&tr!(
+            "  Diagnosen: {errors} Fehler, {warnings} Warnungen\n",
+            "  diagnostics: {errors} errors, {warnings} warnings\n"
+        ));
         for d in diags.iter().take(20) {
             t.push_str(&format!(
                 "    {}:{}:{}: {} {}\n",
@@ -157,10 +169,15 @@ fn status_text(r: &Json) -> String {
             ));
         }
         if let Some(sc) = w["scene"].as_object() {
-            t.push_str(&format!(
+            t.push_str(&tr!(
                 "  Szene v{} ({}), {} Knoten\n",
+                "  scene v{} ({}), {} nodes\n",
                 sc.get("version").cloned().unwrap_or(Json::Null),
-                if sc.get("complete") == Some(&Json::Bool(true)) { "vollständig" } else { "vorläufig" },
+                if sc.get("complete") == Some(&Json::Bool(true)) {
+                    trs!("vollständig", "complete")
+                } else {
+                    trs!("vorläufig", "preliminary")
+                },
                 sc.get("nodes").cloned().unwrap_or(Json::Null)
             ));
         }
@@ -201,7 +218,7 @@ pub fn command(cmd: &UiCmd) -> ExitCode {
         UiCmd::Show { file, line, module, json } => {
             let abs = std::path::absolute(file).unwrap_or_else(|_| file.clone());
             if !abs.exists() {
-                return fail(*json, "show", 2, &format!("{} gibt es nicht", abs.display()));
+                return fail(*json, "show", 2, &tr!("{} gibt es nicht", "{} does not exist", abs.display()));
             }
             let uis = match pick(Some(&abs)) {
                 Ok(u) => u,
@@ -218,11 +235,15 @@ pub fn command(cmd: &UiCmd) -> ExitCode {
                         j["exit_code"] = json!(0);
                         println!("{}", serde_json::to_string_pretty(&j).unwrap());
                     } else {
+                        let at = line.map(|l| tr!(", Zeile {l}", ", line {l}")).unwrap_or_default();
                         println!(
-                            "{} in der UI ({}) geöffnet{}",
-                            abs.display(),
-                            uis[0].0,
-                            line.map(|l| format!(", Zeile {l}")).unwrap_or_default()
+                            "{}",
+                            tr!(
+                                "{} in der UI ({}) geöffnet{at}",
+                                "{} opened in the UI ({}){at}",
+                                abs.display(),
+                                uis[0].0
+                            )
                         );
                     }
                     ExitCode::SUCCESS
@@ -252,7 +273,10 @@ pub fn command(cmd: &UiCmd) -> ExitCode {
                             .unwrap()
                         );
                     } else {
-                        println!("{}: {w}×{h} px, {} Bytes", output.display(), r.data.len());
+                        println!(
+                            "{}",
+                            tr!("{}: {w}×{h} px, {} Bytes", "{}: {w}×{h} px, {} bytes", output.display(), r.data.len())
+                        );
                     }
                     ExitCode::SUCCESS
                 }

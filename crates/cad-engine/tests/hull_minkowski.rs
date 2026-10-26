@@ -120,6 +120,7 @@ fn hull_2d_extruded_and_revolved_is_exact() {
 
 #[test]
 fn hull_2d_degenerate_warns() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     let ev = e.evaluate(tree("linear_extrude(1) hull() polygon([[0, 0], [5, 0], [10, 0]]);"));
     assert!(warnings(&ev).iter().any(|w| w.contains("keine Fläche")), "{:?}", warnings(&ev));
@@ -127,6 +128,7 @@ fn hull_2d_degenerate_warns() {
 
 #[test]
 fn minkowski_2d() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // profile + circle = offset(r)
     assert_approx(
         "rect + circle",
@@ -153,6 +155,7 @@ fn minkowski_2d() {
 
 #[test]
 fn hull_3d_planar_bodies() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // two cubes: one box
     let mut e = engine();
     let ev = e.evaluate(tree("hull() { cube(10); translate([20, 0, 0]) cube(10); }"));
@@ -210,6 +213,7 @@ fn hull_3d_on_one_axis() {
 
 #[test]
 fn hull_3d_parallel_prisms() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // plate with round ends: three equal cylinders → extruded 2D hull
     let src = "hull() { cylinder(r = 3, h = 2); translate([20, 0, 0]) cylinder(r = 3, h = 2); translate([0, 15, 0]) cylinder(r = 3, h = 2); }";
     let want = 2.0 * (150.0 + 60.0 * 3.0 + 9.0 * PI);
@@ -239,6 +243,7 @@ fn hull_3d_equal_spheres() {
 
 #[test]
 fn hull_3d_unsupported_warns_with_reason() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let cases = [
         (
             "hull() { sphere(3); translate([10, 0, 0]) sphere(2); translate([0, 10, 0]) sphere(1); }",
@@ -316,6 +321,7 @@ fn minkowski_3d_extrusion_and_cylinder() {
 
 #[test]
 fn minkowski_3d_unsupported_warns_with_reason() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let cases = [
         ("minkowski() { cube(5); cube(3); rotate([0, 0, 45]) cube(2); }", "exakt nur"),
         (
@@ -329,5 +335,24 @@ fn minkowski_3d_unsupported_warns_with_reason() {
         let w = warnings(&ev);
         assert!(w.iter().any(|m| m.starts_with("minkowski: ") && m.contains(why)), "{src}: {w:?}");
         assert!(errors(&ev).is_empty(), "{src}: {:?}", errors(&ev));
+    }
+}
+
+#[test]
+fn hull_reasons_in_english() {
+    let _en = cad_i18n::scoped(cad_i18n::Lang::En);
+    let cases = [
+        ("hull() { sphere(3); translate([10, 0, 0]) sphere(2); translate([0, 10, 0]) sphere(1); }", "different radii"),
+        ("hull() { cube(5); translate([10, 0, 0]) sphere(2); }", "planar and round bodies mixed"),
+        ("hull() { scale([1, 2, 1]) sphere(2); sphere(1); }", "distorted sphere"),
+    ];
+    for (src, why) in cases {
+        let mut e = engine();
+        let ev = e.evaluate(tree(src));
+        let w = warnings(&ev);
+        assert!(
+            w.iter().any(|m| m.starts_with("hull: ") && m.contains(why) && m.ends_with("; children shown unchanged")),
+            "{src}: {w:?}"
+        );
     }
 }

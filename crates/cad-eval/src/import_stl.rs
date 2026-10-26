@@ -7,6 +7,7 @@
 //! Prepared meshes are cached by content hash and options (thread-local, bounded in bytes), so
 //! a re-evaluation of an unchanged project does not parse the file again.
 
+use cad_i18n::{tr, trs};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -35,7 +36,8 @@ const CACHE_BYTES: usize = 256 << 20;
 type Loaded = Rc<Result<Imported, String>>;
 
 thread_local! {
-    static MESHES: RefCell<HashMap<[u8; 32], Loaded>> = RefCell::new(HashMap::new());
+    /// By content hash and language (errors and warnings are text).
+    static MESHES: RefCell<HashMap<([u8; 32], cad_i18n::Lang), Loaded>> = RefCell::new(HashMap::new());
 }
 
 fn load(data: &[u8], scale: DVec3, center: bool) -> Loaded {
@@ -48,7 +50,8 @@ fn load(data: &[u8], scale: DVec3, center: bool) -> Loaded {
     h.update(&(data.len() as u64).to_le_bytes());
     h.update(data);
     let hash = *h.finalize().as_bytes();
-    if let Some(r) = MESHES.with(|c| c.borrow().get(&hash).cloned()) {
+    let key = (hash, cad_i18n::lang());
+    if let Some(r) = MESHES.with(|c| c.borrow().get(&key).cloned()) {
         return r;
     }
     let r = Rc::new(prepare(data, scale, center, hash));
@@ -57,7 +60,7 @@ fn load(data: &[u8], scale: DVec3, center: bool) -> Loaded {
         let size = |r: &Result<Imported, String>| r.as_ref().map_or(64, |i| i.mesh.mesh.bytes());
         let mut total: usize = c.values().map(|r| size(r)).sum::<usize>() + size(&r);
         // drop other entries until the new one fits (no order: entries are equally cheap to redo)
-        let keys: Vec<[u8; 32]> = c.keys().copied().collect();
+        let keys: Vec<_> = c.keys().copied().collect();
         for k in keys {
             if total <= CACHE_BYTES && c.len() < 32 {
                 break;
@@ -66,7 +69,7 @@ fn load(data: &[u8], scale: DVec3, center: bool) -> Loaded {
                 total -= size(&old);
             }
         }
-        c.insert(hash, r.clone());
+        c.insert(key, r.clone());
     });
     r
 }
@@ -91,32 +94,45 @@ fn prepare(data: &[u8], scale: DVec3, center: bool, hash: [u8; 32]) -> Result<Im
     let p = cad_stl::prepare(&tris)?;
     let st = &p.stats;
     if st.non_finite > 0 {
-        warnings
-            .push(format!("{} Dreiecke mit ungültigen Koordinaten (NaN oder unendlich) weggelassen", st.non_finite));
+        warnings.push(tr!(
+            "{} Dreiecke mit ungültigen Koordinaten (NaN oder unendlich) weggelassen",
+            "{} triangles with invalid coordinates (NaN or infinite) left out",
+            st.non_finite
+        ));
     }
     if st.degenerate > 0 {
-        warnings.push(format!(
+        warnings.push(tr!(
             "{} entartete Dreiecke (Ecken zusammengefallen, verschweißt mit Toleranz {} mm) entfernt",
+            "{} degenerate triangles (corners collapsed, welded with tolerance {} mm) removed",
             st.degenerate,
             crate::value::fmt_num(st.weld_tol)
         ));
     }
     if st.duplicate > 0 {
-        warnings.push(format!("{} doppelte Dreiecke entfernt", st.duplicate));
+        warnings.push(tr!("{} doppelte Dreiecke entfernt", "{} duplicate triangles removed", st.duplicate));
     }
     if st.inverted_parts > 0 && st.flipped == st.triangles {
-        warnings.push(format!(
+        warnings.push(tr!(
             "Orientierung korrigiert: Netz war innen nach außen (alle {} Dreiecke gewendet)",
+            "orientation corrected: mesh was inside out (all {} triangles flipped)",
             st.triangles
         ));
     } else if st.flipped > 0 {
-        warnings.push(format!(
+        warnings.push(tr!(
             "Orientierung korrigiert: {} von {} Dreiecken gewendet (uneinheitlich orientiert)",
-            st.flipped, st.triangles
+            "orientation corrected: {} of {} triangles flipped (inconsistently oriented)",
+            st.flipped,
+            st.triangles
         ));
     }
     if st.nonorientable {
-        warnings.push("Netz nicht orientierbar (Nachbardreiecke widersprechen sich, z. B. Möbiusband)".into());
+        warnings.push(
+            trs!(
+                "Netz nicht orientierbar (Nachbardreiecke widersprechen sich, z. B. Möbiusband)",
+                "mesh not orientable (neighbouring triangles contradict each other, e.g. Möbius strip)"
+            )
+            .into(),
+        );
     }
     Ok(Imported { mesh: MeshRef { hash, mesh: Arc::new(p.mesh) }, stats: p.stats, warnings })
 }
@@ -142,7 +158,13 @@ impl<'a> Ev<'a> {
                 return DVec3::new(v[0], v[1], v[2]);
             }
         }
-        self.warn(x.expr.span, "import: `scale` muss eine positive Zahl oder [x, y, z] sein (Spiegeln mit mirror())");
+        self.warn(
+            x.expr.span,
+            trs!(
+                "import: `scale` muss eine positive Zahl oder [x, y, z] sein (Spiegeln mit mirror())",
+                "import: `scale` must be a positive number or [x, y, z] (mirror with mirror())"
+            ),
+        );
         DVec3::ONE
     }
 
@@ -159,7 +181,13 @@ impl<'a> Ev<'a> {
     ) {
         for (i, n) in [(1, "id"), (3, "dpi")] {
             if let Some(x) = p[i] {
-                self.warn(x.expr.span, format!("import: `{n}` gilt nur für SVG und wird ignoriert"));
+                self.warn(
+                    x.expr.span,
+                    tr!(
+                        "import: `{n}` gilt nur für SVG und wird ignoriert",
+                        "import: `{n}` applies to SVG only and is ignored"
+                    ),
+                );
             }
         }
         let forced = match p[10].map(|x| (&x.val.v, x.expr.span)) {
@@ -167,7 +195,13 @@ impl<'a> Ev<'a> {
             Some((Value::Str(m), _)) if &**m == "solid" => Some(MeshMode::Solid),
             Some((Value::Str(m), _)) if &**m == "mesh" => Some(MeshMode::Mesh),
             Some((_, sp)) => {
-                self.warn(sp, "import: `as` ist \"solid\" (B-Rep) oder \"mesh\" (Netz); automatisch gewählt");
+                self.warn(
+                    sp,
+                    trs!(
+                        "import: `as` ist \"solid\" (B-Rep) oder \"mesh\" (Netz); automatisch gewählt",
+                        "import: `as` is \"solid\" (B-rep) or \"mesh\"; chosen automatically"
+                    ),
+                );
                 None
             }
         };
@@ -187,11 +221,15 @@ impl<'a> Ev<'a> {
         }
         let st = &imp.stats;
         let why_not = if st.nonmanifold_edges > 0 {
-            Some(format!("nicht mannigfaltig ({} Kanten mit mehr als zwei Dreiecken)", st.nonmanifold_edges))
+            Some(tr!(
+                "nicht mannigfaltig ({} Kanten mit mehr als zwei Dreiecken)",
+                "non-manifold ({} edges with more than two triangles)",
+                st.nonmanifold_edges
+            ))
         } else if st.open_edges > 0 {
-            Some(format!("nicht geschlossen ({} offene Kanten)", st.open_edges))
+            Some(tr!("nicht geschlossen ({} offene Kanten)", "not closed ({} open edges)", st.open_edges))
         } else if st.nonorientable {
-            Some("nicht orientierbar".to_string())
+            Some(trs!("nicht orientierbar", "not orientable").to_string())
         } else {
             None
         };
@@ -199,13 +237,22 @@ impl<'a> Ev<'a> {
             (Some(MeshMode::Solid), Some(why)) => {
                 self.error(
                     fspan,
-                    format!("{path}: as = \"solid\" geht nicht, das Netz ist {why}; als Netz importiert"),
+                    tr!(
+                        "{path}: as = \"solid\" geht nicht, das Netz ist {why}; als Netz importiert",
+                        "{path}: as = \"solid\" not possible, the mesh is {why}; imported as a mesh"
+                    ),
                 );
                 MeshMode::Mesh
             }
             (Some(m), _) => m,
             (None, Some(why)) => {
-                self.warn(fspan, format!("{path}: Netz {why}: als Netz ohne B-Rep importiert (keine Booleans)"));
+                self.warn(
+                    fspan,
+                    tr!(
+                        "{path}: Netz {why}: als Netz ohne B-Rep importiert (keine Booleans)",
+                        "{path}: mesh {why}: imported as a mesh without B-rep (no Booleans)"
+                    ),
+                );
                 MeshMode::Mesh
             }
             (None, None) if st.faces <= cad_stl::AUTO_SOLID_FACES => MeshMode::AutoSolid,

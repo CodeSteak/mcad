@@ -36,6 +36,7 @@ use std::rc::Rc;
 
 use cad_engine::{Budget, CacheKey, Engine, EngineConfig, Evaluation, Job, NodeFormat, Step};
 use cad_eval::{Context, DragOptions, EvalOptions, EvalOutput, Project};
+use cad_i18n::{tr, trs};
 use cad_ir::NodeIdx;
 use cad_kernel::{Kernel, MassProps, Mesh};
 
@@ -157,6 +158,9 @@ pub struct Session<K: Kernel> {
     measure_cache: measure::MeasureCache,
     /// Version of the finished evaluation whose assertions are still to be checked.
     asserts_pending: Option<u64>,
+    /// Language of the texts in the session's own caches (measure sections). The engine
+    /// recomputes its cached texts itself when the language changes (`Engine::start`).
+    lang: cad_i18n::Lang,
 }
 
 impl<K: Kernel> Session<K>
@@ -198,6 +202,19 @@ where
             touched: HashSet::new(),
             measure_cache: measure::MeasureCache::default(),
             asserts_pending: None,
+            lang: cad_i18n::lang(),
+        }
+    }
+
+    /// Follows the thread's language ([`cad_i18n::lang`]): on a change, drops the session's
+    /// own cached texts. Cached node results with texts are computed again by the engine at
+    /// the next evaluation (`Engine::start`); the UI re-evaluates after a language change, so
+    /// diagnostics, hints and the scene switch language.
+    pub fn sync_lang(&mut self) {
+        let lang = cad_i18n::lang();
+        if lang != self.lang {
+            self.lang = lang;
+            self.measure_cache = measure::MeasureCache::default();
         }
     }
 
@@ -305,6 +322,7 @@ where
 
     /// Handles one message from the UI.
     pub fn post(&mut self, msg: ToEngine) -> Vec<FromEngine> {
+        self.sync_lang();
         match msg {
             ToEngine::SetSource { text, version } => {
                 self.text = text;
@@ -341,7 +359,7 @@ where
             }
             ToEngine::RequestMeshes { nodes, coarse, version } => {
                 let Some(d) = &self.done else {
-                    return vec![self.error("keine Auswertung vorhanden", None)];
+                    return vec![self.error(&no_evaluation(), None)];
                 };
                 if version.is_some_and(|v| v != d.version) {
                     return Vec::new();
@@ -401,6 +419,12 @@ where
                 }
                 Vec::new()
             }
+            ToEngine::SetLang { lang } => {
+                // the engine thread's language (UI worker / engine process)
+                cad_i18n::set_lang(cad_i18n::Lang::parse(&lang).unwrap_or_default());
+                self.sync_lang();
+                Vec::new()
+            }
             ToEngine::SetDefault { module, param, value } => {
                 let proj = self.load_project(&self.text);
                 let text = convert::value_text(&value);
@@ -409,19 +433,25 @@ where
                         let src = Source::from_project(&proj);
                         vec![FromEngine::Edits { version: self.version, edits: vec![src.edit(&e)] }]
                     }
-                    None => vec![self.error(&format!("Parameter {param} von Modul {module} nicht gefunden"), None)],
+                    None => vec![self.error(
+                        &tr!(
+                            "Parameter {param} von Modul {module} nicht gefunden",
+                            "parameter {param} of module {module} not found"
+                        ),
+                        None,
+                    )],
                 }
             }
             ToEngine::Export { format, parts, zip, colors } => {
                 if self.done.is_none() && self.running.is_none() {
-                    return vec![self.error("keine Auswertung vorhanden", None)];
+                    return vec![self.error(&no_evaluation(), None)];
                 }
                 self.export.push_back(ExportReq { format, parts, zip: zip.unwrap_or(false), colors });
                 Vec::new()
             }
             ToEngine::RequestColorRegions { meshes, coarse, version } => {
                 if self.done.is_none() && self.running.is_none() {
-                    return vec![self.error("keine Auswertung vorhanden", None)];
+                    return vec![self.error(&no_evaluation(), None)];
                 }
                 let v = self.cur.as_ref().map_or(self.version, |c| c.version);
                 if version.is_some_and(|x| x != v) {
@@ -452,7 +482,7 @@ where
                 if bad.is_empty() {
                     Vec::new()
                 } else {
-                    vec![self.error(&format!("ungültige Schlüssel: {}", bad.join(", ")), None)]
+                    vec![self.error(&tr!("ungültige Schlüssel: {}", "invalid keys: {}", bad.join(", ")), None)]
                 }
             }
             ToEngine::Sketch(req) => self.sketch(&req),
@@ -464,7 +494,7 @@ where
     /// [`cad_eval::sketch_edit`].
     fn sketch(&self, req: &p::SketchRequest) -> Vec<FromEngine> {
         use cad_eval::sketch_edit as se;
-        let Some(cur) = &self.cur else { return vec![self.error("keine Auswertung vorhanden", None)] };
+        let Some(cur) = &self.cur else { return vec![self.error(&no_evaluation(), None)] };
         let mut ans = p::SketchAnswer {
             id: req.id,
             version: cur.version,
@@ -486,7 +516,10 @@ where
         };
         let done = |a: p::SketchAnswer| vec![FromEngine::Sketch(Box::new(a))];
         if cur.version != self.version {
-            ans.message = Some("Syntaxfehler im Quelltext: Zeichnen erst nach der Korrektur".into());
+            ans.message = Some(tr!(
+                "Syntaxfehler im Quelltext: Zeichnen erst nach der Korrektur",
+                "syntax error in the source: drawing only after it is fixed"
+            ));
             return done(ans);
         }
         let src = &cur.src;
@@ -576,7 +609,7 @@ where
             match se::click(&cur.out, &cur.proj, &place, tool, &all, step, step_deg, req.angle) {
                 Ok(se::Click::More(ps)) => {
                     if tool == se::SketchTool::Corner && ps.is_empty() {
-                        ans.message = Some("keine Ecke an dieser Stelle".into());
+                        ans.message = Some(tr!("keine Ecke an dieser Stelle", "no corner at this place"));
                     }
                     ans.points = ps.iter().map(pick_to_p).collect();
                 }
@@ -758,16 +791,22 @@ where
 
     /// Edits for `SetFilament`.
     fn filament_edits(&self, color: &str, filament: Option<u32>) -> Vec<FromEngine> {
-        let Some(cur) = &self.cur else { return vec![self.error("keine Auswertung vorhanden", None)] };
+        let Some(cur) = &self.cur else { return vec![self.error(&no_evaluation(), None)] };
         let table = convert::color_table(&cur.out.tree);
         let Some(e) = table.entries.iter().find(|e| cad_engine::colors::key_hex(e.key) == color) else {
-            return vec![self.error(&format!("Farbe {color} kommt im Modell nicht vor"), None)];
+            return vec![self.error(
+                &tr!("Farbe {color} kommt im Modell nicht vor", "colour {color} does not occur in the model"),
+                None,
+            )];
         };
         if e.source == cad_engine::colors::ColorSource::Default {
-            return vec![self.error("Material ohne color() hat immer Filament 1", None)];
+            return vec![self.error(
+                trs!("Material ohne color() hat immer Filament 1", "material without color() always has filament 1"),
+                None,
+            )];
         }
         if filament.is_some_and(|f| !(1..=cad_eval::palette::MAX_FILAMENT).contains(&f)) {
-            return vec![self.error("Filament muss 1 bis 16 sein", None)];
+            return vec![self.error(trs!("Filament muss 1 bis 16 sein", "filament must be 1 to 16"), None)];
         }
         let tree = &cur.out.tree;
         let mut spans: Vec<cad_syntax::Span> = Vec::new();
@@ -832,11 +871,11 @@ where
     /// Colour regions of the parts (or the root) of the last finished evaluation.
     pub fn color_regions(&mut self, meshes: bool, coarse: bool) -> Result<Vec<p::RegionSet>, String> {
         let nodes = self.region_nodes();
-        let table = self.color_table().ok_or("keine Auswertung vorhanden")?;
+        let table = self.color_table().ok_or_else(no_evaluation)?;
         let mut out = Vec::new();
         for (part, n) in nodes {
             let tol = self.tolerance(n, coarse);
-            let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+            let d = self.done.as_ref().ok_or_else(no_evaluation)?;
             let regs = self.engine.color_regions(&d.ev, n)?;
             let mut items = Vec::new();
             for (i, r) in regs.regions.iter().enumerate() {
@@ -953,7 +992,7 @@ where
         if has_asserts {
             if self.drag.is_some() {
                 // not while dragging (Booleans per frame); the evaluation after the drag checks
-                let items = self.asserts_unchecked("beim Ziehen übersprungen");
+                let items = self.asserts_unchecked(trs!("beim Ziehen übersprungen", "skipped while dragging"));
                 if let Some(d) = &mut self.done {
                     d.scene.asserts = items.clone();
                 }
@@ -990,9 +1029,9 @@ where
     /// Mesh of a node of the last finished evaluation (node system).
     pub fn mesh(&mut self, node: NodeIdx, coarse: bool) -> Result<Rc<Mesh>, String> {
         let tol = self.tolerance(node, coarse);
-        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+        let d = self.done.as_ref().ok_or_else(no_evaluation)?;
         if node as usize >= d.ev.tree.nodes.len() {
-            return Err(format!("Knoten {node} existiert nicht"));
+            return Err(tr!("Knoten {node} existiert nicht", "node {node} does not exist"));
         }
         let m = self.engine.tessellate(&d.ev, node, Some(tol))?;
         Ok(self.localize_mesh(m))
@@ -1000,9 +1039,9 @@ where
 
     /// Mesh of a node of the last finished evaluation (node system) with tolerance `tol` mm.
     pub fn mesh_tol(&mut self, node: NodeIdx, tol: f64) -> Result<Rc<Mesh>, String> {
-        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+        let d = self.done.as_ref().ok_or_else(no_evaluation)?;
         if node as usize >= d.ev.tree.nodes.len() {
-            return Err(format!("Knoten {node} existiert nicht"));
+            return Err(tr!("Knoten {node} existiert nicht", "node {node} does not exist"));
         }
         let m = self.engine.tessellate(&d.ev, node, Some(tol))?;
         Ok(self.localize_mesh(m))
@@ -1017,7 +1056,7 @@ where
 
     /// Volume, area, centroid of a node of the last finished evaluation.
     pub fn mass_props(&mut self, node: NodeIdx) -> Result<MassProps, String> {
-        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+        let d = self.done.as_ref().ok_or_else(no_evaluation)?;
         self.engine.mass_props(&d.ev, node)
     }
 
@@ -1119,7 +1158,7 @@ where
         opts: cad_engine::color_export::PackageOptions,
     ) -> Result<(Vec<u8>, cad_engine::color_export::ColorExportStats), String> {
         let tol = Some(self.opts.export_tol);
-        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+        let d = self.done.as_ref().ok_or_else(no_evaluation)?;
         let nodes: Vec<(String, NodeIdx)> = match parts {
             // the parts and the material outside them (as the colour list), else the root
             None => {
@@ -1127,17 +1166,21 @@ where
                 let v: Vec<(String, NodeIdx)> =
                     self.region_nodes().into_iter().map(|(p, n)| (p.unwrap_or_else(|| name.clone()), n)).collect();
                 if v.is_empty() {
-                    return Err("kein Ergebnis".into());
+                    return Err(tr!("kein Ergebnis", "no result"));
                 }
                 v
             }
             Some(names) => {
-                let cur = self.cur.as_ref().filter(|c| c.version == d.version).ok_or("Auswertung läuft noch")?;
+                let cur = self
+                    .cur
+                    .as_ref()
+                    .filter(|c| c.version == d.version)
+                    .ok_or_else(|| tr!("Auswertung läuft noch", "evaluation still running"))?;
                 let mut v = Vec::new();
                 for n in names {
                     match cur.out.part(n) {
                         Some(pt) => v.push((pt.name.clone(), pt.node)),
-                        None => return Err(format!("Bauteil `{n}` nicht gefunden")),
+                        None => return Err(tr!("Bauteil `{n}` nicht gefunden", "part `{n}` not found")),
                     }
                 }
                 v
@@ -1148,7 +1191,10 @@ where
         match format {
             p::ExportFormat::ThreeMf => self.engine.export_3mf_colors(&d.ev, &nodes, tol, &table, &app, opts),
             p::ExportFormat::Stl => self.engine.export_color_stl_zip(&d.ev, &nodes, tol, &table),
-            p::ExportFormat::Step => Err("STEP trägt Farben je Fläche, keine Farbvolumen".into()),
+            p::ExportFormat::Step => Err(tr!(
+                "STEP trägt Farben je Fläche, keine Farbvolumen",
+                "STEP carries colours per face, not colour volumes"
+            )),
         }
     }
 
@@ -1159,8 +1205,8 @@ where
             let (bytes, _) = self.export_step(&cad_engine::StepOptions::default(), false)?;
             return Ok((bytes, 0));
         }
-        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
-        let root = d.ev.root().ok_or("kein Ergebnis")?;
+        let d = self.done.as_ref().ok_or_else(no_evaluation)?;
+        let root = d.ev.root().ok_or_else(|| tr!("kein Ergebnis", "no result"))?;
         let bytes = match format {
             p::ExportFormat::Stl => self.engine.export_stl(&d.ev, tol)?,
             p::ExportFormat::ThreeMf => self.engine.export_3mf(&d.ev, tol)?,
@@ -1196,16 +1242,23 @@ where
         step: &cad_engine::StepOptions,
     ) -> Result<(Vec<u8>, u32), String> {
         let tol = Some(self.opts.export_tol);
-        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
-        let cur = self.cur.as_ref().filter(|c| c.version == d.version).ok_or("Auswertung läuft noch")?;
+        let d = self.done.as_ref().ok_or_else(no_evaluation)?;
+        let cur = self
+            .cur
+            .as_ref()
+            .filter(|c| c.version == d.version)
+            .ok_or_else(|| tr!("Auswertung läuft noch", "evaluation still running"))?;
         let mut nodes = Vec::new();
         for n in names {
             match cur.out.part(n) {
                 Some(pt) => nodes.push((pt.name.clone(), pt.node)),
                 None => {
                     let known: Vec<&str> = cur.out.parts.iter().map(|p| p.name.as_str()).collect();
-                    let known = if known.is_empty() { "keine".to_string() } else { known.join(", ") };
-                    return Err(format!("Bauteil `{n}` nicht gefunden (Bauteile: {known})"));
+                    let known = if known.is_empty() { trs!("keine", "none").to_string() } else { known.join(", ") };
+                    return Err(tr!(
+                        "Bauteil `{n}` nicht gefunden (Bauteile: {known})",
+                        "part `{n}` not found (parts: {known})"
+                    ));
                 }
             }
         }
@@ -1243,7 +1296,7 @@ where
         opts: &cad_engine::StepOptions,
         merge: bool,
     ) -> Result<(Vec<u8>, cad_engine::StepStats, StepNotes), String> {
-        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+        let d = self.done.as_ref().ok_or_else(no_evaluation)?;
         if merge {
             let (b, st) = self.engine.export_step(&d.ev, opts)?;
             return Ok((b, st, StepNotes::default()));
@@ -1268,7 +1321,7 @@ where
         for g in groups.iter().filter(|g| g.len() > 1) {
             notes.fused.push(g.iter().map(|&i| bodies[i].0.clone()).collect());
         }
-        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+        let d = self.done.as_ref().ok_or_else(no_evaluation)?;
         let (b, st, failed) = self.engine.export_step_groups(&d.ev, &named, opts)?;
         for (name, e) in failed {
             notes.fused.retain(|g| g.join(" + ") != name);
@@ -1367,35 +1420,52 @@ pub fn color_export_notes(
     let mut v = Vec::new();
     let real: Vec<&String> = st.object_names.iter().filter(|n| n.as_str() != NO_PART).collect();
     let rest = real.len() < st.object_names.len();
-    v.push(format!(
-        "{} Objekt{} ({}{}), {} Teil{} (eines je Farbe und Objekt)",
-        st.objects,
-        if st.objects == 1 { "" } else { "e" },
-        real.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", "),
-        if rest { if real.is_empty() { NO_PART.to_string() } else { format!(", {NO_PART}") } } else { String::new() },
-        st.parts,
-        if st.parts == 1 { "" } else { "e" },
-    ));
+    let names = real.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ");
+    let rest_name =
+        if rest { if real.is_empty() { NO_PART.to_string() } else { format!(", {NO_PART}") } } else { String::new() };
+    let (objects, parts) = (st.objects, st.parts);
+    v.push(if cad_i18n::is_de() {
+        format!(
+            "{objects} Objekt{} ({names}{rest_name}), {parts} Teil{} (eines je Farbe und Objekt)",
+            if objects == 1 { "" } else { "e" },
+            if parts == 1 { "" } else { "e" },
+        )
+    } else {
+        format!(
+            "{objects} object{} ({names}{rest_name}), {parts} part{} (one per colour and object)",
+            if objects == 1 { "" } else { "s" },
+            if parts == 1 { "" } else { "s" },
+        )
+    });
     if rest && !real.is_empty() {
-        v.push(format!("Material außerhalb der Bauteile ist ein eigenes Objekt „{NO_PART}“"));
+        v.push(tr!(
+            "Material außerhalb der Bauteile ist ein eigenes Objekt „{NO_PART}“",
+            "material outside the parts is an object of its own “{NO_PART}”"
+        ));
     }
     if opts.color_group && st.colors.len() > 1 {
-        v.push(
-            "mit Farbgruppe: Bambu Studio öffnet einen Farbdialog – dort „Abbrechen“ wählen, sonst ersetzt er die Filament-Slots"
-                .into(),
-        );
+        v.push(tr!(
+            "mit Farbgruppe: Bambu Studio öffnet einen Farbdialog – dort „Abbrechen“ wählen, sonst ersetzt er die Filament-Slots",
+            "with colour group: Bambu Studio opens a colour dialog – choose “Cancel” there, otherwise it replaces the filament slots"
+        ));
     } else {
-        v.push(
-            "Filament-Slots in Metadata/model_settings.config, ohne Farbgruppe: Bambu Studio und OrcaSlicer übernehmen die Slots ohne Farbdialog"
-                .into(),
-        );
+        v.push(tr!(
+            "Filament-Slots in Metadata/model_settings.config, ohne Farbgruppe: Bambu Studio und OrcaSlicer übernehmen die Slots ohne Farbdialog",
+            "filament slots in Metadata/model_settings.config, no colour group: Bambu Studio and OrcaSlicer take the slots without a colour dialog"
+        ));
     }
     v
 }
 
 /// Name of the material outside the parts in the colour list and in multi-colour exports
-/// (an object of its own; a part name never contains a space).
+/// (an object of its own; a part name never contains a space). A fixed name in both
+/// languages: the UI matches it and shows it translated, exports stay the same.
 pub const NO_PART: &str = "ohne Bauteil";
+
+/// "No evaluation yet" (answer to requests that need one).
+pub(crate) fn no_evaluation() -> String {
+    tr!("keine Auswertung vorhanden", "no evaluation yet")
+}
 
 /// Material of the result outside the parts: the topmost nodes below `root` that are neither
 /// a part nor contain one (pre-order; `%`, `*` and zones are not material).

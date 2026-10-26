@@ -25,6 +25,7 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use cad_i18n::tr;
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
@@ -122,7 +123,10 @@ impl DaemonConfig {
             }
             Some(toml::Value::Table(t)) => t,
             Some(_) => {
-                self.warnings.push(format!("{name}: `daemon` muss eine Tabelle oder true/false sein"));
+                self.warnings.push(tr!(
+                    "{name}: `daemon` muss eine Tabelle oder true/false sein",
+                    "{name}: `daemon` must be a table or true/false"
+                ));
                 return;
             }
         };
@@ -155,7 +159,8 @@ impl DaemonConfig {
                 _ => false,
             };
             if !ok {
-                self.warnings.push(format!("{name}: [daemon] {k} = {val} ignoriert"));
+                self.warnings
+                    .push(tr!("{name}: [daemon] {k} = {val} ignoriert", "{name}: [daemon] {k} = {val} ignored"));
             }
         }
     }
@@ -171,7 +176,7 @@ impl DaemonConfig {
             if let Some((key, v)) = env(name) {
                 let ok = v.parse::<f64>().ok().is_some_and(|n| f(self, n));
                 if !ok {
-                    self.warnings.push(format!("{key}={v} ignoriert"));
+                    self.warnings.push(tr!("{key}={v} ignoriert", "{key}={v} ignored"));
                 }
             }
         };

@@ -40,6 +40,8 @@ use cad_measure::dist::{self, Tri};
 use cad_measure::{Body, EdgeCurve};
 use glam::{DMat4, DVec2, DVec3};
 
+use cad_i18n::{tr, trs};
+
 use crate::Session;
 use crate::measure::{num, vec_text};
 use crate::protocol::{self as p, FromEngine};
@@ -819,8 +821,8 @@ where
             .unwrap_or_else(|| node.label.clone());
         let file = node.range.file.and_then(|f| sc.files.get(f as usize)).filter(|f| f.id != 0);
         match file {
-            Some(f) => format!("{}:Zeile {}: {code}", f.path, node.range.line),
-            None => format!("Zeile {}: {code}", node.range.line),
+            Some(f) => tr!("{}:Zeile {}: {code}", "{}:line {}: {code}", f.path, node.range.line),
+            None => tr!("Zeile {}: {code}", "line {}: {code}", node.range.line),
         }
     }
 
@@ -852,7 +854,12 @@ where
         cached: &mut bool,
     ) -> Rc<PairData> {
         let mut h = KeyHasher::new();
-        h.str(PAIR_VERSION).key(&a.id).key(&b.id).u64(need.distance as u64).u64(need.contact as u64);
+        h.str(PAIR_VERSION)
+            .str(cad_i18n::lang().code())
+            .key(&a.id)
+            .key(&b.id)
+            .u64(need.distance as u64)
+            .u64(need.contact as u64);
         if need.contact {
             h.f64(tol);
         }
@@ -922,7 +929,7 @@ where
         let tree = d.ev.tree.clone();
         if d.ev.report(decl.node).status == cad_engine::Status::Skipped {
             r.checked = false;
-            r.note = Some("nicht ausgewertet (außerhalb des Ergebnisses)".into());
+            r.note = Some(tr!("nicht ausgewertet (außerhalb des Ergebnisses)", "not evaluated (outside the result)"));
             return (r, Vec::new());
         }
         let children: Vec<NodeIdx> =
@@ -933,7 +940,7 @@ where
         let mut sets_b: Vec<BodySet<K::Shape>>;
         match decl.kind {
             AssertKind::Keepout => {
-                sets_a = self.sets_of(decl.node, false, "Sperrvolumen");
+                sets_a = self.sets_of(decl.node, false, trs!("Sperrvolumen", "keep-out volume"));
                 // the real bodies: parts and the material outside them, or the root
                 let targets = self.target_nodes();
                 sets_b = Vec::new();
@@ -943,7 +950,7 @@ where
                 }
                 r.bodies = sets_b.len() as u32;
                 if sets_a.is_empty() {
-                    r.note = Some("Sperrvolumen ohne Körper".into());
+                    r.note = Some(tr!("Sperrvolumen ohne Körper", "keep-out volume without a body"));
                     return (r, Vec::new());
                 }
                 let (klo, khi) = (sets_a[0].lo, sets_a[0].hi);
@@ -982,7 +989,10 @@ where
             r.pairs.retain(|p| !p.ok || p.problem.is_some());
         }
         if checked.iter().any(|c| c.data.mesh_based) {
-            r.note = Some("Netz ohne B-Rep beteiligt: Überlappung nur ja/nein".into());
+            r.note = Some(tr!(
+                "Netz ohne B-Rep beteiligt: Überlappung nur ja/nein",
+                "mesh without B-rep involved: overlap yes/no only"
+            ));
         }
         (r, diags)
     }
@@ -1025,7 +1035,7 @@ where
         let label = if !set.label.is_empty() {
             set.label.clone()
         } else {
-            origin.first().cloned().unwrap_or_else(|| "Körper".into())
+            origin.first().cloned().unwrap_or_else(|| trs!("Körper", "body").into())
         };
         p::AssertBody { node: set.node, label, origin }
     }
@@ -1082,9 +1092,9 @@ where
             let overlap = dd.overlaps(t.eps_volume);
             let vol_text = |v: f64| format!("{} mm³", num(v));
             let ov_text = if dd.volume > t.eps_volume {
-                format!("Schnittvolumen {}", vol_text(dd.volume))
+                tr!("Schnittvolumen {}", "intersection volume {}", vol_text(dd.volume))
             } else {
-                "netzbasiert, Volumen nicht berechnet".to_string()
+                tr!("netzbasiert, Volumen nicht berechnet", "mesh-based, volume not computed")
             };
             let gap_focus =
                 |x: &(f64, DVec3, DVec3, u32, u32)| Some(p::Bounds { min: pv(x.1.min(x.2)), max: pv(x.1.max(x.2)) });
@@ -1093,12 +1103,16 @@ where
                     if overlap {
                         pr.ok = false;
                         pr.problem = Some("overlap".into());
-                        pr.message = format!("{bn} ragt ins Sperrvolumen ({ov_text})");
+                        pr.message = tr!(
+                            "{bn} ragt ins Sperrvolumen ({ov_text})",
+                            "{bn} enters the keep-out volume ({ov_text})"
+                        );
                     } else if let Some(x) = dd.distance.filter(|x| decl.clearance > 0.0 && x.0 < decl.clearance) {
                         pr.ok = false;
                         pr.problem = Some("too_close".into());
-                        pr.message = format!(
+                        pr.message = tr!(
                             "{bn} hält den Abstand {} mm zum Sperrvolumen nicht ein: {} mm (± {}) von {} bis {}",
+                            "{bn} violates the clearance {} mm to the keep-out volume: {} mm (± {}) from {} to {}",
                             num(decl.clearance),
                             num(x.0),
                             num(acc),
@@ -1108,32 +1122,40 @@ where
                         pr.focus = gap_focus(&x);
                     } else if let Some(e) = &dd.bool_failed {
                         pr.problem = Some("unchecked".into());
-                        pr.message = format!("{bn}: Überlappung mit dem Sperrvolumen nicht prüfbar ({e})");
+                        pr.message = tr!(
+                            "{bn}: Überlappung mit dem Sperrvolumen nicht prüfbar ({e})",
+                            "{bn}: overlap with the keep-out volume could not be checked ({e})"
+                        );
                     } else {
-                        pr.message = format!("{bn} frei");
+                        pr.message = tr!("{bn} frei", "{bn} clear");
                     }
                 }
                 AssertKind::Disjoint => {
                     if overlap {
                         pr.ok = false;
                         pr.problem = Some("overlap".into());
-                        pr.message = format!("{an} und {bn} überschneiden sich ({ov_text})");
+                        pr.message =
+                            tr!("{an} und {bn} überschneiden sich ({ov_text})", "{an} and {bn} overlap ({ov_text})");
                     } else if let Some(e) = &dd.bool_failed {
                         pr.problem = Some("unchecked".into());
-                        pr.message = format!("{an} und {bn}: Überlappung nicht prüfbar ({e})");
+                        pr.message = tr!(
+                            "{an} und {bn}: Überlappung nicht prüfbar ({e})",
+                            "{an} and {bn}: overlap could not be checked ({e})"
+                        );
                     } else {
-                        pr.message = format!("{an} und {bn} getrennt");
+                        pr.message = tr!("{an} und {bn} getrennt", "{an} and {bn} apart");
                     }
                 }
                 AssertKind::Intersect => {
                     // decided below over the connected groups
                     pr.message = if overlap {
-                        format!("{an} und {bn} schneiden sich ({ov_text})")
+                        tr!("{an} und {bn} schneiden sich ({ov_text})", "{an} and {bn} intersect ({ov_text})")
                     } else {
-                        format!(
-                            "{an} und {bn} schneiden sich nicht{}",
-                            dd.distance.map(|x| format!(" (Abstand {} mm)", num(x.0))).unwrap_or_default()
-                        )
+                        let dist = dd
+                            .distance
+                            .map(|x| tr!(" (Abstand {} mm)", " (distance {} mm)", num(x.0)))
+                            .unwrap_or_default();
+                        tr!("{an} und {bn} schneiden sich nicht{dist}", "{an} and {bn} do not intersect{dist}")
                     };
                     if !overlap && let Some(x) = &dd.distance {
                         pr.focus = gap_focus(x);
@@ -1147,20 +1169,22 @@ where
                         pr.message = match dd.distance {
                             Some(x) => {
                                 pr.focus = gap_focus(&x);
-                                format!(
+                                tr!(
                                     "{an} berührt {bn} nicht, Spalt {} mm (± {}) von {} bis {}",
+                                    "{an} does not touch {bn}, gap {} mm (± {}) from {} to {}",
                                     num(x.0),
                                     num(acc),
                                     vec_text(x.1),
                                     vec_text(x.2)
                                 )
                             }
-                            None => format!("{an} berührt {bn} nicht"),
+                            None => tr!("{an} berührt {bn} nicht", "{an} does not touch {bn}"),
                         };
                     } else if overlap {
                         pr.ok = false;
                         pr.problem = Some("overlap".into());
-                        pr.message = format!("{an} und {bn} überschneiden sich ({ov_text})");
+                        pr.message =
+                            tr!("{an} und {bn} überschneiden sich ({ov_text})", "{an} and {bn} overlap ({ov_text})");
                     } else if let Some(c) = &dd.contact {
                         pr.contact = Some(c.kind.to_string());
                         pr.contact_exact = c.exact;
@@ -1176,31 +1200,41 @@ where
                         let note = dd
                             .bool_failed
                             .as_ref()
-                            .map(|e| format!("; Überlappung nicht prüfbar ({e})"))
+                            .map(|e| tr!("; Überlappung nicht prüfbar ({e})", "; overlap could not be checked ({e})"))
                             .unwrap_or_default();
                         match c.kind {
                             "face" => {
                                 pr.contact_area = Some(c.area);
-                                pr.message = format!(
+                                pr.message = tr!(
                                     "{an} berührt {bn}: Flächenkontakt {} mm²{}{note}",
+                                    "{an} touches {bn}: face contact {} mm²{}{note}",
                                     num(c.area),
-                                    if c.exact { "" } else { " (netzbasiert)" }
+                                    if c.exact { "" } else { trs!(" (netzbasiert)", " (mesh-based)") }
                                 );
                             }
                             "line" | "point" => {
-                                let what = if c.kind == "line" { "Linienkontakt" } else { "Punktkontakt" };
+                                let what = if c.kind == "line" {
+                                    trs!("Linienkontakt", "line contact")
+                                } else {
+                                    trs!("Punktkontakt", "point contact")
+                                };
                                 if decl.contact == Contact::Face {
                                     pr.ok = false;
                                     pr.problem = Some(format!("{}_contact", c.kind));
-                                    pr.message = format!(
-                                        "{an} berührt {bn} nur mit {what} (nicht-mannigfaltig, schlecht druckbar; contact = \"any\" erlaubt das){note}"
+                                    pr.message = tr!(
+                                        "{an} berührt {bn} nur mit {what} (nicht-mannigfaltig, schlecht druckbar; contact = \"any\" erlaubt das){note}",
+                                        "{an} touches {bn} only with {what} (non-manifold, hard to print; contact = \"any\" allows it){note}"
                                     );
                                 } else {
-                                    pr.message = format!("{an} berührt {bn}: {what}{note}");
+                                    pr.message =
+                                        tr!("{an} berührt {bn}: {what}{note}", "{an} touches {bn}: {what}{note}");
                                 }
                             }
                             _ => {
-                                pr.message = format!("{an} berührt {bn} (Kontaktart nur netzbasiert bestimmt){note}");
+                                pr.message = tr!(
+                                    "{an} berührt {bn} (Kontaktart nur netzbasiert bestimmt){note}",
+                                    "{an} touches {bn} (kind of contact determined on the mesh only){note}"
+                                );
                             }
                         }
                         if dd.bool_failed.is_some() && pr.ok {
@@ -1208,9 +1242,12 @@ where
                         }
                     } else if let Some(e) = &dd.bool_failed {
                         pr.problem = Some("unchecked".into());
-                        pr.message = format!("{an} und {bn}: Überlappung nicht prüfbar ({e})");
+                        pr.message = tr!(
+                            "{an} und {bn}: Überlappung nicht prüfbar ({e})",
+                            "{an} and {bn}: overlap could not be checked ({e})"
+                        );
                     } else {
-                        pr.message = format!("{an} berührt {bn}");
+                        pr.message = tr!("{an} berührt {bn}", "{an} touches {bn}");
                     }
                 }
             }
@@ -1297,7 +1334,10 @@ fn intersect_groups(n: usize, checked: &[Checked], pairs: &mut [p::AssertPair]) 
             pr.ok = false;
             pr.problem = Some("apart".into());
             if n > 2 {
-                pr.message.push_str("; keine Verbindung zu den übrigen Kindern");
+                pr.message.push_str(trs!(
+                    "; keine Verbindung zu den übrigen Kindern",
+                    "; not connected to the other children"
+                ));
             }
         }
     }

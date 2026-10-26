@@ -16,6 +16,7 @@
 //! Anything else (strings, `echo`, `assert`, function literals depending on `p`, list
 //! comprehensions over `p`) is an error with its own message.
 
+use cad_i18n::{tr, trs};
 use std::collections::HashSet;
 
 use cad_ir::{Law, LawExpr, LawFn, LawOp};
@@ -118,13 +119,31 @@ fn constant(v: &Val) -> Result<LawExpr, String> {
         Value::Range(r) => {
             let n = r.count();
             if n > 10_000.0 {
-                return Err("Bereich mit mehr als 10000 Werten".into());
+                return Err(trs!("Bereich mit mehr als 10000 Werten", "range with more than 10000 values").into());
             }
             LawExpr::List((0..n as usize).map(|i| LawExpr::Num(r.at(i))).collect())
         }
-        Value::Str(_) => return Err("Texte sind in einer Radiusfunktion nicht möglich".into()),
-        Value::Func(_) => return Err("ein Funktionswert ist hier nicht möglich (nur als Aufruf)".into()),
-        _ => return Err(format!("{} ist in einer Radiusfunktion nicht möglich", v.type_de())),
+        Value::Str(_) => {
+            return Err(trs!(
+                "Texte sind in einer Radiusfunktion nicht möglich",
+                "texts are not possible in a radius function"
+            )
+            .into());
+        }
+        Value::Func(_) => {
+            return Err(trs!(
+                "ein Funktionswert ist hier nicht möglich (nur als Aufruf)",
+                "a function value is not possible here (only as a call)"
+            )
+            .into());
+        }
+        _ => {
+            return Err(tr!(
+                "{} ist in einer Radiusfunktion nicht möglich",
+                "{} is not possible in a radius function",
+                v.type_de()
+            ));
+        }
     })
 }
 
@@ -136,7 +155,13 @@ impl<'a> Ev<'a> {
     /// Compiles the function value `c` (one parameter: the position) into a law.
     pub(crate) fn compile_law(&mut self, c: &Closure<'a>, span: Span, dy: &Dyn<'a>) -> R<C<Law>> {
         let Some(first) = c.params.first() else {
-            return err(span, "Radiusfunktion braucht einen Parameter (die Position p)");
+            return err(
+                span,
+                trs!(
+                    "Radiusfunktion braucht einen Parameter (die Position p)",
+                    "radius function needs one parameter (the position p)"
+                ),
+            );
         };
         let mut slots = 0u32;
         let mut cx = Cx { scope: vec![(first.name.name.as_str(), Bind::Point)], env: c.env.clone(), depth: 0 };
@@ -231,7 +256,10 @@ impl<'a> Ev<'a> {
                     other => {
                         return err(
                             name.span,
-                            format!("`.{other}` ist in einer Radiusfunktion nicht möglich (nur .x, .y, .z)"),
+                            tr!(
+                                "`.{other}` ist in einer Radiusfunktion nicht möglich (nur .x, .y, .z)",
+                                "`.{other}` is not possible in a radius function (only .x, .y, .z)"
+                            ),
                         );
                     }
                 };
@@ -239,7 +267,12 @@ impl<'a> Ev<'a> {
             }
             ExprKind::Index { base, items } => match items.as_slice() {
                 [IndexItem::Expr(i)] => LawExpr::Index(bx(sub!(base)), bx(sub!(i))),
-                _ => return err(e.span, "Index mit genau einem Ausdruck erwartet"),
+                _ => {
+                    return err(
+                        e.span,
+                        trs!("Index mit genau einem Ausdruck erwartet", "expected index with exactly one expression"),
+                    );
+                }
             },
             ExprKind::Vector(elems) => {
                 let mut out = Vec::new();
@@ -249,7 +282,10 @@ impl<'a> Ev<'a> {
                         _ => {
                             return err(
                                 e.span,
-                                "Listenausdrücke, die von der Position abhängen, sind in einer Radiusfunktion nicht möglich",
+                                trs!(
+                                    "Listenausdrücke, die von der Position abhängen, sind in einer Radiusfunktion nicht möglich",
+                                    "list expressions that depend on the position are not possible in a radius function"
+                                ),
                             );
                         }
                     }
@@ -280,11 +316,33 @@ impl<'a> Ev<'a> {
             }
             ExprKind::Call { callee, args } => return self.law_call(e, callee, args, cx, slots, dy),
             ExprKind::Assert { body: Some(b), .. } | ExprKind::Echo { body: Some(b), .. } => sub!(b),
-            ExprKind::FuncLit { .. } => return err(e.span, "Funktionsliteral in einer Radiusfunktion nicht möglich"),
-            ExprKind::Range { .. } => {
-                return err(e.span, "Bereiche, die von der Position abhängen, sind nicht möglich");
+            ExprKind::FuncLit { .. } => {
+                return err(
+                    e.span,
+                    trs!(
+                        "Funktionsliteral in einer Radiusfunktion nicht möglich",
+                        "function literal not possible in a radius function"
+                    ),
+                );
             }
-            _ => return err(e.span, "Ausdruck in einer Radiusfunktion nicht möglich"),
+            ExprKind::Range { .. } => {
+                return err(
+                    e.span,
+                    trs!(
+                        "Bereiche, die von der Position abhängen, sind nicht möglich",
+                        "ranges that depend on the position are not possible"
+                    ),
+                );
+            }
+            _ => {
+                return err(
+                    e.span,
+                    trs!(
+                        "Ausdruck in einer Radiusfunktion nicht möglich",
+                        "expression not possible in a radius function"
+                    ),
+                );
+            }
         }))
     }
 
@@ -302,7 +360,13 @@ impl<'a> Ev<'a> {
         // the function to call: user function, function value, or built-in
         let target: Option<(&'a [Param], &'a Expr, Env<'a>)> = match &callee.kind {
             ExprKind::Ident(name) if cx.find(name).is_some() => {
-                return err(callee.span, "Aufruf eines Parameters ist in einer Radiusfunktion nicht möglich");
+                return err(
+                    callee.span,
+                    trs!(
+                        "Aufruf eines Parameters ist in einer Radiusfunktion nicht möglich",
+                        "calling a parameter is not possible in a radius function"
+                    ),
+                );
             }
             ExprKind::Ident(name) => {
                 if let Some((f, fenv)) = cx.env.find_func(name) {
@@ -318,9 +382,14 @@ impl<'a> Ev<'a> {
             }
             _ if !mentions(callee, &names) => match &self.expr(callee, &cx.env, dy)?.v {
                 Value::Func(c) => Some((c.params, c.body, c.env.clone())),
-                _ => return err(callee.span, "kein Funktionswert"),
+                _ => return err(callee.span, trs!("kein Funktionswert", "not a function value")),
             },
-            _ => return err(callee.span, "Aufruf in einer Radiusfunktion nicht möglich"),
+            _ => {
+                return err(
+                    callee.span,
+                    trs!("Aufruf in einer Radiusfunktion nicht möglich", "call not possible in a radius function"),
+                );
+            }
         };
         let Some((params, body, fenv)) = target else {
             // built-in: constant if no argument depends on p
@@ -330,12 +399,24 @@ impl<'a> Ev<'a> {
                 return Ok(constant(&v).map_err(|msg| LawErr { span: e.span, msg }));
             }
             let Some(f) = LawFn::from_name(name) else {
-                return err(callee.span, format!("`{name}()` ist in einer Radiusfunktion nicht möglich"));
+                return err(
+                    callee.span,
+                    tr!(
+                        "`{name}()` ist in einer Radiusfunktion nicht möglich",
+                        "`{name}()` is not possible in a radius function"
+                    ),
+                );
             };
             let mut out = Vec::new();
             for a in args {
                 if a.name.is_some() {
-                    return err(a.span, "benannte Argumente sind bei eingebauten Funktionen hier nicht möglich");
+                    return err(
+                        a.span,
+                        trs!(
+                            "benannte Argumente sind bei eingebauten Funktionen hier nicht möglich",
+                            "named arguments of built-in functions are not possible here"
+                        ),
+                    );
                 }
                 match self.law_expr(&a.value, cx, slots, dy)? {
                     Ok(v) => out.push(v),
@@ -349,7 +430,13 @@ impl<'a> Ev<'a> {
             return Ok(constant(&v).map_err(|msg| LawErr { span: e.span, msg }));
         }
         if cx.depth >= MAX_INLINE {
-            return err(e.span, format!("Radiusfunktion: Aufrufe tiefer als {MAX_INLINE} verschachtelt (Rekursion?)"));
+            return err(
+                e.span,
+                tr!(
+                    "Radiusfunktion: Aufrufe tiefer als {MAX_INLINE} verschachtelt (Rekursion?)",
+                    "radius function: calls nested deeper than {MAX_INLINE} (recursion?)"
+                ),
+            );
         }
         // arguments, compiled in the caller's context, by position or name
         let mut vals: Vec<Option<LawExpr>> = vec![None; params.len()];

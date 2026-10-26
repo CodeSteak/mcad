@@ -1,6 +1,7 @@
 //! Tokenizer. Comments and whitespace are skipped; every token keeps its byte span.
 
 use crate::{Diagnostic, Span};
+use cad_i18n::{tr, trs};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tok {
@@ -69,7 +70,10 @@ pub fn lex(src: &str, diags: &mut Vec<Diagnostic>) -> Vec<Token> {
             i += 2;
             loop {
                 if i + 1 >= b.len() {
-                    diags.push(Diagnostic::error(Span::new(start, b.len()), "Kommentar nicht geschlossen"));
+                    diags.push(Diagnostic::error(
+                        Span::new(start, b.len()),
+                        trs!("Kommentar nicht geschlossen", "comment not closed"),
+                    ));
                     i = b.len();
                     break;
                 }
@@ -91,7 +95,10 @@ pub fn lex(src: &str, diags: &mut Vec<Diagnostic>) -> Vec<Token> {
             if i < b.len() && b[i] == b'>' {
                 i += 1;
             } else {
-                diags.push(Diagnostic::error(Span::new(start, i), "Pfad nicht geschlossen, `>` erwartet"));
+                diags.push(Diagnostic::error(
+                    Span::new(start, i),
+                    trs!("Pfad nicht geschlossen, `>` erwartet", "path not closed, expected `>`"),
+                ));
             }
             out.push(Token { tok: Tok::Path(path), span: Span::new(start, i) });
             expect_path = false;
@@ -133,7 +140,7 @@ pub fn lex(src: &str, diags: &mut Vec<Diagnostic>) -> Vec<Token> {
             }
             let text = &src[start..i];
             let v = text.parse::<f64>().unwrap_or_else(|_| {
-                diags.push(Diagnostic::error(Span::new(start, i), "ungültige Zahl"));
+                diags.push(Diagnostic::error(Span::new(start, i), trs!("ungültige Zahl", "invalid number")));
                 0.0
             });
             out.push(Token { tok: Tok::Number(v), span: Span::new(start, i) });
@@ -191,7 +198,10 @@ pub fn lex(src: &str, diags: &mut Vec<Diagnostic>) -> Vec<Token> {
                 i += ch.len_utf8();
             }
             if !closed {
-                diags.push(Diagnostic::error(Span::new(start, i), "String nicht geschlossen"));
+                diags.push(Diagnostic::error(
+                    Span::new(start, i),
+                    trs!("String nicht geschlossen", "string not closed"),
+                ));
             }
             out.push(Token { tok: Tok::Str(s), span: Span::new(start, i) });
             continue;
@@ -231,7 +241,7 @@ pub fn lex(src: &str, diags: &mut Vec<Diagnostic>) -> Vec<Token> {
                     let ch = src[i..].chars().next().unwrap();
                     diags.push(Diagnostic::error(
                         Span::new(i, i + ch.len_utf8()),
-                        format!("unerwartetes Zeichen `{ch}`"),
+                        tr!("unerwartetes Zeichen `{ch}`", "unexpected character `{ch}`"),
                     ));
                     i += ch.len_utf8();
                     continue;

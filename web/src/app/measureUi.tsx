@@ -1,6 +1,6 @@
 // Measure mode (Plan 18): mode "Messen" of the view toolbar, the context bar (kind, "Im Schnitt",
 // copy/delete the selected or last measurement, "Fertig"), the status line text and the list of
-// measurements in the tab "Messen" of the side panel (docs/konzepte/ui-ueberarbeitung).
+// measurements in the tab "Messen" of the side panel (docs/concepts/ui-redesign).
 
 import { t } from "../i18n";
 import { MEASURE_KINDS, accuracyText, kindAvailable, sectionText } from "../logic/measure";

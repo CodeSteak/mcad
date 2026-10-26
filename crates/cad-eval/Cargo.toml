@@ -16,6 +16,7 @@ cad-svg = { path = "../cad-svg" }
 cad-stl = { path = "../cad-stl" }
 blake3.workspace = true
 cad-font = { path = "../cad-font" }
+cad-i18n.workspace = true
 
 [dev-dependencies]
 serde.workspace = true

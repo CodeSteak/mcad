@@ -66,6 +66,7 @@ fn boolean_volumes() {
 
 #[test]
 fn difference_fillet_selects_bore_rims_only() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     let (t, d, ..) = box_minus_cyl(Some(1.0));
     let ev = e.evaluate(t);
@@ -87,6 +88,7 @@ fn difference_fillet_selects_bore_rims_only() {
 
 #[test]
 fn zone_block_sphere_and_line() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     // fillet(1) { difference() { cube(20); bore }; translate([10,10,20]) sphere(8); }
     let mut b = TreeBuilder::new();
@@ -128,6 +130,7 @@ fn zone_block_sphere_and_line() {
 
 #[test]
 fn zone_select_touch_and_empty_selection() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     for (sel, want) in [(Select::Touch, 3usize), (Select::Inside, 0)] {
         let mut b = TreeBuilder::new();
@@ -179,6 +182,7 @@ fn nested_blocks_inner_first_outer_sees_new_edges() {
 
 #[test]
 fn dollar_fillet_on_primitive() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     let mut b = TreeBuilder::new();
     let c = b.root(cube(10.0));
@@ -195,6 +199,7 @@ fn dollar_fillet_on_primitive() {
 
 #[test]
 fn failed_fillet_keeps_body_and_reports_edges() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     let mut b = TreeBuilder::new();
     let f = b.root(fillet(20.0, Select::Inside));
@@ -494,6 +499,7 @@ fn rotate_extrude_profile_in_xz() {
 
 #[test]
 fn loft_and_sweep() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     // loft of two equal squares = prism
     let mut b = TreeBuilder::new();
@@ -597,6 +603,7 @@ fn equal_content_nodes_share_a_tag() {
 
 #[test]
 fn shell_opens_faces_in_zone() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     let mut b = TreeBuilder::new();
     let s = b.root(shell(1.0, Select::Inside));
@@ -612,6 +619,7 @@ fn shell_opens_faces_in_zone() {
 
 #[test]
 fn surfaces_and_thicken() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     let rows: Vec<Vec<DVec3>> =
         (0..4).map(|i| (0..4).map(|j| v(i as f64 * 10.0, j as f64 * 10.0, ((i + j) % 2) as f64)).collect()).collect();
@@ -750,4 +758,29 @@ fn root_modifier_ignores_transforms_above() {
     assert_eq!(ev.report(g).status, Status::Skipped);
     let (lo, _) = ev.report(c).bounds.unwrap();
     assert!(lo.abs_diff_eq(DVec3::ZERO, 1e-9));
+}
+
+#[test]
+fn hints_follow_the_language_also_from_the_cache() {
+    let mut e = engine();
+    let mut b = TreeBuilder::new();
+    let c = b.root(cube(10.0));
+    b.set_blend(c, BlendKind::Fillet, 1.0);
+    let t = b.finish();
+    let ev = e.evaluate(t.clone());
+    assert_eq!(ev.report(c).hints, vec!["12 edges".to_string()]);
+    {
+        let _de = cad_i18n::scoped(cad_i18n::Lang::De);
+        let ev = e.evaluate(t.clone());
+        assert_eq!(ev.report(c).hints, vec!["12 Kanten".to_string()]);
+    }
+    let ev = e.evaluate(t);
+    assert_eq!(ev.report(c).hints, vec!["12 edges".to_string()]);
+    // a fillet that does not fit: English error, body kept
+    let mut b = TreeBuilder::new();
+    let f = b.root(fillet(20.0, Select::Inside));
+    b.child(f, cube(10.0));
+    let ev = e.evaluate(b.finish());
+    let msg = &ev.report(f).diagnostics[0].message;
+    assert!(msg.starts_with("fillet failed (20 mm): "), "{msg}");
 }

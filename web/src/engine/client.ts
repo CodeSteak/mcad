@@ -3,6 +3,7 @@
 
 import type { Edit, ExportFormat, FromEngine, MeasureAnswer, Scene, SketchAnswer, SnapTarget, ToEngine, Value } from "./protocol";
 import type { EngineTransport } from "./transport";
+import { getLang, onLangChange, type Lang } from "../i18n/index.ts";
 import { bridge } from "../state/bridge";
 import { store } from "../state/store";
 import type { MeshCache } from "../view/meshCache";
@@ -26,12 +27,27 @@ export class EngineClient {
   private seq = 0;
   private version = 0;
   private seqs = new WeakMap<Scene, number>();
+  private lang: Lang | null = null;
 
   constructor(
     private transport: EngineTransport,
     readonly meshes: MeshCache,
   ) {
     transport.onMessage((m) => this.receive(m));
+    // The engine's texts (diagnostics, hints, measure and sketch prompts) follow the UI language.
+    this.setLang(getLang());
+    onLangChange(() => this.setLang(getLang()));
+  }
+
+  /**
+   * Language of the engine's texts. On a change after the first source the source is sent
+   * again, so diagnostics, hints and the scene switch language.
+   */
+  setLang(lang: Lang): void {
+    if (lang === this.lang) return;
+    this.lang = lang;
+    this.send({ type: "SetLang", lang });
+    if (this.version > 0 && !store.getState().pendingSend) this.setSource(bridge.mainText());
   }
 
   private send(m: ToEngine): void {
@@ -198,7 +214,8 @@ export class EngineClient {
         break;
       }
       case "Error": {
-        if (m.message.startsWith("Farbregionen")) store.setState({ regionsError: m.message });
+        // errors of the colour regions (engine text in either language)
+        if (/^(Farbregionen|colou?r regions)/i.test(m.message)) store.setState({ regionsError: m.message });
         store.setState({ engineError: { message: m.message, version: m.version, node: m.node, at: performance.now() }, progress: null });
         for (const w of this.exportWaiters.splice(0)) w.reject(new Error(m.message));
         break;

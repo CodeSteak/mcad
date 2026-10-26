@@ -175,6 +175,7 @@ fn cylinder_between_points_is_oriented() {
 
 #[test]
 fn small_fn_makes_polygons_like_openscad() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run(
         "cylinder(h = 5, r = 4, $fn = 6); sphere(r = 3, $fn = 8); circle(r = 2, $fn = 4); cylinder(h = 1, r = 1, $fn = 64);",
     );
@@ -239,6 +240,7 @@ fn transforms() {
 
 #[test]
 fn nonuniform_scale_warns() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("scale([1, 2, 1]) cube(1);");
     assert!(has_warning(&out, "ungleichmäßige Skalierung"));
 }
@@ -298,6 +300,7 @@ teil();
 
 #[test]
 fn zone_outside_block_warns_and_bad_target_errors() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("grid g { z: a = 1; } zone(g.a, d = 1); fillet(1) { cube(1); zone([1, 2, 3], d = 1); }");
     assert!(has_warning(&out, "zone() außerhalb"));
     assert!(has_error(&out, "zone() braucht Rasterlinie"));
@@ -360,6 +363,7 @@ thicken(2) surface([[[0,0,0],[10,0,0]],[[0,10,0],[10,10,5]]]);
 
 #[test]
 fn surface_errors() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("surface(file = \"x.dat\"); surface([[[0,0,0],[1,0,0]],[[0,1,0]]]);");
     assert!(has_warning(&out, "nicht unterstützt"));
     assert!(has_error(&out, "gleich lange Zeilen"));
@@ -367,6 +371,7 @@ fn surface_errors() {
 
 #[test]
 fn modifiers() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out =
         run("#cube(1); %sphere(1); *cylinder(h = 1, r = 1); echo(\"x\"); !translate([1, 0, 0]) cube(2); !cube(3);");
     assert_eq!(dump(&out), "translate\n  box\n");
@@ -406,6 +411,7 @@ fn geometric_asserts() {
 
 #[test]
 fn unsupported_operations_keep_children() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("hull() { cube(1); sphere(1); } import(\"a.obj\"); minkowski() cube(1); projection() cube(1);");
     // hull and minkowski are nodes of their own (the engine builds the exact special cases)
     assert_eq!(dump(&out), "group\n  hull\n    box\n    sphere\n  minkowski\n    box\n  empty\n    box\n");
@@ -417,6 +423,7 @@ fn unsupported_operations_keep_children() {
 
 #[test]
 fn unknown_module_and_include() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = run("include <x.scad>\nfoo(1); cube(1) sphere(1);");
     assert!(has_error(&out, "Datei `x.scad` nicht gefunden"));
     assert!(has_warning(&out, "unbekanntes Modul `foo`"));
@@ -455,6 +462,7 @@ fn module_context_uses_defaults_and_overrides() {
 /// dependent variables compute with it; `$` variables apply without an assignment.
 #[test]
 fn file_context_overrides_top_level_assignments() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = "
         w = 2;
         d = w * 2;
@@ -488,6 +496,7 @@ fn file_context_overrides_top_level_assignments() {
 
 #[test]
 fn nested_module_context() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = "
         size = 4;
         module outer(a = 2) {
@@ -558,6 +567,7 @@ fn output_serialises() {
 
 #[test]
 fn slot_profile_points_radius_and_handles() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let out = clean("grid g { x: a = 5, b = 25; y: m = 10; }\nslot(g[a, m], g[b, m], d = 4);");
     let n = out.tree.nodes.iter().find(|n| matches!(n.op, Op::Profile(Profile::Slot { .. }))).expect("slot node");
     assert_eq!(n.op, Op::Profile(Profile::Slot { a: DVec2::new(5.0, 10.0), b: DVec2::new(25.0, 10.0), r: 2.0 }));

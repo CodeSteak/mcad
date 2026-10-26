@@ -6,6 +6,7 @@
 //! a solid and rebuild the 2D booleans as 3D booleans of those solids; the 2D display
 //! evaluates the same expression with polygon clipping.
 
+use cad_i18n::{tr, trs};
 use cad_ir::{Contour, NodeIdx, Op, Profile, Tree};
 use cad_kernel::{BoolOp, Loop, Mesh, Segment, Tag};
 use glam::{DAffine2, DMat2, DMat4, DVec2, DVec3, DVec4};
@@ -73,7 +74,10 @@ pub(crate) fn lift(tree: &Tree, idx: NodeIdx, m: DMat4, warn: &mut Vec<String>) 
         }
         Op::Boolean { op, fillet, chamfer, fillet_law } => {
             if fillet.is_some() || chamfer.is_some() || fillet_law.is_some() {
-                warn.push("fillet/chamfer an 2D-Booleans wird ignoriert".into());
+                warn.push(
+                    trs!("fillet/chamfer an 2D-Booleans wird ignoriert", "fillet/chamfer on 2D Booleans is ignored")
+                        .into(),
+                );
             }
             Ok(Expr2::Op(*op, kids(warn)?))
         }
@@ -97,7 +101,7 @@ pub(crate) fn lift(tree: &Tree, idx: NodeIdx, m: DMat4, warn: &mut Vec<String>) 
                     .collect::<Result<_, _>>()?,
             ))
         }
-        other => Err(format!("{} ist kein 2D-Profil", other.label())),
+        other => Err(tr!("{} ist kein 2D-Profil", "{} is not a 2D profile", other.label())),
     }
 }
 
@@ -127,26 +131,26 @@ pub(crate) fn profile_loops(p: &Profile) -> Result<Vec<Loop>, String> {
     match p {
         Profile::Rect { min, max } => {
             if (max.x - min.x).abs() < EPS || (max.y - min.y).abs() < EPS {
-                return Err("Rechteck ohne Fläche".into());
+                return Err(trs!("Rechteck ohne Fläche", "rectangle without area").into());
             }
             Ok(vec![Loop::Polygon(vec![*min, DVec2::new(max.x, min.y), *max, DVec2::new(min.x, max.y)])])
         }
         Profile::Circle { r } => {
             if *r <= 0.0 {
-                return Err(format!("Kreis mit Radius {r}"));
+                return Err(tr!("Kreis mit Radius {r}", "circle with radius {r}"));
             }
             Ok(vec![Loop::Circle { center: DVec2::ZERO, r: *r }])
         }
         Profile::Polygon { loops } => {
             let loops: Vec<_> = loops.iter().filter(|l| !l.is_empty()).collect();
             if loops.is_empty() {
-                return Err("leeres Polygon".into());
+                return Err(trs!("leeres Polygon", "empty polygon").into());
             }
             loops
                 .iter()
                 .map(|l| {
                     if l.len() < 3 {
-                        Err("Polygon mit weniger als 3 Punkten".to_string())
+                        Err(trs!("Polygon mit weniger als 3 Punkten", "polygon with fewer than 3 points").to_string())
                     } else {
                         Ok(Loop::Polygon(l.to_vec()))
                     }
@@ -155,25 +159,29 @@ pub(crate) fn profile_loops(p: &Profile) -> Result<Vec<Loop>, String> {
         }
         Profile::Spline { points, closed } => {
             if !closed {
-                return Err("offener Spline ist kein Profil".into());
+                return Err(trs!("offener Spline ist kein Profil", "open spline is not a profile").into());
             }
             if points.len() < 3 {
-                return Err("Spline mit weniger als 3 Punkten".into());
+                return Err(trs!("Spline mit weniger als 3 Punkten", "spline with fewer than 3 points").into());
             }
             Ok(vec![Loop::Spline(points.clone())])
         }
         Profile::Slot { a, b, r } => {
             if *r <= 0.0 {
-                return Err(format!("Langloch mit Radius {r}"));
+                return Err(tr!("Langloch mit Radius {r}", "slot with radius {r}"));
             }
             Ok(vec![Loop::Composite(contour_segments(&cad_ir::slot_contour(*a, *b, *r))?)])
         }
         Profile::Sketch { contours, closed } => {
             if !closed {
-                return Err("offene Skizze ist kein Profil (nur als `sweep`-Pfad)".into());
+                return Err(trs!(
+                    "offene Skizze ist kein Profil (nur als `sweep`-Pfad)",
+                    "open sketch is not a profile (only as a `sweep` path)"
+                )
+                .into());
             }
             if contours.is_empty() {
-                return Err("leere Skizze".into());
+                return Err(trs!("leere Skizze", "empty sketch").into());
             }
             contours.iter().map(|c| contour_segments(c).map(Loop::Composite)).collect()
         }
@@ -236,7 +244,10 @@ pub(crate) fn open_sketch_mesh(p: &Profile, tol: f64) -> Option<Mesh> {
 pub(crate) fn contour_segments(c: &Contour) -> Result<Vec<Segment>, String> {
     c.segs
         .iter()
-        .map(|s| s.to_kernel().ok_or_else(|| format!("{}-Segment lässt sich nicht berechnen", s.kind())))
+        .map(|s| {
+            s.to_kernel()
+                .ok_or_else(|| tr!("{}-Segment lässt sich nicht berechnen", "{} segment cannot be computed", s.kind()))
+        })
         .collect()
 }
 

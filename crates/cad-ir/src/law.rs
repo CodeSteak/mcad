@@ -370,7 +370,12 @@ impl Law {
     pub fn eval(&self, p: DVec3) -> Result<f64, String> {
         match self.value(p) {
             LawVal::Num(x) => Ok(x),
-            v => Err(format!("Radiusfunktion liefert keine Zahl ({}) bei {}", v.describe(), fmt_point(p))),
+            v => Err(cad_i18n::tr!(
+                "Radiusfunktion liefert keine Zahl ({}) bei {}",
+                "radius function returns no number ({}) at {}",
+                v.describe(),
+                fmt_point(p)
+            )),
         }
     }
 }
@@ -489,7 +494,11 @@ mod tests {
         assert_eq!(law.eval(DVec3::new(3.0, 4.0, 0.0)), Ok(2.0));
         assert_eq!(law.eval(DVec3::new(30.0, 40.0, 0.0)), Ok(3.0));
         let bad = Law { expr: LawExpr::Point, slots: 0, text: String::new() };
-        assert!(bad.eval(DVec3::ZERO).unwrap_err().contains("keine Zahl"));
+        assert!(bad.eval(DVec3::ZERO).unwrap_err().contains("returns no number"));
+        {
+            let _de = cad_i18n::scoped(cad_i18n::Lang::De);
+            assert!(bad.eval(DVec3::ZERO).unwrap_err().contains("keine Zahl"));
+        }
         assert_eq!(cos_deg(90.0), 0.0);
         assert_eq!(sin_deg(-90.0), -1.0);
     }

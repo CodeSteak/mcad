@@ -34,6 +34,7 @@
 
 use std::rc::Rc;
 
+use cad_i18n::{tr, trs};
 use cad_ir::{Dim, NodeIdx, Op, Tree};
 use cad_kernel::{BoolOp, Kernel, Mesh};
 use glam::{DMat4, DVec3};
@@ -237,8 +238,9 @@ impl ColorTable {
                 t.profile_remarks.push((
                     i,
                     true,
-                    format!(
+                    tr!(
                         "Farben im 2D-Profil von {} werden nicht getrennt: der Körper druckt als Standard – color() um die Extrusion setzen oder je Farbe extrudieren",
+                        "colours in the 2D profile of {} are not separated: the body prints as default – put color() around the extrusion or extrude per colour",
                         tree.node(i).op.label()
                     ),
                 ));
@@ -248,7 +250,7 @@ impl ColorTable {
             t.entries.push(ColorEntry {
                 key: color_key(default_rgba),
                 rgba: default_rgba,
-                label: "Standard".into(),
+                label: trs!("Standard", "default").into(),
                 source: ColorSource::Default,
                 filament: 1,
                 explicit: false,
@@ -335,8 +337,9 @@ impl ColorTable {
                 out.push((
                     node,
                     true,
-                    format!(
+                    tr!(
                         "Farbe `{}` bekommt Slot {} – mehr als {MAX_SLOT} Filamente (Bambu Studio/OrcaSlicer: höchstens {MAX_SLOT}); Farben zusammenlegen oder filament = n setzen",
+                        "colour `{}` gets slot {} – more than {MAX_SLOT} filaments (Bambu Studio/OrcaSlicer: at most {MAX_SLOT}); merge colours or set filament = n",
                         e.label, e.filament
                     ),
                 ));
@@ -351,16 +354,22 @@ impl ColorTable {
                 out.push((
                     node,
                     false,
-                    format!(
+                    tr!(
                         "Slot {} hat schon die Farbe `{}`: beide drucken mit demselben Filament",
-                        e.filament, o.label
+                        "slot {} already has the colour `{}`: both print with the same filament",
+                        e.filament,
+                        o.label
                     ),
                 ));
             } else if e.filament == 1 && default {
                 out.push((
                     node,
                     false,
-                    format!("Slot 1 druckt auch das Material ohne color() („Standard“) – `{}` und Standard teilen sich das Filament", e.label),
+                    tr!(
+                        "Slot 1 druckt auch das Material ohne color() („Standard“) – `{}` und Standard teilen sich das Filament",
+                        "slot 1 also prints the material without color() (\"default\") – `{}` and default share the filament",
+                        e.label
+                    ),
                 ));
             }
         }
@@ -568,9 +577,12 @@ where
         node: NodeIdx,
     ) -> Result<Rc<ColorRegions<K::Shape>>, String> {
         let tree = ev.tree.clone();
-        let rep = ev.reports.get(node as usize).ok_or_else(|| format!("Knoten {node} existiert nicht"))?;
+        let rep = ev
+            .reports
+            .get(node as usize)
+            .ok_or_else(|| tr!("Knoten {node} existiert nicht", "node {node} does not exist"))?;
         if rep.dim == Some(Dim::Two) {
-            return Err("2D-Ergebnis hat keine Farbregionen".into());
+            return Err(trs!("2D-Ergebnis hat keine Farbregionen", "a 2D result has no colour regions").into());
         }
         let inner = inner_color_nodes(&tree, node);
         let base = effective(&tree, node);
@@ -588,7 +600,8 @@ where
             RegionColor::Color(k) => h.tag(1).bytes(&k),
         };
         for &(c, k) in &inner {
-            let m = placement(ev, node, c).ok_or("Farbknoten liegt nicht unter dem Knoten")?;
+            let m = placement(ev, node, c)
+                .ok_or(trs!("Farbknoten liegt nicht unter dem Knoten", "colour node is not below the node"))?;
             h.key(&ev.reports[c as usize].key).mat(&m).bytes(&k);
             placed.push((c, k, m));
         }
@@ -643,7 +656,9 @@ where
         whole: Option<f64>,
     ) -> Result<ColorRegions<K::Shape>, String> {
         let tag = ev.reports[node as usize].tag;
-        let fail = |what: &str, e: cad_kernel::KernelError| format!("Farbregionen: {what} gescheitert: {e}");
+        let fail = |what: &str, e: cad_kernel::KernelError| {
+            tr!("Farbregionen: {what} gescheitert: {e}", "colour regions: {what} failed: {e}")
+        };
         let solids: Vec<K::Shape> = ev.parts(node).iter().filter(|p| p.solid).map(|p| p.shape.clone()).collect();
         let mut out =
             ColorRegions { node, regions: Vec::new(), total: 0.0, colored_nodes: placed.len(), key, warning: None };
@@ -667,9 +682,9 @@ where
         let r = if solids.len() == 1 {
             solids[0].clone()
         } else {
-            k.boolean(BoolOp::Union, &solids, tag).map_err(|e| fail("Vereinigung", e))?
+            k.boolean(BoolOp::Union, &solids, tag).map_err(|e| fail(trs!("Vereinigung", "union"), e))?
         };
-        let total = k.mass_props(&r).map_err(|e| fail("Volumen", e))?.volume;
+        let total = k.mass_props(&r).map_err(|e| fail(trs!("Volumen", "volume"), e))?.volume;
         out.total = total;
         // Later statements win, but only over other colours: a piece is reduced by the
         // material of later colour nodes of *other* colours (Bericht 12, F6: subtracting a
@@ -685,7 +700,7 @@ where
                 let s = if m.abs_diff_eq(DMat4::IDENTITY, 1e-12) {
                     p.shape.clone()
                 } else {
-                    k.transform(&p.shape, &m).map_err(|e| fail("Transformation", e))?
+                    k.transform(&p.shape, &m).map_err(|e| fail(trs!("Transformation", "transform"), e))?
                 };
                 ms.push(s);
             }
@@ -695,19 +710,23 @@ where
             let mc = if ms.len() == 1 {
                 ms.pop().unwrap()
             } else {
-                k.boolean(BoolOp::Union, &ms, ctag).map_err(|e| fail("Vereinigung", e))?
+                k.boolean(BoolOp::Union, &ms, ctag).map_err(|e| fail(trs!("Vereinigung", "union"), e))?
             };
-            let mut piece =
-                k.boolean(BoolOp::Intersection, &[r.clone(), mc.clone()], ctag).map_err(|e| fail("Schnittmenge", e))?;
+            let mut piece = k
+                .boolean(BoolOp::Intersection, &[r.clone(), mc.clone()], ctag)
+                .map_err(|e| fail(trs!("Schnittmenge", "intersection"), e))?;
             let others: Vec<K::Shape> = claimed.iter().filter(|(x, _)| *x != ck).map(|(_, s)| s.clone()).collect();
             if !others.is_empty() && !k.is_empty(&piece) {
                 let mut ops = vec![piece];
                 ops.extend(others);
-                piece = k.boolean(BoolOp::Difference, &ops, ctag).map_err(|e| fail("Differenz", e))?;
+                piece =
+                    k.boolean(BoolOp::Difference, &ops, ctag).map_err(|e| fail(trs!("Differenz", "difference"), e))?;
             }
             match claimed.iter_mut().find(|(x, _)| *x == ck) {
                 Some((_, cl)) => {
-                    *cl = k.boolean(BoolOp::Union, &[cl.clone(), mc], ctag).map_err(|e| fail("Vereinigung", e))?
+                    *cl = k
+                        .boolean(BoolOp::Union, &[cl.clone(), mc], ctag)
+                        .map_err(|e| fail(trs!("Vereinigung", "union"), e))?
                 }
                 None => claimed.push((ck, mc)),
             }
@@ -717,7 +736,7 @@ where
         if !claimed.is_empty() {
             let mut ops = vec![r];
             ops.extend(claimed.into_iter().map(|(_, s)| s));
-            let rem = k.boolean(BoolOp::Difference, &ops, tag).map_err(|e| fail("Differenz", e))?;
+            let rem = k.boolean(BoolOp::Difference, &ops, tag).map_err(|e| fail(trs!("Differenz", "difference"), e))?;
             pieces.push((rest, rem));
         }
         // drop empty pieces, unite pieces of one colour (order of first piece)
@@ -727,7 +746,7 @@ where
             if k.is_empty(&s) {
                 continue;
             }
-            let v = k.mass_props(&s).map_err(|e| fail("Volumen", e))?.volume;
+            let v = k.mass_props(&s).map_err(|e| fail(trs!("Volumen", "volume"), e))?.volume;
             if v.abs() <= eps {
                 continue;
             }
@@ -745,8 +764,8 @@ where
                 l.pop().unwrap()
             } else {
                 let shapes: Vec<K::Shape> = l.iter().map(|(s, _)| s.clone()).collect();
-                let u = k.boolean(BoolOp::Union, &shapes, tag).map_err(|e| fail("Vereinigung", e))?;
-                let v = k.mass_props(&u).map_err(|e| fail("Volumen", e))?.volume;
+                let u = k.boolean(BoolOp::Union, &shapes, tag).map_err(|e| fail(trs!("Vereinigung", "union"), e))?;
+                let v = k.mass_props(&u).map_err(|e| fail(trs!("Volumen", "volume"), e))?.volume;
                 (u, v)
             };
             let rkey = KeyHasher::new().key(&key).u64(i as u64).finish();
@@ -754,8 +773,9 @@ where
         }
         let sum: f64 = out.regions.iter().map(|r| r.volume).sum();
         if (sum - total).abs() > 1e-4 * total.abs() + 1e-3 {
-            out.warning = Some(format!(
-                "Farbregionen ungenau: Summe {sum:.3} mm³ statt {total:.3} mm³ (Boolean des Kernels unvollständig)"
+            out.warning = Some(tr!(
+                "Farbregionen ungenau: Summe {sum:.3} mm³ statt {total:.3} mm³ (Boolean des Kernels unvollständig)",
+                "colour regions inexact: sum {sum:.3} mm³ instead of {total:.3} mm³ (kernel Boolean incomplete)"
             ));
         }
         Ok(out)
@@ -777,7 +797,9 @@ where
         let total = self.brep_volume(ev, node)?;
         out.total = total;
         let k = &mut self.kernel;
-        let fail = |what: &str, e: cad_kernel::KernelError| format!("Farbregionen: {what} gescheitert: {e}");
+        let fail = |what: &str, e: cad_kernel::KernelError| {
+            tr!("Farbregionen: {what} gescheitert: {e}", "colour regions: {what} failed: {e}")
+        };
         let mut later: Vec<(ColorKey, K::Shape, Bounds)> = Vec::new();
         let mut pieces: Vec<(ColorKey, K::Shape, Bounds)> = Vec::new();
         for &(c, ck, m) in placed.iter().rev() {
@@ -786,9 +808,9 @@ where
                 let s = if m.abs_diff_eq(DMat4::IDENTITY, 1e-12) {
                     p.shape.clone()
                 } else {
-                    k.transform(&p.shape, &m).map_err(|e| fail("Transformation", e))?
+                    k.transform(&p.shape, &m).map_err(|e| fail(trs!("Transformation", "transform"), e))?
                 };
-                let Some(b) = k.bounds(&s).map_err(|e| fail("Hülle", e))? else { continue };
+                let Some(b) = k.bounds(&s).map_err(|e| fail(trs!("Hülle", "bounds"), e))? else { continue };
                 let cut: Vec<K::Shape> = later
                     .iter()
                     .filter(|(x, _, bb)| *x != ck && boxes_overlap(b, *bb))
@@ -799,7 +821,7 @@ where
                 } else {
                     let mut ops = vec![s.clone()];
                     ops.extend(cut);
-                    k.boolean(BoolOp::Difference, &ops, ctag).map_err(|e| fail("Differenz", e))?
+                    k.boolean(BoolOp::Difference, &ops, ctag).map_err(|e| fail(trs!("Differenz", "difference"), e))?
                 };
                 later.push((ck, s, b));
                 pieces.push((ck, piece, b));
@@ -822,7 +844,7 @@ where
                 mine.iter().map(|p| p.1.clone()).collect()
             } else {
                 let all: Vec<K::Shape> = mine.iter().map(|p| p.1.clone()).collect();
-                vec![k.boolean(BoolOp::Union, &all, tag).map_err(|e| fail("Vereinigung", e))?]
+                vec![k.boolean(BoolOp::Union, &all, tag).map_err(|e| fail(trs!("Vereinigung", "union"), e))?]
             };
             let mut kept = Vec::new();
             let mut volume = 0.0;
@@ -830,7 +852,7 @@ where
                 if k.is_empty(&s) {
                     continue;
                 }
-                let v = k.mass_props(&s).map_err(|e| fail("Volumen", e))?.volume;
+                let v = k.mass_props(&s).map_err(|e| fail(trs!("Volumen", "volume"), e))?.volume;
                 if v.abs() > eps {
                     volume += v;
                     kept.push(s);
@@ -850,8 +872,9 @@ where
         }
         let sum: f64 = out.regions.iter().map(|r| r.volume).sum();
         if (sum - total).abs() > 1e-4 * total.abs() + 1e-3 {
-            out.warning = Some(format!(
-                "Farbregionen ungenau: Summe {sum:.3} mm³ statt {total:.3} mm³ (Boolean des Kernels unvollständig)"
+            out.warning = Some(tr!(
+                "Farbregionen ungenau: Summe {sum:.3} mm³ statt {total:.3} mm³ (Boolean des Kernels unvollständig)",
+                "colour regions inexact: sum {sum:.3} mm³ instead of {total:.3} mm³ (kernel Boolean incomplete)"
             ));
         }
         Ok(out)
@@ -881,15 +904,17 @@ where
         let n = ev.parts(node).len();
         if part >= n {
             // a mesh: one colour (the colour of the latest colour node it comes from)
-            let mp = ev.meshes(node).get(part - n).ok_or("kein solcher Teil")?;
+            let mp = ev.meshes(node).get(part - n).ok_or(trs!("kein solcher Teil", "no such part"))?;
             let placed: Vec<(NodeIdx, ColorKey, DMat4)> =
                 inner.iter().filter_map(|&(c, k)| placement(ev, node, c).map(|m| (c, k, m))).collect();
             let c = mesh_colors(ev, node, rest, &placed)[part - n];
             return Ok(vec![c; mp.mesh.face_count()]);
         }
-        let shape = ev.parts(node).get(part).ok_or("kein solcher Teil")?.shape.clone();
-        let fail = |what: &str, e: cad_kernel::KernelError| format!("Flächenfarben: {what} gescheitert: {e}");
-        let faces = self.kernel.faces(&shape, 3).map_err(|e| fail("Flächen", e))?;
+        let shape = ev.parts(node).get(part).ok_or(trs!("kein solcher Teil", "no such part"))?.shape.clone();
+        let fail = |what: &str, e: cad_kernel::KernelError| {
+            tr!("Flächenfarben: {what} gescheitert: {e}", "face colours: {what} failed: {e}")
+        };
+        let faces = self.kernel.faces(&shape, 3).map_err(|e| fail(trs!("Flächen", "faces"), e))?;
         if inner.is_empty() {
             return Ok(vec![rest; faces.len()]);
         }
@@ -897,14 +922,16 @@ where
         // owner per sample point: index into `inner` of the latest colour node containing it
         let mut owner: Vec<Option<usize>> = vec![None; pts.len()];
         for (ci, &(c, _)) in inner.iter().enumerate() {
-            let m = placement(ev, node, c).ok_or("Farbknoten liegt nicht unter dem Knoten")?;
+            let m = placement(ev, node, c)
+                .ok_or(trs!("Farbknoten liegt nicht unter dem Knoten", "colour node is not below the node"))?;
             for p in ev.parts(c).iter().filter(|p| p.solid) {
                 let s = if m.abs_diff_eq(DMat4::IDENTITY, 1e-12) {
                     p.shape.clone()
                 } else {
-                    self.kernel.transform(&p.shape, &m).map_err(|e| fail("Transformation", e))?
+                    self.kernel.transform(&p.shape, &m).map_err(|e| fail(trs!("Transformation", "transform"), e))?
                 };
-                let cls = self.kernel.classify(&s, &pts).map_err(|e| fail("Klassifikation", e))?;
+                let cls =
+                    self.kernel.classify(&s, &pts).map_err(|e| fail(trs!("Klassifikation", "classification"), e))?;
                 for (o, c) in owner.iter_mut().zip(cls) {
                     if c != cad_kernel::Class::Outside {
                         *o = Some(ci);
@@ -939,7 +966,7 @@ where
 
     /// Mesh of region `i` (node system), cached per region key and tolerance.
     pub fn region_mesh(&mut self, regions: &ColorRegions<K::Shape>, i: usize, tol: f64) -> Result<Rc<Mesh>, String> {
-        let r = regions.regions.get(i).ok_or("keine solche Farbregion")?;
+        let r = regions.regions.get(i).ok_or(trs!("keine solche Farbregion", "no such colour region"))?;
         let slot = Slot::Mesh(r.key, crate::key::canon_f64(tol));
         if let Some(Cached::Mesh(m)) = self.cache.get(&slot) {
             return Ok(m);

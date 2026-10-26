@@ -14,7 +14,14 @@ fn example(name: &str) -> String {
 }
 
 fn json(args: &[&str], code: i32) -> Value {
-    let out = Command::cargo_bin("mcad").unwrap().env("MCAD_NO_DAEMON", "1").args(args).arg("--json").output().unwrap();
+    let out = Command::cargo_bin("mcad")
+        .unwrap()
+        .env("MCAD_LANG", "de")
+        .env("MCAD_NO_DAEMON", "1")
+        .args(args)
+        .arg("--json")
+        .output()
+        .unwrap();
     assert_eq!(
         out.status.code(),
         Some(code),
@@ -114,6 +121,7 @@ fn watch_follows_a_changed_svg() {
     write(dir.path(), "r.svg", RECT);
     let file = write(dir.path(), "w.scad", "linear_extrude(1) import(\"r.svg\");\n");
     let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("mcad"))
+        .env("MCAD_LANG", "de")
         .args(["watch", &file, "--json", "--once-after-change", "--timeout", "60"])
         .env("MCAD_NO_DAEMON", "1")
         .stdout(Stdio::piped())

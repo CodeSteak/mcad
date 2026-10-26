@@ -11,6 +11,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use cad_i18n::{tr, trs};
 use cad_ir::{BlendKind, Contour, NodeIdx, Op, Profile, Seg, Select, StrokeCap, StrokeJoin, Tree, ZoneShape};
 use cad_kernel::hull2;
 use cad_kernel::region2::{self, CornerError, CornerKind, Fill, Loop2, Operand};
@@ -45,7 +46,8 @@ const MEMO_SIZE: usize = 48;
 fn subtree_key(tree: &Tree, idx: NodeIdx, depth: u32) -> CacheKey {
     let n = tree.node(idx);
     let mut h = KeyHasher::new();
-    h.str("op2d/1");
+    // the result holds texts (warnings, hints) in the current language
+    h.str("op2d/1").str(cad_i18n::lang().code());
     match &n.op {
         Op::Color { .. } => h.str("color"),
         op => h.value(op),
@@ -96,7 +98,11 @@ fn run(tree: &Tree, idx: NodeIdx) -> Result<Op2Out, String> {
             let res =
                 if *round { region2::offset_round(&region, *d) } else { region2::offset_delta(&region, *d, *chamfer) };
             if res.is_empty() && !region.is_empty() {
-                out.warnings.push(format!("offset({}) lässt vom Profil nichts übrig", fmt_num(*d)));
+                out.warnings.push(tr!(
+                    "offset({}) lässt vom Profil nichts übrig",
+                    "offset({}) leaves nothing of the profile",
+                    fmt_num(*d)
+                ));
             }
             let tol = display_tol(size);
             for lp in &region {
@@ -125,13 +131,14 @@ fn run(tree: &Tree, idx: NodeIdx) -> Result<Op2Out, String> {
                 chosen += k;
                 res.push(l2);
             }
-            let noun = if count == 1 { "Ecke" } else { "Ecken" };
+            let noun = if count == 1 { trs!("Ecke", "corner") } else { trs!("Ecken", "corners") };
             out.hints.push(format!("{count} {noun}"));
             if chosen == 0 && *r > 0.0 {
                 out.warnings.push(if zones.is_empty() {
-                    "keine Ecke im Profil".to_string()
+                    trs!("keine Ecke im Profil", "no corner in the profile").to_string()
                 } else {
-                    "leere Auswahl: keine Ecke in den Zonen".to_string()
+                    trs!("leere Auswahl: keine Ecke in den Zonen", "empty selection: no corner in the zones")
+                        .to_string()
                 });
             }
             out.contours = to_contours(&res);
@@ -139,7 +146,11 @@ fn run(tree: &Tree, idx: NodeIdx) -> Result<Op2Out, String> {
         Op::Stroke { w, cap, join } => {
             let paths = stroke_paths(tree, idx, &mut out.warnings)?;
             if paths.is_empty() {
-                return Err("stroke braucht einen Pfad: `sketch(closed = false) { … }` oder ein 2D-Profil".into());
+                return Err(trs!(
+                    "stroke braucht einen Pfad: `sketch(closed = false) { … }` oder ein 2D-Profil",
+                    "stroke needs a path: `sketch(closed = false) { … }` or a 2D profile"
+                )
+                .into());
             }
             let size = region_size(&paths.iter().map(|p| p.0.clone()).collect::<Vec<_>>());
             let tol = display_tol(size);
@@ -157,7 +168,7 @@ fn run(tree: &Tree, idx: NodeIdx) -> Result<Op2Out, String> {
                 StrokeJoin::Bevel => region2::Join::Bevel,
             };
             if *w <= 0.0 {
-                return Err("stroke: Breite muss > 0 sein".into());
+                return Err(trs!("stroke: Breite muss > 0 sein", "stroke: width must be > 0").into());
             }
             let res = region2::stroke(&paths, *w, cap, join);
             out.contours = to_contours(&res);
@@ -168,7 +179,13 @@ fn run(tree: &Tree, idx: NodeIdx) -> Result<Op2Out, String> {
             let size = region_size(&loops);
             let h = hull2::hull(&loops);
             if h.is_empty() {
-                out.warnings.push("hull: die Kinder haben keine Fläche (Punkte auf einer Linie)".into());
+                out.warnings.push(
+                    trs!(
+                        "hull: die Kinder haben keine Fläche (Punkte auf einer Linie)",
+                        "hull: the children have no area (points on a line)"
+                    )
+                    .into(),
+                );
             }
             let tol = display_tol(size);
             for lp in &loops {
@@ -180,7 +197,7 @@ fn run(tree: &Tree, idx: NodeIdx) -> Result<Op2Out, String> {
             let res = minkowski(tree, idx, &mut out)?;
             out.contours = to_contours(&res);
         }
-        other => return Err(format!("{} ist keine 2D-Operation", other.label())),
+        other => return Err(tr!("{} ist keine 2D-Operation", "{} is not a 2D operation", other.label())),
     }
     Ok(out)
 }
@@ -265,15 +282,40 @@ fn minkowski(tree: &Tree, idx: NodeIdx, out: &mut Op2Out) -> Result<Vec<Loop2>, 
                     .then(|| l[0].iter().map(|s| s.start()).collect())
             };
             if !hull2::is_convex(&a) || !hull2::is_convex(&b) {
-                return unsupported(out, &e, "zwei Profile nur exakt, wenn beide konvex sind");
+                return unsupported(
+                    out,
+                    &e,
+                    trs!(
+                        "zwei Profile nur exakt, wenn beide konvex sind",
+                        "two profiles only exact if both are convex"
+                    ),
+                );
             }
             match (poly_of(&a), poly_of(&b)) {
                 (Some(v), _) => vec![hull2::minkowski_convex(&v, &b)],
                 (_, Some(v)) => vec![hull2::minkowski_convex(&v, &a)],
-                _ => return unsupported(out, &e, "zwei konvexe Profile nur exakt, wenn eines ein Polygon ist"),
+                _ => {
+                    return unsupported(
+                        out,
+                        &e,
+                        trs!(
+                            "zwei konvexe Profile nur exakt, wenn eines ein Polygon ist",
+                            "two convex profiles only exact if one is a polygon"
+                        ),
+                    );
+                }
             }
         }
-        n => return unsupported(out, &e, &format!("{n} Profile (außer Kreisen); exakt sind höchstens zwei")),
+        n => {
+            return unsupported(
+                out,
+                &e,
+                &tr!(
+                    "{n} Profile (außer Kreisen); exakt sind höchstens zwei",
+                    "{n} profiles (besides circles); at most two are exact"
+                ),
+            );
+        }
     };
     for lp in &base {
         out.guides.push(("source", polyline3(lp, tol, true)));
@@ -284,7 +326,8 @@ fn minkowski(tree: &Tree, idx: NodeIdx, out: &mut Op2Out) -> Result<Vec<Loop2>, 
 
 /// Unsupported case of `minkowski`: warning with the reason, the children unchanged.
 fn unsupported(out: &mut Op2Out, e: &Expr2, why: &str) -> Result<Vec<Loop2>, String> {
-    out.warnings.push(format!("minkowski: {why}; Kinder werden unverändert gezeigt"));
+    out.warnings
+        .push(tr!("minkowski: {why}; Kinder werden unverändert gezeigt", "minkowski: {why}; children shown unchanged"));
     expr_loops(e)
 }
 
@@ -403,15 +446,18 @@ fn children_expr(tree: &Tree, idx: NodeIdx, warn: &mut Vec<String>) -> Result<Ex
     let mut args = Vec::new();
     for c in tree.solid_children(idx) {
         if tree.dim(c) == Some(cad_ir::Dim::Three) {
-            return Err(format!("{what} erwartet 2D-Profile als Kinder"));
+            return Err(tr!("{what} erwartet 2D-Profile als Kinder", "{what} expects 2D profiles as children"));
         }
         if profile::open_sketch_in(tree, c) {
-            return Err(format!("{what}: offene Skizze ist kein Profil (für Pfade `stroke(w)` verwenden)"));
+            return Err(tr!(
+                "{what}: offene Skizze ist kein Profil (für Pfade `stroke(w)` verwenden)",
+                "{what}: open sketch is not a profile (use `stroke(w)` for paths)"
+            ));
         }
         args.push(profile::lift(tree, c, tree.node(c).local, warn)?);
     }
     if args.is_empty() {
-        return Err(format!("{what} ohne Profil"));
+        return Err(tr!("{what} ohne Profil", "{what} without a profile"));
     }
     Ok(Expr2::Op(BoolOp::Union, args))
 }
@@ -555,7 +601,13 @@ fn collect_zone(tree: &Tree, c: NodeIdx, m: DMat4, warn: &mut Vec<String>, z: &m
         }
         _ => {
             if tree.dim(c) != Some(cad_ir::Dim::Two) {
-                warn.push("fillet2d: Zonen müssen 2D-Formen oder zone(…) sein; 3D-Zone ignoriert".into());
+                warn.push(
+                    trs!(
+                        "fillet2d: Zonen müssen 2D-Formen oder zone(…) sein; 3D-Zone ignoriert",
+                        "fillet2d: zones must be 2D shapes or zone(…); 3D zone ignored"
+                    )
+                    .into(),
+                );
                 return;
             }
             let mut w = Vec::new();
@@ -566,7 +618,7 @@ fn collect_zone(tree: &Tree, c: NodeIdx, m: DMat4, warn: &mut Vec<String>, z: &m
                             .push(shape.iter().map(|c| c.iter().map(|p| DVec2::new(p[0], p[1])).collect()).collect());
                     }
                 }
-                Err(msg) => warn.push(format!("Zone: {msg}")),
+                Err(msg) => warn.push(tr!("Zone: {msg}", "zone: {msg}")),
             }
         }
     }
@@ -613,8 +665,8 @@ fn fillet_loop(
     }
     let (pieces, results) = region2::apply_corners(lp, true, &cands);
     let what = match kind {
-        CornerKind::Round(r) => format!("Radius {}", fmt_num(r)),
-        CornerKind::Chamfer(d) => format!("Fase {}", fmt_num(d)),
+        CornerKind::Round(r) => tr!("Radius {}", "radius {}", fmt_num(r)),
+        CornerKind::Chamfer(d) => tr!("Fase {}", "chamfer {}", fmt_num(d)),
     };
     let mut count = 0;
     for ((v, _), r) in cands.iter().zip(&results) {
@@ -627,10 +679,16 @@ fn fillet_loop(
             }
             Err(e) => out.errors.push(match e {
                 CornerError::TooLarge { max: Some(m) } => {
-                    format!("Ecke bei {at}: {what} passt nicht (höchstens ≈ {})", fmt_num((m * 1e4).floor() / 1e4))
+                    tr!(
+                        "Ecke bei {at}: {what} passt nicht (höchstens ≈ {})",
+                        "corner at {at}: {what} does not fit (at most ≈ {})",
+                        fmt_num((m * 1e4).floor() / 1e4)
+                    )
                 }
-                CornerError::Cusp => format!("Ecke bei {at}: Spitze lässt sich nicht verrunden"),
-                _ => format!("Ecke bei {at}: {what} passt nicht"),
+                CornerError::Cusp => {
+                    tr!("Ecke bei {at}: Spitze lässt sich nicht verrunden", "corner at {at}: a cusp cannot be rounded")
+                }
+                _ => tr!("Ecke bei {at}: {what} passt nicht", "corner at {at}: {what} does not fit"),
             }),
         }
     }
@@ -645,7 +703,11 @@ fn stroke_paths(tree: &Tree, idx: NodeIdx, warn: &mut Vec<String>) -> Result<Vec
     let mut out = Vec::new();
     for c in tree.solid_children(idx) {
         if tree.dim(c) == Some(cad_ir::Dim::Three) {
-            return Err("stroke erwartet Pfade (offene Skizzen) oder 2D-Profile als Kinder".into());
+            return Err(trs!(
+                "stroke erwartet Pfade (offene Skizzen) oder 2D-Profile als Kinder",
+                "stroke expects paths (open sketches) or 2D profiles as children"
+            )
+            .into());
         }
         collect_paths(tree, c, tree.node(c).local, warn, &mut out)?;
     }

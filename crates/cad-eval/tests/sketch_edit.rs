@@ -333,3 +333,15 @@ fn dragging_points_through_variables_and_indexed_planes() {
     assert!(t.contains("    line(to = g[loch[2], v]);"), "{t}");
     no_errors(&t);
 }
+
+#[test]
+fn prompts_and_snap_labels_follow_the_language() {
+    let src = "sketch {\n}\n";
+    let (proj, out) = eval(src);
+    let place = place(&out, &proj, at(src, 1, 8));
+    assert_eq!(prompt(&place, SketchTool::Line, &[]), "Line: start point");
+    assert_eq!(SnapKind::Grid.label(), "grid point");
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
+    assert_eq!(prompt(&place, SketchTool::Line, &[]), "Linie: Anfangspunkt");
+    assert_eq!(SnapKind::Grid.label(), "Rasterpunkt");
+}

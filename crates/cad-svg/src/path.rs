@@ -1,6 +1,7 @@
 //! SVG path data (`d`): M, L, H, V, C, S, Q, T, A, Z, absolute and relative, with implicit
 //! repetitions. Coordinates stay in user units; arcs become exact circular or elliptic arcs.
 
+use cad_i18n::{tr, trs};
 use cad_outline::{Contour, Seg};
 use glam::DVec2;
 use std::f64::consts::TAU;
@@ -61,13 +62,13 @@ impl Lexer<'_> {
             }
         }
         if !digits {
-            return Err(format!("Zahl erwartet an Stelle {st}"));
+            return Err(tr!("Zahl erwartet an Stelle {st}", "number expected at position {st}"));
         }
         self.i = i;
         std::str::from_utf8(&s[st..i])
             .ok()
             .and_then(|t| t.parse().ok())
-            .ok_or_else(|| format!("ungültige Zahl an Stelle {st}"))
+            .ok_or_else(|| tr!("ungültige Zahl an Stelle {st}", "invalid number at position {st}"))
     }
 
     /// Arc flags may be written without separators (`a10 10 0 0110 10`).
@@ -82,7 +83,11 @@ impl Lexer<'_> {
                 self.i += 1;
                 Ok(true)
             }
-            _ => Err(format!("Bogen-Flag (0 oder 1) erwartet an Stelle {}", self.i)),
+            _ => Err(tr!(
+                "Bogen-Flag (0 oder 1) erwartet an Stelle {}",
+                "arc flag (0 or 1) expected at position {}",
+                self.i
+            )),
         }
     }
 
@@ -142,12 +147,19 @@ fn parse_into(d: &str, out: &mut Vec<Contour>, cur: &mut Contour, start: &mut DV
                     Some(b'M') if lx.at_number() => b'L',
                     Some(b'm') if lx.at_number() => b'l',
                     Some(c) if lx.at_number() && !matches!(c, b'Z' | b'z') => c,
-                    _ => return Err(format!("unerwartetes Zeichen `{}` an Stelle {}", lx.s[lx.i] as char, lx.i)),
+                    _ => {
+                        return Err(tr!(
+                            "unerwartetes Zeichen `{}` an Stelle {}",
+                            "unexpected character `{}` at position {}",
+                            lx.s[lx.i] as char,
+                            lx.i
+                        ));
+                    }
                 }
             }
         };
         if cmd.is_none() && !matches!(c, b'M' | b'm') {
-            return Err("Pfad muss mit M beginnen".into());
+            return Err(trs!("Pfad muss mit M beginnen", "path must start with M").into());
         }
         cmd = Some(c);
         let rel = c.is_ascii_lowercase();
@@ -211,7 +223,7 @@ fn parse_into(d: &str, out: &mut Vec<Contour>, cur: &mut Contour, start: &mut DV
                 }
                 p = b;
             }
-            other => return Err(format!("unbekannter Pfadbefehl `{}`", other as char)),
+            other => return Err(tr!("unbekannter Pfadbefehl `{}`", "unknown path command `{}`", other as char)),
         }
         last_c2 = c2;
         last_q = q;

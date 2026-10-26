@@ -7,5 +7,6 @@ publish.workspace = true
 description = "STL import: ASCII/binary parser and mesh preparation (weld, orient, merge coplanar triangles into faces)"
 
 [dependencies]
+cad-i18n.workspace = true
 glam.workspace = true
 cad-kernel.workspace = true

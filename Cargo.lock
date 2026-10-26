@@ -314,6 +314,7 @@ name = "cad-app"
 version = "0.3.0"
 dependencies = [
  "cad-desktop",
+ "cad-i18n",
  "cad-ipc",
  "glib",
  "serde",
@@ -332,6 +333,7 @@ dependencies = [
  "cad-desktop",
  "cad-engine",
  "cad-eval",
+ "cad-i18n",
  "cad-ipc",
  "cad-kernel",
  "cad-measure",
@@ -359,6 +361,7 @@ name = "cad-desktop"
 version = "0.3.0"
 dependencies = [
  "cad-eval",
+ "cad-i18n",
  "cad-ipc",
  "cad-kernel",
  "cad-session",
@@ -378,6 +381,7 @@ dependencies = [
  "blake3",
  "cad-eval",
  "cad-font",
+ "cad-i18n",
  "cad-ir",
  "cad-kernel",
  "cad-outline",
@@ -396,6 +400,7 @@ version = "0.3.0"
 dependencies = [
  "blake3",
  "cad-font",
+ "cad-i18n",
  "cad-ir",
  "cad-kernel",
  "cad-outline",
@@ -410,6 +415,7 @@ dependencies = [
 name = "cad-font"
 version = "0.3.0"
 dependencies = [
+ "cad-i18n",
  "cad-kernel",
  "cad-outline",
  "glam",
@@ -424,6 +430,7 @@ version = "0.3.0"
 name = "cad-ipc"
 version = "0.3.0"
 dependencies = [
+ "cad-i18n",
  "libc",
  "serde",
  "serde_json",
@@ -435,6 +442,7 @@ name = "cad-ir"
 version = "0.3.0"
 dependencies = [
  "blake3",
+ "cad-i18n",
  "cad-kernel",
  "cad-syntax",
  "glam",
@@ -454,6 +462,7 @@ dependencies = [
 name = "cad-measure"
 version = "0.3.0"
 dependencies = [
+ "cad-i18n",
  "cad-kernel",
  "glam",
  "kernel-smlib",
@@ -485,6 +494,7 @@ version = "0.3.0"
 dependencies = [
  "cad-engine",
  "cad-eval",
+ "cad-i18n",
  "cad-ir",
  "cad-kernel",
  "cad-measure",
@@ -510,6 +520,7 @@ dependencies = [
 name = "cad-stl"
 version = "0.3.0"
 dependencies = [
+ "cad-i18n",
  "cad-kernel",
  "glam",
 ]
@@ -518,6 +529,7 @@ dependencies = [
 name = "cad-svg"
 version = "0.3.0"
 dependencies = [
+ "cad-i18n",
  "cad-outline",
  "glam",
  "roxmltree",
@@ -527,6 +539,7 @@ dependencies = [
 name = "cad-syntax"
 version = "0.3.0"
 dependencies = [
+ "cad-i18n",
  "insta",
  "serde",
 ]
@@ -535,6 +548,7 @@ dependencies = [
 name = "cad-wasm"
 version = "0.3.0"
 dependencies = [
+ "cad-i18n",
  "cad-session",
  "js-sys",
  "kernel-smlib",

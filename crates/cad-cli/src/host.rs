@@ -71,7 +71,7 @@ pub fn preload_stdin(text: String) {
 /// The whole stdin as text.
 pub fn read_stdin() -> std::io::Result<String> {
     if let Some(s) = CTX.with(|c| c.borrow().as_ref().map(|c| c.stdin.clone())) {
-        return s.ok_or_else(|| std::io::Error::other("keine Eingabe"));
+        return s.ok_or_else(|| std::io::Error::other(cad_i18n::tr!("keine Eingabe", "no input")));
     }
     if let Some(s) = PRELOADED_STDIN.lock().unwrap().clone() {
         return Ok(s);
@@ -167,6 +167,7 @@ impl Drop for Pooled {
 
 /// A session for a command: on the daemon's engine if there is one, else on a new engine.
 pub fn new_session(opts: SessionOptions) -> Pooled {
+    // (the shared engine recomputes cached texts of another language itself, `Engine::start`)
     let engine = CTX.with(|c| c.borrow_mut().as_mut().and_then(|ctx| ctx.engine.take()));
     let s = match engine {
         Some(e) => Session::with_engine(e, opts, std_clock()),

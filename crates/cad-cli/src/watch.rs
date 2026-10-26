@@ -6,6 +6,8 @@
 //! `--timeout` (seconds without a change).
 
 use std::collections::BTreeSet;
+
+use cad_i18n::tr;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -76,15 +78,21 @@ fn report(m: &mut Model, plan: Option<&(Plan, PathBuf)>, r: Run) -> (Json, Strin
         "warnings": warnings,
         "diagnostics": m.diagnostics,
     });
-    let mut t =
-        format!("[{}] {}: {errors} Fehler, {warnings} Warnungen, Auswertung {} ms", r.n, m.file, num(r.total_ms));
+    let mut t = tr!(
+        "[{}] {}: {errors} Fehler, {warnings} Warnungen, Auswertung {} ms",
+        "[{}] {}: {errors} errors, {warnings} warnings, evaluation {} ms",
+        r.n,
+        m.file,
+        num(r.total_ms)
+    );
     let mut timings = json!({ "total_ms": r.total_ms });
     if let Some(sc) = m.scene.clone() {
         timings["eval_ms"] = json!(sc.stats.eval_ms);
         timings["kernel_ms"] = json!(sc.stats.kernel_ms);
         j["stats"] = json!({ "nodes": sc.stats.nodes, "cache_hits": sc.stats.cache_hits, "kernel_calls": sc.stats.kernel_calls });
-        t.push_str(&format!(
+        t.push_str(&tr!(
             " (Kernel {} ms, {}/{} Knoten aus dem Cache)",
+            " (kernel {} ms, {}/{} nodes from the cache)",
             num(sc.stats.kernel_ms),
             sc.stats.cache_hits,
             sc.stats.nodes
@@ -104,21 +112,21 @@ fn report(m: &mut Model, plan: Option<&(Plan, PathBuf)>, r: Run) -> (Json, Strin
                 .collect::<Vec<_>>()
         );
         if let Some(v) = volume {
-            t.push_str(&format!(", Volumen {} mm³", num(v)));
+            t.push_str(&tr!(", Volumen {} mm³", ", volume {} mm³", num(v)));
         }
         if !sc.parts.is_empty() {
-            t.push_str(&format!(", {} Bauteile", sc.parts.len()));
+            t.push_str(&tr!(", {} Bauteile", ", {} parts", sc.parts.len()));
         }
         if let Some((plan, out)) = plan {
             let t0 = Instant::now();
             match render_model(m, plan, out) {
                 Ok((rj, _)) => {
                     j["render"] = json!({ "output": rj["output"], "width": rj["width"], "height": rj["height"] });
-                    t.push_str(&format!(", Bild {}", out.display()));
+                    t.push_str(&tr!(", Bild {}", ", image {}", out.display()));
                 }
                 Err(Fail::Usage(e) | Fail::Kernel(e)) => {
                     j["render"] = json!({ "error": e });
-                    t.push_str(&format!(", Bild: {e}"));
+                    t.push_str(&tr!(", Bild: {e}", ", image: {e}"));
                 }
             }
             let render_ms = t0.elapsed().as_secs_f64() * 1000.0;
@@ -130,7 +138,7 @@ fn report(m: &mut Model, plan: Option<&(Plan, PathBuf)>, r: Run) -> (Json, Strin
     }
     j["timings"] = timings;
     if !r.changed.is_empty() {
-        t.push_str(&format!(" – geändert: {}", r.changed.join(", ")));
+        t.push_str(&tr!(" – geändert: {}", " – changed: {}", r.changed.join(", ")));
     }
     t.push('\n');
     t.push_str(&m.diagnostics_text());
@@ -147,7 +155,7 @@ fn emit(json_mode: bool, j: &Json, t: &str) {
 
 pub(crate) fn command(c: &Common, a: &WatchArgs) -> Result<Outcome, Fail> {
     if c.file.as_os_str() == "-" {
-        return Err(Fail::Usage("watch braucht eine Datei (nicht stdin)".into()));
+        return Err(Fail::Usage(tr!("watch braucht eine Datei (nicht stdin)", "watch needs a file (not stdin)")));
     }
     let plan = match &a.render {
         Some(out) => Some((Plan::from_args(&a.v)?, out.clone())),
@@ -164,7 +172,8 @@ pub(crate) fn command(c: &Common, a: &WatchArgs) -> Result<Outcome, Fail> {
     emit(c.json, &j, &t);
 
     let (tx, rx) = mpsc::channel::<notify::Result<notify::Event>>();
-    let mut watcher = notify::recommended_watcher(tx).map_err(|e| Fail::Usage(format!("Dateibeobachtung: {e}")))?;
+    let mut watcher =
+        notify::recommended_watcher(tx).map_err(|e| Fail::Usage(tr!("Dateibeobachtung: {e}", "file watching: {e}")))?;
     let mut files = project_files(&m, &c.file);
     let mut dirs: BTreeSet<PathBuf> = BTreeSet::new();
     let mut sync_dirs = |files: &BTreeSet<PathBuf>, watcher: &mut notify::RecommendedWatcher| {
@@ -226,7 +235,7 @@ pub(crate) fn command(c: &Common, a: &WatchArgs) -> Result<Outcome, Fail> {
             std::thread::sleep(Duration::from_millis(25));
         }
         let Some(text) = text else {
-            eprintln!("mcad watch: {} nicht lesbar", c.file.display());
+            eprintln!("{}", tr!("mcad watch: {} nicht lesbar", "mcad watch: {} not readable", c.file.display()));
             continue;
         };
         run += 1;

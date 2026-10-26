@@ -5,6 +5,7 @@
 //! Data files come from [`crate::Project::assets`] (loaded with the project, so a changed SVG
 //! or font changes the evaluation). Parsed SVGs are cached by content and options.
 
+use cad_i18n::{tr, trs};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -168,7 +169,7 @@ fn parse_svg(data: &[u8], o: &cad_svg::Options) -> Rc<Result<cad_svg::Svg, Strin
     }
     let r = Rc::new(match std::str::from_utf8(data) {
         Ok(t) => cad_svg::parse(t, o),
-        Err(_) => Err("SVG ist kein UTF-8-Text".into()),
+        Err(_) => Err(trs!("SVG ist kein UTF-8-Text", "SVG is not UTF-8 text").into()),
     });
     SVGS.with(|c| {
         let mut c = c.borrow_mut();
@@ -187,7 +188,7 @@ impl<'a> Ev<'a> {
             Value::Str(s) => Some(s.to_string()),
             Value::Undef => None,
             _ => {
-                self.warn(a.expr.span, format!("`{what}` muss ein Text sein"));
+                self.warn(a.expr.span, tr!("`{what}` muss ein Text sein", "`{what}` must be a text"));
                 None
             }
         }
@@ -199,7 +200,10 @@ impl<'a> Ev<'a> {
             Some(v) if v.is_finite() && v > 0.0 => v,
             Some(_) | None if matches!(x.val.v, Value::Undef) => default,
             _ => {
-                self.warn(x.expr.span, format!("`{what}` muss eine positive Zahl sein"));
+                self.warn(
+                    x.expr.span,
+                    tr!("`{what}` muss eine positive Zahl sein", "`{what}` must be a positive number"),
+                );
                 default
             }
         }
@@ -227,16 +231,15 @@ impl<'a> Ev<'a> {
             Some((path, a)) => match &a.0 {
                 Ok(b) => Some((path, b.clone())),
                 Err(e) => {
-                    self.error(span, format!("Datei `{path}` nicht gefunden ({e})"));
+                    self.error(span, tr!("Datei `{path}` nicht gefunden ({e})", "file `{path}` not found ({e})"));
                     None
                 }
             },
             None => {
                 self.error(
                     span,
-                    format!(
-                        "Datei `{rel}` nicht geladen: Dateinamen werden erkannt, wenn sie als Text im Projekt stehen \
-                         (z. B. `import(\"{rel}\")`)"
+                    tr!("Datei `{rel}` nicht geladen: Dateinamen werden erkannt, wenn sie als Text im Projekt stehen \
+                         (z. B. `import(\"{rel}\")`)", "file `{rel}` not loaded: file names are recognised when they appear as text in the project (e.g. `import(\"{rel}\")`)"
                     ),
                 );
                 None
@@ -255,13 +258,19 @@ impl<'a> Ev<'a> {
             1,
         );
         let Some(file) = self.str_arg(p[0], "file") else {
-            self.error(s.span, "import: Dateiname fehlt");
+            self.error(s.span, trs!("import: Dateiname fehlt", "import: file name missing"));
             return;
         };
         let fspan = p[0].map_or(s.span, |x| x.expr.span);
         for (i, n) in [(6, "layer"), (7, "origin"), (8, "width"), (9, "height")] {
             if let Some(x) = p[i] {
-                self.warn(x.expr.span, format!("import: `{n}` gilt nur für DXF und wird ignoriert"));
+                self.warn(
+                    x.expr.span,
+                    tr!(
+                        "import: `{n}` gilt nur für DXF und wird ignoriert",
+                        "import: `{n}` applies to DXF only and is ignored"
+                    ),
+                );
             }
         }
         if file.to_ascii_lowercase().ends_with(".stl") {
@@ -270,11 +279,23 @@ impl<'a> Ev<'a> {
         }
         if !file.to_ascii_lowercase().ends_with(".svg") {
             let ext = file.rsplit('.').next().unwrap_or("");
-            self.error(fspan, format!("import: nur SVG und STL werden unterstützt (nicht `.{ext}`)"));
+            self.error(
+                fspan,
+                tr!(
+                    "import: nur SVG und STL werden unterstützt (nicht `.{ext}`)",
+                    "import: only SVG and STL are supported (not `.{ext}`)"
+                ),
+            );
             return;
         }
         if let Some(x) = p[10] {
-            self.warn(x.expr.span, "import: `as` gilt nur für STL und wird ignoriert");
+            self.warn(
+                x.expr.span,
+                trs!(
+                    "import: `as` gilt nur für STL und wird ignoriert",
+                    "import: `as` applies to STL only and is ignored"
+                ),
+            );
         }
         let Some((path, data)) = self.asset_data(fspan, &file) else { return };
         let opts = cad_svg::Options {
@@ -303,14 +324,21 @@ impl<'a> Ev<'a> {
         }
         if profiles.is_empty() {
             if svg.paths.is_empty() {
-                self.warn(fspan, format!("{path}: keine Flächen im SVG"));
+                self.warn(fspan, tr!("{path}: keine Flächen im SVG", "{path}: no areas in the SVG"));
                 return;
             }
             // only open paths: a path (`sweep`), no region
             let open: Vec<cad_outline::Contour> = svg.paths.iter().map(|(c, _)| c.clone()).collect();
             profiles.push(Profile::Sketch { contours: ir_contours(&open), closed: false });
         } else if !svg.paths.is_empty() {
-            self.warn(fspan, format!("{path}: {} offene Pfade neben Flächen weggelassen", svg.paths.len()));
+            self.warn(
+                fspan,
+                tr!(
+                    "{path}: {} offene Pfade neben Flächen weggelassen",
+                    "{path}: {} open paths next to areas left out",
+                    svg.paths.len()
+                ),
+            );
         }
         self.profiles(s, profiles, ctx, dy);
     }
@@ -338,7 +366,10 @@ impl<'a> Ev<'a> {
             Some(Value::Str(t)) => t.to_string(),
             Some(Value::Num(n)) => fmt_num(*n),
             Some(_) => {
-                self.warn(p[0].unwrap().expr.span, "text: `text` muss ein Text sein");
+                self.warn(
+                    p[0].unwrap().expr.span,
+                    trs!("text: `text` muss ein Text sein", "text: `text` must be a text"),
+                );
                 return;
             }
         };
@@ -353,7 +384,10 @@ impl<'a> Ev<'a> {
             if opts.contains(&v.as_str()) {
                 Some(v)
             } else {
-                ev.warn(p[i].unwrap().expr.span, format!("text: `{}` ist einer von {}", names[i], opts.join(", ")));
+                ev.warn(
+                    p[i].unwrap().expr.span,
+                    tr!("text: `{}` ist einer von {}", "text: `{}` is one of {}", names[i], opts.join(", ")),
+                );
                 None
             }
         };
@@ -392,12 +426,11 @@ impl<'a> Ev<'a> {
                     cad_font::Pick::Exact => {}
                     cad_font::Pick::StyleMissing => self.warn(
                         fspan,
-                        format!("Stil „{}“ von {fam} nicht mitgeliefert; {fam} {sty}", n.style.unwrap_or_default()),
+                        tr!("Stil „{}“ von {fam} nicht mitgeliefert; {fam} {sty}", "style \"{}\" of {fam} not bundled; {fam} {sty}", n.style.unwrap_or_default()),
                     ),
                     cad_font::Pick::Fallback => self.warn(
                         fspan,
-                        format!(
-                            "Schrift „{}“ nicht vorhanden, verwendet wird die Standardschrift {fam} (mitgeliefert: cad stencil mono, JetBrains Mono, Inter, Allerta Stencil; eigene Schrift: font = \"datei.ttf\")",
+                        tr!("Schrift „{}“ nicht vorhanden, verwendet wird die Standardschrift {fam} (mitgeliefert: cad stencil mono, JetBrains Mono, Inter, Allerta Stencil; eigene Schrift: font = \"datei.ttf\")", "font \"{}\" not available, using the default font {fam} (bundled: cad stencil mono, JetBrains Mono, Inter, Allerta Stencil; own font: font = \"file.ttf\")",
                             n.family
                         ),
                     ),
@@ -413,7 +446,14 @@ impl<'a> Ev<'a> {
             }
             let span = arg.expr.span;
             if !font.is_stencil() {
-                self.warn(span, format!("text: `{what}` wirkt nur mit der Schrift „{}“", cad_font::STENCIL_FAMILY));
+                self.warn(
+                    span,
+                    tr!(
+                        "text: `{what}` wirkt nur mit der Schrift „{}“",
+                        "text: `{what}` only works with the font \"{}\"",
+                        cad_font::STENCIL_FAMILY
+                    ),
+                );
                 continue;
             }
             let (lo, hi, zero) = if i == 9 {
@@ -424,19 +464,31 @@ impl<'a> Ev<'a> {
             let v = match arg.val.as_num() {
                 Some(v) if v.is_finite() && (v > 0.0 || zero && v == 0.0) => v,
                 _ => {
-                    let need = if zero { "eine Zahl ≥ 0" } else { "eine positive Zahl" };
-                    self.warn(span, format!("text: `{what}` muss {need} sein (mm)"));
+                    let need = if zero {
+                        trs!("eine Zahl ≥ 0", "a number ≥ 0")
+                    } else {
+                        trs!("eine positive Zahl", "a positive number")
+                    };
+                    self.warn(span, tr!("text: `{what}` muss {need} sein (mm)", "text: `{what}` must be {need} (mm)"));
                     continue;
                 }
             };
             let (lo, hi) = (lo * tp.size, hi * tp.size);
             if v > hi || v > 0.0 && v < lo {
                 let lim = if v > hi {
-                    format!("höchstens {} mm", fmt_num(hi))
+                    tr!("höchstens {} mm", "at most {} mm", fmt_num(hi))
                 } else {
-                    format!("mindestens {} mm (oder 0)", fmt_num(lo))
+                    tr!("mindestens {} mm (oder 0)", "at least {} mm (or 0)", fmt_num(lo))
                 };
-                self.warn(span, format!("text: `{what}` = {} mm bei size = {}: {lim}", fmt_num(v), fmt_num(tp.size)));
+                self.warn(
+                    span,
+                    tr!(
+                        "text: `{what}` = {} mm bei size = {}: {lim}",
+                        "text: `{what}` = {} mm at size = {}: {lim}",
+                        fmt_num(v),
+                        fmt_num(tp.size)
+                    ),
+                );
             }
             if i == 9 {
                 tp.stroke_width = Some(v);
@@ -459,11 +511,25 @@ impl<'a> Ev<'a> {
             let chars: String = lay.fallback.iter().collect();
             let fam = font.names().0;
             let fb = cad_font::fallback_font(&font).names();
-            self.warn(tspan, format!("Zeichen „{chars}“ fehlen in {fam}; ersetzt aus {} {}", fb.0, fb.1));
+            self.warn(
+                tspan,
+                tr!(
+                    "Zeichen „{chars}“ fehlen in {fam}; ersetzt aus {} {}",
+                    "characters \"{chars}\" missing in {fam}; replaced from {} {}",
+                    fb.0,
+                    fb.1
+                ),
+            );
         }
         if !lay.missing.is_empty() {
             let chars: String = lay.missing.iter().collect();
-            self.warn(tspan, format!("Zeichen „{chars}“ fehlen in der Schrift und in der Ersatzschrift (Platzhalter)"));
+            self.warn(
+                tspan,
+                tr!(
+                    "Zeichen „{chars}“ fehlen in der Schrift und in der Ersatzschrift (Platzhalter)",
+                    "characters \"{chars}\" missing in the font and in the fallback font (placeholder)"
+                ),
+            );
         }
         let profiles: Vec<Profile> = lay
             .glyphs

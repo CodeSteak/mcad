@@ -47,7 +47,7 @@ fn block_keys_from_progress() {
     let done = s.run_to_idle();
     let n = blend(last_scene(&done).unwrap());
     assert_eq!(n.status, NodeStatus::Error);
-    assert_eq!(n.messages[0].message, cad_engine::BLOCKED_MESSAGE);
+    assert_eq!(n.messages[0].message, cad_engine::blocked_message());
     let diags: Vec<_> = done
         .iter()
         .filter_map(|m| match m {
@@ -56,7 +56,7 @@ fn block_keys_from_progress() {
         })
         .next_back()
         .unwrap();
-    assert!(diags.iter().any(|d| d.message == cad_engine::BLOCKED_MESSAGE && d.node == Some(n.idx)));
+    assert!(diags.iter().any(|d| d.message == cad_engine::blocked_message() && d.node == Some(n.idx)));
     // changed parameter: computed again
     s.post(ToEngine::SetSource { text: plate(5.0), version: 2 });
     let done = s.run_to_idle();
@@ -80,7 +80,7 @@ fn drag_suspends_slow_fillet_and_drag_end_restores_it() {
     s.post(ToEngine::SetSource { text: plate(5.0), version: 2 });
     let done = s.run_to_idle();
     let n = blend(last_scene(&done).unwrap());
-    assert!(n.hints.iter().any(|h| h == cad_engine::SUSPENDED_HINT), "{:?}", n.hints);
+    assert!(n.hints.iter().any(|h| h == cad_engine::suspended_hint()), "{:?}", n.hints);
     assert_eq!(n.status, NodeStatus::Ok);
     let draft_key = n.mesh_key.clone();
     // release without a new source: evaluated in full again
@@ -88,7 +88,7 @@ fn drag_suspends_slow_fillet_and_drag_end_restores_it() {
     assert!(last_scene(&msgs).is_some(), "re-evaluation starts: {msgs:?}");
     let done = s.run_to_idle();
     let n = blend(last_scene(&done).unwrap());
-    assert!(!n.hints.iter().any(|h| h == cad_engine::SUSPENDED_HINT), "{:?}", n.hints);
+    assert!(!n.hints.iter().any(|h| h == cad_engine::suspended_hint()), "{:?}", n.hints);
     assert_ne!(n.mesh_key, draft_key);
     let fine: Vec<_> = done
         .iter()

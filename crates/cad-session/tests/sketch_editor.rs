@@ -52,6 +52,7 @@ fn down(x: f64, y: f64) -> Option<Ray> {
 
 #[test]
 fn draws_lines_into_a_new_sketch_and_continues() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let mut text = String::from("cube(2);\n");
     s.post(ToEngine::SetSource { text: text.clone(), version: 1 });
@@ -114,6 +115,7 @@ fn draws_lines_into_a_new_sketch_and_continues() {
 
 #[test]
 fn sketch_under_a_transformation_snaps_in_its_plane() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let text = "grid g {\n    x: a = 0, b = 10;\n    y: u = 0, v = 10;\n}\ntranslate([0, 0, 5]) rotate([90, 0, 0]) linear_extrude(2) sketch {\n    start(g[a, u]);\n    line(to = g[b, u]);\n}\n";
     s.post(ToEngine::SetSource { text: text.into(), version: 1 });
@@ -135,6 +137,7 @@ fn sketch_under_a_transformation_snaps_in_its_plane() {
 
 #[test]
 fn syntax_errors_stop_drawing_and_select_finds_segments() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let text = "sketch {\n    start([0, 0]);\n    line(to = [10, 0]);\n    line(to = [10, 10]);\n    close();\n}\n";
     s.post(ToEngine::SetSource { text: text.into(), version: 1 });
@@ -145,10 +148,16 @@ fn syntax_errors_stop_drawing_and_select_finds_segments() {
     let a = answer(s.post(req(2, 12, SketchTool::Line, vec![], down(1.0, 1.0), true)));
     assert!(a.message.unwrap().contains("Syntaxfehler"));
     assert!(a.edits.is_empty());
+    {
+        let _en = cad_i18n::scoped(cad_i18n::Lang::En);
+        let a = answer(s.post(req(2, 12, SketchTool::Line, vec![], down(1.0, 1.0), true)));
+        assert!(a.message.unwrap().starts_with("syntax error in the source"));
+    }
 }
 
 #[test]
 fn sketch_op_info_carries_the_plane() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let text = "rotate_extrude() sketch {\n    start([10, 0]);\n    line(to = [20, 0]);\n    line(to = [20, 5]);\n    close();\n}\n";
     let msgs = s.post(ToEngine::SetSource { text: text.into(), version: 1 });

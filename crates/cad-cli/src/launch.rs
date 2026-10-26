@@ -5,6 +5,8 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use cad_i18n::{tr, trs};
+
 /// What `mcad [PFAD]` does.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Decision {
@@ -41,26 +43,40 @@ pub fn decide(target: Option<&Path>, env: &dyn Fn(&str) -> Option<String>, gui_b
     Decision::Gui(target.map(Path::to_path_buf))
 }
 
-const HEADLESS: &str = "Ohne UI (headless) arbeiten die Befehle:\n  \
+fn headless() -> &'static str {
+    trs!(
+        "Ohne UI (headless) arbeiten die Befehle:\n  \
 mcad check DATEI · mcad outline DATEI · mcad render DATEI -o bild.png --views all · mcad inspect DATEI --line N\n  \
 mcad measure DATEI … · mcad watch DATEI --json --render bild.png · mcad set DATEI --param m.p=wert · mcad export DATEI -o teil.step\n\
-Hilfe: mcad --help";
+Hilfe: mcad --help",
+        "Without the UI (headless) the commands work:\n  \
+mcad check FILE · mcad outline FILE · mcad render FILE -o image.png --views all · mcad inspect FILE --line N\n  \
+mcad measure FILE … · mcad watch FILE --json --render image.png · mcad set FILE --param m.p=value · mcad export FILE -o part.step\n\
+Help: mcad --help"
+    )
+}
 
 /// Message (stderr) for a decision that does not start the UI.
 pub fn message(d: &Decision, target: Option<&Path>) -> String {
-    let what = target.map(|p| format!(" für {}", p.display())).unwrap_or_default();
+    let what = target.map(|p| tr!(" für {}", " for {}", p.display())).unwrap_or_default();
+    let headless = headless();
     match d {
         Decision::Gui(_) => String::new(),
-        Decision::NotBuilt => format!(
+        Decision::NotBuilt => tr!(
             "mcad: UI nicht in diesem Build (ohne Feature `gui` gebaut){what}.\n\
-             Desktop-UI: cargo build --release -p cad-cli (Standard-Features, Linux: WebKitGTK).\n{HEADLESS}"
+             Desktop-UI: cargo build --release -p cad-cli (Standard-Features, Linux: WebKitGTK).\n{headless}",
+            "mcad: no UI in this build (built without the feature `gui`){what}.\n\
+             Desktop UI: cargo build --release -p cad-cli (default features, Linux: WebKitGTK).\n{headless}"
         ),
-        Decision::NoDisplay => format!(
-            "mcad: keine grafische Sitzung (weder DISPLAY noch WAYLAND_DISPLAY gesetzt), die Desktop-UI{what} startet nicht.\n{HEADLESS}"
+        Decision::NoDisplay => tr!(
+            "mcad: keine grafische Sitzung (weder DISPLAY noch WAYLAND_DISPLAY gesetzt), die Desktop-UI{what} startet nicht.\n{headless}",
+            "mcad: no graphical session (neither DISPLAY nor WAYLAND_DISPLAY set), the desktop UI{what} does not start.\n{headless}"
         ),
-        Decision::Missing(p) => {
-            format!("mcad: {} gibt es nicht (Datei .mcad/.scad oder Ordner erwartet).\n{HEADLESS}", p.display())
-        }
+        Decision::Missing(p) => tr!(
+            "mcad: {} gibt es nicht (Datei .mcad/.scad oder Ordner erwartet).\n{headless}",
+            "mcad: {} does not exist (expected a .mcad/.scad file or a folder).\n{headless}",
+            p.display()
+        ),
     }
 }
 

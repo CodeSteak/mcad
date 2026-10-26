@@ -7,6 +7,7 @@ publish.workspace = true
 description = "Measuring on the exact B-rep: distances, radii, angles, lengths, areas, sections (shared by CLI and session)"
 
 [dependencies]
+cad-i18n.workspace = true
 cad-kernel.workspace = true
 glam.workspace = true
 serde.workspace = true

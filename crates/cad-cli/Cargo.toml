@@ -27,6 +27,7 @@ cad-render.workspace = true
 cad-kernel.workspace = true
 cad-engine.workspace = true
 cad-measure.workspace = true
+cad-i18n.workspace = true
 kernel-smlib.workspace = true
 kernel-solidcore.workspace = true
 glam.workspace = true

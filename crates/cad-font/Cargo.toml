@@ -7,6 +7,7 @@ publish.workspace = true
 description = "Text outlines: bundled OFL fonts, shaping (rustybuzz) and exact glyph contours"
 
 [dependencies]
+cad-i18n.workspace = true
 glam.workspace = true
 cad-outline = { path = "../cad-outline" }
 cad-kernel.workspace = true

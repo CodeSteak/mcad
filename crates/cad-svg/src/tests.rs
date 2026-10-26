@@ -169,6 +169,7 @@ fn hidden_and_unfilled() {
 
 #[test]
 fn open_paths_are_paths() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let o = Options { dpi: 25.4, ..Default::default() };
     let body = r#"<line x1="0" y1="0" x2="10" y2="0"/>
 <polyline points="0,0 5,5 10,0"/>
@@ -182,6 +183,7 @@ fn open_paths_are_paths() {
 
 #[test]
 fn unsupported_warns_with_line() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let body = r##"<style>.a { fill: red }</style>
 <text x="0" y="10">Hallo</text>
 <image href="a.png" width="10" height="10"/>
@@ -218,6 +220,7 @@ fn select_by_id() {
 
 #[test]
 fn errors() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     assert!(parse("<svg", &Options::default()).unwrap_err().contains("nicht lesbar"));
     assert!(parse("<html/>", &Options::default()).unwrap_err().contains("kein SVG"));
     let s = parse(&doc("", r#"<path d="M0 0 L10 0 L10 10 Z L x"/>"#), &Options::default()).unwrap();
@@ -228,6 +231,19 @@ fn errors() {
 <sodipodi:namedview/><metadata/><defs><linearGradient id="g"/></defs><rect width="1" height="1"/></svg>"#;
     let s = parse(ink, &Options::default()).unwrap();
     assert!(s.warnings.is_empty(), "{:?}", s.warnings);
+}
+
+#[test]
+fn messages_english() {
+    let _en = cad_i18n::scoped(cad_i18n::Lang::En);
+    assert!(parse("<svg", &Options::default()).unwrap_err().starts_with("SVG not readable"));
+    assert_eq!(parse("<html/>", &Options::default()).unwrap_err(), "not an SVG document (root element `html`)");
+    let s = parse(&doc("", r#"<path d="M0 0 L10 0 L10 10 Z L x"/>"#), &Options::default()).unwrap();
+    assert!(s.warnings.iter().any(|w| w.msg.starts_with("`path`: path data invalid")), "{:?}", s.warnings);
+    let s = parse(&doc("", r#"<path d="M0 0 L5 5"/><image href="a.png"/>"#), &Options::default()).unwrap();
+    let msgs: Vec<&str> = s.warnings.iter().map(|w| w.msg.as_str()).collect();
+    assert!(msgs.contains(&"`path`: open path is not filled (taken as a path only; Z closes it)"), "{msgs:?}");
+    assert!(msgs.contains(&"`image`: images not supported"), "{msgs:?}");
 }
 
 #[test]

@@ -1,6 +1,7 @@
 //! Expression evaluation: variables, operators, calls (with tail calls), list
 //! comprehensions, indexing, members.
 
+use cad_i18n::{tr, trs};
 use std::rc::Rc;
 
 use cad_syntax::Span;
@@ -66,7 +67,10 @@ impl<'a> Ev<'a> {
                 {
                     self.error(
                         span,
-                        format!("Typfehler: {msg}; Raster, Rasterlinien/-ebenen und Instanzen sind keine Werte"),
+                        tr!(
+                            "Typfehler: {msg}; Raster, Rasterlinien/-ebenen und Instanzen sind keine Werte",
+                            "type error: {msg}; grids, grid lines/planes and instances are not values"
+                        ),
                     );
                     return Ok(Val::undef());
                 }
@@ -174,7 +178,7 @@ impl<'a> Ev<'a> {
                 "$preview" => Val::bool(self.opts.preview),
                 "$tol" | "$vpr" | "$vpt" | "$vpd" | "$vpf" | "$parent_modules" => Val::undef(),
                 _ => {
-                    self.warn(span, format!("unbekannte Variable `{name}`"));
+                    self.warn(span, tr!("unbekannte Variable `{name}`", "unknown variable `{name}`"));
                     Val::undef()
                 }
             });
@@ -182,7 +186,7 @@ impl<'a> Ev<'a> {
         match self.lookup(name, env)? {
             Some(v) => Ok(v),
             None => {
-                self.warn(span, format!("unbekannte Variable `{name}`"));
+                self.warn(span, tr!("unbekannte Variable `{name}`", "unknown variable `{name}`"));
                 Ok(Val { def: Some(span), ..Val::undef() })
             }
         }
@@ -224,7 +228,7 @@ impl<'a> Ev<'a> {
                 Hit::Default(e, de, dd) => return self.force(&cur, name, e, &de, &dd).map(Some),
                 Hit::Cycle => {
                     let sp = self.cur_span;
-                    self.warn(sp, format!("rekursive Definition von `{name}`"));
+                    self.warn(sp, tr!("rekursive Definition von `{name}`", "recursive definition of `{name}`"));
                     return Ok(Some(Val::undef()));
                 }
                 Hit::Miss => {}
@@ -311,7 +315,7 @@ impl<'a> Ev<'a> {
             if let Some(v) = self.builtin_fn(name, &a, e, env)? {
                 return Ok(v);
             }
-            self.warn(callee.span, format!("unbekannte Funktion `{name}`"));
+            self.warn(callee.span, tr!("unbekannte Funktion `{name}`", "unknown function `{name}`"));
             return Ok(Val::undef());
         }
         let ns = match &callee.kind {
@@ -330,7 +334,7 @@ impl<'a> Ev<'a> {
             }
             _ => {
                 let t = f.type_de();
-                self.warn(callee.span, format!("{t} ist nicht aufrufbar"));
+                self.warn(callee.span, tr!("{t} ist nicht aufrufbar", "{t} is not callable"));
                 Ok(Val::undef())
             }
         }
@@ -349,7 +353,12 @@ impl<'a> Ev<'a> {
         dy: &Dyn<'a>,
     ) -> R<Val<'a>> {
         if self.fn_depth >= self.opts.max_function_depth {
-            return self.too_deep(span, "function", name.unwrap_or("Funktionsliteral"), self.opts.max_function_depth);
+            return self.too_deep(
+                span,
+                "function",
+                name.unwrap_or(trs!("Funktionsliteral", "function literal")),
+                self.opts.max_function_depth,
+            );
         }
         self.check_stack(span)?;
         self.fn_depth += 1;
@@ -455,7 +464,7 @@ impl<'a> Ev<'a> {
     fn push_checked(&mut self, out: &mut Vec<Val<'a>>, v: Val<'a>, span: Span) -> R<()> {
         if out.len() >= self.opts.max_list_len {
             let max = self.opts.max_list_len;
-            return self.fatal(span, format!("Liste hat mehr als {max} Elemente"));
+            return self.fatal(span, tr!("Liste hat mehr als {max} Elemente", "list has more than {max} elements"));
         }
         out.push(v);
         Ok(())
@@ -590,20 +599,26 @@ impl<'a> Ev<'a> {
         };
         let en = self.expr(end, env, dy)?;
         let (Some(mut a), Some(mut b)) = (s.as_num(), en.as_num()) else {
-            self.warn(e.span, "Bereichsgrenzen müssen Zahlen sein");
+            self.warn(e.span, trs!("Bereichsgrenzen müssen Zahlen sein", "range bounds must be numbers"));
             return Ok(Val::undef());
         };
         let stepv = match &st {
             Some(v) => match v.as_num() {
                 Some(n) => n,
                 None => {
-                    self.warn(e.span, "Bereichsschritt muss eine Zahl sein");
+                    self.warn(e.span, trs!("Bereichsschritt muss eine Zahl sein", "range step must be a number"));
                     return Ok(Val::undef());
                 }
             },
             None => {
                 if a > b {
-                    self.warn(e.span, "[Anfang:Ende] mit Anfang > Ende ist veraltet, wird vertauscht");
+                    self.warn(
+                        e.span,
+                        trs!(
+                            "[Anfang:Ende] mit Anfang > Ende ist veraltet, wird vertauscht",
+                            "[start:end] with start > end is deprecated, swapped"
+                        ),
+                    );
                     std::mem::swap(&mut a, &mut b);
                 }
                 1.0
@@ -631,11 +646,11 @@ impl<'a> Ev<'a> {
         let item = match items {
             [IndexItem::Expr(x)] => x,
             [IndexItem::Wild(sp)] => {
-                self.error(*sp, "`*` nur in Rasterzugriffen erlaubt");
+                self.error(*sp, trs!("`*` nur in Rasterzugriffen erlaubt", "`*` only allowed in grid access"));
                 return Ok(undef);
             }
             _ => {
-                self.warn(e.span, "nur ein Index erlaubt");
+                self.warn(e.span, trs!("nur ein Index erlaubt", "only one index allowed"));
                 return Ok(undef);
             }
         };
@@ -654,7 +669,13 @@ impl<'a> Ev<'a> {
                 Err(n) => {
                     let base_txt = self.text(base.span);
                     let shown = if n.is_nan() { to_hint(&iv) } else { fmt_num(n) };
-                    self.warn(e.span, format!("`{base_txt}[{shown}]` ist keine benannte Instanz"));
+                    self.warn(
+                        e.span,
+                        tr!(
+                            "`{base_txt}[{shown}]` ist keine benannte Instanz",
+                            "`{base_txt}[{shown}]` is not a named instance"
+                        ),
+                    );
                     undef
                 }
             });
@@ -707,7 +728,11 @@ impl<'a> Ev<'a> {
                 let b = self.text(base.span);
                 self.warn(
                     e.span,
-                    format!("`{b}` ist eine Liste benannter Instanzen: `{b}[i].{}` verwenden", name.name),
+                    tr!(
+                        "`{b}` ist eine Liste benannter Instanzen: `{b}[i].{}` verwenden",
+                        "`{b}` is a list of named instances: use `{b}[i].{}`",
+                        name.name
+                    ),
                 );
                 Ok(Val::undef())
             }

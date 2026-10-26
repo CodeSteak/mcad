@@ -265,7 +265,7 @@ pub fn object_label(tree: &Tree, n: NodeIdx) -> String {
     cad_engine::object_label(tree, n)
 }
 
-/// Text of a kernel diagnostic: the operands it names (`{nodes}`) as "Zeile 12 (dom)" (with
+/// Text of a kernel diagnostic: the operands it names (`{nodes}`) as "line 12 (dom)" (with
 /// the file for other project files), otherwise the engine's text.
 pub fn diag_text(src: &Source, tree: &Tree, d: &cad_engine::Diagnostic) -> String {
     let Some(t) = &d.template else { return d.message.clone() };
@@ -277,8 +277,8 @@ pub fn diag_text(src: &Source, tree: &Tree, d: &cad_engine::Diagnostic) -> Strin
             let label = object_label(tree, n);
             let r = src.range(node.span);
             match src.path(node.span) {
-                Some(f) => format!("{f} Zeile {} ({label})", r.line),
-                None => format!("Zeile {} ({label})", r.line),
+                Some(f) => cad_i18n::tr!("{f} Zeile {} ({label})", "{f} line {} ({label})", r.line),
+                None => cad_i18n::tr!("Zeile {} ({label})", "line {} ({label})", r.line),
             }
         })
         .collect();

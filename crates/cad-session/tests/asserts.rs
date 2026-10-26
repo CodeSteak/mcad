@@ -51,6 +51,7 @@ const PLATE: &str = "cube([40, 30, 3]);\n";
 
 #[test]
 fn keepout_overlap_is_exact_and_not_in_the_result() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let src = format!("{PLATE}assert_keepout() translate([10, 10, 2]) cube([10, 10, 5]);\n");
     let (r, msgs) = run(&mut s, &src, 1);
@@ -77,6 +78,7 @@ fn keepout_overlap_is_exact_and_not_in_the_result() {
 
 #[test]
 fn keepout_clearance() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // 0.3 mm above the plate, 0.5 mm required
     let r = check(&format!("{PLATE}assert_keepout(clearance = 0.5) translate([10, 10, 3.3]) cube(5);\n"));
     let p = &r[0].pairs[0];
@@ -96,6 +98,7 @@ fn keepout_clearance() {
 
 #[test]
 fn keepout_checks_every_part() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = "module teil(x) translate([x, 0, 0]) cube(10);\n\
                a: teil(0);\nb: teil(20);\n\
                assert_keepout() translate([25, 5, 5]) cube(10);\n";
@@ -109,6 +112,7 @@ fn keepout_checks_every_part() {
 
 #[test]
 fn disjoint() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let r = check("assert_disjoint() { cube(10); translate([8, 0, 0]) cube(10); }\n");
     let p = &r[0].pairs[0];
     assert!(!p.ok);
@@ -121,6 +125,7 @@ fn disjoint() {
 
 #[test]
 fn intersect_needs_a_connected_group() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // chain a–b–c: a and c do not meet, but the group is connected
     let chain = "assert_intersect() { cube(10); translate([8, 0, 0]) cube(10); translate([16, 0, 0]) cube(10); }\n";
     let r = check(chain);
@@ -140,6 +145,7 @@ fn intersect_needs_a_connected_group() {
 
 #[test]
 fn touches_face_contact_area() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // box face 5 × 5 on the cube's face x = 10
     let r = check("assert_touches() { cube(10); translate([10, 2, 0]) cube([10, 5, 5]); }\n");
     let p = &r[0].pairs[0];
@@ -158,6 +164,7 @@ fn touches_face_contact_area() {
 
 #[test]
 fn touches_line_and_point_contact() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let line =
         "assert_touches() { cube([30, 30, 3]); translate([5, 15, 8]) rotate([0, 90, 0]) cylinder(h = 20, r = 5); }\n";
     let r = check(line);
@@ -172,6 +179,7 @@ fn touches_line_and_point_contact() {
 
 #[test]
 fn touches_gap_and_overlap() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let r = check("assert_touches() { cube(10); translate([10.2, 0, 0]) cube(10); }\n");
     let p = &r[0].pairs[0];
     assert_eq!(p.problem.as_deref(), Some("gap"));
@@ -187,6 +195,7 @@ fn touches_gap_and_overlap() {
 
 #[test]
 fn imported_mesh_as_keepout() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let stl = include_str!("../../../tests/models/stl/winkel.stl");
     let mut s = session();
     s.post(ToEngine::SetFiles { files: [("winkel.stl".to_string(), stl.to_string())].into(), main: None });
@@ -204,6 +213,7 @@ fn imported_mesh_as_keepout() {
 
 #[test]
 fn results_are_cached_and_skipped_while_dragging() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let src = "assert_disjoint() { cube(10); translate([8, 0, 0]) cube(10); }\n";
     let (r, _) = run(&mut s, src, 1);
@@ -220,6 +230,7 @@ fn results_are_cached_and_skipped_while_dragging() {
 
 #[test]
 fn warnings_of_the_statement() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
     let (_, msgs) =
         run(&mut s, "assert_disjoint() cube(1);\nassert_touches(contact = \"edge\", tol = -1) { cube(1); }\n", 1);

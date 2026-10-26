@@ -4,6 +4,7 @@
 //! extrusion by a 1D search along their generator; B-spline surfaces by a grid search plus
 //! Gauss–Newton steps.
 
+use cad_i18n::trs;
 use cad_kernel::brep::{BSplineSurface, Frame, Surface};
 use glam::DVec3;
 
@@ -21,17 +22,17 @@ pub fn is_analytic(s: &Surface) -> bool {
     )
 }
 
-/// German name of a surface kind (labels).
+/// Name of a surface kind (labels), in the current language.
 pub fn kind_name(s: &Surface) -> &'static str {
     match s {
-        Surface::Plane { .. } => "Ebene",
-        Surface::Cylinder { .. } => "Zylinder",
-        Surface::Cone { .. } => "Kegel",
-        Surface::Sphere { .. } => "Kugel",
-        Surface::Torus { .. } => "Torus",
-        Surface::Revolution { .. } => "Rotationsfläche",
-        Surface::Extrusion { .. } => "Extrusionsfläche",
-        Surface::BSpline(_) => "Freiformfläche",
+        Surface::Plane { .. } => trs!("Ebene", "plane"),
+        Surface::Cylinder { .. } => trs!("Zylinder", "cylinder"),
+        Surface::Cone { .. } => trs!("Kegel", "cone"),
+        Surface::Sphere { .. } => trs!("Kugel", "sphere"),
+        Surface::Torus { .. } => trs!("Torus", "torus"),
+        Surface::Revolution { .. } => trs!("Rotationsfläche", "surface of revolution"),
+        Surface::Extrusion { .. } => trs!("Extrusionsfläche", "extrusion surface"),
+        Surface::BSpline(_) => trs!("Freiformfläche", "free-form surface"),
     }
 }
 

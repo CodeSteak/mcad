@@ -1,6 +1,7 @@
 //! Statement evaluation: scopes, module instantiation, control flow, grids, anchors,
 //! named instances, and building the geometry tree.
 
+use cad_i18n::{tr, trs};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashSet};
 use std::rc::{Rc, Weak};
@@ -329,7 +330,13 @@ impl<'a> Ev<'a> {
     #[inline(never)]
     fn steps_exceeded(&mut self, span: Span) -> R<()> {
         let max = self.opts.max_steps;
-        self.fatal(span, format!("Auswertung abgebrochen: mehr als {max} Schritte (Endlosschleife?)"))
+        self.fatal(
+            span,
+            tr!(
+                "Auswertung abgebrochen: mehr als {max} Schritte (Endlosschleife?)",
+                "evaluation stopped: more than {max} steps (endless loop?)"
+            ),
+        )
     }
 
     #[inline]
@@ -343,15 +350,24 @@ impl<'a> Ev<'a> {
     #[cold]
     #[inline(never)]
     fn stack_exceeded(&mut self, span: Span) -> R<()> {
-        self.fatal(span, "Rekursion zu tief: Auswertungsstapel erschöpft")
+        self.fatal(
+            span,
+            trs!("Rekursion zu tief: Auswertungsstapel erschöpft", "recursion too deep: evaluation stack exhausted"),
+        )
     }
 
     #[cold]
     #[inline(never)]
     pub(crate) fn too_deep<T>(&mut self, span: Span, what: &str, name: &str, max: u32) -> R<T> {
         let msg = match what {
-            "module" => format!("Rekursion zu tief: Modul `{name}` mehr als {max} Ebenen verschachtelt"),
-            _ => format!("Rekursion zu tief: Funktion `{name}` mehr als {max} Ebenen tief aufgerufen"),
+            "module" => tr!(
+                "Rekursion zu tief: Modul `{name}` mehr als {max} Ebenen verschachtelt",
+                "recursion too deep: module `{name}` nested more than {max} levels"
+            ),
+            _ => tr!(
+                "Rekursion zu tief: Funktion `{name}` mehr als {max} Ebenen tief aufgerufen",
+                "recursion too deep: function `{name}` called more than {max} levels deep"
+            ),
         };
         self.fatal(span, msg)
     }
@@ -368,9 +384,9 @@ impl<'a> Ev<'a> {
     pub(crate) fn where_(&self, span: Span, here: Span) -> String {
         let l = self.line(span);
         if span.file() == here.file() {
-            format!("Zeile {l}")
+            tr!("Zeile {l}", "line {l}")
         } else {
-            format!("Zeile {l} in `{}`", self.proj.path_of(span))
+            tr!("Zeile {l} in `{}`", "line {l} in `{}`", self.proj.path_of(span))
         }
     }
 
@@ -437,7 +453,13 @@ impl<'a> Ev<'a> {
             if self.root_mod.is_none() {
                 self.root_mod = Some(idx);
             } else {
-                self.warn(s.span, "mehrere `!`-Modifikatoren: nur der erste gilt");
+                self.warn(
+                    s.span,
+                    trs!(
+                        "mehrere `!`-Modifikatoren: nur der erste gilt",
+                        "several `!` modifiers: only the first applies"
+                    ),
+                );
             }
         }
         idx
@@ -473,7 +495,14 @@ impl<'a> Ev<'a> {
                     if env.set_lazy(&name.name, value) {
                         if let Some((_, sp)) = first.iter().find(|(n, _)| *n == name.name) {
                             let (w1, w2) = (self.where_(*sp, s.span), self.where_(s.span, *sp));
-                            self.warn(name.span, format!("`{}` aus {w1} wird in {w2} überschrieben", name.name));
+                            self.warn(
+                                name.span,
+                                tr!(
+                                    "`{}` aus {w1} wird in {w2} überschrieben",
+                                    "`{}` from {w1} is overwritten in {w2}",
+                                    name.name
+                                ),
+                            );
                         }
                     } else {
                         first.push((&name.name, s.span));
@@ -629,7 +658,10 @@ impl<'a> Ev<'a> {
             } else {
                 self.warn(
                     Span::default(),
-                    format!("-D {name}: keine Zuweisung `{name}` auf oberster Ebene der Hauptdatei (ignoriert)"),
+                    tr!(
+                        "-D {name}: keine Zuweisung `{name}` auf oberster Ebene der Hauptdatei (ignoriert)",
+                        "-D {name}: no assignment `{name}` at the top level of the main file (ignored)"
+                    ),
                 );
             }
         }
@@ -679,7 +711,7 @@ impl<'a> Ev<'a> {
                 .find_map(|(i, l)| find_module_path(&l.ast.stmts, name).map(|p| (p, Some(i))))
         });
         let Some((path, lib)) = found else {
-            return self.fatal(Span::default(), format!("Modul `{name}` nicht gefunden"));
+            return self.fatal(Span::default(), tr!("Modul `{name}` nicht gefunden", "module `{name}` not found"));
         };
         let def = *path.last().unwrap();
         info.def_stmt = Some(def.stmt);
@@ -750,7 +782,14 @@ impl<'a> Ev<'a> {
         let e = Env::new(Some(&env), None, 0, true);
         for (oname, _) in overrides {
             if !def.params.iter().any(|p| p.name.name == *oname) {
-                self.warn(def.name.span, format!("Modul `{}` hat keinen Parameter `{oname}`", def.name.name));
+                self.warn(
+                    def.name.span,
+                    tr!(
+                        "Modul `{}` hat keinen Parameter `{oname}`",
+                        "module `{}` has no parameter `{oname}`",
+                        def.name.name
+                    ),
+                );
             }
         }
         for p in &def.params {
@@ -952,7 +991,14 @@ impl<'a> Ev<'a> {
         for (i, a) in vars.iter().enumerate() {
             // OpenSCAD keeps the first of several assignments to one name.
             if vars[..i].iter().any(|b| b.name.name == a.name.name) {
-                self.warn(a.name.span, format!("doppelte Zuweisung an `{}` wird ignoriert", a.name.name));
+                self.warn(
+                    a.name.span,
+                    tr!(
+                        "doppelte Zuweisung an `{}` wird ignoriert",
+                        "duplicate assignment to `{}` is ignored",
+                        a.name.name
+                    ),
+                );
                 continue;
             }
             let v = self.expr(&a.value, &e, &d)?;
@@ -1013,7 +1059,8 @@ impl<'a> Ev<'a> {
             Value::Range(r) => {
                 let c = r.count();
                 if c > self.opts.max_list_len as f64 {
-                    return self.fatal(span, format!("Bereich hat zu viele Elemente ({c})"));
+                    return self
+                        .fatal(span, tr!("Bereich hat zu viele Elemente ({c})", "range has too many elements ({c})"));
                 }
                 c as usize
             }
@@ -1072,11 +1119,17 @@ impl<'a> Ev<'a> {
             match a.name {
                 Some(n) => {
                     if !params.iter().any(|p| p.name.name == n.name) {
-                        self.warn(n.span, format!("`{what}` hat keinen Parameter `{}`", n.name));
+                        self.warn(
+                            n.span,
+                            tr!("`{what}` hat keinen Parameter `{}`", "`{what}` has no parameter `{}`", n.name),
+                        );
                         continue;
                     }
                     if named.iter().any(|b| b.name.is_some_and(|m| m.name == n.name)) {
-                        self.warn(n.span, format!("Argument `{}` mehrfach angegeben", n.name));
+                        self.warn(
+                            n.span,
+                            tr!("Argument `{}` mehrfach angegeben", "argument `{}` given more than once", n.name),
+                        );
                     }
                     named.push(a);
                 }
@@ -1085,7 +1138,15 @@ impl<'a> Ev<'a> {
         }
         if pos.len() > params.len() {
             let sp = pos[params.len()].expr.span;
-            self.warn(sp, format!("zu viele Argumente für `{what}` ({} statt {})", pos.len(), params.len()));
+            self.warn(
+                sp,
+                tr!(
+                    "zu viele Argumente für `{what}` ({} statt {})",
+                    "too many arguments for `{what}` ({} instead of {})",
+                    pos.len(),
+                    params.len()
+                ),
+            );
         }
         let mut pos = pos.into_iter();
         for p in params {
@@ -1118,7 +1179,10 @@ impl<'a> Ev<'a> {
         // the same name, e.g. a library's `line`).
         if self.sketch.is_some() && crate::sketch::is_segment(&name.name) {
             if label.is_some() {
-                self.error(name.span, format!("Segmente sind nicht benennbar (`{}`)", name.name));
+                self.error(
+                    name.span,
+                    tr!("Segmente sind nicht benennbar (`{}`)", "segments cannot be named (`{}`)", name.name),
+                );
             }
             self.segment_stmt(s, name, a, children, ctx)?;
             return Ok(None);
@@ -1130,7 +1194,14 @@ impl<'a> Ev<'a> {
             return Ok(None); // reported by `find_module_ns`
         }
         if label.is_some() {
-            self.error(name.span, format!("nur Aufrufe eigener Module sind benennbar, `{}` ist eingebaut", name.name));
+            self.error(
+                name.span,
+                tr!(
+                    "nur Aufrufe eigener Module sind benennbar, `{}` ist eingebaut",
+                    "only calls of your own modules can be named, `{}` is built in",
+                    name.name
+                ),
+            );
         }
         self.builtin_module(s, name, a, children, ctx)?;
         Ok(None)
@@ -1259,7 +1330,13 @@ impl<'a> Ev<'a> {
                         (0..n).map(|i| r.at(i)).collect()
                     }
                     _ => {
-                        self.warn(arg.expr.span, "children(): Index muss Zahl, Liste oder Bereich sein");
+                        self.warn(
+                            arg.expr.span,
+                            trs!(
+                                "children(): Index muss Zahl, Liste oder Bereich sein",
+                                "children(): index must be a number, list or range"
+                            ),
+                        );
                         vec![]
                     }
                 };
@@ -1269,7 +1346,12 @@ impl<'a> Ev<'a> {
                     } else {
                         self.warn(
                             arg.expr.span,
-                            format!("children(): Index {} außerhalb ({} Kinder)", fmt_num(v), geo.len()),
+                            tr!(
+                                "children(): Index {} außerhalb ({} Kinder)",
+                                "children(): index {} out of range ({} children)",
+                                fmt_num(v),
+                                geo.len()
+                            ),
                         );
                     }
                 }
@@ -1302,11 +1384,21 @@ impl<'a> Ev<'a> {
 
     pub(crate) fn declare_name(&mut self, inst: InstId, name: &'a Ident, r: NameRef, ctx: &Ctx<'a>) -> bool {
         if self.names_of(inst).iter().any(|(n, _)| *n == name.name) {
-            self.error(name.span, format!("`{}` ist in diesem Modul schon deklariert", name.name));
+            self.error(
+                name.span,
+                tr!("`{}` ist in diesem Modul schon deklariert", "`{}` is already declared in this module", name.name),
+            );
             return false;
         }
         if ctx.env.has_local(&name.name) || self.module_scope_has_var(&ctx.env, &name.name) {
-            self.error(name.span, format!("`{}` ist in diesem Modul schon eine Variable", name.name));
+            self.error(
+                name.span,
+                tr!(
+                    "`{}` ist in diesem Modul schon eine Variable",
+                    "`{}` is already a variable in this module",
+                    name.name
+                ),
+            );
             return false;
         }
         self.names[inst as usize].push((&name.name, r));
@@ -1338,20 +1430,32 @@ impl<'a> Ev<'a> {
         ctx: &Ctx<'a>,
     ) -> R<()> {
         if ctx.in_loop {
-            self.error(s.span, "Anker sind in for-Schleifen nicht erlaubt");
+            self.error(
+                s.span,
+                trs!("Anker sind in for-Schleifen nicht erlaubt", "anchors are not allowed in for loops"),
+            );
             return Ok(());
         }
         if ctx.in_children {
-            self.error(s.span, "Anker sind in den Kindern eines Modulaufrufs nicht erlaubt");
+            self.error(
+                s.span,
+                trs!(
+                    "Anker sind in den Kindern eines Modulaufrufs nicht erlaubt",
+                    "anchors are not allowed in the children of a module call"
+                ),
+            );
             return Ok(());
         }
         if self.file_context && ctx.frame.inst == 0 {
-            self.warn(s.span, "Anker außerhalb eines Moduls ohne Wirkung");
+            self.warn(
+                s.span,
+                trs!("Anker außerhalb eines Moduls ohne Wirkung", "anchor outside a module has no effect"),
+            );
         }
         let pv = self.expr(point, &ctx.env, &ctx.dyn_)?;
         let Some(p) = pv.as_vec3() else {
             let what = pv.type_de();
-            self.error(point.span, format!("Anker braucht einen Punkt, ist {what}"));
+            self.error(point.span, tr!("Anker braucht einen Punkt, ist {what}", "anchor needs a point, is {what}"));
             return Ok(());
         };
         let d = match dir {
@@ -1361,7 +1465,10 @@ impl<'a> Ev<'a> {
                 match dv.as_vec3() {
                     Some(d) if d.length() > 0.0 => Some(crate::math::transform_dir(&ctx.xf.mod_local, d)),
                     _ => {
-                        self.error(de.span, "Ankerrichtung muss ein Vektor ≠ 0 sein");
+                        self.error(
+                            de.span,
+                            trs!("Ankerrichtung muss ein Vektor ≠ 0 sein", "anchor direction must be a vector ≠ 0"),
+                        );
                         None
                     }
                 }
@@ -1369,7 +1476,7 @@ impl<'a> Ev<'a> {
         };
         let inst = ctx.frame.inst as usize;
         if self.insts[inst].anchors.iter().any(|a| a.name == name.name) {
-            self.error(name.span, format!("Anker `{}` ist schon deklariert", name.name));
+            self.error(name.span, tr!("Anker `{}` ist schon deklariert", "anchor `{}` is already declared", name.name));
             return Ok(());
         }
         self.insts[inst].anchors.push(AnchorInfo {
@@ -1416,14 +1523,17 @@ impl<'a> Ev<'a> {
             return Ok(());
         }
         let StmtKind::Call { name: mname, args, children, .. } = &inst.kind else {
-            self.error(name.span, "nur Modulaufrufe sind benennbar");
+            self.error(name.span, trs!("nur Modulaufrufe sind benennbar", "only module calls can be named"));
             return self.stmt(inst, ctx);
         };
         if ctx.in_loop && index.is_none() {
             let n = &name.name;
             self.error(
                 name.span,
-                format!("benannte Instanzen sind in for-Schleifen nicht erlaubt (`{n}[i]: …` verwenden)"),
+                tr!(
+                    "benannte Instanzen sind in for-Schleifen nicht erlaubt (`{n}[i]: …` verwenden)",
+                    "named instances are not allowed in for loops (use `{n}[i]: …`)"
+                ),
             );
             return self.stmt(inst, ctx);
         }
@@ -1431,7 +1541,11 @@ impl<'a> Ev<'a> {
             if is_builtin_module(&mname.name) {
                 self.error(
                     name.span,
-                    format!("nur Aufrufe eigener Module sind benennbar, `{}` ist eingebaut", mname.name),
+                    tr!(
+                        "nur Aufrufe eigener Module sind benennbar, `{}` ist eingebaut",
+                        "only calls of your own modules can be named, `{}` is built in",
+                        mname.name
+                    ),
                 );
             }
             return self.stmt(inst, ctx);
@@ -1445,7 +1559,13 @@ impl<'a> Ev<'a> {
                     Some(n) if n.is_finite() && n.fract() == 0.0 && n.abs() < 1e15 => Some(n as i64),
                     _ => {
                         let shown = to_hint(&v);
-                        self.error(e.span, format!("Index einer benannten Instanz muss ganzzahlig sein, ist {shown}"));
+                        self.error(
+                            e.span,
+                            tr!(
+                                "Index einer benannten Instanz muss ganzzahlig sein, ist {shown}",
+                                "index of a named instance must be an integer, is {shown}"
+                            ),
+                        );
                         return self.stmt(inst, ctx);
                     }
                 }
@@ -1502,14 +1622,28 @@ impl<'a> Ev<'a> {
             Some(NameRef::Family(f)) => {
                 let fam = &mut self.families[f as usize];
                 if fam.contains_key(&index) {
-                    self.error(name.span, format!("`{}[{index}]` ist in diesem Modul schon deklariert", name.name));
+                    self.error(
+                        name.span,
+                        tr!(
+                            "`{}[{index}]` ist in diesem Modul schon deklariert",
+                            "`{}[{index}]` is already declared in this module",
+                            name.name
+                        ),
+                    );
                     return false;
                 }
                 fam.insert(index, id);
                 true
             }
             Some(_) => {
-                self.error(name.span, format!("`{}` ist in diesem Modul schon deklariert", name.name));
+                self.error(
+                    name.span,
+                    tr!(
+                        "`{}` ist in diesem Modul schon deklariert",
+                        "`{}` is already declared in this module",
+                        name.name
+                    ),
+                );
                 false
             }
             None => {
@@ -1556,7 +1690,7 @@ pub fn eval_top_level(proj: &Project, opts: &EvalOptions, exprs: &[String]) -> V
         .map(|e| {
             let (f, d) = cad_syntax::parse(&format!("_ = ({e});"));
             match d.iter().find(|d| d.severity == cad_syntax::Severity::Error) {
-                Some(d) => Err(format!("Syntax: {}", d.message)),
+                Some(d) => Err(tr!("Syntax: {}", "syntax: {}", d.message)),
                 None => Ok(f),
             }
         })
@@ -1570,7 +1704,7 @@ pub fn eval_top_level(proj: &Project, opts: &EvalOptions, exprs: &[String]) -> V
             .iter()
             .find(|d| bad(d))
             .map(|d| d.message.clone())
-            .unwrap_or_else(|| "Auswertung abgebrochen".into())
+            .unwrap_or_else(|| trs!("Auswertung abgebrochen", "evaluation stopped").into())
     };
     let Ok((env, dy, _, _)) = root else {
         let msg = first_error(&ev, 0);
@@ -1586,7 +1720,7 @@ pub fn eval_top_level(proj: &Project, opts: &EvalOptions, exprs: &[String]) -> V
             Ok(f) => match f.stmts.first().map(|s| &s.kind) {
                 Some(StmtKind::Assign { value, .. }) if f.stmts.len() == 1 => value,
                 _ => {
-                    out.push(Err("kein einzelner Ausdruck".into()));
+                    out.push(Err(trs!("kein einzelner Ausdruck", "not a single expression").into()));
                     continue;
                 }
             },

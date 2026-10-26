@@ -5,10 +5,12 @@
 //!
 //! Binary or ASCII: a file whose size is exactly `84 + 50·n` (n from the header) is binary,
 //! even if it starts with `solid` (many exporters write that into the binary header);
-//! otherwise a file starting with `solid` is ASCII. Messages are German (they reach the user
-//! as diagnostics).
+//! otherwise a file starting with `solid` is ASCII. Messages are in the language of
+//! [`cad_i18n`] (they reach the user as diagnostics).
 
 mod prepare;
+
+use cad_i18n::{tr, trs};
 
 pub use cad_kernel::trimesh::TriMesh;
 pub use prepare::{Prepared, Stats, prepare};
@@ -36,7 +38,7 @@ pub struct Stl {
 /// Parses an STL file (see the crate docs for the format detection).
 pub fn parse(data: &[u8]) -> Result<Stl, String> {
     if data.is_empty() {
-        return Err("leere Datei".into());
+        return Err(trs!("leere Datei", "empty file").into());
     }
     let binary_size = (data.len() >= 84).then(|| {
         let n = u32::from_le_bytes([data[80], data[81], data[82], data[83]]) as u64;
@@ -53,19 +55,28 @@ pub fn parse(data: &[u8]) -> Result<Stl, String> {
         return parse_ascii(std::str::from_utf8(data).unwrap_or(""));
     }
     match binary_size {
-        Some((n, size)) if (data.len() as u64) < size => Err(format!(
+        Some((n, size)) if (data.len() as u64) < size => Err(tr!(
             "Binär-STL abgeschnitten: Kopf nennt {n} Dreiecke ({size} Bytes), Datei hat {} Bytes",
+            "binary STL truncated: header names {n} triangles ({size} bytes), file has {} bytes",
             data.len()
         )),
         Some((n, size)) => {
             let mut s = parse_binary(data, n as usize);
-            s.warnings.push(format!("{} Bytes nach den {n} Dreiecken ignoriert", data.len() as u64 - size));
+            s.warnings.push(tr!(
+                "{} Bytes nach den {n} Dreiecken ignoriert",
+                "{} bytes after the {n} triangles ignored",
+                data.len() as u64 - size
+            ));
             Ok(s)
         }
-        None if solid => Err("ASCII-STL ist kein gültiger Text (UTF-8)".into()),
-        None => {
-            Err(format!("keine STL-Datei ({} Bytes: zu kurz für Binär-STL, beginnt nicht mit „solid“)", data.len()))
+        None if solid => {
+            Err(trs!("ASCII-STL ist kein gültiger Text (UTF-8)", "ASCII STL is not valid text (UTF-8)").into())
         }
+        None => Err(tr!(
+            "keine STL-Datei ({} Bytes: zu kurz für Binär-STL, beginnt nicht mit „solid“)",
+            "not an STL file ({} bytes: too short for binary STL, does not start with \"solid\")",
+            data.len()
+        )),
     }
 }
 
@@ -102,7 +113,10 @@ fn parse_ascii(text: &str) -> Result<Stl, String> {
             }
             "facet" => {
                 if in_facet {
-                    return Err(format!("Zeile {ln}: `facet` ohne `endfacet` davor (Zeile {facet_line})"));
+                    return Err(tr!(
+                        "Zeile {ln}: `facet` ohne `endfacet` davor (Zeile {facet_line})",
+                        "line {ln}: `facet` without `endfacet` before it (line {facet_line})"
+                    ));
                 }
                 in_facet = true;
                 facet_line = ln;
@@ -110,34 +124,52 @@ fn parse_ascii(text: &str) -> Result<Stl, String> {
             }
             "vertex" => {
                 if !in_facet {
-                    return Err(format!("Zeile {ln}: `vertex` außerhalb von `facet`"));
+                    return Err(tr!(
+                        "Zeile {ln}: `vertex` außerhalb von `facet`",
+                        "line {ln}: `vertex` outside `facet`"
+                    ));
                 }
                 let mut v = [0f32; 3];
                 for c in &mut v {
-                    let t = w.next().ok_or_else(|| format!("Zeile {ln}: `vertex` braucht drei Zahlen"))?;
-                    *c = t.parse::<f32>().map_err(|_| format!("Zeile {ln}: `{t}` ist keine Zahl"))?;
+                    let t = w.next().ok_or_else(|| {
+                        tr!("Zeile {ln}: `vertex` braucht drei Zahlen", "line {ln}: `vertex` needs three numbers")
+                    })?;
+                    *c = t
+                        .parse::<f32>()
+                        .map_err(|_| tr!("Zeile {ln}: `{t}` ist keine Zahl", "line {ln}: `{t}` is not a number"))?;
                 }
                 verts.push(v);
             }
             "endfacet" => {
                 if !in_facet {
-                    return Err(format!("Zeile {ln}: `endfacet` ohne `facet`"));
+                    return Err(tr!("Zeile {ln}: `endfacet` ohne `facet`", "line {ln}: `endfacet` without `facet`"));
                 }
                 in_facet = false;
                 match verts.len() {
                     3 => s.triangles.push([verts[0], verts[1], verts[2]]),
-                    n => return Err(format!("Zeile {facet_line}: Dreieck mit {n} statt 3 Ecken")),
+                    n => {
+                        return Err(tr!(
+                            "Zeile {facet_line}: Dreieck mit {n} statt 3 Ecken",
+                            "line {facet_line}: triangle with {n} instead of 3 vertices"
+                        ));
+                    }
                 }
             }
             "outer" | "endloop" | "endsolid" => {}
             other => {
                 let t: String = other.chars().take(20).collect();
-                return Err(format!("Zeile {ln}: unbekanntes Wort `{t}` (kein ASCII-STL?)"));
+                return Err(tr!(
+                    "Zeile {ln}: unbekanntes Wort `{t}` (kein ASCII-STL?)",
+                    "line {ln}: unknown word `{t}` (not an ASCII STL?)"
+                ));
             }
         }
     }
     if in_facet {
-        return Err(format!("Zeile {facet_line}: `facet` ohne `endfacet` (Datei abgeschnitten?)"));
+        return Err(tr!(
+            "Zeile {facet_line}: `facet` ohne `endfacet` (Datei abgeschnitten?)",
+            "line {facet_line}: `facet` without `endfacet` (file truncated?)"
+        ));
     }
     Ok(s)
 }

@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use cad_i18n::{tr, trs};
 use cad_kernel::trimesh::{TriMesh, ray_parity};
 use glam::DVec3;
 
@@ -54,12 +55,16 @@ struct Use {
 pub fn prepare(input: &[[DVec3; 3]]) -> Result<Prepared, String> {
     let mut st = Stats { input_triangles: input.len(), ..Default::default() };
     if input.is_empty() {
-        return Err("0 Dreiecke in der Datei".into());
+        return Err(trs!("0 Dreiecke in der Datei", "0 triangles in the file").into());
     }
     let finite: Vec<&[DVec3; 3]> = input.iter().filter(|t| t.iter().all(|p| p.is_finite())).collect();
     st.non_finite = input.len() - finite.len();
     if finite.is_empty() {
-        return Err(format!("alle {} Dreiecke haben ungültige Koordinaten (NaN oder unendlich)", input.len()));
+        return Err(tr!(
+            "alle {} Dreiecke haben ungültige Koordinaten (NaN oder unendlich)",
+            "all {} triangles have invalid coordinates (NaN or infinite)",
+            input.len()
+        ));
     }
     let mut lo = DVec3::splat(f64::INFINITY);
     let mut hi = DVec3::splat(f64::NEG_INFINITY);
@@ -69,7 +74,7 @@ pub fn prepare(input: &[[DVec3; 3]]) -> Result<Prepared, String> {
     }
     let diag = (hi - lo).length();
     if diag <= 0.0 {
-        return Err("alle Ecken liegen in einem Punkt".into());
+        return Err(trs!("alle Ecken liegen in einem Punkt", "all vertices lie in one point").into());
     }
     let scale = diag.max(lo.abs().max(hi.abs()).max_element());
     st.weld_tol = 1e-6 * diag;
@@ -127,7 +132,11 @@ pub fn prepare(input: &[[DVec3; 3]]) -> Result<Prepared, String> {
         tris.push(v);
     }
     if tris.is_empty() {
-        return Err(format!("nur entartete Dreiecke ({} Dreiecke ohne Fläche)", st.degenerate));
+        return Err(tr!(
+            "nur entartete Dreiecke ({} Dreiecke ohne Fläche)",
+            "only degenerate triangles ({} triangles without area)",
+            st.degenerate
+        ));
     }
 
     // ---- edges

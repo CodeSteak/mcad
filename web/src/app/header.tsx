@@ -1,4 +1,4 @@
-// Head bar (docs/konzepte/ui-ueberarbeitung, Abschnitt 3): app name, menus "Datei" and
+// Head bar (docs/concepts/ui-redesign, Abschnitt 3): app name, menus "Datei" and
 // "Beispiele", the file name in the middle (dirty dot, path into the module context), "Speichern"
 // as the primary button, the export split button (keeps the last format), theme and settings as
 // symbol buttons. Global shortcuts: Strg+N/O/S/⇧S/E.

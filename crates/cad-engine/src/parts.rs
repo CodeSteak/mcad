@@ -5,6 +5,7 @@
 
 use std::fmt::Write as _;
 
+use cad_i18n::{tr, trs};
 use cad_ir::{Dim, NodeIdx};
 use cad_kernel::{Kernel, Mesh};
 
@@ -97,9 +98,16 @@ where
     /// Mesh of a node placed in context coordinates (`NodeReport::display_world`), for export
     /// (fine tolerance by default: `tol` or 0.01 mm).
     pub fn placed_mesh(&mut self, ev: &Evaluation<K::Shape>, node: NodeIdx, tol: Option<f64>) -> Result<Mesh, String> {
-        let r = ev.reports.get(node as usize).ok_or_else(|| format!("Knoten {node} existiert nicht"))?;
+        let r = ev
+            .reports
+            .get(node as usize)
+            .ok_or_else(|| tr!("Knoten {node} existiert nicht", "node {node} does not exist"))?;
         if r.dim == Some(Dim::Two) {
-            return Err("2D-Ergebnis kann nicht als Körper exportiert werden".into());
+            return Err(trs!(
+                "2D-Ergebnis kann nicht als Körper exportiert werden",
+                "a 2D result cannot be exported as a body"
+            )
+            .into());
         }
         let world = r.display_world;
         let m = self.tessellate(ev, node, Some(tol.unwrap_or(0.01)))?;
@@ -204,9 +212,16 @@ where
             }
             // single nodes, and what a fused group left (open surfaces, meshes)
             for (n, only) in written {
-                let r = ev.reports.get(n as usize).ok_or_else(|| format!("Knoten {n} existiert nicht"))?;
+                let r = ev
+                    .reports
+                    .get(n as usize)
+                    .ok_or_else(|| tr!("Knoten {n} existiert nicht", "node {n} does not exist"))?;
                 if r.dim == Some(Dim::Two) {
-                    return Err("2D-Ergebnis kann nicht als Körper exportiert werden".into());
+                    return Err(trs!(
+                        "2D-Ergebnis kann nicht als Körper exportiert werden",
+                        "a 2D result cannot be exported as a body"
+                    )
+                    .into());
                 }
                 let world = r.display_world;
                 // B-rep parts, then meshes as facetted B-reps
@@ -256,7 +271,10 @@ where
         let mut shapes = Vec::new();
         let mut rest = Vec::new();
         for &n in nodes {
-            let r = ev.reports.get(n as usize).ok_or_else(|| format!("Knoten {n} existiert nicht"))?;
+            let r = ev
+                .reports
+                .get(n as usize)
+                .ok_or_else(|| tr!("Knoten {n} existiert nicht", "node {n} does not exist"))?;
             let world = r.display_world;
             let mut alone = Vec::new();
             for (i, p) in ev.parts(n).iter().enumerate() {
@@ -308,7 +326,7 @@ where
         step: &cad_step::StepOptions,
     ) -> Result<(Vec<u8>, u32), String> {
         if nodes.is_empty() {
-            return Err("keine Bauteile gewählt".into());
+            return Err(trs!("keine Bauteile gewählt", "no parts selected").into());
         }
         match format {
             NodeFormat::Stl => {

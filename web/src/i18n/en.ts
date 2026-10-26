@@ -433,6 +433,7 @@ export const en = {
   // sketch controller
   "sketch.onlyMain": "Sketch editor: only in the main file (open the tab of the main file)",
   // engine
+  "engine.error": "Engine error",
   "engine.hung": "Engine not responding for {time} (kernel hangs)",
   "engine.restarted": "engine restarted, cache discarded",
   "engine.nodeBlocked": "node blocked",

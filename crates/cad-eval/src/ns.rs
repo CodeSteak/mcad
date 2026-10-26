@@ -7,6 +7,7 @@
 //! instances of `a` are not visible there, only its parameters, variables, functions and
 //! modules.
 
+use cad_i18n::tr;
 use std::rc::Rc;
 
 use cad_syntax::Span;
@@ -48,7 +49,7 @@ impl<'a> Ev<'a> {
     /// missing part at `span` and returns `None`.
     fn ns_path(&mut self, parts: &[&str], span: Span, env: &Env<'a>, dy: &Dyn<'a>) -> R<Option<Env<'a>>> {
         let Some((mut def, mut denv)) = env.find_module(parts[0]) else {
-            self.error(span, format!("unbekanntes Modul `{}`", parts[0]));
+            self.error(span, tr!("unbekanntes Modul `{}`", "unknown module `{}`", parts[0]));
             return Ok(None);
         };
         for (i, part) in parts.iter().enumerate().skip(1) {
@@ -61,7 +62,13 @@ impl<'a> Ev<'a> {
                 }
                 None => {
                     let outer = parts[..i].join(".");
-                    self.error(span, format!("Modul `{outer}` hat kein Untermodul `{part}`"));
+                    self.error(
+                        span,
+                        tr!(
+                            "Modul `{outer}` hat kein Untermodul `{part}`",
+                            "module `{outer}` has no submodule `{part}`"
+                        ),
+                    );
                     return Ok(None);
                 }
             }
@@ -87,7 +94,14 @@ impl<'a> Ev<'a> {
         match found {
             Some(m) => Ok(Some((m, ns))),
             None => {
-                self.error(span, format!("Modul `{}` hat kein Untermodul `{last}`", outer.join(".")));
+                self.error(
+                    span,
+                    tr!(
+                        "Modul `{}` hat kein Untermodul `{last}`",
+                        "module `{}` has no submodule `{last}`",
+                        outer.join(".")
+                    ),
+                );
                 Ok(None)
             }
         }
@@ -130,11 +144,25 @@ impl<'a> Ev<'a> {
                 Val { def: Some(e.span), ..v }
             }
             (None, false) if has_mod => {
-                self.error(e.span, format!("`{ns_name}.{}` ist ein Modul, kein Wert", name.name));
+                self.error(
+                    e.span,
+                    tr!(
+                        "`{ns_name}.{}` ist ein Modul, kein Wert",
+                        "`{ns_name}.{}` is a module, not a value",
+                        name.name
+                    ),
+                );
                 Val::undef()
             }
             (None, false) => {
-                self.warn(e.span, format!("Modul `{ns_name}` hat keine Funktion oder Variable `{}`", name.name));
+                self.warn(
+                    e.span,
+                    tr!(
+                        "Modul `{ns_name}` hat keine Funktion oder Variable `{}`",
+                        "module `{ns_name}` has no function or variable `{}`",
+                        name.name
+                    ),
+                );
                 Val::undef()
             }
         }))

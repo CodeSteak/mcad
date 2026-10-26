@@ -8,6 +8,7 @@ description = "Desktop backend without Tauri: engine process and supervisor (wat
 
 [dependencies]
 cad-ipc = { path = "../cad-ipc" }
+cad-i18n.workspace = true
 cad-session.workspace = true
 cad-eval.workspace = true
 cad-kernel.workspace = true

@@ -17,6 +17,7 @@ fn fehler(name: &str) -> String {
 
 fn mcad() -> Command {
     let mut c = Command::cargo_bin("mcad").unwrap();
+    c.env("MCAD_LANG", "de");
     c.env("MCAD_NO_DAEMON", "1");
     c
 }

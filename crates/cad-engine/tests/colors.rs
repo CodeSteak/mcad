@@ -90,6 +90,7 @@ fn subtracted_material_counts_for_all_colours() {
 
 #[test]
 fn uncoloured_material_is_the_default_colour_on_filament_1() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut e = engine();
     let t = tree("cube(10);\ncolor(\"red\") translate([0, 0, 10]) cube(2);");
     let ct = table(&t);
@@ -101,6 +102,7 @@ fn uncoloured_material_is_the_default_colour_on_filament_1() {
 
 #[test]
 fn filament_slots() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // explicit slots stay, others take the lowest free slot in order of first appearance
     let t = tree(
         "color(\"teal\", filament = 3) cube(1);\ntranslate([2, 0, 0]) color(\"red\") cube(1);\n\
@@ -317,6 +319,7 @@ fn region_meshes_share_coordinates() {
 
 #[test]
 fn uncoloured_part_needs_no_boolean() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // No colour below the root: one Standard region from the root's solids as they are (no
     // Boolean), volume = the cached part volume (`Engine::mass_props`); the mesh holds both cubes.
     let mut e = engine();
@@ -330,4 +333,13 @@ fn uncoloured_part_needs_no_boolean() {
     let m = e.region_mesh(&r, 0, 0.05).unwrap();
     let xmax = m.positions.chunks(3).map(|p| p[0]).fold(f32::MIN, f32::max);
     assert!((xmax - 25.0).abs() < 1e-4, "{xmax}");
+}
+
+#[test]
+fn default_colour_label_in_english() {
+    let _en = cad_i18n::scoped(cad_i18n::Lang::En);
+    let t = tree("cube(10);\ncolor(\"red\") translate([0, 0, 10]) cube(2);");
+    let ct = table(&t);
+    assert_eq!(ct.entries[0].source, ColorSource::Default);
+    assert_eq!(ct.entries[0].label, "default");
 }

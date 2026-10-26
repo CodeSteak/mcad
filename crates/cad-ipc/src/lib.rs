@@ -37,6 +37,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use cad_i18n::{tr, trs};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
@@ -158,14 +159,19 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::NotRunning(p) => write!(f, "kein Prozess an {}", p.display()),
-            Error::InUse(p) => write!(f, "{} ist belegt", p.display()),
-            Error::Version { ours, theirs } => write!(f, "IPC-Version {theirs}, erwartet {ours}"),
-            Error::Protocol(m) => write!(f, "IPC-Protokoll: {m}"),
+            Error::NotRunning(p) => write!(f, "{}", tr!("kein Prozess an {}", "no process at {}", p.display())),
+            Error::InUse(p) => write!(f, "{}", tr!("{} ist belegt", "{} is in use", p.display())),
+            Error::Version { ours, theirs } => {
+                write!(f, "{}", tr!("IPC-Version {theirs}, erwartet {ours}", "IPC version {theirs}, expected {ours}"))
+            }
+            Error::Protocol(m) => write!(f, "{}", tr!("IPC-Protokoll: {m}", "IPC protocol: {m}")),
             Error::Remote(m) => write!(f, "{m}"),
-            Error::Timeout => write!(f, "keine Antwort (Zeitüberschreitung)"),
-            Error::Unsafe(m) => write!(f, "unsicheres IPC-Verzeichnis: {m}"),
-            Error::Unsupported => write!(f, "lokale IPC ist auf dieser Plattform nicht umgesetzt"),
+            Error::Timeout => f.write_str(trs!("keine Antwort (Zeitüberschreitung)", "no answer (timeout)")),
+            Error::Unsafe(m) => write!(f, "{}", tr!("unsicheres IPC-Verzeichnis: {m}", "unsafe IPC directory: {m}")),
+            Error::Unsupported => f.write_str(trs!(
+                "lokale IPC ist auf dieser Plattform nicht umgesetzt",
+                "local IPC is not implemented on this platform"
+            )),
             Error::Io(e) => write!(f, "{e}"),
         }
     }
@@ -197,7 +203,7 @@ pub fn write_frame(w: &mut impl Write, f: &Frame) -> Result<()> {
         header.push(b' ');
     }
     if header.len() > MAX_HEADER || f.data.len() > MAX_DATA {
-        return Err(Error::Protocol("Nachricht zu groß".into()));
+        return Err(Error::Protocol(tr!("Nachricht zu groß", "message too large")));
     }
     let mut buf = Vec::with_capacity(8 + header.len() + f.data.len());
     buf.extend_from_slice(&(header.len() as u32).to_le_bytes());
@@ -219,26 +225,32 @@ pub fn read_frame(r: &mut impl Read) -> Result<Option<Frame>> {
             if got == 0 {
                 return Ok(None);
             }
-            return Err(Error::Protocol("Verbindung mitten im Rahmen beendet".into()));
+            return Err(Error::Protocol(tr!(
+                "Verbindung mitten im Rahmen beendet",
+                "connection closed in the middle of a frame"
+            )));
         }
         got += n;
     }
     let hl = u32::from_le_bytes(len[0..4].try_into().unwrap()) as usize;
     let dl = u32::from_le_bytes(len[4..8].try_into().unwrap()) as usize;
     if hl > MAX_HEADER || dl > MAX_DATA {
-        return Err(Error::Protocol(format!("Rahmen zu groß ({hl} + {dl} Bytes)")));
+        return Err(Error::Protocol(tr!("Rahmen zu groß ({hl} + {dl} Bytes)", "frame too large ({hl} + {dl} bytes)")));
     }
     let mut header = vec![0u8; hl];
     r.read_exact(&mut header)?;
     let mut data = vec![0u8; dl];
     r.read_exact(&mut data)?;
     // Check the version before the rest of the header (newer peers may add fields).
-    let raw: Json = serde_json::from_slice(&header).map_err(|e| Error::Protocol(format!("Kopf: {e}")))?;
-    let v = raw.get("v").and_then(Json::as_u64).ok_or_else(|| Error::Protocol("Kopf ohne Version".into()))? as u32;
+    let raw: Json = serde_json::from_slice(&header).map_err(|e| Error::Protocol(tr!("Kopf: {e}", "header: {e}")))?;
+    let v = raw
+        .get("v")
+        .and_then(Json::as_u64)
+        .ok_or_else(|| Error::Protocol(tr!("Kopf ohne Version", "header without version")))? as u32;
     if v != IPC_VERSION {
         return Err(Error::Version { ours: IPC_VERSION, theirs: v });
     }
-    let header: Header = serde_json::from_value(raw).map_err(|e| Error::Protocol(format!("Kopf: {e}")))?;
+    let header: Header = serde_json::from_value(raw).map_err(|e| Error::Protocol(tr!("Kopf: {e}", "header: {e}")))?;
     Ok(Some(Frame { header, data }))
 }
 
@@ -260,7 +272,7 @@ pub const MAX_SOCKET_PATH: usize = 103;
 
 fn check_name(name: &str) -> Result<()> {
     if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c)) {
-        return Err(Error::Protocol(format!("ungültiger Endpunktname `{name}`")));
+        return Err(Error::Protocol(tr!("ungültiger Endpunktname `{name}`", "invalid endpoint name `{name}`")));
     }
     Ok(())
 }
@@ -293,8 +305,9 @@ pub fn socket_path_in(dir: &Path, name: &str) -> Result<PathBuf> {
     let short = imp::short_dir()?;
     let q = short.join(format!("{}-{name}.sock", dir_hash(dir)));
     if q.as_os_str().len() > MAX_SOCKET_PATH {
-        return Err(Error::Protocol(format!(
+        return Err(Error::Protocol(tr!(
             "Socketpfad zu lang ({} Byte, höchstens {MAX_SOCKET_PATH}): {}",
+            "socket path too long ({} bytes, at most {MAX_SOCKET_PATH}): {}",
             p.as_os_str().len(),
             p.display()
         )));
@@ -395,7 +408,10 @@ impl Conn {
         self.send(&Frame::request(id, method, body).with_data(data))?;
         loop {
             let Some(f) = self.recv()? else {
-                return Err(Error::Protocol("Verbindung ohne Antwort beendet".into()));
+                return Err(Error::Protocol(tr!(
+                    "Verbindung ohne Antwort beendet",
+                    "connection closed without an answer"
+                )));
             };
             match f.header.kind {
                 Kind::Event => self.events.push_back(f),
@@ -602,10 +618,14 @@ mod imp {
         }
         let md = std::fs::symlink_metadata(&dir)?;
         if !md.is_dir() {
-            return Err(Error::Unsafe(format!("{} ist kein Verzeichnis", dir.display())));
+            return Err(Error::Unsafe(tr!("{} ist kein Verzeichnis", "{} is not a directory", dir.display())));
         }
         if md.uid() != uid() {
-            return Err(Error::Unsafe(format!("{} gehört einem anderen Benutzer", dir.display())));
+            return Err(Error::Unsafe(tr!(
+                "{} gehört einem anderen Benutzer",
+                "{} belongs to another user",
+                dir.display()
+            )));
         }
         if md.permissions().mode() & 0o077 != 0 {
             std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
@@ -698,7 +718,7 @@ mod imp {
         // Only the own user (the directory is 0700 anyway).
         let ok = peer_uid(&s).is_none_or(|u| u == uid());
         if !ok {
-            return Err(Error::Unsafe("Verbindung eines anderen Benutzers".into()));
+            return Err(Error::Unsafe(tr!("Verbindung eines anderen Benutzers", "connection of another user")));
         }
         Ok(s)
     }
@@ -763,7 +783,7 @@ mod imp {
                 _ => continue,
             }
         }
-        Err(Error::Protocol(format!("{}: Sperre wechselt ständig", path.display())))
+        Err(Error::Protocol(tr!("{}: Sperre wechselt ständig", "{}: lock keeps changing", path.display())))
     }
 }
 

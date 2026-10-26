@@ -1,5 +1,5 @@
 // Sketch editor (Plan 17.12): mode "Skizze" of the view toolbar, the context bar while drawing
-// (docs/konzepte/ui-ueberarbeitung, Abschnitt 5: symbol groups, arc kinds in a menu, "Fertig"
+// (docs/concepts/ui-redesign, Abschnitt 5: symbol groups, arc kinds in a menu, "Fertig"
 // as the primary button, shortcuts in the tooltips) and the status line text (what the tool asks
 // for, where the mouse snapped, why an action failed).
 

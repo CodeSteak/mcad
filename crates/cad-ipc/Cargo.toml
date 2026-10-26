@@ -7,6 +7,7 @@ publish.workspace = true
 description = "Local IPC for mcad processes: per-user Unix sockets, versioned frames, request/response and events"
 
 [dependencies]
+cad-i18n.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

@@ -22,6 +22,7 @@
 //! | two parallel prisms (e.g. `linear_extrude` + `cylinder`) | 2D Minkowski sum of the sections (circle: rounded offset; two convex, one a polygon: hull), extruded over the summed range |
 //! | two convex planar bodies | hull of the pairwise vertex sums → polyhedron |
 
+use cad_i18n::{tr, trs};
 use cad_ir::{Dim, NodeIdx, Op, Prim, Tree};
 use cad_kernel::hull3::{Flat, Hull3, hull3};
 use cad_kernel::region2::{self, Fill, Loop2, Operand};
@@ -183,7 +184,7 @@ pub(crate) fn bodies(tree: &Tree, n: NodeIdx, m: DMat4, out: &mut Vec<Body>) -> 
         }
         Op::Prim { prim, place } => {
             if node.blend.is_some_and(|(_, r)| r > 0.0) {
-                return Err(format!("{} mit $fillet/$chamfer", node.op.label()));
+                return Err(tr!("{} mit $fillet/$chamfer", "{} with $fillet/$chamfer", node.op.label()));
             }
             let m2 = m * *place;
             match prim {
@@ -210,8 +211,9 @@ pub(crate) fn bodies(tree: &Tree, n: NodeIdx, m: DMat4, out: &mut Vec<Body>) -> 
                 }
                 // an imported mesh (B-rep or not): its vertices
                 Prim::Mesh { mesh, .. } if mesh.mesh.points.len() > MAX_MESH_HULL_POINTS => {
-                    return Err(format!(
+                    return Err(tr!(
                         "Netz mit {} Ecken (höchstens {MAX_MESH_HULL_POINTS}: die Hülle würde zu viele Flächen haben)",
+                        "mesh with {} vertices (at most {MAX_MESH_HULL_POINTS}: the hull would have too many faces)",
                         mesh.mesh.points.len()
                     ));
                 }
@@ -220,11 +222,17 @@ pub(crate) fn bodies(tree: &Tree, n: NodeIdx, m: DMat4, out: &mut Vec<Body>) -> 
                     out.push(Body::Planar { pts, prisms: Vec::new(), convex: false });
                 }
                 Prim::Sphere { r } => {
-                    let s = similarity(&m2).ok_or("verzerrte Kugel (ungleichmäßige Skalierung)")?;
+                    let s = similarity(&m2).ok_or(trs!(
+                        "verzerrte Kugel (ungleichmäßige Skalierung)",
+                        "distorted sphere (non-uniform scale)"
+                    ))?;
                     out.push(Body::Sphere { c: m2.transform_point3(DVec3::ZERO), r: r * s });
                 }
                 Prim::Cylinder { h, r1, r2 } => {
-                    let s = similarity(&m2).ok_or("verzerrter Zylinder (ungleichmäßige Skalierung)")?;
+                    let s = similarity(&m2).ok_or(trs!(
+                        "verzerrter Zylinder (ungleichmäßige Skalierung)",
+                        "distorted cylinder (non-uniform scale)"
+                    ))?;
                     out.push(Body::Frustum {
                         a: m2.transform_point3(DVec3::ZERO),
                         d: m2.transform_vector3(DVec3::Z).normalize(),
@@ -233,12 +241,12 @@ pub(crate) fn bodies(tree: &Tree, n: NodeIdx, m: DMat4, out: &mut Vec<Body>) -> 
                         r2: r2 * s,
                     });
                 }
-                Prim::Torus { .. } => return Err("Torus".into()),
+                Prim::Torus { .. } => return Err(trs!("Torus", "torus").into()),
             }
             Ok(())
         }
         Op::LinearExtrude { h, twist, scale, center } => extrusion(tree, n, m, *h, *twist, *scale, *center, out),
-        other => Err(format!("`{}` als Kind", other.label())),
+        other => Err(tr!("`{}` als Kind", "`{}` as a child", other.label())),
     }
 }
 
@@ -280,13 +288,13 @@ fn extrusion(
     let mut args = Vec::new();
     for c in tree.solid_children(n) {
         if profile::open_sketch_in(tree, c) {
-            return Err("linear_extrude einer offenen Skizze".into());
+            return Err(trs!("linear_extrude einer offenen Skizze", "linear_extrude of an open sketch").into());
         }
         args.push(profile::lift(tree, c, tree.node(c).local, &mut warn)?);
     }
     let e = Expr2::Op(BoolOp::Union, args);
     if e.leaves().iter().any(|l| !profile::is_planar(&l.m)) {
-        return Err("Profil nicht in der xy-Ebene".into());
+        return Err(trs!("Profil nicht in der xy-Ebene", "profile not in the xy plane").into());
     }
     let loops = op2d::expr_loops(&e)?;
     if loops.is_empty() || h <= 0.0 {
@@ -297,7 +305,7 @@ fn extrusion(
     let sim = similarity(&m);
     if lines_only {
         if twist != 0.0 {
-            return Err("linear_extrude mit twist".into());
+            return Err(trs!("linear_extrude mit twist", "linear_extrude with twist").into());
         }
         let mut pts = Vec::new();
         for s in loops.iter().flatten() {
@@ -314,7 +322,13 @@ fn extrusion(
         out.push(Body::Planar { pts, prisms, convex: hull2::is_convex(&loops) });
         return Ok(());
     }
-    let Some(s) = sim else { return Err("linear_extrude mit Bögen unter ungleichmäßiger Skalierung".into()) };
+    let Some(s) = sim else {
+        return Err(trs!(
+            "linear_extrude mit Bögen unter ungleichmäßiger Skalierung",
+            "linear_extrude with arcs under non-uniform scale"
+        )
+        .into());
+    };
     // a single circle: a cylinder or cone
     if let [lp] = loops.as_slice()
         && let Some((c, r)) = single_circle(lp)
@@ -331,7 +345,11 @@ fn extrusion(
         return Ok(());
     }
     if twist != 0.0 || scale != DVec2::ONE {
-        return Err("linear_extrude eines Profils mit Bögen und twist/scale".into());
+        return Err(trs!(
+            "linear_extrude eines Profils mit Bögen und twist/scale",
+            "linear_extrude of a profile with arcs and twist/scale"
+        )
+        .into());
     }
     out.push(Body::Prism(Prism { frame: rigid(&m, s), z0: z0 * s, h: h * s, section: scaled(&loops, s) }));
     Ok(())
@@ -387,12 +405,14 @@ impl Plan {
     /// Hint for `mcad inspect` (which special case was taken).
     pub fn hint(&self) -> String {
         match self {
-            Plan::Polyhedron(h) => format!("exakt: Polyeder ({} Flächen)", h.faces.len()),
-            Plan::Revolve { .. } => "exakt: Rotationskörper".into(),
-            Plan::Extrude { .. } => "exakt: Prisma".into(),
-            Plan::Spheres { r, .. } => format!("exakt: Hülle der Mittelpunkte + Offset {}", fmt(*r)),
-            Plan::Offset { r, .. } => format!("exakt: Offset {}", fmt(*r)),
-            Plan::Sphere { .. } => "exakt: Kugel".into(),
+            Plan::Polyhedron(h) => tr!("exakt: Polyeder ({} Flächen)", "exact: polyhedron ({} faces)", h.faces.len()),
+            Plan::Revolve { .. } => trs!("exakt: Rotationskörper", "exact: solid of revolution").into(),
+            Plan::Extrude { .. } => trs!("exakt: Prisma", "exact: prism").into(),
+            Plan::Spheres { r, .. } => {
+                tr!("exakt: Hülle der Mittelpunkte + Offset {}", "exact: hull of the centres + offset {}", fmt(*r))
+            }
+            Plan::Offset { r, .. } => tr!("exakt: Offset {}", "exact: offset {}", fmt(*r)),
+            Plan::Sphere { .. } => trs!("exakt: Kugel", "exact: sphere").into(),
         }
     }
 }
@@ -405,7 +425,7 @@ fn fmt(x: f64) -> String {
 /// The exact construction of `hull()` of these bodies, or why there is none.
 pub(crate) fn hull_plan(bodies: &[Body]) -> Result<Plan, String> {
     if bodies.is_empty() {
-        return Err("keine Körper".into());
+        return Err(trs!("keine Körper", "no bodies").into());
     }
     let (size, tol) = size_tol(bodies);
     if bodies.iter().all(|b| matches!(b, Body::Planar { .. })) {
@@ -415,8 +435,12 @@ pub(crate) fn hull_plan(bodies: &[Body]) -> Result<Plan, String> {
             .collect();
         return match hull3(&pts, tol) {
             Ok(h) if h.is_closed() => Ok(Plan::Polyhedron(h)),
-            Ok(_) => Err("Hülle numerisch nicht geschlossen (fast koplanare Punkte)".into()),
-            Err(_) => Err("die Kinder haben kein Volumen".into()),
+            Ok(_) => Err(trs!(
+                "Hülle numerisch nicht geschlossen (fast koplanare Punkte)",
+                "hull numerically not closed (nearly coplanar points)"
+            )
+            .into()),
+            Err(_) => Err(trs!("die Kinder haben kein Volumen", "the children have no volume").into()),
         };
     }
     if let Some(p) = axis_plan(bodies, size, tol) {
@@ -430,21 +454,36 @@ pub(crate) fn hull_plan(bodies: &[Body]) -> Result<Plan, String> {
     if spheres.len() == bodies.len() {
         let r = spheres[0].1;
         if spheres.iter().any(|s| (s.1 - r).abs() > tol) {
-            return Err("Kugeln mit verschiedenen Radien nicht auf einer Achse".into());
+            return Err(trs!(
+                "Kugeln mit verschiedenen Radien nicht auf einer Achse",
+                "spheres of different radii not on one axis"
+            )
+            .into());
         }
         let centres: Vec<DVec3> = spheres.iter().map(|s| s.0).collect();
         return match hull3(&centres, tol) {
             Ok(hull) => Ok(Plan::Spheres { hull, r }),
-            Err(Flat::Plane) => Err("gleich große Kugeln mit Mittelpunkten in einer Ebene".into()),
-            Err(_) => Err("Kugeln nicht auf einer Achse".into()),
+            Err(Flat::Plane) => Err(trs!(
+                "gleich große Kugeln mit Mittelpunkten in einer Ebene",
+                "equal spheres with centres in one plane"
+            )
+            .into()),
+            Err(_) => Err(trs!("Kugeln nicht auf einer Achse", "spheres not on one axis").into()),
         };
     }
     let planar = bodies.iter().any(|b| matches!(b, Body::Planar { .. }));
     Err(if planar {
-        "ebene und runde Körper gemischt (exakt nur als parallele Prismen gleicher Höhe, z. B. Quader und Zylinder)"
-            .into()
+        trs!(
+            "ebene und runde Körper gemischt (exakt nur als parallele Prismen gleicher Höhe, z. B. Quader und Zylinder)",
+            "planar and round bodies mixed (exact only as parallel prisms of equal height, e.g. cube and cylinder)"
+        )
+        .into()
     } else {
-        "Kugeln, Zylinder und Kegel weder auf einer Achse noch als parallele Zylinder gleicher Höhe".into()
+        trs!(
+            "Kugeln, Zylinder und Kegel weder auf einer Achse noch als parallele Zylinder gleicher Höhe",
+            "spheres, cylinders and cones neither on one axis nor parallel cylinders of equal height"
+        )
+        .into()
     })
 }
 
@@ -589,15 +628,21 @@ pub(crate) fn minkowski_plan(kids: &[Result<Vec<Body>, String>]) -> Result<Plan,
                     let sums: Vec<DVec3> = pa.iter().flat_map(|x| pb.iter().map(move |y| *x + *y)).collect();
                     let (_, tol) = size_tol(&[p.clone(), q.clone()]);
                     let tol = tol * 2.0;
-                    return hull3(&sums, tol).map(Plan::Polyhedron).map_err(|_| "die Summe hat kein Volumen".into());
+                    return hull3(&sums, tol)
+                        .map(Plan::Polyhedron)
+                        .map_err(|_| trs!("die Summe hat kein Volumen", "the sum has no volume").into());
                 }
             }
         }
         _ => {}
     }
-    Err("exakt nur Körper + Kugel(n), zwei parallele Prismen (z. B. linear_extrude und cylinder) oder zwei konvexe \
-         ebene Körper"
-        .into())
+    Err(trs!(
+        "exakt nur Körper + Kugel(n), zwei parallele Prismen (z. B. linear_extrude und cylinder) oder zwei konvexe \
+         ebene Körper",
+        "exact only body + sphere(s), two parallel prisms (e.g. linear_extrude and cylinder) or two convex planar \
+         bodies"
+    )
+    .into())
 }
 
 fn single(b: &[Body]) -> Option<&Body> {
@@ -622,8 +667,11 @@ fn prism_sum(p: &Body, q: &Body) -> Result<Option<Plan>, String> {
             let inv = a.frame.inverse();
             let shift = inv.transform_vector3(o).truncate();
             let sum = section_sum(&sa, &sb).ok_or_else(|| {
-                "parallele Prismen, aber die Querschnitte sind weder Profil + Kreis noch zwei konvexe (eines ein Polygon)"
-                    .to_string()
+                trs!(
+                    "parallele Prismen, aber die Querschnitte sind weder Profil + Kreis noch zwei konvexe (eines ein Polygon)",
+                    "parallel prisms, but the sections are neither profile + circle nor two convex ones (one a polygon)"
+                )
+                .to_string()
             })?;
             let m = DAffine2::from_translation(shift);
             let section: Vec<Loop2> = sum.iter().map(|lp| lp.iter().map(|s| s.map(&m)).collect()).collect();

@@ -342,7 +342,8 @@ pub fn cut_contours(cut: &Brep, plane: &SectionPlane, body: usize) -> Vec<(usize
                 let k = if oe.forward { k.clone() } else { k.reversed() };
                 // the cut face at this edge (not a cap)
                 let src = edge_faces[oe.edge as usize].iter().map(|&j| faces[j]).find(|g| !is_cap(g));
-                let (source, tag) = src.map_or(("Ebene", f.tag), |g| (surface_name(&g.surface), g.tag));
+                let (source, tag) =
+                    src.map_or((cad_i18n::trs!("Ebene", "plane"), f.tag), |g| (surface_name(&g.surface), g.tag));
                 let seg = if k.is_analytic() {
                     Seg { curve: k, exact: true, dev: 0.0, source, tag }
                 } else if let Some(e) = src.and_then(|g| exact_curve(&k, &g.surface, plane))

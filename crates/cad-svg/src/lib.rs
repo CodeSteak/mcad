@@ -21,6 +21,7 @@ mod path;
 pub use cad_outline::{Contour, FillRule, Seg};
 pub use path::{arc, parse_path};
 
+use cad_i18n::{tr, trs};
 use glam::{DAffine2, DMat2, DVec2};
 use roxmltree::{Document, Node};
 
@@ -106,15 +107,19 @@ impl Svg {
 /// requested `id` does not exist; everything else is a warning.
 pub fn parse(text: &str, opts: &Options) -> Result<Svg, String> {
     let doc = Document::parse_with_options(text, roxmltree::ParsingOptions { allow_dtd: true, ..Default::default() })
-        .map_err(|e| format!("SVG nicht lesbar: {e}"))?;
+        .map_err(|e| tr!("SVG nicht lesbar: {e}", "SVG not readable: {e}"))?;
     let root = doc.root_element();
     if root.tag_name().name() != "svg" {
-        return Err(format!("kein SVG-Dokument (Wurzelelement `{}`)", root.tag_name().name()));
+        return Err(tr!(
+            "kein SVG-Dokument (Wurzelelement `{}`)",
+            "not an SVG document (root element `{}`)",
+            root.tag_name().name()
+        ));
     }
     let mut st = State { doc: &doc, out: Svg::default(), select: None, warned: Vec::new(), has_css: false };
     if let Some(id) = &opts.id {
         let Some(n) = doc.descendants().find(|n| n.attribute("id") == Some(id.as_str())) else {
-            return Err(format!("kein Element mit id \"{id}\" im SVG"));
+            return Err(tr!("kein Element mit id \"{id}\" im SVG", "no element with id \"{id}\" in the SVG"));
         };
         st.select = Some(n.id());
     }
@@ -206,7 +211,13 @@ impl<'d, 'i> State<'d, 'i> {
         if let Some(f) = props.get("fill") {
             style.fill = f != "none" && f != "transparent";
             if f.starts_with("url(") && sel {
-                self.warn(n, format!("`{name}`: Verlauf/Muster als Füllung ({f}) wird als einfache Fläche übernommen"));
+                self.warn(
+                    n,
+                    tr!(
+                        "`{name}`: Verlauf/Muster als Füllung ({f}) wird als einfache Fläche übernommen",
+                        "`{name}`: gradient/pattern fill ({f}) is taken as a plain area"
+                    ),
+                );
             }
         }
         if let Some(r) = props.get("fill-rule") {
@@ -222,19 +233,31 @@ impl<'d, 'i> State<'d, 'i> {
         if let Some(t) = n.attribute("transform") {
             match parse_transform(t) {
                 Ok(t) => m = parent * t,
-                Err(e) => self.warn(n, format!("`{name}`: transform \"{t}\" nicht lesbar ({e}), ignoriert")),
+                Err(e) => self.warn(
+                    n,
+                    tr!(
+                        "`{name}`: transform \"{t}\" nicht lesbar ({e}), ignoriert",
+                        "`{name}`: transform \"{t}\" not readable ({e}), ignored"
+                    ),
+                ),
             }
         }
         if sel {
             for a in ["clip-path", "mask", "filter"] {
                 if props.get(a).is_some_and(|v| v != "none") {
-                    self.warn(n, format!("`{name}`: `{a}` nicht unterstützt (ignoriert)"));
+                    self.warn(
+                        n,
+                        tr!("`{name}`: `{a}` nicht unterstützt (ignoriert)", "`{name}`: `{a}` not supported (ignored)"),
+                    );
                 }
             }
             if n.attribute("class").is_some() && self.has_css {
                 self.warn(
                     n,
-                    format!("`{name}`: CSS-Klassen (`class`) nicht unterstützt; Stil nur aus Attributen und `style`"),
+                    tr!(
+                        "`{name}`: CSS-Klassen (`class`) nicht unterstützt; Stil nur aus Attributen und `style`",
+                        "`{name}`: CSS classes (`class`) not supported; style only from attributes and `style`"
+                    ),
                 );
             }
         }
@@ -252,7 +275,10 @@ impl<'d, 'i> State<'d, 'i> {
             }
             "g" | "a" => self.children(n, m, &style, sel),
             "switch" => {
-                self.warn(n, "`switch`: alle Zweige werden übernommen".into());
+                self.warn(
+                    n,
+                    trs!("`switch`: alle Zweige werden übernommen", "`switch`: all branches are taken").into(),
+                );
                 self.children(n, m, &style, sel);
             }
             "path" | "rect" | "circle" | "ellipse" | "polygon" | "polyline" | "line" => {
@@ -264,27 +290,47 @@ impl<'d, 'i> State<'d, 'i> {
             | "filter" | "metadata" | "title" | "desc" | "script" | "font" | "font-face" => {}
             "style" => {
                 if sel && !n.text().unwrap_or("").trim().is_empty() {
-                    self.warn(n, "CSS-Stylesheet (`<style>`) nicht unterstützt".into());
+                    self.warn(
+                        n,
+                        trs!(
+                            "CSS-Stylesheet (`<style>`) nicht unterstützt",
+                            "CSS stylesheet (`<style>`) not supported"
+                        )
+                        .into(),
+                    );
                 }
             }
             "text" | "tspan" | "textPath" => {
                 if sel {
-                    self.warn(n, format!("`{name}`: Text nicht unterstützt (in Pfade umwandeln)"));
+                    self.warn(
+                        n,
+                        tr!(
+                            "`{name}`: Text nicht unterstützt (in Pfade umwandeln)",
+                            "`{name}`: text not supported (convert to paths)"
+                        ),
+                    );
                 }
             }
             "image" => {
                 if sel {
-                    self.warn(n, "`image`: Bilder nicht unterstützt".into());
+                    self.warn(n, trs!("`image`: Bilder nicht unterstützt", "`image`: images not supported").into());
                 }
             }
             "use" => {
                 if sel {
-                    self.warn(n, "`use`: Verweise nicht unterstützt (Klone in Pfade umwandeln)".into());
+                    self.warn(
+                        n,
+                        trs!(
+                            "`use`: Verweise nicht unterstützt (Klone in Pfade umwandeln)",
+                            "`use`: references not supported (convert clones to paths)"
+                        )
+                        .into(),
+                    );
                 }
             }
             other => {
                 if sel {
-                    self.warn(n, format!("`{other}` nicht unterstützt"));
+                    self.warn(n, tr!("`{other}` nicht unterstützt", "`{other}` not supported"));
                 }
             }
         }
@@ -301,7 +347,13 @@ impl<'d, 'i> State<'d, 'i> {
             "path" => {
                 let (cs, err) = parse_path(n.attribute("d").unwrap_or(""));
                 if let Some(e) = err {
-                    self.warn(n, format!("`{label}`: Pfaddaten fehlerhaft ({e}); Rest ignoriert"));
+                    self.warn(
+                        n,
+                        tr!(
+                            "`{label}`: Pfaddaten fehlerhaft ({e}); Rest ignoriert",
+                            "`{label}`: path data invalid ({e}); rest ignored"
+                        ),
+                    );
                 }
                 contours = cs;
             }
@@ -363,20 +415,36 @@ impl<'d, 'i> State<'d, 'i> {
         if !open.is_empty() {
             self.warn(
                 n,
-                format!("`{label}`: offener Pfad wird nicht gefüllt (nur als Pfad übernommen; Z schließt ihn)"),
+                tr!(
+                    "`{label}`: offener Pfad wird nicht gefüllt (nur als Pfad übernommen; Z schließt ihn)",
+                    "`{label}`: open path is not filled (taken as a path only; Z closes it)"
+                ),
             );
             for c in open {
                 self.out.paths.push((c.transform(&m), line));
             }
         }
         if style.stroke {
-            self.warn(n, "Strichstärke (`stroke`) wird nicht als Fläche übernommen".into());
+            self.warn(
+                n,
+                trs!(
+                    "Strichstärke (`stroke`) wird nicht als Fläche übernommen",
+                    "stroke width (`stroke`) is not taken as an area"
+                )
+                .into(),
+            );
         }
         if closed.is_empty() {
             return;
         }
         if !style.fill {
-            self.warn(n, format!("`{label}`: ohne Füllung (fill=\"none\"), nicht übernommen"));
+            self.warn(
+                n,
+                tr!(
+                    "`{label}`: ohne Füllung (fill=\"none\"), nicht übernommen",
+                    "`{label}`: without fill (fill=\"none\"), not taken"
+                ),
+            );
             return;
         }
         self.out.shapes.push(Shape {
@@ -559,8 +627,8 @@ pub fn parse_transform(s: &str) -> Result<DAffine2, String> {
         if rest.is_empty() {
             break;
         }
-        let open = rest.find('(').ok_or("`(` fehlt")?;
-        let close = rest.find(')').ok_or("`)` fehlt")?;
+        let open = rest.find('(').ok_or(trs!("`(` fehlt", "`(` missing"))?;
+        let close = rest.find(')').ok_or(trs!("`)` fehlt", "`)` missing"))?;
         let name = rest[..open].trim();
         let a = parse_numbers(&rest[open + 1..close]);
         let t = match (name, a.len()) {
@@ -578,7 +646,7 @@ pub fn parse_transform(s: &str) -> Result<DAffine2, String> {
             }
             ("skewX", 1) => DAffine2::from_mat2(DMat2::from_cols(DVec2::X, DVec2::new(a[0].to_radians().tan(), 1.0))),
             ("skewY", 1) => DAffine2::from_mat2(DMat2::from_cols(DVec2::new(1.0, a[0].to_radians().tan()), DVec2::Y)),
-            _ => return Err(format!("`{name}` mit {} Werten", a.len())),
+            _ => return Err(tr!("`{name}` mit {} Werten", "`{name}` with {} values", a.len())),
         };
         m *= t;
         rest = &rest[close + 1..];

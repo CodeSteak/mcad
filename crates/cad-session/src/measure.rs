@@ -21,6 +21,8 @@ use cad_measure::section::{SectionPlane, cut_contours};
 use cad_measure::{Body, EdgeCurve, Geo, Radius, Section};
 use glam::{DMat4, DVec3};
 
+use cad_i18n::{tr, trs};
+
 use crate::Session;
 use crate::protocol::{self as p, FromEngine, MeasureKind};
 
@@ -122,18 +124,18 @@ impl<'a> Elem<'a> {
     }
 }
 
-/// What a pick kind is (German), for labels.
+/// What a pick kind is, for labels.
 fn kind_label(kind: &str) -> &'static str {
     match kind {
-        "vertex" | "section_vertex" => "Eckpunkt",
-        "mid" | "section_mid" => "Kantenmitte",
-        "center" | "section_center" => "Kreismitte",
-        "edge" => "Kante",
-        "section_edge" => "Kontur",
-        "face" => "Fläche",
-        "body" => "Körper",
-        "region" => "Schnittfläche",
-        _ => "Punkt",
+        "vertex" | "section_vertex" => trs!("Eckpunkt", "vertex"),
+        "mid" | "section_mid" => trs!("Kantenmitte", "edge midpoint"),
+        "center" | "section_center" => trs!("Kreismitte", "circle centre"),
+        "edge" => trs!("Kante", "edge"),
+        "section_edge" => trs!("Kontur", "contour"),
+        "face" => trs!("Fläche", "face"),
+        "body" => trs!("Körper", "body"),
+        "region" => trs!("Schnittfläche", "section region"),
+        _ => trs!("Punkt", "point"),
     }
 }
 
@@ -141,17 +143,17 @@ fn kind_label(kind: &str) -> &'static str {
 fn curve_text(c: &EdgeCurve) -> String {
     match c {
         EdgeCurve::Arc { r, .. } => format!("{} R {}", curve_name(c), num(*r)),
-        EdgeCurve::Ellipse { r1, r2, .. } => format!("Ellipse {} × {}", num(*r1), num(*r2)),
+        EdgeCurve::Ellipse { r1, r2, .. } => tr!("Ellipse {} × {}", "ellipse {} × {}", num(*r1), num(*r2)),
         _ => format!("{} {} mm", curve_name(c), num(c.length())),
     }
 }
 
 fn surface_text(s: &Surface) -> String {
     match s {
-        Surface::Cylinder { r, .. } => format!("Zylinder R {}", num(*r)),
-        Surface::Sphere { r, .. } => format!("Kugel R {}", num(*r)),
-        Surface::Cone { semi_angle, .. } => format!("Kegel {}°", num(semi_angle.to_degrees())),
-        Surface::Torus { major, minor, .. } => format!("Torus R {} / {}", num(*major), num(*minor)),
+        Surface::Cylinder { r, .. } => tr!("Zylinder R {}", "cylinder R {}", num(*r)),
+        Surface::Sphere { r, .. } => tr!("Kugel R {}", "sphere R {}", num(*r)),
+        Surface::Cone { semi_angle, .. } => tr!("Kegel {}°", "cone {}°", num(semi_angle.to_degrees())),
+        Surface::Torus { major, minor, .. } => tr!("Torus R {} / {}", "torus R {} / {}", num(*major), num(*minor)),
         s => cad_measure::surface::kind_name(s).to_string(),
     }
 }
@@ -184,13 +186,13 @@ fn needed(kind: MeasureKind) -> usize {
 
 fn title(kind: MeasureKind) -> &'static str {
     match kind {
-        MeasureKind::Distance => "Abstand",
-        MeasureKind::Radius => "Radius",
-        MeasureKind::Angle => "Winkel",
-        MeasureKind::Length => "Länge",
-        MeasureKind::Area => "Fläche",
-        MeasureKind::Body => "Körper",
-        MeasureKind::Wall => "Wandstärke",
+        MeasureKind::Distance => trs!("Abstand", "Distance"),
+        MeasureKind::Radius => trs!("Radius", "Radius"),
+        MeasureKind::Angle => trs!("Winkel", "Angle"),
+        MeasureKind::Length => trs!("Länge", "Length"),
+        MeasureKind::Area => trs!("Fläche", "Area"),
+        MeasureKind::Body => trs!("Körper", "Body"),
+        MeasureKind::Wall => trs!("Wandstärke", "Wall thickness"),
     }
 }
 
@@ -198,24 +200,62 @@ fn title(kind: MeasureKind) -> &'static str {
 pub fn prompt(kind: MeasureKind, section: bool, picks: usize) -> String {
     use MeasureKind::*;
     let s = match (kind, section, picks) {
-        (Distance, false, 0) => "Abstand: erstes Element wählen (Eckpunkt, Kantenmitte, Kreismitte, Kante oder Fläche)",
-        (Distance, false, _) => "Abstand: zweites Element wählen",
-        (Distance, true, 0) => "Abstand im Schnitt: ersten Punkt oder Konturabschnitt wählen",
-        (Distance, true, _) => "Abstand im Schnitt: zweiten Punkt oder Konturabschnitt wählen",
-        (Radius, false, _) => "Radius: Kreiskante oder runde Fläche wählen",
-        (Radius, true, _) => "Radius im Schnitt: Kreisbogen der Kontur wählen",
-        (Angle, false, 0) => "Winkel: erste Kante oder Fläche wählen",
-        (Angle, false, _) => "Winkel: zweite Kante oder Fläche wählen",
-        (Angle, true, 0) => "Winkel im Schnitt: ersten Konturabschnitt wählen",
-        (Angle, true, _) => "Winkel im Schnitt: zweiten Konturabschnitt wählen",
-        (Length, false, _) => "Länge: Kante wählen",
-        (Length, true, _) => "Länge im Schnitt: Konturabschnitt wählen",
-        (Area, false, _) => "Fläche: Fläche wählen",
-        (Area, true, _) => "Fläche im Schnitt: in einen Bereich der Schnittfläche klicken",
-        (Body, false, _) => "Körper: eine Fläche des Körpers wählen (Hülle, Volumen)",
-        (Body, true, _) => "Körper: nicht im Schnitt – „Im Schnitt“ ausschalten",
-        (Wall, true, _) => "Wandstärke: Punkt auf der Schnittkontur wählen",
-        (Wall, false, _) => "Wandstärke: nur im Schnitt – „Im Schnitt“ einschalten",
+        (Distance, false, 0) => trs!(
+            "Abstand: erstes Element wählen (Eckpunkt, Kantenmitte, Kreismitte, Kante oder Fläche)",
+            "Distance: pick the first element (vertex, edge midpoint, circle centre, edge or face)"
+        ),
+        (Distance, false, _) => trs!("Abstand: zweites Element wählen", "Distance: pick the second element"),
+        (Distance, true, 0) => trs!(
+            "Abstand im Schnitt: ersten Punkt oder Konturabschnitt wählen",
+            "Distance in the section: pick the first point or contour segment"
+        ),
+        (Distance, true, _) => trs!(
+            "Abstand im Schnitt: zweiten Punkt oder Konturabschnitt wählen",
+            "Distance in the section: pick the second point or contour segment"
+        ),
+        (Radius, false, _) => {
+            trs!("Radius: Kreiskante oder runde Fläche wählen", "Radius: pick a circular edge or round face")
+        }
+        (Radius, true, _) => {
+            trs!("Radius im Schnitt: Kreisbogen der Kontur wählen", "Radius in the section: pick an arc of the contour")
+        }
+        (Angle, false, 0) => trs!("Winkel: erste Kante oder Fläche wählen", "Angle: pick the first edge or face"),
+        (Angle, false, _) => trs!("Winkel: zweite Kante oder Fläche wählen", "Angle: pick the second edge or face"),
+        (Angle, true, 0) => {
+            trs!(
+                "Winkel im Schnitt: ersten Konturabschnitt wählen",
+                "Angle in the section: pick the first contour segment"
+            )
+        }
+        (Angle, true, _) => trs!(
+            "Winkel im Schnitt: zweiten Konturabschnitt wählen",
+            "Angle in the section: pick the second contour segment"
+        ),
+        (Length, false, _) => trs!("Länge: Kante wählen", "Length: pick an edge"),
+        (Length, true, _) => {
+            trs!("Länge im Schnitt: Konturabschnitt wählen", "Length in the section: pick a contour segment")
+        }
+        (Area, false, _) => trs!("Fläche: Fläche wählen", "Area: pick a face"),
+        (Area, true, _) => trs!(
+            "Fläche im Schnitt: in einen Bereich der Schnittfläche klicken",
+            "Area in the section: click into a region of the section"
+        ),
+        (Body, false, _) => trs!(
+            "Körper: eine Fläche des Körpers wählen (Hülle, Volumen)",
+            "Body: pick a face of the body (bounds, volume)"
+        ),
+        (Body, true, _) => trs!(
+            "Körper: nicht im Schnitt – „Im Schnitt“ ausschalten",
+            "Body: not in the section – turn off “In section”"
+        ),
+        (Wall, true, _) => trs!(
+            "Wandstärke: Punkt auf der Schnittkontur wählen",
+            "Wall thickness: pick a point on the section contour"
+        ),
+        (Wall, false, _) => trs!(
+            "Wandstärke: nur im Schnitt – „Im Schnitt“ einschalten",
+            "Wall thickness: only in the section – turn on “In section”"
+        ),
     };
     s.to_string()
 }
@@ -290,10 +330,17 @@ where
         if let Some((_, m)) = self.measure_cache().models.iter().find(|(n, _)| *n == node) {
             return Ok(m.clone());
         }
-        let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
-        let sn = d.scene.nodes.get(node as usize).ok_or_else(|| format!("Knoten {node} existiert nicht"))?;
+        let d = self.done.as_ref().ok_or_else(crate::no_evaluation)?;
+        let sn = d
+            .scene
+            .nodes
+            .get(node as usize)
+            .ok_or_else(|| tr!("Knoten {node} existiert nicht", "node {node} does not exist"))?;
         if sn.dim == Some(p::Dim::Two) {
-            return Err("2D-Ergebnis: Messen nur an Körpern (im Schnitt oder nach dem Extrudieren)".into());
+            return Err(tr!(
+                "2D-Ergebnis: Messen nur an Körpern (im Schnitt oder nach dem Extrudieren)",
+                "2D result: measuring works on bodies only (in a section or after extruding)"
+            ));
         }
         let world = DMat4::from_cols_array(&sn.display_world.0);
         let tol = self.tolerance(node, false);
@@ -331,7 +378,7 @@ where
         }
         let res = (|| {
             let model = self.measure_model(node)?;
-            let d = self.done.as_ref().ok_or("keine Auswertung vorhanden")?;
+            let d = self.done.as_ref().ok_or_else(crate::no_evaluation)?;
             let sn = &d.scene.nodes[node as usize];
             let world = DMat4::from_cols_array(&sn.display_world.0);
             let cuts = self.engine.section_parts(&d.ev, node, &world, plane.point, plane.normal)?;
@@ -343,7 +390,7 @@ where
             }
             let s = Section::new(*plane, parts);
             if s.is_empty() {
-                return Err("Die Schnittebene trifft das Modell nicht".to_string());
+                return Err(tr!("Die Schnittebene trifft das Modell nicht", "the section plane misses the model"));
             }
             Ok(s)
         })();
@@ -407,7 +454,8 @@ where
                     continue;
                 }
                 lines.push(key);
-                let mut s = format!("{}Zeile {}: {}", file.unwrap_or_default(), node.range.line, node.label);
+                let mut s =
+                    tr!("{}Zeile {}: {}", "{}line {}: {}", file.unwrap_or_default(), node.range.line, node.label);
                 // the named instance the node is in (or that the node is)
                 let mut inst = Some(node.module_inst);
                 let mut names = Vec::new();
@@ -422,7 +470,7 @@ where
                     names.insert(0, l.clone());
                 }
                 if !names.is_empty() {
-                    s.push_str(&format!(" (Instanz {})", names.join(" › ")));
+                    s.push_str(&tr!(" (Instanz {})", " (instance {})", names.join(" › ")));
                 }
                 push(s);
             }
@@ -452,8 +500,9 @@ where
             if let Some(q) = point {
                 let r = names_at(q);
                 if r.iter().all(|x| x.is_some()) && !r.iter().all(|x| x.as_deref() == Some("_")) {
-                    push(format!(
+                    push(tr!(
                         "Rasterpunkt {}[{}]",
+                        "grid point {}[{}]",
                         g.name,
                         r.iter().map(|x| x.clone().unwrap()).collect::<Vec<_>>().join(", ")
                     ));
@@ -467,7 +516,7 @@ where
                         if let Some(name) = &r[a]
                             && name != "_"
                         {
-                            push(format!("Rasterebene {}.{}", g.name, name));
+                            push(tr!("Rasterebene {}.{}", "grid plane {}.{}", g.name, name));
                         }
                     }
                 }
@@ -485,7 +534,7 @@ where
                                 .map(|(b, x)| if b == a { "*".to_string() } else { x.clone().unwrap_or_default() })
                                 .collect();
                             if parts.iter().any(|x| x != "*" && x != "_") {
-                                push(format!("Rasterlinie {}[{}]", g.name, parts.join(", ")));
+                                push(tr!("Rasterlinie {}[{}]", "grid line {}[{}]", g.name, parts.join(", ")));
                             }
                         }
                     }
@@ -495,7 +544,7 @@ where
         if let Some(q) = point {
             for a in &sc.anchors {
                 if DVec3::from_array(a.point.0).distance(q) <= 1e-6 * (1.0 + q.length()) {
-                    push(format!("Anker {}", a.text.clone().unwrap_or_else(|| a.name.clone())));
+                    push(tr!("Anker {}", "anchor {}", a.text.clone().unwrap_or_else(|| a.name.clone())));
                 }
             }
         }
@@ -527,7 +576,7 @@ where
         let tags: Vec<u32> = body.vertex_edges(vi as u32).iter().flat_map(|&e| body.edge_tags(e)).collect::<Vec<_>>();
         pk.reference = format!("vertex@{}", ref_point(q));
         pk.origin = self.origin(&tags, Some(q), None, None);
-        pk.label = format!("Eckpunkt {}", vec_text(q));
+        pk.label = tr!("Eckpunkt {}", "vertex {}", vec_text(q));
         pk
     }
 
@@ -537,15 +586,19 @@ where
         let (point, label, reference) = match kind {
             "mid" => {
                 let q = c.mid();
-                (q, format!("Kantenmitte · {}", curve_text(c)), format!("mid@{}", ref_point(q)))
+                (q, tr!("Kantenmitte · {}", "edge midpoint · {}", curve_text(c)), format!("mid@{}", ref_point(q)))
             }
             "center" => {
                 let (o, _, r, _) = c.circle().expect("circle");
-                (o, format!("Kreismitte · R {} · ⌀ {}", num(r), num(2.0 * r)), format!("center@{}", ref_point(o)))
+                (
+                    o,
+                    tr!("Kreismitte · R {} · ⌀ {}", "circle centre · R {} · ⌀ {}", num(r), num(2.0 * r)),
+                    format!("center@{}", ref_point(o)),
+                )
             }
             _ => {
                 let q = c.closest(at).1;
-                (q, format!("Kante · {}", curve_text(c)), format!("edge@{}", ref_point(q)))
+                (q, tr!("Kante · {}", "edge · {}", curve_text(c)), format!("edge@{}", ref_point(q)))
             }
         };
         let mut pk = self.pick_base(kind, m.node, b, point);
@@ -567,12 +620,12 @@ where
         pk.face = Some(f as u32);
         if kind == "body" {
             pk.label = match self.part_of_face(body, Some(f)) {
-                Some((name, _, _)) => format!("Bauteil {name}"),
-                None => format!("Körper {}", b + 1),
+                Some((name, _, _)) => tr!("Bauteil {name}", "part {name}"),
+                None => tr!("Körper {}", "body {}", b + 1),
             };
             pk.reference = format!("body@{}", ref_point(q));
         } else {
-            pk.label = format!("Fläche · {}", surface_text(&fg.surface));
+            pk.label = tr!("Fläche · {}", "face · {}", surface_text(&fg.surface));
             pk.reference = format!("face@{}", ref_point(q));
         }
         pk.lines = face_lines(body, f);
@@ -589,11 +642,11 @@ where
         let (point, label, reference) = match kind {
             "section_vertex" => {
                 let q = seg.curve.start();
-                (q, format!("Eckpunkt der Kontur {}", vec_text(q)), format!("vertex@{}", ref_point(q)))
+                (q, tr!("Eckpunkt der Kontur {}", "contour vertex {}", vec_text(q)), format!("vertex@{}", ref_point(q)))
             }
             "section_mid" => {
                 let q = seg.curve.mid();
-                (q, format!("Mitte · {}", curve_text(&seg.curve)), format!("mid@{}", ref_point(q)))
+                (q, tr!("Mitte · {}", "midpoint · {}", curve_text(&seg.curve)), format!("mid@{}", ref_point(q)))
             }
             "section_center" => {
                 let (o, r) = match &seg.curve {
@@ -601,11 +654,19 @@ where
                     EdgeCurve::Ellipse { frame, r1, .. } => (frame.origin, *r1),
                     _ => (seg.curve.mid(), 0.0),
                 };
-                (o, format!("Kreismitte · R {} · ⌀ {}", num(r), num(2.0 * r)), format!("center@{}", ref_point(o)))
+                (
+                    o,
+                    tr!("Kreismitte · R {} · ⌀ {}", "circle centre · R {} · ⌀ {}", num(r), num(2.0 * r)),
+                    format!("center@{}", ref_point(o)),
+                )
             }
             _ => {
                 let q = seg.curve.closest(at).1;
-                (q, format!("Kontur · {} ({})", curve_text(&seg.curve), seg.source), format!("edge@{}", ref_point(q)))
+                (
+                    q,
+                    tr!("Kontur · {} ({})", "contour · {} ({})", curve_text(&seg.curve), seg.source),
+                    format!("edge@{}", ref_point(q)),
+                )
             }
         };
         let body = sec.contours[c].body;
@@ -630,7 +691,7 @@ where
         let q = sec.plane.project(at);
         let mut pk = self.pick_base("region", m.node, reg.body, q);
         pk.region = Some(r as u32);
-        pk.label = format!("Schnittfläche {} ({} Löcher)", r + 1, reg.holes.len());
+        pk.label = tr!("Schnittfläche {} ({} Löcher)", "section region {} ({} holes)", r + 1, reg.holes.len());
         pk.reference = format!("region@{}", ref_point(q));
         pk.lines = std::iter::once(reg.outer)
             .chain(reg.holes.iter().copied())
@@ -842,7 +903,7 @@ where
 
     /// Element of a pick (indices checked).
     fn elem<'a>(&self, m: &'a MeasureModel, sec: Option<&'a Section>, pk: &p::MeasurePick) -> Result<Elem<'a>, String> {
-        let stale = || "Auswahl veraltet (Modell geändert): neu wählen".to_string();
+        let stale = || tr!("Auswahl veraltet (Modell geändert): neu wählen", "stale pick (model changed): pick again");
         let b = pk.body as usize;
         match pk.kind.as_str() {
             "point" | "vertex" | "mid" | "center" | "section_vertex" | "section_mid" | "section_center" => {
@@ -869,7 +930,7 @@ where
                 Ok(Elem::Body(b))
             }
             "section_edge" => {
-                let s = sec.ok_or("Kontur ohne Schnitt")?;
+                let s = sec.ok_or_else(|| tr!("Kontur ohne Schnitt", "contour without a section"))?;
                 let (c, g) = (pk.contour.ok_or_else(stale)? as usize, pk.segment.ok_or_else(stale)? as usize);
                 if s.contours.get(c).is_none_or(|x| g >= x.segs.len()) {
                     return Err(stale());
@@ -877,14 +938,14 @@ where
                 Ok(Elem::Seg(s, c, g))
             }
             "region" => {
-                let s = sec.ok_or("Bereich ohne Schnitt")?;
+                let s = sec.ok_or_else(|| tr!("Bereich ohne Schnitt", "region without a section"))?;
                 let r = pk.region.ok_or_else(stale)? as usize;
                 if r >= s.regions.len() {
                     return Err(stale());
                 }
                 Ok(Elem::Region(s, r))
             }
-            k => Err(format!("unbekannte Auswahl `{k}`")),
+            k => Err(tr!("unbekannte Auswahl `{k}`", "unknown pick `{k}`")),
         }
     }
 
@@ -903,12 +964,12 @@ where
         };
         let done = |a: p::MeasureAnswer| vec![FromEngine::Measure(Box::new(a))];
         let Some(d) = &self.done else {
-            ans.message = Some("keine Auswertung vorhanden".into());
+            ans.message = Some(crate::no_evaluation());
             return done(ans);
         };
         let node = req.hit.map(|h| h.node).or(req.node).or(d.scene.root);
         let Some(node) = node else {
-            ans.message = Some("kein Ergebnis zum Messen".into());
+            ans.message = Some(tr!("kein Ergebnis zum Messen", "no result to measure"));
             return done(ans);
         };
         // picks of another node: measure on the node of the first pick
@@ -962,7 +1023,7 @@ where
             self.snap(&model, sec, req.kind, ray, req.hit.as_ref(), req.pixel, req.snap_px, req.free, clip.as_ref());
         if req.click {
             let Some(pk) = hover else {
-                ans.message = Some("Hier ist nichts zu wählen".into());
+                ans.message = Some(tr!("Hier ist nichts zu wählen", "nothing to pick here"));
                 return done(ans);
             };
             let mut picks = req.picks.clone();
@@ -1017,7 +1078,7 @@ where
     ) -> Result<p::Measurement, String> {
         for pk in picks {
             if !accepts(kind, sec.is_some(), &pk.kind) {
-                return Err(format!("{}: {} passt nicht", title(kind), kind_label(&pk.kind)));
+                return Err(tr!("{}: {} passt nicht", "{}: {} does not fit", title(kind), kind_label(&pk.kind)));
             }
         }
         if picks.len() < needed(kind) {
@@ -1062,16 +1123,21 @@ where
         match kind {
             MeasureKind::Distance => {
                 let (ga, gb) = (
-                    elems[0].geo().ok_or("Abstand: Element ohne Geometrie")?,
-                    elems[1].geo().ok_or("Abstand: Element ohne Geometrie")?,
+                    elems[0]
+                        .geo()
+                        .ok_or_else(|| tr!("Abstand: Element ohne Geometrie", "distance: element without geometry"))?,
+                    elems[1]
+                        .geo()
+                        .ok_or_else(|| tr!("Abstand: Element ohne Geometrie", "distance: element without geometry"))?,
                 );
-                let dr = cad_measure::distance(&ga, &gb, m.tol).ok_or("Abstand: keine Geometrie")?;
+                let dr = cad_measure::distance(&ga, &gb, m.tol)
+                    .ok_or_else(|| tr!("Abstand: keine Geometrie", "distance: no geometry"))?;
                 let delta = dr.b - dr.a;
                 r.value = dr.distance;
                 r.label = format!("{} mm", num(dr.distance));
                 r.values.push(val(
                     "distance",
-                    if dr.parallel { "Normalabstand" } else { "Abstand" },
+                    if dr.parallel { trs!("Normalabstand", "normal distance") } else { trs!("Abstand", "distance") },
                     dr.distance,
                     "mm",
                 ));
@@ -1079,17 +1145,32 @@ where
                 r.values.push(val("dy", "Δy", delta.y, "mm"));
                 r.values.push(val("dz", "Δz", delta.z, "mm"));
                 if dr.parallel {
-                    r.details.push("parallele Ebenen: Normalabstand".into());
+                    r.details.push(tr!("parallele Ebenen: Normalabstand", "parallel planes: normal distance"));
                     if (dr.min_distance - dr.distance).abs() > 1e-9 {
-                        r.values.push(val("min_distance", "kleinster Abstand der Flächen", dr.min_distance, "mm"));
-                        r.details.push(format!("kleinster Abstand der Flächen {} mm", num(dr.min_distance)));
+                        r.values.push(val(
+                            "min_distance",
+                            trs!("kleinster Abstand der Flächen", "smallest distance of the faces"),
+                            dr.min_distance,
+                            "mm",
+                        ));
+                        r.details.push(tr!(
+                            "kleinster Abstand der Flächen {} mm",
+                            "smallest distance of the faces {} mm",
+                            num(dr.min_distance)
+                        ));
                     }
                 }
                 if let Some(ad) = dr.axis_distance {
-                    r.values.push(val("axis_distance", "Achsabstand", ad, "mm"));
-                    r.details.push(format!("Achsabstand {} mm", num(ad)));
+                    r.values.push(val("axis_distance", trs!("Achsabstand", "axis distance"), ad, "mm"));
+                    r.details.push(tr!("Achsabstand {} mm", "axis distance {} mm", num(ad)));
                 }
-                r.details.push(format!("von {} bis {} · Δ {}", vec_text(dr.a), vec_text(dr.b), vec_text(delta)));
+                r.details.push(tr!(
+                    "von {} bis {} · Δ {}",
+                    "from {} to {} · Δ {}",
+                    vec_text(dr.a),
+                    vec_text(dr.b),
+                    vec_text(delta)
+                ));
                 if dr.distance > 1e-12 {
                     r.lines.push(vec![pv(dr.a), pv(dr.b)]);
                 }
@@ -1105,7 +1186,9 @@ where
                 }
             }
             MeasureKind::Radius => {
-                let g = elems[0].geo().ok_or("Radius: Element ohne Geometrie")?;
+                let g = elems[0]
+                    .geo()
+                    .ok_or_else(|| tr!("Radius: Element ohne Geometrie", "radius: element without geometry"))?;
                 let rr = cad_measure::radius(&g, at[0])?;
                 let rad = rr.radius.clone();
                 r.value = rad.r();
@@ -1114,38 +1197,49 @@ where
                 match &rad {
                     Radius::Circle { centre, axis, r: rv, sweep_deg, at } => {
                         r.label = format!("R {} · ⌀ {}", num(*rv), num(2.0 * rv));
-                        r.values.push(val("radius", "Radius", *rv, "mm"));
-                        r.values.push(val("diameter", "Durchmesser", 2.0 * rv, "mm"));
-                        r.values.push(val("sweep", "Bogenwinkel", *sweep_deg, "°"));
+                        r.values.push(val("radius", trs!("Radius", "radius"), *rv, "mm"));
+                        r.values.push(val("diameter", trs!("Durchmesser", "diameter"), 2.0 * rv, "mm"));
+                        r.values.push(val("sweep", trs!("Bogenwinkel", "arc angle"), *sweep_deg, "°"));
                         r.lines.push(vec![pv(*centre), pv(*at)]);
                         r.guides.push(axis_seg(*centre, *axis, (0.4 * rv).max(0.02 * size)));
                         r.points.push(pv(*centre));
-                        r.details.push(format!("Mittelpunkt {} · Achse {}", vec_text(*centre), vec_text(*axis)));
+                        r.details.push(tr!(
+                            "Mittelpunkt {} · Achse {}",
+                            "centre {} · axis {}",
+                            vec_text(*centre),
+                            vec_text(*axis)
+                        ));
                         if *sweep_deg < 359.999 {
-                            r.details.push(format!("Kreisbogen {}°", num(*sweep_deg)));
+                            r.details.push(tr!("Kreisbogen {}°", "arc {}°", num(*sweep_deg)));
                         }
                         r.at = pv(0.5 * (*centre + *at));
                     }
                     Radius::Ellipse { centre, axis, r1, r2, at } => {
-                        r.label = format!("Ellipse {} × {}", num(*r1), num(*r2));
-                        r.values.push(val("radius", "große Halbachse", r1.max(*r2), "mm"));
-                        r.values.push(val("minor", "kleine Halbachse", r1.min(*r2), "mm"));
+                        r.label = tr!("Ellipse {} × {}", "ellipse {} × {}", num(*r1), num(*r2));
+                        r.values.push(val("radius", trs!("große Halbachse", "semi-major axis"), r1.max(*r2), "mm"));
+                        r.values.push(val("minor", trs!("kleine Halbachse", "semi-minor axis"), r1.min(*r2), "mm"));
                         r.lines.push(vec![pv(*centre), pv(*at)]);
                         r.guides.push(axis_seg(*centre, *axis, 0.4 * r1.max(*r2)));
                         r.points.push(pv(*centre));
-                        r.details.push(format!("Mittelpunkt {} · Normale {}", vec_text(*centre), vec_text(*axis)));
+                        r.details.push(tr!(
+                            "Mittelpunkt {} · Normale {}",
+                            "centre {} · normal {}",
+                            vec_text(*centre),
+                            vec_text(*axis)
+                        ));
                         r.at = pv(0.5 * (*centre + *at));
                     }
                     Radius::Cylinder { axis_a, axis_b, dir, r: rv, at, foot } => {
                         r.label = format!("R {} · ⌀ {}", num(*rv), num(2.0 * rv));
-                        r.values.push(val("radius", "Radius", *rv, "mm"));
-                        r.values.push(val("diameter", "Durchmesser", 2.0 * rv, "mm"));
+                        r.values.push(val("radius", trs!("Radius", "radius"), *rv, "mm"));
+                        r.values.push(val("diameter", trs!("Durchmesser", "diameter"), 2.0 * rv, "mm"));
                         let ext = 0.15 * axis_a.distance(*axis_b) + 0.02 * size;
                         r.guides.push(vec![pv(*axis_a - *dir * ext), pv(*axis_b + *dir * ext)]);
                         r.lines.push(vec![pv(*foot), pv(*at)]);
                         r.points.push(pv(*foot));
-                        r.details.push(format!(
+                        r.details.push(tr!(
                             "Achse {} durch {} (Länge {} mm)",
+                            "axis {} through {} (length {} mm)",
                             vec_text(*dir),
                             vec_text(*axis_a),
                             num(axis_a.distance(*axis_b))
@@ -1154,15 +1248,21 @@ where
                     }
                     Radius::Cone { axis_a, axis_b, dir, r: rv, semi_deg, apex, at, foot } => {
                         r.label = format!("R {} · ⌀ {} · {}°", num(*rv), num(2.0 * rv), num(*semi_deg));
-                        r.values.push(val("radius", "Radius an der Stelle", *rv, "mm"));
-                        r.values.push(val("diameter", "Durchmesser an der Stelle", 2.0 * rv, "mm"));
-                        r.values.push(val("semi_angle", "Halbwinkel", *semi_deg, "°"));
+                        r.values.push(val("radius", trs!("Radius an der Stelle", "radius at the point"), *rv, "mm"));
+                        r.values.push(val(
+                            "diameter",
+                            trs!("Durchmesser an der Stelle", "diameter at the point"),
+                            2.0 * rv,
+                            "mm",
+                        ));
+                        r.values.push(val("semi_angle", trs!("Halbwinkel", "half angle"), *semi_deg, "°"));
                         let ext = 0.15 * axis_a.distance(*axis_b) + 0.02 * size;
                         r.guides.push(vec![pv(*axis_a - *dir * ext), pv(*axis_b + *dir * ext)]);
                         r.lines.push(vec![pv(*foot), pv(*at)]);
                         r.points.push(pv(*foot));
-                        r.details.push(format!(
+                        r.details.push(tr!(
                             "Achse {} · Spitze {} · Halbwinkel {}°",
+                            "axis {} · apex {} · half angle {}°",
                             vec_text(*dir),
                             vec_text(*apex),
                             num(*semi_deg)
@@ -1171,24 +1271,36 @@ where
                     }
                     Radius::Sphere { centre, r: rv, at } => {
                         r.label = format!("R {} · ⌀ {}", num(*rv), num(2.0 * rv));
-                        r.values.push(val("radius", "Radius", *rv, "mm"));
-                        r.values.push(val("diameter", "Durchmesser", 2.0 * rv, "mm"));
+                        r.values.push(val("radius", trs!("Radius", "radius"), *rv, "mm"));
+                        r.values.push(val("diameter", trs!("Durchmesser", "diameter"), 2.0 * rv, "mm"));
                         r.lines.push(vec![pv(*centre), pv(*at)]);
                         r.points.push(pv(*centre));
-                        r.details.push(format!("Kugel, Mittelpunkt {}", vec_text(*centre)));
+                        r.details.push(tr!("Kugel, Mittelpunkt {}", "sphere, centre {}", vec_text(*centre)));
                         r.at = pv(0.5 * (*centre + *at));
                     }
                     Radius::Torus { centre, axis, major, minor, tube, at } => {
-                        r.label = format!("R {} · ⌀ {} (Ring R {})", num(*minor), num(2.0 * minor), num(*major));
-                        r.values.push(val("radius", "Radius (Rohr)", *minor, "mm"));
-                        r.values.push(val("diameter", "Durchmesser (Rohr)", 2.0 * minor, "mm"));
-                        r.values.push(val("major", "Ringradius", *major, "mm"));
+                        r.label = tr!(
+                            "R {} · ⌀ {} (Ring R {})",
+                            "R {} · ⌀ {} (ring R {})",
+                            num(*minor),
+                            num(2.0 * minor),
+                            num(*major)
+                        );
+                        r.values.push(val("radius", trs!("Radius (Rohr)", "radius (tube)"), *minor, "mm"));
+                        r.values.push(val(
+                            "diameter",
+                            trs!("Durchmesser (Rohr)", "diameter (tube)"),
+                            2.0 * minor,
+                            "mm",
+                        ));
+                        r.values.push(val("major", trs!("Ringradius", "ring radius"), *major, "mm"));
                         r.lines.push(vec![pv(*tube), pv(*at)]);
                         r.guides.push(vec![pv(*centre), pv(*tube)]);
                         r.guides.push(axis_seg(*centre, *axis, (0.5 * major).max(0.02 * size)));
                         r.points.push(pv(*tube));
-                        r.details.push(format!(
+                        r.details.push(tr!(
                             "Mittelpunkt {} · Achse {} · Ringradius {} mm",
+                            "centre {} · axis {} · ring radius {} mm",
                             vec_text(*centre),
                             vec_text(*axis),
                             num(*major)
@@ -1197,13 +1309,26 @@ where
                     }
                     Radius::Curvature { r_min, r_max, centre, at } => {
                         r.label = format!("R ≈ {}", num(*r_min));
-                        r.values.push(val("radius", "Krümmungsradius (kleinster)", *r_min, "mm"));
+                        r.values.push(val(
+                            "radius",
+                            trs!("Krümmungsradius (kleinster)", "radius of curvature (smallest)"),
+                            *r_min,
+                            "mm",
+                        ));
                         if r_max.is_finite() {
-                            r.values.push(val("radius_max", "Krümmungsradius (größter)", *r_max, "mm"));
+                            r.values.push(val(
+                                "radius_max",
+                                trs!("Krümmungsradius (größter)", "radius of curvature (largest)"),
+                                *r_max,
+                                "mm",
+                            ));
                         }
                         r.lines.push(vec![pv(*centre), pv(*at)]);
                         r.points.push(pv(*centre));
-                        r.details.push("Freiformfläche: Hauptkrümmungsradien an der Stelle".into());
+                        r.details.push(tr!(
+                            "Freiformfläche: Hauptkrümmungsradien an der Stelle",
+                            "freeform face: principal radii of curvature at the point"
+                        ));
                         r.at = pv(0.5 * (*centre + *at));
                     }
                 }
@@ -1212,26 +1337,38 @@ where
                 if !rr.exact {
                     r.tol = Some(if rr.dev > 0.0 { rr.dev } else { m.tol });
                     if rr.dev > 0.0 {
-                        r.details.push(format!("Kreis angepasst, Abweichung {} mm", num_e(rr.dev)));
+                        r.details.push(tr!(
+                            "Kreis angepasst, Abweichung {} mm",
+                            "circle fitted, deviation {} mm",
+                            num_e(rr.dev)
+                        ));
                     }
                 }
             }
             MeasureKind::Angle => {
                 let (ga, gb) = (
-                    elems[0].geo().ok_or("Winkel: Element ohne Richtung")?,
-                    elems[1].geo().ok_or("Winkel: Element ohne Richtung")?,
+                    elems[0]
+                        .geo()
+                        .ok_or_else(|| tr!("Winkel: Element ohne Richtung", "angle: element without direction"))?,
+                    elems[1]
+                        .geo()
+                        .ok_or_else(|| tr!("Winkel: Element ohne Richtung", "angle: element without direction"))?,
                 );
                 let a = cad_measure::angle(&ga, at[0], &gb, at[1])?;
                 r.value = a.deg;
                 r.unit = "°".into();
                 r.label = format!("{}°", num(a.deg));
-                r.values.push(val("angle", "Winkel", a.deg, "°"));
+                r.values.push(val("angle", trs!("Winkel", "angle"), a.deg, "°"));
                 if let Some(n) = a.normals {
-                    r.values.push(val("normals", "Winkel der Normalen", n, "°"));
+                    r.values.push(val("normals", trs!("Winkel der Normalen", "angle of the normals"), n, "°"));
                 }
                 if let Some(o) = a.opening {
-                    r.values.push(val("opening", "Öffnungswinkel", o, "°"));
-                    r.details.push(format!("Öffnungswinkel an der Schnittgeraden {}°", num(o)));
+                    r.values.push(val("opening", trs!("Öffnungswinkel", "opening angle"), o, "°"));
+                    r.details.push(tr!(
+                        "Öffnungswinkel an der Schnittgeraden {}°",
+                        "opening angle at the line of intersection {}°",
+                        num(o)
+                    ));
                 }
                 r.details.insert(0, format!("{} – {}", a.what[0], a.what[1]));
                 if a.parallel {
@@ -1256,19 +1393,26 @@ where
                 let c = match elems[0] {
                     Elem::Edge(b, e) => &b.edges[e],
                     Elem::Seg(s, c, g) => &s.contours[c].segs[g].curve,
-                    _ => return Err("Länge: Kante wählen".into()),
+                    _ => return Err(tr!("Länge: Kante wählen", "length: pick an edge")),
                 };
                 let l = c.length();
                 r.value = l;
                 r.label = format!("{} mm", num(l));
-                r.values.push(val("length", "Länge", l, "mm"));
+                r.values.push(val("length", trs!("Länge", "length"), l, "mm"));
                 r.lines.push(poly(c));
                 r.points = vec![pv(c.start()), pv(c.end())];
                 r.at = pv(c.mid());
-                r.details.push(format!("{} von {} bis {}", curve_text(c), vec_text(c.start()), vec_text(c.end())));
+                r.details.push(tr!(
+                    "{} von {} bis {}",
+                    "{} from {} to {}",
+                    curve_text(c),
+                    vec_text(c.start()),
+                    vec_text(c.end())
+                ));
                 if let Some((o, _, rv, sw)) = c.circle() {
-                    r.details.push(format!(
+                    r.details.push(tr!(
                         "Kreisbogen R {} · {}° · Mittelpunkt {}",
+                        "arc R {} · {}° · centre {}",
                         num(rv),
                         num(sw.to_degrees()),
                         vec_text(o)
@@ -1277,7 +1421,8 @@ where
                 r.exact = c.is_analytic();
                 if !r.exact {
                     r.tol = Some(1e-9 * l.max(1.0));
-                    r.details.push("numerisch integriert (Gauß-Legendre)".into());
+                    r.details
+                        .push(tr!("numerisch integriert (Gauß-Legendre)", "integrated numerically (Gauss-Legendre)"));
                 }
             }
             MeasureKind::Area => match elems[0] {
@@ -1286,14 +1431,18 @@ where
                     r.value = a;
                     r.unit = "mm²".into();
                     r.label = format!("{} mm²", num(a));
-                    r.values.push(val("area", "Fläche", a, "mm²"));
+                    r.values.push(val("area", trs!("Fläche", "area"), a, "mm²"));
                     r.lines = face_lines(b, f);
                     r.details.push(surface_text(&b.faces[f].surface));
                     r.exact = exact;
                     if !exact {
                         r.tol =
                             Some(m.tol * b.faces[f].edges.iter().map(|&e| b.edges[e as usize].length()).sum::<f64>());
-                        r.details.push(format!("aus der Tessellierung (Sehnentoleranz {} mm)", num(m.tol)));
+                        r.details.push(tr!(
+                            "aus der Tessellierung (Sehnentoleranz {} mm)",
+                            "from the tessellation (chord tolerance {} mm)",
+                            num(m.tol)
+                        ));
                     }
                 }
                 Elem::Region(s, ri) => {
@@ -1301,11 +1450,22 @@ where
                     r.value = reg.area;
                     r.unit = "mm²".into();
                     r.label = format!("{} mm²", num(reg.area));
-                    r.values.push(val("area", "Fläche des Schnittbereichs", reg.area, "mm²"));
-                    r.values.push(val("section_area", "Schnittfläche gesamt", s.area(), "mm²"));
+                    r.values.push(val(
+                        "area",
+                        trs!("Fläche des Schnittbereichs", "area of the section region"),
+                        reg.area,
+                        "mm²",
+                    ));
+                    r.values.push(val(
+                        "section_area",
+                        trs!("Schnittfläche gesamt", "total section area"),
+                        s.area(),
+                        "mm²",
+                    ));
                     r.lines = r.picks[0].lines.clone();
-                    r.details.push(format!(
+                    r.details.push(tr!(
                         "Bereich {} von {} · {} Löcher · Schnitt gesamt {} mm²",
+                        "region {} of {} · {} holes · section total {} mm²",
                         ri + 1,
                         s.regions.len(),
                         reg.holes.len(),
@@ -1316,13 +1476,13 @@ where
                         r.tol = Some(s.max_dev.max(m.tol));
                     }
                 }
-                _ => return Err("Fläche: Fläche wählen".into()),
+                _ => return Err(tr!("Fläche: Fläche wählen", "area: pick a face")),
             },
             MeasureKind::Body => {
                 let bi = match elems[0] {
                     Elem::Body(b) => b,
                     Elem::Face(..) => picks[0].body as usize,
-                    _ => return Err("Körper: Fläche wählen".into()),
+                    _ => return Err(tr!("Körper: Fläche wählen", "body: pick a face")),
                 };
                 let face = picks[0].face.map(|f| f as usize);
                 let part = self.part_of_face(&m.bodies[bi], face);
@@ -1333,15 +1493,19 @@ where
                         (
                             pm.bodies.clone(),
                             pm.parts.iter().map(|x| x.1).collect(),
-                            format!("Bauteil {name} (Zeile {line})"),
+                            tr!("Bauteil {name} (Zeile {line})", "part {name} (line {line})"),
                         )
                     }
-                    Some((name, _, line)) => {
-                        (vec![m.bodies[bi].clone()], vec![m.parts[bi].1], format!("Bauteil {name} (Zeile {line})"))
-                    }
-                    None => {
-                        (vec![m.bodies[bi].clone()], vec![m.parts[bi].1], format!("Körper {} des Ergebnisses", bi + 1))
-                    }
+                    Some((name, _, line)) => (
+                        vec![m.bodies[bi].clone()],
+                        vec![m.parts[bi].1],
+                        tr!("Bauteil {name} (Zeile {line})", "part {name} (line {line})"),
+                    ),
+                    None => (
+                        vec![m.bodies[bi].clone()],
+                        vec![m.parts[bi].1],
+                        tr!("Körper {} des Ergebnisses", "body {} of the result", bi + 1),
+                    ),
                 };
                 let mut lo = DVec3::splat(f64::INFINITY);
                 let mut hi = DVec3::splat(f64::NEG_INFINITY);
@@ -1352,7 +1516,7 @@ where
                     }
                 }
                 if !lo.x.is_finite() {
-                    return Err("Körper ohne Geometrie".into());
+                    return Err(tr!("Körper ohne Geometrie", "body without geometry"));
                 }
                 let size = hi - lo;
                 let solids: Vec<MassProps> = masses.iter().flatten().copied().collect();
@@ -1373,15 +1537,16 @@ where
                     None => format!("{} × {} × {} mm", num(size.x), num(size.y), num(size.z)),
                 };
                 if let Some(x) = mass {
-                    r.values.push(val("volume", "Volumen", x.volume, "mm³"));
-                    r.values.push(val("area", "Oberfläche", x.area, "mm²"));
+                    r.values.push(val("volume", trs!("Volumen", "volume"), x.volume, "mm³"));
+                    r.values.push(val("area", trs!("Oberfläche", "surface area"), x.area, "mm²"));
                 }
-                r.values.push(val("size_x", "Größe x", size.x, "mm"));
-                r.values.push(val("size_y", "Größe y", size.y, "mm"));
-                r.values.push(val("size_z", "Größe z", size.z, "mm"));
+                r.values.push(val("size_x", trs!("Größe x", "size x"), size.x, "mm"));
+                r.values.push(val("size_y", trs!("Größe y", "size y"), size.y, "mm"));
+                r.values.push(val("size_z", trs!("Größe z", "size z"), size.z, "mm"));
                 r.details.push(what);
-                r.details.push(format!(
+                r.details.push(tr!(
                     "Hülle {} – {} · Größe {} × {} × {} mm",
+                    "bounds {} – {} · size {} × {} × {} mm",
                     vec_text(lo),
                     vec_text(hi),
                     num(size.x),
@@ -1389,7 +1554,12 @@ where
                     num(size.z)
                 ));
                 if let Some(x) = mass {
-                    r.details.push(format!("Oberfläche {} mm² · Schwerpunkt {}", num(x.area), vec_text(x.centroid)));
+                    r.details.push(tr!(
+                        "Oberfläche {} mm² · Schwerpunkt {}",
+                        "surface area {} mm² · centroid {}",
+                        num(x.area),
+                        vec_text(x.centroid)
+                    ));
                 }
                 r.guides = box_lines(lo, hi);
                 r.at = pv(hi);
@@ -1397,20 +1567,31 @@ where
                 if !r.exact {
                     r.tol = Some(m.tol);
                 }
-                r.details.push(
-                    "Volumen und Oberfläche aus dem Kernel (Integration ~1e-4 genau), Hülle aus der B-Rep".into(),
-                );
+                r.details.push(tr!(
+                    "Volumen und Oberfläche aus dem Kernel (Integration ~1e-4 genau), Hülle aus der B-Rep",
+                    "volume and surface area from the kernel (integration accurate to ~1e-4), bounds from the B-rep"
+                ));
             }
             MeasureKind::Wall => {
-                let s = sec.ok_or("Wandstärke nur im Schnitt")?;
-                let w = s.wall(at[0]).ok_or("Wandstärke: kein Gegenüber in dieser Richtung")?;
+                let s = sec.ok_or_else(|| tr!("Wandstärke nur im Schnitt", "wall thickness only in a section"))?;
+                let w = s.wall(at[0]).ok_or_else(|| {
+                    tr!(
+                        "Wandstärke: kein Gegenüber in dieser Richtung",
+                        "wall thickness: no opposite side in this direction"
+                    )
+                })?;
                 r.value = w.thickness;
                 r.label = format!("{} mm", num(w.thickness));
-                r.values.push(val("wall", "Wandstärke", w.thickness, "mm"));
+                r.values.push(val("wall", trs!("Wandstärke", "wall thickness"), w.thickness, "mm"));
                 r.lines.push(vec![pv(w.from), pv(w.to)]);
                 r.points = vec![pv(w.from), pv(w.to)];
                 r.at = pv(0.5 * (w.from + w.to));
-                r.details.push(format!("senkrecht zur Kontur von {} bis {}", vec_text(w.from), vec_text(w.to)));
+                r.details.push(tr!(
+                    "senkrecht zur Kontur von {} bis {}",
+                    "normal to the contour from {} to {}",
+                    vec_text(w.from),
+                    vec_text(w.to)
+                ));
                 r.exact = s.contours[w.contour].segs.iter().all(|g| g.exact);
                 if !r.exact {
                     r.tol = Some(s.max_dev.max(m.tol));
@@ -1432,7 +1613,7 @@ where
             }
         }
         if let Some(s) = sec {
-            text.push_str(&format!("\n  im Schnitt {}", section_args(&s.plane).join(" ")));
+            text.push_str(&tr!("\n  im Schnitt {}", "\n  in section {}", section_args(&s.plane).join(" ")));
         }
         r.text = text;
         let mut cli = self.context_args();
@@ -1482,7 +1663,7 @@ where
         let Some((pre, rest)) = t.split_once('@') else {
             let q = resolve_point(t)?;
             let mut pk = self.pick_base("point", m.node, 0, q);
-            pk.label = format!("Punkt {t}");
+            pk.label = tr!("Punkt {t}", "point {t}");
             pk.reference = t.to_string();
             pk.origin = self.origin(&[], Some(q), None, None);
             return Ok(pk);
@@ -1501,13 +1682,13 @@ where
             };
             return match pre {
                 "vertex" => {
-                    let (ci, si, _) =
-                        near(&mut all().map(|(c, i, g)| (c, i, g.curve.start()))).ok_or_else(|| bad("keine Kontur"))?;
+                    let (ci, si, _) = near(&mut all().map(|(c, i, g)| (c, i, g.curve.start())))
+                        .ok_or_else(|| bad(trs!("keine Kontur", "no contour")))?;
                     Ok(self.pick_seg(m, s, ci, si, "section_vertex", q))
                 }
                 "mid" => {
-                    let (ci, si, _) =
-                        near(&mut all().map(|(c, i, g)| (c, i, g.curve.mid()))).ok_or_else(|| bad("keine Kontur"))?;
+                    let (ci, si, _) = near(&mut all().map(|(c, i, g)| (c, i, g.curve.mid())))
+                        .ok_or_else(|| bad(trs!("keine Kontur", "no contour")))?;
                     Ok(self.pick_seg(m, s, ci, si, "section_mid", q))
                 }
                 "center" => {
@@ -1515,18 +1696,26 @@ where
                         EdgeCurve::Arc { frame, .. } | EdgeCurve::Ellipse { frame, .. } => Some((c, i, frame.origin)),
                         _ => None,
                     }))
-                    .ok_or_else(|| bad("kein Kreisbogen in der Kontur"))?;
+                    .ok_or_else(|| bad(trs!("kein Kreisbogen in der Kontur", "no arc in the contour")))?;
                     Ok(self.pick_seg(m, s, ci, si, "section_center", q))
                 }
                 "edge" => {
-                    let (ci, si, _, _, _) = s.closest(q).ok_or_else(|| bad("keine Kontur"))?;
+                    let (ci, si, _, _, _) = s.closest(q).ok_or_else(|| bad(trs!("keine Kontur", "no contour")))?;
                     Ok(self.pick_seg(m, s, ci, si, "section_edge", q))
                 }
                 "region" => {
-                    let ri = s.region_at(q).ok_or_else(|| bad("Punkt liegt in keinem Bereich des Schnitts"))?;
+                    let ri = s.region_at(q).ok_or_else(|| {
+                        bad(trs!(
+                            "Punkt liegt in keinem Bereich des Schnitts",
+                            "point lies in no region of the section"
+                        ))
+                    })?;
                     Ok(self.pick_region(m, s, ri, q))
                 }
-                _ => Err(bad("im Schnitt: vertex@, mid@, center@, edge@ oder region@")),
+                _ => Err(bad(trs!(
+                    "im Schnitt: vertex@, mid@, center@, edge@ oder region@",
+                    "in a section: vertex@, mid@, center@, edge@ or region@"
+                ))),
             };
         }
         match pre {
@@ -1540,7 +1729,7 @@ where
                         }
                     }
                 }
-                let (_, bi, vi) = best.ok_or_else(|| bad("keine Eckpunkte"))?;
+                let (_, bi, vi) = best.ok_or_else(|| bad(trs!("keine Eckpunkte", "no vertices")))?;
                 Ok(self.pick_vertex(m, bi, vi))
             }
             "mid" | "center" | "edge" => {
@@ -1562,7 +1751,7 @@ where
                         }
                     }
                 }
-                let (_, bi, ei) = best.ok_or_else(|| bad("keine passende Kante"))?;
+                let (_, bi, ei) = best.ok_or_else(|| bad(trs!("keine passende Kante", "no matching edge")))?;
                 Ok(self.pick_edge(m, bi, ei, pre, q))
             }
             "face" | "body" => {
@@ -1575,7 +1764,7 @@ where
                 }
                 let dmin = cands.iter().map(|c| c.0).fold(f64::INFINITY, f64::min);
                 if !dmin.is_finite() {
-                    return Err(bad("keine Flächen"));
+                    return Err(bad(trs!("keine Flächen", "no faces")));
                 }
                 let (_, bi, fi) = cands
                     .into_iter()
@@ -1585,8 +1774,11 @@ where
                     .expect("candidate");
                 Ok(self.pick_face(m, bi, fi, q, pre))
             }
-            "region" => Err(bad("region@ braucht --section")),
-            _ => Err(bad("erwartet vertex@, mid@, center@, edge@, face@, body@ (oder region@ mit --section)")),
+            "region" => Err(bad(trs!("region@ braucht --section", "region@ needs --section"))),
+            _ => Err(bad(trs!(
+                "erwartet vertex@, mid@, center@, edge@, face@, body@ (oder region@ mit --section)",
+                "expected vertex@, mid@, center@, edge@, face@, body@ (or region@ with --section)"
+            ))),
         }
     }
 }

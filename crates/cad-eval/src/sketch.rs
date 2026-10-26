@@ -3,6 +3,7 @@
 //! through module calls and loops inside the block. The result is one `Profile::Sketch` node;
 //! the statements of its segments go to `EvalOutput::sketches` (display, handles, errors).
 
+use cad_i18n::{tr, trs};
 use cad_ir::{Contour, NodeIdx, Op, Profile, Seg};
 use cad_syntax::ast::{Ident, Stmt, StmtId};
 use glam::{DMat4, DVec2};
@@ -203,7 +204,7 @@ impl<'a> Ev<'a> {
         let p = self.bind("sketch", a, &["closed"], 1);
         let closed = p[0].is_none_or(|x| x.val.truthy());
         if self.sketch.is_some() {
-            self.error(s.span, "`sketch` in einer Skizze nicht erlaubt");
+            self.error(s.span, trs!("`sketch` in einer Skizze nicht erlaubt", "`sketch` not allowed in a sketch"));
             return Ok(());
         }
         let node = self.profile(s, Profile::Sketch { contours: Vec::new(), closed }, ctx, dy);
@@ -227,7 +228,7 @@ impl<'a> Ev<'a> {
     ) -> R<()> {
         let n = name.name.as_str();
         if n != "hole" && children.iter().any(crate::eval::is_geometric) {
-            self.warn(name.span, format!("`{n}()` nimmt keine Kinder"));
+            self.warn(name.span, tr!("`{n}()` nimmt keine Kinder", "`{n}()` takes no children"));
         }
         match n {
             "start" => self.sk_start(s, &a, ctx),
@@ -283,9 +284,12 @@ impl<'a> Ev<'a> {
             None => {
                 let after_close = self.sketch.as_ref().is_some_and(|b| b.contours.last().is_some_and(|c| c.closed));
                 let msg = if after_close {
-                    "nach `close()` beginnt eine neue Kontur mit `start(p)`"
+                    trs!(
+                        "nach `close()` beginnt eine neue Kontur mit `start(p)`",
+                        "after `close()` a new contour starts with `start(p)`"
+                    )
                 } else {
-                    "Kontur ohne Anfang: zuerst `start(p)`"
+                    trs!("Kontur ohne Anfang: zuerst `start(p)`", "contour without a start: `start(p)` first")
                 };
                 self.error(s.span, msg);
                 None
@@ -304,7 +308,10 @@ impl<'a> Ev<'a> {
             Some(p) if p.is_finite() => Some(p),
             _ => {
                 let t = x.val.type_de();
-                self.error(x.expr.span, format!("`{what}` muss ein Punkt [x, y] sein, ist {t}"));
+                self.error(
+                    x.expr.span,
+                    tr!("`{what}` muss ein Punkt [x, y] sein, ist {t}", "`{what}` must be a point [x, y], is {t}"),
+                );
                 None
             }
         }
@@ -390,7 +397,7 @@ impl<'a> Ev<'a> {
             _ => a.distance(b),
         };
         if len <= 1e-9 * (1.0 + a.length()) && !matches!(seg, Seg::Bezier { .. } | Seg::Spline { .. }) {
-            self.warn(s.span, "Segment ohne Länge wird ignoriert");
+            self.warn(s.span, trs!("Segment ohne Länge wird ignoriert", "segment without length is ignored"));
             return;
         }
         if let Some(c) = self.sk().contours.last_mut() {
@@ -440,11 +447,16 @@ impl<'a> Ev<'a> {
         }
         if let Some(st) = last {
             if nsegs == 0 {
-                self.mark_error(st, "Kontur ohne Segmente");
+                self.mark_error(st, trs!("Kontur ohne Segmente", "contour without segments"));
             } else {
                 self.mark_error(
                     st,
-                    format!("Kontur nicht geschlossen: endet bei {} statt {}; `close()` fehlt", fmt2(end), fmt2(start)),
+                    tr!(
+                        "Kontur nicht geschlossen: endet bei {} statt {}; `close()` fehlt",
+                        "contour not closed: ends at {} instead of {}; `close()` missing",
+                        fmt2(end),
+                        fmt2(start)
+                    ),
                 );
             }
         }
@@ -462,7 +474,7 @@ impl<'a> Ev<'a> {
         let p = self.bind("start", a, &["p"], 1);
         let Some(pt) = self.sk_point(p[0], "p") else {
             if p[0].is_none() {
-                self.error(s.span, "`start(p)` braucht einen Punkt");
+                self.error(s.span, trs!("`start(p)` braucht einen Punkt", "`start(p)` needs a point"));
             }
             return;
         };
@@ -488,14 +500,26 @@ impl<'a> Ev<'a> {
         let given = p.iter().filter(|x| x.is_some()).count();
         let end = if let Some(x) = p[0] {
             if p[1].is_some() || p[2].is_some() || p[3].is_some() {
-                self.warn(s.span, "line: `to` gegeben, `by`/`length`/`angle` werden ignoriert");
+                self.warn(
+                    s.span,
+                    trs!(
+                        "line: `to` gegeben, `by`/`length`/`angle` werden ignoriert",
+                        "line: `to` given, `by`/`length`/`angle` are ignored"
+                    ),
+                );
             }
             let Some(to) = self.sk_point(Some(x), "to") else { return };
             self.sk_handle(s, ctx, 0, x, to, None);
             to
         } else if let Some(x) = p[1] {
             if p[2].is_some() || p[3].is_some() {
-                self.warn(s.span, "line: `by` gegeben, `length`/`angle` werden ignoriert");
+                self.warn(
+                    s.span,
+                    trs!(
+                        "line: `by` gegeben, `length`/`angle` werden ignoriert",
+                        "line: `by` given, `length`/`angle` are ignored"
+                    ),
+                );
             }
             let Some(by) = self.sk_point(Some(x), "by") else { return };
             self.sk_handle(s, ctx, 0, x, by, Some(cur));
@@ -510,7 +534,13 @@ impl<'a> Ev<'a> {
                 None => match tan {
                     Some(t) => t,
                     None => {
-                        self.error(s.span, "line(length = …) ohne `angle` braucht ein vorheriges Segment (Richtung)");
+                        self.error(
+                            s.span,
+                            trs!(
+                                "line(length = …) ohne `angle` braucht ein vorheriges Segment (Richtung)",
+                                "line(length = …) without `angle` needs a previous segment (direction)"
+                            ),
+                        );
                         return;
                     }
                 },
@@ -519,9 +549,18 @@ impl<'a> Ev<'a> {
             cur + dir * len
         } else {
             if given == 0 {
-                self.error(s.span, "line() braucht `to`, `by` oder `length` (+ `angle`)");
+                self.error(
+                    s.span,
+                    trs!(
+                        "line() braucht `to`, `by` oder `length` (+ `angle`)",
+                        "line() needs `to`, `by` or `length` (+ `angle`)"
+                    ),
+                );
             } else {
-                self.error(s.span, "line(angle = …) braucht auch `length`");
+                self.error(
+                    s.span,
+                    trs!("line(angle = …) braucht auch `length`", "line(angle = …) also needs `length`"),
+                );
             }
             return;
         };
@@ -540,18 +579,34 @@ impl<'a> Ev<'a> {
             self.sk_handle(s, ctx, 1, cx, c, None);
             let r = cur.distance(c);
             if r <= 1e-9 * (1.0 + c.length()) {
-                self.mark_error(s, "unmöglicher Bogen: Mittelpunkt liegt auf dem Anfangspunkt");
+                self.mark_error(
+                    s,
+                    trs!(
+                        "unmöglicher Bogen: Mittelpunkt liegt auf dem Anfangspunkt",
+                        "impossible arc: centre lies on the start point"
+                    ),
+                );
                 return;
             }
             let seg = if let Some(ax) = angle_a {
                 if to_a.is_some() {
-                    self.warn(s.span, "arc: `center` und `angle` gegeben, `to` wird ignoriert");
+                    self.warn(
+                        s.span,
+                        trs!(
+                            "arc: `center` und `angle` gegeben, `to` wird ignoriert",
+                            "arc: `center` and `angle` given, `to` is ignored"
+                        ),
+                    );
                 }
                 let Some(ang) = self.num_of(Some(ax), "angle") else { return };
                 if ang == 0.0 || ang.abs() > 360.0 {
                     self.mark_error(
                         s,
-                        format!("unmöglicher Bogen: Winkel {}° (erlaubt 0 < |Winkel| ≤ 360)", fmt_num(ang)),
+                        tr!(
+                            "unmöglicher Bogen: Winkel {}° (erlaubt 0 < |Winkel| ≤ 360)",
+                            "impossible arc: angle {}° (allowed 0 < |angle| ≤ 360)",
+                            fmt_num(ang)
+                        ),
                     );
                     return;
                 }
@@ -565,20 +620,34 @@ impl<'a> Ev<'a> {
                 if (rt - r).abs() > 1e-6 * (1.0 + r) {
                     self.warn(
                         s.span,
-                        format!("arc: Endpunkt hat Abstand {} vom Mittelpunkt statt {}", fmt_num(rt), fmt_num(r)),
+                        tr!(
+                            "arc: Endpunkt hat Abstand {} vom Mittelpunkt statt {}",
+                            "arc: end point is {} from the centre instead of {}",
+                            fmt_num(rt),
+                            fmt_num(r)
+                        ),
                     );
                 }
                 let to = c + (to - c).normalize_or_zero() * r;
                 arc_seg(c, cur, to, !flag(cw_a))
             } else {
-                self.error(s.span, "arc(center = …) braucht `angle` oder `to`");
+                self.error(
+                    s.span,
+                    trs!("arc(center = …) braucht `angle` oder `to`", "arc(center = …) needs `angle` or `to`"),
+                );
                 return;
             };
             self.push_seg(s, seg);
             return;
         }
         let Some(tx) = to_a else {
-            self.error(s.span, "arc() braucht `to` (mit `r`, `through` oder `tangent`) oder `center` + `angle`");
+            self.error(
+                s.span,
+                trs!(
+                    "arc() braucht `to` (mit `r`, `through` oder `tangent`) oder `center` + `angle`",
+                    "arc() needs `to` (with `r`, `through` or `tangent`) or `center` + `angle`"
+                ),
+            );
             return;
         };
         let Some(to) = self.sk_point(Some(tx), "to") else { return };
@@ -586,7 +655,10 @@ impl<'a> Ev<'a> {
         let chord = to - cur;
         let d = chord.length();
         if d <= 1e-9 * (1.0 + cur.length()) {
-            self.mark_error(s, "unmöglicher Bogen: Endpunkt gleich Anfangspunkt");
+            self.mark_error(
+                s,
+                trs!("unmöglicher Bogen: Endpunkt gleich Anfangspunkt", "impossible arc: end point equals start point"),
+            );
             return;
         }
         if let Some(px) = through_a {
@@ -596,7 +668,13 @@ impl<'a> Ev<'a> {
             let (b, c) = (q - cur, to - cur);
             let den = 2.0 * b.perp_dot(c);
             if den.abs() <= 1e-12 * (b.length() * c.length()).max(1e-300) {
-                self.mark_error(s, "unmöglicher Bogen: die drei Punkte liegen auf einer Geraden");
+                self.mark_error(
+                    s,
+                    trs!(
+                        "unmöglicher Bogen: die drei Punkte liegen auf einer Geraden",
+                        "impossible arc: the three points lie on a straight line"
+                    ),
+                );
                 return;
             }
             let ux = (c.y * b.length_squared() - b.y * c.length_squared()) / den;
@@ -609,17 +687,24 @@ impl<'a> Ev<'a> {
         if let Some(rx) = r_a {
             let Some(r) = self.num_of(Some(rx), "r") else { return };
             if tangent_a.is_some() {
-                self.warn(s.span, "arc: `r` gegeben, `tangent` wird ignoriert");
+                self.warn(
+                    s.span,
+                    trs!("arc: `r` gegeben, `tangent` wird ignoriert", "arc: `r` given, `tangent` is ignored"),
+                );
             }
             if r.is_nan() || r <= 0.0 {
-                self.mark_error(s, format!("unmöglicher Bogen: Radius {} ≤ 0", fmt_num(r)));
+                self.mark_error(
+                    s,
+                    tr!("unmöglicher Bogen: Radius {} ≤ 0", "impossible arc: radius {} ≤ 0", fmt_num(r)),
+                );
                 return;
             }
             if r < d / 2.0 * (1.0 - 1e-9) {
                 self.mark_error(
                     s,
-                    format!(
+                    tr!(
                         "unmöglicher Bogen: Radius {} kleiner als die halbe Sehne {}",
+                        "impossible arc: radius {} smaller than half the chord {}",
                         fmt_num(r),
                         fmt_num(d / 2.0)
                     ),
@@ -643,11 +728,23 @@ impl<'a> Ev<'a> {
         }
         // tangent arc (default without r / through)
         if tangent_a.is_some_and(|t| !t.val.truthy()) {
-            self.error(s.span, "arc(to = …) braucht `r`, `through` oder `tangent = true`");
+            self.error(
+                s.span,
+                trs!(
+                    "arc(to = …) braucht `r`, `through` oder `tangent = true`",
+                    "arc(to = …) needs `r`, `through` or `tangent = true`"
+                ),
+            );
             return;
         }
         let Some(t) = tan else {
-            self.mark_error(s, "tangentialer Bogen braucht ein vorheriges Segment (Richtung)");
+            self.mark_error(
+                s,
+                trs!(
+                    "tangentialer Bogen braucht ein vorheriges Segment (Richtung)",
+                    "tangential arc needs a previous segment (direction)"
+                ),
+            );
             return;
         };
         let n = DVec2::new(-t.y, t.x);
@@ -655,7 +752,10 @@ impl<'a> Ev<'a> {
         if nd.abs() <= 1e-9 * d {
             self.mark_error(
                 s,
-                "unmöglicher tangentialer Bogen: der Endpunkt liegt auf der Tangente (`line` verwenden)",
+                trs!(
+                    "unmöglicher tangentialer Bogen: der Endpunkt liegt auf der Tangente (`line` verwenden)",
+                    "impossible tangential arc: the end point lies on the tangent (use `line`)"
+                ),
             );
             return;
         }
@@ -672,7 +772,13 @@ impl<'a> Ev<'a> {
         let (c1a, c2a, toa) = if npos == 2 { (p[0], p[2], p[1]) } else { (p[0], p[1], p[2]) };
         let Some((cur, _)) = self.sk_need_cur(s) else { return };
         let (Some(c1x), Some(tox)) = (c1a, toa) else {
-            self.error(s.span, "bezier() braucht `c1` und `to` (kubisch zusätzlich `c2`)");
+            self.error(
+                s.span,
+                trs!(
+                    "bezier() braucht `c1` und `to` (kubisch zusätzlich `c2`)",
+                    "bezier() needs `c1` and `to` (cubic also `c2`)"
+                ),
+            );
             return;
         };
         let Some(c1) = self.sk_point(Some(c1x), "c1") else { return };
@@ -693,7 +799,7 @@ impl<'a> Ev<'a> {
         points.extend(c2);
         points.push(to);
         if cur.distance(to) <= 1e-12 && points.iter().all(|q| q.distance(cur) <= 1e-12) {
-            self.warn(s.span, "Segment ohne Länge wird ignoriert");
+            self.warn(s.span, trs!("Segment ohne Länge wird ignoriert", "segment without length is ignored"));
             return;
         }
         self.push_seg(s, Seg::Bezier { points });
@@ -703,15 +809,27 @@ impl<'a> Ev<'a> {
         let p = self.bind("spline", a, &["points", "tangent", "end_tangent"], 1);
         let Some((cur, tan)) = self.sk_need_cur(s) else { return };
         let Some(px) = p[0] else {
-            self.error(s.span, "spline() braucht `points` (Punkte nach dem aktuellen Punkt)");
+            self.error(
+                s.span,
+                trs!(
+                    "spline() braucht `points` (Punkte nach dem aktuellen Punkt)",
+                    "spline() needs `points` (points after the current point)"
+                ),
+            );
             return;
         };
         let Some(list) = px.val.as_list() else {
-            self.error(px.expr.span, "spline: `points` muss eine Liste von [x, y] sein");
+            self.error(
+                px.expr.span,
+                trs!("spline: `points` muss eine Liste von [x, y] sein", "spline: `points` must be a list of [x, y]"),
+            );
             return;
         };
         if list.is_empty() {
-            self.error(px.expr.span, "spline: `points` braucht mindestens einen Punkt");
+            self.error(
+                px.expr.span,
+                trs!("spline: `points` braucht mindestens einen Punkt", "spline: `points` needs at least one point"),
+            );
             return;
         }
         let mut pts = vec![cur];
@@ -719,7 +837,13 @@ impl<'a> Ev<'a> {
         let frame = self.sk_frame();
         for (i, e) in list.iter().enumerate() {
             let Some(q) = self.pt2(e, e.def.unwrap_or(px.expr.span)) else {
-                self.error(px.expr.span, "spline: `points` muss eine Liste von [x, y] sein");
+                self.error(
+                    px.expr.span,
+                    trs!(
+                        "spline: `points` muss eine Liste von [x, y] sein",
+                        "spline: `points` must be a list of [x, y]"
+                    ),
+                );
                 return;
             };
             let dims = e.as_list().map_or(2, |l| l.len().clamp(2, 3));
@@ -727,7 +851,10 @@ impl<'a> Ev<'a> {
             pts.push(q);
         }
         if pts.windows(2).any(|w| w[0].distance(w[1]) <= 1e-9 * (1.0 + w[0].length())) {
-            self.mark_error(s, "spline: zwei aufeinanderfolgende Punkte sind gleich");
+            self.mark_error(
+                s,
+                trs!("spline: zwei aufeinanderfolgende Punkte sind gleich", "spline: two consecutive points are equal"),
+            );
             return;
         }
         let t0 = match p[1] {
@@ -736,14 +863,26 @@ impl<'a> Ev<'a> {
                 (crate::value::Value::Bool(true), _) => match tan {
                     Some(t) => Some(t),
                     None => {
-                        self.error(x.expr.span, "spline(tangent = true) braucht ein vorheriges Segment");
+                        self.error(
+                            x.expr.span,
+                            trs!(
+                                "spline(tangent = true) braucht ein vorheriges Segment",
+                                "spline(tangent = true) needs a previous segment"
+                            ),
+                        );
                         None
                     }
                 },
                 (crate::value::Value::Bool(false), _) => None,
                 (_, Some(v)) if v.length() > 0.0 => Some(v),
                 _ => {
-                    self.error(x.expr.span, "spline: `tangent` muss true/false oder eine Richtung [x, y] sein");
+                    self.error(
+                        x.expr.span,
+                        trs!(
+                            "spline: `tangent` muss true/false oder eine Richtung [x, y] sein",
+                            "spline: `tangent` must be true/false or a direction [x, y]"
+                        ),
+                    );
                     None
                 }
             },
@@ -753,7 +892,13 @@ impl<'a> Ev<'a> {
             Some(x) => match x.val.as_vec2() {
                 Some(v) if v.length() > 0.0 => Some(v),
                 _ => {
-                    self.error(x.expr.span, "spline: `end_tangent` muss eine Richtung [x, y] ≠ 0 sein");
+                    self.error(
+                        x.expr.span,
+                        trs!(
+                            "spline: `end_tangent` muss eine Richtung [x, y] ≠ 0 sein",
+                            "spline: `end_tangent` must be a direction [x, y] ≠ 0"
+                        ),
+                    );
                     None
                 }
             },
@@ -768,35 +913,62 @@ impl<'a> Ev<'a> {
             (Some(x), None) => (x, false),
             (None, Some(x)) => (x, true),
             (Some(x), Some(_)) => {
-                self.warn(s.span, "corner: `r` und `chamfer` gegeben, `chamfer` wird ignoriert");
+                self.warn(
+                    s.span,
+                    trs!(
+                        "corner: `r` und `chamfer` gegeben, `chamfer` wird ignoriert",
+                        "corner: `r` and `chamfer` given, `chamfer` is ignored"
+                    ),
+                );
                 (x, false)
             }
             (None, None) => {
-                self.error(s.span, "corner() braucht `r` (Radius) oder `chamfer` (Abstand)");
+                self.error(
+                    s.span,
+                    trs!(
+                        "corner() braucht `r` (Radius) oder `chamfer` (Abstand)",
+                        "corner() needs `r` (radius) or `chamfer` (distance)"
+                    ),
+                );
                 return;
             }
         };
         let what = if chamfer { "chamfer" } else { "r" };
         let Some(v) = self.num_of(Some(x), what) else { return };
         if v.is_nan() || v <= 0.0 {
-            self.error(x.expr.span, format!("corner: `{what}` = {} muss > 0 sein", fmt_num(v)));
+            self.error(
+                x.expr.span,
+                tr!("corner: `{what}` = {} muss > 0 sein", "corner: `{what}` = {} must be > 0", fmt_num(v)),
+            );
             return;
         }
         let Some(b) = self.sketch.as_ref() else { return };
         let Some(c) = b.contours.last() else {
-            self.error(s.span, "corner() vor `start(p)`: eine Ecke liegt zwischen zwei Segmenten");
+            self.error(
+                s.span,
+                trs!(
+                    "corner() vor `start(p)`: eine Ecke liegt zwischen zwei Segmenten",
+                    "corner() before `start(p)`: a corner lies between two segments"
+                ),
+            );
             return;
         };
         if c.closed {
             self.error(
                 s.span,
-                "corner() nach `close()`: für die Startecke `corner()` direkt nach `start(p)` schreiben",
+                trs!(
+                    "corner() nach `close()`: für die Startecke `corner()` direkt nach `start(p)` schreiben",
+                    "corner() after `close()`: for the start corner write `corner()` directly after `start(p)`"
+                ),
             );
             return;
         }
         let at = c.segs.len();
         if c.corners.iter().any(|k| k.at == at) {
-            self.error(s.span, "an dieser Ecke steht schon ein `corner()`");
+            self.error(
+                s.span,
+                trs!("an dieser Ecke steht schon ein `corner()`", "this corner already has a `corner()`"),
+            );
             return;
         }
         let cur = c.end();
@@ -830,15 +1002,21 @@ impl<'a> Ev<'a> {
         let mut which: Vec<&CornerB<'a>> = Vec::new();
         for k in &corners {
             if n == 0 {
-                self.error(k.stmt.span, "corner(): Kontur ohne Segmente");
+                self.error(k.stmt.span, trs!("corner(): Kontur ohne Segmente", "corner(): contour without segments"));
                 continue;
             }
             let v = if c.closed { k.at % n } else { k.at };
             if !c.closed && (v == 0 || v >= n) {
                 let msg = if v == 0 {
-                    "corner(): eine offene Kontur hat keine Startecke"
+                    trs!(
+                        "corner(): eine offene Kontur hat keine Startecke",
+                        "corner(): an open contour has no start corner"
+                    )
                 } else {
-                    "corner(): nach dem letzten Segment einer offenen Kontur folgt keines mehr"
+                    trs!(
+                        "corner(): nach dem letzten Segment einer offenen Kontur folgt keines mehr",
+                        "corner(): no segment follows the last segment of an open contour"
+                    )
                 };
                 self.error(k.stmt.span, msg);
                 continue;
@@ -847,7 +1025,10 @@ impl<'a> Ev<'a> {
                 continue;
             }
             if list.iter().any(|(w, _)| *w == v) {
-                self.error(k.stmt.span, "an dieser Ecke steht schon ein `corner()`");
+                self.error(
+                    k.stmt.span,
+                    trs!("an dieser Ecke steht schon ein `corner()`", "this corner already has a `corner()`"),
+                );
                 continue;
             }
             list.push((v, k.kind));
@@ -862,15 +1043,19 @@ impl<'a> Ev<'a> {
             let (a, b) = (&ks[(v + n - 1) % n], &ks[v]);
             let vertex = b.start();
             let what = match k.kind {
-                CornerKind::Round(r) => format!("Radius {}", fmt_num(r)),
-                CornerKind::Chamfer(d) => format!("Fase {}", fmt_num(d)),
+                CornerKind::Round(r) => tr!("Radius {}", "radius {}", fmt_num(r)),
+                CornerKind::Chamfer(d) => tr!("Fase {}", "chamfer {}", fmt_num(d)),
             };
             match r {
                 Ok(res) => {
                     if res.residual > 1e-6 {
                         self.warn(
                             k.stmt.span,
-                            format!("corner(): numerische Lösung ungenau (Rest {:.1e})", res.residual),
+                            tr!(
+                                "corner(): numerische Lösung ungenau (Rest {:.1e})",
+                                "corner(): numerical solution inaccurate (residual {:.1e})",
+                                res.residual
+                            ),
                         );
                     }
                     let mid_pt = match &res.mid {
@@ -894,16 +1079,26 @@ impl<'a> Ev<'a> {
                     };
                     self.fix_corner_handle(k, vertex, vertex + inside * reach.max(val * 1e-3));
                     let msg = match e {
-                        CornerError::Tangent => {
-                            "corner(): keine Ecke, die Segmente gehen tangential ineinander über".to_string()
-                        }
-                        CornerError::Cusp => "corner(): Spitze (Umkehr um 180°) lässt sich nicht verrunden".to_string(),
-                        CornerError::TooLarge { max: Some(m) } => format!(
+                        CornerError::Tangent => trs!(
+                            "corner(): keine Ecke, die Segmente gehen tangential ineinander über",
+                            "corner(): no corner, the segments meet tangentially"
+                        )
+                        .to_string(),
+                        CornerError::Cusp => trs!(
+                            "corner(): Spitze (Umkehr um 180°) lässt sich nicht verrunden",
+                            "corner(): a cusp (180° reversal) cannot be rounded"
+                        )
+                        .to_string(),
+                        CornerError::TooLarge { max: Some(m) } => tr!(
                             "corner(): {what} passt nicht zwischen die Segmente (höchstens ≈ {})",
+                            "corner(): {what} does not fit between the segments (at most ≈ {})",
                             fmt_num((m * 1e4).floor() / 1e4)
                         ),
                         CornerError::TooLarge { max: None } | CornerError::NoSolution => {
-                            format!("corner(): {what} passt nicht an diese Ecke")
+                            tr!(
+                                "corner(): {what} passt nicht an diese Ecke",
+                                "corner(): {what} does not fit at this corner"
+                            )
                         }
                     };
                     self.error(k.stmt.span, msg);
@@ -954,7 +1149,7 @@ impl<'a> Ev<'a> {
         let start = c.start;
         let nsegs = c.segs.len();
         if nsegs == 0 {
-            self.mark_error(s, "close(): Kontur ohne Segmente");
+            self.mark_error(s, trs!("close(): Kontur ohne Segmente", "close(): contour without segments"));
             if let Some(c) = self.sk().contours.last_mut() {
                 c.closed = true;
             }
@@ -980,7 +1175,7 @@ impl<'a> Ev<'a> {
         let steps = b.steps;
         let mut contours: Vec<ContourB<'a>> = b.contours;
         if contours.is_empty() {
-            self.warn(s.span, "leere Skizze");
+            self.warn(s.span, trs!("leere Skizze", "empty sketch"));
         }
         // size for tolerances
         let mut lo = DVec2::splat(f64::INFINITY);
@@ -1007,7 +1202,7 @@ impl<'a> Ev<'a> {
                 if !b.closed
                     && let Some(st) = c.start_stmt
                 {
-                    errors.push((st.id, "Kontur ohne Segmente".into()));
+                    errors.push((st.id, trs!("Kontur ohne Segmente", "contour without segments").into()));
                 }
                 continue;
             }
@@ -1015,7 +1210,10 @@ impl<'a> Ev<'a> {
             for g in &c.segs {
                 match g.seg.to_kernel() {
                     Some(k) => ks.push(k),
-                    None => errors.push((g.stmt.id, "Segment lässt sich nicht berechnen".into())),
+                    None => errors.push((
+                        g.stmt.id,
+                        trs!("Segment lässt sich nicht berechnen", "segment cannot be computed").into(),
+                    )),
                 }
             }
             if ks.len() != c.segs.len() {
@@ -1024,21 +1222,25 @@ impl<'a> Ev<'a> {
             let polys: Vec<Vec<DVec2>> = ks.iter().map(|k| k.sample(tol)).collect();
             if c.closed && flat(&polys, size) {
                 let st = c.start_stmt.unwrap_or(c.segs[0].stmt);
-                errors.push((st.id, "Kontur ohne Fläche".into()));
+                errors.push((st.id, trs!("Kontur ohne Fläche", "contour without area").into()));
             } else if let Some((i, j)) = self_intersection(&polys, c.closed, eps) {
                 let other = c.segs[i].stmt;
                 let st = c.segs[j].stmt;
                 let msg = if other.id == st.id {
-                    "Selbstüberschneidung der Kontur".to_string()
+                    trs!("Selbstüberschneidung der Kontur", "self-intersection of the contour").to_string()
                 } else {
-                    format!("Selbstüberschneidung der Kontur mit Segment in {}", self.where_(other.span, st.span))
+                    tr!(
+                        "Selbstüberschneidung der Kontur mit Segment in {}",
+                        "self-intersection of the contour with segment in {}",
+                        self.where_(other.span, st.span)
+                    )
                 };
                 errors.push((st.id, msg));
             } else if c.closed {
                 let area = cad_kernel::curve2::signed_area(&ks, tol);
                 if area.abs() <= size * size * 1e-9 {
                     let st = c.start_stmt.unwrap_or(c.segs[0].stmt);
-                    errors.push((st.id, "Kontur ohne Fläche".into()));
+                    errors.push((st.id, trs!("Kontur ohne Fläche", "contour without area").into()));
                 }
             }
         }
