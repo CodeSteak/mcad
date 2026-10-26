@@ -1,0 +1,3 @@
+module holder(h = 5) { cube([2, 2, h]); anchor top = [1, 1, h]; }
+for (i = [0:2]) translate([i * 10, 0, 0]) k[i]: holder(h = 5 + i);
+translate(k[1].top) sphere(1);

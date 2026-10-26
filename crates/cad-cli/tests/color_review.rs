@@ -308,7 +308,7 @@ fn f4_material_outside_parts() {
     assert_eq!(s.matches("<item ").count(), 3);
     // the object name is fixed (`no part` in every language), the text output translates it
     assert!(s.contains("name=\"no part – yellow\""), "{s}");
-    assert!(t.contains("3 Objekte (teil, deko, no part)"), "{t}");
+    assert!(t.contains("3 Objekte (part, deco, no part)"), "{t}");
     assert!(!t.contains("je Bauteil ein Objekt"), "{t}");
     let yellow = colors(&v).into_iter().find(|c| c.0 == "yellow").unwrap();
     assert!((yellow.4 - 125.0).abs() < 1e-6, "{yellow:?}");
@@ -429,11 +429,11 @@ fn f9_per_colour_export_and_list() {
     assert!(t.contains("ZIP") && t.contains("x.zip"), "{t}");
     assert!(!stl.exists());
     let zip = dir.path().join("x.zip");
-    let (v, t) = run(&["export", &f, "--per-color", "--part", "teil", "-o", &zip.display().to_string()], 0);
+    let (v, t) = run(&["export", &f, "--per-color", "--part", "part", "-o", &zip.display().to_string()], 0);
     let labels: Vec<String> = colors(&v).into_iter().map(|c| c.0).collect();
-    assert_eq!(labels, ["white", "red", "teal", "rosarot"], "only the colours of `teil`");
+    assert_eq!(labels, ["white", "red", "teal", "rosarot"], "only the colours of `part`");
     let teal = v["colors"].as_array().unwrap().iter().find(|c| c["label"] == "teal").unwrap().clone();
-    assert!((teal["volume"].as_f64().unwrap() - 150.7964).abs() < 1e-3, "teal of `teil` only: {teal}");
+    assert!((teal["volume"].as_f64().unwrap() - 150.7964).abs() < 1e-3, "teal of `part` only: {teal}");
     assert!(t.contains("lib.scad:1"), "file of the used statement: {t}");
     assert_eq!(teal["places"][0], "lib.scad:1");
 }

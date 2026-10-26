@@ -10,7 +10,7 @@ test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => console.log("pageerror:", e.message));
 });
 
-test("S01 Laden: Editor, Ansicht und erste Szene", async ({ page }) => {
+test("S01 loading: editor, view and first scene", async ({ page }) => {
   const s = await openApp(page);
   expect(s.fileName).toBe("housing.mcad");
   expect(s.view!.objects).toBeGreaterThan(0);
@@ -24,13 +24,13 @@ test("S01 Laden: Editor, Ansicht und erste Szene", async ({ page }) => {
   await screenshot(page, "s01-laden");
   record({
     id: "S01",
-    title: "Laden",
+    title: "Loading",
     image: "s01-laden",
-    caption: "Startzustand: Spec-Beispiel housing.mcad links im Editor, rechts die Szene mit Boden, Achsenkreuz und den Ankern der benannten Instanz k (Rauten, mit Pfeil bei dir).",
+    caption: "Initial state: spec example housing.mcad on the left in the editor, on the right the scene with the floor, the axis cross and the anchors of the named instance k (diamonds, with an arrow for dir).",
   });
 });
 
-test("S02 Beispiel öffnen", async ({ page }) => {
+test("S02 open an example", async ({ page }) => {
   await openApp(page);
   const v0 = (await cad(page)).shownVersion!;
   const s = await openExample(page, "spec/hole_plate.mcad");
@@ -41,13 +41,13 @@ test("S02 Beispiel öffnen", async ({ page }) => {
   await screenshot(page, "s02-beispiel");
   record({
     id: "S02",
-    title: "Beispiel öffnen",
+    title: "Open an example",
     image: "s02-beispiel",
-    caption: "Beispielmenü → spec/hole_plate.mcad: der Editor lädt die Datei, die Ansicht zeigt nach der Auswertung die Platte mit Bohrungen, Lasche und den Anker p.first_hole.",
+    caption: "Example menu → spec/hole_plate.mcad: the editor loads the file, after the evaluation the view shows the plate with bores, the tab and the anchor p.first_hole.",
   });
 });
 
-test("S03 Cursor in Zeile: Knoten voll, Rest gedimmt, Transformation mit Koordinatenkreuzen", async ({ page }) => {
+test("S03 cursor in a line: node full, the rest dimmed, transform with coordinate crosses", async ({ page }) => {
   await openApp(page);
   await clickLine(page, 22, 20);
   let s = await waitView(page, "(s) => s.view.selection.line === 22 && s.view.plan.base === 'dim'");
@@ -64,13 +64,13 @@ test("S03 Cursor in Zeile: Knoten voll, Rest gedimmt, Transformation mit Koordin
   // Pixel check: the dimmed base is lighter/transparent compared with the full drawing.
   record({
     id: "S03",
-    title: "Cursor in Zeile",
+    title: "Cursor in a line",
     image: "s03b-cursor-translate",
-    caption: "Cursor auf translate(k.corner) in Zeile 22: Teilbaum am Ziel voll, an der Ausgangsposition als Umriss; Koordinatenkreuz vorher gestrichelt, nachher durchgezogen, Pfeil vom alten zum neuen Ursprung; Rest des Modells gedimmt.",
+    caption: "Cursor on translate(k.corner) in line 22: subtree full at the target, as an outline at the start position; coordinate cross before dashed, after solid, an arrow from the old to the new origin; the rest of the model dimmed.",
   });
 });
 
-test("S04 Pixelprüfung: Dimmen verändert die Darstellung", async ({ page }) => {
+test("S04 pixel check: dimming changes the display", async ({ page }) => {
   await openApp(page);
   const canvas = page.getByTestId("viewport-canvas");
   const before = await canvas.screenshot();
@@ -99,12 +99,12 @@ test("S04 Pixelprüfung: Dimmen verändert die Darstellung", async ({ page }) =>
   expect(ma).toBeGreaterThan(mb + 1);
   record({
     id: "S04",
-    title: "Pixelprüfung Dimmen",
-    caption: `Mittlere Helligkeit der Ansicht ohne Auswahl ${mb.toFixed(1)}, mit Cursor auf Zeile 22 ${ma.toFixed(1)} (gedimmter Rest ist heller).`,
+    title: "Pixel check dimming",
+    caption: `Mean brightness of the view without a selection ${mb.toFixed(1)}, with the cursor on line 22 ${ma.toFixed(1)} (the dimmed rest is lighter).`,
   });
 });
 
-test("S05 Modulkontext, Differenz: abgezogener Körper rot", async ({ page }) => {
+test("S05 module context, difference: subtracted body red", async ({ page }) => {
   await openApp(page);
   await clickLine(page, 10, 6);
   const s = await waitScene(page, { context: "housing" });
@@ -116,13 +116,13 @@ test("S05 Modulkontext, Differenz: abgezogener Körper rot", async ({ page }) =>
   await screenshot(page, "s05-difference");
   record({
     id: "S05",
-    title: "Modulkontext und difference",
+    title: "Module context and difference",
     image: "s05-difference",
-    caption: "Cursor in Zeile 10 (difference) innerhalb von module housing: Kontext wechselt auf das Modul (Pfadleiste „Datei › housing“, eigenes System, Raster g eingeblendet); Ergebnis voll, abgezogene Box aus Zeile 12 rot halbtransparent.",
+    caption: "Cursor in line 10 (difference) inside module housing: the context switches to the module (path bar “Datei › housing”, its own system, grid g shown); result full, the subtracted box of line 12 red, semi-transparent.",
   });
 });
 
-test("S06 Hover über Zeile: Knoten halbtransparent", async ({ page }) => {
+test("S06 hover over a line: node semi-transparent", async ({ page }) => {
   await openApp(page);
   await clickLine(page, 11, 4);
   await waitScene(page, { context: "housing" });
@@ -133,13 +133,13 @@ test("S06 Hover über Zeile: Knoten halbtransparent", async ({ page }) => {
   await screenshot(page, "s06-hover-zeile");
   record({
     id: "S06",
-    title: "Hover über Zeile",
+    title: "Hover over a line",
     image: "s06-hover-zeile",
-    caption: "Maus über Zeile 12 (innere Box, wird abgezogen): der Körper erscheint halbtransparent im Gesamtmodell, sichtbar durch das Ergebnis hindurch; Cursor steht auf Zeile 11 (äußere Box voll).",
+    caption: "Mouse over line 12 (inner box, subtracted): the body appears semi-transparent in the whole model, visible through the result; the cursor is on line 11 (outer box full).",
   });
 });
 
-test("S07 Hover über Fläche markiert Zeile, Klick setzt Cursor, Doppelklick springt in Definition", async ({ page }) => {
+test("S07 hover over a face marks the line, a click sets the cursor, a double click jumps into the definition", async ({ page }) => {
   await openApp(page);
   const pt = await page.evaluate(() => (window as unknown as { __cad: { findPointForLine(l: number): { x: number; y: number } | null } }).__cad.findPointForLine(22));
   expect(pt).not.toBeNull();
@@ -166,13 +166,13 @@ test("S07 Hover über Fläche markiert Zeile, Klick setzt Cursor, Doppelklick sp
   await screenshot(page, "s07b-doppelklick");
   record({
     id: "S07",
-    title: "Ansicht → Code",
+    title: "View → code",
     image: "s07a-hover-flaeche",
-    caption: "Maus über der Fläche des Deckels an k.corner: Zeile 22 im Editor wird hervorgehoben (Fläche → tri_tags → tag_nodes → Knoten → Zeile). Klick setzt den Cursor in Zeile 22, Doppelklick auf das Gehäuse springt in module housing.",
+    caption: "Mouse over the face of the lid at k.corner: line 22 is highlighted in the editor (face → tri_tags → tag_nodes → node → line). A click sets the cursor into line 22, a double click on the housing jumps into module housing.",
   });
 });
 
-test("S08 Pfadleiste: Klick springt eine Ebene hoch", async ({ page }) => {
+test("S08 path bar: a click jumps one level up", async ({ page }) => {
   await openApp(page);
   await clickLine(page, 11, 4);
   await waitScene(page, { context: "housing" });
@@ -184,9 +184,9 @@ test("S08 Pfadleiste: Klick springt eine Ebene hoch", async ({ page }) => {
   await screenshot(page, "s08b-datei");
   record({
     id: "S08",
-    title: "Pfadleiste",
+    title: "Path bar",
     image: "s08a-modulkontext",
-    caption: "Modulkontext housing: nur das Modul in seinem eigenen System mit Raster g (Schnittpunkte, verwendete Ebenen der Zeile). Klick auf „Datei“ setzt den Cursor auf den Aufruf k: housing(w = 60) (Zeile 21) und zeigt wieder die ganze Datei.",
+    caption: "Module context housing: only the module in its own system with grid g (intersections, planes used by the line). A click on “Datei” (file) sets the cursor on the call k: housing(w = 60) (line 21) and shows the whole file again.",
   });
 });
 
@@ -205,13 +205,13 @@ test("S09 Modifier #, %, *, !", async ({ page }) => {
   await screenshot(page, "s09b-root-modifier");
   record({
     id: "S09",
-    title: "Modifier",
+    title: "Modifiers",
     image: "s09a-modifier",
-    caption: "24_modifiers.scad: # dauerhaft rot halbtransparent (auch als abgezogener Körper), % grau halbtransparent als Hilfsgeometrie, * unsichtbar und Zeile 7 ausgegraut. Bei 25_root_modifier.scad meldet die Statuszeile den aktiven !-Teilbaum.",
+    caption: "24_modifiers.scad: # permanently red semi-transparent (also as a subtracted body), % grey semi-transparent as helper geometry, * invisible and line 7 greyed out. With 25_root_modifier.scad the status line reports the active !-subtree.",
   });
 });
 
-test("S10 Syntaxfehler: letzter gültiger Stand bleibt sichtbar", async ({ page }) => {
+test("S10 syntax error: the last valid state stays visible", async ({ page }) => {
   await openApp(page);
   const before = await cad(page);
   await lineEl(page, 22).click();
@@ -232,13 +232,13 @@ test("S10 Syntaxfehler: letzter gültiger Stand bleibt sichtbar", async ({ page 
   expect(s.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
   record({
     id: "S10",
-    title: "Syntaxfehler",
+    title: "Syntax error",
     image: "s10-syntaxfehler",
-    caption: "Eingabe „ ]“ am Ende von Zeile 22: Stelle rot unterstrichen, Meldung am Zeilenende, Statuszeile „1 Fehler“; die Ansicht zeigt weiter den letzten gültigen Stand. Nach dem Löschen wird neu ausgewertet.",
+    caption: "Input “ ]” at the end of line 22: place underlined red, message at the line end, status line “1 Fehler” (1 error); the view keeps showing the last valid state. After deleting it the model is evaluated again.",
   });
 });
 
-test("S11 Gescheiterte Operation: Zeile rot, Meldung am Zeilenende", async ({ page }) => {
+test("S11 failed operation: line red, message at the line end", async ({ page }) => {
   await openApp(page);
   await page.evaluate(() =>
     (window as unknown as { __cad: { setText(t: string): void } }).__cad.setText(
@@ -253,13 +253,13 @@ test("S11 Gescheiterte Operation: Zeile rot, Meldung am Zeilenende", async ({ pa
   await screenshot(page, "s11-fehler");
   record({
     id: "S11",
-    title: "Gescheiterte Operation",
+    title: "Failed operation",
     image: "s11-fehler",
-    caption: "difference(fillet = 20) an einem 10-mm-Würfel: Verrundung gescheitert, Zeile 1 rot mit Meldung am Zeilenende; die Ansicht zeigt den Körper ohne Verrundung.",
+    caption: "difference(fillet = 20) on a 10 mm cube: the fillet fails, line 1 red with the message at the line end; the view shows the body without the fillet.",
   });
 });
 
-test("S12 Export STL und 3MF", async ({ page }) => {
+test("S12 export STL and 3MF", async ({ page }) => {
   await openApp(page);
   const [dl] = await Promise.all([page.waitForEvent("download"), exportAs(page, "STL")]);
   expect(dl.suggestedFilename()).toBe("housing.stl");
@@ -277,11 +277,11 @@ test("S12 Export STL und 3MF", async ({ page }) => {
     id: "S12",
     title: "Export",
     image: "s12-export",
-    caption: `Export STL: housing.stl, ${tris} Dreiecke, ${stl.length} Byte (binär, 84 + 50·n). Export 3MF: housing.3mf (ZIP, ${mf.length} Byte). Die Statuszeile meldet den Export.`,
+    caption: `Export STL: housing.stl, ${tris} triangles, ${stl.length} bytes (binary, 84 + 50·n). Export 3MF: housing.3mf (ZIP, ${mf.length} bytes). The status line reports the export.`,
   });
 });
 
-test("S13 Raster: verwendete Ebenen, alle Raster, Hover über Rasterausdruck", async ({ page }) => {
+test("S13 grids: used planes, all grids, hover over a grid expression", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/hole_plate.mcad");
   await clickLine(page, 12, 10);
@@ -305,13 +305,13 @@ test("S13 Raster: verwendete Ebenen, alle Raster, Hover über Rasterausdruck", a
   await screenshot(page, "s13c-raster-hover");
   record({
     id: "S13",
-    title: "Raster",
+    title: "Grids",
     image: "s13b-alle-raster",
-    caption: "Modul hole_plate, Schalter „alle Raster“: Ebenen als dünne Linien am Rand der Bauteilhülle (Literal durchgezogen, Ausdruck gestrichelt), Schnittpunkte als Punkte. Ohne Schalter nur die 6 Ebenen der Zeile 12; Hover über g[hole[i], mid, floor] hebt den Punkt hervor.",
+    caption: "Module hole_plate, switch “alle Raster” (all grids): planes as thin lines at the edge of the part's hull (literal solid, expression dashed), intersections as points. Without the switch only the 6 planes of line 12; hover over g[hole[i], mid, floor] highlights the point.",
   });
 });
 
-test("S14 Anker benannter Instanzen", async ({ page }) => {
+test("S14 anchors of named instances", async ({ page }) => {
   await openApp(page);
   const s = await openExample(page, "spec/angle_anchor.mcad");
   // a: bracket(), b: bracket(l = 40): 3 anchors each.
@@ -329,13 +329,13 @@ test("S14 Anker benannter Instanzen", async ({ page }) => {
   await screenshot(page, "s14-anker");
   record({
     id: "S14",
-    title: "Anker",
+    title: "Anchors",
     image: "s14-anker",
-    caption: "angle_anchor.mcad: Anker der benannten Instanzen a und b als Rauten, mit Pfeil bei dir. Hover über a.base_hole hebt diesen Anker hervor; Cursor auf a: bracket() hebt die drei Anker der Instanz hervor.",
+    caption: "angle_anchor.mcad: anchors of the named instances a and b as diamonds, with an arrow for dir. Hover over a.base_hole highlights this anchor; the cursor on a: bracket() highlights the three anchors of the instance.",
   });
 });
 
-test("S15 Fillet-Zonen blau, ausgewählte Kanten farbig, Inline-Hinweis", async ({ page }) => {
+test("S15 fillet zones blue, selected edges coloured, inline hint", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/fillet_zones.mcad");
   await clickLine(page, 12, 10);
@@ -347,13 +347,13 @@ test("S15 Fillet-Zonen blau, ausgewählte Kanten farbig, Inline-Hinweis", async 
   await screenshot(page, "s15-fillet");
   record({
     id: "S15",
-    title: "Verrundung mit Zonen",
+    title: "Fillet with zones",
     image: "s15-fillet",
-    caption: "fillet_zonen.mcad, Cursor auf fillet(2) in Zeile 12: Zonen (Rasterlinie und Kugel) blau halbtransparent, ausgewählte Kanten orange; Inline-Hinweis „2 Zonen · 2 Kanten“ am Zeilenende.",
+    caption: "fillet_zones.mcad, cursor on fillet(2) in line 12: zones (grid line and sphere) blue semi-transparent, selected edges orange; inline hint “2 Zonen · 2 Kanten” (2 zones · 2 edges) at the line end.",
   });
 });
 
-test("S16 Positionen alter Szenen werden beim Tippen weitergeführt", async ({ page }) => {
+test("S16 positions of old scenes are carried along while typing", async ({ page }) => {
   await openApp(page);
   // Insert two lines at the top while the engine is blocked: the cursor still selects nodes
   // of the old scene at their new lines (ChangeSet.mapPos) before the new scene arrives.
@@ -373,12 +373,12 @@ test("S16 Positionen alter Szenen werden beim Tippen weitergeführt", async ({ p
   expect(after.view!.selection.line).toBe(24);
   record({
     id: "S16",
-    title: "Positionen alter Szenen",
-    caption: "Zwei Zeilen oben eingefügt, während die Engine 1,5 s blockiert ist: Der Cursor in Zeile 24 wählt noch in der alten Szene den Knoten translate(k.corner) (früher Zeile 22) – Quellpositionen werden über ChangeSet.mapPos weitergeführt, bis die neue Szene da ist.",
+    title: "Positions of old scenes",
+    caption: "Two lines inserted at the top while the engine is blocked for 1.5 s: the cursor in line 24 still selects the node translate(k.corner) (formerly line 22) in the old scene – source positions are carried along with ChangeSet.mapPos until the new scene arrives.",
   });
 });
 
-test("S17 Watchdog meldet hängende Engine", async ({ page }) => {
+test("S17 the watchdog reports a hanging engine", async ({ page }) => {
   await page.goto("/?watchdog=800");
   await waitScene(page);
   await page.evaluate(() => (window as unknown as { __cad: { debugHang(ms: number): void } }).__cad.debugHang(5000));
@@ -395,11 +395,11 @@ test("S17 Watchdog meldet hängende Engine", async ({ page }) => {
     id: "S17",
     title: "Watchdog",
     image: "s17-watchdog",
-    caption: "Engine-Worker 5 s blockiert (Testhilfe, Watchdog 0,8 s): Der Worker wird beendet und neu gestartet, die Statuszeile meldet den Fehler rot; die letzte Szene bleibt sichtbar, die nächste Änderung wird normal ausgewertet.",
+    caption: "Engine worker blocked for 5 s (test helper, watchdog 0.8 s): the worker is terminated and started again, the status line reports the error in red; the last scene stays visible, the next change is evaluated normally.",
   });
 });
 
-test("S18 Autospeichern in IndexedDB", async ({ page }) => {
+test("S18 autosave in IndexedDB", async ({ page }) => {
   await openApp(page);
   await lineEl(page, 28).click();
   await page.keyboard.type("cube(3); // autosave-test");
@@ -411,10 +411,10 @@ test("S18 Autospeichern in IndexedDB", async ({ page }) => {
   await page.reload();
   await waitScene(page);
   await expect(page.locator(".cm-content")).toContainText("autosave-test");
-  record({ id: "S18", title: "Autospeichern", caption: "Änderung wird nach 0,4 s in IndexedDB gespeichert; nach dem Neuladen der Seite steht der geänderte Text wieder im Editor." });
+  record({ id: "S18", title: "Autosave", caption: "A change is saved in IndexedDB after 0.4 s; after reloading the page the changed text is in the editor again." });
 });
 
-test("S19 Dunkles Thema und Standardansichten", async ({ page }) => {
+test("S19 dark theme and standard views", async ({ page }) => {
   await openApp(page);
   await setTheme(page, "dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -423,10 +423,10 @@ test("S19 Dunkles Thema und Standardansichten", async ({ page }) => {
   await clickLine(page, 21, 4);
   await waitView(page, "(s) => s.view.selection.line === 21");
   await screenshot(page, "s19-dunkel");
-  record({ id: "S19", title: "Dunkles Thema", image: "s19-dunkel", caption: "Dunkles Thema, Iso-Ansicht, Cursor auf k: housing(w = 60): Instanz voll, Anker der Instanz hervorgehoben, Rest gedimmt." });
+  record({ id: "S19", title: "Dark theme", image: "s19-dunkel", caption: "Dark theme, iso view, cursor on k: housing(w = 60): instance full, the anchors of the instance highlighted, the rest dimmed." });
 });
 
-test("S20 intersection und 2D-Formen", async ({ page }) => {
+test("S20 intersection and 2D shapes", async ({ page }) => {
   await openApp(page);
   await openExample(page, "openscad-compat/05_nested_booleans.scad");
   await clickLine(page, 3, 8);
@@ -442,13 +442,13 @@ test("S20 intersection und 2D-Formen", async ({ page }) => {
   await screenshot(page, "s20b-profil");
   record({
     id: "S20",
-    title: "intersection und 2D",
+    title: "intersection and 2D",
     image: "s20a-intersection",
-    caption: "05_nested_booleans.scad, Cursor auf intersection(): Würfel und Kugel halbtransparent, Ergebnis voll. 27_spacers_2d.scad, Cursor auf square([30, 10]): 2D-Form als Umriss mit leichter Füllung in ihrer Ebene (Ansicht von oben).",
+    caption: "05_nested_booleans.scad, cursor on intersection(): cube and sphere semi-transparent, result full. 27_spacers_2d.scad, cursor on square([30, 10]): 2D shape as an outline with a light fill in its plane (view from the top).",
   });
 });
 
-test("S21 Öffnen und Speichern ohne File System Access API (Hoch- und Herunterladen)", async ({ page }) => {
+test("S21 open and save without the File System Access API (upload and download)", async ({ page }) => {
   await page.addInitScript(() => {
     const w = window as unknown as Record<string, unknown>;
     delete w.showOpenFilePicker;
@@ -456,22 +456,22 @@ test("S21 Öffnen und Speichern ohne File System Access API (Hoch- und Herunterl
   });
   await openApp(page);
   const [chooser] = await Promise.all([page.waitForEvent("filechooser"), fileMenu(page, "Öffnen …")]);
-  await chooser.setFiles({ name: "teil.scad", mimeType: "text/plain", buffer: Buffer.from("// hochgeladen\ncube([12, 8, 4]);\n") });
+  await chooser.setFiles({ name: "part.scad", mimeType: "text/plain", buffer: Buffer.from("// uploaded\ncube([12, 8, 4]);\n") });
   const s = await waitScene(page);
-  expect(s.fileName).toBe("teil.scad");
+  expect(s.fileName).toBe("part.scad");
   await expect(lineEl(page, 2)).toHaveText("cube([12, 8, 4]);");
   const [dl] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Speichern", exact: true }).click()]);
-  expect(dl.suggestedFilename()).toBe("teil.scad");
-  expect(readFileSync((await dl.path())!, "utf8")).toBe("// hochgeladen\ncube([12, 8, 4]);\n");
-  await expect(page.getByTestId("status-notice")).toContainText("Gespeichert: teil.scad");
+  expect(dl.suggestedFilename()).toBe("part.scad");
+  expect(readFileSync((await dl.path())!, "utf8")).toBe("// uploaded\ncube([12, 8, 4]);\n");
+  await expect(page.getByTestId("status-notice")).toContainText("Gespeichert: part.scad");
   record({
     id: "S21",
-    title: "Öffnen und Speichern",
-    caption: "Ohne File System Access API: „Datei › Öffnen …“ lädt eine Datei über den Dateidialog hoch (teil.scad wird ausgewertet), „Speichern“ lädt den Quelltext unverändert herunter. Mit der API (Chromium) werden dieselben Funktionen über showOpenFilePicker/showSaveFilePicker ausgeführt.",
+    title: "Open and save",
+    caption: "Without the File System Access API: “Datei › Öffnen …” (file › open) uploads a file through the file dialog (part.scad is evaluated), “Speichern” (save) downloads the source unchanged. With the API (Chromium) the same functions run through showOpenFilePicker/showSaveFilePicker.",
   });
 });
 
-test("S22 Messwerte: Tastendruck bis neue Szene, fps beim Drehen", async ({ page }) => {
+test("S22 measurements: keystroke to new scene, fps while orbiting", async ({ page }) => {
   await openApp(page);
   await lineEl(page, 21).click();
   // Edit the literal 60 → 61 … 65 and wait for each scene.
@@ -503,7 +503,7 @@ test("S22 Messwerte: Tastendruck bis neue Szene, fps beim Drehen", async ({ page
   expect(fps.fps).toBeGreaterThan(process.env.CI ? 2 : 5);
   record({
     id: "S22",
-    title: "Messwerte",
-    caption: `Fünf Änderungen des Literals in Zeile 21: Tastendruck → neue Szene gezeichnet, Median ${median(s.metrics.editToScene).toFixed(0)} ms (App-Messung). Drehen über 120 Bilder: ${fps.fps.toFixed(0)} fps (SwiftShader, ohne GPU).`,
+    title: "Measurements",
+    caption: `Five changes of the literal in line 21: keystroke → new scene drawn, median ${median(s.metrics.editToScene).toFixed(0)} ms (app measurement). Orbiting for 120 frames: ${fps.fps.toFixed(0)} fps (SwiftShader, no GPU).`,
   });
 });

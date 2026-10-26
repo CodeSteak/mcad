@@ -112,7 +112,7 @@ mod tests {
         for (name, page) in PAGES {
             assert_eq!(text(&args(&[name], false, false)).unwrap(), format!("{}\n", page.trim_end()));
         }
-        assert!(text(&args(&["gibt-es-nicht"], false, false)).unwrap_err().contains("unknown topic"));
+        assert!(text(&args(&["no-such-topic"], false, false)).unwrap_err().contains("unknown topic"));
         let all = text(&args(&[], true, false)).unwrap();
         assert!(PAGES.iter().all(|(_, p)| all.contains(p.trim_end())));
     }

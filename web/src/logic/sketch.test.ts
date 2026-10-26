@@ -23,8 +23,8 @@ function planAt(name: "sketch" | "sketch-module", line: number, col = 4) {
   return { f, idx, sel, at, p: plan({ scene: f.scene, cursor: sel.nodes, hover: [], segmentActive }) };
 }
 
-describe("Skizze unter dem Cursor", () => {
-  it("Segmentzeile: Skizze in ihrer Ebene, Segment der Zeile hervorgehoben", () => {
+describe("Sketch under the cursor", () => {
+  it("segment line: sketch in its plane, the line's segment highlighted", () => {
     // line 12: `arc(to = s[arc_x, top], r = b / 2);` in module holder
     const { f, p } = planAt("sketch-module", 12);
     expect(p.sketches).toHaveLength(1);
@@ -45,14 +45,14 @@ describe("Skizze unter dem Cursor", () => {
     expect(sk.helpers.length).toBe(5);
   });
 
-  it("Zeile im `hole`-Block: Skizze über die Gruppe gefunden", () => {
+  it("line in the `hole` block: sketch found through the group", () => {
     const { f, sel, p } = planAt("sketch-module", 22);
     expect(f.scene.nodes[sel.nodes[0]].label).toBe("group");
     expect(sketchesFor(f.scene, f.scene.nodes[sel.nodes[0]]).map((n) => n.label)).toEqual(["sketch"]);
     expect(p.sketches[0].segments.filter((g) => g.active).map((g) => g.kind)).toEqual(["line"]);
   });
 
-  it("Bézier: Kontrollpolygon als Hilfslinie", () => {
+  it("Bézier: control polygon as a help line", () => {
     const { p } = planAt("sketch", 36);
     const sk = p.sketches[0];
     expect(sk.segments.filter((g) => g.active).map((g) => g.kind)).toEqual(["bezier"]);
@@ -60,15 +60,15 @@ describe("Skizze unter dem Cursor", () => {
     expect(sk.helpers.some((h) => h.length === 4 && h[1][0] === 6 && h[1][1] === 10)).toBe(true);
   });
 
-  it("Aufruf eines Skizzen-Moduls zeigt die Skizze, ohne hervorgehobenes Segment", () => {
+  it("a call of a sketch module shows the sketch, without a highlighted segment", () => {
     const { p } = planAt("sketch", 29, 0);
     expect(p.sketches).toHaveLength(1);
     expect(p.sketches[0].segments.some((g) => g.active)).toBe(false);
   });
 });
 
-describe("Griffe der Segmente", () => {
-  it("Segmentzeile: Griffe dieses Segments; Zeile `sketch`: alle Segmentgriffe", () => {
+describe("Handles of the segments", () => {
+  it("segment line: handles of this segment; line `sketch`: all segment handles", () => {
     const f = fixture("sketch-module");
     const idx = new SceneIndex(f.scene);
     const at = (line: number, col = 4) => {
@@ -84,8 +84,8 @@ describe("Griffe der Segmente", () => {
   });
 });
 
-describe("Module als Namensräume", () => {
-  it("Modul unter dem Cursor mit Pfad, Signatur des Kontextmoduls", () => {
+describe("Modules as namespaces", () => {
+  it("module under the cursor with its path, signature of the context module", () => {
     const f = fixture("library");
     const idx = new SceneIndex(f.scene);
     expect(idx.moduleAt(pos(f.doc, 7, 8))).toBe("profile.star");

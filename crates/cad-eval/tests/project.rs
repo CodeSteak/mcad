@@ -34,9 +34,9 @@ fn not_info(out: &EvalOutput) -> Vec<String> {
 fn paths_are_relative_to_the_including_file() {
     assert_eq!(resolve_path("main.scad", "lib/a.scad"), "lib/a.scad");
     assert_eq!(resolve_path("lib/a.scad", "b.scad"), "lib/b.scad");
-    assert_eq!(resolve_path("lib/a.scad", "../konst.scad"), "konst.scad");
+    assert_eq!(resolve_path("lib/a.scad", "../consts.scad"), "consts.scad");
     assert_eq!(resolve_path("lib/a.scad", "./x/../y.scad"), "lib/y.scad");
-    assert_eq!(resolve_path("main.scad", "../aussen.scad"), "../aussen.scad");
+    assert_eq!(resolve_path("main.scad", "../outside.scad"), "../outside.scad");
     assert_eq!(resolve_path("a/b.scad", "/abs/c.scad"), "/abs/c.scad");
     assert_eq!(resolve_path("a\\b.scad", "c\\d.scad"), "a/c/d.scad");
 }
@@ -44,15 +44,15 @@ fn paths_are_relative_to_the_including_file() {
 #[test]
 fn include_inserts_definitions_variables_and_geometry() {
     let (p, out) = project(
-        "include <konst.scad>\necho(breite, f(2));\nteil();\ncube(breite);",
+        "include <consts.scad>\necho(width, f(2));\npart();\ncube(width);",
         &[(
-            "konst.scad",
-            "breite = 40;\nfunction f(x) = x * breite;\nmodule teil() sphere(breite);\ncylinder(h = 1, r = 2);",
+            "consts.scad",
+            "width = 40;\nfunction f(x) = x * width;\nmodule part() sphere(width);\ncylinder(h = 1, r = 2);",
         )],
     );
     assert_eq!(not_info(&out), Vec::<String>::new());
     assert_eq!(echoes(&out), ["40, 80"]);
-    assert_eq!(dump(&out), "group\n  cylinder\n  teil\n    sphere\n  box\n");
+    assert_eq!(dump(&out), "group\n  cylinder\n  part\n    sphere\n  box\n");
     assert_eq!(p.files.len(), 2);
     assert_eq!(p.files[1].role, FileRole::Include);
     // The cylinder's node points into the included file.
@@ -116,11 +116,11 @@ fn own_definitions_win_and_includes_bring_their_uses() {
 #[test]
 fn use_without_geometry_and_used_once() {
     let (p, out) = project(
-        "use <lib.scad>\nuse <lib.scad>\nhalter();",
-        &[("lib.scad", "module halter(h = 10) cylinder(h = h, r = 2);\ncube(100);\nsphere(5);")],
+        "use <lib.scad>\nuse <lib.scad>\nholder();",
+        &[("lib.scad", "module holder(h = 10) cylinder(h = h, r = 2);\ncube(100);\nsphere(5);")],
     );
     assert_eq!(not_info(&out), Vec::<String>::new());
-    assert_eq!(dump(&out), "group\n  halter\n    cylinder\n");
+    assert_eq!(dump(&out), "group\n  holder\n    cylinder\n");
     assert_eq!(p.libs.len(), 1);
     assert_eq!(p.files.len(), 2);
     assert_eq!(p.files[1].role, FileRole::Use);
@@ -150,15 +150,15 @@ fn include_cycle_is_an_error() {
 #[test]
 fn missing_file_is_an_error_at_the_line() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
-    let (p, out) = project("cube(1);\ninclude <fehlt.scad>\nuse <lib/fehlt2.scad>\n", &[]);
+    let (p, out) = project("cube(1);\ninclude <missing.scad>\nuse <lib/missing2.scad>\n", &[]);
     let errs: Vec<_> = out.diagnostics.iter().filter(|d| d.severity == Severity::Error).collect();
     assert_eq!(errs.len(), 2, "{errs:?}");
-    assert!(errs[0].message.starts_with("Datei `fehlt.scad` nicht gefunden"));
+    assert!(errs[0].message.starts_with("Datei `missing.scad` nicht gefunden"));
     assert_eq!(p.line(errs[0].span), 2);
-    assert!(errs[1].message.starts_with("Datei `lib/fehlt2.scad` nicht gefunden"));
+    assert!(errs[1].message.starts_with("Datei `lib/missing2.scad` nicht gefunden"));
     assert_eq!(p.line(errs[1].span), 3);
     // Missing file inside an included file: at that file's line.
-    let (p, out) = project("include <a.scad>", &[("a.scad", "\n\ninclude <nix.scad>")]);
+    let (p, out) = project("include <a.scad>", &[("a.scad", "\n\ninclude <nothing.scad>")]);
     let d = out.diagnostics.iter().find(|d| d.severity == Severity::Error).unwrap();
     assert_eq!((p.path_of(d.span), p.line(d.span)), ("a.scad", 3));
 }
@@ -166,9 +166,9 @@ fn missing_file_is_an_error_at_the_line() {
 #[test]
 fn diagnostics_of_library_code_know_their_file() {
     let (p, out) =
-        project("use <lib/teile.mcad>\nhalter();", &[("lib/teile.mcad", "\nmodule halter() {\n  cube(unbekannt);\n}")]);
-    let d = out.diagnostics.iter().find(|d| d.message.contains("unbekannt")).unwrap();
-    assert_eq!(p.path_of(d.span), "lib/teile.mcad");
+        project("use <lib/parts.mcad>\nholder();", &[("lib/parts.mcad", "\nmodule holder() {\n  cube(unknown);\n}")]);
+    let d = out.diagnostics.iter().find(|d| d.message.contains("unknown")).unwrap();
+    assert_eq!(p.path_of(d.span), "lib/parts.mcad");
     assert_eq!(p.line(d.span), 3);
     // Syntax errors of other files have their spans in those files too.
     let f = files(&[("x.scad", "cube(;")]);
@@ -194,9 +194,9 @@ fn diamond_include_loads_the_file_twice() {
 
 #[test]
 fn drag_writes_into_the_included_file() {
-    let main = "include <konst.scad>\ncube([breite, 10, 2]);";
-    let konst = "// Konstanten\nbreite = 40;\n";
-    let (p, out) = project(main, &[("konst.scad", konst)]);
+    let main = "include <consts.scad>\ncube([width, 10, 2]);";
+    let consts = "// Constants\nwidth = 40;\n";
+    let (p, out) = project(main, &[("consts.scad", consts)]);
     let h = out.handles.iter().find(|h| h.kind == HandleKind::Point).expect("corner handle");
     assert!(h.via_var);
     let c0 = h.comps[0].expect("literal through variable");
@@ -209,9 +209,9 @@ fn drag_writes_into_the_included_file() {
     assert_eq!(edits[0].text, "55");
     // Apply to the file's text and evaluate again.
     let local = TextEdit { span: edits[0].span.local(), text: edits[0].text.clone() };
-    let konst2 = apply_edits(konst, &[local]);
-    assert_eq!(konst2, "// Konstanten\nbreite = 55;\n");
-    let (_, out2) = project(main, &[("konst.scad", &konst2)]);
+    let consts2 = apply_edits(consts, &[local]);
+    assert_eq!(consts2, "// Constants\nwidth = 55;\n");
+    let (_, out2) = project(main, &[("consts.scad", &consts2)]);
     let b = nodes_by_label(&out2, "box")[0];
     let cad_ir::Op::Prim { prim: cad_ir::Prim::Box { max, .. }, .. } = &out2.tree.node(b).op else { panic!() };
     assert_eq!(max.x, 55.0);
@@ -219,56 +219,56 @@ fn drag_writes_into_the_included_file() {
 
 #[test]
 fn module_of_a_used_library_as_context() {
-    let lib = "module halter(h = 12) {\n  cylinder(h = h, r = 3);\n  anchor oben = [0, 0, h];\n}";
+    let lib = "module holder(h = 12) {\n  cylinder(h = h, r = 3);\n  anchor top = [0, 0, h];\n}";
     let opts =
-        EvalOptions { context: Context::Module { name: "halter".into(), overrides: vec![] }, ..Default::default() };
-    let (p, out) = project_with("use <lib/halter.mcad>\nhalter();", &[("lib/halter.mcad", lib)], &opts);
+        EvalOptions { context: Context::Module { name: "holder".into(), overrides: vec![] }, ..Default::default() };
+    let (p, out) = project_with("use <lib/holder.mcad>\nholder();", &[("lib/holder.mcad", lib)], &opts);
     assert_eq!(not_info(&out), Vec::<String>::new());
-    assert_eq!(out.context.module.as_deref(), Some("halter"));
-    assert_eq!(p.path_of(out.context.def_span.unwrap()), "lib/halter.mcad");
+    assert_eq!(out.context.module.as_deref(), Some("holder"));
+    assert_eq!(p.path_of(out.context.def_span.unwrap()), "lib/holder.mcad");
     // Height handle of the cylinder, literal in the default of the library file.
     let h = out.handles.iter().find(|h| h.kind == HandleKind::Height).expect("height handle");
     assert!(h.via_default);
     let e = drag_edits(&out, &p, h.id, &DragTarget::Free(DragValue::Scalar(20.0)), &DragOptions::default());
     assert_eq!(e.len(), 1);
-    assert_eq!(p.path_of(e[0].span), "lib/halter.mcad");
+    assert_eq!(p.path_of(e[0].span), "lib/holder.mcad");
     assert_eq!(p.text(e[0].span), "12");
     // Module signatures of library modules are listed (parameter bar).
-    let sig = out.modules.iter().find(|m| m.name == "halter").unwrap();
+    let sig = out.modules.iter().find(|m| m.name == "holder").unwrap();
     assert_eq!(sig.params[0].default_text.as_deref(), Some("12"));
-    // "Als Standard übernehmen" into the library file.
-    let e = set_default_edit_project(&p, "halter", "h", "15").unwrap();
-    assert_eq!((p.path_of(e.span), p.text(e.span)), ("lib/halter.mcad", "12"));
+    // "Use as default" into the library file.
+    let e = set_default_edit_project(&p, "holder", "h", "15").unwrap();
+    assert_eq!((p.path_of(e.span), p.text(e.span)), ("lib/holder.mcad", "12"));
 }
 
 #[test]
 fn parts_are_top_level_named_instances() {
-    let src = "module deckel() cube([10, 10, 2]);\nmodule gehaeuse() cube(10);\nmodule schraube() cylinder(h = 5, r = 1);\n\
-               deckel: deckel();\ntranslate([0, 0, 20]) gehaeuse: gehaeuse();\nmodule baugruppe() { s: schraube(); }\nb: baugruppe();\ncube(1);";
+    let src = "module lid() cube([10, 10, 2]);\nmodule housing() cube(10);\nmodule screw() cylinder(h = 5, r = 1);\n\
+               lid: lid();\ntranslate([0, 0, 20]) housing: housing();\nmodule assembly() { s: screw(); }\nb: assembly();\ncube(1);";
     let out = clean(src);
     let names: Vec<&str> = out.parts.iter().map(|p| p.name.as_str()).collect();
-    assert_eq!(names, ["deckel", "gehaeuse", "b"]);
-    let g = out.part("gehaeuse").unwrap();
+    assert_eq!(names, ["lid", "housing", "b"]);
+    let g = out.part("housing").unwrap();
     assert_eq!(out.tree.node(g.node).world.w_axis.z, 20.0);
-    assert!(matches!(&out.tree.node(g.node).op, cad_ir::Op::ModuleCall { instance: Some(n), .. } if n == "gehaeuse"));
+    assert!(matches!(&out.tree.node(g.node).op, cad_ir::Op::ModuleCall { instance: Some(n), .. } if n == "housing"));
     // No parts in a module context.
-    let out = run_module(src, "baugruppe", vec![]);
+    let out = run_module(src, "assembly", vec![]);
     assert!(out.parts.is_empty());
 }
 
 #[test]
 fn indexed_named_instances_in_loops() {
-    let src = "module halter(h = 5) { cube([2, 2, h]); anchor anker = [1, 1, h]; anchor ecke = [2, 2, 0]; }\n\
-               for (i = [0:3]) translate([i * 10, 0, 0]) k[i]: halter(h = 5 + i);\n\
-               echo(k[2].anker, k[0].ecke);\n\
-               translate(k[3].anker) sphere(1);\n\
+    let src = "module holder(h = 5) { cube([2, 2, h]); anchor peak = [1, 1, h]; anchor corner = [2, 2, 0]; }\n\
+               for (i = [0:3]) translate([i * 10, 0, 0]) k[i]: holder(h = 5 + i);\n\
+               echo(k[2].peak, k[0].corner);\n\
+               translate(k[3].peak) sphere(1);\n\
                translate([0, 0, 0]) cube(1);";
     let out = clean(src);
     assert_eq!(echoes(&out), ["[21, 1, 7], [2, 2, 0]"]);
     let labels: Vec<String> = out.instances.iter().filter_map(|i| i.label.clone()).collect();
     assert_eq!(labels, ["k[0]", "k[1]", "k[2]", "k[3]"]);
     assert_eq!(out.parts.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["k[0]", "k[1]", "k[2]", "k[3]"]);
-    // Snap writes `k[2].ecke`.
+    // Snap writes `k[2].corner`.
     let h = out
         .handles
         .iter()
@@ -276,11 +276,11 @@ fn indexed_named_instances_in_loops() {
         .unwrap();
     assert_eq!(h.instances.len(), 4);
     let t = snap_targets(&out, h.id);
-    let k2 = t.iter().find(|t| t.text == "k[2].ecke").expect("snap target k[2].ecke");
+    let k2 = t.iter().find(|t| t.text == "k[2].corner").expect("snap target k[2].corner");
     assert!(approx3(k2.world, [22.0, 2.0, 0.0]));
     let e = drag_edits(&out, src, h.id, &DragTarget::Snap(k2.r#ref.clone()), &DragOptions::default());
     let new = apply_edits(src, &e);
-    assert!(new.ends_with("translate(k[2].ecke) cube(1);"), "{new}");
+    assert!(new.ends_with("translate(k[2].corner) cube(1);"), "{new}");
     let out2 = clean(&new);
     let b = nodes_by_label(&out2, "box").into_iter().last().unwrap();
     assert!(approx3(out2.tree.node(b).world.w_axis.truncate(), [22.0, 2.0, 0.0]));
@@ -323,7 +323,7 @@ fn single_file_eval_reports_includes_as_missing() {
 
 #[test]
 fn missing_file_in_english() {
-    let (_, out) = project("cube(1);\ninclude <fehlt.scad>\n", &[]);
+    let (_, out) = project("cube(1);\ninclude <missing.scad>\n", &[]);
     let e = out.diagnostics.iter().find(|d| d.severity == Severity::Error).unwrap();
-    assert!(e.message.starts_with("file `fehlt.scad` not found"), "{}", e.message);
+    assert!(e.message.starts_with("file `missing.scad` not found"), "{}", e.message);
 }

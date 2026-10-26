@@ -28,35 +28,35 @@ const diag = (severity: Diagnostic["severity"], from: number, to: number, messag
   range: { from, to, line, col: 1, end_line: line, end_col: 1 },
 });
 
-describe("Editor-Dekorationen", () => {
-  it("Syntaxfehler: Stelle unterstrichen, Zeile rot, Meldung am Ende", () => {
+describe("Editor decorations", () => {
+  it("syntax error: place underlined, line red, message at the end", () => {
     const doc = Text.of(["cube(10);", "sphere(;"]);
-    const { lines, marks } = collectLines(doc, input({ diagnostics: { version: 0, items: [diag("error", 17, 17, "Ausdruck erwartet", 2)] } }), []);
+    const { lines, marks } = collectLines(doc, input({ diagnostics: { version: 0, items: [diag("error", 17, 17, "expected expression", 2)] } }), []);
     expect([...lines.get(2)!.classes]).toContain("cm-l-error");
-    expect(lines.get(2)!.segs).toEqual([{ kind: "error", text: "Ausdruck erwartet", locate: false }]);
+    expect(lines.get(2)!.segs).toEqual([{ kind: "error", text: "expected expression", locate: false }]);
     // Empty range → one character marked.
     expect(marks).toEqual([{ from: 17, to: 18, cls: "cm-d-error" }]);
   });
 
-  it("Kernel-Fehler mit Ort: Meldung klickbar", () => {
+  it("kernel error with a place: message clickable", () => {
     const doc = Text.of(["union() {", "  cube(2);", "}"]);
-    const d: Diagnostic = { ...diag("error", 0, 5, "Vereinigung gescheitert: Zeile 2 (box) und …", 1), source: "kernel", at: [2, 10, 6], nodes: [2, 3] };
-    const { lines } = collectLines(doc, input({ diagnostics: { version: 0, items: [d, diag("warning", 12, 13, "ohne Ort", 2)] } }), []);
+    const d: Diagnostic = { ...diag("error", 0, 5, "union failed: line 2 (box) and …", 1), source: "kernel", at: [2, 10, 6], nodes: [2, 3] };
+    const { lines } = collectLines(doc, input({ diagnostics: { version: 0, items: [d, diag("warning", 12, 13, "no place", 2)] } }), []);
     expect(lines.get(1)!.segs).toEqual([{ kind: "error", text: d.message, locate: true }]);
-    expect(lines.get(2)!.segs).toEqual([{ kind: "warning", text: "ohne Ort", locate: false }]);
+    expect(lines.get(2)!.segs).toEqual([{ kind: "warning", text: "no place", locate: false }]);
   });
 
-  it("Warnung: Zeile gelb", () => {
+  it("warning: line yellow", () => {
     const doc = Text.of(["a", "b"]);
     const { lines } = collectLines(doc, input({ diagnostics: { version: 0, items: [{ ...diag("warning", 2, 3, "0 Kanten", 2), source: "kernel" }] } }), []);
     expect([...lines.get(2)!.classes]).toEqual(["cm-l-warning"]);
   });
 
-  it("Diagnosen einer alten Version folgen den Änderungen", () => {
+  it("diagnostics of an old version follow the changes", () => {
     const doc0 = Text.of(["cube(10);", "sphere(;"]);
     const m = new VersionMapper(doc0.length);
     m.mark(3, doc0.length);
-    const ch = ChangeSet.of({ from: 0, insert: "// neu\n" }, doc0.length);
+    const ch = ChangeSet.of({ from: 0, insert: "// new\n" }, doc0.length);
     m.apply(ch);
     const doc = ch.apply(doc0);
     const { lines } = collectLines(doc, input({ diagnostics: { version: 3, items: [diag("error", 17, 17, "x", 2)] } }, m), []);
@@ -64,7 +64,7 @@ describe("Editor-Dekorationen", () => {
     expect(lines.get(2)?.classes.has("cm-l-error") ?? false).toBe(false);
   });
 
-  it("Inline-Hinweise: Werte und Kantenanzahl", () => {
+  it("inline hints: values and edge count", () => {
     const f = fixture("fillet-module");
     const { lines } = collectLines(f.doc, input({ scene: f.scene, complete: f.scene }, new VersionMapper(f.source.length)), []);
     expect(lines.get(9)!.segs).toEqual([{ kind: "hint", text: "= [15, 10, 0]" }]);
@@ -72,7 +72,7 @@ describe("Editor-Dekorationen", () => {
     expect(lines.get(11)!.segs).toEqual([{ kind: "hint", text: "1 Zone · 5 Kanten" }]);
   });
 
-  it("*-Anweisungen ausgegraut, Hover-Zeilen markiert", () => {
+  it("*-statements greyed out, hover lines marked", () => {
     const f = fixture("modifiers");
     const dis = disabledStatements(scadParser.parse(f.source), f.source);
     const { lines } = collectLines(f.doc, input({ complete: f.scene, viewHoverLines: [3], hoverLine: 8 }, new VersionMapper(f.source.length)), dis);
@@ -82,16 +82,16 @@ describe("Editor-Dekorationen", () => {
     expect(lines.get(8)!.classes.has("cm-l-hover")).toBe(true);
   });
 
-  it("Watchdog-Fehler an einem Knoten färbt dessen Zeile", () => {
+  it("watchdog error at a node colours its line", () => {
     const f = fixture("housing");
     const node = f.scene.nodes.find((n) => n.range.line === 22)!.idx;
-    const { lines } = collectLines(f.doc, input({ complete: f.scene, engineError: { node, version: 1, message: "Engine hängt" } }, new VersionMapper(f.source.length)), []);
+    const { lines } = collectLines(f.doc, input({ complete: f.scene, engineError: { node, version: 1, message: "engine hangs" } }, new VersionMapper(f.source.length)), []);
     expect(lines.get(22)!.classes.has("cm-l-error")).toBe(true);
-    expect(lines.get(22)!.segs[0]).toEqual({ kind: "error", text: "Engine hängt" });
+    expect(lines.get(22)!.segs[0]).toEqual({ kind: "error", text: "engine hangs" });
   });
 
-  it("Inline-Schalter nur für Bool-Literale bei Zuweisungen", () => {
-    const g = fixture("griffe");
+  it("inline switch only for bool literals in assignments", () => {
+    const g = fixture("handles");
     const { controls } = collectLines(g.doc, input({ scene: g.scene }, new VersionMapper(g.source.length)), []);
     // Number literals (line 12) have no inline slider.
     expect([...controls.keys()]).toEqual([13]);

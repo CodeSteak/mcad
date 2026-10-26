@@ -1,4 +1,4 @@
-// 2D operations of sketches (Plan 17.3, Testbericht 15) in the view logic: the offset contour
+// 2D operations of sketches (Plan 17.3, test report 15) in the view logic: the offset contour
 // dashed over the input contour, the centre line of a stroke, the zones and new corner pieces of
 // fillet2d, the radius handle of corner().
 
@@ -17,8 +17,8 @@ function planAt(name: Name, line: number, col = 4) {
   return { f, idx, sel, p: plan({ scene: f.scene, cursor: sel.nodes, hover: [] }) };
 }
 
-describe("offset, stroke, fillet2d unter dem Cursor", () => {
-  it("offset: Ausgangskontur als Profil, Offset-Kontur gestrichelt", () => {
+describe("offset, stroke, fillet2d under the cursor", () => {
+  it("offset: input contour as a profile, offset contour dashed", () => {
     // line 30: `offset(r = -(wall + clearance)) outline();`
     const { f, sel, p } = planAt("sketch-lid", 30, 6);
     const n = f.scene.nodes[sel.nodes[0]];
@@ -37,7 +37,7 @@ describe("offset, stroke, fillet2d unter dem Cursor", () => {
     expect(p.items.some((i) => i.mode === "profile" && f.scene.nodes[i.node].label === "outline")).toBe(true);
   });
 
-  it("stroke: Mittellinie gestrichelt, Pfad als Profil", () => {
+  it("stroke: centre line dashed, path as a profile", () => {
     // line 22: `linear_extrude(floor_t) stroke(width, cap = "flat") route();` – the stroke node
     const f = fixture("sketch-cable-duct");
     const stroke = f.scene.nodes.find((n) => n.label === "stroke" && n.range.line === 22)!;
@@ -55,7 +55,7 @@ describe("offset, stroke, fillet2d unter dem Cursor", () => {
     expect(p.items.some((i) => i.mode === "profile")).toBe(true);
   });
 
-  it("fillet2d: Zone blau, neue Eckbögen als ausgewählte Kanten, Hinweis", () => {
+  it("fillet2d: zone blue, new corner arcs as selected edges, hint", () => {
     // line 19: `fillet2d(r_inner) {` (inner block with the zone)
     const { f, sel, p } = planAt("sketch-holder", 19, 10);
     const n = f.scene.nodes[sel.nodes[0]];
@@ -71,7 +71,7 @@ describe("offset, stroke, fillet2d unter dem Cursor", () => {
     expect(outer.selected_edges).toHaveLength(5);
   });
 
-  it("corner(): Radius-Griff auf der Verrundung", () => {
+  it("corner(): radius handle on the fillet", () => {
     // module route as context, line 17: `corner(r = 12);`
     const f = fixture("sketch-path");
     const idx = new SceneIndex(f.scene);

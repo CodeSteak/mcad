@@ -28,11 +28,11 @@ function boxMesh(min: Vec3, max: Vec3) {
 
 const T = (x: number, y: number, z: number): Mat4 => [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1];
 
-describe("Zonen auf Meshes", () => {
+describe("Zones on meshes", () => {
   const zone = boxMesh([-1, -1, 9], [21, 21, 11]); // plate around z = 10
   const vol = new MeshVolume(zone.positions, zone.indices, IDENTITY);
 
-  it("Punkt innen, außen, auf dem Rand (Toleranz)", () => {
+  it("point inside, outside, on the boundary (tolerance)", () => {
     expect(vol.triangles).toBe(12);
     expect(vol.contains([5, 5, 10], 1e-6)).toBe(true);
     expect(vol.contains([5, 5, 12], 1e-6)).toBe(false);
@@ -44,7 +44,7 @@ describe("Zonen auf Meshes", () => {
     expect(moved.contains([5, 5, 10], 1e-6)).toBe(false);
   });
 
-  it("Kanten: inside = vollständig, touch = berührt", () => {
+  it("edges: inside = completely, touch = touches", () => {
     const edges: Vec3[][] = [
       [[0, 0, 10], [20, 0, 10]], // in the plate
       [[0, 0, 0], [0, 0, 10]], // ends in the plate
@@ -55,7 +55,7 @@ describe("Zonen auf Meshes", () => {
     expect(samplePolyline([[0, 0, 0], [3, 0, 0]], 2)).toEqual([[0, 0, 0], [1, 0, 0], [2, 0, 0], [3, 0, 0]]);
   });
 
-  it("geöffnete Flächen: nur die Fläche vollständig in der Zone", () => {
+  it("opened faces: only the face completely in the zone", () => {
     const body = boxMesh([0, 0, 0], [20, 20, 10]);
     const faces = facesInZones(body, IDENTITY, [vol], "inside", 1e-3);
     expect([...faces.keys()]).toEqual([1]);
@@ -65,9 +65,9 @@ describe("Zonen auf Meshes", () => {
   });
 });
 
-describe("Neu einpassen", () => {
+describe("Refit", () => {
   const b = (min: Vec3, max: Vec3) => ({ min, max });
-  it("deutliche Größenänderung oder Verschiebung", () => {
+  it("a clear change of size or position", () => {
     expect(needsRefit(b([0, 0, 0], [10, 10, 10]), b([0, 0, 0], [11, 11, 11]))).toBe(false);
     expect(needsRefit(b([0, 0, 0], [10, 10, 10]), b([0, 0, 0], [20, 20, 20]))).toBe(true);
     expect(needsRefit(b([0, 0, 0], [30, 30, 30]), b([0, 0, 0], [10, 10, 10]))).toBe(true);

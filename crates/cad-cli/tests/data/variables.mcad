@@ -1,0 +1,6 @@
+// Purpose: -D without a module context sets top-level assignments (like openscad -D).
+w = 20;
+d = w / 2;
+h = 5;
+h = 8; // the last assignment wins
+cube([w, d, h]);

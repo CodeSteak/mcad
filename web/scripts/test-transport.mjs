@@ -38,7 +38,7 @@ const got = [];
 t.onMessage((m) => got.push(m));
 
 // queued until ready
-t.send({ type: "SetContext", module: "gehaeuse", overrides: {} });
+t.send({ type: "SetContext", module: "housing", overrides: {} });
 t.send({ type: "SetSource", text: "cube(1);", version: 7 });
 const w1 = FakeWorker.all[0];
 assert.equal(w1.sent.length, 0);

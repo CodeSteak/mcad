@@ -1,0 +1,13 @@
+// Handles: literals, variable, grid, rotation, computed values (Vitest fixture)
+p = [20, 0, 10];
+grid g {
+    x: left = 0, right = 40;
+    z: floor = 0, lid = 20;
+}
+translate(p) cube([10, 10, 10]);
+rotate([0, 0, 30]) cube([20, 4, 4]);
+cylinder(h = 12, r = 4);
+translate([1, 0, 0] * 2) sphere(3);
+scale(2) cube(5);
+t = 3;
+open = true;

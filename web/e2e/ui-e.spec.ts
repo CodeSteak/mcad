@@ -36,7 +36,7 @@ async function cursorOn(page: Page, l: number, col: number, context: string | nu
   return waitView(page, `(s) => s.view.selection.line === ${l} && (${pred})(s)`);
 }
 
-test("E01 Variabler Radius: Hinweis „r 2–4“, Kanten orange, Ergebnis verrundet", async ({ page }) => {
+test("E01 variable radius: hint “r 2–4”, edges orange, result rounded", async ({ page }) => {
   await openApp(page);
   let s = await openExample(page, "spec/variable_radius.mcad");
   expect(s.diagnostics.filter((d) => d.severity !== "info")).toEqual([]);
@@ -70,24 +70,24 @@ test("E01 Variabler Radius: Hinweis „r 2–4“, Kanten orange, Ergebnis verru
   await screenshotE(page, "e01-lookup");
   recordE({
     id: "E01",
-    title: "Variabler Radius im Browser",
+    title: "Variable radius in the browser",
     images: [
-      { name: "e01-stufe", label: "Cursor auf fillet(r = function (p) p.z < g.mid ? 2 : 4)" },
-      { name: "e01-tasche", label: "Cursor auf difference(fillet = function (p) 1 + p.x / 40)" },
-      { name: "e01-lookup", label: "Cursor auf fillet(r = function (p) lookup(p.x, …)) mit Zone" },
+      { name: "e01-stufe", label: "cursor on fillet(r = function (p) p.z < g.mid ? 2 : 4)" },
+      { name: "e01-tasche", label: "cursor on difference(fillet = function (p) 1 + p.x / 40)" },
+      { name: "e01-lookup", label: "cursor on fillet(r = function (p) lookup(p.x, …)) with a zone" },
     ],
     code: lines(src, 10, 25),
     caption:
-      "variable_radius.mcad: der Radius ist eine Funktion der Position. Am Zeilenende stehen Kantenzahl und Radiusbereich der ausgewerteten Stützpunkte („12 Kanten · r 2–4“, „4 Kanten · r 1.125–1.875“, „1 Zone · 4 Kanten · r 1.5–3.9“); ausgewählte Kanten orange, Zone blau wie beim konstanten Radius.",
+      "variable_radius.mcad: the radius is a function of the position. The line end shows the edge count and the radius range of the evaluated stations (“12 Kanten · r 2–4”, “4 Kanten · r 1.125–1.875”, “1 Zone · 4 Kanten · r 1.5–3.9”); selected edges orange, zone blue as with a constant radius.",
     checks: [
-      `Status ok, Hinweise ${JSON.stringify(f.hints)}, ${JSON.stringify(d.hints)}, ${JSON.stringify(z.hints)}`,
-      `gezeichnete ausgewählte Kanten 12 / 4 / 4, Pixel der orangen Kanten (Stufe): ${orange}`,
-      `Dreiecke der verrundeten Box: ${f.triangles}`,
+      `status ok, hints ${JSON.stringify(f.hints)}, ${JSON.stringify(d.hints)}, ${JSON.stringify(z.hints)}`,
+      `drawn selected edges 12 / 4 / 4, pixels of the orange edges (step): ${orange}`,
+      `triangles of the rounded box: ${f.triangles}`,
     ],
   });
 });
 
-test("E02 Variabler Radius: Radius ≤ 0 und zu großer Radius wie beim konstanten Radius", async ({ page }) => {
+test("E02 variable radius: radius ≤ 0 and a radius too large as with a constant radius", async ({ page }) => {
   await openApp(page);
   const src = "fillet(r = function (p) p.x - 5) {\n    cube(20);\n}\ntranslate([40, 0, 0]) fillet(r = function (p) 8 + p.z / 2) {\n    cube(20);\n}\n";
   await loadText(page, src);
@@ -110,19 +110,19 @@ test("E02 Variabler Radius: Radius ≤ 0 und zu großer Radius wie beim konstant
   await screenshotE(page, "e02-zu-gross");
   recordE({
     id: "E02",
-    title: "Fehlerfälle des variablen Radius",
+    title: "Error cases of the variable radius",
     images: [
-      { name: "e02-negativ", label: "Radius ≤ 0 an einer Kante" },
-      { name: "e02-zu-gross", label: "Radius 8–18 an einem 20-mm-Würfel" },
+      { name: "e02-negativ", label: "radius ≤ 0 at an edge" },
+      { name: "e02-zu-gross", label: "radius 8–18 at a 20 mm cube" },
     ],
     code: src.trim(),
     caption:
-      "Radius ≤ 0 an einem Stützpunkt: Zeile rot, Meldung mit Wert und Position, die Kante rot, der Würfel bleibt ohne Verrundung (12 Dreiecke). Zu großer Radius: Kernel-Meldung mit dem Radiusbereich, Körper unverändert – wie beim konstanten Radius.",
-    checks: [`Status error/error, Dreiecke ${a.triangles}/${b.triangles}`, `Meldung: ${a.messages[0]?.message ?? ""}`],
+      "Radius ≤ 0 at a station: line red, message with value and position, the edge red, the cube stays without a fillet (12 triangles). Radius too large: kernel message with the radius range, body unchanged – as with a constant radius.",
+    checks: [`status error/error, triangles ${a.triangles}/${b.triangles}`, `message: ${a.messages[0]?.message ?? ""}`],
   });
 });
 
-test("E03 shell eines verrundeten Körpers: can_shell.mcad und die drei Fälle aus Bericht 4", async ({ page }) => {
+test("E03 shell of a rounded body: can_shell.mcad and the three cases from report 4", async ({ page }) => {
   await openApp(page);
   let s = await openExample(page, "spec/can_shell.mcad");
   expect(s.diagnostics.filter((d) => d.severity === "error")).toEqual([]);
@@ -154,19 +154,19 @@ test("E03 shell eines verrundeten Körpers: can_shell.mcad und die drei Fälle a
   await screenshotE(page, "e03-faelle");
   recordE({
     id: "E03",
-    title: "shell verrundeter Körper",
+    title: "shell of rounded bodies",
     images: [
-      { name: "e03-dose", label: "can_shell.mcad, Cursor auf shell(wall)" },
-      { name: "e03-faelle", label: "die drei Fälle aus Bericht 4 (F1)" },
+      { name: "e03-dose", label: "can_shell.mcad, cursor on shell(wall)" },
+      { name: "e03-faelle", label: "the three cases from report 4 (F1)" },
     ],
     code: src.trim(),
     caption:
-      "can_shell.mcad ist wieder grün: ein geschlossener Hohlkörper mit Öffnung oben, „1 Zone · 1 Fläche geöffnet“. Die drei Fälle aus Bericht 4 (früher SM_ERR_NULL_POINTER, „leaves no cavity“, „self-overlapping“) ergeben Hohlkörper.",
-    checks: [`dose: ${sh.triangles} Dreiecke, ${sh.openedFaces} Fläche geöffnet (Ansicht und Engine)`, `Fälle: Status ${shells.map((x) => x.status).join("/")}, je ${shells.map((x) => x.openedFaces).join("/")} Fläche geöffnet; Mitte ${mid.triangles} Dreiecke`],
+      "can_shell.mcad is green again: a closed hollow body with an opening at the top, “1 Zone · 1 Fläche geöffnet” (1 zone · 1 face opened). The three cases from report 4 (formerly SM_ERR_NULL_POINTER, “leaves no cavity”, “self-overlapping”) give hollow bodies.",
+    checks: [`can: ${sh.triangles} triangles, ${sh.openedFaces} face opened (view and engine)`, `cases: status ${shells.map((x) => x.status).join("/")}, ${shells.map((x) => x.openedFaces).join("/")} face opened each; middle ${mid.triangles} triangles`],
   });
 });
 
-test("E04 Naht- und Polkanten zählen nicht: Zylinder 2 Kanten, Kugel 0 Kanten", async ({ page }) => {
+test("E04 seam and pole edges do not count: cylinder 2 edges, sphere 0 edges", async ({ page }) => {
   await openApp(page);
   const src = "cylinder(h = 10, r = 5, $chamfer = 1);\ntranslate([20, 0, 0]) sphere(5, $fillet = 1);\ntranslate([40, 0, 0]) fillet(1) { cylinder(h = 10, r = 5); sphere(20); }\n";
   await loadText(page, src);
@@ -186,19 +186,19 @@ test("E04 Naht- und Polkanten zählen nicht: Zylinder 2 Kanten, Kugel 0 Kanten",
   await screenshotE(page, "e04-zone", "view");
   recordE({
     id: "E04",
-    title: "Naht- und Polkanten",
+    title: "Seam and pole edges",
     images: [
-      { name: "e04-zylinder", label: "cylinder(…, $chamfer = 1): Deckel- und Bodenkante" },
-      { name: "e04-zone", label: "fillet(1) mit Kugelzone um den Zylinder" },
+      { name: "e04-zylinder", label: "cylinder(…, $chamfer = 1): top and bottom edge" },
+      { name: "e04-zone", label: "fillet(1) with a sphere zone around the cylinder" },
     ],
     code: src.trim(),
     caption:
-      "Die Naht des Zylinders und die Naht/Pole der Kugel sind glatt und werden nie ausgewählt: $chamfer am Zylinder „2 Kanten“ (vorher 3), $fillet an der Kugel „0 Kanten“ als Warnung ohne Wirkung (vorher Fehler), Zonenauswahl um den ganzen Zylinder ebenfalls 2 Kanten.",
-    checks: ["gezeichnete Kanten 2 / 0 / 2", "Kugel: Status warning, Zeile gelb"],
+      "The seam of the cylinder and the seam/poles of the sphere are smooth and never selected: $chamfer on the cylinder “2 Kanten” (2 edges, before 3), $fillet on the sphere “0 Kanten” as a warning without effect (before an error), a zone selection around the whole cylinder also 2 edges.",
+    checks: ["drawn edges 2 / 0 / 2", "sphere: status warning, line yellow"],
   });
 });
 
-test("E05 surface aus 2 × 2 und 3 × 3 Punkten", async ({ page }) => {
+test("E05 surface from 2 × 2 and 3 × 3 points", async ({ page }) => {
   await openApp(page);
   const src =
     "thicken(1) surface(points = [[[0, 0, 0], [20, 0, 6]], [[0, 20, 6], [20, 20, 0]]]);\n" +
@@ -217,10 +217,10 @@ test("E05 surface aus 2 × 2 und 3 × 3 Punkten", async ({ page }) => {
   await screenshotE(page, "e05-surface", "view");
   recordE({
     id: "E05",
-    title: "surface aus wenigen Punkten",
-    images: [{ name: "e05-surface", label: "bilinear (2 × 2) und quadratisch (3 × 3)" }],
+    title: "surface from few points",
+    images: [{ name: "e05-surface", label: "bilinear (2 × 2) and quadratic (3 × 3)" }],
     code: src.trim(),
-    caption: "surface(points) mit 2 × 2 (bilinear) und 3 × 3 Punkten (quadratisch) wird erzeugt und lässt sich aufdicken (vorher SmApiCreateSurfaceFromOrderedPoints … SM_ERR).",
-    checks: ["beide surface-Knoten ok"],
+    caption: "surface(points) with 2 × 2 (bilinear) and 3 × 3 points (quadratic) is created and can be thickened (before SmApiCreateSurfaceFromOrderedPoints … SM_ERR).",
+    checks: ["both surface nodes ok"],
   });
 });

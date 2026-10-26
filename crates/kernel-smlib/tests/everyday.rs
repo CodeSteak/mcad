@@ -163,7 +163,7 @@ fn chamfer_result_must_be_closed() {
 }
 
 /// Mass properties: volume relative accuracy about 1e-6 (was 1e-8, which took 70 % of an
-/// evaluation of the Schlüsselbrett).
+/// evaluation of the key rack).
 #[test]
 fn volume_accuracy() {
     let mut k = k();

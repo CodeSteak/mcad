@@ -43,7 +43,7 @@ const LOGO = (w: number) => `<svg xmlns="http://www.w3.org/2000/svg" width="40mm
 </svg>
 `;
 
-test("T01 Text in den mitgelieferten Schriften", async ({ page }) => {
+test("T01 text in the bundled fonts", async ({ page }) => {
   await openApp(page);
   const code = `color("red") linear_extrude(2) text("Größe 7", size = 10, font = "Inter:style=Bold");
 color("blue") translate([0, -15, 0]) linear_extrude(2) text("ÄÖÜ äöü ẞ „x“", size = 8, font = "JetBrains Mono");
@@ -66,15 +66,15 @@ color("black") translate([0, -30, 0]) linear_extrude(2) text("STENCIL 42", size 
   expect(w.some((m) => m.includes("„°“ fehlen in Allerta Stencil") && m.includes("JetBrains Mono"))).toBe(true);
   record16({
     id: "T01",
-    title: "Text in drei Schriften",
-    images: [{ name: "t01-text", label: "Inter Bold, JetBrains Mono, Allerta Stencil (Draufsicht)" }],
+    title: "Text in three fonts",
+    images: [{ name: "t01-text", label: "Inter Bold, JetBrains Mono, Allerta Stencil (top view)" }],
     code: code.trim(),
-    caption: "Umlaute, ẞ und deutsche Anführungszeichen ohne Warnung; Farben wie sonst.",
-    checks: ["keine Fehler/Warnungen", "Breite > 50 mm, Höhe 2 mm", "„20°C“ in Allerta Stencil: Warnung, ° aus JetBrains Mono"],
+    caption: "Umlauts, ẞ and German quotation marks without a warning; colours as usual.",
+    checks: ["no errors/warnings", "width > 50 mm, height 2 mm", "“20°C” in Allerta Stencil: warning, ° from JetBrains Mono"],
   });
 });
 
-test("T02 SVG aus den Projektdateien; SVG ändern → Szene folgt", async ({ page }) => {
+test("T02 SVG from the project files; change the SVG → the scene follows", async ({ page }) => {
   await openApp(page);
   const main = `color("teal") linear_extrude(3) import("logo.svg");\n`;
   const v0 = (await cad(page)).sentVersion;
@@ -94,47 +94,47 @@ test("T02 SVG aus den Projektdateien; SVG ändern → Szene folgt", async ({ pag
   expect((await info(page)).files["logo.svg"]).toContain('width="30"');
   record16({
     id: "T02",
-    title: "SVG als Projektdatei, im Editor geändert",
+    title: "SVG as a project file, changed in the editor",
     images: [
-      { name: "t02-vorher", label: "Rechteck 20 mm + Kreis" },
-      { name: "t02-nachher", label: "logo.svg im Editor: Rechteck 30 mm" },
+      { name: "t02-vorher", label: "rectangle 20 mm + circle" },
+      { name: "t02-nachher", label: "logo.svg in the editor: rectangle 30 mm" },
     ],
     code: main.trim(),
-    caption: "Das SVG ist eine Projektdatei (Tab), wird im Editor geändert; die Szene rechnet neu (Cache-Schlüssel aus dem Inhalt).",
-    checks: ["Breite 34 mm", "nach der Änderung 44 mm"],
+    caption: "The SVG is a project file (tab), changed in the editor; the scene is evaluated again (cache key from the content).",
+    checks: ["width 34 mm", "after the change 44 mm"],
   });
 });
 
-test("T03 Schrift ins Projekt laden", async ({ page }) => {
+test("T03 load a font into the project", async ({ page }) => {
   await openApp(page);
   await loadText(page, `cube(1);\n`);
   const ttf = readFileSync(join(FONTS, "AllertaStencil-Regular.ttf"));
   // "Datei › Datei laden …" (also in the "+" menu of the tabs) opens the file dialog
   const [chooser] = await Promise.all([page.waitForEvent("filechooser"), fileMenu(page, "Datei laden …")]);
-  await chooser.setFiles({ name: "schablone.ttf", mimeType: "font/ttf", buffer: ttf });
-  await page.waitForFunction(() => (window as unknown as W).__cad.projectInfo().paths.includes("schablone.ttf"));
-  const f = (await info(page)).files["schablone.ttf"];
+  await chooser.setFiles({ name: "stencil.ttf", mimeType: "font/ttf", buffer: ttf });
+  await page.waitForFunction(() => (window as unknown as W).__cad.projectInfo().paths.includes("stencil.ttf"));
+  const f = (await info(page)).files["stencil.ttf"];
   expect(f.startsWith("data:font/ttf;base64,")).toBe(true);
-  await loadText(page, `linear_extrude(2) text("HALLO", font = "schablone.ttf");\n`);
+  await loadText(page, `linear_extrude(2) text("HELLO", font = "stencil.ttf");\n`);
   expect(await errors(page)).toEqual([]);
   expect(await warnings(page)).toEqual([]);
   expect(await width(page)).toBeGreaterThan(30);
   // the font tab does not open in the editor
-  expect(await page.evaluate(() => (window as unknown as W).__cad.switchFile("schablone.ttf"))).toBe(false);
+  expect(await page.evaluate(() => (window as unknown as W).__cad.switchFile("stencil.ttf"))).toBe(false);
   await expect(page.getByTestId("status-notice")).toContainText("Schriftdatei");
   await hook(page, (c) => c.setView("top"));
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   await screenshot16(page, "t03-schrift", "full");
   record16({
     id: "T03",
-    title: "Eigene Schrift (Upload)",
-    images: [{ name: "t03-schrift", label: "„⇡ Datei laden“: schablone.ttf, text(…, font = \"schablone.ttf\")" }],
-    caption: "Binärdateien liegen im Projekt als data-URL; die Engine dekodiert sie. Der Tab öffnet keinen Editor.",
-    checks: ["Datei im Projekt", "keine Warnung", "Tab: Hinweis statt Editor"],
+    title: "Own font (upload)",
+    images: [{ name: "t03-schrift", label: "“⇡ Datei laden” (load file): stencil.ttf, text(…, font = \"stencil.ttf\")" }],
+    caption: "Binary files are kept in the project as data URLs; the engine decodes them. The tab opens no editor.",
+    checks: ["file in the project", "no warning", "tab: a notice instead of an editor"],
   });
 });
 
-test("T04 Beispiel svg_logo mit seinen SVG-Dateien; Warnungen mit Zeile", async ({ page }) => {
+test("T04 example svg_logo with its SVG files; warnings with their line", async ({ page }) => {
   await openApp(page);
   const v0 = (await cad(page)).sentVersion;
   expect(await page.evaluate(() => (window as unknown as W).__cad.openExample("spec/svg_logo.mcad"))).toBe(true);
@@ -162,14 +162,14 @@ test("T04 Beispiel svg_logo mit seinen SVG-Dateien; Warnungen mit Zeile", async 
   expect((await warnings(page)).some((m) => m.startsWith("w.svg:3:") && m.includes("Text"))).toBe(true);
   record16({
     id: "T04",
-    title: "Beispiel mit SVG-Dateien",
-    images: [{ name: "t04-beispiel", label: "tests/models/spec/svg_logo.mcad als Projekt mit svg/*.svg" }],
-    caption: "Einzelbeispiele, die SVGs aus tests/models/svg importieren, öffnen als Projekt mit diesen Dateien.",
-    checks: ["4 SVG-Dateien im Projekt", "keine Fehler", "<text> im SVG: Warnung „w.svg:3: …Text…“"],
+    title: "Example with SVG files",
+    images: [{ name: "t04-beispiel", label: "tests/models/spec/svg_logo.mcad as a project with svg/*.svg" }],
+    caption: "Single examples that import SVGs from tests/models/svg open as a project with these files.",
+    checks: ["4 SVG files in the project", "no errors", "<text> in the SVG: warning “w.svg:3: …Text…”"],
   });
 });
 
-test("T05 Messung: Text im Browser (Kernel-Zeit)", async ({ page }) => {
+test("T05 measurement: text in the browser (kernel time)", async ({ page }) => {
   test.setTimeout(240_000);
   await openApp(page);
   const cases: Array<[string, string]> = [

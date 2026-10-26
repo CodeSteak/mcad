@@ -1,5 +1,5 @@
 //! CLI for agents: `outline`, extended `render` (contact sheet, free camera, selection,
-//! overlays, section, xray), `measure`, `watch`, `set` and the reserved UI entry `mcad DATEI`.
+//! overlays, section, xray), `measure`, `watch`, `set` and the reserved UI entry `mcad FILE`.
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -49,7 +49,7 @@ fn text(args: &[&str], code: i32) -> String {
 }
 
 fn f(v: &Value) -> f64 {
-    v.as_f64().unwrap_or_else(|| panic!("keine Zahl: {v}"))
+    v.as_f64().unwrap_or_else(|| panic!("not a number: {v}"))
 }
 
 fn close(a: f64, b: f64, eps: f64) {
@@ -104,11 +104,11 @@ impl Png {
 
 #[test]
 fn outline_spec_example() {
-    let v = json(&["outline", &data("gehaeuse.mcad")], 0);
+    let v = json(&["outline", &data("housing.mcad")], 0);
     assert_eq!(v["command"], "outline");
     assert_eq!(v["counts"]["errors"], 0);
     let m = &v["modules"][0];
-    assert_eq!(m["name"], "gehaeuse");
+    assert_eq!(m["name"], "housing");
     assert_eq!(m["line"], 3);
     let w = &m["params"][0];
     assert_eq!(
@@ -118,45 +118,42 @@ fn outline_spec_example() {
     let g = &m["grids"][0];
     assert_eq!(g["name"], "g");
     let planes = g["planes"].as_array().unwrap();
-    let innen_r = planes.iter().find(|p| p["name"] == "innen_r").unwrap();
+    let inner_right = planes.iter().find(|p| p["name"] == "inner_right").unwrap();
     assert_eq!(
-        (innen_r["axis"].as_u64(), innen_r["axis_name"].as_str(), f(&innen_r["value"])),
+        (inner_right["axis"].as_u64(), inner_right["axis_name"].as_str(), f(&inner_right["value"])),
         (Some(0), Some("x"), 37.0)
     );
-    assert_eq!(innen_r["kind"], "expression");
-    assert_eq!(innen_r["expr"], "w - t");
-    let ecke = m["anchors"].as_array().unwrap().iter().find(|a| a["name"] == "ecke").unwrap();
-    assert_eq!(ecke["point"], serde_json::json!([40.0, 30.0, 20.0]));
+    assert_eq!(inner_right["kind"], "expression");
+    assert_eq!(inner_right["expr"], "w - t");
+    let corner = m["anchors"].as_array().unwrap().iter().find(|a| a["name"] == "corner").unwrap();
+    assert_eq!(corner["point"], serde_json::json!([40.0, 30.0, 20.0]));
     // file level: instance k is a part with bounds and volume, anchors in file coordinates
     let k = &v["instances"][0];
-    assert_eq!(
-        (k["name"].as_str(), k["module"].as_str(), k["part"].as_str()),
-        (Some("k"), Some("gehaeuse"), Some("k"))
-    );
+    assert_eq!((k["name"].as_str(), k["module"].as_str(), k["part"].as_str()), (Some("k"), Some("housing"), Some("k")));
     let part = &v["parts"][0];
     close(f(&part["volume"]), 60.0 * 30.0 * 20.0 - 54.0 * 30.0 * 17.0, 1e-6);
     assert_eq!(part["bounds"]["max"], serde_json::json!([60.0, 30.0, 20.0]));
-    assert!(v["anchors"].as_array().unwrap().iter().any(|a| a["ref"] == "k.ecke"));
+    assert!(v["anchors"].as_array().unwrap().iter().any(|a| a["ref"] == "k.corner"));
     assert_eq!(v["grids"][0]["name"], "h");
-    let t = text(&["outline", &data("gehaeuse.mcad")], 0);
-    assert!(t.contains("gehaeuse(w = 40: Zahl"), "{t}");
-    assert!(t.contains("innen_r = w - t → 37"), "{t}");
-    assert!(t.contains("k: gehaeuse  Z.21  Bauteil"), "{t}");
+    let t = text(&["outline", &data("housing.mcad")], 0);
+    assert!(t.contains("housing(w = 40: Zahl"), "{t}");
+    assert!(t.contains("inner_right = w - t → 37"), "{t}");
+    assert!(t.contains("k: housing  Z.21  Bauteil"), "{t}");
     // without the kernel: no volumes
-    let v = json(&["outline", "--no-kernel", &data("gehaeuse.mcad")], 0);
+    let v = json(&["outline", "--no-kernel", &data("housing.mcad")], 0);
     assert_eq!(v["parts"][0]["volume"], Value::Null);
     // --module makes no sense for an overview
-    json(&["outline", &data("gehaeuse.mcad"), "--module", "gehaeuse"], 2);
+    json(&["outline", &data("housing.mcad"), "--module", "housing"], 2);
 }
 
 #[test]
 fn outline_functions_variables_and_projects() {
-    let v = json(&["outline", &data("funktionen.mcad")], 0);
+    let v = json(&["outline", &data("functions.mcad")], 0);
     let fun = &v["functions"][0];
-    assert_eq!((fun["name"].as_str(), fun["body"].as_str()), (Some("doppelt"), Some("2 * x")));
+    assert_eq!((fun["name"].as_str(), fun["body"].as_str()), (Some("double"), Some("2 * x")));
     let vars = v["variables"].as_array().unwrap();
-    let hoehe = vars.iter().find(|x| x["name"] == "hoehe").unwrap();
-    assert_eq!((hoehe["expr"].as_str(), f(&hoehe["value"])), (Some("doppelt(5)"), 10.0));
+    let height = vars.iter().find(|x| x["name"] == "height").unwrap();
+    assert_eq!((height["expr"].as_str(), f(&height["value"])), (Some("double(5)"), 10.0));
     let params = v["modules"][0]["params"].as_array().unwrap();
     assert_eq!(params[0]["type"], "vector");
     assert_eq!(params[1]["type"], "bool");
@@ -178,9 +175,9 @@ fn outline_functions_variables_and_projects() {
 #[test]
 fn render_contact_sheet() {
     let dir = tempfile::tempdir().unwrap();
-    let out = dir.path().join("bogen.png");
+    let out = dir.path().join("sheet.png");
     let o = out.display().to_string();
-    let v = json(&["render", &data("gehaeuse.mcad"), "-o", &o, "--views", "all", "--size", "800x600"], 0);
+    let v = json(&["render", &data("housing.mcad"), "-o", &o, "--views", "all", "--size", "800x600"], 0);
     assert_eq!((v["width"].as_u64(), v["height"].as_u64()), (Some(800), Some(600)));
     let img = png(&out);
     assert_eq!((img.w, img.h), (800, 600));
@@ -196,17 +193,17 @@ fn render_contact_sheet() {
     }
     assert_eq!(views[1]["camera"]["dir"], serde_json::json!([0.0, 1.0, 0.0]));
     // explicit list
-    let v = json(&["render", &data("gehaeuse.mcad"), "-o", &o, "--views", "front,top"], 0);
+    let v = json(&["render", &data("housing.mcad"), "-o", &o, "--views", "front,top"], 0);
     assert_eq!(v["views"].as_array().unwrap().len(), 2);
     assert_eq!((v["width"].as_u64(), v["height"].as_u64()), (Some(1600), Some(1200)));
-    json(&["render", &data("gehaeuse.mcad"), "-o", &o, "--views", "iso,schräg"], 2);
+    json(&["render", &data("housing.mcad"), "-o", &o, "--views", "iso,oblique"], 2);
 }
 
 #[test]
 fn render_free_camera() {
     let dir = tempfile::tempdir().unwrap();
     let o = dir.path().join("k.png").display().to_string();
-    let g = data("gehaeuse.mcad");
+    let g = data("housing.mcad");
     let v = json(&["render", &g, "-o", &o, "--azimuth", "30", "--elevation", "20", "--size", "320x240"], 0);
     let cam = &v["camera"];
     close(f(&cam["azimuth"]), 30.0, 1e-3);
@@ -226,13 +223,13 @@ fn render_free_camera() {
     assert_eq!(v["camera"]["fov_deg"], 40.0);
     assert_eq!(v["camera"]["target"], serde_json::json!([0.0, 0.0, 0.0]));
     // fit to a part: the part fills the image (larger scale than the whole model)
-    let all = json(&["render", &data("kollision.mcad"), "-o", &o, "--view", "front", "--size", "320x240"], 0);
+    let all = json(&["render", &data("collision.mcad"), "-o", &o, "--view", "front", "--size", "320x240"], 0);
     let one = json(
-        &["render", &data("kollision.mcad"), "-o", &o, "--view", "front", "--fit", "part:c", "--size", "320x240"],
+        &["render", &data("collision.mcad"), "-o", &o, "--view", "front", "--fit", "part:c", "--size", "320x240"],
         0,
     );
     assert!(f(&one["camera"]["scale_px_per_mm"]) > 2.0 * f(&all["camera"]["scale_px_per_mm"]));
-    json(&["render", &g, "-o", &o, "--fit", "part:gibtsnicht"], 2);
+    json(&["render", &g, "-o", &o, "--fit", "part:missing"], 2);
     json(&["render", &g, "-o", &o, "--target", "1,2"], 2);
     json(&["render", &g, "-o", &o, "--zoom", "0"], 2);
 }
@@ -241,7 +238,7 @@ fn render_free_camera() {
 fn render_selection() {
     let dir = tempfile::tempdir().unwrap();
     let o = dir.path().join("s.png").display().to_string();
-    let k = data("kollision.mcad");
+    let k = data("collision.mcad");
     let v = json(&["render", &k, "-o", &o, "--part", "b", "--size", "320x240"], 0);
     let vis = v["visible_nodes"].as_array().unwrap();
     assert_eq!(vis.len(), 1);
@@ -256,7 +253,7 @@ fn render_selection() {
     let v = json(&["render", &k, "-o", &o, "--line", "5", "--only", "--size", "320x240"], 0);
     assert!(v["visible_nodes"].as_array().unwrap().iter().all(|n| n["role"] != "dimmed"));
     // by node index, with -D in a module context
-    let v = json(&["render", &data("gehaeuse.mcad"), "-o", &o, "--module", "gehaeuse", "-D", "w=80", "--node", "1"], 0);
+    let v = json(&["render", &data("housing.mcad"), "-o", &o, "--module", "housing", "-D", "w=80", "--node", "1"], 0);
     assert_eq!(v["highlighted"], serde_json::json!([1]));
     assert_eq!(v["bounds"]["max"][0], 80.0);
 }
@@ -264,9 +261,9 @@ fn render_selection() {
 #[test]
 fn render_overlays_change_pixels() {
     let dir = tempfile::tempdir().unwrap();
-    let g = data("gehaeuse.mcad");
+    let g = data("housing.mcad");
     let plain = dir.path().join("plain.png");
-    json(&["render", &g, "-o", &plain.display().to_string(), "--module", "gehaeuse", "--size", "400x300"], 0);
+    json(&["render", &g, "-o", &plain.display().to_string(), "--module", "housing", "--size", "400x300"], 0);
     let p0 = png(&plain);
     for (show, min) in [("grids", 200), ("anchors", 50), ("handles", 10), ("edges", 50), ("bbox", 100), ("dims", 100)] {
         let out = dir.path().join(format!("{show}.png"));
@@ -277,7 +274,7 @@ fn render_overlays_change_pixels() {
                 "-o",
                 &out.display().to_string(),
                 "--module",
-                "gehaeuse",
+                "housing",
                 "--size",
                 "400x300",
                 "--show",
@@ -287,7 +284,7 @@ fn render_overlays_change_pixels() {
         );
         assert_eq!(v["show"][0], show);
         let n = png(&out).differing(&p0);
-        assert!(n >= min, "--show {show}: {n} Pixel geändert");
+        assert!(n >= min, "--show {show}: {n} pixels changed");
     }
     let out = dir.path().join("all.png");
     let v = json(
@@ -297,7 +294,7 @@ fn render_overlays_change_pixels() {
             "-o",
             &out.display().to_string(),
             "--module",
-            "gehaeuse",
+            "housing",
             "--size",
             "400x300",
             "--show",
@@ -316,20 +313,20 @@ fn render_overlays_change_pixels() {
     assert!(png(&out).differing(&grids) > 300);
     // no grids in the file context of this file? h is there; a file without grids gives a note
     let v = json(
-        &["render", &data("kollision.mcad"), "-o", &out.display().to_string(), "--show", "grids", "--size", "200x150"],
+        &["render", &data("collision.mcad"), "-o", &out.display().to_string(), "--show", "grids", "--size", "200x150"],
         0,
     );
     assert!(v["notes"][0].as_str().unwrap().contains("--module"));
-    json(&["render", &g, "-o", &out.display().to_string(), "--show", "gitter"], 2);
+    json(&["render", &g, "-o", &out.display().to_string(), "--show", "lattice"], 2);
 }
 
 #[test]
 fn render_section_reduces_visible_area() {
     let dir = tempfile::tempdir().unwrap();
-    let g = data("gehaeuse.mcad");
-    let full = dir.path().join("voll.png");
+    let g = data("housing.mcad");
+    let full = dir.path().join("full.png");
     json(&["render", &g, "-o", &full.display().to_string(), "--size", "400x300", "--no-axes"], 0);
-    let cut = dir.path().join("schnitt.png");
+    let cut = dir.path().join("section.png");
     let v = json(
         &["render", &g, "-o", &cut.display().to_string(), "--size", "400x300", "--no-axes", "--section", "z=10"],
         0,
@@ -371,7 +368,7 @@ fn render_section_reduces_visible_area() {
 #[test]
 fn render_xray() {
     let dir = tempfile::tempdir().unwrap();
-    let g = data("gehaeuse.mcad");
+    let g = data("housing.mcad");
     let a = dir.path().join("a.png");
     let b = dir.path().join("b.png");
     json(&["render", &g, "-o", &a.display().to_string(), "--size", "400x300"], 0);
@@ -386,8 +383,8 @@ fn render_xray() {
 
 #[test]
 fn measure_points_bounds_volume() {
-    let g = data("gehaeuse.mcad");
-    let v = json(&["measure", &g, "--between", "k.ecke", "k.oben"], 0);
+    let g = data("housing.mcad");
+    let v = json(&["measure", &g, "--between", "k.corner", "k.top"], 0);
     let b = &v["between"];
     assert_eq!(b["a"]["point"], serde_json::json!([60.0, 30.0, 20.0]));
     assert_eq!(b["a"]["kind"], "anchor");
@@ -395,20 +392,17 @@ fn measure_points_bounds_volume() {
     assert_eq!(b["delta"], serde_json::json!([-60.0, -30.0, 0.0]));
     close(f(&b["distance"]), (60.0f64 * 60.0 + 30.0 * 30.0).sqrt(), 1e-9);
     // grid points in the module context, numbers and coordinates
-    let v = json(
-        &["measure", &g, "--module", "gehaeuse", "--between", "g[links, vorne, boden]", "g[rechts,hinten,deckel]"],
-        0,
-    );
+    let v = json(&["measure", &g, "--module", "housing", "--between", "g[left, front, floor]", "g[right,back,lid]"], 0);
     close(f(&v["between"]["distance"]), (40.0f64 * 40.0 + 30.0 * 30.0 + 20.0 * 20.0).sqrt(), 1e-9);
-    let v = json(&["measure", &g, "--module", "gehaeuse", "-D", "w=50", "--between", "g[rechts, 5, _]", "[0,0,0]"], 0);
+    let v = json(&["measure", &g, "--module", "housing", "-D", "w=50", "--between", "g[right, 5, _]", "[0,0,0]"], 0);
     assert_eq!(v["between"]["a"]["point"], serde_json::json!([50.0, 5.0, 0.0]));
     assert_eq!(v["between"]["a"]["kind"], "grid_point");
     assert_eq!(v["between"]["b"]["kind"], "coordinate");
-    let v = json(&["measure", &g, "--module", "gehaeuse", "--between", "ecke", "oben"], 0);
+    let v = json(&["measure", &g, "--module", "housing", "--between", "corner", "top"], 0);
     close(f(&v["between"]["distance"]), 50.0, 1e-9);
-    json(&["measure", &g, "--between", "g[links,vorne,boden]", "[0,0,0]"], 2); // g not in the file context
-    json(&["measure", &g, "--module", "gehaeuse", "--between", "g[links,vorne,oben]", "[0,0,0]"], 2);
-    json(&["measure", &g, "--between", "k.nirgends", "[0,0,0]"], 2);
+    json(&["measure", &g, "--between", "g[left,front,floor]", "[0,0,0]"], 2); // g not in the file context
+    json(&["measure", &g, "--module", "housing", "--between", "g[left,front,top]", "[0,0,0]"], 2);
+    json(&["measure", &g, "--between", "k.nowhere", "[0,0,0]"], 2);
     json(&["measure", &g], 2);
     // bounds, volume, area
     let v = json(&["measure", &g, "--bounds", "part:k", "--volume", "part:k", "--area", "line:21"], 0);
@@ -420,14 +414,14 @@ fn measure_points_bounds_volume() {
     assert_eq!(v["bounds"]["target"], "all");
     assert_eq!(v["bounds"]["bounds"]["max"], serde_json::json!([70.0, 40.0, 22.0]));
     close(f(&v["volume"]["volume"]), 8460.0 + 2.0 * 200.0, 1e-6);
-    let t = text(&["measure", &g, "--between", "k.ecke", "k.oben", "--volume", "part:k"], 0);
+    let t = text(&["measure", &g, "--between", "k.corner", "k.top", "--volume", "part:k"], 0);
     assert!(t.contains("67.082 mm"), "{t}");
     assert!(t.contains("Volumen part:k: 8460 mm³"), "{t}");
 }
 
 #[test]
 fn measure_interference_and_clearance() {
-    let k = data("kollision.mcad");
+    let k = data("collision.mcad");
     let v = json(&["measure", &k, "--interference"], 0);
     let i = &v["interference"];
     assert_eq!(i["parts"], serde_json::json!(["a", "b", "c"]));
@@ -465,7 +459,7 @@ fn measure_interference_and_clearance() {
 fn watch_reports_a_second_run_after_a_change() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("w.scad");
-    std::fs::write(&file, std::fs::read_to_string(data("gehaeuse.mcad")).unwrap()).unwrap();
+    std::fs::write(&file, std::fs::read_to_string(data("housing.mcad")).unwrap()).unwrap();
     let img = dir.path().join("w.png");
     let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("mcad"))
         .env("MCAD_LANG", "de")
@@ -488,15 +482,15 @@ fn watch_reports_a_second_run_after_a_change() {
     assert!(img.exists());
     // change the file (the watcher is set up right after the first line)
     std::thread::sleep(Duration::from_millis(300));
-    let src = std::fs::read_to_string(&file).unwrap().replace("k: gehaeuse(w = 60);", "k: gehaeuse(w = 80);");
+    let src = std::fs::read_to_string(&file).unwrap().replace("k: housing(w = 60);", "k: housing(w = 80);");
     std::fs::write(&file, src).unwrap();
     let t0 = Instant::now();
-    let second: Value = serde_json::from_str(&lines.next().expect("zweite Zeile").unwrap()).unwrap();
+    let second: Value = serde_json::from_str(&lines.next().expect("second line").unwrap()).unwrap();
     assert!(t0.elapsed() < Duration::from_secs(30));
     assert_eq!((second["run"].as_u64(), second["trigger"].as_str()), (Some(2), Some("change")));
     assert_eq!(second["changed"], serde_json::json!(["w.scad"]));
     close(f(&second["parts"][0]["volume"]), 80.0 * 30.0 * 20.0 - 74.0 * 30.0 * 17.0, 1e-6);
-    // the engine cache stays: the unchanged deckel nodes come from the cache
+    // the engine cache stays: the unchanged lid nodes come from the cache
     assert!(second["stats"]["cache_hits"].as_u64().unwrap() > first["stats"]["cache_hits"].as_u64().unwrap());
     let status = child.wait().unwrap();
     assert_eq!(status.code(), Some(0));
@@ -522,15 +516,15 @@ fn watch_text_and_timeout() {
 fn set_param_and_literal() {
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("g.scad");
-    let orig = std::fs::read_to_string(data("gehaeuse.mcad")).unwrap();
+    let orig = std::fs::read_to_string(data("housing.mcad")).unwrap();
     std::fs::write(&file, &orig).unwrap();
     let fs = file.display().to_string();
     // dry run: diff only
-    let v = json(&["set", &fs, "--param", "gehaeuse.w=50", "--literal", "21:17=70", "--dry-run"], 0);
+    let v = json(&["set", &fs, "--param", "housing.w=50", "--literal", "21:16=70", "--dry-run"], 0);
     assert_eq!(std::fs::read_to_string(&file).unwrap(), orig);
     let diff = v["diff"].as_str().unwrap();
-    assert!(diff.contains("+module gehaeuse(w = 50, d = 30"), "{diff}");
-    assert!(diff.contains("+k: gehaeuse(w = 70);"), "{diff}");
+    assert!(diff.contains("+module housing(w = 50, d = 30"), "{diff}");
+    assert!(diff.contains("+k: housing(w = 70);"), "{diff}");
     let ch = v["changes"].as_array().unwrap();
     assert_eq!(
         (ch[0]["kind"].as_str(), ch[0]["old"].as_str(), ch[0]["new"].as_str()),
@@ -542,30 +536,30 @@ fn set_param_and_literal() {
     );
     assert_eq!(v["written"], serde_json::json!([]));
     // written atomically, the result evaluates
-    let v = json(&["set", &fs, "--param", "gehaeuse.w=50", "--literal", "21:17=70"], 0);
+    let v = json(&["set", &fs, "--param", "housing.w=50", "--literal", "21:16=70"], 0);
     assert_eq!(v["written"].as_array().unwrap().len(), 1);
     let now = std::fs::read_to_string(&file).unwrap();
-    assert!(now.contains("module gehaeuse(w = 50,") && now.contains("k: gehaeuse(w = 70);"), "{now}");
+    assert!(now.contains("module housing(w = 50,") && now.contains("k: housing(w = 70);"), "{now}");
     let e = json(&["eval", &fs], 0);
     assert_eq!(
-        e["scene"]["anchors"].as_array().unwrap().iter().find(|a| a["text"] == "k.ecke").unwrap()["point"][0],
+        e["scene"]["anchors"].as_array().unwrap().iter().find(|a| a["text"] == "k.corner").unwrap()["point"][0],
         70.0
     );
-    // literal of a grid plane inside the module (line 5, `links = 0`)
-    let v = json(&["set", &fs, "--literal", "5:20=1"], 0);
+    // literal of a grid plane inside the module (line 5, `left = 0`)
+    let v = json(&["set", &fs, "--literal", "5:19=1"], 0);
     assert_eq!(v["changes"][0]["old"], "0");
     // not a literal: a reference to a parameter
-    let t = text(&["set", &fs, "--literal", "5:30=4"], 2);
+    let t = text(&["set", &fs, "--literal", "5:35=4"], 2);
     assert!(t.contains("kein editierbares Literal"), "{t}");
-    json(&["set", &fs, "--param", "gehaeuse.x=1"], 2);
-    json(&["set", &fs, "--param", "nirgends.w=1"], 2);
+    json(&["set", &fs, "--param", "housing.x=1"], 2);
+    json(&["set", &fs, "--param", "nowhere.w=1"], 2);
     json(&["set", &fs], 2);
     // a change that breaks the model is refused (exit 1), --force writes it
     let before = std::fs::read_to_string(&file).unwrap();
-    let v = json(&["set", &fs, "--param", "gehaeuse.t=foo"], 1);
+    let v = json(&["set", &fs, "--param", "housing.t=foo"], 1);
     assert_eq!(v["refused"], true);
     assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
-    json(&["set", &fs, "--param", "gehaeuse.t=foo", "--force"], 0);
+    json(&["set", &fs, "--param", "housing.t=foo", "--force"], 0);
     assert!(std::fs::read_to_string(&file).unwrap().contains("t = foo"));
     // no temporary files left behind
     assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
@@ -597,7 +591,7 @@ fn set_in_project_file() {
 }
 
 // ------------------------------------------------------------------------------------------
-// UI entry (`mcad`, `mcad DATEI`), `mcad ui`, help
+// UI entry (`mcad`, `mcad FILE`), `mcad ui`, help
 // ------------------------------------------------------------------------------------------
 
 /// `mcad` without a graphical session (and without a running UI).
@@ -610,7 +604,7 @@ fn headless() -> Command {
 
 #[test]
 fn ui_entry_without_display() {
-    for args in [vec![], vec![data("gehaeuse.mcad")], vec![data("")]] {
+    for args in [vec![], vec![data("housing.mcad")], vec![data("")]] {
         let out = headless().args(&args).output().unwrap();
         assert_eq!(out.status.code(), Some(2), "{args:?}");
         let err = String::from_utf8_lossy(&out.stderr);
@@ -621,7 +615,7 @@ fn ui_entry_without_display() {
             "{err}"
         );
     }
-    let out = headless().arg("gibt-es-nicht.scad").output().unwrap();
+    let out = headless().arg("does-not-exist.scad").output().unwrap();
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("gibt es nicht"));
     let out = mcad().arg("rendr").output().unwrap();
@@ -658,7 +652,7 @@ fn usage_manual() {
     let out = mcad().args(["usage", "meas"]).output().unwrap();
     assert_eq!(out.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&out.stdout).starts_with("# mcad measure"));
-    let out = mcad().args(["usage", "gibt-es-nicht"]).output().unwrap();
+    let out = mcad().args(["usage", "no-such-topic"]).output().unwrap();
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("unknown topic"));
 }
@@ -675,7 +669,7 @@ fn ui_commands_without_running_ui() {
     assert_eq!(v["ok"], false);
     let out = headless().args(["ui", "screenshot", "-o", "/tmp/x.png"]).output().unwrap();
     assert_eq!(out.status.code(), Some(3));
-    let out = headless().args(["ui", "show", &data("gehaeuse.mcad"), "--line", "3"]).output().unwrap();
+    let out = headless().args(["ui", "show", &data("housing.mcad"), "--line", "3"]).output().unwrap();
     assert_eq!(out.status.code(), Some(3));
 }
 
@@ -684,15 +678,15 @@ fn ui_commands_talk_to_a_running_ui() {
     // A fake UI endpoint answers like the app: the CLI side of the control protocol.
     let dir = tempfile::tempdir().unwrap();
     let server = cad_ipc::Server::bind_path(&dir.path().join("ui-4242.sock")).unwrap();
-    let file = data("gehaeuse.mcad");
+    let file = data("housing.mcad");
     let root = std::path::Path::new(&file).parent().unwrap().to_path_buf();
     std::thread::spawn(move || {
         let _ = server.serve(move |f| match f.header.method.as_str() {
             "status" => Ok((
                 serde_json::json!({ "pid": 4242, "endpoint": "ui-4242", "windows": [{
-                    "project": { "root": root, "main": "gehaeuse.mcad", "files": ["gehaeuse.mcad"], "folder": false },
-                    "dirty": ["gehaeuse.mcad"], "cursor": { "file": "gehaeuse.mcad", "line": 7, "col": 3 },
-                    "selection": { "nodes": [{ "idx": 2, "label": "box", "line": 7 }] }, "context": "gehaeuse",
+                    "project": { "root": root, "main": "housing.mcad", "files": ["housing.mcad"], "folder": false },
+                    "dirty": ["housing.mcad"], "cursor": { "file": "housing.mcad", "line": 7, "col": 3 },
+                    "selection": { "nodes": [{ "idx": 2, "label": "box", "line": 7 }] }, "context": "housing",
                     "params": { "w": 50 }, "diagnostics": [], "scene": { "version": 3, "complete": true, "nodes": 9 }, "section": null
                 }]}),
                 Vec::new(),
@@ -707,7 +701,7 @@ fn ui_commands_talk_to_a_running_ui() {
     assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
     let t = String::from_utf8_lossy(&out.stdout);
     assert!(
-        t.contains("Zeile 7") && t.contains("Modul gehaeuse") && t.contains("gehaeuse.mcad*") && t.contains("w = 50"),
+        t.contains("Zeile 7") && t.contains("Modul housing") && t.contains("housing.mcad*") && t.contains("w = 50"),
         "{t}"
     );
     let out = run(&["ui", "status", "--json"]);

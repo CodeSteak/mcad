@@ -76,7 +76,7 @@ for f in stencil allerta; do
 // Sign with raised text (report 17): $f
 color("white") cube([100, 30, 2]);
 color("black") translate([50, 17, 2]) linear_extrude(1) text("WERKSTATT 3", size = 8, halign = "center"$font);
-color("black") translate([50, 5, 2]) linear_extrude(1) text("ZUTRITT NUR MIT BRILLE", size = 4.2, halign = "center"$font);
+color("black") translate([50, 5, 2]) linear_extrude(1) text("SAFETY GLASSES REQUIRED", size = 4.2, halign = "center"$font);
 EOF
   r "$CASES/schild-$f.scad" -o "$CLI/schild-$f.png" --size 1000x420 --view top --no-axes
   "$CAD" measure "$CASES/schild-$f.scad" --volume > "$OUT/schild-$f.measure.txt" 2>&1 || true
@@ -100,7 +100,7 @@ for f in stencil allerta jetbrains; do
   [ "$f" = jetbrains ] && font=', font = "JetBrains Mono"'
   t "hello-$f" "linear_extrude(2) text(\"Hello World\"$font);"
   t "vierzig-$f" "linear_extrude(2) text(\"The quick brown fox jumps over the lazy d\"$font);"
-  t "schild-$f" "cube([100, 14, 2]); translate([50, 4, 2]) linear_extrude(1.2) text(\"ZUTRITT NUR MIT BRILLE\", size = 4.2, halign = \"center\"$font);"
+  t "schild-$f" "cube([100, 14, 2]); translate([50, 4, 2]) linear_extrude(1.2) text(\"SAFETY GLASSES REQUIRED\", size = 4.2, halign = \"center\"$font);"
 done
 t schablone "$(cat tests/models/spec/stencil.mcad)"
 

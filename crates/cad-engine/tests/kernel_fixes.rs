@@ -269,14 +269,14 @@ fn variable_radius_captured_values_user_functions_and_booleans() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = r#"
 lo = 1;
-function steigung(x, k = 40) = x / k;
-module tasche(f) {
+function slope(x, k = 40) = x / k;
+module pocket(f) {
     difference(fillet = f) {
         cube([40, 30, 10]);
         translate([5, 8, 4]) cube([30, 14, 10]);
     }
 }
-tasche(function (p) let(s = steigung(p.x)) lo + s);
+pocket(function (p) let(s = slope(p.x)) lo + s);
 "#;
     let mut e = engine();
     let ev = e.evaluate(tree(src));

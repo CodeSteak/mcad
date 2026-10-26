@@ -8,36 +8,36 @@ fn ok(src: &str) -> File {
 }
 
 #[test]
-fn spec_example_gehaeuse() {
+fn spec_example_housing() {
     let src = r#"
-module gehaeuse(w = 40, d = 30, h = 20, t = 3) {
+module housing(w = 40, d = 30, h = 20, t = 3) {
     grid g {
-        x: links = 0, innen_l = t, innen_r = w - t, rechts = w;
-        y: vorne = 0, hinten = d;
-        z: boden = 0, deckel = h;
+        x: left = 0, inner_left = t, inner_right = w - t, right = w;
+        y: front = 0, back = d;
+        z: floor = 0, lid = h;
     }
 
     difference() {
-        box(g[links, vorne, boden], g[rechts, hinten, deckel]);
-        box(g[innen_l, vorne, t], g[innen_r, hinten, deckel]);
+        box(g[left, front, floor], g[right, back, lid]);
+        box(g[inner_left, front, t], g[inner_right, back, lid]);
     }
 
-    anchor ecke = g[rechts, hinten, deckel];
-    anchor oben = g[rechts, *, deckel], dir = [0, 0, 1];
+    anchor corner = g[right, back, lid];
+    anchor top = g[right, *, lid], dir = [0, 0, 1];
 }
 
-k: gehaeuse(w = 60);
-translate(k.ecke) rotate(to = dir(k.ecke)) deckel();
-grid h { x: rand = k.ecke.x; }
+k: housing(w = 60);
+translate(k.corner) rotate(to = dir(k.corner)) lid();
+grid h { x: rim = k.corner.x; }
 "#;
     let f = ok(src);
     assert_eq!(f.stmts.len(), 4);
     let StmtKind::Module(m) = &f.stmts[0].kind else { panic!() };
-    assert_eq!(m.name.name, "gehaeuse");
+    assert_eq!(m.name.name, "housing");
     assert_eq!(m.params.len(), 4);
     let StmtKind::Grid(g) = &m.body[0].kind else { panic!("{:?}", m.body[0].kind) };
     assert_eq!(g.planes.len(), 8);
-    assert_eq!(g.planes[2].name.name, "innen_r");
+    assert_eq!(g.planes[2].name.name, "inner_right");
     assert!(matches!(m.body[2].kind, StmtKind::Anchor { .. }));
     let StmtKind::Anchor { dir, point, .. } = &m.body[3].kind else { panic!() };
     assert!(dir.is_some());
@@ -196,7 +196,7 @@ fn line_index_utf16() {
 
 #[test]
 fn indexed_named_instance() {
-    let f = ok("for (i = [0:3]) k[i]: halter();\nk[2 * 1]: halter();");
+    let f = ok("for (i = [0:3]) k[i]: holder();\nk[2 * 1]: holder();");
     let StmtKind::For { body, .. } = &f.stmts[0].kind else { panic!() };
     let StmtKind::Named { name, index: Some(ix), inst } = &body.kind else { panic!("{:?}", body.kind) };
     assert_eq!(name.name, "k");
@@ -238,7 +238,7 @@ fn sketch_block_without_arguments() {
     // with arguments, `hole { … }`, and as a module body
     ok("sketch(closed = false) { start([0, 0]); line(by = [1, 0]); }");
     ok("sketch { start([0,0]); line(to=[1,0]); line(to=[0,1]); close(); hole { start([.2,.2]); close(); } }");
-    let f = ok("module profil(b = 40) sketch { start([0, 0]); }");
+    let f = ok("module strip(b = 40) sketch { start([0, 0]); }");
     let StmtKind::Module(m) = &f.stmts[0].kind else { panic!() };
     assert!(matches!(&m.body[0].kind, StmtKind::Call { name, .. } if name.name == "sketch"));
     // `sketch` stays an ordinary name elsewhere
@@ -247,21 +247,21 @@ fn sketch_block_without_arguments() {
 
 #[test]
 fn module_without_parentheses_and_qualified_calls() {
-    let src = "module teile {\n  module schraube(d = 3) { cylinder(h = 10, d = d); }\n}\nteile.schraube(d = 4);\nk: a.b.c();\nlinear_extrude(2) profile.stern();\nx = geo.flaeche(2);";
+    let src = "module parts {\n  module screw(d = 3) { cylinder(h = 10, d = d); }\n}\nparts.screw(d = 4);\nk: a.b.c();\nlinear_extrude(2) profile.star();\nx = geo.area(2);";
     let f = ok(src);
     let StmtKind::Module(m) = &f.stmts[0].kind else { panic!() };
-    assert_eq!(m.name.name, "teile");
+    assert_eq!(m.name.name, "parts");
     assert!(m.params.is_empty());
     let StmtKind::Call { name, .. } = &f.stmts[1].kind else { panic!() };
-    assert_eq!(name.name, "teile.schraube");
-    assert_eq!(&src[name.span.start as usize..name.span.end as usize], "teile.schraube");
+    assert_eq!(name.name, "parts.screw");
+    assert_eq!(&src[name.span.start as usize..name.span.end as usize], "parts.screw");
     let StmtKind::Named { inst, .. } = &f.stmts[2].kind else { panic!() };
     assert!(matches!(&inst.kind, StmtKind::Call { name, .. } if name.name == "a.b.c"));
     let StmtKind::Call { children, .. } = &f.stmts[3].kind else { panic!() };
-    assert!(matches!(&children[0].kind, StmtKind::Call { name, .. } if name.name == "profile.stern"));
+    assert!(matches!(&children[0].kind, StmtKind::Call { name, .. } if name.name == "profile.star"));
     let StmtKind::Assign { value, .. } = &f.stmts[4].kind else { panic!() };
     let ExprKind::Call { callee, .. } = &value.kind else { panic!() };
-    assert!(matches!(&callee.kind, ExprKind::Member { name, .. } if name.name == "flaeche"));
+    assert!(matches!(&callee.kind, ExprKind::Member { name, .. } if name.name == "area"));
     // a module without parameters and a single statement body
-    ok("module stern linear_extrude(1) square(2);");
+    ok("module star linear_extrude(1) square(2);");
 }

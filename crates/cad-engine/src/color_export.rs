@@ -352,7 +352,7 @@ mod tests {
             PackageColor { rgba: [0xf4, 0xf3, 0xf0, 255], label: "white".into(), filament: 1 },
         ];
         let objects = vec![PackageObject {
-            name: "schild<1>".into(),
+            name: "sign<1>".into(),
             parts: vec![
                 PackagePart { name: "a".into(), color: 0, mesh: tri(), volume: 1.0 },
                 PackagePart { name: "b".into(), color: 1, mesh: tri(), volume: 5.0 },
@@ -365,10 +365,10 @@ mod tests {
         assert!(x.contains("<object id=\"3\" type=\"model\" name=\"b\" pid=\"1\" pindex=\"1\">"));
         assert!(x.contains("<component objectid=\"2\"/>") && x.contains("<component objectid=\"3\"/>"));
         assert!(!x.contains("transform="), "components keep the common origin");
-        assert!(x.contains("name=\"schild&lt;1&gt;\""));
+        assert!(x.contains("name=\"sign&lt;1&gt;\""));
         assert!(x.contains("<item objectid=\"4\"/>"));
         let c = model_settings_xml(&objects, &colors, &ids);
-        assert!(c.contains("<object id=\"4\">\n    <metadata key=\"name\" value=\"schild&lt;1&gt;\"/>\n    <metadata key=\"extruder\" value=\"1\"/>"), "{c}");
+        assert!(c.contains("<object id=\"4\">\n    <metadata key=\"name\" value=\"sign&lt;1&gt;\"/>\n    <metadata key=\"extruder\" value=\"1\"/>"), "{c}");
         assert!(c.contains("<part id=\"2\" subtype=\"normal_part\">\n      <metadata key=\"name\" value=\"a\"/>\n      <metadata key=\"extruder\" value=\"2\"/>"), "{c}");
         assert!(c.contains("<part id=\"3\" subtype=\"normal_part\">\n      <metadata key=\"name\" value=\"b\"/>\n      <metadata key=\"extruder\" value=\"1\"/>"), "{c}");
     }

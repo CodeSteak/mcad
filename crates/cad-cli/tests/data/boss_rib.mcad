@@ -1,0 +1,16 @@
+// Purpose: kernel error with a place – a keyhole boss touches a rib tangentially (the
+// union is not a closed body); the message names both lines and the place.
+module boss(h = 10) {
+    difference() {
+        cylinder(h = h, r = 4);
+        translate([0, 0, 2]) linear_extrude(h) union() {
+            circle(2);
+            slot([0, 0], [0, -2.5], 1);
+        }
+    }
+}
+module rib(l = 20, h = 8) cube([2, l, h]);
+
+cube([30, 30, 2]);
+translate([11, 15, 0]) boss();
+translate([5, 5, 0]) rib();

@@ -24,9 +24,9 @@ describe("section convention (as mcad render --section)", () => {
     expect(cliSection(freeSection([0, 7, 0], [0, -1, 0]))).toBe("--section y=7 --section-flip");
   });
   it("moving along the normal", () => {
-    const s = withOffset(axisSection("y", 0), 12.25, "g.hinten");
+    const s = withOffset(axisSection("y", 0), 12.25, "g.back");
     expect(s.point).toEqual([0, 12.25, 0]);
-    expect(s.snap).toBe("g.hinten");
+    expect(s.snap).toBe("g.back");
     const f = withOffset(freeSection([1, 1, 1], [0, 0, 2]), 5);
     expect(f.point).toEqual([1, 1, 5]);
     expect(offset(f)).toBe(5);
@@ -35,7 +35,7 @@ describe("section convention (as mcad render --section)", () => {
     expect(cliCamera([0, -1, 0])).toEqual({ azimuth: 0, elevation: 0 });
     expect(cliCamera([1, 0, 0])).toEqual({ azimuth: 90, elevation: 0 });
     expect(cliCamera([0, 0, 1]).elevation).toBe(90);
-    const c = cliCommand(axisSection("z", 10), "/tmp/mein teil.scad", "gehaeuse", [1, -1, 0]);
-    expect(c).toBe("mcad render '/tmp/mein teil.scad' -o schnitt.png --module gehaeuse --section z=10 --azimuth 45 --elevation 0");
+    const c = cliCommand(axisSection("z", 10), "/tmp/my part.scad", "housing", [1, -1, 0]);
+    expect(c).toBe("mcad render '/tmp/my part.scad' -o section.png --module housing --section z=10 --azimuth 45 --elevation 0");
   });
 });

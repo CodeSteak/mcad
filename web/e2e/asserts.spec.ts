@@ -78,7 +78,7 @@ const TOUCHES = `assert_touches() { cube(10); translate([10, 2, 0]) cube([10, 5,
 assert_touches() { translate([0, 20, 0]) cube(10); translate([10.2, 20, 0]) cube(10); }
 `;
 
-test("C01 Sperrvolumen aus STL: durchscheinend, nicht wählbar, Asserts ok (hell/dunkel)", async ({ page }) => {
+test("C01 keep-out volume from an STL: translucent, not pickable, asserts ok (light/dark)", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/asserts.mcad");
   const a = await waitAsserts(page);
@@ -101,7 +101,7 @@ test("C01 Sperrvolumen aus STL: durchscheinend, nicht wählbar, Asserts ok (hell
   note({ id: "C01", keepout: a.view?.keepout, labels: a.view?.labels, kinds: a.items.map((r) => r.kind) });
 });
 
-test("C02 Verletzung: roter Schnittkörper, Statusleiste springt und rahmt ein (hell/dunkel)", async ({ page }) => {
+test("C02 violation: red intersection body, the status bar jumps and frames (light/dark)", async ({ page }) => {
   await openApp(page);
   await loadText(page, KEEPOUT_BAD);
   const a = await waitAsserts(page);
@@ -136,7 +136,7 @@ test("C02 Verletzung: roter Schnittkörper, Statusleiste springt und rahmt ein (
   note({ id: "C02", volume: pr.volume, expected: 180, message: pr.message, labels: a.view!.labels, target: s.view!.camera.target });
 });
 
-test("C03 Sperrvolumen ein-/ausblenden, Zustand bleibt nach dem Neuladen", async ({ page }) => {
+test("C03 show/hide the keep-out volume, the state survives a reload", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/asserts.mcad");
   await waitAsserts(page);
@@ -160,7 +160,7 @@ test("C03 Sperrvolumen ein-/ausblenden, Zustand bleibt nach dem Neuladen", async
   note({ id: "C03", stored });
 });
 
-test("C04 Export mit Verletzung: Rückfrage, Abbrechen, Trotzdem exportieren", async ({ page }) => {
+test("C04 export with a violation: question, cancel, export anyway", async ({ page }) => {
   await openApp(page);
   await loadText(page, KEEPOUT_BAD);
   await waitAsserts(page);
@@ -190,7 +190,7 @@ test("C04 Export mit Verletzung: Rückfrage, Abbrechen, Trotzdem exportieren", a
   note({ id: "C04", file: dl.suggestedFilename() });
 });
 
-test("C05 assert_touches: Kontaktfläche grün, Spalt als Maßlinie (hell/dunkel)", async ({ page }) => {
+test("C05 assert_touches: contact face green, gap as a dimension line (light/dark)", async ({ page }) => {
   await openApp(page);
   await loadText(page, TOUCHES);
   const a = await waitAsserts(page);
@@ -211,7 +211,7 @@ test("C05 assert_touches: Kontaktfläche grün, Spalt als Maßlinie (hell/dunkel
   note({ id: "C05", area: face.pairs[0].contact_area, gap: gap.pairs[0].distance, labels: a.view!.labels });
 });
 
-test("C06 hull/minkowski im Browser (Phase A, sc_offset)", async ({ page }) => {
+test("C06 hull/minkowski in the browser (phase A, sc_offset)", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/hull_minkowski.mcad");
   const s = await cad(page);
@@ -225,7 +225,7 @@ test("C06 hull/minkowski im Browser (Phase A, sc_offset)", async ({ page }) => {
   note({ id: "C06", minkowski: mk });
 });
 
-test("C07 STL-Import im Browser (Phase B)", async ({ page }) => {
+test("C07 STL import in the browser (phase B)", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/stl_import.mcad");
   const s = await waitScene(page);

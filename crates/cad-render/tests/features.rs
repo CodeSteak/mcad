@@ -132,7 +132,7 @@ fn markers_labels_title_and_sheet() {
     });
     s.labels.push(Label {
         pos: DVec3::ZERO,
-        text: "g[links,vorne,boden]".into(),
+        text: "g[left,front,floor]".into(),
         color: [0.0, 0.0, 0.0, 1.0],
         offset: (4.0, 4.0),
         priority: 1,

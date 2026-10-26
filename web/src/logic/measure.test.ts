@@ -40,14 +40,14 @@ describe("measure mode (Plan 18)", () => {
     expect(shellQuote("face@[10,5,8]")).toBe("'face@[10,5,8]'");
     expect(shellQuote("--section")).toBe("--section");
     expect(shellQuote("z=10")).toBe("z=10");
-    expect(shellQuote("mein teil.scad")).toBe("'mein teil.scad'");
+    expect(shellQuote("my part.scad")).toBe("'my part.scad'");
     expect(shellQuote("it's")).toBe("'it'\\''s'");
   });
 
   it("copies as mcad measure, comment and text", () => {
     expect(measureCli(m(), "main.scad")).toBe("mcad measure main.scad --distance 'face@[10,5,8]' 'face@[10,5,0]'");
-    expect(measureCli(m({ cli: ["--module", "gehaeuse", "--section", "z=10", "--wall", "[0,15,10]"] }), "/home/x/a b.scad")).toBe(
-      "mcad measure '/home/x/a b.scad' --module gehaeuse --section z=10 --wall '[0,15,10]'",
+    expect(measureCli(m({ cli: ["--module", "housing", "--section", "z=10", "--wall", "[0,15,10]"] }), "/home/x/a b.scad")).toBe(
+      "mcad measure '/home/x/a b.scad' --module housing --section z=10 --wall '[0,15,10]'",
     );
     const c = measureComment(m());
     expect(c.split("\n")).toEqual([

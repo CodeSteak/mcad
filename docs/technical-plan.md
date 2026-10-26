@@ -1201,7 +1201,7 @@ directions, fallback; cad-eval: default font, parameters, warnings; cad-engine
 (`stencil_text.rs`): each glyph via `region_2d` without a hole, volume = area × height,
 kernel time of a sign against Allerta Stencil (native 1.6–1.9 s against 3.3–3.6 s: lines and
 circles instead of B-splines, fewer kernel calls); example `tests/models/spec/stencil.mcad`;
-Playwright K01–K03 (`web/e2e/schablone.spec.ts`). Character chart:
+Playwright K01–K03 (`web/e2e/stencil.spec.ts`). Character chart:
 `cargo run -p cad-font --example stencil_chart -- tafel.svg [strich steg]`.
 
 **Playwright C16 (finding).** C16 (axis-constrained dragging) failed depending on timing, most recently also
@@ -1313,7 +1313,7 @@ transformation/`rotate_extrude`/centred extrusion, anchors, segment under the mo
 in short form) and unit tests in the module; cad-session `tests/sketch_editor.rs` (protocol with ray,
 new sketch, chain, close, delete, plane under transformation, syntax error, selection,
 `OpInfo.plane`); Vitest `logic/sketchEditor.test.ts`; Playwright Z01–Z17
-(`web/e2e/skizzen-editor.spec.ts`: each tool, snap display, snap kinds, undo, dragging a handle,
+(`web/e2e/sketch-editor.spec.ts`: each tool, snap display, snap kinds, undo, dragging a handle,
 deleting a segment, transformation and `rotate_extrude`, dark theme, response times); Tauri T16
 (`web/e2e-tauri/desktop.e2e.mjs`: rectangle on grid points via the `TauriTransport` with the
 native kernel, snap display, undo).
@@ -1466,8 +1466,8 @@ chamfer 45°/135°; distances face–sphere, point–sphere, skew edges; section
 with exact circles, areas, wall thicknesses, oblique section as an ellipse). `cad-session`
 `tests/measure.rs` (snap with provenance, clicks, CLI arguments, perforated plate with bore and
 fillet radii, housing from `tests/models/spec` with wall thickness 3 mm in section, inner distance,
-part volume, chamfer, section mode via the protocol). CLI `tests/messen.rs`. Vitest
-`logic/measure.test.ts`. Playwright M01–M11 (`web/e2e/messen.spec.ts`), Tauri T17.
+part volume, chamfer, section mode via the protocol). CLI `tests/measure.rs`. Vitest
+`logic/measure.test.ts`. Playwright M01–M11 (`web/e2e/measure.spec.ts`), Tauri T17.
 
 **Limitations.** The section costs one kernel boolean per part and plane; if it fails, there is
 no section (message) and no substitute contour from the mesh. Contours on free-form faces and
@@ -1524,7 +1524,7 @@ X11 `WM_CLASS`. The desktop file is named after it (`packaging/linux/dev.mcad.de
 
 **Tests.** Playwright selectors via role and name (helpers `pickMenu`, `menuItem`, `mode`,
 `sideTab`, `fileTab`, `sketchTool`, `measureKind`, `exportAs` in `web/e2e/helpers.ts`); new
-`e2e/ui-ueberarbeitung.spec.ts` U01–U09 (bars at 1280/1440/1920 px light/dark in all modes:
+`e2e/ui-overhaul.spec.ts` U01–U09 (bars at 1280/1440/1920 px light/dark in all modes:
 `scrollWidth ≤ clientWidth`, nothing sticks out, single line, no overlap; menus via keyboard,
 export format with Ctrl+E and after reload, tabs and context menu, mode exclusivity, sketch shortcuts,
 view cube, side panel, tab order, contrast on the rendered button); Tauri T18 (bars at

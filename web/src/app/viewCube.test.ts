@@ -6,10 +6,10 @@ import { FACES, cellDirection } from "./viewCube";
 
 const key = (d: number[]) => d.map((x) => Math.sign(Math.round(x * 1000))).join(",");
 
-describe("Ansichtswürfel", () => {
-  it("Flächenmitte = Normale, Ecke vorne rechts oben = (1, −1, 1)/√3", () => {
+describe("View cube", () => {
+  it("face centre = normal, corner front right top = (1, −1, 1)/√3", () => {
     for (const f of FACES) expect(cellDirection(f, 1, 1)).toEqual(f.n.map((x) => x + 0));
-    const front = FACES.find((f) => f.name === "Vorne")!;
+    const front = FACES.find((f) => f.id === "front")!;
     const c = cellDirection(front, 2, 0);
     const s = 1 / Math.sqrt(3);
     [s, -s, s].forEach((x, k) => expect(c[k]).toBeCloseTo(x, 12));
@@ -17,7 +17,7 @@ describe("Ansichtswürfel", () => {
     const e = cellDirection(front, 2, 1);
     [Math.SQRT1_2, -Math.SQRT1_2, 0].forEach((x, k) => expect(e[k]).toBeCloseTo(x, 12));
   });
-  it("54 Felder ergeben die 26 Richtungen; Kanten auf 2, Ecken auf 3 Flächen", () => {
+  it("54 cells give the 26 directions; edges on 2, corners on 3 faces", () => {
     const count = new Map<string, number>();
     for (const f of FACES) for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
       const k = key(cellDirection(f, i, j));
@@ -29,8 +29,8 @@ describe("Ansichtswürfel", () => {
     expect(by(2)).toEqual(Array(12).fill(2));
     expect(by(3)).toEqual(Array(8).fill(3));
   });
-  it("Oben von außen: rechts = +x, unten im Bild = vorne (−y)", () => {
-    const top = FACES.find((f) => f.name === "Oben")!;
+  it("top from outside: right = +x, down in the image = front (−y)", () => {
+    const top = FACES.find((f) => f.id === "top")!;
     expect(key(cellDirection(top, 2, 1))).toBe("1,0,1");
     expect(key(cellDirection(top, 1, 2))).toBe("0,-1,1");
   });

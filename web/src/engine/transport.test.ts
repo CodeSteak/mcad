@@ -27,7 +27,7 @@ const progress = (key: string, line: number): FromEngine => ({
   current: { node: 4, label: "fillet", range: { from: 0, to: 1, line, col: 1, end_line: line, end_col: 2 }, key } as never,
 });
 
-describe("Watchdog: hängende Knoten sperren", () => {
+describe("Watchdog: block hanging nodes", () => {
   let workers: FakeWorker[];
   let t: WorkerTransport;
   let got: FromEngine[];
@@ -44,7 +44,7 @@ describe("Watchdog: hängende Knoten sperren", () => {
     vi.useRealTimers();
   });
 
-  it("neuer Worker bekommt BlockKeys vor SetSource, Liste bleibt über Neustarts", () => {
+  it("a new worker gets BlockKeys before SetSource, the list survives restarts", () => {
     const src: ToEngine = { type: "SetSource", text: "fillet(1) cube(5);", version: 1 };
     t.send({ type: "SetContext", overrides: {} });
     t.send(src);
@@ -70,7 +70,7 @@ describe("Watchdog: hängende Knoten sperren", () => {
     expect([...t.blockedKeys]).toEqual(["aa", "bb"]);
   });
 
-  it("ohne neuen Knoten wird die Quelle nicht erneut gesendet", () => {
+  it("without a new node the source is not sent again", () => {
     t.send({ type: "SetSource", text: "x", version: 1 });
     // Hang without progress (no node known).
     vi.advanceTimersByTime(1001);
@@ -88,7 +88,7 @@ describe("Watchdog: hängende Knoten sperren", () => {
     expect(workers[3].posted.map((m) => m.type)).toEqual(["BlockKeys"]);
   });
 
-  it("SetLang geht zuerst an jeden neuen Worker", () => {
+  it("SetLang goes first to every new worker", () => {
     t.send({ type: "SetLang", lang: "de" });
     t.send({ type: "SetSource", text: "x", version: 1 });
     workers[0].out({ kind: "out", msgs: [progress("cc", 2)], busy: true });

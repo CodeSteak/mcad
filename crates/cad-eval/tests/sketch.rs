@@ -141,7 +141,7 @@ fn errors_per_segment_line() {
     assert!(has_error(&run("sketch { start([0,0]); cube(3); }"), "in einer Skizze nicht erlaubt"));
 }
 
-// ---------------------------------------------------------------- corner (17.3, Schritt 2)
+// ---------------------------------------------------------------- corner (17.3, step 2)
 
 fn arcs_of(cs: &[cad_ir::Contour]) -> Vec<(DVec2, f64)> {
     cs.iter()
@@ -284,7 +284,7 @@ fn corner_radius_handle() {
 #[test]
 fn loops_variables_grids_and_modules_in_a_sketch() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
-    let src = "module zahn(i, n) {\n a = 360 * i / n;\n line(to = [12 * cos(a + 4), 12 * sin(a + 4)]);\n line(to = [12 * cos(a + 360 / n - 4), 12 * sin(a + 360 / n - 4)]);\n line(to = [10 * cos(a + 360 / n), 10 * sin(a + 360 / n)]);\n}\nn = 12;\nlinear_extrude(4) sketch {\n grid s { x: l = 0, r = 10; y: u = 0; }\n start(s[r, u]);\n for (i = [0 : n - 1]) zahn(i, n);\n if (n > 3) close();\n}";
+    let src = "module tooth(i, n) {\n a = 360 * i / n;\n line(to = [12 * cos(a + 4), 12 * sin(a + 4)]);\n line(to = [12 * cos(a + 360 / n - 4), 12 * sin(a + 360 / n - 4)]);\n line(to = [10 * cos(a + 360 / n), 10 * sin(a + 360 / n)]);\n}\nn = 12;\nlinear_extrude(4) sketch {\n grid s { x: l = 0, r = 10; y: u = 0; }\n start(s[r, u]);\n for (i = [0 : n - 1]) tooth(i, n);\n if (n > 3) close();\n}";
     let out = clean(src);
     let (cs, _) = sketch_of(&out);
     assert_eq!(cs[0].segs.len(), 36);
@@ -353,7 +353,7 @@ fn handles_of_segments_and_dragging() {
 
 #[test]
 fn named_sketch_module_and_qualified_profiles() {
-    let src = "module profil(b = 40) sketch { start([0, 0]); line(to = [b, 0]); line(to = [b, 5]); line(to = [0, 5]); close(); }\nlinear_extrude(3) profil(b = 30);\nmodule profile { module stern() sketch { start([5, 0]); line(to = [0, 5]); line(to = [-5, 0]); close(); } }\nlinear_extrude(2) profile.stern();";
+    let src = "module strip(b = 40) sketch { start([0, 0]); line(to = [b, 0]); line(to = [b, 5]); line(to = [0, 5]); close(); }\nlinear_extrude(3) strip(b = 30);\nmodule profile { module star() sketch { start([5, 0]); line(to = [0, 5]); line(to = [-5, 0]); close(); } }\nlinear_extrude(2) profile.star();";
     let out = clean(src);
     let n = out.tree.nodes.iter().filter(|n| matches!(n.op, Op::Profile(Profile::Sketch { .. }))).count();
     assert_eq!(n, 2);
@@ -363,20 +363,18 @@ fn named_sketch_module_and_qualified_profiles() {
 
 // ---------------------------------------------------------------- namespaces (17.2)
 
-const NS: &str = "module teile(k = 2) {\n\
-    breite = 10 * k;\n\
+const NS: &str = "module parts(k = 2) {\n\
+    width = 10 * k;\n\
     grid g { x: a = 0; }\n\
-    function flaeche(r) = PI * r * r;\n\
-    module schraube(d = 3) { cylinder(h = breite, d = d); }\n\
-    module mutter { module m3() { cube(k); } }\n\
+    function area(r) = PI * r * r;\n\
+    module screw(d = 3) { cylinder(h = width, d = d); }\n\
+    module nut { module m3() { cube(k); } }\n\
     cube(1);\n\
 }\n";
 
 #[test]
 fn qualified_module_calls() {
-    let src = format!(
-        "{NS}teile.schraube(d = 4);\nteile.mutter.m3();\nk: teile.schraube();\necho(teile.flaeche(2), teile.breite);"
-    );
+    let src = format!("{NS}parts.screw(d = 4);\nparts.nut.m3();\nk: parts.screw();\necho(parts.area(2), parts.width);");
     let out = clean(&src);
     // the inner module sees the outer parameters with their defaults
     let cyl = out.tree.nodes.iter().find_map(|n| match &n.op {
@@ -407,14 +405,14 @@ fn qualified_module_calls() {
 fn namespace_visibility_and_errors() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     // grids of the outer module are not visible in the inner one
-    let src = format!("{NS}module x {{}}\nteile.mutter.m3();");
+    let src = format!("{NS}module x {{}}\nparts.nut.m3();");
     clean(&src);
     let out = run("module a { grid g { x: p = 1; } module b() { translate([g.p, 0, 0]) cube(1); } }\na.b();");
     assert!(has_warning(&out, "unbekannte Variable `g`"), "{:?}", out.diagnostics);
     // unknown parts of a path
-    assert!(has_error(&run(&format!("{NS}teile.bolzen();")), "Modul `teile` hat kein Untermodul `bolzen`"));
-    assert!(has_error(&run("nix.bolzen();"), "unbekanntes Modul `nix`"));
-    assert!(has_warning(&run(&format!("{NS}echo(teile.gibtsnicht);")), "hat keine Funktion oder Variable"));
+    assert!(has_error(&run(&format!("{NS}parts.bolt();")), "Modul `parts` hat kein Untermodul `bolt`"));
+    assert!(has_error(&run("nothing.bolt();"), "unbekanntes Modul `nothing`"));
+    assert!(has_warning(&run(&format!("{NS}echo(parts.missing);")), "hat keine Funktion oder Variable"));
     // a variable shadows the module name: plain member access (`v.x`)
     let out = clean("module v { function f() = 1; }\nv = [3, 4];\necho(v.x);");
     assert_eq!(echoes(&out), ["3"]);
@@ -422,19 +420,19 @@ fn namespace_visibility_and_errors() {
 
 #[test]
 fn qualified_context_module() {
-    let src = format!("{NS}teile.schraube();");
-    for name in ["teile.schraube", "teile::schraube", "schraube"] {
+    let src = format!("{NS}parts.screw();");
+    for name in ["parts.screw", "parts::screw", "screw"] {
         let out = run_module(&src, name, vec![]);
         assert!(errors(&out).is_empty(), "{name}: {:?}", errors(&out));
-        assert_eq!(out.context.path, ["teile", "schraube"], "{name}");
+        assert_eq!(out.context.path, ["parts", "screw"], "{name}");
         let h = out.tree.nodes.iter().find_map(|n| match &n.op {
             Op::Prim { prim: cad_ir::Prim::Cylinder { h, .. }, .. } => Some(*h),
             _ => None,
         });
         assert_eq!(h, Some(20.0));
     }
-    let out = run_module(&src, "teile.mutter.m3", vec![]);
-    assert_eq!(out.context.path, ["teile", "mutter", "m3"]);
+    let out = run_module(&src, "parts.nut.m3", vec![]);
+    assert_eq!(out.context.path, ["parts", "nut", "m3"]);
 }
 
 #[test]

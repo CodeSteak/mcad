@@ -9,14 +9,14 @@ import { IDENTITY, apply } from "./math";
 import { VersionMapper } from "./positions";
 import { SKETCH_TOOL_KEYS, pixelSize, planeCamera, rasterLines, rasterSpacing, sketchKeyAction, sketchTransaction, snapMarker } from "./sketchEditor";
 
-describe("Raster der Zeichenebene", () => {
-  it("Abstand: Schrittweite, vergröbert bis mindestens 12 px", () => {
+describe("Grid of the drawing plane", () => {
+  it("spacing: the step, coarsened to at least 12 px", () => {
     expect(rasterSpacing(1, 0.05)).toBe(1);
     expect(rasterSpacing(1, 0.2)).toBe(5);
     expect(rasterSpacing(1, 1)).toBe(20);
     expect(rasterSpacing(0, 0.01)).toBe(1);
   });
-  it("Linien in beiden Richtungen, jede fünfte stärker", () => {
+  it("lines in both directions, every fifth stronger", () => {
     const l = rasterLines([-2, -1], [10, 4], 2);
     const xs = l.filter((x) => x.a[0] === x.b[0]).map((x) => x.a[0]);
     const ys = l.filter((x) => x.a[1] === x.b[1]).map((x) => x.a[1]);
@@ -28,8 +28,8 @@ describe("Raster der Zeichenebene", () => {
   });
 });
 
-describe("Blick senkrecht auf die Skizzenebene", () => {
-  it("xy-Ebene: von oben, Ziel in der Mitte", () => {
+describe("View perpendicular onto the sketch plane", () => {
+  it("xy plane: from the top, target in the middle", () => {
     const c = planeCamera(IDENTITY, [0, 0], [40, 20], 35, 1.5);
     expect(c.target).toEqual([20, 10, 0]);
     const d = [c.eye[0] - c.target[0], c.eye[1] - c.target[1], c.eye[2] - c.target[2]];
@@ -39,7 +39,7 @@ describe("Blick senkrecht auf die Skizzenebene", () => {
     expect(d[1]).toBeLessThan(0);
     expect(len).toBeGreaterThan(30);
   });
-  it("gedrehte Ebene (rotate([90, 0, 0])): Blick entlang −y der Welt", () => {
+  it("rotated plane (rotate([90, 0, 0])): view along the world's −y", () => {
     // local x → x, y → z, z → −y; origin at z = 5
     const m: Mat4 = [1, 0, 0, 0, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 5, 1];
     const c = planeCamera(m, [0, 0], [10, 10], 35, 1);
@@ -49,13 +49,13 @@ describe("Blick senkrecht auf die Skizzenebene", () => {
     expect(d[2]).toBeCloseTo(0, 9);
     expect(d[1]).toBeLessThan(0);
   });
-  it("Pixelgröße der Kamera", () => {
+  it("pixel size of the camera", () => {
     expect(pixelSize(90, 100)).toBeCloseTo(0.02, 12);
   });
 });
 
-describe("Snap-Markierung je Art", () => {
-  it("Ring, Quadrat, Raute, Kreuz", () => {
+describe("Snap mark per kind", () => {
+  it("ring, square, diamond, cross", () => {
     expect(snapMarker("end", [0, 0], 1)).toHaveLength(21);
     expect(snapMarker("grid", [1, 1], 1)).toEqual([[0, 0], [2, 0], [2, 2], [0, 2], [0, 0]]);
     expect(snapMarker("horizontal", [0, 0], 1)[1]).toEqual([0, -1]);
@@ -73,9 +73,9 @@ function editor(doc: string) {
   return ed;
 }
 
-describe("Aktion = ein Undo-Schritt, Cursor nach dem neuen Code", () => {
+describe("Action = one undo step, cursor after the new code", () => {
   const doc = "sketch {\n    start([0, 0]);\n}\n";
-  it("Einfügen, Cursor, Undo", () => {
+  it("insert, cursor, undo", () => {
     const ed = editor(doc);
     const mapper = new VersionMapper(doc.length);
     mapper.mark(1, doc.length);
@@ -96,15 +96,15 @@ describe("Aktion = ein Undo-Schritt, Cursor nach dem neuen Code", () => {
     undo(ed);
     expect(ed.state.doc.toString()).toBe(doc);
   });
-  it("Edits einer unbekannten Version: nichts", () => {
+  it("edits of an unknown version: nothing", () => {
     const ed = editor(doc);
     const mapper = new VersionMapper(doc.length);
     expect(sketchTransaction(ed.state, mapper, 7, [{ from: 0, to: 0, text: "x" }], null)).toBeNull();
   });
 });
 
-describe("Tastenkürzel des Zeichenmodus (UI-Überarbeitung)", () => {
-  it("Buchstaben wählen die Werkzeuge, Umschalt+A den Bogen um den Mittelpunkt", () => {
+describe("Shortcuts of the drawing mode (UI overhaul)", () => {
+  it("letters choose the tools, Shift+A the arc around the centre", () => {
     const cases: Array<[string, boolean, unknown]> = [
       ["v", false, { tool: "select" }],
       ["L", false, { tool: "line" }],
@@ -123,7 +123,7 @@ describe("Tastenkürzel des Zeichenmodus (UI-Überarbeitung)", () => {
     ];
     for (const [k, shift, want] of cases) expect(sketchKeyAction(k, shift), `${shift ? "⇧" : ""}${k}`).toEqual(want);
   });
-  it("jedes Werkzeug der Leiste hat ein Kürzel, keines doppelt", () => {
+  it("every tool of the bar has a shortcut, none twice", () => {
     const keys = Object.values(SKETCH_TOOL_KEYS);
     expect(keys.length).toBe(9);
     expect(new Set(keys).size).toBe(keys.length);

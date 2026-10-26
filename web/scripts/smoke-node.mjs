@@ -3,7 +3,7 @@
 //
 //   web/scripts/build-wasm.sh && node web/scripts/smoke-node.mjs [--json]
 //
-// Checks: SetSource with the spec example `gehaeuse` → preliminary scene → stepwise (16 ms
+// Checks: SetSource with the spec example `housing` → preliminary scene → stepwise (16 ms
 // budget) until the complete scene → root mesh with triangles; RequestMeshes; dragging a
 // handle gives edits; the edited source re-evaluates from the cache; STL export.
 // Prints timings and module sizes.
@@ -19,29 +19,29 @@ const here = dirname(fileURLToPath(import.meta.url));
 const pkg = join(here, "../src/wasm-pkg");
 const asJson = process.argv.includes("--json");
 
-const GEHAEUSE = `module gehaeuse(w = 40, d = 30, h = 20, t = 3) {
+const HOUSING = `module housing(w = 40, d = 30, h = 20, t = 3) {
     grid g {
-        x: links = 0, innen_l = t, innen_r = w - t, rechts = w;
-        y: vorne = 0, hinten = d;
-        z: boden = 0, deckel = h;
+        x: left = 0, inner_left = t, inner_right = w - t, right = w;
+        y: front = 0, back = d;
+        z: floor = 0, lid = h;
     }
 
     difference() {
-        box(g[links, vorne, boden], g[rechts, hinten, deckel]);
-        box(g[innen_l, vorne, t], g[innen_r, hinten, deckel]);
+        box(g[left, front, floor], g[right, back, lid]);
+        box(g[inner_left, front, t], g[inner_right, back, lid]);
     }
 
-    anchor ecke = g[rechts, hinten, deckel];
-    anchor oben = g[links, vorne, deckel], dir = [0, 0, 1];
+    anchor corner = g[right, back, lid];
+    anchor top = g[left, front, lid], dir = [0, 0, 1];
 }
 
-module deckel() cube([10, 10, 2]);
+module lid() cube([10, 10, 2]);
 
-k: gehaeuse(w = 60);
-translate(k.ecke) deckel();
+k: housing(w = 60);
+translate(k.corner) lid();
 
 grid h {
-    x: rand = k.ecke.x;
+    x: rim = k.corner.x;
 }
 `;
 
@@ -75,7 +75,7 @@ function runSteps(t0, on) {
 
 // ---- SetSource → scene → meshes
 t0 = performance.now();
-const first = session.post({ type: "SetSource", text: GEHAEUSE, version: 1 });
+const first = session.post({ type: "SetSource", text: HOUSING, version: 1 });
 const tPrelim = performance.now() - t0;
 assert.equal(first[0].type, "Diagnostics");
 assert.deepEqual(first[0].items, []);
@@ -108,8 +108,8 @@ assert.ok(scene && scene.complete, "complete scene");
 assert.equal(scene.version, 1);
 assert.ok(scene.nodes.every((n) => n.status === "ok"), JSON.stringify(scene.nodes.map((n) => n.status)));
 assert.equal(scene.grids.length, 2);
-const ecke = scene.anchors.find((a) => a.text === "k.ecke");
-assert.deepEqual(ecke.point, [60, 30, 20]);
+const corner = scene.anchors.find((a) => a.text === "k.corner");
+assert.deepEqual(corner.point, [60, 30, 20]);
 assert.equal(scene.nodes[0].stmt, null, "optional fields are null");
 assert.ok(rootMesh, "root mesh");
 assert.equal(rootMesh.node, scene.root);
@@ -131,26 +131,26 @@ timings.request_all_meshes_ms = ms(performance.now() - t0);
 const keys = new Set(wanted.map((i) => scene.nodes[i].mesh_key));
 assert.equal(items.length, keys.size, "one mesh per distinct key");
 
-// ---- drag a handle: translate(k.ecke) target, free (Alt) and snapped
+// ---- drag a handle: translate(k.corner) target, free (Alt) and snapped
 const h = scene.handles.find((x) => x.kind.kind === "point" && x.range.line === 20);
 assert.ok(h, "translate handle");
 const start = session.post({ type: "DragStart", handle: h.id });
 assert.equal(start[0].type, "SnapTargets");
-assert.ok(start[0].targets.some((t) => t.text === "k.oben"), "anchor snap target");
+assert.ok(start[0].targets.some((t) => t.text === "k.top"), "anchor snap target");
 const drag = session.post({ type: "Drag", handle: h.id, target: { kind: "point", pos: [12.4, 30, 20] } });
 assert.equal(drag.length, 1);
 assert.equal(drag[0].type, "Edits");
 assert.ok(drag[0].edits.length > 0, "edits");
 const apply = (src, edits) =>
   [...edits].sort((a, b) => b.from - a.from).reduce((s, e) => s.slice(0, e.from) + e.text + s.slice(e.to), src);
-const v2 = apply(GEHAEUSE, drag[0].edits);
-assert.ok(v2.includes("translate([12, 30, 20]) deckel();"), v2);
+const v2 = apply(HOUSING, drag[0].edits);
+assert.ok(v2.includes("translate([12, 30, 20]) lid();"), v2);
 const snap = session.post({
   type: "Drag",
   handle: h.id,
-  target: { kind: "snap", snap: start[0].targets.find((t) => t.text === "k.oben").snap },
+  target: { kind: "snap", snap: start[0].targets.find((t) => t.text === "k.top").snap },
 });
-assert.equal(apply(GEHAEUSE, snap[0].edits).includes("translate(k.oben) deckel();"), true);
+assert.equal(apply(HOUSING, snap[0].edits).includes("translate(k.top) lid();"), true);
 
 // ---- edited source during the drag: cache hits, coarse mesh
 t0 = performance.now();
@@ -177,7 +177,7 @@ runSteps(performance.now(), (m) => {
 assert.equal(fine.coarse, false);
 
 // ---- warm engine, new geometry (no cache hits for the changed nodes)
-const v3 = GEHAEUSE.replace("w = 40, d = 30, h = 20, t = 3", "w = 41, d = 31, h = 21, t = 2").replace("w = 60", "w = 62");
+const v3 = HOUSING.replace("w = 40, d = 30, h = 20, t = 3", "w = 41, d = 31, h = 21, t = 2").replace("w = 60", "w = 62");
 t0 = performance.now();
 const pre3 = session.post({ type: "SetSource", text: v3, version: 4 });
 timings.warm_set_source_to_preliminary_scene_ms = ms(performance.now() - t0);

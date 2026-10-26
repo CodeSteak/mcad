@@ -5,7 +5,7 @@
 //
 // Inputs (gitignored, reports/tmp/report14/):
 //   cli/*.png, volumes.tsv, step.tsv, outline.txt, check-*.txt   tools/report/report14-data.sh
-//   scenarios.json, img/*.jpg                                   cd web && pnpm exec playwright test e2e/skizzen.spec.ts
+//   scenarios.json, img/*.jpg                                   cd web && pnpm exec playwright test e2e/sketches.spec.ts
 //   playwright.json, playwright.txt                             whole suite (pnpm e2e; copy of reports/tmp/report2/playwright.json)
 //   vitest.txt, typecheck.txt                                   cd web && pnpm test, pnpm typecheck
 //   cargo.txt, clippy.txt, fmt.txt                              cargo test --workspace --no-fail-fast, clippy -D warnings, fmt --check

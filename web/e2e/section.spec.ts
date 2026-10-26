@@ -73,7 +73,7 @@ test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => console.log("pageerror:", e.message));
 });
 
-test("X01 Schnitt z: gefüllte Kappe, Kontur, Statuszeile, Picking nur auf der behaltenen Seite", async ({ page }) => {
+test("X01 section z: filled cap, contour, status line, picking only on the kept side", async ({ page }) => {
   await openApp(page);
   await hook(page, (c) => c.setView("iso"));
   const before = await pixels(page, await canvasPng(page));
@@ -91,14 +91,14 @@ test("X01 Schnitt z: gefüllte Kappe, Kontur, Statuszeile, Picking nur auf der b
   await screenshot9(page, "x01-schnitt-z");
   record9({
     id: "X01",
-    title: `Schnitt z = ${z} mit Kappe`,
-    caption: `„Schnitt“ in der Ansicht: Ebene z durch die Modellmitte (z = ${z}), entfernt wird z > ${z}. Die Schnittfläche ist gefüllt und schraffiert (Stencil-Kappe, Farbe wie im CLI-Renderer), die Kontur als Linie; Statuszeile „Schnitt z = ${z} · entfernt z > ${z}“.`,
-    images: [{ name: "x01-schnitt-z", label: `Schnitt z = ${z} (iso)` }],
-    checks: [`Kappenpixel vorher ${before.cap}, nachher ${after.cap}`, `${i.caps} Körper mit Kappe, ${i.contour} Kontursegmente`],
+    title: `Section z = ${z} with cap`,
+    caption: `“Schnitt” (section) in the view: plane z through the middle of the model (z = ${z}), z > ${z} is removed. The cut face is filled and hatched (stencil cap, colour as in the CLI renderer), the contour as a line; status line “Schnitt z = ${z} · entfernt z > ${z}”.`,
+    images: [{ name: "x01-schnitt-z", label: `section z = ${z} (iso)` }],
+    checks: [`cap pixels before ${before.cap}, after ${after.cap}`, `${i.caps} bodies with a cap, ${i.contour} contour segments`],
   });
 });
 
-test("X02 Ebene am Griff ziehen: rastet auf Rasterebene und Anker, Alt frei", async ({ page }) => {
+test("X02 drag the plane by its grip: snaps to grid planes and anchors, Alt free", async ({ page }) => {
   await openApp(page);
   // module context: grid g (z: floor = 0, lid = 20) of housing
   await clickLine(page, 11, 8);
@@ -162,17 +162,17 @@ test("X02 Ebene am Griff ziehen: rastet auf Rasterebene und Anker, Alt frei", as
   writeMetrics9({ sectionDragFps: fps });
   record9({
     id: "X02",
-    title: "Ebene ziehen und rasten",
-    caption: "Im Modulkontext housing (Raster g): Griff (blauer Punkt) nach oben gezogen, die Ebene rastet auf g.lid (z = 20, grünes Etikett), nach unten auf g.floor; mit Alt frei (auf 0,1 mm gerundet).",
+    title: "Drag and snap the plane",
+    caption: "In the module context housing (grid g): grip (blue point) dragged up, the plane snaps to g.lid (z = 20, green label), down to g.floor; free with Alt (rounded to 0.1 mm).",
     images: [
-      { name: "x02-rasten-lid", label: "beim Ziehen: rastet auf g.lid" },
-      { name: "x02-frei", label: "mit Alt frei gezogen" },
+      { name: "x02-rasten-lid", label: "while dragging: snaps to g.lid" },
+      { name: "x02-frei", label: "dragged freely with Alt" },
     ],
-    checks: [`Rasten: ${mid.snap} (z = ${mid.point[2]}), g.floor (z = 0)`, `frei: z = ${s.point[2]}`, `fps beim Ziehen: ${fps.map((f) => f.fps.toFixed(0)).join(", ")}`],
+    checks: [`snap: ${mid.snap} (z = ${mid.point[2]}), g.floor (z = 0)`, `free: z = ${s.point[2]}`, `fps while dragging: ${fps.map((f) => f.fps.toFixed(0)).join(", ")}`],
   });
 });
 
-test("X03 Umkehren, Achsen, freie Ebene aus Blickrichtung und per Eingabe", async ({ page }) => {
+test("X03 flip, axes, free plane from the view direction and by input", async ({ page }) => {
   await openApp(page);
   await hook(page, (c) => c.setView("iso"));
   await sectionOn(page);
@@ -207,18 +207,18 @@ test("X03 Umkehren, Achsen, freie Ebene aus Blickrichtung und per Eingabe", asyn
   await screenshot9(page, "x03-frei");
   record9({
     id: "X03",
-    title: "Umkehren, Achsen, freie Ebene",
-    caption: "„Umkehren“ behält die obere Hälfte (n = −z, entspricht --section-flip); X mit Wert 30; „Aus Blickrichtung“ legt eine freie Ebene senkrecht zur Blickrichtung, die Normale lässt sich eingeben (1, 1, 1).",
+    title: "Flip, axes, free plane",
+    caption: "“Umkehren” (flip) keeps the upper half (n = −z, like --section-flip); X with value 30; “Aus Blickrichtung” (from the view direction) lays a free plane perpendicular to the view direction, the normal can be typed (1, 1, 1).",
     images: [
-      { name: "x03-umgekehrt", label: "z umgekehrt (entfernt die untere Hälfte), von unten" },
+      { name: "x03-umgekehrt", label: "z flipped (removes the lower half), from below" },
       { name: "x03-x30", label: "x = 30" },
-      { name: "x03-frei", label: "frei, n = (1, 1, 1)/√3" },
+      { name: "x03-frei", label: "free, n = (1, 1, 1)/√3" },
     ],
     checks: [`CLI: ${cli.lastCli}`],
   });
 });
 
-test("X04 Mit Hervorhebung, Zonen, transparenten Körpern (ohne Kappe) und Griffen", async ({ page }) => {
+test("X04 with highlighting, zones, transparent bodies (without a cap) and handles", async ({ page }) => {
   await openApp(page);
   await clickLine(page, 11, 8);
   await waitScene(page, { context: "housing" });
@@ -249,14 +249,14 @@ test("X04 Mit Hervorhebung, Zonen, transparenten Körpern (ohne Kappe) und Griff
   const hs = await hook(page, (c) => (c as unknown as { handles(): unknown[] }).handles());
   record9({
     id: "X04",
-    title: "Schnitt zusammen mit Hervorhebung, Zonen, Transparenz",
-    caption: "Cursor auf einer Zeile: deren Körper voll und mit Kappe, der Rest gedimmt (nur abgeschnitten, ohne Kappe); abgezogener Körper rot transparent ohne Kappe; Zone (blau) im Fillet-Beispiel; Griffe bleiben über dem Schnitt.",
+    title: "Section together with highlighting, zones, transparency",
+    caption: "Cursor on a line: its body full and capped, the rest dimmed (only cut, without a cap); subtracted body red, transparent, without a cap; zone (blue) in the fillet example; handles stay above the section.",
     images: [
-      { name: "x04-hervorhebung", label: "Zeile 11 hervorgehoben" },
-      { name: "x04-abgezogen", label: "Zeile 12: abgezogener Körper" },
-      { name: "x04-zone", label: `Zone (Zeile ${zl})` },
+      { name: "x04-hervorhebung", label: "line 11 highlighted" },
+      { name: "x04-abgezogen", label: "line 12: subtracted body" },
+      { name: "x04-zone", label: `zone (line ${zl})` },
     ],
-    checks: [`Kappen = volle Körper (${full})`, `${(hs as unknown[]).length} Griffe gezeichnet`],
+    checks: [`caps = full bodies (${full})`, `${(hs as unknown[]).length} handles drawn`],
   });
 });
 
@@ -265,9 +265,9 @@ function cadBin(): string | null {
   return null;
 }
 
-test("X05 Kopierter CLI-Aufruf ergibt im CLI denselben Schnitt (Pixelanteil der Kappe)", async ({ page }) => {
+test("X05 the copied CLI call gives the same section in the CLI (share of cap pixels)", async ({ page }) => {
   const bin = cadBin();
-  test.skip(!bin, "kein mcad-Binary (MCAD_BIN oder target/{release,debug}/mcad)");
+  test.skip(!bin, "no mcad binary (MCAD_BIN or target/{release,debug}/mcad)");
   await openApp(page);
   await hook(page, (c) => c.setView("iso"));
   await sectionOn(page);
@@ -277,7 +277,7 @@ test("X05 Kopierter CLI-Aufruf ergibt im CLI denselben Schnitt (Pixelanteil der 
   await sectionBar(page).getByRole("button", { name: "Als mcad render … kopieren" }).click();
   const st = (await cad(page)) as CadState & { lastCli: string };
   const cli = st.lastCli;
-  expect(cli).toMatch(/^mcad render housing\.mcad -o schnitt\.png --section z=12 --azimuth [\d.]+ --elevation [\d.]+$/);
+  expect(cli).toMatch(/^mcad render housing\.mcad -o section\.png --section z=12 --azimuth [\d.]+ --elevation [\d.]+$/);
   const web = await pixels(page, await canvasPng(page));
   // run the copied call (file and output into a temporary directory)
   const dir = mkdtempSync(join(tmpdir(), "cad-x05-"));
@@ -286,7 +286,7 @@ test("X05 Kopierter CLI-Aufruf ergibt im CLI denselben Schnitt (Pixelanteil der 
   const args = cli.split(" ").slice(1);
   const r = spawnSync(bin!, [...args, "--size", `${Math.round(box.width)}x${Math.round(box.height)}`, "--no-axes"], { cwd: dir, encoding: "utf8" });
   expect(r.status, r.stderr).toBe(0);
-  const png = readFileSync(join(dir, "schnitt.png"));
+  const png = readFileSync(join(dir, "section.png"));
   writeFileSync(join(ROOT, "reports/tmp/report9/img/x05-cli.png"), png);
   const cliPx = await pixels(page, png);
   const rel = Math.abs(web.share - cliPx.share) / Math.max(web.share, cliPx.share);
@@ -296,17 +296,17 @@ test("X05 Kopierter CLI-Aufruf ergibt im CLI denselben Schnitt (Pixelanteil der 
   writeMetrics9({ cliCompare: { cli, web, cliPx, rel } });
   record9({
     id: "X05",
-    title: "Gleicher Schnitt in UI und CLI",
-    caption: `„Als mcad render … kopieren“ ergibt \`${cli}\`; in der CLI ausgeführt zeigt das Bild denselben Schnitt (Kappenanteil an den gezeichneten Pixeln UI ${(web.share * 100).toFixed(1)} %, CLI ${(cliPx.share * 100).toFixed(1)} %, Abweichung ${(rel * 100).toFixed(0)} %; Perspektive in der UI, orthografisch in der CLI).`,
+    title: "Same section in UI and CLI",
+    caption: `“Als mcad render … kopieren” (copy as mcad render …) gives \`${cli}\`; run in the CLI the image shows the same section (cap share of the drawn pixels UI ${(web.share * 100).toFixed(1)} %, CLI ${(cliPx.share * 100).toFixed(1)} %, deviation ${(rel * 100).toFixed(0)} %; perspective in the UI, orthographic in the CLI).`,
     images: [
       { name: "x05-web", label: "UI (WebGL)" },
-      { name: "x05-cli", label: "CLI (Software-Renderer), kopierter Aufruf" },
+      { name: "x05-cli", label: "CLI (software renderer), copied call" },
     ],
-    checks: [`Kappenpixel UI ${web.cap} / ${web.drawn}, CLI ${cliPx.cap} / ${cliPx.drawn}`],
+    checks: [`cap pixels UI ${web.cap} / ${web.drawn}, CLI ${cliPx.cap} / ${cliPx.drawn}`],
   });
 });
 
-test("X06 fps beim Verschieben der Ebene", async ({ page }) => {
+test("X06 fps while moving the plane", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/fillet_zones.mcad");
   await hook(page, (c) => c.setView("iso"));
@@ -318,14 +318,14 @@ test("X06 fps beim Verschieben der Ebene", async ({ page }) => {
   writeMetrics9({ sectionMoveFps: r, orbitFpsWithSection: orbit, orbitFpsNoSection: plain });
   record9({
     id: "X06",
-    title: "Bildrate beim Schnittziehen",
-    caption: `Ebene 120 Bilder lang verschoben (jedes Bild neue Lage, Kappe und Kontur neu): ${r.fps.toFixed(1)} fps in Chromium mit SwiftShader (Software-GL, keine GPU); Drehen mit Schnitt ${orbit.fps.toFixed(1)} fps, ohne Schnitt ${plain.fps.toFixed(1)} fps – der Schnitt kostet kaum mehr als das Zeichnen selbst.`,
+    title: "Frame rate while dragging the section",
+    caption: `Plane moved for 120 frames (every frame a new position, new cap and contour): ${r.fps.toFixed(1)} fps in Chromium with SwiftShader (software GL, no GPU); orbiting with a section ${orbit.fps.toFixed(1)} fps, without ${plain.fps.toFixed(1)} fps – the section costs hardly more than the drawing itself.`,
     images: [],
-    checks: [`${r.frames} Bilder in ${r.ms.toFixed(0)} ms`],
+    checks: [`${r.frames} frames in ${r.ms.toFixed(0)} ms`],
   });
 });
 
-test("X07 Tastendruck → Szene im Browser (Wasm), gleiche Änderungen wie in Tauri", async ({ page }) => {
+test("X07 keystroke → scene in the browser (Wasm), the same changes as in Tauri", async ({ page }) => {
   test.setTimeout(240_000);
   await openApp(page);
   // after "w = 60" in `k: housing(w = 60);`: Backspace / digit, always a valid model

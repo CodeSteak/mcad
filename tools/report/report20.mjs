@@ -8,7 +8,7 @@
 // Inputs (gitignored, reports/tmp/report20/):
 //   vorher/*.png, nachher/*.png          node tools/report/report20-shots.mjs --label vorher|nachher --url …
 //                                        (vorher = before: build of the commit before the overhaul)
-//   img/*.png, scenarios.json,           cd web && pnpm exec playwright test e2e/ui-ueberarbeitung.spec.ts
+//   img/*.png, scenarios.json,           cd web && pnpm exec playwright test e2e/ui-overhaul.spec.ts
 //   metrics.json
 //   tauri-vorher/img/*.png               node web/e2e-tauri/desktop.e2e.mjs --bin <cad vorher> --out reports/tmp/report20/tauri-vorher
 //   tauri/tauri-e2e.json, tauri/img/*    node web/e2e-tauri/desktop.e2e.mjs --out reports/tmp/report20/tauri
@@ -149,7 +149,7 @@ function scen(id) {
   return `<h3>${esc(s.id)} ${esc(s.title)}</h3><p>${md(s.caption)}</p><div class="grid">${images}</div><ul class="checks">${(s.checks ?? []).map((c) => `<li>${md(c)}</li>`).join("")}</ul>`;
 }
 
-/** Bar names in metrics.json come from web/e2e/ui-ueberarbeitung.spec.ts (German, or English if translated). */
+/** Bar names in metrics.json come from web/e2e/ui-overhaul.spec.ts (German, or English if translated). */
 const BAR_NAMES = {
   header: /^(Kopfleiste|head(er)? bar)$/i,
   mode: /^(Werkzeugleiste Modus|mode toolbar|toolbar mode)$/i,

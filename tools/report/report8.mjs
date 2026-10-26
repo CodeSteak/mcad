@@ -119,8 +119,8 @@ const sections = [];
 const sec = (title, items) => sections.push({ title, items });
 const block = (r, opts = {}) => ({ kind: "cmd", r, ...opts });
 
-const G = td("gehaeuse.mcad");
-const K = td("kollision.scad");
+const G = td("housing.mcad");
+const K = td("collision.mcad");
 const P = ex("project-housing/housing.mcad");
 
 // outline
@@ -136,11 +136,11 @@ const P = ex("project-housing/housing.mcad");
 
 // render: contact sheet
 {
-  const a = runJson(["render", G, "-o", im("bogen"), "--module", "gehaeuse", "--views", "all", "--show", "grids,anchors,labels,dims", "--size", "1500x1100"]);
+  const a = runJson(["render", G, "-o", im("bogen"), "--module", "housing", "--views", "all", "--show", "grids,anchors,labels,dims", "--size", "1500x1100"]);
   const b = runJson(["render", P, "-o", im("bogen-projekt"), "--views", "iso,front,top,right", "--show", "anchors,labels", "--size", "1500x1100"]);
   sec("2 cad render: contact sheet", [
     { kind: "p", html: "<code>--views iso,front,top,right</code> (or <code>all</code>) combines labelled tiles into one image. All tiles have the same scale (px/mm) and the same target point (center of the model), so sizes are comparable between views; <code>--size</code> is the total size. The JSON gives position and camera per tile." },
-    block(a, { json: ["width", "height", "views", "overlays"], image: "bogen", caption: "Spec example gehaeuse in module context: grid g with plane names and grid points g[a,b,c], anchors as diamonds with direction arrow, dimensions W/D/H." }),
+    block(a, { json: ["width", "height", "views", "overlays"], image: "bogen", caption: "Spec example housing in module context: grid g with plane names and grid points g[a,b,c], anchors as diamonds with direction arrow, dimensions W/D/H." }),
     block(b, { image: "bogen-projekt", caption: "Project of three files in file context: anchors of the named instances (housing.lid_mid, boss[i].top) and part names." }),
   ]);
 }
@@ -155,7 +155,7 @@ const P = ex("project-housing/housing.mcad");
     { kind: "p", html: "Camera: <code>--azimuth</code> (0° from the front/−y, 90° from the right/+x), <code>--elevation</code> (90° from above), <code>--zoom</code>, <code>--target x,y,z</code>, <code>--fit all|part:NAME|line:N</code>, <code>--ortho</code>/<code>--perspective [--fov]</code>. Selection: <code>--part NAME</code> (parts only), <code>--line N</code> and <code>--node I</code> repeatable (nodes in full, the rest dimmed, <code>--only</code> omits the rest), combinable with <code>--module</code> and <code>-D</code>." },
     { kind: "pair", items: [
       block(a, { image: "kamera-azimut", caption: "fillet_zones.mcad --line 12 --azimuth 120 --elevation 30: zones blue, selected edges orange." }),
-      block(b, { image: "kamera-perspektive", caption: "gehaeuse --perspective --fov 45 --azimuth -30 --elevation 20" }),
+      block(b, { image: "kamera-perspektive", caption: "housing --perspective --fov 45 --azimuth -30 --elevation 20" }),
     ] },
     { kind: "pair", items: [
       block(c, { image: "auswahl-part", caption: "Project --part lid --show dims" }),
@@ -169,12 +169,12 @@ const P = ex("project-housing/housing.mcad");
 // render: overlays
 {
   const shows = ["grids", "anchors", "handles", "edges", "labels", "bbox", "dims"];
-  const base = runJson(["render", G, "-o", im("ov-ohne"), "--module", "gehaeuse", "--size", "420x320", "--no-axes"]);
+  const base = runJson(["render", G, "-o", im("ov-ohne"), "--module", "housing", "--size", "420x320", "--no-axes"]);
   const rows = [];
   const tiles = [];
   for (const s of shows) {
     const sh = s === "labels" ? "grids,labels" : s;
-    const r = runJson(["render", G, "-o", im(`ov-${s}`), "--module", "gehaeuse", "--size", "420x320", "--no-axes", "--show", sh]);
+    const r = runJson(["render", G, "-o", im(`ov-${s}`), "--module", "housing", "--size", "420x320", "--no-axes", "--show", sh]);
     rows.push({ s: sh, r });
     tiles.push({ image: `ov-${s}`, caption: `--show ${sh}` });
   }
@@ -219,17 +219,17 @@ const P = ex("project-housing/housing.mcad");
 
 // measure
 {
-  const a = run(["measure", G, "--between", "k.ecke", "k.oben", "--bounds", "part:k", "--volume", "part:k", "--area", "part:k"]);
-  const b = run(["measure", G, "--module", "gehaeuse", "--between", "g[links,vorne,boden]", "g[rechts,hinten,deckel]"]);
-  const b2 = run(["measure", G, "--module", "gehaeuse", "-D", "w=60", "--between", "ecke", "[0,0,0]"]);
+  const a = run(["measure", G, "--between", "k.corner", "k.top", "--bounds", "part:k", "--volume", "part:k", "--area", "part:k"]);
+  const b = run(["measure", G, "--module", "housing", "--between", "g[left,front,floor]", "g[right,back,lid]"]);
+  const b2 = run(["measure", G, "--module", "housing", "-D", "w=60", "--between", "corner", "[0,0,0]"]);
   const c = run(["measure", K, "--interference", "--clearance", "b", "c"]);
   const c2 = runJson(["measure", K, "--interference"]);
   const d = runJson(["measure", P, "--interference", "--clearance", "housing", "lid"]);
-  const e = run(["measure", G, "--between", "g[links,vorne,boden]", "[0,0,0]"]);
+  const e = run(["measure", G, "--between", "g[left,front,floor]", "[0,0,0]"]);
   const kr = runJson(["render", K, "-o", im("kollision"), "--show", "labels", "--xray", "--size", "600x400"]);
   sec("6 cad measure", [
-    { kind: "p", html: "<code>--between A B</code> with anchors (<code>k.ecke</code>, <code>k[2].ecke</code>, in module context <code>ecke</code>), grid points of the context module (<code>g[a,b,c]</code>, entries may also be numbers or <code>_</code>) and coordinates <code>[x,y,z]</code>: distance and difference vector. <code>--bounds/--volume/--area TARGET</code> with <code>all</code>, <code>part:NAME</code>, <code>line:N</code>, <code>node:I</code>. <code>--interference</code>: pairwise intersection volume of all parts, exact via the kernel (boolean intersection of the B-rep, bounding boxes tested first); collision from <code>--tolerance</code> (default 0.001 mm³). <code>--clearance A B</code>: smallest distance between two parts as the exact triangle–triangle distance of their tessellations (BVH, tolerance <code>--mesh-tol</code> 0.01 mm, accuracy ± 2·0.01 mm); if the parts intersect, the distance is 0 and <code>collision: true</code>." },
-    { kind: "p", html: "Expected values, spec example <i>gehaeuse</i>: k.ecke = [60, 30, 20], k.oben = [0, 0, 20] → √(60² + 30²) = 67.082 mm; in the module g[links,vorne,boden] → g[rechts,hinten,deckel] = √(40² + 30² + 20²) = 53.852 mm; volume k = 60·30·20 − 54·30·17 = 8460 mm³. <i>kollision.scad</i>: a and b overlap by 2 × 10 × 10 = 200 mm³, c is 5 mm next to b." },
+    { kind: "p", html: "<code>--between A B</code> with anchors (<code>k.corner</code>, <code>k[2].corner</code>, in module context <code>corner</code>), grid points of the context module (<code>g[a,b,c]</code>, entries may also be numbers or <code>_</code>) and coordinates <code>[x,y,z]</code>: distance and difference vector. <code>--bounds/--volume/--area TARGET</code> with <code>all</code>, <code>part:NAME</code>, <code>line:N</code>, <code>node:I</code>. <code>--interference</code>: pairwise intersection volume of all parts, exact via the kernel (boolean intersection of the B-rep, bounding boxes tested first); collision from <code>--tolerance</code> (default 0.001 mm³). <code>--clearance A B</code>: smallest distance between two parts as the exact triangle–triangle distance of their tessellations (BVH, tolerance <code>--mesh-tol</code> 0.01 mm, accuracy ± 2·0.01 mm); if the parts intersect, the distance is 0 and <code>collision: true</code>." },
+    { kind: "p", html: "Expected values, spec example <i>housing</i>: k.corner = [60, 30, 20], k.top = [0, 0, 20] → √(60² + 30²) = 67.082 mm; in the module g[left,front,floor] → g[right,back,lid] = √(40² + 30² + 20²) = 53.852 mm; volume k = 60·30·20 − 54·30·17 = 8460 mm³. <i>kollision.scad</i>: a and b overlap by 2 × 10 × 10 = 200 mm³, c is 5 mm next to b." },
     block(a, { text: true }),
     block(b, { text: true }),
     block(b2, { text: true }),
@@ -237,7 +237,7 @@ const P = ex("project-housing/housing.mcad");
     block(c, { text: true }),
     block(c2, { json: ["interference"] }),
     block(d, { json: ["clearance"] }),
-    { kind: "figure", image: "kollision", caption: "kollision.scad --xray --show labels: a and b overlap, c at 5 mm distance" },
+    { kind: "figure", image: "kollision", caption: "collision.mcad --xray --show labels: a and b overlap, c at 5 mm distance" },
   ]);
   void kr;
 }
@@ -246,10 +246,10 @@ const P = ex("project-housing/housing.mcad");
 {
   const f = join(work, "set.scad");
   copyFileSync(G, f);
-  const a = run(["set", rel(f), "--param", "gehaeuse.w=50", "--literal", "21:17=70", "--dry-run"]);
-  const b = runJson(["set", rel(f), "--param", "gehaeuse.w=50", "--literal", "21:17=70"]);
+  const a = run(["set", rel(f), "--param", "housing.w=50", "--literal", "21:16=70", "--dry-run"]);
+  const b = runJson(["set", rel(f), "--param", "housing.w=50", "--literal", "21:16=70"]);
   const c = run(["set", rel(f), "--literal", "5:30=4"]);
-  const d = run(["set", rel(f), "--param", "gehaeuse.t=foo"]);
+  const d = run(["set", rel(f), "--param", "housing.t=foo"]);
   sec("7 cad set", [
     { kind: "p", html: "<code>--param module.param=value</code> writes a default value (like \"Apply as default\" in the UI, also for modules from <code>use</code> files), <code>--literal [file:]line:col=value</code> replaces the editable literal at that position – the same literals the UI changes via handles, sliders and grid planes. Before writing, the changed project is evaluated; new errors prevent writing (exit 1, <code>--force</code> overrides). Writing is atomic (temporary file + rename); <code>--dry-run</code> only shows the diff." },
     block(a, { text: true }),
@@ -321,11 +321,11 @@ const watchRuns = [];
   const konst = readFileSync(join(dir, "constants.mcad"), "utf8");
   const teile = readFileSync(join(dir, "lib/parts.mcad"), "utf8");
   const res2 = await watch(join(dir, "housing.mcad"), [
-    () => writeFileSync(join(dir, "constants.mcad"), konst.replace("abstand = 10", "abstand = 15")),
-    () => writeFileSync(join(dir, "lib/parts.mcad"), teile.replace("dom_r = 3;", "dom_r = 3.5;")),
+    () => writeFileSync(join(dir, "constants.mcad"), konst.replace("spacing = 10", "spacing = 15")),
+    () => writeFileSync(join(dir, "lib/parts.mcad"), teile.replace("boss_r = 3;", "boss_r = 3.5;")),
   ]);
-  const what2 = ["start (everything new)", "constants.mcad: abstand = 15 (only the position of the lid)", "lib/parts.mcad: dom_r = 3.5 (screw bosses rebuilt)"];
-  res2.forEach((r, i) => watchRuns.push({ file: "projekt-gehaeuse", what: what2[i] ?? "", r }));
+  const what2 = ["start (everything new)", "constants.mcad: spacing = 15 (only the position of the lid)", "lib/parts.mcad: boss_r = 3.5 (screw bosses rebuilt)"];
+  res2.forEach((r, i) => watchRuns.push({ file: "project-housing", what: what2[i] ?? "", r }));
 }
 sec("9 cad watch", [
   { kind: "p", html: "<code>cad watch FILE [--json] [--render image.png …]</code> watches the file and all included files (crate <code>notify</code>, inotify on Linux; the directories are watched so that atomic saves by editors are detected too), re-evaluates in the same session on every change and writes one JSON line per run (diagnostics, timings, volume, parts, image). The engine cache is kept: unchanged nodes come from the cache. Stop with Ctrl+C, <code>--once-after-change</code> or <code>--timeout S</code>." },
@@ -348,12 +348,12 @@ const cmdTimes = [
   ["outline", ["outline", G]],
   ["check", ["check", G]],
   ["render (iso)", ["render", G, "-o", join(work, "a.png")]],
-  ["render --views all --show grids,anchors", ["render", G, "-o", join(work, "b.png"), "--module", "gehaeuse", "--views", "all", "--show", "grids,anchors"]],
+  ["render --views all --show grids,anchors", ["render", G, "-o", join(work, "b.png"), "--module", "housing", "--views", "all", "--show", "grids,anchors"]],
   ["render --section z=10", ["render", G, "-o", join(work, "c.png"), "--section", "z=10"]],
-  ["measure --between --volume", ["measure", G, "--between", "k.ecke", "k.oben", "--volume", "part:k"]],
-  ["measure --interference (kollision)", ["measure", K, "--interference"]],
-  ["measure --clearance b c (kollision)", ["measure", K, "--clearance", "b", "c"]],
-  ["set --dry-run", ["set", G, "--param", "gehaeuse.w=50", "--dry-run"]],
+  ["measure --between --volume", ["measure", G, "--between", "k.corner", "k.top", "--volume", "part:k"]],
+  ["measure --interference (collision)", ["measure", K, "--interference"]],
+  ["measure --clearance b c (collision)", ["measure", K, "--clearance", "b", "c"]],
+  ["set --dry-run", ["set", G, "--param", "housing.w=50", "--dry-run"]],
 ].map(([n, a]) => {
   const r = run(a);
   return [n, num(r.ms, 0), r.code];
@@ -539,7 +539,7 @@ ${sections.map((s) => `<h2>${esc(s.title)}</h2>\n${s.items.map(itemHtml).join("\
 <table><tr><th>File</th><th>Run</th><th>Wall time ms</th><th>Evaluation ms</th><th>of which kernel ms</th><th>Image ms</th></tr>
 ${timingRows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>
 <p><b>Decision: no persistent cache between calls.</b> The second call is as fast as the first (no cache); a call takes up to ${num(maxWall / 1000, 2)} s – for <i>variabler_radius</i> at the 1 s limit, almost all of it kernel time (fillets) and tessellation. A file cache of the kernel results would be costly: the results are handles to SMLib objects in the memory of the native library; a cache would have to serialize and re-read the B-rep (together with the provenance of faces and edges), which itself costs kernel time. Instead <code>cad watch</code>: the same session persists, the engine cache holds all node results; a run after a change costs only the changed nodes (table in section 9: ${vrWatch[1] ? num(vrWatch[1].r.timings.total_ms, 0) : "–"} ms for a change without effect on geometry, ${vrWatch[2] ? num(vrWatch[2].r.timings.total_ms, 0) : "–"} ms when two filleted bodies are rebuilt). The skill recommends <code>cad watch</code> for loops with many small steps.</p>
-<h3>Run time per command (spec example gehaeuse, wall time)</h3>
+<h3>Run time per command (spec example housing, wall time)</h3>
 <table><tr><th>Command</th><th>ms</th><th>Exit</th></tr>${cmdTimes.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>
 
 <h2>11 Case study: an agent develops a part using only the CLI</h2>
@@ -550,7 +550,7 @@ ${steps.map((s, i) => `<div class="step"><h3>Step ${i + 1}: ${esc(s.title)}</h3>
 <h2>12 Tests</h2>
 <ul>
 <li><code>cargo test --workspace</code>: ${cargoSum ? `${cargoSum.ok} passed, ${cargoSum.failed} failed, ${cargoSum.ignored} ignored` : "–"}; <code>cargo clippy --workspace --all-targets -- -D warnings</code>: ${clippy == null ? "–" : /^(error|warning)/m.test(clippy) ? "warnings" : "no findings"}; <code>cargo fmt --check</code>: ${fmt == null ? "–" : fmt.trim() === "" ? "no findings" : "deviations"}.</li>
-<li>New in <code>crates/cad-cli/tests/agent.rs</code> (assert_cmd, per command/option with JSON fields): outline (spec example, functions/variables, project), render (contact sheet: image size and equal scale; free camera; selection; overlays change pixels; section reduces the visible area and produces cap pixels; X-ray), measure (anchors, grid points, coordinates against expected values of the spec example; bounding box, volume; collision on <code>tests/data/kollision.scad</code>; clearance), watch (change file → second JSON line, cache hits increase; text and timeout), set (parameter, literal, diff, rejection, project files), UI entry point.</li>
+<li>New in <code>crates/cad-cli/tests/agent.rs</code> (assert_cmd, per command/option with JSON fields): outline (spec example, functions/variables, project), render (contact sheet: image size and equal scale; free camera; selection; overlays change pixels; section reduces the visible area and produces cap pixels; X-ray), measure (anchors, grid points, coordinates against expected values of the spec example; bounding box, volume; collision on <code>tests/data/collision.mcad</code>; clearance), watch (change file → second JSON line, cache hits increase; text and timeout), set (parameter, literal, diff, rejection, project files), UI entry point.</li>
 <li>New in <code>crates/cad-render/tests/features.rs</code>: camera angles = standard views, section with cap on a closed cube (all cap from above, none from below), perspective and fixed scale, markers/labels/title/contact sheet; in <code>geom.rs</code>: triangle–triangle distance on cubes (face, edge, vertex, overlap).</li>
 </ul>
 <table><tr><th>Test file</th><th>Test</th><th>Result</th></tr>${agentTests.map((t) => `<tr><td>${esc(t.file.replace(/\(.*$/, "").trim())}</td><td>${esc(t.name)}</td><td class="${t.res === "ok" ? "ok" : "bad"}">${esc(t.res)}</td></tr>`).join("")}</table>

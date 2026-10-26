@@ -5,7 +5,7 @@ use cad_session::protocol::*;
 use cad_session::{Session, SessionOptions, std_clock};
 use kernel_smlib::SmlibKernel;
 
-const SCHILD: &str = "color(\"white\") cube([40, 20, 2]);\ncolor(\"red\") translate([5, 5, 2]) cube([30, 10, 1]);\ncolor(\"lightgoldenrod\") translate([0, 0, -2]) cube([4, 4, 2]);\n";
+const SIGN: &str = "color(\"white\") cube([40, 20, 2]);\ncolor(\"red\") translate([5, 5, 2]) cube([30, 10, 1]);\ncolor(\"lightgoldenrod\") translate([0, 0, -2]) cube([4, 4, 2]);\n";
 
 fn session() -> Session<SmlibKernel> {
     Session::new(SmlibKernel::new(), SessionOptions::default(), std_clock())
@@ -42,7 +42,7 @@ fn apply(text: &str, edits: &[Edit]) -> String {
 fn scene_lists_colours_with_slots() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
-    let r = run(&mut s, SCHILD);
+    let r = run(&mut s, SIGN);
     let sc = last_scene(&r);
     let c: Vec<(&str, &str, u32, ColorSource)> =
         sc.colors.iter().map(|c| (c.key.as_str(), c.label.as_str(), c.filament, c.source)).collect();
@@ -61,7 +61,7 @@ fn scene_lists_colours_with_slots() {
         && d.message.contains("`lightgoldenrod` unbekannt")
         && d.range.line == 3));
     // the preliminary scene has the list already (no kernel needed)
-    let pre = s.post(ToEngine::SetSource { text: SCHILD.replace("red", "blue"), version: 2 });
+    let pre = s.post(ToEngine::SetSource { text: SIGN.replace("red", "blue"), version: 2 });
     let FromEngine::Scene(p) = pre.iter().find(|m| matches!(m, FromEngine::Scene(_))).unwrap() else { panic!() };
     assert!(!p.complete);
     assert_eq!(p.colors[1].label, "blue");
@@ -71,7 +71,7 @@ fn scene_lists_colours_with_slots() {
 fn colour_regions_with_meshes() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
-    run(&mut s, SCHILD);
+    run(&mut s, SIGN);
     s.post(ToEngine::RequestColorRegions { meshes: true, coarse: None, version: Some(1) });
     let r = s.run_to_idle();
     let FromEngine::ColorRegions { version, items } = &r[0] else { panic!("{r:?}") };
@@ -95,10 +95,10 @@ fn colour_regions_with_meshes() {
 fn set_filament_writes_the_code() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
-    run(&mut s, SCHILD);
+    run(&mut s, SIGN);
     let r = s.post(ToEngine::SetFilament { color: "#c74240".into(), filament: Some(4) });
     let FromEngine::Edits { edits, .. } = &r[0] else { panic!("{r:?}") };
-    let t = apply(SCHILD, edits);
+    let t = apply(SIGN, edits);
     assert!(t.contains("color(\"red\", filament = 4) translate"), "{t}");
     // the new text gives the slot; automatic again removes it
     let r = run(&mut s, &t);
@@ -106,7 +106,7 @@ fn set_filament_writes_the_code() {
     assert!(last_scene(&r).colors[1].explicit);
     let r = s.post(ToEngine::SetFilament { color: "#c74240".into(), filament: None });
     let FromEngine::Edits { edits, .. } = &r[0] else { panic!() };
-    assert_eq!(apply(&t, edits), SCHILD);
+    assert_eq!(apply(&t, edits), SIGN);
     // errors: unknown colour, default material, bad slot
     let r = s.post(ToEngine::SetFilament { color: "#000000".into(), filament: Some(2) });
     assert!(matches!(&r[0], FromEngine::Error { message, .. } if message.contains("kommt im Modell nicht vor")));
@@ -121,7 +121,7 @@ fn set_filament_writes_the_code() {
 fn multicolour_exports() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
-    run(&mut s, SCHILD);
+    run(&mut s, SIGN);
     s.post(ToEngine::Export { format: ExportFormat::ThreeMf, parts: None, zip: None, colors: None });
     s.post(ToEngine::Export { format: ExportFormat::ThreeMf, parts: None, zip: None, colors: Some(false) });
     s.post(ToEngine::Export { format: ExportFormat::Stl, parts: None, zip: None, colors: Some(true) });
@@ -221,18 +221,18 @@ fn filament_table_rules() {
 #[test]
 fn material_outside_parts_is_exported() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
-    let src = "module a() color(\"red\") cube(5);\nteil: a();\ntranslate([10, 0, 0]) color(\"blue\") cube(4);\n";
+    let src = "module a() color(\"red\") cube(5);\npart: a();\ntranslate([10, 0, 0]) color(\"blue\") cube(4);\n";
     let mut s = session();
     run(&mut s, src);
     let regs = s.color_regions(false, false).unwrap();
     let parts: Vec<(Option<&str>, f64)> = regs.iter().map(|r| (r.part.as_deref(), r.total)).collect();
-    assert_eq!(parts, [(Some("teil"), 125.0), (Some("no part"), 64.0)]);
+    assert_eq!(parts, [(Some("part"), 125.0), (Some("no part"), 64.0)]);
     s.post(ToEngine::Export { format: ExportFormat::ThreeMf, parts: None, zip: None, colors: None });
     let r = s.run_to_idle();
     let FromEngine::ExportResult { bytes, notes: Some(notes), .. } = &r[0] else { panic!("{r:?}") };
     let t = String::from_utf8_lossy(bytes);
     assert_eq!(t.matches("<item ").count(), 2);
     assert!(t.contains("name=\"no part – blue\""), "{t}");
-    assert!(notes[0].starts_with("2 Objekte (teil, no part)"), "{notes:?}");
+    assert!(notes[0].starts_with("2 Objekte (part, no part)"), "{notes:?}");
     assert!(notes.iter().any(|n| n.contains("ohne Farbdialog")), "{notes:?}");
 }

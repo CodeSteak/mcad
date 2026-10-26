@@ -5,7 +5,7 @@ import { alignTargets, handleGeom, handleStyle, handlesForCursor, nearestSnap, p
 import { SceneIndex } from "./sceneIndex";
 import { modelHull } from "./grids";
 
-const f = fixture("griffe");
+const f = fixture("handles");
 const idx = new SceneIndex(f.scene);
 const at = (line: number, col = 0) => {
   const p = pos(f.doc, line, col);
@@ -14,8 +14,8 @@ const at = (line: number, col = 0) => {
 const kinds = (hs: Handle[]) => hs.map((h) => `${h.kind.kind}${"axis" in h.kind && h.kind.axis !== null ? h.kind.axis : ""}:${h.index}`);
 const close = (a: number[], b: number[], eps = 1e-6) => a.every((x, i) => Math.abs(x - b[i]) < eps);
 
-describe("Griffe der Zeile unter dem Cursor", () => {
-  it("Anweisung mit Geometrie: Griffe der gewählten Anweisung", () => {
+describe("Handles of the line under the cursor", () => {
+  it("statement with geometry: handles of the chosen statement", () => {
     expect(kinds(at(7, 0))).toEqual(["point:0"]);
     // Cursor on `cube` in the same line: the cube corner.
     const c = at(7, 16);
@@ -25,7 +25,7 @@ describe("Griffe der Zeile unter dem Cursor", () => {
     expect(kinds(at(11, 0))).toEqual(["scale:0"]);
   });
 
-  it("Zeilen ohne Geometrie: Variable, Rasterblock", () => {
+  it("lines without geometry: variable, grid block", () => {
     expect(kinds(at(2, 0))).toEqual(["point:0"]);
     // Anywhere inside the grid block: all literal planes.
     expect(kinds(at(4, 8))).toEqual(["plane0:0", "plane0:1", "plane2:3", "plane2:4"]);
@@ -33,7 +33,7 @@ describe("Griffe der Zeile unter dem Cursor", () => {
     expect(at(12, 0)).toEqual([]);
   });
 
-  it("Stil: Literal, Variable, gesperrt", () => {
+  it("style: literal, variable, locked", () => {
     const t = at(7, 0)[0];
     expect(t.via_var).toBe(true);
     expect(handleStyle(t)).toBe("literal");
@@ -49,8 +49,8 @@ describe("Griffe der Zeile unter dem Cursor", () => {
   });
 });
 
-describe("Darstellung der Griffe", () => {
-  it("Drehring: Griff beim aktuellen Winkel", () => {
+describe("Display of the handles", () => {
+  it("rotation ring: grip at the current angle", () => {
     const z = at(8, 0)[2];
     const g = handleGeom(f.scene, z, 10);
     expect(g.ring).not.toBeNull();
@@ -61,7 +61,7 @@ describe("Darstellung der Griffe", () => {
     expect(Math.abs(Math.abs(x.ring!.normal[0]) - Math.cos(Math.PI / 6)) < 1e-6).toBe(true);
   });
 
-  it("Höhe und Radius als Linie, Skalierung an der Hüllenecke", () => {
+  it("height and radius as a line, scale at the hull corner", () => {
     const [h, r] = at(9, 0);
     const gh = handleGeom(f.scene, h, 10);
     expect(close(gh.grip, [0, 0, 12])).toBe(true);
@@ -74,35 +74,35 @@ describe("Darstellung der Griffe", () => {
     expect(gs.line!.value).toBe(2);
   });
 
-  it("Ebenengriffe auf je einer Kante der Rasterbox, Snap-Ziele auf der Griffachse", () => {
+  it("plane handles on one edge each of the grid box, snap targets on the handle axis", () => {
     const hull = modelHull(f.scene);
     const planes = at(4, 8).map((h) => handleGeom(f.scene, h, 10, hull));
-    const links = planes.find((g) => g.handle.kind.kind === "plane" && g.handle.kind.axis === 0 && g.handle.value[0] === 0)!;
-    const boden = planes.find((g) => g.handle.kind.kind === "plane" && g.handle.kind.axis === 2 && g.handle.value[0] === 0)!;
+    const left = planes.find((g) => g.handle.kind.kind === "plane" && g.handle.kind.axis === 0 && g.handle.value[0] === 0)!;
+    const floor = planes.find((g) => g.handle.kind.kind === "plane" && g.handle.kind.axis === 2 && g.handle.value[0] === 0)!;
     // Both planes are at 0, the grips are not at the same place.
-    expect(close(links.grip, boden.grip)).toBe(false);
-    expect(links.grip[0]).toBe(0);
-    expect(boden.grip[2]).toBe(0);
-    expect(close(links.line!.dir, [1, 0, 0])).toBe(true);
-    const deckel = planes.find((g) => g.handle.kind.kind === "plane" && g.handle.kind.axis === 2 && g.handle.value[0] === 20)!;
+    expect(close(left.grip, floor.grip)).toBe(false);
+    expect(left.grip[0]).toBe(0);
+    expect(floor.grip[2]).toBe(0);
+    expect(close(left.line!.dir, [1, 0, 0])).toBe(true);
+    const lid = planes.find((g) => g.handle.kind.kind === "plane" && g.handle.kind.axis === 2 && g.handle.value[0] === 20)!;
     const t: SnapTarget = { text: "h.top", snap: { kind: "plane", grid: 1, plane: "top" }, local: [0, 0, 12], world: [0, 0, 12], result_world: [0, 0, 12] };
-    const [a] = alignTargets(deckel, [t]);
+    const [a] = alignTargets(lid, [t]);
     expect(a.world[2]).toBeCloseTo(12);
-    expect(close(a.world, [deckel.line!.base[0], deckel.line!.base[1], 12])).toBe(true);
+    expect(close(a.world, [lid.line!.base[0], lid.line!.base[1], 12])).toBe(true);
     // Point handles keep their targets.
     const tr = handleGeom(f.scene, at(7, 0)[0], 10);
     expect(alignTargets(tr, [t])[0]).toBe(t);
   });
 
-  it("Punktgriff am Ziel", () => {
+  it("point handle at the target", () => {
     const g = handleGeom(f.scene, at(7, 0)[0], 10);
     expect(g.grip).toEqual([20, 0, 10]);
     expect(g.line).toBeNull();
   });
 });
 
-describe("Maus → Wert", () => {
-  it("Strahl gegen Ebene und Linie", () => {
+describe("Mouse → value", () => {
+  it("ray against plane and line", () => {
     const ray = { origin: [5, -10, 6] as [number, number, number], dir: [0, 1, 0] as [number, number, number] };
     expect(rayLineParam(ray, [0, 0, 0], [0, 0, 1])).toBeCloseTo(6);
     expect(rayLineParam(ray, [0, 0, 0], [0, 0, 2])).toBeCloseTo(3);
@@ -111,7 +111,7 @@ describe("Maus → Wert", () => {
     expect(rayPlane(ray, [0, -20, 0], [0, 1, 0])).toBeNull();
   });
 
-  it("Winkel auf dem Ring, stetig fortgesetzt", () => {
+  it("angle on the ring, continued continuously", () => {
     const g = handleGeom(f.scene, at(8, 0)[2], 10);
     const a = (deg: number) => (deg * Math.PI) / 180;
     const ray = (deg: number) => ({ origin: [10 * Math.cos(a(deg)), 10 * Math.sin(a(deg)), 10] as [number, number, number], dir: [0, 0, -1] as [number, number, number] });
@@ -119,7 +119,7 @@ describe("Maus → Wert", () => {
     expect(ringAngle(ray(-170), g.ring!, 175)).toBeCloseTo(190);
   });
 
-  it("Ziehebene: 2D-Punkte in ihrer xy-Ebene, sonst zur Kamera", () => {
+  it("drag plane: 2D points in their xy plane, otherwise facing the camera", () => {
     const h = at(7, 0)[0];
     expect(pointDragPlane(h, [1, 2, 3], [0, 0, -1]).n).toEqual([0, 0, -1]);
     const h2 = { ...h, value: [1, 2] };
@@ -130,18 +130,18 @@ describe("Maus → Wert", () => {
   });
 });
 
-describe("Snap im Bildschirmraum", () => {
+describe("Snap in screen space", () => {
   const t = (text: string, x: number): SnapTarget => ({ text, snap: { kind: "anchor", inst: 1, name: text }, local: [x, 0, 0], world: [x, 0, 0], result_world: [x, 0, 0] });
   const targets = [t("a", 0), t("b", 10), t("c", 20)];
   const screen = (i: number) => ({ x: targets[i].world[0] * 10, y: 100 });
 
-  it("nächstes Ziel im Fangradius", () => {
+  it("nearest target within the snap radius", () => {
     expect(nearestSnap(targets, screen, { x: 96, y: 104 }, 12)?.target.text).toBe("b");
     expect(nearestSnap(targets, screen, { x: 150, y: 100 }, 12)).toBeNull();
     expect(nearestSnap(targets, screen, { x: 150, y: 100 }, 60)?.target.text).toBe("b");
   });
 
-  it("unsichtbare Ziele zählen nicht", () => {
+  it("invisible targets do not count", () => {
     expect(nearestSnap(targets, (i) => (i === 1 ? null : screen(i)), { x: 100, y: 100 }, 12)).toBeNull();
   });
 });

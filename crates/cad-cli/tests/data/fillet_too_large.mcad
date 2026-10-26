@@ -1,0 +1,2 @@
+// Purpose: fillet with a radius that is too large (kernel error at the node, line 2).
+fillet(30) cube(10);

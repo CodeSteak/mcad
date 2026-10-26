@@ -84,7 +84,7 @@ fn messages(v: &Value) -> Vec<String> {
 #[test]
 fn cube_becomes_a_brep_with_booleans() {
     let dir = tempfile::tempdir().unwrap();
-    write(dir.path(), "w.stl", cad_stl::write_ascii("wuerfel", &cube(10.0)));
+    write(dir.path(), "w.stl", cad_stl::write_ascii("cube", &cube(10.0)));
     // binary with a header starting with "solid" (the size decides)
     write(dir.path(), "b.stl", cad_stl::write_binary("solid binary from some CAD", &cube(10.0)));
     for stl in ["w.stl", "b.stl"] {
@@ -119,12 +119,12 @@ fn large_sphere_stays_a_mesh() {
     let dir = tempfile::tempdir().unwrap();
     let tris = sphere(20.0, 100, 101);
     assert_eq!(tris.len(), 20000);
-    write(dir.path(), "kugel.stl", cad_stl::write_binary("kugel", &tris));
+    write(dir.path(), "sphere.stl", cad_stl::write_binary("sphere", &tris));
     let f = write(
         dir.path(),
         "m.scad",
-        "module platine() color(\"green\") translate([0, 0, 20]) import(\"kugel.stl\");\nmodule klotz() cube(10);\n\
-         k: platine();\ntranslate([25, 0, 0]) a: klotz();\ntranslate([15, -5, 15]) b: klotz();\n",
+        "module board() color(\"green\") translate([0, 0, 20]) import(\"sphere.stl\");\nmodule block() cube(10);\n\
+         k: board();\ntranslate([25, 0, 0]) a: block();\ntranslate([15, -5, 15]) b: block();\n",
     );
     let v = json(&["check", &f], 0);
     assert_eq!(v["warnings"].as_u64(), Some(0), "{v}");
@@ -154,7 +154,7 @@ fn large_sphere_stays_a_mesh() {
     assert!(std::fs::read_to_string(&out).unwrap().contains("PLANE"));
     // render: the mesh is drawn (green pixels)
     let png = dir.path().join("m.png");
-    let v = json(&["render", &f, "-o", &png.display().to_string(), "--module", "platine"], 0);
+    let v = json(&["render", &f, "-o", &png.display().to_string(), "--module", "board"], 0);
     assert_eq!(v["triangles"].as_u64(), Some(20000), "{v}");
     let dec = png::Decoder::new(std::fs::File::open(&png).unwrap());
     let mut reader = dec.read_info().unwrap();
@@ -164,7 +164,7 @@ fn large_sphere_stays_a_mesh() {
     let green = buf.chunks(ch).filter(|p| p[1] > 60 && p[1] as u32 > p[0] as u32 + 30 && p[1] > p[2]).count();
     assert!(green > 10000, "green pixels: {green}");
     // Booleans with a mesh: error with the hint
-    let f = write(dir.path(), "d.scad", "difference() { import(\"kugel.stl\"); cube(5); }\n");
+    let f = write(dir.path(), "d.scad", "difference() { import(\"sphere.stl\"); cube(5); }\n");
     let v = json(&["check", &f], 1);
     assert!(messages(&v).iter().any(|m| m.contains("beschnitten") && m.contains("as = \"solid\"")), "{v}");
 }
@@ -200,21 +200,21 @@ fn mode_override_and_limit() {
 #[test]
 fn broken_open_and_inverted_meshes() {
     let dir = tempfile::tempdir().unwrap();
-    write(dir.path(), "kaputt.stl", "solid x\nfacet normal 0 0 1\nouter loop\nvertex 0 0 nan_x\n");
-    let f = write(dir.path(), "a.scad", "import(\"kaputt.stl\");\n");
+    write(dir.path(), "broken.stl", "solid x\nfacet normal 0 0 1\nouter loop\nvertex 0 0 nan_x\n");
+    let f = write(dir.path(), "a.scad", "import(\"broken.stl\");\n");
     let m = messages(&json(&["check", &f], 1));
-    assert!(m.iter().any(|m| m.contains("kaputt.stl: Zeile 4")), "{m:?}");
-    write(dir.path(), "leer.stl", "solid leer\nendsolid leer\n");
-    let f = write(dir.path(), "l.scad", "import(\"leer.stl\");\n");
+    assert!(m.iter().any(|m| m.contains("broken.stl: Zeile 4")), "{m:?}");
+    write(dir.path(), "empty.stl", "solid empty\nendsolid empty\n");
+    let f = write(dir.path(), "l.scad", "import(\"empty.stl\");\n");
     assert!(messages(&json(&["check", &f], 1)).iter().any(|m| m.contains("0 Dreiecke")));
     // open: one triangle missing → mesh with a warning; as = "solid" → error
     let mut open = cube(10.0);
     open.pop();
-    write(dir.path(), "offen.stl", cad_stl::write_binary("offen", &open));
-    let f = write(dir.path(), "o.scad", "import(\"offen.stl\");\n");
+    write(dir.path(), "open.stl", cad_stl::write_binary("open", &open));
+    let f = write(dir.path(), "o.scad", "import(\"open.stl\");\n");
     let v = json(&["check", &f], 0);
     assert!(messages(&v).iter().any(|m| m.contains("nicht geschlossen (3 offene Kanten)")), "{v}");
-    let f = write(dir.path(), "os.scad", "import(\"offen.stl\", as = \"solid\");\n");
+    let f = write(dir.path(), "os.scad", "import(\"open.stl\", as = \"solid\");\n");
     assert!(messages(&json(&["check", &f], 1)).iter().any(|m| m.contains("as = \"solid\" geht nicht")));
     // inside out and NaN: corrected / dropped with warnings, volume positive
     let mut inv: Vec<Tri> = cube(10.0).into_iter().map(|t| [t[0], t[2], t[1]]).collect();
@@ -247,7 +247,7 @@ fn watch_follows_a_changed_stl() {
     std::thread::sleep(Duration::from_millis(300));
     write(dir.path(), "w.stl", cad_stl::write_binary("w", &cube(5.0)));
     let t0 = Instant::now();
-    let second: Value = serde_json::from_str(&lines.next().expect("zweite Zeile").unwrap()).unwrap();
+    let second: Value = serde_json::from_str(&lines.next().expect("second line").unwrap()).unwrap();
     assert!(t0.elapsed() < Duration::from_secs(30));
     assert_eq!(second["trigger"], "change");
     assert_eq!(second["changed"], serde_json::json!(["w.stl"]));

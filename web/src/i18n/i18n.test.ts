@@ -13,11 +13,11 @@ const placeholders = (v: string | { one: string; other: string }) => {
 
 afterEach(() => setLang("de"));
 
-describe("Wörterbücher", () => {
-  it("de hat genau die Schlüssel von en", () => {
+describe("Dictionaries", () => {
+  it("de has exactly the keys of en", () => {
     expect(Object.keys(de).sort()).toEqual(Object.keys(en).sort());
   });
-  it("gleiche Platzhalter und Pluralformen in beiden Sprachen, keine leeren Texte", () => {
+  it("same placeholders and plural forms in both languages, no empty texts", () => {
     for (const k of Object.keys(en) as Array<keyof typeof en>) {
       const a = en[k];
       const b = de[k];
@@ -30,14 +30,14 @@ describe("Wörterbücher", () => {
 });
 
 describe("t", () => {
-  it("setzt Parameter ein, unbekannte bleiben stehen", () => {
+  it("fills in parameters, unknown ones stay", () => {
     setLang("en");
     expect(t("tab.closeConfirm", { path: "lib/a.mcad" })).toBe("Remove lib/a.mcad from the project?");
-    expect(interpolate("{a} und {b}", { a: 1 })).toBe("1 und {b}");
+    expect(interpolate("{a} and {b}", { a: 1 })).toBe("1 and {b}");
     setLang("de");
     expect(t("tab.closeConfirm", { path: "lib/a.mcad" })).toBe("lib/a.mcad aus dem Projekt entfernen?");
   });
-  it("Pluralformen nach n", () => {
+  it("plural forms by n", () => {
     setLang("en");
     expect(t("status.warnings", { n: 1 })).toBe("1 warning");
     expect(t("status.warnings", { n: 0 })).toBe("0 warnings");
@@ -45,7 +45,7 @@ describe("t", () => {
     expect(t("status.warnings", { n: 1 })).toBe("1 Warnung");
     expect(t("status.warnings", { n: 3 })).toBe("3 Warnungen");
   });
-  it("Umschalten benachrichtigt und ändert Tabellen mit Gettern", () => {
+  it("switching notifies and changes tables with getters", () => {
     const names = lazyRecord(["save"] as const, () => t("header.save"));
     let calls = 0;
     const off = onLangChange(() => calls++);
@@ -59,7 +59,7 @@ describe("t", () => {
     setLang("en");
     expect(calls).toBe(2);
   });
-  it("Tastenkürzel in der Sprache der Oberfläche", () => {
+  it("shortcuts in the language of the UI", () => {
     setLang("en");
     expect(shortcutText("Strg+⇧+S")).toBe("Ctrl+⇧+S");
     expect(shortcutText("Entf")).toBe("Del");
@@ -68,8 +68,8 @@ describe("t", () => {
   });
 });
 
-describe("Systemsprache", () => {
-  it("de… → Deutsch, sonst Englisch", () => {
+describe("System language", () => {
+  it("de… → German, otherwise English", () => {
     expect(systemLang("de-DE")).toBe("de");
     expect(systemLang("de")).toBe("de");
     expect(systemLang("DE-at")).toBe("de");
@@ -77,13 +77,13 @@ describe("Systemsprache", () => {
     expect(systemLang("fr-FR")).toBe("en");
     expect(systemLang("")).toBe("en");
   });
-  it("feste Wahl schlägt das System", () => {
+  it("a fixed choice beats the system", () => {
     expect(resolveLang("system", "de-CH")).toBe("de");
     expect(resolveLang("system", "en-GB")).toBe("en");
     expect(resolveLang("en", "de-DE")).toBe("en");
     expect(resolveLang("de", "en-US")).toBe("de");
   });
-  it("beide Sprachen sind registriert", () => {
+  it("both languages are registered", () => {
     expect(Object.keys(DICTS).sort()).toEqual(["de", "en"]);
   });
 });

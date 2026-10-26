@@ -42,72 +42,72 @@ fn text(args: &[&str], code: i32) -> String {
 
 #[test]
 fn check_ok_syntax_error_and_kernel_error() {
-    let v = json(&["check", &data("gehaeuse.mcad")], 0);
+    let v = json(&["check", &data("housing.mcad")], 0);
     assert_eq!(v["command"], "check");
     assert_eq!(v["errors"], 0);
 
-    let v = json(&["check", &data("syntax_fehler.mcad")], 1);
+    let v = json(&["check", &data("syntax_error.mcad")], 1);
     let d = &v["diagnostics"][0];
     assert_eq!(d["severity"], "error");
     assert_eq!(d["source"], "syntax");
     assert_eq!(d["range"]["line"], 3);
-    let t = text(&["check", &data("syntax_fehler.mcad")], 1);
-    assert!(t.contains("syntax_fehler.mcad:3:"), "{t}");
+    let t = text(&["check", &data("syntax_error.mcad")], 1);
+    assert!(t.contains("syntax_error.mcad:3:"), "{t}");
 
-    let v = json(&["check", &data("fillet_zu_gross.mcad")], 1);
+    let v = json(&["check", &data("fillet_too_large.mcad")], 1);
     let d = &v["diagnostics"][0];
     assert_eq!(d["source"], "kernel");
     assert_eq!(d["range"]["line"], 2);
     // without the kernel the file is fine
-    json(&["check", "--no-kernel", &data("fillet_zu_gross.mcad")], 0);
+    json(&["check", "--no-kernel", &data("fillet_too_large.mcad")], 0);
 }
 
 #[test]
 fn eval_scene_text_and_json() {
-    let v = json(&["eval", &data("gehaeuse.mcad")], 0);
+    let v = json(&["eval", &data("housing.mcad")], 0);
     let scene = &v["scene"];
     assert_eq!(scene["complete"], true);
     let anchors = scene["anchors"].as_array().unwrap();
-    let ecke = anchors.iter().find(|a| a["text"] == "k.ecke").unwrap();
-    assert_eq!(ecke["point"], serde_json::json!([60.0, 30.0, 20.0]));
+    let corner = anchors.iter().find(|a| a["text"] == "k.corner").unwrap();
+    assert_eq!(corner["point"], serde_json::json!([60.0, 30.0, 20.0]));
     assert!(scene["nodes"].as_array().unwrap().iter().all(|n| n["status"] == "ok"));
 
-    let t = text(&["eval", &data("gehaeuse.mcad")], 0);
+    let t = text(&["eval", &data("housing.mcad")], 0);
     assert!(t.contains("Kontext: Datei"), "{t}");
     assert!(t.contains("difference"), "{t}");
-    assert!(t.contains("k.ecke = [60, 30, 20]"), "{t}");
+    assert!(t.contains("k.corner = [60, 30, 20]"), "{t}");
     assert!(t.contains("Raster:"), "{t}");
 
     // module context with -D
-    let v = json(&["eval", &data("gehaeuse.mcad"), "--module", "gehaeuse", "-D", "w=80"], 0);
-    assert_eq!(v["context"], "gehaeuse");
+    let v = json(&["eval", &data("housing.mcad"), "--module", "housing", "-D", "w=80"], 0);
+    assert_eq!(v["context"], "housing");
     let params = v["scene"]["context"]["params"].as_array().unwrap();
     let w = params.iter().find(|p| p["name"] == "w").unwrap();
     assert_eq!(w["value"], 80.0);
     assert_eq!(w["overridden"], true);
-    let t = text(&["eval", &data("platte.mcad")], 0);
-    assert!(t.contains("ECHO: \"fertig\", 4"), "{t}");
+    let t = text(&["eval", &data("plate.mcad")], 0);
+    assert!(t.contains("ECHO: \"done\", 4"), "{t}");
 }
 
 #[test]
 fn inspect_line() {
-    // line 11 is the outer box inside module gehaeuse: module context
-    let v = json(&["inspect", &data("gehaeuse.mcad"), "--line", "11"], 0);
-    assert_eq!(v["context"], "gehaeuse");
+    // line 11 is the outer box inside module housing: module context
+    let v = json(&["inspect", &data("housing.mcad"), "--line", "11"], 0);
+    assert_eq!(v["context"], "housing");
     let nodes = v["nodes"].as_array().unwrap();
     assert_eq!(nodes.len(), 1);
     assert_eq!(nodes[0]["label"], "box");
     let vol = nodes[0]["volume"].as_f64().unwrap();
     assert!((vol - 40.0 * 30.0 * 20.0).abs() < 1e-6, "{vol}");
     // in the file context the same line has no own node... the call on line 21 has
-    let v = json(&["inspect", &data("gehaeuse.mcad"), "--line", "21"], 0);
+    let v = json(&["inspect", &data("housing.mcad"), "--line", "21"], 0);
     assert_eq!(v["context"], Value::Null);
     let n = &v["nodes"][0];
-    assert_eq!(n["label"], "gehaeuse");
+    assert_eq!(n["label"], "housing");
     assert_eq!(n["instance"], "k");
     assert_eq!(n["world_bounds"]["max"][0], 60.0);
     // zone block: selected edges
-    let v = json(&["inspect", &data("fillet_zonen.mcad"), "--line", "12"], 0);
+    let v = json(&["inspect", &data("fillet_zones.mcad"), "--line", "12"], 0);
     let n = &v["nodes"][0];
     assert_eq!(n["label"], "fillet");
     assert_eq!(n["selected_edge_count"], 2);
@@ -117,10 +117,10 @@ fn inspect_line() {
     assert!(edges.iter().all(|e| e.as_array().unwrap().len() >= 2 && e[0].as_array().unwrap().len() == 3), "{edges:?}");
     assert!(n["hints"].as_array().unwrap().iter().any(|h| h == "2 Kanten"));
     // variable line: value and handle-free
-    let v = json(&["inspect", &data("platte.mcad"), "--line", "2"], 0);
+    let v = json(&["inspect", &data("plate.mcad"), "--line", "2"], 0);
     assert_eq!(v["nodes"].as_array().unwrap().len(), 0);
     assert_eq!(v["hints"][0]["text"], "4");
-    let t = text(&["inspect", &data("fillet_zu_gross.mcad"), "--line", "2"], 1);
+    let t = text(&["inspect", &data("fillet_too_large.mcad"), "--line", "2"], 1);
     assert!(t.contains("Verrundung gescheitert"), "{t}");
 }
 
@@ -129,46 +129,46 @@ fn render_png() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("g.png");
     let o = out.display().to_string();
-    let v = json(&["render", &data("gehaeuse.mcad"), "-o", &o, "--size", "320x240"], 0);
+    let v = json(&["render", &data("housing.mcad"), "-o", &o, "--size", "320x240"], 0);
     assert_eq!(v["width"], 320);
     assert!(v["triangles"].as_u64().unwrap() > 10);
     let png = std::fs::read(&out).unwrap();
     assert_eq!(&png[1..4], b"PNG");
     // highlighted line: subtracted body of line 12 (module context)
-    let v = json(&["render", &data("gehaeuse.mcad"), "-o", &o, "--line", "12", "--view", "top"], 0);
+    let v = json(&["render", &data("housing.mcad"), "-o", &o, "--line", "12", "--view", "top"], 0);
     assert_eq!(v["highlighted"].as_array().unwrap().len(), 1);
-    assert_eq!(v["context"], "gehaeuse");
+    assert_eq!(v["context"], "housing");
     // usage errors
-    json(&["render", &data("gehaeuse.mcad"), "-o", &o, "--view", "schräg"], 2);
-    json(&["render", &data("gehaeuse.mcad"), "-o", &o, "--size", "gross"], 2);
+    json(&["render", &data("housing.mcad"), "-o", &o, "--view", "oblique"], 2);
+    json(&["render", &data("housing.mcad"), "-o", &o, "--size", "huge"], 2);
     // syntax error: no image, exit 1
     let o2 = dir.path().join("x.png");
-    json(&["render", &data("syntax_fehler.mcad"), "-o", &o2.display().to_string()], 1);
+    json(&["render", &data("syntax_error.mcad"), "-o", &o2.display().to_string()], 1);
     assert!(!o2.exists());
 }
 
 #[test]
 fn export_stl_and_3mf() {
     let dir = tempfile::tempdir().unwrap();
-    let stl = dir.path().join("teil.stl");
-    let v = json(&["export", &data("platte.mcad"), "-o", &stl.display().to_string()], 0);
+    let stl = dir.path().join("part.stl");
+    let v = json(&["export", &data("plate.mcad"), "-o", &stl.display().to_string()], 0);
     let tris = v["triangles"].as_u64().unwrap();
     let bytes = std::fs::read(&stl).unwrap();
     assert_eq!(bytes.len() as u64, 84 + 50 * tris);
     assert_eq!(v["bytes"], bytes.len());
     let vol = v["volume"].as_f64().unwrap();
     assert!(vol > 5000.0 && vol < 6000.0, "{vol}");
-    let mf = dir.path().join("teil.3mf");
-    json(&["export", &data("platte.mcad"), "-o", &mf.display().to_string()], 0);
+    let mf = dir.path().join("part.3mf");
+    json(&["export", &data("plate.mcad"), "-o", &mf.display().to_string()], 0);
     assert_eq!(&std::fs::read(&mf).unwrap()[..2], b"PK");
-    json(&["export", &data("platte.mcad"), "-o", &dir.path().join("teil.obj").display().to_string()], 2);
+    json(&["export", &data("plate.mcad"), "-o", &dir.path().join("part.obj").display().to_string()], 2);
 }
 
 #[test]
 fn export_step() {
     let dir = tempfile::tempdir().unwrap();
-    let step = dir.path().join("teil.step");
-    let v = json(&["export", &data("platte.mcad"), "-o", &step.display().to_string()], 0);
+    let step = dir.path().join("part.step");
+    let v = json(&["export", &data("plate.mcad"), "-o", &step.display().to_string()], 0);
     assert_eq!(v["format"], "step");
     assert_eq!(v["triangles"], 0);
     let st = &v["step"];
@@ -183,11 +183,11 @@ fn export_step() {
     assert!(v["area"].as_f64().unwrap() > 0.0);
     assert!(v["bounds"]["min"].is_array());
     // .stp and AP214
-    let stp = dir.path().join("teil.stp");
-    json(&["export", &data("platte.mcad"), "-o", &stp.display().to_string(), "--schema", "ap214"], 0);
+    let stp = dir.path().join("part.stp");
+    json(&["export", &data("plate.mcad"), "-o", &stp.display().to_string(), "--schema", "ap214"], 0);
     let m = cad_step::p21::parse(&std::fs::read_to_string(&stp).unwrap()).unwrap();
     assert!(m.schema.starts_with("AUTOMOTIVE_DESIGN"), "{}", m.schema);
-    json(&["export", &data("platte.mcad"), "-o", &stp.display().to_string(), "--schema", "ap203"], 2);
+    json(&["export", &data("plate.mcad"), "-o", &stp.display().to_string(), "--schema", "ap203"], 2);
 }
 
 /// STEP export: one named body per part and per top-level object outside the parts, also when
@@ -196,7 +196,7 @@ fn export_step() {
 fn export_step_separate_bodies() {
     let dir = tempfile::tempdir().unwrap();
     let step = dir.path().join("b.step").display().to_string();
-    let v = json(&["export", &data("beruehrend.mcad"), "-o", &step], 0);
+    let v = json(&["export", &data("touching.mcad"), "-o", &step], 0);
     let st = &v["step"];
     assert_eq!(st["solids"], 4, "{st}");
     assert_eq!(st["bodies"], serde_json::json!(["a", "b", "box", "box 2"]));
@@ -212,10 +212,10 @@ fn export_step_separate_bodies() {
     // the colour of the red cube stays on its faces
     assert!(text.contains("COLOUR_RGB"));
     // --merge: one fused body (faces of a and b merge)
-    let v = json(&["export", &data("beruehrend.mcad"), "-o", &step, "--merge"], 0);
+    let v = json(&["export", &data("touching.mcad"), "-o", &step, "--merge"], 0);
     assert_eq!(v["step"]["solids"], 1, "{}", v["step"]);
     // without parts: the top-level children; a single one stays the product's body
-    let src = dir.path().join("zwei.scad");
+    let src = dir.path().join("two.scad");
     std::fs::write(&src, "cube(10);\ntranslate([10, 0, 0]) cube(10);\n").unwrap();
     let v = json(&["export", &src.display().to_string(), "-o", &step], 0);
     assert_eq!(v["step"]["bodies"], serde_json::json!(["box", "box 2"]));
@@ -238,7 +238,7 @@ fn export_step_separate_bodies() {
         "{t}"
     );
     // --part: the parts by name
-    let v = json(&["export", &data("beruehrend.mcad"), "--part", "a", "--part", "b", "-o", &step], 0);
+    let v = json(&["export", &data("touching.mcad"), "--part", "a", "--part", "b", "-o", &step], 0);
     let text = std::fs::read_to_string(&step).unwrap();
     assert!(text.contains("MANIFOLD_SOLID_BREP('a',") && text.contains("MANIFOLD_SOLID_BREP('b',"), "{v}");
 }
@@ -251,7 +251,7 @@ fn text_of(args: &[&str]) -> String {
 #[cfg(not(feature = "solidcore"))]
 #[test]
 fn diff_kernels_needs_the_feature() {
-    let v = json(&["diff-kernels", &data("platte.mcad")], 2);
+    let v = json(&["diff-kernels", &data("plate.mcad")], 2);
     assert!(v["error"].as_str().unwrap().contains("--features solidcore"), "{v}");
 }
 
@@ -316,9 +316,9 @@ fn diff_kernels_on_examples() {
 
 #[test]
 fn usage_errors() {
-    json(&["check", "/nonexistent/datei.scad"], 2);
+    json(&["check", "/nonexistent/file.scad"], 2);
     // -D without a value
-    json(&["eval", &data("gehaeuse.mcad"), "-D", "w"], 2);
+    json(&["eval", &data("housing.mcad"), "-D", "w"], 2);
     // clap errors exit with 2 as well
     let out = mcad().args(["render"]).output().unwrap();
     assert_eq!(out.status.code(), Some(2));
@@ -340,7 +340,7 @@ fn sketch_and_namespaces() {
     let v = json(
         &[
             "export",
-            &data("skizze.mcad"),
+            &data("sketch.mcad"),
             "-o",
             &tempfile::tempdir().unwrap().path().join("s.step").display().to_string(),
         ],
@@ -349,20 +349,20 @@ fn sketch_and_namespaces() {
     let vol = v["volume"].as_f64().unwrap();
     assert!((vol - want).abs() < 1e-6 * want, "{vol} {want}");
     // the function of the namespace
-    let t = text(&["eval", &data("skizze.mcad")], 0);
+    let t = text(&["eval", &data("sketch.mcad")], 0);
     assert!(t.contains(&format!("ECHO: {}", cad_eval::fmt_num(40.0 * 20.0 + PI * 200.0))), "{t}");
     // outline: qualified module and function names
-    let v = json(&["outline", &data("skizze.mcad")], 0);
+    let v = json(&["outline", &data("sketch.mcad")], 0);
     let q: Vec<&str> = v["modules"].as_array().unwrap().iter().map(|m| m["qualified"].as_str().unwrap()).collect();
-    assert_eq!(q, ["teile", "teile.platte"]);
+    assert_eq!(q, ["parts", "parts.plate"]);
     let f: Vec<&str> = v["functions"].as_array().unwrap().iter().map(|m| m["name"].as_str().unwrap()).collect();
-    assert_eq!(f, ["teile.flaeche"]);
-    let t = text(&["outline", &data("skizze.mcad")], 0);
-    assert!(t.contains("teile.platte(a = 40: Zahl"), "{t}");
+    assert_eq!(f, ["parts.area"]);
+    let t = text(&["outline", &data("sketch.mcad")], 0);
+    assert!(t.contains("parts.plate(a = 40: Zahl"), "{t}");
     // --module with a path: the inner module as context
-    let v = json(&["eval", &data("skizze.mcad"), "--module", "teile.platte", "-D", "a=30"], 0);
-    assert_eq!(v["scene"]["context"]["path"], serde_json::json!(["teile", "platte"]));
-    let v = json(&["inspect", &data("skizze.mcad"), "--module", "teile.platte", "--line", "5"], 0);
+    let v = json(&["eval", &data("sketch.mcad"), "--module", "parts.plate", "-D", "a=30"], 0);
+    assert_eq!(v["scene"]["context"]["path"], serde_json::json!(["parts", "plate"]));
+    let v = json(&["inspect", &data("sketch.mcad"), "--module", "parts.plate", "--line", "5"], 0);
     let n = &v["nodes"][0];
     assert_eq!(n["label"], "linear_extrude");
     let vol = n["volume"].as_f64().unwrap();
@@ -370,9 +370,9 @@ fn sketch_and_namespaces() {
     // a segment line: the sketch node (render highlights it)
     let dir = tempfile::tempdir().unwrap();
     let o = dir.path().join("s.png").display().to_string();
-    json(&["render", &data("skizze.mcad"), "-o", &o, "--line", "9", "--size", "320x240"], 0);
+    json(&["render", &data("sketch.mcad"), "-o", &o, "--line", "9", "--size", "320x240"], 0);
     // errors per segment line
-    let src = dir.path().join("fehler.mcad");
+    let src = dir.path().join("error.mcad");
     std::fs::write(&src, "linear_extrude(1) sketch {\n start([0, 0]);\n arc(to = [10, 0], r = 2);\n close();\n}\n")
         .unwrap();
     let v = json(&["check", &src.display().to_string()], 1);
@@ -384,7 +384,7 @@ fn sketch_and_namespaces() {
 #[test]
 fn sketch_corners_offset_stroke() {
     use std::f64::consts::PI;
-    let f = data("skizze_ecken.mcad");
+    let f = data("sketch_corners.mcad");
     let k = 4.0 - PI;
     let sketch = 600.0 - 2.0 * k * 16.0 / 4.0 - 4.5;
     let fillet = 600.0 - k * 9.0;
@@ -408,7 +408,7 @@ fn sketch_corners_offset_stroke() {
     assert_eq!(v["overlays"]["lines"], 2, "{v}");
     assert!(v["overlays"]["handles"].as_u64().unwrap() > 0);
     // a radius too large for the corner: error at the corner line
-    let src = dir.path().join("zu_gross.scad");
+    let src = dir.path().join("too_large.scad");
     std::fs::write(&src, "linear_extrude(1) sketch {\n start([0, 0]);\n line(to = [10, 0]);\n corner(r = 12);\n line(to = [10, 5]);\n line(to = [0, 5]);\n close();\n}\n").unwrap();
     let v = json(&["check", &src.display().to_string()], 1);
     let d = &v["diagnostics"][0];
@@ -419,7 +419,7 @@ fn sketch_corners_offset_stroke() {
 /// `-D` without a module context overrides top-level assignments (like `openscad -D`).
 #[test]
 fn define_top_level_variables() {
-    let f = data("variablen.mcad");
+    let f = data("variables.mcad");
     let vol = |extra: &[&str]| {
         let mut a = vec!["measure", f.as_str(), "--volume", "all"];
         a.extend_from_slice(extra);
@@ -436,11 +436,11 @@ fn define_top_level_variables() {
     let (v2, _) = vol(&["-D", "h=2", "-D", "h=3"]);
     assert!((v2 - 20.0 * 10.0 * 3.0).abs() < 1e-6, "{v2}");
     // unknown name: warning, exit 0, model unchanged
-    let (v3, j) = vol(&["-D", "breite=3"]);
+    let (v3, j) = vol(&["-D", "width=3"]);
     assert!((v3 - v0).abs() < 1e-9);
     let d = j["diagnostics"].as_array().unwrap();
     assert!(
-        d.iter().any(|x| x["severity"] == "warning" && x["message"].as_str().unwrap().contains("-D breite")),
+        d.iter().any(|x| x["severity"] == "warning" && x["message"].as_str().unwrap().contains("-D width")),
         "{d:?}"
     );
     // `$` variables need no assignment
@@ -454,18 +454,18 @@ fn define_top_level_variables() {
     assert_eq!(dd["value"], 20.0);
     let v = json(&["inspect", &f, "--line", "6", "-D", "w=40"], 0);
     assert_eq!(v["nodes"][0]["world_bounds"]["max"][0], 40.0);
-    let t = text(&["check", &f, "-D", "nix=1"], 0);
-    assert!(t.contains("Warnung") && t.contains("-D nix"), "{t}");
+    let t = text(&["check", &f, "-D", "nope=1"], 0);
+    assert!(t.contains("Warnung") && t.contains("-D nope"), "{t}");
     // with a module context -D stays a module parameter
-    let v = json(&["eval", &data("gehaeuse.mcad"), "--module", "gehaeuse", "-D", "w=80"], 0);
-    assert_eq!(v["context"], "gehaeuse");
+    let v = json(&["eval", &data("housing.mcad"), "--module", "housing", "-D", "w=80"], 0);
+    assert_eq!(v["context"], "housing");
 }
 
 /// `-m 'NAME(args)'`: module context with arguments as in a call (positional, named,
 /// expressions with the file's variables and functions), for every command with `-m`.
 #[test]
 fn module_call_arguments() {
-    let f = data("halter.mcad");
+    let f = data("holder.mcad");
     let vol = |m: &str, extra: &[&str]| {
         let mut a = vec!["measure", f.as_str(), "-m", m, "--volume", "all"];
         a.extend_from_slice(extra);
@@ -474,26 +474,26 @@ fn module_call_arguments() {
         v["volume"]["volume"].as_f64().unwrap()
     };
     let close = |a: f64, b: f64| assert!((a - b).abs() < 1e-6 * b.abs().max(1.0), "{a} vs {b}");
-    close(vol("halter", &[]), 10.0 * 5.0 * 2.0);
-    close(vol("halter", &["-D", "w=30"]), 30.0 * 5.0 * 2.0);
+    close(vol("holder", &[]), 10.0 * 5.0 * 2.0);
+    close(vol("holder", &["-D", "w=30"]), 30.0 * 5.0 * 2.0);
     // positional and named
-    close(vol("halter(30, h = 5)", &[]), 30.0 * 5.0 * 5.0);
+    close(vol("holder(30, h = 5)", &[]), 30.0 * 5.0 * 5.0);
     // expressions: file variables and functions
-    close(vol("halter(breite, h = doppelt(2))", &[]), 30.0 * 5.0 * 4.0);
+    close(vol("holder(width, h = double(2))", &[]), 30.0 * 5.0 * 4.0);
     // together with -D for another parameter
-    close(vol("halter(30)", &["-D", "d=1"]), 30.0 * 1.0 * 2.0);
+    close(vol("holder(30)", &["-D", "d=1"]), 30.0 * 1.0 * 2.0);
     // nested module
-    close(vol("teile.schraube(d = 3)", &[]), std::f64::consts::PI * 1.5 * 1.5 * 10.0);
-    close(vol("teile.schraube(4, l = 1)", &[]), std::f64::consts::PI * 4.0);
+    close(vol("parts.screw(d = 3)", &[]), std::f64::consts::PI * 1.5 * 1.5 * 10.0);
+    close(vol("parts.screw(4, l = 1)", &[]), std::f64::consts::PI * 4.0);
     // other commands: render, check, export
     let out = std::env::temp_dir().join(format!("cad_mcall_{}", std::process::id()));
     std::fs::create_dir_all(&out).unwrap();
     let stl = out.join("h.stl").display().to_string();
-    let v = json(&["export", &f, "-m", "halter(30, h = 5)", "-o", &stl], 0);
+    let v = json(&["export", &f, "-m", "holder(30, h = 5)", "-o", &stl], 0);
     close(v["volume"].as_f64().unwrap(), 750.0);
     let png = out.join("h.png").display().to_string();
-    json(&["render", &f, "-m", "halter(30, h = 5)", "-o", &png], 0);
-    json(&["check", &f, "-m", "halter(h = 1)"], 0);
+    json(&["render", &f, "-m", "holder(30, h = 5)", "-o", &png], 0);
+    json(&["check", &f, "-m", "holder(h = 1)"], 0);
     // errors: exit 2 with a message
     let err = |m: &str, extra: &[&str], want: &str| {
         let mut a = vec!["check", f.as_str(), "-m", m];
@@ -502,13 +502,13 @@ fn module_call_arguments() {
         let e = v["error"].as_str().unwrap();
         assert!(e.contains(want), "{m}: {e}");
     };
-    err("halter(1, 2, 3, 4)", &[], "zu viele Positionsargumente");
-    err("halter(x = 1)", &[], "keinen Parameter `x`");
-    err("halter(30)", &["-D", "w=20"], "in -D w=");
-    err("halter(1, w = 2)", &[], "doppelt");
-    err("halter(unbekannt + 1)", &[], "Argument `w`");
-    err("halter(1", &[], "erwartet");
-    err("fehlt(1)", &[], "Modul `fehlt` nicht gefunden");
+    err("holder(1, 2, 3, 4)", &[], "zu viele Positionsargumente");
+    err("holder(x = 1)", &[], "keinen Parameter `x`");
+    err("holder(30)", &["-D", "w=20"], "in -D w=");
+    err("holder(1, w = 2)", &[], "doppelt");
+    err("holder(unknown + 1)", &[], "Argument `w`");
+    err("holder(1", &[], "erwartet");
+    err("missing(1)", &[], "Modul `missing` nicht gefunden");
     let _ = std::fs::remove_dir_all(&out);
 }
 
@@ -516,14 +516,14 @@ fn module_call_arguments() {
 /// names both lines and the place (`at`, `nodes`), `mcad render` marks it.
 #[test]
 fn tangent_contact_place_in_diagnostics_and_render() {
-    let f = data("dom_rippe.mcad");
+    let f = data("boss_rib.mcad");
     let v = json(&["check", &f], 1);
     let d =
         v["diagnostics"].as_array().unwrap().iter().find(|d| d["at"].is_array()).expect("diagnostic with at").clone();
     let msg = d["message"].as_str().unwrap();
     assert!(
         msg.starts_with(
-            "Vereinigung gescheitert: Zeile 15 (dom) und Zeile 16 (rippe) berühren sich tangential bei [7, 15,"
+            "Vereinigung gescheitert: Zeile 15 (boss) und Zeile 16 (rib) berühren sich tangential bei [7, 15,"
         ),
         "{msg}"
     );
@@ -532,7 +532,7 @@ fn tangent_contact_place_in_diagnostics_and_render() {
     assert_eq!(d["nodes"].as_array().unwrap().len(), 2);
     // text output: the same message
     let t = text(&["check", &f], 1);
-    assert!(t.contains("Zeile 15 (dom) und Zeile 16 (rippe) berühren sich tangential"), "{t}");
+    assert!(t.contains("Zeile 15 (boss) und Zeile 16 (rib) berühren sich tangential"), "{t}");
     // render: marked (red edges, point, label), counted
     let dir = tempfile::tempdir().unwrap();
     let png = dir.path().join("r.png").display().to_string();

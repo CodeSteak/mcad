@@ -16,8 +16,8 @@ const param = (name: string, ty: Param["ty"], def: Param["default_value"] | null
   ty,
 });
 
-describe("Parameterleiste: Zeilen aus der Modulsignatur", () => {
-  it("Kontextmodul und Zeilen", () => {
+describe("Parameter bar: rows from the module signature", () => {
+  it("context module and rows", () => {
     expect(sig.name).toBe("housing");
     const rows = paramRows(sig, used, undefined);
     expect(rows.map((r) => [r.name, r.control, r.value, r.changed])).toEqual([
@@ -30,7 +30,7 @@ describe("Parameterleiste: Zeilen aus der Modulsignatur", () => {
     expect(rows[0].max).toBe(80);
   });
 
-  it("temporäre Werte pro Modul, geändert markiert", () => {
+  it("temporary values per module, changed ones marked", () => {
     let ov = setOverride({}, "housing", "w", 60);
     ov = setOverride(ov, "lid", "x", 1);
     const rows = paramRows(sig, used, ov.housing);
@@ -42,7 +42,7 @@ describe("Parameterleiste: Zeilen aus der Modulsignatur", () => {
     expect(ov.lid).toEqual({ x: 1 });
   });
 
-  it("Reset auf den Standardwert, ohne Standardwert auf 0 / false / [0, 0, 0]", () => {
+  it("reset to the default, without a default to 0 / false / [0, 0, 0]", () => {
     const ov = setOverride({}, "housing", "w", 60);
     const wp = sig.params[0];
     expect(resetOverride(ov, "housing", wp, "number").housing).toEqual({});
@@ -56,7 +56,7 @@ describe("Parameterleiste: Zeilen aus der Modulsignatur", () => {
     expect(resetOverride({}, "m", v, "vector").m).toEqual({ v: [0, 0, 0] });
   });
 
-  it("alle zurücksetzen", () => {
+  it("reset all", () => {
     const m: Module = { ...sig, params: [...sig.params, param("n", "unknown", null)] };
     let ov = setOverride({}, "housing", "w", 60);
     ov = setOverride(ov, "housing", "n", 5);
@@ -66,12 +66,12 @@ describe("Parameterleiste: Zeilen aus der Modulsignatur", () => {
     expect(rows.every((x) => !x.changed)).toBe(true);
   });
 
-  it("nach „Als Standard übernehmen“ fällt der temporäre Wert weg", () => {
+  it("after “Use as default” the temporary value is dropped", () => {
     const ov = setOverride(setOverride({}, "housing", "w", 60), "housing", "d", 50);
     expect(dropOverride(ov, "housing", "d").housing).toEqual({ w: 60 });
   });
 
-  it("Bedienelemente nach Typ", () => {
+  it("controls by type", () => {
     expect(controlOf(param("a", "bool", true), true)).toBe("bool");
     expect(controlOf(param("a", "vector", [1, 2, 3]), undefined)).toBe("vector");
     expect(controlOf(param("a", "string", "x"), undefined)).toBe("other");
@@ -79,7 +79,7 @@ describe("Parameterleiste: Zeilen aus der Modulsignatur", () => {
     expect(controlOf(param("a", "unknown", null), undefined)).toBe("number");
   });
 
-  it("Schieberegler-Bereich", () => {
+  it("slider range", () => {
     expect(sliderRange(3)).toEqual({ min: 0, max: 10, step: 1 });
     expect(sliderRange(40)).toEqual({ min: 0, max: 80, step: 1 });
     expect(sliderRange(0.4)).toEqual({ min: 0, max: 10, step: 0.1 });

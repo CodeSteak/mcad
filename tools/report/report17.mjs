@@ -7,7 +7,7 @@
 // Inputs (gitignored, reports/tmp/report17/):
 //   chart/*.png, cli/*.png, glyphs-*.tsv, var-*.tsv, times.tsv, gcode.json, *.check.txt,
 //   schild-*.measure.txt, schablone-measure.txt, compat-text.txt   tools/report/report17-data.sh
-//   scenarios.json, img/*.jpg, browser-metrics.json  cd web && pnpm exec playwright test e2e/schablone.spec.ts
+//   scenarios.json, img/*.jpg, browser-metrics.json  cd web && pnpm exec playwright test e2e/stencil.spec.ts
 //   playwright.txt                                   whole suite (cd web && pnpm e2e > …)
 //   c16.txt                                          C16 repeated before/after the fix (one line each)
 //   vitest.txt, typecheck.txt                        cd web && pnpm test, pnpm typecheck
@@ -282,7 +282,7 @@ ${pre(`'B' => {
 <tr><th>Model</th><th>cad stencil mono</th><th>Allerta Stencil</th><th>JetBrains Mono</th><th>Stencil / Allerta</th></tr>
 ${timeRow("hello", "\"Hello World\", extruded")}
 ${timeRow("vierzig", "40 characters, extruded")}
-${timeRow("schild", "Sign: plate ∪ \"ZUTRITT NUR MIT BRILLE\" (size 4.2)")}
+${timeRow("schild", "Sign: plate ∪ \"SAFETY GLASSES REQUIRED\" (size 4.2)")}
 </table>
 <p>Browser (Chromium, SMLib as Wasm, Playwright K03): sign ${num(bms("schild-stencil"))} ms versus ${num(bms("schild-allerta"))} ms with Allerta Stencil; "Hello World" ${num(bms("hello-stencil"))} versus ${num(bms("hello-allerta"))} ms. Stencil example native: ${num(t("schablone")?.kernelMs)} ms.</p>
 <h3>Wasm module</h3>
@@ -292,7 +292,7 @@ ${wasm ? `<table><tr><th></th><th>raw</th><th>gzip -9</th></tr><tr><td><code>cad
 <p>Do the compatibility tests depend on the default font? No: the 36 comparison models (<code>tests/models/openscad-compat</code>, <code>tests/openscad-compat/projects</code>) contain no <code>text()</code> (${compatText ? `found: ${esc(compatText)}` : "grep finds no file"}), so <code>compare.py</code> and the stage 1 tests (<code>crates/compat-tests</code>) are unaffected; the text comparison with OpenSCAD from report 16 (<code>hull_and_area_like_openscad</code>, <code>report16-openscad.py</code>) names every font explicitly. ${compareLine ? `Run <code>compare.py --eval</code>: ${esc(compareLine)}.` : ""} Intentional deviation: <code>text("…")</code> without <code>font</code> gives the stencil font here and the fontconfig default in OpenSCAD – for identical dimensions, specify a font (plan 17.11, skill).</p>
 
 <h2>10 UI</h2>
-<p>There is no font selection in the UI (fonts are specified in the code; custom ones via "⇡ Load file"), so no change there. New scenarios in <code>web/e2e/schablone.spec.ts</code>:</p>
+<p>There is no font selection in the UI (fonts are specified in the code; custom ones via "⇡ Load file"), so no change there. New scenarios in <code>web/e2e/stencil.spec.ts</code>:</p>
 ${scenarios.map((s) => `<h3>${esc(s.id)} ${esc(s.title)}</h3><p>${md(s.caption)}</p>${(s.images ?? []).map((i) => fig(pw(i.name), i.label)).join("")}${s.code && s.code.split("\n").length <= 12 ? pre(s.code) : ""}<ul>${(s.checks ?? []).map((c) => `<li>${md(c)}</li>`).join("")}</ul>`).join("\n")}
 <h3>C16 axis-constrained dragging (report 4) – cause and fix</h3>
 <p>Since report 15, C16 ran into the test timeout depending on timing, recently also on its own. Cause: after <code>clickLine(2, 3)</code> the viewer rebuilds the handles only in the next animation frame; until then <code>__cad.handles()</code> returns the handles of the previous cursor line. That line holds <code>cube([60, 30, 1])</code>, whose vector is also a point handle – <code>waitHandles("… kind === 'point'")</code> was satisfied immediately, the test took the first handle (the plate corner at x = 1118 px instead of the translate point at 770 px), the drag did not start (<code>drag() = null</code>), the mouse rotated the camera, and waiting for "axis x" ran until the timeout. The axis selection itself was correct in all runs. Fix in the test: <code>pointHandleOn(page, zeile)</code> waits for the point handle <b>of the line</b> and takes exactly that one (likewise C20, same gap). No test skipped.</p>

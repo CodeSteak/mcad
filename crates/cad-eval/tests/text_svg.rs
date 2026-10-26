@@ -64,24 +64,24 @@ fn import_svg_gives_sketch_profiles() {
 #[test]
 fn import_relative_to_the_file_and_errors() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
-    let lib = "module logo() import(\"bilder/logo.svg\");";
-    let (_, out) = run("use <lib/teile.mcad>\nlogo();", &[("lib/teile.mcad", lib), ("lib/bilder/logo.svg", LOGO)]);
+    let lib = "module logo() import(\"images/logo.svg\");";
+    let (_, out) = run("use <lib/parts.mcad>\nlogo();", &[("lib/parts.mcad", lib), ("lib/images/logo.svg", LOGO)]);
     assert!(msgs(&out, Severity::Error).is_empty(), "{:?}", out.diagnostics);
     assert_eq!(sketches(&out).len(), 2);
     // missing file
-    let (_, out) = run("import(\"fehlt.svg\");", &[]);
-    assert!(msgs(&out, Severity::Error).iter().any(|m| m.contains("fehlt.svg") && m.contains("nicht gefunden")));
+    let (_, out) = run("import(\"missing.svg\");", &[]);
+    assert!(msgs(&out, Severity::Error).iter().any(|m| m.contains("missing.svg") && m.contains("nicht gefunden")));
     // name computed at run time: not loaded
     let (_, out) = run("n = \"lo\"; import(str(n, \"go.sv\", \"g\"));", &[("logo.svg", LOGO)]);
     assert!(msgs(&out, Severity::Error).iter().any(|m| m.contains("nicht geladen")), "{:?}", out.diagnostics);
     // other formats
-    let (_, out) = run("import(\"teil.dxf\");", &[]);
+    let (_, out) = run("import(\"part.dxf\");", &[]);
     assert!(msgs(&out, Severity::Error).iter().any(|m| m.contains("nur SVG und STL")));
     // broken SVG and unknown id
     let (_, out) = run("import(\"x.svg\");", &[("x.svg", "<svg")]);
     assert!(msgs(&out, Severity::Error).iter().any(|m| m.contains("x.svg: SVG nicht lesbar")));
-    let (_, out) = run("import(\"logo.svg\", id = \"nix\");", &[("logo.svg", LOGO)]);
-    assert!(msgs(&out, Severity::Error).iter().any(|m| m.contains("nix")));
+    let (_, out) = run("import(\"logo.svg\", id = \"nothing\");", &[("logo.svg", LOGO)]);
+    assert!(msgs(&out, Severity::Error).iter().any(|m| m.contains("nothing")));
     // a name passed as a parameter is found too
     let (_, out) = run("module m(f = \"logo.svg\") import(f);\nm();", &[("logo.svg", LOGO)]);
     assert!(msgs(&out, Severity::Error).is_empty(), "{:?}", out.diagnostics);
@@ -129,7 +129,7 @@ fn text_profiles_and_fonts() {
     let (_, out) = run("text(\"A\", font = \"cad stencil mono:style=Bold\");", &[]);
     assert!(out.diagnostics.is_empty(), "{:?}", out.diagnostics);
     // parameters
-    let (_, out) = run("text(\"A\", halign = \"mitte\");", &[]);
+    let (_, out) = run("text(\"A\", halign = \"middle\");", &[]);
     assert!(msgs(&out, Severity::Warning).iter().any(|m| m.contains("halign")));
     let (_, out) = run("text(\"\");", &[]);
     assert!(sketches(&out).is_empty() && out.diagnostics.is_empty());
@@ -196,7 +196,7 @@ fn text_with_a_font_file() {
     assert!(out.diagnostics.is_empty(), "{:?}", out.diagnostics);
     assert_eq!(p.assets["fonts/allerta.ttf"].0.as_ref().unwrap().len(), ttf.len());
     assert_eq!(sketches(&out), vec![(2, true)], "stencil H: two parts");
-    let (_, out) = run("text(\"H\", font = \"kaputt.ttf\");", &[("kaputt.ttf", "keine Schrift")]);
+    let (_, out) = run("text(\"H\", font = \"broken.ttf\");", &[("broken.ttf", "not a font")]);
     assert!(msgs(&out, Severity::Error).iter().any(|m| m.contains("nicht lesbar")), "{:?}", out.diagnostics);
 }
 

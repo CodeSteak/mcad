@@ -16,12 +16,12 @@ const files = [
     .map((f) => join("../../examples", f)),
 ];
 
-describe("Lezer-Grammatik", () => {
-  it("liest alle Beispiele (.mcad und .scad)", () => {
+describe("Lezer grammar", () => {
+  it("reads all examples (.mcad and .scad)", () => {
     expect(files.filter((f) => f.endsWith(".mcad")).length).toBeGreaterThanOrEqual(28);
     expect(files.filter((f) => f.endsWith(".scad")).length).toBeGreaterThanOrEqual(36);
   });
-  it.each(files)("parst %s ohne Fehler", (f) => {
+  it.each(files)("parses %s without errors", (f) => {
     const text = readFileSync(join(root, f), "utf8");
     const tree = scadParser.parse(text);
     const errs = errorNodes(tree).map((p) => {
@@ -31,7 +31,7 @@ describe("Lezer-Grammatik", () => {
     expect(errs).toEqual([]);
   });
 
-  it("erkennt Raster, Anker, Label und Modifier", () => {
+  it("recognises grids, anchors, labels and modifiers", () => {
     const text =
       "grid g { x: a = 0, b = w - t; }\nk: housing(w = 60);\nanchor e = g[a, *, _], dir = [0, 0, 1];\n* translate([1, 0, 0]) cube(2);\n";
     const tree = scadParser.parse(text);

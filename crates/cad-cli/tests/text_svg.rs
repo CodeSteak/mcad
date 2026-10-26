@@ -44,7 +44,7 @@ fn volume(file: &str) -> f64 {
 
 const RECT: &str = r#"<svg xmlns="http://www.w3.org/2000/svg" width="20mm" height="10mm" viewBox="0 0 20 10">
 <rect width="20" height="10"/>
-<text x="1" y="5">nicht unterstützt</text>
+<text x="1" y="5">not supported</text>
 </svg>
 "#;
 
@@ -99,7 +99,7 @@ fn text_volume_is_area_times_height() {
     // area of Inter's H at size 10 (OpenSCAD 2021.01: 32.08 mm²)
     let v = volume(&f);
     assert!((v - 2.0 * 32.0824).abs() < 0.01, "{v}");
-    let v = json(&["check", &write(dir.path(), "u.scad", "text(\"a\", font = \"Keine\");\n")], 0);
+    let v = json(&["check", &write(dir.path(), "u.scad", "text(\"a\", font = \"NoSuchFont\");\n")], 0);
     assert!(v["diagnostics"][0]["message"].as_str().unwrap().contains("nicht vorhanden"));
     // glyphs apart from each other unite without loss (stencil "c": three pieces; SMLib's union
     // returned one of them twice, once inside out, before the facade merged disjoint bodies)
@@ -134,7 +134,7 @@ fn watch_follows_a_changed_svg() {
     std::thread::sleep(Duration::from_millis(300));
     write(dir.path(), "r.svg", &RECT.replace("<rect width=\"20\"", "<rect width=\"10\""));
     let t0 = Instant::now();
-    let second: Value = serde_json::from_str(&lines.next().expect("zweite Zeile").unwrap()).unwrap();
+    let second: Value = serde_json::from_str(&lines.next().expect("second line").unwrap()).unwrap();
     assert!(t0.elapsed() < Duration::from_secs(30));
     assert_eq!(second["trigger"], "change");
     assert_eq!(second["changed"], serde_json::json!(["r.svg"]));

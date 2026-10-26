@@ -364,7 +364,7 @@ ${pre(T("profil.txt"))}
 <h2>7 Test runs</h2>
 <h3>New regression tests</h3>
 <p>${newTests.map((t) => `<code>${esc(t.name)}</code> ${t.res === "ok" ? '<span class="ok">ok</span>' : '<span class="bad">FAILED</span>'}`).join(", ") || "–"}</p>
-<p class="small">Kernel: <code>crates/kernel-smlib/tests/everyday.rs</code>; engine: <code>crates/cad-engine/tests/everyday_bugs.rs</code> (reads the minimal examples); CLI: <code>crates/cad-cli/tests/geometrie.rs</code>.</p>
+<p class="small">Kernel: <code>crates/kernel-smlib/tests/everyday.rs</code>; engine: <code>crates/cad-engine/tests/everyday_bugs.rs</code> (reads the minimal examples); CLI: <code>crates/cad-cli/tests/geometry.rs</code>.</p>
 <h3>Bug examples (check.sh --fehler)</h3>
 ${pre(fehlerTxt.split("\n").filter((l) => /^\s+(behoben|offen|fixed|open)|Fehlerbeispiele|[Bb]ug examples/.test(l)).join("\n") || "(missing)")}
 <h3>Everyday models, OpenSCAD comparison, STEP</h3>

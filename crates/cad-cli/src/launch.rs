@@ -131,7 +131,7 @@ mod tests {
         }
         assert_eq!(decide(None, &env_of(&[("DISPLAY", ":0")]), true), Decision::Gui(None));
         assert_eq!(decide(None, &env_of(&[("DISPLAY", ":0")]), false), Decision::NotBuilt);
-        let missing = Path::new("gibt-es-nicht.scad");
+        let missing = Path::new("does-not-exist.scad");
         assert_eq!(decide(Some(missing), &env_of(&[("DISPLAY", ":0")]), true), Decision::Missing(missing.into()));
         let m = message(&Decision::NoDisplay, Some(Path::new("a.scad")));
         assert!(m.contains("DISPLAY") && m.contains("mcad check") && m.contains("a.scad"), "{m}");

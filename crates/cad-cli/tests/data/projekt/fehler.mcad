@@ -1,3 +1,0 @@
-include <fehlt.scad>
-use <lib/teile.mcad>
-halter();

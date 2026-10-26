@@ -6,7 +6,7 @@
 // Writes docs/reports/19-messen/report.html (images in img/).
 //
 // Inputs (gitignored, reports/tmp/report19/):
-//   scenarios.json, img/*.jpg, metrics.json     cd web && pnpm exec playwright test e2e/messen.spec.ts
+//   scenarios.json, img/*.jpg, metrics.json     cd web && pnpm exec playwright test e2e/measure.spec.ts
 //   cli/*.txt, cli/*.json, cli/*.png,           CAD=target/release/mcad tools/report/report19-data.sh
 //   analytic.json
 //   playwright.txt                              whole suite (cd web && pnpm e2e > …)
@@ -299,7 +299,7 @@ ${wasm ? `<h3>Wasm module</h3><table><tr><th></th><th class="n">raw</th><th clas
 <p class="small">Flaky tests fixed (previously red sporadically, also without measure mode): <code>waitHandles</code> still answered with the handles of the previous cursor line (B06, B10) and now waits for settled handles; <code>clickAt</code> in M01–M11 and the click in T17 wait for the click's own effect instead of any response; T17 picks faces with Alt (without point snapping). Nothing skipped or disabled.</p>
 <p>New Rust tests (${newTests.length}):</p>
 <p class="small">${newTests.map((x) => `<code>${esc(x.name)}</code> ${x.res === "ok" ? '<span class="ok">ok</span>' : '<span class="bad">FAILED</span>'}`).join(" · ")}</p>
-<p class="small">cad-measure <code>tests/analytic.rs</code>: cylinder (radius, axis, lateral and cap area, circle length, normal distance), cone (radius, half angle, apex, lateral area), sphere and torus (radii, areas, bounding box), fillet cylinder and fillet sphere of a cuboid, fillet torus of a circular edge, chamfer 45°/135°, distances, section through two bores (exact circles, area, wall thicknesses, longitudinal section, oblique section as ellipse); unit tests of curves, surfaces and quadrature. cad-session <code>tests/measure.rs</code>: snap (face, vertex, edge midpoint, edge) with provenance, clicks and CLI arguments, references, hole plate, housing with wall thickness in the section, part volume, chamfer, section mode via the protocol. cad-cli <code>tests/messen.rs</code>: JSON and text of the new options, usage errors. Vitest <code>logic/measure.test.ts</code>.</p>
+<p class="small">cad-measure <code>tests/analytic.rs</code>: cylinder (radius, axis, lateral and cap area, circle length, normal distance), cone (radius, half angle, apex, lateral area), sphere and torus (radii, areas, bounding box), fillet cylinder and fillet sphere of a cuboid, fillet torus of a circular edge, chamfer 45°/135°, distances, section through two bores (exact circles, area, wall thicknesses, longitudinal section, oblique section as ellipse); unit tests of curves, surfaces and quadrature. cad-session <code>tests/measure.rs</code>: snap (face, vertex, edge midpoint, edge) with provenance, clicks and CLI arguments, references, hole plate, housing with wall thickness in the section, part volume, chamfer, section mode via the protocol. cad-cli <code>tests/measure.rs</code>: JSON and text of the new options, usage errors. Vitest <code>logic/measure.test.ts</code>.</p>
 
 <h2>12 Limitations</h2>
 <ul>

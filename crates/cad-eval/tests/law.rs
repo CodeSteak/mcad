@@ -38,16 +38,16 @@ fn step_law_and_text() {
 #[test]
 fn captured_values_functions_let_and_builtins() {
     let src = r#"
-grid g { z: mitte = 10; }
-basis = 1.5;
-tab = [for (i = [0:2]) [i * 10, basis + i]];
-function rampe(t, k = 2) = t / k;
+grid g { z: mid = 10; }
+base = 1.5;
+tab = [for (i = [0:2]) [i * 10, base + i]];
+function ramp(t, k = 2) = t / k;
 f = function (x) max(x, 0.5);
-fillet(r = function (p) let(d = norm([p.x, p.y])) f(basis + rampe(d) - (p.z > g.mitte ? 1 : 0)) + lookup(p.z, tab) - basis) cube(20);
+fillet(r = function (p) let(d = norm([p.x, p.y])) f(base + ramp(d) - (p.z > g.mid ? 1 : 0)) + lookup(p.z, tab) - base) cube(20);
 "#;
     let out = clean(src);
     let l = law_of(&out);
-    // p = [6, 8, 0]: d = 10, rampe = 5, f(6.5) = 6.5, lookup(0) = 1.5 → 6.5
+    // p = [6, 8, 0]: d = 10, ramp = 5, f(6.5) = 6.5, lookup(0) = 1.5 → 6.5
     assert!((at(l, 6.0, 8.0, 0.0) - 6.5).abs() < 1e-12);
     // p = [0, 0, 15]: f(max(0.5, 0.5)) = 0.5, lookup(15) = 3 → 0.5 + 3 - 1.5
     assert!((at(l, 0.0, 0.0, 15.0) - 2.0).abs() < 1e-12);

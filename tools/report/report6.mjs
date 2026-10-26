@@ -5,7 +5,7 @@
 //   docs/reports/06-projekte-bauteile/report.html, report.pdf, img/*.jpg
 //
 // Inputs (written by the test runs, gitignored under reports/tmp/):
-//   report2/playwright.json   Playwright JSON reporter (web/playwright.config.ts); web/e2e/projekte.spec.ts
+//   report2/playwright.json   Playwright JSON reporter (web/playwright.config.ts); web/e2e/projects.spec.ts
 //                             is reported here, ui.spec.ts / ui-b.spec.ts / ui-c.spec.ts as regression
 //   report6/vitest.json       Vitest JSON reporter
 //   report6/cargo.txt         output of `cargo test --workspace`
@@ -63,15 +63,15 @@ const sh = (args) => {
     /* failed tests still write their results */
   }
 };
-const hasPhaseD = (j) => JSON.stringify(j?.suites ?? []).includes('"projekte.spec.ts"');
+const hasPhaseD = (j) => JSON.stringify(j?.suites ?? []).includes('"projects.spec.ts"');
 mkdirSync(input, { recursive: true });
 if (rerun || !existsSync(join(input, "vitest.json"))) {
   console.log("report6: Vitest …");
   sh(["vitest", "run", "--reporter=default", "--reporter=json", `--outputFile.json=${join(input, "vitest.json")}`]);
 }
 if (rerun || !hasPhaseD(readJson(pwFile))) {
-  console.log("report6: Playwright (web/e2e/projekte.spec.ts) …");
-  sh(["playwright", "test", "e2e/projekte.spec.ts"]);
+  console.log("report6: Playwright (web/e2e/projects.spec.ts) …");
+  sh(["playwright", "test", "e2e/projects.spec.ts"]);
 }
 
 const pw = readJson(pwFile);
@@ -80,7 +80,7 @@ const scenarios = readJson(join(input, "scenarios.json"), []);
 const cargo = existsSync(join(input, "cargo.txt")) ? readFileSync(join(input, "cargo.txt"), "utf8") : null;
 const compare = existsSync(join(input, "compare.txt")) ? readFileSync(join(input, "compare.txt"), "utf8") : null;
 if (!pw || !hasPhaseD(pw)) {
-  console.error(`missing: results of web/e2e/projekte.spec.ts in ${pwFile} (cd web && pnpm e2e)`);
+  console.error(`missing: results of web/e2e/projects.spec.ts in ${pwFile} (cd web && pnpm e2e)`);
   process.exit(1);
 }
 
@@ -98,7 +98,7 @@ function flatten(suite, file, acc = []) {
   }
   return acc;
 }
-const e2e = flatten(pw, "projekte.spec.ts");
+const e2e = flatten(pw, "projects.spec.ts");
 const regression = [...flatten(pw, "ui.spec.ts"), ...flatten(pw, "ui-b.spec.ts"), ...flatten(pw, "ui-c.spec.ts")];
 const passed = (l) => l.filter((t) => t.status === "passed").length;
 
@@ -342,7 +342,7 @@ const html = `<!doctype html>
 <table><tr><th>Project</th><th>Files</th><th>Echo lines</th><th>expected.echo</th><th>OpenSCAD now</th></tr>${oscRows}</table>
 ${oscBlocks}
 
-<h2>4 Scenarios (Playwright, web/e2e/projekte.spec.ts)</h2>
+<h2>4 Scenarios (Playwright, web/e2e/projects.spec.ts)</h2>
 <table>
 <tr><th>ID</th><th>Scenario</th><th>Result</th><th>Duration</th><th>Checked</th></tr>
 ${scenarioRows}

@@ -1,0 +1,11 @@
+// Purpose: plate with a bore, colour, modifier `#`, variable with a literal and echo.
+r = 4;
+module plate(w = 40, d = 30, t = 5) {
+    difference() {
+        color("orange") cube([w, d, t]);
+        translate([w / 2, d / 2, -1]) cylinder(h = t + 2, r = r);
+        #translate([5, 5, -1]) cylinder(h = t + 2, r = 2);
+    }
+}
+plate();
+echo("done", r);

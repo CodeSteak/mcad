@@ -29,11 +29,11 @@ describe("lineChanges", () => {
     });
   }
   it("keeps unchanged regions out of the changes (cursor stays)", () => {
-    const a = "eins\nzwei\ndrei\nvier\nfünf\n";
-    const b = "EINS\nzwei\ndrei\nvier\nFÜNF\n";
+    const a = "one\ntwo\nthree\nfour\nfive\n";
+    const b = "ONE\ntwo\nthree\nfour\nFIVE\n";
     const cs = lineChanges(a, b);
     expect(cs.length).toBe(2);
-    const cursor = a.indexOf("drei");
+    const cursor = a.indexOf("three");
     for (const c of cs) expect(cursor < c.from || cursor >= c.to).toBe(true);
   });
   it("no change for equal texts", () => expect(lineChanges("x", "x")).toEqual([]));

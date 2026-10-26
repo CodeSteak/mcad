@@ -4,13 +4,13 @@ import { cleanPath, evalSpline, interpolate, splinePoints, sweepPath, sweepStart
 
 const dist = (a: Vec3, b: Vec3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
-describe("Pfade von sweep", () => {
-  it("Duplikate fallen weg, kollineare Pfade werden zur Strecke", () => {
+describe("Paths of sweep", () => {
+  it("duplicates are dropped, collinear paths become a segment", () => {
     expect(cleanPath([[0, 0, 0], [0, 0, 0], [5, 0, 0], [10, 0, 0]])).toEqual([[0, 0, 0], [10, 0, 0]]);
     expect(cleanPath([[0, 0, 0], [5, 0, 0], [5, 5, 0]])).toHaveLength(3);
   });
 
-  it("kubische Interpolation geht durch alle Punkte (Sehnenlängen-Parameter)", () => {
+  it("cubic interpolation passes through all points (chord length parameter)", () => {
     const pts: Vec3[] = [[0, 0, 0], [20, 0, 10], [40, 10, 10], [60, 10, 0], [70, 0, 0]];
     const c = interpolate(pts)!;
     expect(c.degree).toBe(3);
@@ -25,14 +25,14 @@ describe("Pfade von sweep", () => {
     });
   });
 
-  it("drei Punkte: zwei Zusatzpunkte auf der Parabel (wie im Kernel)", () => {
+  it("three points: two extra points on the parabola (as in the kernel)", () => {
     const sp = splinePoints([[0, 0, 0], [10, 0, 10], [20, 0, 0]]);
     expect(sp).toHaveLength(5);
     expect(sp[1][2]).toBeGreaterThan(0);
     expect(sp[1][0]).toBeCloseTo(5);
   });
 
-  it("Polylinie: Spline fein abgetastet, linear unverändert; Starttangente", () => {
+  it("polyline: spline sampled finely, linear unchanged; start tangent", () => {
     const lin = sweepPath([[0, 0, 0], [10, 0, 0], [10, 10, 0]], false)!;
     expect(lin.points).toEqual([[0, 0, 0], [10, 0, 0], [10, 10, 0]]);
     expect(lin.tangent).toEqual([1, 0, 0]);
@@ -46,7 +46,7 @@ describe("Pfade von sweep", () => {
     expect(Math.hypot(...sp.tangent)).toBeCloseTo(1);
   });
 
-  it("Startrahmen: z entlang der Tangente, x = globales X projiziert, rechtshändig", () => {
+  it("start frame: z along the tangent, x = global X projected, right-handed", () => {
     const m = sweepStartFrame([1, 2, 3], [0, 0, 1]);
     expect(m.slice(0, 3)).toEqual([1, 0, 0]);
     expect(m.slice(8, 11)).toEqual([0, 0, 1]);

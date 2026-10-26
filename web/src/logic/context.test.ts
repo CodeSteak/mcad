@@ -3,38 +3,38 @@ import { definitionTarget, jumpUpTarget, moduleSpans, pathSegments } from "./con
 import { SceneIndex } from "./sceneIndex";
 import { fixture, pos } from "./__fixtures__/load";
 
-describe("Modulkontext und Pfadleiste", () => {
+describe("Module context and path bar", () => {
   const f = fixture("housing-module");
   const idx = new SceneIndex(f.scene);
   const mods = moduleSpans(idx);
 
-  it("Pfadleiste aus dem Kontext", () => {
+  it("path bar from the context", () => {
     expect(pathSegments(f.scene, "housing.mcad")).toEqual(["housing.mcad", "housing"]);
     expect(pathSegments(null, "x.scad")).toEqual(["x.scad"]);
   });
 
-  it("eine Ebene hoch: Aufruf des Moduls in der Datei", () => {
+  it("one level up: the module's call in the file", () => {
     const p = jumpUpTarget(f.source, mods, ["housing"], 0)!;
     expect(f.doc.lineAt(p).number).toBe(21);
     expect(f.source.slice(p, p + 8)).toBe("housing(");
   });
 
-  it("ohne Aufruf: hinter die Definition", () => {
+  it("without a call: behind the definition", () => {
     const src = f.source.replace("k: housing(w = 60);", "k: cube(1);");
     const p = jumpUpTarget(src, mods, ["housing"], 0)!;
     expect(p).toBe(mods.find((m) => m.name === "housing")!.to + 1);
   });
 
-  it("Aufrufe in Kommentaren und Definitionen zählen nicht", () => {
-    const src = "// gehaeuse(1)\nmodule gehaeuse() { cube(1); }\nmodule x() { gehaeuse(); }\ngehaeuse();\n";
+  it("calls in comments and definitions do not count", () => {
+    const src = "// housing(1)\nmodule housing() { cube(1); }\nmodule x() { housing(); }\nhousing();\n";
     const m = [
-      { name: "gehaeuse", from: 15, to: 45, body: { from: 33, to: 45 }, path: [] },
-      { name: "x", from: 46, to: 73, body: { from: 57, to: 73 }, path: [] },
+      { name: "housing", from: 14, to: 43, body: { from: 31, to: 43 }, path: [] },
+      { name: "x", from: 44, to: 70, body: { from: 55, to: 70 }, path: [] },
     ];
-    expect(jumpUpTarget(src, m, ["gehaeuse"], 0)).toBe(src.lastIndexOf("gehaeuse();"));
+    expect(jumpUpTarget(src, m, ["housing"], 0)).toBe(src.lastIndexOf("housing();"));
   });
 
-  it("Definition: Sprung in den Rumpf", () => {
+  it("definition: jump into the body", () => {
     const mod = f.scene.modules.find((m) => m.name === "housing")!;
     const p = definitionTarget(f.source, idx.range(mod.body_range));
     expect(f.doc.lineAt(p).number).toBe(4);

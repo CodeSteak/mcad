@@ -70,16 +70,16 @@ fn check_and_eval_read_included_and_used_files() {
 
 #[test]
 fn diagnostics_name_their_file_and_line() {
-    let (v, t) = run(&["check", "--no-kernel", &data("projekt/fehler.mcad")], 1);
+    let (v, t) = run(&["check", "--no-kernel", &data("project/error.mcad")], 1);
     let d = v["diagnostics"].as_array().unwrap();
-    let missing = d.iter().find(|d| d["message"].as_str().unwrap().contains("fehlt.scad")).unwrap();
+    let missing = d.iter().find(|d| d["message"].as_str().unwrap().contains("missing.scad")).unwrap();
     assert_eq!(missing["range"]["line"], 1);
     assert!(missing.get("file").is_none());
-    let lib = d.iter().find(|d| d["message"].as_str().unwrap().contains("unbekannt")).unwrap();
-    assert_eq!(lib["file"], "lib/teile.mcad");
+    let lib = d.iter().find(|d| d["message"].as_str().unwrap().contains("unknown")).unwrap();
+    assert_eq!(lib["file"], "lib/parts.mcad");
     assert_eq!(lib["range"]["line"], 3);
-    assert!(t.contains("fehler.mcad:1:"), "{t}");
-    assert!(t.contains("lib/teile.mcad:3:"), "{t}");
+    assert!(t.contains("error.mcad:1:"), "{t}");
+    assert!(t.contains("lib/parts.mcad:3:"), "{t}");
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn export_single_parts_and_all_parts() {
     assert!((min_y - 50.0).abs() < 1e-3, "{min_y}");
 
     // Two parts into one 3MF: one object each (single colour: one mesh per object).
-    let mf = dir.path().join("beide.3mf");
+    let mf = dir.path().join("both.3mf");
     run(
         &[
             "export",
@@ -130,17 +130,14 @@ fn export_single_parts_and_all_parts() {
     assert!(text.contains("Metadata/model_settings.config") && !text.contains("<m:colorgroup"));
 
     // All parts into a folder.
-    let out = dir.path().join("teile");
+    let out = dir.path().join("parts");
     let (v, t) = run(&["export", &example(), "--all-parts", "-o", &out.display().to_string()], 0);
     assert_eq!(v["parts"].as_array().unwrap().len(), 2);
     assert!(out.join("housing.stl").exists() && out.join("lid.stl").exists());
     assert!(t.contains("lid:"), "{t}");
     // Indexed instances: file names k_0 … k_2.
-    let out = dir.path().join("reihe");
-    run(
-        &["export", &data("projekt/reihe.mcad"), "--all-parts", "--format", "3mf", "-o", &out.display().to_string()],
-        0,
-    );
+    let out = dir.path().join("row");
+    run(&["export", &data("project/row.mcad"), "--all-parts", "--format", "3mf", "-o", &out.display().to_string()], 0);
     for i in 0..3 {
         assert!(out.join(format!("k_{i}.3mf")).exists());
     }
@@ -162,7 +159,7 @@ fn export_single_parts_and_all_parts() {
     let min_y = ys.iter().cloned().fold(f64::INFINITY, f64::min);
     assert!((min_y - 50.0).abs() < 1e-9, "{min_y}");
     // Two parts into one STEP: two solids; AP214 through --schema.
-    let both = dir.path().join("beide.stp");
+    let both = dir.path().join("both.stp");
     run(
         &[
             "export",
@@ -183,7 +180,7 @@ fn export_single_parts_and_all_parts() {
     // the housing's module body is an implicit union of several solids
     assert!(m.count("MANIFOLD_SOLID_BREP") >= 2);
     // All parts as STEP files.
-    let out_step = dir.path().join("teile-step");
+    let out_step = dir.path().join("parts-step");
     let (v, _) =
         run(&["export", &example(), "--all-parts", "--format", "step", "-o", &out_step.display().to_string()], 0);
     assert_eq!(v["parts"].as_array().unwrap().len(), 2);
@@ -194,6 +191,6 @@ fn export_single_parts_and_all_parts() {
     }
 
     // Unknown part / no parts.
-    run(&["export", &example(), "--part", "fehlt", "-o", &stl.display().to_string()], 3);
-    run(&["export", &data("platte.mcad"), "--all-parts", "-o", &out.display().to_string()], 2);
+    run(&["export", &example(), "--part", "missing", "-o", &stl.display().to_string()], 3);
+    run(&["export", &data("plate.mcad"), "--all-parts", "-o", &out.display().to_string()], 2);
 }

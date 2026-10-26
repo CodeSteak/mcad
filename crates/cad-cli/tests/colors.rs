@@ -122,7 +122,7 @@ fn export_multicolour_single_and_per_colour() {
     assert_eq!(v["multicolor"], false);
     assert!(!String::from_utf8_lossy(&std::fs::read(&mf).unwrap()).contains("colorgroup"));
     // one STL per colour and part
-    let zip = dir.path().join("farben.zip");
+    let zip = dir.path().join("colors.zip");
     let (v, t) = run(
         &[
             "export",
@@ -194,5 +194,5 @@ fn render_theme_and_regions() {
     let (l, d) = (corner(&light), corner(&dark));
     assert!(l.iter().all(|c| *c > 230.0), "light background {l:?}");
     assert!(d.iter().all(|c| *c < 40.0), "dark background {d:?}");
-    run(&["render", &example(), "-o", &dark.display().to_string(), "--theme", "lila"], 2);
+    run(&["render", &example(), "-o", &dark.display().to_string(), "--theme", "purple"], 2);
 }

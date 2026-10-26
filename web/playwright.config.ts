@@ -23,7 +23,7 @@ export default defineConfig({
     deviceScaleFactor: 1,
     acceptDownloads: true,
     // The specs select by the German names of the UI (language "System" follows the browser);
-    // sprache.spec.ts checks English.
+    // language.spec.ts checks English.
     locale: "de-DE",
     trace: "retain-on-failure",
     launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] },

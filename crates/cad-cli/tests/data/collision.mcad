@@ -1,0 +1,7 @@
+// Purpose: three parts for `mcad measure`: a and b overlap on purpose
+// (2 × 10 × 10 = 200 mm³), c stands 5 mm beside b.
+module block(s = 10) cube(s);
+
+a: block();
+translate([8, 0, 0]) b: block();
+translate([23, 0, 0]) c: block();

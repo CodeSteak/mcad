@@ -4,8 +4,8 @@ import { VersionMapper, mapRange } from "./positions";
 import { SceneIndex } from "./sceneIndex";
 import { fixture, pos } from "./__fixtures__/load";
 
-describe("VersionMapper (alte Quellpositionen)", () => {
-  it("bildet Positionen über spätere Änderungen ab", () => {
+describe("VersionMapper (old source positions)", () => {
+  it("maps positions across later changes", () => {
     const m = new VersionMapper(10);
     m.mark(1, 10);
     // Insert 3 characters at 2, then delete 1 at 0.
@@ -16,7 +16,7 @@ describe("VersionMapper (alte Quellpositionen)", () => {
     expect(m.map(1, 10)).toBe(12);
   });
 
-  it("führt mehrere Versionen getrennt", () => {
+  it("keeps several versions apart", () => {
     const m = new VersionMapper(4);
     m.mark(1, 4);
     m.apply(ChangeSet.of({ from: 0, insert: "xx" }, 4));
@@ -29,20 +29,20 @@ describe("VersionMapper (alte Quellpositionen)", () => {
     expect(m.versions()).toEqual([2]);
   });
 
-  it("begrenzt unbekannte Versionen auf die Dokumentlänge", () => {
+  it("clamps unknown versions to the document length", () => {
     const m = new VersionMapper(5);
     expect(m.map(9, 100)).toBe(5);
     expect(m.mapper(9)(3)).toBe(3);
   });
 
-  it("Bereiche: Einfügen am Anfang verschiebt, am Ende verlängert nicht", () => {
+  it("ranges: inserting at the start shifts, at the end does not extend", () => {
     const m = new VersionMapper(10);
     m.mark(1, 10);
     m.apply(ChangeSet.of([{ from: 2, insert: "--" }, { from: 6, insert: "++" }], 10));
     expect(mapRange(m.mapper(1), 2, 6)).toEqual({ from: 4, to: 8 });
   });
 
-  it("Knoten einer alten Szene bleiben beim Tippen an ihrer Zeile", () => {
+  it("nodes of an old scene stay at their line while typing", () => {
     const f = fixture("housing");
     const m = new VersionMapper(f.source.length);
     m.mark(f.scene.version, f.source.length);

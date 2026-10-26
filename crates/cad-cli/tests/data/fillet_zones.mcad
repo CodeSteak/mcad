@@ -1,0 +1,29 @@
+// Purpose: zone block fillet(r) { body; zone; … } with a grid line, a grid plane and
+// volume zone, select = "touch", nested blocks with two distinct radii.
+module block(w = 30, d = 20, h = 15) {
+    grid g {
+        x: left = 0, right = w;
+        y: front = 0, back = d;
+        z: floor = 0, lid = h;
+    }
+    p = [w / 2, d / 2, 0];
+
+    fillet(1) {
+        fillet(2) {
+            difference() {
+                box(g[left, front, floor], g[right, back, lid]);
+                translate(p) cylinder(h = h + 1, r = 4);
+            }
+            zone(g[right, *, lid], d = 2);     // the top right edge
+            translate(p + [0, 0, h]) sphere(6);   // Upper edge of bore
+        }
+        zone(g.floor, d = 1);                     // all of the bottom edges (outer r)
+    }
+
+    translate([0, d + 10, 0]) fillet(1.5, select = "touch") {
+        box(g[left, front, floor], g[right, back, lid]);
+        zone(g[left, front, *], d = 1);
+    }
+}
+
+block();

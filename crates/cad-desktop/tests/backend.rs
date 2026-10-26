@@ -22,15 +22,19 @@ fn open_file_loads_includes() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let d = tempfile::tempdir().unwrap();
     std::fs::create_dir(d.path().join("lib")).unwrap();
-    std::fs::write(d.path().join("lib/teile.mcad"), "module t() { cube(2); }\n").unwrap();
-    std::fs::write(d.path().join("haupt.scad"), "use <lib/teile.mcad>\nt();\ninclude <fehlt.scad>\n").unwrap();
-    std::fs::write(d.path().join("anders.scad"), "cube(1);\n").unwrap();
-    let p = open_file(&d.path().join("haupt.scad")).unwrap();
-    assert_eq!(p.main, "haupt.scad");
+    std::fs::write(d.path().join("lib/parts.mcad"), "module t() { cube(2); }\n").unwrap();
+    std::fs::write(d.path().join("assembly.scad"), "use <lib/parts.mcad>\nt();\ninclude <missing.scad>\n").unwrap();
+    std::fs::write(d.path().join("other.scad"), "cube(1);\n").unwrap();
+    let p = open_file(&d.path().join("assembly.scad")).unwrap();
+    assert_eq!(p.main, "assembly.scad");
     assert!(!p.folder);
     let keys: Vec<&str> = p.files.keys().map(|s| s.as_str()).collect();
-    assert_eq!(keys, vec!["haupt.scad", "lib/teile.mcad"], "missing includes and unrelated files are not part of it");
-    assert_eq!(p.abs("lib/teile.mcad"), std::path::absolute(d.path().join("lib/teile.mcad")).unwrap());
+    assert_eq!(
+        keys,
+        vec!["assembly.scad", "lib/parts.mcad"],
+        "missing includes and unrelated files are not part of it"
+    );
+    assert_eq!(p.abs("lib/parts.mcad"), std::path::absolute(d.path().join("lib/parts.mcad")).unwrap());
 }
 
 #[test]
@@ -66,12 +70,12 @@ fn open_folder_mixes_mcad_and_scad() {
     std::fs::create_dir(d.path().join("lib")).unwrap();
     std::fs::write(d.path().join("lib/a.scad"), "module a() { cube(1); }\n").unwrap();
     std::fs::write(d.path().join("lib/b.MCAD"), "module b() { cube(2); }\n").unwrap();
-    std::fs::write(d.path().join("teil.mcad"), "use <lib/a.scad>\nuse <lib/b.MCAD>\na();\nb();\n").unwrap();
-    std::fs::write(d.path().join("notiz.txt"), "kein Modell\n").unwrap();
+    std::fs::write(d.path().join("part.mcad"), "use <lib/a.scad>\nuse <lib/b.MCAD>\na();\nb();\n").unwrap();
+    std::fs::write(d.path().join("note.txt"), "not a model\n").unwrap();
     let p = open_folder(d.path(), None).unwrap();
     let keys: Vec<&str> = p.files.keys().map(|s| s.as_str()).collect();
-    assert_eq!(keys, vec!["lib/a.scad", "lib/b.MCAD", "teil.mcad"], "both extensions, no other files");
-    assert_eq!(p.main, "teil.mcad");
+    assert_eq!(keys, vec!["lib/a.scad", "lib/b.MCAD", "part.mcad"], "both extensions, no other files");
+    assert_eq!(p.main, "part.mcad");
     // main.mcad before main.scad
     std::fs::write(d.path().join("main.scad"), "cube(1);\n").unwrap();
     std::fs::write(d.path().join("main.mcad"), "cube(1);\n").unwrap();
@@ -118,7 +122,7 @@ fn next(rx: &Receiver<WatchEvent>, ms: u64) -> Option<WatchEvent> {
 fn watcher_reports_external_changes_only() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let d = tempfile::tempdir().unwrap();
-    let f = d.path().join("teil.scad");
+    let f = d.path().join("part.scad");
     let inc = d.path().join("inc.scad");
     std::fs::write(&f, "cube(1);\n").unwrap();
     std::fs::write(&inc, "x = 1;\n").unwrap();
@@ -150,7 +154,7 @@ fn watcher_reports_external_changes_only() {
     std::fs::write(&inc, "x = 2;\n").unwrap();
     assert!(matches!(next(&rx, 3000), Some(WatchEvent::Changed { path, .. }) if path == inc));
     // other files in the directory are ignored
-    std::fs::write(d.path().join("fremd.scad"), "sphere(1);\n").unwrap();
+    std::fs::write(d.path().join("foreign.scad"), "sphere(1);\n").unwrap();
     assert_eq!(next(&rx, 600), None);
     // deleted, then created again
     std::fs::remove_file(&f).unwrap();
@@ -158,7 +162,7 @@ fn watcher_reports_external_changes_only() {
     std::fs::write(&f, "cube(5);\n").unwrap();
     assert!(matches!(next(&rx, 3000), Some(WatchEvent::Changed { text, .. }) if text == "cube(5);\n"));
     // renamed away
-    std::fs::rename(&f, d.path().join("neu.scad")).unwrap();
+    std::fs::rename(&f, d.path().join("new.scad")).unwrap();
     assert!(matches!(next(&rx, 3000), Some(WatchEvent::Removed { .. })));
     assert_eq!(w.watched().len(), 2);
 }
@@ -172,7 +176,7 @@ fn diff_hunks_kinds() {
     assert!(diff_hunks(base, base).is_empty());
     // CRLF and a missing final newline are no change
     assert!(diff_hunks(base, "a\r\nb\r\nc\r\nd\r\ne").is_empty());
-    let h = diff_hunks(base, "a\nB\nc\nd\nneu\ne\n");
+    let h = diff_hunks(base, "a\nB\nc\nd\nnew\ne\n");
     assert_eq!(h.len(), 2);
     assert_eq!((h[0].kind, h[0].start, h[0].end, h[0].old.clone()), (HunkKind::Modified, 2, 2, vec!["b".to_string()]));
     assert_eq!((h[1].kind, h[1].start, h[1].end), (HunkKind::Added, 5, 5));
@@ -204,35 +208,35 @@ fn sh_git(dir: &Path, args: &[&str]) {
 fn head_base_of_tracked_and_untracked_files() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let d = tempfile::tempdir().unwrap();
-    let f = d.path().join("teil.scad");
-    let neu = d.path().join("neu.scad");
+    let f = d.path().join("part.scad");
+    let new_file = d.path().join("new.scad");
     // not a repository
     std::fs::write(&f, "cube(1);\nsphere(2);\n").unwrap();
     assert_eq!(head_base(&f), Base::None);
     sh_git(d.path(), &["init", "-q"]);
     assert_eq!(head_base(&f), Base::None, "no commit yet");
-    sh_git(d.path(), &["add", "teil.scad"]);
-    sh_git(d.path(), &["commit", "-q", "-m", "eins"]);
-    std::fs::write(&neu, "cube(3);\n").unwrap();
+    sh_git(d.path(), &["add", "part.scad"]);
+    sh_git(d.path(), &["commit", "-q", "-m", "one"]);
+    std::fs::write(&new_file, "cube(3);\n").unwrap();
     match head_base(&f) {
         Base::Head { text, .. } => assert_eq!(text, "cube(1);\nsphere(2);\n"),
         Base::None => panic!("tracked file without base"),
     }
-    assert_eq!(head_base(&neu), Base::None, "untracked: no markers");
+    assert_eq!(head_base(&new_file), Base::None, "untracked: no markers");
     let mut g = GitBases::default();
     let h = g.hunks(&f, "cube(1);\nsphere(3);\ncylinder(1);\n", false).unwrap();
     assert_eq!(h.len(), 1);
     assert_eq!((h[0].kind, h[0].start, h[0].end), (HunkKind::Modified, 2, 3));
-    assert!(g.hunks(&neu, "x", false).is_none());
+    assert!(g.hunks(&new_file, "x", false).is_none());
     // a new commit: refresh gives the new base
     std::fs::write(&f, "cube(9);\n").unwrap();
-    sh_git(d.path(), &["commit", "-q", "-am", "zwei"]);
+    sh_git(d.path(), &["commit", "-q", "-am", "two"]);
     assert!(g.hunks(&f, "cube(9);\n", true).unwrap().is_empty());
     // file in a subdirectory of the repository
     std::fs::create_dir(d.path().join("lib")).unwrap();
     std::fs::write(d.path().join("lib/a.scad"), "a\n").unwrap();
     sh_git(d.path(), &["add", "lib/a.scad"]);
-    sh_git(d.path(), &["commit", "-q", "-m", "drei"]);
+    sh_git(d.path(), &["commit", "-q", "-m", "three"]);
     assert!(matches!(head_base(&d.path().join("lib/a.scad")), Base::Head { text, .. } if text == "a\n"));
 }
 
@@ -320,7 +324,7 @@ fn wait_for(got: &Got, what: &str, f: impl Fn(&Json) -> bool) -> Json {
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    panic!("{what} kam nicht: {:?}", got.lock().unwrap().iter().map(|m| m["type"].clone()).collect::<Vec<_>>());
+    panic!("{what} did not arrive: {:?}", got.lock().unwrap().iter().map(|m| m["type"].clone()).collect::<Vec<_>>());
 }
 
 #[test]
@@ -331,7 +335,7 @@ fn supervisor_evaluates_and_sends_meshes() {
         ToEngine::SetSource { text: "cube(1);".into(), version: 1 },
         ToEngine::SetSource { text: "cube(10);".into(), version: 2 },
     ]);
-    let scene = wait_for(&got, "Szene", |m| m["type"] == "Scene" && m["complete"] == true);
+    let scene = wait_for(&got, "scene", |m| m["type"] == "Scene" && m["complete"] == true);
     assert_eq!(scene["version"], 2, "a SetSource followed by another is dropped");
     let meshes = wait_for(&got, "Meshes", |m| m["type"] == "Meshes");
     let pos = meshes["items"][0]["positions"].as_array().unwrap();
@@ -351,9 +355,9 @@ fn supervisor_watchdog_when_idle_engine_hangs() {
     // sent again (it would hang again).
     let (s, got) = supervisor(800);
     s.send(vec![ToEngine::SetSource { text: "cube(2);".into(), version: 1 }]);
-    wait_for(&got, "Szene", |m| m["type"] == "Scene" && m["complete"] == true);
+    wait_for(&got, "scene", |m| m["type"] == "Scene" && m["complete"] == true);
     s.debug_hang(5000);
-    let err = wait_for(&got, "Fehler", |m| m["type"] == "Error");
+    let err = wait_for(&got, "error", |m| m["type"] == "Error");
     let msg = err["message"].as_str().unwrap();
     assert!(msg.contains("neu gestartet") && !msg.contains("gesperrt"), "{msg}");
     assert!(s.status().blocked_keys.is_empty());
@@ -373,7 +377,7 @@ fn supervisor_watchdog_replaces_engine_and_blocks_key() {
     ]);
     let prog = wait_for(&got, "Progress", |m| m["type"] == "Progress" && m["current"]["key"].is_string());
     let key = prog["current"]["key"].as_str().unwrap().to_string();
-    let err = wait_for(&got, "Watchdog-Fehler", |m| {
+    let err = wait_for(&got, "watchdog error", |m| {
         m["type"] == "Error" && m["message"].as_str().unwrap_or("").contains("neu gestartet")
     });
     let msg = err["message"].as_str().unwrap();
@@ -383,7 +387,7 @@ fn supervisor_watchdog_replaces_engine_and_blocks_key() {
     assert_eq!(st.restarts, 1);
     assert_eq!(st.blocked_keys, vec![key.clone()]);
     // The new engine gets BlockKeys and the source again: the blocked node reports an error.
-    let scene = wait_for(&got, "Szene nach Neustart", |m| {
+    let scene = wait_for(&got, "scene after restart", |m| {
         m["type"] == "Scene"
             && m["complete"] == true
             && m["nodes"].as_array().is_some_and(|ns| ns.iter().any(|n| n["status"] == "error"))
@@ -393,7 +397,7 @@ fn supervisor_watchdog_replaces_engine_and_blocks_key() {
     assert_eq!(host["body"]["blocked_keys"][0], Json::from(key));
     // A changed source evaluates normally again.
     s.send(vec![ToEngine::SetSource { text: "cube(3);".into(), version: 2 }]);
-    let ok = wait_for(&got, "neue Szene", |m| m["type"] == "Scene" && m["complete"] == true && m["version"] == 2);
+    let ok = wait_for(&got, "new scene", |m| m["type"] == "Scene" && m["complete"] == true && m["version"] == 2);
     assert!(ok["nodes"].as_array().unwrap().iter().all(|n| n["status"] != "error"));
     s.shutdown();
 }
@@ -417,9 +421,9 @@ fn supervisor_follows_set_lang_also_after_restart() {
     s.send(vec![ToEngine::SetLang { lang: "en".into() }, ToEngine::SetSource { text: "cube(y);".into(), version: 2 }]);
     diag(&got, 2, "unknown variable");
     s.send(vec![ToEngine::SetLang { lang: "de".into() }, ToEngine::SetSource { text: "cube(y);".into(), version: 3 }]);
-    wait_for(&got, "Szene", |m| m["type"] == "Scene" && m["complete"] == true && m["version"] == 3);
+    wait_for(&got, "scene", |m| m["type"] == "Scene" && m["complete"] == true && m["version"] == 3);
     s.debug_hang(5000);
-    let err = wait_for(&got, "Fehler", |m| m["type"] == "Error");
+    let err = wait_for(&got, "error", |m| m["type"] == "Error");
     assert!(err["message"].as_str().unwrap().contains("neu gestartet"), "{err}");
     // the new engine speaks German too
     s.send(vec![ToEngine::SetSource { text: "cube(z);".into(), version: 4 }]);

@@ -1,0 +1,16 @@
+// Sketch (rectangle with a semicircle) and a namespace with a submodule and a function
+module parts {
+    function area(a, b, r) = a * b + PI * r * r / 2;
+    module plate(a = 40, b = 20, h = 5) {
+        linear_extrude(h) sketch {
+            start([0, 0]);
+            line(to = [a, 0]);
+            line(to = [a, b]);
+            arc(to = [0, b], r = a / 2);
+            close();
+        }
+    }
+}
+
+parts.plate();
+echo(parts.area(40, 20, 20));

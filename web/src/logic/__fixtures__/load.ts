@@ -7,7 +7,7 @@ import { Text } from "@codemirror/state";
 import type { Diagnostic, Scene } from "../../engine/protocol";
 
 const FIXTURES: Record<string, { example: string; local?: boolean }> = {
-  griffe: { example: "griffe.mcad", local: true },
+  handles: { example: "handles.mcad", local: true },
   profile: { example: "profile.mcad", local: true },
   housing: { example: "spec/housing.mcad" },
   "housing-module": { example: "spec/housing.mcad" },

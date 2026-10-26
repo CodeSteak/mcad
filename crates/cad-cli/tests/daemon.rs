@@ -54,7 +54,7 @@ impl Env {
         let mut c = Command::cargo_bin("mcad").unwrap();
         c.env("MCAD_LANG", "de");
         c.env("MCAD_IPC_DIR", self.ipc())
-            .env("MCAD_CONFIG", self.tmp.path().join("keine-config.toml"))
+            .env("MCAD_CONFIG", self.tmp.path().join("no-config.toml"))
             .env_remove("MCAD_NO_DAEMON")
             .env_remove("MCAD_DAEMON_BUILD_ID")
             .env_remove("MCAD_DAEMON_DEBUG_HANG_MS")
@@ -197,25 +197,25 @@ fn output_identical_with_and_without_daemon() {
     let vr = ex("spec/variable_radius.mcad");
     let cases: Vec<Vec<String>> = vec![
         vec!["check".into(), housing.clone()],
-        vec!["check".into(), data("syntax_fehler.mcad")],
-        vec!["check".into(), data("fillet_zu_gross.mcad")],
+        vec!["check".into(), data("syntax_error.mcad")],
+        vec!["check".into(), data("fillet_too_large.mcad")],
         vec!["eval".into(), housing.clone()],
         vec!["eval".into(), project.clone(), "--module".into(), "lid".into()],
         vec!["inspect".into(), ex("spec/fillet_zones.mcad"), "--line".into(), "12".into()],
         vec!["outline".into(), project.clone()],
         // -D without a module: top-level assignments
-        vec!["measure".into(), data("variablen.mcad"), "-D".into(), "w=40".into(), "--volume".into(), "all".into()],
-        vec!["check".into(), data("variablen.mcad"), "-D".into(), "nix=1".into()],
+        vec!["measure".into(), data("variables.mcad"), "-D".into(), "w=40".into(), "--volume".into(), "all".into()],
+        vec!["check".into(), data("variables.mcad"), "-D".into(), "nope=1".into()],
         // -m with arguments as in a call
         vec![
             "measure".into(),
-            data("halter.mcad"),
+            data("holder.mcad"),
             "-m".into(),
-            "halter(breite, h = doppelt(2))".into(),
+            "holder(width, h = double(2))".into(),
             "--volume".into(),
             "all".into(),
         ],
-        vec!["check".into(), data("halter.mcad"), "-m".into(), "halter(1, 2, 3, 4)".into()],
+        vec!["check".into(), data("holder.mcad"), "-m".into(), "holder(1, 2, 3, 4)".into()],
         vec![
             "measure".into(),
             housing.clone(),
@@ -234,7 +234,7 @@ fn output_identical_with_and_without_daemon() {
             "lid".into(),
         ],
         vec!["set".into(), housing.clone(), "--param".into(), "housing.w=50".into(), "--dry-run".into()],
-        vec!["export".into(), housing.clone(), "--part".into(), "gibtsnicht".into(), "-o".into(), o("x.stl")],
+        vec!["export".into(), housing.clone(), "--part".into(), "missing".into(), "-o".into(), o("x.stl")],
     ];
     // in both languages (alternating: the daemon's cache serves both)
     for args in &cases {
@@ -309,8 +309,8 @@ fn output_identical_with_and_without_daemon() {
         assert_eq!(normalized(json(&lj)), normalized(json(&dj)), "{aj:?}");
     }
     // all parts into a directory (created by the client)
-    let dir_l = o("teile_l");
-    let dir_d = o("teile_d");
+    let dir_l = o("parts_l");
+    let dir_d = o("parts_d");
     let l = env.local(&["export", &project, "--all-parts", "-o", &dir_l, "--format", "stl"]);
     let d = env.run(&["export", &project, "--all-parts", "-o", &dir_d, "--format", "stl"]);
     assert_same(&l, &d, "all-parts");
@@ -604,25 +604,25 @@ fn cache_limit_and_project_limit() {
 #[test]
 fn changed_files_are_never_stale() {
     let env = Env::new();
-    let main = env.path("teil.scad");
+    let main = env.path("part.scad");
     let lib = env.path("lib.scad");
-    std::fs::write(&lib, "module klotz(s) { cube(s); }\n").unwrap();
-    std::fs::write(&main, "include <lib.scad>\nw = 10;\nklotz(w);\n").unwrap();
+    std::fs::write(&lib, "module block(s) { cube(s); }\n").unwrap();
+    std::fs::write(&main, "include <lib.scad>\nw = 10;\nblock(w);\n").unwrap();
     let m = main.display().to_string();
     let vol = |o: &Output| json(o)["volume"]["volume"].as_f64().unwrap();
     let o = env.run(&["measure", &m, "--volume", "--json"]);
     assert!(used(&o));
     assert!((vol(&o) - 1000.0).abs() < 1e-6, "{}", vol(&o));
     // main file changes
-    std::fs::write(&main, "include <lib.scad>\nw = 12;\nklotz(w);\n").unwrap();
+    std::fs::write(&main, "include <lib.scad>\nw = 12;\nblock(w);\n").unwrap();
     let o = env.run(&["measure", &m, "--volume", "--json"]);
     assert!((vol(&o) - 1728.0).abs() < 1e-6, "{}", vol(&o));
     // included file changes
-    std::fs::write(&lib, "module klotz(s) { cube([s, s, 1]); }\n").unwrap();
+    std::fs::write(&lib, "module block(s) { cube([s, s, 1]); }\n").unwrap();
     let o = env.run(&["measure", &m, "--volume", "--json"]);
     assert!((vol(&o) - 144.0).abs() < 1e-6, "{}", vol(&o));
     // back to an earlier state: from the cache, still right
-    std::fs::write(&lib, "module klotz(s) { cube(s); }\n").unwrap();
+    std::fs::write(&lib, "module block(s) { cube(s); }\n").unwrap();
     let o = env.run(&["measure", &m, "--volume", "--json"]);
     assert!((vol(&o) - 1728.0).abs() < 1e-6, "{}", vol(&o));
     // `set` writes through the client; the next call sees it
@@ -701,14 +701,14 @@ fn long_ipc_dir_uses_short_socket_path() {
     let long = env
         .tmp
         .path()
-        .join("ein-sehr-langer-verzeichnisname-fuer-den-socket-des-hintergrundprozesses-damit-es-reicht")
+        .join("a-very-long-directory-name-for-the-socket-of-the-background-process-so-that-it-is-enough")
         .join("ipc");
     std::fs::create_dir_all(&long).unwrap();
     assert!(long.join("daemon.sock").as_os_str().len() > 107, "{}", long.display());
     env.vars.push(("MCAD_IPC_DIR".into(), long.display().to_string()));
     let o = env.run(&["check", &ex("spec/housing.mcad"), "--json"]);
     assert_eq!(o.status.code(), Some(0), "{}", text(&o.stderr));
-    assert!(used(&o), "Daemon nicht verwendet: {}", text(&o.stderr));
+    assert!(used(&o), "daemon not used: {}", text(&o.stderr));
     let st = env.status();
     assert_eq!(st["running"], true, "{st}");
     assert_eq!(st["socket_substitute"], true, "{st}");
@@ -725,7 +725,7 @@ fn long_ipc_dir_uses_short_socket_path() {
     assert_eq!(env.status()["pid"].as_u64(), Some(pid));
     let o = env.run(&["daemon", "stop", "--json"]);
     assert_eq!(json(&o)["stopped"], true);
-    assert!(!Path::new(&sock).exists(), "Ersatz-Socket bleibt liegen");
+    assert!(!Path::new(&sock).exists(), "substitute socket left behind");
     let o = env.run(&["daemon", "status"]);
     assert!(text(&o.stdout).starts_with("kein Daemon"), "{}", text(&o.stdout));
 }
@@ -737,7 +737,7 @@ fn long_ipc_dir_uses_short_socket_path() {
 fn language_switch_in_one_daemon() {
     let env = Env::new();
     let f = ex("spec/fillet_zones.mcad");
-    let bad = data("fillet_zu_gross.mcad");
+    let bad = data("fillet_too_large.mcad");
     let run = |lang: &str, args: &[&str]| {
         let mut c = env.cmd();
         c.env("MCAD_LANG", lang).args(args);

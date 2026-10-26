@@ -39,27 +39,27 @@ describe("ZIP", () => {
     expect(crc32(new TextEncoder().encode("123456789"))).toBe(0xcbf43926);
   });
 
-  it("schreiben und lesen (gespeichert, UTF-8-Namen)", async () => {
+  it("write and read (stored, UTF-8 names)", async () => {
     const z = writeZip([
-      { name: "projekt/haupt.scad", data: "include <maße.scad>\ncube(1);\n" },
-      { name: "projekt/maße.scad", data: "b = 1; // äö" },
+      { name: "project/main.scad", data: "include <naïve.scad>\ncube(1);\n" },
+      { name: "project/naïve.scad", data: "b = 1; // é ü" },
     ]);
     const back = await readZip(z);
     const dec = new TextDecoder();
     expect(back.map((e) => [e.name, dec.decode(e.data)])).toEqual([
-      ["projekt/haupt.scad", "include <maße.scad>\ncube(1);\n"],
-      ["projekt/maße.scad", "b = 1; // äö"],
+      ["project/main.scad", "include <naïve.scad>\ncube(1);\n"],
+      ["project/naïve.scad", "b = 1; // é ü"],
     ]);
   });
 
-  it("komprimierte Einträge (deflate)", async () => {
+  it("compressed entries (deflate)", async () => {
     const text = "module m() cube(1);\n".repeat(50);
-    const back = await readZip(deflatedZip("lib/teile.mcad", text));
-    expect(back[0].name).toBe("lib/teile.mcad");
+    const back = await readZip(deflatedZip("lib/parts.mcad", text));
+    expect(back[0].name).toBe("lib/parts.mcad");
     expect(new TextDecoder().decode(back[0].data)).toBe(text);
   });
 
-  it("keine ZIP-Datei", async () => {
+  it("not a ZIP file", async () => {
     await expect(readZip(new TextEncoder().encode("cube(1);"))).rejects.toThrow("keine ZIP-Datei");
   });
 });

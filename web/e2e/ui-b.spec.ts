@@ -48,15 +48,15 @@ const waitText = (page: Page, pred: string) =>
   page.waitForFunction((src) => new Function("t", `return (${src})(t);`)((window as unknown as { __cad: { text(): string } }).__cad.text()), pred, { timeout: 30_000, polling: 30 });
 
 const GRID = `grid g {
-    x: links = 0, rechts = 40;
-    y: vorne = 0, hinten = 30;
-    z: boden = 0, deckel = 20;
+    x: left = 0, right = 40;
+    y: front = 0, back = 30;
+    z: floor = 0, lid = 20;
 }
 cube([40, 30, 2]);
 translate([5, 5, 2]) cube(4);
 `;
 
-test("B01 cube-Ecke ziehen: Literal live, Szene folgt, ein Undo", async ({ page }) => {
+test("B01 drag a cube corner: literal live, the scene follows, one undo", async ({ page }) => {
   await openApp(page);
   const src = "cube([20, 20, 20]);\n";
   await loadText(page, src);
@@ -115,16 +115,16 @@ test("B01 cube-Ecke ziehen: Literal live, Szene folgt, ein Undo", async ({ page 
   expect(await text(page)).toBe(after);
   recordB({
     id: "B01",
-    title: "cube-Ecke ziehen",
+    title: "Drag a cube corner",
     before: "b01-vorher",
     after: "b01-nachher",
     codeBefore: src.trim(),
     codeAfter: after.trim(),
-    caption: `Griff an der Ecke gegenüber dem Ursprung mit der Maus gezogen: das Literal änderte sich live (${s.metrics.dragToScene.length} Zwischenstände mit grober Tessellierung), die Szene folgte. Ein Strg+Z stellte „${src.trim()}“ wieder her, Strg+Y (Wiederholen) wieder „${after.trim()}“.`,
+    caption: `The handle at the corner opposite the origin dragged with the mouse: the literal changed live (${s.metrics.dragToScene.length} intermediate states with coarse tessellation), the scene followed. One Ctrl+Z restored “${src.trim()}”, Ctrl+Y (redo) again “${after.trim()}”.`,
   });
 });
 
-test("B02 translate-Griff auf Rasterpunkt loslassen schreibt g[…]", async ({ page }) => {
+test("B02 releasing the translate handle on a grid point writes g[…]", async ({ page }) => {
   await openApp(page);
   await loadText(page, GRID);
   await clickLine(page, 7, 0);
@@ -136,39 +136,39 @@ test("B02 translate-Griff auf Rasterpunkt loslassen schreibt g[…]", async ({ p
   const to = await project(page, [40, 30, 20]);
   await mouseDrag(page, from, line(from, to, 16), {
     mid: async () => {
-      await page.waitForFunction(() => (window as unknown as { __cad: { drag(): { snap: string | null } | null } }).__cad.drag()?.snap === "g[rechts, hinten, deckel]");
+      await page.waitForFunction(() => (window as unknown as { __cad: { drag(): { snap: string | null } | null } }).__cad.drag()?.snap === "g[right, back, lid]");
       await expect(page.getByTestId("snap-label")).toBeVisible();
-      await expect(page.getByTestId("snap-label")).toHaveText("g[rechts, hinten, deckel]");
-      await expect(page.getByTestId("status-drag")).toContainText("Snap: g[rechts, hinten, deckel]");
-      await waitText(page, `(t) => t.includes("translate(g[rechts, hinten, deckel])")`);
+      await expect(page.getByTestId("snap-label")).toHaveText("g[right, back, lid]");
+      await expect(page.getByTestId("status-drag")).toContainText("Snap: g[right, back, lid]");
+      await waitText(page, `(t) => t.includes("translate(g[right, back, lid])")`);
       await screenshotB(page, "b02-waehrend");
     },
   });
   await waitDragDone(page);
   const after = await text(page);
-  expect(lines(after, 7)).toBe("translate(g[rechts, hinten, deckel]) cube(4);");
+  expect(lines(after, 7)).toBe("translate(g[right, back, lid]) cube(4);");
   // The cube now sits at the grid point.
   const nb = await hook(page, (c) => c.nodeBounds(7));
   expect(nb.some((b) => Math.abs(b.min[0] - 40) < 1e-6 && Math.abs(b.min[1] - 30) < 1e-6 && Math.abs(b.min[2] - 20) < 1e-6)).toBe(true);
   await screenshotB(page, "b02-nachher");
   recordB({
     id: "B02",
-    title: "Snap auf Rasterpunkt",
+    title: "Snap to a grid point",
     before: "b02-vorher",
     after: "b02-waehrend",
     codeBefore: lines(GRID, 7),
     codeAfter: lines(after, 7),
-    caption: "translate-Griff (Ziel des Pfeils) zum Schnittpunkt rechts/hinten/deckel gezogen: Ziel im Fangradius hervorgehoben und beschriftet, beim Loslassen steht die Referenz g[rechts, hinten, deckel] im Code (keine Koordinaten).",
+    caption: "translate handle (target of the arrow) dragged to the intersection right/back/lid: the target within the snap radius highlighted and labelled; on release the reference g[right, back, lid] is in the code (no coordinates).",
   });
 });
 
-test("B03 Snap auf Anker schreibt k.ecke", async ({ page }) => {
+test("B03 snap to an anchor writes k.corner", async ({ page }) => {
   await openApp(page);
-  const src = `module teil() {
-    anchor ecke = [30, 20, 10];
+  const src = `module part() {
+    anchor corner = [30, 20, 10];
     cube([30, 20, 10]);
 }
-k: teil();
+k: part();
 translate([0, 0, 25]) sphere(3);
 `;
   await loadText(page, src);
@@ -179,26 +179,26 @@ translate([0, 0, 25]) sphere(3);
   const to = await project(page, [30, 20, 10]);
   await mouseDrag(page, from, line(from, to, 14), {
     mid: async () => {
-      await page.waitForFunction(() => (window as unknown as { __cad: { drag(): { snap: string | null } | null } }).__cad.drag()?.snap === "k.ecke");
+      await page.waitForFunction(() => (window as unknown as { __cad: { drag(): { snap: string | null } | null } }).__cad.drag()?.snap === "k.corner");
       await screenshotB(page, "b03-waehrend");
     },
   });
   await waitDragDone(page);
   const after = await text(page);
-  expect(lines(after, 6)).toBe("translate(k.ecke) sphere(3);");
+  expect(lines(after, 6)).toBe("translate(k.corner) sphere(3);");
   await screenshotB(page, "b03-nachher");
   recordB({
     id: "B03",
-    title: "Snap auf Anker",
+    title: "Snap to an anchor",
     before: "b03-vorher",
     after: "b03-waehrend",
     codeBefore: lines(src, 6),
     codeAfter: lines(after, 6),
-    caption: "Griff des translate-Ziels auf die Raute des Ankers ecke der benannten Instanz k gezogen: Beschriftung „k.ecke“, beim Loslassen wird k.ecke geschrieben.",
+    caption: "The handle of the translate target dragged onto the diamond of the anchor corner of the named instance k: label “k.corner”, on release k.corner is written.",
   });
 });
 
-test("B04 Alt-Ziehen: frei, Zahlen auf die Schrittweite gerundet", async ({ page }) => {
+test("B04 Alt drag: free, numbers rounded to the step", async ({ page }) => {
   await openApp(page);
   await loadText(page, GRID);
   await clickLine(page, 7, 0);
@@ -240,16 +240,16 @@ test("B04 Alt-Ziehen: frei, Zahlen auf die Schrittweite gerundet", async ({ page
   await screenshotB(page, "b04-nachher");
   recordB({
     id: "B04",
-    title: "Alt-Ziehen",
+    title: "Alt drag",
     before: "b04-waehrend",
     after: "b04-nachher",
     codeBefore: lines(GRID, 7),
     codeAfter: `${first}\n${lines(after, 7)}`,
-    caption: `Mit gedrückter Alt-Taste nahe an einen Rasterpunkt gezogen: kein Snap, es werden Zahlen geschrieben, gerundet auf 1 mm (${first}). Danach Schrittweite in den Einstellungen auf 0,5 mm gesetzt: ${lines(after, 7)}.`,
+    caption: `Dragged close to a grid point with Alt held: no snap, numbers are written, rounded to 1 mm (${first}). Then the step set to 0.5 mm in the settings: ${lines(after, 7)}.`,
   });
 });
 
-test("B05 Rasterebene mit Literal ziehen", async ({ page }) => {
+test("B05 drag a grid plane with a literal", async ({ page }) => {
   await openApp(page);
   await loadText(page, GRID);
   await clickLine(page, 2, 8);
@@ -260,12 +260,12 @@ test("B05 Rasterebene mit Literal ziehen", async ({ page }) => {
   const to = await handlePoint(page, r.id, 52);
   await mouseDrag(page, from, line(from, to, 12), {
     mid: async () => {
-      await waitText(page, `(t) => !t.includes("rechts = 40;")`);
+      await waitText(page, `(t) => !t.includes("right = 40;")`);
     },
   });
   await waitDragDone(page);
   const after = await text(page);
-  const m = lines(after, 2).match(/rechts = (\d+);/);
+  const m = lines(after, 2).match(/right = (\d+);/);
   expect(m).not.toBeNull();
   expect(Number(m![1])).toBeGreaterThanOrEqual(49);
   expect(Number(m![1])).toBeLessThanOrEqual(55);
@@ -275,19 +275,19 @@ test("B05 Rasterebene mit Literal ziehen", async ({ page }) => {
   await screenshotB(page, "b05-nachher");
   recordB({
     id: "B05",
-    title: "Rasterebene ziehen",
+    title: "Drag a grid plane",
     before: "b05-vorher",
     after: "b05-nachher",
     codeBefore: lines(GRID, 2),
     codeAfter: lines(after, 2),
-    caption: "Cursor im Rasterblock: alle Ebenen mit Literal als durchgezogene Linie mit Griff. Der Griff der Ebene rechts wurde entlang der x-Achse gezogen; das Literal folgt, Linie und Rasterpunkte wandern mit.",
+    caption: "Cursor in the grid block: all planes with a literal as solid lines with a handle. The handle of the plane right was dragged along the x axis; the literal follows, the line and the grid points move along.",
   });
 });
 
-test("B06 Höhe snappt auf Rasterebene derselben Achse (g.deckel)", async ({ page }) => {
+test("B06 the height snaps to a grid plane of the same axis (g.lid)", async ({ page }) => {
   await openApp(page);
   const src = `grid g {
-    z: boden = 0, deckel = 20;
+    z: floor = 0, lid = 20;
 }
 cube([30, 30, 1]);
 cylinder(h = 12, r = 4);
@@ -301,27 +301,27 @@ cylinder(h = 12, r = 4);
   const to = await handlePoint(page, h.id, 20);
   await mouseDrag(page, from, line(from, to, 10), {
     mid: async () => {
-      await page.waitForFunction(() => (window as unknown as { __cad: { drag(): { snap: string | null } | null } }).__cad.drag()?.snap === "g.deckel");
+      await page.waitForFunction(() => (window as unknown as { __cad: { drag(): { snap: string | null } | null } }).__cad.drag()?.snap === "g.lid");
       await screenshotB(page, "b06-waehrend");
     },
   });
   await waitDragDone(page);
   const after = await text(page);
-  expect(lines(after, 5)).toBe("cylinder(h = g.deckel, r = 4);");
+  expect(lines(after, 5)).toBe("cylinder(h = g.lid, r = 4);");
   const nb = await hook(page, (c) => c.nodeBounds(5));
   expect(nb[0].max[2]).toBeCloseTo(20, 3);
   recordB({
     id: "B06",
-    title: "1D-Griff snappt auf Ebene",
+    title: "1D handle snaps to a plane",
     before: "b06-vorher",
     after: "b06-waehrend",
     codeBefore: lines(src, 5),
     codeAfter: lines(after, 5),
-    caption: "Höhengriff des Zylinders an die Rasterebene deckel gezogen: Ebenen derselben Achse sind Snap-Ziele, geschrieben wird g.deckel (neu in cad-eval: SnapRef::Plane).",
+    caption: "The height handle of the cylinder dragged to the grid plane lid: planes of the same axis are snap targets, g.lid is written (new in cad-eval: SnapRef::Plane).",
   });
 });
 
-test("B07 rotate-Ring rastet in 15°", async ({ page }) => {
+test("B07 the rotate ring snaps in 15°", async ({ page }) => {
   await openApp(page);
   const src = "rotate([0, 0, 10]) cube([30, 6, 6]);\n";
   await loadText(page, src);
@@ -349,16 +349,16 @@ test("B07 rotate-Ring rastet in 15°", async ({ page }) => {
   await screenshotB(page, "b07-nachher");
   recordB({
     id: "B07",
-    title: "Drehring rastet in 15°",
+    title: "Rotation ring snaps in 15°",
     before: "b07-vorher",
     after: "b07-nachher",
     codeBefore: lines(src, 1),
     codeAfter: lines(after, 1),
-    caption: "Drehringe pro Achse; der Griff am z-Ring wurde von 10° bis 52° gezogen. Geschrieben werden nur Vielfache von 15° (Schrittweite für Winkel), am Ende 45°.",
+    caption: "Rotation rings per axis; the handle on the z ring was dragged from 10° to 52°. Only multiples of 15° (the angle step) are written, 45° at the end.",
   });
 });
 
-test("B08 gesperrter Griff bei berechnetem Wert", async ({ page }) => {
+test("B08 locked handle for a computed value", async ({ page }) => {
   await openApp(page);
   const src = `a = 3;
 translate([a + 1, 0, 0] * 4) cube(5);
@@ -379,15 +379,15 @@ cube([30, 10, 1]);
   await expect(page.getByTestId("status-notice")).toContainText("gesperrt");
   recordB({
     id: "B08",
-    title: "Gesperrter Griff",
+    title: "Locked handle",
     before: "b08-vorher",
     codeBefore: lines(src, 2),
     codeAfter: lines(src, 2),
-    caption: "Berechneter Wert [a + 1, 0, 0] * 4: der Griff wird angezeigt (grauer Ring), ist aber gesperrt. Ziehen ändert nichts, die Statuszeile meldet „berechneter Wert – gesperrt“.",
+    caption: "Computed value [a + 1, 0, 0] * 4: the handle is shown (grey ring) but locked. Dragging changes nothing, the status line reports “berechneter Wert – gesperrt” (computed value – locked).",
   });
 });
 
-test("B09 Variable mit Literal: Definition ändert sich, alle Verwendungen bewegen sich", async ({ page }) => {
+test("B09 variable with a literal: the definition changes, all uses move", async ({ page }) => {
   await openApp(page);
   const src = `p = [10, 0, 5];
 translate(p) cube(4);
@@ -419,24 +419,24 @@ cube([40, 20, 1]);
   await screenshotB(page, "b09-nachher");
   recordB({
     id: "B09",
-    title: "Variable mit Literal",
+    title: "Variable with a literal",
     before: "b09-vorher",
     after: "b09-nachher",
     codeBefore: lines(src, 1, 3),
     codeAfter: lines(after, 1, 3),
-    caption: "translate(p) in Zeile 2 gezogen: geändert wird die Definition von p in Zeile 1, Würfel und Kugel (Zeilen 2 und 3) verschieben sich um denselben Betrag.",
+    caption: "translate(p) in line 2 dragged: the definition of p in line 1 changes, cube and sphere (lines 2 and 3) move by the same amount.",
   });
 });
 
-test("B10 Zonenmittelpunkt über translate snappt auf Raster", async ({ page }) => {
+test("B10 a zone centre under translate snaps to the grid", async ({ page }) => {
   await openApp(page);
   const src = `grid g {
-    x: links = 0, rechts = 30;
-    y: vorne = 0, hinten = 20;
-    z: boden = 0, deckel = 15;
+    x: left = 0, right = 30;
+    y: front = 0, back = 20;
+    z: floor = 0, lid = 15;
 }
 fillet(2) {
-    box(g[links, vorne, boden], g[rechts, hinten, deckel]);
+    box(g[left, front, floor], g[right, back, lid]);
     translate([10, 10, 15]) sphere(4);
 }
 `;
@@ -450,20 +450,20 @@ fillet(2) {
   await mouseDrag(page, from, line(from, to, 12));
   await waitDragDone(page);
   const after = await text(page);
-  expect(lines(after, 8)).toBe("    translate(g[rechts, hinten, deckel]) sphere(4);");
+  expect(lines(after, 8)).toBe("    translate(g[right, back, lid]) sphere(4);");
   await screenshotB(page, "b10-nachher");
   recordB({
     id: "B10",
-    title: "Zonenmittelpunkt",
+    title: "Zone centre",
     before: "b10-vorher",
     after: "b10-nachher",
     codeBefore: lines(src, 8),
     codeAfter: lines(after, 8),
-    caption: "Cursor auf der Zone (Kugel) im fillet-Block: Griff am Zonenmittelpunkt (translate), auf die Ecke rechts/hinten/deckel gezogen. Die Zone wandert, die ausgewählten Kanten folgen.",
+    caption: "Cursor on the zone (sphere) in the fillet block: handle at the zone centre (translate), dragged onto the corner right/back/lid. The zone moves, the selected edges follow.",
   });
 });
 
-test("B11 Parameterleiste: Vorschau, Reset, Als Standard übernehmen", async ({ page }) => {
+test("B11 parameter bar: preview, reset, use as default", async ({ page }) => {
   await openApp(page);
   const src0 = await text(page);
   await clickLine(page, 10, 6);
@@ -531,27 +531,27 @@ test("B11 Parameterleiste: Vorschau, Reset, Als Standard übernehmen", async ({ 
   });
   recordB({
     id: "B11",
-    title: "Parameterleiste",
+    title: "Parameter bar",
     before: "b11-vorschau",
     after: "b11-nachher",
     codeBefore: lines(src0, 3),
     codeAfter: lines(after, 3),
-    caption: `Cursor in module housing: Leiste mit w, d, h, t (Eingabefeld + Schieberegler, Reset ↺). w = 60 änderte nur die Vorschau (Code unverändert, Zeile markiert), Reset stellte 40 her; h per Schieberegler auf ${hval}. d = 50 blieb beim Verlassen und Wiederbetreten des Moduls erhalten; „Als Standard übernehmen“ schrieb d = 50 in die Moduldefinition.`,
+    caption: `Cursor in module housing: bar with w, d, h, t (input field + slider, reset ↺). w = 60 changed only the preview (code unchanged, line marked), reset restored 40; h by slider to ${hval}. d = 50 stayed when leaving and entering the module again; “Als Standard übernehmen” (use as default) wrote d = 50 into the module definition.`,
   });
 });
 
-test("B12 Inline-Schalter, kein Schieberegler", async ({ page }) => {
+test("B12 inline switch, no slider", async ({ page }) => {
   await openApp(page);
   // Number literals have no inline slider.
   await loadText(page, "t = 3;\ncube([t * 5, 10, 10]);\n");
   await waitScene(page);
   await expect(page.getByTestId("inline-slider")).toHaveCount(0);
   // Bool switch.
-  const src2 = "hohl = true;\nif (hohl) cube(10); else sphere(5);\n";
+  const src2 = "hollow = true;\nif (hollow) cube(10); else sphere(5);\n";
   await loadText(page, src2);
   await screenshotB(page, "b12-vorher", "top");
   await page.getByRole("checkbox", { name: "Wert umschalten" }).click();
-  await waitText(page, `(t) => t.startsWith("hohl = false;")`);
+  await waitText(page, `(t) => t.startsWith("hollow = false;")`);
   await waitScene(page);
   const nb = await hook(page, (c) => c.nodeBounds(2));
   expect(nb.some((b) => b.label === "sphere")).toBe(true);
@@ -563,16 +563,16 @@ test("B12 Inline-Schalter, kein Schieberegler", async ({ page }) => {
   expect(await text(page)).toBe(src2);
   recordB({
     id: "B12",
-    title: "Inline-Schalter",
+    title: "Inline switch",
     before: "b12-vorher",
     after: "b12-nachher",
-    codeBefore: "hohl = true;",
-    codeAfter: "hohl = false;",
-    caption: "Bool-Literal einer Zuweisung: Schalter am Zeilenende, Klick schreibt false; die Szene wechselt auf den else-Zweig. Zahl-Literale haben keinen Inline-Schieberegler (nur in der Parameterleiste).",
+    codeBefore: "hollow = true;",
+    codeAfter: "hollow = false;",
+    caption: "Bool literal of an assignment: a switch at the line end, a click writes false; the scene switches to the else branch. Number literals have no inline slider (only in the parameter bar).",
   });
 });
 
-test("B13 Strg+Klick auf Rasterausdruck springt zur Rasterdeklaration", async ({ page }) => {
+test("B13 Ctrl+click on a grid expression jumps to the grid declaration", async ({ page }) => {
   await openApp(page);
   // The references of a module are known once the cursor is in it (module context).
   const src0 = await text(page);
@@ -589,14 +589,14 @@ test("B13 Strg+Klick auf Rasterausdruck springt zur Rasterdeklaration", async ({
   await page.waitForFunction(() => (window as unknown as { __cad: { cursorLine(): number } }).__cad.cursorLine() === 11);
   recordB({
     id: "B13",
-    title: "Sprung zur Rasterdeklaration",
+    title: "Jump to the grid declaration",
     codeBefore: `11: ${lines(src0, 11).trim()}`,
     codeAfter: `4: ${lines(src0, 4).trim()}   ← Cursor`,
-    caption: "Strg+Klick auf g[left, front, floor] (Zeile 11) setzt den Cursor auf die Deklaration grid g (Zeile 4); ein normaler Klick setzt weiter nur den Cursor.",
+    caption: "Ctrl+click on g[left, front, floor] (line 11) sets the cursor on the declaration grid g (line 4); a normal click still only sets the cursor.",
   });
 });
 
-test("B14 Messwerte: Latenz Ziehen → Szene (grob/fein), fps beim Ziehen", async ({ page }) => {
+test("B14 measurements: latency drag → scene (coarse/fine), fps while dragging", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/hole_plate.mcad");
   // Module context: drag the plate thickness plane `top = t` (default of t) up and down.
@@ -644,11 +644,11 @@ test("B14 Messwerte: Latenz Ziehen → Szene (grob/fein), fps beim Ziehen", asyn
   await screenshotB(page, "b14-nachher");
   recordB({
     id: "B14",
-    title: "Messwerte beim Ziehen",
+    title: "Measurements while dragging",
     before: "b14-waehrend",
     after: "b14-nachher",
     codeBefore: "module hole_plate(n = 4, pitch = 12, t = 4, margin = 6) {",
     codeAfter: lines(after, 3),
-    caption: `hole_plate (Differenz mit fillet = 1, vier Bohrungen): Ebene top = t (Standardwert, andere Farbe) ${path.length}-mal bewegt, ein Schritt pro Frame. Ziehen → Szene grob: Median ${med.toFixed(0)} ms, p95 ${p95.toFixed(0)} ms (${coarse.length} Szenen); Loslassen → feine Szene ${fine.at(-1)!.toFixed(0)} ms; ${fps.fps.toFixed(0)} fps während des Ziehens, ${fps.sent} Drag-Nachrichten, ${fps.dropped} übersprungen.`,
+    caption: `hole_plate (difference with fillet = 1, four bores): plane top = t (default value, another colour) moved ${path.length} times, one step per frame. Drag → coarse scene: median ${med.toFixed(0)} ms, p95 ${p95.toFixed(0)} ms (${coarse.length} scenes); release → fine scene ${fine.at(-1)!.toFixed(0)} ms; ${fps.fps.toFixed(0)} fps while dragging, ${fps.sent} drag messages, ${fps.dropped} skipped.`,
   });
 });

@@ -20,8 +20,8 @@ function editor(doc: string) {
 
 const type = (ed: ReturnType<typeof editor>, at: number, text: string) => ed.dispatch(ed.state.update({ changes: { from: at, insert: text }, userEvent: "input.type" }));
 
-describe("Ein Ziehvorgang ist ein Undo-Schritt", () => {
-  it("viele Live-Änderungen → ein Undo stellt den Ausgangstext her", () => {
+describe("A drag is one undo step", () => {
+  it("many live changes → one undo restores the original text", () => {
     const ed = editor("cube([20, 20, 20]);\n");
     const g = new EditGroup(() => ed);
     g.begin();
@@ -42,7 +42,7 @@ describe("Ein Ziehvorgang ist ein Undo-Schritt", () => {
     expect(ed.state.doc.toString()).toBe("cube([26, 20, 20]);\n");
   });
 
-  it("früheres Tippen bleibt ein eigener Schritt", () => {
+  it("earlier typing stays a step of its own", () => {
     const ed = editor("a = 1;\n");
     type(ed, 6, "\nb = 2;");
     const g = new EditGroup(() => ed);
@@ -57,7 +57,7 @@ describe("Ein Ziehvorgang ist ein Undo-Schritt", () => {
     expect(ed.state.doc.toString()).toBe("a = 1;\n");
   });
 
-  it("Tippen direkt danach wird nicht angehängt", () => {
+  it("typing right after is not appended", () => {
     const ed = editor("x = 1;");
     const g = new EditGroup(() => ed);
     g.begin();
@@ -70,7 +70,7 @@ describe("Ein Ziehvorgang ist ein Undo-Schritt", () => {
     expect(ed.state.doc.toString()).toBe("x = 1;");
   });
 
-  it("ohne Änderung kein Undo-Schritt, Abbrechen stellt her", () => {
+  it("no change, no undo step; cancel restores", () => {
     const ed = editor("x = 1;");
     const g = new EditGroup(() => ed);
     g.begin();
@@ -84,8 +84,8 @@ describe("Ein Ziehvorgang ist ein Undo-Schritt", () => {
   });
 });
 
-describe("Engine-Edits auf das aktuelle Dokument abbilden", () => {
-  it("über Änderungen seit der Version", () => {
+describe("Map engine edits onto the current document", () => {
+  it("across changes since the version", () => {
     const m = new VersionMapper(17);
     m.mark(1, 17);
     const ed = editor("translate([5, 5, ");
@@ -98,7 +98,7 @@ describe("Engine-Edits auf das aktuelle Dokument abbilden", () => {
     expect(mapEdits(m, 7, [{ from: 0, to: 1, text: "a" }], 19)).toBeNull();
   });
 
-  it("überlappende Edits werden verworfen", () => {
+  it("overlapping edits are dropped", () => {
     const m = new VersionMapper(10);
     m.mark(3, 10);
     expect(mapEdits(m, 3, [{ from: 0, to: 4, text: "a" }, { from: 2, to: 6, text: "b" }], 10)).toBeNull();
@@ -109,9 +109,9 @@ describe("Engine-Edits auf das aktuelle Dokument abbilden", () => {
   });
 });
 
-describe("Inline-Schalter: Literal noch an der Stelle?", () => {
-  const doc = Text.of(["t = 3;", "hohl = true;", "x = -2.5;"]);
-  it("prüft Bool", () => {
+describe("Inline switch: literal still in place?", () => {
+  const doc = Text.of(["t = 3;", "open = true;", "x = -2.5;"]);
+  it("checks bool", () => {
     expect(literalAt(doc, { from: 14, to: 18, kind: "bool", value: true })).toBe(true);
     expect(literalAt(doc, { from: 13, to: 18, kind: "bool", value: true })).toBe(true);
     expect(literalAt(doc, { from: 4, to: 5, kind: "bool", value: true })).toBe(false);

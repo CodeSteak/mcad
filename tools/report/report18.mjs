@@ -6,7 +6,7 @@
 // Writes docs/reports/18-skizzen-editor/report.html (images in img/).
 //
 // Inputs (gitignored, reports/tmp/report18/):
-//   scenarios.json, img/*.jpg, metrics.json     cd web && pnpm exec playwright test e2e/skizzen-editor.spec.ts
+//   scenarios.json, img/*.jpg, metrics.json     cd web && pnpm exec playwright test e2e/sketch-editor.spec.ts
 //   playwright.txt                              whole suite (cd web && pnpm e2e > …)
 //   vitest.txt, typecheck.txt                   cd web && pnpm test, pnpm typecheck
 //   cargo.txt, clippy.txt, fmt.txt              cargo test --workspace, clippy -D warnings, fmt --check

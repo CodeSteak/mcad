@@ -19,27 +19,27 @@ fn find(tree: &cad_ir::Tree, pred: impl Fn(&Op) -> bool) -> u32 {
 }
 
 #[test]
-fn spec_gehaeuse() {
+fn spec_housing() {
     let src = r#"
-module gehaeuse(w = 40, d = 30, h = 20, t = 3) {
+module housing(w = 40, d = 30, h = 20, t = 3) {
     grid g {
-        x: links = 0, innen_l = t, innen_r = w - t, rechts = w;
-        y: vorne = 0, hinten = d;
-        z: boden = 0, deckel = h;
+        x: left = 0, inner_left = t, inner_right = w - t, right = w;
+        y: front = 0, back = d;
+        z: floor = 0, lid = h;
     }
 
     difference() {
-        box(g[links, vorne, boden], g[rechts, hinten, deckel]);
-        box(g[innen_l, vorne, t], g[innen_r, hinten, deckel]);
+        box(g[left, front, floor], g[right, back, lid]);
+        box(g[inner_left, front, t], g[inner_right, back, lid]);
     }
 
-    anchor ecke = g[rechts, hinten, deckel];
+    anchor corner = g[right, back, lid];
 }
 
-module deckel() cube([10, 10, 2]);
+module lid() cube([10, 10, 2]);
 
-k: gehaeuse(w = 60);
-translate(k.ecke) deckel();
+k: housing(w = 60);
+translate(k.corner) lid();
 "#;
     let out = eval(src);
     let mut e = engine();
@@ -47,9 +47,9 @@ translate(k.ecke) deckel();
     assert_clean(&ev);
     // U-profile 60×30×20, wall 3, plus the lid on the corner (touching, disjoint volume)
     let want = 60.0 * 30.0 * 20.0 - 54.0 * 30.0 * 17.0 + 200.0;
-    assert_approx("gehaeuse", root_volume(&mut e, &ev), want, 1e-6);
-    // the lid sits at k.ecke = [60, 30, 20] in the root system
-    let lid = find(&ev.tree, |o| matches!(o, Op::ModuleCall { name, .. } if name == "deckel"));
+    assert_approx("housing", root_volume(&mut e, &ev), want, 1e-6);
+    // the lid sits at k.corner = [60, 30, 20] in the root system
+    let lid = find(&ev.tree, |o| matches!(o, Op::ModuleCall { name, .. } if name == "lid"));
     let w = ev.report(lid).display_world;
     assert!(w.w_axis.truncate().abs_diff_eq(glam::DVec3::new(60.0, 30.0, 20.0), 1e-9), "{w}");
 }
@@ -58,11 +58,11 @@ translate(k.ecke) deckel();
 fn spec_fillet_zone_block() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let src = r#"
-module teil(w = 20, h = 20) {
+module part(w = 20, h = 20) {
     grid g {
-        x: links = 0, rechts = w;
-        y: vorne = 0, hinten = w;
-        z: boden = 0, deckel = h;
+        x: left = 0, right = w;
+        y: front = 0, back = w;
+        z: floor = 0, lid = h;
     }
     p = [10, 10, 0];
     fillet(2) {
@@ -71,10 +71,10 @@ module teil(w = 20, h = 20) {
             translate(p) cylinder(h = 30, r = 5);
         }
         translate(p) sphere(8);
-        zone(g[rechts, *, deckel], d = 2);
+        zone(g[right, *, lid], d = 2);
     }
 }
-teil();
+part();
 "#;
     let out = eval(src);
     let mut e = engine();

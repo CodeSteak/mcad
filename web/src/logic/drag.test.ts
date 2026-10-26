@@ -5,7 +5,7 @@ import { DragQueue, type DragInput, axisFromMotion, axisLine, dragStep, lockable
 import { handleGeom, handlesForCursor } from "./handles";
 import { SceneIndex } from "./sceneIndex";
 
-const f = fixture("griffe");
+const f = fixture("handles");
 const idx = new SceneIndex(f.scene);
 const handlesAt = (line: number, col = 0) => {
   const p = pos(f.doc, line, col);
@@ -17,8 +17,8 @@ const project = (p: Vec3) => ({ x: p[0] * 10, y: -p[1] * 10 });
 const rayAt = (sx: number, sy: number) => ({ origin: [sx / 10, -sy / 10, 100] as Vec3, dir: [0, 0, -1] as Vec3 });
 
 const gridPoint: SnapTarget = {
-  text: "g[rechts, _, deckel]",
-  snap: { kind: "grid", grid: 0, planes: ["rechts", "_", "deckel"] },
+  text: "g[right, _, lid]",
+  snap: { kind: "grid", grid: 0, planes: ["right", "_", "lid"] },
   local: [40, 0, 20],
   world: [40, 0, 20],
   result_world: [40, 0, 20],
@@ -28,10 +28,10 @@ function input(geom: ReturnType<typeof handleGeom>, sx: number, sy: number, extr
   return { geom, ray: rayAt(sx, sy), mouse: { x: sx, y: sy }, viewDir: [0, 0, -1], alt: false, targets: [gridPoint], project, snapRadius: 12, prevAngle: geom.ring?.value ?? 0, stepMm: 1, stepDeg: 15, ...extra };
 }
 
-describe("Ein Schritt beim Ziehen", () => {
+describe("One drag step", () => {
   const translate = handleGeom(f.scene, handlesAt(7, 0)[0], 10);
 
-  it("Punkt frei: Zahlen in lokalen Koordinaten, Vorschau gerundet", () => {
+  it("free point: numbers in local coordinates, preview rounded", () => {
     const s = dragStep(input(translate, 253, -38));
     expect(s.target?.kind).toBe("point");
     const p = (s.target as Extract<DragTarget, { kind: "point" }>).pos;
@@ -42,27 +42,27 @@ describe("Ein Schritt beim Ziehen", () => {
     expect(s.snap).toBeNull();
   });
 
-  it("Punkt nahe einem Rasterpunkt: Referenz", () => {
+  it("point near a grid point: reference", () => {
     const s = dragStep(input(translate, 395, 3));
     expect(s.target).toEqual({ kind: "snap", snap: gridPoint.snap });
-    expect(s.snap?.text).toBe("g[rechts, _, deckel]");
+    expect(s.snap?.text).toBe("g[right, _, lid]");
     expect(s.grip).toEqual([40, 0, 20]);
   });
 
-  it("Alt: kein Snap, Zahlen", () => {
+  it("Alt: no snap, numbers", () => {
     const s = dragStep(input(translate, 395, 3, { alt: true }));
     expect(s.target?.kind).toBe("point");
     expect(s.snap).toBeNull();
   });
 
-  it("reine Referenz wird ohne Alt nie zu Zahlen", () => {
+  it("a pure reference never becomes numbers without Alt", () => {
     const ref = handleGeom(f.scene, { ...translate.handle, comps: [null, null, null], has_ref: true }, 10);
     expect(dragStep(input(ref, 100, -100)).target).toBeNull();
     expect(dragStep(input(ref, 100, -100, { alt: true })).target?.kind).toBe("point");
     expect(dragStep(input(ref, 398, 0)).target?.kind).toBe("snap");
   });
 
-  it("Höhe: Projektion auf die Griffachse", () => {
+  it("height: projection onto the handle axis", () => {
     const h = handleGeom(f.scene, handlesAt(9, 0)[0], 10);
     // Seen from the side (ray along +y): screen y ↔ z.
     const side = { ...input(h, 0, 0, { targets: [] }), ray: { origin: [0, -100, 17.4] as Vec3, dir: [0, 1, 0] as Vec3 }, viewDir: [0, 1, 0] as Vec3 };
@@ -71,7 +71,7 @@ describe("Ein Schritt beim Ziehen", () => {
     expect(s.grip[2]).toBe(17);
   });
 
-  it("Drehring: Winkel, Vorschau auf 15° gerastet", () => {
+  it("rotation ring: angle, preview snapped to 15°", () => {
     const z = handleGeom(f.scene, handlesAt(8, 0)[2], 10);
     const a = (52 * Math.PI) / 180;
     const s = dragStep(input(z, 10 * Math.cos(a) * 10, -10 * Math.sin(a) * 10));
@@ -84,12 +84,12 @@ describe("Ein Schritt beim Ziehen", () => {
   });
 });
 
-describe("Achsgebundenes Ziehen", () => {
+describe("Axis-locked drag", () => {
   const translate = handleGeom(f.scene, handlesAt(7, 0)[0], 10);
   const h = translate.handle;
   const origin = [...h.pos] as Vec3;
 
-  it("nur die gewählte Komponente ändert sich", () => {
+  it("only the chosen component changes", () => {
     const s = dragStep(input(translate, 253, -38, { axis: { axis: 0, origin }, targets: [] }));
     const p = (s.target as Extract<DragTarget, { kind: "point" }>).pos;
     expect(p[0]).toBeCloseTo(25.3);
@@ -103,18 +103,18 @@ describe("Achsgebundenes Ziehen", () => {
     expect(q[1]).toBeCloseTo(3.8);
   });
 
-  it("nur Rasterpunkte auf der Achse sind Snap-Ziele", () => {
-    const onAxis: SnapTarget = { ...gridPoint, text: "g[rechts, …]", local: [40, origin[1], origin[2]], world: [40, origin[1], origin[2]], result_world: [40, origin[1], origin[2]] };
+  it("only grid points on the axis are snap targets", () => {
+    const onAxis: SnapTarget = { ...gridPoint, text: "g[right, …]", local: [40, origin[1], origin[2]], world: [40, origin[1], origin[2]], result_world: [40, origin[1], origin[2]] };
     const off: SnapTarget = { ...gridPoint, local: [40, origin[1] + 5, origin[2]], world: [40, origin[1] + 5, origin[2]], result_world: [40, origin[1] + 5, origin[2]] };
     const near = { x: 400, y: -origin[1] * 10 };
     let s = dragStep(input(translate, near.x, near.y, { axis: { axis: 0, origin }, targets: [off, onAxis] }));
-    expect(s.snap?.text).toBe("g[rechts, …]");
+    expect(s.snap?.text).toBe("g[right, …]");
     s = dragStep(input(translate, near.x, near.y - 50, { axis: { axis: 0, origin }, targets: [off] }));
     expect(s.snap).toBeNull();
     expect(s.target?.kind).toBe("point");
   });
 
-  it("Achse aus der Mausbewegung; 2D-Punkte nur x/y", () => {
+  it("axis from the mouse motion; 2D points only x/y", () => {
     expect(lockableAxes(h)).toEqual([0, 1, 2]);
     expect(axisFromMotion(h, origin, { x: 0, y: 0 }, { x: 3, y: 1 }, project)).toBeNull();
     expect(axisFromMotion(h, origin, { x: 0, y: 0 }, { x: 40, y: 6 }, project)).toBe(0);
@@ -126,10 +126,10 @@ describe("Achsgebundenes Ziehen", () => {
   });
 });
 
-describe("Höchstens ein Drag in Flug, letzte Position gewinnt", () => {
+describe("At most one drag in flight, the last position wins", () => {
   const v = (x: number): DragTarget => ({ kind: "value", value: x });
 
-  it("puffert während eine Antwort aussteht", () => {
+  it("buffers while an answer is pending", () => {
     const sent: DragTarget[] = [];
     const q = new DragQueue((t) => sent.push(t));
     expect(q.push(v(1))).toBe(true);
@@ -146,7 +146,7 @@ describe("Höchstens ein Drag in Flug, letzte Position gewinnt", () => {
     expect(q.dropped).toBe(2);
   });
 
-  it("gleiche Position wird nicht erneut gesendet", () => {
+  it("the same position is not sent again", () => {
     const sent: DragTarget[] = [];
     const q = new DragQueue((t) => sent.push(t));
     q.push(v(1));
@@ -163,9 +163,9 @@ describe("Höchstens ein Drag in Flug, letzte Position gewinnt", () => {
     expect(q.push(null)).toBe(false);
   });
 
-  it("Schlüssel der Ziele", () => {
+  it("keys of the targets", () => {
     expect(targetKey(v(1))).not.toBe(targetKey(v(1.5)));
-    expect(targetKey({ kind: "snap", snap: gridPoint.snap })).toContain("rechts");
+    expect(targetKey({ kind: "snap", snap: gridPoint.snap })).toContain("right");
     expect(targetKey(null)).toBe("");
   });
 });

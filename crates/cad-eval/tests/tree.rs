@@ -7,30 +7,30 @@ use cad_kernel::{BoolOp, PathInterp};
 use common::*;
 use glam::{DMat4, DVec2, DVec3};
 
-pub const GEHAEUSE: &str = r#"
-module gehaeuse(w = 40, d = 30, h = 20, t = 3) {
+pub const HOUSING: &str = r#"
+module housing(w = 40, d = 30, h = 20, t = 3) {
     grid g {
-        x: links = 0, innen_l = t, innen_r = w - t, rechts = w;
-        y: vorne = 0, hinten = d;
-        z: boden = 0, deckel = h;
+        x: left = 0, inner_left = t, inner_right = w - t, right = w;
+        y: front = 0, back = d;
+        z: floor = 0, lid = h;
     }
 
     difference() {
-        box(g[links, vorne, boden], g[rechts, hinten, deckel]);
-        box(g[innen_l, vorne, t], g[innen_r, hinten, deckel]);
+        box(g[left, front, floor], g[right, back, lid]);
+        box(g[inner_left, front, t], g[inner_right, back, lid]);
     }
 
-    anchor ecke = g[rechts, hinten, deckel];
-    anchor oben = g[rechts, hinten, deckel], dir = [0, 0, 1];
+    anchor corner = g[right, back, lid];
+    anchor top = g[right, back, lid], dir = [0, 0, 1];
 }
 
-module deckel() cube([10, 10, 2]);
+module lid() cube([10, 10, 2]);
 
-k: gehaeuse(w = 60);
-translate(k.ecke) rotate(to = dir(k.oben)) deckel();
+k: housing(w = 60);
+translate(k.corner) rotate(to = dir(k.top)) lid();
 
 grid h {
-    x: rand = k.ecke.x;
+    x: rim = k.corner.x;
 }
 "#;
 
@@ -42,23 +42,23 @@ fn prim(out: &cad_eval::EvalOutput, i: u32) -> &Prim {
 }
 
 #[test]
-fn spec_gehaeuse_tree() {
-    let out = clean(GEHAEUSE);
+fn spec_housing_tree() {
+    let out = clean(HOUSING);
     assert_eq!(
         dump(&out),
-        "group\n  k:gehaeuse\n    difference\n      box\n      box\n  translate\n    rotate\n      deckel\n        box\n"
+        "group\n  k:housing\n    difference\n      box\n      box\n  translate\n    rotate\n      lid\n        box\n"
     );
     let boxes = nodes_by_label(&out, "box");
     assert_eq!(prim(&out, boxes[0]), &Prim::Box { min: DVec3::ZERO, max: DVec3::new(60.0, 30.0, 20.0) });
-    // `t` in `g[innen_l, vorne, t]` is a coordinate, not a plane.
+    // `t` in `g[inner_left, front, t]` is a coordinate, not a plane.
     assert_eq!(prim(&out, boxes[1]), &Prim::Box { min: DVec3::new(3.0, 0.0, 3.0), max: DVec3::new(57.0, 30.0, 20.0) });
     // The lid sits at the anchor.
     let lid = boxes[2];
     assert!(approx3(out.tree.node(lid).world.transform_point3(DVec3::ZERO), [60.0, 30.0, 20.0]));
     // Grid h uses the anchor's x.
     let h = out.grid_by_name("h").unwrap();
-    assert_eq!(h.planes.iter().find(|p| p.name == "rand").unwrap().value, 60.0);
-    // Instances: file, k, deckel.
+    assert_eq!(h.planes.iter().find(|p| p.name == "rim").unwrap().value, 60.0);
+    // Instances: file, k, lid.
     assert_eq!(out.instances.len(), 3);
     let k = &out.instances[1];
     assert_eq!(k.label.as_deref(), Some("k"));
@@ -262,9 +262,9 @@ fn spec_fillet_zone_block() {
     let src = r#"
 module teil(w = 20, h = 20) {
     grid g {
-        x: links = 0, rechts = w;
-        y: vorne = 0, hinten = w;
-        z: boden = 0, deckel = h;
+        x: left = 0, right = w;
+        y: front = 0, back = w;
+        z: floor = 0, lid = h;
     }
     p = [10, 10, 0];
     fillet(2) {
@@ -273,11 +273,11 @@ module teil(w = 20, h = 20) {
             translate(p) cylinder(h = 30, r = 5);
         }
         translate(p) sphere(8);
-        zone(g[rechts, *, deckel], d = 2);
-        zone(g.deckel, d = 1);
+        zone(g[right, *, lid], d = 2);
+        zone(g.lid, d = 1);
     }
     chamfer(1, select = "touch") cube(5);
-    shell(1) { cube(10); zone(g.boden, d = 1); }
+    shell(1) { cube(10); zone(g.floor, d = 1); }
 }
 teil();
 "#;
@@ -439,20 +439,20 @@ fn intersection_for() {
 
 #[test]
 fn module_context_uses_defaults_and_overrides() {
-    let out = run_module(GEHAEUSE, "gehaeuse", vec![("w", PValue::Num(50.0))]);
+    let out = run_module(HOUSING, "housing", vec![("w", PValue::Num(50.0))]);
     assert!(errors(&out).is_empty(), "{:?}", out.diagnostics);
-    assert_eq!(dump(&out), "gehaeuse\n  difference\n    box\n    box\n");
+    assert_eq!(dump(&out), "housing\n  difference\n    box\n    box\n");
     let root = out.tree.root.unwrap();
-    assert!(matches!(&out.tree.node(root).op, Op::ModuleCall { name, .. } if name == "gehaeuse"));
-    assert_eq!(out.context.module.as_deref(), Some("gehaeuse"));
-    assert_eq!(out.context.path, ["gehaeuse"]);
+    assert!(matches!(&out.tree.node(root).op, Op::ModuleCall { name, .. } if name == "housing"));
+    assert_eq!(out.context.module.as_deref(), Some("housing"));
+    assert_eq!(out.context.path, ["housing"]);
     let w = out.context.params.iter().find(|p| p.name == "w").unwrap();
     assert_eq!((w.value.clone(), w.overridden), (PValue::Num(50.0), true));
     let t = out.context.params.iter().find(|p| p.name == "t").unwrap();
     assert_eq!((t.value.clone(), t.overridden), (PValue::Num(3.0), false));
     let g = out.grid_by_name("g").unwrap();
     assert!(g.in_context);
-    assert_eq!(g.planes.iter().find(|p| p.name == "rechts").unwrap().value, 50.0);
+    assert_eq!(g.planes.iter().find(|p| p.name == "right").unwrap().value, 50.0);
     // Top-level statements are not evaluated in module context.
     assert!(out.grid_by_name("h").is_none());
     assert_eq!(out.instances[0].anchors.len(), 2);
@@ -486,8 +486,8 @@ fn file_context_overrides_top_level_assignments() {
     // the value hint of the assignment shows the overridden value
     let w = out.hints.iter().find(|h| h.text == "5").map(|h| h.value.clone());
     assert_eq!(w, Some(PValue::Num(5.0)));
-    let out = run_with(src, &ov(vec![("breite", PValue::Num(1.0))]));
-    assert!(has_warning(&out, "-D breite"), "{:?}", out.diagnostics);
+    let out = run_with(src, &ov(vec![("width", PValue::Num(1.0))]));
+    assert!(has_warning(&out, "-D width"), "{:?}", out.diagnostics);
     assert_eq!(
         prim(&out, nodes_by_label(&out, "box")[0]),
         &Prim::Box { min: DVec3::ZERO, max: DVec3::new(2.0, 4.0, 3.0) }
@@ -556,9 +556,9 @@ fn hints_for_assignments() {
 fn output_serialises() {
     // All output types derive Serialize; check that a full output can be serialised
     // through serde's data model (count of top-level fields via a tiny serializer).
-    let out = clean(GEHAEUSE);
+    let out = clean(HOUSING);
     let s = format!("{out:?}");
-    assert!(s.contains("gehaeuse"));
+    assert!(s.contains("housing"));
     fn assert_ser<T: serde::Serialize + for<'de> serde::Deserialize<'de>>(_: &T) {}
     assert_ser(&out);
     assert_ser(&cad_eval::EvalOptions::default());

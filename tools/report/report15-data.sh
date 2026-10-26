@@ -24,8 +24,8 @@ r tests/models/spec/sketch_holder.mcad -o "$CLI/halter.png" --size 900x560
 r tests/models/spec/sketch_holder.mcad -o "$CLI/halter-fillet.png" --size 900x560 --view top --line 18
 r tests/models/spec/sketch_cable_duct.mcad -o "$CLI/kabelkanal.png" --size 900x560
 r tests/models/spec/sketch_cable_duct.mcad -o "$CLI/kabelkanal-stroke.png" --size 900x560 --view top --line 22
-r crates/cad-cli/tests/data/skizze_ecken.scad -o "$CLI/ecken-handles.png" --size 900x560 --view top --line 5 --show handles
-r crates/cad-cli/tests/data/skizze_ecken.scad -o "$CLI/ecken-offset.png" --size 900x560 --view top --line 13 --show handles
+r crates/cad-cli/tests/data/sketch_corners.mcad -o "$CLI/ecken-handles.png" --size 900x560 --view top --line 5 --show handles
+r crates/cad-cli/tests/data/sketch_corners.mcad -o "$CLI/ecken-offset.png" --size 900x560 --view top --line 13 --show handles
 
 # areas against formulas: case name, 2D source (extruded by 1), formula (python expression)
 cat > "$CASES/list.txt" <<'EOF'

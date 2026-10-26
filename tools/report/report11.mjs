@@ -5,7 +5,7 @@
 // Inputs (gitignored, reports/tmp/report11/):
 //   palette.json, outline.json, measure.json, export*.txt, 3dmodel.model, model_settings.config,
 //   verify.json/.txt, zufall.json, sources.sha256   tools/report/report11-data.sh (CLI, Python)
-//   scenarios.json, metrics.json, img/*.jpg          cd web && pnpm exec playwright test e2e/farben.spec.ts
+//   scenarios.json, metrics.json, img/*.jpg          cd web && pnpm exec playwright test e2e/colors.spec.ts
 //   playwright.json                                  copy of reports/tmp/report2/playwright.json (whole suite)
 //   vitest.txt                                       cd web && pnpm test
 //   tauri/tauri-e2e.json, tauri/img/*.png            node web/e2e-tauri/desktop.e2e.mjs --bin target/release/mcad --out reports/tmp/report11/tauri

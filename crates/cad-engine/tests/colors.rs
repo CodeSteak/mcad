@@ -164,9 +164,9 @@ fn resize_scales_the_colour_material() {
 fn transforms_and_modules() {
     let mut e = engine();
     let t = tree(
-        "module knopf(c) color(c) cylinder(h = 2, r = 3);\n\
+        "module knob(c) color(c) cylinder(h = 2, r = 3);\n\
          color(\"black\") cube([30, 10, 2]);\n\
-         for (i = [0:2]) translate([5 + 10 * i, 5, 2]) rotate([0, 0, 30]) knopf(i == 1 ? \"red\" : \"white\");",
+         for (i = [0:2]) translate([5 + 10 * i, 5, 2]) rotate([0, 0, 30]) knob(i == 1 ? \"red\" : \"white\");",
     );
     let ct = table(&t);
     let ev = e.evaluate(t);
@@ -225,9 +225,9 @@ fn attr<'a>(tag: &'a str, name: &str) -> Option<&'a str> {
 fn multicolour_3mf_structure() {
     let mut e = engine();
     let out = eval_source(
-        "module deckel() color(\"white\") { cube([20, 20, 2]); color(\"red\", filament = 3) translate([5, 5, 2]) cube([10, 10, 1]); }\n\
-         module boden() translate([30, 0, 0]) color(\"teal\") cube([20, 20, 5]);\n\
-         deckel: deckel();\nboden: boden();",
+        "module lid() color(\"white\") { cube([20, 20, 2]); color(\"red\", filament = 3) translate([5, 5, 2]) cube([10, 10, 1]); }\n\
+         module base() translate([30, 0, 0]) color(\"teal\") cube([20, 20, 5]);\n\
+         lid: lid();\nbase: base();",
         &EvalOptions::default(),
     );
     assert!(out.errors().next().is_none());
@@ -268,7 +268,7 @@ fn multicolour_3mf_structure() {
     let white_slot = ct.entries[ct.find(key("white")).unwrap()].filament;
     let teal_slot = ct.entries[ct.find(key("teal")).unwrap()].filament;
     assert_eq!((white_slot, teal_slot), (1, 2));
-    for (o, slot) in [("deckel – white", 1), ("deckel – red", 3), ("boden – teal", 2)] {
+    for (o, slot) in [("lid – white", 1), ("lid – red", 3), ("base – teal", 2)] {
         let i = cfg.find(&format!("value=\"{o}\"")).unwrap_or_else(|| panic!("{o} in {cfg}"));
         let ext = &cfg[i..];
         let ext = attr(&ext[ext.find("key=\"extruder\"").unwrap() - 1..], "value").unwrap();
@@ -291,7 +291,7 @@ fn multicolour_3mf_structure() {
     // one STL per colour
     let (zip, _) = e.export_color_stl_zip(&ev, &named, None, &ct).unwrap();
     let names: Vec<String> = unzip(&zip).into_iter().map(|(n, _)| n).collect();
-    assert_eq!(names, ["deckel_F1_white.stl", "deckel_F3_red.stl", "boden_F2_teal.stl"]);
+    assert_eq!(names, ["lid_F1_white.stl", "lid_F3_red.stl", "base_F2_teal.stl"]);
 }
 
 #[test]

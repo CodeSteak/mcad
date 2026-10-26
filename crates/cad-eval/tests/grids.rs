@@ -20,10 +20,10 @@ fn declaration_planes_and_values() {
     let src = "
         t = 2;
         grid g {
-            x: b = 10, a = 0, loch = [for (i = [0:2]) 5 + i * 8];
+            x: b = 10, a = 0, hole = [for (i = [0:2]) 5 + i * 8];
             y: v = t * 2;
         }
-        echo(g.a, g.b + 1, g.loch, g.loch[1] * 2, g.v);
+        echo(g.a, g.b + 1, g.hole, g.hole[1] * 2, g.v);
         cube(g[b, v, _] + [0, 0, 1]);
     ";
     let out = clean(src);
@@ -31,7 +31,7 @@ fn declaration_planes_and_values() {
     let g = out.grid_by_name("g").unwrap();
     let names: Vec<&str> = g.planes.iter().map(|p| p.name.as_str()).collect();
     // Sorted by axis, then value; missing z gets the implicit `_`.
-    assert_eq!(names, ["a", "loch[0]", "b", "loch[1]", "loch[2]", "v", "_"]);
+    assert_eq!(names, ["a", "hole[0]", "b", "hole[1]", "hole[2]", "v", "_"]);
     assert!(g.planes[6].implicit);
     assert!(g.in_context);
     let b = g.planes.iter().find(|p| p.name == "b").unwrap();

@@ -7,7 +7,7 @@
 // Inputs (gitignored, reports/tmp/report15/):
 //   cli/*.png, areas.tsv, openscad.tsv, step.tsv, timings.tsv,
 //   check-fehler.txt, inspect-halter.txt                       tools/report/report15-data.sh
-//   scenarios.json, img/*.jpg                                   cd web && pnpm exec playwright test e2e/skizzen-ecken.spec.ts
+//   scenarios.json, img/*.jpg                                   cd web && pnpm exec playwright test e2e/sketch-corners.spec.ts
 //   playwright.json                                             whole suite (pnpm e2e; copy of reports/tmp/report2/playwright.json)
 //   vitest.txt, typecheck.txt                                   cd web && pnpm test, pnpm typecheck
 //   cargo.txt, clippy.txt, fmt.txt                              cargo test --workspace --no-fail-fast, clippy -D warnings, fmt --check
@@ -275,7 +275,7 @@ const html = `<!doctype html>
 <tr><td>with Bézier or spline</td><td>Newton on <code>a(u) + r·n<sub>a</sub>(u) = b(w) + r·n<sub>b</sub>(w)</code> (start value from the tangents), stop at residual 10<sup>−13</sup> of the size, warning above 10<sup>−6</sup>; the curve is trimmed at the parameter (stays a B-spline). Test: line–Bézier, residual &lt; 10<sup>−9</sup>, distance center–curve = r to 10<sup>−6</sup></td></tr>
 </table>
 <p><b>Errors at the corner line:</b> radius does not fit ("at most ≈ r", via bisection), tangential corner ("no corner"), cusp (180°), after <code>close()</code>, before <code>start</code>, twice at one corner, start/end of an open contour, value ≤ 0. <b>Handle:</b> radius at the middle of the fillet, base at the corner point, linear in r (UI test E01).</p>
-<div class="codefig">${pre(src("crates/cad-cli/tests/data/skizze_ecken.scad"))}<div>${fig(cli("ecken-handles"), "`cad render --line 5 --view top --show handles`: the sketch highlighted, handles (radius on the fillets)")}${fig(cli("ecken-offset"), "`--line 13`: offset – source contour, offset contour dashed")}</div></div>
+<div class="codefig">${pre(src("crates/cad-cli/tests/data/sketch_corners.mcad"))}<div>${fig(cli("ecken-handles"), "`cad render --line 5 --view top --show handles`: the sketch highlighted, handles (radius on the fillets)")}${fig(cli("ecken-offset"), "`--line 13`: offset – source contour, offset contour dashed")}</div></div>
 ${pre(T("cases/fehler.scad"))}
 ${pre(T("check-fehler.txt"))}
 

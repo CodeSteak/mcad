@@ -732,7 +732,7 @@ async function exportPartsNow(format: ExportFormat, parts: string[], zip: boolea
     const single = parts.length === 1;
     const r = await client.exportFile(format, parts, zip && !single);
     const base = baseName(store.getState().fileName);
-    const name = single ? partFileName(parts[0], format) : zip ? `${base}-teile-${format}.zip` : `${base}-teile.${format}`;
+    const name = single ? partFileName(parts[0], format) : zip ? `${base}-parts-${format}.zip` : `${base}-parts.${format}`;
     const type = zip && !single ? "application/zip" : MIME[format];
     download(new Blob([r.bytes as BlobPart], { type }), name);
     store.setState({ notice: `${t("notice.exported", { name })}${r.triangles ? ` (${t("notice.triangles", { n: r.triangles })})` : ""}` });

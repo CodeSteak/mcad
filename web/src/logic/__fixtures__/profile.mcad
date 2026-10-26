@@ -7,8 +7,8 @@ translate([0, 40, 0]) loft() {
 }
 translate([40, 40, 0]) sweep(path = [[0, 0, 0], [20, 0, 10], [40, 10, 10]], interp = "linear") circle(2);
 translate([0, 80, 0]) thicken(1.5) surface(points = [for (i = [0:3]) [for (j = [0:3]) [i * 10, j * 10, (i - 1.5) * (j - 1.5)]]]);
-grid g { z: oben = 15; }
+grid g { z: top = 15; }
 translate([50, 80, 0]) shell(1.2) {
     box([0, 0, 0], [30, 20, 15]);
-    zone(g.oben, d = 1);
+    zone(g.top, d = 1);
 }

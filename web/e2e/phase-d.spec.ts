@@ -33,12 +33,12 @@ test.beforeEach(async ({ page }) => {
   page.on("pageerror", (e) => console.log("pageerror:", e.message));
 });
 
-// Keyhole dome touching a rib along x = 7, y = 15 (crates/cad-cli/tests/data/dom_rippe.mcad).
-const DOM_RIPPE = `cube([30, 30, 2]);
-translate([11, 15, 0]) dom();
-translate([5, 5, 0]) rippe();
+// Keyhole boss touching a rib along x = 7, y = 15 (crates/cad-cli/tests/data/boss_rib.mcad).
+const BOSS_RIB = `cube([30, 30, 2]);
+translate([11, 15, 0]) boss();
+translate([5, 5, 0]) rib();
 
-module dom(h = 10) {
+module boss(h = 10) {
     difference() {
         cylinder(h = h, r = 4);
         translate([0, 0, 2]) linear_extrude(h) union() {
@@ -47,15 +47,15 @@ module dom(h = 10) {
         }
     }
 }
-module rippe(l = 20, h = 8) cube([2, l, h]);
+module rib(l = 20, h = 8) cube([2, l, h]);
 `;
 
-test("D01 Berührung: Stelle rot markiert, Klick auf die Meldung rahmt sie ein (hell/dunkel)", async ({ page }) => {
+test("D01 contact: place marked red, a click on the message frames it (light/dark)", async ({ page }) => {
   await openApp(page);
-  await loadText(page, DOM_RIPPE);
+  await loadText(page, BOSS_RIB);
   let s = await waitScene(page, { context: null });
   const d = s.diagnostics.find((x) => x.message.includes("berühren sich tangential"));
-  expect(d?.message).toContain("Vereinigung gescheitert: Zeile 2 (dom) und Zeile 3 (rippe) berühren sich tangential bei [7, 15,");
+  expect(d?.message).toContain("Vereinigung gescheitert: Zeile 2 (boss) und Zeile 3 (rib) berühren sich tangential bei [7, 15,");
   const plan = s.view!.plan as unknown as Failures;
   expect(plan.failures).toHaveLength(1);
   const [x, y, z] = plan.failures[0].point;
@@ -83,7 +83,7 @@ test("D01 Berührung: Stelle rot markiert, Klick auf die Meldung rahmt sie ein (
   await frame(page);
   await shot(page, "d01-beruehrung-eingerahmt-dunkel");
   // a gap of 0.2 mm: no error, no place
-  await loadText(page, DOM_RIPPE.replace("translate([5, 5, 0]) rippe()", "translate([4.8, 5, 0]) rippe()"));
+  await loadText(page, BOSS_RIB.replace("translate([5, 5, 0]) rib()", "translate([4.8, 5, 0]) rib()"));
   s = await cad(page);
   expect((s.view!.plan as unknown as Failures).failures).toHaveLength(0);
   expect(s.diagnostics.filter((x) => x.severity === "error")).toHaveLength(0);
@@ -91,7 +91,7 @@ test("D01 Berührung: Stelle rot markiert, Klick auf die Meldung rahmt sie ein (
   note({ id: "D01", message: d?.message, point: plan.failures[0].point, camera: s.view!.camera.target });
 });
 
-test("D02 slot(p1, p2, r): Griffe für beide Punkte und den Radius, Radius ziehen", async ({ page }) => {
+test("D02 slot(p1, p2, r): handles for both points and the radius, drag the radius", async ({ page }) => {
   await openApp(page);
   await loadText(page, "linear_extrude(2) slot([0, 0], [20, 10], 3);\n");
   await clickLine(page, 1, 20);

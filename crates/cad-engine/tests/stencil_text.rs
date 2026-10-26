@@ -71,13 +71,13 @@ fn extruded_text_volume() {
     assert_approx("layout area", la, area, 1e-4);
 }
 
-/// A typical sign: plate ∪ raised text, 22 characters. The stencil font's glyphs are lines and
+/// A typical sign: plate ∪ raised text, 23 characters. The stencil font's glyphs are lines and
 /// arcs (Allerta Stencil: B-spline flanks); the kernel needs no more time than for Allerta.
 #[test]
 fn sign_text_kernel_time_like_allerta() {
     let sign = |font: &str| {
         format!(
-            "cube([100, 14, 2]); translate([50, 4, 2]) linear_extrude(1.2) text(\"ZUTRITT NUR MIT BRILLE\", size = 4.2, halign = \"center\"{font});"
+            "cube([100, 14, 2]); translate([50, 4, 2]) linear_extrude(1.2) text(\"SAFETY GLASSES REQUIRED\", size = 4.2, halign = \"center\"{font});"
         )
     };
     let run = |src: String| {
@@ -91,7 +91,7 @@ fn sign_text_kernel_time_like_allerta() {
     };
     let (ts, vs) = run(sign(""));
     let (ta, va) = run(sign(", font = \"Allerta Stencil\""));
-    println!("Schild: cad stencil mono {ts:.2} s ({vs:.1} mm³), Allerta Stencil {ta:.2} s ({va:.1} mm³)");
+    println!("sign: cad stencil mono {ts:.2} s ({vs:.1} mm³), Allerta Stencil {ta:.2} s ({va:.1} mm³)");
     let plate = 100.0 * 14.0 * 2.0;
     assert!(vs > plate + 10.0 && va > plate + 10.0);
     assert!(ts < 1.5 * ta + 1.0, "stencil {ts:.2} s vs Allerta {ta:.2} s");

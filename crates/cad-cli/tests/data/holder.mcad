@@ -1,0 +1,14 @@
+// Purpose: -m 'module(arguments)' – module context with arguments as in the code.
+width = 30;
+function double(x) = 2 * x;
+
+module holder(w = 10, h = 2, d = 5) {
+    cube([w, d, h]);
+}
+
+module parts() {
+    module screw(d = 2, l = 10) cylinder(h = l, d = d);
+    screw();
+}
+
+holder();

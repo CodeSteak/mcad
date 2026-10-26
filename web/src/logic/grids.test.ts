@@ -3,12 +3,12 @@ import { gridOverlay, modelHull, refHighlight } from "./grids";
 import { SceneIndex } from "./sceneIndex";
 import { fixture, pos } from "./__fixtures__/load";
 
-describe("Rasteranzeige", () => {
+describe("Grid display", () => {
   const f = fixture("hole-plate-module");
   const idx = new SceneIndex(f.scene);
   const hull = modelHull(f.scene);
 
-  it("nur die von der Zeile verwendeten Ebenen", () => {
+  it("only the planes used by the line", () => {
     const sel = idx.select(f.doc, pos(f.doc, 12, 10));
     const g = gridOverlay({ scene: f.scene, hull, all: false, refs: sel.refs, grids: sel.grids, hoverRef: null });
     // box(g[left, front, floor], g[right, back, top]): 6 planes.
@@ -19,19 +19,19 @@ describe("Rasteranzeige", () => {
     expect(g.points).toHaveLength(36 + 4);
   });
 
-  it("Schalter „alle Raster“ zeigt alle expliziten Ebenen", () => {
+  it("switch “all grids” shows all explicit planes", () => {
     const g = gridOverlay({ scene: f.scene, hull, all: true, refs: [], grids: [], hoverRef: null });
     expect(g.lines).toHaveLength(11 + 4);
   });
 
-  it("Rasterdeklaration auf der Zeile zeigt ihr Raster", () => {
+  it("a grid declaration on the line shows its grid", () => {
     const sel = idx.select(f.doc, pos(f.doc, 6, 8));
     const g = gridOverlay({ scene: f.scene, hull, all: false, refs: sel.refs, grids: sel.grids, hoverRef: null });
     expect(new Set(g.lines.map((l) => l.grid))).toEqual(new Set([0]));
     expect(g.lines).toHaveLength(11);
   });
 
-  it("Ebenen liegen am Rand der Hülle (im Rastersystem)", () => {
+  it("planes lie at the edge of the hull (in the grid system)", () => {
     const g = gridOverlay({ scene: f.scene, hull, all: true, refs: [], grids: [], hoverRef: null });
     const left = g.lines.find((l) => f.scene.grids[l.grid].planes[l.plane].name === "left")!;
     expect(left.points).toHaveLength(5);
@@ -41,7 +41,7 @@ describe("Rasteranzeige", () => {
     expect(Math.max(...ys)).toBeGreaterThan(12);
   });
 
-  it("Hover über Rasterpunkt, Rasterlinie, Ebene", () => {
+  it("hover over grid point, grid line, plane", () => {
     const point = refHighlight(f.scene, f.scene.refs[idx.refAt(pos(f.doc, 12, 20))!], hull);
     expect(point?.kind).toBe("point");
     expect(point?.points).toEqual([[0, 0, 0]]);

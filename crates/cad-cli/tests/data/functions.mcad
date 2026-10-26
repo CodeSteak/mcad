@@ -1,0 +1,18 @@
+// Purpose: functions, variables and a module with vector and bool parameters for `mcad outline`.
+function double(x) = 2 * x;
+width = 30;
+height = double(5);
+
+module plate(size = [20, 10, 2], hollow = false) {
+    grid r {
+        x: a = 0, b = size[0];
+        z: bottom = 0;
+    }
+    difference() {
+        cube(size);
+        if (hollow) translate([5, 2, -1]) cube([size[0] - 10, size[1] - 4, 4]);
+    }
+    anchor mid = [size[0] / 2, size[1] / 2, size[2]], dir = [0, 0, 1];
+}
+
+p: plate([width, 10, height / 5], hollow = true);

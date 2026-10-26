@@ -286,9 +286,9 @@ fn plane_of_sketches_under_transformations() {
 #[test]
 fn anchors_are_snap_targets() {
     let src =
-        "module halter() {\n    cube([10, 10, 2]);\n    anchor ecke = [10, 10, 0];\n}\nk: halter();\nsketch {\n}\n";
+        "module holder() {\n    cube([10, 10, 2]);\n    anchor corner = [10, 10, 0];\n}\nk: holder();\nsketch {\n}\n";
     let (t, _) = draw(src, at(src, 6, 3), SketchTool::Line, &[[0.0, 0.0], [10.2, 9.9]], 0.5, false);
-    assert!(t.contains("    start([0, 0]);\n    line(to = k.ecke);"), "{t}");
+    assert!(t.contains("    start([0, 0]);\n    line(to = k.corner);"), "{t}");
 }
 
 #[test]
@@ -323,14 +323,14 @@ fn dragging_points_through_variables_and_indexed_planes() {
     let t = apply_edits(src, &e);
     assert!(t.starts_with("p = [12, 6];"), "{t}");
     // an indexed plane: snapping writes the other index
-    let src = "grid g {\n    x: loch = [0, 10, 20];\n    y: u = 0, v = 8;\n}\nsketch(closed = false) {\n    start(g[loch[0], u]);\n    line(to = g[loch[1], v]);\n}\n";
+    let src = "grid g {\n    x: hole = [0, 10, 20];\n    y: u = 0, v = 8;\n}\nsketch(closed = false) {\n    start(g[hole[0], u]);\n    line(to = g[hole[1], v]);\n}\n";
     let (proj, out) = eval(src);
     let h = out.handles.iter().find(|h| h.kind == HandleKind::Point && h.value[..2] == [10.0, 8.0]).expect("Griff");
     let g = out.grid_by_name("g").unwrap().id;
-    let r = SnapRef::Grid { grid: g, planes: ["loch[2]".into(), "v".into(), "_".into()] };
+    let r = SnapRef::Grid { grid: g, planes: ["hole[2]".into(), "v".into(), "_".into()] };
     let e = drag_edits(&out, &proj, h.id, &DragTarget::Snap(r), &DragOptions::default());
     let t = apply_edits(src, &e);
-    assert!(t.contains("    line(to = g[loch[2], v]);"), "{t}");
+    assert!(t.contains("    line(to = g[hole[2], v]);"), "{t}");
     no_errors(&t);
 }
 

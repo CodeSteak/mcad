@@ -725,7 +725,7 @@ fn step_export() {
     let mut e = engine();
     let (t, ..) = box_minus_cyl(None);
     let ev = e.evaluate(t);
-    let opts = cad_engine::StepOptions { name: "bohrung".into(), ..Default::default() };
+    let opts = cad_engine::StepOptions { name: "bore".into(), ..Default::default() };
     let (bytes, st) = e.export_step(&ev, &opts).unwrap();
     assert_eq!((st.solids, st.faces), (1, 7));
     assert_eq!(st.surfaces.get("cylinder"), Some(&1));

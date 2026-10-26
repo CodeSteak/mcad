@@ -1,0 +1,3 @@
+// Purpose: syntax error on line 3 (missing parenthesis).
+cube(10);
+cube(10;

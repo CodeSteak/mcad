@@ -451,7 +451,7 @@ mod tests {
 
     #[test]
     fn file_names() {
-        assert_eq!(part_file_name("deckel", "stl"), "deckel.stl");
+        assert_eq!(part_file_name("lid", "stl"), "lid.stl");
         assert_eq!(part_file_name("k[2]", "3mf"), "k_2.3mf");
         assert_eq!(part_file_name("ä", "stl"), "part.stl");
     }

@@ -1,2 +1,2 @@
 include <lib.scad>
-translate([0, 20, 0]) knopf("green");
+translate([0, 20, 0]) knob("green");

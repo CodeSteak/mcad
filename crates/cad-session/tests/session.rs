@@ -6,25 +6,25 @@ use cad_session::protocol::*;
 use cad_session::{Session, SessionOptions, std_clock};
 use kernel_smlib::SmlibKernel;
 
-const GEHAEUSE: &str = r#"module gehaeuse(w = 40, d = 30, h = 20, t = 3) {
+const HOUSING: &str = r#"module housing(w = 40, d = 30, h = 20, t = 3) {
     grid g {
-        x: links = 0, innen_l = t, innen_r = w - t, rechts = w;
-        y: vorne = 0, hinten = d;
-        z: boden = 0, deckel = h;
+        x: left = 0, inner_left = t, inner_right = w - t, right = w;
+        y: front = 0, back = d;
+        z: floor = 0, lid = h;
     }
 
     difference() {
-        box(g[links, vorne, boden], g[rechts, hinten, deckel]);
-        box(g[innen_l, vorne, t], g[innen_r, hinten, deckel]);
+        box(g[left, front, floor], g[right, back, lid]);
+        box(g[inner_left, front, t], g[inner_right, back, lid]);
     }
 
-    anchor ecke = g[rechts, hinten, deckel];
+    anchor corner = g[right, back, lid];
 }
 
-module deckel() cube([10, 10, 2]);
+module lid() cube([10, 10, 2]);
 
-k: gehaeuse(w = 60);
-translate(k.ecke) deckel();
+k: housing(w = 60);
+translate(k.corner) lid();
 "#;
 
 fn session() -> Session<SmlibKernel> {
@@ -88,10 +88,10 @@ fn set_source(s: &mut Session<SmlibKernel>, text: &str, version: u64) -> Vec<Fro
 }
 
 #[test]
-fn gehaeuse_flow() {
+fn housing_flow() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
-    let first = s.post(ToEngine::SetSource { text: GEHAEUSE.into(), version: 1 });
+    let first = s.post(ToEngine::SetSource { text: HOUSING.into(), version: 1 });
     // Diagnostics, preliminary scene, progress
     assert!(matches!(first[0], FromEngine::Diagnostics { version: 1, ref items } if items.is_empty()), "{first:?}");
     let pre = scenes(&first);
@@ -116,10 +116,10 @@ fn gehaeuse_flow() {
     assert!(scene.nodes.iter().all(|n| n.status == NodeStatus::Ok), "{:?}", scene.nodes);
     assert_eq!(scene.grids.len(), 1);
     assert_eq!(scene.grids[0].name, "g");
-    // anchor ecke of k in world coordinates
-    let ecke = scene.anchors.iter().find(|a| a.name == "ecke").expect("anchor");
-    assert_eq!(ecke.text.as_deref(), Some("k.ecke"));
-    assert_eq!(ecke.point, Vec3([60.0, 30.0, 20.0]));
+    // anchor corner of k in world coordinates
+    let corner = scene.anchors.iter().find(|a| a.name == "corner").expect("anchor");
+    assert_eq!(corner.text.as_deref(), Some("k.corner"));
+    assert_eq!(corner.point, Vec3([60.0, 30.0, 20.0]));
     // lines of nodes: the translate is on line 19
     let tr = scene.nodes.iter().find(|n| n.label == "translate").unwrap();
     assert_eq!(tr.range.line, 19);
@@ -148,18 +148,18 @@ fn gehaeuse_flow() {
     assert!(s.post(ToEngine::RequestMeshes { nodes: vec![sub.idx], coarse: None, version: Some(99) }).is_empty());
     assert!(!s.busy());
 
-    // drag the translate target (k.ecke) freely: the reference becomes numbers
+    // drag the translate target (k.corner) freely: the reference becomes numbers
     let h = scene.handles.iter().find(|h| h.kind == HandleKind::Point && h.range.line == 19).expect("translate handle");
     assert!(h.has_ref);
     assert_eq!(h.world_pos, Vec3([60.0, 30.0, 20.0]));
     let st = s.post(ToEngine::DragStart { handle: h.id });
     let FromEngine::SnapTargets { targets, .. } = &st[0] else { panic!("{st:?}") };
-    assert!(targets.iter().any(|t| t.text == "k.ecke"), "{targets:?}");
+    assert!(targets.iter().any(|t| t.text == "k.corner"), "{targets:?}");
     let e =
         edits(&s.post(ToEngine::Drag { handle: h.id, target: DragTarget::Point { pos: Vec3([12.2, 30.0, 20.0]) } }));
     assert_eq!(e.len(), 1, "{e:?}");
-    let v2 = apply(GEHAEUSE, &e);
-    assert!(v2.contains("translate([12, 30, 20]) deckel();"), "{v2}");
+    let v2 = apply(HOUSING, &e);
+    assert!(v2.contains("translate([12, 30, 20]) lid();"), "{v2}");
     // during the drag: coarse root mesh
     let r = set_source(&mut s, &v2, 2);
     let m = meshes(&r);
@@ -181,12 +181,12 @@ fn gehaeuse_flow() {
 fn snap_writes_reference() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
-    s.post(ToEngine::SetContext { module: Some("gehaeuse".into()), overrides: BTreeMap::new() });
-    let r = set_source(&mut s, GEHAEUSE, 1);
+    s.post(ToEngine::SetContext { module: Some("housing".into()), overrides: BTreeMap::new() });
+    let r = set_source(&mut s, HOUSING, 1);
     let scene = *scenes(&r).last().unwrap();
-    assert_eq!(scene.context.module.as_deref(), Some("gehaeuse"));
-    assert_eq!(scene.context.path, vec!["gehaeuse".to_string()]);
-    // second corner of the inner box: g[innen_r, hinten, deckel]
+    assert_eq!(scene.context.module.as_deref(), Some("housing"));
+    assert_eq!(scene.context.path, vec!["housing".to_string()]);
+    // second corner of the inner box: g[inner_right, back, lid]
     let h = scene
         .handles
         .iter()
@@ -195,13 +195,13 @@ fn snap_writes_reference() {
         .expect("inner box corner handle");
     let t = s.post(ToEngine::SnapTargets { handle: h.id });
     let FromEngine::SnapTargets { targets, .. } = &t[0] else { panic!("{t:?}") };
-    let target = targets.iter().find(|t| t.text == "g[rechts, hinten, deckel]").expect("snap target");
+    let target = targets.iter().find(|t| t.text == "g[right, back, lid]").expect("snap target");
     let e = edits(
         &s.post(ToEngine::DragEnd { handle: h.id, target: Some(DragTarget::Snap { snap: target.snap.clone() }) }),
     );
     assert_eq!(e.len(), 1);
-    let v2 = apply(GEHAEUSE, &e);
-    assert!(v2.contains("box(g[innen_l, vorne, t], g[rechts, hinten, deckel]);"), "{v2}");
+    let v2 = apply(HOUSING, &e);
+    assert!(v2.contains("box(g[inner_left, front, t], g[right, back, lid]);"), "{v2}");
 }
 
 #[test]
@@ -210,8 +210,8 @@ fn context_overrides_and_default() {
     let mut s = session();
     let mut ov = BTreeMap::new();
     ov.insert("w".to_string(), Value::Num(80.0));
-    s.post(ToEngine::SetContext { module: Some("gehaeuse".into()), overrides: ov });
-    let r = set_source(&mut s, GEHAEUSE, 3);
+    s.post(ToEngine::SetContext { module: Some("housing".into()), overrides: ov });
+    let r = set_source(&mut s, HOUSING, 3);
     let scene = *scenes(&r).last().unwrap();
     let w = scene.context.params.iter().find(|p| p.name == "w").unwrap();
     assert_eq!(w.value, Value::Num(80.0));
@@ -219,13 +219,13 @@ fn context_overrides_and_default() {
     let root = scene.root.unwrap() as usize;
     let b = scene.nodes[root].bounds.as_ref().unwrap();
     assert!((b.max.0[0] - b.min.0[0] - 80.0).abs() < 1e-6, "{b:?}");
-    // "Als Standard übernehmen"
+    // "Use as default"
     let e =
-        edits(&s.post(ToEngine::SetDefault { module: "gehaeuse".into(), param: "w".into(), value: Value::Num(80.0) }));
-    let v2 = apply(GEHAEUSE, &e);
-    assert!(v2.starts_with("module gehaeuse(w = 80, d = 30"), "{v2}");
+        edits(&s.post(ToEngine::SetDefault { module: "housing".into(), param: "w".into(), value: Value::Num(80.0) }));
+    let v2 = apply(HOUSING, &e);
+    assert!(v2.starts_with("module housing(w = 80, d = 30"), "{v2}");
     // unknown parameter
-    let r = s.post(ToEngine::SetDefault { module: "gehaeuse".into(), param: "zz".into(), value: Value::Num(1.0) });
+    let r = s.post(ToEngine::SetDefault { module: "housing".into(), param: "zz".into(), value: Value::Num(1.0) });
     assert!(matches!(r[0], FromEngine::Error { .. }));
 }
 
@@ -233,16 +233,16 @@ fn context_overrides_and_default() {
 fn syntax_error_keeps_scene_and_utf16_ranges() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let mut s = session();
-    let src = "// Größe\ncube(10);\n";
+    let src = "// naïve\ncube(10);\n";
     let r = set_source(&mut s, src, 1);
     assert_eq!(scenes(&r).len(), 2);
     let ok_scene = (*scenes(&r).last().unwrap()).clone();
     let cube = ok_scene.nodes.iter().find(|n| n.label == "box").unwrap();
-    // "// Größe\n" is 9 UTF-16 units (10 bytes)
+    // "// naïve\n" is 9 UTF-16 units (10 bytes)
     assert_eq!(cube.range.from, 9);
     assert_eq!((cube.range.line, cube.range.col), (2, 1));
 
-    let bad = "// Größe\ncube(10;\n";
+    let bad = "// naïve\ncube(10;\n";
     let r = set_source(&mut s, bad, 2);
     assert!(scenes(&r).is_empty());
     let d = diagnostics(&r);
@@ -325,7 +325,7 @@ fn protocol_json_roundtrip() {
     let m: ToEngine = serde_json::from_str(r#"{"type":"RequestMeshes","nodes":[1,2]}"#).unwrap();
     assert_eq!(m, ToEngine::RequestMeshes { nodes: vec![1, 2], coarse: None, version: None });
     let m: ToEngine = serde_json::from_str(
-        r#"{"type":"Drag","handle":5,"target":{"kind":"snap","snap":{"kind":"anchor","inst":1,"name":"ecke"}}}"#,
+        r#"{"type":"Drag","handle":5,"target":{"kind":"snap","snap":{"kind":"anchor","inst":1,"name":"corner"}}}"#,
     )
     .unwrap();
     assert!(matches!(m, ToEngine::Drag { target: DragTarget::Snap { .. }, .. }));
@@ -336,7 +336,7 @@ fn protocol_json_roundtrip() {
 }
 
 const PLANES: &str = "grid g {
-    z: boden = 0, deckel = 20;
+    z: floor = 0, lid = 20;
 }
 cylinder(h = 25, r = 3);
 translate([1, 0, 0] * 2) cube(2);
@@ -358,15 +358,15 @@ fn drag_always_answers_and_plane_snap() {
     let st = s.post(ToEngine::DragStart { handle: h.id });
     let FromEngine::SnapTargets { targets, .. } = &st[0] else { panic!("{st:?}") };
     let texts: Vec<&str> = targets.iter().map(|t| t.text.as_str()).collect();
-    assert_eq!(texts, ["g.boden", "g.deckel"]);
+    assert_eq!(texts, ["g.floor", "g.lid"]);
     assert_eq!(targets[1].result_world, Vec3([0.0, 0.0, 20.0]));
     // A drag that does not change the text still answers (empty edit list).
     let same = s.post(ToEngine::Drag { handle: h.id, target: DragTarget::Value { value: 25.2 } });
     assert!(matches!(&same[..], [FromEngine::Edits { version: 1, edits }] if edits.is_empty()), "{same:?}");
-    // Snap writes `g.deckel`.
+    // Snap writes `g.lid`.
     let e = edits(&s.post(ToEngine::Drag { handle: h.id, target: DragTarget::Snap { snap: targets[1].snap.clone() } }));
     let v2 = apply(PLANES, &e);
-    assert!(v2.contains("cylinder(h = g.deckel, r = 3);"), "{v2}");
+    assert!(v2.contains("cylinder(h = g.lid, r = 3);"), "{v2}");
     let r = set_source(&mut s, &v2, 2);
     assert!(diagnostics(&r).is_empty(), "{:?}", diagnostics(&r));
     // Drag options: 0.5 mm steps.
@@ -386,7 +386,7 @@ fn drag_always_answers_and_plane_snap() {
 fn language_switch_recomputes_cached_texts() {
     use cad_i18n::{Lang, scoped};
     let src =
-        std::fs::read_to_string(format!("{}/../cad-cli/tests/data/fillet_zonen.mcad", env!("CARGO_MANIFEST_DIR")))
+        std::fs::read_to_string(format!("{}/../cad-cli/tests/data/fillet_zones.mcad", env!("CARGO_MANIFEST_DIR")))
             .unwrap();
     let mut s = session();
     let mut run = |v: u64| -> (Vec<String>, Stats) {

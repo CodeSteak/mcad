@@ -16,8 +16,8 @@ function planAt(name: Parameters<typeof fixture>[0], line: number, col: number, 
   return { f, p: plan({ scene: f.scene, cursor, hover }) };
 }
 
-describe("Darstellungszustände", () => {
-  it("ohne Auswahl: Modell voll, Anker benannter Instanzen", () => {
+describe("Display states", () => {
+  it("no selection: model full, anchors of named instances", () => {
     const f = fixture("housing");
     const p = plan({ scene: f.scene, cursor: [], hover: [] });
     expect(p.base?.mode).toBe("full");
@@ -26,7 +26,7 @@ describe("Darstellungszustände", () => {
     expect(p.status).toBeNull();
   });
 
-  it("Cursor auf Zeile mit Geometrie: Knoten voll, Rest gedimmt", () => {
+  it("cursor on a line with geometry: node full, the rest dimmed", () => {
     const { f, p } = planAt("housing", 21, 0);
     expect(p.base?.mode).toBe("dim");
     expect(modes(f, p)).toEqual(["full:housing@21"]);
@@ -34,12 +34,12 @@ describe("Darstellungszustände", () => {
     expect(p.anchors.filter((a) => a.active)).toHaveLength(2);
   });
 
-  it("Cursor auf Zeile ohne Geometrie dimmt nicht", () => {
+  it("cursor on a line without geometry does not dim", () => {
     const { p } = planAt("housing", 26, 4);
     expect(p.base?.mode).toBe("full");
   });
 
-  it("Transformation: Kreuz vorher gestrichelt, nachher durchgezogen, Umriss am Ursprung", () => {
+  it("transform: cross before dashed, after solid, outline at the origin", () => {
     const { f, p } = planAt("housing", 22, 2);
     expect(modes(f, p)).toEqual(["full:translate@22", "outline:lid@22"]);
     expect(p.frames.map((x) => x.dashed)).toEqual([true, false]);
@@ -49,24 +49,24 @@ describe("Darstellungszustände", () => {
     expect(p.items[1].matrix.slice(12, 15)).toEqual([0, 0, 0]);
   });
 
-  it("difference: abgezogene Körper rot", () => {
+  it("difference: subtracted bodies red", () => {
     const { f, p } = planAt("housing-module", 10, 6);
     expect(modes(f, p)).toEqual(["full:difference@10", "red:box@12"]);
   });
 
-  it("Hover über Zeile: halbtransparent, auch wenn abgezogen", () => {
+  it("hover over a line: semi-transparent, also when subtracted", () => {
     const { f, p } = planAt("housing-module", 11, 6, 12);
     expect(modes(f, p)).toEqual(["full:box@11", "hover:box@12"]);
   });
 
-  it("fillet: Zonen blau, ausgewählte Kanten", () => {
+  it("fillet: zones blue, selected edges", () => {
     const { f, p } = planAt("fillet-module", 12, 10);
     expect(modes(f, p)).toEqual(["full:fillet@12", "blue:zone@17", "blue:translate@18"]);
     expect(p.edges.length).toBeGreaterThan(0);
     expect(p.edges.every((e) => e.kind === "selected")).toBe(true);
   });
 
-  it("Cursor auf einer Zone: nur diese Zone blau, Kanten des Blocks zur Prüfung", () => {
+  it("cursor on a zone: only this zone blue, edges of the block for checking", () => {
     const { f, p } = planAt("fillet-module", 17, 10);
     expect(modes(f, p)).toEqual(["blue:zone@17"]);
     // The block's edges are not drawn as such; the viewer keeps those in this zone.
@@ -76,25 +76,25 @@ describe("Darstellungszustände", () => {
     expect(planNodes(p)).toContain(p.zoneEdges!.zone);
   });
 
-  it("Zone über translate: ohne Umriss und Koordinatenkreuze der Transformation", () => {
+  it("zone under translate: without outline and coordinate crosses of the transform", () => {
     const { f, p } = planAt("fillet-module", 18, 6);
     expect(modes(f, p)).toEqual(["blue:translate@18"]);
     expect(p.frames).toEqual([]);
   });
 
-  it("select = touch kommt aus op_info", () => {
+  it("select = touch comes from op_info", () => {
     const { p } = planAt("fillet-module", 25, 8);
     expect(p.zoneEdges?.select).toBe("touch");
     expect(p.zoneEdges?.edges.length).toBe(5);
   });
 
-  it("linear_extrude: Profil als Umriss unten (center: auf −h/2)", () => {
+  it("linear_extrude: profile as an outline at the bottom (center: at −h/2)", () => {
     const { f, p } = planAt("profile", 2, 3);
     expect(modes(f, p)).toEqual(["full:linear_extrude@2", "profile:rect@2"]);
     expect(p.items[1].matrix.slice(12, 15)).toEqual([0, 0, -5]);
   });
 
-  it("rotate_extrude: Profil in der xz-Ebene, Drehachse als Linie", () => {
+  it("rotate_extrude: profile in the xz plane, axis of revolution as a line", () => {
     const { f, p } = planAt("profile", 3, 30);
     expect(modes(f, p)).toEqual(["full:rotate_extrude@3", "profile:translate@3"]);
     // Profile y → z: the matrix maps (x, y, 0) to (40 + x, 0, y).
@@ -110,13 +110,13 @@ describe("Darstellungszustände", () => {
     expect(b[2]).toBeGreaterThan(12);
   });
 
-  it("loft: alle Profile als Umrisse an ihrer Lage, Ergebnis halbtransparent", () => {
+  it("loft: all profiles as outlines in place, result semi-transparent", () => {
     const { f, p } = planAt("profile", 4, 24);
     expect(modes(f, p)).toEqual(["translucent:loft@4", "profile:circle@5", "profile:rect@6"]);
     expect(p.items[2].matrix.slice(12, 15)).toEqual([0, 40, 20]);
   });
 
-  it("sweep: Pfad als Kurve, Profil am Startpunkt senkrecht zur Tangente", () => {
+  it("sweep: path as a curve, profile at the start point perpendicular to the tangent", () => {
     const { f, p } = planAt("profile", 8, 30);
     expect(modes(f, p)).toEqual(["full:sweep@8", "profile:circle@8"]);
     const path = p.guides.find((g) => g.kind === "path")!;
@@ -128,7 +128,7 @@ describe("Darstellungszustände", () => {
     expect(m.slice(12, 15)).toEqual([40, 40, 0]);
   });
 
-  it("surface und thicken: Kontrollnetz, Fläche als Umriss", () => {
+  it("surface and thicken: control net, surface as an outline", () => {
     let r = planAt("profile", 9, 25);
     expect(modes(r.f, r.p)).toEqual(["full:thicken@9", "profile:surface@9"]);
     r = planAt("profile", 9, 50);
@@ -136,7 +136,7 @@ describe("Darstellungszustände", () => {
     expect(r.p.guides.filter((g) => g.kind === "net")).toHaveLength(8);
   });
 
-  it("shell: Zone blau, geöffnete Flächen zur Prüfung", () => {
+  it("shell: zone blue, opened faces for checking", () => {
     const { f, p } = planAt("profile", 11, 30);
     expect(modes(f, p)).toEqual(["full:shell@11", "blue:zone@13"]);
     expect(p.openFaces).toHaveLength(1);
@@ -150,12 +150,12 @@ describe("Darstellungszustände", () => {
     expect(z.p.openFaces[0].zones).toEqual(q.zones);
   });
 
-  it("Modifier: # rot, % grau, unabhängig vom Cursor", () => {
+  it("modifiers: # red, % grey, independent of the cursor", () => {
     const { f, p } = planAt("modifiers", 8, 0);
     expect(modes(f, p)).toEqual(["full:translate@8", "outline:box@8", "red:translate@4", "grey:translate@6"]);
   });
 
-  it("Sperrvolumen (assert_keepout): eigener Modus, ausblendbar", () => {
+  it("keep-out volume (assert_keepout): own mode, can be hidden", () => {
     const f = fixture("modifiers");
     const scene = structuredClone(f.scene);
     const bg = scene.nodes.find((n) => n.flags.background)!;
@@ -167,24 +167,24 @@ describe("Darstellungszustände", () => {
     expect(hide.items.some((i) => i.node === bg.idx)).toBe(false);
   });
 
-    it("! : Hinweis für die Statuszeile", () => {
+    it("! : hint for the status line", () => {
     const f = fixture("root-modifier");
     const p = plan({ scene: f.scene, cursor: [], hover: [] });
     expect(p.status).toContain("Zeile 3");
     expect(p.base?.node).toBe(f.scene.root);
   });
 
-  it("intersection: Kinder halbtransparent, Ergebnis voll", () => {
+  it("intersection: children semi-transparent, result full", () => {
     const { f, p } = planAt("nested", 3, 8);
     expect(modes(f, p)).toEqual(["full:intersection@3", "ghost:box@4", "ghost:sphere@5"]);
   });
 
-  it("Hover über union: Kinder mit dünnem Umriss", () => {
+  it("hover over union: children with a thin outline", () => {
     const { f, p } = planAt("nested", 20, 0, 7);
     expect(modes(f, p).filter((m) => m.startsWith("outline"))).toEqual(["outline:cylinder@8", "outline:rotate@9", "outline:rotate@10"]);
   });
 
-  it("2D-Formen: Umriss mit leichter Füllung (flach)", () => {
+  it("2D shapes: outline with a light fill (flat)", () => {
     const { f, p } = planAt("spacers-2d", 6, 8);
     expect(p.items.length).toBe(4);
     expect(p.items.every((i) => i.flat)).toBe(true);
@@ -194,13 +194,13 @@ describe("Darstellungszustände", () => {
     expect(d.p.items.filter((i) => i.mode === "red").every((i) => i.flat)).toBe(true);
   });
 
-  it("Maus in der Ansicht: Knoten mit Kanten in Akzentfarbe", () => {
+  it("mouse in the view: node with edges in the accent colour", () => {
     const f = fixture("housing");
     const p = plan({ scene: f.scene, cursor: [], hover: [], picked: [1] });
     expect(modes(f, p)).toEqual(["picked:housing@21"]);
   });
 
-  it("Hover über Ankerreferenz hebt den Anker hervor", () => {
+  it("hover over an anchor reference highlights the anchor", () => {
     const f = fixture("angle-anchor");
     const p = plan({ scene: f.scene, cursor: [], hover: [], hoverAnchor: { inst: 1, anchor: 0 } });
     expect(p.anchors).toHaveLength(6);
@@ -208,8 +208,8 @@ describe("Darstellungszustände", () => {
   });
 });
 
-describe("Fehlerstellen", () => {
-  it("Boolean mit Berührung: Kanten rot, Stelle als Punkt in Weltkoordinaten", () => {
+describe("Failure places", () => {
+  it("boolean with contact: edges red, place as a point in world coordinates", () => {
     const f = fixture("housing");
     const scene = structuredClone(f.scene);
     const n = scene.nodes.find((x) => x.label === "lid")!;

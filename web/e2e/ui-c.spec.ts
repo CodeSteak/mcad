@@ -72,7 +72,7 @@ async function cursorOn(page: Page, l: number, col: number, context: string | nu
 
 // ---------------------------------------------------------------- fillet, chamfer, shell
 
-test("C01 fillet-Zeile: Zonen blau, ausgewählte Kanten farbig, Anzahl am Zeilenende", async ({ page }) => {
+test("C01 fillet line: zones blue, selected edges coloured, count at the line end", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/fillet_zones.mcad");
   const s = await cursorOn(page, 12, 10, "block", "(s) => s.view.plan.items.some(i => i.mode === 'blue')");
@@ -86,15 +86,15 @@ test("C01 fillet-Zeile: Zonen blau, ausgewählte Kanten farbig, Anzahl am Zeilen
   await screenshotC(page, "c01-fillet");
   recordC({
     id: "C01",
-    title: "fillet-Zeile",
-    images: [{ name: "c01-fillet", label: "Cursor auf fillet(2)" }],
+    title: "fillet line",
+    images: [{ name: "c01-fillet", label: "cursor on fillet(2)" }],
     code: lines(await text(page), 11, 21),
-    caption: "fillet_zones.mcad, Modul block, Cursor auf fillet(2) (Zeile 12): Körper voll, Rest gedimmt; die beiden Zonen (Zylinder um die Rasterlinie g[right, *, lid] und die Kugel über der Bohrung) blau halbtransparent, die zwei ausgewählten Kanten orange; am Zeilenende „2 Zonen · 2 Kanten“.",
-    checks: [`Darstellung: ${modes(s).join(", ")}`, `ausgewählte Kanten gezeichnet: ${view(s).edgeKinds.selected}`, `Pixel der Kanten: ${orange}, der Zonen: ${blue} (Differenz mit/ohne Ebene)`],
+    caption: "fillet_zones.mcad, module block, cursor on fillet(2) (line 12): body full, the rest dimmed; both zones (cylinder around the grid line g[right, *, lid] and the sphere above the bore) blue semi-transparent, the two selected edges orange; at the line end “2 Zonen · 2 Kanten” (2 zones · 2 edges).",
+    checks: [`display: ${modes(s).join(", ")}`, `selected edges drawn: ${view(s).edgeKinds.selected}`, `pixels of the edges: ${orange}, of the zones: ${blue} (difference with/without the layer)`],
   });
 });
 
-test("C02 Cursor auf einer Zone: nur diese Zone und ihre Kanten", async ({ page }) => {
+test("C02 cursor on a zone: only this zone and its edges", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/fillet_zones.mcad");
   let s = await cursorOn(page, 18, 6, "block", "(s) => s.view.zoneEdges !== null");
@@ -108,20 +108,20 @@ test("C02 Cursor auf einer Zone: nur diese Zone und ihre Kanten", async ({ page 
   await screenshotC(page, "c02-zone-linie");
   recordC({
     id: "C02",
-    title: "Cursor auf einer Zone",
+    title: "Cursor on a zone",
     images: [
-      { name: "c02-zone-kugel", label: "Zone Kugel (Zeile 18)" },
-      { name: "c02-zone-linie", label: "Zone Rasterlinie (Zeile 17)" },
+      { name: "c02-zone-kugel", label: "zone sphere (line 18)" },
+      { name: "c02-zone-linie", label: "zone grid line (line 17)" },
     ],
     code: lines(await text(page), 12, 19),
-    caption: "Cursor auf einer Zone des Blocks fillet(2): nur diese Zone ist blau, von den zwei ausgewählten Kanten des Blocks ist nur die Kante in dieser Zone orange (Kugel: obere Bohrungskante; Rasterlinie: obere rechte Kante). Der Griff am Zonenmittelpunkt (translate) snappt auf Raster (Phase B, B10).",
-    checks: ["Zone Kugel: 1 von 2 Kanten, nur blue@18", "Zone Rasterlinie: 1 von 2 Kanten, nur blue@17"],
+    caption: "Cursor on a zone of the block fillet(2): only this zone is blue, of the two selected edges of the block only the edge in this zone is orange (sphere: upper bore edge; grid line: upper right edge). The handle at the zone centre (translate) snaps to the grid (phase B, B10).",
+    checks: ["zone sphere: 1 of 2 edges, only blue@18", "zone grid line: 1 of 2 edges, only blue@17"],
   });
 });
 
-test("C03 Leere Auswahl: Zeile gelb, „0 Kanten“", async ({ page }) => {
+test("C03 empty selection: line yellow, “0 Kanten”", async ({ page }) => {
   await openApp(page);
-  const src = "fillet(2) {\n    cube(20);\n    translate([20, 0, 20]) sphere(3);   // berührt nur die Ecke\n}\n";
+  const src = "fillet(2) {\n    cube(20);\n    translate([20, 0, 20]) sphere(3);   // touches only the corner\n}\n";
   await loadText(page, src);
   const s = await cursorOn(page, 1, 3, null, "(s) => s.view.plan.items.length > 0");
   await expect(lineEl(page, 1)).toHaveClass(/cm-l-warning/);
@@ -133,15 +133,15 @@ test("C03 Leere Auswahl: Zeile gelb, „0 Kanten“", async ({ page }) => {
   await screenshotC(page, "c03-leer", "full");
   recordC({
     id: "C03",
-    title: "Leere Auswahl",
-    images: [{ name: "c03-leer", label: "Editor und Ansicht" }],
+    title: "Empty selection",
+    images: [{ name: "c03-leer", label: "editor and view" }],
     code: src.trim(),
-    caption: "Die Kugel berührt den Würfel nur an der Ecke, keine Kante liegt vollständig in der Zone: Zeile 1 gelb markiert, am Zeilenende „1 Zone · 0 Kanten“ und die Warnung; die Ansicht zeigt den Würfel unverändert (Warnung, kein Fehler).",
-    checks: ["Zeilenklasse cm-l-warning", "Knotenstatus warning", "keine ausgewählten Kanten gezeichnet"],
+    caption: "The sphere touches the cube only at the corner, no edge lies completely in the zone: line 1 marked yellow, at the line end “1 Zone · 0 Kanten” and the warning; the view shows the cube unchanged (warning, no error).",
+    checks: ["line class cm-l-warning", "node status warning", "no selected edges drawn"],
   });
 });
 
-test("C04 Verrundung gescheitert: Zeile rot, Kante rot, Körper ohne Verrundung", async ({ page }) => {
+test("C04 fillet failed: line red, edge red, body without the fillet", async ({ page }) => {
   await openApp(page);
   const src = "fillet(25) {\n    cube(20);\n    translate([20, 10, 20]) cube([2, 22, 2], center = true);\n}\n";
   await loadText(page, src);
@@ -159,15 +159,15 @@ test("C04 Verrundung gescheitert: Zeile rot, Kante rot, Körper ohne Verrundung"
   await screenshotC(page, "c04-fehler", "full");
   recordC({
     id: "C04",
-    title: "Verrundung gescheitert",
-    images: [{ name: "c04-fehler", label: "Editor und Ansicht" }],
+    title: "Fillet failed",
+    images: [{ name: "c04-fehler", label: "editor and view" }],
     code: src.trim(),
-    caption: "fillet(25) an einer Kante eines 20-mm-Würfels: Zeile 1 rot mit der Kernel-Meldung am Zeilenende, die betroffene Kante rot; die Ansicht zeigt den Würfel ohne Verrundung (Mesh des Knotens = Mesh des Körpers, 12 Dreiecke).",
-    checks: [`Knotenstatus error, 1 betroffene Kante`, `Mesh des fillet-Knotens: ${f.triangles} Dreiecke (unverrundeter Würfel)`, `Pixel der roten Kante: ${red}`],
+    caption: "fillet(25) on an edge of a 20 mm cube: line 1 red with the kernel message at the line end, the edge concerned red; the view shows the cube without the fillet (mesh of the node = mesh of the body, 12 triangles).",
+    checks: [`node status error, 1 edge concerned`, `mesh of the fillet node: ${f.triangles} triangles (cube without fillet)`, `pixels of the red edge: ${red}`],
   });
 });
 
-test("C05 difference(fillet = r) und $fillet am Primitiv", async ({ page }) => {
+test("C05 difference(fillet = r) and $fillet on a primitive", async ({ page }) => {
   await openApp(page);
   const src = "difference(fillet = 1) {\n    cube(20);\n    translate([10, 10, -1]) cylinder(h = 30, r = 4);\n}\ntranslate([30, 0, 0]) cube(10, $fillet = 1);\ntranslate([50, 0, 0]) cylinder(h = 10, r = 5, $chamfer = 1);\n";
   await loadText(page, src);
@@ -188,18 +188,18 @@ test("C05 difference(fillet = r) und $fillet am Primitiv", async ({ page }) => {
   await expect(lineHint(page, 6)).toContainText(`${cyl.selectedEdges} Kanten`);
   recordC({
     id: "C05",
-    title: "fillet = an Booleans, $fillet/$chamfer an Primitiven",
+    title: "fillet = on booleans, $fillet/$chamfer on primitives",
     images: [
       { name: "c05-difference", label: "difference(fillet = 1)" },
       { name: "c05-dollar-fillet", label: "cube(10, $fillet = 1)" },
     ],
     code: src.trim(),
-    caption: "difference(fillet = 1): die zwei durch die Bohrung neu entstandenen Kanten orange, abgezogener Zylinder rot halbtransparent, „2 Kanten“ am Zeilenende. $fillet = 1 am Würfel: alle 12 eigenen Kanten, „12 Kanten“; $chamfer = 1 am Zylinder: Deckel- und Bodenkante (2; die Naht ist glatt und zählt nicht, Bericht 7).",
-    checks: ["difference: 2 Kanten gezeichnet", "$fillet: 12 Kanten", `$chamfer am Zylinder: ${cyl.selectedEdges} Kanten wie gemeldet`],
+    caption: "difference(fillet = 1): the two edges created by the bore orange, the subtracted cylinder red semi-transparent, “2 Kanten” at the line end. $fillet = 1 on the cube: all 12 own edges, “12 Kanten”; $chamfer = 1 on the cylinder: top and bottom edge (2; the seam is smooth and does not count, report 7).",
+    checks: ["difference: 2 edges drawn", "$fillet: 12 edges", `$chamfer on the cylinder: ${cyl.selectedEdges} edges as reported`],
   });
 });
 
-test("C06 select = \"touch\" und verschachtelte Blöcke", async ({ page }) => {
+test("C06 select = \"touch\" and nested blocks", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/fillet_zones.mcad");
   // touch: the zone (vertical grid line) only touches four of the edges.
@@ -219,18 +219,18 @@ test("C06 select = \"touch\" und verschachtelte Blöcke", async ({ page }) => {
   expect(view(s).edgeKinds.selected).toBe(2);
   recordC({
     id: "C06",
-    title: "select = \"touch\", verschachtelte Blöcke",
+    title: "select = \"touch\", nested blocks",
     images: [
       { name: "c06-touch", label: "fillet(1.5, select = \"touch\")" },
-      { name: "c06-aussen", label: "äußerer Block fillet(1)" },
+      { name: "c06-aussen", label: "outer block fillet(1)" },
     ],
     code: lines(await text(page), 11, 26),
-    caption: "select = \"touch\": die Zone um die senkrechte Rasterlinie g[left, front, *] erfasst die senkrechte Kante und die vier Kanten, die sie an den Enden berühren (auf ganzer Länge), „5 Kanten“; Cursor auf der Zone: alle 5 in dieser Zone. Verschachtelt: der innere Block fillet(2) wählt 2 Kanten, der äußere fillet(1) mit der Zone g.boden die 5 Bodenkanten (vier Außenkanten und die Bohrungskante).",
-    checks: ["touch: 5 Kanten, Zone: 5 von 5", "äußerer Block: 5 Kanten, eine Zone (blue@20)", "innerer Block: 2 Kanten"],
+    caption: "select = \"touch\": the zone around the vertical grid line g[left, front, *] catches the vertical edge and the four edges that touch it at its ends (over their whole length), “5 Kanten”; cursor on the zone: all 5 in this zone. Nested: the inner block fillet(2) selects 2 edges, the outer fillet(1) with the zone g.floor the 5 bottom edges (four outer edges and the bore edge).",
+    checks: ["touch: 5 edges, zone: 5 of 5", "outer block: 5 edges, one zone (blue@20)", "inner block: 2 edges"],
   });
 });
 
-test("C07 chamfer in allen drei Formen", async ({ page }) => {
+test("C07 chamfer in all three forms", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/chamfers.mcad");
   let s = await cursorOn(page, 9, 3, null, "(s) => s.view.edgeKinds.selected > 0");
@@ -246,14 +246,14 @@ test("C07 chamfer in allen drei Formen", async ({ page }) => {
   recordC({
     id: "C07",
     title: "chamfer",
-    images: [{ name: "c07-chamfer", label: "chamfer(1) mit Zone g.o" }],
+    images: [{ name: "c07-chamfer", label: "chamfer(1) with zone g.o" }],
     code: lines(await text(page), 9, 19),
-    caption: "chamfer(1) { box; zone(g.o) }: die vier oberen Kanten orange, Zone blau; union(chamfer = 0.5) markiert die Schnittkanten der beiden Quader, $chamfer = 1 die 12 Würfelkanten.",
-    checks: [`Zonenblock: ${top} Kanten`, "union(chamfer =): Schnittkanten > 0", "$chamfer: 12 Kanten"],
+    caption: "chamfer(1) { box; zone(g.o) }: the four upper edges orange, zone blue; union(chamfer = 0.5) marks the intersection edges of the two boxes, $chamfer = 1 the 12 cube edges.",
+    checks: [`zone block: ${top} edges`, "union(chamfer =): intersection edges > 0", "$chamfer: 12 edges"],
   });
 });
 
-test("C08 shell: Zone blau, geöffnete Flächen farbig", async ({ page }) => {
+test("C08 shell: zone blue, opened faces coloured", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/grip_shell.mcad");
   let s = await cursorOn(page, 12, 10, "grip_shell", "(s) => s.view.openFaces.length > 0");
@@ -275,18 +275,18 @@ test("C08 shell: Zone blau, geöffnete Flächen farbig", async ({ page }) => {
     id: "C08",
     title: "shell",
     images: [
-      { name: "c08-shell", label: "Cursor auf shell(wall)" },
-      { name: "c08-shell-zone", label: "Cursor auf der Zone" },
+      { name: "c08-shell", label: "cursor on shell(wall)" },
+      { name: "c08-shell-zone", label: "cursor on the zone" },
     ],
     code: lines(await text(page), 11, 17),
-    caption: "grip_shell.mcad (neu), Modul grip_shell: Cursor auf shell(wall): Hohlkörper voll, Zone (Platte um g.top) blau, die geöffnete Oberseite des Körpers orange – in der Ansicht aus den Zonen-Meshes bestimmt (1 Fläche, wie die Engine meldet); „1 Zone · 1 Fläche geöffnet“ am Zeilenende. Cursor auf der Zone: nur diese Zone und ihre Fläche.",
-    checks: [`geöffnete Flächen Ansicht/Engine: ${view(s).openFaces[0].faces}/${view(s).openFaces[0].engine}`, `Pixel der geöffneten Fläche: ${open}`],
+    caption: "grip_shell.mcad (new), module grip_shell: cursor on shell(wall): hollow body full, zone (plate around g.top) blue, the opened top side of the body orange – determined in the view from the zone meshes (1 face, as the engine reports); “1 Zone · 1 Fläche geöffnet” at the line end. Cursor on the zone: only this zone and its face.",
+    checks: [`opened faces view/engine: ${view(s).openFaces[0].faces}/${view(s).openFaces[0].engine}`, `pixels of the opened face: ${open}`],
   });
 });
 
 // ---------------------------------------------------------------- profile operations
 
-test("C09 linear_extrude: Profil als Umriss unten, Höhengriff oben", async ({ page }) => {
+test("C09 linear_extrude: profile as an outline at the bottom, height handle at the top", async ({ page }) => {
   await openApp(page);
   const src = "linear_extrude(height = 15, twist = 30)\n    translate([-10, -5]) square([20, 10]);\ntranslate([40, 0, 0]) linear_extrude(8, center = true) circle(6);\n";
   await loadText(page, src);
@@ -317,16 +317,16 @@ test("C09 linear_extrude: Profil als Umriss unten, Höhengriff oben", async ({ p
     id: "C09",
     title: "linear_extrude",
     images: [
-      { name: "c09-vorher", label: "vorher" },
-      { name: "c09-nachher", label: `Höhe gezogen → ${hNew}` },
+      { name: "c09-vorher", label: "before" },
+      { name: "c09-nachher", label: `height dragged → ${hNew}` },
     ],
-    code: `${src.trim()}\n// nach dem Ziehen:\n${lines(after, 1)}`,
-    caption: `Cursor auf linear_extrude: Körper voll, das Profil (Rechteck) als Umriss in Profilfarbe unten in der xy-Ebene, sichtbar durch den Körper; Höhengriff oben auf der Achse. Griff mit der Maus nach oben gezogen: height = 15 → ${hNew}. Bei center = true liegt der Umriss auf −h/2.`,
-    checks: ["Darstellung full@1, profile@2", "Höhengriff über dem Ursprung", `Pixel des Profils: ${prof}`],
+    code: `${src.trim()}\n// after the drag:\n${lines(after, 1)}`,
+    caption: `Cursor on linear_extrude: body full, the profile (rectangle) as an outline in the profile colour at the bottom in the xy plane, visible through the body; height handle at the top on the axis. The handle dragged up with the mouse: height = 15 → ${hNew}. With center = true the outline lies at −h/2.`,
+    checks: ["display full@1, profile@2", "height handle above the origin", `pixels of the profile: ${prof}`],
   });
 });
 
-test("C10 rotate_extrude: Profil in der xz-Ebene, Drehachse, Winkelgriff", async ({ page }) => {
+test("C10 rotate_extrude: profile in the xz plane, axis of revolution, angle handle", async ({ page }) => {
   await openApp(page);
   const src = "rotate_extrude(angle = 270)\n    translate([12, 0]) square([4, 20]);\n";
   await loadText(page, src);
@@ -357,15 +357,15 @@ test("C10 rotate_extrude: Profil in der xz-Ebene, Drehachse, Winkelgriff", async
     title: "rotate_extrude",
     images: [
       { name: "c10-vorher", label: "angle = 270" },
-      { name: "c10-nachher", label: "Winkelgriff auf 180° gezogen" },
+      { name: "c10-nachher", label: "angle handle dragged to 180°" },
     ],
-    code: `${src.trim()}\n// nach dem Ziehen:\n${lines(after, 1)}`,
-    caption: "Cursor auf rotate_extrude: Körper voll, das Profil (Rechteck x = 12…16, y = 0…20) als Umriss in der xz-Ebene (Profil-y wird z), die Drehachse z als gestrichelte Linie, der Winkelgriff auf dem Ring um z. Ring mit der Maus auf 180° gezogen: angle = 270 → 180 (Raster 15°).",
-    checks: ["Darstellung full@1, profile@2", "Achse: Linie x = y = 0 entlang z", "Winkelgriff 270 → 180", `Pixel Achse/Profil: ${axisPx}/${profPx}`],
+    code: `${src.trim()}\n// after the drag:\n${lines(after, 1)}`,
+    caption: "Cursor on rotate_extrude: body full, the profile (rectangle x = 12…16, y = 0…20) as an outline in the xz plane (profile y becomes z), the axis of revolution z as a dashed line, the angle handle on the ring around z. The ring dragged to 180° with the mouse: angle = 270 → 180 (grid 15°).",
+    checks: ["display full@1, profile@2", "axis: line x = y = 0 along z", "angle handle 270 → 180", `pixels axis/profile: ${axisPx}/${profPx}`],
   });
 });
 
-test("C11 loft: alle Profile als Umrisse, Ergebnis halbtransparent", async ({ page }) => {
+test("C11 loft: all profiles as outlines, result semi-transparent", async ({ page }) => {
   await openApp(page);
   await openExample(page, "spec/loft_sweep.mcad");
   const s = await cursorOn(page, 9, 2, null, "(s) => s.view.plan.items.some(i => i.mode === 'translucent')");
@@ -376,14 +376,14 @@ test("C11 loft: alle Profile als Umrisse, Ergebnis halbtransparent", async ({ pa
   recordC({
     id: "C11",
     title: "loft",
-    images: [{ name: "c11-loft", label: "Cursor auf loft()" }],
+    images: [{ name: "c11-loft", label: "cursor on loft()" }],
     code: lines(await text(page), 9, 13),
-    caption: "loft_sweep.mcad, Cursor auf loft(): Ergebnis halbtransparent, alle drei Profile (Kreis unten, Quadrat auf z = 15, Kreis auf z = 30) als Umrisse an ihrer Lage.",
-    checks: ["translucent@9, profile@10/11/12", `Pixel der Profile: ${prof}`],
+    caption: "loft_sweep.mcad, cursor on loft(): result semi-transparent, all three profiles (circle at the bottom, square at z = 15, circle at z = 30) as outlines in place.",
+    checks: ["translucent@9, profile@10/11/12", `pixels of the profiles: ${prof}`],
   });
 });
 
-test("C12 sweep: Pfad als Kurve, Griffe an Literal-Punkten, Profil am Startpunkt", async ({ page }) => {
+test("C12 sweep: path as a curve, handles at literal points, profile at the start point", async ({ page }) => {
   await openApp(page);
   const src = "sweep(path = [[0, 0, 0], [20, 0, 10], [40, 10, 10], [60, 10, 0]], interp = \"spline\")\n    circle(3);\n";
   await loadText(page, src);
@@ -416,16 +416,16 @@ test("C12 sweep: Pfad als Kurve, Griffe an Literal-Punkten, Profil am Startpunkt
     id: "C12",
     title: "sweep",
     images: [
-      { name: "c12-vorher", label: "vorher" },
-      { name: "c12-nachher", label: "dritten Pfadpunkt gezogen" },
+      { name: "c12-vorher", label: "before" },
+      { name: "c12-nachher", label: "third path point dragged" },
     ],
-    code: `${src.trim()}\n// nach dem Ziehen:\n${lines(after, 1)}`,
-    caption: "Cursor auf sweep: Pfad als Kurve (kubischer Spline durch die Punkte wie im Kernel, Sehnenlängen-Parameter), ein Griff an jedem Literal-Punkt, das Profil (Kreis) als Umriss am Startpunkt senkrecht zur Starttangente. Den dritten Punkt mit Alt frei gezogen: nur dieses Literal ändert sich, Kurve und Körper folgen.",
-    checks: ["Kurve durch alle 4 Punkte (Abstand < 0,6 mm)", "4 Griffe (Literal)", `Pixel Pfad/Profil: ${guide}/${prof}`],
+    code: `${src.trim()}\n// after the drag:\n${lines(after, 1)}`,
+    caption: "Cursor on sweep: path as a curve (cubic spline through the points as in the kernel, chord length parameter), a handle at every literal point, the profile (circle) as an outline at the start point perpendicular to the start tangent. The third point dragged freely with Alt: only this literal changes, curve and body follow.",
+    checks: ["curve through all 4 points (distance < 0.6 mm)", "4 handles (literal)", `pixels path/profile: ${guide}/${prof}`],
   });
 });
 
-test("C13 surface und thicken: Kontrollnetz mit Griffen, Fläche beidseitig, Fläche als Umriss", async ({ page }) => {
+test("C13 surface and thicken: control net with handles, surface two-sided, surface as an outline", async ({ page }) => {
   await openApp(page);
   const src =
     "thicken(2)\n    surface(points = [\n        [[0, 0, 0], [10, 0, 3], [20, 0, 3], [30, 0, 0]],\n        [[0, 10, 3], [10, 10, 10], [20, 10, 10], [30, 10, 3]],\n        [[0, 20, 3], [10, 20, 10], [20, 20, 12], [30, 20, 3]],\n        [[0, 30, 0], [10, 30, 3], [20, 30, 3], [30, 30, 0]]\n    ]);\n";
@@ -469,19 +469,19 @@ test("C13 surface und thicken: Kontrollnetz mit Griffen, Fläche beidseitig, Fl�
   expect(below).toBeGreaterThan(5000);
   recordC({
     id: "C13",
-    title: "surface und thicken",
+    title: "surface and thicken",
     images: [
-      { name: "c13-netz", label: "Cursor auf surface: Kontrollnetz" },
-      { name: "c13-thicken", label: "Cursor auf thicken(2)" },
-      { name: "c13-unten", label: "offene Fläche von unten" },
+      { name: "c13-netz", label: "cursor on surface: control net" },
+      { name: "c13-thicken", label: "cursor on thicken(2)" },
+      { name: "c13-unten", label: "open surface from below" },
     ],
-    code: `${src.trim()}\n// nach dem Ziehen (Zeile 4):\n${lines(after, 4)}\n// Fläche allein:\n${alone.trim()}`,
-    caption: "Cursor auf surface (4 × 4): Kontrollnetz (4 Zeilen + 4 Spalten als Linien) mit einem Griff an jedem Kontrollpunkt. Einen inneren Punkt mit Alt nach oben gezogen: nur sein Literal ändert sich. Cursor auf thicken(2): Ergebnis voll, die Fläche als Umriss. Eine offene Fläche allein (berechnete Punkte, gesperrte Griffe) wird beidseitig gerendert: von oben und von unten sichtbar.",
-    checks: ["8 Netzlinien, 16 Griffe", "mittlerer Punkt gezogen", "thicken: full@1, profile@2", `bedeckte Pixel der offenen Fläche von oben/unten: ${above}/${below}`],
+    code: `${src.trim()}\n// after the drag (line 4):\n${lines(after, 4)}\n// surface alone:\n${alone.trim()}`,
+    caption: "Cursor on surface (4 × 4): control net (4 rows + 4 columns as lines) with a handle at every control point. An inner point dragged up with Alt: only its literal changes. Cursor on thicken(2): result full, the surface as an outline. An open surface alone (computed points, locked handles) is rendered two-sided: visible from above and from below.",
+    checks: ["8 net lines, 16 handles", "middle point dragged", "thicken: full@1, profile@2", `covered pixels of the open surface from above/below: ${above}/${below}`],
   });
 });
 
-test("C14 2D-Formen allein: Umriss mit Füllung, z-Abweichung als Warnung", async ({ page }) => {
+test("C14 2D shapes alone: outline with a fill, z deviation as a warning", async ({ page }) => {
   await openApp(page);
   const src = "grid g {\n    x: a = 0, b = 30;\n    y: v = 0, h = 20;\n    z: u = 0, o = 4;\n}\npolygon([g[a, v, u], g[b, v, u], g[b, h, o], g[a, h, u]]);\ntranslate([40, 0]) circle(8);\n";
   await loadText(page, src);
@@ -498,17 +498,17 @@ test("C14 2D-Formen allein: Umriss mit Füllung, z-Abweichung als Warnung", asyn
   await screenshotC(page, "c14-2d", "full");
   recordC({
     id: "C14",
-    title: "2D-Formen allein",
-    images: [{ name: "c14-2d", label: "Editor und Ansicht von oben" }],
+    title: "2D shapes alone",
+    images: [{ name: "c14-2d", label: "editor and view from the top" }],
     code: src.trim(),
-    caption: "Nur 2D-Formen: Umriss mit leichter Füllung in der xy-Ebene (Ansicht von oben). Der Rasterpunkt g[b, h, o] hat z = 4: Zeile 6 gelb mit „z-Koordinate ignoriert: 2D-Formen liegen in der xy-Ebene“ am Zeilenende.",
-    checks: ["Warnung in Zeile 6 (Diagnose und Zeilenklasse)", "alle Darstellungen flach", `Pixel Flächenfarbe: ${fill}`],
+    caption: "Only 2D shapes: outline with a light fill in the xy plane (view from the top). The grid point g[b, h, o] has z = 4: line 6 yellow with “z-Koordinate ignoriert: 2D-Formen liegen in der xy-Ebene” (z coordinate ignored) at the line end.",
+    checks: ["warning on line 6 (diagnostic and line class)", "all displays flat", `pixels of the face colour: ${fill}`],
   });
 });
 
 // ---------------------------------------------------------------- view and drags
 
-test("C15 Ansicht nach deutlicher Größenänderung neu einpassen", async ({ page }) => {
+test("C15 refit the view after a clear change of size", async ({ page }) => {
   await openApp(page);
   await loadText(page, "cube(10);\n");
   let s = await cad(page);
@@ -545,18 +545,18 @@ test("C15 Ansicht nach deutlicher Größenänderung neu einpassen", async ({ pag
   await screenshotC(page, "c15-eingepasst");
   recordC({
     id: "C15",
-    title: "Ansicht neu einpassen",
+    title: "Refit the view",
     images: [
-      { name: "c15-knopf", label: "Kamera bewegt, Modell 5× größer: Knopf" },
-      { name: "c15-eingepasst", label: "nach „Neu einpassen“" },
+      { name: "c15-knopf", label: "camera moved, model 5× larger: button" },
+      { name: "c15-eingepasst", label: "after “Neu einpassen” (refit)" },
     ],
-    code: "cube(10);  →  cube(60);  →  cube(62);  →  (Drehen)  →  cube(300);",
-    caption: `Solange der Nutzer die Kamera nicht bewegt hat, wird nach einer deutlichen Größenänderung (Diagonale × 1,6 oder Mitte um mehr als die halbe Diagonale verschoben) neu eingepasst: cube(10) → cube(60), Kameraabstand ${d0.toFixed(0)} → ${d1.toFixed(0)} mm; cube(62) ändert nichts. Nach dem Drehen mit der Maus bleibt die Kamera bei cube(300) stehen, oben erscheint „Neu einpassen“; ein Klick rahmt das Modell ein.`,
-    checks: ["automatisch: Abstand > 3 × vorher", "kleine Änderung: Kamera unverändert", "nach Drehen: Knopf, Kamera unverändert", "Knopf: eingepasst, Knopf weg"],
+    code: "cube(10);  →  cube(60);  →  cube(62);  →  (orbit)  →  cube(300);",
+    caption: `As long as the user has not moved the camera, the view is fitted again after a clear change of size (diagonal × 1.6 or the centre moved by more than half the diagonal): cube(10) → cube(60), camera distance ${d0.toFixed(0)} → ${d1.toFixed(0)} mm; cube(62) changes nothing. After orbiting with the mouse the camera stays at cube(300), “Neu einpassen” (refit) appears at the top; a click frames the model.`,
+    checks: ["automatic: distance > 3 × before", "small change: camera unchanged", "after orbiting: button, camera unchanged", "button: fitted, button gone"],
   });
 });
 
-test("C16 Punktgriff achsgebunden ziehen (Umschalttaste, X/Y/Z)", async ({ page }) => {
+test("C16 drag a point handle axis-locked (Shift, X/Y/Z)", async ({ page }) => {
   await openApp(page);
   const src = "cube([60, 30, 1]);\ntranslate([10, 5.5, 2.25]) cube(6);\n";
   await loadText(page, src);
@@ -625,28 +625,28 @@ test("C16 Punktgriff achsgebunden ziehen (Umschalttaste, X/Y/Z)", async ({ page 
   await screenshotC(page, "c16-nachher");
   recordC({
     id: "C16",
-    title: "Achsgebundenes Ziehen",
+    title: "Axis-locked drag",
     images: [
-      { name: "c16-waehrend", label: "Umschalttaste: Achse x aus der Bewegung" },
-      { name: "c16-nachher", label: "erst frei, dann Taste Z" },
+      { name: "c16-waehrend", label: "Shift: axis x from the motion" },
+      { name: "c16-nachher", label: "free first, then key Z" },
     ],
-    code: `${src.trim()}\n// Umschalt + Ziehen (schräg, überwiegend x):\n${lines(t1, 2)}\n// erst frei, dann Taste Z:\n${lines(t2, 2)}`,
-    caption: "Mit gedrückter Umschalttaste bestimmt die Mausbewegung die Achse (die Achse des lokalen Systems, deren Bildschirmrichtung am besten zur Bewegung passt); der Griff läuft auf einer Linie in Achsfarbe, nur diese Komponente ändert sich – y = 5.5 und z = 2.25 bleiben als Text erhalten (cad-eval schreibt unveränderte Literale nicht neu). Die Tasten X/Y/Z wählen die Achse direkt (erneut drücken: frei), auch mitten im Ziehen: die Achslinie geht dann durch die aktuelle Lage, die übrigen Komponenten behalten ihren Wert; die Tasten erreichen den Editor nicht.",
-    checks: [`Umschalt: ${m1.slice(1).join(", ")} (nur x geändert)`, `erst frei, dann Taste Z: ${m2.slice(1).join(", ")} (x, y wie beim Drücken von Z)`],
+    code: `${src.trim()}\n// Shift + drag (oblique, mostly x):\n${lines(t1, 2)}\n// free first, then key Z:\n${lines(t2, 2)}`,
+    caption: "With Shift held the mouse motion determines the axis (the axis of the local system whose screen direction fits the motion best); the handle runs on a line in the axis colour, only this component changes – y = 5.5 and z = 2.25 stay as text (cad-eval does not rewrite unchanged literals). The keys X/Y/Z choose the axis directly (press again: free), also in the middle of a drag: the axis line then goes through the current position, the other components keep their value; the keys do not reach the editor.",
+    checks: [`Shift: ${m1.slice(1).join(", ")} (only x changed)`, `free first, then key Z: ${m2.slice(1).join(", ")} (x, y as when Z was pressed)`],
   });
 });
 
 // ---------------------------------------------------------------- examples, measurements
 
 const NEW_EXAMPLES: Array<{ path: string; line: number; col: number; context: string | null; what: string }> = [
-  { path: "spec/grip_shell.mcad", line: 12, col: 10, context: "grip_shell", what: "shell mit Zone g.top, Kabelausgang per difference, Schraubdome mit difference(fillet = 0.5)" },
-  { path: "spec/bottle.mcad", line: 11, col: 10, context: "bottle", what: "rotate_extrude eines Polygons aus Rasterpunkten, fillet(3) mit zwei Zonen, Teilumlauf 270°" },
-  { path: "spec/vent_grille.mcad", line: 12, col: 10, context: "grille", what: "linear_extrude für Rahmen und Schlitze an indizierten Rasterebenen, difference(chamfer = 0.6)" },
-  { path: "spec/cable_guide.mcad", line: 16, col: 3, context: null, what: "sweep eines U-Profils entlang eines Spline-Pfads aus Rasterpunkten und Literalen, linearer Kanal" },
-  { path: "spec/freeform_lid.mcad", line: 11, col: 10, context: "lid", what: "surface aus einem 4 × 4-Netz (Rasterrand, Wölbung als Literale), thicken(2)" },
+  { path: "spec/grip_shell.mcad", line: 12, col: 10, context: "grip_shell", what: "shell with zone g.top, cable outlet by difference, screw bosses with difference(fillet = 0.5)" },
+  { path: "spec/bottle.mcad", line: 11, col: 10, context: "bottle", what: "rotate_extrude of a polygon of grid points, fillet(3) with two zones, partial revolution 270°" },
+  { path: "spec/vent_grille.mcad", line: 12, col: 10, context: "grille", what: "linear_extrude for frame and slots at indexed grid planes, difference(chamfer = 0.6)" },
+  { path: "spec/cable_guide.mcad", line: 16, col: 3, context: null, what: "sweep of a U profile along a spline path of grid points and literals, linear channel" },
+  { path: "spec/freeform_lid.mcad", line: 11, col: 10, context: "lid", what: "surface from a 4 × 4 net (grid border, bulge as literals), thicken(2)" },
 ];
 
-test("C17 Neue Beispiele im Menü", async ({ page }) => {
+test("C17 new examples in the menu", async ({ page }) => {
   await openApp(page);
   // the menu "Beispiele" › "Spec-Beispiele" lists them
   await pickMenu(page, "Beispiele", "Spec-Beispiele");
@@ -668,18 +668,18 @@ test("C17 Neue Beispiele im Menü", async ({ page }) => {
     s = await cursorOn(page, ex.line, ex.col, ex.context, "(s) => s.view.plan.items.length > 0");
     const img = `c17-${name.replace(".scad", "")}`;
     await screenshotC(page, img, "full");
-    caps.push(`${name}: ${ex.what} (Cursor Zeile ${ex.line}: ${modes(s).slice(0, 4).join(", ")})`);
+    caps.push(`${name}: ${ex.what} (cursor line ${ex.line}: ${modes(s).slice(0, 4).join(", ")})`);
     recordC({
       id: `C17-${name.replace(".scad", "")}`,
-      title: `Beispiel ${name}`,
-      images: [{ name: img, label: `Cursor in Zeile ${ex.line}` }],
-      caption: `${ex.what}. Fehlerfrei ausgewertet; Cursor in Zeile ${ex.line}.`,
+      title: `Example ${name}`,
+      images: [{ name: img, label: `cursor in line ${ex.line}` }],
+      caption: `${ex.what}. Evaluated without errors; cursor in line ${ex.line}.`,
     });
   }
-  recordC({ id: "C17", title: "Neue Beispiele", images: [], caption: caps.join(" · ") });
+  recordC({ id: "C17", title: "New examples", images: [], caption: caps.join(" · ") });
 });
 
-test("C19 Watchdog: hängender Knoten wird gesperrt, Zeile rot, Änderung hebt die Sperre auf", async ({ page }) => {
+test("C19 watchdog: a hanging node is blocked, line red, a change lifts the block", async ({ page }) => {
   page.on("pageerror", (e) => console.log("pageerror:", e.message));
   await page.goto("/?watchdog=1500");
   await expect(page.getByTestId("editor").locator(".cm-content")).toBeVisible();
@@ -727,15 +727,15 @@ test("C19 Watchdog: hängender Knoten wird gesperrt, Zeile rot, Änderung hebt d
   await expect(lineEl(page, bl)).not.toHaveClass(/cm-l-error/);
   recordC({
     id: "C19",
-    title: "Watchdog-Sperre",
-    images: [{ name: "c19-gesperrt", label: "nach dem Neustart: gesperrter Knoten rot" }],
-    code: `${lines(src, bl).trim()}\n// geändert:\n${lines(edited, bl).trim()}`,
-    caption: `Watchdog auf 1,5 s gesetzt (?watchdog=1500), der Worker beim ersten Progress mit __debugHang 4 s blockiert: der Worker wird beendet und neu gestartet, der Schlüssel des Knotens aus Progress.current wird gesperrt; der neue Worker bekommt vor SetSource {type: "BlockKeys", keys: […]}. Der Knoten (${blocked[0].label}) in Zeile ${bl} meldet „Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung“ (Zeile rot), der Rest wird ausgewertet. Gesperrt wird der Inhaltsschlüssel: gleiche Knoten in anderen Zeilen wären mitgesperrt. Nach Ändern der Zeile wird sie normal berechnet; die Liste bleibt für weitere Neustarts erhalten (Unit-Test transport.test.ts).`,
-    checks: [`Neustarts: 1, gesperrte Schlüssel: ${s.blockedKeys.length}`, `gesperrter Knoten: Zeile ${bl} (${blocked[0].label})`, "nach Änderung: 0 Fehler, kein weiterer Neustart"],
+    title: "Watchdog block",
+    images: [{ name: "c19-gesperrt", label: "after the restart: blocked node red" }],
+    code: `${lines(src, bl).trim()}\n// changed:\n${lines(edited, bl).trim()}`,
+    caption: `Watchdog set to 1.5 s (?watchdog=1500), the worker blocked for 4 s with __debugHang at the first Progress: the worker is terminated and started again, the key of the node from Progress.current is blocked; the new worker gets {type: "BlockKeys", keys: […]} before SetSource. The node (${blocked[0].label}) in line ${bl} reports “Zeitüberschreitung, Knoten gesperrt bis zur nächsten Änderung” (timeout, node blocked until the next change; line red), the rest is evaluated. The content key is blocked: equal nodes on other lines would be blocked too. After the line is changed it is computed normally; the list survives further restarts (unit test transport.test.ts).`,
+    checks: [`restarts: 1, blocked keys: ${s.blockedKeys.length}`, `blocked node: line ${bl} (${blocked[0].label})`, "after the change: 0 errors, no further restart"],
   });
 });
 
-test("C20 Entwurfsmodus: Verrundung beim Ziehen ausgesetzt, danach berechnet", async ({ page }) => {
+test("C20 draft mode: fillet suspended while dragging, computed afterwards", async ({ page }) => {
   await openApp(page);
   const src = "difference(fillet = 1) {\n    cube([40, 30, 10]);\n    translate([20, 15, -1]) cylinder(h = 12, r = 5);\n}\n";
   await loadText(page, src);
@@ -766,28 +766,28 @@ test("C20 Entwurfsmodus: Verrundung beim Ziehen ausgesetzt, danach berechnet", a
   await screenshotC(page, "c20-danach", "full");
   recordC({
     id: "C20",
-    title: "Entwurfsmodus beim Ziehen",
+    title: "Draft mode while dragging",
     images: [
-      { name: "c20-ziehen", label: "während des Ziehens" },
-      { name: "c20-danach", label: "nach dem Loslassen" },
+      { name: "c20-ziehen", label: "while dragging" },
+      { name: "c20-danach", label: "after the release" },
     ],
-    code: `${src.trim()}\n// gezogen: ${lines(await text(page), 3).trim()}`,
-    caption: "Beim Ziehen des Zylinder-Griffs wird die Verrundung von difference(fillet = 1) ausgesetzt (Entwurfsmodus der Engine: Verrundungen, die länger als 25 ms brauchen): die Statuszeile zeigt „Verrundung beim Ziehen ausgesetzt (Zeile 1)“, am Zeilenende steht derselbe Hinweis (NodeReport.blend_suspended, im Szenenknoten als blend_suspended). Nach dem Loslassen wertet die Engine vollständig aus, Hinweis und Meldung verschwinden.",
-    checks: ["Statuszeile während des Ziehens: Zeile 1", `Zeilenhinweis: ${hint.trim()}`, "danach: blend_suspended überall false, Knoten ok"],
+    code: `${src.trim()}\n// dragged: ${lines(await text(page), 3).trim()}`,
+    caption: "While the cylinder handle is dragged the fillet of difference(fillet = 1) is suspended (draft mode of the engine: fillets that need longer than 25 ms): the status line shows “Verrundung beim Ziehen ausgesetzt (Zeile 1)” (fillet suspended while dragging), the same hint is at the line end (NodeReport.blend_suspended, in the scene node as blend_suspended). After the release the engine evaluates completely, hint and message disappear.",
+    checks: ["status line while dragging: line 1", `line hint: ${hint.trim()}`, "afterwards: blend_suspended false everywhere, nodes ok"],
   });
 });
 
-test("C18 Messwerte: Auswertzeit fillet, chamfer, shell, sweep, loft, surface", async ({ page }) => {
+test("C18 measurements: evaluation time of fillet, chamfer, shell, sweep, loft, surface", async ({ page }) => {
   await openApp(page);
   // Each model is evaluated with different parameters (no cache hits); kernel time of the
   // complete scene (stats.kernel_ms) and SetSource → complete scene in the app.
   const models: Array<{ key: string; label: string; src: (k: number) => string }> = [
-    { key: "fillet", label: "fillet(r) Zonenblock, 4 Kanten", src: (k) => `grid g { z: o = 15; }\nfillet(${1 + k * 0.25}) {\n  cube([${30 + k}, 20, 15]);\n  zone(g.o, d = 1);\n}\n` },
-    { key: "fillet_bool", label: "difference(fillet = r), 4 Bohrungen", src: (k) => `difference(fillet = ${0.8 + k * 0.1}) {\n  cube([${60 + k}, 20, 5]);\n  for (i = [0:3]) translate([10 + i * 13, 10, -1]) cylinder(h = 7, r = 3);\n}\n` },
-    { key: "chamfer", label: "chamfer, 12 Kanten ($chamfer)", src: (k) => `cube([${20 + k}, 20, 20], $chamfer = ${1 + k * 0.2});\n` },
-    { key: "shell", label: "shell(1.6) eines gefasten Quaders ($chamfer = 4)", src: (k) => `grid g { z: o = 18; }\nshell(1.6) {\n  box([0, 0, 0], [${90 + 2 * k}, 34, 18], $chamfer = 4);\n  zone(g.o, d = 1);\n}\n` },
-    { key: "sweep", label: "sweep, Spline-Pfad mit 4 Punkten", src: (k) => `sweep(path = [[0, 0, 0], [20, 0, ${10 + k}], [40, 10, 10], [60, 10, 0]]) circle(3);\n` },
-    { key: "loft", label: "loft, 3 Profile", src: (k) => `loft() {\n  circle(${10 + k * 0.5});\n  translate([0, 0, 15]) square(14, center = true);\n  translate([0, 0, 30]) circle(4);\n}\n` },
+    { key: "fillet", label: "fillet(r) zone block, 4 edges", src: (k) => `grid g { z: o = 15; }\nfillet(${1 + k * 0.25}) {\n  cube([${30 + k}, 20, 15]);\n  zone(g.o, d = 1);\n}\n` },
+    { key: "fillet_bool", label: "difference(fillet = r), 4 bores", src: (k) => `difference(fillet = ${0.8 + k * 0.1}) {\n  cube([${60 + k}, 20, 5]);\n  for (i = [0:3]) translate([10 + i * 13, 10, -1]) cylinder(h = 7, r = 3);\n}\n` },
+    { key: "chamfer", label: "chamfer, 12 edges ($chamfer)", src: (k) => `cube([${20 + k}, 20, 20], $chamfer = ${1 + k * 0.2});\n` },
+    { key: "shell", label: "shell(1.6) of a chamfered box ($chamfer = 4)", src: (k) => `grid g { z: o = 18; }\nshell(1.6) {\n  box([0, 0, 0], [${90 + 2 * k}, 34, 18], $chamfer = 4);\n  zone(g.o, d = 1);\n}\n` },
+    { key: "sweep", label: "sweep, spline path with 4 points", src: (k) => `sweep(path = [[0, 0, 0], [20, 0, ${10 + k}], [40, 10, 10], [60, 10, 0]]) circle(3);\n` },
+    { key: "loft", label: "loft, 3 profiles", src: (k) => `loft() {\n  circle(${10 + k * 0.5});\n  translate([0, 0, 15]) square(14, center = true);\n  translate([0, 0, 30]) circle(4);\n}\n` },
     { key: "surface", label: "thicken(surface) 4 × 4", src: (k) => `thicken(2) surface(points = [for (i = [0:3]) [for (j = [0:3]) [i * 10, j * 10, ${2 + k} * sin(i * 60) * cos(j * 60)]]]);\n` },
   ];
   const out: Record<string, { label: string; kernel: number[]; total: number[]; median: number; medianTotal: number; nodes: number; failed: number }> = {};
@@ -818,10 +818,10 @@ test("C18 Messwerte: Auswertzeit fillet, chamfer, shell, sweep, loft, surface", 
   writeMetricsC({ evalTimes: out });
   recordC({
     id: "C18",
-    title: "Auswertzeiten",
+    title: "Evaluation times",
     images: [],
     caption: Object.values(out)
-      .map((o) => `${o.label}: Kernel ${o.median.toFixed(0)} ms (Median aus 5${o.failed ? `, ${o.failed} gescheitert` : ""}), SetSource → Szene ${o.medianTotal.toFixed(0)} ms`)
+      .map((o) => `${o.label}: kernel ${o.median.toFixed(0)} ms (median of 5${o.failed ? `, ${o.failed} failed` : ""}), SetSource → scene ${o.medianTotal.toFixed(0)} ms`)
       .join(" · "),
   });
 });

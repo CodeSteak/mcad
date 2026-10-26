@@ -6,7 +6,7 @@
 //
 // Inputs (gitignored, reports/tmp/report12/):
 //   cli/*.png, *.txt, *.json, sources/              tools/report/report12-data.sh
-//   scenarios.json, img/*.jpg                       cd web && pnpm exec playwright test e2e/farben-korrekturen.spec.ts
+//   scenarios.json, img/*.jpg                       cd web && pnpm exec playwright test e2e/color-fixes.spec.ts
 //   playwright.json                                 copy of reports/tmp/report2/playwright.json (whole suite: pnpm e2e)
 //   vitest.txt, typecheck.txt                       cd web && pnpm test, pnpm typecheck
 //   tauri/tauri-e2e.json, tauri/img/*.png           node web/e2e-tauri/desktop.e2e.mjs --bin target/release/mcad --out reports/tmp/report12/tauri

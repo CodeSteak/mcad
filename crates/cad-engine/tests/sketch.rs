@@ -123,7 +123,7 @@ fn bezier_and_spline_segments() {
 #[test]
 fn sketch_modules_loops_and_twist() {
     // a module whose body is a sketch, teeth by a loop
-    let src = "module stern(n = 6, r1 = 10, r2 = 5) sketch {\n start([r1, 0]);\n for (i = [1 : n]) {\n  line(to = [r2 * cos(360 * (i - 0.5) / n), r2 * sin(360 * (i - 0.5) / n)]);\n  line(to = [r1 * cos(360 * i / n), r1 * sin(360 * i / n)]);\n }\n}\nlinear_extrude(3) stern();";
+    let src = "module star(n = 6, r1 = 10, r2 = 5) sketch {\n start([r1, 0]);\n for (i = [1 : n]) {\n  line(to = [r2 * cos(360 * (i - 0.5) / n), r2 * sin(360 * (i - 0.5) / n)]);\n  line(to = [r1 * cos(360 * i / n), r1 * sin(360 * i / n)]);\n }\n}\nlinear_extrude(3) star();";
     // star: 2n triangles centre–r1–r2 with angle π/n between them
     let area = 12.0 * 0.5 * 10.0 * 5.0 * (PI / 6.0).sin();
     assert_approx("star", vol(src), area * 3.0, VREL);

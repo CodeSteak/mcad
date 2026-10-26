@@ -102,7 +102,7 @@ export function cliCamera(eyeDir: Vec3): { azimuth: number; elevation: number } 
 }
 
 /** Full `mcad render` call for the current section and view. */
-export function cliCommand(s: SectionState, file: string, module: string | null, eyeDir: Vec3 | null, output = "schnitt.png"): string {
+export function cliCommand(s: SectionState, file: string, module: string | null, eyeDir: Vec3 | null, output = "section.png"): string {
   const q = (t: string) => (/^[A-Za-z0-9_./:-]+$/.test(t) ? t : `'${t.replace(/'/g, "'\\''")}'`);
   const parts = ["mcad", "render", q(file), "-o", q(output)];
   if (module) parts.push("--module", q(module));

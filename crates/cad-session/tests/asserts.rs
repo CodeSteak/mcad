@@ -83,11 +83,11 @@ fn keepout_clearance() {
     let r = check(&format!("{PLATE}assert_keepout(clearance = 0.5) translate([10, 10, 3.3]) cube(5);\n"));
     let p = &r[0].pairs[0];
     assert_eq!(p.problem.as_deref(), Some("too_close"), "{p:?}");
-    close("Abstand", p.distance.unwrap(), 0.3, 1e-5);
+    close("distance", p.distance.unwrap(), 0.3, 1e-5);
     assert_eq!(p.points.len(), 2);
     // a: the keep-out volume, b: the plate
-    close("Fußpunkt Sperrvolumen", p.points[0].0[2], 3.3, 1e-5);
-    close("Fußpunkt Platte", p.points[1].0[2], 3.0, 1e-5);
+    close("foot point keep-out volume", p.points[0].0[2], 3.3, 1e-5);
+    close("foot point plate", p.points[1].0[2], 3.0, 1e-5);
     // 1 mm: fine (no pair listed)
     let r = check(&format!("{PLATE}assert_keepout(clearance = 0.5) translate([10, 10, 4]) cube(5);\n"));
     assert!(r[0].ok && r[0].pairs.is_empty(), "{:?}", r[0]);
@@ -137,7 +137,7 @@ fn intersect_needs_a_connected_group() {
     let bad: Vec<&AssertPair> = r[0].pairs.iter().filter(|p| !p.ok).collect();
     assert_eq!(bad.len(), 1, "{:?}", r[0].pairs);
     assert_eq!(bad[0].problem.as_deref(), Some("apart"));
-    close("Abstand", bad[0].distance.unwrap(), 40.0 - 26.0, 1e-5);
+    close("distance", bad[0].distance.unwrap(), 40.0 - 26.0, 1e-5);
     // touching is no intersection
     let r = check("assert_intersect() { cube(10); translate([10, 0, 0]) cube(10); }\n");
     assert!(!r[0].ok);
@@ -152,13 +152,13 @@ fn touches_face_contact_area() {
     assert!(p.ok, "{p:?}");
     assert_eq!(p.contact.as_deref(), Some("face"));
     assert!(p.contact_exact);
-    close("Kontaktfläche", p.contact_area.unwrap(), 25.0, 1e-9);
+    close("contact area", p.contact_area.unwrap(), 25.0, 1e-9);
     assert!(p.contact_mesh.is_some() && !p.contact_lines.is_empty());
     // circle on a face: π r² exactly (arcs in region2)
     let r = check("assert_touches() { cube(10); translate([5, 5, 10]) cylinder(h = 5, r = 3); }\n");
     let p = &r[0].pairs[0];
     assert!(p.ok, "{p:?}");
-    close("Kontaktfläche Kreis", p.contact_area.unwrap(), PI * 9.0, 1e-6);
+    close("contact area circle", p.contact_area.unwrap(), PI * 9.0, 1e-6);
     assert!(p.contact_exact, "{p:?}");
 }
 
@@ -183,7 +183,7 @@ fn touches_gap_and_overlap() {
     let r = check("assert_touches() { cube(10); translate([10.2, 0, 0]) cube(10); }\n");
     let p = &r[0].pairs[0];
     assert_eq!(p.problem.as_deref(), Some("gap"));
-    close("Spalt", p.distance.unwrap(), 0.2, 1e-5);
+    close("gap", p.distance.unwrap(), 0.2, 1e-5);
     // within tol: contact
     let r = check("assert_touches(tol = 0.3) { cube(10); translate([10.2, 0, 0]) cube(10); }\n");
     assert!(r[0].ok, "{:?}", r[0]);
