@@ -1,288 +1,159 @@
 # mcad
 
-Parametric CAD in an OpenSCAD-style language, on an exact B-rep kernel, with a CLI built for
-AI agents and a desktop/browser UI for humans.
+Parametric CAD in an OpenSCAD-style language on an exact B-rep kernel. CLI for AI agents,
+desktop/browser UI for humans.
 
-> **Status: alpha.** Expect breaking changes in the language, the CLI and the file formats.
-> Hobby project, tested on Linux. The repository URL will probably change.
+> **Alpha.** Expect breaking changes. Tested on Linux. The repository URL will probably change.
 
 ![Macro pad modelled in mcad](docs/img/readme/macropad.png)
 
 ## Motivation
 
-I like OpenSCAD: models are plain text, parametric, diffable, and easy to generate. A few
-things are missing for the parts I print:
+I like OpenSCAD, but some features are missing: fillets on arbitrary edges, exact geometry,
+named references instead of repeated coordinates, STEP export. mcad keeps the OpenSCAD syntax
+and uses a B-rep kernel ([SMLib](https://github.com/tangency-labs/smlib)). That gives:
 
-- **Fillets and chamfers** on arbitrary edges, not only on the shapes you can build with
-  `hull` and `minkowski`.
-- **Exact geometry.** OpenSCAD works on meshes; a cylinder is a polygon with `$fn` sides.
-- **Named references** instead of repeating coordinates: planes, points, attachments.
-- **Checking a model without looking at it**: distances, wall thickness, collisions.
-- **STEP export** for other CAD tools.
-
-mcad keeps the OpenSCAD syntax and adds what is missing. Geometry is a boundary
-representation (B-rep, kernel [SMLib](https://github.com/tangency-labs/smlib)), so:
-
-| B-rep gives | Example |
-| --- | --- |
-| fillets/chamfers on selected edges | `fillet(2) { body; zone(g.top, d = 1); }` |
-| exact measurements | radius `R 6`, wall thickness `2.4 mm`, volume `29485.7965 mm³` |
-| exact STEP (AP242/AP214) | cylinders stay cylinders, arcs stay arcs |
-| shells, offsets, lofts, sweeps | `shell(2.4) { … }`, `loft() { … }` |
-| `$fn` only affects display | no faceting decisions in the model |
+- fillets, chamfers, shells, lofts, sweeps on exact surfaces
+- exact measurements (radius, wall thickness, volume) and STEP with real cylinders and arcs
+- `$fn` only affects display
 
 ## AI first
 
-The CLI `mcad` is designed for coding agents such as Claude Code: an agent can write, check,
-look at, measure and export a model without a UI.
+The CLI is built for coding agents like Claude Code: write, check, look at, measure and export
+a model without a UI.
 
-- Every command has `--json` with a fixed, versioned schema and stable exit codes.
-- `mcad usage` prints a manual for agents/LLMs (compiled into the binary, `manuell/`).
-- `mcad render` writes PNGs an agent can look at: contact sheets, grids and anchors overlaid,
-  sections, X-ray, highlighted lines of code.
-- `mcad measure` answers questions with numbers instead of pictures.
-- Diagnostics carry `file:line:column`; kernel errors name the statement and the cause.
-- A daemon keeps the kernel cache between calls, `mcad watch` re-evaluates on every save.
-- With the desktop UI open, `mcad ui status` tells the agent what the human is looking at.
-
-Typical agent loop:
+- `--json` on every command, versioned schema, stable exit codes
+- `mcad usage`: manual for agents, compiled into the binary
+- `mcad render`: PNGs with grids, anchors, sections, X-ray, highlighted code lines
+- `mcad measure`: numbers instead of pictures
+- daemon keeps the kernel cache between calls; `mcad ui status` shows what the human has open
 
 ```sh
-mcad outline part.mcad                                    # modules, parameters, grids, anchors, parts
-mcad check part.mcad                                      # until 0 errors
+mcad outline part.mcad                 # modules, parameters, grids, anchors, parts
+mcad check part.mcad                   # until 0 errors
 mcad render part.mcad -o v.png --views all --show grids,anchors
-mcad inspect part.mcad --line 36                          # what this line produces
-mcad measure part.mcad --section z=8 --wall "[1.2,30,8]"  # verify numbers
+mcad measure part.mcad --section z=8 --wall "[1.2,30,8]"
 mcad export part.mcad -o part.3mf
 ```
 
-A Claude Code skill for this workflow is in [`.claude/skills/cad-cli/`](.claude/skills/cad-cli/SKILL.md).
-
-Note: text output of the CLI (diagnostics, results) is German for now; `--help`, `mcad usage`
-and all JSON keys are English.
+Claude Code skill: [`.claude/skills/cad-cli/`](.claude/skills/cad-cli/SKILL.md). CLI text
+output is German for now; `--help`, `mcad usage` and JSON keys are English.
 
 ## Tutorial
 
-The models in [`examples/`](examples/) are short and build on each other; each file starts
-with what it shows and commands to try.
+[`examples/`](examples/): short models, each builds on the previous one.
 
 | File | Shows |
 | --- | --- |
-| [`01-plate.mcad`](examples/01-plate.mcad) | OpenSCAD basics, parameters, `$fillet` on a primitive |
-| [`02-bracket.mcad`](examples/02-bracket.mcad) | grids, `box(a, b)`, `cylinder(a, b)`, `difference(chamfer = …)` |
-| [`03-tray.mcad`](examples/03-tray.mcad) | fillet zones on grid lines and planes, `shell` |
-| [`04-hook.mcad`](examples/04-hook.mcad) | `sketch` with lines, arcs, `corner`; measuring arcs in a section |
-| [`05-box-lid.mcad`](examples/05-box-lid.mcad) | modules, anchors, parts, loop instances, clearance between parts |
-| [`06-name-tag.mcad`](examples/06-name-tag.mcad) | `text`, `slot`, colours and filament slots, multi-colour 3MF |
-| [`07-mug.mcad`](examples/07-mug.mcad) | `loft`, `sweep`, `union(fillet = …)` |
-| [`08-macropad.mcad`](examples/08-macropad.mcad) | all of it, plus a keep-out assert (below) |
+| [`01-plate`](examples/01-plate.mcad) | OpenSCAD basics, parameters, `$fillet` |
+| [`02-bracket`](examples/02-bracket.mcad) | grids, `box(a, b)`, `cylinder(a, b)`, `difference(chamfer = …)` |
+| [`03-tray`](examples/03-tray.mcad) | fillet zones, `shell` |
+| [`04-hook`](examples/04-hook.mcad) | `sketch`: lines, arcs, `corner` |
+| [`05-box-lid`](examples/05-box-lid.mcad) | modules, anchors, parts, clearance |
+| [`06-name-tag`](examples/06-name-tag.mcad) | `text`, `slot`, colours, multi-colour 3MF |
+| [`07-mug`](examples/07-mug.mcad) | `loft`, `sweep`, `union(fillet = …)` |
+| [`08-macropad`](examples/08-macropad.mcad) | all of it, plus collision asserts |
 
-![Tutorial models 01–07](docs/img/readme/tutorial.png)
+![Tutorial models](docs/img/readme/tutorial.png)
 
-## Example: a macro pad
+## Features
 
-[`examples/08-macropad.mcad`](examples/08-macropad.mcad): 4 × 3 MX keys, a rotary
-encoder, USB-C. 15 parts, four filament colours, about 110 lines. All images below are
-`mcad render … --theme dark`.
+Shown on [`08-macropad.mcad`](examples/08-macropad.mcad).
 
-### Grids and anchors
-
-Named planes replace loose coordinates. Lists make indexed planes; every key position is a
-grid point. Anchors are named points that other parts attach to.
+**Grids and anchors.** Named planes instead of loose numbers; lists give indexed planes.
+Anchors are points other parts attach to; named instances are parts.
 
 ```openscad
-module plate() {
-    grid g {
-        x: left = 0, key = [for (i = [0 : cols - 1]) kx(i)], enc = w - margin - enc_w / 2, right = w;
-        y: front = 0, row = [for (j = [0 : rows - 1]) ky(j)], back = d;
-        z: bottom = 0, top = plate_t;
-    }
-    difference(fillet = 0.5) {                    // rounds the edges the cut creates
-        linear_extrude(plate_t) fillet2d(r) square([w, d]);
-        for (i = [0 : cols - 1], j = [0 : rows - 1])
-            box(g[key[i], row[j], bottom] - [7, 7, 1], g[key[i], row[j], top] + [7, 7, 1]);
-        translate(g[enc, row[1], bottom] - [0, 0, 1]) cylinder(h = plate_t + 2, d = 7);
-    }
-    anchor encoder = g[enc, row[1], top], dir = [0, 0, 1];
+grid g {
+    x: left = 0, key = [for (i = [0 : cols - 1]) kx(i)], enc = w - margin - enc_w / 2, right = w;
+    y: front = 0, row = [for (j = [0 : rows - 1]) ky(j)], back = d;
+    z: bottom = 0, top = plate_t;
 }
-
-case: case();                                      // named instances are parts
-translate(case.rim) plate: plate();
+anchor encoder = g[enc, row[1], top], dir = [0, 0, 1];
+…
 translate(plate.encoder + [0, 0, 7]) knob: knob();
 ```
 
-`mcad render 08-macropad.mcad -o grids.png --module plate --views all --show grids,anchors,labels`:
-
 ![Grid planes and anchors of the plate](docs/img/readme/grids.png)
 
-### Fillet zones
-
-A fillet selects the edges of its first child that lie inside the zones that follow: a
-cylinder around a grid line, a slab around a grid plane, or any volume. `shell` uses the same
-zones to choose the faces it opens.
+**Fillet zones.** A fillet rounds the edges of its first child that lie in the zones.
+`shell` opens the faces in its zones.
 
 ```openscad
 shell(wall) {
-    fillet(wall + 1.5) {                  // bottom edge; radius > wall, else shell fails
-        fillet(r) {                       // vertical corners
-            box(g[left, front, bottom], g[right, back, top]);
-            zone(g[left, front, *], d = 1);
-            zone(g[right, front, *], d = 1);
-            zone(g[left, back, *], d = 1);
-            zone(g[right, back, *], d = 1);
-        }
-        zone(g.bottom, d = 1);
+    fillet(r) {
+        box(g[left, front, bottom], g[right, back, top]);
+        zone(g[left, front, *], d = 1);          // cylinder around a grid line
+        …
     }
-    zone(g.top, d = 1);                   // open top
+    zone(g.top, d = 1);                          // slab around a grid plane: open top
 }
 ```
 
-`mcad inspect 08-macropad.mcad --line 36` reports `ausgewählte Kanten: 4` (selected edges);
-`mcad render … --line 36` shows the zones in blue and the selected edges in orange:
+![Fillet zones: zones blue, selected edges orange](docs/img/readme/fillet-zones.png)
 
-![Fillet zones on the vertical corners](docs/img/readme/fillet-zones.png)
-
-### Exact measurement
-
-Measurements run on the B-rep, not on the mesh. In a section, contours are lines and arcs
-with their radii:
+**Exact measurement** on the B-rep, also in sections:
 
 ```console
 $ mcad measure 08-macropad.mcad --section z=8 --wall "[1.2, 30, 8]"
-Schnitt z = 8 (entfernt z > 8): 1 Bereich(e), Fläche 818.0623 mm² (exakt: Konturen aus Geraden und Kreisen der B-Rep)
   Bogen R 6 · ⌀ 12 bei [6, 59.15, 8] (center@[6,59.15,8])
-  Bogen R 3.6 · ⌀ 7.2 bei [6, 59.15, 8] (center@[6,59.15,8])
   …
 Wandstärke Punkt [1.2, 30, 8]: 2.4 mm
-  senkrecht zur Kontur von [0, 30, 8] bis [2.4, 30, 8]
 ```
 
 ![Section of the case at z = 8](docs/img/readme/section.png)
 
-Also: distance with foot points, angle, length, area, volume, clearance between parts
-(`mcad usage measure`). The desktop UI has the same measuring tool.
-
-### Collision asserts
-
-Asserts are checked after evaluation. A keep-out volume is shown but never exported; here it
-stands for the switch bodies and the PCB:
+**Collision asserts.** A keep-out volume (switches, PCB) is shown but not exported. A
+violation is a warning; `mcad export` stops with exit 4.
 
 ```openscad
-if (keepout) assert_keepout(clearance = 0.5) translate([0, 0, -11]) {
-    for (i = [0 : cols - 1], j = [0 : rows - 1])
-        translate([kx(i) - 7, ky(j) - 7, 5]) cube([14, 14, 5.4]);
-    translate([margin, margin, 0]) cube([w - 2 * margin, d - 2 * margin, 1.6]);
-}
+assert_keepout(clearance = 0.5) translate([0, 0, -11]) { switches(); pcb(); }
+```
+
+```console
+$ mcad check 08-macropad.mcad -D h=12
+08-macropad.mcad:104:18: Warnung (Kernel): assert_keepout: case ragt ins Sperrvolumen (Schnittvolumen 8497.131 mm³)
 ```
 
 ![Keep-out volume in X-ray view](docs/img/readme/keepout.png)
 
-Make the case too low and the check fails; `mcad export` refuses to write (exit 4):
+**Colours and text.** `color("teal")` from a 16-colour palette, filament slots, 3MF with one
+part per colour for Bambu Studio/OrcaSlicer. `text()` with bundled fonts.
 
-```console
-$ mcad check 08-macropad.mcad -D h=12
-08-macropad.mcad:104:18: Warnung (Kernel): assert_keepout: case ragt ins Sperrvolumen (Schnittvolumen 8497.131 mm³) [Zeile 34: shell (Instanz case: case)]
-Asserts: 1 von 1 geprüft, 1 verletzt (1 Verletzung(en); mcad export bricht dann ab, außer mit --ignore-asserts)
-```
+![Macro pad from the back](docs/img/readme/macropad-colors.png)
 
-Also `assert_disjoint`, `assert_intersect`, `assert_touches` (`mcad usage asserts`).
-
-### Colours, text, multi-material 3MF
-
-`color()` assigns print colours from a 16-colour palette, optionally with a filament slot.
-`mcad export x.3mf` writes one object per part and one part per colour, with slots for Bambu
-Studio and OrcaSlicer. `text()` uses bundled fonts; the default is a stencil font whose
-glyphs have no islands.
-
-```openscad
-color("teal") translate(g[enc, row[0], top]) linear_extrude(0.6)
-    text("mcad", size = 6, halign = "center", valign = "center");
-```
-
-```console
-$ mcad measure 08-macropad.mcad --colors
-Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):
-  F1  Standard       #c3c8cf  36938.4663 mm³  45.8 g  (ohne color())
-  F2  teal           #217274  24.1309 mm³  0.03 g  Z.67
-  F3  orange         #dc813b  5810.2486 mm³  7.2 g  Z.75
-  F4  white          #f4f3f0  21417.294 mm³  26.56 g  Z.91
-```
-
-![Macro pad from the back with the USB-C opening](docs/img/readme/macropad-colors.png)
-
-## More features
-
-| Area | Features |
-| --- | --- |
-| Language | OpenSCAD syntax (modules, functions, `for`/`if`/`let`, list comprehensions, `include`/`use`), `.scad` files open unchanged; modules as namespaces; `box(a, b)`, `cylinder(a, b, r)`, `slot`, `torus` |
-| Sketches | `sketch { line; arc; bezier; spline; corner(r); hole { … } }`, exact `offset`, `fillet2d`, `chamfer2d`, `stroke`; sketch editor in the UI |
-| 3D | `loft`, `sweep`, `surface` + `thicken`, `shell`, variable fillet radius `fillet(r = function (p) …)`, exact special cases of `hull`/`minkowski` |
-| Import | SVG as exact 2D profile, STL as B-rep (≤ 500 faces) or mesh |
-| Export | STL, multi-colour 3MF, STEP; per part (`--all-parts`) |
-| UI | code and 3D view coupled (cursor highlights geometry, handles write literals back into the code), section view, measuring, colours and filaments, parameters, file watcher, Git gutter; English and German |
-| CLI | `outline`, `check`, `eval`, `inspect`, `render`, `measure`, `set`, `watch`, `export`, `ui`, `daemon`, `usage` |
-
-OpenSCAD compatibility: 36 reference models are compared against OpenSCAD 2021.01
-(`tests/openscad-compat/`). Not supported: `projection`; `polyhedron` only for small planar
-bodies; `hull`/`minkowski` outside the exact special cases warn and keep the children.
+**Also:** sketch editor, section view and measuring in the UI; `loft`, `sweep`, variable
+fillet radius; SVG and STL import; STL/3MF/STEP export per part; `.scad` files open unchanged
+(36 models compared against OpenSCAD 2021.01). UI in English and German.
 
 ## Build
 
-Requirements: Rust (with target `wasm32-unknown-unknown` for the browser build), a C++17
-compiler, CMake ≥ 3.20, Node 22 and pnpm 10 (UI), emsdk (browser build only).
+Needs Rust, a C++17 compiler, CMake ≥ 3.20, Node 22 + pnpm 10 (UI), emsdk (browser only).
 
 ```sh
-smlib/fetch.sh                  # SMLib sources + patches -> third_party/smlib
-make cli                        # target/release/mcad without the desktop UI
-make app                        # with the desktop UI (Tauri 2, needs WebKitGTK)
-make web                        # browser app -> web/dist (needs emcc: make emsdk)
-make test                       # cargo test + Vitest
-make install PREFIX=~/.local    # binary, desktop file, icons, docs
+smlib/fetch.sh          # SMLib sources -> third_party/smlib
+make cli                # target/release/mcad, headless
+make app                # with desktop UI (Tauri 2, WebKitGTK)
+make web                # browser app -> web/dist
+make test
 ```
 
-`make` lists all targets. Details on building, tests and the code layout (German):
-[`docs/entwicklung.md`](docs/entwicklung.md).
+`make` lists all targets. Details (German): [`docs/entwicklung.md`](docs/entwicklung.md).
 
 ## Installation
 
-There are no prebuilt packages yet.
-
 | Platform | How |
 | --- | --- |
-| Arch Linux | `make arch-pkg` builds `target/arch/mcad-*.pkg.tar.zst` (with `makepkg`, or in Docker on other distributions); then `sudo pacman -U target/arch/mcad-*.pkg.tar.zst` |
-| Other | TODO; for now build from source (above) and `make install` |
-
-```sh
-mcad                            # desktop UI
-mcad examples/08-macropad.mcad
-mcad usage                      # manual for agents
-```
+| Arch Linux | `make arch-pkg`, then `sudo pacman -U target/arch/mcad-*.pkg.tar.zst` |
+| Other | TODO; for now `make app && make install` |
 
 ## Documentation
 
-| Where | What |
-| --- | --- |
-| `mcad usage`, [`manuell/`](manuell/) | language and CLI reference (English) |
-| [`docs/reports/`](docs/reports/README.md) | test reports per milestone with screenshots and measurements (English) |
-| [`examples/`](examples/) | tutorial models 01–08 |
-| [`tests/models/`](tests/models/) | test models: OpenSCAD comparison, spec cases, everyday parts (comments partly German) |
-| [`docs/technischer-plan.md`](docs/technischer-plan.md) | technical plan and decisions (German) |
-
-## Architecture
-
-```
-Browser:  React/TS (CodeMirror 6, three.js) ── Web Worker ── cad-wasm ── smlib.wasm
-Desktop:  Tauri 2 (same React app) ── engine process (cad-session, SMLib native)
-CLI:      cad-cli ── daemon (cad-ipc) ── cad-session ── cad-engine ── kernel-smlib (SMLib, FFI)
-Language: cad-syntax (parser) → cad-eval (values with origin, grids, anchors) → cad-ir (tree)
-```
-
-The same Rust crates run in the browser (Wasm) and natively. The engine caches results by
-content and evaluates incrementally.
+- `mcad usage` / [`manuell/`](manuell/): language and CLI reference
+- [`docs/reports/`](docs/reports/README.md): test reports per milestone
+- [`docs/technischer-plan.md`](docs/technischer-plan.md): technical plan (German)
 
 ## License
 
-[MIT](LICENSE). Third-party components keep their licenses: SMLib/SM_API (Apache-2.0,
-fetched at build time), bundled fonts JetBrains Mono, Inter, Allerta Stencil (SIL OFL 1.1,
-`crates/cad-font/fonts/`), Rust crates and npm packages (mostly MIT/Apache-2.0). See
+[MIT](LICENSE). SMLib: Apache-2.0 (fetched at build time). Bundled fonts: SIL OFL 1.1. Details:
 [`packaging/linux/NOTICE`](packaging/linux/NOTICE).
