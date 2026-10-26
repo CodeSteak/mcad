@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 17 – Schablonenschrift „cad stencil mono“</title>
+<title>Test report 17 – Stencil font "cad stencil mono"</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -38,93 +38,93 @@
 </head>
 <body>
 <main>
-<h1>Testbericht 17 – Schablonenschrift „cad stencil mono“</h1>
-<div class="meta">Plan 17.7, Schritt 3b: eigene monospaced Schablonenschrift als Standardschrift von <code>text()</code> · cad-font (<code>stencil.rs</code>), cad-eval (<code>text()</code>-Parameter), Tests in cad-font, cad-eval, cad-engine, compat-tests, Playwright; Korrektur Playwright C16/C20 · 24.10.2026 · Branch worktree-agent-a84f54f259309a87b · Commit 436b868 · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 Kerne</div>
+<h1>Test report 17 – Stencil font "cad stencil mono"</h1>
+<div class="meta">Plan 17.7, step 3b: custom monospaced stencil font as the default font of <code>text()</code> · cad-font (<code>stencil.rs</code>), cad-eval (<code>text()</code> parameters), tests in cad-font, cad-eval, cad-engine, compat-tests, Playwright; fix for Playwright C16/C20 · 2026-10-24 · branch worktree-agent-a84f54f259309a87b · commit 436b868 · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 cores</div>
 
 <div class="summary">
-  <div>Glyphen ohne Loch<b class="ok">125 / 125</b>Regular und Bold; 8 Parameterkombinationen im Test</div>
-  <div>cargo test --workspace<b class="ok">529 / 529</b>davon 13 neu/geändert</div>
-  <div>clippy · fmt<b class="ok">sauber · sauber</b>-D warnings</div>
-  <div>Vitest · Playwright<b class="ok">221 · 106 / 106</b>neu: K01–K03; C16 behoben</div>
-  <div>Schild, Kernel nativ<b>1.791 ms</b>Allerta Stencil 3.419 ms</div>
-  <div>Wasm cad_wasm<b>+41,5 KiB</b>gzip +15,0 KiB</div>
+  <div>Glyphs without holes<b class="ok">125 / 125</b>Regular and Bold; 8 parameter combinations in the test</div>
+  <div>cargo test --workspace<b class="ok">529 / 529</b>13 of them new/changed</div>
+  <div>clippy · fmt<b class="ok">clean · clean</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="ok">221 · 106 / 106</b>new: K01–K03; C16 fixed</div>
+  <div>Sign, kernel native<b>1,791 ms</b>Allerta Stencil 3,419 ms</div>
+  <div>Wasm cad_wasm<b>+41.5 KiB</b>gzip +15.0 KiB</div>
 </div>
 
-<h2>1 Auftrag und Ergebnis</h2>
-<p>Plan 17.4 sieht als Standardschrift eine eigene, sehr einfache monospaced Schablonenschrift aus Geraden und Bögen vor, mit Stegen, sodass keine Inseln herausfallen. Umgesetzt:</p>
+<h2>1 Task and result</h2>
+<p>Plan 17.4 calls for a custom, very simple monospaced stencil font made of lines and arcs as the default font, with bridges so that no islands fall out. Implemented:</p>
 <ul>
-<li><b>„cad stencil mono“</b> (Regular, Bold) in <code>crates/cad-font/src/stencil.rs</code>: 125 Glyphen – der ganze Pflicht-Zeichensatz <code>cad_font::REQUIRED_CHARS</code> ohne Rückfall, dazu <code>’ ” $</code>. Jede Glyphe ist eine Folge von Mittellinien (Geraden, tangentiale Kreisbögen), gezeichnet mit einem Stift der Strichstärke (flache Enden, Gehrung), plus Punkte, minus Stege, an Grund- bzw. Versallinie beschnitten. Die Kontur rechnet <code>cad_kernel::region2</code> exakt aus (Stücke der Geraden und Bögen); STEP und Kernel sehen Geraden und Kreise.</li>
-<li><b>Keine Löcher:</b> jede Glyphe, zum Profil gerendert, hat 0 Löcher – Innenräume von O, A, B, D, P, R, 0, 4, 6, 8, 9, Ä, ö, @, %, &amp;, §, °, Ø … sind über Stege mit dem Außenbereich verbunden. Geprüft in cad-font für 8 Kombinationen von Strichstärke und Stegbreite (Regionen ohne Uhrzeigersinn-Schleifen, geschlossene Schleifen, keine Splitter, keine Überlappungen) und in der Engine für jede Glyphe über <code>cad_engine::region_2d</code>.</li>
-<li><b>Parameter</b> <code>text(…, stroke_width = …, bridge_width = …)</code> in mm: Strichstärke Standard 0,14·<code>size</code> (Bold 0,2·<code>size</code>), höchstens 0,2·<code>size</code>; Stegbreite Standard 0,1·<code>size</code>, 0 (keine Stege – geschlossene Innenräume wie eine normale Schrift) oder 0,03…0,2·<code>size</code>. Werte außerhalb: Warnung am Argument, begrenzt. Bei anderen Schriften: Warnung „wirkt nur mit …“.</li>
-<li><b>Metrik</b> wie die übrigen Schriften: em = <code>size</code>/0,72, Versalhöhe = <code>size</code> (720/1000 em), Vorschub 600/1000 em × 1000/1024 – genau wie JetBrains Mono, sodass Texte gleich breit bleiben wie mit der bisherigen Standardschrift.</li>
-<li><b>Standardschrift:</b> <code>text()</code> ohne <code>font</code> und mit unbekannter Familie nutzt die Schablonenschrift (vorher JetBrains Mono); fehlende Zeichen (z. B. Kyrillisch) kommen weiter aus JetBrains Mono gleichen Gewichts.</li>
-<li>Nebenbei: Playwright <b>C16</b> (achsgebundenes Ziehen, Phase B), das zuletzt auch einzeln scheiterte, ist behoben – die Ursache lag im Test (Griffe der vorigen Cursorzeile, Abschnitt 10).</li>
+<li><b>"cad stencil mono"</b> (Regular, Bold) in <code>crates/cad-font/src/stencil.rs</code>: 125 glyphs – the whole required character set <code>cad_font::REQUIRED_CHARS</code> without fallback, plus <code>’ ” $</code>. Each glyph is a sequence of center lines (lines, tangential circular arcs), drawn with a pen of the stroke width (flat ends, miter), plus dots, minus bridges, trimmed at the baseline and cap line. The contour is computed exactly by <code>cad_kernel::region2</code> (pieces of the lines and arcs); STEP and the kernel see lines and circles.</li>
+<li><b>No holes:</b> every glyph, rendered to a profile, has 0 holes – the counters of O, A, B, D, P, R, 0, 4, 6, 8, 9, Ä, ö, @, %, &amp;, §, °, Ø … are connected to the outside via bridges. Checked in cad-font for 8 combinations of stroke width and bridge width (regions without clockwise loops, closed loops, no slivers, no overlaps) and in the engine for every glyph via <code>cad_engine::region_2d</code>.</li>
+<li><b>Parameters</b> <code>text(…, stroke_width = …, bridge_width = …)</code> in mm: stroke width default 0.14·<code>size</code> (Bold 0.2·<code>size</code>), at most 0.2·<code>size</code>; bridge width default 0.1·<code>size</code>, 0 (no bridges – closed counters like a normal font) or 0.03…0.2·<code>size</code>. Values outside: warning at the argument, clamped. With other fonts: warning "wirkt nur mit …" ("only takes effect with …").</li>
+<li><b>Metrics</b> as for the other fonts: em = <code>size</code>/0.72, cap height = <code>size</code> (720/1000 em), advance 600/1000 em × 1000/1024 – exactly as JetBrains Mono, so texts stay as wide as with the previous default font.</li>
+<li><b>Default font:</b> <code>text()</code> without <code>font</code> and with an unknown family uses the stencil font (previously JetBrains Mono); missing characters (e.g. Cyrillic) still come from JetBrains Mono of the same weight.</li>
+<li>Along the way: Playwright <b>C16</b> (axis-constrained dragging, phase B), which recently failed even on its own, is fixed – the cause was in the test (handles of the previous cursor line, section 10).</li>
 </ul>
 
-<h2>2 Entscheidungen</h2>
+<h2>2 Decisions</h2>
 <table>
-<tr><th>Frage</th><th>Entscheidung</th></tr>
-<tr><td>Form der Schrift</td><td>Rust-Daten statt Schriftdatei: je Zeichen eine kleine Zeichenfunktion über benannten Lagen (Mittellinien links/rechts/Mitte, Grund-, x-, Versal-, Ober-, Unterlänge, abhängig von der Strichstärke), Bausteine Stadion, Bauch, C-Bogen, Punkte, Kommas. Kein TTF-Build, keine Lizenzfrage; Wasm-Zuwachs nur Code (Abschnitt 8).</td></tr>
-<tr><td>Strich</td><td><code>region2::stroke</code> (aus Schritt 2) mit flachen Enden und Gehrung: rechte Winkel bleiben eckig, Enden sind gerade Schnitte (Schablonen-Anmutung). Freie Enden laufen bis zur äußeren Linie (Grundlinie, Versalhöhe), Stöße enden auf der Mittellinie des anderen Strichs – so entstehen keine Kerben. Diagonalen (A, K, M, N, V, W, X, Y, Z, 1, 2, 4, 7, <code>/</code>) werden über die Linie verlängert und an Grund-/Versallinie beschnitten (gerade Füße, flache Spitzen).</td></tr>
-<tr><td>Stege</td><td>Ein Steg ist ein Band der Stegbreite quer über einen Strich (Länge 1,3 halbe Striche zu jeder Seite), von der Glyphe abgezogen. Regeln: Stamm getrennt vom Bauch bei B, D, P, R, b, d, g, p, q (Stege am Stamm), runde Formen oben und unten (O, Q, 0, 8, o), offenes A (Beine an der Versallinie um die Stegbreite auseinander), e und a am Querstrich bzw. am Bauch neben dem Stamm, 4 am Querstrich vor dem Stamm, 6/9 schräg am Bauch, Ringe (°, %, Ø, @, &amp;, §) an einer Seite. ß/ẞ sind offen (Lücke ≥ Stegbreite zum Stamm).</td></tr>
-<tr><td>Parameter</td><td><code>stroke_width</code> und <code>bridge_width</code> in mm (für Druck und Fräsen sind absolute Maße gefragt: „Steg mindestens zwei Düsenbreiten“); ohne Angabe proportional zu <code>size</code>. Stil Bold = Standard-Strichstärke 0,2·<code>size</code>. Die Grenzen kommen aus dem Test der Parameterfläche: oberhalb 0,2·<code>size</code> wachsen Striche von a, e, #, @ zusammen und schließen Innenräume; Stege unter 0,03·<code>size</code> schließen schwere Striche wieder.</td></tr>
-<tr><td>Metrik</td><td>1000 Einheiten je em, Versalhöhe 720, x-Höhe 530, Oberlänge 760, Unterlänge −210, Vorschub 600, Seitenrand 60 (Glyphenbox 480 breit). Senkrechter Text: Vorschub 1000, Glyphe mittig auf dem Stift (wie der Shaper bei TrueType).</td></tr>
-<tr><td>Standardschrift und OpenSCAD</td><td>OpenSCAD kennt die Schrift nicht (es nimmt ohne <code>font</code> die fontconfig-Standardschrift, meist Liberation Sans): ein Modell ohne <code>font</code> sieht in OpenSCAD anders aus. Die Kompatibilitätstests hängen davon nicht ab (Abschnitt 9); wer gleiche Maße wie OpenSCAD braucht, gibt eine mitgelieferte TrueType-Schrift an. Unbekannte Familien → Standardschrift mit Warnung (vorher JetBrains Mono).</td></tr>
+<tr><th>Question</th><th>Decision</th></tr>
+<tr><td>Form of the font</td><td>Rust data instead of a font file: per character a small drawing function over named positions (center lines left/right/middle, baseline, x-height, cap height, ascender, descender, depending on the stroke width), building blocks stadium, bowl, C arc, dots, commas. No TTF build, no license question; Wasm growth is code only (section 8).</td></tr>
+<tr><td>Stroke</td><td><code>region2::stroke</code> (from step 2) with flat ends and miter: right angles stay square, ends are straight cuts (stencil look). Free ends run to the outer line (baseline, cap height), joints end on the center line of the other stroke – so no notches occur. Diagonals (A, K, M, N, V, W, X, Y, Z, 1, 2, 4, 7, <code>/</code>) are extended beyond the line and trimmed at the baseline/cap line (straight feet, flat apexes).</td></tr>
+<tr><td>Bridges</td><td>A bridge is a band of the bridge width across a stroke (length 1.3 half strokes to each side), subtracted from the glyph. Rules: stem separated from the bowl for B, D, P, R, b, d, g, p, q (bridges at the stem), round shapes at top and bottom (O, Q, 0, 8, o), open A (legs at the cap line apart by the bridge width), e and a at the crossbar or at the bowl next to the stem, 4 at the crossbar before the stem, 6/9 diagonally at the bowl, rings (°, %, Ø, @, &amp;, §) on one side. ß/ẞ are open (gap ≥ bridge width to the stem).</td></tr>
+<tr><td>Parameters</td><td><code>stroke_width</code> and <code>bridge_width</code> in mm (for printing and milling, absolute dimensions are what matters: "bridge at least two nozzle widths"); if not given, proportional to <code>size</code>. Style Bold = default stroke width 0.2·<code>size</code>. The limits come from the test of the parameter space: above 0.2·<code>size</code> strokes of a, e, #, @ grow together and close counters; bridges below 0.03·<code>size</code> are closed again by heavy strokes.</td></tr>
+<tr><td>Metrics</td><td>1000 units per em, cap height 720, x-height 530, ascender 760, descender −210, advance 600, side bearing 60 (glyph box 480 wide). Vertical text: advance 1000, glyph centered on the pen (as the shaper does for TrueType).</td></tr>
+<tr><td>Default font and OpenSCAD</td><td>OpenSCAD does not know the font (without <code>font</code> it takes the fontconfig default font, usually Liberation Sans): a model without <code>font</code> looks different in OpenSCAD. The compatibility tests do not depend on it (section 9); anyone who needs the same dimensions as OpenSCAD specifies a bundled TrueType font. Unknown families → default font with a warning (previously JetBrains Mono).</td></tr>
 </table>
 
-<h2>3 Zeichentafel</h2>
-<p>Alle 125 Glyphen direkt aus der Schrift (Beispielprogramm <code>cargo run -p cad-font --example stencil_chart</code>): Zelle = Vorschub, Linien Grundlinie, x-Höhe, Versalhöhe, Unterlänge. Eine Glyphe mit Loch wäre rot.</p>
-<figure><img src="img/chart-regular.jpg" alt=""><figcaption>cad stencil mono Regular (Strich 0,14·size, Steg 0,1·size)</figcaption></figure>
-<figure><img src="img/chart-bold.jpg" alt=""><figcaption>cad stencil mono Bold (Strich 0,2·size, Steg 0,1·size)</figcaption></figure>
-<p>Teile je Glyphe (Regular): 88× 1 Teil, 27× 2 Teile, 8× 3 Teile, 2× 4 Teile; Löcher: Regular 0, Bold 0.</p>
+<h2>3 Character chart</h2>
+<p>All 125 glyphs directly from the font (example program <code>cargo run -p cad-font --example stencil_chart</code>): cell = advance, lines baseline, x-height, cap height, descender. A glyph with a hole would be red.</p>
+<figure><img src="img/chart-regular.jpg" alt=""><figcaption>cad stencil mono Regular (stroke 0.14·size, bridge 0.1·size)</figcaption></figure>
+<figure><img src="img/chart-bold.jpg" alt=""><figcaption>cad stencil mono Bold (stroke 0.2·size, bridge 0.1·size)</figcaption></figure>
+<p>Parts per glyph (Regular): 88× 1 part, 27× 2 parts, 8× 3 parts, 2× 4 parts; holes: Regular 0, Bold 0.</p>
 
-<h2>4 Parameter</h2>
-<p>Dieselben acht Zeichen mit verschiedenen Strich- und Stegbreiten (Anteile von <code>size</code>). <code>bridge_width = 0</code> schaltet die Stege ab: dann haben O, B, 0, 8 … wieder Innenräume (rot = Glyphe mit Loch, so gewollt).</p>
-<figure><img src="img/chart-var-0.06-0.04.jpg" alt=""><figcaption>Strich 0,06 · Steg 0,04</figcaption></figure>
-<figure><img src="img/chart-var-0.14-0.1.jpg" alt=""><figcaption>Standard: Strich 0,14 · Steg 0,1</figcaption></figure>
-<figure><img src="img/chart-var-0.2-0.2.jpg" alt=""><figcaption>Strich 0,2 · Steg 0,2 (Grenzen)</figcaption></figure>
-<figure><img src="img/chart-var-0.14-0.jpg" alt=""><figcaption>Strich 0,14 · ohne Stege (bridge_width = 0)</figcaption></figure>
-<p>Warnungen bei Werten außerhalb der Grenzen und bei anderen Schriften:</p>
+<h2>4 Parameters</h2>
+<p>The same eight characters with different stroke and bridge widths (fractions of <code>size</code>). <code>bridge_width = 0</code> turns the bridges off: then O, B, 0, 8 … have counters again (red = glyph with a hole, intended here).</p>
+<figure><img src="img/chart-var-0.06-0.04.jpg" alt=""><figcaption>Stroke 0.06 · bridge 0.04</figcaption></figure>
+<figure><img src="img/chart-var-0.14-0.1.jpg" alt=""><figcaption>Default: stroke 0.14 · bridge 0.1</figcaption></figure>
+<figure><img src="img/chart-var-0.2-0.2.jpg" alt=""><figcaption>Stroke 0.2 · bridge 0.2 (limits)</figcaption></figure>
+<figure><img src="img/chart-var-0.14-0.jpg" alt=""><figcaption>Stroke 0.14 · without bridges (bridge_width = 0)</figcaption></figure>
+<p>Warnings for values outside the limits and for other fonts:</p>
 <pre>cases/warn.scad:1:37: Warnung (Auswertung): text: `stroke_width` = 3 mm bei size = 10: höchstens 2 mm
 cases/warn.scad:1:55: Warnung (Auswertung): text: `bridge_width` = 0.1 mm bei size = 10: mindestens 0.3 mm (oder 0)
 cases/warn.scad:2:42: Warnung (Auswertung): text: `bridge_width` wirkt nur mit der Schrift „cad stencil mono“
 cases/warn.scad:3:18: Warnung (Auswertung): Schrift „Comic Sans“ nicht vorhanden, verwendet wird die Standardschrift cad stencil mono (mitgeliefert: cad stencil mono, JetBrains Mono, Inter, Allerta Stencil; eigene Schrift: font = &quot;datei.ttf&quot;)
 cases/warn.scad: 0 Fehler, 4 Warnungen</pre>
 
-<h2>5 Vergleich mit Allerta Stencil</h2>
-<p>Alphabet-Tafeln über die CLI (<code>text(…, size = 8)</code>, 0,6 mm extrudiert, von oben): die Schablonenschrift hat alle Zeichen selbst, Allerta Stencil (proportional) 20 davon nicht (aus JetBrains Mono, nicht schabloniert, Bericht 16).</p>
+<h2>5 Comparison with Allerta Stencil</h2>
+<p>Alphabet charts via the CLI (<code>text(…, size = 8)</code>, extruded 0.6 mm, from above): the stencil font has all characters itself; Allerta Stencil (proportional) lacks 20 of them (taken from JetBrains Mono, not stenciled, report 16).</p>
 <figure><img src="img/cli-alphabet-stencil.jpg" alt=""><figcaption>cad stencil mono Regular</figcaption></figure>
 <figure><img src="img/cli-alphabet-stencil-bold.jpg" alt=""><figcaption>cad stencil mono Bold</figcaption></figure>
-<figure><img src="img/cli-alphabet-allerta.jpg" alt=""><figcaption>Allerta Stencil – ẞ „ ‚ { } _ # ° ² ³ § ~ ^ · • … ± µ Ø ø aus JetBrains Mono</figcaption></figure>
-<h3>Gleiches Schild in beiden Schriften</h3>
-<div class="two"><figure><img src="img/cli-schild-stencil.jpg" alt=""><figcaption>cad stencil mono (Standard) – Volumen 6281.4993 mm³</figcaption></figure><figure><img src="img/cli-schild-allerta.jpg" alt=""><figcaption>Allerta Stencil – Volumen 6294.8797 mm³</figcaption></figure></div>
-<pre>// Schild mit erhabenem Text (Bericht 17): stencil
+<figure><img src="img/cli-alphabet-allerta.jpg" alt=""><figcaption>Allerta Stencil – ẞ „ ‚ { } _ # ° ² ³ § ~ ^ · • … ± µ Ø ø from JetBrains Mono</figcaption></figure>
+<h3>Same sign in both fonts</h3>
+<div class="two"><figure><img src="img/cli-schild-stencil.jpg" alt=""><figcaption>cad stencil mono (default) – volume 6281.4993 mm³</figcaption></figure><figure><img src="img/cli-schild-allerta.jpg" alt=""><figcaption>Allerta Stencil – volume 6294.8797 mm³</figcaption></figure></div>
+<pre>// sign with raised text (report 17): stencil
 color(&quot;white&quot;) cube([100, 30, 2]);
 color(&quot;black&quot;) translate([50, 17, 2]) linear_extrude(1) text(&quot;WERKSTATT 3&quot;, size = 8, halign = &quot;center&quot;);
 color(&quot;black&quot;) translate([50, 5, 2]) linear_extrude(1) text(&quot;ZUTRITT NUR MIT BRILLE&quot;, size = 4.2, halign = &quot;center&quot;);</pre>
 <table>
-<tr><th>Merkmal</th><th>cad stencil mono</th><th>Allerta Stencil</th></tr>
-<tr><td>Breite</td><td>monospaced, 0,814·size je Zeichen (wie JetBrains Mono)</td><td>proportional, mit Kerning</td></tr>
-<tr><td>Kurven</td><td>Geraden und Kreisbögen (Bögen &gt; 90° im Kernel geteilt)</td><td>quadratische Bézierkurven → je Flanke eine B-Spline</td></tr>
-<tr><td>Pflicht-Zeichensatz</td><td>vollständig, alle schabloniert</td><td>20 Zeichen fehlen (Rückfall, ohne Stege)</td></tr>
-<tr><td>Strich, Steg</td><td>einstellbar (<code>stroke_width</code>, <code>bridge_width</code>), Bold</td><td>fest</td></tr>
-<tr><td>Lizenz</td><td>Quelltext des Projekts</td><td>SIL OFL 1.1, Reserved Font Name (nur unverändert)</td></tr>
+<tr><th>Property</th><th>cad stencil mono</th><th>Allerta Stencil</th></tr>
+<tr><td>Width</td><td>monospaced, 0.814·size per character (as JetBrains Mono)</td><td>proportional, with kerning</td></tr>
+<tr><td>Curves</td><td>lines and circular arcs (arcs &gt; 90° split in the kernel)</td><td>quadratic Bézier curves → one B-spline per flank</td></tr>
+<tr><td>Required character set</td><td>complete, all stenciled</td><td>20 characters missing (fallback, without bridges)</td></tr>
+<tr><td>Stroke, bridge</td><td>adjustable (<code>stroke_width</code>, <code>bridge_width</code>), Bold</td><td>fixed</td></tr>
+<tr><td>License</td><td>source code of the project</td><td>SIL OFL 1.1, Reserved Font Name (unmodified only)</td></tr>
 </table>
 
-<h2>6 Beispiel: Schablone</h2>
-<p><code>examples/spec/schablone.scad</code>: Text aus einer 1 mm dünnen Platte geschnitten. Ohne Stege fielen die Innenteile von A, 0, 8, B, 9 heraus; mit der Schablonenschrift hängen sie an der Platte.</p>
-<div class="codefig"><pre>// Zweck: Sprühschablone mit der Standardschrift „cad stencil mono“ (Plan 17.4, Bericht 17) – der
-// Text ist aus einer dünnen Platte ausgeschnitten; die Stege der Schrift halten die Innenteile
-// von O, A, B, 0, 8 … an der Platte, nichts fällt heraus. Ohne `font` gilt die Schablonenschrift;
-// `stroke_width` (Strichstärke) und `bridge_width` (Stegbreite) in mm, `bridge_width = 0` ohne Stege.
+<h2>6 Example: stencil</h2>
+<p><code>examples/spec/schablone.scad</code>: text cut out of a 1 mm thin plate. Without bridges the inner parts of A, 0, 8, B, 9 would fall out; with the stencil font they stay attached to the plate.</p>
+<div class="codefig"><pre>// Purpose: spray stencil with the default font "cad stencil mono" (plan 17.4, report 17) – the
+// text is cut out of a thin plate; the bridges of the font hold the inner parts
+// of O, A, B, 0, 8 … on the plate, nothing falls out. Without `font` the stencil font applies;
+// `stroke_width` (stroke width) and `bridge_width` (bridge width) in mm, `bridge_width = 0` without bridges.
 
 breite = 120;
 hoehe = 44;
 dicke = 1;
-r = 4;              // Eckenradius
-groesse = 12;       // Versalhöhe
-strich = 1.7;       // Strichstärke (Standard 0,14 · size)
-steg = 1.2;         // Stegbreite (Druck: mindestens zwei Düsenbreiten)
+r = 4;              // corner radius
+groesse = 12;       // cap height
+strich = 1.7;       // stroke width (default 0.14 · size)
+steg = 1.2;         // bridge width (printing: at least two nozzle widths)
 
 difference() {
     linear_extrude(dicke) offset(r = r) offset(delta = -r) square([breite, hoehe]);
@@ -132,13 +132,13 @@ difference() {
         text(&quot;LACK 08&quot;, size = groesse, halign = &quot;center&quot;, stroke_width = strich, bridge_width = steg);
     translate([breite / 2, 8, -1]) linear_extrude(dicke + 2)
         text(&quot;RAL 9005 B&quot;, size = 8, halign = &quot;center&quot;, bridge_width = steg);
-}</pre><div><figure><img src="img/cli-schablone.jpg" alt=""><figcaption>gerendert (iso)</figcaption></figure><figure><img src="img/cli-schablone-oben.jpg" alt=""><figcaption>von oben</figcaption></figure></div></div>
-<h3>Gedruckt: G-Code aus PrusaSlicer</h3>
-<p>Ein echter Druck ist in dieser Umgebung nicht möglich; stattdessen: STL exportiert (<code>cad export</code>), mit PrusaSlicer 2.7 (Standardprofil, Schicht 0,2 mm, Düse 0,4 mm) zu G-Code geschnitten und die oberste Schicht aus dem G-Code gezeichnet (<code>tools/report/report17-gcode.py</code>): jede Insel der Platte ist mit dem Rest verbunden, die Stege (1,2 mm = 3 Düsenbreiten) werden als eigene Bahnen gedruckt.</p>
-<figure><img src="img/cli-schablone-gcode.jpg" alt=""><figcaption>oberste Schicht (z = 1 mm) aus dem G-Code, 5 Schichten, geschätzte Druckzeit 53m 3s, Filament 2058.04 mm</figcaption></figure>
+}</pre><div><figure><img src="img/cli-schablone.jpg" alt=""><figcaption>rendered (iso)</figcaption></figure><figure><img src="img/cli-schablone-oben.jpg" alt=""><figcaption>top view</figcaption></figure></div></div>
+<h3>Printed: G-code from PrusaSlicer</h3>
+<p>A real print is not possible in this environment; instead: STL exported (<code>cad export</code>), sliced to G-code with PrusaSlicer 2.7 (default profile, layer 0.2 mm, nozzle 0.4 mm), and the top layer drawn from the G-code (<code>tools/report/report17-gcode.py</code>): every island of the plate is connected to the rest, the bridges (1.2 mm = 3 nozzle widths) are printed as separate paths.</p>
+<figure><img src="img/cli-schablone-gcode.jpg" alt=""><figcaption>top layer (z = 1 mm) from the G-code, 5 layers, estimated print time 53m 3s, filament 2058.04 mm</figcaption></figure>
 
-<h2>7 Wie eine Glyphe entsteht</h2>
-<p>Beispiel B: Stamm <code>vline(l, 0, cap)</code>; oberer und unterer Bauch als Pfad vom Stamm (<code>bowl</code>: Querstrich, Viertelbögen, Querstrich zurück); drei Stege direkt rechts neben dem Stamm (Querstriche oben, Mitte, unten). <code>region2::stroke</code> macht aus den Pfaden Bänder, Gehrungsstücke und Enden, <code>region2::combine</code> vereinigt sie und zieht die Stege ab. Ergebnis: Stamm und „3“-förmiger Bauch als zwei geschlossene Konturen aus Geraden und Bögen, ohne Loch. Die Lagen hängen von der Strichstärke ab (Mittellinie = äußere Linie ∓ halber Strich), daher bleiben Versalhöhe und Glyphenbox bei jeder Strichstärke gleich.</p>
+<h2>7 How a glyph is built</h2>
+<p>Example B: stem <code>vline(l, 0, cap)</code>; upper and lower bowl as a path from the stem (<code>bowl</code>: crossbar, quarter arcs, crossbar back); three bridges directly to the right of the stem (crossbars top, middle, bottom). <code>region2::stroke</code> turns the paths into bands, miter pieces and ends, <code>region2::combine</code> unites them and subtracts the bridges. Result: stem and "3"-shaped bowl as two closed contours of lines and arcs, without a hole. The positions depend on the stroke width (center line = outer line ∓ half stroke), so cap height and glyph box stay the same for every stroke width.</p>
 <pre>'B' =&gt; {
     g.vline(l, y0, cap);
     bowl(g, l, r - 0.06 * wd, t, m, (t - m) / 2.0);
@@ -148,54 +148,54 @@ difference() {
     }
 }</pre>
 
-<h2>8 Messwerte</h2>
-<h3>Kernel-Zeit</h3>
-<p>Release-Build, <code>cad eval --json</code> ohne Daemon, Median aus 3 Läufen; Kernel-Zeit in ms (alle Kernel-Aufrufe). Die Schablonenschrift braucht weniger Kernel-Aufrufe und Zeit als Allerta Stencil und JetBrains Mono: Geraden und Kreise statt B-Splines; ihre eigene Rechenzeit (Regionen, im Cache) steckt in der Auswertung (Sprache 1,6 ms für das Schild).</p>
+<h2>8 Measurements</h2>
+<h3>Kernel time</h3>
+<p>Release build, <code>cad eval --json</code> without daemon, median of 3 runs; kernel time in ms (all kernel calls). The stencil font needs fewer kernel calls and less time than Allerta Stencil and JetBrains Mono: lines and circles instead of B-splines; its own computation time (regions, cached) is part of the evaluation (language 1.6 ms for the sign).</p>
 <table>
-<tr><th>Modell</th><th>cad stencil mono</th><th>Allerta Stencil</th><th>JetBrains Mono</th><th>Schablone / Allerta</th></tr>
-<tr><td>„Hello World“, extrudiert</td><td class="n">130 <span class="small">(18 Aufrufe)</span></td><td class="n">414 <span class="small">(26 Aufrufe)</span></td><td class="n">417 <span class="small">(20 Aufrufe)</span></td><td class="n">0,31</td></tr>
-<tr><td>40 Zeichen, extrudiert</td><td class="n">962 <span class="small">(53 Aufrufe)</span></td><td class="n">2.652 <span class="small">(95 Aufrufe)</span></td><td class="n">2.126 <span class="small">(61 Aufrufe)</span></td><td class="n">0,36</td></tr>
-<tr><td>Schild: Platte ∪ „ZUTRITT NUR MIT BRILLE“ (size 4,2)</td><td class="n">1.791 <span class="small">(33 Aufrufe)</span></td><td class="n">3.419 <span class="small">(45 Aufrufe)</span></td><td class="n">2.238 <span class="small">(34 Aufrufe)</span></td><td class="n">0,52</td></tr>
+<tr><th>Model</th><th>cad stencil mono</th><th>Allerta Stencil</th><th>JetBrains Mono</th><th>Stencil / Allerta</th></tr>
+<tr><td>"Hello World", extruded</td><td class="n">130 <span class="small">(18 calls)</span></td><td class="n">414 <span class="small">(26 calls)</span></td><td class="n">417 <span class="small">(20 calls)</span></td><td class="n">0.31</td></tr>
+<tr><td>40 characters, extruded</td><td class="n">962 <span class="small">(53 calls)</span></td><td class="n">2,652 <span class="small">(95 calls)</span></td><td class="n">2,126 <span class="small">(61 calls)</span></td><td class="n">0.36</td></tr>
+<tr><td>Sign: plate ∪ "ZUTRITT NUR MIT BRILLE" (size 4.2)</td><td class="n">1,791 <span class="small">(33 calls)</span></td><td class="n">3,419 <span class="small">(45 calls)</span></td><td class="n">2,238 <span class="small">(34 calls)</span></td><td class="n">0.52</td></tr>
 </table>
-<p>Browser (Chromium, SMLib als Wasm, Playwright K03): Schild 2.196 ms gegen 3.208 ms mit Allerta Stencil; „Hello World“ 206 gegen 463 ms. Beispiel Schablone nativ: 2.609 ms.</p>
-<h3>Wasm-Modul</h3>
-<table><tr><th></th><th>roh</th><th>gzip -9</th></tr><tr><td><code>cad_wasm_bg.wasm</code> vorher (Commit ed85270)</td><td class="n">4.120.239 B</td><td class="n">1.757.290 B</td></tr><tr><td>mit Schablonenschrift</td><td class="n">4.162.774 B</td><td class="n">1.772.667 B</td></tr><tr><td>Zuwachs</td><td class="n">42.535 B</td><td class="n">15.377 B</td></tr></table><p class="small">Gleicher Build (release, wasm-opt -O3) für beide Stände. <code>region2</code> war schon im Modul (offset, stroke); hinzu kommen nur die Zeichenfunktionen.</p>
+<p>Browser (Chromium, SMLib as Wasm, Playwright K03): sign 2,196 ms versus 3,208 ms with Allerta Stencil; "Hello World" 206 versus 463 ms. Stencil example native: 2,609 ms.</p>
+<h3>Wasm module</h3>
+<table><tr><th></th><th>raw</th><th>gzip -9</th></tr><tr><td><code>cad_wasm_bg.wasm</code> before (commit ed85270)</td><td class="n">4,120,239 B</td><td class="n">1,757,290 B</td></tr><tr><td>with stencil font</td><td class="n">4,162,774 B</td><td class="n">1,772,667 B</td></tr><tr><td>growth</td><td class="n">42,535 B</td><td class="n">15,377 B</td></tr></table><p class="small">Same build (release, wasm-opt -O3) for both states. <code>region2</code> was already in the module (offset, stroke); only the drawing functions are added.</p>
 
-<h2>9 OpenSCAD-Kompatibilität</h2>
-<p>Hängen die Kompatibilitätstests von der Standardschrift ab? Nein: Die 36 Vergleichsmodelle (<code>examples/openscad-compat</code>, <code>tests/openscad-compat/projects</code>) enthalten kein <code>text()</code> (grep findet keine Datei), <code>compare.py</code> und die Stufe-1-Tests (<code>crates/compat-tests</code>) sind damit unberührt; der Textvergleich mit OpenSCAD aus Bericht 16 (<code>hull_and_area_like_openscad</code>, <code>report16-openscad.py</code>) nennt jede Schrift ausdrücklich. Lauf <code>compare.py --eval</code>: 36/36 files match. Bewusste Abweichung: <code>text("…")</code> ohne <code>font</code> ergibt bei uns die Schablonenschrift, in OpenSCAD dessen fontconfig-Standard – für gleiche Maße eine Schrift angeben (Plan 17.11, Skill).</p>
+<h2>9 OpenSCAD compatibility</h2>
+<p>Do the compatibility tests depend on the default font? No: the 36 comparison models (<code>examples/openscad-compat</code>, <code>tests/openscad-compat/projects</code>) contain no <code>text()</code> (grep finds no file), so <code>compare.py</code> and the stage 1 tests (<code>crates/compat-tests</code>) are unaffected; the text comparison with OpenSCAD from report 16 (<code>hull_and_area_like_openscad</code>, <code>report16-openscad.py</code>) names every font explicitly. Run <code>compare.py --eval</code>: 36/36 files match. Intentional deviation: <code>text("…")</code> without <code>font</code> gives the stencil font here and the fontconfig default in OpenSCAD – for identical dimensions, specify a font (plan 17.11, skill).</p>
 
 <h2>10 UI</h2>
-<p>Eine Schriftauswahl gibt es in der UI nicht (Schriften stehen im Code; eigene per „⇡ Datei laden“), daher dort keine Änderung. Neue Szenarien in <code>web/e2e/schablone.spec.ts</code>:</p>
-<h3>K01 Standardschrift im Browser</h3><p>Die Wasm-Engine nutzt dieselbe Schrift wie die CLI: Versalhöhe = size, Vorschub wie JetBrains Mono, Umlaute ohne Rückfall.</p><figure><img src="img/ui-k01-standard.jpg" alt=""><figcaption>text() ohne font: cad stencil mono, zweite Zeile mit stroke_width = 2, bridge_width = 1.5</figcaption></figure><pre>linear_extrude(1) text(&quot;HALLO 08&quot;, size = 10);
-translate([0, -16, 0]) linear_extrude(1) text(&quot;Größe ÄÖÜ&quot;, size = 10, stroke_width = 2, bridge_width = 1.5);</pre><ul><li>keine Meldungen</li><li>Versalhöhe 10 mm, Höhe 1 mm</li><li>Breite 7–9 Zellen</li><li>Grenzen und fremde Schrift: Warnungen</li></ul>
-<h3>K02 Beispiel Schablone</h3><p>Platte minus Text: die Innenteile von A, 0, 8, B, 9 hängen über die Stege an der Platte.</p><figure><img src="img/ui-k02-schablone.jpg" alt=""><figcaption>examples/spec/schablone.scad im Browser (Draufsicht)</figcaption></figure><ul><li>keine Fehler/Warnungen</li><li>Hülle 120 × 44 × 1 mm</li></ul>
-<h3>C16 achsgebundenes Ziehen (Bericht 4) – Ursache und Korrektur</h3>
-<p>C16 lief seit Bericht 15 zeitabhängig in den Test-Timeout, zuletzt auch einzeln. Ursache: Nach <code>clickLine(2, 3)</code> baut der Viewer die Griffe erst im nächsten Animationsframe neu; bis dahin liefert <code>__cad.handles()</code> die Griffe der vorigen Cursorzeile. Dort steht <code>cube([60, 30, 1])</code>, dessen Vektor ebenfalls ein Punktgriff ist – <code>waitHandles("… kind === 'point'")</code> war sofort erfüllt, der Test nahm den ersten Griff (die Plattenecke bei x = 1118 px statt des translate-Punkts bei 770 px), das Ziehen begann nicht (<code>drag() = null</code>), die Maus drehte die Kamera, und das Warten auf „Achse x“ lief bis zum Timeout. Die Achswahl selbst war in allen Läufen richtig. Korrektur im Test: <code>pointHandleOn(page, zeile)</code> wartet auf den Punktgriff <b>der Zeile</b> und nimmt genau diesen (ebenso C20, dieselbe Lücke). Kein Test übersprungen.</p>
-<pre>vorher (pnpm exec playwright test e2e/ui-c.spec.ts -g C16, mehrere Läufe mit --repeat-each): 10 von 16 bestanden, 6 × Test-Timeout (waitForFunction drag()?.axis === 0)
-  fehlgeschlagener Lauf: Griff bei Wartebeginn {&quot;line&quot;:1,&quot;value&quot;:[60,30,1],&quot;screen&quot;:{&quot;x&quot;:1117.7,&quot;y&quot;:527.9}} (cube der Zeile 1), drag() = null
-nachher (pointHandleOn): C16 16 von 16, C20 8 von 8 bestanden (je ca. 25 s bzw. 10 s)</pre>
+<p>There is no font selection in the UI (fonts are specified in the code; custom ones via "⇡ Load file" (German UI: „⇡ Datei laden“)), so no change there. New scenarios in <code>web/e2e/schablone.spec.ts</code>:</p>
+<h3>K01 Default font in the browser</h3><p>The Wasm engine uses the same font as the CLI: cap height = size, advance as JetBrains Mono, umlauts without fallback.</p><figure><img src="img/ui-k01-standard.jpg" alt=""><figcaption>text() without font: cad stencil mono, second line with stroke_width = 2, bridge_width = 1.5</figcaption></figure><pre>linear_extrude(1) text(&quot;HALLO 08&quot;, size = 10);
+translate([0, -16, 0]) linear_extrude(1) text(&quot;Größe ÄÖÜ&quot;, size = 10, stroke_width = 2, bridge_width = 1.5);</pre><ul><li>no messages</li><li>cap height 10 mm, height 1 mm</li><li>width 7–9 cells</li><li>limits and unknown font: warnings</li></ul>
+<h3>K02 Stencil example</h3><p>Plate minus text: the inner parts of A, 0, 8, B, 9 are attached to the plate via the bridges.</p><figure><img src="img/ui-k02-schablone.jpg" alt=""><figcaption>examples/spec/schablone.scad in the browser (top view)</figcaption></figure><ul><li>no errors/warnings</li><li>bounding box 120 × 44 × 1 mm</li></ul>
+<h3>C16 axis-constrained dragging (report 4) – cause and fix</h3>
+<p>Since report 15, C16 ran into the test timeout depending on timing, recently also on its own. Cause: after <code>clickLine(2, 3)</code> the viewer rebuilds the handles only in the next animation frame; until then <code>__cad.handles()</code> returns the handles of the previous cursor line. That line holds <code>cube([60, 30, 1])</code>, whose vector is also a point handle – <code>waitHandles("… kind === 'point'")</code> was satisfied immediately, the test took the first handle (the plate corner at x = 1118 px instead of the translate point at 770 px), the drag did not start (<code>drag() = null</code>), the mouse rotated the camera, and waiting for "Achse x" ("axis x") ran until the timeout. The axis selection itself was correct in all runs. Fix in the test: <code>pointHandleOn(page, zeile)</code> waits for the point handle <b>of the line</b> and takes exactly that one (likewise C20, same gap). No test skipped.</p>
+<pre>before (pnpm exec playwright test e2e/ui-c.spec.ts -g C16, several runs with --repeat-each): 10 of 16 passed, 6 × test timeout (waitForFunction drag()?.axis === 0)
+  failed run: handle at start of wait {&quot;line&quot;:1,&quot;value&quot;:[60,30,1],&quot;screen&quot;:{&quot;x&quot;:1117.7,&quot;y&quot;:527.9}} (cube of line 1), drag() = null
+after (pointHandleOn): C16 16 of 16, C20 8 of 8 passed (approx. 25 s and 10 s each)</pre>
 
-<h2>11 Testläufe</h2>
+<h2>11 Test runs</h2>
 <table>
-<tr><th>Lauf</th><th>Ergebnis</th></tr>
-<tr><td><code>cargo test --workspace --no-fail-fast</code></td><td>529 bestanden, 0 fehlgeschlagen</td></tr>
-<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>sauber · sauber</td></tr>
-<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>sauber · 221 bestanden</td></tr>
-<tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>106 bestanden, 0 fehlgeschlagen</td></tr>
+<tr><th>Run</th><th>Result</th></tr>
+<tr><td><code>cargo test --workspace --no-fail-fast</code></td><td>529 passed, 0 failed</td></tr>
+<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>clean · clean</td></tr>
+<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>clean · 221 passed</td></tr>
+<tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>106 passed, 0 failed</td></tr>
 <tr><td><code>tests/openscad-compat/compare.py --eval</code></td><td>36/36 files match</td></tr>
 </table>
-<p>Neue bzw. geänderte Rust-Tests (13):</p>
+<p>New or changed Rust tests (13):</p>
 <p class="small"><code>every_glyph_profile_has_no_holes</code> <span class="ok">ok</span> · <code>extruded_text_volume</code> <span class="ok">ok</span> · <code>sign_text_kernel_time_like_allerta</code> <span class="ok">ok</span> · <code>text_stencil_parameters</code> <span class="ok">ok</span> · <code>text_profiles_and_fonts</code> <span class="ok">ok</span> · <code>tests::font_names</code> <span class="ok">ok</span> · <code>tests::stencil_areas</code> <span class="ok">ok</span> · <code>tests::required_chars_in_every_font</code> <span class="ok">ok</span> · <code>tests::stencil_layout_features</code> <span class="ok">ok</span> · <code>tests::stencil_metrics_and_monospaced_advance</code> <span class="ok">ok</span> · <code>tests::stencil_without_bridges_has_counters</code> <span class="ok">ok</span> · <code>tests::stencil_glyphs_have_no_holes</code> <span class="ok">ok</span> · <code>spec_models_stage1</code> <span class="ok">ok</span></p>
-<p class="small">cad-font: Abdeckung (<code>required_chars_in_every_font</code> mit beiden Stilen), keine Löcher/Splitter/Überlappungen für 8 Parameterkombinationen, geschlossene Innenräume ohne Stege, Metrik (Versalhöhe = size, Vorschub = JetBrains Mono, jede Glyphe in ihrer Zelle), Flächen (H exakt, o gegen Formel, Alphabet gegen JetBrains Mono, Strich/Steg/Bold/size), Ausrichtung, Richtungen, Rückfall, Schriftnamen. cad-eval: Standardschrift, Parameter, Warnungen. cad-engine: jede Glyphe als Profil ohne Loch (Regular, Bold), Volumen = Fläche × Höhe, Kernel-Zeit des Schilds gegen Allerta Stencil. compat-tests: Beispiel <code>schablone.scad</code>.</p>
+<p class="small">cad-font: coverage (<code>required_chars_in_every_font</code> with both styles), no holes/slivers/overlaps for 8 parameter combinations, closed counters without bridges, metrics (cap height = size, advance = JetBrains Mono, every glyph in its cell), areas (H exact, o against formula, alphabet against JetBrains Mono, stroke/bridge/Bold/size), alignment, directions, fallback, font names. cad-eval: default font, parameters, warnings. cad-engine: every glyph as a profile without a hole (Regular, Bold), volume = area × height, kernel time of the sign against Allerta Stencil. compat-tests: example <code>schablone.scad</code>.</p>
 
-<h2>12 Grenzen</h2>
+<h2>12 Limitations</h2>
 <ul>
-<li>Gestaltung bewusst einfach: eine Strichstärke je Glyphe (nur @ mit 0,72-fachem Strich, ² ³ mit 0,75-fachem), keine optischen Korrekturen, keine Kerning-Paare (monospaced). W, w, m, @, * werden bei Bold sehr dicht.</li>
-<li>Grenzen der Parameter aus dem Test (Strich ≤ 0,2·size, Steg 0 oder 0,03…0,2·size); dazwischen geprüft an 8 Kombinationen, nicht lückenlos. Ein Steg ist an Bögen radial gerade geschnitten, seine Breite gilt auf der Mittellinie.</li>
-<li>Kombinierende Zeichen (z. B. „a“ + U+0308) setzt die Schrift nicht zusammen: das Zeichen kommt aus JetBrains Mono. Vorkomponierte Umlaute sind enthalten.</li>
-<li>Zeichen außerhalb des Umfangs (Kyrillisch, Griechisch, Pfeile …) kommen aus JetBrains Mono – ohne Stege, können also Löcher haben.</li>
-<li>Glyphen verschiedener Zeichen berühren sich nur bei <code>spacing</code> &lt; 1 oder den durchgehenden Strichen <code>—</code>, <code>_</code> (über die ganze Zelle wie in Monospace-Schriften); dann können zwischen Glyphen Innenräume entstehen.</li>
-<li>Modelle ohne <code>font</code> sehen in OpenSCAD anders aus (dort fontconfig-Standard).</li>
+<li>Design deliberately simple: one stroke width per glyph (only @ with 0.72 times the stroke, ² ³ with 0.75 times), no optical corrections, no kerning pairs (monospaced). W, w, m, @, * become very dense in Bold.</li>
+<li>Parameter limits from the test (stroke ≤ 0.2·size, bridge 0 or 0.03…0.2·size); values in between checked at 8 combinations, not exhaustively. On arcs, a bridge is cut radially straight; its width applies on the center line.</li>
+<li>The font does not compose combining characters (e.g. "a" + U+0308): the character comes from JetBrains Mono. Precomposed umlauts are included.</li>
+<li>Characters outside the scope (Cyrillic, Greek, arrows …) come from JetBrains Mono – without bridges, so they can have holes.</li>
+<li>Glyphs of different characters touch only with <code>spacing</code> &lt; 1 or with the continuous strokes <code>—</code>, <code>_</code> (across the whole cell as in monospace fonts); then counters can form between glyphs.</li>
+<li>Models without <code>font</code> look different in OpenSCAD (fontconfig default there).</li>
 </ul>
 </main>
 </body>

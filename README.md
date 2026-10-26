@@ -4,7 +4,7 @@ Parametric CAD in an OpenSCAD-style language, on an exact B-rep kernel, with a C
 AI agents and a desktop/browser UI for humans.
 
 > **Status: alpha.** Expect breaking changes in the language, the CLI and the file formats.
-> Hobby project, tested on Linux.
+> Hobby project, tested on Linux. The repository URL will probably change.
 
 ![Macro pad modelled in mcad](docs/img/readme/macropad.png)
 
@@ -64,7 +64,8 @@ and all JSON keys are English.
 ## Example: a macro pad
 
 [`examples/macropad/macropad.mcad`](examples/macropad/macropad.mcad): 4 × 3 MX keys, a rotary
-encoder, USB-C. 15 parts, four filament colours, about 110 lines.
+encoder, USB-C. 15 parts, four filament colours, about 110 lines. All images below are
+`mcad render … --theme dark`.
 
 ### Grids and anchors
 
@@ -189,7 +190,7 @@ Farben (Filament, Farbe, Volumen, Masse PLA 1,24 g/cm³):
   F4  white          #f4f3f0  21417.294 mm³  26.56 g  Z.89
 ```
 
-![Macro pad, dark theme](docs/img/readme/macropad-dark.png)
+![Macro pad from the back with the USB-C opening](docs/img/readme/macropad-colors.png)
 
 ## More features
 
