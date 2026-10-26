@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 11 – Farben, Multi-Filament-3MF, dunkles Thema</title>
+<title>Test report 11 – colors, multi-filament 3MF, dark theme</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -48,128 +48,128 @@
 </head>
 <body>
 <main>
-<h1>Testbericht 11 – Farben, Multi-Filament-3MF, dunkles Thema</h1>
-<div class="meta">cad-eval (palette), cad-engine (colors, color_export), cad-session, cad-cli, cad-render, web (Farbliste, Thema) · 23.10.2026 · Branch worktree-agent-a2ab30636d524862b · Commit 23ec721 · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 Kerne</div>
+<h1>Test report 11 – colors, multi-filament 3MF, dark theme</h1>
+<div class="meta">cad-eval (palette), cad-engine (colors, color_export), cad-session, cad-cli, cad-render, web (color list, theme) · 2026-10-23 · Branch worktree-agent-a2ab30636d524862b · Commit 23ec721 · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 cores</div>
 
 <div class="summary">
-  <div>cargo test --workspace<b class="ok">388 / 388</b>davon 31 neue Farbtests</div>
-  <div>clippy · fmt<b class="ok">sauber · sauber</b>-D warnings</div>
-  <div>Vitest · Playwright<b class="ok">193 · 84 / 84</b>davon 7 neue Szenarien (F01–F07)</div>
+  <div>cargo test --workspace<b class="ok">388 / 388</b>of which 31 new color tests</div>
+  <div>clippy · fmt<b class="ok">clean · clean</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="ok">193 · 84 / 84</b>of which 7 new scenarios (F01–F07)</div>
   <div>Tauri-E2E<b class="ok">14 / 14</b>tauri-driver + WebKitWebDriver, Xvfb</div>
-  <div>3MF unabhängig geprüft<b class="ok">bestanden</b>lib3mf, trimesh, Bambu-Modell, PrusaSlicer</div>
+  <div>3MF checked independently<b class="ok">passed</b>lib3mf, trimesh, Bambu model, PrusaSlicer</div>
   <div>OpenSCAD · STEP<b class="ok">33/33 · 48/48</b>compare.py · verify.py</div>
-  <div>Palette: kleinster ΔE<sub>OK</sub><b>0,107 · 0,070</b>normal · Deuteranopie</div>
+  <div>Palette: smallest ΔE<sub>OK</sub><b>0.107 · 0.070</b>normal · deuteranopia</div>
 </div>
 
-<h2>1 Auftrag und Ergebnis</h2>
-<p>Drei Nutzerwünsche: <b>Mehrfarbigkeit</b> mit einem Export, den Bambu Studio „recht einfach mit mehreren Filamenten“ druckt; die CSS-Farben durch ein <b>kleines, schönes Preset</b> ersetzen (nur englische Namen, gedeckte Töne, Warnung und Zufallsfarbe bei unbekannten Namen); ein gründlich überarbeitetes <b>dunkles Thema</b>. Umgesetzt:</p>
+<h2>1 Task and result</h2>
+<p>Three user requests: <b>multiple colors</b> with an export that Bambu Studio prints "fairly easily with several filaments"; replace the CSS colors with a <b>small, good-looking preset</b> (English names only, muted tones, warning and random color for unknown names); a thoroughly reworked <b>dark theme</b>. Implemented:</p>
 <ul>
-<li><b>Palette</b> mit 16 Farben in <code>cad-eval</code> (eine Quelle, für UI generiert), unbekannte Namen → Warnung „Farbe <code>x</code> unbekannt – Zufallsfarbe“ und stabile Farbe aus dem Hash des Namens; Hex, Vektoren und <code>alpha</code> exakt (Abschnitt 2).</li>
-<li><b>Farbregionen</b>: jedes Bauteil wird über Kernel-Booleans in Körper je Farbe geteilt (gecacht), Summe der Volumen = Bauteilvolumen; <b>Filament-Slots</b> aus <code>color("teal", filament = 2)</code> oder automatisch (Abschnitt 3).</li>
-<li><b>3MF für Bambu Studio / OrcaSlicer</b>: ein Objekt je Bauteil, ein Teil je Farbe am selben Ursprung, Farbgruppe und <code>Metadata/model_settings.config</code> mit <code>extruder</code> je Teil – das Format aus dem Quellcode der Slicer erarbeitet (Abschnitt 5), geprüft mit lib3mf, trimesh, einem Modell des Bambu-Importers und PrusaSlicer (Abschnitt 6). Dazu „ein STL je Farbe“ als ZIP. CLI: <code>cad export -o x.3mf</code> ist mehrfarbig (<code>--single-color</code>), <code>cad outline</code> und <code>cad measure --colors</code> zeigen Farben, Slots, Volumen und Masse.</li>
-<li><b>UI</b>: „Farben &amp; Filamente“ (Farbfeld, Name, Zeilen, Slot-Auswahl, die <code>filament = n</code> in den Code schreibt, Volumen und Masse bei PLA 1,24 g/cm³), Farbe je Fläche in der Ansicht, „Farbregionen zeigen“ (Abschnitt 7).</li>
-<li><b>Dunkles Thema</b>: Auswahl System (Standard, folgt <code>prefers-color-scheme</code>, auch in Tauri)/Hell/Dunkel, Token-Satz mit WCAG-Prüfung (Text ≥ 4,5:1), Editor-Teile mit eigenem Standardthema angepasst, Palette-Farben im Dunkeln leicht aufgehellt; <code>cad render --theme dark</code> (Abschnitt 8).</li>
+<li><b>Palette</b> with 16 colors in <code>cad-eval</code> (one source, generated for the UI), unknown names → warning „Farbe <code>x</code> unbekannt – Zufallsfarbe“ ("color x unknown – random color") and a stable color from the hash of the name; hex, vectors and <code>alpha</code> exact (section 2).</li>
+<li><b>Color regions</b>: each part is split via kernel booleans into bodies per color (cached), sum of the volumes = part volume; <b>filament slots</b> from <code>color("teal", filament = 2)</code> or automatic (section 3).</li>
+<li><b>3MF for Bambu Studio / OrcaSlicer</b>: one object per part, one sub-part per color at the same origin, color group and <code>Metadata/model_settings.config</code> with <code>extruder</code> per sub-part – the format worked out from the slicers' source code (section 5), checked with lib3mf, trimesh, a model of the Bambu importer and PrusaSlicer (section 6). In addition "one STL per color" as a ZIP. CLI: <code>cad export -o x.3mf</code> is multi-color (<code>--single-color</code>), <code>cad outline</code> and <code>cad measure --colors</code> show colors, slots, volume and mass.</li>
+<li><b>UI</b>: "Colors &amp; filaments" (German UI: „Farben &amp; Filamente“) (swatch, name, lines, slot selector that writes <code>filament = n</code> into the code, volume and mass for PLA 1.24 g/cm³), color per face in the view, "Show color regions" (German UI: „Farbregionen zeigen“) (section 7).</li>
+<li><b>Dark theme</b>: choice System (default, follows <code>prefers-color-scheme</code>, also in Tauri)/Light/Dark, token set with WCAG check (text ≥ 4.5:1), editor components with their own default theme adapted, palette colors slightly lightened in the dark theme; <code>cad render --theme dark</code> (section 8).</li>
 </ul>
 
 <h2>2 Palette</h2>
-<p>Gewählt wurden die Namen, die in OpenSCAD-Dateien am häufigsten vorkommen – im Korpus der OpenSCAD-Beispiele und -Bibliotheken im Container red (11), green (7), cyan (7), yellow, gray, blue, black (je 2), magenta, lime; aus Erfahrung mit verbreiteten Projekten zusätzlich white, orange, silver, purple – und dazu teal, pink, brown als häufige Filamentfarben. Der Vorschlag <code>indigo</code>/<code>slate</code> entfiel: indigo liegt zwischen blue und purple (bei Deuteranopie kaum zu trennen), slate zwischen gray und blue; <code>silver</code> und <code>magenta</code> sind in OpenSCAD-Dateien häufiger. <code>grey</code>, <code>aqua</code>, <code>fuchsia</code> sind die CSS-Schreibweisen von gray, cyan, magenta; deutsche Namen gibt es nicht.</p>
-<p>Werte: Zielwerte in OKLCH (Helligkeit L, Chroma C ≤ 0,18 – gedeckt, keine reinen RGB-Ecken –, Farbton h), mit einer Suche optimiert auf den kleinsten Abstand in OKLab bei normalem Sehen und für simulierte Deuteranopie und Protanopie (Machado, Oliveira, Fernandes 2009, Schwere 1,0, in linearem sRGB). Die Formeln stehen in <code>palette.rs</code>; <code>cargo test -p cad-eval --test palette</code> erzwingt die Mindestabstände, <code>tools/palette/palette.py</code> rechnet dieselben Werte nach.</p>
-<table class="pal"><tr><th>Name</th><th>Grundwert (Export)</th><th>hell angezeigt<br><span class="small">auf #e7eaee</span></th><th>dunkel angezeigt<br><span class="small">auf #16191d</span></th><th>Deut.</th><th>Prot.</th><th>Trit.</th><th>OKLCH (L · C · h)</th></tr>
+<p>The names chosen are those that occur most often in OpenSCAD files – in the corpus of OpenSCAD examples and libraries in the container red (11), green (7), cyan (7), yellow, gray, blue, black (2 each), magenta, lime; from experience with widely used projects additionally white, orange, silver, purple – plus teal, pink, brown as common filament colors. The proposal <code>indigo</code>/<code>slate</code> was dropped: indigo lies between blue and purple (hard to separate with deuteranopia), slate between gray and blue; <code>silver</code> and <code>magenta</code> are more frequent in OpenSCAD files. <code>grey</code>, <code>aqua</code>, <code>fuchsia</code> are the CSS spellings of gray, cyan, magenta; there are no German names.</p>
+<p>Values: target values in OKLCH (lightness L, chroma C ≤ 0.18 – muted, no pure RGB corners –, hue h), optimized by a search for the smallest distance in OKLab for normal vision and for simulated deuteranopia and protanopia (Machado, Oliveira, Fernandes 2009, severity 1.0, in linear sRGB). The formulas are in <code>palette.rs</code>; <code>cargo test -p cad-eval --test palette</code> enforces the minimum distances, <code>tools/palette/palette.py</code> recomputes the same values.</p>
+<table class="pal"><tr><th>Name</th><th>Base value (export)</th><th>shown light<br><span class="small">on #e7eaee</span></th><th>shown dark<br><span class="small">on #16191d</span></th><th>Deut.</th><th>Prot.</th><th>Trit.</th><th>OKLCH (L · C · h)</th></tr>
 <tr><td><b>red</b></td><td><span class="sw" style="background:#c74240"></span> <code>#c74240</code></td>
-<td class="bgl"><span class="sw" style="background:#c74240"></span> <code>#c74240</code> <span class="small">4,06:1</span></td>
-<td class="bgd"><span class="sw" style="background:#c74240"></span> <code>#c74240</code> <span class="small">3,60:1</span></td>
+<td class="bgl"><span class="sw" style="background:#c74240"></span> <code>#c74240</code> <span class="small">4.06:1</span></td>
+<td class="bgd"><span class="sw" style="background:#c74240"></span> <code>#c74240</code> <span class="small">3.60:1</span></td>
 <td><span class="sw" style="background:#887b3c"></span></td><td><span class="sw" style="background:#665f3f"></span></td><td><span class="sw" style="background:#da1f43"></span></td>
-<td class="small">0,568 · 0,170 · 25,1</td></tr>
+<td class="small">0.568 · 0.170 · 25.1</td></tr>
 <tr><td><b>orange</b></td><td><span class="sw" style="background:#dc813b"></span> <code>#dc813b</code></td>
-<td class="bgl"><span class="sw" style="background:#dc813b"></span> <code>#dc813b</code> <span class="small">2,40:1</span></td>
-<td class="bgd"><span class="sw" style="background:#dc813b"></span> <code>#dc813b</code> <span class="small">6,08:1</span></td>
+<td class="bgl"><span class="sw" style="background:#dc813b"></span> <code>#dc813b</code> <span class="small">2.40:1</span></td>
+<td class="bgd"><span class="sw" style="background:#dc813b"></span> <code>#dc813b</code> <span class="small">6.08:1</span></td>
 <td><span class="sw" style="background:#b1a03b"></span></td><td><span class="sw" style="background:#9c8b33"></span></td><td><span class="sw" style="background:#f06e72"></span></td>
-<td class="small">0,690 · 0,140 · 55,1</td></tr>
+<td class="small">0.690 · 0.140 · 55.1</td></tr>
 <tr><td><b>yellow</b></td><td><span class="sw" style="background:#f7d974"></span> <code>#f7d974</code></td>
-<td class="bgl"><span class="sw" style="background:#f7d974"></span> <code>#f7d974</code> <span class="small">1,15:1</span></td>
-<td class="bgd"><span class="sw" style="background:#f7d974"></span> <code>#f7d974</code> <span class="small">12,71:1</span></td>
+<td class="bgl"><span class="sw" style="background:#f7d974"></span> <code>#f7d974</code> <span class="small">1.15:1</span></td>
+<td class="bgd"><span class="sw" style="background:#f7d974"></span> <code>#f7d974</code> <span class="small">12.71:1</span></td>
 <td><span class="sw" style="background:#f3df78"></span></td><td><span class="sw" style="background:#ecd66b"></span></td><td><span class="sw" style="background:#ffcbc2"></span></td>
-<td class="small">0,890 · 0,125 · 93,2</td></tr>
+<td class="small">0.890 · 0.125 · 93.2</td></tr>
 <tr><td><b>lime</b></td><td><span class="sw" style="background:#91ca55"></span> <code>#91ca55</code></td>
-<td class="bgl"><span class="sw" style="background:#91ca55"></span> <code>#91ca55</code> <span class="small">1,61:1</span></td>
-<td class="bgd"><span class="sw" style="background:#91ca55"></span> <code>#91ca55</code> <span class="small">9,05:1</span></td>
+<td class="bgl"><span class="sw" style="background:#91ca55"></span> <code>#91ca55</code> <span class="small">1.61:1</span></td>
+<td class="bgd"><span class="sw" style="background:#91ca55"></span> <code>#91ca55</code> <span class="small">9.05:1</span></td>
 <td><span class="sw" style="background:#cab85d"></span></td><td><span class="sw" style="background:#d2bc49"></span></td><td><span class="sw" style="background:#93c2b1"></span></td>
-<td class="small">0,775 · 0,160 · 131,0</td></tr>
+<td class="small">0.775 · 0.160 · 131.0</td></tr>
 <tr><td><b>green</b></td><td><span class="sw" style="background:#4ca167"></span> <code>#4ca167</code></td>
-<td class="bgl"><span class="sw" style="background:#4ca167"></span> <code>#4ca167</code> <span class="small">2,64:1</span></td>
-<td class="bgd"><span class="sw" style="background:#4ca167"></span> <code>#4ca167</code> <span class="small">5,54:1</span></td>
+<td class="bgl"><span class="sw" style="background:#4ca167"></span> <code>#4ca167</code> <span class="small">2.64:1</span></td>
+<td class="bgd"><span class="sw" style="background:#4ca167"></span> <code>#4ca167</code> <span class="small">5.54:1</span></td>
 <td><span class="sw" style="background:#958d6b"></span></td><td><span class="sw" style="background:#a19563"></span></td><td><span class="sw" style="background:#389f92"></span></td>
-<td class="small">0,641 · 0,120 · 151,9</td></tr>
+<td class="small">0.641 · 0.120 · 151.9</td></tr>
 <tr><td><b>teal</b></td><td><span class="sw" style="background:#217274"></span> <code>#217274</code></td>
-<td class="bgl"><span class="sw" style="background:#217274"></span> <code>#217274</code> <span class="small">4,67:1</span></td>
-<td class="bgd"><span class="sw" style="background:#307e80"></span> <code>#307e80</code> <span class="small">3,71:1</span></td>
+<td class="bgl"><span class="sw" style="background:#217274"></span> <code>#217274</code> <span class="small">4.67:1</span></td>
+<td class="bgd"><span class="sw" style="background:#307e80"></span> <code>#307e80</code> <span class="small">3.71:1</span></td>
 <td><span class="sw" style="background:#5d6374"></span></td><td><span class="sw" style="background:#6a6c74"></span></td><td><span class="sw" style="background:#007672"></span></td>
-<td class="small">0,506 · 0,075 · 197,5</td></tr>
+<td class="small">0.506 · 0.075 · 197.5</td></tr>
 <tr><td><b>cyan</b></td><td><span class="sw" style="background:#6eccec"></span> <code>#6eccec</code></td>
-<td class="bgl"><span class="sw" style="background:#6eccec"></span> <code>#6eccec</code> <span class="small">1,51:1</span></td>
-<td class="bgd"><span class="sw" style="background:#6eccec"></span> <code>#6eccec</code> <span class="small">9,67:1</span></td>
+<td class="bgl"><span class="sw" style="background:#6eccec"></span> <code>#6eccec</code> <span class="small">1.51:1</span></td>
+<td class="bgd"><span class="sw" style="background:#6eccec"></span> <code>#6eccec</code> <span class="small">9.67:1</span></td>
 <td><span class="sw" style="background:#a7baec"></span></td><td><span class="sw" style="background:#b9c8ee"></span></td><td><span class="sw" style="background:#00d6d6"></span></td>
-<td class="small">0,799 · 0,100 · 222,5</td></tr>
+<td class="small">0.799 · 0.100 · 222.5</td></tr>
 <tr><td><b>blue</b></td><td><span class="sw" style="background:#2e65b9"></span> <code>#2e65b9</code></td>
-<td class="bgl"><span class="sw" style="background:#2e65b9"></span> <code>#2e65b9</code> <span class="small">4,73:1</span></td>
-<td class="bgd"><span class="sw" style="background:#3a71c6"></span> <code>#3a71c6</code> <span class="small">3,66:1</span></td>
+<td class="bgl"><span class="sw" style="background:#2e65b9"></span> <code>#2e65b9</code> <span class="small">4.73:1</span></td>
+<td class="bgd"><span class="sw" style="background:#3a71c6"></span> <code>#3a71c6</code> <span class="small">3.66:1</span></td>
 <td><span class="sw" style="background:#1c60b7"></span></td><td><span class="sw" style="background:#3a6dbc"></span></td><td><span class="sw" style="background:#007986"></span></td>
-<td class="small">0,515 · 0,145 · 258,8</td></tr>
+<td class="small">0.515 · 0.145 · 258.8</td></tr>
 <tr><td><b>purple</b></td><td><span class="sw" style="background:#693d8c"></span> <code>#693d8c</code></td>
-<td class="bgl"><span class="sw" style="background:#693d8c"></span> <code>#693d8c</code> <span class="small">6,57:1</span></td>
-<td class="bgd"><span class="sw" style="background:#754999"></span> <code>#754999</code> <span class="small">2,66:1</span></td>
+<td class="bgl"><span class="sw" style="background:#693d8c"></span> <code>#693d8c</code> <span class="small">6.57:1</span></td>
+<td class="bgd"><span class="sw" style="background:#754999"></span> <code>#754999</code> <span class="small">2.66:1</span></td>
 <td><span class="sw" style="background:#32528a"></span></td><td><span class="sw" style="background:#234f8f"></span></td><td><span class="sw" style="background:#644b5e"></span></td>
-<td class="small">0,450 · 0,130 · 307,7</td></tr>
+<td class="small">0.450 · 0.130 · 307.7</td></tr>
 <tr><td><b>magenta</b></td><td><span class="sw" style="background:#cd67b7"></span> <code>#cd67b7</code></td>
-<td class="bgl"><span class="sw" style="background:#cd67b7"></span> <code>#cd67b7</code> <span class="small">2,80:1</span></td>
-<td class="bgd"><span class="sw" style="background:#cd67b7"></span> <code>#cd67b7</code> <span class="small">5,22:1</span></td>
+<td class="bgl"><span class="sw" style="background:#cd67b7"></span> <code>#cd67b7</code> <span class="small">2.80:1</span></td>
+<td class="bgd"><span class="sw" style="background:#cd67b7"></span> <code>#cd67b7</code> <span class="small">5.22:1</span></td>
 <td><span class="sw" style="background:#8591b4"></span></td><td><span class="sw" style="background:#6882ba"></span></td><td><span class="sw" style="background:#d66b87"></span></td>
-<td class="small">0,660 · 0,161 · 336,1</td></tr>
+<td class="small">0.660 · 0.161 · 336.1</td></tr>
 <tr><td><b>pink</b></td><td><span class="sw" style="background:#f7b8c6"></span> <code>#f7b8c6</code></td>
-<td class="bgl"><span class="sw" style="background:#f7b8c6"></span> <code>#f7b8c6</code> <span class="small">1,38:1</span></td>
-<td class="bgd"><span class="sw" style="background:#f7b8c6"></span> <code>#f7b8c6</code> <span class="small">10,60:1</span></td>
+<td class="bgl"><span class="sw" style="background:#f7b8c6"></span> <code>#f7b8c6</code> <span class="small">1.38:1</span></td>
+<td class="bgd"><span class="sw" style="background:#f7b8c6"></span> <code>#f7b8c6</code> <span class="small">10.60:1</span></td>
 <td><span class="sw" style="background:#cfcdc5"></span></td><td><span class="sw" style="background:#c1c2c6"></span></td><td><span class="sw" style="background:#ffb4bd"></span></td>
-<td class="small">0,844 · 0,075 · 4,1</td></tr>
+<td class="small">0.844 · 0.075 · 4.1</td></tr>
 <tr><td><b>brown</b></td><td><span class="sw" style="background:#6e4223"></span> <code>#6e4223</code></td>
-<td class="bgl"><span class="sw" style="background:#6e4223"></span> <code>#6e4223</code> <span class="small">7,05:1</span></td>
-<td class="bgd"><span class="sw" style="background:#7a4d2e"></span> <code>#7a4d2e</code> <span class="small">2,46:1</span></td>
+<td class="bgl"><span class="sw" style="background:#6e4223"></span> <code>#6e4223</code> <span class="small">7.05:1</span></td>
+<td class="bgd"><span class="sw" style="background:#7a4d2e"></span> <code>#7a4d2e</code> <span class="small">2.46:1</span></td>
 <td><span class="sw" style="background:#595023"></span></td><td><span class="sw" style="background:#4f4720"></span></td><td><span class="sw" style="background:#78393b"></span></td>
-<td class="small">0,425 · 0,076 · 54,3</td></tr>
+<td class="small">0.425 · 0.076 · 54.3</td></tr>
 <tr><td><b>black</b></td><td><span class="sw" style="background:#202225"></span> <code>#202225</code></td>
-<td class="bgl"><span class="sw" style="background:#202225"></span> <code>#202225</code> <span class="small">13,21:1</span></td>
-<td class="bgd"><span class="sw" style="background:#3b3d41"></span> <code>#3b3d41</code> <span class="small">1,62:1</span></td>
+<td class="bgl"><span class="sw" style="background:#202225"></span> <code>#202225</code> <span class="small">13.21:1</span></td>
+<td class="bgd"><span class="sw" style="background:#3b3d41"></span> <code>#3b3d41</code> <span class="small">1.62:1</span></td>
 <td><span class="sw" style="background:#212225"></span></td><td><span class="sw" style="background:#212225"></span></td><td><span class="sw" style="background:#1f2323"></span></td>
-<td class="small">0,251 · 0,006 · 258,4</td></tr>
+<td class="small">0.251 · 0.006 · 258.4</td></tr>
 <tr><td><b>gray</b></td><td><span class="sw" style="background:#7b7d81"></span> <code>#7b7d81</code></td>
-<td class="bgl"><span class="sw" style="background:#7b7d81"></span> <code>#7b7d81</code> <span class="small">3,42:1</span></td>
-<td class="bgd"><span class="sw" style="background:#7b7d81"></span> <code>#7b7d81</code> <span class="small">4,28:1</span></td>
+<td class="bgl"><span class="sw" style="background:#7b7d81"></span> <code>#7b7d81</code> <span class="small">3.42:1</span></td>
+<td class="bgd"><span class="sw" style="background:#7b7d81"></span> <code>#7b7d81</code> <span class="small">4.28:1</span></td>
 <td><span class="sw" style="background:#7b7d81"></span></td><td><span class="sw" style="background:#7c7d81"></span></td><td><span class="sw" style="background:#7a7e7e"></span></td>
-<td class="small">0,589 · 0,007 · 264,5</td></tr>
+<td class="small">0.589 · 0.007 · 264.5</td></tr>
 <tr><td><b>silver</b></td><td><span class="sw" style="background:#abaeb2"></span> <code>#abaeb2</code></td>
-<td class="bgl"><span class="sw" style="background:#abaeb2"></span> <code>#abaeb2</code> <span class="small">1,85:1</span></td>
-<td class="bgd"><span class="sw" style="background:#abaeb2"></span> <code>#abaeb2</code> <span class="small">7,92:1</span></td>
+<td class="bgl"><span class="sw" style="background:#abaeb2"></span> <code>#abaeb2</code> <span class="small">1.85:1</span></td>
+<td class="bgd"><span class="sw" style="background:#abaeb2"></span> <code>#abaeb2</code> <span class="small">7.92:1</span></td>
 <td><span class="sw" style="background:#acadb2"></span></td><td><span class="sw" style="background:#adaeb2"></span></td><td><span class="sw" style="background:#a9afaf"></span></td>
-<td class="small">0,750 · 0,007 · 255,5</td></tr>
+<td class="small">0.750 · 0.007 · 255.5</td></tr>
 <tr><td><b>white</b></td><td><span class="sw" style="background:#f4f3f0"></span> <code>#f4f3f0</code></td>
-<td class="bgl"><span class="sw" style="background:#e9e8e5"></span> <code>#e9e8e5</code> <span class="small">1,02:1</span></td>
-<td class="bgd"><span class="sw" style="background:#f4f3f0"></span> <code>#f4f3f0</code> <span class="small">15,89:1</span></td>
+<td class="bgl"><span class="sw" style="background:#e9e8e5"></span> <code>#e9e8e5</code> <span class="small">1.02:1</span></td>
+<td class="bgd"><span class="sw" style="background:#f4f3f0"></span> <code>#f4f3f0</code> <span class="small">15.89:1</span></td>
 <td><span class="sw" style="background:#f4f3f0"></span></td><td><span class="sw" style="background:#f4f3f0"></span></td><td><span class="sw" style="background:#f5f2f2"></span></td>
-<td class="small">0,964 · 0,004 · 91,4</td></tr>
-<tr><td><b>Standard</b> <span class="small">(ohne color())</span></td><td><span class="sw" style="background:#c3c8cf"></span> <code>#c3c8cf</code></td><td colspan="6" class="small" style="white-space:normal">Material ohne <code>color()</code> in Exporten und in der Farbliste; in der Ansicht die Modellfarbe des Themas (<code>--view-model</code>)</td></tr>
+<td class="small">0.964 · 0.004 · 91.4</td></tr>
+<tr><td><b>Default</b> <span class="small">(without color())</span></td><td><span class="sw" style="background:#c3c8cf"></span> <code>#c3c8cf</code></td><td colspan="6" class="small" style="white-space:normal">Material without <code>color()</code> in exports and in the color list; in the view the model color of the theme (<code>--view-model</code>)</td></tr>
 </table>
-<p class="small">Streifen: Palette normal, simuliert Deuteranopie, Protanopie, Tritanopie.</p>
+<p class="small">Strips: palette normal, simulated deuteranopia, protanopia, tritanopia.</p>
 <div class="strip"><span title="red" style="background:#c74240"></span><span title="orange" style="background:#dc813b"></span><span title="yellow" style="background:#f7d974"></span><span title="lime" style="background:#91ca55"></span><span title="green" style="background:#4ca167"></span><span title="teal" style="background:#217274"></span><span title="cyan" style="background:#6eccec"></span><span title="blue" style="background:#2e65b9"></span><span title="purple" style="background:#693d8c"></span><span title="magenta" style="background:#cd67b7"></span><span title="pink" style="background:#f7b8c6"></span><span title="brown" style="background:#6e4223"></span><span title="black" style="background:#202225"></span><span title="gray" style="background:#7b7d81"></span><span title="silver" style="background:#abaeb2"></span><span title="white" style="background:#f4f3f0"></span></div><div class="strip"><span title="red" style="background:#887b3c"></span><span title="orange" style="background:#b1a03b"></span><span title="yellow" style="background:#f3df78"></span><span title="lime" style="background:#cab85d"></span><span title="green" style="background:#958d6b"></span><span title="teal" style="background:#5d6374"></span><span title="cyan" style="background:#a7baec"></span><span title="blue" style="background:#1c60b7"></span><span title="purple" style="background:#32528a"></span><span title="magenta" style="background:#8591b4"></span><span title="pink" style="background:#cfcdc5"></span><span title="brown" style="background:#595023"></span><span title="black" style="background:#212225"></span><span title="gray" style="background:#7b7d81"></span><span title="silver" style="background:#acadb2"></span><span title="white" style="background:#f4f3f0"></span></div><div class="strip"><span title="red" style="background:#665f3f"></span><span title="orange" style="background:#9c8b33"></span><span title="yellow" style="background:#ecd66b"></span><span title="lime" style="background:#d2bc49"></span><span title="green" style="background:#a19563"></span><span title="teal" style="background:#6a6c74"></span><span title="cyan" style="background:#b9c8ee"></span><span title="blue" style="background:#3a6dbc"></span><span title="purple" style="background:#234f8f"></span><span title="magenta" style="background:#6882ba"></span><span title="pink" style="background:#c1c2c6"></span><span title="brown" style="background:#4f4720"></span><span title="black" style="background:#212225"></span><span title="gray" style="background:#7c7d81"></span><span title="silver" style="background:#adaeb2"></span><span title="white" style="background:#f4f3f0"></span></div><div class="strip"><span title="red" style="background:#da1f43"></span><span title="orange" style="background:#f06e72"></span><span title="yellow" style="background:#ffcbc2"></span><span title="lime" style="background:#93c2b1"></span><span title="green" style="background:#389f92"></span><span title="teal" style="background:#007672"></span><span title="cyan" style="background:#00d6d6"></span><span title="blue" style="background:#007986"></span><span title="purple" style="background:#644b5e"></span><span title="magenta" style="background:#d66b87"></span><span title="pink" style="background:#ffb4bd"></span><span title="brown" style="background:#78393b"></span><span title="black" style="background:#1f2323"></span><span title="gray" style="background:#7a7e7e"></span><span title="silver" style="background:#a9afaf"></span><span title="white" style="background:#f5f2f2"></span></div>
-<table><tr><th>Sicht</th><th>kleinste Abstände ΔE<sub>OK</sub> (OKLab, ~0,02 gerade sichtbar)</th></tr>
-<tr><td>normales Sehen</td><td>cyan/silver <b>0,107</b> · teal/gray <b>0,111</b> · pink/silver <b>0,122</b> · teal/blue <b>0,128</b> · blue/purple <b>0,132</b></td></tr>
-<tr><td>Deuteranopie (Grün)</td><td>red/green <b>0,070</b> · green/gray <b>0,076</b> · blue/purple <b>0,077</b> · orange/lime <b>0,078</b> · cyan/silver <b>0,080</b></td></tr>
-<tr><td>Protanopie (Rot)</td><td>orange/green <b>0,052</b> · cyan/pink <b>0,054</b> · teal/gray <b>0,058</b> · pink/silver <b>0,063</b> · red/teal <b>0,078</b></td></tr>
-<tr><td>Tritanopie (Blau)</td><td>teal/blue <b>0,031</b> · yellow/pink <b>0,056</b> · lime/silver <b>0,056</b> · orange/magenta <b>0,058</b> · purple/brown <b>0,067</b></td></tr></table>
+<table><tr><th>Vision</th><th>smallest distances ΔE<sub>OK</sub> (OKLab, ~0.02 just visible)</th></tr>
+<tr><td>normal vision</td><td>cyan/silver <b>0.107</b> · teal/gray <b>0.111</b> · pink/silver <b>0.122</b> · teal/blue <b>0.128</b> · blue/purple <b>0.132</b></td></tr>
+<tr><td>deuteranopia (green)</td><td>red/green <b>0.070</b> · green/gray <b>0.076</b> · blue/purple <b>0.077</b> · orange/lime <b>0.078</b> · cyan/silver <b>0.080</b></td></tr>
+<tr><td>protanopia (red)</td><td>orange/green <b>0.052</b> · cyan/pink <b>0.054</b> · teal/gray <b>0.058</b> · pink/silver <b>0.063</b> · red/teal <b>0.078</b></td></tr>
+<tr><td>tritanopia (blue)</td><td>teal/blue <b>0.031</b> · yellow/pink <b>0.056</b> · lime/silver <b>0.056</b> · orange/magenta <b>0.058</b> · purple/brown <b>0.067</b></td></tr></table>
 <ul>
-<li><b>Anzeige je Thema</b> (gleiche Namen, gleicher Farbton): im dunklen Thema wird Schwarz auf L 0,36 angehoben (#3b3d41) und dunkle Töne (teal, blue, purple, brown) um +0,04 heller; im hellen Thema wird Weiß auf L 0,93 abgesenkt (#e9e8e5). Exporte, STEP und 3MF nutzen die Grundwerte. Die Kontrastangabe in der Tafel ist die der flachen Farbe zum Hintergrund der 3D-Ansicht; Körper sind schattiert und haben Kantenlinien, daher sind auch Weiß (hell) und Schwarz (dunkel) zu sehen, aber nur knapp.</li>
-<li><b>Farbfehlsichtigkeit:</b> 16 Farben lassen sich nicht für alle Formen gut trennen. Bei Deuteranopie liegen red/green (0,070), green/gray und blue/purple am nächsten, bei Protanopie orange/green (0,052), bei der seltenen Tritanopie teal/blue (0,031) – die Liste zeigt deshalb immer Namen und Slot zur Farbe.</li>
-<li><b>Unbekannte Namen:</b> Farbton aus FNV-1a 64 des kleingeschriebenen Namens, L = 0,65 und C = 0,125 (Mediane der zwölf bunten Palettenfarben, C kleiner, bis der Wert in sRGB liegt). Gleicher Name → gleiche Farbe, auch über Sitzungen, CLI und UI hinweg.</li>
+<li><b>Display per theme</b> (same names, same hue): in the dark theme black is raised to L 0.36 (#3b3d41) and dark tones (teal, blue, purple, brown) +0.04 lighter; in the light theme white is lowered to L 0.93 (#e9e8e5). Exports, STEP and 3MF use the base values. The contrast given in the table is that of the flat color against the background of the 3D view; bodies are shaded and have edge lines, so white (light) and black (dark) are also visible, but only barely.</li>
+<li><b>Color vision deficiency:</b> 16 colors cannot be separated well for all forms. With deuteranopia red/green (0.070), green/gray and blue/purple are closest, with protanopia orange/green (0.052), with the rare tritanopia teal/blue (0.031) – the list therefore always shows name and slot next to the color.</li>
+<li><b>Unknown names:</b> hue from FNV-1a 64 of the lower-cased name, L = 0.65 and C = 0.125 (medians of the twelve chromatic palette colors, C reduced until the value lies in sRGB). Same name → same color, also across sessions, CLI and UI.</li>
 </ul>
-<table><tr><th>Eingabe</th><th>Farbe</th><th>Quelle</th></tr><tr><td><code>color("lightblue")</code></td><td><span class="sw" style="background:#bd70af"></span> <code>#bd70af</code></td><td>random</td></tr>
+<table><tr><th>Input</th><th>Color</th><th>Source</th></tr><tr><td><code>color("lightblue")</code></td><td><span class="sw" style="background:#bd70af"></span> <code>#bd70af</code></td><td>random</td></tr>
 <tr><td><code>color("Rot")</code></td><td><span class="sw" style="background:#d06f65"></span> <code>#d06f65</code></td><td>random</td></tr>
 <tr><td><code>color("salmon")</code></td><td><span class="sw" style="background:#8a82d7"></span> <code>#8a82d7</code></td><td>random</td></tr>
 <tr><td><code>color("navy")</code></td><td><span class="sw" style="background:#b78520"></span> <code>#b78520</code></td><td>random</td></tr>
@@ -179,38 +179,38 @@
 zufall.scad:2:7: Warnung (Auswertung): Farbe `Rot` unbekannt – Zufallsfarbe (Palette: red, orange, yellow, lime, green, teal, cyan, blue, purple, magenta, pink, brown, black, gray, silver, white)
 zufall.scad:3:7: Warnung (Auswertung): Farbe `salmon` unbekannt – Zufallsfarbe (Palette: red, orange, yellow, lime, green, teal, cyan, blue, purple, magenta, pink, brown, black, gray, silver, white)</pre>
 
-<h2>3 Regeln: Farbregionen und Filamente</h2>
-<h3>Farbregionen (Volumen je Farbe)</h3>
+<h2>3 Rules: color regions and filaments</h2>
+<h3>Color regions (volume per color)</h3>
 <ul>
-<li>Der Körper eines gefärbten Teilbaums gehört seiner Farbe: das Ergebnis des <code>color()</code>-Knotens, ins System des Bauteils gelegt (lokale Matrizen und <code>resize</code>-Faktoren auf dem Weg).</li>
-<li>Überlappen sich Farben, gewinnt die <b>spätere Anweisung</b>, die frühere wird um sie verringert; „später“ heißt Pre-Order im Baum: ein inneres <code>color()</code> nach dem äußeren, ein späteres Geschwister nach dem früheren.</li>
-<li><b>Abgezogenes gilt für alle</b>: jedes Stück wird mit dem Ergebnis geschnitten (<code>difference</code> nimmt allen Farben das Loch); Farben, die nur in abgezogenen Operanden vorkommen, bekommen keinen Slot.</li>
-<li>Material in keinem gefärbten Teilbaum (z. B. die Verrundung zwischen zwei Farben) gehört zur Farbe am Bauteil, sonst zum Standard-Eintrag (wenn das Bauteil ungefärbte Primitive hat), sonst zur ersten Farbe des Bauteils.</li>
-<li>Rechnung: <code>Stück(C) = R ∩ M(C) − ⋃ M(später)</code>, Rest <code>R − ⋃ M</code>, Stücke einer Farbe vereinigt, leere verworfen; je Farbknoten etwa drei Booleans. Ergebnis je Bauteil eine Liste (Farbe, Slot, Körper) mit Volumen; weicht die Summe vom Bauteilvolumen ab, warnt die Engine („Farbregionen ungenau“). Gecacht unter Bauteil, Farbknoten, Lagen und Farben; Farbe und Slot sind <b>nicht</b> Teil der Knotenschlüssel – eine neue Farbe oder ein neuer Slot rechnet keinen Knoten neu (Test <code>regions_are_cached…</code>). Ohne Farbknoten unter dem Bauteil gibt es keinen Boolean: eine Region aus den Körpern des Bauteils, Volumen = gecachtes Bauteilvolumen (Test <code>uncoloured_part_needs_no_boolean</code>).</li>
+<li>The body of a colored subtree belongs to its color: the result of the <code>color()</code> node, placed in the coordinate system of the part (local matrices and <code>resize</code> factors along the path).</li>
+<li>If colors overlap, the <b>later statement</b> wins, the earlier one is reduced by it; "later" means pre-order in the tree: an inner <code>color()</code> after the outer one, a later sibling after the earlier one.</li>
+<li><b>Subtracted material applies to all</b>: each piece is intersected with the result (<code>difference</code> removes the hole from all colors); colors that occur only in subtracted operands get no slot.</li>
+<li>Material in no colored subtree (e.g. the fillet between two colors) belongs to the color on the part, else to the default entry (if the part has uncolored primitives), else to the first color of the part.</li>
+<li>Computation: <code>Stück(C) = R ∩ M(C) − ⋃ M(später)</code> (piece of C = result ∩ material of C − union of later materials), remainder <code>R − ⋃ M</code>, pieces of one color united, empty ones dropped; about three booleans per color node. Result per part is a list (color, slot, body) with volume; if the sum differs from the part volume, the engine warns („Farbregionen ungenau“, "color regions inaccurate"). Cached by part, color nodes, placements and colors; color and slot are <b>not</b> part of the node keys – a new color or a new slot recomputes no node (test <code>regions_are_cached…</code>). Without color nodes below the part there is no boolean: one region from the bodies of the part, volume = cached part volume (test <code>uncoloured_part_needs_no_boolean</code>).</li>
 </ul>
-<h3>Filament-Slots</h3>
+<h3>Filament slots</h3>
 <ul>
-<li><code>color("teal", filament = 2)</code> legt den Slot der Farbe fest (1–16, benanntes Argument; die erste Angabe gilt, ein Widerspruch warnt).</li>
-<li>Material ohne <code>color()</code> („Standard“, #c3c8cf) druckt mit Slot 1.</li>
-<li>Alle anderen Farben bekommen in Reihenfolge ihres ersten Auftretens den niedrigsten freien Slot. Gleiche Farbe in anderer Schreibweise (<code>"gray"</code>, <code>"GREY"</code>, <code>"#7b7d81"</code>) ist derselbe Eintrag.</li>
-<li><b>Slot in der UI ändern = Text-Edit</b> (<code>SetFilament</code>): jede <code>color()</code>-Anweisung der Farbe mit <code>filament = …</code> bekommt den neuen Wert, sonst die erste <code>, filament = n</code>; „automatisch“ entfernt das Argument. Begründung: der Code bleibt die einzige Quelle (CLI-Export und UI-Export stimmen überein, der Agent sieht dasselbe), Undo und Git-Rand erfassen die Änderung; ein Vorschau-Override wie in der Parameterleiste ginge beim Speichern verloren und wäre für den Export eine zweite Wahrheit.</li>
+<li><code>color("teal", filament = 2)</code> sets the slot of the color (1–16, named argument; the first specification applies, a contradiction warns).</li>
+<li>Material without <code>color()</code> ("default", #c3c8cf) prints with slot 1.</li>
+<li>All other colors get the lowest free slot in the order of their first occurrence. The same color in another spelling (<code>"gray"</code>, <code>"GREY"</code>, <code>"#7b7d81"</code>) is the same entry.</li>
+<li><b>Changing the slot in the UI = text edit</b> (<code>SetFilament</code>): every <code>color()</code> statement of the color with <code>filament = …</code> gets the new value, otherwise the first one gets <code>, filament = n</code>; "automatic" removes the argument. Reason: the code stays the only source (CLI export and UI export agree, the agent sees the same), undo and the Git gutter capture the change; a preview override as in the parameter bar would be lost on saving and would be a second source of truth for the export.</li>
 </ul>
 
-<h2>4 Beispielmodell <code>examples/spec/mehrfarbig.scad</code></h2>
-<p>Türschild (weiße Platte, Rahmen teal, Schrift „CAD“ als Relief in red mit festem Slot 3, abgezogene Aufhängebohrung) und Spielfigur (blauer Körper aus Sockel und gedrehtem Profil, weißer Kragen, gelber Kopf) als zwei Bauteile.</p>
-<div class="two"><figure><img src="img/cli-hell.png" alt=""><figcaption><code>cad render</code> – Farbe je Fläche</figcaption></figure><figure><img src="img/cli-dunkel.png" alt=""><figcaption><code>cad render --theme dark</code></figcaption></figure></div>
-<div class="two"><figure><img src="img/cli-regionen.png" alt=""><figcaption><code>--show regions --theme dark</code>: Körper je Farbe</figcaption></figure><figure><img src="img/cli-schnitt.png" alt=""><figcaption><code>--section x=80 --part figur --show regions --view right</code>: Schnitt durch die Regionskörper; die Kappen sind wie immer rot schraffiert, die Konturen zeigen die Grenzen zwischen Kopf (gewinnt im Hals), Kragen und Körper</figcaption></figure></div>
-<figure><img src="img/cli-ansichten.png" alt=""><figcaption>Kontaktbogen iso, front, top, right</figcaption></figure>
-<h3>Farben und Volumen (<code>cad measure --colors</code>)</h3>
-<table><tr><th>Slot</th><th>Farbe</th><th>Quelle</th><th>Zeilen</th><th>Volumen</th><th>Masse PLA</th></tr>
-<tr><td><b>F1</b></td><td><span class="sw" style="background:#f4f3f0"></span> white <code>#f4f3f0</code></td><td>palette</td><td>36, 66</td><td class="n">4.900,8 mm³</td><td class="n">6,08 g</td></tr>
-<tr><td><b>F2</b></td><td><span class="sw" style="background:#217274"></span> teal <code>#217274</code></td><td>palette</td><td>37</td><td class="n">622,5 mm³</td><td class="n">0,77 g</td></tr>
-<tr><td><b>F3</b> <span class='small'>(filament = 3)</span></td><td><span class="sw" style="background:#c74240"></span> red <code>#c74240</code></td><td>palette</td><td>42</td><td class="n">208,8 mm³</td><td class="n">0,26 g</td></tr>
-<tr><td><b>F4</b></td><td><span class="sw" style="background:#2e65b9"></span> blue <code>#2e65b9</code></td><td>palette</td><td>61</td><td class="n">1.689,3 mm³</td><td class="n">2,09 g</td></tr>
-<tr><td><b>F5</b></td><td><span class="sw" style="background:#f7d974"></span> yellow <code>#f7d974</code></td><td>palette</td><td>67</td><td class="n">226,2 mm³</td><td class="n">0,28 g</td></tr></table>
-<table><tr><th>Bauteil</th><th>Regionen (Slot, Farbe, mm³)</th><th>Summe</th><th>Bauteilvolumen</th><th>Warnung</th></tr><tr><td><b>schild</b></td><td>F1 white 4.773,57 · F2 teal 622,50 · F3 red 208,80</td><td class="n">5.604,873</td><td class="n">5.604,873</td><td>–</td></tr>
-<tr><td><b>figur</b></td><td>F4 blue 1.689,33 · F1 white 127,23 · F5 yellow 226,24</td><td class="n">2.042,797</td><td class="n">2.042,797</td><td>–</td></tr></table>
-<details open><summary class="small">Quelltext</summary><pre>// Zweck: Mehrfarbig drucken (Bericht 11) – Türschild mit Schrift-Relief und Spielfigur als
+<h2>4 Example model <code>examples/spec/mehrfarbig.scad</code></h2>
+<p>Door sign (white plate, frame teal, lettering "CAD" as relief in red with fixed slot 3, subtracted hanging hole) and game piece (blue body of base and revolved profile, white collar, yellow head) as two parts.</p>
+<div class="two"><figure><img src="img/cli-hell.png" alt=""><figcaption><code>cad render</code> – color per face</figcaption></figure><figure><img src="img/cli-dunkel.png" alt=""><figcaption><code>cad render --theme dark</code></figcaption></figure></div>
+<div class="two"><figure><img src="img/cli-regionen.png" alt=""><figcaption><code>--show regions --theme dark</code>: bodies per color</figcaption></figure><figure><img src="img/cli-schnitt.png" alt=""><figcaption><code>--section x=80 --part figur --show regions --view right</code>: section through the region bodies; the caps are hatched red as always, the contours show the boundaries between head (wins in the neck), collar and body</figcaption></figure></div>
+<figure><img src="img/cli-ansichten.png" alt=""><figcaption>Contact sheet iso, front, top, right</figcaption></figure>
+<h3>Colors and volumes (<code>cad measure --colors</code>)</h3>
+<table><tr><th>Slot</th><th>Color</th><th>Source</th><th>Lines</th><th>Volume</th><th>Mass PLA</th></tr>
+<tr><td><b>F1</b></td><td><span class="sw" style="background:#f4f3f0"></span> white <code>#f4f3f0</code></td><td>palette</td><td>36, 66</td><td class="n">4,900.8 mm³</td><td class="n">6.08 g</td></tr>
+<tr><td><b>F2</b></td><td><span class="sw" style="background:#217274"></span> teal <code>#217274</code></td><td>palette</td><td>37</td><td class="n">622.5 mm³</td><td class="n">0.77 g</td></tr>
+<tr><td><b>F3</b> <span class='small'>(filament = 3)</span></td><td><span class="sw" style="background:#c74240"></span> red <code>#c74240</code></td><td>palette</td><td>42</td><td class="n">208.8 mm³</td><td class="n">0.26 g</td></tr>
+<tr><td><b>F4</b></td><td><span class="sw" style="background:#2e65b9"></span> blue <code>#2e65b9</code></td><td>palette</td><td>61</td><td class="n">1,689.3 mm³</td><td class="n">2.09 g</td></tr>
+<tr><td><b>F5</b></td><td><span class="sw" style="background:#f7d974"></span> yellow <code>#f7d974</code></td><td>palette</td><td>67</td><td class="n">226.2 mm³</td><td class="n">0.28 g</td></tr></table>
+<table><tr><th>Part</th><th>Regions (slot, color, mm³)</th><th>Sum</th><th>Part volume</th><th>Warning</th></tr><tr><td><b>schild</b></td><td>F1 white 4,773.57 · F2 teal 622.50 · F3 red 208.80</td><td class="n">5,604.873</td><td class="n">5,604.873</td><td>–</td></tr>
+<tr><td><b>figur</b></td><td>F4 blue 1,689.33 · F1 white 127.23 · F5 yellow 226.24</td><td class="n">2,042.797</td><td class="n">2,042.797</td><td>–</td></tr></table>
+<details open><summary class="small">Source code</summary><pre>// Zweck: Mehrfarbig drucken (Bericht 11) – Türschild mit Schrift-Relief und Spielfigur als
 // zwei Bauteile, Farben aus der Palette, ein fester Filament-Slot; Export als 3MF mit einem
 // Teil je Farbe für Bambu Studio / OrcaSlicer.
 
@@ -286,8 +286,8 @@ schild: schild();
 figur: figur();
 </pre></details>
 
-<h2>5 3MF für Bambu Studio und OrcaSlicer</h2>
-<h3>Struktur</h3>
+<h2>5 3MF for Bambu Studio and OrcaSlicer</h2>
+<h3>Structure</h3>
 <pre>Archive:  mehrfarbig.3mf
   Length      Date    Time    Name
 ---------  ---------- -----   ----
@@ -299,9 +299,9 @@ figur: figur();
    605217                     4 files
 </pre>
 <ul>
-<li><code>3D/3dmodel.model</code> (Kern 2015/02 + Materials-Erweiterung): <code>m:colorgroup</code> mit einer <code>m:color</code> je Farbe (#RRGGBBAA); je (Bauteil, Farbe) ein Netz-Objekt mit <code>pid</code>/<code>pindex</code> (Farbe auf Objektebene); je Bauteil ein Objekt mit <code>components</code> ohne <code>transform</code> (alle Netze im selben Koordinatensystem – nichts wird verschoben); ein Build-Item je Bauteil. <code>Application</code> = „controller-cad 0.1.0“.</li>
-<li><code>Metadata/model_settings.config</code>: je Bauteil <code>&lt;object id&gt;</code> (= Build-Item) mit <code>name</code> und <code>extruder</code> (Slot der größten Farbe), je Farbe <code>&lt;part id&gt;</code> (= ID des Netz-Objekts) mit <code>name</code> und <code>extruder</code> = Slot.</li>
-<li>Kein <code>Metadata/project_settings.config</code> (siehe Annahmen). Content-Type für <code>.config</code> eingetragen.</li>
+<li><code>3D/3dmodel.model</code> (core 2015/02 + materials extension): <code>m:colorgroup</code> with one <code>m:color</code> per color (#RRGGBBAA); per (part, color) one mesh object with <code>pid</code>/<code>pindex</code> (color at object level); per part one object with <code>components</code> without <code>transform</code> (all meshes in the same coordinate system – nothing is moved); one build item per part. <code>Application</code> = "controller-cad 0.1.0".</li>
+<li><code>Metadata/model_settings.config</code>: per part <code>&lt;object id&gt;</code> (= build item) with <code>name</code> and <code>extruder</code> (slot of the largest color), per color <code>&lt;part id&gt;</code> (= ID of the mesh object) with <code>name</code> and <code>extruder</code> = slot.</li>
+<li>No <code>Metadata/project_settings.config</code> (see assumptions). Content type for <code>.config</code> registered.</li>
 </ul>
 <pre>&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
 &lt;model unit=&quot;millimeter&quot; xml:lang=&quot;en-US&quot; xmlns=&quot;http://schemas.microsoft.com/3dmanufacturing/core/2015/02&quot; xmlns:m=&quot;http://schemas.microsoft.com/3dmanufacturing/material/2015/02&quot;&gt;
@@ -364,16 +364,16 @@ figur: figur();
   &lt;/object&gt;
 &lt;/config&gt;
 </pre>
-<h3>Annahmen und ihre Quellen</h3>
-<p>Gelesen im Quellcode von Bambu Studio (<code>bambulab/BambuStudio</code>, Zweig master) und OrcaSlicer (<code>SoftFever/OrcaSlicer</code>, Zweig main), abgerufen am 23.10.2026 über raw.githubusercontent.com (Prüfsummen unten):</p>
+<h3>Assumptions and their sources</h3>
+<p>Read in the source code of Bambu Studio (<code>bambulab/BambuStudio</code>, branch master) and OrcaSlicer (<code>SoftFever/OrcaSlicer</code>, branch main), retrieved on 2026-10-23 via raw.githubusercontent.com (checksums below):</p>
 <ol>
-<li><b>Fremde 3MF:</b> Bambu Studio gilt eine Datei als eigene nur, wenn <code>Application</code> mit „BambuStudio-“ beginnt (<code>_handle_end_metadata</code>, OrcaSlicer zusätzlich „OrcaSlicer-“). Wir geben uns nicht als Bambu Studio aus; die Datei wird als „From_Other“ geladen (<code>Model::read_from_archive</code>; PrusaSlicer-Dateien erkennt <code>PrusaFileParser</code> am Namen „PrusaSlicer“).</li>
-<li><b><code>model_settings.config</code> wird auch für fremde Dateien gelesen</b> (<code>_load_model_from_file</code>, Zweig <code>BBS_MODEL_CONFIG_FILE</code>; Fehler nur für eigene Dateien fatal). <code>&lt;object id&gt;</code> wird über die ID des Build-Item-Objekts zugeordnet, <code>&lt;part id&gt;</code> über die ID des Unterobjekts (<code>_handle_start_config_volume</code>: ohne Dreiecksbereich zählt <code>subobject_id</code>; <code>_generate_volumes_new</code> sucht <code>volume_iter.subobject_id == sub_object-&gt;id</code>). Alle übrigen Schlüssel einer <code>part</code> landen in der Volumen-Konfiguration (<code>volume-&gt;config.set_deserialize</code>), also auch <code>extruder</code>.</li>
-<li><b>Komponenten ohne <code>p:path</code></b> verweisen auf Objekte derselben Datei (<code>_handle_start_component</code>: Pfad leer = aktuelles Modell); <code>_generate_current_object_list</code> löst sie in Unterobjekte auf, jede Komponente wird ein Teil (Volumen) desselben Objekts mit der Transformation der Komponente (hier keine).</li>
-<li><b>Ein Volumen:</b> nach dem Laden entfernt der Importer das <code>extruder</code> eines einzigen Volumens; dann gilt das des Objekts – deshalb schreiben wir es auch am Objekt.</li>
-<li><b>Farben:</b> der Parser vergleicht Elementnamen wörtlich mit <code>m:colorgroup</code>/<code>m:color</code> (Präfix <code>m</code> nötig). Mit <code>pid</code>/<code>pindex</code> am Netz-Objekt bekommt jedes Dreieck die Farbe (<code>_handle_start_triangle</code>), und das aktuelle Bambu Studio bietet beim Öffnen den Farbdialog an (<code>Plater.cpp</code>: <code>extract_colors_to_obj_dialog</code>, <code>ObjColorDialog</code>); „Append“ fügt die Farben als Filamente hinzu, und bei Farben je Volumen setzt <code>ObjColorPanel::apply_volume_filament_ids</code> die Extruder je Volumen, ohne die Volumengrenzen zu übermalen. Ältere Versionen und OrcaSlicer nutzen die Farbgruppe nur auf Objektebene und ohne Metadaten.</li>
-<li><b>Kein <code>project_settings.config</code>:</b> Bambu Studio lädt es nur aus eigenen Dateien (<code>dont_load_config = true</code> ohne Generator-Version); OrcaSlicer lädt es immer und legt es über seine Standardwerte (<code>config += config_loaded</code>) – eine Datei nur mit <code>filament_colour</code> setzte dort Drucker- und Prozesseinstellungen zurück. Die Filamentfarben kommen deshalb aus dem Farbdialog (Bambu) oder vom Nutzer/AMS-Abgleich.</li>
-<li><b>Fehlende Filamente:</b> beim Import (nur Geometrie) ergänzt Bambu Studio die Filamentliste bis zum höchsten <code>extruder</code> der Datei (<code>Plater.cpp</code>: „add extruder … if only import geometry“, mit Farben aus <code>get_next_color_for_filament</code>).</li>
+<li><b>Foreign 3MF:</b> Bambu Studio treats a file as its own only if <code>Application</code> starts with "BambuStudio-" (<code>_handle_end_metadata</code>, OrcaSlicer additionally "OrcaSlicer-"). We do not pose as Bambu Studio; the file is loaded as "From_Other" (<code>Model::read_from_archive</code>; PrusaSlicer files are recognized by <code>PrusaFileParser</code> from the name "PrusaSlicer").</li>
+<li><b><code>model_settings.config</code> is also read for foreign files</b> (<code>_load_model_from_file</code>, branch <code>BBS_MODEL_CONFIG_FILE</code>; errors are fatal only for its own files). <code>&lt;object id&gt;</code> is matched via the ID of the build item object, <code>&lt;part id&gt;</code> via the ID of the sub-object (<code>_handle_start_config_volume</code>: without a triangle range, <code>subobject_id</code> counts; <code>_generate_volumes_new</code> looks for <code>volume_iter.subobject_id == sub_object-&gt;id</code>). All other keys of a <code>part</code> go into the volume configuration (<code>volume-&gt;config.set_deserialize</code>), including <code>extruder</code>.</li>
+<li><b>Components without <code>p:path</code></b> refer to objects of the same file (<code>_handle_start_component</code>: empty path = current model); <code>_generate_current_object_list</code> resolves them into sub-objects, each component becomes a sub-part (volume) of the same object with the component's transformation (none here).</li>
+<li><b>One volume:</b> after loading, the importer removes the <code>extruder</code> of a single volume; then the object's applies – that is why we also write it on the object.</li>
+<li><b>Colors:</b> the parser compares element names literally with <code>m:colorgroup</code>/<code>m:color</code> (prefix <code>m</code> required). With <code>pid</code>/<code>pindex</code> on the mesh object every triangle gets the color (<code>_handle_start_triangle</code>), and current Bambu Studio offers the color dialog on opening (<code>Plater.cpp</code>: <code>extract_colors_to_obj_dialog</code>, <code>ObjColorDialog</code>); "Append" adds the colors as filaments, and with colors per volume <code>ObjColorPanel::apply_volume_filament_ids</code> sets the extruders per volume without painting over the volume boundaries. Older versions and OrcaSlicer use the color group only at object level and without metadata.</li>
+<li><b>No <code>project_settings.config</code>:</b> Bambu Studio loads it only from its own files (<code>dont_load_config = true</code> without generator version); OrcaSlicer always loads it and applies it over its defaults (<code>config += config_loaded</code>) – a file with only <code>filament_colour</code> would reset printer and process settings there. The filament colors therefore come from the color dialog (Bambu) or from the user/AMS sync.</li>
+<li><b>Missing filaments:</b> on import (geometry only) Bambu Studio extends the filament list up to the highest <code>extruder</code> in the file (<code>Plater.cpp</code>: "add extruder … if only import geometry", with colors from <code>get_next_color_for_filament</code>).</li>
 </ol>
 <pre>b725d2c7d872c7e4ba31fa6d67c333d59da939e417d02eae16d8e9a15fa16608  SoftFever/OrcaSlicer main/src/libslic3r/Format/bbs/3mf.cpp
 c32c66d03d16fe17cf5f4cde3ac68025791b20f423984aac4694094d6033d650  SoftFever/OrcaSlicer main/src/slic3r/GUI/Plater.cpp
@@ -384,8 +384,8 @@ c6f9aa6c45c04c2849118a11bc0c0c81329aec9cf9817eb01edd7733210f2765  bambulab/Bambu
 4a5a4db32d9ae48e98ba0e53c1fba5cf6700eb67cb2746318627b43c4add86d8  bambulab/BambuStudio master/src/slic3r/GUI/Plater.cpp
 </pre>
 
-<h2>6 Prüfung der 3MF</h2>
-<p><code>tools/report/verify3mf.py</code> auf der Datei von <code>cad export examples/spec/mehrfarbig.scad --part schild --part figur -o mehrfarbig.3mf</code>, erwartete Werte aus <code>cad measure --colors --json</code>:</p>
+<h2>6 Verification of the 3MF</h2>
+<p><code>tools/report/verify3mf.py</code> on the file from <code>cad export examples/spec/mehrfarbig.scad --part schild --part figur -o mehrfarbig.3mf</code>, expected values from <code>cad measure --colors --json</code>:</p>
 <pre>lib3mf 2.5.0: 6 Netze, 2 Komponentenobjekte, 2 Build-Items, 5 Farben, Warnungen 0, alle mannigfaltig: True
 trimesh 5.1.1: 6 Geometrien, wasserdicht: True
 Bambu/Orca-Import (Modell): Objekt schild: schild – white → Extruder 1 #F4F3F0FF, schild – teal → Extruder 2 #217274FF, schild – red → Extruder 3 #C74240FF
@@ -399,19 +399,19 @@ PrusaSlicer (PrusaSlicer-2.7.2+UNKNOWN based on Slic3r (with GUI support)): 6 Ob
   figur yellow: F5 Bambu 5, B-Rep 226.24 Netz 225.32 mm³ ok
 alle Prüfungen bestanden
 </pre>
-<table><tr><th>Bauteil</th><th>Farbe</th><th>Slot</th><th>Extruder (Bambu-Modell)</th><th>Farbe in 3MF</th><th>Volumen B-Rep</th><th>Volumen Netz</th><th></th></tr><tr><td>schild</td><td><span class="sw" style="background:#F4F3F0"></span> white</td><td>F1</td><td>1</td><td><code>#F4F3F0FF</code></td><td class="n">4.773,573</td><td class="n">4.773,635</td><td class="ok">ok</td></tr>
-<tr><td>schild</td><td><span class="sw" style="background:#217274"></span> teal</td><td>F2</td><td>2</td><td><code>#217274FF</code></td><td class="n">622,500</td><td class="n">622,500</td><td class="ok">ok</td></tr>
-<tr><td>schild</td><td><span class="sw" style="background:#C74240"></span> red</td><td>F3</td><td>3</td><td><code>#C74240FF</code></td><td class="n">208,800</td><td class="n">208,800</td><td class="ok">ok</td></tr>
-<tr><td>figur</td><td><span class="sw" style="background:#2E65B9"></span> blue</td><td>F4</td><td>4</td><td><code>#2E65B9FF</code></td><td class="n">1.689,325</td><td class="n">1.688,168</td><td class="ok">ok</td></tr>
-<tr><td>figur</td><td><span class="sw" style="background:#F4F3F0"></span> white</td><td>F1</td><td>1</td><td><code>#F4F3F0FF</code></td><td class="n">127,235</td><td class="n">127,029</td><td class="ok">ok</td></tr>
-<tr><td>figur</td><td><span class="sw" style="background:#F7D974"></span> yellow</td><td>F5</td><td>5</td><td><code>#F7D974FF</code></td><td class="n">226,237</td><td class="n">225,322</td><td class="ok">ok</td></tr></table>
+<table><tr><th>Part</th><th>Color</th><th>Slot</th><th>Extruder (Bambu model)</th><th>Color in 3MF</th><th>Volume B-rep</th><th>Volume mesh</th><th></th></tr><tr><td>schild</td><td><span class="sw" style="background:#F4F3F0"></span> white</td><td>F1</td><td>1</td><td><code>#F4F3F0FF</code></td><td class="n">4,773.573</td><td class="n">4,773.635</td><td class="ok">ok</td></tr>
+<tr><td>schild</td><td><span class="sw" style="background:#217274"></span> teal</td><td>F2</td><td>2</td><td><code>#217274FF</code></td><td class="n">622.500</td><td class="n">622.500</td><td class="ok">ok</td></tr>
+<tr><td>schild</td><td><span class="sw" style="background:#C74240"></span> red</td><td>F3</td><td>3</td><td><code>#C74240FF</code></td><td class="n">208.800</td><td class="n">208.800</td><td class="ok">ok</td></tr>
+<tr><td>figur</td><td><span class="sw" style="background:#2E65B9"></span> blue</td><td>F4</td><td>4</td><td><code>#2E65B9FF</code></td><td class="n">1,689.325</td><td class="n">1,688.168</td><td class="ok">ok</td></tr>
+<tr><td>figur</td><td><span class="sw" style="background:#F4F3F0"></span> white</td><td>F1</td><td>1</td><td><code>#F4F3F0FF</code></td><td class="n">127.235</td><td class="n">127.029</td><td class="ok">ok</td></tr>
+<tr><td>figur</td><td><span class="sw" style="background:#F7D974"></span> yellow</td><td>F5</td><td>5</td><td><code>#F7D974FF</code></td><td class="n">226.237</td><td class="n">225.322</td><td class="ok">ok</td></tr></table>
 <ul>
-<li><b>lib3mf</b> 2.5.0 (Bibliothek des 3MF-Konsortiums): liest ohne Warnung, 6 Netze, alle mannigfaltig und orientiert (<code>IsManifoldAndOriented</code>), Komponenten und Build-Items ohne Transformation, Farbe je Netz aus der Farbgruppe.</li>
-<li><b>trimesh</b> 5.1.1: 6 Geometrien, alle wasserdicht.</li>
-<li><b>Bambu/Orca-Modell</b>: der Importer nachgebaut (Abschnitt 5): Build-Item → Komponenten → Unterobjekte, Teile über <code>part id</code>, Extruder je Teil, Farbe je Teil; Datei nicht als Bambu-Projekt erkannt (gewollt), kein <code>project_settings.config</code>. Volumen B-Rep ↔ Netz innerhalb 0,5 %.</li>
-<li><b>PrusaSlicer</b> PrusaSlicer-2.7.2+UNKNOWN based on Slic3r (with GUI support) (apt, CLI <code>--info</code>): lädt die Datei, 6 Objekte (je Netz eines, an der richtigen Stelle; PrusaSlicer liest <code>model_settings.config</code> nicht und macht aus Komponenten fremder Dateien eigene Objekte), alle mannigfaltig, Volumen wie oben.</li>
-<li><b>Bambu Studio / OrcaSlicer selbst</b> liefen nicht: im Container gibt es keinen Zugriff auf deren Release-Dateien (AppImage), der Bau aus den Quellen bräuchte Stunden und viele GB. Die Zuordnung ist deshalb aus dem Quellcode abgeleitet und mit dem Modell geprüft; die Prüfung im Slicer beschreibt Abschnitt 10.</li>
-<li>STL je Farbe (ZIP, <code>cad export --per-color</code>): <pre>Archive:  mehrfarbig-farben.zip
+<li><b>lib3mf</b> 2.5.0 (library of the 3MF Consortium): reads without warning, 6 meshes, all manifold and oriented (<code>IsManifoldAndOriented</code>), components and build items without transformation, color per mesh from the color group.</li>
+<li><b>trimesh</b> 5.1.1: 6 geometries, all watertight.</li>
+<li><b>Bambu/Orca model</b>: the importer re-implemented (section 5): build item → components → sub-objects, sub-parts via <code>part id</code>, extruder per sub-part, color per sub-part; file not recognized as a Bambu project (intended), no <code>project_settings.config</code>. Volume B-rep ↔ mesh within 0.5 %.</li>
+<li><b>PrusaSlicer</b> PrusaSlicer-2.7.2+UNKNOWN based on Slic3r (with GUI support) (apt, CLI <code>--info</code>): loads the file, 6 objects (one per mesh, at the right position; PrusaSlicer does not read <code>model_settings.config</code> and turns components of foreign files into separate objects), all manifold, volumes as above.</li>
+<li><b>Bambu Studio / OrcaSlicer themselves</b> were not run: the container has no access to their release files (AppImage), building from source would take hours and many GB. The mapping is therefore derived from the source code and checked with the model; section 10 describes the check in the slicer.</li>
+<li>STL per color (ZIP, <code>cad export --per-color</code>): <pre>Archive:  mehrfarbig-farben.zip
   Length      Date    Time    Name
 ---------  ---------- -----   ----
     19284  1980-01-01 00:00   schild_F1_white.stl
@@ -425,154 +425,154 @@ alle Prüfungen bestanden
 </pre></li>
 </ul>
 
-<h2>7 UI: Farben &amp; Filamente (Playwright, Chromium)</h2>
-<div class="scen"><h3>F01 Farbliste mit Slots, Volumen, Masse</h3><p>Beispiel mehrfarbig.scad: fünf Farben in Reihenfolge des ersten Auftretens, red mit filament = 3 fest, die anderen automatisch (1, 2, 4, 5). Volumen je Farbe aus den Farbregionen beider Bauteile, Masse bei PLA 1,24 g/cm³. In der 3D-Ansicht trägt jede Fläche die Farbe ihres color()-Aufrufs.</p>
-<ul class="checks"><li>Labels und Slots white 1, teal 2, red 3 (explizit), blue 4, yellow 5</li><li>Summe der Regionen = Volumen je Bauteil</li><li>red 208.8 mm³ / 0.26 g; Farbfelder mit Palettenwerten</li><li>1072 rote und 6499 petrolfarbene Pixel in der Ansicht</li></ul>
-<figure><img src="img/f01-farbliste-hell.jpg" alt=""><figcaption>helles Thema, Farbliste rechts</figcaption></figure>
-<figure><img src="img/f01-panel-hell.jpg" alt=""><figcaption>Farbliste</figcaption></figure></div>
-<div class="scen"><h3>F02 Slot per Dropdown</h3><p>Slot von teal auf 5: der Editor bekommt color(&quot;teal&quot;, filament = 5) (Text-Edit über die Engine, rückgängig machbar), blue rückt auf den freien Slot 2. „automatisch“ entfernt das Argument wieder. Material ohne color() ist immer Filament 1.</p>
-<ul class="checks"><li>Text enthält color(&quot;teal&quot;, filament = 5)</li><li>Slots danach white 1, teal 5, red 3, blue 2, yellow 4</li><li>automatisch: Text wieder wie vorher</li><li>Standard-Eintrag ohne Auswahl</li></ul>
-<figure><img src="img/f02-slot-geaendert.jpg" alt=""><figcaption>teal auf Slot 5, Code geändert</figcaption></figure></div>
-<div class="scen"><h3>F03 Export für Bambu Studio / OrcaSlicer</h3><p>„3MF mehrfarbig“: ein Objekt je Bauteil (schild, figur), darin ein Teil je Farbe ohne Verschiebung, Farbgruppe mit fünf Farben, Metadata/model_settings.config mit extruder je Teil. „STL je Farbe“: ZIP mit sechs Dateien F&lt;slot&gt;_&lt;farbe&gt;.stl. „3MF einfarbig“ ohne Farben.</p>
-<ul class="checks"><li>2 Build-Items, 6 Komponenten, 5 m:color</li><li>schild – red → extruder 3</li><li>ZIP mit 6 STL (Bauteil_F&lt;slot&gt;_&lt;farbe&gt;.stl)</li><li>einfarbig ohne colorgroup</li></ul>
+<h2>7 UI: colors &amp; filaments (Playwright, Chromium)</h2>
+<div class="scen"><h3>F01 Color list with slots, volume, mass</h3><p>Example mehrfarbig.scad: five colors in the order of first occurrence, red fixed with filament = 3, the others automatic (1, 2, 4, 5). Volume per color from the color regions of both parts, mass for PLA 1.24 g/cm³. In the 3D view each face carries the color of its color() call.</p>
+<ul class="checks"><li>labels and slots white 1, teal 2, red 3 (explicit), blue 4, yellow 5</li><li>sum of the regions = volume per part</li><li>red 208.8 mm³ / 0.26 g; swatches with palette values</li><li>1072 red and 6499 teal pixels in the view</li></ul>
+<figure><img src="img/f01-farbliste-hell.jpg" alt=""><figcaption>light theme, color list on the right</figcaption></figure>
+<figure><img src="img/f01-panel-hell.jpg" alt=""><figcaption>Color list</figcaption></figure></div>
+<div class="scen"><h3>F02 Slot via dropdown</h3><p>Slot of teal set to 5: the editor gets color(&quot;teal&quot;, filament = 5) (text edit via the engine, undoable), blue moves to the free slot 2. "automatic" (German UI: „automatisch“) removes the argument again. Material without color() is always filament 1.</p>
+<ul class="checks"><li>text contains color(&quot;teal&quot;, filament = 5)</li><li>slots afterwards white 1, teal 5, red 3, blue 2, yellow 4</li><li>automatic: text as before again</li><li>default entry without selector</li></ul>
+<figure><img src="img/f02-slot-geaendert.jpg" alt=""><figcaption>teal on slot 5, code changed</figcaption></figure></div>
+<div class="scen"><h3>F03 Export for Bambu Studio / OrcaSlicer</h3><p>"3MF multi-color" (German UI: „3MF mehrfarbig“): one object per part (schild, figur), in it one sub-part per color without offset, color group with five colors, Metadata/model_settings.config with extruder per sub-part. "STL per color" („STL je Farbe“): ZIP with six files F&lt;slot&gt;_&lt;farbe&gt;.stl. "3MF single-color" („3MF einfarbig“) without colors.</p>
+<ul class="checks"><li>2 build items, 6 components, 5 m:color</li><li>schild – red → extruder 3</li><li>ZIP with 6 STL (Bauteil_F&lt;slot&gt;_&lt;farbe&gt;.stl)</li><li>single-color without colorgroup</li></ul>
 </div>
-<div class="scen"><h3>F04 Farbregionen in der Ansicht</h3><p>„Farbregionen zeigen“: statt der Farbe je Fläche die Körper je Farbe, wie sie exportiert werden (sechs Körper: drei je Bauteil).</p>
-<ul class="checks"><li>6 Regionskörper gezeichnet</li><li>532 gelbe Pixel</li><li>aus: wieder Farbe je Fläche</li></ul>
-<figure><img src="img/f04-farbregionen.jpg" alt=""><figcaption>Farbregionen</figcaption></figure></div>
-<div class="scen"><h3>F05 Dunkles Thema</h3><p>Thema „Dunkel“: Panels, Editor (Syntax, Zeilennummern, Suchleiste), Statusleiste und Farbliste dunkel, Kontrast der Texte ≥ 4,5 (computed styles); 3D-Ansicht mit dunklem Hintergrund, Palette-Farben in der dunklen Variante (teal #307e80 statt #217274), Export nutzt die Grundwerte.</p>
-<ul class="checks"><li>Text auf Hintergrund: 15.15</li><li>Editor-Text: 14.19</li><li>Zeilennummern: 7.37</li><li>Statusleiste: 7.37</li><li>Farbliste: 14.19</li><li>Werkzeugleiste: 12.80</li></ul>
-<figure><img src="img/f05-farbliste-dunkel.jpg" alt=""><figcaption>dunkles Thema</figcaption></figure>
-<figure><img src="img/f05-panel-dunkel.jpg" alt=""><figcaption>Farbliste dunkel</figcaption></figure>
-<figure><img src="img/f05-dunkel-suche.jpg" alt=""><figcaption>Editor mit Suchleiste</figcaption></figure></div>
-<div class="scen"><h3>F06 Thema „System“</h3><p>Standard ist „System“: das Thema folgt prefers-color-scheme, auch beim Umschalten im laufenden Betrieb; „Hell“/„Dunkel“ sind fest und bleiben nach dem Neuladen.</p>
-<ul class="checks"><li>System + dunkel → dark, dann hell → light, dunkel → dark</li><li>fest Hell bleibt bei dunklem System</li><li>Wahl übersteht Neuladen</li></ul>
+<div class="scen"><h3>F04 Color regions in the view</h3><p>"Show color regions": instead of the color per face, the bodies per color as they are exported (six bodies: three per part).</p>
+<ul class="checks"><li>6 region bodies drawn</li><li>532 yellow pixels</li><li>off: color per face again</li></ul>
+<figure><img src="img/f04-farbregionen.jpg" alt=""><figcaption>Color regions</figcaption></figure></div>
+<div class="scen"><h3>F05 Dark theme</h3><p>Theme "Dark" (German UI: „Dunkel“): panels, editor (syntax, line numbers, search bar), status bar and color list dark, text contrast ≥ 4.5 (computed styles); 3D view with dark background, palette colors in the dark variant (teal #307e80 instead of #217274), export uses the base values.</p>
+<ul class="checks"><li>text on background: 15.15</li><li>editor text: 14.19</li><li>line numbers: 7.37</li><li>status bar: 7.37</li><li>color list: 14.19</li><li>toolbar: 12.80</li></ul>
+<figure><img src="img/f05-farbliste-dunkel.jpg" alt=""><figcaption>dark theme</figcaption></figure>
+<figure><img src="img/f05-panel-dunkel.jpg" alt=""><figcaption>Color list dark</figcaption></figure>
+<figure><img src="img/f05-dunkel-suche.jpg" alt=""><figcaption>Editor with search bar</figcaption></figure></div>
+<div class="scen"><h3>F06 Theme "System"</h3><p>The default is "System": the theme follows prefers-color-scheme, also when switching at run time; "Light"/"Dark" (German UI: „Hell“/„Dunkel“) are fixed and persist after reloading.</p>
+<ul class="checks"><li>System + dark → dark, then light → light, dark → dark</li><li>fixed Light stays with dark system</li><li>choice survives reload</li></ul>
 </div>
-<div class="scen"><h3>F07 Unbekannte Farbe</h3><p>color(&quot;lightblue&quot;): Warnung am Argument „Farbe <code>lightblue</code> unbekannt – Zufallsfarbe (Palette: …)“, die Farbe kommt aus dem Hash des Namens (gleich für LightBlue, gleiche Helligkeit und Sättigung wie die Palette); „Teal“ (Groß/Klein egal) ist die Palettenfarbe.</p>
-<ul class="checks"><li>Zufallsfarbe #bd70af für lightblue und LightBlue</li><li>Warnung in Zeile 1</li><li>Teal = Palette</li></ul>
-<figure><img src="img/f07-zufallsfarbe.jpg" alt=""><figcaption>Warnung und Farbliste</figcaption></figure></div>
+<div class="scen"><h3>F07 Unknown color</h3><p>color(&quot;lightblue&quot;): warning on the argument „Farbe <code>lightblue</code> unbekannt – Zufallsfarbe (Palette: …)“, the color comes from the hash of the name (the same for LightBlue, same lightness and saturation as the palette); "Teal" (case-insensitive) is the palette color.</p>
+<ul class="checks"><li>random color #bd70af for lightblue and LightBlue</li><li>warning in line 1</li><li>Teal = palette</li></ul>
+<figure><img src="img/f07-zufallsfarbe.jpg" alt=""><figcaption>Warning and color list</figcaption></figure></div>
 
-<h3>Desktop-App (Tauri, nativer Kernel)</h3>
-<div class="scen"><h3>T12 Farben &amp; Filamente in Tauri: Liste, Slot ändern, 3MF mehrfarbig (nativer Kernel)</h3><ul class="checks"><li class="">Farben white:1, teal:2, red:3, blue:4, yellow:5</li><li class="">schild: Summe 5604.873 = 5604.873 mm³</li><li class="">figur: Summe 2042.797 = 2042.797 mm³</li><li class="">teal fest auf Slot 5</li><li class="">Datei als geändert markiert</li><li class="">3MF: {&quot;files&quot;:[],&quot;mColors&quot;:5,&quot;colorGroup&quot;:true,&quot;modelSettings&quot;:true,&quot;items&quot;:2,&quot;colors&quot;:true,&quot;components&quot;:6,&quot;bytes&quot;:605695,&quot;extruders&quot;:[1,1,5,3,2,2,1,4],&quot;triangles&quot;:8434}</li><li class="">extruder je Teil 1,1,5,3,2,2,1,4</li><li class="">STL je Farbe: schild_F1_white.stl, schild_F5_teal.stl, schild_F3_red.stl, figur_F2_blue.stl, figur_F1_white.stl, figur_F4_yellow.stl</li></ul>
+<h3>Desktop app (Tauri, native kernel)</h3>
+<div class="scen"><h3>T12 Colors &amp; filaments in Tauri: list, change slot, 3MF multi-color (native kernel)</h3><ul class="checks"><li class="">colors white:1, teal:2, red:3, blue:4, yellow:5</li><li class="">schild: sum 5604.873 = 5604.873 mm³</li><li class="">figur: sum 2042.797 = 2042.797 mm³</li><li class="">teal fixed on slot 5</li><li class="">file marked as modified</li><li class="">3MF: {&quot;files&quot;:[],&quot;mColors&quot;:5,&quot;colorGroup&quot;:true,&quot;modelSettings&quot;:true,&quot;items&quot;:2,&quot;colors&quot;:true,&quot;components&quot;:6,&quot;bytes&quot;:605695,&quot;extruders&quot;:[1,1,5,3,2,2,1,4],&quot;triangles&quot;:8434}</li><li class="">extruder per sub-part 1,1,5,3,2,2,1,4</li><li class="">STL per color: schild_F1_white.stl, schild_F5_teal.stl, schild_F3_red.stl, figur_F2_blue.stl, figur_F1_white.stl, figur_F4_yellow.stl</li></ul>
 
-<figure><img src="img/tauri-t12-farben.jpg" alt=""><figcaption>Farbliste in der Desktop-App (helles Thema)</figcaption></figure>
-<figure><img src="img/tauri-t12-slot.jpg" alt=""><figcaption>teal auf Slot 5: Code geändert</figcaption></figure></div>
-<div class="scen"><h3>T13 Dunkles Thema in Tauri: Kontrast (computed styles), Ansicht, Editor</h3><ul class="checks"><li class="">Text: Kontrast 15.15 ≥ 4,5</li><li class="">Editor: Kontrast 14.19 ≥ 4,5</li><li class="">Statusleiste: Kontrast 7.37 ≥ 4,5</li><li class="">Farbliste: Kontrast 14.19 ≥ 4,5</li><li class="">Werkzeugleiste: Kontrast 12.80 ≥ 4,5</li><li class="">teal dunkle Variante (rgb(48, 126, 128))</li><li class="">Farbe je Fläche in der Ansicht</li></ul>
+<figure><img src="img/tauri-t12-farben.jpg" alt=""><figcaption>Color list in the desktop app (light theme)</figcaption></figure>
+<figure><img src="img/tauri-t12-slot.jpg" alt=""><figcaption>teal on slot 5: code changed</figcaption></figure></div>
+<div class="scen"><h3>T13 Dark theme in Tauri: contrast (computed styles), view, editor</h3><ul class="checks"><li class="">text: contrast 15.15 ≥ 4.5</li><li class="">editor: contrast 14.19 ≥ 4.5</li><li class="">status bar: contrast 7.37 ≥ 4.5</li><li class="">color list: contrast 14.19 ≥ 4.5</li><li class="">toolbar: contrast 12.80 ≥ 4.5</li><li class="">teal dark variant (rgb(48, 126, 128))</li><li class="">color per face in the view</li></ul>
 
-<figure><img src="img/tauri-t13-dunkel.jpg" alt=""><figcaption>dunkles Thema in der Desktop-App</figcaption></figure></div>
-<div class="scen"><h3>T14 Thema „System“ in Tauri folgt dem GTK-Farbschema (prefers-color-scheme)</h3><ul class="checks"><li class="">System (hell) → data-theme light</li><li class="">WebKitGTK meldet prefers-color-scheme: dark mit GTK_THEME=Adwaita:dark (true)</li><li class="">Thema System → dark</li></ul>
+<figure><img src="img/tauri-t13-dunkel.jpg" alt=""><figcaption>dark theme in the desktop app</figcaption></figure></div>
+<div class="scen"><h3>T14 Theme "System" in Tauri follows the GTK color scheme (prefers-color-scheme)</h3><ul class="checks"><li class="">System (light) → data-theme light</li><li class="">WebKitGTK reports prefers-color-scheme: dark with GTK_THEME=Adwaita:dark (true)</li><li class="">theme System → dark</li></ul>
 
-<figure><img src="img/tauri-t14-system-dunkel.jpg" alt=""><figcaption>Thema System bei dunklem GTK-Schema</figcaption></figure></div>
+<figure><img src="img/tauri-t14-system-dunkel.jpg" alt=""><figcaption>Theme System with dark GTK scheme</figcaption></figure></div>
 
-<h2>8 Dunkles Thema</h2>
+<h2>8 Dark theme</h2>
 <ul>
-<li><b>Auswahl</b> in der Werkzeugleiste: System (Standard; folgt <code>prefers-color-scheme</code> mit Listener, auch beim Umschalten im Betrieb), Hell, Dunkel; gespeichert in <code>localStorage</code> (<code>cad-theme</code>). In Tauri meldet WebKitGTK das GTK-Farbschema (Test T14 mit <code>GTK_THEME=Adwaita:dark</code>).</li>
-<li><b>Token</b> je Thema in <code>styles.css</code>: Flächen, Text, Akzent, Fehler/Warnung (auch Zeilenhintergründe), Syntax, Auswahl, Hover, Diff-Ansicht, Schatten, Rückseite von Dialogen, Farbfelder; 3D-Ansicht (Hintergrund, Boden und Raster, Modell, Kanten, Hervorhebung, Dimmen, Zonen, abgezogene Körper, Schnittkappe, Griffe samt Füllung, Anker, Snap mit eigener Schriftfarbe), Git-Rand. Die 3D-Ansicht liest die Token beim Wechsel neu.</li>
-<li><b>Editor-Teile mit eigenem Standardthema</b> (CodeMirror: Autovervollständigung, Suchleiste, Treffer, Klammerpaare, Faltmarken) folgen jetzt den Token; vorher blieben sie im dunklen Thema hell.</li>
-<li><b>Prüfung:</b> <code>web/src/logic/contrast.test.ts</code> rechnet für alle Paare den WCAG-Kontrast aus den Token (durchscheinende Hintergründe über der Fläche gemischt): Text ≥ 4,5:1, UI-Teile ≥ 3:1; F05 und T13 messen dieselben Paare über <code>getComputedStyle</code> in Chromium und WebKitGTK, F05 zusätzlich Pixel der 3D-Ansicht (Hintergrund, Palette-Variante).</li>
+<li><b>Choice</b> in the toolbar: System (default; follows <code>prefers-color-scheme</code> with a listener, also when switching at run time), Light, Dark; stored in <code>localStorage</code> (<code>cad-theme</code>). In Tauri, WebKitGTK reports the GTK color scheme (test T14 with <code>GTK_THEME=Adwaita:dark</code>).</li>
+<li><b>Tokens</b> per theme in <code>styles.css</code>: surfaces, text, accent, error/warning (also line backgrounds), syntax, selection, hover, diff view, shadows, dialog backdrop, swatches; 3D view (background, floor and grid, model, edges, highlight, dimming, zones, subtracted bodies, section cap, handles including fill, anchors, snap with its own text color), Git gutter. The 3D view re-reads the tokens on a switch.</li>
+<li><b>Editor components with their own default theme</b> (CodeMirror: autocompletion, search bar, matches, bracket pairs, fold markers) now follow the tokens; before, they stayed light in the dark theme.</li>
+<li><b>Check:</b> <code>web/src/logic/contrast.test.ts</code> computes the WCAG contrast from the tokens for all pairs (translucent backgrounds blended over the surface): text ≥ 4.5:1, UI components ≥ 3:1; F05 and T13 measure the same pairs via <code>getComputedStyle</code> in Chromium and WebKitGTK, F05 additionally pixels of the 3D view (background, palette variant).</li>
 </ul>
-<table><tr><th>Paar</th><th>Token</th><th>hell</th><th>dunkel</th><th>Ziel</th></tr>
-<tr><td>Text</td><td class="small"><code>--text</code> auf <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#1f2328"></span> <b class="ok">15,80</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#e6e9ed"></span> <b class="ok">14,19</b></td><td>4,5</td></tr>
-<tr><td>Text gedämpft</td><td class="small"><code>--muted</code> auf <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#5f6670"></span> <b class="ok">5,80</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#a2aab5"></span> <b class="ok">7,37</b></td><td>4,5</td></tr>
-<tr><td>Text gedämpft auf Fläche 2</td><td class="small"><code>--muted</code> auf <code>--panel-2</code></td><td><span class="sw" style="background:#f0f2f5"></span><span class="sw" style="background:#5f6670"></span> <b class="ok">5,17</b></td><td><span class="sw" style="background:#20242a"></span><span class="sw" style="background:#a2aab5"></span> <b class="ok">6,65</b></td><td>4,5</td></tr>
-<tr><td>Akzent (Links, Zeilen der Farbliste)</td><td class="small"><code>--accent</code> auf <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#2a63c4"></span> <b class="ok">5,71</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#7eaaff"></span> <b class="ok">7,47</b></td><td>4,5</td></tr>
-<tr><td>Fehler</td><td class="small"><code>--error</code> auf <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#c4302b"></span> <b class="ok">5,52</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#ff7b7b"></span> <b class="ok">6,89</b></td><td>4,5</td></tr>
-<tr><td>Fehler auf Fehlerzeile</td><td class="small"><code>--error</code> auf <code>--error-bg</code></td><td><span class="sw" style="background:rgba(229, 72, 77, 0.13)"></span><span class="sw" style="background:#c4302b"></span> <b class="ok">4,66</b></td><td><span class="sw" style="background:rgba(255, 99, 99, 0.15)"></span><span class="sw" style="background:#ff7b7b"></span> <b class="ok">5,62</b></td><td>4,5</td></tr>
-<tr><td>Warnung auf Warnzeile</td><td class="small"><code>--warning</code> auf <code>--warning-bg</code></td><td><span class="sw" style="background:rgba(234, 179, 8, 0.2)"></span><span class="sw" style="background:#855700"></span> <b class="ok">5,48</b></td><td><span class="sw" style="background:rgba(232, 184, 74, 0.13)"></span><span class="sw" style="background:#e8b84a"></span> <b class="ok">7,20</b></td><td>4,5</td></tr>
-<tr><td>Syntax: Schlüsselwort</td><td class="small"><code>--hl-keyword</code> auf <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#8b2fc9"></span> <b class="ok">6,27</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#c9a0ff"></span> <b class="ok">8,19</b></td><td>4,5</td></tr>
-<tr><td>Syntax: Zahl</td><td class="small"><code>--hl-number</code> auf <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#0a7d5a"></span> <b class="ok">5,13</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#7fd8c0"></span> <b class="ok">10,27</b></td><td>4,5</td></tr>
-<tr><td>Syntax: Text</td><td class="small"><code>--hl-string</code> auf <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#a3501a"></span> <b class="ok">5,65</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#f3ae78"></span> <b class="ok">9,16</b></td><td>4,5</td></tr>
-<tr><td>Syntax: Kommentar</td><td class="small"><code>--hl-comment</code> auf <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#636b75"></span> <b class="ok">5,40</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#8d96a0"></span> <b class="ok">5,76</b></td><td>4,5</td></tr>
-<tr><td>Syntax: Kommentar in aktiver Zeile</td><td class="small"><code>--hl-comment</code> auf <code>--active-line</code></td><td><span class="sw" style="background:rgba(31, 35, 40, 0.035)"></span><span class="sw" style="background:#636b75"></span> <b class="ok">5,05</b></td><td><span class="sw" style="background:rgba(255, 255, 255, 0.045)"></span><span class="sw" style="background:#8d96a0"></span> <b class="ok">5,11</b></td><td>4,5</td></tr>
-<tr><td>Syntax: Definition</td><td class="small"><code>--hl-def</code> auf <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#1f5bc4"></span> <b class="ok">6,27</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#8ab4ff"></span> <b class="ok">8,27</b></td><td>4,5</td></tr>
-<tr><td>Syntax: Modifier</td><td class="small"><code>--hl-modifier</code> auf <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#c8202b"></span> <b class="ok">5,68</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#ff8a80"></span> <b class="ok">7,57</b></td><td>4,5</td></tr>
-<tr><td>Text auf Auswahl</td><td class="small"><code>--text</code> auf <code>--accent-soft</code></td><td><span class="sw" style="background:rgba(42, 99, 196, 0.12)"></span><span class="sw" style="background:#1f2328"></span> <b class="ok">13,34</b></td><td><span class="sw" style="background:rgba(126, 170, 255, 0.18)"></span><span class="sw" style="background:#e6e9ed"></span> <b class="ok">10,17</b></td><td>4,5</td></tr>
-<tr><td>Text auf Diff (neu)</td><td class="small"><code>--text</code> auf <code>--diff-add</code></td><td><span class="sw" style="background:rgba(45, 164, 78, 0.16)"></span><span class="sw" style="background:#1f2328"></span> <b class="ok">13,32</b></td><td><span class="sw" style="background:rgba(70, 192, 91, 0.18)"></span><span class="sw" style="background:#e6e9ed"></span> <b class="ok">10,30</b></td><td>4,5</td></tr>
-<tr><td>Text auf Diff (gelöscht)</td><td class="small"><code>--text</code> auf <code>--diff-del</code></td><td><span class="sw" style="background:rgba(229, 72, 77, 0.14)"></span><span class="sw" style="background:#1f2328"></span> <b class="ok">13,17</b></td><td><span class="sw" style="background:rgba(255, 93, 85, 0.17)"></span><span class="sw" style="background:#e6e9ed"></span> <b class="ok">11,31</b></td><td>4,5</td></tr>
-<tr><td>Schrift auf Akzent</td><td class="small"><code>--on-accent</code> auf <code>--accent</code></td><td><span class="sw" style="background:#2a63c4"></span><span class="sw" style="background:#ffffff"></span> <b class="ok">5,71</b></td><td><span class="sw" style="background:#7eaaff"></span><span class="sw" style="background:#0b1220"></span> <b class="ok">8,10</b></td><td>4,5</td></tr>
-<tr><td>Snap-Beschriftung</td><td class="small"><code>--on-snap</code> auf <code>--view-snap</code></td><td><span class="sw" style="background:#237a35"></span><span class="sw" style="background:#ffffff"></span> <b class="ok">5,38</b></td><td><span class="sw" style="background:#5fd37a"></span><span class="sw" style="background:#06210e"></span> <b class="ok">9,00</b></td><td>4,5</td></tr>
-<tr><td>Git-Rand neu (UI, ≥ 3)</td><td class="small"><code>--git-added</code> auf <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#2a9d4a"></span> <b class="ok">3,49</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#46c05b"></span> <b class="ok">7,36</b></td><td>3,0</td></tr>
-<tr><td>3D: Kanten auf Modell (≥ 3)</td><td class="small"><code>--view-edge</code> auf <code>--view-model</code></td><td><span class="sw" style="background:#c3cad4"></span><span class="sw" style="background:#39404a"></span> <b class="ok">6,34</b></td><td><span class="sw" style="background:#7f8997"></span><span class="sw" style="background:#0e1013"></span> <b class="ok">5,38</b></td><td>3,0</td></tr>
-<tr><td>3D: Raster auf Hintergrund (≥ 3)</td><td class="small"><code>--view-grid</code> auf <code>--view-bg</code></td><td><span class="sw" style="background:#e7eaee"></span><span class="sw" style="background:#6a3fd2"></span> <b class="ok">5,35</b></td><td><span class="sw" style="background:#16191d"></span><span class="sw" style="background:#a990fb"></span> <b class="ok">6,78</b></td><td>3,0</td></tr></table>
+<table><tr><th>Pair</th><th>Token</th><th>light</th><th>dark</th><th>Target</th></tr>
+<tr><td>Text</td><td class="small"><code>--text</code> on <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#1f2328"></span> <b class="ok">15.80</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#e6e9ed"></span> <b class="ok">14.19</b></td><td>4.5</td></tr>
+<tr><td>Muted text</td><td class="small"><code>--muted</code> on <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#5f6670"></span> <b class="ok">5.80</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#a2aab5"></span> <b class="ok">7.37</b></td><td>4.5</td></tr>
+<tr><td>Muted text on surface 2</td><td class="small"><code>--muted</code> on <code>--panel-2</code></td><td><span class="sw" style="background:#f0f2f5"></span><span class="sw" style="background:#5f6670"></span> <b class="ok">5.17</b></td><td><span class="sw" style="background:#20242a"></span><span class="sw" style="background:#a2aab5"></span> <b class="ok">6.65</b></td><td>4.5</td></tr>
+<tr><td>Accent (links, lines of the color list)</td><td class="small"><code>--accent</code> on <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#2a63c4"></span> <b class="ok">5.71</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#7eaaff"></span> <b class="ok">7.47</b></td><td>4.5</td></tr>
+<tr><td>Error</td><td class="small"><code>--error</code> on <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#c4302b"></span> <b class="ok">5.52</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#ff7b7b"></span> <b class="ok">6.89</b></td><td>4.5</td></tr>
+<tr><td>Error on error line</td><td class="small"><code>--error</code> on <code>--error-bg</code></td><td><span class="sw" style="background:rgba(229, 72, 77, 0.13)"></span><span class="sw" style="background:#c4302b"></span> <b class="ok">4.66</b></td><td><span class="sw" style="background:rgba(255, 99, 99, 0.15)"></span><span class="sw" style="background:#ff7b7b"></span> <b class="ok">5.62</b></td><td>4.5</td></tr>
+<tr><td>Warning on warning line</td><td class="small"><code>--warning</code> on <code>--warning-bg</code></td><td><span class="sw" style="background:rgba(234, 179, 8, 0.2)"></span><span class="sw" style="background:#855700"></span> <b class="ok">5.48</b></td><td><span class="sw" style="background:rgba(232, 184, 74, 0.13)"></span><span class="sw" style="background:#e8b84a"></span> <b class="ok">7.20</b></td><td>4.5</td></tr>
+<tr><td>Syntax: keyword</td><td class="small"><code>--hl-keyword</code> on <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#8b2fc9"></span> <b class="ok">6.27</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#c9a0ff"></span> <b class="ok">8.19</b></td><td>4.5</td></tr>
+<tr><td>Syntax: number</td><td class="small"><code>--hl-number</code> on <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#0a7d5a"></span> <b class="ok">5.13</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#7fd8c0"></span> <b class="ok">10.27</b></td><td>4.5</td></tr>
+<tr><td>Syntax: string</td><td class="small"><code>--hl-string</code> on <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#a3501a"></span> <b class="ok">5.65</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#f3ae78"></span> <b class="ok">9.16</b></td><td>4.5</td></tr>
+<tr><td>Syntax: comment</td><td class="small"><code>--hl-comment</code> on <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#636b75"></span> <b class="ok">5.40</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#8d96a0"></span> <b class="ok">5.76</b></td><td>4.5</td></tr>
+<tr><td>Syntax: comment in active line</td><td class="small"><code>--hl-comment</code> on <code>--active-line</code></td><td><span class="sw" style="background:rgba(31, 35, 40, 0.035)"></span><span class="sw" style="background:#636b75"></span> <b class="ok">5.05</b></td><td><span class="sw" style="background:rgba(255, 255, 255, 0.045)"></span><span class="sw" style="background:#8d96a0"></span> <b class="ok">5.11</b></td><td>4.5</td></tr>
+<tr><td>Syntax: definition</td><td class="small"><code>--hl-def</code> on <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#1f5bc4"></span> <b class="ok">6.27</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#8ab4ff"></span> <b class="ok">8.27</b></td><td>4.5</td></tr>
+<tr><td>Syntax: modifier</td><td class="small"><code>--hl-modifier</code> on <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#c8202b"></span> <b class="ok">5.68</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#ff8a80"></span> <b class="ok">7.57</b></td><td>4.5</td></tr>
+<tr><td>Text on selection</td><td class="small"><code>--text</code> on <code>--accent-soft</code></td><td><span class="sw" style="background:rgba(42, 99, 196, 0.12)"></span><span class="sw" style="background:#1f2328"></span> <b class="ok">13.34</b></td><td><span class="sw" style="background:rgba(126, 170, 255, 0.18)"></span><span class="sw" style="background:#e6e9ed"></span> <b class="ok">10.17</b></td><td>4.5</td></tr>
+<tr><td>Text on diff (new)</td><td class="small"><code>--text</code> on <code>--diff-add</code></td><td><span class="sw" style="background:rgba(45, 164, 78, 0.16)"></span><span class="sw" style="background:#1f2328"></span> <b class="ok">13.32</b></td><td><span class="sw" style="background:rgba(70, 192, 91, 0.18)"></span><span class="sw" style="background:#e6e9ed"></span> <b class="ok">10.30</b></td><td>4.5</td></tr>
+<tr><td>Text on diff (deleted)</td><td class="small"><code>--text</code> on <code>--diff-del</code></td><td><span class="sw" style="background:rgba(229, 72, 77, 0.14)"></span><span class="sw" style="background:#1f2328"></span> <b class="ok">13.17</b></td><td><span class="sw" style="background:rgba(255, 93, 85, 0.17)"></span><span class="sw" style="background:#e6e9ed"></span> <b class="ok">11.31</b></td><td>4.5</td></tr>
+<tr><td>Text on accent</td><td class="small"><code>--on-accent</code> on <code>--accent</code></td><td><span class="sw" style="background:#2a63c4"></span><span class="sw" style="background:#ffffff"></span> <b class="ok">5.71</b></td><td><span class="sw" style="background:#7eaaff"></span><span class="sw" style="background:#0b1220"></span> <b class="ok">8.10</b></td><td>4.5</td></tr>
+<tr><td>Snap label</td><td class="small"><code>--on-snap</code> on <code>--view-snap</code></td><td><span class="sw" style="background:#237a35"></span><span class="sw" style="background:#ffffff"></span> <b class="ok">5.38</b></td><td><span class="sw" style="background:#5fd37a"></span><span class="sw" style="background:#06210e"></span> <b class="ok">9.00</b></td><td>4.5</td></tr>
+<tr><td>Git gutter new (UI, ≥ 3)</td><td class="small"><code>--git-added</code> on <code>--panel</code></td><td><span class="sw" style="background:#ffffff"></span><span class="sw" style="background:#2a9d4a"></span> <b class="ok">3.49</b></td><td><span class="sw" style="background:#181b1f"></span><span class="sw" style="background:#46c05b"></span> <b class="ok">7.36</b></td><td>3.0</td></tr>
+<tr><td>3D: edges on model (≥ 3)</td><td class="small"><code>--view-edge</code> on <code>--view-model</code></td><td><span class="sw" style="background:#c3cad4"></span><span class="sw" style="background:#39404a"></span> <b class="ok">6.34</b></td><td><span class="sw" style="background:#7f8997"></span><span class="sw" style="background:#0e1013"></span> <b class="ok">5.38</b></td><td>3.0</td></tr>
+<tr><td>3D: grid on background (≥ 3)</td><td class="small"><code>--view-grid</code> on <code>--view-bg</code></td><td><span class="sw" style="background:#e7eaee"></span><span class="sw" style="background:#6a3fd2"></span> <b class="ok">5.35</b></td><td><span class="sw" style="background:#16191d"></span><span class="sw" style="background:#a990fb"></span> <b class="ok">6.78</b></td><td>3.0</td></tr></table>
 
 <h2>9 Tests</h2>
 <ul>
-<li><code>cargo test --workspace</code>: 388 bestanden, 0 fehlgeschlagen, 0 ignoriert; <code>cargo clippy --workspace --all-targets -- -D warnings</code>: ohne Befund; <code>cargo fmt --all --check</code>: ohne Befund.</li>
-<li>Web: <code>pnpm typecheck</code>, Vitest 193 (neu: <code>colors.test.ts</code>, <code>contrast.test.ts</code>), Playwright 84/84 (alle bisherigen Szenarien und F01–F07).</li>
-<li>Tauri-E2E 14/14 (T01–T11 wie in Bericht 9, neu T12–T14).</li>
-<li>Bei den Läufen gefunden und behoben: (1) die Farbliste ist standardmäßig offen und fragte für jede fertige Szene Regionen an; bei Bauteilen ohne Farbe kostete das eine Volumenrechnung im Kernel, die mit dem auf 1,5 s gesetzten Watchdog in C19 einen zweiten Neustart auslöste – jetzt ohne Kernel-Aufruf (gecachtes Bauteilvolumen). (2) T08: bei offener Farbliste bricht die Ansichtsleiste um, die Schnittleiste lag über der zweiten Zeile („element click intercepted“) – beide stehen jetzt untereinander in einem Container. (3) Unregelmäßiger Fehler in <code>supervisor_watchdog_replaces_engine_and_blocks_key</code> (1 von 5 Läufen, schon vor diesem Auftrag): der Eingabe-Thread der Desktop-Engine reichte die Nachrichten eines Frames einzeln weiter, sodass <code>SetSource</code> und <code>__debugHang</code> in zwei Durchläufe der Engine-Schleife fallen konnten und ein anderer Knoten gesperrt wurde; ein Frame ist jetzt eine Kanal-Nachricht (8/8 Läufe grün). (4) P07 erwartete das alte einfarbige 3MF der Bauteilleiste (jetzt mehrfarbig: Build-Items statt Objekte gezählt).</li>
-<li>OpenSCAD-Vergleich <code>compare.py --eval</code>: 33/33 (keines der 33 Modelle nutzt <code>color()</code>; Geometrie unverändert); STEP <code>verify.py</code> mit OpenCASCADE: 48/48 passed.</li>
+<li><code>cargo test --workspace</code>: 388 passed, 0 failed, 0 ignored; <code>cargo clippy --workspace --all-targets -- -D warnings</code>: no findings; <code>cargo fmt --all --check</code>: no findings.</li>
+<li>Web: <code>pnpm typecheck</code>, Vitest 193 (new: <code>colors.test.ts</code>, <code>contrast.test.ts</code>), Playwright 84/84 (all existing scenarios and F01–F07).</li>
+<li>Tauri E2E 14/14 (T01–T11 as in report 9, new T12–T14).</li>
+<li>Found and fixed during the runs: (1) the color list is open by default and requested regions for every finished scene; for parts without color this cost a volume computation in the kernel, which with the watchdog set to 1.5 s in C19 triggered a second restart – now without a kernel call (cached part volume). (2) T08: with the color list open, the view bar wraps and the section bar lay over the second row ("element click intercepted") – both are now stacked in one container. (3) Intermittent failure in <code>supervisor_watchdog_replaces_engine_and_blocks_key</code> (1 in 5 runs, already before this task): the input thread of the desktop engine passed on the messages of a frame one by one, so <code>SetSource</code> and <code>__debugHang</code> could fall into two iterations of the engine loop and a different node was blocked; a frame is now one channel message (8/8 runs green). (4) P07 expected the old single-color 3MF of the part bar (now multi-color: build items counted instead of objects).</li>
+<li>OpenSCAD comparison <code>compare.py --eval</code>: 33/33 (none of the 33 models uses <code>color()</code>; geometry unchanged); STEP <code>verify.py</code> with OpenCASCADE: 48/48 passed.</li>
 </ul>
-<table><tr><th>Test</th><th>Prüft</th><th>Ergebnis</th></tr>
-<tr><td><code>display_variants</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td>Anzeige-Varianten: gleicher Farbton, Helligkeit nur wo nötig, Kontrast zum Ansichtshintergrund</td><td class="ok">ok</td></tr>
-<tr><td><code>children_inherit_the_colour</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td>Kinder erben die Farbe, inneres <code>color()</code> gewinnt</td><td class="ok">ok</td></tr>
-<tr><td><code>filament_parameter</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td><code>filament = n</code>: Bereich 1–16, ganzzahlig, Widerspruch warnt, nicht positionell</td><td class="ok">ok</td></tr>
-<tr><td><code>hex_vectors_and_alpha_stay_exact</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td><code>#rgb</code>, <code>#rrggbbaa</code>, Vektoren, <code>alpha</code> exakt; kaputtes Hex warnt</td><td class="ok">ok</td></tr>
-<tr><td><code>palette_ts_is_current</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td>generierte Tabelle <code>web/src/logic/palette.ts</code> aktuell</td><td class="ok">ok</td></tr>
-<tr><td><code>palette_names_case_insensitive</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td>Namen Groß/Klein egal, <code>grey</code> = gray, Werte der Palette</td><td class="ok">ok</td></tr>
-<tr><td><code>unknown_name_warns_and_gets_a_stable_random_colour</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td>Warnung am Argument, stabile Zufallsfarbe (Hash), L/C wie Palette, verschiedene Farbtöne, keine deutschen Aliasse</td><td class="ok">ok</td></tr>
-<tr><td><code>palette_is_distinguishable</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td>ΔE_OK ≥ 0,10 normal, ≥ 0,065 Deuteranopie, ≥ 0,05 Protanopie, ≥ 0,025 Tritanopie; Chroma ≤ 0,18, keine puren Farben</td><td class="ok">ok</td></tr>
-<tr><td><code>unchanged_value_gives_no_edit</code><br><span class="small">cad-eval/tests/filament_edit.rs</span></td><td>gleicher Wert: kein Edit</td><td class="ok">ok</td></tr>
-<tr><td><code>slot_is_added_to_the_first_statement</code><br><span class="small">cad-eval/tests/filament_edit.rs</span></td><td>ohne Slot: <code>, filament = n</code> an die erste Anweisung der Farbe</td><td class="ok">ok</td></tr>
-<tr><td><code>existing_slots_are_replaced_or_removed</code><br><span class="small">cad-eval/tests/filament_edit.rs</span></td><td>vorhandene Slots ersetzt (alle Schreibweisen der Farbe), „automatisch“ entfernt sie</td><td class="ok">ok</td></tr>
-<tr><td><code>filament_slots</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>explizite Slots, niedrigster freier Slot, gleiche Farbe in drei Schreibweisen = ein Eintrag</td><td class="ok">ok</td></tr>
-<tr><td><code>later_statement_wins_overlaps</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>Überlappung: spätere Anweisung gewinnt (500 / 1000 mm³)</td><td class="ok">ok</td></tr>
-<tr><td><code>multicolour_3mf_structure</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>3MF: Dateien, Farbgruppe, Objekte, Komponenten ohne Transformation, <code>model_settings.config</code> (Teil-ID = Netz-ID, extruder), STL je Farbe</td><td class="ok">ok</td></tr>
-<tr><td><code>nested_colour_wins_over_its_parent</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>inneres <code>color()</code> gewinnt über das äußere</td><td class="ok">ok</td></tr>
-<tr><td><code>region_meshes_share_coordinates</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>Netze der Regionen: Volumen, gemeinsame Koordinaten</td><td class="ok">ok</td></tr>
-<tr><td><code>resize_scales_the_colour_material</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td><code>resize</code> beim Platzieren der Farbkörper</td><td class="ok">ok</td></tr>
-<tr><td><code>fillet_between_colours_goes_to_the_first_coloured_subtree</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>Verrundung zwischen zwei Farben → erste Farbe; Volumensumme</td><td class="ok">ok</td></tr>
-<tr><td><code>regions_are_cached_and_colour_changes_recompute_no_nodes</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>Regionen gecacht (0 Kernel-Aufrufe), Farb-/Slot-Änderung rechnet keinen Knoten neu</td><td class="ok">ok</td></tr>
-<tr><td><code>transforms_and_modules</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>Module, Schleifen, Drehungen</td><td class="ok">ok</td></tr>
-<tr><td><code>uncoloured_material_is_the_default_colour_on_filament_1</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>ungefärbtes Material = Standard, Slot 1</td><td class="ok">ok</td></tr>
-<tr><td><code>subtracted_material_counts_for_all_colours</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>Abgezogenes gilt für alle Farben; Farbe nur im Abzug: kein Slot</td><td class="ok">ok</td></tr>
-<tr><td><code>uncoloured_part_needs_no_boolean</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>ohne Farbknoten: eine Standard-Region ohne Boolean, Volumen = Bauteilvolumen, Netz mit allen Körpern</td><td class="ok">ok</td></tr>
-<tr><td><code>colour_regions_with_meshes</code><br><span class="small">cad-session/tests/colors.rs</span></td><td><code>RequestColorRegions</code> mit Netzen, alte Version wird verworfen</td><td class="ok">ok</td></tr>
-<tr><td><code>scene_lists_colours_with_slots</code><br><span class="small">cad-session/tests/colors.rs</span></td><td>Protokoll: <code>Scene.colors</code> (auch vorläufige Szene), Warnung an Zeile 3</td><td class="ok">ok</td></tr>
-<tr><td><code>multicolour_exports</code><br><span class="small">cad-session/tests/colors.rs</span></td><td>Export 3MF (Standard mehrfarbig), <code>colors: false</code>, STL je Farbe</td><td class="ok">ok</td></tr>
-<tr><td><code>set_filament_writes_the_code</code><br><span class="small">cad-session/tests/colors.rs</span></td><td><code>SetFilament</code> → Edits, rückgängig, Fehlerfälle</td><td class="ok">ok</td></tr>
-<tr><td><code>measure_colours</code><br><span class="small">cad-cli/tests/colors.rs</span></td><td><code>cad measure --colors</code>: Volumen, Masse 1,24 g/cm³, Bauteile</td><td class="ok">ok</td></tr>
-<tr><td><code>outline_lists_colours_slots_and_volumes</code><br><span class="small">cad-cli/tests/colors.rs</span></td><td><code>cad outline</code>: Farben, Slots, Volumen, Summe je Bauteil, ohne Kernel ohne Volumen</td><td class="ok">ok</td></tr>
-<tr><td><code>render_theme_and_regions</code><br><span class="small">cad-cli/tests/colors.rs</span></td><td><code>cad render --theme dark --show regions</code>: dunkler Hintergrund (Pixel), 6 Regionskörper</td><td class="ok">ok</td></tr>
-<tr><td><code>export_multicolour_single_and_per_colour</code><br><span class="small">cad-cli/tests/colors.rs</span></td><td><code>cad export</code> mehrfarbig, <code>--single-color</code>, <code>--per-color</code>, STL einfarbig</td><td class="ok">ok</td></tr></table>
-<table><tr><th>Tauri-E2E</th><th>Szenario</th><th>Dauer</th><th>Ergebnis</th></tr><tr><td>T01</td><td>App startet mit Datei, Szene erscheint (nativer Kernel)</td><td class="n">2,2 s</td><td class="ok">ok</td></tr>
-<tr><td>T02</td><td>Externe Änderung ohne ungespeicherte Änderungen: still neu geladen, Undo als eigener Schritt</td><td class="n">0,8 s</td><td class="ok">ok</td></tr>
-<tr><td>T03</td><td>Git-Markierungen am Rand (neu, geändert, gelöscht)</td><td class="n">1,0 s</td><td class="ok">ok</td></tr>
-<tr><td>T04</td><td>Externe Änderung bei ungespeicherten Änderungen: Hinweisleiste, Vergleichen, Meine behalten, Speichern ohne Schleife</td><td class="n">2,5 s</td><td class="ok">ok</td></tr>
-<tr><td>T05</td><td>Gelöschte und umbenannte Datei</td><td class="n">1,3 s</td><td class="ok">ok</td></tr>
-<tr><td>T06</td><td>Agent-Ablauf: Datei per Shell ändern, <code>cad check</code>, UI folgt (Bildfolge)</td><td class="n">1,1 s</td><td class="ok">ok</td></tr>
-<tr><td>T07</td><td><code>cad ui status</code> / <code>show</code> / <code>screenshot</code> gegen die laufende App</td><td class="n">1,0 s</td><td class="ok">ok</td></tr>
-<tr><td>T08</td><td>Schnittansicht in Tauri (Kappe, Kontur, Ziehen, CLI-Aufruf)</td><td class="n">3,9 s</td><td class="ok">ok</td></tr>
-<tr><td>T09</td><td>Watchdog in Tauri: hängender Kernel → Engine-Prozess ersetzt, Knoten gesperrt</td><td class="n">8,0 s</td><td class="ok">ok</td></tr>
-<tr><td>T10</td><td>Ordner als Projekt, Autospeichern</td><td class="n">3,3 s</td><td class="ok">ok</td></tr>
-<tr><td>T11</td><td>Tastendruck → Szene nativ (Messung)</td><td class="n">11,3 s</td><td class="ok">ok</td></tr>
-<tr><td>T12</td><td>Farben &amp; Filamente in Tauri: Liste, Slot ändern, 3MF mehrfarbig (nativer Kernel)</td><td class="n">3,4 s</td><td class="ok">ok</td></tr>
-<tr><td>T13</td><td>Dunkles Thema in Tauri: Kontrast (computed styles), Ansicht, Editor</td><td class="n">0,6 s</td><td class="ok">ok</td></tr>
-<tr><td>T14</td><td>Thema „System“ in Tauri folgt dem GTK-Farbschema (prefers-color-scheme)</td><td class="n">4,2 s</td><td class="ok">ok</td></tr></table>
+<table><tr><th>Test</th><th>Checks</th><th>Result</th></tr>
+<tr><td><code>display_variants</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td>display variants: same hue, lightness only where needed, contrast to the view background</td><td class="ok">ok</td></tr>
+<tr><td><code>children_inherit_the_colour</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td>children inherit the color, inner <code>color()</code> wins</td><td class="ok">ok</td></tr>
+<tr><td><code>filament_parameter</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td><code>filament = n</code>: range 1–16, integer, contradiction warns, not positional</td><td class="ok">ok</td></tr>
+<tr><td><code>hex_vectors_and_alpha_stay_exact</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td><code>#rgb</code>, <code>#rrggbbaa</code>, vectors, <code>alpha</code> exact; broken hex warns</td><td class="ok">ok</td></tr>
+<tr><td><code>palette_ts_is_current</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td>generated table <code>web/src/logic/palette.ts</code> up to date</td><td class="ok">ok</td></tr>
+<tr><td><code>palette_names_case_insensitive</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td>names case-insensitive, <code>grey</code> = gray, palette values</td><td class="ok">ok</td></tr>
+<tr><td><code>unknown_name_warns_and_gets_a_stable_random_colour</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td>warning on the argument, stable random color (hash), L/C as palette, different hues, no German aliases</td><td class="ok">ok</td></tr>
+<tr><td><code>palette_is_distinguishable</code><br><span class="small">cad-eval/tests/palette.rs</span></td><td>ΔE_OK ≥ 0.10 normal, ≥ 0,065 deuteranopia, ≥ 0.05 protanopia, ≥ 0,025 tritanopia; chroma ≤ 0.18, no pure colors</td><td class="ok">ok</td></tr>
+<tr><td><code>unchanged_value_gives_no_edit</code><br><span class="small">cad-eval/tests/filament_edit.rs</span></td><td>same value: no edit</td><td class="ok">ok</td></tr>
+<tr><td><code>slot_is_added_to_the_first_statement</code><br><span class="small">cad-eval/tests/filament_edit.rs</span></td><td>without slot: <code>, filament = n</code> on the first statement of the color</td><td class="ok">ok</td></tr>
+<tr><td><code>existing_slots_are_replaced_or_removed</code><br><span class="small">cad-eval/tests/filament_edit.rs</span></td><td>existing slots replaced (all spellings of the color), "automatic" removes them</td><td class="ok">ok</td></tr>
+<tr><td><code>filament_slots</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>explicit slots, lowest free slot, same color in three spellings = one entry</td><td class="ok">ok</td></tr>
+<tr><td><code>later_statement_wins_overlaps</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>overlap: later statement wins (500 / 1000 mm³)</td><td class="ok">ok</td></tr>
+<tr><td><code>multicolour_3mf_structure</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>3MF: files, color group, objects, components without transformation, <code>model_settings.config</code> (part ID = mesh ID, extruder), STL per color</td><td class="ok">ok</td></tr>
+<tr><td><code>nested_colour_wins_over_its_parent</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>inner <code>color()</code> wins over the outer one</td><td class="ok">ok</td></tr>
+<tr><td><code>region_meshes_share_coordinates</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>meshes of the regions: volume, shared coordinates</td><td class="ok">ok</td></tr>
+<tr><td><code>resize_scales_the_colour_material</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td><code>resize</code> when placing the color bodies</td><td class="ok">ok</td></tr>
+<tr><td><code>fillet_between_colours_goes_to_the_first_coloured_subtree</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>fillet between two colors → first color; volume sum</td><td class="ok">ok</td></tr>
+<tr><td><code>regions_are_cached_and_colour_changes_recompute_no_nodes</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>regions cached (0 kernel calls), color/slot change recomputes no node</td><td class="ok">ok</td></tr>
+<tr><td><code>transforms_and_modules</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>modules, loops, rotations</td><td class="ok">ok</td></tr>
+<tr><td><code>uncoloured_material_is_the_default_colour_on_filament_1</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>uncolored material = default, slot 1</td><td class="ok">ok</td></tr>
+<tr><td><code>subtracted_material_counts_for_all_colours</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>subtracted material applies to all colors; color only in the subtraction: no slot</td><td class="ok">ok</td></tr>
+<tr><td><code>uncoloured_part_needs_no_boolean</code><br><span class="small">cad-engine/tests/colors.rs</span></td><td>without color nodes: one default region without boolean, volume = part volume, mesh with all bodies</td><td class="ok">ok</td></tr>
+<tr><td><code>colour_regions_with_meshes</code><br><span class="small">cad-session/tests/colors.rs</span></td><td><code>RequestColorRegions</code> with meshes, old version is discarded</td><td class="ok">ok</td></tr>
+<tr><td><code>scene_lists_colours_with_slots</code><br><span class="small">cad-session/tests/colors.rs</span></td><td>protocol: <code>Scene.colors</code> (also preliminary scene), warning at line 3</td><td class="ok">ok</td></tr>
+<tr><td><code>multicolour_exports</code><br><span class="small">cad-session/tests/colors.rs</span></td><td>export 3MF (multi-color by default), <code>colors: false</code>, STL per color</td><td class="ok">ok</td></tr>
+<tr><td><code>set_filament_writes_the_code</code><br><span class="small">cad-session/tests/colors.rs</span></td><td><code>SetFilament</code> → edits, undo, error cases</td><td class="ok">ok</td></tr>
+<tr><td><code>measure_colours</code><br><span class="small">cad-cli/tests/colors.rs</span></td><td><code>cad measure --colors</code>: volume, mass 1.24 g/cm³, parts</td><td class="ok">ok</td></tr>
+<tr><td><code>outline_lists_colours_slots_and_volumes</code><br><span class="small">cad-cli/tests/colors.rs</span></td><td><code>cad outline</code>: colors, slots, volumes, sum per part, without kernel no volumes</td><td class="ok">ok</td></tr>
+<tr><td><code>render_theme_and_regions</code><br><span class="small">cad-cli/tests/colors.rs</span></td><td><code>cad render --theme dark --show regions</code>: dark background (pixels), 6 region bodies</td><td class="ok">ok</td></tr>
+<tr><td><code>export_multicolour_single_and_per_colour</code><br><span class="small">cad-cli/tests/colors.rs</span></td><td><code>cad export</code> multi-color, <code>--single-color</code>, <code>--per-color</code>, STL single-color</td><td class="ok">ok</td></tr></table>
+<table><tr><th>Tauri E2E</th><th>Scenario</th><th>Duration</th><th>Result</th></tr><tr><td>T01</td><td>App starts with a file, scene appears (native kernel)</td><td class="n">2.2 s</td><td class="ok">ok</td></tr>
+<tr><td>T02</td><td>External change without unsaved changes: silently reloaded, undo as a separate step</td><td class="n">0.8 s</td><td class="ok">ok</td></tr>
+<tr><td>T03</td><td>Git markers in the gutter (new, changed, deleted)</td><td class="n">1.0 s</td><td class="ok">ok</td></tr>
+<tr><td>T04</td><td>External change with unsaved changes: notification bar, Compare, Keep mine, save without loop</td><td class="n">2.5 s</td><td class="ok">ok</td></tr>
+<tr><td>T05</td><td>Deleted and renamed file</td><td class="n">1.3 s</td><td class="ok">ok</td></tr>
+<tr><td>T06</td><td>Agent workflow: change file from the shell, <code>cad check</code>, UI follows (image sequence)</td><td class="n">1.1 s</td><td class="ok">ok</td></tr>
+<tr><td>T07</td><td><code>cad ui status</code> / <code>show</code> / <code>screenshot</code> against the running app</td><td class="n">1.0 s</td><td class="ok">ok</td></tr>
+<tr><td>T08</td><td>Section view in Tauri (cap, contour, dragging, CLI call)</td><td class="n">3.9 s</td><td class="ok">ok</td></tr>
+<tr><td>T09</td><td>Watchdog in Tauri: hanging kernel → engine process replaced, node blocked</td><td class="n">8.0 s</td><td class="ok">ok</td></tr>
+<tr><td>T10</td><td>Folder as project, auto-save</td><td class="n">3.3 s</td><td class="ok">ok</td></tr>
+<tr><td>T11</td><td>Keystroke → scene, native (measurement)</td><td class="n">11.3 s</td><td class="ok">ok</td></tr>
+<tr><td>T12</td><td>Colors &amp; filaments in Tauri: list, change slot, 3MF multi-color (native kernel)</td><td class="n">3.4 s</td><td class="ok">ok</td></tr>
+<tr><td>T13</td><td>Dark theme in Tauri: contrast (computed styles), view, editor</td><td class="n">0.6 s</td><td class="ok">ok</td></tr>
+<tr><td>T14</td><td>Theme "System" in Tauri follows the GTK color scheme (prefers-color-scheme)</td><td class="n">4.2 s</td><td class="ok">ok</td></tr></table>
 
-<h2>10 Anleitung: In Bambu Studio öffnen</h2>
-<p class="note">Im Container gab es kein Bambu Studio; diese Schritte bitte selbst prüfen. Beschrieben ist, was nach dem Quellcode zu erwarten ist.</p>
+<h2>10 Instructions: open in Bambu Studio</h2>
+<p class="note">There was no Bambu Studio in the container; please verify these steps yourself. Described is what the source code leads one to expect.</p>
 <ol>
-<li>Exportieren: in der UI „Farben &amp; Filamente“ → <b>3MF mehrfarbig</b> (bei Bauteilen ein Objekt je Bauteil) oder <code>cad export modell.scad -o modell.3mf</code>. Die Farbliste zeigt vorher Slot, Volumen und Masse je Farbe; Slots ändern sich über die Auswahl (schreibt <code>filament = n</code>).</li>
-<li>In Bambu Studio <b>Datei → Importieren → 3MF/STL… (Strg+I)</b> wählen (oder die Datei ins Fenster ziehen bzw. „Projekt öffnen“). Die Datei stammt nicht von Bambu Studio; erwartet ist der Hinweis, dass nur Geometrie (und Farben) geladen werden – das ist richtig so.</li>
-<li><b>Farbdialog</b> (aktuelle Versionen): Bambu Studio zeigt die Farben der Datei (z. B. weiß, petrol, rot, blau, gelb) und schlägt Filamente dafür vor. Mit <b>„Append“ / „Anhängen“</b> werden die Farben als neue Filamente angelegt, mit der Zuordnung zu vorhandenen Filamenten die Farben auf die Slots im AMS gelegt; bestätigen. Bei Farben je Teil bleibt jedes Teil ganz in seinem Filament.</li>
-<li>Ohne Farbdialog (ältere Version, OrcaSlicer oder abgebrochen): die Slots aus der Datei gelten. In der <b>Objektliste</b> (links) erscheinen die Objekte <code>schild</code> und <code>figur</code>; aufgeklappt je ein Teil pro Farbe („schild – white“, „schild – teal“, „schild – red“ …), daneben die Filamentnummer (1, 2, 3 …). Fehlende Filamente ergänzt Bambu Studio beim Import bis zum höchsten Slot (mit eigenen Farben); dann in der Filamentleiste die richtigen Farben/AMS-Slots wählen („AMS synchronisieren“).</li>
-<li>Prüfen: die Teile eines Objekts sitzen genau aufeinander (gemeinsamer Ursprung), die Schrift steht als Relief auf der Platte, der Kragen sitzt am Hals der Figur. „Objekte anordnen“ verschiebt nur ganze Objekte.</li>
-<li><b>Slicen</b>: in der Vorschau die Ansicht „Filament“ wählen – jede Farbe in ihrer Farbe, Filamentwechsel an den Farbgrenzen, Prime Tower bei mehreren Filamenten. Masse je Filament mit der Farbliste vergleichen (PLA 1,24 g/cm³; der Slicer rechnet mit Wänden/Füllung, daher anders).</li>
+<li>Export: in the UI "Colors &amp; filaments" → <b>3MF multi-color</b> (with parts, one object per part) or <code>cad export modell.scad -o modell.3mf</code>. The color list shows slot, volume and mass per color beforehand; slots are changed via the selector (writes <code>filament = n</code>).</li>
+<li>In Bambu Studio choose <b>File → Import → 3MF/STL… (Ctrl+I)</b> (or drag the file into the window, or "Open project"). The file does not come from Bambu Studio; expect the notice that only geometry (and colors) are loaded – that is correct.</li>
+<li><b>Color dialog</b> (current versions): Bambu Studio shows the colors of the file (e.g. white, teal, red, blue, yellow) and suggests filaments for them. <b>"Append"</b> (German UI: „Anhängen“) creates the colors as new filaments; mapping to existing filaments puts the colors on the AMS slots; confirm. With colors per sub-part, each sub-part stays entirely in its filament.</li>
+<li>Without the color dialog (older version, OrcaSlicer or cancelled): the slots from the file apply. In the <b>object list</b> (left) the objects <code>schild</code> and <code>figur</code> appear; expanded, one sub-part per color ("schild – white", "schild – teal", "schild – red" …), next to it the filament number (1, 2, 3 …). Bambu Studio adds missing filaments on import up to the highest slot (with its own colors); then choose the right colors/AMS slots in the filament bar ("Sync AMS").</li>
+<li>Check: the sub-parts of an object sit exactly on each other (common origin), the lettering stands as relief on the plate, the collar sits at the neck of the figure. "Arrange objects" only moves whole objects.</li>
+<li><b>Slice</b>: in the preview choose the view "Filament" – each color in its color, filament changes at the color boundaries, prime tower with several filaments. Compare the mass per filament with the color list (PLA 1.24 g/cm³; the slicer computes with walls/infill, hence different).</li>
 </ol>
-<p>OrcaSlicer: wie oben ohne Farbdialog – Teile und Slots aus <code>model_settings.config</code>, Filamentfarben selbst setzen. PrusaSlicer liest diese Metadaten nicht: dort „STL je Farbe (ZIP)“ nehmen, alle STL zusammen laden und bei „Mehrteiliges Objekt?“ <b>Ja</b> wählen, dann je Teil den Extruder setzen (Dateinamen <code>F&lt;slot&gt;_&lt;farbe&gt;.stl</code>).</p>
+<p>OrcaSlicer: as above without the color dialog – sub-parts and slots from <code>model_settings.config</code>, set the filament colors yourself. PrusaSlicer does not read this metadata: there use "STL per color (ZIP)", load all STLs together and answer <b>Yes</b> to "Multi-part object?", then set the extruder per sub-part (file names <code>F&lt;slot&gt;_&lt;farbe&gt;.stl</code>).</p>
 
-<h2>11 Bekannte Grenzen</h2>
+<h2>11 Known limitations</h2>
 <ul>
-<li>Farbregionen hängen an den Booleans von SMLib: wo SMLib Material verliert (z. B. Vereinigung mit einem Torus, bekannt seit Bericht 1 – das Beispiel nutzt deshalb einen Ring aus einem Zylinder), stimmen die Regionen nicht, die Engine warnt („Summe ≠ Volumen“) oder meldet einen Fehler. Je Farbknoten etwa drei Booleans; die UI fragt die Regionen nur bei offener Farbliste an.</li>
-<li>Kanten, die nur auf einer Linie zusammenstoßen, ergeben keinen geschlossenen Körper (beim ersten Buchstaben „D“ gefunden: zwei Balken berührten sich nur an einer Kante, lib3mf meldete das Netz als nicht mannigfaltig; jetzt überlappen sie).</li>
-<li><code>color()</code> in 2D-Teilbäumen (unter <code>linear_extrude</code> usw.) färbt Flächen, teilt aber kein Volumen. Material außerhalb der Bauteile fehlt in der Farbliste, wenn es Bauteile gibt.</li>
-<li>Filamentfarben in Bambu Studio über den Farbdialog oder von Hand (kein <code>project_settings.config</code>, siehe 5.6); in Bambu Studio und OrcaSlicer nicht im Container geprüft. PrusaSlicer: Komponenten werden eigene Objekte, keine Slots.</li>
-<li>Farbe je Fläche in der Ansicht über den Flächen-Tag: zwei inhaltsgleiche Körper mit verschiedenen Farben teilen sich einen Tag und zeigen beide die erste Farbe (bekannte Grenze der Provenienz); „Farbregionen zeigen“ ist davon nicht betroffen.</li>
-<li>Farbfehlsichtigkeit: siehe Abschnitt 2 (kleinste ΔE bei Deuteranopie 0,070, Tritanopie 0,031). Weiß auf hellem und Schwarz auf dunklem Hintergrund nur über Schattierung und Kanten unterscheidbar.</li>
-<li>Thema „System“ in Tauri hängt am GTK-Farbschema; unter Xvfb ohne Schema ist es hell. Messwerte und Bilder unter Xvfb/SwiftShader ohne GPU.</li>
+<li>Color regions depend on SMLib's booleans: where SMLib loses material (e.g. union with a torus, known since report 1 – the example therefore uses a ring made from a cylinder), the regions are wrong; the engine warns ("sum ≠ volume") or reports an error. About three booleans per color node; the UI requests the regions only while the color list is open.</li>
+<li>Bodies that meet only along a line do not give a closed body (found with the first letter "D": two bars touched only along an edge, lib3mf reported the mesh as non-manifold; now they overlap).</li>
+<li><code>color()</code> in 2D subtrees (below <code>linear_extrude</code> etc.) colors faces but does not split volume. Material outside the parts is missing from the color list if there are parts.</li>
+<li>Filament colors in Bambu Studio via the color dialog or by hand (no <code>project_settings.config</code>, see 5.6); not checked in Bambu Studio and OrcaSlicer in the container. PrusaSlicer: components become separate objects, no slots.</li>
+<li>Color per face in the view via the face tag: two bodies with identical content and different colors share one tag and both show the first color (known limitation of the provenance); "Show color regions" is not affected.</li>
+<li>Color vision deficiency: see section 2 (smallest ΔE with deuteranopia 0.070, tritanopia 0.031). White on a light and black on a dark background distinguishable only by shading and edges.</li>
+<li>Theme "System" in Tauri depends on the GTK color scheme; under Xvfb without a scheme it is light. Measurements and images under Xvfb/SwiftShader without GPU.</li>
 </ul>
 
-<h2>12 Reproduktion</h2>
+<h2>12 Reproduction</h2>
 <pre>export SMLIB_PREBUILT=$PWD/smlib/build-native CAD_NO_DAEMON=1
 cargo build --release -p cad-cli                   # nach: cd web &amp;&amp; pnpm build:tauri
 cargo test --workspace --no-fail-fast &gt; reports/tmp/report11/cargo.txt 2&gt;&amp;1
@@ -585,7 +585,7 @@ CAD=target/release/cad python3 tests/openscad-compat/compare.py --eval &gt; repo
 /opt/tools/venv-step/bin/python tests/step/verify.py --cad target/release/cad &gt; reports/tmp/report11/step.txt
 CAD=target/release/cad PY3MF=/pfad/venv/bin/python tools/report/report11-data.sh   # lib3mf, trimesh
 node tools/report/report11.mjs
-node tools/report/print-pdf.mjs docs/reports/11-farben-filamente/report.html docs/reports/11-farben-filamente/report.pdf "Testbericht 11: Farben, Multi-Filament-3MF, dunkles Thema"</pre>
+node tools/report/print-pdf.mjs docs/reports/11-farben-filamente/report.html docs/reports/11-farben-filamente/report.pdf "Test report 11 – colors, multi-filament 3MF, dark theme"</pre>
 </main>
 </body>
 </html>
