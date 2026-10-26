@@ -1,7 +1,7 @@
-// F4 (klein): union(fillet) an einem Sweep mit 32-Eck-Profil scheitert (viele Facettenkanten);
-// mit circle geht es (Schlüsselbrett-Haken).
-// Status (Bericht 13): offen – der Sweep gelingt, die Verrundung der 32 Facettenkanten an der
-// Kreiskante des Zapfens scheitert in SMLib (SM_ERR); Umgehung circle().
+// F4 (minor): union(fillet) on a sweep with a 32-gon profile fails (many facet edges);
+// with circle it works (key rack hook).
+// Status (report 13): open – the sweep succeeds, rounding the 32 facet edges at the
+// circular edge of the peg fails in SMLib (SM_ERR); workaround circle().
 // SOLL: fehlerfrei
 union(fillet = 1) {
     cylinder([0, 0, 0], [0, 8, 0], d = 8);

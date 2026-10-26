@@ -1,4 +1,4 @@
-// Zweck: verschachtelte Booleans – Würfel mit Kugel geschnitten, Kreuzbohrung abgezogen.
+// Zweck: nested booleans – cube intersected with a sphere, then a cross bore subtracted.
 difference() {
     intersection() {
         cube(20, center = true);

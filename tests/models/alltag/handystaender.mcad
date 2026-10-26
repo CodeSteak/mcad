@@ -1,36 +1,36 @@
-// Zweck: Handyständer für den Schreibtisch – Seitenprofil als Polygon aus einem 2D-Raster,
-// linear_extrude über die Breite, dreieckiges Fenster (Eckpunkte über eine Funktion für den
-// Schnitt zweier Geraden), Kabelloch mit Kanal unter dem Boden. Die Innenecken von Lippe und
-// Ablage und die Lippenoberkante werden über Zonen an Rasterlinien verrundet (zwei Radien).
-// Maße in mm; Telefon bis 12 mm dick, Neigung a der Lehne gegen die Waagrechte.
+// Zweck: desk phone stand – side profile as a polygon from a 2D grid,
+// linear_extrude across the width, triangular window (corners via a function for the
+// intersection of two lines), cable hole with a channel under the base. The inner corners of lip and
+// shelf and the top edge of the lip are rounded via zones at grid lines (two radii).
+// Dimensions in mm; phone up to 12 mm thick, tilt a of the backrest against the horizontal.
 
-// Schnittpunkt der Geraden p1 + s·d1 und p2 + u·d2 (2D)
+// Intersection of the lines p1 + s·d1 and p2 + u·d2 (2D)
 function schnitt(p1, d1, p2, d2) =
     let (den = d1.x * d2.y - d1.y * d2.x,
          s = ((p2.x - p1.x) * d2.y - (p2.y - p1.y) * d2.x) / den)
     p1 + s * d1;
 
 module handystaender(w = 70, a = 65, lehne = 95, t = 5, lippe = 12, ablage = 14, kabel_d = 9) {
-    x0 = t + ablage;                                   // Beginn der Lehne
-    d = [cos(a), sin(a)];                              // Richtung der Lehne
-    n = [sin(a), -cos(a)];                             // Normale der Lehne nach hinten unten
-    top = [x0 + lehne * cos(a), t + lehne * sin(a)];   // vordere Oberkante der Lehne
-    fuss = top.x + t * n.x + 18;                       // hinteres Ende des Bodens
-    e = (top + t * n - [fuss, t]) / norm(top + t * n - [fuss, t]);  // Richtung der Strebe
+    x0 = t + ablage;                                   // Start of the backrest
+    d = [cos(a), sin(a)];                              // Direction of the backrest
+    n = [sin(a), -cos(a)];                             // Normal of the backrest, pointing back and down
+    top = [x0 + lehne * cos(a), t + lehne * sin(a)];   // Front top edge of the backrest
+    fuss = top.x + t * n.x + 18;                       // Rear end of the base
+    e = (top + t * n - [fuss, t]) / norm(top + t * n - [fuss, t]);  // Direction of the strut
 
-    // Seitenprofil (x nach hinten, y nach oben)
+    // Side profile (x to the back, y up)
     grid p {
         x: vorn = 0, lippe_i = t, lehne_u = x0, oben_v = top.x, oben_h = top.x + t * n.x, hinten = fuss;
         y: boden = 0, sitz = t, lippe_o = t + lippe, oben_u = top.y + t * n.y, oben = top.y;
     }
-    // Dasselbe im Raum (y = Breite) für Zonen und Bohrungen
+    // The same in space (y = width) for zones and holes
     grid g {
         x: vorn = 0, lippe_i = t, lehne_u = x0, loch = t + ablage / 2, hinten = fuss;
         y: links = 0, mitte = w / 2, rechts = w;
         z: boden = 0, sitz = t, lippe_o = t + lippe;
     }
 
-    // Fenster: Dreieck zwischen Lehne, Boden und Strebe, je um die Wandstärke t eingerückt
+    // Window: triangle between backrest, base and strut, each inset by the wall thickness t
     l1 = p[lehne_u, sitz] + t * n;
     l3 = [fuss, t] + t * [-e.y, e.x];
     fa = schnitt(l1, d, [0, 2 * t], [1, 0]);
@@ -45,15 +45,15 @@ module handystaender(w = 70, a = 65, lehne = 95, t = 5, lippe = 12, ablage = 14,
                              p[oben_v, oben], p[lehne_u, sitz], p[lippe_i, sitz], p[lippe_i, lippe_o],
                              p[vorn, lippe_o]]);
                 translate([0, w + 1, 0]) rotate([90, 0, 0]) linear_extrude(w + 2) polygon([fa, fb, fc]);
-                // Kabel: senkrechtes Loch in der Ablage und Kanal unter dem Boden nach hinten
+                // Cable: vertical hole in the shelf and channel under the base to the back
                 translate(g[loch, mitte, boden] - [0, 0, 1]) cylinder(h = t + 2, d = kabel_d);
                 box(g[loch, mitte, boden] - [0, kabel_d / 2, 1], g[hinten, mitte, boden] + [1, kabel_d / 2, 3]);
             }
-            zone(g[lippe_i, *, sitz], d = 2);   // Innenecke Lippe/Ablage
-            zone(g[lehne_u, *, sitz], d = 2);   // Innenecke Ablage/Lehne
+            zone(g[lippe_i, *, sitz], d = 2);   // Inner corner lip/shelf
+            zone(g[lehne_u, *, sitz], d = 2);   // Inner corner shelf/backrest
         }
-        zone(g[vorn, *, lippe_o], d = 2);       // Oberkante der Lippe außen
-        zone(g[lippe_i, *, lippe_o], d = 2);    // Oberkante der Lippe innen
+        zone(g[vorn, *, lippe_o], d = 2);       // Top edge of the lip outside
+        zone(g[lippe_i, *, lippe_o], d = 2);    // Top edge of the lip inside
     }
 
     anchor ablage_mitte = g[loch, mitte, sitz], dir = [0, 0, 1];

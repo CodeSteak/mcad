@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Beispiel-Logo (eigene Zeichnung, frei): Ring aus Bögen (evenodd), Zahnkranz, Blitz -->
+<!-- Example logo (own drawing, free): ring of arcs (evenodd), gear rim, lightning bolt -->
 <svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="40mm" viewBox="0 0 100 100">
   <title>Logo</title>
-  <!-- Ring: zwei Kreise als Bögen, das innere Loch über fill-rule evenodd -->
+  <!-- Ring: two circles as arcs, the inner hole via fill-rule evenodd -->
   <path id="ring" fill-rule="evenodd"
         d="M 95 50 A 45 45 0 1 0 5 50 A 45 45 0 1 0 95 50 Z
            M 87 50 A 37 37 0 1 1 13 50 A 37 37 0 1 1 87 50 Z"/>
-  <!-- Zahnkranz: acht Zähne, relativ gezeichnet, um die Mitte gedreht -->
+  <!-- Gear rim: eight teeth, drawn relatively, rotated about the centre -->
   <g id="zaehne" transform="translate(50 50)">
     <rect x="-5" y="-49" width="10" height="9" rx="1.5" transform="rotate(22.5)"/>
     <rect x="-5" y="-49" width="10" height="9" rx="1.5" transform="rotate(67.5)"/>
@@ -17,6 +17,6 @@
     <rect x="-5" y="-49" width="10" height="9" rx="1.5" transform="rotate(292.5)"/>
     <rect x="-5" y="-49" width="10" height="9" rx="1.5" transform="rotate(337.5)"/>
   </g>
-  <!-- Blitz: Polygon -->
+  <!-- Lightning bolt: polygon -->
   <polygon id="blitz" points="56,18 32,54 48,54 42,82 68,42 52,42 60,18"/>
 </svg>

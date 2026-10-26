@@ -1,8 +1,8 @@
-// Zweck: vereinfachtes Stirnrad – Trapezzähne als polygon aus einer Listen-Comprehension.
-z = 20;          // Zähnezahl
-m = 2;           // Modul
-r_p = z * m / 2; // Teilkreis
-r_a = r_p + m;   // Kopfkreis
+// Zweck: simplified spur gear – trapezoid teeth as polygon from a list comprehension.
+z = 20;          // Number of teeth
+m = 2;           // Module
+r_p = z * m / 2; // Pitch circle
+r_a = r_p + m;   // Tip circle
 r_f = r_p - 1.25 * m;
 step = 360 / z;
 function pt(r, a) = [r * cos(a), r * sin(a)];

@@ -1,10 +1,10 @@
-// Zweck: Winkelhalter mit verrundetem Profil (Plan 17.3) – L-Profil als Polygon; `fillet2d`
-// mit einer Zone rundet nur die Innenecke groß (Kerbwirkung), ein äußerer `fillet2d` alle
-// übrigen Ecken klein (die Übergänge des großen Bogens sind tangential und zählen nicht);
-// extrudiert, mit Langlöchern aus `stroke` einer Strecke (runde Enden).
-t = 6;       // Wandstärke
-a = 40;      // Schenkellänge
-h = 30;      // Breite des Halters
+// Zweck: angle holder with rounded profile (plan 17.3) – L profile as a polygon; `fillet2d`
+// with a zone rounds only the inner corner large (notch effect), one outer `fillet2d` all
+// other corners small (the transitions of the large arc are tangential and do not count);
+// extruded, with slots made by `stroke` of a line segment (round ends).
+t = 6;       // Wall width
+a = 40;      // Length of leg
+h = 30;      // The holder's width
 r_innen = 5;
 
 module profil() polygon([[0, 0], [a, 0], [a, t], [t, t], [t, a], [0, a]]);
@@ -18,11 +18,11 @@ difference() {
     linear_extrude(h) fillet2d(1) {
         fillet2d(r_innen) {
             profil();
-            translate([t, t]) circle(1);   // Zone: die Innenecke
+            translate([t, t]) circle(1);   // Zone: inner corner.
         }
     }
-    // Langlöcher im Boden (xz-Ebene, durch die Wand in y)
+    // Slots in the bottom (xz plane, through the wall, y)
     translate([0, -1, 0]) rotate([-90, 0, 0]) linear_extrude(t + 2) langloch([16, -h / 2], [32, -h / 2]);
-    // und in der Wand (yz-Ebene, durch die Wand in x)
+    // and in the wall (yz plane, through the wall, x)
     translate([-1, 0, 0]) rotate([90, 0, 90]) linear_extrude(t + 2) langloch([16, h / 2], [32, h / 2]);
 }

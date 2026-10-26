@@ -1,4 +1,4 @@
-// Zweck: Handyständer – geneigte Lehne über rotate, Lippe, Kabelschlitz; Profil per polygon.
+// Zweck: phone stand – tilted backrest via rotate, lip, cable slot; profile via polygon.
 angle = 65; depth = 60; width = 70; t = 5;
 lean = 80;
 module profile() polygon([
@@ -7,6 +7,6 @@ module profile() polygon([
 ]);
 difference() {
     rotate([90, 0, 0]) translate([0, 0, -width]) linear_extrude(height = width) profile();
-    // Kabelschlitz
+    // Cable slot
     translate([-1, width / 2 - 6, -1]) cube([t + 12, 12, t + 2]);
 }

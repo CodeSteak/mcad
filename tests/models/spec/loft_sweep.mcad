@@ -1,5 +1,5 @@
-// Zweck: Profiloperationen – loft vom Kreis zum Quadrat (Trichter), sweep eines Kreises
-// entlang eines Spline-Pfads (Griffbügel) und eines linearen Pfads aus Rasterpunkten.
+// Zweck: profile operations – loft from circle to square (funnel), sweep of a circle
+// along a spline path (grip bow) and of a linear path from grid points.
 grid g {
     x: links = 0, mitte = 20, rechts = 40;
     y: vorne = 0;

@@ -1,11 +1,11 @@
-// Zweck: Stirnradpaar Modul 2 (20 und 12 Zähne, Achsabstand 32 mm) – Evolventenflanken als
-// Polygon aus Listen-Funktionen (Evolventenwinkel, Zahndicke über Radius), linear_extrude;
-// Rad 1 mit Nabe, Passfedernut und Erleichterungslöchern (for), Rad 2 mit D-Bohrung für eine
-// Motorwelle 5 mm. Beide Räder als Bauteile im Eingriff (Flankenspiel prüfen mit
-// `mcad measure --clearance rad1 rad2`). Bohrungskanten mit difference(chamfer = …). Maße in mm.
+// Zweck: spur gear pair module 2 (20 and 12 teeth, centre distance 32 mm) – involute flanks as
+// polygon from list functions (involute angle, tooth thickness over radius), linear_extrude;
+// gear 1 with hub, keyway and lightening holes (for), gear 2 with a D bore for a
+// 5 mm motor shaft. Both gears as parts in mesh (check the backlash with
+// `mcad measure --clearance rad1 rad2`). Bore edges with difference(chamfer = …). Dimensions in mm.
 
-function inv(a) = tan(a) - a * PI / 180;                // Evolventenfunktion (a in Grad)
-function zahn_halbwinkel(m, z, rho, alpha, spiel) =      // halbe Zahndicke in Grad beim Radius rho
+function inv(a) = tan(a) - a * PI / 180;                // Involute function (a in degrees)
+function zahn_halbwinkel(m, z, rho, alpha, spiel) =      // Half the tooth thickness in degrees at radius rho
     let (r = m * z / 2, rb = r * cos(alpha), a_rho = acos(min(1, rb / rho)))
     90 / z - (spiel / 2) / r * 180 / PI + (inv(alpha) - inv(a_rho)) * 180 / PI;
 function zahnprofil(m, z, alpha = 20, spiel = 0.1, n = 5) =
@@ -33,7 +33,7 @@ module zahnrad(m = 2, z = 20, b = 10, bohrung = 8, nabe_d = 0, nabe_h = 0, nut_b
             linear_extrude(b) polygon([for (p = zahnprofil(m, z)) polar(p)]);
             if (nabe_h > 0) cylinder(h = g.nabe_o, d = nabe_d);
         }
-        // Bohrung; bei d_flach > 0 als D-Profil (Kreis, unten bei y = -d_flach abgeflacht)
+        // Bore; with d_flach > 0 as a D profile (circle, flattened at the bottom at y = -d_flach)
         intersection() {
             translate([0, 0, -1]) cylinder(h = g.nabe_o + 2, d = bohrung);
             if (d_flach > 0) translate([-bohrung, -d_flach, -2]) cube([2 * bohrung, 2 * bohrung, g.nabe_o + 4]);

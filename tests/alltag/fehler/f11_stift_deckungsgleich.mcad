@@ -1,7 +1,7 @@
-// F11: Scharnier mit Stift 3,0 in Bohrung 3,0 (deckungsgleiche Zylinder): die Vereinigung
-// aller Bauteile (Wurzel, Z. 1) scheitert mit SM_ERR_NULL_POINTER, `--interference` meldet
-// 0,24 mm³ Kollision a ↔ stift. Nicht weiter reduziert (ein einzelnes Auge mit Stift geht).
-// Status (Bericht 13): offen – deckungsgleiche Zylinderflächen (SMLib-Boolean).
+// F11: hinge with pin 3.0 in bore 3.0 (coincident cylinders): the union
+// of all parts (root, l. 1) fails with SM_ERR_NULL_POINTER, `--interference` reports
+// 0.24 mm³ collision a ↔ stift. Not reduced further (a single knuckle with pin works).
+// Status (report 13): open – coincident cylinder surfaces (SMLib boolean).
 // SOLL: fehlerfrei
 use <../../../tests/models/alltag/scharnier/teile.mcad>
 a: blatt(seite = 0, bohrung = 3.0);

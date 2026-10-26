@@ -1,9 +1,9 @@
-// Zweck: Kabelkanal entlang eines Pfads (Plan 17.3) – der Pfad ist eine offene Skizze aus
-// Geraden, einem tangentialen Bogen und einer verrundeten Ecke (`corner`); `stroke` macht
-// daraus den Boden (volle Breite, flache Enden) und die Wände (Differenz mit einem schmaleren
-// Strich, dessen eckige Enden über den Kanal hinausreichen: die Enden bleiben offen); dazu
-// Rippen im Boden als Zickzack mit Gehrung.
-breite = 16;   // außen
+// Zweck: cable duct along a path (plan 17.3) – the path is an open sketch that is made of
+// lines, a tangential arc and a rounded corner (`corner`); from this path, `stroke` makes
+// the bottom (full width, flat ends) and the walls (a difference with a narrower stroke whose
+// square ends reach beyond the duct, so that the ends remain open); in addition, there are
+// ribs in the bottom as zigzag with mitres.
+breite = 16;   // outer
 wand = 2;
 hoehe = 12;
 boden = 2;
@@ -12,7 +12,7 @@ module pfad() {
     sketch(closed = false) {
         start([0, 0]);
         line(to = [40, 0]);
-        arc(to = [60, 20]);          // tangential: Viertelkreis r = 20
+        arc(to = [60, 20]);          // tangential: quarter arc, r = 20
         line(to = [60, 50]);
         corner(r = 12);
         line(to = [20, 50]);
@@ -24,7 +24,7 @@ linear_extrude(hoehe) difference() {
     stroke(breite, cap = "flat") pfad();
     stroke(breite - 2 * wand, cap = "square") pfad();
 }
-// Rippen auf dem Boden des geraden Anfangsstücks
+// Ribs on the bottom of the first straight piece
 translate([0, 0, boden]) linear_extrude(1) stroke(1.2, cap = "round", join = "miter") sketch(closed = false) {
     start([4, -4]);
     for (i = [1 : 8]) line(to = [4 + 4 * i, i % 2 == 0 ? -4 : 4]);

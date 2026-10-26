@@ -706,7 +706,7 @@ export function writeMetrics11(m: Record<string, unknown>): void {
   writeFileSync(f, JSON.stringify({ ...old, ...m }, null, 2));
 }
 
-// ---------------------------------------------------------------- Bericht 12 (Farben-Korrekturen)
+// ---------------------------------------------------------------- colour fixes (test report 12)
 
 export const REPORT12_DIR = join(here, "../../reports/tmp/report12");
 
@@ -727,7 +727,7 @@ export function record12(entry: ScenarioC): void {
   writeFileSync(f, JSON.stringify(all, null, 2));
 }
 
-// ---------------------------------------------------------------- Bericht 14 (Skizzen, Namensräume)
+// ---------------------------------------------------------------- sketches, namespaces (test report 14)
 
 export const REPORT14_DIR = join(here, "../../reports/tmp/report14");
 
@@ -748,7 +748,7 @@ export function record14(entry: ScenarioC): void {
   writeFileSync(f, JSON.stringify(all, null, 2));
 }
 
-// ---------------------------------------------------------------- Bericht 15 (Ecken, Offset, Stroke)
+// ---------------------------------------------------------------- corners, offset, stroke (test report 15)
 
 export const REPORT15_DIR = join(here, "../../reports/tmp/report15");
 
@@ -769,7 +769,7 @@ export function record15(entry: ScenarioC): void {
   writeFileSync(f, JSON.stringify(all, null, 2));
 }
 
-// ---------------------------------------------------------------- Bericht 16 (Text, SVG-Import)
+// ---------------------------------------------------------------- text, SVG import (test report 16)
 
 export const REPORT16_DIR = join(here, "../../reports/tmp/report16");
 
@@ -790,7 +790,7 @@ export function record16(entry: ScenarioC): void {
   writeFileSync(f, JSON.stringify(all, null, 2));
 }
 
-// ---------------------------------------------------------------- Bericht 17 (Schablonenschrift)
+// ---------------------------------------------------------------- stencil font (test report 17)
 
 export const REPORT17_DIR = join(here, "../../reports/tmp/report17");
 
@@ -811,7 +811,7 @@ export function record17(entry: ScenarioC): void {
   writeFileSync(f, JSON.stringify(all, null, 2));
 }
 
-// ---------------------------------------------------------------- Bericht 18 (Skizzen-Editor)
+// ---------------------------------------------------------------- sketch editor (test report 18)
 
 export const REPORT18_DIR = join(here, "../../reports/tmp/report18");
 
@@ -839,7 +839,7 @@ export function writeMetrics18(m: Record<string, unknown>): void {
   writeFileSync(f, JSON.stringify({ ...old, ...m }, null, 2));
 }
 
-// ---------------------------------------------------------------- Bericht 19 (Messen)
+// ---------------------------------------------------------------- measuring (test report 19)
 
 export const REPORT19_DIR = join(here, "../../reports/tmp/report19");
 

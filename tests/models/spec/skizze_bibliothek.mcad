@@ -1,7 +1,7 @@
-// Zweck: Module als Namensräume (Plan 17.2) – eine Bibliothek `profile` mit Skizzen-Modulen
-// und eine Teilebibliothek `teile` mit Konstanten, Funktionen und Untermodulen; Aufrufe von
-// außen mit Punkt (`profile.stern()`, `teile.schraube(d = 3)`, mehrstufig
-// `teile.platte.lochplatte()`), Funktionen und Konstanten als `teile.kopf(teile.M3)`.
+// Zweck: modules as namespaces (plan 17.2) – a library `profile` containing sketch modules,
+// and a parts library `teile` with constants, functions and submodules; it gets called from
+// outside with a dot (`profile.stern()`, `teile.schraube(d = 3)`, nested,
+// `teile.platte.lochplatte()`), functions and constants as in `teile.kopf(teile.M3)`.
 module profile {
     module stern(n = 5, r1 = 12, r2 = 5) sketch {
         start([r1, 0]);
@@ -20,14 +20,14 @@ module profile {
 }
 
 module teile(raster = 10) {
-    M3 = 3.2;                                   // Durchgangsbohrung M3
-    function kopf(d) = 1.8 * d;                 // Kopfdurchmesser
+    M3 = 3.2;                                   // Through hole for M3.
+    function kopf(d) = 1.8 * d;                 // Head's diameter
     module schraube(d = 3, l = 12) {
         cylinder(h = l, d = d);
         translate([0, 0, l]) cylinder(h = d * 0.6, d = kopf(d));
     }
     module platte {
-        // sieht `raster` und `M3` von `teile` (Standardwerte)
+        // sees `raster` and `M3` of `teile` (as the defaults)
         module lochplatte(n = 3) {
             difference() {
                 cube([n * raster, raster, 3]);

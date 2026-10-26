@@ -1,7 +1,7 @@
-// F7: torus() als Zone wählt keine Kante („0 Kanten“), obwohl die obere Kreiskante genau auf
-// der Seelenlinie des Torus liegt (auch mit Rohrradius 2). Ein flacher Ring (Differenz zweier
-// Zylinder) als Zone wählt sie. Umgehung: Modul ringzone() im Flansch.
-// Status (Bericht 13): behoben – Ursache: Toleranz 0 des verschobenen Torus (siehe F8).
+// F7: torus() as a zone selects no edge („0 edges“) although the upper circular edge lies exactly on
+// the core line of the torus (also with tube radius 2). A flat ring (difference of two
+// cylinders) as a zone selects it. Workaround: module ringzone() in the flange.
+// Status (report 13): fixed – cause: tolerance 0 of the moved torus (see F8).
 // SOLL: keine Warnungen
 fillet(1) {
     cylinder(h = 10, r = 20);

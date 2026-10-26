@@ -1,23 +1,23 @@
-# Arch-Paket mcad (Repository controller-cad; Paketname bis 0.2: controller-cad): `mcad` mit Desktop-UI (Tauri 2, WebKitGTK 4.1) und CLI.
+# Arch package mcad (repository controller-cad; package name up to 0.2: controller-cad): `mcad` with desktop UI (Tauri 2, WebKitGTK 4.1) and CLI.
 #
-# Gebaut wird über das Makefile im Repository-Wurzelverzeichnis:
-#   make arch-pkg      # makepkg auf Arch Linux, sonst in einem archlinux-Container (Docker)
-#   make arch-test     # Paket in frischem Container installieren und prüfen
-# `make arch-pkg` legt das Quelltext-Archiv (git archive HEAD) nach target/arch, kopiert diese
-# Datei dorthin und setzt dabei pkgver (<Cargo-Version>.r<Commits>.g<Hash>) und _srcsum.
-# Direkt mit makepkg: erst `make dist`, dann pkgver/_srcsum wie oben setzen.
+# Built via the Makefile in the repository root:
+#   make arch-pkg      # makepkg on Arch Linux, otherwise in an archlinux container (Docker)
+#   make arch-test     # install and check the package in a fresh container
+# `make arch-pkg` puts the source archive (git archive HEAD) into target/arch, copies this
+# file there and sets pkgver (<Cargo version>.r<commits>.g<hash>) and _srcsum.
+# Directly with makepkg: first `make dist`, then set pkgver/_srcsum as above.
 #
-# SMLib (Apache-2.0) kommt als Git-Quelle (Fork tangency-labs/smlib, fester Commit wie in
-# smlib/fetch.sh) mit den Patches aus smlib/patches; anderer Ort: SMLIB_URL=… make arch-pkg.
+# SMLib (Apache-2.0) comes as a Git source (fork tangency-labs/smlib, fixed commit as in
+# smlib/fetch.sh) with the patches from smlib/patches; other location: SMLIB_URL=… make arch-pkg.
 
 pkgname=mcad
 pkgver=0.3.0
 pkgrel=1
-pkgdesc='Parametrisches CAD im OpenSCAD-Dialekt mit exakter B-Rep (SMLib): CLI mcad und Desktop-UI'
+pkgdesc='Parametric CAD in an OpenSCAD dialect with exact B-rep (SMLib): CLI mcad and desktop UI'
 arch=('x86_64')
 url='https://github.com/CodeSteak/controller-cad'
-# Projekt: MIT; SMLib: Apache-2.0; Schriften: OFL-1.1; Crates/UI: MIT, Apache-2.0
-# bis 0.2.x hieß Paket und Programm controller-cad bzw. cad
+# Project: MIT; SMLib: Apache-2.0; fonts: OFL-1.1; crates/UI: MIT, Apache-2.0
+# up to 0.2.x the package and program were called controller-cad and cad
 provides=('controller-cad')
 conflicts=('controller-cad')
 replaces=('controller-cad')
@@ -44,8 +44,8 @@ makedepends=(
   'nodejs'
   'pnpm'
 )
-# lto: makepkg würde SMLib (statische C++-Bibliotheken) als GCC-LTO-Objekte bauen, die rustc
-# beim Linken nicht auflöst. debug: Debug-Info von Tauri/WebKit-Bindings kostet mehrere GB.
+# lto: makepkg would build SMLib (static C++ libraries) as GCC LTO objects that rustc
+# cannot resolve when linking. debug: debug info of the Tauri/WebKit bindings costs several GB.
 options=('!lto' '!debug')
 _smlib_commit=7eba8aa8086777c9cb220c0eb2726112a2a5a2b4
 _srcsum=SKIP
@@ -56,7 +56,7 @@ sha256sums=("$_srcsum"
 
 prepare() {
   cd "$pkgname-$pkgver"
-  # SMLib-Quellen an den Ort, den smlib/fetch.sh und build.rs erwarten, Patches einmal anwenden
+  # SMLib sources where smlib/fetch.sh and build.rs expect them, apply the patches once
   mkdir -p third_party
   ln -sfn "$srcdir/smlib" third_party/smlib
   local p
@@ -65,7 +65,7 @@ prepare() {
       git -C "$srcdir/smlib" apply "$PWD/$p"
     fi
   done
-  # Netzzugriff nur hier: Crates und pnpm-Pakete
+  # Network access only here: crates and pnpm packages
   export RUSTUP_TOOLCHAIN=stable
   cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
   (cd web && pnpm install --frozen-lockfile)
@@ -76,9 +76,9 @@ build() {
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR="$PWD/target"
   export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/usr/src/$pkgname"
-  # SMLib ist nur ohne libstdc++-Assertions getestet (wie in CI und den Testberichten)
+  # SMLib is only tested without libstdc++ assertions (as in CI and the test reports)
   export CXXFLAGS="${CXXFLAGS//-Wp,-D_GLIBCXX_ASSERTIONS/}"
-  # __FILE__ in SMLib-Meldungen ohne $srcdir
+  # __FILE__ in SMLib messages without $srcdir
   CFLAGS+=" -ffile-prefix-map=$srcdir=/usr/src/$pkgname"
   CXXFLAGS+=" -ffile-prefix-map=$srcdir=/usr/src/$pkgname"
   export JOBS="${JOBS:-$(nproc)}"
@@ -91,10 +91,10 @@ check() {
   export MCAD_NO_DAEMON=1
   "$mcad" --version
   "$mcad" check tests/models/spec/gehaeuse.mcad
-  "$mcad" check tests/models/openscad-compat/05_nested_booleans.scad   # .scad öffnet weiterhin
+  "$mcad" check tests/models/openscad-compat/05_nested_booleans.scad   # .scad still opens
   "$mcad" render tests/models/spec/gehaeuse.mcad -o "$srcdir/check-gehaeuse.png" --module gehaeuse --views all
   "$mcad" export tests/models/spec/flasche.mcad -o "$srcdir/check-flasche.step"
-  # ohne grafische Sitzung: Meldung und Exit 2 (die UI ist eingebettet, nicht der Platzhalter)
+  # without a graphical session: message and exit 2 (the UI is embedded, not the placeholder)
   local rc=0
   env -u DISPLAY -u WAYLAND_DISPLAY "$mcad" >/dev/null 2>&1 || rc=$?
   [ "$rc" = 2 ]

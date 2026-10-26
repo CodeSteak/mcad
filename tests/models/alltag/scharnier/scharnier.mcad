@@ -1,12 +1,12 @@
-// Zweck: Druckbares Scharnier 60 mm aus drei Bauteilen (Blatt A, Blatt B, Stift) – Maße per
-// include, Teile per use; die Augen beider Blätter aus derselben Funktion (axiales Spiel),
-// Freiräume per for, Blatt B um die Achse auf den Öffnungswinkel gedreht. Prüfen:
-// `mcad measure scharnier.mcad --interference --clearance a b` (Spiel 0,4 mm) und Stift ↔ B.
-// Maße in mm.
+// Zweck: printable 60 mm hinge of three parts (leaf A, leaf B, pin) – dimensions via
+// include, parts via use; the knuckles of both leaves from the same function (axial clearance),
+// clearances via for, leaf B rotated about the axis to the opening angle. Check:
+// `mcad measure scharnier.mcad --interference --clearance a b` (clearance 0.4 mm) and pin ↔ B.
+// Dimensions in mm.
 include <masse.mcad>
 use <teile.mcad>
 
-winkel = 180;     // Öffnungswinkel zwischen den Blättern (180 = flach; unter ca. 40° berühren sich die Blätter)
+winkel = 180;     // Opening angle between the leaves (180 = flat; below approx. 40° the leaves touch)
 
 a: blatt(seite = 0, l = laenge, n = augen, r = auge_r, t = blatt_t, spiel = spiel, bohrung = bohrung_a);
 rotate([180 - winkel, 0, 0])

@@ -1,5 +1,5 @@
-// Zweck: Fasen in allen drei Formen – chamfer-Block mit Zone, union(chamfer = …) und
-// $chamfer auf Primitiven; dazu $fillet für einen verrundeten Knopf.
+// Zweck: chamfers in all three forms – chamfer block with zone, union(chamfer = …) and
+// $chamfer on primitives; plus $fillet for a rounded knob.
 grid g {
     x: a = 0, b = 40;
     y: v = 0, h = 25;

@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# Arch-Paket in Docker bauen und prüfen (für `make arch-pkg` / `make arch-test` ohne Arch Linux).
+# Build and check the Arch package in Docker (for `make arch-pkg` / `make arch-test` without Arch Linux).
 #
-#   packaging/arch/docker.sh build OUT   # makepkg in OUT (PKGBUILD + Quelltext-Archiv von make arch-pkg)
-#   packaging/arch/docker.sh test OUT    # OUT/mcad-*.pkg.tar.zst in frischem Container
-#                                        # installieren, packaging/arch/smoke-test.sh ausführen
-#   packaging/arch/docker.sh clean       # Builder-Image und Cache-Volume entfernen
+#   packaging/arch/docker.sh build OUT   # makepkg in OUT (PKGBUILD + source archive from make arch-pkg)
+#   packaging/arch/docker.sh test OUT    # install OUT/mcad-*.pkg.tar.zst in a fresh
+#                                        # container, run packaging/arch/smoke-test.sh
+#   packaging/arch/docker.sh clean       # remove builder image and cache volume
 #
-# Umgebung (Vorgaben aus dem Makefile):
-#   ARCH_IMAGE=archlinux:latest            Basis-Image
+# Environment (defaults from the Makefile):
+#   ARCH_IMAGE=archlinux:latest            base image
 #   ARCH_BUILDER_IMAGE=controller-cad-arch-builder
-#                                          Image mit base-devel, depends, makedepends, namcap
-#   ARCH_DOCKER_NETWORK=host               Netz der Container (host: ein Proxy auf 127.0.0.1
-#                                          des Hosts ist erreichbar)
-#   ARCH_CA_BUNDLE=                        zusätzliche CA (PEM) im Container, z. B. für einen
-#                                          TLS-Proxy; HTTPS_PROXY/NO_PROXY werden durchgereicht
+#                                          image with base-devel, depends, makedepends, namcap
+#   ARCH_DOCKER_NETWORK=host               container network (host: a proxy on the host's
+#                                          127.0.0.1 is reachable)
+#   ARCH_CA_BUNDLE=                        extra CA (PEM) in the container, e.g. for a
+#                                          TLS proxy; HTTPS_PROXY/NO_PROXY are passed through
 #   ARCH_CACHE_VOLUME=controller-cad-arch-cache
-#                                          Volume für Cargo- und pnpm-Caches (leer: keines)
+#                                          volume for Cargo and pnpm caches (empty: none)
 #
-# makepkg läuft als Benutzer `builder` (makepkg verweigert root); die Ergebnisse gehören
-# danach wieder dem aufrufenden Benutzer.
+# makepkg runs as user `builder` (makepkg refuses root); afterwards the results belong
+# to the calling user again.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,7 +31,7 @@ CACHE="${ARCH_CACHE_VOLUME-controller-cad-arch-cache}"
 
 usage() { sed -n '2,7p' "$0" >&2; exit 2; }
 
-# docker-run-Argumente: Netz, Proxy, CA
+# docker run arguments: network, proxy, CA
 common=(--rm --network "$NETWORK")
 build_args=(--network "$NETWORK")
 for v in HTTPS_PROXY https_proxy HTTP_PROXY http_proxy NO_PROXY no_proxy; do
@@ -41,19 +41,19 @@ for v in HTTPS_PROXY https_proxy HTTP_PROXY http_proxy NO_PROXY no_proxy; do
   fi
 done
 if [ -n "$CA" ]; then
-  [ -f "$CA" ] || { echo "ARCH_CA_BUNDLE: $CA nicht gefunden" >&2; exit 2; }
+  [ -f "$CA" ] || { echo "ARCH_CA_BUNDLE: $CA not found" >&2; exit 2; }
   common+=(-v "$(cd "$(dirname "$CA")" && pwd)/$(basename "$CA"):/etc/ca-certificates/trust-source/anchors/extra-ca.crt:ro")
-  # Node (pnpm) liest den System-Trust-Store nicht: ohne diese Variable hängt pnpm install
-  # hinter einem TLS-Proxy in Wiederholungen
+  # Node (pnpm) does not read the system trust store: without this variable pnpm install
+  # hangs in retries behind a TLS proxy
   common+=(-e NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt)
 fi
-# Vor pacman: zusätzliche CA in den Trust-Store übernehmen
+# Before pacman: add the extra CA to the trust store
 TRUST='if [ -f /etc/ca-certificates/trust-source/anchors/extra-ca.crt ]; then update-ca-trust; fi'
 
 builder_image() {
   local ctx
   ctx="$(mktemp -d)"
-  # Nur die Paketlisten kommen ins Image (pkgver ändert sich mit jedem Commit, die Liste selten)
+  # Only the package lists go into the image (pkgver changes with every commit, the list rarely)
   bash -c 'source "$1"; printf "%s\n" "${depends[@]}" "${makedepends[@]}" "${checkdepends[@]}"' _ \
     "$HERE/PKGBUILD" | sort -u >"$ctx/deps.txt"
   if [ -n "$CA" ]; then cp "$CA" "$ctx/extra-ca.crt"; else : >"$ctx/extra-ca.crt"; fi
@@ -76,8 +76,8 @@ EOF
 cmd="${1:-}"
 case "$cmd" in
   build)
-    OUT="$(cd "${2:?Ausgabeordner fehlt}" && pwd)"
-    [ -f "$OUT/PKGBUILD" ] || { echo "$OUT/PKGBUILD fehlt (make arch-pkg)" >&2; exit 2; }
+    OUT="$(cd "${2:?output directory missing}" && pwd)"
+    [ -f "$OUT/PKGBUILD" ] || { echo "$OUT/PKGBUILD missing (make arch-pkg)" >&2; exit 2; }
     builder_image
     vol=()
     [ -n "$CACHE" ] && vol=(-v "$CACHE:/home/builder/.cache")
@@ -102,9 +102,9 @@ case "$cmd" in
         exit $rc'
     ;;
   test)
-    OUT="$(cd "${2:?Ausgabeordner fehlt}" && pwd)"
+    OUT="$(cd "${2:?output directory missing}" && pwd)"
     pkg="$(ls -t "$OUT"/mcad-*.pkg.tar.zst 2>/dev/null | head -n 1)"
-    [ -n "$pkg" ] || { echo "kein Paket in $OUT (make arch-pkg)" >&2; exit 2; }
+    [ -n "$pkg" ] || { echo "no package in $OUT (make arch-pkg)" >&2; exit 2; }
     ROOT="$(cd "$HERE/../.." && pwd)"
     mkdir -p "$OUT/test"
     "$DOCKER" run "${common[@]}" -v "$OUT:/pkg" -v "$ROOT/examples:/examples:ro" \

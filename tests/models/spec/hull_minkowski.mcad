@@ -1,8 +1,8 @@
-// Zweck: hull() und minkowski() in ihren exakten Sonderfällen (Plan 21): Platte mit runden
-// Ecken und Langlöchern (2D-Hülle), abgerundeter Block (minkowski mit Kugel), Griff als Kapsel
-// (Kugeln auf einer Achse), Lasche aus Quader und Zylinder gleicher Höhe (Prisma), Kissen aus
-// gleich großen Kugeln (Hülle der Mittelpunkte + Offset) und eine Leiste aus linear_extrude +
-// cylinder (Minkowski-Summe zweier Prismen).
+// Zweck: hull() and minkowski() in their exact special cases (plan 21): plate with round
+// corners and slots (2D hull), rounded block (minkowski with sphere), grip as a capsule
+// (spheres on an axis), tab of box and cylinder of equal height (prism), cushion of
+// equal spheres (hull of the centres + offset) and a strip of linear_extrude +
+// cylinder (Minkowski sum of two prisms).
 module langloch(l = 20, d = 6) {
     hull() {
         circle(d = d);

@@ -1,4 +1,4 @@
-// Zweck: globales $fn = 64 nur für glatte Darstellung – bei uns exakte Geometrie mit Hinweis.
+// Zweck: global $fn = 64 only for smooth display – here exact geometry with a note.
 $fn = 64;
 difference() {
     cylinder(h = 10, r = 8);

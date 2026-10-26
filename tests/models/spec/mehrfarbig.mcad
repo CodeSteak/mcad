@@ -1,8 +1,8 @@
-// Zweck: Mehrfarbig drucken (Bericht 11) – Türschild mit Schrift-Relief und Spielfigur als
-// zwei Bauteile, Farben aus der Palette, ein fester Filament-Slot; Export als 3MF mit einem
-// Teil je Farbe für Bambu Studio / OrcaSlicer.
+// Zweck: multi-colour printing (report 11) – door sign with relief lettering and a game piece as
+// two parts, colours from the palette, one fixed filament slot; export as 3MF with one
+// part per colour for Bambu Studio / OrcaSlicer.
 
-// Blockbuchstaben aus Balken: s = Strichstärke, b × h = Feld des Buchstabens.
+// Block letters from bars: s = stroke width, b × h = letter cell.
 module balken(x, y, w, h, t) translate([x, y, 0]) cube([w, h, t]);
 
 module buchstabe(c, b = 8, h = 12, s = 2, t = 1.2) {
@@ -16,7 +16,7 @@ module buchstabe(c, b = 8, h = 12, s = 2, t = 1.2) {
         balken(0, h - s, b, s, t);
         balken(0, h / 2 - s / 2, b, s, t);
     } else if (c == "D") {
-        // Balken überlappen (nur Kanten berühren gäbe keinen geschlossenen Körper)
+        // Bars overlap (touching edges only would not give a closed solid)
         balken(0, 0, s, h, t);
         balken(0, h - s, b - s / 2, s, t);
         balken(0, 0, b - s / 2, s, t);
@@ -32,17 +32,17 @@ module schild(w = 60, d = 28, t = 3, rand = 2.5) {
     }
     difference() {
         union() {
-            // Grundplatte weiß, Rahmen petrol (sitzt auf der Platte)
+            // Base plate white, frame petrol (sits on the plate)
             color("white") box(g[links, vorne, boden], g[rechts, hinten, oben]);
             color("teal") difference() {
                 box(g[links, vorne, oben] - [0, 0, 0.5], g[rechts, hinten, oben] + [0, 0, 1]);
                 box(g[links, vorne, oben] + [rand, rand, -1], g[rechts, hinten, oben] - [rand, rand, -2]);
             }
-            // Schrift-Relief rot, auf Filament 3 festgelegt
+            // Relief lettering red, fixed to filament 3
             color("red", filament = 3)
                 for (i = [0:2]) translate(g[schrift, zeile, oben] + [i * 11, 0, -0.2]) buchstabe(["C", "A", "D"][i]);
         }
-        // Aufhängebohrung: abgezogen, gilt für alle Farben
+        // Hanging hole: subtracted, applies to all colours
         translate(g[links, hinten, boden] + [6, -6, -1]) cylinder(h = t + 3, r = 1.6);
     }
 }
@@ -52,7 +52,7 @@ module spielfigur(r = 9, h = 26) {
         x: achse = 0, hals = r * 0.3, rand = r * 0.85, fuss = r;
         y: boden = 0, sockel = 4, mitte = h * 0.55, kopf = h * 0.8;
     }
-    // Profil: vom Rand des Sockels zum Hals (quadratisch), dann gerade bis zum Kopf
+    // Profile: from the rim of the base to the neck (square), then straight up to the head
     z0 = p.sockel - 1;
     profil = concat(
         [[0, z0]],
@@ -62,12 +62,12 @@ module spielfigur(r = 9, h = 26) {
         cylinder(h = p.sockel, r = p.fuss);
         rotate_extrude() polygon(profil);
     }
-    // weißer Kragen und gelber Kopf: spätere Anweisungen gewinnen bei Überlappung
+    // white collar and yellow head: later statements win where they overlap
     color("white") translate([0, 0, p.mitte - 1]) cylinder(h = 2, r = r * 0.5);
     color("yellow") translate([0, 0, p.kopf + 2.5]) sphere(r * 0.42);
 }
 
-// Spielfigur neben dem Schild (eigenes Bauteil = eigenes Objekt im Slicer)
+// Game piece next to the sign (own part = own object in the slicer)
 module figur(at = [80, 14, 0]) translate(at) spielfigur();
 
 schild: schild();

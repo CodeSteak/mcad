@@ -1,16 +1,16 @@
-// Zweck: Schild mit Relief-Text (Plan 17.4, Bericht 16) – Grundplatte mit Rand, erhabener Text in
-// zwei Schriften – mehrfarbig (3MF mit einem Filament je Farbe).
-// Schriften: Standard ist die Schablonenschrift "cad stencil mono" (schablone.mcad); mitgeliefert
-// sind außerdem JetBrains Mono, Inter und Allerta Stencil, je mit Stil (`"Inter:style=Bold"`);
-// eigene Schriften mit `font = "datei.ttf"` (Datei im Projekt).
-// `size` wie in OpenSCAD: Versalhöhe etwa `size`.
+// Zweck: sign with relief text (plan 17.4, report 16) – base plate with rim, raised text in
+// two fonts – multi-colour (3MF with one filament per colour).
+// Fonts: the default is the stencil font "cad stencil mono" (schablone.mcad); also bundled
+// are JetBrains Mono, Inter and Allerta Stencil, each with a style (`"Inter:style=Bold"`);
+// own fonts with `font = "datei.ttf"` (file in the project).
+// `size` as in OpenSCAD: cap height about `size`.
 
 breite = 100;
 hoehe = 44;
 dicke = 3;
-r = 5;          // Eckenradius
-rand = 2;       // Breite des Rands
-relief = 1.2;   // Höhe von Text und Rand
+r = 5;          // Corner radius
+rand = 2;       // Width of the rim
+relief = 1.2;   // Height of text and rim
 
 module platte(b, h, r) sketch {
     start([r, 0]);
@@ -26,13 +26,13 @@ module platte(b, h, r) sketch {
 
 color("white") linear_extrude(dicke) platte(breite, hoehe, r);
 
-// Rand
+// Rim
 color("blue") translate([0, 0, dicke]) linear_extrude(relief) difference() {
     platte(breite, hoehe, r);
     translate([rand, rand]) platte(breite - 2 * rand, hoehe - 2 * rand, r - rand);
 }
 
-// Titel und Untertitel erhaben
+// Title and subtitle raised
 color("red") translate([breite / 2, 26, dicke])
     linear_extrude(relief) text("Werkstatt", size = 11, font = "Inter:style=Bold", halign = "center", valign = "center");
 color("black") translate([breite / 2, 9, dicke])

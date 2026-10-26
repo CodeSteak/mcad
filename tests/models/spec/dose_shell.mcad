@@ -1,5 +1,5 @@
-// Zweck: shell(t) { körper; zone } – Dose aus einem verrundeten Vollkörper ($fillet),
-// oben geöffnet über die Zone an der Rasterebene deckel; Anker für den Deckel.
+// Zweck: shell(t) { body; zone } – box from a rounded solid ($fillet),
+// opened at the top via the zone at the grid plane deckel; anchor for the lid.
 module dose(w = 50, d = 35, h = 30, wand = 1.5) {
     grid g {
         x: links = 0, rechts = w;

@@ -1,6 +1,6 @@
-// Zweck: Winkel (L-Halter) mit Versteifungsrippe und Langlöchern.
+// Zweck: angle bracket (L holder) with stiffening rib and slots.
 w = 30; l = 40; t = 4;
-// Langloch ohne hull(): zwei Kreise und ein Rechteck
+// Slot without hull(): two circles and a rectangle
 module slot(len, d) {
     translate([-len / 2, 0]) circle(d = d);
     translate([len / 2, 0]) circle(d = d);
@@ -10,7 +10,7 @@ difference() {
     union() {
         cube([l, w, t]);
         cube([t, w, l]);
-        // Rippe
+        // Rib
         translate([0, w / 2 - t / 2, 0]) rotate([90, 0, 0]) mirror([0, 0, 1])
             linear_extrude(height = t) polygon([[t, t], [l - 5, t], [t, l - 5]]);
     }

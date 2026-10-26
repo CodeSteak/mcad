@@ -1,5 +1,5 @@
-// Zweck: Lochplatte mit indizierten Rasterebenen (Listen), Bohrungen an Rasterpunkten,
-// an Rasterpunkten platziertes zweites Raster und difference(fillet = 1) für die Bohrkanten.
+// Zweck: perforated plate with indexed grid planes (lists), bore holes at grid points,
+// a second grid placed at grid points and difference(fillet = 1) for the edges of the bores.
 module lochplatte(n = 4, pitch = 12, t = 4, rand = 6) {
     w = 2 * rand + (n - 1) * pitch;
     grid g {
@@ -14,7 +14,7 @@ module lochplatte(n = 4, pitch = 12, t = 4, rand = 6) {
             translate(g[loch[i], mitte, boden]) translate([0, 0, -1]) cylinder(h = t + 2, d = 4);
     }
 
-    // Raster für die Lasche, am rechten Rand platziert
+    // Grid for the tab, placed at the right-hand edge.
     translate(g[rechts, vorne, boden]) grid l {
         x: anfang = 0, ende = 10;
         y: v = 0, h = 2 * rand;

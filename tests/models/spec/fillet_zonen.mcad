@@ -1,5 +1,5 @@
-// Zweck: Zonenblock fillet(r) { körper; zone; … } mit Rasterlinie, Rasterebene und
-// Volumenzone, select = "touch", verschachtelte Blöcke mit zwei Radien.
+// Zweck: zone block fillet(r) { body; zone; … } with a grid line, a grid plane and
+// volume zone, select = "touch", nested blocks with two distinct radii.
 module block(w = 30, d = 20, h = 15) {
     grid g {
         x: links = 0, rechts = w;
@@ -14,10 +14,10 @@ module block(w = 30, d = 20, h = 15) {
                 box(g[links, vorne, boden], g[rechts, hinten, deckel]);
                 translate(p) cylinder(h = h + 1, r = 4);
             }
-            zone(g[rechts, *, deckel], d = 2);     // obere rechte Kante
-            translate(p + [0, 0, h]) sphere(6);   // Bohrungskante oben
+            zone(g[rechts, *, deckel], d = 2);     // the top right edge
+            translate(p + [0, 0, h]) sphere(6);   // Upper edge of bore
         }
-        zone(g.boden, d = 1);                     // alle Bodenkanten (äußerer Radius)
+        zone(g.boden, d = 1);                     // all of the bottom edges (outer r)
     }
 
     translate([0, d + 10, 0]) fillet(1.5, select = "touch") {

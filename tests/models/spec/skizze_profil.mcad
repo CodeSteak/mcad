@@ -1,7 +1,7 @@
-// Zweck: Skizzen mit Bögen (Plan 17.1) – ein Halter als Skizze aus Geraden und Bögen mit
-// Raster in der Skizze, einer Bohrung (Gegenlauf, Windungsregel) und einem Langloch
-// (`hole { … }`), extrudiert; daneben ein Drehknopf aus einer Skizze mit tangentialem Bogen
-// und kubischer Bézier-Kurve, um die z-Achse gedreht.
+// Zweck: sketches with arcs (plan 17.1) – a holder as a sketch of lines and arcs, with a
+// grid in the sketch, one bore (reverse direction, winding rule) and an oblong hole
+// (`hole { … }`), extruded; next to it, a knob made from a sketch with a tangential arc and
+// a cubic Bézier curve, then rotated about the z axis
 module halter(l = 60, b = 24, r_loch = 4) sketch {
     grid s {
         x: links = 0, bogen = l - b / 2;
@@ -9,14 +9,14 @@ module halter(l = 60, b = 24, r_loch = 4) sketch {
     }
     start(s[links, unten]);
     line(to = s[bogen, unten]);
-    arc(to = s[bogen, oben], r = b / 2);        // Halbkreis am Ende
+    arc(to = s[bogen, oben], r = b / 2);        // Semicircle at end
     line(to = s[links, oben]);
     close();
-    // Bohrung um den Bogenmittelpunkt, im Uhrzeigersinn: ein Loch (Windungsregel)
+    // Bore around the arc centre, running clockwise: it is a hole (winding rule).
     start([l - b / 2 + r_loch, b / 2]);
     arc(to = [l - b / 2 - r_loch, b / 2], r = r_loch, cw = true);
     arc(to = [l - b / 2 + r_loch, b / 2], r = r_loch, cw = true);
-    // Langloch: ein Loch in jeder Laufrichtung
+    // Slot: a hole in either running direction
     hole {
         start([10, b / 2 - 3]);
         line(to = [26, b / 2 - 3]);
@@ -32,7 +32,7 @@ translate([90, 12, 0]) rotate_extrude() sketch {
     start([0, 0]);
     line(to = [14, 0]);
     line(to = [14, 8]);
-    arc(to = [12, 10]);                         // tangential an die Gerade
+    arc(to = [12, 10]);                         // tangent to the straight.
     bezier(c1 = [6, 10], c2 = [5, 16], to = [0, 16]);
-    close();                                    // entlang der Achse zurück
+    close();                                    // and back along the axis.
 }

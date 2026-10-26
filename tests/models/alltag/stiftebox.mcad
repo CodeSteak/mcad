@@ -1,11 +1,11 @@
-// Zweck: Stiftebox mit Fächern für den Schreibtisch – Fachgrenzen als indizierte Rasterebenen
-// aus Listen (Fachbreiten als Parameter), Taschen als box zwischen Rasterpunkten; vier
-// verschachtelte Zonenblöcke: senkrechte Außen- und Taschenkanten (Rasterlinien, Zonen in einer
-// for-Schleife), Taschenböden (Platte um die Innenbodenebene) und die Oberkanten hinten (Fase an
-// der Deckelebene). Vorderes Fach niedriger; seine Oberkanten bleiben scharf (README: F6).
-// Maße in mm.
+// Zweck: desk pen box with compartments – compartment borders as indexed grid planes
+// from lists (compartment widths as parameters), pockets as box between grid points; four
+// nested zone blocks: vertical outer and pocket edges (grid lines, zones in a
+// for loop), pocket bottoms (plate around the inner bottom plane) and the rear top edges (chamfer at
+// the lid plane). Front compartment lower; its top edges stay sharp (README: F6).
+// Dimensions in mm.
 
-// Summe der ersten n Einträge einer Liste
+// Sum of the first n entries of a list
 function summe(v, n) = n <= 0 ? 0 : v[n - 1] + summe(v, n - 1);
 
 module stiftebox(faecher = [38, 26, 26], tiefe = 70, h = 95, wand = 2.4, boden = 3,
@@ -30,10 +30,10 @@ module stiftebox(faecher = [38, 26, 26], tiefe = 70, h = 95, wand = 2.4, boden =
                         box(g[links, steg_v, unten], g[rechts, hinten, oben]);
                         box(g[links, vorne, unten], g[rechts, steg_h, niedrig]);
                     }
-                    // hohe Fächer hinten
+                    // tall compartments at the back
                     for (i = [0 : n - 1])
                         box(g[von[i], steg_h, boden_i], g[bis[i], hinten_i, oben] + [0, 0, 1]);
-                    // ein durchgehendes flaches Fach vorn (Radiergummi, Klammern)
+                    // one continuous flat compartment at the front (eraser, clips)
                     box(g[von[0], vorn_i, boden_i], g[bis[n - 1], steg_v, niedrig] + [0, 0, 1]);
                 }
                 zone(g[links, vorne, *], d = 1);
@@ -41,7 +41,7 @@ module stiftebox(faecher = [38, 26, 26], tiefe = 70, h = 95, wand = 2.4, boden =
                 zone(g[links, hinten, *], d = 1);
                 zone(g[rechts, hinten, *], d = 1);
             }
-            // senkrechte Innenecken aller Taschen
+            // vertical inner corners of all pockets
             for (i = [0 : n - 1]) {
                 zone(g[von[i], steg_h, *], d = 1);
                 zone(g[bis[i], steg_h, *], d = 1);
@@ -53,9 +53,9 @@ module stiftebox(faecher = [38, 26, 26], tiefe = 70, h = 95, wand = 2.4, boden =
             zone(g[von[0], steg_v, *], d = 1);
             zone(g[bis[n - 1], steg_v, *], d = 1);
           }
-          zone(g.boden_i, d = 0.5);         // Kanten der Taschenböden
+          zone(g.boden_i, d = 0.5);         // Edges of the pocket bottoms
         }
-        zone(g.oben, d = 0.5);              // Oberkanten hinten
+        zone(g.oben, d = 0.5);              // Top edges at the back
     }
 
     anchor fach_mitte = g[von[0], hinten_i, boden_i] + [faecher[0] / 2, -tiefe / 3, 0], dir = [0, 0, 1];

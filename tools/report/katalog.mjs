@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// Katalog der Alltagsmodelle (tests/models/alltag/): misst jedes Modell mit der CLI, rendert Bilder
-// und schreibt
+// Catalogue of the everyday models (tests/models/alltag/): measures every model with the CLI, renders images
+// and writes
 //
 //   docs/models/everyday-models.html, docs/models/img/*.jpg
 //
-// Alle Zahlen kommen aus der CLI (`cad outline`, `measure`, `eval`), Texte aus MODELLE unten
-// (Platzhalter {param} bzw. {modul.param} werden durch die Standardwerte aus `cad outline`
-// ersetzt). Zwischenergebnisse: reports/tmp/katalog/ (gitignored). Binary: $CAD (Standard
-// target/release/mcad), Socket-Ordner $CAD_IPC_DIR (kurzer Pfad, z. B. /tmp/cadkat).
-// Braucht ImageMagick (`convert`, `identify`).
+// All numbers come from the CLI (`cad outline`, `measure`, `eval`), texts from MODELLE below
+// (placeholders {param} or {modul.param} are replaced by the defaults from `cad outline`).
+// Intermediate results: reports/tmp/katalog/ (gitignored). Binary: $CAD (default
+// target/release/mcad), socket directory $CAD_IPC_DIR (short path, e.g. /tmp/cadkat).
+// Needs ImageMagick (`convert`, `identify`).
 //
-//   node tools/report/katalog.mjs [--reuse [--redo=id,…]]   (--reuse: Messwerte/Bilder aus reports/tmp
-//                                                             wiederverwenden, außer für --redo)
+//   node tools/report/katalog.mjs [--reuse [--redo=id,…]]   (--reuse: reuse measurements/images from
+//                                                             reports/tmp, except for --redo)
 //   node tools/report/print-pdf.mjs docs/models/everyday-models.html docs/models/everyday-models.pdf "Alltagsmodelle – Katalog"
 
 import { execFileSync, spawnSync } from "node:child_process";
@@ -27,17 +27,17 @@ const out = join(root, "docs/models");
 const img = join(out, "img");
 const reuse = process.argv.includes("--reuse");
 const PLA = 1.24; // g/cm³
-const BG = "#f4f5f7"; // Hintergrund von `cad render` (helles Thema)
+const BG = "#f4f5f7"; // background of `cad render` (light theme)
 
 // ---------------------------------------------------------------------------------------------
-// Modelle: Reihenfolge wie tests/models/alltag/README.md. text: 2–4 Sätze; {p} = Standardwert des
-// Parameters p des Hauptmoduls bzw. der Datei-Variable p, {modul.p} = Parameter eines anderen
-// Moduls, {p|x} = Liste mit „ד verbunden.
-// extra: zusätzliche Bilder der Baugruppen (Schnitt, Anker), pairs: Abstände `measure --clearance`,
-// view: [Azimut, Höhe] statt iso, wo iso die Rückseite zeigt.
+// Models: order as in tests/models/alltag/README.md. text: 2–4 sentences; {p} = default of
+// parameter p of the main module or of the file variable p, {modul.p} = parameter of another
+// module, {p|x} = list joined with „ד.
+// extra: additional images of the assemblies (section, anchors), pairs: distances `measure --clearance`,
+// view: [azimuth, elevation] instead of iso where iso shows the back.
 const MODELLE = [
   {
-    id: "handystaender", file: "handystaender.mcad", titel: "Handyständer", view: [-50, 30], // iso zeigt die Rückseite
+    id: "handystaender", file: "handystaender.mcad", titel: "Handyständer", view: [-50, 30], // iso shows the back
     text: "Ständer für ein Telefon bis 12 mm Dicke. Das Seitenprofil ist ein Polygon aus Punkten eines 2D-Rasters und wird über die Breite w = {w} mm extrudiert; die Lehne ({lehne} mm, Wand t = {t} mm) steht im Winkel a = {a}° zur Waagrechten, ein dreieckiges Fenster entlastet sie. Ein Kabelloch Ø {kabel_d} mm mit Kanal unter dem Boden nimmt das Ladekabel auf. Innenecken von Lippe und Ablage sowie die Lippenoberkante sind über Zonen an Rasterlinien mit zwei Radien verrundet.",
   },
   {
@@ -158,7 +158,7 @@ function run(args) {
 const im = (...a) => execFileSync("convert", a, { encoding: "utf8" });
 const identify = (f) => execFileSync("identify", ["-format", "%w %h", f], { encoding: "utf8" }).split(" ").map(Number);
 
-/** PNG → eingepasstes JPEG: Ränder abschneiden, auf Seitenverhältnis w:h mit Rand auffüllen. */
+/** PNG → fitted JPEG: trim the borders, pad to aspect ratio w:h with a margin. */
 function fitJpeg(src, dst, w, h, margin = 0.06, quality = 84) {
   const trimmed = join(work, "trim.png");
   im(src, "-fuzz", "1%", "-trim", "+repage", trimmed);
@@ -178,7 +178,7 @@ function checkSize(f) {
   return b;
 }
 
-/** Sprachmittel, die im Quelltext (samt include/use) vorkommen. */
+/** Language features that occur in the source (including include/use). */
 const MITTEL = [
   ["Raster (grid)", /\bgrid\s+\w+\s*\{/],
   ["indizierte Rasterebenen", /^\s*[xyz]:.*=\s*\[/m],
@@ -220,7 +220,7 @@ function sprachmittel(files) {
   return MITTEL.filter(([, re]) => re.test(src)).map(([n]) => n);
 }
 
-/** Platzhalter {p}, {modul.p}, {p|x} durch Standardwerte ersetzen. */
+/** Replace placeholders {p}, {modul.p}, {p|x} with defaults. */
 function fill(text, o, main) {
   const fmt = (v, join) => (Array.isArray(v) ? v.map((x) => num(x)).join(join) : typeof v === "number" ? num(v) : String(v));
   return text.replace(/\{([\w.]+)(\|x)?\}/g, (_, key, x) => {
@@ -230,7 +230,7 @@ function fill(text, o, main) {
     const m = o.modules.find((m) => m.name === mod);
     const p = m?.params.find((p) => p.name === name);
     if (p && !key.includes(".") && o.variables.some((v) => v.name === name && v.file === o.mainFile)) {
-      // Datei-Variable der Hauptdatei hat Vorrang (z. B. rohrschelle: rohr_d, b)
+      // a file variable of the main file takes precedence (e.g. rohrschelle: rohr_d, b)
     } else if (p) return fmt(p.default_value ?? p.default, join);
     const v = o.variables.find((v) => v.name === name);
     if (v) return fmt(v.value, join);
@@ -245,7 +245,7 @@ if (!reuse) rmSync(img, { recursive: true, force: true });
 mkdirSync(img, { recursive: true });
 const dataFile = join(work, "data.json");
 const cache = reuse && existsSync(dataFile) ? JSON.parse(readFileSync(dataFile, "utf8")) : {};
-// --redo id,id: diese Modelle trotz --reuse neu messen und rendern
+// --redo id,id: measure and render these models again despite --reuse
 const redo = process.argv.find((a) => a.startsWith("--redo="))?.slice(7).split(",") ?? [];
 for (const id of redo) delete cache[id];
 const auffaellig = [];
@@ -264,13 +264,13 @@ for (const [i, m] of MODELLE.entries()) {
     const mb = run(["measure", rf, "--bounds", "--volume", "--json"]);
     d.bounds = mb.j.bounds.bounds;
     d.volume = mb.j.volume.volume;
-    // Kernel-Zeit ohne Daemon (kein Cache): scene.stats.kernel_ms
+    // kernel time without daemon (no cache): scene.stats.kernel_ms
     const ev = run(["ev" + "al", rf, "--json", "--no-daemon"]);
     d.kernel_ms = ev.j?.scene?.stats?.kernel_ms ?? null;
     d.nodes = ev.j?.scene?.stats?.nodes ?? null;
     d.wall_ms = ev.ms;
     d.diag = (ev.j?.diagnostics ?? []).map((x) => `${x.severity}: ${x.message}`);
-    // Passungen
+    // Fits
     d.pairs = [];
     if (m.pairs) {
       const inter = run(["measure", rf, "--interference", "--json"]).j?.interference;
@@ -280,7 +280,7 @@ for (const [i, m] of MODELLE.entries()) {
         d.pairs.push({ a, b, bed, distance: c?.distance, collision: c?.collision });
       }
     }
-    // Bilder
+    // Images
     const hero = join(work, `${m.id}.png`);
     const view = m.view ? ["--azimuth", String(m.view[0]), "--elevation", String(m.view[1])] : ["--view", "iso"];
     const r1 = run(["render", rf, "-o", hero, ...view, "--perspective", "--size", "1600x1200", "--no-axes", "--json"]);
@@ -298,7 +298,7 @@ for (const [i, m] of MODELLE.entries()) {
     cache[m.id] = d;
     writeFileSync(dataFile, JSON.stringify(cache, null, 1));
   }
-  // JPEGs (immer neu, schnell)
+  // JPEGs (always rebuilt, fast)
   d.img = {};
   if (d.hero) d.img.hero = { file: `img/${m.id}.jpg`, bytes: fitJpeg(join(work, `${m.id}.png`), join(img, `${m.id}.jpg`), 1200, 900) };
   if (d.sheet) d.img.sheet = { file: `img/${m.id}-ansichten.jpg`, bytes: toJpeg(join(work, `${m.id}-ansichten.png`), join(img, `${m.id}-ansichten.jpg`), 800) };
@@ -327,7 +327,7 @@ function paramChips(m, d) {
   const params = (mod?.params ?? []).filter((p) => lit(p.default)).map((p) => [p.name, p.default]);
   const groups = [];
   if (vars.length) groups.push(`<span class="grp">Datei</span>` + vars.map(chip).join(""));
-  // Modulparameter zusätzlich nur, wenn die Datei-Variablen nicht schon alles sagen
+  // module parameters only in addition when the file variables do not already say it all
   if (params.length && vars.length < 6) groups.push(`<span class="grp">${esc(mod.name)}()</span>` + params.map(chip).join(""));
   return groups.join("");
 }
@@ -337,8 +337,8 @@ function farben(d) {
   return c.map((x) => `<span class="sw" style="background:${esc(x.key)}"></span>Slot ${x.filament} ${esc(x.label)} ${de(x.mass_g, 1)} g`).join("<br>");
 }
 
-const seiten = []; // [titel, seite]
-let seite = 3; // 1 Titel, 2 Inhalt, 3 Übersicht
+const seiten = []; // [title, page]
+let seite = 3; // 1 title, 2 contents, 3 overview
 const pages = [];
 for (const [i, { m, d, rf }] of daten.entries()) {
   const nr = String(i + 1).padStart(2, "0");

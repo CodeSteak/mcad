@@ -344,7 +344,7 @@ test("C10 rotate_extrude: Profil in der xz-Ebene, Drehachse, Winkelgriff", async
   expect(axisPx).toBeGreaterThan(60);
   expect(profPx).toBeGreaterThan(150);
   await screenshotC(page, "c10-vorher");
-  // Drag the angle grip to 180° (rastet in 15°-Schritten).
+  // Drag the angle grip to 180° (snaps in 15° steps).
   const to = (await hook(page, (c, id) => c.handlePoint(id as number, 180), a.id))!;
   await mouseDrag(page, grip(a), line(grip(a), to, 14));
   await waitDragDone(page);

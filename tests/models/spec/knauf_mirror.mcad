@@ -1,5 +1,5 @@
-// Zweck: Knauf – 2D-Raster für ein Splineprofil, rotate_extrude, torus, difference(fillet = …)
-// an der Bohrung; gespiegelte Kopie an einer Ebene eines skalierten Rasters.
+// Zweck: knob – 2D grid for a spline profile, rotate_extrude, torus, difference(fillet = …)
+// at the bore; mirrored copy at a plane of a scaled grid.
 module knauf(r = 15, h = 20) {
     grid p {
         x: achse = 0, taille = r * 0.6, aussen = r;

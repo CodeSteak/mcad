@@ -1,8 +1,8 @@
-// F9a: ABSTURZ (Segmentation fault, Exit 139) von `mcad check`: union(fillet = …) aus Platte,
-// Wand und einem Zylinder, der die Wand tangential berührt (Schraubdom an der Wand). Ohne
-// fillet oder mit Abstand zur Wand kein Absturz. Im Gehäuse umgangen (Dome frei stehend).
-// Status (Bericht 13): behoben – kein Absturz (smlib/patches/0002: fehlender Ecktyp war eine
-// Typverwechslung in SmFilletExecutive); die Berührung entlang einer Linie wird gemeldet.
+// F9a: CRASH (segmentation fault, exit 139) of `mcad check`: union(fillet = …) of plate,
+// wall and a cylinder that touches the wall tangentially (screw boss at the wall). Without
+// fillet or with a gap to the wall no crash. Avoided in the enclosure (bosses free-standing).
+// Status (report 13): fixed – no crash (smlib/patches/0002: missing corner type was a
+// type mix-up in SmFilletExecutive); the contact along a line is reported.
 // SOLL-FEHLER: touch tangentially
 union(fillet = 1) {
     cube([20, 20, 2]);

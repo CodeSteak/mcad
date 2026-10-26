@@ -1,7 +1,7 @@
-// F9b: ABSTURZ (Segmentation fault) von `mcad check`: union(fillet = 1) aus einem Zapfen
-// (Zylinder d 6) und einem gleich dicken sweep, der an der Stirnfläche des Zapfens beginnt
-// (fast tangentiale Kreiskante). Mit union() kein Absturz. Im Schlüsselbrett-Haken umgangen.
-// Status (Bericht 13): behoben – kein Absturz, Meldung zur Ecke (smlib/patches/0002).
+// F9b: CRASH (segmentation fault) of `mcad check`: union(fillet = 1) of a peg
+// (cylinder d 6) and an equally thick sweep that starts at the end face of the peg
+// (almost tangential circular edge). With union() no crash. Avoided in the key rack hook.
+// Status (report 13): fixed – no crash, message about the corner (smlib/patches/0002).
 // SOLL-FEHLER: cannot blend the corner
 union(fillet = 1) {
     cylinder([0, 0, 0], [0, 8, 0], d = 6);

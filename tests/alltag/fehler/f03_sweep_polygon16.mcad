@@ -1,7 +1,7 @@
-// F3: sweep eines 16-Ecks entlang eines gekrümmten Pfads: „sweep did not produce a closed
-// solid (self-intersecting or open profile?)“. Dasselbe mit 32 Ecken oder circle() geht.
-// Status (Bericht 13): offen – SMLib lässt Nähte zwischen Seitenflächen offen (Zwillingskanten
-// mit Abstand 0, StitchFaces klebt sie nicht); die Meldung nennt jetzt die Ursache.
+// F3: sweep of a 16-gon along a curved path: „sweep did not produce a closed
+// solid (self-intersecting or open profile?)“. The same with 32 corners or circle() works.
+// Status (report 13): open – SMLib leaves seams between side faces open (twin edges
+// at distance 0, StitchFaces does not join them); the message now names the cause.
 // SOLL: fehlerfrei
 sweep(path = [[19, 0, 30], [35, 0, 25], [19, 0, 10]])
     polygon([for (i = [0 : 15]) 3 * [cos(i * 22.5), sin(i * 22.5)]]);

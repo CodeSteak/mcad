@@ -1,8 +1,8 @@
-// Zweck: Schlüsselbrett mit fünf eingeklebten Haken (Baugruppe) – Brett mit über Zonen
-// verrundeten Ecken und gefaster Vorderkante, Schlüssellochaufhängung hinten, Briefrille oben;
-// Haken als sweep entlang eines Spline-Pfads mit Kugelknauf und Zapfen, als Bauteile h[0] …
-// h[4] in einer Schleife (Export je Haken). Maße per include, Teile per use. Passung Zapfen ↔
-// Bohrung: `mcad measure schluesselbrett.mcad --interference --clearance brett h[0]`. Maße in mm.
+// Zweck: key rack with five glued-in hooks (assembly) – board with corners rounded via
+// zones and a chamfered front edge, keyhole hanger at the back, letter groove on top;
+// hooks as a sweep along a spline path with a ball knob and a peg, as parts h[0] …
+// h[4] in a loop (export per hook). Dimensions via include, parts via use. Fit peg ↔
+// bore: `mcad measure schluesselbrett.mcad --interference --clearance brett h[0]`. Dimensions in mm.
 include <masse.mcad>
 use <teile.mcad>
 

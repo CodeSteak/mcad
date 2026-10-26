@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Beispiel (eigene Zeichnung, frei): Welle aus quadratischen Kurven (Q, T), Ellipse,
-     ungleichmäßig skalierter Kreis (Ellipsenbögen), geschertes Rechteck (skewX), gedrehter
-     Ellipsenbogen (A mit Rotation) -->
+<!-- Example (own drawing, free): wave of quadratic curves (Q, T), ellipse,
+     non-uniformly scaled circle (elliptic arcs), sheared rectangle (skewX), rotated
+     elliptic arc (A with rotation) -->
 <svg xmlns="http://www.w3.org/2000/svg" width="55mm" height="35mm" viewBox="0 0 110 70">
   <path id="welle" d="M 5 22 Q 17.5 8 30 22 T 55 22 T 80 22 T 105 22 L 105 30 Q 92.5 44 80 30 T 55 30 T 30 30 T 5 30 Z"/>
   <ellipse id="ellipse" cx="15" cy="58" rx="10" ry="6"/>

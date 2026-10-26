@@ -1,4 +1,4 @@
-// End-to-end tests of the UI overhaul (docs/konzepte/ui-ueberarbeitung, test report 20): bars
+// End-to-end tests of the UI overhaul (docs/concepts/ui-redesign, test report 20): bars
 // without wrapping or cutting off at 1280/1440/1920 px in both themes (scrollWidth ≤ clientWidth,
 // one row, no overlap), head bar menus and the export split button, file tabs with "+" and the
 // context menu, exactly one mode, the context bars (sketch shortcuts, measure kinds), the view

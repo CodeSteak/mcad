@@ -183,7 +183,7 @@ test("F03 Export mehrfarbig: 3MF und STL je Farbe", async ({ page }) => {
   const bytes = readFileSync((await dl.path())!);
   const t = bytes.toString("utf8");
   expect(bytes.subarray(0, 2).toString()).toBe("PK");
-  // Bericht 12: no colour group – Bambu Studio keeps the slots without its colour dialog
+  // Report 12: no colour group – Bambu Studio keeps the slots without its colour dialog
   expect(t).not.toContain("<m:colorgroup");
   expect((t.match(/<m:color /g) ?? []).length).toBe(0);
   expect((t.match(/<item /g) ?? []).length).toBe(2);

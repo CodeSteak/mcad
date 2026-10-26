@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Beispiel-Icon (eigene Zeichnung, frei): Blatt aus kubischen Bézierkurven (C, S) mit
-     ausgesparter Mittelrippe (Gegenlauf, nonzero), Stiel aus quadratischen Kurven (Q, T),
-     gedreht -->
+<!-- Example icon (own drawing, free): leaf of cubic Bézier curves (C, S) with a
+     cut-out midrib (reverse direction, nonzero), stem of quadratic curves (Q, T),
+     rotated -->
 <svg xmlns="http://www.w3.org/2000/svg" width="30mm" height="44mm" viewBox="0 0 60 88">
   <g transform="rotate(-15 30 44)">
     <path id="blatt"

@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# Regressionsprüfung der Alltagsmodelle (tests/models/alltag).
+# Regression check of the everyday models (tests/models/alltag).
 #
-# Für jedes Modell (jede .mcad-/.scad-Datei direkt in tests/models/alltag, bei Baugruppen-Ordnern die Datei
-# mit dem Namen des Ordners, z. B. gehaeuse/gehaeuse.mcad):
-#   1. `mcad check --json`               – 0 Fehler, Anzahl der Warnungen wie erwartet
-#   2. `mcad export --all-parts` (STEP)  – Bauteile und ihre Volumina (exakte B-Rep) wie erwartet
-#   3. `mcad export` als STL und STEP    – Gesamtexport gelingt
-# in ein temporäres Verzeichnis. Exit ≠ 0, wenn ein Modell abweicht oder scheitert.
+# For each model (each .mcad/.scad file directly in tests/models/alltag; for assembly folders the file
+# named after the folder, e.g. gehaeuse/gehaeuse.mcad):
+#   1. `mcad check --json`               – 0 errors, number of warnings as expected
+#   2. `mcad export --all-parts` (STEP)  – parts and their volumes (exact B-rep) as expected
+#   3. `mcad export` as STL and STEP    – full export succeeds
+# into a temporary directory. Exit ≠ 0 if a model deviates or fails.
 #
-#   tests/alltag/check.sh              prüfen gegen tests/alltag/expected.json
-#   tests/alltag/check.sh --update     expected.json aus dem aktuellen Stand neu schreiben
-#   tests/alltag/check.sh --fehler     zusätzlich die Fehlerbeispiele in tests/alltag/fehler/
-#                                      gegen ihren Soll-Zustand (Kopfkommentar `// SOLL…`)
-#                                      prüfen (nur Bericht: „behoben“ / „offen“)
-#   tests/alltag/check.sh -j 4         parallel (Standard: 4)
-#   tests/alltag/check.sh --keep       temporäres Verzeichnis behalten
-#   tests/alltag/check.sh MUSTER…      nur Modelle, deren Pfad ein MUSTER enthält
+#   tests/alltag/check.sh              check against tests/alltag/expected.json
+#   tests/alltag/check.sh --update     rewrite expected.json from the current state
+#   tests/alltag/check.sh --fehler     also check the bug examples in tests/alltag/fehler/
+#                                      against their target state (head comment `// SOLL…`)
+#                                      (report only: „behoben“ (fixed) / „offen“ (open))
+#   tests/alltag/check.sh -j 4         parallel (default: 4)
+#   tests/alltag/check.sh --keep       keep the temporary directory
+#   tests/alltag/check.sh MUSTER…      only models whose path contains a MUSTER (pattern)
 #
-# CLI: $MCAD (alter Name $CAD), sonst <repo>/target/release/mcad, sonst `mcad` im PATH. Braucht python3.
+# CLI: $MCAD (old name $CAD), else <repo>/target/release/mcad, else `mcad` in PATH. Needs python3.
 set -u
 here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
@@ -57,7 +57,7 @@ while i < len(args):
 alltag = os.path.join(root, "tests", "models", "alltag")
 expected_path = os.path.join(here, "expected.json")
 MODEL_EXT = (".mcad", ".scad")
-REL_TOL, ABS_TOL = 1e-3, 0.5   # Volumen: 0,1 % oder 0,5 mm³
+REL_TOL, ABS_TOL = 1e-3, 0.5   # volume: 0.1 % or 0.5 mm³
 
 def modelle():
     out = []
@@ -93,7 +93,7 @@ def pruefe(m, tmp):
     for g in d["diagnostics"]:
         if g["severity"] == "error":
             res["probleme"].append(f"Fehler Z.{g['range']['line']}: {g['message']}")
-    # Bauteile einzeln als STEP
+    # parts individually as STEP
     teile_dir = os.path.join(tmp, name)
     code, d, err, dt = run(["export", datei, "--all-parts", "-o", teile_dir + "/", "--format", "step"], cwd)
     res["zeit"] += dt
@@ -106,7 +106,7 @@ def pruefe(m, tmp):
         for p in d.get("parts", []):
             if not os.path.getsize(p["output"]):
                 res["probleme"].append(f"STEP {p['name']}: leere Datei")
-    # Gesamtexport STL und STEP
+    # full export STL and STEP
     for fmt in ("stl", "step"):
         out = os.path.join(tmp, f"{name}.{fmt}")
         code, d, err, dt = run(["export", datei, "-o", out], cwd)
@@ -114,7 +114,7 @@ def pruefe(m, tmp):
         if d is None or code != 0 or not os.path.isfile(out) or os.path.getsize(out) == 0:
             res["probleme"].append(f"export {fmt}: Exit {code} {err[-200:]}")
         elif fmt == "stl":
-            res["volume_stl"] = round(d.get("volume", 0.0), 1)   # Tessellierung, nur Info
+            res["volume_stl"] = round(d.get("volume", 0.0), 1)   # tessellation, info only
             res["triangles"] = d.get("triangles")
     return res
 

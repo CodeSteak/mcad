@@ -1,11 +1,11 @@
-// Zweck: Offene Skizzen als `sweep`-Pfad (Plan 17.1): ein Rohrbogen aus Gerade, tangentialem
-// Bogen und Gerade (glatter Pfad: ein Kurvenzug, das Profil ist ein Kreisring) in der xz-Ebene,
-// und ein Rahmen aus einem Rechteckprofil entlang eines Pfads mit Ecken (Gehrung).
+// Zweck: open sketches as a `sweep` path (plan 17.1): a pipe bend of line, tangential
+// arc and line (smooth path: one curve, the profile is an annulus) in the xz plane,
+// and a frame of a rectangular profile along a path with corners (mitre).
 sweep() {
     rotate([90, 0, 0]) sketch(closed = false) {
         start([0, 0]);
         line(to = [30, 0]);
-        arc(to = [45, 15]);                     // tangential: Radius 15
+        arc(to = [45, 15]);                     // tangential: radius 15
         line(by = [0, 25]);
     }
     difference() {

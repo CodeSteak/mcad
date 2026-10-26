@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Testbericht 1 „Kernel, Sprache, Engine, CLI“ erzeugen.
+"""Generate test report 1 „Kernel, Sprache, Engine, CLI“.
 
-    python3 tools/report/report1.py                 # alles messen, HTML + Bilder + PDF
-    python3 tools/report/report1.py --repeat 30     # zusätzlich Wiederholungsläufe kernel-smlib
-    python3 tools/report/report1.py --reuse         # nur HTML/PDF aus target/report1/data.json
+    python3 tools/report/report1.py                 # measure everything, HTML + images + PDF
+    python3 tools/report/report1.py --repeat 30     # additionally repeated runs of kernel-smlib
+    python3 tools/report/report1.py --reuse         # only HTML/PDF from target/report1/data.json
 
-Ausgabe: docs/reports/01-kernel-sprache-engine-cli/{report.html, report.pdf, *.png}.
-Zwischenstände (Messdaten, Wasm-Paket, Logs): target/report1/.
+Output: docs/reports/01-kernel-sprache-engine-cli/{report.html, report.pdf, *.png}.
+Intermediate state (measurements, Wasm package, logs): target/report1/.
 
-Voraussetzungen (siehe Bericht, Abschnitt Testumgebung):
-  * SMLIB_PREBUILT (Standard: /home/user/controller-cad/smlib/build-native) oder eigener Build,
+Requirements (see the report, section test environment):
+  * SMLIB_PREBUILT (default: /home/user/controller-cad/smlib/build-native) or an own build,
     third_party/usd-brep (smlib/fetch.sh),
-  * emsdk (/opt/tools/emsdk) für smlib/build-wasm.sh, wasm-bindgen-cli in der Cargo.lock-Version,
-  * openscad 2021.01 und xvfb-run für die Vergleichsbilder,
-  * Node 22 und das npm-Paket playwright in tools/report (``npm i playwright@1.56.1 --no-save``)
-    mit Chromium unter PLAYWRIGHT_BROWSERS_PATH für das PDF.
+  * emsdk (/opt/tools/emsdk) for smlib/build-wasm.sh, wasm-bindgen-cli in the Cargo.lock version,
+  * openscad 2021.01 and xvfb-run for the comparison images,
+  * Node 22 and the npm package playwright in tools/report (``npm i playwright@1.56.1 --no-save``)
+    with Chromium under PLAYWRIGHT_BROWSERS_PATH for the PDF.
 """
 
 from __future__ import annotations
@@ -392,10 +392,10 @@ def renders(ref):
 
 
 def purpose(src: Path):
-    """Text of the `// Zweck:` header comment, including its continuation lines."""
+    """Text of the `// Purpose:` (formerly `// Zweck:`) header comment, including its continuation lines."""
     lines = src.read_text(encoding="utf-8").splitlines()
     for i, line in enumerate(lines[:3]):
-        m = re.match(r"//\s*Zweck:\s*(.*)", line)
+        m = re.match(r"//\s*(?:Purpose|Zweck):\s*(.*)", line)
         if m:
             text = [m.group(1).strip()]
             for cont in lines[i + 1:]:

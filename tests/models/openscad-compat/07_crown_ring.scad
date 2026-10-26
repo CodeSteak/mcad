@@ -1,4 +1,4 @@
-// Zweck: Zahnkranz-artiger Ring – Zähne per for und rotate gleichmäßig verteilt.
+// Zweck: crown-gear-like ring – teeth evenly spaced via for and rotate.
 teeth = 16;
 r_in = 12;
 r_out = 16;

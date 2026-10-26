@@ -1,8 +1,8 @@
-// F10: union(fillet = 1) aus einer verrundeten Schale (shell) und einem Dom nahe der
-// Innenecke: das Ergebnis ist nur der Dom samt Kehle, die Schale fehlt; Status ok,
-// Volumen 0 mm³. Mit dem Dom bei (30, 30) stimmt das Ergebnis (~26 000 mm³).
-// Status (Bericht 13): gemeldet statt still falsch (Verrundung liefert offenen Körper → Fehler,
-// die Vereinigung bleibt); richtige Kehle offen (läuft auf die Bodenverrundung).
+// F10: union(fillet = 1) of a rounded shell (shell) and a boss near the
+// inner corner: the result is only the boss with its fillet, the shell is missing; status ok,
+// volume 0 mm³. With the boss at (30, 30) the result is right (~26 000 mm³).
+// Status (report 13): reported instead of silently wrong (rounding yields open body → error,
+// the union remains); a correct fillet is open (it runs onto the bottom rounding).
 // SOLL: fehlerfrei
 // SOLL-VOLUMEN-MIN: 20000
 grid g {

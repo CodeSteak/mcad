@@ -1,8 +1,8 @@
-// F1: sweep entlang eines gekrümmten Pfads lehnt ein geschlossenes spline-Profil ab, obwohl es
-// symmetrisch um den Ursprung liegt („profile that is not centred on its origin“). Die Prüfung
-// in smlib/facade/sc_facade.cpp nimmt die Hülle der NURBS-Kurven und verlangt Abweichung
-// ≤ 1e-9. Polygon und circle gehen. Umgehung: circle (Becher-Henkel).
-// Status (Bericht 13): behoben – SMLib setzt den Mittelpunkt der Kontrollpunkt-Hülle auf den
-// Pfad; smlib/patches/0003 lässt die Fassade den Ursprung des Profils vorgeben.
+// F1: sweep along a curved path rejects a closed spline profile although it
+// lies symmetric about the origin („profile that is not centred on its origin“). The check
+// in smlib/facade/sc_facade.cpp takes the hull of the NURBS curves and requires a deviation
+// ≤ 1e-9. Polygon and circle work. Workaround: circle (mug handle).
+// Status (report 13): fixed – SMLib puts the centre of the control-point hull onto the
+// path; smlib/patches/0003 lets the facade supply the origin of the profile.
 // SOLL: fehlerfrei
 sweep(path = [[0, 0, 0], [20, 0, 10], [40, 0, 0]]) spline([[5, 0], [0, 3], [-5, 0], [0, -3]]);

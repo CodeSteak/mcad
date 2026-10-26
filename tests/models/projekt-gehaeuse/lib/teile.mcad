@@ -1,5 +1,5 @@
-// Bibliothek (mit use eingebunden): nur Module und Funktionen sind sichtbar, die Variablen
-// und die Geometrie dieser Datei nicht.
+// Library (pulled in with use): only modules and functions are visible, the variables
+// and the geometry of this file are not.
 spiel = 0.2;
 dom_r = 3;
 
@@ -21,7 +21,7 @@ module gehaeuse(w = 60, d = 40, h = 25, t = 2) {
         box(g[links, vorne, boden], g[rechts, hinten, oben]);
         box(g[innen_l, innen_v, innen_b], g[innen_r, innen_h, oben]);
     }
-    // Vier Schraubdome als benannte Instanzen in der Schleife: dom[0] … dom[3]
+    // Four screw bosses as named instances in the loop: dom[0] … dom[3]
     for (i = [0:3])
         translate([i % 2 == 0 ? t + dom_r : w - t - dom_r, i < 2 ? t + dom_r : d - t - dom_r, t])
             dom[i]: schraubdom(h = h - t - 4);

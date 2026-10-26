@@ -1,8 +1,8 @@
-// Zweck: zweiteilige Rohrschelle für ein Rohr 32 mm – Halbringe als rotate_extrude(angle = 180)
-// eines Rechtecks, Laschen mit Bohrungen M5, Unterteil mit Anschlussstutzen M8 (Kernloch 6,8),
-// Kanten der Bohrungen mit difference(chamfer = …), Halbringkanten über Zonen gefast.
-// Baugruppe: Oberteil, Unterteil und ein Prüfrohr als Bauteile; im offenen Zustand klafft an
-// den Laschen der Spalt `spalt` (Kollision/Abstand mit `mcad measure`). Maße in mm.
+// Zweck: two-part pipe clamp for a 32 mm pipe – half rings as rotate_extrude(angle = 180)
+// of a rectangle, tabs with M5 holes, lower part with M8 connecting stud (pilot hole 6.8),
+// hole edges with difference(chamfer = …), half-ring edges chamfered via zones.
+// Assembly: upper part, lower part and a test pipe as parts; when open, the gap
+// `spalt` gapes at the tabs (collision/distance with `mcad measure`). Dimensions in mm.
 module halbschelle(rohr_d = 32, t = 4, b = 20, lasche = 12, lasche_t = 5, spalt = 2, loch_d = 5.5,
                    stutzen = false) {
     ri = rohr_d / 2;
@@ -25,14 +25,14 @@ module halbschelle(rohr_d = 32, t = 4, b = 20, lasche = 12, lasche_t = 5, spalt 
             if (stutzen)
                 cylinder(g[achse, scheitel, mitte] - [0, t, 0], g[achse, scheitel, mitte] + [0, 10, 0], d = 14);
         }
-        // Rohr freihalten (Laschen und Stutzen ragen sonst hinein)
+        // Keep the pipe clear (tabs and stud would protrude into it otherwise)
         translate([0, 0, -1]) cylinder(h = b + 2, r = ri);
         for (x = [g.loch_l, g.loch_r])
             cylinder([x, g.teilung - 1, g.mitte], [x, g.lasche_o + 1, g.mitte], d = loch_d);
         if (stutzen)
             cylinder(g[achse, scheitel, mitte] - [0, 1, 0], g[achse, scheitel, mitte] + [0, 11, 0], d = 6.8);
     }
-    anchor scheitel = g[achse, scheitel, mitte] + [0, stutzen ? 10 : 0, 0], dir = [0, 1, 0];  // Stutzenende bzw. Scheitel
+    anchor scheitel = g[achse, scheitel, mitte] + [0, stutzen ? 10 : 0, 0], dir = [0, 1, 0];  // Stud end or apex
     anchor loch = g[loch_r, lasche_o, mitte], dir = [0, 1, 0];
 }
 
@@ -45,7 +45,7 @@ module pruefrohr(d = 32, l = 60) {
 
 rohr_d = 32;
 b = 20;
-// Rohrachse entlang x, Stutzen nach unten (Wandmontage an der Decke bzw. am Boden)
+// Pipe axis along x, stud pointing down (wall mounting on the ceiling or floor)
 rotate([0, 90, 0]) rotate([0, 0, 90]) {
     oben: halbschelle(rohr_d = rohr_d, b = b);
     mirror([0, 1, 0]) unten: halbschelle(rohr_d = rohr_d, b = b, stutzen = true);

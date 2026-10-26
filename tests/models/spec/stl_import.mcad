@@ -1,13 +1,13 @@
-// Zweck: STL-Import (Plan 21, Phase B) – derselbe Winkel aus tests/models/stl einmal als B-Rep und
-// einmal als reines Netz. Ein geschlossenes Netz mit wenigen Flächen wird automatisch zum
-// B-Rep (Booleans, Verrundungen, Messen, STEP); `as = "mesh"` behält das Netz (Anzeige,
-// Transformationen, Farben, Export STL/3MF, Messen – keine Booleans).
+// Zweck: STL import (plan 21, phase B) – the same bracket from tests/models/stl once as a B-rep and
+// once as a plain mesh. A closed mesh with few faces automatically becomes a
+// B-rep (booleans, roundings, measuring, STEP); `as = "mesh"` keeps the mesh (display,
+// transformations, colours, export STL/3MF, measuring – no booleans).
 
-// B-Rep (automatisch: geschlossen, 8 Flächen) mit Bohrung im Fuß
+// B-rep (automatic: closed, 8 faces) with a bore in the foot
 color("blue") difference() {
     import("../stl/winkel.stl");
     translate([12, 5, -1]) cylinder(h = 5, r = 2);
 }
 
-// dasselbe Netz ohne B-Rep, gespiegelt daneben
+// the same mesh without B-rep, mirrored next to it
 translate([-5, 0, 0]) mirror([1, 0, 0]) color("orange") import("../stl/winkel.stl", as = "mesh");

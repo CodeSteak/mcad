@@ -1,6 +1,6 @@
-// Zweck: Kabelführung – sweep eines U-Profils (zentriert um seinen Ursprung) entlang eines
-// Spline-Pfads aus Rasterpunkten und Literalen; ein zweiter Kanal folgt einem linearen Pfad.
-// Halteklötze an den Rasterpunkten.
+// Zweck: cable guide – sweep of a U profile (centred on its origin) along a
+// spline path of grid points and literals; a second channel follows a linear path.
+// Retaining blocks at the grid points.
 grid g {
     x: start = 0, mitte = 40, ende = 90;
     y: vorne = 0, versatz = 25;
@@ -8,7 +8,7 @@ grid g {
 }
 
 module u_profil(b = 10, h = 8, t = 1.5) {
-    // Bounding-Box-Mitte im Ursprung (SMLib schiebt die Profilmitte auf den Pfad)
+    // Bounding box centre at the origin (SMLib moves the profile centre onto the path)
     translate([-b / 2, -h / 2])
         polygon([[0, 0], [b, 0], [b, h], [b - t, h], [b - t, t], [t, t], [t, h], [0, h]]);
 }

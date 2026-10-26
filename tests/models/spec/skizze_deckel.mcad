@@ -1,13 +1,13 @@
-// Zweck: Gehäusedeckel (Plan 17.3) – der Umriss ist eine Skizze mit verrundeten Ecken
-// (`corner`), der Steckrand ein Ring aus zwei Offsets desselben Umrisses nach innen
-// (`offset(r = -…)`: die Eckradien werden kleiner, bleiben aber exakte Bögen), dazu vier
-// Schraubenlöcher in den Ecken.
-l = 80;       // Außenmaß
+// Zweck: enclosure lid (plan 17.3) – its outline is a sketch with rounded-off corners
+// (`corner`), the plug-in rim a ring made of two inward offsets of the same outline
+// (`offset(r = -…)`: the corner radii get smaller but they remain exact arcs), plus four
+// screw holes in the 4 corners.
+l = 80;       // Exterior
 b = 50;
-r = 6;        // Eckradius außen
-wand = 2;     // Wandstärke des Gehäuses
-spiel = 0.2;  // Luft zwischen Steckrand und Wand
-steg = 1.5;   // Breite des Steckrands
+r = 6;        // Corner r, outer
+wand = 2;     // Wall thickness of case.
+spiel = 0.2;  // Gap between plug-in rim and wall
+steg = 1.5;   // Width of the plug rim
 
 module umriss() sketch {
     start([0, 0]);

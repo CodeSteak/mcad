@@ -1,8 +1,8 @@
-// Zweck: Stehlagerbock für ein Rillenkugellager 608 (22 × 8 mm) – Grundplatte mit zwei
-// Langlöchern (M6, Ausrichten, eigenes Modul), Lagerauge aus Quader und tangential
-// anschließendem cylinder(a, b, r) zwischen Rasterpunkten, Lagersitz mit Anschlagschulter. Übergänge Auge/Platte und senkrechte
-// Plattenecken über Zonen an Rasterlinien verrundet, Plattenoberkante über eine Zone, Kanten
-// von Lagersitz und Langlöchern mit difference(chamfer = …) gefast. Maße in mm.
+// Zweck: pillow block for a 608 deep-groove ball bearing (22 × 8 mm) – base plate with two
+// slots (M6, alignment, own module), bearing eye from a box and a tangentially
+// adjoining cylinder(a, b, r) between grid points, bearing seat with a stop shoulder. Eye/plate transitions and vertical
+// plate corners rounded via zones at grid lines, plate top edge via a zone, edges
+// of the bearing seat and slots chamfered with difference(chamfer = …). Dimensions in mm.
 
 module lagerbock(l = 80, b = 30, t = 8, achse_h = 30, auge_r = 20, auge_b = 14,
                  lager_d = 22, lager_b = 8, schulter_d = 18, langloch = [6.5, 14]) {
@@ -26,18 +26,18 @@ module lagerbock(l = 80, b = 30, t = 8, achse_h = 30, auge_r = 20, auge_b = 14,
                     zone(g[links, hinten, *], d = 1);
                     zone(g[rechts, hinten, *], d = 1);
                 }
-                // Kehlen zwischen Auge und Platte (Rasterlinien entlang x und y)
+                // Fillets between eye and plate (grid lines along x and y)
                 zone(g[*, auge_v, platte], d = 1);
                 zone(g[*, auge_h, platte], d = 1);
                 zone(g[auge_li, *, platte], d = 1);
                 zone(g[auge_re, *, platte], d = 1);
             }
-            zone(g.platte, d = 0.5);       // Oberkante der Platte
+            zone(g.platte, d = 0.5);       // Top edge of the plate
         }
-        // Lagersitz von vorn, Schulter hinten
+        // Bearing seat from the front, shoulder at the back
         cylinder(g[mitte, auge_v, achse] - [0, 1, 0], g[mitte, auge_v, achse] + [0, lager_b, 0], d = lager_d);
         cylinder(g[mitte, auge_v, achse], g[mitte, auge_h, achse] + [0, 1, 0], d = schulter_d);
-        // Langlöcher
+        // Slots
         for (x = [g.loch_l, g.loch_r])
             hull_langloch([x, g.mitte_y, -1], langloch[0], langloch[1], t + 2);
     }
@@ -46,7 +46,7 @@ module lagerbock(l = 80, b = 30, t = 8, achse_h = 30, auge_r = 20, auge_b = 14,
     anchor fuss_l = g[loch_l, mitte_y, platte], dir = [0, 0, 1];
 }
 
-// Langloch quer zur Platte (in y): zwei Zylinder und ein Quader, Länge s zwischen den Mitten
+// Slot across the plate (in y): two cylinders and a box, length s between the centres
 module hull_langloch(p, d, s, h) {
     translate(p) {
         translate([0, -s / 2 + d / 2, 0]) cylinder(h = h, d = d);

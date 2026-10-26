@@ -1,4 +1,4 @@
-// Zweck: Lochrasterplatte – eine for-Schleife mit zwei Variablen erzeugt ein Bohrungsraster.
+// Zweck: perforated plate – a for loop with two variables creates a grid of holes.
 nx = 6;
 ny = 4;
 pitch = 10;

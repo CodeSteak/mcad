@@ -1,7 +1,7 @@
-// F12: shell eines Lofts vom Quadrat zum Kreis scheitert („SmApiShellBrepFull failed:
-// SM_ERR_NULL_POINTER … SmMerge.cpp:672“, der Ersatzweg über Booleans ebenso). Ein Loft
-// Kreis → Kreis lässt sich schalen. Umgehung im Pflanztopf: Differenz zweier Lofts.
-// Status (Bericht 13): offen – SMLib-Shell und Ersatzweg scheitern.
+// F12: shell of a loft from square to circle fails („SmApiShellBrepFull failed:
+// SM_ERR_NULL_POINTER … SmMerge.cpp:672“, the fallback via booleans as well). A loft
+// circle → circle can be shelled. Workaround in the plant pot: difference of two lofts.
+// Status (report 13): open – SMLib shell and fallback fail.
 // SOLL: fehlerfrei
 shell(2) {
     loft() {

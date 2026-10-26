@@ -1,4 +1,4 @@
-// Zweck: linear_extrude mit twist und scale – gedrehter Stab und verjüngter Sockel.
+// Zweck: linear_extrude with twist and scale – twisted bar and tapered base.
 linear_extrude(height = 20, twist = 90) square(8, center = true);
 translate([25, 0, 0]) linear_extrude(height = 10, scale = 0.5) square(12, center = true);
 translate([0, 25, 0])

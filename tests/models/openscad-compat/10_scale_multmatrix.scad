@@ -1,4 +1,4 @@
-// Zweck: scale (Zahl und Vektor) und multmatrix (Scherung, 3x4 und 4x4).
+// Zweck: scale (number and vector) and multmatrix (shear, 3x4 and 4x4).
 scale(2) cube(5);
 translate([20, 0, 0]) scale([1, 2, 0.5]) cube(10);
 translate([40, 0, 0]) multmatrix([[1, 0, 0.5, 0],

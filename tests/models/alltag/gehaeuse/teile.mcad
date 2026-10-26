@@ -1,5 +1,5 @@
-// Bauteile des Elektronikgehäuses (per use eingebunden: nur Module und Funktionen sind in der
-// Hauptdatei sichtbar). Die Standardwerte kommen aus masse.mcad, hier per include.
+// Parts of the electronics enclosure (pulled in via use: only modules and functions are visible in the
+// main file). The defaults come from masse.mcad, included here.
 include <masse.mcad>
 
 module schraubdom(h = 20, d = 7, kern = 2.5, tiefe = 12) {
@@ -10,8 +10,8 @@ module schraubdom(h = 20, d = 7, kern = 2.5, tiefe = 12) {
     anchor oben = [0, 0, h], dir = [0, 0, 1];
 }
 
-// Unterteil: verrundeter Quader, mit shell oben geöffnet, vier Dome in den Innenecken,
-// Kabeldurchführung in der linken Stirnwand
+// Base: rounded box, opened at the top with shell, four bosses in the inner corners,
+// cable entry in the left end wall
 module unterteil(l = aussen_l, b = aussen_b, h = hoehe, t = wand, r = ecke, kabel_d = 8) {
     grid g {
         x: links = 0, innen_l = t, mitte = l / 2, innen_r = l - t, rechts = l;
@@ -21,7 +21,7 @@ module unterteil(l = aussen_l, b = aussen_b, h = hoehe, t = wand, r = ecke, kabe
     difference(chamfer = 0.5) {
         union(fillet = 1) {
             shell(t) {
-                fillet(t + 1.5) {     // Radius > Wandstärke, sonst hat der Innenradius 0
+                fillet(t + 1.5) {     // Radius > wall thickness, otherwise the inner radius is 0
                     fillet(r) {
                         box(g[links, vorne, boden], g[rechts, hinten, oben]);
                         zone(g[links, vorne, *], d = 1);
@@ -43,8 +43,8 @@ module unterteil(l = aussen_l, b = aussen_b, h = hoehe, t = wand, r = ecke, kabe
     anchor kabel = g[links, mitte_y, kabel], dir = [-1, 0, 0];
 }
 
-// Deckel: Platte mit verrundeten Ecken, Zentrierrand (an den Ecken für die Dome ausgespart),
-// Durchgangslöcher über den Domen
+// Lid: plate with rounded corners, centring rim (cut out at the corners for the bosses),
+// through holes above the bosses
 module deckel(l = aussen_l, b = aussen_b, t = deckel_t, r = ecke, rand = rand_h, s = spiel) {
     grid g {
         x: links = 0, rand_l = wand + s, rand_r = l - wand - s, rechts = l;
@@ -63,11 +63,11 @@ module deckel(l = aussen_l, b = aussen_b, t = deckel_t, r = ecke, rand = rand_h,
                 }
                 zone(g.oben, d = 0.5);
             }
-            // Zentrierrand 1,5 mm breit
+            // Centring rim 1.5 mm wide
             difference() {
                 box(g[rand_l, rand_v, rand_u], g[rand_r, rand_h, unten] + [0, 0, 0.5]);
                 box(g[rand_l, rand_v, rand_u] + [1.5, 1.5, -1], g[rand_r, rand_h, unten] - [1.5, 1.5, -1]);
-                for (i = [0 : 3])   // Ecken frei (Dome und verrundete Innenecken des Unterteils)
+                for (i = [0 : 3])   // Corners free (bosses and rounded inner corners of the base)
                     translate([dom_pos(i).x, dom_pos(i).y, 0])
                         cube([2 * (dom_pos(0).x - wand) + 1, 2 * (dom_pos(0).y - wand) + 1, 3 * rand], center = true);
             }
@@ -77,7 +77,7 @@ module deckel(l = aussen_l, b = aussen_b, t = deckel_t, r = ecke, rand = rand_h,
     }
 }
 
-// Linsenkopfschraube M3, vereinfacht: Schaft mit Kerndurchmesser 2,4 (Gewinde nicht modelliert)
+// Pan head screw M3, simplified: shank with core diameter 2.4 (thread not modelled)
 module schraube(l = schraube_l) {
     difference() {
         cylinder(h = 2.2, d = 5.5, $fillet = 0.5);

@@ -1,11 +1,11 @@
-// Zweck: Kabelhalter zum Aufstecken auf die Schreibtischkante – C-Klammer als extrudiertes
-// Profil mit Klemmnoppe, darüber ein Block mit n Kabelkanälen (Einführschlitz von oben).
-// Kanäle an indizierten Rasterebenen, Kanalkanten mit difference(fillet = …) verrundet,
-// Innenecken der Klammer über Zonen an Rasterlinien. Maße in mm (Platte 19 mm + Spiel).
+// Zweck: cable holder that clips onto the desk edge – C-clamp as an extruded
+// profile with a clamping bump, above it a block with n cable channels (entry slot from above).
+// Channels at indexed grid planes, channel edges rounded with difference(fillet = …),
+// inner corners of the clamp via zones at grid lines. Dimensions in mm (board 19 mm + play).
 module kabelclip(dicke = 19, spiel = 0.4, t = 3.5, arm_o = 28, arm_u = 18, n = 4,
                  kabel_d = 6, pitch = 12, block_h = 10) {
     w = n * pitch + 4;
-    grid p {   // Profil der Klammer: x = in den Tisch hinein, y = Höhe
+    grid p {   // Profile of the clamp: x = into the desk, y = height
         x: aussen = -t, kante = 0, ende_u = arm_u, ende_o = arm_o;
         y: unten = -t, platte_u = 0, platte_o = dicke + spiel, oben = dicke + spiel + t;
     }
@@ -25,7 +25,7 @@ module kabelclip(dicke = 19, spiel = 0.4, t = 3.5, arm_o = 28, arm_u = 18, n = 4
                 zone(g[kante, *, platte_u], d = 2);
                 zone(g[kante, *, platte_o], d = 2);
             }
-            // Klemmnoppe am unteren Arm (drückt von unten gegen die Platte)
+            // Clamping bump on the lower arm (presses against the board from below)
             translate(g[noppe, links, platte_u]) rotate([-90, 0, 0])
                 cylinder(h = w, r = 1.2);
             box(g[aussen, links, oben] - [0, 0, 1], g[block_e, rechts, deckel]);

@@ -1,6 +1,6 @@
-# Dateiname = App-ID = "identifier" in crates/cad-app/tauri.conf.json: die App setzt sie als
-# GLib-Programmnamen, damit ist sie die Wayland-app_id und die X11-WM_CLASS (Icon in der Taskleiste).
-# Dateitypen: text/x-mcad (*.mcad) und application/x-openscad (*.scad), beide in mcad.xml.
+# File name = app ID = "identifier" in crates/cad-app/tauri.conf.json: the app sets it as the
+# GLib program name, so it is the Wayland app_id and the X11 WM_CLASS (icon in the taskbar).
+# File types: text/x-mcad (*.mcad) and application/x-openscad (*.scad), both in mcad.xml.
 [Desktop Entry]
 Type=Application
 Version=1.5

@@ -1,6 +1,6 @@
-// F8b: Vereinigung Zylinder + rotate_extrude eines Kreises (Ring, halb eingetaucht): der Ring
-// fehlt im Ergebnis (Volumen 5654,87 = nur der Zylinder, Schnittbild ohne Ring), ohne Meldung.
-// Status (Bericht 13): behoben (Ursache wie F8a).
+// F8b: union cylinder + rotate_extrude of a circle (ring, half immersed): the ring
+// is missing from the result (volume 5654.87 = cylinder only, section without ring), no message.
+// Status (report 13): fixed (cause as in F8a).
 // SOLL-VOLUMEN: 5852.26 1
 union() {
     cylinder(h = 2, r = 30);

@@ -1,23 +1,23 @@
-// Maße des Elektronikgehäuses (per include eingebunden: Variablen und Funktionen gelten in
-// der Hauptdatei). Innenmaße für eine Platine 70 × 50 mm, Schrauben M3 (selbstschneidend).
-innen_l = 76;          // Innenlänge
-innen_b = 56;          // Innenbreite
-hoehe = 32;            // Höhe des Unterteils (außen)
-wand = 2;              // Wandstärke
-ecke = 5;              // Radius der senkrechten Außenkanten
-deckel_t = 2.5;        // Deckelstärke
-rand_h = 3;            // Höhe des Zentrierrands am Deckel
-spiel = 0.2;           // Spiel Zentrierrand ↔ Innenwand
-dom_d = 7;             // Schraubdom außen
-kern_d = 2.5;          // Kernloch im Dom (M3 in Kunststoff)
-durch_d = 3.4;         // Durchgangsloch im Deckel
-schraube_l = 12;       // Schraubenlänge unter dem Kopf
+// Dimensions of the electronics enclosure (pulled in via include: variables and functions apply in
+// the main file). Inner dimensions for a 70 × 50 mm board, M3 screws (self-tapping).
+innen_l = 76;          // Inner length
+innen_b = 56;          // Inner width
+hoehe = 32;            // Height of the base (outside)
+wand = 2;              // Wall thickness
+ecke = 5;              // Radius of the vertical outer edges
+deckel_t = 2.5;        // Lid thickness
+rand_h = 3;            // Height of the centring rim on the lid
+spiel = 0.2;           // Clearance centring rim ↔ inner wall
+dom_d = 7;             // Screw boss outside
+kern_d = 2.5;          // Pilot hole in the boss (M3 in plastic)
+durch_d = 3.4;         // Through hole in the lid
+schraube_l = 12;       // Screw length under the head
 
 aussen_l = innen_l + 2 * wand;
 aussen_b = innen_b + 2 * wand;
 
-dom_abstand = 3;       // Luft Dom ↔ Innenwand: Domfuß samt Kehle bleibt auf dem ebenen Boden (README: F9, F10)
+dom_abstand = 3;       // Gap boss ↔ inner wall: boss foot with fillet stays on the flat bottom (README: F9, F10)
 
-// Mitte des Schraubdoms i (0 … 3) im System des Unterteils, in den Innenecken
+// Centre of screw boss i (0 … 3) in the base's system, in the inner corners
 function dom_pos(i) = let (a = wand + dom_abstand + dom_d / 2)
     [i % 2 == 0 ? a : aussen_l - a, i < 2 ? a : aussen_b - a];

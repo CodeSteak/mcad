@@ -1,12 +1,12 @@
-// Zweck: Zahnriemenscheibe (GT2-ähnlich) als Skizze per Schleife (Plan 17.1): jede Zahnlücke
-// ist ein Bogen durch einen Punkt am Lückengrund, dazwischen ein Bogen um die Mitte auf dem
-// Kopfkreis; die Nabenbohrung ist eine zweite Kontur im Uhrzeigersinn. Bordscheiben als Zylinder.
+// Zweck: timing belt pulley (GT2-like) as a sketch via a loop (plan 17.1): each tooth gap
+// is an arc through a point at the bottom of the gap, between them an arc about the centre on the
+// tip circle; the hub bore is a second contour, clockwise. Flanges as cylinders.
 function polar(r, a) = [r * cos(a), r * sin(a)];
 
 module scheibe(z = 20, teilung = 2, h = 7, bohrung = 5) {
-    ra = z * teilung / PI / 2 - 0.25;           // Kopfkreisradius
-    t = 0.75;                                   // Tiefe der Zahnlücke
-    dw = 0.6 / ra * 180 / PI;                   // halbe Lückenbreite als Winkel
+    ra = z * teilung / PI / 2 - 0.25;           // Tip circle radius
+    t = 0.75;                                   // Depth of the tooth gap
+    dw = 0.6 / ra * 180 / PI;                   // Half the gap width as an angle
     a = 360 / z;
     translate([0, 0, 1]) linear_extrude(h) sketch {
         start(polar(ra, -dw));

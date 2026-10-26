@@ -1,4 +1,4 @@
-// Zweck: offset an Profilen mit Löchern – Löcher schrumpfen/wachsen, schließen sich, schmale Teile verschwinden.
+// Zweck: offset on profiles with holes – holes shrink/grow, close, thin parts vanish.
 module lochplatte() difference() {
     square([30, 20]);
     translate([8, 10]) circle(r = 4);
@@ -6,11 +6,11 @@ module lochplatte() difference() {
 }
 
 linear_extrude(2) lochplatte();
-translate([40, 0, 0]) linear_extrude(2) offset(r = 1) lochplatte();    // Löcher kleiner
-translate([80, 0, 0]) linear_extrude(2) offset(r = -1) lochplatte();   // Löcher größer
-translate([0, 30, 0]) linear_extrude(2) offset(r = 4.5) lochplatte();  // Löcher geschlossen
+translate([40, 0, 0]) linear_extrude(2) offset(r = 1) lochplatte();    // Holes smaller
+translate([80, 0, 0]) linear_extrude(2) offset(r = -1) lochplatte();   // Holes larger
+translate([0, 30, 0]) linear_extrude(2) offset(r = 4.5) lochplatte();  // Holes closed
 translate([40, 30, 0]) linear_extrude(2) offset(delta = 1) lochplatte();
-// zwei Teile wachsen zusammen; ein schmaler Steg verschwindet nach innen
+// two parts grow together; a thin web vanishes inwards
 translate([0, 70, 0]) linear_extrude(2) offset(r = 1.5) {
     square([10, 10]);
     translate([12, 0]) square([10, 10]);

@@ -1,4 +1,4 @@
-// Zweck: rotate in allen Formen und mirror – sternförmige Halterung.
+// Zweck: rotate in all forms and mirror – star-shaped bracket.
 module arm() translate([5, 0, 0]) cube([20, 4, 4]);
 arm();
 mirror([1, 0, 0]) arm();

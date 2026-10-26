@@ -1,7 +1,7 @@
-// F13 (Meldung): shell(2) eines Körpers, dessen Bodenkanten mit r 2 verrundet sind (Innenradius
-// 0): vorher nur „SmApiShellBrepFull failed: SM_ERR (1001)“.
-// Status (Bericht 13): behoben – die Meldung nennt jetzt die Ursache (Verrundungsradius ≤
-// Wandstärke, die Innenfläche entartet); mit fillet(3) geht es.
+// F13 (message): shell(2) of a body whose bottom edges are rounded with r 2 (inner radius
+// 0): before only „SmApiShellBrepFull failed: SM_ERR (1001)“.
+// Status (report 13): fixed – the message now names the cause (rounding radius ≤
+// wall thickness, the inner face degenerates); with fillet(3) it works.
 // SOLL-FEHLER: radius of a convex rounding
 grid g { z: o = 30; }
 shell(2) {

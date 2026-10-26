@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Testbericht 5 „STEP-Export und Kernel-Vergleich“ erzeugen.
+"""Generate test report 5 „STEP-Export und Kernel-Vergleich“.
 
-    python3 tools/report/report5.py --run     # alles messen (Tests, verify.py, diff-kernels, Bilder), HTML + PDF
-    python3 tools/report/report5.py           # nur HTML/PDF aus target/step/ (vorheriger --run)
+    python3 tools/report/report5.py --run     # measure everything (tests, verify.py, diff-kernels, images), HTML + PDF
+    python3 tools/report/report5.py           # only HTML/PDF from target/step/ (previous --run)
 
-Ausgabe: docs/reports/05-step-export/{report.html, report.pdf, img/*.png}.
-Zwischenstände: target/step/ (verify-report.json, diff-kernels.json, report5-tests.json, readback/).
+Output: docs/reports/05-step-export/{report.html, report.pdf, img/*.png}.
+Intermediate state: target/step/ (verify-report.json, diff-kernels.json, report5-tests.json, readback/).
 
-Voraussetzungen:
-  * SMLIB_PREBUILT (Standard /home/user/controller-cad/smlib/build-native) oder eigener SMLib-Build,
-    third_party/smlib (smlib/fetch.sh), emsdk für smlib/build-wasm.sh (Node-Test),
-  * ein venv mit cadquery-ocp (OCCT-Python), Standard /opt/tools/venv-step (STEP_PY),
-  * Node 22 und playwright in tools/report (``npm i playwright@1.56.1 --no-save``) für das PDF.
+Requirements:
+  * SMLIB_PREBUILT (default /home/user/controller-cad/smlib/build-native) or an own SMLib build,
+    third_party/smlib (smlib/fetch.sh), emsdk for smlib/build-wasm.sh (Node test),
+  * a venv with cadquery-ocp (OCCT Python), default /opt/tools/venv-step (STEP_PY),
+  * Node 22 and playwright in tools/report (``npm i playwright@1.56.1 --no-save``) for the PDF.
 """
 
 from __future__ import annotations

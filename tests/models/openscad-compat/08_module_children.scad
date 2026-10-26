@@ -1,4 +1,4 @@
-// Zweck: Module mit Parametern und children() – Füße an den Ecken einer Platte.
+// Zweck: modules with parameters and children() – feet at the corners of a plate.
 module corners(w, d) {
     for (x = [0, w], y = [0, d]) translate([x, y, 0]) children();
 }

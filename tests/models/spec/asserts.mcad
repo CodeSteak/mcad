@@ -1,27 +1,27 @@
-// Zweck: Kollisions-Asserts (Plan 21, Phase C) – Prüfungen nach der Auswertung; eine
-// Verletzung ist eine Warnung, `mcad export` bricht dann ab (außer mit --ignore-asserts).
-// Asserts sind Gruppen ihrer Kinder und lassen sich schachteln. Das Bauteil auf der Platine
-// (STL als Netz) ist ein Sperrvolumen: gezeigt, aber nicht exportiert und nicht gezählt.
+// Zweck: collision asserts (plan 21, phase C) – checks after evaluation; a
+// violation is a warning, `mcad export` then aborts (unless --ignore-asserts).
+// Asserts are groups of their children and can be nested. The component on the board
+// (STL as a mesh) is a keep-out volume: shown, but neither exported nor counted.
 
-w = 60;   // Gehäuse außen
+w = 60;   // Enclosure outside
 d = 40;
 h = 25;
-t = 2;    // Wand
-luft = 1; // Mindestabstand zum Bauteil
+t = 2;    // Wall
+luft = 1; // Minimum distance to the component
 
 module gehaeuse() difference() {
     cube([w, d, h]);
     translate([t, t, t]) cube([w - 2 * t, d - 2 * t, h]);
 }
 module deckel() translate([0, 0, h]) cube([w, d, t]);
-// Halter und Kabelführung stecken 1 mm in Boden und Wand
+// Holder and cable guide reach 1 mm into the bottom and wall
 module halter() translate([t - 1, d / 2 - 5, t - 1]) cube([10, 10, 12]);
 module kabelfuehrung() translate([w - t - 6, d / 2 - 4, t - 1]) cube([7, 8, 6]);
 
-assert_touches() {               // Deckel liegt flächig auf dem Gehäuse
-    assert_intersect() {         // Halter und Kabelführung sind mit dem Gehäuse verbunden
+assert_touches() {               // Lid lies flat on the enclosure
+    assert_intersect() {         // Holder and cable guide are joined to the enclosure
         g: gehaeuse();
-        assert_disjoint() {      // Halter und Kabelführung berühren sich nicht
+        assert_disjoint() {      // Holder and cable guide do not touch
             hl: halter();
             kf: kabelfuehrung();
         }
@@ -29,5 +29,5 @@ assert_touches() {               // Deckel liegt flächig auf dem Gehäuse
     k: deckel();
 }
 
-// Bauteil auf der Platine (Winkel 20 × 10 × 15): 1 mm Luft zu allem
+// Component on the board (bracket 20 × 10 × 15): 1 mm clearance to everything
 assert_keepout(clearance = luft) translate([25, 12, t + 2]) import("../stl/winkel.stl", as = "mesh");

@@ -1,10 +1,10 @@
-// F5: Fase über eine Zone an der Oberkante eines Kastens mit verrundeten senkrechten Ecken
-// (r 6, Wand 3): Status ok, 0 Fehler, aber Volumen 0 mm³ – die Hülle ist offen (STEP mit
-// 26 Flächen). Mit fillet(2) statt fillet(6) oder chamfer(0.4) stimmt das Volumen
-// (~20 000 mm³). Ein Kernel-Ergebnis ohne geschlossene Hülle müsste ein Fehler sein.
-// Status (Bericht 13): behoben – die Fasen der inneren und äußeren Kante stoßen an den Ecken
-// zusammen (Wand an der Ecke 1,76 mm < 0,8 + 0,8·√2); statt Volumen 0 ohne Meldung jetzt ein
-// Fehler. chamfer(0.7) geht.
+// F5: chamfer via a zone on the top edge of a box with rounded vertical corners
+// (r 6, wall 3): status ok, 0 errors, but volume 0 mm³ – the shell is open (STEP with
+// 26 faces). With fillet(2) instead of fillet(6) or chamfer(0.4) the volume is right
+// (~20 000 mm³). A kernel result without a closed shell should be an error.
+// Status (report 13): fixed – the chamfers of the inner and outer edge collide at the
+// corners (wall at the corner 1.76 mm < 0.8 + 0.8·√2); instead of volume 0 without a message now an
+// error. chamfer(0.7) works.
 // SOLL-FEHLER: not closed
 grid g {
     x: l = 0, r = 40;

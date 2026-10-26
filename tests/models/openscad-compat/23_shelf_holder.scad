@@ -1,4 +1,4 @@
-// Zweck: Regalträger – Profil per polygon, linear_extrude, Schraubenlöcher mit Senkung (Kegel).
+// Zweck: shelf bracket – profile via polygon, linear_extrude, screw holes with countersink (cone).
 l = 50; h = 40; t = 5; b = 20;
 module countersink() {
     cylinder(h = t + 2, d = 4);
@@ -7,8 +7,8 @@ module countersink() {
 difference() {
     rotate([90, 0, 0]) translate([0, 0, -b]) linear_extrude(height = b)
         polygon([[0, 0], [l, 0], [l, t], [t + 8, t], [t, h - 8], [t, h], [0, h]]);
-    // Löcher in der Wandseite
+    // Holes in the wall side
     for (z = [12, h - 8]) translate([-1, b / 2, z]) rotate([0, 90, 0]) cylinder(h = t + 2, d = 4);
-    // Senkloch in der Auflage
+    // Countersunk hole in the support
     translate([l - 10, b / 2, -1]) countersink();
 }

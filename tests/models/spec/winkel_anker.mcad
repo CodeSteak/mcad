@@ -1,5 +1,5 @@
-// Zweck: Anker von außen – zwei benannte Instanzen eines Winkels, Schrauben an den Ankern
-// mit rotate(to = dir(k.a)), gedrehte Instanz, Raster aus Ankerkoordinaten.
+// Zweck: anchors from outside – two named instances of a bracket, screws at their anchors
+// with rotate(to = dir(k.a)), rotated instance, grid of anchor coordinates.
 module winkel(l = 30, b = 20, t = 3) {
     grid g {
         x: innen = t, aussen = 0, ende = l, loch_x = l - 8;
@@ -27,7 +27,7 @@ translate(a.boden_loch) rotate(to = dir(a.boden_loch)) schraube();
 translate(a.wand_loch) rotate(to = dir(a.wand_loch)) schraube(8);
 translate(b.wand_loch) rotate(to = dir(b.wand_loch)) schraube(8);
 
-// Lineal zwischen den Spitzen beider Winkel
+// A ruler between the tips of both brackets
 grid m {
     x: von = a.spitze.x, bis = b.spitze.x;
     y: y0 = a.spitze.y;

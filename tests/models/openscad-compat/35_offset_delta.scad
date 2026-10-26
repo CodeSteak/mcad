@@ -1,4 +1,4 @@
-// Zweck: offset(delta) – Gehrung an konvexen Ecken, mit chamfer = true Fasen, negativ nach innen.
+// Zweck: offset(delta) – mitre at convex corners, with chamfer = true chamfers, negative inwards.
 module stern() polygon([for (i = [0 : 9]) let(a = i * 36, r = i % 2 == 0 ? 10 : 5) [r * cos(a), r * sin(a)]]);
 module l_form() polygon([[0, 0], [20, 0], [20, 8], [8, 8], [8, 20], [0, 20]]);
 

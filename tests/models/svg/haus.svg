@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Beispiel-Icon (eigene Zeichnung, frei): Haus mit Fenstern und Tür als Löcher (evenodd),
-     relative Befehle (h, v, l), Schornstein als abgerundetes Rechteck, verschachtelte Gruppen -->
+<!-- Example icon (own drawing, free): house with windows and door as holes (evenodd),
+     relative commands (h, v, l), chimney as a rounded rectangle, nested groups -->
 <svg xmlns="http://www.w3.org/2000/svg" width="60mm" height="50mm" viewBox="0 0 60 50">
   <g id="haus" transform="translate(5 2)">
     <path id="dach" d="M 0 22 L 25 2 L 50 22 h -6 L 25 8.5 L 6 22 Z"/>

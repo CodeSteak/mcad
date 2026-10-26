@@ -1,4 +1,4 @@
-// Zweck: Funktionen, let, Listenausdrücke, Rekursion und Funktionsliterale steuern eine Treppe.
+// Zweck: functions, let, list expressions, recursion and function literals drive a staircase.
 function sum(v, i = 0) = i >= len(v) ? 0 : v[i] + sum(v, i + 1);
 function fib(n) = n < 2 ? n : fib(n - 1) + fib(n - 2);
 function cumsum(v) = [for (i = [0 : len(v) - 1]) sum([for (j = [0 : i]) v[j]])];

@@ -1,9 +1,9 @@
-// F2: Vereinigung eines Zylinders mit einem gekrümmten sweep, dessen Endkappen die
-// Zylinderfläche schneiden: „boolean union failed: SM_ERR_NULL_POINTER (1006)“. Liegen die
-// Enden tiefer im Zylinder (r = 15 statt 19), geht es. In einem union() { … }-Block erscheint
-// dieselbe Meldung zweimal an 1:1 (doppelte Diagnose).
-// Status (Bericht 13): offen (SMLib-Schnitt Zylinder/gekrümmter Sweep nahe der Endkappe);
-// die doppelte Diagnose ist behoben (eine Meldung je gescheiterter Operation).
+// F2: union of a cylinder with a curved sweep whose end caps intersect the
+// cylinder surface: „boolean union failed: SM_ERR_NULL_POINTER (1006)“. If the
+// ends lie deeper in the cylinder (r = 15 instead of 19), it works. In a union() { … } block
+// the same message appears twice at 1:1 (duplicate diagnostic).
+// Status (report 13): open (SMLib intersection cylinder/curved sweep near the end cap);
+// the duplicate diagnostic is fixed (one message per failed operation).
 // SOLL: fehlerfrei
 cylinder(h = 40, r = 20);
 sweep(path = [[19, 0, 30], [35, 0, 25], [19, 0, 10]]) circle(3);

@@ -1,9 +1,9 @@
-// Zweck: Türstopper (Keil) – loft durch drei Trapezprofile (glatt, nicht ruled) entlang der
-// Länge, mit rotate([90, 0, 90]) liegend ausgerichtet; Griffmulde oben, Querrillen unten
-// gegen Rutschen (for), Aufhängeloch hinten; Unterkante des Lofts vorher über eine Zone an
-// der Bodenebene gefast. Maße in mm.
+// Zweck: door stop (wedge) – loft through three trapezoid profiles (smooth, not ruled) along the
+// length, laid down with rotate([90, 0, 90]); finger recess on top, cross grooves underneath
+// against slipping (for), hanging hole at the back; bottom edge of the loft chamfered beforehand
+// via a zone at the bottom plane. Dimensions in mm.
 
-// Trapez: unten Breite bu, oben Breite bo, Höhe h (Profil-x = Breite, Profil-y = Höhe)
+// Trapezoid: bottom width bu, top width bo, height h (profile x = width, profile y = height)
 function trapez(bu, bo, h) = [[-bu / 2, 0], [bu / 2, 0], [bo / 2, h], [-bo / 2, h]];
 
 module tuerstopper(l = 120, b = 44, h_hinten = 32, h_mitte = 14, spitze = 3, rillen = 6,
@@ -23,12 +23,12 @@ module tuerstopper(l = 120, b = 44, h_hinten = 32, h_mitte = 14, spitze = 3, ril
             }
             zone(g.boden, d = 0.5);
         }
-        // Querrillen unten
+        // Cross grooves underneath
         for (i = [0 : rillen - 1])
             box(g[rille[i], links, boden] - [1.5, 1, 1], g[rille[i], rechts, boden] + [1.5, 1, 1]);
-        // Aufhängeloch quer durch das hohe Ende
+        // Hanging hole across the high end
         cylinder(g[loch, links, loch_z] - [0, 1, 0], g[loch, rechts, loch_z] + [0, 1, 0], d = loch_d);
-        // Griffmulde oben (Kugel schneidet eine flache Delle)
+        // Finger recess on top (a sphere cuts a shallow dent)
         translate(g[loch, achse, oben] + [18, 0, 20.5]) sphere(30);
     }
 

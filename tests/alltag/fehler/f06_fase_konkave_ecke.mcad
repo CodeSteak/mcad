@@ -1,8 +1,8 @@
-// F6 (Kernel-Schwäche): Fase/Verrundung der Kanten einer Ebene scheitert, wenn eine konvexe
-// Kante an einer kurzen konkaven endet (Stufe vor einer hohen Wand): „chamfer failed:
-// SM_ERR (1001)“; `mcad render --line 5` zeigt die konkave Kante rot. Ebenso: Rippenfüße samt
-// kurzer Außenkanten (Kühlkörper), Oberkanten des vorderen Fachs (Stiftebox).
-// Status (Bericht 13): offen – SMLib-Ecktyp konvex/konkav; Meldung markiert die Kante.
+// F6 (kernel weakness): chamfer/rounding of the edges of a plane fails when a convex
+// edge ends at a short concave one (step in front of a high wall): „chamfer failed:
+// SM_ERR (1001)“; `mcad render --line 5` shows the concave edge in red. Likewise: rib feet with
+// short outer edges (heat sink), top edges of the front compartment (pen box).
+// Status (report 13): open – SMLib corner type convex/concave; message marks the edge.
 // SOLL: fehlerfrei
 chamfer(0.5) {
     difference() {

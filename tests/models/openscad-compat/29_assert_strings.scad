@@ -1,4 +1,4 @@
-// Zweck: assert, Strings und str() – Namensschild-Rohling mit Parameterprüfung.
+// Zweck: assert, strings and str() – name plate blank with parameter check.
 label = "Werkstatt";
 w = len(label) * 6 + 10;
 h = 15;

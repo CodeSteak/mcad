@@ -1,4 +1,4 @@
-// Maße des Gehäuses (mit include eingebunden: die Variablen gelten in gehaeuse.mcad)
+// Dimensions of the enclosure (pulled in with include: the variables apply in gehaeuse.mcad)
 breite = 60;
 tiefe = 40;
 hoehe = 25;

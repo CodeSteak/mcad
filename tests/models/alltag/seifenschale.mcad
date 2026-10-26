@@ -1,7 +1,7 @@
-// Zweck: Seifenschale mit Ablauf – Wanne aus einem Quader, senkrechte Ecken und Bodenkanten
-// über Zonen verrundet (verschachtelt, zwei Radien), mit shell oben geöffnet; runde Auflagerippen
-// als cylinder(a, b, r) zwischen Rasterpunkten, Ablaufschlitze zwischen den Rippen
-// (difference(fillet = …)), vier Füße. Maße in mm.
+// Zweck: soap dish with drain – tub from a box, vertical corners and bottom edges
+// rounded via zones (nested, two radii), opened at the top with shell; round support ribs
+// as cylinder(a, b, r) between grid points, drain slots between the ribs
+// (difference(fillet = …)), four feet. Dimensions in mm.
 module seifenschale(l = 115, b = 80, h = 24, wand = 2.2, ecke = 14, n = 7, fuss_h = 3) {
     pitch = (l - 2 * ecke) / (n - 1);
     grid g {
@@ -24,16 +24,16 @@ module seifenschale(l = 115, b = 80, h = 24, wand = 2.2, ecke = 14, n = 7, fuss_
                     }
                     zone(g.boden, d = 1);
                 }
-                zone(g.rand, d = 1);    // oben offen
+                zone(g.rand, d = 1);    // open at the top
             }
-            // Auflagerippen (Seife liegt trocken)
+            // Support ribs (soap stays dry)
             for (i = [0 : n - 1])
                 cylinder(g[rippe[i], r_v, innen], g[rippe[i], r_h, innen], r = 2);
-            // Füße
+            // Feet
             for (x = [g.links + ecke, g.rechts - ecke], y = [g.vorne + ecke, g.hinten - ecke])
                 translate([x, y, g.fuss]) cylinder(h = fuss_h + 1, d = 10);
         }
-        // Ablaufschlitze im Boden zwischen den Rippen
+        // Drain slots in the bottom between the ribs
         for (i = [0 : n - 2])
             box(g[schlitz[i], r_v, fuss] + [-2, 8, -1], g[schlitz[i], r_h, innen] + [2, -8, 1]);
     }

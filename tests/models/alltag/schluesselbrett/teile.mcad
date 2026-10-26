@@ -1,5 +1,5 @@
-// Teile des Schlüsselbretts (per use eingebunden). Vorderseite des Bretts ist y = 0, die Wand
-// liegt bei y = t; Haken zeigen nach -y.
+// Parts of the key rack (pulled in via use). The front of the board is y = 0, the wall
+// lies at y = t; hooks point towards -y.
 include <masse.mcad>
 
 module brett(l = brett_l, h = brett_h, t = brett_t, n = anzahl, ecke = 8) {
@@ -19,25 +19,25 @@ module brett(l = brett_l, h = brett_h, t = brett_t, n = anzahl, ecke = 8) {
             }
             zone(g.vorne, d = 1);
         }
-        // Bohrungen für die Hakenzapfen
+        // Bores for the hook pegs
         for (i = [0 : n - 1])
             cylinder(g[haken[i], vorne, reihe] - [0, 1, 0], g[haken[i], vorne, reihe] + [0, zapfen_l + 1, 0],
                      d = bohrung_d);
-        // Schlüssellochaufhängung hinten: Einführloch 10 mm, Schlitz 4,5 mm nach oben,
-        // Hinterschnitt 8,5 mm für den Schraubenkopf
+        // Keyhole hanger at the back: entry hole 10 mm, slot 4.5 mm upwards,
+        // undercut 8.5 mm for the screw head
         for (i = [0 : 1]) {
             cylinder(g[aufh[i], hinten, aufh_z] + [0, 1, 0], g[aufh[i], hinten, aufh_z] - [0, 7, 0], d = 10);
             box(g[aufh[i], hinten, aufh_z] + [-2.25, 1, 0], g[aufh[i], hinten, aufh_z] + [2.25, -7, 10]);
             box(g[aufh[i], hinten, aufh_z] + [-4.25, -3.5, 0], g[aufh[i], hinten, aufh_z] + [4.25, -7, 10]);
         }
-        // Rille oben für Briefe
+        // Groove on top for letters
         box(g[links, vorne, ablage] + [10, 3, 0], g[rechts, hinten, oben] + [-10, -3, 1]);
     }
 }
 
 module haken(d = 6, zapfen = zapfen_d, zl = zapfen_l, ausladung = 22, knauf_d = 10) {
-    // Zapfen ohne Kehle (sie läge in der Fase der Bohrung); union(fillet) über die fast
-    // tangentiale Fuge Zapfen/Bogen bringt die CLI zum Absturz (README: F9)
+    // Peg without fillet (it would lie in the chamfer of the bore); union(fillet) across the almost
+    // tangential joint peg/arc crashes the CLI (README: F9)
     cylinder([0, -1, 0], [0, zl, 0], d = zapfen);
     union(fillet = 1) {
         sweep(path = [[0, 0, 0], [0, -ausladung * 0.6, -1], [0, -ausladung, 4], [0, -ausladung - 1, 10]],

@@ -1,7 +1,7 @@
-// Zweck: Montagewinkel 60 × 50 mm mit Versteifungsrippe(n) – Schenkel als box zwischen
-// Rasterpunkten, Rippen als extrudierte Dreiecke an indizierten Rasterebenen (for), Innenkante
-// und Rippenanschlüsse über Zonen an Rasterlinien in einem Block verrundet (Eckübergänge),
-// Außenecken der Schenkel über Zonen, Bohrungen (M5) mit difference(chamfer = …). Maße in mm.
+// Zweck: mounting bracket 60 × 50 mm with stiffening rib(s) – legs as box between
+// grid points, ribs as extruded triangles at indexed grid planes (for), inner edge
+// and rib joints rounded via zones at grid lines in one block (corner transitions),
+// outer corners of the legs via zones, holes (M5) with difference(chamfer = …). Dimensions in mm.
 module winkel_rippe(a = 60, h = 50, b = 40, t = 5, rippe_t = 4, rippe_l = 30, n_rippen = 1,
                     loch_d = 5.5) {
     grid g {
@@ -16,23 +16,23 @@ module winkel_rippe(a = 60, h = 50, b = 40, t = 5, rippe_t = 4, rippe_l = 30, n_
         fillet(4) {
             fillet(2) {
                 union() {
-                    box(g[aussen, vorne, unten], g[ende, hinten, innen_z]);     // Grundschenkel
-                    box(g[aussen, vorne, unten], g[innen, hinten, oben]);        // Wandschenkel
+                    box(g[aussen, vorne, unten], g[ende, hinten, innen_z]);     // Base leg
+                    box(g[aussen, vorne, unten], g[innen, hinten, oben]);        // Wall leg
                     for (i = [0 : n_rippen - 1])
                         translate(g[innen, rippe_e[i], innen_z]) rotate([90, 0, 0]) linear_extrude(rippe_t)
                             polygon([[-1, -1], [rippe_l, -1], [-1, rippe_l]]);
                 }
-                zone(g[innen, *, innen_z], d = 1);           // Innenkante zwischen den Rippen
+                zone(g[innen, *, innen_z], d = 1);           // Inner edge between the ribs
                 for (i = [0 : n_rippen - 1]) {
-                    zone(g[*, rippe[i], innen_z], d = 1);    // Rippe auf dem Grundschenkel
+                    zone(g[*, rippe[i], innen_z], d = 1);    // Rib on the base leg
                     zone(g[*, rippe_e[i], innen_z], d = 1);
-                    zone(g[innen, rippe[i], *], d = 1);      // Rippe an der Wand
+                    zone(g[innen, rippe[i], *], d = 1);      // Rib on the wall
                     zone(g[innen, rippe_e[i], *], d = 1);
                 }
             }
-            zone(g[ende, vorne, *], d = 1);                  // Ecken des Grundschenkels
+            zone(g[ende, vorne, *], d = 1);                  // Corners of the base leg
             zone(g[ende, hinten, *], d = 1);
-            zone(g[*, vorne, oben], d = 1);                  // Ecken des Wandschenkels
+            zone(g[*, vorne, oben], d = 1);                  // Corners of the wall leg
             zone(g[*, hinten, oben], d = 1);
         }
         for (y = [g.loch_l, g.loch_r]) {

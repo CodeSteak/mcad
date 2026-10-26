@@ -1,5 +1,5 @@
-// Zweck: Freiformdeckel – surface(points) aus einem 4 × 4-Kontrollnetz (Rand auf den
-// Rasterebenen, Wölbung als Literale), thicken(t) zum Körper und eine verrundete Montageleiste.
+// Zweck: free-form lid – surface(points) from a 4 × 4 control net (border on the
+// grid planes, bulge as literals), thicken(t) to a solid and a rounded mounting strip.
 module deckel(w = 60, d = 40, t = 2, wolbung = 9) {
     grid g {
         x: a = 0, b = w / 3, c = 2 * w / 3, e = w;

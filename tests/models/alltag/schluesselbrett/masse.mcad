@@ -1,12 +1,12 @@
-// Maße des Schlüsselbretts (per include): Brett, Haken, Passung Zapfen ↔ Bohrung
+// Dimensions of the key rack (via include): board, hooks, fit peg ↔ bore
 brett_l = 200;
 brett_h = 70;
 brett_t = 12;
-anzahl = 5;              // Haken
-haken_z = 22;            // Höhe der Hakenreihe über der Unterkante
-zapfen_d = 6;            // Zapfen am Haken (eingeklebt)
+anzahl = 5;              // Hooks
+haken_z = 22;            // Height of the row of hooks above the bottom edge
+zapfen_d = 6;            // Peg on the hook (glued in)
 zapfen_l = 8;
-bohrung_d = 6.3;         // Bohrung im Brett (0,15 mm Spiel radial für Kleber)
+bohrung_d = 6.3;         // Bore in the board (0.15 mm radial clearance for glue)
 
-// x-Position von Haken i (gleichmäßig verteilt, Rand je eine halbe Teilung)
+// x position of hook i (evenly spaced, half a pitch at each edge)
 function haken_x(i) = brett_l / anzahl * (i + 0.5);

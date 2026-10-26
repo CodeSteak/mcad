@@ -1,9 +1,9 @@
-# controller-cad: Bauen, Prüfen, Installieren, Arch-Paket.
+# controller-cad: build, test, install, Arch package.
 #
-# Die Ziele rufen die Skripte auf, die auch die CI nutzt (scripts/ci/*.sh, smlib/*.sh,
-# web/scripts/build-wasm.sh); `make help` listet sie. Variablen lassen sich überschreiben:
-#   make app SMLIB_PREBUILT=/pfad/build-native
-#   make install PREFIX=/usr DESTDIR=/tmp/paket
+# The targets call the scripts the CI uses too (scripts/ci/*.sh, smlib/*.sh,
+# web/scripts/build-wasm.sh); `make help` lists them. Variables can be overridden:
+#   make app SMLIB_PREBUILT=/path/build-native
+#   make install PREFIX=/usr DESTDIR=/tmp/pkg
 #   make arch-pkg ARCH_BUILD=docker
 #
 # GNU Make, bash.
@@ -14,7 +14,7 @@ SHELL := bash
 .DELETE_ON_ERROR:
 MAKEFLAGS += --no-builtin-rules
 
-# --- Werkzeuge -------------------------------------------------------------------------
+# --- Tools ----------------------------------------------------------------------------
 CARGO   ?= cargo
 PNPM    ?= pnpm
 NODE    ?= node
@@ -23,12 +23,12 @@ DOCKER  ?= docker
 MAKEPKG ?= makepkg
 INSTALL ?= install
 
-# --- Pfade -----------------------------------------------------------------------------
-# Vorgebaute SMLib (libSMLib.a, libSM_API.a in $(SMLIB_PREBUILT)/lib; scripts/ci/smlib-native.sh)
+# --- Paths -----------------------------------------------------------------------------
+# Prebuilt SMLib (libSMLib.a, libSM_API.a in $(SMLIB_PREBUILT)/lib; scripts/ci/smlib-native.sh)
 SMLIB_PREBUILT ?= $(CURDIR)/smlib/build-native
-# SMLib-Quellen (smlib/fetch.sh legt sie in third_party/smlib ab; build.rs braucht die Header)
+# SMLib sources (smlib/fetch.sh puts them in third_party/smlib; build.rs needs the headers)
 SMLIB_SRC      ?= $(CURDIR)/third_party/smlib
-# Emscripten SDK für smlib.wasm (leer: emcc aus PATH, sonst die Vorgabe von smlib/build-wasm.sh)
+# Emscripten SDK for smlib.wasm (empty: emcc from PATH, else the default of smlib/build-wasm.sh)
 EMSDK          ?=
 CARGO_TARGET_DIR ?= $(CURDIR)/target
 CARGO_FLAGS    ?= --locked
@@ -44,14 +44,14 @@ DOCDIR     ?= $(DATADIR)/doc/mcad
 LICENSEDIR ?= $(DATADIR)/licenses/mcad
 MIMEDIR    ?= $(DATADIR)/mime/packages
 
-# --- Arch-Paket ------------------------------------------------------------------------
-# auto: makepkg auf Arch Linux, sonst Docker (archlinux:latest)
+# --- Arch package ----------------------------------------------------------------------
+# auto: makepkg on Arch Linux, otherwise Docker (archlinux:latest)
 ARCH_BUILD   ?= auto
 ARCH_OUT     ?= $(CURDIR)/target/arch
 ARCH_IMAGE   ?= archlinux:latest
 MAKEPKG_FLAGS ?= --syncdeps --force
-# Für Docker (siehe packaging/arch/docker.sh): Netz des Containers, zusätzliche CA (Proxy),
-# Volume für Cargo-/pnpm-Caches (leer: keines)
+# For Docker (see packaging/arch/docker.sh): container network, extra CA (proxy),
+# volume for Cargo/pnpm caches (empty: none)
 ARCH_DOCKER_NETWORK ?= host
 ARCH_CA_BUNDLE      ?=
 ARCH_CACHE_VOLUME   ?= controller-cad-arch-cache
@@ -61,7 +61,7 @@ ifneq ($(EMSDK),)
 export EMSDK
 endif
 
-# --- abgeleitete Werte -----------------------------------------------------------------
+# --- derived values --------------------------------------------------------------------
 MCAD_BIN     := $(CARGO_TARGET_DIR)/release/mcad
 SMLIB_HEADER := $(SMLIB_SRC)/source/SMLib/inc/SmSmlibAll.h
 SMLIB_LIBS   := $(SMLIB_PREBUILT)/lib/libSMLib.a
@@ -69,14 +69,14 @@ SMLIB_WASM   := web/public/smlib/smlib.wasm
 WEB_DEPS     := web/node_modules/.modules.yaml
 WASM_PKG     := web/src/wasm-pkg/cad_wasm.js
 UI_DIST      := web/dist-tauri/index.html
-# App-Symbol (assets/icon): PNG je Größe und SVG für hicolor
+# App icon (assets/icon): PNG per size and SVG for hicolor
 ICON_SIZES   := $(sort $(patsubst assets/icon/png/%.png,%,$(wildcard assets/icon/png/*.png)))
 ICON_SIZES   := $(foreach s,$(ICON_SIZES),$(firstword $(subst x, ,$(s))))
 UI_SOURCES   := $(shell find web/src -type f -not -path 'web/src/wasm-pkg/*' 2>/dev/null) \
                 web/index.html web/vite.config.ts web/tsconfig.json web/package.json web/pnpm-lock.yaml
-# App-ID der Desktop-App (Tauri identifier): Name der Desktop-Datei, Wayland-app_id, WM_CLASS
+# App ID of the desktop app (Tauri identifier): desktop file name, Wayland app_id, WM_CLASS
 APP_ID  := $(shell sed -n 's/.*"identifier": *"\([^"]*\)".*/\1/p' crates/cad-app/tauri.conf.json)
-# Version: Cargo-Workspace; Paketversion mit Git-Stand (Arch-Schema für VCS-Pakete)
+# Version: Cargo workspace; package version with Git state (Arch scheme for VCS packages)
 VERSION := $(shell sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)
 GIT_REV := $(shell $(GIT) rev-list --count HEAD 2>/dev/null)
 GIT_SHA := $(shell $(GIT) rev-parse --short=7 HEAD 2>/dev/null)
@@ -87,59 +87,59 @@ ifeq ($(ARCH_BUILD),auto)
 override ARCH_BUILD := $(if $(and $(wildcard /etc/arch-release),$(shell command -v $(MAKEPKG) 2>/dev/null)),native,docker)
 endif
 
-# $(call need,befehl,hinweis): bricht mit einer verständlichen Meldung ab, wenn der Befehl fehlt
-need = command -v $(firstword $(1)) >/dev/null 2>&1 || { echo "make: '$(firstword $(1))' nicht gefunden – $(2)" >&2; exit 127; }
-NEED_CARGO = $(call need,$(CARGO),Rust 1.97 installieren: https://rustup.rs (oder make CARGO=/pfad/zu/cargo))
-NEED_PNPM  = $(call need,$(PNPM),pnpm 10.28 installieren: corepack enable oder npm i -g pnpm@10.28.0 (oder make PNPM=…))
-NEED_NODE  = $(call need,$(NODE),Node.js 22.18 oder neuer installieren)
-NEED_GIT   = $(call need,$(GIT),git installieren)
-NEED_CMAKE = $(call need,cmake,CMake 3.20 oder neuer installieren (Ninja optional))
-NEED_CXX   = $(call need,$${CXX:-c++},einen C++17-Compiler installieren (g++ 13 oder clang))
+# $(call need,command,hint): aborts with a clear message when the command is missing
+need = command -v $(firstword $(1)) >/dev/null 2>&1 || { echo "make: '$(firstword $(1))' not found – $(2)" >&2; exit 127; }
+NEED_CARGO = $(call need,$(CARGO),install Rust 1.97: https://rustup.rs (or make CARGO=/path/to/cargo))
+NEED_PNPM  = $(call need,$(PNPM),install pnpm 10.28: corepack enable or npm i -g pnpm@10.28.0 (or make PNPM=…))
+NEED_NODE  = $(call need,$(NODE),install Node.js 22.18 or newer)
+NEED_GIT   = $(call need,$(GIT),install git)
+NEED_CMAKE = $(call need,cmake,install CMake 3.20 or newer (Ninja optional))
+NEED_CXX   = $(call need,$${CXX:-c++},install a C++17 compiler (g++ 13 or clang))
 
-##@ Hilfe
+##@ Help
 .PHONY: help
-help: ## Diese Übersicht (Standardziel)
-	@echo "mcad $(VERSION) (Paketversion $(PKGVER))"
-	@echo "Aufruf: make <ziel> [VARIABLE=wert …]"
+help: ## This overview (default target)
+	@echo "mcad $(VERSION) (package version $(PKGVER))"
+	@echo "Usage: make <target> [VARIABLE=value …]"
 	@awk 'BEGIN { FS = ":.*## " } \
 	  /^##@/ { printf "\n%s\n", substr($$0, 5); next } \
 	  /^[a-zA-Z0-9_.-]+:.*## / { printf "  %-14s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 	@echo
-	@echo "Variablen (Auszug): CARGO=$(CARGO) PNPM=$(PNPM) SMLIB_PREBUILT=$(SMLIB_PREBUILT)"
-	@echo "  SMLIB_SRC=$(SMLIB_SRC) EMSDK=$(or $(EMSDK),<PATH/Vorgabe>) CARGO_TARGET_DIR=$(CARGO_TARGET_DIR)"
+	@echo "Variables (excerpt): CARGO=$(CARGO) PNPM=$(PNPM) SMLIB_PREBUILT=$(SMLIB_PREBUILT)"
+	@echo "  SMLIB_SRC=$(SMLIB_SRC) EMSDK=$(or $(EMSDK),<PATH/default>) CARGO_TARGET_DIR=$(CARGO_TARGET_DIR)"
 	@echo "  PREFIX=$(PREFIX) DESTDIR=$(DESTDIR) ARCH_BUILD=$(ARCH_BUILD) ARCH_OUT=$(ARCH_OUT)"
 
-##@ Abhängigkeiten
+##@ Dependencies
 .PHONY: deps smlib smlib-fetch smlib-native smlib-wasm emsdk web-deps sysdeps
-deps: smlib web-deps ## SMLib (nativ + Wasm) und pnpm-Pakete
+deps: smlib web-deps ## SMLib (native + Wasm) and pnpm packages
 
-smlib: smlib-native smlib-wasm ## SMLib nativ (-> SMLIB_PREBUILT) und als Wasm (-> web/public/smlib)
+smlib: smlib-native smlib-wasm ## SMLib native (-> SMLIB_PREBUILT) and as Wasm (-> web/public/smlib)
 
-smlib-fetch: ## SMLib-Quellen (Fork + Patches) nach third_party/smlib
+smlib-fetch: ## SMLib sources (fork + patches) into third_party/smlib
 	@$(NEED_GIT)
 	smlib/fetch.sh
 
-smlib-native: ## SMLib nativ bauen, falls die Bibliotheken fehlen (scripts/ci/smlib-native.sh)
+smlib-native: ## Build SMLib natively if the libraries are missing (scripts/ci/smlib-native.sh)
 	@$(NEED_GIT); $(NEED_CMAKE); $(NEED_CXX)
 	scripts/ci/smlib-native.sh "$(SMLIB_PREBUILT)"
 
-smlib-wasm: ## smlib.wasm bauen, falls es fehlt (braucht emcc: make emsdk)
+smlib-wasm: ## Build smlib.wasm if it is missing (needs emcc: make emsdk)
 	@$(NEED_GIT); $(NEED_CMAKE)
 	@command -v emcc >/dev/null 2>&1 || [ -x "$${EMSDK:-/opt/tools/emsdk}/upstream/emscripten/emcc" ] || \
-	  { echo "make: emcc nicht gefunden – make emsdk EMSDK=~/emsdk, danach make … EMSDK=~/emsdk" >&2; exit 127; }
+	  { echo "make: emcc not found – make emsdk EMSDK=~/emsdk, then make … EMSDK=~/emsdk" >&2; exit 127; }
 	scripts/ci/smlib-wasm.sh
 
-emsdk: ## Emscripten 6.0.13 nach EMSDK (Vorgabe ~/emsdk) installieren (scripts/ci/emsdk.sh)
+emsdk: ## Install Emscripten 6.0.13 into EMSDK (default ~/emsdk) (scripts/ci/emsdk.sh)
 	@$(NEED_GIT)
 	scripts/ci/emsdk.sh
 
-web-deps: $(WEB_DEPS) ## pnpm install --frozen-lockfile (nur wenn package.json/Lockfile neuer)
+web-deps: $(WEB_DEPS) ## pnpm install --frozen-lockfile (only if package.json/lockfile is newer)
 
-sysdeps: ## Systempakete für Tauri/SMLib per apt (Debian/Ubuntu, scripts/ci/desktop.sh deps)
-	@command -v apt-get >/dev/null 2>&1 || { echo "make: sysdeps braucht apt-get; Arch: siehe packaging/arch/PKGBUILD (depends/makedepends)" >&2; exit 127; }
+sysdeps: ## System packages for Tauri/SMLib via apt (Debian/Ubuntu, scripts/ci/desktop.sh deps)
+	@command -v apt-get >/dev/null 2>&1 || { echo "make: sysdeps needs apt-get; Arch: see packaging/arch/PKGBUILD (depends/makedepends)" >&2; exit 127; }
 	scripts/ci/desktop.sh deps
 
-# Dateiziele: nur bauen, was fehlt (die Skripte prüfen das zusätzlich selbst)
+# File targets: build only what is missing (the scripts check this themselves as well)
 $(SMLIB_HEADER):
 	@$(NEED_GIT)
 	smlib/fetch.sh
@@ -156,7 +156,7 @@ $(WEB_DEPS): web/package.json web/pnpm-lock.yaml
 	scripts/ci/web.sh install
 	@touch $@
 
-##@ Bauen
+##@ Build
 .PHONY: wasm web ui cli app build
 wasm: $(SMLIB_WASM) ## cad-wasm + wasm-bindgen + wasm-opt -> web/src/wasm-pkg (scripts/ci/web.sh wasm)
 	@$(NEED_CARGO)
@@ -166,35 +166,35 @@ wasm: $(SMLIB_WASM) ## cad-wasm + wasm-bindgen + wasm-opt -> web/src/wasm-pkg (s
 $(WASM_PKG):
 	@$(MAKE) --no-print-directory wasm
 
-web: $(WASM_PKG) $(WEB_DEPS) ## Browser-App -> web/dist (vite build)
+web: $(WASM_PKG) $(WEB_DEPS) ## Browser app -> web/dist (vite build)
 	scripts/ci/web.sh build
 
-ui: $(WEB_DEPS) ## UI der Desktop-App -> web/dist-tauri (pnpm build:tauri, ohne Wasm)
+ui: $(WEB_DEPS) ## UI of the desktop app -> web/dist-tauri (pnpm build:tauri, without Wasm)
 	scripts/ci/desktop.sh ui
 
-# Ohne gebaute UI legt crates/cad-app/build.rs eine Platzhalterseite an (Datei `placeholder`):
-# dann immer neu bauen.
+# Without a built UI, crates/cad-app/build.rs creates a placeholder page (file `placeholder`):
+# then always rebuild.
 ifneq ($(wildcard web/dist-tauri/placeholder),)
 .PHONY: $(UI_DIST)
 endif
 $(UI_DIST): $(UI_SOURCES) $(WEB_DEPS)
 	scripts/ci/desktop.sh ui
 
-cli: $(SMLIB_LIBS) ## mcad ohne Desktop-UI (headless, ohne WebKitGTK) -> target/release/mcad
+cli: $(SMLIB_LIBS) ## mcad without desktop UI (headless, without WebKitGTK) -> target/release/mcad
 	@$(NEED_CARGO)
 	$(CARGO) build --release $(CARGO_FLAGS) -p cad-cli --no-default-features
 	@ls -l "$(MCAD_BIN)"
 
-app: $(SMLIB_LIBS) $(UI_DIST) ## mcad mit Desktop-UI (Tauri 2, eingebettete UI) -> target/release/mcad
+app: $(SMLIB_LIBS) $(UI_DIST) ## mcad with desktop UI (Tauri 2, embedded UI) -> target/release/mcad
 	@$(NEED_CARGO)
 	$(CARGO) build --release $(CARGO_FLAGS) -p cad-cli
 	@ls -l "$(MCAD_BIN)"
 
-build: smlib web app ## Alles: SMLib nativ + Wasm, Browser-App, Desktop-App
+build: smlib web app ## Everything: SMLib native + Wasm, browser app, desktop app
 
-##@ Prüfen
+##@ Test
 .PHONY: test test-rust test-web test-node e2e e2e-desktop lint fmt fmt-check clippy typecheck
-test: test-rust test-web ## Rust-Tests (Workspace) und Vitest
+test: test-rust test-web ## Rust tests (workspace) and Vitest
 
 test-rust: $(SMLIB_LIBS) ## cargo test --workspace (scripts/ci/rust.sh test)
 	@$(NEED_CARGO)
@@ -203,20 +203,20 @@ test-rust: $(SMLIB_LIBS) ## cargo test --workspace (scripts/ci/rust.sh test)
 test-web: $(WEB_DEPS) ## Vitest (scripts/ci/web.sh unit)
 	scripts/ci/web.sh unit
 
-test-node: $(WASM_PKG) ## Node-Tests: smlib.wasm über die Brücke, Engine-Smoke-Test, Transport
+test-node: $(WASM_PKG) ## Node tests: smlib.wasm via the bridge, engine smoke test, transport
 	@$(NEED_NODE)
 	scripts/ci/web.sh node
 
-e2e: $(WASM_PKG) $(WEB_DEPS) ## Playwright (Chromium; baut und startet vite preview selbst)
+e2e: $(WASM_PKG) $(WEB_DEPS) ## Playwright (Chromium; builds and starts vite preview itself)
 	scripts/ci/web.sh e2e
 
-e2e-desktop: app ## Tauri-E2E (tauri-driver + WebKitWebDriver, Xvfb ohne Display)
+e2e-desktop: app ## Tauri E2E (tauri-driver + WebKitWebDriver, Xvfb without a display)
 	@$(NEED_NODE); $(call need,tauri-driver,scripts/ci/desktop.sh e2e-deps)
 	scripts/ci/desktop.sh e2e
 
-lint: fmt-check clippy typecheck ## cargo fmt --check, clippy (nativ + wasm32), tsc
+lint: fmt-check clippy typecheck ## cargo fmt --check, clippy (native + wasm32), tsc
 
-fmt: ## Rust-Quellen formatieren (cargo fmt --all)
+fmt: ## Format the Rust sources (cargo fmt --all)
 	@$(NEED_CARGO)
 	$(CARGO) fmt --all
 
@@ -224,17 +224,17 @@ fmt-check: ## cargo fmt --all --check
 	@$(NEED_CARGO)
 	scripts/ci/rust.sh fmt
 
-clippy: $(SMLIB_LIBS) ## cargo clippy -D warnings, nativ und cad-wasm (wasm32)
+clippy: $(SMLIB_LIBS) ## cargo clippy -D warnings, native and cad-wasm (wasm32)
 	@$(NEED_CARGO)
 	scripts/ci/rust.sh clippy clippy-wasm
 
-typecheck: $(WASM_PKG) $(WEB_DEPS) ## tsc --noEmit (braucht die Typen aus web/src/wasm-pkg)
+typecheck: $(WASM_PKG) $(WEB_DEPS) ## tsc --noEmit (needs the types from web/src/wasm-pkg)
 	scripts/ci/web.sh typecheck
 
-##@ Installieren
+##@ Install
 .PHONY: install uninstall
-install: ## mcad, Desktop-Datei, Icons, Lizenzen, Beispiele nach DESTDIR+PREFIX (vorher make app)
-	@[ -x "$(MCAD_BIN)" ] || { echo "make: $(MCAD_BIN) fehlt – erst make app (oder make cli für headless)" >&2; exit 2; }
+install: ## mcad, desktop file, icons, licenses, examples into DESTDIR+PREFIX (make app first)
+	@[ -x "$(MCAD_BIN)" ] || { echo "make: $(MCAD_BIN) missing – run make app first (or make cli for headless)" >&2; exit 2; }
 	$(INSTALL) -Dm755 "$(MCAD_BIN)" "$(DESTDIR)$(BINDIR)/mcad"
 	$(INSTALL) -Dm644 packaging/linux/$(APP_ID).desktop "$(DESTDIR)$(APPDIR)/$(APP_ID).desktop"
 	$(INSTALL) -Dm644 packaging/linux/mcad.xml "$(DESTDIR)$(MIMEDIR)/mcad.xml"
@@ -248,67 +248,67 @@ install: ## mcad, Desktop-Datei, Icons, Lizenzen, Beispiele nach DESTDIR+PREFIX 
 	  echo "$(INSTALL) -Dm644 $(SMLIB_SRC)/LICENSE $(DESTDIR)$(LICENSEDIR)/SMLib-LICENSE"; \
 	  $(INSTALL) -Dm644 "$(SMLIB_SRC)/LICENSE" "$(DESTDIR)$(LICENSEDIR)/SMLib-LICENSE"; \
 	  $(INSTALL) -Dm644 "$(SMLIB_SRC)/THIRD_PARTY_NOTICES.md" "$(DESTDIR)$(LICENSEDIR)/SMLib-THIRD_PARTY_NOTICES.md"; \
-	else echo "make: Warnung: $(SMLIB_SRC)/LICENSE fehlt, SMLib-Lizenz nicht installiert (make smlib-fetch)" >&2; fi
+	else echo "make: warning: $(SMLIB_SRC)/LICENSE missing, SMLib license not installed (make smlib-fetch)" >&2; fi
 	$(INSTALL) -Dm644 README.md "$(DESTDIR)$(DOCDIR)/README.md"
 	$(INSTALL) -Dm644 .claude/skills/cad-cli/SKILL.md "$(DESTDIR)$(DOCDIR)/cad-cli.md"
 	@cd examples && find . -type f | while read -r f; do \
 	  $(INSTALL) -Dm644 "$$f" "$(DESTDIR)$(DOCDIR)/examples/$${f#./}"; done
-	@echo "installiert: $(DESTDIR)$(BINDIR)/mcad (+ Desktop-Datei, Dateitypen, Icons, $(LICENSEDIR), $(DOCDIR))"
+	@echo "installed: $(DESTDIR)$(BINDIR)/mcad (+ desktop file, file types, icons, $(LICENSEDIR), $(DOCDIR))"
 
-# Entfernt auch Desktop-Datei, Icons, Lizenzen und Doku unter den Namen vor der Umbenennung
-# in mcad (0.3.0, controller-cad); ein altes $(BINDIR)/cad bleibt (könnte ein anderes Programm sein).
+# Also removes desktop file, icons, licenses and docs under the names before the rename
+# to mcad (0.3.0, controller-cad); an old $(BINDIR)/cad stays (could be another program).
 OLD_APP_ID := dev.controller-cad.desktop
-uninstall: ## Entfernt, was make install angelegt hat (gleiche PREFIX/DESTDIR; auch alte controller-cad-Namen)
+uninstall: ## Removes what make install created (same PREFIX/DESTDIR; also old controller-cad names)
 	rm -f "$(DESTDIR)$(BINDIR)/mcad" "$(DESTDIR)$(APPDIR)/$(APP_ID).desktop" "$(DESTDIR)$(MIMEDIR)/mcad.xml"
 	rm -f "$(DESTDIR)$(APPDIR)/$(OLD_APP_ID).desktop" "$(DESTDIR)$(APPDIR)/controller-cad.desktop"
 	for s in $(ICON_SIZES); do rm -f "$(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/mcad.png" "$(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/controller-cad.png"; done
 	rm -f "$(DESTDIR)$(ICONDIR)/scalable/apps/mcad.svg" "$(DESTDIR)$(ICONDIR)/scalable/apps/controller-cad.svg"
 	rm -rf "$(DESTDIR)$(LICENSEDIR)" "$(DESTDIR)$(DOCDIR)" "$(DESTDIR)$(DATADIR)/licenses/controller-cad" "$(DESTDIR)$(DATADIR)/doc/controller-cad"
 
-##@ Paket
+##@ Package
 .PHONY: dist arch-pkg arch-test arch-clean
-dist: $(DIST) ## Quelltext-Archiv des Git-Stands HEAD -> target/arch/mcad-<pkgver>.tar.gz
+dist: $(DIST) ## Source archive of Git HEAD -> target/arch/mcad-<pkgver>.tar.gz
 
 $(DIST):
 	@$(NEED_GIT)
-	@[ -n "$(GIT_SHA)" ] || { echo "make: dist braucht ein Git-Checkout" >&2; exit 2; }
-	@$(GIT) diff --quiet HEAD -- || echo "make: Hinweis: nicht eingecheckte Änderungen sind nicht im Archiv (git archive HEAD)" >&2
+	@[ -n "$(GIT_SHA)" ] || { echo "make: dist needs a Git checkout" >&2; exit 2; }
+	@$(GIT) diff --quiet HEAD -- || echo "make: note: uncommitted changes are not in the archive (git archive HEAD)" >&2
 	mkdir -p "$(ARCH_OUT)"
 	$(GIT) archive --format=tar.gz --prefix=mcad-$(PKGVER)/ -o "$@" HEAD
 
-arch-pkg: $(DIST) ## Arch-Paket bauen (makepkg auf Arch, sonst Docker) -> target/arch/*.pkg.tar.zst
+arch-pkg: $(DIST) ## Build the Arch package (makepkg on Arch, otherwise Docker) -> target/arch/*.pkg.tar.zst
 	sed -e 's/^pkgver=.*/pkgver=$(PKGVER)/' \
 	    -e "s/^_srcsum=.*/_srcsum=$$(sha256sum "$(DIST)" | cut -d' ' -f1)/" \
 	    packaging/arch/PKGBUILD > "$(ARCH_OUT)/PKGBUILD"
 ifeq ($(ARCH_BUILD),native)
-	@$(call need,$(MAKEPKG),pacman/makepkg (Arch Linux) – sonst make arch-pkg ARCH_BUILD=docker)
+	@$(call need,$(MAKEPKG),pacman/makepkg (Arch Linux) – otherwise make arch-pkg ARCH_BUILD=docker)
 	cd "$(ARCH_OUT)" && $(MAKEPKG) $(MAKEPKG_FLAGS)
 else ifeq ($(ARCH_BUILD),docker)
-	@$(call need,$(DOCKER),Docker installieren oder auf Arch mit makepkg bauen (ARCH_BUILD=native))
+	@$(call need,$(DOCKER),install Docker or build with makepkg on Arch (ARCH_BUILD=native))
 	DOCKER="$(DOCKER)" ARCH_IMAGE="$(ARCH_IMAGE)" ARCH_DOCKER_NETWORK="$(ARCH_DOCKER_NETWORK)" \
 	  ARCH_CA_BUNDLE="$(ARCH_CA_BUNDLE)" ARCH_CACHE_VOLUME="$(ARCH_CACHE_VOLUME)" \
 	  packaging/arch/docker.sh build "$(ARCH_OUT)"
 else
-	@echo "make: ARCH_BUILD=$(ARCH_BUILD) unbekannt (auto, native, docker)" >&2; exit 2
+	@echo "make: ARCH_BUILD=$(ARCH_BUILD) unknown (auto, native, docker)" >&2; exit 2
 endif
 	@ls -l "$(ARCH_OUT)"/mcad-$(PKGVER)-*.pkg.tar.zst
-	@echo "Installieren: sudo pacman -U $$(ls -t "$(ARCH_OUT)"/mcad-$(PKGVER)-*.pkg.tar.zst | head -1)"
+	@echo "Install: sudo pacman -U $$(ls -t "$(ARCH_OUT)"/mcad-$(PKGVER)-*.pkg.tar.zst | head -1)"
 
-arch-test: ## Paket in frischem archlinux-Container installieren und prüfen (CLI, xvfb-UI)
-	@$(call need,$(DOCKER),Docker installieren)
+arch-test: ## Install and check the package in a fresh archlinux container (CLI, xvfb UI)
+	@$(call need,$(DOCKER),install Docker)
 	DOCKER="$(DOCKER)" ARCH_IMAGE="$(ARCH_IMAGE)" ARCH_DOCKER_NETWORK="$(ARCH_DOCKER_NETWORK)" \
 	  ARCH_CA_BUNDLE="$(ARCH_CA_BUNDLE)" packaging/arch/docker.sh test "$(ARCH_OUT)"
 
-arch-clean: ## target/arch, Builder-Image und Cache-Volume entfernen
+arch-clean: ## Remove target/arch, builder image and cache volume
 	rm -rf "$(ARCH_OUT)"
 	-DOCKER="$(DOCKER)" ARCH_CACHE_VOLUME="$(ARCH_CACHE_VOLUME)" packaging/arch/docker.sh clean
 
-##@ Aufräumen
+##@ Clean
 .PHONY: clean distclean
-clean: ## Bauergebnisse: cargo clean, web/dist, web/dist-tauri, web/src/wasm-pkg, target/arch
+clean: ## Build outputs: cargo clean, web/dist, web/dist-tauri, web/src/wasm-pkg, target/arch
 	-$(CARGO) clean
 	rm -rf web/dist web/dist-tauri web/src/wasm-pkg "$(ARCH_OUT)"
 
-distclean: clean ## zusätzlich node_modules, smlib/build-native, web/public/smlib (Quellen bleiben)
+distclean: clean ## additionally node_modules, smlib/build-native, web/public/smlib (sources stay)
 	rm -rf web/node_modules smlib/build-native smlib/build-wasm
 	find web/public/smlib -mindepth 1 -not -name .gitkeep -delete 2>/dev/null || true
