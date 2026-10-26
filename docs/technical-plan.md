@@ -40,7 +40,7 @@ Festgelegte Rahmenbedingungen:
 | Bauteile | Offener Punkt 2 | benannte Instanzen auf oberster Ebene der Hauptdatei; Export je Bauteil (STL/3MF/STEP), alle als ZIP oder als 3MF mit einem Objekt je Bauteil; CLI `export --part`, `--all-parts` | B6 |
 | Benannte Instanzen in Schleifen | nicht definiert | `k[i]: …` mit ganzzahligem Index (`k[2].anker`, Snap schreibt `k[2].ecke`); `k: …` in `for` bleibt ein Fehler | B6 (P08) |
 | Variabler Radius | Stretch Goal | `fillet(r = function (p) …)` und `difference/union/intersection(fillet = function (p) …)`: cad-eval übersetzt das Funktionsliteral in ein Radiusgesetz `cad_ir::Law` (reiner Ausdruck über `p`, Teil des Baums und des Cache-Schlüssels) statt eines Rückrufs; die Engine wertet es an Stützpunkten je Kante aus, die Fassade (`sc_fillet_var`) baut daraus ein B-Spline-Gesetz | B7 |
-| solidcore | `kernel-solidcore` ab Umstieg | `kernel-solidcore` und `mcad diff-kernels` vorhanden, opt-in (Feature `solidcore`), Pin `c9de85d`: Quader und einfache Extrusion gleich wie SMLib, übrige Primitive, Transformation, Booleans noch nicht; Tessellierung nicht im Umfang von solidcore (eigener Tessellierer nötig), M8 wartet | B5, B6, `docs/solidcore-umstieg.md` |
+| solidcore | `kernel-solidcore` ab Umstieg | `kernel-solidcore` und `mcad diff-kernels` vorhanden, opt-in (Feature `solidcore`), Pin `c9de85d`: Quader und einfache Extrusion gleich wie SMLib, übrige Primitive, Transformation, Booleans noch nicht; Tessellierung nicht im Umfang von solidcore (eigener Tessellierer nötig), M8 wartet | B5, B6, `docs/solidcore-migration.md` |
 | UI-Bibliotheken | react-three-fiber, `three-mesh-bvh`, `Line2` | three.js direkt (Raycaster, Linien als `LineSegments`), ohne r3f und BVH; TS-Protokolltypen aus Rust mit `ts-rs` | B2 |
 | CI | GitHub Actions, gecachte SMLib-Builds | Workflows `rust`, `web`, `desktop`, `compat`, `pages` (manuell) in `.github/workflows/`, Schritte in `scripts/ci/` (Abschnitt 11) | B9 |
 | Tauri-Version | „später, optional“ | `crates/cad-app` (Tauri 2) im Binary `mcad` (Feature `gui`, Standard): `mcad` / `mcad datei.mcad` / `mcad ordner/` startet die UI. Engine in einem eigenen Prozess (`mcad engine-host`, Engine-Thread mit 256 MiB Stack, schrittweise wie im Worker), weil SMLib globalen Zustand hat und ein hängender Aufruf nur mit dem Prozess beendet werden kann; Antworten binär über einen Tauri-Kanal (`cad-desktop/src/wire.rs`). Dateien auf der Festplatte, Dateibeobachter (`notify`), Git-Rand gegen `HEAD` (`git`-Aufruf + `similar`), Steuerung durch `mcad ui status/show/screenshot` über lokale IPC (`cad-ipc`) | B9 |
@@ -129,8 +129,8 @@ Zwei Wasm-Module statt einem: `wasm-bindgen` unterstützt das Emscripten-Target 
 - solidcore baut für `wasm32-unknown-unknown`. Laut solidcore-README braucht der Konsument einen größeren Stack (`-zstack-size=8388608`), weil Wasm keine Guard-Page hat.
 - Abnahme: Die CLI wertet alle Beispiele mit beiden Kerneln aus und vergleicht Volumen, Flächen- und Kantenanzahl und ausgewählte Kanten (Abschnitt 8). Erst wenn alle übereinstimmen, wird umgestellt.
 - Bis dahin kann `kernel-solidcore` als zweite Implementierung mitlaufen und meldet, welche Operationen schon gehen.
-- Tessellierung und Polyeder sind ausdrücklich nicht im Umfang von solidcore (`plan/closure.md`). Für M8 braucht es einen eigenen Tessellierer in Rust (Kanten einmal diskretisieren, ebene Flächen als Polygon mit Löchern, gekrümmte im Parameterraum mit Trimmen und Kantenabgleich, Sehnenfehler-Steuerung; Skizze in `docs/solidcore-umstieg.md`), sonst bleibt SMLib oder OCCT allein dafür im Build.
-- Fillet und Fase haben in solidcore noch keine öffentliche API; öffentliche Einstiege für Transformation, Sweeps (linear, Rotation, Pipe, Skin), Offset/Shell und Klassifizierung existieren (Stand und Ergebnisse in `docs/solidcore-umstieg.md`).
+- Tessellierung und Polyeder sind ausdrücklich nicht im Umfang von solidcore (`plan/closure.md`). Für M8 braucht es einen eigenen Tessellierer in Rust (Kanten einmal diskretisieren, ebene Flächen als Polygon mit Löchern, gekrümmte im Parameterraum mit Trimmen und Kantenabgleich, Sehnenfehler-Steuerung; Skizze in `docs/solidcore-migration.md`), sonst bleibt SMLib oder OCCT allein dafür im Build.
+- Fillet und Fase haben in solidcore noch keine öffentliche API; öffentliche Einstiege für Transformation, Sweeps (linear, Rotation, Pipe, Skin), Offset/Shell und Klassifizierung existieren (Stand und Ergebnisse in `docs/solidcore-migration.md`).
 
 ### 2.4 Fassade: Kernpunkte
 
@@ -373,7 +373,7 @@ Ein natives Programm `mcad` (Crate `cad-cli`; bis 0.2 hieß das Binary `cad`) au
 | `watch <datei> [--render bild.png …]` | Beobachtet Datei und Projektdateien (`notify`), wertet in derselben Sitzung neu aus (Cache bleibt), eine JSON-Zeile je Lauf |
 | `set <datei> --param m.p=wert \| --literal [datei:]z:s=wert` | Code über die Engine ändern (Standardwert, Literal), prüft vor dem Schreiben, atomar, `--dry-run` |
 | `export <datei> -o teil.stl\|.3mf\|.step [-D …] [--schema ap214] [--part name] [--all-parts]` | Exportdatei (STEP: exakte B-Rep, AP242), einzelne oder alle Bauteile |
-| `diff-kernels <datei…>` | Vergleich SMLib ↔ solidcore (nur Entwicklung, `docs/solidcore-umstieg.md`) |
+| `diff-kernels <datei…>` | Vergleich SMLib ↔ solidcore (nur Entwicklung, `docs/solidcore-migration.md`) |
 
 - Jeder Befehl hat `--json` mit festem, versioniertem Schema (`schema_version`) und definierte Exit-Codes (0 ok, 1 Modellfehler, 2 Aufruf, 3 Kernel). Ohne `--json` gibt es lesbaren Text.
 - `mcad` ohne Argumente startet die Desktop-UI, `mcad datei.mcad` bzw. `mcad ordner/` mit dieser Datei bzw. diesem Ordner als Projekt (Feature `gui`, Standard; `--no-default-features` baut eine CLI ohne UI). Ohne grafische Sitzung (kein `DISPLAY`/`WAYLAND_DISPLAY`) oder ohne `gui`: Meldung mit den headless Befehlen, Exit 2. `mcad --help` erklärt beides.
@@ -643,7 +643,7 @@ Stand Bericht 7; behobene Punkte früherer Berichte sind weggelassen (z. B. F1�
 
 **solidcore (M8)**
 
-- Pin `c9de85d`: `diff-kernels` über 48 Beispiele, 942 Knoten: 241 gleich (Quader, lineare Extrusion eines Polygons, 2D-Knoten), 288 unsupported, 413 blockiert, 0 abweichend (vorher `3a6a50b`: 101/267/487/0 von 855). Zylinder/Kegel (`surface.trim_srf_cache`), Kugel/Torus (`topology.face_p2`), Booleans (`topology.edge`, `query.face_p1`) brechen ab; `transform` und `classify` antworten, rechnen aber falsch und werden von `kernel-solidcore` geprüft und als `Unsupported` gemeldet. Fillet/Fase ohne öffentliche API. (B5, `docs/solidcore-umstieg.md`)
+- Pin `c9de85d`: `diff-kernels` über 48 Beispiele, 942 Knoten: 241 gleich (Quader, lineare Extrusion eines Polygons, 2D-Knoten), 288 unsupported, 413 blockiert, 0 abweichend (vorher `3a6a50b`: 101/267/487/0 von 855). Zylinder/Kegel (`surface.trim_srf_cache`), Kugel/Torus (`topology.face_p2`), Booleans (`topology.edge`, `query.face_p1`) brechen ab; `transform` und `classify` antworten, rechnen aber falsch und werden von `kernel-solidcore` geprüft und als `Unsupported` gemeldet. Fillet/Fase ohne öffentliche API. (B5, `docs/solidcore-migration.md`)
 - Tessellierung und Polyeder sind nicht im Umfang von solidcore: ohne eigenen Tessellierer kein Umstieg (Anzeige, STL/3MF).
 
 ---
@@ -1487,7 +1487,7 @@ Zeigerereignissen.
 
 ## 19. UI-Überarbeitung (Testbericht 20)
 
-**Grundlage.** Konzept `docs/konzepte/ui-ueberarbeitung/konzept.html` (+ PDF), vom Nutzer
+**Grundlage.** Konzept `docs/concepts/ui-redesign/concept.html` (+ PDF), vom Nutzer
 angenommen mit allen Vorschlägen (Option A) und Teal/Smaragdgrün statt Blau als Akzent. Keine
 neue Funktion; Ordnung, Gewichtung und einheitliche Bedienelemente in Browser und Tauri.
 

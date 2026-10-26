@@ -26,7 +26,7 @@ sichtbare Befehl (`mcad <name>`) im Manual vorkommt.
 - Die übrige Textausgabe der CLI (Diagnosen, Ergebnisse) ist Deutsch; JSON-Schlüssel sind
   Englisch. Neue deutsche Begriffe in der Ausgabe → Glossar in `17-troubleshooting.md`.
 - `README.md` und die Testberichte (`docs/reports/`) sind Englisch; übrige Doku im Repo (Plan,
-  `docs/entwicklung.md`, Skill) bleibt Deutsch.
+  `docs/development.md`, Skill) bleibt Deutsch.
 - Web-UI: Texte nur über die i18n-Wörterbücher (Englisch und Deutsch), nie hart codiert.
 
 ## Bauen

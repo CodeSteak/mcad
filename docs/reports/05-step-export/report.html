@@ -56,7 +56,7 @@ figcaption b { color: var(--ink); }
 <li><b>Writer</b> <code>cad-step</code> (kernel-independent): AP242 (default) or AP214, product structure (<code>PRODUCT</code> … <code>SHAPE_DEFINITION_REPRESENTATION</code>), units mm and degrees, <code>MANIFOLD_SOLID_BREP</code>/<code>BREP_WITH_VOIDS</code> per body (several shells → several solids), open surfaces as <code>SHELL_BASED_SURFACE_MODEL</code>, colors from <code>color()</code> as <code>STYLED_ITEM</code> per face.</li>
 <li><b>Integration</b>: <code>Engine::export_step</code>, <code>cad export -o x.step [--schema ap214]</code> (JSON with volume, area, bounding box and statistics), session <code>Export{format:"step"}</code> (additive, <code>protocol.ts</code> regenerated), Wasm.</li>
 <li><b>Verification</b> <code>tests/step/verify.py</code>: reads every file with OpenCASCADE (not our code), <code>BRepCheck_Analyzer</code>, closed shells, number of solids/faces, volume and bounding box against the kernel (relative 0.0001), area (0.0005, see section 7). Rust tests of the writer (syntax, references, numbers read back with our own Part 21 reader) run without Python.</li>
-<li><b>solidcore</b>: crate <code>kernel-solidcore</code>, CLI <code>cad diff-kernels</code>, documentation <code>docs/solidcore-umstieg.md</code>.</li></ul>
+<li><b>solidcore</b>: crate <code>kernel-solidcore</code>, CLI <code>cad diff-kernels</code>, documentation <code>docs/solidcore-migration.md</code>.</li></ul>
 <p><b>Why AP242:</b> AP242 is the current edition that merges and replaces AP203 and AP214; the B-rep entities (Part 42) are the same in both, the choice only changes the header and the application context. AP214 remains available via <code>--schema ap214</code> for older readers that do not know the AP242 schema name.</p>
 <h2>2. Environment</h2><table>
 <tr><th style='width:20%'>Date</th><td>2026-10-23 05:04</td></tr>
@@ -173,7 +173,7 @@ figcaption b { color: var(--ink); }
 <tr><td><code>group</code></td><td class='n'>99</td><td class='n'>2</td><td class='n'>0</td><td class='n'>97</td><td class='n'>0</td></tr>
 <tr><td><code>polygon</code></td><td class='n'>13</td><td class='n'>13</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0</td></tr>
 <tr><td><code>rect</code></td><td class='n'>22</td><td class='n'>22</td><td class='n'>0</td><td class='n'>0</td><td class='n'>0</td></tr>
-</table><p class='small'>Further labels (module calls, groups, 2D primitives) in the JSON <code>target/step/diff-kernels.json</code>. Acceptance and missing parts: <code>docs/solidcore-umstieg.md</code>.</p>
+</table><p class='small'>Further labels (module calls, groups, 2D primitives) in the JSON <code>target/step/diff-kernels.json</code>. Acceptance and missing parts: <code>docs/solidcore-migration.md</code>.</p>
 <h2>7. Known limitations</h2><ul>
 <li><b>Area:</b> SMLib integrates areas only to about 1e-4 (<code>SmApiBrepComputeArea</code> clamps the accuracy to [1e-4, 1e-1]). For <code>freiformdeckel</code> the kernel area deviates by 1.9e-4; OCCT adaptive (6658.641 mm²) and a fine OCCT mesh (6658.656 mm²) agree with each other, so the error lies in the kernel reference value. The area check therefore uses 5e-4, volume and bounding box 1e-4.</li>
 <li>OCCT's default integration (fixed Gauss rule) deviates by up to 1e-4 for B-spline surfaces and surfaces of revolution; verify.py integrates adaptively (1e-9).</li>

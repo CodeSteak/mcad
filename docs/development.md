@@ -9,7 +9,7 @@ OpenSCAD-Dialekt geschrieben; dazu kommen Raster, Anker, benannte Instanzen und 
 gekoppelt: Cursor und Hover markieren die zugehörige Geometrie, Griffe in der Ansicht
 schreiben Literale oder Rasterreferenzen in den Code zurück.
 
-Plan und Entscheidungen: [`docs/technischer-plan.md`](technischer-plan.md).
+Plan und Entscheidungen: [`docs/technical-plan.md`](technical-plan.md).
 
 ## Status
 
@@ -24,7 +24,7 @@ Skizzen-Editor, Text und SVG-Import sowie ein Messwerkzeug an der exakten B-Rep 
 Fußpunkten, Radius, Winkel, Länge, Fläche, Körper; im Schnitt Konturen, Kreise, Wandstärke) in
 der UI und in `mcad measure` (Testberichte 1–19, [`docs/reports/`](reports/README.md)). Offen ist der Umstieg auf den
 Rust-Kernel solidcore (M8, wartet auf den Portierungsstand von solidcore, siehe
-[`docs/solidcore-umstieg.md`](solidcore-umstieg.md)). Browser: kein Backend, gespeichert
+[`docs/solidcore-migration.md`](solidcore-migration.md)). Browser: kein Backend, gespeichert
 wird im Browser (IndexedDB) oder über die File System Access API; Desktop: Dateisystem.
 
 ## Architektur in Kürze

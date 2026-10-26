@@ -2,7 +2,7 @@
 // Katalog der Alltagsmodelle (tests/models/alltag/): misst jedes Modell mit der CLI, rendert Bilder
 // und schreibt
 //
-//   docs/modelle/alltagsmodelle.html, docs/modelle/img/*.jpg
+//   docs/models/everyday-models.html, docs/models/img/*.jpg
 //
 // Alle Zahlen kommen aus der CLI (`cad outline`, `measure`, `eval`), Texte aus MODELLE unten
 // (Platzhalter {param} bzw. {modul.param} werden durch die Standardwerte aus `cad outline`
@@ -12,7 +12,7 @@
 //
 //   node tools/report/katalog.mjs [--reuse [--redo=id,…]]   (--reuse: Messwerte/Bilder aus reports/tmp
 //                                                             wiederverwenden, außer für --redo)
-//   node tools/report/print-pdf.mjs docs/modelle/alltagsmodelle.html docs/modelle/alltagsmodelle.pdf "Alltagsmodelle – Katalog"
+//   node tools/report/print-pdf.mjs docs/models/everyday-models.html docs/models/everyday-models.pdf "Alltagsmodelle – Katalog"
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -23,7 +23,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "../..");
 const cad = process.env.CAD ?? join(root, "target/release/mcad");
 const work = join(root, "reports/tmp/katalog");
-const out = join(root, "docs/modelle");
+const out = join(root, "docs/models");
 const img = join(out, "img");
 const reuse = process.argv.includes("--reuse");
 const PLA = 1.24; // g/cm³
@@ -523,8 +523,8 @@ table.toc code { font-size: 7.6pt; }
 ${pages.join("\n")}
 </body></html>
 `;
-writeFileSync(join(out, "alltagsmodelle.html"), html);
+writeFileSync(join(out, "everyday-models.html"), html);
 const total = 3 + pages.length;
-console.log(`${rel(join(out, "alltagsmodelle.html"))}: ${total} Seiten erwartet, Bilder ${daten.reduce((s, { d }) => s + Object.values(d.img).reduce((a, x) => a + x.bytes, 0), 0)} B`);
+console.log(`${rel(join(out, "everyday-models.html"))}: ${total} Seiten erwartet, Bilder ${daten.reduce((s, { d }) => s + Object.values(d.img).reduce((a, x) => a + x.bytes, 0), 0)} B`);
 for (const a of auffaellig) console.log("  Auffällig: " + a);
 writeFileSync(join(work, "auffaellig.txt"), auffaellig.join("\n") + "\n");

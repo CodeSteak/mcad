@@ -1,3 +1,0 @@
-# Modellkataloge
-
-[`alltagsmodelle.pdf`](alltagsmodelle.pdf) (HTML: [`alltagsmodelle.html`](alltagsmodelle.html), Bilder in `img/`): Katalog der Beispielmodelle aus [`tests/models/alltag/`](../../tests/models/alltag/README.md), je Modell eine Seite (Baugruppen zwei) mit Beschreibung, Rendering, Kenndaten, Parametern und Sprachmitteln – erzeugt mit `CAD=target/release/mcad MCAD_IPC_DIR=/tmp/cadkat node tools/report/katalog.mjs` (misst alles mit der CLI, braucht ImageMagick; `--reuse` nutzt die Messwerte aus `reports/tmp/katalog/`), dann `node tools/report/print-pdf.mjs docs/modelle/alltagsmodelle.html docs/modelle/alltagsmodelle.pdf "Alltagsmodelle – Katalog"`.

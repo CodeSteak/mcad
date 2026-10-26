@@ -1,6 +1,6 @@
 # solidcore coverage, weekly: `mcad diff-kernels` over the examples against the newest
 # solidcore `main` instead of the commit pinned in crates/kernel-solidcore/Cargo.toml
-# (docs/solidcore-umstieg.md). Reports the numbers only (job summary, artifact
+# (docs/solidcore-migration.md). Reports the numbers only (job summary, artifact
 # `solidcore-coverage` with diff-kernels.json): unsupported, blocked or differing nodes do not
 # fail the job; a build failure (API change in solidcore) or a crash of diff-kernels does.
 # Locally: scripts/ci/smlib-native.sh && SMLIB_PREBUILT=smlib/build-native scripts/ci/solidcore.sh

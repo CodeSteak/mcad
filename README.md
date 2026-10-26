@@ -138,7 +138,7 @@ make web                # browser app -> web/dist
 make test
 ```
 
-`make` lists all targets. Details (German): [`docs/entwicklung.md`](docs/entwicklung.md).
+`make` lists all targets. Details (German): [`docs/development.md`](docs/development.md).
 
 ## Installation
 
@@ -152,7 +152,7 @@ make test
 - [Quick reference](manuell/20-quickref.md) (`mcad usage quickref`): all functions on one page
 - `mcad usage` / [`manuell/`](manuell/): language and CLI reference
 - [`docs/reports/`](docs/reports/README.md): test reports per milestone
-- [`docs/technischer-plan.md`](docs/technischer-plan.md): technical plan (German)
+- [`docs/technical-plan.md`](docs/technical-plan.md): technical plan (German)
 
 ## License
 

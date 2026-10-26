@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 20 ("UI-Überarbeitung", docs/konzepte/ui-ueberarbeitung): before/after screenshots
+// Test report 20 ("UI-Überarbeitung", docs/concepts/ui-redesign): before/after screenshots
 // per area (head bar, editor, view and modes, side panel, light/dark, Tauri), the checks of the
 // bars at 1280/1440/1920 px, keyboard, contrast of the teal accent, the app id for Wayland, test
 // runs, deviations from the concept.
@@ -236,7 +236,7 @@ const html = `<!doctype html>
 <body>
 <main>
 <h1>Testbericht 20 – UI-Überarbeitung</h1>
-<div class="meta">Umsetzung des beschlossenen Konzepts <code>docs/konzepte/ui-ueberarbeitung/konzept.html</code> (alle Vorschläge Option A, Akzent Teal statt Blau) · Browser und Tauri · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${os.cpus().length} Kerne</div>
+<div class="meta">Umsetzung des beschlossenen Konzepts <code>docs/concepts/ui-redesign/concept.html</code> (alle Vorschläge Option A, Akzent Teal statt Blau) · Browser und Tauri · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${os.cpus().length} Kerne</div>
 
 <div class="summary">
   <div>Playwright (ganze Suite)<b class="${pwSum && pwSum.failed === 0 ? "ok" : "bad"}">${pwSum ? `${pwSum.passed} / ${pwSum.passed + pwSum.failed}` : "–"}</b>${pwSum ? `${pwSum.skipped} übersprungen, ${pwSum.flaky} flaky` : ""}</div>

@@ -1,7 +1,7 @@
 # OpenSCAD-Vergleich
 
 Vergleich unserer Sprache (OpenSCAD-Dialekt, B-Rep) mit OpenSCAD 2021.01 an typischen
-Hobbymodellen. Umfang: nur Features aus „Voll“ in `docs/technischer-plan.md`, Abschnitt 5.
+Hobbymodellen. Umfang: nur Features aus „Voll“ in `docs/technical-plan.md`, Abschnitt 5.
 
 | Ort | Inhalt |
 | --- | --- |

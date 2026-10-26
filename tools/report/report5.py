@@ -162,7 +162,7 @@ def build_html() -> str:
       "<code>BRepCheck_Analyzer</code>, geschlossene Schalen, Anzahl Solids/Flächen, Volumen und Hülle gegen den Kernel "
       f"(relativ {ver['tolerance_rel']:g}), Fläche ({ver.get('area_tolerance_rel', 1e-4):g}, siehe Abschnitt 7). Rust-Tests des Writers "
       "(Syntax, Referenzen, Zahlen zurückgelesen mit eigenem Part-21-Leser) laufen ohne Python.</li>")
-    a("<li><b>solidcore</b>: Crate <code>kernel-solidcore</code>, CLI <code>cad diff-kernels</code>, Doku <code>docs/solidcore-umstieg.md</code>.</li></ul>")
+    a("<li><b>solidcore</b>: Crate <code>kernel-solidcore</code>, CLI <code>cad diff-kernels</code>, Doku <code>docs/solidcore-migration.md</code>.</li></ul>")
     a("<p><b>Warum AP242:</b> AP242 ist die aktuelle Ausgabe, die AP203 und AP214 zusammenführt und ersetzt; die B-Rep-Entitäten "
       "(Teil 42) sind in beiden gleich, die Wahl ändert nur Kopf und Anwendungskontext. AP214 bleibt per <code>--schema ap214</code> für "
       "ältere Leser, die den AP242-Schemanamen nicht kennen.</p>")
@@ -236,7 +236,7 @@ def build_html() -> str:
         a(f"<tr><td><code>{esc(op)}</code></td><td class='n'>{c.get('nodes', 0)}</td><td class='n'>{c.get('same', 0)}</td><td class='n'>{c.get('unsupported', 0)}</td>"
           f"<td class='n'>{c.get('blocked', 0)}</td><td class='n'>{c.get('differ', 0) + c.get('failed', 0)}</td></tr>")
     a("</table><p class='small'>Weitere Labels (Modulaufrufe, Gruppen, 2D-Primitive) im JSON <code>target/step/diff-kernels.json</code>. Abnahme "
-      "und fehlende Teile: <code>docs/solidcore-umstieg.md</code>.</p>")
+      "und fehlende Teile: <code>docs/solidcore-migration.md</code>.</p>")
 
     a("<h2>7. Bekannte Grenzen</h2><ul>")
     a("<li><b>Fläche:</b> SMLib integriert Flächen nur auf etwa 1e-4 genau (<code>SmApiBrepComputeArea</code> klemmt die Genauigkeit auf [1e-4, 1e-1]). "
