@@ -218,7 +218,7 @@ fn filament_table_rules() {
     assert!(w.iter().any(|m| m.contains("nur auf oberster Ebene")), "{w:?}");
 }
 
-/// Bericht 12, F4: material outside the parts is an object "ohne Bauteil" of the default
+/// Bericht 12, F4: material outside the parts is an object "no part" (fixed name) of the default
 /// export and has a volume in the colour regions; the export names its objects.
 #[test]
 fn material_outside_parts_is_exported() {
@@ -228,13 +228,13 @@ fn material_outside_parts_is_exported() {
     run(&mut s, src);
     let regs = s.color_regions(false, false).unwrap();
     let parts: Vec<(Option<&str>, f64)> = regs.iter().map(|r| (r.part.as_deref(), r.total)).collect();
-    assert_eq!(parts, [(Some("teil"), 125.0), (Some("ohne Bauteil"), 64.0)]);
+    assert_eq!(parts, [(Some("teil"), 125.0), (Some("no part"), 64.0)]);
     s.post(ToEngine::Export { format: ExportFormat::ThreeMf, parts: None, zip: None, colors: None });
     let r = s.run_to_idle();
     let FromEngine::ExportResult { bytes, notes: Some(notes), .. } = &r[0] else { panic!("{r:?}") };
     let t = String::from_utf8_lossy(bytes);
     assert_eq!(t.matches("<item ").count(), 2);
-    assert!(t.contains("name=\"ohne Bauteil – blue\""), "{t}");
-    assert!(notes[0].starts_with("2 Objekte (teil, ohne Bauteil)"), "{notes:?}");
+    assert!(t.contains("name=\"no part – blue\""), "{t}");
+    assert!(notes[0].starts_with("2 Objekte (teil, no part)"), "{notes:?}");
     assert!(notes.iter().any(|n| n.contains("ohne Farbdialog")), "{notes:?}");
 }

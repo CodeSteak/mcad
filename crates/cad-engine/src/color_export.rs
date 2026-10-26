@@ -196,7 +196,7 @@ fn label_file(label: &str) -> String {
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
         .collect();
-    if s.is_empty() { "farbe".into() } else { s }
+    if s.is_empty() { "color".into() } else { s }
 }
 
 impl<K: cad_kernel::Kernel> Engine<K>
@@ -403,6 +403,6 @@ mod tests {
     fn label_files() {
         assert_eq!(label_file("#12ab34"), "12ab34");
         assert_eq!(label_file("dark red"), "dark_red");
-        assert_eq!(label_file(""), "farbe");
+        assert_eq!(label_file(""), "color");
     }
 }

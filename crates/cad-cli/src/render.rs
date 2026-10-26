@@ -1502,12 +1502,12 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
         let title = if plan.sheet {
             Some(match name.as_str() {
                 "iso" => "iso".to_string(),
-                "front" => "front (von -y)".into(),
-                "back" => "back (von +y)".into(),
-                "top" => "top (von +z)".into(),
-                "bottom" => "bottom (von -z)".into(),
-                "left" => "left (von -x)".into(),
-                "right" => "right (von +x)".into(),
+                "front" => tr!("front (von -y)", "front (from -y)"),
+                "back" => tr!("back (von +y)", "back (from +y)"),
+                "top" => tr!("top (von +z)", "top (from +z)"),
+                "bottom" => tr!("bottom (von -z)", "bottom (from -z)"),
+                "left" => tr!("left (von -x)", "left (from -x)"),
+                "right" => tr!("right (von +x)", "right (from +x)"),
                 other => other.to_string(),
             })
         } else {

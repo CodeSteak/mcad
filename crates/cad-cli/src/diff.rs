@@ -201,11 +201,12 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     let mut all_same = true;
     let mut totals: BTreeMap<&'static str, usize> = BTreeMap::new();
     if !SolidcoreKernel::available() {
-        return Err(Fail::Usage(
+        return Err(Fail::Usage(tr!(
             "diff-kernels braucht solidcore: mcad mit `--features solidcore` bauen \
+             (cargo build -p cad-cli --features solidcore)",
+            "diff-kernels needs solidcore: build mcad with `--features solidcore` \
              (cargo build -p cad-cli --features solidcore)"
-                .into(),
-        ));
+        )));
     }
     for f in files {
         let src = std::fs::read_to_string(f).map_err(|e| Fail::Usage(format!("{}: {e}", f.display())))?;

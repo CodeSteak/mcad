@@ -28,7 +28,7 @@ fn json(args: &[&str], code: i32) -> Value {
         String::from_utf8_lossy(&out.stderr)
     );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(v["schema_version"], 2);
+    assert_eq!(v["schema_version"], 3);
     assert_eq!(v["exit_code"], code);
     assert_eq!(v["ok"], code == 0);
     v

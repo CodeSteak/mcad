@@ -99,12 +99,13 @@ pub(crate) struct MeasureArgs {
     pub colors: bool,
 }
 
-/// A point reference resolved in context coordinates.
+/// A point reference resolved in context coordinates, with its kind (`coordinate`,
+/// `grid_point`, `anchor`; fixed JSON values).
 pub(crate) fn resolve_point(sc: &p::Scene, s: &str) -> Result<(DVec3, String), Fail> {
     let s = s.trim();
     if s.starts_with('[') {
         let v = parse_vec(s, 3, trs!("Koordinate", "coordinate"))?;
-        return Ok((DVec3::new(v[0], v[1], v[2]), "Koordinate".into()));
+        return Ok((DVec3::new(v[0], v[1], v[2]), "coordinate".into()));
     }
     // grid point g[a, b, c]
     if let Some(open) = s.find('[')
@@ -147,7 +148,7 @@ pub(crate) fn resolve_point(sc: &p::Scene, s: &str) -> Result<(DVec3, String), F
                 pl.value
             };
         }
-        return Ok((mat(&g.frame).transform_point3(local), "Rasterpunkt".into()));
+        return Ok((mat(&g.frame).transform_point3(local), "grid_point".into()));
     }
     // anchor: `k.ecke`, `k[2].ecke` or (module context) `ecke`
     let found = sc
@@ -156,7 +157,7 @@ pub(crate) fn resolve_point(sc: &p::Scene, s: &str) -> Result<(DVec3, String), F
         .find(|a| a.text.as_deref() == Some(s))
         .or_else(|| (!s.contains('.')).then(|| sc.anchors.iter().find(|a| a.inst == 0 && a.name == s)).flatten());
     match found {
-        Some(a) => Ok((DVec3::from_array(a.point.0), "Anker".into())),
+        Some(a) => Ok((DVec3::from_array(a.point.0), "anchor".into())),
         None => {
             let known: Vec<String> =
                 sc.anchors.iter().map(|a| a.text.clone().unwrap_or_else(|| a.name.clone())).collect();

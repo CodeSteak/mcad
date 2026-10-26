@@ -261,7 +261,7 @@ sudo pacman -U target/arch/mcad-*.pkg.tar.zst
   `filament = n` into the code, volume and mass PLA) and the colour regions as printed.
   If the colour comes from a parameter or a loop, `filament("red", 4);` at
   top level sets the slot (the UI then writes that). `alpha` only affects the view,
-  `transparent` does not colour. The 3MF has one object per part (remainder: "ohne Bauteil" (without part)) and
+  `transparent` does not colour. The 3MF has one object per part (remainder: "no part") and
   no colour group, so that Bambu Studio takes over the slots without a colour dialog (report 12).
 
 - `sketch { start(p); line(to = …); arc(to = …, r = …); bezier(c1 = …, to = …); spline(…);

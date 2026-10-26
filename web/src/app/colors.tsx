@@ -56,59 +56,63 @@ export function ColorsPanel() {
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.key} data-testid={`color-row-${r.label}`} className={shared.includes(r.filament) ? "shared" : ""}>
-              <td className="cpcolor">
-                <span className="swatch" style={{ background: r.swatch }} data-testid={`color-swatch-${r.label}`} title={t("colors.swatch", { hex: r.hex, swatch: r.swatch })} />
-                <span className="cplabel">
-                  {r.label}
-                  {r.source === "random" && (
-                    <span className="badge warn" title={t("colors.randomHint")}>
-                      {t("colors.random")}
+          {rows.map((r) => {
+            // `label` is a fixed value (test ids); material without color() has the label "default", shown translated
+            const name = r.source === "default" ? t("colors.defaultLabel") : r.label;
+            return (
+              <tr key={r.key} data-testid={`color-row-${r.label}`} className={shared.includes(r.filament) ? "shared" : ""}>
+                <td className="cpcolor">
+                  <span className="swatch" style={{ background: r.swatch }} data-testid={`color-swatch-${r.label}`} title={t("colors.swatch", { hex: r.hex, swatch: r.swatch })} />
+                  <span className="cplabel">
+                    {name}
+                    {r.source === "random" && (
+                      <span className="badge warn" title={t("colors.randomHint")}>
+                        {t("colors.random")}
+                      </span>
+                    )}
+                    {r.source === "default" && <span className="badge">{t("colors.default")}</span>}
+                    <span className="cplines">
+                      {r.places.map((p) => (
+                        <button
+                          key={p.label}
+                          className="link"
+                          title={p.file ? t("colors.showFileLine", { file: p.file, line: p.line }) : t("colors.showLine", { line: p.line })}
+                          onClick={() => (p.file ? openLocation(p.file, p.from) : bridge.setCursorLine(p.line))}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
                     </span>
-                  )}
-                  {r.source === "default" && <span className="badge">{t("colors.default")}</span>}
-                  <span className="cplines">
-                    {r.places.map((p) => (
-                      <button
-                        key={p.label}
-                        className="link"
-                        title={p.file ? t("colors.showFileLine", { file: p.file, line: p.line }) : t("colors.showLine", { line: p.line })}
-                        onClick={() => (p.file ? openLocation(p.file, p.from) : bridge.setCursorLine(p.line))}
-                      >
-                        {p.label}
-                      </button>
-                    ))}
                   </span>
-                </span>
-              </td>
-              <td>
-                <select
-                  aria-label={t("colors.filamentFor", { label: r.label })}
-                  data-testid={`color-slot-${r.label}`}
-                  value={r.explicit ? String(r.filament) : "auto"}
-                  disabled={r.source === "default"}
-                  title={
-                    r.source === "default"
-                      ? t("colors.defaultSlotHint")
-                      : t("colors.slotSelectHint")
-                  }
-                  onChange={(e) => client.setFilament(r.key, e.target.value === "auto" ? null : Number(e.target.value))}
-                >
-                  <option value="auto">{r.explicit ? t("colors.auto") : `${r.filament} (auto)`}</option>
-                  {Array.from({ length: MAX_FILAMENT }, (_, i) => i + 1).map((s) => (
-                    <option key={s} value={String(s)}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </td>
-              <td className="n" data-testid={`color-volume-${r.label}`}>
-                {vol(r.volume)}
-                <span className="cpmass">{mass(r.grams)}</span>
-              </td>
-            </tr>
-          ))}
+                </td>
+                <td>
+                  <select
+                    aria-label={t("colors.filamentFor", { label: name })}
+                    data-testid={`color-slot-${r.label}`}
+                    value={r.explicit ? String(r.filament) : "auto"}
+                    disabled={r.source === "default"}
+                    title={
+                      r.source === "default"
+                        ? t("colors.defaultSlotHint")
+                        : t("colors.slotSelectHint")
+                    }
+                    onChange={(e) => client.setFilament(r.key, e.target.value === "auto" ? null : Number(e.target.value))}
+                  >
+                    <option value="auto">{r.explicit ? t("colors.auto") : `${r.filament} (auto)`}</option>
+                    {Array.from({ length: MAX_FILAMENT }, (_, i) => i + 1).map((s) => (
+                      <option key={s} value={String(s)}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className="n" data-testid={`color-volume-${r.label}`}>
+                  {vol(r.volume)}
+                  <span className="cpmass">{mass(r.grams)}</span>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
         <tfoot>
           <tr>

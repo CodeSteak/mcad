@@ -405,7 +405,7 @@ A native program `mcad` (crate `cad-cli`; up to 0.2 the binary was called `cad`)
 | Git (desktop) | gutter markers against `HEAD`: new green, changed blue (3 px, opacity 0.5–0.55), deleted as a red triangle between the lines; hover shows the old lines; debounced 300 ms while typing, on save, on external changes and on window focus; untracked files without markers |
 | Measuring | mode "Messen" (measure; section 18): context bar with measurement kind and "Im Schnitt" (in section), snapping to vertices, edge midpoints, circle centres, edges, faces or the section contour, dimension lines and labels in the view, list "Messungen" (measurements) with copy as text, comment and `mcad measure` |
 | Section view | tool "Schnitt" (section): plane x/y/z or free (normal from view direction or input), drag handle (snaps to grid planes of the context module and anchors, Alt free), flip, cap (stencil, hatched, alternating direction per body, transparent bodies without cap), contour; status line and "Als `mcad render …` kopieren" with the same convention as the CLI |
-| Parts | "Bauteile" (parts) tab of the side panel: visibility, volume, export per part in the ⋯ menu, "ohne Bauteil" (no part), total |
+| Parts | "Bauteile" (parts) tab of the side panel: visibility, volume, export per part in the ⋯ menu, material outside the parts ("no part"), total |
 | Colours & filaments | "Farben" (colours) tab of the side panel (swatch, name, lines, slot selection, volume, PLA mass), "Farbregionen zeigen" (show colour regions), exports "3MF mehrfarbig" (3MF multi-colour), "STL je Farbe (ZIP)" (STL per colour (ZIP)), "3MF einfarbig" (3MF single-colour); colour per face in the view (vertex colours from `tri_tags` → `tag_nodes` → `color`) |
 | Theme | icon button with System/Light/Dark menu in the header (localStorage `cad-theme`); all colours as CSS variables (`styles.css`), the 3D view re-reads them on change; palette colours adjusted per theme (`logic/palette.ts`) |
 
@@ -700,7 +700,7 @@ or partly uncoloured 2D contents are not separated (one body, default, warning
 "Farben im 2D-Profil … werden nicht getrennt" (colours in the 2D profile … are not separated)).
 
 Material outside the parts (B12, F4): the topmost nodes that are neither a part nor
-contain one form the entry "ohne Bauteil" of the regions (colour list, export).
+contain one form the entry "no part" of the regions (colour list, export).
 
 ### 16.3 Filaments
 
@@ -731,7 +731,7 @@ syntax (a module call, a harmless warning in OpenSCAD) and applies to exactly on
 ### 16.4 Export
 
 3MF (`cad_engine::color_export`): one object per part (material outside the parts: one
-object "ohne Bauteil"; without parts the root) with `components` without transformation, one mesh
+object "no part"; without parts the root) with `components` without transformation, one mesh
 per (object, colour), `Metadata/model_settings.config` with `extruder` per part and object
 (assumptions from `bbs_3mf.cpp` of Bambu Studio and OrcaSlicer, report 11). **No
 `m:colorgroup`** (B12): Bambu Studio opens the colour dialog for foreign 3MF exactly when

@@ -664,7 +664,12 @@ where
                 let q = seg.curve.closest(at).1;
                 (
                     q,
-                    tr!("Kontur · {} ({})", "contour · {} ({})", curve_text(&seg.curve), seg.source),
+                    tr!(
+                        "Kontur · {} ({})",
+                        "contour · {} ({})",
+                        curve_text(&seg.curve),
+                        cad_measure::surface::kind_id_name(seg.source)
+                    ),
                     format!("edge@{}", ref_point(q)),
                 )
             }

@@ -1135,9 +1135,9 @@ where
 
     /// Name of the root object in exports: the main file's stem.
     fn model_name(&self) -> String {
-        let f = self.main_path.rsplit('/').next().unwrap_or("modell");
+        let f = self.main_path.rsplit('/').next().unwrap_or("model");
         let stem = cad_eval::strip_model_extension(f);
-        if stem.is_empty() { "modell".into() } else { stem.to_string() }
+        if stem.is_empty() { "model".into() } else { stem.to_string() }
     }
 
     /// Multi-colour export (Plan 16.4) of the root or the named parts of the last finished
@@ -1460,7 +1460,7 @@ pub fn color_export_notes(
 /// Name of the material outside the parts in the colour list and in multi-colour exports
 /// (an object of its own; a part name never contains a space). A fixed name in both
 /// languages: the UI matches it and shows it translated, exports stay the same.
-pub const NO_PART: &str = "ohne Bauteil";
+pub const NO_PART: &str = "no part";
 
 /// "No evaluation yet" (answer to requests that need one).
 pub(crate) fn no_evaluation() -> String {

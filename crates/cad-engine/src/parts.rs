@@ -41,7 +41,7 @@ pub fn part_file_name(name: &str, ext: &str) -> String {
         s.pop();
     }
     if s.is_empty() {
-        s.push_str("teil");
+        s.push_str("part");
     }
     format!("{s}.{ext}")
 }
@@ -453,7 +453,7 @@ mod tests {
     fn file_names() {
         assert_eq!(part_file_name("deckel", "stl"), "deckel.stl");
         assert_eq!(part_file_name("k[2]", "3mf"), "k_2.3mf");
-        assert_eq!(part_file_name("ä", "stl"), "teil.stl");
+        assert_eq!(part_file_name("ä", "stl"), "part.stl");
     }
 
     #[test]

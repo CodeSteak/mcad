@@ -118,7 +118,7 @@ pub fn apply(op: &FileOp) -> std::io::Result<()> {
         FileOp::Mkdir(p) => std::fs::create_dir_all(p),
         FileOp::Write(p, b) => std::fs::write(p, b),
         FileOp::Atomic(path, b) => {
-            let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "datei".into());
+            let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
             let tmp = path.with_file_name(format!(".{name}.mcad-set.tmp"));
             std::fs::write(&tmp, b)?;
             if let Ok(meta) = std::fs::metadata(path) {

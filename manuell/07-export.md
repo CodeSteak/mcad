@@ -8,10 +8,10 @@
 | `-o part.step [--schema ap214]` | exact B-rep, AP242 default, face colours from colour regions; STL meshes facetted (one plane per face). One named body (`MANIFOLD_SOLID_BREP`) per part and per top-level object outside the parts (named after the object: module name, `box`, `box 2`, …; without parts and with only one object: one body as before) – touching parts stay apart |
 | `-o part.step --merge` | the whole result as one fused body (implicit union of the top level) |
 | `-o part.stl` | binary STL |
-| `-o part.3mf` | multicolour: one object per part (material outside parts: object "ohne Bauteil", a fixed name in every language), one sub-part per colour with filament slot; Bambu Studio/OrcaSlicer take the slots without a colour dialog |
+| `-o part.3mf` | multicolour: one object per part (material outside parts: object "no part", a fixed name in every language), one sub-part per colour with filament slot; Bambu Studio/OrcaSlicer take the slots without a colour dialog |
 | `-o part.3mf --single-color` | one plain mesh |
 | `-o part.3mf --color-group` | adds `m:colorgroup` for other programs (Bambu then asks; "Cancel" keeps slots) |
-| `--per-color -o colours.zip` | one STL per colour (and part), `F<slot>_<colour>.stl`, shared coordinates |
+| `--per-color -o colours.zip` | one STL per colour (and part), `F<slot>_<colour>.stl`, shared coordinates; uncoloured material: colour label `default` (`F1_default.stl`, 3MF sub-part `<object> – default`) in every language |
 | `--part NAME` (repeatable) | only these parts, in one file |
 | `--all-parts -o dir/ [--format step]` | one file per part (`body.stl`, `k_2.step`; default stl) |
 | `-m NAME [-D p=v]`, `-m 'NAME(args)'` | only that module, with its defaults and the given parameters (`-m 'holder(30, h = 5)'`, `-m 'parts.screw(d = 3)'`; `mcad usage commands`) |
@@ -22,7 +22,7 @@ kept); objects that overlap are fused into one solid named `a + b` – the expor
 bodies a, b overlap: written as one body “a + b” …` (JSON `notes`). Overlap is
 the exact intersection volume (as `assert_disjoint`); if that boolean or the union fails, the
 bodies are written apart with a note. STL is always one mesh of the fused result; 3MF keeps
-parts as objects (the material outside the parts is one object "ohne Bauteil"), objects outside
+parts as objects (the material outside the parts is one object "no part"), objects outside
 the parts are fused.
 
 ```sh

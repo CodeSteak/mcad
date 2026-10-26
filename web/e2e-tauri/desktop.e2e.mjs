@@ -640,7 +640,7 @@ async function main() {
     e.images.push({ name: await shot("t13-dunkel"), label: "dunkles Thema in der Desktop-App" });
   });
 
-  await test("T15", "Bericht 12 in Tauri: Farbregionen je Instanz, filament()-Tabelle, Objekt „ohne Bauteil“, 3MF ohne Farbgruppe", async (check, e) => {
+  await test("T15", "Bericht 12 in Tauri: Farbregionen je Instanz, filament()-Tabelle, Objekt „no part“, 3MF ohne Farbgruppe", async (check, e) => {
     await ensureApp();
     await exec("window.__cad.setThemePref('light'); window.__cad.store.setState({ sideOpen: true, sideTab: 'colors', showRegions: true })");
     const pal2 = `// pal2\n${readFileSync(join(ROOT, "tests/farben-pruefung/cases/pal2.scad"), "utf8")}`;
@@ -669,7 +669,7 @@ async function main() {
     await exec("window.__cad.setText(arguments[0])", '// F4\nmodule a() color("white") cube([20, 10, 2]);\nteil: a();\ntranslate([0, 20, 0]) color("yellow") cube(5);\n');
     await sceneReady();
     const sum = await hookAsync("exportSummary", "3mf", true);
-    check(sum.objects.join(",") === "teil,ohne Bauteil", `Objekte ${sum.objects.join(", ")}`);
+    check(sum.objects.join(",") === "teil,no part", `Objekte ${sum.objects.join(", ")}`);
     check(!sum.colorGroup && sum.mColors === 0, "keine Farbgruppe");
     check(sum.notes.some((n) => n.includes("ohne Farbdialog")), `Hinweise ${sum.notes.join("; ")}`);
     e.details = { slots, export3mf: sum };

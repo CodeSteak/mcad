@@ -64,7 +64,7 @@ pub fn content_bytes(text: &str) -> std::borrow::Cow<'_, [u8]> {
 pub fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
     let dir = path.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or(Path::new("."));
     std::fs::create_dir_all(dir)?;
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "datei".into());
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "file".into());
     let tmp = dir.join(format!(".{name}.mcad-{}.tmp", std::process::id()));
     std::fs::write(&tmp, content_bytes(text))?;
     if let Ok(md) = std::fs::metadata(path) {
@@ -98,10 +98,8 @@ pub fn open_file(path: &Path) -> io::Result<OpenedProject> {
     let path = std::path::absolute(path)?;
     let text = read_text(&path)?;
     let root = path.parent().map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("/"));
-    let name = path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| format!("datei.{MODEL_EXTENSION}"));
+    let name =
+        path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| format!("file.{MODEL_EXTENSION}"));
     let mut files = closure(&root, &name, &text);
     // Files that do not exist are diagnostics of the engine, not project files.
     files.retain(|p, _| abs_path(&root, p).is_file());
@@ -193,7 +191,7 @@ pub fn open_folder(dir: &Path, main: Option<&Path>) -> io::Result<OpenedProject>
     let hint = main
         .and_then(|m| std::path::absolute(m).ok())
         .and_then(|m| m.strip_prefix(&root).ok().map(|r| r.to_string_lossy().replace('\\', "/")));
-    let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Projekt".into());
+    let name = root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "project".into());
     let Some(main) = choose_main(&files, hint.as_deref()) else {
         // An empty folder: start with a new main file.
         let main = cad_eval::DEFAULT_MAIN.to_string();

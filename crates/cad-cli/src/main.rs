@@ -27,7 +27,7 @@
 //! reference), 3 kernel/internal error (tessellation or export failed, panic), 4 `export`
 //! stopped by a violated assertion (`assert_keepout`, …; `--ignore-asserts` exports anyway).
 //!
-//! JSON schema (`schema_version` = `cad_session::PROTOCOL_VERSION`, currently 2). Types such
+//! JSON schema (`schema_version` = `cad_session::PROTOCOL_VERSION`, currently 3). Types such
 //! as `Diagnostic`, `Scene`, `SrcRange`, `Hint`, `Handle` are the protocol types documented in
 //! `web/src/engine/protocol.ts` (lines/columns 1-based, offsets UTF-16); `Bounds` here is
 //! `{ min, max, size }`:
@@ -69,7 +69,8 @@
 //!                     dir, up, right, target, eye, scale_px_per_mm, width_mm, height_mm }
 //!          role: base | dimmed | highlighted | zone | subtracted | background | modifier #|% |
 //!                keepout
-//! measure: + { asserts?: (as outline), between?: {a: {ref, kind, point}, b: {…}, delta, distance},
+//! measure: + { asserts?: (as outline), between?: {a: {ref, kind: "anchor"|"grid_point"|"coordinate",
+//!              point}, b: {…}, delta, distance},
 //!              bounds?: {target, nodes, bounds: Bounds|null},
 //!              volume?: {target, nodes, volume}, area?: {target, nodes, area},
 //!              interference?: {parts, tolerance, method, pairs: [{a, b, bounds_overlap,
@@ -85,7 +86,8 @@
 //!              section?: {plane: {point, normal}, method, exact, max_dev, area,
 //!                         regions: [{area, holes, body, bounds, reference, contours: [{hole,
 //!                         area, segments: [{kind, length, start, end, center?, radius?,
-//!                         sweep_deg?, radii?, exact, source, dev}]}]}],
+//!                         sweep_deg?, radii?, exact, dev, source: "plane"|"cylinder"|"cone"|
+//!                         "sphere"|"torus"|"revolution"|"extrusion"|"bspline"}]}]}],
 //!                         circles: [{center, radius, diameter, full}],
 //!                         min_wall: {thickness, from, to, samples_per_segment}|null},
 //!              at?: [{point, elements: [{kind, reference, label, point, distance, origin}]}] }

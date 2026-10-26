@@ -1,5 +1,5 @@
 // Side panel on the right (docs/concepts/ui-redesign, Abschnitt 4): collapsible, tabs
-// "Bauteile" (visibility, volume, export per part in the ⋯ menu, "ohne Bauteil", sum),
+// "Bauteile" (visibility, volume, export per part in the ⋯ menu, material outside the parts, sum),
 // "Farben" (the colour list), "Messen" (the measurements) and – in a module context –
 // "Parameter" (the parameter bar). The rows "Datei …" and "Bauteile …" above the view are gone.
 
@@ -14,7 +14,7 @@ import { exportParts, togglePart } from "./runtime";
 import { IconButton, IconMore, IconPanelClose, MenuButton } from "./ui";
 
 /** Name of the material outside the parts (as the engine names it, cad_session::NO_PART; shown translated). */
-const NO_PART = "ohne Bauteil";
+const NO_PART = "no part";
 
 function vol(v: number | null | undefined): string {
   return v === null || v === undefined ? "–" : `${fmtNum(Math.round(v * 10) / 10)} mm³`;
@@ -36,7 +36,7 @@ function PartsPanel() {
   }
   // material outside the parts: from the colour regions when they are known for this scene
   const rest = regions && shown && regions.version === shown.version ? regions.items.filter((r) => r.part === NO_PART).reduce((a, r) => a + r.total, 0) : null;
-  // (no set "ohne Bauteil" in a known answer: all material is in parts)
+  // (no set NO_PART in a known answer: all material is in parts)
   const known = parts.every((p) => p.volume !== null);
   const sum = known ? parts.reduce((a, p) => a + (p.volume ?? 0), 0) + (rest ?? 0) : null;
   return (

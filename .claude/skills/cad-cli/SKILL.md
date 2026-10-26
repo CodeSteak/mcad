@@ -56,7 +56,7 @@ language. German↔English glossary: `mcad usage troubleshooting`.
    collisions of the parts, distance between two parts.
 6. **Output:** `mcad export datei.mcad -o teil.step` (or `--all-parts -o ordner/`). For
    multi-colour printing `mcad export datei.mcad -o teil.3mf` (multi-colour by default: one
-   object per part, material outside the parts as object „ohne Bauteil“ (fixed name, = outside any part), one part per colour with
+   object per part, material outside the parts as object "no part" (fixed name, = outside any part), one part per colour with
    filament slot; without colour group, so Bambu Studio and OrcaSlicer take over the slots without
    a colour dialog; beforehand `mcad measure datei.mcad --colors` for slots, volume and mass per colour).
 
@@ -150,7 +150,7 @@ and checks with the CLI. The UI watches the file and all included files:
 | `mcad measure DATEI [options]` | measure (options below) |
 | `mcad watch DATEI [--json] [--render bild.png …]` | watch and re-evaluate on every change (below) |
 | `mcad set DATEI --param modul.param=wert \| --literal [datei:]zeile:spalte=wert [--dry-run]` | change code via the engine (below) |
-| `mcad export DATEI -o teil.stl\|teil.3mf\|teil.step [--schema ap214] [--merge]` | export file (STEP: exact B-Rep, AP242, face colours from the colour regions, one named body per part and per top-level object outside the parts – touching parts stay separate, intersecting ones are united into one body “a + b” (note); `--merge`: one merged body as before; 3MF: **multi-colour**, one object per part + „ohne Bauteil“, one part per colour with filament slot for Bambu Studio/OrcaSlicer, without colour group; `--color-group` with colour group for other programs – Bambu then opens a colour dialog, "Cancel" keeps the slots; single colour with `--single-color`) |
+| `mcad export DATEI -o teil.stl\|teil.3mf\|teil.step [--schema ap214] [--merge]` | export file (STEP: exact B-Rep, AP242, face colours from the colour regions, one named body per part and per top-level object outside the parts – touching parts stay separate, intersecting ones are united into one body “a + b” (note); `--merge`: one merged body as before; 3MF: **multi-colour**, one object per part + "no part", one part per colour with filament slot for Bambu Studio/OrcaSlicer, without colour group; `--color-group` with colour group for other programs – Bambu then opens a colour dialog, "Cancel" keeps the slots; single colour with `--single-color`) |
 | `mcad export DATEI --per-color [--part NAME]… -o farben.zip` | ZIP with one STL per colour (and part): `F<slot>_<farbe>.stl`, all in the same coordinate system (extension `.zip` required) |
 | `mcad export DATEI --part NAME [--part NAME2] -o …` | only these parts (named instances at top level, e.g. `deckel`, `k[2]`) |
 | `mcad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | each part as a separate file (`deckel.stl`, `k_2.step`) |
@@ -267,7 +267,7 @@ plane) · `3` kernel/internal error.
 
 ## JSON (summary)
 
-Every response is an object with `schema_version` (2), `command`, `file`, `ok`, `exit_code`,
+Every response is an object with `schema_version` (3), `command`, `file`, `ok`, `exit_code`,
 `context` (module name or `null`), `diagnostics: Diagnostic[]`, for invocation errors `error`, for
 the commands with daemon `daemon: {used, reason}` (`reason` e.g. `--no-daemon`, otherwise `null`).
 `Diagnostic = { severity: "error"|"warning"|"info", message, source: "syntax"|"eval"|"kernel",
@@ -296,14 +296,14 @@ offsets UTF-16). `Bounds = { min, max, size }`. Complete schema: header of
   scale_px_per_mm, width_mm, height_mm}, lines, highlighted, visible_nodes: [{idx, label,
   instance, role, line}], triangles, show, overlays: {grids, grid_points, anchors, handles,
   labels}, section: {point, normal, keeps, method}|null, xray, bounds, notes, timings }`
-- `measure`: `+ { between?: {a: {ref, kind, point}, b, delta, distance}, bounds?: {target,
+- `measure`: `+ { between?: {a: {ref, kind: anchor|grid_point|coordinate, point}, b, delta, distance}, bounds?: {target,
   bounds}, volume?: {target, volume}, area?: {target, area}, interference?: {parts, pairs,
   collisions: [{a, b, volume}]}, clearance?: {a, b, distance, point_a, point_b, collision,
   accuracy}, measurements?: [{kind: distance|radius|angle|length|area|body|wall, title, value,
   unit, label, values: [{key, label, value, unit}], lines, guides, points, at, details,
   picks: [{kind, reference, label, point, origin}], exact, tol?, section?, text, cli}],
   section?: {plane, exact, max_dev, area, regions: [{area, holes, bounds, reference,
-  contours: [{hole, area, segments}]}], circles: [{center, radius, diameter, full}],
+  contours: [{hole, area, segments: [{kind, …, exact, dev, source: plane|cylinder|cone|sphere|torus|revolution|extrusion|bspline}]}]}], circles: [{center, radius, diameter, full}],
   min_wall}, at?: [{point, elements: [{kind, reference, label, point, distance, origin}]}] }`
   – values rounded to 12 digits; `values` e.g. `distance, dx, dy, dz, min_distance,
   axis_distance` · `radius, diameter, sweep, semi_angle, major` · `angle, opening, normals` ·
@@ -318,7 +318,8 @@ offsets UTF-16). `Bounds = { min, max, size }`. Complete schema: header of
   color_group?, notes?, colors?, color_regions? }` (`--per-color`: `format: "zip"`, `files`)
 - `outline`/`measure --colors`: `colors: [{key, label, source: default|palette|random|exact,
   filament, explicit, lines, places, volume, mass_g}]` (`places`: `line 3` or `lib.mcad:3`), `color_regions`/`colors.parts: [{part, node,
-  total, warning, regions: [{color, label, filament, volume, mass_g}]}]`
+  total, warning, regions: [{color, label, filament, volume, mass_g}]}]` (fixed values in every
+  language: label `default` = no `color()`, part `no part` = material outside the parts)
 - `daemon status`: `{ running, pid, version, build_id, uptime_s, idle_s, idle_limit_s, watchdog_s,
   busy, current, pending, requests, failed, projects, max_projects, project_evictions, cache:
   {entries, nodes, meshes, bytes, limit_bytes, max_entries, evictions, hits, misses, hit_rate},

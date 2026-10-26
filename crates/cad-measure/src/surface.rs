@@ -36,6 +36,36 @@ pub fn kind_name(s: &Surface) -> &'static str {
     }
 }
 
+/// Fixed identifier of a surface kind (JSON, the same in every language): `plane`,
+/// `cylinder`, `cone`, `sphere`, `torus`, `revolution`, `extrusion`, `bspline`.
+pub fn kind_id(s: &Surface) -> &'static str {
+    match s {
+        Surface::Plane { .. } => "plane",
+        Surface::Cylinder { .. } => "cylinder",
+        Surface::Cone { .. } => "cone",
+        Surface::Sphere { .. } => "sphere",
+        Surface::Torus { .. } => "torus",
+        Surface::Revolution { .. } => "revolution",
+        Surface::Extrusion { .. } => "extrusion",
+        Surface::BSpline(_) => "bspline",
+    }
+}
+
+/// Display name of a [`kind_id`], in the current language (unknown ids unchanged).
+pub fn kind_id_name(id: &'static str) -> &'static str {
+    match id {
+        "plane" => trs!("Ebene", "plane"),
+        "cylinder" => trs!("Zylinder", "cylinder"),
+        "cone" => trs!("Kegel", "cone"),
+        "sphere" => trs!("Kugel", "sphere"),
+        "torus" => trs!("Torus", "torus"),
+        "revolution" => trs!("Rotationsfläche", "surface of revolution"),
+        "extrusion" => trs!("Extrusionsfläche", "extrusion surface"),
+        "bspline" => trs!("Freiformfläche", "free-form surface"),
+        other => other,
+    }
+}
+
 fn radial(f: &Frame, p: DVec3) -> (DVec3, f64) {
     let d = p - f.origin;
     let h = d.dot(f.z);

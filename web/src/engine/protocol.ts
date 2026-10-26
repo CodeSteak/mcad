@@ -1,7 +1,7 @@
 // Generated from crates/cad-session/src/protocol.rs (ts-rs). Do not edit.
 // Regenerate: UPDATE_PROTOCOL_TS=1 cargo test -p cad-session --test protocol_ts
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /**
  * `[x, y, z]`
@@ -566,7 +566,8 @@ tri_tags: Uint32Array, tri_faces: Uint32Array, edge_segments: Float32Array, edge
  */
 export type RegionSet = { node: number, 
 /**
- * Part name (`null`: the root).
+ * Part name (`null`: the root); `"no part"` for the material outside the parts
+ * (`cad_session::NO_PART`, fixed in every language).
  */
 part: string | null, 
 /**
@@ -610,7 +611,8 @@ key: string,
  */
 rgba: Rgba, 
 /**
- * Palette name, the unknown name as written, hex text, or `Standard`.
+ * Palette name, the unknown name as written, hex text, or `default` (material without
+ * `color()`; a fixed value, the UI shows it translated).
  */
 label: string, source: ColorSource, 
 /**
@@ -994,7 +996,7 @@ module_inst: number,
  */
 inst_key: number, status: NodeStatus, messages: Array<NodeMessage>, 
 /**
- * Inline hints of the node, e.g. "4 Kanten".
+ * Inline hints of the node, e.g. "4 edges".
  */
 hints: Array<string>, 
 /**

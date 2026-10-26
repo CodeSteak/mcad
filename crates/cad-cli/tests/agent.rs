@@ -36,7 +36,7 @@ fn json(args: &[&str], code: i32) -> Value {
         String::from_utf8_lossy(&out.stderr)
     );
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(v["schema_version"], 2, "{v}");
+    assert_eq!(v["schema_version"], 3, "{v}");
     assert_eq!(v["exit_code"], code);
     assert_eq!(v["ok"], code == 0);
     v
@@ -390,7 +390,8 @@ fn measure_points_bounds_volume() {
     let v = json(&["measure", &g, "--between", "k.ecke", "k.oben"], 0);
     let b = &v["between"];
     assert_eq!(b["a"]["point"], serde_json::json!([60.0, 30.0, 20.0]));
-    assert_eq!(b["b"]["kind"], "Anker");
+    assert_eq!(b["a"]["kind"], "anchor");
+    assert_eq!(b["b"]["kind"], "anchor");
     assert_eq!(b["delta"], serde_json::json!([-60.0, -30.0, 0.0]));
     close(f(&b["distance"]), (60.0f64 * 60.0 + 30.0 * 30.0).sqrt(), 1e-9);
     // grid points in the module context, numbers and coordinates
@@ -401,6 +402,8 @@ fn measure_points_bounds_volume() {
     close(f(&v["between"]["distance"]), (40.0f64 * 40.0 + 30.0 * 30.0 + 20.0 * 20.0).sqrt(), 1e-9);
     let v = json(&["measure", &g, "--module", "gehaeuse", "-D", "w=50", "--between", "g[rechts, 5, _]", "[0,0,0]"], 0);
     assert_eq!(v["between"]["a"]["point"], serde_json::json!([50.0, 5.0, 0.0]));
+    assert_eq!(v["between"]["a"]["kind"], "grid_point");
+    assert_eq!(v["between"]["b"]["kind"], "coordinate");
     let v = json(&["measure", &g, "--module", "gehaeuse", "--between", "ecke", "oben"], 0);
     close(f(&v["between"]["distance"]), 50.0, 1e-9);
     json(&["measure", &g, "--between", "g[links,vorne,boden]", "[0,0,0]"], 2); // g not in the file context

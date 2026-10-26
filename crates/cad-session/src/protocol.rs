@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Version of this protocol (also the `schema_version` of the CLI's JSON output).
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// `[x, y, z]`
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
@@ -883,7 +883,8 @@ pub struct MeshData {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct RegionSet {
     pub node: u32,
-    /// Part name (`null`: the root).
+    /// Part name (`null`: the root); `"no part"` for the material outside the parts
+    /// (`cad_session::NO_PART`, fixed in every language).
     pub part: Option<String>,
     /// Volume of the node's result in mm³ (= sum of the region volumes).
     pub total: f64,
@@ -907,7 +908,7 @@ pub struct Region {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 pub enum ColorSource {
-    /// Material without `color()` ("Standard", filament 1).
+    /// Material without `color()` (label `default`, filament 1).
     Default,
     /// Palette name.
     Palette,
@@ -924,7 +925,8 @@ pub struct ColorInfo {
     pub key: String,
     /// Exact value (exports).
     pub rgba: Rgba,
-    /// Palette name, the unknown name as written, hex text, or `Standard`.
+    /// Palette name, the unknown name as written, hex text, or `default` (material without
+    /// `color()`; a fixed value, the UI shows it translated).
     pub label: String,
     pub source: ColorSource,
     /// Filament slot (1-based).
@@ -1242,7 +1244,7 @@ pub struct SceneNode {
     pub inst_key: u64,
     pub status: NodeStatus,
     pub messages: Vec<NodeMessage>,
-    /// Inline hints of the node, e.g. "4 Kanten".
+    /// Inline hints of the node, e.g. "4 edges".
     pub hints: Vec<String>,
     /// Edges selected by fillet/chamfer (polylines, node system); the new corner pieces of
     /// `fillet2d`/`chamfer2d`.

@@ -4,7 +4,7 @@
 
 | Option | Result |
 | --- | --- |
-| `--between A B` | distance + delta of two points |
+| `--between A B` | distance + delta of two points; JSON `kind` per point: `anchor`, `grid_point`, `coordinate` |
 | `--bounds/--volume/--area [TARGET]` | bounds, volume mm³, area mm² (default `all`) |
 | `--colors` | volume and PLA mass per colour/filament slot and part |
 | `--interference [--tolerance 0.001]` | pairwise intersection volume of all parts (mm³); a part with an STL mesh: mesh test, `volume: null`, `method: "mesh"` |
@@ -14,7 +14,7 @@
 | `--angle A B` | angle of edges/faces; planes 0–90° plus `opening` angle |
 | `--length REF`, `--body REF` | edge length; volume/area/centroid/bounds of the body |
 | `--at P` | elements near P with their references – use it to find references |
-| `--section z=V` (`--section-plane`, `--section-flip`) | section regions, holes, contours, circles, min wall |
+| `--section z=V` (`--section-plane`, `--section-flip`) | section regions, holes, contours, circles, min wall; JSON segment `source` = cut surface: `plane`, `cylinder`, `cone`, `sphere`, `torus`, `revolution`, `extrusion`, `bspline` |
 | `--wall P` | wall thickness at the contour point nearest P (needs `--section`) |
 
 **Element references** pick the element nearest point P: `vertex@P`, `mid@P` (edge

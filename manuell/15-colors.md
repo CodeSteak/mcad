@@ -16,6 +16,9 @@ translate([10, 10, 3]) knob("teal");
 - Slots: `filament = n` on a fixed colour; `filament("c", n);` at top level of the main file
   for colours from parameters/loops; otherwise order of first appearance. Uncoloured material
   is slot 1. More than 16 slots: warning.
+- Uncoloured material: colour label `default`, `source: "default"` (JSON, export names; same in
+  every language, text output `--lang de`: "Standard"). Material outside the parts: part name
+  `no part` (JSON `color_regions[].part`, 3MF object).
 - Volume per colour: a coloured subtree owns its body; on overlap the later statement wins;
   subtracted material is removed from all colours.
 - Check with `mcad outline` (section "Colours") or `mcad measure --colors`; see with

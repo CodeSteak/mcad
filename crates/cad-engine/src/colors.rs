@@ -3,7 +3,8 @@
 //! **Colour table** ([`ColorTable::of`], no kernel): the colours of the *material tree* (the
 //! result without `%`, `*`, zones and the subtracted operands of `difference`) in order of
 //! first appearance (pre-order), one entry per RGBA value. Material from a primitive,
-//! extrusion or surface without any `color()` above it is the *default* entry ("Standard").
+//! extrusion or surface without any `color()` above it is the *default* entry (label
+//! [`DEFAULT_LABEL`], the same in every language).
 //!
 //! **Filament slots:** a `filament(c, n);` statement at the top level of the main file sets
 //! the slot of colour `c` for the model (Bericht 12, F2); otherwise an entry with
@@ -53,6 +54,15 @@ pub fn color_key(c: [f32; 4]) -> ColorKey {
     k
 }
 
+/// Label of the default entry (material without `color()`): fixed, also in export names
+/// (`teil – default`, `F1_default.stl`); display texts translate it ([`default_label_text`]).
+pub const DEFAULT_LABEL: &str = "default";
+
+/// [`DEFAULT_LABEL`] in the current language (text output).
+pub fn default_label_text() -> &'static str {
+    trs!("Standard", "default")
+}
+
 /// Highest filament slot (Bambu Studio and OrcaSlicer: 16; `cad_eval::palette::MAX_FILAMENT`).
 pub const MAX_SLOT: u32 = 16;
 
@@ -84,7 +94,7 @@ pub struct ColorEntry {
     pub key: ColorKey,
     /// Exact RGBA (the first `color()` that gave it).
     pub rgba: [f32; 4],
-    /// Palette name, unknown name as written, hex text, or `Standard`.
+    /// Palette name, unknown name as written, hex text, or [`DEFAULT_LABEL`].
     pub label: String,
     pub source: ColorSource,
     /// Filament slot, 1-based.
@@ -250,7 +260,8 @@ impl ColorTable {
             t.entries.push(ColorEntry {
                 key: color_key(default_rgba),
                 rgba: default_rgba,
-                label: trs!("Standard", "default").into(),
+                // a fixed label (exports, JSON, UI test ids); shown translated
+                label: DEFAULT_LABEL.into(),
                 source: ColorSource::Default,
                 filament: 1,
                 explicit: false,

@@ -52,7 +52,7 @@ pub const PALETTE: [PaletteColor; 16] = [
 /// CSS spellings of palette colours.
 pub const ALIASES: [(&str, &str); 3] = [("grey", "gray"), ("aqua", "cyan"), ("fuchsia", "magenta")];
 
-/// Colour of material without `color()` in exports and the colour list ("Standard").
+/// Colour of material without `color()` in exports and the colour list (label `default`).
 pub const DEFAULT_RGB: [u8; 3] = [0xc3, 0xc8, 0xcf];
 
 /// Highest filament slot (`color(…, filament = n)`): Bambu Studio and OrcaSlicer handle 16

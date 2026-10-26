@@ -24,6 +24,12 @@ fn source(s: p::ColorSource) -> &'static str {
     }
 }
 
+/// Colour label in the text output: the fixed label of material without `color()`
+/// (`default`) translated, other labels as written.
+fn label_text(c: &p::ColorInfo) -> &str {
+    if c.source == p::ColorSource::Default { cad_engine::colors::default_label_text() } else { &c.label }
+}
+
 /// "Z.n" of a range, with the file name for ranges in other project files (`use`/`include`).
 fn line_ref(sc: &p::Scene, r: &p::SrcRange) -> String {
     match r.file {
@@ -100,7 +106,7 @@ pub(crate) fn table_of(
         for c in &shown {
             let v = volume_of(&c.key);
             let lines: Vec<String> = c.ranges.iter().map(|r| line_ref(sc, r)).collect();
-            let mut l = format!("  F{:<2} {:<14} {}", c.filament, c.label, c.key);
+            let mut l = format!("  F{:<2} {:<14} {}", c.filament, label_text(c), c.key);
             if let Some(v) = v {
                 l.push_str(&format!("  {} mm³  {} g", num(v), num((pla_grams(v) * 100.0).round() / 100.0)));
             }
@@ -136,8 +142,11 @@ pub(crate) fn table_of(
             for name in names {
                 let mut acc: Vec<(u32, String, f64)> = Vec::new();
                 for r in s.iter().filter(|x| x.part.as_ref() == name).flat_map(|x| &x.regions) {
-                    let label =
-                        sc.colors.iter().find(|c| c.key == r.color).map_or(r.color.clone(), |c| c.label.clone());
+                    let label = sc
+                        .colors
+                        .iter()
+                        .find(|c| c.key == r.color)
+                        .map_or(r.color.clone(), |c| label_text(c).to_string());
                     match acc.iter_mut().find(|a| a.1 == label && a.0 == r.filament) {
                         Some(a) => a.2 += r.volume,
                         None => acc.push((r.filament, label, r.volume)),
@@ -146,8 +155,8 @@ pub(crate) fn table_of(
                 let parts: Vec<String> = acc.iter().map(|(f, l, v)| format!("F{f} {l} {} mm³", num(*v))).collect();
                 let name = match name {
                     None => trs!("Modell", "model"),
-                    // the material outside the parts (a fixed name, see cad_session::NO_PART)
-                    Some(n) if n == cad_session::NO_PART && !cad_i18n::is_de() => "outside any part",
+                    // the material outside the parts (a fixed name in JSON, see cad_session::NO_PART)
+                    Some(n) if n == cad_session::NO_PART => trs!("ohne Bauteil", "outside any part"),
                     Some(n) => n.as_str(),
                 };
                 t.push_str(&format!("  {name}: {}\n", parts.join(", ")));

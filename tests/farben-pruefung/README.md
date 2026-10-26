@@ -63,7 +63,7 @@ palette), plus a dedicated test per finding.
 | F1 | fixed | The view shows the colour regions (UI default, `cad render`); colour per face only from nodes below the drawn node, for identical content the one with the matching bounding box; STEP face colours from the regions (`face_region_colors`). Cache reuse remains. | `f1_equal_geometry_…`, Vitest "F1", Playwright G01, Tauri T15 |
 | F2 | fixed | `filament("red", 4);` at top level: slot table with precedence; the UI writes it when the colour at a statement is not a literal | `set_filament_of_a_parameter_colour_writes_a_table`, `filament_table_rules`, `filament_declarations`, G02, T15 |
 | F3 | fixed | (a, b) regions in the view; (c) a uniform 2D colour colours the extrusion, mixed → warning, default | `f3_view_matches_the_print`, G03 |
-| F4 | fixed | object „ohne Bauteil“ (without part) in list and export, CLI = UI, the message names the objects | `f4_material_outside_parts`, `material_outside_parts_is_exported`, G04, T15 |
+| F4 | fixed | object "no part" (fixed name; was „ohne Bauteil“) in list and export, CLI = UI, the message names the objects | `f4_material_outside_parts`, `material_outside_parts_is_exported`, G04, T15 |
 | F5 | fixed | L, C, hue from the hash; ΔE ≥ 0.07 to the palette, ≥ 0.06 to other random colours in the model | `f5_random_colours_keep_their_distance`, `random_colours_do_not_collide_in_a_model` |
 | F6 | fixed | only later material of a different colour is subtracted | `f6_no_slivers_…`, all cases (sum to 10⁻⁶) |
 | F7 | fixed | identity = RGB (alpha only for the view), clamping with warning, `transparent`/`""`/`color()` do not colour (warning) | `f7_value_rules` |

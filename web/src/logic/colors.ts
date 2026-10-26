@@ -1,6 +1,7 @@
 // Model colours in the view and the colour list (Plan 16): palette display values per theme,
 // colours per face (from `Scene.tag_nodes`), rows of "Farben & Filamente".
 
+import { t } from "../i18n";
 import type { ColorInfo, MeshData, Rgba, Scene, Vec3 } from "../engine/protocol";
 import type { RegionsState, Theme } from "../state/store";
 import { apply, invertAffine, mul } from "./math";
@@ -218,7 +219,7 @@ export function colorRows(scene: Scene, regions: RegionsState | null, theme: The
         .map((r) => {
           const file = r.file ? (scene.files ?? []).find((f) => f.id === r.file)?.path ?? null : null;
           const short = file ? file.split("/").pop() : null;
-          return { line: r.line, file, from: r.from, label: short ? `${short}:${r.line}` : `Z.${r.line}` };
+          return { line: r.line, file, from: r.from, label: short ? `${short}:${r.line}` : t("place.line", { line: r.line }) };
         })
         .filter((p, i, a) => a.findIndex((q) => q.label === p.label) === i),
       volume,

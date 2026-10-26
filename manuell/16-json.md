@@ -1,6 +1,6 @@
 # JSON output (`--json`)
 
-Every answer: `{ schema_version: 2, command, file, ok, exit_code, context: string|null,
+Every answer: `{ schema_version: 3, command, file, ok, exit_code, context: string|null,
 diagnostics: Diagnostic[], error?: string, daemon?: {used, reason} }` plus per command:
 
 | Command | Additional fields |
@@ -28,9 +28,19 @@ Types:
 Measurement values are rounded to 12 significant digits. Display texts (`message`, `text`, `title`,
 `label`, `details`, `origin`, `notes`, hints) follow the output language (`--lang`, `MCAD_LANG`,
 locale; default English); keys and machine values (`severity`, `source`, `kind`, `key`, `problem`,
-`cli`, `reference`) never change.
+`cli`, `reference`, colour `label` `default`, part `no part`) never change.
 
-## Conventions (schema 2)
+Fixed machine values (English in every language):
+
+| Field | Values |
+| --- | --- |
+| `measure` `between.a/b.kind` | `anchor`, `grid_point`, `coordinate` |
+| `measure` `section.regions[].contours[].segments[].source` | cut surface: `plane`, `cylinder`, `cone`, `sphere`, `torus`, `revolution`, `extrusion`, `bspline` |
+| `colors[].label`, `color_regions[].regions[].label` | palette name, name as written, hex, or `default` (no `color()`, `source: "default"`) |
+| `colors[].source` | `default`, `palette`, `random`, `exact` |
+| `color_regions[].part`, `colors.parts[].part` | part name, `no part` (material outside the parts; also the 3MF object name), `null` (no parts) |
+
+## Conventions (schema 3)
 
 | Rule | Fields |
 | --- | --- |
@@ -46,6 +56,12 @@ pairs `a`/`b` are `{node, label, origin}`, interference pairs `a`/`b` part names
 point in `camera`, a target spec in `measure`; `from`/`to` are offsets in `range`, points in
 `min_wall`; `context` is the module name at top level, an object in `scene`; `version` is the
 program version in `daemon status`, the source version in `scene`.
+
+Schema 3 (from 2): machine values that were German are English: `between` `kind`
+`Koordinate`/`Rasterpunkt`/`Anker` → `coordinate`/`grid_point`/`anchor`; section segment
+`source` (was the translated surface name, e.g. `Ebene`) → fixed id; colour label `Standard` →
+`default`; part `ohne Bauteil` → `no part` (also 3MF object names, `F1_default.stl`). The UI
+protocol (`PROTOCOL_VERSION` 3) changed the same way.
 
 Schema 2 (from 1): `inspect` `selected_edges` list instead of count (+ `selected_edge_count`);
 `outline` plane `axis` number (+ `axis_name`), `variables[].literal` range instead of bool,

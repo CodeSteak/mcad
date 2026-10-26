@@ -95,9 +95,9 @@ fn uncoloured_material_is_the_default_colour_on_filament_1() {
     let t = tree("cube(10);\ncolor(\"red\") translate([0, 0, 10]) cube(2);");
     let ct = table(&t);
     assert_eq!(ct.entries[0].source, ColorSource::Default);
-    assert_eq!(ct.entries[0].label, "Standard");
+    assert_eq!(ct.entries[0].label, "default", "fixed label, also in German");
     let ev = e.evaluate(t);
-    check(&regions(&mut e, &ev, &ct), &[("Standard", 1, 1000.0), ("red", 2, 8.0)]);
+    check(&regions(&mut e, &ev, &ct), &[("default", 1, 1000.0), ("red", 2, 8.0)]);
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn filament_slots() {
     let t = tree("cube(1);\ncolor(\"red\") cube(1);\ncolor(\"blue\", filament = 2) cube(1);\ncolor(\"lime\") cube(1);");
     let ct = table(&t);
     let got: Vec<(&str, u32)> = ct.entries.iter().map(|e| (e.label.as_str(), e.filament)).collect();
-    assert_eq!(got, [("Standard", 1), ("red", 3), ("blue", 2), ("lime", 4)]);
+    assert_eq!(got, [("default", 1), ("red", 3), ("blue", 2), ("lime", 4)]);
     // equal colours in different spellings are one entry
     let t = tree("color(\"gray\") cube(1); color(\"GREY\") cube(1); color(\"#7b7d81\") cube(1);");
     assert_eq!(table(&t).entries.len(), 1);
@@ -320,14 +320,14 @@ fn region_meshes_share_coordinates() {
 #[test]
 fn uncoloured_part_needs_no_boolean() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
-    // No colour below the root: one Standard region from the root's solids as they are (no
+    // No colour below the root: one default region from the root's solids as they are (no
     // Boolean), volume = the cached part volume (`Engine::mass_props`); the mesh holds both cubes.
     let mut e = engine();
     let t = tree("cube(10);\ntranslate([20, 0, 0]) cube(5);");
     let ct = table(&t);
     let ev = e.evaluate(t);
     assert_clean(&ev);
-    check(&regions(&mut e, &ev, &ct), &[("Standard", 1, 1125.0)]);
+    check(&regions(&mut e, &ev, &ct), &[("default", 1, 1125.0)]);
     let r = e.color_regions(&ev, ev.root().unwrap()).unwrap();
     assert!(!r.regions[0].shapes.is_empty());
     let m = e.region_mesh(&r, 0, 0.05).unwrap();
@@ -336,10 +336,15 @@ fn uncoloured_part_needs_no_boolean() {
 }
 
 #[test]
-fn default_colour_label_in_english() {
-    let _en = cad_i18n::scoped(cad_i18n::Lang::En);
+fn default_colour_label_is_fixed() {
     let t = tree("cube(10);\ncolor(\"red\") translate([0, 0, 10]) cube(2);");
-    let ct = table(&t);
-    assert_eq!(ct.entries[0].source, ColorSource::Default);
-    assert_eq!(ct.entries[0].label, "default");
+    for lang in [cad_i18n::Lang::En, cad_i18n::Lang::De] {
+        let _l = cad_i18n::scoped(lang);
+        let ct = table(&t);
+        assert_eq!(ct.entries[0].source, ColorSource::Default);
+        assert_eq!(ct.entries[0].label, cad_engine::colors::DEFAULT_LABEL);
+        assert_eq!(ct.entries[0].label, "default");
+    }
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
+    assert_eq!(cad_engine::colors::default_label_text(), "Standard");
 }

@@ -378,5 +378,5 @@ export function download(blob: Blob, name: string): void {
 }
 
 export function baseName(name: string): string {
-  return name.replace(/\.[^.]*$/, "") || "modell";
+  return name.replace(/\.[^.]*$/, "") || "model";
 }

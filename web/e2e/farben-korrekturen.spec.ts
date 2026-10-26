@@ -153,7 +153,9 @@ test("G03 F3: Ansicht wie Druck – Überlappung, Verrundung, 2D-Farbe", async (
   const st = await cad(page);
   const w = st.diagnostics.find((d) => d.line === 4 && d.severity === "warning");
   expect(w?.message).toContain("2D-Profil");
-  expect(st.colors.map((c) => c.label)).toEqual(["Standard", "red", "blue"]);
+  // the label of material without color() is fixed ("default"); the colour list shows it translated
+  expect(st.colors.map((c) => c.label)).toEqual(["default", "red", "blue"]);
+  await expect(page.getByTestId("color-row-default")).toContainText("Standard");
   await screenshot12(page, "g03-extrusion", "full");
   record12({
     id: "G03",
@@ -174,21 +176,21 @@ test("G04 F4/Bambu: Material außerhalb von Bauteilen, 3MF ohne Farbgruppe", asy
   await loadText(page, '// Bauteil und Material ohne Bauteil\nmodule a() color("white") cube([20, 10, 2]);\nteil: a();\ntranslate([0, 20, 0]) color("yellow") cube(5);\n');
   await expect(page.getByTestId("color-volume-yellow")).toContainText("125 mm³");
   const sum = await hook(page, (c) => (c as unknown as { exportSummary(f: string, colors?: boolean): Promise<Summary> }).exportSummary("3mf", true));
-  expect(sum.objects).toEqual(["teil", "ohne Bauteil"]);
+  expect(sum.objects).toEqual(["teil", "no part"]);
   expect(sum.items).toBe(2);
   expect(sum.colorGroup).toBe(false);
   expect(sum.mColors).toBe(0);
   expect(sum.notes.join(" ")).toContain("ohne Farbdialog");
   // the button: the notice names the objects
   const [dl] = await Promise.all([page.waitForEvent("download"), page.getByRole("region", { name: "Farben und Filamente" }).getByRole("button", { name: "3MF mehrfarbig" }).click()]);
-  expect(readFileSync((await dl.path())!).toString("utf8")).toContain('name="ohne Bauteil – yellow"');
-  await expect(page.getByTestId("status-notice")).toContainText("ohne Bauteil");
+  expect(readFileSync((await dl.path())!).toString("utf8")).toContain('name="no part – yellow"');
+  await expect(page.getByTestId("status-notice")).toContainText("no part");
   await screenshot12(page, "g04-export", "full");
   record12({
     id: "G04",
     title: "F4: Material ohne Bauteil, 3MF für Bambu Studio",
     caption:
-      "Ein Bauteil teil und ein gelber Würfel ohne Bauteil: vorher 0 mm³ in der Liste und im UI-Export weggelassen. Jetzt 125 mm³, eigenes Objekt „ohne Bauteil“, gleiche Datei wie mcad export. Das 3MF hat keine Farbgruppe mehr: Bambu Studio öffnet keinen Farbdialog und übernimmt die Slots aus model_settings.config.",
+      "Ein Bauteil teil und ein gelber Würfel ohne Bauteil: vorher 0 mm³ in der Liste und im UI-Export weggelassen. Jetzt 125 mm³, eigenes Objekt „no part“ (fester Name), gleiche Datei wie mcad export. Das 3MF hat keine Farbgruppe mehr: Bambu Studio öffnet keinen Farbdialog und übernimmt die Slots aus model_settings.config.",
     images: [{ name: "g04-export", label: "Export-Meldung mit Objekten" }],
     checks: [`Objekte ${sum.objects.join(", ")}`, "keine m:colorgroup, keine m:color", `Hinweise: ${sum.notes.join("; ")}`],
   });

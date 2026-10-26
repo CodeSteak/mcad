@@ -516,7 +516,7 @@ export function assertName(r: AssertResult): string {
 /** Violations of the assertions of a scene version as text lines (`Z.3 assert_disjoint: …`). */
 export function violationLines(items: AssertResult[]): string[] {
   const out: string[] = [];
-  for (const r of items) for (const p of r.pairs) if (!p.ok) out.push(`Z.${r.range.line} ${assertName(r)}: ${p.message}`);
+  for (const r of items) for (const p of r.pairs) if (!p.ok) out.push(`${t("place.line", { line: r.range.line })} ${assertName(r)}: ${p.message}`);
   return out;
 }
 
@@ -635,7 +635,7 @@ async function exportModelNow(format: ExportFormat): Promise<void> {
 
 /**
  * Multi-colour exports of the model: 3MF with one object per part (material outside the parts:
- * an object "ohne Bauteil"), one volume per colour and filament slots for Bambu Studio /
+ * an object "no part"), one volume per colour and filament slots for Bambu Studio /
  * OrcaSlicer, single-colour 3MF, or a ZIP with one STL per colour. The engine picks the parts
  * like `mcad export` (Bericht 12, F4): the files of UI and CLI are the same.
  */

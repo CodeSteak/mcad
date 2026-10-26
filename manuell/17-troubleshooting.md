@@ -60,7 +60,7 @@ German locale) – glossary:
 | Syntax / Auswertung / Kernel | syntax / evaluation / kernel (diagnostic source) |
 | Z.12, Zeile 12 | line 12 (render labels `l.12`) |
 | Hülle | bounds |
-| Bauteil, ohne Bauteil | part, outside any part (3MF object name "ohne Bauteil" in every language) |
+| Bauteil, ohne Bauteil | part, outside any part (JSON part name and 3MF object name `no part` in every language) |
 | Benannte Instanzen | named instances |
 | Raster, Rasterebene, Rasterpunkt, Rasterlinie | grid, grid plane, grid point, grid line |
 | Anker | anchor |
@@ -79,7 +79,7 @@ German locale) – glossary:
 | Aufruf, Argument, Positionsargument, doppelt angegeben | call, argument, positional argument, given twice |
 | abgezogen, übersprungen, offen | subtracted, skipped, pending |
 | Wert, Literal, ziehbar, Griff, Referenz, gesperrt | value, literal, draggable, handle, reference, locked |
-| Farben, Standard | colours, default (uncoloured) |
+| Farben, Standard | colours, default (uncoloured; JSON/3MF label `default` in every language) |
 | Röntgen | x-ray |
 | Kinder werden unverändert gezeigt | children shown unchanged |
 | exakt: Polyeder / Rotationskörper / Prisma / Offset | exact: polyhedron / solid of revolution / prism / offset (special case taken) |

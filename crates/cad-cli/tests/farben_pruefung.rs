@@ -284,11 +284,14 @@ fn f3_view_matches_the_print() {
     assert_eq!(fc.values().sum::<usize>(), 9, "every face coloured {fc:?}");
     assert!(fc[&pal("red")] >= 6 && fc[&pal("blue")] >= 2, "{fc:?}");
     // 2D colour below an extrusion: uniform → the body's colour; mixed → warning, default
-    let (v, _) = run(&["measure", &case("r_extrude.scad"), "--colors"], 0);
+    let (v, t) = run(&["measure", &case("r_extrude.scad"), "--colors"], 0);
     let c = colors(&v);
     let get = |l: &str| c.iter().find(|x| x.0 == l).unwrap().4;
     assert!((get("red") - 500.0).abs() < 1e-6 && (get("blue") - 500.0).abs() < 1e-6, "{c:?}");
-    assert!((get("Standard") - 250.0).abs() < 1e-6, "{c:?}");
+    // label `default` is fixed in JSON; the German text output says "Standard"
+    assert!((get("default") - 250.0).abs() < 1e-6, "{c:?}");
+    assert!(rows(&v).as_array().unwrap().iter().any(|r| r["label"] == "default" && r["source"] == "default"), "{v}");
+    assert!(t.contains("F1  Standard "), "{t}");
     let m = messages(&v);
     assert!(m.iter().any(|(s, l, t)| s == "warning" && *l == 3 && t.contains("2D-Profil")), "{m:?}");
 }
@@ -303,13 +306,16 @@ fn f4_material_outside_parts() {
     let (v, t) = run(&["export", &f, "-o", &mf.display().to_string()], 0);
     let s = String::from_utf8_lossy(&std::fs::read(&mf).unwrap()).into_owned();
     assert_eq!(s.matches("<item ").count(), 3);
-    assert!(s.contains("name=\"ohne Bauteil – yellow\""), "{s}");
-    assert!(t.contains("3 Objekte (teil, deko, ohne Bauteil)"), "{t}");
+    // the object name is fixed (`no part` in every language), the text output translates it
+    assert!(s.contains("name=\"no part – yellow\""), "{s}");
+    assert!(t.contains("3 Objekte (teil, deko, no part)"), "{t}");
     assert!(!t.contains("je Bauteil ein Objekt"), "{t}");
     let yellow = colors(&v).into_iter().find(|c| c.0 == "yellow").unwrap();
     assert!((yellow.4 - 125.0).abs() < 1e-6, "{yellow:?}");
     let notes: Vec<&str> = v["notes"].as_array().unwrap().iter().map(|n| n.as_str().unwrap()).collect();
-    assert!(notes.iter().any(|n| n.contains("ohne Bauteil")), "{notes:?}");
+    assert!(notes.iter().any(|n| n.contains("no part")), "{notes:?}");
+    let parts = v["color_regions"].as_array().unwrap();
+    assert!(parts.iter().any(|p| p["part"] == "no part"), "{parts:?}");
 }
 
 /// F5: unknown names collide no more (34 names in one model, distinct, away from the
