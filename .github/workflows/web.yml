@@ -5,11 +5,12 @@
 # Locally: scripts/ci/smlib-wasm.sh && scripts/ci/web.sh wasm install typecheck unit node build e2e
 name: web
 
+# Heavy (emsdk, Playwright): only on pushes to main and by hand.
 on:
   push:
+    branches: [main]
     paths-ignore: ["docs/**", "**/*.md"]
-  pull_request:
-    paths-ignore: ["docs/**", "**/*.md"]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

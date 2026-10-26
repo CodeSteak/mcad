@@ -5,11 +5,12 @@
 # Locally: scripts/ci/smlib-native.sh && SMLIB_PREBUILT=smlib/build-native scripts/ci/desktop.sh ui build e2e
 name: desktop
 
+# Heavy (Tauri build, E2E under Xvfb): only on pushes to main and by hand.
 on:
   push:
+    branches: [main]
     paths-ignore: ["docs/**", "**/*.md"]
-  pull_request:
-    paths-ignore: ["docs/**", "**/*.md"]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
