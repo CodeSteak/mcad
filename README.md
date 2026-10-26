@@ -149,6 +149,7 @@ make test
 
 ## Documentation
 
+- [Quick reference](manuell/20-quickref.md) (`mcad usage quickref`): all functions on one page
 - `mcad usage` / [`manuell/`](manuell/): language and CLI reference
 - [`docs/reports/`](docs/reports/README.md): test reports per milestone
 - [`docs/technischer-plan.md`](docs/technischer-plan.md): technical plan (German)
