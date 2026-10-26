@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 18 – Skizzen-Editor</title>
+<title>Test report 18 – Sketch editor</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -38,56 +38,56 @@
 </head>
 <body>
 <main>
-<h1>Testbericht 18 – Skizzen-Editor</h1>
-<div class="meta">Plan 17.7, Schritt 4: Zeichenmodus mit Raster in Browser und Tauri · cad-eval (<code>sketch_edit.rs</code>, Zeichenzustand der Skizzen), cad-session (Protokoll <code>Sketch</code>), Web-UI (<code>app/sketch.ts</code>, <code>sketchUi.tsx</code>, <code>logic/sketchEditor.ts</code>, Viewer) · 24.10.2026 · Branch worktree-agent-ab1441aa7672b7a32 · Commit 4abe40d · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 Kerne</div>
+<h1>Test report 18 – Sketch editor</h1>
+<div class="meta">Plan 17.7, step 4: drawing mode with grid in browser and Tauri · cad-eval (<code>sketch_edit.rs</code>, drawing state of sketches), cad-session (protocol <code>Sketch</code>), web UI (<code>app/sketch.ts</code>, <code>sketchUi.tsx</code>, <code>logic/sketchEditor.ts</code>, viewer) · 2026-10-24 · Branch worktree-agent-ab1441aa7672b7a32 · Commit 4abe40d · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 cores</div>
 
 <div class="summary">
-  <div>Werkzeuge<b class="ok">9 + 2</b>Linie, 3 Bögen, Bézier, Rechteck, Kreis, Ecke runden, Auswahl; Schließen, Löschen</div>
-  <div>cargo test --workspace<b class="ok">554 / 554</b>davon 23 neu</div>
-  <div>clippy · fmt<b class="ok">sauber · sauber</b>-D warnings</div>
-  <div>Vitest · Playwright<b class="ok">229 · 120 / 120</b>neu: Z01–Z17</div>
-  <div>Tauri T16<b class="ok">bestanden</b>8 Prüfungen, nativer Kernel</div>
-  <div>Snap + Vorschau<b>4,0 ms</b>Median je Mausbewegung (Browser, 42 Segmente)</div>
+  <div>Tools<b class="ok">9 + 2</b>line, 3 arcs, Bézier, rectangle, circle, round corner, select; close, delete</div>
+  <div>cargo test --workspace<b class="ok">554 / 554</b>23 of them new</div>
+  <div>clippy · fmt<b class="ok">clean · clean</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="ok">229 · 120 / 120</b>new: Z01–Z17</div>
+  <div>Tauri T16<b class="ok">passed</b>8 checks, native kernel</div>
+  <div>Snap + preview<b>4.0 ms</b>median per mouse move (browser, 42 segments)</div>
 </div>
 
-<h2>1 Auftrag und Ergebnis</h2>
-<p>Plan 17.6: Werkzeuge in der Ansicht, Zeichnen in der Skizzenebene mit Raster, Snap mit Anzeige, jede Aktion schreibt Code in den <code>sketch</code>-Block am Cursor oder legt einen an, Undo wie beim Ziehen, Bearbeiten über Griffe, Segment löschen; der Code bleibt die einzige Quelle. Umgesetzt:</p>
+<h2>1 Task and result</h2>
+<p>Plan 17.6: tools in the view, drawing in the sketch plane with a grid, snap with indicator, every action writes code into the <code>sketch</code> block at the cursor or creates one, undo as with dragging, editing via handles, deleting segments; the code remains the single source. Implemented:</p>
 <ul>
-<li><b>Zeichenmodus</b> (Schalter „Skizze“): Kamera senkrecht auf die Skizzenebene – auch unter Transformationen, im <code>rotate_extrude</code> (xz-Ebene) und im zentrierten <code>linear_extrude</code> (Boden); Schrittraster, Rasterlinien und -punkte des Moduls oder der Skizze in der Ebene; Werkzeugleiste, Statuszeile, Esc beendet.</li>
-<li><b>Werkzeuge</b> Linie (Kette, Klick auf den Anfang schließt), Bogen durch drei Punkte, Bogen um einen Mittelpunkt, tangentialer Bogen, Bézier (kubisch), Rechteck, Kreis, Ecke runden (<code>corner(r)</code>), Schließen, Löschen, Auswahl. Jede Aktion ist ein Text-Edit in der Sprache, die es schon gibt, und ein Undo-Schritt.</li>
-<li><b>Snap</b> auf Rasterpunkte und Anker (Referenzen wie <code>g[b, u]</code>, <code>k.ecke</code>), Anfang, Ecken, End-, Mittel- und Schnittpunkte, Bogenmitten, tangential (<code>line(length = …)</code>), horizontal/vertikal, Rasterlinien (<code>[g.b, 40]</code>), Schrittweite; Alt = frei mit Schrittweite. Die Markierung zeigt die Art, die Beschriftung den Text, der geschrieben würde.</li>
-<li><b>Bearbeiten:</b> mit „Auswahl“ die Griffe aller Segmente (bestehende Griff-Logik: Literal ändern, Rasterreferenz umschreiben), Klick auf ein Segment setzt den Cursor, Entf löscht.</li>
-<li><b>Logik in Rust:</b> Skizze und Einfügestelle, Zeichenzustand, Snap, Code, Vorschau, Löschen, Ecken, Raster, Ebene und Strahlschnitt in <code>cad-eval</code>/<code>cad-session</code>; die UI reicht Maus und Tasten weiter und wendet die Antwort an. Dasselbe über <code>WorkerTransport</code> (Wasm) und <code>TauriTransport</code> (nativer Engine-Prozess).</li>
+<li><b>Drawing mode</b> (toggle "Sketch", German UI: „Skizze“): camera perpendicular to the sketch plane – also under transformations, in <code>rotate_extrude</code> (xz plane) and in centered <code>linear_extrude</code> (bottom face); step grid, grid lines and grid points of the module or the sketch in the plane; toolbar, status line, Esc exits.</li>
+<li><b>Tools</b> line (chain, a click on the start closes), arc through three points, arc around a center, tangent arc, Bézier (cubic), rectangle, circle, round corner (<code>corner(r)</code>), close, delete, select. Every action is a text edit in the existing language and one undo step.</li>
+<li><b>Snap</b> to grid points and anchors (references such as <code>g[b, u]</code>, <code>k.ecke</code>), start, corners, end points, midpoints and intersections, arc midpoints, tangent (<code>line(length = …)</code>), horizontal/vertical, grid lines (<code>[g.b, 40]</code>), step size; Alt = free with step size. The marker shows the kind, the label shows the text that would be written.</li>
+<li><b>Editing:</b> with "Select" the handles of all segments (existing handle logic: change a literal, rewrite a grid reference), a click on a segment sets the cursor, Del deletes.</li>
+<li><b>Logic in Rust:</b> sketch and insertion point, drawing state, snap, code, preview, deletion, corners, grid, plane and ray intersection in <code>cad-eval</code>/<code>cad-session</code>; the UI forwards mouse and keys and applies the response. The same via <code>WorkerTransport</code> (Wasm) and <code>TauriTransport</code> (native engine process).</li>
 </ul>
 
-<h2>2 Entscheidungen</h2>
+<h2>2 Decisions</h2>
 <table>
-<tr><th>Frage</th><th>Entscheidung</th></tr>
-<tr><td>Wohin der Code geht</td><td>Skizze = die <code>sketch</code>-Anweisung, die den Cursor enthält oder auf seiner Zeile beginnt. Einfügen nach der Anweisung der Cursorzeile (bzw. der letzten davor), im innersten <code>hole</code>-Block; auf der <code>sketch {</code>-Zeile ans Ende; leere Blöcke werden aufgeklappt. Ohne Skizze: neuer <code>sketch { … }</code>-Block am Ende des Kontextmoduls bzw. der Datei. Nach jeder Aktion steht der Cursor hinter dem neuen Code.</td></tr>
-<tr><td>Aktueller Punkt</td><td>Aus der Auswertung: <code>SketchInfo::steps</code> hält jede Segmentanweisung in Auswertungsreihenfolge mit dem Zustand danach (Kontur, Anfang, Punkt, Richtung; Geometrie vor <code>corner()</code>) – auch für Schleifen und Modulaufrufe im Block. Linie, Bögen, Bézier setzen die offene Kontur fort, wenn ihr erster Punkt deren Ende ist; sonst <code>start(p)</code>. Eine neue Kontur mitten in einer weiterlaufenden kommt hinter deren Ende.</td></tr>
-<tr><td>Zustand der Werkzeuge</td><td>Die Engine ist ohne Zustand: die gewählten Punkte (Position, Text, Art) gehen mit jeder Anfrage hin und mit der Antwort zurück. Höchstens eine Anfrage unterwegs, die letzte Mausposition gewinnt, Klicks in Reihenfolge.</td></tr>
-<tr><td>Undo</td><td>Eine Transaktion je Aktion mit <code>isolateHistory</code> (auch <code>start</code> + erste Linie zusammen); die Quelle geht sofort an die Engine, die Nachrichten in Reihenfolge bearbeitet – die nächste Anfrage sieht den neuen Text. Strg+Z wirkt auch mit dem Fokus in der Ansicht.</td></tr>
-<tr><td>Referenzen statt Zahlen</td><td>Rasterpunkte und Anker schreiben ihre Referenz; ein Rechteck aus zwei Rasterpunkten bekommt auch die anderen Ecken als Rasterpunkte. Freie Punkte: Zahlen auf die Schrittweite gerundet; exakte Punkte (End-, Schnittpunkte …): kürzeste Zahl mit 6 Stellen. 2D-Punkte schreiben <code>g[a, b]</code> (auch beim Griff-Snap, statt <code>g[a, b, _]</code>).</td></tr>
-<tr><td>Ebene</td><td><code>sketch_frame</code>: Knotensystem, im <code>rotate_extrude</code> die xz-Ebene, beim zentrierten <code>linear_extrude</code> der Boden – für Editor, Griffe (<code>Handle.frame</code>) und Darstellung (<code>OpInfo::Sketch.plane</code>).</td></tr>
-<tr><td>Griffe und Werkzeuge</td><td>Zeichenwerkzeuge zeichnen auch auf bestehenden Punkten (dort keine Griffe, die den Klick abfangen); Griffe aller Segmente mit „Auswahl“.</td></tr>
-<tr><td>Toleranz</td><td>Snap-Radius in Pixeln (Einstellungen, 14 px) mal Pixelgröße am Treffpunkt des Strahls; die UI schickt nur Strahl, Pixelgröße und Radius.</td></tr>
+<tr><th>Question</th><th>Decision</th></tr>
+<tr><td>Where the code goes</td><td>Sketch = the <code>sketch</code> statement that contains the cursor or starts on its line. Insertion after the statement on the cursor line (or the last one before it), in the innermost <code>hole</code> block; on the <code>sketch {</code> line at the end; empty blocks are expanded. Without a sketch: new <code>sketch { … }</code> block at the end of the context module or the file. After every action the cursor is placed after the new code.</td></tr>
+<tr><td>Current point</td><td>From the evaluation: <code>SketchInfo::steps</code> holds every segment statement in evaluation order with the state after it (contour, start, point, direction; geometry before <code>corner()</code>) – also for loops and module calls in the block. Line, arcs and Bézier continue the open contour if their first point is its end; otherwise <code>start(p)</code>. A new contour in the middle of a continuing one goes after its end.</td></tr>
+<tr><td>Tool state</td><td>The engine is stateless: the chosen points (position, text, kind) go out with every request and come back with the response. At most one request in flight, the last mouse position wins, clicks in order.</td></tr>
+<tr><td>Undo</td><td>One transaction per action with <code>isolateHistory</code> (also <code>start</code> + first line together); the source goes to the engine immediately, which processes messages in order – the next request sees the new text. Ctrl+Z also works with focus in the view.</td></tr>
+<tr><td>References instead of numbers</td><td>Grid points and anchors write their reference; a rectangle from two grid points also gets the other corners as grid points. Free points: numbers rounded to the step size; exact points (end points, intersections …): shortest number with 6 digits. 2D points write <code>g[a, b]</code> (also with handle snap, instead of <code>g[a, b, _]</code>).</td></tr>
+<tr><td>Plane</td><td><code>sketch_frame</code>: node coordinate system, in <code>rotate_extrude</code> the xz plane, in centered <code>linear_extrude</code> the bottom face – for editor, handles (<code>Handle.frame</code>) and rendering (<code>OpInfo::Sketch.plane</code>).</td></tr>
+<tr><td>Handles and tools</td><td>Drawing tools also draw on existing points (no handles there to catch the click); handles of all segments with "Select".</td></tr>
+<tr><td>Tolerance</td><td>Snap radius in pixels (settings, 14 px) times pixel size at the ray hit point; the UI sends only ray, pixel size and radius.</td></tr>
 </table>
 
-<h2>3 Ablauf</h2>
-<pre>Maus bewegt     → Sketch { cursor, tool, points, ray, pixel, snap_px, free }        (≤ 1 unterwegs)
+<h2>3 Flow</h2>
+<pre>Mouse moved     → Sketch { cursor, tool, points, ray, pixel, snap_px, free }        (≤ 1 in flight)
                  ← Sketch { plane, snap {point, text, kind, label}, guides, preview, prompt }
-Klick           → Sketch { …, click: true }
-                 ← points (Punkt gemerkt)  oder  edits + select (Aktion fertig)
-                   UI: eine Transaktion (Undo-Schritt), Cursor hinter den Code, SetSource sofort
-Schließen/Entf  → Sketch { tool: close | delete, cursor }  ← edits
+Click           → Sketch { …, click: true }
+                 ← points (point stored)  or  edits + select (action done)
+                   UI: one transaction (undo step), cursor after the code, SetSource immediately
+Close/Del       → Sketch { tool: close | delete, cursor }  ← edits
 
-Engine (cad-eval::sketch_edit, Session):  place → Skizze, Einfügestelle, Zeichenzustand, Raster/Anker
-                                          snap → Punkt + Text + Art     click → Code   preview → Polylinien
-UI (app/sketch.ts, Viewer):               Strahl, Tasten, Antwort anwenden, zeichnen, Kamera</pre>
+Engine (cad-eval::sketch_edit, Session):  place → sketch, insertion point, drawing state, grid/anchors
+                                          snap → point + text + kind     click → code   preview → polylines
+UI (app/sketch.ts, viewer):               ray, keys, apply response, draw, camera</pre>
 
-<h2>4 Werkzeuge</h2>
-<p>Jedes Szenario zeichnet mit der Maus (Playwright, echte Zeigerereignisse) und prüft den geschriebenen Code wörtlich; links der Code nach der Aktion, rechts die Ansicht.</p>
-<h3>Z02 Linie</h3><p>Ohne sketch-Block am Cursor legt die erste Aktion einen an (am Ende der Datei). Jeder Klick ist eine Aktion: <code>start(…)</code> und die erste Linie, dann <code>line(to = …)</code> je Punkt; der Klick auf den Anfang der Kontur schreibt <code>close();</code>. Freie Punkte werden auf die Schrittweite gerundet.</p><div class="codefig"><div><pre>cube([30, 20, 2]);
+<h2>4 Tools</h2>
+<p>Each scenario draws with the mouse (Playwright, real pointer events) and checks the written code verbatim; left the code after the action, right the view.</p>
+<h3>Z02 Line</h3><p>Without a sketch block at the cursor, the first action creates one (at the end of the file). Every click is an action: <code>start(…)</code> and the first line, then <code>line(to = …)</code> per point; a click on the start of the contour writes <code>close();</code>. Free points are rounded to the step size.</p><div class="codefig"><div><pre>cube([30, 20, 2]);
 
 sketch {
     start([0, 0]);
@@ -95,8 +95,8 @@ sketch {
     line(to = [20, 12]);
     line(to = [5, 12]);
     close();
-}</pre></div><div><figure><img src="img/ui-z02-vor-schliessen.jpg" alt=""><figcaption>vor dem letzten Klick: Snap „Anfang (schließt)“</figcaption></figure><figure><img src="img/ui-z02-linie.jpg" alt=""><figcaption>nach dem Klick: close(); geschlossene Kontur</figcaption></figure></div></div><ul class="checks"><li>neuer sketch-Block</li><li>4 Aktionen</li><li>close() durch Klick auf den Anfang</li><li>keine Fehler</li></ul>
-<h3>Z03 Rechteck auf Rasterpunkten</h3><p>Snappen auf Rasterpunkte schreibt Referenzen. Beim Rechteck aus zwei Rasterpunkten werden auch die beiden anderen Ecken Rasterpunkte (<code>g[c, u]</code>, <code>g[b, v]</code>): ändert sich eine Ebene, folgt das Rechteck.</p><div class="codefig"><div><pre>grid g {
+}</pre></div><div><figure><img src="img/ui-z02-vor-schliessen.jpg" alt=""><figcaption>before the last click: snap "start (closes)" (German UI: „Anfang (schließt)“)</figcaption></figure><figure><img src="img/ui-z02-linie.jpg" alt=""><figcaption>after the click: close(); closed contour</figcaption></figure></div></div><ul class="checks"><li>new sketch block</li><li>4 actions</li><li>close() by clicking on the start</li><li>no errors</li></ul>
+<h3>Z03 Rectangle on grid points</h3><p>Snapping to grid points writes references. For a rectangle from two grid points, the other two corners also become grid points (<code>g[c, u]</code>, <code>g[b, v]</code>): if a grid level changes, the rectangle follows.</p><div class="codefig"><div><pre>grid g {
     x: a = 0, b = 10, c = 30, d = 40;
     y: u = 0, v = 15, w = 25;
 }
@@ -106,54 +106,54 @@ linear_extrude(3) sketch {
     line(to = g[c, v]);
     line(to = g[b, v]);
     close();
-}</pre></div><div><figure><img src="img/ui-z03-snap.jpg" alt=""><figcaption>Snap auf Rasterpunkt: Quadrat und Text g[b, u]</figcaption></figure><figure><img src="img/ui-z03-vorschau.jpg" alt=""><figcaption>zweite Ecke: Vorschau des Rechtecks</figcaption></figure><figure><img src="img/ui-z03-rechteck.jpg" alt=""><figcaption>Ergebnis: Referenzen statt Zahlen</figcaption></figure></div></div><ul class="checks"><li>Snap-Text g[b, u] sichtbar</li><li>Ecken als g[…]</li><li>Vorschau 1 Polylinie</li></ul>
-<h3>Z04 Kreis</h3><p>Mittelpunkt, dann ein Punkt auf dem Kreis: <code>start(p); arc(center = c, angle = 360); close();</code> – eine eigene Kontur nach der offenen.</p><div class="codefig"><div><pre>linear_extrude(2) sketch(closed = false) {
+}</pre></div><div><figure><img src="img/ui-z03-snap.jpg" alt=""><figcaption>snap to grid point: square and text g[b, u]</figcaption></figure><figure><img src="img/ui-z03-vorschau.jpg" alt=""><figcaption>second corner: preview of the rectangle</figcaption></figure><figure><img src="img/ui-z03-rechteck.jpg" alt=""><figcaption>result: references instead of numbers</figcaption></figure></div></div><ul class="checks"><li>snap text g[b, u] visible</li><li>corners as g[…]</li><li>preview 1 polyline</li></ul>
+<h3>Z04 Circle</h3><p>Center, then a point on the circle: <code>start(p); arc(center = c, angle = 360); close();</code> – a separate contour after the open one.</p><div class="codefig"><div><pre>linear_extrude(2) sketch(closed = false) {
     start([0, 0]);
     line(to = [20, 0]);
     start([30, 6]);
     arc(center = [26, 6], angle = 360);
     close();
-}</pre></div><div><figure><img src="img/ui-z04-vorschau.jpg" alt=""><figcaption>Vorschau: Kreis um den Mittelpunkt</figcaption></figure><figure><img src="img/ui-z04-kreis.jpg" alt=""><figcaption>Ergebnis</figcaption></figure></div></div><ul class="checks"><li>start/arc(center, angle = 360)/close</li></ul>
-<h3>Z05 Bogen durch drei Punkte</h3><p>Anfang (hier das Ende der Kontur, kein neues start), Punkt auf dem Bogen, Endpunkt: <code>arc(through = q, to = p)</code>.</p><div class="codefig"><div><pre>linear_extrude(2) sketch(closed = false) {
+}</pre></div><div><figure><img src="img/ui-z04-vorschau.jpg" alt=""><figcaption>preview: circle around the center</figcaption></figure><figure><img src="img/ui-z04-kreis.jpg" alt=""><figcaption>result</figcaption></figure></div></div><ul class="checks"><li>start/arc(center, angle = 360)/close</li></ul>
+<h3>Z05 Arc through three points</h3><p>Start (here the end of the contour, no new start), point on the arc, end point: <code>arc(through = q, to = p)</code>.</p><div class="codefig"><div><pre>linear_extrude(2) sketch(closed = false) {
     start([0, 0]);
     line(to = [20, 0]);
     arc(through = [24, 4], to = [20, 8]);
-}</pre></div><div><figure><img src="img/ui-z05-vorschau.jpg" alt=""><figcaption>Vorschau durch Anfang, Durchgangspunkt und Maus</figcaption></figure><figure><img src="img/ui-z05-bogen.jpg" alt=""><figcaption>Ergebnis</figcaption></figure></div></div><ul class="checks"><li>arc(through = [24, 4], to = [20, 8])</li></ul>
-<h3>Z06 Bogen um einen Mittelpunkt</h3><p>Anfang, Mittelpunkt, Endwinkel: <code>arc(center = c, angle = a)</code>; der Winkel rastet auf die Winkelschrittweite (15°), auf einem gesnappten Punkt entsteht <code>arc(center = c, to = p)</code>.</p><div class="codefig"><div><pre>linear_extrude(2) sketch(closed = false) {
+}</pre></div><div><figure><img src="img/ui-z05-vorschau.jpg" alt=""><figcaption>preview through start, through point and mouse</figcaption></figure><figure><img src="img/ui-z05-bogen.jpg" alt=""><figcaption>result</figcaption></figure></div></div><ul class="checks"><li>arc(through = [24, 4], to = [20, 8])</li></ul>
+<h3>Z06 Arc around a center</h3><p>Start, center, end angle: <code>arc(center = c, angle = a)</code>; the angle snaps to the angle step (15°), on a snapped point the result is <code>arc(center = c, to = p)</code>.</p><div class="codefig"><div><pre>linear_extrude(2) sketch(closed = false) {
     start([0, 0]);
     line(to = [20, 0]);
     arc(through = [24, 4], to = [20, 8]);
     arc(center = [16, 8], angle = 90);
-}</pre></div><div><figure><img src="img/ui-z06-vorschau.jpg" alt=""><figcaption>Vorschau mit Radiuslinie</figcaption></figure><figure><img src="img/ui-z06-bogen.jpg" alt=""><figcaption>Ergebnis</figcaption></figure></div></div><ul class="checks"><li>arc(center = [16, 8], angle = 90)</li></ul>
-<h3>Z07 Tangentialer Bogen</h3><p>Ein Klick: der Bogen setzt die Richtung des letzten Segments fort, <code>arc(to = p)</code>.</p><div class="codefig"><div><pre>linear_extrude(2) sketch(closed = false) {
+}</pre></div><div><figure><img src="img/ui-z06-vorschau.jpg" alt=""><figcaption>preview with radius line</figcaption></figure><figure><img src="img/ui-z06-bogen.jpg" alt=""><figcaption>result</figcaption></figure></div></div><ul class="checks"><li>arc(center = [16, 8], angle = 90)</li></ul>
+<h3>Z07 Tangent arc</h3><p>One click: the arc continues the direction of the last segment, <code>arc(to = p)</code>.</p><div class="codefig"><div><pre>linear_extrude(2) sketch(closed = false) {
     start([0, 0]);
     line(to = [20, 0]);
     arc(through = [24, 4], to = [20, 8]);
     arc(center = [16, 8], angle = 90);
     arc(to = [10, 10]);
-}</pre></div><div><figure><img src="img/ui-z07-vorschau.jpg" alt=""><figcaption>Vorschau tangential am Ende der Kontur</figcaption></figure><figure><img src="img/ui-z07-bogen.jpg" alt=""><figcaption>Ergebnis</figcaption></figure></div></div><ul class="checks"><li>arc(to = [10, 10])</li></ul>
-<h3>Z08 Bézier</h3><p>Anfang, zwei Kontrollpunkte, Ende: kubische Kurve <code>bezier(c1 = …, c2 = …, to = …)</code>.</p><div class="codefig"><div><pre>linear_extrude(2) sketch(closed = false) {
+}</pre></div><div><figure><img src="img/ui-z07-vorschau.jpg" alt=""><figcaption>preview tangent at the end of the contour</figcaption></figure><figure><img src="img/ui-z07-bogen.jpg" alt=""><figcaption>result</figcaption></figure></div></div><ul class="checks"><li>arc(to = [10, 10])</li></ul>
+<h3>Z08 Bézier</h3><p>Start, two control points, end: cubic curve <code>bezier(c1 = …, c2 = …, to = …)</code>.</p><div class="codefig"><div><pre>linear_extrude(2) sketch(closed = false) {
     start([0, 0]);
     line(to = [20, 0]);
     bezier(c1 = [24, 0], c2 = [27, 5], to = [27, 10]);
-}</pre></div><div><figure><img src="img/ui-z08-vorschau.jpg" alt=""><figcaption>Vorschau mit Kontrollpolygon</figcaption></figure><figure><img src="img/ui-z08-bezier.jpg" alt=""><figcaption>Ergebnis</figcaption></figure></div></div><ul class="checks"><li>bezier(c1 = [24, 0], c2 = [27, 5], to = [27, 10])</li></ul>
-<h3>Z09 Ecke runden</h3><p>Ecke wählen (nur Ecken zwischen zwei Segmenten snappen), dann den Radius als Abstand zur Ecke: <code>corner(r = …)</code> nach dem Segment, das dort endet; an einer schon gerundeten Ecke ändert sich der Radius.</p><div class="codefig"><div><pre>linear_extrude(2) sketch {
+}</pre></div><div><figure><img src="img/ui-z08-vorschau.jpg" alt=""><figcaption>preview with control polygon</figcaption></figure><figure><img src="img/ui-z08-bezier.jpg" alt=""><figcaption>result</figcaption></figure></div></div><ul class="checks"><li>bezier(c1 = [24, 0], c2 = [27, 5], to = [27, 10])</li></ul>
+<h3>Z09 Round corner</h3><p>Pick a corner (only corners between two segments snap), then the radius as the distance to the corner: <code>corner(r = …)</code> after the segment that ends there; on an already rounded corner the radius changes.</p><div class="codefig"><div><pre>linear_extrude(2) sketch {
     start([0, 0]);
     line(to = [30, 0]);
     line(to = [30, 20]);
     corner(r = 4);
     line(to = [0, 20]);
     close();
-}</pre></div><div><figure><img src="img/ui-z09-vorschau.jpg" alt=""><figcaption>Ecke gewählt, Vorschau der Rundung</figcaption></figure><figure><img src="img/ui-z09-ecke.jpg" alt=""><figcaption>Ergebnis</figcaption></figure></div></div><ul class="checks"><li>corner(r = 4) nach line(to = [30, 20])</li></ul>
-<h3>Z10 Schließen</h3><p>„Schließen“ schreibt <code>close();</code> für die offene Kontur am Cursor; der Fehler „Kontur nicht geschlossen“ verschwindet.</p><div class="codefig"><div><pre>linear_extrude(2) sketch {
+}</pre></div><div><figure><img src="img/ui-z09-vorschau.jpg" alt=""><figcaption>corner picked, preview of the rounding</figcaption></figure><figure><img src="img/ui-z09-ecke.jpg" alt=""><figcaption>result</figcaption></figure></div></div><ul class="checks"><li>corner(r = 4) after line(to = [30, 20])</li></ul>
+<h3>Z10 Close</h3><p>"Close" writes <code>close();</code> for the open contour at the cursor; the error "contour not closed" (German: „Kontur nicht geschlossen“) disappears.</p><div class="codefig"><div><pre>linear_extrude(2) sketch {
     start([0, 0]);
     line(to = [30, 0]);
     line(to = [30, 20]);
     close();
-}</pre></div><div><figure><img src="img/ui-z10-vorher.jpg" alt=""><figcaption>offene Kontur (Fehler: nicht geschlossen)</figcaption></figure><figure><img src="img/ui-z10-nachher.jpg" alt=""><figcaption>nach „Schließen“: close();</figcaption></figure></div></div><ul class="checks"><li>close(); eingefügt</li><li>keine Fehler</li></ul>
+}</pre></div><div><figure><img src="img/ui-z10-vorher.jpg" alt=""><figcaption>open contour (error: not closed)</figcaption></figure><figure><img src="img/ui-z10-nachher.jpg" alt=""><figcaption>after "Close": close();</figcaption></figure></div></div><ul class="checks"><li>close(); inserted</li><li>no errors</li></ul>
 
 <h2>5 Snap</h2>
-<h3>Z11 Snap-Arten</h3><p>Reihenfolge: Rasterpunkte und Anker (Referenz), Anfang, Ecken, End-, Mittel-, Schnittpunkte und Bogenmitten (Zahlen); sonst tangential (schreibt <code>line(length = …)</code>), horizontal/vertikal zum vorigen Punkt und Rasterlinien (<code>[g.b, 40]</code>), sonst die Schrittweite. Alt: frei mit Schrittweite. Die Markierung zeigt die Art (Ring Punkt, Quadrat Raster, Raute Richtung, Kreuz Schritt).</p><div class="codefig"><div><pre>grid g {
+<h3>Z11 Snap kinds</h3><p>Order: grid points and anchors (reference), start, corners, end points, midpoints, intersections and arc midpoints (numbers); otherwise tangent (writes <code>line(length = …)</code>), horizontal/vertical to the previous point and grid lines (<code>[g.b, 40]</code>), otherwise the step size. Alt: free with step size. The marker shows the kind (ring point, square grid, diamond direction, cross step).</p><div class="codefig"><div><pre>grid g {
     x: a = 0, b = 10;
     y: u = 0;
 }
@@ -164,23 +164,23 @@ linear_extrude(2) sketch(closed = false) {
     start([0, 25]);
     line(to = [30, 15]);
     line(length = 6);
-}</pre></div><div><figure><img src="img/ui-z11-schnitt.jpg" alt=""><figcaption>Schnittpunkt zweier Linien (Ring)</figcaption></figure><figure><img src="img/ui-z11-horizontal.jpg" alt=""><figcaption>horizontal zum Anfangspunkt (Raute, Hilfslinie)</figcaption></figure><figure><img src="img/ui-z11-tangential.jpg" alt=""><figcaption>tangential zum letzten Segment</figcaption></figure></div></div><ul class="checks"><li>Endpunkt → end: [20, 5]</li><li>Mitte → mid: [10, 5]</li><li>Schnittpunkt → intersection: [20, 18.3333]</li><li>Rasterpunkt → grid: g[b, u]</li><li>horizontal → horizontal: [42, 25]</li><li>Rasterlinie → grid_line: [g.b, -6]</li><li>Alt → step: [10, 0]</li><li>tangential → tangent: [35.6921, 13.1026]</li></ul>
+}</pre></div><div><figure><img src="img/ui-z11-schnitt.jpg" alt=""><figcaption>intersection of two lines (ring)</figcaption></figure><figure><img src="img/ui-z11-horizontal.jpg" alt=""><figcaption>horizontal to the start point (diamond, guide line)</figcaption></figure><figure><img src="img/ui-z11-tangential.jpg" alt=""><figcaption>tangent to the last segment</figcaption></figure></div></div><ul class="checks"><li>end point → end: [20, 5]</li><li>midpoint → mid: [10, 5]</li><li>intersection → intersection: [20, 18.3333]</li><li>grid point → grid: g[b, u]</li><li>horizontal → horizontal: [42, 25]</li><li>grid line → grid_line: [g.b, -6]</li><li>Alt → step: [10, 0]</li><li>tangent → tangent: [35.6921, 13.1026]</li></ul>
 
-<h2>6 Bearbeiten: Undo, Griffe, Löschen</h2>
-<h3>Z12 Undo</h3><p>Jede Aktion ist ein eigener Verlaufsschritt (auch <code>start</code> + erste Linie zusammen); Strg+Z/Strg+Umschalt+Z wirken auch mit dem Fokus in der Ansicht.</p><div class="codefig"><div><pre>// nach zwei Aktionen
+<h2>6 Editing: undo, handles, delete</h2>
+<h3>Z12 Undo</h3><p>Every action is a separate history step (also <code>start</code> + first line together); Ctrl+Z/Ctrl+Shift+Z also work with focus in the view.</p><div class="codefig"><div><pre>// after two actions
 linear_extrude(2) sketch(closed = false) {
     start([0, 0]);
     line(to = [20, 0]);
     line(to = [20, 10]);
     line(to = [5, 10]);
 }
-// Strg+Z, Strg+Z, Strg+Umschalt+Z
+// Ctrl+Z, Ctrl+Z, Ctrl+Shift+Z
 linear_extrude(2) sketch(closed = false) {
     start([0, 0]);
     line(to = [20, 0]);
     line(to = [20, 10]);
-}</pre></div><div><figure><img src="img/ui-z12-undo.jpg" alt=""><figcaption>nach Undo, Undo, Redo</figcaption></figure></div></div><ul class="checks"><li>Undo nimmt genau eine Aktion zurück</li><li>Redo stellt sie wieder her</li></ul>
-<h3>Z13 Griff ziehen</h3><p>Im Zeichenmodus zeigt die Ansicht die Griffe aller Segmente der Skizze. Ziehen nutzt die bestehende Griff-Logik: auf einem Rasterpunkt wird die Referenz umgeschrieben, Literale werden geändert (Alt: Zahlen).</p><div class="codefig"><div><pre>grid g {
+}</pre></div><div><figure><img src="img/ui-z12-undo.jpg" alt=""><figcaption>after undo, undo, redo</figcaption></figure></div></div><ul class="checks"><li>undo reverts exactly one action</li><li>redo restores it</li></ul>
+<h3>Z13 Dragging a handle</h3><p>In drawing mode the view shows the handles of all segments of the sketch. Dragging uses the existing handle logic: on a grid point the reference is rewritten, literals are changed (Alt: numbers).</p><div class="codefig"><div><pre>grid g {
     x: a = 0, b = 10, c = 30;
     y: u = 0, v = 15;
 }
@@ -189,22 +189,22 @@ linear_extrude(2) sketch {
     line(to = g[c, u]);
     line(to = g[c, v]);
     close();
-}</pre></div><div><figure><img src="img/ui-z13-vorher.jpg" alt=""><figcaption>Griffe aller Segmente (Zeichenmodus)</figcaption></figure><figure><img src="img/ui-z13-nachher.jpg" alt=""><figcaption>Punkt auf g[c, v] gezogen</figcaption></figure></div></div><ul class="checks"><li>g[b, v] → g[c, v]</li></ul>
-<h3>Z14 Segment löschen</h3><p>Mit dem Werkzeug Auswahl setzt ein Klick auf ein Segment den Cursor in seine Zeile, Entf (oder „Löschen“) entfernt die Anweisung. Das einzige Segment einer Kontur nimmt die Kontur mit, ein <code>corner()</code> direkt danach ebenfalls.</p><div class="codefig"><div><pre>linear_extrude(2) sketch {
+}</pre></div><div><figure><img src="img/ui-z13-vorher.jpg" alt=""><figcaption>handles of all segments (drawing mode)</figcaption></figure><figure><img src="img/ui-z13-nachher.jpg" alt=""><figcaption>point dragged onto g[c, v]</figcaption></figure></div></div><ul class="checks"><li>g[b, v] → g[c, v]</li></ul>
+<h3>Z14 Deleting a segment</h3><p>With the Select tool, a click on a segment puts the cursor on its line, Del (or "Delete") removes the statement. The only segment of a contour takes the contour with it, as does a <code>corner()</code> directly after it.</p><div class="codefig"><div><pre>linear_extrude(2) sketch {
     start([0, 0]);
     line(to = [30, 0]);
     line(to = [0, 20]);
     close();
-}</pre></div><div><figure><img src="img/ui-z14-auswahl.jpg" alt=""><figcaption>Auswahl: Segment unter der Maus, Klick setzt den Cursor</figcaption></figure><figure><img src="img/ui-z14-geloescht.jpg" alt=""><figcaption>nach Entf: Zeile entfernt, der Nachfolger beginnt am vorigen Punkt</figcaption></figure></div></div><ul class="checks"><li>line(to = [30, 20]) entfernt</li></ul>
+}</pre></div><div><figure><img src="img/ui-z14-auswahl.jpg" alt=""><figcaption>Select: segment under the mouse, click sets the cursor</figcaption></figure><figure><img src="img/ui-z14-geloescht.jpg" alt=""><figcaption>after Del: line removed, the successor starts at the previous point</figcaption></figure></div></div><ul class="checks"><li>line(to = [30, 20]) removed</li></ul>
 
-<h2>7 Zeichenmodus, Ebenen, Thema</h2>
-<h3>Z01 Zeichenmodus ein/aus</h3><p>„Skizze“ in der Ansichtsleiste schaltet den Zeichenmodus ein: die Kamera blickt senkrecht auf die Ebene der Skizze am Cursor, das Raster g und die Schrittweite (1 mm, gröber beim Herauszoomen) liegen in der Ebene, die Statuszeile sagt, was das Werkzeug als Nächstes braucht. Esc beendet den Modus.</p><div class="codefig"><div><pre>grid g {
+<h2>7 Drawing mode, planes, theme</h2>
+<h3>Z01 Drawing mode on/off</h3><p>"Sketch" in the view toolbar turns drawing mode on: the camera looks perpendicular onto the plane of the sketch at the cursor, grid g and the step size (1 mm, coarser when zooming out) lie in the plane, the status line says what the tool needs next. Esc exits the mode.</p><div class="codefig"><div><pre>grid g {
     x: a = 0, b = 10, c = 30, d = 40;
     y: u = 0, v = 15, w = 25;
 }
 linear_extrude(3) sketch {
-}</pre></div><div><figure><img src="img/ui-z01-modus.jpg" alt=""><figcaption>Zeichenmodus: Werkzeugleiste, Raster in der Skizzenebene, Blick von oben</figcaption></figure></div></div><ul class="checks"><li>Blickrichtung z = -1.00000</li><li>Rasterlinien 7, Schrittraster 42</li><li>Esc: Modus aus</li></ul>
-<h3>Z15 Skizze unter Transformation, rotate_extrude</h3><p>Die Ebene der Skizze kommt von der Engine (<code>OpInfo.Sketch.plane</code>): unter Transformationen ihr Knotensystem, im rotate_extrude die xz-Ebene, in der das Profil im Körper liegt, beim zentrierten linear_extrude dessen Boden. Kamera, Raster, Snap und Griffe nutzen dieselbe Ebene; die Werte bleiben Koordinaten der Skizze.</p><div class="codefig"><div><pre>translate([0, 0, 10]) rotate([90, 0, 0]) linear_extrude(3) sketch {
+}</pre></div><div><figure><img src="img/ui-z01-modus.jpg" alt=""><figcaption>drawing mode: toolbar, grid in the sketch plane, view from above</figcaption></figure></div></div><ul class="checks"><li>view direction z = -1.00000</li><li>grid lines 7, step grid 42</li><li>Esc: mode off</li></ul>
+<h3>Z15 Sketch under transformation, rotate_extrude</h3><p>The sketch plane comes from the engine (<code>OpInfo.Sketch.plane</code>): under transformations its node coordinate system, in rotate_extrude the xz plane in which the profile lies in the body, in centered linear_extrude its bottom face. Camera, grid, snap and handles use the same plane; the values remain sketch coordinates.</p><div class="codefig"><div><pre>translate([0, 0, 10]) rotate([90, 0, 0]) linear_extrude(3) sketch {
     start([0, 0]);
     line(to = [20, 0]);
     line(to = [20, 10]);
@@ -218,39 +218,39 @@ rotate_extrude() sketch {
     line(to = [20, 5]);
     line(to = [15, 8]);
     close();
-}</pre></div><div><figure><img src="img/ui-z15-transformiert.jpg" alt=""><figcaption>translate + rotate([90, 0, 0]): Ebene senkrecht zur y-Achse</figcaption></figure><figure><img src="img/ui-z15-rotate-extrude.jpg" alt=""><figcaption>rotate_extrude: Profil in der xz-Ebene</figcaption></figure></div></div><ul class="checks"><li>Blick y = 1.00000</li><li>Snap-Punkt z = 20 (Welt)</li><li>rotate_extrude: Blick y = 1.00000</li></ul>
-<h3>Z16 Dunkles Thema</h3><p>Raster, Vorschau, Snap-Markierung und Beschriftung nutzen die Farben des Themas (Snap-Beschriftung wie beim Griff-Snap).</p><figure><img src="img/ui-z16-dunkel.jpg" alt=""><figcaption>Zeichenmodus im dunklen Thema</figcaption></figure><ul class="checks"><li>Kontrast der Snap-Beschriftung 9.0:1</li></ul>
+}</pre></div><div><figure><img src="img/ui-z15-transformiert.jpg" alt=""><figcaption>translate + rotate([90, 0, 0]): plane perpendicular to the y axis</figcaption></figure><figure><img src="img/ui-z15-rotate-extrude.jpg" alt=""><figcaption>rotate_extrude: profile in the xz plane</figcaption></figure></div></div><ul class="checks"><li>view y = 1.00000</li><li>snap point z = 20 (world)</li><li>rotate_extrude: view y = 1.00000</li></ul>
+<h3>Z16 Dark theme</h3><p>Grid, preview, snap marker and label use the theme colors (snap label as with handle snap).</p><figure><img src="img/ui-z16-dunkel.jpg" alt=""><figcaption>drawing mode in the dark theme</figcaption></figure><ul class="checks"><li>contrast of the snap label 9.0:1</li></ul>
 
-<h2>8 Desktop-App (Tauri)</h2>
-<p>Szenario T16 in <code>web/e2e-tauri/desktop.e2e.mjs</code> (tauri-driver, WebKitWebDriver, Xvfb): die echte App <code>cad</code> mit dem nativen Engine-Prozess, Nachrichten über den <code>TauriTransport</code>. Die Ansicht wird mit Zeigerereignissen auf dem Canvas bedient (WebDriver hat keine Maus über WebGL-Inhalten, die sich verlässlich bewegen ließe).</p>
-<p>Ergebnis: <span class="ok">bestanden</span> in 2,2 s, Snap + Vorschau Median 13,0 ms je Bewegung.</p><ul class="checks"><li class="">Blick senkrecht auf die Skizzenebene (z = -1.00000)</li><li class="">Snap auf Rasterpunkt: g[b, u]</li><li class="">Snap-Beschriftung sichtbar: g[b, u]</li><li class="">Vorschau des Rechtecks</li><li class="">Code im sketch-Block mit Rasterreferenzen</li><li class="">keine Fehler, Körper nativ berechnet</li><li class="">Undo nimmt die Aktion als einen Schritt zurück</li><li class="">Zeichenmodus beendet</li></ul><figure><img src="img/tauri-t16-vorschau.jpg" alt=""><figcaption>Rechteck: zweite Ecke g[c, v], Vorschau und Snap-Anzeige</figcaption></figure><figure><img src="img/tauri-t16-rechteck.jpg" alt=""><figcaption>Rechteck auf Rasterpunkten, Code links</figcaption></figure>
+<h2>8 Desktop app (Tauri)</h2>
+<p>Scenario T16 in <code>web/e2e-tauri/desktop.e2e.mjs</code> (tauri-driver, WebKitWebDriver, Xvfb): the real app <code>cad</code> with the native engine process, messages via <code>TauriTransport</code>. The view is operated with pointer events on the canvas (WebDriver has no mouse over WebGL content that can be moved reliably).</p>
+<p>Result: <span class="ok">passed</span> in 2.2 s, snap + preview median 13.0 ms per move.</p><ul class="checks"><li class="">view perpendicular to the sketch plane (z = -1.00000)</li><li class="">snap to grid point: g[b, u]</li><li class="">snap label visible: g[b, u]</li><li class="">preview of the rectangle</li><li class="">code in the sketch block with grid references</li><li class="">no errors, body computed natively</li><li class="">undo reverts the action as one step</li><li class="">drawing mode exited</li></ul><figure><img src="img/tauri-t16-vorschau.jpg" alt=""><figcaption>rectangle: second corner g[c, v], preview and snap indicator</figcaption></figure><figure><img src="img/tauri-t16-rechteck.jpg" alt=""><figcaption>rectangle on grid points, code on the left</figcaption></figure>
 
-<h2>9 Messwerte</h2>
-<h3>Z17 Antwortzeiten</h3><p>Jede Mausbewegung schickt den Strahl an die Engine (Worker, Wasm): Snap gegen Rasterpunkte, alle End-, Mittel- und Schnittpunkte der 42 Segmente, Vorschau; höchstens eine Anfrage unterwegs, die letzte Position gewinnt. Gemessen: Anfrage bis Antwort im Store.</p><figure><img src="img/ui-z17-zahnscheibe.jpg" alt=""><figcaption>Zahnriemenscheibe (Skizze mit for-Schleife) im Zeichenmodus</figcaption></figure><ul class="checks"><li>40 Bewegungen: Median 4.0 ms, 95 % 20.0 ms, max 24.2 ms</li></ul>
+<h2>9 Measurements</h2>
+<h3>Z17 Response times</h3><p>Every mouse move sends the ray to the engine (worker, Wasm): snap against grid points, all end points, midpoints and intersections of the 42 segments, preview; at most one request in flight, the last position wins. Measured: request until response in the store.</p><figure><img src="img/ui-z17-zahnscheibe.jpg" alt=""><figcaption>timing belt pulley (sketch with for loop) in drawing mode</figcaption></figure><ul class="checks"><li>40 moves: median 4.0 ms, 95 % 20.0 ms, max 24.2 ms</li></ul>
 
 
-<h2>10 Testläufe</h2>
+<h2>10 Test runs</h2>
 <table>
-<tr><th>Lauf</th><th>Ergebnis</th></tr>
-<tr><td><code>cargo test --workspace -- --test-threads=2</code></td><td>554 bestanden, 0 fehlgeschlagen</td></tr>
-<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>sauber · sauber</td></tr>
-<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>sauber · 229 bestanden</td></tr>
-<tr><td><code>pnpm e2e</code> (Playwright, Chromium, ganze Suite)</td><td>120 bestanden, 0 fehlgeschlagen</td></tr>
-<tr><td>Tauri-E2E T16</td><td>bestanden</td></tr>
+<tr><th>Run</th><th>Result</th></tr>
+<tr><td><code>cargo test --workspace -- --test-threads=2</code></td><td>554 passed, 0 failed</td></tr>
+<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>clean · clean</td></tr>
+<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>clean · 229 passed</td></tr>
+<tr><td><code>pnpm e2e</code> (Playwright, Chromium, full suite)</td><td>120 passed, 0 failed</td></tr>
+<tr><td>Tauri E2E T16</td><td>passed</td></tr>
 </table>
-<p>Neue Rust-Tests (23):</p>
+<p>New Rust tests (23):</p>
 <p class="small"><code>sketch_edit::tests::step_rounding_writes_short_numbers</code> <span class="ok">ok</span> · <code>sketch_edit::tests::intersections_of_lines_and_arcs</code> <span class="ok">ok</span> · <code>sketch_edit::tests::sweep_continues_beyond_half_turn</code> <span class="ok">ok</span> · <code>anchors_are_snap_targets</code> <span class="ok">ok</span> · <code>arcs_bezier_circle</code> <span class="ok">ok</span> · <code>center_arc_to_a_snapped_point_keeps_the_reference</code> <span class="ok">ok</span> · <code>close_and_delete</code> <span class="ok">ok</span> · <code>dragging_a_sketch_point_onto_a_grid_point_keeps_the_short_form</code> <span class="ok">ok</span> · <code>corner_tool_inserts_and_updates</code> <span class="ok">ok</span> · <code>grid_points_write_references_and_rectangles_combine_them</code> <span class="ok">ok</span> · <code>line_between_statements_and_new_contour</code> <span class="ok">ok</span> · <code>hole_blocks_and_empty_blocks</code> <span class="ok">ok</span> · <code>new_sketch_at_the_end_of_the_file</code> <span class="ok">ok</span> · <code>new_sketch_in_the_context_module</code> <span class="ok">ok</span> · <code>line_continues_the_contour_at_the_cursor</code> <span class="ok">ok</span> · <code>plane_of_sketches_under_transformations</code> <span class="ok">ok</span> · <code>segment_under_the_mouse</code> <span class="ok">ok</span> · <code>snaps_by_kind</code> <span class="ok">ok</span> · <code>tangent_line_writes_length</code> <span class="ok">ok</span> · <code>sketch_op_info_carries_the_plane</code> <span class="ok">ok</span> · <code>sketch_under_a_transformation_snaps_in_its_plane</code> <span class="ok">ok</span> · <code>draws_lines_into_a_new_sketch_and_continues</code> <span class="ok">ok</span> · <code>syntax_errors_stop_drawing_and_select_finds_segments</code> <span class="ok">ok</span></p>
-<p class="small">cad-eval <code>tests/sketch_edit.rs</code>: Einfügestelle, neue Skizze in Datei und Kontextmodul, Ketten, neue Kontur hinter einer weiterlaufenden, Snap-Arten, Schnittpunkte, tangential, Rechteck mit Rasterreferenzen, Bögen, Bézier, Kreis, Mittelpunktsbogen auf Rasterpunkten, Ecken einfügen und ändern, Schließen, Löschen, <code>hole</code>- und leere Blöcke, Ebenen, Anker, Segment unter der Maus, Griff-Snap in Kurzform; Unit-Tests im Modul (Bogenwinkel über 180°, Schnitte, Rundung). cad-session <code>tests/sketch_editor.rs</code>: Protokoll mit Strahl (neue Skizze, Kette, Schließen, Löschen), Ebene unter Transformation, Syntaxfehler, Auswahl, <code>OpInfo.plane</code>. Vitest <code>logic/sketchEditor.test.ts</code>: Raster, Kamera, Markierungen, Undo-Schritt mit Cursor.</p>
+<p class="small">cad-eval <code>tests/sketch_edit.rs</code>: insertion point, new sketch in file and context module, chains, new contour after a continuing one, snap kinds, intersections, tangent, rectangle with grid references, arcs, Bézier, circle, center arc on grid points, inserting and changing corners, close, delete, <code>hole</code> and empty blocks, planes, anchors, segment under the mouse, handle snap in short form; unit tests in the module (arc angle over 180°, intersections, rounding). cad-session <code>tests/sketch_editor.rs</code>: protocol with ray (new sketch, chain, close, delete), plane under transformation, syntax errors, selection, <code>OpInfo.plane</code>. Vitest <code>logic/sketchEditor.test.ts</code>: grid, camera, markers, undo step with cursor.</p>
 
-<h2>11 Grenzen</h2>
+<h2>11 Limitations</h2>
 <ul>
-<li>Nur die Hauptdatei: in einer anderen Projektdatei startet der Modus nicht; Skizzen aus eingebundenen Dateien sind kein Ziel.</li>
-<li>Anweisungen in Schleifen oder Modulen werden weder gelöscht noch bekommt ihre Ecke ein <code>corner()</code> (Meldung). Der Zeichenzustand mitten in einer Schleife ist der nach ihrem letzten Durchlauf.</li>
-<li>Snap nur auf die Skizze, sichtbare Raster und Anker – nicht auf Körperkanten oder andere Skizzen; horizontal/vertikal nur zum vorigen Punkt.</li>
-<li>Bézier nur kubisch, kein Spline-Werkzeug; <code>line(by = …)</code> und <code>length</code> + <code>angle</code> entstehen nicht (außer tangential <code>line(length = …)</code>).</li>
-<li>Eine neue Skizze ist eine bloße 2D-Skizze (zum Körper: z. B. <code>linear_extrude</code> davor schreiben).</li>
-<li>Die Kamera behält „z oben“ der Bahnsteuerung: in gedrehten Ebenen steht die y-Achse der Skizze nicht unbedingt senkrecht auf dem Bildschirm. Mit einem Zeichenwerkzeug dreht die linke Maustaste die Kamera nicht (rechts verschieben, Rad zoomen, „Auswahl“ zum Drehen).</li>
-<li>Tauri: T16 bedient die Ansicht mit synthetischen Zeigerereignissen.</li>
+<li>Main file only: in another project file the mode does not start; sketches from included files are not a target.</li>
+<li>Statements in loops or modules are not deleted, and their corner does not get a <code>corner()</code> (message). The drawing state in the middle of a loop is the one after its last iteration.</li>
+<li>Snap only to the sketch, visible grids and anchors – not to body edges or other sketches; horizontal/vertical only relative to the previous point.</li>
+<li>Bézier only cubic, no spline tool; <code>line(by = …)</code> and <code>length</code> + <code>angle</code> are not generated (except tangent <code>line(length = …)</code>).</li>
+<li>A new sketch is a bare 2D sketch (to get a body: e.g. write <code>linear_extrude</code> in front of it).</li>
+<li>The camera keeps the orbit control's "z up": in rotated planes the sketch's y axis is not necessarily vertical on screen. With a drawing tool the left mouse button does not rotate the camera (right pans, wheel zooms, "Select" to rotate).</li>
+<li>Tauri: T16 operates the view with synthetic pointer events.</li>
 </ul>
 </main>
 </body>

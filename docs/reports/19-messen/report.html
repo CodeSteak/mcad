@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 19 – Messen</title>
+<title>Test report 19 – Measuring</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -39,105 +39,105 @@
 </head>
 <body>
 <main>
-<h1>Testbericht 19 – Messen</h1>
-<div class="meta">Plan 18: Messwerkzeug in UI (Browser, Tauri) und CLI mit gemeinsamer Logik in Rust · cad-measure (neu), cad-engine (<code>measure_parts</code>, <code>section_parts</code>), cad-session (<code>measure.rs</code>, Protokoll <code>Measure</code>), cad-cli (<code>measure.rs</code>), Web-UI (<code>app/measure.ts</code>, <code>measureUi.tsx</code>, Viewer) · 24.10.2026 · Branch worktree-agent-ae8a7468fa02b25a2 · Commit a949494 · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 Kerne</div>
+<h1>Test report 19 – Measuring</h1>
+<div class="meta">Plan 18: measurement tool in UI (browser, Tauri) and CLI with shared logic in Rust · cad-measure (new), cad-engine (<code>measure_parts</code>, <code>section_parts</code>), cad-session (<code>measure.rs</code>, protocol <code>Measure</code>), cad-cli (<code>measure.rs</code>), web UI (<code>app/measure.ts</code>, <code>measureUi.tsx</code>, viewer) · 2026-10-24 · Branch worktree-agent-ae8a7468fa02b25a2 · Commit a949494 · rustc 1.97.0 (2d8144b78 2026-07-07) · 4 cores</div>
 
 <div class="summary">
-  <div>Messarten<b class="ok">7</b>Abstand, Radius, Winkel, Länge, Fläche, Körper, Wandstärke – auch im Schnitt</div>
-  <div>Analytische Fälle (CLI)<b class="ok">21 / 21</b>innerhalb 10⁻⁶ relativ (Kernel-Volumen 10⁻³)</div>
-  <div>cargo test --workspace<b class="ok">574 / 574</b>davon 22 neu</div>
-  <div>clippy · fmt<b class="ok">sauber · sauber</b>-D warnings</div>
-  <div>Vitest · Playwright<b class="ok">233 · 131 / 131</b>neu: M01–M11</div>
-  <div>Tauri T17<b class="ok">bestanden</b>6 Prüfungen, nativer Kernel</div>
-  <div>Antwort unter der Maus<b>2,9 ms</b>Median (Browser, Wasm, 42 Antworten)</div>
+  <div>Measurement kinds<b class="ok">7</b>distance, radius, angle, length, area, body, wall thickness – also in the section</div>
+  <div>Analytic cases (CLI)<b class="ok">21 / 21</b>within 10⁻⁶ relative (kernel volume 10⁻³)</div>
+  <div>cargo test --workspace<b class="ok">574 / 574</b>22 of them new</div>
+  <div>clippy · fmt<b class="ok">clean · clean</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="ok">233 · 131 / 131</b>new: M01–M11</div>
+  <div>Tauri T17<b class="ok">passed</b>6 checks, native kernel</div>
+  <div>Response under the mouse<b>2.9 ms</b>median (browser, Wasm, 42 responses)</div>
 </div>
 
-<h2>1 Auftrag und Ergebnis</h2>
-<p>Auftrag: das Messwerkzeug in der UI (Browser und Tauri) und in der CLI ausbauen – Abstand Punkt–Punkt und zwischen Punkten, Kanten, Flächen (minimal, mit Fußpunkten, parallele Ebenen als Normalabstand), Radius/Durchmesser von Kreiskanten, Bögen, Zylinder-, Kegel-, Kugel- und Torusflächen exakt aus der B-Rep mit Achse/Mittelpunkt, Winkel, Länge, Fläche, Hülle/Volumen; Messen im aktiven Schnitt (Snap auf Konturen, Abstände in der Ebene, Radius von Schnittkreisen, Wandstärke, Fläche der Kontur) mit exakten Schnittkurven; Snap, Maßlinien und Beschriftungen, mehrere Messungen, Löschen, Kopieren als Text/Kommentar/<code>cad measure</code>; Bezug zur Sprache; dieselben Messarten in <code>cad measure</code> mit JSON. Umgesetzt:</p>
+<h2>1 Task and result</h2>
+<p>Task: extend the measurement tool in the UI (browser and Tauri) and in the CLI – distance point–point and between points, edges, faces (minimal, with foot points, parallel planes as normal distance), radius/diameter of circular edges, arcs, cylinder, cone, sphere and torus faces exactly from the B-rep with axis/center, angle, length, area, bounding box/volume; measuring in the active section (snap to contours, distances in the plane, radius of section circles, wall thickness, contour area) with exact section curves; snap, dimension lines and labels, multiple measurements, delete, copy as text/comment/<code>cad measure</code>; link to the language; the same measurement kinds in <code>cad measure</code> with JSON. Implemented:</p>
 <ul>
-<li><b>Gemeinsame Logik in Rust:</b> neues Crate <code>cad-measure</code> (Kanten und Flächen exakt, Abstand, Winkel, Radius, Fläche, Schnitt, Wandstärke), in <code>cad-session</code> das Messmodell je Knoten, Snap, Provenienz, Texte und CLI-Argumente – dieselben Funktionen bedienen das Protokoll (UI) und die Referenzen der CLI.</li>
-<li><b>Exaktheit:</b> analytische Geometrie in geschlossener Form; Schnittkurven als Ebene ∩ B-Rep aus dem Kernel, ihre Segmente auf analytischen Flächen als Gerade, Kreis oder Ellipse (mit der Abweichung der Kernel-Kurve); sonst mit angegebener Toleranz. Jede Messung trägt <code>exact</code> und <code>tol</code>.</li>
-<li><b>UI:</b> Modus „Messen“ mit Kontextleiste (Messart, „Im Schnitt“), Snap mit Anzeige, Maßlinien, Hilfslinien, Beschriftungen (hell/dunkel geprüft), Liste mit Kopieren und Löschen – als eigenständige Bausteine für die UI-Überarbeitung.</li>
-<li><b>CLI:</b> <code>--distance</code>, <code>--radius</code>, <code>--angle</code>, <code>--length</code>, <code>--area face@P</code>, <code>--body</code>, <code>--section …</code> (Konturen, Kreise, kleinste Wand), <code>--wall</code>, <code>--at</code>; Elementreferenzen <code>vertex@P</code>, <code>mid@P</code>, <code>center@P</code>, <code>edge@P</code>, <code>face@P</code>, <code>body@P</code>, <code>region@P</code>; JSON <code>measurements</code> (Protokolltyp), <code>section</code>, <code>at</code>.</li>
+<li><b>Shared logic in Rust:</b> new crate <code>cad-measure</code> (exact edges and faces, distance, angle, radius, area, section, wall thickness), in <code>cad-session</code> the measurement model per node, snap, provenance, texts and CLI arguments – the same functions serve the protocol (UI) and the CLI references.</li>
+<li><b>Exactness:</b> analytic geometry in closed form; section curves as plane ∩ B-rep from the kernel, their segments on analytic surfaces as line, circle or ellipse (with the deviation of the kernel curve); otherwise with a stated tolerance. Every measurement carries <code>exact</code> and <code>tol</code>.</li>
+<li><b>UI:</b> mode "Measure" (German UI: „Messen“) with context bar (measurement kind, "In section"), snap with indicator, dimension lines, guide lines, labels (checked light/dark), list with copy and delete – as standalone building blocks for the UI rework.</li>
+<li><b>CLI:</b> <code>--distance</code>, <code>--radius</code>, <code>--angle</code>, <code>--length</code>, <code>--area face@P</code>, <code>--body</code>, <code>--section …</code> (contours, circles, thinnest wall), <code>--wall</code>, <code>--at</code>; element references <code>vertex@P</code>, <code>mid@P</code>, <code>center@P</code>, <code>edge@P</code>, <code>face@P</code>, <code>body@P</code>, <code>region@P</code>; JSON <code>measurements</code> (protocol type), <code>section</code>, <code>at</code>.</li>
 </ul>
 
-<h2>2 Entscheidungen</h2>
+<h2>2 Decisions</h2>
 <table>
-<tr><th>Frage</th><th>Entscheidung</th></tr>
-<tr><td>Wo gemessen wird</td><td>In der Engine (Worker bzw. Engine-Prozess) auf der neutralen B-Rep der Knotenteile in Kontextkoordinaten; die UI schickt Strahl, ihren Raycast-Treffer (Knoten, Flächen-ID, Punkt), Pixelgröße und Snap-Radius, bekommt das Element unter der Maus und nach dem letzten Klick die Messung mit Maßlinien. Wie beim Skizzen-Editor keine Auswahl in der Engine.</td></tr>
-<tr><td>Abstand</td><td>Grobsuche über die Tessellierung (BVH), Verfeinerung durch abwechselnde Projektion auf die exakten Kurven und Flächen; außerhalb einer getrimmten Fläche auf ihren Rand. Parallele Ebenen: Normalabstand als Wert, der kleinste Abstand der begrenzten Flächen daneben; parallele Achsen: Achsabstand.</td></tr>
-<tr><td>Radius</td><td>Aus den Parametern der B-Rep; Verrundungen an Kreiskanten (bei SMLib Rotationsflächen mit Kreisbogen-Erzeugender) werden erkannt, Freiform über die Hauptkrümmung (genähert).</td></tr>
-<tr><td>Winkel zweier Ebenen</td><td>Winkel zwischen den Ebenen (0–90°, Fase 45°), dazu Öffnungswinkel an der Schnittgeraden und Winkel der Normalen.</td></tr>
-<tr><td>Schnitt</td><td>Kernel-Boolean mit dem behaltenen Halbraum (Konvention von <code>cad render --section</code>), Deckflächen als Bereiche; Segmente aus der geschnittenen Fläche in geschlossener Form. Ein Boolean je Teil und Ebene, gecacht.</td></tr>
-<tr><td>Wandstärke</td><td>An einem Konturpunkt senkrecht zur Kontur ins Material bis zur nächsten Kontur; ohne Punkt die kleinste über Stichproben (Schätzung).</td></tr>
-<tr><td>Bezug zur Sprache</td><td>Flächen-Tags → Knoten → Zeilen und benannte Instanzen; dazu Rasterpunkte, -linien, -ebenen und Anker, auf denen ein Punkt, eine Achse oder eine Ebene liegt.</td></tr>
-<tr><td>CLI-Referenzen</td><td>Das Element nächst einem Punkt (<code>face@[x,y,z]</code>): eindeutig und lesbar, die UI kopiert Messungen in dieser Form; <code>--at P</code> zeigt, was bei P liegt.</td></tr>
-<tr><td>Ort in der UI</td><td>Kontextleiste und Liste als eigenständige Komponenten (<code>MeasureBar</code>, <code>MeasurePanel</code>); vorerst im Stapel rechts oben bzw. rechts neben der Ansicht, nach dem UI-Konzept später links oben unter der Werkzeugleiste und als Reiter „Messen“.</td></tr>
+<tr><th>Question</th><th>Decision</th></tr>
+<tr><td>Where measuring happens</td><td>In the engine (worker or engine process) on the neutral B-rep of the node parts in context coordinates; the UI sends ray, its raycast hit (node, face ID, point), pixel size and snap radius, and receives the element under the mouse and, after the last click, the measurement with dimension lines. As with the sketch editor, no selection state in the engine.</td></tr>
+<tr><td>Distance</td><td>Coarse search over the tessellation (BVH), refinement by alternating projection onto the exact curves and surfaces; outside a trimmed face onto its boundary. Parallel planes: normal distance as the value, the minimum distance of the bounded faces alongside; parallel axes: axis distance.</td></tr>
+<tr><td>Radius</td><td>From the B-rep parameters; fillets on circular edges (in SMLib surfaces of revolution with a circular-arc generatrix) are recognized, free-form via principal curvature (approximated).</td></tr>
+<tr><td>Angle of two planes</td><td>Angle between the planes (0–90°, chamfer 45°), plus the opening angle at the intersection line and the angle of the normals.</td></tr>
+<tr><td>Section</td><td>Kernel Boolean with the kept half-space (convention of <code>cad render --section</code>), cap faces as regions; segments from the cut surface in closed form. One Boolean per part and plane, cached.</td></tr>
+<tr><td>Wall thickness</td><td>At a contour point perpendicular to the contour into the material up to the next contour; without a point the minimum over samples (estimate).</td></tr>
+<tr><td>Link to the language</td><td>Face tags → nodes → lines and named instances; plus grid points, grid lines, grid planes and anchors on which a point, an axis or a plane lies.</td></tr>
+<tr><td>CLI references</td><td>The element nearest to a point (<code>face@[x,y,z]</code>): unambiguous and readable, the UI copies measurements in this form; <code>--at P</code> shows what lies at P.</td></tr>
+<tr><td>Place in the UI</td><td>Context bar and list as standalone components (<code>MeasureBar</code>, <code>MeasurePanel</code>); for now in the stack at the top right and to the right of the view, per the UI concept later at the top left below the toolbar and as a tab "Measure".</td></tr>
 </table>
 
-<h2>3 Ablauf</h2>
-<pre>Maus bewegt  → Measure { kind, picks, ray, hit {node, face, point}, pixel, snap_px, free, section? | clip? }
+<h2>3 Flow</h2>
+<pre>Mouse moved  → Measure { kind, picks, ray, hit {node, face, point}, pixel, snap_px, free, section? | clip? }
               ← Measure { hover {kind, label, point, reference, origin, lines}, prompt, section {regions, area, exact} }
-Klick        → Measure { …, click: true }
-              ← picks (Auswahl gemerkt)  oder  result: Measurement { value, label, values, lines, guides, points,
-                                                                     at, details, exact, tol, text, cli }
-Engine:  measure_model(node)  = je Teil B-Rep + Tessellierung (Kontext)      measure_section(node, plane) = Boolean
-         snap → Eckpunkt | Kantenmitte | Kreismitte | Kante | Fläche  (im Schnitt: Kontur, Bereich)
+Click        → Measure { …, click: true }
+              ← picks (selection stored)  or  result: Measurement { value, label, values, lines, guides, points,
+                                                                    at, details, exact, tol, text, cli }
+Engine:  measure_model(node)  = per part B-rep + tessellation (context)      measure_section(node, plane) = Boolean
+         snap → vertex | edge midpoint | circle center | edge | face  (in section: contour, region)
          measurement → cad_measure::{distance, radius, angle, face_area, Section::wall …}
-CLI:     face@[x,y,z] → dieselbe Auswahl → dieselbe Messung → JSON/Text</pre>
+CLI:     face@[x,y,z] → same selection → same measurement → JSON/text</pre>
 
-<h2>4 Messarten in der UI</h2>
-<p>Alle Szenarien klicken mit der Maus (Playwright, Chromium mit SwiftShader) und prüfen die Werte gegen die Geometrie.</p>
-<h3>M01 Messmodus ein/aus, Snap</h3><p>„Messen“ in der Ansichtsleiste schaltet den Messmodus ein: die Kontextleiste zeigt die Messarten (Abstand, Radius, Winkel zuerst wie im UI-Konzept, dazu Länge, Fläche, Körper, Wandstärke im Schnitt) und „Im Schnitt“. Unter der Maus fängt die Engine Eckpunkte, Kantenmitten, Kreismitten, Kanten und Flächen (Snap-Radius aus den Einstellungen); Beschriftung und Statuszeile nennen das Element und woher es kommt. Esc beendet den Modus.</p><div class="codefig"><div><pre>grid g {
+<h2>4 Measurement kinds in the UI</h2>
+<p>All scenarios click with the mouse (Playwright, Chromium with SwiftShader) and check the values against the geometry.</p>
+<h3>M01 Measure mode on/off, snap</h3><p>"Measure" in the view toolbar turns measure mode on: the context bar shows the measurement kinds (distance, radius, angle first as in the UI concept, plus length, area, body, wall thickness in section) and "In section". Under the mouse the engine snaps to vertices, edge midpoints, circle centers, edges and faces (snap radius from the settings); label and status line name the element and where it comes from. Esc exits the mode.</p><div class="codefig"><div><pre>grid g {
   x: a = 0, b = 20;
   y: v = 0, h = 10;
   z: u = 0, o = 8;
 }
 box(g[a, v, u], g[b, h, o]);
-translate([30, 0, 0]) cube([10, 10, 12]);</pre></div><div><figure><img src="img/ui-m01-flaeche.jpg" alt=""><figcaption>Maus über der Deckfläche: Fläche hervorgehoben, Beschriftung, Provenienz g.o</figcaption></figure><figure><img src="img/ui-m01-eckpunkt.jpg" alt=""><figcaption>nahe einer Ecke: Snap auf den Eckpunkt (Rasterpunkt g[b, v, o])</figcaption></figure></div></div><ul class="checks"><li>Hover Fläche mit Rasterebene g.o</li><li>Eckpunkt [20, 0, 8] = Rasterpunkt g[b, v, o]</li><li>Kantenmitte</li><li>Esc: Modus aus</li></ul>
-<h3>M02 Abstand</h3><p>Zwei Klicks: kleinster Abstand der Elemente mit Fußpunkten, aus der exakten B-Rep (abwechselnde Projektion auf Ebenen, Zylinder, … in geschlossener Form). Für parallele Ebenen gilt der Normalabstand. Die Maßlinie verbindet die Fußpunkte, die Beschriftung steht in der Mitte; die Liste rechts zeigt Werte, Δx/Δy/Δz und Herkunft.</p><div class="codefig"><div><pre>grid g {
+translate([30, 0, 0]) cube([10, 10, 12]);</pre></div><div><figure><img src="img/ui-m01-flaeche.jpg" alt=""><figcaption>mouse over the top face: face highlighted, label, provenance g.o</figcaption></figure><figure><img src="img/ui-m01-eckpunkt.jpg" alt=""><figcaption>near a corner: snap to the vertex (grid point g[b, v, o])</figcaption></figure></div></div><ul class="checks"><li>hover face with grid plane g.o</li><li>vertex [20, 0, 8] = grid point g[b, v, o]</li><li>edge midpoint</li><li>Esc: mode off</li></ul>
+<h3>M02 Distance</h3><p>Two clicks: minimum distance of the elements with foot points, from the exact B-rep (alternating projection onto planes, cylinders, … in closed form). For parallel planes the normal distance applies. The dimension line connects the foot points, the label sits in the middle; the list on the right shows values, Δx/Δy/Δz and origin.</p><div class="codefig"><div><pre>grid g {
   x: a = 0, b = 20;
   y: v = 0, h = 10;
   z: u = 0, o = 8;
 }
 box(g[a, v, u], g[b, h, o]);
-translate([30, 0, 0]) cube([10, 10, 12]);</pre></div><div><figure><img src="img/ui-m02-abstand.jpg" alt=""><figcaption>zwei Messungen: Normalabstand der Deckflächen 4 mm, Eckpunkt–Eckpunkt mit Δ</figcaption></figure></div></div><ul class="checks"><li>Normalabstand 4 mm (exakt)</li><li>Eckpunkte 40.199502 mm, Δx 40, Δz 4</li><li>cad measure --distance vertex@[0,0,8] vertex@[40,0,12]</li></ul>
-<h3>M03 Radius und Durchmesser</h3><p>Radius einer Kreiskante oder runden Fläche aus der B-Rep: Zylinder, Kegel, Kugel, Torus in geschlossener Form, Verrundungen an Kreiskanten (Rotationsfläche eines Kreisbogens) erkannt, Freiform über die Krümmung. Gezeichnet werden Radiuslinie, Mittelpunkt und Achse.</p><div class="codefig"><div><pre>cylinder(h = 10, r = 5);
-translate([20, -5, 0]) cube([20, 10, 8], $fillet = 2);</pre></div><div><figure><img src="img/ui-m03-radius.jpg" alt=""><figcaption>Radius des Zylinders (Achse gestrichelt), der Verrundung (R 2) und der Kreiskante</figcaption></figure></div></div><ul class="checks"><li>Zylinder R 5 · ⌀ 10 mit Achse</li><li>Verrundung R 2</li><li>Kreiskante R 5</li></ul>
-<h3>M04 Winkel</h3><p>Winkel zwischen zwei Kanten oder Flächen: Ebenen über ihre Normalen (angezeigt der Winkel zwischen den Ebenen, dazu der Öffnungswinkel an der Schnittgeraden), Zylinder und Kegel über ihre Achse, Kanten an einer gemeinsamen Ecke von der Ecke weg. Der Bogen liegt an der Schnittgeraden.</p><figure><img src="img/ui-m04-winkel.jpg" alt=""><figcaption>Fase 45° (Öffnungswinkel 135°) und Deckfläche–Seite 90°, mit Winkelbogen</figcaption></figure><pre>cube([20, 10, 8], $chamfer = 2);</pre><ul class="checks"><li>Fase 45°</li><li>Öffnungswinkel 135°</li><li>Deckfläche–Seite 90°</li></ul>
-<h3>M05 Länge, Fläche, Körper</h3><p>Länge einer Kante (exakt für Geraden und Bögen, sonst Gauß-Legendre), Fläche einer Fläche (eben exakt über den Rand, gekrümmt über projizierte Unterteilung), Körper: das Bauteil der gewählten Fläche (benannte Instanz k) mit Volumen und Oberfläche aus dem Kernel und der Hülle aus der B-Rep (gestrichelte Box).</p><figure><img src="img/ui-m05-koerper.jpg" alt=""><figcaption>Kantenlänge 30 mm, Fläche 600 mm², Bauteil k: Volumen und Hülle 60 × 30 × 20</figcaption></figure><pre>examples/spec/gehaeuse.scad</pre><ul class="checks"><li>Länge 30 mm</li><li>Fläche 600 mm²</li><li>Bauteil k: 8460 mm³, 60 × 30 × 20</li></ul>
+translate([30, 0, 0]) cube([10, 10, 12]);</pre></div><div><figure><img src="img/ui-m02-abstand.jpg" alt=""><figcaption>two measurements: normal distance of the top faces 4 mm, vertex–vertex with Δ</figcaption></figure></div></div><ul class="checks"><li>normal distance 4 mm (exact)</li><li>vertices 40.199502 mm, Δx 40, Δz 4</li><li>cad measure --distance vertex@[0,0,8] vertex@[40,0,12]</li></ul>
+<h3>M03 Radius and diameter</h3><p>Radius of a circular edge or round face from the B-rep: cylinder, cone, sphere, torus in closed form, fillets on circular edges (surface of revolution of a circular arc) recognized, free-form via curvature. Radius line, center and axis are drawn.</p><div class="codefig"><div><pre>cylinder(h = 10, r = 5);
+translate([20, -5, 0]) cube([20, 10, 8], $fillet = 2);</pre></div><div><figure><img src="img/ui-m03-radius.jpg" alt=""><figcaption>radius of the cylinder (axis dashed), of the fillet (R 2) and of the circular edge</figcaption></figure></div></div><ul class="checks"><li>cylinder R 5 · ⌀ 10 with axis</li><li>fillet R 2</li><li>circular edge R 5</li></ul>
+<h3>M04 Angle</h3><p>Angle between two edges or faces: planes via their normals (shown: the angle between the planes, plus the opening angle at the intersection line), cylinders and cones via their axis, edges at a common vertex pointing away from the vertex. The arc sits at the intersection line.</p><figure><img src="img/ui-m04-winkel.jpg" alt=""><figcaption>chamfer 45° (opening angle 135°) and top face–side 90°, with angle arc</figcaption></figure><pre>cube([20, 10, 8], $chamfer = 2);</pre><ul class="checks"><li>chamfer 45°</li><li>opening angle 135°</li><li>top face–side 90°</li></ul>
+<h3>M05 Length, area, body</h3><p>Length of an edge (exact for lines and arcs, otherwise Gauss–Legendre), area of a face (planar exactly via the boundary, curved via projected subdivision), body: the part of the chosen face (named instance k) with volume and surface area from the kernel and the bounding box from the B-rep (dashed box).</p><figure><img src="img/ui-m05-koerper.jpg" alt=""><figcaption>edge length 30 mm, area 600 mm², part k: volume and bounding box 60 × 30 × 20</figcaption></figure><pre>examples/spec/gehaeuse.scad</pre><ul class="checks"><li>length 30 mm</li><li>area 600 mm²</li><li>part k: 8460 mm³, 60 × 30 × 20</li></ul>
 
-<h2>5 Messen im Schnitt</h2>
-<h3>M06 Messen im Schnitt</h3><p>„Im Schnitt“ misst in der aktiven Schnittebene: die Konturen kommen aus dem Kernel (Ebene ∩ B-Rep über einen Boolean mit dem behaltenen Halbraum), die Segmente auf Zylindern, Kegeln, Kugeln und Tori in geschlossener Form (hier exakte Kreise). Snap auf Eckpunkte, Mitten und Kreismitten der Kontur; Wandstärke quer zur Kontur; Fläche eines Bereichs (Kontur minus Löcher).</p><div class="codefig"><div><pre>difference() {
+<h2>5 Measuring in the section</h2>
+<h3>M06 Measuring in the section</h3><p>"In section" measures in the active section plane: the contours come from the kernel (plane ∩ B-rep via a Boolean with the kept half-space), the segments on cylinders, cones, spheres and tori in closed form (here exact circles). Snap to vertices, midpoints and circle centers of the contour; wall thickness across the contour; area of a region (contour minus holes).</p><div class="codefig"><div><pre>difference() {
   cube([40, 20, 6]);
   translate([10, 10, -1]) cylinder(h = 8, r = 2);
   translate([28, 10, -1]) cylinder(h = 8, r = 3);
-}</pre></div><div><figure><img src="img/ui-m06-schnitt.jpg" alt=""><figcaption>Schnitt z = 3: Radius der Bohrung, Wandstärke 8 mm, Schnittfläche, Abstand der Kreismitten 18 mm</figcaption></figure></div></div><ul class="checks"><li>Schnitt exakt, 1 Bereich</li><li>Bohrung R 2 · ⌀ 4</li><li>Wandstärke 8 mm</li><li>Fläche 759.1593 mm²</li><li>Kreismitten 18 mm</li></ul>
+}</pre></div><div><figure><img src="img/ui-m06-schnitt.jpg" alt=""><figcaption>section z = 3: radius of the bore, wall thickness 8 mm, section area, distance of the circle centers 18 mm</figcaption></figure></div></div><ul class="checks"><li>section exact, 1 region</li><li>bore R 2 · ⌀ 4</li><li>wall thickness 8 mm</li><li>area 759.1593 mm²</li><li>circle centers 18 mm</li></ul>
 
-<h2>6 Liste, Kopieren, Bezug zur Sprache, Thema</h2>
-<h3>M07 Liste der Messungen</h3><p>Mehrere Messungen bleiben gleichzeitig sichtbar (auch nach dem Beenden des Modus). Klick auf Beschriftung oder Eintrag wählt eine Messung, Entf oder × löscht sie, „Alle löschen“ alle. Jede Messung lässt sich als Text, als Code-Kommentar (<code>// Messung: …</code>) und als <code>cad measure</code>-Aufruf kopieren (wie „Als cad render kopieren“ beim Schnitt).</p><div class="codefig"><div><pre>grid g {
+<h2>6 List, copy, link to the language, theme</h2>
+<h3>M07 List of measurements</h3><p>Multiple measurements stay visible at the same time (also after exiting the mode). A click on a label or entry selects a measurement, Del or × deletes it, "Delete all" deletes all. Each measurement can be copied as text, as a code comment (<code>// Messung: …</code>) and as a <code>cad measure</code> call (like "Copy as cad render" for the section).</p><div class="codefig"><div><pre>grid g {
   x: a = 0, b = 20;
   y: v = 0, h = 10;
   z: u = 0, o = 8;
 }
 box(g[a, v, u], g[b, h, o]);
-translate([30, 0, 0]) cube([10, 10, 12]);</pre></div><div><figure><img src="img/ui-m07-liste.jpg" alt=""><figcaption>drei Längen, eine gewählt (Akzentfarbe in Ansicht und Liste)</figcaption></figure></div></div><ul class="checks"><li>kopiert: cad measure gehaeuse.scad --length 'edge@[10.049762,0,8]'</li><li>Kommentar // Messung: Länge …</li><li>Entf löscht die gewählte</li><li>Alle löschen</li></ul>
-<h3>M08 Bezug zur Sprache</h3><p>Zu jedem gewählten Element nennt die Engine die Codezeilen der Flächen (Tags → Knoten), die benannte Instanz (p: lochplatte) und Raster oder Anker, auf denen es liegt: Rasterpunkte und -ebenen, Rasterlinien für Achsen (g[loch[0], mitte, *]), Anker (p.erstes_loch).</p><figure><img src="img/ui-m08-kreismitte.jpg" alt=""><figcaption>Kreismitte einer Bohrung (Fase/Verrundung) mit Herkunft</figcaption></figure><figure><img src="img/ui-m08-provenienz.jpg" alt=""><figcaption>Abstand der Kreismitten = Teilung 12 mm, Herkunft in der Liste</figcaption></figure><pre>examples/spec/lochplatte.scad</pre><ul class="checks"><li>Kreismitte mit Instanz p</li><li>Abstand 12 mm = pitch</li></ul>
-<h3>M09 Dunkles Thema</h3><p>Maßlinien und Beschriftungen nutzen die Tokens <code>--view-measure</code>/<code>--on-measure</code> (hell: Dunkelgold auf weißer Schrift, dunkel: Gold mit dunkler Schrift); contrast.test.ts prüft Schrift ≥ 4,5:1 und Linie zum Hintergrund ≥ 3:1.</p><div class="codefig"><div><pre>grid g {
+translate([30, 0, 0]) cube([10, 10, 12]);</pre></div><div><figure><img src="img/ui-m07-liste.jpg" alt=""><figcaption>three lengths, one selected (accent color in view and list)</figcaption></figure></div></div><ul class="checks"><li>copied: cad measure gehaeuse.scad --length 'edge@[10.049762,0,8]'</li><li>comment // Messung: Länge …</li><li>Del deletes the selected one</li><li>Delete all</li></ul>
+<h3>M08 Link to the language</h3><p>For each chosen element the engine names the code lines of the faces (tags → nodes), the named instance (p: lochplatte) and grids or anchors on which it lies: grid points and grid planes, grid lines for axes (g[loch[0], mitte, *]), anchors (p.erstes_loch).</p><figure><img src="img/ui-m08-kreismitte.jpg" alt=""><figcaption>circle center of a bore (chamfer/fillet) with origin</figcaption></figure><figure><img src="img/ui-m08-provenienz.jpg" alt=""><figcaption>distance of the circle centers = pitch 12 mm, origin in the list</figcaption></figure><pre>examples/spec/lochplatte.scad</pre><ul class="checks"><li>circle center with instance p</li><li>distance 12 mm = pitch</li></ul>
+<h3>M09 Dark theme</h3><p>Dimension lines and labels use the tokens <code>--view-measure</code>/<code>--on-measure</code> (light: dark gold with white text, dark: gold with dark text); contrast.test.ts checks text ≥ 4.5:1 and line against background ≥ 3:1.</p><div class="codefig"><div><pre>grid g {
   x: a = 0, b = 20;
   y: v = 0, h = 10;
   z: u = 0, o = 8;
 }
 box(g[a, v, u], g[b, h, o]);
-translate([30, 0, 0]) cube([10, 10, 12]);</pre></div><div><figure><img src="img/ui-m09-dunkel.jpg" alt=""><figcaption>Messung im dunklen Thema</figcaption></figure></div></div><ul class="checks"><li>Kontrast der Beschriftung 8.10:1</li></ul>
+translate([30, 0, 0]) cube([10, 10, 12]);</pre></div><div><figure><img src="img/ui-m09-dunkel.jpg" alt=""><figcaption>measurement in the dark theme</figcaption></figure></div></div><ul class="checks"><li>label contrast 8.10:1</li></ul>
 
-<h2>7 Desktop-App (Tauri)</h2>
-<p>Szenario T17 in <code>web/e2e-tauri/desktop.e2e.mjs</code> (tauri-driver, WebKitWebDriver, Xvfb): die App <code>cad</code> mit dem nativen Engine-Prozess, Nachrichten über den <code>TauriTransport</code>; die Ansicht wird mit Zeigerereignissen auf dem Canvas bedient.</p>
-<p>Ergebnis: <span class="ok">bestanden</span> in 6,1 s, Antwort unter der Maus Median 11,0 ms.</p><ul class="checks"><li class="">Radius des Zylinders: R 5 · ⌀ 10</li><li class="">Normalabstand der Deckflächen: 4 mm (exakt)</li><li class="">Beschriftung in der Ansicht: 4 mm</li><li class="">Schnitt exakt: 2 Bereiche, 278.5398 mm²</li><li class="">Kreis im Schnitt: R 5 · ⌀ 10</li><li class="">Messmodus beendet</li></ul><figure><img src="img/tauri-t17-messen.jpg" alt=""><figcaption>Radius des Zylinders und Normalabstand der Deckflächen</figcaption></figure><figure><img src="img/tauri-t17-schnitt.jpg" alt=""><figcaption>Radius des Schnittkreises (Schnitt z = 4)</figcaption></figure>
+<h2>7 Desktop app (Tauri)</h2>
+<p>Scenario T17 in <code>web/e2e-tauri/desktop.e2e.mjs</code> (tauri-driver, WebKitWebDriver, Xvfb): the app <code>cad</code> with the native engine process, messages via <code>TauriTransport</code>; the view is operated with pointer events on the canvas.</p>
+<p>Result: <span class="ok">passed</span> in 6.1 s, response under the mouse median 11.0 ms.</p><ul class="checks"><li class="">radius of the cylinder: R 5 · ⌀ 10</li><li class="">normal distance of the top faces: 4 mm (exact)</li><li class="">label in the view: 4 mm</li><li class="">section exact: 2 regions, 278.5398 mm²</li><li class="">circle in the section: R 5 · ⌀ 10</li><li class="">measure mode exited</li></ul><figure><img src="img/tauri-t17-messen.jpg" alt=""><figcaption>radius of the cylinder and normal distance of the top faces</figcaption></figure><figure><img src="img/tauri-t17-schnitt.jpg" alt=""><figcaption>radius of the section circle (section z = 4)</figcaption></figure>
 
 <h2>8 CLI: <code>cad measure</code></h2>
-<p>Dieselben Messungen ohne UI, für Agenten mit <code>--json</code>. Ausgaben aus <code>tools/report/report19-data.sh</code> (Release-Binary, ohne Daemon; Zeiten je Aufruf im Mittel von 3 Läufen inklusive Laden und Kernel).</p>
-<h3>Gehäuse im Schnitt z = 10: Bereiche, Wandstärke, Innenmaß (133 ms)</h3>
+<p>The same measurements without UI, for agents with <code>--json</code>. Output from <code>tools/report/report19-data.sh</code> (release binary, without daemon; times per call as the mean of 3 runs including loading and kernel).</p>
+<h3>Housing in section z = 10: regions, wall thickness, inner dimension (133 ms)</h3>
 <div class="two"><div><pre class="term">$ cad measure examples/spec/gehaeuse.scad --section z=10 --wall \[0\,15\,10\] --distance edge@\[3\,15\,10\] edge@\[57\,15\,10\]
 Schnitt z = 10 (entfernt z &gt; 10): 2 Bereich(e), Fläche 180 mm² (exakt: Konturen aus Geraden und Kreisen der B-Rep)
   Bereich 1: 90 mm², Hülle [57, 0, 10] – [60, 30, 10], 0 Loch/Löcher
@@ -150,8 +150,8 @@ Abstand Kontur · Gerade 30 mm (Ebene) – Kontur · Gerade 30 mm (Ebene): 54 mm
   im Schnitt --section z=10
 Wandstärke Punkt [0,15,10]: 3 mm
   senkrecht zur Kontur von [0, 15, 10] bis [3, 15, 10]
-  im Schnitt --section z=10</pre></div><div><figure><img src="img/cli-housing-section.jpg" alt=""><figcaption><code>cad render gehaeuse.scad --section z=10 --view top</code>: die zwei Wandbereiche</figcaption></figure></div></div>
-<h3>Gehäuse: Innenabstand, Bauteil, Kantenlänge (114 ms)</h3>
+  im Schnitt --section z=10</pre></div><div><figure><img src="img/cli-housing-section.jpg" alt=""><figcaption><code>cad render gehaeuse.scad --section z=10 --view top</code>: the two wall regions</figcaption></figure></div></div>
+<h3>Housing: inner distance, part, edge length (114 ms)</h3>
 <pre class="term">$ cad measure examples/spec/gehaeuse.scad --distance face@\[3\,15\,10\] face@\[57\,15\,10\] --body face@\[0\,15\,10\] --length edge@\[60\,15\,20\]
 Abstand Fläche · Ebene – Fläche · Ebene: 54 mm
   parallele Ebenen: Normalabstand
@@ -171,7 +171,7 @@ Körper Bauteil k: 8460 mm³
   Volumen und Oberfläche aus dem Kernel (Integration ~1e-4 genau), Hülle aus der B-Rep
   Körper: Zeile 11: box (Instanz k: gehaeuse)
   Körper: Rasterebene g.links</pre>
-<h3>Lochplatte: Bohrung, Verrundung, Teilung (1.145 ms)</h3>
+<h3>Hole plate: bore, fillet, pitch (1145 ms)</h3>
 <pre class="term">$ cad measure examples/spec/lochplatte.scad --radius face@\[8\,6\,2\] --radius face@\[8.292893\,6\,3.707107\] --distance center@\[6\,6\,0\] center@\[18\,6\,0\]
 Abstand Kreismitte · R 3 · ⌀ 6 – Kreismitte · R 3 · ⌀ 6: 12 mm
   von [6, 6, 0] bis [18, 6, 0] · Δ [12, 0, 0]
@@ -193,7 +193,7 @@ Radius Fläche · Rotationsfläche: 1 mm
   Mittelpunkt [6, 6, 3] · Achse [0, 0, 1] · Ringradius 3 mm
   Fläche: Zeile 11: difference (Instanz p: lochplatte)
   Fläche: Rasterlinie g[loch[0], mitte, *]</pre>
-<h3>Lochplatte im Schnitt z = 2: Kreise, Fläche, Radius, Wand (1.234 ms)</h3>
+<h3>Hole plate in section z = 2: circles, area, radius, wall (1234 ms)</h3>
 <div class="two"><div><pre class="term">$ cad measure examples/spec/lochplatte.scad --section z=2 --radius edge@\[8\,6\,2\] --wall \[8\,6\,2\]
 Schnitt z = 2 (entfernt z &gt; 2): 1 Bereich(e), Fläche 645.7345 mm² (exakt: Konturen aus Geraden und Kreisen der B-Rep)
   Bereich 1: 645.7345 mm², Hülle [0, 0, 2] – [58, 12, 2], 4 Loch/Löcher
@@ -211,7 +211,7 @@ Radius Kontur · Kreis R 2 (Zylinder): 2 mm
 Wandstärke Punkt [8,6,2]: 8 mm
   senkrecht zur Kontur von [8, 6, 2] bis [16, 6, 2]
   im Schnitt --section z=2</pre></div><div><figure><img src="img/cli-plate-section.jpg" alt=""><figcaption><code>cad render lochplatte.scad --section z=2 --view top</code></figcaption></figure></div></div>
-<h3>Was liegt bei P: <code>--at</code> (1.136 ms)</h3>
+<h3>What lies at P: <code>--at</code> (1136 ms)</h3>
 <pre class="term">$ cad measure examples/spec/lochplatte.scad --at \[8\,6\,2\]
 Bei [8, 6, 2]:
   vertex@[8,6,1]               Eckpunkt [8, 6, 1] (1 mm entfernt)
@@ -226,7 +226,7 @@ Bei [8, 6, 2]:
   face@[8,6,2]                 Fläche · Zylinder R 2 (0 mm entfernt)
                                Zeile 14: cylinder (Instanz p: lochplatte)
                                Rasterlinie g[loch[0], mitte, *]</pre>
-<h3>Winkel einer Fase (494 ms)</h3>
+<h3>Angle of a chamfer (494 ms)</h3>
 <pre class="term">$ cad measure examples/spec/fase_chamfer.scad --angle face@\[39.5\,12\,9.5\] face@\[20\,12\,10\] --angle face@\[20\,12\,10\] face@\[40\,12\,5\]
 Winkel Fläche · Ebene – Fläche · Ebene: 45°
   Ebene – Ebene
@@ -241,7 +241,7 @@ Winkel Fläche · Ebene – Fläche · Ebene: 90°
   Fläche: Rasterebene g.o
   Fläche: Zeile 10: box
   Fläche: Rasterebene g.b</pre>
-<h3>JSON für Agenten (Auszug: Radius der Bohrung)</h3>
+<h3>JSON for agents (excerpt: radius of the bore)</h3>
 <pre>{
  &quot;kind&quot;: &quot;distance&quot;,
  &quot;title&quot;: &quot;Abstand&quot;,
@@ -309,7 +309,7 @@ Winkel Fläche · Ebene – Fläche · Ebene: 90°
  ],
  &quot;text&quot;: &quot;Abstand Kreismitte · R 3 · ⌀ 6 – Kreismitte · R 3 · ⌀ 6: 12 mm\n  von [6, 6, 0] bis [18, 6, 0] · Δ [12, 0, 0]\n  Kreismitte: Zeile 11: difference (Instanz p: lochplatte)\n  Kreismitte: Zeile 12: box (Instanz p: lochplatte)\n  Kreismitte: Rasterpunkt g[loch[0], mitte, boden]\n  Kreismitte: Rasterlinie g[loch[0], mitte, *]\n  Kreismitte: Zeile 11: difference (Instanz p: lochplatte)\n  Kreismitte: Zeile 12: box (Instanz p: lochplatte)\n  Kreismitte: Rasterpunkt g[loch[1], mitte, boden]\n  Kreismitte: Rasterlinie g[loch[1], mitte, *]&quot;
 }</pre>
-<h3>JSON des Schnitts (Auszug)</h3>
+<h3>JSON of the section (excerpt)</h3>
 <pre>{
  &quot;plane&quot;: {
   &quot;normal&quot;: [
@@ -403,39 +403,39 @@ Winkel Fläche · Ebene – Fläche · Ebene: 90°
  }
 }</pre>
 
-<h2>9 Analytische Prüfung</h2>
-<p>Kleine Modelle, gemessen über die CLI (dieselbe Logik wie die UI), gegen die Formel. Grenze 10⁻⁶ relativ; Volumen kommt aus der Integration des Kernels (SMLib, ~10⁻⁴) und hat die Grenze 10⁻³.</p>
-<table><tr><th>Fall</th><th>Aufruf</th><th class="n">erwartet</th><th class="n">gemessen</th><th class="n">Abweichung</th><th>exakt</th></tr><tr><td>Zylinder r 5, Radius</td><td><code>--radius face@[5,0,5]</code></td><td class="n">5,000000</td><td class="n">5,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Zylinder r 5, Mantelfläche</td><td><code>--area face@[5,0,5]</code></td><td class="n">314,159265</td><td class="n">314,159265</td><td class="n ok">-3.0e-7</td><td>ja</td></tr><tr><td>Zylinder r 5, Kreiskante Länge</td><td><code>--length edge@[0,5,10]</code></td><td class="n">31,415927</td><td class="n">31,415927</td><td class="n ok">2.1e-12</td><td>ja</td></tr><tr><td>Zylinder, Deckflächen Normalabstand</td><td><code>--distance face@[1,1,10] face@[1,1,0]</code></td><td class="n">10,000000</td><td class="n">10,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Kegel r 4→2, Radius bei h 5</td><td><code>--radius face@[3,0,5]</code></td><td class="n">3,000000</td><td class="n">3,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Kegel r 4→2, Halbwinkel</td><td><code>--radius face@[3,0,5]</code></td><td class="n">11,309932</td><td class="n">11,309932</td><td class="n ok">-2.0e-11</td><td>ja</td></tr><tr><td>Kegel r 4→2, Mantelfläche</td><td><code>--area face@[3,0,5]</code></td><td class="n">192,228507</td><td class="n">192,228425</td><td class="n ok">-8.2e-5</td><td>ja</td></tr><tr><td>Kugel r 5, Radius</td><td><code>--radius face@[0,0,5]</code></td><td class="n">5,000000</td><td class="n">5,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Kugel r 5, Volumen (Kernel)</td><td><code>--body body@[0,0,5]</code></td><td class="n">523,598776</td><td class="n">523,598364</td><td class="n ok">-4.1e-4</td><td>ja</td></tr><tr><td>Torus R 10 r 2, Rohrradius</td><td><code>--radius face@[12,0,0]</code></td><td class="n">2,000000</td><td class="n">2,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Torus R 10 r 2, Ringradius</td><td><code>--radius face@[12,0,0]</code></td><td class="n">10,000000</td><td class="n">10,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Verrundung r 2 (gerade Kante)</td><td><code>--radius face@[19.414214,5,7.414214]</code></td><td class="n">2,000000</td><td class="n">2,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Verrundung r 1 (Kreiskante)</td><td><code>--radius face@[12.292893,10,5.292893]</code></td><td class="n">1,000000</td><td class="n">1,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Fase 2 mm, Winkel zur Deckfläche</td><td><code>--angle face@[19,5,7] face@[10,5,8]</code></td><td class="n">45,000000</td><td class="n">45,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Fase 2 mm, Öffnungswinkel</td><td><code>--angle face@[19,5,7] face@[10,5,8]</code></td><td class="n">135,000000</td><td class="n">135,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Schnitt durch Bohrung r 3, Radius</td><td><code>--section z=3 --radius edge@[13,10,3]</code></td><td class="n">3,000000</td><td class="n">3,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Schnitt, Fläche des Bereichs</td><td><code>--section z=3 --area region@[1,1,3]</code></td><td class="n">371,725666</td><td class="n">371,725666</td><td class="n ok">3.1e-10</td><td>ja</td></tr><tr><td>Schnitt, Wandstärke Bohrung–Rand</td><td><code>--section z=3 --wall [7,10,3]</code></td><td class="n">7,000000</td><td class="n">7,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Schräger Schnitt (45°) durch Bohrung r 3: große Halbachse</td><td><code>--section-plane 10,10,5,1,0,1 --radius edge@[10,13,5]</code></td><td class="n">4,242641</td><td class="n">4,242641</td><td class="n ok">7.1e-13</td><td>ja</td></tr><tr><td>Schräger Schnitt (45°): kleine Halbachse</td><td><code>--section-plane 10,10,5,1,0,1 --radius edge@[10,13,5]</code></td><td class="n">3,000000</td><td class="n">3,000000</td><td class="n ok">0</td><td>ja</td></tr><tr><td>Gehäuse: Wandstärke im Schnitt z 10</td><td><code>--section z=10 --wall [0,15,10]</code></td><td class="n">3,000000</td><td class="n">3,000000</td><td class="n ok">0</td><td>ja</td></tr></table>
+<h2>9 Analytic check</h2>
+<p>Small models, measured via the CLI (same logic as the UI), against the formula. Limit 10⁻⁶ relative; volume comes from the kernel's integration (SMLib, ~10⁻⁴) and has the limit 10⁻³.</p>
+<table><tr><th>Case</th><th>Call</th><th class="n">expected</th><th class="n">measured</th><th class="n">deviation</th><th>exact</th></tr><tr><td>Cylinder r 5, radius</td><td><code>--radius face@[5,0,5]</code></td><td class="n">5.000000</td><td class="n">5.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Cylinder r 5, lateral area</td><td><code>--area face@[5,0,5]</code></td><td class="n">314.159265</td><td class="n">314.159265</td><td class="n ok">-3.0e-7</td><td>yes</td></tr><tr><td>Cylinder r 5, circular edge length</td><td><code>--length edge@[0,5,10]</code></td><td class="n">31.415927</td><td class="n">31.415927</td><td class="n ok">2.1e-12</td><td>yes</td></tr><tr><td>Cylinder, cap faces normal distance</td><td><code>--distance face@[1,1,10] face@[1,1,0]</code></td><td class="n">10.000000</td><td class="n">10.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Cone r 4→2, radius at h 5</td><td><code>--radius face@[3,0,5]</code></td><td class="n">3.000000</td><td class="n">3.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Cone r 4→2, half angle</td><td><code>--radius face@[3,0,5]</code></td><td class="n">11.309932</td><td class="n">11.309932</td><td class="n ok">-2.0e-11</td><td>yes</td></tr><tr><td>Cone r 4→2, lateral area</td><td><code>--area face@[3,0,5]</code></td><td class="n">192.228507</td><td class="n">192.228425</td><td class="n ok">-8.2e-5</td><td>yes</td></tr><tr><td>Sphere r 5, radius</td><td><code>--radius face@[0,0,5]</code></td><td class="n">5.000000</td><td class="n">5.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Sphere r 5, volume (kernel)</td><td><code>--body body@[0,0,5]</code></td><td class="n">523.598776</td><td class="n">523.598364</td><td class="n ok">-4.1e-4</td><td>yes</td></tr><tr><td>Torus R 10 r 2, tube radius</td><td><code>--radius face@[12,0,0]</code></td><td class="n">2.000000</td><td class="n">2.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Torus R 10 r 2, ring radius</td><td><code>--radius face@[12,0,0]</code></td><td class="n">10.000000</td><td class="n">10.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Fillet r 2 (straight edge)</td><td><code>--radius face@[19.414214,5,7.414214]</code></td><td class="n">2.000000</td><td class="n">2.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Fillet r 1 (circular edge)</td><td><code>--radius face@[12.292893,10,5.292893]</code></td><td class="n">1.000000</td><td class="n">1.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Chamfer 2 mm, angle to top face</td><td><code>--angle face@[19,5,7] face@[10,5,8]</code></td><td class="n">45.000000</td><td class="n">45.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Chamfer 2 mm, opening angle</td><td><code>--angle face@[19,5,7] face@[10,5,8]</code></td><td class="n">135.000000</td><td class="n">135.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Section through bore r 3, radius</td><td><code>--section z=3 --radius edge@[13,10,3]</code></td><td class="n">3.000000</td><td class="n">3.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Section, area of the region</td><td><code>--section z=3 --area region@[1,1,3]</code></td><td class="n">371.725666</td><td class="n">371.725666</td><td class="n ok">3.1e-10</td><td>yes</td></tr><tr><td>Section, wall thickness bore–edge</td><td><code>--section z=3 --wall [7,10,3]</code></td><td class="n">7.000000</td><td class="n">7.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Oblique section (45°) through bore r 3: semi-major axis</td><td><code>--section-plane 10,10,5,1,0,1 --radius edge@[10,13,5]</code></td><td class="n">4.242641</td><td class="n">4.242641</td><td class="n ok">7.1e-13</td><td>yes</td></tr><tr><td>Oblique section (45°): semi-minor axis</td><td><code>--section-plane 10,10,5,1,0,1 --radius edge@[10,13,5]</code></td><td class="n">3.000000</td><td class="n">3.000000</td><td class="n ok">0</td><td>yes</td></tr><tr><td>Housing: wall thickness in section z 10</td><td><code>--section z=10 --wall [0,15,10]</code></td><td class="n">3.000000</td><td class="n">3.000000</td><td class="n ok">0</td><td>yes</td></tr></table>
 
-<h2>10 Messwerte</h2>
-<h3>M10 Antwortzeiten</h3><p>Mausfahrt über die Lochplatte (41 Positionen, je 16 ms): höchstens eine Anfrage unterwegs, die letzte Position gewinnt. Gemessen von der Anfrage bis zur Antwort im Browser (Worker, Wasm-Kernel, SwiftShader ohne GPU).</p><ul class="checks"><li>42 Antworten, Median 2.9 ms, 95 % 48.0 ms</li></ul>
+<h2>10 Measurements</h2>
+<h3>M10 Response times</h3><p>Mouse pass over the hole plate (41 positions, 16 ms each): at most one request in flight, the last position wins. Measured from request until response in the browser (worker, Wasm kernel, SwiftShader without GPU).</p><ul class="checks"><li>42 responses, median 2.9 ms, 95 % 48.0 ms</li></ul>
 
 
-<h2>11 Testläufe</h2>
+<h2>11 Test runs</h2>
 <table>
-<tr><th>Lauf</th><th>Ergebnis</th></tr>
-<tr><td><code>cargo test --workspace -- --test-threads=2</code></td><td>574 bestanden, 0 fehlgeschlagen</td></tr>
-<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> (nativ und <code>-p cad-wasm --target wasm32-unknown-unknown</code>) · <code>cargo fmt --check</code></td><td>sauber · sauber</td></tr>
-<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>sauber · 233 bestanden</td></tr>
-<tr><td><code>pnpm e2e</code> (Playwright, Chromium, ganze Suite)</td><td>131 bestanden, 0 fehlgeschlagen</td></tr>
-<tr><td>Tauri-E2E T17</td><td>bestanden</td></tr>
-<tr><td>Analytische Fälle über die CLI</td><td>21 von 21 innerhalb der Grenze</td></tr>
+<tr><th>Run</th><th>Result</th></tr>
+<tr><td><code>cargo test --workspace -- --test-threads=2</code></td><td>574 passed, 0 failed</td></tr>
+<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> (native and <code>-p cad-wasm --target wasm32-unknown-unknown</code>) · <code>cargo fmt --check</code></td><td>clean · clean</td></tr>
+<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>clean · 233 passed</td></tr>
+<tr><td><code>pnpm e2e</code> (Playwright, Chromium, full suite)</td><td>131 passed, 0 failed</td></tr>
+<tr><td>Tauri E2E T17</td><td>passed</td></tr>
+<tr><td>Analytic cases via the CLI</td><td>21 of 21 within the limit</td></tr>
 </table>
-<p class="small">Unbeständige Tests behoben (vorher sporadisch rot, auch ohne den Messmodus): <code>waitHandles</code> antwortete noch mit den Griffen der vorigen Cursorzeile (B06, B10) und wartet jetzt auf stehende Griffe; <code>clickAt</code> in M01–M11 und der Klick in T17 warten auf die eigene Wirkung des Klicks statt auf irgendeine Antwort; T17 wählt Flächen mit Alt (ohne Punktfang). Nichts übersprungen oder deaktiviert.</p>
-<p>Neue Rust-Tests (22):</p>
+<p class="small">Flaky tests fixed (previously red sporadically, also without measure mode): <code>waitHandles</code> still answered with the handles of the previous cursor line (B06, B10) and now waits for settled handles; <code>clickAt</code> in M01–M11 and the click in T17 wait for the click's own effect instead of any response; T17 picks faces with Alt (without point snapping). Nothing skipped or disabled.</p>
+<p>New Rust tests (22):</p>
 <p class="small"><code>usage_errors</code> <span class="ok">ok</span> · <code>chamfer_angle_and_at</code> <span class="ok">ok</span> · <code>housing_section_wall_and_distances</code> <span class="ok">ok</span> · <code>usage_errors</code> <span class="ok">ok</span> · <code>hole_plate_radii_bores_fillets_and_pitch</code> <span class="ok">ok</span> · <code>curve::tests::arc_basics</code> <span class="ok">ok</span> · <code>curve::tests::ellipse_length</code> <span class="ok">ok</span> · <code>curve::tests::line_ray</code> <span class="ok">ok</span> · <code>dist::tests::distance_of_cubes</code> <span class="ok">ok</span> · <code>num::tests::quadrature_and_minimum</code> <span class="ok">ok</span> · <code>surface::tests::projections</code> <span class="ok">ok</span> · <code>cylinder_radius_area_length</code> <span class="ok">ok</span> · <code>distances</code> <span class="ok">ok</span> · <code>fillet_and_chamfer</code> <span class="ok">ok</span> · <code>section_through_bores_and_wall</code> <span class="ok">ok</span> · <code>cone_sphere_torus</code> <span class="ok">ok</span> · <code>distance_by_clicks_parallel_planes_and_cli</code> <span class="ok">ok</span> · <code>housing_wall_thickness_in_the_section_and_inner_distance</code> <span class="ok">ok</span> · <code>angle_of_a_chamfer</code> <span class="ok">ok</span> · <code>section_mode_over_the_protocol</code> <span class="ok">ok</span> · <code>snaps_vertices_midpoints_faces_with_provenance</code> <span class="ok">ok</span> · <code>radius_of_bores_and_fillets_in_the_hole_plate</code> <span class="ok">ok</span></p>
-<p class="small">cad-measure <code>tests/analytic.rs</code>: Zylinder (Radius, Achse, Mantel- und Deckfläche, Kreislänge, Normalabstand), Kegel (Radius, Halbwinkel, Spitze, Mantel), Kugel und Torus (Radien, Flächen, Hülle), Fillet-Zylinder und -Kugel eines Quaders, Fillet-Torus einer Kreiskante, Fase 45°/135°, Abstände, Schnitt durch zwei Bohrungen (exakte Kreise, Fläche, Wandstärken, Längsschnitt, schräger Schnitt als Ellipse); Unit-Tests der Kurven, Flächen und Quadratur. cad-session <code>tests/measure.rs</code>: Snap (Fläche, Eckpunkt, Kantenmitte, Kante) mit Provenienz, Klicks und CLI-Argumente, Referenzen, Lochplatte, Gehäuse mit Wandstärke im Schnitt, Bauteilvolumen, Fase, Schnittmodus über das Protokoll. cad-cli <code>tests/messen.rs</code>: JSON und Text der neuen Optionen, Aufruffehler. Vitest <code>logic/measure.test.ts</code>.</p>
+<p class="small">cad-measure <code>tests/analytic.rs</code>: cylinder (radius, axis, lateral and cap area, circle length, normal distance), cone (radius, half angle, apex, lateral area), sphere and torus (radii, areas, bounding box), fillet cylinder and fillet sphere of a cuboid, fillet torus of a circular edge, chamfer 45°/135°, distances, section through two bores (exact circles, area, wall thicknesses, longitudinal section, oblique section as ellipse); unit tests of curves, surfaces and quadrature. cad-session <code>tests/measure.rs</code>: snap (face, vertex, edge midpoint, edge) with provenance, clicks and CLI arguments, references, hole plate, housing with wall thickness in the section, part volume, chamfer, section mode via the protocol. cad-cli <code>tests/messen.rs</code>: JSON and text of the new options, usage errors. Vitest <code>logic/measure.test.ts</code>.</p>
 
-<h2>12 Grenzen</h2>
+<h2>12 Limitations</h2>
 <ul>
-<li>Der Schnitt braucht einen Kernel-Boolean je Teil und Ebene; scheitert er, gibt es keinen Schnitt (Meldung), keine Ersatzkontur aus dem Netz.</li>
-<li>Konturen auf Freiformflächen und auf schräg geschnittenen Kegeln, Tori und Rotationsflächen bleiben Kernel-Kurven (<code>exact = false</code>).</li>
-<li>Wandstärke senkrecht zur Kontur an einer Stelle; die kleinste Wandstärke des Schnitts ist eine Schätzung über Stichproben.</li>
-<li>Abstände zwischen Freiformflächen und Fälle, in denen die Projektion an einem anderen lokalen Minimum endet, gelten mit der Toleranz der Tessellierung; Flächen von Freiformflächen aus den Dreiecken; Volumen aus dem Kernel (~10⁻⁴).</li>
-<li>CLI-Referenzen über den nächsten Punkt sind eindeutig, solange P einem Element am nächsten liegt; die Ergebnisse erscheinen in der Reihenfolge der Optionen.</li>
-<li>2D-Ergebnisse (Skizzen ohne Extrusion) lassen sich nicht messen; die Liste der Messungen wird nicht gespeichert.</li>
-<li>Die Kontextleiste liegt bis zur UI-Überarbeitung im Stapel rechts oben (die Ansichtsleiste bricht um), die Liste rechts neben der Ansicht.</li>
-<li>Tauri T17 bedient die Ansicht mit synthetischen Zeigerereignissen; Messwerte aus SwiftShader bzw. Software-GL sind nur relativ aussagekräftig.</li>
+<li>The section needs one kernel Boolean per part and plane; if it fails, there is no section (message), no substitute contour from the mesh.</li>
+<li>Contours on free-form surfaces and on obliquely cut cones, tori and surfaces of revolution remain kernel curves (<code>exact = false</code>).</li>
+<li>Wall thickness perpendicular to the contour at one location; the minimum wall thickness of the section is an estimate from samples.</li>
+<li>Distances between free-form surfaces and cases in which the projection ends at a different local minimum hold within the tessellation tolerance; areas of free-form faces from the triangles; volume from the kernel (~10⁻⁴).</li>
+<li>CLI references via the nearest point are unambiguous as long as P is closest to one element; results appear in the order of the options.</li>
+<li>2D results (sketches without extrusion) cannot be measured; the list of measurements is not saved.</li>
+<li>Until the UI rework the context bar sits in the stack at the top right (the view toolbar wraps), the list to the right of the view.</li>
+<li>Tauri T17 operates the view with synthetic pointer events; timings from SwiftShader or software GL are only meaningful relative to each other.</li>
 </ul>
 </main>
 </body>
