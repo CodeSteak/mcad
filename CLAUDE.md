@@ -1,35 +1,35 @@
 # CLAUDE.md
 
-## Usage-Manual (`manuell/`) bei jedem Feature mitziehen
+## Keep the usage manual (`manuell/`) in step with every feature
 
-`mcad usage` gibt das Manual für Agenten/LLMs aus: die Markdown-Dateien in `manuell/`
-(Englisch), per `crates/cad-cli/build.rs` ins Binary kompiliert. Die Nummer im Dateinamen
-ordnet nur (`04-measure.md` → `mcad usage measure`), die erste `# `-Zeile ist der Titel.
+`mcad usage` prints the manual for agents/LLMs: the Markdown files in `manuell/` (English),
+compiled into the binary by `crates/cad-cli/build.rs`. The number in the file name only sorts
+(`04-measure.md` → `mcad usage measure`); the first `# ` line is the title.
 
-**Jede Änderung, die ein Nutzer der CLI oder der Sprache sieht, aktualisiert im selben Commit
-die passende Seite in `manuell/`**: neue oder geänderte Befehle, Optionen, Standardwerte,
-JSON-Felder, Exit-Codes, Sprachkonstrukte (Builtins, Parameter, Zonen, Skizzen, Farben),
-neue Fehlermeldungen mit typischer Ursache (`17-troubleshooting.md`). Neues Thema → neue
-Datei mit Nummer.
+**Every change a user of the CLI or the language can see updates the matching page in
+`manuell/` in the same commit**: new or changed commands, options, defaults, JSON fields, exit
+codes, language constructs (builtins, parameters, zones, sketches, colours), new error messages
+with their typical cause (`17-troubleshooting.md`), new builtins in `20-quickref.md`. New topic
+→ new numbered file.
 
-Stil des Manuals: Englisch, kurz und präzise, Tabellen statt Prosa, nichts Offensichtliches
-erklären. Beispiele vorher mit `mcad` ausführen (Beispielmodell `box.mcad` steht in
-`10-language.md`).
+Manual style: English, short and precise, tables instead of prose, nothing obvious. Run
+examples with `mcad` first (example model `box.mcad` is in `10-language.md`).
 
-Tests: `cargo test -p cad-cli usage` prüft, dass jede Seite einen Titel hat und jeder
-sichtbare Befehl (`mcad <name>`) im Manual vorkommt.
+Tests: `cargo test -p cad-cli usage` checks that every page has a title and every visible
+command (`mcad <name>`) appears in the manual.
 
-## CLI-Texte
+## Texts
 
-- `mcad --help` und die Hilfetexte aller Befehle/Optionen (Doc-Kommentare der clap-Structs in
-  `crates/cad-cli/src/`) sind Englisch.
-- Die übrige Textausgabe der CLI (Diagnosen, Ergebnisse) ist Deutsch; JSON-Schlüssel sind
-  Englisch. Neue deutsche Begriffe in der Ausgabe → Glossar in `17-troubleshooting.md`.
-- `README.md` und die Testberichte (`docs/reports/`) sind Englisch; übrige Doku im Repo (Plan,
-  `docs/development.md`, Skill) bleibt Deutsch.
-- Web-UI: Texte nur über die i18n-Wörterbücher (Englisch und Deutsch), nie hart codiert.
+- Everything in the repository is English: docs, comments, README, reports, manual.
+- `mcad --help` and the help texts of all commands/options (doc comments of the clap structs in
+  `crates/cad-cli/src/`) are English only.
+- Other user-visible output (diagnostics, results, render labels) exists in English and German:
+  `cad_i18n::tr!("German …", "English …", args)` / `trs!`, never a plain literal. Language:
+  `--lang`, `MCAD_LANG`, locale; default English. JSON keys are English.
+- Web UI: texts only through the i18n dictionaries `web/src/i18n/` (English and German), never
+  hard-coded.
 
-## Bauen
+## Building
 
-Ohne `third_party/smlib`: `SMLIB_SRC` und `SMLIB_PREBUILT` setzen (siehe `Makefile`,
+Without `third_party/smlib`: set `SMLIB_SRC` and `SMLIB_PREBUILT` (see `Makefile`,
 `smlib/fetch.sh`).
