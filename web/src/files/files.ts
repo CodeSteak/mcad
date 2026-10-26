@@ -4,6 +4,7 @@
 // and download.
 
 import { dataFileRefs, fileBytes, fileText, fromDataUrl, guessMain, isProjectFile, MODEL_ACCEPT, MODEL_EXTS, normalizePath, resolvePath, stripCommonFolder } from "../logic/files";
+import { t } from "../i18n";
 import type { DirHandle, FileHandleLike, ProjectSnapshot } from "../state/project";
 import { readZip, writeZip } from "./zip";
 
@@ -149,7 +150,7 @@ export async function openFolder(): Promise<LoadedProject | null> {
   }
   const files = await readDir(dir);
   const main = guessMain(files);
-  if (!main) throw new Error(`Ordner ${dir.name} enthält keine Modelldatei (.mcad, .scad)`);
+  if (!main) throw new Error(t("files.folderNoModel", { name: dir.name }));
   return { name: dir.name, main, files, dir };
 }
 
@@ -184,7 +185,7 @@ export async function projectFromZip(name: string, bytes: Uint8Array): Promise<L
   const stripped = stripCommonFolder(files);
   files = stripped.files;
   const main = guessMain(files);
-  if (!main) throw new Error(`${name} enthält keine Modelldatei (.mcad, .scad)`);
+  if (!main) throw new Error(t("files.noModel", { name }));
   return { name: stripped.folder ?? name.replace(/\.zip$/i, ""), main, files, dir: null };
 }
 
@@ -252,7 +253,10 @@ export const EXAMPLES: Example[] = Object.entries(raw)
   })
   .sort((a, b) => (a.group === b.group ? a.name.localeCompare(b.name) : a.group === "spec" ? -1 : b.group === "spec" ? 1 : a.group.localeCompare(b.group)));
 
-export const GROUP_LABELS: Record<string, string> = { spec: "Spec-Beispiele", "openscad-compat": "OpenSCAD-Kompatibilität" };
+/** Name of an example group in the menu (unknown groups: the folder name). */
+export function groupLabel(group: string): string {
+  return group === "spec" || group === "openscad-compat" ? t(`examples.group.${group}`) : group;
+}
 
 /** Folders of examples/ besides the single-file groups: projects of several files. */
 const SINGLE_GROUPS = new Set(["spec", "openscad-compat"]);
@@ -292,7 +296,7 @@ type PickerWindow = Window & {
   showSaveFilePicker?: (o?: unknown) => Promise<FsHandle>;
 };
 
-const pickerTypes = [{ description: "CAD-Modell", accept: { "text/plain": MODEL_EXTS } }];
+const pickerTypes = () => [{ description: t("files.pickerModel"), accept: { "text/plain": MODEL_EXTS } }];
 
 let handle: FsHandle | null = null;
 
@@ -305,7 +309,7 @@ export async function openFile(): Promise<{ name: string; text: string } | null>
   const w = window as PickerWindow;
   if (w.showOpenFilePicker) {
     try {
-      const [h] = await w.showOpenFilePicker({ types: pickerTypes, multiple: false });
+      const [h] = await w.showOpenFilePicker({ types: pickerTypes(), multiple: false });
       handle = h;
       const f = await h.getFile();
       return { name: f.name, text: await f.text() };
@@ -331,7 +335,7 @@ export async function saveFile(name: string, text: string, saveAs = false): Prom
   const w = window as PickerWindow;
   if (w.showSaveFilePicker) {
     try {
-      if (!handle || saveAs) handle = await w.showSaveFilePicker({ suggestedName: name, types: pickerTypes });
+      if (!handle || saveAs) handle = await w.showSaveFilePicker({ suggestedName: name, types: pickerTypes() });
       const out = await handle.createWritable();
       await out.write(text);
       await out.close();

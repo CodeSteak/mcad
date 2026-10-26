@@ -22,7 +22,7 @@ mcad export part.mcad -o part.step         # .stl / .3mf / .step
   file, unknown anchor/part/plane) · 3 kernel/internal error, or no running UI for `mcad ui` ·
   4 `mcad export` stopped by a violated assert (`mcad usage asserts`, `--ignore-asserts`).
 
-Model files: `.mcad` for new files (UI "Neu", "Speichern unter", examples). `.scad` files
+Model files: `.mcad` for new files (UI "New", "Save as", examples). `.scad` files
 (OpenSCAD, older projects) open, evaluate, export and work in `include <…>`/`use <…>` the same
 way, also mixed in one project. The program was called `cad` before 0.3.0; old environment
 variables `CAD_*` still work (`mcad usage daemon`).

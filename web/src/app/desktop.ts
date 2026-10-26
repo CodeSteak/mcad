@@ -14,6 +14,7 @@
 import { isolateHistory } from "@codemirror/commands";
 import { Transaction } from "@codemirror/state";
 import { setHunks } from "../editor/gitGutter";
+import { onLangChange, t } from "../i18n";
 import { definitionTarget } from "../logic/context";
 import { lineChanges } from "../logic/textDiff";
 import { type DiskProject, IS_TAURI, absPath, desktop, normalizeAbs } from "../platform/desktop";
@@ -36,7 +37,7 @@ export function relOf(abs: string): string | null {
 
 function title(): string {
   const dirty = project.dirty().length > 0;
-  return `${dirty ? "● " : ""}${project.root ? project.name : `${project.name} (nicht gespeichert)`} – mcad`;
+  return `${dirty ? "● " : ""}${project.root ? project.name : t("desktop.notSaved", { name: project.name })} – mcad`;
 }
 
 /** Publishes the dirty files (tabs, title). */
@@ -127,21 +128,21 @@ export async function openDialog(folder: boolean): Promise<void> {
     const p = await desktop.openDialog(folder);
     if (p) openDisk(p);
   } catch (e) {
-    store.setState({ notice: `Öffnen fehlgeschlagen: ${String(e)}` });
+    store.setState({ notice: t("notice.openFailed", { error: String(e) }) });
   }
 }
 
 export function openDisk(p: DiskProject): void {
   const d = diskToLoad(p);
   loadProject(d.project, null, d.disk);
-  store.setState({ notice: p.folder ? `Ordner ${p.root}: ${Object.keys(p.files).length} Dateien, Hauptdatei ${p.main}` : `Geöffnet: ${absPath(p.root, p.main)}` });
+  store.setState({ notice: p.folder ? t("notice.folderOpened", { root: p.root, n: Object.keys(p.files).length, main: p.main }) : t("notice.opened", { path: absPath(p.root, p.main) }) });
 }
 
 export async function openRecent(path: string): Promise<void> {
   try {
     openDisk(await desktop.openPath(path));
   } catch (e) {
-    store.setState({ notice: `Öffnen fehlgeschlagen: ${String(e)}` });
+    store.setState({ notice: t("notice.openFailed", { error: String(e) }) });
   }
 }
 
@@ -177,7 +178,7 @@ export async function saveProject(saveAs = false, auto = false): Promise<void> {
         store.setState({ project: { ...store.getState().project, name, main: name, active: name, paths: [name] }, fileName: name });
         projectLoaded();
       }
-      store.setState({ notice: `Gespeichert: ${path}` });
+      store.setState({ notice: t("notice.saved", { what: path }) });
       publishDirty();
       return;
     }
@@ -186,7 +187,7 @@ export async function saveProject(saveAs = false, auto = false): Promise<void> {
     const removed = Object.entries(store.getState().external).filter(([, e]) => e.kind === "removed").map(([p]) => p);
     const paths = [...new Set([...dirty, ...removed])];
     if (!paths.length) {
-      if (!auto) store.setState({ notice: "Keine Änderungen zu speichern" });
+      if (!auto) store.setState({ notice: t("notice.nothingToSave") });
       return;
     }
     const files = paths.map((p) => ({ path: absPath(root, p), text: project.text(p) }));
@@ -198,11 +199,11 @@ export async function saveProject(saveAs = false, auto = false): Promise<void> {
     }
     const ext = { ...store.getState().external };
     for (const p of paths) delete ext[p];
-    store.setState({ external: ext, notice: r.errors.length ? `Speichern fehlgeschlagen: ${r.errors.join("; ")}` : `${auto ? "Automatisch gespeichert" : "Gespeichert"}: ${paths.join(", ")}` });
+    store.setState({ external: ext, notice: r.errors.length ? t("notice.saveFailed", { error: r.errors.join("; ") }) : t(auto ? "notice.autoSaved" : "notice.saved", { what: paths.join(", ") }) });
     publishDirty();
     requestGit(true);
   } catch (e) {
-    store.setState({ notice: `Speichern fehlgeschlagen: ${String(e)}` });
+    store.setState({ notice: t("notice.saveFailed", { error: String(e) }) });
   }
 }
 
@@ -230,7 +231,7 @@ export function reloadFile(rel: string, text: string, quiet = false): void {
   project.saved.set(rel, text);
   const ext = { ...store.getState().external };
   delete ext[rel];
-  store.setState({ external: ext, ...(quiet ? { notice: `Extern geändert: ${rel} – neu geladen` } : {}) });
+  store.setState({ external: ext, ...(quiet ? { notice: t("notice.reloaded", { path: rel }) } : {}) });
   publishDirty();
   if (rel === project.active) requestGit(true);
 }
@@ -411,4 +412,6 @@ export function initDesktop(): void {
   void desktop.onFileRemoved((e) => onRemoved(e.path));
   void desktop.onUiRequest((r) => void handleRequest(r.id, r.method, r.body));
   window.addEventListener("focus", () => requestGit(true));
+  // the window title is text of the UI
+  onLangChange(() => publishDirty());
 }

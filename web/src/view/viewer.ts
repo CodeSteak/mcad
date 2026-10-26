@@ -1,6 +1,7 @@
 // 3D view (three.js): draws the display plan of the shown scene, grids and anchors; orbit,
 // pan, zoom, standard views; picking (face → tag → node → editor line).
 
+import { t } from "../i18n";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
@@ -1176,7 +1177,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     e.stopPropagation();
     e.preventDefault();
     if (g.handle.locked) {
-      store.setState({ notice: `${handleLabel(g.handle)}: berechneter Wert – gesperrt` });
+      store.setState({ notice: t("handle.locked", { what: handleLabel(g.handle) }) });
       return;
     }
     this.drag.start(g, this, e);
@@ -1558,20 +1559,20 @@ export class Viewer implements DragView, SketchView, MeasureView {
         const text =
           pr.problem === "overlap"
             ? pr.volume
-              ? `Schnitt ${pr.volume.toFixed(2).replace(/\.?0+$/, "")} mm³`
-              : "Überschneidung"
+              ? t("assert.overlapVolume", { v: pr.volume.toFixed(2).replace(/\.?0+$/, "") })
+              : t("assert.overlap")
             : pr.problem === "too_close"
               ? `${d} mm < ${r.clearance}`
               : pr.problem === "gap"
-                ? `Spalt ${d} mm`
+                ? t("assert.gap", { d })
                 : pr.problem === "apart"
-                  ? `kein Schnitt, ${d} mm`
+                  ? t("assert.apart", { d })
                   : pr.problem === "line_contact"
-                    ? "Linienkontakt"
+                    ? t("assert.lineContact")
                     : pr.problem === "point_contact"
-                      ? "Punktkontakt"
+                      ? t("assert.pointContact")
                       : pr.contact_area !== null
-                        ? `Kontakt ${pr.contact_area.toFixed(2).replace(/\.?0+$/, "")} mm²`
+                        ? t("assert.contact", { a: pr.contact_area.toFixed(2).replace(/\.?0+$/, "") })
                         : null;
         if (text && (!pr.ok || pr.contact === "face")) label(text, at, !pr.ok, id);
       });
@@ -2124,9 +2125,9 @@ export class Viewer implements DragView, SketchView, MeasureView {
 function gripTitle(g: HandleGeom): string {
   const h = g.handle;
   const what = handleLabel(h);
-  if (h.locked) return `${what}: berechneter Wert – gesperrt`;
-  const how = h.via_default ? "Standardwert des Parameters" : h.via_var ? "Variable" : h.comps.every((c) => c === null) ? "Referenz (Snap, Alt: Zahlen)" : "Literal";
-  return `${what} (${how}) – ziehen ändert den Code; Alt: frei`;
+  if (h.locked) return t("handle.locked", { what });
+  const how = h.via_default ? t("handle.viaDefault") : h.via_var ? t("handle.viaVar") : h.comps.every((c) => c === null) ? t("handle.viaRef") : t("handle.viaLiteral");
+  return t("handle.grip", { what, how });
 }
 
 function niceStep(x: number): number {

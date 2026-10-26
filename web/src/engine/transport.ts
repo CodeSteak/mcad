@@ -2,6 +2,7 @@
 // interface; WorkerTransport runs the engine in a Web Worker, TauriTransport
 // (tauriTransport.ts) talks to the native engine of the desktop app.
 
+import { t } from "../i18n/index.ts";
 import type { FromEngine, ToEngine } from "./protocol";
 import { createEngineWorker } from "./workerFactory.ts";
 
@@ -170,7 +171,7 @@ export class WorkerTransport implements EngineTransport {
   private arm(ms = this.watchdogMs): void {
     this.disarm();
     this.timer = setTimeout(() => {
-      if (this.busy) this.restart(`Engine reagiert seit ${durText(ms)} nicht (Kernel hängt)`);
+      if (this.busy) this.restart(t("engine.hung", { time: durText(ms) }));
     }, ms);
   }
 
@@ -186,12 +187,12 @@ export class WorkerTransport implements EngineTransport {
     this.worker = null;
     this.restarts++;
     const cur = this.lastProgress?.current ?? null;
-    const where = cur ? ` (Zeile ${cur.range.line})` : "";
+    const where = cur ? ` (${t("status.line", { line: cur.range.line })})` : "";
     const fresh = !!cur?.key && !this.blockedKeys.has(cur.key);
     if (cur?.key) this.blockedKeys.add(cur.key);
     this.emit({
       type: "Error",
-      message: `${reason}${where}; Engine neu gestartet, Cache verworfen${fresh ? ", Knoten gesperrt" : ""}`,
+      message: `${reason}${where}; ${t("engine.restarted")}${fresh ? `, ${t("engine.nodeBlocked")}` : ""}`,
       version: this.lastProgress?.version ?? this.lastVersion,
       node: cur?.node ?? null,
     });

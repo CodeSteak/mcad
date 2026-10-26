@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import type { Vec3 } from "../engine/protocol";
+import { t } from "../i18n";
 import { fmtNum } from "../logic/format";
 import { type SectionState, axisSection, cliCommand, effectiveNormal, freeSection, normalize, offset, withOffset } from "../logic/section";
 import { absPath, IS_TAURI } from "../platform/desktop";
@@ -87,7 +88,7 @@ export async function copySectionCli(): Promise<string> {
     }
     ta.remove();
   }
-  store.setState({ notice: ok ? `Kopiert: ${cmd}` : `CLI-Aufruf: ${cmd}`, lastCli: cmd });
+  store.setState({ notice: ok ? t("notice.copied", { text: cmd }) : t("notice.cliCall", { text: cmd }), lastCli: cmd });
   return cmd;
 }
 
@@ -100,9 +101,9 @@ export function sectionText(s: SectionState): string {
   if (axis) {
     const k = "xyz".indexOf(axis);
     const v = fmtNum(Math.round(s.point[k] * 1000) / 1000);
-    return `Schnitt ${axis} = ${v} · entfernt ${axis} ${n[k] > 0 ? ">" : "<"} ${v}${s.snap ? ` · ${s.snap}` : ""}`;
+    return `${t("section.axisText", { axis, value: v, cmp: n[k] > 0 ? ">" : "<" })}${s.snap ? ` · ${s.snap}` : ""}`;
   }
-  return `Schnitt p = ${v3(s.point)}, n = ${v3(n)} · entfernt die Seite, in die n zeigt${s.snap ? ` · ${s.snap}` : ""}`;
+  return `${t("section.freeText", { p: v3(s.point), n: v3(n) })}${s.snap ? ` · ${s.snap}` : ""}`;
 }
 
 export function SectionBar() {
@@ -114,25 +115,25 @@ export function SectionBar() {
   if (!s.on) return null;
   const axis = s.axis === "free" ? "view" : s.axis;
   return (
-    <Toolbar label="Schnitt" float className="contextbar sectionbar" data-testid="sectionbar">
+    <Toolbar label={t("mode.section")} float className="contextbar sectionbar" data-testid="sectionbar">
       <Segmented
-        label="Schnittebene"
+        label={t("section.plane")}
         value={axis}
         onChange={(v) => (v === "view" ? sectionFromView() : setSectionAxis(v))}
         options={[
-          { value: "x", label: "X", hint: "Ebene senkrecht zur x-Achse durch die Modellmitte" },
-          { value: "y", label: "Y", hint: "Ebene senkrecht zur y-Achse durch die Modellmitte" },
-          { value: "z", label: "Z", hint: "Ebene senkrecht zur z-Achse durch die Modellmitte" },
-          { value: "view", label: "Aus Blickrichtung", text: "Blick", hint: "Freie Ebene: Normale aus der Blickrichtung" },
+          { value: "x", label: "X", hint: t("section.axisHint", { axis: "x" }) },
+          { value: "y", label: "Y", hint: t("section.axisHint", { axis: "y" }) },
+          { value: "z", label: "Z", hint: t("section.axisHint", { axis: "z" }) },
+          { value: "view", label: t("section.fromView"), text: t("section.fromViewShort"), hint: t("section.fromViewHint") },
         ]}
       />
       <ToolSep />
-      <label className="ui-field" title={s.axis === "free" ? "Abstand der Ebene vom Ursprung entlang n" : `Lage der Ebene (${s.axis})`}>
+      <label className="ui-field" title={s.axis === "free" ? t("section.offsetHint") : t("section.position", { what: s.axis })}>
         <span className="ui-label">{s.axis === "free" ? "p·n =" : `${s.axis} =`}</span>
         <input
           className="ui-input"
           value={val}
-          aria-label={s.axis === "free" ? "Lage der Ebene (p·n)" : `Lage der Ebene (${s.axis})`}
+          aria-label={t("section.position", { what: s.axis === "free" ? "p·n" : s.axis })}
           onChange={(e) => setVal(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && setSectionValue(Number(val.replace(",", ".")))}
           onBlur={() => setSectionValue(Number(val.replace(",", ".")))}
@@ -141,12 +142,12 @@ export function SectionBar() {
         />
       </label>
       {s.axis === "free" && (
-        <label className="ui-field" title="Normale (nx, ny, nz)">
+        <label className="ui-field" title={t("section.normalHint")}>
           <span className="ui-label">n =</span>
           <input
             className="ui-input"
             value={nrm}
-            aria-label="Normale der Ebene"
+            aria-label={t("section.normal")}
             onChange={(e) => setNrm(e.target.value)}
             onKeyDown={(e) => {
               if (e.key !== "Enter") return;
@@ -160,8 +161,8 @@ export function SectionBar() {
       )}
       <ToolSep />
       <ToolGroup>
-        <IconButton icon={IconFlip} label="Umkehren" hint="Andere Seite behalten (--section-flip)" pressed={s.flip} onClick={flipSection} />
-        <IconButton icon={IconCopy} label="Als mcad render … kopieren" hint="Gleichen Schnitt in der CLI rendern" onClick={() => void copySectionCli()} />
+        <IconButton icon={IconFlip} label={t("section.flip")} hint={t("section.flipHint")} pressed={s.flip} onClick={flipSection} />
+        <IconButton icon={IconCopy} label={t("section.copyCli")} hint={t("section.copyCliHint")} onClick={() => void copySectionCli()} />
       </ToolGroup>
     </Toolbar>
   );
@@ -171,7 +172,7 @@ export function SectionStatus() {
   const s = useCad((st) => st.section);
   if (!s.on) return null;
   return (
-    <span className="st-note section" data-testid="status-section" title="Konvention wie mcad render --section: es bleibt (q − p) · n ≤ 0">
+    <span className="st-note section" data-testid="status-section" title={t("section.statusHint")}>
       {sectionText(s)}
     </span>
   );

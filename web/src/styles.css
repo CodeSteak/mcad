@@ -558,6 +558,15 @@ input:checked + .cm-switch-knob::after {
   color: var(--muted);
 }
 
+.settings-pop .setrow--wide {
+  grid-template-columns: 1fr 124px;
+}
+
+.settings-pop select {
+  font: inherit;
+  height: 24px;
+}
+
 .statusbar .st-note.drag {
   color: var(--view-snap);
   font-weight: 600;

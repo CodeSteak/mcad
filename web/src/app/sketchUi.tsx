@@ -4,6 +4,7 @@
 // for, where the mouse snapped, why an action failed).
 
 import type { SketchTool } from "../engine/protocol";
+import { DICTS, t } from "../i18n";
 import { SKETCH_TOOL_KEYS, SKETCH_TOOLS, SKETCH_TOOL_NAMES } from "../logic/sketchEditor";
 import { useCad } from "../state/store";
 import { sketch } from "./runtime";
@@ -49,20 +50,20 @@ function info(tool: SketchTool) {
 }
 
 function ToolButton({ tool, active }: { tool: SketchTool; active: SketchTool }) {
-  const t = info(tool);
-  return <IconButton icon={ICONS[tool]!} label={SKETCH_TOOL_NAMES[tool]} shortcut={SKETCH_TOOL_KEYS[tool]} hint={t.title} pressed={active === tool} onClick={() => sketch.setTool(tool)} />;
+  const ti = info(tool);
+  return <IconButton icon={ICONS[tool]!} label={SKETCH_TOOL_NAMES[tool]} shortcut={SKETCH_TOOL_KEYS[tool]} hint={ti.title} pressed={active === tool} onClick={() => sketch.setTool(tool)} />;
 }
 
 /** Arc button: the last arc kind; the menu chooses the kind (3 points, centre, tangential). */
 function ArcButton({ active }: { active: SketchTool }) {
   const last = useCad((s) => s.sketchArc);
   const cur = ARCS.includes(active) ? active : last;
-  const t = info(cur);
+  const ti = info(cur);
   return (
     <span className="ui-split ui-split--quiet">
-      <IconButton icon={IconArc} label={SKETCH_TOOL_NAMES[cur]} shortcut={SKETCH_TOOL_KEYS[cur]} hint={t.title} pressed={ARCS.includes(active)} onClick={() => sketch.setTool(cur)} className="ui-split-main" />
+      <IconButton icon={IconArc} label={SKETCH_TOOL_NAMES[cur]} shortcut={SKETCH_TOOL_KEYS[cur]} hint={ti.title} pressed={ARCS.includes(active)} onClick={() => sketch.setTool(cur)} className="ui-split-main" />
       <MenuButton
-        label="Bogenart"
+        label={t("sketch.arcKind")}
         text={null}
         icon={IconChevronDown}
         className="ui-split-menu ui-split-menu--narrow"
@@ -76,17 +77,17 @@ export function SketchBar() {
   const s = useCad((st) => st.sketch);
   if (!s) return null;
   const a = s.answer;
-  const target = a?.sketch ? `sketch · Zeile ${a.sketch.line}` : "neue Skizze";
+  const target = a?.sketch ? `sketch · ${t("status.line", { line: a.sketch.line })}` : t("sketch.new");
   return (
-    <Toolbar label="Skizze" float className="contextbar sketchbar" data-testid="sketchbar">
-      <ToolLabel className="ctx-title" title={a?.sketch ? `Der Code entsteht im sketch-Block in Zeile ${a.sketch.line} (Cursor)` : "Die erste Aktion legt einen sketch-Block an"} data-testid="sketch-target">
+    <Toolbar label={t("mode.sketch")} float className="contextbar sketchbar" data-testid="sketchbar">
+      <ToolLabel className="ctx-title" title={a?.sketch ? t("sketch.targetHint", { line: a.sketch.line }) : t("sketch.newHint")} data-testid="sketch-target">
         {target}
       </ToolLabel>
-      <ToolGroup label="Auswahl">
+      <ToolGroup label={t("sketch.groupSelect")}>
         <ToolButton tool="select" active={s.tool} />
       </ToolGroup>
       <ToolSep />
-      <ToolGroup label="Zeichnen">
+      <ToolGroup label={t("sketch.groupDraw")}>
         <ToolButton tool="line" active={s.tool} />
         <ArcButton active={s.tool} />
         <ToolButton tool="bezier" active={s.tool} />
@@ -94,15 +95,15 @@ export function SketchBar() {
         <ToolButton tool="circle" active={s.tool} />
       </ToolGroup>
       <ToolSep />
-      <ToolGroup label="Bearbeiten">
+      <ToolGroup label={t("sketch.groupEdit")}>
         <ToolButton tool="corner" active={s.tool} />
-        <IconButton icon={IconCloseContour} label="Schließen" shortcut="Enter" hint="close(); für die offene Kontur am Cursor" onClick={() => sketch.closeContour()} />
-        <IconButton icon={IconDelete} label="Löschen" shortcut="Entf" hint="Segment am Cursor löschen" onClick={() => sketch.deleteSegment()} />
+        <IconButton icon={IconCloseContour} label={t("sketch.tool.close")} shortcut="Enter" hint={t("sketch.closeHint")} onClick={() => sketch.closeContour()} />
+        <IconButton icon={IconDelete} label={t("sketch.tool.delete")} shortcut="Entf" hint={t("sketch.deleteHint")} onClick={() => sketch.deleteSegment()} />
       </ToolGroup>
       <ToolSep />
-      <IconButton icon={IconPerpendicular} label="⊥ Ansicht" shortcut="N" hint="Ansicht senkrecht auf die Skizzenebene" onClick={() => sketch.align()} />
-      <Button variant="primary" icon={IconCheck} shortcut="Esc" hint="Zeichenmodus beenden" onClick={() => sketch.exit()}>
-        Fertig
+      <IconButton icon={IconPerpendicular} label={t("sketch.align")} shortcut="N" hint={t("sketch.alignHint")} onClick={() => sketch.align()} />
+      <Button variant="primary" icon={IconCheck} shortcut="Esc" hint={t("sketch.doneHint")} onClick={() => sketch.exit()}>
+        {t("common.done")}
       </Button>
     </Toolbar>
   );
@@ -113,9 +114,11 @@ export function SketchStatus() {
   if (!s) return null;
   const a = s.answer;
   const text = s.message || a?.prompt || SKETCH_TOOL_NAMES[s.tool];
+  // the prompts come from the engine (German): no tool prefix when they start with the tool's name
+  const prefixes = [SKETCH_TOOL_NAMES[s.tool], DICTS.de[`sketch.tool.${s.tool}`] as string];
   return (
-    <span className={`st-note sketch${s.message ? " warn" : ""}`} data-testid="status-sketch" title="Alt: frei mit Schrittweite · Esc: Punkte verwerfen, nochmals: beenden">
-      {!text.startsWith(SKETCH_TOOL_NAMES[s.tool].split(" ")[0]) && <span className="st-tool">{SKETCH_TOOL_NAMES[s.tool]}: </span>}
+    <span className={`st-note sketch${s.message ? " warn" : ""}`} data-testid="status-sketch" title={t("sketch.statusHint")}>
+      {!prefixes.some((p) => text.startsWith(p.split(" ")[0])) && <span className="st-tool">{SKETCH_TOOL_NAMES[s.tool]}: </span>}
       {text}
       {a?.snap ? ` · ${a.snap.label}` : ""}
     </span>

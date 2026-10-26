@@ -4,9 +4,10 @@
 // symbol buttons. Global shortcuts: Strg+N/O/S/⇧S/E.
 
 import { useEffect } from "react";
-import { EXAMPLE_PROJECTS, GROUP_LABELS, SINGLE_EXAMPLES } from "../files/files";
+import { EXAMPLE_PROJECTS, SINGLE_EXAMPLES, groupLabel } from "../files/files";
 import { pathSegments } from "../logic/context";
 import { MODEL_ACCEPT, MODEL_EXT } from "../logic/files";
+import { t } from "../i18n";
 import { IS_TAURI } from "../platform/desktop";
 import { type ExportChoice, type ThemePref, setThemePref, store, useCad } from "../state/store";
 import { openRecent } from "./desktop";
@@ -38,7 +39,7 @@ export function chooseUpload(): void {
 
 /** Asks for a name and adds an empty file to the project. */
 export function promptNewProjectFile(): void {
-  const name = window.prompt("Name der neuen Datei (z. B. lib/teile.mcad)", `neu${MODEL_EXT}`);
+  const name = window.prompt(t("file.newPrompt"), `${t("file.newName")}${MODEL_EXT}`);
   if (name) addProjectFile(name);
 }
 
@@ -64,7 +65,7 @@ export function UploadInput() {
 }
 
 function recentItems(recent: Array<{ path: string; folder: boolean }>): MenuEntry[] {
-  if (!recent.length) return [{ label: "(noch nichts)", onSelect: () => {}, disabled: true }];
+  if (!recent.length) return [{ label: t("file.recentEmpty"), onSelect: () => {}, disabled: true }];
   return recent.map((r) => {
     const parts = (r.folder ? `${r.path}/` : r.path).split("/").filter(Boolean);
     return { label: parts.slice(-2).join("/") + (r.folder ? "/" : ""), detail: parts.length > 2 ? `…/${parts.slice(-3, -2)[0]}` : undefined, hint: r.path, onSelect: () => void openRecent(r.path) };
@@ -73,18 +74,18 @@ function recentItems(recent: Array<{ path: string; folder: boolean }>): MenuEntr
 
 export function fileMenuItems(recent: Array<{ path: string; folder: boolean }>): MenuEntry[] {
   return [
-    { label: "Neu", shortcut: IS_TAURI ? "Strg+N" : undefined, hint: "Neue Datei (das Projekt wird ersetzt)", onSelect: newFile },
-    { label: "Öffnen …", shortcut: "Strg+O", hint: "Datei öffnen", onSelect: () => void openFromDisk() },
-    { label: "Ordner öffnen …", hint: IS_TAURI ? "Ordner als Projekt öffnen" : "Ordner als Projekt öffnen (ohne Ordnerzugriff des Browsers: ZIP)", onSelect: () => void openFolderOrZip() },
-    ...(IS_TAURI ? [{ kind: "sub" as const, label: "Zuletzt geöffnet", items: recentItems(recent) }] : []),
+    { label: t("file.new"), shortcut: IS_TAURI ? "Strg+N" : undefined, hint: t("file.newHint"), onSelect: newFile },
+    { label: t("file.open"), shortcut: "Strg+O", hint: t("file.openHint"), onSelect: () => void openFromDisk() },
+    { label: t("file.openFolder"), hint: IS_TAURI ? t("file.openFolderHint") : t("file.openFolderHintWeb"), onSelect: () => void openFolderOrZip() },
+    ...(IS_TAURI ? [{ kind: "sub" as const, label: t("file.recent"), items: recentItems(recent) }] : []),
     { kind: "sep" },
-    { label: "Speichern unter …", shortcut: "Strg+⇧+S", onSelect: () => void saveToDisk(true) },
+    { label: t("file.saveAs"), shortcut: "Strg+⇧+S", onSelect: () => void saveToDisk(true) },
     { kind: "sep" },
-    { label: "Datei hinzufügen …", hint: "Neue, leere Datei im Projekt", onSelect: promptNewProjectFile },
-    { label: "Datei laden …", hint: "SVG (für import), Schrift .ttf/.otf (für text) oder .mcad/.scad ins Projekt laden", onSelect: chooseUpload },
+    { label: t("file.add"), hint: t("file.addHint"), onSelect: promptNewProjectFile },
+    { label: t("file.upload"), hint: t("file.uploadHint"), onSelect: chooseUpload },
     { kind: "sep" },
-    { label: "ZIP laden …", hint: "Projekt aus ZIP-Datei öffnen", onSelect: () => void openZip() },
-    { label: "ZIP speichern", hint: "Projekt als ZIP herunterladen", onSelect: downloadProjectZip },
+    { label: t("file.openZip"), hint: t("file.openZipHint"), onSelect: () => void openZip() },
+    { label: t("file.saveZip"), hint: t("file.saveZipHint"), onSelect: downloadProjectZip },
   ];
 }
 
@@ -92,13 +93,13 @@ export function exampleItems(): MenuEntry[] {
   const groups = [...new Set(SINGLE_EXAMPLES.map((e) => e.group))];
   const out: MenuEntry[] = groups.map((g) => ({
     kind: "sub" as const,
-    label: GROUP_LABELS[g] ?? g,
+    label: groupLabel(g),
     items: SINGLE_EXAMPLES.filter((e) => e.group === g).map((e) => ({ label: e.name, hint: e.path, onSelect: () => openExample(e) })),
   }));
   if (EXAMPLE_PROJECTS.length)
     out.push({
       kind: "sub",
-      label: "Projekte (mehrere Dateien)",
+      label: t("examples.projects"),
       items: EXAMPLE_PROJECTS.map((p) => ({ label: `${p.name}/`, onSelect: () => openExampleProject(p) })),
     });
   return out;
@@ -116,14 +117,14 @@ export function exportItems(current: ExportChoice, parts: number): MenuEntry[] {
     onSelect: () => void runExport(c),
   });
   const hints: Record<ExportChoice, string> = {
-    "3mf": "3MF: je Bauteil ein Objekt, ein Teil je Farbe mit Filament-Slot (Bambu Studio, OrcaSlicer)",
-    "3mf-single": "3MF ohne Farben: ein Netz je Bauteil",
-    stl: "Als STL exportieren",
-    "stl-colors": "ZIP mit einem STL je Farbe (alle im selben Koordinatensystem)",
-    step: "Als STEP exportieren (über den Kernel)",
-    "parts-stl": "Jedes Bauteil als STL, zusammen als ZIP",
-    "parts-step": "Jedes Bauteil als STEP, zusammen als ZIP",
-    "parts-3mf": "Ein 3MF mit einem Objekt je Bauteil",
+    "3mf": t("export.hint.3mf"),
+    "3mf-single": t("export.hint.3mfSingle"),
+    stl: t("export.hint.stl"),
+    "stl-colors": t("export.hint.stlColors"),
+    step: t("export.hint.step"),
+    "parts-stl": t("export.hint.partsStl"),
+    "parts-step": t("export.hint.partsStep"),
+    "parts-3mf": t("export.hint.parts3mf"),
   };
   const partItem = (c: ExportChoice): MenuEntry => ({ ...(item(c, hints[c]) as object), disabled: parts === 0 }) as MenuEntry;
   return [
@@ -131,9 +132,9 @@ export function exportItems(current: ExportChoice, parts: number): MenuEntry[] {
     { kind: "sep" },
     {
       kind: "sub",
-      label: "Je Bauteil",
+      label: t("export.perPart"),
       disabled: parts === 0,
-      hint: parts === 0 ? "Keine Bauteile – benannte Instanzen auf oberster Ebene (deckel: deckel();) sind Bauteile" : `${parts} Bauteile`,
+      hint: parts === 0 ? t("parts.none") : t("parts.count", { n: parts }),
       items: [partItem("parts-stl"), partItem("parts-step"), partItem("parts-3mf")],
     },
   ];
@@ -145,12 +146,12 @@ function ThemeMenu() {
   const opt = (p: ThemePref, label: string): MenuEntry => ({ label, check: "radio", checked: pref === p, onSelect: () => setThemePref(p) });
   return (
     <MenuButton
-      label="Farbschema"
+      label={t("theme.label")}
       text={null}
       icon={pref === "system" ? IconSystem : theme === "dark" ? IconMoon : IconSun}
-      hint={`${pref === "system" ? "System" : pref === "dark" ? "Dunkel" : "Hell"}; System folgt der Einstellung des Betriebssystems`}
+      hint={t("theme.hint", { current: pref === "system" ? t("theme.system") : pref === "dark" ? t("theme.dark") : t("theme.light") })}
       align="end"
-      items={[opt("light", "Hell"), opt("dark", "Dunkel"), opt("system", "System")]}
+      items={[opt("light", t("theme.light")), opt("dark", t("theme.dark")), opt("system", t("theme.system"))]}
       data-testid="theme"
     />
   );
@@ -163,7 +164,7 @@ function Title() {
   const dirty = useCad((s) => s.dirty.length > 0);
   const segs = pathSegments(shown, fileName);
   return (
-    <nav className="hd-title" aria-label="Pfadleiste" data-testid="pathbar">
+    <nav className="hd-title" aria-label={t("path.bar")} data-testid="pathbar">
       {segs.map((s, i) => (
         <span key={i} className="hd-seg-wrap">
           {i > 0 && (
@@ -172,16 +173,16 @@ function Title() {
             </span>
           )}
           {i < segs.length - 1 ? (
-            <button type="button" className="hd-seg link" onClick={() => jumpToLevel(i)} aria-label={i === 0 ? `Zur Datei ${s}` : `Zu ${s}`} title={i === 0 ? "Zur Datei (Dateikontext)" : `Zu ${s}`}>
+            <button type="button" className="hd-seg link" onClick={() => jumpToLevel(i)} aria-label={i === 0 ? t("path.toFile", { name: s }) : t("path.to", { name: s })} title={i === 0 ? t("path.toFileHint") : t("path.to", { name: s })}>
               {s}
             </button>
           ) : (
-            <span className={`hd-seg current${i === 0 ? " file" : ""}`} title={i === 0 ? "Aktuelle Datei" : `Kontext: Modul ${s}`} data-testid={i === 0 ? "filename" : undefined}>
+            <span className={`hd-seg current${i === 0 ? " file" : ""}`} title={i === 0 ? t("path.current") : t("path.module", { name: s })} data-testid={i === 0 ? "filename" : undefined}>
               {s}
             </span>
           )}
           {i === 0 && dirty && (
-            <span className="hd-dirty" title="Ungespeicherte Änderungen" aria-label="ungespeichert" data-testid="title-dirty">
+            <span className="hd-dirty" title={t("file.unsaved")} aria-label={t("file.unsavedShort")} data-testid="title-dirty">
               ●
             </span>
           )}
@@ -200,13 +201,13 @@ function ExportButton() {
   const l = EXPORT_LABELS[choice];
   return (
     <SplitButton
-      label={`Exportieren: ${l.label}`}
+      label={t("export.button", { format: l.label })}
       text={l.short}
       icon={IconDownload}
       variant="standard"
       shortcut="Strg+E"
       onClick={() => void runExport(choice)}
-      menuLabel="Exportformat"
+      menuLabel={t("export.format")}
       items={exportItems(choice, parts)}
       data-testid="export"
     />
@@ -217,15 +218,15 @@ export function Header() {
   const recent = useCad((s) => s.recent);
   return (
     <header className="hd" data-testid="header">
-      <div className="hd-left" role="toolbar" aria-label="Datei und Beispiele">
-        <span className="hd-brand" title="mcad – parametrisches CAD">mcad</span>
-        <MenuButton label="Datei" items={fileMenuItems(recent)} data-testid="file-menu" />
-        <MenuButton label="Beispiele" items={exampleItems()} data-testid="examples" />
+      <div className="hd-left" role="toolbar" aria-label={t("header.left")}>
+        <span className="hd-brand" title={t("header.brand")}>mcad</span>
+        <MenuButton label={t("header.file")} items={fileMenuItems(recent)} data-testid="file-menu" />
+        <MenuButton label={t("header.examples")} items={exampleItems()} data-testid="examples" />
       </div>
       <Title />
-      <div className="hd-right" role="toolbar" aria-label="Speichern, Export, Einstellungen">
-        <Button variant="primary" icon={IconSave} shortcut="Strg+S" hint={IS_TAURI ? undefined : "mehrere Dateien: ZIP"} onClick={() => void saveToDisk()} data-testid="save">
-          Speichern
+      <div className="hd-right" role="toolbar" aria-label={t("header.right")}>
+        <Button variant="primary" icon={IconSave} shortcut="Strg+S" hint={IS_TAURI ? undefined : t("header.saveHint")} onClick={() => void saveToDisk()} data-testid="save">
+          {t("header.save")}
         </Button>
         <ExportButton />
         <span className="ui-sep" role="separator" aria-orientation="vertical" />

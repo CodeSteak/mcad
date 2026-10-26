@@ -1,11 +1,12 @@
-// Parameter bar (Spec: Parameterleiste) and settings (Schrittweiten beim Ziehen).
+// Parameter bar (Spec: Parameterleiste) and settings (language, Schrittweiten beim Ziehen).
 
+import { LANG_PREFS, type LangPref, t } from "../i18n";
 import { IS_TAURI } from "../platform/desktop";
 import { useEffect, useRef, useState } from "react";
 import type { Value } from "../engine/protocol";
 import { fmtNum } from "../logic/format";
 import { type ParamRow, contextModule, dropOverride, paramRows, resetAll, resetOverride, setOverride } from "../logic/params";
-import { DEFAULT_SETTINGS, type Settings, saveSettings, store, useCad } from "../state/store";
+import { DEFAULT_SETTINGS, type Settings, saveSettings, setLangPref, store, useCad } from "../state/store";
 import { client } from "./runtime";
 import { Button, IconButton, IconReset, IconSettings } from "./ui";
 
@@ -87,10 +88,10 @@ function Row({ row, module }: { row: ParamRow; module: string }) {
     const v = typeof row.value === "number" ? row.value : 0;
     control = (
       <div className="pctl">
-        <NumberField value={v} onChange={set} label={`${row.name} Wert`} testid={`param-${row.name}-input`} />
+        <NumberField value={v} onChange={set} label={t("param.value", { name: row.name })} testid={`param-${row.name}-input`} />
         <input
           type="range"
-          aria-label={`${row.name} Schieberegler`}
+          aria-label={t("param.slider", { name: row.name })}
           data-testid={`param-${row.name}-slider`}
           min={row.min}
           max={row.max}
@@ -106,7 +107,7 @@ function Row({ row, module }: { row: ParamRow; module: string }) {
   } else if (row.control === "bool") {
     control = (
       <label className="pswitch">
-        <input type="checkbox" checked={row.value === true} aria-label={`${row.name} Schalter`} data-testid={`param-${row.name}-switch`} onChange={(e) => set(e.target.checked)} />
+        <input type="checkbox" checked={row.value === true} aria-label={t("param.switch", { name: row.name })} data-testid={`param-${row.name}-switch`} onChange={(e) => set(e.target.checked)} />
         <span className="cm-switch-knob" />
       </label>
     );
@@ -135,16 +136,16 @@ function Row({ row, module }: { row: ParamRow; module: string }) {
   return (
     <div className={`prow${row.changed ? " changed" : ""}`} data-testid={`param-${row.name}`}>
       <div className="phead">
-        <span className="pname" title={row.hasDefault ? `Standard: ${row.defaultText}` : "ohne Standardwert"}>
-          {row.changed && <span className="pmark" aria-label="geändert">●</span>}
+        <span className="pname" title={row.hasDefault ? t("param.defaultIs", { value: row.defaultText ?? "" }) : t("param.noDefaultHint")}>
+          {row.changed && <span className="pmark" aria-label={t("param.changed")}>●</span>}
           {row.name}
         </span>
-        <span className="pdefault">{row.hasDefault ? `= ${row.defaultText}` : "kein Standard"}</span>
+        <span className="pdefault">{row.hasDefault ? `= ${row.defaultText}` : t("param.noDefault")}</span>
         <IconButton
           icon={IconReset}
           className="ui-btn--small"
-          label={`${row.name} zurücksetzen`}
-          title={`Zurücksetzen auf ${row.hasDefault ? row.defaultText : numText(row.reset) || JSON.stringify(row.reset)}`}
+          label={t("param.reset", { name: row.name })}
+          title={t("param.resetTo", { value: row.hasDefault ? (row.defaultText ?? "") : numText(row.reset) || JSON.stringify(row.reset) })}
           data-testid={`param-${row.name}-reset`}
           disabled={!row.overridden}
           onClick={reset}
@@ -152,8 +153,8 @@ function Row({ row, module }: { row: ParamRow; module: string }) {
       </div>
       {control}
       {row.changed && row.control !== "other" && (
-        <Button className="padopt" data-testid={`param-${row.name}-adopt`} onClick={adopt} title="Wert als Standardwert in die Moduldefinition schreiben">
-          Als Standard übernehmen
+        <Button className="padopt" data-testid={`param-${row.name}-adopt`} onClick={adopt} title={t("param.adoptHint")}>
+          {t("param.adopt")}
         </Button>
       )}
     </div>
@@ -169,17 +170,17 @@ export function ParamBar() {
   const rows = paramRows(sig, shown.context.params, overrides[module]);
   const anyChanged = rows.some((r) => r.overridden);
   return (
-    <div className="parambar" role="region" aria-label="Parameterleiste" data-testid="parambar">
+    <div className="parambar" role="region" aria-label={t("param.bar")} data-testid="parambar">
       <div className="pbtitle">
         <span>
-          Parameter <b>{sig.name}</b>
+          {t("param.title")} <b>{sig.name}</b>
         </span>
         <Button variant="quiet" data-testid="param-reset-all" disabled={!anyChanged} onClick={() => store.setState({ paramOverrides: resetAll(store.getState().paramOverrides, sig, shown.context.params) })}>
-          Alle zurücksetzen
+          {t("param.resetAll")}
         </Button>
       </div>
-      <p className="pbnote">Nur Vorschau – der Code bleibt unverändert.</p>
-      {rows.length === 0 && <p className="pbnote">Keine Parameter.</p>}
+      <p className="pbnote">{t("param.previewOnly")}</p>
+      {rows.length === 0 && <p className="pbnote">{t("param.none")}</p>}
       {rows.map((r) => (
         <Row key={r.name} row={r} module={module} />
       ))}
@@ -187,10 +188,14 @@ export function ParamBar() {
   );
 }
 
+/** Names of the language choices: the languages in their own language, "System" translated. */
+const LANG_NAMES: Record<LangPref, () => string> = { system: () => t("settings.langSystem"), en: () => "English", de: () => "Deutsch" };
+
 export function SettingsButton() {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLSpanElement>(null);
   const settings = useCad((s) => s.settings);
+  const langPref = useCad((s) => s.langPref);
   const set = (patch: Partial<Settings>) => {
     const s = { ...store.getState().settings, ...patch };
     saveSettings(s);
@@ -235,27 +240,37 @@ export function SettingsButton() {
         }
       }}
     >
-      <IconButton icon={IconSettings} label="Einstellungen" onClick={() => setOpen(!open)} aria-expanded={open} aria-haspopup="dialog" pressed={open} data-testid="settings" />
+      <IconButton icon={IconSettings} label={t("settings.title")} onClick={() => setOpen(!open)} aria-expanded={open} aria-haspopup="dialog" pressed={open} data-testid="settings" />
       {open && (
-        <div className="settings-pop" role="dialog" aria-label="Einstellungen">
-          <b>Ziehen von Griffen</b>
-          {field("stepMm", "Schrittweite Länge", "mm")}
-          {field("stepDeg", "Schrittweite Winkel", "°")}
-          {field("snapPx", "Fangradius", "px")}
-          <p className="pbnote">Mit Alt wird frei gezogen (ohne Snap); Zahlen werden auf die Schrittweite gerundet.</p>
+        <div className="settings-pop" role="dialog" aria-label={t("settings.title")}>
+          <label className="setrow setrow--wide">
+            <span>{t("settings.language")}</span>
+            <select value={langPref} onChange={(e) => setLangPref(e.target.value as LangPref)} aria-label={t("settings.language")} data-testid="setting-lang">
+              {LANG_PREFS.map((p) => (
+                <option key={p} value={p}>
+                  {LANG_NAMES[p]()}
+                </option>
+              ))}
+            </select>
+          </label>
+          <b>{t("settings.drag")}</b>
+          {field("stepMm", t("settings.stepMm"), "mm")}
+          {field("stepDeg", t("settings.stepDeg"), "°")}
+          {field("snapPx", t("settings.snapPx"), "px")}
+          <p className="pbnote">{t("settings.dragNote")}</p>
           {IS_TAURI && (
             <>
-              <b>Dateien</b>
+              <b>{t("settings.files")}</b>
               <label className="setrow">
-                <span>Automatisch speichern</span>
-                <input type="checkbox" checked={settings.autoSave} onChange={(e) => set({ autoSave: e.target.checked })} aria-label="Automatisch speichern" data-testid="setting-autoSave" />
+                <span>{t("settings.autoSave")}</span>
+                <input type="checkbox" checked={settings.autoSave} onChange={(e) => set({ autoSave: e.target.checked })} aria-label={t("settings.autoSave")} data-testid="setting-autoSave" />
                 <span className="unit" />
               </label>
-              {field("autoSaveMs", "Verzögerung", "ms")}
+              {field("autoSaveMs", t("settings.autoSaveMs"), "ms")}
             </>
           )}
           <div className="setfoot">
-            <Button onClick={() => set({ ...DEFAULT_SETTINGS })}>Standard</Button>
+            <Button onClick={() => set({ ...DEFAULT_SETTINGS })}>{t("settings.defaults")}</Button>
           </div>
         </div>
       )}

@@ -11,6 +11,7 @@
 
 import type { EngineClient } from "../engine/client";
 import type { MeasureAnswer, MeasureHit, MeasureKind, MeasureRequest, Ray, SectionPlaneRef } from "../engine/protocol";
+import { t } from "../i18n";
 import { MEASURE_KINDS, fitKind, kindAvailable, listText, measureCli, measureComment } from "../logic/measure";
 import { effectiveNormal } from "../logic/section";
 import { pixelSize } from "../logic/sketchEditor";
@@ -53,7 +54,7 @@ export class MeasureController {
       const m = s.measure;
       if (!m || s.complete === p.complete || !s.complete) return;
       if (m.version !== null && m.version !== s.complete.version && (m.picks.length || m.hover)) {
-        const msg = m.picks.length ? "Modell geändert – Auswahl verworfen" : null;
+        const msg = m.picks.length ? t("measure.modelChanged") : null;
         this.patch({ picks: [], hover: null, version: s.complete.version, message: msg });
         if (msg) store.setState({ notice: msg });
       }
@@ -264,8 +265,8 @@ export class MeasureController {
     if (!e) return null;
     const text = how === "text" ? e.m.text : how === "comment" ? measureComment(e.m) : measureCli(e.m, e.file);
     const ok = await copyText(text);
-    const what = how === "text" ? "Messung" : how === "comment" ? "Kommentar" : "CLI-Aufruf";
-    store.setState({ notice: ok ? `Kopiert (${what}): ${text.split("\n")[0]}` : `${what}: ${text.split("\n")[0]}`, lastCli: how === "cli" ? text : store.getState().lastCli });
+    const what = how === "text" ? t("measure.comment") : how === "comment" ? t("measure.commentShort") : t("measure.cliCall");
+    store.setState({ notice: ok ? t("measure.copied", { what, text: text.split("\n")[0] }) : `${what}: ${text.split("\n")[0]}`, lastCli: how === "cli" ? text : store.getState().lastCli });
     return text;
   }
 
@@ -273,7 +274,7 @@ export class MeasureController {
   async copyAll(): Promise<string> {
     const text = listText(store.getState().measurements.map((x) => x.m));
     const ok = await copyText(text);
-    store.setState({ notice: ok ? `Kopiert: ${store.getState().measurements.length} Messungen` : "Kopieren nicht möglich" });
+    store.setState({ notice: ok ? t("measure.copiedAll", { n: store.getState().measurements.length }) : t("measure.copyFailed") });
     return text;
   }
 

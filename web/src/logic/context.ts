@@ -1,6 +1,7 @@
 // Module context (Spec: Kontext: aktuelles Modul): path bar targets and definition jumps.
 
 import type { Scene, SrcRange } from "../engine/protocol";
+import { t } from "../i18n";
 import type { SceneIndex, Span } from "./sceneIndex";
 
 export interface ModuleSpan extends Span {
@@ -19,7 +20,7 @@ export function moduleSpans(idx: SceneIndex): ModuleSpan[] {
 
 /** Path bar segments: "Datei" then the modules of the context. */
 export function pathSegments(scene: Scene | null, fileName: string): string[] {
-  return [fileName || "Datei", ...(scene?.context.path ?? [])];
+  return [fileName || t("header.file"), ...(scene?.context.path ?? [])];
 }
 
 function escapeRe(s: string): string {

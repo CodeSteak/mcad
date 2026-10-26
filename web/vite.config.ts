@@ -33,5 +33,6 @@ export default defineConfig(({ mode }) => ({
   test: {
     include: ["src/**/*.test.ts"],
     environment: "node",
+    setupFiles: ["src/i18n/test-setup.ts"],
   },
 }));

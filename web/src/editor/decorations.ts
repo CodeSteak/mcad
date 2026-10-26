@@ -7,6 +7,7 @@ import { syntaxTree } from "@codemirror/language";
 import type { EditorState, Range, Text } from "@codemirror/state";
 import { Decoration, type DecorationSet, WidgetType } from "@codemirror/view";
 import type { Diagnostic, Scene } from "../engine/protocol";
+import { t } from "../i18n";
 import { diagnosticPath, fileIds, includeStatements } from "../logic/files";
 import { mapRange, type MapPos, type VersionMapper } from "../logic/positions";
 import { disabledStatements } from "./lang";
@@ -48,10 +49,10 @@ class LineEndWidget extends WidgetType {
     for (const s of this.segs) {
       const e = document.createElement("span");
       e.className = `cm-lineend-${s.kind}${s.kind === "warning" && /^assert_(keepout|disjoint|intersect|touches): /.test(s.text) ? " cm-lineend-assert" : ""}`;
-      if (e.classList.contains("cm-lineend-assert")) e.title = "Klick: Verletzung in der Ansicht zeigen";
+      if (e.classList.contains("cm-lineend-assert")) e.title = t("editor.showViolation");
       if (s.locate) {
         e.classList.add("cm-lineend-locate");
-        e.title = "Klick: Stelle in der Ansicht zeigen";
+        e.title = t("editor.showPlace");
       }
       e.textContent = s.text;
       wrap.appendChild(e);
@@ -214,12 +215,12 @@ export function buildDecorations(state: EditorState, input: DecorationInput): De
     if (c) ranges.push(Decoration.widget({ widget: new LiteralControlWidget(c), side: 2 }).range(l.to));
   }
   for (const m of marks) {
-    const attributes = m.cls === "cm-ref-hover" ? { title: "Strg+Klick: zur Deklaration springen" } : undefined;
+    const attributes = m.cls === "cm-ref-hover" ? { title: t("editor.gotoDecl") } : undefined;
     ranges.push(Decoration.mark({ class: m.cls, attributes }).range(m.from, m.to));
   }
   // Paths of include/use: Ctrl+click opens the file.
   for (const inc of includeStatements(doc.toString())) {
-    if (inc.to > inc.from) ranges.push(Decoration.mark({ class: "cm-include", attributes: { title: "Strg+Klick: Datei öffnen" } }).range(inc.from, inc.to));
+    if (inc.to > inc.from) ranges.push(Decoration.mark({ class: "cm-include", attributes: { title: t("editor.openInclude") } }).range(inc.from, inc.to));
   }
   return Decoration.set(ranges, true);
 }

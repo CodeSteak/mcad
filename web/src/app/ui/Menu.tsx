@@ -8,6 +8,7 @@
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ariaShortcut, Button, type ButtonVariant, CaretIcon, Icon, IconButton, type IconType, tooltip } from "./Button";
+import { shortcutText } from "../../i18n";
 import { IconCheck, IconChevronDown, IconChevronRight } from "./icons";
 
 export type MenuEntry =
@@ -242,7 +243,7 @@ function MenuPopup({
             {!isSub && item.detail && <span className="ui-menu-detail">{item.detail}</span>}
             {!isSub && item.shortcut && (
               <kbd className="ui-kbd" aria-hidden="true">
-                {item.shortcut}
+                {shortcutText(item.shortcut)}
               </kbd>
             )}
             {isSub && <Icon icon={IconChevronRight} className="ui-menu-subarrow" />}

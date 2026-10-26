@@ -1,6 +1,7 @@
 // Desktop app UI parts: bar for external changes, diff view ("Vergleichen"). The recent files
 // are a submenu of "Datei" (header.tsx).
 
+import { t } from "../i18n";
 import { diffLines } from "../logic/textDiff";
 import { project } from "../state/project";
 import { store, useCad } from "../state/store";
@@ -19,29 +20,29 @@ export function ExternalBar() {
         e.kind === "changed" ? (
           <div key={path} className="extbar" role="alert" data-testid="external-bar" data-path={path}>
             <span className="msg">
-              <b>{path}</b> wurde extern geändert (ungespeicherte Änderungen im Editor).
+              <b>{path}</b> {t("external.changed")}
             </span>
-            <Button onClick={() => reloadFile(path, e.text ?? "")} data-testid="external-reload" title="Stand der Festplatte übernehmen (rückgängig machbar)">
-              Neu laden
+            <Button onClick={() => reloadFile(path, e.text ?? "")} data-testid="external-reload" title={t("external.reloadHint")}>
+              {t("external.reload")}
             </Button>
-            <Button onClick={() => keepMine(path)} data-testid="external-keep" title="Editor-Stand behalten; Speichern überschreibt die Datei">
-              Meine behalten
+            <Button onClick={() => keepMine(path)} data-testid="external-keep" title={t("external.keepHint")}>
+              {t("external.keep")}
             </Button>
             <Button onClick={() => compare(path)} data-testid="external-compare">
-              Vergleichen
+              {t("external.compare")}
             </Button>
           </div>
         ) : (
           <div key={path} className="extbar removed" role="alert" data-testid="external-bar" data-path={path}>
             <span className="msg">
-              <b>{path}</b> wurde gelöscht oder umbenannt. Der Inhalt bleibt im Editor; Speichern legt die Datei wieder an.
+              <b>{path}</b> {t("external.removed")}
             </span>
             <Button onClick={() => void saveProject()} data-testid="external-restore">
-              Wieder speichern
+              {t("external.restore")}
             </Button>
             {path !== project.main && (
               <Button onClick={() => closeRemoved(path)} data-testid="external-close">
-                Schließen
+                {t("common.close")}
               </Button>
             )}
           </div>
@@ -59,12 +60,12 @@ export function DiffDialog() {
   const close = () => store.setState({ diffView: null });
   return (
     <div className="modal-back" onClick={close}>
-      <div className="diffview" role="dialog" aria-label={`Vergleich ${d.path}`} data-testid="diff-view" onClick={(e) => e.stopPropagation()}>
+      <div className="diffview" role="dialog" aria-label={t("diff.label", { path: d.path })} data-testid="diff-view" onClick={(e) => e.stopPropagation()}>
         <header>
-          <b>{d.path}</b>: <span className="del">− auf der Festplatte</span> · <span className="add">+ im Editor</span>
+          <b>{d.path}</b>: <span className="del">− {t("diff.disk")}</span> · <span className="add">+ {t("diff.editor")}</span>
           <span className="grow" />
           <Button onClick={() => reloadFile(d.path, d.disk)} data-testid="diff-reload">
-            Festplatte übernehmen
+            {t("diff.takeDisk")}
           </Button>
           <Button
             onClick={() => {
@@ -72,9 +73,9 @@ export function DiffDialog() {
             }}
             data-testid="diff-keep"
           >
-            Meine behalten
+            {t("external.keep")}
           </Button>
-          <Button onClick={close}>Schließen</Button>
+          <Button onClick={close}>{t("common.close")}</Button>
         </header>
         <pre>
           {rows.map((r, i) => (

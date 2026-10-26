@@ -29,6 +29,7 @@ import {
   saveProjectAutosave,
   saveToFolder,
 } from "../files/files";
+import { type MessageKey, getLang, resolveLang, setLang, t } from "../i18n";
 import { hasFaceColors } from "../logic/colors";
 import { jumpUpTarget, moduleSpans } from "../logic/context";
 import { baseName as pathBase, diagnosticPath, fileText, isDataFile, isFontFile, isMeshFile, isModelFile, MODEL_EXT, normalizePath, rangePath, stripModelExt, withModelExt } from "../logic/files";
@@ -38,7 +39,7 @@ import { VersionMapper, mapRange } from "../logic/positions";
 import { isOff } from "../logic/sceneIndex";
 import { bridge } from "../state/bridge";
 import { type DirHandle, project } from "../state/project";
-import { colorsVisible, type ExportChoice, type SideTab, resolveTheme, setExportChoice, setSideTab, setThemePref, store } from "../state/store";
+import { colorsVisible, type ExportChoice, type SideTab, resolveTheme, setExportChoice, setLangPref, setSideTab, setThemePref, store } from "../state/store";
 import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
 import { DragController } from "./drag";
@@ -119,15 +120,15 @@ export function switchFile(path: string, pos?: number): boolean {
   const p = normalizePath(path);
   const v = bridge.view;
   if (!v || !project.has(p)) {
-    store.setState({ notice: `Datei ${p} gehört nicht zum Projekt` });
+    store.setState({ notice: t("notice.notInProject", { path: p }) });
     return false;
   }
   if (isFontFile(p)) {
-    store.setState({ notice: `${p}: Schriftdatei (binär), nutzbar mit text(…, font = "${pathBase(p)}")` });
+    store.setState({ notice: t("notice.fontFile", { path: p, name: pathBase(p) }) });
     return false;
   }
   if (isMeshFile(p)) {
-    store.setState({ notice: `${p}: Netzdatei (STL), nutzbar mit import("${pathBase(p)}")` });
+    store.setState({ notice: t("notice.meshFile", { path: p, name: pathBase(p) }) });
     return false;
   }
   if (p !== project.active) {
@@ -279,7 +280,7 @@ export async function initialProject(): Promise<{ name: string; main: string; ac
         return { ...d.project, active: d.project.active, disk: d.disk };
       }
     } catch (e) {
-      store.setState({ notice: `Öffnen fehlgeschlagen: ${String(e)}` });
+      store.setState({ notice: t("notice.openFailed", { error: String(e) }) });
     }
     const ex = EXAMPLES.find((e) => e.path === DEFAULT_EXAMPLE) ?? EXAMPLES[0];
     const name = ex ? ex.name : `unbenannt${MODEL_EXT}`;
@@ -335,7 +336,7 @@ function openLoaded(p: LoadedProject | null): void {
   if (!p) return;
   forgetHandle();
   loadProject({ name: p.name, main: p.main, files: p.files }, p.dir);
-  store.setState({ notice: `Projekt ${p.name}: ${Object.keys(p.files).length} Dateien, Hauptdatei ${p.main}` });
+  store.setState({ notice: t("notice.projectOpened", { name: p.name, n: Object.keys(p.files).length, main: p.main }) });
 }
 
 /** Opens a folder (File System Access API), else a ZIP file. Desktop app: folder dialog. */
@@ -345,7 +346,7 @@ export async function openFolderOrZip(): Promise<void> {
     const w = window as Window & { showDirectoryPicker?: unknown };
     openLoaded(typeof w.showDirectoryPicker === "function" ? await openFolder() : await pickZip());
   } catch (e) {
-    store.setState({ notice: `Öffnen fehlgeschlagen: ${(e as Error).message}` });
+    store.setState({ notice: t("notice.openFailed", { error: (e as Error).message }) });
   }
 }
 
@@ -353,7 +354,7 @@ export async function openZip(): Promise<void> {
   try {
     openLoaded(await pickZip());
   } catch (e) {
-    store.setState({ notice: `Öffnen fehlgeschlagen: ${(e as Error).message}` });
+    store.setState({ notice: t("notice.openFailed", { error: (e as Error).message }) });
   }
 }
 
@@ -362,14 +363,14 @@ export function downloadProjectZip(): void {
   flushActive();
   const name = `${stripModelExt(project.name)}.zip`;
   download(new Blob([projectZip(stripModelExt(project.name), project.files()) as BlobPart], { type: "application/zip" }), name);
-  store.setState({ notice: `Heruntergeladen: ${name}` });
+  store.setState({ notice: t("notice.downloaded", { name }) });
 }
 
 /** Adds a file to the project and shows it. */
 export function addProjectFile(path: string, text = ""): boolean {
   const p = normalizePath(path.trim());
   if (!p || p.startsWith("..") || p.startsWith("/")) {
-    store.setState({ notice: `Ungültiger Dateiname: ${path}` });
+    store.setState({ notice: t("notice.badName", { path }) });
     return false;
   }
   const name = withModelExt(p);
@@ -433,7 +434,7 @@ export async function uploadProjectFiles(files: ArrayLike<File>): Promise<void> 
   for (const f of Array.from(files)) {
     const name = normalizePath(dir + f.name);
     if (!isModelFile(name) && !isDataFile(name)) {
-      store.setState({ notice: `${f.name}: nur .mcad, .scad, .svg, .stl, .ttf und .otf` });
+      store.setState({ notice: t("notice.badUpload", { name: f.name }) });
       continue;
     }
     const text = fileText(name, new Uint8Array(await f.arrayBuffer()));
@@ -451,12 +452,12 @@ export async function uploadProjectFiles(files: ArrayLike<File>): Promise<void> 
   sendNow();
   scheduleSave();
   publishDirty();
-  store.setState({ notice: `Hinzugefügt: ${added.join(", ")}` });
+  store.setState({ notice: t("notice.added", { names: added.join(", ") }) });
 }
 
 export function newFile(): void {
   forgetHandle();
-  loadText(`unbenannt${MODEL_EXT}`, "// Neues Modell\ncube(10);\n");
+  loadText(`unbenannt${MODEL_EXT}`, `// ${t("file.newModel")}\ncube(10);\n`);
 }
 
 export async function openFromDisk(): Promise<void> {
@@ -465,7 +466,7 @@ export async function openFromDisk(): Promise<void> {
     const f = await openFile();
     if (f) loadText(f.name, f.text);
   } catch (e) {
-    store.setState({ notice: `Öffnen fehlgeschlagen: ${(e as Error).message}` });
+    store.setState({ notice: t("notice.openFailed", { error: (e as Error).message }) });
   }
 }
 
@@ -475,7 +476,7 @@ export async function saveToDisk(saveAs = false): Promise<void> {
     flushActive();
     if (project.dir && !saveAs) {
       const n = await saveToFolder(project.dir, project.files());
-      store.setState({ notice: `Gespeichert: ${n} Dateien in ${project.dir.name}` });
+      store.setState({ notice: t("notice.savedFolder", { n, dir: project.dir.name }) });
       return;
     }
     if (project.texts.size > 1 && !saveAs) {
@@ -495,9 +496,9 @@ export async function saveToDisk(saveAs = false): Promise<void> {
         publishProject();
       }
     }
-    if (name) store.setState({ notice: `Gespeichert: ${name}` });
+    if (name) store.setState({ notice: t("notice.saved", { what: name }) });
   } catch (e) {
-    store.setState({ notice: `Speichern fehlgeschlagen: ${(e as Error).message}` });
+    store.setState({ notice: t("notice.saveFailed", { error: (e as Error).message }) });
   }
 }
 
@@ -529,7 +530,7 @@ async function currentAsserts(): Promise<AssertResult[]> {
   };
   const now = ready();
   if (now) return now;
-  store.setState({ notice: "Asserts werden geprüft …" });
+  store.setState({ notice: t("notice.checkingAsserts") });
   return new Promise((resolve) => {
     const done = (v: AssertResult[]) => {
       clearTimeout(t);
@@ -549,7 +550,7 @@ async function currentAsserts(): Promise<AssertResult[]> {
 async function guardedExport(what: string, run: () => Promise<void>): Promise<void> {
   const v = violationLines(await currentAsserts());
   if (!v.length) return run();
-  store.setState({ exportConfirm: { what, violations: v, run }, notice: `Export angehalten: ${v.length} Assert-Verletzung(en)` });
+  store.setState({ exportConfirm: { what, violations: v, run }, notice: t("notice.exportHeld", { n: v.length }) });
 }
 
 /** "Trotzdem exportieren" (`true`) or "Abbrechen" in the export dialog. */
@@ -558,7 +559,7 @@ export async function confirmExport(go: boolean): Promise<void> {
   store.setState({ exportConfirm: null });
   if (!c) return;
   if (go) await c.run();
-  else store.setState({ notice: "Export abgebrochen (Assert-Verletzung)" });
+  else store.setState({ notice: t("notice.exportCancelled") });
 }
 
 bridge.onAssertClick = (line) => focusAssertAtLine(line);
@@ -573,7 +574,7 @@ export function focusDiagnosticAtLine(line: number): boolean {
   if (!d?.at) return false;
   const a = d.at;
   getViewer()?.frameBox([a[0] - 1, a[1] - 1, a[2] - 1], [a[0] + 1, a[1] + 1, a[2] + 1]);
-  store.setState({ notice: `Stelle ${a.map((x) => +x.toFixed(3)).join(", ")} eingerahmt` });
+  store.setState({ notice: t("notice.framed", { at: a.map((x) => +x.toFixed(3)).join(", ") }) });
   return true;
 }
 
@@ -619,14 +620,14 @@ export async function exportModel(format: ExportFormat): Promise<void> {
 }
 
 async function exportModelNow(format: ExportFormat): Promise<void> {
-  store.setState({ notice: `Export ${format.toUpperCase()} …` });
+  store.setState({ notice: t("notice.exporting", { what: format.toUpperCase() }) });
   try {
     const r = await client.exportFile(format);
     const name = `${baseName(store.getState().fileName)}.${format}`;
     download(new Blob([r.bytes as BlobPart], { type: MIME[format] }), name);
-    store.setState({ notice: `Exportiert: ${name} (${r.triangles ? `${r.triangles} Dreiecke` : `${r.bytes.length} Bytes`})` });
+    store.setState({ notice: `${t("notice.exported", { name })} (${r.triangles ? t("notice.triangles", { n: r.triangles }) : t("notice.bytes", { n: r.bytes.length })})` });
   } catch (e) {
-    store.setState({ notice: `Export fehlgeschlagen: ${(e as Error).message}` });
+    store.setState({ notice: t("notice.exportFailed", { error: (e as Error).message }) });
   }
 }
 
@@ -637,28 +638,39 @@ async function exportModelNow(format: ExportFormat): Promise<void> {
  * like `mcad export` (Bericht 12, F4): the files of UI and CLI are the same.
  */
 export async function exportColors(kind: "3mf" | "3mf-single" | "stl-zip"): Promise<void> {
-  return guardedExport(kind === "3mf" ? "3MF mehrfarbig" : kind === "3mf-single" ? "3MF einfarbig" : "STL je Farbe", () => exportColorsNow(kind));
+  return guardedExport(colorExportLabel(kind), () => exportColorsNow(kind));
+}
+
+function colorExportLabel(kind: "3mf" | "3mf-single" | "stl-zip"): string {
+  return kind === "3mf" ? t("export.label.3mf") : kind === "3mf-single" ? t("export.label.3mfSingle") : t("export.label.stlColorsShort");
 }
 
 async function exportColorsNow(kind: "3mf" | "3mf-single" | "stl-zip"): Promise<void> {
   const st = store.getState();
   const format: ExportFormat = kind === "stl-zip" ? "stl" : "3mf";
   const colors = kind !== "3mf-single";
-  const label = kind === "3mf" ? "3MF mehrfarbig" : kind === "3mf-single" ? "3MF einfarbig" : "STL je Farbe";
-  store.setState({ notice: `Export ${label} …` });
+  const label = colorExportLabel(kind);
+  store.setState({ notice: t("notice.exporting", { what: label }) });
   try {
     const r = await client.exportFile(format, undefined, false, colors);
     const base = baseName(st.fileName);
     const name = kind === "stl-zip" ? `${base}-farben.zip` : kind === "3mf" ? `${base}.3mf` : `${base}-einfarbig.3mf`;
     download(new Blob([r.bytes as BlobPart], { type: kind === "stl-zip" ? "application/zip" : MIME["3mf"] }), name);
     const notes = r.notes?.length ? ` – ${r.notes.join("; ")}` : "";
-    store.setState({ notice: `Exportiert: ${name} (${r.triangles} Dreiecke)${notes}` });
+    store.setState({ notice: `${t("notice.exported", { name })} (${t("notice.triangles", { n: r.triangles })})${notes}` });
   } catch (e) {
-    store.setState({ notice: `Export fehlgeschlagen: ${(e as Error).message}` });
+    store.setState({ notice: t("notice.exportFailed", { error: (e as Error).message }) });
   }
 }
 
 // ---------------------------------------------------------------- theme and colour regions
+
+// "System" language: follow a change of the browser language.
+if (typeof window !== "undefined") {
+  window.addEventListener("languagechange", () => {
+    if (store.getState().langPref === "system") setLang(resolveLang("system"));
+  });
+}
 
 if (typeof matchMedia !== "undefined") {
   // "System": follow dark mode changes of the OS (browser and desktop webview).
@@ -713,7 +725,7 @@ export async function exportParts(format: ExportFormat, parts: string[], zip: bo
 }
 
 async function exportPartsNow(format: ExportFormat, parts: string[], zip: boolean): Promise<void> {
-  store.setState({ notice: `Export ${format.toUpperCase()} (${parts.join(", ")}) …` });
+  store.setState({ notice: t("notice.exporting", { what: `${format.toUpperCase()} (${parts.join(", ")})` }) });
   try {
     const single = parts.length === 1;
     const r = await client.exportFile(format, parts, zip && !single);
@@ -721,9 +733,9 @@ async function exportPartsNow(format: ExportFormat, parts: string[], zip: boolea
     const name = single ? partFileName(parts[0], format) : zip ? `${base}-teile-${format}.zip` : `${base}-teile.${format}`;
     const type = zip && !single ? "application/zip" : MIME[format];
     download(new Blob([r.bytes as BlobPart], { type }), name);
-    store.setState({ notice: `Exportiert: ${name}${r.triangles ? ` (${r.triangles} Dreiecke)` : ""}` });
+    store.setState({ notice: `${t("notice.exported", { name })}${r.triangles ? ` (${t("notice.triangles", { n: r.triangles })})` : ""}` });
   } catch (e) {
-    store.setState({ notice: `Export fehlgeschlagen: ${(e as Error).message}` });
+    store.setState({ notice: t("notice.exportFailed", { error: (e as Error).message }) });
   }
 }
 
@@ -736,15 +748,22 @@ export function togglePart(name: string, visible: boolean): void {
 // ---------------------------------------------------------------- export button
 
 /** Names of the export choices (menu, button text, notices). */
-export const EXPORT_LABELS: Record<ExportChoice, { label: string; short: string }> = {
-  "3mf": { label: "3MF mehrfarbig", short: "3MF" },
-  "3mf-single": { label: "3MF einfarbig", short: "3MF" },
-  stl: { label: "STL", short: "STL" },
-  "stl-colors": { label: "STL je Farbe (ZIP)", short: "STL" },
-  step: { label: "STEP", short: "STEP" },
-  "parts-stl": { label: "STL je Bauteil (ZIP)", short: "STL" },
-  "parts-step": { label: "STEP je Bauteil (ZIP)", short: "STEP" },
-  "parts-3mf": { label: "3MF mit einem Objekt je Bauteil", short: "3MF" },
+const exportLabel = (key: MessageKey | null, plain: string, short: string) => ({
+  get label() {
+    return key ? t(key) : plain;
+  },
+  short,
+});
+
+export const EXPORT_LABELS: Record<ExportChoice, { readonly label: string; short: string }> = {
+  "3mf": exportLabel("export.label.3mf", "", "3MF"),
+  "3mf-single": exportLabel("export.label.3mfSingle", "", "3MF"),
+  stl: exportLabel(null, "STL", "STL"),
+  "stl-colors": exportLabel("export.label.stlColors", "", "STL"),
+  step: exportLabel(null, "STEP", "STEP"),
+  "parts-stl": exportLabel("export.label.partsStl", "", "STL"),
+  "parts-step": exportLabel("export.label.partsStep", "", "STEP"),
+  "parts-3mf": exportLabel("export.label.parts3mf", "", "3MF"),
 };
 
 /** Part names of the file context (the exports "je Bauteil"). */
@@ -773,7 +792,7 @@ export async function runExport(c: ExportChoice, remember = true): Promise<void>
     case "parts-3mf": {
       const names = partNames();
       if (!names.length) {
-        store.setState({ notice: "Keine Bauteile – benannte Instanzen auf oberster Ebene (deckel: deckel();) sind Bauteile" });
+        store.setState({ notice: t("parts.none") });
         return;
       }
       return exportParts(c === "parts-stl" ? "stl" : c === "parts-step" ? "step" : "3mf", names, c !== "parts-3mf");
@@ -860,6 +879,8 @@ window.__cad = {
       allGrids: s.allGrids,
       theme: s.theme,
       themePref: s.themePref,
+      lang: getLang(),
+      langPref: s.langPref,
       colorsOpen: colorsVisible(s),
       sideOpen: s.sideOpen,
       sideTab: s.sideTab,
@@ -1182,6 +1203,10 @@ window.__cad = {
       extruders: [...t.matchAll(/<metadata key="extruder" value="(\d+)"\/>/g)].map((m) => Number(m[1])),
       files: [...t.matchAll(/([A-Za-z0-9_-]+_F\d+_[A-Za-z0-9_-]+\.stl)/g)].map((m) => m[1]).filter((v, i, a) => a.indexOf(v) === i),
     };
+  },
+  /** Chooses the language (System/English/Deutsch) like the settings. */
+  setLangPref(p: "system" | "en" | "de") {
+    setLangPref(p);
   },
   /** Chooses the theme (System/Hell/Dunkel) like the toolbar. */
   setThemePref(p: "system" | "light" | "dark") {

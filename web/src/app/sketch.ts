@@ -13,6 +13,7 @@
 import { redo, undo } from "@codemirror/commands";
 import type { EngineClient } from "../engine/client";
 import type { Mat4, Ray, SketchAnswer, SketchRequest, SketchTool } from "../engine/protocol";
+import { t } from "../i18n";
 import { pixelSize, sketchKeyAction, sketchTransaction } from "../logic/sketchEditor";
 import { bridge } from "../state/bridge";
 import { project } from "../state/project";
@@ -77,7 +78,7 @@ export class SketchController {
   enter(tool: SketchTool = "line"): boolean {
     if (this.active) return true;
     if (project.active !== project.main) {
-      store.setState({ notice: "Skizzen-Editor: nur in der Hauptdatei (Tab der Hauptdatei öffnen)" });
+      store.setState({ notice: t("sketch.onlyMain") });
       return false;
     }
     this.aligned = null;

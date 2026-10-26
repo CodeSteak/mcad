@@ -21,6 +21,7 @@ import {
   lineNumbers,
   rectangularSelection,
 } from "@codemirror/view";
+import { onLangChange, t } from "../i18n";
 import { refDeclaration } from "../logic/context";
 import { includeAt, resolvePath } from "../logic/files";
 import { VersionMapper } from "../logic/positions";
@@ -194,7 +195,8 @@ function editorExtensions(cb: EditorCallbacks): Extension[] {
     engineDecorations,
     syncPlugin(cb),
     hoverTracking,
-    EditorView.contentAttributes.of({ "aria-label": "Quelltext", spellcheck: "false" }),
+    // a function: the name follows the UI language (evaluated on every update)
+    EditorView.contentAttributes.of(() => ({ "aria-label": t("editor.source"), spellcheck: "false" })),
   ];
 }
 
@@ -224,6 +226,8 @@ export function createEditor(parent: HTMLElement, doc: string, cb: EditorCallbac
       view.dispatch({ effects: refreshEffect.of(null) });
     });
   });
+  // language switch: attributes and decoration texts again
+  onLangChange(() => view.dispatch({ effects: refreshEffect.of(null) }));
   return view;
 }
 

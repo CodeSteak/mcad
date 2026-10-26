@@ -7,24 +7,36 @@
 
 import { useEffect, useState } from "react";
 import type { Vec3 } from "../engine/protocol";
+import { t } from "../i18n";
 import type { Viewer } from "../view/viewer";
 
 type V = [number, number, number];
 
 export interface Face {
-  name: string;
+  id: "front" | "back" | "right" | "left" | "top" | "bottom";
+  /** Label (current language). */
+  readonly name: string;
   n: V;
   /** Right on the face seen from outside (z up). */
   u: V;
 }
 
+const face = (id: Face["id"], n: V, u: V): Face => ({
+  id,
+  n,
+  u,
+  get name() {
+    return t(`view.${id}`);
+  },
+});
+
 export const FACES: Face[] = [
-  { name: "Vorne", n: [0, -1, 0], u: [1, 0, 0] },
-  { name: "Hinten", n: [0, 1, 0], u: [-1, 0, 0] },
-  { name: "Rechts", n: [1, 0, 0], u: [0, 1, 0] },
-  { name: "Links", n: [-1, 0, 0], u: [0, -1, 0] },
-  { name: "Oben", n: [0, 0, 1], u: [1, 0, 0] },
-  { name: "Unten", n: [0, 0, -1], u: [1, 0, 0] },
+  face("front", [0, -1, 0], [1, 0, 0]),
+  face("back", [0, 1, 0], [-1, 0, 0]),
+  face("right", [1, 0, 0], [0, 1, 0]),
+  face("left", [-1, 0, 0], [0, -1, 0]),
+  face("top", [0, 0, 1], [1, 0, 0]),
+  face("bottom", [0, 0, -1], [1, 0, 0]),
 ];
 
 const cross = (a: V, b: V): V => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -71,7 +83,7 @@ export function ViewCube({ viewer }: { viewer: Viewer | null }) {
   const cam = (w: V): V => [rot[0] * w[0] + rot[1] * w[1] + rot[2] * w[2], rot[3] * w[0] + rot[4] * w[1] + rot[5] * w[2], rot[6] * w[0] + rot[7] * w[1] + rot[8] * w[2]];
   const look = (d: Vec3) => viewer?.viewFrom(d);
   return (
-    <div className="viewcube" data-testid="viewcube" role="group" aria-label="Ansichtswürfel" title="Ansichtswürfel: Fläche, Kante oder Ecke anklicken">
+    <div className="viewcube" data-testid="viewcube" role="group" aria-label={t("cube.label")} title={t("cube.hint")}>
       <svg width="132" height="108" viewBox="-78 -54 132 108">
         {FACES.map((f) => {
           const rn = cam(f.n);
@@ -82,11 +94,11 @@ export function ViewCube({ viewer }: { viewer: Viewer | null }) {
           const m = [S * ru[0], -S * ru[1], S * rv[0], -S * rv[1], S * rn[0], -S * rn[1]].map((x) => +x.toFixed(3));
           const shade = 0.55 + 0.45 * rn[2];
           return (
-            <g key={f.name} transform={`matrix(${m.join(" ")})`} className="vc-face" style={{ ["--vc-shade" as string]: shade }}>
+            <g key={f.id} transform={`matrix(${m.join(" ")})`} className="vc-face" style={{ ["--vc-shade" as string]: shade }}>
               <rect x={-1} y={-1} width={2} height={2} className="vc-base" vectorEffect="non-scaling-stroke" />
               {[0, 1, 2].flatMap((i) =>
                 [0, 1, 2].map((j) => {
-                  const key = `${f.name}-${i}-${j}`;
+                  const key = `${f.id}-${i}-${j}`;
                   const center = i === 1 && j === 1;
                   const dir = cellDirection(f, i, j);
                   const id = dir.map((x) => Math.sign(Math.round(x * 100))).join(",");
@@ -100,7 +112,7 @@ export function ViewCube({ viewer }: { viewer: Viewer | null }) {
                       className={`vc-cell${hover === id ? " is-hover" : ""}${center ? " vc-center" : ""}`}
                       vectorEffect="non-scaling-stroke"
                       role={center ? "button" : undefined}
-                      aria-label={center ? `Ansicht ${f.name}` : undefined}
+                      aria-label={center ? t("cube.face", { name: f.name }) : undefined}
                       aria-hidden={center ? undefined : true}
                       onMouseEnter={() => setHover(id)}
                       onMouseLeave={() => setHover((h) => (h === id ? null : h))}

@@ -12,6 +12,7 @@
 // replaces the engine process and blocks the node's key, like WorkerTransport does.
 
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { t } from "../i18n";
 import type { FromEngine, ToEngine } from "./protocol";
 import type { EngineListener, EngineTransport } from "./transport";
 
@@ -34,7 +35,7 @@ export function decodeFrame(buf: ArrayBuffer): DecodedFrame {
   const dl = dv.getUint32(4, true);
   const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, hl))) as { v: number; kind: string; method: string; body: unknown };
   const base = 8 + hl;
-  if (base + dl > buf.byteLength) throw new Error("Rahmen unvollständig");
+  if (base + dl > buf.byteLength) throw new Error(t("engine.frameIncomplete"));
   const fix = (v: unknown): unknown => {
     if (Array.isArray(v)) {
       for (let i = 0; i < v.length; i++) v[i] = fix(v[i]);
@@ -115,7 +116,7 @@ export class TauriTransport implements EngineTransport {
         await this.api.invoke("engine_post", { msgs });
       }
     } catch (e) {
-      this.emit({ type: "Error", message: `Engine nicht erreichbar: ${(e as Error).message ?? e}`, version: null, node: null });
+      this.emit({ type: "Error", message: t("engine.unreachable", { error: String((e as Error).message ?? e) }), version: null, node: null });
     } finally {
       this.flushing = false;
     }

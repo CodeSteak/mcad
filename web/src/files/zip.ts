@@ -2,6 +2,8 @@
 // reading stored or deflated entries (project upload; deflate through the browser's
 // DecompressionStream("deflate-raw")).
 
+import { t } from "../i18n";
+
 const enc = new TextEncoder();
 
 let crcTable: Uint32Array | null = null;
@@ -102,13 +104,13 @@ export async function readZip(bytes: Uint8Array): Promise<Array<{ name: string; 
       break;
     }
   }
-  if (eocd < 0) throw new Error("keine ZIP-Datei");
+  if (eocd < 0) throw new Error(t("files.notZip"));
   const count = v.getUint16(eocd + 10, true);
   let p = v.getUint32(eocd + 16, true);
   const dec = new TextDecoder();
   const out: Array<{ name: string; data: Uint8Array }> = [];
   for (let k = 0; k < count; k++) {
-    if (v.getUint32(p, true) !== 0x02014b50) throw new Error("ZIP: Verzeichnis beschädigt");
+    if (v.getUint32(p, true) !== 0x02014b50) throw new Error(t("files.zipDirBroken"));
     const method = v.getUint16(p + 10, true);
     const csize = v.getUint32(p + 20, true);
     const nlen = v.getUint16(p + 28, true);
@@ -124,7 +126,7 @@ export async function readZip(bytes: Uint8Array): Promise<Array<{ name: string; 
     const raw = bytes.subarray(start, start + csize);
     if (method === 0) out.push({ name, data: raw.slice() });
     else if (method === 8) out.push({ name, data: await inflateRaw(raw) });
-    else throw new Error(`ZIP: Kompressionsverfahren ${method} nicht unterstützt (${name})`);
+    else throw new Error(t("files.zipMethod", { method, name }));
   }
   return out;
 }

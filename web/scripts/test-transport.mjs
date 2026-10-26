@@ -5,6 +5,10 @@
 
 import assert from "node:assert/strict";
 import { WorkerTransport } from "../src/engine/transport.ts";
+import { setLang } from "../src/i18n/index.ts";
+
+// the checks below match the German texts of the restart message
+setLang("de");
 
 class FakeWorker {
   static all = [];

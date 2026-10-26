@@ -21,10 +21,13 @@ export default defineConfig({
     viewport: { width: 1440, height: 900 },
     deviceScaleFactor: 1,
     acceptDownloads: true,
+    // The specs select by the German names of the UI (language "System" follows the browser);
+    // sprache.spec.ts checks English.
+    locale: "de-DE",
     trace: "retain-on-failure",
     launchOptions: { args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] },
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 } }],
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], locale: "de-DE", viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1 } }],
   webServer: {
     command: "pnpm exec vite build && pnpm exec vite preview --port 4173 --strictPort --host 127.0.0.1",
     url: "http://127.0.0.1:4173",

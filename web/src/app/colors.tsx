@@ -2,6 +2,7 @@
 // estimated mass; the slot is written into the code (`filament = n`), exports for Bambu
 // Studio / OrcaSlicer, "Farbregionen zeigen".
 
+import { t } from "../i18n";
 import { colorRows, MAX_FILAMENT, sharedSlots } from "../logic/colors";
 import { fmtNum } from "../logic/format";
 import { bridge } from "../state/bridge";
@@ -25,8 +26,8 @@ export function ColorsPanel() {
   const showRegions = useCad((s) => s.showRegions);
   if (!scene || !(scene.colors ?? []).length)
     return (
-      <div className="colorspanel" role="region" aria-label="Farben und Filamente" data-testid="colors-panel">
-        <p className="pbnote">Keine Farben – mit color("Name") oder color("#rrggbb") gefärbte Teile erscheinen hier mit Filament-Slot und Volumen.</p>
+      <div className="colorspanel" role="region" aria-label={t("colors.region")} data-testid="colors-panel">
+        <p className="pbnote">{t("colors.none")}</p>
       </div>
     );
   const model = getViewer()?.modelColor() ?? "#c3cad4";
@@ -36,43 +37,43 @@ export function ColorsPanel() {
   const warnings = regions && regions.version === scene.version ? regions.items.map((s) => s.warning).filter((w): w is string => !!w) : [];
   const parts = scene.context.module === null ? scene.parts.length : 0;
   return (
-    <div className="colorspanel" role="region" aria-label="Farben und Filamente" data-testid="colors-panel">
+    <div className="colorspanel" role="region" aria-label={t("colors.region")} data-testid="colors-panel">
       <div className="cptitle">
         <span>
-          Farben &amp; Filamente <span className="cpcount">{rows.length}</span>
+          {t("colors.title")} <span className="cpcount">{rows.length}</span>
         </span>
       </div>
-      <label className="check cpregions" title="Körper je Farbe anzeigen, wie sie exportiert und gedruckt werden (aus: Farbe je Fläche, schneller, bei Überlappung und Verrundung ungenau)">
+      <label className="check cpregions" title={t("colors.regionsHint")}>
         <input type="checkbox" checked={showRegions} onChange={(e) => store.setState({ showRegions: e.target.checked })} data-testid="colors-regions" />
-        Farbregionen zeigen
+        {t("view.showRegions")}
       </label>
       <table className="cptable">
         <thead>
           <tr>
-            <th>Farbe</th>
-            <th title="Filament-Slot (AMS)">Slot</th>
-            <th className="n">Volumen</th>
+            <th>{t("colors.color")}</th>
+            <th title={t("colors.slotHint")}>{t("colors.slot")}</th>
+            <th className="n">{t("colors.volume")}</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
             <tr key={r.key} data-testid={`color-row-${r.label}`} className={shared.includes(r.filament) ? "shared" : ""}>
               <td className="cpcolor">
-                <span className="swatch" style={{ background: r.swatch }} data-testid={`color-swatch-${r.label}`} title={`${r.hex} (Anzeige ${r.swatch})`} />
+                <span className="swatch" style={{ background: r.swatch }} data-testid={`color-swatch-${r.label}`} title={t("colors.swatch", { hex: r.hex, swatch: r.swatch })} />
                 <span className="cplabel">
                   {r.label}
                   {r.source === "random" && (
-                    <span className="badge warn" title="Name nicht in der Palette: stabile Zufallsfarbe">
-                      zufällig
+                    <span className="badge warn" title={t("colors.randomHint")}>
+                      {t("colors.random")}
                     </span>
                   )}
-                  {r.source === "default" && <span className="badge">ohne color()</span>}
+                  {r.source === "default" && <span className="badge">{t("colors.default")}</span>}
                   <span className="cplines">
                     {r.places.map((p) => (
                       <button
                         key={p.label}
                         className="link"
-                        title={p.file ? `${p.file}, Zeile ${p.line} zeigen` : `Zeile ${p.line} zeigen`}
+                        title={p.file ? t("colors.showFileLine", { file: p.file, line: p.line }) : t("colors.showLine", { line: p.line })}
                         onClick={() => (p.file ? openLocation(p.file, p.from) : bridge.setCursorLine(p.line))}
                       >
                         {p.label}
@@ -83,18 +84,18 @@ export function ColorsPanel() {
               </td>
               <td>
                 <select
-                  aria-label={`Filament für ${r.label}`}
+                  aria-label={t("colors.filamentFor", { label: r.label })}
                   data-testid={`color-slot-${r.label}`}
                   value={r.explicit ? String(r.filament) : "auto"}
                   disabled={r.source === "default"}
                   title={
                     r.source === "default"
-                      ? "Material ohne color() druckt immer mit Filament 1"
-                      : "Schreibt filament = n in den color()-Aufruf; kommt die Farbe aus einem Parameter oder einer Schleife, filament(\"Farbe\", n); am Anfang der Datei"
+                      ? t("colors.defaultSlotHint")
+                      : t("colors.slotSelectHint")
                   }
                   onChange={(e) => client.setFilament(r.key, e.target.value === "auto" ? null : Number(e.target.value))}
                 >
-                  <option value="auto">{r.explicit ? "automatisch" : `${r.filament} (auto)`}</option>
+                  <option value="auto">{r.explicit ? t("colors.auto") : `${r.filament} (auto)`}</option>
                   {Array.from({ length: MAX_FILAMENT }, (_, i) => i + 1).map((s) => (
                     <option key={s} value={String(s)}>
                       {s}
@@ -111,7 +112,10 @@ export function ColorsPanel() {
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={2}>Summe{parts > 0 ? ` (${parts} Bauteile)` : ""}</td>
+            <td colSpan={2}>
+              {t("common.sum")}
+              {parts > 0 ? ` (${t("parts.count", { n: parts })})` : ""}
+            </td>
             <td className="n" data-testid="colors-total">
               {vol(total)}
               <span className="cpmass">{total !== null ? `${mass(total * 1.24e-3)} PLA` : ""}</span>
@@ -119,7 +123,7 @@ export function ColorsPanel() {
           </tr>
         </tfoot>
       </table>
-      {shared.length > 0 && <p className="pbnote warn">Slot {shared.join(", ")}: mehrere Farben auf einem Filament.</p>}
+      {shared.length > 0 && <p className="pbnote warn">{t("colors.shared", { slots: shared.join(", ") })}</p>}
       {regionsError && <p className="pbnote warn">{regionsError}</p>}
       {warnings.map((w) => (
         <p key={w} className="pbnote warn">
@@ -127,24 +131,24 @@ export function ColorsPanel() {
         </p>
       ))}
       <div className="cpexport">
-        <b>Export für den Druck</b>
+        <b>{t("colors.exportTitle")}</b>
         <div className="cpexport-buttons">
-          <Button onClick={() => void runExport("3mf")} title="3MF: je Bauteil ein Objekt, ein Teil je Farbe mit Filament-Slot (Bambu Studio, OrcaSlicer)">
-            3MF mehrfarbig
+          <Button onClick={() => void runExport("3mf")} title={t("export.hint.3mf")}>
+            {t("export.label.3mf")}
           </Button>
-          <Button onClick={() => void runExport("stl-colors")} title="ZIP mit einem STL je Farbe (alle im selben Koordinatensystem)">
-            STL je Farbe (ZIP)
+          <Button onClick={() => void runExport("stl-colors")} title={t("export.hint.stlColors")}>
+            {t("export.label.stlColors")}
           </Button>
-          <Button onClick={() => void runExport("3mf-single")} title="3MF ohne Farben: ein Netz je Bauteil">
-            3MF einfarbig
+          <Button onClick={() => void runExport("3mf-single")} title={t("export.hint.3mfSingle")}>
+            {t("export.label.3mfSingle")}
           </Button>
         </div>
       </div>
       <p
         className="pbnote"
-        title="Kommt die Farbe aus einem Parameter oder einer Schleife, schreibt die Auswahl filament(&quot;Farbe&quot;, n); an den Anfang der Datei. 3MF: ein Objekt je Bauteil (Rest: „ohne Bauteil“), ohne Farbgruppe – Bambu Studio und OrcaSlicer übernehmen die Slots ohne Farbdialog."
+        title={t("colors.noteHint")}
       >
-        Slot ändern schreibt <code>filament = n</code> in den Code. Masse: PLA 1,24 g/cm³.
+        {t("colors.note1")} <code>filament = n</code> {t("colors.note2")}
       </p>
     </div>
   );

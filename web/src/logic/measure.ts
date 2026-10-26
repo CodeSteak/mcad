@@ -3,6 +3,7 @@
 // (`cad_session::measure`, `cad-measure`); these functions only format its answers.
 
 import type { MeasureKind, Measurement } from "../engine/protocol";
+import { t } from "../i18n";
 
 export interface KindInfo {
   kind: MeasureKind;
@@ -15,15 +16,28 @@ export interface KindInfo {
 }
 
 /** Kinds in the order of the context bar (Abstand, Radius, Winkel first, as in the UI concept). */
-export const MEASURE_KINDS: KindInfo[] = [
-  { kind: "distance", label: "Abstand", title: "Kleinster Abstand zweier Elemente mit Fußpunkten (parallele Ebenen: Normalabstand)", key: "D", where: "both" },
-  { kind: "radius", label: "Radius", title: "Radius und Durchmesser einer Kreiskante oder runden Fläche, mit Mittelpunkt und Achse", key: "R", where: "both" },
-  { kind: "angle", label: "Winkel", title: "Winkel zwischen zwei Kanten oder Flächen", key: "W", where: "both" },
-  { kind: "length", label: "Länge", title: "Länge einer Kante (im Schnitt: eines Konturabschnitts)", key: "L", where: "both" },
-  { kind: "area", label: "Fläche", title: "Fläche einer Fläche (im Schnitt: eines Bereichs der Schnittfläche)", key: "F", where: "both" },
-  { kind: "body", label: "Körper", title: "Hülle, Volumen und Oberfläche des Körpers bzw. Bauteils", key: "K", where: "model" },
-  { kind: "wall", label: "Wandstärke", title: "Wandstärke quer zur Schnittkontur an einer Stelle", key: "T", where: "section" },
-];
+// (the keys stay the same in every language)
+export const MEASURE_KINDS: KindInfo[] = (
+  [
+    ["distance", "D", "both"],
+    ["radius", "R", "both"],
+    ["angle", "W", "both"],
+    ["length", "L", "both"],
+    ["area", "F", "both"],
+    ["body", "K", "model"],
+    ["wall", "T", "section"],
+  ] as const
+).map(([kind, key, where]) => ({
+  kind,
+  key,
+  where,
+  get label() {
+    return t(`measure.kind.${kind}`);
+  },
+  get title() {
+    return t(`measure.kind.${kind}.title`);
+  },
+}));
 
 export function kindAvailable(kind: MeasureKind, inSection: boolean): boolean {
   const k = MEASURE_KINDS.find((x) => x.kind === kind);
@@ -49,7 +63,7 @@ export function measureCli(m: Measurement, file: string): string {
 /** The measurement as a code comment (`// Messung: …`, one line per line of text). */
 export function measureComment(m: Measurement): string {
   const lines = m.text.split("\n");
-  return lines.map((l, i) => (i === 0 ? `// Messung: ${l}` : `//   ${l.trim()}`)).join("\n");
+  return lines.map((l, i) => (i === 0 ? `// ${t("measure.comment")}: ${l}` : `//   ${l.trim()}`)).join("\n");
 }
 
 /** Text of all measurements (one block each). */
@@ -64,9 +78,9 @@ export function valueText(m: Measurement): string {
 
 /** Accuracy note (`exakt` or `± 0.02 mm`). */
 export function accuracyText(m: Measurement): string {
-  if (m.exact) return "exakt";
-  const t = m.tol ?? 0;
-  return t > 0 ? `± ${t < 1e-3 ? t.toExponential(1) : Number(t.toPrecision(3))} mm` : "genähert";
+  if (m.exact) return t("measure.exact");
+  const tol = m.tol ?? 0;
+  return tol > 0 ? `± ${tol < 1e-3 ? tol.toExponential(1) : Number(tol.toPrecision(3))} mm` : t("measure.approx");
 }
 
 /** Section plane of a measurement as text (`z = 10`). */
@@ -76,5 +90,5 @@ export function sectionText(m: Measurement): string | null {
   const n = s.normal;
   const axis = [0, 1, 2].find((k) => Math.abs(Math.abs(n[k]) - 1) < 1e-9);
   if (axis !== undefined) return `${"xyz"[axis]} = ${Number(s.point[axis].toFixed(4))}`;
-  return "freie Ebene";
+  return t("measure.freePlane");
 }

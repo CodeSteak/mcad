@@ -4,6 +4,7 @@
 
 import type { Text } from "@codemirror/state";
 import type { Handle, Scene, SnapTarget, Vec3 } from "../engine/protocol";
+import { t } from "../i18n";
 import { sketchesFor } from "./display";
 import { gridBox } from "./grids";
 import { type Box3, add, apply, applyDir, invertAffine, length, scale, sub } from "./math";
@@ -32,21 +33,21 @@ export function isAngle(h: Handle): boolean {
   return h.kind.kind === "angle";
 }
 
-/** German label of a handle kind (tooltips, report). */
+/** Label of a handle kind (tooltips, report). */
 export function handleLabel(h: Handle): string {
   switch (h.kind.kind) {
     case "point":
-      return "Punkt";
+      return t("handle.point");
     case "radius":
-      return "Radius";
+      return t("handle.radius");
     case "height":
-      return "Höhe";
+      return t("handle.height");
     case "angle":
-      return `Drehung ${["x", "y", "z", "Achse"][h.kind.axis] ?? ""}`.trim();
+      return t("handle.angle", { axis: ["x", "y", "z", t("handle.axis")][h.kind.axis] ?? "" }).trim();
     case "plane":
-      return `Ebene ${["x", "y", "z"][h.kind.axis]}`;
+      return t("handle.plane", { axis: ["x", "y", "z"][h.kind.axis] });
     case "scale":
-      return h.kind.axis === null ? "Skalierung" : `Skalierung ${["x", "y", "z"][h.kind.axis]}`;
+      return h.kind.axis === null ? t("handle.scale") : `${t("handle.scale")} ${["x", "y", "z"][h.kind.axis]}`;
   }
 }
 

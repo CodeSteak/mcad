@@ -7,21 +7,20 @@ import { isolateHistory } from "@codemirror/commands";
 import type { EditorState, TransactionSpec } from "@codemirror/state";
 import type { Edit, Mat4, SketchTool, Vec3 } from "../engine/protocol";
 import { mapEdits } from "../editor/applyEdits";
+import { lazyRecord, t } from "../i18n";
 import { add, apply, applyDir, length, scale, sub } from "./math";
 import type { VersionMapper } from "./positions";
 
 /** Tools in the bar (order, label, tooltip). */
-export const SKETCH_TOOLS: Array<{ tool: SketchTool; label: string; title: string }> = [
-  { tool: "select", label: "Auswahl", title: "Segment anklicken (Entf löscht), Griffe ziehen" },
-  { tool: "line", label: "Linie", title: "Linien: Anfangspunkt, dann Punkt für Punkt; Klick auf den Anfang schließt" },
-  { tool: "arc_through", label: "Bogen 3P", title: "Bogen durch drei Punkte: arc(through = …, to = …)" },
-  { tool: "arc_center", label: "Bogen M", title: "Bogen um einen Mittelpunkt: arc(center = …, angle = …)" },
-  { tool: "arc_tangent", label: "Bogen tan", title: "Tangentialer Bogen am Ende der Kontur: arc(to = …)" },
-  { tool: "bezier", label: "Bézier", title: "Kubische Bézierkurve: Anfang, Kontrollpunkt 1, Kontrollpunkt 2, Ende" },
-  { tool: "rect", label: "Rechteck", title: "Rechteck aus zwei Ecken (Rasterpunkte bleiben Referenzen)" },
-  { tool: "circle", label: "Kreis", title: "Kreis: Mittelpunkt, dann Punkt auf dem Kreis" },
-  { tool: "corner", label: "Ecke runden", title: "corner(r = …): Ecke wählen, dann Radius" },
-];
+export const SKETCH_TOOLS: Array<{ tool: SketchTool; label: string; title: string }> = (["select", "line", "arc_through", "arc_center", "arc_tangent", "bezier", "rect", "circle", "corner"] as const).map((tool) => ({
+  tool,
+  get label() {
+    return t(`sketch.tool.${tool}.short`);
+  },
+  get title() {
+    return t(`sketch.tool.${tool}.title`);
+  },
+}));
 
 /** Shortcuts of the tools (docs/konzepte/ui-ueberarbeitung, Abschnitt 5). */
 export const SKETCH_TOOL_KEYS: Partial<Record<SketchTool, string>> = {
@@ -47,19 +46,9 @@ export function sketchKeyAction(key: string, shift: boolean): { tool: SketchTool
   return null;
 }
 
-export const SKETCH_TOOL_NAMES: Record<SketchTool, string> = {
-  select: "Auswahl",
-  line: "Linie",
-  arc_through: "Bogen (3 Punkte)",
-  arc_center: "Bogen (Mittelpunkt)",
-  arc_tangent: "Bogen (tangential)",
-  bezier: "Bézier",
-  rect: "Rechteck",
-  circle: "Kreis",
-  corner: "Ecke runden",
-  close: "Schließen",
-  delete: "Löschen",
-};
+const ALL_TOOLS = ["select", "line", "arc_through", "arc_center", "arc_tangent", "bezier", "rect", "circle", "corner", "close", "delete"] as const satisfies readonly SketchTool[];
+
+export const SKETCH_TOOL_NAMES: Record<SketchTool, string> = lazyRecord(ALL_TOOLS, (tool) => t(`sketch.tool.${tool}`));
 
 /**
  * Spacing of the step raster: the step times 1, 2, 5, 10, … so that lines are at least

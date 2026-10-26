@@ -4,6 +4,7 @@
 
 import type { Text } from "@codemirror/state";
 import { type EditorView, WidgetType } from "@codemirror/view";
+import { t } from "../i18n";
 
 export interface LiteralControl {
   /** Literal range in the current document. */
@@ -44,7 +45,7 @@ export class LiteralControlWidget extends WidgetType {
     const input = document.createElement("input");
     input.type = "checkbox";
     input.checked = this.c.value === true;
-    input.setAttribute("aria-label", "Wert umschalten");
+    input.setAttribute("aria-label", t("editor.toggle"));
     input.setAttribute("data-testid", "inline-switch");
     input.addEventListener("change", () => {
       const st = wrap.__lit!;

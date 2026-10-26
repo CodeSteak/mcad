@@ -8,6 +8,7 @@
 // (`title`) adds the shortcut, `aria-keyshortcuts` carries it for assistive technology.
 
 import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { shortcutText } from "../../i18n";
 import type { LucideIcon } from "./icons";
 
 export type ButtonVariant = "primary" | "standard" | "quiet";
@@ -19,9 +20,9 @@ export function Icon({ icon: I, className }: { icon: IconType; className?: strin
   return <I size={15} strokeWidth={1.75} className={`ui-icon${className ? ` ${className}` : ""}`} aria-hidden="true" />;
 }
 
-/** "Strg+E" → tooltip text; `aria-keyshortcuts` wants "Control+E". */
+/** "Strg+E" → tooltip text (shortcut in the UI language: "Ctrl+E"); `aria-keyshortcuts` wants "Control+E". */
 export function tooltip(name: string, shortcut?: string, extra?: string): string {
-  return `${name}${shortcut ? ` (${shortcut})` : ""}${extra ? ` – ${extra}` : ""}`;
+  return `${name}${shortcut ? ` (${shortcutText(shortcut)})` : ""}${extra ? ` – ${extra}` : ""}`;
 }
 
 export function ariaShortcut(shortcut?: string): string | undefined {
@@ -39,7 +40,7 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
   icon?: IconType;
   /** Toggle state (`aria-pressed`). */
   pressed?: boolean;
-  /** Shortcut shown in the tooltip ("Strg+S"). */
+  /** Shortcut shown in the tooltip, in the German notation ("Strg+S"; shown as "Ctrl+S" in English). */
   shortcut?: string;
   /** Tooltip; defaults to the text of the button with the shortcut. */
   title?: string;

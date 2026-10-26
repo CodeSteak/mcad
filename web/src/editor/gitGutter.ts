@@ -5,6 +5,7 @@
 
 import { type EditorState, RangeSet, RangeSetBuilder, StateEffect, StateField, type Text } from "@codemirror/state";
 import { GutterMarker, gutter } from "@codemirror/view";
+import { t } from "../i18n";
 import type { Hunk } from "../platform/desktop";
 
 class GitMarker extends GutterMarker {
@@ -29,10 +30,10 @@ class GitMarker extends GutterMarker {
 export const setHunks = StateEffect.define<Hunk[] | null>();
 
 function title(h: Hunk): string {
-  const what = h.kind === "added" ? "neu" : h.kind === "modified" ? "geändert" : "gelöscht";
-  if (!h.old.length) return `Git: ${what} (gegenüber HEAD)`;
+  const what = h.kind === "added" ? t("git.added") : h.kind === "modified" ? t("git.modified") : t("git.deleted");
+  if (!h.old.length) return t("git.vsHead", { what });
   const shown = h.old.slice(0, 12).join("\n");
-  return `Git: ${what} – vorher (HEAD):\n${shown}${h.old.length > 12 ? `\n… (${h.old.length - 12} weitere)` : ""}`;
+  return `${t("git.before", { what })}\n${shown}${h.old.length > 12 ? `\n${t("git.more", { n: h.old.length - 12 })}` : ""}`;
 }
 
 /** Marker set for hunks on document `doc`. */

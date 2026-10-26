@@ -209,6 +209,8 @@ async function startApp(args) {
   const v = await wd("POST", "/session", { capabilities: { alwaysMatch: { "tauri:options": { application: BIN, args } } } });
   sid = v.sessionId;
   await waitFor("UI", async () => (await exec("return !!window.__cad")) || null, 60_000);
+  // The checks use the German names of the UI (the webview's language depends on the system).
+  await exec("window.__cad.setLangPref('de')");
   const s = await sceneReady();
   return { wallMs: Date.now() - t0, state: s };
 }

@@ -4,6 +4,7 @@
 // "Parameter" (the parameter bar). The rows "Datei …" and "Bauteile …" above the view are gone.
 
 import { useRef, type KeyboardEvent } from "react";
+import { lazyRecord, t } from "../i18n";
 import { fmtNum } from "../logic/format";
 import { type SideTab, setSideOpen, setSideTab, useCad } from "../state/store";
 import { ColorsPanel } from "./colors";
@@ -12,7 +13,7 @@ import { ParamBar } from "./panels";
 import { exportParts, togglePart } from "./runtime";
 import { IconButton, IconMore, IconPanelClose, MenuButton } from "./ui";
 
-/** Name of the material outside the parts (as the engine names it, cad_session::NO_PART). */
+/** Name of the material outside the parts (as the engine names it, cad_session::NO_PART; shown translated). */
 const NO_PART = "ohne Bauteil";
 
 function vol(v: number | null | undefined): string {
@@ -28,8 +29,8 @@ function PartsPanel() {
   const names = parts.map((p) => p.name);
   if (!parts.length) {
     return (
-      <div className="partspanel" role="region" aria-label="Bauteile" data-testid="partsbar">
-        <p className="pbnote">{fileContext ? "Keine Bauteile – benannte Instanzen auf oberster Ebene (deckel: deckel();) sind Bauteile." : "Bauteile gibt es nur im Dateikontext."}</p>
+      <div className="partspanel" role="region" aria-label={t("side.parts")} data-testid="partsbar">
+        <p className="pbnote">{fileContext ? `${t("parts.none")}.` : t("parts.onlyFile")}</p>
       </div>
     );
   }
@@ -39,7 +40,7 @@ function PartsPanel() {
   const known = parts.every((p) => p.volume !== null);
   const sum = known ? parts.reduce((a, p) => a + (p.volume ?? 0), 0) + (rest ?? 0) : null;
   return (
-    <div className="partspanel" role="region" aria-label="Bauteile" data-testid="partsbar">
+    <div className="partspanel" role="region" aria-label={t("side.parts")} data-testid="partsbar">
       <ul className="pplist">
         {parts.map((pt) => {
           const b = pt.bounds;
@@ -47,49 +48,49 @@ function PartsPanel() {
           const on = !hidden.includes(pt.name);
           return (
             <li key={pt.name} className={`pprow${on ? "" : " off"}`} data-testid={`part-${pt.name}`}>
-              <label className="ppname" title={`Bauteil ${pt.name} (Zeile ${pt.range.line}) ein-/ausblenden`}>
-                <input type="checkbox" checked={on} onChange={(e) => togglePart(pt.name, e.target.checked)} aria-label={`${pt.name} sichtbar`} />
+              <label className="ppname" title={t("parts.toggle", { name: pt.name, line: pt.range.line })}>
+                <input type="checkbox" checked={on} onChange={(e) => togglePart(pt.name, e.target.checked)} aria-label={t("parts.visible", { name: pt.name })} />
                 <span>{pt.name}</span>
               </label>
-              <span className="ppvol" title={size ? `Hülle ${size} mm` : undefined}>
+              <span className="ppvol" title={size ? t("parts.hull", { size }) : undefined}>
                 {vol(pt.volume)}
               </span>
               <MenuButton
-                label={`Export ${pt.name}`}
+                label={t("parts.export", { name: pt.name })}
                 text={null}
                 icon={IconMore}
                 align="end"
                 className="ui-btn--small"
                 items={[
-                  { label: "STL", hint: `${pt.name} als STL`, onSelect: () => void exportParts("stl", [pt.name], false) },
-                  { label: "3MF", hint: `${pt.name} als 3MF`, onSelect: () => void exportParts("3mf", [pt.name], false) },
-                  { label: "STEP", hint: `${pt.name} als STEP`, onSelect: () => void exportParts("step", [pt.name], false) },
+                  { label: "STL", hint: t("parts.as", { name: pt.name, format: "STL" }), onSelect: () => void exportParts("stl", [pt.name], false) },
+                  { label: "3MF", hint: t("parts.as", { name: pt.name, format: "3MF" }), onSelect: () => void exportParts("3mf", [pt.name], false) },
+                  { label: "STEP", hint: t("parts.as", { name: pt.name, format: "STEP" }), onSelect: () => void exportParts("step", [pt.name], false) },
                 ]}
               />
             </li>
           );
         })}
-        <li className="pprow rest" title="Material außerhalb der Bauteile (im 3MF ein eigenes Objekt; Volumen aus den Farbregionen)" data-testid="part-rest">
-          <span className="ppname muted">{NO_PART}</span>
+        <li className="pprow rest" title={t("parts.restHint")} data-testid="part-rest">
+          <span className="ppname muted">{t("parts.rest")}</span>
           <span className="ppvol">{rest === null ? "–" : vol(rest)}</span>
           <span className="ppspacer" />
         </li>
       </ul>
       <div className="ppsum">
-        <span>Summe</span>
+        <span>{t("common.sum")}</span>
         <span className="ppvol" data-testid="parts-total">
           {vol(sum)}
         </span>
         <MenuButton
-          label="Export aller Bauteile"
+          label={t("parts.exportAll")}
           text={null}
           icon={IconMore}
           align="end"
           className="ui-btn--small"
           items={[
-            { label: "ZIP (STL)", hint: "Jedes Bauteil als STL, zusammen als ZIP", onSelect: () => void exportParts("stl", names, true) },
-            { label: "ZIP (STEP)", hint: "Jedes Bauteil als STEP, zusammen als ZIP", onSelect: () => void exportParts("step", names, true) },
-            { label: "3MF (ein Objekt je Bauteil)", hint: "Ein 3MF mit einem Objekt je Bauteil", onSelect: () => void exportParts("3mf", names, false) },
+            { label: "ZIP (STL)", hint: t("export.hint.partsStl"), onSelect: () => void exportParts("stl", names, true) },
+            { label: "ZIP (STEP)", hint: t("export.hint.partsStep"), onSelect: () => void exportParts("step", names, true) },
+            { label: t("parts.3mfObjects"), hint: t("export.hint.parts3mf"), onSelect: () => void exportParts("3mf", names, false) },
           ]}
         />
       </div>
@@ -97,7 +98,7 @@ function PartsPanel() {
   );
 }
 
-const TAB_LABELS: Record<SideTab, string> = { parts: "Bauteile", colors: "Farben", measure: "Messen", params: "Parameter" };
+const TAB_LABELS: Record<SideTab, string> = lazyRecord(["parts", "colors", "measure", "params"], (k) => t(`side.${k}`));
 
 export function SidePanel() {
   const open = useCad((s) => s.sideOpen);
@@ -123,30 +124,30 @@ export function SidePanel() {
     requestAnimationFrame(() => tabsRef.current?.querySelector<HTMLButtonElement>(`[data-tab="${tabs[i]}"]`)?.focus());
   };
   return (
-    <aside className="sidepanel" aria-label="Seitenpanel" data-testid="sidepanel">
+    <aside className="sidepanel" aria-label={t("side.label")} data-testid="sidepanel">
       <div className="sp-head">
-        <div className="ui-seg sp-tabs" role="tablist" aria-label="Seitenpanel" ref={tabsRef} onKeyDown={onKey}>
-          {tabs.map((t) => (
+        <div className="ui-seg sp-tabs" role="tablist" aria-label={t("side.label")} ref={tabsRef} onKeyDown={onKey}>
+          {tabs.map((tab) => (
             <button
-              key={t}
+              key={tab}
               type="button"
               role="tab"
-              id={`sp-tab-${t}`}
-              data-tab={t}
-              aria-label={TAB_LABELS[t]}
-              aria-selected={t === cur}
+              id={`sp-tab-${tab}`}
+              data-tab={tab}
+              aria-label={TAB_LABELS[tab]}
+              aria-selected={tab === cur}
               aria-controls="sp-body"
-              tabIndex={t === cur ? 0 : -1}
-              className={`ui-seg-item${t === cur ? " is-on" : ""}`}
-              title={t === "params" && module ? `Parameter von ${module}` : TAB_LABELS[t]}
-              onClick={() => setSideTab(t)}
+              tabIndex={tab === cur ? 0 : -1}
+              className={`ui-seg-item${tab === cur ? " is-on" : ""}`}
+              title={tab === "params" && module ? t("side.paramsOf", { module }) : TAB_LABELS[tab]}
+              onClick={() => setSideTab(tab)}
             >
-              <span className="ui-seg-text">{TAB_LABELS[t]}</span>
-              {count[t] ? <span className="sp-count">{count[t]}</span> : null}
+              <span className="ui-seg-text">{TAB_LABELS[tab]}</span>
+              {count[tab] ? <span className="sp-count">{count[tab]}</span> : null}
             </button>
           ))}
         </div>
-        <IconButton icon={IconPanelClose} label="Seitenpanel ausblenden" onClick={() => setSideOpen(false)} />
+        <IconButton icon={IconPanelClose} label={t("side.hide")} onClick={() => setSideOpen(false)} />
       </div>
       <div className="sp-body" id="sp-body" role="tabpanel" aria-labelledby={`sp-tab-${cur}`}>
         {cur === "parts" && <PartsPanel />}

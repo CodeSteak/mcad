@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createEditor } from "../editor/setup";
+import { t, useLang } from "../i18n";
 import { diagnosticPath } from "../logic/files";
+import { IS_TAURI } from "../platform/desktop";
 import { bridge } from "../state/bridge";
 import { project } from "../state/project";
 import { setShowKeepout, setSideOpen, store, useCad } from "../state/store";
@@ -57,13 +59,13 @@ import {
 /** Actions of a file tab (context menu and the "+" menu). */
 function tabItems(path: string, main: string): MenuEntry[] {
   return [
-    { label: "Als Hauptdatei", hint: "Diese Datei als Hauptdatei auswerten", disabled: path === main, onSelect: () => setMainFile(path) },
+    { label: t("tab.makeMain"), hint: t("tab.makeMainHint"), disabled: path === main, onSelect: () => setMainFile(path) },
     {
-      label: "Schließen",
-      hint: path === main ? "Die Hauptdatei bleibt im Projekt" : "Datei aus dem Projekt entfernen",
+      label: t("tab.close"),
+      hint: path === main ? t("tab.closeMainHint") : t("tab.closeHint"),
       disabled: path === main,
       onSelect: () => {
-        if (window.confirm(`${path} aus dem Projekt entfernen?`)) removeProjectFile(path);
+        if (window.confirm(t("tab.closeConfirm", { path }))) removeProjectFile(path);
       },
     },
   ];
@@ -85,7 +87,7 @@ function FileBar() {
   };
   return (
     <div className="filebar" data-testid="filebar">
-      <div className="tabs" role="tablist" aria-label="Dateien des Projekts">
+      <div className="tabs" role="tablist" aria-label={t("tab.list")}>
         {p.paths.map((path) => (
           <button
             key={path}
@@ -97,7 +99,7 @@ function FileBar() {
             tabIndex={path === p.active ? 0 : -1}
             className={`tab${path === p.active ? " active" : ""}${path === p.main ? " is-main" : ""}`}
             data-testid={`tab-${path}`}
-            title={`${path === p.main ? `${path} (Hauptdatei)` : path} – Rechtsklick: Als Hauptdatei, Schließen`}
+            title={t("tab.title", { name: path === p.main ? t("tab.mainName", { path }) : path })}
             onClick={() => switchFile(path)}
             onContextMenu={(e) => {
               e.preventDefault();
@@ -118,55 +120,53 @@ function FileBar() {
             }}
           >
             {path === p.main && (
-              <span className="star" aria-label="Hauptdatei" title="Hauptdatei">
+              <span className="star" aria-label={t("tab.main")} title={t("tab.main")}>
                 ★
               </span>
             )}
             {path}
             {dirty.includes(path) && (
-              <span className="dirty" title="Ungespeicherte Änderungen" data-testid={`dirty-${path}`}>
+              <span className="dirty" title={t("file.unsaved")} data-testid={`dirty-${path}`}>
                 ●
               </span>
             )}
-            {errorsIn.has(path) && <span className="dot" title="Fehler in dieser Datei" />}
+            {errorsIn.has(path) && <span className="dot" title={t("tab.errors")} />}
           </button>
         ))}
       </div>
       <MenuButton
-        label="Datei hinzufügen"
+        label={t("tab.add")}
         text={null}
         icon={IconPlus}
         className="tab-add"
-        hint="Neue Datei, Datei laden; Aktionen der angezeigten Datei"
+        hint={t("tab.addHint")}
         items={[
-          { label: "Neue Datei …", hint: "Neue, leere Datei im Projekt", onSelect: promptNewProjectFile },
-          { label: "Datei laden …", hint: "SVG (für import), Schrift .ttf/.otf (für text) oder .mcad/.scad ins Projekt laden", onSelect: chooseUpload },
+          { label: t("tab.newFile"), hint: t("file.addHint"), onSelect: promptNewProjectFile },
+          { label: t("file.upload"), hint: t("file.uploadHint"), onSelect: chooseUpload },
           { kind: "sep" },
           { kind: "heading", label: p.active },
           ...tabItems(p.active, p.main),
         ]}
       />
-      <ContextMenu at={menu} label={`Datei ${menu?.path ?? ""}`} items={menu ? tabItems(menu.path, p.main) : []} onClose={() => setMenu(null)} />
+      <ContextMenu at={menu} label={t("tab.menu", { path: menu?.path ?? "" })} items={menu ? tabItems(menu.path, p.main) : []} onClose={() => setMenu(null)} />
     </div>
   );
 }
 
-const MODES: Array<{ value: ViewMode; label: string; icon: IconType; hint: string }> = [
-  { value: "model", label: "Modell", icon: IconModel, hint: "Modell ansehen, Griffe ziehen" },
-  { value: "section", label: "Schnitt", icon: IconSection, hint: "3D-Schnittansicht (Ebene am Griff ziehen, Alt: ohne Rasten)" },
-  { value: "sketch", label: "Skizze", icon: IconSketch, hint: "Skizze zeichnen: Werkzeuge in der Skizzenebene, der Code entsteht im sketch-Block am Cursor (Esc beendet)" },
-  { value: "measure", label: "Messen", icon: IconMeasure, hint: "Abstand, Radius, Winkel, Länge, Fläche, Körper – auch im Schnitt (Esc beendet)" },
-];
+function modes(): Array<{ value: ViewMode; label: string; icon: IconType; hint: string }> {
+  return [
+    { value: "model", label: t("mode.model"), icon: IconModel, hint: t("mode.modelHint") },
+    { value: "section", label: t("mode.section"), icon: IconSection, hint: t("mode.sectionHint") },
+    { value: "sketch", label: t("mode.sketch"), icon: IconSketch, hint: t("mode.sketchHint") },
+    { value: "measure", label: t("mode.measure"), icon: IconMeasure, hint: t("mode.measureHint") },
+  ];
+}
 
-const VIEWS: Array<{ v: StandardView; label: string }> = [
-  { v: "iso", label: "Iso" },
-  { v: "top", label: "Oben" },
-  { v: "front", label: "Vorne" },
-  { v: "right", label: "Rechts" },
-  { v: "back", label: "Hinten" },
-  { v: "left", label: "Links" },
-  { v: "bottom", label: "Unten" },
-];
+const VIEWS: StandardView[] = ["iso", "top", "front", "right", "back", "left", "bottom"];
+
+function viewLabel(v: StandardView): string {
+  return t(`view.${v}`);
+}
 
 /** Tool bar of the view: the mode on the left, camera and display on the right. */
 function ViewToolbar({ viewer }: { viewer: Viewer | null }) {
@@ -183,49 +183,49 @@ function ViewToolbar({ viewer }: { viewer: Viewer | null }) {
   };
   return (
     <div className="vtoolbar">
-      <Toolbar label="Modus" float>
-        <Segmented label="Modus" value={mode} onChange={(m) => setViewMode(m, setSectionOn)} options={MODES} className="modes" data-testid="modes" />
+      <Toolbar label={t("mode.label")} float>
+        <Segmented label={t("mode.label")} value={mode} onChange={(m) => setViewMode(m, setSectionOn)} options={modes()} className="modes" data-testid="modes" />
       </Toolbar>
       <div className="vt-end">
-        <Toolbar label="Kamera und Anzeige" float>
+        <Toolbar label={t("view.toolbar")} float>
           <ToolGroup>
-            <IconButton icon={IconFit} label="Einpassen" hint="Alles zeigen" onClick={() => viewer?.fitAll()} />
+            <IconButton icon={IconFit} label={t("view.fit")} hint={t("view.fitHint")} onClick={() => viewer?.fitAll()} />
             <MenuButton
-              label="Ansicht"
-              text={VIEWS.find((x) => x.v === lastView)?.label ?? "Iso"}
-              hint="Standardansichten (auch über den Ansichtswürfel unten rechts)"
-              items={VIEWS.map((x) => ({ label: x.label, onSelect: () => view(x.v) }))}
+              label={t("view.menu")}
+              text={viewLabel(lastView)}
+              hint={t("view.menuHint")}
+              items={VIEWS.map((v) => ({ label: viewLabel(v), onSelect: () => view(v) }))}
               align="end"
               className="view-menu"
             />
           </ToolGroup>
           <ToolSep />
           <ToolGroup>
-            <IconButton icon={IconGrid} label="Alle Raster" hint="Alle Raster zeigen (sonst die am Cursor)" pressed={allGrids} onClick={() => store.setState({ allGrids: !allGrids })} />
+            <IconButton icon={IconGrid} label={t("view.allGrids")} hint={t("view.allGridsHint")} pressed={allGrids} onClick={() => store.setState({ allGrids: !allGrids })} />
             {hasKeepout && (
               <IconButton
                 icon={IconKeepout}
-                label="Sperrvolumen"
-                hint="Sperrvolumen (assert_keepout) zeigen oder ausblenden"
+                label={t("view.keepout")}
+                hint={t("view.keepoutHint")}
                 pressed={showKeepout}
                 onClick={() => setShowKeepout(!showKeepout)}
                 data-testid="toggle-keepout"
               />
             )}
             <MenuButton
-              label="Anzeige"
+              label={t("view.display")}
               text={null}
               icon={IconEye}
               align="end"
-              hint="Weitere Anzeigeoptionen"
+              hint={t("view.displayHint")}
               items={[
-                { label: "Alle Raster", check: "checkbox", checked: allGrids, onSelect: () => store.setState({ allGrids: !allGrids }) },
-                { label: "Sperrvolumen zeigen", check: "checkbox", checked: showKeepout, hint: "Sperrvolumen von assert_keepout (nicht im Export)", onSelect: () => setShowKeepout(!showKeepout) },
-                { label: "Farbregionen zeigen", check: "checkbox", checked: showRegions, hint: "Körper je Farbe, wie sie exportiert und gedruckt werden", onSelect: () => store.setState({ showRegions: !showRegions }) },
-                { label: "Seitenpanel", check: "checkbox", checked: sideOpen, hint: "Bauteile, Farben, Messungen", onSelect: () => setSideOpen(!sideOpen) },
+                { label: t("view.allGrids"), check: "checkbox", checked: allGrids, onSelect: () => store.setState({ allGrids: !allGrids }) },
+                { label: t("view.showKeepout"), check: "checkbox", checked: showKeepout, hint: t("view.showKeepoutHint"), onSelect: () => setShowKeepout(!showKeepout) },
+                { label: t("view.showRegions"), check: "checkbox", checked: showRegions, hint: t("view.showRegionsHint"), onSelect: () => store.setState({ showRegions: !showRegions }) },
+                { label: t("side.label"), check: "checkbox", checked: sideOpen, hint: t("side.hint"), onSelect: () => setSideOpen(!sideOpen) },
               ]}
             />
-            {!sideOpen && <IconButton icon={IconPanelOpen} label="Seitenpanel einblenden" hint="Bauteile, Farben, Messungen" onClick={() => setSideOpen(true)} />}
+            {!sideOpen && <IconButton icon={IconPanelOpen} label={t("side.show")} hint={t("side.hint")} onClick={() => setSideOpen(true)} />}
           </ToolGroup>
         </Toolbar>
         <BusySpinner />
@@ -240,8 +240,8 @@ function BusySpinner() {
   const progress = useCad((s) => s.progress);
   if (ready && !progress) return null;
   const text = !ready
-    ? "Engine lädt …"
-    : `Berechnung läuft${progress && progress.total > 0 ? ` · ${progress.done}/${progress.total}` : ""}${progress?.line ? ` · Zeile ${progress.line}` : ""}`;
+    ? t("status.engineLoading")
+    : `${t("status.computing")}${progress && progress.total > 0 ? ` · ${progress.done}/${progress.total}` : ""}${progress?.line ? ` · ${t("status.line", { line: progress.line })}` : ""}`;
   return (
     <div className="view-busy" role="status" aria-label={text} title={text} data-testid="view-busy">
       <span className="view-busy-ring" aria-hidden="true" />
@@ -277,8 +277,8 @@ function ViewPane() {
         </div>
       </div>
       {refitHint && (
-        <Button variant="standard" className="refit" icon={IconFit} hint="Das Modell hat seine Größe deutlich geändert: Ansicht neu einpassen" onClick={() => viewer?.fitAll()} data-testid="refit">
-          Neu einpassen
+        <Button variant="standard" className="refit" icon={IconFit} hint={t("view.refitHint")} onClick={() => viewer?.fitAll()} data-testid="refit">
+          {t("view.refit")}
         </Button>
       )}
       <ViewCube viewer={viewer} />
@@ -298,7 +298,7 @@ function EditorPane() {
         onChange: onDocChange,
         onSave: () => void saveToDisk(),
         onOpenFile: (path) => {
-          if (!switchFile(path)) store.setState({ notice: `Datei ${path} ist nicht im Projekt` });
+          if (!switchFile(path)) store.setState({ notice: t("notice.fileNotInProject", { path }) });
         },
       });
       sendNow();
@@ -336,20 +336,24 @@ function StatusBar() {
   return (
     <footer className="statusbar" data-testid="statusbar">
       <span className="st-progress" data-testid="status-progress">
-        {!ready ? "Engine lädt …" : progress && progress.total > 0 ? `Auswertung ${progress.done}/${progress.total}${progress.line ? ` · Zeile ${progress.line}` : ""}` : "Bereit"}
+        {!ready
+          ? t("status.engineLoading")
+          : progress && progress.total > 0
+            ? `${t("status.evaluating", { done: progress.done, total: progress.total })}${progress.line ? ` · ${t("status.line", { line: progress.line })}` : ""}`
+            : t("status.ready")}
       </span>
       <span className={`st-diag${errors ? " has-errors" : warnings ? " has-warnings" : ""}`} data-testid="status-errors">
-        {errors} Fehler · {warnings} Warnungen
+        {t("status.errors", { n: errors })} · {t("status.warnings", { n: warnings })}
       </span>
-      {syntax && <span className="st-note warn">Syntaxfehler – letzter gültiger Stand wird angezeigt</span>}
+      {syntax && <span className="st-note warn">{t("status.syntax")}</span>}
       {violations > 0 && (
-        <button type="button" className="st-note assert-viol" data-testid="status-asserts" title="Zur nächsten Assert-Verletzung springen (Schnittkörper einrahmen); Export nur nach Rückfrage" onClick={focusNextViolation}>
-          {violations} Assert-Verletzung{violations === 1 ? "" : "en"}
+        <button type="button" className="st-note assert-viol" data-testid="status-asserts" title={t("status.assertsHint")} onClick={focusNextViolation}>
+          {t("status.asserts", { n: violations })}
         </button>
       )}
       {bang && (
         <span className="st-note bang" data-testid="status-bang">
-          ! aktiv: nur Teilbaum{bangLine ? ` aus Zeile ${bangLine}` : ""} sichtbar
+          {bangLine ? t("status.bangLine", { line: bangLine }) : t("status.bang")}
         </span>
       )}
       {engineError && (
@@ -359,19 +363,18 @@ function StatusBar() {
       )}
       {drag && (
         <span className="st-note drag" data-testid="status-drag">
-          {drag.axis !== null ? `Achse ${"xyz"[drag.axis]} · ` : ""}
-          {drag.alt ? "Alt: frei ziehen (Zahlen)" : drag.snap ? `Snap: ${drag.snap}` : drag.axis !== null ? "Umschalt/X/Y/Z: Achse" : "Ziehen – Alt: ohne Snap, Umschalt: Achse, Esc: abbrechen"}
+          {drag.axis !== null ? `${t("drag.axis", { axis: "xyz"[drag.axis] })} · ` : ""}
+          {drag.alt ? t("drag.alt") : drag.snap ? `Snap: ${drag.snap}` : drag.axis !== null ? t("drag.axisKeys") : t("drag.hint")}
         </span>
       )}
       {suspended.length > 0 && (
-        <span className="st-note draft" data-testid="status-draft" title="Entwurfsmodus: Verrundungen, die länger als 25 ms brauchen, werden beim Ziehen ausgesetzt und danach berechnet">
-          Verrundung beim Ziehen ausgesetzt (Zeile {suspended.slice(0, 4).join(", ")}
-          {suspended.length > 4 ? ", …" : ""})
+        <span className="st-note draft" data-testid="status-draft" title={t("status.draftHint")}>
+          {t("status.draft", { lines: suspended.slice(0, 4).join(", ") + (suspended.length > 4 ? ", …" : "") })}
         </span>
       )}
       {hoverOther && (
-        <span className="st-note" data-testid="status-hover-file" title="Klick öffnet die Datei an dieser Stelle">
-          Fläche aus {hoverOther.path}, Zeile {hoverOther.line}
+        <span className="st-note" data-testid="status-hover-file" title={t("status.hoverFileHint")}>
+          {t("status.hoverFile", { path: hoverOther.path, line: hoverOther.line })}
         </span>
       )}
       <SketchStatus />
@@ -380,8 +383,8 @@ function StatusBar() {
       {notice && <span className="st-note" data-testid="status-notice">{notice}</span>}
       <span className="grow" />
       {st && (
-        <span className="st-stats" title="Sprachauswertung · Kernel · Knoten (aus Cache)">
-          Sprache {st.eval_ms.toFixed(0)} ms · Kernel {st.kernel_ms.toFixed(0)} ms · {st.nodes} Knoten ({st.cache_hits} aus Cache)
+        <span className="st-stats" title={t("status.statsHint")}>
+          {t("status.stats", { lang: st.eval_ms.toFixed(0), kernel: st.kernel_ms.toFixed(0), nodes: st.nodes, cached: st.cache_hits })}
         </span>
       )}
       <span className="st-version">v{shown?.version ?? "–"}</span>
@@ -419,23 +422,25 @@ function ExportConfirm() {
     <div className="modal-back" onKeyDown={(e) => e.key === "Escape" && void confirmExport(false)}>
       <div className="dialog export-confirm" role="alertdialog" aria-modal="true" aria-labelledby="export-confirm-title" data-testid="export-confirm">
         <h2 id="export-confirm-title">
-          <IconAlert size={16} aria-hidden="true" /> Export trotz Assert-Verletzung?
+          <IconAlert size={16} aria-hidden="true" /> {t("exportConfirm.title")}
         </h2>
         <p>
-          {c.what}: {c.violations.length} Prüfung{c.violations.length === 1 ? "" : "en"} verletzt (wie <code>mcad export</code>, der ohne <code>--ignore-asserts</code> abbricht).
+          {c.what}: {t("exportConfirm.violated", { n: c.violations.length })} ({t("exportConfirm.like")} <code>mcad export</code>
+          {t("exportConfirm.likeAfter")} <code>--ignore-asserts</code>
+          {t("exportConfirm.likeEnd")}).
         </p>
         <ul className="export-confirm-list">
           {c.violations.slice(0, 8).map((v) => (
             <li key={v}>{v}</li>
           ))}
-          {c.violations.length > 8 && <li>… {c.violations.length - 8} weitere</li>}
+          {c.violations.length > 8 && <li>… {t("exportConfirm.more", { n: c.violations.length - 8 })}</li>}
         </ul>
         <div className="dialog-buttons">
           <Button variant="quiet" onClick={() => void confirmExport(false)} data-testid="export-cancel">
-            Abbrechen
+            {t("common.cancel")}
           </Button>
           <Button ref={ok} variant="primary" onClick={() => void confirmExport(true)} data-testid="export-anyway">
-            Trotzdem exportieren
+            {t("exportConfirm.anyway")}
           </Button>
         </div>
       </div>
@@ -445,6 +450,12 @@ function ExportConfirm() {
 
 export function App() {
   const theme = useCad((s) => s.theme);
+  // the root follows the language: a switch re-renders the whole tree
+  const lang = useLang();
+  useEffect(() => {
+    // browser tab (the desktop app sets its window title itself)
+    if (!IS_TAURI) document.title = t("app.title");
+  }, [lang]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
@@ -453,13 +464,13 @@ export function App() {
     <div className="app">
       <Header />
       <main className="main">
-        <section className="editorpane" aria-label="Editor">
+        <section className="editorpane" aria-label={t("app.editor")}>
           <FileBar />
           <ExternalBar />
           <EditorPane />
         </section>
         <Splitter />
-        <section className="viewcol" aria-label="3D-Ansicht">
+        <section className="viewcol" aria-label={t("app.view")}>
           <div className="viewbody">
             <ViewPane />
             <SidePanel />

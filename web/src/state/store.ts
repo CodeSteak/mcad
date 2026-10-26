@@ -4,6 +4,7 @@
 import { createStore } from "zustand/vanilla";
 import { useStore } from "zustand";
 import type { AssertResult, Diagnostic, MeasureKind, MeasurePick, MeasureSectionInfo, Measurement, RegionSet, Scene, SketchAnswer, SketchPoint, SketchTool } from "../engine/protocol";
+import { type LangPref, loadLangPref, resolveLang, saveLangPref, setLang, t } from "../i18n";
 import { MODEL_EXT } from "../logic/files";
 import type { ParamOverrides } from "../logic/params";
 import { SECTION_OFF, type SectionState } from "../logic/section";
@@ -192,6 +193,8 @@ export interface CadState {
   /** Theme in effect (resolved from `themePref`). */
   theme: Theme;
   themePref: ThemePref;
+  /** Language choice in the settings (the language in effect: `i18n.getLang()`). */
+  langPref: LangPref;
   /** Side panel on the right (UI overhaul): open and the chosen tab. */
   sideOpen: boolean;
   sideTab: SideTab;
@@ -308,6 +311,13 @@ export function setThemePref(pref: ThemePref): void {
   store.setState({ themePref: pref, theme: resolveTheme(pref) });
 }
 
+/** Sets the language choice (kept in localStorage like the theme). */
+export function setLangPref(pref: LangPref): void {
+  saveLangPref(pref);
+  setLang(resolveLang(pref));
+  store.setState({ langPref: pref });
+}
+
 /** Tabs of the side panel: parts, colours, measurements, parameters (module context). */
 export type SideTab = "parts" | "colors" | "measure" | "params";
 const SIDE_TABS: SideTab[] = ["parts", "colors", "measure", "params"];
@@ -371,7 +381,7 @@ export function setExportChoice(c: ExportChoice): void {
 
 export const store = createStore<CadState>(() => ({
   fileName: `unbenannt${MODEL_EXT}`,
-  project: { name: "Projekt", main: `unbenannt${MODEL_EXT}`, active: `unbenannt${MODEL_EXT}`, paths: [`unbenannt${MODEL_EXT}`], folder: false },
+  project: { name: t("project.defaultName"), main: `unbenannt${MODEL_EXT}`, active: `unbenannt${MODEL_EXT}`, paths: [`unbenannt${MODEL_EXT}`], folder: false },
   hiddenParts: [],
   viewHoverOther: null,
 
@@ -394,6 +404,7 @@ export const store = createStore<CadState>(() => ({
   allGrids: false,
   theme: resolveTheme(initialThemePref()),
   themePref: initialThemePref(),
+  langPref: loadLangPref(),
   sideOpen: stored("cad-side-open", ["0", "1"], "1") === "1",
   sideTab: stored("cad-side-tab", SIDE_TABS, "parts"),
   exportChoice: stored("cad-export", EXPORT_CHOICES, "3mf"),
