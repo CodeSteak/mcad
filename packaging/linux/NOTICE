@@ -1,23 +1,23 @@
-mcad (Projekt controller-cad) – Lizenzhinweise der installierten Dateien
+mcad (project controller-cad) – licence notices for the installed files
 
-mcad (Binary)
-  mcad selbst: MIT-Lizenz, Lizenztext: LICENSE.
-  Statisch gelinkt:
-  - SMLib/SM_API (NVIDIA usd-brep, Fork tangency-labs/smlib): Apache-2.0,
-    Lizenztext: SMLib-LICENSE, Hinweise: SMLib-THIRD_PARTY_NOTICES.md.
-  - Rust-Crates (u. a. Tauri 2, wry, tao, serde, clap, rustybuzz, ttf-parser, roxmltree,
-    notify, similar): überwiegend MIT und/oder Apache-2.0, siehe die Angaben in Cargo.lock
-    bzw. auf crates.io.
-  - Eingebettete Web-Oberfläche (React, three.js, CodeMirror, zustand, Lezer): MIT; Symbole
-    aus Lucide (lucide-react): ISC; Oberflächenschrift Inter 4.1 (dieselbe Datei wie unten):
+mcad (binary)
+  mcad itself: MIT licence, licence text: LICENSE.
+  Statically linked:
+  - SMLib/SM_API (NVIDIA usd-brep, fork tangency-labs/smlib): Apache-2.0,
+    licence text: SMLib-LICENSE, notices: SMLib-THIRD_PARTY_NOTICES.md.
+  - Rust crates (including Tauri 2, wry, tao, serde, clap, rustybuzz, ttf-parser, roxmltree,
+    notify, similar): mostly MIT and/or Apache-2.0, see the information in Cargo.lock
+    or on crates.io.
+  - Embedded web interface (React, three.js, CodeMirror, zustand, Lezer): MIT; icons
+    from Lucide (lucide-react): ISC; interface font Inter 4.1 (the same file as below):
     SIL Open Font License 1.1.
-  Eingebettete Schriften (crates/cad-font/fonts, unverändert):
+  Embedded fonts (crates/cad-font/fonts, unmodified):
   - JetBrains Mono 2.304 (Regular, Bold): SIL Open Font License 1.1, OFL-JetBrainsMono.txt
   - Inter 4.1 (Regular, Bold): SIL Open Font License 1.1, OFL-Inter.txt
-  - Allerta Stencil: SIL Open Font License 1.1 (Reserved Font Name „Allerta“),
+  - Allerta Stencil: SIL Open Font License 1.1 (Reserved Font Name "Allerta"),
     OFL-AllertaStencil.txt
-  Quellen und Prüfsummen: fonts-README.md.
-  Die Standardschrift „cad stencil mono“ ist Teil des Quelltexts (keine Schriftdatei).
+  Sources and checksums: fonts-README.md.
+  The default font "cad stencil mono" is part of the source code (no font file).
 
-App-Symbol (share/icons/hicolor/*/apps/mcad.{png,svg}, Quelle assets/icon): Teil von
+App icon (share/icons/hicolor/*/apps/mcad.{png,svg}, source assets/icon): part of
 controller-cad.

@@ -1,203 +1,203 @@
-# Umstieg auf solidcore (Plan 2.3, M8)
+# Migration to solidcore (plan 2.3, M8)
 
-Stand: 2026-10-25 · solidcore `main` @ `d4940b6` (2026-10-25 18:31 UTC, tangency-labs/solidcore, Apache-2.0); die Tabellen der Operationen unten stammen vom Lauf mit `c9de85d`, die Zahlen von `d4940b6` stehen im Vergleich über die Beispiele.
+As of: 2026-10-25 · solidcore `main` @ `d4940b6` (2026-10-25 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation tables below come from the run with `c9de85d`, the figures for `d4940b6` are in the comparison over the examples.
 
-## Stand
+## Status
 
-- **Crate `kernel-solidcore`** implementiert `cad_kernel::Kernel` über die öffentliche API von
-  solidcore. Die Abhängigkeit ist ein git-Eintrag mit festem Commit
-  (`crates/kernel-solidcore/Cargo.toml`, Konstante `SOLIDCORE_REV`, Kernel-Id
-  `solidcore-d4940b6`). Vorherige Pins: `3a6a50b` (2026-10-22), `c9de85d` (2026-10-23). Von
-  `c9de85d` auf `d4940b6` (2026-10-25, gut 1200 Commits) änderte sich die API der
-  Masseneigenschaften (`brep_mass_properties`, `brep_area` nehmen `&mut Brep`); der wöchentliche
-  Lauf gegen `main` wäre am Build gescheitert.
-- **solidcore selbst** (`plan/PROGRESS.md` @ `c9de85d`): 238 von 261 Port-Einheiten portiert
-  (116 grün = identisch zum C++, 122 teilweise), 89,8 % der Upstream-Zeilen. Das README sagt
-  weiter „Nothing is usable end to end yet (no primitives, booleans or fillets)“; „etwa ein
-  Drittel portiert“ im README ist veraltet.
-- **Toolchain:** solidcore pinnt in seinem eigenen Repository Rust 1.98
-  (`rust-toolchain.toml`); diese Datei gilt nicht für abhängige Crates. Mit unserem Stand
-  (Rust 1.97) baut solidcore ohne Änderung. Debug-Build von `cad-cli --features solidcore` ab
-  leerem Target-Verzeichnis: ca. 11 min mit 4 Kernen (einmalig; Abhängigkeiten mit
-  `opt-level = 2`), danach Sekunden.
-- **Feature `solidcore`** (opt-in in `kernel-solidcore` und `cad-cli`, Standard aus): ein
-  normaler Build (`cargo build`, `cargo test --workspace`) kompiliert solidcore nicht; jede
-  Operation von `kernel-solidcore` meldet dann
-  `Unsupported("solidcore: … (built without feature `solidcore`)")`, und `mcad diff-kernels`
-  bricht mit „diff-kernels braucht solidcore: mcad mit `--features solidcore` bauen“ ab
-  (Exit-Code 2). Für den Vergleich: `cargo build -p cad-cli --features solidcore`, Tests mit
-  `cargo test -p cad-cli --features solidcore` bzw. `cargo test -p kernel-solidcore
-  --features solidcore -- --nocapture` (zeigt die Antwort jeder Operation). Der git-Eintrag
-  steht weiter in `Cargo.lock` (Auflösung einmal mit Netz).
+- **Crate `kernel-solidcore`** implements `cad_kernel::Kernel` via the public API of
+  solidcore. The dependency is a git entry with a fixed commit
+  (`crates/kernel-solidcore/Cargo.toml`, constant `SOLIDCORE_REV`, kernel ID
+  `solidcore-d4940b6`). Previous pins: `3a6a50b` (2026-10-22), `c9de85d` (2026-10-23). From
+  `c9de85d` to `d4940b6` (2026-10-25, a little over 1200 commits) the API of the
+  mass properties changed (`brep_mass_properties`, `brep_area` take `&mut Brep`); the weekly
+  run against `main` would have failed at the build.
+- **solidcore itself** (`plan/PROGRESS.md` @ `c9de85d`): 238 of 261 port units ported
+  (116 green = identical to the C++, 122 partial), 89.8 % of the upstream lines. The README still
+  says "Nothing is usable end to end yet (no primitives, booleans or fillets)"; "about one
+  third ported" in the README is outdated.
+- **Toolchain:** solidcore pins Rust 1.98 in its own repository
+  (`rust-toolchain.toml`); this file does not apply to dependent crates. With our setup
+  (Rust 1.97) solidcore builds without changes. Debug build of `cad-cli --features solidcore` from
+  an empty target directory: about 11 min with 4 cores (once; dependencies with
+  `opt-level = 2`), seconds afterwards.
+- **Feature `solidcore`** (opt-in in `kernel-solidcore` and `cad-cli`, off by default): a
+  normal build (`cargo build`, `cargo test --workspace`) does not compile solidcore; every
+  operation of `kernel-solidcore` then reports
+  `Unsupported("solidcore: … (built without feature `solidcore`)")`, and `mcad diff-kernels`
+  aborts with "diff-kernels braucht solidcore: mcad mit `--features solidcore` bauen" (diff-kernels needs solidcore: build mcad with `--features solidcore`)
+  (exit code 2). For the comparison: `cargo build -p cad-cli --features solidcore`, tests with
+  `cargo test -p cad-cli --features solidcore` or `cargo test -p kernel-solidcore
+  --features solidcore -- --nocapture` (shows the response of every operation). The git entry
+  remains in `Cargo.lock` (resolved once with network access).
 
-## Öffentliche Einstiege in solidcore (Recherche 2026-10-23)
+## Public entry points in solidcore (research 2026-10-23)
 
-| Bereich | Einstieg (Rust-Pfad in `solidcore`) | Upstream |
+| Area | Entry point (Rust path in `solidcore`) | Upstream |
 | --- | --- | --- |
-| Primitive | `primitive::api_primitives::create_box`, `create_sphere`, `create_cylinder`, `create_cone`, `create_torus`, Teilprimitive, `create_pyramid` | `SmApiCreate*` |
-| Kurven | `primitive::api_curves::create_line_segment`, `create_analytic_circle`, `create_circle`, `create_arc`, `create_helix`, … | `SmApiCreate*` |
+| Primitives | `primitive::api_primitives::create_box`, `create_sphere`, `create_cylinder`, `create_cone`, `create_torus`, partial primitives, `create_pyramid` | `SmApiCreate*` |
+| Curves | `primitive::api_curves::create_line_segment`, `create_analytic_circle`, `create_circle`, `create_arc`, `create_helix`, … | `SmApiCreate*` |
 | Booleans | `boolean::api_brep::boolean`, `boolean_union/_difference/_intersection`, `merge_breps`, … | `SmApiBoolean*` |
-| Transformation | `topology::proto_topology::p1::api_transform::{api_transform, api_translate, api_rotate, api_scale, api_scale_by_pt, transform_independent_object}`: starre Platzierung (`Axis2Placement`) nach einer Skalierung entlang der Achsen; die 4×4-Matrix-Variante von `SmBrep::Transform` ist nicht portiert | `SmApiTransform` u. a. |
-| Sweeps | `sweep::api_brep::create_linear_sweep`, `create_rotational_sweep`, `create_pipe_sweep`, `create_draft_sweep`, `create_taper_extrude`, `create_curve_sweep*`, `create_sweep_along_planar_path`; Skins: `sweep::api_surfaces::create_skin`, `create_ruled_surface`, `create_extrude`, `create_surface_revolution` | `SmApiCreate*Sweep`, `SmApiCreateSkin` |
-| Offset/Shell | `offset::offset_executive::p2::api_offset_brep_full`, `api_shell_brep_full` | `SmApiOffsetBrepFull`, `SmApiShellBrepFull` |
-| Klassifizierung | `query::brep::BrepClassifier::point_3d_classify` (bzw. `BrepQuery`), `query::api_queries::face_classify_uv`, `edge_classify_parameter`, `brep_relationship` | `SmBrep::Point3DClassify`, `SmApiFaceClassifyUV` |
-| Abfragen | `query::api_queries::get_faces`, `get_edges`, `face_get_boundary_loops`, `face_internal_point`, `brep_bounding_box`, `edge_bounding_box`, `vertex_get_point`, `brep_is_manifold_solid`, Abstände/nächste Punkte | `SmApi*` |
-| Masseneigenschaften | `mass::integrator::properties::brep_mass_properties`, `brep_area`, `brep_volume` (exakte Integration über die Flächen, ohne Tessellierung) | `SmApiBrepCompute*` |
-| Fillet/Fase | **keine öffentliche API**: die Fillet-Module (`blend::*`) sind portiert, die Einstiege `SmApiFilletEdges`, `SmApiChamferFillet`, `SmApiVariableRadiusFillet` (Einheit `blend.fillet_executive_p1`) nicht | `SmApiFillet*` |
-| Tessellierung, Polyeder | **ausdrücklich nicht im Umfang** von solidcore (`plan/closure.md`, „Out of scope“: `SmApiTessellate`, `SmApiTessellateBoundaries`, `SmApiPoly*`; `SmTess`/`NL_Tessellate` werden von keiner Operation im Umfang gebraucht) | – |
+| Transformation | `topology::proto_topology::p1::api_transform::{api_transform, api_translate, api_rotate, api_scale, api_scale_by_pt, transform_independent_object}`: rigid placement (`Axis2Placement`) after scaling along the axes; the 4×4 matrix variant of `SmBrep::Transform` is not ported | `SmApiTransform` and others |
+| Sweeps | `sweep::api_brep::create_linear_sweep`, `create_rotational_sweep`, `create_pipe_sweep`, `create_draft_sweep`, `create_taper_extrude`, `create_curve_sweep*`, `create_sweep_along_planar_path`; skins: `sweep::api_surfaces::create_skin`, `create_ruled_surface`, `create_extrude`, `create_surface_revolution` | `SmApiCreate*Sweep`, `SmApiCreateSkin` |
+| Offset/shell | `offset::offset_executive::p2::api_offset_brep_full`, `api_shell_brep_full` | `SmApiOffsetBrepFull`, `SmApiShellBrepFull` |
+| Classification | `query::brep::BrepClassifier::point_3d_classify` (or `BrepQuery`), `query::api_queries::face_classify_uv`, `edge_classify_parameter`, `brep_relationship` | `SmBrep::Point3DClassify`, `SmApiFaceClassifyUV` |
+| Queries | `query::api_queries::get_faces`, `get_edges`, `face_get_boundary_loops`, `face_internal_point`, `brep_bounding_box`, `edge_bounding_box`, `vertex_get_point`, `brep_is_manifold_solid`, distances/closest points | `SmApi*` |
+| Mass properties | `mass::integrator::properties::brep_mass_properties`, `brep_area`, `brep_volume` (exact integration over the faces, without tessellation) | `SmApiBrepCompute*` |
+| Fillet/chamfer | **no public API**: the fillet modules (`blend::*`) are ported, the entry points `SmApiFilletEdges`, `SmApiChamferFillet`, `SmApiVariableRadiusFillet` (unit `blend.fillet_executive_p1`) are not | `SmApiFillet*` |
+| Tessellation, polyhedra | **explicitly out of scope** of solidcore (`plan/closure.md`, "Out of scope": `SmApiTessellate`, `SmApiTessellateBoundaries`, `SmApiPoly*`; `SmTess`/`NL_Tessellate` are not needed by any in-scope operation) | – |
 
-Weitere Upstream-Einstiege, die solidcore nicht portiert (Auswahl aus `plan/closure.md`):
-`SmApiCreateCurveInterpPoints` (interpolierende Spline-Kurve, bei uns für `Loop::Spline`),
+Further upstream entry points that solidcore does not port (selection from `plan/closure.md`):
+`SmApiCreateCurveInterpPoints` (interpolating spline curve, used here for `Loop::Spline`),
 `SmApiCreatePlanarFaces`, `SmApiCreateSurface*`, `SmApiCut`, `SmApiIntersect*`.
 
-## Was heute geht (Lauf mit `c9de85d`)
+## What works today (run with `c9de85d`)
 
-| Kernel-Operation | Weg in `kernel-solidcore` | Ergebnis @ `c9de85d` |
+| Kernel operation | Route in `kernel-solidcore` | Result @ `c9de85d` |
 | --- | --- | --- |
-| `make_box` | `create_box` | **geht**, Volumen, Flächen- und Kantenzahl wie SMLib |
-| `make_cylinder` (Zylinder, Kegel, Kegel mit Spitze unten) | `create_cylinder`, `create_cone` (Spitze unten: gedreht wie in der SMLib-Fassade) | `Unsupported`: `TrimSrfCache::build_tree_with_face` (Einheit `surface.trim_srf_cache`) |
+| `make_box` | `create_box` | **works**, volume, face and edge count as in SMLib |
+| `make_cylinder` (cylinder, cone, cone with apex at the bottom) | `create_cylinder`, `create_cone` (apex at the bottom: rotated as in the SMLib facade) | `Unsupported`: `TrimSrfCache::build_tree_with_face` (unit `surface.trim_srf_cache`) |
 | `make_sphere`, `make_torus` | `create_sphere`, `create_torus` | `Unsupported`: `SmFace handle of a surface's face` (`topology.face_p2`) |
-| `make_polyhedron` | – | `Unsupported`: Poly-B-Reps nicht im Umfang |
-| `transform` | `transform_independent_object` mit `Axis2Placement` + Skalierung; Scherung → `Unsupported` | **Antwortet mit Erfolg, aber falsch**: nur die Ecken werden bewegt, Kurven und Flächen nicht (`SmBrep::Transform`, `topology.brep_p5`, findet unter den Schlüsseln seiner Bearbeitung keine Geometrie). `kernel-solidcore` prüft Volumen und Schwerpunkt des Ergebnisses und meldet dann `Unsupported` |
-| `extrude` (ohne Verdrehung/Skalierung) | Polygon: Liniensegmente, `create_linear_sweep`, dann `transform` mit dem Profilrahmen | **geht** für Polygone mit Einheitsrahmen; mit anderem Rahmen scheitert die Transformation (s. o.); Kreisprofil: `Unsupported` (`SmEdgeuse::GetOrCreateUVTrimCurve`, `topology.edgeuse_p3`); Spline-Profil: `SmApiCreateCurveInterpPoints` nicht im Umfang |
-| `extrude` mit Verdrehung/Skalierung, `loft` | bräuchte `create_skin` | `Unsupported` (nicht verdrahtet) |
+| `make_polyhedron` | – | `Unsupported`: poly B-Reps out of scope |
+| `transform` | `transform_independent_object` with `Axis2Placement` + scaling; shear → `Unsupported` | **Reports success, but wrong**: only the vertices are moved, curves and faces are not (`SmBrep::Transform`, `topology.brep_p5`, finds no geometry under the keys of its edit). `kernel-solidcore` checks volume and centroid of the result and then reports `Unsupported` |
+| `extrude` (without twist/scale) | polygon: line segments, `create_linear_sweep`, then `transform` with the profile frame | **works** for polygons with unit frame; with another frame the transformation fails (see above); circular profile: `Unsupported` (`SmEdgeuse::GetOrCreateUVTrimCurve`, `topology.edgeuse_p3`); spline profile: `SmApiCreateCurveInterpPoints` out of scope |
+| `extrude` with twist/scale, `loft` | would need `create_skin` | `Unsupported` (not wired up) |
 | `revolve` | `create_rotational_sweep` | `Unsupported` (`surface.trim_srf_cache`) |
-| `boolean` | `boolean::api_brep::boolean` | `Unsupported`: `SmEdge::GetTolerance` (`topology.edge`) bzw. `SmFace::Point3DClassify` (`query.face_p1`) |
-| `faces` | `get_faces`, Randschleifen-Ecken; innerer Punkt (`face_internal_point`), sobald portiert | **geht** (innerer Punkt: `SmEdge::GetCurve`, `topology.edge`, noch nicht) |
-| `edges` | `get_edges`, Anfangs-/Endecke, Kurvenpunkte | **geht** |
-| `bounds`, `is_solid`, `is_empty`, `mass_props` | `query::api_queries`, `mass::integrator::properties` | **gehen** (Quader und Extrusion: Volumen, Fläche, Schwerpunkt exakt) |
-| `classify` | `BrepClassifier::point_3d_classify` | **Antwortet, aber falsch**: Punkte im Quader und auf seinen Flächen landen in der unendlichen Region. `kernel-solidcore` prüft das einmal an einem Einheitswürfel und meldet bis dahin `Unsupported` |
-| `fillet`, `chamfer` | – | `Unsupported`: keine öffentliche API |
-| `sweep`, `thicken`, `shell`, `nurbs_surface` | – | `Unsupported` (nicht verdrahtet; `api_shell_brep_full` endet @ `c9de85d` an `SmBrep::SmBrep`, `topology.brep_p3`) |
-| `tessellate`, `brep` | – | `Unsupported` (Tessellierung nicht im Umfang, s. u.) |
+| `boolean` | `boolean::api_brep::boolean` | `Unsupported`: `SmEdge::GetTolerance` (`topology.edge`) or `SmFace::Point3DClassify` (`query.face_p1`) |
+| `faces` | `get_faces`, boundary loop vertices; interior point (`face_internal_point`) once ported | **works** (interior point: `SmEdge::GetCurve`, `topology.edge`, not yet) |
+| `edges` | `get_edges`, start/end vertex, curve points | **works** |
+| `bounds`, `is_solid`, `is_empty`, `mass_props` | `query::api_queries`, `mass::integrator::properties` | **work** (box and extrusion: volume, area, centroid exact) |
+| `classify` | `BrepClassifier::point_3d_classify` | **Responds, but wrong**: points inside the box and on its faces end up in the infinite region. `kernel-solidcore` checks this once on a unit cube and reports `Unsupported` until then |
+| `fillet`, `chamfer` | – | `Unsupported`: no public API |
+| `sweep`, `thicken`, `shell`, `nurbs_surface` | – | `Unsupported` (not wired up; `api_shell_brep_full` @ `c9de85d` ends at `SmBrep::SmBrep`, `topology.brep_p3`) |
+| `tessellate`, `brep` | – | `Unsupported` (tessellation out of scope, see below) |
 
-Fehlerabbildung: `SolidError::Unported` → `KernelError::Unsupported("solidcore: <op>: …")`
-mit Upstream-Funktion und blockierender Einheit, `SolidError::InvalidInput` → `InvalidInput`,
-sonst `Failed`. Flächen tragen vorerst den Tag der erzeugenden Operation (Attribut-Weitergabe
-für Provenienz ist noch nicht verdrahtet). Die Prüfungen bei `transform` und `classify`
-schalten sich von selbst frei, sobald solidcore richtig rechnet.
+Error mapping: `SolidError::Unported` → `KernelError::Unsupported("solidcore: <op>: …")`
+with upstream function and blocking unit, `SolidError::InvalidInput` → `InvalidInput`,
+otherwise `Failed`. For now faces carry the tag of the generating operation (attribute propagation
+for provenance is not wired up yet). The checks for `transform` and `classify`
+unlock themselves as soon as solidcore computes correctly.
 
-## Vergleich über die Beispiele (`mcad diff-kernels`)
+## Comparison over the examples (`mcad diff-kernels`)
 
-`tests/models/openscad-compat` und `tests/models/spec`:
+`tests/models/openscad-compat` and `tests/models/spec`:
 
-| Stand | Dateien | Knoten | gleich | unsupported | blockiert | abweichend | gescheitert |
+| State | Files | Nodes | same | unsupported | blocked | differ | failed |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `3a6a50b` (Testbericht 5) | 46 | 855 | 101 | 267 | 487 | 0 | 0 |
-| `169dbc4`, `kernel-solidcore` unverändert | 48 | 942 | 102 | 287 | 431 | 122 | 0 |
-| `169dbc4` und `c9de85d`, `kernel-solidcore` angepasst | 48 | 942 | **241** | 288 | 413 | **0** | 0 |
-| `3688a8b` (24.10.) | 61 | 1339 | 482 | 332 | 336 | 189 | 0 |
-| `d4940b6` (25.10., Pin) | 64 | 1436 | **516** | 354 | 360 | 206 | 0 |
+| `3a6a50b` (test report 5) | 46 | 855 | 101 | 267 | 487 | 0 | 0 |
+| `169dbc4`, `kernel-solidcore` unchanged | 48 | 942 | 102 | 287 | 431 | 122 | 0 |
+| `169dbc4` and `c9de85d`, `kernel-solidcore` adapted | 48 | 942 | **241** | 288 | 413 | **0** | 0 |
+| `3688a8b` (2026-10-24) | 61 | 1339 | 482 | 332 | 336 | 189 | 0 |
+| `d4940b6` (2026-10-25, pin) | 64 | 1436 | **516** | 354 | 360 | 206 | 0 |
 
-- @ `d4940b6`: Zylinder, Kegel, Kugeln, Tori und `revolve` liefern Ergebnisse mit den Flächen- und
-  Kantenzahlen von SMLib, die Volumen weichen aber um etwa 1e-5 ab (Kugel r 5: 523,6048 statt
-  523,5988 mm³; die Genauigkeit der Integration, 1e-6 oder 1e-8, ändert nichts) – das sind die
-  meisten „abweichend“ (Zylinder 126, Kugel 20). Größter Blocker bleibt `transform`
-  (`topology.brep_p5`: nur die Ecken werden bewegt; 258 Knoten unsupported, die meisten
-  blockierten hängen daran), dazu zusammengesetzte Skizzenprofile (hier nicht verdrahtet, 42),
-  Fillet/Fase (keine öffentliche API) und Polyeder (nicht im Umfang). Booleans gehen teilweise
-  (`difference` 17 von 64 gleich).
+- @ `d4940b6`: cylinders, cones, spheres, tori and `revolve` deliver results with the face and
+  edge counts of SMLib, but the volumes deviate by about 1e-5 (sphere r 5: 523.6048 instead of
+  523.5988 mm³; the integration accuracy, 1e-6 or 1e-8, changes nothing) – these are most
+  of the "differ" (cylinder 126, sphere 20). The biggest blocker remains `transform`
+  (`topology.brep_p5`: only the vertices are moved; 258 nodes unsupported, most of the
+  blocked ones depend on it), plus composite sketch profiles (not wired up here, 42),
+  fillet/chamfer (no public API) and polyhedra (out of scope). Booleans work partially
+  (`difference` 17 of 64 same).
 
-- Der Quader geht jetzt, wurde mit dem alten `kernel-solidcore` aber **nicht richtig
-  verglichen**: `faces` scheiterte (innerer Punkt nicht portiert), `diff-kernels` verwarf den
-  Fehler still und zählte den Knoten wegen fehlender Flächen-/Kantenzahl als „abweichend“
-  (106 Quader, dazu Folgeknoten). Jetzt liefert `faces` die Randecken als Abtastpunkte, und
-  `diff-kernels` meldet eine nicht unterstützte Abfrage (Flächen/Kanten/Volumen) des
-  solidcore-Ergebnisses als `unsupported` mit Meldung statt als Abweichung.
-- Gleich sind jetzt 106 von 112 `box`, 17 von 32 `linear_extrude` und die 2D-Knoten. Die
-  größten Blocker nach Knoten (unsupported): `make_cylinder` (`surface.trim_srf_cache`, 115),
+- The box works now, but with the old `kernel-solidcore` it was **not compared
+  correctly**: `faces` failed (interior point not ported), `diff-kernels` silently discarded the
+  error and counted the node as "differ" because of the missing face/edge count
+  (106 boxes, plus dependent nodes). Now `faces` delivers the boundary vertices as sample points, and
+  `diff-kernels` reports an unsupported query (faces/edges/volume) of the
+  solidcore result as `unsupported` with a message instead of as a difference.
+- Same are now 106 of 112 `box`, 17 of 32 `linear_extrude` and the 2D nodes. The
+  biggest blockers by node (unsupported): `make_cylinder` (`surface.trim_srf_cache`, 115),
   `transform` (`topology.brep_p5`, 103), Booleans (`topology.edge`, `query.face_p1`, 13),
-  Kreisprofile (`topology.edgeuse_p3`, 11), Kugel/Torus (`topology.face_p2`, 10).
+  circular profiles (`topology.edgeuse_p3`, 11), sphere/torus (`topology.face_p2`, 10).
 
-## Was fehlt (in solidcore bzw. hier)
+## What is missing (in solidcore or here)
 
-1. Primitive außer dem Quader (`surface.trim_srf_cache`, `topology.face_p2`).
-2. Eine Transformation, die Kurven und Flächen mitnimmt (`topology.brep_p5`), und die
-   4×4-Matrix-Variante (Scherung, z. B. `multmatrix`).
-3. Booleans (`topology.edge`, `query.face_p1`), Punktklassifikation (`query.brep`).
-4. Öffentliche Fillet-/Fasen-API (`blend.fillet_executive_p1`).
-5. Hier: `create_skin` (Loft, Extrusion mit Verdrehung), `create_pipe_sweep` (Sweep),
-   Offset/Shell verdrahten; Attribute für Face-Tags (Provenienz); `Kernel::brep` für den
-   STEP-Export; Wasm-Build im selben Modul (Stack 8 MiB, siehe solidcore-README).
-6. **Eigener Tessellierer** (nicht in solidcore, s. u.).
+1. Primitives other than the box (`surface.trim_srf_cache`, `topology.face_p2`).
+2. A transformation that carries curves and faces along (`topology.brep_p5`), and the
+   4×4 matrix variant (shear, e.g. `multmatrix`).
+3. Booleans (`topology.edge`, `query.face_p1`), point classification (`query.brep`).
+4. Public fillet/chamfer API (`blend.fillet_executive_p1`).
+5. Here: wire up `create_skin` (loft, extrusion with twist), `create_pipe_sweep` (sweep),
+   offset/shell; attributes for face tags (provenance); `Kernel::brep` for
+   STEP export; Wasm build in the same module (stack 8 MiB, see solidcore README).
+6. **Own tessellator** (not in solidcore, see below).
 
-Schätzung aus der Recherche (unsicher, hängt an den Einheiten oben und an den Leuten, die in
-solidcore Einheiten übernehmen): alle Primitive end to end in 1–2 Wochen, Booleans in 2–4
-Wochen, Fillets, Sweeps und Shell in 6–10 Wochen.
+Estimate from the research (uncertain, depends on the units above and on the people who take
+over units in solidcore): all primitives end to end in 1–2 weeks, Booleans in 2–4
+weeks, fillets, sweeps and shell in 6–10 weeks.
 
-## Tessellierung: eigener Tessellierer für M8
+## Tessellation: own tessellator for M8
 
-Tessellierung und Polyeder sind ausdrücklich nicht im Umfang von solidcore
-(`plan/closure.md`). Für M8 (Anzeige, STL/3MF, Schnittansicht, `compare.py`) braucht es also
-einen eigenen Tessellierer in Rust über dem solidcore-B-Rep, oder SMLib (`NL_Tessellate`,
-C++) bzw. OCCT (`BRepMesh`, über den STEP-Weg) bleibt allein dafür im Build; das widerspricht
-dem Ziel von M8, das SMLib-Wasm zu entfernen. Skizze:
+Tessellation and polyhedra are explicitly out of scope of solidcore
+(`plan/closure.md`). For M8 (display, STL/3MF, section view, `compare.py`) we therefore need
+our own tessellator in Rust on top of the solidcore B-Rep, or SMLib (`NL_Tessellate`,
+C++) or OCCT (`BRepMesh`, via the STEP route) stays in the build just for this; that contradicts
+the goal of M8 to remove the SMLib Wasm. Outline:
 
-1. **Kanten zuerst, einmal je Kante:** jede Kante wird genau einmal diskretisiert und von
-   beiden Nachbarflächen benutzt (wasserdicht, Kantenabgleich). Sehnenfehler-Steuerung:
-   Gerade 1 Segment; Kreis/Ellipse Schrittwinkel `θ = 2·acos(1 − tol/r)`; NURBS adaptiv
-   halbieren, bis die Abweichung des Mittelpunkts ≤ `tol` und der Tangentenwinkel unter einer
-   Grenze liegt.
-2. **Ebene Flächen:** Schleifen in die Ebene projizieren und als Polygon mit Löchern
-   triangulieren (Ear-Clipping mit Lochbrücken wie earcut, oder eingeschränkte
-   Delaunay-Triangulierung, CDT); Orientierung aus Flächennormale und Schleifenrichtung.
-3. **Analytische und NURBS-Flächen:** im Parameterraum arbeiten. Die Kantenpunkte über die
-   UV-Trimmkurven der Kantenverwendungen (bzw. Punktinversion auf die Fläche) nach (u, v)
-   bringen; Nähte periodischer Flächen (Zylinder, Kugel, Torus) aufschneiden und Punkte
-   doppeln, Pole (Kugel, Kegelspitze) als entartete Kanten behandeln. Ein UV-Gitter, dessen
-   Schrittweite aus dem Sehnenfehler folgt (Zylinder/Kegel: aus dem Radius; Kugel/Torus: aus
-   beiden Radien; NURBS: aus zweiten Ableitungen bzw. der Ebenheit des Kontrollnetzes,
-   adaptiv als Quadtree), die Gitterpunkte gegen die UV-Schleifen trimmen
-   (Punkt-in-Polygon), dann CDT in UV mit den Kantenpolylinien als Zwangskanten, sodass der
-   Rand exakt aus den Kantenpunkten aus Schritt 1 besteht. Danach nachverfeinern, wo die
-   3D-Abweichung in Dreiecks- bzw. Kantenmitten `tol` übersteigt (Steiner-Punkte), und
-   Dreiecke mit schlechtem Seitenverhältnis in UV vermeiden (anisotrope Skalierung von u
-   und v nach den Ableitungslängen).
-4. **Normalen** exakt aus der Flächenauswertung je Ecke, Orientierung nach dem Sinn der
-   Fläche; Face-Id je Dreieck für die Provenienz (`Mesh`), Kanten-Polylinien für die
-   Anzeige; grob/fein nach Toleranz wie in Plan 7.2.
+1. **Edges first, once per edge:** each edge is discretised exactly once and used by
+   both neighbouring faces (watertight, edge matching). Chord error control:
+   line 1 segment; circle/ellipse step angle `θ = 2·acos(1 − tol/r)`; NURBS adaptive
+   bisection until the deviation of the midpoint is ≤ `tol` and the tangent angle is below a
+   limit.
+2. **Planar faces:** project the loops into the plane and triangulate as a polygon with holes
+   (ear clipping with hole bridges like earcut, or constrained
+   Delaunay triangulation, CDT); orientation from face normal and loop direction.
+3. **Analytic and NURBS faces:** work in parameter space. Bring the edge points to (u, v) via the
+   UV trim curves of the edge uses (or point inversion onto the surface);
+   cut open the seams of periodic surfaces (cylinder, sphere, torus) and duplicate points,
+   treat poles (sphere, cone apex) as degenerate edges. A UV grid whose
+   step size follows from the chord error (cylinder/cone: from the radius; sphere/torus: from
+   both radii; NURBS: from second derivatives or the flatness of the control net,
+   adaptively as a quadtree), trim the grid points against the UV loops
+   (point in polygon), then CDT in UV with the edge polylines as constrained edges, so that the
+   boundary consists exactly of the edge points from step 1. Afterwards refine where the
+   3D deviation at triangle or edge midpoints exceeds `tol` (Steiner points), and
+   avoid triangles with a poor aspect ratio in UV (anisotropic scaling of u
+   and v by the derivative lengths).
+4. **Normals** exactly from the surface evaluation per vertex, orientation according to the sense of the
+   face; face ID per triangle for provenance (`Mesh`), edge polylines for the
+   display; coarse/fine by tolerance as in plan 7.2.
 
-Abhängigkeiten: aus solidcore Flächen- und Kurvenauswertung (Punkt, Ableitungen, Normale:
-`SmApiEvaluateSurface*`, Kurven-`evaluate_point`), Randschleifen und Kantenverwendungen
-(`face_get_boundary_loops`), UV-Trimmkurven (`SmEdgeuse::GetOrCreateUVTrimCurve`, Einheit
-`topology.edgeuse_p3`, heute teilweise), Punktinversion (`surface_closest_point`),
-UV-Klassifikation (`face_classify_uv`), Flächentyp und Parameterbereich/Periodizität. Auf
-unserer Seite: eine CDT (eigene oder z. B. das Crate `spade`, MIT/Apache) mit robusten
-Prädikaten (`robust`), Ear-Clipping für den ebenen Fall. `make_polyhedron` bräuchte einen
-eigenen Aufbau aus ebenen Flächen und Nähen (`SmApiStitchIntoSolid` ist im Umfang, aber
-ungeprüft).
+Dependencies: from solidcore surface and curve evaluation (point, derivatives, normal:
+`SmApiEvaluateSurface*`, curve `evaluate_point`), boundary loops and edge uses
+(`face_get_boundary_loops`), UV trim curves (`SmEdgeuse::GetOrCreateUVTrimCurve`, unit
+`topology.edgeuse_p3`, partial today), point inversion (`surface_closest_point`),
+UV classification (`face_classify_uv`), surface type and parameter range/periodicity. On
+our side: a CDT (own or e.g. the crate `spade`, MIT/Apache) with robust
+predicates (`robust`), ear clipping for the planar case. `make_polyhedron` would need its
+own construction from planar faces and stitching (`SmApiStitchIntoSolid` is in scope, but
+untested).
 
-## Abnahme
+## Acceptance
 
-`mcad diff-kernels <dateien…> [--json]` (`crates/cad-cli/src/diff.rs`) wertet jede Datei mit
-SMLib und mit solidcore aus und vergleicht jeden von SMLib ausgewerteten Knoten:
+`mcad diff-kernels <dateien…> [--json]` (`crates/cad-cli/src/diff.rs`) evaluates each file with
+SMLib and with solidcore and compares every node evaluated by SMLib:
 
-- Status, Volumen (relativ 1e-6), Anzahl Flächen und Kanten des Knotenergebnisses,
-  ausgewählte Kanten (Fillet/Fase: Anzahl und Endpunkte, 1e-6 der Modellgröße);
-- Urteil je Knoten: `same`, `unsupported` (solidcore meldet die Operation oder eine Abfrage
-  ihres Ergebnisses als nicht unterstützt), `blocked` (weicht nur ab, weil ein Eingangsknoten
-  unsupported ist; bei `zone` der Geschwisterkörper), `differ`, `failed` (solidcore scheitert,
-  SMLib nicht), `skipped`;
-- „Abdeckung“: je Operation (Knotenlabel) gleich / Knoten, unsupported, blockiert, abweichend.
+- status, volume (relative 1e-6), number of faces and edges of the node result,
+  selected edges (fillet/chamfer: count and end points, 1e-6 of the model size);
+- verdict per node: `same`, `unsupported` (solidcore reports the operation or a query of
+  its result as unsupported), `blocked` (differs only because an input node
+  is unsupported; for `zone` the sibling body), `differ`, `failed` (solidcore fails,
+  SMLib does not), `skipped`;
+- "Abdeckung" (coverage): per operation (node label) same / nodes, unsupported, blocked, differ.
 
-Exit-Code 0 nur, wenn alle Knoten aller Dateien `same` sind. Umgestellt wird erst, wenn
-`diff-kernels` über alle Beispiele (`tests/models/openscad-compat`, `tests/models/spec`) mit 0 endet;
-zusätzlich müssen `tests/openscad-compat/compare.py` und `tests/step/verify.py` mit solidcore
-weiter bestehen (dafür braucht `kernel-solidcore` noch `tessellate` und `brep`).
+Exit code 0 only if all nodes of all files are `same`. The switch happens only when
+`diff-kernels` ends with 0 over all examples (`tests/models/openscad-compat`, `tests/models/spec`);
+in addition, `tests/openscad-compat/compare.py` and `tests/step/verify.py` must still pass with solidcore
+(for this `kernel-solidcore` still needs `tessellate` and `brep`).
 
-Der Test `diff_kernels_on_examples` (`crates/cad-cli/tests/cli.rs`, nur mit `--features
-solidcore`) prüft, dass der Vergleich über alle Beispiele ohne Absturz durchläuft, dass mehr
-als 450 Knoten gleich sind, keiner scheitert und abweichende Zylinder, Kugeln, Tori und Rotationskörper nur im Volumen abweichen; ohne das Feature prüft
-`diff_kernels_needs_the_feature` den Hinweis zum Bauen. `crates/kernel-solidcore/tests/coverage.rs`
-prüft jede Operation einzeln (Quader: Volumen, Fläche, Schwerpunkt, Grenzen; Transformation
-und Klassifikation richtig oder `Unsupported`).
+The test `diff_kernels_on_examples` (`crates/cad-cli/tests/cli.rs`, only with `--features
+solidcore`) checks that the comparison runs over all examples without a crash, that more
+than 450 nodes are the same, none fails, and differing cylinders, spheres, tori and solids of revolution differ only in volume; without the feature
+`diff_kernels_needs_the_feature` checks the build hint. `crates/kernel-solidcore/tests/coverage.rs`
+checks each operation individually (box: volume, area, centroid, bounds; transformation
+and classification correct or `Unsupported`).
 
-Wöchentlich (montags, `.github/workflows/solidcore.yml`, auch von Hand startbar) läuft
-`scripts/ci/solidcore.sh`: `mcad` mit `--features solidcore` gegen den jeweils neuesten
-solidcore-`main` statt des Pins gebaut, `diff-kernels` über dieselben Beispiele; die Zahlen
-stehen in der Job-Zusammenfassung (gesamt und je Operation) und als Artefakt
-`solidcore-coverage` (`diff-kernels.json`). Der Job wird nicht rot, weil Knoten unsupported,
-blockiert oder abweichend sind, nur wenn der Build (API-Änderung in solidcore) oder
-`diff-kernels` selbst scheitert. Lokal: `SMLIB_PREBUILT=smlib/build-native
-scripts/ci/solidcore.sh` (ändert den Pin im Arbeitsbaum, danach `git checkout --
+Weekly (Mondays, `.github/workflows/solidcore.yml`, can also be started manually)
+`scripts/ci/solidcore.sh` runs: `mcad` built with `--features solidcore` against the latest
+solidcore `main` instead of the pin, `diff-kernels` over the same examples; the figures
+appear in the job summary (total and per operation) and as artefact
+`solidcore-coverage` (`diff-kernels.json`). The job does not turn red because nodes are unsupported,
+blocked or differ, only if the build (API change in solidcore) or
+`diff-kernels` itself fails. Locally: `SMLIB_PREBUILT=smlib/build-native
+scripts/ci/solidcore.sh` (changes the pin in the working tree, afterwards `git checkout --
 crates/kernel-solidcore Cargo.lock`).
