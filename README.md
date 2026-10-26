@@ -240,8 +240,17 @@ make test                       # cargo test + Vitest
 make install PREFIX=~/.local    # binary, desktop file, icons, docs
 ```
 
-`make` lists all targets. Arch Linux package: `make arch-pkg`. Details on building, tests and
-the code layout (German): [`docs/entwicklung.md`](docs/entwicklung.md).
+`make` lists all targets. Details on building, tests and the code layout (German):
+[`docs/entwicklung.md`](docs/entwicklung.md).
+
+## Installation
+
+There are no prebuilt packages yet.
+
+| Platform | How |
+| --- | --- |
+| Arch Linux | `make arch-pkg` builds `target/arch/mcad-*.pkg.tar.zst` (with `makepkg`, or in Docker on other distributions); then `sudo pacman -U target/arch/mcad-*.pkg.tar.zst` |
+| Other | TODO; for now build from source (above) and `make install` |
 
 ```sh
 mcad                            # desktop UI
