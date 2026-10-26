@@ -25,7 +25,10 @@ Types:
 - `AssertPair = { a: {node, label, origin}, b, ok, problem: overlap|too_close|apart|gap|line_contact|point_contact|unchecked|null, message, volume, mesh_based, distance, accuracy, points: [a, b], contact: face|line|point|mesh|null, contact_area, contact_exact, overlap: {positions, indices, edges}|null, contact_mesh, contact_lines, focus: {min, max} }`
 - `camera = { projection, azimuth, elevation, dir, up, right, target, eye, scale_px_per_mm, width_mm, height_mm }`
 
-Measurement values are rounded to 12 significant digits. `message` texts are German.
+Measurement values are rounded to 12 significant digits. Display texts (`message`, `text`, `title`,
+`label`, `details`, `origin`, `notes`, hints) follow the output language (`--lang`, `MCAD_LANG`,
+locale; default English); keys and machine values (`severity`, `source`, `kind`, `key`, `problem`,
+`cli`, `reference`) never change.
 
 ## Conventions (schema 2)
 

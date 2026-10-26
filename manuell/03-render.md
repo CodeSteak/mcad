@@ -19,12 +19,12 @@
 - Asserts (always drawn): `assert_keepout` volume translucent yellow, dashed outline on top;
   intersection bodies of violations red with their edges on top; contact faces/lines of
   `assert_touches` green; gaps and too small clearances as red lines with foot points. Labels
-  ("Schnitt 100 mm³", "Spalt 0.2 mm", "2 mm < 3") for violations; `--show asserts` labels every
-  pair and draws the wanted intersections of `assert_intersect` green ("Kontakt 384 mm²",
-  "Schnitt 306 mm³").
+  ("intersection 100 mm³", "gap 0.2 mm", "2 mm < 3") for violations; `--show asserts` labels every
+  pair and draws the wanted intersections of `assert_intersect` green ("contact 384 mm²",
+  "intersection 306 mm³").
 - Failed Booleans with a place (always drawn): where the operands touch tangentially, the
-  contact edges red on top, a red dot and the label `Berührung Z.15 + 16` (lines of the
-  operands); note `n Fehlerstelle(n) rot markiert …`, JSON `overlays.failures`.
+  contact edges red on top, a red dot and the label `contact l.15 + 16` (lines of the
+  operands); note `n error place(s) marked red …`, JSON `overlays.failures`.
 - In `iso`, cut faces of `y=` sections face away: add `--section-flip` or `--view back`.
 - `--json` returns the camera per view (`scale_px_per_mm`) to map pixels to mm.
 

@@ -2,7 +2,7 @@
 
 1. `mcad outline FILE` – understand the model (one call per project).
 2. Edit the file, or `mcad set` for parameter defaults/literals.
-3. `mcad check FILE` – until 0 errors. Warning "0 Kanten" = a zone selected no edges.
+3. `mcad check FILE` – until 0 errors. Warning "0 edges" = a zone selected no edges.
 4. `mcad render FILE -o x.png --views all --show grids,anchors` – view the image. Module grids
    only show with `--module NAME`.
 5. `mcad inspect FILE --line N`, `mcad measure …` – verify numbers; don't trust a picture.

@@ -16,7 +16,9 @@ mcad export part.mcad -o part.step         # .stl / .3mf / .step
 ```
 
 - `--json` on every command: one object, fixed schema (`mcad usage json`). Prefer it.
-- Text output is German (glossary: `mcad usage troubleshooting`); JSON keys are English.
+- Text output is English; German with `--lang de`, `MCAD_LANG=de` or a German locale (first set
+  of `--lang`, `MCAD_LANG`, `LC_ALL`, `LC_MESSAGES`, `LANG`; other values → English). JSON keys
+  and machine values never change; JSON display texts (`message`, `text`) follow the language.
 - `FILE` `-` reads stdin. Lines/columns are 1-based.
 - Exit codes: 0 ok · 1 diagnostics with errors (output complete) · 2 usage error (arguments,
   file, unknown anchor/part/plane) · 3 kernel/internal error, or no running UI for `mcad ui` ·

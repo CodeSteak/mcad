@@ -32,6 +32,11 @@ desktop UI (`mcad`, `mcad datei.mcad`, `mcad ordner/`); without a graphical sess
 agents always work with the commands below, the UI is never needed. Headless build without UI:
 `cargo build --release -p cad-cli --no-default-features`.
 
+Text output is English; German with `--lang de` (or `MCAD_LANG=de`, German locale; precedence
+`--lang`, `MCAD_LANG`, `LC_ALL`, `LC_MESSAGES`, `LANG`). JSON keys and machine values never change,
+JSON display texts (`message`, `text`, …) follow the language; the daemon answers in the caller's
+language. German↔English glossary: `mcad usage troubleshooting`.
+
 ## Recommended workflow for agents
 
 1. **Understand:** `mcad outline datei.mcad` – modules with parameters (default value, type), grids
@@ -39,7 +44,7 @@ agents always work with the commands below, the UI is never needed. Headless bui
    volume), `include`/`use`, diagnostics. One call is enough for a project.
 2. **Edit:** change the file (Edit tool) or `mcad set` for default values/literals.
 3. **Check:** `mcad check datei.mcad` – only continue when there are no errors. Read warnings
-   (e.g. „0 Kanten“ (0 edges) for an empty zone selection).
+   (e.g. "0 edges" for an empty zone selection).
 4. **Look:** `mcad render datei.mcad -o /tmp/x.png --views all --show grids,anchors` and
    **look at the image** (Read tool). For a module `--module NAME` (grids are only visible in their own
    module), for details `--line N`, `--section z=…`, `--xray`, `--show labels,dims`.
@@ -51,7 +56,7 @@ agents always work with the commands below, the UI is never needed. Headless bui
    collisions of the parts, distance between two parts.
 6. **Output:** `mcad export datei.mcad -o teil.step` (or `--all-parts -o ordner/`). For
    multi-colour printing `mcad export datei.mcad -o teil.3mf` (multi-colour by default: one
-   object per part, material outside the parts as object „ohne Bauteil“ (without part), one part per colour with
+   object per part, material outside the parts as object „ohne Bauteil“ (fixed name, = outside any part), one part per colour with
    filament slot; without colour group, so Bambu Studio and OrcaSlicer take over the slots without
    a colour dialog; beforehand `mcad measure datei.mcad --colors` for slots, volume and mass per colour).
 
@@ -113,7 +118,7 @@ and checks with the CLI. The UI watches the file and all included files:
   `mcad set`) appears immediately in the editor and in the 3D view (~0.2–0.3 s, report 9); the user's cursor and
   viewport stay, the change is a separate undo step.
 - **User has unsaved changes:** the UI overwrites nothing, but shows the bar
-  „Datei wurde extern geändert: Neu laden / Meine behalten / Vergleichen“ (file was changed externally: reload / keep mine / compare). Therefore check
+  "… was changed externally: Reload / Keep mine / Compare" (German UI: „Neu laden / Meine behalten / Vergleichen“). Therefore check
   `mcad ui status --json` before writing: if the file is listed in `dirty`, ask the user instead of
   writing.
 - Workflow: `mcad ui status` (what is open, cursor line, selected node, context module, values
@@ -121,9 +126,9 @@ and checks with the CLI. The UI watches the file and all included files:
   if needed `mcad ui show datei.mcad --line N [--module m]` (shows the user the location: window
   to the front, cursor there) and `mcad ui screenshot -o /tmp/ui.png` (the 3D view as the
   user sees it; look at the image).
-- Without a running UI, `mcad ui …` ends with exit 3 („keine laufende Desktop-UI“ (no running desktop UI)) – then simply
+- Without a running UI, `mcad ui …` ends with exit 3 ("no desktop UI running") – then simply
   continue headless. Everything else works unchanged without a UI.
-- Section from the UI: „Als `mcad render …` kopieren“ (copy as `mcad render …`) in the section view yields the same
+- Section from the UI: "Copy as mcad render …" in the section view yields the same
   section as a CLI call (`--section z=12 --azimuth … --elevation …`); `mcad ui status` reports it
   under `section.cli`.
 
@@ -137,15 +142,15 @@ and checks with the CLI. The UI watches the file and all included files:
 
 | Command | Purpose |
 | --- | --- |
-| `mcad check DATEI [--no-kernel]` | diagnostics `datei:zeile:spalte: Fehler/Warnung (Syntax/Auswertung/Kernel): …` (file:line:column: error/warning (syntax/evaluation/kernel)) |
+| `mcad check DATEI [--no-kernel]` | diagnostics `file:line:col: error/warning (syntax/evaluation/kernel): …`, `Asserts: 4 of 4 checked, 0 violated` |
 | `mcad outline DATEI [--no-kernel]` | outline (see above); `--no-kernel`: without bounding boxes/volumes, faster |
 | `mcad eval DATEI [--module m] [-D name=wert]…` | tree (nodes, line, status, bounding box), values of the variables, grids, anchors, `echo` |
-| `mcad inspect DATEI --line N` | what line N produces: nodes, bounding box, volume/area, selected edges, hints („4 Kanten“ (4 edges)), errors, handles |
+| `mcad inspect DATEI --line N` | what line N produces: nodes, bounding box, volume/area, selected edges, hints ("4 edges"), errors, handles |
 | `mcad render DATEI -o bild.png [options]` | image (options below) |
 | `mcad measure DATEI [options]` | measure (options below) |
 | `mcad watch DATEI [--json] [--render bild.png …]` | watch and re-evaluate on every change (below) |
 | `mcad set DATEI --param modul.param=wert \| --literal [datei:]zeile:spalte=wert [--dry-run]` | change code via the engine (below) |
-| `mcad export DATEI -o teil.stl\|teil.3mf\|teil.step [--schema ap214] [--merge]` | export file (STEP: exact B-Rep, AP242, face colours from the colour regions, one named body per part and per top-level object outside the parts – touching parts stay separate, intersecting ones are united into one body „a + b“ (hint); `--merge`: one merged body as before; 3MF: **multi-colour**, one object per part + „ohne Bauteil“, one part per colour with filament slot for Bambu Studio/OrcaSlicer, without colour group; `--color-group` with colour group for other programs – Bambu then opens a colour dialog, „Abbrechen“ (Cancel) keeps the slots; single colour with `--single-color`) |
+| `mcad export DATEI -o teil.stl\|teil.3mf\|teil.step [--schema ap214] [--merge]` | export file (STEP: exact B-Rep, AP242, face colours from the colour regions, one named body per part and per top-level object outside the parts – touching parts stay separate, intersecting ones are united into one body “a + b” (note); `--merge`: one merged body as before; 3MF: **multi-colour**, one object per part + „ohne Bauteil“, one part per colour with filament slot for Bambu Studio/OrcaSlicer, without colour group; `--color-group` with colour group for other programs – Bambu then opens a colour dialog, "Cancel" keeps the slots; single colour with `--single-color`) |
 | `mcad export DATEI --per-color [--part NAME]… -o farben.zip` | ZIP with one STL per colour (and part): `F<slot>_<farbe>.stl`, all in the same coordinate system (extension `.zip` required) |
 | `mcad export DATEI --part NAME [--part NAME2] -o …` | only these parts (named instances at top level, e.g. `deckel`, `k[2]`) |
 | `mcad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | each part as a separate file (`deckel.stl`, `k_2.step`) |
@@ -211,7 +216,7 @@ the module definition.
 | `--radius REF` | radius, diameter, centre, axis of a circular edge (`edge@P`) or round face (`face@P`: cylinder, cone with half-angle and apex, sphere, torus with ring radius; fillets on circular edges recognised as surfaces of revolution; free-form: radii of curvature, `exact: false`) |
 | `--angle A B` | angle between two edges or faces: planes 0–90° (`values.opening` = opening angle at the intersection line, `normals`), lines 0–90° (at a shared vertex 0–180°), line–plane; cylinder/cone via the axis |
 | `--length REF`, `--area face@P` | length of an edge (exact for line/arc), area of a face (exact if planar) |
-| `--body REF` | part or body of the element: volume, surface area, centroid, bounding box from the B-Rep (`details[0]`: „Bauteil k (Zeile 21)“ (part k (line 21))) |
+| `--body REF` | part or body of the element: volume, surface area, centroid, bounding box from the B-Rep (`details[0]`: "part k (line 21)") |
 | `--section z=W` (`--section-plane p,n`, `--section-flip`) | section as in `mcad render`: plane ∩ B-Rep via the kernel; alone: regions with area and holes, contours with segments (`kind`, `center`, `radius`, `exact`, `source` = intersected face), circles (bores), smallest wall thickness (estimate over 8 positions per segment). With `--distance`/`--radius`/`--angle`/`--length`/`--area region@P`/`--wall` you measure in the plane |
 | `--wall P` | wall thickness in the section at the contour point nearest to P, perpendicular to the contour through the material (needs `--section`) |
 | `--at P` | what lies at P: nearest vertex, edge midpoint, circle centre, edge, face (in a section: contour, region) with reference, distance and origin – for finding the references |
@@ -222,9 +227,9 @@ the module definition.
 to the section contour and `region@P` to the region containing P (`face@`/`body@` are then not
 available). Order of the results in `measurements`: distances, radii, angles, lengths,
 area, body, wall thicknesses. Each measurement has `text` (lines as in the UI), `cli` (the
-arguments that repeat it) and `picks[].origin` (origin: `Zeile 11: box (Instanz k:
-gehaeuse)`, `Rasterebene g.innen_l`, `Rasterpunkt g[b, h, o]`, `Rasterlinie g[loch[0],
-mitte, *]`, `Anker k.ecke`). The UI („Messen“ (Measure), „Als mcad measure kopieren“ (copy as mcad measure)) produces the same
+arguments that repeat it) and `picks[].origin` (origin: `line 11: box (instance k:
+gehaeuse)`, `grid plane g.innen_l`, `grid point g[b, h, o]`, `grid line g[loch[0],
+mitte, *]`, `anchor k.ecke`). The UI ("Measure", "Copy as mcad measure") produces the same
 calls.
 
 Example (spec `gehaeuse`): `mcad measure gehaeuse.mcad --between k.ecke k.oben` → 67.082 mm,
@@ -246,8 +251,8 @@ change) or `--timeout S` (S seconds without a change).
 
 ### `set`
 
-- `mcad set datei.mcad --param gehaeuse.w=50` writes the default value (like „Als Standard
-  übernehmen“ (apply as default) in the UI; module also from `use` files, nested `aussen::innen.p`).
+- `mcad set datei.mcad --param gehaeuse.w=50` writes the default value (like "Use as
+  default" in the UI; module also from `use` files, nested `aussen::innen.p`).
 - `mcad set datei.mcad --literal 21:17=70` replaces the editable literal at line:column
   (column anywhere in the literal; the literals the UI changes: variable values, handles,
   grid planes, default values); in project files `--literal lib/teile.mcad:12:20=4`.
@@ -267,8 +272,8 @@ Every response is an object with `schema_version` (2), `command`, `file`, `ok`, 
 the commands with daemon `daemon: {used, reason}` (`reason` e.g. `--no-daemon`, otherwise `null`).
 `Diagnostic = { severity: "error"|"warning"|"info", message, source: "syntax"|"eval"|"kernel",
 node, range, file?, at?, nodes? }` (`at`: location of a kernel error, e.g. where the operands
-of a Boolean touch tangentially – „Zeile 12 (dom) und Zeile 30 (rippe) berühren sich
-tangential bei [x, y, z]“ (line 12 (dom) and line 30 (rippe) touch tangentially at [x, y, z]); `mcad render` marks the location in red), `range = { from, to, line, col, end_line, end_col }` (1-based,
+of a Boolean touch tangentially – "union failed: line 12 (dom) and line 30 (rippe)
+touch tangentially at [x, y, z]"; `mcad render` marks the location in red), `range = { from, to, line, col, end_line, end_col }` (1-based,
 offsets UTF-16). `Bounds = { min, max, size }`. Complete schema: header of
 `crates/cad-cli/src/main.rs`.
 
@@ -312,7 +317,7 @@ offsets UTF-16). `Bounds = { min, max, size }`. Complete schema: header of
 - `export`: `+ { output, format, bytes, triangles, volume, area, bounds, step?, multicolor,
   color_group?, notes?, colors?, color_regions? }` (`--per-color`: `format: "zip"`, `files`)
 - `outline`/`measure --colors`: `colors: [{key, label, source: default|palette|random|exact,
-  filament, explicit, lines, places, volume, mass_g}]` (`places`: `Z.3` or `lib.mcad:3`), `color_regions`/`colors.parts: [{part, node,
+  filament, explicit, lines, places, volume, mass_g}]` (`places`: `line 3` or `lib.mcad:3`), `color_regions`/`colors.parts: [{part, node,
   total, warning, regions: [{color, label, filament, volume, mass_g}]}]`
 - `daemon status`: `{ running, pid, version, build_id, uptime_s, idle_s, idle_limit_s, watchdog_s,
   busy, current, pending, requests, failed, projects, max_projects, project_evictions, cache:
@@ -401,7 +406,7 @@ maths builtins, `lookup`, captured variables, user functions); not for `chamfer`
 and `$fillet`. Seam and pole edges (cylinder, sphere) and tangential edges never count.
 
 Edges count if they lie entirely within a zone (`select = "inside"`). An empty selection is
-a warning („0 Kanten“), a radius that is too large is a kernel error (the body stays without
+a warning ("0 edges"), a radius that is too large is a kernel error (the body stays without
 fillet). `chamfer` and `shell(t) { körper; zone; }` follow the same pattern.
 `inspect --line` of the block shows the edge count, `render --line` the zones (blue) and the
 edges (orange).
@@ -422,7 +427,7 @@ always slot 1; above 16 slots a warning is given, shared slots are shown by a hi
 body of a coloured subtree belongs to that colour, on overlap the later
 statement wins (also an inner `color()`), subtracted material applies to all; `color()` in a 2D profile
 colours the extrusion (mixed 2D colours: warning). Check with `mcad outline` (section
-„Farben“ (colours), lines of other files as `lib.mcad:3`) or `mcad measure --colors`, view with
+"Colours", lines of other files as `lib.mcad:3`) or `mcad measure --colors`, view with
 `mcad render` (a model with colours shows the colour regions as printed; `--show faces` the
 faster colour per face).
 
@@ -459,8 +464,8 @@ module profil(b = 40) sketch { … }        // named sketch; for/if/let and modu
 sweep() { sketch(closed = false) { start([0, 0]); line(to = [30, 0]); arc(to = [45, 15]); } circle(2); }
 ```
 
-Errors: „Kontur nicht geschlossen“ (contour not closed), „unmöglicher Bogen“ (impossible arc) (radius < half the chord, …),
-„Selbstüberschneidung … mit Segment in Zeile n“ (self-intersection … with segment in line n), „Kontur ohne Fläche“ (contour without area). `loft` connects
+Errors: "contour not closed", "impossible arc: …" (radius < half the chord, …),
+"self-intersection of the contour with segment in line n", "contour without area". `loft` connects
 sketches with the same number of segments segment by segment (start = `start`), otherwise as one curve each.
 In `mcad render --line N` of a segment line the sketch is highlighted.
 
@@ -487,22 +492,22 @@ stroke(2, cap = "round" | "flat" | "square", join = "round" | "miter" | "bevel")
     sketch(closed = false) { … };  // open path → area; stroke(1) circle(5) = ring
 ```
 
-`corner` does not fit → error at the corner line with „höchstens ≈ r“ (at most ≈ r); tangential corner →
-„keine Ecke“ (no corner). `fillet2d` reports „n Ecken“ (n corners) (inline hint), radii that are too large per corner
-(„Ecke bei [x, y]: … passt nicht“ (corner at [x, y]: … does not fit)). `offset` without argument: `r = 1`; `r` takes precedence over `delta`;
+`corner` does not fit → error at the corner line with "at most ≈ r"; tangential corner →
+"no corner". `fillet2d` reports "n corners" (inline hint), radii that are too large per corner
+("corner at [x, y]: … does not fit"). `offset` without argument: `r = 1`; `r` takes precedence over `delta`;
 negative values shrink (narrow parts disappear, holes grow), positive values close
 holes. `mcad render --line N` on offset/stroke/fillet2d shows the source contour, the
 offset contour dashed, the centre line of the stroke and the new corner arcs; `--show handles`
 shows the radius handle of `corner`.
 
 **`hull` and `minkowski`** (plan 21): only exact special cases, otherwise the warning
-„hull: <Grund>; Kinder werden unverändert gezeigt“ (hull: <reason>; children are shown unchanged) (`mcad usage language` has the table).
+"hull: <reason>; children shown unchanged" (`mcad usage language` has the table).
 `hull` in 2D always (lines + arcs); in 3D: only planar bodies (polyhedra), spheres/cylinders/cones
 on one axis (solids of revolution), parallel prisms of equal height (cylinder + box →
 plate with round ends), ≥ 3 equally sized spheres not in one plane (rounded box).
 `minkowski`: body + `sphere(r)` (offset), 2D profile + `circle(r)` (`offset(r)`),
 `linear_extrude` + `cylinder`, two convex planar bodies. `mcad inspect --line N` shows the
-case („exakt: Prisma“ (exact: prism)). Offset is only exact at right-angled corners (tetrahedron → warning).
+case ("exact: prism"). Offset is only exact at right-angled corners (tetrahedron → warning).
 
 ```
 hull() for (x = [0, 20], y = [0, 10], z = [0, 5]) translate([x, y, z]) sphere(2);   // rounded box
@@ -536,7 +541,7 @@ linear_extrude(2) import("logo.svg", center = true);             // also id = "�
   (exceptions in Allerta Stencil: ẞ„‚{}_#°²³§~^·•…±µØø).
 - `import("….svg")`: paths, rectangles (rx/ry), circles/ellipses exact, polygons, groups with
   `transform`, `viewBox`/mm/in/pt, `fill-rule`. Origin bottom left (y up) as in OpenSCAD.
-  Warnings name the SVG line (`logo.svg:4: \`text\`: Text nicht unterstützt …`): convert text to
+  Warnings name the SVG line (`logo.svg:4: \`text\`: text not supported …`): convert text to
   paths; strokes as areas are not supported, open paths are not filled.
 - File names must appear as text in the project (also as a parameter default value); `mcad watch`
   also watches the SVG/TTF files.
@@ -550,19 +555,19 @@ Closed mesh with ≤ 500 faces (after merging coplanar triangles) → B-Rep
 **mesh** (display, transformations, colours, parts, `hull` up to 2000 vertices, export STL/3MF,
 STEP faceted, `measure` bounding box/volume/section/`--clearance`/`--interference` mesh-based;
 Booleans and fillets report an error with the hint `as = "solid"`). Hint at the node
-(`mcad inspect --line N`): „B-Rep: 6 Flächen aus 12 Dreiecken“ (B-Rep: 6 faces from 12 triangles) or „Netz: 20000 Dreiecke, …“ (mesh: 20000 triangles, …).
+(`mcad inspect --line N`): "B-rep: 6 faces from 12 triangles" or "mesh: 20000 triangles, …".
 `as = "solid"` forces the B-Rep (slow: 900 faces + one Boolean ≈ 4 s), `as = "mesh"` the
 mesh. Example: `tests/models/spec/stl_import.mcad`.
 
 **Collision asserts** (plan 21 C, `mcad usage asserts`): checks after evaluation,
-violation = warning (`mcad check` exit 0, line „Asserts: 4 von 4 geprüft, 0 verletzt“ (asserts: 4 of 4 checked, 0 violated)),
+violation = warning (`mcad check` exit 0, line "Asserts: 4 of 4 checked, 0 violated"),
 `mcad export` then aborts with **exit 4** (`--ignore-asserts` exports anyway).
 `assert_keepout(clearance = 0.5) …` – keep-out volume (B-Rep or STL mesh): shown (yellow,
 translucent), never exported/counted, checked against all real bodies (intersection volume exact
 via Boolean, mesh only yes/no; distance < clearance). `assert_disjoint() { a; b; }` (no pair
 intersects), `assert_intersect() { … }` (children form **one connected** group;
-touching does not count), `assert_touches(tol = 0.001, contact = "face") { … }` (gap → „berührt
-nicht“ (does not touch), intersection, only line/point contact → warning; contact face exact from `region2`).
+touching does not count), `assert_touches(tol = 0.001, contact = "face") { … }` (gap → "does not
+touch", intersection, only line/point contact → warning; contact face exact from `region2`).
 Asserts are groups and can be nested; named instances inside them remain parts.
 `mcad render` draws intersection bodies red, contact faces green, gaps as a dimension line
 (`--show asserts` labels everything); `mcad inspect --line N` lists the pairs.

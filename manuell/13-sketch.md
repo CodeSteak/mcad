@@ -27,8 +27,8 @@ linear_extrude(5) sketch {
 - Named sketch: `module profile(w = 40) sketch { … }`; `for`/`if`/`let` and segment modules
   work inside.
 - `loft` connects sketches with equal segment counts segment by segment.
-- Errors: "Kontur nicht geschlossen" (not closed), "unmöglicher Bogen" (impossible arc),
-  "Selbstüberschneidung" (self-intersection), "Kontur ohne Fläche" (no area).
+- Errors: "contour not closed", "impossible arc: …", "self-intersection of the contour",
+  "contour without area".
 
 2D operations (exact arcs, no facets):
 

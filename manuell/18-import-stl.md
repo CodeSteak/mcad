@@ -34,7 +34,7 @@ With a mesh child: `union()` shows it next to the result (warning), `difference(
 mesh base uncut or drops a mesh operand (error), `intersection()`/`fillet` leave the children
 unchanged (error); every message names `as = "solid"`. A failed B-rep build falls back to the
 mesh (warning; error with `as = "solid"`). Hint at the node (`mcad inspect FILE --line N`):
-`B-Rep: 8 Flächen aus 20 Dreiecken` or `Netz: 20000 Dreiecke, 18556 Flächen`.
+`B-rep: 8 faces from 20 triangles` or `mesh: 20000 triangles, 18556 faces`.
 
 Kernel time (sphere-like meshes; the limit 500 keeps import + one Boolean ≲ 2 s):
 

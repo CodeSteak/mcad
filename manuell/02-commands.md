@@ -2,7 +2,7 @@
 
 | Command | Output |
 | --- | --- |
-| `mcad check FILE [--no-kernel]` | `file:line:col: Fehler/Warnung (Syntax/Auswertung/Kernel): …`, assert results (`Asserts: 4 von 4 geprüft, 0 verletzt`) |
+| `mcad check FILE [--no-kernel]` | `file:line:col: error/warning (syntax/evaluation/kernel): …`, assert results (`Asserts: 4 of 4 checked, 0 violated`) |
 | `mcad outline FILE [--no-kernel] [-D …]` | modules + params, grids, anchors, functions, variables, instances, parts (bounds, volume), colours, files |
 | `mcad eval FILE` | node tree (index, line, status, bounds), expression values, grids, anchors, `echo` |
 | `mcad inspect FILE --line N [--whole-file]` | nodes of line N: bounds, volume/area, selected edges, hints, errors, handles |
@@ -24,17 +24,18 @@
 | `-m 'NAME(args)'` | same, with arguments as in a call: positional then named, expressions see the file's variables and functions (`-m 'holder(30, h = 5)'`, `-m 'parts.screw(d = 3)'`); combines with `-D` for other parameters. Exit 2: unknown module/parameter, too many positional arguments, a parameter twice or also in `-D`, an argument that fails or warns |
 | `-D NAME=VALUE` | with a module context: override a parameter of that module; without: override a top-level assignment of the main file (like `openscad -D`: the last assignment of the name takes the value, variables computed from it follow; `$fn` etc. need no assignment; unknown name → warning). JSON value (`-D w=60`, `-D p=[1,2]`), else string. Repeatable, the last `-D` of a name wins |
 | `--no-daemon`, `--verbose` | compute locally / daemon info on stderr |
+| `--lang en\|de` | language of the text output and JSON display texts; default `MCAD_LANG`, else locale (`LC_ALL`, `LC_MESSAGES`, `LANG`): `de*` → German, else English. Other value → exit 2 |
 
 ```sh
 mcad measure teil.mcad -D w=40 --volume all   # teil.mcad: w = 20; d = w / 2; h = 8; cube([w, d, h]);
-#   Volumen all: 6400 mm³                     (40 × 20 × 8: d follows w)
+#   Volume all: 6400 mm³                      (40 × 20 × 8: d follows w)
 ```
 
 ```sh
 mcad export holder.mcad -m 'holder(width, h = twice(2))' -o h.stl   # width = 30; function twice(x) = 2 * x;
-#   h.stl: 12 Dreiecke, 684 Bytes, Volumen 600 mm³                   (module holder(w = 10, h = 2, d = 5) cube([w, d, h]);)
+#   h.stl: 12 triangles, 684 bytes, volume 600 mm³                   (module holder(w = 10, h = 2, d = 5) cube([w, d, h]);)
 mcad check holder.mcad -m 'holder(1, 2, 3, 4)'
-#   mcad check: -m 'holder(1, 2, 3, 4)': zu viele Positionsargumente – `holder` hat 3 Parameter (w, h, d)   (exit 2)
+#   mcad check: -m 'holder(1, 2, 3, 4)': too many positional arguments – `holder` has 3 parameters (w, h, d)   (exit 2)
 ```
 
 `--line N` inside a module definition makes that module the context (`--whole-file` keeps the

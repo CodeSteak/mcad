@@ -40,30 +40,30 @@ difference() {                                                    // plate with 
     cube([40, 20, 4]);
     translate([0, 0, -1]) linear_extrude(6) slot([10, 10], [30, 10], 3);
 }
-// mcad measure plate.mcad --volume all   → Volumen all: 2606.9027 mm³  (3200 − (9π + 120) · 4)
-// mcad measure plate.mcad --section z=2  → two arcs "Bogen R 3 · ⌀ 6", area 651.7257 mm²
+// mcad measure plate.mcad --volume all   → Volume all: 2606.9027 mm³   (3200 − (9π + 120) · 4)
+// mcad measure plate.mcad --section z=2  → two arcs "arc R 3 · ⌀ 6", area 651.7257 mm²
 ```
 
 ## hull and minkowski
 
 Exact or nothing: a combination that is no special case gives the warning
-`hull: <reason>; Kinder werden unverändert gezeigt` (same for `minkowski`) and the children
-unchanged. `mcad inspect FILE --line N` names the case taken (hint `exakt: …`). Faces of the
+`hull: <reason>; children shown unchanged` (same for `minkowski`) and the children
+unchanged. `mcad inspect FILE --line N` names the case taken (hint `exact: …`). Faces of the
 result belong to the `hull`/`minkowski` statement.
 
 | `hull()` of | Result (hint) |
 | --- | --- |
 | 2D profiles of any kind (circles, polygons, sketches, text, booleans, offsets) | convex hull of lines and arcs of the inputs (B-splines as biarcs, 1 µm); collinear input: warning |
-| planar bodies: `cube`, `polyhedron`, imported STL (≤ 2000 vertices), `linear_extrude` of polygons without `twist` (any affine transform) | polyhedron of the vertices (`exakt: Polyeder (n Flächen)`) |
-| spheres, cylinders, cones on one common axis | revolved 2D hull of the half sections: capsule, cone between two spheres (`exakt: Rotationskörper`) |
-| prisms along one direction with the same start and height: cylinders, cubes, `linear_extrude` without `twist`/`scale` | extruded 2D hull of the sections: plate with round ends (`exakt: Prisma`) |
-| ≥ 3 equal spheres, centres not in one plane | hull of the centres offset by r: rounded box (`exakt: Hülle der Mittelpunkte + Offset r`) |
+| planar bodies: `cube`, `polyhedron`, imported STL (≤ 2000 vertices), `linear_extrude` of polygons without `twist` (any affine transform) | polyhedron of the vertices (`exact: polyhedron (n faces)`) |
+| spheres, cylinders, cones on one common axis | revolved 2D hull of the half sections: capsule, cone between two spheres (`exact: solid of revolution`) |
+| prisms along one direction with the same start and height: cylinders, cubes, `linear_extrude` without `twist`/`scale` | extruded 2D hull of the sections: plate with round ends (`exact: prism`) |
+| ≥ 3 equal spheres, centres not in one plane | hull of the centres offset by r: rounded box (`exact: hull of the centres + offset r`) |
 
 | `minkowski()` of | Result |
 | --- | --- |
 | 2D: profile + `circle(r)` (also several circles) | `offset(r = Σr)`, moved by the circles' centres |
 | 2D: two convex profiles, one of them a polygon | exact sum |
-| 3D: body + `sphere(r)` | outward offset by r, moved by the sphere's centre (`exakt: Offset r`) |
+| 3D: body + `sphere(r)` | outward offset by r, moved by the sphere's centre (`exact: offset r`) |
 | 3D: two parallel prisms (`linear_extrude` + `cylinder`, `cube` + `cylinder`) | extruded 2D sum of the sections, z from `z0a + z0b` to `z1a + z1b` |
 | 3D: two convex planar bodies (cubes, extruded convex polygons) | polyhedron of the vertex sums |
 

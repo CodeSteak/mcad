@@ -21,7 +21,7 @@
 midpoint), `center@P` (circle centre), `edge@P`, `face@P`, `body@P`. With `--section`, they
 refer to the section contour, plus `region@P`; `face@`/`body@` are unavailable.
 
-Each result names its origin (`Zeile 11: box (Instanz body: enclosure)`, `Rasterebene
+Each result names its origin (`line 10: box (instance body: enclosure)`, `grid plane
 g.inner_l`) and, in JSON, `cli` – the arguments that repeat it.
 
 Wrong element type (e.g. `--radius` on a straight edge) or unknown anchor → exit 2.

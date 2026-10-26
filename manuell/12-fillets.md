@@ -24,7 +24,7 @@ fillet(r = function (p) p.z < 10 ? 2 : 4) { … }   // variable radius over posi
 - Variable radius: pure expressions of `p` (no geometry); not for `chamfer` and `$fillet`.
   Hint "r 2–4".
 - Seam/pole edges of cylinders and spheres and tangent edges never count.
-- Empty selection → warning "0 Kanten"; radius too large → kernel error, body stays
+- Empty selection → warning "0 edges"; radius too large → kernel error, body stays
   unfilleted.
-- Check: `mcad inspect FILE --line N` (hint "4 Kanten"), `mcad render FILE --line N` (zones
+- Check: `mcad inspect FILE --line N` (hint "4 edges"), `mcad render FILE --line N` (zones
   blue, selected edges orange).

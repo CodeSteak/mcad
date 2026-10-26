@@ -37,7 +37,8 @@ mcad export part.mcad -o part.3mf
 ```
 
 Claude Code skill: [`.claude/skills/cad-cli/`](.claude/skills/cad-cli/SKILL.md). CLI text
-output is German for now; `--help`, `mcad usage` and JSON keys are English.
+output is English by default, German with `--lang de` (or `MCAD_LANG=de`, German locale);
+`--help`, `mcad usage` and JSON keys are always English.
 
 ## Tutorial
 
@@ -96,9 +97,9 @@ shell(wall) {
 
 ```console
 $ mcad measure 08-macropad.mcad --section z=8 --wall "[1.2, 30, 8]"
-  Bogen R 6 · ⌀ 12 bei [6, 59.15, 8] (center@[6,59.15,8])
+  arc R 6 · ⌀ 12 at [6, 59.15, 8] (center@[6,59.15,8])
   …
-Wandstärke Punkt [1.2, 30, 8]: 2.4 mm
+Wall thickness point [1.2, 30, 8]: 2.4 mm
 ```
 
 ![Section of the case at z = 8](docs/img/readme/section.png)
@@ -112,7 +113,7 @@ assert_keepout(clearance = 0.5) translate([0, 0, -11]) { switches(); pcb(); }
 
 ```console
 $ mcad check 08-macropad.mcad -D h=12
-08-macropad.mcad:104:18: Warnung (Kernel): assert_keepout: case ragt ins Sperrvolumen (Schnittvolumen 8497.131 mm³)
+08-macropad.mcad:104:18: warning (kernel): assert_keepout: case enters the keep-out volume (intersection volume 8497.131 mm³) [line 34: shell (instance case: case)]
 ```
 
 ![Keep-out volume in X-ray view](docs/img/readme/keepout.png)
