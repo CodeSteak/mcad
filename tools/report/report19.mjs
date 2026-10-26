@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 19 ("Messen", Plan 18): measure mode in the browser and in Tauri – every kind with
+// Test report 19 ("Measuring", plan 18): measure mode in the browser and in Tauri – every kind with
 // a screenshot, measuring in the section, the list (copy, delete), provenance, the dark theme,
 // response times; `cad measure` with the same kinds (text and JSON), analytic test models
 // against their formulas, test runs, limits.
@@ -16,7 +16,7 @@
 //   wasm.json (optional)                        {"base", "before": {raw, gzip}, "after": {raw, gzip}}
 //
 //   node tools/report/report19.mjs
-//   node tools/report/print-pdf.mjs docs/reports/19-messen/report.html docs/reports/19-messen/report.pdf "Testbericht 19: Messen"
+//   node tools/report/print-pdf.mjs docs/reports/19-messen/report.html docs/reports/19-messen/report.pdf "Test report 19: Measuring"
 
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -41,7 +41,8 @@ const gitOut = (...a) => {
     return "–";
   }
 };
-const de = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d }));
+// English number format without thousands separators (as in the translated report 19)
+const num = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d, useGrouping: false }));
 const md = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>");
 const pre = (t) => `<pre>${esc(String(t).trimEnd())}</pre>`;
 const term = (t) => `<pre class="term">${esc(String(t).trimEnd())}</pre>`;
@@ -62,7 +63,7 @@ function img(srcPath, dst, width = 1200) {
 const pw = (n) => img(join(input, "img", `${n}.jpg`), `ui-${n}.jpg`);
 const tauriImg = (n) => img(join(input, "tauri", "img", n), `tauri-${n.replace(/\.png$/, ".jpg")}`);
 const cliImg = (n) => img(join(input, "cli", n), `cli-${n.replace(/\.png$/, ".jpg")}`, 900);
-const fig = (s, cap) => (s ? `<figure><img src="${s}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(Bild fehlt: ${esc(cap)})</p>`);
+const fig = (s, cap) => (s ? `<figure><img src="${s}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(image missing: ${esc(cap)})</p>`);
 
 // ------------------------------------------------------------------------------- data
 
@@ -103,10 +104,10 @@ const tauri = readJson(join(input, "tauri", "tauri-e2e.json"));
 const t17 = tauri?.results?.find((r) => r.id === "T17") ?? null;
 const wasm = readJson(join(input, "wasm.json"));
 const hover = metrics.hoverRtt ?? null;
-const limitOf = (r) => (/Kernel/.test(r.name) ? 1e-3 : 1e-6);
+const limitOf = (r) => (/kernel/i.test(r.name) ? 1e-3 : 1e-6);
 const analyticOk = analytic.filter((r) => r.err !== null && Math.abs(r.err) <= Math.max(limitOf(r) * Math.abs(r.expect), 1e-9)).length;
 
-const date = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const commit = gitOut("rev-parse", "--short", "HEAD");
 const branch = gitOut("rev-parse", "--abbrev-ref", "HEAD");
 const rustc = (() => {
@@ -119,22 +120,22 @@ const rustc = (() => {
 
 function scen(id, opts = {}) {
   const s = byId[id];
-  if (!s) return `<p class="small">(Szenario ${esc(id)} fehlt)</p>`;
+  if (!s) return `<p class="small">(scenario ${esc(id)} missing)</p>`;
   const images = (s.images ?? []).map((i) => fig(pw(i.name), i.label)).join("");
   const code = s.code ? pre(s.code) : "";
   const body = code && !opts.wide && s.code.includes("\n") ? `<div class="codefig"><div>${code}</div><div>${images}</div></div>` : `${images}${code}`;
   return `<h3>${esc(s.id)} ${esc(s.title)}</h3><p>${md(s.caption)}</p>${body}<ul class="checks">${(s.checks ?? []).map((c) => `<li>${md(c)}</li>`).join("")}</ul>`;
 }
 
-const sci = (x) => (x === null || x === undefined ? "–" : x === 0 ? "0" : Math.abs(x) < 1e-3 ? x.toExponential(1) : de(x, 6));
+const sci = (x) => (x === null || x === undefined ? "–" : x === 0 ? "0" : Math.abs(x) < 1e-3 ? x.toExponential(1) : num(x, 6));
 const analyticTable = analytic.length
-  ? `<table><tr><th>Fall</th><th>Aufruf</th><th class="n">erwartet</th><th class="n">gemessen</th><th class="n">Abweichung</th><th>exakt</th></tr>${analytic
+  ? `<table><tr><th>Case</th><th>Call</th><th class="n">expected</th><th class="n">measured</th><th class="n">deviation</th><th>exact</th></tr>${analytic
       .map((r) => {
         const ok = r.err !== null && Math.abs(r.err) <= Math.max(limitOf(r) * Math.abs(r.expect), 1e-9);
-        return `<tr><td>${esc(r.name)}</td><td><code>${esc(r.args)}</code></td><td class="n">${de(r.expect, 6)}</td><td class="n">${r.got === null ? esc(r.label) : de(r.got, 6)}</td><td class="n ${ok ? "ok" : "bad"}">${sci(r.err)}</td><td>${r.exact ? "ja" : r.exact === false ? `nein${r.tol ? ` (± ${sci(r.tol)})` : ""}` : "–"}</td></tr>`;
+        return `<tr><td>${esc(r.name)}</td><td><code>${esc(r.args)}</code></td><td class="n">${num(r.expect, 6)}</td><td class="n">${r.got === null ? esc(r.label) : num(r.got, 6)}</td><td class="n ${ok ? "ok" : "bad"}">${sci(r.err)}</td><td>${r.exact ? "yes" : r.exact === false ? `no${r.tol ? ` (± ${sci(r.tol)})` : ""}` : "–"}</td></tr>`;
       })
       .join("")}</table>`
-  : "<p>(fehlt: tools/report/report19-data.sh)</p>";
+  : "<p>(missing: tools/report/report19-data.sh)</p>";
 
 const jsonExcerpt = (() => {
   const j = cliJson("plate-radius");
@@ -151,10 +152,10 @@ const sectionExcerpt = (() => {
 })();
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 19 – Messen</title>
+<title>Test report 19 – Measuring</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -191,129 +192,129 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 19 – Messen</h1>
-<div class="meta">Plan 18: Messwerkzeug in UI (Browser, Tauri) und CLI mit gemeinsamer Logik in Rust · cad-measure (neu), cad-engine (<code>measure_parts</code>, <code>section_parts</code>), cad-session (<code>measure.rs</code>, Protokoll <code>Measure</code>), cad-cli (<code>measure.rs</code>), Web-UI (<code>app/measure.ts</code>, <code>measureUi.tsx</code>, Viewer) · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} Kerne</div>
+<h1>Test report 19 – Measuring</h1>
+<div class="meta">Plan 18: measurement tool in UI (browser, Tauri) and CLI with shared logic in Rust · cad-measure (new), cad-engine (<code>measure_parts</code>, <code>section_parts</code>), cad-session (<code>measure.rs</code>, protocol <code>Measure</code>), cad-cli (<code>measure.rs</code>), web UI (<code>app/measure.ts</code>, <code>measureUi.tsx</code>, viewer) · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} cores</div>
 
 <div class="summary">
-  <div>Messarten<b class="ok">7</b>Abstand, Radius, Winkel, Länge, Fläche, Körper, Wandstärke – auch im Schnitt</div>
-  <div>Analytische Fälle (CLI)<b class="${analyticOk === analytic.length && analytic.length ? "ok" : "bad"}">${analytic.length ? `${analyticOk} / ${analytic.length}` : "–"}</b>innerhalb 10⁻⁶ relativ (Kernel-Volumen 10⁻³)</div>
-  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>davon ${newTests.length} neu</div>
-  <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "sauber" : "Befund"} · ${fmt == null ? "–" : fmtOk ? "sauber" : "Abw."}</b>-D warnings</div>
-  <div>Vitest · Playwright<b class="${pwSum && pwSum.failed === 0 ? "ok" : "bad"}">${vitestSum ?? "–"} · ${pwSum ? `${pwSum.passed} / ${pwSum.passed + pwSum.failed}` : "–"}</b>neu: M01–M11</div>
-  <div>Tauri T17<b class="${t17?.ok ? "ok" : "bad"}">${t17 ? (t17.ok ? "bestanden" : "fehlgeschlagen") : "–"}</b>${t17 ? `${t17.checks.length} Prüfungen, nativer Kernel` : ""}</div>
-  <div>Antwort unter der Maus<b>${hover ? `${de(hover.median, 1)} ms` : "–"}</b>Median (Browser, Wasm, ${hover ? hover.n : "–"} Antworten)</div>
+  <div>Measurement kinds<b class="ok">7</b>distance, radius, angle, length, area, body, wall thickness – also in the section</div>
+  <div>Analytic cases (CLI)<b class="${analyticOk === analytic.length && analytic.length ? "ok" : "bad"}">${analytic.length ? `${analyticOk} / ${analytic.length}` : "–"}</b>within 10⁻⁶ relative (kernel volume 10⁻³)</div>
+  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>${newTests.length} of them new</div>
+  <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "clean" : "finding"} · ${fmt == null ? "–" : fmtOk ? "clean" : "diff"}</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="${pwSum && pwSum.failed === 0 ? "ok" : "bad"}">${vitestSum ?? "–"} · ${pwSum ? `${pwSum.passed} / ${pwSum.passed + pwSum.failed}` : "–"}</b>new: M01–M11</div>
+  <div>Tauri T17<b class="${t17?.ok ? "ok" : "bad"}">${t17 ? (t17.ok ? "passed" : "failed") : "–"}</b>${t17 ? `${t17.checks.length} checks, native kernel` : ""}</div>
+  <div>Response under the mouse<b>${hover ? `${num(hover.median, 1)} ms` : "–"}</b>median (browser, Wasm, ${hover ? hover.n : "–"} responses)</div>
 </div>
 
-<h2>1 Auftrag und Ergebnis</h2>
-<p>Auftrag: das Messwerkzeug in der UI (Browser und Tauri) und in der CLI ausbauen – Abstand Punkt–Punkt und zwischen Punkten, Kanten, Flächen (minimal, mit Fußpunkten, parallele Ebenen als Normalabstand), Radius/Durchmesser von Kreiskanten, Bögen, Zylinder-, Kegel-, Kugel- und Torusflächen exakt aus der B-Rep mit Achse/Mittelpunkt, Winkel, Länge, Fläche, Hülle/Volumen; Messen im aktiven Schnitt (Snap auf Konturen, Abstände in der Ebene, Radius von Schnittkreisen, Wandstärke, Fläche der Kontur) mit exakten Schnittkurven; Snap, Maßlinien und Beschriftungen, mehrere Messungen, Löschen, Kopieren als Text/Kommentar/<code>cad measure</code>; Bezug zur Sprache; dieselben Messarten in <code>cad measure</code> mit JSON. Umgesetzt:</p>
+<h2>1 Task and result</h2>
+<p>Task: extend the measurement tool in the UI (browser and Tauri) and in the CLI – distance point–point and between points, edges, faces (minimal, with foot points, parallel planes as normal distance), radius/diameter of circular edges, arcs, cylinder, cone, sphere and torus faces exactly from the B-rep with axis/center, angle, length, area, bounding box/volume; measuring in the active section (snap to contours, distances in the plane, radius of section circles, wall thickness, contour area) with exact section curves; snap, dimension lines and labels, multiple measurements, delete, copy as text/comment/<code>cad measure</code>; link to the language; the same measurement kinds in <code>cad measure</code> with JSON. Implemented:</p>
 <ul>
-<li><b>Gemeinsame Logik in Rust:</b> neues Crate <code>cad-measure</code> (Kanten und Flächen exakt, Abstand, Winkel, Radius, Fläche, Schnitt, Wandstärke), in <code>cad-session</code> das Messmodell je Knoten, Snap, Provenienz, Texte und CLI-Argumente – dieselben Funktionen bedienen das Protokoll (UI) und die Referenzen der CLI.</li>
-<li><b>Exaktheit:</b> analytische Geometrie in geschlossener Form; Schnittkurven als Ebene ∩ B-Rep aus dem Kernel, ihre Segmente auf analytischen Flächen als Gerade, Kreis oder Ellipse (mit der Abweichung der Kernel-Kurve); sonst mit angegebener Toleranz. Jede Messung trägt <code>exact</code> und <code>tol</code>.</li>
-<li><b>UI:</b> Modus „Messen“ mit Kontextleiste (Messart, „Im Schnitt“), Snap mit Anzeige, Maßlinien, Hilfslinien, Beschriftungen (hell/dunkel geprüft), Liste mit Kopieren und Löschen – als eigenständige Bausteine für die UI-Überarbeitung.</li>
-<li><b>CLI:</b> <code>--distance</code>, <code>--radius</code>, <code>--angle</code>, <code>--length</code>, <code>--area face@P</code>, <code>--body</code>, <code>--section …</code> (Konturen, Kreise, kleinste Wand), <code>--wall</code>, <code>--at</code>; Elementreferenzen <code>vertex@P</code>, <code>mid@P</code>, <code>center@P</code>, <code>edge@P</code>, <code>face@P</code>, <code>body@P</code>, <code>region@P</code>; JSON <code>measurements</code> (Protokolltyp), <code>section</code>, <code>at</code>.</li>
+<li><b>Shared logic in Rust:</b> new crate <code>cad-measure</code> (exact edges and faces, distance, angle, radius, area, section, wall thickness), in <code>cad-session</code> the measurement model per node, snap, provenance, texts and CLI arguments – the same functions serve the protocol (UI) and the CLI references.</li>
+<li><b>Exactness:</b> analytic geometry in closed form; section curves as plane ∩ B-rep from the kernel, their segments on analytic surfaces as line, circle or ellipse (with the deviation of the kernel curve); otherwise with a stated tolerance. Every measurement carries <code>exact</code> and <code>tol</code>.</li>
+<li><b>UI:</b> mode "Measure" with context bar (measurement kind, "In section"), snap with indicator, dimension lines, guide lines, labels (checked light/dark), list with copy and delete – as standalone building blocks for the UI rework.</li>
+<li><b>CLI:</b> <code>--distance</code>, <code>--radius</code>, <code>--angle</code>, <code>--length</code>, <code>--area face@P</code>, <code>--body</code>, <code>--section …</code> (contours, circles, thinnest wall), <code>--wall</code>, <code>--at</code>; element references <code>vertex@P</code>, <code>mid@P</code>, <code>center@P</code>, <code>edge@P</code>, <code>face@P</code>, <code>body@P</code>, <code>region@P</code>; JSON <code>measurements</code> (protocol type), <code>section</code>, <code>at</code>.</li>
 </ul>
 
-<h2>2 Entscheidungen</h2>
+<h2>2 Decisions</h2>
 <table>
-<tr><th>Frage</th><th>Entscheidung</th></tr>
-<tr><td>Wo gemessen wird</td><td>In der Engine (Worker bzw. Engine-Prozess) auf der neutralen B-Rep der Knotenteile in Kontextkoordinaten; die UI schickt Strahl, ihren Raycast-Treffer (Knoten, Flächen-ID, Punkt), Pixelgröße und Snap-Radius, bekommt das Element unter der Maus und nach dem letzten Klick die Messung mit Maßlinien. Wie beim Skizzen-Editor keine Auswahl in der Engine.</td></tr>
-<tr><td>Abstand</td><td>Grobsuche über die Tessellierung (BVH), Verfeinerung durch abwechselnde Projektion auf die exakten Kurven und Flächen; außerhalb einer getrimmten Fläche auf ihren Rand. Parallele Ebenen: Normalabstand als Wert, der kleinste Abstand der begrenzten Flächen daneben; parallele Achsen: Achsabstand.</td></tr>
-<tr><td>Radius</td><td>Aus den Parametern der B-Rep; Verrundungen an Kreiskanten (bei SMLib Rotationsflächen mit Kreisbogen-Erzeugender) werden erkannt, Freiform über die Hauptkrümmung (genähert).</td></tr>
-<tr><td>Winkel zweier Ebenen</td><td>Winkel zwischen den Ebenen (0–90°, Fase 45°), dazu Öffnungswinkel an der Schnittgeraden und Winkel der Normalen.</td></tr>
-<tr><td>Schnitt</td><td>Kernel-Boolean mit dem behaltenen Halbraum (Konvention von <code>cad render --section</code>), Deckflächen als Bereiche; Segmente aus der geschnittenen Fläche in geschlossener Form. Ein Boolean je Teil und Ebene, gecacht.</td></tr>
-<tr><td>Wandstärke</td><td>An einem Konturpunkt senkrecht zur Kontur ins Material bis zur nächsten Kontur; ohne Punkt die kleinste über Stichproben (Schätzung).</td></tr>
-<tr><td>Bezug zur Sprache</td><td>Flächen-Tags → Knoten → Zeilen und benannte Instanzen; dazu Rasterpunkte, -linien, -ebenen und Anker, auf denen ein Punkt, eine Achse oder eine Ebene liegt.</td></tr>
-<tr><td>CLI-Referenzen</td><td>Das Element nächst einem Punkt (<code>face@[x,y,z]</code>): eindeutig und lesbar, die UI kopiert Messungen in dieser Form; <code>--at P</code> zeigt, was bei P liegt.</td></tr>
-<tr><td>Ort in der UI</td><td>Kontextleiste und Liste als eigenständige Komponenten (<code>MeasureBar</code>, <code>MeasurePanel</code>); vorerst im Stapel rechts oben bzw. rechts neben der Ansicht, nach dem UI-Konzept später links oben unter der Werkzeugleiste und als Reiter „Messen“.</td></tr>
+<tr><th>Question</th><th>Decision</th></tr>
+<tr><td>Where measuring happens</td><td>In the engine (worker or engine process) on the neutral B-rep of the node parts in context coordinates; the UI sends ray, its raycast hit (node, face ID, point), pixel size and snap radius, and receives the element under the mouse and, after the last click, the measurement with dimension lines. As with the sketch editor, no selection state in the engine.</td></tr>
+<tr><td>Distance</td><td>Coarse search over the tessellation (BVH), refinement by alternating projection onto the exact curves and surfaces; outside a trimmed face onto its boundary. Parallel planes: normal distance as the value, the minimum distance of the bounded faces alongside; parallel axes: axis distance.</td></tr>
+<tr><td>Radius</td><td>From the B-rep parameters; fillets on circular edges (in SMLib surfaces of revolution with a circular-arc generatrix) are recognized, free-form via principal curvature (approximated).</td></tr>
+<tr><td>Angle of two planes</td><td>Angle between the planes (0–90°, chamfer 45°), plus the opening angle at the intersection line and the angle of the normals.</td></tr>
+<tr><td>Section</td><td>Kernel Boolean with the kept half-space (convention of <code>cad render --section</code>), cap faces as regions; segments from the cut surface in closed form. One Boolean per part and plane, cached.</td></tr>
+<tr><td>Wall thickness</td><td>At a contour point perpendicular to the contour into the material up to the next contour; without a point the minimum over samples (estimate).</td></tr>
+<tr><td>Link to the language</td><td>Face tags → nodes → lines and named instances; plus grid points, grid lines, grid planes and anchors on which a point, an axis or a plane lies.</td></tr>
+<tr><td>CLI references</td><td>The element nearest to a point (<code>face@[x,y,z]</code>): unambiguous and readable, the UI copies measurements in this form; <code>--at P</code> shows what lies at P.</td></tr>
+<tr><td>Place in the UI</td><td>Context bar and list as standalone components (<code>MeasureBar</code>, <code>MeasurePanel</code>); for now in the stack at the top right and to the right of the view, per the UI concept later at the top left below the toolbar and as a tab "Measure".</td></tr>
 </table>
 
-<h2>3 Ablauf</h2>
-${pre(`Maus bewegt  → Measure { kind, picks, ray, hit {node, face, point}, pixel, snap_px, free, section? | clip? }
+<h2>3 Flow</h2>
+${pre(`Mouse moved  → Measure { kind, picks, ray, hit {node, face, point}, pixel, snap_px, free, section? | clip? }
               ← Measure { hover {kind, label, point, reference, origin, lines}, prompt, section {regions, area, exact} }
-Klick        → Measure { …, click: true }
-              ← picks (Auswahl gemerkt)  oder  result: Measurement { value, label, values, lines, guides, points,
-                                                                     at, details, exact, tol, text, cli }
-Engine:  measure_model(node)  = je Teil B-Rep + Tessellierung (Kontext)      measure_section(node, plane) = Boolean
-         snap → Eckpunkt | Kantenmitte | Kreismitte | Kante | Fläche  (im Schnitt: Kontur, Bereich)
+Click        → Measure { …, click: true }
+              ← picks (selection stored)  or  result: Measurement { value, label, values, lines, guides, points,
+                                                                    at, details, exact, tol, text, cli }
+Engine:  measure_model(node)  = per part B-rep + tessellation (context)      measure_section(node, plane) = Boolean
+         snap → vertex | edge midpoint | circle center | edge | face  (in section: contour, region)
          measurement → cad_measure::{distance, radius, angle, face_area, Section::wall …}
-CLI:     face@[x,y,z] → dieselbe Auswahl → dieselbe Messung → JSON/Text`)}
+CLI:     face@[x,y,z] → same selection → same measurement → JSON/text`)}
 
-<h2>4 Messarten in der UI</h2>
-<p>Alle Szenarien klicken mit der Maus (Playwright, Chromium mit SwiftShader) und prüfen die Werte gegen die Geometrie.</p>
+<h2>4 Measurement kinds in the UI</h2>
+<p>All scenarios click with the mouse (Playwright, Chromium with SwiftShader) and check the values against the geometry.</p>
 ${scen("M01")}
 ${scen("M02")}
 ${scen("M03")}
 ${scen("M04")}
 ${scen("M05", { wide: true })}
 
-<h2>5 Messen im Schnitt</h2>
+<h2>5 Measuring in the section</h2>
 ${scen("M06")}
 
-<h2>6 Liste, Kopieren, Bezug zur Sprache, Thema</h2>
+<h2>6 List, copy, link to the language, theme</h2>
 ${scen("M07")}
 ${scen("M08", { wide: true })}
 ${scen("M09")}
 
-<h2>7 Desktop-App (Tauri)</h2>
-<p>Szenario T17 in <code>web/e2e-tauri/desktop.e2e.mjs</code> (tauri-driver, WebKitWebDriver, Xvfb): die App <code>cad</code> mit dem nativen Engine-Prozess, Nachrichten über den <code>TauriTransport</code>; die Ansicht wird mit Zeigerereignissen auf dem Canvas bedient.</p>
-${t17 ? `<p>Ergebnis: <span class="${t17.ok ? "ok" : "bad"}">${t17.ok ? "bestanden" : "fehlgeschlagen"}</span> in ${de(t17.ms / 1000, 1)} s${tauri?.metrics?.measureTauri?.hoverMedianMs != null ? `, Antwort unter der Maus Median ${de(tauri.metrics.measureTauri.hoverMedianMs, 1)} ms` : ""}.</p><ul class="checks">${t17.checks.map((c) => `<li class="${c.ok ? "" : "bad"}">${md(c.text)}</li>`).join("")}</ul>${(t17.images ?? []).map((i) => fig(tauriImg(i.name), i.label)).join("")}${t17.error ? pre(t17.error) : ""}` : "<p>(fehlt)</p>"}
+<h2>7 Desktop app (Tauri)</h2>
+<p>Scenario T17 in <code>web/e2e-tauri/desktop.e2e.mjs</code> (tauri-driver, WebKitWebDriver, Xvfb): the app <code>cad</code> with the native engine process, messages via <code>TauriTransport</code>; the view is operated with pointer events on the canvas.</p>
+${t17 ? `<p>Result: <span class="${t17.ok ? "ok" : "bad"}">${t17.ok ? "passed" : "failed"}</span> in ${num(t17.ms / 1000, 1)} s${tauri?.metrics?.measureTauri?.hoverMedianMs != null ? `, response under the mouse median ${num(tauri.metrics.measureTauri.hoverMedianMs, 1)} ms` : ""}.</p><ul class="checks">${t17.checks.map((c) => `<li class="${c.ok ? "" : "bad"}">${md(c.text)}</li>`).join("")}</ul>${(t17.images ?? []).map((i) => fig(tauriImg(i.name), i.label)).join("")}${t17.error ? pre(t17.error) : ""}` : "<p>(missing)</p>"}
 
 <h2>8 CLI: <code>cad measure</code></h2>
-<p>Dieselben Messungen ohne UI, für Agenten mit <code>--json</code>. Ausgaben aus <code>tools/report/report19-data.sh</code> (Release-Binary, ohne Daemon; Zeiten je Aufruf im Mittel von 3 Läufen inklusive Laden und Kernel).</p>
-<h3>Gehäuse im Schnitt z = 10: Bereiche, Wandstärke, Innenmaß (${de(times["housing-section"])} ms)</h3>
-<div class="two"><div>${term(cliTxt("housing-section") ?? "(fehlt)")}</div><div>${fig(cliImg("housing-section.png"), "`cad render gehaeuse.scad --section z=10 --view top`: die zwei Wandbereiche")}</div></div>
-<h3>Gehäuse: Innenabstand, Bauteil, Kantenlänge (${de(times["housing-3d"])} ms)</h3>
-${term(cliTxt("housing-3d") ?? "(fehlt)")}
-<h3>Lochplatte: Bohrung, Verrundung, Teilung (${de(times["plate-radius"])} ms)</h3>
-${term(cliTxt("plate-radius") ?? "(fehlt)")}
-<h3>Lochplatte im Schnitt z = 2: Kreise, Fläche, Radius, Wand (${de(times["plate-section"])} ms)</h3>
-<div class="two"><div>${term(cliTxt("plate-section") ?? "(fehlt)")}</div><div>${fig(cliImg("plate-section.png"), "`cad render lochplatte.scad --section z=2 --view top`")}</div></div>
-<h3>Was liegt bei P: <code>--at</code> (${de(times["plate-at"])} ms)</h3>
-${term(cliTxt("plate-at") ?? "(fehlt)")}
-<h3>Winkel einer Fase (${de(times["chamfer-angle"])} ms)</h3>
-${term(cliTxt("chamfer-angle") ?? "(fehlt)")}
-<h3>JSON für Agenten (Auszug: Radius der Bohrung)</h3>
-${jsonExcerpt ? pre(jsonExcerpt) : "<p>(fehlt)</p>"}
-<h3>JSON des Schnitts (Auszug)</h3>
-${sectionExcerpt ? pre(sectionExcerpt) : "<p>(fehlt)</p>"}
+<p>The same measurements without UI, for agents with <code>--json</code>. Output from <code>tools/report/report19-data.sh</code> (release binary, without daemon; times per call as the mean of 3 runs including loading and kernel).</p>
+<h3>Housing in section z = 10: regions, wall thickness, inner dimension (${num(times["housing-section"])} ms)</h3>
+<div class="two"><div>${term(cliTxt("housing-section") ?? "(missing)")}</div><div>${fig(cliImg("housing-section.png"), "`cad render gehaeuse.scad --section z=10 --view top`: the two wall regions")}</div></div>
+<h3>Housing: inner distance, part, edge length (${num(times["housing-3d"])} ms)</h3>
+${term(cliTxt("housing-3d") ?? "(missing)")}
+<h3>Hole plate: bore, fillet, pitch (${num(times["plate-radius"])} ms)</h3>
+${term(cliTxt("plate-radius") ?? "(missing)")}
+<h3>Hole plate in section z = 2: circles, area, radius, wall (${num(times["plate-section"])} ms)</h3>
+<div class="two"><div>${term(cliTxt("plate-section") ?? "(missing)")}</div><div>${fig(cliImg("plate-section.png"), "`cad render lochplatte.scad --section z=2 --view top`")}</div></div>
+<h3>What lies at P: <code>--at</code> (${num(times["plate-at"])} ms)</h3>
+${term(cliTxt("plate-at") ?? "(missing)")}
+<h3>Angle of a chamfer (${num(times["chamfer-angle"])} ms)</h3>
+${term(cliTxt("chamfer-angle") ?? "(missing)")}
+<h3>JSON for agents (excerpt: radius of the bore)</h3>
+${jsonExcerpt ? pre(jsonExcerpt) : "<p>(missing)</p>"}
+<h3>JSON of the section (excerpt)</h3>
+${sectionExcerpt ? pre(sectionExcerpt) : "<p>(missing)</p>"}
 
-<h2>9 Analytische Prüfung</h2>
-<p>Kleine Modelle, gemessen über die CLI (dieselbe Logik wie die UI), gegen die Formel. Grenze 10⁻⁶ relativ; Volumen kommt aus der Integration des Kernels (SMLib, ~10⁻⁴) und hat die Grenze 10⁻³.</p>
+<h2>9 Analytic check</h2>
+<p>Small models, measured via the CLI (same logic as the UI), against the formula. Limit 10⁻⁶ relative; volume comes from the kernel's integration (SMLib, ~10⁻⁴) and has the limit 10⁻³.</p>
 ${analyticTable}
 
-<h2>10 Messwerte</h2>
+<h2>10 Measurements</h2>
 ${scen("M10", { wide: true })}
-${wasm ? `<h3>Wasm-Modul</h3><table><tr><th></th><th class="n">roh</th><th class="n">gzip -9</th></tr><tr><td><code>cad_wasm_bg.wasm</code> vorher (Commit ${esc(wasm.base)})</td><td class="n">${de(wasm.before.raw)} B</td><td class="n">${de(wasm.before.gzip)} B</td></tr><tr><td>mit Messen</td><td class="n">${de(wasm.after.raw)} B</td><td class="n">${de(wasm.after.gzip)} B</td></tr><tr><td>Zuwachs</td><td class="n">${de(wasm.after.raw - wasm.before.raw)} B</td><td class="n">${de(wasm.after.gzip - wasm.before.gzip)} B</td></tr></table>` : ""}
+${wasm ? `<h3>Wasm module</h3><table><tr><th></th><th class="n">raw</th><th class="n">gzip -9</th></tr><tr><td><code>cad_wasm_bg.wasm</code> before (commit ${esc(wasm.base)})</td><td class="n">${num(wasm.before.raw)} B</td><td class="n">${num(wasm.before.gzip)} B</td></tr><tr><td>with measuring</td><td class="n">${num(wasm.after.raw)} B</td><td class="n">${num(wasm.after.gzip)} B</td></tr><tr><td>growth</td><td class="n">${num(wasm.after.raw - wasm.before.raw)} B</td><td class="n">${num(wasm.after.gzip - wasm.before.gzip)} B</td></tr></table>` : ""}
 
-<h2>11 Testläufe</h2>
+<h2>11 Test runs</h2>
 <table>
-<tr><th>Lauf</th><th>Ergebnis</th></tr>
-<tr><td><code>cargo test --workspace -- --test-threads=2</code></td><td>${cargoSum ? `${cargoSum.ok} bestanden, ${cargoSum.failed} fehlgeschlagen` : "–"}</td></tr>
-<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> (nativ und <code>-p cad-wasm --target wasm32-unknown-unknown</code>) · <code>cargo fmt --check</code></td><td>${clippyOk ? "sauber" : "Befund"} · ${fmtOk ? "sauber" : "Abweichung"}</td></tr>
-<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>${typecheck !== null ? (/error TS/i.test(typecheck) ? "Fehler" : "sauber") : "–"} · ${vitestSum ?? "–"} bestanden</td></tr>
-<tr><td><code>pnpm e2e</code> (Playwright, Chromium, ganze Suite)</td><td>${pwSum ? `${pwSum.passed} bestanden, ${pwSum.failed} fehlgeschlagen${pwSum.skipped ? `, ${pwSum.skipped} übersprungen` : ""}${pwSum.flaky ? `, ${pwSum.flaky} unbeständig` : ""}${pwFailed.length ? `: ${pwFailed.map(esc).join("; ")}` : ""}` : "–"}</td></tr>
-<tr><td>Tauri-E2E T17</td><td>${t17 ? (t17.ok ? "bestanden" : "fehlgeschlagen") : "–"}</td></tr>
-<tr><td>Analytische Fälle über die CLI</td><td>${analytic.length ? `${analyticOk} von ${analytic.length} innerhalb der Grenze` : "–"}</td></tr>
+<tr><th>Run</th><th>Result</th></tr>
+<tr><td><code>cargo test --workspace -- --test-threads=2</code></td><td>${cargoSum ? `${cargoSum.ok} passed, ${cargoSum.failed} failed` : "–"}</td></tr>
+<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> (native and <code>-p cad-wasm --target wasm32-unknown-unknown</code>) · <code>cargo fmt --check</code></td><td>${clippyOk ? "clean" : "finding"} · ${fmtOk ? "clean" : "diff"}</td></tr>
+<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>${typecheck !== null ? (/error TS/i.test(typecheck) ? "errors" : "clean") : "–"} · ${vitestSum ?? "–"} passed</td></tr>
+<tr><td><code>pnpm e2e</code> (Playwright, Chromium, full suite)</td><td>${pwSum ? `${pwSum.passed} passed, ${pwSum.failed} failed${pwSum.skipped ? `, ${pwSum.skipped} skipped` : ""}${pwSum.flaky ? `, ${pwSum.flaky} flaky` : ""}${pwFailed.length ? `: ${pwFailed.map(esc).join("; ")}` : ""}` : "–"}</td></tr>
+<tr><td>Tauri E2E T17</td><td>${t17 ? (t17.ok ? "passed" : "failed") : "–"}</td></tr>
+<tr><td>Analytic cases via the CLI</td><td>${analytic.length ? `${analyticOk} of ${analytic.length} within the limit` : "–"}</td></tr>
 </table>
-<p class="small">Unbeständige Tests behoben (vorher sporadisch rot, auch ohne den Messmodus): <code>waitHandles</code> antwortete noch mit den Griffen der vorigen Cursorzeile (B06, B10) und wartet jetzt auf stehende Griffe; <code>clickAt</code> in M01–M11 und der Klick in T17 warten auf die eigene Wirkung des Klicks statt auf irgendeine Antwort; T17 wählt Flächen mit Alt (ohne Punktfang). Nichts übersprungen oder deaktiviert.</p>
-<p>Neue Rust-Tests (${newTests.length}):</p>
+<p class="small">Flaky tests fixed (previously red sporadically, also without measure mode): <code>waitHandles</code> still answered with the handles of the previous cursor line (B06, B10) and now waits for settled handles; <code>clickAt</code> in M01–M11 and the click in T17 wait for the click's own effect instead of any response; T17 picks faces with Alt (without point snapping). Nothing skipped or disabled.</p>
+<p>New Rust tests (${newTests.length}):</p>
 <p class="small">${newTests.map((x) => `<code>${esc(x.name)}</code> ${x.res === "ok" ? '<span class="ok">ok</span>' : '<span class="bad">FAILED</span>'}`).join(" · ")}</p>
-<p class="small">cad-measure <code>tests/analytic.rs</code>: Zylinder (Radius, Achse, Mantel- und Deckfläche, Kreislänge, Normalabstand), Kegel (Radius, Halbwinkel, Spitze, Mantel), Kugel und Torus (Radien, Flächen, Hülle), Fillet-Zylinder und -Kugel eines Quaders, Fillet-Torus einer Kreiskante, Fase 45°/135°, Abstände, Schnitt durch zwei Bohrungen (exakte Kreise, Fläche, Wandstärken, Längsschnitt, schräger Schnitt als Ellipse); Unit-Tests der Kurven, Flächen und Quadratur. cad-session <code>tests/measure.rs</code>: Snap (Fläche, Eckpunkt, Kantenmitte, Kante) mit Provenienz, Klicks und CLI-Argumente, Referenzen, Lochplatte, Gehäuse mit Wandstärke im Schnitt, Bauteilvolumen, Fase, Schnittmodus über das Protokoll. cad-cli <code>tests/messen.rs</code>: JSON und Text der neuen Optionen, Aufruffehler. Vitest <code>logic/measure.test.ts</code>.</p>
+<p class="small">cad-measure <code>tests/analytic.rs</code>: cylinder (radius, axis, lateral and cap area, circle length, normal distance), cone (radius, half angle, apex, lateral area), sphere and torus (radii, areas, bounding box), fillet cylinder and fillet sphere of a cuboid, fillet torus of a circular edge, chamfer 45°/135°, distances, section through two bores (exact circles, area, wall thicknesses, longitudinal section, oblique section as ellipse); unit tests of curves, surfaces and quadrature. cad-session <code>tests/measure.rs</code>: snap (face, vertex, edge midpoint, edge) with provenance, clicks and CLI arguments, references, hole plate, housing with wall thickness in the section, part volume, chamfer, section mode via the protocol. cad-cli <code>tests/messen.rs</code>: JSON and text of the new options, usage errors. Vitest <code>logic/measure.test.ts</code>.</p>
 
-<h2>12 Grenzen</h2>
+<h2>12 Limitations</h2>
 <ul>
-<li>Der Schnitt braucht einen Kernel-Boolean je Teil und Ebene; scheitert er, gibt es keinen Schnitt (Meldung), keine Ersatzkontur aus dem Netz.</li>
-<li>Konturen auf Freiformflächen und auf schräg geschnittenen Kegeln, Tori und Rotationsflächen bleiben Kernel-Kurven (<code>exact = false</code>).</li>
-<li>Wandstärke senkrecht zur Kontur an einer Stelle; die kleinste Wandstärke des Schnitts ist eine Schätzung über Stichproben.</li>
-<li>Abstände zwischen Freiformflächen und Fälle, in denen die Projektion an einem anderen lokalen Minimum endet, gelten mit der Toleranz der Tessellierung; Flächen von Freiformflächen aus den Dreiecken; Volumen aus dem Kernel (~10⁻⁴).</li>
-<li>CLI-Referenzen über den nächsten Punkt sind eindeutig, solange P einem Element am nächsten liegt; die Ergebnisse erscheinen in der Reihenfolge der Optionen.</li>
-<li>2D-Ergebnisse (Skizzen ohne Extrusion) lassen sich nicht messen; die Liste der Messungen wird nicht gespeichert.</li>
-<li>Die Kontextleiste liegt bis zur UI-Überarbeitung im Stapel rechts oben (die Ansichtsleiste bricht um), die Liste rechts neben der Ansicht.</li>
-<li>Tauri T17 bedient die Ansicht mit synthetischen Zeigerereignissen; Messwerte aus SwiftShader bzw. Software-GL sind nur relativ aussagekräftig.</li>
+<li>The section needs one kernel Boolean per part and plane; if it fails, there is no section (message), no substitute contour from the mesh.</li>
+<li>Contours on free-form surfaces and on obliquely cut cones, tori and surfaces of revolution remain kernel curves (<code>exact = false</code>).</li>
+<li>Wall thickness perpendicular to the contour at one location; the minimum wall thickness of the section is an estimate from samples.</li>
+<li>Distances between free-form surfaces and cases in which the projection ends at a different local minimum hold within the tessellation tolerance; areas of free-form faces from the triangles; volume from the kernel (~10⁻⁴).</li>
+<li>CLI references via the nearest point are unambiguous as long as P is closest to one element; results appear in the order of the options.</li>
+<li>2D results (sketches without extrusion) cannot be measured; the list of measurements is not saved.</li>
+<li>Until the UI rework the context bar sits in the stack at the top right (the view toolbar wraps), the list to the right of the view.</li>
+<li>Tauri T17 operates the view with synthetic pointer events; timings from SwiftShader or software GL are only meaningful relative to each other.</li>
 </ul>
 </main>
 </body>
 </html>
 `;
 writeFileSync(join(out, "report.html"), html);
-console.log(`${join(out, "report.html")}: ${html.length} Zeichen, ${scenarios.length} Szenarien, ${analytic.length} analytische Fälle`);
+console.log(`${join(out, "report.html")}: ${html.length} characters, ${scenarios.length} scenarios, ${analytic.length} analytic cases`);

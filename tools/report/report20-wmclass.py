@@ -19,7 +19,7 @@ disp = ":%d" % (90 + os.getpid() % 50)
 xvfb = subprocess.Popen(["Xvfb", disp, "-screen", "0", "1440x900x24", "-nolisten", "tcp"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 time.sleep(1.0)
 env = dict(os.environ, DISPLAY=disp, CAD_NO_DAEMON="1", CAD_IPC_DIR=tempfile.mkdtemp(prefix="wm"))
-model = os.path.join(tempfile.mkdtemp(prefix="wm"), "teil.scad")
+model = os.path.join(tempfile.mkdtemp(prefix="wm"), "part.scad")
 with open(model, "w") as f:
     f.write("cube(10);\n")
 app = subprocess.Popen([cad, model], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -65,11 +65,11 @@ finally:
         app.kill()
     xvfb.terminate()
 
-print("Fenster (xid, Titel, WM_CLASS res_name, res_class) unter Xvfb:")
+print("Windows (xid, title, WM_CLASS res_name, res_class) under Xvfb:")
 for f in found:
     print(f"  {f[0]}  {f[1]!r:40}  {f[2]!r}  {f[3]!r}")
 ok = any(f[2] == "dev.controller-cad.desktop" for f in found)
 desktop = "packaging/linux/dev.controller-cad.desktop.desktop"
-print(f"Desktop-Datei {desktop}: {'vorhanden' if os.path.exists(desktop) else 'fehlt'}")
-print("WM_CLASS = App-ID = Name der Desktop-Datei:", "ja" if ok else "NEIN")
+print(f"Desktop file {desktop}: {'present' if os.path.exists(desktop) else 'missing'}")
+print("WM_CLASS = app ID = name of the desktop file:", "yes" if ok else "NO")
 sys.exit(0 if ok else 1)

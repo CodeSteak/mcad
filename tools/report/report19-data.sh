@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Data of test report 19 ("Messen"): `cad measure` outputs (text and JSON) for every kind on the
+# Data of test report 19 ("Measuring"): `cad measure` outputs (text and JSON) for every kind on the
 # spec examples, the section summaries, analytic test models (cylinder, cone, sphere, torus,
 # fillets, chamfer, bores) measured through the CLI against their formulas, a rendered section
 # next to its contour summary, and CLI times (3 runs each, without daemon).
@@ -48,27 +48,27 @@ run chamfer-angle measure "$S/fase_chamfer.scad" --angle "face@[39.5,12,9.5]" "f
 
 # 2. analytic models: name | source | cad measure arguments | key | expected (python expression)
 cat > "$CASES/list.tsv" <<'EOF'
-Zylinder r 5, Radius	cylinder(h = 10, r = 5);	--radius face@[5,0,5]	radius	5
-Zylinder r 5, Mantelfläche	cylinder(h = 10, r = 5);	--area face@[5,0,5]	area	2*pi*5*10
-Zylinder r 5, Kreiskante Länge	cylinder(h = 10, r = 5);	--length edge@[0,5,10]	length	2*pi*5
-Zylinder, Deckflächen Normalabstand	cylinder(h = 10, r = 5);	--distance face@[1,1,10] face@[1,1,0]	distance	10
-Kegel r 4→2, Radius bei h 5	cylinder(h = 10, r1 = 4, r2 = 2);	--radius face@[3,0,5]	radius	3
-Kegel r 4→2, Halbwinkel	cylinder(h = 10, r1 = 4, r2 = 2);	--radius face@[3,0,5]	semi_angle	degrees(atan(0.2))
-Kegel r 4→2, Mantelfläche	cylinder(h = 10, r1 = 4, r2 = 2);	--area face@[3,0,5]	area	pi*(4+2)*sqrt(100+4)
-Kugel r 5, Radius	sphere(r = 5);	--radius face@[0,0,5]	radius	5
-Kugel r 5, Volumen (Kernel)	sphere(r = 5);	--body body@[0,0,5]	volume	4/3*pi*125
-Torus R 10 r 2, Rohrradius	rotate_extrude() translate([10, 0, 0]) circle(r = 2);	--radius face@[12,0,0]	radius	2
-Torus R 10 r 2, Ringradius	rotate_extrude() translate([10, 0, 0]) circle(r = 2);	--radius face@[12,0,0]	major	10
-Verrundung r 2 (gerade Kante)	cube([20, 10, 8], $fillet = 2);	--radius face@[19.414214,5,7.414214]	radius	2
-Verrundung r 1 (Kreiskante)	difference(fillet = 1) { cube([20, 20, 6]); translate([10, 10, -1]) cylinder(h = 8, r = 3); }	--radius face@[12.292893,10,5.292893]	radius	1
-Fase 2 mm, Winkel zur Deckfläche	cube([20, 10, 8], $chamfer = 2);	--angle face@[19,5,7] face@[10,5,8]	angle	45
-Fase 2 mm, Öffnungswinkel	cube([20, 10, 8], $chamfer = 2);	--angle face@[19,5,7] face@[10,5,8]	opening	135
-Schnitt durch Bohrung r 3, Radius	difference() { cube([20, 20, 6]); translate([10, 10, -1]) cylinder(h = 8, r = 3); }	--section z=3 --radius edge@[13,10,3]	radius	3
-Schnitt, Fläche des Bereichs	difference() { cube([20, 20, 6]); translate([10, 10, -1]) cylinder(h = 8, r = 3); }	--section z=3 --area region@[1,1,3]	area	400-9*pi
-Schnitt, Wandstärke Bohrung–Rand	difference() { cube([20, 20, 6]); translate([10, 10, -1]) cylinder(h = 8, r = 3); }	--section z=3 --wall [7,10,3]	wall	7
-Schräger Schnitt (45°) durch Bohrung r 3: große Halbachse	difference() { cube([20, 20, 10]); translate([10, 10, -1]) cylinder(h = 12, r = 3); }	--section-plane 10,10,5,1,0,1 --radius edge@[10,13,5]	radius	3*sqrt(2)
-Schräger Schnitt (45°): kleine Halbachse	difference() { cube([20, 20, 10]); translate([10, 10, -1]) cylinder(h = 12, r = 3); }	--section-plane 10,10,5,1,0,1 --radius edge@[10,13,5]	minor	3
-Gehäuse: Wandstärke im Schnitt z 10	include <../../../../tests/models/spec/gehaeuse.scad>	--section z=10 --wall [0,15,10]	wall	3
+Cylinder r 5, radius	cylinder(h = 10, r = 5);	--radius face@[5,0,5]	radius	5
+Cylinder r 5, lateral area	cylinder(h = 10, r = 5);	--area face@[5,0,5]	area	2*pi*5*10
+Cylinder r 5, circular edge length	cylinder(h = 10, r = 5);	--length edge@[0,5,10]	length	2*pi*5
+Cylinder, cap faces normal distance	cylinder(h = 10, r = 5);	--distance face@[1,1,10] face@[1,1,0]	distance	10
+Cone r 4→2, radius at h 5	cylinder(h = 10, r1 = 4, r2 = 2);	--radius face@[3,0,5]	radius	3
+Cone r 4→2, half angle	cylinder(h = 10, r1 = 4, r2 = 2);	--radius face@[3,0,5]	semi_angle	degrees(atan(0.2))
+Cone r 4→2, lateral area	cylinder(h = 10, r1 = 4, r2 = 2);	--area face@[3,0,5]	area	pi*(4+2)*sqrt(100+4)
+Sphere r 5, radius	sphere(r = 5);	--radius face@[0,0,5]	radius	5
+Sphere r 5, volume (kernel)	sphere(r = 5);	--body body@[0,0,5]	volume	4/3*pi*125
+Torus R 10 r 2, tube radius	rotate_extrude() translate([10, 0, 0]) circle(r = 2);	--radius face@[12,0,0]	radius	2
+Torus R 10 r 2, ring radius	rotate_extrude() translate([10, 0, 0]) circle(r = 2);	--radius face@[12,0,0]	major	10
+Fillet r 2 (straight edge)	cube([20, 10, 8], $fillet = 2);	--radius face@[19.414214,5,7.414214]	radius	2
+Fillet r 1 (circular edge)	difference(fillet = 1) { cube([20, 20, 6]); translate([10, 10, -1]) cylinder(h = 8, r = 3); }	--radius face@[12.292893,10,5.292893]	radius	1
+Chamfer 2 mm, angle to top face	cube([20, 10, 8], $chamfer = 2);	--angle face@[19,5,7] face@[10,5,8]	angle	45
+Chamfer 2 mm, opening angle	cube([20, 10, 8], $chamfer = 2);	--angle face@[19,5,7] face@[10,5,8]	opening	135
+Section through bore r 3, radius	difference() { cube([20, 20, 6]); translate([10, 10, -1]) cylinder(h = 8, r = 3); }	--section z=3 --radius edge@[13,10,3]	radius	3
+Section, area of the region	difference() { cube([20, 20, 6]); translate([10, 10, -1]) cylinder(h = 8, r = 3); }	--section z=3 --area region@[1,1,3]	area	400-9*pi
+Section, wall thickness bore–edge	difference() { cube([20, 20, 6]); translate([10, 10, -1]) cylinder(h = 8, r = 3); }	--section z=3 --wall [7,10,3]	wall	7
+Oblique section (45°) through bore r 3: semi-major axis	difference() { cube([20, 20, 10]); translate([10, 10, -1]) cylinder(h = 12, r = 3); }	--section-plane 10,10,5,1,0,1 --radius edge@[10,13,5]	radius	3*sqrt(2)
+Oblique section (45°): semi-minor axis	difference() { cube([20, 20, 10]); translate([10, 10, -1]) cylinder(h = 12, r = 3); }	--section-plane 10,10,5,1,0,1 --radius edge@[10,13,5]	minor	3
+Housing: wall thickness in section z 10	include <../../../../tests/models/spec/gehaeuse.scad>	--section z=10 --wall [0,15,10]	wall	3
 EOF
 python3 - "$CAD" "$CASES" "$OUT/analytic.json" <<'EOF'
 import json, math, subprocess, sys
@@ -88,15 +88,15 @@ for i, line in enumerate(open(f"{cases}/list.tsv")):
         exact, tol, label = m["exact"], m.get("tol"), m["label"]
         got = next((v["value"] for v in m["values"] if v["key"] == key), None)
     except Exception as e:  # noqa: BLE001
-        label = f"Fehler: {e}: {r.stderr.strip()[:200]}"
+        label = f"error: {e}: {r.stderr.strip()[:200]}"
     rows.append({"name": name, "source": src, "args": args, "key": key, "expect": want, "got": got,
                  "err": None if got is None else got - want, "exact": exact, "tol": tol, "label": label})
 json.dump(rows, open(out, "w"), indent=1)
 def limit(r):
-    return 1e-3 if "Kernel" in r["name"] else 1e-6
+    return 1e-3 if "kernel" in r["name"].lower() else 1e-6
 bad = [r for r in rows if r["err"] is None or abs(r["err"]) > max(limit(r) * abs(r["expect"]), 1e-9)]
-print(f"{len(rows)} analytische Fälle, {len(rows) - len(bad)} innerhalb der Grenze (1e-6 relativ, Kernel-Volumen 1e-3)")
+print(f"{len(rows)} analytic cases, {len(rows) - len(bad)} within the limit (1e-6 relative, kernel volume 1e-3)")
 for b in bad:
-    print("  Abweichung:", b["name"], b["got"], b["expect"], b["label"])
+    print("  deviation:", b["name"], b["got"], b["expect"], b["label"])
 EOF
 echo "-> $OUT"

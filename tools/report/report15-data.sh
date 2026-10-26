@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Data of test report 15 ("Skizzen: Ecken, Offset, Stroke") from the CLI: renderings of the
+# Data of test report 15 ("Sketches: corners, offset, stroke") from the CLI: renderings of the
 # examples (views, highlighted lines with the guide lines of offset/stroke/fillet2d), areas of 2D
 # operations against closed formulas, the OpenSCAD comparison of offset case by case, STEP
 # statistics (exact circles and lines), error messages, timings of the 2D operations. Writes

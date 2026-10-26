@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 16 ("Text und SVG-Import", Plan 17.4/17.5, Schritt 3 ohne Schablonenschrift):
+// Test report 16 ("Text and SVG import", plan 17.4/17.5, step 3 without the stencil font):
 // text() with the bundled OFL fonts, import() of SVG files, comparison with OpenSCAD 2021.01,
 // kernel times, Wasm size. Writes docs/reports/16-text-svg/report.html (images in img/).
 //
@@ -14,7 +14,7 @@
 //   wasm.json                                       {"before": {raw, gzip}, "after": {raw, gzip}, "fonts": bytes}
 //
 //   node tools/report/report16.mjs
-//   node tools/report/print-pdf.mjs docs/reports/16-text-svg/report.html docs/reports/16-text-svg/report.pdf "Testbericht 16: Text und SVG-Import"
+//   node tools/report/print-pdf.mjs docs/reports/16-text-svg/report.html docs/reports/16-text-svg/report.pdf "Test report 16: Text and SVG import"
 
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -39,11 +39,11 @@ const git = (...a) => {
     return "–";
   }
 };
-const de = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d }));
+const num = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const md = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>");
-const T = (name) => readText(join(input, name))?.replaceAll(`${input}/`, "").replaceAll(`${root}/`, "") ?? "(fehlt)";
+const T = (name) => readText(join(input, name))?.replaceAll(`${input}/`, "").replaceAll(`${root}/`, "") ?? "(missing)";
 const pre = (t) => `<pre>${esc(String(t).trimEnd())}</pre>`;
-const src = (p) => readText(join(root, p)) ?? "(fehlt)";
+const src = (p) => readText(join(root, p)) ?? "(missing)";
 
 function img(srcPath, dst) {
   if (!existsSync(srcPath)) return null;
@@ -61,7 +61,7 @@ function img(srcPath, dst) {
 const cli = (n) => img(join(input, "cli", `${n}.png`), `cli-${n}.jpg`);
 const pw = (n) => img(join(input, "img", `${n}.jpg`), `ui-${n}.jpg`);
 const svgSrc = (n) => img(join(root, "tests/models/svg", `${n}.svg`), `src-${n}.svg`);
-const fig = (s, cap) => (s ? `<figure><img src="${s}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(Bild fehlt: ${esc(cap)})</p>`);
+const fig = (s, cap) => (s ? `<figure><img src="${s}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(image missing: ${esc(cap)})</p>`);
 const pair = (a, ca, b, cb) => `<div class="two">${fig(a, ca)}${fig(b, cb)}</div>`;
 
 // ------------------------------------------------------------------------------- test summaries
@@ -129,14 +129,16 @@ const osc = (readText(join(input, "openscad.tsv")) ?? "")
   });
 const maxBoundDiff = (r) => Math.max(...[0, 1, 2, 3].map((i) => Math.abs(r.o[i] - r.c[i])));
 const relArea = (r) => Math.abs(r.o[4] - r.c[4]) / Math.abs(r.o[4]);
+// case names are data keys of report16-openscad.py; "ohne-viewbox" gets an English gloss
+const oscName = (n) => (n === "ohne-viewbox" ? "ohne-viewbox (without viewBox)" : n);
 const oscRow = (r) =>
-  `<tr><td>${md(r.name)}</td><td class="n">${de(r.o[0], 3)} … ${de(r.o[2], 3)}<br>${de(r.o[1], 3)} … ${de(r.o[3], 3)}</td><td class="n">${de(r.c[0], 3)} … ${de(r.c[2], 3)}<br>${de(r.c[1], 3)} … ${de(r.c[3], 3)}</td><td class="n">${de(maxBoundDiff(r), 4)}</td><td class="n">${de(r.o[4], 3)}</td><td class="n">${de(r.c[4], 3)}</td><td class="n ${relArea(r) < 0.005 ? "" : "warnc"}">${de(100 * relArea(r), 3)} %</td></tr>`;
+  `<tr><td>${md(oscName(r.name))}</td><td class="n">${num(r.o[0], 3)} … ${num(r.o[2], 3)}<br>${num(r.o[1], 3)} … ${num(r.o[3], 3)}</td><td class="n">${num(r.c[0], 3)} … ${num(r.c[2], 3)}<br>${num(r.c[1], 3)} … ${num(r.c[3], 3)}</td><td class="n">${num(maxBoundDiff(r), 4)}</td><td class="n">${num(r.o[4], 3)}</td><td class="n">${num(r.c[4], 3)}</td><td class="n ${relArea(r) < 0.005 ? "" : "warnc"}">${num(100 * relArea(r), 3)} %</td></tr>`;
 const oscText = osc.filter((r) => r.kind === "text");
 const oscSvg = osc.filter((r) => r.kind !== "text");
 const textMaxBound = oscText.length ? Math.max(...oscText.map(maxBoundDiff)) : null;
 const textMaxArea = oscText.length ? Math.max(...oscText.map(relArea)) : null;
 
-const date = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const commit = git("rev-parse", "--short", "HEAD");
 const branch = git("rev-parse", "--abbrev-ref", "HEAD");
 const rustc = (() => {
@@ -148,7 +150,7 @@ const rustc = (() => {
 })();
 
 const FONTS = [
-  ["jetbrains", "JetBrains Mono (Standard)", "JetBrains Mono 2.304, Regular"],
+  ["jetbrains", "JetBrains Mono (default)", "JetBrains Mono 2.304, Regular"],
   ["jetbrains-bold", "JetBrains Mono:style=Bold", "JetBrains Mono 2.304, Bold"],
   ["inter", "Inter", "Inter 4.1, Regular"],
   ["inter-bold", "Inter:style=Bold", "Inter 4.1, Bold"],
@@ -162,13 +164,13 @@ const fallbackWarn = T("fallback.check.txt");
 
 const t = (k) => times[k];
 const timeRow = (k, label, browserKey) =>
-  `<tr><td>${md(label)}</td><td class="n">${de(t(k)?.nodes)}</td><td class="n">${de(t(k)?.calls)}</td><td class="n">${de(t(k)?.evalMs, 1)}</td><td class="n">${de(t(k)?.kernelMs)}</td><td class="n">${browserKey && browser[browserKey] ? de(browser[browserKey].kernel_ms) : "–"}</td></tr>`;
+  `<tr><td>${md(label)}</td><td class="n">${num(t(k)?.nodes)}</td><td class="n">${num(t(k)?.calls)}</td><td class="n">${num(t(k)?.evalMs, 1)}</td><td class="n">${num(t(k)?.kernelMs)}</td><td class="n">${browserKey && browser[browserKey] ? num(browser[browserKey].kernel_ms) : "–"}</td></tr>`;
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 16 – Text und SVG-Import</title>
+<title>Test report 16 – Text and SVG import</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -206,157 +208,157 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 16 – Text und SVG-Import</h1>
-<div class="meta">Plan 17.7, Schritt 3 (ohne eigene Schablonenschrift): <code>text()</code> mit mitgelieferten OFL-Schriften, <code>import()</code> von SVG · neue Crates cad-outline, cad-svg, cad-font; cad-eval, cad-ir, cad-engine (Farbregionen), cad-step (Ellipsen), SMLib-Fassade (getrennte Vereinigung), cad-cli, cad-desktop, web · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} Kerne</div>
+<h1>Test report 16 – Text and SVG import</h1>
+<div class="meta">Plan 17.7, step 3 (without the custom stencil font): <code>text()</code> with bundled OFL fonts, <code>import()</code> of SVG · new crates cad-outline, cad-svg, cad-font; cad-eval, cad-ir, cad-engine (color regions), cad-step (ellipses), SMLib facade (disjoint union), cad-cli, cad-desktop, web · ${esc(date)} · branch ${esc(branch)} · commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} cores</div>
 
 <div class="summary">
-  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>davon ${newTests.length} neu/geändert</div>
-  <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "sauber" : "Befund"} · ${fmt == null ? "–" : fmtOk ? "sauber" : "Abw."}</b>-D warnings</div>
-  <div>Vitest · Playwright<b class="${pwStats && pwStats.failed.length <= (flaky ? 1 : 0) ? "ok" : "bad"}">${vitestSum ?? "–"} · ${pwStats ? `${pwStats.passed} / ${pwStats.total}` : "–"}</b>neu: T01–T05${flaky ? "; C16 zeitabhängig" : ""}</div>
-  <div>OpenSCAD Text<b class="${textMaxArea !== null && textMaxArea < 0.005 ? "ok" : "bad"}">${textMaxBound !== null ? `≤ ${de(textMaxBound, 3)} mm` : "–"}</b>Hülle; Fläche ≤ ${textMaxArea !== null ? de(100 * textMaxArea, 2) : "–"} %</div>
-  <div>Wasm cad_wasm<b>${wasm ? `+${de((wasm.after.raw - wasm.before.raw) / 1e6, 2)} MB` : "–"}</b>${wasm ? `${de(wasm.after.raw / 1e6, 2)} MB, gzip ${de(wasm.after.gzip / 1e6, 2)} MB` : ""}</div>
-  <div>„Hello World“<b>${de(t("hello")?.kernelMs)} ms</b>Kernel nativ; Browser ${browser.hello ? de(browser.hello.kernel_ms) : "–"} ms</div>
+  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>${newTests.length} of them new/changed</div>
+  <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "clean" : "finding"} · ${fmt == null ? "–" : fmtOk ? "clean" : "diff"}</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="${pwStats && pwStats.failed.length <= (flaky ? 1 : 0) ? "ok" : "bad"}">${vitestSum ?? "–"} · ${pwStats ? `${pwStats.passed} / ${pwStats.total}` : "–"}</b>new: T01–T05${flaky ? "; C16 timing-dependent" : ""}</div>
+  <div>OpenSCAD text<b class="${textMaxArea !== null && textMaxArea < 0.005 ? "ok" : "bad"}">${textMaxBound !== null ? `≤ ${num(textMaxBound, 3)} mm` : "–"}</b>bounding box; area ≤ ${textMaxArea !== null ? num(100 * textMaxArea, 2) : "–"} %</div>
+  <div>Wasm cad_wasm<b>${wasm ? `+${num((wasm.after.raw - wasm.before.raw) / 1e6, 2)} MB` : "–"}</b>${wasm ? `${num(wasm.after.raw / 1e6, 2)} MB, gzip ${num(wasm.after.gzip / 1e6, 2)} MB` : ""}</div>
+  <div>"Hello World"<b>${num(t("hello")?.kernelMs)} ms</b>kernel native; browser ${browser.hello ? num(browser.hello.kernel_ms) : "–"} ms</div>
 </div>
 
-<h2>1 Auftrag und Ergebnis</h2>
-<p>Aus Schritt 3 von Plan 17: <b>SVG-Import</b> (Teilmenge, 17.5) und <b>Text</b> mit mitgelieferten freien Schriften (17.4). Die eigene Schablonenschrift <code>"cad stencil mono"</code> gehört nicht dazu (sie braucht <code>stroke</code> aus Schritt 2); der Name ist als künftige Standardschrift reserviert, bis dahin ist <b>JetBrains Mono</b> die Standardschrift (Hinweis bei <code>font = "cad stencil mono"</code>).</p>
+<h2>1 Task and result</h2>
+<p>From step 3 of plan 17: <b>SVG import</b> (subset, 17.5) and <b>text</b> with bundled free fonts (17.4). The custom stencil font <code>"cad stencil mono"</code> is not part of this (it needs <code>stroke</code> from step 2); the name is reserved as the future default font; until then <b>JetBrains Mono</b> is the default font (hint for <code>font = "cad stencil mono"</code>).</p>
 <ul>
-<li><code>text(t, size, font, halign, valign, spacing, direction, language, script)</code>: Umrisse exakt (TrueType quadratisch, CFF kubisch), Kerning und Ligaturen über <code>rustybuzz</code>, Löcher nach nonzero, <code>color()</code> wie sonst. Hülle und Fläche gegen OpenSCAD 2021.01 mit denselben Schriftdateien: Hülle ≤ ${textMaxBound !== null ? de(textMaxBound, 3) : "–"} mm, Fläche ≤ ${textMaxArea !== null ? de(100 * textMaxArea, 2) : "–"} % (OpenSCAD tastet die Kurven ab).</li>
-<li><code>import("….svg", id, scale, dpi = 96, center)</code>: Pfade (alle Befehle), Rechtecke mit Rundung, Kreise und Ellipsen exakt, Polygone, Gruppen und verschachtelte <code>svg</code> mit <code>transform</code>, Einheiten, <code>fill-rule</code>, <code>display:none</code>; alles andere mit Warnung und SVG-Zeile.</li>
-<li>Dateien relativ zur einbindenden Datei (CLI: Dateisystem; Browser: Projektdateien; Desktop: liest und schreibt sie); geänderte SVGs ändern den Cache-Schlüssel, <code>cad watch</code> folgt ihnen, die UI-Szene auch (T02).</li>
-<li>Pflicht-Zeichensatz mit Umlauten, ß/ẞ und Satzzeichen in allen mitgelieferten Schriften (Test); Lücken (nur Allerta Stencil) kommen mit Warnung aus JetBrains Mono.</li>
-<li>Nebenbei: Farbregionen von Modellen, die nur Vereinigungen ihrer Farbknoten sind, ohne Boolean mit dem Ganzen (mehrfarbiger Text: Sekunden statt Abbruch durch den Watchdog).</li>
-<li>Gefunden mit der Alphabet-Tafel: SMLib vereinigte getrennte Glyphenteile falsch (Allerta-„c“: ein Stück doppelt, einmal verkehrt herum; Volumen 2,0 statt 7,3 mm³, „a“ in „abcd“ verschwand, ohne Meldung). Die Fassade vereinigt Körper mit getrennten Hüllquadern jetzt ohne SMLib-Boolean (<code>disjoint_union</code>: beide Schalen in eine Brep); Regressionstest <code>text_volume_is_area_times_height</code>.</li>
+<li><code>text(t, size, font, halign, valign, spacing, direction, language, script)</code>: exact outlines (TrueType quadratic, CFF cubic), kerning and ligatures via <code>rustybuzz</code>, holes by nonzero, <code>color()</code> as usual. Bounding box and area against OpenSCAD 2021.01 with the same font files: bounding box ≤ ${textMaxBound !== null ? num(textMaxBound, 3) : "–"} mm, area ≤ ${textMaxArea !== null ? num(100 * textMaxArea, 2) : "–"} % (OpenSCAD samples the curves).</li>
+<li><code>import("….svg", id, scale, dpi = 96, center)</code>: paths (all commands), rectangles with rounding, circles and ellipses exact, polygons, groups and nested <code>svg</code> with <code>transform</code>, units, <code>fill-rule</code>, <code>display:none</code>; everything else with a warning and the SVG line.</li>
+<li>Files relative to the including file (CLI: file system; browser: project files; desktop: reads and writes them); changed SVGs change the cache key, <code>cad watch</code> follows them, and so does the UI scene (T02).</li>
+<li>Required character set with umlauts, ß/ẞ and punctuation in all bundled fonts (test); gaps (Allerta Stencil only) are filled from JetBrains Mono with a warning.</li>
+<li>Along the way: color regions of models that are only unions of their color nodes, without a Boolean with the whole (multicolor text: seconds instead of abort by the watchdog).</li>
+<li>Found with the alphabet chart: SMLib united disjoint glyph parts wrongly (Allerta "c": one piece twice, once reversed; volume 2.0 instead of 7.3 mm³, "a" in "abcd" disappeared, without a message). The facade now unites bodies with disjoint bounding boxes without an SMLib Boolean (<code>disjoint_union</code>: both shells into one B-rep); regression test <code>text_volume_is_area_times_height</code>.</li>
 </ul>
 
-<h2>2 Entscheidungen</h2>
+<h2>2 Decisions</h2>
 <table>
-<tr><th>Frage</th><th>Entscheidung</th></tr>
-<tr><td>Bibliotheken</td><td><code>roxmltree</code> 0.21 (XML, Zeilen für Meldungen), <code>rustybuzz</code> 0.20.1 mit <code>ttf-parser</code> 0.25 (Shaping wie HarfBuzz, Umrisse, reines Rust, Wasm-tauglich). Pfaddaten, Transformationen, Einheiten, Bögen, Füllregeln: eigener Code.</td></tr>
-<tr><td>Aufteilung</td><td>Neue Crates <code>cad-outline</code> (neutrale Konturen), <code>cad-svg</code>, <code>cad-font</code>; in <code>cad-eval</code> nur die Builtins (<code>import.rs</code>) und das Laden der Datendateien (<code>Project::assets</code>). IR: <code>Seg::Nurbs</code> (aus Schritt 2) für B-Spline-Ketten und Ellipsenbögen. Engine unverändert außer den Farbregionen; Fassade: Vereinigung getrennter Körper ohne SMLib-Boolean (unten).</td></tr>
-<tr><td>Profil-Knoten</td><td>Ein <code>Profile::Sketch</code> je gefülltem SVG-Element bzw. je Glyphe, mehrere unter einer Gruppe (Vereinigung): überlappende Elemente oder Glyphen ergeben die Vereinigung wie beim Malen; innerhalb eines Elements entscheidet seine Füllregel.</td></tr>
-<tr><td>Kurven</td><td>Tangentenstetige Ketten von Bézierkurven einer Glyphe oder eines Pfads werden <b>eine</b> B-Spline (Knoten C1, Parameterlängen aus den Tangentenlängen; exakt), Ecken trennen. Weniger Kernel-Flächen (Glyphe „o“: 4 statt ~30).</td></tr>
-<tr><td>Größe <code>size</code></td><td>wie OpenSCAD: em = <code>size</code>/0,72 (OpenSCAD setzt die Schrift auf <code>size</code> Punkt bei 100 dpi); Versalhöhe ≈ <code>size</code>. Laufweite, Versatz und Ausrichtung mal 1000/1024 wie OpenSCAD (dessen FreeType-Umrechnung): Text bleibt gleich breit wie in OpenSCAD.</td></tr>
-<tr><td>Ausrichtung</td><td><code>halign</code> nach der Laufweite, <code>valign</code> nach der Glyphenhülle (top/center/bottom), <code>baseline</code> 0; senkrechter Text mit den Versätzen des Shapers (wie OpenSCAD zentriert).</td></tr>
-<tr><td>Standardschrift</td><td>JetBrains Mono Regular, bis <code>"cad stencil mono"</code> existiert (Name reserviert, Hinweis). Unbekannte Familie: Warnung + JetBrains Mono; unbekannter Stil: Warnung + Regular der Familie.</td></tr>
-<tr><td>Fehlende Zeichen</td><td>Rückfall je Zeichen auf JetBrains Mono gleichen Gewichts (OS/2-Gewicht ≥ 600 → Bold) mit Warnung am Statement: ein lesbares Zeichen an seiner Stelle ist nützlicher als ein Kästchen oder eine Lücke, die beim Drucken übersehen wird; JetBrains Mono deckt den Pflicht-Zeichensatz und weit mehr ab. Allerta Stencil bleibt unverändert (Reserved Font Name „Allerta“: veränderte Fassungen dürften nicht so heißen).</td></tr>
-<tr><td>SVG-Einheiten</td><td>wie OpenSCAD, wo es konsistent ist; Standard <code>dpi = 96</code> (OpenSCAD 2021.01: 72 für Zahlen ohne Einheit). Abweichungen siehe 5.3.</td></tr>
-<tr><td>Dateien</td><td>Jeder Text im Projekt, der auf <code>.svg/.ttf/.otf/.ttc/.otc</code> endet, wird beim Laden gelesen (auch Parameter-Standardwerte); Binärdateien liegen in Text-Projekten (Browser, <code>SetFiles</code>) als <code>data:</code>-URL. Ein zur Laufzeit zusammengesetzter Name, der nirgends als Text steht: Fehler „nicht geladen“.</td></tr>
+<tr><th>Question</th><th>Decision</th></tr>
+<tr><td>Libraries</td><td><code>roxmltree</code> 0.21 (XML, line numbers for messages), <code>rustybuzz</code> 0.20.1 with <code>ttf-parser</code> 0.25 (shaping like HarfBuzz, outlines, pure Rust, Wasm-capable). Path data, transformations, units, arcs, fill rules: own code.</td></tr>
+<tr><td>Split</td><td>New crates <code>cad-outline</code> (neutral contours), <code>cad-svg</code>, <code>cad-font</code>; in <code>cad-eval</code> only the builtins (<code>import.rs</code>) and loading of data files (<code>Project::assets</code>). IR: <code>Seg::Nurbs</code> (from step 2) for B-spline chains and elliptical arcs. Engine unchanged except for the color regions; facade: union of disjoint bodies without an SMLib Boolean (below).</td></tr>
+<tr><td>Profile nodes</td><td>One <code>Profile::Sketch</code> per filled SVG element or per glyph, several under a group (union): overlapping elements or glyphs give the union, as in painting; within one element its fill rule decides.</td></tr>
+<tr><td>Curves</td><td>Tangent-continuous chains of Bézier curves of a glyph or a path become <b>one</b> B-spline (C1 knots, parameter lengths from the tangent lengths; exact); corners separate them. Fewer kernel faces (glyph "o": 4 instead of ~30).</td></tr>
+<tr><td>Size <code>size</code></td><td>as in OpenSCAD: em = <code>size</code>/0.72 (OpenSCAD sets the font at <code>size</code> points at 100 dpi); cap height ≈ <code>size</code>. Advance, offset and alignment times 1000/1024 as in OpenSCAD (its FreeType conversion): text stays as wide as in OpenSCAD.</td></tr>
+<tr><td>Alignment</td><td><code>halign</code> by the advance, <code>valign</code> by the glyph bounding box (top/center/bottom), <code>baseline</code> 0; vertical text with the offsets from the shaper (centered as in OpenSCAD).</td></tr>
+<tr><td>Default font</td><td>JetBrains Mono Regular until <code>"cad stencil mono"</code> exists (name reserved, hint). Unknown family: warning + JetBrains Mono; unknown style: warning + Regular of the family.</td></tr>
+<tr><td>Missing characters</td><td>Per-character fallback to JetBrains Mono of the same weight (OS/2 weight ≥ 600 → Bold) with a warning at the statement: a readable character in its place is more useful than a box or a gap that is overlooked when printing; JetBrains Mono covers the required character set and much more. Allerta Stencil stays unmodified (Reserved Font Name "Allerta": modified versions may not use that name).</td></tr>
+<tr><td>SVG units</td><td>as in OpenSCAD where it is consistent; default <code>dpi = 96</code> (OpenSCAD 2021.01: 72 for numbers without a unit). Deviations see 5.3.</td></tr>
+<tr><td>Files</td><td>Every string in the project that ends in <code>.svg/.ttf/.otf/.ttc/.otc</code> is read on load (also parameter default values); binary files are stored in text projects (browser, <code>SetFiles</code>) as a <code>data:</code> URL. A name composed at run time that appears nowhere as a string: error "not loaded".</td></tr>
 </table>
 
-<h2>3 Schriften</h2>
-<p>Mitgeliefert in <code>crates/cad-font/fonts/</code> (SIL OFL 1.1, Lizenztexte und Quellen mit Prüfsummen in <code>fonts/README.md</code>), eingebettet mit <code>include_bytes!</code>: ${fontBytes.map(([f, b]) => `<code>${esc(f)}</code> ${de(b / 1024)} KiB`).join(", ")}. Auswahl per Familie und Stil wie OpenSCAD (<code>"Inter:style=Bold"</code>), eigene Schriften per Pfad (<code>font = "datei.ttf"</code>) bzw. Upload in der UI (T03).</p>
-<h3>Alphabet-Tafeln</h3>
-<p>Je Schrift <code>text(…, size = 8)</code>, 0,6 mm extrudiert, von oben (Generator <code>tools/report/report16-data.sh</code>). Zeile 3–5: Ziffern, <b>Umlaute und Satzzeichen</b> des Pflicht-Zeichensatzes.</p>
+<h2>3 Fonts</h2>
+<p>Bundled in <code>crates/cad-font/fonts/</code> (SIL OFL 1.1, license texts and sources with checksums in <code>fonts/README.md</code>), embedded with <code>include_bytes!</code>: ${fontBytes.map(([f, b]) => `<code>${esc(f)}</code> ${num(b / 1024)} KiB`).join(", ")}. Selection by family and style as in OpenSCAD (<code>"Inter:style=Bold"</code>), custom fonts by path (<code>font = "datei.ttf"</code>) or by upload in the UI (T03).</p>
+<h3>Alphabet charts</h3>
+<p>Per font <code>text(…, size = 8)</code>, extruded 0.6 mm, viewed from above (generator <code>tools/report/report16-data.sh</code>). Rows 3–5: digits, <b>umlauts and punctuation</b> of the required character set.</p>
 ${FONTS.map(([k, name, ver]) => fig(cli(`alphabet-${k}`), `${name} – ${ver}`)).join("\n")}
-<h3>Pflicht-Zeichensatz</h3>
-<p><code>cad_font::REQUIRED_CHARS</code> (Test <code>required_chars_in_every_font</code>: jede mitgelieferte Schrift hat für jedes Zeichen eine echte Glyphe, kein <code>.notdef</code>): A–Z a–z 0–9, Ä Ö Ü ä ö ü ß ẞ, Leerzeichen, <code>. , ; : ! ? ' " „ “ ‚ ‘ » « ( ) [ ] { } - – — _ / \\ &amp; % # + * = &lt; &gt; ° ² ³ € @ § ~ ^ | · • …</code>, <code>± × ÷ µ Ø ø</code>. Gilt auch für die künftige Schablonenschrift (Plan 17.4).</p>
+<h3>Required character set</h3>
+<p><code>cad_font::REQUIRED_CHARS</code> (test <code>required_chars_in_every_font</code>: every bundled font has a real glyph for each character, no <code>.notdef</code>): A–Z a–z 0–9, Ä Ö Ü ä ö ü ß ẞ, space, <code>. , ; : ! ? ' " „ “ ‚ ‘ » « ( ) [ ] { } - – — _ / \\ &amp; % # + * = &lt; &gt; ° ² ³ € @ § ~ ^ | · • …</code>, <code>± × ÷ µ Ø ø</code>. Also applies to the future stencil font (plan 17.4).</p>
 <table>
-<tr><th>Schrift</th><th>fehlende Zeichen</th><th>Folge</th></tr>
-<tr><td>JetBrains Mono Regular/Bold</td><td>keine</td><td>–</td></tr>
-<tr><td>Inter Regular/Bold</td><td>keine</td><td>–</td></tr>
-<tr><td>Allerta Stencil</td><td><code>ẞ „ ‚ { } _ # ° ² ³ § ~ ^ · • … ± µ Ø ø</code></td><td>aus JetBrains Mono Regular, Warnung (siehe Tafel: diese Zeichen sind nicht schabloniert)</td></tr>
+<tr><th>Font</th><th>missing characters</th><th>Consequence</th></tr>
+<tr><td>JetBrains Mono Regular/Bold</td><td>none</td><td>–</td></tr>
+<tr><td>Inter Regular/Bold</td><td>none</td><td>–</td></tr>
+<tr><td>Allerta Stencil</td><td><code>ẞ „ ‚ { } _ # ° ² ³ § ~ ^ · • … ± µ Ø ø</code></td><td>from JetBrains Mono Regular, warning (see chart: these characters are not stenciled)</td></tr>
 </table>
 ${pre(fallbackWarn)}
 
-<h2>4 Text gegen OpenSCAD 2021.01</h2>
-<p>Gleiche Schriftdateien (OpenSCAD über eine fontconfig-Datei, die nur <code>crates/cad-font/fonts</code> kennt), <code>text(…)</code> als 2D exportiert (Polygone) gegen <code>cad measure --bounds --volume</code> einer 1-mm-Extrusion (<code>tools/report/report16-openscad.py</code>). Hülle in x (oben) und y (unten), mm.</p>
+<h2>4 Text against OpenSCAD 2021.01</h2>
+<p>Same font files (OpenSCAD via a fontconfig file that knows only <code>crates/cad-font/fonts</code>), <code>text(…)</code> exported as 2D (polygons) against <code>cad measure --bounds --volume</code> of a 1 mm extrusion (<code>tools/report/report16-openscad.py</code>). Bounding box in x (top) and y (bottom), mm.</p>
 <table>
-<tr><th>Fall</th><th>OpenSCAD Hülle</th><th>cad Hülle</th><th>max. Abw.</th><th>OpenSCAD mm²</th><th>cad mm²</th><th>Fläche</th></tr>
+<tr><th>Case</th><th>OpenSCAD bbox</th><th>cad bbox</th><th>max. dev.</th><th>OpenSCAD mm²</th><th>cad mm²</th><th>Area</th></tr>
 ${oscText.map(oscRow).join("\n")}
 </table>
-<p class="small">Die Fläche von OpenSCAD ist kleiner, weil es die Kurven als Polygone abtastet (Sehnen innerhalb der Kurve); die Hülle stimmt bis auf ≤ 0,001 mm (OpenSCAD schreibt 6 Stellen; seine Polygonecken liegen auf der Kurve). <code>valign</code> misst OpenSCAD an gerasterten Glyphenmetriken (FreeType), daher dort bis 0,004 mm. „Hello World“, „AV“ (Kerning), „fi“ und „-&gt;“ (Ligaturen in JetBrains Mono) zeigen, dass Shaping und Laufweite gleich sind.</p>
+<p class="small">OpenSCAD's area is smaller because it samples the curves as polygons (chords inside the curve); the bounding box agrees to ≤ 0.001 mm (OpenSCAD writes 6 digits; its polygon vertices lie on the curve). OpenSCAD measures <code>valign</code> on rasterized glyph metrics (FreeType), hence up to 0.004 mm there. "Hello World", "AV" (kerning), "fi" and "-&gt;" (ligatures in JetBrains Mono) show that shaping and advance are identical.</p>
 
-<h2>5 SVG-Import</h2>
-<h3>5.1 Beispiele: Quelle und Ergebnis</h3>
-<p>Links die SVG-Datei, wie der Browser sie zeichnet (Quelle in <code>tests/models/svg/</code>, eigene Zeichnungen), rechts <code>linear_extrude(2) import("….svg")</code> von oben.</p>
+<h2>5 SVG import</h2>
+<h3>5.1 Examples: source and result</h3>
+<p>Left the SVG file as the browser draws it (source in <code>tests/models/svg/</code>, own drawings), right <code>linear_extrude(2) import("….svg")</code> from above.</p>
 ${[
-  ["logo", "Ring aus Halbkreisbögen mit Loch (evenodd), acht gedrehte Rechtecke mit Rundung, Polygon"],
-  ["blatt", "kubische Bézier (C, S), Rippe als Gegenlauf (nonzero), Stiel aus Q/T, gedrehte Gruppe"],
-  ["haus", "relative Befehle (h, v, m), Fenster und Tür als Löcher (evenodd), Rechteck mit rx, skalierte Gruppe mit Kreis"],
-  ["welle", "Q/T-Welle, Ellipse, Kreis mit scale(2 1) (Ellipsenbögen), skewX, gedrehter Ellipsenbogen (A)"],
+  ["logo", "Ring of half-circle arcs with a hole (evenodd), eight rotated rectangles with rounding, polygon"],
+  ["blatt", "cubic Bézier (C, S), vein as reverse direction (nonzero), stem from Q/T, rotated group"],
+  ["haus", "relative commands (h, v, m), windows and door as holes (evenodd), rectangle with rx, scaled group with a circle"],
+  ["welle", "Q/T wave, ellipse, circle with scale(2 1) (elliptical arcs), skewX, rotated elliptical arc (A)"],
 ]
-  .map(([n, cap]) => `<h3>${esc(n)}.svg</h3><p class="small">${md(cap)}</p><div class="two">${svgSrc(n) ? `<figure><img class="src" src="${svgSrc(n)}" alt=""><figcaption>Quelle (Browser)</figcaption></figure>` : ""}${fig(cli(`svg-${n}`), "import, extrudiert, von oben")}</div>`)
+  .map(([n, cap]) => `<h3>${esc(n)}.svg</h3><p class="small">${md(cap)}</p><div class="two">${svgSrc(n) ? `<figure><img class="src" src="${svgSrc(n)}" alt=""><figcaption>Source (browser)</figcaption></figure>` : ""}${fig(cli(`svg-${n}`), "import, extruded, from above")}</div>`)
   .join("\n")}
-<h3>5.2 Unterstützt und nicht unterstützt</h3>
+<h3>5.2 Supported and unsupported</h3>
 <table>
-<tr><th>Element / Eigenschaft</th><th>Umsetzung</th></tr>
-<tr><td><code>path</code></td><td>M L H V C S Q T A Z, absolut und relativ, implizite Wiederholung, kompakte Zahlen (<code>10-10.5.5</code>) und Bogen-Flags (<code>a10 10 0 0110 10</code>); Fehler: der Teil davor bleibt, Warnung</td></tr>
-<tr><td>Bögen <code>A</code>, <code>circle</code>, <code>ellipse</code>, <code>rect rx/ry</code></td><td>exakte Kreisbögen (unter Ähnlichkeiten), sonst exakte Ellipsenbögen (rationale B-Spline); Radien zu klein → hochskaliert wie SVG</td></tr>
-<tr><td><code>polygon</code> · <code>polyline</code>, <code>line</code>, offene Pfade</td><td>Fläche · nur Pfad (Warnung „offener Pfad wird nicht gefüllt“); nur Pfade → offene Skizze (als <code>sweep</code>-Pfad)</td></tr>
-<tr><td><code>g</code>, <code>a</code>, verschachteltes <code>svg</code>, <code>transform</code></td><td>matrix, translate, scale, rotate (auch um Punkt), skewX, skewY; Listen von rechts nach links</td></tr>
-<tr><td><code>viewBox</code>, <code>width/height</code>, <code>preserveAspectRatio</code></td><td>px, mm, cm, in, pt, pc, ohne Einheit (<code>dpi</code>); Ursprung unten links</td></tr>
-<tr><td><code>fill</code>, <code>fill-rule</code>, <code>display</code>, <code>visibility</code></td><td>als Attribut und in <code>style</code>, vererbt; <code>fill="none"</code>: nicht übernommen (Warnung)</td></tr>
-<tr><td>Text, Bilder, <code>use</code>, CSS-Klassen/<code>&lt;style&gt;</code>, Masken, Clip-Pfade, Filter, Verläufe/Muster als Füllung, Strichstärke</td><td>Warnung mit SVG-Zeile (je Meldung einmal); Verläufe werden als einfache Fläche übernommen</td></tr>
-<tr><td>Metadaten (Inkscape, Sodipodi, <code>defs</code>, <code>title</code>)</td><td>stillschweigend übergangen</td></tr>
-<tr><td><code>id = "…"</code></td><td>nur dieses Element (mit Inhalt); unbekannt: Fehler</td></tr>
+<tr><th>Element / property</th><th>Implementation</th></tr>
+<tr><td><code>path</code></td><td>M L H V C S Q T A Z, absolute and relative, implicit repetition, compact numbers (<code>10-10.5.5</code>) and arc flags (<code>a10 10 0 0110 10</code>); on error the part before it is kept, warning</td></tr>
+<tr><td>Arcs <code>A</code>, <code>circle</code>, <code>ellipse</code>, <code>rect rx/ry</code></td><td>exact circular arcs (under similarity transforms), otherwise exact elliptical arcs (rational B-spline); radii too small → scaled up as in SVG</td></tr>
+<tr><td><code>polygon</code> · <code>polyline</code>, <code>line</code>, open paths</td><td>area · path only (warning "open path is not filled"); paths only → open sketch (as a <code>sweep</code> path)</td></tr>
+<tr><td><code>g</code>, <code>a</code>, nested <code>svg</code>, <code>transform</code></td><td>matrix, translate, scale, rotate (also about a point), skewX, skewY; lists from right to left</td></tr>
+<tr><td><code>viewBox</code>, <code>width/height</code>, <code>preserveAspectRatio</code></td><td>px, mm, cm, in, pt, pc, without unit (<code>dpi</code>); origin bottom left</td></tr>
+<tr><td><code>fill</code>, <code>fill-rule</code>, <code>display</code>, <code>visibility</code></td><td>as attribute and in <code>style</code>, inherited; <code>fill="none"</code>: not imported (warning)</td></tr>
+<tr><td>Text, images, <code>use</code>, CSS classes/<code>&lt;style&gt;</code>, masks, clip paths, filters, gradients/patterns as fill, stroke width</td><td>warning with the SVG line (once per message); gradients are imported as a plain area</td></tr>
+<tr><td>Metadata (Inkscape, Sodipodi, <code>defs</code>, <code>title</code>)</td><td>silently skipped</td></tr>
+<tr><td><code>id = "…"</code></td><td>only this element (with its content); unknown: error</td></tr>
 </table>
 ${pre(src("reports/tmp/report16/cases/warn.svg"))}
 ${pre(T("warn.check.txt"))}
-<h3>5.3 Einheiten und Vergleich mit OpenSCAD</h3>
-<p>OpenSCAD 2021.01 (<code>import(…, dpi = 96)</code>, 2D exportiert) gegen cad. Mit <code>viewBox</code> stimmen beide überein. Abweichungen mit Absicht (SVG-Regel statt OpenSCAD-Eigenheit): <b>ohne <code>viewBox</code></b> nimmt OpenSCAD Nutzereinheiten als mm, spiegelt aber um die Höhe in Pixeln (Zeile „ohne-viewbox“); ein y-Versatz der <code>viewBox</code> wird bei OpenSCAD addiert statt abgezogen; OpenSCAD füllt immer nach evenodd und macht aus Strichen Flächen.</p>
+<h3>5.3 Units and comparison with OpenSCAD</h3>
+<p>OpenSCAD 2021.01 (<code>import(…, dpi = 96)</code>, exported as 2D) against cad. With a <code>viewBox</code> both agree. Intentional deviations (SVG rule instead of OpenSCAD quirk): <b>without a <code>viewBox</code></b> OpenSCAD takes user units as mm but mirrors about the height in pixels (row "ohne-viewbox"); a y offset of the <code>viewBox</code> is added by OpenSCAD instead of subtracted; OpenSCAD always fills by evenodd and turns strokes into areas.</p>
 <table>
-<tr><th>Datei</th><th>OpenSCAD Hülle</th><th>cad Hülle</th><th>max. Abw.</th><th>OpenSCAD mm²</th><th>cad mm²</th><th>Fläche</th></tr>
+<tr><th>File</th><th>OpenSCAD bbox</th><th>cad bbox</th><th>max. dev.</th><th>OpenSCAD mm²</th><th>cad mm²</th><th>Area</th></tr>
 ${oscSvg.map(oscRow).join("\n")}
 </table>
 
-<h2>6 Beispiele</h2>
+<h2>6 Examples</h2>
 <h3><code>tests/models/spec/text_schild.scad</code></h3>
-<div class="codefig">${pre(src("tests/models/spec/text_schild.scad"))}<div>${fig(cli("text_schild"), "Schild: Platte aus einer Skizze, Rand, erhabener Text in Inter Bold und Allerta Stencil, vier Farben")}${fig(cli("text_schild-oben"), "von oben")}${pre(T("schild-colors.txt"))}</div></div>
+<div class="codefig">${pre(src("tests/models/spec/text_schild.scad"))}<div>${fig(cli("text_schild"), "Sign: plate from a sketch, rim, raised text in Inter Bold and Allerta Stencil, four colors")}${fig(cli("text_schild-oben"), "top view")}${pre(T("schild-colors.txt"))}</div></div>
 <h3><code>tests/models/spec/svg_logo.scad</code></h3>
-<div class="codefig">${pre(src("tests/models/spec/svg_logo.scad"))}<div>${fig(cli("svg_logo"), "Logo, Blatt (skaliert), Haus als Prägung, aus welle.svg nur id = \"oval\" und id = \"bogen\"")}${fig(cli("svg_logo-oben"), "von oben")}</div></div>
-<p class="small">STEP von svg_logo: ${esc(T("svg_logo.step-counts.json"))} – Kreise bleiben <code>CIRCLE</code>, extrudierte Bögen <code>CYLINDRICAL_SURFACE</code>.</p>
+<div class="codefig">${pre(src("tests/models/spec/svg_logo.scad"))}<div>${fig(cli("svg_logo"), "Logo, leaf (scaled), house as an engraving, from welle.svg only id = \"oval\" and id = \"bogen\"")}${fig(cli("svg_logo-oben"), "top view")}</div></div>
+<p class="small">STEP of svg_logo: ${esc(T("svg_logo.step-counts.json"))} – circles stay <code>CIRCLE</code>, extruded arcs <code>CYLINDRICAL_SURFACE</code>.</p>
 
-<h2>7 Messwerte</h2>
-<h3>Kernel-Zeit</h3>
-<p>Release-Build, <code>cad eval --json</code> ohne Daemon, Median aus 3 Läufen (Sprache = Auswertung inkl. Shaping und SVG; Kernel = alle Kernel-Aufrufe). Browser: dieselben Modelle in Chromium (SMLib als Wasm, T05).</p>
+<h2>7 Measurements</h2>
+<h3>Kernel time</h3>
+<p>Release build, <code>cad eval --json</code> without daemon, median of 3 runs (language = evaluation including shaping and SVG; kernel = all kernel calls). Browser: the same models in Chromium (SMLib as Wasm, T05).</p>
 <table>
-<tr><th>Modell</th><th>Knoten</th><th>Kernel-Aufrufe</th><th>Sprache ms</th><th>Kernel ms nativ</th><th>Kernel ms Browser</th></tr>
-${timeRow("hello", "„Hello World“ (Inter), extrudiert", "hello")}
-${timeRow("vierzig", "40 Zeichen (Inter), extrudiert", "40")}
-${timeRow("vierzig_mono", "40 Zeichen (JetBrains Mono)", null)}
-${timeRow("platte", "„Hello World“ auf einer Platte (Vereinigung)", null)}
+<tr><th>Model</th><th>Nodes</th><th>Kernel calls</th><th>Language ms</th><th>Kernel ms native</th><th>Kernel ms browser</th></tr>
+${timeRow("hello", "\"Hello World\" (Inter), extruded", "hello")}
+${timeRow("vierzig", "40 characters (Inter), extruded", "40")}
+${timeRow("vierzig_mono", "40 characters (JetBrains Mono)", null)}
+${timeRow("platte", "\"Hello World\" on a plate (union)", null)}
 ${timeRow("svg_logo", "tests/models/spec/svg_logo.scad", null)}
 ${timeRow("text_schild", "tests/models/spec/text_schild.scad", null)}
 </table>
-<p>Je Glyphe: Extrusion je Kontur (Außen, Loch), Differenz für Löcher, eine Vereinigung aller Glyphen (sie berühren sich nicht). Teuer ist Text <b>auf</b> einer Fläche: SMLib prägt jede Glyphe in die Deckfläche (Schild: eine Vereinigung von ≈ 9 s nativ). Die neue Farbregion-Regel (Plan 17.10) vermeidet dabei die Booleans mit dem Ganzen; vorher brauchte der Kontaktbogen von T01 nativ 21 s und scheiterte („Schnittmenge gescheitert“), jetzt 4 s.</p>
-<h3>Wasm-Modul</h3>
-${wasm ? `<table><tr><th></th><th>roh</th><th>gzip -9</th></tr><tr><td><code>cad_wasm_bg.wasm</code> vorher (Commit ${esc(wasm.base ?? "cafe7a4")})</td><td class="n">${de(wasm.before.raw)} B</td><td class="n">${de(wasm.before.gzip)} B</td></tr><tr><td>mit Text/SVG (vor dem Merge von Schritt 2)</td><td class="n">${de(wasm.after.raw)} B</td><td class="n">${de(wasm.after.gzip)} B</td></tr>${wasm.merged ? `<tr><td>nach dem Merge mit Skizzen Schritt 2 (Stand dieses Berichts)</td><td class="n">${de(wasm.merged.raw)} B</td><td class="n">${de(wasm.merged.gzip)} B</td></tr>` : ""}<tr><td>Zuwachs durch Text/SVG</td><td class="n">+${de(wasm.after.raw - wasm.before.raw)} B</td><td class="n">+${de(wasm.after.gzip - wasm.before.gzip)} B</td></tr><tr><td>davon Schriftdateien</td><td class="n">${de(wasm.fonts)} B</td><td class="n">–</td></tr></table><p class="small">Der Rest des Zuwachses ist Code (rustybuzz/ttf-parser, roxmltree, SVG- und Textlogik). <code>smlib.wasm</code>: ${de(wasm.smlib)} B (+726 B durch <code>disjoint_union</code> in der Fassade).</p>` : "<p>(fehlt)</p>"}
+<p>Per glyph: one extrusion per contour (outer, hole), difference for holes, one union of all glyphs (they do not touch). Text <b>on</b> a face is expensive: SMLib imprints each glyph into the top face (sign: one union of ≈ 9 s native). The new color region rule (plan 17.10) avoids the Booleans with the whole here; before, the contact sheet of T01 took 21 s natively and failed ("intersection failed"), now 4 s.</p>
+<h3>Wasm module</h3>
+${wasm ? `<table><tr><th></th><th>raw</th><th>gzip -9</th></tr><tr><td><code>cad_wasm_bg.wasm</code> before (commit ${esc(wasm.base ?? "cafe7a4")})</td><td class="n">${num(wasm.before.raw)} B</td><td class="n">${num(wasm.before.gzip)} B</td></tr><tr><td>with text/SVG (before the merge of step 2)</td><td class="n">${num(wasm.after.raw)} B</td><td class="n">${num(wasm.after.gzip)} B</td></tr>${wasm.merged ? `<tr><td>after the merge with sketches step 2 (state of this report)</td><td class="n">${num(wasm.merged.raw)} B</td><td class="n">${num(wasm.merged.gzip)} B</td></tr>` : ""}<tr><td>growth from text/SVG</td><td class="n">+${num(wasm.after.raw - wasm.before.raw)} B</td><td class="n">+${num(wasm.after.gzip - wasm.before.gzip)} B</td></tr><tr><td>of which font files</td><td class="n">${num(wasm.fonts)} B</td><td class="n">–</td></tr></table><p class="small">The rest of the growth is code (rustybuzz/ttf-parser, roxmltree, SVG and text logic). <code>smlib.wasm</code>: ${num(wasm.smlib)} B (+726 B from <code>disjoint_union</code> in the facade).</p>` : "<p>(missing)</p>"}
 
 <h2>8 UI</h2>
-<p>Prüfungen über den Zustand der UI (<code>window.__cad</code>), Szenen und Hüllen; Screenshots aus <code>web/e2e/text-svg.spec.ts</code>.</p>
+<p>Checks via the UI state (<code>window.__cad</code>), scenes and bounding boxes; screenshots from <code>web/e2e/text-svg.spec.ts</code>.</p>
 ${scenarios.map((s) => `<h3>${esc(s.id)} ${esc(s.title)}</h3><p>${md(s.caption)}</p>${(s.images ?? []).length === 2 ? pair(pw(s.images[0].name), s.images[0].label, pw(s.images[1].name), s.images[1].label) : (s.images ?? []).map((i) => fig(pw(i.name), i.label)).join("")}${s.code && s.code.split("\n").length <= 16 ? pre(s.code) : ""}<ul>${(s.checks ?? []).map((c) => `<li>${md(c)}</li>`).join("")}</ul>`).join("\n")}
 
-<h2>9 Testläufe</h2>
+<h2>9 Test runs</h2>
 <table>
-<tr><th>Lauf</th><th>Ergebnis</th></tr>
-<tr><td><code>cargo test --workspace --no-fail-fast</code></td><td>${cargoSum ? `${cargoSum.ok} bestanden, ${cargoSum.failed} fehlgeschlagen` : "–"}</td></tr>
-<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>${clippyOk ? "sauber" : "Befund"} · ${fmtOk ? "sauber" : "Abweichung"}</td></tr>
-<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>${typecheck !== null ? (/error TS/i.test(typecheck) ? "Fehler" : "sauber") : "–"} · ${vitestSum ?? "–"} bestanden</td></tr>
-<tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>${pwStats ? `${pwStats.passed} / ${pwStats.total}${pwStats.failed.length ? ` – fehlgeschlagen: ${pwStats.failed.map((f) => esc(f.title)).join(", ")}` : ""}` : "–"}${flaky ? ` · ${md(flaky.trim())}` : ""}</td></tr>
+<tr><th>Run</th><th>Result</th></tr>
+<tr><td><code>cargo test --workspace --no-fail-fast</code></td><td>${cargoSum ? `${cargoSum.ok} passed, ${cargoSum.failed} failed` : "–"}</td></tr>
+<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>${clippyOk ? "clean" : "finding"} · ${fmtOk ? "clean" : "diff"}</td></tr>
+<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>${typecheck !== null ? (/error TS/i.test(typecheck) ? "errors" : "clean") : "–"} · ${vitestSum ?? "–"} passed</td></tr>
+<tr><td><code>pnpm e2e</code> (Playwright, Chromium)</td><td>${pwStats ? `${pwStats.passed} / ${pwStats.total}${pwStats.failed.length ? ` – failed: ${pwStats.failed.map((f) => esc(f.title)).join(", ")}` : ""}` : "–"}${flaky ? ` · ${md(flaky.trim())}` : ""}</td></tr>
 <tr><td><code>tests/openscad-compat/compare.py --eval</code></td><td>${compareSum ? `${compareSum[0]}/${compareSum[1]}` : "–"}</td></tr>
 <tr><td><code>tests/step/verify.py</code> (OpenCASCADE)</td><td>${esc(stepSum ?? "–")}</td></tr>
 <tr><td><code>tests/alltag/check.sh</code></td><td>${esc(alltagLine ?? "–")}</td></tr>
-<tr><td><code>node crates/kernel-smlib/js/test-node.mjs</code></td><td>${nodeTest && /all node tests passed/.test(nodeTest) ? "bestanden" : "–"}</td></tr>
+<tr><td><code>node crates/kernel-smlib/js/test-node.mjs</code></td><td>${nodeTest && /all node tests passed/.test(nodeTest) ? "passed" : "–"}</td></tr>
 </table>
-<p>Neue bzw. geänderte Rust-Tests (${newTests.length}):</p>
+<p>New or changed Rust tests (${newTests.length}):</p>
 <p class="small">${newTests.map((t) => `<code>${esc(t.name)}</code> ${t.res === "ok" ? '<span class="ok">ok</span>' : '<span class="bad">FAILED</span>'}`).join(" · ")}</p>
-<p class="small">SVG (<code>cad-svg</code>): Pfadbefehle, Bögen und Flags, Transformationen, Einheiten mit OpenSCAD-Referenzwerten, Füllregeln, verborgene/ungefüllte Elemente, Warnungen mit Zeile, <code>id</code>, Fehlerfälle. Text (<code>cad-font</code>): Hülle und Fläche gegen OpenSCAD (20 Fälle), Glyphe „O“ mit Loch, Kerning „AV“, Ausrichtung, Richtungen, Schriftnamen, eigene Schrift, CFF-Umrisse, Pflicht-Zeichensatz, Rückfall. <code>cad-eval</code>: Profile, Projektdateien, Fehler, data-URLs. CLI: Beispiele, Volumen, STEP-Kreis, <code>watch</code> folgt dem SVG. Vitest: Datendateien (<code>web/src/logic/files.test.ts</code>).</p>
+<p class="small">SVG (<code>cad-svg</code>): path commands, arcs and flags, transformations, units with OpenSCAD reference values, fill rules, hidden/unfilled elements, warnings with line, <code>id</code>, error cases. Text (<code>cad-font</code>): bounding box and area against OpenSCAD (20 cases), glyph "O" with a hole, kerning "AV", alignment, directions, font names, custom font, CFF outlines, required character set, fallback. <code>cad-eval</code>: profiles, project files, errors, data URLs. CLI: examples, volume, STEP circle, <code>watch</code> follows the SVG. Vitest: data files (<code>web/src/logic/files.test.ts</code>).</p>
 
-<h2>10 Grenzen</h2>
+<h2>10 Limitations</h2>
 <ul>
-<li>Eigene Schablonenschrift fehlt (Schritt 3, nach <code>stroke</code>); Allerta Stencil hat 20 Zeichen des Pflicht-Zeichensatzes nicht (aus JetBrains Mono, nicht schabloniert).</li>
-<li>Kernel-Zeit: viele Glyphen auf einer gemeinsamen Fläche sind teuer (Vereinigung in SMLib wächst überlinear: 9 Glyphen ≈ 1,5 s, 28 ≈ 9 s nativ); im Browser dauert es etwa 1,3- bis 1,8-mal so lange, ein einzelner Kernel-Aufruf über 15 s löst den Watchdog aus.</li>
-<li>Füllregeln setzen sich nicht schneidende Konturen innerhalb eines Elements voraus (Schriften mit überlappenden Konturen, z. B. manche Variable Fonts, und sich selbst schneidende SVG-Pfade werden nicht aufgelöst). Variable Fonts nur in der Standardinstanz.</li>
-<li>SVG: kein Text, keine <code>use</code>-Klone, keine CSS-Klassen, keine Striche als Fläche, keine Masken/Clip-Pfade; Prozent- und em-Längen werden wie Zahlen behandelt.</li>
-<li>Dateinamen müssen als Text im Projekt stehen (ein zur Laufzeit zusammengesetzter Name wird nicht geladen).</li>
-<li>Gefunden beim Logo: Vereinigungen extrudierter Skizzenbögen über 90° rechnete die Fassade falsch (Skizzen Schritt 1); behoben in Schritt 2 (<code>profile::split_arcs</code>), die zwischenzeitliche Umgehung im Import entfiel.</li>
-<li>STEP: Extrusionen von Ellipsenbögen schreibt der Writer jetzt als Extrusion einer <code>ELLIPSE</code> (OpenCASCADE hatte die rationale B-Spline um 3,6·10<sup>−3</sup> falsch integriert). Offen: die Extrusion der quadratischen Q/T-Welle aus <code>welle.svg</code> misst OpenCASCADE um 3 % zu klein (Kernel 652,25 mm², analytisch 652,19 mm²) – <code>svg_logo.scad</code> nimmt aus <code>welle.svg</code> daher nur Ellipse und Bogen; die Welle selbst steht in 5.1.</li>
-<li>Standardausrichtung senkrechten Texts wie OpenSCAD (Versatz des Shapers); <code>valign</code> nach der echten Glyphenhülle (OpenSCAD: gerasterte FreeType-Metriken, ≤ 0,005 mm).</li>
+<li>The custom stencil font is missing (step 3, after <code>stroke</code>); Allerta Stencil lacks 20 characters of the required character set (taken from JetBrains Mono, not stenciled).</li>
+<li>Kernel time: many glyphs on a common face are expensive (the union in SMLib grows superlinearly: 9 glyphs ≈ 1.5 s, 28 ≈ 9 s native); in the browser it takes about 1.3 to 1.8 times as long; a single kernel call over 15 s triggers the watchdog.</li>
+<li>Fill rules assume non-intersecting contours within one element (fonts with overlapping contours, e.g. some variable fonts, and self-intersecting SVG paths are not resolved). Variable fonts only in the default instance.</li>
+<li>SVG: no text, no <code>use</code> clones, no CSS classes, no strokes as areas, no masks/clip paths; percent and em lengths are treated like plain numbers.</li>
+<li>File names must appear as strings in the project (a name composed at run time is not loaded).</li>
+<li>Found with the logo: the facade computed unions of extruded sketch arcs over 90° wrongly (sketches step 1); fixed in step 2 (<code>profile::split_arcs</code>), the interim workaround in the import was removed.</li>
+<li>STEP: the writer now writes extrusions of elliptical arcs as an extrusion of an <code>ELLIPSE</code> (OpenCASCADE had integrated the rational B-spline wrongly by 3.6·10<sup>−3</sup>). Open: OpenCASCADE measures the extrusion of the quadratic Q/T wave from <code>welle.svg</code> 3 % too small (kernel 652.25 mm², analytical 652.19 mm²) – <code>svg_logo.scad</code> therefore takes only the ellipse and the arc from <code>welle.svg</code>; the wave itself is shown in 5.1.</li>
+<li>Default alignment of vertical text as in OpenSCAD (shaper offset); <code>valign</code> by the actual glyph bounding box (OpenSCAD: rasterized FreeType metrics, ≤ 0.005 mm).</li>
 </ul>
 </main>
 </body>
 </html>
 `;
 writeFileSync(join(out, "report.html"), html);
-console.log(`${join(out, "report.html")}: ${html.length} Zeichen, ${scenarios.length} Szenarien, ${osc.length} OpenSCAD-Vergleiche`);
+console.log(`${join(out, "report.html")}: ${html.length} characters, ${scenarios.length} scenarios, ${osc.length} OpenSCAD comparisons`);

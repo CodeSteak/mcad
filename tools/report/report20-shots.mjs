@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Test report 20 (UI-Überarbeitung): the same states of the browser UI as screenshots, once
-// for the old UI ("vorher", build of the commit before the overhaul) and once for the new one
-// ("nachher"). The script only uses the test hooks (`window.__cad`) and region selectors that
+// Test report 20 (UI overhaul): the same states of the browser UI as screenshots, once
+// for the old UI (label "vorher" = before, build of the commit before the overhaul) and once for
+// the new one ("nachher" = after; the labels are directory names read by report20.mjs). The script only uses the test hooks (`window.__cad`) and region selectors that
 // exist in both versions, so the pairs show exactly the same model, theme and mode.
 //
 //   (cd web && pnpm exec vite build && pnpm exec vite preview --port 4180 --strictPort --host 127.0.0.1) &
@@ -47,8 +47,9 @@ async function openProject(page) {
   const sel = page.locator("select[data-testid=examples]");
   if (await sel.count()) await sel.selectOption("projekt:projekt-gehaeuse");
   else {
-    await page.getByRole("button", { name: "Beispiele" }).click();
-    await page.getByRole("menuitem", { name: "Projekte (mehrere Dateien)" }).click();
+    // the new UI follows the browser language (English in Playwright); German names for older builds
+    await page.getByRole("button", { name: /^(Examples|Beispiele)$/ }).click();
+    await page.getByRole("menuitem", { name: /^(Projects \(several files\)|Projekte \(mehrere Dateien\))$/ }).click();
     await page.getByRole("menuitem", { name: /projekt-gehaeuse/ }).click();
   }
   await page.waitForFunction(() => window.__cad.state().fileName === "gehaeuse.scad");
@@ -63,7 +64,7 @@ async function shot(page, name, selector) {
   }
   const loc = page.locator(selector).first();
   if (!(await loc.count())) {
-    console.log(`  (${name}: ${selector} nicht vorhanden)`);
+    console.log(`  (${name}: ${selector} not present)`);
     return;
   }
   await loc.screenshot({ path: file });
@@ -149,4 +150,4 @@ for (const theme of ["light", "dark"]) {
 }
 writeFileSync(join(OUT, "shots.json"), JSON.stringify(info, null, 2));
 await browser.close();
-console.log(`${OUT}: fertig`);
+console.log(`${OUT}: done`);

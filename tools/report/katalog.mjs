@@ -12,7 +12,7 @@
 //
 //   node tools/report/katalog.mjs [--reuse [--redo=id,…]]   (--reuse: reuse measurements/images from
 //                                                             reports/tmp, except for --redo)
-//   node tools/report/print-pdf.mjs docs/models/everyday-models.html docs/models/everyday-models.pdf "Alltagsmodelle – Katalog"
+//   node tools/report/print-pdf.mjs docs/models/everyday-models.html docs/models/everyday-models.pdf "Everyday models – catalogue"
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -32,109 +32,109 @@ const BG = "#f4f5f7"; // background of `cad render` (light theme)
 // ---------------------------------------------------------------------------------------------
 // Models: order as in tests/models/alltag/README.md. text: 2–4 sentences; {p} = default of
 // parameter p of the main module or of the file variable p, {modul.p} = parameter of another
-// module, {p|x} = list joined with „ד.
+// module, {p|x} = list joined with " × ".
 // extra: additional images of the assemblies (section, anchors), pairs: distances `measure --clearance`,
 // view: [azimuth, elevation] instead of iso where iso shows the back.
 const MODELLE = [
   {
-    id: "handystaender", file: "handystaender.mcad", titel: "Handyständer", view: [-50, 30], // iso shows the back
-    text: "Ständer für ein Telefon bis 12 mm Dicke. Das Seitenprofil ist ein Polygon aus Punkten eines 2D-Rasters und wird über die Breite w = {w} mm extrudiert; die Lehne ({lehne} mm, Wand t = {t} mm) steht im Winkel a = {a}° zur Waagrechten, ein dreieckiges Fenster entlastet sie. Ein Kabelloch Ø {kabel_d} mm mit Kanal unter dem Boden nimmt das Ladekabel auf. Innenecken von Lippe und Ablage sowie die Lippenoberkante sind über Zonen an Rasterlinien mit zwei Radien verrundet.",
+    id: "handystaender", file: "handystaender.mcad", titel: "Phone stand", view: [-50, 30], // iso shows the back
+    text: "Stand for a phone up to 12 mm thick. The side profile is a polygon of points of a 2D grid and is extruded over the width w = {w} mm; the backrest ({lehne} mm, wall t = {t} mm) is at an angle a = {a}° to the horizontal, a triangular window lightens it. A cable hole Ø {kabel_d} mm with a channel under the base takes the charging cable. Inner corners of lip and shelf as well as the top edge of the lip are filleted with two radii via zones on grid lines.",
   },
   {
-    id: "becher", file: "becher.mcad", titel: "Becher mit Henkel",
-    text: "Trinkbecher als konischer Rotationskörper (Radius unten ru = {ru} mm, oben ro = {ro} mm, Höhe h = {h} mm), der mit shell und Wand {wand} mm oben geöffnet wird. Die Bodenkante ist über eine Zone an der Bodenebene mit r {boden_r} mm verrundet, der Trinkrand über eine zweite Zone. Der Henkel (Ø {henkel_d} mm) ist ein sweep eines Kreises entlang eines Spline-Pfads, dessen Enden radial in der Wand sitzen, und mit union(fillet = …) angesetzt.",
+    id: "becher", file: "becher.mcad", titel: "Mug with handle",
+    text: "Drinking mug as a conical solid of revolution (radius at the bottom ru = {ru} mm, at the top ro = {ro} mm, height h = {h} mm), opened at the top with shell and a {wand} mm wall. The bottom edge is filleted with r {boden_r} mm via a zone on the bottom plane, the drinking rim via a second zone. The handle (Ø {henkel_d} mm) is a sweep of a circle along a spline path whose ends sit radially in the wall, attached with union(fillet = …).",
   },
   {
-    id: "kabelclip", file: "kabelclip.mcad", titel: "Kabelclip für die Tischkante", kurz: "Kabelclip",
-    text: "Kabelhalter zum Aufstecken auf eine Tischplatte von dicke = {dicke} mm (Spiel {spiel} mm). Die C-Klammer ist ein extrudiertes Profil (Wand {t} mm, Arme {arm_o} und {arm_u} mm) mit Klemmnoppe; darüber sitzt ein Block mit n = {n} Kabelkanälen Ø {kabel_d} mm im Abstand {pitch} mm, die von oben eingeführt werden. Die Kanäle liegen an indizierten Rasterebenen, ihre Kanten sind mit difference(fillet = …) verrundet, die Innenecken der Klammer über Zonen.",
+    id: "kabelclip", file: "kabelclip.mcad", titel: "Cable clip for the desk edge", kurz: "Cable clip",
+    text: "Cable holder that clips onto a desk top of dicke = {dicke} mm (clearance {spiel} mm). The C clamp is an extruded profile (wall {t} mm, arms {arm_o} and {arm_u} mm) with a clamping bump; above it sits a block with n = {n} cable channels Ø {kabel_d} mm at a pitch of {pitch} mm, inserted from the top. The channels lie on indexed grid planes, their edges are filleted with difference(fillet = …), the inner corners of the clamp via zones.",
   },
   {
-    id: "wandhaken", file: "wandhaken.mcad", titel: "Wandhaken",
-    text: "Haken für Jacke oder Handtuch: Wandplatte {b} × {h} × {t} mm mit verrundeten Ecken (r {ecke} mm), gefaster Vorderkante und zwei Senkbohrungen (Ø {schraube_d} mm, Kopf Ø {kopf_d} mm). Fase und Verrundung sind verschachtelt, so dass die Fase auch die Randkanten der Verrundung erfasst. Der Haken (Ø {haken_d} mm, Ausladung {ausladung} mm) ist ein sweep entlang eines Spline-Pfads mit Kugelknauf Ø {knauf_d} mm, angesetzt mit union(fillet = …).",
+    id: "wandhaken", file: "wandhaken.mcad", titel: "Wall hook",
+    text: "Hook for a jacket or towel: wall plate {b} × {h} × {t} mm with filleted corners (r {ecke} mm), chamfered front edge and two countersunk holes (Ø {schraube_d} mm, head Ø {kopf_d} mm). Chamfer and fillet are nested, so that the chamfer also covers the boundary edges of the fillet. The hook (Ø {haken_d} mm, reach {ausladung} mm) is a sweep along a spline path with a ball knob Ø {knauf_d} mm, attached with union(fillet = …).",
   },
   {
-    id: "seifenschale", file: "seifenschale.mcad", titel: "Seifenschale",
-    text: "Seifenschale {l} × {b} × {h} mm mit Ablauf. Die Wanne ist ein Quader, dessen senkrechte Ecken (r {ecke} mm) und Bodenkanten über verschachtelte Zonen verrundet werden und den shell (Wand {wand} mm) oben öffnet. n = {n} runde Auflagerippen sind cylinder(a, b, r) zwischen Rasterpunkten, dazwischen liegen Ablaufschlitze mit verrundeten Kanten; unten stehen vier Füße ({fuss_h} mm).",
+    id: "seifenschale", file: "seifenschale.mcad", titel: "Soap dish",
+    text: "Soap dish {l} × {b} × {h} mm with drainage. The tray is a box whose vertical corners (r {ecke} mm) and bottom edges are filleted via nested zones and which shell (wall {wand} mm) opens at the top. n = {n} round support ribs are cylinder(a, b, r) between grid points, with drainage slots with filleted edges between them; underneath stand four feet ({fuss_h} mm).",
   },
   {
-    id: "stiftebox", file: "stiftebox.mcad", titel: "Stiftebox",
-    text: "Stiftebox mit drei hohen Fächern (Breiten {faecher} mm, Tiefe {tiefe} mm, Höhe {h} mm) und einem flachen vorderen Fach ({vorn_t} mm tief, {vorn_h} mm hoch), Wand {wand} mm. Die Fachgrenzen sind indizierte Rasterebenen, die eine rekursive Funktion aus der Liste der Fachbreiten berechnet. Vier verschachtelte Zonenblöcke verrunden die senkrechten Kanten (außen r {ecke} mm, Taschen r {ecke_i} mm) und die Taschenböden und fasen die hinteren Oberkanten; die Oberkanten des vorderen Fachs bleiben scharf (Kernel-Grenze F6).",
+    id: "stiftebox", file: "stiftebox.mcad", titel: "Pen box",
+    text: "Pen box with three tall compartments (widths {faecher} mm, depth {tiefe} mm, height {h} mm) and a low front compartment ({vorn_t} mm deep, {vorn_h} mm high), wall {wand} mm. The compartment boundaries are indexed grid planes computed by a recursive function from the list of compartment widths. Four nested zone blocks fillet the vertical edges (outside r {ecke} mm, pockets r {ecke_i} mm) and the pocket floors and chamfer the rear top edges; the top edges of the front compartment stay sharp (kernel limit F6).",
   },
   {
-    id: "tuerstopper", file: "tuerstopper.mcad", titel: "Türstopper",
-    text: "Keil {l} mm lang, {b} mm breit und hinten {h_hinten} mm hoch. Der Körper ist ein loft durch drei Trapezprofile (Höhe hinten, Mitte {h_mitte} mm, Spitze {spitze} mm), liegend ausgerichtet mit rotate([90, 0, 90]); seine Unterkante ist vorher über eine Zone an der Bodenebene gefast. Oben liegt eine Griffmulde, unten {rillen} Querrillen gegen Rutschen, hinten ein Aufhängeloch Ø {loch_d} mm.",
+    id: "tuerstopper", file: "tuerstopper.mcad", titel: "Door stop",
+    text: "Wedge {l} mm long, {b} mm wide and {h_hinten} mm high at the back. The body is a loft through three trapezoid profiles (height at the back, middle {h_mitte} mm, tip {spitze} mm), laid flat with rotate([90, 0, 90]); its bottom edge is chamfered beforehand via a zone on the bottom plane. On top there is a finger recess, underneath {rillen} transverse grooves against slipping, at the back a hanging hole Ø {loch_d} mm.",
   },
   {
-    id: "topfuntersetzer", file: "topfuntersetzer.mcad", titel: "Topfuntersetzer",
-    text: "Untersetzer Ø {d} mm, {h} mm hoch: drei konzentrische Ringe (Mittenradien {ringe} mm, Steg {steg} mm) als rotate_extrude eines Rechtecks in einer for-Schleife, verbunden durch {speichen} Speichen und eine Mittelscheibe (r {mitte_r} mm). Alle Oberkanten von Ringen und Speichen werden in einem Block über eine Zone an der Deckebene gefast; unten liegen drei Mulden für Gummifüße Ø {fuss_d} mm.",
+    id: "topfuntersetzer", file: "topfuntersetzer.mcad", titel: "Pot trivet",
+    text: "Trivet Ø {d} mm, {h} mm high: three concentric rings (centre radii {ringe} mm, web {steg} mm) as rotate_extrude of a rectangle in a for loop, connected by {speichen} spokes and a centre disc (r {mitte_r} mm). All top edges of rings and spokes are chamfered in one block via a zone on the top plane; underneath there are three recesses for rubber feet Ø {fuss_d} mm.",
   },
   {
-    id: "flansch", file: "flansch.mcad", titel: "Flanschplatte",
-    text: "Flansch Ø {d_aussen} mm, {t} mm stark, mit Bund Ø {d_bund} mm (Höhe {h_bund} mm) und Bohrung Ø {d_bohrung} mm. Der Querschnitt ist ein Polygon aus einem 2D-Raster, gedreht mit rotate_extrude; auf dem Lochkreis Ø {lk} mm liegen {n} Durchgangslöcher Ø {d_loch} mm (M10), dazu eine Dichtnut {nut_t} mm tief. Den Übergang Bund/Scheibe verrundet ein eigenes Modul als Zone (ringzone), Bohrungs- und Außenkanten sind über Volumenzonen gefast.",
+    id: "flansch", file: "flansch.mcad", titel: "Flange plate",
+    text: "Flange Ø {d_aussen} mm, {t} mm thick, with collar Ø {d_bund} mm (height {h_bund} mm) and bore Ø {d_bohrung} mm. The cross-section is a polygon from a 2D grid, revolved with rotate_extrude; on the bolt circle Ø {lk} mm lie {n} through holes Ø {d_loch} mm (M10), plus a sealing groove {nut_t} mm deep. The transition collar/disc is filleted by a dedicated module used as a zone (ringzone), bore and outer edges are chamfered via volume zones.",
   },
   {
-    id: "lagerbock", file: "lagerbock.mcad", titel: "Stehlagerbock 608",
-    text: "Lagerbock für ein Rillenkugellager 608 ({lager_d} × {lager_b} mm), Achshöhe {achse_h} mm. Die Grundplatte {l} × {b} × {t} mm hat zwei Langlöcher für M6 ({langloch|x} mm, Hilfsmodul) zum Ausrichten; das Lagerauge (r {auge_r} mm, {auge_b} mm breit) ist ein Quader mit tangential anschließendem cylinder(a, b, r) und hat eine Anschlagschulter Ø {schulter_d} mm. Die Kehlen rund um das Auge entstehen über Zonen an Rasterlinien in x, y und z.",
+    id: "lagerbock", file: "lagerbock.mcad", titel: "Pillow block 608",
+    text: "Bearing block for a 608 deep-groove ball bearing ({lager_d} × {lager_b} mm), axis height {achse_h} mm. The base plate {l} × {b} × {t} mm has two slots for M6 ({langloch|x} mm, helper module) for alignment; the bearing eye (r {auge_r} mm, {auge_b} mm wide) is a box with a tangentially adjoining cylinder(a, b, r) and has a stop shoulder Ø {schulter_d} mm. The fillets around the eye are created via zones on grid lines in x, y and z.",
   },
   {
-    id: "winkel_rippe", file: "winkel_rippe.mcad", titel: "Montagewinkel mit Rippe", kurz: "Montagewinkel",
-    text: "Winkel mit Schenkeln {a} und {h} mm, {b} mm breit und {t} mm stark, mit n_rippen = {n_rippen} Versteifungsrippe ({rippe_t} mm dick, {rippe_l} mm lang). Die Rippen sind extrudierte Dreiecke an indizierten Rasterebenen; Innenkante und Rippenanschlüsse werden in einem Zonenblock verrundet, so dass die Eckübergänge sauber laufen. Die Bohrungen Ø {loch_d} mm (M5) sind mit difference(chamfer = …) gefast.",
+    id: "winkel_rippe", file: "winkel_rippe.mcad", titel: "Mounting bracket with rib", kurz: "Mounting bracket",
+    text: "Bracket with legs of {a} and {h} mm, {b} mm wide and {t} mm thick, with n_rippen = {n_rippen} stiffening rib ({rippe_t} mm thick, {rippe_l} mm long). The ribs are extruded triangles on indexed grid planes; inner edge and rib joints are filleted in one zone block, so that the corner transitions run cleanly. The holes Ø {loch_d} mm (M5) are chamfered with difference(chamfer = …).",
   },
   {
-    id: "kuehlkoerper", file: "kuehlkoerper.mcad", titel: "Kühlkörper",
-    text: "Strangpress-Kühlkörper {l} × {b} mm, Grundplatte {basis} mm, Gesamthöhe {h} mm, mit n = {n} Rippen à {rippe_t} mm. Die Rippenlage steht als indizierte Rasterebenen aus einer Liste; die Rippenfüße sind über Zonen an Rasterlinien in einer for-Schleife verrundet (r {fuss_r} mm), die Köpfe über eine Zone an der Kopfebene fast voll gerundet. Zwei Bohrungen M3 im Abstand {loch_abstand} mm liegen zwischen den Rippen, ein Anker markiert die Wärmequelle.",
+    id: "kuehlkoerper", file: "kuehlkoerper.mcad", titel: "Heat sink",
+    text: "Extruded heat sink {l} × {b} mm, base plate {basis} mm, total height {h} mm, with n = {n} fins of {rippe_t} mm each. The fin positions are indexed grid planes from a list; the fin roots are filleted via zones on grid lines in a for loop (r {fuss_r} mm), the tips almost fully rounded via a zone on the tip plane. Two M3 holes {loch_abstand} mm apart lie between the fins, an anchor marks the heat source.",
   },
   {
-    id: "zahnrad", file: "zahnrad.mcad", titel: "Stirnradpaar",
-    text: "Zwei Stirnräder mit Modul m = {m} mm und {z1} bzw. {z2} Zähnen im Eingriff, Achsabstand {achsabstand} mm, Breite {zahnrad.b} mm. Die Evolventenflanken entstehen als Polygon aus Listenfunktionen (let, each, concat) und werden linear extrudiert; die Zahndicke ist für das Flankenspiel leicht verringert. Rad 1 hat Nabe, Passfedernut und Erleichterungslöcher, Rad 2 eine D-Bohrung für eine Motorwelle 5 mm.",
-    pairs: [["rad1", "rad2", "Flankenspiel"]],
-    extra: [{ name: "eingriff", args: ["--view", "top", "--fit", "all", "--zoom", "6", "--target", "18.6,-4.2,10"], caption: "Draufsicht, 6-fach vergrößert auf die Engstelle des Eingriffs: der Spalt zwischen den Flanken ist das gemessene Flankenspiel." }],
+    id: "zahnrad", file: "zahnrad.mcad", titel: "Spur gear pair",
+    text: "Two meshing spur gears with module m = {m} mm and {z1} and {z2} teeth, centre distance {achsabstand} mm, width {zahnrad.b} mm. The involute flanks are created as a polygon from list functions (let, each, concat) and extruded linearly; the tooth thickness is slightly reduced for backlash. Gear 1 has a hub, keyway and lightening holes, gear 2 a D bore for a 5 mm motor shaft.",
+    pairs: [["rad1", "rad2", "Backlash"]],
+    extra: [{ name: "eingriff", args: ["--view", "top", "--fit", "all", "--zoom", "6", "--target", "18.6,-4.2,10"], caption: "Top view, magnified 6× on the narrowest point of the mesh: the gap between the flanks is the measured backlash." }],
   },
   {
-    id: "rohrschelle", file: "rohrschelle.mcad", titel: "Rohrschelle",
-    text: "Zweiteilige Schelle für ein Rohr Ø {rohr_d} mm: die Halbringe ({halbschelle.t} mm stark, {b} mm breit) sind rotate_extrude(angle = 180) eines Rechtecks, mit Laschen und Bohrungen Ø {halbschelle.loch_d} mm (M5); das Unterteil (mirror) trägt einen Stutzen mit Kernloch für M8. Oberteil, Unterteil und ein Prüfrohr sind Bauteile in einem gemeinsam gedrehten Block. Im offenen Zustand klafft an den Laschen der Spalt {halbschelle.spalt} mm.",
-    pairs: [["oben", "unten", "Klemmspalt an den Laschen"], ["oben", "rohr", "Rohr liegt am Oberteil an"], ["unten", "rohr", "Rohr liegt am Unterteil an"]],
-    extra: [{ name: "schnitt", args: ["--section", "x=10", "--view", "right"], caption: "Schnitt x = 10 (Mitte der Schelle, quer zur Rohrachse), Blick von +x: Halbringe mit Laschen und Bohrungen M5, Klemmspalt 2 mm, Stutzen mit Kernloch für M8, Prüfrohr." }],
+    id: "rohrschelle", file: "rohrschelle.mcad", titel: "Pipe clamp",
+    text: "Two-part clamp for a pipe Ø {rohr_d} mm: the half rings ({halbschelle.t} mm thick, {b} mm wide) are rotate_extrude(angle = 180) of a rectangle, with lugs and holes Ø {halbschelle.loch_d} mm (M5); the lower part (mirror) carries a boss with a pilot hole for M8. Upper part, lower part and a test pipe are parts in a jointly rotated block. In the open state there is a {halbschelle.spalt} mm gap at the lugs.",
+    pairs: [["oben", "unten", "Clamping gap at the lugs"], ["oben", "rohr", "Pipe touches the upper part"], ["unten", "rohr", "Pipe touches the lower part"]],
+    extra: [{ name: "schnitt", args: ["--section", "x=10", "--view", "right"], caption: "Section x = 10 (middle of the clamp, across the pipe axis), view from +x: half rings with lugs and M5 holes, clamping gap 2 mm, boss with pilot hole for M8, test pipe." }],
   },
   {
-    id: "pi_platte", file: "pi_platte.mcad", titel: "Montageplatte Raspberry Pi", kurz: "Raspberry-Pi-Platte",
-    text: "Platte {l} × {b} × {t} mm für einen Raspberry Pi (Lochbild 58 × 49 mm, M2.5). Die Abstandshalter ({hoehe} mm) sind ein eigenes Modul mit Anker, in der Schleife als benannte Instanzen dom[i] gesetzt und mit union(fillet = …) angesetzt. Dazu kommen {schlitze} Lüftungsschlitze, vier Befestigungslöcher M4 mit Senkung und verrundete Ecken (r {ecke} mm). Ein farbiger Platinen-Dummy 85 × 56 × 1,6 mm liegt als zweites Bauteil am Anker der Platte.",
-    pairs: [["platte", "pi", "Platine liegt auf den Domen"]],
-    extra: [{ name: "anker", args: ["--show", "anchors", "--part", "platte"], caption: "Platte mit eingeblendeten Ankern (gelb): die Anker oben der Dome tragen die Platine." }],
+    id: "pi_platte", file: "pi_platte.mcad", titel: "Raspberry Pi mounting plate", kurz: "Raspberry Pi plate",
+    text: "Plate {l} × {b} × {t} mm for a Raspberry Pi (hole pattern 58 × 49 mm, M2.5). The standoffs ({hoehe} mm) are a separate module with an anchor, placed in the loop as named instances dom[i] and attached with union(fillet = …). In addition there are {schlitze} ventilation slots, four M4 mounting holes with countersink and filleted corners (r {ecke} mm). A coloured board dummy 85 × 56 × 1.6 mm sits as a second part on the anchor of the plate.",
+    pairs: [["platte", "pi", "Board rests on the bosses"]],
+    extra: [{ name: "anker", args: ["--show", "anchors", "--part", "platte"], caption: "Plate with anchors shown (yellow): the anchors oben of the bosses carry the board." }],
   },
   {
-    id: "gehaeuse", file: "gehaeuse/gehaeuse.mcad", titel: "Elektronikgehäuse",
-    text: "Gehäuse für eine Platine 70 × 50 mm: innen {innen_l} × {innen_b} mm, Höhe {hoehe} mm, Wand {wand} mm, Ecken r {ecke} mm. Das Unterteil ist ein verrundeter Quader, den shell öffnet; vier Schraubdome (Kernloch Ø {kern_d} mm) sind als dom[i] mit union(fillet = …) angesetzt. Der Deckel ({deckel_t} mm, Zentrierrand {rand_h} mm, Spiel {spiel} mm) sitzt am Anker deckel_auflage, die Schrauben M3 sind Bauteile s[0] … s[3]. Maße stehen in masse.mcad (include), Teile in teile.mcad (use); explosion > 0 zieht die Baugruppe auseinander.",
-    pairs: [["unterteil", "deckel", "Deckel liegt auf"], ["s[0]", "deckel", "Schraubenkopf liegt auf"], ["s[0]", "unterteil", "Schaft im Kernloch"]],
-    extra: [{ name: "schnitt", args: ["--section", "y=8.5", "--section-flip", "--view", "front"], caption: "Schnitt y = 8,5 (durch die vorderen Dome), Blick von vorn: Schraube im Dom, Deckel mit Zentrierrand auf dem Unterteil." }],
+    id: "gehaeuse", file: "gehaeuse/gehaeuse.mcad", titel: "Electronics enclosure",
+    text: "Enclosure for a 70 × 50 mm board: inside {innen_l} × {innen_b} mm, height {hoehe} mm, wall {wand} mm, corners r {ecke} mm. The base is a filleted box opened by shell; four screw bosses (pilot hole Ø {kern_d} mm) are attached as dom[i] with union(fillet = …). The lid ({deckel_t} mm, centring rim {rand_h} mm, clearance {spiel} mm) sits on the anchor deckel_auflage, the M3 screws are parts s[0] … s[3]. Dimensions are in masse.mcad (include), parts in teile.mcad (use); explosion > 0 pulls the assembly apart.",
+    pairs: [["unterteil", "deckel", "Lid rests on the base"], ["s[0]", "deckel", "Screw head rests on the lid"], ["s[0]", "unterteil", "Shank in the pilot hole"]],
+    extra: [{ name: "schnitt", args: ["--section", "y=8.5", "--section-flip", "--view", "front"], caption: "Section y = 8.5 (through the front bosses), view from the front: screw in the boss, lid with centring rim on the base." }],
   },
   {
-    id: "scharnier", file: "scharnier/scharnier.mcad", titel: "Scharnier",
-    text: "Druckbares Scharnier {laenge} mm aus Blatt A, Blatt B und Stift mit {augen} Gelenkaugen (r {auge_r} mm, Blattstärke {blatt_t} mm). Die Augen beider Blätter kommen aus derselben Funktion, so dass das Spiel von {spiel} mm überall gleich ist; die Freiräume entstehen per for mit Schrittweite. Blatt A hat die Bohrung {bohrung_a} mm (Stift eingeklebt), Blatt B {bohrung_b} mm (dreht frei), der Stift Ø {stift_d} mm. Die Variable winkel = {winkel}° dreht Blatt B um die Achse.",
-    pairs: [["a", "b", "Spiel der Augen"], ["stift", "b", "Lagerspiel"], ["stift", "a", "Stiftkopf liegt an"]],
+    id: "scharnier", file: "scharnier/scharnier.mcad", titel: "Hinge",
+    text: "Printable {laenge} mm hinge made of leaf A, leaf B and pin with {augen} knuckles (r {auge_r} mm, leaf thickness {blatt_t} mm). The knuckles of both leaves come from the same function, so that the clearance of {spiel} mm is the same everywhere; the gaps are created by for with a step. Leaf A has the {bohrung_a} mm hole (pin glued in), leaf B {bohrung_b} mm (rotates freely), the pin Ø {stift_d} mm. The variable winkel = {winkel}° rotates leaf B about the axis.",
+    pairs: [["a", "b", "Clearance of the knuckles"], ["stift", "b", "Bearing clearance"], ["stift", "a", "Pin head touches"]],
     extra: [
-      { name: "schnitt", args: ["--section", "z=0", "--view", "top"], caption: "Schnitt z = 0 (Mittelebene der Blätter), Draufsicht: Augen von A (unten) und B (oben) abwechselnd mit axialem Spiel, Stift in den Bohrungen." },
-      { name: "lager", args: ["--section", "x=18", "--view", "right", "--zoom", "3.5", "--target", "18,0,0"], caption: "Schnitt x = 18 (zweites Auge, Blatt B), Blick von +x, 3,5-fach: Stift Ø 2,95 in der Bohrung 3,4 von B; links Blatt A mit Freiraum." },
+      { name: "schnitt", args: ["--section", "z=0", "--view", "top"], caption: "Section z = 0 (mid-plane of the leaves), top view: knuckles of A (bottom) and B (top) alternating with axial clearance, pin in the holes." },
+      { name: "lager", args: ["--section", "x=18", "--view", "right", "--zoom", "3.5", "--target", "18,0,0"], caption: "Section x = 18 (second knuckle, leaf B), view from +x, 3.5×: pin Ø 2.95 in the 3.4 hole of B; on the left leaf A with clearance." },
     ],
   },
   {
-    id: "pflanztopf", file: "pflanztopf/pflanztopf.mcad", titel: "Pflanztopf mit Untersetzer", kurz: "Pflanztopf",
-    text: "Der Topf geht per loft vom abgerundeten Quadrat ({topf_unten} mm, Superellipse als spline aus einer Funktion) zur runden Öffnung Ø {topf_oben_d} mm, Höhe {topf_h} mm, Wand {wand} mm, Boden {boden} mm; er steht auf {fuss_h} mm hohen Füßen und hat Abflusslöcher. Die Wand ist die Differenz zweier Lofts. Der Untersetzer ist ein rotate_extrude, mit shell oben geöffnet und über Zonen verrundet. Der Topf steht mit dem Anker aufstand auf dem Anker boden des Untersetzers.",
-    pairs: [["topf", "untersetzer", "Füße stehen auf dem Boden"]],
-    extra: [{ name: "schnitt", args: ["--section", "y=0", "--section-flip", "--view", "front"], caption: "Schnitt y = 0, Blick von vorn: Wand des Lofts, Füße und Abflusslöcher, Topf im Untersetzer." }],
+    id: "pflanztopf", file: "pflanztopf/pflanztopf.mcad", titel: "Plant pot with saucer", kurz: "Plant pot",
+    text: "The pot goes by loft from a rounded square ({topf_unten} mm, superellipse as a spline from a function) to the round opening Ø {topf_oben_d} mm, height {topf_h} mm, wall {wand} mm, bottom {boden} mm; it stands on {fuss_h} mm high feet and has drainage holes. The wall is the difference of two lofts. The saucer is a rotate_extrude, opened at the top with shell and filleted via zones. The pot stands with the anchor aufstand on the anchor boden of the saucer.",
+    pairs: [["topf", "untersetzer", "Feet stand on the saucer base"]],
+    extra: [{ name: "schnitt", args: ["--section", "y=0", "--section-flip", "--view", "front"], caption: "Section y = 0, view from the front: wall of the loft, feet and drainage holes, pot in the saucer." }],
   },
   {
-    id: "schluesselbrett", file: "schluesselbrett/schluesselbrett.mcad", titel: "Schlüsselbrett",
-    text: "Brett {brett_l} × {brett_h} × {brett_t} mm mit {anzahl} eingeklebten Haken. Es hat über Zonen verrundete Ecken und eine gefaste Vorderkante, hinten zwei Schlüssellochaufhängungen und oben eine Briefrille. Die Haken sind ein sweep entlang eines Spline-Pfads mit Kugelknauf; ihr Zapfen Ø {zapfen_d} mm sitzt in einer Bohrung Ø {bohrung_d} mm (Kleberspalt). Die Haken sind Bauteile h[0] … h[4] aus einer for-Schleife, die Maße stehen in masse.mcad.",
-    pairs: [["brett", "h[0]", "Zapfen in der Bohrung (Kleberspalt)"]],
-    extra: [{ name: "schnitt", args: ["--section", "x=20", "--view", "right"], caption: "Schnitt x = 20 (durch Haken h[0]), Blick von +x: Zapfen in der Bohrung, Fase der Vorderkante, Briefrille oben." }],
+    id: "schluesselbrett", file: "schluesselbrett/schluesselbrett.mcad", titel: "Key rack",
+    text: "Board {brett_l} × {brett_h} × {brett_t} mm with {anzahl} glued-in hooks. It has corners filleted via zones and a chamfered front edge, two keyhole hangers at the back and a letter slot on top. The hooks are a sweep along a spline path with a ball knob; their peg Ø {zapfen_d} mm sits in a hole Ø {bohrung_d} mm (glue gap). The hooks are parts h[0] … h[4] from a for loop, the dimensions are in masse.mcad.",
+    pairs: [["brett", "h[0]", "Peg in the hole (glue gap)"]],
+    extra: [{ name: "schnitt", args: ["--section", "x=20", "--view", "right"], caption: "Section x = 20 (through hook h[0]), view from +x: peg in the hole, chamfer of the front edge, letter slot on top." }],
   },
 ];
 
 // ---------------------------------------------------------------------------------------------
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const de = (x, d = 0) => Number(x).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d });
-const num = (x) => Number(x).toLocaleString("de-DE", { maximumFractionDigits: 3 });
+const fmtNum = (x, d = 0) => Number(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const num = (x) => Number(x).toLocaleString("en-US", { maximumFractionDigits: 3 });
 const rel = (p) => relative(root, p);
 const git = (...a) => {
   try {
@@ -180,17 +180,17 @@ function checkSize(f) {
 
 /** Language features that occur in the source (including include/use). */
 const MITTEL = [
-  ["Raster (grid)", /\bgrid\s+\w+\s*\{/],
-  ["indizierte Rasterebenen", /^\s*[xyz]:.*=\s*\[/m],
-  ["Anker", /\banchor\s+\w+/],
-  ["Anker mit dir", /\banchor\s+\w+\s*=.*dir\s*=/],
-  ["benannte Instanzen", /^\s*(translate\([^;]*\)\s*)?\w+(\[\w+\])?\s*:\s*\w+\(/m],
+  ["grid", /\bgrid\s+\w+\s*\{/],
+  ["indexed grid planes", /^\s*[xyz]:.*=\s*\[/m],
+  ["anchor", /\banchor\s+\w+/],
+  ["anchor with dir", /\banchor\s+\w+\s*=.*dir\s*=/],
+  ["named instances", /^\s*(translate\([^;]*\)\s*)?\w+(\[\w+\])?\s*:\s*\w+\(/m],
   ["include", /^\s*include\s*</m],
   ["use", /^\s*use\s*</m],
-  ["Funktion", /\bfunction\s+\w+/],
-  ["Rekursion", /function\s+(\w+)\s*\([^)]*\)\s*=[^;]*\b\1\s*\(/],
+  ["function", /\bfunction\s+\w+/],
+  ["recursion", /function\s+(\w+)\s*\([^)]*\)\s*=[^;]*\b\1\s*\(/],
   ["let", /\blet\s*\(/],
-  ["Listen-Komprehension", /\[\s*for\s*\(/],
+  ["list comprehension", /\[\s*for\s*\(/],
   ["each", /\beach\b/],
   ["for", /\bfor\s*\(/],
   ["if / ?:", /\bif\s*\(|\?[^:;]+:/],
@@ -201,15 +201,15 @@ const MITTEL = [
   ["loft", /\bloft\s*\(/],
   ["sweep", /\bsweep\s*\(/],
   ["shell", /\bshell\s*\(/],
-  ["fillet-Zonen", /\bfillet\s*\([^)]*\)\s*\{/],
-  ["chamfer-Zonen", /\bchamfer\s*\([^)]*\)\s*\{/],
+  ["fillet zones", /\bfillet\s*\([^)]*\)\s*\{/],
+  ["chamfer zones", /\bchamfer\s*\([^)]*\)\s*\{/],
   ["zone", /\bzone\s*\(/],
   ["difference(fillet/chamfer)", /\bdifference\s*\(\s*(fillet|chamfer)\s*=/],
   ["union(fillet)", /\bunion\s*\(\s*fillet\s*=/],
   ["$fillet", /\$fillet\s*=/],
   ["box(a, b)", /\bbox\s*\(/],
   ["cylinder(a, b, r)", /\bcylinder\s*\(\s*(g\[|\[|\w+\[)/],
-  ["Kegel (r1, r2)", /\bcylinder\s*\([^;]*\b(r1|d1)\s*=/],
+  ["cone (r1, r2)", /\bcylinder\s*\([^;]*\b(r1|d1)\s*=/],
   ["sphere", /\bsphere\s*\(/],
   ["intersection", /\bintersection\s*\(/],
   ["mirror", /\bmirror\s*\(/],
@@ -234,12 +234,12 @@ function fill(text, o, main) {
     } else if (p) return fmt(p.default_value ?? p.default, join);
     const v = o.variables.find((v) => v.name === name);
     if (v) return fmt(v.value, join);
-    throw new Error(`Platzhalter {${key}} unbekannt (Modul ${main})`);
+    throw new Error(`placeholder {${key}} unknown (module ${main})`);
   });
 }
 
 // ---------------------------------------------------------------------------------------------
-if (!existsSync(cad)) throw new Error(`${cad} fehlt (cargo build --release -p cad-cli --no-default-features)`);
+if (!existsSync(cad)) throw new Error(`${cad} missing (cargo build --release -p cad-cli --no-default-features)`);
 mkdirSync(work, { recursive: true });
 if (!reuse) rmSync(img, { recursive: true, force: true });
 mkdirSync(img, { recursive: true });
@@ -309,10 +309,10 @@ for (const [i, m] of MODELLE.entries()) {
 // ---------------------------------------------------------------------------------------------
 // HTML
 const commit = git("rev-parse", "--short", "HEAD");
-const datum = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
-const mm = (b) => b.size.map((x) => de(x, 1)).join(" × ");
+const datum = new Date().toISOString().slice(0, 10);
+const mm = (b) => b.size.map((x) => fmtNum(x, 1)).join(" × ");
 const masse = (v) => (v * PLA) / 1000;
-const sec = (ms) => (ms == null ? "–" : de(ms / 1000, ms < 10000 ? 2 : 1) + " s");
+const sec = (ms) => (ms == null ? "–" : fmtNum(ms / 1000, ms < 10000 ? 2 : 1) + " s");
 
 function mainModule(d) {
   const parts = d.outline.parts;
@@ -326,15 +326,15 @@ function paramChips(m, d) {
   const mod = o.modules.find((x) => x.name === mainModule(d));
   const params = (mod?.params ?? []).filter((p) => lit(p.default)).map((p) => [p.name, p.default]);
   const groups = [];
-  if (vars.length) groups.push(`<span class="grp">Datei</span>` + vars.map(chip).join(""));
+  if (vars.length) groups.push(`<span class="grp">File</span>` + vars.map(chip).join(""));
   // module parameters only in addition when the file variables do not already say it all
   if (params.length && vars.length < 6) groups.push(`<span class="grp">${esc(mod.name)}()</span>` + params.map(chip).join(""));
   return groups.join("");
 }
 function farben(d) {
   const c = d.outline.colors ?? [];
-  if (c.length <= 1) return "einfarbig (Filament-Slot 1)";
-  return c.map((x) => `<span class="sw" style="background:${esc(x.key)}"></span>Slot ${x.filament} ${esc(x.label)} ${de(x.mass_g, 1)} g`).join("<br>");
+  if (c.length <= 1) return "single colour (filament slot 1)";
+  return c.map((x) => `<span class="sw" style="background:${esc(x.key)}"></span>Slot ${x.filament} ${esc(x.label)} ${fmtNum(x.mass_g, 1)} g`).join("<br>");
 }
 
 const seiten = []; // [title, page]
@@ -350,68 +350,68 @@ for (const [i, { m, d, rf }] of daten.entries()) {
   seiten.push({ nr, titel: m.titel, kurz: m.kurz ?? m.titel, rf, seite, d, baugruppe });
   const partsTxt = o.parts.map((p) => `<code>${esc(p.name)}</code>`).join(", ");
   const kenn = [
-    ["Hülle (B × T × H)", `${mm(d.bounds)} mm`],
-    ["Volumen", `${de(d.volume / 1000, 1)} cm³`],
-    ["Masse PLA (1,24 g/cm³)", `${de(masse(d.volume), 1)} g`],
-    ["Bauteile", `${o.parts.length}: ${partsTxt}`],
-    ["Farben / Filamente", farben(d)],
-    ["Kernel-Zeit (ohne Cache)", `${sec(d.kernel_ms)} <span class="dim">(${d.nodes} Knoten)</span>`],
+    ["Bounding box (W × D × H)", `${mm(d.bounds)} mm`],
+    ["Volume", `${fmtNum(d.volume / 1000, 1)} cm³`],
+    ["Mass PLA (1.24 g/cm³)", `${fmtNum(masse(d.volume), 1)} g`],
+    ["Parts", `${o.parts.length}: ${partsTxt}`],
+    ["Colours / filaments", farben(d)],
+    ["Kernel time (no cache)", `${sec(d.kernel_ms)} <span class="dim">(${d.nodes} nodes)</span>`],
   ];
   const cmd = `cad ${rf}`;
   pages.push(`
 <section class="page model" id="m-${m.id}">
-  <header class="mh"><span class="nr">${nr}</span><h2>${esc(m.titel)}</h2><span class="tag">${baugruppe ? "Baugruppe" : "Einzelteil"}</span></header>
+  <header class="mh"><span class="nr">${nr}</span><h2>${esc(m.titel)}</h2><span class="tag">${baugruppe ? "Assembly" : "Single part"}</span></header>
   <p class="desc">${esc(text)}</p>
-  <figure class="hero">${d.img.hero ? `<img src="${d.img.hero.file}" alt="${esc(m.titel)}, isometrisch">` : `<div class="missing">Rendering fehlgeschlagen</div>`}</figure>
+  <figure class="hero">${d.img.hero ? `<img src="${d.img.hero.file}" alt="${esc(m.titel)}, isometric">` : `<div class="missing">Rendering failed</div>`}</figure>
   <div class="row">
-    <figure class="sheet">${d.img.sheet ? `<img src="${d.img.sheet.file}" alt="Ansichten">` : ""}<figcaption>Ansichten iso, vorn, oben, rechts (gleicher Maßstab)</figcaption></figure>
+    <figure class="sheet">${d.img.sheet ? `<img src="${d.img.sheet.file}" alt="Views">` : ""}<figcaption>Views iso, front, top, right (same scale)</figcaption></figure>
     <table class="kenn">${kenn.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("")}</table>
   </div>
-  <div class="block"><h3>Parameter (Standardwerte)</h3><div class="chips">${paramChips(m, d)}</div></div>
-  <div class="block"><h3>Sprachmittel</h3><div class="chips">${mittel.map((x) => `<span class="ch">${esc(x)}</span>`).join("")}</div></div>
-  <div class="cmd"><span>Öffnen</span><code>${esc(cmd)}</code><span>headless</span><code>cad render ${esc(rf)} -o bild.png --views all</code></div>
+  <div class="block"><h3>Parameters (default values)</h3><div class="chips">${paramChips(m, d)}</div></div>
+  <div class="block"><h3>Language features</h3><div class="chips">${mittel.map((x) => `<span class="ch">${esc(x)}</span>`).join("")}</div></div>
+  <div class="cmd"><span>Open</span><code>${esc(cmd)}</code><span>headless</span><code>cad render ${esc(rf)} -o bild.png --views all</code></div>
 </section>`);
   if (baugruppe) {
     seite += 1;
-    const extras = (m.extra ?? []).map((x) => (d.img[x.name] ? `<figure class="extra"><img src="${d.img[x.name].file}" alt="${esc(x.caption)}"><figcaption>${esc(x.caption)}</figcaption></figure>` : `<div class="missing">${esc(x.name)}: Rendering fehlgeschlagen</div>`)).join("");
+    const extras = (m.extra ?? []).map((x) => (d.img[x.name] ? `<figure class="extra"><img src="${d.img[x.name].file}" alt="${esc(x.caption)}"><figcaption>${esc(x.caption)}</figcaption></figure>` : `<div class="missing">${esc(x.name)}: rendering failed</div>`)).join("");
     const extra = (m.extra ?? []).length > 1 ? `<div class="extras2">${extras}</div>` : extras;
-    const coll = d.collisions == null ? "–" : d.collisions.length === 0 ? "keine Kollision (Toleranz 0,001 mm³)" : d.collisions.map((c) => `${c.a} ↔ ${c.b}: ${de(c.volume, 3)} mm³`).join("; ");
+    const coll = d.collisions == null ? "–" : d.collisions.length === 0 ? "no collision (tolerance 0.001 mm³)" : d.collisions.map((c) => `${c.a} ↔ ${c.b}: ${fmtNum(c.volume, 3)} mm³`).join("; ");
     pages.push(`
 <section class="page model">
-  <header class="mh"><span class="nr">${nr}</span><h2>${esc(m.titel)} <span class="sub">– Passung</span></h2><span class="tag">Baugruppe</span></header>
-  <table class="parts"><thead><tr><th>Bauteil</th><th>Modul</th><th>Hülle (B × T × H) mm</th><th class="r">Volumen cm³</th><th class="r">Masse PLA g</th></tr></thead><tbody>
-  ${o.parts.map((p) => `<tr><td><code>${esc(p.name)}</code></td><td><code>${esc(p.module)}</code></td><td>${mm(p.bounds)}</td><td class="r">${de(p.volume / 1000, 2)}</td><td class="r">${de(masse(p.volume), 1)}</td></tr>`).join("")}
+  <header class="mh"><span class="nr">${nr}</span><h2>${esc(m.titel)} <span class="sub">– fit</span></h2><span class="tag">Assembly</span></header>
+  <table class="parts"><thead><tr><th>Part</th><th>Module</th><th>Bounding box (W × D × H) mm</th><th class="r">Volume cm³</th><th class="r">Mass PLA g</th></tr></thead><tbody>
+  ${o.parts.map((p) => `<tr><td><code>${esc(p.name)}</code></td><td><code>${esc(p.module)}</code></td><td>${mm(p.bounds)}</td><td class="r">${fmtNum(p.volume / 1000, 2)}</td><td class="r">${fmtNum(masse(p.volume), 1)}</td></tr>`).join("")}
   </tbody></table>
-  <table class="parts"><thead><tr><th>Paar (<code>measure --clearance</code>)</th><th class="r">Abstand</th><th>Bedeutung</th></tr></thead><tbody>
-  ${d.pairs.map((p) => `<tr><td><code>${esc(p.a)}</code> ↔ <code>${esc(p.b)}</code></td><td class="r">${p.distance == null ? "–" : de(p.distance, 3) + " mm"}${p.collision ? " (Kollision)" : ""}</td><td>${esc(p.bed)}</td></tr>`).join("")}
+  <table class="parts"><thead><tr><th>Pair (<code>measure --clearance</code>)</th><th class="r">Distance</th><th>Meaning</th></tr></thead><tbody>
+  ${d.pairs.map((p) => `<tr><td><code>${esc(p.a)}</code> ↔ <code>${esc(p.b)}</code></td><td class="r">${p.distance == null ? "–" : fmtNum(p.distance, 3) + " mm"}${p.collision ? " (collision)" : ""}</td><td>${esc(p.bed)}</td></tr>`).join("")}
   <tr><td><code>measure --interference</code></td><td colspan="2">${coll}</td></tr>
   </tbody></table>
   ${extra}
-  <div class="cmd"><span>Prüfen</span><code>cad measure ${esc(rf)} --interference --clearance ${esc(m.pairs[0][0])} ${esc(m.pairs[0][1])}</code></div>
+  <div class="cmd"><span>Check</span><code>cad measure ${esc(rf)} --interference --clearance ${esc(m.pairs[0][0])} ${esc(m.pairs[0][1])}</code></div>
 </section>`);
   }
   for (const x of d.diag) auffaellig.push(`${m.id}: ${x}`);
-  if (!d.hero || !d.sheet || d.extra.some((x) => !x.ok)) auffaellig.push(`${m.id}: Rendering fehlgeschlagen`);
+  if (!d.hero || !d.sheet || d.extra.some((x) => !x.ok)) auffaellig.push(`${m.id}: rendering failed`);
 }
 
 const gesamtVol = daten.reduce((s, { d }) => s + d.volume, 0);
 const gesamtTeile = daten.reduce((s, { d }) => s + d.outline.parts.length, 0);
 const nBaugruppen = daten.filter(({ d }) => d.outline.parts.length > 1).length;
-const toc = seiten.map((s) => `<tr><td class="nr">${s.nr}</td><td><a href="#m-${s.d.id}">${esc(s.titel)}</a>${s.baugruppe ? ' <span class="tag sm">Baugruppe</span>' : ""}<br><code class="dim">${esc(s.rf.replace("tests/models/alltag/", ""))}</code></td><td class="r">${s.d.outline.parts.length}</td><td class="nw">${mm(s.d.bounds)}</td><td class="r nw">${de(masse(s.d.volume), 0)} g</td><td class="r nw">${sec(s.d.kernel_ms)}</td><td class="r">${s.seite}</td></tr>`).join("");
-const grid = seiten.map((s) => `<a class="tile" href="#m-${s.d.id}"><img src="${s.d.img.hero?.file ?? ""}" alt=""><span><em><b>${s.nr}</b> ${esc(s.kurz)}</em><i>S. ${s.seite}</i></span></a>`).join("");
+const toc = seiten.map((s) => `<tr><td class="nr">${s.nr}</td><td><a href="#m-${s.d.id}">${esc(s.titel)}</a>${s.baugruppe ? ' <span class="tag sm">Assembly</span>' : ""}<br><code class="dim">${esc(s.rf.replace("tests/models/alltag/", ""))}</code></td><td class="r">${s.d.outline.parts.length}</td><td class="nw">${mm(s.d.bounds)}</td><td class="r nw">${fmtNum(masse(s.d.volume), 0)} g</td><td class="r nw">${sec(s.d.kernel_ms)}</td><td class="r">${s.seite}</td></tr>`).join("");
+const grid = seiten.map((s) => `<a class="tile" href="#m-${s.d.id}"><img src="${s.d.img.hero?.file ?? ""}" alt=""><span><em><b>${s.nr}</b> ${esc(s.kurz)}</em><i>p. ${s.seite}</i></span></a>`).join("");
 
 const howtoLines = [
-  ["cad tests/models/alltag/becher.mcad", "Desktop-UI: Editor und 3D"],
-  ["cad tests/models/alltag/gehaeuse/", "Baugruppe als Projekt (Ordner)"],
-  ["cad render tests/models/alltag/becher.mcad -o becher.png --views all", "headless: Bild"],
-  ["cad outline tests/models/alltag/becher.mcad", "Parameter, Raster, Anker, Bauteile"],
-  ["cad measure tests/models/alltag/becher.mcad --volume --colors", "Volumen, Masse je Farbe"],
-  ["cad export tests/models/alltag/zahnrad.mcad --all-parts -o teile/", "STL/STEP/3MF je Bauteil"],
+  ["cad tests/models/alltag/becher.mcad", "desktop UI: editor and 3D"],
+  ["cad tests/models/alltag/gehaeuse/", "assembly as project (folder)"],
+  ["cad render tests/models/alltag/becher.mcad -o becher.png --views all", "headless: image"],
+  ["cad outline tests/models/alltag/becher.mcad", "parameters, grids, anchors, parts"],
+  ["cad measure tests/models/alltag/becher.mcad --volume --colors", "volume, mass per colour"],
+  ["cad export tests/models/alltag/zahnrad.mcad --all-parts -o teile/", "STL/STEP/3MF per part"],
 ];
 const howto = howtoLines.map(([c, k]) => `<code>${esc(c)}</code><span>${esc(k)}</span>`).join("");
 const html = `<!doctype html>
-<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Alltagsmodelle – Katalog</title>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Everyday models – catalogue</title>
 <style>
 @page { size: A4; margin: 13mm 14mm 15mm 14mm; }
 :root { --ink:#1d2129; --dim:#5b6270; --line:#d9dce2; --soft:#f4f5f7; --acc:#2f5d8a; }
@@ -495,29 +495,29 @@ table.toc code { font-size: 7.6pt; }
 </style></head><body>
 
 <section class="page title">
-  <div class="kicker">Parametrisches CAD · Beispielsammlung</div>
-  <h1>Alltagsmodelle<br>Katalog</h1>
-  <p class="lead">${daten.length} parametrische Modelle aus <code>tests/models/alltag/</code>: Haushalt, Schreibtisch, Werkstatt und typische Maschinenbauteile – vom Becher bis zum Stehlagerbock.</p>
-  <p>Die Sammlung dient zweierlei: als Vorlage für eigene Teile (jedes Modell ist ein Modul mit Standardwerten, alle Maße in mm) und als Testsuite, die die Sprache in der Breite nutzt – Raster und Anker, Verrundung und Fase über Zonen, <code>shell</code>, <code>loft</code>, <code>sweep</code>, Profile, <code>include</code>/<code>use</code>, benannte Instanzen als Bauteile. Die Regression <code>tests/alltag/check.sh</code> prüft alle Modelle; gefundene Fehler und Schwächen stehen in <code>tests/models/alltag/README.md</code>.</p>
-  <p>Je Modell zeigt der Katalog eine Seite mit Beschreibung, Rendering, Ansichten, Kenndaten, Parametern und verwendeten Sprachmitteln; Baugruppen haben eine zweite Seite mit Bauteilen, gemessenen Abständen und einem Schnitt bzw. den Ankern. Alle Werte sind mit der CLI gemessen.</p>
-  <h3 style="margin-top:6mm">Ein Modell öffnen</h3>
+  <div class="kicker">Parametric CAD · example collection</div>
+  <h1>Everyday models<br>Catalogue</h1>
+  <p class="lead">${daten.length} parametric models from <code>tests/models/alltag/</code>: household, desk, workshop and typical machine parts – from the mug to the pillow block bearing.</p>
+  <p>The collection serves two purposes: as a template for your own parts (every model is a module with default values, all dimensions in mm) and as a test suite that uses the language broadly – grids and anchors, fillet and chamfer via zones, <code>shell</code>, <code>loft</code>, <code>sweep</code>, profiles, <code>include</code>/<code>use</code>, named instances as parts. The regression <code>tests/alltag/check.sh</code> checks all models; bugs and weaknesses found are listed in <code>tests/models/alltag/README.md</code>.</p>
+  <p>For each model the catalogue shows a page with description, rendering, views, key data, parameters and the language features used; assemblies have a second page with parts, measured distances and a section or the anchors. All values are measured with the CLI.</p>
+  <h3 style="margin-top:6mm">Opening a model</h3>
 <div class="howto">${howto}</div>
   <div class="facts">
-    <div><b>${daten.length}</b><span>Modelle</span></div>
-    <div><b>${nBaugruppen}</b><span>mit mehreren Bauteilen</span></div>
-    <div><b>${gesamtTeile}</b><span>Bauteile</span></div>
-    <div><b>${de(masse(gesamtVol) / 1000, 2)} kg</b><span>PLA für alles</span></div>
+    <div><b>${daten.length}</b><span>models</span></div>
+    <div><b>${nBaugruppen}</b><span>with multiple parts</span></div>
+    <div><b>${gesamtTeile}</b><span>parts</span></div>
+    <div><b>${fmtNum(masse(gesamtVol) / 1000, 2)} kg</b><span>PLA for everything</span></div>
   </div>
-  <div class="stand">Stand ${datum}, Commit <code>${esc(commit)}</code> · erzeugt mit <code>node tools/report/katalog.mjs</code> · Bilder <code>cad render --view iso --perspective</code>, eingepasst · Masse: PLA 1,24 g/cm³ · Kernel-Zeit: <code>scene.stats.kernel_ms</code> von <code>cad eval --no-daemon</code></div>
+  <div class="stand">As of ${datum}, commit <code>${esc(commit)}</code> · generated with <code>node tools/report/katalog.mjs</code> · images <code>cad render --view iso --perspective</code>, fitted · mass: PLA 1.24 g/cm³ · kernel time: <code>scene.stats.kernel_ms</code> from <code>cad eval --no-daemon</code></div>
 </section>
 
 <section class="page">
-  <header class="mh"><h2>Inhalt</h2></header>
-  <table class="toc"><thead><tr><th>Nr.</th><th>Modell, Datei</th><th class="r">Teile</th><th>Hülle B × T × H mm</th><th class="r">PLA</th><th class="r">Kernel</th><th class="r">Seite</th></tr></thead><tbody>${toc}</tbody></table>
+  <header class="mh"><h2>Contents</h2></header>
+  <table class="toc"><thead><tr><th>No.</th><th>Model, file</th><th class="r">Parts</th><th>Bounding box W × D × H mm</th><th class="r">PLA</th><th class="r">Kernel</th><th class="r">Page</th></tr></thead><tbody>${toc}</tbody></table>
 </section>
 
 <section class="page">
-  <header class="mh"><h2>Übersicht</h2></header>
+  <header class="mh"><h2>Overview</h2></header>
   <div class="tiles">${grid}</div>
 </section>
 ${pages.join("\n")}
@@ -525,6 +525,6 @@ ${pages.join("\n")}
 `;
 writeFileSync(join(out, "everyday-models.html"), html);
 const total = 3 + pages.length;
-console.log(`${rel(join(out, "everyday-models.html"))}: ${total} Seiten erwartet, Bilder ${daten.reduce((s, { d }) => s + Object.values(d.img).reduce((a, x) => a + x.bytes, 0), 0)} B`);
-for (const a of auffaellig) console.log("  Auffällig: " + a);
+console.log(`${rel(join(out, "everyday-models.html"))}: ${total} pages expected, images ${daten.reduce((s, { d }) => s + Object.values(d.img).reduce((a, x) => a + x.bytes, 0), 0)} B`);
+for (const a of auffaellig) console.log("  notable: " + a);
 writeFileSync(join(work, "auffaellig.txt"), auffaellig.join("\n") + "\n");

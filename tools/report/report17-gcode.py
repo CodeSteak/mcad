@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Picture of the top layer of a PrusaSlicer G-code file (extrusion moves, Bericht 17) and its
+"""Picture of the top layer of a PrusaSlicer G-code file (extrusion moves, report 17) and its
 key figures as JSON on stdout (layers, estimated time, filament).
 
     python3 tools/report/report17-gcode.py file.gcode out.png"""

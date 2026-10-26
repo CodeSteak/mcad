@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Data of test report 16 ("Text und SVG-Import") from the CLI and OpenSCAD 2021.01: alphabet
+# Data of test report 16 ("Text and SVG import") from the CLI and OpenSCAD 2021.01: alphabet
 # tables of every bundled font, renderings of the SVG examples (the sources are shown by the
 # browser itself), the examples text_schild/svg_logo, kernel times (Hello World, 40
 # characters), and the comparison with OpenSCAD (tools/report/report16-openscad.py).
@@ -28,7 +28,7 @@ fonts = [("jetbrains", "JetBrains Mono"), ("jetbrains-bold", "JetBrains Mono:sty
 esc = lambda s: s.replace("\\", "\\\\").replace('"', '\\"')
 for name, font in fonts:
     with open(f"{out}/alphabet-{name}.scad", "w") as f:
-        f.write(f"// Alphabet-Tafel {font} (Bericht 16)\n")
+        f.write(f"// Alphabet chart {font} (report 16)\n")
         for i, row in enumerate(rows):
             f.write(f'translate([0, {-14 * i}, 0]) linear_extrude(0.6) text("{esc(row)}", size = 8, font = "{font}");\n')
 EOF
@@ -62,7 +62,7 @@ cat > "$CASES/warn.svg" <<'EOF'
 <svg xmlns="http://www.w3.org/2000/svg" width="40mm" height="20mm" viewBox="0 0 40 20">
   <style>.a { fill: red }</style>
   <rect class="a" width="20" height="20"/>
-  <text x="22" y="12">Hallo</text>
+  <text x="22" y="12">Hello</text>
   <image href="foto.png" width="10" height="10"/>
   <path d="M 22 2 L 38 2 L 38 8" stroke="black" fill="none"/>
   <use href="#r"/>

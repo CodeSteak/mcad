@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Data of test report 17 ("Schablonenschrift cad stencil mono"): character charts of the font
+# Data of test report 17 ("Stencil font cad stencil mono"): character charts of the font
 # (SVG from the font itself, PNG through Chromium), alphabet tables through the CLI (stencil
 # regular/bold, Allerta Stencil for comparison), parameter variations, the example stencil
 # (render, STL, PrusaSlicer G-code and a picture of its first layer), the same sign in both
@@ -47,7 +47,7 @@ fonts = [("stencil", ""), ("stencil-bold", ', font = "cad stencil mono:style=Bol
 esc = lambda s: s.replace("\\", "\\\\").replace('"', '\\"')
 for name, font in fonts:
     with open(f"{out}/alphabet-{name}.scad", "w") as f:
-        f.write(f"// Alphabet-Tafel {name} (Bericht 17)\n")
+        f.write(f"// Alphabet chart {name} (report 17)\n")
         for i, row in enumerate(rows):
             f.write(f'translate([0, {-14 * i}, 0]) linear_extrude(0.6) text("{esc(row)}", size = 8{font});\n')
 EOF
@@ -73,7 +73,7 @@ for f in stencil allerta; do
   font=""
   [ "$f" = allerta ] && font=', font = "Allerta Stencil"'
   cat > "$CASES/schild-$f.scad" <<EOF
-// Schild mit erhabenem Text (Bericht 17): $f
+// Sign with raised text (report 17): $f
 color("white") cube([100, 30, 2]);
 color("black") translate([50, 17, 2]) linear_extrude(1) text("WERKSTATT 3", size = 8, halign = "center"$font);
 color("black") translate([50, 5, 2]) linear_extrude(1) text("ZUTRITT NUR MIT BRILLE", size = 4.2, halign = "center"$font);

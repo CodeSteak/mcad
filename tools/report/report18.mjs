@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Test report 18 ("Skizzen-Editor", Plan 17.6/17.12, Schritt 4): drawing mode with raster in the
+// Test report 18 ("Sketch editor", plan 17.6/17.12, step 4): drawing mode with grid in the
 // browser and in Tauri – every tool with a screenshot and the code it wrote, the snap display,
 // undo, dragging handles, deleting segments, sketches under transformations, the dark theme,
 // response times, the Tauri scenario, test runs, limits.
@@ -14,7 +14,7 @@
 //   wasm.json (optional)                        {"base", "before": {raw, gzip}, "after": {raw, gzip}}
 //
 //   node tools/report/report18.mjs
-//   node tools/report/print-pdf.mjs docs/reports/18-skizzen-editor/report.html docs/reports/18-skizzen-editor/report.pdf "Testbericht 18: Skizzen-Editor"
+//   node tools/report/print-pdf.mjs docs/reports/18-skizzen-editor/report.html docs/reports/18-skizzen-editor/report.pdf "Test report 18: Sketch editor"
 
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -39,7 +39,7 @@ const git = (...a) => {
     return "–";
   }
 };
-const de = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("de-DE", { minimumFractionDigits: d, maximumFractionDigits: d }));
+const num = (x, d = 0) => (x === null || x === undefined || Number.isNaN(Number(x)) ? "–" : Number(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const md = (t) => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>");
 const pre = (t) => `<pre>${esc(String(t).trimEnd())}</pre>`;
 
@@ -58,7 +58,7 @@ function img(srcPath, dst, width = 1200) {
 }
 const pw = (n) => img(join(input, "img", `${n}.jpg`), `ui-${n}.jpg`);
 const tauriImg = (n) => img(join(input, "tauri", "img", n), `tauri-${n.replace(/\.png$/, ".jpg")}`);
-const fig = (s, cap) => (s ? `<figure><img src="${s}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(Bild fehlt: ${esc(cap)})</p>`);
+const fig = (s, cap) => (s ? `<figure><img src="${s}" alt=""><figcaption>${md(cap)}</figcaption></figure>` : `<p class="small">(image missing: ${esc(cap)})</p>`);
 
 // ------------------------------------------------------------------------------- data
 
@@ -93,7 +93,7 @@ const t16 = tauri?.results?.find((r) => r.id === "T16") ?? null;
 const wasm = readJson(join(input, "wasm.json"));
 const hover = metrics.hover ?? null;
 
-const date = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+const date = new Date().toISOString().slice(0, 10);
 const commit = git("rev-parse", "--short", "HEAD");
 const branch = git("rev-parse", "--abbrev-ref", "HEAD");
 const rustc = (() => {
@@ -107,7 +107,7 @@ const rustc = (() => {
 /** One scenario: caption, code next to the screenshots, checks. */
 function scen(id, opts = {}) {
   const s = byId[id];
-  if (!s) return `<p class="small">(Szenario ${esc(id)} fehlt)</p>`;
+  if (!s) return `<p class="small">(scenario ${esc(id)} missing)</p>`;
   const images = (s.images ?? []).map((i) => fig(pw(i.name), i.label)).join("");
   const code = s.code ? pre(s.code) : "";
   const body = code && !opts.wide ? `<div class="codefig"><div>${code}</div><div>${images}</div></div>` : `${images}${code}`;
@@ -115,10 +115,10 @@ function scen(id, opts = {}) {
 }
 
 const html = `<!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Testbericht 18 – Skizzen-Editor</title>
+<title>Test report 18 – Sketch editor</title>
 <style>
   @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
   :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
@@ -154,55 +154,55 @@ const html = `<!doctype html>
 </head>
 <body>
 <main>
-<h1>Testbericht 18 – Skizzen-Editor</h1>
-<div class="meta">Plan 17.7, Schritt 4: Zeichenmodus mit Raster in Browser und Tauri · cad-eval (<code>sketch_edit.rs</code>, Zeichenzustand der Skizzen), cad-session (Protokoll <code>Sketch</code>), Web-UI (<code>app/sketch.ts</code>, <code>sketchUi.tsx</code>, <code>logic/sketchEditor.ts</code>, Viewer) · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} Kerne</div>
+<h1>Test report 18 – Sketch editor</h1>
+<div class="meta">Plan 17.7, step 4: drawing mode with grid in browser and Tauri · cad-eval (<code>sketch_edit.rs</code>, drawing state of sketches), cad-session (protocol <code>Sketch</code>), web UI (<code>app/sketch.ts</code>, <code>sketchUi.tsx</code>, <code>logic/sketchEditor.ts</code>, viewer) · ${esc(date)} · Branch ${esc(branch)} · Commit ${esc(commit)} · ${esc(rustc)} · ${os.cpus().length} cores</div>
 
 <div class="summary">
-  <div>Werkzeuge<b class="ok">9 + 2</b>Linie, 3 Bögen, Bézier, Rechteck, Kreis, Ecke runden, Auswahl; Schließen, Löschen</div>
-  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>davon ${newTests.length} neu</div>
-  <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "sauber" : "Befund"} · ${fmt == null ? "–" : fmtOk ? "sauber" : "Abw."}</b>-D warnings</div>
-  <div>Vitest · Playwright<b class="${pwSum && pwSum.failed === 0 ? "ok" : "bad"}">${vitestSum ?? "–"} · ${pwSum ? `${pwSum.passed} / ${pwSum.passed + pwSum.failed}` : "–"}</b>neu: Z01–Z17</div>
-  <div>Tauri T16<b class="${t16?.ok ? "ok" : "bad"}">${t16 ? (t16.ok ? "bestanden" : "fehlgeschlagen") : "–"}</b>${t16 ? `${t16.checks.length} Prüfungen, nativer Kernel` : ""}</div>
-  <div>Snap + Vorschau<b>${hover ? `${de(hover.medianMs, 1)} ms` : "–"}</b>Median je Mausbewegung (Browser, ${hover ? hover.segments : "–"} Segmente)</div>
+  <div>Tools<b class="ok">9 + 2</b>line, 3 arcs, Bézier, rectangle, circle, round corner, select; close, delete</div>
+  <div>cargo test --workspace<b class="${cargoSum && cargoSum.failed === 0 ? "ok" : "bad"}">${cargoSum ? `${cargoSum.ok} / ${cargoSum.ok + cargoSum.failed}` : "–"}</b>${newTests.length} of them new</div>
+  <div>clippy · fmt<b class="${clippyOk && fmtOk ? "ok" : "bad"}">${clippy == null ? "–" : clippyOk ? "clean" : "finding"} · ${fmt == null ? "–" : fmtOk ? "clean" : "diff"}</b>-D warnings</div>
+  <div>Vitest · Playwright<b class="${pwSum && pwSum.failed === 0 ? "ok" : "bad"}">${vitestSum ?? "–"} · ${pwSum ? `${pwSum.passed} / ${pwSum.passed + pwSum.failed}` : "–"}</b>new: Z01–Z17</div>
+  <div>Tauri T16<b class="${t16?.ok ? "ok" : "bad"}">${t16 ? (t16.ok ? "passed" : "failed") : "–"}</b>${t16 ? `${t16.checks.length} checks, native kernel` : ""}</div>
+  <div>Snap + preview<b>${hover ? `${num(hover.medianMs, 1)} ms` : "–"}</b>median per mouse move (browser, ${hover ? hover.segments : "–"} segments)</div>
 </div>
 
-<h2>1 Auftrag und Ergebnis</h2>
-<p>Plan 17.6: Werkzeuge in der Ansicht, Zeichnen in der Skizzenebene mit Raster, Snap mit Anzeige, jede Aktion schreibt Code in den <code>sketch</code>-Block am Cursor oder legt einen an, Undo wie beim Ziehen, Bearbeiten über Griffe, Segment löschen; der Code bleibt die einzige Quelle. Umgesetzt:</p>
+<h2>1 Task and result</h2>
+<p>Plan 17.6: tools in the view, drawing in the sketch plane with a grid, snap with indicator, every action writes code into the <code>sketch</code> block at the cursor or creates one, undo as with dragging, editing via handles, deleting segments; the code remains the single source. Implemented:</p>
 <ul>
-<li><b>Zeichenmodus</b> (Schalter „Skizze“): Kamera senkrecht auf die Skizzenebene – auch unter Transformationen, im <code>rotate_extrude</code> (xz-Ebene) und im zentrierten <code>linear_extrude</code> (Boden); Schrittraster, Rasterlinien und -punkte des Moduls oder der Skizze in der Ebene; Werkzeugleiste, Statuszeile, Esc beendet.</li>
-<li><b>Werkzeuge</b> Linie (Kette, Klick auf den Anfang schließt), Bogen durch drei Punkte, Bogen um einen Mittelpunkt, tangentialer Bogen, Bézier (kubisch), Rechteck, Kreis, Ecke runden (<code>corner(r)</code>), Schließen, Löschen, Auswahl. Jede Aktion ist ein Text-Edit in der Sprache, die es schon gibt, und ein Undo-Schritt.</li>
-<li><b>Snap</b> auf Rasterpunkte und Anker (Referenzen wie <code>g[b, u]</code>, <code>k.ecke</code>), Anfang, Ecken, End-, Mittel- und Schnittpunkte, Bogenmitten, tangential (<code>line(length = …)</code>), horizontal/vertikal, Rasterlinien (<code>[g.b, 40]</code>), Schrittweite; Alt = frei mit Schrittweite. Die Markierung zeigt die Art, die Beschriftung den Text, der geschrieben würde.</li>
-<li><b>Bearbeiten:</b> mit „Auswahl“ die Griffe aller Segmente (bestehende Griff-Logik: Literal ändern, Rasterreferenz umschreiben), Klick auf ein Segment setzt den Cursor, Entf löscht.</li>
-<li><b>Logik in Rust:</b> Skizze und Einfügestelle, Zeichenzustand, Snap, Code, Vorschau, Löschen, Ecken, Raster, Ebene und Strahlschnitt in <code>cad-eval</code>/<code>cad-session</code>; die UI reicht Maus und Tasten weiter und wendet die Antwort an. Dasselbe über <code>WorkerTransport</code> (Wasm) und <code>TauriTransport</code> (nativer Engine-Prozess).</li>
+<li><b>Drawing mode</b> (toggle "Sketch"): camera perpendicular to the sketch plane – also under transformations, in <code>rotate_extrude</code> (xz plane) and in centered <code>linear_extrude</code> (bottom face); step grid, grid lines and grid points of the module or the sketch in the plane; toolbar, status line, Esc exits.</li>
+<li><b>Tools</b> line (chain, a click on the start closes), arc through three points, arc around a center, tangent arc, Bézier (cubic), rectangle, circle, round corner (<code>corner(r)</code>), close, delete, select. Every action is a text edit in the existing language and one undo step.</li>
+<li><b>Snap</b> to grid points and anchors (references such as <code>g[b, u]</code>, <code>k.ecke</code>), start, corners, end points, midpoints and intersections, arc midpoints, tangent (<code>line(length = …)</code>), horizontal/vertical, grid lines (<code>[g.b, 40]</code>), step size; Alt = free with step size. The marker shows the kind, the label shows the text that would be written.</li>
+<li><b>Editing:</b> with "Select" the handles of all segments (existing handle logic: change a literal, rewrite a grid reference), a click on a segment sets the cursor, Del deletes.</li>
+<li><b>Logic in Rust:</b> sketch and insertion point, drawing state, snap, code, preview, deletion, corners, grid, plane and ray intersection in <code>cad-eval</code>/<code>cad-session</code>; the UI forwards mouse and keys and applies the response. The same via <code>WorkerTransport</code> (Wasm) and <code>TauriTransport</code> (native engine process).</li>
 </ul>
 
-<h2>2 Entscheidungen</h2>
+<h2>2 Decisions</h2>
 <table>
-<tr><th>Frage</th><th>Entscheidung</th></tr>
-<tr><td>Wohin der Code geht</td><td>Skizze = die <code>sketch</code>-Anweisung, die den Cursor enthält oder auf seiner Zeile beginnt. Einfügen nach der Anweisung der Cursorzeile (bzw. der letzten davor), im innersten <code>hole</code>-Block; auf der <code>sketch {</code>-Zeile ans Ende; leere Blöcke werden aufgeklappt. Ohne Skizze: neuer <code>sketch { … }</code>-Block am Ende des Kontextmoduls bzw. der Datei. Nach jeder Aktion steht der Cursor hinter dem neuen Code.</td></tr>
-<tr><td>Aktueller Punkt</td><td>Aus der Auswertung: <code>SketchInfo::steps</code> hält jede Segmentanweisung in Auswertungsreihenfolge mit dem Zustand danach (Kontur, Anfang, Punkt, Richtung; Geometrie vor <code>corner()</code>) – auch für Schleifen und Modulaufrufe im Block. Linie, Bögen, Bézier setzen die offene Kontur fort, wenn ihr erster Punkt deren Ende ist; sonst <code>start(p)</code>. Eine neue Kontur mitten in einer weiterlaufenden kommt hinter deren Ende.</td></tr>
-<tr><td>Zustand der Werkzeuge</td><td>Die Engine ist ohne Zustand: die gewählten Punkte (Position, Text, Art) gehen mit jeder Anfrage hin und mit der Antwort zurück. Höchstens eine Anfrage unterwegs, die letzte Mausposition gewinnt, Klicks in Reihenfolge.</td></tr>
-<tr><td>Undo</td><td>Eine Transaktion je Aktion mit <code>isolateHistory</code> (auch <code>start</code> + erste Linie zusammen); die Quelle geht sofort an die Engine, die Nachrichten in Reihenfolge bearbeitet – die nächste Anfrage sieht den neuen Text. Strg+Z wirkt auch mit dem Fokus in der Ansicht.</td></tr>
-<tr><td>Referenzen statt Zahlen</td><td>Rasterpunkte und Anker schreiben ihre Referenz; ein Rechteck aus zwei Rasterpunkten bekommt auch die anderen Ecken als Rasterpunkte. Freie Punkte: Zahlen auf die Schrittweite gerundet; exakte Punkte (End-, Schnittpunkte …): kürzeste Zahl mit 6 Stellen. 2D-Punkte schreiben <code>g[a, b]</code> (auch beim Griff-Snap, statt <code>g[a, b, _]</code>).</td></tr>
-<tr><td>Ebene</td><td><code>sketch_frame</code>: Knotensystem, im <code>rotate_extrude</code> die xz-Ebene, beim zentrierten <code>linear_extrude</code> der Boden – für Editor, Griffe (<code>Handle.frame</code>) und Darstellung (<code>OpInfo::Sketch.plane</code>).</td></tr>
-<tr><td>Griffe und Werkzeuge</td><td>Zeichenwerkzeuge zeichnen auch auf bestehenden Punkten (dort keine Griffe, die den Klick abfangen); Griffe aller Segmente mit „Auswahl“.</td></tr>
-<tr><td>Toleranz</td><td>Snap-Radius in Pixeln (Einstellungen, 14 px) mal Pixelgröße am Treffpunkt des Strahls; die UI schickt nur Strahl, Pixelgröße und Radius.</td></tr>
+<tr><th>Question</th><th>Decision</th></tr>
+<tr><td>Where the code goes</td><td>Sketch = the <code>sketch</code> statement that contains the cursor or starts on its line. Insertion after the statement on the cursor line (or the last one before it), in the innermost <code>hole</code> block; on the <code>sketch {</code> line at the end; empty blocks are expanded. Without a sketch: new <code>sketch { … }</code> block at the end of the context module or the file. After every action the cursor is placed after the new code.</td></tr>
+<tr><td>Current point</td><td>From the evaluation: <code>SketchInfo::steps</code> holds every segment statement in evaluation order with the state after it (contour, start, point, direction; geometry before <code>corner()</code>) – also for loops and module calls in the block. Line, arcs and Bézier continue the open contour if their first point is its end; otherwise <code>start(p)</code>. A new contour in the middle of a continuing one goes after its end.</td></tr>
+<tr><td>Tool state</td><td>The engine is stateless: the chosen points (position, text, kind) go out with every request and come back with the response. At most one request in flight, the last mouse position wins, clicks in order.</td></tr>
+<tr><td>Undo</td><td>One transaction per action with <code>isolateHistory</code> (also <code>start</code> + first line together); the source goes to the engine immediately, which processes messages in order – the next request sees the new text. Ctrl+Z also works with focus in the view.</td></tr>
+<tr><td>References instead of numbers</td><td>Grid points and anchors write their reference; a rectangle from two grid points also gets the other corners as grid points. Free points: numbers rounded to the step size; exact points (end points, intersections …): shortest number with 6 digits. 2D points write <code>g[a, b]</code> (also with handle snap, instead of <code>g[a, b, _]</code>).</td></tr>
+<tr><td>Plane</td><td><code>sketch_frame</code>: node coordinate system, in <code>rotate_extrude</code> the xz plane, in centered <code>linear_extrude</code> the bottom face – for editor, handles (<code>Handle.frame</code>) and rendering (<code>OpInfo::Sketch.plane</code>).</td></tr>
+<tr><td>Handles and tools</td><td>Drawing tools also draw on existing points (no handles there to catch the click); handles of all segments with "Select".</td></tr>
+<tr><td>Tolerance</td><td>Snap radius in pixels (settings, 14 px) times pixel size at the ray hit point; the UI sends only ray, pixel size and radius.</td></tr>
 </table>
 
-<h2>3 Ablauf</h2>
-${pre(`Maus bewegt     → Sketch { cursor, tool, points, ray, pixel, snap_px, free }        (≤ 1 unterwegs)
+<h2>3 Flow</h2>
+${pre(`Mouse moved     → Sketch { cursor, tool, points, ray, pixel, snap_px, free }        (≤ 1 in flight)
                  ← Sketch { plane, snap {point, text, kind, label}, guides, preview, prompt }
-Klick           → Sketch { …, click: true }
-                 ← points (Punkt gemerkt)  oder  edits + select (Aktion fertig)
-                   UI: eine Transaktion (Undo-Schritt), Cursor hinter den Code, SetSource sofort
-Schließen/Entf  → Sketch { tool: close | delete, cursor }  ← edits
+Click           → Sketch { …, click: true }
+                 ← points (point stored)  or  edits + select (action done)
+                   UI: one transaction (undo step), cursor after the code, SetSource immediately
+Close/Del       → Sketch { tool: close | delete, cursor }  ← edits
 
-Engine (cad-eval::sketch_edit, Session):  place → Skizze, Einfügestelle, Zeichenzustand, Raster/Anker
-                                          snap → Punkt + Text + Art     click → Code   preview → Polylinien
-UI (app/sketch.ts, Viewer):               Strahl, Tasten, Antwort anwenden, zeichnen, Kamera`)}
+Engine (cad-eval::sketch_edit, Session):  place → sketch, insertion point, drawing state, grid/anchors
+                                          snap → point + text + kind     click → code   preview → polylines
+UI (app/sketch.ts, viewer):               ray, keys, apply response, draw, camera`)}
 
-<h2>4 Werkzeuge</h2>
-<p>Jedes Szenario zeichnet mit der Maus (Playwright, echte Zeigerereignisse) und prüft den geschriebenen Code wörtlich; links der Code nach der Aktion, rechts die Ansicht.</p>
+<h2>4 Tools</h2>
+<p>Each scenario draws with the mouse (Playwright, real pointer events) and checks the written code verbatim; left the code after the action, right the view.</p>
 ${scen("Z02")}
 ${scen("Z03")}
 ${scen("Z04")}
@@ -216,50 +216,50 @@ ${scen("Z10")}
 <h2>5 Snap</h2>
 ${scen("Z11")}
 
-<h2>6 Bearbeiten: Undo, Griffe, Löschen</h2>
+<h2>6 Editing: undo, handles, delete</h2>
 ${scen("Z12")}
 ${scen("Z13")}
 ${scen("Z14")}
 
-<h2>7 Zeichenmodus, Ebenen, Thema</h2>
+<h2>7 Drawing mode, planes, theme</h2>
 ${scen("Z01")}
 ${scen("Z15")}
 ${scen("Z16", { wide: true })}
 
-<h2>8 Desktop-App (Tauri)</h2>
-<p>Szenario T16 in <code>web/e2e-tauri/desktop.e2e.mjs</code> (tauri-driver, WebKitWebDriver, Xvfb): die echte App <code>cad</code> mit dem nativen Engine-Prozess, Nachrichten über den <code>TauriTransport</code>. Die Ansicht wird mit Zeigerereignissen auf dem Canvas bedient (WebDriver hat keine Maus über WebGL-Inhalten, die sich verlässlich bewegen ließe).</p>
-${t16 ? `<p>Ergebnis: <span class="${t16.ok ? "ok" : "bad"}">${t16.ok ? "bestanden" : "fehlgeschlagen"}</span> in ${de(t16.ms / 1000, 1)} s${tauri?.metrics?.sketchTauri?.hoverMedianMs != null ? `, Snap + Vorschau Median ${de(tauri.metrics.sketchTauri.hoverMedianMs, 1)} ms je Bewegung` : ""}.</p><ul class="checks">${t16.checks.map((c) => `<li class="${c.ok ? "" : "bad"}">${md(c.text)}</li>`).join("")}</ul>${(t16.images ?? []).map((i) => fig(tauriImg(i.name), i.label)).join("")}${t16.error ? pre(t16.error) : ""}` : "<p>(fehlt)</p>"}
+<h2>8 Desktop app (Tauri)</h2>
+<p>Scenario T16 in <code>web/e2e-tauri/desktop.e2e.mjs</code> (tauri-driver, WebKitWebDriver, Xvfb): the real app <code>cad</code> with the native engine process, messages via <code>TauriTransport</code>. The view is operated with pointer events on the canvas (WebDriver has no mouse over WebGL content that can be moved reliably).</p>
+${t16 ? `<p>Result: <span class="${t16.ok ? "ok" : "bad"}">${t16.ok ? "passed" : "failed"}</span> in ${num(t16.ms / 1000, 1)} s${tauri?.metrics?.sketchTauri?.hoverMedianMs != null ? `, snap + preview median ${num(tauri.metrics.sketchTauri.hoverMedianMs, 1)} ms per move` : ""}.</p><ul class="checks">${t16.checks.map((c) => `<li class="${c.ok ? "" : "bad"}">${md(c.text)}</li>`).join("")}</ul>${(t16.images ?? []).map((i) => fig(tauriImg(i.name), i.label)).join("")}${t16.error ? pre(t16.error) : ""}` : "<p>(missing)</p>"}
 
-<h2>9 Messwerte</h2>
+<h2>9 Measurements</h2>
 ${scen("Z17", { wide: true })}
-${wasm ? `<h3>Wasm-Modul</h3><table><tr><th></th><th>roh</th><th>gzip -9</th></tr><tr><td><code>cad_wasm_bg.wasm</code> vorher (Commit ${esc(wasm.base)})</td><td class="n">${de(wasm.before.raw)} B</td><td class="n">${de(wasm.before.gzip)} B</td></tr><tr><td>mit Skizzen-Editor</td><td class="n">${de(wasm.after.raw)} B</td><td class="n">${de(wasm.after.gzip)} B</td></tr><tr><td>Zuwachs</td><td class="n">${de(wasm.after.raw - wasm.before.raw)} B</td><td class="n">${de(wasm.after.gzip - wasm.before.gzip)} B</td></tr></table>` : ""}
+${wasm ? `<h3>Wasm module</h3><table><tr><th></th><th>raw</th><th>gzip -9</th></tr><tr><td><code>cad_wasm_bg.wasm</code> before (commit ${esc(wasm.base)})</td><td class="n">${num(wasm.before.raw)} B</td><td class="n">${num(wasm.before.gzip)} B</td></tr><tr><td>with sketch editor</td><td class="n">${num(wasm.after.raw)} B</td><td class="n">${num(wasm.after.gzip)} B</td></tr><tr><td>growth</td><td class="n">${num(wasm.after.raw - wasm.before.raw)} B</td><td class="n">${num(wasm.after.gzip - wasm.before.gzip)} B</td></tr></table>` : ""}
 
-<h2>10 Testläufe</h2>
+<h2>10 Test runs</h2>
 <table>
-<tr><th>Lauf</th><th>Ergebnis</th></tr>
-<tr><td><code>cargo test --workspace -- --test-threads=2</code></td><td>${cargoSum ? `${cargoSum.ok} bestanden, ${cargoSum.failed} fehlgeschlagen` : "–"}</td></tr>
-<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>${clippyOk ? "sauber" : "Befund"} · ${fmtOk ? "sauber" : "Abweichung"}</td></tr>
-<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>${typecheck !== null ? (/error TS/i.test(typecheck) ? "Fehler" : "sauber") : "–"} · ${vitestSum ?? "–"} bestanden</td></tr>
-<tr><td><code>pnpm e2e</code> (Playwright, Chromium, ganze Suite)</td><td>${pwSum ? `${pwSum.passed} bestanden, ${pwSum.failed} fehlgeschlagen${pwSum.skipped ? `, ${pwSum.skipped} übersprungen` : ""}${pwFailed.length ? `: ${pwFailed.map(esc).join("; ")}` : ""}` : "–"}</td></tr>
-<tr><td>Tauri-E2E T16</td><td>${t16 ? (t16.ok ? "bestanden" : "fehlgeschlagen") : "–"}</td></tr>
+<tr><th>Run</th><th>Result</th></tr>
+<tr><td><code>cargo test --workspace -- --test-threads=2</code></td><td>${cargoSum ? `${cargoSum.ok} passed, ${cargoSum.failed} failed` : "–"}</td></tr>
+<tr><td><code>cargo clippy --workspace --all-targets -- -D warnings</code> · <code>cargo fmt --check</code></td><td>${clippyOk ? "clean" : "finding"} · ${fmtOk ? "clean" : "diff"}</td></tr>
+<tr><td><code>pnpm typecheck</code> · <code>pnpm test</code> (Vitest)</td><td>${typecheck !== null ? (/error TS/i.test(typecheck) ? "errors" : "clean") : "–"} · ${vitestSum ?? "–"} passed</td></tr>
+<tr><td><code>pnpm e2e</code> (Playwright, Chromium, full suite)</td><td>${pwSum ? `${pwSum.passed} passed, ${pwSum.failed} failed${pwSum.skipped ? `, ${pwSum.skipped} skipped` : ""}${pwFailed.length ? `: ${pwFailed.map(esc).join("; ")}` : ""}` : "–"}</td></tr>
+<tr><td>Tauri E2E T16</td><td>${t16 ? (t16.ok ? "passed" : "failed") : "–"}</td></tr>
 </table>
-<p>Neue Rust-Tests (${newTests.length}):</p>
+<p>New Rust tests (${newTests.length}):</p>
 <p class="small">${newTests.map((x) => `<code>${esc(x.name)}</code> ${x.res === "ok" ? '<span class="ok">ok</span>' : '<span class="bad">FAILED</span>'}`).join(" · ")}</p>
-<p class="small">cad-eval <code>tests/sketch_edit.rs</code>: Einfügestelle, neue Skizze in Datei und Kontextmodul, Ketten, neue Kontur hinter einer weiterlaufenden, Snap-Arten, Schnittpunkte, tangential, Rechteck mit Rasterreferenzen, Bögen, Bézier, Kreis, Mittelpunktsbogen auf Rasterpunkten, Ecken einfügen und ändern, Schließen, Löschen, <code>hole</code>- und leere Blöcke, Ebenen, Anker, Segment unter der Maus, Griff-Snap in Kurzform; Unit-Tests im Modul (Bogenwinkel über 180°, Schnitte, Rundung). cad-session <code>tests/sketch_editor.rs</code>: Protokoll mit Strahl (neue Skizze, Kette, Schließen, Löschen), Ebene unter Transformation, Syntaxfehler, Auswahl, <code>OpInfo.plane</code>. Vitest <code>logic/sketchEditor.test.ts</code>: Raster, Kamera, Markierungen, Undo-Schritt mit Cursor.</p>
+<p class="small">cad-eval <code>tests/sketch_edit.rs</code>: insertion point, new sketch in file and context module, chains, new contour after a continuing one, snap kinds, intersections, tangent, rectangle with grid references, arcs, Bézier, circle, center arc on grid points, inserting and changing corners, close, delete, <code>hole</code> and empty blocks, planes, anchors, segment under the mouse, handle snap in short form; unit tests in the module (arc angle over 180°, intersections, rounding). cad-session <code>tests/sketch_editor.rs</code>: protocol with ray (new sketch, chain, close, delete), plane under transformation, syntax errors, selection, <code>OpInfo.plane</code>. Vitest <code>logic/sketchEditor.test.ts</code>: grid, camera, markers, undo step with cursor.</p>
 
-<h2>11 Grenzen</h2>
+<h2>11 Limitations</h2>
 <ul>
-<li>Nur die Hauptdatei: in einer anderen Projektdatei startet der Modus nicht; Skizzen aus eingebundenen Dateien sind kein Ziel.</li>
-<li>Anweisungen in Schleifen oder Modulen werden weder gelöscht noch bekommt ihre Ecke ein <code>corner()</code> (Meldung). Der Zeichenzustand mitten in einer Schleife ist der nach ihrem letzten Durchlauf.</li>
-<li>Snap nur auf die Skizze, sichtbare Raster und Anker – nicht auf Körperkanten oder andere Skizzen; horizontal/vertikal nur zum vorigen Punkt.</li>
-<li>Bézier nur kubisch, kein Spline-Werkzeug; <code>line(by = …)</code> und <code>length</code> + <code>angle</code> entstehen nicht (außer tangential <code>line(length = …)</code>).</li>
-<li>Eine neue Skizze ist eine bloße 2D-Skizze (zum Körper: z. B. <code>linear_extrude</code> davor schreiben).</li>
-<li>Die Kamera behält „z oben“ der Bahnsteuerung: in gedrehten Ebenen steht die y-Achse der Skizze nicht unbedingt senkrecht auf dem Bildschirm. Mit einem Zeichenwerkzeug dreht die linke Maustaste die Kamera nicht (rechts verschieben, Rad zoomen, „Auswahl“ zum Drehen).</li>
-<li>Tauri: T16 bedient die Ansicht mit synthetischen Zeigerereignissen.</li>
+<li>Main file only: in another project file the mode does not start; sketches from included files are not a target.</li>
+<li>Statements in loops or modules are not deleted, and their corner does not get a <code>corner()</code> (message). The drawing state in the middle of a loop is the one after its last iteration.</li>
+<li>Snap only to the sketch, visible grids and anchors – not to body edges or other sketches; horizontal/vertical only relative to the previous point.</li>
+<li>Bézier only cubic, no spline tool; <code>line(by = …)</code> and <code>length</code> + <code>angle</code> are not generated (except tangent <code>line(length = …)</code>).</li>
+<li>A new sketch is a bare 2D sketch (to get a body: e.g. write <code>linear_extrude</code> in front of it).</li>
+<li>The camera keeps the orbit control's "z up": in rotated planes the sketch's y axis is not necessarily vertical on screen. With a drawing tool the left mouse button does not rotate the camera (right pans, wheel zooms, "Select" to rotate).</li>
+<li>Tauri: T16 operates the view with synthetic pointer events.</li>
 </ul>
 </main>
 </body>
 </html>
 `;
 writeFileSync(join(out, "report.html"), html);
-console.log(`${join(out, "report.html")}: ${html.length} Zeichen, ${scenarios.length} Szenarien`);
+console.log(`${join(out, "report.html")}: ${html.length} characters, ${scenarios.length} scenarios`);

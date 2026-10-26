@@ -87,4 +87,4 @@ with open(os.path.join(out, "openscad.tsv"), "w") as f:
         o = osc_measure(code, f"c{i}")
         c = cad_measure(code, f"c{i}")
         f.write("\t".join([kind, name, code.replace(root + "/", "")] + [repr(x) for x in o + c]) + "\n")
-print(f"{len(cases)} Vergleiche -> {out}/openscad.tsv")
+print(f"{len(cases)} comparisons -> {out}/openscad.tsv")

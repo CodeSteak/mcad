@@ -8,7 +8,8 @@ values, timings, CLI outputs and images to reports/tmp/report21/data/:
   b/bench.json, b/*.png       STL import: spheres with 250 … 5000 triangles as B-rep (build, build
                               + one Boolean) and as mesh, realistic exports, combined model
   c/asserts.json, c/*.png     assert cases against formulas, export exit codes, renders
-  d/*.txt, d/*.png            user feedback, before (VORHER binary, build before phase D) / after
+  d/*.txt, d/*.png            user feedback, before ("vorher": VORHER binary, build before phase D) /
+                              after ("nachher")
   e/*.txt                     rename: --version, --help, .mcad and .scad side by side
 
   python3 tools/report/report21-data.py [--mcad target/release/mcad] [--vorher <cad 0.2.1>]
@@ -86,30 +87,30 @@ def part_a():
     l_area = 175 + 80 * 2 + (5 * pi / 4 - 1) * 4
     tetra = "polyhedron([[0, 0, 0], [10, 0, 0], [0, 10, 0], [0, 0, 10]], [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]])"
     cases = [
-        ("2d_stadion", "hull", "Stadion r 3, L 10", "πr² + 2rL", "linear_extrude(1) hull() { circle(3); translate([10, 0]) circle(3); }", pi * 9 + 60),
-        ("2d_riemen", "hull", "Kreise r 5 und r 2, Abstand 12", "Riemenfläche", "linear_extrude(1) hull() { circle(5); translate([12, 0]) circle(2); }", belt(5, 2, 12)),
-        ("2d_quadrat_kreis", "hull", "Quadrat 10 + Kreis r 5 auf der Kante", "100 + 12,5π", "linear_extrude(1) hull() { square(10); translate([10, 5]) circle(5); }", 100 + pi * 12.5),
-        ("2d_vier_kreise", "hull", "4 Kreise r 2 auf Rechteck 20×10", "24·14 − (4 − π)·4", "linear_extrude(1) hull() { for (x = [0, 20], y = [0, 10]) translate([x, y]) circle(2); }", 24 * 14 - (4 - pi) * 4),
-        ("2d_text_G", "hull", "Hülle der Glyphe „G“ (size 20)", "–", 'linear_extrude(1) hull() text("G", size = 20);', None),
-        ("2d_mink_kreis", "minkowski", "Rechteck 10×20 ⊕ Kreis r 2", "A + Pr + πr²", "linear_extrude(1) minkowski() { square([10, 20]); circle(2); }", 200 + 120 + 4 * pi),
-        ("2d_mink_L", "minkowski", "L-Profil ⊕ Kreis r 2 (konkave Ecke)", "A + Pr + (5π/4 − 1)r²", "linear_extrude(1) minkowski() { polygon([[0, 0], [20, 0], [20, 5], [5, 5], [5, 20], [0, 20]]); circle(2); }", l_area),
-        ("2d_mink_konvex", "minkowski", "Quadrat 10 ⊕ Dreieck 4×3", "176", "linear_extrude(1) minkowski() { square(10); polygon([[0, 0], [4, 0], [0, 3]]); }", 176.0),
-        ("3d_kapsel", "hull", "Kapsel r 3, L 10", "πr²L + 4/3πr³", "hull() { sphere(3); translate([0, 0, 10]) sphere(3); }", pi * 9 * 10 + 36 * pi),
-        ("3d_kapsel_gedreht", "hull", "Kapsel gedreht [30, 40, 0]", "πr²L + 4/3πr³", "rotate([30, 40, 0]) hull() { sphere(3); translate([0, 0, 10]) sphere(3); }", pi * 9 * 10 + 36 * pi),
-        ("3d_kugeln_r5_r2", "hull", "Kugeln r 5 und r 2, Abstand 10", "Kappe + Kegelstumpf + Kappe", "hull() { sphere(5); translate([0, 0, 10]) sphere(2); }", spheres(5, 2, 10)),
-        ("3d_zylinder_kuppel", "hull", "Zylinder r 3 h 10 + Kugel r 3 oben", "πr²h + 2/3πr³", "hull() { cylinder(r = 3, h = 10); translate([0, 0, 10]) sphere(3); }", pi * 9 * 10 + 2 / 3 * pi * 27),
-        ("3d_zwei_wuerfel", "hull", "zwei Würfel 10 im Abstand 20", "30·10·10", "hull() { cube(10); translate([20, 0, 0]) cube(10); }", 3000.0),
-        ("3d_wuerfel_pyramide", "hull", "Würfel 10 + „Punkt“ 5 über der Deckfläche", "1000 + 100·5/3", "hull() { cube(10, center = true); translate([0, 0, 10]) cube(0.0001, center = true); }", 1000 + 100 * 5 / 3),
-        ("3d_stadion_platte", "hull", "3 Zylinder r 3 h 2", "h·(Dreieck + Pr + πr²)", "hull() { cylinder(r = 3, h = 2); translate([20, 0, 0]) cylinder(r = 3, h = 2); translate([0, 15, 0]) cylinder(r = 3, h = 2); }", 2 * (150 + 60 * 3 + 9 * pi)),
-        ("3d_quader_zylinder", "hull", "Quader 10×10×5 + Zylinder r 5 h 5", "h·(200 + 12,5π)", "hull() { cube([10, 10, 5]); translate([20, 5, 0]) cylinder(r = 5, h = 5); }", 5 * (100 + 100 + pi * 12.5)),
-        ("3d_kugeln_quader", "hull", "8 Kugeln r 2 an den Ecken von 20×10×5", "Quader ⊕ Kugel (Steiner)", "hull() { for (x = [0, 20], y = [0, 10], z = [0, 5]) translate([x, y, z]) sphere(2); }", box_ball(20, 10, 5, 2)),
-        ("3d_mink_wuerfel", "minkowski", "Quader 10×20×30 ⊕ Kugel r 2", "Steiner", "minkowski() { cube([10, 20, 30]); sphere(2); }", box_ball(10, 20, 30, 2)),
-        ("3d_mink_wuerfel_gedreht", "minkowski", "gedrehter Quader ⊕ Kugel r 2", "Steiner", "minkowski() { rotate([10, 20, 30]) cube([10, 20, 30]); sphere(2); }", box_ball(10, 20, 30, 2)),
-        ("3d_mink_extrude_zyl", "minkowski", "Prisma 10×20×5 ⊕ Zylinder r 2 h 1", "6·(A + Pr + πr²)", "minkowski() { linear_extrude(5) square([10, 20]); cylinder(r = 2, h = 1); }", 6 * (200 + 120 + 4 * pi)),
-        ("3d_mink_zwei_quader", "minkowski", "Würfel 10 ⊕ Quader 1×2×3", "11·12·13", "minkowski() { cube(10); cube([1, 2, 3]); }", 11 * 12 * 13.0),
-        ("3d_mink_tetraeder", "minkowski", "Tetraeder ⊕ Kugel r 1", "–", f"minkowski() {{ {tetra}; sphere(1); }}", None),
-        ("3d_kugeln_ungleich", "hull", "3 Kugeln r 3/2/1 nicht auf einer Achse", "–", "hull() { sphere(3); translate([10, 0, 0]) sphere(2); translate([0, 10, 0]) sphere(1); }", None),
-        ("3d_kugeln_ebene", "hull", "4 gleiche Kugeln r 2 in einer Ebene", "–", "hull() { for (x = [0, 20], y = [0, 10]) translate([x, y, 0]) sphere(2); }", None),
+        ("2d_stadion", "hull", "Stadium r 3, L 10", "πr² + 2rL", "linear_extrude(1) hull() { circle(3); translate([10, 0]) circle(3); }", pi * 9 + 60),
+        ("2d_riemen", "hull", "Circles r 5 and r 2, distance 12", "belt area", "linear_extrude(1) hull() { circle(5); translate([12, 0]) circle(2); }", belt(5, 2, 12)),
+        ("2d_quadrat_kreis", "hull", "Square 10 + circle r 5 on the edge", "100 + 12.5π", "linear_extrude(1) hull() { square(10); translate([10, 5]) circle(5); }", 100 + pi * 12.5),
+        ("2d_vier_kreise", "hull", "4 circles r 2 on rectangle 20×10", "24·14 − (4 − π)·4", "linear_extrude(1) hull() { for (x = [0, 20], y = [0, 10]) translate([x, y]) circle(2); }", 24 * 14 - (4 - pi) * 4),
+        ("2d_text_G", "hull", "Hull of the glyph \"G\" (size 20)", "–", 'linear_extrude(1) hull() text("G", size = 20);', None),
+        ("2d_mink_kreis", "minkowski", "Rectangle 10×20 ⊕ circle r 2", "A + Pr + πr²", "linear_extrude(1) minkowski() { square([10, 20]); circle(2); }", 200 + 120 + 4 * pi),
+        ("2d_mink_L", "minkowski", "L profile ⊕ circle r 2 (concave corner)", "A + Pr + (5π/4 − 1)r²", "linear_extrude(1) minkowski() { polygon([[0, 0], [20, 0], [20, 5], [5, 5], [5, 20], [0, 20]]); circle(2); }", l_area),
+        ("2d_mink_konvex", "minkowski", "Square 10 ⊕ triangle 4×3", "176", "linear_extrude(1) minkowski() { square(10); polygon([[0, 0], [4, 0], [0, 3]]); }", 176.0),
+        ("3d_kapsel", "hull", "Capsule r 3, L 10", "πr²L + 4/3πr³", "hull() { sphere(3); translate([0, 0, 10]) sphere(3); }", pi * 9 * 10 + 36 * pi),
+        ("3d_kapsel_gedreht", "hull", "Capsule rotated [30, 40, 0]", "πr²L + 4/3πr³", "rotate([30, 40, 0]) hull() { sphere(3); translate([0, 0, 10]) sphere(3); }", pi * 9 * 10 + 36 * pi),
+        ("3d_kugeln_r5_r2", "hull", "Spheres r 5 and r 2, distance 10", "cap + truncated cone + cap", "hull() { sphere(5); translate([0, 0, 10]) sphere(2); }", spheres(5, 2, 10)),
+        ("3d_zylinder_kuppel", "hull", "Cylinder r 3 h 10 + sphere r 3 on top", "πr²h + 2/3πr³", "hull() { cylinder(r = 3, h = 10); translate([0, 0, 10]) sphere(3); }", pi * 9 * 10 + 2 / 3 * pi * 27),
+        ("3d_zwei_wuerfel", "hull", "two cubes 10 at distance 20", "30·10·10", "hull() { cube(10); translate([20, 0, 0]) cube(10); }", 3000.0),
+        ("3d_wuerfel_pyramide", "hull", "Cube 10 + \"point\" 5 above the top face", "1000 + 100·5/3", "hull() { cube(10, center = true); translate([0, 0, 10]) cube(0.0001, center = true); }", 1000 + 100 * 5 / 3),
+        ("3d_stadion_platte", "hull", "3 cylinders r 3 h 2", "h·(triangle + Pr + πr²)", "hull() { cylinder(r = 3, h = 2); translate([20, 0, 0]) cylinder(r = 3, h = 2); translate([0, 15, 0]) cylinder(r = 3, h = 2); }", 2 * (150 + 60 * 3 + 9 * pi)),
+        ("3d_quader_zylinder", "hull", "Cuboid 10×10×5 + cylinder r 5 h 5", "h·(200 + 12.5π)", "hull() { cube([10, 10, 5]); translate([20, 5, 0]) cylinder(r = 5, h = 5); }", 5 * (100 + 100 + pi * 12.5)),
+        ("3d_kugeln_quader", "hull", "8 spheres r 2 at the corners of 20×10×5", "cuboid ⊕ sphere (Steiner)", "hull() { for (x = [0, 20], y = [0, 10], z = [0, 5]) translate([x, y, z]) sphere(2); }", box_ball(20, 10, 5, 2)),
+        ("3d_mink_wuerfel", "minkowski", "Cuboid 10×20×30 ⊕ sphere r 2", "Steiner", "minkowski() { cube([10, 20, 30]); sphere(2); }", box_ball(10, 20, 30, 2)),
+        ("3d_mink_wuerfel_gedreht", "minkowski", "rotated cuboid ⊕ sphere r 2", "Steiner", "minkowski() { rotate([10, 20, 30]) cube([10, 20, 30]); sphere(2); }", box_ball(10, 20, 30, 2)),
+        ("3d_mink_extrude_zyl", "minkowski", "Prism 10×20×5 ⊕ cylinder r 2 h 1", "6·(A + Pr + πr²)", "minkowski() { linear_extrude(5) square([10, 20]); cylinder(r = 2, h = 1); }", 6 * (200 + 120 + 4 * pi)),
+        ("3d_mink_zwei_quader", "minkowski", "Cube 10 ⊕ cuboid 1×2×3", "11·12·13", "minkowski() { cube(10); cube([1, 2, 3]); }", 11 * 12 * 13.0),
+        ("3d_mink_tetraeder", "minkowski", "Tetrahedron ⊕ sphere r 1", "–", f"minkowski() {{ {tetra}; sphere(1); }}", None),
+        ("3d_kugeln_ungleich", "hull", "3 spheres r 3/2/1 not on one axis", "–", "hull() { sphere(3); translate([10, 0, 0]) sphere(2); translate([0, 10, 0]) sphere(1); }", None),
+        ("3d_kugeln_ebene", "hull", "4 equal spheres r 2 in one plane", "–", "hull() { for (x = [0, 20], y = [0, 10]) translate([x, y, 0]) sphere(2); }", None),
     ]
     rows = []
     for name, op, what, formula, src, want in cases:
@@ -123,7 +124,8 @@ def part_a():
         vol = (v.get("volume") or {}).get("volume")
         warns = [d["message"] for d in v.get("diagnostics", []) if d.get("severity") in ("warning", "Warning")]
         ins, _ = run([MCAD, "inspect", str(f), "--line", "1"])
-        hint = next((l.split("Hinweis:")[1].strip() for l in ins.stdout.splitlines() if "Hinweis: exakt" in l), "")
+        # `mcad inspect` (English): "hint: exact: solid of revolution"
+        hint = next((l.split("hint:", 1)[1].strip() for l in ins.stdout.splitlines() if "hint: exact" in l), "")
         rel = (vol - want) / want if (want and vol is not None) else None
         rows.append(dict(name=name, op=op, what=what, formula=formula, src=src, want=want, got=vol, rel=rel, ms=statistics.median(times), hint=hint, warnings=warns))
         run([MCAD, "render", str(f), "-o", str(out / f"{name}.png"), "--size", "480x360", "--no-axes"])
@@ -185,10 +187,11 @@ def part_b():
         f = out / "hint.mcad"
         f.write_text(f'import("{stl}");\n')
         p, _ = run([MCAD, "inspect", str(f), "--line", "1"], out)
-        h = next(l for l in p.stdout.splitlines() if "Hinweis:" in l)
-        tri = int(re.search(r"(\d+) Dreieck", h).group(1))
-        fl = int(re.search(r"(\d+) Flächen", h).group(1))
-        return tri, fl, ("mesh" if "Netz" in h else "solid")
+        # `mcad inspect` (English): "hint: B-rep: 8 faces from 20 triangles" or "hint: mesh: 20 triangles, 8 faces"
+        h = next(l for l in p.stdout.splitlines() if "hint:" in l and "triangles" in l)
+        tri = int(re.search(r"(\d+) triangles", h).group(1))
+        fl = int(re.search(r"(\d+) faces", h).group(1))
+        return tri, fl, ("mesh" if "mesh:" in h else "solid")
 
     rows = []
     for n in [250, 500, 750, 1000, 1500, 2000, 3000, 5000, 10000, 20000]:
@@ -242,29 +245,29 @@ def part_c():
     shutil.copy(ROOT / "tests/models/stl/winkel.stl", out / "winkel.stl")
     plate = "cube([40, 30, 3]);\n"
     cases = [
-        ("K1", "keepout: Quader ragt in die Platte", f"{plate}assert_keepout() translate([10, 10, 2]) cube([10, 10, 5]);", "overlap", "volume", 100.0, "10·10·1"),
-        ("K2", "keepout: clearance 0,5, Abstand 0,3", f"{plate}assert_keepout(clearance = 0.5) translate([10, 10, 3.3]) cube(5);", "too_close", "distance", 0.3, "3,3 − 3"),
-        ("K3", "keepout: clearance 0,5, Abstand 1", f"{plate}assert_keepout(clearance = 0.5) translate([10, 10, 4]) cube(5);", None, None, None, "Abstand 1 > 0,5"),
-        ("K4", "keepout: Berühren bei clearance 0", f"{plate}assert_keepout() translate([10, 10, 3]) cube(5);", None, None, None, "Abstand 0"),
-        ("K5", "keepout: Kugel r 2 halb in der Platte", f"{plate}assert_keepout() translate([20, 15, 3]) sphere(2);", "overlap", "volume", 2 / 3 * pi * 8, "2/3·π·r³"),
-        ("K6", "keepout: STL als Netz in der Platte", f'{plate}assert_keepout() translate([5, 5, 2]) import("winkel.stl", as = "mesh");', "overlap", "volume", None, "Netz: nur ja/nein"),
-        ("K7", "keepout: zwei Bauteile, nur b im Sperrvolumen", "module t(x) translate([x, 0, 0]) cube(10);\na: t(0);\nb: t(20);\nassert_keepout() translate([25, 5, 5]) cube(10);", "overlap", "volume", 125.0, "5·5·5"),
-        ("D1", "disjoint: überlappend", "assert_disjoint() { cube(10); translate([8, 0, 0]) cube(10); }", "overlap", "volume", 200.0, "2·10·10"),
-        ("D2", "disjoint: berührend", "assert_disjoint() { cube(10); translate([10, 0, 0]) cube(10); }", None, None, None, "Berühren erlaubt"),
-        ("D3", "disjoint: Zylinder halb im Quader", "assert_disjoint() { cube(10); translate([10, 5, 0]) cylinder(h = 10, r = 2); }", "overlap", "volume", pi * 4 * 10 / 2, "π·r²·h/2"),
-        ("I1", "intersect: Kette a–b–c", "assert_intersect() { cube(10); translate([8, 0, 0]) cube(10); translate([16, 0, 0]) cube(10); }", None, None, None, "zusammenhängend"),
-        ("I2", "intersect: viertes Kind 14 mm entfernt", "assert_intersect() { cube(10); translate([8, 0, 0]) cube(10); translate([16, 0, 0]) cube(10); translate([40, 0, 0]) cube(10); }", "apart", "distance", 14.0, "40 − 26"),
-        ("I3", "intersect: nur berührend", "assert_intersect() { cube(10); translate([10, 0, 0]) cube(10); }", "apart", "distance", 0.0, "Berühren ≠ Schnitt"),
-        ("T1", "touches: Fläche 5×5", "assert_touches() { cube(10); translate([10, 2, 0]) cube([10, 5, 5]); }", None, "contact_area", 25.0, "5·5"),
-        ("T2", "touches: Zylinder r 3 auf Fläche", "assert_touches() { cube(10); translate([5, 5, 10]) cylinder(h = 5, r = 3); }", None, "contact_area", pi * 9, "π·r²"),
-        ("T3", "touches: Deckel auf Gehäuserand", "module g() difference() { cube([60, 40, 25]); translate([2, 2, 2]) cube([56, 36, 25]); }\nassert_touches() { g(); translate([0, 0, 25]) cube([60, 40, 2]); }", None, "contact_area", 60 * 40 - 56 * 36, "60·40 − 56·36"),
-        ("T4", "touches: liegender Zylinder (Linie)", "assert_touches() { cube([30, 30, 3]); translate([5, 15, 8]) rotate([0, 90, 0]) cylinder(h = 20, r = 5); }", "line_contact", None, None, "Linienkontakt"),
-        ("T5", 'touches: dasselbe, contact = "any"', 'assert_touches(contact = "any") { cube([30, 30, 3]); translate([5, 15, 8]) rotate([0, 90, 0]) cylinder(h = 20, r = 5); }', None, None, None, "Linie erlaubt"),
-        ("T6", "touches: Kugel auf Platte (Punkt)", "assert_touches() { cube([30, 30, 3]); translate([15, 15, 8]) sphere(5); }", "point_contact", None, None, "Punktkontakt"),
-        ("T7", "touches: Spalt 0,2", "assert_touches() { cube(10); translate([10.2, 0, 0]) cube(10); }", "gap", "distance", 0.2, "10,2 − 10"),
-        ("T8", "touches: Spalt 0,2 bei tol 0,3", "assert_touches(tol = 0.3) { cube(10); translate([10.2, 0, 0]) cube(10); }", None, None, None, "innerhalb tol"),
-        ("T9", "touches: Überschneidung 1 mm", "assert_touches() { cube(10); translate([9, 0, 0]) cube(10); }", "overlap", "volume", 100.0, "1·10·10"),
-        ("T10", "touches: Quader Kante an Kante", "assert_touches() { cube(10); translate([10, 10, 0]) cube(10); }", "line_contact", None, None, "Kante an Kante"),
+        ("K1", "keepout: cuboid protrudes into the plate", f"{plate}assert_keepout() translate([10, 10, 2]) cube([10, 10, 5]);", "overlap", "volume", 100.0, "10·10·1"),
+        ("K2", "keepout: clearance 0.5, distance 0.3", f"{plate}assert_keepout(clearance = 0.5) translate([10, 10, 3.3]) cube(5);", "too_close", "distance", 0.3, "3.3 − 3"),
+        ("K3", "keepout: clearance 0.5, distance 1", f"{plate}assert_keepout(clearance = 0.5) translate([10, 10, 4]) cube(5);", None, None, None, "distance 1 > 0.5"),
+        ("K4", "keepout: touching at clearance 0", f"{plate}assert_keepout() translate([10, 10, 3]) cube(5);", None, None, None, "distance 0"),
+        ("K5", "keepout: sphere r 2 half in the plate", f"{plate}assert_keepout() translate([20, 15, 3]) sphere(2);", "overlap", "volume", 2 / 3 * pi * 8, "2/3·π·r³"),
+        ("K6", "keepout: STL as mesh in the plate", f'{plate}assert_keepout() translate([5, 5, 2]) import("winkel.stl", as = "mesh");', "overlap", "volume", None, "mesh: yes/no only"),
+        ("K7", "keepout: two parts, only b in the keep-out volume", "module t(x) translate([x, 0, 0]) cube(10);\na: t(0);\nb: t(20);\nassert_keepout() translate([25, 5, 5]) cube(10);", "overlap", "volume", 125.0, "5·5·5"),
+        ("D1", "disjoint: overlapping", "assert_disjoint() { cube(10); translate([8, 0, 0]) cube(10); }", "overlap", "volume", 200.0, "2·10·10"),
+        ("D2", "disjoint: touching", "assert_disjoint() { cube(10); translate([10, 0, 0]) cube(10); }", None, None, None, "touching allowed"),
+        ("D3", "disjoint: cylinder half in the cuboid", "assert_disjoint() { cube(10); translate([10, 5, 0]) cylinder(h = 10, r = 2); }", "overlap", "volume", pi * 4 * 10 / 2, "π·r²·h/2"),
+        ("I1", "intersect: chain a–b–c", "assert_intersect() { cube(10); translate([8, 0, 0]) cube(10); translate([16, 0, 0]) cube(10); }", None, None, None, "connected"),
+        ("I2", "intersect: fourth child 14 mm away", "assert_intersect() { cube(10); translate([8, 0, 0]) cube(10); translate([16, 0, 0]) cube(10); translate([40, 0, 0]) cube(10); }", "apart", "distance", 14.0, "40 − 26"),
+        ("I3", "intersect: touching only", "assert_intersect() { cube(10); translate([10, 0, 0]) cube(10); }", "apart", "distance", 0.0, "touching ≠ intersection"),
+        ("T1", "touches: face 5×5", "assert_touches() { cube(10); translate([10, 2, 0]) cube([10, 5, 5]); }", None, "contact_area", 25.0, "5·5"),
+        ("T2", "touches: cylinder r 3 on face", "assert_touches() { cube(10); translate([5, 5, 10]) cylinder(h = 5, r = 3); }", None, "contact_area", pi * 9, "π·r²"),
+        ("T3", "touches: lid on housing rim", "module g() difference() { cube([60, 40, 25]); translate([2, 2, 2]) cube([56, 36, 25]); }\nassert_touches() { g(); translate([0, 0, 25]) cube([60, 40, 2]); }", None, "contact_area", 60 * 40 - 56 * 36, "60·40 − 56·36"),
+        ("T4", "touches: lying cylinder (line)", "assert_touches() { cube([30, 30, 3]); translate([5, 15, 8]) rotate([0, 90, 0]) cylinder(h = 20, r = 5); }", "line_contact", None, None, "line contact"),
+        ("T5", 'touches: the same, contact = "any"', 'assert_touches(contact = "any") { cube([30, 30, 3]); translate([5, 15, 8]) rotate([0, 90, 0]) cylinder(h = 20, r = 5); }', None, None, None, "line allowed"),
+        ("T6", "touches: sphere on plate (point)", "assert_touches() { cube([30, 30, 3]); translate([15, 15, 8]) sphere(5); }", "point_contact", None, None, "point contact"),
+        ("T7", "touches: gap 0.2", "assert_touches() { cube(10); translate([10.2, 0, 0]) cube(10); }", "gap", "distance", 0.2, "10.2 − 10"),
+        ("T8", "touches: gap 0.2 at tol 0.3", "assert_touches(tol = 0.3) { cube(10); translate([10.2, 0, 0]) cube(10); }", None, None, None, "within tol"),
+        ("T9", "touches: overlap 1 mm", "assert_touches() { cube(10); translate([9, 0, 0]) cube(10); }", "overlap", "volume", 100.0, "1·10·10"),
+        ("T10", "touches: cuboids edge to edge", "assert_touches() { cube(10); translate([10, 10, 0]) cube(10); }", "line_contact", None, None, "edge to edge"),
     ]
     rows = []
     for cid, title, src, prob, key, want, formula in cases:
@@ -350,7 +353,7 @@ def part_d():
             j = json.loads(p.stdout)
             n = j["nodes"][0]
             se = n.get("selected_edges")
-            summary = dict(schema_version=j.get("schema_version"), selected_edges=(f"Liste von {len(se)} Polylinien mit {sum(len(x) for x in se)} Punkten" if isinstance(se, list) else se), selected_edge_count=n.get("selected_edge_count"))
+            summary = dict(schema_version=j.get("schema_version"), selected_edges=(f"list of {len(se)} polylines with {sum(len(x) for x in se)} points" if isinstance(se, list) else se), selected_edge_count=n.get("selected_edge_count"))
         except Exception as e:  # noqa: BLE001
             summary = dict(error=str(e))
         (out / f"d6-{label}.json").write_text(json.dumps(summary, ensure_ascii=False))
