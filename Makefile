@@ -242,7 +242,7 @@ install: ## mcad, Desktop-Datei, Icons, Lizenzen, Beispiele nach DESTDIR+PREFIX 
 	  echo "$(INSTALL) -Dm644 assets/icon/png/$${s}x$${s}.png $(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/mcad.png"; \
 	  $(INSTALL) -Dm644 "assets/icon/png/$${s}x$${s}.png" "$(DESTDIR)$(ICONDIR)/$${s}x$${s}/apps/mcad.png"; done
 	$(INSTALL) -Dm644 assets/icon/cad.svg "$(DESTDIR)$(ICONDIR)/scalable/apps/mcad.svg"
-	$(INSTALL) -Dm644 -t "$(DESTDIR)$(LICENSEDIR)" packaging/linux/NOTICE crates/cad-font/fonts/OFL-*.txt
+	$(INSTALL) -Dm644 -t "$(DESTDIR)$(LICENSEDIR)" LICENSE packaging/linux/NOTICE crates/cad-font/fonts/OFL-*.txt
 	$(INSTALL) -Dm644 crates/cad-font/fonts/README.md "$(DESTDIR)$(LICENSEDIR)/fonts-README.md"
 	@if [ -f "$(SMLIB_SRC)/LICENSE" ]; then \
 	  echo "$(INSTALL) -Dm644 $(SMLIB_SRC)/LICENSE $(DESTDIR)$(LICENSEDIR)/SMLib-LICENSE"; \

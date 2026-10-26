@@ -1,4 +1,6 @@
-# controller-cad – `mcad`
+# controller-cad – Entwicklung (deutsch)
+
+Englische Übersicht: [`README.md`](../README.md). Diese Datei ist die frühere deutsche README mit allen Details zu Bauen, Installieren, Tests und Struktur.
 
 Programm `mcad` (bis 0.2: `cad`), Modelldateien `*.mcad` (`*.scad` öffnet weiterhin).
 Parametrisches CAD im Browser und als Desktop-App (Tauri 2) für kleine Hobbyprojekte. Modelle werden als Text in einem
@@ -7,7 +9,7 @@ OpenSCAD-Dialekt geschrieben; dazu kommen Raster, Anker, benannte Instanzen und 
 gekoppelt: Cursor und Hover markieren die zugehörige Geometrie, Griffe in der Ansicht
 schreiben Literale oder Rasterreferenzen in den Code zurück.
 
-Plan und Entscheidungen: [`docs/technischer-plan.md`](docs/technischer-plan.md).
+Plan und Entscheidungen: [`docs/technischer-plan.md`](technischer-plan.md).
 
 ## Status
 
@@ -20,9 +22,9 @@ Farbpalette, Farbregionen, Filament-Slots, mehrfarbigem 3MF für Bambu Studio/Or
 überarbeitetes dunkles Thema, nach einer unabhängigen Prüfung korrigiert, Skizzen mit
 Skizzen-Editor, Text und SVG-Import sowie ein Messwerkzeug an der exakten B-Rep (Abstand mit
 Fußpunkten, Radius, Winkel, Länge, Fläche, Körper; im Schnitt Konturen, Kreise, Wandstärke) in
-der UI und in `mcad measure` (Testberichte 1–19, [`docs/reports/`](docs/reports/README.md)). Offen ist der Umstieg auf den
+der UI und in `mcad measure` (Testberichte 1–19, [`docs/reports/`](reports/README.md)). Offen ist der Umstieg auf den
 Rust-Kernel solidcore (M8, wartet auf den Portierungsstand von solidcore, siehe
-[`docs/solidcore-umstieg.md`](docs/solidcore-umstieg.md)). Browser: kein Backend, gespeichert
+[`docs/solidcore-umstieg.md`](solidcore-umstieg.md)). Browser: kein Backend, gespeichert
 wird im Browser (IndexedDB) oder über die File System Access API; Desktop: Dateisystem.
 
 ## Architektur in Kürze
@@ -207,7 +209,7 @@ Icons, Lizenzen und Doku unter den alten Namen (`controller-cad`), nicht aber ei
 ### Arch-Paket
 
 `packaging/arch/PKGBUILD` baut das Paket `mcad` (ersetzt das frühere Paket `controller-cad`): `mcad` mit Desktop-UI und CLI,
-Desktop-Datei, Icons, Lizenzen (Projekt `LicenseRef-UNLICENSED`, SMLib Apache-2.0, Schriften
+Desktop-Datei, Icons, Lizenzen (Projekt MIT, SMLib Apache-2.0, Schriften
 OFL-1.1) und Beispiele. Laufzeit: `webkit2gtk-4.1`, `gtk3`, `libsoup3`, `glib2`, `cairo`,
 `gdk-pixbuf2`, `dbus`, `libgcc`, `libstdc++`, `glibc`, `hicolor-icon-theme`, `shared-mime-info`; Bau: `cargo`, `nodejs`, `pnpm`,
 `cmake`, `ninja`, `git` (und `base-devel`). SMLib kommt als Git-Quelle am Commit aus
@@ -413,30 +415,30 @@ CMakeLists, Build-Skript und Compiler: `scripts/ci/smlib-key.sh`). Ist der SMLib
 
 ## Testberichte
 
-Übersicht mit Generator-Befehlen: [`docs/reports/README.md`](docs/reports/README.md).
+Übersicht mit Generator-Befehlen: [`docs/reports/README.md`](reports/README.md).
 
-- [Bericht 1](docs/reports/01-kernel-sprache-engine-cli/report.pdf): Kernel, Sprache, Engine, CLI; OpenSCAD-Vergleich 33/33.
-- [Bericht 2](docs/reports/02-ui-phase-a/report.pdf): Browser-UI Phase A – Editor, Ansicht, Zuordnung Code ↔ Ansicht.
-- [Bericht 3](docs/reports/03-ui-phase-b/report.pdf): UI Phase B – Griffe, Snap, Parameterleiste.
-- [Bericht 4](docs/reports/04-fillet-profile/report.pdf): Verrundung, Fase, Shell, Profiloperationen, Entwurfsmodus, Watchdog-Sperre.
-- [Bericht 5](docs/reports/05-step-export/report.pdf): STEP-Export und Kernel-Vergleich SMLib ↔ solidcore.
-- [Bericht 6](docs/reports/06-projekte-bauteile/report.pdf): Projekte, Bauteile, `include`/`use`.
-- [Bericht 7](docs/reports/07-kernel-variabler-radius/report.pdf): Kernel-Korrekturen und variabler Radius.
-- [Bericht 8](docs/reports/08-cli-agenten/report.pdf): CLI für Agenten (outline, render-Ansichten/Schnitt, measure, watch, set).
-- [Bericht 9](docs/reports/09-desktop-schnitt/report.pdf): Desktop-App, Dateibeobachter, Git, Schnittansicht, CLI↔UI.
-- [Bericht 10](docs/reports/10-cli-daemon/report.pdf): CLI-Daemon (Cache zwischen Aufrufen, Grenzen, Messung).
-- [Bericht 11](docs/reports/11-farben-filamente/report.pdf): Farben, Multi-Filament-3MF (Bambu Studio/OrcaSlicer), dunkles Thema.
-- [Bericht 12](docs/reports/12-farben-korrekturen/report.pdf): Korrekturen Farben und Daemon (Befunde F1–F9 der unabhängigen Prüfung, Bambu-Farbdialog, Socketpfad).
-- [Bericht 14](docs/reports/14-skizzen/report.pdf): Skizzen mit gemischten Konturen (Geraden, Bögen, Bézier, Splines) und Module als Namensräume.
-- [Bericht 15](docs/reports/15-skizzen-ecken-offset/report.pdf): Skizzen – Ecken (`corner`, `fillet2d`), `offset` (OpenSCAD-Vergleich), `stroke`.
-- [Bericht 16](docs/reports/16-text-svg/report.pdf): Text mit mitgelieferten Schriften und SVG-Import, Vergleich mit OpenSCAD.
-- [Bericht 17](docs/reports/17-schablonenschrift/report.pdf): Schablonenschrift „cad stencil mono“ als Standardschrift.
-- [Bericht 18](docs/reports/18-skizzen-editor/report.pdf): Skizzen-Editor (Zeichenmodus mit Raster, Snap, Code je Aktion).
-- [Bericht 19](docs/reports/19-messen/report.pdf): Messwerkzeug in UI und CLI (exakt an der B-Rep, im Schnitt, Bezug zur Sprache).
+- [Bericht 1](reports/01-kernel-sprache-engine-cli/report.pdf): Kernel, Sprache, Engine, CLI; OpenSCAD-Vergleich 33/33.
+- [Bericht 2](reports/02-ui-phase-a/report.pdf): Browser-UI Phase A – Editor, Ansicht, Zuordnung Code ↔ Ansicht.
+- [Bericht 3](reports/03-ui-phase-b/report.pdf): UI Phase B – Griffe, Snap, Parameterleiste.
+- [Bericht 4](reports/04-fillet-profile/report.pdf): Verrundung, Fase, Shell, Profiloperationen, Entwurfsmodus, Watchdog-Sperre.
+- [Bericht 5](reports/05-step-export/report.pdf): STEP-Export und Kernel-Vergleich SMLib ↔ solidcore.
+- [Bericht 6](reports/06-projekte-bauteile/report.pdf): Projekte, Bauteile, `include`/`use`.
+- [Bericht 7](reports/07-kernel-variabler-radius/report.pdf): Kernel-Korrekturen und variabler Radius.
+- [Bericht 8](reports/08-cli-agenten/report.pdf): CLI für Agenten (outline, render-Ansichten/Schnitt, measure, watch, set).
+- [Bericht 9](reports/09-desktop-schnitt/report.pdf): Desktop-App, Dateibeobachter, Git, Schnittansicht, CLI↔UI.
+- [Bericht 10](reports/10-cli-daemon/report.pdf): CLI-Daemon (Cache zwischen Aufrufen, Grenzen, Messung).
+- [Bericht 11](reports/11-farben-filamente/report.pdf): Farben, Multi-Filament-3MF (Bambu Studio/OrcaSlicer), dunkles Thema.
+- [Bericht 12](reports/12-farben-korrekturen/report.pdf): Korrekturen Farben und Daemon (Befunde F1–F9 der unabhängigen Prüfung, Bambu-Farbdialog, Socketpfad).
+- [Bericht 14](reports/14-skizzen/report.pdf): Skizzen mit gemischten Konturen (Geraden, Bögen, Bézier, Splines) und Module als Namensräume.
+- [Bericht 15](reports/15-skizzen-ecken-offset/report.pdf): Skizzen – Ecken (`corner`, `fillet2d`), `offset` (OpenSCAD-Vergleich), `stroke`.
+- [Bericht 16](reports/16-text-svg/report.pdf): Text mit mitgelieferten Schriften und SVG-Import, Vergleich mit OpenSCAD.
+- [Bericht 17](reports/17-schablonenschrift/report.pdf): Schablonenschrift „cad stencil mono“ als Standardschrift.
+- [Bericht 18](reports/18-skizzen-editor/report.pdf): Skizzen-Editor (Zeichenmodus mit Raster, Snap, Code je Aktion).
+- [Bericht 19](reports/19-messen/report.pdf): Messwerkzeug in UI und CLI (exakt an der B-Rep, im Schnitt, Bezug zur Sprache).
 
 ## Lizenzen
 
-- Dieses Projekt: privat, nicht lizenziert (`license = "UNLICENSED"`, `publish = false`).
+- Dieses Projekt: MIT (`LICENSE`), `publish = false`.
 - SMLib/SM_API (NVIDIA usd-brep, Fork tangency-labs/smlib): Apache-2.0.
 - Tauri 2 (Apache-2.0/MIT), `notify` (CC0/MIT/Apache-2.0), `similar` (Apache-2.0). Die Quellen sind
   nicht Teil des Repositorys; `smlib/patches/` enthält Änderungen daran.

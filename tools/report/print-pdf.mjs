@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { statSync } from "node:fs";
 
-const [src, dst, title = "Testbericht 1: Kernel, Sprache, Engine, CLI"] = process.argv.slice(2);
+const [src, dst, title = "Test report 1: kernel, language, engine, CLI"] = process.argv.slice(2);
 const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
 if (!src || !dst) {
   console.error("usage: node print-pdf.mjs <report.html> <report.pdf>");
@@ -27,7 +27,7 @@ try {
     headerTemplate: "<span></span>",
     footerTemplate:
       "<div style='font-size:7.5pt;color:#5b6270;width:100%;padding:0 13mm;display:flex;justify-content:space-between;'>" +
-      `<span>${esc(title)}</span>` + "<span>Seite <span class='pageNumber'></span> / <span class='totalPages'></span></span></div>",
+      `<span>${esc(title)}</span>` + "<span>Page <span class='pageNumber'></span> / <span class='totalPages'></span></span></div>",
   });
   console.log(`${dst}: ${statSync(resolve(dst)).size} B, Chromium ${browser.version()}`);
 } finally {

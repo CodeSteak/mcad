@@ -1,7 +1,7 @@
 mcad (Projekt controller-cad) – Lizenzhinweise der installierten Dateien
 
 mcad (Binary)
-  mcad selbst: privat, nicht lizenziert (Cargo: license = "UNLICENSED").
+  mcad selbst: MIT-Lizenz, Lizenztext: LICENSE.
   Statisch gelinkt:
   - SMLib/SM_API (NVIDIA usd-brep, Fork tangency-labs/smlib): Apache-2.0,
     Lizenztext: SMLib-LICENSE, Hinweise: SMLib-THIRD_PARTY_NOTICES.md.

@@ -16,12 +16,12 @@ pkgrel=1
 pkgdesc='Parametrisches CAD im OpenSCAD-Dialekt mit exakter B-Rep (SMLib): CLI mcad und Desktop-UI'
 arch=('x86_64')
 url='https://github.com/CodeSteak/controller-cad'
-# Projekt: nicht lizenziert (privat); SMLib: Apache-2.0; Schriften: OFL-1.1; Crates/UI: MIT, Apache-2.0
+# Projekt: MIT; SMLib: Apache-2.0; Schriften: OFL-1.1; Crates/UI: MIT, Apache-2.0
 # bis 0.2.x hieß Paket und Programm controller-cad bzw. cad
 provides=('controller-cad')
 conflicts=('controller-cad')
 replaces=('controller-cad')
-license=('LicenseRef-UNLICENSED' 'Apache-2.0' 'OFL-1.1' 'MIT')
+license=('MIT' 'Apache-2.0' 'OFL-1.1')
 depends=(
   'cairo'
   'dbus'
