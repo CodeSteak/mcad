@@ -2101,3 +2101,56 @@ select:hover {
   cursor: pointer;
   text-decoration: underline dotted;
 }
+
+/* Studio look: settings panel under the toggle in the view toolbar */
+.studio-pop {
+  width: 310px;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+}
+
+.studio-pop .studio-row {
+  grid-template-columns: 1fr 140px 44px;
+}
+
+.studio-pop input[type="range"] {
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  accent-color: var(--accent);
+}
+
+.studio-pop .studio-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.studio-pop .studio-check input {
+  height: auto;
+}
+
+.studio-pop .studio-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.studio-pop .studio-line .grow {
+  flex: 1;
+}
+
+.studio-pop .studio-color {
+  width: 30px;
+  height: 24px;
+  padding: 1px 2px;
+  cursor: pointer;
+}
+
+.studio-pop .studio-foot {
+  justify-content: space-between;
+  margin-top: 6px;
+}

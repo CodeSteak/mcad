@@ -40,7 +40,7 @@ import { VersionMapper, mapRange } from "../logic/positions";
 import { isOff } from "../logic/sceneIndex";
 import { bridge } from "../state/bridge";
 import { type DirHandle, project } from "../state/project";
-import { colorsVisible, type ExportChoice, type SideTab, resolveTheme, setExportChoice, setLangPref, setSideTab, setThemePref, store } from "../state/store";
+import { colorsVisible, type ExportChoice, type SideTab, resolveTheme, setExportChoice, setLangPref, setSideTab, setStudio, setThemePref, store } from "../state/store";
 import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
 import { DragController } from "./drag";
@@ -1156,6 +1156,29 @@ window.__cad = {
     if (!viewer) return null;
     const c = viewer.camera.position;
     return { eye: [c.x, c.y, c.z], dir: viewer.viewDir() };
+  },
+  /** Studio look: settings and what the last frame drew. */
+  studioInfo() {
+    return { settings: store.getState().studio, drawn: viewer?.lastStudioDraw ?? null };
+  },
+  setStudio(patch: Partial<import("../logic/studio").StudioSettings>) {
+    setStudio(patch);
+  },
+  /** Mean time per frame (ms) of `frames` synchronous renders of the view (benchmark). */
+  renderBenchmark(frames: number) {
+    if (!viewer) return null;
+    const gl = viewer.renderer.getContext();
+    const px = new Uint8Array(4);
+    // reading a pixel waits for the frame (finish() alone may return early)
+    const sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    viewer.render();
+    sync();
+    const t0 = performance.now();
+    for (let i = 0; i < frames; i++) {
+      viewer.render();
+      sync();
+    }
+    return (performance.now() - t0) / Math.max(1, frames);
   },
   /** Section view as drawn. */
   sectionInfo() {

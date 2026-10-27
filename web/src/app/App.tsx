@@ -27,6 +27,7 @@ import {
 } from "./runtime";
 import { Header, UploadInput, chooseUpload, promptNewProjectFile, useGlobalShortcuts } from "./header";
 import { SectionBar, SectionStatus, setSectionOn } from "./section";
+import { StudioControls } from "./studio";
 import { DiffDialog, ExternalBar } from "./desktopUi";
 import { SketchBar, SketchStatus } from "./sketchUi";
 import { MeasureBar, MeasureStatus } from "./measureUi";
@@ -199,6 +200,8 @@ function ViewToolbar({ viewer }: { viewer: Viewer | null }) {
               className="view-menu"
             />
           </ToolGroup>
+          <ToolSep />
+          <StudioControls />
           <ToolSep />
           <ToolGroup>
             <IconButton icon={IconGrid} label={t("view.allGrids")} hint={t("view.allGridsHint")} pressed={allGrids} onClick={() => store.setState({ allGrids: !allGrids })} />

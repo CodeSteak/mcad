@@ -24,7 +24,8 @@ a model without a UI.
 
 - `--json` on every command, versioned schema, stable exit codes
 - `mcad usage`: manual for agents, compiled into the binary
-- `mcad render`: PNGs with grids, anchors, sections, X-ray, highlighted code lines
+- `mcad render`: PNGs with grids, anchors, sections, X-ray, highlighted code lines; `--style studio`
+  for a realistic look (soft shadows, ambient occlusion, ground)
 - `mcad measure`: numbers instead of pictures
 - daemon keeps the kernel cache between calls; `mcad ui status` shows what the human has open
 

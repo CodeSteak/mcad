@@ -45,7 +45,7 @@ perspective, section, colours/regions, `--theme`, `--size`). Same settings in th
 | `--light-intensity F` | `1` | key + fill light, 0…4 |
 | `--ambient F` | `0.4` | share of the sky light, 0…1 (rest: key light) |
 | `--shadows on\|off` | `on` | shadow map of the opaque bodies |
-| `--shadow-softness F` | `0.35` | 0 = hard … 1 = very soft (light size 0…8°, edges sharper near contact) |
+| `--shadow-softness F` | `0.35` | 0 = hard … 1 = very soft (light radius 0…5°; edges sharper near contact) |
 | `--ao on\|off` | `on` | ambient occlusion in corners, gaps, at the ground contact |
 | `--ao-radius MM` | 5 % of the model diagonal | reach of the occlusion |
 | `--ao-strength F` | `1` | 0…2 |

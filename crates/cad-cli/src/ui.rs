@@ -151,6 +151,9 @@ fn status_text(r: &Json) -> String {
         if !w["section"].is_null() {
             t.push_str(&tr!("  Schnitt: {}\n", "  section: {}\n", w["section"]["cli"].as_str().unwrap_or("")));
         }
+        if !w["studio"].is_null() {
+            t.push_str(&tr!("  Studio: {}\n", "  studio: {}\n", w["studio"]["cli"].as_str().unwrap_or("")));
+        }
         let diags = w["diagnostics"].as_array().cloned().unwrap_or_default();
         let errors = diags.iter().filter(|d| d["severity"] == "error").count();
         let warnings = diags.iter().filter(|d| d["severity"] == "warning").count();

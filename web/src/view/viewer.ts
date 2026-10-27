@@ -7,6 +7,8 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { LineSegments2 } from "three/addons/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/addons/lines/LineSegmentsGeometry.js";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
+import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
+import { FullScreenQuad } from "three/addons/postprocessing/Pass.js";
 import type { EngineClient } from "../engine/client";
 import type { AssertMesh, Mat4, MeasureHit, Scene, SrcRange, Vec3 } from "../engine/protocol";
 import { definitionTarget } from "../logic/context";
@@ -31,6 +33,7 @@ import type { MeshCache } from "./meshCache";
 import type { SketchController, SketchView } from "../app/sketch";
 import type { MeasureController, MeasureView } from "../app/measure";
 import { pixelSize, planeCamera, rasterLines, rasterSpacing, snapMarker } from "../logic/sketchEditor";
+import { STUDIO_THEME, type StudioSettings, aoRadiusFor, lightDirection } from "../logic/studio";
 
 export type StandardView = "iso" | "top" | "front" | "right" | "back" | "left" | "bottom";
 
@@ -199,6 +202,24 @@ export class Viewer implements DragView, SketchView, MeasureView {
   lastSelection: CursorSelection = EMPTY_SELECTION;
   lastHoverNodes: number[] = [];
   missingMeshes = 0;
+  /** Lights of the standard look (hemisphere + head light). */
+  private stdLights: THREE.Light[] = [];
+  /** Studio look: key light (shadows), fill light, sky light and the ground. */
+  private studioGroup = new THREE.Group();
+  private keyLight = new THREE.DirectionalLight(0xffffff, 1);
+  private fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+  private skyLight = new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1);
+  private ground: THREE.Mesh | null = null;
+  private groundKey = "";
+  private studioBg: THREE.Texture | null = null;
+  /** Ambient occlusion (created on first use). */
+  private gtao: GTAOPass | null = null;
+  private aoQuad: FullScreenQuad | null = null;
+  private aoMaterial: THREE.ShaderMaterial | null = null;
+  /** Studio settings in effect. */
+  studio: StudioSettings = store.getState().studio;
+  /** What the last frame drew in the studio look (test hook). */
+  lastStudioDraw: { on: boolean; shadows: boolean; ao: boolean; ground: boolean; aoRadius: number | null; light: Vec3 | null } = { on: false, shadows: false, ao: false, ground: false, aoRadius: null, light: null };
   /** Mode the base was drawn with (full while the selected node's mesh is loading). */
   baseMode: string | null = null;
   modelBox: Box3 = emptyBox();
@@ -253,8 +274,18 @@ export class Viewer implements DragView, SketchView, MeasureView {
     head.position.set(0.3, 0.2, 1);
     this.camera.add(head);
     this.scene3.add(this.camera);
+    this.stdLights = [hemi, head];
+    // studio look: lights follow the camera's azimuth (placed every frame), the ground plane
+    this.skyLight.position.set(0, 0, 1);
+    this.keyLight.shadow.mapSize.set(2048, 2048);
+    this.studioGroup.add(this.keyLight, this.keyLight.target, this.fillLight, this.fillLight.target, this.skyLight);
+    this.studioGroup.name = "studio";
+    this.studioGroup.visible = false;
+    this.scene3.add(this.studioGroup);
+    // variance shadow maps: a smooth blur for soft shadows (PCF with a large radius is grainy)
+    this.renderer.shadowMap.type = THREE.VSMShadowMap;
 
-    this.materials = new Materials(readPalette());
+    this.materials = new Materials(readPalette(), this.studio.on);
     this.applyTheme();
 
     this.resizeObs = new ResizeObserver(() => this.resize());
@@ -296,6 +327,14 @@ export class Viewer implements DragView, SketchView, MeasureView {
     this.measureHoverLabel.remove();
     for (const l of this.measureLabels.values()) l.remove();
     this.section.dispose();
+    this.gtao?.dispose();
+    this.aoQuad?.dispose();
+    this.aoMaterial?.dispose();
+    this.studioBg?.dispose();
+    if (this.ground) {
+      this.ground.geometry.dispose();
+      (this.ground.material as THREE.Material).dispose();
+    }
     this.materials.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
@@ -321,6 +360,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
       this.buildAsserts();
       this.requestRender();
     }
+    if (s.studio !== p.studio) this.applyStudio(s.studio);
     if (s.theme !== p.theme) {
       // CSS variables change with the theme attribute; read them after the style update.
       requestAnimationFrame(() => this.applyTheme());
@@ -362,11 +402,231 @@ export class Viewer implements DragView, SketchView, MeasureView {
   applyTheme(): void {
     const pal = readPalette();
     this.materials.dispose();
-    this.materials = new Materials(pal);
+    this.materials = new Materials(pal, this.studio.on);
     this.renderer.setClearColor(new THREE.Color(pal.background), 1);
+    this.applyStudioLook();
     this.section?.setColors(pal.cap, pal.edge, pal.accent);
     this.handleColors = readHandleColors();
     this.requestBuild();
+  }
+
+  /** Switches the studio look or changes its settings. */
+  applyStudio(s: StudioSettings): void {
+    const was = this.studio;
+    this.studio = s;
+    // materials depend on the look (roughness, edge opacity) and on the shadow map
+    if (was.on !== s.on || was.shadows !== s.shadows) this.applyTheme();
+    else {
+      this.applyStudioLook();
+      this.requestRender();
+    }
+  }
+
+  /** Lights, shadow map, background and ground of the current studio settings and theme. */
+  private applyStudioLook(): void {
+    const s = this.studio;
+    const on = s.on;
+    for (const l of this.stdLights) l.visible = !on;
+    this.studioGroup.visible = on;
+    const shadows = on && s.shadows;
+    this.renderer.shadowMap.enabled = shadows;
+    this.keyLight.castShadow = shadows;
+    // blur radius in texels ≈ penumbra of a light of radius softness · 5° (as the CLI) at a
+    // typical occluder distance of 0.6 · R (the map spans 2.2 · R over 2048 texels)
+    const tanTheta = Math.tan((Math.max(0, Math.min(1, s.shadowSoftness)) * 5 * Math.PI) / 180);
+    this.keyLight.shadow.radius = Math.min(40, 1 + 560 * tanTheta);
+    this.keyLight.shadow.blurSamples = 24;
+    const theme = store.getState().theme;
+    const th = STUDIO_THEME[theme];
+    const gc = new THREE.Color(s.groundColor ?? th.ground);
+    const amb = Math.max(0, Math.min(1, s.ambient));
+    const k = (1 - amb) * Math.max(0, s.lightIntensity);
+    this.keyLight.intensity = k * Math.PI;
+    this.fillLight.intensity = 0.22 * k * Math.PI;
+    this.skyLight.intensity = amb * Math.PI;
+    this.skyLight.color.set(0xffffff);
+    this.skyLight.groundColor.setRGB(0.35 + 0.4 * gc.r, 0.35 + 0.4 * gc.g, 0.35 + 0.4 * gc.b);
+    // background: vertical gradient (procedural, 1 × 256 canvas)
+    this.studioBg?.dispose();
+    this.studioBg = null;
+    if (on) {
+      const [top, bottom] = s.background ?? th.background;
+      const cv = document.createElement("canvas");
+      cv.width = 1;
+      cv.height = 256;
+      const ctx = cv.getContext("2d");
+      if (ctx) {
+        const g = ctx.createLinearGradient(0, 0, 0, 256);
+        g.addColorStop(0, top);
+        g.addColorStop(1, bottom);
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 1, 256);
+        const tex = new THREE.CanvasTexture(cv);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        this.studioBg = tex;
+      }
+    }
+    this.scene3.background = this.studioBg;
+    this.groundKey = "?";
+    this.updateGround();
+    const floor = this.helpers.getObjectByName("floor");
+    if (floor) floor.visible = !(on && s.ground);
+  }
+
+  /** Ground plane at the lowest point of the model, fading out around it (studio look). */
+  private updateGround(): void {
+    const s = this.studio;
+    const box = this.modelBox;
+    const want = s.on && s.ground && !isEmpty(box);
+    const color = s.groundColor ?? STUDIO_THEME[store.getState().theme].ground;
+    const key = want ? `${box.min.join(",")}|${box.max.join(",")}|${color}` : "";
+    if (key === this.groundKey) return;
+    this.groundKey = key;
+    if (this.ground) {
+      this.studioGroup.remove(this.ground);
+      this.ground.geometry.dispose();
+      (this.ground.material as THREE.Material).dispose();
+      this.ground = null;
+    }
+    if (!want) return;
+    const diag = Math.max(1, boxDiagonal(box));
+    const cx = (box.min[0] + box.max[0]) / 2;
+    const cy = (box.min[1] + box.max[1]) / 2;
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, transparent: true, depthWrite: false });
+    const fade = { value: new THREE.Vector4(cx, cy, diag * 0.55, diag * 1.5) };
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.groundFade = fade;
+      sh.vertexShader = sh.vertexShader
+        .replace("#include <common>", "#include <common>\nvarying vec3 vGroundPos;")
+        .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+      sh.fragmentShader = sh.fragmentShader
+        .replace("#include <common>", "#include <common>\nvarying vec3 vGroundPos;\nuniform vec4 groundFade;")
+        .replace("#include <dithering_fragment>", "#include <dithering_fragment>\n  gl_FragColor.a *= 1.0 - smoothstep(groundFade.z, groundFade.w, distance(vGroundPos.xy, groundFade.xy));");
+    };
+    mat.customProgramCacheKey = () => "studio-ground";
+    const size = diag * 4;
+    const g = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+    g.position.set(cx, cy, box.min[2] - diag * 1e-4);
+    g.receiveShadow = true;
+    g.renderOrder = -2;
+    g.name = "studio-ground";
+    this.ground = g;
+    this.studioGroup.add(g);
+  }
+
+  /** Places key and fill light for the current camera (azimuth relative to the camera). */
+  private placeStudioLights(): Vec3 {
+    const s = this.studio;
+    const box = isEmpty(this.modelBox) ? { min: [-25, -25, 0] as Vec3, max: [25, 25, 25] as Vec3 } : this.modelBox;
+    const c = new THREE.Vector3((box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2, (box.min[2] + box.max[2]) / 2);
+    const r = Math.max(1, boxDiagonal(box) / 2);
+    const eye = this.camera.position.clone().sub(this.controls.target).normalize();
+    const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+    const e: Vec3 = [eye.x, eye.y, eye.z];
+    const u: Vec3 = [up.x, up.y, up.z];
+    const l = lightDirection(e, u, s.lightAzimuth, s.lightElevation);
+    this.keyLight.position.set(c.x + l[0] * r * 3, c.y + l[1] * r * 3, c.z + l[2] * r * 3);
+    this.keyLight.target.position.copy(c);
+    const cam = this.keyLight.shadow.camera;
+    // the shadow camera covers the model (the ground only gets shadow where the model casts it)
+    cam.left = -r * 1.1;
+    cam.right = r * 1.1;
+    cam.top = r * 1.1;
+    cam.bottom = -r * 1.1;
+    cam.near = r * 0.5;
+    cam.far = r * 5.5;
+    cam.updateProjectionMatrix();
+    this.keyLight.shadow.bias = -0.0004;
+    this.keyLight.shadow.normalBias = r * 0.004;
+    const camEl = (Math.asin(Math.max(-1, Math.min(1, eye.z))) * 180) / Math.PI;
+    const f = lightDirection(e, u, 0, camEl + 15);
+    this.fillLight.position.set(c.x + f[0] * r * 3, c.y + f[1] * r * 3, c.z + f[2] * r * 3);
+    this.fillLight.target.position.copy(c);
+    this.keyLight.target.updateMatrixWorld();
+    this.fillLight.target.updateMatrixWorld();
+    return l;
+  }
+
+  /** Ambient occlusion pass of the studio look (lazy). */
+  private ensureAo(w: number, h: number): GTAOPass {
+    if (!this.gtao) {
+      this.gtao = new GTAOPass(this.scene3, this.camera, w, h);
+      this.gtao.output = GTAOPass.OUTPUT.Off;
+      this.aoMaterial = new THREE.ShaderMaterial({
+        uniforms: { tAo: { value: null }, strength: { value: 1 } },
+        vertexShader: "varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+        fragmentShader: "uniform sampler2D tAo; uniform float strength; varying vec2 vUv; void main() { float ao = texture2D(tAo, vUv).r; gl_FragColor = vec4(vec3(clamp(1.0 - strength * (1.0 - ao), 0.0, 1.0)), 1.0); }",
+        transparent: true,
+        depthTest: false,
+        depthWrite: false,
+        blending: THREE.CustomBlending,
+        blendSrc: THREE.DstColorFactor,
+        blendDst: THREE.ZeroFactor,
+        blendEquation: THREE.AddEquation,
+        blendSrcAlpha: THREE.ZeroFactor,
+        blendDstAlpha: THREE.OneFactor,
+      });
+      this.aoQuad = new FullScreenQuad(this.aoMaterial);
+    } else if (this.gtao.width !== w || this.gtao.height !== h) this.gtao.setSize(w, h);
+    return this.gtao;
+  }
+
+  /**
+   * Studio frame with ambient occlusion: the model (without overlays) to the screen, AO of the
+   * opaque model multiplied onto it, then the overlays on top (depth of the first pass kept).
+   */
+  private renderStudioAo(): void {
+    const r = this.renderer;
+    const size = r.getDrawingBufferSize(new THREE.Vector2());
+    const ao = this.ensureAo(size.x, size.y);
+    const diag = Math.max(1, boxDiagonal(isEmpty(this.modelBox) ? { min: [0, 0, 0], max: [50, 50, 25] } : this.modelBox));
+    const radius = aoRadiusFor(this.studio, diag);
+    ao.updateGtaoMaterial({ radius, distanceExponent: 1, thickness: radius, distanceFallOff: 1, scale: 1, samples: 16, screenSpaceRadius: false });
+    ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 10, rings: 3, samples: 16 });
+    const overlays = [this.overlay, this.handleGroup, this.sketchGroup, this.measureGroup, this.assertGroup];
+    const vis = overlays.map((g) => g.visible);
+    for (const g of overlays) g.visible = false;
+    r.render(this.scene3, this.camera);
+    // AO: only opaque model surfaces and the ground (no helpers, no transparent display modes)
+    const hidden: THREE.Object3D[] = [];
+    const hide = (o: THREE.Object3D) => {
+      if (o.visible) {
+        o.visible = false;
+        hidden.push(o);
+      }
+    };
+    hide(this.helpers);
+    hide(this.section.group);
+    this.content.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.Material | undefined;
+      if ((o as THREE.Mesh).isMesh && m && m.transparent) hide(o);
+    });
+    const bg = this.scene3.background;
+    this.scene3.background = null;
+    // the shadow map of the first pass stays valid for the AO and overlay passes
+    const autoShadow = r.shadowMap.autoUpdate;
+    r.shadowMap.autoUpdate = false;
+    ao.render(r, null as unknown as THREE.WebGLRenderTarget, null as unknown as THREE.WebGLRenderTarget, 0, false);
+    this.scene3.background = bg;
+    for (const o of hidden) o.visible = true;
+    r.setRenderTarget(null);
+    const auto = r.autoClear;
+    r.autoClear = false;
+    this.aoMaterial!.uniforms.tAo.value = ao.gtaoMap;
+    this.aoMaterial!.uniforms.strength.value = Math.max(0, Math.min(2, this.studio.aoStrength));
+    this.aoQuad!.render(r);
+    // overlays on top of the model's depth (the lights stay on)
+    const keep: THREE.Object3D[] = [this.content, this.helpers, this.section.group];
+    if (this.ground) keep.push(this.ground);
+    const kv = keep.map((g) => g.visible);
+    for (const g of keep) g.visible = false;
+    overlays.forEach((g, i) => (g.visible = vis[i]));
+    this.scene3.background = null;
+    r.render(this.scene3, this.camera);
+    this.scene3.background = bg;
+    keep.forEach((g, i) => (g.visible = kv[i]));
+    r.autoClear = auto;
+    r.shadowMap.autoUpdate = autoShadow;
   }
 
   private resize(): void {
@@ -410,7 +670,20 @@ export class Viewer implements DragView, SketchView, MeasureView {
     const h = this.container.clientHeight;
     r.setScissorTest(false);
     r.setViewport(0, 0, w, h);
-    r.render(this.scene3, this.camera);
+    const st = this.studio;
+    if (st.on) {
+      this.updateGround();
+      const light = this.placeStudioLights();
+      // AO pauses while a section is shown (the cut faces are stencil caps)
+      const ao = st.ao && !store.getState().section.on;
+      if (ao) this.renderStudioAo();
+      else r.render(this.scene3, this.camera);
+      const diag = Math.max(1, boxDiagonal(this.modelBox));
+      this.lastStudioDraw = { on: true, shadows: st.shadows, ao, ground: this.ground !== null, aoRadius: ao ? aoRadiusFor(st, diag) : null, light };
+    } else {
+      r.render(this.scene3, this.camera);
+      this.lastStudioDraw = { on: false, shadows: false, ao: false, ground: false, aoRadius: null, light: null };
+    }
     this.noteCamera();
     this.placeMeasureLabels();
     this.placeAssertLabels();
@@ -661,6 +934,8 @@ export class Viewer implements DragView, SketchView, MeasureView {
       const mesh = new THREE.Mesh(geo, style.surface);
       mesh.renderOrder = style.renderOrder;
       mesh.userData = { meshKey: r.key, node: r.node };
+      // studio look: opaque bodies cast and receive shadows
+      mesh.castShadow = mesh.receiveShadow = !style.surface.transparent;
       group.add(mesh);
       this.pickables.push(mesh);
       if (!style.surface.transparent) this.capBodies.push({ group, geometry: geo, key: r.key });
@@ -700,6 +975,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
         const mesh = new THREE.Mesh(geo, style.surface);
         mesh.renderOrder = style.renderOrder;
         mesh.userData = { meshKey: key, node: it.node };
+        mesh.castShadow = mesh.receiveShadow = !style.surface.transparent && !it.flat;
         group.add(mesh);
         if (style.pickable) this.pickables.push(mesh);
         // Opaque solids get a section cap (transparent ones are only clipped).
@@ -988,6 +1264,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     grid.renderOrder = -1;
     grid.userData.ownGeometry = true;
     grid.name = "floor";
+    grid.visible = !(this.studio.on && this.studio.ground);
     this.helpers.add(grid);
     const axes = new THREE.AxesHelper(step);
     axes.userData.ownGeometry = true;

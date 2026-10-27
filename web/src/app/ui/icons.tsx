@@ -41,6 +41,8 @@ export {
   SquareRoundCorner as IconCorner,
   Star as IconStar,
   Sun as IconSun,
+  Sparkles as IconStudio,
+  SlidersVertical as IconStudioSettings,
   Circle as IconCircle,
   Trash2 as IconDelete,
   X as IconClose,

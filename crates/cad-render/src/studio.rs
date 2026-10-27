@@ -29,6 +29,9 @@ pub(crate) const SURFACE: u8 = 1;
 pub(crate) const CAP: u8 = 2;
 pub(crate) const GROUND: u8 = 3;
 
+/// Apparent radius of the key light at `shadow_softness = 1` (degrees).
+pub const MAX_LIGHT_RADIUS_DEG: f64 = 5.0;
+
 /// Opacity factor of the mesh edge lines in the studio look.
 pub(crate) const EDGE_ALPHA: f32 = 0.35;
 
@@ -45,7 +48,7 @@ pub struct Studio {
     /// Share of the ambient (sky) light, 0..1.
     pub ambient: f64,
     pub shadows: bool,
-    /// 0 = hard shadow edges, 1 = very soft (apparent light size 0…8°).
+    /// 0 = hard shadow edges, 1 = very soft (apparent light radius 0…5°).
     pub shadow_softness: f64,
     pub ao: bool,
     /// Ambient occlusion radius in mm (`None`: 5 % of the model diagonal).
@@ -297,15 +300,19 @@ impl ShadowMap {
         if x < 0.0 || y < 0.0 || x >= nf || y >= nf {
             return 1.0;
         }
-        let slope = ((1.0 - ndl * ndl).max(0.0).sqrt() / ndl.max(0.2)).min(4.0);
-        let bias = |r: f64| self.texel * (1.2 + r * slope);
+        // receiver plane: its depth changes by (gx, gy) mm per texel across the map, so the
+        // samples of a wide filter compare against the plane, not against one depth
+        let nz = ndl.max(0.25);
+        let (gx, gy) = ((n.dot(self.lx) / nz).clamp(-4.0, 4.0), (n.dot(self.ly) / nz).clamp(-4.0, 4.0));
+        let bias = self.texel * 1.5;
+        let receiver = |ox: f64, oy: f64| d + (gx * ox + gy * oy) * self.texel - bias;
         // blocker search
         let rs = ((d - self.dmin).max(0.0) * tan_theta / self.texel).clamp(1.5, nf * 0.06);
         // no texel near enough to the light in the search square: lit
         let nt = self.n.div_ceil(TILE);
         let (tx0, tx1) = (((x - rs).max(0.0) as usize) / TILE, ((x + rs).min(nf - 1.0) as usize) / TILE);
         let (ty0, ty1) = (((y - rs).max(0.0) as usize) / TILE, ((y + rs).min(nf - 1.0) as usize) / TILE);
-        let limit = (d - self.texel * 1.2) as f32;
+        let limit = (d - bias - rs * (gx.abs() + gy.abs()) * self.texel) as f32;
         if (ty0..=ty1).all(|ty| (tx0..=tx1).all(|tx| self.tiles[ty * nt + tx] >= limit)) {
             return 1.0;
         }
@@ -313,25 +320,26 @@ impl ShadowMap {
         let (mut sum, mut cnt) = (0.0, 0usize);
         for k in 0..NB {
             let (ox, oy) = vogel(k, NB, phi);
-            let r = rs * (ox * ox + oy * oy).sqrt();
-            let z = self.at(x + ox * rs, y + oy * rs) as f64;
-            if z < d - bias(r) {
-                sum += z;
+            let (ox, oy) = (ox * rs, oy * rs);
+            let z = self.at(x + ox, y + oy) as f64;
+            let r = receiver(ox, oy);
+            if z < r {
+                // distance blocker → receiver at this sample
+                sum += r + bias - z;
                 cnt += 1;
             }
         }
         if cnt == 0 {
             return 1.0;
         }
-        let blocker = sum / cnt as f64;
-        let pen = ((d - blocker) * tan_theta / self.texel).clamp(1.0, rs.max(1.0));
+        let gap = sum / cnt as f64;
+        let pen = (gap * tan_theta / self.texel).clamp(1.0, rs.max(1.0));
         const NF: usize = 16;
         let mut lit = 0usize;
         for k in 0..NF {
             let (ox, oy) = vogel(k, NF, phi + 1.3);
-            let r = pen * (ox * ox + oy * oy).sqrt();
-            let z = self.at(x + ox * pen, y + oy * pen) as f64;
-            if z >= d - bias(r) {
+            let (ox, oy) = (ox * pen, oy * pen);
+            if self.at(x + ox, y + oy) as f64 >= receiver(ox, oy) {
                 lit += 1;
             }
         }
@@ -501,7 +509,7 @@ pub(crate) fn shade(
     // Shadow map along the key light.
     let sm_size = 2048usize;
     let sm = if st.shadows && light.z > -0.99 { ShadowMap::build(casters, light, sm_size) } else { None };
-    let tan_theta = (st.shadow_softness.clamp(0.0, 1.0) * 8.0).to_radians().tan();
+    let tan_theta = (st.shadow_softness.clamp(0.0, 1.0) * MAX_LIGHT_RADIUS_DEG).to_radians().tan();
 
     // Lighting.
     let fill = light_direction(cam.dir, cam.up, 0.0, (-cam.dir.z).asin().to_degrees() + 15.0);

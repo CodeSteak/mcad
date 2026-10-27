@@ -22,6 +22,7 @@ import { bridge } from "../state/bridge";
 import { project } from "../state/project";
 import { store } from "../state/store";
 import { sectionCli } from "./section";
+import { studioCli } from "./studio";
 import { editTarget, getViewer, loadProject, sendNow, switchFile } from "./runtime";
 
 let gitTimer: ReturnType<typeof setTimeout> | null = null;
@@ -330,6 +331,7 @@ export function windowStatus(): unknown {
     diagnostics: st.diagnostics.items,
     scene: shown ? { version: shown.version, complete: shown.complete, nodes: shown.nodes.length, parts: (shown.parts ?? []).map((p) => p.name) } : null,
     section: st.section.on ? { point: st.section.point, normal: st.section.normal, flip: st.section.flip, cli: sectionCli() } : null,
+    studio: st.studio.on ? { ...st.studio, cli: studioCli() } : null,
     external: Object.keys(st.external),
     engine_error: st.engineError?.message ?? null,
   };

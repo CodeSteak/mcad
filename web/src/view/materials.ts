@@ -92,15 +92,18 @@ export class Materials {
   private styles = new Map<string, ModeStyle>();
   private fullByColor = new Map<string, THREE.Material>();
   private fatLines: LineMaterial[] = [];
+  /** Studio look: glossier surfaces (highlights of the key light), lighter edges. */
+  readonly studio: boolean;
 
-  constructor(palette: Palette) {
+  constructor(palette: Palette, studio = false) {
     this.palette = palette;
+    this.studio = studio;
   }
 
   private solid(color: string): THREE.MeshStandardMaterial {
     return new THREE.MeshStandardMaterial({
       color,
-      roughness: 0.78,
+      roughness: this.studio ? 0.5 : 0.78,
       metalness: 0.0,
       polygonOffset: true,
       polygonOffsetFactor: 1,
@@ -139,7 +142,7 @@ export class Materials {
     switch (mode) {
       case "full":
         if (flat) s = { surface: this.transparent(p.flat, 0.18, { polygonOffset: true, polygonOffsetFactor: 1 }), edges: this.lines(p.flat), renderOrder: 1, pickable: true };
-        else s = { surface: faceColors ? this.vertexColorMaterial() : this.fullMaterial(color), edges: this.lines(p.edge, 0.9), renderOrder: 0, pickable: true };
+        else s = { surface: faceColors ? this.vertexColorMaterial() : this.fullMaterial(color), edges: this.lines(p.edge, this.studio ? 0.35 : 0.9), renderOrder: 0, pickable: true };
         break;
       case "dim":
         s = {
