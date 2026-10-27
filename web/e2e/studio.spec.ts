@@ -1,7 +1,7 @@
 // End-to-end tests of the studio look (test report 22): toggle in the view toolbar, settings
 // panel (light, shadows, ambient occlusion, ground, background), settings kept after a reload,
-// dark theme, section, "Als mcad render kopieren" and the same look in the CLI. Screenshots and
-// measurements go to reports/tmp/report22/.
+// dark theme, section, "Als mcad render kopieren" and the same look in the CLI, English labels.
+// Screenshots and measurements go to reports/tmp/report22/.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -268,5 +268,32 @@ test("S05 “Als mcad render kopieren” gives the studio call; the CLI renders 
     caption: `“Als mcad render kopieren” gives \`${cli}\`${ran ? "; the call run with the CLI (size of the view, --no-axes) renders the same view in the CLI's software renderer" : " (no mcad binary: CLI run skipped)"}.`,
     images: ran ? ["s05-web", "s05-cli"] : ["s05-web"],
     checks: [cli],
+  });
+});
+
+test.describe("English UI", () => {
+  test.use({ locale: "en-US" });
+
+  test("S06 English labels of the toggle and the settings panel", async ({ page }) => {
+    await openApp(page);
+    await loadText(page, example("08-macropad.mcad"));
+    const tg = page.getByRole("button", { name: "Studio look", exact: true });
+    await tg.click();
+    await studioReady(page);
+    await page.getByRole("button", { name: "Studio settings", exact: true }).click();
+    const p = page.getByRole("dialog", { name: "Studio settings" });
+    await expect(p).toBeVisible();
+    for (const name of ["Shadows", "Ambient occlusion", "Ground"]) await expect(p.getByRole("checkbox", { name, exact: true })).toBeVisible();
+    for (const name of ["Direction", "Height", "Ambient", "Softness"]) await expect(p.getByRole("slider", { name, exact: true })).toBeVisible();
+    await expect(p.getByRole("button", { name: "Defaults", exact: true })).toBeVisible();
+    await expect(p.getByRole("button", { name: "Copy as mcad render", exact: true })).toBeVisible();
+    await shot(page, "s06-panel-en", "full");
+    record({
+      id: "S06",
+      title: "English UI",
+      caption: "Browser language English: “Studio look” and “Studio settings” in the view toolbar, the panel with Light (Direction, Height, Intensity, Ambient), Shadows (Softness), Ambient occlusion (Radius, Strength), Ground (colour, Theme), Background (top, bottom, Theme), Defaults and “Copy as mcad render”.",
+      images: ["s06-panel-en"],
+      checks: ["all labels found by role and English name"],
+    });
   });
 });

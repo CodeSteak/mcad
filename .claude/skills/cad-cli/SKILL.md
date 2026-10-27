@@ -190,7 +190,7 @@ file context.
 | `--theme dark` | dark colour scheme (as in the UI; palette colours in the dark variant) |
 | `--show regions` / `--show faces` | colour regions (body per colour as exported; default for models with colours) or colour per face (faster, inaccurate with overlap/fillets) |
 | `--size BxH`, `--no-axes`, `--whole-file` | image size, without axis cross, file context |
-| `--style studio` | realistic look: key light relative to the camera (`--light AZ,EL`, default `-40,50`), `--light-intensity`, `--ambient`, soft shadows (`--shadows on\|off`, `--shadow-softness 0…1`), ambient occlusion (`--ao on\|off`, `--ao-radius MM`, `--ao-strength 0…2`), ground plane (`--ground on\|off`, `--ground-color C`); 2–4× slower; for looking at form and contacts, `standard` for checking geometry |
+| `--style studio` | realistic look: key light relative to the camera (`--light AZ,EL`, default `-40,50`), `--light-intensity`, `--ambient`, soft shadows (`--shadows on\|off`, `--shadow-softness 0…1`), ambient occlusion (`--ao on\|off`, `--ao-radius MM`, `--ao-strength 0…2`), ground plane (`--ground on\|off`, `--ground-color C`); about +1 s per 1024x768 image; for looking at form and contacts, `standard` for checking geometry |
 | `--background C[,C]` | background colour or top,bottom gradient (`#rrggbb`, `rrggbb`, palette name) |
 
 **Section convention (same in the UI):** plane through point `p` with normal `n`; the half

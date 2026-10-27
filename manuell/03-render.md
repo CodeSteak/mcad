@@ -55,7 +55,7 @@ perspective, section, colours/regions, `--theme`, `--size`). Same settings in th
 
 - Studio options without `--style studio`: exit 2 (`--ao only applies with --style studio`).
 - Transparent bodies (dimmed rest, x-ray, alpha) and section caps cast no shadow.
-- Run time about 2–4× `standard` (1024x768: +0.5–1 s; `--shadows off --ao off` is cheapest).
+- Run time: about +1 s at 1024x768 on 4 cores (simple models 2–6× `standard`); `--shadows off --ao off` is cheapest.
 - JSON: `style`, `studio` (settings), `background` (hex list), `views[].studio` (`light_dir`,
   `ground_z`, `ao_radius_mm`, `shadow_map`; `null` where off).
 
