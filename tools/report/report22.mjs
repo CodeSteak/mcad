@@ -8,13 +8,14 @@
 //   data/           python3 tools/report/report22-data.py [--before <mcad before the change>]
 //   img/, scenarios.json, metrics.json
 //                   cd web && npx playwright test e2e/studio.spec.ts (S01–S06)
-//   final/          tools/report/report22-tests.sh (logs, times.txt, playwright.json)
+//   final/          tools/report/report22-tests.sh (logs, times.txt, playwright.json or, with
+//                   PW_CHUNKS=1, pw-a…d.json: the Playwright suite in four chunks)
 //
 //   node tools/report/report22.mjs
 //   node tools/report/print-pdf.mjs docs/reports/22-studio-look/report.html docs/reports/22-studio-look/report.pdf "Test report 22: studio look"
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
@@ -99,7 +100,15 @@ const usage = readText(join(fin, "usage.txt"));
 const usageSum = usage ? [...usage.matchAll(/test result: \w+\. (\d+) passed; (\d+) failed/g)].reduce((a, m) => ({ ok: a.ok + +m[1], failed: a.failed + +m[2] }), { ok: 0, failed: 0 }) : null;
 const vitest = readText(join(fin, "vitest.txt"));
 const vitestSum = vitest ? { ok: +(/Tests\s+(?:\d+ failed \| )?(\d+) passed/.exec(vitest)?.[1] ?? 0), failed: +(/Tests\s+(\d+) failed/.exec(vitest)?.[1] ?? 0) } : null;
-const pwJson = readJson(join(fin, "playwright.json"));
+// one run (playwright.json) or the suite in chunks (pw-*.json, PW_CHUNKS=1 tools/report/report22-tests.sh)
+const pwChunks = existsSync(fin) ? readdirSync(fin).filter((f) => /^pw-[a-z]+\.json$/.test(f)).sort().map((f) => readJson(join(fin, f))) : [];
+const pwJson = pwChunks.length
+  ? {
+      suites: pwChunks.flatMap((c) => c.suites ?? []),
+      stats: pwChunks.reduce((a, c) => ({ expected: a.expected + c.stats.expected, unexpected: a.unexpected + c.stats.unexpected, flaky: a.flaky + c.stats.flaky, skipped: a.skipped + c.stats.skipped, duration: a.duration + c.stats.duration }), { expected: 0, unexpected: 0, flaky: 0, skipped: 0, duration: 0 }),
+      chunks: pwChunks.length,
+    }
+  : readJson(join(fin, "playwright.json"));
 const pwStats = pwJson?.stats ?? null;
 const pwSpecs = (() => {
   const res = [];
@@ -144,7 +153,7 @@ const testRows = [
   ["`cargo test -p cad-cli usage` (manual: titles, every command)", usageSum ? resCell(usageSum.failed === 0 && rcOk("usage"), `${usageSum.ok} passed, ${usageSum.failed} failed`) : "–", dur("usage")],
   ["`cd web && pnpm typecheck`", resCell(rcOk("typecheck"), rcOk("typecheck") ? "no errors" : "errors"), dur("typecheck")],
   ["`cd web && pnpm test` (Vitest)", vitestSum ? resCell(vitestSum.failed === 0 && rcOk("vitest"), `${vitestSum.ok} passed, ${vitestSum.failed} failed`) : "–", dur("vitest")],
-  ["Playwright 1.56.1, full suite (Chromium 1243 with SwiftShader, `playwright.local.config.ts`)", pwStats ? resCell(pwStats.unexpected === 0, `${pwStats.expected} passed, ${pwStats.unexpected} failed${pwStats.flaky ? `, ${pwStats.flaky} flaky` : ""}${pwStats.skipped ? `, ${pwStats.skipped} skipped` : ""} (${pwFiles.length} files)${pwBad.length ? `: ${pwBad.map((t) => t.title.split(" ")[0]).join(", ")}` : ""}`) : "–", pwStats ? `${fmt(pwStats.duration / 60000, 1)} min` : dur("playwright")],
+  ["Playwright 1.56.1, full suite (Chromium 1243 with SwiftShader, `playwright.local.config.ts`)", pwStats ? resCell(pwStats.unexpected === 0, `${pwStats.expected} passed, ${pwStats.unexpected} failed${pwStats.flaky ? `, ${pwStats.flaky} flaky` : ""}${pwStats.skipped ? `, ${pwStats.skipped} skipped` : ""} (${pwFiles.length} files${pwJson?.chunks ? `, in ${pwJson.chunks} chunks` : ""})${pwBad.length ? `: ${pwBad.map((t) => t.title.split(" ")[0]).join(", ")}` : ""}`) : "–", pwStats ? `${fmt(pwStats.duration / 60000, 1)} min` : dur("playwright")],
 ]
   .map(([a, b, c]) => `<tr><td>${md(a)}</td><td>${b}</td><td class="n">${c}</td></tr>`)
   .join("");
@@ -203,7 +212,7 @@ const html = `<!doctype html>
   table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 8.2pt; }
   th, td { border: 1px solid var(--border); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
   th { background: var(--head); font-weight: 600; }
-  td.n, th.n { text-align: right; white-space: nowrap; }
+  td.n, th.n { text-align: right; } td.n { white-space: nowrap; }
   code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 7.6pt; }
   pre { margin: 0 0 1.5mm; padding: 1.4mm 2mm; background: #f6f8fa; border: 1px solid var(--border); border-radius: 1mm; white-space: pre-wrap; word-break: break-word; }
   pre.term { background: #16191d; color: #e6e9ed; border-color: #32373e; }
@@ -264,7 +273,7 @@ const html = `<!doctype html>
 ${pairs}
 <h3>Shadows on and off</h3>
 <div class="two">${fig(cli("shadow/on"), `Shadows on (AO off): the upright throws a soft shadow onto the base, light shines through its bore; mean brightness of the base probe ${fmt(D.probe["shadow/on"], 0)}`)}${fig(cli("shadow/off"), `\`--shadows off\`: probe ${fmt(D.probe["shadow/off"], 0)}; ${pct(D.diff.shadow)} of the pixels differ`)}</div>
-<div class="two">${fig(diff("shadow/on", "shadow/off", "diff-shadow.jpg", 3), "Difference shadows on − off, ×3, inverted (dark = changed): the shadow of the upright on the base and on the ground")}${fig(crop("shadow/on", "300x225+450+250", "crop-shadow-on.jpg"), "Shadows on, crop ×2: penumbra widens away from the contact")}</div>
+<div class="two">${fig(diff("shadow/on", "shadow/off", "diff-shadow.jpg", 2), "Difference shadows on − off, ×2, inverted (dark = changed): the shadow of the upright on the base and on the ground")}${fig(crop("shadow/on", "300x225+450+250", "crop-shadow-on.jpg"), "Shadows on, crop ×2: penumbra widens away from the contact")}</div>
 <h3>Ambient occlusion on and off</h3>
 <div class="three">${fig(cli("ao/on", 600), "Tray, AO on (shadows off)")}${fig(cli("ao/off", 600), `AO off: ${pct(D.diff.ao)} of the pixels differ`)}${fig(cli("ao/strong", 600), `\`--ao-strength 2 --ao-radius 6\`: ${pct(D.diff.ao_strong)} differ from AO off`)}</div>
 <div class="two">${fig(cli("ao/box-on"), "Box, AO on: inner corners, the gap under the lid and the contact with the ground darken")}${fig(cli("ao/box-off"), `AO off (${pct(D.diff.ao_box)} differ)`)}</div>
