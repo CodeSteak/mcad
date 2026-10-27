@@ -331,7 +331,8 @@ ${fm ? `<p>UI (Playwright S01, ${esc(fm.renderer)}, mean of ${fm.frames ?? "–"
 <tr><td>Shadow casters</td><td>transparent bodies (x-ray, dimmed rest, alpha) and section caps cast no shadow; the shadow map covers the model, very long shadows at low light elevation end where the ground fades.</td></tr>
 <tr><td>Ground</td><td>only below the model and only when the camera looks down onto it; not in front/right/bottom views. A model “floating” above other parts is lit as one scene (no per-part ground).</td></tr>
 <tr><td>Light follows the camera azimuth</td><td>deliberately (turntable): every view is lit from the front-left; in the UI the shadow turns while orbiting.</td></tr>
-<tr><td>Run time</td><td>studio is ${medRatio ? `${fmt(medRatio, 1)}×` : "several times"} slower than standard in the CLI (table above); <code>--shadows off --ao off</code> keeps only the lighting.</td></tr>
+<tr><td>Run time</td><td>studio adds about 1 s per 1024×768 image in the CLI (median ${medRatio ? `${fmt(medRatio, 1)}×` : "several times"} standard, table above); <code>--shadows off --ao off</code> keeps only the lighting.</td></tr>
+<tr><td>UI frame time</td><td>shadow map (2048², VSM blur) and GTAO are redrawn every frame; on a GPU this is cheap, on software WebGL (this container, VMs without GPU) a studio frame takes about ${fm ? fmt(fm.studio / 1000, 1) : "2"} s, so orbiting stutters; switch the studio look off or AO off there.</td></tr>
 <tr><td>Desktop app</td><td>not built or run here (no WebKitGTK); it embeds the same web UI.</td></tr>
 </table>
 </main>
