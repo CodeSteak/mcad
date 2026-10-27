@@ -14,6 +14,8 @@
 | `--show LIST` | `grids, anchors, handles, edges, labels, bbox, dims, asserts` or `all`; colours: `regions` (as printed, default with colours) / `faces` (faster) |
 | `--section x=V\|y=V\|z=V`, `--section-plane px,py,pz,nx,ny,nz`, `--section-flip` | cut; removes the side the normal points to (`z=10` removes z > 10) |
 | `--xray`, `--theme dark`, `--size WxH`, `--no-axes` | |
+| `--background C` / `--background TOP,BOTTOM` | solid or vertical gradient; `#rrggbb`, `rrggbb` or a palette name (`mcad usage colors`) |
+| `--style standard\|studio` | `studio`: realistic lighting, shadows, ambient occlusion, ground (table below) |
 
 - `--show grids` in file context shows only top-level grids; use `--module NAME`.
 - Asserts (always drawn): `assert_keepout` volume translucent yellow, dashed outline on top;
@@ -28,9 +30,41 @@
 - In `iso`, cut faces of `y=` sections face away: add `--section-flip` or `--view back`.
 - `--json` returns the camera per view (`scale_px_per_mm`) to map pixels to mm.
 
+## Studio style (`--style studio`)
+
+Key light with highlight, weak fill light from the camera, sky/ground ambient light, soft cast
+shadows (model on itself and on the ground), screen-space ambient occlusion, ground plane at the
+model's lowest z fading into a gradient background, edges at 35 % opacity. Analytic only (no
+textures, no environment maps). Works with every other option (views, contact sheet,
+perspective, section, colours/regions, `--theme`, `--size`). Same settings in the UI
+(`mcad usage ui`).
+
+| Option | Default | Effect |
+| --- | --- | --- |
+| `--light AZ,EL` | `-40,50` | key light: azimuth relative to the camera (0 = from the camera, + = from the right, like a turntable: the light moves with the camera), elevation 1…90° above the xy plane |
+| `--light-intensity F` | `1` | key + fill light, 0…4 |
+| `--ambient F` | `0.4` | share of the sky light, 0…1 (rest: key light) |
+| `--shadows on\|off` | `on` | shadow map of the opaque bodies |
+| `--shadow-softness F` | `0.35` | 0 = hard … 1 = very soft (light size 0…8°, edges sharper near contact) |
+| `--ao on\|off` | `on` | ambient occlusion in corners, gaps, at the ground contact |
+| `--ao-radius MM` | 5 % of the model diagonal | reach of the occlusion |
+| `--ao-strength F` | `1` | 0…2 |
+| `--ground on\|off` | `on` | ground plane, only seen from above (none in `front`/`bottom` …) |
+| `--ground-color C` | light `#e6e8ec`, dark `#2c3038` | |
+| background | light `#f8f9fb`→`#d9dde3`, dark `#2b3038`→`#111317` | `--background` overrides |
+
+- Studio options without `--style studio`: exit 2 (`--ao only applies with --style studio`).
+- Transparent bodies (dimmed rest, x-ray, alpha) and section caps cast no shadow.
+- Run time about 2–4× `standard` (1024x768: +0.5–1 s; `--shadows off --ao off` is cheapest).
+- JSON: `style`, `studio` (settings), `background` (hex list), `views[].studio` (`light_dir`,
+  `ground_z`, `ao_radius_mm`, `shadow_map`; `null` where off).
+
 ```sh
 mcad render box.mcad -o /tmp/a.png --module enclosure --views all --show grids,anchors,labels
 mcad render box.mcad -o /tmp/b.png --section z=10 --show dims
 mcad render box.mcad -o /tmp/c.png --line 8 --azimuth 120 --elevation 30
 mcad render box.mcad -o /tmp/d.png --part cover --xray
+mcad render box.mcad -o /tmp/e.png --style studio --views all
+mcad render box.mcad -o /tmp/f.png --style studio --light 60,30 --shadow-softness 0.8 --ao-strength 1.5
+mcad render box.mcad -o /tmp/g.png --style studio --ground off --background '#ffffff,#c8ccd2'
 ```

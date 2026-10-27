@@ -20,8 +20,8 @@ use std::rc::Rc;
 use cad_eval::palette::{self, Theme};
 use cad_kernel::Mesh;
 use cad_render::{
-    CameraInfo, Item, Label, Marker, MarkerShape, Polyline, Projection, RenderOptions, Scene, Section, View,
-    contact_sheet, render_info, tile_origin,
+    CameraInfo, Item, Label, Marker, MarkerShape, Polyline, Projection, RenderOptions, Scene, Section, Studio,
+    StudioInfo, View, contact_sheet, render_info, tile_origin,
 };
 use cad_session::protocol as p;
 use clap::Args;
@@ -69,6 +69,9 @@ pub(crate) struct Look {
     pub overlap: [f32; 4],
     /// Contact face of `assert_touches`.
     pub contact: [f32; 4],
+    /// Studio look: background gradient (top, bottom) and ground colour.
+    pub studio_background: [[f32; 4]; 2],
+    pub ground: [f32; 4],
 }
 
 const fn hex(c: u32, a: f32) -> [f32; 4] {
@@ -108,6 +111,8 @@ pub(crate) const LIGHT: Look = Look {
     keepout_edge: hex(0x8a5a00, 1.0),
     overlap: hex(0xe03131, 0.92),
     contact: hex(0x2f9e44, 0.9),
+    studio_background: [hex(0xf8f9fb, 1.0), hex(0xd9dde3, 1.0)],
+    ground: hex(0xe6e8ec, 1.0),
 };
 
 pub(crate) const DARK: Look = Look {
@@ -143,6 +148,8 @@ pub(crate) const DARK: Look = Look {
     keepout_edge: hex(0xfde047, 1.0),
     overlap: hex(0xff6b6b, 0.92),
     contact: hex(0x69db7c, 0.9),
+    studio_background: [hex(0x2b3038, 1.0), hex(0x111317, 1.0)],
+    ground: hex(0x2c3038, 1.0),
 };
 
 impl Look {
@@ -237,6 +244,45 @@ pub(crate) struct ViewArgs {
     /// Colour scheme: light (default) or dark (like the dark theme of the UI).
     #[arg(long, default_value = "light", value_name = "light|dark")]
     pub theme: String,
+    /// Rendering style: standard (CAD shading) or studio (key and fill light, highlights, soft
+    /// shadows, ambient occlusion, ground plane, gradient background).
+    #[arg(long, default_value = "standard", value_name = "standard|studio")]
+    pub style: String,
+    /// Studio: key light direction in degrees: azimuth relative to the camera (0 = from the
+    /// camera, positive = from the right), elevation above the xy plane (default -40,50).
+    #[arg(long, value_name = "AZ,EL", allow_hyphen_values = true)]
+    pub light: Option<String>,
+    /// Studio: strength of key and fill light, 0…4 (default 1).
+    #[arg(long, value_name = "F")]
+    pub light_intensity: Option<f64>,
+    /// Studio: share of the ambient (sky) light, 0…1 (default 0.4).
+    #[arg(long, value_name = "F")]
+    pub ambient: Option<f64>,
+    /// Studio: cast shadows on the model and the ground (default on).
+    #[arg(long, value_name = "on|off")]
+    pub shadows: Option<String>,
+    /// Studio: shadow edge softness, 0 = hard … 1 = very soft (default 0.35).
+    #[arg(long, value_name = "F")]
+    pub shadow_softness: Option<f64>,
+    /// Studio: ambient occlusion in corners and gaps (default on).
+    #[arg(long, value_name = "on|off")]
+    pub ao: Option<String>,
+    /// Studio: ambient occlusion radius in mm (default 5 % of the model diagonal).
+    #[arg(long, value_name = "MM")]
+    pub ao_radius: Option<f64>,
+    /// Studio: ambient occlusion strength, 0…2 (default 1).
+    #[arg(long, value_name = "F")]
+    pub ao_strength: Option<f64>,
+    /// Studio: ground plane under the model, fading into the background (default on).
+    #[arg(long, value_name = "on|off")]
+    pub ground: Option<String>,
+    /// Studio: colour of the ground plane: `#rrggbb` or a palette name (default from the theme).
+    #[arg(long, value_name = "COLOR")]
+    pub ground_color: Option<String>,
+    /// Background: one colour, or two for a vertical gradient (top,bottom); `#rrggbb` or a
+    /// palette name. Default: the theme's colour, with --style studio a light gradient.
+    #[arg(long, value_name = "COLOR[,COLOR]")]
+    pub background: Option<String>,
 }
 
 pub(crate) fn parse_size(s: &str) -> Result<(u32, u32), Fail> {
@@ -336,6 +382,137 @@ pub(crate) struct Plan {
     pub section: Option<Section>,
     pub xray: bool,
     pub look: &'static Look,
+    /// `--style studio` with its settings.
+    pub studio: Option<Studio>,
+    /// `--background`: (top, bottom of a gradient).
+    pub background: Option<Background>,
+}
+
+/// `on|off` of a studio switch.
+fn parse_switch(opt: &str, v: &str) -> Result<bool, Fail> {
+    match v.trim().to_ascii_lowercase().as_str() {
+        "on" | "true" | "yes" | "1" => Ok(true),
+        "off" | "false" | "no" | "0" => Ok(false),
+        _ => Err(Fail::Usage(tr!("{opt} {v}: erwartet on oder off", "{opt} {v}: expected on or off"))),
+    }
+}
+
+/// A number option within `lo..=hi`.
+fn in_range(opt: &str, v: f64, lo: f64, hi: f64) -> Result<f64, Fail> {
+    if v.is_finite() && v >= lo && v <= hi {
+        Ok(v)
+    } else {
+        Err(Fail::Usage(tr!("{opt} {v}: erlaubt {lo}…{hi}", "{opt} {v}: allowed {lo}…{hi}")))
+    }
+}
+
+/// Colour of an option: `#rgb`, `#rrggbb` (also without `#`) or a palette name.
+pub(crate) fn parse_color_arg(opt: &str, s: &str) -> Result<[f32; 4], Fail> {
+    let t = s.trim();
+    let hexlike = (t.len() == 3 || t.len() == 6) && t.chars().all(|c| c.is_ascii_hexdigit());
+    let parsed = if hexlike { palette::parse_color(&format!("#{t}")) } else { palette::parse_color(t) };
+    match parsed {
+        Some(c) if c.kind != palette::ColorKind::Random => Ok([c.rgba[0], c.rgba[1], c.rgba[2], 1.0]),
+        _ => Err(Fail::Usage(tr!(
+            "{opt} {s}: erwartet #rrggbb oder einen Palettennamen (mcad usage colors)",
+            "{opt} {s}: expected #rrggbb or a palette colour name (mcad usage colors)"
+        ))),
+    }
+}
+
+/// Studio settings from the options (`None` for `--style standard`).
+fn studio_from_args(a: &ViewArgs, look: &Look) -> Result<Option<Studio>, Fail> {
+    let style = a.style.trim().to_ascii_lowercase();
+    let studio = match style.as_str() {
+        "" | "standard" => false,
+        "studio" => true,
+        _ => {
+            return Err(Fail::Usage(tr!(
+                "--style {}: standard oder studio",
+                "--style {}: standard or studio",
+                a.style
+            )));
+        }
+    };
+    let given: Vec<&str> = [
+        ("--light", a.light.is_some()),
+        ("--light-intensity", a.light_intensity.is_some()),
+        ("--ambient", a.ambient.is_some()),
+        ("--shadows", a.shadows.is_some()),
+        ("--shadow-softness", a.shadow_softness.is_some()),
+        ("--ao", a.ao.is_some()),
+        ("--ao-radius", a.ao_radius.is_some()),
+        ("--ao-strength", a.ao_strength.is_some()),
+        ("--ground", a.ground.is_some()),
+        ("--ground-color", a.ground_color.is_some()),
+    ]
+    .into_iter()
+    .filter(|(_, g)| *g)
+    .map(|(n, _)| n)
+    .collect();
+    if !studio {
+        if let Some(first) = given.first() {
+            return Err(Fail::Usage(tr!(
+                "{first} gilt nur mit --style studio",
+                "{first} only applies with --style studio"
+            )));
+        }
+        return Ok(None);
+    }
+    let mut s = Studio { ground_color: look.ground, ..Studio::default() };
+    if let Some(l) = &a.light {
+        let v = parse_vec(l, 2, "--light")?;
+        s.light_azimuth = v[0];
+        s.light_elevation = in_range("--light (elevation)", v[1], 1.0, 90.0)?;
+    }
+    if let Some(v) = a.light_intensity {
+        s.light_intensity = in_range("--light-intensity", v, 0.0, 4.0)?;
+    }
+    if let Some(v) = a.ambient {
+        s.ambient = in_range("--ambient", v, 0.0, 1.0)?;
+    }
+    if let Some(v) = &a.shadows {
+        s.shadows = parse_switch("--shadows", v)?;
+    }
+    if let Some(v) = a.shadow_softness {
+        s.shadow_softness = in_range("--shadow-softness", v, 0.0, 1.0)?;
+    }
+    if let Some(v) = &a.ao {
+        s.ao = parse_switch("--ao", v)?;
+    }
+    if let Some(v) = a.ao_radius {
+        if !(v.is_finite() && v > 0.0) {
+            return Err(Fail::Usage(tr!("--ao-radius {v}: muss positiv sein", "--ao-radius {v}: must be positive")));
+        }
+        s.ao_radius = Some(v);
+    }
+    if let Some(v) = a.ao_strength {
+        s.ao_strength = in_range("--ao-strength", v, 0.0, 2.0)?;
+    }
+    if let Some(v) = &a.ground {
+        s.ground = parse_switch("--ground", v)?;
+    }
+    if let Some(c) = &a.ground_color {
+        s.ground_color = parse_color_arg("--ground-color", c)?;
+    }
+    Ok(Some(s))
+}
+
+/// Background colour, with the bottom colour of a vertical gradient.
+pub(crate) type Background = ([f32; 4], Option<[f32; 4]>);
+
+/// `--background C` or `C1,C2`.
+fn background_from_args(a: &ViewArgs) -> Result<Option<Background>, Fail> {
+    let Some(b) = &a.background else { return Ok(None) };
+    let parts: Vec<&str> = b.split(',').map(str::trim).collect();
+    match parts.as_slice() {
+        [c] => Ok(Some((parse_color_arg("--background", c)?, None))),
+        [c1, c2] => Ok(Some((parse_color_arg("--background", c1)?, Some(parse_color_arg("--background", c2)?)))),
+        _ => Err(Fail::Usage(tr!(
+            "--background {b}: erwartet FARBE oder OBEN,UNTEN",
+            "--background {b}: expected COLOR or TOP,BOTTOM"
+        ))),
+    }
 }
 
 impl Plan {
@@ -410,6 +587,11 @@ impl Plan {
             }
             None => None,
         };
+        let look: &'static Look = match a.theme.trim().to_ascii_lowercase().as_str() {
+            "light" | "hell" | "" => &LIGHT,
+            "dark" | "dunkel" => &DARK,
+            t => return Err(Fail::Usage(tr!("--theme {t}: light oder dark", "--theme {t}: light or dark"))),
+        };
         Ok(Plan {
             views,
             sheet,
@@ -426,12 +608,19 @@ impl Plan {
             show,
             section: parse_section(a.section.as_deref(), a.section_plane.as_deref(), a.section_flip)?,
             xray: a.xray,
-            look: match a.theme.trim().to_ascii_lowercase().as_str() {
-                "light" | "hell" | "" => &LIGHT,
-                "dark" | "dunkel" => &DARK,
-                t => return Err(Fail::Usage(tr!("--theme {t}: light oder dark", "--theme {t}: light or dark"))),
-            },
+            look,
+            studio: studio_from_args(a, look)?,
+            background: background_from_args(a)?,
         })
+    }
+
+    /// Background (top, bottom of a gradient) of the rendering.
+    pub fn background(&self) -> Background {
+        match (self.background, &self.studio) {
+            (Some(b), _) => b,
+            (None, Some(_)) => (self.look.studio_background[0], Some(self.look.studio_background[1])),
+            (None, None) => (self.look.background, None),
+        }
     }
 
     fn shows(&self, s: &str) -> bool {
@@ -1404,6 +1593,28 @@ fn grid_overlay(
     count
 }
 
+/// Settings of `--style studio` (JSON `studio`).
+fn studio_json(s: &Studio) -> Json {
+    json!({
+        "light_azimuth": s.light_azimuth, "light_elevation": s.light_elevation,
+        "light_intensity": s.light_intensity, "ambient": s.ambient,
+        "shadows": s.shadows, "shadow_softness": s.shadow_softness,
+        "ao": s.ao, "ao_radius": s.ao_radius, "ao_strength": s.ao_strength,
+        "ground": s.ground, "ground_color": palette::hex_string(s.ground_color),
+    })
+}
+
+/// What the studio look used in one view (JSON `views[].studio`).
+fn studio_view_json(s: &StudioInfo) -> Json {
+    let r = |v: f64| num(v).parse::<f64>().unwrap_or(v);
+    json!({
+        "light_dir": [r(s.light_dir.x), r(s.light_dir.y), r(s.light_dir.z)],
+        "ground_z": s.ground_z.map(r),
+        "ao_radius_mm": s.ao_radius.map(r),
+        "shadow_map": s.shadow_map,
+    })
+}
+
 fn camera_json(c: &CameraInfo) -> Json {
     let (proj, fov) = match c.projection {
         Projection::Ortho => ("ortho", None),
@@ -1469,7 +1680,9 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
         fit,
         zoom: plan.zoom,
         section: plan.section,
-        background: plan.look.background,
+        background: plan.background().0,
+        background_bottom: plan.background().1,
+        studio: plan.studio.clone(),
         cap_color: plan.look.cap,
         title_color: plan.look.text,
         label_background: plan.look.label_background,
@@ -1516,17 +1729,21 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
         let opts = RenderOptions { view: *view, title, ..common.clone() };
         let (img, cam) = render_info(&scene, &opts);
         let (x, y) = if plan.sheet { tile_origin(k, cols, (tw, th), gap) } else { (0, 0) };
-        views_json
-            .push(json!({ "name": name, "x": x, "y": y, "width": tw, "height": th, "camera": camera_json(&cam) }));
+        views_json.push(json!({ "name": name, "x": x, "y": y, "width": tw, "height": th, "camera": camera_json(&cam),
+            "studio": cam.studio.as_ref().map(studio_view_json) }));
         tiles.push(img);
     }
-    let img = if plan.sheet { contact_sheet(&tiles, cols, gap, plan.look.background) } else { tiles.remove(0) };
+    let img = if plan.sheet { contact_sheet(&tiles, cols, gap, plan.background().0) } else { tiles.remove(0) };
     crate::host::write_file(output, &img.to_png()).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
 
     let section = plan.section.map(|s| {
         json!({ "point": s.point.to_array(), "normal": s.normal.to_array(), "keeps": "(q - point) · normal <= 0",
                 "method": "renderer clipping + cap" })
     });
+    let background_json: Vec<String> = {
+        let (t, b) = plan.background();
+        std::iter::once(t).chain(b).map(palette::hex_string).collect()
+    };
     let j = json!({
         "output": output.display().to_string(),
         "width": img.width,
@@ -1546,6 +1763,9 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
         "section": section,
         "xray": plan.xray,
         "theme": if plan.look.theme == Theme::Dark { "dark" } else { "light" },
+        "style": if plan.studio.is_some() { "studio" } else { "standard" },
+        "studio": plan.studio.as_ref().map(studio_json),
+        "background": background_json,
         "bounds": bounds_json(&built.subject),
         "notes": built.notes,
     });
@@ -1588,6 +1808,9 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
     }
     if plan.look.theme == Theme::Dark {
         t.push_str(trs!(", dunkel", ", dark"));
+    }
+    if plan.studio.is_some() {
+        t.push_str(trs!(", Studio", ", studio"));
     }
     if let Some(b) = &built.subject {
         let s: Vec<String> = (0..3).map(|i| num(b.max.0[i] - b.min.0[i])).collect();

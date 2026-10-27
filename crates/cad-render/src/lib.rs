@@ -15,14 +15,22 @@
 //!   counted with a top-left fill rule so shared edges count once. Convention: the plane
 //!   through `point` with `normal` removes the half space the normal points into, i.e. what
 //!   stays is `(q − point) · normal ≤ 0`.
+//! * Studio look ([`Studio`], `RenderOptions::studio`): the opaque samples are shaded after
+//!   rasterisation (deferred) with a key light (Blinn-Phong highlight), a camera fill light and
+//!   hemisphere ambient light, soft shadows from a shadow map (percentage-closer soft shadows),
+//!   screen-space ambient occlusion and a ground plane under the model that fades into the
+//!   background; see [`studio`].
+//! * Background: solid or a vertical gradient (`RenderOptions::background_bottom`).
 //! * Anti-aliasing by supersampling. No GPU.
 
 mod font;
+pub mod studio;
 pub mod text;
 
 use cad_kernel::Mesh;
 use glam::{DMat4, DVec3};
 
+pub use studio::{Studio, StudioInfo};
 pub use text::{TextSize, contact_sheet, text_size, tile_origin};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -217,7 +225,12 @@ pub struct RenderOptions {
     pub width: u32,
     pub height: u32,
     pub view: View,
+    /// Background colour (top of the image with `background_bottom`).
     pub background: [f32; 4],
+    /// Vertical gradient: colour at the bottom of the image (`None`: solid `background`).
+    pub background_bottom: Option<[f32; 4]>,
+    /// Studio look (`None`: the classic per-vertex shading).
+    pub studio: Option<Studio>,
     pub axes: bool,
     /// Supersampling factor per axis (1 = none).
     pub supersample: u32,
@@ -253,6 +266,8 @@ impl Default for RenderOptions {
             height: 600,
             view: View::Iso,
             background: [0.96, 0.96, 0.97, 1.0],
+            background_bottom: None,
+            studio: None,
             axes: true,
             supersample: 2,
             margin: 0.08,
@@ -289,6 +304,8 @@ pub struct CameraInfo {
     pub height_mm: f64,
     pub azimuth: f64,
     pub elevation: f64,
+    /// What the studio look used (`None` without it).
+    pub studio: Option<StudioInfo>,
 }
 
 /// 8-bit RGBA image.
@@ -367,6 +384,36 @@ impl Camera {
         }
     }
 
+    /// Scene point of sample (sx, sy) at `depth` (inverse of [`Camera::project`]).
+    fn unproject(&self, sx: f64, sy: f64, depth: f64) -> DVec3 {
+        let (x, y) = (sx - self.w / 2.0, self.h / 2.0 - sy);
+        match self.dist {
+            None => self.target + self.right * (x / self.scale) + self.up * (y / self.scale) + self.dir * depth,
+            Some(d) => {
+                let zc = d * d / (d - depth).max(1e-12);
+                let f = self.scale * d / zc;
+                self.target + self.right * (x / f) + self.up * (y / f) + self.dir * (zc - d)
+            }
+        }
+    }
+
+    /// Linear depth (mm along the viewing direction from the target) of a [`Camera::project`]
+    /// depth.
+    fn linear_depth(&self, depth: f64) -> f64 {
+        match self.dist {
+            None => depth,
+            Some(d) => d * d / (d - depth).max(1e-12) - d,
+        }
+    }
+
+    /// Unit direction of the view ray through scene point `p` (camera → `p`).
+    fn ray(&self, p: DVec3) -> DVec3 {
+        match self.dist {
+            None => self.dir,
+            Some(_) => (p - self.eye()).normalize_or(self.dir),
+        }
+    }
+
     /// Depth (as [`Camera::project`]) where the ray through sample (sx, sy) meets `plane`.
     fn plane_depth(&self, sx: f64, sy: f64, plane: &Section) -> Option<f64> {
         let n = plane.normal.normalize_or_zero();
@@ -404,6 +451,15 @@ struct Target {
     depth: Vec<f64>,
 }
 
+/// Per-sample surface data of the studio look (deferred shading).
+pub(crate) struct GBuf {
+    pub albedo: Vec<[f32; 3]>,
+    /// Unit normal facing the camera.
+    pub normal: Vec<[f32; 3]>,
+    /// [`studio::NONE`], [`studio::SURFACE`], [`studio::CAP`] or [`studio::GROUND`].
+    pub kind: Vec<u8>,
+}
+
 impl Target {
     fn blend(&mut self, i: usize, c: [f32; 3], a: f32) {
         let d = &mut self.color[i];
@@ -419,6 +475,8 @@ struct SV {
     y: f64,
     z: f64,
     shade: f32,
+    /// Shading normal (camera facing), for the studio look.
+    n: [f32; 3],
 }
 
 fn edge_fn(a: &SV, b: &SV, x: f64, y: f64) -> f64 {
@@ -439,6 +497,13 @@ fn tri_box(t: &Target, v: &[SV; 3]) -> Option<(usize, usize, usize, usize)> {
 
 /// Rasterises a triangle; `f(index, depth, shade)` decides what to do with each covered sample.
 fn raster_tri(t: &Target, v: [SV; 3], mut f: impl FnMut(usize, f64, f32)) {
+    raster_tri_w(t, v, |i, z, w| {
+        f(i, z, (w[0] as f32) * v[0].shade + (w[1] as f32) * v[1].shade + (w[2] as f32) * v[2].shade)
+    });
+}
+
+/// Rasterises a triangle; `f(index, depth, barycentric weights)` per covered sample.
+fn raster_tri_w(t: &Target, v: [SV; 3], mut f: impl FnMut(usize, f64, [f64; 3])) {
     let area = edge_fn(&v[0], &v[1], v[2].x, v[2].y);
     if area.abs() < 1e-12 {
         return;
@@ -455,8 +520,7 @@ fn raster_tri(t: &Target, v: [SV; 3], mut f: impl FnMut(usize, f64, f32)) {
                 continue;
             }
             let z = w0 * v[0].z + w1 * v[1].z + w2 * v[2].z;
-            let s = (w0 as f32) * v[0].shade + (w1 as f32) * v[1].shade + (w2 as f32) * v[2].shade;
-            f(y * t.w + x, z, s);
+            f(y * t.w + x, z, [w0, w1, w2]);
         }
     }
 }
@@ -769,6 +833,7 @@ fn camera_info(cam: &Camera, opts: &RenderOptions, ss: f64) -> CameraInfo {
         height_mm: opts.height as f64 / scale,
         azimuth,
         elevation,
+        studio: None,
     }
 }
 
@@ -794,8 +859,18 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
     if zlo > zhi {
         (zlo, zhi) = (0.0, 0.0);
     }
-    let bg = [opts.background[0], opts.background[1], opts.background[2]];
-    let mut t = Target { w, h, color: vec![bg; w * h], depth: vec![f64::INFINITY; w * h] };
+    let row_bg = |y: usize| background_at(opts, y, h);
+    let mut color = Vec::with_capacity(w * h);
+    for y in 0..h {
+        color.extend(std::iter::repeat_n(row_bg(y), w));
+    }
+    let mut t = Target { w, h, color, depth: vec![f64::INFINITY; w * h] };
+    let studio = opts.studio.as_ref();
+    let mut gbuf = studio.map(|_| GBuf {
+        albedo: vec![[0.0; 3]; w * h],
+        normal: vec![[0.0; 3]; w * h],
+        kind: vec![studio::NONE; w * h],
+    });
     let bias = ((zhi - zlo).abs() * 2e-3).max(1e-6) + 1.5 * ss as f64 / cam.scale;
 
     // Clip planes: the section and (perspective) the near plane.
@@ -814,11 +889,14 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
     let shade = |n: DVec3| -> f32 { (0.38 + 0.62 * n.dot(light).max(0.0)) as f32 };
     let sv = |p: DVec3, n: DVec3| {
         let (x, y, z) = cam.project(p);
-        SV { x, y, z, shade: shade(n) }
+        SV { x, y, z, shade: shade(n), n: n.as_vec3().to_array() }
     };
 
     let mut transparent: Vec<Tri> = Vec::new();
     let mut opaque: Vec<Tri> = Vec::new();
+    // studio: world triangles of the opaque meshes (shadow casters) and the bounds of all items
+    let mut casters: Vec<[DVec3; 3]> = Vec::new();
+    let (mut mlo, mut mhi) = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
     for (item, it) in scene.items.iter().enumerate() {
         let m = &it.mesh;
         let nm = it.transform.inverse().transpose();
@@ -826,6 +904,12 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
         for tri in m.indices.chunks_exact(3) {
             let p: [DVec3; 3] =
                 std::array::from_fn(|k| it.transform.transform_point3(v3(&m.positions[tri[k] as usize * 3..])));
+            if studio.is_some() {
+                for q in &p {
+                    mlo = mlo.min(*q);
+                    mhi = mhi.max(*q);
+                }
+            }
             let fnrm = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
             let vn: [DVec3; 3] = std::array::from_fn(|k| {
                 if has_n {
@@ -860,6 +944,9 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
                 if it.color[3] < 0.999 {
                     transparent.push(t);
                 } else {
+                    if studio.is_some() {
+                        casters.push([q[0].0, q[1].0, q[2].0]);
+                    }
                     opaque.push(t);
                 }
             }
@@ -868,15 +955,30 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
     for tri in &opaque {
         let c = tri.color;
         let mut writes = Vec::new();
-        raster_tri(&t, tri.v, |i, z, s| {
+        raster_tri_w(&t, tri.v, |i, z, w| {
             if z < t.depth[i] {
-                writes.push((i, z, s));
+                writes.push((i, z, w));
             }
         });
-        for (i, z, s) in writes {
+        let v = &tri.v;
+        for (i, z, wt) in writes {
             if z < t.depth[i] {
                 t.depth[i] = z;
-                t.color[i] = [c[0] * s, c[1] * s, c[2] * s];
+                match gbuf.as_mut() {
+                    None => {
+                        let s = (wt[0] as f32) * v[0].shade + (wt[1] as f32) * v[1].shade + (wt[2] as f32) * v[2].shade;
+                        t.color[i] = [c[0] * s, c[1] * s, c[2] * s];
+                    }
+                    Some(g) => {
+                        let n: [f32; 3] = std::array::from_fn(|k| {
+                            (wt[0] as f32) * v[0].n[k] + (wt[1] as f32) * v[1].n[k] + (wt[2] as f32) * v[2].n[k]
+                        });
+                        let l = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-12);
+                        g.normal[i] = [n[0] / l, n[1] / l, n[2] / l];
+                        g.albedo[i] = [c[0], c[1], c[2]];
+                        g.kind[i] = studio::SURFACE;
+                    }
+                }
             }
         }
     }
@@ -939,9 +1041,21 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
                     let hatch = if ci % 2 == 0 { x + y } else { x + 7 * oh_cap - y };
                     let k = if hatch % 7 == 0 { 0.72 } else { 1.0 };
                     t.color[i] = [cc[0] * cs * k, cc[1] * cs * k, cc[2] * cs * k];
+                    if let Some(g) = gbuf.as_mut() {
+                        g.albedo[i] = [cc[0] * k, cc[1] * k, cc[2] * k];
+                        g.normal[i] = cap_n.as_vec3().to_array();
+                        g.kind[i] = studio::CAP;
+                    }
                 }
             }
         }
+    }
+
+    // Studio look: ground, ambient occlusion, shadows and lighting of the opaque samples.
+    let mut studio_info = None;
+    if let (Some(st), Some(g)) = (studio, gbuf.as_mut()) {
+        let bounds = if mlo.x <= mhi.x { Some((mlo, mhi)) } else { None };
+        studio_info = Some(studio::shade(&mut t, g, &cam, opts, st, &casters, bounds));
     }
 
     // Edges of opaque meshes (depth tested).
@@ -955,9 +1069,11 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
             }
         }
     };
+    // studio: lighter edges (the shading shows the form)
+    let edge_alpha = if studio.is_some() { studio::EDGE_ALPHA } else { 1.0 };
     for it in scene.items.iter().filter(|i| i.color[3] >= 0.999) {
         if let Some(ec) = it.edges {
-            draw_edges(&mut t, it, ec);
+            draw_edges(&mut t, it, [ec[0], ec[1], ec[2], ec[3] * edge_alpha]);
         }
     }
     for (a, b, c) in &contour {
@@ -1089,6 +1205,20 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
             break;
         }
     }
-    let info = camera_info(&cam, opts, ss as f64);
+    let mut info = camera_info(&cam, opts, ss as f64);
+    info.studio = studio_info;
     (img, info)
+}
+
+/// Background colour of sample row `y` of `h` (gradient from `background` to
+/// `background_bottom`).
+fn background_at(opts: &RenderOptions, y: usize, h: usize) -> [f32; 3] {
+    let top = opts.background;
+    match opts.background_bottom {
+        None => [top[0], top[1], top[2]],
+        Some(b) => {
+            let u = if h > 1 { y as f32 / (h - 1) as f32 } else { 0.0 };
+            std::array::from_fn(|k| top[k] + (b[k] - top[k]) * u)
+        }
+    }
 }

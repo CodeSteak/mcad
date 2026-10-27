@@ -116,6 +116,7 @@ Units mm and degrees, Z up.
 | `mcad check FILE` | diagnostics with line:column |
 | `mcad eval FILE` / `mcad inspect FILE --line N` | tree and values / what one line produces |
 | `mcad render FILE -o x.png` | image: views, contact sheet, overlays, section, X-ray (`mcad usage render`) |
+| `mcad render FILE -o x.png --style studio` | realistic look: lights, soft shadows, ambient occlusion, ground (`mcad usage render`) |
 | `mcad measure FILE …` | distance, radius, angle, length, area, volume, section, wall, collisions (`mcad usage measure`) |
 | `mcad set FILE --param m.p=v` | change a default value or literal |
 | `mcad watch FILE` | re-evaluate on every change |

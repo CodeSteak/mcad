@@ -377,6 +377,133 @@ fn render_xray() {
     assert!(png(&a).differing(&png(&b)) > 2000);
 }
 
+#[test]
+fn render_studio_style() {
+    let dir = tempfile::tempdir().unwrap();
+    let g = data("housing.mcad");
+    let p = |n: &str| dir.path().join(n).display().to_string();
+    let std_v = json(&["render", &g, "-o", &p("a.png"), "--size", "400x300"], 0);
+    assert_eq!(std_v["style"], "standard");
+    assert_eq!(std_v["studio"], Value::Null);
+    assert_eq!(std_v["background"], serde_json::json!(["#f5f5f7"]));
+    let v = json(&["render", &g, "-o", &p("b.png"), "--size", "400x300", "--style", "studio"], 0);
+    assert_eq!(v["style"], "studio");
+    // defaults
+    let s = &v["studio"];
+    assert_eq!((f(&s["light_azimuth"]), f(&s["light_elevation"])), (-40.0, 50.0));
+    assert_eq!((f(&s["light_intensity"]), f(&s["ambient"])), (1.0, 0.4));
+    assert_eq!((s["shadows"].as_bool(), f(&s["shadow_softness"])), (Some(true), 0.35));
+    assert_eq!((s["ao"].as_bool(), &s["ao_radius"], f(&s["ao_strength"])), (Some(true), &Value::Null, 1.0));
+    assert_eq!((s["ground"].as_bool(), s["ground_color"].as_str()), (Some(true), Some("#e6e8ec")));
+    assert_eq!(v["background"], serde_json::json!(["#f8f9fb", "#d9dde3"]));
+    let vs = &v["views"][0]["studio"];
+    assert!(f(&vs["ao_radius_mm"]) > 0.0);
+    assert_eq!(vs["shadow_map"], 2048);
+    assert!(vs["ground_z"].is_number());
+    assert!(f(&vs["light_dir"][2]) > 0.7);
+    let (a, b) = (png(&dir.path().join("a.png")), png(&dir.path().join("b.png")));
+    assert!(a.differing(&b) > 20000, "{}", a.differing(&b));
+    // shadows, AO and ground change the image; settings appear in the JSON
+    let v = json(
+        &[
+            "render",
+            &g,
+            "-o",
+            &p("c.png"),
+            "--size",
+            "400x300",
+            "--style",
+            "studio",
+            "--shadows",
+            "off",
+            "--ao",
+            "off",
+            "--ground",
+            "off",
+            "--light",
+            "30,70",
+            "--light-intensity",
+            "1.5",
+            "--ambient",
+            "0.2",
+            "--ao-radius",
+            "3",
+            "--ao-strength",
+            "2",
+            "--shadow-softness",
+            "0",
+            "--ground-color",
+            "#808080",
+            "--background",
+            "white,silver",
+        ],
+        0,
+    );
+    let s = &v["studio"];
+    assert_eq!(
+        (s["shadows"].as_bool(), s["ao"].as_bool(), s["ground"].as_bool()),
+        (Some(false), Some(false), Some(false))
+    );
+    assert_eq!((f(&s["light_azimuth"]), f(&s["light_elevation"]), f(&s["ao_radius"])), (30.0, 70.0, 3.0));
+    assert_eq!(s["ground_color"], "#808080");
+    assert_eq!(v["background"], serde_json::json!(["#f4f3f0", "#abaeb2"]));
+    assert_eq!(v["views"][0]["studio"]["shadow_map"], Value::Null);
+    assert_eq!(v["views"][0]["studio"]["ao_radius_mm"], Value::Null);
+    assert_eq!(v["views"][0]["studio"]["ground_z"], Value::Null);
+    assert!(png(&dir.path().join("c.png")).differing(&b) > 2000);
+    // contact sheet, dark theme, section, perspective together
+    let v = json(
+        &[
+            "render",
+            &g,
+            "-o",
+            &p("d.png"),
+            "--views",
+            "all",
+            "--size",
+            "800x600",
+            "--style",
+            "studio",
+            "--theme",
+            "dark",
+            "--section",
+            "z=10",
+            "--perspective",
+        ],
+        0,
+    );
+    assert_eq!(v["views"].as_array().unwrap().len(), 4);
+    assert_eq!(v["background"], serde_json::json!(["#2b3038", "#111317"]));
+    // gradient background without studio
+    let v = json(&["render", &g, "-o", &p("e.png"), "--size", "200x150", "--background", "#ffffff,#000000"], 0);
+    assert_eq!(v["background"], serde_json::json!(["#ffffff", "#000000"]));
+    let e = png(&dir.path().join("e.png"));
+    assert_eq!(&e.rgba[0..3], &[255, 255, 255]);
+    let last = ((e.h - 1) * e.w * 4) as usize;
+    assert_eq!(&e.rgba[last..last + 3], &[0, 0, 0]);
+    // text line
+    let t = text(&["render", &g, "-o", &p("f.png"), "--size", "200x150", "--style", "studio"], 0);
+    assert!(t.contains("Studio"), "{t}");
+    // usage errors
+    for bad in [
+        &["--ao", "off"][..],
+        &["--style", "fancy"],
+        &["--style", "studio", "--shadows", "maybe"],
+        &["--style", "studio", "--light", "10"],
+        &["--style", "studio", "--light", "10,0"],
+        &["--style", "studio", "--ambient", "1.5"],
+        &["--style", "studio", "--ao-radius", "0"],
+        &["--style", "studio", "--ground-color", "notacolour"],
+        &["--background", "#12"],
+        &["--background", "red,green,blue"],
+    ] {
+        let mut args = vec!["render", g.as_str(), "-o", "/dev/null"];
+        args.extend_from_slice(bad);
+        let v = json(&args, 2);
+        assert!(v["error"].as_str().is_some_and(|e| !e.is_empty()), "{bad:?}: {v}");
+    }
+}
+
 // ------------------------------------------------------------------------------------------
 // measure
 // ------------------------------------------------------------------------------------------
