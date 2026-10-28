@@ -28,6 +28,8 @@ export interface StudioSettings {
   groundColor: string | null;
   /** Background gradient top, bottom (`#rrggbb`, equal = solid); `null` = from the theme. */
   background: [string, string] | null;
+  /** Edge lines of the bodies. */
+  edges: boolean;
 }
 
 /** Defaults: the same as `mcad render --style studio`. */
@@ -45,6 +47,7 @@ export const DEFAULT_STUDIO: StudioSettings = {
   ground: true,
   groundColor: null,
   background: null,
+  edges: true,
 };
 
 /** Theme colours of the studio look (as the CLI's `--theme light|dark`). */
@@ -81,6 +84,7 @@ export function sanitizeStudio(raw: unknown): StudioSettings {
     ground: bool("ground"),
     groundColor: hex(r.groundColor),
     background: bg && bg[0] && bg[1] ? [bg[0], bg[1]] : null,
+    edges: bool("edges"),
   };
 }
 
@@ -125,6 +129,7 @@ export function studioCliArgs(s: StudioSettings): string[] {
   }
   if (!s.ground) out.push("--ground", "off");
   else if (s.groundColor) out.push("--ground-color", s.groundColor.slice(1));
+  if (!s.edges) out.push("--edges", "off");
   if (s.background) out.push("--background", s.background[0] === s.background[1] ? s.background[0].slice(1) : `${s.background[0].slice(1)},${s.background[1].slice(1)}`);
   return out;
 }

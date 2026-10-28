@@ -396,6 +396,7 @@ fn render_studio_style() {
     assert_eq!((s["ao"].as_bool(), &s["ao_radius"], f(&s["ao_strength"])), (Some(true), &Value::Null, 1.0));
     assert_eq!((s["ground"].as_bool(), s["ground_color"].as_str()), (Some(true), Some("#e6e8ec")));
     assert_eq!(v["background"], serde_json::json!(["#f8f9fb", "#d9dde3"]));
+    assert_eq!(s["edges"], true);
     let vs = &v["views"][0]["studio"];
     assert!(f(&vs["ao_radius_mm"]) > 0.0);
     assert_eq!(vs["shadow_map"], 2048);
@@ -451,6 +452,12 @@ fn render_studio_style() {
     assert_eq!(v["views"][0]["studio"]["ao_radius_mm"], Value::Null);
     assert_eq!(v["views"][0]["studio"]["ground_z"], Value::Null);
     assert!(png(&dir.path().join("c.png")).differing(&b) > 2000);
+    // edges off: only the edge lines go
+    let v = json(&["render", &g, "-o", &p("n.png"), "--size", "400x300", "--style", "studio", "--edges", "off"], 0);
+    assert_eq!(v["studio"]["edges"], false);
+    let n = png(&dir.path().join("n.png"));
+    let d = n.differing(&b);
+    assert!(d > 300 && d < 20000, "{d}");
     // contact sheet, dark theme, section, perspective together
     let v = json(
         &[
@@ -494,6 +501,8 @@ fn render_studio_style() {
         &["--style", "studio", "--ambient", "1.5"],
         &["--style", "studio", "--ao-radius", "0"],
         &["--style", "studio", "--ground-color", "notacolour"],
+        &["--style", "studio", "--edges", "maybe"],
+        &["--edges", "off"],
         &["--background", "#12"],
         &["--background", "red,green,blue"],
     ] {

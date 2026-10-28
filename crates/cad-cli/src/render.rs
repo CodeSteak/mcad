@@ -279,6 +279,10 @@ pub(crate) struct ViewArgs {
     /// Studio: colour of the ground plane: `#rrggbb` or a palette name (default from the theme).
     #[arg(long, value_name = "COLOR")]
     pub ground_color: Option<String>,
+    /// Studio: mesh edge lines of opaque bodies (default on; off: only the shading shows the
+    /// form).
+    #[arg(long, value_name = "on|off")]
+    pub edges: Option<String>,
     /// Background: one colour, or two for a vertical gradient (top,bottom); `#rrggbb` or a
     /// palette name. Default: the theme's colour, with --style studio a light gradient.
     #[arg(long, value_name = "COLOR[,COLOR]")]
@@ -445,6 +449,7 @@ fn studio_from_args(a: &ViewArgs, look: &Look) -> Result<Option<Studio>, Fail> {
         ("--ao-strength", a.ao_strength.is_some()),
         ("--ground", a.ground.is_some()),
         ("--ground-color", a.ground_color.is_some()),
+        ("--edges", a.edges.is_some()),
     ]
     .into_iter()
     .filter(|(_, g)| *g)
@@ -494,6 +499,9 @@ fn studio_from_args(a: &ViewArgs, look: &Look) -> Result<Option<Studio>, Fail> {
     }
     if let Some(c) = &a.ground_color {
         s.ground_color = parse_color_arg("--ground-color", c)?;
+    }
+    if let Some(v) = &a.edges {
+        s.edges = parse_switch("--edges", v)?;
     }
     Ok(Some(s))
 }
@@ -1601,6 +1609,7 @@ fn studio_json(s: &Studio) -> Json {
         "shadows": s.shadows, "shadow_softness": s.shadow_softness,
         "ao": s.ao, "ao_radius": s.ao_radius, "ao_strength": s.ao_strength,
         "ground": s.ground, "ground_color": palette::hex_string(s.ground_color),
+        "edges": s.edges,
     })
 }
 

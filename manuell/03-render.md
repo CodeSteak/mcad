@@ -34,7 +34,7 @@
 
 Key light with highlight, weak fill light from the camera, sky/ground ambient light, soft cast
 shadows (model on itself and on the ground), screen-space ambient occlusion, ground plane at the
-model's lowest z fading into a gradient background, edges at 35 % opacity. Analytic only (no
+model's lowest z fading into a gradient background, edges at 35 % opacity (`--edges off`: none). Analytic only (no
 textures, no environment maps). Works with every other option (views, contact sheet,
 perspective, section, colours/regions, `--theme`, `--size`). Same settings in the UI
 (`mcad usage ui`).
@@ -51,6 +51,7 @@ perspective, section, colours/regions, `--theme`, `--size`). Same settings in th
 | `--ao-strength F` | `1` | 0…2 |
 | `--ground on\|off` | `on` | ground plane, only seen from above (none in `front`/`bottom` …) |
 | `--ground-color C` | light `#e6e8ec`, dark `#2c3038` | |
+| `--edges on\|off` | `on` | mesh edge lines of opaque bodies; dimmed/x-ray bodies and section contours keep theirs |
 | background | light `#f8f9fb`→`#d9dde3`, dark `#2b3038`→`#111317` | `--background` overrides |
 
 - Studio options without `--style studio`: exit 2 (`--ao only applies with --style studio`).
@@ -67,4 +68,5 @@ mcad render box.mcad -o /tmp/d.png --part cover --xray
 mcad render box.mcad -o /tmp/e.png --style studio --views all
 mcad render box.mcad -o /tmp/f.png --style studio --light 60,30 --shadow-softness 0.8 --ao-strength 1.5
 mcad render box.mcad -o /tmp/g.png --style studio --ground off --background '#ffffff,#c8ccd2'
+mcad render box.mcad -o /tmp/h.png --style studio --edges off
 ```

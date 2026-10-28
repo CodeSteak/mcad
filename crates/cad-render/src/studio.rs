@@ -14,7 +14,8 @@
 //! * Ground: the plane z = lowest point of the model, only seen from above, faded into the
 //!   background around the model. It does not hide overlays (grids, lines, labels).
 //! * Background: solid or vertical gradient ([`crate::RenderOptions::background_bottom`]).
-//! * Mesh edge lines at half opacity (the shading shows the form).
+//! * Mesh edge lines at reduced opacity (the shading shows the form), or none
+//!   ([`Studio::edges`]).
 //!
 //! No textures, no environment maps: everything is analytic. Deterministic (the sample
 //! rotations are fixed patterns), parallel over image rows.
@@ -57,6 +58,8 @@ pub struct Studio {
     pub ao_strength: f64,
     pub ground: bool,
     pub ground_color: [f32; 4],
+    /// Mesh edge lines of opaque bodies (at [`EDGE_ALPHA`] opacity); `false` hides them.
+    pub edges: bool,
 }
 
 impl Default for Studio {
@@ -73,6 +76,7 @@ impl Default for Studio {
             ao_strength: 1.0,
             ground: true,
             ground_color: [0.9, 0.905, 0.915, 1.0],
+            edges: true,
         }
     }
 }

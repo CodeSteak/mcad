@@ -94,10 +94,13 @@ export class Materials {
   private fatLines: LineMaterial[] = [];
   /** Studio look: glossier surfaces (highlights of the key light), lighter edges. */
   readonly studio: boolean;
+  /** Studio look: edge lines of opaque bodies (`false`: none). */
+  readonly studioEdges: boolean;
 
-  constructor(palette: Palette, studio = false) {
+  constructor(palette: Palette, studio = false, studioEdges = true) {
     this.palette = palette;
     this.studio = studio;
+    this.studioEdges = studioEdges;
   }
 
   private solid(color: string): THREE.MeshStandardMaterial {
@@ -142,7 +145,13 @@ export class Materials {
     switch (mode) {
       case "full":
         if (flat) s = { surface: this.transparent(p.flat, 0.18, { polygonOffset: true, polygonOffsetFactor: 1 }), edges: this.lines(p.flat), renderOrder: 1, pickable: true };
-        else s = { surface: faceColors ? this.vertexColorMaterial() : this.fullMaterial(color), edges: this.lines(p.edge, this.studio ? 0.35 : 0.9), renderOrder: 0, pickable: true };
+        else
+          s = {
+            surface: faceColors ? this.vertexColorMaterial() : this.fullMaterial(color),
+            edges: this.studio && !this.studioEdges ? null : this.lines(p.edge, this.studio ? 0.35 : 0.9),
+            renderOrder: 0,
+            pickable: true,
+          };
         break;
       case "dim":
         s = {

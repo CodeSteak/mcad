@@ -14,7 +14,7 @@
 | `cad: command not found`, old scripts | the program is `mcad` since 0.3.0; `CAD_*` variables and `~/.config/controller-cad/config.toml` are still read (`mcad usage daemon`) |
 | "mcad: x does not exist (expected a .mcad/.scad file or a folder)" | `mcad PATH` opens the UI; PATH missing. For a command: `mcad check PATH` |
 | `mcad ui …` exit 3 | no desktop UI running; work headless |
-| "--ao only applies with --style studio" (also `--light`, `--shadows`, `--ground` …) | studio settings need `--style studio` |
+| "--ao only applies with --style studio" (also `--light`, `--shadows`, `--ground`, `--edges` …) | studio settings need `--style studio` |
 | "--ground-color X: expected #rrggbb or a palette colour name" (also `--background`) | quote `#` in the shell (`'#e0e0e0'`) or drop it (`e0e0e0`); names: `mcad usage colors` |
 | studio render: no ground / no ground shadow | the camera looks from below or horizontally (`front`, `right`, `bottom`): the ground is only drawn from above |
 | studio render: no shadow of a part | transparent bodies (x-ray, dimmed rest with `--line`, alpha) cast none |

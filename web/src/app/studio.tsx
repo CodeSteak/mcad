@@ -94,6 +94,7 @@ function StudioPanel({ s }: { s: StudioSettings }) {
         <span className="unit">mm</span>
       </label>
       <Slider id="aoStrength" label={t("studio.aoStrength")} value={s.aoStrength} min={0} max={2} step={0.05} disabled={!s.ao} onChange={(v) => setStudio({ aoStrength: v })} />
+      <Check id="edges" label={t("studio.edges")} hint={t("studio.edgesHint")} checked={s.edges} onChange={(edges) => setStudio({ edges })} />
       <div className="studio-line">
         <Check id="ground" label={t("studio.ground")} hint={t("studio.groundHint")} checked={s.ground} onChange={(ground) => setStudio({ ground })} />
         <span className="grow" />

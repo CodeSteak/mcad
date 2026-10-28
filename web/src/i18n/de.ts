@@ -172,6 +172,8 @@ export const de: Messages = {
   "studio.aoRadius": "Radius",
   "studio.aoRadiusAuto": "auto ({mm} mm)",
   "studio.aoStrength": "Stärke",
+  "studio.edges": "Kantenlinien",
+  "studio.edgesHint": "Kantenlinien der Körper (aus: nur die Schattierung zeigt die Form)",
   "studio.ground": "Boden",
   "studio.groundHint": "Bodenebene unter dem Modell, läuft in den Hintergrund aus (nur von oben sichtbar)",
   "studio.groundColor": "Bodenfarbe",

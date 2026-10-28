@@ -219,7 +219,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
   /** Studio settings in effect. */
   studio: StudioSettings = store.getState().studio;
   /** What the last frame drew in the studio look (test hook). */
-  lastStudioDraw: { on: boolean; shadows: boolean; ao: boolean; ground: boolean; aoRadius: number | null; light: Vec3 | null } = { on: false, shadows: false, ao: false, ground: false, aoRadius: null, light: null };
+  lastStudioDraw: { on: boolean; shadows: boolean; ao: boolean; ground: boolean; edges: boolean; edgeLines: number; aoRadius: number | null; light: Vec3 | null } = { on: false, shadows: false, ao: false, ground: false, edges: true, edgeLines: 0, aoRadius: null, light: null };
   /** Mode the base was drawn with (full while the selected node's mesh is loading). */
   baseMode: string | null = null;
   modelBox: Box3 = emptyBox();
@@ -285,7 +285,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     // variance shadow maps: a smooth blur for soft shadows (PCF with a large radius is grainy)
     this.renderer.shadowMap.type = THREE.VSMShadowMap;
 
-    this.materials = new Materials(readPalette(), this.studio.on);
+    this.materials = new Materials(readPalette(), this.studio.on, this.studio.edges);
     this.applyTheme();
 
     this.resizeObs = new ResizeObserver(() => this.resize());
@@ -402,7 +402,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
   applyTheme(): void {
     const pal = readPalette();
     this.materials.dispose();
-    this.materials = new Materials(pal, this.studio.on);
+    this.materials = new Materials(pal, this.studio.on, this.studio.edges);
     this.renderer.setClearColor(new THREE.Color(pal.background), 1);
     this.applyStudioLook();
     this.section?.setColors(pal.cap, pal.edge, pal.accent);
@@ -415,7 +415,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     const was = this.studio;
     this.studio = s;
     // materials depend on the look (roughness, edge opacity) and on the shadow map
-    if (was.on !== s.on || was.shadows !== s.shadows) this.applyTheme();
+    if (was.on !== s.on || was.shadows !== s.shadows || was.edges !== s.edges) this.applyTheme();
     else {
       this.applyStudioLook();
       this.requestRender();
@@ -679,10 +679,14 @@ export class Viewer implements DragView, SketchView, MeasureView {
       if (ao) this.renderStudioAo();
       else r.render(this.scene3, this.camera);
       const diag = Math.max(1, boxDiagonal(this.modelBox));
-      this.lastStudioDraw = { on: true, shadows: st.shadows, ao, ground: this.ground !== null, aoRadius: ao ? aoRadiusFor(st, diag) : null, light };
+      let edgeLines = 0;
+      this.content.traverse((o) => {
+        if ((o as THREE.LineSegments).isLineSegments && !(o instanceof LineSegments2)) edgeLines++;
+      });
+      this.lastStudioDraw = { on: true, shadows: st.shadows, ao, ground: this.ground !== null, edges: st.edges, edgeLines, aoRadius: ao ? aoRadiusFor(st, diag) : null, light };
     } else {
       r.render(this.scene3, this.camera);
-      this.lastStudioDraw = { on: false, shadows: false, ao: false, ground: false, aoRadius: null, light: null };
+      this.lastStudioDraw = { on: false, shadows: false, ao: false, ground: false, edges: true, edgeLines: 0, aoRadius: null, light: null };
     }
     this.noteCamera();
     this.placeMeasureLabels();

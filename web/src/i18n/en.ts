@@ -176,6 +176,8 @@ export const en = {
   "studio.aoRadius": "Radius",
   "studio.aoRadiusAuto": "auto ({mm} mm)",
   "studio.aoStrength": "Strength",
+  "studio.edges": "Edge lines",
+  "studio.edgesHint": "Edge lines of the bodies (off: only the shading shows the form)",
   "studio.ground": "Ground",
   "studio.groundHint": "Ground plane under the model, fading into the background (only seen from above)",
   "studio.groundColor": "Ground colour",

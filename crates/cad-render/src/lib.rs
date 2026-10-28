@@ -1069,9 +1069,10 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
             }
         }
     };
-    // studio: lighter edges (the shading shows the form)
+    // studio: lighter edges (the shading shows the form), or none
     let edge_alpha = if studio.is_some() { studio::EDGE_ALPHA } else { 1.0 };
-    for it in scene.items.iter().filter(|i| i.color[3] >= 0.999) {
+    let opaque_edges = studio.is_none_or(|s| s.edges);
+    for it in scene.items.iter().filter(|i| opaque_edges && i.color[3] >= 0.999) {
         if let Some(ec) = it.edges {
             draw_edges(&mut t, it, [ec[0], ec[1], ec[2], ec[3] * edge_alpha]);
         }

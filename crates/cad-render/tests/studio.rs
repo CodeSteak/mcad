@@ -214,3 +214,41 @@ fn transparent_items_cast_no_shadow() {
     let p = px(&cam, &o, v(8.0, 0.0, 0.0));
     assert!((luma5(&a, p) - luma5(&b, p)).abs() < 2.0);
 }
+
+/// The 12 edges of a box as segments (`Mesh::edge_segments`).
+fn box_edges(lo: DVec3, hi: DVec3) -> Vec<f32> {
+    let c = |i: u32| {
+        [
+            if i & 1 == 0 { lo.x } else { hi.x } as f32,
+            if i & 2 == 0 { lo.y } else { hi.y } as f32,
+            if i & 4 == 0 { lo.z } else { hi.z } as f32,
+        ]
+    };
+    let mut out = Vec::new();
+    for (a, b) in [(0, 1), (2, 3), (4, 5), (6, 7), (0, 2), (1, 3), (4, 6), (5, 7), (0, 4), (1, 5), (2, 6), (3, 7)] {
+        out.extend_from_slice(&c(a));
+        out.extend_from_slice(&c(b));
+    }
+    out
+}
+
+#[test]
+fn edges_off_hides_the_edge_lines() {
+    let (lo, hi) = (v(0.0, 0.0, 0.0), v(20.0, 20.0, 20.0));
+    let mut m = boxm(lo, hi);
+    m.edge_segments = box_edges(lo, hi);
+    let black = Some([0.0, 0.0, 0.0, 1.0]);
+    let scene = Scene { items: vec![Item::new(&m, GREY).with_edges(black)], ..Default::default() };
+    let st = Studio { shadows: false, ao: false, ground: false, ..Studio::default() };
+    let o = opts(View::Iso, Some(st.clone()));
+    let (on, cam) = render_info(&scene, &o);
+    let off = render(&scene, &opts(View::Iso, Some(Studio { edges: false, ..st })));
+    assert_ne!(on, off);
+    // the vertical front edge (x = 20, y = 0) at mid height: darker with edges
+    let p = px(&cam, &o, v(20.0, 0.0, 10.0));
+    let (a, b) = (luma(&on, p).min(luma(&on, (p.0 + 1, p.1))), luma(&off, p).min(luma(&off, (p.0 + 1, p.1))));
+    assert!(a + 15.0 < b, "edge {a}, without {b}");
+    // the faces away from the edges are the same
+    let f = px(&cam, &o, v(10.0, 0.0, 10.0));
+    assert!((luma5(&on, f) - luma5(&off, f)).abs() < 1.0);
+}

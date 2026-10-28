@@ -5,7 +5,7 @@ const close = (a: number[], b: number[]) => a.forEach((x, i) => expect(x).toBeCl
 
 describe("studio settings", () => {
   it("defaults match mcad render --style studio", () => {
-    expect(DEFAULT_STUDIO).toMatchObject({ on: false, lightAzimuth: -40, lightElevation: 50, lightIntensity: 1, ambient: 0.4, shadows: true, shadowSoftness: 0.35, ao: true, aoRadius: null, aoStrength: 1, ground: true });
+    expect(DEFAULT_STUDIO).toMatchObject({ on: false, lightAzimuth: -40, lightElevation: 50, lightIntensity: 1, ambient: 0.4, shadows: true, shadowSoftness: 0.35, ao: true, aoRadius: null, aoStrength: 1, ground: true, edges: true });
     expect(studioCliArgs({ ...DEFAULT_STUDIO, on: true })).toEqual(["--style", "studio"]);
   });
   it("sanitizes stored values", () => {
@@ -19,6 +19,7 @@ describe("studio settings", () => {
     expect(s.groundColor).toBe("#abcdef");
     expect(s.background).toBeNull();
     expect(s.shadows).toBe(true);
+    expect(sanitizeStudio({ edges: false }).edges).toBe(false);
     expect(sanitizeStudio({ background: ["#ffffff", "#000000"], aoRadius: 2.5 })).toMatchObject({ background: ["#ffffff", "#000000"], aoRadius: 2.5 });
   });
   it("AO radius: explicit or 5 % of the diagonal", () => {
@@ -57,6 +58,9 @@ describe("CLI call", () => {
       "--background",
       "ffffff,000000",
     ]);
+  });
+  it("edge lines off", () => {
+    expect(studioCliArgs({ ...DEFAULT_STUDIO, edges: false })).toEqual(["--style", "studio", "--edges", "off"]);
   });
   it("full command with camera and theme", () => {
     const c = studioCliCommand({ ...DEFAULT_STUDIO, on: true }, "my box.mcad", "lid", [0, -1, 0], "dark");
