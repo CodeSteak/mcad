@@ -146,7 +146,8 @@ export function colorMatches(sel: string, c: ColorRef | null): boolean {
 export function materialFor(materials: StudioMaterial[], c: ColorRef | null, part: string | null): Pbr {
   for (let i = materials.length - 1; i >= 0; i--) {
     const m = materials[i];
-    if ("part" in m.target && part !== null && m.target.part === part) return resolvePbr(m);
+    // `feet` names all parts `feet[k]`
+    if ("part" in m.target && part !== null && (m.target.part === part || part.startsWith(`${m.target.part}[`))) return resolvePbr(m);
   }
   for (let i = materials.length - 1; i >= 0; i--) {
     const m = materials[i];

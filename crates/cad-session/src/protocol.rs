@@ -1036,6 +1036,65 @@ pub struct Scene {
     /// Results of the geometric assertions (empty until checked, see `FromEngine.Asserts`).
     #[serde(default)]
     pub asserts: Vec<AssertResult>,
+    /// The main file's `render { … }` block (studio look of the file; `None`: none).
+    #[serde(default)]
+    #[ts(optional)]
+    pub render: Option<RenderBlock>,
+}
+
+/// `render { … }` of the main file: the values given (`None`: not set, the default applies).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
+pub struct RenderBlock {
+    pub range: SrcRange,
+    /// `studio` or `standard`.
+    pub style: Option<String>,
+    pub edges: Option<bool>,
+    /// `studio`, `overcast` or `none`.
+    pub environment: Option<String>,
+    pub ambient: Option<f64>,
+    pub light_intensity: Option<f64>,
+    pub shadows: Option<bool>,
+    pub shadow_softness: Option<f64>,
+    pub ao: Option<bool>,
+    pub ao_radius: Option<f64>,
+    pub ao_strength: Option<f64>,
+    pub ground: Option<bool>,
+    /// `#rrggbb`.
+    pub ground_color: Option<String>,
+    /// One or two (top, bottom) `#rrggbb`.
+    pub background: Option<Vec<String>>,
+    pub lights: Vec<RenderLight>,
+    pub materials: Vec<RenderMaterial>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct RenderLight {
+    pub name: String,
+    pub azimuth: f64,
+    pub elevation: f64,
+    pub intensity: f64,
+    /// `#rrggbb`.
+    pub color: String,
+    pub range: SrcRange,
+}
+
+/// What a material entry applies to: a colour as written (`red`, `#rrggbb`, `default` =
+/// uncoloured material) or a part.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(untagged)]
+pub enum RenderTarget {
+    Color { color: String },
+    Part { part: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+pub struct RenderMaterial {
+    pub target: RenderTarget,
+    pub preset: Option<String>,
+    pub metalness: Option<f64>,
+    pub roughness: Option<f64>,
+    pub clearcoat: Option<f64>,
+    pub range: SrcRange,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -1624,6 +1683,10 @@ pub fn typescript() -> String {
         AssertPair,
         AssertMesh,
         Scene,
+        RenderBlock,
+        RenderLight,
+        RenderTarget,
+        RenderMaterial,
         NodeStatus,
         Dim,
         NodeFlags,

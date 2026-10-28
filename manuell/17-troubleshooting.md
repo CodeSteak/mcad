@@ -20,6 +20,11 @@
 | studio render: no shadow of a part | transparent bodies (x-ray, dimmed rest with `--line`, alpha) cast none; only the first light casts shadows |
 | "--material red=gold: unknown material gold (known: plastic, …)" | presets: `mcad usage render`; or give values: `red=metalness=1,roughness=0.3` |
 | "--material x=chrome: x: expected a colour, default or part:NAME" | colour name (`mcad usage colors`), `#rrggbb`, `default` (uncoloured material) or `part:NAME` |
+| warning "render: unknown setting `x` (known: …)" (also in `light`/`material`) | typo in the render block; names: `mcad usage render-block`; the value is ignored |
+| warning "render: ambient = 3 is outside 0…1 – ignored" / "expects true or false" / "expects a colour" | value of the wrong type or range; the default applies |
+| warning "render: material \"x\": unknown colour" / "material lid: no part `lid` (parts: …)" | colour as in `color()` (palette name, `#rrggbb`, `default`); part names: `mcad outline` |
+| warning "render { … } applies only at the top level of the main file" / "only the first render block applies" | move the block to the top level of the main file; keep one |
+| `mcad render` draws the studio look without `--style` | the file has a render block; `--style standard` for the CAD look |
 | studio render: metal looks dark or flat | metals show their surroundings: keep `--environment studio`, raise `--ambient`; a smooth metal (`chrome`) needs curved faces to show the softboxes |
 | `mcad` exits 2 "no graphical session" | no `DISPLAY`/`WAYLAND_DISPLAY`; use the commands |
 | UI dies with "Error 71 (Protokollfehler) dispatching to Wayland display" | WebKitGTK DMA-BUF renderer; `mcad` sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` on Wayland unless the variable is set |

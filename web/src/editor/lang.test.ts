@@ -45,4 +45,14 @@ describe("Lezer grammar", () => {
     expect(dis).toHaveLength(1);
     expect(text.slice(dis[0].from, dis[0].to)).toBe("* translate([1, 0, 0]) cube(2);");
   });
+
+  it("reads a render block with lights and materials", () => {
+    const text = 'render {\n  edges = false;\n  light key { azimuth = -30; color = "#ffffff"; }\n  material "red" { preset = "chrome"; }\n  material lid { roughness = 0.4; };\n}\nrender() cube(1);\n';
+    const tree = scadParser.parse(text);
+    expect(errorNodes(tree)).toEqual([]);
+    const names: string[] = [];
+    tree.iterate({ enter: (n) => void names.push(n.name) });
+    expect(names.filter((n) => n === "RenderEntry")).toHaveLength(3);
+    expect(names).toContain("EntryName");
+  });
 });

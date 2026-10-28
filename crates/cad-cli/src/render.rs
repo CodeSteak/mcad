@@ -464,7 +464,9 @@ impl MatSpec {
 /// The material of a body of colour `color` (`None`: uncoloured) in part `part`: the last
 /// matching part entry, else the last matching colour entry, else plastic.
 pub(crate) fn material_for(mats: &[(MatSel, Material)], color: Option<[f32; 4]>, part: Option<&str>) -> Material {
-    let by_part = part.and_then(|p| mats.iter().rev().find(|(s, _)| matches!(s, MatSel::Part(n) if n == p)));
+    // `feet` names all parts `feet[k]`
+    let is = |n: &str, p: &str| n == p || p.strip_prefix(n).is_some_and(|r| r.starts_with('['));
+    let by_part = part.and_then(|p| mats.iter().rev().find(|(s, _)| matches!(s, MatSel::Part(n) if is(n, p))));
     if let Some((_, m)) = by_part {
         return *m;
     }
@@ -521,6 +523,84 @@ fn parse_material_arg(s: &str) -> Result<(MatSel, MatSpec), Fail> {
         }
     }
     Ok((sel, m))
+}
+
+/// Writes the values of the file's render block over the defaults (the command line comes
+/// after it).
+fn apply_block(
+    b: &p::RenderBlock,
+    st: &mut Studio,
+    materials: &mut Vec<(MatSel, Material)>,
+    bg: &mut Option<Background>,
+) {
+    let color = |h: &str| palette::parse_color(h).map(|c| [c.rgba[0], c.rgba[1], c.rgba[2], 1.0]);
+    if !b.lights.is_empty() {
+        st.lights = b
+            .lights
+            .iter()
+            .map(|l| Light {
+                azimuth: l.azimuth,
+                elevation: l.elevation,
+                intensity: l.intensity,
+                color: color(&l.color).map_or([1.0; 3], |c| [c[0], c[1], c[2]]),
+            })
+            .collect();
+    }
+    if let Some(v) = b.edges {
+        st.edges = v;
+    }
+    if let Some(e) = b.environment.as_deref().and_then(Environment::from_name) {
+        st.environment = e;
+    }
+    if let Some(v) = b.ambient {
+        st.ambient = v;
+    }
+    if let Some(v) = b.light_intensity {
+        st.light_intensity = v;
+    }
+    if let Some(v) = b.shadows {
+        st.shadows = v;
+    }
+    if let Some(v) = b.shadow_softness {
+        st.shadow_softness = v;
+    }
+    if let Some(v) = b.ao {
+        st.ao = v;
+    }
+    if let Some(v) = b.ao_radius {
+        st.ao_radius = Some(v);
+    }
+    if let Some(v) = b.ao_strength {
+        st.ao_strength = v;
+    }
+    if let Some(v) = b.ground {
+        st.ground = v;
+    }
+    if let Some(c) = b.ground_color.as_deref().and_then(color) {
+        st.ground_color = c;
+    }
+    if let Some(v) = &b.background {
+        let cs: Vec<[f32; 4]> = v.iter().filter_map(|h| color(h)).collect();
+        *bg = match cs.as_slice() {
+            [c] => Some((*c, None)),
+            [a, b2] => Some((*a, Some(*b2))),
+            _ => None,
+        };
+    }
+    for m in &b.materials {
+        let sel = match &m.target {
+            p::RenderTarget::Part { part } => Some(MatSel::Part(part.clone())),
+            p::RenderTarget::Color { color } => MatSel::parse(color),
+        };
+        let Some(sel) = sel else { continue };
+        let spec = MatSpec {
+            preset: m.preset.as_deref().and_then(Material::preset),
+            metalness: m.metalness.map(|v| v as f32),
+            roughness: m.roughness.map(|v| v as f32),
+            clearcoat: m.clearcoat.map(|v| v as f32),
+        };
+        materials.push((sel, spec.material()));
+    }
 }
 
 /// The studio options of the command line, checked (`None`: not given).
@@ -840,9 +920,10 @@ impl Plan {
 
     /// Style, studio settings, materials and background from the command line over the file's
     /// render block (`block`); exit 2 for studio options without the studio style.
-    pub fn resolve(&self) -> Result<Resolved, Fail> {
+    pub fn resolve(&self, block: Option<&p::RenderBlock>) -> Result<Resolved, Fail> {
         let a = &self.studio_args;
-        let studio_on = a.style.unwrap_or(false);
+        // a render block makes the studio look the default (unless it says `style = "standard"`)
+        let studio_on = a.style.or(block.map(|b| b.style.as_deref() != Some("standard"))).unwrap_or(false);
         if !studio_on {
             if let Some(first) = a.given.first() {
                 return Err(Fail::Usage(tr!(
@@ -855,14 +936,17 @@ impl Plan {
         }
         let mut st = Studio { ground_color: self.look.ground, ..Studio::default() };
         let mut materials: Vec<(MatSel, Material)> = Vec::new();
-        let background: Option<Background> = None;
+        let mut background: Option<Background> = None;
+        if let Some(b) = block {
+            apply_block(b, &mut st, &mut materials, &mut background);
+        }
         a.apply(&mut st);
         materials.extend(a.materials.iter().map(|(s, m)| (s.clone(), m.material())));
         let background = self
             .background
             .or(background)
             .unwrap_or((self.look.studio_background[0], Some(self.look.studio_background[1])));
-        Ok(Resolved { studio: Some(st), materials, background, block_line: None })
+        Ok(Resolved { studio: Some(st), materials, background, block_line: block.map(|b| b.range.line) })
     }
 
     fn shows(&self, s: &str) -> bool {
@@ -1923,7 +2007,7 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
     let Some(sc) = m.scene.clone() else {
         return Err(Fail::Usage(tr!("keine Szene (Syntaxfehler)", "no scene (syntax error)")));
     };
-    let res = plan.resolve()?;
+    let res = plan.resolve(sc.render.as_ref())?;
     let built = build(m, &sc, plan, &res)?;
     let items: Vec<Item> = built
         .meshes

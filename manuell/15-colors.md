@@ -23,3 +23,5 @@ translate([10, 10, 3]) knob("teal");
   subtracted material is removed from all colours.
 - Check with `mcad outline` (section "Colours") or `mcad measure --colors`; see with
   `mcad render`.
+- Look of a colour in the studio style (metal, rubber, glossy plastic …): `material "red" { … }`
+  in the file's render block (`mcad usage render-block`) or `mcad render --material red=…`.

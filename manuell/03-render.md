@@ -15,7 +15,7 @@
 | `--section x=V\|y=V\|z=V`, `--section-plane px,py,pz,nx,ny,nz`, `--section-flip` | cut; removes the side the normal points to (`z=10` removes z > 10) |
 | `--xray`, `--theme dark`, `--size WxH`, `--no-axes` | |
 | `--background C` / `--background TOP,BOTTOM` | solid or vertical gradient; `#rrggbb`, `rrggbb` or a palette name (`mcad usage colors`) |
-| `--style standard\|studio` | `studio`: realistic lighting, shadows, ambient occlusion, ground (table below) |
+| `--style standard\|studio` | `studio`: physically based lights and materials, shadows, ambient occlusion, ground (table below); default `standard`, `studio` if the file has a render block (`mcad usage render-block`) |
 
 - `--show grids` in file context shows only top-level grids; use `--module NAME`.
 - Asserts (always drawn): `assert_keepout` volume translucent yellow, dashed outline on top;
@@ -39,7 +39,8 @@ integrated in closed form), screen-space ambient occlusion, ground plane at the 
 fading into a gradient background, edges at 35 % opacity (`--edges off`: none), Khronos PBR
 Neutral tone mapping. Analytic only (no textures, no image files). Works with every other
 option (views, contact sheet, perspective, section, colours/regions, `--theme`, `--size`). Same
-settings in the UI (`mcad usage ui`).
+settings in the UI (`mcad usage ui`) and in the file's `render { … }` block (`mcad usage
+render-block`; options override it).
 
 | Option | Default | Effect |
 | --- | --- | --- |
@@ -69,7 +70,8 @@ settings in the UI (`mcad usage ui`).
 
 - Metal reflections take the body's colour (`silver` + `aluminium` = aluminium); plastics
   reflect white.
-- Studio options without `--style studio`: exit 2 (`--ao only applies with --style studio`).
+- Studio options without `--style studio` (and without a render block): exit 2
+  (`--ao only applies with --style studio`). `--style standard` ignores the render block.
 - Transparent bodies (dimmed rest, x-ray, alpha) and section caps cast no shadow.
 - Run time: about +1 s at 1024x768 on 4 cores (simple models 2–6× `standard`); `--shadows off --ao off` is cheapest.
 - Part materials draw the bodies per part (colour regions, kernel Booleans: first call slower).

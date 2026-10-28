@@ -32,6 +32,7 @@ statement[@isGroup=Statement] {
   ForStatement |
   LetStatement |
   Instantiation |
+  RenderEntry |
   IncludeStatement |
   Empty { ";" }
 }
@@ -70,6 +71,10 @@ ForBinding { VariableName "=" expression }
 // `k[i]: knob();` (indexed instance labels), `parts.screw(d = 3);` (modules as namespaces), `sketch { … }` / `hole { … }` without
 // arguments (sketches, Plan 17.1; any name is accepted here, the engine checks).
 Instantiation { Modifier* (Label ("[" expression "]")? ":")? CallName ("." CallName)* (ArgList statement | Block) }
+
+// Entries of a `render { … }` block: `light key { … }`, `material "red" { … }`, `material lid { … }`
+// (the block itself is an Instantiation with a Block).
+RenderEntry { CallName (EntryName | String) Block }
 
 Modifier { "#" | "%" | "!" | "*" }
 
@@ -126,6 +131,7 @@ AxisName { identifier }
 PlaneName { identifier }
 AnchorName { identifier }
 Label { identifier }
+EntryName { identifier }
 CallName { identifier }
 VariableName { identifier }
 PropertyName { identifier }

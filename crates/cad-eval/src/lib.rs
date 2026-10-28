@@ -26,6 +26,7 @@ mod output;
 pub mod palette;
 mod print;
 pub mod project;
+pub mod render_block;
 mod sig;
 mod sketch;
 pub mod sketch_edit;

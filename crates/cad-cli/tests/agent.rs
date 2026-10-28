@@ -557,6 +557,106 @@ fn render_studio_style() {
     }
 }
 
+#[test]
+fn render_block_of_the_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("torch.mcad");
+    std::fs::write(
+        &file,
+        r##"color("silver") cylinder(h = 30, r = 8);
+color("red") translate([0, 0, 30]) sphere(6);
+lid: cube_lid();
+module cube_lid() translate([20, 0, 0]) cube(8);
+render {
+    edges = false;
+    ambient = 0.3;
+    environment = "overcast";
+    background = "#ffffff";
+    light key { azimuth = 20; elevation = 60; }
+    light rim { azimuth = 160; intensity = 0.5; color = "#ffe0c0"; }
+    material "silver" { preset = "chrome"; }
+    material lid { preset = "rubber"; }
+}
+"##,
+    )
+    .unwrap();
+    let g = file.display().to_string();
+    let p = |n: &str| dir.path().join(n).display().to_string();
+    // the block makes the studio look the default and sets its values
+    let v = json(&["render", &g, "-o", &p("a.png"), "--size", "320x240"], 0);
+    assert_eq!(v["style"], "studio");
+    let s = &v["studio"];
+    assert_eq!(s["render_block"]["line"], 5);
+    assert_eq!(
+        (s["edges"].as_bool(), f(&s["ambient"]), s["environment"].as_str()),
+        (Some(false), 0.3, Some("overcast"))
+    );
+    assert_eq!(s["lights"].as_array().unwrap().len(), 2);
+    assert_eq!((f(&s["lights"][0]["azimuth"]), f(&s["lights"][0]["elevation"])), (20.0, 60.0));
+    assert_eq!((s["lights"][1]["color"].as_str(), f(&s["lights"][1]["elevation"])), (Some("#ffe0c0"), 50.0));
+    assert_eq!(v["background"], serde_json::json!(["#ffffff"]));
+    let mats = s["materials"].as_array().unwrap();
+    assert_eq!((mats[0]["target"].as_str(), f(&mats[0]["metalness"])), (Some("#abaeb2"), 1.0));
+    assert_eq!((mats[1]["target"].as_str(), f(&mats[1]["roughness"])), (Some("part:lid"), 0.9));
+    // options override the block (the first light, materials after the block's)
+    let v = json(
+        &[
+            "render",
+            &g,
+            "-o",
+            &p("b.png"),
+            "--size",
+            "320x240",
+            "--light",
+            "-60,30",
+            "--edges",
+            "on",
+            "--material",
+            "silver=plastic",
+            "--environment",
+            "studio",
+        ],
+        0,
+    );
+    let s = &v["studio"];
+    assert_eq!((f(&s["lights"][0]["azimuth"]), f(&s["lights"][0]["elevation"])), (-60.0, 30.0));
+    assert_eq!(s["lights"].as_array().unwrap().len(), 2);
+    assert_eq!((s["edges"].as_bool(), s["environment"].as_str()), (Some(true), Some("studio")));
+    assert_eq!(s["materials"].as_array().unwrap().last().unwrap()["metalness"], 0.0);
+    assert!(png(&dir.path().join("a.png")).differing(&png(&dir.path().join("b.png"))) > 1000);
+    // --style standard ignores the block; studio options then need --style studio
+    let v = json(&["render", &g, "-o", &p("c.png"), "--size", "320x240", "--style", "standard"], 0);
+    assert_eq!((v["style"].as_str(), &v["studio"]), (Some("standard"), &Value::Null));
+    let v = json(&["render", &g, "-o", &p("d.png"), "--style", "standard", "--ao", "off"], 2);
+    assert!(v["error"].as_str().unwrap().contains("--ao"));
+    // `style = "standard"` in the block: standard unless --style studio
+    std::fs::write(&file, "cube(5);\nrender { style = \"standard\"; edges = false; }\n").unwrap();
+    assert_eq!(json(&["render", &g, "-o", &p("e.png"), "--size", "160x120"], 0)["style"], "standard");
+    let v = json(&["render", &g, "-o", &p("e.png"), "--size", "160x120", "--style", "studio"], 0);
+    assert_eq!(v["studio"]["edges"], false);
+    // outline shows the block
+    std::fs::write(
+        &file,
+        "cube(5);\nrender { edges = false; light key { azimuth = 10; } material \"red\" { preset = \"chrome\"; } }\n",
+    )
+    .unwrap();
+    let o = json(&["outline", &g], 0);
+    assert_eq!(o["render"]["edges"], false);
+    assert_eq!(o["render"]["range"]["line"], 2);
+    assert_eq!(o["render"]["lights"][0]["name"], "key");
+    assert_eq!(o["render"]["materials"][0]["target"], serde_json::json!({"color": "red"}));
+    let t = mcad().env("MCAD_LANG", "en").args(["outline", &g]).output().unwrap();
+    let t = String::from_utf8_lossy(&t.stdout);
+    assert!(t.contains("Render block (line 2): style studio, edges off"), "{t}");
+    assert!(t.contains("material \"red\": chrome"), "{t}");
+    // a bad value: warning with its line, the rest of the block applies
+    std::fs::write(&file, "cube(5);\nrender {\n  ambient = 7;\n  edges = false;\n}\n").unwrap();
+    let c = json(&["check", &g], 0);
+    let d = &c["diagnostics"][0];
+    assert_eq!((d["severity"].as_str(), d["range"]["line"].as_u64()), (Some("warning"), Some(3)));
+    assert!(d["message"].as_str().unwrap().contains("ambient"), "{d}");
+}
+
 // ------------------------------------------------------------------------------------------
 // measure
 // ------------------------------------------------------------------------------------------

@@ -74,6 +74,7 @@ Units mm and degrees, Z up.
 | `zone(g[x, y, *], d)`, `zone(g.plane, d)`, any body | zone around a grid line / plane / volume | fillets |
 | `$fillet = r`, `$chamfer = d` on a primitive | all its edges | fillets |
 | `group()`, `render()` | grouping | language |
+| `render { setting = v; light NAME { … } material SEL { … } }` | studio look of the file (no geometry) | render-block |
 
 ## Grids, anchors, parts
 

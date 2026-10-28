@@ -848,7 +848,46 @@ aborted: boolean, stats: Stats,
 /**
  * Results of the geometric assertions (empty until checked, see `FromEngine.Asserts`).
  */
-asserts: Array<AssertResult>, };
+asserts: Array<AssertResult>, 
+/**
+ * The main file's `render { … }` block (studio look of the file; `None`: none).
+ */
+render?: RenderBlock, };
+
+/**
+ * `render { … }` of the main file: the values given (`None`: not set, the default applies).
+ */
+export type RenderBlock = { range: SrcRange, 
+/**
+ * `studio` or `standard`.
+ */
+style: string | null, edges: boolean | null, 
+/**
+ * `studio`, `overcast` or `none`.
+ */
+environment: string | null, ambient: number | null, light_intensity: number | null, shadows: boolean | null, shadow_softness: number | null, ao: boolean | null, ao_radius: number | null, ao_strength: number | null, ground: boolean | null, 
+/**
+ * `#rrggbb`.
+ */
+ground_color: string | null, 
+/**
+ * One or two (top, bottom) `#rrggbb`.
+ */
+background: Array<string> | null, lights: Array<RenderLight>, materials: Array<RenderMaterial>, };
+
+export type RenderLight = { name: string, azimuth: number, elevation: number, intensity: number, 
+/**
+ * `#rrggbb`.
+ */
+color: string, range: SrcRange, };
+
+/**
+ * What a material entry applies to: a colour as written (`red`, `#rrggbb`, `default` =
+ * uncoloured material) or a part.
+ */
+export type RenderTarget = { color: string, } | { part: string, };
+
+export type RenderMaterial = { target: RenderTarget, preset: string | null, metalness: number | null, roughness: number | null, clearcoat: number | null, range: SrcRange, };
 
 export type NodeStatus = "ok" | "warning" | "error" | "skipped" | "pending";
 

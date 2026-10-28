@@ -891,5 +891,54 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
         aborted: out.aborted,
         asserts: Vec::new(),
         stats,
+        render: tree.render.as_ref().map(|d| render_block(d, src)),
+    }
+}
+
+/// The evaluated `render { … }` block for the UI and the CLI.
+pub fn render_block(d: &cad_ir::RenderDecl, src: &Source) -> p::RenderBlock {
+    let hex = |c: [f32; 4]| cad_eval::palette::hex_string([c[0], c[1], c[2], 1.0]);
+    p::RenderBlock {
+        range: src.range(d.span),
+        style: d.style.clone(),
+        edges: d.edges,
+        environment: d.environment.clone(),
+        ambient: d.ambient,
+        light_intensity: d.light_intensity,
+        shadows: d.shadows,
+        shadow_softness: d.shadow_softness,
+        ao: d.ao,
+        ao_radius: d.ao_radius,
+        ao_strength: d.ao_strength,
+        ground: d.ground,
+        ground_color: d.ground_color.map(hex),
+        background: d.background.as_ref().map(|v| v.iter().map(|c| hex(*c)).collect()),
+        lights: d
+            .lights
+            .iter()
+            .map(|l| p::RenderLight {
+                name: l.name.clone(),
+                azimuth: l.azimuth,
+                elevation: l.elevation,
+                intensity: l.intensity,
+                color: hex(l.color),
+                range: src.range(l.span),
+            })
+            .collect(),
+        materials: d
+            .materials
+            .iter()
+            .map(|m| p::RenderMaterial {
+                target: match &m.target {
+                    cad_ir::RenderTarget::Color { label, .. } => p::RenderTarget::Color { color: label.clone() },
+                    cad_ir::RenderTarget::Part(n) => p::RenderTarget::Part { part: n.clone() },
+                },
+                preset: m.preset.clone(),
+                metalness: m.metalness,
+                roughness: m.roughness,
+                clearcoat: m.clearcoat,
+                range: src.range(m.span),
+            })
+            .collect(),
     }
 }

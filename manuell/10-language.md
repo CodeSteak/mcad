@@ -34,6 +34,7 @@ Additions:
 | `sweep(path = pts, interp = "spline"\|"linear") profile;` | sweep a profile along a path (or an open `sketch` as first child) |
 | `surface(points = grid4x4…)` + `thicken(t)` | free-form surface and its solid |
 | `module ns { … }` | modules as namespaces: `ns.part();`, `ns.f(x)`, `ns.CONST`, `a.b.c();` |
+| `render { … }` | studio look of the file: lights, materials per colour/part, environment, … (`mcad usage render-block`); `render()` with parentheses is OpenSCAD's grouping |
 
 ```
 difference() {                                                    // plate with a slot 26 × 6

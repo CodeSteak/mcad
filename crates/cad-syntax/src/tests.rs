@@ -265,3 +265,50 @@ fn module_without_parentheses_and_qualified_calls() {
     // a module without parameters and a single statement body
     ok("module star linear_extrude(1) square(2);");
 }
+
+#[test]
+fn render_block() {
+    let src = r##"
+key_az = -30;
+render {
+    style = "studio";   // comment
+    edges = false;
+    light key { azimuth = key_az; elevation = 50; }
+    light rim { azimuth = 140; color = "#cfe0ff"; };
+    material "silver" { preset = "aluminium"; roughness = 0.3; }
+    material lid { preset = "rubber"; }
+}
+render() cube(1);
+"##;
+    let f = ok(src);
+    assert_eq!(f.stmts.len(), 3);
+    let StmtKind::Render(r) = &f.stmts[1].kind else { panic!("{:?}", f.stmts[1].kind) };
+    assert_eq!(r.items.len(), 6);
+    let RenderItem::Setting(s) = &r.items[0] else { panic!() };
+    assert_eq!(s.name.name, "style");
+    assert!(matches!(&s.value.kind, ExprKind::Str(v) if v == "studio"));
+    assert_eq!(&src[s.span.start as usize..s.span.end as usize], "style = \"studio\";");
+    let RenderItem::Light { name, settings, body, .. } = &r.items[2] else { panic!() };
+    assert_eq!((name.name.as_str(), settings.len()), ("key", 2));
+    assert!(src[body.start as usize..body.end as usize].starts_with('{'));
+    assert!(src[body.start as usize..body.end as usize].ends_with('}'));
+    let RenderItem::Material { target: RenderTarget::Color(c, _), settings, .. } = &r.items[4] else { panic!() };
+    assert_eq!((c.as_str(), settings.len()), ("silver", 2));
+    assert!(matches!(&r.items[5], RenderItem::Material { target: RenderTarget::Part(p), .. } if p.name == "lid"));
+    assert_eq!(&src[r.body.end as usize - 1..r.body.end as usize], "}");
+    // OpenSCAD's render() stays a call
+    assert!(matches!(&f.stmts[2].kind, StmtKind::Call { name, .. } if name.name == "render"));
+}
+
+#[test]
+fn render_block_errors_recover() {
+    let (f, d) = parse("render { edges = ; light { x = 1; } shadows = true; 42; }\ncube(1);");
+    assert!(!d.is_empty());
+    assert!(d.iter().any(|x| x.message.contains("expected")), "{d:?}");
+    assert_eq!(f.stmts.len(), 2, "{:?}", f.stmts);
+    let StmtKind::Render(r) = &f.stmts[0].kind else { panic!() };
+    assert!(r.items.iter().any(|i| matches!(i, RenderItem::Setting(s) if s.name.name == "shadows")));
+    // not closed
+    let (_, d) = parse("render { edges = false;");
+    assert!(d.iter().any(|x| x.message.contains("not closed")), "{d:?}");
+}

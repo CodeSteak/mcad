@@ -26,6 +26,67 @@ pub struct Tree {
     /// the checks the session runs after the kernel job, one per evaluated statement instance.
     #[serde(default)]
     pub asserts: Vec<AssertDecl>,
+    /// The `render { … }` block at the top level of the main file (studio look of the file).
+    #[serde(default)]
+    pub render: Option<RenderDecl>,
+}
+
+/// `render { … }`, evaluated: the values given (`None`: not set, the default applies).
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+pub struct RenderDecl {
+    pub stmt: StmtId,
+    pub span: Span,
+    /// `"studio"` or `"standard"`.
+    pub style: Option<String>,
+    pub edges: Option<bool>,
+    /// `"studio"`, `"overcast"` or `"none"`.
+    pub environment: Option<String>,
+    pub ambient: Option<f64>,
+    pub light_intensity: Option<f64>,
+    pub shadows: Option<bool>,
+    pub shadow_softness: Option<f64>,
+    pub ao: Option<bool>,
+    pub ao_radius: Option<f64>,
+    pub ao_strength: Option<f64>,
+    pub ground: Option<bool>,
+    pub ground_color: Option<[f32; 4]>,
+    /// One colour, or two for a vertical gradient (top, bottom).
+    pub background: Option<Vec<[f32; 4]>>,
+    /// `light NAME { … }` in order (missing values: the defaults of the key light).
+    pub lights: Vec<RenderLight>,
+    pub materials: Vec<RenderMaterial>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RenderLight {
+    pub name: String,
+    pub azimuth: f64,
+    pub elevation: f64,
+    pub intensity: f64,
+    pub color: [f32; 4],
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum RenderTarget {
+    /// The colour as written (`red`, `#rrggbb`, `default`) and its RGBA (`None` for
+    /// `default`, the uncoloured material).
+    Color {
+        label: String,
+        rgba: Option<[f32; 4]>,
+    },
+    Part(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RenderMaterial {
+    pub target: RenderTarget,
+    /// Preset name (checked).
+    pub preset: Option<String>,
+    pub metalness: Option<f64>,
+    pub roughness: Option<f64>,
+    pub clearcoat: Option<f64>,
+    pub span: Span,
 }
 
 /// A geometric assertion. Its node is a group of the checked children; the node of
