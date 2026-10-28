@@ -60,7 +60,7 @@ other option (views, contact sheet, perspective, section, colours/regions, `--th
 | `--ground-color C` | light `#e6e8ec`, dark `#2c3038` | |
 | `--ground-reflection F` | `0.2` | mirror image of the model in the ground, 0 (none) … 1 (strong); stronger at grazing angles, fades with the height above the ground |
 | `--ground-roughness F` | `0.3` | blur of the ground reflection, 0 = sharp mirror … 1 = very blurred |
-| `--reflections on\|off` | `on` | ray-traced reflections in surfaces with roughness < 0.6: the model reflects itself and the ground with its shadow (off: the environment only) |
+| `--reflections on\|off` | `on` | ray-traced reflections in metals with roughness < 0.6 and plastics < 0.35: the model reflects itself and the ground with its shadow (off: the environment only) |
 | `--quality Q` | `normal` | `draft`: no rays for surfaces, one ray per ground sample (fast); `normal`: 4 rays on every 4th sample, smoothed; `high`: 8 rays on every sample (smoother, ~2–4× the ray time) |
 | `--edges on\|off` | `on` | mesh edge lines of opaque bodies; dimmed/x-ray bodies and section contours keep theirs |
 | background | light `#f8f9fb`→`#d9dde3`, dark `#2b3038`→`#111317` | `--background` overrides |
@@ -98,8 +98,9 @@ other option (views, contact sheet, perspective, section, colours/regions, `--th
   (`--ao only applies with --style studio`). `--style standard` ignores the render block.
 - Transparent bodies (dimmed rest, x-ray, alpha) and section caps cast no shadow and are not
   in reflections.
-- Run time at 800x600 on 4 cores (mug example, render step only): `standard` 1.3 s, studio
-  `--quality draft` ~2.5 s, `normal` ~3.5 s, `high` ~6 s; `--shadows off --ao off --quality draft` is cheapest.
+- Run time at 800x600 on 4 cores (mug example, `render_ms`): `standard` 1.1 s; studio `--quality
+  draft` 2.8 s, `normal` 3.3 s (aluminium 3.7 s), `high` 4.7 s (aluminium 8 s);
+  `--shadows off --ao off --quality draft` is cheapest.
 - Part materials draw the bodies per part (colour regions, kernel Booleans: first call slower).
 - JSON: `style`, `studio` (settings incl. `lights`, `environment`, `materials`,
   `ground_reflection`, `ground_roughness`, `reflections`, `quality`), `background` (hex list),

@@ -3,7 +3,7 @@
 // materials go by colour. `mcad render` uses the block (style studio), options override it.
 // Try: mcad render 09-flashlight.mcad -o torch.png
 //      mcad render 09-flashlight.mcad -o plain.png --style standard
-//      mcad render 09-flashlight.mcad -o brushed.png --material silver=metal_brushed --edges on
+//      mcad render 09-flashlight.mcad -o steel.png --material silver=stainless --edges on
 
 len    = 120;  // overall length
 r      = 13;   // body radius
@@ -38,7 +38,8 @@ render {
     ambient = 0.45;
     light key { azimuth = -35; elevation = 45; }
     light rim { azimuth = 150; elevation = 25; intensity = 0.6; color = "#dfe8ff"; }
-    material "silver" { preset = "aluminium"; roughness = 0.3; }
+    ground_reflection = 0.3;
+    material "silver" { preset = "aluminium"; }
     material "white" { preset = "chrome"; }
     material "black" { preset = "rubber"; }
     material "red" { preset = "plastic_glossy"; }

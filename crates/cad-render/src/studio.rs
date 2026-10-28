@@ -14,10 +14,11 @@
 //!   fixed relative to the camera like the lights, prefiltered for the roughness (split sum
 //!   with a numerically computed DFG table). Ambient occlusion also occludes the environment
 //!   reflections.
-//! * Reflections of the scene ([`Studio::reflections`]): rays from glossy surfaces (roughness
-//!   below 0.6, a few per sample by [`Quality`]) are traced through a bounding volume
-//!   hierarchy of the opaque triangles: the model reflects itself and the ground with its
-//!   shadow. The ground mirrors the model ([`Studio::ground_reflection`], blurred by
+//! * Reflections of the scene ([`Studio::reflections`]): rays from glossy surfaces (metals with
+//!   roughness below 0.6, dielectrics below 0.35; a few per sample by [`Quality`]) are traced
+//!   through a bounding volume hierarchy of the opaque triangles: the model reflects itself
+//!   and the ground with its shadow; several rays per sample are smoothed over neighbouring
+//!   samples (Gaussian, normal and plane aware), clamped against fireflies. The ground mirrors the model ([`Studio::ground_reflection`], blurred by
 //!   [`Studio::ground_roughness`], fading with the height above the ground).
 //! * Shadows: an orthographic shadow map of the opaque (clipped) triangles along the first
 //!   light, filtered with percentage-closer soft shadows (blocker search, penumbra from the
@@ -662,6 +663,8 @@ const CLEARCOAT_ROUGHNESS: f64 = 0.05;
 /// Rougher surfaces reflect the environment only (their reflections of the scene would be
 /// too blurred to show and too noisy with few rays).
 const RT_MAX_ROUGHNESS: f64 = 0.6;
+/// The same for dielectrics (plastics): their reflections of the scene are faint.
+const RT_MAX_ROUGHNESS_DIELECTRIC: f64 = 0.35;
 
 /// What the shading needs to know about a scene item.
 #[derive(Debug, Clone, Copy)]
@@ -877,6 +880,10 @@ impl Ctx<'_> {
                     None => n,
                 };
                 let r = (nb * (2.0 * nb.dot(view)) - view).normalize_or(n);
+                // brushed: as rough as the mean of both directions (the rays sample a round lobe)
+                let rt_rough = aniso.map_or(rough, |(_, _, at)| (at * alpha).sqrt().sqrt());
+                // dielectrics reflect a few percent: rays only where the reflection is sharp
+                let rt_max = if metal >= 0.5 { RT_MAX_ROUGHNESS } else { RT_MAX_ROUGHNESS_DIELECTRIC };
                 let mut spec_ao = s.ao;
                 let mut corr = None;
                 let pre = if s.ground {
@@ -884,7 +891,7 @@ impl Ctx<'_> {
                 } else {
                     let env = self.env_reflection(r, rough);
                     match (self.tracer, trace) {
-                        (Some(tr), Some((u, phi, take))) if rough < RT_MAX_ROUGHNESS => {
+                        (Some(tr), Some((u, phi, take))) if rt_rough < rt_max => {
                             match tr.glossy(self, s.p, n, view, r, alpha, u, phi, take) {
                                 // one mirror ray: exact, no noise
                                 Glossy::Mirror(c) => {
@@ -957,6 +964,9 @@ impl Ctx<'_> {
         (c, refl)
     }
 }
+
+/// Largest radiance of one of several glossy rays (fireflies).
+const RAY_CLAMP: f64 = 1.5;
 
 /// Roughness of the environment lookups of reflection rays (the floor in reflections).
 const GROUND_ENV_ROUGHNESS: f64 = 0.15;
@@ -1040,7 +1050,9 @@ impl Tracer<'_> {
             if let Some(c) = self.radiance(ctx, o, d) {
                 let e = ctx.env_reflection(d, GROUND_ENV_ROUGHNESS);
                 for q in 0..3 {
-                    sum[q] += c[q] - e[q];
+                    // several rays: clamped against fireflies (bright highlights hit by a ray)
+                    let c = if k > 1 { c[q].min(RAY_CLAMP) } else { c[q] };
+                    sum[q] += c - e[q].min(if k > 1 { RAY_CLAMP } else { f64::INFINITY });
                 }
             }
         }
@@ -1362,8 +1374,8 @@ pub(crate) fn shade(
         });
     }
 
-    // Glossy reflections: smoothed over 7 × 7 samples of similar depth and normal, spaced
-    // wider for rougher surfaces.
+    // Glossy reflections: smoothed with a Gaussian over the traced samples nearby (wider for
+    // rougher surfaces) of similar normal and on the sample's tangent plane.
     let mut lin: Vec<[f32; 3]> = shaded.iter().map(|s| s.0).collect();
     if shaded.iter().any(|s| s.1[3] > 0.0) {
         let tol = diag * 0.004;
@@ -1383,14 +1395,15 @@ pub(crate) fn shade(
                 let (x, y) = ((i % w) as i64, (i / w) as i64);
                 let ni = g.normal[i];
                 let rough = ctx.items[g.item[i] as usize].material.roughness as f64;
-                // taps on the lattice of the traced samples
+                // taps on the lattice of the traced samples around the sample
                 let lat = if tracer_sparse { 2 } else { 1 };
-                let step = lat * (1.0 + rough * 3.0).round() as i64;
-                let (bx, by) = (x - x % lat, y - y % lat);
+                let k = 3 + (rough * 4.0).round() as i64;
+                let sigma = (k * lat) as f64 * 0.5;
+                let (bx, by) = (x - x.rem_euclid(lat), y - y.rem_euclid(lat));
                 let (mut s, mut n) = ([0.0f32; 3], 0.0f32);
-                for dy in -3i64..=3 {
-                    for dx in -3i64..=3 {
-                        let (xx, yy) = (bx + dx * step, by + dy * step);
+                for dy in -k..=k {
+                    for dx in -k..=k {
+                        let (xx, yy) = (bx + dx * lat, by + dy * lat);
                         if xx < 0 || yy < 0 || xx >= w as i64 || yy >= h as i64 {
                             continue;
                         }
@@ -1406,14 +1419,16 @@ pub(crate) fn shade(
                         if (pos[q] - pos[i]).dot(v3f(ni)).abs() > tol {
                             continue;
                         }
+                        let d2 = ((xx - x).pow(2) + (yy - y).pow(2)) as f64;
+                        let wt = (-d2 / (2.0 * sigma * sigma)).exp() as f32;
                         for (v, r) in s.iter_mut().zip(shaded[q].1) {
-                            *v += r;
+                            *v += r * wt;
                         }
-                        n += 1.0;
+                        n += wt;
                     }
                 }
                 for c in 0..3 {
-                    out[c] = (out[c] + s[c] / n.max(1.0)).max(0.0);
+                    out[c] = (out[c] + if n > 0.0 { s[c] / n } else { 0.0 }).max(0.0);
                 }
             }
         });

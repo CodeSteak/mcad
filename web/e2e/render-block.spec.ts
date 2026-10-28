@@ -22,6 +22,7 @@ interface Drawn {
   lights: number;
   environment: string | null;
   toneMapping: boolean;
+  groundReflection: number;
 }
 type W = { __cad: { studioInfo(): { settings: Record<string, unknown>; drawn: Drawn | null }; setStudio(p: unknown): void } };
 
@@ -174,6 +175,9 @@ test("R04 a file with a render block: the studio look follows the file", async (
   expect(s.ambient).toBe(0.45);
   expect(s.lights.map((l) => l.name)).toEqual(["key", "rim"]);
   expect(s.materials.find((m) => m.target.color === "silver")?.preset).toBe("aluminium");
+  // the mirror image in the ground from the block
+  expect((s as unknown as { groundReflection: number }).groundReflection).toBe(0.3);
+  expect((await drawn(page, (x) => x.groundReflection > 0)).groundReflection).toBe(0.3);
   await shot(page, "ui-flashlight");
   // typing in the block changes the view's settings
   const t = await text(page);
@@ -183,4 +187,48 @@ test("R04 a file with a render block: the studio look follows the file", async (
   await expect(panel(page).getByTestId("studio-source")).toContainText("Zeile 36");
   await expect(panel(page).getByTestId("studio-preset-silver")).toHaveValue("aluminium");
   await shot(page, "ui-flashlight-panel", "full");
+});
+
+test("R05 ground reflection, real metals and brushing; the panel writes the new keys back", async ({ page }) => {
+  test.setTimeout(150_000);
+  const shaderErrors: string[] = [];
+  page.on("console", (m) => {
+    if (/Shader Error|shader chunk changed|WebGLProgram/i.test(m.text())) shaderErrors.push(m.text());
+  });
+  await openApp(page);
+  await loadText(page, example("07-mug.mcad"));
+  const set = (p: unknown) => page.evaluate((x) => (window as unknown as W).__cad.setStudio(x), p);
+  await set({ on: true, edges: false, groundReflection: 0 });
+  await drawn(page, (x) => x.on && x.groundReflection === 0);
+  const plain = await grab(page);
+  await set({ groundReflection: 0.7, groundRoughness: 0 });
+  expect((await drawn(page, (x) => x.groundReflection > 0)).groundReflection).toBe(0.7);
+  await frame(page);
+  await shot(page, "ui-ground-reflection");
+  // the mirror image below the mug changes the ground
+  expect(await differ(page, plain, await grab(page))).toBeGreaterThan(0.01);
+  // presets with their own colour and a brushed one compile and draw
+  const m = (preset: string) => [{ target: { color: "default" }, preset, metalness: null, roughness: null, clearcoat: null, anisotropy: null }];
+  await set({ materials: m("gold") });
+  await frame(page);
+  await frame(page);
+  const gold = await grab(page);
+  await set({ materials: m("metal_brushed") });
+  await frame(page);
+  await frame(page);
+  await shot(page, "ui-brushed");
+  expect(await differ(page, gold, await grab(page))).toBeGreaterThan(0.05);
+  expect(shaderErrors).toEqual([]);
+  // panel → render block
+  await settingsButton(page).click();
+  await panel(page).getByTestId("studio-groundReflection").fill("0.4");
+  await expect.poll(() => text(page), { timeout: 20_000 }).toContain("ground_reflection = 0.4;");
+  await panel(page).getByTestId("studio-reflections").uncheck();
+  await expect.poll(() => text(page), { timeout: 20_000 }).toContain("reflections = false;");
+  await panel(page).getByTestId("studio-anisotropy-default").fill("0.5");
+  await expect.poll(() => text(page), { timeout: 20_000 }).toContain("anisotropy = 0.5;");
+  await panel(page).getByTestId("studio-environment").selectOption("soft");
+  await expect.poll(() => text(page), { timeout: 20_000 }).toContain('environment = "soft";');
+  await expect(panel(page).getByTestId("studio-environment").locator("option")).toHaveText(["Studio (dunkel, Softboxen)", "Helles Studio (weich)", "Bedeckt", "Keine (keine Spiegelungen)"]);
+  await shot(page, "ui-panel-reflections", "full");
 });
