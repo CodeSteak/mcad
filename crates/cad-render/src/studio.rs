@@ -1495,10 +1495,15 @@ pub(crate) fn shade(
                 }
             });
         }
-        // blur over 5 × 5 ground samples (smooths the ray noise), then over the ground colour
+        // Gaussian over the traced ground samples nearby (smooths the ray noise), then over the
+        // ground colour
         let mut blurred = vec![[0.0f32; 4]; w * h];
         {
             let (g, layer) = (&*g, &layer);
+            let lat = if tr.sparse { 2 } else { 1 };
+            // wider for a rougher ground (its reflection is blurred anyway)
+            let k = 2 + (st.ground_roughness.clamp(0.0, 1.0) * 6.0).round() as i64;
+            let sigma = (k * lat) as f64 * 0.6;
             par_rows(&mut blurred, w, |y0, rows| {
                 for (j, out) in rows.iter_mut().enumerate() {
                     let i = y0 * w + j;
@@ -1506,10 +1511,11 @@ pub(crate) fn shade(
                         continue;
                     }
                     let (x, y) = ((i % w) as i64, (i / w) as i64);
+                    let (bx, by) = (x - x.rem_euclid(lat), y - y.rem_euclid(lat));
                     let (mut s, mut n) = ([0.0f32; 4], 0.0f32);
-                    for dy in -2i64..=2 {
-                        for dx in -2i64..=2 {
-                            let (xx, yy) = (x + dx, y + dy);
+                    for dy in -k..=k + 1 {
+                        for dx in -k..=k + 1 {
+                            let (xx, yy) = (bx + dx * lat, by + dy * lat);
                             if xx < 0 || yy < 0 || xx >= w as i64 || yy >= h as i64 {
                                 continue;
                             }
@@ -1517,13 +1523,15 @@ pub(crate) fn shade(
                             if g.kind[q] != GROUND || layer[q][3] < 0.0 {
                                 continue;
                             }
-                            for c in 0..4 {
-                                s[c] += layer[q][c];
+                            let d2 = ((xx - x).pow(2) + (yy - y).pow(2)) as f64;
+                            let wt = (-d2 / (2.0 * sigma * sigma)).exp() as f32;
+                            for (v, l) in s.iter_mut().zip(layer[q]) {
+                                *v += l * wt;
                             }
-                            n += 1.0;
+                            n += wt;
                         }
                     }
-                    *out = s.map(|v| v / n.max(1.0));
+                    *out = if n > 0.0 { s.map(|v| v / n) } else { [0.0; 4] };
                 }
             });
         }
