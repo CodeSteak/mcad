@@ -244,8 +244,9 @@ impl Place<'_> {
             // on its own line after the anchor's line
             TextEdit { span: Span::new(le, le), text: format!("\n{}{item}", self.indent) }
         } else if after.is_none() && self.text[at..close].trim().is_empty() {
-            // empty one-line block `render {}`
-            TextEdit { span: Span::new(at, close), text: format!(" {item} ") }
+            // empty one-line block `render {}` / `render { }`: before the `}`
+            let text = if self.text[..close].ends_with(' ') { format!("{item} ") } else { format!(" {item} ") };
+            TextEdit { span: Span::new(close, close), text }
         } else {
             TextEdit { span: Span::new(at, at), text: format!(" {item}") }
         }

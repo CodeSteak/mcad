@@ -141,6 +141,10 @@ fn removals_take_their_line() {
 fn one_line_and_empty_blocks() {
     assert_eq!(edit("render { edges = false; }\n", &[set("ao", "false")]), "render { edges = false; ao = false; }\n");
     assert_eq!(edit("render {}\n", &[set("ao", "false")]), "render { ao = false; }\n");
+    assert_eq!(
+        edit("render { }\n", &[set("ao", "false"), set("edges", "true")]),
+        "render { ao = false; edges = true; }\n"
+    );
     assert_eq!(edit("render {\n}\n", &[light("key", "azimuth", "5")]), "render {\n    light key { azimuth = 5; }\n}\n");
     // multi-line light entry
     let src = "render {\n  light key {\n    azimuth = 5;\n  }\n}\n";
