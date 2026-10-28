@@ -25,7 +25,7 @@ import { rangePath } from "../logic/files";
 import { bridge } from "../state/bridge";
 import { project } from "../state/project";
 import { type CadState, store } from "../state/store";
-import { Materials, readPalette } from "./materials";
+import { Materials, readPalette, studioGroundMaterial } from "./materials";
 import { displayHex, faceColors, hasFaceColors, vertexColors } from "../logic/colors";
 import { type CapBody, SectionLayer } from "./sectionLayer";
 import { type SectionState, effectiveNormal, keeps, offset, snapCandidates, withOffset } from "../logic/section";
@@ -33,7 +33,21 @@ import type { MeshCache } from "./meshCache";
 import type { SketchController, SketchView } from "../app/sketch";
 import type { MeasureController, MeasureView } from "../app/measure";
 import { pixelSize, planeCamera, rasterLines, rasterSpacing, snapMarker } from "../logic/sketchEditor";
-import { STUDIO_THEME, type StudioSettings, aoRadiusFor, lightDirection } from "../logic/studio";
+import {
+  ENV_SPECULAR_GAIN,
+  type ColorRef,
+  type Pbr,
+  STUDIO_THEME,
+  type StudioSettings,
+  aoRadiusFor,
+  cameraAzimuth,
+  environmentPixels,
+  environmentSpec,
+  lightDirection,
+  materialFor,
+  studioPartMaterials,
+  upIrradiance,
+} from "../logic/studio";
 
 export type StandardView = "iso" | "top" | "front" | "right" | "back" | "left" | "bottom";
 
@@ -204,11 +218,14 @@ export class Viewer implements DragView, SketchView, MeasureView {
   missingMeshes = 0;
   /** Lights of the standard look (hemisphere + head light). */
   private stdLights: THREE.Light[] = [];
-  /** Studio look: key light (shadows), fill light, sky light and the ground. */
+  /** Studio look: directional lights (the first casts shadows), sky light (environment
+   *  "none" only), the ground; reflections from a procedural environment map. */
   private studioGroup = new THREE.Group();
-  private keyLight = new THREE.DirectionalLight(0xffffff, 1);
-  private fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
+  private studioLights: THREE.DirectionalLight[] = [];
   private skyLight = new THREE.HemisphereLight(0xffffff, 0x8a8f98, 1);
+  private pmrem: THREE.PMREMGenerator | null = null;
+  private envMap: THREE.Texture | null = null;
+  private envKey = "";
   private ground: THREE.Mesh | null = null;
   private groundKey = "";
   private studioBg: THREE.Texture | null = null;
@@ -219,7 +236,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
   /** Studio settings in effect. */
   studio: StudioSettings = store.getState().studio;
   /** What the last frame drew in the studio look (test hook). */
-  lastStudioDraw: { on: boolean; shadows: boolean; ao: boolean; ground: boolean; edges: boolean; edgeLines: number; aoRadius: number | null; light: Vec3 | null } = { on: false, shadows: false, ao: false, ground: false, edges: true, edgeLines: 0, aoRadius: null, light: null };
+  lastStudioDraw: { on: boolean; shadows: boolean; ao: boolean; ground: boolean; edges: boolean; edgeLines: number; aoRadius: number | null; light: Vec3 | null; lights: number; environment: string | null; toneMapping: boolean } = { on: false, shadows: false, ao: false, ground: false, edges: true, edgeLines: 0, aoRadius: null, light: null, lights: 0, environment: null, toneMapping: false };
   /** Mode the base was drawn with (full while the selected node's mesh is loading). */
   baseMode: string | null = null;
   modelBox: Box3 = emptyBox();
@@ -277,15 +294,14 @@ export class Viewer implements DragView, SketchView, MeasureView {
     this.stdLights = [hemi, head];
     // studio look: lights follow the camera's azimuth (placed every frame), the ground plane
     this.skyLight.position.set(0, 0, 1);
-    this.keyLight.shadow.mapSize.set(2048, 2048);
-    this.studioGroup.add(this.keyLight, this.keyLight.target, this.fillLight, this.fillLight.target, this.skyLight);
+    this.studioGroup.add(this.skyLight);
     this.studioGroup.name = "studio";
     this.studioGroup.visible = false;
     this.scene3.add(this.studioGroup);
     // variance shadow maps: a smooth blur for soft shadows (PCF with a large radius is grainy)
     this.renderer.shadowMap.type = THREE.VSMShadowMap;
 
-    this.materials = new Materials(readPalette(), this.studio.on, this.studio.edges);
+    this.materials = new Materials(readPalette(), this.studio.on, this.studio.edges, this.envDiffuse());
     this.applyTheme();
 
     this.resizeObs = new ResizeObserver(() => this.resize());
@@ -331,6 +347,8 @@ export class Viewer implements DragView, SketchView, MeasureView {
     this.aoQuad?.dispose();
     this.aoMaterial?.dispose();
     this.studioBg?.dispose();
+    this.envMap?.dispose();
+    this.pmrem?.dispose();
     if (this.ground) {
       this.ground.geometry.dispose();
       (this.ground.material as THREE.Material).dispose();
@@ -402,7 +420,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
   applyTheme(): void {
     const pal = readPalette();
     this.materials.dispose();
-    this.materials = new Materials(pal, this.studio.on, this.studio.edges);
+    this.materials = new Materials(pal, this.studio.on, this.studio.edges, this.envDiffuse());
     this.renderer.setClearColor(new THREE.Color(pal.background), 1);
     this.applyStudioLook();
     this.section?.setColors(pal.cap, pal.edge, pal.accent);
@@ -414,35 +432,94 @@ export class Viewer implements DragView, SketchView, MeasureView {
   applyStudio(s: StudioSettings): void {
     const was = this.studio;
     this.studio = s;
-    // materials depend on the look (roughness, edge opacity) and on the shadow map
-    if (was.on !== s.on || was.shadows !== s.shadows || was.edges !== s.edges) this.applyTheme();
+    // materials depend on the look (surfaces, edge opacity, environment) and on the shadow map
+    const mats = (x: StudioSettings) => JSON.stringify(x.materials);
+    if (was.on !== s.on || was.shadows !== s.shadows || was.edges !== s.edges || was.environment !== s.environment || mats(was) !== mats(s) || was.lights.length !== s.lights.length) this.applyTheme();
     else {
       this.applyStudioLook();
       this.requestRender();
     }
   }
 
-  /** Lights, shadow map, background and ground of the current studio settings and theme. */
+  /** Factor on the environment's diffuse light of the current environment (`Materials`). */
+  private envDiffuse(): number {
+    const s = this.studio;
+    if (s.environment === "none") return 1;
+    return 1 / (upIrradiance(environmentSpec(s.environment, this.groundLinear())) * ENV_SPECULAR_GAIN);
+  }
+
+  private groundLinear(): Vec3 {
+    const s = this.studio;
+    const g = new THREE.Color(s.groundColor ?? STUDIO_THEME[store.getState().theme].ground);
+    // THREE.Color holds linear values (colour management)
+    return [g.r, g.g, g.b];
+  }
+
+  /** Environment map of the studio look: equirectangular image of the analytic environment,
+   *  prefiltered by PMREM (no image files). */
+  private updateEnvironment(): void {
+    const s = this.studio;
+    const on = s.on && s.environment !== "none";
+    const gl = this.groundLinear();
+    const key = on ? `${s.environment}|${gl.map((x) => x.toFixed(4)).join(",")}` : "";
+    if (key === this.envKey) return;
+    this.envKey = key;
+    this.envMap?.dispose();
+    this.envMap = null;
+    if (on) {
+      const w = 256;
+      const tex = new THREE.DataTexture(environmentPixels(environmentSpec(s.environment, gl), w), w, w / 2, THREE.RGBAFormat, THREE.FloatType);
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      tex.colorSpace = THREE.LinearSRGBColorSpace;
+      tex.needsUpdate = true;
+      this.pmrem ??= new THREE.PMREMGenerator(this.renderer);
+      this.envMap = this.pmrem.fromEquirectangular(tex).texture;
+      tex.dispose();
+    }
+  }
+
+  /** Lights, shadow map, environment, background and ground of the current studio settings and theme. */
   private applyStudioLook(): void {
     const s = this.studio;
     const on = s.on;
     for (const l of this.stdLights) l.visible = !on;
     this.studioGroup.visible = on;
+    this.renderer.toneMapping = on ? THREE.NeutralToneMapping : THREE.NoToneMapping;
     const shadows = on && s.shadows;
     this.renderer.shadowMap.enabled = shadows;
-    this.keyLight.castShadow = shadows;
+    // one directional light per setting; the first casts the shadows
+    while (this.studioLights.length > s.lights.length) {
+      const l = this.studioLights.pop()!;
+      this.studioGroup.remove(l, l.target);
+      l.dispose();
+    }
+    while (this.studioLights.length < s.lights.length) {
+      const l = new THREE.DirectionalLight(0xffffff, 1);
+      l.shadow.mapSize.set(2048, 2048);
+      this.studioLights.push(l);
+      this.studioGroup.add(l, l.target);
+    }
     // blur radius in texels ≈ penumbra of a light of radius softness · 5° (as the CLI) at a
     // typical occluder distance of 0.6 · R (the map spans 2.2 · R over 2048 texels)
     const tanTheta = Math.tan((Math.max(0, Math.min(1, s.shadowSoftness)) * 5 * Math.PI) / 180);
-    this.keyLight.shadow.radius = Math.min(40, 1 + 560 * tanTheta);
-    this.keyLight.shadow.blurSamples = 24;
+    const amb = Math.max(0, Math.min(1, s.ambient));
+    const k = (1 - amb) * Math.max(0, s.lightIntensity);
+    this.studioLights.forEach((l, i) => {
+      const set = s.lights[i];
+      l.castShadow = shadows && i === 0;
+      l.shadow.radius = Math.min(40, 1 + 560 * tanTheta);
+      l.shadow.blurSamples = 24;
+      l.intensity = k * Math.max(0, set.intensity) * Math.PI;
+      l.color.set(set.color);
+    });
     const theme = store.getState().theme;
     const th = STUDIO_THEME[theme];
     const gc = new THREE.Color(s.groundColor ?? th.ground);
-    const amb = Math.max(0, Math.min(1, s.ambient));
-    const k = (1 - amb) * Math.max(0, s.lightIntensity);
-    this.keyLight.intensity = k * Math.PI;
-    this.fillLight.intensity = 0.22 * k * Math.PI;
+    // environment: reflections and diffuse light (`none`: a hemisphere light as before)
+    this.updateEnvironment();
+    this.scene3.environment = on ? this.envMap : null;
+    this.scene3.environmentIntensity = amb * ENV_SPECULAR_GAIN;
+    this.skyLight.visible = on && s.environment === "none";
     this.skyLight.intensity = amb * Math.PI;
     this.skyLight.color.set(0xffffff);
     this.skyLight.groundColor.setRGB(0.35 + 0.4 * gc.r, 0.35 + 0.4 * gc.g, 0.35 + 0.4 * gc.b);
@@ -479,7 +556,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     const box = this.modelBox;
     const want = s.on && s.ground && !isEmpty(box);
     const color = s.groundColor ?? STUDIO_THEME[store.getState().theme].ground;
-    const key = want ? `${box.min.join(",")}|${box.max.join(",")}|${color}` : "";
+    const key = want ? `${box.min.join(",")}|${box.max.join(",")}|${color}|${this.materials.envDiffuse}` : "";
     if (key === this.groundKey) return;
     this.groundKey = key;
     if (this.ground) {
@@ -492,9 +569,11 @@ export class Viewer implements DragView, SketchView, MeasureView {
     const diag = Math.max(1, boxDiagonal(box));
     const cx = (box.min[0] + box.max[0]) / 2;
     const cy = (box.min[1] + box.max[1]) / 2;
-    const mat = new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, transparent: true, depthWrite: false });
+    const mat = studioGroundMaterial(color, this.materials.envDiffuse);
     const fade = { value: new THREE.Vector4(cx, cy, diag * 0.55, diag * 1.5) };
-    mat.onBeforeCompile = (sh) => {
+    const envPatch = mat.onBeforeCompile;
+    mat.onBeforeCompile = (sh, r) => {
+      envPatch.call(mat, sh, r);
       sh.uniforms.groundFade = fade;
       sh.vertexShader = sh.vertexShader
         .replace("#include <common>", "#include <common>\nvarying vec3 vGroundPos;")
@@ -514,8 +593,9 @@ export class Viewer implements DragView, SketchView, MeasureView {
     this.studioGroup.add(g);
   }
 
-  /** Places key and fill light for the current camera (azimuth relative to the camera). */
-  private placeStudioLights(): Vec3 {
+  /** Places the lights and turns the environment for the current camera (azimuths relative
+   *  to the camera). Returns the direction towards the first light. */
+  private placeStudioLights(): Vec3 | null {
     const s = this.studio;
     const box = isEmpty(this.modelBox) ? { min: [-25, -25, 0] as Vec3, max: [25, 25, 25] as Vec3 } : this.modelBox;
     const c = new THREE.Vector3((box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2, (box.min[2] + box.max[2]) / 2);
@@ -524,27 +604,31 @@ export class Viewer implements DragView, SketchView, MeasureView {
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
     const e: Vec3 = [eye.x, eye.y, eye.z];
     const u: Vec3 = [up.x, up.y, up.z];
-    const l = lightDirection(e, u, s.lightAzimuth, s.lightElevation);
-    this.keyLight.position.set(c.x + l[0] * r * 3, c.y + l[1] * r * 3, c.z + l[2] * r * 3);
-    this.keyLight.target.position.copy(c);
-    const cam = this.keyLight.shadow.camera;
-    // the shadow camera covers the model (the ground only gets shadow where the model casts it)
-    cam.left = -r * 1.1;
-    cam.right = r * 1.1;
-    cam.top = r * 1.1;
-    cam.bottom = -r * 1.1;
-    cam.near = r * 0.5;
-    cam.far = r * 5.5;
-    cam.updateProjectionMatrix();
-    this.keyLight.shadow.bias = -0.0004;
-    this.keyLight.shadow.normalBias = r * 0.004;
-    const camEl = (Math.asin(Math.max(-1, Math.min(1, eye.z))) * 180) / Math.PI;
-    const f = lightDirection(e, u, 0, camEl + 15);
-    this.fillLight.position.set(c.x + f[0] * r * 3, c.y + f[1] * r * 3, c.z + f[2] * r * 3);
-    this.fillLight.target.position.copy(c);
-    this.keyLight.target.updateMatrixWorld();
-    this.fillLight.target.updateMatrixWorld();
-    return l;
+    // the environment map is made for a camera at azimuth 0
+    this.scene3.environmentRotation.set(0, 0, cameraAzimuth(e, u));
+    let first: Vec3 | null = null;
+    this.studioLights.forEach((light, i) => {
+      const set = s.lights[i];
+      const l = lightDirection(e, u, set.azimuth, set.elevation);
+      if (i === 0) first = l;
+      light.position.set(c.x + l[0] * r * 3, c.y + l[1] * r * 3, c.z + l[2] * r * 3);
+      light.target.position.copy(c);
+      light.target.updateMatrixWorld();
+      if (i === 0) {
+        const cam = light.shadow.camera;
+        // the shadow camera covers the model (the ground only gets shadow where the model casts it)
+        cam.left = -r * 1.1;
+        cam.right = r * 1.1;
+        cam.top = r * 1.1;
+        cam.bottom = -r * 1.1;
+        cam.near = r * 0.5;
+        cam.far = r * 5.5;
+        cam.updateProjectionMatrix();
+        light.shadow.bias = -0.0004;
+        light.shadow.normalBias = r * 0.004;
+      }
+    });
+    return first;
   }
 
   /** Ambient occlusion pass of the studio look (lazy). */
@@ -673,6 +757,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     const st = this.studio;
     if (st.on) {
       this.updateGround();
+      this.updateEnvironment();
       const light = this.placeStudioLights();
       // AO pauses while a section is shown (the cut faces are stencil caps)
       const ao = st.ao && !store.getState().section.on;
@@ -683,10 +768,22 @@ export class Viewer implements DragView, SketchView, MeasureView {
       this.content.traverse((o) => {
         if ((o as THREE.LineSegments).isLineSegments && !(o instanceof LineSegments2)) edgeLines++;
       });
-      this.lastStudioDraw = { on: true, shadows: st.shadows, ao, ground: this.ground !== null, edges: st.edges, edgeLines, aoRadius: ao ? aoRadiusFor(st, diag) : null, light };
+      this.lastStudioDraw = {
+        on: true,
+        shadows: st.shadows,
+        ao,
+        ground: this.ground !== null,
+        edges: st.edges,
+        edgeLines,
+        aoRadius: ao ? aoRadiusFor(st, diag) : null,
+        light,
+        lights: this.studioLights.length,
+        environment: this.scene3.environment ? st.environment : null,
+        toneMapping: r.toneMapping === THREE.NeutralToneMapping,
+      };
     } else {
       r.render(this.scene3, this.camera);
-      this.lastStudioDraw = { on: false, shadows: false, ao: false, ground: false, edges: true, edgeLines: 0, aoRadius: null, light: null };
+      this.lastStudioDraw = { on: false, shadows: false, ao: false, ground: false, edges: true, edgeLines: 0, aoRadius: null, light: null, lights: 0, environment: null, toneMapping: false };
     }
     this.noteCamera();
     this.placeMeasureLabels();
@@ -818,7 +915,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
       this.baseMode = mode;
       // "Farbregionen zeigen" (default for models with colours, Bericht 12): bodies per colour
       // as the 3MF prints them, instead of the base (full display only)
-      const regions = mode === "full" && st.showRegions && hasFaceColors(scene) ? this.regionItems(scene, hidden) : null;
+      const regions = mode === "full" && st.showRegions && (hasFaceColors(scene) || studioPartMaterials(st.studio)) ? this.regionItems(scene, hidden) : null;
       if (regions) {
         for (const r of regions) this.addRegionMesh(r);
         this.regionsDrawn = regions.length;
@@ -906,11 +1003,11 @@ export class Viewer implements DragView, SketchView, MeasureView {
   }
 
   /** Region meshes of the shown scene, if they are there (`null`: draw the base instead). */
-  private regionItems(scene: Scene, hidden: number[]): Array<{ node: number; key: string; color: string; alpha: number; matrix: Mat4 }> | null {
+  private regionItems(scene: Scene, hidden: number[]): Array<{ node: number; key: string; color: string; alpha: number; matrix: Mat4; pbr: Pbr }> | null {
     const st = store.getState();
     const r = st.regions;
     if (!r || r.version !== scene.version || !r.meshes) return null;
-    const out: Array<{ node: number; key: string; color: string; alpha: number; matrix: Mat4 }> = [];
+    const out: Array<{ node: number; key: string; color: string; alpha: number; matrix: Mat4; pbr: Pbr }> = [];
     for (const set of r.items) {
       if (hidden.includes(set.node)) continue;
       for (const reg of set.regions) {
@@ -919,16 +1016,36 @@ export class Viewer implements DragView, SketchView, MeasureView {
         const color = !info || info.source === "default" ? this.materials.palette.model : displayHex(info.rgba, st.theme);
         // alpha only changes the view (the entry is the RGB value): the first color() gives it
         const alpha = info && info.source !== "default" ? info.rgba[3] : 1;
-        out.push({ node: set.node, key: reg.mesh.key, color, alpha, matrix: scene.nodes[set.node].display_world });
+        const ref: ColorRef | null = info ? { key: info.key, label: info.label, isDefault: info.source === "default" } : null;
+        const pbr = materialFor(st.studio.materials, ref, set.part);
+        out.push({ node: set.node, key: reg.mesh.key, color, alpha, matrix: scene.nodes[set.node].display_world, pbr });
       }
     }
     return out.length ? out : null;
   }
 
+  /** Studio material of a whole node (its own colour, its part). */
+  private nodePbr(scene: Scene, node: number): Pbr {
+    const st = store.getState();
+    const c = scene.nodes[node].color;
+    let ref: ColorRef | null = null;
+    if (c) {
+      const hex = `#${[c[0], c[1], c[2]].map((x) => Math.round(Math.max(0, Math.min(1, x)) * 255).toString(16).padStart(2, "0")).join("")}`;
+      const info = (scene.colors ?? []).find((x) => x.key.slice(0, 7) === hex);
+      ref = { key: hex, label: info?.label ?? hex, isDefault: false };
+    }
+    // part: the part node itself or an ancestor
+    let part: string | null = null;
+    for (let k: number | null = node; k !== null && part === null; k = scene.nodes[k].parent ?? null) {
+      part = (scene.parts ?? []).find((p) => p.node === k)?.name ?? null;
+    }
+    return materialFor(st.studio.materials, ref, part);
+  }
+
   /** One colour region: opaque body in its colour with edges, pickable, with section cap. */
-  private addRegionMesh(r: { node: number; key: string; color: string; alpha: number; matrix: Mat4 }): void {
+  private addRegionMesh(r: { node: number; key: string; color: string; alpha: number; matrix: Mat4; pbr: Pbr }): void {
     const c = new THREE.Color(r.color);
-    const style = this.materials.style("full", false, [c.r, c.g, c.b, r.alpha]);
+    const style = this.materials.style("full", false, [c.r, c.g, c.b, r.alpha], false, r.pbr);
     const group = new THREE.Group();
     group.matrixAutoUpdate = false;
     group.matrix.copy(m4(r.matrix));
@@ -964,7 +1081,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     const theme = store.getState().theme;
     const fc = it.mode === "full" && !it.flat && !(n.color && n.color[3] < 1) ? faceColors(scene, it.node, theme) : null;
     const perFace = fc !== null && fc.count > 0;
-    const style = this.materials.style(it.mode, it.flat, it.mode === "full" ? n.color : null, perFace);
+    const style = this.materials.style(it.mode, it.flat, it.mode === "full" ? n.color : null, perFace, it.mode === "full" ? this.nodePbr(scene, it.node) : null);
     const group = new THREE.Group();
     group.matrixAutoUpdate = false;
     group.matrix.copy(m4(it.matrix));

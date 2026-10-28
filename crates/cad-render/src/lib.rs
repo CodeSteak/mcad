@@ -16,10 +16,10 @@
 //!   through `point` with `normal` removes the half space the normal points into, i.e. what
 //!   stays is `(q − point) · normal ≤ 0`.
 //! * Studio look ([`Studio`], `RenderOptions::studio`): the opaque samples are shaded after
-//!   rasterisation (deferred) with a key light (Blinn-Phong highlight), a camera fill light and
-//!   hemisphere ambient light, soft shadows from a shadow map (percentage-closer soft shadows),
-//!   screen-space ambient occlusion and a ground plane under the model that fades into the
-//!   background; see [`studio`].
+//!   rasterisation (deferred), physically based: directional lights and reflections of an
+//!   analytic environment on metallic-roughness materials ([`Material`] per item), soft shadows
+//!   from a shadow map (percentage-closer soft shadows), screen-space ambient occlusion and a
+//!   ground plane under the model that fades into the background; see [`studio`].
 //! * Background: solid or a vertical gradient (`RenderOptions::background_bottom`).
 //! * Anti-aliasing by supersampling. No GPU.
 
@@ -30,7 +30,7 @@ pub mod text;
 use cad_kernel::Mesh;
 use glam::{DMat4, DVec3};
 
-pub use studio::{Studio, StudioInfo};
+pub use studio::{Environment, Light, Material, Studio, StudioInfo};
 pub use text::{TextSize, contact_sheet, text_size, tile_origin};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -140,11 +140,25 @@ pub struct Item<'a> {
     pub edges: Option<[f32; 4]>,
     /// With a section: close the cut with a cap (opaque solids).
     pub cap: bool,
+    /// Surface in the studio look.
+    pub material: Material,
 }
 
 impl<'a> Item<'a> {
     pub fn new(mesh: &'a Mesh, color: [f32; 4]) -> Self {
-        Item { mesh, transform: DMat4::IDENTITY, color, edges: Some([0.15, 0.15, 0.18, 1.0]), cap: true }
+        Item {
+            mesh,
+            transform: DMat4::IDENTITY,
+            color,
+            edges: Some([0.15, 0.15, 0.18, 1.0]),
+            cap: true,
+            material: Material::default(),
+        }
+    }
+
+    pub fn with_material(mut self, m: Material) -> Self {
+        self.material = m;
+        self
     }
 
     pub fn with_transform(mut self, m: DMat4) -> Self {
@@ -454,6 +468,8 @@ struct Target {
 /// Per-sample surface data of the studio look (deferred shading).
 pub(crate) struct GBuf {
     pub albedo: Vec<[f32; 3]>,
+    /// Surface of [`studio::SURFACE`] samples.
+    pub material: Vec<Material>,
     /// Unit normal facing the camera.
     pub normal: Vec<[f32; 3]>,
     /// [`studio::NONE`], [`studio::SURFACE`], [`studio::CAP`] or [`studio::GROUND`].
@@ -868,6 +884,7 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
     let studio = opts.studio.as_ref();
     let mut gbuf = studio.map(|_| GBuf {
         albedo: vec![[0.0; 3]; w * h],
+        material: vec![Material::default(); w * h],
         normal: vec![[0.0; 3]; w * h],
         kind: vec![studio::NONE; w * h],
     });
@@ -976,6 +993,7 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
                         let l = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-12);
                         g.normal[i] = [n[0] / l, n[1] / l, n[2] / l];
                         g.albedo[i] = [c[0], c[1], c[2]];
+                        g.material[i] = scene.items[tri.item as usize].material;
                         g.kind[i] = studio::SURFACE;
                     }
                 }

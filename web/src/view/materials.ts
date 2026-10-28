@@ -4,6 +4,29 @@
 import * as THREE from "three";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import type { Mode } from "../logic/display";
+import { DEFAULT_PBR, type Pbr } from "../logic/studio";
+
+/**
+ * Studio look: the environment's diffuse light is normalised (a white face facing up gets
+ * `ambient`), its reflections are not (`cad_render::studio`). three.js scales both by the
+ * environment intensity; this factor corrects the diffuse part.
+ */
+function patchEnvDiffuse(m: THREE.MeshStandardMaterial, factor: number): void {
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.envDiffuse = { value: factor };
+    sh.fragmentShader = sh.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform float envDiffuse;")
+      .replace("#include <lights_fragment_maps>", "#include <lights_fragment_maps>\n  iblIrradiance *= envDiffuse;");
+  };
+  m.customProgramCacheKey = () => `env-diffuse-${m.type}`;
+}
+
+/** Ground and other matte studio surfaces with the environment's diffuse correction. */
+export function studioGroundMaterial(color: string, envDiffuse: number): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, transparent: true, depthWrite: false });
+  patchEnvDiffuse(m, envDiffuse);
+  return m;
+}
 
 export interface Palette {
   background: string;
@@ -96,23 +119,27 @@ export class Materials {
   readonly studio: boolean;
   /** Studio look: edge lines of opaque bodies (`false`: none). */
   readonly studioEdges: boolean;
+  /** Studio look: factor on the environment's diffuse light (see `patchEnvDiffuse`). */
+  readonly envDiffuse: number;
 
-  constructor(palette: Palette, studio = false, studioEdges = true) {
+  constructor(palette: Palette, studio = false, studioEdges = true, envDiffuse = 1) {
     this.palette = palette;
     this.studio = studio;
     this.studioEdges = studioEdges;
+    this.envDiffuse = envDiffuse;
   }
 
-  private solid(color: string): THREE.MeshStandardMaterial {
-    return new THREE.MeshStandardMaterial({
-      color,
-      roughness: this.studio ? 0.5 : 0.78,
-      metalness: 0.0,
-      polygonOffset: true,
-      polygonOffsetFactor: 1,
-      polygonOffsetUnits: 1,
-      side: THREE.DoubleSide,
-    });
+  /** Opaque surface; in the studio look physically based (`pbr`, default plastic). */
+  private solid(color: string, pbr: Pbr | null = null): THREE.MeshStandardMaterial {
+    const common = { color, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, side: THREE.DoubleSide };
+    if (!this.studio) return new THREE.MeshStandardMaterial({ ...common, roughness: 0.78, metalness: 0.0 });
+    const p = pbr ?? DEFAULT_PBR;
+    const m =
+      p.clearcoat > 0
+        ? new THREE.MeshPhysicalMaterial({ ...common, roughness: p.roughness, metalness: p.metalness, clearcoat: p.clearcoat, clearcoatRoughness: 0.05 })
+        : new THREE.MeshStandardMaterial({ ...common, roughness: p.roughness, metalness: p.metalness });
+    patchEnvDiffuse(m, this.envDiffuse);
+    return m;
   }
 
   private transparent(color: string, opacity: number, opts: Partial<THREE.MeshStandardMaterialParameters> = {}): THREE.MeshStandardMaterial {
@@ -129,15 +156,17 @@ export class Materials {
   }
 
   private lines(color: string, opacity = 1, depthTest = true): THREE.LineBasicMaterial {
-    return new THREE.LineBasicMaterial({ color, transparent: opacity < 1 || !depthTest, opacity, depthTest });
+    // lines keep their colour under the studio look's tone mapping
+    return new THREE.LineBasicMaterial({ color, transparent: opacity < 1 || !depthTest, opacity, depthTest, toneMapped: false });
   }
 
   /**
    * Surface/edge materials of a mode; `flat` for 2D nodes, `color` from `color()`,
    * `faceColors`: the geometry has per-vertex colours (colours per face).
    */
-  style(mode: Mode, flat: boolean, color: [number, number, number, number] | null, faceColors = false): ModeStyle {
-    const key = `${mode}|${flat}|${color?.join(",") ?? ""}|${faceColors}`;
+  style(mode: Mode, flat: boolean, color: [number, number, number, number] | null, faceColors = false, pbr: Pbr | null = null): ModeStyle {
+    const pk = this.studio && pbr ? `${pbr.metalness},${pbr.roughness},${pbr.clearcoat}` : "";
+    const key = `${mode}|${flat}|${color?.join(",") ?? ""}|${faceColors}|${pk}`;
     const c = this.styles.get(key);
     if (c) return c;
     const p = this.palette;
@@ -147,7 +176,7 @@ export class Materials {
         if (flat) s = { surface: this.transparent(p.flat, 0.18, { polygonOffset: true, polygonOffsetFactor: 1 }), edges: this.lines(p.flat), renderOrder: 1, pickable: true };
         else
           s = {
-            surface: faceColors ? this.vertexColorMaterial() : this.fullMaterial(color),
+            surface: faceColors ? this.vertexColorMaterial(pbr) : this.fullMaterial(color, pbr),
             edges: this.studio && !this.studioEdges ? null : this.lines(p.edge, this.studio ? 0.35 : 0.9),
             renderOrder: 0,
             pickable: true,
@@ -222,30 +251,31 @@ export class Materials {
     return m;
   }
 
-  private vertexColorMaterial(): THREE.Material {
-    let m = this.fullByColor.get("vertex");
+  private vertexColorMaterial(pbr: Pbr | null): THREE.Material {
+    const key = `vertex|${pbr ? Object.values(pbr).join(",") : ""}`;
+    let m = this.fullByColor.get(key);
     if (!m) {
-      const mm = this.solid("#ffffff");
+      const mm = this.solid("#ffffff", pbr);
       mm.vertexColors = true;
       m = mm;
-      this.fullByColor.set("vertex", m);
+      this.fullByColor.set(key, m);
     }
     return m;
   }
 
-  private fullMaterial(color: [number, number, number, number] | null): THREE.Material {
-    const key = color?.join(",") ?? "";
+  private fullMaterial(color: [number, number, number, number] | null, pbr: Pbr | null): THREE.Material {
+    const key = `${color?.join(",") ?? ""}|${pbr ? Object.values(pbr).join(",") : ""}`;
     let m = this.fullByColor.get(key);
     if (!m) {
       if (color) {
         const c = new THREE.Color(color[0], color[1], color[2]);
-        const mm = this.solid(`#${c.getHexString()}`);
+        const mm = this.solid(`#${c.getHexString()}`, pbr);
         if (color[3] < 1) {
           mm.transparent = true;
           mm.opacity = color[3];
         }
         m = mm;
-      } else m = this.solid(this.palette.model);
+      } else m = this.solid(this.palette.model, pbr);
       this.fullByColor.set(key, m);
     }
     return m;

@@ -20,8 +20,8 @@ use std::rc::Rc;
 use cad_eval::palette::{self, Theme};
 use cad_kernel::Mesh;
 use cad_render::{
-    CameraInfo, Item, Label, Marker, MarkerShape, Polyline, Projection, RenderOptions, Scene, Section, Studio,
-    StudioInfo, View, contact_sheet, render_info, tile_origin,
+    CameraInfo, Environment, Item, Label, Light, Marker, MarkerShape, Material, Polyline, Projection, RenderOptions,
+    Scene, Section, Studio, StudioInfo, View, contact_sheet, render_info, tile_origin,
 };
 use cad_session::protocol as p;
 use clap::Args;
@@ -244,10 +244,11 @@ pub(crate) struct ViewArgs {
     /// Colour scheme: light (default) or dark (like the dark theme of the UI).
     #[arg(long, default_value = "light", value_name = "light|dark")]
     pub theme: String,
-    /// Rendering style: standard (CAD shading) or studio (key and fill light, highlights, soft
-    /// shadows, ambient occlusion, ground plane, gradient background).
-    #[arg(long, default_value = "standard", value_name = "standard|studio")]
-    pub style: String,
+    /// Rendering style: standard (CAD shading) or studio (lights, physically based materials
+    /// with reflections, soft shadows, ambient occlusion, ground plane, gradient background).
+    /// Default: standard (studio if the file has a render block).
+    #[arg(long, value_name = "standard|studio")]
+    pub style: Option<String>,
     /// Studio: key light direction in degrees: azimuth relative to the camera (0 = from the
     /// camera, positive = from the right), elevation above the xy plane (default -40,50).
     #[arg(long, value_name = "AZ,EL", allow_hyphen_values = true)]
@@ -255,9 +256,18 @@ pub(crate) struct ViewArgs {
     /// Studio: strength of key and fill light, 0…4 (default 1).
     #[arg(long, value_name = "F")]
     pub light_intensity: Option<f64>,
-    /// Studio: share of the ambient (sky) light, 0…1 (default 0.4).
+    /// Studio: share of the environment (sky) light, 0…1 (default 0.4).
     #[arg(long, value_name = "F")]
     pub ambient: Option<f64>,
+    /// Studio: surroundings seen in reflections: studio (softboxes, default), overcast (soft
+    /// sky only) or none (no reflections).
+    #[arg(long, value_name = "studio|overcast|none")]
+    pub environment: Option<String>,
+    /// Studio: material of a colour or part (repeatable): `SEL=PRESET[,metalness=M,roughness=R,
+    /// clearcoat=C]`; SEL is a colour (`red`, `#rrggbb`, `default` = uncoloured) or `part:NAME`;
+    /// presets: plastic, plastic_glossy, rubber, aluminium, metal_brushed, chrome.
+    #[arg(long = "material", value_name = "SEL=SPEC")]
+    pub material: Vec<String>,
     /// Studio: cast shadows on the model and the ground (default on).
     #[arg(long, value_name = "on|off")]
     pub shadows: Option<String>,
@@ -386,10 +396,164 @@ pub(crate) struct Plan {
     pub section: Option<Section>,
     pub xray: bool,
     pub look: &'static Look,
-    /// `--style studio` with its settings.
-    pub studio: Option<Studio>,
+    /// `--style` and the studio options (resolved with the file's render block: [`Plan::resolve`]).
+    pub studio_args: StudioArgs,
     /// `--background`: (top, bottom of a gradient).
     pub background: Option<Background>,
+}
+
+/// Which bodies a material applies to.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum MatSel {
+    /// Material of a colour (RGB bytes).
+    Color([u8; 3]),
+    /// Uncoloured material.
+    Default,
+    Part(String),
+}
+
+impl MatSel {
+    /// `red`, `#rrggbb`, `default` or `part:NAME`.
+    pub fn parse(s: &str) -> Option<MatSel> {
+        let t = s.trim();
+        if let Some(p) = t.strip_prefix("part:") {
+            return (!p.trim().is_empty()).then(|| MatSel::Part(p.trim().to_string()));
+        }
+        if t.eq_ignore_ascii_case("default") {
+            return Some(MatSel::Default);
+        }
+        let hexlike = (t.len() == 3 || t.len() == 6) && t.chars().all(|c| c.is_ascii_hexdigit());
+        let c = if hexlike { palette::parse_color(&format!("#{t}")) } else { palette::parse_color(t) }?;
+        if c.kind == palette::ColorKind::Random {
+            return None;
+        }
+        let b = palette::rgba_bytes(c.rgba);
+        Some(MatSel::Color([b[0], b[1], b[2]]))
+    }
+
+    fn text(&self) -> String {
+        match self {
+            MatSel::Color(b) => format!("#{:02x}{:02x}{:02x}", b[0], b[1], b[2]),
+            MatSel::Default => "default".into(),
+            MatSel::Part(p) => format!("part:{p}"),
+        }
+    }
+}
+
+/// A material entry: preset and single values (unset values: from the preset, else plastic).
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub(crate) struct MatSpec {
+    pub preset: Option<Material>,
+    pub metalness: Option<f32>,
+    pub roughness: Option<f32>,
+    pub clearcoat: Option<f32>,
+}
+
+impl MatSpec {
+    pub fn material(&self) -> Material {
+        let b = self.preset.unwrap_or_default();
+        Material {
+            metalness: self.metalness.unwrap_or(b.metalness),
+            roughness: self.roughness.unwrap_or(b.roughness),
+            clearcoat: self.clearcoat.unwrap_or(b.clearcoat),
+        }
+        .clamped()
+    }
+}
+
+/// The material of a body of colour `color` (`None`: uncoloured) in part `part`: the last
+/// matching part entry, else the last matching colour entry, else plastic.
+pub(crate) fn material_for(mats: &[(MatSel, Material)], color: Option<[f32; 4]>, part: Option<&str>) -> Material {
+    let by_part = part.and_then(|p| mats.iter().rev().find(|(s, _)| matches!(s, MatSel::Part(n) if n == p)));
+    if let Some((_, m)) = by_part {
+        return *m;
+    }
+    let key = color.map(|c| {
+        let b = palette::rgba_bytes(c);
+        [b[0], b[1], b[2]]
+    });
+    mats.iter()
+        .rev()
+        .find(|(s, _)| match (s, key) {
+            (MatSel::Default, None) => true,
+            (MatSel::Color(a), Some(b)) => *a == b,
+            _ => false,
+        })
+        .map_or(Material::default(), |(_, m)| *m)
+}
+
+/// `--material SEL=SPEC`.
+fn parse_material_arg(s: &str) -> Result<(MatSel, MatSpec), Fail> {
+    let bad = |why: String| Fail::Usage(tr!("--material {s}: {why}", "--material {s}: {why}"));
+    let (sel, spec) = s.split_once('=').ok_or_else(|| {
+        bad(tr!("erwartet AUSWAHL=VOREINSTELLUNG[,roughness=R,…]", "expected SEL=PRESET[,roughness=R,…]"))
+    })?;
+    let sel = MatSel::parse(sel).ok_or_else(|| {
+        bad(tr!("{sel}: erwartet eine Farbe, default oder part:NAME", "{sel}: expected a colour, default or part:NAME"))
+    })?;
+    let mut m = MatSpec::default();
+    for tok in spec.split(',').map(str::trim).filter(|t| !t.is_empty()) {
+        match tok.split_once('=') {
+            None => {
+                m.preset = Some(Material::preset(tok).ok_or_else(|| {
+                    bad(tr!(
+                        "unbekanntes Material {tok} (bekannt: {})",
+                        "unknown material {tok} (known: {})",
+                        Material::preset_names()
+                    ))
+                })?);
+            }
+            Some((k, v)) => {
+                let v: f64 = v.trim().parse().map_err(|_| bad(tr!("{k}: Zahl erwartet", "{k}: number expected")))?;
+                let v = in_range(&format!("--material {}", k.trim()), v, 0.0, 1.0)? as f32;
+                match k.trim() {
+                    "metalness" => m.metalness = Some(v),
+                    "roughness" => m.roughness = Some(v),
+                    "clearcoat" => m.clearcoat = Some(v),
+                    k => {
+                        return Err(bad(tr!(
+                            "unbekannter Wert {k} (metalness, roughness, clearcoat)",
+                            "unknown value {k} (metalness, roughness, clearcoat)"
+                        )));
+                    }
+                }
+            }
+        }
+    }
+    Ok((sel, m))
+}
+
+/// The studio options of the command line, checked (`None`: not given).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct StudioArgs {
+    /// `--style`: `Some(true)` = studio, `Some(false)` = standard.
+    pub style: Option<bool>,
+    pub light: Option<(f64, f64)>,
+    pub light_intensity: Option<f64>,
+    pub ambient: Option<f64>,
+    pub environment: Option<Environment>,
+    pub shadows: Option<bool>,
+    pub shadow_softness: Option<f64>,
+    pub ao: Option<bool>,
+    pub ao_radius: Option<f64>,
+    pub ao_strength: Option<f64>,
+    pub ground: Option<bool>,
+    pub ground_color: Option<[f32; 4]>,
+    pub edges: Option<bool>,
+    pub materials: Vec<(MatSel, MatSpec)>,
+    /// Names of the studio options given (for "only applies with --style studio").
+    pub given: Vec<&'static str>,
+}
+
+/// What a rendering uses after the command line and the file's render block are combined.
+#[derive(Debug, Clone)]
+pub(crate) struct Resolved {
+    pub studio: Option<Studio>,
+    /// Materials by colour or part, later entries win.
+    pub materials: Vec<(MatSel, Material)>,
+    pub background: Background,
+    /// Line of the file's render block that was used.
+    pub block_line: Option<u32>,
 }
 
 /// `on|off` of a studio switch.
@@ -424,86 +588,138 @@ pub(crate) fn parse_color_arg(opt: &str, s: &str) -> Result<[f32; 4], Fail> {
     }
 }
 
-/// Studio settings from the options (`None` for `--style standard`).
-fn studio_from_args(a: &ViewArgs, look: &Look) -> Result<Option<Studio>, Fail> {
-    let style = a.style.trim().to_ascii_lowercase();
-    let studio = match style.as_str() {
-        "" | "standard" => false,
-        "studio" => true,
-        _ => {
-            return Err(Fail::Usage(tr!(
-                "--style {}: standard oder studio",
-                "--style {}: standard or studio",
-                a.style
-            )));
+impl StudioArgs {
+    /// The studio options of `a` with their values checked.
+    pub fn from_args(a: &ViewArgs) -> Result<StudioArgs, Fail> {
+        let style = match a.style.as_deref().map(|s| s.trim().to_ascii_lowercase()) {
+            None => None,
+            Some(s) if s == "standard" => Some(false),
+            Some(s) if s == "studio" => Some(true),
+            Some(_) => {
+                return Err(Fail::Usage(tr!(
+                    "--style {}: standard oder studio",
+                    "--style {}: standard or studio",
+                    a.style.as_deref().unwrap_or_default()
+                )));
+            }
+        };
+        let given: Vec<&'static str> = [
+            ("--light", a.light.is_some()),
+            ("--light-intensity", a.light_intensity.is_some()),
+            ("--ambient", a.ambient.is_some()),
+            ("--environment", a.environment.is_some()),
+            ("--shadows", a.shadows.is_some()),
+            ("--shadow-softness", a.shadow_softness.is_some()),
+            ("--ao", a.ao.is_some()),
+            ("--ao-radius", a.ao_radius.is_some()),
+            ("--ao-strength", a.ao_strength.is_some()),
+            ("--ground", a.ground.is_some()),
+            ("--ground-color", a.ground_color.is_some()),
+            ("--edges", a.edges.is_some()),
+            ("--material", !a.material.is_empty()),
+        ]
+        .into_iter()
+        .filter(|(_, g)| *g)
+        .map(|(n, _)| n)
+        .collect();
+        let mut s = StudioArgs { style, given, ..StudioArgs::default() };
+        if let Some(l) = &a.light {
+            let v = parse_vec(l, 2, "--light")?;
+            s.light = Some((v[0], in_range("--light (elevation)", v[1], 1.0, 90.0)?));
         }
-    };
-    let given: Vec<&str> = [
-        ("--light", a.light.is_some()),
-        ("--light-intensity", a.light_intensity.is_some()),
-        ("--ambient", a.ambient.is_some()),
-        ("--shadows", a.shadows.is_some()),
-        ("--shadow-softness", a.shadow_softness.is_some()),
-        ("--ao", a.ao.is_some()),
-        ("--ao-radius", a.ao_radius.is_some()),
-        ("--ao-strength", a.ao_strength.is_some()),
-        ("--ground", a.ground.is_some()),
-        ("--ground-color", a.ground_color.is_some()),
-        ("--edges", a.edges.is_some()),
-    ]
-    .into_iter()
-    .filter(|(_, g)| *g)
-    .map(|(n, _)| n)
-    .collect();
-    if !studio {
-        if let Some(first) = given.first() {
-            return Err(Fail::Usage(tr!(
-                "{first} gilt nur mit --style studio",
-                "{first} only applies with --style studio"
-            )));
+        if let Some(v) = a.light_intensity {
+            s.light_intensity = Some(in_range("--light-intensity", v, 0.0, 4.0)?);
         }
-        return Ok(None);
-    }
-    let mut s = Studio { ground_color: look.ground, ..Studio::default() };
-    if let Some(l) = &a.light {
-        let v = parse_vec(l, 2, "--light")?;
-        s.light_azimuth = v[0];
-        s.light_elevation = in_range("--light (elevation)", v[1], 1.0, 90.0)?;
-    }
-    if let Some(v) = a.light_intensity {
-        s.light_intensity = in_range("--light-intensity", v, 0.0, 4.0)?;
-    }
-    if let Some(v) = a.ambient {
-        s.ambient = in_range("--ambient", v, 0.0, 1.0)?;
-    }
-    if let Some(v) = &a.shadows {
-        s.shadows = parse_switch("--shadows", v)?;
-    }
-    if let Some(v) = a.shadow_softness {
-        s.shadow_softness = in_range("--shadow-softness", v, 0.0, 1.0)?;
-    }
-    if let Some(v) = &a.ao {
-        s.ao = parse_switch("--ao", v)?;
-    }
-    if let Some(v) = a.ao_radius {
-        if !(v.is_finite() && v > 0.0) {
-            return Err(Fail::Usage(tr!("--ao-radius {v}: muss positiv sein", "--ao-radius {v}: must be positive")));
+        if let Some(v) = a.ambient {
+            s.ambient = Some(in_range("--ambient", v, 0.0, 1.0)?);
         }
-        s.ao_radius = Some(v);
+        if let Some(v) = &a.environment {
+            s.environment = Some(Environment::from_name(v).ok_or_else(|| {
+                Fail::Usage(tr!(
+                    "--environment {v}: erwartet {}",
+                    "--environment {v}: expected {}",
+                    Environment::NAMES.join(", ")
+                ))
+            })?);
+        }
+        if let Some(v) = &a.shadows {
+            s.shadows = Some(parse_switch("--shadows", v)?);
+        }
+        if let Some(v) = a.shadow_softness {
+            s.shadow_softness = Some(in_range("--shadow-softness", v, 0.0, 1.0)?);
+        }
+        if let Some(v) = &a.ao {
+            s.ao = Some(parse_switch("--ao", v)?);
+        }
+        if let Some(v) = a.ao_radius {
+            if !(v.is_finite() && v > 0.0) {
+                return Err(Fail::Usage(tr!(
+                    "--ao-radius {v}: muss positiv sein",
+                    "--ao-radius {v}: must be positive"
+                )));
+            }
+            s.ao_radius = Some(v);
+        }
+        if let Some(v) = a.ao_strength {
+            s.ao_strength = Some(in_range("--ao-strength", v, 0.0, 2.0)?);
+        }
+        if let Some(v) = &a.ground {
+            s.ground = Some(parse_switch("--ground", v)?);
+        }
+        if let Some(c) = &a.ground_color {
+            s.ground_color = Some(parse_color_arg("--ground-color", c)?);
+        }
+        if let Some(v) = &a.edges {
+            s.edges = Some(parse_switch("--edges", v)?);
+        }
+        for m in &a.material {
+            s.materials.push(parse_material_arg(m)?);
+        }
+        Ok(s)
     }
-    if let Some(v) = a.ao_strength {
-        s.ao_strength = in_range("--ao-strength", v, 0.0, 2.0)?;
+
+    /// Writes the given options over `st`.
+    fn apply(&self, st: &mut Studio) {
+        if let Some((az, el)) = self.light {
+            match st.lights.first_mut() {
+                Some(l) => (l.azimuth, l.elevation) = (az, el),
+                None => st.lights.push(Light::new(az, el)),
+            }
+        }
+        if let Some(v) = self.light_intensity {
+            st.light_intensity = v;
+        }
+        if let Some(v) = self.ambient {
+            st.ambient = v;
+        }
+        if let Some(v) = self.environment {
+            st.environment = v;
+        }
+        if let Some(v) = self.shadows {
+            st.shadows = v;
+        }
+        if let Some(v) = self.shadow_softness {
+            st.shadow_softness = v;
+        }
+        if let Some(v) = self.ao {
+            st.ao = v;
+        }
+        if let Some(v) = self.ao_radius {
+            st.ao_radius = Some(v);
+        }
+        if let Some(v) = self.ao_strength {
+            st.ao_strength = v;
+        }
+        if let Some(v) = self.ground {
+            st.ground = v;
+        }
+        if let Some(v) = self.ground_color {
+            st.ground_color = v;
+        }
+        if let Some(v) = self.edges {
+            st.edges = v;
+        }
     }
-    if let Some(v) = &a.ground {
-        s.ground = parse_switch("--ground", v)?;
-    }
-    if let Some(c) = &a.ground_color {
-        s.ground_color = parse_color_arg("--ground-color", c)?;
-    }
-    if let Some(v) = &a.edges {
-        s.edges = parse_switch("--edges", v)?;
-    }
-    Ok(Some(s))
 }
 
 /// Background colour, with the bottom colour of a vertical gradient.
@@ -617,18 +833,36 @@ impl Plan {
             section: parse_section(a.section.as_deref(), a.section_plane.as_deref(), a.section_flip)?,
             xray: a.xray,
             look,
-            studio: studio_from_args(a, look)?,
+            studio_args: StudioArgs::from_args(a)?,
             background: background_from_args(a)?,
         })
     }
 
-    /// Background (top, bottom of a gradient) of the rendering.
-    pub fn background(&self) -> Background {
-        match (self.background, &self.studio) {
-            (Some(b), _) => b,
-            (None, Some(_)) => (self.look.studio_background[0], Some(self.look.studio_background[1])),
-            (None, None) => (self.look.background, None),
+    /// Style, studio settings, materials and background from the command line over the file's
+    /// render block (`block`); exit 2 for studio options without the studio style.
+    pub fn resolve(&self) -> Result<Resolved, Fail> {
+        let a = &self.studio_args;
+        let studio_on = a.style.unwrap_or(false);
+        if !studio_on {
+            if let Some(first) = a.given.first() {
+                return Err(Fail::Usage(tr!(
+                    "{first} gilt nur mit --style studio",
+                    "{first} only applies with --style studio"
+                )));
+            }
+            let background = self.background.unwrap_or((self.look.background, None));
+            return Ok(Resolved { studio: None, materials: Vec::new(), background, block_line: None });
         }
+        let mut st = Studio { ground_color: self.look.ground, ..Studio::default() };
+        let mut materials: Vec<(MatSel, Material)> = Vec::new();
+        let background: Option<Background> = None;
+        a.apply(&mut st);
+        materials.extend(a.materials.iter().map(|(s, m)| (s.clone(), m.material())));
+        let background = self
+            .background
+            .or(background)
+            .unwrap_or((self.look.studio_background[0], Some(self.look.studio_background[1])));
+        Ok(Resolved { studio: Some(st), materials, background, block_line: None })
     }
 
     fn shows(&self, s: &str) -> bool {
@@ -720,13 +954,22 @@ pub(crate) fn face_colors(sc: &p::Scene, owner: u32, m: &Mesh) -> Vec<Option<[f3
     out
 }
 
-/// Splits a mesh by triangle colour (`None`: `base`). Edges stay with the first part.
-fn split_by_color(m: &Mesh, tri_colors: &[Option<[f32; 4]>], base: [f32; 4]) -> Vec<(Mesh, [f32; 4])> {
-    let colors: Vec<[f32; 4]> = tri_colors.iter().map(|c| c.unwrap_or(base)).collect();
-    if colors.iter().all(|c| *c == base) {
-        return vec![(m.clone(), base)];
+/// Splits a mesh by triangle colour (`None`: `base`) and studio material. Edges stay with the
+/// first part.
+fn split_by_color(
+    m: &Mesh,
+    tri_colors: &[Option<[f32; 4]>],
+    tri_materials: &[Material],
+    base: [f32; 4],
+) -> Vec<(Mesh, [f32; 4], Material)> {
+    let colors: Vec<([f32; 4], Material)> =
+        tri_colors.iter().zip(tri_materials).map(|(c, mt)| (c.unwrap_or(base), *mt)).collect();
+    if colors.iter().all(|c| *c == colors[0] && c.0 == base) {
+        return vec![(m.clone(), base, colors.first().map_or(Material::default(), |c| c.1))];
     }
-    let mut groups: Vec<([f32; 4], Vec<usize>)> = Vec::new();
+    // (colour, material) → triangles
+    type Group = (([f32; 4], Material), Vec<usize>);
+    let mut groups: Vec<Group> = Vec::new();
     for (i, c) in colors.iter().enumerate() {
         match groups.iter_mut().find(|(gc, _)| gc == c) {
             Some(g) => g.1.push(i),
@@ -734,7 +977,7 @@ fn split_by_color(m: &Mesh, tri_colors: &[Option<[f32; 4]>], base: [f32; 4]) -> 
         }
     }
     let mut out = Vec::new();
-    for (k, (c, tris)) in groups.into_iter().enumerate() {
+    for (k, ((c, mt), tris)) in groups.into_iter().enumerate() {
         let mut sub = Mesh::default();
         let mut remap: HashMap<u32, u32> = HashMap::new();
         for t in tris {
@@ -755,7 +998,7 @@ fn split_by_color(m: &Mesh, tri_colors: &[Option<[f32; 4]>], base: [f32; 4]) -> 
         }
         let mut c = c;
         c[3] = base[3];
-        out.push((sub, c));
+        out.push((sub, c, mt));
     }
     out
 }
@@ -858,7 +1101,8 @@ pub(crate) fn target_nodes(sc: &p::Scene, spec: &str) -> Result<Vec<u32>, Fail> 
 }
 
 /// (mesh, colour, placement, edge colour, section cap)
-type Owned = (Mesh, [f32; 4], DMat4, Option<[f32; 4]>, bool);
+/// Mesh, colour, transform, edge colour, cap, studio material.
+type Owned = (Mesh, [f32; 4], DMat4, Option<[f32; 4]>, bool, Material);
 
 /// Everything to draw, built once per evaluation (meshes owned).
 struct Built {
@@ -874,7 +1118,7 @@ struct Built {
     notes: Vec<String>,
 }
 
-fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
+fn build(m: &mut Model, sc: &p::Scene, plan: &Plan, res: &Resolved) -> Result<Built, Fail> {
     let live = |n: u32| sc.nodes[n as usize].status != p::NodeStatus::Skipped;
     let mut highlighted: Vec<u32> = Vec::new();
     for &l in &plan.lines {
@@ -996,12 +1240,16 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
     // the 3MF prints them, instead of colours per face (the base draws)
     let colored = sc.colors.iter().any(|c| c.source != p::ColorSource::Default);
     let has_base = draws.iter().any(|d| d.role == "base");
-    let regions_on =
-        !plan.xray && has_base && (plan.shows("regions") || (colored && sc.complete && !plan.shows("faces")));
-    let mut region_meshes: Vec<(u32, Mesh, [f32; 4])> = Vec::new();
+    // studio materials of parts: the regions are bodies per part
+    let part_materials = res.studio.is_some() && res.materials.iter().any(|(s, _)| matches!(s, MatSel::Part(_)));
+    let regions_on = !plan.xray
+        && has_base
+        && (plan.shows("regions") || ((colored || part_materials) && sc.complete && !plan.shows("faces")));
+    let mut region_meshes: Vec<(u32, Mesh, [f32; 4], Material)> = Vec::new();
     if regions_on {
         let sets = m.session.color_regions(true, false).map_err(Fail::Kernel)?;
-        let color_of = |key: &str| sc.colors.iter().find(|c| c.key == key).map(|c| lk.model(c.rgba.0));
+        let info_of = |key: &str| sc.colors.iter().find(|c| c.key == key);
+        let color_of = |key: &str| info_of(key).map(|c| lk.model(c.rgba.0));
         for set in sets {
             if !plan.parts.is_empty() && !set.part.as_ref().is_some_and(|n| plan.parts.contains(n)) {
                 continue;
@@ -1017,7 +1265,9 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
                     edge_segments: md.edge_segments,
                     edge_ids: md.edge_ids,
                 };
-                region_meshes.push((set.node, mesh, color_of(&r.color).unwrap_or(lk.part)));
+                let raw = info_of(&r.color).filter(|c| c.source != p::ColorSource::Default).map(|c| c.rgba.0);
+                let mt = material_for(&res.materials, raw, set.part.as_deref());
+                region_meshes.push((set.node, mesh, color_of(&r.color).unwrap_or(lk.part), mt));
             }
         }
     }
@@ -1025,14 +1275,14 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
     let mut triangles = 0usize;
     let mut visible = Vec::new();
     let mut keepout_lines: Vec<Polyline> = Vec::new();
-    for (node, mesh, col) in &region_meshes {
+    for (node, mesh, col, mt) in &region_meshes {
         let n = &sc.nodes[*node as usize];
         triangles += mesh.triangle_count();
         visible.push(json!({
             "idx": n.idx, "label": n.label, "instance": n.instance, "role": "region",
             "line": n.range.line, "file": n.range.file, "triangles": mesh.triangle_count(),
         }));
-        meshes.push((mesh.clone(), *col, mat(&n.display_world), Some(lk.edge), true));
+        meshes.push((mesh.clone(), *col, mat(&n.display_world), Some(lk.edge), true, *mt));
     }
     for d in &draws {
         if regions_on && d.role == "base" {
@@ -1045,12 +1295,13 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
         let cap = d.color[3] >= 0.999;
         if d.node_colors {
             let fc = face_colors(sc, d.node, &mesh);
+            let mts: Vec<Material> = fc.iter().map(|c| material_for(&res.materials, *c, None)).collect();
             let fc: Vec<Option<[f32; 4]>> = fc.into_iter().map(|c| c.map(|c| lk.model(c))).collect();
-            for (sub, col) in split_by_color(&mesh, &fc, d.color) {
-                meshes.push((sub, col, w, d.edges, cap));
+            for (sub, col, mt) in split_by_color(&mesh, &fc, &mts, d.color) {
+                meshes.push((sub, col, w, d.edges, cap, mt));
             }
         } else {
-            meshes.push(((*mesh).clone(), d.color, w, d.edges, cap));
+            meshes.push(((*mesh).clone(), d.color, w, d.edges, cap, material_for(&res.materials, None, None)));
         }
         if d.role == "keepout" {
             // outline on top, dashed: visible inside the model
@@ -1159,7 +1410,7 @@ fn build(m: &mut Model, sc: &p::Scene, plan: &Plan) -> Result<Built, Fail> {
     }
     if plan.shows("edges") {
         // hidden edges dashed on top of everything
-        for (mesh, _, w, _, _) in &meshes {
+        for (mesh, _, w, _, _, _) in &meshes {
             for seg in mesh.edge_segments.chunks_exact(6) {
                 let a = w.transform_point3(DVec3::new(seg[0] as f64, seg[1] as f64, seg[2] as f64));
                 let b = w.transform_point3(DVec3::new(seg[3] as f64, seg[4] as f64, seg[5] as f64));
@@ -1311,7 +1562,7 @@ fn assert_overlay(
             {
                 // a wanted intersection (assert_intersect) green, a violation red
                 let (fill, edge) = if pr.ok { (lk.contact, lk.contact) } else { (lk.overlap, lk.failed) };
-                meshes.push((assert_mesh(o), fill, DMat4::IDENTITY, None, true));
+                meshes.push((assert_mesh(o), fill, DMat4::IDENTITY, None, true, Material::default()));
                 // feature edges on top: visible inside the bodies
                 for e in o.edges.chunks_exact(6) {
                     let x = DVec3::new(e[0] as f64, e[1] as f64, e[2] as f64);
@@ -1321,7 +1572,7 @@ fn assert_overlay(
                 drawn = true;
             }
             if let Some(c) = &pr.contact_mesh {
-                meshes.push((assert_mesh(c), lk.contact, DMat4::IDENTITY, None, true));
+                meshes.push((assert_mesh(c), lk.contact, DMat4::IDENTITY, None, true, Material::default()));
                 drawn = true;
             }
             let contact_c = if pr.ok { lk.contact } else { lk.failed };
@@ -1602,14 +1853,36 @@ fn grid_overlay(
 }
 
 /// Settings of `--style studio` (JSON `studio`).
-fn studio_json(s: &Studio) -> Json {
+fn studio_json(s: &Studio, res: &Resolved) -> Json {
+    let first = s.lights.first();
+    let lights: Vec<Json> = s
+        .lights
+        .iter()
+        .map(|l| {
+            json!({ "azimuth": l.azimuth, "elevation": l.elevation, "intensity": l.intensity,
+                    "color": palette::hex_string([l.color[0], l.color[1], l.color[2], 1.0]) })
+        })
+        .collect();
+    let materials: Vec<Json> = res
+        .materials
+        .iter()
+        .map(|(sel, m)| {
+            let r = |x: f32| (x as f64 * 1000.0).round() / 1000.0;
+            json!({ "target": sel.text(), "metalness": r(m.metalness), "roughness": r(m.roughness),
+                    "clearcoat": r(m.clearcoat) })
+        })
+        .collect();
     json!({
-        "light_azimuth": s.light_azimuth, "light_elevation": s.light_elevation,
+        "light_azimuth": first.map(|l| l.azimuth), "light_elevation": first.map(|l| l.elevation),
+        "lights": lights,
         "light_intensity": s.light_intensity, "ambient": s.ambient,
+        "environment": s.environment.name(),
         "shadows": s.shadows, "shadow_softness": s.shadow_softness,
         "ao": s.ao, "ao_radius": s.ao_radius, "ao_strength": s.ao_strength,
         "ground": s.ground, "ground_color": palette::hex_string(s.ground_color),
         "edges": s.edges,
+        "materials": materials,
+        "render_block": res.block_line.map(|l| json!({ "line": l })),
     })
 }
 
@@ -1650,11 +1923,14 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
     let Some(sc) = m.scene.clone() else {
         return Err(Fail::Usage(tr!("keine Szene (Syntaxfehler)", "no scene (syntax error)")));
     };
-    let built = build(m, &sc, plan)?;
+    let res = plan.resolve()?;
+    let built = build(m, &sc, plan, &res)?;
     let items: Vec<Item> = built
         .meshes
         .iter()
-        .map(|(mesh, col, w, edges, cap)| Item::new(mesh, *col).with_transform(*w).with_edges(*edges).with_cap(*cap))
+        .map(|(mesh, col, w, edges, cap, mt)| {
+            Item::new(mesh, *col).with_transform(*w).with_edges(*edges).with_cap(*cap).with_material(*mt)
+        })
         .collect();
     let scene =
         Scene { items, lines: built.lines.clone(), markers: built.markers.clone(), labels: built.labels.clone() };
@@ -1689,9 +1965,9 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
         fit,
         zoom: plan.zoom,
         section: plan.section,
-        background: plan.background().0,
-        background_bottom: plan.background().1,
-        studio: plan.studio.clone(),
+        background: res.background.0,
+        background_bottom: res.background.1,
+        studio: res.studio.clone(),
         cap_color: plan.look.cap,
         title_color: plan.look.text,
         label_background: plan.look.label_background,
@@ -1742,7 +2018,7 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
             "studio": cam.studio.as_ref().map(studio_view_json) }));
         tiles.push(img);
     }
-    let img = if plan.sheet { contact_sheet(&tiles, cols, gap, plan.background().0) } else { tiles.remove(0) };
+    let img = if plan.sheet { contact_sheet(&tiles, cols, gap, res.background.0) } else { tiles.remove(0) };
     crate::host::write_file(output, &img.to_png()).map_err(|e| Fail::Usage(format!("{}: {e}", output.display())))?;
 
     let section = plan.section.map(|s| {
@@ -1750,7 +2026,7 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
                 "method": "renderer clipping + cap" })
     });
     let background_json: Vec<String> = {
-        let (t, b) = plan.background();
+        let (t, b) = res.background;
         std::iter::once(t).chain(b).map(palette::hex_string).collect()
     };
     let j = json!({
@@ -1772,8 +2048,8 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
         "section": section,
         "xray": plan.xray,
         "theme": if plan.look.theme == Theme::Dark { "dark" } else { "light" },
-        "style": if plan.studio.is_some() { "studio" } else { "standard" },
-        "studio": plan.studio.as_ref().map(studio_json),
+        "style": if res.studio.is_some() { "studio" } else { "standard" },
+        "studio": res.studio.as_ref().map(|s| studio_json(s, &res)),
         "background": background_json,
         "bounds": bounds_json(&built.subject),
         "notes": built.notes,
@@ -1818,7 +2094,7 @@ pub(crate) fn render_model(m: &mut Model, plan: &Plan, output: &Path) -> Result<
     if plan.look.theme == Theme::Dark {
         t.push_str(trs!(", dunkel", ", dark"));
     }
-    if plan.studio.is_some() {
+    if res.studio.is_some() {
         t.push_str(trs!(", Studio", ", studio"));
     }
     if let Some(b) = &built.subject {

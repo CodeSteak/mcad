@@ -2104,7 +2104,7 @@ select:hover {
 
 /* Studio look: settings panel under the toggle in the view toolbar */
 .studio-pop {
-  width: 310px;
+  width: 330px;
   max-height: calc(100vh - 140px);
   overflow-y: auto;
 }
@@ -2148,6 +2148,36 @@ select:hover {
   height: 24px;
   padding: 1px 2px;
   cursor: pointer;
+}
+
+.studio-pop .pbnote {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+
+.studio-pop .studio-light,
+.studio-pop .studio-material {
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+}
+
+.studio-pop .studio-material .swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  flex: none;
+}
+
+.studio-pop .studio-mlabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-pop select.ui-input {
+  max-width: 150px;
 }
 
 .studio-pop .studio-foot {

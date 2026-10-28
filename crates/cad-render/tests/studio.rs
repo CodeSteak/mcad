@@ -2,7 +2,10 @@
 //! gradient background (meshes built by hand).
 
 use cad_kernel::Mesh;
-use cad_render::{CameraInfo, Image, Item, Projection, RenderOptions, Scene, Studio, View, render, render_info, to_u8};
+use cad_render::{
+    CameraInfo, Environment, Image, Item, Light, Material, Projection, RenderOptions, Scene, Studio, View, render,
+    render_info, to_u8,
+};
 use glam::DVec3;
 
 /// Closed box from `lo` to `hi` (outward triangles).
@@ -93,8 +96,7 @@ fn shadow_darkens_the_ground_behind_a_wall() {
         items: vec![Item::new(&wall, GREY), Item::new(&foot, GREY), Item::new(&far, GREY)],
         ..Default::default()
     };
-    let st =
-        Studio { light_azimuth: -90.0, light_elevation: 40.0, ao: false, shadow_softness: 0.0, ..Studio::default() };
+    let st = Studio { ao: false, shadow_softness: 0.0, ..Studio::with_light(-90.0, 40.0) };
     let on = opts(View::Top, Some(st.clone()));
     let off = opts(View::Top, Some(Studio { shadows: false, ..st.clone() }));
     let (a, cam) = render_info(&scene, &on);
@@ -122,7 +124,7 @@ fn model_shadows_itself() {
     let block = boxm(v(0.0, 0.0, 0.0), v(30.0, 30.0, 10.0));
     let plate = boxm(v(-5.0, -5.0, 20.0), v(15.0, 35.0, 22.0));
     let scene = Scene { items: vec![Item::new(&block, GREY), Item::new(&plate, GREY)], ..Default::default() };
-    let st = Studio { light_azimuth: 0.0, light_elevation: 90.0, ao: false, ..Studio::default() };
+    let st = Studio { ao: false, ..Studio::with_light(0.0, 90.0) };
     let o = opts(View::Iso, Some(st.clone()));
     let (a, cam) = render_info(&scene, &o);
     let b = render(&scene, &opts(View::Iso, Some(Studio { shadows: false, ..st })));
@@ -163,7 +165,7 @@ fn ground_only_from_above_and_lights_follow_the_camera() {
     assert_eq!(info(View::Front, Studio::default()).ground_z, None);
     assert_eq!(info(View::Iso, Studio::default()).ground_z, Some(0.0));
     // azimuth relative to the camera: 0 = from the camera, 90 = from its right
-    let s = |az: f64, el: f64| Studio { light_azimuth: az, light_elevation: el, ..Studio::default() };
+    let s = |az: f64, el: f64| Studio::with_light(az, el);
     let d = info(View::Front, s(0.0, 0.0)).light_dir;
     assert!((d - DVec3::NEG_Y).length() < 1e-3, "{d}");
     let d = info(View::Front, s(90.0, 0.0)).light_dir;
@@ -207,7 +209,7 @@ fn transparent_items_cast_no_shadow() {
     let base = boxm(v(-30.0, -20.0, 0.0), v(-28.0, -18.0, 0.5));
     let glass = [0.5, 0.6, 0.9, 0.3];
     let scene = Scene { items: vec![Item::new(&m, glass), Item::new(&base, GREY)], ..Default::default() };
-    let st = Studio { light_azimuth: -90.0, light_elevation: 40.0, ao: false, ..Studio::default() };
+    let st = Studio { ao: false, ..Studio::with_light(-90.0, 40.0) };
     let o = opts(View::Top, Some(st.clone()));
     let (a, cam) = render_info(&scene, &o);
     let b = render(&scene, &opts(View::Top, Some(Studio { shadows: false, ..st })));
@@ -251,4 +253,148 @@ fn edges_off_hides_the_edge_lines() {
     // the faces away from the edges are the same
     let f = px(&cam, &o, v(10.0, 0.0, 10.0));
     assert!((luma5(&on, f) - luma5(&off, f)).abs() < 1.0);
+}
+
+/// UV sphere of radius `r` around `c` with vertex normals.
+fn sphere(c: DVec3, r: f64, n: u32) -> Mesh {
+    let mut m = Mesh::default();
+    for i in 0..=n {
+        let th = std::f64::consts::PI * i as f64 / n as f64;
+        for j in 0..=2 * n {
+            let ph = std::f64::consts::PI * j as f64 / n as f64;
+            let d = DVec3::new(th.sin() * ph.cos(), th.sin() * ph.sin(), th.cos());
+            let p = c + d * r;
+            m.positions.extend_from_slice(&[p.x as f32, p.y as f32, p.z as f32]);
+            m.normals.extend_from_slice(&[d.x as f32, d.y as f32, d.z as f32]);
+        }
+    }
+    let row = 2 * n + 1;
+    for i in 0..n {
+        for j in 0..2 * n {
+            let (a, b) = (i * row + j, (i + 1) * row + j);
+            m.indices.extend_from_slice(&[a, b, b + 1, a, b + 1, a + 1]);
+        }
+    }
+    m.tri_tags = vec![1; m.indices.len() / 3];
+    m.tri_faces = vec![0; m.indices.len() / 3];
+    m
+}
+
+fn lumas(img: &Image) -> Vec<f64> {
+    img.rgba.chunks_exact(4).map(|p| (p[0] as f64 + p[1] as f64 + p[2] as f64) / 3.0).collect()
+}
+
+#[test]
+fn metal_and_plastic_differ_and_metal_takes_its_colour() {
+    let m = sphere(v(0.0, 0.0, 10.0), 10.0, 48);
+    let gold = [0.85, 0.65, 0.25, 1.0];
+    let st = Studio { shadows: false, ao: false, ground: false, ..Studio::default() };
+    let o = opts(View::Iso, Some(st));
+    let draw =
+        |mt: Material| render(&Scene { items: vec![Item::new(&m, gold).with_material(mt)], ..Default::default() }, &o);
+    let plastic = draw(Material::preset("plastic").unwrap());
+    let metal = draw(Material::preset("chrome").unwrap());
+    let (lp, lm) = (lumas(&plastic), lumas(&metal));
+    let changed = lp.iter().zip(&lm).filter(|(a, b)| (*a - *b).abs() > 12.0).count();
+    assert!(changed > 3000, "{changed} pixels differ");
+    // a mirror shows its surroundings: much more contrast over the sphere than matte plastic
+    let spread = |l: &[f64], img: &Image| {
+        let bg = to_u8(o.background);
+        let on: Vec<f64> =
+            l.iter().zip(img.rgba.chunks_exact(4)).filter(|(_, p)| p[..3] != bg[..3]).map(|(x, _)| *x).collect();
+        let mean = on.iter().sum::<f64>() / on.len() as f64;
+        (on.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / on.len() as f64).sqrt()
+    };
+    assert!(spread(&lm, &metal) > spread(&lp, &plastic) * 1.3, "{} vs {}", spread(&lm, &metal), spread(&lp, &plastic));
+    // the reflection of a metal is tinted by its colour: red > blue on average
+    let (mut r, mut b) = (0.0, 0.0);
+    for p in metal.rgba.chunks_exact(4) {
+        r += p[0] as f64;
+        b += p[2] as f64;
+    }
+    assert!(r > b * 1.1, "red {r} blue {b}");
+}
+
+#[test]
+fn roughness_widens_the_highlight() {
+    // light from the camera, no environment: the key light's highlight in the middle
+    let m = sphere(v(0.0, 0.0, 0.0), 10.0, 64);
+    let st = Studio {
+        lights: vec![Light::new(0.0, 35.26)],
+        environment: Environment::None,
+        ambient: 0.1,
+        shadows: false,
+        ao: false,
+        ground: false,
+        ..Studio::default()
+    };
+    let o = opts(View::Iso, Some(st));
+    let grey = [0.3, 0.3, 0.3, 1.0];
+    let draw = |r: f32| {
+        let mt = Material { metalness: 0.0, roughness: r, clearcoat: 0.0 };
+        lumas(&render(&Scene { items: vec![Item::new(&m, grey).with_material(mt)], ..Default::default() }, &o))
+    };
+    let matte = draw(1.0);
+    // RMS radius (pixels) of the brightness the highlight adds, around its centre
+    let radius = |l: &[f64]| {
+        let w = o.width as usize;
+        let ex: Vec<f64> = l.iter().zip(&matte).map(|(a, b)| (a - b).max(0.0)).collect();
+        let s: f64 = ex.iter().sum();
+        let (cx, cy) = ex
+            .iter()
+            .enumerate()
+            .fold((0.0, 0.0), |(x, y), (i, e)| (x + (i % w) as f64 * e / s, y + (i / w) as f64 * e / s));
+        let r2: f64 = ex
+            .iter()
+            .enumerate()
+            .map(|(i, e)| e * (((i % w) as f64 - cx).powi(2) + ((i / w) as f64 - cy).powi(2)))
+            .sum();
+        ((r2 / s).sqrt(), s)
+    };
+    let (r_smooth, s_smooth) = radius(&draw(0.15));
+    let (r_rough, s_rough) = radius(&draw(0.45));
+    assert!(s_smooth > 100.0 && s_rough > 100.0, "{s_smooth} {s_rough}");
+    assert!(r_rough > r_smooth * 1.5, "highlight radius: smooth {r_smooth}, rough {r_rough}");
+}
+
+#[test]
+fn environment_shows_in_reflections_only_with_reflections() {
+    let m = sphere(v(0.0, 0.0, 10.0), 10.0, 48);
+    let silver = [0.8, 0.8, 0.82, 1.0];
+    let scene = Scene {
+        items: vec![Item::new(&m, silver).with_material(Material::preset("chrome").unwrap())],
+        ..Default::default()
+    };
+    let base = Studio { shadows: false, ao: false, ground: false, ..Studio::default() };
+    let studio = render(&scene, &opts(View::Iso, Some(base.clone())));
+    let overcast =
+        render(&scene, &opts(View::Iso, Some(Studio { environment: Environment::Overcast, ..base.clone() })));
+    let none = render(&scene, &opts(View::Iso, Some(Studio { environment: Environment::None, ..base })));
+    let diff = |a: &Image, b: &Image| lumas(a).iter().zip(lumas(b)).filter(|(x, y)| (*x - y).abs() > 12.0).count();
+    assert!(diff(&studio, &overcast) > 1500, "{}", diff(&studio, &overcast));
+    assert!(diff(&studio, &none) > 3000, "{}", diff(&studio, &none));
+    // deterministic
+    assert_eq!(
+        render(
+            &scene,
+            &opts(View::Iso, Some(Studio { shadows: false, ao: false, ground: false, ..Studio::default() }))
+        ),
+        studio
+    );
+}
+
+#[test]
+fn environment_numbers() {
+    use cad_render::studio::{Env, environment_spec, neutral_tone, up_irradiance};
+    // the same numbers as web/src/logic/studio.test.ts (UI environment map)
+    let spec = environment_spec(Environment::Studio, [0.8, 0.8, 0.8]);
+    let env = Env::new(&spec, DVec3::new(0.0, 1.0, 0.0), DVec3::Z);
+    let up = env.radiance(DVec3::Z);
+    let left = env.radiance(DVec3::new(-1.0, 0.0, 0.0));
+    let down = env.radiance(DVec3::NEG_Z);
+    let r = |x: f64| (x * 1e4).round() / 1e4;
+    assert_eq!([r(up[0]), r(left[0]), r(down[0])], [1.3248, 0.3607, 0.5692]);
+    assert_eq!(r(up_irradiance(&spec)), 1.1669);
+    let t = neutral_tone([0.5, 1.0, 2.0]);
+    assert_eq!([r(t[0]), r(t[1]), r(t[2])], [0.3211, 0.5341, 0.96]);
 }

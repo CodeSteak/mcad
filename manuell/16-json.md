@@ -24,6 +24,7 @@ Types:
 - `AssertResult = { node, kind: keepout|disjoint|intersect|touches, range, ok, checked, note, clearance, tol, contact: face|any, eps_volume, bodies, pairs: AssertPair[], ms, cached }` (keepout: only pairs with a problem)
 - `AssertPair = { a: {node, label, origin}, b, ok, problem: overlap|too_close|apart|gap|line_contact|point_contact|unchecked|null, message, volume, mesh_based, distance, accuracy, points: [a, b], contact: face|line|point|mesh|null, contact_area, contact_exact, overlap: {positions, indices, edges}|null, contact_mesh, contact_lines, focus: {min, max} }`
 - `camera = { projection, azimuth, elevation, dir, up, right, target, eye, scale_px_per_mm, width_mm, height_mm }`
+- `render` `studio = { lights: [{azimuth, elevation, intensity, color}], light_azimuth, light_elevation (first light), light_intensity, ambient, environment: studio|overcast|none, shadows, shadow_softness, ao, ao_radius, ao_strength, ground, ground_color, edges, materials: [{target: "#rrggbb"|"default"|"part:NAME", metalness, roughness, clearcoat}] }`; `views[].studio = { light_dir, light_dirs, ground_z, ao_radius_mm, shadow_map }`
 
 Measurement values are rounded to 12 significant digits. Display texts (`message`, `text`, `title`,
 `label`, `details`, `origin`, `notes`, hints) follow the output language (`--lang`, `MCAD_LANG`,

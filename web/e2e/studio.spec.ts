@@ -17,7 +17,7 @@ const OUT = join(ROOT, "reports/tmp/report22");
 const example = (name: string) => readFileSync(join(ROOT, "examples", name), "utf8");
 
 interface StudioInfo {
-  settings: { on: boolean; ao: boolean; shadows: boolean; ground: boolean; lightAzimuth: number; lightElevation: number; shadowSoftness: number; background: [string, string] | null };
+  settings: { on: boolean; ao: boolean; shadows: boolean; ground: boolean; lights: Array<{ azimuth: number; elevation: number }>; shadowSoftness: number; background: [string, string] | null };
   drawn: { on: boolean; shadows: boolean; ao: boolean; ground: boolean; aoRadius: number | null; light: [number, number, number] | null } | null;
 }
 type W = { __cad: { studioInfo(): StudioInfo; setStudio(p: unknown): void; renderBenchmark(n: number): number | null } };
@@ -156,18 +156,18 @@ test("S02 settings panel: light, shadows, ambient occlusion, ground, background;
   // light from the right, low
   await panel(page).getByRole("slider", { name: "Richtung" }).fill("60");
   await panel(page).getByRole("slider", { name: "Höhe" }).fill("25");
-  i = await studioReady(page, (x) => x.settings.lightAzimuth === 60 && x.settings.lightElevation === 25);
+  i = await studioReady(page, (x) => x.settings.lights[0].azimuth === 60 && x.settings.lights[0].elevation === 25);
   expect(i.drawn!.light![2]).toBeCloseTo(Math.sin((25 * Math.PI) / 180), 3);
   await page.keyboard.press("Escape");
   // reload: the settings stay
   await page.reload();
   await expect(page.getByTestId("editor").locator(".cm-content")).toBeVisible();
   const after = await info(page);
-  expect(after.settings).toMatchObject({ on: true, ao: false, shadows: false, lightAzimuth: 60, lightElevation: 25 });
+  expect(after.settings).toMatchObject({ on: true, ao: false, shadows: false, lights: [{ azimuth: 60, elevation: 25 }] });
   // defaults again
   await settingsButton(page).click();
   await panel(page).getByRole("button", { name: "Standardwerte" }).click();
-  expect((await info(page)).settings).toMatchObject({ on: true, ao: true, shadows: true, lightAzimuth: -40, lightElevation: 50 });
+  expect((await info(page)).settings).toMatchObject({ on: true, ao: true, shadows: true, lights: [{ azimuth: -40, elevation: 50 }] });
   record({
     id: "S02",
     title: "Settings panel and persistence",
@@ -183,10 +183,10 @@ test("S03 variants: light, softness, ground and background, dark theme", async (
   await setStudio(page, { on: true });
   await studioReady(page);
   await shot(page, "s03-default");
-  await setStudio(page, { lightAzimuth: 70, lightElevation: 30, shadowSoftness: 0.9 });
-  await studioReady(page, (x) => x.settings.lightAzimuth === 70);
+  await setStudio(page, { lights: [{ name: "key", azimuth: 70, elevation: 30, intensity: 1, color: "#ffffff" }], shadowSoftness: 0.9 });
+  await studioReady(page, (x) => x.settings.lights[0].azimuth === 70);
   await shot(page, "s03-light-right-soft");
-  await setStudio(page, { lightAzimuth: -40, lightElevation: 50, shadowSoftness: 0.35, ground: false, background: ["#ffffff", "#9fb3c8"] });
+  await setStudio(page, { lights: [{ name: "key", azimuth: -40, elevation: 50, intensity: 1, color: "#ffffff" }], shadowSoftness: 0.35, ground: false, background: ["#ffffff", "#9fb3c8"] });
   const g = await studioReady(page, (x) => x.drawn?.ground === false);
   expect(g.drawn!.ground).toBe(false);
   await shot(page, "s03-no-ground-blue");
@@ -240,7 +240,7 @@ test("S05 “Als mcad render kopieren” gives the studio call; the CLI renders 
   await openApp(page);
   const text = example("02-bracket.mcad");
   await loadText(page, text);
-  await setStudio(page, { on: true, lightAzimuth: -30, shadowSoftness: 0.5 });
+  await setStudio(page, { on: true, lights: [{ name: "key", azimuth: -30, elevation: 50, intensity: 1, color: "#ffffff" }], shadowSoftness: 0.5 });
   await studioReady(page);
   await settingsButton(page).click();
   await panel(page).getByRole("button", { name: "Als mcad render kopieren" }).click();

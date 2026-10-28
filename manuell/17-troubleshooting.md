@@ -17,7 +17,10 @@
 | "--ao only applies with --style studio" (also `--light`, `--shadows`, `--ground`, `--edges` …) | studio settings need `--style studio` |
 | "--ground-color X: expected #rrggbb or a palette colour name" (also `--background`) | quote `#` in the shell (`'#e0e0e0'`) or drop it (`e0e0e0`); names: `mcad usage colors` |
 | studio render: no ground / no ground shadow | the camera looks from below or horizontally (`front`, `right`, `bottom`): the ground is only drawn from above |
-| studio render: no shadow of a part | transparent bodies (x-ray, dimmed rest with `--line`, alpha) cast none |
+| studio render: no shadow of a part | transparent bodies (x-ray, dimmed rest with `--line`, alpha) cast none; only the first light casts shadows |
+| "--material red=gold: unknown material gold (known: plastic, …)" | presets: `mcad usage render`; or give values: `red=metalness=1,roughness=0.3` |
+| "--material x=chrome: x: expected a colour, default or part:NAME" | colour name (`mcad usage colors`), `#rrggbb`, `default` (uncoloured material) or `part:NAME` |
+| studio render: metal looks dark or flat | metals show their surroundings: keep `--environment studio`, raise `--ambient`; a smooth metal (`chrome`) needs curved faces to show the softboxes |
 | `mcad` exits 2 "no graphical session" | no `DISPLAY`/`WAYLAND_DISPLAY`; use the commands |
 | UI dies with "Error 71 (Protokollfehler) dispatching to Wayland display" | WebKitGTK DMA-BUF renderer; `mcad` sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` on Wayland unless the variable is set |
 | "Engine not responding for 20 min (kernel hangs)", line red | one kernel call ran 20 min: node blocked until its line changes; simplify it (fewer `$fn`, separate text) |

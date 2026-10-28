@@ -43,6 +43,7 @@ import { type DirHandle, project } from "../state/project";
 import { colorsVisible, type ExportChoice, type SideTab, resolveTheme, setExportChoice, setLangPref, setSideTab, setStudio, setThemePref, store } from "../state/store";
 import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
+import { studioPartMaterials } from "../logic/studio";
 import { DragController } from "./drag";
 import { SketchController } from "./sketch";
 import { MeasureController } from "./measure";
@@ -690,10 +691,12 @@ function syncRegions(): void {
   const s = store.getState();
   const c = s.complete;
   // the list needs volumes; the view draws the regions of a model with colours (Bericht 12)
-  const want = c !== null && ((colorsVisible(s) && (c.colors ?? []).length > 0) || (s.showRegions && hasFaceColors(c)));
+  // the view draws the regions of a model with colours, and per part with studio part materials
+  const draw = c !== null && s.showRegions && (hasFaceColors(c) || studioPartMaterials(s.studio));
+  const want = c !== null && ((colorsVisible(s) && (c.colors ?? []).length > 0) || draw);
   if (!want || !c) return;
   // meshes only where the view draws them (a model with colours): none for uncoloured models
-  const meshes = s.showRegions && hasFaceColors(c);
+  const meshes = draw;
   const key = `${c.version}|${meshes}`;
   if (key === regionsAsked) return;
   if (s.regions && s.regions.version === c.version && (s.regions.meshes || !meshes)) return;
@@ -708,7 +711,7 @@ function syncRegions(): void {
 }
 
 store.subscribe((s, p) => {
-  if (s.complete !== p.complete || colorsVisible(s) !== colorsVisible(p) || s.showRegions !== p.showRegions) syncRegions();
+  if (s.complete !== p.complete || colorsVisible(s) !== colorsVisible(p) || s.showRegions !== p.showRegions || studioPartMaterials(s.studio) !== studioPartMaterials(p.studio)) syncRegions();
 });
 
 /** File name of a part (`k[2]` → `k_2.stl`, as the engine names ZIP entries). */

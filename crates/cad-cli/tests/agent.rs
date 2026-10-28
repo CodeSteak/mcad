@@ -397,6 +397,13 @@ fn render_studio_style() {
     assert_eq!((s["ground"].as_bool(), s["ground_color"].as_str()), (Some(true), Some("#e6e8ec")));
     assert_eq!(v["background"], serde_json::json!(["#f8f9fb", "#d9dde3"]));
     assert_eq!(s["edges"], true);
+    assert_eq!(s["environment"], "studio");
+    assert_eq!(
+        s["lights"],
+        serde_json::json!([{"azimuth": -40.0, "elevation": 50.0, "intensity": 1.0, "color": "#ffffff"}])
+    );
+    assert_eq!(s["materials"], serde_json::json!([]));
+    assert_eq!(s["render_block"], Value::Null);
     let vs = &v["views"][0]["studio"];
     assert!(f(&vs["ao_radius_mm"]) > 0.0);
     assert_eq!(vs["shadow_map"], 2048);
@@ -458,6 +465,36 @@ fn render_studio_style() {
     let n = png(&dir.path().join("n.png"));
     let d = n.differing(&b);
     assert!(d > 300 && d < 20000, "{d}");
+    // materials and environment
+    let v = json(
+        &[
+            "render",
+            &g,
+            "-o",
+            &p("m.png"),
+            "--size",
+            "400x300",
+            "--style",
+            "studio",
+            "--material",
+            "default=chrome",
+            "--material",
+            "part:k=plastic,roughness=0.3",
+            "--environment",
+            "overcast",
+        ],
+        0,
+    );
+    assert_eq!(v["studio"]["environment"], "overcast");
+    let mats = v["studio"]["materials"].as_array().unwrap();
+    assert_eq!(mats.len(), 2);
+    assert_eq!(
+        (mats[0]["target"].as_str(), f(&mats[0]["metalness"]), f(&mats[0]["roughness"])),
+        (Some("default"), 1.0, 0.08)
+    );
+    assert_eq!(mats[1]["target"], "part:k");
+    close(f(&mats[1]["roughness"]), 0.3, 1e-6);
+    assert!(png(&dir.path().join("m.png")).differing(&b) > 2000);
     // contact sheet, dark theme, section, perspective together
     let v = json(
         &[
@@ -503,6 +540,13 @@ fn render_studio_style() {
         &["--style", "studio", "--ground-color", "notacolour"],
         &["--style", "studio", "--edges", "maybe"],
         &["--edges", "off"],
+        &["--material", "red=chrome"],
+        &["--style", "studio", "--material", "red=gold"],
+        &["--style", "studio", "--material", "nocolour=chrome"],
+        &["--style", "studio", "--material", "red"],
+        &["--style", "studio", "--material", "red=chrome,shine=1"],
+        &["--style", "studio", "--material", "red=roughness=2"],
+        &["--style", "studio", "--environment", "beach"],
         &["--background", "#12"],
         &["--background", "red,green,blue"],
     ] {
