@@ -15,7 +15,7 @@ use crate::palette::{self, ColorKind};
 use crate::value::{Val, Value};
 
 /// Settings at the top level of a render block.
-pub const RENDER_SETTINGS: [&str; 13] = [
+pub const RENDER_SETTINGS: [&str; 16] = [
     "style",
     "edges",
     "environment",
@@ -28,16 +28,34 @@ pub const RENDER_SETTINGS: [&str; 13] = [
     "ao_strength",
     "ground",
     "ground_color",
+    "ground_reflection",
+    "ground_roughness",
+    "reflections",
     "background",
 ];
 /// Settings of `light NAME { … }`.
 pub const LIGHT_SETTINGS: [&str; 4] = ["azimuth", "elevation", "intensity", "color"];
 /// Settings of `material SEL { … }`.
-pub const MATERIAL_SETTINGS: [&str; 4] = ["preset", "metalness", "roughness", "clearcoat"];
+pub const MATERIAL_SETTINGS: [&str; 5] = ["preset", "metalness", "roughness", "clearcoat", "anisotropy"];
 /// Material presets (the same as `cad_render::Material::PRESETS`).
-pub const MATERIAL_PRESETS: [&str; 6] = ["plastic", "plastic_glossy", "rubber", "aluminium", "metal_brushed", "chrome"];
+pub const MATERIAL_PRESETS: [&str; 14] = [
+    "plastic",
+    "plastic_satin",
+    "plastic_glossy",
+    "rubber",
+    "ceramic",
+    "aluminium",
+    "metal_brushed",
+    "anodized",
+    "chrome",
+    "stainless",
+    "titanium",
+    "gold",
+    "copper",
+    "brass",
+];
 /// Values of `environment`.
-pub const ENVIRONMENTS: [&str; 3] = ["studio", "overcast", "none"];
+pub const ENVIRONMENTS: [&str; 4] = ["studio", "soft", "overcast", "none"];
 /// Values of the key light (defaults of a `light` entry).
 pub const KEY_LIGHT: (f64, f64, f64) = (-40.0, 50.0, 1.0);
 
@@ -102,6 +120,9 @@ impl<'a> Ev<'a> {
                 "shadows" => d.shadows = self.render_bool(&v, sp, name),
                 "ao" => d.ao = self.render_bool(&v, sp, name),
                 "ground" => d.ground = self.render_bool(&v, sp, name),
+                "reflections" => d.reflections = self.render_bool(&v, sp, name),
+                "ground_reflection" => d.ground_reflection = self.render_num(&v, sp, name, 0.0, 1.0),
+                "ground_roughness" => d.ground_roughness = self.render_num(&v, sp, name, 0.0, 1.0),
                 "ambient" => d.ambient = self.render_num(&v, sp, name, 0.0, 1.0),
                 "light_intensity" => d.light_intensity = self.render_num(&v, sp, name, 0.0, 4.0),
                 "shadow_softness" => d.shadow_softness = self.render_num(&v, sp, name, 0.0, 1.0),
@@ -227,7 +248,15 @@ impl<'a> Ev<'a> {
                 }
             }
         };
-        let mut m = RenderMaterial { target, preset: None, metalness: None, roughness: None, clearcoat: None, span };
+        let mut m = RenderMaterial {
+            target,
+            preset: None,
+            metalness: None,
+            roughness: None,
+            clearcoat: None,
+            anisotropy: None,
+            span,
+        };
         let list: Vec<&RenderSetting> = settings.iter().collect();
         self.render_duplicates(&list);
         for st in settings {
@@ -249,6 +278,7 @@ impl<'a> Ev<'a> {
                 "metalness" => m.metalness = self.render_num(&v, sp, key, 0.0, 1.0),
                 "roughness" => m.roughness = self.render_num(&v, sp, key, 0.0, 1.0),
                 "clearcoat" => m.clearcoat = self.render_num(&v, sp, key, 0.0, 1.0),
+                "anisotropy" => m.anisotropy = self.render_num(&v, sp, key, 0.0, 1.0),
                 _ => unreachable!(),
             }
         }

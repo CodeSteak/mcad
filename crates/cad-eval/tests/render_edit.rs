@@ -164,3 +164,14 @@ fn expressions_are_replaced_and_bad_names_refused() {
     assert!(render_edits(&proj, &[light("key", "height", "1")]).is_err());
     assert!(render_edits(&proj, &[light("my light", "azimuth", "1")]).is_err());
 }
+
+#[test]
+fn reflection_settings_and_anisotropy_are_written_back() {
+    let out = edit(
+        BLOCK,
+        &[set("ground_reflection", "0.35"), set("reflections", "false"), mat("silver", "anisotropy", "0.6")],
+    );
+    assert!(out.contains("ground_reflection = 0.35;"), "{out}");
+    assert!(out.contains("reflections = false;"), "{out}");
+    assert!(out.contains("material \"silver\" { preset = \"aluminium\"; anisotropy = 0.6; }"), "{out}");
+}

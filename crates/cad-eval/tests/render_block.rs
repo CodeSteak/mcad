@@ -101,7 +101,7 @@ render {
     light key { azimuth = 10; height = 4; elevation = 0; }
     light key { azimuth = 20; }
     material "nocolour" { preset = "chrome"; }
-    material "red" { preset = "gold"; shine = 1; }
+    material "red" { preset = "unobtainium"; shine = 1; }
     material lid { preset = "chrome"; }
     edges = true;
     edges = false;
@@ -117,13 +117,13 @@ render { ao = false; }
         "render: unknown setting `egdes` (known: style, edges",
         "render: ambient = 3 is outside 0…1 – ignored",
         "render: shadows expects true or false, not string – ignored",
-        "render: environment expects \"studio\", \"overcast\", \"none\" – ignored",
+        "render: environment expects \"studio\", \"soft\", \"overcast\", \"none\" – ignored",
         "render: ground_color expects a colour",
         "light key: unknown setting `height` (known: azimuth, elevation, intensity, color)",
         "render: elevation = 0 is outside 1…90 – ignored",
         "render: light `key` is defined twice (the last one applies)",
         "render: material \"nocolour\": unknown colour",
-        "render: preset expects \"plastic\", \"plastic_glossy\"",
+        "render: preset expects \"plastic\", \"plastic_satin\"",
         "material \"red\": unknown setting `shine`",
         "render: material lid: no part `lid` (parts: –)",
         "render: `edges` is set twice (the last value applies)",
@@ -146,4 +146,33 @@ render { ao = false; }
     assert_eq!(r.materials[0].preset, None);
     // the geometry is unaffected: no error
     assert!(out.tree.root.is_some());
+}
+
+#[test]
+fn reflections_soft_environment_and_anisotropy() {
+    let src = r#"
+color("silver") cube(5);
+render {
+    environment = "soft";
+    reflections = false;
+    ground_reflection = 0.4;
+    ground_roughness = 0.1;
+    material "silver" { preset = "metal_brushed"; anisotropy = 0.5; }
+    material "default" { preset = "titanium"; }
+}
+"#;
+    let out = run(src);
+    assert!(out.diagnostics.is_empty(), "{:?}", warnings(&out));
+    let r = out.tree.render.as_ref().unwrap();
+    assert_eq!(r.environment.as_deref(), Some("soft"));
+    assert_eq!((r.reflections, r.ground_reflection, r.ground_roughness), (Some(false), Some(0.4), Some(0.1)));
+    assert_eq!((r.materials[0].preset.as_deref(), r.materials[0].anisotropy), (Some("metal_brushed"), Some(0.5)));
+    assert_eq!(r.materials[1].preset.as_deref(), Some("titanium"));
+    // out of range: warning, ignored
+    let out = run("cube(1);\nrender { ground_reflection = 2; material \"default\" { anisotropy = -1; } }");
+    let w = warnings(&out);
+    assert!(w.iter().any(|m| m.contains("ground_reflection = 2 is outside 0…1")), "{w:?}");
+    assert!(w.iter().any(|m| m.contains("anisotropy = -1 is outside 0…1")), "{w:?}");
+    let r = out.tree.render.as_ref().unwrap();
+    assert_eq!((r.ground_reflection, r.materials[0].anisotropy), (None, None));
 }

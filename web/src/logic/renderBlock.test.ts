@@ -18,6 +18,9 @@ const empty: RenderBlock = {
   ao_strength: null,
   ground: null,
   ground_color: null,
+  ground_reflection: null,
+  ground_roughness: null,
+  reflections: null,
   background: null,
   lights: [],
   materials: [],
@@ -36,12 +39,12 @@ describe("settings from a render block", () => {
       ground_color: "#808080",
       background: ["#FFFFFF"],
       lights: [{ name: "rim", azimuth: 150, elevation: 25, intensity: 0.5, color: "#ffe0c0", range: R }],
-      materials: [{ target: { color: "red" }, preset: "chrome", metalness: null, roughness: 0.2, clearcoat: null, range: R }],
+      materials: [{ target: { color: "red" }, preset: "chrome", metalness: null, roughness: 0.2, clearcoat: null, anisotropy: null, range: R }],
     };
     const s = settingsFromBlock(b, false);
     expect(s).toMatchObject({ edges: false, ambient: 0.3, environment: "overcast", groundColor: "#808080", background: ["#ffffff", "#ffffff"] });
     expect(s.lights).toEqual([{ name: "rim", azimuth: 150, elevation: 25, intensity: 0.5, color: "#ffe0c0" }]);
-    expect(s.materials).toEqual([{ target: { color: "red" }, preset: "chrome", metalness: null, roughness: 0.2, clearcoat: null }]);
+    expect(s.materials).toEqual([{ target: { color: "red" }, preset: "chrome", metalness: null, roughness: 0.2, clearcoat: null, anisotropy: null }]);
     // the key ignores the place
     expect(blockKey({ ...b, range: { ...R, line: 9 } })).toBe(blockKey(b));
     expect(blockKey({ ...b, ambient: 0.4 })).not.toBe(blockKey(b));
@@ -88,12 +91,24 @@ describe("changes written into the block", () => {
     ]);
   });
   it("materials: new entry, changed value, removed entry", () => {
-    const m = { target: { color: "red" }, preset: "chrome", metalness: null, roughness: null, clearcoat: null };
+    const m = { target: { color: "red" }, preset: "chrome", metalness: null, roughness: null, clearcoat: null, anisotropy: null };
     expect(blockChanges(s0, { ...s0, materials: [m] }, true)).toEqual([{ kind: "material", target: { color: "red" }, key: "preset", value: "chrome" }]);
     const prev = { ...s0, materials: [m] };
     expect(blockChanges(prev, { ...s0, materials: [{ ...m, roughness: 0.3 }] }, true)).toEqual([{ kind: "material", target: { color: "red" }, key: "roughness", value: 0.3 }]);
     expect(blockChanges(prev, s0, true)).toEqual([{ kind: "remove_material", target: { color: "red" } }]);
-    const lid = { target: { part: "lid" }, preset: null, metalness: 1, roughness: null, clearcoat: null };
+    const lid = { target: { part: "lid" }, preset: null, metalness: 1, roughness: null, clearcoat: null, anisotropy: null };
     expect(blockChanges(s0, { ...s0, materials: [lid] }, true)).toEqual([{ kind: "material", target: { part: "lid" }, key: "metalness", value: 1 }]);
+  });
+  it("reflections and anisotropy are written back", () => {
+    expect(blockChanges(s0, { ...s0, groundReflection: 0.45, groundRoughness: 0.1, reflections: false }, true)).toEqual([
+      { kind: "set", key: "ground_reflection", value: 0.45 },
+      { kind: "set", key: "ground_roughness", value: 0.1 },
+      { kind: "set", key: "reflections", value: false },
+    ]);
+    const m = { target: { color: "silver" }, preset: "metal_brushed", metalness: null, roughness: null, clearcoat: null, anisotropy: null };
+    expect(blockChanges({ ...s0, materials: [m] }, { ...s0, materials: [{ ...m, anisotropy: 0.4 }] }, true)).toEqual([{ kind: "material", target: { color: "silver" }, key: "anisotropy", value: 0.4 }]);
+    const b = settingsFromBlock({ ...empty, environment: "soft", ground_reflection: 0.5, reflections: false, materials: [{ ...m, anisotropy: 0.3, range: R }] }, true);
+    expect(b).toMatchObject({ environment: "soft", groundReflection: 0.5, groundRoughness: 0.3, reflections: false });
+    expect(b.materials[0].anisotropy).toBe(0.3);
   });
 });

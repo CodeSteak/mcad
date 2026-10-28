@@ -24,9 +24,12 @@ export function settingsFromBlock(b: RenderBlock, on: boolean): StudioSettings {
     aoStrength: b.ao_strength ?? d.aoStrength,
     ground: b.ground ?? d.ground,
     groundColor: b.ground_color?.toLowerCase() ?? null,
+    groundReflection: b.ground_reflection ?? d.groundReflection,
+    groundRoughness: b.ground_roughness ?? d.groundRoughness,
+    reflections: b.reflections ?? d.reflections,
     background: bg && bg.length >= 1 ? [bg[0].toLowerCase(), (bg[1] ?? bg[0]).toLowerCase()] : null,
     edges: b.edges ?? d.edges,
-    materials: b.materials.map((m) => ({ target: "part" in m.target ? { part: m.target.part } : { color: m.target.color }, preset: m.preset, metalness: m.metalness, roughness: m.roughness, clearcoat: m.clearcoat })),
+    materials: b.materials.map((m) => ({ target: "part" in m.target ? { part: m.target.part } : { color: m.target.color }, preset: m.preset, metalness: m.metalness, roughness: m.roughness, clearcoat: m.clearcoat, anisotropy: m.anisotropy })),
   };
 }
 
@@ -52,6 +55,9 @@ const TOP: Array<[keyof StudioSettings, string, (s: StudioSettings) => Value]> =
   ["aoStrength", "ao_strength", (s) => r3(s.aoStrength)],
   ["ground", "ground", (s) => s.ground],
   ["groundColor", "ground_color", (s) => s.groundColor],
+  ["groundReflection", "ground_reflection", (s) => r3(s.groundReflection)],
+  ["groundRoughness", "ground_roughness", (s) => r3(s.groundRoughness)],
+  ["reflections", "reflections", (s) => s.reflections],
   ["background", "background", (s) => (s.background === null ? null : s.background[0] === s.background[1] ? s.background[0] : [s.background[0], s.background[1]])],
 ];
 
@@ -61,7 +67,7 @@ const LIGHT_KEYS: Array<[keyof StudioLight, string]> = [
   ["intensity", "intensity"],
   ["color", "color"],
 ];
-const MATERIAL_KEYS: Array<keyof Omit<StudioMaterial, "target">> = ["preset", "metalness", "roughness", "clearcoat"];
+const MATERIAL_KEYS: Array<keyof Omit<StudioMaterial, "target">> = ["preset", "metalness", "roughness", "clearcoat", "anisotropy"];
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const lightValue = (l: StudioLight, k: keyof StudioLight): Value => (typeof l[k] === "number" ? r3(l[k] as number) : (l[k] as string));

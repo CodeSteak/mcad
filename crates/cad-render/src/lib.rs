@@ -23,14 +23,16 @@
 //! * Background: solid or a vertical gradient (`RenderOptions::background_bottom`).
 //! * Anti-aliasing by supersampling. No GPU.
 
+pub mod env;
 mod font;
+mod rt;
 pub mod studio;
 pub mod text;
 
 use cad_kernel::Mesh;
 use glam::{DMat4, DVec3};
 
-pub use studio::{Environment, Light, Material, Studio, StudioInfo};
+pub use studio::{Environment, Light, Material, Quality, Studio, StudioInfo};
 pub use text::{TextSize, contact_sheet, text_size, tile_origin};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -468,8 +470,8 @@ struct Target {
 /// Per-sample surface data of the studio look (deferred shading).
 pub(crate) struct GBuf {
     pub albedo: Vec<[f32; 3]>,
-    /// Surface of [`studio::SURFACE`] samples.
-    pub material: Vec<Material>,
+    /// Scene item of [`studio::SURFACE`] samples.
+    pub item: Vec<u32>,
     /// Unit normal facing the camera.
     pub normal: Vec<[f32; 3]>,
     /// [`studio::NONE`], [`studio::SURFACE`], [`studio::CAP`] or [`studio::GROUND`].
@@ -884,7 +886,7 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
     let studio = opts.studio.as_ref();
     let mut gbuf = studio.map(|_| GBuf {
         albedo: vec![[0.0; 3]; w * h],
-        material: vec![Material::default(); w * h],
+        item: vec![0; w * h],
         normal: vec![[0.0; 3]; w * h],
         kind: vec![studio::NONE; w * h],
     });
@@ -911,8 +913,9 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
 
     let mut transparent: Vec<Tri> = Vec::new();
     let mut opaque: Vec<Tri> = Vec::new();
-    // studio: world triangles of the opaque meshes (shadow casters) and the bounds of all items
-    let mut casters: Vec<[DVec3; 3]> = Vec::new();
+    // studio: world triangles of the opaque meshes (shadow casters, reflections) and the
+    // bounds of all items
+    let mut casters: Vec<rt::RtTri> = Vec::new();
     let (mut mlo, mut mhi) = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
     for (item, it) in scene.items.iter().enumerate() {
         let m = &it.mesh;
@@ -962,7 +965,12 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
                     transparent.push(t);
                 } else {
                     if studio.is_some() {
-                        casters.push([q[0].0, q[1].0, q[2].0]);
+                        let n = |k: usize| if q[k].1 == DVec3::ZERO { fnrm } else { q[k].1 };
+                        casters.push(rt::RtTri {
+                            p: [q[0].0, q[1].0, q[2].0],
+                            n: [n(0), n(1), n(2)],
+                            item: item as u32,
+                        });
                     }
                     opaque.push(t);
                 }
@@ -993,7 +1001,7 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
                         let l = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt().max(1e-12);
                         g.normal[i] = [n[0] / l, n[1] / l, n[2] / l];
                         g.albedo[i] = [c[0], c[1], c[2]];
-                        g.material[i] = scene.items[tri.item as usize].material;
+                        g.item[i] = tri.item;
                         g.kind[i] = studio::SURFACE;
                     }
                 }
@@ -1073,7 +1081,9 @@ pub fn render_info(scene: &Scene, opts: &RenderOptions) -> (Image, CameraInfo) {
     let mut studio_info = None;
     if let (Some(st), Some(g)) = (studio, gbuf.as_mut()) {
         let bounds = if mlo.x <= mhi.x { Some((mlo, mhi)) } else { None };
-        studio_info = Some(studio::shade(&mut t, g, &cam, opts, st, &casters, bounds));
+        let infos: Vec<studio::ItemInfo> =
+            scene.items.iter().map(|it| studio::ItemInfo::new(it.material, it.color, &it.transform)).collect();
+        studio_info = Some(studio::shade(&mut t, g, &cam, opts, st, &casters, &infos, bounds));
     }
 
     // Edges of opaque meshes (depth tested).

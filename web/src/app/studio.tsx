@@ -15,6 +15,7 @@ import {
   PRESET_NAMES,
   STUDIO_THEME,
   type StudioLight,
+  type StudioMaterial,
   type StudioSettings,
   aoRadiusFor,
   materialEntry,
@@ -93,10 +94,11 @@ function LightRow({ s, i }: { s: StudioSettings; i: number }) {
 /** Material of a colour or part: preset and the single values. */
 function MaterialRow({ s, target, label, swatch, testid }: { s: StudioSettings; target: MaterialTarget; label: string; swatch: string | null; testid: string }) {
   const e = materialEntry(s.materials, target);
-  const pbr = resolvePbr(e ?? { preset: null, metalness: null, roughness: null, clearcoat: null });
-  const set = (patch: Partial<{ preset: string | null; metalness: number | null; roughness: number | null; clearcoat: number | null }>) => {
-    const base = e ?? { preset: null, metalness: null, roughness: null, clearcoat: null };
-    editStudio({ materials: withMaterial(s.materials, target, { preset: base.preset, metalness: base.metalness, roughness: base.roughness, clearcoat: base.clearcoat, ...patch }) });
+  const none = { preset: null, metalness: null, roughness: null, clearcoat: null, anisotropy: null };
+  const pbr = resolvePbr(e ?? none);
+  const set = (patch: Partial<Omit<StudioMaterial, "target">>) => {
+    const base = e ?? none;
+    editStudio({ materials: withMaterial(s.materials, target, { preset: base.preset, metalness: base.metalness, roughness: base.roughness, clearcoat: base.clearcoat, anisotropy: base.anisotropy, ...patch }) });
   };
   return (
     <div className="studio-material" data-testid={`studio-material-${testid}`}>
@@ -113,7 +115,7 @@ function MaterialRow({ s, target, label, swatch, testid }: { s: StudioSettings; 
             const v = ev.target.value;
             if (v === "") editStudio({ materials: withMaterial(s.materials, target, null) });
             else if (v === "custom") set({ preset: null });
-            else editStudio({ materials: withMaterial(s.materials, target, { preset: v, metalness: null, roughness: null, clearcoat: null }) });
+            else editStudio({ materials: withMaterial(s.materials, target, { ...none, preset: v }) });
           }}
         >
           <option value="">{t("studio.presetNone")}</option>
@@ -130,6 +132,7 @@ function MaterialRow({ s, target, label, swatch, testid }: { s: StudioSettings; 
           <Slider id={`metalness-${testid}`} label={t("studio.metalness")} hint={t("studio.metalnessHint")} value={pbr.metalness} min={0} max={1} step={0.05} onChange={(metalness) => set({ metalness })} />
           <Slider id={`roughness-${testid}`} label={t("studio.roughness")} hint={t("studio.roughnessHint")} value={pbr.roughness} min={0} max={1} step={0.05} onChange={(roughness) => set({ roughness })} />
           <Slider id={`clearcoat-${testid}`} label={t("studio.clearcoat")} hint={t("studio.clearcoatHint")} value={pbr.clearcoat} min={0} max={1} step={0.05} onChange={(clearcoat) => set({ clearcoat })} />
+          <Slider id={`anisotropy-${testid}`} label={t("studio.anisotropy")} hint={t("studio.anisotropyHint")} value={pbr.anisotropy} min={0} max={1} step={0.05} onChange={(anisotropy) => set({ anisotropy })} />
         </>
       )}
     </div>
@@ -211,7 +214,7 @@ function StudioPanel({ s }: { s: StudioSettings }) {
         <select className="ui-input" value={s.environment} aria-label={t("studio.environment")} data-testid="studio-environment" onChange={(e) => editStudio({ environment: e.target.value as EnvironmentName })}>
           {ENVIRONMENTS.map((e) => (
             <option key={e} value={e}>
-              {t(`studio.env.${e}`)}
+              {t(`studio.env.${e}` as MessageKey)}
             </option>
           ))}
         </select>
@@ -246,6 +249,9 @@ function StudioPanel({ s }: { s: StudioSettings }) {
           {t("studio.fromTheme")}
         </Button>
       </div>
+      <Slider id="groundReflection" label={t("studio.groundReflection")} hint={t("studio.groundReflectionHint")} value={s.groundReflection} min={0} max={1} step={0.05} disabled={!s.ground} onChange={(v) => editStudio({ groundReflection: v })} />
+      <Slider id="groundRoughness" label={t("studio.groundRoughness")} hint={t("studio.groundRoughnessHint")} value={s.groundRoughness} min={0} max={1} step={0.05} disabled={!s.ground || s.groundReflection <= 0} onChange={(v) => editStudio({ groundRoughness: v })} />
+      <Check id="reflections" label={t("studio.reflections")} hint={t("studio.reflectionsHint")} checked={s.reflections} onChange={(reflections) => editStudio({ reflections })} />
       <div className="studio-line">
         <b>{t("studio.background")}</b>
         <span className="grow" />

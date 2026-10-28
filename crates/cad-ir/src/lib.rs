@@ -50,6 +50,15 @@ pub struct RenderDecl {
     pub ao_strength: Option<f64>,
     pub ground: Option<bool>,
     pub ground_color: Option<[f32; 4]>,
+    /// Mirror image in the ground, 0..1.
+    #[serde(default)]
+    pub ground_reflection: Option<f64>,
+    /// Blur of the ground reflection, 0..1.
+    #[serde(default)]
+    pub ground_roughness: Option<f64>,
+    /// Ray-traced reflections of the model (CLI renderer).
+    #[serde(default)]
+    pub reflections: Option<bool>,
     /// One colour, or two for a vertical gradient (top, bottom).
     pub background: Option<Vec<[f32; 4]>>,
     /// `light NAME { … }` in order (missing values: the defaults of the key light).
@@ -86,6 +95,8 @@ pub struct RenderMaterial {
     pub metalness: Option<f64>,
     pub roughness: Option<f64>,
     pub clearcoat: Option<f64>,
+    #[serde(default)]
+    pub anisotropy: Option<f64>,
     pub span: Span,
 }
 

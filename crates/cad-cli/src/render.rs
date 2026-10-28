@@ -20,8 +20,8 @@ use std::rc::Rc;
 use cad_eval::palette::{self, Theme};
 use cad_kernel::Mesh;
 use cad_render::{
-    CameraInfo, Environment, Item, Label, Light, Marker, MarkerShape, Material, Polyline, Projection, RenderOptions,
-    Scene, Section, Studio, StudioInfo, View, contact_sheet, render_info, tile_origin,
+    CameraInfo, Environment, Item, Label, Light, Marker, MarkerShape, Material, Polyline, Projection, Quality,
+    RenderOptions, Scene, Section, Studio, StudioInfo, View, contact_sheet, render_info, tile_origin,
 };
 use cad_session::protocol as p;
 use clap::Args;
@@ -259,13 +259,15 @@ pub(crate) struct ViewArgs {
     /// Studio: share of the environment (sky) light, 0…1 (default 0.4).
     #[arg(long, value_name = "F")]
     pub ambient: Option<f64>,
-    /// Studio: surroundings seen in reflections: studio (softboxes, default), overcast (soft
-    /// sky only) or none (no reflections).
-    #[arg(long, value_name = "studio|overcast|none")]
+    /// Studio: surroundings seen in reflections: studio (dark studio with bright softboxes,
+    /// default), soft (light studio, gentle reflections), overcast (sky gradient only) or none
+    /// (no reflections).
+    #[arg(long, value_name = "studio|soft|overcast|none")]
     pub environment: Option<String>,
     /// Studio: material of a colour or part (repeatable): `SEL=PRESET[,metalness=M,roughness=R,
-    /// clearcoat=C]`; SEL is a colour (`red`, `#rrggbb`, `default` = uncoloured) or `part:NAME`;
-    /// presets: plastic, plastic_glossy, rubber, aluminium, metal_brushed, chrome.
+    /// clearcoat=C,anisotropy=A]`; SEL is a colour (`red`, `#rrggbb`, `default` = uncoloured)
+    /// or `part:NAME`; presets: plastic, plastic_satin, plastic_glossy, rubber, ceramic,
+    /// aluminium, metal_brushed, anodized, chrome, stainless, titanium, gold, copper, brass.
     #[arg(long = "material", value_name = "SEL=SPEC")]
     pub material: Vec<String>,
     /// Studio: cast shadows on the model and the ground (default on).
@@ -289,6 +291,20 @@ pub(crate) struct ViewArgs {
     /// Studio: colour of the ground plane: `#rrggbb` or a palette name (default from the theme).
     #[arg(long, value_name = "COLOR")]
     pub ground_color: Option<String>,
+    /// Studio: mirror image of the model in the ground, 0 = none … 1 = strong (default 0.2).
+    #[arg(long, value_name = "F")]
+    pub ground_reflection: Option<f64>,
+    /// Studio: blur of the ground reflection, 0 = sharp mirror … 1 = very blurred (default 0.3).
+    #[arg(long, value_name = "F")]
+    pub ground_roughness: Option<f64>,
+    /// Studio: ray-traced reflections of the model in itself and of the ground with the
+    /// model's shadow in glossy surfaces (default on).
+    #[arg(long, value_name = "on|off")]
+    pub reflections: Option<String>,
+    /// Studio: ray tracing effort: draft (no reflections of the model, fast), normal
+    /// (default), high (more rays: smoother glossy reflections, slower).
+    #[arg(long, value_name = "draft|normal|high")]
+    pub quality: Option<String>,
     /// Studio: mesh edge lines of opaque bodies (default on; off: only the shading shows the
     /// form).
     #[arg(long, value_name = "on|off")]
@@ -447,6 +463,7 @@ pub(crate) struct MatSpec {
     pub metalness: Option<f32>,
     pub roughness: Option<f32>,
     pub clearcoat: Option<f32>,
+    pub anisotropy: Option<f32>,
 }
 
 impl MatSpec {
@@ -456,6 +473,8 @@ impl MatSpec {
             metalness: self.metalness.unwrap_or(b.metalness),
             roughness: self.roughness.unwrap_or(b.roughness),
             clearcoat: self.clearcoat.unwrap_or(b.clearcoat),
+            anisotropy: self.anisotropy.unwrap_or(b.anisotropy),
+            color: b.color,
         }
         .clamped()
     }
@@ -512,10 +531,11 @@ fn parse_material_arg(s: &str) -> Result<(MatSel, MatSpec), Fail> {
                     "metalness" => m.metalness = Some(v),
                     "roughness" => m.roughness = Some(v),
                     "clearcoat" => m.clearcoat = Some(v),
+                    "anisotropy" => m.anisotropy = Some(v),
                     k => {
                         return Err(bad(tr!(
-                            "unbekannter Wert {k} (metalness, roughness, clearcoat)",
-                            "unknown value {k} (metalness, roughness, clearcoat)"
+                            "unbekannter Wert {k} (metalness, roughness, clearcoat, anisotropy)",
+                            "unknown value {k} (metalness, roughness, clearcoat, anisotropy)"
                         )));
                     }
                 }
@@ -579,6 +599,15 @@ fn apply_block(
     if let Some(c) = b.ground_color.as_deref().and_then(color) {
         st.ground_color = c;
     }
+    if let Some(v) = b.ground_reflection {
+        st.ground_reflection = v;
+    }
+    if let Some(v) = b.ground_roughness {
+        st.ground_roughness = v;
+    }
+    if let Some(v) = b.reflections {
+        st.reflections = v;
+    }
     if let Some(v) = &b.background {
         let cs: Vec<[f32; 4]> = v.iter().filter_map(|h| color(h)).collect();
         *bg = match cs.as_slice() {
@@ -598,6 +627,7 @@ fn apply_block(
             metalness: m.metalness.map(|v| v as f32),
             roughness: m.roughness.map(|v| v as f32),
             clearcoat: m.clearcoat.map(|v| v as f32),
+            anisotropy: m.anisotropy.map(|v| v as f32),
         };
         materials.push((sel, spec.material()));
     }
@@ -619,6 +649,10 @@ pub(crate) struct StudioArgs {
     pub ao_strength: Option<f64>,
     pub ground: Option<bool>,
     pub ground_color: Option<[f32; 4]>,
+    pub ground_reflection: Option<f64>,
+    pub ground_roughness: Option<f64>,
+    pub reflections: Option<bool>,
+    pub quality: Option<Quality>,
     pub edges: Option<bool>,
     pub materials: Vec<(MatSel, MatSpec)>,
     /// Names of the studio options given (for "only applies with --style studio").
@@ -695,6 +729,10 @@ impl StudioArgs {
             ("--ao-strength", a.ao_strength.is_some()),
             ("--ground", a.ground.is_some()),
             ("--ground-color", a.ground_color.is_some()),
+            ("--ground-reflection", a.ground_reflection.is_some()),
+            ("--ground-roughness", a.ground_roughness.is_some()),
+            ("--reflections", a.reflections.is_some()),
+            ("--quality", a.quality.is_some()),
             ("--edges", a.edges.is_some()),
             ("--material", !a.material.is_empty()),
         ]
@@ -749,6 +787,20 @@ impl StudioArgs {
         if let Some(c) = &a.ground_color {
             s.ground_color = Some(parse_color_arg("--ground-color", c)?);
         }
+        if let Some(v) = a.ground_reflection {
+            s.ground_reflection = Some(in_range("--ground-reflection", v, 0.0, 1.0)?);
+        }
+        if let Some(v) = a.ground_roughness {
+            s.ground_roughness = Some(in_range("--ground-roughness", v, 0.0, 1.0)?);
+        }
+        if let Some(v) = &a.reflections {
+            s.reflections = Some(parse_switch("--reflections", v)?);
+        }
+        if let Some(v) = &a.quality {
+            s.quality = Some(Quality::from_name(v).ok_or_else(|| {
+                Fail::Usage(tr!("--quality {v}: erwartet {}", "--quality {v}: expected {}", Quality::NAMES.join(", ")))
+            })?);
+        }
         if let Some(v) = &a.edges {
             s.edges = Some(parse_switch("--edges", v)?);
         }
@@ -795,6 +847,18 @@ impl StudioArgs {
         }
         if let Some(v) = self.ground_color {
             st.ground_color = v;
+        }
+        if let Some(v) = self.ground_reflection {
+            st.ground_reflection = v;
+        }
+        if let Some(v) = self.ground_roughness {
+            st.ground_roughness = v;
+        }
+        if let Some(v) = self.reflections {
+            st.reflections = v;
+        }
+        if let Some(v) = self.quality {
+            st.quality = v;
         }
         if let Some(v) = self.edges {
             st.edges = v;
@@ -1953,7 +2017,8 @@ fn studio_json(s: &Studio, res: &Resolved) -> Json {
         .map(|(sel, m)| {
             let r = |x: f32| (x as f64 * 1000.0).round() / 1000.0;
             json!({ "target": sel.text(), "metalness": r(m.metalness), "roughness": r(m.roughness),
-                    "clearcoat": r(m.clearcoat) })
+                    "clearcoat": r(m.clearcoat), "anisotropy": r(m.anisotropy),
+                    "color": m.color.map(|c| c.map(r)) })
         })
         .collect();
     json!({
@@ -1964,6 +2029,8 @@ fn studio_json(s: &Studio, res: &Resolved) -> Json {
         "shadows": s.shadows, "shadow_softness": s.shadow_softness,
         "ao": s.ao, "ao_radius": s.ao_radius, "ao_strength": s.ao_strength,
         "ground": s.ground, "ground_color": palette::hex_string(s.ground_color),
+        "ground_reflection": s.ground_reflection, "ground_roughness": s.ground_roughness,
+        "reflections": s.reflections, "quality": s.quality.name(),
         "edges": s.edges,
         "materials": materials,
         "render_block": res.block_line.map(|l| json!({ "line": l })),
@@ -1978,6 +2045,7 @@ fn studio_view_json(s: &StudioInfo) -> Json {
         "ground_z": s.ground_z.map(r),
         "ao_radius_mm": s.ao_radius.map(r),
         "shadow_map": s.shadow_map,
+        "rays": s.rays.map(|(surf, ground)| json!({ "surfaces": surf, "ground": ground })),
     })
 }
 

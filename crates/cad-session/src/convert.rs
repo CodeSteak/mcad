@@ -933,6 +933,9 @@ pub fn render_block(d: &cad_ir::RenderDecl, src: &Source) -> p::RenderBlock {
         ao_strength: d.ao_strength,
         ground: d.ground,
         ground_color: d.ground_color.map(hex),
+        ground_reflection: d.ground_reflection,
+        ground_roughness: d.ground_roughness,
+        reflections: d.reflections,
         background: d.background.as_ref().map(|v| v.iter().map(|c| hex(*c)).collect()),
         lights: d
             .lights
@@ -958,6 +961,7 @@ pub fn render_block(d: &cad_ir::RenderDecl, src: &Source) -> p::RenderBlock {
                 metalness: m.metalness,
                 roughness: m.roughness,
                 clearcoat: m.clearcoat,
+                anisotropy: m.anisotropy,
                 range: src.range(m.span),
             })
             .collect(),

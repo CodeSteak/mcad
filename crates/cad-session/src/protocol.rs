@@ -1095,6 +1095,15 @@ pub struct RenderBlock {
     pub ground: Option<bool>,
     /// `#rrggbb`.
     pub ground_color: Option<String>,
+    /// Mirror image of the model in the ground, 0..1.
+    #[serde(default)]
+    pub ground_reflection: Option<f64>,
+    /// Blur of the ground reflection, 0..1.
+    #[serde(default)]
+    pub ground_roughness: Option<f64>,
+    /// Ray-traced reflections of the model in itself (CLI renderer).
+    #[serde(default)]
+    pub reflections: Option<bool>,
     /// One or two (top, bottom) `#rrggbb`.
     pub background: Option<Vec<String>>,
     pub lights: Vec<RenderLight>,
@@ -1128,6 +1137,8 @@ pub struct RenderMaterial {
     pub metalness: Option<f64>,
     pub roughness: Option<f64>,
     pub clearcoat: Option<f64>,
+    #[serde(default)]
+    pub anisotropy: Option<f64>,
     pub range: SrcRange,
 }
 

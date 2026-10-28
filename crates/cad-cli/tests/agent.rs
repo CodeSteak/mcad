@@ -404,7 +404,10 @@ fn render_studio_style() {
     );
     assert_eq!(s["materials"], serde_json::json!([]));
     assert_eq!(s["render_block"], Value::Null);
+    assert_eq!((f(&s["ground_reflection"]), f(&s["ground_roughness"])), (0.2, 0.3));
+    assert_eq!((s["reflections"].as_bool(), s["quality"].as_str()), (Some(true), Some("normal")));
     let vs = &v["views"][0]["studio"];
+    assert_eq!(vs["rays"], serde_json::json!({"surfaces": 4, "ground": 4}));
     assert!(f(&vs["ao_radius_mm"]) > 0.0);
     assert_eq!(vs["shadow_map"], 2048);
     assert!(vs["ground_z"].is_number());
@@ -459,6 +462,36 @@ fn render_studio_style() {
     assert_eq!(v["views"][0]["studio"]["ao_radius_mm"], Value::Null);
     assert_eq!(v["views"][0]["studio"]["ground_z"], Value::Null);
     assert!(png(&dir.path().join("c.png")).differing(&b) > 2000);
+    // ray tracing off: no rays, a different image
+    let v = json(
+        &[
+            "render",
+            &g,
+            "-o",
+            &p("r.png"),
+            "--size",
+            "400x300",
+            "--style",
+            "studio",
+            "--quality",
+            "draft",
+            "--reflections",
+            "off",
+            "--ground-reflection",
+            "0",
+            "--ground-roughness",
+            "0.5",
+            "--material",
+            "default=metal_brushed,anisotropy=0.5",
+        ],
+        0,
+    );
+    let s = &v["studio"];
+    assert_eq!((s["quality"].as_str(), s["reflections"].as_bool()), (Some("draft"), Some(false)));
+    assert_eq!((f(&s["ground_reflection"]), f(&s["ground_roughness"])), (0.0, 0.5));
+    assert_eq!(f(&s["materials"][0]["anisotropy"]), 0.5);
+    assert_eq!(s["materials"][0]["color"], serde_json::json!([0.913, 0.922, 0.924]));
+    assert_eq!(v["views"][0]["studio"]["rays"], Value::Null);
     // edges off: only the edge lines go
     let v = json(&["render", &g, "-o", &p("n.png"), "--size", "400x300", "--style", "studio", "--edges", "off"], 0);
     assert_eq!(v["studio"]["edges"], false);
@@ -490,7 +523,7 @@ fn render_studio_style() {
     assert_eq!(mats.len(), 2);
     assert_eq!(
         (mats[0]["target"].as_str(), f(&mats[0]["metalness"]), f(&mats[0]["roughness"])),
-        (Some("default"), 1.0, 0.08)
+        (Some("default"), 1.0, 0.04)
     );
     assert_eq!(mats[1]["target"], "part:k");
     close(f(&mats[1]["roughness"]), 0.3, 1e-6);
@@ -541,7 +574,12 @@ fn render_studio_style() {
         &["--style", "studio", "--edges", "maybe"],
         &["--edges", "off"],
         &["--material", "red=chrome"],
-        &["--style", "studio", "--material", "red=gold"],
+        &["--style", "studio", "--material", "red=unobtainium"],
+        &["--style", "studio", "--quality", "fast"],
+        &["--style", "studio", "--ground-reflection", "2"],
+        &["--style", "studio", "--ground-roughness", "1.5"],
+        &["--style", "studio", "--reflections", "maybe"],
+        &["--reflections", "off"],
         &["--style", "studio", "--material", "nocolour=chrome"],
         &["--style", "studio", "--material", "red"],
         &["--style", "studio", "--material", "red=chrome,shine=1"],
@@ -597,7 +635,8 @@ render {
     assert_eq!(v["background"], serde_json::json!(["#ffffff"]));
     let mats = s["materials"].as_array().unwrap();
     assert_eq!((mats[0]["target"].as_str(), f(&mats[0]["metalness"])), (Some("#abaeb2"), 1.0));
-    assert_eq!((mats[1]["target"].as_str(), f(&mats[1]["roughness"])), (Some("part:lid"), 0.9));
+    close(f(&mats[1]["roughness"]), 0.85, 1e-6);
+    assert_eq!(mats[1]["target"], "part:lid");
     // options override the block (the first light, materials after the block's)
     let v = json(
         &[

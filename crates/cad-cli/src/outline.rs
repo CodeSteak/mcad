@@ -110,7 +110,13 @@ fn render_block_text(r: &p::RenderBlock) -> String {
     let on = |b: bool| if b { "on" } else { "off" };
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!("style {}", r.style.as_deref().unwrap_or("studio")));
-    let sw = [("edges", r.edges), ("shadows", r.shadows), ("ao", r.ao), ("ground", r.ground)];
+    let sw = [
+        ("edges", r.edges),
+        ("shadows", r.shadows),
+        ("ao", r.ao),
+        ("ground", r.ground),
+        ("reflections", r.reflections),
+    ];
     parts.extend(sw.iter().filter_map(|(k, v)| v.map(|v| format!("{k} {}", on(v)))));
     let nums = [
         ("ambient", r.ambient),
@@ -118,6 +124,8 @@ fn render_block_text(r: &p::RenderBlock) -> String {
         ("shadow_softness", r.shadow_softness),
         ("ao_radius", r.ao_radius),
         ("ao_strength", r.ao_strength),
+        ("ground_reflection", r.ground_reflection),
+        ("ground_roughness", r.ground_roughness),
     ];
     parts.extend(nums.iter().filter_map(|(k, v)| v.map(|v| format!("{k} {}", num(v)))));
     if let Some(e) = &r.environment {
@@ -147,7 +155,12 @@ fn render_block_text(r: &p::RenderBlock) -> String {
             p::RenderTarget::Part { part } => tr!("Bauteil {part}", "part {part}"),
         };
         let mut v: Vec<String> = m.preset.iter().cloned().collect();
-        let vals = [("metalness", m.metalness), ("roughness", m.roughness), ("clearcoat", m.clearcoat)];
+        let vals = [
+            ("metalness", m.metalness),
+            ("roughness", m.roughness),
+            ("clearcoat", m.clearcoat),
+            ("anisotropy", m.anisotropy),
+        ];
         v.extend(vals.iter().filter_map(|(k, x)| x.map(|x| format!("{k} {}", num(x)))));
         t.push_str(&tr!("  Material {target}: {}\n", "  material {target}: {}\n", v.join(", ")));
     }

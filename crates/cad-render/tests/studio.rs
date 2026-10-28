@@ -293,7 +293,8 @@ fn metal_and_plastic_differ_and_metal_takes_its_colour() {
     let draw =
         |mt: Material| render(&Scene { items: vec![Item::new(&m, gold).with_material(mt)], ..Default::default() }, &o);
     let plastic = draw(Material::preset("plastic").unwrap());
-    let metal = draw(Material::preset("chrome").unwrap());
+    // a smooth metal in the body's colour
+    let metal = draw(Material { metalness: 1.0, roughness: 0.08, ..Material::PLASTIC });
     let (lp, lm) = (lumas(&plastic), lumas(&metal));
     let changed = lp.iter().zip(&lm).filter(|(a, b)| (*a - *b).abs() > 12.0).count();
     assert!(changed > 3000, "{changed} pixels differ");
@@ -331,7 +332,7 @@ fn roughness_widens_the_highlight() {
     let o = opts(View::Iso, Some(st));
     let grey = [0.3, 0.3, 0.3, 1.0];
     let draw = |r: f32| {
-        let mt = Material { metalness: 0.0, roughness: r, clearcoat: 0.0 };
+        let mt = Material { metalness: 0.0, roughness: r, ..Material::PLASTIC };
         lumas(&render(&Scene { items: vec![Item::new(&m, grey).with_material(mt)], ..Default::default() }, &o))
     };
     let matte = draw(1.0);
@@ -385,16 +386,240 @@ fn environment_shows_in_reflections_only_with_reflections() {
 
 #[test]
 fn environment_numbers() {
-    use cad_render::studio::{Env, environment_spec, neutral_tone, up_irradiance};
-    // the same numbers as web/src/logic/studio.test.ts (UI environment map)
-    let spec = environment_spec(Environment::Studio, [0.8, 0.8, 0.8]);
-    let env = Env::new(&spec, DVec3::new(0.0, 1.0, 0.0), DVec3::Z);
-    let up = env.radiance(DVec3::Z);
-    let left = env.radiance(DVec3::new(-1.0, 0.0, 0.0));
-    let down = env.radiance(DVec3::NEG_Z);
+    use cad_render::studio::{EnvFn, environment_spec, neutral_tone, up_irradiance};
+    // the same numbers as web/src/logic/studio.test.ts (UI environment map); directions for
+    // the camera at azimuth 0 (looking along +y)
     let r = |x: f64| (x * 1e4).round() / 1e4;
-    assert_eq!([r(up[0]), r(left[0]), r(down[0])], [1.3248, 0.3607, 0.5692]);
-    assert_eq!(r(up_irradiance(&spec)), 1.1669);
+    let spec = environment_spec(Environment::Studio, [0.8, 0.8, 0.8]);
+    let f = EnvFn::new(&spec);
+    let dir = |az: f64, el: f64| {
+        let (a, e) = (az.to_radians(), el.to_radians());
+        DVec3::new(a.sin() * e.cos(), -a.cos() * e.cos(), e.sin())
+    };
+    let probe = |d: DVec3| f.radiance(d).map(r);
+    assert_eq!(probe(DVec3::Z), [0.05, 0.05, 0.055]);
+    assert_eq!(probe(DVec3::NEG_Z), [0.6, 0.6, 0.6]);
+    assert_eq!(probe(dir(-68.0, 5.0)), [9.0175, 8.6175, 8.0199]);
+    assert_eq!(probe(dir(180.0, 55.0)), [6.0431, 6.0431, 6.0476]);
+    assert_eq!(probe(dir(-60.0, 30.0)), [4.2667, 4.0785, 3.7996]);
+    assert_eq!(probe(dir(40.0, -20.0)), [0.1055, 0.1055, 0.1055]);
+    assert_eq!(r(up_irradiance(&spec)), 1.0579);
+    let soft = environment_spec(Environment::Soft, [0.5, 0.5, 0.5]);
+    assert_eq!(r(up_irradiance(&soft)), 1.4092);
     let t = neutral_tone([0.5, 1.0, 2.0]);
     assert_eq!([r(t[0]), r(t[1]), r(t[2])], [0.3211, 0.5341, 0.96]);
+}
+
+/// Standard deviation of the brightness over the pixels that differ from the background.
+fn spread_on(img: &Image, bg: [f32; 4]) -> f64 {
+    let bg = to_u8(bg);
+    let on: Vec<f64> = img
+        .rgba
+        .chunks_exact(4)
+        .filter(|p| p[..3].iter().zip(&bg[..3]).any(|(a, b)| (*a as i32 - *b as i32).abs() > 2))
+        .map(|p| (p[0] as f64 + p[1] as f64 + p[2] as f64) / 3.0)
+        .collect();
+    let mean = on.iter().sum::<f64>() / on.len().max(1) as f64;
+    (on.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / on.len().max(1) as f64).sqrt()
+}
+
+#[test]
+fn chrome_shows_high_contrast_reflections() {
+    // a chrome ball in the dark studio: bright softboxes against dark walls — far more
+    // contrast than in the light `soft` studio
+    let m = sphere(v(0.0, 0.0, 10.0), 10.0, 64);
+    let scene = Scene {
+        items: vec![Item::new(&m, GREY).with_material(Material::preset("chrome").unwrap())],
+        ..Default::default()
+    };
+    let base = Studio { shadows: false, ao: false, ground: false, ..Studio::default() };
+    let o = opts(View::Iso, Some(base.clone()));
+    let studio = render(&scene, &o);
+    let soft = render(&scene, &opts(View::Iso, Some(Studio { environment: Environment::Soft, ..base })));
+    let (a, b) = (spread_on(&studio, o.background), spread_on(&soft, o.background));
+    assert!(a > 55.0, "spread {a}");
+    assert!(a > b * 1.4, "studio {a} soft {b}");
+    // highlights reach white, the walls are dark
+    let l = lumas(&studio);
+    assert!(l.iter().filter(|x| **x > 245.0).count() > 100);
+    assert!(l.iter().filter(|x| **x < 40.0).count() > 1000);
+}
+
+#[test]
+fn real_metals_have_their_own_colour() {
+    let m = sphere(v(0.0, 0.0, 10.0), 10.0, 48);
+    let blue = [0.2, 0.3, 0.9, 1.0];
+    let st = Studio { shadows: false, ao: false, ground: false, ..Studio::default() };
+    let o = opts(View::Iso, Some(st));
+    let mean = |mt: &str| {
+        let img = render(
+            &Scene {
+                items: vec![Item::new(&m, blue).with_material(Material::preset(mt).unwrap())],
+                ..Default::default()
+            },
+            &o,
+        );
+        let bg = to_u8(o.background);
+        let (mut s, mut n) = ([0.0f64; 3], 0.0);
+        for p in img.rgba.chunks_exact(4).filter(|p| p[..3] != bg[..3]) {
+            for k in 0..3 {
+                s[k] += p[k] as f64;
+            }
+            n += 1.0;
+        }
+        s.map(|v| v / n)
+    };
+    // gold on a blue body stays gold, chrome stays neutral, anodized takes the body colour
+    let gold = mean("gold");
+    assert!(gold[0] > gold[2] * 1.4, "{gold:?}");
+    let chrome = mean("chrome");
+    assert!((chrome[0] - chrome[2]).abs() < 12.0, "{chrome:?}");
+    let anodized = mean("anodized");
+    assert!(anodized[2] > anodized[0] * 1.4, "{anodized:?}");
+}
+
+#[test]
+fn ground_reflection_mirrors_the_model() {
+    // a red box on the ground, seen from low above: with a reflective ground, the ground just
+    // in front of the box turns red
+    let m = boxm(v(-10.0, -10.0, 0.0), v(10.0, 10.0, 20.0));
+    let red = [0.85, 0.1, 0.1, 1.0];
+    let scene = Scene { items: vec![Item::new(&m, red)], ..Default::default() };
+    let base = Studio { ao: false, shadows: false, edges: false, ..Studio::default() };
+    let o = |s: Studio| RenderOptions { view: View::from_angles(20.0, 15.0), ..opts(View::Iso, Some(s)) };
+    let off = Studio { ground_reflection: 0.0, ..base.clone() };
+    let on = Studio { ground_reflection: 0.8, ground_roughness: 0.0, ..base };
+    let (a, ci) = render_info(&scene, &o(off.clone()));
+    let b = render(&scene, &o(on.clone()));
+    let info = ci.studio.as_ref().unwrap();
+    assert_eq!(info.rays.map(|r| r.1), Some(0), "no ground rays without ground reflection");
+    // pixels below the box's front corner on the ground
+    let oo = o(off);
+    let below = px(&ci, &oo, v(-10.0, -10.0, 0.0));
+    let redness = |img: &Image, (x, y): (u32, u32)| {
+        let p = img.pixel(x, y);
+        p[0] as f64 - p[2] as f64
+    };
+    let probe = (below.0 + 3, below.1 + 6);
+    assert!(redness(&b, probe) > redness(&a, probe) + 25.0, "{} vs {}", redness(&b, probe), redness(&a, probe));
+    // beside the mirror image nothing changes
+    let far = (4, probe.1);
+    assert!((redness(&b, far) - redness(&a, far)).abs() < 4.0);
+    // deterministic
+    assert_eq!(render(&scene, &o(on)), b);
+}
+
+#[test]
+fn ray_traced_reflections_show_other_parts() {
+    // a chrome ball beside a red box: with reflections the ball shows the red box
+    let ball = sphere(v(0.0, 0.0, 10.0), 10.0, 48);
+    let wall = boxm(v(14.0, -15.0, 0.0), v(18.0, 15.0, 30.0));
+    let red = [0.9, 0.1, 0.1, 1.0];
+    let scene = Scene {
+        items: vec![Item::new(&ball, GREY).with_material(Material::preset("chrome").unwrap()), Item::new(&wall, red)],
+        ..Default::default()
+    };
+    let base = Studio { ao: false, ground: false, edges: false, ..Studio::default() };
+    let o = |s: Studio| RenderOptions { view: View::from_angles(0.0, 10.0), ..opts(View::Iso, Some(s)) };
+    let (on, ci) = render_info(&scene, &o(base.clone()));
+    let off = render(&scene, &o(Studio { reflections: false, ..base }));
+    assert!(ci.studio.as_ref().unwrap().rays.is_some());
+    // red pixels on the ball (left of the box)
+    let oo = o(Studio::default());
+    let (x0, y0) = px(&ci, &oo, v(-10.0, 0.0, 20.0));
+    let (x1, y1) = px(&ci, &oo, v(10.0, 0.0, 0.0));
+    let reds = |img: &Image| {
+        let mut n = 0;
+        for y in y0..y1 {
+            for x in x0..x1 {
+                let p = img.pixel(x, y);
+                if p[0] as i32 > p[2] as i32 + 60 && p[0] > 90 {
+                    n += 1;
+                }
+            }
+        }
+        n
+    };
+    assert!(reds(&on) > 150, "{}", reds(&on));
+    assert!(reds(&off) < reds(&on) / 4, "{} {}", reds(&off), reds(&on));
+}
+
+#[test]
+fn anisotropy_stretches_the_highlight() {
+    // the key light from the camera on a sphere: a brushed finish around the z axis stretches
+    // the highlight along the meridians (vertical on screen)
+    let m = sphere(v(0.0, 0.0, 0.0), 10.0, 96);
+    let st = Studio {
+        lights: vec![Light::new(0.0, 20.0)],
+        environment: Environment::None,
+        ambient: 0.1,
+        shadows: false,
+        ao: false,
+        ground: false,
+        ..Studio::default()
+    };
+    let o = RenderOptions { view: View::from_angles(0.0, 20.0), ..opts(View::Iso, Some(st)) };
+    let grey = [0.5, 0.5, 0.5, 1.0];
+    let draw = |an: f32| {
+        let mt = Material { metalness: 1.0, roughness: 0.3, anisotropy: an, ..Material::PLASTIC };
+        lumas(&render(&Scene { items: vec![Item::new(&m, grey).with_material(mt)], ..Default::default() }, &o))
+    };
+    // second moments of the highlight's brightness: vertical / horizontal extent
+    let shape = |l: &[f64]| {
+        let w = o.width as usize;
+        let bg = lumas(&render(&Scene::default(), &o))[0];
+        let wt: Vec<f64> = l.iter().map(|v| if (v - bg).abs() > 2.0 { (v - 40.0).max(0.0) } else { 0.0 }).collect();
+        let n: f64 = wt.iter().sum();
+        let (mx, my) = wt
+            .iter()
+            .enumerate()
+            .fold((0.0, 0.0), |a, (i, q)| (a.0 + (i % w) as f64 * q / n, a.1 + (i / w) as f64 * q / n));
+        let (vx, vy) = wt.iter().enumerate().fold((0.0, 0.0), |a, (i, q)| {
+            (a.0 + ((i % w) as f64 - mx).powi(2) * q / n, a.1 + ((i / w) as f64 - my).powi(2) * q / n)
+        });
+        (vy / vx.max(1e-9)).sqrt()
+    };
+    let iso = shape(&draw(0.0));
+    let brushed = shape(&draw(0.9));
+    assert!((0.7..1.4).contains(&iso), "isotropic {iso}");
+    assert!(brushed > iso * 1.4, "brushed {brushed} isotropic {iso}");
+}
+
+#[test]
+fn rough_metal_keeps_its_brightness() {
+    // multiple-scattering compensation: a rough white metal is about as bright as a smooth
+    // one under the even overcast sky (without it, rough metals turn dark grey)
+    let m = sphere(v(0.0, 0.0, 10.0), 10.0, 48);
+    let white = [1.0, 1.0, 1.0, 1.0];
+    let st =
+        Studio { environment: Environment::Overcast, shadows: false, ao: false, ground: false, ..Studio::default() };
+    let o = opts(View::Iso, Some(st));
+    let mean = |r: f32| {
+        let mt = Material { metalness: 1.0, roughness: r, ..Material::PLASTIC };
+        let img = render(&Scene { items: vec![Item::new(&m, white).with_material(mt)], ..Default::default() }, &o);
+        let bg = to_u8(o.background);
+        let on: Vec<f64> = img
+            .rgba
+            .chunks_exact(4)
+            .filter(|p| p[..3] != bg[..3])
+            .map(|p| (p[0] as f64 + p[1] as f64 + p[2] as f64) / 3.0)
+            .collect();
+        on.iter().sum::<f64>() / on.len() as f64
+    };
+    let (smooth, rough) = (mean(0.1), mean(0.95));
+    assert!(rough > smooth * 0.85, "rough {rough} smooth {smooth}");
+}
+
+#[test]
+fn draft_quality_traces_no_rays() {
+    let m = sphere(v(0.0, 0.0, 10.0), 10.0, 24);
+    let scene = Scene {
+        items: vec![Item::new(&m, GREY).with_material(Material::preset("chrome").unwrap())],
+        ..Default::default()
+    };
+    let draft = Studio { quality: cad_render::Quality::Draft, ground_reflection: 0.0, ..Studio::default() };
+    let (_, ci) = render_info(&scene, &opts(View::Iso, Some(draft)));
+    assert_eq!(ci.studio.unwrap().rays, None);
+    let (_, ci) = render_info(&scene, &opts(View::Iso, Some(Studio::default())));
+    assert_eq!(ci.studio.unwrap().rays, Some((4, 4)));
 }

@@ -4,14 +4,21 @@
 //!   turntable: the model turns, the lights stay with the camera) and whose elevation is
 //!   measured from the xy plane (z up). The first light casts the shadows.
 //! * Materials ([`Material`]): metallic-roughness model per body (base colour from the model's
-//!   colours): GGX microfacet distribution, height-correlated Smith visibility, Schlick
-//!   Fresnel, Lambert diffuse; an optional clear coat (a second, smooth dielectric layer).
-//! * Environment ([`Environment`]): reflections and ambient light of an analytic studio: a sky
-//!   gradient, a ground bounce and softboxes, all spherical Gaussians (fixed relative to the
-//!   camera like the lights). Prefiltered radiance for a roughness and diffuse irradiance are
-//!   closed-form integrals of products of spherical Gaussians (no textures, no sampling); the
-//!   split-sum environment BRDF uses Karis' analytic fit. Ambient occlusion also occludes the
-//!   environment reflections.
+//!   colours, or the preset's own, e.g. the reflectance of gold): GGX microfacet
+//!   distribution (anisotropic for brushed metal), height-correlated Smith visibility, Schlick
+//!   Fresnel, Lambert diffuse, multiple-scattering energy compensation (rough metals keep
+//!   their brightness); an optional clear coat (a second, smooth dielectric layer). The same
+//!   model as three.js `MeshPhysicalMaterial` in the UI.
+//! * Environment ([`Environment`], [`crate::env`]): reflections and ambient light of a
+//!   procedural high dynamic range studio (dark walls, lit floor, rectangular softboxes),
+//!   fixed relative to the camera like the lights, prefiltered for the roughness (split sum
+//!   with a numerically computed DFG table). Ambient occlusion also occludes the environment
+//!   reflections.
+//! * Reflections of the scene ([`Studio::reflections`]): rays from glossy surfaces (roughness
+//!   below 0.6, a few per sample by [`Quality`]) are traced through a bounding volume
+//!   hierarchy of the opaque triangles: the model reflects itself and the ground with its
+//!   shadow. The ground mirrors the model ([`Studio::ground_reflection`], blurred by
+//!   [`Studio::ground_roughness`], fading with the height above the ground).
 //! * Shadows: an orthographic shadow map of the opaque (clipped) triangles along the first
 //!   light, filtered with percentage-closer soft shadows (blocker search, penumbra from the
 //!   distance between blocker and receiver, Vogel disk samples rotated per sample). The model
@@ -27,11 +34,14 @@
 //! * Mesh edge lines at reduced opacity (the shading shows the form), or none
 //!   ([`Studio::edges`]).
 //!
-//! No textures, no environment maps: everything is analytic. Deterministic (the sample
-//! rotations are fixed patterns), parallel over image rows.
+//! No textures and no image files: the environment is generated in code. Deterministic (the
+//! sample rotations are fixed patterns), parallel over image rows.
 
 use glam::DVec3;
 
+use crate::env::{Dfg, camera_azimuth, smith_vis};
+pub use crate::env::{ENV_SPECULAR_GAIN, EnvFn, EnvMaps, EnvSpec, Softbox, environment_spec, up_irradiance};
+use crate::rt::{Bvh, RtTri};
 use crate::{Camera, GBuf, RenderOptions, Target, background_at};
 
 /// Sample kinds of the G-buffer.
@@ -72,7 +82,8 @@ impl Light {
     }
 }
 
-/// Surface of a body (metallic-roughness model; the base colour is the body's colour).
+/// Surface of a body (metallic-roughness model; the base colour is the body's colour unless
+/// the material has its own, like the real metals).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Material {
     /// 0 = dielectric (plastic), 1 = metal (the base colour tints the reflection).
@@ -81,6 +92,12 @@ pub struct Material {
     pub roughness: f32,
     /// Strength of a smooth clear coat on top, 0..1.
     pub clearcoat: f32,
+    /// Brushed finish, 0..1: highlights stretch across the brushing (anisotropic GGX). The
+    /// brushing runs around the body's z axis (lathe turned look): around the walls and in
+    /// circles on faces across the axis.
+    pub anisotropy: f32,
+    /// Base colour (linear RGB) instead of the body's colour, e.g. the reflectance of a metal.
+    pub color: Option<[f32; 3]>,
 }
 
 impl Default for Material {
@@ -89,18 +106,46 @@ impl Default for Material {
     }
 }
 
+const fn mat(metalness: f32, roughness: f32, clearcoat: f32) -> Material {
+    Material { metalness, roughness, clearcoat, anisotropy: 0.0, color: None }
+}
+
+const fn metal(color: [f32; 3], roughness: f32) -> Material {
+    Material { metalness: 1.0, roughness, clearcoat: 0.0, anisotropy: 0.0, color: Some(color) }
+}
+
+/// Reflectance (F0, linear RGB) of real metals.
+pub mod f0 {
+    pub const ALUMINIUM: [f32; 3] = [0.913, 0.922, 0.924];
+    pub const CHROME: [f32; 3] = [0.55, 0.556, 0.554];
+    pub const STAINLESS: [f32; 3] = [0.65, 0.64, 0.62];
+    pub const TITANIUM: [f32; 3] = [0.542, 0.497, 0.449];
+    pub const GOLD: [f32; 3] = [1.0, 0.766, 0.336];
+    pub const COPPER: [f32; 3] = [0.955, 0.638, 0.538];
+    pub const BRASS: [f32; 3] = [0.91, 0.778, 0.423];
+}
+
 impl Material {
     /// Default of every body: matte plastic.
-    pub const PLASTIC: Material = Material { metalness: 0.0, roughness: 0.5, clearcoat: 0.0 };
+    pub const PLASTIC: Material = mat(0.0, 0.45, 0.0);
 
-    /// Named presets (`--material SEL=PRESET`, `preset = "…"` in a `render` block).
-    pub const PRESETS: [(&'static str, Material); 6] = [
+    /// Named presets (`--material SEL=PRESET`, `preset = "…"` in a `render` block; the UI has
+    /// the same table: `web/src/logic/studio.ts`).
+    pub const PRESETS: [(&'static str, Material); 14] = [
         ("plastic", Material::PLASTIC),
-        ("plastic_glossy", Material { metalness: 0.0, roughness: 0.2, clearcoat: 0.5 }),
-        ("rubber", Material { metalness: 0.0, roughness: 0.9, clearcoat: 0.0 }),
-        ("aluminium", Material { metalness: 1.0, roughness: 0.35, clearcoat: 0.0 }),
-        ("metal_brushed", Material { metalness: 1.0, roughness: 0.55, clearcoat: 0.0 }),
-        ("chrome", Material { metalness: 1.0, roughness: 0.08, clearcoat: 0.0 }),
+        ("plastic_satin", mat(0.0, 0.3, 0.0)),
+        ("plastic_glossy", mat(0.0, 0.12, 0.6)),
+        ("rubber", mat(0.0, 0.85, 0.0)),
+        ("ceramic", mat(0.0, 0.35, 1.0)),
+        ("aluminium", metal(f0::ALUMINIUM, 0.2)),
+        ("metal_brushed", Material { anisotropy: 0.8, ..metal(f0::ALUMINIUM, 0.22) }),
+        ("anodized", mat(1.0, 0.28, 0.0)),
+        ("chrome", metal(f0::CHROME, 0.04)),
+        ("stainless", metal(f0::STAINLESS, 0.12)),
+        ("titanium", metal(f0::TITANIUM, 0.25)),
+        ("gold", metal(f0::GOLD, 0.12)),
+        ("copper", metal(f0::COPPER, 0.18)),
+        ("brass", metal(f0::BRASS, 0.15)),
     ];
 
     pub fn preset(name: &str) -> Option<Material> {
@@ -120,18 +165,23 @@ impl Material {
             metalness: self.metalness.clamp(0.0, 1.0),
             roughness: self.roughness.clamp(0.0, 1.0),
             clearcoat: self.clearcoat.clamp(0.0, 1.0),
+            anisotropy: self.anisotropy.clamp(0.0, 1.0),
+            color: self.color.map(|c| c.map(|v| v.clamp(0.0, 1.0))),
         }
     }
 }
 
-/// What the surroundings of the model look like in reflections and ambient light.
+/// What the surroundings of the model look like in reflections and ambient light
+/// ([`crate::env::environment_spec`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Environment {
-    /// Sky gradient, ground bounce and three softboxes (top, left, back right): crisp
-    /// highlights on glossy and metal surfaces.
+    /// Dark studio with bright softboxes (top, key strip left, fill strip right): contrasty
+    /// reflections, metals look like metal.
     #[default]
     Studio,
-    /// Sky gradient and ground bounce only: soft, even light.
+    /// Light grey studio with large soft boxes: gentle reflections, low contrast.
+    Soft,
+    /// Sky gradient only: soft, even light.
     Overcast,
     /// No reflections of the surroundings: hemisphere ambient light only (like the classic
     /// studio look).
@@ -139,11 +189,12 @@ pub enum Environment {
 }
 
 impl Environment {
-    pub const NAMES: [&'static str; 3] = ["studio", "overcast", "none"];
+    pub const NAMES: [&'static str; 4] = ["studio", "soft", "overcast", "none"];
 
     pub fn from_name(s: &str) -> Option<Environment> {
         match s.trim().to_ascii_lowercase().as_str() {
             "studio" => Some(Environment::Studio),
+            "soft" => Some(Environment::Soft),
             "overcast" => Some(Environment::Overcast),
             "none" => Some(Environment::None),
             _ => None,
@@ -153,8 +204,51 @@ impl Environment {
     pub fn name(self) -> &'static str {
         match self {
             Environment::Studio => "studio",
+            Environment::Soft => "soft",
             Environment::Overcast => "overcast",
             Environment::None => "none",
+        }
+    }
+}
+
+/// Ray tracing effort of the studio look.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Quality {
+    /// No ray tracing: reflections of the environment only, no reflections of the model.
+    Draft,
+    /// Ray-traced reflections with few rays per sample.
+    #[default]
+    Normal,
+    /// More rays per sample: smoother glossy reflections (slower).
+    High,
+}
+
+impl Quality {
+    pub const NAMES: [&'static str; 3] = ["draft", "normal", "high"];
+
+    pub fn from_name(s: &str) -> Option<Quality> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "draft" => Some(Quality::Draft),
+            "normal" => Some(Quality::Normal),
+            "high" => Some(Quality::High),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Quality::Draft => "draft",
+            Quality::Normal => "normal",
+            Quality::High => "high",
+        }
+    }
+
+    /// Rays per sample for glossy surfaces and for the ground.
+    fn rays(self) -> (u32, u32) {
+        match self {
+            Quality::Draft => (0, 0),
+            Quality::Normal => (4, 4),
+            Quality::High => (8, 8),
         }
     }
 }
@@ -179,6 +273,14 @@ pub struct Studio {
     pub ao_strength: f64,
     pub ground: bool,
     pub ground_color: [f32; 4],
+    /// Mirror image of the model in the ground, 0 = none … 1 = strong (glossy floor).
+    pub ground_reflection: f64,
+    /// Blur of the ground reflection, 0 = sharp mirror … 1 = very blurred.
+    pub ground_roughness: f64,
+    /// Ray-traced reflections of the model in itself and of the ground with the model's
+    /// shadow (`false`: the environment only).
+    pub reflections: bool,
+    pub quality: Quality,
     /// Mesh edge lines of opaque bodies (at [`EDGE_ALPHA`] opacity); `false` hides them.
     pub edges: bool,
 }
@@ -197,6 +299,10 @@ impl Default for Studio {
             ao_strength: 1.0,
             ground: true,
             ground_color: [0.9, 0.905, 0.915, 1.0],
+            ground_reflection: 0.2,
+            ground_roughness: 0.3,
+            reflections: true,
+            quality: Quality::Normal,
             edges: true,
         }
     }
@@ -222,6 +328,9 @@ pub struct StudioInfo {
     pub ao_radius: Option<f64>,
     /// Shadow map size in texels (`None`: shadows off or nothing casts).
     pub shadow_map: Option<u32>,
+    /// Ray-traced reflection rays per sample: glossy surfaces, ground (`None`: no ray
+    /// tracing).
+    pub rays: Option<(u32, u32)>,
 }
 
 /// Direction towards a light at `az` (relative to the camera azimuth) and `el` degrees.
@@ -301,7 +410,7 @@ struct ShadowMap {
 const TILE: usize = 16;
 
 impl ShadowMap {
-    fn build(casters: &[[DVec3; 3]], light: DVec3, n: usize) -> Option<ShadowMap> {
+    fn build(casters: &[RtTri], light: DVec3, n: usize) -> Option<ShadowMap> {
         if casters.is_empty() {
             return None;
         }
@@ -310,7 +419,7 @@ impl ShadowMap {
         let ly = lz.cross(lx);
         let (mut lo, mut hi) = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
         for t in casters {
-            for p in t {
+            for p in &t.p {
                 let q = DVec3::new(p.dot(lx), p.dot(ly), p.dot(lz));
                 lo = lo.min(q);
                 hi = hi.max(q);
@@ -333,7 +442,7 @@ impl ShadowMap {
             dmin: lo.z,
         };
         for t in casters {
-            let q: [(f64, f64, f64); 3] = std::array::from_fn(|k| sm.coords(t[k]));
+            let q: [(f64, f64, f64); 3] = std::array::from_fn(|k| sm.coords(t.p[k]));
             sm.raster(q);
         }
         let nt = n.div_ceil(TILE);
@@ -425,6 +534,18 @@ impl ShadowMap {
         self.depth[y as usize * self.n + x as usize]
     }
 
+    /// Lit fraction with 4 taps around the point (reflections: cheap, slightly soft).
+    fn visibility_fast(&self, p: DVec3, n: DVec3, ndl: f64) -> f64 {
+        let p = p + n * self.texel * (1.0 + 1.5 * (1.0 - ndl.clamp(0.0, 1.0)));
+        let (x, y, d) = self.coords(p);
+        let bias = self.texel * 3.0;
+        let lit = [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)]
+            .iter()
+            .filter(|(ox, oy)| self.at(x + ox, y + oy) as f64 >= d - bias)
+            .count();
+        lit as f64 / 4.0
+    }
+
     /// Lit fraction (0..1) of a receiver at `p` with unit normal `n`, `ndl` = n · light.
     fn visibility(&self, p: DVec3, n: DVec3, ndl: f64, tan_theta: f64, phi: f64) -> f64 {
         // normal offset against acne, more where the light grazes the surface
@@ -481,30 +602,6 @@ impl ShadowMap {
     }
 }
 
-/// Factor of the environment reflections per unit of `ambient` (radiance as in
-/// [`environment_spec`]). The diffuse environment light is normalised instead: a white surface
-/// facing up receives `ambient` (as the hemisphere light of the classic studio look).
-pub const ENV_SPECULAR_GAIN: f64 = 2.5;
-
-/// A spherical Gaussian lobe of the environment: radiance `amp · exp(sharpness · (ω·dir − 1))`.
-/// Direction as for lights: azimuth relative to the camera, elevation above the xy plane.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct EnvLobe {
-    pub azimuth: f64,
-    pub elevation: f64,
-    pub sharpness: f64,
-    /// Linear RGB radiance at the centre.
-    pub amp: [f64; 3],
-}
-
-/// The analytic environment: a constant radiance plus lobes (the UI builds its environment
-/// map from the same numbers, `web/src/logic/studio.ts`).
-#[derive(Debug, Clone, PartialEq)]
-pub struct EnvSpec {
-    pub constant: [f64; 3],
-    pub lobes: Vec<EnvLobe>,
-}
-
 /// sRGB (0..1) → linear.
 pub fn srgb_to_linear(c: f32) -> f32 {
     if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
@@ -558,149 +655,444 @@ pub fn neutral_tone(c: [f64; 3]) -> [f64; 3] {
     })
 }
 
-/// The environment of `env` (`ground`: linear colour of the ground bounce).
-pub fn environment_spec(env: Environment, ground: [f64; 3]) -> EnvSpec {
-    // a tall strip softbox: lobes stacked from below the horizon to 45° above
-    let strip = |az: f64, a: f64| {
-        [-30.0, -10.0, 10.0, 30.0, 50.0].map(|el| EnvLobe { azimuth: az, elevation: el, sharpness: 60.0, amp: [a; 3] })
-    };
-    let bounce = |k: f64| EnvLobe { azimuth: 0.0, elevation: -90.0, sharpness: 1.2, amp: ground.map(|g| g * k) };
-    match env {
-        Environment::Studio => EnvSpec {
-            constant: [0.08, 0.08, 0.08],
-            lobes: vec![
-                EnvLobe { azimuth: 0.0, elevation: 90.0, sharpness: 2.0, amp: [0.50, 0.51, 0.54] },
-                bounce(0.6),
-                // softboxes: a large one above behind the model (seen in the top faces) and two
-                // tall strips left and right (seen in the side faces)
-                EnvLobe { azimuth: 180.0, elevation: 60.0, sharpness: 12.0, amp: [3.5, 3.5, 3.5] },
-            ]
-            .into_iter()
-            .chain(strip(-70.0, 3.0))
-            .chain(strip(115.0, 2.0))
-            .collect(),
-        },
-        Environment::Overcast => EnvSpec {
-            constant: [0.25, 0.25, 0.25],
-            lobes: vec![
-                EnvLobe { azimuth: 0.0, elevation: 90.0, sharpness: 0.8, amp: [0.74, 0.75, 0.78] },
-                bounce(0.6),
-            ],
-        },
-        Environment::None => EnvSpec { constant: [0.0; 3], lobes: Vec::new() },
-    }
+/// Smallest roughness (as three.js: avoids sub-pixel highlights).
+const MIN_ROUGHNESS: f64 = 0.0525;
+/// Roughness of the clear coat.
+const CLEARCOAT_ROUGHNESS: f64 = 0.05;
+/// Rougher surfaces reflect the environment only (their reflections of the scene would be
+/// too blurred to show and too noisy with few rays).
+const RT_MAX_ROUGHNESS: f64 = 0.6;
+
+/// What the shading needs to know about a scene item.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct ItemInfo {
+    pub material: Material,
+    /// Linear base colour of the item (its colour, or the material's own).
+    pub albedo: [f64; 3],
+    /// The item's z axis and origin in the world (brushing of anisotropic materials).
+    pub axis: DVec3,
+    pub origin: DVec3,
 }
 
-/// Irradiance of `spec` on a surface facing up, divided by π (1 for a uniform radiance 1).
-pub fn up_irradiance(spec: &EnvSpec) -> f64 {
-    let env = Env::new(spec, DVec3::new(0.0, 1.0, 0.0), DVec3::Z);
-    let e = env.irradiance(DVec3::Z);
-    (0.2126 * e[0] + 0.7152 * e[1] + 0.0722 * e[2]) / std::f64::consts::PI
-}
-
-/// `∫ exp(l1 (ω·d1 − 1)) exp(l2 (ω·d2 − 1)) dω` over the sphere (unit `d1`, `d2`).
-fn sg_product(d1: DVec3, l1: f64, d2: DVec3, l2: f64) -> f64 {
-    let m = (d1 * l1 + d2 * l2).length();
-    if m < 1e-6 {
-        return 4.0 * std::f64::consts::PI * (-l1 - l2).exp();
-    }
-    let e = m - l1 - l2;
-    if e < -18.0 {
-        return 0.0;
-    }
-    std::f64::consts::TAU * e.exp() * (1.0 - (-2.0 * m).exp()) / m
-}
-
-/// An [`EnvSpec`] placed for one camera: lobe directions in world space (linear radiance).
-pub struct Env {
-    constant: [f64; 3],
-    lobes: Vec<(DVec3, f64, [f64; 3])>,
-}
-
-/// Sharpness and amplitude of the cosine lobe as a spherical Gaussian.
-const COS_SHARP: f64 = 2.133;
-const COS_AMP: f64 = 1.17;
-
-impl Env {
-    /// The environment for a camera with viewing direction `cam_dir` and screen up `cam_up`.
-    pub fn new(spec: &EnvSpec, cam_dir: DVec3, cam_up: DVec3) -> Env {
-        let lobes = spec
-            .lobes
-            .iter()
-            .map(|l| (light_direction(cam_dir, cam_up, l.azimuth, l.elevation), l.sharpness, l.amp))
-            .collect();
-        Env { constant: spec.constant, lobes }
-    }
-
-    /// Radiance seen in direction `d`.
-    pub fn radiance(&self, d: DVec3) -> [f64; 3] {
-        let mut c = self.constant;
-        for (dir, l, a) in &self.lobes {
-            let k = (l * (d.dot(*dir) - 1.0)).exp();
-            for i in 0..3 {
-                c[i] += a[i] * k;
-            }
+impl ItemInfo {
+    pub fn new(material: Material, color: [f32; 4], transform: &glam::DMat4) -> ItemInfo {
+        let material = material.clamped();
+        let albedo = match material.color {
+            Some(c) => c.map(|v| v as f64),
+            None => [color[0], color[1], color[2]].map(|v| srgb_to_linear(v) as f64),
+        };
+        ItemInfo {
+            material,
+            albedo,
+            axis: transform.transform_vector3(DVec3::Z).normalize_or(DVec3::Z),
+            origin: transform.transform_point3(DVec3::ZERO),
         }
-        c
-    }
-
-    /// Irradiance on a surface with normal `n` (`∫ L(ω) max(0, n·ω) dω`).
-    pub fn irradiance(&self, n: DVec3) -> [f64; 3] {
-        let mut c = self.constant.map(|v| v * std::f64::consts::PI);
-        for (dir, l, a) in &self.lobes {
-            let k = COS_AMP * sg_product(*dir, *l, n, COS_SHARP);
-            for i in 0..3 {
-                c[i] += a[i] * k;
-            }
-        }
-        c
-    }
-
-    /// Radiance around the reflection direction `r`, averaged over the specular lobe of
-    /// roughness `alpha` (GGX lobe as a normalised spherical Gaussian).
-    pub fn prefiltered(&self, r: DVec3, alpha: f64) -> [f64; 3] {
-        let lg = (0.5 / (alpha * alpha).max(1e-6)).clamp(0.25, 2e4);
-        let norm = lg / (std::f64::consts::TAU * (1.0 - (-2.0 * lg).exp()));
-        let mut c = self.constant;
-        for (dir, l, a) in &self.lobes {
-            let k = norm * sg_product(*dir, *l, r, lg);
-            for i in 0..3 {
-                c[i] += a[i] * k;
-            }
-        }
-        c
     }
 }
 
-/// Analytic fit of the split-sum environment BRDF (Karis): `(scale, bias)` of F0.
-fn env_brdf(n_dot_v: f64, roughness: f64) -> (f64, f64) {
-    let c0 = [-1.0, -0.0275, -0.572, 0.022];
-    let c1 = [1.0, 0.0425, 1.04, -0.04];
-    let r: [f64; 4] = std::array::from_fn(|i| roughness * c0[i] + c1[i]);
-    let a004 = (r[0] * r[0]).min((-9.28 * n_dot_v).exp2()) * r[0] + r[1];
-    (-1.04 * a004 + r[2], 1.04 * a004 + r[3])
+/// Direction in which the highlights of a brushed surface stretch (unit, in the tangent plane
+/// of `n`): across the brushing, which runs around `axis` through `origin` — on walls around
+/// the axis, on faces across the axis in circles (a lathe-turned or spun finish). The UI uses
+/// the same rule (`brushFrame` in `web/src/view/materials.ts`).
+pub fn brush_stretch(n: DVec3, p: DVec3, axis: DVec3, origin: DVec3) -> DVec3 {
+    let r = p - origin;
+    let radial = (r - axis * r.dot(axis)).normalize_or_zero();
+    let groove = axis.cross(n) + axis.cross(radial) * 0.25;
+    let groove = groove - n * groove.dot(n);
+    let groove = if groove.length_squared() < 1e-10 { n.any_orthonormal_vector() } else { groove.normalize() };
+    n.cross(groove)
 }
 
-/// GGX distribution × height-correlated Smith visibility (`alpha` = roughness²).
+/// Widening of the specular lobe for the lights: they act like round area lights of about
+/// 10° radius (Karis' sphere light approximation: `alpha + tan(radius) / 2`, energy kept),
+/// so smooth metals show soft discs instead of pinpoint highlights. The UI patches three.js
+/// the same way (`LIGHT_SPREAD` in `web/src/view/materials.ts`).
+pub const LIGHT_SPREAD: f64 = 0.088;
+
+/// GGX distribution of the lights (widened by [`LIGHT_SPREAD`]) × height-correlated Smith
+/// visibility (`alpha` = roughness²).
 fn ggx_dv(n_dot_h: f64, n_dot_l: f64, n_dot_v: f64, alpha: f64) -> f64 {
-    let a2 = alpha * alpha;
+    let aw = (alpha + LIGHT_SPREAD).min(1.0);
+    let a2 = aw * aw;
     let d = n_dot_h * n_dot_h * (a2 - 1.0) + 1.0;
-    let dist = a2 / (std::f64::consts::PI * d * d);
-    let gv = n_dot_l * (n_dot_v * n_dot_v * (1.0 - a2) + a2).sqrt();
-    let gl = n_dot_v * (n_dot_l * n_dot_l * (1.0 - a2) + a2).sqrt();
-    dist * 0.5 / (gv + gl).max(1e-9)
+    let dist = a2 / (std::f64::consts::PI * d * d) * (alpha / aw).powi(2);
+    dist * smith_vis(n_dot_l, n_dot_v, alpha)
+}
+
+/// Anisotropic GGX (widened like [`ggx_dv`]) × Smith visibility (Filament, as three.js):
+/// roughness `at` along the stretch direction `t`, `ab` along `b`.
+#[allow(clippy::too_many_arguments)]
+fn ggx_dv_aniso(at: f64, ab: f64, t: DVec3, b: DVec3, n: DVec3, l: DVec3, v: DVec3, h: DVec3) -> f64 {
+    let (n_dot_l, n_dot_v, n_dot_h) = (n.dot(l), n.dot(v), n.dot(h));
+    let (atw, abw) = ((at + LIGHT_SPREAD).min(1.0), (ab + LIGHT_SPREAD).min(1.0));
+    let a2 = atw * abw;
+    let q = DVec3::new(abw * t.dot(h), atw * b.dot(h), a2 * n_dot_h);
+    let w2 = a2 / q.length_squared().max(1e-30);
+    let d = a2 * w2 * w2 / std::f64::consts::PI * (at * ab / a2);
+    let gv = n_dot_l * DVec3::new(at * t.dot(v), ab * b.dot(v), n_dot_v).length();
+    let gl = n_dot_v * DVec3::new(at * t.dot(l), ab * b.dot(l), n_dot_l).length();
+    d * 0.5 / (gv + gl).max(1e-12)
 }
 
 fn schlick(f0: f64, v_dot_h: f64) -> f64 {
     f0 + (1.0 - f0) * (1.0 - v_dot_h).clamp(0.0, 1.0).powi(5)
 }
 
-/// Smallest roughness (as three.js: avoids sub-pixel highlights).
-const MIN_ROUGHNESS: f64 = 0.0525;
-/// Roughness of the clear coat.
-const CLEARCOAT_ROUGHNESS: f64 = 0.05;
+/// Half vector of the GGX distribution for `(u1, u2)` around `n` (frame `t1`, `t2`).
+fn ggx_half(u1: f64, u2: f64, alpha: f64, n: DVec3, t1: DVec3, t2: DVec3) -> DVec3 {
+    let a2 = alpha * alpha;
+    let cos_t = ((1.0 - u1) / (1.0 + (a2 - 1.0) * u1)).max(0.0).sqrt();
+    let sin_t = (1.0 - cos_t * cos_t).max(0.0).sqrt();
+    let phi = std::f64::consts::TAU * u2;
+    t1 * (sin_t * phi.cos()) + t2 * (sin_t * phi.sin()) + n * cos_t
+}
 
-/// Shades the opaque samples of `t` from the G-buffer (see the module docs).
+/// One surface point to shade.
+struct Surf {
+    p: DVec3,
+    /// Unit normal facing the viewer.
+    n: DVec3,
+    /// Unit vector towards the viewer.
+    view: DVec3,
+    /// Linear base colour.
+    base: [f64; 3],
+    m: Material,
+    /// Stretch direction of a brushed material.
+    stretch: Option<DVec3>,
+    ao: f64,
+    /// Rotation of the shadow filter pattern (`None`: a cheap 4-tap shadow, for reflections).
+    phi: Option<f64>,
+    /// The ground: matte, no specular reflection.
+    ground: bool,
+}
+
+/// Lights, shadows and environment of one rendering.
+struct Ctx<'a> {
+    lights: &'a [(DVec3, [f64; 3])],
+    light_w: f64,
+    sm: Option<&'a ShadowMap>,
+    tan_theta: f64,
+    maps: Option<&'a EnvMaps>,
+    /// cos, sin of the rotation world → environment (camera at azimuth 0).
+    rot: (f64, f64),
+    env_spec_w: f64,
+    env_diff_w: f64,
+    /// Environment `none`: hemisphere light (ambient, ground bounce).
+    amb: f64,
+    bounce: [f64; 3],
+    dfg: &'static Dfg,
+    items: &'a [ItemInfo],
+    tracer: Option<&'a Tracer<'a>>,
+}
+
+impl Ctx<'_> {
+    fn to_env(&self, d: DVec3) -> DVec3 {
+        let (c, s) = self.rot;
+        DVec3::new(d.x * c - d.y * s, d.x * s + d.y * c, d.z)
+    }
+
+    /// Environment radiance as reflections see it (roughness 0 = mirror).
+    fn env_reflection(&self, d: DVec3, rough: f64) -> [f64; 3] {
+        match self.maps {
+            Some(m) => m.specular(self.to_env(d), rough).map(|v| v * self.env_spec_w),
+            None => [0.0; 3],
+        }
+    }
+
+    /// Linear outgoing radiance of `s`; `trace` = (sample offset, rotation, rays of glossy
+    /// surfaces wanted) traces the reflections of the scene. Second: the part of glossy
+    /// (several rays) reflections that differs from the environment (noisy, the caller
+    /// smooths it; `Some([NAN; 3])`: glossy, but no rays traced for this sample).
+    fn shade(&self, s: &Surf, trace: Option<(f64, f64, bool)>) -> ([f64; 3], Option<[f64; 3]>) {
+        let (n, view, m) = (s.n, s.view, &s.m);
+        let n_dot_v = n.dot(view).clamp(1e-4, 1.0);
+        let metal = m.metalness as f64;
+        let rough = (m.roughness as f64).max(MIN_ROUGHNESS);
+        let alpha = rough * rough;
+        let base = s.base;
+        let f0: [f64; 3] = std::array::from_fn(|k| 0.04 + (base[k] - 0.04) * metal);
+        let diffuse: [f64; 3] = base.map(|c| c * (1.0 - metal));
+        let (da, db) = self.dfg.lookup(rough, n_dot_v);
+        let ess = (da + db).clamp(1e-3, 1.0);
+        let an = m.anisotropy as f64;
+        // brushed: stretch direction t (roughness rises along it), b across it
+        let aniso = s.stretch.filter(|_| an > 0.0 && !s.ground).map(|t| {
+            let at = alpha + (1.0 - alpha) * an * an;
+            (t, n.cross(t), at)
+        });
+        let cc = if s.ground { 0.0 } else { m.clearcoat as f64 };
+        let direct_ao = 1.0 - 0.55 * (1.0 - s.ao);
+        let mut c = [0.0f64; 3];
+        let mut coat = [0.0f64; 3];
+        let mut refl: Option<[f64; 3]> = None;
+        for (li, (l, radiance)) in self.lights.iter().enumerate() {
+            let n_dot_l = n.dot(*l);
+            if n_dot_l <= 0.0 {
+                continue;
+            }
+            let vis = match (self.sm, s.phi) {
+                (Some(sm), Some(phi)) if li == 0 => sm.visibility(s.p, n, n_dot_l, self.tan_theta, phi),
+                (Some(sm), None) if li == 0 => sm.visibility_fast(s.p, n, n_dot_l),
+                _ => 1.0,
+            };
+            if vis <= 0.0 {
+                continue;
+            }
+            let h = (*l + view).normalize_or_zero();
+            let (n_dot_h, v_dot_h) = (n.dot(h).max(0.0), view.dot(h).max(0.0));
+            let e = self.light_w * n_dot_l * vis * direct_ao;
+            let dv = if s.ground {
+                0.0
+            } else {
+                match aniso {
+                    Some((t, b, at)) => ggx_dv_aniso(at, alpha, t, b, n, *l, view, h),
+                    None => ggx_dv(n_dot_h, n_dot_l, n_dot_v, alpha),
+                }
+            };
+            let fc = (1.0 - v_dot_h).clamp(0.0, 1.0).powi(5);
+            for k in 0..3 {
+                let f = f0[k] + (1.0 - f0[k]) * fc;
+                // multiple-scattering compensation (Turquin), as three.js
+                let comp = 1.0 + f0[k] * (1.0 / ess - 1.0);
+                c[k] += (diffuse[k] / std::f64::consts::PI * (1.0 - f) + dv * f * comp) * radiance[k] * e;
+            }
+            if cc > 0.0 {
+                let dc = ggx_dv(n_dot_h, n_dot_l, n_dot_v, CLEARCOAT_ROUGHNESS.max(MIN_ROUGHNESS).powi(2));
+                let f = schlick(0.04, v_dot_h);
+                for k in 0..3 {
+                    coat[k] += dc * f * radiance[k] * e;
+                }
+            }
+        }
+        match self.maps {
+            Some(maps) => {
+                let irr = maps.irradiance(self.to_env(n));
+                // reflection direction; brushed: around the bent normal (Filament)
+                let nb = match aniso {
+                    Some((_, b, _)) => {
+                        let bn = b.cross(view).cross(b).normalize_or(n);
+                        let k = (1.0 - an * (1.0 - rough)).powi(4);
+                        (bn + (n - bn) * k).normalize_or(n)
+                    }
+                    None => n,
+                };
+                let r = (nb * (2.0 * nb.dot(view)) - view).normalize_or(n);
+                let mut spec_ao = s.ao;
+                let mut corr = None;
+                let pre = if s.ground {
+                    [0.0; 3]
+                } else {
+                    let env = self.env_reflection(r, rough);
+                    match (self.tracer, trace) {
+                        (Some(tr), Some((u, phi, take))) if rough < RT_MAX_ROUGHNESS => {
+                            match tr.glossy(self, s.p, n, view, r, alpha, u, phi, take) {
+                                // one mirror ray: exact, no noise
+                                Glossy::Mirror(c) => {
+                                    spec_ao = 1.0;
+                                    std::array::from_fn(|k| (env[k] * s.ao + c[k]).max(0.0))
+                                }
+                                Glossy::Rays(c) => {
+                                    corr = Some(c);
+                                    env
+                                }
+                                Glossy::Skipped => {
+                                    corr = Some([f64::NAN; 3]);
+                                    env
+                                }
+                                Glossy::None => env,
+                            }
+                        }
+                        _ => env,
+                    }
+                };
+                let ems = 1.0 - ess;
+                let fms = |fss: f64, fr: f64| {
+                    let favg = fr + (1.0 - fr) / 21.0;
+                    fss * favg / (1.0 - ems * favg) * ems
+                };
+                for k in 0..3 {
+                    let (fss_d, fss_m) = (0.04 * da + db, base[k] * da + db);
+                    let (ms_d, ms_m) = (fms(fss_d, 0.04), fms(fss_m, base[k]));
+                    let single = fss_d + (fss_m - fss_d) * metal;
+                    let multi = ms_d + (ms_m - ms_d) * metal;
+                    let spec = if s.ground {
+                        0.0
+                    } else {
+                        pre[k] * single * spec_ao + multi * irr[k] / std::f64::consts::PI * self.env_spec_w * s.ao
+                    };
+                    if let Some(cr) = corr {
+                        // the ambient occlusion of the environment part stays
+                        refl.get_or_insert([0.0; 3])[k] = cr[k] * single;
+                    }
+                    let dif =
+                        diffuse[k] * (1.0 - fss_d - ms_d) * irr[k] / std::f64::consts::PI * self.env_diff_w * s.ao;
+                    c[k] += spec + dif;
+                }
+                if cc > 0.0 {
+                    let cr = CLEARCOAT_ROUGHNESS.max(MIN_ROUGHNESS);
+                    let (ca, cb) = self.dfg.lookup(cr, n_dot_v);
+                    let rc = (n * (2.0 * n.dot(view)) - view).normalize_or(n);
+                    let pc = self.env_reflection(rc, cr);
+                    for k in 0..3 {
+                        coat[k] += pc[k] * (0.04 * ca + cb) * s.ao;
+                    }
+                }
+            }
+            None => {
+                let up = 0.5 + 0.5 * n.z;
+                for k in 0..3 {
+                    c[k] += diffuse[k] * self.amb * (self.bounce[k] + (1.0 - self.bounce[k]) * up) * s.ao;
+                }
+            }
+        }
+        if cc > 0.0 {
+            let fc = schlick(0.04, n_dot_v);
+            for k in 0..3 {
+                c[k] = c[k] * (1.0 - cc * fc) + cc * coat[k];
+                if let Some(r) = refl.as_mut() {
+                    r[k] *= 1.0 - cc * fc;
+                }
+            }
+        }
+        (c, refl)
+    }
+}
+
+/// Roughness of the environment lookups of reflection rays (the floor in reflections).
+const GROUND_ENV_ROUGHNESS: f64 = 0.15;
+
+/// The ground as reflections see it.
+struct GroundInfo {
+    z: f64,
+    center: DVec3,
+    /// Radii where it starts and ends fading into the environment.
+    fade: (f64, f64),
+}
+
+/// Result of [`Tracer::glossy`].
+enum Glossy {
+    /// No rays (none wanted for this roughness).
+    None,
+    /// One mirror ray: the correction of the environment.
+    Mirror([f64; 3]),
+    /// Several rays: the (noisy) correction of the environment.
+    Rays([f64; 3]),
+    /// Glossy, but this sample traces no rays (its neighbours do).
+    Skipped,
+}
+
+/// Rays through the scene for the reflections.
+struct Tracer<'a> {
+    bvh: &'a Bvh,
+    tris: &'a [RtTri],
+    /// Offset of ray origins from surfaces (mm).
+    eps: f64,
+    /// Rays per sample: glossy surfaces, ground.
+    rays: (u32, u32),
+    /// Glossy and ground rays only from every second sample in x and y.
+    sparse: bool,
+    ground: Option<GroundInfo>,
+    /// Share of the ground's light that the key light's shadow takes away.
+    shadow_share: f64,
+}
+
+impl Tracer<'_> {
+    /// Reflection of the scene around `r` for a surface of roughness `alpha` (squared), as a
+    /// correction of the prefiltered environment: the mean of (traced radiance − environment
+    /// radiance) over the rays (a control variate: where a ray sees what the environment
+    /// shows, e.g. the unshadowed floor, it adds no noise). Several rays only if `take`.
+    #[allow(clippy::too_many_arguments)]
+    fn glossy(
+        &self,
+        ctx: &Ctx,
+        p: DVec3,
+        n: DVec3,
+        view: DVec3,
+        r: DVec3,
+        alpha: f64,
+        u: f64,
+        phi: f64,
+        take: bool,
+    ) -> Glossy {
+        let k = if alpha < 0.0064 { 1 } else { self.rays.0 };
+        if k == 0 {
+            return Glossy::None;
+        }
+        if k > 1 && !take {
+            return Glossy::Skipped;
+        }
+        let o = p + n * self.eps;
+        let (t1, t2) = n.any_orthonormal_pair();
+        let mut sum = [0.0f64; 3];
+        for i in 0..k {
+            let d = if k == 1 {
+                r
+            } else {
+                let u1 = ((i as f64 + u) / k as f64).fract();
+                let u2 = (i as f64 * 0.618_034 + phi).fract();
+                let h = ggx_half(u1, u2, alpha, n, t1, t2);
+                let l = h * (2.0 * view.dot(h)) - view;
+                if l.dot(n) <= 1e-3 {
+                    continue;
+                }
+                l.normalize()
+            };
+            if let Some(c) = self.radiance(ctx, o, d) {
+                let e = ctx.env_reflection(d, GROUND_ENV_ROUGHNESS);
+                for q in 0..3 {
+                    sum[q] += c[q] - e[q];
+                }
+            }
+        }
+        let c = sum.map(|v| v / k as f64);
+        if k > 1 { Glossy::Rays(c) } else { Glossy::Mirror(c) }
+    }
+
+    /// Radiance along the ray `o + t d`: the model or the ground with the model's shadow
+    /// (`None`: the environment).
+    fn radiance(&self, ctx: &Ctx, o: DVec3, d: DVec3) -> Option<[f64; 3]> {
+        let tg = self.ground.as_ref().and_then(|g| (d.z < -1e-6 && o.z > g.z).then(|| (g.z - o.z) / d.z));
+        if let Some(h) = self.bvh.intersect(o, d, 0.0, tg.unwrap_or(f64::INFINITY)) {
+            return Some(self.shade_hit(ctx, h.tri as usize, h.u, h.v, d));
+        }
+        let (g, t) = (self.ground.as_ref()?, tg?);
+        let q = o + d * t;
+        let fade = smoothstep(g.fade.0, g.fade.1, (DVec3::new(q.x, q.y, 0.0) - g.center).length());
+        if fade >= 1.0 {
+            return None;
+        }
+        let env = ctx.env_reflection(d, GROUND_ENV_ROUGHNESS);
+        let vis = match (ctx.sm, ctx.lights.first()) {
+            (Some(sm), Some((l, _))) if l.z > 0.0 => sm.visibility_fast(q, DVec3::Z, l.z),
+            _ => 1.0,
+        };
+        let k = 1.0 - self.shadow_share * (1.0 - vis) * (1.0 - fade);
+        Some(env.map(|v| v * k))
+    }
+
+    /// Shaded hit on triangle `tri` (barycentric `u`, `v`) seen along `d`.
+    fn shade_hit(&self, ctx: &Ctx, tri: usize, u: f64, v: f64, d: DVec3) -> [f64; 3] {
+        let t = &self.tris[tri];
+        let w0 = 1.0 - u - v;
+        let p = t.p[0] * w0 + t.p[1] * u + t.p[2] * v;
+        let mut ng = (t.p[1] - t.p[0]).cross(t.p[2] - t.p[0]).normalize_or(DVec3::Z);
+        if ng.dot(d) > 0.0 {
+            ng = -ng;
+        }
+        let mut n = (t.n[0] * w0 + t.n[1] * u + t.n[2] * v).normalize_or(ng);
+        if n.dot(ng) < 0.0 {
+            n = -n;
+        }
+        let info = &ctx.items[t.item as usize];
+        let stretch = (info.material.anisotropy > 0.0).then(|| brush_stretch(n, p, info.axis, info.origin));
+        let s =
+            Surf { p, n, view: -d, base: info.albedo, m: info.material, stretch, ao: 1.0, phi: None, ground: false };
+        ctx.shade(&s, None).0
+    }
+}
+
+/// Shades the opaque samples of `t` from the G-buffer (see the module docs). `tris`: the
+/// opaque (clipped) triangles, `items`: per scene item.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn shade(
     t: &mut Target,
@@ -708,7 +1100,8 @@ pub(crate) fn shade(
     cam: &Camera,
     opts: &RenderOptions,
     st: &Studio,
-    casters: &[[DVec3; 3]],
+    tris: &[RtTri],
+    items: &[ItemInfo],
     bounds: Option<(DVec3, DVec3)>,
 ) -> StudioInfo {
     let (w, h) = (t.w, t.h);
@@ -865,45 +1258,64 @@ pub(crate) fn shade(
 
     // Shadow map along the first light.
     let sm_size = 2048usize;
-    let sm = if st.shadows && !lights.is_empty() && light.z > -0.99 {
-        ShadowMap::build(casters, light, sm_size)
-    } else {
-        None
-    };
+    let sm =
+        if st.shadows && !lights.is_empty() && light.z > -0.99 { ShadowMap::build(tris, light, sm_size) } else { None };
     let tan_theta = (st.shadow_softness.clamp(0.0, 1.0) * MAX_LIGHT_RADIUS_DEG).to_radians().tan();
 
-    // Lighting (linear light).
+    // Environment.
     let amb = st.ambient.clamp(0.0, 1.0);
     let light_w = (1.0 - amb) * st.light_intensity.max(0.0);
     let gc = st.ground_color;
     let ground_lin = [gc[0], gc[1], gc[2]].map(|c| srgb_to_linear(c) as f64);
     let spec_env = environment_spec(st.environment, ground_lin);
-    let env = Env::new(&spec_env, cam.dir, cam.up);
+    let maps = (st.environment != Environment::None).then(|| EnvMaps::cached(&spec_env));
     let env_spec_w = amb * ENV_SPECULAR_GAIN;
     let env_diff_w = amb / up_irradiance(&spec_env).max(1e-6);
-    let reflections = st.environment != Environment::None;
-    // hemisphere light of `Environment::None` (the classic studio look)
-    let sky = [1.0f64, 1.0, 1.0];
-    let bounce: [f64; 3] = std::array::from_fn(|k| 0.35 + 0.4 * ground_lin[k]);
+    let cam_az = camera_azimuth(cam.dir, cam.up);
     let fade = (diag * 0.55, diag * 1.5);
     let center_xy = DVec3::new(center.x, center.y, 0.0);
-    let shadow_on_ground = |p: DVec3| -> f64 {
-        // the ground's shadow also fades with the ground
-        let r = (DVec3::new(p.x, p.y, 0.0) - center_xy).length();
-        smoothstep(fade.0, fade.1, r)
+
+    // Ray tracing: reflections of the scene in glossy surfaces and in the ground.
+    let (rays_surf, rays_ground) = st.quality.rays();
+    let rays = (
+        if st.reflections && maps.is_some() { rays_surf } else { 0 },
+        if st.ground_reflection > 0.0 && ground_z.is_some() { rays_ground.max(1) } else { 0 },
+    );
+    let bvh = (rays != (0, 0) && !tris.is_empty()).then(|| Bvh::build(tris));
+    let tracer = bvh.as_ref().map(|bvh| Tracer {
+        bvh,
+        tris,
+        eps: diag * 2e-4,
+        rays,
+        sparse: st.quality != Quality::High,
+        ground: ground_z.map(|z| GroundInfo { z, center: center_xy, fade }),
+        shadow_share: if lights.is_empty() { 0.0 } else { (1.0 - amb).clamp(0.0, 1.0) * 0.85 },
+    });
+    let tracer_sparse = tracer.as_ref().is_some_and(|t| t.sparse);
+    let ctx = Ctx {
+        lights: &lights,
+        light_w,
+        sm: sm.as_ref(),
+        tan_theta,
+        maps: maps.as_deref(),
+        rot: ((-cam_az).cos(), (-cam_az).sin()),
+        env_spec_w,
+        env_diff_w,
+        amb,
+        bounce: std::array::from_fn(|k| 0.35 + 0.4 * ground_lin[k]),
+        dfg: Dfg::get(),
+        items,
+        tracer: tracer.as_ref(),
     };
-    let srgb = SrgbTable::new();
+
+    // Lighting (linear light); glossy reflections of the scene separately in `refl`.
+    let mut shaded = vec![([0.0f32; 3], [0.0f32; 4]); w * h];
     {
-        let (g, ao, sm) = (&*g, &ao, &sm);
-        let depth = &t.depth;
-        let gdepth = &gdepth;
-        let (lights, env, srgb) = (&lights, &env, &srgb);
-        par_rows(&mut t.color, w, |y0, rows| {
+        let (g, ao) = (&*g, &ao);
+        let (depth, gdepth, ctx) = (&t.depth, &gdepth, &ctx);
+        par_rows(&mut shaded, w, |y0, rows| {
             // the albedo changes rarely along a row: convert it once per change
             let mut last_albedo = ([f32::NAN; 3], [0.0f64; 3]);
-            // flat faces: the same normal (and in orthographic views the same reflection)
-            let mut last_irr = ([f32::NAN; 3], [0.0f64; 3]);
-            let mut last_pre = (DVec3::NAN, f64::NAN, [0.0f64; 3]);
             for (j, out) in rows.iter_mut().enumerate() {
                 let i = y0 * w + j;
                 let kind = g.kind[i];
@@ -915,102 +1327,222 @@ pub(crate) fn shade(
                 let p = cam.unproject(sx, sy, d);
                 let n = v3f(g.normal[i]);
                 let view = -cam.ray(p);
-                let n_dot_v = n.dot(view).clamp(1e-4, 1.0);
-                let a = ao.as_ref().map_or(1.0, |v| v[i] as f64);
-                let direct_ao = 1.0 - 0.55 * (1.0 - a);
                 if g.albedo[i] != last_albedo.0 {
                     last_albedo = (g.albedo[i], g.albedo[i].map(|c| srgb_to_linear(c) as f64));
                 }
-                let albedo = last_albedo.1;
-                // surface: ground and caps are matte dielectrics
-                let m = if kind == SURFACE {
-                    g.material[i]
+                let (x, y) = (i % w, i / w);
+                let phi = ign(x, y) * std::f64::consts::TAU;
+                let a = ao.as_ref().map_or(1.0, |v| v[i] as f64);
+                let (base, m, stretch) = if kind == SURFACE {
+                    let info = &ctx.items[g.item[i] as usize];
+                    let m = info.material;
+                    let base = match m.color {
+                        Some(c) => c.map(|v| v as f64),
+                        None => last_albedo.1,
+                    };
+                    let stretch = (m.anisotropy > 0.0).then(|| brush_stretch(n, p, info.axis, info.origin));
+                    (base, m, stretch)
                 } else {
-                    Material { metalness: 0.0, roughness: 1.0, clearcoat: 0.0 }
+                    (last_albedo.1, Material { roughness: 1.0, ..Material::PLASTIC }, None)
                 };
-                let metal = m.metalness as f64;
-                let rough = (m.roughness as f64).max(MIN_ROUGHNESS);
-                let alpha = rough * rough;
-                let cc = if kind == SURFACE { m.clearcoat as f64 } else { 0.0 };
-                let f0: [f64; 3] = std::array::from_fn(|k| 0.04 + (albedo[k] - 0.04) * metal);
-                let diffuse: [f64; 3] = albedo.map(|c| c * (1.0 - metal));
-                let mut c = [0.0f64; 3];
-                let mut coat = [0.0f64; 3];
-                // direct light
-                for (li, (l, radiance)) in lights.iter().enumerate() {
-                    let n_dot_l = n.dot(*l);
-                    if n_dot_l <= 0.0 {
+                let s = Surf { p, n, view, base, m, stretch, ao: a, phi: Some(phi), ground: kind == GROUND };
+                // ray pattern: 4 × 4 offsets and a rotation per sample
+                let take = !tracer_sparse || (x % 2 == 0 && y % 2 == 0);
+                let trace = (kind == SURFACE).then(|| (ign(x / 2, y / 2), ign(x / 2 + 37, y / 2 + 11), take));
+                let (c, r) = ctx.shade(&s, trace);
+                *out = (
+                    c.map(|v| v as f32),
+                    match r {
+                        None => [0.0; 4],
+                        Some(r) if r[0].is_nan() => [0.0, 0.0, 0.0, 0.5],
+                        Some(r) => [r[0] as f32, r[1] as f32, r[2] as f32, 1.0],
+                    },
+                );
+            }
+        });
+    }
+
+    // Glossy reflections: smoothed over 7 × 7 samples of similar depth and normal, spaced
+    // wider for rougher surfaces.
+    let mut lin: Vec<[f32; 3]> = shaded.iter().map(|s| s.0).collect();
+    if shaded.iter().any(|s| s.1[3] > 0.0) {
+        let tol = diag * 0.004;
+        let pos: Vec<DVec3> = (0..w * h)
+            .map(|i| {
+                let (sx, sy) = sample(i);
+                if g.kind[i] == SURFACE { cam.unproject(sx, sy, t.depth[i]) } else { DVec3::ZERO }
+            })
+            .collect();
+        let (g, shaded, pos, ctx) = (&*g, &shaded, &pos, &ctx);
+        par_rows(&mut lin, w, |y0, rows| {
+            for (j, out) in rows.iter_mut().enumerate() {
+                let i = y0 * w + j;
+                if shaded[i].1[3] <= 0.0 {
+                    continue;
+                }
+                let (x, y) = ((i % w) as i64, (i / w) as i64);
+                let ni = g.normal[i];
+                let rough = ctx.items[g.item[i] as usize].material.roughness as f64;
+                // taps on the lattice of the traced samples
+                let lat = if tracer_sparse { 2 } else { 1 };
+                let step = lat * (1.0 + rough * 3.0).round() as i64;
+                let (bx, by) = (x - x % lat, y - y % lat);
+                let (mut s, mut n) = ([0.0f32; 3], 0.0f32);
+                for dy in -3i64..=3 {
+                    for dx in -3i64..=3 {
+                        let (xx, yy) = (bx + dx * step, by + dy * step);
+                        if xx < 0 || yy < 0 || xx >= w as i64 || yy >= h as i64 {
+                            continue;
+                        }
+                        let q = yy as usize * w + xx as usize;
+                        if shaded[q].1[3] < 1.0 {
+                            continue;
+                        }
+                        let nq = g.normal[q];
+                        if ni[0] * nq[0] + ni[1] * nq[1] + ni[2] * nq[2] < 0.9 {
+                            continue;
+                        }
+                        // near the tangent plane of the sample (same face or smooth surface)
+                        if (pos[q] - pos[i]).dot(v3f(ni)).abs() > tol {
+                            continue;
+                        }
+                        for (v, r) in s.iter_mut().zip(shaded[q].1) {
+                            *v += r;
+                        }
+                        n += 1.0;
+                    }
+                }
+                for c in 0..3 {
+                    out[c] = (out[c] + s[c] / n.max(1.0)).max(0.0);
+                }
+            }
+        });
+    }
+    drop(shaded);
+
+    // Mirror image of the model in the ground.
+    if let (Some(tr), Some(gz)) = (ctx.tracer, ground_z)
+        && rays.1 > 0
+    {
+        let strength = st.ground_reflection.clamp(0.0, 1.0);
+        let alpha = (st.ground_roughness.clamp(0.0, 1.0) * 0.5).powi(2).max(1e-6);
+        let k = if alpha < 1e-4 { 1 } else { rays.1 };
+        let fade_h = diag * 0.6;
+        let mut layer = vec![[0.0f32; 4]; w * h];
+        {
+            let (g, gdepth, ctx) = (&*g, &gdepth, &ctx);
+            par_rows(&mut layer, w, |y0, rows| {
+                for (j, out) in rows.iter_mut().enumerate() {
+                    let i = y0 * w + j;
+                    if g.kind[i] != GROUND {
                         continue;
                     }
-                    let vis = match sm {
-                        Some(sm) if li == 0 => {
-                            sm.visibility(p, n, n_dot_l, tan_theta, ign(i % w, i / w) * std::f64::consts::TAU)
-                        }
-                        _ => 1.0,
-                    };
-                    if vis <= 0.0 {
+                    let (sx, sy) = sample(i);
+                    let p = cam.unproject(sx, sy, gdepth[i]);
+                    if smoothstep(fade.0, fade.1, (DVec3::new(p.x, p.y, 0.0) - center_xy).length()) >= 0.999 {
                         continue;
                     }
-                    let hv = (*l + view).normalize_or_zero();
-                    let (n_dot_h, v_dot_h) = (n.dot(hv).max(0.0), view.dot(hv).max(0.0));
-                    let e = light_w * n_dot_l * vis * direct_ao;
-                    let dv = if kind == GROUND { 0.0 } else { ggx_dv(n_dot_h, n_dot_l, n_dot_v, alpha) };
-                    for k in 0..3 {
-                        let spec = dv * schlick(f0[k], v_dot_h);
-                        c[k] += (diffuse[k] / std::f64::consts::PI + spec) * radiance[k] * e;
+                    let view = -cam.ray(p);
+                    let o = DVec3::new(p.x, p.y, gz + tr.eps);
+                    let (x, y) = (i % w, i / w);
+                    if tr.sparse && (x % 2 != 0 || y % 2 != 0) {
+                        // filled by the blur
+                        *out = [0.0, 0.0, 0.0, -1.0];
+                        continue;
                     }
-                    if cc > 0.0 {
-                        let dc = ggx_dv(n_dot_h, n_dot_l, n_dot_v, CLEARCOAT_ROUGHNESS.max(MIN_ROUGHNESS).powi(2));
-                        let f = schlick(0.04, v_dot_h);
-                        for k in 0..3 {
-                            coat[k] += dc * f * radiance[k] * e;
+                    let (u, phi) = (ign(x / 2, y / 2), ign(x / 2 + 37, y / 2 + 11));
+                    let mut acc = [0.0f64; 4];
+                    for s in 0..k {
+                        let d = if k == 1 {
+                            DVec3::new(-view.x, -view.y, view.z)
+                        } else {
+                            let u1 = ((s as f64 + u) / k as f64).fract();
+                            let u2 = (s as f64 * 0.618_034 + phi).fract();
+                            let hh = ggx_half(u1, u2, alpha, DVec3::Z, DVec3::X, DVec3::Y);
+                            let l = hh * (2.0 * view.dot(hh)) - view;
+                            if l.z <= 1e-3 {
+                                continue;
+                            }
+                            l.normalize()
+                        };
+                        let Some(hit) = tr.bvh.intersect(o, d, 0.0, fade_h / d.z) else { continue };
+                        let f = 1.0 - smoothstep(0.0, fade_h, hit.t * d.z);
+                        if f <= 0.0 {
+                            continue;
+                        }
+                        let c = tr.shade_hit(ctx, hit.tri as usize, hit.u, hit.v, d);
+                        for q in 0..3 {
+                            acc[q] += c[q] * f;
+                        }
+                        acc[3] += f;
+                    }
+                    *out = acc.map(|v| (v / k as f64) as f32);
+                }
+            });
+        }
+        // blur over 5 × 5 ground samples (smooths the ray noise), then over the ground colour
+        let mut blurred = vec![[0.0f32; 4]; w * h];
+        {
+            let (g, layer) = (&*g, &layer);
+            par_rows(&mut blurred, w, |y0, rows| {
+                for (j, out) in rows.iter_mut().enumerate() {
+                    let i = y0 * w + j;
+                    if g.kind[i] != GROUND {
+                        continue;
+                    }
+                    let (x, y) = ((i % w) as i64, (i / w) as i64);
+                    let (mut s, mut n) = ([0.0f32; 4], 0.0f32);
+                    for dy in -2i64..=2 {
+                        for dx in -2i64..=2 {
+                            let (xx, yy) = (x + dx, y + dy);
+                            if xx < 0 || yy < 0 || xx >= w as i64 || yy >= h as i64 {
+                                continue;
+                            }
+                            let q = yy as usize * w + xx as usize;
+                            if g.kind[q] != GROUND || layer[q][3] < 0.0 {
+                                continue;
+                            }
+                            for c in 0..4 {
+                                s[c] += layer[q][c];
+                            }
+                            n += 1.0;
                         }
                     }
+                    *out = s.map(|v| v / n.max(1.0));
                 }
-                // environment: diffuse irradiance and prefiltered reflections
-                if reflections {
-                    if g.normal[i] != last_irr.0 {
-                        last_irr = (g.normal[i], env.irradiance(n));
-                    }
-                    let irr = last_irr.1;
-                    let r = (n * (2.0 * n.dot(view)) - view).normalize_or_zero();
-                    let (sa, sb) = env_brdf(n_dot_v, rough);
-                    let pre = if kind == GROUND {
-                        [0.0; 3]
-                    } else {
-                        if r != last_pre.0 || alpha != last_pre.1 {
-                            last_pre = (r, alpha, env.prefiltered(r, alpha));
-                        }
-                        last_pre.2
-                    };
-                    for k in 0..3 {
-                        let fss = f0[k] * sa + sb;
-                        let dif = diffuse[k] / std::f64::consts::PI * irr[k] * (1.0 - fss) * env_diff_w;
-                        c[k] += (dif + pre[k] * fss * env_spec_w) * a;
-                    }
-                    if cc > 0.0 {
-                        let (ca, cb) = env_brdf(n_dot_v, CLEARCOAT_ROUGHNESS.max(MIN_ROUGHNESS));
-                        let pc = env.prefiltered(r, CLEARCOAT_ROUGHNESS.max(MIN_ROUGHNESS).powi(2));
-                        for k in 0..3 {
-                            coat[k] += pc[k] * (0.04 * ca + cb) * env_spec_w * a;
-                        }
-                    }
-                } else {
-                    let up = 0.5 + 0.5 * n.z;
-                    for k in 0..3 {
-                        c[k] += diffuse[k] * amb * (bounce[k] + (sky[k] - bounce[k]) * up) * a;
-                    }
+            });
+        }
+        for i in 0..w * h {
+            if g.kind[i] != GROUND || blurred[i][3] <= 0.0 {
+                continue;
+            }
+            let (sx, sy) = sample(i);
+            let p = cam.unproject(sx, sy, gdepth[i]);
+            let n_dot_v = (-cam.ray(p)).z.clamp(0.0, 1.0);
+            let f = (strength + (1.0 - strength) * (1.0 - n_dot_v).powi(5) * strength) as f32;
+            let b = blurred[i];
+            for c in 0..3 {
+                lin[i][c] = lin[i][c] * (1.0 - f * b[3]) + f * b[c];
+            }
+        }
+    }
+
+    // Tone mapping, sRGB, the ground fading into the background.
+    let srgb = SrgbTable::new();
+    {
+        let (g, lin, srgb, gdepth) = (&*g, &lin, &srgb, &gdepth);
+        par_rows(&mut t.color, w, |y0, rows| {
+            for (j, out) in rows.iter_mut().enumerate() {
+                let i = y0 * w + j;
+                let kind = g.kind[i];
+                if kind == NONE {
+                    continue;
                 }
-                if cc > 0.0 {
-                    let fc = schlick(0.04, n_dot_v);
-                    for k in 0..3 {
-                        c[k] = c[k] * (1.0 - cc * fc) + cc * coat[k];
-                    }
-                }
-                let lin = neutral_tone(c);
-                let c: [f32; 3] = lin.map(|v| srgb.get(v));
+                let c = neutral_tone(lin[i].map(|v| v as f64)).map(|v| srgb.get(v));
                 *out = if kind == GROUND {
-                    let f = shadow_on_ground(p) as f32;
+                    let (sx, sy) = sample(i);
+                    let p = cam.unproject(sx, sy, gdepth[i]);
+                    let f = smoothstep(fade.0, fade.1, (DVec3::new(p.x, p.y, 0.0) - center_xy).length()) as f32;
                     let bg = background_at(opts, i / w, h);
                     std::array::from_fn(|k| c[k] + (bg[k] - c[k]) * f)
                 } else {
@@ -1025,5 +1557,6 @@ pub(crate) fn shade(
         ground_z,
         ao_radius: ao.as_ref().map(|_| ao_radius),
         shadow_map: sm.as_ref().map(|s| s.n as u32),
+        rays: tracer.as_ref().map(|t| t.rays),
     }
 }

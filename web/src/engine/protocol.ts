@@ -871,6 +871,18 @@ environment: string | null, ambient: number | null, light_intensity: number | nu
  */
 ground_color: string | null, 
 /**
+ * Mirror image of the model in the ground, 0..1.
+ */
+ground_reflection: number | null, 
+/**
+ * Blur of the ground reflection, 0..1.
+ */
+ground_roughness: number | null, 
+/**
+ * Ray-traced reflections of the model in itself (CLI renderer).
+ */
+reflections: boolean | null, 
+/**
  * One or two (top, bottom) `#rrggbb`.
  */
 background: Array<string> | null, lights: Array<RenderLight>, materials: Array<RenderMaterial>, };
@@ -892,7 +904,7 @@ color: string, range: SrcRange, };
  */
 export type RenderTarget = { color: string, } | { part: string, };
 
-export type RenderMaterial = { target: RenderTarget, preset: string | null, metalness: number | null, roughness: number | null, clearcoat: number | null, range: SrcRange, };
+export type RenderMaterial = { target: RenderTarget, preset: string | null, metalness: number | null, roughness: number | null, clearcoat: number | null, anisotropy: number | null, range: SrcRange, };
 
 export type NodeStatus = "ok" | "warning" | "error" | "skipped" | "pending";
 

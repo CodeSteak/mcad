@@ -26,6 +26,7 @@ import { bridge } from "../state/bridge";
 import { project } from "../state/project";
 import { type CadState, store } from "../state/store";
 import { Materials, readPalette, studioGroundMaterial } from "./materials";
+import { GROUND_REFLECTION_BLEND, GROUND_REFLECTION_PARS, GroundReflection } from "./groundReflection";
 import { displayHex, faceColors, hasFaceColors, vertexColors } from "../logic/colors";
 import { type CapBody, SectionLayer } from "./sectionLayer";
 import { type SectionState, effectiveNormal, keeps, offset, snapCandidates, withOffset } from "../logic/section";
@@ -229,6 +230,8 @@ export class Viewer implements DragView, SketchView, MeasureView {
   private ground: THREE.Mesh | null = null;
   private groundKey = "";
   private studioBg: THREE.Texture | null = null;
+  /** Mirror image of the model in the ground (studio look). */
+  private groundRefl = new GroundReflection();
   /** Ambient occlusion (created on first use). */
   private gtao: GTAOPass | null = null;
   private aoQuad: FullScreenQuad | null = null;
@@ -236,7 +239,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
   /** Studio settings in effect. */
   studio: StudioSettings = store.getState().studio;
   /** What the last frame drew in the studio look (test hook). */
-  lastStudioDraw: { on: boolean; shadows: boolean; ao: boolean; ground: boolean; edges: boolean; edgeLines: number; aoRadius: number | null; light: Vec3 | null; lights: number; environment: string | null; toneMapping: boolean } = { on: false, shadows: false, ao: false, ground: false, edges: true, edgeLines: 0, aoRadius: null, light: null, lights: 0, environment: null, toneMapping: false };
+  lastStudioDraw: { on: boolean; shadows: boolean; ao: boolean; ground: boolean; edges: boolean; edgeLines: number; aoRadius: number | null; light: Vec3 | null; lights: number; environment: string | null; toneMapping: boolean; groundReflection: number } = { on: false, shadows: false, ao: false, ground: false, edges: true, edgeLines: 0, aoRadius: null, light: null, lights: 0, environment: null, toneMapping: false, groundReflection: 0 };
   /** Mode the base was drawn with (full while the selected node's mesh is loading). */
   baseMode: string | null = null;
   modelBox: Box3 = emptyBox();
@@ -347,6 +350,7 @@ export class Viewer implements DragView, SketchView, MeasureView {
     this.aoQuad?.dispose();
     this.aoMaterial?.dispose();
     this.studioBg?.dispose();
+    this.groundRefl.dispose();
     this.envMap?.dispose();
     this.pmrem?.dispose();
     if (this.ground) {
@@ -467,7 +471,8 @@ export class Viewer implements DragView, SketchView, MeasureView {
     this.envMap?.dispose();
     this.envMap = null;
     if (on) {
-      const w = 256;
+      // 512 × 256: about 0.7° per pixel, the softbox edges stay crisp in chrome
+      const w = 512;
       const tex = new THREE.DataTexture(environmentPixels(environmentSpec(s.environment, gl), w), w, w / 2, THREE.RGBAFormat, THREE.FloatType);
       tex.mapping = THREE.EquirectangularReflectionMapping;
       tex.colorSpace = THREE.LinearSRGBColorSpace;
@@ -569,20 +574,19 @@ export class Viewer implements DragView, SketchView, MeasureView {
     const diag = Math.max(1, boxDiagonal(box));
     const cx = (box.min[0] + box.max[0]) / 2;
     const cy = (box.min[1] + box.max[1]) / 2;
-    const mat = studioGroundMaterial(color, this.materials.envDiffuse);
     const fade = { value: new THREE.Vector4(cx, cy, diag * 0.55, diag * 1.5) };
-    const envPatch = mat.onBeforeCompile;
-    mat.onBeforeCompile = (sh, r) => {
-      envPatch.call(mat, sh, r);
+    // fades into the background around the model; the mirror image of the model blended in
+    const mat = studioGroundMaterial(color, this.materials.envDiffuse, (sh) => {
       sh.uniforms.groundFade = fade;
+      Object.assign(sh.uniforms, this.groundRefl.uniforms);
       sh.vertexShader = sh.vertexShader
         .replace("#include <common>", "#include <common>\nvarying vec3 vGroundPos;")
         .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvGroundPos = (modelMatrix * vec4(transformed, 1.0)).xyz;");
       sh.fragmentShader = sh.fragmentShader
-        .replace("#include <common>", "#include <common>\nvarying vec3 vGroundPos;\nuniform vec4 groundFade;")
+        .replace("#include <common>", `#include <common>\nvarying vec3 vGroundPos;\nuniform vec4 groundFade;\n${GROUND_REFLECTION_PARS}`)
+        .replace("#include <tonemapping_fragment>", `${GROUND_REFLECTION_BLEND}\n#include <tonemapping_fragment>`)
         .replace("#include <dithering_fragment>", "#include <dithering_fragment>\n  gl_FragColor.a *= 1.0 - smoothstep(groundFade.z, groundFade.w, distance(vGroundPos.xy, groundFade.xy));");
-    };
-    mat.customProgramCacheKey = () => "studio-ground";
+    });
     const size = diag * 4;
     const g = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
     g.position.set(cx, cy, box.min[2] - diag * 1e-4);
@@ -629,6 +633,29 @@ export class Viewer implements DragView, SketchView, MeasureView {
       }
     });
     return first;
+  }
+
+  /** Mirror image of the model in the ground for this frame (`false`: none). */
+  private renderGroundReflection(): boolean {
+    const s = this.studio;
+    const strength = s.ground && this.ground ? Math.max(0, Math.min(1, s.groundReflection)) : 0;
+    // the ground is only seen from above
+    if (strength <= 0 || !this.ground || this.camera.position.z <= this.ground.position.z) {
+      this.groundRefl.off();
+      return false;
+    }
+    const r = this.renderer;
+    const size = r.getDrawingBufferSize(new THREE.Vector2());
+    const hide = [this.helpers, this.overlay, this.handleGroup, this.sketchGroup, this.measureGroup, this.assertGroup, this.section.group, this.ground];
+    const vis = hide.map((g) => g.visible);
+    for (const g of hide) g.visible = false;
+    const bg = this.scene3.background;
+    this.scene3.background = null;
+    const diag = Math.max(1, boxDiagonal(this.modelBox));
+    this.groundRefl.render(r, this.scene3, this.camera, this.ground.position.z, strength, Math.max(0, Math.min(1, s.groundRoughness)), diag * 0.6, size.x, size.y);
+    this.scene3.background = bg;
+    hide.forEach((g, i) => (g.visible = vis[i]));
+    return true;
   }
 
   /** Ambient occlusion pass of the studio look (lazy). */
@@ -759,10 +786,15 @@ export class Viewer implements DragView, SketchView, MeasureView {
       this.updateGround();
       this.updateEnvironment();
       const light = this.placeStudioLights();
+      // the mirror pass renders the shadow map of this frame: the other passes reuse it
+      const autoShadow = r.shadowMap.autoUpdate;
+      const mirrored = this.renderGroundReflection();
+      if (mirrored) r.shadowMap.autoUpdate = false;
       // AO pauses while a section is shown (the cut faces are stencil caps)
       const ao = st.ao && !store.getState().section.on;
       if (ao) this.renderStudioAo();
       else r.render(this.scene3, this.camera);
+      r.shadowMap.autoUpdate = autoShadow;
       const diag = Math.max(1, boxDiagonal(this.modelBox));
       let edgeLines = 0;
       this.content.traverse((o) => {
@@ -780,10 +812,11 @@ export class Viewer implements DragView, SketchView, MeasureView {
         lights: this.studioLights.length,
         environment: this.scene3.environment ? st.environment : null,
         toneMapping: r.toneMapping === THREE.NeutralToneMapping,
+        groundReflection: mirrored ? this.groundRefl.strength : 0,
       };
     } else {
       r.render(this.scene3, this.camera);
-      this.lastStudioDraw = { on: false, shadows: false, ao: false, ground: false, edges: true, edgeLines: 0, aoRadius: null, light: null, lights: 0, environment: null, toneMapping: false };
+      this.lastStudioDraw = { on: false, shadows: false, ao: false, ground: false, edges: true, edgeLines: 0, aoRadius: null, light: null, lights: 0, environment: null, toneMapping: false, groundReflection: 0 };
     }
     this.noteCamera();
     this.placeMeasureLabels();

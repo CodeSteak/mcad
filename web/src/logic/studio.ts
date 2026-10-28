@@ -30,6 +30,7 @@ export interface StudioMaterial {
   metalness: number | null;
   roughness: number | null;
   clearcoat: number | null;
+  anisotropy: number | null;
 }
 
 /** Physically based surface (metallic-roughness). */
@@ -37,10 +38,14 @@ export interface Pbr {
   metalness: number;
   roughness: number;
   clearcoat: number;
+  /** Brushed finish 0…1 (anisotropic GGX, brushing around the body's z axis). */
+  anisotropy: number;
+  /** Own base colour (linear RGB, e.g. the reflectance of gold); `null`: the body's colour. */
+  color: Vec3 | null;
 }
 
-export type EnvironmentName = "studio" | "overcast" | "none";
-export const ENVIRONMENTS: EnvironmentName[] = ["studio", "overcast", "none"];
+export type EnvironmentName = "studio" | "soft" | "overcast" | "none";
+export const ENVIRONMENTS: EnvironmentName[] = ["studio", "soft", "overcast", "none"];
 
 export interface StudioSettings {
   /** Studio look on. */
@@ -64,6 +69,13 @@ export interface StudioSettings {
   ground: boolean;
   /** `#rrggbb`; `null` = from the theme. */
   groundColor: string | null;
+  /** Mirror image of the model in the ground, 0…1. */
+  groundReflection: number;
+  /** Blur of the ground reflection, 0 = mirror … 1. */
+  groundRoughness: number;
+  /** Ray-traced reflections of the model in itself (`mcad render`; the view shows the
+   *  environment and the ground reflection). */
+  reflections: boolean;
   /** Background gradient top, bottom (`#rrggbb`, equal = solid); `null` = from the theme. */
   background: [string, string] | null;
   /** Edge lines of the bodies. */
@@ -88,6 +100,9 @@ export const DEFAULT_STUDIO: StudioSettings = {
   aoStrength: 1,
   ground: true,
   groundColor: null,
+  groundReflection: 0.2,
+  groundRoughness: 0.3,
+  reflections: true,
   background: null,
   edges: true,
   materials: [],
@@ -99,25 +114,57 @@ export const STUDIO_THEME = {
   dark: { ground: "#2c3038", background: ["#2b3038", "#111317"] as [string, string] },
 };
 
-/** Material presets (as `cad_render::Material::PRESETS`). */
+/** Reflectance (F0, linear RGB) of real metals (as `cad_render::studio::f0`). */
+export const F0 = {
+  aluminium: [0.913, 0.922, 0.924] as Vec3,
+  chrome: [0.55, 0.556, 0.554] as Vec3,
+  stainless: [0.65, 0.64, 0.62] as Vec3,
+  titanium: [0.542, 0.497, 0.449] as Vec3,
+  gold: [1.0, 0.766, 0.336] as Vec3,
+  copper: [0.955, 0.638, 0.538] as Vec3,
+  brass: [0.91, 0.778, 0.423] as Vec3,
+};
+
+const mat = (metalness: number, roughness: number, clearcoat = 0): Pbr => ({ metalness, roughness, clearcoat, anisotropy: 0, color: null });
+const metal = (color: Vec3, roughness: number, anisotropy = 0): Pbr => ({ metalness: 1, roughness, clearcoat: 0, anisotropy, color });
+
+/** Material presets (as `cad_render::Material::PRESETS`, in that order). */
 export const MATERIAL_PRESETS: Record<string, Pbr> = {
-  plastic: { metalness: 0, roughness: 0.5, clearcoat: 0 },
-  plastic_glossy: { metalness: 0, roughness: 0.2, clearcoat: 0.5 },
-  rubber: { metalness: 0, roughness: 0.9, clearcoat: 0 },
-  aluminium: { metalness: 1, roughness: 0.35, clearcoat: 0 },
-  metal_brushed: { metalness: 1, roughness: 0.55, clearcoat: 0 },
-  chrome: { metalness: 1, roughness: 0.08, clearcoat: 0 },
+  plastic: mat(0, 0.45),
+  plastic_satin: mat(0, 0.3),
+  plastic_glossy: mat(0, 0.12, 0.6),
+  rubber: mat(0, 0.85),
+  ceramic: mat(0, 0.35, 1),
+  aluminium: metal(F0.aluminium, 0.2),
+  metal_brushed: metal(F0.aluminium, 0.22, 0.8),
+  anodized: mat(1, 0.28),
+  chrome: metal(F0.chrome, 0.04),
+  stainless: metal(F0.stainless, 0.12),
+  titanium: metal(F0.titanium, 0.25),
+  gold: metal(F0.gold, 0.12),
+  copper: metal(F0.copper, 0.18),
+  brass: metal(F0.brass, 0.15),
 };
 export const PRESET_NAMES = Object.keys(MATERIAL_PRESETS);
 export const DEFAULT_PBR: Pbr = MATERIAL_PRESETS.plastic;
+
+/** Widening of the specular lobe of the lights (round area lights of about 10°), as
+ *  `cad_render::studio::LIGHT_SPREAD`. */
+export const LIGHT_SPREAD = 0.088;
 
 const HEX = /^#[0-9a-f]{6}$/;
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 
 /** The surface of a material entry: the preset (else plastic) with the single values over it. */
-export function resolvePbr(m: Pick<StudioMaterial, "preset" | "metalness" | "roughness" | "clearcoat">): Pbr {
+export function resolvePbr(m: Pick<StudioMaterial, "preset" | "metalness" | "roughness" | "clearcoat" | "anisotropy">): Pbr {
   const b = (m.preset && MATERIAL_PRESETS[m.preset]) || DEFAULT_PBR;
-  return { metalness: clamp01(m.metalness ?? b.metalness), roughness: clamp01(m.roughness ?? b.roughness), clearcoat: clamp01(m.clearcoat ?? b.clearcoat) };
+  return {
+    metalness: clamp01(m.metalness ?? b.metalness),
+    roughness: clamp01(m.roughness ?? b.roughness),
+    clearcoat: clamp01(m.clearcoat ?? b.clearcoat),
+    anisotropy: clamp01(m.anisotropy ?? b.anisotropy),
+    color: b.color,
+  };
 }
 
 /** A colour of the model as the material lookup sees it. */
@@ -215,7 +262,7 @@ export function sanitizeStudio(raw: unknown): StudioSettings {
       if (!target) continue;
       const v = (k: string) => (typeof m[k] === "number" && Number.isFinite(m[k] as number) ? clamp01(m[k] as number) : null);
       const preset = typeof m.preset === "string" && m.preset in MATERIAL_PRESETS ? m.preset : null;
-      materials.push({ target, preset, metalness: v("metalness"), roughness: v("roughness"), clearcoat: v("clearcoat") });
+      materials.push({ target, preset, metalness: v("metalness"), roughness: v("roughness"), clearcoat: v("clearcoat"), anisotropy: v("anisotropy") });
     }
   }
   return {
@@ -231,6 +278,9 @@ export function sanitizeStudio(raw: unknown): StudioSettings {
     aoStrength: num("aoStrength", 0, 2),
     ground: bool("ground"),
     groundColor: hex(r.groundColor),
+    groundReflection: num("groundReflection", 0, 1),
+    groundRoughness: num("groundRoughness", 0, 1),
+    reflections: bool("reflections"),
     background: bg && bg[0] && bg[1] ? [bg[0], bg[1]] : null,
     edges: bool("edges"),
     materials,
@@ -265,18 +315,29 @@ export function cameraAzimuth(eye: Vec3, up: Vec3): number {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Analytic environment (cad_render::studio::environment_spec): constant + spherical Gaussians
+// Procedural environment (cad_render::env): a vertical gradient and rectangular softboxes
 
-export interface EnvLobe {
+/** A rectangular softbox facing the model. */
+export interface Softbox {
+  /** Degrees relative to the camera (as lights). */
   azimuth: number;
   elevation: number;
-  sharpness: number;
+  /** Angular size in degrees (horizontal, vertical). */
+  width: number;
+  height: number;
+  /** Width of the soft edge in degrees. */
+  softness: number;
   /** Linear RGB radiance at the centre. */
-  amp: Vec3;
+  radiance: Vec3;
 }
 export interface EnvSpec {
-  constant: Vec3;
-  lobes: EnvLobe[];
+  zenith: Vec3;
+  horizon: Vec3;
+  floorHorizon: Vec3;
+  nadir: Vec3;
+  /** Half width of the floor → wall transition in degrees. */
+  horizonBlur: number;
+  boxes: Softbox[];
 }
 
 /** Factor of the environment reflections per unit of `ambient`. */
@@ -286,59 +347,118 @@ export function srgbToLinear(c: number): number {
   return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 }
 
-/** The environment (`ground`: linear colour of the ground bounce). */
+/** The environment (`ground`: linear colour of the ground), as `cad_render::env::environment_spec`. */
 export function environmentSpec(env: EnvironmentName, ground: Vec3): EnvSpec {
-  const bounce = (k: number): EnvLobe => ({ azimuth: 0, elevation: -90, sharpness: 1.2, amp: [ground[0] * k, ground[1] * k, ground[2] * k] });
-  const strip = (az: number, a: number): EnvLobe[] => [-30, -10, 10, 30, 50].map((el) => ({ azimuth: az, elevation: el, sharpness: 60, amp: [a, a, a] }));
+  const g = (k: number): Vec3 => [ground[0] * k, ground[1] * k, ground[2] * k];
+  const box = (azimuth: number, elevation: number, width: number, height: number, softness: number, radiance: Vec3): Softbox => ({ azimuth, elevation, width, height, softness, radiance });
   switch (env) {
     case "studio":
       return {
-        constant: [0.08, 0.08, 0.08],
-        lobes: [
-          { azimuth: 0, elevation: 90, sharpness: 2, amp: [0.5, 0.51, 0.54] },
-          bounce(0.6),
-          { azimuth: 180, elevation: 60, sharpness: 12, amp: [3.5, 3.5, 3.5] },
-          ...strip(-70, 3),
-          ...strip(115, 2),
+        zenith: [0.05, 0.05, 0.055],
+        horizon: [0.012, 0.012, 0.014],
+        floorHorizon: g(0.05),
+        nadir: g(0.75),
+        horizonBlur: 3,
+        boxes: [
+          box(180, 55, 64, 30, 5, [6, 6, 6]),
+          box(-68, 5, 16, 100, 3, [9, 8.6, 8]),
+          box(105, 5, 12, 96, 3, [3, 3.15, 3.4]),
+          box(0, 8, 110, 22, 14, [0.45, 0.45, 0.47]),
+          box(95, -22, 60, 36, 18, [0.3, 0.3, 0.3]),
         ],
       };
+    case "soft":
+      return {
+        zenith: [0.55, 0.56, 0.58],
+        horizon: [0.3, 0.3, 0.31],
+        floorHorizon: g(0.35),
+        nadir: g(0.75),
+        horizonBlur: 10,
+        boxes: [box(180, 55, 110, 60, 18, [2.2, 2.2, 2.2]), box(-70, 22, 34, 60, 12, [2.6, 2.55, 2.45]), box(105, 22, 30, 56, 12, [1.6, 1.65, 1.7])],
+      };
     case "overcast":
-      return { constant: [0.25, 0.25, 0.25], lobes: [{ azimuth: 0, elevation: 90, sharpness: 0.8, amp: [0.74, 0.75, 0.78] }, bounce(0.6)] };
+      return { zenith: [1, 1.01, 1.05], horizon: [0.45, 0.45, 0.46], floorHorizon: g(0.35), nadir: g(0.6), horizonBlur: 12, boxes: [] };
     case "none":
-      return { constant: [0, 0, 0], lobes: [] };
+      return { zenith: [0, 0, 0], horizon: [0, 0, 0], floorHorizon: [0, 0, 0], nadir: [0, 0, 0], horizonBlur: 1, boxes: [] };
   }
 }
 
-/** Lobe direction for a camera at azimuth 0 (looking from −y): the UI rotates the map with the
- *  camera (`scene.environmentRotation`). */
-function lobeDir(l: EnvLobe): Vec3 {
-  return lightDirection([0, -1, 0], [0, 0, 1], l.azimuth, l.elevation);
+const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const cross = (a: Vec3, b: Vec3): Vec3 => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const normalize = (a: Vec3): Vec3 => {
+  const l = Math.hypot(a[0], a[1], a[2]);
+  return [a[0] / l, a[1] / l, a[2] / l];
+};
+const smoothstep = (e0: number, e1: number, x: number) => {
+  const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+};
+
+interface PlacedBox {
+  c: Vec3;
+  u: Vec3;
+  v: Vec3;
+  b: Softbox;
 }
 
-/** Radiance of the environment in direction `d` (camera at azimuth 0). */
-export function envRadiance(spec: EnvSpec, d: Vec3): Vec3 {
-  const c: Vec3 = [...spec.constant];
-  for (const l of spec.lobes) {
-    const o = lobeDir(l);
-    const k = Math.exp(l.sharpness * (d[0] * o[0] + d[1] * o[1] + d[2] * o[2] - 1));
-    for (let i = 0; i < 3; i++) c[i] += l.amp[i] * k;
+/** Softbox frames for a camera at azimuth 0 (looking along +y). */
+function placeBoxes(spec: EnvSpec): PlacedBox[] {
+  return spec.boxes.map((b) => {
+    const c = lightDirection([0, -1, 0], [0, 0, 1], b.azimuth, b.elevation);
+    const a = (b.azimuth * Math.PI) / 180;
+    const u: Vec3 = Math.abs(c[2]) < 0.999 ? normalize(cross([0, 0, 1], c)) : [Math.cos(a), Math.sin(a), 0];
+    return { c, u, v: cross(c, u), b };
+  });
+}
+
+function radianceOf(spec: EnvSpec, boxes: PlacedBox[], d: Vec3): Vec3 {
+  const el = (Math.asin(Math.max(-1, Math.min(1, d[2]))) * 180) / Math.PI;
+  const up = Math.max(0, d[2]);
+  const down = Math.min(0, d[2]) ** 2;
+  const k = smoothstep(-spec.horizonBlur, spec.horizonBlur, el);
+  const c = [0, 1, 2].map((i) => {
+    const wall = spec.horizon[i] + (spec.zenith[i] - spec.horizon[i]) * up;
+    const floor = spec.floorHorizon[i] + (spec.nadir[i] - spec.floorHorizon[i]) * down;
+    return floor + (wall - floor) * k;
+  }) as Vec3;
+  for (const p of boxes) {
+    const z = dot(d, p.c);
+    if (z <= 1e-3) continue;
+    const x = (Math.atan2(dot(d, p.u), z) * 180) / Math.PI;
+    const y = (Math.atan2(dot(d, p.v), z) * 180) / Math.PI;
+    const hw = p.b.width / 2;
+    const hh = p.b.height / 2;
+    const sf = Math.max(0.01, p.b.softness);
+    const m = (1 - smoothstep(hw - sf, hw + sf, Math.abs(x))) * (1 - smoothstep(hh - sf, hh + sf, Math.abs(y)));
+    if (m <= 0) continue;
+    const hot = 1 - 0.2 * Math.min(1, (x / hw) ** 2 + (y / hh) ** 2);
+    for (let i = 0; i < 3; i++) c[i] += p.b.radiance[i] * m * hot;
   }
   return c;
 }
 
-function sgProduct(d1: Vec3, l1: number, d2: Vec3, l2: number): number {
-  const v = [d1[0] * l1 + d2[0] * l2, d1[1] * l1 + d2[1] * l2, d1[2] * l1 + d2[2] * l2];
-  const m = Math.hypot(v[0], v[1], v[2]);
-  if (m < 1e-6) return 4 * Math.PI * Math.exp(-l1 - l2);
-  return (2 * Math.PI * Math.exp(m - l1 - l2) * (1 - Math.exp(-2 * m))) / m;
+/** Radiance of the environment in direction `d` (unit, z up; camera at azimuth 0). */
+export function envRadiance(spec: EnvSpec, d: Vec3): Vec3 {
+  return radianceOf(spec, placeBoxes(spec), d);
 }
 
-/** Irradiance on a surface facing up divided by π (luminance), as `cad_render::studio::up_irradiance`. */
+/** Irradiance on a surface facing up divided by π (luminance), as
+ *  `cad_render::env::up_irradiance`: midpoint rule over 256 × 64 directions. */
 export function upIrradiance(spec: EnvSpec): number {
-  const e: Vec3 = [spec.constant[0] * Math.PI, spec.constant[1] * Math.PI, spec.constant[2] * Math.PI];
-  for (const l of spec.lobes) {
-    const k = 1.17 * sgProduct(lobeDir(l), l.sharpness, [0, 0, 1], 2.133);
-    for (let i = 0; i < 3; i++) e[i] += l.amp[i] * k;
+  const boxes = placeBoxes(spec);
+  const na = 256;
+  const ne = 64;
+  const da = (2 * Math.PI) / na;
+  const de = Math.PI / 2 / ne;
+  const e = [0, 0, 0];
+  for (let j = 0; j < ne; j++) {
+    const el = (j + 0.5) * de;
+    const w = Math.sin(el) * Math.cos(el) * de * da;
+    for (let i = 0; i < na; i++) {
+      const a = (i + 0.5) * da;
+      const l = radianceOf(spec, boxes, [Math.cos(a) * Math.cos(el), Math.sin(a) * Math.cos(el), Math.sin(el)]);
+      for (let k = 0; k < 3; k++) e[k] += l[k] * w;
+    }
   }
   return (0.2126 * e[0] + 0.7152 * e[1] + 0.0722 * e[2]) / Math.PI;
 }
@@ -371,12 +491,13 @@ export function neutralTone(c: Vec3): Vec3 {
 export function environmentPixels(spec: EnvSpec, w: number): Float32Array {
   const h = w / 2;
   const out = new Float32Array(w * h * 4);
+  const boxes = placeBoxes(spec);
   for (let y = 0; y < h; y++) {
     const lat = ((y + 0.5) / h - 0.5) * Math.PI;
     for (let x = 0; x < w; x++) {
       const lon = ((x + 0.5) / w - 0.5) * 2 * Math.PI;
       const d: Vec3 = [Math.cos(lat) * Math.cos(lon), Math.sin(lat), Math.cos(lat) * Math.sin(lon)];
-      const c = envRadiance(spec, d);
+      const c = radianceOf(spec, boxes, d);
       const i = (y * w + x) * 4;
       out[i] = c[0];
       out[i + 1] = c[1];
@@ -400,6 +521,7 @@ function materialArg(m: StudioMaterial): string | null {
   if (m.metalness !== null) parts.push(`metalness=${n(m.metalness)}`);
   if (m.roughness !== null) parts.push(`roughness=${n(m.roughness)}`);
   if (m.clearcoat !== null) parts.push(`clearcoat=${n(m.clearcoat)}`);
+  if (m.anisotropy !== null) parts.push(`anisotropy=${n(m.anisotropy)}`);
   return parts.length ? `${sel}=${parts.join(",")}` : null;
 }
 
@@ -421,7 +543,12 @@ export function studioCliArgs(s: StudioSettings): string[] {
     if (s.aoStrength !== d.aoStrength) out.push("--ao-strength", n(s.aoStrength));
   }
   if (!s.ground) out.push("--ground", "off");
-  else if (s.groundColor) out.push("--ground-color", s.groundColor.slice(1));
+  else {
+    if (s.groundColor) out.push("--ground-color", s.groundColor.slice(1));
+    if (s.groundReflection !== d.groundReflection) out.push("--ground-reflection", n(s.groundReflection));
+    if (s.groundRoughness !== d.groundRoughness) out.push("--ground-roughness", n(s.groundRoughness));
+  }
+  if (!s.reflections) out.push("--reflections", "off");
   if (!s.edges) out.push("--edges", "off");
   for (const m of s.materials) {
     const a = materialArg(m);
