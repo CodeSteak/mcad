@@ -895,6 +895,27 @@ pub fn scene<S>(i: SceneInput<'_, S>) -> p::Scene {
     }
 }
 
+/// A change of the render block as the language's edit (values as literal text).
+pub fn render_edit(c: &p::RenderChange) -> cad_eval::RenderEdit {
+    use cad_eval::{EditTarget, RenderEdit as E};
+    let val = |v: &p::Value| (!matches!(v, p::Value::Undef)).then(|| value_text(v));
+    let target = |t: &p::RenderTarget| match t {
+        p::RenderTarget::Color { color } => EditTarget::Color(color.clone()),
+        p::RenderTarget::Part { part } => EditTarget::Part(part.clone()),
+    };
+    match c {
+        p::RenderChange::Set { key, value } => E::Set { key: key.clone(), value: val(value) },
+        p::RenderChange::Light { name, key, value } => {
+            E::Light { name: name.clone(), key: key.clone(), value: val(value) }
+        }
+        p::RenderChange::RemoveLight { name } => E::RemoveLight { name: name.clone() },
+        p::RenderChange::Material { target: t, key, value } => {
+            E::Material { target: target(t), key: key.clone(), value: val(value) }
+        }
+        p::RenderChange::RemoveMaterial { target: t } => E::RemoveMaterial { target: target(t) },
+    }
+}
+
 /// The evaluated `render { … }` block for the UI and the CLI.
 pub fn render_block(d: &cad_ir::RenderDecl, src: &Source) -> p::RenderBlock {
     let hex = |c: [f32; 4]| cad_eval::palette::hex_string([c[0], c[1], c[2], 1.0]);

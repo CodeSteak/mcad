@@ -181,6 +181,11 @@ pub enum ToEngine {
         #[ts(optional)]
         filament: Option<u32>,
     },
+    /// Writes studio settings into the main file's `render { … }` block (created at the end of
+    /// the file if missing): changed values in place, new settings after their kind, `null`
+    /// removes. Always answers `Edits` (empty when nothing changes; plus `Error` for a bad
+    /// name).
+    SetRender { changes: Vec<RenderChange> },
     /// Abort the running job and drop queued mesh/export work. The last scene stays.
     Cancel,
     /// Watchdog: nodes with these cache keys (`NodeRef.key` of `Progress.current`, hex) hung
@@ -1042,6 +1047,35 @@ pub struct Scene {
     pub render: Option<RenderBlock>,
 }
 
+/// One change of the render block (`SetRender`); `value: null` removes the setting.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum RenderChange {
+    /// A top-level setting (`edges`, `ambient`, …).
+    Set {
+        key: String,
+        value: Value,
+    },
+    /// A value of `light NAME { … }` (the entry is created if missing).
+    Light {
+        name: String,
+        key: String,
+        value: Value,
+    },
+    RemoveLight {
+        name: String,
+    },
+    /// A value of `material SEL { … }` (created if missing).
+    Material {
+        target: RenderTarget,
+        key: String,
+        value: Value,
+    },
+    RemoveMaterial {
+        target: RenderTarget,
+    },
+}
+
 /// `render { … }` of the main file: the values given (`None`: not set, the default applies).
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
 pub struct RenderBlock {
@@ -1684,6 +1718,7 @@ pub fn typescript() -> String {
         AssertMesh,
         Scene,
         RenderBlock,
+        RenderChange,
         RenderLight,
         RenderTarget,
         RenderMaterial,

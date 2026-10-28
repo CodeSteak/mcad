@@ -44,6 +44,7 @@ import { colorsVisible, type ExportChoice, type SideTab, resolveTheme, setExport
 import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
 import { studioPartMaterials } from "../logic/studio";
+import { initRenderBlock } from "./renderBlock";
 import { DragController } from "./drag";
 import { SketchController } from "./sketch";
 import { MeasureController } from "./measure";
@@ -156,6 +157,7 @@ export function switchFile(path: string, pos?: number): boolean {
 
 /** Handle drags (Spec: Griffe und Rückschreiben). */
 export const drag = new DragController(client, () => sendNow(), { target: editTarget, fileOf: editFile, active: () => project.active });
+initRenderBlock(client);
 
 /** Sketch editor (Plan 17.12). */
 export const sketch = new SketchController(client, () => sendNow());

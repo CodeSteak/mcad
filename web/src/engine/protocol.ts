@@ -76,7 +76,7 @@ volume: number | null, };
 /**
  * Message from the UI to the engine.
  */
-export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetLang", lang: string, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, colors?: boolean, } | { "type": "RequestColorRegions", meshes: boolean, coarse?: boolean, version?: number, } | { "type": "SetFilament", color: string, filament?: number, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, } | { "type": "Sketch" } & SketchRequest | { "type": "Measure" } & MeasureRequest;
+export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetLang", lang: string, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, colors?: boolean, } | { "type": "RequestColorRegions", meshes: boolean, coarse?: boolean, version?: number, } | { "type": "SetFilament", color: string, filament?: number, } | { "type": "SetRender", changes: Array<RenderChange>, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, } | { "type": "Sketch" } & SketchRequest | { "type": "Measure" } & MeasureRequest;
 
 /**
  * Tools of the sketch editor.
@@ -874,6 +874,11 @@ ground_color: string | null,
  * One or two (top, bottom) `#rrggbb`.
  */
 background: Array<string> | null, lights: Array<RenderLight>, materials: Array<RenderMaterial>, };
+
+/**
+ * One change of the render block (`SetRender`); `value: null` removes the setting.
+ */
+export type RenderChange = { "kind": "set", key: string, value: Value, } | { "kind": "light", name: string, key: string, value: Value, } | { "kind": "remove_light", name: string, } | { "kind": "material", target: RenderTarget, key: string, value: Value, } | { "kind": "remove_material", target: RenderTarget, };
 
 export type RenderLight = { name: string, azimuth: number, elevation: number, intensity: number, 
 /**

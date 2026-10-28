@@ -47,8 +47,16 @@ render {
   (`mcad usage troubleshooting`); `mcad check` stays at 0 errors.
 - `mcad outline`: section "Render block (line N)", JSON `render` (`mcad usage json`).
 
+Writing the block: the UI's studio panel ("Studio settings") edits it in the editor (one undo
+step per change, saved with the file; panel note "Saved in the file: render block, line N"),
+`mcad set FILE --render key=value` does the same from the shell (`mcad usage set`): changed
+values in place, new settings after the last of their kind (one-line blocks stay on one line),
+removed ones with their line, a new block at the end of the file. Comments and formatting
+elsewhere stay.
+
 ```sh
 mcad render examples/09-flashlight.mcad -o /tmp/torch.png
 mcad render examples/09-flashlight.mcad -o /tmp/torch2.png --light 60,30 --material silver=metal_brushed
 mcad outline examples/09-flashlight.mcad
+mcad set examples/09-flashlight.mcad --render light.rim.intensity=0.8 --dry-run
 ```

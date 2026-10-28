@@ -12,7 +12,7 @@ diagnostics: Diagnostic[], error?: string, daemon?: {used, reason} }` plus per c
 | `render` | `output, width, height, view, views: [{name, x, y, width, height, camera, studio}], camera, visible_nodes, triangles, overlays, section, theme, style, studio, background, bounds, notes, timings` |
 | `measure` | `asserts?` (as `outline`), `between?, bounds?, volume?, area?, interference?, clearance?, measurements?: [{kind, title, value, unit, values: [{key, value, unit}], picks: [{kind, reference, point, origin}], exact, details, text, cli}], section?, at?` |
 | `watch` | one object per line: `run, trigger, changed, ok, errors, warnings, diagnostics, stats, volume, bounds, parts, render, timings` |
-| `set` | `changes: [{kind, spec, file, line, col, old, new}], dry_run, written, refused, errors_before, errors_after, diff` |
+| `set` | `changes: [{kind: param\|literal\|render, spec, file, line, col, old, new}], dry_run, written, refused, errors_before, errors_after, diff` |
 | `export` | `output, format, bytes, triangles, volume, area, bounds, step?: {solids, sheets, voids, faces, edges, bodies: [label], surfaces, curves, …}, notes, multicolor, colors?, color_regions?` (`--part/--all-parts`: `parts`), `asserts, violations, ignored_asserts, aborted` (violation: `aborted: true`, exit 4, no output fields) |
 | `daemon status` | `running, pid, version, build_id, uptime_s, idle_s, requests, cache: {entries, bytes, limit_bytes, hit_rate, …}, rss_bytes, socket, log` |
 

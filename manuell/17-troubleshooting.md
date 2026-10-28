@@ -24,6 +24,7 @@
 | warning "render: ambient = 3 is outside 0…1 – ignored" / "expects true or false" / "expects a colour" | value of the wrong type or range; the default applies |
 | warning "render: material \"x\": unknown colour" / "material lid: no part `lid` (parts: …)" | colour as in `color()` (palette name, `#rrggbb`, `default`); part names: `mcad outline` |
 | warning "render { … } applies only at the top level of the main file" / "only the first render block applies" | move the block to the top level of the main file; keep one |
+| "--render x: expected key=value, light.NAME.key=value or material.SEL.key=value" / "--render: render: unknown setting `x`" | `mcad set --render` path or name wrong: `mcad usage render-block` |
 | `mcad render` draws the studio look without `--style` | the file has a render block; `--style standard` for the CAD look |
 | studio render: metal looks dark or flat | metals show their surroundings: keep `--environment studio`, raise `--ambient`; a smooth metal (`chrome`) needs curved faces to show the softboxes |
 | `mcad` exits 2 "no graphical session" | no `DISPLAY`/`WAYLAND_DISPLAY`; use the commands |

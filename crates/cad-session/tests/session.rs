@@ -419,3 +419,48 @@ fn language_switch_recomputes_cached_texts() {
     assert_eq!(de3, de);
     assert_eq!(st.kernel_calls, 0, "{st:?}");
 }
+
+#[test]
+fn render_block_in_the_scene_and_set_render() {
+    let mut s = session();
+    let src = "color(\"red\") cube(10);\n";
+    let r = set_source(&mut s, src, 1);
+    assert!(scenes(&r).last().unwrap().render.is_none());
+    // a new block at the end
+    let e = edits(&s.post(ToEngine::SetRender {
+        changes: vec![
+            RenderChange::Set { key: "edges".into(), value: Value::Bool(false) },
+            RenderChange::Light { name: "key".into(), key: "azimuth".into(), value: Value::Num(30.0) },
+            RenderChange::Material {
+                target: RenderTarget::Color { color: "red".into() },
+                key: "preset".into(),
+                value: Value::Str("chrome".into()),
+            },
+        ],
+    }));
+    let v2 = apply(src, &e);
+    assert_eq!(
+        v2,
+        "color(\"red\") cube(10);\n\nrender {\n    edges = false;\n    light key { azimuth = 30; }\n    material \"red\" { preset = \"chrome\"; }\n}\n"
+    );
+    let r = set_source(&mut s, &v2, 2);
+    let b = scenes(&r).last().unwrap().render.clone().expect("render block");
+    assert_eq!((b.edges, b.range.line, b.lights[0].azimuth), (Some(false), 3, 30.0));
+    assert_eq!(b.materials[0].target, RenderTarget::Color { color: "red".into() });
+    assert_eq!(b.materials[0].preset.as_deref(), Some("chrome"));
+    // a changed value in place; null removes
+    let e = edits(&s.post(ToEngine::SetRender {
+        changes: vec![
+            RenderChange::Set { key: "edges".into(), value: Value::Undef },
+            RenderChange::Light { name: "key".into(), key: "azimuth".into(), value: Value::Num(-15.5) },
+        ],
+    }));
+    let v3 = apply(&v2, &e);
+    assert!(v3.contains("light key { azimuth = -15.5; }") && !v3.contains("edges"), "{v3}");
+    // nothing to change: empty edits; a bad name: empty edits and an error
+    let r = s.post(ToEngine::SetRender { changes: vec![] });
+    assert!(matches!(&r[..], [FromEngine::Edits { edits, .. }] if edits.is_empty()));
+    let r = s
+        .post(ToEngine::SetRender { changes: vec![RenderChange::Set { key: "shine".into(), value: Value::Num(1.0) }] });
+    assert!(matches!(&r[..], [FromEngine::Edits { edits, .. }, FromEngine::Error { .. }] if edits.is_empty()), "{r:?}");
+}

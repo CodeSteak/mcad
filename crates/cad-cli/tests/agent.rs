@@ -657,6 +657,64 @@ render {
     assert!(d["message"].as_str().unwrap().contains("ambient"), "{d}");
 }
 
+#[test]
+fn set_render_values() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("m.mcad");
+    let src = "// model\ncolor(\"red\") cube(5);\n";
+    std::fs::write(&file, src).unwrap();
+    let g = file.display().to_string();
+    // a new block at the end; bare words of string settings are quoted
+    let v = json(
+        &[
+            "set",
+            &g,
+            "--render",
+            "edges=false",
+            "--render",
+            "light.key.azimuth=30",
+            "--render",
+            "material.red.preset=chrome",
+            "--render",
+            "environment=overcast",
+        ],
+        0,
+    );
+    assert_eq!(v["written"].as_array().map(|a| a.len()), Some(1));
+    let t = std::fs::read_to_string(&file).unwrap();
+    assert_eq!(
+        t,
+        "// model\ncolor(\"red\") cube(5);\n\nrender {\n    edges = false;\n    environment = \"overcast\";\n    light key { azimuth = 30; }\n    material \"red\" { preset = \"chrome\"; }\n}\n"
+    );
+    // in place, removal, part material; the render JSON follows
+    json(
+        &[
+            "set",
+            &g,
+            "--render",
+            "light.key.azimuth=-60",
+            "--render",
+            "edges=",
+            "--render",
+            "material.part:lid.roughness=0.4",
+        ],
+        0,
+    );
+    let t = std::fs::read_to_string(&file).unwrap();
+    assert!(t.contains("light key { azimuth = -60; }") && !t.contains("edges"), "{t}");
+    assert!(t.contains("material lid { roughness = 0.4; }"), "{t}");
+    let v = json(&["render", &g, "-o", &dir.path().join("a.png").display().to_string(), "--size", "160x120"], 0);
+    assert_eq!((v["style"].as_str(), f(&v["studio"]["lights"][0]["azimuth"])), (Some("studio"), -60.0));
+    // dry run writes nothing; bad specs are usage errors
+    let before = std::fs::read_to_string(&file).unwrap();
+    let v = json(&["set", &g, "--render", "ambient=0.2", "--dry-run"], 0);
+    assert!(v["diff"].as_str().unwrap().contains("+    ambient = 0.2;"), "{v}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
+    for bad in ["shine=1", "light.key.height=3", "nothing", "material.red=x=1"] {
+        json(&["set", &g, "--render", bad], 2);
+    }
+}
+
 // ------------------------------------------------------------------------------------------
 // measure
 // ------------------------------------------------------------------------------------------

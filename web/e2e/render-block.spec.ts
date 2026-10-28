@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Page } from "@playwright/test";
-import { frame, loadText, openApp } from "./helpers";
+import { frame, hook, loadText, openApp } from "./helpers";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(here, "../..");
@@ -120,4 +120,67 @@ test("R02 materials reflect a procedural environment; lights can be added", asyn
   // no environment: no reflections
   await panel(page).getByTestId("studio-environment").selectOption("none");
   await drawn(page, (x) => (x as Drawn & { environment: string | null }).environment === null);
+});
+
+const text = (page: Page) => hook(page, (c) => c.text());
+
+test("R03 changes in the studio panel write the render block into the source; undo takes them back", async ({ page }) => {
+  test.setTimeout(120_000);
+  await openApp(page);
+  const src = example("05-box-lid.mcad");
+  await loadText(page, src);
+  await page.evaluate(() => (window as unknown as W).__cad.setStudio({ on: true }));
+  await settingsButton(page).click();
+  await expect(panel(page).getByTestId("studio-source")).toContainText("render-Block in die Datei");
+  // light direction: a new block at the end of the file, the rest unchanged
+  await panel(page).getByRole("slider", { name: "Richtung" }).fill("60");
+  await expect.poll(() => text(page), { timeout: 20_000 }).toContain("light key { azimuth = 60; elevation = 50; }");
+  let t = await text(page);
+  expect(t.startsWith(src)).toBe(true);
+  expect(t.slice(src.length)).toBe("\nrender {\n    light key { azimuth = 60; elevation = 50; }\n}\n");
+  // the panel now names the block's line
+  await expect(panel(page).getByTestId("studio-source")).toContainText("Zeile");
+  // edge lines off: a new setting in the block; the light again: in place
+  await panel(page).getByRole("checkbox", { name: "Kantenlinien" }).uncheck();
+  await expect.poll(() => text(page), { timeout: 20_000 }).toContain("edges = false;");
+  await panel(page).getByRole("slider", { name: "Richtung" }).fill("-90");
+  await expect.poll(() => text(page), { timeout: 20_000 }).toContain("azimuth = -90;");
+  t = await text(page);
+  expect(t.match(/light key/g)?.length).toBe(1);
+  expect(t.match(/render \{/g)?.length).toBe(1);
+  expect(t.slice(src.length)).toBe("\nrender {\n    edges = false;\n    light key { azimuth = -90; elevation = 50; }\n}\n");
+  // a material of the uncoloured material
+  await panel(page).getByTestId("studio-preset-default").selectOption("chrome");
+  await expect.poll(() => text(page), { timeout: 20_000 }).toContain('material "default" { preset = "chrome"; }');
+  await shot(page, "ui-writeback", "full");
+  // undo in the editor: the last change goes (one undo step per change)
+  await page.keyboard.press("Escape");
+  await hook(page, (c) => c.focusEditor());
+  await page.keyboard.press("Control+z");
+  await expect.poll(() => text(page), { timeout: 10_000 }).not.toContain("material");
+  expect(await text(page)).toContain("azimuth = -90;");
+  // the settings follow the file again (the material is gone)
+  await expect.poll(async () => JSON.stringify((await info(page)).settings.materials), { timeout: 20_000 }).toBe("[]");
+});
+
+test("R04 a file with a render block: the studio look follows the file", async ({ page }) => {
+  test.setTimeout(120_000);
+  await openApp(page);
+  await loadText(page, example("09-flashlight.mcad"));
+  // the block switches the look on and sets lights, edges, materials
+  const d = await drawn(page, (x) => x.on && x.lights === 2);
+  expect(d).toMatchObject({ edges: false, environment: "studio" });
+  const s = (await info(page)).settings as { ambient: number; lights: Array<{ name: string }>; materials: Array<{ target: { color?: string }; preset: string | null }> };
+  expect(s.ambient).toBe(0.45);
+  expect(s.lights.map((l) => l.name)).toEqual(["key", "rim"]);
+  expect(s.materials.find((m) => m.target.color === "silver")?.preset).toBe("aluminium");
+  await shot(page, "ui-flashlight");
+  // typing in the block changes the view's settings
+  const t = await text(page);
+  await hook(page, (c, x) => c.setText(x as string), t.replace("ambient = 0.45;", "ambient = 0.2;"));
+  await expect.poll(async () => ((await info(page)).settings as { ambient: number }).ambient, { timeout: 20_000 }).toBe(0.2);
+  await settingsButton(page).click();
+  await expect(panel(page).getByTestId("studio-source")).toContainText("Zeile 36");
+  await expect(panel(page).getByTestId("studio-preset-silver")).toHaveValue("aluminium");
+  await shot(page, "ui-flashlight-panel", "full");
 });

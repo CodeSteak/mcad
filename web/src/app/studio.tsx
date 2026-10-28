@@ -81,7 +81,7 @@ function LightRow({ s, i }: { s: StudioSettings; i: number }) {
         <b>{i === 0 ? t("studio.lightKey", { name: l.name }) : l.name}</b>
         <span className="grow" />
         <Color id={`light${i}-color`} label={t("studio.lightColor")} value={l.color} onChange={(color) => set({ color })} />
-        <IconButton icon={IconDelete} label={t("studio.removeLight")} onClick={() => editStudio({ lights: s.lights.filter((_, k) => k !== i) })} data-testid={`studio-light${i}-remove`} />
+        <IconButton icon={IconDelete} label={t("studio.removeLight")} disabled={s.lights.length <= 1} onClick={() => editStudio({ lights: s.lights.filter((_, k) => k !== i) })} data-testid={`studio-light${i}-remove`} />
       </div>
       <Slider id={i === 0 ? "azimuth" : `light${i}-azimuth`} label={t("studio.azimuth")} hint={t("studio.azimuthHint")} value={l.azimuth} min={-180} max={180} step={5} unit="°" onChange={(azimuth) => set({ azimuth })} />
       <Slider id={i === 0 ? "elevation" : `light${i}-elevation`} label={t("studio.elevation")} hint={t("studio.elevationHint")} value={l.elevation} min={5} max={90} step={1} unit="°" onChange={(elevation) => set({ elevation })} />
@@ -168,7 +168,7 @@ function MaterialList({ s }: { s: StudioSettings }) {
 
 /** Where the settings are kept: the file's render block or only this browser. */
 function SourceNote() {
-  const line = useCad(() => renderBlockLine());
+  const line = useCad((st) => renderBlockLine(st));
   return <p className="pbnote" data-testid="studio-source">{line !== null ? t("studio.inFile", { line }) : t("studio.notInFile")}</p>;
 }
 
