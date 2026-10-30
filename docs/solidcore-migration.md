@@ -1,5 +1,7 @@
 # Migration to solidcore (plan 2.3, M8)
 
+Work plan up to the switch: [`solidcore-plan.md`](solidcore-plan.md).
+
 As of: 2026-10-30 · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
 
 ## Status
@@ -224,7 +226,7 @@ than 1100 nodes are the same, none fails, and differing cylinders, spheres, tori
 checks each operation individually (box: volume, area, centroid, bounds; transformation
 and classification correct or `Unsupported`).
 
-Weekly (Mondays, `.github/workflows/solidcore.yml`, can also be started manually)
+By hand (`workflow_dispatch` of `.github/workflows/solidcore.yml`, no schedule since `576f3c0`)
 `scripts/ci/solidcore.sh` runs: `mcad` built with `--features solidcore` against the latest
 solidcore `main` instead of the pin, `diff-kernels` over the same examples; the figures
 appear in the job summary (total and per operation) and as artefact
