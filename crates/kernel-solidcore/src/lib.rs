@@ -1,9 +1,9 @@
 //! [`cad_kernel::Kernel`] over [solidcore](https://github.com/tangency-labs/solidcore), the Rust
 //! port of SMLib (plan section 2.3, milestone M8).
 //!
-//! solidcore is not usable end to end yet (its README: "no primitives, booleans or fillets"):
-//! its `SM_API`-level entry points exist, but most stop at a unit that is not ported and return
-//! `SolidError::Unported`. This crate calls the public API where it exists and maps
+//! solidcore has every unit ported, but is still experimental: some entry points stop at a call
+//! that is not wired and return `SolidError::Unported`. This crate calls the public API where it
+//! exists and maps
 //!
 //! * `SolidError::Unported` → [`KernelError::Unsupported`]`("solidcore: <op>: …")` (the message
 //!   names the upstream function and the solidcore unit that blocks it),
@@ -14,11 +14,13 @@
 //!   `classify` runs a self-test on a box once,
 //! * other solidcore errors → [`KernelError::Failed`] / [`KernelError::InvalidInput`].
 //!
-//! So `mcad diff-kernels` can report which operations already work ("coverage"); at d4940b6:
-//! `make_box`, plain `extrude` of a polygon with an identity frame, `faces`, `edges`, `bounds`,
-//! `mass_props`, `is_solid`; cylinders, cones, spheres, tori and `revolve` answer with the faces
-//! and edges of SMLib, but volumes about 1e-5 off. Faces carry the tag of the operation that made the shape
-//! (solidcore's attribute plumbing for provenance is not wired here yet).
+//! So `mcad diff-kernels` can report which operations already work ("coverage"); at bba8d87:
+//! primitives, rigid transforms, `extrude` of polygons and circles, `revolve`, `classify`,
+//! `faces`, `edges`, `bounds`, `mass_props`, `is_solid`; booleans mostly (some results lose faces);
+//! curved solids have volumes about 1e-5 off. Shapes are copied with `SmApiBrepCopy`
+//! ([`Inner::copy`]), never with `Brep::clone`, whose geometry has no owner. Faces carry the tag
+//! of the operation that made the shape (solidcore's attribute plumbing for provenance is not
+//! wired here yet).
 //!
 //! Feature `solidcore` (opt-in): link solidcore (git dependency pinned to a commit). Without
 //! it the crate compiles without solidcore and every operation is `Unsupported`.
@@ -44,7 +46,7 @@ pub struct ShapeData {
 pub type Shape = Rc<ShapeData>;
 
 /// The commit of solidcore this crate is built against.
-pub const SOLIDCORE_REV: &str = "d4940b63e9816c77a32a421bd9dfa89c7e63fa12";
+pub const SOLIDCORE_REV: &str = "bba8d8798122e9e5adc69c9ba153b8411dca24be";
 
 fn unsupported(op: &str) -> KernelError {
     KernelError::Unsupported(format!("solidcore: {op}"))
@@ -63,7 +65,7 @@ mod imp {
     use solidcore::primitive::api_curves as ac;
     use solidcore::primitive::api_primitives as ap;
     use solidcore::query::api_queries as q;
-    use solidcore::query::brep::{BrepClassifier, BrepIdentity};
+    use solidcore::query::brep::BrepQuery;
     use solidcore::sweep::api_brep as sw;
     use solidcore::topology::edge;
     use solidcore::topology::proto_topology::p1::api_transform::{TransformObject, transform_independent_object};
@@ -99,11 +101,38 @@ mod imp {
         pub k: solidcore::Kernel,
         /// Result of the classification self-test ([`Inner::classify`]), once run.
         classify_check: Option<Result<(), String>>,
+        /// Last caller key domain handed to a copy ([`Inner::copy`]).
+        copies: u64,
+    }
+
+    /// Caller identity of `e` in a B-rep copied under `domain` (bits 36 and up; the low
+    /// 36 bits are kind and index as in the kernel's own topology keys).
+    fn copy_key(e: solidcore::EntityRef, domain: u64) -> solidcore::geom::object::ObjectRef {
+        let r = solidcore::topology::brep::p3::topology_ref(0, e);
+        solidcore::geom::object::ObjectRef {
+            type_code: r.type_code,
+            key: solidcore::geom::attribute::ObjectKey((domain << 36) | (r.key.0 & ((1 << 36) - 1))),
+        }
     }
 
     impl Inner {
         pub fn new() -> Self {
-            Inner { k: solidcore::Kernel::default(), classify_check: None }
+            Inner { k: solidcore::Kernel::default(), classify_check: None, copies: 0 }
+        }
+
+        /// An independent copy (`SmApiBrepCopy`): `Brep::clone` leaves the curves and surfaces
+        /// without owner, so transforms and face queries of the clone miss its geometry.
+        pub fn copy(&mut self, b: &solidcore::Brep) -> KResult<solidcore::Brep> {
+            use solidcore::topology::brep::{p2, p3};
+            self.copies += 1;
+            let domain = self.copies;
+            let src = b.key().0;
+            let src_domain = if solidcore::geom::context::is_reserved_key(b.key()) { 0 } else { src >> 36 };
+            let mut state = p2::ArenaNotifyState::new(&solidcore::Brep::new());
+            let mut env = state.env(None);
+            let key_of = |e| copy_key(e, domain);
+            env.key_of = &key_of;
+            p3::api_brep_copy(&mut self.k, &mut env, Some(b), &|e| copy_key(e, src_domain)).map_err(|e| err("copy", e))
         }
 
         fn wrap(r: Result<solidcore::Brep, SolidError>, op: &str, tag: Tag) -> KResult<Shape> {
@@ -182,7 +211,7 @@ mod imp {
             let Some((pl, scale)) = Self::placement(m)? else {
                 return Ok(s.clone());
             };
-            let mut b = s.brep.clone();
+            let mut b = self.copy(&s.brep)?;
             if b.face_list().is_empty() {
                 return Ok(Rc::new(ShapeData { brep: b, tag: s.tag }));
             }
@@ -190,9 +219,9 @@ mod imp {
             transform_independent_object(&mut self.k, Some(TransformObject::Brep(&mut b)), &pl, scale)
                 .map_err(|e| err("transform", e))?;
             let t = Rc::new(ShapeData { brep: b, tag: s.tag });
-            // solidcore @ c9de85d returns success but moves only the vertices: the curves and
-            // surfaces of a primitive are not owned under the keys its edit looks for. Hand out
-            // only a result whose volume and centroid moved with the matrix.
+            // solidcore @ c9de85d returned success but moved only the vertices (on a
+            // `Brep::clone`, whose geometry has no owner, it still does). Hand out only a result
+            // whose volume and centroid moved with the matrix.
             let after = self.mass_props(&t).map_err(|e| match e {
                 KernelError::Unsupported(_) => check_err("transform", e),
                 e => unsupported(&format!("transform: the result fails the check ({e})")),
@@ -319,15 +348,17 @@ mod imp {
                 return Ok(vec![Class::Outside; pts.len()]);
             }
             let tol = zone_tol_3d(&self.k, SmallTopoType::NormalSize);
-            let mut c = BrepClassifier::new(&s.brep, BrepIdentity::default());
+            let mut b = self.copy(&s.brep)?;
             let mut out = Vec::with_capacity(pts.len());
             for p in pts {
-                let pc = c.point_3d_classify(&self.k, pt(*p), tol, true).map_err(|e| err("classify", e))?;
+                let pc = BrepQuery::of_brep(&b)
+                    .point_3d_classify(&self.k, &mut b, pt(*p), tol, true)
+                    .map_err(|e| err("classify", e))?;
                 out.push(match pc.point_class() {
                     // as the SMLib facade: inside a region that is not void (`IsVoid` 0)
                     PointClassType::Region => match pc.object() {
                         Some(EntityRef::Region(r)) => {
-                            let void = c.brep().region(r).map_err(|e| err("classify", e))?.is_void();
+                            let void = b.region(r).map_err(|e| err("classify", e))?.is_void();
                             if void == 0 { Class::Inside } else { Class::Outside }
                         }
                         _ => Class::Outside,
@@ -347,9 +378,10 @@ mod imp {
             };
             let mut it = shapes.iter();
             let first = it.next().ok_or_else(|| KernelError::InvalidInput("boolean without operands".into()))?;
-            let mut acc = first.brep.clone();
+            let mut acc = self.copy(&first.brep)?;
             for s in it {
-                let out = solidcore::boolean::api_brep::boolean(&mut self.k, acc, s.brep.clone(), op_sc)
+                let other = self.copy(&s.brep)?;
+                let out = solidcore::boolean::api_brep::boolean(&mut self.k, acc, other, op_sc)
                     .map_err(|e| err("boolean", e))?;
                 acc = out.result;
             }
@@ -359,20 +391,23 @@ mod imp {
         /// Sample points: an interior point (`SmApiFaceInternalPoint`) and the vertices of the
         /// boundary loops; only the vertices while the interior point is not ported.
         pub fn faces(&mut self, s: &Shape) -> KResult<Vec<FaceInfo>> {
-            let fs = q::get_faces(&s.brep).map_err(|e| err("faces", e))?;
+            // the copy owns its geometry (face_internal_point needs that) and numbers its own
+            // faces, so every query goes to it
+            let mut b = self.copy(&s.brep)?;
+            let fs = q::get_faces(&b).map_err(|e| err("faces", e))?;
             let mut out = Vec::with_capacity(fs.len());
             for (i, f) in fs.into_iter().enumerate() {
                 let mut points = Vec::new();
-                match q::face_internal_point(&self.k, &s.brep, f) {
+                match q::face_internal_point(&self.k, &mut b, f) {
                     Ok(p) => points.push(dv(p)),
                     Err(e) if e.is_unported() => {}
                     Err(e) => return Err(err("faces", e)),
                 }
-                let loops = q::face_get_boundary_loops(&s.brep, f).map_err(|e| err("faces", e))?;
+                let loops = q::face_get_boundary_loops(&b, f).map_err(|e| err("faces", e))?;
                 for e in loops.edges {
-                    for v in [edge::start_vertex(&s.brep, e), edge::end_vertex(&s.brep, e)] {
+                    for v in [edge::start_vertex(&b, e), edge::end_vertex(&b, e)] {
                         if let Some(v) = v.map_err(|e| err("faces", e))? {
-                            let p = dv(q::vertex_get_point(&s.brep, v).map_err(|e| err("faces", e))?);
+                            let p = dv(q::vertex_get_point(&b, v).map_err(|e| err("faces", e))?);
                             if !points.contains(&p) {
                                 points.push(p);
                             }
@@ -417,7 +452,7 @@ mod imp {
             let store = solidcore::geom::attribute::AttributeStore::new();
             let key_of = |_e: solidcore::EntityRef| solidcore::geom::attribute::ObjectKey(0);
             let attrs = mp::PropertyAttributes { store: &store, key_of: &key_of };
-            let mut b = s.brep.clone();
+            let mut b = self.copy(&s.brep)?;
             let m = mp::brep_mass_properties(&self.k, &mut b, 1e-6, 1.0, pt(DVec3::ZERO), &attrs)
                 .map_err(|e| err("mass_props", e))?;
             let area = mp::brep_area(&self.k, &mut b, 1e-6).map_err(|e| err("mass_props (area)", e))?;
@@ -497,7 +532,7 @@ impl Kernel for SolidcoreKernel {
     type Shape = Shape;
 
     fn id(&self) -> &'static str {
-        "solidcore-d4940b6"
+        "solidcore-bba8d87"
     }
 
     fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Shape> {

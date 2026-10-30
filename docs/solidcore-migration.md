@@ -1,13 +1,15 @@
 # Migration to solidcore (plan 2.3, M8)
 
-As of: 2026-10-25 · solidcore `main` @ `d4940b6` (2026-10-25 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation tables below come from the run with `c9de85d`, the figures for `d4940b6` are in the comparison over the examples.
+As of: 2026-10-30 · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
 
 ## Status
 
 - **Crate `kernel-solidcore`** implements `cad_kernel::Kernel` via the public API of
   solidcore. The dependency is a git entry with a fixed commit
   (`crates/kernel-solidcore/Cargo.toml`, constant `SOLIDCORE_REV`, kernel ID
-  `solidcore-d4940b6`). Previous pins: `3a6a50b` (2026-10-22), `c9de85d` (2026-10-23). From
+  `solidcore-bba8d87`). Previous pins: `3a6a50b` (2026-10-22), `c9de85d` (2026-10-23),
+  `d4940b6` (2026-10-25). From `d4940b6` to `bba8d87` (3101 commits) `face_internal_point` takes
+  `&mut Brep`. From
   `c9de85d` to `d4940b6` (2026-10-25, a little over 1200 commits) the API of the
   mass properties changed (`brep_mass_properties`, `brep_area` take `&mut Brep`); the weekly
   run against `main` would have failed at the build.
@@ -87,7 +89,9 @@ unlock themselves as soon as solidcore computes correctly.
 | `169dbc4`, `kernel-solidcore` unchanged | 48 | 942 | 102 | 287 | 431 | 122 | 0 |
 | `169dbc4` and `c9de85d`, `kernel-solidcore` adapted | 48 | 942 | **241** | 288 | 413 | **0** | 0 |
 | `3688a8b` (2026-10-24) | 61 | 1339 | 482 | 332 | 336 | 189 | 0 |
-| `d4940b6` (2026-10-25, pin) | 64 | 1436 | **516** | 354 | 360 | 206 | 0 |
+| `d4940b6` (2026-10-25) | 64 | 1436 | **516** | 354 | 360 | 206 | 0 |
+| `bba8d87`, `kernel-solidcore` only builds | 64 | 1438 | 369 | 352 | 362 | 355 | 0 |
+| `bba8d87` (2026-10-30, pin), `kernel-solidcore` adapted | 64 | 1438 | **1187** | 84 | 116 | 51 | 0 |
 
 - @ `d4940b6`: cylinders, cones, spheres, tori and `revolve` deliver results with the face and
   edge counts of SMLib, but the volumes deviate by about 1e-5 (sphere r 5: 523.6048 instead of
@@ -109,16 +113,44 @@ unlock themselves as soon as solidcore computes correctly.
   `transform` (`topology.brep_p5`, 103), Booleans (`topology.edge`, `query.face_p1`, 13),
   circular profiles (`topology.edgeuse_p3`, 11), sphere/torus (`topology.face_p2`, 10).
 
+## State at `bba8d87` (2026-10-30)
+
+solidcore: all 279 units `green`. New since `d4940b6`: public fillet/chamfer API
+(`blend::fillet_executive::api::{fillet_edges, fillet_edges_per_edge, variable_radius_fillet,
+chamfer_fillet}`), crates `step-import`, `step-export`, `step-brep` (STEP in both directions on the
+solidcore B-rep) and `nurbs-grid-mesh` (grid mesher for trimmed NURBS faces). Still out of scope:
+`SmApiTessellate`, `SmApiPoly*`, `SmApiCreateCurveInterpPoints`.
+
+Changes in `kernel-solidcore`:
+
+| Problem | Fix |
+| --- | --- |
+| `Brep::clone` gives curves and surfaces without owner: `transform` of the clone moves only the vertices, `face_internal_point` fails (status 1001) | copies with `SmApiBrepCopy` (`api_brep_copy`, caller keys per copy, `Inner::copy`) |
+| face ids of a copy differ from the original (`face N not found`) | `faces` queries the copy only |
+| `BrepClassifier` with `BrepIdentity::default()` puts every point outside | `BrepQuery::of_brep(..).point_3d_classify` on a copy; the self-test passes |
+
+Remaining nodes:
+
+| Kind | Nodes | Cause |
+| --- | ---: | --- |
+| differ: volume only (≤ 1e-4 relative, same faces/edges) | 27 | curved solids, about 1e-5 off |
+| differ: faces/edges and volume (0.1 % to 95 %) | 24 | booleans that lose faces (`hole_plate`, `vent_grille`, `chamfers`, `grip_shell`), `hull`/`minkowski` |
+| unsupported: sketch profile in `extrude` | 42 | not wired here |
+| unsupported: fillet/chamfer | 9 | API exists, not wired here |
+| unsupported: polyhedron | 8 | out of scope of solidcore |
+| unsupported: sweep, skin (twist/scale), shell, spline revolve, shear | 17 | not wired here or not ported |
+
 ## What is missing (in solidcore or here)
 
-1. Primitives other than the box (`surface.trim_srf_cache`, `topology.face_p2`).
-2. A transformation that carries curves and faces along (`topology.brep_p5`), and the
-   4×4 matrix variant (shear, e.g. `multmatrix`).
-3. Booleans (`topology.edge`, `query.face_p1`), point classification (`query.brep`).
-4. Public fillet/chamfer API (`blend.fillet_executive_p1`).
-5. Here: wire up `create_skin` (loft, extrusion with twist), `create_pipe_sweep` (sweep),
-   offset/shell; attributes for face tags (provenance); `Kernel::brep` for
-   STEP export; Wasm build in the same module (stack 8 MiB, see solidcore README).
+1. ~~Primitives other than the box~~ (works at `bba8d87`).
+2. ~~A transformation that carries curves and faces along~~ (works at `bba8d87`); still missing:
+   the 4×4 matrix variant (shear, e.g. `multmatrix`).
+3. Booleans that keep all faces (see "State at `bba8d87`"); ~~point classification~~ (works).
+4. ~~Public fillet/chamfer API~~ (exists at `bba8d87`); wire it up here.
+5. Here: sketch profiles for `extrude`; wire up `create_skin` (loft, extrusion with twist),
+   `create_pipe_sweep` (sweep), offset/shell; attributes for face tags (provenance);
+   `Kernel::brep` and STEP export via `step-brep`/`step-export`; Wasm build in the same module
+   (stack 8 MiB, see solidcore README).
 6. **Own tessellator** (not in solidcore, see below).
 
 Estimate from the research (uncertain, depends on the units above and on the people who take
@@ -187,7 +219,7 @@ in addition, `tests/openscad-compat/compare.py` and `tests/step/verify.py` must 
 
 The test `diff_kernels_on_examples` (`crates/cad-cli/tests/cli.rs`, only with `--features
 solidcore`) checks that the comparison runs over all examples without a crash, that more
-than 450 nodes are the same, none fails, and differing cylinders, spheres, tori and solids of revolution differ only in volume; without the feature
+than 1100 nodes are the same, none fails, and differing cylinders, spheres, tori and solids of revolution differ only in volume; without the feature
 `diff_kernels_needs_the_feature` checks the build hint. `crates/kernel-solidcore/tests/coverage.rs`
 checks each operation individually (box: volume, area, centroid, bounds; transformation
 and classification correct or `Unsupported`).

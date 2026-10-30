@@ -291,12 +291,12 @@ fn diff_kernels_on_examples() {
         }
     }
     if v["solidcore_available"] == true {
-        // solidcore @ d4940b6: transforms, fillets and most booleans are unsupported; boxes and
-        // plain extrusions agree with SMLib; cylinders, spheres, tori and revolutions answer with
-        // the right faces and edges but volumes about 1e-5 off (solidcore's geometry, not the
-        // integration accuracy; one revolution's face query fails) – they differ, nothing fails
-        assert!(s["unsupported"].as_u64().unwrap() > 100, "{s}");
-        assert!(s["same"].as_u64().unwrap() > 450, "{s}");
+        // solidcore @ bba8d87: primitives, transforms and most booleans agree with SMLib (1187 of
+        // 1438 nodes); sketch profiles, fillets, sweeps and polyhedra are unsupported; cylinders,
+        // spheres, tori and revolutions answer with the right faces and edges but volumes about
+        // 1e-5 off (solidcore's geometry, not the integration accuracy) – they differ, nothing fails
+        assert!(s["unsupported"].as_u64().unwrap() > 50, "{s}");
+        assert!(s["same"].as_u64().unwrap() > 1100, "{s}");
         assert_eq!(s["failed"].as_u64().unwrap(), 0, "{s}");
         let curved = ["cylinder", "sphere", "torus", "rotate_extrude"];
         for f in v["files"].as_array().unwrap() {
