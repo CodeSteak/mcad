@@ -1,11 +1,11 @@
 // End-to-end tests in a real Chromium against the production build (vite build + preview),
 // built with VITE_TEST_MODELS=1 so the example menu lists the test models of tests/models/.
-// Browsers come from PLAYWRIGHT_BROWSERS_PATH (preinstalled locally; in CI
-// `playwright install --with-deps chromium`, see .github/workflows/web.yml).
+// Browsers come from PLAYWRIGHT_BROWSERS_PATH (preinstalled locally, otherwise
+// `playwright install --with-deps chromium`).
 import { defineConfig, devices, type ReporterDescription } from "@playwright/test";
 
 const reporter: ReporterDescription[] = [["list"], ["json", { outputFile: "../reports/tmp/report2/playwright.json" }]];
-// CI (GitHub Actions sets CI): additionally an HTML report in playwright-report/ (artefact on failure).
+// With CI set: additionally an HTML report in playwright-report/ (artefact on failure).
 if (process.env.CI) reporter.push(["html", { open: "never", outputFolder: "playwright-report" }]);
 
 export default defineConfig({

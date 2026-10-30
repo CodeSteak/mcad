@@ -4,9 +4,8 @@
 #   EMSDK=~/emsdk scripts/ci/emsdk.sh          # default EMSDK: $HOME/emsdk
 #   EMSDK_VERSION=6.0.13                        # default
 #
-# If $EMSDK already holds an activated SDK of this version (CI cache, or a local install),
+# If $EMSDK already holds an activated SDK of this version (a local install),
 # nothing is downloaded. Otherwise emsdk is cloned and the version installed and activated.
-# In GitHub Actions EMSDK and the PATH entries are exported to later steps.
 set -euo pipefail
 
 VERSION="${EMSDK_VERSION:-6.0.13}"
@@ -29,8 +28,3 @@ else
 fi
 
 "$DIR/upstream/emscripten/emcc" --version | head -n 1
-if [ -n "${GITHUB_ENV:-}" ]; then
-  echo "EMSDK=$DIR" >> "$GITHUB_ENV"
-  echo "$DIR" >> "$GITHUB_PATH"
-  echo "$DIR/upstream/emscripten" >> "$GITHUB_PATH"
-fi

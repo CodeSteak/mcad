@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# solidcore coverage as run weekly by .github/workflows/solidcore.yml: builds `mcad` with
+# solidcore coverage: builds `mcad` with
 # `--features solidcore` against the newest solidcore `main` (instead of the commit pinned in
 # crates/kernel-solidcore/Cargo.toml) and runs `mcad diff-kernels` over the examples
 # (tests/models/openscad-compat, tests/models/spec). Reports the numbers only: unsupported, blocked
@@ -10,7 +10,7 @@
 #                                       # diff-kernels.json, summary.md
 #   SOLIDCORE_REV=<commit>|main         # default main
 #
-# Writes summary.md to $GITHUB_STEP_SUMMARY when set. Changes the pin in
+# Changes the pin in
 # crates/kernel-solidcore (Cargo.toml, src/lib.rs) and Cargo.lock; locally restore them with
 # `git checkout -- crates/kernel-solidcore Cargo.lock`.
 # Locally: scripts/ci/smlib-native.sh && SMLIB_PREBUILT=smlib/build-native scripts/ci/solidcore.sh
@@ -76,6 +76,3 @@ for label, c in sorted(v["coverage"].items()):
 print("\n</details>")
 PY
 cat "$OUT/summary.md"
-if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-  cat "$OUT/summary.md" >>"$GITHUB_STEP_SUMMARY"
-fi

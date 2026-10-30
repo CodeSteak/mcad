@@ -37,5 +37,5 @@ Not a test report, but generated the same way: the catalogue of example models
 Requirements of the generators (local): SMLib sources (`smlib/fetch.sh`), natively built
 libraries (`SMLIB_PREBUILT`), emsdk 6.0.13, wasm-bindgen-cli in the version from
 `Cargo.lock`, OpenSCAD 2021.01 (reports 1, 6), a venv with `cadquery-ocp==8.0.1.1.0`
-(reports 5–7, 21), Python 3 with Pillow (report 8, pixel counting), Chromium from Playwright 1.56.1, for reports 9, 11, 18, 19, 20 and 21 the Tauri packages, Xvfb, WebKitWebDriver (`webkit2gtk-driver`), `tauri-driver` 2.1.0 and ImageMagick (`scripts/ci/desktop.sh deps e2e-deps`), for report 11 a venv with `lib3mf` and `trimesh` as well as PrusaSlicer (apt, optional; report 17: G-code of the stencil). The reports do not run in CI; the
-checks they are based on do (`.github/workflows/`).
+(reports 5–7, 21), Python 3 with Pillow (report 8, pixel counting), Chromium from Playwright 1.56.1, for reports 9, 11, 18, 19, 20 and 21 the Tauri packages, Xvfb, WebKitWebDriver (`webkit2gtk-driver`), `tauri-driver` 2.1.0 and ImageMagick (`scripts/ci/desktop.sh deps e2e-deps`), for report 11 a venv with `lib3mf` and `trimesh` as well as PrusaSlicer (apt, optional; report 17: G-code of the stencil). The reports and the checks
+they are based on (`scripts/ci/`) run locally.

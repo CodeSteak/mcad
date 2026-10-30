@@ -1,6 +1,6 @@
 # controller-cad: build, test, install, Arch package.
 #
-# The targets call the scripts the CI uses too (scripts/ci/*.sh, smlib/*.sh,
+# The targets call the check and build scripts (scripts/ci/*.sh, smlib/*.sh,
 # web/scripts/build-wasm.sh); `make help` lists them. Variables can be overridden:
 #   make app SMLIB_PREBUILT=/path/build-native
 #   make install PREFIX=/usr DESTDIR=/tmp/pkg

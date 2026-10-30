@@ -42,7 +42,7 @@ Fixed constraints:
 | Variable radius | stretch goal | `fillet(r = function (p) …)` and `difference/union/intersection(fillet = function (p) …)`: cad-eval translates the function literal into a radius law `cad_ir::Law` (pure expression over `p`, part of the tree and of the cache key) instead of a callback; the engine evaluates it at sample points per edge, the facade (`sc_fillet_var`) builds a B-spline law from them | B7 |
 | solidcore | `kernel-solidcore` from the switch | `kernel-solidcore` and `mcad diff-kernels` exist, opt-in (feature `solidcore`), pin `bba8d87`: 1187 of 1438 nodes identical to SMLib (primitives, transformation, most booleans); tessellation not in solidcore's scope (custom tessellator needed), M8 waits; work plan `docs/solidcore-plan.md` | B5, B6, `docs/solidcore-migration.md` |
 | UI libraries | react-three-fiber, `three-mesh-bvh`, `Line2` | three.js directly (raycaster, lines as `LineSegments`), without r3f and BVH; TS protocol types generated from Rust with `ts-rs` | B2 |
-| CI | GitHub Actions, cached SMLib builds | workflows `rust`, `web`, `desktop`, `compat`, `pages` (manual) in `.github/workflows/`, steps in `scripts/ci/` (section 11) | B9 |
+| CI | GitHub Actions, cached SMLib builds | no hosted CI (workflows removed 2026-10-30); check scripts in `scripts/ci/`, run locally (section 11) | B9 |
 | Tauri version | "later, optional" | `crates/cad-app` (Tauri 2) in the `mcad` binary (feature `gui`, default): `mcad` / `mcad datei.mcad` / `mcad ordner/` starts the UI. Engine in a separate process (`mcad engine-host`, engine thread with 256 MiB stack, stepwise as in the worker), because SMLib has global state and a hanging call can only be stopped by ending the process; responses are sent in binary over a Tauri channel (`cad-desktop/src/wire.rs`). Files on disk, file watcher (`notify`), Git gutter against `HEAD` (`git` call + `similar`), control via `mcad ui status/show/screenshot` over local IPC (`cad-ipc`) | B9 |
 | Section view | – | GPU section in browser and Tauri: clipping plane, stencil cap (parity pass per body, hatched like `mcad render --section`), contour, handle with detents on grid planes and anchors; "Als `mcad render …` kopieren" (copy as `mcad render …`) | B9 |
 | `color()` | CSS names like OpenSCAD | own palette of 16 muted colours (section 16.1), unknown names: warning and a stable random colour; `filament = n` | B11 |
@@ -444,8 +444,7 @@ web/
 examples/           example files (also test cases): spec/, openscad-compat/, project-housing/
 tests/              openscad-compat/ (reference, compare.py), step/verify.py
 tools/report/       generators for the test reports
-scripts/ci/         steps of the CI workflows
-.github/            workflows and composite actions (SMLib native/Wasm with cache)
+scripts/ci/         check and build steps (run locally, Makefile)
 docs/               plan, solidcore migration, test reports (reports/)
 ```
 
@@ -464,17 +463,15 @@ docs/               plan, solidcore migration, test reports (reports/)
 | UI | Vitest, Playwright | editor ↔ view, dragging, undo, snapping |
 | Performance | browser benchmarks | load time, evaluation of the examples, dragging at ≥ 30 fps |
 
-CI: GitHub Actions; SMLib Wasm and SMLib native as cached build artefacts. Implemented in `.github/workflows/`, each step is a script in `scripts/ci/` and can be run locally the same way:
+Checks: no hosted CI (the GitHub workflows were removed on 2026-10-30). Each step is a script in `scripts/ci/` and runs locally (also via the `Makefile`):
 
-| Workflow | Content | Cache |
-| --- | --- | --- |
-| `rust` | Tauri system packages (apt, `scripts/ci/desktop.sh deps`: the workspace contains `cad-app`), `cargo fmt --check`, `cargo clippy --workspace --all-targets -D warnings` (native and `cad-wasm` for wasm32), `cargo test --workspace`, `cargo check -p cad-wasm --target wasm32-unknown-unknown` | SMLib native (`smlib/build-native/lib`), Cargo |
-| `web` | emsdk 6.0.13, `smlib/build-wasm.sh`, `web/scripts/build-wasm.sh`, `pnpm install --frozen-lockfile`, `typecheck`, Vitest, Node tests (smlib.wasm, engine, transport), `pnpm build`, Playwright; artefacts `web/dist` and, on failure, the Playwright report | emsdk, smlib.js/.wasm, Cargo, pnpm |
-| `compat` | OpenSCAD 2021.01 (apt): regenerate the reference and compare with `reference.json`, self-test of `compare.py`, `include`/`use` against OpenSCAD, `compare.py --eval` with the release CLI; STEP check with `cadquery-ocp==8.0.1.1.0` | SMLib native, Cargo, venv |
-| `desktop` | Tauri packages (apt), SMLib native, `pnpm build:tauri`, `cargo build --release -p cad-cli`, Tauri E2E with `tauri-driver` + WebKitWebDriver under Xvfb (`web/e2e-tauri/desktop.e2e.mjs`) | SMLib native, Cargo, pnpm |
-| `pages` | manual (`workflow_dispatch`): `web/dist` to GitHub Pages (no COOP/COEP headers needed) | as `web` |
-
-Cache key of the SMLib builds (`scripts/ci/smlib-key.sh`): fork commit, content of the patches, `smlib/CMakeLists.txt`, build script and compiler version (native `c++`, Wasm `emcc`, plus CMake), for Wasm additionally the facade sources.
+| Script | Content |
+| --- | --- |
+| `rust.sh` | Tauri system packages (apt, `scripts/ci/desktop.sh deps`: the workspace contains `cad-app`), `cargo fmt --check`, `cargo clippy --workspace --all-targets -D warnings` (native and `cad-wasm` for wasm32), `cargo test --workspace`, `cargo check -p cad-wasm --target wasm32-unknown-unknown` |
+| `web.sh` | emsdk 6.0.13, `smlib/build-wasm.sh`, `web/scripts/build-wasm.sh`, `pnpm install --frozen-lockfile`, `typecheck`, Vitest, Node tests (smlib.wasm, engine, transport), `pnpm build`, Playwright |
+| `compat.sh` | OpenSCAD 2021.01 (apt): regenerate the reference and compare with `reference.json`, self-test of `compare.py`, `include`/`use` against OpenSCAD, `compare.py --eval` with the release CLI; STEP check with `cadquery-ocp==8.0.1.1.0` |
+| `desktop.sh` | Tauri packages (apt), SMLib native, `pnpm build:tauri`, `cargo build --release -p cad-cli`, Tauri E2E with `tauri-driver` + WebKitWebDriver under Xvfb (`web/e2e-tauri/desktop.e2e.mjs`) |
+| `solidcore.sh` | `mcad diff-kernels` against solidcore `main` (`docs/solidcore-migration.md`) |
 
 ---
 
@@ -513,7 +510,7 @@ Each milestone ends with a working state in the browser and in the CLI.
 | later | Tauri version (`TauriTransport`), file watcher, Git gutter, `mcad ui`, section view | | done (B9) |
 | later | CLI daemon | | done (B10) |
 | later | multi-colour, multi-filament 3MF, dark theme (section 16) | | done (B11) |
-| – | CI (GitHub Actions) | | done (workflows checked locally; run on GitHub pending) |
+| – | CI (GitHub Actions) | | removed (2026-10-30); checks run locally with `scripts/ci/` |
 
 Dependencies: M1 → M2 → M3 → M4 → M5. M6 depends only on M2. M8 depends on solidcore's progress and can partly start at any time after M2.
 

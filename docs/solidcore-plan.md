@@ -29,7 +29,7 @@ As of 2026-10-30, solidcore pin `bba8d87`. Status and measurements: `docs/solidc
 | --- | --- | --- | --- |
 | 0.1 | Kernel selection at runtime: `--kernel smlib\|solidcore`, `MCAD_KERNEL`, for every command; the engine is already generic (`Session<K>`) | `crates/cad-cli/src/main.rs:411`, `daemon.rs`, `host.rs`, `set.rs`; manual `02-commands.md`, `17-troubleshooting.md` | `mcad render --kernel solidcore box.mcad` works or reports `Unsupported` per node |
 | 0.2 | `diff-kernels` corpus: add `tests/models/everyday` (21), `tests/models/project-housing`, `tests/everyday/bugs` | `scripts/ci/solidcore.sh`, `crates/cad-cli/tests/cli.rs` | numbers for all models |
-| 0.3 | Pin routine: run `solidcore.yml` by hand, fix API breaks, update the table in `solidcore-migration.md`, bump pin. Fix the sentence "Weekly (Mondays …)" in `solidcore-migration.md` (the workflow is `workflow_dispatch` only since `576f3c0`) | `scripts/ci/solidcore.sh`, docs | checklist in `solidcore-migration.md` |
+| 0.3 | Pin routine: run `scripts/ci/solidcore.sh` against `main`, fix API breaks, update the table in `solidcore-migration.md`, bump pin | `scripts/ci/solidcore.sh`, docs | checklist in `solidcore-migration.md` |
 | 0.4 | Volume comparison: `diff-kernels` compares volumes relative 1e-6. On curved solids solidcore is closer to the exact value than SMLib (cylinder r 5, h 10: solidcore −4e-7, SMLib −1.6e-4; sphere r 5: +9e-5 against −4e-4). Compare against the exact volume where it is known (primitives), otherwise with a tolerance from the integration accuracy | `crates/cad-cli/src/diff.rs` | the 27 volume-only nodes are `same` or explained |
 | 0.5 | Performance baseline: eval time and peak memory per example, SMLib against solidcore; cost of `Inner::copy` (a copy per query: `faces`, `classify`, `mass_props`) | `diff-kernels --json` (time per node), report in `docs/reports/` | table; decision on 0.6 |
 | 0.6 | Fewer copies: read-only queries need `&mut Brep` only for caches. Keep one owned copy per shape (`RefCell<Brep>` in `ShapeData`) and query it in place | `crates/kernel-solidcore/src/lib.rs` | `faces`/`mass_props` without a copy per call |
@@ -117,7 +117,7 @@ STL/3MF export, section view and render snapshots pass with `--kernel solidcore`
 | --- | --- |
 | 5.1 | Default kernel solidcore; SMLib remains as feature `smlib` for one release (comparison, fallback) |
 | 5.2 | Freeze reference data before removal: volume, faces, edges, selected edges per node from the last SMLib run as `tests/kernel-reference.json`; a test compares solidcore against it (replaces `diff-kernels` once SMLib is gone) |
-| 5.3 | Remove: `crates/kernel-smlib`, `smlib/` (facade, patches, scripts), `third_party/smlib`, Emscripten/`make emsdk`, Makefile targets `smlib*`, SMLib steps and caches in `.github/workflows/{rust,web,desktop,compat}.yml`, `kernel-smlib` dev-dependencies of `cad-measure`, `cad-render`, `cad-session`, `cad-engine`, `cad-desktop` |
+| 5.3 | Remove: `crates/kernel-smlib`, `smlib/` (facade, patches, scripts), `third_party/smlib`, Emscripten/`make emsdk`, Makefile targets `smlib*`, SMLib steps in `scripts/ci/{rust,web,desktop,compat}.sh`, `kernel-smlib` dev-dependencies of `cad-measure`, `cad-render`, `cad-session`, `cad-engine`, `cad-desktop` |
 | 5.4 | Docs: `README.md`, `docs/development.md`, `docs/technical-plan.md`, `CLAUDE.md` (building section), manual (`mcad diff-kernels`: remove or keep only with feature `smlib`) |
 
 ## Order and duration

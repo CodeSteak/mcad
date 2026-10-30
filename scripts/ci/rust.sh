@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rust checks as run by .github/workflows/rust.yml.
+# Rust checks: fmt, clippy, tests, Wasm check.
 #
 #   scripts/ci/rust.sh fmt | clippy | clippy-wasm | test | wasm-check | all
 #

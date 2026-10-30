@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # SMLib as Wasm (smlib.js + smlib.wasm in web/public/smlib/, input of web/scripts/build-wasm.sh):
-# fetch the fork + patches and run smlib/build-wasm.sh unless both files already exist
-# (CI cache). Needs emcc (scripts/ci/emsdk.sh).
+# fetch the fork + patches and run smlib/build-wasm.sh unless both files already exist.
+# Needs emcc (scripts/ci/emsdk.sh).
 #
 #   scripts/ci/smlib-wasm.sh [--force]
 set -euo pipefail

@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Desktop app (Tauri 2) as run by .github/workflows/desktop.yml and the Linux deps of the
-# rust workflow (the workspace contains crates/cad-app, so `cargo test --workspace` links
+# Desktop app (Tauri 2) and the Linux deps of the Rust checks (the workspace contains crates/cad-app, so `cargo test --workspace` links
 # WebKitGTK).
 #
 #   scripts/ci/desktop.sh deps      # apt: WebKitGTK 4.1, libsoup 3, … (+ ninja); with `e2e-deps` also Xvfb, WebKitWebDriver

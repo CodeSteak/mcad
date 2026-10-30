@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Browser build and tests as run by .github/workflows/web.yml (from the repository root).
+# Browser build and tests (from the repository root).
 #
 #   scripts/ci/web.sh wasm        # cad-wasm + wasm-bindgen + wasm-opt -> web/src/wasm-pkg/
 #                                 # (needs web/public/smlib/smlib.{js,wasm}: scripts/ci/smlib-wasm.sh)

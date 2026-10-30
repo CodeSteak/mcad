@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OpenSCAD comparison and STEP check as run by .github/workflows/compat.yml.
+# OpenSCAD comparison and STEP check.
 #
 #   scripts/ci/compat.sh cli         # cargo build --release -p cad-cli --no-default-features (headless, needs SMLIB_PREBUILT)
 #   scripts/ci/compat.sh reference   # OpenSCAD 2021.01: regenerate the reference into target/,

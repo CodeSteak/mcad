@@ -374,7 +374,7 @@ tests/               openscad-compat/ (reference, compare.py), step/verify.py
 tools/report/        generators of the test reports, 3MF check (verify3mf.py)
 tools/palette/       check of the colour palette (ΔE in OKLab, colour vision deficiency, contrast)
 tools/font/          generator of the bitmap font of cad-render
-scripts/ci/          steps of the GitHub Actions workflows (can be called locally the same way)
+scripts/ci/          check and build steps (also called by the Makefile)
 packaging/           desktop file and NOTICE (linux/), Arch package (arch/: PKGBUILD, Docker build, check script)
 Makefile             targets for building, checking, installing, Arch package (make help)
 docs/                plan, solidcore migration, test reports
@@ -402,16 +402,13 @@ python3 tools/palette/palette.py                                # palette: ΔE, 
 python3 tools/report/verify3mf.py teil.3mf                      # 3MF: lib3mf, trimesh, Bambu import model
 ```
 
-CI (`.github/workflows/`): `rust` (Tauri packages, fmt, clippy, tests, Wasm check), `web` (smlib.wasm,
-cad-wasm, typecheck, Vitest, Node tests, build, Playwright), `desktop` (UI for Tauri, release build,
-Tauri E2E under Xvfb), `compat` (OpenSCAD reference and
-comparison, include/use against OpenSCAD, STEP check), `pages` (manual: `web/dist` to
-GitHub Pages). The workflows only call `scripts/ci/*.sh`; the same calls run locally,
-e.g. `scripts/ci/smlib-native.sh && SMLIB_PREBUILT=smlib/build-native scripts/ci/rust.sh all`.
-SMLib (native and Wasm) and emsdk are cached (key from fork commit, patches,
-CMakeLists, build script and compiler: `scripts/ci/smlib-key.sh`). If the SMLib fork is not
-publicly readable, the repository needs the secret `SMLIB_CLONE_URL`
-(`https://x-access-token:<token>@github.com/tangency-labs/smlib.git`).
+There are no GitHub workflows (removed 2026-10-30). The checks run locally with the scripts
+in `scripts/ci/`: `rust.sh` (Tauri packages, fmt, clippy, tests, Wasm check), `web.sh`
+(smlib.wasm, cad-wasm, typecheck, Vitest, Node tests, build, Playwright), `desktop.sh` (UI for
+Tauri, release build, Tauri E2E under Xvfb), `compat.sh` (OpenSCAD reference and comparison,
+include/use against OpenSCAD, STEP check), `solidcore.sh` (`diff-kernels` against solidcore
+`main`), e.g. `scripts/ci/smlib-native.sh && SMLIB_PREBUILT=smlib/build-native scripts/ci/rust.sh all`.
+If the SMLib fork is not publicly readable, `SMLIB_URL` gives `smlib/fetch.sh` another URL.
 
 ## Test reports
 

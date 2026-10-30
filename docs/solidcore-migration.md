@@ -226,12 +226,10 @@ than 1100 nodes are the same, none fails, and differing cylinders, spheres, tori
 checks each operation individually (box: volume, area, centroid, bounds; transformation
 and classification correct or `Unsupported`).
 
-By hand (`workflow_dispatch` of `.github/workflows/solidcore.yml`, no schedule since `576f3c0`)
-`scripts/ci/solidcore.sh` runs: `mcad` built with `--features solidcore` against the latest
-solidcore `main` instead of the pin, `diff-kernels` over the same examples; the figures
-appear in the job summary (total and per operation) and as artefact
-`solidcore-coverage` (`diff-kernels.json`). The job does not turn red because nodes are unsupported,
-blocked or differ, only if the build (API change in solidcore) or
-`diff-kernels` itself fails. Locally: `SMLIB_PREBUILT=smlib/build-native
+`scripts/ci/solidcore.sh` (by hand; there is no CI workflow) builds `mcad` with `--features
+solidcore` against the latest solidcore `main` instead of the pin and runs `diff-kernels` over
+the same examples; the figures go to `summary.md` (total and per operation) and
+`diff-kernels.json` in the output directory. The script fails only if the build (API change in
+solidcore) or `diff-kernels` itself fails, not because nodes are unsupported, blocked or differ: `SMLIB_PREBUILT=smlib/build-native
 scripts/ci/solidcore.sh` (changes the pin in the working tree, afterwards `git checkout --
 crates/kernel-solidcore Cargo.lock`).
