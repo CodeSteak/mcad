@@ -318,3 +318,87 @@ fn sweep_along_sketch_paths() {
     assert!((hi - DVec3::new(11.0, 1.0, 10.0)).abs().max_element() < 1e-6, "{hi}");
     assert!(matches!(k.sweep_path(&square(DVec2::ONE), &corner, 1), Err(KernelError::Unsupported(_))));
 }
+
+#[test]
+fn extrude_with_twist_and_scale() {
+    let mut k = SolidcoreKernel::new();
+    // twisted bar: every section is the same square, 12 skin sections
+    let s = k.extrude(&placed_loop(square_of(4.0)), 20.0, FRAC_PI_2, DVec2::ONE, 1).unwrap();
+    check(&mut k, &s, 6, 12, 1280.0, 1e-5);
+    // tapered: frustum h / 3 (A1 + A2 + sqrt(A1 A2)), ruled
+    let s = k.extrude(&placed_loop(square_of(6.0)), 10.0, 0.0, DVec2::splat(0.5), 1).unwrap();
+    check(&mut k, &s, 6, 12, 840.0, 1e-9);
+    let circle = Loop::Circle { center: DVec2::ZERO, r: 5.0 };
+    let s = k.extrude(&placed_loop(circle.clone()), 10.0, 0.0, DVec2::splat(0.5), 1).unwrap();
+    check(&mut k, &s, 3, 3, PI * 10.0 / 3.0 * (25.0 + 12.5 + 6.25), 1e-6);
+    // twist and non-uniform scale, placed: sections scaled after the turn (OpenSCAD's order)
+    let rect =
+        Loop::Polygon(vec![DVec2::new(-5.0, -3.0), DVec2::new(5.0, -3.0), DVec2::new(5.0, 3.0), DVec2::new(-5.0, 3.0)]);
+    let p = PlacedLoop { lp: rect, frame: DMat4::from_translation(DVec3::new(0.0, 0.0, -6.0)) };
+    let s = k.extrude(&p, 12.0, -PI / 3.0, DVec2::new(1.0, 0.5), 1).unwrap();
+    // the area falls linearly in y: 12 · 60 · (1 + 0.5) / 2
+    check(&mut k, &s, 6, 12, 540.0, 1e-5);
+    let (lo, hi) = k.bounds(&s).unwrap().unwrap();
+    assert!((lo.z + 6.0).abs() < 1e-9 && (hi.z - 6.0).abs() < 1e-9, "{lo} {hi}");
+    // a sketch profile and a spline profile turn as curves
+    let slot = vec![
+        line([-1.0, -1.0], [1.0, -1.0]),
+        arc([1.0, 0.0], 1.0, -FRAC_PI_2, FRAC_PI_2),
+        line([1.0, 1.0], [-1.0, 1.0]),
+        arc([-1.0, 0.0], 1.0, FRAC_PI_2, 1.5 * PI),
+    ];
+    let s = k.extrude(&placed(slot), 10.0, FRAC_PI_2, DVec2::ONE, 1).unwrap();
+    check(&mut k, &s, 6, 12, 10.0 * (4.0 + PI), 1e-5);
+    // as SMLib: no apex, no elliptic circle
+    for sc in [DVec2::ZERO, DVec2::new(1.0, 0.5)] {
+        let r = k.extrude(&placed_loop(circle.clone()), 10.0, 0.0, sc, 1);
+        assert!(matches!(r, Err(cad_kernel::KernelError::Unsupported(_))), "{sc}");
+    }
+}
+
+fn square_of(a: f64) -> Loop {
+    Loop::Polygon(vec![DVec2::new(-a, -a), DVec2::new(a, -a), DVec2::new(a, a), DVec2::new(-a, a)])
+}
+
+fn placed_loop(lp: Loop) -> PlacedLoop {
+    PlacedLoop { lp, frame: DMat4::IDENTITY }
+}
+
+fn at(lp: Loop, z: f64) -> PlacedLoop {
+    PlacedLoop { lp, frame: DMat4::from_translation(DVec3::new(0.0, 0.0, z)) }
+}
+
+#[test]
+fn loft_sections() {
+    let mut k = SolidcoreKernel::new();
+    // two squares: a frustum, ruled or not (two sections are linear either way)
+    for ruled in [true, false] {
+        let s = k.loft(&[at(square_of(2.0), 0.0), at(square_of(1.0), 6.0)], ruled, 1).unwrap();
+        check(&mut k, &s, 6, 12, 56.0, 1e-9);
+    }
+    // three circles: quadratic in the loft direction, r(t) = 5 - 8 t + 8 t², z = 10 t
+    let circle = |r: f64| Loop::Circle { center: DVec2::ZERO, r };
+    let secs = [at(circle(5.0), 0.0), at(circle(3.0), 5.0), at(circle(5.0), 10.0)];
+    let s = k.loft(&secs, false, 1).unwrap();
+    check(&mut k, &s, 3, 3, 138.0 * PI, 1e-5);
+    // ruled: two frustums
+    let s = k.loft(&secs, true, 1).unwrap();
+    check(&mut k, &s, 4, 5, 490.0 * PI / 3.0, 1e-6);
+    // sketch sections with the same segment count: segment by segment
+    let slot = vec![
+        line([-1.0, -1.0], [1.0, -1.0]),
+        arc([1.0, 0.0], 1.0, -FRAC_PI_2, FRAC_PI_2),
+        line([1.0, 1.0], [-1.0, 1.0]),
+        arc([-1.0, 0.0], 1.0, FRAC_PI_2, 1.5 * PI),
+    ];
+    let s =
+        k.loft(&[at(Loop::Composite(slot.clone()), 0.0), at(Loop::Composite(slot.clone()), 5.0)], false, 1).unwrap();
+    check(&mut k, &s, 6, 12, 5.0 * (4.0 + PI), 1e-6);
+    // different kinds: each section one closed curve (faces and edges as SMLib, volume as
+    // SMLib's to 1e-7)
+    let s = k.loft(&[at(Loop::Composite(slot), 0.0), at(circle(1.0), 5.0)], false, 1).unwrap();
+    check(&mut k, &s, 10, 24, 25.183_72, 1e-6);
+    let s = k.loft(&[at(circle(2.0), 0.0), at(square_of(1.5), 6.0)], false, 1).unwrap();
+    check(&mut k, &s, 6, 12, 27.925_10, 1e-6);
+    assert!(matches!(k.loft(&[at(circle(1.0), 0.0)], false, 1), Err(cad_kernel::KernelError::InvalidInput(_))));
+}

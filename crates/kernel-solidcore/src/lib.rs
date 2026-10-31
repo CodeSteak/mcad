@@ -15,11 +15,13 @@
 //! * other solidcore errors → [`KernelError::Failed`] / [`KernelError::InvalidInput`].
 //!
 //! So `mcad diff-kernels` can report which operations already work ("coverage"); at bba8d87:
-//! primitives, rigid transforms, `extrude` and `revolve` of polygons, circles, closed
-//! interpolating splines and sketch profiles (lines, arcs and B-splines; all curves built as
-//! the SMLib facade builds them), `classify`,
-//! `faces`, `edges`, `bounds`, `mass_props`, `is_solid`; booleans mostly (some results lose faces);
-//! curved solids have volumes closer to the exact value than SMLib's. Queries work on the
+//! primitives, rigid transforms, `extrude` (also with twist and scale), `revolve`, `loft`,
+//! `sweep` and `sweep_path` of polygons, circles, closed interpolating splines and sketch
+//! profiles (lines, arcs and B-splines), `classify`, `faces`, `edges`, `bounds`, `mass_props`,
+//! `is_solid`; booleans mostly (some results lose faces); curved solids have volumes closer to
+//! the exact value than SMLib's. Profiles and sweeps follow the SMLib facade
+//! (`smlib/facade/sc_facade.cpp`, `sc_sketch.cpp`) step by step: the same curves, sections,
+//! frames and refusals, so faces and edges come out as SMLib's. Queries work on the
 //! shape's own body ([`ShapeData`]); before an operation changes a body it is copied with
 //! `SmApiBrepCopy` ([`Inner::copy`]), never with `Brep::clone`, whose geometry has no owner.
 //! Faces carry the tag
@@ -148,6 +150,48 @@ mod imp {
         let (a, b) = (f.x_axis.truncate(), f.y_axis.truncate());
         let (la, lb) = (a.length(), b.length());
         la > 0.0 && (la - lb).abs() <= 1e-7 * la && a.dot(b).abs() <= 1e-9 * la * la
+    }
+
+    /// Is the linear part of `f` a similarity (as the facade's `similarity`)?
+    fn similar(f: &DMat4) -> bool {
+        let c = [f.x_axis.truncate(), f.y_axis.truncate(), f.z_axis.truncate()];
+        let l = c.map(|v| v.length());
+        l[0] > 0.0
+            && l[0].is_finite()
+            && (l[0] - l[1]).abs() <= 1e-7 * l[0]
+            && (l[0] - l[2]).abs() <= 1e-7 * l[0]
+            && [(0, 1), (0, 2), (1, 2)].iter().all(|&(i, j)| c[i].dot(c[j]).abs() <= 1e-9 * l[0] * l[0])
+    }
+
+    /// The sections of a loft as kernel-smlib passes them on (`loft_sections`): composite
+    /// sections are matched segment by segment only if all have the same number of
+    /// segments; otherwise each is joined into one closed B-spline that starts where the +x
+    /// ray from its centroid leaves it, so the sections do not twist against each other.
+    fn loft_sections(sections: &[PlacedLoop]) -> Vec<PlacedLoop> {
+        let counts: Vec<Option<usize>> = sections
+            .iter()
+            .map(|s| match &s.lp {
+                Loop::Composite(v) => Some(v.len()),
+                _ => None,
+            })
+            .collect();
+        if counts.iter().all(|c| c.is_some() && *c == counts[0]) || counts.iter().all(|c| c.is_none()) {
+            return sections.to_vec();
+        }
+        sections
+            .iter()
+            .map(|s| match &s.lp {
+                Loop::Composite(v) => {
+                    let size = v.iter().map(|g| g.start().length()).fold(1e-9, f64::max);
+                    let tol = size * 1e-4;
+                    let c = cad_kernel::curve2::centroid(v, tol);
+                    let r = cad_kernel::curve2::restart_at_ray(v, c, DVec2::X, tol);
+                    let lp = Loop::Composite(vec![cad_kernel::Segment::Nurbs(cad_kernel::curve2::join(&r))]);
+                    PlacedLoop { lp, frame: s.frame }
+                }
+                _ => s.clone(),
+            })
+            .collect()
     }
 
     /// One segment of a composite loop as the SMLib facade hands it to SMLib
@@ -290,9 +334,9 @@ mod imp {
         Ok(out)
     }
 
-    /// The points of a spline loop as the SMLib facade takes them (`parse_loops`): without
+    /// The points of a polygon or spline loop as the SMLib facade takes them (`parse_loops`): without
     /// repeated consecutive points and without a last point equal to the first; at least 3.
-    fn spline_points(ps: &[DVec2], op: &str) -> KResult<Vec<DVec2>> {
+    fn loop_points(ps: &[DVec2], op: &str) -> KResult<Vec<DVec2>> {
         let mut out: Vec<DVec2> = Vec::with_capacity(ps.len());
         for p in ps {
             if !p.is_finite() {
@@ -550,6 +594,11 @@ mod imp {
                     Ok(out)
                 }
                 Loop::Circle { center, r } => {
+                    if !similar(frame) {
+                        return Err(unsupported(&format!(
+                            "{op}: circle profile under a non-uniform frame (an ellipse; SMLib does not take it either)"
+                        )));
+                    }
                     let c = ac::create_analytic_circle(&self.k, pt(DVec3::new(center.x, center.y, 0.0)), *r)
                         .map_err(|e| err(op, e))?;
                     let mut c = Curve::from(c);
@@ -560,7 +609,7 @@ mod imp {
                     Ok(vec![c])
                 }
                 Loop::Spline(ps) => {
-                    let pts: Vec<DVec3> = spline_points(ps, op)?.iter().map(|p| dv(p3(*p))).collect();
+                    let pts: Vec<DVec3> = loop_points(ps, op)?.iter().map(|p| dv(p3(*p))).collect();
                     Ok(vec![interp_curve(&pts, true, op)?])
                 }
                 Loop::Composite(segs) => {
@@ -574,10 +623,12 @@ mod imp {
             if !h.is_finite() || h == 0.0 {
                 return Err(KernelError::InvalidInput("solidcore: extrude: height must be non-zero".into()));
             }
+            if !twist.is_finite() || !scale.is_finite() || scale.min_element() < 0.0 {
+                return Err(KernelError::InvalidInput("solidcore: extrude: bad twist/scale".into()));
+            }
             if twist.abs() >= 1e-12 || (scale - DVec2::ONE).abs().max_element() >= 1e-12 {
-                return Err(unsupported(
-                    "extrude: twist or scale (a skin through sections, SmApiCreateSkin; not wired in kernel-solidcore)",
-                ));
+                let s = self.extrude_skin(&p.lp, h, twist, scale, tag)?;
+                return self.transform(&s, &p.frame);
             }
             // as the SMLib facade: sweep in the profile plane, then place the solid
             let curves = self.loop_curves(&p.lp, &DMat4::IDENTITY, "extrude")?;
@@ -656,17 +707,8 @@ mod imp {
                         .brep
                 }
             };
-            let s = ShapeData::new(b, tag);
-            // as the facade's require_solid: a closed solid of positive volume
-            if self.is_empty(&s) || !self.is_solid(&s) {
-                let what = if polygon { " (polygon profile: open seams between the side faces?)" } else { "" };
-                return Err(KernelError::failed(format!("solidcore: sweep did not produce a closed solid{what}")));
-            }
-            let v = self.mass_props(&s).map_err(|e| check_err(OP, e))?.volume;
-            if v.is_nan() || v <= 0.0 {
-                return Err(KernelError::failed(format!("solidcore: sweep produced an invalid solid (volume {v})")));
-            }
-            Ok(s)
+            let hint = if polygon { " (polygon profile: open seams between the side faces?)" } else { "" };
+            self.require_solid(ShapeData::new(b, tag), OP, hint)
         }
 
         /// `sweep` along a polyline or an interpolating spline through `path`, as the SMLib
@@ -777,6 +819,133 @@ mod imp {
             }
         }
 
+        /// The loop as one closed curve (the facade's `loop_curves` with `single`, for lofts
+        /// between sections that do not match segment by segment): a polygon is a degree-1
+        /// B-spline, a circle a B-spline arc over 360°.
+        fn loop_curve_single(&mut self, lp: &Loop, frame: &DMat4, op: &str) -> KResult<Vec<Curve>> {
+            match lp {
+                Loop::Polygon(ps) => {
+                    let pts: Vec<DVec3> =
+                        loop_points(ps, op)?.iter().map(|p| frame.transform_point3(p.extend(0.0))).collect();
+                    Ok(vec![polyline_curve(&pts, true, op)?])
+                }
+                Loop::Circle { center, r } => {
+                    if !similar(frame) {
+                        return Err(unsupported(&format!(
+                            "{op}: circle profile under a non-uniform frame (an ellipse; SMLib does not take it either)"
+                        )));
+                    }
+                    let c = ac::create_arc(pt(center.extend(0.0)), *r, 0.0, 360.0).map_err(|e| err(op, e))?;
+                    let mut c = Curve::from(c);
+                    if let Some((pl, scale)) = Self::placement(frame)? {
+                        transform_independent_object(&mut self.k, Some(TransformObject::Curve(&mut c)), &pl, scale)
+                            .map_err(|e| err(op, e))?;
+                    }
+                    Ok(vec![c])
+                }
+                _ => self.loop_curves(lp, frame, op),
+            }
+        }
+
+        /// A closed solid of positive volume, as the facade's `require_solid`.
+        fn require_solid(&mut self, s: Shape, what: &str, hint: &str) -> KResult<Shape> {
+            if self.is_empty(&s) || !self.is_solid(&s) {
+                return Err(KernelError::failed(format!("solidcore: {what} did not produce a closed solid{hint}")));
+            }
+            let v = self.mass_props(&s).map_err(|e| check_err(what, e))?.volume;
+            if v.is_nan() || v <= 0.0 {
+                return Err(KernelError::failed(format!("solidcore: {what} produced an invalid solid (volume {v})")));
+            }
+            Ok(s)
+        }
+
+        /// Skin through the sections (`SmApiCreateSkinPrimitive`, capped), `degree` in the loft
+        /// direction.
+        fn skin(&mut self, sections: &[Vec<Curve>], degree: usize, what: &str, tag: Tag) -> KResult<Shape> {
+            let counts: Vec<usize> = sections.iter().map(Vec::len).collect();
+            let refs: Vec<Option<&Curve>> = sections.iter().flatten().map(Some).collect();
+            let b = solidcore::sweep::api_surfaces::create_skin_primitive(&mut self.k, &counts, &refs, degree, true)
+                .map_err(|e| err(what, e))?
+                .brep;
+            self.require_solid(ShapeData::new(b, tag), what, "")
+        }
+
+        /// `extrude` with twist or scale, as the SMLib facade: a skin through `k + 1` sections
+        /// (one per 7.5° of twist, at least 2; bicubic, ruled for a pure scale). Section
+        /// `t` is the profile turned by `twist · t` about the origin, then scaled by
+        /// `lerp(1, scale, t)` (OpenSCAD's order), at height `h · t`.
+        fn extrude_skin(&mut self, lp: &Loop, h: f64, twist: f64, scale: DVec2, tag: Tag) -> KResult<Shape> {
+            const OP: &str = "extrude";
+            if scale.min_element() <= 1e-9 {
+                return Err(unsupported("extrude: scale 0 (an apex; SMLib does not take it either)"));
+            }
+            if matches!(lp, Loop::Circle { .. }) && (scale.x - scale.y).abs() > 1e-12 {
+                return Err(unsupported(
+                    "extrude: non-uniform scale of a circle profile (SMLib does not take it either)",
+                ));
+            }
+            let k = if twist.abs() < 1e-12 { 1 } else { ((twist.abs() / 7.5f64.to_radians()).ceil() as usize).max(2) };
+            let mut secs = Vec::with_capacity(k + 1);
+            for i in 0..=k {
+                let t = i as f64 / k as f64;
+                let (sn, c) = (twist * t).sin_cos();
+                let sc = DVec2::ONE + (scale - DVec2::ONE) * t;
+                let lift = DMat4::from_translation(DVec3::new(0.0, 0.0, h * t));
+                let map = |p: &DVec2| DVec2::new((c * p.x - sn * p.y) * sc.x, (sn * p.x + c * p.y) * sc.y);
+                secs.push(match lp {
+                    // the points move (a spline is interpolated through the moved points)
+                    Loop::Polygon(ps) => self.loop_curves(&Loop::Polygon(ps.iter().map(map).collect()), &lift, OP)?,
+                    Loop::Spline(ps) => self.loop_curves(&Loop::Spline(ps.iter().map(map).collect()), &lift, OP)?,
+                    // the curves move: scale(sx, sy) · rotate(a) (for circles sx = sy)
+                    _ => {
+                        let m = DMat4::from_cols(
+                            DVec3::new(c * sc.x, sn * sc.y, 0.0).extend(0.0),
+                            DVec3::new(-sn * sc.x, c * sc.y, 0.0).extend(0.0),
+                            DVec3::new(0.0, 0.0, sc.x).extend(0.0),
+                            DVec3::new(0.0, 0.0, h * t).extend(1.0),
+                        );
+                        self.loop_curves(lp, &m, OP)?
+                    }
+                });
+            }
+            self.skin(&secs, if k == 1 { 1 } else { 3 }, "extrude (skin)", tag)
+        }
+
+        /// `loft`, as the SMLib facade (`sc_loft`): sections are matched segment by segment
+        /// when all are polygons with the same number of points or all composite loops with
+        /// the same number of segments, otherwise every section is one closed curve; degree
+        /// 1 (`ruled`) or min(3, sections - 1).
+        pub fn loft(&mut self, sections: &[PlacedLoop], ruled: bool, tag: Tag) -> KResult<Shape> {
+            const OP: &str = "loft";
+            if sections.len() < 2 {
+                return Err(KernelError::InvalidInput("solidcore: loft needs at least 2 sections".into()));
+            }
+            let sections = loft_sections(sections);
+            let n_poly = |l: &Loop| match l {
+                Loop::Polygon(ps) => loop_points(ps, OP).ok().map(|v| v.len()),
+                _ => None,
+            };
+            let n_comp = |l: &Loop| match l {
+                Loop::Composite(v) => Some(v.len()),
+                _ => None,
+            };
+            let all_eq = |f: &dyn Fn(&Loop) -> Option<usize>| {
+                let first = f(&sections[0].lp);
+                first.is_some() && sections.iter().all(|s| f(&s.lp) == first)
+            };
+            let segmentwise = all_eq(&n_poly) || all_eq(&n_comp);
+            let mut secs = Vec::with_capacity(sections.len());
+            for s in &sections {
+                secs.push(if segmentwise {
+                    self.loop_curves(&s.lp, &s.frame, OP)?
+                } else {
+                    self.loop_curve_single(&s.lp, &s.frame, OP)?
+                });
+            }
+            let degree = if ruled { 1 } else { (sections.len() - 1).min(3) };
+            self.skin(&secs, degree, OP, tag)
+        }
+
         pub fn revolve(&mut self, p: &PlacedLoop, angle: f64, tag: Tag) -> KResult<Shape> {
             if !angle.is_finite() || angle == 0.0 {
                 return Err(KernelError::InvalidInput("solidcore: revolve: angle must be non-zero".into()));
@@ -805,7 +974,7 @@ mod imp {
             const OP: &str = "revolve";
             let Loop::Spline(ps) = &p.lp else { return self.loop_curves(&p.lp, &p.frame, OP) };
             let pts: Vec<DVec3> =
-                spline_points(ps, OP)?.iter().map(|q| p.frame.transform_point3(q.extend(0.0))).collect();
+                loop_points(ps, OP)?.iter().map(|q| p.frame.transform_point3(q.extend(0.0))).collect();
             let n = pts.len();
             let atol = 1e-9 * pts.iter().map(|q| q.length()).fold(1.0, f64::max);
             let on_axis = |i: usize| pts[i].x.hypot(pts[i].y) <= atol;
@@ -1143,8 +1312,8 @@ impl Kernel for SolidcoreKernel {
         with_sc!(self, "revolve", |i| i.revolve(p, angle, tag))
     }
 
-    fn loft(&mut self, _sections: &[PlacedLoop], _ruled: bool, _tag: Tag) -> KResult<Shape> {
-        Err(unsupported("loft (SmApiCreateSkin exists, not wired in kernel-solidcore)"))
+    fn loft(&mut self, sections: &[PlacedLoop], ruled: bool, tag: Tag) -> KResult<Shape> {
+        with_sc!(self, "loft", |i| i.loft(sections, ruled, tag))
     }
 
     fn sweep(&mut self, p: &Loop, path: &[DVec3], interp: PathInterp, tag: Tag) -> KResult<Shape> {

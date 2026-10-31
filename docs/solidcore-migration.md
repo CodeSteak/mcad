@@ -2,7 +2,7 @@
 
 Work plan up to the switch: [`solidcore-plan.md`](solidcore-plan.md).
 
-As of: 2026-10-31 (phase 0 of the plan done) · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
+As of: 2026-10-31 (phase 0 of the plan done; phase 1: 1.1, 1.2, 1.4, 1.5 done) · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
 
 ## Status
 
@@ -56,7 +56,9 @@ As of: 2026-10-31 (phase 0 of the plan done) · solidcore `main` @ `bba8d87` (20
 | Tessellation, polyhedra | **explicitly out of scope** of solidcore (`plan/closure.md`, "Out of scope": `SmApiTessellate`, `SmApiTessellateBoundaries`, `SmApiPoly*`; `SmTess`/`NL_Tessellate` are not needed by any in-scope operation) | – |
 
 Further upstream entry points that solidcore does not port (selection from `plan/closure.md`):
-`SmApiCreateCurveInterpPoints` (interpolating spline curve, used here for `Loop::Spline`),
+`SmApiCreateCurveInterpPoints` (interpolating spline curve, used by the SMLib facade for
+`Loop::Spline`; the `SmBSplineCurve::CreateInterpolatingCurve` it calls is ported and gives the
+same curve, see "Profiles and sweeps"),
 `SmApiCreatePlanarFaces`, `SmApiCreateSurface*`, `SmApiCut`, `SmApiIntersect*`.
 
 ## What works today (run with `c9de85d`)
@@ -106,6 +108,10 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, volume against the exact value (plan 0.4), 64 files | 64 | 1462 | 1217 | 95 | 136 | 14 | 0 |
 | `bba8d87`, volume against the exact value (plan 0.4) | 101 | 2604 | 2110 | 180 | 287 | 27 | 0 |
 | `bba8d87`, end of phase 0 (queries in place, plan 0.6) | 101 | 2604 | **2110** | 180 | 287 | 27 | 0 |
+| `bba8d87`, sketch profiles (plan 1.1) | 101 | 2604 | 2231 | 129 | 216 | 28 | 0 |
+| `bba8d87`, spline profiles (plan 1.2) | 101 | 2604 | 2233 | 128 | 211 | 32 | 0 |
+| `bba8d87`, sweeps (plan 1.4) | 101 | 2604 | 2262 | 108 | 184 | 50 | 0 |
+| `bba8d87`, twist/scale and loft (plan 1.5) | 101 | 2604 | **2280** | 102 | 172 | 50 | 0 |
 
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
@@ -171,6 +177,40 @@ Remaining nodes:
 | unsupported: polyhedron | 8 | out of scope of solidcore |
 | unsupported: sweep, skin (twist/scale), shell, spline revolve, shear | 17 | not wired here or not ported |
 
+The sketch, spline, sweep and skin rows are done since plan 1.1–1.5 (see "Profiles and sweeps").
+
+## Profiles and sweeps (plan 1.1, 1.2, 1.4, 1.5)
+
+`kernel-solidcore` builds every profile, section and path as the SMLib facade does
+(`smlib/facade/sc_facade.cpp`, `sc_sketch.cpp`), step by step, so faces and edges come out as
+SMLib's (checked node by node with `diff-kernels` and in `crates/kernel-solidcore/tests/profiles.rs`
+against exact volumes):
+
+| Kernel operation | Route | Notes |
+| --- | --- | --- |
+| `Loop::Composite` (sketch) | lines: `create_line_segment`; arcs: rational quadratic B-spline of the circular-arc form (pieces of at most 90°; elliptic-arc form under a non-uniform frame); B-splines as given (`create_canonical_curve`); joints welded (gap ≤ 1e-6 of the extent) | as `sketch_segments`/`weld`/`make_curve` |
+| `Loop::Spline` | `BSplineCurve::create_interpolating_curve` (chord length, cubic) through the points and the first again | the ported core of `SmApiCreateCurveInterpPoints`; control points and knots equal SMLib's and `cad_kernel::curve2::interpolate`'s to 4e-15 |
+| `revolve` | spline points that follow each other on the axis: a line along the axis, open runs between (3 points: two more on the parabola); a curve reaching x < 0 (257 samples) is `InvalidInput` | as `revolve_profile_curves` |
+| `extrude` with twist/scale | skin (`create_skin_primitive`) through one section per 7.5° of twist (at least 2; bicubic), ruled for a pure scale; section = turn, then scale; scale 0 and an elliptic circle are `Unsupported` as in SMLib | as `sc_extrude` |
+| `loft` | segment by segment when all sections are polygons with the same point count or sketches with the same segment count, else one closed curve per section (polygon: degree-1 B-spline, circle: B-spline arc); degree 1 (ruled) or min(3, n − 1); sketches of different segment counts joined as in kernel-smlib | as `sc_loft` |
+| `sweep`, `sweep_path` | profile frame at the path start (x = global X projected into the normal plane); curve sweep (`create_curve_sweep`) on straight and spline paths and tangent-continuous sketch paths; mitered `create_sweep_along_planar_path` on planar polylines and sketch paths with corners; non-planar polyline and off-centre profile along corners `Unsupported` as in SMLib | SMLib patch 0003 (`bUseProfileRefPoint` with the frame origin) is `SweepOptions::profile_at_path_start` (solidcore#1450): the frame origin lies at the path start |
+
+Results over the 101 files (from the end of phase 0): same 2110 → 2280, unsupported 180 → 102,
+blocked 287 → 172, differ 27 → 50. All `linear_extrude`, `rotate_extrude`, `loft` and `sweep`
+nodes are `same` (or unsupported for other reasons, e.g. a transform check). The new `differ`
+nodes are explained:
+
+| Nodes | Cause |
+| ---: | --- |
+| 20 | `union`/`difference(fillet = …)`: the engine selects the new edges of the Boolean by face tags; solidcore's faces carry only the tag of the operation (no provenance, plan 1.9), so it finds none ("0 edges: no new edges found") and the fillet is skipped (`key_rack` 16, `knob_mirror` 4) |
+| 2 | the same in `tests/everyday/bugs/f04`, `f15`, where SMLib's fillet fails (`SMLib fails, solidcore not`) |
+| 1 | `sketch_cable_duct`: the union of three extrusions loses faces (63 vs 47; Booleans, phase 3) |
+
+Other findings: the adapter's `transform` check rejects a few rigid transforms of curved solids
+whose centroid moves by 1e-6 (`wall_hook`, `f09b`, `knob_mirror`'s mirror): the tolerance of the
+check is tighter than the volume integration. SMLib's skins are less accurate than solidcore's
+(twisted square bar 8 × 8 × 20, exact 1280: SMLib +1.5e-5, solidcore +6e-7 relative).
+
 ## Performance (plan 0.5)
 
 Release build (`cargo build --release -p cad-cli --no-default-features --features solidcore`),
@@ -235,8 +275,8 @@ Findings:
    the 4×4 matrix variant (shear, e.g. `multmatrix`).
 3. Booleans that keep all faces (see "State at `bba8d87`"); ~~point classification~~ (works).
 4. ~~Public fillet/chamfer API~~ (exists at `bba8d87`); wire it up here.
-5. Here: sketch profiles for `extrude`; wire up `create_skin` (loft, extrusion with twist),
-   `create_pipe_sweep` (sweep), offset/shell; attributes for face tags (provenance);
+5. Here: ~~sketch profiles for `extrude`; wire up `create_skin` (loft, extrusion with twist),
+   sweeps~~ (plan 1.1–1.5, see "Profiles and sweeps"); offset/shell; attributes for face tags (provenance);
    `Kernel::brep` and STEP export via `step-brep`/`step-export`; Wasm build in the same module
    (stack 8 MiB, see solidcore README).
 6. **Own tessellator** (not in solidcore, see below).
