@@ -159,25 +159,24 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
             stats.failed_faces.push((f.id, "no triangles".into()));
             continue;
         }
-        // vertices: boundary points once per face (seam copies meet), the rest as they are
-        let base = (mesh.positions.len() / 3) as u32;
-        let mut by_id: HashMap<u32, u32> = HashMap::new();
+        // vertices: a boundary point once per face and normal (seam copies meet, unless the
+        // surface has a crease there), the others as they are
+        let mut by_id: HashMap<u32, Vec<(u32, DVec3)>> = HashMap::new();
         let mut index = Vec::with_capacity(fm.verts.len());
-        let mut count = 0u32;
         for v in &fm.verts {
             let shared = v.id.filter(|_| !v.pole);
-            if let Some(i) = shared.and_then(|id| by_id.get(&id)) {
+            let n = g.normal(v.uv, fm.bounds).map_or(DVec3::ZERO, |n| n * orient);
+            let same = shared.and_then(|id| by_id.get(&id)).and_then(|c| c.iter().find(|(_, m)| m.dot(n) > 0.9));
+            if let Some((i, _)) = same {
                 index.push(*i);
                 continue;
             }
-            let i = base + count;
-            count += 1;
+            let i = (mesh.positions.len() / 3) as u32;
             if let Some(id) = shared {
-                by_id.insert(id, i);
+                by_id.entry(id).or_default().push((i, n));
             }
             index.push(i);
             vid.push(shared);
-            let n = g.normal(v.uv, fm.bounds).map_or(DVec3::ZERO, |n| n * orient);
             mesh.positions.extend_from_slice(&[v.p.x as f32, v.p.y as f32, v.p.z as f32]);
             mesh.normals.extend_from_slice(&[n.x as f32, n.y as f32, n.z as f32]);
         }

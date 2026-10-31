@@ -293,6 +293,10 @@ impl Geom {
             }
             _ => {}
         }
+        // a hair towards the middle: on a seam of a closed curve with a crease, the side of
+        // the face (the parameter then wraps onto the right branch)
+        let mid = (bounds.0 + bounds.1) * 0.5;
+        let uv = uv + (mid - uv) * 1e-9;
         let d = self.ders(uv);
         if let Some(n) = d[1]
             .cross(d[2])
@@ -302,7 +306,6 @@ impl Geom {
             return Some(n);
         }
         // degenerate (pole, apex): step towards the middle of the face
-        let mid = (bounds.0 + bounds.1) * 0.5;
         for f in [1e-6, 1e-4, 1e-2] {
             let q = uv + (mid - uv) * f;
             let d = self.ders(q);
@@ -330,8 +333,27 @@ impl Geom {
     }
 
     /// Parameters of `p` (on or near the surface). `hint`: parameters of a point nearby
-    /// (continuity along a loop, choice among several solutions).
+    /// (continuity along a loop, choice among several solutions). Where the local solution
+    /// from the hint misses `p` (another branch of a curve at a seam corner), a global search.
     pub fn invert(&self, p: DVec3, hint: Option<DVec2>) -> DVec2 {
+        let a = self.invert_from(p, hint);
+        if hint.is_none()
+            || matches!(
+                self.kind,
+                Kind::Plane | Kind::Cylinder { .. } | Kind::Cone { .. } | Kind::Sphere { .. } | Kind::Torus { .. }
+            )
+        {
+            return a;
+        }
+        let da = (self.eval(a) - p).length();
+        if da <= 1e3 * self.eps {
+            return a;
+        }
+        let b = self.invert_from(p, None);
+        if (self.eval(b) - p).length() < da { b } else { a }
+    }
+
+    fn invert_from(&self, p: DVec3, hint: Option<DVec2>) -> DVec2 {
         let d = p - self.o;
         let (lx, ly, lz) = (d.dot(self.x), d.dot(self.y), d.dot(self.z));
         let ang = ly.atan2(lx);
@@ -360,43 +382,42 @@ impl Geom {
                     (d - z * h, h)
                 };
                 let (rp, hp) = rh(p);
-                let v = match hint {
-                    Some(h) => self.wrap(1, h.y),
+                let vs = match hint {
+                    Some(h) => vec![self.wrap(1, h.y)],
                     None => seed_curve(curve, |q| {
                         let (rc, hc) = rh(q);
                         (rc.length() - rp.length()).hypot(hc - hp)
                     }),
                 };
-                let (rc, _) = rh(curve.eval(v));
-                let u = match (rc.try_normalize(), rp.try_normalize()) {
-                    (Some(ec), Some(ep)) => ec.cross(ep).dot(z).atan2(ec.dot(ep)),
-                    _ => hint.map_or(0.0, |h| h.x),
-                };
-                self.newton(p, DVec2::new(u, v))
+                self.best(
+                    p,
+                    vs.into_iter().map(|v| {
+                        let (rc, _) = rh(curve.eval(v));
+                        let u = match (rc.try_normalize(), rp.try_normalize()) {
+                            (Some(ec), Some(ep)) => ec.cross(ep).dot(z).atan2(ec.dot(ep)),
+                            _ => hint.map_or(0.0, |h| h.x),
+                        };
+                        DVec2::new(u, v)
+                    }),
+                )
             }
             Kind::Extrusion { curve, dir } => {
                 let dn = dir.normalize();
-                let u = match hint {
-                    Some(h) => self.wrap(0, h.x),
+                let us = match hint {
+                    Some(h) => vec![self.wrap(0, h.x)],
                     None => seed_curve(curve, |q| (p - q).cross(dn).length()),
                 };
-                let v = (p - curve.eval(u)).dot(*dir) / dir.length_squared();
-                self.newton(p, DVec2::new(u, v))
+                self.best(
+                    p,
+                    us.into_iter().map(|u| DVec2::new(u, (p - curve.eval(u)).dot(*dir) / dir.length_squared())),
+                )
             }
             Kind::BSpline(s) => {
                 let seed = match hint {
                     Some(h) => DVec2::new(self.wrap(0, h.x), self.wrap(1, h.y)),
                     None => seed_surface(s, p),
                 };
-                let a = self.newton(p, seed);
-                // a hint far from the solution can end in another local minimum
-                if hint.is_some() && (self.eval(a) - p).length() > 1e3 * self.eps {
-                    let b = self.newton(p, seed_surface(s, p));
-                    if (self.eval(b) - p).length() < (self.eval(a) - p).length() {
-                        return b;
-                    }
-                }
-                a
+                self.newton(p, seed)
             }
         }
     }
@@ -407,6 +428,19 @@ impl Geom {
             Kind::Revolution { .. } | Kind::Extrusion { .. } | Kind::BSpline(_) => self.newton(p, seed),
             _ => self.invert(p, Some(seed)),
         }
+    }
+
+    /// The best of the Newton solutions from `seeds`.
+    fn best(&self, p: DVec3, seeds: impl Iterator<Item = DVec2>) -> DVec2 {
+        let mut best = (DVec2::ZERO, f64::INFINITY);
+        for s in seeds {
+            let uv = self.newton(p, s);
+            let d = (self.eval(uv) - p).length();
+            if d < best.1 {
+                best = (uv, d);
+            }
+        }
+        best.0
     }
 
     /// Closest point by Newton iteration (Piegl & Tiller 6.1) from `uv`, kept in the natural
@@ -480,22 +514,45 @@ impl Geom {
     }
 }
 
-/// Parameter of the curve sample minimising `f` (dense samples per knot span).
-fn seed_curve(c: &bspline::Curve, f: impl Fn(DVec3) -> f64) -> f64 {
+/// Parameters of the best local minima of `f` among dense curve samples (per knot span), at
+/// most three: at a seam corner both branches are candidates.
+fn seed_curve(c: &bspline::Curve, f: impl Fn(DVec3) -> f64) -> Vec<f64> {
     let br = c.breaks();
     let per = (4 * c.degree).clamp(4, 16);
-    let mut best = (br[0], f64::INFINITY);
+    let mut ts = vec![br[0]];
     for w in br.windows(2) {
-        for k in 0..=per {
-            let t = w[0] + (w[1] - w[0]) * k as f64 / per as f64;
-            let d = f(c.eval(t));
-            if d < best.1 {
-                best = (t, d);
-            }
+        for k in 1..=per {
+            ts.push(w[0] + (w[1] - w[0]) * k as f64 / per as f64);
         }
     }
-    // golden-section refinement around the best sample is left to the surface Newton step
-    best.0
+    let d: Vec<f64> = ts.iter().map(|t| f(c.eval(*t))).collect();
+    let n = d.len();
+    let mut minima: Vec<(f64, f64)> = (0..n)
+        .filter(|&i| (i == 0 || d[i] <= d[i - 1]) && (i + 1 == n || d[i] <= d[i + 1]))
+        .map(|i| (d[i], ts[i]))
+        .collect();
+    minima.sort_by(|a, b| a.0.total_cmp(&b.0));
+    minima.truncate(3);
+    // each refined between its neighbouring samples (golden section, inside the domain: a
+    // Newton step from a domain end of a closed curve would wrap onto the other branch)
+    let (a, b) = c.domain();
+    let h = (b - a) / (br.len() - 1).max(1) as f64 / per as f64;
+    minima
+        .iter()
+        .map(|&(_, t)| {
+            let (mut lo, mut hi) = ((t - 2.0 * h).max(a), (t + 2.0 * h).min(b));
+            let g = 0.5 * (5f64.sqrt() - 1.0);
+            for _ in 0..40 {
+                let (x1, x2) = (hi - g * (hi - lo), lo + g * (hi - lo));
+                if f(c.eval(x1)) < f(c.eval(x2)) {
+                    hi = x2;
+                } else {
+                    lo = x1;
+                }
+            }
+            0.5 * (lo + hi)
+        })
+        .collect()
 }
 
 /// Parameters of the surface sample nearest `p` (a grid over the knot spans).
