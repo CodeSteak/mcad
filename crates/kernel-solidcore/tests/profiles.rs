@@ -1,4 +1,4 @@
-//! Profiles and sweeps over solidcore (plan 1.1): face and edge counts as the
+//! Profiles and sweeps over solidcore (plan 1.1, 1.2, 1.4, 1.5): face and edge counts as the
 //! SMLib facade builds them (checked with `mcad diff-kernels`), volumes against the exact value.
 
 #![cfg(feature = "solidcore")]
@@ -138,4 +138,78 @@ fn composite_input_errors() {
         k.extrude(&placed(vec![arc([0.0, 0.0], 0.0, 0.0, TAU)]), 1.0, 0.0, DVec2::ONE, 1),
         Err(cad_kernel::KernelError::InvalidInput(_))
     ));
+}
+
+/// 100000 points along `c`.
+fn samples(c: &cad_kernel::brep::BSplineCurve) -> Vec<DVec2> {
+    let (t0, t1) = c.domain();
+    (0..=100_000).map(|i| c.eval(t0 + (t1 - t0) * f64::from(i) / 1e5).truncate()).collect()
+}
+
+/// Area and centroid of the closed polyline `p` (counter-clockwise or clockwise).
+fn area_centroid(p: &[DVec2]) -> (f64, DVec2) {
+    let n = p.len();
+    let (mut a, mut c) = (0.0, DVec2::ZERO);
+    for i in 0..n {
+        let (u, v) = (p[i], p[(i + 1) % n]);
+        let w = u.perp_dot(v);
+        a += w / 2.0;
+        c += (u + v) * w / 6.0;
+    }
+    (a.abs(), c / a)
+}
+
+#[test]
+fn extrude_closed_spline() {
+    let mut k = SolidcoreKernel::new();
+    let pts = vec![DVec2::new(0.0, 0.0), DVec2::new(10.0, 1.0), DVec2::new(12.0, 7.0), DVec2::new(3.0, 9.0)];
+    let mut closed = pts.clone();
+    closed.push(pts[0]);
+    // the same curve as SMLib's (see the unit test in lib.rs): area from a fine polyline
+    let c = cad_kernel::curve2::interpolate(&closed, None, None).unwrap();
+    let (a, _) = area_centroid(&samples(&c));
+    let p = PlacedLoop { lp: Loop::Spline(pts.clone()), frame: DMat4::IDENTITY };
+    let s = k.extrude(&p, 2.0, 0.0, DVec2::ONE, 1).unwrap();
+    check(&mut k, &s, 3, 3, 2.0 * a, 1e-6);
+    // repeated points and a last point equal to the first change nothing
+    let mut rep = vec![pts[0], pts[0]];
+    rep.extend_from_slice(&pts[1..]);
+    rep.push(pts[0]);
+    let s = k.extrude(&PlacedLoop { lp: Loop::Spline(rep), frame: DMat4::IDENTITY }, 2.0, 0.0, DVec2::ONE, 1).unwrap();
+    check(&mut k, &s, 3, 3, 2.0 * a, 1e-6);
+    let two = Loop::Spline(vec![DVec2::ZERO, DVec2::X, DVec2::ZERO]);
+    assert!(matches!(
+        k.extrude(&PlacedLoop { lp: two, frame: DMat4::IDENTITY }, 2.0, 0.0, DVec2::ONE, 1),
+        Err(cad_kernel::KernelError::InvalidInput(_))
+    ));
+}
+
+#[test]
+fn revolve_spline_through_the_axis() {
+    let mut k = SolidcoreKernel::new();
+    // knob: the closed spline would cross the axis between (0, 20) and (0, 0); it becomes a
+    // line along the axis and the open spline through the other points
+    let pts = vec![
+        DVec2::new(0.0, 0.0),
+        DVec2::new(15.0, 0.0),
+        DVec2::new(9.0, 10.0),
+        DVec2::new(15.0, 20.0),
+        DVec2::new(0.0, 20.0),
+    ];
+    let c = cad_kernel::curve2::interpolate(&pts, None, None).unwrap();
+    let (a, cen) = area_centroid(&samples(&c));
+    let xz = DMat4::from_cols(DVec3::X.extend(0.0), DVec3::Z.extend(0.0), DVec3::NEG_Y.extend(0.0), glam::DVec4::W);
+    let p = PlacedLoop { lp: Loop::Spline(pts), frame: xz };
+    let s = k.revolve(&p, TAU, 1).unwrap();
+    check(&mut k, &s, 1, 1, TAU * cen.x * a, 1e-6);
+    // just off the axis the closed spline runs through: it bulges across (to x = -1.6)
+    let bulge = vec![
+        DVec2::new(0.001, 0.0),
+        DVec2::new(15.0, 0.0),
+        DVec2::new(9.0, 10.0),
+        DVec2::new(15.0, 20.0),
+        DVec2::new(0.001, 20.0),
+    ];
+    let p = PlacedLoop { lp: Loop::Spline(bulge), frame: xz };
+    assert!(matches!(k.revolve(&p, TAU, 1), Err(cad_kernel::KernelError::InvalidInput(m)) if m.contains("axis")));
 }

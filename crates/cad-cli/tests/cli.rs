@@ -393,13 +393,14 @@ fn diff_kernels_on_examples() {
         }
     }
     if v["solidcore_available"] == true {
-        // solidcore @ bba8d87 over 101 files (2604 nodes): 2231 same, 129 unsupported (fillets,
-        // sweeps, polyhedra, skins), 216 blocked, 28 differ, nothing fails. Curved solids are
+        // solidcore @ bba8d87 over 101 files (2604 nodes): 2233 same, 128 unsupported (fillets,
+        // sweeps, polyhedra, skins), 211 blocked, 32 differ, nothing fails. Curved solids are
         // compared against their exact volume (solidcore is the more accurate one): no node
-        // differs in its volume alone; the differences are Booleans that lose faces
+        // differs in its volume alone; the differences are Booleans that lose faces and
+        // `difference(fillet = …)` without new edges (faces carry no provenance yet, plan 1.9)
         assert!(s["unsupported"].as_u64().unwrap() <= 135, "{s}");
         assert!(s["same"].as_u64().unwrap() >= 2220, "{s}");
-        assert!(s["differ"].as_u64().unwrap() <= 28, "{s}");
+        assert!(s["differ"].as_u64().unwrap() <= 32, "{s}");
         assert_eq!(s["failed"].as_u64().unwrap(), 0, "{s}");
         // every rule is in use, the curved fallback the least
         let r = &s["volume_rules"];

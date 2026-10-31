@@ -15,8 +15,9 @@
 //! * other solidcore errors → [`KernelError::Failed`] / [`KernelError::InvalidInput`].
 //!
 //! So `mcad diff-kernels` can report which operations already work ("coverage"); at bba8d87:
-//! primitives, rigid transforms, `extrude` and `revolve` of polygons, circles and sketch
-//! profiles (lines, arcs and B-splines built as the SMLib facade builds them), `classify`,
+//! primitives, rigid transforms, `extrude` and `revolve` of polygons, circles, closed
+//! interpolating splines and sketch profiles (lines, arcs and B-splines; all curves built as
+//! the SMLib facade builds them), `classify`,
 //! `faces`, `edges`, `bounds`, `mass_props`, `is_solid`; booleans mostly (some results lose faces);
 //! curved solids have volumes closer to the exact value than SMLib's. Queries work on the
 //! shape's own body ([`ShapeData`]); before an operation changes a body it is copied with
@@ -288,6 +289,107 @@ mod imp {
         Ok(out)
     }
 
+    /// The points of a spline loop as the SMLib facade takes them (`parse_loops`): without
+    /// repeated consecutive points and without a last point equal to the first; at least 3.
+    fn spline_points(ps: &[DVec2], op: &str) -> KResult<Vec<DVec2>> {
+        let mut out: Vec<DVec2> = Vec::with_capacity(ps.len());
+        for p in ps {
+            if !p.is_finite() {
+                return Err(KernelError::InvalidInput(format!("solidcore: {op}: non-finite profile point")));
+            }
+            if out.last().is_none_or(|q| q.distance(*p) >= 1e-12) {
+                out.push(*p);
+            }
+        }
+        while out.len() > 1 && out[0].distance(out[out.len() - 1]) < 1e-12 {
+            out.pop();
+        }
+        if out.len() < 3 {
+            return Err(KernelError::InvalidInput(format!(
+                "solidcore: {op}: profile needs at least 3 distinct points"
+            )));
+        }
+        Ok(out)
+    }
+
+    /// Degree-1 B-spline through `pts` of the polyline form, clamped, chord-length knots
+    /// (the facade's `polyline_curve`).
+    fn polyline_curve(pts: &[DVec3], closed: bool, op: &str) -> KResult<Curve> {
+        let mut p: Vec<solidcore::Point3> = pts.iter().map(|q| pt(*q)).collect();
+        if closed {
+            p.push(p[0]);
+        }
+        let mut knots = Vec::with_capacity(p.len());
+        let mut t = 0.0;
+        for i in 0..p.len() {
+            if i > 0 {
+                t += dv(p[i]).distance(dv(p[i - 1])).max(1e-12);
+            }
+            knots.push(t);
+        }
+        let mut mult = vec![1; p.len()];
+        mult[0] = 2;
+        mult[p.len() - 1] = 2;
+        let c = ac::create_canonical_curve(&ac::CanonicalCurveParams {
+            points: &p,
+            knots: &knots,
+            knot_multiplicities: &mult,
+            weights: None,
+            degree: 1,
+            form: BSplineCurveForm::PolylineForm,
+        })
+        .map_err(|e| err(op, e))?;
+        Ok(Curve::from(c))
+    }
+
+    /// Cubic B-spline interpolating `pts` with chord-length parameters, as the SMLib facade
+    /// makes it (`interp_curve`): `SmApiCreateCurveInterpPoints` is outside solidcore's scope,
+    /// but the `SmBSplineCurve::CreateInterpolatingCurve` it calls is ported, so the curve is
+    /// SMLib's (control points and knots agree with SMLib's and with
+    /// `cad_kernel::curve2::interpolate` to rounding). `closed`: through the first point again
+    /// (a closed clamped curve, C0 there). An open run of 3 points gets two more on the
+    /// parabola through them, fewer than 4 points give a polyline.
+    fn interp_curve(pts: &[DVec3], closed: bool, op: &str) -> KResult<Curve> {
+        let mut p = pts.to_vec();
+        if closed {
+            p.push(pts[0]);
+        }
+        if !closed && p.len() == 3 {
+            let t1 = p[1].distance(p[0]);
+            let t2 = t1 + p[2].distance(p[1]);
+            let q = |t: f64| {
+                let l0 = (t - t1) * (t - t2) / (t1 * t2);
+                let l1 = t * (t - t2) / (t1 * (t1 - t2));
+                let l2 = t * (t - t1) / (t2 * (t2 - t1));
+                p[0] * l0 + p[1] * l1 + p[2] * l2
+            };
+            p = vec![p[0], q(t1 / 2.0), p[1], q((t1 + t2) / 2.0), p[2]];
+        }
+        if p.len() < 4 {
+            return polyline_curve(pts, closed, op);
+        }
+        Ok(Curve::from(interp_spline(&p, op)?))
+    }
+
+    /// `SmApiCreateCurveInterpPoints(points, SM_CP_CHORDLENGTH)`: the cubic through `p` (at
+    /// least 4 distinct consecutive points).
+    pub(crate) fn interp_spline(p: &[DVec3], op: &str) -> KResult<solidcore::nurbs::b_spline_curve::BSplineCurve> {
+        if p.windows(2).any(|w| w[0].distance_squared(w[1]) <= 1e-24) {
+            return Err(KernelError::InvalidInput(format!("solidcore: {op}: coincident spline points")));
+        }
+        let p: Vec<solidcore::Point3> = p.iter().map(|q| pt(*q)).collect();
+        solidcore::nurbs::b_spline_curve::BSplineCurve::create_interpolating_curve(
+            solidcore::nurbs::crv_fit::p1::ParamMethod::ChordLength,
+            3,
+            3,
+            &p,
+            &[],
+            None,
+            false,
+        )
+        .map_err(|e| err(op, e))
+    }
+
     impl Inner {
         pub fn new() -> Self {
             Inner {
@@ -456,9 +558,10 @@ mod imp {
                     }
                     Ok(vec![c])
                 }
-                Loop::Spline(_) => Err(unsupported(&format!(
-                    "{op}: spline profile (SmApiCreateCurveInterpPoints is outside solidcore's scope)"
-                ))),
+                Loop::Spline(ps) => {
+                    let pts: Vec<DVec3> = spline_points(ps, op)?.iter().map(|p| dv(p3(*p))).collect();
+                    Ok(vec![interp_curve(&pts, true, op)?])
+                }
                 Loop::Composite(segs) => {
                     let segs = sketch_segments(segs, true, op)?;
                     segs.iter().map(|s| s.curve(frame, op)).collect()
@@ -489,7 +592,7 @@ mod imp {
                 return Err(KernelError::InvalidInput("solidcore: revolve: angle must be non-zero".into()));
             }
             let deg = angle.to_degrees().clamp(-360.0, 360.0);
-            let curves = self.loop_curves(&p.lp, &p.frame, "revolve")?;
+            let curves = self.revolve_curves(p)?;
             self.check_revolve_profile(&curves)?;
             let refs: Vec<Option<&Curve>> = curves.iter().map(Some).collect();
             let b = sw::create_rotational_sweep(
@@ -502,6 +605,41 @@ mod imp {
             )
             .map_err(|e| err("revolve", e))?;
             Ok(ShapeData::new(b, tag))
+        }
+
+        /// Profile curves of a revolve, as the SMLib facade (`revolve_profile_curves`): a
+        /// closed spline cannot pass through two points on the axis without crossing it, so
+        /// two spline points that follow each other on the axis are joined by a line along
+        /// the axis and the spline runs open between such lines.
+        fn revolve_curves(&mut self, p: &PlacedLoop) -> KResult<Vec<Curve>> {
+            const OP: &str = "revolve";
+            let Loop::Spline(ps) = &p.lp else { return self.loop_curves(&p.lp, &p.frame, OP) };
+            let pts: Vec<DVec3> =
+                spline_points(ps, OP)?.iter().map(|q| p.frame.transform_point3(q.extend(0.0))).collect();
+            let n = pts.len();
+            let atol = 1e-9 * pts.iter().map(|q| q.length()).fold(1.0, f64::max);
+            let on_axis = |i: usize| pts[i].x.hypot(pts[i].y) <= atol;
+            let cuts: Vec<usize> = (0..n).filter(|&i| on_axis(i) && on_axis((i + 1) % n)).collect();
+            if cuts.is_empty() {
+                return self.loop_curves(&p.lp, &p.frame, OP);
+            }
+            let mut out = Vec::new();
+            for (c, &a) in cuts.iter().enumerate() {
+                let b = (a + 1) % n;
+                out.push(Curve::from(ac::create_line_segment(pt(pts[a]), pt(pts[b])).map_err(|e| err(OP, e))?));
+                // open run from b to the start of the next axis segment
+                let e = cuts[(c + 1) % cuts.len()];
+                let mut run = vec![pts[b]];
+                let mut i = b;
+                while i != e {
+                    i = (i + 1) % n;
+                    run.push(pts[i]);
+                }
+                if run.len() >= 2 {
+                    out.push(interp_curve(&run, false, OP)?);
+                }
+            }
+            Ok(out)
         }
 
         /// As the SMLib facade (`revolve_profile_curves`): a profile curve that reaches x < 0
@@ -888,6 +1026,48 @@ impl Kernel for SolidcoreKernel {
         {
             let _ = s;
             false
+        }
+    }
+}
+
+#[cfg(all(test, feature = "solidcore"))]
+mod tests {
+    use super::imp::*;
+    use glam::{DVec2, DVec3};
+
+    /// The interpolating spline of a closed spline profile is SMLib's: the same as
+    /// `cad_kernel::curve2::interpolate` through the points and the first again (which agrees
+    /// with SMLib's `SmApiCreateCurveInterpPoints` to 4e-15, checked through `Kernel::brep` of
+    /// kernel-smlib).
+    #[test]
+    fn interpolating_spline_matches_curve2() {
+        for pts in [
+            vec![DVec2::new(5.0, 0.0), DVec2::new(0.0, 3.0), DVec2::new(-5.0, 0.0), DVec2::new(0.0, -3.0)],
+            vec![DVec2::new(1.0, 0.0), DVec2::new(2.0, 1.0), DVec2::new(1.0, 2.0)],
+            vec![
+                DVec2::new(0.0, 0.0),
+                DVec2::new(10.0, 1.0),
+                DVec2::new(12.0, 7.0),
+                DVec2::new(3.0, 9.0),
+                DVec2::new(-2.0, 4.0),
+            ],
+        ] {
+            let mut closed = pts.clone();
+            closed.push(pts[0]);
+            let want = cad_kernel::curve2::interpolate(&closed, None, None).unwrap();
+            let p3: Vec<DVec3> = closed.iter().map(|p| p.extend(0.0)).collect();
+            let got = interp_spline(&p3, "test").unwrap();
+            assert_eq!(got.degree().unwrap(), want.degree as usize);
+            let (cp, w) = got.control_polygon().unwrap();
+            assert!(w.iter().all(|w| (w - 1.0).abs() < 1e-15), "{w:?}");
+            assert_eq!(cp.len(), want.points.len());
+            for (a, b) in cp.iter().zip(&want.points) {
+                assert!((dv(*a) - *b).length() < 1e-12, "{a:?} {b:?}");
+            }
+            let (ks, ms) = got.knots(None).unwrap();
+            let full: Vec<f64> = ks.iter().zip(&ms).flat_map(|(k, m)| std::iter::repeat_n(*k, *m)).collect();
+            assert_eq!(full.len(), want.knots.len());
+            assert!(full.iter().zip(&want.knots).all(|(a, b)| (a - b).abs() < 1e-12), "{full:?} {:?}", want.knots);
         }
     }
 }
