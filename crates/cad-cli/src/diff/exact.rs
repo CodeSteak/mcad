@@ -2,6 +2,7 @@
 //! parameters of the operation (`diff-kernels`, plan 0.4): box, sphere, cylinder/cone frustum,
 //! torus, an extrusion of a polygon or circle (also with twist and scale: A·|h|·∫₀¹ sx·sy dt), a
 //! revolution of a polygon or circle (Pappus), and every affine image of these (volume × |det|). Other operations give `None`.
+//! Next to it the volume blends and offsets changed (rule `blend` of `diff-kernels`).
 
 use std::f64::consts::PI;
 
@@ -14,8 +15,10 @@ use glam::{DMat4, DVec2, DVec3};
 /// `K` with the exact volume next to each shape.
 pub struct Exact<K>(pub K);
 
-/// A shape and its exact volume, if known.
-pub type Shape<S> = (S, Option<f64>);
+/// A shape, its exact volume (if known) and the volume its blends and offsets changed (the
+/// fillets, chamfers, thickenings, shells and offsets in its history, |V(result) − V(input)|
+/// each, summed and carried through transforms and Booleans; NaN where a volume failed).
+pub type Shape<S> = (S, Option<f64>, f64);
 
 /// Area of a closed loop in its own plane (polygon, circle).
 fn loop_area(lp: &Loop) -> Option<f64> {
@@ -84,6 +87,14 @@ fn det3(m: &DMat4) -> f64 {
     glam::DMat3::from_mat4(*m).determinant().abs()
 }
 
+impl<K: Kernel> Exact<K> {
+    /// |V(after) − V(before)| (an open body has volume 0), NaN if a volume fails.
+    fn changed(&mut self, before: &K::Shape, after: &K::Shape) -> f64 {
+        let mut v = |s: &K::Shape| self.0.mass_props(s).map(|m| m.volume).unwrap_or(f64::NAN);
+        (v(after) - v(before)).abs()
+    }
+}
+
 fn strip<S: Clone>(shapes: &[Shape<S>]) -> Vec<S> {
     shapes.iter().map(|s| s.0.clone()).collect()
 }
@@ -97,41 +108,49 @@ impl<K: Kernel> Kernel for Exact<K> {
 
     fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Self::Shape> {
         let d = max - min;
-        self.0.make_box(min, max, tag).map(|s| (s, Some((d.x * d.y * d.z).abs())))
+        self.0.make_box(min, max, tag).map(|s| (s, Some((d.x * d.y * d.z).abs()), 0.0))
     }
 
     fn make_sphere(&mut self, r: f64, tag: Tag) -> KResult<Self::Shape> {
-        self.0.make_sphere(r, tag).map(|s| (s, Some(4.0 / 3.0 * PI * r.powi(3))))
+        self.0.make_sphere(r, tag).map(|s| (s, Some(4.0 / 3.0 * PI * r.powi(3)), 0.0))
     }
 
     fn make_cylinder(&mut self, h: f64, r1: f64, r2: f64, tag: Tag) -> KResult<Self::Shape> {
         let v = PI * h.abs() * (r1 * r1 + r1 * r2 + r2 * r2) / 3.0;
-        self.0.make_cylinder(h, r1, r2, tag).map(|s| (s, Some(v)))
+        self.0.make_cylinder(h, r1, r2, tag).map(|s| (s, Some(v), 0.0))
     }
 
     fn make_torus(&mut self, big_r: f64, r: f64, tag: Tag) -> KResult<Self::Shape> {
         let v = (r < big_r).then_some(2.0 * PI * PI * big_r * r * r);
-        self.0.make_torus(big_r, r, tag).map(|s| (s, v))
+        self.0.make_torus(big_r, r, tag).map(|s| (s, v, 0.0))
     }
 
     fn make_polyhedron(&mut self, points: &[DVec3], faces: &[Vec<u32>], tag: Tag) -> KResult<Self::Shape> {
-        self.0.make_polyhedron(points, faces, tag).map(|s| (s, None))
+        self.0.make_polyhedron(points, faces, tag).map(|s| (s, None, 0.0))
     }
 
     fn transform(&mut self, s: &Self::Shape, m: &DMat4) -> KResult<Self::Shape> {
-        self.0.transform(&s.0, m).map(|t| (t, s.1.map(|v| v * det3(m))))
+        self.0.transform(&s.0, m).map(|t| (t, s.1.map(|v| v * det3(m)), s.2 * det3(m)))
     }
 
     fn boolean(&mut self, op: BoolOp, shapes: &[Self::Shape], tag: Tag) -> KResult<Self::Shape> {
-        self.0.boolean(op, &strip(shapes), tag).map(|s| (s, None))
+        self.0.boolean(op, &strip(shapes), tag).map(|r| (r, None, shapes.iter().map(|s| s.2).sum()))
     }
 
     fn fillet(&mut self, s: &Self::Shape, edges: &[EdgeId], r: f64, tag: Tag) -> KResult<Self::Shape> {
-        self.0.fillet(&s.0, edges, r, tag).map(|s| (s, None))
+        {
+            let r = self.0.fillet(&s.0, edges, r, tag)?;
+            let dv = self.changed(&s.0, &r);
+            Ok((r, None, s.2 + dv))
+        }
     }
 
     fn chamfer(&mut self, s: &Self::Shape, edges: &[EdgeId], d: f64, tag: Tag) -> KResult<Self::Shape> {
-        self.0.chamfer(&s.0, edges, d, tag).map(|s| (s, None))
+        {
+            let r = self.0.chamfer(&s.0, edges, d, tag)?;
+            let dv = self.changed(&s.0, &r);
+            Ok((r, None, s.2 + dv))
+        }
     }
 
     fn law_stations(&mut self, s: &Self::Shape, edges: &[EdgeId], counts: &[u32]) -> KResult<Vec<Vec<DVec3>>> {
@@ -145,45 +164,61 @@ impl<K: Kernel> Kernel for Exact<K> {
         radii: &[Vec<f64>],
         tag: Tag,
     ) -> KResult<Self::Shape> {
-        self.0.fillet_variable(&s.0, edges, radii, tag).map(|s| (s, None))
+        {
+            let r = self.0.fillet_variable(&s.0, edges, radii, tag)?;
+            let dv = self.changed(&s.0, &r);
+            Ok((r, None, s.2 + dv))
+        }
     }
 
     fn extrude(&mut self, p: &PlacedLoop, h: f64, twist: f64, scale: DVec2, tag: Tag) -> KResult<Self::Shape> {
         let v = extrude_volume(p, h, scale);
-        self.0.extrude(p, h, twist, scale, tag).map(|s| (s, v))
+        self.0.extrude(p, h, twist, scale, tag).map(|s| (s, v, 0.0))
     }
 
     fn revolve(&mut self, p: &PlacedLoop, angle: f64, tag: Tag) -> KResult<Self::Shape> {
         let v = revolve_volume(p, angle);
-        self.0.revolve(p, angle, tag).map(|s| (s, v))
+        self.0.revolve(p, angle, tag).map(|s| (s, v, 0.0))
     }
 
     fn loft(&mut self, sections: &[PlacedLoop], ruled: bool, tag: Tag) -> KResult<Self::Shape> {
-        self.0.loft(sections, ruled, tag).map(|s| (s, None))
+        self.0.loft(sections, ruled, tag).map(|s| (s, None, 0.0))
     }
 
     fn sweep(&mut self, p: &Loop, path: &[DVec3], interp: PathInterp, tag: Tag) -> KResult<Self::Shape> {
-        self.0.sweep(p, path, interp, tag).map(|s| (s, None))
+        self.0.sweep(p, path, interp, tag).map(|s| (s, None, 0.0))
     }
 
     fn sweep_path(&mut self, p: &Loop, path: &PlacedPath, tag: Tag) -> KResult<Self::Shape> {
-        self.0.sweep_path(p, path, tag).map(|s| (s, None))
+        self.0.sweep_path(p, path, tag).map(|s| (s, None, 0.0))
     }
 
     fn nurbs_surface(&mut self, rows: &[Vec<DVec3>], tag: Tag) -> KResult<Self::Shape> {
-        self.0.nurbs_surface(rows, tag).map(|s| (s, None))
+        self.0.nurbs_surface(rows, tag).map(|s| (s, None, 0.0))
     }
 
     fn thicken(&mut self, s: &Self::Shape, t: f64, tag: Tag) -> KResult<Self::Shape> {
-        self.0.thicken(&s.0, t, tag).map(|s| (s, None))
+        {
+            let r = self.0.thicken(&s.0, t, tag)?;
+            let dv = self.changed(&s.0, &r);
+            Ok((r, None, s.2 + dv))
+        }
     }
 
     fn shell(&mut self, s: &Self::Shape, t: f64, open: &[FaceId], tag: Tag) -> KResult<Self::Shape> {
-        self.0.shell(&s.0, t, open, tag).map(|s| (s, None))
+        {
+            let r = self.0.shell(&s.0, t, open, tag)?;
+            let dv = self.changed(&s.0, &r);
+            Ok((r, None, s.2 + dv))
+        }
     }
 
     fn offset(&mut self, s: &Self::Shape, d: f64, tag: Tag) -> KResult<Self::Shape> {
-        self.0.offset(&s.0, d, tag).map(|s| (s, None))
+        {
+            let r = self.0.offset(&s.0, d, tag)?;
+            let dv = self.changed(&s.0, &r);
+            Ok((r, None, s.2 + dv))
+        }
     }
 
     fn edges(&mut self, s: &Self::Shape, samples: u32) -> KResult<Vec<EdgeInfo>> {

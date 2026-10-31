@@ -63,20 +63,19 @@ Nodes = unsupported nodes in `diff-kernels` at `bba8d87` (1438 nodes in 64 model
 Done when: `diff-kernels` has no `unsupported` left except 1.8; `tests/step/verify.py` and `mcad measure`
 tests pass with `--kernel solidcore` (tessellation still from phase 2).
 
-Status 2026-10-31 (end of phase 1, 101 files, 2604 nodes): same 2589, unsupported 3, blocked 3,
-differ 9, failed 0. "Done when", item by item:
+Status 2026-10-31 (end of phase 1, after the re-test of task C; 101 files, 2604 nodes): same
+2596, unsupported 3, blocked 3, differ 2, failed 0. "Done when", item by item:
 
 - `unsupported` left: 3, not 1.8 (shear works) but variable-radius fillets with different radius
   laws on several edges (`variable_radius`): solidcore's `FilletSession` takes one law for all
   edges, the executive's per-edge laws are not public (upstream API). Not met until solidcore
   exposes them.
-- `tests/step/verify.py` with `MCAD_KERNEL=solidcore`: 61 of 64 at plan 1.11; the 3 failures
-  were polyhedra (1.7, done since) and `asserts` (its asserts need the tessellation, phase 2).
+- `tests/step/verify.py` with `MCAD_KERNEL=solidcore`: 63 of 64 (61 at plan 1.11, polyhedra
+  since 1.7); left `asserts`, whose asserts need the tessellation (phase 2).
 - `mcad measure` tests with `--kernel solidcore`: not yet, every measurement needs the mesh
   (`MeasurePart.mesh`, phase 2).
-- left `differ` (9): Booleans that lose faces or are no manifold solid (`sketch_cable_duct`,
-  `angle_anchor`, `project-housing` 2, `f09a`), SMLib failing where solidcore does not (`f08c` 2,
-  `f11`) and `mug`'s fillet after a shell (volume 1.1e-4 apart, undecided).
+- left `differ` (2): `sketch_cable_duct` (the union of three extrusions loses faces, phase 3)
+  and `f11` (SMLib fails, solidcore not).
 
 ## Phase 2: own tessellator `cad-tess` (4–6 weeks)
 
@@ -114,7 +113,7 @@ STL/3MF export, section view and render snapshots pass with `--kernel solidcore`
 | 3.1 | Minimal reproducers per case (`.mcad` + Rust test on the solidcore API), with the SMLib result as expectation |
 | 3.2 | Check against unpatched upstream C++ (solidcore's `difftest` uses upstream usd-brep, our SMLib carries `smlib/patches/` and fork fixes): a difference can come from our patches |
 | 3.3 | Issues in `tangency-labs/solidcore`; bump the pin when fixed (0.3) |
-| 3.4 | Until then, a guard in the adapter: after a boolean check `brep_is_manifold_solid` and volume plausibility (union ≥ max operand, difference ≤ first operand, intersection ≤ min operand); otherwise `Failed` instead of a wrong solid |
+| 3.4 | Until then, a guard in the adapter: after a boolean check `brep_is_manifold_solid` and volume plausibility (union ≥ max operand, difference ≤ first operand, intersection ≤ min operand); otherwise `Failed` instead of a wrong solid. **Done 2026-10-31** (re-test of task C): the facade's `checked_boolean` (closed, volume bounds, point checks, retries swapped and moved, touching union), `crates/kernel-solidcore/src/boolean.rs` |
 
 ## Phase 4: Wasm and UI (1–2 weeks)
 

@@ -63,7 +63,7 @@ pub struct ShapeData {
     pub brep: std::cell::RefCell<solidcore::Brep>,
     /// Mass properties, once computed (the shape never changes).
     #[cfg(feature = "solidcore")]
-    mass: std::cell::Cell<Option<MassProps>>,
+    pub(crate) mass: std::cell::Cell<Option<MassProps>>,
     /// The shape this one is a similarity transform of, and the matrix: its mass properties
     /// follow from the source's, if those are known by then (no second integration).
     #[cfg(feature = "solidcore")]
@@ -97,6 +97,8 @@ fn unsupported(op: &str) -> KernelError {
 }
 
 #[cfg(feature = "solidcore")]
+mod boolean;
+#[cfg(feature = "solidcore")]
 mod brep;
 #[cfg(feature = "solidcore")]
 mod offset;
@@ -112,7 +114,6 @@ mod imp {
     use solidcore::blend::fillet_executive::session::FilletSession;
     use solidcore::curve::curve::Curve;
     use solidcore::error::EntityRef;
-    use solidcore::geom::a_object::BooleanOperation;
     use solidcore::geom::attribute::{Attribute, Behavior};
     use solidcore::geom::axis2_placement::Axis2Placement;
     use solidcore::geom::tol::{SmallTopoType, zone_tol_3d};
@@ -696,6 +697,25 @@ mod imp {
             r
         }
 
+        /// `SmBrep::MergeBrep`: a copy of `other`'s topology and geometry added to `m`, without
+        /// intersection (the facade's union of bodies that only touch).
+        pub(crate) fn merge_into(&mut self, m: &mut solidcore::Brep, other: &solidcore::Brep) -> KResult<()> {
+            use solidcore::topology::brep::{p2, p3};
+            self.copies += 1;
+            let domain = self.copies;
+            let src = other.key().0;
+            let src_domain = if solidcore::geom::context::is_reserved_key(other.key()) { 0 } else { src >> 36 };
+            let mut state = p2::ArenaNotifyState::new(m);
+            let mut env = state.env(None);
+            let key_of = |e| copy_key(e, domain);
+            env.key_of = &key_of;
+            p3::merge_brep(&mut self.k, &mut env, m, other, &|e| copy_key(e, src_domain), None, None, true)
+                .map_err(|e| err("boolean (merge)", e))?;
+            drop(state);
+            m.refresh_cached_topology();
+            Ok(())
+        }
+
         pub fn copy_stats(&self) -> (u64, std::time::Duration) {
             (self.copies, self.copy_time)
         }
@@ -858,13 +878,14 @@ mod imp {
         /// so every tolerance became 0, and the context's model size changed too; later
         /// Booleans with the body missed their intersections and returned the operand
         /// unchanged or no manifold solid). A scaled body gets its tolerances from its full
-        /// box; the context keeps its model size.
+        /// box, a rigid motion or a mirror keeps them; the context keeps its model size.
         fn transform_brep(&mut self, b: &mut solidcore::Brep, pl: &Axis2Placement, scale: Option<Vec3>) -> KResult<()> {
             use solidcore::geom::tol;
             use solidcore::topology::{face, vertex};
             solidcore::topology::brep::p5::transform(&mut self.k, b, pl, scale, false)
                 .map_err(|e| err("transform", e))?;
-            if scale.is_none() {
+            // rigid motions, mirrors included, keep their tolerances (as the facade)
+            if scale.is_none_or(|s| [s.x, s.y, s.z].iter().all(|v| (v.abs() - 1.0).abs() <= 1e-12)) {
                 return Ok(());
             }
             let size = model_diag(&self.k, b);
@@ -1535,28 +1556,6 @@ mod imp {
                 });
             }
             Ok(out)
-        }
-
-        pub fn boolean(&mut self, op: BoolOp, shapes: &[Shape], tag: Tag) -> KResult<Shape> {
-            let op_sc = match op {
-                BoolOp::Union => BooleanOperation::Union,
-                BoolOp::Difference => BooleanOperation::Difference,
-                BoolOp::Intersection => BooleanOperation::Intersection,
-            };
-            let mut it = shapes.iter();
-            let first = it.next().ok_or_else(|| KernelError::InvalidInput("boolean without operands".into()))?;
-            // the boolean consumes its operands: copies, the shapes stay as they are
-            let mut acc = self.copy(&first.brep.borrow())?;
-            for s in it {
-                let other = self.copy(&s.brep.borrow())?;
-                let out = solidcore::boolean::api_brep::boolean(&mut self.k, acc, other, op_sc)
-                    .map_err(|e| err("boolean", e))?;
-                acc = out.result;
-            }
-            // solidcore carries the tags (split pieces keep theirs); a face without one gets
-            // the tag of the operand face it lies on, else the Boolean's
-            self.resolve_tags(&mut acc, shapes, tag, false)?;
-            Ok(ShapeData::new(acc, tag))
         }
 
         /// Tags of the faces of `r`, the result of an operation on `inputs`, as the facade's

@@ -9,9 +9,9 @@
 //! deviations of both kernels from the exact volumes of the operands; else, for curved results,
 //! 3e-5 (both integrate over curved faces, and SMLib fits skins and sweeps less closely: its
 //! sphere r 5 is 7.9e-7 below the exact volume, its twisted bar 1.5e-5 above); else, for a
-//! result with a fillet, chamfer, thicken, shell or offset at or below the node, 1e-4 of those bodies
-//! (both fit the blend and offset surfaces): of the volume of the nearest such nodes at or below it,
-//! not of the node.
+//! result with a fillet, chamfer, thicken, shell or offset in its history, 8 % of the volume
+//! those operations changed plus 4e-6 of the node (both fit the blend and offset surfaces; the
+//! `curved` rule does not apply there).
 //! Selected edges match in any order, by all their sample points (either direction; another
 //! parameterisation or start point within the chordal sag of the other's samples).
 //! "Coverage" counts per operation (node label) how many nodes solidcore evaluated like SMLib.
@@ -26,7 +26,7 @@
 //! with `NodeDiff = { idx, label, line,
 //!   verdict: "same"|"unsupported"|"blocked"|"differ"|"failed"|"skipped",
 //!   smlib: Metrics, solidcore: Metrics, volume_check: VolumeCheck|null, notes: [string] }`,
-//! `Metrics = { status, volume, exact_volume, curved, faces, edges, selected_edges, message }`,
+//! `Metrics = { status, volume, exact_volume, curved, faces, edges, selected_edges, message, blend_change }`,
 //! `VolumeCheck = { rule: "relative"|"exact"|"operands"|"curved"|"blend"|"none", tolerance, difference,
 //!   exact, smlib_error, solidcore_error }`; `summary.volume_rules`: same nodes per rule.
 //! Cost per file (`smlib_cost`, `solidcore_cost`) and in the summary (sums; heap: maximum; plus
@@ -71,6 +71,9 @@ pub struct Metrics {
     pub edges: Option<usize>,
     pub selected_edges: Vec<Vec<[f64; 3]>>,
     pub message: Option<String>,
+    /// The volume the blends and offsets in the history of the node's shapes changed (rule
+    /// `blend`; NaN where a volume failed).
+    pub blend_change: f64,
     /// The neutral B-rep of the node's parts (`Kernel::brep`), `None` without parts or for a mesh.
     pub brep: Option<brep::Summary>,
     #[serde(skip)]
@@ -127,13 +130,16 @@ const REL_VOLUME: f64 = 1e-6;
 /// are fitted less closely (twisted bar 8 × 8 × 20, exact 1280: SMLib 1.5e-5 above, solidcore
 /// 6e-7). Largest difference in the corpus: 1.9e-5 (a loft in `planter`).
 const REL_VOLUME_CURVED: f64 = 3e-5;
-/// Results with a fillet or chamfer at or below the node, relative: both kernels fit the blend
-/// surfaces, SMLib less closely (`pillow_block`: its chamfers of 19 edges remove 39.15 mm³, by
-/// Pappus 41.40, solidcore 41.39; a cylinder rim chamfer: SMLib −1.2e-6, solidcore −5.7e-6 of the
-/// exact volume). Largest difference in the corpus: 6.5e-5 (`pillow_block`). Relative to the
-/// volume of the blend nodes (the nearest at or below a node, summed), so that unblended bodies
-/// beside them in a group do not widen it ([`blends`]).
-const REL_VOLUME_BLEND: f64 = 1e-4;
+/// Results with a fillet, chamfer, thicken, shell or offset at or below the node: both kernels
+/// fit the blend and offset surfaces, SMLib less closely (`pillow_block`: its chamfers of 19 edges
+/// remove 39.15 mm³, by Pappus 41.40, solidcore 41.39: 5.4 % of the change). The tolerance is
+/// relative to the volume those operations changed (`Exact`'s third field, summed over the
+/// node's history), not to the node: a wrong radius (5 % → 10 % of the change) is caught; plus
+/// [`REL_VOLUME_BLEND_REST`] of the node for the integration of the rest.
+const REL_VOLUME_BLEND: f64 = 0.08;
+/// The part of rule `blend` for the unblended rest of the node (curved primitives agree within
+/// 4.3e-6).
+const REL_VOLUME_BLEND_REST: f64 = 4e-6;
 
 /// One evaluation: (index, label, line, children) and metrics per scene node.
 struct Run {
@@ -254,6 +260,7 @@ where
             let meshes = s.done().is_some_and(|d| !d.ev.meshes(n.idx).is_empty());
             if !meshes && !parts.is_empty() {
                 m.exact_volume = parts.iter().map(|p| p.shape.1).sum();
+                m.blend_change = parts.iter().map(|p| p.shape.2).sum();
             }
             let k = s.engine_mut().kernel_mut();
             let mut faces = 0;
@@ -320,7 +327,7 @@ where
 /// `relative` (1e-6), `exact` (solidcore at most as far from the exact volume as SMLib, at least
 /// 1e-6), `operands` (no exact value, difference ≤ budget + 1e-6), `curved` (curved faces:
 /// difference ≤ 3e-5, and solidcore within 3e-5 of an exact value), `blend` (a fillet or chamfer
-/// at or below the node: difference ≤ `blend`, 1e-4 of the blended bodies, see [`blends`]);
+/// in the node's history: difference ≤ `blend`, 8 % of the volume they changed, see [`blends`]);
 /// else `none`.
 fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>, blend: Option<f64>) -> VolumeCheck {
     let difference = (x - y).abs();
@@ -356,7 +363,8 @@ fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>, blend: Option<
     }
     // with an exact value solidcore must also be within 3e-5 of it
     let near_exact = c.solidcore_error.is_none_or(|e| e <= REL_VOLUME_CURVED);
-    if a.curved && near_exact && difference <= REL_VOLUME_CURVED * x.abs() {
+    // not for blended results: their tolerance is rule `blend`'s, from the volume the blends changed
+    if a.curved && blend.is_none() && near_exact && difference <= REL_VOLUME_CURVED * x.abs() {
         c.rule = "curved";
         c.tolerance = REL_VOLUME_CURVED * x.abs();
         return c;
@@ -406,45 +414,29 @@ fn budgets(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics], b: &[Me
     (0..nodes.len()).map(|i| go(i, nodes, pos, a, b, &mut memo)).collect()
 }
 
-/// Per node where SMLib blends edges (fillet, chamfer) or offsets faces (`thicken`, `shell`,
-/// `offset`: SMLib approximates offset surfaces as B-splines; a thickened B-spline sheet in
-/// `freeform_lid`: SMLib 3.3e-5 off a numerical integration, solidcore 1.6e-6) at the node or
-/// below it: the volume tolerance of rule `blend`, 1e-4 of the volume of those nodes (the node
-/// itself if it is one, else the sum over its children); `None` without one.
-fn blends(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics]) -> Vec<Option<f64>> {
-    fn go(
-        i: usize,
-        nodes: &[NodeRow],
-        pos: &BTreeMap<u32, usize>,
-        a: &[Metrics],
-        memo: &mut Vec<Option<Option<f64>>>,
-    ) -> Option<f64> {
-        if let Some(v) = memo[i] {
-            return v;
-        }
-        let own = !a[i].selected_edges.is_empty() || matches!(nodes[i].1.as_str(), "thicken" | "shell" | "offset");
-        let v = if !own {
-            let mut sum = None;
-            for c in nodes[i].3.iter().filter_map(|c| pos.get(c)) {
-                if let Some(t) = go(*c, nodes, pos, a, memo) {
-                    *sum.get_or_insert(0.0) += t;
-                }
-            }
-            sum
-        } else {
-            Some(REL_VOLUME_BLEND * a[i].volume.unwrap_or(0.0).abs())
-        };
-        memo[i] = Some(v);
-        v
-    }
-    let mut memo = vec![None; nodes.len()];
-    (0..nodes.len()).map(|i| go(i, nodes, pos, a, &mut memo)).collect()
+/// Per node whose shapes SMLib blended (fillet, chamfer) or offset (`thicken`, `shell`,
+/// `offset`; SMLib approximates offset surfaces as B-splines: a thickened B-spline sheet in
+/// `freeform_lid` is 3.3e-5 off a numerical integration, solidcore 1.6e-6) somewhere in their
+/// history: the tolerance of rule `blend`, [`REL_VOLUME_BLEND`] of the volume those operations
+/// changed plus [`REL_VOLUME_BLEND_REST`] of the node; `None` without one (or where a volume of
+/// that history failed).
+fn blends(a: &[Metrics]) -> Vec<Option<f64>> {
+    a.iter()
+        .map(|m| {
+            let c = m.blend_change;
+            (c.is_finite() && c > 0.0)
+                .then(|| REL_VOLUME_BLEND * c + REL_VOLUME_BLEND_REST * m.volume.unwrap_or(0.0).abs())
+        })
+        .collect()
 }
 
 /// The same edge, sampled: every point within `tol`, in order or reversed; else (another
 /// parameterisation of the same curve, e.g. a B-spline for a circle, or a closed edge from
 /// another start point) every point of each within `tol` plus twice the chordal sag of the other's
 /// polyline (estimated from its points) of that polyline, and the ends equal unless both are closed.
+/// Limit: in that second case an edge within about that sag passes too (18 samples of a circle
+/// r 10: 0.19 mm, so r 10.1 or an offset of 0.2 mm along the axis is not told apart); the face
+/// and edge counts and the volume of the node still are compared exactly.
 fn same_polyline(x: &[[f64; 3]], y: &[[f64; 3]], tol: f64) -> bool {
     use glam::DVec3;
     let (x, y): (Vec<DVec3>, Vec<DVec3>) =
@@ -616,7 +608,7 @@ pub fn command(files: &[PathBuf], brep: bool) -> Result<Outcome, Fail> {
             })
             .collect();
         let budget = budgets(nodes, &pos, a, &b);
-        let blend = blends(nodes, &pos, a);
+        let blend = blends(a);
         // own verdict per node, then "blocked" where a descendant is unsupported or failed
         let mut own = Vec::with_capacity(nodes.len());
         for i in 0..nodes.len() {
@@ -771,8 +763,8 @@ pub fn command(files: &[PathBuf], brep: bool) -> Result<Outcome, Fail> {
     let g = |k: &str| rules.get(k).copied().unwrap_or(0);
     text.push_str(&tr!(
         "Volumen der gleichen Knoten: relativ 1e-6 {}, exakter Wert {}, Operanden {}, gekrümmt 3e-5 {}, \
-         Rundung 1e-4 {}\n",
-        "Volume of the same nodes: relative 1e-6 {}, exact value {}, operands {}, curved 3e-5 {}, blend 1e-4 {}\n",
+         Rundung {}\n",
+        "Volume of the same nodes: relative 1e-6 {}, exact value {}, operands {}, curved 3e-5 {}, blend {}\n",
         g("relative"),
         g("exact"),
         g("operands"),
@@ -825,4 +817,27 @@ pub fn command(files: &[PathBuf], brep: bool) -> Result<Outcome, Fail> {
                      "query_ratio": ratio(cost_a.query_ms, cost_b.query_ms) },
     });
     Ok(Outcome { json: j, text, errors: !all_same, exit: None })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Rule `blend` scales with the volume the blends changed, not with the node: a box edge of
+    /// 100 with all 12 edges filleted r 1 changes 12 · 100 · (1 − π/4) ≈ 258 mm³; a radius 5 %
+    /// too large changes 10 % more and is caught, the 5.4 % of `pillow_block`'s chamfers pass.
+    #[test]
+    fn blend_tolerance_follows_the_blended_volume() {
+        let change = 12.0 * 100.0 * (1.0 - std::f64::consts::PI / 4.0);
+        let v = 1e6 - change;
+        let a = Metrics { volume: Some(v), curved: true, blend_change: change, ..Default::default() };
+        let tol = blends(std::slice::from_ref(&a))[0];
+        assert!(tol.is_some());
+        let wrong = 1e6 - change * 1.05 * 1.05;
+        assert_eq!(volume_check(v, wrong, &a, None, tol).rule, "none");
+        assert_eq!(volume_check(v, 1e6 - change * 1.054, &a, None, tol).rule, "blend");
+        // without a blend the curved rule takes the same difference within 3e-5 of the node
+        let c = Metrics { volume: Some(v), curved: true, ..Default::default() };
+        assert_eq!(volume_check(v, wrong, &c, None, None).rule, "curved");
+    }
 }

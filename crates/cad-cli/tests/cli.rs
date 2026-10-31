@@ -438,28 +438,27 @@ fn diff_kernels_on_examples() {
         }
     }
     if v["solidcore_available"] == true {
-        // solidcore @ bba8d87 over 101 files (2604 nodes): 2586 same, 3 unsupported (a
-        // variable fillet with several laws), 3 blocked, 12 differ, nothing fails. Curved solids
+        // solidcore @ bba8d87 over 101 files (2604 nodes): 2596 same, 3 unsupported (a
+        // variable fillet with several laws), 3 blocked, 2 differ, nothing fails. Curved solids
         // are compared against their exact volume (solidcore is the more accurate one), blends
-        // and offsets within the fit of their surfaces: no node differs in its volume alone
-        // (except `mug`'s fillet after a shell, 1.1e-4, undecided); the differences are
-        // Booleans that lose faces or that SMLib fails
+        // and offsets within 8 % of the volume they changed: no node differs in its volume alone;
+        // the differences are a Boolean that loses faces and one that SMLib fails
         assert!(s["unsupported"].as_u64().unwrap() <= 5, "{s}");
-        assert!(s["same"].as_u64().unwrap() >= 2575, "{s}");
-        assert!(s["differ"].as_u64().unwrap() <= 14, "{s}");
+        assert!(s["same"].as_u64().unwrap() >= 2585, "{s}");
+        assert!(s["differ"].as_u64().unwrap() <= 5, "{s}");
         assert_eq!(s["failed"].as_u64().unwrap(), 0, "{s}");
-        // every rule is in use; curved 83 (with fillets and chamfers), blend 11
+        // every rule is in use; curved 25 (blended results use rule blend), blend 70
         let r = &s["volume_rules"];
         assert!(r["exact"].as_u64().unwrap() >= 110 && r["operands"].as_u64().unwrap() >= 45, "{r}");
-        assert!(r["curved"].as_u64().unwrap() <= 95, "{r}");
-        assert!((1..=20).contains(&r["blend"].as_u64().unwrap_or(0)), "{r}");
-        // queries work on the shape's own body: few copies (2005 at bba8d87, end of phase 1)
+        assert!(r["curved"].as_u64().unwrap() <= 40, "{r}");
+        assert!((40..=100).contains(&r["blend"].as_u64().unwrap_or(0)), "{r}");
+        // queries work on the shape's own body: few copies (2420 at bba8d87 with the Boolean
+        // checks' retries)
         let copies = s["solidcore_cost"]["copies"].as_u64().unwrap();
-        assert!(copies > 0 && copies < 2500, "{copies}");
+        assert!(copies > 0 && copies < 3000, "{copies}");
         for f in v["files"].as_array().unwrap() {
             for n in f["nodes"].as_array().unwrap() {
-                let known = f["file"].as_str().unwrap().ends_with("mug.mcad") && n["line"] == 25;
-                if n["verdict"] == "differ" && !known {
+                if n["verdict"] == "differ" {
                     let notes = n["notes"].as_array().unwrap();
                     assert!(!notes.iter().all(|x| x.as_str().unwrap().starts_with("volume")), "volume only: {n}");
                 }

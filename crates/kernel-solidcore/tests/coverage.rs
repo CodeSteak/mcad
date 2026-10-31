@@ -88,8 +88,10 @@ fn every_operation_answers_without_panicking() {
     ] {
         assert!(ok, "{n}");
     }
-    // shear has no counterpart in solidcore
-    assert!(matches!(k.transform(&b, &shear), Err(KernelError::Unsupported(_))));
+    // shear: split into rotations and a scale along the axes (plan 1.8), the volume kept
+    let t = k.transform(&b, &shear).unwrap();
+    let (v0, v1) = (k.mass_props(&b).unwrap().volume, k.mass_props(&t).unwrap().volume);
+    assert!((v1 - v0).abs() < 1e-9 * v0, "{v0} {v1}");
 }
 
 /// What already works agrees with the SMLib results for the same input.

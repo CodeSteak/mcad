@@ -20,13 +20,11 @@ fn primitives(k: &mut SolidcoreKernel) -> Vec<(&'static str, Shape, f64)> {
     let xz = DMat4::from_rotation_x(std::f64::consts::FRAC_PI_2);
     let circle = PlacedLoop { lp: Loop::Circle { center: DVec2::new(6.0, 0.0), r: 2.0 }, frame: xz };
     let poly = vec![DVec2::new(2.0, -4.0), DVec2::new(6.0, -3.0), DVec2::new(5.0, 4.0), DVec2::new(2.0, 3.0)];
-    // Pappus: 2π · area · centroid x (shoelace)
-    let (mut a, mut cx) = (0.0, 0.0);
+    // Pappus: 2π · ∫∫ x dA (shoelace)
+    let mut cx = 0.0;
     for i in 0..poly.len() {
         let (p, q) = (poly[i], poly[(i + 1) % poly.len()]);
-        let c = p.x * q.y - q.x * p.y;
-        a += c / 2.0;
-        cx += (p.x + q.x) * c / 6.0;
+        cx += (p.x + q.x) * (p.x * q.y - q.x * p.y) / 6.0;
     }
     let down = DMat4::from_translation(DVec3::new(0.0, 0.0, -5.0));
     let mut out = vec![
@@ -40,7 +38,6 @@ fn primitives(k: &mut SolidcoreKernel) -> Vec<(&'static str, Shape, f64)> {
     let c = k.make_cylinder(10.0, 4.0, 1.0, 1).unwrap();
     out.push(("cone", k.transform(&c, &down).unwrap(), PI * 10.0 / 3.0 * (16.0 + 4.0 + 1.0)));
     out.push(("box", k.make_box(DVec3::new(-3.0, -4.0, -5.0), DVec3::new(3.0, 4.0, 5.0), 1).unwrap(), 480.0));
-    let _ = a;
     out
 }
 

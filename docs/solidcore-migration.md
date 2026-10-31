@@ -120,6 +120,7 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, polyhedra (plan 1.7) | 101 | 2604 | **2545** | 17 | 34 | 8 | 0 |
 | `bba8d87`, offset, shell, thicken, NURBS surface (plan 1.6) | 101 | 2604 | **2581** | 5 | 6 | 12 | 0 |
 | `bba8d87`, shear (plan 1.8), set_draft/shape_bytes/export (1.12), rule `blend` with offsets: end of phase 1 | 101 | 2604 | **2589** | 3 | 3 | 9 | 0 |
+| `bba8d87`, re-test of task C: checked Booleans, rule `blend` from the changed volume | 101 | 2604 | **2596** | 3 | 3 | 2 | 0 |
 
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
@@ -380,6 +381,20 @@ volume per colour with both kernels for all 37 cases of `tests/color-review/case
 (debug build, dependencies `opt-level = 2`); solidcore is slower on `key_rack` (12.8 s vs 5.8 s),
 `mug`, `pen_box` and `wall_hook` (2×), faster on `text_sign` and `f11`.
 
+## Re-test findings on task C
+
+| Finding | Fix |
+| --- | --- |
+| Booleans unchecked: a box minus a cylinder that touches it tangentially gave an open body (STEP export wrote it, the volume query failed); box ∩ a sphere of 1e-4 of its size gave the whole box (1e6 instead of 2.6e-7); Booleans of `scale(1e3)` and `scale(1e-3)` bodies no manifold solid, status ok | the facade's `checked_boolean` ported (`crates/kernel-solidcore/src/boolean.rs`): per step of closed solids the result must be closed (or, where the interiors do not overlap, `a − b = a`, `a ∩ b` empty), its volume within the bounds of the operation (3 %), points just outside and inside one face of each operand near a face of the other inside or outside the result as the operation says (confirmed at a second point; one point on at most 24 faces, the facade takes 5 on every face near the other operand: solidcore's point classification made that 2.5 times as slow as SMLib over the corpus, `text_sign` 200 s); a union of bodies that only touch is one solid with a shell per body (`SmBrep::MergeBrep`, the facade's `touching_union`: `angle_anchor`, `project-housing` are `same` now); else the swapped operands, then the second moved by 1e-6, 1e-5, 1e-4 of the size; else `Failed` with the facade's wording ("the result is not a closed solid: the operands touch tangentially …", "solidcore returned a wrong result (…)"). Volumes coarse (1e-2, as the facade), the accurate ones before a refusal (`rib_bracket`: a coarse 1.3 % error refused a right union). The tester's tiny-sphere and scaled cases now give SMLib's volumes after a retry, the tangential difference fails as in SMLib. Not ported: `disjoint_union` (solidcore unites bodies apart correctly), the reordering of a failed chain. Unit tests `tests/booleans.rs` |
+| rule `blend` accepted a radius 5–10 % too large (`cube(100, $fillet = 1)`: via `curved`, via `blend` with 1e-4 of the node) | `blend`: 8 % of the volume the blends and offsets in the node's history changed (|V(result) − V(input)| per fillet, chamfer, thicken, shell, offset, carried by `diff/exact.rs` through transforms and Booleans) plus 4e-6 of the node; `curved` no longer applies to blended results. A 5 % radius error (10 % of the change) fails, `pillow_block`'s 5.4 % passes (unit test `blend_tolerance_follows_the_blended_volume`) |
+| selected closed edges matched within twice the chordal sag | documented as the limit of the samples (18 per edge: 0.19 mm for a circle r 10); face and edge counts and volumes are still compared exactly |
+| result of the round (101 files) | same 2589 → 2596, unsupported 3, blocked 3, differ 9 → 2, failed 0: `angle_anchor`, `project-housing` (touching union), `f08c`, `f09a` (tangential Booleans now fail as in SMLib or come out right), `freeform_lid`, `mug` (rule `blend`) are `same`; 58 `curved` and 4 `none` nodes use rule `blend`, no node became `differ` by it. Evaluation of all files: solidcore 252 s, SMLib 149 s (156 s before the checks; debug build) |
+| `invalid_faces` (1e-4 of the diagonal) rejects valid tiny fillets (`cube(0.08, $fillet = 0.005)`) | left as the facade has it (parity); a larger `eps` from the zone tolerance would be the fix in both kernels |
+| `transform` reset the tolerances under a mirror (scale −1) | only under a scale ≠ ±1, as the facade (rigid motions and mirrors keep them) |
+| unused area in `tests/transforms.rs` | removed |
+
+Known SMLib crashes (no fix, SMLib is the reference until the switch): `rotate_extrude() polygon([[x, 0], [5, 0], [5, 5], [x, 5]])` for x from about ±1e-10 to ±2e-9 (also +1e-10, a valid profile) ends `mcad` with a segmentation fault (exit 139); `diff-kernels` on the tester's `m_cone.mcad` crashes inside SMLib (`SmTopologyIntersector::CloseIntersectionLoop`, called from the facade's `checked_boolean`).
+
 ## Tester findings on task C (fillets, tags, transforms)
 
 | Finding | Fix |
@@ -611,7 +626,7 @@ node evaluated by SMLib:
   | `exact` | the exact volume E is known and \|solidcore − E\| / E ≤ max(\|SMLib − E\| / E, 1e-6): solidcore is at least as close to E as SMLib |
   | `operands` | E unknown (Boolean, …): \|SMLib − solidcore\| ≤ Σ (\|SMLib − Eᵢ\| + \|solidcore − Eᵢ\|) + 1e-6 · \|SMLib\| over the nearest descendants with an exact volume Eᵢ (the deviation of the operands carries over to the result) |
   | `curved` | the result has a curved edge, \|SMLib − solidcore\| ≤ 3e-5 · \|SMLib\| and, if E is known, \|solidcore − E\| ≤ 3e-5 · E (integration and fit accuracy; largest difference in the corpus 1.9e-5, a loft; primitives and Booleans of them up to 4.3e-6) |
-  | `blend` | SMLib blends edges (fillet, chamfer) or offsets faces (`thicken`, `shell`, `offset`) at the node or below it, \|SMLib − solidcore\| ≤ 1e-4 of the volume of the nearest such nodes at or below it (both fit the blend and offset surfaces, SMLib less closely: see "Fillets and chamfers"; largest difference in the corpus 6.5e-5; `freeform_lid`'s thickened sheet: SMLib 3.3e-5 off a numerical integration of the offset volume, solidcore 1.6e-6) |
+  | `blend` | SMLib blends edges (fillet, chamfer) or offsets faces (`thicken`, `shell`, `offset`) in the history of the node's shapes, \|SMLib − solidcore\| ≤ 8 % of the volume those operations changed + 4e-6 of the node (`curved` does not apply to such nodes) (both fit the blend and offset surfaces, SMLib less closely: see "Fillets and chamfers"; largest difference in the corpus 6.5e-5; `freeform_lid`'s thickened sheet: SMLib 3.3e-5 off a numerical integration of the offset volume, solidcore 1.6e-6) |
   | otherwise | `differ` with the note `volume x vs y (exact E)` |
 
   Exact volumes (`crates/cad-cli/src/diff/exact.rs`, a kernel wrapper that carries them next to
@@ -634,10 +649,9 @@ in addition, `tests/openscad-compat/compare.py` and `tests/step/verify.py` must 
 
 The test `diff_kernels_on_examples` (`crates/cad-cli/tests/cli.rs`, only with `--features
 solidcore`) checks that the comparison runs over all 101 examples without a crash, that at
-least 2575 nodes are the same, at most 5 unsupported, at most 14 differ and none fails, that
-no node differs in its volume alone (except `mug`'s fillet after a shell, undecided), that every
-volume rule is used (exact ≥ 110, operands ≥ 45, curved ≤ 95, blend 1 to 20) and that the
-queries need few copies (< 2500); without the feature
+least 2585 nodes are the same, at most 5 unsupported, at most 5 differ and none fails, that
+no node differs in its volume alone, that every volume rule is used (exact ≥ 110, operands ≥ 45,
+curved ≤ 40, blend 40 to 100) and that the queries need few copies (< 3000); without the feature
 `diff_kernels_needs_the_feature` checks the build hint. `crates/kernel-solidcore/tests/coverage.rs`
 checks each operation individually (box: volume, area, centroid, bounds; transformation
 and classification correct or `Unsupported`).
