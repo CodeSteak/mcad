@@ -213,3 +213,108 @@ fn revolve_spline_through_the_axis() {
     let p = PlacedLoop { lp: Loop::Spline(bulge), frame: xz };
     assert!(matches!(k.revolve(&p, TAU, 1), Err(cad_kernel::KernelError::InvalidInput(m)) if m.contains("axis")));
 }
+
+fn square(c: DVec2) -> Loop {
+    Loop::Polygon(vec![
+        c + DVec2::new(-1.0, -1.0),
+        c + DVec2::new(1.0, -1.0),
+        c + DVec2::new(1.0, 1.0),
+        c + DVec2::new(-1.0, 1.0),
+    ])
+}
+
+#[test]
+fn sweep_straight_and_with_corners() {
+    use cad_kernel::{KernelError, PathInterp};
+    let mut k = SolidcoreKernel::new();
+    let circle = Loop::Circle { center: DVec2::ZERO, r: 1.0 };
+    // collinear points: one straight segment
+    let path = [DVec3::ZERO, DVec3::new(0.0, 0.0, 5.0), DVec3::new(0.0, 0.0, 10.0)];
+    let s = k.sweep(&circle, &path, PathInterp::Linear, 1).unwrap();
+    check(&mut k, &s, 3, 3, 10.0 * PI, 1e-6);
+    // off-centre profile on a straight path: swept where it lies
+    let s = k.sweep(&square(DVec2::ONE), &[DVec3::ZERO, DVec3::new(3.0, 4.0, 0.0)], PathInterp::Linear, 1).unwrap();
+    check(&mut k, &s, 6, 12, 20.0, 1e-9);
+    // planar polyline with a corner: mitered joint, volume = area × centre line
+    let l = [DVec3::ZERO, DVec3::new(10.0, 0.0, 0.0), DVec3::new(10.0, 10.0, 0.0)];
+    let s = k.sweep(&square(DVec2::ZERO), &l, PathInterp::Linear, 1).unwrap();
+    check(&mut k, &s, 8, 18, 80.0, 1e-9);
+    let s = k.sweep(&circle, &l, PathInterp::Linear, 1).unwrap();
+    check(&mut k, &s, 4, 5, 20.0 * PI, 1e-6);
+    // as SMLib: no off-centre profile along corners, no non-planar polyline
+    assert!(matches!(k.sweep(&square(DVec2::ONE), &l, PathInterp::Linear, 1), Err(KernelError::Unsupported(_))));
+    let bent = [DVec3::ZERO, DVec3::X * 10.0, DVec3::new(10.0, 10.0, 0.0), DVec3::new(10.0, 10.0, 10.0)];
+    assert!(matches!(k.sweep(&circle, &bent, PathInterp::Linear, 1), Err(KernelError::Unsupported(_))));
+    assert!(matches!(
+        k.sweep(&circle, &[DVec3::ZERO, DVec3::ZERO], PathInterp::Linear, 1),
+        Err(KernelError::InvalidInput(_))
+    ));
+}
+
+#[test]
+fn sweep_along_splines() {
+    use cad_kernel::PathInterp;
+    let mut k = SolidcoreKernel::new();
+    let circle = Loop::Circle { center: DVec2::ZERO, r: 1.0 };
+    // planar spline path: the same curve as curve2::interpolate (SMLib's), volume = area × length
+    let pts = [DVec2::ZERO, DVec2::new(10.0, 2.0), DVec2::new(20.0, 0.0), DVec2::new(30.0, 5.0)];
+    let c = cad_kernel::curve2::interpolate(&pts, None, None).unwrap();
+    let len: f64 = samples(&c).windows(2).map(|w| w[0].distance(w[1])).sum();
+    let path: Vec<DVec3> = pts.iter().map(|p| p.extend(0.0)).collect();
+    let s = k.sweep(&circle, &path, PathInterp::Spline, 1).unwrap();
+    check(&mut k, &s, 3, 3, PI * len, 1e-6);
+    let s = k.sweep(&square(DVec2::ZERO), &path, PathInterp::Spline, 1).unwrap();
+    check(&mut k, &s, 6, 12, 4.0 * len, 1e-6);
+    // helix through 8 points per turn, 4 turns of pitch 10 (the spline is a little shorter
+    // than the exact helix)
+    let helix: Vec<DVec3> = (0..=32)
+        .map(|i| {
+            let a = f64::from(i) * TAU / 8.0;
+            DVec3::new(10.0 * a.cos(), 10.0 * a.sin(), 10.0 * f64::from(i) / 8.0)
+        })
+        .collect();
+    let exact = PI * 4.0 * (400.0 * PI * PI + 100.0f64).sqrt();
+    let s = k.sweep(&circle, &helix, PathInterp::Spline, 1).unwrap();
+    check(&mut k, &s, 3, 3, exact, 1e-3);
+    let slot = vec![
+        line([-1.0, -1.0], [1.0, -1.0]),
+        arc([1.0, 0.0], 1.0, -FRAC_PI_2, FRAC_PI_2),
+        line([1.0, 1.0], [-1.0, 1.0]),
+        arc([-1.0, 0.0], 1.0, FRAC_PI_2, 1.5 * PI),
+    ];
+    let s = k.sweep(&Loop::Composite(slot), &helix, PathInterp::Spline, 1).unwrap();
+    check(&mut k, &s, 6, 12, (4.0 + PI) / PI * exact, 1e-3);
+}
+
+#[test]
+fn sweep_along_sketch_paths() {
+    use cad_kernel::{KernelError, PlacedPath};
+    let mut k = SolidcoreKernel::new();
+    let circle = Loop::Circle { center: DVec2::ZERO, r: 1.0 };
+    // line and tangent quarter arc (solidcore#1450): one B-spline, volume π (10 + 5π)
+    let bend = PlacedPath {
+        segs: vec![line([0.0, 0.0], [10.0, 0.0]), arc([10.0, 10.0], 10.0, -FRAC_PI_2, 0.0)],
+        frame: DMat4::IDENTITY,
+    };
+    let s = k.sweep_path(&circle, &bend, 1).unwrap();
+    check(&mut k, &s, 4, 5, PI * (10.0 + 5.0 * PI), 1e-6);
+    let slot = vec![
+        line([-1.0, -1.0], [1.0, -1.0]),
+        arc([1.0, 0.0], 1.0, -FRAC_PI_2, FRAC_PI_2),
+        line([1.0, 1.0], [-1.0, 1.0]),
+        arc([-1.0, 0.0], 1.0, FRAC_PI_2, 1.5 * PI),
+    ];
+    let s = k.sweep_path(&Loop::Composite(slot), &bend, 1).unwrap();
+    check(&mut k, &s, 10, 20, (4.0 + PI) * (10.0 + 5.0 * PI), 1e-6);
+    // a corner in a placed path: mitered
+    let corner = PlacedPath {
+        segs: vec![line([0.0, 0.0], [10.0, 0.0]), line([10.0, 0.0], [10.0, 10.0])],
+        frame: DMat4::from_rotation_x(FRAC_PI_2),
+    };
+    let s = k.sweep_path(&square(DVec2::ZERO), &corner, 1).unwrap();
+    check(&mut k, &s, 8, 18, 80.0, 1e-9);
+    let (lo, hi) = k.bounds(&s).unwrap().unwrap();
+    assert!((lo - DVec3::new(0.0, -1.0, -1.0)).abs().max_element() < 1e-6, "{lo}");
+    assert!((hi - DVec3::new(11.0, 1.0, 10.0)).abs().max_element() < 1e-6, "{hi}");
+    assert!(matches!(k.sweep_path(&square(DVec2::ONE), &corner, 1), Err(KernelError::Unsupported(_))));
+}

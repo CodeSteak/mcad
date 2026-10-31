@@ -34,7 +34,7 @@
 
 use cad_kernel::{
     BoolOp, Class, EdgeInfo, FaceId, FaceInfo, KResult, Kernel, KernelError, Loop, MassProps, Mesh, PathInterp,
-    PlacedLoop, Tag,
+    PlacedLoop, PlacedPath, Tag,
 };
 use glam::{DMat4, DVec2, DVec3};
 use std::rc::Rc;
@@ -88,6 +88,7 @@ mod imp {
     use solidcore::nurbs::b_spline_curve::BSplineCurveForm;
     use solidcore::primitive::api_curves as ac;
     use solidcore::primitive::api_primitives as ap;
+    use solidcore::primitive::primitive_creation::SweepOptions;
     use solidcore::query::api_queries as q;
     use solidcore::query::brep::BrepQuery;
     use solidcore::sweep::api_brep as sw;
@@ -587,6 +588,195 @@ mod imp {
             self.transform(&s, &p.frame)
         }
 
+        /// The profile frame of a sweep, as the SMLib facade (`sc_sweep`): origin at the path
+        /// start `p0`, z along the start tangent `z`, x the global X projected into the normal
+        /// plane (global Y if the tangent is nearly parallel to X).
+        fn sweep_frame(p0: DVec3, z: DVec3) -> DMat4 {
+            let r = if z.x.abs() < 0.9 { DVec3::X } else { DVec3::Y };
+            let x = (r - z * r.dot(z)).normalize();
+            DMat4::from_cols(x.extend(0.0), z.cross(x).extend(0.0), z.extend(0.0), p0.extend(1.0))
+        }
+
+        /// Is the centre of the profile curves' bounding box at `p0`? SMLib's mitered sweep
+        /// along a planar path moves that centre along the path (the curve sweep the frame
+        /// origin, smlib/patches/0003, here `SweepOptions::profile_at_path_start`).
+        fn profile_centred(&self, prof: &[Curve], p0: DVec3) -> KResult<bool> {
+            use solidcore::nurbs::b_spline_curve::BoundingBoxRequest;
+            let req = BoundingBoxRequest { normal: true, pseudo: false, polar: false };
+            let (mut lo, mut hi) = (DVec3::INFINITY, DVec3::NEG_INFINITY);
+            for c in prof {
+                let b = c
+                    .calculate_bounding_box(&self.k, &c.natural_interval(), req, true)
+                    .map_err(|e| err("sweep", e))?
+                    .normal
+                    .ok_or_else(|| KernelError::failed("solidcore: sweep: profile curve without a box"))?;
+                lo = lo.min(DVec3::new(b.min_at(0), b.min_at(1), b.min_at(2)));
+                hi = hi.max(DVec3::new(b.max_at(0), b.max_at(1), b.max_at(2)));
+            }
+            Ok(((lo + hi) / 2.0).distance(p0) <= 1e-9 * hi.distance(lo).max(1.0))
+        }
+
+        /// The sweep itself, as the SMLib facade: `segments` (a path with corners, planar):
+        /// mitered joints (`SmApiCreateSweepAlongPlanarPath`); otherwise the curve sweep
+        /// along `path` (`SmApiCreateCurveSweep`) with the profile where it lies.
+        fn sweep_curves(
+            &mut self,
+            prof: &[Curve],
+            path: &Curve,
+            segments: Option<&[Curve]>,
+            p0: DVec3,
+            polygon: bool,
+            tag: Tag,
+        ) -> KResult<Shape> {
+            const OP: &str = "sweep";
+            if segments.is_some() && !self.profile_centred(prof, p0)? {
+                return Err(unsupported(
+                    "sweep: profile not centred on its origin along a path with corners (SMLib's mitered \
+                     sweep moves the profile's box centre along the path; use a spline path)",
+                ));
+            }
+            let b = match segments {
+                Some(segs) => {
+                    let pr: Vec<&Curve> = prof.iter().collect();
+                    let sg: Vec<&Curve> = segs.iter().collect();
+                    sw::create_sweep_along_planar_path(&mut self.k, &pr, &sg, true, 3).map_err(|e| err(OP, e))?
+                }
+                None => {
+                    // smlib/patches/0003 (bUseProfileRefPoint with the frame origin, which lies
+                    // at the path start): the profile is swept where it lies
+                    let opt = SweepOptions {
+                        cap_ends: true,
+                        move_profile_center_to_path: true,
+                        profile_at_path_start: true,
+                        ..SweepOptions::default()
+                    };
+                    let pr: Vec<Option<&Curve>> = prof.iter().map(Some).collect();
+                    sw::create_curve_sweep(&mut self.k, &pr, Some(path), None, None, Some(&opt))
+                        .map_err(|e| err(OP, e))?
+                        .brep
+                }
+            };
+            let s = ShapeData::new(b, tag);
+            // as the facade's require_solid: a closed solid of positive volume
+            if self.is_empty(&s) || !self.is_solid(&s) {
+                let what = if polygon { " (polygon profile: open seams between the side faces?)" } else { "" };
+                return Err(KernelError::failed(format!("solidcore: sweep did not produce a closed solid{what}")));
+            }
+            let v = self.mass_props(&s).map_err(|e| check_err(OP, e))?.volume;
+            if v.is_nan() || v <= 0.0 {
+                return Err(KernelError::failed(format!("solidcore: sweep produced an invalid solid (volume {v})")));
+            }
+            Ok(s)
+        }
+
+        /// `sweep` along a polyline or an interpolating spline through `path`, as the SMLib
+        /// facade (`sc_sweep`): a collinear path is one straight segment; a polyline with
+        /// corners must be planar.
+        pub fn sweep(&mut self, lp: &Loop, path: &[DVec3], interp: PathInterp, tag: Tag) -> KResult<Shape> {
+            const OP: &str = "sweep";
+            let mut pp: Vec<DVec3> = Vec::with_capacity(path.len());
+            for p in path {
+                if !p.is_finite() {
+                    return Err(KernelError::InvalidInput("solidcore: sweep: bad path point".into()));
+                }
+                if pp.last().is_none_or(|q| q.distance(*p) >= 1e-12) {
+                    pp.push(*p);
+                }
+            }
+            if pp.len() < 2 {
+                return Err(KernelError::InvalidInput(
+                    "solidcore: sweep: path needs at least 2 distinct points".into(),
+                ));
+            }
+            let plen: f64 = pp.windows(2).map(|w| w[0].distance(w[1])).sum();
+            let ptol = 1e-9 * plen.max(1.0);
+            let d = (pp[pp.len() - 1] - pp[0]).normalize_or_zero();
+            let straight = pp.iter().all(|p| {
+                let q = *p - pp[0];
+                (q - d * q.dot(d)).length() <= ptol
+            });
+            if straight {
+                pp = vec![pp[0], pp[pp.len() - 1]];
+            }
+            let mut planar = true;
+            if !straight {
+                let n = (1..pp.len() - 1)
+                    .map(|i| (pp[i] - pp[0]).cross(pp[i + 1] - pp[0]))
+                    .find(|c| c.length() > ptol * plen)
+                    .map_or(DVec3::ZERO, |c| c.normalize());
+                planar = pp.iter().all(|p| (*p - pp[0]).dot(n).abs() <= 1e-7 * plen.max(1.0));
+            }
+            let spline = interp == PathInterp::Spline && pp.len() >= 3 && !straight;
+            if !spline && !straight && !planar {
+                return Err(unsupported("sweep: along a non-planar polyline (as SMLib; use a spline path)"));
+            }
+            let path_curve = if spline { interp_curve(&pp, false, OP)? } else { polyline_curve(&pp, false, OP)? };
+            // start tangent: towards the first control point after the start (clamped curve)
+            let z = match path_curve.kind() {
+                solidcore::curve::curve::CurveKind::BSpline(c) => {
+                    let (cp, _) = c.control_polygon().map_err(|e| err(OP, e))?;
+                    cp.iter().map(|q| dv(*q) - pp[0]).find(|v| v.length() > 1e-12).map(|v| v.normalize())
+                }
+                _ => None,
+            }
+            .unwrap_or_else(|| (pp[1] - pp[0]).normalize());
+            let prof = self.loop_curves(lp, &Self::sweep_frame(pp[0], z), OP)?;
+            let segments = if straight || spline {
+                None
+            } else {
+                let mut segs = Vec::with_capacity(pp.len() - 1);
+                for w in pp.windows(2) {
+                    segs.push(Curve::from(ac::create_line_segment(pt(w[0]), pt(w[1])).map_err(|e| err(OP, e))?));
+                }
+                Some(segs)
+            };
+            let polygon = matches!(lp, Loop::Polygon(_)) && !straight;
+            self.sweep_curves(&prof, &path_curve, segments.as_deref(), pp[0], polygon, tag)
+        }
+
+        /// `sweep` along an open sketch path, as kernel-smlib and the facade
+        /// (`sc_sketch_sweep`): a tangent-continuous path is one B-spline (curve sweep), a
+        /// path with corners is swept segment by segment with mitered joints.
+        pub fn sweep_path(&mut self, lp: &Loop, path: &PlacedPath, tag: Tag) -> KResult<Shape> {
+            const OP: &str = "sweep";
+            if path.segs.is_empty() {
+                return Err(KernelError::InvalidInput("solidcore: sweep path without segments".into()));
+            }
+            let smooth = path.segs.windows(2).all(|w| w[0].end_tangent().dot(w[1].start_tangent()) > 1.0 - 1e-9);
+            let (segs, mitered) = if path.segs.len() == 1 {
+                (path.segs.clone(), false)
+            } else if smooth {
+                (vec![cad_kernel::Segment::Nurbs(cad_kernel::curve2::join(&path.segs))], false)
+            } else {
+                (path.segs.clone(), true)
+            };
+            let sk = sketch_segments(&segs, false, OP)?;
+            let curves: Vec<Curve> = sk.iter().map(|s| s.curve(&path.frame, OP)).collect::<KResult<_>>()?;
+            let p0 = path.frame.transform_point3(sk[0].start().extend(0.0));
+            // start tangent of the first segment (B-splines: towards the first distinct
+            // control point)
+            let t = match &sk[0] {
+                SkSeg::Line(a, b) => *b - *a,
+                SkSeg::Spline { c, .. } => c
+                    .points
+                    .iter()
+                    .map(|q| q.truncate() - c.points[0].truncate())
+                    .find(|v| v.length() > 1e-12)
+                    .unwrap_or_default(),
+            };
+            let z = path.frame.transform_vector3(t.extend(0.0)).normalize_or_zero();
+            if z == DVec3::ZERO {
+                return Err(KernelError::InvalidInput("solidcore: sweep path starts with a zero tangent".into()));
+            }
+            let prof = self.loop_curves(lp, &Self::sweep_frame(p0, z), OP)?;
+            let polygon = matches!(lp, Loop::Polygon(_));
+            if mitered {
+                self.sweep_curves(&prof, &curves[0], Some(&curves), p0, polygon, tag)
+            } else {
+                self.sweep_curves(&prof, &curves[0], None, p0, polygon, tag)
+            }
+        }
+
         pub fn revolve(&mut self, p: &PlacedLoop, angle: f64, tag: Tag) -> KResult<Shape> {
             if !angle.is_finite() || angle == 0.0 {
                 return Err(KernelError::InvalidInput("solidcore: revolve: angle must be non-zero".into()));
@@ -957,8 +1147,12 @@ impl Kernel for SolidcoreKernel {
         Err(unsupported("loft (SmApiCreateSkin exists, not wired in kernel-solidcore)"))
     }
 
-    fn sweep(&mut self, _p: &Loop, _path: &[DVec3], _interp: PathInterp, _tag: Tag) -> KResult<Shape> {
-        Err(unsupported("sweep (SmApiCreatePipeSweep exists, not wired in kernel-solidcore)"))
+    fn sweep(&mut self, p: &Loop, path: &[DVec3], interp: PathInterp, tag: Tag) -> KResult<Shape> {
+        with_sc!(self, "sweep", |i| i.sweep(p, path, interp, tag))
+    }
+
+    fn sweep_path(&mut self, p: &Loop, path: &PlacedPath, tag: Tag) -> KResult<Shape> {
+        with_sc!(self, "sweep_path", |i| i.sweep_path(p, path, tag))
     }
 
     fn nurbs_surface(&mut self, _rows: &[Vec<DVec3>], _tag: Tag) -> KResult<Shape> {
