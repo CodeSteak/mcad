@@ -125,6 +125,16 @@ Status 2026-10-31 (task F, `MCAD_KERNEL=solidcore`, debug build), check by check
 
 So phase 2 is done except what phase 1 left (`variable_radius`).
 
+Tester findings on task F (`docs/solidcore-migration.md`, "Tester findings on task F"), fixed:
+the scaled `mug` (a ruled band whose refinement did not converge) meshes at 0.01; tori, revolved
+fillets and large round parts are meshed anisotropically (CDT in grid steps, half the tolerance
+per direction on doubly curved faces; `torus(50, 5)` at 0.05 7.1 k triangles against SMLib's
+8.2 k, the hoop of radius 300 at 0.01 79 k against 65 k, export of `sphere(300)` and of a
+300 mm tray with 1 mm fillets at 0.01 works); the budget is 2 000 000 triangles (a guard);
+`diff-kernels --mesh` catches displaced meshes; `assert_touches` classifies the contact of
+analytic surfaces that cannot coincide independently of the mesher; `check` rejects inside-out
+meshes and NaN positions; solidcore's fillet and shell failures of `f09b` and `f13` say why.
+
 ## Phase 3: booleans (depends on upstream)
 
 24 nodes differ in topology and volume (0.1 % to 95 %) without an error: `hole_plate`, `vent_grille`,

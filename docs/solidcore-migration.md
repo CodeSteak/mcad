@@ -382,6 +382,26 @@ volume per colour with both kernels for all 37 cases of `tests/color-review/case
 (debug build, dependencies `opt-level = 2`); solidcore is slower on `key_rack` (12.8 s vs 5.8 s),
 `mug`, `pen_box` and `wall_hook` (2×), faster on `text_sign` and `f11`.
 
+## Tester findings on task F (4f150fa)
+
+The tester confirmed phase 2 (render, export, section, asserts, `measure` with solidcore) and
+found:
+
+| Finding | Fix |
+| --- | --- |
+| `mug` scaled by 2 (also 2.5, 3, 4; unscaled at 0.005) failed STL export: "face 9: tolerance 0.01 not reached (5.655e-2 mm after the refinement)" after 29 s, SMLib 100 k triangles in 5 s; also on SMLib's B-rep | face 9 is the conical wall (a revolved straight line) with the handle's holes: rows of the straight direction near the holes, none for 38 mm below them. A refinement point in that band was joined by Delaunay to row points several steps away across the curved direction, so each split made the next long edge. All rows of a straight direction are now half a step apart in the CDT's coordinates (`Warp`), however far apart by arc length. `scale(2) mug()` at 0.01: 84 k triangles, 1.6 s for the mesh (SMLib 100 k); tests: ruled bands (revolved line, cone, cylinder) with stubs and a hole at scales 1, 2, 4 and tolerances 0.01, 0.005, and the corpus mug scaled by 2, from both kernels' B-reps |
+| tori and revolved fillets meshed isotropically, 3 to 14 × SMLib's triangles, linear in the major radius: `torus(50, 5)` at 0.05 21 k (SMLib 8.2 k), at 0.01 100 k (33 k); the hoop `rotate_extrude() translate([300, 0]) circle(5)` at 0.01 "too fine" (513 k; SMLib 65 k); `torus(2000, 5)` at 0.05 failed render, section and measure; `sphere(300)` at 0.01 failed (SMLib 259 k); the 300 mm tray with `$fillet = 1` 250 k (SMLib 28.7 k) | the CDT works in grid steps instead of arc length (a step of either direction is one unit: Delaunay triangles round for the chord error, long along the circle of a torus, short across its tube); doubly curved surfaces get grid steps for half the tolerance in each direction (a cell's diagonal sags by the sum of both). Now: `torus(50, 5)` 7.1 k at 0.05, 33.6 k at 0.01 (SMLib 8.2 k, 32.8 k); hoop 79 k (65 k); `torus(2000, 5)` at 0.05 42 k (52 k); `sphere(300)` at 0.01 297 k (259 k: the grid keeps every meridian up to the poles); tray 23 k (28.7 k), the 240 mm tray with a foot ring 28 k (35 k). Budget (chosen: a fixed guard, not a quality limit): 2 000 000 triangles per face and in all, a 100 MB STL, where a realistic part at 0.01 needs a few hundred thousand; beyond it the error stays (exit 3), SMLib would mesh on for minutes |
+| `f13_shell_fillet`, `f08` tori, `heat_sink` far above SMLib where SMLib holds the tolerance | rows of a straight direction one row beyond a run across the grid (was four) and 32 steps apart elsewhere (was 16): at 0.05 / 0.01 `f13` 316 / 772 → 132 / 344 (SMLib 92 / 164), `heat_sink` 3.9 k / 5.9 k → 2.1 k / 3.4 k (1.7 k / 2.2 k), `f08a` 4.9 k / 20.8 k → 1.5 k / 5.6 k (2.6 k / 5.4 k) |
+| `diff-kernels --mesh`: all positions shifted by 50 mm was `ok` (Hausdorff 50, chord 0); one vertex moved 0.3 mm was `ok` | vertices are checked (within `tol` of their face plus SMLib's gap where the bodies are the same, separately inside faces and on their boundaries); the Hausdorff limit no longer adds solidcore's own surface distance (which contains the displacement) and makes the verdict `differ`; test with displaced meshes |
+| `mesh_distance` far from the mesh took 75 s (the grid was searched in growing shells) | a bounding-volume hierarchy (nearer child first, boxes beyond the best skipped) |
+| assert outcomes depended on the tessellator: two cylinders 0.005 mm apart side by side with `assert_touches(tol = 0.01)`: SMLib "face contact 0.0022 mm² (mesh-based)", solidcore "only line contact" (export exit 0 vs 4); `torus(20, 2)` on a plate: face contact 91.8 vs 22.3 mm² | solidcore's answer was right (the contacts are a line and a circle): analytic surfaces of different kinds, planes at an angle and cylinders that are not coaxial with equal radius cannot lie on each other over an area, so their mesh-based contact is a line or a point, independent of the mesher; free-form surfaces stay mesh-based (their face-contact area still depends on the mesh) |
+| the budget message named the per-face limit where the remaining total had cut it | "at most L left of 2000000 in all" |
+| manual: a `--tol` option that does not exist; `$tol` described as reaching export; the export example's numbers | the tolerances are the commands' (`export` 0.01, `render`/section 0.05, `measure --clearance --mesh-tol`); `$tol` is a node's display tolerance in the UI only (render and export ignore it by design: their tolerances are fixed per command); numbers rerun |
+| `diff-kernels --mesh`: "solidcore: solidcore: tessellate: …"; `--mesh-tol 1e-9` hung SMLib's tessellator (3.7 GB), `inf` said "must be > 0" | the prefix once; at least 0.0001 mm (as `measure`), "is not a finite number" |
+| `check`: an inside-out mesh and NaN positions counted as watertight, so the closed-solid check of `kernel-solidcore` accepted both | `inside_out` (closed, consistent, negative volume) and `non_finite`, neither watertight; `tessellate` fails on both |
+| `f09b` and `f13` with solidcore gave raw upstream statuses | a failed fillet re-creates the corners with solidcore's opt-in `fillet_vertex_error_diagnostics`: an unsupported corner gives "cannot blend the corner where these edges meet"; a failed shell checks the smallest convex rounding (the facade's `min_convex_radius`): "wall thickness T is not smaller than the radius of a convex rounding …". Both bug models now end with the message they expect |
+| SMLib's B-rep of `f02` at 0.01 (found while measuring these fixes): two triangles whose corners coincide at `f32` resolution (a crossing of loops split at a boundary point) used an edge twice | such triangles are dropped at the output; their neighbours close the surface |
+
 ## Tester findings on task E (d896e16)
 
 The tester confirmed 101 / 101 watertight at 0.05 from both kernels' B-reps, face ids and tags as
@@ -651,9 +671,9 @@ and `diff-kernels --mesh` compare it instead.
 | 2.2 surfaces | point, first and second derivatives, unit normal for plane, cylinder, cone, sphere, torus (closed form, STEP parameterisation), revolution, extrusion, B-spline (Piegl & Tiller with rational derivatives); inversion closed form or Newton (Gauss-Newton where the Hessian is not positive), seeds from the previous point of a loop, else local minima of dense curve samples refined by golden section (both branches at a seam corner) or a surface grid; periods (analytic, closed curves, coinciding boundary rows) and poles (sphere poles, cone apex, revolution profile on the axis, collapsed B-spline rows) |
 | UV loops | boundary points inverted, periodic parameters unwrapped along the loop (a seam used twice lands on both sides), a pole traversed on the face's side (the free parameter from the arriving to the leaving value, the direction from the face's orientation), inner loops shifted into the widest loop's period; a loop that wraps a period without a seam is an error (neither kernel writes one) |
 | 2.3 planar faces | the loops projected into the plane, constrained Delaunay (spade) without inner points |
-| 2.4 curved faces | grid lines by chord error and angle (analytic: from the radii; else from the normal part of the second derivative sampled per knot span, spread over the cumulated need; where a direction is straight over part of the face only, lines there at most 4 × the other direction's spacing, never denser than on its curved pieces), straight directions only near boundary runs across the grid; grid points inside the loops (even-odd per row, a margin from the boundary); CDT in (u, v) mapped to the arc length along each parameter, a straight direction squashed by 4 (Delaunay joins points along it, not across the curved one); inside by the parity of constraint edges crossed (winding number where loops cross); refinement while it adds points, at most 40 passes, each measuring only the triangles and inner edges that are new: the foot of a triangle centroid or inner edge midpoint on the surface farther than `tol` → the midpoint of the triangle's longest splittable edge or the foot (second choice where the first lands on the boundary), an inner triangle facing against the surface → its centroid; never on or within 1e-6 (CDT coordinates) of a boundary edge, never within `tol / 20` of a vertex. Loops that cross in (u, v) (polylines of tangent edges at a cusp) are split at the crossing and the neighbour's triangle on that segment as well (watertight) |
+| 2.4 curved faces | grid lines by chord error and angle (analytic: from the radii; else from the normal part of the second derivative sampled per knot span, spread over the cumulated need; curved in both directions: half the tolerance in each, so a cell's diagonal holds it; where a direction is straight over part of the face only, lines there at most 4 × the other direction's spacing, never denser than on its curved pieces), straight directions only near boundary runs across the grid (rows at 2 × the other direction's step over such a run and one row beyond, at 32 × elsewhere); grid points inside the loops (even-odd per row, a margin from the boundary); CDT in grid steps (`Warp`): a direction with lines for the chord maps its lines to 0, 1, 2, … (the arc length in between: dense knots), so Delaunay triangles are round for the chord error, long along a gently curved direction and short across a tight one (a torus with a large major radius: long along its circle); a straight direction with rows maps them half a step apart (bands between rows far apart cost no more than near ones), without rows its arc length squashed by 4 (Delaunay joins points along it, not across the curved one); inside by the parity of constraint edges crossed (winding number where loops cross); refinement while it adds points, at most 40 passes, each measuring only the triangles and inner edges that are new: the foot of a triangle centroid or inner edge midpoint on the surface farther than `tol` → the midpoint of the triangle's longest splittable edge or the foot (second choice where the first lands on the boundary), an inner triangle facing against the surface → its centroid; never on or within 1e-6 (CDT coordinates) of a boundary edge, never within `tol / 20` of a vertex. Loops that cross in (u, v) (polylines of tangent edges at a cusp) are split at the crossing and the neighbour's triangle on that segment as well (watertight); a triangle whose corners coincide at the `f32` resolution of the output is dropped (its neighbours close the surface). Budget: 2 000 000 triangles per face and in all (a 100 MB STL; a guard against runaway, not a quality limit), checked on the grid, after the CDT and while inserting |
 | 2.5 output | positions (shared edge points: identical), normals from the surface (`same_sense`; a hair inside the face at a seam with a crease; a pole: the limit from the inside), seam copies one vertex unless the normals differ, `tri_tags`, `tri_faces` (the B-rep's face ids), every edge's polyline as `edge_segments`/`edge_ids` (the B-rep's edge index = `EdgeId`) |
-| 2.6 checks | `cad_tess::check(&mesh)`: vertices welded by position, every edge used twice in opposite directions (boundary, non-manifold, misoriented counts), degenerate triangles, volume and area; `MeshCheck::volume_ok(exact, tol)`: \|V − exact\| ≤ tol · area |
+| 2.6 checks | `cad_tess::check(&mesh)`: vertices welded by position, every edge used twice in opposite directions (boundary, non-manifold, misoriented counts), a closed consistent mesh with negative volume is `inside_out`, positions with NaN/inf are counted (`non_finite`; neither is watertight), degenerate triangles, volume and area; `MeshCheck::volume_ok(exact, tol)`: \|V − exact\| ≤ tol · area |
 
 Tests: `crates/cad-tess/tests/kernels.rs` (one case per surface kind and tricky situation from
 SMLib's and, with `--features solidcore`, solidcore's B-rep: watertight, outward, deviation and
@@ -668,12 +688,19 @@ the node's `$tol`), 10 × that while dragging (`coarse_factor`), 0.01 STL/3MF an
 
 | tol | kernel | watertight | \|V − exact\| / (tol · area): median, worst | largest deviation (refinement's measure) | triangles (SMLib's own) | time (SMLib's own) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0.5 | SMLib B-rep | 101 / 101 | 0.007, 0.28 (`bottle`) | 0.50 | 102 k (150 k) | 1.6 s (7.5 s) |
-| 0.5 | solidcore B-rep | 101 / 101 | 0.007, 0.28 | 0.50 | 100 k | 1.5 s |
-| 0.05 | SMLib B-rep | 101 / 101 | 0.039, 0.49 (`02_sphere_variants`) | 0.050 | 232 k (272 k) | 4.7 s (14.0 s) |
-| 0.05 | solidcore B-rep | 101 / 101 | 0.034, 0.49 | 0.050 | 229 k | 4.5 s |
-| 0.01 | SMLib B-rep | 101 / 101 | 0.040, 0.59 (`f11`) | 0.010 | 849 k (708 k) | 22.4 s (27.9 s) |
-| 0.01 | solidcore B-rep | 101 / 101 | 0.035, 0.49 | 0.010 | 837 k | 21.8 s |
+| 0.5 | SMLib B-rep | 101 / 101 | 0.006, 0.28 (`bottle`) | 0.49 | 97 k (150 k) | 1.5 s (7.3 s) |
+| 0.5 | solidcore B-rep | 101 / 101 | 0.007, 0.28 | 0.49 | 95 k | 1.3 s |
+| 0.05 | SMLib B-rep | 101 / 101 | 0.034, 0.52 (`02_sphere_variants`) | 0.050 | 178 k (272 k) | 2.4 s (11.4 s) |
+| 0.05 | solidcore B-rep | 101 / 101 | 0.027, 0.52 | 0.050 | 175 k | 2.3 s |
+| 0.01 | SMLib B-rep | 101 / 101 | 0.042, 0.59 (`f11`) | 0.010 | 613 k (708 k) | 8.9 s (22.9 s) |
+| 0.01 | solidcore B-rep | 101 / 101 | 0.033, 0.53 | 0.010 | 602 k | 8.9 s |
+
+After the findings on task F (anisotropic CDT, rows of straight directions); before them 232 k /
+229 k triangles in 3.7 s / 3.5 s at 0.05 and 849 k / 837 k in 17.8 s / 17.0 s at 0.01 (same
+machine, same run conditions). Fewer triangles than SMLib's own in 79 / 80 / 70 of 101 files at
+0.5 / 0.05 / 0.01; most above it: `f12_shell_loft_square_circle` (25 k against 5.7 k at 0.01:
+a twisted loft, where SMLib's mesh misses the tolerance inside its triangles), `heat_sink`
+(3.4 k against 2.2 k), `f13_shell_fillet` (344 against 164: rows near the mitred fillet ends).
 
 The times vary with the load of the machine by up to 1.5 × between runs (the same code measured
 14.7 s against SMLib's 25.6 s at 0.01 in a quieter run); compare within a row. Since task E's
@@ -690,7 +717,7 @@ chord error without the B-rep's own vertex gap): the 14 files that had problems 
 `planter`, `heat_sink`, `02_sphere_variants`) hold 0.5, 0.05, 0.02 and 0.01 everywhere, 5 of them
 also 0.002 (the assert tolerance of small models). SMLib's own meshes are not watertight by position for 6, 4 and
 6 files at 0.5, 0.05 and 0.01 (`asserts`, `variable_radius`, `f02`, …) and hold the tolerance
-only along triangle edges (plan 2.7). Fewer triangles than SMLib in 77 / 67 / 59 of 101 files at
+only along triangle edges (plan 2.7). At the end of task F (before the tester's findings): fewer triangles than SMLib in 77 / 67 / 59 of 101 files at
 0.5 / 0.05 / 0.01; more where the tolerance is held inside long triangles on fillets, tori and
 mitres (`f13_shell_fillet` 6 × at 0.01, `f08` tori 3.9 ×, `heat_sink` 2.8 ×) and on revolutions
 (`planter` 2.8 ×). Slowest at 0.01: `mug` 2.8 s, `planter` 2.5 s (debug).
@@ -703,19 +730,26 @@ result with both kernels' `tessellate` and measures per kernel the triangles, wa
 kernel's own B-rep (`cad_tess::surface_distance`: 7 points per triangle projected onto the
 surface of its face; the chord error is that distance minus the triangle corners' own distance,
 which is the B-rep's: `f02`'s fitted sweep end lies up to 0.53 mm off its cap edge) and the time;
-between the kernels the sampled distance in both directions (`cad_tess::mesh_distance`, a grid
-of triangles) and the Hausdorff distance. The verdict per file looks at solidcore's mesh against
-the exact surface (watertight, volume within `tol · area`, chord error ≤ 1.1 · tol), not at the
-distance to SMLib, whose mesh misses the tolerance inside its triangles.
+between the kernels the sampled distance in both directions (`cad_tess::mesh_distance`, a
+bounding-volume hierarchy of the triangles) and the Hausdorff distance. The verdict per file looks
+at solidcore's mesh against the exact surface (watertight and outwards, volume within
+`tol · area`, chord error ≤ 1.1 · tol), not at the distance to SMLib, whose mesh misses the
+tolerance inside its triangles; and at its vertices: within `tol` of their face's surface, plus
+SMLib's largest such gap where the root nodes are `same`, separately for the vertices inside a
+face (`inner_vertex_gap`) and all (`vertex_gap`): the B-rep's own gaps (`f02`: its fitted sweep
+end 0.53 mm off the cap, the points where loops cross at a cusp split on their chords, 0.46 mm
+in solidcore's and 0.57 mm in SMLib's mesh). Where the root nodes are `same`, a Hausdorff distance beyond SMLib's own distance
+to its surfaces (at least `tol`) + 1.1 · `tol` + 1e-4 of the size is `differ` as well: only
+SMLib's distance counts, solidcore's own grows with any displacement of its mesh (see the
+findings on task F).
 
-Corpus (`scripts/ci/solidcore.sh`, tol 0.05, debug build): 100 results `ok`, 1 without a B-rep
-result; watertight SMLib 97, solidcore 100; chord error max SMLib 0.241 mm (11 files above
-0.055: `door_stop` 0.19, `f12` 0.14, `loft_sweep` 0.13, …), solidcore 0.050; triangles SMLib
-272 k, solidcore 229 k; time SMLib 14.1 s, solidcore 18.8 s of which 13.8 s are `brep` (the
-conversion runs unoptimised in a debug build: `kernel-solidcore` is a workspace crate; `cad-tess`
-itself 5 s). Hausdorff distance at most 0.22 mm where the root nodes are the same (`door_stop`:
-SMLib's chord error 0.19 explains it); 3.07 mm in `variable_radius` and 2.6 mm in `f11`, whose
-roots differ (unsupported fillet; SMLib fails).
+Corpus (`scripts/ci/solidcore.sh`, tol 0.05, debug build, after the findings on task F): 100
+results `ok` without notes, 1 without a B-rep result; watertight SMLib 97, solidcore 100; chord
+error max SMLib 0.241 mm, solidcore 0.050; triangles SMLib 272 k, solidcore 175 k (was 229 k);
+time SMLib 11.9 s, solidcore 15.0 s of which 12.9 s are `brep` (the conversion runs unoptimised
+in a debug build: `kernel-solidcore` is a workspace crate; `cad-tess` itself about 2 s).
+Hausdorff distance 3.07 mm in `variable_radius` and 2.6 mm in `f11`, whose roots differ
+(unsupported fillet; SMLib fails); where the roots are the same, within the limit everywhere.
 
 ## Pin routine (bumping solidcore)
 
