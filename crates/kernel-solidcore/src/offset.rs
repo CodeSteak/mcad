@@ -4,7 +4,8 @@
 //! facade's flags and its checks of the result. Not ported: the facade's fallback for a failed
 //! shell (`shell_by_booleans`, a shell from an inward offset and Booleans) and its pre-check of
 //! opposite walls; the check of the offset's trim curves (`trim_gap`, SMLib's tessellation
-//! follows them, the neutral B-rep does not).
+//! follows them, the neutral B-rep does not). Ported: the facade's diagnosis of a failed shell
+//! whose body has a convex rounding no larger than the wall (`min_convex_radius`).
 
 use cad_kernel::{FaceId, KResult, KernelError, Tag};
 use glam::DVec3;
@@ -110,12 +111,28 @@ impl Inner {
             create_offset_solid: false,
             merge_sheet_side_walls: false,
         };
-        let r = shell_brep_simple(&mut self.k, &s.brep.borrow(), opts, &faces).map_err(|e| err(OP, e))?;
+        // a convex rounding no larger than the wall degenerates inside: the facade's wording
+        let rounding = |inner: &mut Inner, e: KernelError| -> KernelError {
+            let rmin = crate::brep::min_convex_radius(&inner.k, &mut s.brep.borrow_mut(), &faces);
+            if rmin > 1.02 * t {
+                return e;
+            }
+            failed(format!(
+                "shell: wall thickness {t} is not smaller than the radius of a convex rounding of the body \
+                 (about {rmin:.6}): the inner surface degenerates there (rounding radius must be > wall \
+                 thickness). {}",
+                e.to_string().trim_start_matches("solidcore: ")
+            ))
+        };
+        let r = shell_brep_simple(&mut self.k, &s.brep.borrow(), opts, &faces);
+        let r = match r {
+            Ok(r) => r,
+            Err(e) => return Err(rounding(self, err(OP, e))),
+        };
         let r = crate::ShapeData::new(r, tag);
         if self.is_empty(&r) || !self.is_solid(&r) {
-            return Err(failed(format!(
-                "shell: wall thickness {t} leaves no cavity (solidcore returned no closed solid)"
-            )));
+            let e = failed(format!("shell: wall thickness {t} leaves no cavity (solidcore returned no closed solid)"));
+            return Err(rounding(self, e));
         }
         self.check_valid(&r, OP)?;
         let (v0, v1) = (

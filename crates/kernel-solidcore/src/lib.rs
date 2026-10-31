@@ -1731,6 +1731,26 @@ mod imp {
         /// the stations of [`Inner::law_stations`]), as the facade's `do_fillet_like`: edges with
         /// nothing to blend are skipped, the result is checked (closed if the input is, a volume
         /// change a blend of that size can make, new faces) and its faces get their tags.
+        /// Whether the constant-radius fillet of the edges `kept` of `s` meets a filleted vertex
+        /// for which no corner type exists (solidcore's `CornerUnsupported`, recorded only with
+        /// `fixes.fillet_vertex_error_diagnostics`): the corners of a fresh session on a copy.
+        fn unsupported_corner(&mut self, s: &Shape, kept: &[u32], r: f64) -> bool {
+            use solidcore::blend::fillet_geom::p1::FilletErrorType;
+            let Ok(mut b) = self.copy(&s.brep.borrow()) else { return false };
+            let Ok(all) = q::get_edges(&b) else { return false };
+            let sel: Vec<solidcore::EdgeId> = kept.iter().filter_map(|&i| all.get(i as usize).copied()).collect();
+            let before = self.k.fixes.fillet_vertex_error_diagnostics;
+            self.k.fixes.fillet_vertex_error_diagnostics = true;
+            let found = (|| {
+                let mut session = FilletSession::new(&mut self.k, &mut b).ok()?;
+                session.prepare_constant_radius_edges(&mut self.k, &sel, r, 1, 1, 1.0).ok()?;
+                session.create_corners(&self.k, None).ok()?;
+                Some(session.error_info().code == FilletErrorType::CornerUnsupported as i32)
+            })();
+            self.k.fixes.fillet_vertex_error_diagnostics = before;
+            found == Some(true)
+        }
+
         pub fn fillet_like(
             &mut self,
             s: &Shape,
@@ -1810,10 +1830,24 @@ mod imp {
                 // circular cross-section, G1 (SetFilletParameters as the facade calls it)
                 fillet_edges(&mut self.k, &mut b, &sel, r, 1, 1, 1.0)
             };
-            run.map_err(|e| match err(what, e) {
-                KernelError::Failed { msg, .. } => KernelError::Failed { msg, edges: kept.clone(), places: Vec::new() },
-                e => e,
-            })?;
+            if let Err(e) = run {
+                // a corner no corner type handles: the facade's wording (its SMLib reports it
+                // through the fillet error info, solidcore records it on request)
+                if !chamfer && laws.is_none() && self.unsupported_corner(s, &kept, r) {
+                    return Err(failed(
+                        "solidcore cannot blend the corner where these edges meet (faces that touch \
+                         tangentially there?)"
+                            .into(),
+                        kept,
+                    ));
+                }
+                return Err(match err(what, e) {
+                    KernelError::Failed { msg, .. } => {
+                        KernelError::Failed { msg, edges: kept.clone(), places: Vec::new() }
+                    }
+                    e => e,
+                });
+            }
             if b.face_list().is_empty() {
                 return Err(failed("removed all faces".into(), kept));
             }

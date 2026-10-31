@@ -83,6 +83,8 @@
 | "assert_touches: a does not touch b, gap X mm" | gap above `tol` (+ mesh accuracy); close it or raise `tol` |
 | "assert_touches: a and b overlap (V mm³)" | overlap instead of contact |
 | "assert_touches: a touches b only with line contact (non-manifold, hard to print …)" | cylinder on a plane, edge on a face, a torus or two cylinders side by side within `tol`: the union is non-manifold; give it a flat, or `contact = "any"`. Analytic surfaces that cannot lie on each other over an area always give line/point contact (before, SMLib's mesh could report a tiny "face contact … (mesh-based)" there) |
+| "fillet failed …: solidcore: fillet: solidcore cannot blend the corner where these edges meet (faces that touch tangentially there?)" (`--kernel solidcore`) | as with SMLib: a vertex where the filleted edges meet in a way no corner type handles; fillet fewer edges or change the geometry there |
+| "shell failed …: solidcore: shell: wall thickness T is not smaller than the radius of a convex rounding of the body (about R) …" (`--kernel solidcore`) | as with SMLib: a rounding radius ≤ wall thickness degenerates inside; a larger rounding or a thinner wall |
 | "… overlap could not be checked (…)" (info) | the kernel boolean failed (faces lying on each other); result undecided, not a violation |
 | "assert_touches: a and b: contact could not be checked (…)" (info) | the tessellation of a body failed (no distance), or the boolean failed with the bodies within the mesh accuracy; undecided, not a violation (counted in `Asserts: … N could not be checked`) |
 | "kind of contact determined on the mesh only" | freeform faces: contact found on the mesh only |

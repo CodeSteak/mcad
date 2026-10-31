@@ -335,6 +335,52 @@ pub(crate) fn face_sample(
     Some((p, outward(k, b, f, uv)?))
 }
 
+/// Smallest radius of convex curvature over the faces of `b` not in `skip`, as the facade's
+/// `min_convex_radius`: finite differences of the outward normal on a 7 × 7 grid of each face's
+/// UV domain (grid points in the face); infinite if no face is convex. An inward shell offsets
+/// every face by its thickness: where a convex rounding has a smaller radius the offset surface
+/// degenerates and the shell fails with a bare upstream status.
+pub(crate) fn min_convex_radius(k: &solidcore::Kernel, b: &mut solidcore::Brep, skip: &[solidcore::FaceId]) -> f64 {
+    let mut best = f64::INFINITY;
+    for f in b.face_list().to_vec() {
+        if skip.contains(&f) {
+            continue;
+        }
+        let Some(fd) = b.face(f).ok().and_then(|x| uv_domain(k, x, x.surface.as_ref()?).ok()) else { continue };
+        let (hu, hv) = (1e-4 * (fd.u_max() - fd.u_min()), 1e-4 * (fd.v_max() - fd.v_min()));
+        let at = |b: &solidcore::Brep, uv: Point2| -> Option<(DVec3, DVec3)> {
+            let srf = b.face(f).ok()?.surface.as_ref()?;
+            Some((dv(srf.evaluate_point(k, uv).ok()?), outward(k, b, f, uv)?))
+        };
+        for i in 1..=7 {
+            for j in 1..=7 {
+                let uv = Point2::new(
+                    fd.u_min() + (fd.u_max() - fd.u_min()) * f64::from(i) / 8.0,
+                    fd.v_min() + (fd.v_max() - fd.v_min()) * f64::from(j) / 8.0,
+                );
+                if !q::face_classify_uv(k, b, f, uv).is_ok_and(|c| c == PointClassType::Face) {
+                    continue;
+                }
+                let Some((p0, n0)) = at(b, uv) else { continue };
+                for step in [Point2::new(uv.x + hu, uv.y), Point2::new(uv.x, uv.y + hv)] {
+                    let Some((p1, n1)) = at(b, step) else { continue };
+                    let dp = p1 - p0;
+                    let l2 = dp.length_squared();
+                    if l2 <= 0.0 {
+                        continue;
+                    }
+                    // > 0: convex in this direction
+                    let kappa = (n1 - n0).dot(dp) / l2;
+                    if kappa > 1e-9 {
+                        best = best.min(1.0 / kappa);
+                    }
+                }
+            }
+        }
+    }
+    best
+}
+
 /// Whether `b` has a solid region (neither the infinite one nor a void).
 pub(crate) fn has_solid_region(b: &solidcore::Brep) -> bool {
     solidcore::topology::brep::p1::regions(b, None).is_ok_and(|rs| {
