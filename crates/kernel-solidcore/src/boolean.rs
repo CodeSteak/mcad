@@ -7,15 +7,18 @@
 //! * the result must be a closed solid (or empty); a difference or intersection of bodies whose
 //!   interiors do not overlap is `a` or empty;
 //! * its volume must lie within the bounds of the operation (3 % slack: gross errors only);
-//! * points just inside and just outside the faces of each operand whose box meets the box of a
-//!   face of the other (one per face, at most 24 faces; the facade takes 5 on every face that
-//!   reaches the other operand's box, solidcore's point classification is too slow for that)
-//!   must be inside or outside the result as the operation says, confirmed at a second, shifted
-//!   point and by the side of the result's nearest face (solidcore's ray classification can be
-//!   wrong at several nearby points);
+//! * points just inside and just outside the faces of each operand whose box meets the other
+//!   operand's box, all faces of the smaller operand, and at least one face per shell (one per face, every k-th beyond 64
+//!   faces; the facade takes 5 on every such face, solidcore's point classification is too slow
+//!   for that) must be inside or outside the result as the operation says, confirmed at a
+//!   second, shifted point and by the side of the result's nearest face (solidcore's ray
+//!   classification can be wrong at several nearby points). The offset from the faces is 1e-4
+//!   of the pair's size, at most 1e-3 of the smaller operand's, at least ten zone tolerances (up
+//!   to 2 % of the smaller operand) (the facade: always 1e-4 of the pair's, so SMLib can lose or
+//!   move an operand smaller than that);
 //! * else the step runs again with the operands swapped (union, intersection), then with the
-//!   second operand moved by 1e-6, 1e-5, 1e-4 of the size; if nothing passes, `Failed` with the
-//!   facade's wording.
+//!   second operand moved by 1e-6, 1e-5, 1e-4 of the size (at most ten times the smaller
+//!   operand's); if nothing passes, `Failed` with the facade's wording.
 //!
 //! A union of bodies that only touch is one solid with a shell per body (`SmBrep::MergeBrep`, the
 //! facade's `touching_union`). Not ported: the facade's union of bodies whose boxes are apart
@@ -40,6 +43,9 @@ struct Attempts {
     wrong: bool,
     /// A union gave no closed solid and the interiors do not overlap: the bodies only touch.
     touching: bool,
+    /// Where the first result that was no closed solid is open (its edges with one face), as
+    /// the facade's places.
+    places: Vec<Vec<DVec3>>,
 }
 
 /// How a step's result compares with its operands (the facade's `Plausible`).
@@ -123,7 +129,15 @@ impl Inner {
             return Ok(r);
         }
         if st.wrong {
+            // the shift: of the pair's size, but at most 10x the smaller operand's (moving a
+            // small operand by more than 1e-3 of itself would change the result)
             let size = self.pair_box(a, b).map_or(1.0, |(lo, hi)| (hi - lo).length().max(1e-9));
+            let small = [a, b]
+                .iter()
+                .filter_map(|s| self.bounds(s).ok().flatten())
+                .map(|(lo, hi)| (hi - lo).length())
+                .fold(f64::INFINITY, f64::min);
+            let size = size.min(10.0 * small).max(1e-9);
             let dir = DVec3::new(0.2672612, 0.5345225, 0.8017837).normalize();
             for rel in [1e-6, 1e-5, 1e-4] {
                 let moved = self.transform(b, &DMat4::from_translation(dir * (rel * size)))?;
@@ -145,7 +159,11 @@ impl Inner {
             }
         }
         match (st.why, st.first_err) {
-            (Some(w), _) => Err(KernelError::failed(format!("solidcore: boolean: {w}"))),
+            (Some(w), _) => Err(KernelError::Failed {
+                msg: format!("solidcore: boolean: {w}"),
+                edges: Vec::new(),
+                places: st.places,
+            }),
             (None, Some(e)) => Err(e),
             (None, None) => Err(KernelError::failed("solidcore: boolean: no result")),
         }
@@ -185,6 +203,11 @@ impl Inner {
                      (let them overlap a little or keep a gap)"
                         .into()
                 });
+                if st.places.is_empty()
+                    && let Ok(es) = self.edges(&r, 8)
+                {
+                    st.places = es.into_iter().filter(|e| e.face_tags.len() == 1).map(|e| e.points).take(32).collect();
+                }
                 Ok(None)
             }
             Plausible::Wrong(w) => {
@@ -233,30 +256,73 @@ impl Inner {
             .collect()
     }
 
-    /// A point of each face of `s` whose box meets the box of a face of `other` (the facade takes
-    /// 5 on each face that reaches the other operand's box; only faces near the other's faces can
-    /// be cut), with the outward normal there.
+    /// A point of each face of `s` whose box meets the box of `other` (the facade's rule; it
+    /// takes 5 per face), of every face if `s` is the smaller operand, and at least one per
+    /// shell of `s` (a body inside the other's box but away from its faces), with the outward
+    /// normal there.
     fn near_samples(&mut self, s: &Shape, other: &Shape, eps: f64) -> Vec<(DVec3, DVec3)> {
-        let theirs = self.face_boxes(other);
+        let Ok(Some(ob)) = self.bounds(other) else { return Vec::new() };
+        // the smaller operand: every face (a tiny body kept or lost whole by mistake shows on
+        // the faces outside the other's box)
+        let smaller =
+            self.bounds(s).ok().flatten().is_some_and(|(lo, hi)| (hi - lo).length() <= (ob.1 - ob.0).length());
         let mine = self.face_boxes(s);
-        let near: Vec<solidcore::FaceId> = mine
-            .into_iter()
-            .filter(|(_, fb)| theirs.iter().any(|(_, ob)| boxes_overlap(*fb, *ob, eps)))
-            .map(|(f, _)| f)
-            .collect();
-        // solidcore's point classification is slow on large bodies (a box with 600 faces of text
-        // on it: 200 s with the facade's 5 samples on every face): one sample per face, every
-        // k-th face beyond MAX_FACES
-        const MAX_FACES: usize = 24;
-        let step = near.len().div_ceil(MAX_FACES).max(1);
         let mut b = s.brep.borrow_mut();
+        // the shell (pair of shells of a face's two uses) of each face
+        let shell_of = |f: solidcore::FaceId| -> Option<(u32, u32)> {
+            let fu = b.face(f).ok()?.faceuse?;
+            let u = b.faceuse(fu).ok()?;
+            let x = u.shell.map_or(u32::MAX, |s| s.index());
+            let y = u.mate.and_then(|m| b.faceuse(m).ok()?.shell).map_or(u32::MAX, |s| s.index());
+            Some((x.min(y), x.max(y)))
+        };
+        let mut near: Vec<solidcore::FaceId> = Vec::new();
+        let mut shells: Vec<((u32, u32), bool)> = Vec::new();
+        for (f, fb) in &mine {
+            let sh = shell_of(*f);
+            let hit = smaller || boxes_overlap(*fb, ob, eps);
+            if hit {
+                near.push(*f);
+            }
+            match shells.iter_mut().find(|(k, _)| Some(*k) == sh) {
+                Some(e) => e.1 |= hit,
+                None => {
+                    if let Some(k) = sh {
+                        shells.push((k, hit));
+                    }
+                }
+            }
+        }
+        // solidcore's point classification is slow (~14 ms a point, a box with 600 faces of
+        // text: 200 s with the facade's 5 samples on every face): one sample per face, every
+        // k-th face beyond MAX_FACES
+        const MAX_FACES: usize = 64;
+        let step = near.len().div_ceil(MAX_FACES).max(1);
+        let mut pick: Vec<solidcore::FaceId> = near.into_iter().step_by(step).collect();
+        for (k, hit) in shells {
+            if !hit && let Some((f, _)) = mine.iter().find(|(f, _)| shell_of(*f) == Some(k)) {
+                pick.push(*f);
+            }
+        }
         let mut out = Vec::new();
-        for f in near.into_iter().step_by(step) {
+        for f in pick {
             if let Some(x) = crate::brep::face_sample(&self.k, &mut b, f) {
                 out.push(x);
             }
         }
         out
+    }
+
+    /// Offset of the sample points from the faces: 1e-4 of the pair's size, at most 1e-3 of the
+    /// smaller operand's (an operand smaller than the offset would be missed), but ten times
+    /// solidcore's zone tolerance (closer, the classification says "on"), up to 2 % of the
+    /// smaller operand.
+    fn pair_eps(&self, ba: (DVec3, DVec3), bb: (DVec3, DVec3)) -> f64 {
+        use solidcore::geom::tol::{SmallTopoType, zone_tol_3d};
+        let size = (ba.0.min(bb.0) - ba.1.max(bb.1)).length();
+        let small = (ba.1 - ba.0).length().min((bb.1 - bb.0).length());
+        let floor = (10.0 * zone_tol_3d(&self.k, SmallTopoType::NormalSize)).min(2e-2 * small);
+        (1e-4 * size).min(1e-3 * small).max(floor).max(1e-9)
     }
 
     fn class(&mut self, s: &Shape, p: DVec3) -> Option<Class> {
@@ -273,8 +339,7 @@ impl Inner {
             return Ok(Plausible::Open);
         }
         let (Some(ba), Some(bb)) = (self.bounds(a)?, self.bounds(b)?) else { return Ok(Plausible::Ok) };
-        let size = (ba.0.min(bb.0) - ba.1.max(bb.1)).length().max(1e-9);
-        let eps = 1e-4 * size;
+        let eps = self.pair_eps(ba, bb);
         if !boxes_overlap(ba, bb, eps) {
             return Ok(Plausible::Ok);
         }
@@ -385,7 +450,7 @@ impl Inner {
     /// inside a face of one inside the other; else their intersection's volume.
     fn interiors_overlap(&mut self, a: &Shape, b: &Shape, tag: Tag) -> KResult<bool> {
         let (Some(ba), Some(bb)) = (self.bounds(a)?, self.bounds(b)?) else { return Ok(false) };
-        let eps = 1e-4 * (ba.0.min(bb.0) - ba.1.max(bb.1)).length().max(1e-9);
+        let eps = self.pair_eps(ba, bb);
         for side in 0..2 {
             let (own, other) = if side == 0 { (a, b) } else { (b, a) };
             for (p, n) in self.near_samples(own, other, eps) {

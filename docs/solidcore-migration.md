@@ -273,14 +273,15 @@ every face normal points out: a point along it is outside, against it inside), a
 per surface and curve kind, loops, bodies; edges matched by kind and the point at half their
 length; faces by kind and those points, with the oriented normals there and the tags).
 
-Result over the 101 files: 2056 of the 2081 compared nodes agree. The 25 others are differences
-of the kernels, not of the mapping:
+Result over the 101 files (since task D's tester findings positions and orientation are
+compared also where the kinds differ, see `diff/brep.rs`): 2095 of the 2149 compared nodes
+agree. The 54 others are differences of the kernels, not of the mapping:
 
 | Nodes | Cause |
 | ---: | --- |
-| 9 | `mirror` (`09_rotate_mirror`, `21_angle_bracket`, `knob_mirror`, `pipe_clamp`): solidcore's `SmBrep::Transform` turns every surface into a B-spline under a negative scale (`turn_to_nurbs`); SMLib's 4 × 4 overload keeps planes and cylinders |
-| 6 | `phone_stand`: solidcore's fillet of an edge around a hole makes a B-spline surface (SMLib a surface of revolution) and B-spline edges instead of circles |
-| 13 | tags of faces merged by a union of coplanar faces (`multicolor` letters, `rib_bracket`): the kernels keep another operand's tag |
+| 25 | only tags: faces merged by a union of coplanar faces (`multicolor` letters, `rib_bracket`) and a face after a fillet or shell (`rib_bracket`, `mug`, `grip_shell`, `planter`): the kernels keep another operand's tag |
+| 25 | other kinds at the same positions and orientation: `mirror` (`09_rotate_mirror`, `21_angle_bracket`, `knob_mirror`, `pipe_clamp`): solidcore's `SmBrep::Transform` turns every surface into a B-spline under a negative scale (`turn_to_nurbs`), SMLib's 4 × 4 overload keeps planes and cylinders; shear (`10_scale_multmatrix`) likewise; `shell` (`soap_dish`, `housing`, `f10`): B-spline edges where SMLib has lines |
+| 4 | `phone_stand`: solidcore's fillet of an edge around a hole makes a B-spline surface (SMLib a surface of revolution) and B-spline edges instead of circles at the same positions; the fillet face's loop has another number of edges (one face "at other positions") |
 
 STEP export goes through the neutral B-rep and works with solidcore: `tests/step/verify.py`
 (OCCT reads, checks validity, closed shells, solids, faces, volume, area, bounds) passes 61 of
@@ -380,6 +381,29 @@ volume per colour with both kernels for all 37 cases of `tests/color-review/case
 `tests/models/spec/multicolor.mcad`. Evaluation of all 101 files: SMLib 112 s, solidcore 109 s
 (debug build, dependencies `opt-level = 2`); solidcore is slower on `key_rack` (12.8 s vs 5.8 s),
 `mug`, `pen_box` and `wall_hook` (2×), faster on `text_sign` and `f11`.
+
+## Tester findings on task D (ae50f1f)
+
+The tester reproduced the numbers (101 files, 2604 nodes: 2596 same, 3 unsupported, 3 blocked,
+2 differ, 0 failed; no node worse) and found:
+
+| Finding | Fix |
+| --- | --- |
+| rule `blend` missed wrong radii: `cube(100, $fillet = 1)` caught only at × 1.05, a filleted hole r 10 at × 1.2, r 3 with `fillet = 0.5` at × 2 (the 4e-6 · V part dominated) | blended nodes compare the neutral B-reps of both kernels (always, not only with `--brep`): with the same kinds the edge and face positions and orientation must agree (else `differ`, "blend: B-reps at other positions"), × 1.02 is caught on all three; with other kinds 5 % of the change; the 4e-6 · V part only for curved results. OCCT: the blend geometry of both kernels agrees within 1.8e-12, SMLib's integration is off up to 7.7e-5, solidcore's up to 2.7e-6 |
+| Boolean checks sampled a face only if its box met a face box of the other operand: `cube(100, center = true)` with `sphere(5)` inside got no sample (only the 3 % volume bound); beyond 24 near faces every k-th | the facade's rule (a face whose box meets the other operand's box), every face of the smaller operand, at least one face per shell; every k-th only beyond 64 faces. Cost: point classification skips points outside the body's box (a cached box per shape): the evaluation of all files took 216 s instead of 240 s, with more samples |
+| an operand smaller than the checks' offset (1e-4 of the pair) or the retries' shift (up to 1e-4 of the pair) could be moved or lost silently (a sphere r 0.005 on a cube of 10000 moved by 0.017 mm, a pocket r 0.002 lost, a cube of 0.01 kept whole) | in the solidcore adapter the offset is at most 1e-3 of the smaller operand (at least ten zone tolerances, so that the classification does not say "on"), the shift at most 1e-3 of it: such cases now fail loudly ("solidcore returned a wrong result") or come out right; unit tests `operand_inside_the_other`, `operand_smaller_than_the_offset`. SMLib's facade keeps its behaviour (a known SMLib weakness, see "What is missing") |
+| `thicken` returned the offset sheet alone with status ok (volume 0, STEP one sheet) where SMLib fails | the result must be a closed solid, else `Failed` "thicken: the result is not a closed solid (the offset of the surface folds over itself …)"; unit test in `tests/offset.rs` |
+| `diff/brep.rs` returned early on count or kind mismatches: mirrored, sheared and shelled bodies and fillets around holes were never compared by position | positions and orientation also across kinds (edges within 1e-4 of the size there, faces by the points of their loop edges); numbers in "Neutral B-rep" (2095 / 54) |
+| manual 17 lacked solidcore's Boolean and thicken failures; a touching operand had no `at [x, y, z]` | entries added; the failure of a Boolean whose result is open carries the result's open edges as places (the engine names the place and marks it, as with SMLib) |
+| solidcore fails loudly where SMLib succeeds (polyhedron of two cubes sharing an edge, `shell(1) cube(10, $fillet = 2)`, a root union of many slivers); shell failures said "upstream status 1007" | upstream status codes now carry their meaning ("the kernel refused its input (degenerate or self-overlapping geometry) (… upstream status 1007)"); the rest in "What is missing" |
+| a projective matrix with shear failed as "shear (the matrix could not be split …)" | the projective check runs before the shear split; unit test |
+| rule `operands` allowed far too much for small pieces of large curved faces (`intersection() { sphere(1000); translate([0, 0, 1000]) cube(1, center = true); }`: OCCT 0.49992, solidcore 0.791, SMLib −2.64, `same`) | the budget is capped at 1e-4 of the node's volume (largest need in the corpus 1.3e-5, `soap_dish`); such a node is `differ` now. Both kernels integrate a small piece of a large sphere poorly (the face's divergence integral cancels: solidcore +58 % there, SMLib negative) |
+
+Also: `sketch_cable_duct`'s `differ` is an SMLib error (exact 9898.11 = solidcore, SMLib +0.54).
+
+Result over the corpus: no verdict and no volume rule changed (2596 same, 3 unsupported, 3
+blocked, 2 differ, 0 failed; rules relative 2293, exact 129, operands 67, blend 70, curved 25);
+the 70 blended nodes pass with positions or within 5 %; copies 2420.
 
 ## Re-test findings on task C
 
@@ -532,6 +556,15 @@ solidcore not).
    `Kernel::brep` and STEP export via `step-brep`/`step-export`; Wasm build in the same module
    (stack 8 MiB, see solidcore README).
 6. **Own tessellator** (not in solidcore, see below).
+7. Where SMLib succeeds and solidcore fails loudly (task D's tester): a polyhedron of two cubes
+   sharing an edge (SMLib 16 mm³; solidcore "every edge must belong to exactly two faces");
+   `shell(1) cube(10, $fillet = 2)` (SMLib 414.97; solidcore's offset reports self-overlap,
+   status 1007, now with its meaning); a root union of many slivers (the facade reorders a
+   chain's operands when a step fails, not ported); a Boolean of an operand smaller than about
+   1e-4 of the pair on a face of the other (solidcore's result is wrong; the adapter's retries
+   move the operand by at most 1e-3 of its size, so it fails; SMLib's facade moves it by up to
+   1e-4 of the pair or loses it, e.g. a sphere r 0.005 on a cube of 10000 moved by 0.017 mm, a
+   pocket r 0.002 in a cube of 1000 lost: a known SMLib weakness, the facade stays as it is).
 
 Estimate from the research (uncertain, depends on the units above and on the people who take
 over units in solidcore): all primitives end to end in 1–2 weeks, Booleans in 2–4
@@ -624,9 +657,9 @@ node evaluated by SMLib:
   | --- | --- |
   | `relative` | \|SMLib − solidcore\| ≤ 1e-6 · \|SMLib\| |
   | `exact` | the exact volume E is known and \|solidcore − E\| / E ≤ max(\|SMLib − E\| / E, 1e-6): solidcore is at least as close to E as SMLib |
-  | `operands` | E unknown (Boolean, …): \|SMLib − solidcore\| ≤ Σ (\|SMLib − Eᵢ\| + \|solidcore − Eᵢ\|) + 1e-6 · \|SMLib\| over the nearest descendants with an exact volume Eᵢ (the deviation of the operands carries over to the result) |
+  | `operands` | E unknown (Boolean, …): \|SMLib − solidcore\| ≤ min(Σ (\|SMLib − Eᵢ\| + \|solidcore − Eᵢ\|), 1e-4 · max(\|SMLib\|, \|solidcore\|)) + 1e-6 · \|SMLib\| over the nearest descendants with an exact volume Eᵢ (the deviation of the operands carries over to the result; the cap since task D's tester: a 1 mm cube on a sphere of r 1000 has a budget of several mm³ against a volume of 0.5; largest need in the corpus 1.3e-5) |
   | `curved` | the result has a curved edge, \|SMLib − solidcore\| ≤ 3e-5 · \|SMLib\| and, if E is known, \|solidcore − E\| ≤ 3e-5 · E (integration and fit accuracy; largest difference in the corpus 1.9e-5, a loft; primitives and Booleans of them up to 4.3e-6) |
-  | `blend` | SMLib blends edges (fillet, chamfer) or offsets faces (`thicken`, `shell`, `offset`) in the history of the node's shapes, \|SMLib − solidcore\| ≤ 8 % of the volume those operations changed + 4e-6 of the node (`curved` does not apply to such nodes) (both fit the blend and offset surfaces, SMLib less closely: see "Fillets and chamfers"; largest difference in the corpus 6.5e-5; `freeform_lid`'s thickened sheet: SMLib 3.3e-5 off a numerical integration of the offset volume, solidcore 1.6e-6) |
+  | `blend` | SMLib blends edges (fillet, chamfer) or offsets faces (`thicken`, `shell`, `offset`) in the history of the node's shapes, \|SMLib − solidcore\| ≤ 8 % of the volume those operations changed (+ 4e-6 of the node if it is curved) where both neutral B-reps have the same surface and curve kinds **and** the same edge and face positions and orientation (`diff/brep.rs`, else `differ` with "blend: B-reps at other positions"), 5 % where the kinds differ (`curved` does not apply to such nodes) (both fit the blend and offset surfaces, SMLib less closely: see "Fillets and chamfers"; largest need in the corpus 3.7 % of the change, `key_rack`; `freeform_lid`'s thickened sheet: SMLib 3.3e-5 off a numerical integration of the offset volume, solidcore 1.6e-6). The volume alone missed a wrong radius: `cube(100, $fillet = 1)` with the radius × 1.05 in one kernel passed; with the positions × 1.02 is caught (OCCT: the blend geometry of both kernels agrees within 1.8e-12; SMLib's integration is off up to 7.7e-5, solidcore's up to 2.7e-6) |
   | otherwise | `differ` with the note `volume x vs y (exact E)` |
 
   Exact volumes (`crates/cad-cli/src/diff/exact.rs`, a kernel wrapper that carries them next to

@@ -120,3 +120,16 @@ fn sheared_box_and_fillet() {
     let exact = 1000.0 - (1.0 - PI / 4.0) * 10.0;
     assert!((v - exact).abs() < 1e-6 * exact, "{v} vs {exact}");
 }
+
+#[test]
+fn projective_matrix_with_shear_is_named_as_such() {
+    let mut k = SolidcoreKernel::new();
+    let b = k.make_box(DVec3::ZERO, DVec3::ONE, 1).unwrap();
+    let mut m = DMat4::IDENTITY;
+    m.y_axis.x = 0.5; // shear
+    m.x_axis.w = 0.1; // projective row
+    match k.transform(&b, &m) {
+        Err(KernelError::Unsupported(e)) => assert!(e.contains("projective matrix"), "{e}"),
+        other => panic!("{other:?}"),
+    }
+}

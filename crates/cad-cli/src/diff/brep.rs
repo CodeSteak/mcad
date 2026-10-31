@@ -4,14 +4,19 @@
 //!
 //! * counts: vertices, loops, vertex loops, solids, voids, sheets, faces per surface kind and
 //!   edges per curve kind (`kind()` of the neutral types) must agree;
-//! * edges match one to one by curve kind and the point at half their length (within 1e-6 of
-//!   the model size; the point by arc length, so another parameterisation of the same curve
-//!   matches);
-//! * faces match one to one by surface kind and the half-length points of their loop edges
-//!   (a face with the same tag first); at each such point the face normals (normal of the
-//!   surface, flipped where not `same_sense`) must point the same way (orientation; B-spline
+//! * positions, also where the kinds differ (a mirror that turns planes into B-splines, a
+//!   fillet whose circles are B-splines in one kernel): edges match one to one by the point at
+//!   half their length (by arc length, so another parameterisation of the same curve matches;
+//!   within 1e-6 of the model size for the same kind, 1e-4 across kinds, where the polylines
+//!   of different parameterisations put the point a little apart), a kind changed noted;
+//! * faces match one to one by the half-length points of their loop edges (the same surface
+//!   kind first, then a face with the same tag); at each such point the face normals (normal of
+//!   the surface, flipped where not `same_sense`) must point the same way (orientation; B-spline
 //!   surfaces have no normal without (u, v) and are compared by position only), and the tags
 //!   must agree.
+//!
+//! [`Comparison::positions_agree`]: counts, edge and face positions and orientation agree (the
+//! tags and kinds may differ); `diff-kernels` uses it in its verdict on blended nodes.
 
 use std::collections::BTreeMap;
 
@@ -92,7 +97,7 @@ impl Summary {
             }
         }
         let mid: Vec<DVec3> = (0..b.edges.len())
-            .map(|i| half_length(&b.edge_points(cad_kernel::brep::OrientedEdge { edge: i as u32, forward: true }, 64)))
+            .map(|i| half_length(&b.edge_points(cad_kernel::brep::OrientedEdge { edge: i as u32, forward: true }, 256)))
             .collect();
         for (e, m) in b.edges.iter().zip(&mid) {
             *self.curves.entry(e.curve.kind()).or_insert(0) += 1;
@@ -124,12 +129,25 @@ impl Summary {
     }
 }
 
-/// Differences between the B-reps of SMLib (`a`) and solidcore (`b`); empty if they agree.
-pub fn compare(a: &Summary, b: &Summary) -> Vec<String> {
+/// Result of [`compare`].
+#[derive(Debug, Clone, Default)]
+pub struct Comparison {
+    /// Differences; empty if the B-reps agree.
+    pub notes: Vec<String>,
+    /// Surface and curve kinds per count agree.
+    pub kinds_agree: bool,
+    /// Counts, positions and orientation agree (tags and kinds aside).
+    pub positions_agree: bool,
+}
+
+/// Compares the B-reps of SMLib (`a`) and solidcore (`b`).
+pub fn compare(a: &Summary, b: &Summary) -> Comparison {
     let mut notes = Vec::new();
-    let count = |what: &str, x: usize, y: usize, notes: &mut Vec<String>| {
+    let mut counts_agree = true;
+    let mut count = |what: &str, x: usize, y: usize, notes: &mut Vec<String>| {
         if x != y {
             notes.push(format!("{what} {x} vs {y}"));
+            counts_agree = false;
         }
     };
     count("vertices", a.vertices, b.vertices, &mut notes);
@@ -138,6 +156,9 @@ pub fn compare(a: &Summary, b: &Summary) -> Vec<String> {
     count("solids", a.solids, b.solids, &mut notes);
     count("voids", a.voids, b.voids, &mut notes);
     count("sheets", a.sheets, b.sheets, &mut notes);
+    count("edges", a.shape.edges.len(), b.shape.edges.len(), &mut notes);
+    count("faces", a.shape.faces.len(), b.shape.faces.len(), &mut notes);
+    let kinds_agree = a.surfaces == b.surfaces && a.curves == b.curves;
     if a.surfaces != b.surfaces {
         notes.push(format!("surfaces {:?} vs {:?}", a.surfaces, b.surfaces));
     }
@@ -147,35 +168,43 @@ pub fn compare(a: &Summary, b: &Summary) -> Vec<String> {
     if !b.problems.is_empty() {
         notes.push(format!("solidcore: {}", b.problems.join("; ")));
     }
-    if !notes.is_empty() {
-        return notes;
-    }
-    let tol = 1e-6 * a.shape.size.max(b.shape.size);
+    let size = a.shape.size.max(b.shape.size);
+    let tol = 1e-6 * size;
+    let tol_kind = 1e-4 * size;
     let mut free = vec![true; b.shape.edges.len()];
-    let mut unmatched = 0;
+    let (mut unmatched, mut other_kind) = (0, 0);
     for (k, p) in &a.shape.edges {
-        let hit =
+        let same =
             (0..free.len()).find(|&j| free[j] && b.shape.edges[j].0 == *k && b.shape.edges[j].1.distance(*p) <= tol);
+        let hit = same.or_else(|| (0..free.len()).find(|&j| free[j] && b.shape.edges[j].1.distance(*p) <= tol_kind));
         match hit {
-            Some(j) => free[j] = false,
+            Some(j) => {
+                free[j] = false;
+                other_kind += usize::from(b.shape.edges[j].0 != *k);
+            }
             None => unmatched += 1,
         }
     }
+    let mut positions_agree = counts_agree && unmatched == 0;
     if unmatched > 0 {
         notes.push(format!("{unmatched} edges at other positions"));
     }
+    if other_kind > 0 {
+        notes.push(format!("{other_kind} edges of another curve kind at the same positions"));
+    }
     let mut free = vec![true; b.shape.faces.len()];
-    let (mut unmatched, mut flipped, mut retagged) = (0, 0, 0);
+    let (mut unmatched, mut flipped, mut retagged, mut other_kind) = (0, 0, 0, 0);
     for (k, tag, pts) in &a.shape.faces {
         // the same points (each one once): whether the normals there point the same way
         let fits = |(k2, _, pts2): &FaceKey| -> Option<bool> {
-            if k2 != k || pts2.len() != pts.len() {
+            if pts2.len() != pts.len() {
                 return None;
             }
+            let t = if k2 == k { tol } else { tol_kind };
             let mut used = vec![false; pts2.len()];
             let mut same_way = true;
             for (p, n) in pts {
-                let j = (0..pts2.len()).find(|&j| !used[j] && pts2[j].0.distance(*p) <= tol)?;
+                let j = (0..pts2.len()).find(|&j| !used[j] && pts2[j].0.distance(*p) <= t)?;
                 used[j] = true;
                 if let (Some(n), Some(m)) = (n, pts2[j].1) {
                     same_way &= n.dot(m) > 0.0;
@@ -183,30 +212,36 @@ pub fn compare(a: &Summary, b: &Summary) -> Vec<String> {
             }
             Some(same_way)
         };
-        // a face with the same tag first
-        let candidates = (0..free.len()).filter(|&j| free[j]);
-        let hit = candidates
-            .clone()
-            .filter(|&j| b.shape.faces[j].1 == *tag)
-            .chain(candidates.filter(|&j| b.shape.faces[j].1 != *tag))
-            .find_map(|j| fits(&b.shape.faces[j]).map(|w| (j, w)));
+        // the same kind and tag first, then the same kind, then any
+        let rank = |j: usize| {
+            let (k2, t2, _) = &b.shape.faces[j];
+            usize::from(k2 != k) * 2 + usize::from(t2 != tag)
+        };
+        let mut candidates: Vec<usize> = (0..free.len()).filter(|&j| free[j]).collect();
+        candidates.sort_by_key(|&j| rank(j));
+        let hit = candidates.into_iter().find_map(|j| fits(&b.shape.faces[j]).map(|w| (j, w)));
         match hit {
             Some((j, w)) => {
                 free[j] = false;
                 flipped += usize::from(!w);
                 retagged += usize::from(b.shape.faces[j].1 != *tag);
+                other_kind += usize::from(b.shape.faces[j].0 != *k);
             }
             None => unmatched += 1,
         }
     }
+    positions_agree &= unmatched == 0 && flipped == 0;
     if unmatched > 0 {
         notes.push(format!("{unmatched} faces at other positions"));
     }
     if flipped > 0 {
         notes.push(format!("{flipped} faces oriented the other way"));
     }
+    if other_kind > 0 {
+        notes.push(format!("{other_kind} faces of another surface kind at the same positions"));
+    }
     if retagged > 0 {
         notes.push(format!("{retagged} faces with other tags"));
     }
-    notes
+    Comparison { notes, kinds_agree, positions_agree }
 }

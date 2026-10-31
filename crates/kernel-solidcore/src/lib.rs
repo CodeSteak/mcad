@@ -68,6 +68,9 @@ pub struct ShapeData {
     /// follow from the source's, if those are known by then (no second integration).
     #[cfg(feature = "solidcore")]
     derived: std::cell::RefCell<Option<(std::rc::Weak<ShapeData>, DMat4)>>,
+    /// Bounding box, once computed (point classification skips points outside it).
+    #[cfg(feature = "solidcore")]
+    pub(crate) bbox: std::cell::Cell<Option<Option<(DVec3, DVec3)>>>,
     pub tag: Tag,
 }
 
@@ -78,6 +81,7 @@ impl ShapeData {
             brep: std::cell::RefCell::new(brep),
             mass: std::cell::Cell::new(None),
             derived: std::cell::RefCell::new(None),
+            bbox: std::cell::Cell::new(None),
             tag,
         })
     }
@@ -136,9 +140,32 @@ mod imp {
             KernelError::Unsupported(format!("solidcore: {op}: {e}"))
         } else if matches!(e, SolidError::InvalidInput { .. }) {
             KernelError::InvalidInput(format!("solidcore: {op}: {e}"))
+        } else if let SolidError::Upstream { code, .. } = &e
+            && let Some(why) = status_reason(*code)
+        {
+            KernelError::failed(format!("solidcore: {op}: {why} ({e})"))
         } else {
             KernelError::failed(format!("solidcore: {op}: {e}"))
         }
+    }
+
+    /// What an upstream `SmStatus` (`SmMessages.h`) means, for the message.
+    fn status_reason(code: i32) -> Option<&'static str> {
+        Some(match code {
+            1001 => "the operation failed",
+            1002 => "out of memory",
+            1006 => "an intermediate result was missing",
+            1007 => "the kernel refused its input (degenerate or self-overlapping geometry)",
+            1020 => "a parameter left its domain",
+            1021 => "a result missed the tolerance",
+            1022 => "an iteration did not converge",
+            1025 => "the axis passes through a face",
+            1027 => "bad intersections",
+            1028 => "vertices coincide",
+            1034 => "a degenerate surface",
+            1042 => "the offset walls would meet (thickness too large for the geometry)",
+            _ => return None,
+        })
     }
 
     pub fn pt(p: DVec3) -> solidcore::Point3 {
@@ -822,6 +849,11 @@ mod imp {
             // axes and the placement U (with the translation); exact, since the scale turns
             // every curve and surface into a B-spline (`turn_to_nurbs`) and maps its control
             // points, and a NURBS under an affine map is the NURBS of the mapped control points
+            let a = m.to_cols_array();
+            if a[3].abs() > 1e-15 || a[7].abs() > 1e-15 || a[11].abs() > 1e-15 || (a[15] - 1.0).abs() > 1e-15 {
+                // before the split: a projective matrix is no shear
+                return Err(unsupported("transform: projective matrix"));
+            }
             if let Some((first, second)) = Self::shear_split(m)? {
                 let r = self.transform(s, &first)?;
                 return self.transform(&r, &second);
@@ -1531,6 +1563,23 @@ mod imp {
         }
 
         fn classify_unchecked(&mut self, s: &Shape, pts: &[DVec3]) -> KResult<Vec<Class>> {
+            // points clearly outside the box are outside (the ray classification costs ~14 ms)
+            let bx = self.bounds(s)?;
+            let outside = |p: &DVec3| {
+                bx.is_some_and(|(lo, hi)| {
+                    let m = DVec3::splat(1e-6 * (hi - lo).length() + 1e-9);
+                    !(p.cmpge(lo - m).all() && p.cmple(hi + m).all())
+                })
+            };
+            if pts.iter().any(|p| !outside(p)) {
+                let inner: Vec<DVec3> = pts.iter().copied().filter(|p| !outside(p)).collect();
+                let mut got = self.classify_ray(s, &inner)?.into_iter();
+                return Ok(pts.iter().map(|p| if outside(p) { Class::Outside } else { got.next().unwrap() }).collect());
+            }
+            Ok(vec![Class::Outside; pts.len()])
+        }
+
+        fn classify_ray(&mut self, s: &Shape, pts: &[DVec3]) -> KResult<Vec<Class>> {
             let mut b = s.brep.borrow_mut();
             let b = &mut *b;
             if b.face_list().is_empty() {
@@ -2020,15 +2069,21 @@ mod imp {
         }
 
         pub fn bounds(&mut self, s: &Shape) -> KResult<Option<(DVec3, DVec3)>> {
-            let b = s.brep.borrow();
-            if b.face_list().is_empty() {
-                return Ok(None);
+            if let Some(x) = s.bbox.get() {
+                return Ok(x);
             }
-            let b = q::brep_bounding_box(&self.k, &b, true).map_err(|e| err("bounds", e))?;
-            Ok(Some((
-                DVec3::new(b.min_at(0), b.min_at(1), b.min_at(2)),
-                DVec3::new(b.max_at(0), b.max_at(1), b.max_at(2)),
-            )))
+            let b = s.brep.borrow();
+            let out = if b.face_list().is_empty() {
+                None
+            } else {
+                let b = q::brep_bounding_box(&self.k, &b, true).map_err(|e| err("bounds", e))?;
+                Some((
+                    DVec3::new(b.min_at(0), b.min_at(1), b.min_at(2)),
+                    DVec3::new(b.max_at(0), b.max_at(1), b.max_at(2)),
+                ))
+            };
+            s.bbox.set(Some(out));
+            Ok(out)
         }
 
         pub fn is_solid(&mut self, s: &Shape) -> bool {

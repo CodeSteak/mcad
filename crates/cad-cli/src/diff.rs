@@ -134,12 +134,21 @@ const REL_VOLUME_CURVED: f64 = 3e-5;
 /// fit the blend and offset surfaces, SMLib less closely (`pillow_block`: its chamfers of 19 edges
 /// remove 39.15 mm³, by Pappus 41.40, solidcore 41.39: 5.4 % of the change). The tolerance is
 /// relative to the volume those operations changed (`Exact`'s third field, summed over the
-/// node's history), not to the node: a wrong radius (5 % → 10 % of the change) is caught; plus
-/// [`REL_VOLUME_BLEND_REST`] of the node for the integration of the rest.
+/// node's history), not to the node; plus [`REL_VOLUME_BLEND_REST`] of a curved node for the
+/// integration of the rest. A wrong radius changes the volume by less than that (a cube with
+/// `$fillet = 1` at × 1.05): where both B-reps have the same kinds, their edge and face positions
+/// must agree as well (they do to 1e-12, OCCT: both kernels build the same blend surfaces; × 1.02
+/// is caught); elsewhere [`REL_VOLUME_BLEND_UNCHECKED`].
 const REL_VOLUME_BLEND: f64 = 0.08;
-/// The part of rule `blend` for the unblended rest of the node (curved primitives agree within
-/// 4.3e-6).
+/// Rule `blend` where the B-reps' kinds differ (no position check): 5 % of the change (largest
+/// need in the corpus 3.7 %, `key_rack`).
+const REL_VOLUME_BLEND_UNCHECKED: f64 = 0.05;
+/// The part of rule `blend` for the unblended rest of a curved node (curved primitives agree
+/// within 4.3e-6); planar rests agree within [`REL_VOLUME`].
 const REL_VOLUME_BLEND_REST: f64 = 4e-6;
+/// Rule `operands` at most this, relative to the node's volume: the operands' deviations
+/// summed can exceed a small result many times (a 1 mm cube on a sphere of r 1000).
+const REL_VOLUME_OPERANDS: f64 = 1e-4;
 
 /// One evaluation: (index, label, line, children) and metrics per scene node.
 struct Run {
@@ -285,7 +294,9 @@ where
                 m.faces = Some(faces);
                 m.edges = Some(edges);
             }
-            if with_brep && !meshes && !parts.is_empty() {
+            // blended nodes always: their verdict compares the positions (see `volume_check`)
+            let blended = m.blend_change.is_finite() && m.blend_change > 0.0;
+            if (with_brep || blended) && !meshes && !parts.is_empty() {
                 let mut sum = brep::Summary::default();
                 for part in &parts {
                     match k.brep(&part.shape) {
@@ -325,10 +336,11 @@ where
 /// Compares the volumes `x` (SMLib) and `y` (solidcore). `budget`: summed deviation of both
 /// kernels from the exact volumes of the operands (see `command`). The rules in order:
 /// `relative` (1e-6), `exact` (solidcore at most as far from the exact volume as SMLib, at least
-/// 1e-6), `operands` (no exact value, difference ≤ budget + 1e-6), `curved` (curved faces:
+/// 1e-6), `operands` (no exact value, difference ≤ budget, at most 1e-4 of the volume, + 1e-6),
+/// `curved` (curved faces:
 /// difference ≤ 3e-5, and solidcore within 3e-5 of an exact value), `blend` (a fillet or chamfer
-/// in the node's history: difference ≤ `blend`, 8 % of the volume they changed, see [`blends`]);
-/// else `none`.
+/// in the node's history: difference ≤ `blend`, see [`blends`], [`blend_tolerance`]); else
+/// `none`.
 fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>, blend: Option<f64>) -> VolumeCheck {
     let difference = (x - y).abs();
     let rel = REL_VOLUME * x.abs().max(1e-9);
@@ -355,10 +367,10 @@ fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>, blend: Option<
     }
     if let Some(b) = budget
         && exact.is_none()
-        && difference <= b + rel
+        && difference <= b.min(REL_VOLUME_OPERANDS * x.abs().max(y.abs())) + rel
     {
         c.rule = "operands";
-        c.tolerance = b + rel;
+        c.tolerance = b.min(REL_VOLUME_OPERANDS * x.abs().max(y.abs())) + rel;
         return c;
     }
     // with an exact value solidcore must also be within 3e-5 of it
@@ -420,14 +432,38 @@ fn budgets(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics], b: &[Me
 /// history: the tolerance of rule `blend`, [`REL_VOLUME_BLEND`] of the volume those operations
 /// changed plus [`REL_VOLUME_BLEND_REST`] of the node; `None` without one (or where a volume of
 /// that history failed).
-fn blends(a: &[Metrics]) -> Vec<Option<f64>> {
+fn blends(a: &[Metrics]) -> Vec<Option<Blend>> {
     a.iter()
         .map(|m| {
             let c = m.blend_change;
-            (c.is_finite() && c > 0.0)
-                .then(|| REL_VOLUME_BLEND * c + REL_VOLUME_BLEND_REST * m.volume.unwrap_or(0.0).abs())
+            let rest = if m.curved { REL_VOLUME_BLEND_REST * m.volume.unwrap_or(0.0).abs() } else { 0.0 };
+            (c.is_finite() && c > 0.0).then_some(Blend { change: c, rest })
         })
         .collect()
+}
+
+/// Rule `blend` of a node: the volume its blends changed and the allowance for the rest.
+#[derive(Debug, Clone, Copy)]
+struct Blend {
+    change: f64,
+    rest: f64,
+}
+
+/// Rule `blend`'s tolerance from the B-reps of both kernels: `None` if the positions differ
+/// where the kinds agree (then the volume cannot excuse the node).
+fn blend_tolerance(b: Blend, a: &Metrics, c: &Metrics, notes: &mut Vec<String>) -> Option<f64> {
+    let cmp = match (&a.brep, &c.brep) {
+        (Some(x), Some(y)) if x.error.is_none() && y.error.is_none() => Some(brep::compare(x, y)),
+        _ => None,
+    };
+    match cmp {
+        Some(k) if k.kinds_agree && !k.positions_agree => {
+            notes.push(format!("blend: B-reps at other positions ({})", k.notes.join("; ")));
+            None
+        }
+        Some(k) if k.kinds_agree => Some(REL_VOLUME_BLEND * b.change + b.rest),
+        _ => Some(REL_VOLUME_BLEND_UNCHECKED * b.change + b.rest),
+    }
 }
 
 /// The same edge, sampled: every point within `tol`, in order or reversed; else (another
@@ -493,7 +529,7 @@ fn compare(
     a: &Metrics,
     b: &Metrics,
     budget: Option<f64>,
-    blend: Option<f64>,
+    blend: Option<Blend>,
     notes: &mut Vec<String>,
 ) -> (&'static str, Option<VolumeCheck>) {
     let mut vc = None;
@@ -505,7 +541,7 @@ fn compare_metrics(
     a: &Metrics,
     b: &Metrics,
     budget: Option<f64>,
-    blend: Option<f64>,
+    blend: Option<Blend>,
     vc: &mut Option<VolumeCheck>,
     notes: &mut Vec<String>,
 ) -> &'static str {
@@ -528,6 +564,7 @@ fn compare_metrics(
     }
     match (a.volume, b.volume) {
         (Some(x), Some(y)) => {
+            let blend = blend.and_then(|bl| blend_tolerance(bl, a, b, notes));
             let c = volume_check(x, y, a, budget, blend);
             if c.rule == "none" {
                 let exact = c.exact.map(|e| format!(" (exact {e})")).unwrap_or_default();
@@ -647,12 +684,17 @@ pub fn command(files: &[PathBuf], brep: bool) -> Result<Outcome, Fail> {
                 (verdict, notes)
             };
             let brep_check = match (&a[i].brep, &mb.brep) {
-                (Some(x), Some(y)) if verdict == "same" && x.error.is_none() => Some(if let Some(e) = &y.error {
-                    BrepCheck { verdict: if y.unsupported { "unsupported" } else { "differ" }, notes: vec![e.clone()] }
-                } else {
-                    let n = brep::compare(x, y);
-                    BrepCheck { verdict: if n.is_empty() { "same" } else { "differ" }, notes: n }
-                }),
+                (Some(x), Some(y)) if brep && verdict == "same" && x.error.is_none() => {
+                    Some(if let Some(e) = &y.error {
+                        BrepCheck {
+                            verdict: if y.unsupported { "unsupported" } else { "differ" },
+                            notes: vec![e.clone()],
+                        }
+                    } else {
+                        let n = brep::compare(x, y).notes;
+                        BrepCheck { verdict: if n.is_empty() { "same" } else { "differ" }, notes: n }
+                    })
+                }
                 _ => None,
             };
             if let Some(c) = &brep_check {
@@ -825,17 +867,24 @@ mod tests {
 
     /// Rule `blend` scales with the volume the blends changed, not with the node: a box edge of
     /// 100 with all 12 edges filleted r 1 changes 12 · 100 · (1 − π/4) ≈ 258 mm³; a radius 5 %
-    /// too large changes 10 % more and is caught, the 5.4 % of `pillow_block`'s chamfers pass.
+    /// too large changes 10 % more and is caught. Without B-reps to compare (or with other
+    /// kinds) 5 % of the change; with the same kinds the positions decide.
     #[test]
     fn blend_tolerance_follows_the_blended_volume() {
         let change = 12.0 * 100.0 * (1.0 - std::f64::consts::PI / 4.0);
         let v = 1e6 - change;
         let a = Metrics { volume: Some(v), curved: true, blend_change: change, ..Default::default() };
-        let tol = blends(std::slice::from_ref(&a))[0];
-        assert!(tol.is_some());
+        let bl = blends(std::slice::from_ref(&a))[0].unwrap();
+        let mut notes = Vec::new();
+        let tol = blend_tolerance(bl, &a, &a, &mut notes);
+        assert!(tol.is_some() && notes.is_empty());
         let wrong = 1e6 - change * 1.05 * 1.05;
         assert_eq!(volume_check(v, wrong, &a, None, tol).rule, "none");
-        assert_eq!(volume_check(v, 1e6 - change * 1.054, &a, None, tol).rule, "blend");
+        assert_eq!(volume_check(v, 1e6 - change * 1.04, &a, None, tol).rule, "blend");
+        assert_eq!(volume_check(v, 1e6 - change * 1.08, &a, None, tol).rule, "none");
+        // planar results get no allowance for the rest
+        let p = Metrics { curved: false, ..a.clone() };
+        assert_eq!(blends(std::slice::from_ref(&p))[0].unwrap().rest, 0.0);
         // without a blend the curved rule takes the same difference within 3e-5 of the node
         let c = Metrics { volume: Some(v), curved: true, ..Default::default() };
         assert_eq!(volume_check(v, wrong, &c, None, None).rule, "curved");

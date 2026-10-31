@@ -76,6 +76,14 @@ impl Inner {
         let r = shell_brep_simple(&mut self.k, &s.brep.borrow(), opts, &[]).map_err(|e| err(OP, e))?;
         let r = crate::ShapeData::new(r, tag);
         self.check_valid(&r, OP)?;
+        // solidcore can return the offset sheet alone (a surface whose offset folds over):
+        // the result must be a closed solid, as SMLib's
+        if self.is_empty(&r) || !self.is_solid(&r) {
+            return Err(failed(
+                "thicken: the result is not a closed solid (the offset of the surface folds over itself: \
+                 a smaller thickness or a flatter surface)",
+            ));
+        }
         self.retag(&r, s, tag)?;
         Ok(r)
     }
