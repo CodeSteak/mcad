@@ -403,19 +403,20 @@ fn diff_kernels_on_examples() {
         }
     }
     if v["solidcore_available"] == true {
-        // solidcore @ bba8d87 over 101 files (2604 nodes): 2299 same, 128 unsupported (fillets,
-        // polyhedra, shell, shear), 171 blocked, 6 differ, nothing fails. Curved solids are
-        // compared against their exact volume (solidcore is the more accurate one): no node
-        // differs in its volume alone; the differences are Booleans that lose faces or that
-        // SMLib fails
-        assert!(s["unsupported"].as_u64().unwrap() <= 135, "{s}");
-        assert!(s["same"].as_u64().unwrap() >= 2290, "{s}");
+        // solidcore @ bba8d87 over 101 files (2604 nodes): 2523 same, 26 unsupported
+        // (polyhedra, shell, shear, a variable fillet with several laws), 47 blocked, 8 differ,
+        // nothing fails. Curved solids are compared against their exact volume (solidcore is the
+        // more accurate one), blends within the fit of their surfaces: no node differs in its
+        // volume alone; the differences are Booleans that lose faces or that SMLib fails
+        assert!(s["unsupported"].as_u64().unwrap() <= 30, "{s}");
+        assert!(s["same"].as_u64().unwrap() >= 2510, "{s}");
         assert!(s["differ"].as_u64().unwrap() <= 10, "{s}");
         assert_eq!(s["failed"].as_u64().unwrap(), 0, "{s}");
-        // every rule is in use, the curved fallback the least
+        // every rule is in use; curved 73 (with fillets and chamfers), blend 8
         let r = &s["volume_rules"];
         assert!(r["exact"].as_u64().unwrap() >= 110 && r["operands"].as_u64().unwrap() >= 45, "{r}");
-        assert!(r["curved"].as_u64().unwrap() <= 30, "{r}");
+        assert!(r["curved"].as_u64().unwrap() <= 85, "{r}");
+        assert!((1..=15).contains(&r["blend"].as_u64().unwrap_or(0)), "{r}");
         // queries work on the shape's own body: few copies (1549 at bba8d87)
         let copies = s["solidcore_cost"]["copies"].as_u64().unwrap();
         assert!(copies > 0 && copies < 2500, "{copies}");

@@ -18,8 +18,9 @@
 //! So `mcad diff-kernels` can report which operations already work ("coverage"); at bba8d87:
 //! primitives, rigid transforms, `extrude` (also with twist and scale), `revolve`, `loft`,
 //! `sweep` and `sweep_path` of polygons, circles, closed interpolating splines and sketch
-//! profiles (lines, arcs and B-splines), `classify`, `faces`, `edges`, `bounds`, `mass_props`,
-//! `is_solid`; booleans mostly (some results lose faces); curved solids have volumes closer to
+//! profiles (lines, arcs and B-splines), `fillet`, `chamfer`, `fillet_variable` (one radius law
+//! for all edges), `classify`, `faces`, `edges`, `bounds`, `mass_props`, `is_solid`; booleans
+//! mostly (some results lose faces); curved solids have volumes closer to
 //! the exact value than SMLib's. Profiles and sweeps follow the SMLib facade
 //! (`smlib/facade/sc_facade.cpp`, `sc_sketch.cpp`) step by step: the same curves, sections,
 //! frames and refusals, so faces and edges come out as SMLib's. Queries work on the
@@ -27,7 +28,11 @@
 //! `SmApiBrepCopy` ([`Inner::copy`]), never with `Brep::clone`, whose geometry has no owner.
 //! Face tags (provenance) are solidcore attributes as in the facade (`TAG_ATTR`): set on every
 //! face of a new body, carried by solidcore through copies, transforms and Booleans. `edges`
-//! reports the tags of an edge's faces and marks as `smooth` what SMLib cannot blend.
+//! reports the tags of an edge's faces and marks as `smooth` what SMLib cannot blend. Fillets
+//! and chamfers follow the facade's `do_fillet_like` (`SmApiFilletEdges`, equal-distance chamfer
+//! with bevelled corners, radius laws as B-splines at the Greville stations, the same checks of
+//! the result, tags resolved as `resolve_tags`); the facade's retry chain by chain after a
+//! failed fillet is not ported.
 //!
 //! Feature `solidcore` (opt-in): link solidcore (git dependency pinned to a commit). Without
 //! it the crate compiles without solidcore and every operation is `Unsupported`.
@@ -90,6 +95,8 @@ fn unsupported(op: &str) -> KernelError {
 #[cfg(feature = "solidcore")]
 mod imp {
     use super::*;
+    use solidcore::blend::fillet_executive::api::fillet_edges;
+    use solidcore::blend::fillet_executive::session::FilletSession;
     use solidcore::curve::curve::Curve;
     use solidcore::error::EntityRef;
     use solidcore::geom::a_object::BooleanOperation;
@@ -105,6 +112,7 @@ mod imp {
     use solidcore::query::api_queries as q;
     use solidcore::query::brep::BrepQuery;
     use solidcore::sweep::api_brep as sw;
+    use solidcore::topology::brep::p5::{StitchAndOrientOptions, stitch_and_orient};
     use solidcore::topology::edge;
     use solidcore::topology::proto_topology::p1::api_transform::{TransformObject, transform_independent_object};
     use solidcore::{SolidError, Vec3};
@@ -170,6 +178,133 @@ mod imp {
     fn made(mut b: solidcore::Brep, tag: Tag) -> KResult<Shape> {
         tag_all(&mut b, tag)?;
         Ok(ShapeData::new(b, tag))
+    }
+
+    /// The diagonal of the bounding box of `b` (1 for an empty body or a failed query).
+    fn model_diag(k: &solidcore::Kernel, b: &solidcore::Brep) -> f64 {
+        if b.face_list().is_empty() {
+            return 1.0;
+        }
+        match q::brep_bounding_box(k, b, false) {
+            Ok(x) => {
+                let d = (0..3).map(|i| (x.max_at(i) - x.min_at(i)).powi(2)).sum::<f64>().sqrt();
+                if d > 0.0 && d.is_finite() { d } else { 1.0 }
+            }
+            Err(_) => 1.0,
+        }
+    }
+
+    /// A tagged face of an input of an operation: input index, face, tag, bounding box.
+    type FaceBox = (usize, solidcore::FaceId, Tag, DVec3, DVec3);
+
+    /// Uniform clamped knots of a radius law with `m` control radii: degree min(3, m - 1), as
+    /// the facade's `law_knots`.
+    fn law_knots(m: u32) -> (usize, Vec<f64>) {
+        let p = 3.min(m as usize - 1);
+        let inner = m as usize - p - 1;
+        let mut k = vec![0.0; p + 1];
+        k.extend((1..=inner).map(|i| i as f64 / (inner + 1) as f64));
+        k.extend(std::iter::repeat_n(1.0, p + 1));
+        (p, k)
+    }
+
+    /// Greville abscissae of the law's control radii (the stations), as `law_greville`.
+    fn law_greville(m: u32) -> Vec<f64> {
+        let (p, k) = law_knots(m);
+        (0..m as usize).map(|j| (1..=p).map(|i| k[j + i]).sum::<f64>() / p as f64).collect()
+    }
+
+    /// The radius law through `radii` at the stations as the facade's `make_law`: a B-spline
+    /// with control points (r_j, t_j, 0), so its x is the radius and its y the parameter.
+    fn make_law(radii: &[f64]) -> KResult<solidcore::blend::fillet_standard_solver::p1::FilletLaw> {
+        use solidcore::blend::fillet_standard_solver::p1::{FilletLaw, FilletLawKind};
+        let m = radii.len() as u32;
+        let (p, k) = law_knots(m);
+        let g = law_greville(m);
+        let c = cad_kernel::brep::BSplineCurve {
+            degree: p as u32,
+            knots: k,
+            points: radii.iter().zip(&g).map(|(&r, &t)| DVec3::new(r, t, 0.0)).collect(),
+            weights: None,
+        };
+        let law_curve = bspline(&c, pt, BSplineCurveForm::Unspecified, "fillet (radius law)")?;
+        Ok(FilletLaw::new(FilletLawKind::BSpline { law_curve, extended_law: None }))
+    }
+
+    /// A variable-radius fillet of `edges` with the law `laws[i]` along `edges[i]`, as the
+    /// facade's `blend_core`: the constant-radius solver where all values of an edge agree.
+    /// solidcore's fillet session takes one law for all edges: different laws on several
+    /// edges are `Unsupported`.
+    fn variable_fillet(
+        k: &mut solidcore::Kernel,
+        b: &mut solidcore::Brep,
+        edges: &[solidcore::EdgeId],
+        laws: &[&Vec<f64>],
+    ) -> KResult<Result<(), SolidError>> {
+        use solidcore::blend::fillet_solver::p1::FilletSurfaceGeneratorType;
+        let constant = |rs: &Vec<f64>| {
+            let (lo, hi) = rs.iter().fold((f64::MAX, f64::MIN), |(lo, hi), &x| (lo.min(x), hi.max(x)));
+            rs.len() == 1 || hi - lo <= 1e-12 * hi
+        };
+        if laws.iter().all(|l| constant(l)) {
+            let radii: Vec<f64> = laws.iter().map(|l| l[0]).collect();
+            let xs = vec![FilletSurfaceGeneratorType::Circular; edges.len()];
+            return Ok(solidcore::blend::fillet_executive::api::fillet_edges_per_edge(
+                k, b, edges, &radii, &xs, 1, 1.0,
+            ));
+        }
+        if laws.iter().any(|l| l != &laws[0]) {
+            return Err(unsupported(
+                "fillet_variable: different radius laws on several edges (solidcore's fillet session \
+                 takes one law for all edges)",
+            ));
+        }
+        let law = make_law(laws[0])?;
+        let hi = laws[0].iter().copied().fold(f64::MIN, f64::max);
+        let r = (|| {
+            {
+                let mut session = FilletSession::new(k, b)?;
+                session.prepare_variable_radius_edges(k, edges, hi, law, 1, 1)?;
+                session.do_fillet(k)?;
+            }
+            stitch_and_orient(k, b, &StitchAndOrientOptions::default())
+        })();
+        b.refresh_cached_topology();
+        Ok(r)
+    }
+
+    /// An equal-distance chamfer as the facade's `blend_core`: the constant-radius solver with
+    /// a linear cross-section, every corner a bevel, `DoFilleting`, then `StitchAndOrient`.
+    fn chamfer_edges(
+        k: &mut solidcore::Kernel,
+        b: &mut solidcore::Brep,
+        edges: &[solidcore::EdgeId],
+        d: f64,
+    ) -> Result<(), SolidError> {
+        let r = (|| {
+            {
+                let mut session = FilletSession::new(k, b)?;
+                session.prepare_constant_radius_edges(k, edges, d, 0, 1, 1.0)?;
+                session.create_corners(k, None)?;
+                for c in session.fillet_corners()? {
+                    session.set_corner_bevel(c, true)?;
+                }
+                session.do_filleting(k, None)?;
+            }
+            stitch_and_orient(k, b, &StitchAndOrientOptions::default())
+        })();
+        b.refresh_cached_topology();
+        r
+    }
+
+    /// Length of `e` (polyline through 33 points of its curve), as the facade's `edge_length`.
+    fn edge_length(k: &solidcore::Kernel, b: &solidcore::Brep, e: Option<solidcore::EdgeId>) -> f64 {
+        let Some(ed) = e.and_then(|e| b.edge(e).ok()) else { return 0.0 };
+        let Some(c) = ed.curve.as_ref() else { return 0.0 };
+        let (t0, t1) = (ed.interval.min(), ed.interval.max());
+        let pts: Vec<DVec3> =
+            (0..=32).filter_map(|j| c.evaluate_point(k, t0 + (t1 - t0) * f64::from(j) / 32.0).ok().map(dv)).collect();
+        pts.windows(2).map(|w| (w[1] - w[0]).length()).sum()
     }
 
     /// What [`Inner::transform`] follows through the transform: vertices with their points,
@@ -1255,6 +1390,253 @@ mod imp {
             Ok(ShapeData::new(acc, tag))
         }
 
+        /// Tags of the faces of `r`, the result of an operation on `inputs`, as the facade's
+        /// `resolve_tags` ("Provenance" in `sc_facade.cpp`): a face with a tag keeps it
+        /// (`verify`: only if an interior point lies on an input face with that tag); a face
+        /// without one, or whose tag is not confirmed, gets the tag of the input face it lies on
+        /// (closest point on the face's surface, within its box), or `op_tag` if it lies on none.
+        /// Returns the number of faces that lie on no input face (new faces).
+        fn resolve_tags(
+            &mut self,
+            r: &mut solidcore::Brep,
+            inputs: &[Shape],
+            op_tag: Tag,
+            verify: bool,
+        ) -> KResult<usize> {
+            let mut tol = 1e-6 * model_diag(&self.k, r);
+            for s in inputs {
+                tol = tol.max(1e-6 * model_diag(&self.k, &s.brep.borrow()));
+            }
+            // (input, face, tag, box) of every tagged input face, once needed
+            let mut boxes: Option<Vec<FaceBox>> = None;
+            let mut fresh = 0;
+            for f in r.face_list().to_vec() {
+                let has = face_tag(r, f);
+                if has.is_some() && !verify {
+                    continue;
+                }
+                let p = match q::face_internal_point(&self.k, r, f) {
+                    Ok(p) => dv(p),
+                    Err(_) => {
+                        if has.is_none() {
+                            set_face_tag(r, f, op_tag)?;
+                            fresh += 1;
+                        }
+                        continue;
+                    }
+                };
+                if boxes.is_none() {
+                    let mut v = Vec::new();
+                    for (i, s) in inputs.iter().enumerate() {
+                        let b = s.brep.borrow();
+                        for &g in b.face_list() {
+                            let Some(t) = face_tag(&b, g) else { continue };
+                            let (lo, hi) = match q::face_bounding_box(&self.k, &b, g, false) {
+                                Ok(x) => (
+                                    DVec3::new(x.min_at(0), x.min_at(1), x.min_at(2)),
+                                    DVec3::new(x.max_at(0), x.max_at(1), x.max_at(2)),
+                                ),
+                                Err(_) => (DVec3::splat(-1e300), DVec3::splat(1e300)),
+                            };
+                            v.push((i, g, t, lo, hi));
+                        }
+                    }
+                    boxes = Some(v);
+                }
+                let (mut best, mut best_tag, mut confirmed, mut on_input) = (f64::MAX, op_tag, false, false);
+                for &(i, g, t, lo, hi) in boxes.iter().flatten() {
+                    if p.cmplt(lo - tol).any() || p.cmpgt(hi + tol).any() {
+                        continue;
+                    }
+                    let b = inputs[i].brep.borrow();
+                    let Ok(Some(srf)) = solidcore::topology::face::p2::surface(&b, g) else { continue };
+                    let Ok(c) = q::surface_closest_point(&self.k, srf, pt(p)) else { continue };
+                    let d = c.closest.distance;
+                    if d > tol {
+                        continue;
+                    }
+                    on_input = true;
+                    if has == Some(t) {
+                        confirmed = true;
+                        break;
+                    }
+                    if d < best {
+                        (best, best_tag) = (d, t);
+                    }
+                }
+                if confirmed {
+                    continue;
+                }
+                if !on_input {
+                    fresh += 1;
+                }
+                set_face_tag(r, f, best_tag)?;
+            }
+            Ok(fresh)
+        }
+
+        /// The points of `edge` at the Greville abscissae of a radius law with `m` control
+        /// radii, as the facade's `sc_law_stations`.
+        pub fn law_stations(&mut self, s: &Shape, edges: &[u32], counts: &[u32]) -> KResult<Vec<Vec<DVec3>>> {
+            if edges.len() != counts.len() {
+                return Err(KernelError::InvalidInput("solidcore: law_stations: one count per edge".into()));
+            }
+            let b = s.brep.borrow();
+            let all = q::get_edges(&b).map_err(|e| err("law_stations", e))?;
+            let mut out = Vec::with_capacity(edges.len());
+            for (&id, &m) in edges.iter().zip(counts) {
+                let e = *all.get(id as usize).ok_or_else(|| {
+                    KernelError::InvalidInput(format!("solidcore: law_stations: edge id {id} out of range"))
+                })?;
+                if !(2..=256).contains(&m) {
+                    return Err(KernelError::InvalidInput("solidcore: a radius law needs 2 to 256 stations".into()));
+                }
+                let ed = b.edge(e).map_err(|e| err("law_stations", e))?;
+                let curve = ed
+                    .curve
+                    .as_ref()
+                    .ok_or_else(|| KernelError::failed("solidcore: law_stations: edge without curve"))?;
+                let (t0, t1) = (ed.interval.min(), ed.interval.max());
+                let mut pts = Vec::with_capacity(m as usize);
+                for g in law_greville(m) {
+                    pts.push(dv(curve
+                        .evaluate_point(&self.k, t0 + g * (t1 - t0))
+                        .map_err(|e| err("law_stations", e))?));
+                }
+                out.push(pts);
+            }
+            Ok(out)
+        }
+
+        /// Fillet (`chamfer`: equal-distance chamfer, corners bevelled) of the edges `ids` (indices
+        /// of [`Inner::edges`]) with size `r`, or with a radius law per edge (`laws`, the values at
+        /// the stations of [`Inner::law_stations`]), as the facade's `do_fillet_like`: edges with
+        /// nothing to blend are skipped, the result is checked (closed if the input is, a volume
+        /// change a blend of that size can make, new faces) and its faces get their tags.
+        pub fn fillet_like(
+            &mut self,
+            s: &Shape,
+            ids: &[u32],
+            r: f64,
+            tag: Tag,
+            chamfer: bool,
+            laws: Option<&[Vec<f64>]>,
+        ) -> KResult<Shape> {
+            let what = if chamfer { "chamfer" } else { "fillet" };
+            let invalid = |m: String| KernelError::InvalidInput(format!("solidcore: {what}: {m}"));
+            let failed = |m: String, edges: Vec<u32>| KernelError::Failed {
+                msg: format!("solidcore: {what}: {m}"),
+                edges,
+                places: Vec::new(),
+            };
+            let mut r = r;
+            if let Some(laws) = laws {
+                if laws.len() != ids.len() || laws.iter().any(Vec::is_empty) {
+                    return Err(invalid("radii for every edge".into()));
+                }
+                r = 0.0;
+                for (&id, l) in ids.iter().zip(laws) {
+                    for &x in l {
+                        if x <= 0.0 || !x.is_finite() {
+                            return Err(KernelError::InvalidInput(format!(
+                                "solidcore: fillet radius must be > 0 (edge {id})"
+                            )));
+                        }
+                        r = r.max(x);
+                    }
+                }
+            }
+            if r <= 0.0 || !r.is_finite() {
+                return Err(invalid("size must be > 0".into()));
+            }
+            if ids.is_empty() {
+                return Err(invalid("no edges given".into()));
+            }
+            // the selection on the shape's own body, in the order of `edges`
+            let (kept, skipped, n_edges) = {
+                let mut b = s.brep.borrow_mut();
+                let all = q::get_edges(&b).map_err(|e| err(what, e))?;
+                let (mut kept, mut skipped) = (Vec::<u32>::new(), Vec::new());
+                for &id in ids {
+                    let &e = all
+                        .get(id as usize)
+                        .ok_or_else(|| invalid(format!("edge id {id} out of range (shape has {} edges)", all.len())))?;
+                    if kept.contains(&id) || skipped.contains(&id) {
+                        continue;
+                    }
+                    // nothing to blend at seams and other tangent-continuous or open edges
+                    if edge::blend_edgeuse(&self.k, &mut b, e).map_err(|e| err(what, e))?.is_some() {
+                        kept.push(id);
+                    } else {
+                        skipped.push(id);
+                    }
+                }
+                (kept, skipped, all.len())
+            };
+            if kept.is_empty() {
+                return Err(failed("none of the edges can be blended (smooth, seam or open edges)".into(), skipped));
+            }
+            let mut b = self.copy(&s.brep.borrow())?;
+            let all = q::get_edges(&b).map_err(|e| err(what, e))?;
+            if all.len() != n_edges {
+                return Err(failed("the B-rep copy changed the edge count".into(), kept));
+            }
+            let sel: Vec<solidcore::EdgeId> = kept.iter().map(|&i| all[i as usize]).collect();
+            let run = if chamfer {
+                chamfer_edges(&mut self.k, &mut b, &sel, r)
+            } else if let Some(laws) = laws {
+                let per_edge: Vec<&Vec<f64>> =
+                    kept.iter().map(|i| &laws[ids.iter().position(|j| j == i).expect("kept id")]).collect();
+                variable_fillet(&mut self.k, &mut b, &sel, &per_edge)?
+            } else {
+                // circular cross-section, G1 (SetFilletParameters as the facade calls it)
+                fillet_edges(&mut self.k, &mut b, &sel, r, 1, 1, 1.0)
+            };
+            run.map_err(|e| match err(what, e) {
+                KernelError::Failed { msg, .. } => KernelError::Failed { msg, edges: kept.clone(), places: Vec::new() },
+                e => e,
+            })?;
+            if b.face_list().is_empty() {
+                return Err(failed("removed all faces".into(), kept));
+            }
+            let t = ShapeData::new(b, tag);
+            if self.is_solid(s) {
+                if !self.is_solid(&t) {
+                    return Err(failed(
+                        "solidcore returned a body that is not closed (faces missing): the blends of \
+                         neighbouring edges collide, size too large for the wall between them?"
+                            .into(),
+                        kept,
+                    ));
+                }
+                // as the facade: at most what a blend of that size can change near the edges
+                let v0 = self.mass_props(s).map_err(|e| check_err(what, e))?.volume;
+                let v1 = self.mass_props(&t).map_err(|e| check_err(what, e))?.volume;
+                let b0 = s.brep.borrow();
+                let reach: f64 = kept
+                    .iter()
+                    .map(|&i| {
+                        let len = edge_length(&self.k, &b0, q::get_edges(&b0).ok().map(|a| a[i as usize]));
+                        20.0 * r * r * len + 10.0 * r * r * r
+                    })
+                    .sum();
+                if v1 <= 1e-9 * v0.abs() || (v1 - v0).abs() > reach + 2e-2 * v0.abs() {
+                    return Err(failed(
+                        format!("solidcore returned a wrong body (volume {v1} instead of about {v0})"),
+                        kept,
+                    ));
+                }
+            }
+            let fresh = {
+                let mut b = t.brep.borrow_mut();
+                self.resolve_tags(&mut b, std::slice::from_ref(s), tag, true)?
+            };
+            if fresh == 0 {
+                return Err(failed(format!("solidcore returned the shape unchanged (size {r} too large?)"), kept));
+            }
+            Ok(t)
+        }
+
         /// Sample points: an interior point (`SmApiFaceInternalPoint`) and the vertices of the
         /// boundary loops; only the vertices while the interior point is not ported.
         pub fn faces(&mut self, s: &Shape) -> KResult<Vec<FaceInfo>> {
@@ -1481,12 +1863,24 @@ impl Kernel for SolidcoreKernel {
         with_sc!(self, "boolean", |i| i.boolean(op, shapes, tag))
     }
 
-    fn fillet(&mut self, _s: &Shape, _edges: &[u32], _r: f64, _tag: Tag) -> KResult<Shape> {
-        Err(unsupported("fillet (no public entry point: SmApiFilletEdges is not ported)"))
+    fn fillet(&mut self, s: &Shape, edges: &[u32], r: f64, tag: Tag) -> KResult<Shape> {
+        let _ = (s, edges, r, tag);
+        with_sc!(self, "fillet", |i| i.fillet_like(s, edges, r, tag, false, None))
     }
 
-    fn chamfer(&mut self, _s: &Shape, _edges: &[u32], _d: f64, _tag: Tag) -> KResult<Shape> {
-        Err(unsupported("chamfer (no public entry point: SmApiChamferFillet is not ported)"))
+    fn chamfer(&mut self, s: &Shape, edges: &[u32], d: f64, tag: Tag) -> KResult<Shape> {
+        let _ = (s, edges, d, tag);
+        with_sc!(self, "chamfer", |i| i.fillet_like(s, edges, d, tag, true, None))
+    }
+
+    fn law_stations(&mut self, s: &Shape, edges: &[u32], counts: &[u32]) -> KResult<Vec<Vec<DVec3>>> {
+        let _ = (s, edges, counts);
+        with_sc!(self, "law_stations", |i| i.law_stations(s, edges, counts))
+    }
+
+    fn fillet_variable(&mut self, s: &Shape, edges: &[u32], radii: &[Vec<f64>], tag: Tag) -> KResult<Shape> {
+        let _ = (s, edges, radii, tag);
+        with_sc!(self, "fillet_variable", |i| i.fillet_like(s, edges, 1.0, tag, false, Some(radii)))
     }
 
     fn extrude(&mut self, p: &PlacedLoop, h: f64, twist: f64, scale: DVec2, tag: Tag) -> KResult<Shape> {

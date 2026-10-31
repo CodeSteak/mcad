@@ -34,8 +34,9 @@ mcad measure teil.mcad -D w=40 --volume all   # teil.mcad: w = 20; d = w / 2; h 
 
 ```sh
 mcad check box.mcad --kernel solidcore
-#   box.mcad:7:5: error (kernel): fillet failed (1 mm): not supported by this kernel: solidcore: fillet (no public entry point: SmApiFilletEdges is not ported)
-#   …   (exit 1; without --features solidcore: exit 2 "--kernel solidcore needs solidcore: build mcad with `--features solidcore` …")
+#   box.mcad: 0 errors, 0 warnings     (without --features solidcore: exit 2 "--kernel solidcore needs solidcore: build mcad with `--features solidcore` …")
+mcad render box.mcad --kernel solidcore
+#   mcad render: not supported by this kernel: solidcore: tessellate (outside solidcore's scope: SmApiTessellate, plan/closure.md)
 ```
 
 ```sh

@@ -8,7 +8,9 @@
 //! (`diff/exact.rs`), solidcore at most as far from it as SMLib; else within the summed
 //! deviations of both kernels from the exact volumes of the operands; else, for curved results,
 //! 3e-5 (both integrate over curved faces, and SMLib fits skins and sweeps less closely: its
-//! sphere r 5 is 7.9e-7 below the exact volume, its twisted bar 1.5e-5 above).
+//! sphere r 5 is 7.9e-7 below the exact volume, its twisted bar 1.5e-5 above); else, for a
+//! result with a fillet or chamfer at or below the node, 1e-4 (both fit the blend surfaces).
+//! Selected edges match in any order.
 //! "Coverage" counts per operation (node label) how many nodes solidcore evaluated like SMLib.
 //! Verdicts: `same`; `unsupported` (solidcore reports the operation, or a query of its result —
 //! faces, edges, volume —, as not supported, also in a warning such as "B-rep from the mesh failed");
@@ -22,7 +24,7 @@
 //!   verdict: "same"|"unsupported"|"blocked"|"differ"|"failed"|"skipped",
 //!   smlib: Metrics, solidcore: Metrics, volume_check: VolumeCheck|null, notes: [string] }`,
 //! `Metrics = { status, volume, exact_volume, curved, faces, edges, selected_edges, message }`,
-//! `VolumeCheck = { rule: "relative"|"exact"|"operands"|"curved"|"none", tolerance, difference,
+//! `VolumeCheck = { rule: "relative"|"exact"|"operands"|"curved"|"blend"|"none", tolerance, difference,
 //!   exact, smlib_error, solidcore_error }`; `summary.volume_rules`: same nodes per rule.
 //! Cost per file (`smlib_cost`, `solidcore_cost`) and in the summary (sums; heap: maximum; plus
 //! `eval_ratio`, `query_ratio` solidcore / SMLib): `{ eval_ms, query_ms, heap_bytes, copies,
@@ -105,6 +107,11 @@ const REL_VOLUME: f64 = 1e-6;
 /// are fitted less closely (twisted bar 8 × 8 × 20, exact 1280: SMLib 1.5e-5 above, solidcore
 /// 6e-7). Largest difference in the corpus: 1.9e-5 (a loft in `planter`).
 const REL_VOLUME_CURVED: f64 = 3e-5;
+/// Results with a fillet or chamfer at or below the node, relative: both kernels fit the blend
+/// surfaces, SMLib less closely (`pillow_block`: its chamfers of 19 edges remove 39.15 mm³, by
+/// Pappus 41.40, solidcore 41.39; a cylinder rim chamfer: SMLib −1.2e-6, solidcore −5.7e-6 of the
+/// exact volume). Largest difference in the corpus: 6.5e-5 (`pillow_block`).
+const REL_VOLUME_BLEND: f64 = 1e-4;
 
 /// One evaluation: (index, label, line, children) and metrics per scene node.
 struct Run {
@@ -275,8 +282,9 @@ where
 /// kernels from the exact volumes of the operands (see `command`). The rules in order:
 /// `relative` (1e-6), `exact` (solidcore at most as far from the exact volume as SMLib, at least
 /// 1e-6), `operands` (no exact value, difference ≤ budget + 1e-6), `curved` (curved faces:
-/// difference ≤ 3e-5, and solidcore within 3e-5 of an exact value); else `none`.
-fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>) -> VolumeCheck {
+/// difference ≤ 3e-5, and solidcore within 3e-5 of an exact value), `blend` (a fillet or chamfer
+/// at or below the node: difference ≤ 1e-4); else `none`.
+fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>, blend: bool) -> VolumeCheck {
     let difference = (x - y).abs();
     let rel = REL_VOLUME * x.abs().max(1e-9);
     let exact = a.exact_volume.filter(|e| *e > 0.0);
@@ -313,6 +321,11 @@ fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>) -> VolumeCheck
     if a.curved && near_exact && difference <= REL_VOLUME_CURVED * x.abs() {
         c.rule = "curved";
         c.tolerance = REL_VOLUME_CURVED * x.abs();
+        return c;
+    }
+    if blend && difference <= REL_VOLUME_BLEND * x.abs() {
+        c.rule = "blend";
+        c.tolerance = REL_VOLUME_BLEND * x.abs();
         return c;
     }
     c.rule = "none";
@@ -353,14 +366,38 @@ fn budgets(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics], b: &[Me
     (0..nodes.len()).map(|i| go(i, nodes, pos, a, b, &mut memo)).collect()
 }
 
+/// Per node: does SMLib blend edges (fillet, chamfer) at the node or below it?
+fn blends(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics]) -> Vec<bool> {
+    fn go(
+        i: usize,
+        nodes: &[NodeRow],
+        pos: &BTreeMap<u32, usize>,
+        a: &[Metrics],
+        memo: &mut Vec<Option<bool>>,
+    ) -> bool {
+        if let Some(v) = memo[i] {
+            return v;
+        }
+        let mut v = !a[i].selected_edges.is_empty();
+        for c in nodes[i].3.iter().filter_map(|c| pos.get(c)) {
+            v |= go(*c, nodes, pos, a, memo);
+        }
+        memo[i] = Some(v);
+        v
+    }
+    let mut memo = vec![None; nodes.len()];
+    (0..nodes.len()).map(|i| go(i, nodes, pos, a, &mut memo)).collect()
+}
+
 fn compare(
     a: &Metrics,
     b: &Metrics,
     budget: Option<f64>,
+    blend: bool,
     notes: &mut Vec<String>,
 ) -> (&'static str, Option<VolumeCheck>) {
     let mut vc = None;
-    let verdict = compare_metrics(a, b, budget, &mut vc, notes);
+    let verdict = compare_metrics(a, b, budget, blend, &mut vc, notes);
     (verdict, vc)
 }
 
@@ -368,6 +405,7 @@ fn compare_metrics(
     a: &Metrics,
     b: &Metrics,
     budget: Option<f64>,
+    blend: bool,
     vc: &mut Option<VolumeCheck>,
     notes: &mut Vec<String>,
 ) -> &'static str {
@@ -390,7 +428,7 @@ fn compare_metrics(
     }
     match (a.volume, b.volume) {
         (Some(x), Some(y)) => {
-            let c = volume_check(x, y, a, budget);
+            let c = volume_check(x, y, a, budget, blend);
             if c.rule == "none" {
                 let exact = c.exact.map(|e| format!(" (exact {e})")).unwrap_or_default();
                 notes.push(format!("volume {x} vs {y}{exact}"));
@@ -410,17 +448,19 @@ fn compare_metrics(
         notes.push(format!("selected edges {} vs {}", a.selected_edges.len(), b.selected_edges.len()));
     } else {
         let size = a.selected_edges.iter().flatten().flat_map(|p| p.iter().map(|x| x.abs())).fold(1.0f64, f64::max);
-        let close = a.selected_edges.iter().zip(&b.selected_edges).all(|(x, y)| {
-            let (ea, eb) = (x.first().zip(x.last()), y.first().zip(y.last()));
-            match (ea, eb) {
-                (Some((a0, a1)), Some((b0, b1))) => {
-                    let d =
-                        |p: &[f64; 3], q: &[f64; 3]| p.iter().zip(q).map(|(u, v)| (u - v).abs()).fold(0.0, f64::max);
-                    let tol = 1e-6 * size;
-                    (d(a0, b0) <= tol && d(a1, b1) <= tol) || (d(a0, b1) <= tol && d(a1, b0) <= tol)
-                }
-                _ => true,
-            }
+        // in any order (the kernels list a Boolean's edges in different orders), either direction
+        let d = |p: &[f64; 3], q: &[f64; 3]| p.iter().zip(q).map(|(u, v)| (u - v).abs()).fold(0.0, f64::max);
+        let tol = 1e-6 * size;
+        let ends = |x: &Vec<[f64; 3]>| x.first().zip(x.last()).map(|(p, q)| (*p, *q));
+        let mut free: Vec<Option<([f64; 3], [f64; 3])>> = b.selected_edges.iter().map(ends).collect();
+        let close = a.selected_edges.iter().all(|x| {
+            let Some((a0, a1)) = ends(x) else { return true };
+            let hit = free.iter().position(|y| {
+                y.is_some_and(|(b0, b1)| {
+                    (d(&a0, &b0) <= tol && d(&a1, &b1) <= tol) || (d(&a0, &b1) <= tol && d(&a1, &b0) <= tol)
+                })
+            });
+            hit.map(|i| free[i] = None).is_some()
         });
         if !close {
             notes.push("selected edges at other positions".into());
@@ -473,6 +513,7 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
             })
             .collect();
         let budget = budgets(nodes, &pos, a, &b);
+        let blend = blends(nodes, &pos, a);
         // own verdict per node, then "blocked" where a descendant is unsupported or failed
         let mut own = Vec::with_capacity(nodes.len());
         for i in 0..nodes.len() {
@@ -480,7 +521,7 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
             if aborted[i] {
                 notes.push("solidcore: evaluation aborted (panic or other tree)".into());
             }
-            let (verdict, vc) = compare(&a[i], &b[i], budget[i], &mut notes);
+            let (verdict, vc) = compare(&a[i], &b[i], budget[i], blend[i], &mut notes);
             own.push((verdict, b[i].clone(), notes, vc));
         }
         fn broken(
@@ -602,12 +643,14 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     ));
     let g = |k: &str| rules.get(k).copied().unwrap_or(0);
     text.push_str(&tr!(
-        "Volumen der gleichen Knoten: relativ 1e-6 {}, exakter Wert {}, Operanden {}, gekrümmt 3e-5 {}\n",
-        "Volume of the same nodes: relative 1e-6 {}, exact value {}, operands {}, curved 3e-5 {}\n",
+        "Volumen der gleichen Knoten: relativ 1e-6 {}, exakter Wert {}, Operanden {}, gekrümmt 3e-5 {}, \
+         Rundung 1e-4 {}\n",
+        "Volume of the same nodes: relative 1e-6 {}, exact value {}, operands {}, curved 3e-5 {}, blend 1e-4 {}\n",
         g("relative"),
         g("exact"),
         g("operands"),
-        g("curved")
+        g("curved"),
+        g("blend")
     ));
     let ratio = |a: f64, b: f64| if a > 0.0 { b / a } else { 0.0 };
     text.push_str(&tr!(

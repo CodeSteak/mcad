@@ -114,6 +114,7 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, twist/scale and loft (plan 1.5) | 101 | 2604 | **2280** | 102 | 172 | 50 | 0 |
 | `bba8d87`, cheap `transform` check | 101 | 2604 | **2299** | 92 | 160 | 53 | 0 |
 | `bba8d87`, face tags and edge information (plan 1.10) | 101 | 2604 | 2299 | 128 | 171 | 6 | 0 |
+| `bba8d87`, fillets and chamfers (plan 1.3) | 101 | 2604 | **2523** | 26 | 47 | 8 | 0 |
 
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
@@ -231,6 +232,50 @@ counted as Booleans losing faces (`hole_plate`, `vent_grille`, `gear`, `grip_she
 or `blocked` now (fillet not wired yet, plan 1.3); nodes: unsupported 92 → 128, blocked 160 →
 171, differ 53 → 6. Left `differ`: `sketch_cable_duct` (the union loses faces), `angle_anchor`,
 `project-housing` (2) and `f08c` (2), all from before.
+
+## Fillets and chamfers (plan 1.3)
+
+`fillet`, `chamfer`, `law_stations` and `fillet_variable` follow the facade's `do_fillet_like`
+and `blend_core` step by step:
+
+| Step | solidcore |
+| --- | --- |
+| selection: edge ids are indices of `edges` on the shape's own body; edges without a blend edge use (`GetBlendEdgeuse`: seams, poles, tangent, open) are skipped, none left → `Failed` with those edges | `topology::edge::blend_edgeuse` |
+| fillet: constant radius, circular cross-section, G1 | `blend::fillet_executive::api::fillet_edges` (`SmApiFilletEdges`) |
+| chamfer: constant-radius solver with a linear cross-section, every corner a bevel, `DoFilleting`, `StitchAndOrient` | `FilletSession`: `prepare_constant_radius_edges` (cross-section 0), `create_corners`, `set_corner_bevel`, `do_filleting`; `stitch_and_orient` |
+| variable radius: per edge the values at the Greville stations of a clamped B-spline law (degree min(3, m − 1)), law curve (r, t, 0); constant values → constant solver | `fillet_edges_per_edge` where every edge is constant, else one law for all edges (`prepare_variable_radius_edges` with a `FilletLawKind::BSpline` law); different laws on several edges → `Unsupported` (the session takes one law; the executive's per-edge laws are not public) |
+| checks: no faces left, open result of a solid, volume change beyond what a blend of that size can make (20 r² per length + 10 r³ per edge + 2 %), no new face ("unchanged, size too large?") → `Failed` with the edges | as the facade |
+| tags: every face of the result checked against the input (`resolve_tags` with verification): a face on an input face keeps that face's tag, the others are new and get the operation's tag | `face_internal_point`, `surface_closest_point` |
+
+Not ported: the facade's retry chain by chain when the blend of all edges fails, and its check for
+self-overlapping faces. Unit tests: `crates/kernel-solidcore/tests/fillets.rs` (box edge: fillet
+box − (1 − π/4) r² l, chamfer box − d²/2 l; all edges of a box with the corner balls; a linear
+radius law; new edges of a union; seams skipped; bad input).
+
+Results (101 files): same 2299 → 2523, unsupported 128 → 26, blocked 171 → 47, differ 6 → 8.
+All fillet and chamfer nodes are `same` except three variable fillets with different laws on
+several edges (all three in `variable_radius`), which are `unsupported`. Two
+changes to `diff-kernels`:
+
+- Selected edges match in any order (solidcore lists a Boolean's edges in another order than
+  SMLib; 12 nodes differed only by that).
+- Rule `blend` (1e-4) for volumes with a fillet or chamfer at or below the node: both kernels
+  fit the blend surfaces, SMLib less closely. `pillow_block`'s `difference(chamfer = 0.5)` (19
+  edges: 3 bore circles, 4 slot loops) removes 41.40 mm³ by Pappus, solidcore 41.39, SMLib 39.15
+  (6.5e-5 of the part); `pipe_clamp`'s `chamfer(0.6)` of a half ring: about 43.02 mm³ estimated,
+  solidcore 43.03, SMLib 42.91 (2.3e-5, the union above it 3.5e-5). Elsewhere both are close:
+  cylinder rim chamfer SMLib −1.2e-6, solidcore −5.7e-6 of the exact volume; tube rim chamfer
+  SMLib +8.2e-6, solidcore −1.2e-6; cylinder rim fillet both 3e-7. 8 nodes use the rule; the
+  blended nodes within 3e-5 count as `curved` (24 → 73).
+
+Left `differ` (8): `sketch_cable_duct` (the union loses faces), `angle_anchor`, `project-housing`
+(2), `f09a` (results that are no manifold solid, Booleans), `f08c` (2) and `f11` (SMLib fails,
+solidcore not). Of the "Booleans that lose faces" of phase 0, the faces were SMLib's chamfers
+and fillets in 25 nodes (plan 1.10). Colour regions: `mcad measure --colors` gives the same
+volume per colour with both kernels for all 37 cases of `tests/color-review/cases` and
+`tests/models/spec/multicolor.mcad`. Evaluation of all 101 files: SMLib 112 s, solidcore 109 s
+(debug build, dependencies `opt-level = 2`); solidcore is slower on `key_rack` (12.8 s vs 5.8 s),
+`mug`, `pen_box` and `wall_hook` (2×), faster on `text_sign` and `f11`.
 
 ## Performance (plan 0.5)
 
@@ -410,7 +455,7 @@ SMLib and with solidcore (`include`/`use`/`import` relative to the file) and com
 node evaluated by SMLib:
 
 - status, volume (rules below), number of faces and edges of the node result (exactly equal),
-  selected edges (fillet/chamfer: count and end points, 1e-6 of the model size);
+  selected edges (fillet/chamfer: count and end points, 1e-6 of the model size, in any order);
 - volume (plan 0.4; JSON `volume_check: {rule, tolerance, difference, exact, smlib_error,
   solidcore_error}` per node, `summary.volume_rules` counts the same nodes per rule). Both
   kernels integrate the volume over the faces; on curved faces SMLib is the less accurate one
@@ -426,6 +471,7 @@ node evaluated by SMLib:
   | `exact` | the exact volume E is known and \|solidcore − E\| / E ≤ max(\|SMLib − E\| / E, 1e-6): solidcore is at least as close to E as SMLib |
   | `operands` | E unknown (Boolean, …): \|SMLib − solidcore\| ≤ Σ (\|SMLib − Eᵢ\| + \|solidcore − Eᵢ\|) + 1e-6 · \|SMLib\| over the nearest descendants with an exact volume Eᵢ (the deviation of the operands carries over to the result) |
   | `curved` | the result has a curved edge, \|SMLib − solidcore\| ≤ 3e-5 · \|SMLib\| and, if E is known, \|solidcore − E\| ≤ 3e-5 · E (integration and fit accuracy; largest difference in the corpus 1.9e-5, a loft; primitives and Booleans of them up to 4.3e-6) |
+  | `blend` | SMLib blends edges (fillet, chamfer) at the node or below it, \|SMLib − solidcore\| ≤ 1e-4 · \|SMLib\| (both fit the blend surfaces, SMLib less closely: see "Fillets and chamfers"; largest difference in the corpus 6.5e-5) |
   | otherwise | `differ` with the note `volume x vs y (exact E)` |
 
   Exact volumes (`crates/cad-cli/src/diff/exact.rs`, a kernel wrapper that carries them next to
@@ -448,9 +494,9 @@ in addition, `tests/openscad-compat/compare.py` and `tests/step/verify.py` must 
 
 The test `diff_kernels_on_examples` (`crates/cad-cli/tests/cli.rs`, only with `--features
 solidcore`) checks that the comparison runs over all 101 examples without a crash, that at
-least 2270 nodes are the same, at most 110 unsupported, at most 50 differ and none fails, that
+least 2510 nodes are the same, at most 30 unsupported, at most 10 differ and none fails, that
 no node differs in its volume alone, that every volume rule is used (exact ≥ 110, operands ≥ 45,
-curved ≤ 30) and that the queries need few copies (< 2500); without the feature
+curved ≤ 85, blend 1 to 15) and that the queries need few copies (< 2500); without the feature
 `diff_kernels_needs_the_feature` checks the build hint. `crates/kernel-solidcore/tests/coverage.rs`
 checks each operation individually (box: volume, area, centroid, bounds; transformation
 and classification correct or `Unsupported`).
