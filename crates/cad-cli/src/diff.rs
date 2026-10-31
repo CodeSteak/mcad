@@ -2,8 +2,12 @@
 //! compares every node (plan sections 2.3 and 8, acceptance test of the switch to solidcore).
 //!
 //! Files are evaluated like the other commands do (`include`/`use`/`import` relative to the file).
-//! Per node evaluated by SMLib: status, volume (relative 1e-6), number of faces and edges of its
-//! result, and the edges selected by fillet/chamfer (count and points, 1e-6 of the size).
+//! Per node evaluated by SMLib: status, volume, number of faces and edges of its result (exactly
+//! equal), and the edges selected by fillet/chamfer (count and points, 1e-6 of the size).
+//! Volumes ([`volume_check`]): relative 1e-6; else, where the exact volume is known
+//! (`diff/exact.rs`), solidcore at most as far from it as SMLib; else within the summed
+//! deviations of both kernels from the exact volumes of the operands; else, for curved results,
+//! 1e-4 (both integrate over curved faces; SMLib's sphere is 4e-4 below the exact volume).
 //! "Coverage" counts per operation (node label) how many nodes solidcore evaluated like SMLib.
 //! Verdicts: `same`; `unsupported` (solidcore reports the operation, or a query of its result —
 //! faces, edges, volume —, as not supported, also in a warning such as "B-rep from the mesh failed");
@@ -15,8 +19,10 @@
 //!   coverage: { label: { nodes, same, unsupported, differ, failed } }, summary }`
 //! with `NodeDiff = { idx, label, line,
 //!   verdict: "same"|"unsupported"|"blocked"|"differ"|"failed"|"skipped",
-//!   smlib: Metrics, solidcore: Metrics, notes: [string] }` and
-//! `Metrics = { status, volume, faces, edges, selected_edges, message }`.
+//!   smlib: Metrics, solidcore: Metrics, volume_check: VolumeCheck|null, notes: [string] }`,
+//! `Metrics = { status, volume, exact_volume, curved, faces, edges, selected_edges, message }`,
+//! `VolumeCheck = { rule: "relative"|"exact"|"operands"|"curved"|"none", tolerance, difference,
+//!   exact, smlib_error, solidcore_error }`; `summary.volume_rules`: same nodes per rule.
 //! Exit code 0 if every node of every file is the same, 1 otherwise, 2 usage error.
 
 use std::collections::BTreeMap;
@@ -33,16 +39,43 @@ use serde_json::json;
 
 use crate::{Fail, Outcome};
 
+mod exact;
+
+use exact::Exact;
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Metrics {
     pub status: String,
     pub volume: Option<f64>,
+    /// Exact volume from the parameters (primitives, plain extrusions, revolutions and their
+    /// affine images; `exact.rs`), `None` where unknown.
+    pub exact_volume: Option<f64>,
+    /// Some edge of the result is not straight (so some face is curved and its volume integral
+    /// is approximate).
+    pub curved: bool,
     pub faces: Option<usize>,
     pub edges: Option<usize>,
     pub selected_edges: Vec<Vec<[f64; 3]>>,
     pub message: Option<String>,
     #[serde(skip)]
     pub unsupported: bool,
+}
+
+/// How the volumes of a node were compared (see [`volume_check`]).
+#[derive(Debug, Clone, Serialize)]
+pub struct VolumeCheck {
+    /// `relative`: |smlib − solidcore| ≤ 1e-6 |smlib|; `exact`: solidcore at most as far from
+    /// the exact volume as SMLib (or within 1e-6 of it); `operands`: the difference is within the
+    /// summed deviations of both kernels from the exact volumes of the operands; `curved`: curved
+    /// faces, within 1e-4 (of SMLib and of an exact value); `none`: none of them.
+    pub rule: &'static str,
+    /// Allowed difference (absolute, mm³) of the rule that applied, or of `relative`.
+    pub tolerance: f64,
+    pub difference: f64,
+    pub exact: Option<f64>,
+    /// |volume − exact| / exact.
+    pub smlib_error: Option<f64>,
+    pub solidcore_error: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -53,29 +86,55 @@ pub struct NodeDiff {
     pub verdict: &'static str,
     pub smlib: Metrics,
     pub solidcore: Metrics,
+    /// Present when both kernels gave a volume.
+    pub volume_check: Option<VolumeCheck>,
     pub notes: Vec<String>,
 }
 
 const UNSUPPORTED: &str = "not supported by this kernel";
 
-/// Evaluates `text` with `kernel` and measures every node.
+/// Volumes agree relatively (planar results, and any result without a better rule).
+const REL_VOLUME: f64 = 1e-6;
+/// Curved results without an exact value: both kernels integrate the volume over curved faces
+/// (SMLib's cylinder r 5 h 10 is 1.6e-4 below the exact volume, its sphere 4e-4).
+const REL_VOLUME_CURVED: f64 = 1e-4;
+
+/// One evaluation: (index, label, line, children) and metrics per scene node.
+struct Run {
+    nodes: Vec<NodeRow>,
+    metrics: Vec<Metrics>,
+}
+
+/// Whether the sample points of an edge lie on one line (within 1e-9 of its length).
+fn straight(pts: &[glam::DVec3]) -> bool {
+    let (Some(&a), Some(&b)) = (pts.first(), pts.last()) else { return true };
+    let d = b - a;
+    let len = d.length();
+    if len <= 1e-12 {
+        // closed edge (full circle): straight only if all points coincide
+        return pts.iter().all(|p| (*p - a).length() <= 1e-9);
+    }
+    pts.iter().all(|p| (*p - a).cross(d).length() / len <= 1e-9 * len)
+}
+
 /// (index, label, line, children) per scene node.
 type NodeRow = (u32, String, u32, Vec<u32>);
 
-fn evaluate<K: Kernel + 'static>(kernel: K, text: &str, file: &Path) -> (Vec<NodeRow>, Vec<Metrics>)
+/// Evaluates `text` with `kernel` and measures every node.
+fn evaluate<K: Kernel + 'static>(kernel: K, text: &str, file: &Path) -> Run
 where
     K::Shape: 'static,
 {
     let mut opts = SessionOptions { auto_root_mesh: false, ..Default::default() };
     opts.eval.max_stack_bytes = 192 << 20;
-    let mut s = Session::new(kernel, opts, std_clock());
+    let mut s = Session::new(Exact(kernel), opts, std_clock());
     // `include`/`use` relative to the file, as in the other commands
     let root = file.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let main = file.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
     s.set_resolver(Box::new(cad_session::FsResolver { root: root.to_path_buf() }), &main);
     s.post(ToEngine::SetSource { text: text.to_string(), version: 1 });
     s.run_to_idle();
-    let Some(d) = s.done() else { return (Vec::new(), Vec::new()) };
+    let Some(d) = s.done() else { return Run { nodes: Vec::new(), metrics: Vec::new() } };
     let scene = d.scene.clone();
     let mut nodes = Vec::new();
     let mut out = Vec::new();
@@ -112,6 +171,10 @@ where
         };
         if matches!(n.status, p::NodeStatus::Ok | p::NodeStatus::Warning) {
             let parts: Vec<_> = s.done().map(|d| d.ev.parts(n.idx).to_vec()).unwrap_or_default();
+            let meshes = s.done().is_some_and(|d| !d.ev.meshes(n.idx).is_empty());
+            if !meshes && !parts.is_empty() {
+                m.exact_volume = parts.iter().map(|p| p.shape.1).sum();
+            }
             let k = s.engine_mut().kernel_mut();
             let mut faces = 0;
             let mut edges = 0;
@@ -119,10 +182,11 @@ where
             // the first failed query; an unsupported query makes the node unsupported
             let mut query_err: Option<String> = None;
             for part in &parts {
-                match (k.faces(&part.shape, 0), k.edges(&part.shape, 0)) {
+                match (k.faces(&part.shape, 0), k.edges(&part.shape, 3)) {
                     (Ok(f), Ok(e)) => {
                         faces += f.len();
                         edges += e.len();
+                        m.curved |= e.iter().any(|e| !straight(&e.points));
                     }
                     (Err(e), _) | (_, Err(e)) => {
                         ok = false;
@@ -150,10 +214,109 @@ where
         }
         out.push(m);
     }
-    (nodes, out)
+    Run { nodes, metrics: out }
 }
 
-fn compare(a: &Metrics, b: &Metrics, notes: &mut Vec<String>) -> &'static str {
+/// Compares the volumes `x` (SMLib) and `y` (solidcore). `budget`: summed deviation of both
+/// kernels from the exact volumes of the operands (see `command`). The rules in order:
+/// `relative` (1e-6), `exact` (solidcore at most as far from the exact volume as SMLib, at least
+/// 1e-6), `operands` (no exact value, difference ≤ budget + 1e-6), `curved` (curved faces:
+/// difference ≤ 1e-4, and solidcore within 1e-4 of an exact value); else `none`.
+fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>) -> VolumeCheck {
+    let difference = (x - y).abs();
+    let rel = REL_VOLUME * x.abs().max(1e-9);
+    let exact = a.exact_volume.filter(|e| *e > 0.0);
+    let err = |v: f64| exact.map(|e| (v - e).abs() / e);
+    let mut c = VolumeCheck {
+        rule: "relative",
+        tolerance: rel,
+        difference,
+        exact,
+        smlib_error: err(x),
+        solidcore_error: err(y),
+    };
+    if difference <= rel {
+        return c;
+    }
+    if let (Some(e), Some(ea), Some(eb)) = (exact, c.smlib_error, c.solidcore_error) {
+        let allowed = ea.max(REL_VOLUME);
+        if eb <= allowed {
+            c.rule = "exact";
+            c.tolerance = allowed * e;
+            return c;
+        }
+    }
+    if let Some(b) = budget
+        && exact.is_none()
+        && difference <= b + rel
+    {
+        c.rule = "operands";
+        c.tolerance = b + rel;
+        return c;
+    }
+    // with an exact value solidcore must also be within 1e-4 of it
+    let near_exact = c.solidcore_error.is_none_or(|e| e <= REL_VOLUME_CURVED);
+    if a.curved && near_exact && difference <= REL_VOLUME_CURVED * x.abs() {
+        c.rule = "curved";
+        c.tolerance = REL_VOLUME_CURVED * x.abs();
+        return c;
+    }
+    c.rule = "none";
+    c
+}
+
+/// Per node: the summed deviation of both kernels from the exact volume, for a node with an
+/// exact volume; else the sum over its children that have one (`None` if none has).
+fn budgets(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics], b: &[Metrics]) -> Vec<Option<f64>> {
+    fn go(
+        i: usize,
+        nodes: &[NodeRow],
+        pos: &BTreeMap<u32, usize>,
+        a: &[Metrics],
+        b: &[Metrics],
+        memo: &mut Vec<Option<Option<f64>>>,
+    ) -> Option<f64> {
+        if let Some(v) = memo[i] {
+            return v;
+        }
+        let own = match (a[i].exact_volume, a[i].volume, b[i].volume) {
+            (Some(e), Some(x), Some(y)) => Some((x - e).abs() + (y - e).abs()),
+            _ => None,
+        };
+        let v = own.or_else(|| {
+            let mut sum = None;
+            for c in nodes[i].3.iter().filter_map(|c| pos.get(c)) {
+                if let Some(v) = go(*c, nodes, pos, a, b, memo) {
+                    *sum.get_or_insert(0.0) += v;
+                }
+            }
+            sum
+        });
+        memo[i] = Some(v);
+        v
+    }
+    let mut memo = vec![None; nodes.len()];
+    (0..nodes.len()).map(|i| go(i, nodes, pos, a, b, &mut memo)).collect()
+}
+
+fn compare(
+    a: &Metrics,
+    b: &Metrics,
+    budget: Option<f64>,
+    notes: &mut Vec<String>,
+) -> (&'static str, Option<VolumeCheck>) {
+    let mut vc = None;
+    let verdict = compare_metrics(a, b, budget, &mut vc, notes);
+    (verdict, vc)
+}
+
+fn compare_metrics(
+    a: &Metrics,
+    b: &Metrics,
+    budget: Option<f64>,
+    vc: &mut Option<VolumeCheck>,
+    notes: &mut Vec<String>,
+) -> &'static str {
     if a.status == "skipped" || a.status == "pending" {
         return "skipped";
     }
@@ -172,7 +335,14 @@ fn compare(a: &Metrics, b: &Metrics, notes: &mut Vec<String>) -> &'static str {
         return "differ";
     }
     match (a.volume, b.volume) {
-        (Some(x), Some(y)) if (x - y).abs() > 1e-6 * x.abs().max(1e-9) => notes.push(format!("volume {x} vs {y}")),
+        (Some(x), Some(y)) => {
+            let c = volume_check(x, y, a, budget);
+            if c.rule == "none" {
+                let exact = c.exact.map(|e| format!(" (exact {e})")).unwrap_or_default();
+                notes.push(format!("volume {x} vs {y}{exact}"));
+            }
+            *vc = Some(c);
+        }
         (Some(_), None) => notes.push("solidcore: no volume".into()),
         _ => {}
     }
@@ -214,6 +384,8 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     let mut text = String::new();
     let mut all_same = true;
     let mut totals: BTreeMap<&'static str, usize> = BTreeMap::new();
+    // same nodes per volume rule
+    let mut rules: BTreeMap<&'static str, usize> = BTreeMap::new();
     if !SolidcoreKernel::available() {
         return Err(Fail::Usage(tr!(
             "diff-kernels braucht solidcore: mcad mit `--features solidcore` bauen \
@@ -224,31 +396,42 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     }
     for f in files {
         let src = std::fs::read_to_string(f).map_err(|e| Fail::Usage(format!("{}: {e}", f.display())))?;
-        let (nodes, a) = evaluate(SmlibKernel::new(), &src, f);
+        let ra = evaluate(SmlibKernel::new(), &src, f);
         let solid =
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| evaluate(SolidcoreKernel::new(), &src, f)));
-        let (nodes_b, b) = solid.unwrap_or_default();
+        let rb = solid.ok();
+        let (nodes, a) = (&ra.nodes, &ra.metrics);
         let mut diffs = Vec::new();
         let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
+        let pos: BTreeMap<u32, usize> = nodes.iter().enumerate().map(|(i, n)| (n.0, i)).collect();
+        // solidcore's metrics per node of the SMLib tree
+        let aborted: Vec<bool> = (0..nodes.len())
+            .map(|i| {
+                !rb.as_ref().is_some_and(|r| r.nodes.get(i).is_some_and(|n| n.0 == nodes[i].0 && n.1 == nodes[i].1))
+            })
+            .collect();
+        let b: Vec<Metrics> = (0..nodes.len())
+            .map(|i| match &rb {
+                Some(r) if !aborted[i] => r.metrics[i].clone(),
+                _ => Metrics { status: "error".into(), ..Default::default() },
+            })
+            .collect();
+        let budget = budgets(nodes, &pos, a, &b);
         // own verdict per node, then "blocked" where a descendant is unsupported or failed
         let mut own = Vec::with_capacity(nodes.len());
-        for (i, (idx, label, _, _)) in nodes.iter().enumerate() {
+        for i in 0..nodes.len() {
             let mut notes = Vec::new();
-            let mb = if nodes_b.get(i).is_some_and(|n| n.0 == *idx && n.1 == *label) {
-                b[i].clone()
-            } else {
+            if aborted[i] {
                 notes.push("solidcore: evaluation aborted (panic or other tree)".into());
-                Metrics { status: "error".into(), ..Default::default() }
-            };
-            let verdict = compare(&a[i], &mb, &mut notes);
-            own.push((verdict, mb, notes));
+            }
+            let (verdict, vc) = compare(&a[i], &b[i], budget[i], &mut notes);
+            own.push((verdict, b[i].clone(), notes, vc));
         }
-        let pos: BTreeMap<u32, usize> = nodes.iter().enumerate().map(|(i, n)| (n.0, i)).collect();
         fn broken(
             i: usize,
             nodes: &[NodeRow],
             pos: &BTreeMap<u32, usize>,
-            own: &[(&str, Metrics, Vec<String>)],
+            own: &[(&str, Metrics, Vec<String>, Option<VolumeCheck>)],
         ) -> bool {
             nodes[i]
                 .3
@@ -262,10 +445,10 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
         let blocked: Vec<bool> = (0..nodes.len())
             .map(|i| {
                 let scope = if nodes[i].1 == "zone" { parent.get(&nodes[i].0).copied().unwrap_or(i) } else { i };
-                matches!(own[i].0, "differ" | "failed") && broken(scope, &nodes, &pos, &own)
+                matches!(own[i].0, "differ" | "failed") && broken(scope, nodes, &pos, &own)
             })
             .collect();
-        for (i, ((idx, label, line, _), (verdict, mb, notes))) in nodes.iter().zip(own).enumerate() {
+        for (i, ((idx, label, line, _), (verdict, mb, notes, volume_check))) in nodes.iter().zip(own).enumerate() {
             let (verdict, notes) = if blocked[i] {
                 ("blocked", vec!["input from an unsupported or failed node".to_string()])
             } else {
@@ -281,6 +464,11 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
             if verdict != "same" && verdict != "skipped" {
                 all_same = false;
             }
+            if verdict == "same"
+                && let Some(c) = &volume_check
+            {
+                *rules.entry(c.rule).or_insert(0) += 1;
+            }
             diffs.push(NodeDiff {
                 idx: *idx,
                 label: label.clone(),
@@ -288,6 +476,7 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
                 verdict,
                 smlib: a[i].clone(),
                 solidcore: mb,
+                volume_check,
                 notes,
             });
         }
@@ -348,6 +537,15 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
         totals.get("differ").unwrap_or(&0),
         totals.get("failed").unwrap_or(&0)
     ));
+    let g = |k: &str| rules.get(k).copied().unwrap_or(0);
+    text.push_str(&tr!(
+        "Volumen der gleichen Knoten: relativ 1e-6 {}, exakter Wert {}, Operanden {}, gekrümmt 1e-4 {}\n",
+        "Volume of the same nodes: relative 1e-6 {}, exact value {}, operands {}, curved 1e-4 {}\n",
+        g("relative"),
+        g("exact"),
+        g("operands"),
+        g("curved")
+    ));
     let j = json!({
         "schema_version": PROTOCOL_VERSION,
         "command": "diff-kernels",
@@ -361,7 +559,8 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
                      "unsupported": totals.get("unsupported").unwrap_or(&0),
                      "blocked": totals.get("blocked").unwrap_or(&0),
                      "differ": totals.get("differ").unwrap_or(&0),
-                     "failed": totals.get("failed").unwrap_or(&0) },
+                     "failed": totals.get("failed").unwrap_or(&0),
+                     "volume_rules": rules },
     });
     Ok(Outcome { json: j, text, errors: !all_same, exit: None })
 }

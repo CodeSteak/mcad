@@ -101,15 +101,27 @@ unlock themselves as soon as solidcore computes correctly.
 | `d4940b6` (2026-10-25) | 64 | 1436 | **516** | 354 | 360 | 206 | 0 |
 | `bba8d87`, `kernel-solidcore` only builds | 64 | 1438 | 369 | 352 | 362 | 355 | 0 |
 | `bba8d87` (2026-10-30, pin), `kernel-solidcore` adapted | 64 | 1438 | **1187** | 84 | 116 | 51 | 0 |
-| `bba8d87`, `include`/`use`/`import` resolved, unsupported warnings count (64 files as before) | 64 | 1462 | 1190 | 90 | 131 | 51 | 0 |
-| `bba8d87`, corpus extended (plan 0.2) | 101 | 2604 | **1927** | 175 | 290 | 212 | 0 |
+| `bba8d87`, `include`/`use`/`import` resolved, unsupported warnings count (64 files as before) | 64 | 1462 | 1190 | 95 | 136 | 41 | 0 |
+| `bba8d87`, corpus extended (plan 0.2) | 101 | 2604 | 1927 | 180 | 295 | 202 | 0 |
+| `bba8d87`, volume against the exact value (plan 0.4), 64 files | 64 | 1462 | 1217 | 95 | 136 | 14 | 0 |
+| `bba8d87`, volume against the exact value (plan 0.4) | 101 | 2604 | **2110** | 180 | 287 | 27 | 0 |
 
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
   it now resolves them relative to the file like the other commands. A node whose warning
   names an unsupported operation counts as `unsupported` (STL import: solidcore has no
-  polyhedron, the mesh stays a mesh and the following `difference` failed). New per corpus
-  (same / nodes): `everyday` 621 / 947, `project-housing` 20 / 33, `everyday/bugs` 96 / 162.
+  polyhedron, the mesh stays a mesh and the following `difference` failed; `hull`/`minkowski`
+  that fall back to their children because an operation is unsupported). New per corpus
+  (same / nodes, before 0.4): `everyday` 621 / 947, `project-housing` 20 / 33,
+  `everyday/bugs` 96 / 162.
+- Volume rule (plan 0.4, see "Acceptance"): the 27 volume-only differences of the 64 files are
+  `same` now (16 by the exact value, 4 by the operands, 7 curved within 1e-4); over the 101 files
+  183 nodes (119 exact, 53 operands, 11 curved). Left `differ` (27): 24 with other faces/edges
+  (Booleans that lose faces: `hole_plate`, `vent_grille`, `chamfers`, `grip_shell`,
+  `variable_radius`, `gear`, `project-housing`, `hull`/`minkowski` inputs; phase 3), and 3
+  explained ones: `angle_anchor` (the implicit union of touching bodies at the top is not a
+  manifold solid for solidcore, its volume query fails) and `f08c`/`f09a` in `tests/everyday/bugs`
+  (SMLib fails there – the documented SMLib bugs – solidcore does not).
 
 - @ `d4940b6`: cylinders, cones, spheres, tori and `revolve` deliver results with the face and
   edge counts of SMLib, but the volumes deviate by about 1e-5 (sphere r 5: 523.6048 instead of
@@ -151,7 +163,7 @@ Remaining nodes:
 
 | Kind | Nodes | Cause |
 | --- | ---: | --- |
-| differ: volume only (≤ 1e-4 relative, same faces/edges) | 27 | curved solids, about 1e-5 off |
+| differ: volume only (≤ 1e-4 relative, same faces/edges) | 27 | curved solids, about 1e-5 off; `same` since plan 0.4 (solidcore is the more accurate one, see "Acceptance") |
 | differ: faces/edges and volume (0.1 % to 95 %) | 24 | booleans that lose faces (`hole_plate`, `vent_grille`, `chamfers`, `grip_shell`), `hull`/`minkowski` |
 | unsupported: sketch profile in `extrude` | 42 | not wired here |
 | unsupported: fillet/chamfer | 9 | API exists, not wired here |
@@ -247,8 +259,29 @@ solidcore is 0.0.x and changes by thousands of commits a week: the pin moves onl
 SMLib and with solidcore (`include`/`use`/`import` relative to the file) and compares every
 node evaluated by SMLib:
 
-- status, volume (relative 1e-6), number of faces and edges of the node result,
+- status, volume (rules below), number of faces and edges of the node result (exactly equal),
   selected edges (fillet/chamfer: count and end points, 1e-6 of the model size);
+- volume (plan 0.4; JSON `volume_check: {rule, tolerance, difference, exact, smlib_error,
+  solidcore_error}` per node, `summary.volume_rules` counts the same nodes per rule). Both
+  kernels integrate the volume over the faces; on curved faces SMLib is the less accurate one
+  (cylinder r 5, h 10: SMLib −1.6e-4 relative to the exact volume, solidcore −4e-7; sphere r 5:
+  −4e-4 against +9e-5), so a fixed 1e-6 against SMLib counted solidcore's better value as a
+  difference. The first rule that holds:
+
+  | Rule | Condition |
+  | --- | --- |
+  | `relative` | \|SMLib − solidcore\| ≤ 1e-6 · \|SMLib\| |
+  | `exact` | the exact volume E is known and \|solidcore − E\| / E ≤ max(\|SMLib − E\| / E, 1e-6): solidcore is at least as close to E as SMLib |
+  | `operands` | E unknown (Boolean, …): \|SMLib − solidcore\| ≤ Σ (\|SMLib − Eᵢ\| + \|solidcore − Eᵢ\|) + 1e-6 · \|SMLib\| over the nearest descendants with an exact volume Eᵢ (the deviation of the operands carries over to the result) |
+  | `curved` | the result has a curved edge, \|SMLib − solidcore\| ≤ 1e-4 · \|SMLib\| and, if E is known, \|solidcore − E\| ≤ 1e-4 · E (integration accuracy) |
+  | otherwise | `differ` with the note `volume x vs y (exact E)` |
+
+  Exact volumes (`crates/cad-cli/src/diff/exact.rs`, a kernel wrapper that carries them next to
+  the shapes): box, sphere, cylinder and cone frustum, torus (R > r), extrusion of a polygon or
+  circle without twist/scale, revolution of a polygon or circle in the xz-plane (Pappus), and the
+  affine image of each (volume × \|det\|). A node's exact volume is the sum over its parts (none
+  if a part has none, or the node has a mesh). Faces and edges must still match exactly, so a
+  Boolean that loses faces stays `differ` whatever its volume;
 - verdict per node: `same`, `unsupported` (solidcore reports the operation or a query of
   its result as unsupported), `blocked` (differs only because an input node
   is unsupported; for `zone` the sibling body), `differ`, `failed` (solidcore fails,

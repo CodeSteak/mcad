@@ -393,21 +393,33 @@ fn diff_kernels_on_examples() {
         }
     }
     if v["solidcore_available"] == true {
-        // solidcore @ bba8d87: primitives, transforms and most booleans agree with SMLib (1187 of
-        // 1438 nodes); sketch profiles, fillets, sweeps and polyhedra are unsupported; cylinders,
-        // spheres, tori and revolutions answer with the right faces and edges but volumes about
-        // 1e-5 off (solidcore's geometry, not the integration accuracy) – they differ, nothing fails
-        assert!(s["unsupported"].as_u64().unwrap() > 50, "{s}");
-        assert!(s["same"].as_u64().unwrap() > 1100, "{s}");
+        // solidcore @ bba8d87 over 101 files (2604 nodes): 2110 same, 180 unsupported (sketch
+        // profiles, fillets, sweeps, polyhedra), 287 blocked, 27 differ, nothing fails. Curved
+        // solids are compared against their exact volume (solidcore is the more accurate one):
+        // no node differs in its volume alone; the differences are Booleans that lose faces
+        assert!(s["unsupported"].as_u64().unwrap() > 150, "{s}");
+        assert!(s["same"].as_u64().unwrap() >= 2080, "{s}");
+        assert!(s["differ"].as_u64().unwrap() <= 30, "{s}");
         assert_eq!(s["failed"].as_u64().unwrap(), 0, "{s}");
-        let curved = ["cylinder", "sphere", "torus", "rotate_extrude"];
+        // every rule is in use, the curved fallback the least
+        let r = &s["volume_rules"];
+        assert!(r["exact"].as_u64().unwrap() > 100 && r["operands"].as_u64().unwrap() > 30, "{r}");
+        assert!(r["curved"].as_u64().unwrap() < 30, "{r}");
         for f in v["files"].as_array().unwrap() {
             for n in f["nodes"].as_array().unwrap() {
-                if n["verdict"] == "differ" && curved.contains(&n["label"].as_str().unwrap()) {
+                if n["verdict"] == "differ" {
                     let notes = n["notes"].as_array().unwrap();
-                    let query_failed =
-                        n["solidcore"]["message"].as_str().is_some_and(|m| m.starts_with("Abfrage Flächen/Kanten"));
-                    assert!(query_failed || notes.iter().all(|x| x.as_str().unwrap().starts_with("volume")), "{n}");
+                    assert!(!notes.iter().all(|x| x.as_str().unwrap().starts_with("volume")), "volume only: {n}");
+                }
+                // a box is exact in both kernels
+                if n["verdict"] == "same" && n["label"] == "box" {
+                    assert_eq!(n["volume_check"]["rule"], "relative", "{n}");
+                }
+                // with an exact value, solidcore is the closer one (or within 1e-6)
+                if n["verdict"] == "same" && n["volume_check"]["rule"] == "exact" {
+                    let c = &n["volume_check"];
+                    let (a, b) = (c["smlib_error"].as_f64().unwrap(), c["solidcore_error"].as_f64().unwrap());
+                    assert!(b <= a.max(1e-6), "{n}");
                 }
             }
         }
