@@ -25,9 +25,9 @@
 //! frames and refusals, so faces and edges come out as SMLib's. Queries work on the
 //! shape's own body ([`ShapeData`]); before an operation changes a body it is copied with
 //! `SmApiBrepCopy` ([`Inner::copy`]), never with `Brep::clone`, whose geometry has no owner.
-//! Faces carry the tag
-//! of the operation that made the shape (solidcore's attribute plumbing for provenance is not
-//! wired here yet).
+//! Face tags (provenance) are solidcore attributes as in the facade (`TAG_ATTR`): set on every
+//! face of a new body, carried by solidcore through copies, transforms and Booleans. `edges`
+//! reports the tags of an edge's faces and marks as `smooth` what SMLib cannot blend.
 //!
 //! Feature `solidcore` (opt-in): link solidcore (git dependency pinned to a commit). Without
 //! it the crate compiles without solidcore and every operation is `Unsupported`.
@@ -93,6 +93,7 @@ mod imp {
     use solidcore::curve::curve::Curve;
     use solidcore::error::EntityRef;
     use solidcore::geom::a_object::BooleanOperation;
+    use solidcore::geom::attribute::{Attribute, Behavior};
     use solidcore::geom::axis2_placement::Axis2Placement;
     use solidcore::geom::tol::{SmallTopoType, zone_tol_3d};
     use solidcore::intersect::point_class::PointClassType;
@@ -132,6 +133,43 @@ mod imp {
 
     pub fn dv(p: solidcore::Point3) -> DVec3 {
         DVec3::new(p.x, p.y, p.z)
+    }
+
+    /// Attribute id of a face's tag (provenance), the SMLib facade's `SC_TAG_ATTR_ID`: a long
+    /// attribute with copy behaviour, so solidcore copies it with the B-rep, keeps it on a face
+    /// that moves into a Boolean's result and gives it to both pieces of a split face (as
+    /// SMLib's default attribute handlers).
+    const TAG_ATTR: u64 = solidcore::geom::attribute::ids::USER_1 + 77;
+
+    fn face_tag(b: &solidcore::Brep, f: solidcore::FaceId) -> Option<Tag> {
+        let v = b.find_attribute(EntityRef::Face(f), TAG_ATTR)?.long_value()?;
+        Tag::try_from(v).ok()
+    }
+
+    fn set_face_tag(b: &mut solidcore::Brep, f: solidcore::FaceId, tag: Tag) -> KResult<()> {
+        let e = EntityRef::Face(f);
+        let old: Vec<_> =
+            b.entity_attributes(e).into_iter().filter(|(_, a)| a.attribute_id() == TAG_ATTR).map(|(h, _)| h).collect();
+        for h in old {
+            b.remove_attribute(e, h).map_err(|e| err("face tag", e))?;
+        }
+        b.add_attribute(e, Attribute::long(TAG_ATTR, i64::from(tag), Behavior::Copy))
+            .map_err(|e| err("face tag", e))?;
+        Ok(())
+    }
+
+    /// Every face of `b` gets `tag` (a new body: primitives, extrusions, sweeps, skins).
+    fn tag_all(b: &mut solidcore::Brep, tag: Tag) -> KResult<()> {
+        for f in b.face_list().to_vec() {
+            set_face_tag(b, f, tag)?;
+        }
+        Ok(())
+    }
+
+    /// A new shape whose faces all carry `tag`.
+    fn made(mut b: solidcore::Brep, tag: Tag) -> KResult<Shape> {
+        tag_all(&mut b, tag)?;
+        Ok(ShapeData::new(b, tag))
     }
 
     /// What [`Inner::transform`] follows through the transform: vertices with their points,
@@ -486,7 +524,7 @@ mod imp {
         }
 
         fn wrap(r: Result<solidcore::Brep, SolidError>, op: &str, tag: Tag) -> KResult<Shape> {
-            r.map(|brep| ShapeData::new(brep, tag)).map_err(|e| err(op, e))
+            made(r.map_err(|e| err(op, e))?, tag)
         }
 
         pub fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Shape> {
@@ -752,7 +790,7 @@ mod imp {
             let refs: Vec<Option<&Curve>> = curves.iter().map(Some).collect();
             let b = sw::create_linear_sweep(&mut self.k, &refs, Vec3::new(0.0, 0.0, h.signum()), h.abs(), true)
                 .map_err(|e| err("extrude", e))?;
-            let s = ShapeData::new(b, tag);
+            let s = made(b, tag)?;
             self.transform(&s, &p.frame)
         }
 
@@ -825,7 +863,7 @@ mod imp {
                 }
             };
             let hint = if polygon { " (polygon profile: open seams between the side faces?)" } else { "" };
-            self.require_solid(ShapeData::new(b, tag), OP, hint)
+            self.require_solid(made(b, tag)?, OP, hint)
         }
 
         /// `sweep` along a polyline or an interpolating spline through `path`, as the SMLib
@@ -984,7 +1022,7 @@ mod imp {
             let b = solidcore::sweep::api_surfaces::create_skin_primitive(&mut self.k, &counts, &refs, degree, true)
                 .map_err(|e| err(what, e))?
                 .brep;
-            self.require_solid(ShapeData::new(b, tag), what, "")
+            self.require_solid(made(b, tag)?, what, "")
         }
 
         /// `extrude` with twist or scale, as the SMLib facade: a skin through `k + 1` sections
@@ -1080,7 +1118,7 @@ mod imp {
                 true,
             )
             .map_err(|e| err("revolve", e))?;
-            Ok(ShapeData::new(b, tag))
+            made(b, tag)
         }
 
         /// Profile curves of a revolve, as the SMLib facade (`revolve_profile_curves`): a
@@ -1245,18 +1283,28 @@ mod imp {
                 if points.is_empty() {
                     return Err(unsupported("faces: no sample point (SmApiFaceInternalPoint not ported)"));
                 }
-                out.push(FaceInfo { id: i as FaceId, tag: s.tag, points });
+                out.push(FaceInfo { id: i as FaceId, tag: face_tag(b, f).unwrap_or(s.tag), points });
             }
             Ok(out)
         }
 
-        /// Start point, `samples` interior points of the curve, end point.
+        /// Start point, `samples` interior points of the curve, end point; the tags of the faces
+        /// (twice the face's for a seam, as the facade's `sc_edges`); `smooth` where solidcore
+        /// finds nothing to blend (`SmEdge::GetBlendEdgeuse` is none: seams, poles, edges
+        /// between faces tangent within 2°, open edges), as SMLib.
         pub fn edges(&mut self, s: &Shape, samples: u32) -> KResult<Vec<EdgeInfo>> {
-            let b = s.brep.borrow();
-            let b = &*b;
+            let mut b = s.brep.borrow_mut();
+            let b = &mut *b;
             let es = q::get_edges(b).map_err(|e| err("edges", e))?;
             let mut out = Vec::with_capacity(es.len());
             for (i, e) in es.into_iter().enumerate() {
+                let smooth =
+                    edge::blend_edgeuse(&self.k, b, e).map_err(|e| err("edges (blend edge use)", e))?.is_none();
+                let faces = edge::faces(b, e, None).map_err(|e| err("edges", e))?;
+                let mut face_tags: Vec<Tag> = faces.iter().map(|&f| face_tag(b, f).unwrap_or(s.tag)).collect();
+                if faces.len() == 1 && edge::edgeuse_count(b, e).map_err(|e| err("edges", e))? >= 4 {
+                    face_tags.push(face_tags[0]);
+                }
                 let ed = b.edge(e).map_err(|e| err("edges", e))?;
                 let curve =
                     ed.curve.as_ref().ok_or_else(|| KernelError::failed("solidcore: edges: edge without curve"))?;
@@ -1273,7 +1321,7 @@ mod imp {
                     points.push(at(t0 + (t1 - t0) * f64::from(j) / f64::from(samples + 1))?);
                 }
                 points.push(end(edge::end_vertex(b, e), t1)?);
-                out.push(EdgeInfo { id: i as u32, points, face_tags: vec![s.tag, s.tag], smooth: false });
+                out.push(EdgeInfo { id: i as u32, points, face_tags, smooth });
             }
             Ok(out)
         }

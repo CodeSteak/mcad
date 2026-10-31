@@ -113,6 +113,7 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, sweeps (plan 1.4) | 101 | 2604 | 2262 | 108 | 184 | 50 | 0 |
 | `bba8d87`, twist/scale and loft (plan 1.5) | 101 | 2604 | **2280** | 102 | 172 | 50 | 0 |
 | `bba8d87`, cheap `transform` check | 101 | 2604 | **2299** | 92 | 160 | 53 | 0 |
+| `bba8d87`, face tags and edge information (plan 1.10) | 101 | 2604 | 2299 | 128 | 171 | 6 | 0 |
 
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
@@ -211,6 +212,25 @@ Other findings: the adapter's `transform` check rejected a few rigid transforms 
 whose centroid moved by 1e-6 (`wall_hook`, `f09b`, `knob_mirror`'s mirror): the tolerance of the
 check was tighter than the volume integration (fixed since, see "Transform check"). SMLib's skins are less accurate than solidcore's
 (twisted square bar 8 × 8 × 20, exact 1280: SMLib +1.5e-5, solidcore +6e-7 relative).
+
+## Face tags and edge information (plan 1.10)
+
+Face tags are solidcore attributes as in the SMLib facade: a long attribute (id
+`SM_AI_USER_1 + 77`, the facade's `SC_TAG_ATTR_ID`) with copy behaviour on every face of a new
+body (primitives, extrusions, revolutions, sweeps, skins). solidcore carries it as SMLib's default
+handlers do (solidcore#1462): `SmApiBrepCopy` copies it, a face that moves into a Boolean's result
+keeps it, both pieces of a split face get it, a face merged with a coplanar one keeps its own.
+`faces` reports the attribute, `edges` the tags of an edge's faces (twice the face's for a seam,
+as `sc_edges`) and `smooth` where `SmEdge::GetBlendEdgeuse` finds nothing to blend (seams, poles,
+faces tangent within 2°, open edges), as SMLib. Unit tests: `crates/kernel-solidcore/tests/provenance.rs`.
+
+With tags, `union`/`difference(fillet = …, chamfer = …)` find the new edges of a Boolean instead
+of skipping the blend: the 22 `differ` of the fillet-on-Boolean nodes and 25 more that were
+counted as Booleans losing faces (`hole_plate`, `vent_grille`, `gear`, `grip_shell`, `chamfers`,
+`variable_radius`, `f09a`: the missing faces were SMLib's chamfers and fillets) are `unsupported`
+or `blocked` now (fillet not wired yet, plan 1.3); nodes: unsupported 92 → 128, blocked 160 →
+171, differ 53 → 6. Left `differ`: `sketch_cable_duct` (the union loses faces), `angle_anchor`,
+`project-housing` (2) and `f08c` (2), all from before.
 
 ## Performance (plan 0.5)
 
