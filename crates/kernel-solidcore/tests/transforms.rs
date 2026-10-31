@@ -1,12 +1,12 @@
 //! Transforms of curved solids followed by a Boolean (tester finding on task C): every primitive
-//! under rotations, mirrors, uniform scales and their products, cut by a half-space. The two
+//! under rotations, mirrors, uniform scales, shears and their products, cut by a half-space. The two
 //! halves add up to the exact volume of the transformed solid (a Boolean that misses the
 //! intersection returns the whole body or none).
 
 #![cfg(feature = "solidcore")]
 
 use cad_kernel::{BoolOp, Kernel, KernelError, Loop, PlacedLoop};
-use glam::{DMat4, DVec2, DVec3};
+use glam::{DMat4, DVec2, DVec3, DVec4};
 use kernel_solidcore::{Shape, SolidcoreKernel};
 use std::f64::consts::{PI, TAU};
 
@@ -58,6 +58,26 @@ fn transformed_solids_cut_by_a_half_space() {
         ("rotsc", rot * sc),
         ("neg", DMat4::from_scale(DVec3::splat(-1.0)) * rot),
         ("sc", DMat4::from_scale(DVec3::splat(0.3))),
+        // shear (plan 1.8): split into rotations and a scale along the axes
+        (
+            "shear",
+            DMat4::from_cols(
+                DVec4::new(1.0, 0.0, 0.0, 0.0),
+                DVec4::new(0.3, 1.0, 0.0, 0.0),
+                DVec4::new(0.5, 0.2, 1.0, 0.0),
+                DVec4::new(1.0, 2.0, 0.5, 1.0),
+            ),
+        ),
+        (
+            "shear·mirror",
+            mirror(DVec3::Y)
+                * DMat4::from_cols(
+                    DVec4::new(1.2, 0.4, 0.0, 0.0),
+                    DVec4::new(0.0, 0.8, 0.0, 0.0),
+                    DVec4::new(0.0, 0.3, 1.5, 0.0),
+                    DVec4::W,
+                ),
+        ),
     ];
     let mut failures = Vec::new();
     for (pname, p, exact) in primitives(&mut k) {
@@ -85,4 +105,21 @@ fn transformed_solids_cut_by_a_half_space() {
         }
     }
     assert!(failures.is_empty(), "{failures:#?}");
+}
+
+/// A sheared box (plan 1.8): exact volume, and a fillet of an edge between two faces the shear
+/// keeps perpendicular (y = 0, z = 10, along x) removes (1 − π/4) r² per length.
+#[test]
+fn sheared_box_and_fillet() {
+    let mut k = SolidcoreKernel::new();
+    let b = k.make_box(DVec3::ZERO, DVec3::splat(10.0), 1).unwrap();
+    let m = DMat4::from_cols(DVec4::X, DVec4::new(0.4, 1.0, 0.0, 0.0), DVec4::Z, DVec4::W);
+    let s = k.transform(&b, &m).unwrap();
+    assert!((k.mass_props(&s).unwrap().volume - 1000.0).abs() < 1e-9);
+    let es = k.edges(&s, 1).unwrap();
+    let e = es.iter().find(|e| e.points.iter().all(|p| p.y.abs() < 1e-9 && (p.z - 10.0).abs() < 1e-9)).unwrap().id;
+    let f = k.fillet(&s, &[e], 1.0, 2).unwrap();
+    let v = k.mass_props(&f).unwrap().volume;
+    let exact = 1000.0 - (1.0 - PI / 4.0) * 10.0;
+    assert!((v - exact).abs() < 1e-6 * exact, "{v} vs {exact}");
 }

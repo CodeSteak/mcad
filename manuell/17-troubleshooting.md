@@ -19,7 +19,7 @@
 | `mcad ui …` exit 3 | no desktop UI running; work headless |
 | exit 2 "--kernel solidcore needs solidcore: build mcad with `--features solidcore` …" (or `MCAD_KERNEL=solidcore …`) | this `mcad` was built without solidcore: `cargo build -p cad-cli --features solidcore`, or use SMLib (default; unset `MCAD_KERNEL`) |
 | exit 2 "MCAD_KERNEL: unknown kernel `x` (smlib or solidcore)" | wrong value in the environment variable |
-| "not supported by this kernel: solidcore: …" (kernel error, `render`/`measure`/`export` exit 3) | the operation is not wired to solidcore yet (tessellation for `render`, `measure`, STL/3MF and the assert checks, …) or solidcore cannot do it (shear in `multmatrix`; variable-radius fillet with different laws on several edges: "fillet_variable: different radius laws on several edges"): use the default kernel SMLib |
+| "not supported by this kernel: solidcore: …" (kernel error, `render`/`measure`/`export` exit 3) | the operation is not wired to solidcore yet (tessellation for `render`, `measure`, STL/3MF and the assert checks, …) or solidcore cannot do it (variable-radius fillet with different laws on several edges: "fillet_variable: different radius laws on several edges"): use the default kernel SMLib |
 | `diff-kernels --brep`: "line N … [B-rep]: surfaces {\"plane\": 6} vs {\"bspline\": 6}" after a `mirror` | solidcore turns every surface into a B-spline under a mirror (negative scale); geometry and volume are the same |
 | `diff-kernels --brep`: "N faces with other tags" after a `union` of coplanar faces | the kernels keep a different operand's tag on a merged face |
 | "--ao only applies with --style studio" (also `--light`, `--shadows`, `--ground`, `--edges` …) | studio settings need `--style studio` |

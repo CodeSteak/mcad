@@ -9,8 +9,9 @@
 //! deviations of both kernels from the exact volumes of the operands; else, for curved results,
 //! 3e-5 (both integrate over curved faces, and SMLib fits skins and sweeps less closely: its
 //! sphere r 5 is 7.9e-7 below the exact volume, its twisted bar 1.5e-5 above); else, for a
-//! result with a fillet or chamfer at or below the node, 1e-4 of the blended bodies (both fit the
-//! blend surfaces): of the volume of the nearest blend nodes at or below it, not of the node.
+//! result with a fillet, chamfer, thicken, shell or offset at or below the node, 1e-4 of those bodies
+//! (both fit the blend and offset surfaces): of the volume of the nearest such nodes at or below it,
+//! not of the node.
 //! Selected edges match in any order, by all their sample points (either direction; another
 //! parameterisation or start point within the chordal sag of the other's samples).
 //! "Coverage" counts per operation (node label) how many nodes solidcore evaluated like SMLib.
@@ -405,9 +406,11 @@ fn budgets(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics], b: &[Me
     (0..nodes.len()).map(|i| go(i, nodes, pos, a, b, &mut memo)).collect()
 }
 
-/// Per node where SMLib blends edges (fillet, chamfer) at the node or below it: the volume
-/// tolerance of rule `blend`, 1e-4 of the volume of the blend nodes (the node itself if it
-/// blends, else the sum over its children); `None` without a blend.
+/// Per node where SMLib blends edges (fillet, chamfer) or offsets faces (`thicken`, `shell`,
+/// `offset`: SMLib approximates offset surfaces as B-splines; a thickened B-spline sheet in
+/// `freeform_lid`: SMLib 3.3e-5 off a numerical integration, solidcore 1.6e-6) at the node or
+/// below it: the volume tolerance of rule `blend`, 1e-4 of the volume of those nodes (the node
+/// itself if it is one, else the sum over its children); `None` without one.
 fn blends(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics]) -> Vec<Option<f64>> {
     fn go(
         i: usize,
@@ -419,7 +422,8 @@ fn blends(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics]) -> Vec<O
         if let Some(v) = memo[i] {
             return v;
         }
-        let v = if a[i].selected_edges.is_empty() {
+        let own = !a[i].selected_edges.is_empty() || matches!(nodes[i].1.as_str(), "thicken" | "shell" | "offset");
+        let v = if !own {
             let mut sum = None;
             for c in nodes[i].3.iter().filter_map(|c| pos.get(c)) {
                 if let Some(t) = go(*c, nodes, pos, a, memo) {

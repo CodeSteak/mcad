@@ -353,6 +353,67 @@ mod imp {
         }
     }
 
+    /// Singular value decomposition A = U · diag(σ) · Vᵀ of a regular 3 × 3 matrix with U and V
+    /// rotations (determinant 1); a mirror makes the last σ negative. Jacobi rotations on AᵀA.
+    pub(crate) fn svd3(a: &glam::DMat3) -> (glam::DMat3, DVec3, glam::DMat3) {
+        use glam::DMat3;
+        let mut s = a.transpose() * *a;
+        let mut v = DMat3::IDENTITY;
+        for _ in 0..64 {
+            let off = s.x_axis.y.abs() + s.x_axis.z.abs() + s.y_axis.z.abs();
+            if off <= 1e-30 * (s.x_axis.x.abs() + s.y_axis.y.abs() + s.z_axis.z.abs()) {
+                break;
+            }
+            for (p, q) in [(0usize, 1usize), (0, 2), (1, 2)] {
+                let spq = s.col(q)[p];
+                if spq == 0.0 {
+                    continue;
+                }
+                let (spp, sqq) = (s.col(p)[p], s.col(q)[q]);
+                let theta = (sqq - spp) / (2.0 * spq);
+                let t = theta.signum() / (theta.abs() + (theta * theta + 1.0).sqrt());
+                let t = if theta == 0.0 { 1.0 } else { t };
+                let cs = 1.0 / (t * t + 1.0).sqrt();
+                let sn = t * cs;
+                let mut j = DMat3::IDENTITY;
+                let mut cols = [j.x_axis, j.y_axis, j.z_axis];
+                cols[p][p] = cs;
+                cols[q][q] = cs;
+                cols[q][p] = sn;
+                cols[p][q] = -sn;
+                j = DMat3::from_cols(cols[0], cols[1], cols[2]);
+                s = j.transpose() * s * j;
+                v *= j;
+            }
+        }
+        let mut lam = DVec3::new(s.x_axis.x, s.y_axis.y, s.z_axis.z).max(DVec3::ZERO);
+        let mut vc = [v.x_axis, v.y_axis, v.z_axis];
+        // largest first
+        for i in 0..3 {
+            for j in i + 1..3 {
+                if lam[j] > lam[i] {
+                    let (x, y) = (lam[i], lam[j]);
+                    lam[i] = y;
+                    lam[j] = x;
+                    vc.swap(i, j);
+                }
+            }
+        }
+        if DMat3::from_cols(vc[0], vc[1], vc[2]).determinant() < 0.0 {
+            vc[2] = -vc[2];
+        }
+        let v = DMat3::from_cols(vc[0], vc[1], vc[2]);
+        let mut sigma = DVec3::new(lam.x.sqrt(), lam.y.sqrt(), lam.z.sqrt());
+        let av = *a * v;
+        let mut uc = [av.x_axis / sigma.x, av.y_axis / sigma.y, av.z_axis / sigma.z];
+        // the smallest column again from the others (accuracy), its sign from A
+        let n = uc[0].cross(uc[1]).normalize();
+        let sgn = if n.dot(uc[2]) < 0.0 { -1.0 } else { 1.0 };
+        uc[2] = n;
+        sigma.z *= sgn;
+        (DMat3::from_cols(uc[0], uc[1], uc[2]), sigma, v)
+    }
+
     /// Is the linear part of `f` a similarity (as the facade's `similarity`)?
     fn similar(f: &DMat4) -> bool {
         let c = [f.x_axis.truncate(), f.y_axis.truncate(), f.z_axis.truncate()];
@@ -737,6 +798,14 @@ mod imp {
         }
 
         pub fn transform(&mut self, s: &Shape, m: &DMat4) -> KResult<Shape> {
+            // shear (plan 1.8): A = U Σ Vᵀ, the rotation Vᵀ first, then the scale Σ along the
+            // axes and the placement U (with the translation); exact, since the scale turns
+            // every curve and surface into a B-spline (`turn_to_nurbs`) and maps its control
+            // points, and a NURBS under an affine map is the NURBS of the mapped control points
+            if let Some((first, second)) = Self::shear_split(m)? {
+                let r = self.transform(s, &first)?;
+                return self.transform(&r, &second);
+            }
             let Some((pl, scale)) = Self::placement(m)? else {
                 return Ok(s.clone());
             };
@@ -758,6 +827,29 @@ mod imp {
                 *t.derived.borrow_mut() = Some((Rc::downgrade(s), *m));
             }
             Ok(t)
+        }
+
+        /// For a matrix whose linear part is no scale along orthogonal axes followed by a
+        /// rotation (shear, a scale along skew axes): `(Vᵀ, T·U·Σ)` from the singular value
+        /// decomposition A = U Σ Vᵀ (U, V rotations, a mirror as a negative σ), so that
+        /// `m = second · first`; `None` otherwise.
+        fn shear_split(m: &DMat4) -> KResult<Option<(DMat4, DMat4)>> {
+            let a = glam::DMat3::from_mat4(*m);
+            let c = [a.x_axis, a.y_axis, a.z_axis];
+            let l = c.map(|v| v.length());
+            let orthogonal = [(0, 1), (0, 2), (1, 2)].iter().all(|&(i, j)| c[i].dot(c[j]).abs() <= 1e-9 * l[i] * l[j]);
+            if orthogonal || !a.is_finite() || a.determinant().abs() < 1e-18 {
+                return Ok(None);
+            }
+            let (u, sigma, v) = svd3(&a);
+            let first = DMat4::from_mat3(v.transpose());
+            let second = DMat4::from_translation(m.w_axis.truncate()) * DMat4::from_mat3(u) * DMat4::from_scale(sigma);
+            // the split reproduces the matrix
+            let back = second * first;
+            if !back.abs_diff_eq(*m, 1e-9 * (1.0 + m.to_cols_array().iter().fold(0.0f64, |x, y| x.max(y.abs())))) {
+                return Err(unsupported("transform: shear (the matrix could not be split into rotations and a scale)"));
+            }
+            Ok(Some((first, second)))
         }
 
         /// `SmBrep::Transform` of `b` as the facade's `apply_matrix`: without the tolerance

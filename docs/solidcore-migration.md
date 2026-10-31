@@ -2,7 +2,7 @@
 
 Work plan up to the switch: [`solidcore-plan.md`](solidcore-plan.md).
 
-As of: 2026-10-31 (phase 0 of the plan done; phase 1: 1.1–1.5, 1.9, 1.10 and a cheap transform check done) · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
+As of: 2026-10-31 (phase 0 of the plan done; phase 1 done except a variable fillet with several radius laws, see the plan) · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
 
 ## Status
 
@@ -119,6 +119,7 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, neutral B-rep (plan 1.11), tester findings of task C | 101 | 2604 | **2523** | 26 | 47 | 8 | 0 |
 | `bba8d87`, polyhedra (plan 1.7) | 101 | 2604 | **2545** | 17 | 34 | 8 | 0 |
 | `bba8d87`, offset, shell, thicken, NURBS surface (plan 1.6) | 101 | 2604 | **2581** | 5 | 6 | 12 | 0 |
+| `bba8d87`, shear (plan 1.8), set_draft/shape_bytes/export (1.12), rule `blend` with offsets: end of phase 1 | 101 | 2604 | **2589** | 3 | 3 | 9 | 0 |
 
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
@@ -505,8 +506,9 @@ solidcore not).
 ## What is missing (in solidcore or here)
 
 1. ~~Primitives other than the box~~ (works at `bba8d87`).
-2. ~~A transformation that carries curves and faces along~~ (works at `bba8d87`); still missing:
-   the 4×4 matrix variant (shear, e.g. `multmatrix`).
+2. ~~A transformation that carries curves and faces along~~ (works at `bba8d87`); the 4×4 matrix
+   variant (shear, e.g. `multmatrix`) is not ported, the adapter splits such a matrix into a
+   rotation, a scale along the axes and a rotation (plan 1.8).
 3. Booleans that keep all faces (see "State at `bba8d87`"); ~~point classification~~ (works).
 4. ~~Public fillet/chamfer API~~ (exists at `bba8d87`; wired here, plan 1.3); still missing: a
    public per-edge radius law in `FilletSession` (the executive has `var_rad_laws` per edge).
@@ -609,7 +611,7 @@ node evaluated by SMLib:
   | `exact` | the exact volume E is known and \|solidcore − E\| / E ≤ max(\|SMLib − E\| / E, 1e-6): solidcore is at least as close to E as SMLib |
   | `operands` | E unknown (Boolean, …): \|SMLib − solidcore\| ≤ Σ (\|SMLib − Eᵢ\| + \|solidcore − Eᵢ\|) + 1e-6 · \|SMLib\| over the nearest descendants with an exact volume Eᵢ (the deviation of the operands carries over to the result) |
   | `curved` | the result has a curved edge, \|SMLib − solidcore\| ≤ 3e-5 · \|SMLib\| and, if E is known, \|solidcore − E\| ≤ 3e-5 · E (integration and fit accuracy; largest difference in the corpus 1.9e-5, a loft; primitives and Booleans of them up to 4.3e-6) |
-  | `blend` | SMLib blends edges (fillet, chamfer) at the node or below it, \|SMLib − solidcore\| ≤ 1e-4 · \|SMLib\| (both fit the blend surfaces, SMLib less closely: see "Fillets and chamfers"; largest difference in the corpus 6.5e-5) |
+  | `blend` | SMLib blends edges (fillet, chamfer) or offsets faces (`thicken`, `shell`, `offset`) at the node or below it, \|SMLib − solidcore\| ≤ 1e-4 of the volume of the nearest such nodes at or below it (both fit the blend and offset surfaces, SMLib less closely: see "Fillets and chamfers"; largest difference in the corpus 6.5e-5; `freeform_lid`'s thickened sheet: SMLib 3.3e-5 off a numerical integration of the offset volume, solidcore 1.6e-6) |
   | otherwise | `differ` with the note `volume x vs y (exact E)` |
 
   Exact volumes (`crates/cad-cli/src/diff/exact.rs`, a kernel wrapper that carries them next to
@@ -628,13 +630,14 @@ Exit code 0 only if all nodes of all files are `same`. The switch happens only w
 `diff-kernels` ends with 0 over all examples (`tests/models/openscad-compat`, `tests/models/spec`,
 `tests/models/everyday`, `tests/models/project-housing`, `tests/everyday/bugs`);
 in addition, `tests/openscad-compat/compare.py` and `tests/step/verify.py` must still pass with solidcore
-(for this `kernel-solidcore` still needs `tessellate` and `brep`).
+(for this `kernel-solidcore` still needs `tessellate`; `brep` exists since plan 1.11).
 
 The test `diff_kernels_on_examples` (`crates/cad-cli/tests/cli.rs`, only with `--features
 solidcore`) checks that the comparison runs over all 101 examples without a crash, that at
-least 2510 nodes are the same, at most 30 unsupported, at most 10 differ and none fails, that
-no node differs in its volume alone, that every volume rule is used (exact ≥ 110, operands ≥ 45,
-curved ≤ 85, blend 1 to 15) and that the queries need few copies (< 2500); without the feature
+least 2575 nodes are the same, at most 5 unsupported, at most 14 differ and none fails, that
+no node differs in its volume alone (except `mug`'s fillet after a shell, undecided), that every
+volume rule is used (exact ≥ 110, operands ≥ 45, curved ≤ 95, blend 1 to 20) and that the
+queries need few copies (< 2500); without the feature
 `diff_kernels_needs_the_feature` checks the build hint. `crates/kernel-solidcore/tests/coverage.rs`
 checks each operation individually (box: volume, area, centroid, bounds; transformation
 and classification correct or `Unsupported`).
