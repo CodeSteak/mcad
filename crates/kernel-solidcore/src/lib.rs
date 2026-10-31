@@ -34,7 +34,8 @@
 //! and chamfers follow the facade's `do_fillet_like` (`SmApiFilletEdges`, equal-distance chamfer
 //! with bevelled corners, radius laws as B-splines at the Greville stations, the same checks of
 //! the result, self-overlap as `invalid_faces`, tags resolved as `resolve_tags`); the facade's
-//! retry chain by chain after a failed fillet is not ported. `brep` maps the B-rep to the
+//! retry chain by chain after a failed fillet is not ported; `set_draft` skips the fillet checks
+//! as the facade's `g_draft`. `brep` maps the B-rep to the
 //! neutral one as the facade's `sc_brep` (`brep.rs`).
 //!
 //! Feature `solidcore` (opt-in): link solidcore (git dependency pinned to a commit). Without
@@ -2134,8 +2135,33 @@ impl Kernel for SolidcoreKernel {
         with_sc!(self, "brep", |i| i.brep(s).map(|(b, _)| b))
     }
 
+    /// As kernel-smlib: no kernel export, STEP is written from [`Kernel::brep`] (`cad-step`).
     fn export(&mut self, _shapes: &[Shape], _fmt: cad_kernel::ExportFormat) -> KResult<Vec<u8>> {
-        Err(unsupported("export (not wired in kernel-solidcore; STEP goes through `brep`)"))
+        Err(KernelError::Unsupported("export".into()))
+    }
+
+    /// An estimate from the topology as kernel-smlib's (a fixed part, a part per face and per
+    /// edge), with its constants scaled by the heap solidcore holds against SMLib (0.6 on the
+    /// largest example, plan 0.5).
+    fn shape_bytes(&mut self, s: &Shape) -> usize {
+        #[cfg(feature = "solidcore")]
+        {
+            let b = s.brep.borrow();
+            (8 << 10) + b.face_list().len() * (20 << 10) + b.edge_list().len() * (600)
+        }
+        #[cfg(not(feature = "solidcore"))]
+        {
+            let _ = s;
+            16 << 10
+        }
+    }
+
+    fn set_draft(&mut self, draft: bool) {
+        #[cfg(feature = "solidcore")]
+        {
+            self.inner.draft = draft;
+        }
+        let _ = draft;
     }
 
     fn mass_props(&mut self, s: &Shape) -> KResult<MassProps> {

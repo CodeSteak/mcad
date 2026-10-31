@@ -286,6 +286,14 @@ STEP export goes through the neutral B-rep and works with solidcore: `tests/step
 polyhedra (1.7), `asserts` stops at its asserts, which need the tessellation (phase 2).
 `mcad measure` needs the tessellation as well (`MeasurePart.mesh`).
 
+## Draft mode, cache estimate, export (plan 1.12)
+
+| Kernel operation | SMLib (facade, kernel-smlib) | solidcore |
+| --- | --- | --- |
+| `set_draft` | `g_draft`: fillets skip `invalid_faces` and the volume check, Booleans take SMLib's result without the plausibility check (if it succeeds and is closed) | the same for fillets; the adapter's Booleans have no plausibility check to skip |
+| `shape_bytes` | 8 KiB + 32 KiB per face + 1 KiB per edge (measured over the examples) | 8 KiB + 20 KiB per face + 600 B per edge: the same form, scaled by the heap solidcore holds against SMLib (0.6 on the largest example, plan 0.5); not measured per shape |
+| `export` | not implemented (`Unsupported("export")`); STEP goes through `brep` and `cad-step` | the same |
+
 ## Offset, shell, thicken, NURBS surface (plan 1.6)
 
 At `bba8d87` solidcore's `SmApiShellBrepFull` and `SmApiOffsetBrepFull` work (at `c9de85d` the

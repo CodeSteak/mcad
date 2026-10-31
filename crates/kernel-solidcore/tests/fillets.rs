@@ -162,3 +162,19 @@ fn oversize_fillet_overlaps_itself() {
     let v = k.mass_props(&f).unwrap().volume;
     assert!((v - exact).abs() < 1e-4 * exact, "{v} vs {exact}");
 }
+
+/// Draft mode (plan 1.12): as the facade's `g_draft`, fillets skip the self-overlap and volume
+/// checks (results only for a temporary display while a handle is dragged).
+#[test]
+fn draft_skips_the_checks() {
+    let mut k = SolidcoreKernel::new();
+    let b = k.make_box(DVec3::ZERO, DVec3::splat(10.0), 1).unwrap();
+    let all: Vec<u32> = (0..12).collect();
+    k.set_draft(true);
+    assert!(k.fillet(&b, &all, 6.0, 2).is_ok());
+    k.set_draft(false);
+    assert!(k.fillet(&b, &all, 6.0, 2).is_err());
+    // the cache estimate grows with the topology
+    let f = k.fillet(&b, &all, 1.0, 2).unwrap();
+    assert!(k.shape_bytes(&f) > k.shape_bytes(&b));
+}
