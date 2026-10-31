@@ -335,6 +335,13 @@ pub(crate) fn face_sample(
     Some((p, outward(k, b, f, uv)?))
 }
 
+/// Whether `b` has a solid region (neither the infinite one nor a void).
+pub(crate) fn has_solid_region(b: &solidcore::Brep) -> bool {
+    solidcore::topology::brep::p1::regions(b, None).is_ok_and(|rs| {
+        rs.into_iter().any(|r| b.region(r).is_ok_and(|x| !x.is_infinite_region(b, r) && x.is_void() == 0))
+    })
+}
+
 struct Ctx {
     vix: std::collections::HashMap<solidcore::VertexId, u32>,
     eix: std::collections::HashMap<solidcore::EdgeId, u32>,

@@ -118,6 +118,7 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, tags resolved after Booleans (plan 1.9), tester findings of task B | 101 | 2604 | **2523** | 26 | 47 | 8 | 0 |
 | `bba8d87`, neutral B-rep (plan 1.11), tester findings of task C | 101 | 2604 | **2523** | 26 | 47 | 8 | 0 |
 | `bba8d87`, polyhedra (plan 1.7) | 101 | 2604 | **2545** | 17 | 34 | 8 | 0 |
+| `bba8d87`, offset, shell, thicken, NURBS surface (plan 1.6) | 101 | 2604 | **2581** | 5 | 6 | 12 | 0 |
 
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
@@ -284,6 +285,30 @@ STEP export goes through the neutral B-rep and works with solidcore: `tests/step
 64 models with `MCAD_KERNEL=solidcore` (SMLib 64): `17_polyhedron` and `19_hex_nut` need
 polyhedra (1.7), `asserts` stops at its asserts, which need the tessellation (phase 2).
 `mcad measure` needs the tessellation as well (`MeasurePart.mesh`).
+
+## Offset, shell, thicken, NURBS surface (plan 1.6)
+
+At `bba8d87` solidcore's `SmApiShellBrepFull` and `SmApiOffsetBrepFull` work (at `c9de85d` the
+shell stopped in `topology.brep_p3`). `crates/kernel-solidcore/src/offset.rs` follows the facade:
+
+| Operation | solidcore | Checks (as the facade) |
+| --- | --- | --- |
+| `nurbs_surface` | `BSplineSurface::approximate_points` (one control point per point, degree min(3, n − 1) per direction), `create_face_from_surface` over its natural domain | at least 2 × 2 points |
+| `thicken` | `shell_brep_simple` (`SmApiShellBrepFull(t, extend, merge, solid)`) | input open; no self-overlap; tags verified |
+| `shell` | `shell_brep_simple(−t, extend, merge)`, open faces by `faces` index | closed result ("leaves no cavity"), no self-overlap, 0 < volume < body; outer faces keep their tags, inner ones get the shell's |
+| `offset` | `offset_brep_simple(d, rounded, self-intersections)` (mode 2) | input closed; closed result larger than the body; no self-overlap; every edge point (9 per edge) and face sample at distance d from the body within 1e-6 of the size ("offset is not exact") |
+| `mass_props` of an open body (no solid region) | area, centre of the box, volume 0, as `sc_mass_props` | a solid that is no manifold keeps the error |
+
+Not ported: the facade's shell from an inward offset and Booleans (`shell_by_booleans`, its
+fallback when SMLib's shell fails) and its pre-check of opposite walls closer than 2 t; the
+offset's trim-curve check (`trim_gap`: SMLib's tessellation follows the trim curves, the
+neutral B-rep does not). Unit tests `crates/kernel-solidcore/tests/offset.rs` (box and sphere
+offset against the Minkowski volume, shells of a box with and without an open face and of a
+sphere, a flat surface thickened). All shell, offset (`hull`/`minkowski` of spheres) and
+`nurbs_surface` nodes are `same`; new `differ` (volumes only): `freeform_lid`'s `thicken` of a
+B-spline sheet (SMLib 5237.594, solidcore 5237.413, 3.5e-5; SMLib approximates the offset
+surface, which kernel is closer is not known) and the lid above it, and `mug`'s fillet after the
+shell (70568.87 against 70576.65, 1.1e-4).
 
 ## Polyhedra (plan 1.7)
 

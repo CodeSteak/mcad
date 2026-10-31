@@ -98,6 +98,8 @@ fn unsupported(op: &str) -> KernelError {
 #[cfg(feature = "solidcore")]
 mod brep;
 #[cfg(feature = "solidcore")]
+mod offset;
+#[cfg(feature = "solidcore")]
 mod polyhedron;
 #[cfg(feature = "solidcore")]
 pub use brep::BrepStats;
@@ -185,13 +187,13 @@ mod imp {
     }
 
     /// A new shape whose faces all carry `tag`.
-    fn made(mut b: solidcore::Brep, tag: Tag) -> KResult<Shape> {
+    pub(crate) fn made(mut b: solidcore::Brep, tag: Tag) -> KResult<Shape> {
         tag_all(&mut b, tag)?;
         Ok(ShapeData::new(b, tag))
     }
 
     /// The diagonal of the bounding box of `b` (1 for an empty body or a failed query).
-    fn model_diag(k: &solidcore::Kernel, b: &solidcore::Brep) -> f64 {
+    pub(crate) fn model_diag(k: &solidcore::Kernel, b: &solidcore::Brep) -> f64 {
         if b.face_list().is_empty() {
             return 1.0;
         }
@@ -335,6 +337,9 @@ mod imp {
         copies: u64,
         /// Time spent in [`Inner::copy`].
         copy_time: std::time::Duration,
+        /// Draft mode ([`Kernel::set_draft`]): fillets skip the self-overlap and volume checks,
+        /// as the facade's `g_draft`.
+        pub(crate) draft: bool,
     }
 
     /// Caller identity of `e` in a B-rep copied under `domain` (bits 36 and up; the low
@@ -606,6 +611,7 @@ mod imp {
                 classify_check: None,
                 copies: 0,
                 copy_time: std::time::Duration::ZERO,
+                draft: false,
             }
         }
 
@@ -1466,7 +1472,7 @@ mod imp {
         /// without one, or whose tag is not confirmed, gets the tag of the input face it lies on
         /// (closest point on the face's surface, within its box), or `op_tag` if it lies on none.
         /// Returns the number of faces that lie on no input face (new faces).
-        fn resolve_tags(
+        pub(crate) fn resolve_tags(
             &mut self,
             r: &mut solidcore::Brep,
             inputs: &[Shape],
@@ -1686,7 +1692,12 @@ mod imp {
                     })
                     .collect()
             };
-            let bad = self.invalid_faces(&t, (near.len() == kept.len()).then_some(&near[..]))?;
+            // (draft mode: no check, as the facade)
+            let bad = if self.draft {
+                Vec::new()
+            } else {
+                self.invalid_faces(&t, (near.len() == kept.len()).then_some(&near[..]))?
+            };
             if !bad.is_empty() {
                 // the selected edges near the faces that fail, else all (as the facade's
                 // `edges_near_faces` with a reach of 3 r)
@@ -1707,16 +1718,17 @@ mod imp {
                     if near.is_empty() { kept } else { near },
                 ));
             }
-            if self.is_solid(s) {
-                if !self.is_solid(&t) {
-                    return Err(failed(
-                        "solidcore returned a body that is not closed (faces missing): the blends of \
-                         neighbouring edges collide, size too large for the wall between them?"
-                            .into(),
-                        kept,
-                    ));
-                }
-                // as the facade: at most what a blend of that size can change near the edges
+            if self.is_solid(s) && !self.is_solid(&t) {
+                return Err(failed(
+                    "solidcore returned a body that is not closed (faces missing): the blends of \
+                     neighbouring edges collide, size too large for the wall between them?"
+                        .into(),
+                    kept,
+                ));
+            }
+            // as the facade: at most what a blend of that size can change near the edges (not
+            // in draft mode)
+            if self.is_solid(s) && !self.draft {
                 let v0 = self.mass_props(s).map_err(|e| check_err(what, e))?.volume;
                 let v1 = self.mass_props(&t).map_err(|e| check_err(what, e))?.volume;
                 let b0 = s.brep.borrow();
@@ -1750,7 +1762,7 @@ mod imp {
         /// inside): the result overlaps itself. Empty for open bodies; faces without a sample
         /// or whose points cannot be classified are skipped. `near`: only faces whose box meets
         /// one of these boxes (all faces if `None`).
-        fn invalid_faces(&mut self, t: &Shape, near: Option<&[(DVec3, DVec3)]>) -> KResult<Vec<DVec3>> {
+        pub(crate) fn invalid_faces(&mut self, t: &Shape, near: Option<&[(DVec3, DVec3)]>) -> KResult<Vec<DVec3>> {
             if !self.is_solid(t) {
                 return Ok(Vec::new());
             }
@@ -1873,6 +1885,17 @@ mod imp {
             }
             if self.is_empty(s) {
                 return Ok(MassProps { volume: 0.0, area: 0.0, centroid: DVec3::ZERO });
+            }
+            if !self.is_solid(s) && !crate::brep::has_solid_region(&s.brep.borrow()) {
+                // an open body (no solid region), as the facade's `sc_mass_props`: no volume, the
+                // area, the centre of the box (a solid that is no manifold, e.g. bodies that
+                // touch, keeps the error of the integration)
+                let area =
+                    mp::brep_area(&self.k, &mut s.brep.borrow_mut(), 1e-6).map_err(|e| err("mass_props (area)", e))?;
+                let (lo, hi) = self.bounds(s)?.unwrap_or((DVec3::ZERO, DVec3::ZERO));
+                let m = MassProps { volume: 0.0, area, centroid: (lo + hi) / 2.0 };
+                s.mass.set(Some(m));
+                return Ok(m);
             }
             let store = solidcore::geom::attribute::AttributeStore::new();
             let key_of = |_e: solidcore::EntityRef| solidcore::geom::attribute::ObjectKey(0);
@@ -2072,20 +2095,20 @@ impl Kernel for SolidcoreKernel {
         with_sc!(self, "sweep_path", |i| i.sweep_path(p, path, tag))
     }
 
-    fn nurbs_surface(&mut self, _rows: &[Vec<DVec3>], _tag: Tag) -> KResult<Shape> {
-        Err(unsupported("nurbs_surface (not wired in kernel-solidcore)"))
+    fn nurbs_surface(&mut self, rows: &[Vec<DVec3>], tag: Tag) -> KResult<Shape> {
+        with_sc!(self, "nurbs_surface", |i| i.nurbs_surface(rows, tag))
     }
 
-    fn thicken(&mut self, _s: &Shape, _t: f64, _tag: Tag) -> KResult<Shape> {
-        Err(unsupported("thicken (SmApiOffsetBrepFull exists, not wired in kernel-solidcore)"))
+    fn thicken(&mut self, s: &Shape, t: f64, tag: Tag) -> KResult<Shape> {
+        with_sc!(self, "thicken", |i| i.thicken(s, t, tag))
     }
 
-    fn shell(&mut self, _s: &Shape, _t: f64, _open: &[FaceId], _tag: Tag) -> KResult<Shape> {
-        Err(unsupported("shell (SmApiShellBrepFull stops at SmBrep::SmBrep, unit topology.brep_p3, at c9de85d)"))
+    fn shell(&mut self, s: &Shape, t: f64, open: &[FaceId], tag: Tag) -> KResult<Shape> {
+        with_sc!(self, "shell", |i| i.shell(s, t, open, tag))
     }
 
-    fn offset(&mut self, _s: &Shape, _d: f64, _tag: Tag) -> KResult<Shape> {
-        Err(unsupported("offset (not wired in kernel-solidcore)"))
+    fn offset(&mut self, s: &Shape, d: f64, tag: Tag) -> KResult<Shape> {
+        with_sc!(self, "offset", |i| i.offset(s, d, tag))
     }
 
     fn edges(&mut self, s: &Shape, samples: u32) -> KResult<Vec<EdgeInfo>> {
