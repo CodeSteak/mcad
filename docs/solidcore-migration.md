@@ -122,7 +122,7 @@ unlock themselves as soon as solidcore computes correctly.
   (same / nodes, before 0.4): `everyday` 621 / 947, `project-housing` 20 / 33,
   `everyday/bugs` 96 / 162.
 - Volume rule (plan 0.4, see "Acceptance"): the 27 volume-only differences of the 64 files are
-  `same` now (16 by the exact value, 4 by the operands, 7 curved within 1e-4); over the 101 files
+  `same` now (16 by the exact value, 4 by the operands, 7 curved within 1e-4, the tolerance then; 3e-5 since phase 1); over the 101 files
   183 nodes (119 exact, 53 operands, 11 curved). Left `differ` (27): 24 with other faces/edges
   (Booleans that lose faces: `hole_plate`, `vent_grille`, `chamfers`, `grip_shell`,
   `variable_radius`, `gear`, `project-housing`, `hull`/`minkowski` inputs; phase 3), and 3
@@ -170,7 +170,7 @@ Remaining nodes:
 
 | Kind | Nodes | Cause |
 | --- | ---: | --- |
-| differ: volume only (≤ 1e-4 relative, same faces/edges) | 27 | curved solids, about 1e-5 off; `same` since plan 0.4 (solidcore is the more accurate one, see "Acceptance") |
+| differ: volume only (≤ 5e-6 relative, same faces/edges) | 27 | curved solids, up to 4.3e-6 apart; `same` since plan 0.4 (solidcore is the more accurate one, see "Acceptance") |
 | differ: faces/edges and volume (0.1 % to 95 %) | 24 | booleans that lose faces (`hole_plate`, `vent_grille`, `chamfers`, `grip_shell`), `hull`/`minkowski` |
 | unsupported: sketch profile in `extrude` | 42 | not wired here |
 | unsupported: fillet/chamfer | 9 | API exists, not wired here |
@@ -250,8 +250,12 @@ Slowest files (solidcore evaluation in `diff-kernels`, ms, before → after 0.6)
 | `spec/knob_mirror.mcad` (2 unsupported) | 596 | 5912 → 4422 | 1260 | 5418 → 395 | 46 → 8 |
 | `everyday/gear.mcad` | 5019 | 3485 → 3124 | 1834 | 1778 → 784 | 126 → 28 |
 | `everyday/key_rack/key_rack.mcad` (8 unsupported) | 5829 | 3198 → 2758 | 5420 | 2334 → 1290 | 190 → 52 |
-| `openscad-compat/02_sphere_variants.scad` | 17 | 1187 | 394 | 1778 | 28 |
-| `openscad-compat/26_if_else_variants.scad` | 81 | 674 | 453 | 1515 | 91 |
+| `openscad-compat/02_sphere_variants.scad` | 17 | 1187 → 972 | 394 | 1778 → 581 | 28 → 7 |
+| `openscad-compat/26_if_else_variants.scad` | 81 | 674 → 522 | 453 | 1515 → 220 | 91 → 15 |
+
+The "after" figures of the two `openscad-compat` rows were measured later (release, at the
+end of plan 1.5, `0e18322`; neither file uses an operation of phase 1), the others at the end of
+phase 0.
 
 Findings:
 
@@ -362,8 +366,10 @@ node evaluated by SMLib:
 - volume (plan 0.4; JSON `volume_check: {rule, tolerance, difference, exact, smlib_error,
   solidcore_error}` per node, `summary.volume_rules` counts the same nodes per rule). Both
   kernels integrate the volume over the faces; on curved faces SMLib is the less accurate one
-  (cylinder r 5, h 10: SMLib −1.6e-4 relative to the exact volume, solidcore −4e-7; sphere r 5:
-  −4e-4 against +9e-5), so a fixed 1e-6 against SMLib counted solidcore's better value as a
+  (cylinder r 5, h 10: SMLib −2.0e-7 relative to the exact volume, i.e. −1.6e-4 mm³, solidcore
+  −5.7e-10, −4.5e-7 mm³; sphere r 5: SMLib −7.9e-7, −4.1e-4 mm³, solidcore +1.8e-7, +9.2e-5 mm³;
+  SMLib's skins and sweeps are fitted less closely: twisted bar 8 × 8 × 20, exact 1280, SMLib
+  +1.5e-5, solidcore +6e-7), so a fixed 1e-6 against SMLib counted solidcore's better value as a
   difference. The first rule that holds:
 
   | Rule | Condition |
@@ -371,7 +377,7 @@ node evaluated by SMLib:
   | `relative` | \|SMLib − solidcore\| ≤ 1e-6 · \|SMLib\| |
   | `exact` | the exact volume E is known and \|solidcore − E\| / E ≤ max(\|SMLib − E\| / E, 1e-6): solidcore is at least as close to E as SMLib |
   | `operands` | E unknown (Boolean, …): \|SMLib − solidcore\| ≤ Σ (\|SMLib − Eᵢ\| + \|solidcore − Eᵢ\|) + 1e-6 · \|SMLib\| over the nearest descendants with an exact volume Eᵢ (the deviation of the operands carries over to the result) |
-  | `curved` | the result has a curved edge, \|SMLib − solidcore\| ≤ 1e-4 · \|SMLib\| and, if E is known, \|solidcore − E\| ≤ 1e-4 · E (integration accuracy) |
+  | `curved` | the result has a curved edge, \|SMLib − solidcore\| ≤ 3e-5 · \|SMLib\| and, if E is known, \|solidcore − E\| ≤ 3e-5 · E (integration and fit accuracy; largest difference in the corpus 1.9e-5, a loft; primitives and Booleans of them up to 4.3e-6) |
   | otherwise | `differ` with the note `volume x vs y (exact E)` |
 
   Exact volumes (`crates/cad-cli/src/diff/exact.rs`, a kernel wrapper that carries them next to
@@ -394,9 +400,9 @@ in addition, `tests/openscad-compat/compare.py` and `tests/step/verify.py` must 
 
 The test `diff_kernels_on_examples` (`crates/cad-cli/tests/cli.rs`, only with `--features
 solidcore`) checks that the comparison runs over all 101 examples without a crash, that at
-least 2100 nodes are the same, at least 170 unsupported, at most 28 differ and none fails, that no
-node differs in its volume alone, that every volume rule is used (exact ≥ 110, operands ≥ 45,
-curved ≤ 15) and that the queries need few copies (< 2500); without the feature
+least 2270 nodes are the same, at most 110 unsupported, at most 50 differ and none fails, that
+no node differs in its volume alone, that every volume rule is used (exact ≥ 110, operands ≥ 45,
+curved ≤ 30) and that the queries need few copies (< 2500); without the feature
 `diff_kernels_needs_the_feature` checks the build hint. `crates/kernel-solidcore/tests/coverage.rs`
 checks each operation individually (box: volume, area, centroid, bounds; transformation
 and classification correct or `Unsupported`).

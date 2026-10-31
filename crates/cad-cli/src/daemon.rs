@@ -766,12 +766,13 @@ fn worker_loop(s: &Arc<Shared>, rx: Receiver<Job>) {
         let res = execute(&job, eng);
         let (reply, ctx, project, panicked) = match res {
             Ok(r) => r,
-            Err(e) => {
+            Err(refused) => {
+                let (e, eng) = *refused;
                 let mut st = s.state.lock().unwrap();
                 st.failed += 1;
                 finish_job(s, st);
                 let _ = job.reply.send(Err(e));
-                engine = Some(new_engine(&s.cfg));
+                engine = Some(eng);
                 continue;
             }
         };
@@ -876,25 +877,29 @@ fn finish_job(_s: &Shared, mut st: std::sync::MutexGuard<'_, State>) {
 }
 
 type Executed = (Reply, Ctx, Option<String>, bool);
+/// A request [`execute`] refused: the reason and the engine, unused.
+type Refused = Box<(String, Engine<AnyKernel>)>;
 
 /// Runs one request with the CLI's command code (in the client's working directory and
-/// language).
-fn execute(job: &Job, engine: Engine<AnyKernel>) -> Result<Executed, String> {
+/// language). A refused request hands the engine back with the reason (its cache stays).
+fn execute(job: &Job, engine: Engine<AnyKernel>) -> Result<Executed, Refused> {
     let _lang = cad_i18n::scoped(job.lang);
-    let cli = Cli::try_parse_from(std::iter::once("mcad".to_string()).chain(job.argv.iter().cloned()))
-        .map_err(|e| tr!("Argumente: {e}", "arguments: {e}"))?;
-    let Some(cmd) = cli.cmd else { return Err(tr!("kein Befehl", "no command")) };
+    let cli = match Cli::try_parse_from(std::iter::once("mcad".to_string()).chain(job.argv.iter().cloned())) {
+        Ok(c) => c,
+        Err(e) => return Err(Box::new((tr!("Argumente: {e}", "arguments: {e}"), engine))),
+    };
+    let Some(cmd) = cli.cmd else { return Err(Box::new((tr!("kein Befehl", "no command"), engine))) };
     if !eligible(&cmd) {
-        return Err(tr!(
-            "`mcad {}` läuft nicht im Daemon",
-            "`mcad {}` does not run in the daemon",
-            crate::command_name(&cmd)
-        ));
+        let msg =
+            tr!("`mcad {}` läuft nicht im Daemon", "`mcad {}` does not run in the daemon", crate::command_name(&cmd));
+        return Err(Box::new((msg, engine)));
     }
     if cli.kernel.as_deref().and_then(Choice::parse).is_some_and(|k| k != Choice::Smlib) {
-        return Err(tr!("der Daemon rechnet nur mit SMLib", "the daemon computes with SMLib only"));
+        return Err(Box::new((tr!("der Daemon rechnet nur mit SMLib", "the daemon computes with SMLib only"), engine)));
     }
-    std::env::set_current_dir(&job.cwd).map_err(|e| format!("{}: {e}", job.cwd.display()))?;
+    if let Err(e) = std::env::set_current_dir(&job.cwd) {
+        return Err(Box::new((format!("{}: {e}", job.cwd.display()), engine)));
+    }
     let project = project_id(&cmd, &job.cwd);
     let ctx = Ctx { stdin: job.stdin.clone(), engine: Some(engine), ..Default::default() };
     let name = crate::command_name(&cmd);

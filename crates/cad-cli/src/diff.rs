@@ -7,7 +7,8 @@
 //! Volumes ([`volume_check`]): relative 1e-6; else, where the exact volume is known
 //! (`diff/exact.rs`), solidcore at most as far from it as SMLib; else within the summed
 //! deviations of both kernels from the exact volumes of the operands; else, for curved results,
-//! 1e-4 (both integrate over curved faces; SMLib's sphere is 4e-4 below the exact volume).
+//! 3e-5 (both integrate over curved faces, and SMLib fits skins and sweeps less closely: its
+//! sphere r 5 is 7.9e-7 below the exact volume, its twisted bar 1.5e-5 above).
 //! "Coverage" counts per operation (node label) how many nodes solidcore evaluated like SMLib.
 //! Verdicts: `same`; `unsupported` (solidcore reports the operation, or a query of its result —
 //! faces, edges, volume —, as not supported, also in a warning such as "B-rep from the mesh failed");
@@ -70,7 +71,7 @@ pub struct VolumeCheck {
     /// `relative`: |smlib − solidcore| ≤ 1e-6 |smlib|; `exact`: solidcore at most as far from
     /// the exact volume as SMLib (or within 1e-6 of it); `operands`: the difference is within the
     /// summed deviations of both kernels from the exact volumes of the operands; `curved`: curved
-    /// faces, within 1e-4 (of SMLib and of an exact value); `none`: none of them.
+    /// faces, within 3e-5 (of SMLib and of an exact value); `none`: none of them.
     pub rule: &'static str,
     /// Allowed difference (absolute, mm³) of the rule that applied, or of `relative`.
     pub tolerance: f64,
@@ -98,9 +99,12 @@ const UNSUPPORTED: &str = "not supported by this kernel";
 
 /// Volumes agree relatively (planar results, and any result without a better rule).
 const REL_VOLUME: f64 = 1e-6;
-/// Curved results without an exact value: both kernels integrate the volume over curved faces
-/// (SMLib's cylinder r 5 h 10 is 1.6e-4 below the exact volume, its sphere 4e-4).
-const REL_VOLUME_CURVED: f64 = 1e-4;
+/// Curved results without an exact value, relative: both kernels integrate the volume over
+/// curved faces (cylinder r 5 h 10: SMLib 2.0e-7 below the exact volume, i.e. 1.6e-4 mm³;
+/// sphere r 5: SMLib 7.9e-7 below, solidcore 1.8e-7 above), and SMLib's skin and sweep surfaces
+/// are fitted less closely (twisted bar 8 × 8 × 20, exact 1280: SMLib 1.5e-5 above, solidcore
+/// 6e-7). Largest difference in the corpus: 1.9e-5 (a loft in `planter`).
+const REL_VOLUME_CURVED: f64 = 3e-5;
 
 /// One evaluation: (index, label, line, children) and metrics per scene node.
 struct Run {
@@ -271,7 +275,7 @@ where
 /// kernels from the exact volumes of the operands (see `command`). The rules in order:
 /// `relative` (1e-6), `exact` (solidcore at most as far from the exact volume as SMLib, at least
 /// 1e-6), `operands` (no exact value, difference ≤ budget + 1e-6), `curved` (curved faces:
-/// difference ≤ 1e-4, and solidcore within 1e-4 of an exact value); else `none`.
+/// difference ≤ 3e-5, and solidcore within 3e-5 of an exact value); else `none`.
 fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>) -> VolumeCheck {
     let difference = (x - y).abs();
     let rel = REL_VOLUME * x.abs().max(1e-9);
@@ -304,7 +308,7 @@ fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>) -> VolumeCheck
         c.tolerance = b + rel;
         return c;
     }
-    // with an exact value solidcore must also be within 1e-4 of it
+    // with an exact value solidcore must also be within 3e-5 of it
     let near_exact = c.solidcore_error.is_none_or(|e| e <= REL_VOLUME_CURVED);
     if a.curved && near_exact && difference <= REL_VOLUME_CURVED * x.abs() {
         c.rule = "curved";
@@ -598,8 +602,8 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     ));
     let g = |k: &str| rules.get(k).copied().unwrap_or(0);
     text.push_str(&tr!(
-        "Volumen der gleichen Knoten: relativ 1e-6 {}, exakter Wert {}, Operanden {}, gekrümmt 1e-4 {}\n",
-        "Volume of the same nodes: relative 1e-6 {}, exact value {}, operands {}, curved 1e-4 {}\n",
+        "Volumen der gleichen Knoten: relativ 1e-6 {}, exakter Wert {}, Operanden {}, gekrümmt 3e-5 {}\n",
+        "Volume of the same nodes: relative 1e-6 {}, exact value {}, operands {}, curved 3e-5 {}\n",
         g("relative"),
         g("exact"),
         g("operands"),

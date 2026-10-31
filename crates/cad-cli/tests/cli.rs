@@ -347,6 +347,16 @@ fn kernel_solidcore_evaluates() {
     let out = mcad().args(["render", &f, "-o", &png, "--kernel", "solidcore"]).output().unwrap();
     assert_eq!(out.status.code(), Some(3));
     assert!(String::from_utf8_lossy(&out.stderr).contains("tessellate"), "{}", String::from_utf8_lossy(&out.stderr));
+    // a failed command still names its kernel
+    let v = json(&["render", &f, "-o", &png, "--kernel", "solidcore"], 3);
+    assert!(v["kernel_id"].as_str().unwrap().starts_with("solidcore-"), "{v}");
+    // no exact B-rep in solidcore yet: exact measures and STEP are kernel errors that name it
+    let v = json(&["measure", &f, "--at", "10,10,30", "--kernel", "solidcore"], 3);
+    let e = v["error"].as_str().unwrap();
+    assert!(e.contains("solidcore: brep"), "{v}");
+    let step = dir.path().join("b.step").display().to_string();
+    let v = json(&["export", &f, "-o", &step, "--kernel", "solidcore"], 3);
+    assert!(v["error"].as_str().unwrap().contains("solidcore: brep"), "{v}");
 }
 
 /// `diff-kernels` over all examples: still mostly `Unsupported` on the solidcore side; it must

@@ -578,6 +578,9 @@ pub(crate) fn finish(
                 if let Some(d) = daemon_json {
                     j["daemon"] = d;
                 }
+                if evaluates_command(name) {
+                    j["kernel_id"] = json!(kernel_id());
+                }
                 let j = if name == "watch" { serde_json::to_string(&j) } else { serde_json::to_string_pretty(&j) };
                 stdout.push_str(&j.unwrap());
                 stdout.push('\n');

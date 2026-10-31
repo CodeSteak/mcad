@@ -1358,6 +1358,14 @@ impl Kernel for SolidcoreKernel {
         Err(unsupported("tessellate (outside solidcore's scope: SmApiTessellate, plan/closure.md)"))
     }
 
+    fn brep(&mut self, _s: &Shape) -> KResult<cad_kernel::brep::Brep> {
+        Err(unsupported("brep (solidcore's B-rep is not mapped to the neutral one yet, plan 1.11)"))
+    }
+
+    fn export(&mut self, _shapes: &[Shape], _fmt: cad_kernel::ExportFormat) -> KResult<Vec<u8>> {
+        Err(unsupported("export (not wired in kernel-solidcore; STEP goes through `brep`)"))
+    }
+
     fn mass_props(&mut self, s: &Shape) -> KResult<MassProps> {
         let _ = s;
         with_sc!(self, "mass_props", |i| i.mass_props(s))
@@ -1432,5 +1440,19 @@ mod tests {
             assert_eq!(full.len(), want.knots.len());
             assert!(full.iter().zip(&want.knots).all(|(a, b)| (a - b).abs() < 1e-12), "{full:?} {:?}", want.knots);
         }
+    }
+}
+
+#[cfg(test)]
+mod pin {
+    use super::{KERNEL_ID, SOLIDCORE_REV};
+
+    /// `scripts/ci/solidcore.sh` rewrites the pin with `sed` in three places: they must agree.
+    #[test]
+    fn kernel_id_and_cargo_rev_name_the_pin() {
+        assert_eq!(SOLIDCORE_REV.len(), 40, "{SOLIDCORE_REV}");
+        assert_eq!(KERNEL_ID, format!("solidcore-{}", &SOLIDCORE_REV[..7]));
+        let toml = include_str!("../Cargo.toml");
+        assert!(toml.contains(&format!("rev = \"{SOLIDCORE_REV}\"")), "Cargo.toml pins another solidcore commit");
     }
 }

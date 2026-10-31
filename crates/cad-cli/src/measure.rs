@@ -13,7 +13,7 @@
 //! measurements in this form ("Als mcad measure kopieren").
 
 use cad_i18n::{tr, trs};
-use cad_kernel::{BoolOp, Kernel};
+use cad_kernel::{BoolOp, Kernel, KernelError};
 use cad_measure::section::SectionPlane;
 use cad_measure::{EdgeCurve, Section};
 use cad_session::measure::{num_e, vec_text};
@@ -460,7 +460,10 @@ fn exact_measures(m: &mut Model, sc: &p::Scene, a: &MeasureArgs, j: &mut Json, t
         )));
     }
     let root = sc.root.ok_or_else(|| Fail::Usage(tr!("kein Ergebnis zum Messen", "no result to measure")))?;
-    let model = m.session.measure_model(root).map_err(Fail::Usage)?;
+    // the kernel cannot give the exact B-rep (`Kernel::brep`, e.g. solidcore): a kernel failure
+    let model = m.session.measure_model(root).map_err(|e| {
+        if e.contains(&KernelError::Unsupported(String::new()).to_string()) { Fail::Kernel(e) } else { Fail::Usage(e) }
+    })?;
     let sec_rc = plane.as_ref().map(|pl| m.session.measure_section(root, pl));
     let sec = match &sec_rc {
         Some(rc) => match rc.as_ref() {

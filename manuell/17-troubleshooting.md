@@ -16,7 +16,7 @@
 | `mcad ui …` exit 3 | no desktop UI running; work headless |
 | exit 2 "--kernel solidcore needs solidcore: build mcad with `--features solidcore` …" (or `MCAD_KERNEL=solidcore …`) | this `mcad` was built without solidcore: `cargo build -p cad-cli --features solidcore`, or use SMLib (default; unset `MCAD_KERNEL`) |
 | exit 2 "MCAD_KERNEL: unknown kernel `x` (smlib or solidcore)" | wrong value in the environment variable |
-| "not supported by this kernel: solidcore: …" (kernel error, `render`/`export` exit 3) | the operation is not wired to solidcore yet (fillet, sketch profiles, tessellation, …): use the default kernel SMLib |
+| "not supported by this kernel: solidcore: …" (kernel error, `render`/`measure`/`export` exit 3) | the operation is not wired to solidcore yet (fillet, shell, polyhedra, tessellation, exact B-rep for `measure` and STEP, …): use the default kernel SMLib |
 | "--ao only applies with --style studio" (also `--light`, `--shadows`, `--ground`, `--edges` …) | studio settings need `--style studio` |
 | "--ground-color X: expected #rrggbb or a palette colour name" (also `--background`) | quote `#` in the shell (`'#e0e0e0'`) or drop it (`e0e0e0`); names: `mcad usage colors` |
 | studio render: no ground / no ground shadow | the camera looks from below or horizontally (`front`, `right`, `bottom`): the ground is only drawn from above |
