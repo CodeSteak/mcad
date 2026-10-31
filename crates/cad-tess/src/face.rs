@@ -94,9 +94,10 @@ impl Builder<'_> {
         Point2::new(snap(q.x), snap(q.y))
     }
 
-    /// `uv` lies in an inner triangle or on an inner edge between two (not on the boundary).
     /// `uv` (surface point `q`) lies in an inner triangle or on an inner edge between two (not
-    /// on the boundary), farther than `min` from the corners there.
+    /// on the boundary), farther than `min` from the corners there, and not on a boundary edge
+    /// of the triangle (within 1e-6 of its length in the CDT's coordinates: the CDT would split
+    /// that edge, which the neighbour face does not).
     fn inside_point(&self, uv: DVec2, q: DVec3, min: f64, inside: &[bool]) -> bool {
         use spade::PositionInTriangulation as P;
         if !uv.is_finite() {
@@ -106,8 +107,18 @@ impl Builder<'_> {
         let far = |vs: &[spade::handles::VertexHandle<Point2<f64>, (), spade::CdtEdge<()>, ()>]| {
             vs.iter().all(|v| (self.info[v.fix().index()].p - q).length() > min)
         };
+        let x = self.point(uv);
+        let x = DVec2::new(x.x, x.y);
+        let off_boundary = |f: spade::handles::FixedFaceHandle<spade::handles::InnerTag>| {
+            self.cdt.face(f).adjacent_edges().iter().filter(|e| e.is_constraint_edge()).all(|e| {
+                let [a, b] = e.positions().map(|p| DVec2::new(p.x, p.y));
+                let ab = b - a;
+                let t = ((x - a).dot(ab) / ab.length_squared().max(1e-300)).clamp(0.0, 1.0);
+                (a + ab * t - x).length() > 1e-6 * ab.length()
+            })
+        };
         match self.cdt.locate(self.point(uv)) {
-            P::OnFace(f) => inside[f.index()] && far(&self.cdt.face(f).vertices()),
+            P::OnFace(f) => inside[f.index()] && far(&self.cdt.face(f).vertices()) && off_boundary(f),
             P::OnEdge(e) => {
                 let e = self.cdt.directed_edge(e);
                 !e.is_constraint_edge() && ins(e.face()) && ins(e.rev().face()) && far(&e.vertices())
@@ -238,8 +249,9 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
     }
     // a direction that is straight over part of the face (a revolution's profile with a
     // straight piece) gets lines there as well, at most ASPECT times the other direction's
-    // spacing (by arc length): else the grid leaves a band of long thin triangles, and every
-    // point the refinement puts into it is joined to its neighbours along the band
+    // spacing (by arc length) and no denser than on its curved pieces: else the grid leaves a
+    // band of long thin triangles, and every point the refinement puts into it is joined to
+    // its neighbours along the band
     const ASPECT: f64 = 4.0;
     let sc = scale(g, bounds);
     let total = |n: &[f64]| n.iter().sum::<f64>();
@@ -255,7 +267,13 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
             continue;
         }
         if total(&need[i]) > 0.0 && total(&need[o]) > 0.0 {
-            let floor = sc[i] / (ASPECT * spacing[o]);
+            // never denser than the direction is elsewhere (a narrow strip keeps its few lines)
+            let densest = need[i]
+                .iter()
+                .zip(pieces[i].windows(2))
+                .map(|(n, w)| n / (w[1] - w[0]).max(1e-300))
+                .fold(0.0, f64::max);
+            let floor = (sc[i] / (ASPECT * spacing[o])).min(densest);
             for (n, w) in need[i].iter_mut().zip(pieces[i].windows(2)) {
                 *n = n.max((w[1] - w[0]) * floor);
             }
@@ -766,7 +784,11 @@ fn refine_pass(b: &Builder, inside: &[bool], tol: f64, ok: &mut Checked) -> (Vec
         let (lo, hi) = (a.uv.min(c.uv).min(d.uv), a.uv.max(c.uv).max(d.uv));
         let (foot, dev) = b.foot((a.p + c.p + d.p) / 3.0, uvc, (lo, hi), n);
         worst = worst.max(dev);
-        let flipped = b.g.normal(uvc, b.bounds).is_some_and(|m| m.dot(n) < 0.0);
+        // a triangle on the boundary may face against the surface where the boundary's chord
+        // sags more than the face is wide (a narrow fillet at a coarse tolerance): no point
+        // inside changes that chord, so only inner triangles count as flipped
+        let on_boundary = f.adjacent_edges().iter().any(|e| e.is_constraint_edge());
+        let flipped = !on_boundary && b.g.normal(uvc, b.bounds).is_some_and(|m| m.dot(n) < 0.0);
         if !(dev > tol || flipped) {
             ok.tris.insert(key, dev);
         }
