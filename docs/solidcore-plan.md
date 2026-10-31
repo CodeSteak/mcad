@@ -25,6 +25,11 @@ As of 2026-10-30, solidcore pin `bba8d87`. Status and measurements: `docs/solidc
 
 ## Phase 0: foundations (about 1 week)
 
+Done 2026-10-31: all six items; results in `docs/solidcore-migration.md` (comparison table, "Pin
+routine", "Performance", "Acceptance"). Measured for 0.6: `Inner::copy` was cheap, the gain came
+from keeping solidcore's caches and the mass properties; the next performance item is the
+volume check in the adapter's `transform` (two integrations per transform).
+
 | # | Task | Where | Done when |
 | --- | --- | --- | --- |
 | 0.1 | Kernel selection at runtime: `--kernel smlib\|solidcore`, `MCAD_KERNEL`, for every command; the engine is already generic (`Session<K>`) | `crates/cad-cli/src/main.rs:411`, `daemon.rs`, `host.rs`, `set.rs`; manual `02-commands.md`, `17-troubleshooting.md` | `mcad render --kernel solidcore box.mcad` works or reports `Unsupported` per node |

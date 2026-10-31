@@ -2,7 +2,7 @@
 
 Work plan up to the switch: [`solidcore-plan.md`](solidcore-plan.md).
 
-As of: 2026-10-30 · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
+As of: 2026-10-31 (phase 0 of the plan done) · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
 
 ## Status
 
@@ -104,7 +104,8 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, `include`/`use`/`import` resolved, unsupported warnings count (64 files as before) | 64 | 1462 | 1190 | 95 | 136 | 41 | 0 |
 | `bba8d87`, corpus extended (plan 0.2) | 101 | 2604 | 1927 | 180 | 295 | 202 | 0 |
 | `bba8d87`, volume against the exact value (plan 0.4), 64 files | 64 | 1462 | 1217 | 95 | 136 | 14 | 0 |
-| `bba8d87`, volume against the exact value (plan 0.4) | 101 | 2604 | **2110** | 180 | 287 | 27 | 0 |
+| `bba8d87`, volume against the exact value (plan 0.4) | 101 | 2604 | 2110 | 180 | 287 | 27 | 0 |
+| `bba8d87`, end of phase 0 (queries in place, plan 0.6) | 101 | 2604 | **2110** | 180 | 287 | 27 | 0 |
 
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
@@ -352,8 +353,10 @@ in addition, `tests/openscad-compat/compare.py` and `tests/step/verify.py` must 
 (for this `kernel-solidcore` still needs `tessellate` and `brep`).
 
 The test `diff_kernels_on_examples` (`crates/cad-cli/tests/cli.rs`, only with `--features
-solidcore`) checks that the comparison runs over all examples without a crash, that more
-than 1100 nodes are the same, none fails, and differing cylinders, spheres, tori and solids of revolution differ only in volume; without the feature
+solidcore`) checks that the comparison runs over all 101 examples without a crash, that at
+least 2100 nodes are the same, at least 170 unsupported, at most 28 differ and none fails, that no
+node differs in its volume alone, that every volume rule is used (exact ≥ 110, operands ≥ 45,
+curved ≤ 15) and that the queries need few copies (< 2500); without the feature
 `diff_kernels_needs_the_feature` checks the build hint. `crates/kernel-solidcore/tests/coverage.rs`
 checks each operation individually (box: volume, area, centroid, bounds; transformation
 and classification correct or `Unsupported`).

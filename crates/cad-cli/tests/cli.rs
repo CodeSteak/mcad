@@ -397,14 +397,17 @@ fn diff_kernels_on_examples() {
         // profiles, fillets, sweeps, polyhedra), 287 blocked, 27 differ, nothing fails. Curved
         // solids are compared against their exact volume (solidcore is the more accurate one):
         // no node differs in its volume alone; the differences are Booleans that lose faces
-        assert!(s["unsupported"].as_u64().unwrap() > 150, "{s}");
-        assert!(s["same"].as_u64().unwrap() >= 2080, "{s}");
-        assert!(s["differ"].as_u64().unwrap() <= 30, "{s}");
+        assert!(s["unsupported"].as_u64().unwrap() >= 170, "{s}");
+        assert!(s["same"].as_u64().unwrap() >= 2100, "{s}");
+        assert!(s["differ"].as_u64().unwrap() <= 28, "{s}");
         assert_eq!(s["failed"].as_u64().unwrap(), 0, "{s}");
         // every rule is in use, the curved fallback the least
         let r = &s["volume_rules"];
-        assert!(r["exact"].as_u64().unwrap() > 100 && r["operands"].as_u64().unwrap() > 30, "{r}");
-        assert!(r["curved"].as_u64().unwrap() < 30, "{r}");
+        assert!(r["exact"].as_u64().unwrap() >= 110 && r["operands"].as_u64().unwrap() >= 45, "{r}");
+        assert!(r["curved"].as_u64().unwrap() <= 15, "{r}");
+        // queries work on the shape's own body: few copies (1549 at bba8d87)
+        let copies = s["solidcore_cost"]["copies"].as_u64().unwrap();
+        assert!(copies > 0 && copies < 2500, "{copies}");
         for f in v["files"].as_array().unwrap() {
             for n in f["nodes"].as_array().unwrap() {
                 if n["verdict"] == "differ" {
