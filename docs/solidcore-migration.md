@@ -24,6 +24,11 @@ As of: 2026-10-30 · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangenc
   (Rust 1.97) solidcore builds without changes. Debug build of `cad-cli --features solidcore` from
   an empty target directory: about 11 min with 4 cores (once; dependencies with
   `opt-level = 2`), seconds afterwards.
+- **Kernel selection at run time:** `mcad <command> --kernel solidcore` or `MCAD_KERNEL=solidcore`
+  evaluates with solidcore (`crates/cad-cli/src/kernel.rs`: `AnyKernel` forwards to SMLib or
+  solidcore; JSON field `kernel_id`). Without the feature: exit 2 with the build hint. The daemon
+  keeps one SMLib engine; a command with solidcore runs locally (`daemon.reason`), so the two
+  kernels never share a cache. The desktop app (`mcad engine-host`, `cad-desktop`) stays on SMLib.
 - **Feature `solidcore`** (opt-in in `kernel-solidcore` and `cad-cli`, off by default): a
   normal build (`cargo build`, `cargo test --workspace`) does not compile solidcore; every
   operation of `kernel-solidcore` then reports

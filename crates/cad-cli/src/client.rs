@@ -16,6 +16,7 @@ use serde_json::{Value as Json, json};
 use crate::config::DaemonConfig;
 use crate::daemon::{self, DAEMON_PROTO, ENDPOINT, build_id};
 use crate::host::{self, FileOp};
+use crate::kernel::Choice;
 use crate::{DaemonInfo, Output};
 
 pub enum Attempt {
@@ -274,7 +275,14 @@ fn missing(k: &str) -> String {
 
 /// Tries to run the command (`argv` without the program name) in the daemon; it answers in
 /// `lang` (the language of this process, also the thread's).
-pub fn run(argv: &[OsString], uses_stdin: bool, no_daemon: bool, verbose: bool, lang: cad_i18n::Lang) -> Attempt {
+pub fn run(
+    argv: &[OsString],
+    uses_stdin: bool,
+    no_daemon: bool,
+    verbose: bool,
+    lang: cad_i18n::Lang,
+    kernel: Choice,
+) -> Attempt {
     let _lang = cad_i18n::scoped(lang);
     let local = |reason: String, loud: bool| {
         if loud {
@@ -292,6 +300,17 @@ pub fn run(argv: &[OsString], uses_stdin: bool, no_daemon: bool, verbose: bool, 
     };
     if no_daemon {
         return local("--no-daemon".into(), false);
+    }
+    // the daemon keeps one SMLib engine; another kernel computes here
+    if kernel != Choice::Smlib {
+        return local(
+            tr!(
+                "Kernel {} (der Daemon rechnet nur mit SMLib)",
+                "kernel {} (the daemon computes with SMLib only)",
+                kernel.name()
+            ),
+            false,
+        );
     }
     let cfg = DaemonConfig::load();
     if verbose {

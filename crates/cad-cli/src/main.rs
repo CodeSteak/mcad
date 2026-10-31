@@ -1,5 +1,6 @@
-//! `mcad`: command line interface for the CAD language (native SMLib kernel), made for agents
-//! that develop and check models without the UI.
+//! `mcad`: command line interface for the CAD language (native SMLib kernel; solidcore with
+//! `--kernel solidcore` in a build with the feature `solidcore`, see `kernel.rs`), made for
+//! agents that develop and check models without the UI.
 //!
 //! Commands (Plan section 8): `check`, `outline`, `eval`, `inspect --line n`,
 //! `render -o bild.png`, `measure`, `watch`, `set`, `export -o teil.stl|teil.3mf|teil.step`,
@@ -35,7 +36,8 @@
 //! ```text
 //! common:  { schema_version, command, file, ok, exit_code, context: string|null,
 //!            diagnostics: Diagnostic[], error?: string,
-//!            daemon?: {used: bool, reason: string|null} }   (commands that use the daemon)
+//!            daemon?: {used: bool, reason: string|null},  (commands that use the daemon)
+//!            kernel_id?: string }   (commands that evaluate models: id of the selected kernel)
 //! check:   + { errors: number, warnings: number, violations: number,
 //!            asserts: AssertResult[] (protocol type) }
 //! outline: + { files: [{path, role}], includes: [{file, line, path, use, found}],
@@ -116,6 +118,7 @@ mod config;
 mod daemon;
 mod diff;
 mod host;
+mod kernel;
 mod launch;
 mod measure;
 mod outline;
@@ -179,6 +182,11 @@ pub(crate) struct Cli {
     /// else the locale (LC_ALL, LC_MESSAGES, LANG): German for `de*`, otherwise English.
     #[arg(long, global = true, value_name = "en|de", value_parser = ["en", "de"])]
     lang: Option<String>,
+    /// Kernel of the commands that evaluate models: `smlib` (default) or `solidcore` (needs a
+    /// build with the cargo feature `solidcore`; runs without the daemon). Default: MCAD_KERNEL,
+    /// else smlib. `diff-kernels` always uses both.
+    #[arg(long, global = true, value_name = "smlib|solidcore", value_parser = ["smlib", "solidcore"])]
+    pub(crate) kernel: Option<String>,
 }
 
 #[derive(Args, Clone)]
@@ -443,10 +451,16 @@ fn main() -> ExitCode {
     }
     let json_mode = json_mode(&cmd);
     let name = command_name(&cmd);
+    if evaluates_models(&cmd) {
+        match kernel::resolve(cli.kernel.as_deref()) {
+            Ok(k) => kernel::select(k),
+            Err(m) => return finish(name, json_mode, Err(Fail::Usage(m)), None).emit(),
+        }
+    }
     let mut info = None;
     if daemon::eligible(&cmd) {
         let argv: Vec<OsString> = std::env::args_os().skip(1).collect();
-        match client::run(&argv, uses_stdin(&cmd), cli.no_daemon, cli.verbose, lang) {
+        match client::run(&argv, uses_stdin(&cmd), cli.no_daemon, cli.verbose, lang, kernel::selected()) {
             client::Attempt::Done(out) => return out.emit(),
             client::Attempt::Local(i) => info = Some(i),
         }
@@ -496,6 +510,11 @@ pub(crate) fn json_mode(cmd: &Cmd) -> bool {
     }
 }
 
+/// The command evaluates models with the selected kernel (`--kernel`, `MCAD_KERNEL`).
+fn evaluates_models(cmd: &Cmd) -> bool {
+    daemon::eligible(cmd) || matches!(cmd, Cmd::Watch { .. })
+}
+
 /// The command reads its source from stdin (`-`).
 fn uses_stdin(cmd: &Cmd) -> bool {
     match cmd {
@@ -533,6 +552,9 @@ pub(crate) fn finish(
                 if let Some(d) = daemon_json {
                     j["daemon"] = d;
                 }
+                if evaluates_command(name) {
+                    j["kernel_id"] = json!(kernel_id());
+                }
                 stdout.push_str(&serde_json::to_string_pretty(&j).unwrap());
                 stdout.push('\n');
             } else {
@@ -566,6 +588,16 @@ pub(crate) fn finish(
         }
     };
     Output { stdout: stdout.into_bytes(), stderr: stderr.into_bytes(), code }
+}
+
+/// [`evaluates_models`] by command name (`finish` gets the name only).
+fn evaluates_command(name: &str) -> bool {
+    matches!(name, "check" | "outline" | "eval" | "inspect" | "render" | "measure" | "watch" | "set" | "export")
+}
+
+/// Id of the kernel the commands of this process use (the daemon never selects: SMLib).
+pub(crate) fn kernel_id() -> &'static str {
+    kernel::selected().id()
 }
 
 pub(crate) fn command_name(c: &Cmd) -> &'static str {

@@ -14,6 +14,9 @@
 | `cad: command not found`, old scripts | the program is `mcad` since 0.3.0; `CAD_*` variables and `~/.config/controller-cad/config.toml` are still read (`mcad usage daemon`) |
 | "mcad: x does not exist (expected a .mcad/.scad file or a folder)" | `mcad PATH` opens the UI; PATH missing. For a command: `mcad check PATH` |
 | `mcad ui …` exit 3 | no desktop UI running; work headless |
+| exit 2 "--kernel solidcore needs solidcore: build mcad with `--features solidcore` …" (or `MCAD_KERNEL=solidcore …`) | this `mcad` was built without solidcore: `cargo build -p cad-cli --features solidcore`, or use SMLib (default; unset `MCAD_KERNEL`) |
+| exit 2 "MCAD_KERNEL: unknown kernel `x` (smlib or solidcore)" | wrong value in the environment variable |
+| "not supported by this kernel: solidcore: …" (kernel error, `render`/`export` exit 3) | the operation is not wired to solidcore yet (fillet, sketch profiles, tessellation, …): use the default kernel SMLib |
 | `mcad` exits 2 "no graphical session" | no `DISPLAY`/`WAYLAND_DISPLAY`; use the commands |
 | UI dies with "Error 71 (Protokollfehler) dispatching to Wayland display" | WebKitGTK DMA-BUF renderer; `mcad` sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` on Wayland unless the variable is set |
 | "Engine not responding for 20 min (kernel hangs)", line red | one kernel call ran 20 min: node blocked until its line changes; simplify it (fewer `$fn`, separate text) |

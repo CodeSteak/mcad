@@ -767,3 +767,25 @@ fn language_switch_in_one_daemon() {
     let d = run("de", &["check", bad.as_str(), "--lang", "en"]);
     assert!(text(&d.stdout).contains(" errors, "), "{}", text(&d.stdout));
 }
+
+/// The daemon keeps one SMLib engine: a command with the kernel solidcore computes in the CLI
+/// process and starts no daemon.
+#[cfg(feature = "solidcore")]
+#[test]
+fn solidcore_runs_without_the_daemon() {
+    let env = Env::new();
+    let f = data("plate.mcad");
+    for out in [env.run(&["check", &f, "--json", "--kernel", "solidcore"]), {
+        env.cmd().env("MCAD_KERNEL", "solidcore").args(["check", &f, "--json"]).output().unwrap()
+    }] {
+        let v = json(&out);
+        assert_eq!(v["daemon"]["used"], false, "{v}");
+        assert!(v["daemon"]["reason"].as_str().unwrap().contains("solidcore"), "{v}");
+        assert!(v["kernel_id"].as_str().unwrap().starts_with("solidcore-"), "{v}");
+    }
+    assert_eq!(env.status()["running"], false);
+    // SMLib still goes through the daemon
+    let v = json(&env.run(&["check", &f, "--json", "--kernel", "smlib"]));
+    assert_eq!(v["daemon"]["used"], true, "{v}");
+    assert!(v["kernel_id"].as_str().unwrap().starts_with("smlib-"), "{v}");
+}

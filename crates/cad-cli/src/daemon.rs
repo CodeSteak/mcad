@@ -14,12 +14,13 @@
 //! data part), `status`, `stop`. Nothing else is processed; `run` only accepts the commands
 //! above (parsed with the CLI's own parser).
 //!
-//! **Execution.** One worker thread (256 MiB stack, like the CLI) owns one
-//! `Engine<SmlibKernel>` for all projects (content keys do not depend on the project) and runs
+//! **Execution.** One worker thread (256 MiB stack, like the CLI) owns one SMLib engine
+//! (`Engine<AnyKernel>`) for all projects (content keys do not depend on the project) and runs
 //! the requests one after another with the CLI's command code (`host.rs`: sessions on the
 //! shared engine, stdin from the client, file writes recorded for the client); before each
 //! request it changes to the client's working directory, so paths and messages are the same
-//! as in the CLI.
+//! as in the CLI. Only SMLib: a command with the kernel solidcore (`--kernel`, `MCAD_KERNEL`)
+//! runs without the daemon (`client.rs`), and `run` refuses `--kernel solidcore`.
 //!
 //! **Limits.** Cache: `cache_mb` (512) MiB estimated for node results + meshes and
 //! `cache_entries` entries (LRU of the engine); `max_projects` (8): the keys touched per
@@ -46,11 +47,11 @@ use cad_engine::{CacheKey, CacheStats, Engine, EngineConfig};
 use cad_i18n::{tr, trs};
 use cad_ipc::{Conn, Frame, Kind, LockFile, Server};
 use clap::{Args, Parser, Subcommand};
-use kernel_smlib::SmlibKernel;
 use serde_json::{Value as Json, json};
 
 use crate::config::DaemonConfig;
 use crate::host::{self, Ctx, FileOp};
+use crate::kernel::{AnyKernel, Choice};
 use crate::{Cli, DaemonInfo, Output};
 
 /// Version of the requests between client and daemon (besides the frame version).
@@ -713,10 +714,10 @@ pub fn heap_in_use() -> Option<usize> {
     None
 }
 
-fn new_engine(cfg: &DaemonConfig) -> Engine<SmlibKernel> {
+fn new_engine(cfg: &DaemonConfig) -> Engine<AnyKernel> {
     let config =
         EngineConfig { cache_bytes: cfg.cache_bytes(), cache_entries: cfg.cache_entries, ..Default::default() };
-    let mut e = Engine::with_config(SmlibKernel::new(), config);
+    let mut e = Engine::with_config(Choice::Smlib.new_kernel(), config);
     // Cost of a node result: what its evaluation kept on the heap (at least the estimate).
     if heap_in_use().is_some() {
         e.set_heap_probe(Some(Box::new(|| heap_in_use().unwrap_or(0))));
@@ -878,7 +879,7 @@ type Executed = (Reply, Ctx, Option<String>, bool);
 
 /// Runs one request with the CLI's command code (in the client's working directory and
 /// language).
-fn execute(job: &Job, engine: Engine<SmlibKernel>) -> Result<Executed, String> {
+fn execute(job: &Job, engine: Engine<AnyKernel>) -> Result<Executed, String> {
     let _lang = cad_i18n::scoped(job.lang);
     let cli = Cli::try_parse_from(std::iter::once("mcad".to_string()).chain(job.argv.iter().cloned()))
         .map_err(|e| tr!("Argumente: {e}", "arguments: {e}"))?;
@@ -889,6 +890,9 @@ fn execute(job: &Job, engine: Engine<SmlibKernel>) -> Result<Executed, String> {
             "`mcad {}` does not run in the daemon",
             crate::command_name(&cmd)
         ));
+    }
+    if cli.kernel.as_deref().and_then(Choice::parse).is_some_and(|k| k != Choice::Smlib) {
+        return Err(tr!("der Daemon rechnet nur mit SMLib", "the daemon computes with SMLib only"));
     }
     std::env::set_current_dir(&job.cwd).map_err(|e| format!("{}: {e}", job.cwd.display()))?;
     let project = project_id(&cmd, &job.cwd);

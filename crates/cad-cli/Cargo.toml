@@ -11,8 +11,9 @@ name = "mcad"
 path = "src/main.rs"
 
 [features]
-# Opt-in (`cargo build -p cad-cli --features solidcore`): links solidcore for `diff-kernels`.
-# Without it the CLI does not compile solidcore and `diff-kernels` explains how to build it.
+# Opt-in (`cargo build -p cad-cli --features solidcore`): links solidcore for `diff-kernels` and
+# `--kernel solidcore`. Without it the CLI does not compile solidcore; `diff-kernels` and
+# `--kernel solidcore` explain how to build it.
 # `gui` (default): `mcad`, `mcad datei.mcad`, `mcad ordner/` start the desktop UI (Tauri 2, needs
 # WebKitGTK on Linux). `--no-default-features` builds a headless CLI only.
 default = ["gui"]

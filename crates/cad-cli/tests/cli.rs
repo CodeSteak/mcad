@@ -255,6 +255,100 @@ fn diff_kernels_needs_the_feature() {
     assert!(v["error"].as_str().unwrap().contains("--features solidcore"), "{v}");
 }
 
+/// `--kernel` (global option) and `MCAD_KERNEL`: the option wins, unknown names are usage
+/// errors, the JSON reports the kernel used (`kernel_id`).
+#[test]
+fn kernel_option_and_env() {
+    let f = data("plate.mcad");
+    let v = json(&["check", &f], 0);
+    assert!(v["kernel_id"].as_str().unwrap().starts_with("smlib-"), "{v}");
+    let v = json(&["check", "--kernel", "smlib", &f], 0);
+    assert!(v["kernel_id"].as_str().unwrap().starts_with("smlib-"), "{v}");
+    // the option is global: also after the file
+    let v = json(&["eval", &f, "--kernel", "smlib"], 0);
+    assert!(v["kernel_id"].as_str().unwrap().starts_with("smlib-"), "{v}");
+    // the option wins over the variable
+    let out =
+        mcad().env("MCAD_KERNEL", "solidcore").args(["check", "--kernel", "smlib", &f, "--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stdout));
+    let out = mcad().env("MCAD_KERNEL", "SMLib").args(["check", &f, "--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+    // unknown names: clap for the option, our message for the variable
+    let out = mcad().args(["check", "--kernel", "occt", &f]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let out = mcad().env("MCAD_KERNEL", "occt").args(["check", &f, "--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(
+        v["error"].as_str().unwrap().contains("MCAD_KERNEL") && v["error"].as_str().unwrap().contains("occt"),
+        "{v}"
+    );
+    // commands that evaluate nothing ignore the variable
+    let out = mcad().env("MCAD_KERNEL", "occt").args(["usage", "--list"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+}
+
+/// Without the feature `solidcore`, `--kernel solidcore` and `MCAD_KERNEL=solidcore` are usage
+/// errors with a build hint.
+#[cfg(not(feature = "solidcore"))]
+#[test]
+fn kernel_solidcore_needs_the_feature() {
+    let f = data("plate.mcad");
+    for args in [vec!["check", "--kernel", "solidcore", &f], vec!["render", &f, "-o", "x.png", "--kernel", "solidcore"]]
+    {
+        let v = json(&args, 2);
+        let e = v["error"].as_str().unwrap();
+        assert!(e.contains("--kernel solidcore") && e.contains("--features solidcore"), "{v}");
+    }
+    let out = mcad().env("MCAD_KERNEL", "solidcore").args(["eval", &f]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let e = String::from_utf8_lossy(&out.stderr);
+    assert!(e.contains("MCAD_KERNEL=solidcore") && e.contains("--features solidcore"), "{e}");
+}
+
+/// With the feature `solidcore`: the commands evaluate with solidcore, volumes as with SMLib
+/// (box exact, cylinder within the accuracy of SMLib's integration).
+#[cfg(feature = "solidcore")]
+#[test]
+fn kernel_solidcore_evaluates() {
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("box.mcad");
+    std::fs::write(&f, "cube([10, 20, 30]);\ntranslate([20, 0, 0]) cylinder(h = 10, r = 5);\n").unwrap();
+    let f = f.display().to_string();
+    let v = json(&["eval", "--kernel", "solidcore", &f], 0);
+    assert!(v["kernel_id"].as_str().unwrap().starts_with("solidcore-"), "{v}");
+    assert_eq!(v["daemon"]["used"], false);
+    let volume = |extra: &[&str], env: Option<&str>| {
+        let mut c = mcad();
+        if let Some(k) = env {
+            c.env("MCAD_KERNEL", k);
+        }
+        let out = c.args(["measure", &f, "--volume", "--json"]).args(extra).output().unwrap();
+        assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stdout));
+        let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+        (v["volume"]["volume"].as_f64().unwrap(), v["kernel_id"].as_str().unwrap().to_string())
+    };
+    let (a, ka) = volume(&[], None);
+    let (b, kb) = volume(&["--kernel", "solidcore"], None);
+    let (c, kc) = volume(&[], Some("solidcore"));
+    assert!(ka.starts_with("smlib-") && kb.starts_with("solidcore-") && kc == kb, "{ka} {kb} {kc}");
+    let exact = 6000.0 + std::f64::consts::PI * 25.0 * 10.0;
+    assert_eq!(b, c);
+    assert!(
+        (a - exact).abs() < 2e-4 * exact && (b - exact).abs() < 1e-6 * exact,
+        "smlib {a}, solidcore {b}, exact {exact}"
+    );
+    // the cube alone agrees exactly
+    let out = mcad().args(["inspect", &f, "--line", "1", "--json", "--kernel", "solidcore"]).output().unwrap();
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!((v["nodes"][0]["volume"].as_f64().unwrap() - 6000.0).abs() < 1e-9, "{v}");
+    // no tessellation in solidcore yet: render is a kernel error that says so
+    let png = dir.path().join("b.png").display().to_string();
+    let out = mcad().args(["render", &f, "-o", &png, "--kernel", "solidcore"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(3));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("tessellate"), "{}", String::from_utf8_lossy(&out.stderr));
+}
+
 /// `diff-kernels` over all examples: still mostly `Unsupported` on the solidcore side; it must
 /// answer for every file and node without crashing (exit 1 = not all nodes the same). Only with
 /// the feature `solidcore` (`cargo test -p cad-cli --features solidcore`).

@@ -25,10 +25,17 @@
 | `-D NAME=VALUE` | with a module context: override a parameter of that module; without: override a top-level assignment of the main file (like `openscad -D`: the last assignment of the name takes the value, variables computed from it follow; `$fn` etc. need no assignment; unknown name → warning). JSON value (`-D w=60`, `-D p=[1,2]`), else string. Repeatable, the last `-D` of a name wins |
 | `--no-daemon`, `--verbose` | compute locally / daemon info on stderr |
 | `--lang en\|de` | language of the text output and JSON display texts; default `MCAD_LANG`, else locale (`LC_ALL`, `LC_MESSAGES`, `LANG`): `de*` → German, else English. Other value → exit 2 |
+| `--kernel smlib\|solidcore` | kernel of `check` … `export`, `watch`, `set`; default `MCAD_KERNEL`, else `smlib`. `solidcore` needs a build with `--features solidcore` (else exit 2), runs without the daemon, and reports what it cannot do yet as a kernel error (`not supported by this kernel: solidcore: …`; no tessellation: `render`, STL/3MF and STEP export fail with exit 3). JSON: `kernel_id`. `diff-kernels` always uses both |
 
 ```sh
 mcad measure teil.mcad -D w=40 --volume all   # teil.mcad: w = 20; d = w / 2; h = 8; cube([w, d, h]);
 #   Volume all: 6400 mm³                      (40 × 20 × 8: d follows w)
+```
+
+```sh
+mcad check box.mcad --kernel solidcore
+#   box.mcad:7:5: error (kernel): fillet failed (1 mm): not supported by this kernel: solidcore: fillet (no public entry point: SmApiFilletEdges is not ported)
+#   …   (exit 1; without --features solidcore: exit 2 "--kernel solidcore needs solidcore: build mcad with `--features solidcore` …")
 ```
 
 ```sh

@@ -4,7 +4,9 @@
 background process that keeps the kernel cache. Started by the first such call, exits after
 15 min idle. Output is identical; JSON adds `daemon: {used, reason}`. The daemon answers in the
 language of each call (`--lang`, `MCAD_LANG`, locale of the client), cached results included. The cache is
-content-based – results are never stale.
+content-based – results are never stale. The daemon computes with SMLib only: with
+`--kernel solidcore` / `MCAD_KERNEL=solidcore` the command runs locally (`daemon.reason`:
+"kernel solidcore (the daemon computes with SMLib only)").
 
 | Command / setting | Effect |
 | --- | --- |

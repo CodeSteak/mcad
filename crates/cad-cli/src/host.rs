@@ -2,9 +2,9 @@
 //! client. The commands call these functions instead of touching stdin, the file system and
 //! the kernel directly, so the same code runs in both places:
 //!
-//! * [`new_session`]: in the daemon a session on the daemon's engine (shared cache), in the
-//!   CLI a session with a fresh engine. [`Pooled`] gives the engine back when the command's
-//!   model is dropped.
+//! * [`new_session`]: in the daemon a session on the daemon's engine (shared cache, SMLib), in
+//!   the CLI a session with a fresh engine on the selected kernel (`kernel.rs`). [`Pooled`]
+//!   gives the engine back when the command's model is dropped.
 //! * [`read_stdin`]: stdin of the CLI process, or the text the client sent.
 //! * [`write_file`], [`write_atomic`], [`create_dir_all`]: done at once in the CLI; in the
 //!   daemon recorded as [`FileOp`]s that the client carries out (the client writes all files).
@@ -18,7 +18,8 @@ use std::sync::Mutex;
 
 use cad_engine::{CacheKey, Engine};
 use cad_session::{Session, SessionOptions, std_clock};
-use kernel_smlib::SmlibKernel;
+
+use crate::kernel::{AnyKernel, Choice};
 
 /// A file system change recorded in the daemon.
 #[derive(Debug, Clone)]
@@ -35,7 +36,7 @@ pub struct Ctx {
     pub stdin: Option<String>,
     pub ops: Vec<FileOp>,
     /// The daemon's engine while no session holds it.
-    pub engine: Option<Engine<SmlibKernel>>,
+    pub engine: Option<Engine<AnyKernel>>,
     /// Cache keys touched by the sessions of this command.
     pub touched: HashSet<CacheKey>,
 }
@@ -130,10 +131,10 @@ pub fn apply(op: &FileOp) -> std::io::Result<()> {
 }
 
 /// A session; in the daemon its engine goes back to the daemon when this is dropped.
-pub struct Pooled(Option<Session<SmlibKernel>>);
+pub struct Pooled(Option<Session<AnyKernel>>);
 
 impl Deref for Pooled {
-    type Target = Session<SmlibKernel>;
+    type Target = Session<AnyKernel>;
     fn deref(&self) -> &Self::Target {
         self.0.as_ref().expect("session")
     }
@@ -165,13 +166,17 @@ impl Drop for Pooled {
     }
 }
 
-/// A session for a command: on the daemon's engine if there is one, else on a new engine.
+/// A session for a command: on the daemon's engine if there is one, else on a new engine
+/// (in the daemon SMLib, in the CLI the selected kernel).
 pub fn new_session(opts: SessionOptions) -> Pooled {
     // (the shared engine recomputes cached texts of another language itself, `Engine::start`)
     let engine = CTX.with(|c| c.borrow_mut().as_mut().and_then(|ctx| ctx.engine.take()));
     let s = match engine {
         Some(e) => Session::with_engine(e, opts, std_clock()),
-        None => Session::new(SmlibKernel::new(), opts, std_clock()),
+        None => {
+            let kernel = if in_daemon() { Choice::Smlib } else { crate::kernel::selected() };
+            Session::new(kernel.new_kernel(), opts, std_clock())
+        }
     };
     Pooled(Some(s))
 }

@@ -48,6 +48,10 @@ pub type Shape = Rc<ShapeData>;
 /// The commit of solidcore this crate is built against.
 pub const SOLIDCORE_REV: &str = "bba8d8798122e9e5adc69c9ba153b8411dca24be";
 
+/// [`Kernel::id`] of [`SolidcoreKernel`] (part of every cache key): `solidcore-` and the short
+/// [`SOLIDCORE_REV`].
+pub const KERNEL_ID: &str = "solidcore-bba8d87";
+
 fn unsupported(op: &str) -> KernelError {
     KernelError::Unsupported(format!("solidcore: {op}"))
 }
@@ -532,7 +536,7 @@ impl Kernel for SolidcoreKernel {
     type Shape = Shape;
 
     fn id(&self) -> &'static str {
-        "solidcore-bba8d87"
+        KERNEL_ID
     }
 
     fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Shape> {

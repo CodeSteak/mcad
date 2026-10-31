@@ -17,7 +17,6 @@ use cad_i18n::{tr, trs};
 use cad_session::protocol::{self as p, ToEngine};
 use cad_session::{PROTOCOL_VERSION, Session, SessionOptions, std_clock};
 use clap::Args;
-use kernel_smlib::SmlibKernel;
 use serde_json::{Value as Json, json};
 
 use crate::{Common, Fail, Outcome, last_diagnostics, last_scene, load};
@@ -265,8 +264,11 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
     for f in proj.files.iter().skip(1) {
         files.insert(f.path.clone(), texts.get(&f.id).cloned().unwrap_or_else(|| f.text.clone()));
     }
-    let mut s =
-        Session::new(SmlibKernel::new(), SessionOptions { auto_root_mesh: false, ..Default::default() }, std_clock());
+    let mut s = Session::new(
+        crate::kernel::selected().new_kernel(),
+        SessionOptions { auto_root_mesh: false, ..Default::default() },
+        std_clock(),
+    );
     s.post(ToEngine::SetFiles { files, main: Some(proj.files[0].path.clone()) });
     let msgs = s.post(ToEngine::SetSource { text: new_main, version: 1 });
     s.post(ToEngine::Cancel);

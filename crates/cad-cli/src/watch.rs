@@ -77,6 +77,7 @@ fn report(m: &mut Model, plan: Option<&(Plan, PathBuf)>, r: Run) -> (Json, Strin
         "errors": errors,
         "warnings": warnings,
         "diagnostics": m.diagnostics,
+        "kernel_id": crate::kernel_id(),
     });
     let mut t = tr!(
         "[{}] {}: {errors} Fehler, {warnings} Warnungen, Auswertung {} ms",
