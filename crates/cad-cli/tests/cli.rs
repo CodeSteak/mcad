@@ -401,7 +401,7 @@ fn diff_kernels_brep() {
 fn diff_kernels_mesh() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut args =
-        vec!["diff-kernels".to_string(), "--mesh".into(), "--mesh-tol".into(), "0.05".into(), "--json".into()];
+        vec!["diff-kernels".to_string(), "--mesh".into(), "--mesh-tol".into(), "0.02".into(), "--json".into()];
     for f in [
         "tests/models/openscad-compat/02_sphere_variants.scad",
         "tests/models/openscad-compat/12_linear_extrude_twist.scad",
@@ -414,7 +414,7 @@ fn diff_kernels_mesh() {
     let m = &v["summary"]["mesh"];
     assert_eq!(m["verdicts"]["ok"], 3, "{m}");
     assert_eq!((m["files"].as_u64(), m["solidcore"]["watertight"].as_u64()), (Some(3), Some(3)), "{m}");
-    assert!(m["solidcore"]["chord_max"].as_f64().unwrap() <= 0.055, "{m}");
+    assert!(m["solidcore"]["chord_max"].as_f64().unwrap() <= 0.022, "{m}");
     assert!(m["solidcore"]["volume_ratio_max"].as_f64().unwrap() <= 1.0, "{m}");
     // SMLib's mesh misses the tolerance in triangle centres (its chord error here 0.24 mm on the
     // twisted extrusion): the meshes are as far apart as both are from the surfaces

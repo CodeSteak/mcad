@@ -5,15 +5,21 @@
 //! 1. **Grid.** Lines in u and v whose step keeps the chord within `tol` and the turn within
 //!    the angle: analytic surfaces from their radii (straight directions get no lines),
 //!    revolutions and extrusions from their curve, B-splines per knot span from the second
-//!    derivatives. Grid points inside the loops (even-odd per row) and not too near them are
-//!    inserted.
+//!    derivatives; where one direction is straight over part of the face only, lines there at
+//!    most four times the other direction's spacing. Grid points inside the loops (even-odd per
+//!    row) and not too near them are inserted.
 //! 2. **CDT** in (u, v) mapped to the arc length along each parameter (so that Delaunay in the
-//!    plane is roughly Delaunay on the surface), the loops as constraint edges. Triangles inside
-//!    are those an odd number of constraint edges away from the outside (nested loops).
-//! 3. **Refinement.** A triangle whose centroid lies farther than `tol` from its plane gets the
-//!    centroid, an inner edge whose midpoint lies farther than `tol` from the chord its
-//!    midpoint, and a triangle facing against the surface its centroid; repeated a few passes.
-//!    Boundary edges are never split (their points are the edges', shared with the neighbour).
+//!    plane is roughly Delaunay on the surface), a straight direction squashed by four (Delaunay
+//!    then joins points along it, not across the curved one), the loops as constraint edges.
+//!    Triangles inside are those an odd number of constraint edges away from the outside
+//!    (nested loops).
+//! 3. **Refinement.** A triangle whose centroid lies farther than `tol` from the surface gets
+//!    the midpoint of its longest inner edge (or the centroid's foot), an inner edge whose
+//!    midpoint lies farther than `tol` the foot of its midpoint, and a triangle facing against
+//!    the surface its centroid; a point that would land on the boundary is replaced by the
+//!    second choice. Passes repeat while they add points (at most `max_passes`); each measures
+//!    only the triangles and edges that are new since the last. Boundary edges are never split
+//!    (their points are the edges', shared with the neighbour).
 //!
 //! Planar faces take only the first two steps without grid (`σ` is affine, nothing to refine).
 
@@ -171,6 +177,9 @@ impl Builder<'_> {
     }
 }
 
+/// Factor by which a straight direction is squashed in the CDT's coordinates (see `Warp`).
+const SQUASH: f64 = 4.0;
+
 /// Lines of parameter `dir` strictly inside `(lo, hi)`.
 fn uniform(lo: f64, hi: f64, step: f64) -> Vec<f64> {
     let n = steps(hi - lo, step);
@@ -194,17 +203,17 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
         return out;
     }
     // general: lines from the derivatives sampled over the bounds
-    let mut out = [Vec::new(), Vec::new()];
-    for (i, lines) in out.iter_mut().enumerate() {
+    let mut pieces: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
+    let mut need: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
+    for i in 0..2 {
         let (a, b) = if i == 0 { (lo.x, hi.x) } else { (lo.y, hi.y) };
         if !crate::gt(b, a) {
             continue;
         }
         let (c, d) = if i == 0 { (lo.y, hi.y) } else { (lo.x, hi.x) };
-        let pieces = g.breaks(i, a, b);
-        // lines needed per unit of the parameter on each piece
-        let mut density = Vec::with_capacity(pieces.len());
-        for w in pieces.windows(2) {
+        pieces[i] = g.breaks(i, a, b);
+        // lines needed on each piece
+        for w in pieces[i].windows(2) {
             // samples of the normal part of σ'' (the sag of a chord off the surface; the
             // tangential part only changes the speed) and of the normal's turn rate
             let mut d2: f64 = 0.0;
@@ -224,11 +233,37 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
                     }
                 }
             }
-            density.push((d2 / (8.0 * p.tol)).sqrt().max(turn / p.angle));
+            need[i].push((w[1] - w[0]) * (d2 / (8.0 * p.tol)).sqrt().max(turn / p.angle));
+        }
+    }
+    // a direction that is straight over part of the face (a revolution's profile with a
+    // straight piece) gets lines there as well, at most ASPECT times the other direction's
+    // spacing (by arc length): else the grid leaves a band of long thin triangles, and every
+    // point the refinement puts into it is joined to its neighbours along the band
+    const ASPECT: f64 = 4.0;
+    let sc = scale(g, bounds);
+    let total = |n: &[f64]| n.iter().sum::<f64>();
+    let spacing: [f64; 2] = [0, 1].map(|i| {
+        let span = if i == 0 { hi.x - lo.x } else { hi.y - lo.y };
+        span * sc[i] / (total(&need[i]).ceil() + 1.0)
+    });
+    let mut out = [Vec::new(), Vec::new()];
+    for i in 0..2 {
+        let o = 1 - i;
+        let (a, b) = if i == 0 { (lo.x, hi.x) } else { (lo.y, hi.y) };
+        if pieces[i].is_empty() {
+            continue;
+        }
+        if total(&need[i]) > 0.0 && total(&need[o]) > 0.0 {
+            let floor = sc[i] / (ASPECT * spacing[o]);
+            for (n, w) in need[i].iter_mut().zip(pieces[i].windows(2)) {
+                *n = n.max((w[1] - w[0]) * floor);
+            }
         }
         // lines evenly over the cumulated need (knots without need get none)
-        let need: Vec<f64> = pieces.windows(2).zip(&density).map(|(w, r)| (w[1] - w[0]) * r).collect();
-        let total: f64 = need.iter().sum();
+        let need = &need[i];
+        let pieces = &pieces[i];
+        let total = total(need);
         let n = (total.ceil() as usize).min(4096);
         let mut all = Vec::new();
         let (mut k, mut acc) = (0usize, 0.0);
@@ -241,7 +276,7 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
             let f = if need[k] > 0.0 { ((target - acc) / need[k]).clamp(0.0, 1.0) } else { 0.0 };
             all.push(pieces[k] + (pieces[k + 1] - pieces[k]) * f);
         }
-        *lines = all.into_iter().filter(|t| *t > a && *t < b).collect();
+        out[i] = all.into_iter().filter(|t| *t > a && *t < b).collect();
     }
     out
 }
@@ -366,7 +401,7 @@ struct Warp {
 }
 
 impl Warp {
-    fn new(g: &Geom, (lo, hi): (DVec2, DVec2), sc: DVec2) -> Warp {
+    fn new(g: &Geom, (lo, hi): (DVec2, DVec2), sc: DVec2, squash: [f64; 2]) -> Warp {
         const N: usize = 64;
         let mut w = Warp { t: [Vec::new(), Vec::new()], s: [Vec::new(), Vec::new()] };
         for i in 0..2 {
@@ -401,6 +436,9 @@ impl Warp {
             }
             w.t[i] = ts;
             w.s[i] = ss;
+        }
+        for (s, f) in w.s.iter_mut().zip(squash) {
+            s.iter_mut().for_each(|x| *x *= f);
         }
         w
     }
@@ -534,9 +572,13 @@ pub(crate) fn mesh_face(
     let bounds = (lo, hi);
     let mut lines = grid_lines(g, bounds, p);
     let sc = scale(g, bounds);
+    // a straight direction (no lines for the chord where the other one has some) is squashed
+    // in the CDT: Delaunay then joins points along it rather than across the curved one, whose
+    // extent alone makes the chord error
+    let squash = [0, 1].map(|i| if lines[i].is_empty() && !lines[1 - i].is_empty() { 1.0 / SQUASH } else { 1.0 });
     straight_lines(&loops, &mut lines, bounds, sc);
     split_poles(&mut loops, &lines);
-    let mut b = Builder { g, cdt: Cdt::new(), info: Vec::new(), warp: Warp::new(g, bounds, sc), bounds };
+    let mut b = Builder { g, cdt: Cdt::new(), info: Vec::new(), warp: Warp::new(g, bounds, sc, squash), bounds };
     let mut fm = FaceMesh { bounds, ..Default::default() };
     // boundary
     let mut handles: Vec<Vec<Option<FixedVertexHandle>>> = Vec::new();
@@ -583,11 +625,12 @@ pub(crate) fn mesh_face(
     // refinement
     let mut inside = b.inside();
     if !g.is_plane() {
+        let mut checked = Checked::default();
         for _ in 0..p.max_passes {
             if b.cdt.num_inner_faces() > p.max_triangles {
                 break;
             }
-            let (add, worst) = refine_pass(&b, &inside, p.tol);
+            let (add, worst) = refine_pass(&b, &inside, p.tol, &mut checked);
             fm.deviation = worst;
             if add.is_empty() {
                 break;
@@ -597,10 +640,11 @@ pub(crate) fn mesh_face(
             // and none within `tol / 20` of a vertex or of another new point
             let mut seen: std::collections::HashMap<glam::I64Vec3, Vec<DVec3>> = Default::default();
             let cell = 0.05 * p.tol;
-            let ok: Vec<DVec2> = add
-                .into_iter()
-                .filter(|uv| {
-                    let q = b.g.eval(*uv);
+            // the second candidate where the first is not inside (a foot on the boundary)
+            let mut ok: Vec<DVec2> = Vec::new();
+            'cands: for cands in add {
+                for uv in cands {
+                    let q = b.g.eval(uv);
                     let key = (q / cell).floor().as_i64vec3();
                     let mut near = false;
                     for dx in -1..=1 {
@@ -611,13 +655,16 @@ pub(crate) fn mesh_face(
                             }
                         }
                     }
-                    if near || !b.inside_point(*uv, q, cell, &inside) {
-                        return false;
+                    if near {
+                        continue 'cands;
                     }
-                    seen.entry(key).or_default().push(q);
-                    true
-                })
-                .collect();
+                    if b.inside_point(uv, q, cell, &inside) {
+                        seen.entry(key).or_default().push(q);
+                        ok.push(uv);
+                        continue 'cands;
+                    }
+                }
+            }
             if ok.is_empty() {
                 break;
             }
@@ -682,8 +729,17 @@ fn winding(loops: &[Vec<UvPt>], q: DVec2) -> i32 {
     w
 }
 
-/// Points to insert (see the module docs) and the largest deviation found.
-fn refine_pass(b: &Builder, inside: &[bool], tol: f64) -> (Vec<DVec2>, f64) {
+/// Triangles and inner edges (by their vertices) within the tolerance and their deviation:
+/// a refinement pass measures only the new ones.
+#[derive(Default)]
+struct Checked {
+    tris: std::collections::HashMap<[usize; 3], f64>,
+    edges: std::collections::HashMap<[usize; 2], f64>,
+}
+
+/// Points to insert, each with a second choice (see the module docs), and the largest
+/// deviation found.
+fn refine_pass(b: &Builder, inside: &[bool], tol: f64, ok: &mut Checked) -> (Vec<[DVec2; 2]>, f64) {
     let mut add = Vec::new();
     let mut worst: f64 = 0.0;
     let info = |h: spade::handles::VertexHandle<Point2<f64>, (), spade::CdtEdge<()>, ()>| b.info[h.fix().index()];
@@ -691,11 +747,18 @@ fn refine_pass(b: &Builder, inside: &[bool], tol: f64) -> (Vec<DVec2>, f64) {
         if !inside[f.fix().index()] {
             continue;
         }
+        let mut key = f.vertices().map(|v| v.fix().index());
+        key.sort_unstable();
+        if let Some(d) = ok.tris.get(&key) {
+            worst = worst.max(*d);
+            continue;
+        }
         let [a, c, d] = f.vertices().map(info);
         let n = (c.p - a.p).cross(d.p - a.p);
         let area2 = n.length();
         let scale2 = (c.p - a.p).length_squared().max((d.p - a.p).length_squared());
         if !crate::gt(area2, 1e-14 * scale2) || scale2.max((d.p - c.p).length_squared()) < (0.1 * tol).powi(2) {
+            ok.tris.insert(key, 0.0);
             continue; // a pole triangle, a sliver or a tiny one: nothing to measure
         }
         let n = n / area2;
@@ -704,6 +767,9 @@ fn refine_pass(b: &Builder, inside: &[bool], tol: f64) -> (Vec<DVec2>, f64) {
         let (foot, dev) = b.foot((a.p + c.p + d.p) / 3.0, uvc, (lo, hi), n);
         worst = worst.max(dev);
         let flipped = b.g.normal(uvc, b.bounds).is_some_and(|m| m.dot(n) < 0.0);
+        if !(dev > tol || flipped) {
+            ok.tris.insert(key, dev);
+        }
         if dev > tol || flipped {
             // the midpoint of the longest edge that may be split, else the centroid
             let es = f.adjacent_edges();
@@ -721,8 +787,8 @@ fn refine_pass(b: &Builder, inside: &[bool], tol: f64) -> (Vec<DVec2>, f64) {
             });
             let longest = longest.fold(0.0, f64::max);
             match best {
-                Some((l2, mid)) if l2 >= 0.5 * longest => add.push(mid),
-                _ => add.push(foot),
+                Some((l2, mid)) if l2 >= 0.5 * longest => add.push([mid, foot]),
+                _ => add.push([foot, uvc]),
             }
         }
     }
@@ -735,17 +801,26 @@ fn refine_pass(b: &Builder, inside: &[bool], tol: f64) -> (Vec<DVec2>, f64) {
         if !(ins(d.face()) && ins(d.rev().face())) {
             continue;
         }
+        let mut key = e.vertices().map(|v| v.fix().index());
+        key.sort_unstable();
+        if let Some(d) = ok.edges.get(&key) {
+            worst = worst.max(*d);
+            continue;
+        }
         let [v0, v1] = e.vertices().map(info);
         let mid = (v0.uv + v1.uv) * 0.5;
         let ab = v1.p - v0.p;
         if ab.length_squared() < (0.1 * tol).powi(2) {
+            ok.edges.insert(key, 0.0);
             continue;
         }
         let (lo, hi) = (v0.uv.min(v1.uv), v0.uv.max(v1.uv));
         let (foot, dev) = b.foot((v0.p + v1.p) * 0.5, mid, (lo, hi), DVec3::ZERO);
         worst = worst.max(dev);
         if dev > tol {
-            add.push(foot);
+            add.push([foot, mid]);
+        } else {
+            ok.edges.insert(key, dev);
         }
     }
     (add, worst)

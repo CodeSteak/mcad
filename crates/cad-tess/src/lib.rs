@@ -49,7 +49,7 @@ pub struct Options {
     /// Largest turn of an edge's tangent between two of its points and largest angle step on
     /// curved surfaces, radians (as SMLib's 20°).
     pub angle: f64,
-    /// Refinement passes per face.
+    /// Refinement passes per face (each measures only what the last one changed).
     pub max_passes: usize,
     /// No refinement beyond this many triangles in one face.
     pub max_face_triangles: usize,
@@ -57,7 +57,7 @@ pub struct Options {
 
 impl Options {
     pub fn new(tol: f64) -> Options {
-        Options { tol, angle: 20f64.to_radians(), max_passes: 12, max_face_triangles: 200_000 }
+        Options { tol, angle: 20f64.to_radians(), max_passes: 40, max_face_triangles: 200_000 }
     }
 }
 
