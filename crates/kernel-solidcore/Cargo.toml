@@ -10,10 +10,12 @@ description = "cad_kernel::Kernel over solidcore (Rust port of SMLib), as far as
 # Opt-in: without it the crate builds without solidcore (nothing of it is compiled) and every
 # operation is Unsupported.
 default = []
-solidcore = ["dep:solidcore", "dep:step-brep", "dep:step-import"]
+solidcore = ["dep:solidcore", "dep:step-brep", "dep:step-import", "dep:cad-tess"]
 
 [dependencies]
 cad-kernel.workspace = true
+# tessellation of the neutral B-rep (plan 2.8)
+cad-tess = { workspace = true, optional = true }
 glam.workspace = true
 # tangency-labs/solidcore main @ bba8d87 (2026-10-30 18:31 UTC), Apache-2.0. Builds with Rust 1.97
 # (solidcore pins 1.98 in its own rust-toolchain.toml, which does not apply to dependents).

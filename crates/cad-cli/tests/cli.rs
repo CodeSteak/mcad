@@ -345,18 +345,18 @@ fn kernel_solidcore_evaluates() {
     let out = mcad().args(["inspect", &f, "--line", "1", "--json", "--kernel", "solidcore"]).output().unwrap();
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert!((v["nodes"][0]["volume"].as_f64().unwrap() - 6000.0).abs() < 1e-9, "{v}");
-    // no tessellation in solidcore yet: render is a kernel error that says so
+    // tessellation by cad-tess on solidcore's B-rep (plan 2.8): render, exact measures, STL
     let png = dir.path().join("b.png").display().to_string();
-    let out = mcad().args(["render", &f, "-o", &png, "--kernel", "solidcore"]).output().unwrap();
-    assert_eq!(out.status.code(), Some(3));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("tessellate"), "{}", String::from_utf8_lossy(&out.stderr));
-    // a failed command still names its kernel
-    let v = json(&["render", &f, "-o", &png, "--kernel", "solidcore"], 3);
+    let v = json(&["render", &f, "-o", &png, "--kernel", "solidcore"], 0);
     assert!(v["kernel_id"].as_str().unwrap().starts_with("solidcore-"), "{v}");
-    // exact measures need the tessellation too (plan phase 2): a kernel error that names it
-    let v = json(&["measure", &f, "--at", "[10,10,30]", "--kernel", "solidcore"], 3);
-    let e = v["error"].as_str().unwrap();
-    assert!(e.contains("solidcore: tessellate"), "{v}");
+    let v = json(&["measure", &f, "--at", "[10,10,30]", "--kernel", "solidcore"], 0);
+    let w = json(&["measure", &f, "--at", "[10,10,30]"], 0);
+    assert_eq!(v["at"][0]["elements"][0]["reference"], w["at"][0]["elements"][0]["reference"], "{v} {w}");
+    let stl = dir.path().join("b.stl").display().to_string();
+    let v = json(&["export", &f, "-o", &stl, "--kernel", "solidcore"], 0);
+    // the mesh encloses the exact volume within tol · area (0.01 mm)
+    let (vol, area) = (v["volume"].as_f64().unwrap(), v["area"].as_f64().unwrap());
+    assert!((vol - exact).abs() <= 0.01 * area && v["triangles"].as_u64().unwrap() > 0, "{v}");
     // a wrong reference is a usage error before the kernel is asked
     json(&["measure", &f, "--at", "bogus", "--kernel", "solidcore"], 2);
     json(&["measure", &f, "--distance", "corner@[0,0,0]", "[1,1,1]", "--kernel", "solidcore"], 2);

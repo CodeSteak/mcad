@@ -348,6 +348,7 @@ dependencies = [
  "cad-step",
  "cad-stl",
  "cad-syntax",
+ "cad-tess",
  "clap",
  "glam",
  "kernel-smlib",
@@ -2283,6 +2284,7 @@ name = "kernel-solidcore"
 version = "0.3.0"
 dependencies = [
  "cad-kernel",
+ "cad-tess",
  "glam",
  "solidcore",
  "step-brep",

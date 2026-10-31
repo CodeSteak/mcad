@@ -20,7 +20,7 @@
 //! `sweep` and `sweep_path` of polygons, circles, closed interpolating splines and sketch
 //! profiles (lines, arcs and B-splines), `fillet`, `chamfer`, `fillet_variable` (one radius law
 //! for all edges), `make_polyhedron` (planar faces through solidcore's STEP builder), `classify`,
-//! `faces`, `edges`, `brep`, `bounds`, `mass_props`, `is_solid`; booleans
+//! `faces`, `edges`, `brep`, `tessellate`, `bounds`, `mass_props`, `is_solid`; booleans
 //! mostly (some results lose faces); curved solids have volumes closer to
 //! the exact value than SMLib's. Profiles and sweeps follow the SMLib facade
 //! (`smlib/facade/sc_facade.cpp`, `sc_sketch.cpp`) step by step: the same curves, sections,
@@ -36,7 +36,8 @@
 //! the result, self-overlap as `invalid_faces`, tags resolved as `resolve_tags`); the facade's
 //! retry chain by chain after a failed fillet is not ported; `set_draft` skips the fillet checks
 //! as the facade's `g_draft`. `brep` maps the B-rep to the
-//! neutral one as the facade's `sc_brep` (`brep.rs`).
+//! neutral one as the facade's `sc_brep` (`brep.rs`); `tessellate` meshes that B-rep with
+//! `cad-tess` (solidcore has no tessellator).
 //!
 //! Feature `solidcore` (opt-in): link solidcore (git dependency pinned to a commit). Without
 //! it the crate compiles without solidcore and every operation is `Unsupported`.
@@ -2098,6 +2099,33 @@ mod imp {
         pub fn brep(&mut self, s: &Shape) -> KResult<(cad_kernel::brep::Brep, crate::BrepStats)> {
             crate::brep::convert(&mut self.k, &mut s.brep.borrow_mut(), s.tag)
         }
+
+        /// The neutral B-rep meshed by `cad-tess` (solidcore has no tessellator, plan 2.8). A
+        /// face that cannot be meshed, or an open mesh of closed solids, is an error, never a
+        /// mesh with holes.
+        pub fn tessellate(&mut self, s: &Shape, tol: f64) -> KResult<Mesh> {
+            const OP: &str = "tessellate";
+            let (b, _) = self.brep(s)?;
+            let t = cad_tess::tessellate_with(&b, &cad_tess::Options::new(tol))
+                .map_err(|e| KernelError::failed(format!("solidcore: {e}")))?;
+            if let Some((id, why)) = t.stats.failed_faces.first() {
+                let n = t.stats.failed_faces.len();
+                return Err(KernelError::failed(format!(
+                    "solidcore: {OP}: face {id} cannot be meshed ({why}; {n} faces failed)"
+                )));
+            }
+            let closed = b.bodies.iter().all(|b| matches!(b, cad_kernel::brep::Body::Solid { .. }));
+            if closed && !t.mesh.is_empty() {
+                let c = cad_tess::check(&t.mesh);
+                if c.boundary_edges + c.misoriented_edges > 0 {
+                    return Err(KernelError::failed(format!(
+                        "solidcore: {OP}: the mesh of a closed solid is not watertight ({} open, {} misoriented edges)",
+                        c.boundary_edges, c.misoriented_edges
+                    )));
+                }
+            }
+            Ok(t.mesh)
+        }
     }
 }
 
@@ -2272,8 +2300,11 @@ impl Kernel for SolidcoreKernel {
         with_sc!(self, "classify", |i| i.classify(s, pts))
     }
 
-    fn tessellate(&mut self, _s: &Shape, _tol: f64) -> KResult<Mesh> {
-        Err(unsupported("tessellate (outside solidcore's scope: SmApiTessellate, plan/closure.md)"))
+    /// `cad-tess` on [`Kernel::brep`]: tessellation is outside solidcore's scope
+    /// (`SmApiTessellate`, plan/closure.md).
+    fn tessellate(&mut self, s: &Shape, tol: f64) -> KResult<Mesh> {
+        let _ = (s, tol);
+        with_sc!(self, "tessellate", |i| i.tessellate(s, tol))
     }
 
     fn brep(&mut self, s: &Shape) -> KResult<cad_kernel::brep::Brep> {

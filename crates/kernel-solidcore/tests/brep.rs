@@ -140,3 +140,41 @@ fn extrusions_and_revolutions() {
     normals_point_out(&mut k, &e, &b);
     let _ = Surface::kind;
 }
+
+/// `Kernel::tessellate` is `cad-tess` on the neutral B-rep (plan 2.8): every face meshed, the
+/// mesh closed (every edge used twice, in opposite directions) and within `tol · area` of the
+/// exact volume.
+#[test]
+fn tessellate_meshes_the_brep() {
+    let mut k = SolidcoreKernel::new();
+    let s = k.make_sphere(10.0, 1).unwrap();
+    let b = k.make_box(DVec3::ZERO, DVec3::splat(20.0), 2).unwrap();
+    let d = k.boolean(BoolOp::Difference, &[s, b], 3).unwrap();
+    let tol = 0.05;
+    let m = k.tessellate(&d, tol).unwrap();
+    let faces = k.faces(&d, 0).unwrap().len() as u32;
+    let mut seen: Vec<u32> = m.tri_faces.clone();
+    seen.sort_unstable();
+    seen.dedup();
+    assert_eq!(seen, (0..faces).collect::<Vec<_>>());
+    let p = |i: u32| {
+        let k = 3 * i as usize;
+        DVec3::new(m.positions[k] as f64, m.positions[k + 1] as f64, m.positions[k + 2] as f64)
+    };
+    let key = |i: u32| m.positions[3 * i as usize..3 * i as usize + 3].iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+    let (mut volume, mut area) = (0.0, 0.0);
+    let mut uses = std::collections::HashMap::new();
+    for t in m.indices.chunks_exact(3) {
+        let (a, b, c) = (p(t[0]), p(t[1]), p(t[2]));
+        volume += a.dot(b.cross(c)) / 6.0;
+        area += 0.5 * (b - a).cross(c - a).length();
+        for j in 0..3 {
+            *uses.entry((key(t[j]), key(t[(j + 1) % 3]))).or_insert(0) += 1;
+        }
+    }
+    for ((a, b), n) in &uses {
+        assert_eq!((n, uses.get(&(b.clone(), a.clone()))), (&1, Some(&1)), "edge {a:?} {b:?}");
+    }
+    let exact = k.mass_props(&d).unwrap().volume;
+    assert!((volume - exact).abs() <= tol * area, "{volume} vs {exact}");
+}
