@@ -19,7 +19,7 @@
 | `mcad ui …` exit 3 | no desktop UI running; work headless |
 | exit 2 "--kernel solidcore needs solidcore: build mcad with `--features solidcore` …" (or `MCAD_KERNEL=solidcore …`) | this `mcad` was built without solidcore: `cargo build -p cad-cli --features solidcore`, or use SMLib (default; unset `MCAD_KERNEL`) |
 | exit 2 "MCAD_KERNEL: unknown kernel `x` (smlib or solidcore)" | wrong value in the environment variable |
-| "not supported by this kernel: solidcore: …" (kernel error, `render`/`measure`/`export` exit 3) | the operation is not wired to solidcore yet (shell, polyhedra, offset, tessellation for `render`, `measure`, STL/3MF and the assert checks, …) or solidcore cannot do it (shear in `multmatrix`; variable-radius fillet with different laws on several edges: "fillet_variable: different radius laws on several edges"): use the default kernel SMLib |
+| "not supported by this kernel: solidcore: …" (kernel error, `render`/`measure`/`export` exit 3) | the operation is not wired to solidcore yet (shell, offset, tessellation for `render`, `measure`, STL/3MF and the assert checks, …) or solidcore cannot do it (shear in `multmatrix`; variable-radius fillet with different laws on several edges: "fillet_variable: different radius laws on several edges"): use the default kernel SMLib |
 | `diff-kernels --brep`: "line N … [B-rep]: surfaces {\"plane\": 6} vs {\"bspline\": 6}" after a `mirror` | solidcore turns every surface into a B-spline under a mirror (negative scale); geometry and volume are the same |
 | `diff-kernels --brep`: "N faces with other tags" after a `union` of coplanar faces | the kernels keep a different operand's tag on a merged face |
 | "--ao only applies with --style studio" (also `--light`, `--shadows`, `--ground`, `--edges` …) | studio settings need `--style studio` |
@@ -60,6 +60,8 @@
 | "x.stl: as = \"solid\" not possible, the mesh is …" | an open/non-manifold mesh cannot be a B-rep; imported as a mesh |
 | "union: a mesh is not united …", "difference: a mesh cannot be cut/subtracted …", "intersection: not possible with a mesh …", "fillet: a mesh cannot be modified …" | the STL is a mesh (more than 500 faces or `as = "mesh"`): `import(…, as = "solid")` (slow above ~500 faces: `mcad usage import-stl`) |
 | "B-rep from the mesh failed (…): continuing as a mesh" | the kernel refused the polyhedron; the mesh is shown instead |
+| "make_polyhedron: the faces do not form a closed manifold solid (every edge must belong to exactly two faces)" / "… cannot be oriented consistently" (solidcore) | `polyhedron`/STL with holes, edges shared by more than two faces, or a Möbius-like face list |
+| "make_polyhedron: face N is not planar" (solidcore, not supported) | a polygon of `polyhedron(points, faces)` whose points do not lie in one plane: split it into triangles |
 | "hull: mesh with n vertices (at most 2000 …)" | `hull()` of a large mesh; use a coarser STL |
 | "assert_keepout: X enters the keep-out volume (intersection volume V mm³)" | a body enters the keep-out volume; move it, or the volume (`mcad render` shows the red intersection) |
 | "assert_keepout: X violates the clearance c mm to the keep-out volume: d mm …" | closer than `clearance`; foot points in the message; a board the part sits on counts too (start the volume above it) |

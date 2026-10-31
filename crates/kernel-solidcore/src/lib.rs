@@ -19,7 +19,8 @@
 //! primitives, rigid transforms, `extrude` (also with twist and scale), `revolve`, `loft`,
 //! `sweep` and `sweep_path` of polygons, circles, closed interpolating splines and sketch
 //! profiles (lines, arcs and B-splines), `fillet`, `chamfer`, `fillet_variable` (one radius law
-//! for all edges), `classify`, `faces`, `edges`, `bounds`, `mass_props`, `is_solid`; booleans
+//! for all edges), `make_polyhedron` (planar faces through solidcore's STEP builder), `classify`,
+//! `faces`, `edges`, `brep`, `bounds`, `mass_props`, `is_solid`; booleans
 //! mostly (some results lose faces); curved solids have volumes closer to
 //! the exact value than SMLib's. Profiles and sweeps follow the SMLib facade
 //! (`smlib/facade/sc_facade.cpp`, `sc_sketch.cpp`) step by step: the same curves, sections,
@@ -96,6 +97,8 @@ fn unsupported(op: &str) -> KernelError {
 
 #[cfg(feature = "solidcore")]
 mod brep;
+#[cfg(feature = "solidcore")]
+mod polyhedron;
 #[cfg(feature = "solidcore")]
 pub use brep::BrepStats;
 
@@ -654,6 +657,31 @@ mod imp {
                 let m = DMat4::from_translation(DVec3::new(0.0, 0.0, h)) * DMat4::from_rotation_x(std::f64::consts::PI);
                 self.transform(&s, &m)
             }
+        }
+
+        /// A solid of planar faces (`polyhedron.rs`), as the facade's `sc_make_polyhedron`: a
+        /// closed manifold solid of positive volume, else `Failed`.
+        pub fn make_polyhedron(&mut self, points: &[DVec3], faces: &[Vec<u32>], tag: Tag) -> KResult<Shape> {
+            const OP: &str = "make_polyhedron";
+            let body = crate::polyhedron::body(points, faces)?;
+            let built = step_brep::build(&body).map_err(|e| {
+                KernelError::failed(format!("solidcore: {OP}: planar faces not stitched into a solid ({e})"))
+            })?;
+            // made in the builder's own kernel: an independent copy in ours
+            let b = self.copy(&built)?;
+            let s = made(b, tag)?;
+            if !self.is_solid(&s) {
+                return Err(KernelError::failed(format!(
+                    "solidcore: {OP}: the faces do not form a closed manifold solid"
+                )));
+            }
+            let v = self.mass_props(&s).map_err(|e| check_err(OP, e))?.volume;
+            if v.is_nan() || v <= 0.0 {
+                return Err(KernelError::failed(format!(
+                    "solidcore: {OP}: orientation could not be fixed (volume {v})"
+                )));
+            }
+            Ok(s)
         }
 
         pub fn make_torus(&mut self, big_r: f64, r: f64, tag: Tag) -> KResult<Shape> {
@@ -1992,8 +2020,8 @@ impl Kernel for SolidcoreKernel {
         with_sc!(self, "make_torus", |i| i.make_torus(big_r, r, tag))
     }
 
-    fn make_polyhedron(&mut self, _points: &[DVec3], _faces: &[Vec<u32>], _tag: Tag) -> KResult<Shape> {
-        Err(unsupported("make_polyhedron (poly B-reps, SmApiPoly*, are outside solidcore's scope: plan/closure.md)"))
+    fn make_polyhedron(&mut self, points: &[DVec3], faces: &[Vec<u32>], tag: Tag) -> KResult<Shape> {
+        with_sc!(self, "make_polyhedron", |i| i.make_polyhedron(points, faces, tag))
     }
 
     fn transform(&mut self, s: &Shape, m: &DMat4) -> KResult<Shape> {

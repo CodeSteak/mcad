@@ -10,7 +10,7 @@ description = "cad_kernel::Kernel over solidcore (Rust port of SMLib), as far as
 # Opt-in: without it the crate builds without solidcore (nothing of it is compiled) and every
 # operation is Unsupported.
 default = []
-solidcore = ["dep:solidcore"]
+solidcore = ["dep:solidcore", "dep:step-brep", "dep:step-import"]
 
 [dependencies]
 cad-kernel.workspace = true
@@ -18,3 +18,6 @@ glam.workspace = true
 # tangency-labs/solidcore main @ bba8d87 (2026-10-30 18:31 UTC), Apache-2.0. Builds with Rust 1.97
 # (solidcore pins 1.98 in its own rust-toolchain.toml, which does not apply to dependents).
 solidcore = { git = "https://github.com/tangency-labs/solidcore", rev = "bba8d8798122e9e5adc69c9ba153b8411dca24be", optional = true }
+# polyhedra (make_polyhedron) as planar faces through the STEP builder of the same commit
+step-brep = { git = "https://github.com/tangency-labs/solidcore", rev = "bba8d8798122e9e5adc69c9ba153b8411dca24be", optional = true }
+step-import = { git = "https://github.com/tangency-labs/solidcore", rev = "bba8d8798122e9e5adc69c9ba153b8411dca24be", optional = true }

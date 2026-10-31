@@ -117,6 +117,7 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, fillets and chamfers (plan 1.3) | 101 | 2604 | **2523** | 26 | 47 | 8 | 0 |
 | `bba8d87`, tags resolved after Booleans (plan 1.9), tester findings of task B | 101 | 2604 | **2523** | 26 | 47 | 8 | 0 |
 | `bba8d87`, neutral B-rep (plan 1.11), tester findings of task C | 101 | 2604 | **2523** | 26 | 47 | 8 | 0 |
+| `bba8d87`, polyhedra (plan 1.7) | 101 | 2604 | **2545** | 17 | 34 | 8 | 0 |
 
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
@@ -283,6 +284,23 @@ STEP export goes through the neutral B-rep and works with solidcore: `tests/step
 64 models with `MCAD_KERNEL=solidcore` (SMLib 64): `17_polyhedron` and `19_hex_nut` need
 polyhedra (1.7), `asserts` stops at its asserts, which need the tessellation (phase 2).
 `mcad measure` needs the tessellation as well (`MeasurePart.mesh`).
+
+## Polyhedra (plan 1.7)
+
+`make_polyhedron` (`polyhedron`, `hull`, `minkowski` of convex bodies, STL as B-rep) builds one
+planar face per polygon as the facade's `sc_make_polyhedron` (`SmPolyBrep::CreatePoly` per
+face, `SmBrep::CreateFromPolyBrep`; coplanar faces are not merged). solidcore has no poly B-reps,
+so `crates/kernel-solidcore/src/polyhedron.rs` writes the faces as a planar
+`step_import::model::Body` (line edges shared by their two faces, a plane per face from its
+Newell normal) and `step_brep::build` makes the faces and stitches them
+(`SmApiStitchIntoSolid`); the body is then copied into the adapter's kernel. As SMLib: points
+within `max(1e-9, 1e-9 · diagonal)` are one vertex, every edge must belong to exactly two faces
+(else `Failed` "the faces do not form a closed manifold solid"), the faces are oriented
+consistently (neighbours run their edge opposite ways) and outward (positive signed volume,
+SMLib's `OrientTrimmedSurfaces`). A polygon off its plane by more than 1e-6 of the diagonal is
+`Unsupported` (the engine splits non-planar hull faces into triangles beforehand). Unit tests
+`crates/kernel-solidcore/tests/polyhedron.rs`. All polyhedron, STL and hull/minkowski nodes are
+`same` except the two that also need `offset` (1.6).
 
 ## Fillets and chamfers (plan 1.3)
 
