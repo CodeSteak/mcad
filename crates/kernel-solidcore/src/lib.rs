@@ -15,7 +15,8 @@
 //! * other solidcore errors → [`KernelError::Failed`] / [`KernelError::InvalidInput`].
 //!
 //! So `mcad diff-kernels` can report which operations already work ("coverage"); at bba8d87:
-//! primitives, rigid transforms, `extrude` of polygons and circles, `revolve`, `classify`,
+//! primitives, rigid transforms, `extrude` and `revolve` of polygons, circles and sketch
+//! profiles (lines, arcs and B-splines built as the SMLib facade builds them), `classify`,
 //! `faces`, `edges`, `bounds`, `mass_props`, `is_solid`; booleans mostly (some results lose faces);
 //! curved solids have volumes closer to the exact value than SMLib's. Queries work on the
 //! shape's own body ([`ShapeData`]); before an operation changes a body it is copied with
@@ -83,6 +84,7 @@ mod imp {
     use solidcore::geom::tol::{SmallTopoType, zone_tol_3d};
     use solidcore::intersect::point_class::PointClassType;
     use solidcore::mass::integrator::properties as mp;
+    use solidcore::nurbs::b_spline_curve::BSplineCurveForm;
     use solidcore::primitive::api_curves as ac;
     use solidcore::primitive::api_primitives as ap;
     use solidcore::query::api_queries as q;
@@ -136,6 +138,154 @@ mod imp {
             type_code: r.type_code,
             key: solidcore::geom::attribute::ObjectKey((domain << 36) | (r.key.0 & ((1 << 36) - 1))),
         }
+    }
+
+    /// Is the linear part of `f` a similarity (rotation and uniform scale) in the profile
+    /// plane? Then arcs stay circular arcs.
+    fn similar_in_plane(f: &DMat4) -> bool {
+        let (a, b) = (f.x_axis.truncate(), f.y_axis.truncate());
+        let (la, lb) = (a.length(), b.length());
+        la > 0.0 && (la - lb).abs() <= 1e-7 * la && a.dot(b).abs() <= 1e-9 * la * la
+    }
+
+    /// One segment of a composite loop as the SMLib facade hands it to SMLib
+    /// (`smlib/facade/sc_sketch.cpp`): a line, or a B-spline (arcs as rational quadratic
+    /// B-splines of the circular-arc form, pieces of at most 90°).
+    enum SkSeg {
+        Line(DVec2, DVec2),
+        Spline { arc: bool, c: cad_kernel::brep::BSplineCurve },
+    }
+
+    impl SkSeg {
+        fn start(&self) -> DVec2 {
+            match self {
+                SkSeg::Line(a, _) => *a,
+                SkSeg::Spline { c, .. } => c.points[0].truncate(),
+            }
+        }
+
+        fn end(&self) -> DVec2 {
+            match self {
+                SkSeg::Line(_, b) => *b,
+                SkSeg::Spline { c, .. } => c.points[c.points.len() - 1].truncate(),
+            }
+        }
+
+        fn set_start(&mut self, p: DVec2) {
+            match self {
+                SkSeg::Line(a, _) => *a = p,
+                SkSeg::Spline { c, .. } => c.points[0] = p.extend(0.0),
+            }
+        }
+
+        /// The solidcore curve, its points mapped by `frame` (exact for B-splines under any
+        /// affine map; an arc under a non-uniform map is an elliptic arc).
+        fn curve(&self, frame: &DMat4, op: &str) -> KResult<Curve> {
+            let p3 = |p: DVec3| pt(frame.transform_point3(DVec3::new(p.x, p.y, 0.0)));
+            match self {
+                SkSeg::Line(a, b) => Ok(Curve::from(
+                    ac::create_line_segment(p3(a.extend(0.0)), p3(b.extend(0.0))).map_err(|e| err(op, e))?,
+                )),
+                SkSeg::Spline { arc, c } => {
+                    let form = match (arc, similar_in_plane(frame)) {
+                        (false, _) => BSplineCurveForm::Unspecified,
+                        (true, true) => BSplineCurveForm::CircularArc,
+                        (true, false) => BSplineCurveForm::EllipticArc,
+                    };
+                    Ok(Curve::from(bspline(c, p3, form, op)?))
+                }
+            }
+        }
+    }
+
+    /// A solidcore B-spline from the neutral one, control points mapped by `map`.
+    fn bspline(
+        c: &cad_kernel::brep::BSplineCurve,
+        map: impl Fn(DVec3) -> solidcore::Point3,
+        form: BSplineCurveForm,
+        op: &str,
+    ) -> KResult<solidcore::nurbs::b_spline_curve::BSplineCurve> {
+        let points: Vec<solidcore::Point3> = c.points.iter().map(|p| map(*p)).collect();
+        let (mut knots, mut mult) = (Vec::<f64>::new(), Vec::<usize>::new());
+        for (i, &k) in c.knots.iter().enumerate() {
+            if i > 0 && k == c.knots[i - 1] {
+                *mult.last_mut().expect("knot") += 1;
+            } else {
+                knots.push(k);
+                mult.push(1);
+            }
+        }
+        // as the facade: rational only if the weights differ
+        let weights = c.weights.as_deref().filter(|w| w.iter().any(|v| (v - w[0]).abs() > 1e-14 * w[0].abs()));
+        ac::create_canonical_curve(&ac::CanonicalCurveParams {
+            points: &points,
+            knots: &knots,
+            knot_multiplicities: &mult,
+            weights,
+            degree: c.degree as usize,
+            form,
+        })
+        .map_err(|e| err(op, e))
+    }
+
+    /// The segments of a composite loop (`Loop::Composite`) or an open sketch path, checked
+    /// and welded as the SMLib facade does (`sketch_segments`, `weld`): every segment starts
+    /// exactly where the previous one ends (`closed`: the first where the last ends).
+    fn sketch_segments(segs: &[cad_kernel::Segment], closed: bool, op: &str) -> KResult<Vec<SkSeg>> {
+        use cad_kernel::Segment;
+        let bad = |m: &str| KernelError::InvalidInput(format!("solidcore: {op}: {m}"));
+        if segs.is_empty() {
+            return Err(bad("sketch loop without segments"));
+        }
+        let mut out = Vec::with_capacity(segs.len());
+        for s in segs {
+            out.push(match s {
+                Segment::Line { a, b } => SkSeg::Line(*a, *b),
+                Segment::Arc { r, a0, a1, .. } => {
+                    if !(r.is_finite() && *r > 0.0) {
+                        return Err(bad("sketch arc radius must be > 0"));
+                    }
+                    let sweep = (a1 - a0).abs();
+                    if !(1e-12..=std::f64::consts::TAU + 1e-9).contains(&sweep) {
+                        return Err(bad("sketch arc sweep must be in (0, 2pi]"));
+                    }
+                    SkSeg::Spline { arc: true, c: s.to_nurbs() }
+                }
+                Segment::Nurbs(c) => {
+                    let n = c.points.len();
+                    if c.degree < 1
+                        || c.degree > 9
+                        || n < c.degree as usize + 1
+                        || c.knots.len() != n + c.degree as usize + 1
+                    {
+                        return Err(bad("bad sketch B-spline"));
+                    }
+                    if c.weights
+                        .as_ref()
+                        .is_some_and(|w| w.len() != n || w.iter().any(|v| !(v.is_finite() && *v > 0.0)))
+                    {
+                        return Err(bad("sketch B-spline weights must be > 0"));
+                    }
+                    if c.knots.windows(2).any(|w| w[1] < w[0]) {
+                        return Err(bad("sketch B-spline knots must not decrease"));
+                    }
+                    SkSeg::Spline { arc: false, c: c.clone() }
+                }
+            });
+        }
+        let ext = out.iter().map(|s| s.start().length().max(s.end().length())).fold(1.0, f64::max);
+        let n = out.len();
+        for k in 0..n {
+            if k == 0 && !closed {
+                continue;
+            }
+            let e = out[(k + n - 1) % n].end();
+            if e.distance(out[k].start()) > 1e-6 * ext {
+                return Err(bad(&format!("sketch segments do not meet (segment {k})")));
+            }
+            out[k].set_start(e);
+        }
+        Ok(out)
     }
 
     impl Inner {
@@ -309,7 +459,10 @@ mod imp {
                 Loop::Spline(_) => Err(unsupported(&format!(
                     "{op}: spline profile (SmApiCreateCurveInterpPoints is outside solidcore's scope)"
                 ))),
-                Loop::Composite(_) => Err(unsupported(&format!("{op}: sketch profile (lines, arcs, B-splines)"))),
+                Loop::Composite(segs) => {
+                    let segs = sketch_segments(segs, true, op)?;
+                    segs.iter().map(|s| s.curve(frame, op)).collect()
+                }
             }
         }
 
@@ -337,6 +490,7 @@ mod imp {
             }
             let deg = angle.to_degrees().clamp(-360.0, 360.0);
             let curves = self.loop_curves(&p.lp, &p.frame, "revolve")?;
+            self.check_revolve_profile(&curves)?;
             let refs: Vec<Option<&Curve>> = curves.iter().map(Some).collect();
             let b = sw::create_rotational_sweep(
                 &mut self.k,
@@ -348,6 +502,29 @@ mod imp {
             )
             .map_err(|e| err("revolve", e))?;
             Ok(ShapeData::new(b, tag))
+        }
+
+        /// As the SMLib facade (`revolve_profile_curves`): a profile curve that reaches x < 0
+        /// (257 samples per curve) crosses the axis and is `InvalidInput`.
+        fn check_revolve_profile(&self, curves: &[Curve]) -> KResult<()> {
+            const K: u32 = 256;
+            let mut pts = Vec::with_capacity(curves.len() * (K as usize + 1));
+            for c in curves {
+                let iv = c.natural_interval();
+                let (t0, t1) = (iv.min(), iv.max());
+                for k in 0..=K {
+                    if let Ok(p) = c.evaluate_point(&self.k, t0 + (t1 - t0) * f64::from(k) / f64::from(K)) {
+                        pts.push(dv(p));
+                    }
+                }
+            }
+            let ext = pts.iter().map(|p| p.length()).fold(1.0, f64::max);
+            match pts.iter().map(|p| p.x).reduce(f64::min) {
+                Some(x) if x < -1e-7 * ext => Err(KernelError::InvalidInput(format!(
+                    "solidcore: revolve: the profile curve crosses the axis (reaches x = {x} after its frame)"
+                ))),
+                _ => Ok(()),
+            }
         }
 
         /// Point classification, once a self-test on a box passed: at c9de85d
