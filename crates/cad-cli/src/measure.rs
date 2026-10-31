@@ -460,6 +460,27 @@ fn exact_measures(m: &mut Model, sc: &p::Scene, a: &MeasureArgs, j: &mut Json, t
         )));
     }
     let root = sc.root.ok_or_else(|| Fail::Usage(tr!("kein Ergebnis zum Messen", "no result to measure")))?;
+    // the references' syntax and points first: a wrong argument is a usage error (exit 2) even
+    // where the kernel cannot measure
+    let refs = a.distance.iter().chain(&a.radius).chain(&a.angle).chain(&a.length).chain(&a.body).chain(&a.wall);
+    for r in refs.map(String::as_str).chain(area_ref) {
+        let pt = match r.trim().split_once('@') {
+            Some((pre, pt)) => {
+                if !["vertex", "mid", "center", "edge", "face", "body", "region"].contains(&pre) {
+                    return Err(Fail::Usage(tr!(
+                        "{r}: unbekannte Art `{pre}` (vertex, mid, center, edge, face, body, region)",
+                        "{r}: unknown kind `{pre}` (vertex, mid, center, edge, face, body, region)"
+                    )));
+                }
+                pt
+            }
+            None => r,
+        };
+        resolve_point(sc, pt)?;
+    }
+    for pt in &a.at {
+        resolve_point(sc, pt)?;
+    }
     // the kernel cannot give the exact B-rep (`Kernel::brep`, e.g. solidcore): a kernel failure
     let model = m.session.measure_model(root).map_err(|e| {
         if e.contains(&KernelError::Unsupported(String::new()).to_string()) { Fail::Kernel(e) } else { Fail::Usage(e) }

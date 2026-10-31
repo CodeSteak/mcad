@@ -283,6 +283,8 @@ fn kernel_option_and_env() {
         v["error"].as_str().unwrap().contains("MCAD_KERNEL") && v["error"].as_str().unwrap().contains("occt"),
         "{v}"
     );
+    // no kernel was selected: the output names none
+    assert!(v.get("kernel_id").is_none(), "{v}");
     // commands that evaluate nothing ignore the variable
     let out = mcad().env("MCAD_KERNEL", "occt").args(["usage", "--list"]).output().unwrap();
     assert_eq!(out.status.code(), Some(0));
@@ -297,6 +299,7 @@ fn kernel_solidcore_needs_the_feature() {
     for args in [vec!["check", "--kernel", "solidcore", &f], vec!["render", &f, "-o", "x.png", "--kernel", "solidcore"]]
     {
         let v = json(&args, 2);
+        assert!(v.get("kernel_id").is_none(), "{v}");
         let e = v["error"].as_str().unwrap();
         assert!(e.contains("--kernel solidcore") && e.contains("--features solidcore"), "{v}");
     }
@@ -351,9 +354,12 @@ fn kernel_solidcore_evaluates() {
     let v = json(&["render", &f, "-o", &png, "--kernel", "solidcore"], 3);
     assert!(v["kernel_id"].as_str().unwrap().starts_with("solidcore-"), "{v}");
     // no exact B-rep in solidcore yet: exact measures and STEP are kernel errors that name it
-    let v = json(&["measure", &f, "--at", "10,10,30", "--kernel", "solidcore"], 3);
+    let v = json(&["measure", &f, "--at", "[10,10,30]", "--kernel", "solidcore"], 3);
     let e = v["error"].as_str().unwrap();
     assert!(e.contains("solidcore: brep"), "{v}");
+    // a wrong reference is a usage error before the kernel is asked
+    json(&["measure", &f, "--at", "bogus", "--kernel", "solidcore"], 2);
+    json(&["measure", &f, "--distance", "corner@[0,0,0]", "[1,1,1]", "--kernel", "solidcore"], 2);
     let step = dir.path().join("b.step").display().to_string();
     let v = json(&["export", &f, "-o", &step, "--kernel", "solidcore"], 3);
     assert!(v["error"].as_str().unwrap().contains("solidcore: brep"), "{v}");

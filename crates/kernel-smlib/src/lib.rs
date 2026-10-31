@@ -224,38 +224,6 @@ fn encode_segments(out: &mut Vec<f64>, segs: &[Segment]) {
     }
 }
 
-/// Lofts match composite sections segment by segment only if all have the same number of
-/// segments; otherwise each is joined into one closed B-spline.
-fn loft_sections(sections: &[PlacedLoop]) -> Vec<PlacedLoop> {
-    let counts: Vec<Option<usize>> = sections
-        .iter()
-        .map(|s| match &s.lp {
-            Loop::Composite(v) => Some(v.len()),
-            _ => None,
-        })
-        .collect();
-    let equal = counts.iter().all(|c| c.is_some() && *c == counts[0]);
-    if equal || counts.iter().all(|c| c.is_none()) {
-        return sections.to_vec();
-    }
-    sections
-        .iter()
-        .map(|s| match &s.lp {
-            Loop::Composite(v) => {
-                // start where the +x ray from the centroid leaves the section, like circles
-                // (and polygons, see the engine's `loft_normalize`), so the sections do not
-                // twist against each other
-                let size = v.iter().map(|g| g.start().length()).fold(1e-9, f64::max);
-                let tol = size * 1e-4;
-                let c = cad_kernel::curve2::centroid(v, tol);
-                let r = cad_kernel::curve2::restart_at_ray(v, c, DVec2::X, tol);
-                PlacedLoop { lp: Loop::Composite(vec![Segment::Nurbs(cad_kernel::curve2::join(&r))]), frame: s.frame }
-            }
-            _ => s.clone(),
-        })
-        .collect()
-}
-
 impl SmlibKernel {
     /// Creates the kernel (initialises SMLib's context on first use).
     pub fn new() -> Self {
@@ -409,7 +377,7 @@ impl Kernel for SmlibKernel {
 
     fn loft(&mut self, sections: &[PlacedLoop], ruled: bool, tag: Tag) -> KResult<Shape> {
         let mut enc = Vec::new();
-        for s in &loft_sections(sections) {
+        for s in &cad_kernel::loft_sections(sections) {
             encode_loop(&mut enc, &s.lp, &s.frame);
         }
         let n = sections.len() as u32;

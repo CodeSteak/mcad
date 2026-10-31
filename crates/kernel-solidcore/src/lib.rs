@@ -334,14 +334,6 @@ mod imp {
         }
     }
 
-    /// Is the linear part of `f` a similarity (rotation and uniform scale) in the profile
-    /// plane? Then arcs stay circular arcs.
-    fn similar_in_plane(f: &DMat4) -> bool {
-        let (a, b) = (f.x_axis.truncate(), f.y_axis.truncate());
-        let (la, lb) = (a.length(), b.length());
-        la > 0.0 && (la - lb).abs() <= 1e-7 * la && a.dot(b).abs() <= 1e-9 * la * la
-    }
-
     /// Is the linear part of `f` a similarity (as the facade's `similarity`)?
     fn similar(f: &DMat4) -> bool {
         let c = [f.x_axis.truncate(), f.y_axis.truncate(), f.z_axis.truncate()];
@@ -351,37 +343,6 @@ mod imp {
             && (l[0] - l[1]).abs() <= 1e-7 * l[0]
             && (l[0] - l[2]).abs() <= 1e-7 * l[0]
             && [(0, 1), (0, 2), (1, 2)].iter().all(|&(i, j)| c[i].dot(c[j]).abs() <= 1e-9 * l[0] * l[0])
-    }
-
-    /// The sections of a loft as kernel-smlib passes them on (`loft_sections`): composite
-    /// sections are matched segment by segment only if all have the same number of
-    /// segments; otherwise each is joined into one closed B-spline that starts where the +x
-    /// ray from its centroid leaves it, so the sections do not twist against each other.
-    fn loft_sections(sections: &[PlacedLoop]) -> Vec<PlacedLoop> {
-        let counts: Vec<Option<usize>> = sections
-            .iter()
-            .map(|s| match &s.lp {
-                Loop::Composite(v) => Some(v.len()),
-                _ => None,
-            })
-            .collect();
-        if counts.iter().all(|c| c.is_some() && *c == counts[0]) || counts.iter().all(|c| c.is_none()) {
-            return sections.to_vec();
-        }
-        sections
-            .iter()
-            .map(|s| match &s.lp {
-                Loop::Composite(v) => {
-                    let size = v.iter().map(|g| g.start().length()).fold(1e-9, f64::max);
-                    let tol = size * 1e-4;
-                    let c = cad_kernel::curve2::centroid(v, tol);
-                    let r = cad_kernel::curve2::restart_at_ray(v, c, DVec2::X, tol);
-                    let lp = Loop::Composite(vec![cad_kernel::Segment::Nurbs(cad_kernel::curve2::join(&r))]);
-                    PlacedLoop { lp, frame: s.frame }
-                }
-                _ => s.clone(),
-            })
-            .collect()
     }
 
     /// One segment of a composite loop as the SMLib facade hands it to SMLib
@@ -423,7 +384,7 @@ mod imp {
                     ac::create_line_segment(p3(a.extend(0.0)), p3(b.extend(0.0))).map_err(|e| err(op, e))?,
                 )),
                 SkSeg::Spline { arc, c } => {
-                    let form = match (arc, similar_in_plane(frame)) {
+                    let form = match (arc, similar(frame)) {
                         (false, _) => BSplineCurveForm::Unspecified,
                         (true, true) => BSplineCurveForm::CircularArc,
                         (true, false) => BSplineCurveForm::EllipticArc,
@@ -925,7 +886,7 @@ mod imp {
             let refs: Vec<Option<&Curve>> = curves.iter().map(Some).collect();
             let b = sw::create_linear_sweep(&mut self.k, &refs, Vec3::new(0.0, 0.0, h.signum()), h.abs(), true)
                 .map_err(|e| err("extrude", e))?;
-            let s = made(b, tag)?;
+            let s = self.require_solid(made(b, tag)?, "extrude", "")?;
             self.transform(&s, &p.frame)
         }
 
@@ -1140,6 +1101,8 @@ mod imp {
         /// A closed solid of positive volume, as the facade's `require_solid`.
         fn require_solid(&mut self, s: Shape, what: &str, hint: &str) -> KResult<Shape> {
             if self.is_empty(&s) || !self.is_solid(&s) {
+                // as the facade's `require_solid`, unless the caller knows better
+                let hint = if hint.is_empty() { " (self-intersecting or open profile?)" } else { hint };
                 return Err(KernelError::failed(format!("solidcore: {what} did not produce a closed solid{hint}")));
             }
             let v = self.mass_props(&s).map_err(|e| check_err(what, e))?.volume;
@@ -1210,7 +1173,7 @@ mod imp {
             if sections.len() < 2 {
                 return Err(KernelError::InvalidInput("solidcore: loft needs at least 2 sections".into()));
             }
-            let sections = loft_sections(sections);
+            let sections = cad_kernel::loft_sections(sections);
             let n_poly = |l: &Loop| match l {
                 Loop::Polygon(ps) => loop_points(ps, OP).ok().map(|v| v.len()),
                 _ => None,
@@ -1241,6 +1204,7 @@ mod imp {
                 return Err(KernelError::InvalidInput("solidcore: revolve: angle must be non-zero".into()));
             }
             let deg = angle.to_degrees().clamp(-360.0, 360.0);
+            Self::check_revolve_points(p)?;
             let curves = self.revolve_curves(p)?;
             self.check_revolve_profile(&curves)?;
             let refs: Vec<Option<&Curve>> = curves.iter().map(Some).collect();
@@ -1253,7 +1217,27 @@ mod imp {
                 true,
             )
             .map_err(|e| err("revolve", e))?;
-            made(b, tag)
+            self.require_solid(made(b, tag)?, "revolve", "")
+        }
+
+        /// The facade's check before a revolve (`sc_revolve`): the polygon or spline points, or
+        /// the circle (under a similarity frame), stay at x ≥ 0 after the frame, within 1e-9 of
+        /// the frame's scale.
+        fn check_revolve_points(p: &PlacedLoop) -> KResult<()> {
+            let f = &p.frame;
+            let scale = (f.x_axis.truncate().length() + f.y_axis.truncate().length()).max(1.0);
+            let x = |q: DVec2| f.transform_point3(DVec3::new(q.x, q.y, 0.0)).x;
+            let minx = match &p.lp {
+                Loop::Circle { center, r } if similar(f) => x(*center) - r * f.x_axis.truncate().length(),
+                Loop::Polygon(ps) | Loop::Spline(ps) => ps.iter().map(|&q| x(q)).fold(f64::MAX, f64::min),
+                _ => f64::MAX,
+            };
+            if minx < -1e-9 * scale {
+                return Err(KernelError::InvalidInput(
+                    "solidcore: revolve: the profile crosses the axis (x < 0 after its frame)".into(),
+                ));
+            }
+            Ok(())
         }
 
         /// Profile curves of a revolve, as the SMLib facade (`revolve_profile_curves`): a
@@ -1985,10 +1969,10 @@ mod tests {
     use super::imp::*;
     use glam::{DVec2, DVec3};
 
-    /// The interpolating spline of a closed spline profile is SMLib's: the same as
-    /// `cad_kernel::curve2::interpolate` through the points and the first again (which agrees
-    /// with SMLib's `SmApiCreateCurveInterpPoints` to 4e-15, checked through `Kernel::brep` of
-    /// kernel-smlib).
+    /// The interpolating spline of a closed spline profile: the same as
+    /// `cad_kernel::curve2::interpolate` through the points and the first again, within 1e-12
+    /// (a one-off comparison with SMLib's `SmApiCreateCurveInterpPoints` through `Kernel::brep`
+    /// of kernel-smlib agreed to 3.6e-15; not part of this test).
     #[test]
     fn interpolating_spline_matches_curve2() {
         for pts in [

@@ -64,6 +64,18 @@ pub fn select(c: Choice) {
     SOLIDCORE.store(c == Choice::Solidcore, Ordering::Relaxed);
 }
 
+static FAILED: AtomicBool = AtomicBool::new(false);
+
+/// Kernel resolution failed (main, before the command): the output names no kernel.
+pub fn select_failed() {
+    FAILED.store(true, Ordering::Relaxed);
+}
+
+/// `false` after [`select_failed`].
+pub fn known() -> bool {
+    !FAILED.load(Ordering::Relaxed)
+}
+
 pub fn selected() -> Choice {
     if SOLIDCORE.load(Ordering::Relaxed) { Choice::Solidcore } else { Choice::Smlib }
 }

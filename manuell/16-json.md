@@ -3,7 +3,8 @@
 Every answer: `{ schema_version: 3, command, file, ok, exit_code, context: string|null,
 diagnostics: Diagnostic[], error?: string, daemon?: {used, reason}, kernel_id? }` plus per command
 (`kernel_id`: kernel of a model command, e.g. `smlib-7eba8aa+1/facade-5`, `solidcore-bba8d87`;
-also when it fails and in every `watch` line):
+also when it fails and in every `watch` line; missing when the kernel itself is wrong:
+`MCAD_KERNEL=foo`, `--kernel solidcore` without the feature):
 
 | Command | Additional fields |
 | --- | --- |

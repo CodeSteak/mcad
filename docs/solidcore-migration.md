@@ -192,7 +192,7 @@ against exact volumes):
 | Kernel operation | Route | Notes |
 | --- | --- | --- |
 | `Loop::Composite` (sketch) | lines: `create_line_segment`; arcs: rational quadratic B-spline of the circular-arc form (pieces of at most 90°; elliptic-arc form under a non-uniform frame); B-splines as given (`create_canonical_curve`); joints welded (gap ≤ 1e-6 of the extent) | as `sketch_segments`/`weld`/`make_curve` |
-| `Loop::Spline` | `BSplineCurve::create_interpolating_curve` (chord length, cubic) through the points and the first again | the ported core of `SmApiCreateCurveInterpPoints`; control points and knots equal SMLib's and `cad_kernel::curve2::interpolate`'s to 4e-15 |
+| `Loop::Spline` | `BSplineCurve::create_interpolating_curve` (chord length, cubic) through the points and the first again | the ported core of `SmApiCreateCurveInterpPoints`; control points and knots equal `cad_kernel::curve2::interpolate`'s within 1e-12 (unit test) and SMLib's within 3.6e-15 (a one-off comparison through kernel-smlib's `Kernel::brep`) |
 | `revolve` | spline points that follow each other on the axis: a line along the axis, open runs between (3 points: two more on the parabola); a curve reaching x < 0 (257 samples) is `InvalidInput` | as `revolve_profile_curves` |
 | `extrude` with twist/scale | skin (`create_skin_primitive`) through one section per 7.5° of twist (at least 2; bicubic), ruled for a pure scale; section = turn, then scale; scale 0 and an elliptic circle are `Unsupported` as in SMLib | as `sc_extrude` |
 | `loft` | segment by segment when all sections are polygons with the same point count or sketches with the same segment count, else one closed curve per section (polygon: degree-1 B-spline, circle: B-spline arc); degree 1 (ruled) or min(3, n − 1); sketches of different segment counts joined as in kernel-smlib | as `sc_loft` |
@@ -277,6 +277,18 @@ volume per colour with both kernels for all 37 cases of `tests/color-review/case
 (debug build, dependencies `opt-level = 2`); solidcore is slower on `key_rack` (12.8 s vs 5.8 s),
 `mug`, `pen_box` and `wall_hook` (2×), faster on `text_sign` and `f11`.
 
+## Tester findings on task B (profiles and sweeps)
+
+| Finding | Fix |
+| --- | --- |
+| `union(fillet = …)` of a Boolean skipped the fillet ("0 edges"): no face tags | plan 1.10 (tags through Booleans) and 1.3 (fillets): `union(fillet = 1) { cube([20,20,4]); translate([10,10,0]) cylinder(h=10, r=4); }` is the same in both kernels (1 edge) |
+| no exact volume for twist/scale extrusions (SMLib off by > 3e-5 outside the corpus: twist 360°, bar 20 × 8 × 4: SMLib +1.1e-4, solidcore −4.6e-7) | `diff/exact.rs`: A·\|h\|·∫₀¹ sx·sy dt. The `curved` tolerance stays 3e-5: a loft in `planter` (no exact volume) differs by 1.9e-5. `volume_rules` counts `same` nodes only: 24 `curved` at `3284a36` (27 nodes counting all verdicts) |
+| `mcad measure … --at bogus --kernel solidcore` exit 3 | references and points are checked before the kernel model: exit 2 |
+| `kernel_id` named a kernel when the kernel was wrong (`MCAD_KERNEL=foo`, solidcore without the feature) | `kernel_id` is missing then |
+| revolve: no pre-check of polygon/spline points and circles | as `sc_revolve`: x ≥ −1e-9 · scale after the frame, else `InvalidInput` ("crosses the axis") |
+| plain extrude and revolve without `require_solid` (a bowtie polygon gave a body that failed later) | `require_solid` as `sc_extrude`/`sc_revolve`: "did not produce a closed solid" |
+| `loft_sections` duplicated; `similar_in_plane` checked x and y only | `cad_kernel::loft_sections` for both kernels; arcs and circles use the facade's `similarity` (all three columns) |
+
 ## Performance (plan 0.5)
 
 Release build (`cargo build --release -p cad-cli --no-default-features --features solidcore`),
@@ -307,6 +319,10 @@ properties (plan 0.6); the verdicts of all 2604 nodes are the same in both.
 | `mcad eval` per process, wall time, sum over 101 files (s) | 105.6–106.5 | 59.8 | 50.7 | 0.48 |
 | peak RSS per process, largest file (MB) | 165–167 | 82 | 85 | 0.51 |
 | peak RSS per process, median file (MB) | 24–25 | 25 | 27 | 1.09 |
+
+Twisted extrusions are expensive in solidcore (debug build): `linear_extrude(height = 10, twist =
+720) square([6, 2], center = true)` 1.1 s against 78 ms in SMLib (97 sections, bicubic skin), the
+tester's file of 8 twist/scale extrusions 8.1 s against 0.38 s.
 
 Slowest files (solidcore evaluation in `diff-kernels`, ms, before → after 0.6):
 
@@ -476,7 +492,7 @@ node evaluated by SMLib:
 
   Exact volumes (`crates/cad-cli/src/diff/exact.rs`, a kernel wrapper that carries them next to
   the shapes): box, sphere, cylinder and cone frustum, torus (R > r), extrusion of a polygon or
-  circle without twist/scale, revolution of a polygon or circle in the xz-plane (Pappus), and the
+  circle (with twist and scale: A·|h|·∫₀¹ sx·sy dt, the twist keeps the area), revolution of a polygon or circle in the xz-plane (Pappus), and the
   affine image of each (volume × \|det\|). A node's exact volume is the sum over its parts (none
   if a part has none, or the node has a mesh). Faces and edges must still match exactly, so a
   Boolean that loses faces stays `differ` whatever its volume;

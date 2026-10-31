@@ -1,7 +1,7 @@
 //! [`Exact`]: a kernel wrapper that carries the exact volume of a shape where it follows from the
 //! parameters of the operation (`diff-kernels`, plan 0.4): box, sphere, cylinder/cone frustum,
-//! torus, an extrusion without twist or scale and a revolution of a polygon or circle (Pappus),
-//! and every affine image of these (volume × |det|). Other operations give `None`.
+//! torus, an extrusion of a polygon or circle (also with twist and scale: A·|h|·∫₀¹ sx·sy dt), a
+//! revolution of a polygon or circle (Pappus), and every affine image of these (volume × |det|). Other operations give `None`.
 
 use std::f64::consts::PI;
 
@@ -29,6 +29,15 @@ fn loop_area(lp: &Loop) -> Option<f64> {
 /// Signed area of a polygon.
 fn shoelace(ps: &[DVec2]) -> f64 {
     (0..ps.len()).map(|i| ps[i].perp_dot(ps[(i + 1) % ps.len()])).sum::<f64>() / 2.0
+}
+
+/// Volume of extruding `p` by `h` with twist and `scale`: the section at height t·h is the
+/// profile turned by twist·t (area unchanged) and scaled by 1 + (scale − 1)·t per axis, so
+/// A·|h|·∫₀¹ sx(t)·sy(t) dt, times the frame's |det|.
+fn extrude_volume(p: &PlacedLoop, h: f64, scale: DVec2) -> Option<f64> {
+    let (a, b) = (scale.x - 1.0, scale.y - 1.0);
+    let factor = 1.0 + (a + b) / 2.0 + a * b / 3.0;
+    loop_area(&p.lp).map(|area| area * h.abs() * factor * det3(&p.frame))
 }
 
 /// Volume of revolving `p` around the z-axis by `angle` radians (Pappus: angle × first moment
@@ -140,8 +149,7 @@ impl<K: Kernel> Kernel for Exact<K> {
     }
 
     fn extrude(&mut self, p: &PlacedLoop, h: f64, twist: f64, scale: DVec2, tag: Tag) -> KResult<Self::Shape> {
-        let plain = twist == 0.0 && scale == DVec2::ONE;
-        let v = if plain { loop_area(&p.lp).map(|a| a * h.abs() * det3(&p.frame)) } else { None };
+        let v = extrude_volume(p, h, scale);
         self.0.extrude(p, h, twist, scale, tag).map(|s| (s, v))
     }
 
@@ -230,6 +238,19 @@ impl<K: Kernel> Kernel for Exact<K> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extrusion_with_twist_and_scale() {
+        let sq = PlacedLoop {
+            lp: Loop::Polygon(vec![DVec2::ZERO, DVec2::new(2.0, 0.0), DVec2::new(2.0, 2.0), DVec2::new(0.0, 2.0)]),
+            frame: DMat4::IDENTITY,
+        };
+        // twist alone: A h; scale to 0: the pyramid A h / 3; scale (2, 0.5): ∫ (1 + t)(1 − t/2)
+        assert!((extrude_volume(&sq, -3.0, DVec2::ONE).unwrap() - 12.0).abs() < 1e-12);
+        assert!((extrude_volume(&sq, 3.0, DVec2::ZERO).unwrap() - 4.0).abs() < 1e-12);
+        let v = extrude_volume(&sq, 3.0, DVec2::new(2.0, 0.5)).unwrap();
+        assert!((v - 12.0 * (1.0 + 0.25 - 1.0 / 6.0)).abs() < 1e-12, "{v}");
+    }
 
     #[test]
     fn pappus_polygon_and_circle() {

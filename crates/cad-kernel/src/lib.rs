@@ -84,6 +84,37 @@ pub struct PlacedLoop {
     pub frame: DMat4,
 }
 
+/// The sections of a loft as both kernels build them: composite sections are matched segment by
+/// segment only if all have the same number of segments; otherwise each is joined into one
+/// closed B-spline that starts where the +x ray from its centroid leaves it, like circles (and
+/// polygons, see the engine's `loft_normalize`), so the sections do not twist against each other.
+pub fn loft_sections(sections: &[PlacedLoop]) -> Vec<PlacedLoop> {
+    let counts: Vec<Option<usize>> = sections
+        .iter()
+        .map(|s| match &s.lp {
+            Loop::Composite(v) => Some(v.len()),
+            _ => None,
+        })
+        .collect();
+    let equal = counts.iter().all(|c| c.is_some() && *c == counts[0]);
+    if equal || counts.iter().all(|c| c.is_none()) {
+        return sections.to_vec();
+    }
+    sections
+        .iter()
+        .map(|s| match &s.lp {
+            Loop::Composite(v) => {
+                let size = v.iter().map(|g| g.start().length()).fold(1e-9, f64::max);
+                let tol = size * 1e-4;
+                let c = curve2::centroid(v, tol);
+                let r = curve2::restart_at_ray(v, c, DVec2::X, tol);
+                PlacedLoop { lp: Loop::Composite(vec![Segment::Nurbs(curve2::join(&r))]), frame: s.frame }
+            }
+            _ => s.clone(),
+        })
+        .collect()
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum PathInterp {
     Linear,

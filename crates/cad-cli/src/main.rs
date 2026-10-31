@@ -454,7 +454,10 @@ fn main() -> ExitCode {
     if evaluates_models(&cmd) {
         match kernel::resolve(cli.kernel.as_deref()) {
             Ok(k) => kernel::select(k),
-            Err(m) => return finish(name, json_mode, Err(Fail::Usage(m)), None).emit(),
+            Err(m) => {
+                kernel::select_failed();
+                return finish(name, json_mode, Err(Fail::Usage(m)), None).emit();
+            }
         }
     }
     let mut info = None;
@@ -552,7 +555,7 @@ pub(crate) fn finish(
                 if let Some(d) = daemon_json {
                     j["daemon"] = d;
                 }
-                if evaluates_command(name) {
+                if evaluates_command(name) && kernel::known() {
                     j["kernel_id"] = json!(kernel_id());
                 }
                 stdout.push_str(&serde_json::to_string_pretty(&j).unwrap());
@@ -578,7 +581,7 @@ pub(crate) fn finish(
                 if let Some(d) = daemon_json {
                     j["daemon"] = d;
                 }
-                if evaluates_command(name) {
+                if evaluates_command(name) && kernel::known() {
                     j["kernel_id"] = json!(kernel_id());
                 }
                 let j = if name == "watch" { serde_json::to_string(&j) } else { serde_json::to_string_pretty(&j) };
