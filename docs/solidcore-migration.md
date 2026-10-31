@@ -217,6 +217,30 @@ predicates (`robust`), ear clipping for the planar case. `make_polyhedron` would
 own construction from planar faces and stitching (`SmApiStitchIntoSolid` is in scope, but
 untested).
 
+## Pin routine (bumping solidcore)
+
+solidcore is 0.0.x and changes by thousands of commits a week: the pin moves only on purpose.
+
+1. Measure `main`: `SMLIB_PREBUILT=smlib/build-native scripts/ci/solidcore.sh target/sc-main`
+   (or `SOLIDCORE_REV=<commit>`). It rewrites the pin in the working tree and builds against it.
+   A build failure is an API break: fix `crates/kernel-solidcore/src/lib.rs` (solidcore's
+   `crates/solidcore/tests/*.rs` show the intended use; note the change under "Status").
+2. Compare `target/sc-main/summary.md` with the last row of the comparison table: no new
+   `failed`, no node that was `same` now `differ` (`diff-kernels.json`, per node). A regression
+   upstream: minimal reproducer and issue; keep the old pin.
+3. Run the adapter tests: `cargo test -p kernel-solidcore --features solidcore`,
+   `cargo test -p cad-cli --no-default-features --features solidcore` (also guards the numbers
+   in `diff_kernels_on_examples`; adjust its thresholds to the new figures, a bit below them).
+4. Bump the pin, all in one commit:
+   - `crates/kernel-solidcore/Cargo.toml`: `rev = "<full hash>"` and the comment with date;
+   - `crates/kernel-solidcore/src/lib.rs`: `SOLIDCORE_REV` and `KERNEL_ID` (`solidcore-<7 chars>`,
+     part of every cache key) and the state described in the crate doc;
+   - `Cargo.lock` (follows from the build: `cargo update -p solidcore` is not needed when the
+     `rev` changes);
+   - this file: "As of", previous pins under "Status", a new row in the comparison table;
+     the brief in `docs/solidcore-plan.md` if a planned item became possible.
+5. Restore the working tree if you did not bump: `git checkout -- crates/kernel-solidcore Cargo.lock`.
+
 ## Acceptance
 
 `mcad diff-kernels <dateien…> [--json]` (`crates/cad-cli/src/diff.rs`) evaluates each file with

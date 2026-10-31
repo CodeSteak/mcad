@@ -12,9 +12,9 @@
 #                                       # diff-kernels.json, summary.md
 #   SOLIDCORE_REV=<commit>|main         # default main
 #
-# Changes the pin in
-# crates/kernel-solidcore (Cargo.toml, src/lib.rs) and Cargo.lock; locally restore them with
-# `git checkout -- crates/kernel-solidcore Cargo.lock`.
+# Changes the pin in crates/kernel-solidcore (Cargo.toml, src/lib.rs: SOLIDCORE_REV, KERNEL_ID)
+# and Cargo.lock; locally restore them with `git checkout -- crates/kernel-solidcore Cargo.lock`
+# (pin routine: docs/solidcore-migration.md).
 # Locally: scripts/ci/smlib-native.sh && SMLIB_PREBUILT=smlib/build-native scripts/ci/solidcore.sh
 set -euo pipefail
 
@@ -43,6 +43,7 @@ fi
 echo "solidcore: pinned ${PINNED:0:7}, measuring ${REV:0:7} ($WANT)"
 sed -i "s/rev = \"$PINNED\"/rev = \"$REV\"/" "$MANIFEST"
 sed -i "s/SOLIDCORE_REV: &str = \"$PINNED\"/SOLIDCORE_REV: \&str = \"$REV\"/" "$LIB"
+sed -i "s/KERNEL_ID: &str = \"solidcore-${PINNED:0:7}\"/KERNEL_ID: \&str = \"solidcore-${REV:0:7}\"/" "$LIB"
 
 # headless CLI: no Tauri/WebKitGTK needed; Cargo.lock follows the changed pin
 cargo build -p cad-cli --no-default-features --features solidcore
