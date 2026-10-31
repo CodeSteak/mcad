@@ -382,6 +382,23 @@ volume per colour with both kernels for all 37 cases of `tests/color-review/case
 (debug build, dependencies `opt-level = 2`); solidcore is slower on `key_rack` (12.8 s vs 5.8 s),
 `mug`, `pen_box` and `wall_hook` (2×), faster on `text_sign` and `f11`.
 
+## Tester findings on task E (d896e16)
+
+The tester confirmed 101 / 101 watertight at 0.05 from both kernels' B-reps, face ids and tags as
+SMLib's, `diff-kernels` unchanged, and found:
+
+| Finding | Fix |
+| --- | --- |
+| a tiny tolerance hung or ran out of memory (`sphere(10)` at 1e-7: > 60 s, 4.4 GB), 1e-20 panicked (integer overflow in the refinement's point grid); `$tol` reaches the kernel unfiltered | the tolerance is at least `MIN_REL_TOL` = 1e-6 of the model size (the `f32` resolution of mesh positions; SMLib's facade passes the tolerance through unchanged and stops its own refinement at a budget of 300 k triangles); budgets of 300 k triangles per face and 500 k in all, checked on the grid before the CDT, after the CDT and while inserting refinement points: "tolerance T mm too fine: more than N triangles" (an error at once, the other faces are not meshed). `sphere(10)` at 1e-7 fails in 0.03 s, the twisted extrusion at 1e-7 in 30 s (debug); the overflow is gone (saturating cell keys, the floor) |
+| a face stopped by the budget before the first pass kept `max_deviation` 0 (nothing measured); passes used up still gave `Ok` | each pass measures the mesh as it is, the last one only measures, so the deviation is that of the final mesh; a face above the tolerance is listed in `Stats::unconverged`; `tessellate` (and `kernel-solidcore`) fail if one is above `MAX_MISS` = 2 × the tolerance (SMLib keeps whatever its 3 passes reached) |
+| "largest deviation 0.050" was measured at centroids and inner edge midpoints only; dense sampling found 0.0504 to 0.0552 | a triangle whose centroid is off by more than a third of the tolerance is also measured at three inner points towards its corners; `Stats::max_deviation` documents the points; `diff-kernels --mesh` and `cad_tess::surface_distance` sample 7 points per triangle independently (corpus at 0.05: chord error ≤ 0.050) |
+| vertex normals at revolution poles and collapsed B-spline corners pointed against their triangles (`soap_dish` 104, `pillow_block` 5, `variable_radius` 22) | `Geom::normal` takes the limit from inside the face at a known pole (round-off `σu` passed the relative test); a vertex normal still against the mean of its triangles becomes that mean (collapsed corners of variable fillets): 0 in all three |
+| `check`: a T-junction closed by a zero-area triangle passed, an empty mesh was watertight, an index out of range panicked | empty is not watertight; bad indices are counted (`bad_indices`) and not watertight; a zero-area triangle closing a crack leaves no gap and still counts as closed (it is reported in `degenerate`; at tolerances near the floor the `f32` positions make slivers of that kind); self-intersections and fins are not detected (documented) |
+| an edge curve of degree ≥ 10 panicked | edge curves and revolution/extrusion profiles are checked like B-spline surfaces: "degree above 9" |
+| more triangles than SMLib where SMLib holds the tolerance (`f13_shell_fillet`, `heat_sink`, `f08`), slower on some sweeps; "fewer in 78 / 101" counted equal ones | partly: the fine-tolerance work (task F) cut `heat_sink` at 0.05 to 3.9 k (SMLib 1.7 k), the counts in "Tessellator" are strictly fewer; the rest is open |
+| `f32` mesh positions limit the accuracy far from the origin (a model at 10000 mm: 0.0515 at tol 0.05) | documented (the `Mesh` type; the floor `MIN_REL_TOL` is relative to the model size, not to its distance from the origin) |
+| `Asserts: 6 of 6 checked, 0 violated` counted pairs that could not be checked | the summary says `Asserts: n of m checked, k violated, j could not be checked` (manual 17, 19) |
+
 ## Tester findings on task D (ae50f1f)
 
 The tester reproduced the numbers (101 files, 2604 nodes: 2596 same, 3 unsupported, 3 blocked,

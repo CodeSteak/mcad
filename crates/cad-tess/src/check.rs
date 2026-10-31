@@ -25,12 +25,22 @@ pub struct MeshCheck {
     /// Enclosed volume (divergence theorem; meaningful when watertight), mm³.
     pub volume: f64,
     pub area: f64,
+    /// Triangles with an index beyond the vertices (skipped).
+    pub bad_indices: usize,
 }
 
 impl MeshCheck {
-    /// Closed, manifold and consistently oriented.
+    /// Closed, manifold, consistently oriented and not empty. A crack closed by a zero-area
+    /// triangle (a T-junction) leaves no gap and counts as closed; `degenerate` reports such
+    /// triangles (also slivers whose height is below the `f32` resolution of the positions, at
+    /// tolerances near [`crate::MIN_REL_TOL`]). Not detected: self-intersections and fins of two
+    /// coinciding triangles facing each other.
     pub fn watertight(&self) -> bool {
-        self.boundary_edges == 0 && self.nonmanifold_edges == 0 && self.misoriented_edges == 0
+        self.triangles > 0
+            && self.boundary_edges == 0
+            && self.nonmanifold_edges == 0
+            && self.misoriented_edges == 0
+            && self.bad_indices == 0
     }
 
     /// `|volume − exact| ≤ tol · area`: a mesh within `tol` of the surface encloses about
@@ -65,7 +75,12 @@ pub fn check(mesh: &Mesh) -> MeshCheck {
     let mut out = MeshCheck { triangles: mesh.indices.len() / 3, vertices: weld.len(), ..Default::default() };
     // per undirected edge: uses in direction (lo → hi) and (hi → lo)
     let mut uses: HashMap<(u32, u32), (u32, u32)> = HashMap::new();
+    let nv = ids.len();
     for t in mesh.indices.chunks_exact(3) {
+        if t.iter().any(|i| *i as usize >= nv) {
+            out.bad_indices += 1;
+            continue;
+        }
         let (a, b, c) = (pos(t[0]), pos(t[1]), pos(t[2]));
         let cr = (b - a).cross(c - a);
         out.area += 0.5 * cr.length();
@@ -118,5 +133,23 @@ mod tests {
         let mut m = tetra(false);
         m.indices.truncate(9);
         assert_eq!(check(&m).boundary_edges, 3);
+        // empty, an index out of range, a crack patched with a zero-area triangle
+        assert!(!check(&Mesh::default()).watertight());
+        let mut m = tetra(false);
+        m.indices.extend_from_slice(&[0, 1, 9]);
+        let c = check(&m);
+        assert_eq!(c.bad_indices, 1);
+        assert!(!c.watertight());
+        // edge 1–2 split at its midpoint 4 on one side, closed by the triangle (1, 4, 2)
+        let mut m = tetra(false);
+        m.positions.extend_from_slice(&[0.5, 0.5, 0.0]);
+        let t = &mut m.indices;
+        // the bottom triangle (0, 2, 1) becomes (0, 2, 4) and (0, 4, 1)
+        t.splice(0..3, [0, 2, 4, 0, 4, 1]);
+        t.extend_from_slice(&[1, 4, 2]);
+        let c = check(&m);
+        assert_eq!((c.boundary_edges, c.misoriented_edges, c.nonmanifold_edges), (0, 0, 0), "{c:?}");
+        assert_eq!(c.degenerate, 1);
+        assert!(c.watertight());
     }
 }

@@ -20,7 +20,9 @@
 | exit 2 "--kernel solidcore needs solidcore: build mcad with `--features solidcore` …" (or `MCAD_KERNEL=solidcore …`) | this `mcad` was built without solidcore: `cargo build -p cad-cli --features solidcore`, or use SMLib (default; unset `MCAD_KERNEL`) |
 | exit 2 "MCAD_KERNEL: unknown kernel `x` (smlib or solidcore)" | wrong value in the environment variable |
 | "not supported by this kernel: solidcore: …" (kernel error, `render`/`measure`/`export` exit 3) | the operation is not wired to solidcore yet or solidcore cannot do it (variable-radius fillet with different laws on several edges: "fillet_variable: different radius laws on several edges"): use the default kernel SMLib |
-| "solidcore: tessellate: face N cannot be meshed (…)" / "… the mesh of a closed solid is not watertight (…)" (exit 3) | `cad-tess` could not mesh solidcore's B-rep there (a face whose loops it cannot place on the surface): report the model; SMLib meshes it with its own tessellator |
+| "solidcore: tessellate: face N: …" / "… the mesh of a closed solid is not watertight (…)" (exit 3) | `cad-tess` could not mesh solidcore's B-rep there (a face whose loops it cannot place on the surface): report the model; SMLib meshes it with its own tessellator |
+| "solidcore: tessellate: face N: tolerance T mm too fine: more than K triangles (at most 300000 per face, 500000 in all)" (exit 3) | `$tol` (or `--tol`) far below what the model needs; tolerances below 1e-6 of the model size are raised to it (the `f32` resolution of meshes): use a coarser tolerance |
+| "solidcore: tessellate: face N: tolerance T not reached (D mm after the refinement)" (exit 3) | the refinement ended more than twice the tolerance off the surface: report the model, or use a coarser tolerance |
 | `diff-kernels --brep`: "line N … [B-rep]: surfaces {\"plane\": 6} vs {\"bspline\": 6}; 6 faces of another surface kind at the same positions" after a `mirror` | solidcore turns every surface into a B-spline under a mirror (negative scale); positions, orientation and volume are the same (also: shear, fillets around holes, offset curves of `shell`) |
 | `diff-kernels`: "blend: B-reps at other positions (n edges at other positions …)" (differ) | a blended node whose B-reps have the same kinds but other edge or face positions: a fillet or chamfer of another size in one kernel |
 | `diff-kernels --mesh`: "mesh [differ]: solidcore: chord X mm off the surface at […]" / "… volume off by …" / "… not watertight" | solidcore's mesh (`cad-tess`) misses the tolerance there: report the model |
@@ -81,7 +83,7 @@
 | "assert_touches: a and b overlap (V mm³)" | overlap instead of contact |
 | "assert_touches: a touches b only with line contact (non-manifold, hard to print …)" | cylinder on a plane, edge on a face: the union is non-manifold; give it a flat, or `contact = "any"` |
 | "… overlap could not be checked (…)" (info) | the kernel boolean failed (faces lying on each other); result undecided, not a violation |
-| "assert_touches: a and b: contact could not be checked (…)" (info) | the tessellation of a body failed (no distance), or the boolean failed with the bodies within the mesh accuracy; undecided, not a violation |
+| "assert_touches: a and b: contact could not be checked (…)" (info) | the tessellation of a body failed (no distance), or the boolean failed with the bodies within the mesh accuracy; undecided, not a violation (counted in `Asserts: … N could not be checked`) |
 | "kind of contact determined on the mesh only" | freeform faces: contact found on the mesh only |
 | "`assert_disjoint()` needs at least two children (a for loop counts as one child)" | put the bodies as separate statements |
 | `mcad export` exit 4 "export stopped: n assert violation(s)" | fix the model, or `--ignore-asserts` |
@@ -135,6 +137,6 @@ German locale) – glossary:
 | Flächenkontakt, Linienkontakt, Punktkontakt, Kontaktart | face contact, line contact, point contact, kind of contact |
 | nicht-mannigfaltig, schlecht druckbar | non-manifold, hard to print |
 | Überlappung nicht prüfbar, Berührung nicht prüfbar | overlap could not be checked, contact could not be checked |
-| Asserts: n von m geprüft, k verletzt; Assert-Verletzung; VERLETZT | Asserts: n of m checked, k violated; assert violation; VIOLATED |
+| Asserts: n von m geprüft, k verletzt, j nicht prüfbar; Assert-Verletzung; VERLETZT | Asserts: n of m checked, k violated, j could not be checked; assert violation; VIOLATED |
 | Export abgebrochen, nichts geschrieben, trotzdem exportiert | export stopped, nothing written, exported despite … |
 | beim Ziehen übersprungen, nicht geprüft | skipped while dragging, not checked |

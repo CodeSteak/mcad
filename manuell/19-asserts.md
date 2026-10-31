@@ -39,7 +39,7 @@ be checked", for `assert_touches`: neither "do not intersect" nor "does not touc
 
 | Command | Behaviour |
 | --- | --- |
-| `mcad check` | warnings `assert_touches: a and b overlap (…)`, line `Asserts: 4 of 4 checked, 1 violated`; JSON `asserts`, `violations` |
+| `mcad check` | warnings `assert_touches: a and b overlap (…)`, line `Asserts: 4 of 4 checked, 1 violated` (with `, N could not be checked` for assertions with an undecided pair: neither checked nor violated); JSON `asserts`, `violations` |
 | `mcad export` | violation → exit 4, nothing written, list of violations; `--ignore-asserts` writes anyway (warning line); keep-out volumes never exported |
 | `mcad render` | keep-out translucent yellow with dashed outline on top; intersection bodies red (edges on top), contact faces/lines green, gaps and clearances as lines with foot points; labels for violations, `--show asserts` labels every pair |
 | `mcad outline` / `measure` | section `Asserts` (`line 21 assert_touches(tol = 0.001, contact = "face"): ok – g + holder + guide touches k: face contact 384 mm²`); JSON `asserts` |

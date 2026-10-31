@@ -21,7 +21,7 @@
 //! let brep: Brep = kernel_brep();
 //! let mesh = cad_tess::tessellate(&brep, 0.05).unwrap();
 //! let c = cad_tess::check(&mesh);
-//! assert!(c.watertight());
+//! assert!(c.watertight() || mesh.is_empty()); // an empty B-rep gives an empty mesh
 //! ```
 
 use std::collections::HashMap;
@@ -51,13 +51,24 @@ pub struct Options {
     pub angle: f64,
     /// Refinement passes per face (each measures only what the last one changed).
     pub max_passes: usize,
-    /// No refinement beyond this many triangles in one face.
+    /// Most triangles of one face and of the whole mesh: a face that would need more (from
+    /// its grid, or during the refinement) fails with "tolerance too fine" instead of running
+    /// out of time and memory.
     pub max_face_triangles: usize,
+    pub max_triangles: usize,
 }
+
+/// The tolerance is at least this fraction of the model size: finer is below the resolution of
+/// the mesh's `f32` positions (about 6e-8 of a coordinate) and would only cost time.
+pub const MIN_REL_TOL: f64 = 1e-6;
+
+/// A face whose deviation after the refinement is above this many times the tolerance makes
+/// [`tessellate`] fail; up to it the mesh is kept and the face listed in [`Stats::unconverged`].
+pub const MAX_MISS: f64 = 2.0;
 
 impl Options {
     pub fn new(tol: f64) -> Options {
-        Options { tol, angle: 20f64.to_radians(), max_passes: 40, max_face_triangles: 200_000 }
+        Options { tol, angle: 20f64.to_radians(), max_passes: 40, max_face_triangles: 300_000, max_triangles: 500_000 }
     }
 }
 
@@ -69,11 +80,19 @@ pub struct Stats {
     pub refined: usize,
     /// Boundary segments that could not be kept (loops crossing in their parameter plane).
     pub lost_constraints: usize,
-    /// Faces without triangles and why.
+    /// Faces without triangles and why. (A tolerance that needs more triangles than
+    /// [`Options::max_face_triangles`] or [`Options::max_triangles`] allow is an error.)
     pub failed_faces: Vec<(FaceId, String)>,
-    /// Largest deviation of a triangle centroid or inner edge midpoint from the surface in the
-    /// last refinement pass of a curved face (planar faces: 0).
+    /// Largest deviation from the surface measured on the final mesh of a curved face (planar
+    /// faces: 0): at each triangle's centroid, at three inner points of a triangle whose centroid
+    /// is off by more than a third of the tolerance, and at each inner edge's midpoint
+    /// (boundary edges are the edges' polylines, within the tolerance of their curves).
     pub max_deviation: f64,
+    /// Faces whose refinement ended above the tolerance (passes used up), with their
+    /// deviation; [`tessellate`] fails if one is above [`MAX_MISS`] times the tolerance.
+    pub unconverged: Vec<(FaceId, f64)>,
+    /// The tolerance used: the requested one, at least [`MIN_REL_TOL`] of the model size.
+    pub tol: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -103,10 +122,25 @@ impl From<TessError> for KernelError {
 /// [`tessellate_with`] for the mesh of the other faces).
 pub fn tessellate(brep: &Brep, tol: f64) -> Result<Mesh, TessError> {
     let t = tessellate_with(brep, &Options::new(tol))?;
-    if let Some((id, why)) = t.stats.failed_faces.first() {
-        return Err(TessError(format!("face {id}: {why}")));
-    }
+    t.strict()?;
     Ok(t.mesh)
+}
+
+impl Tessellation {
+    /// An error for the first failed face, or for a face whose deviation stayed above
+    /// [`MAX_MISS`] times the tolerance.
+    pub fn strict(&self) -> Result<(), TessError> {
+        if let Some((id, why)) = self.stats.failed_faces.first() {
+            let n = self.stats.failed_faces.len();
+            let more = if n > 1 { format!(" ({} more faces)", n - 1) } else { String::new() };
+            return Err(TessError(format!("face {id}: {why}{more}")));
+        }
+        let t = self.stats.tol;
+        if let Some((id, d)) = self.stats.unconverged.iter().find(|(_, d)| *d > MAX_MISS * t) {
+            return Err(TessError(format!("face {id}: tolerance {t} not reached ({d:.3e} mm after the refinement)")));
+        }
+        Ok(())
+    }
 }
 
 /// The mesh of `brep` with `opts`; faces that fail are left out and listed in the stats.
@@ -115,26 +149,35 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
         return Err(TessError("tolerance must be > 0".into()));
     }
     brep.validate().map_err(TessError)?;
-    for f in brep.faces() {
-        if let cad_kernel::brep::Surface::BSpline(s) = &f.surface
-            && (s.degree_u.max(s.degree_v) as usize) >= bspline::MAXP
+    // degrees the evaluation handles (the kernels write 7 at most)
+    let too_high = |d: u32| d as usize >= bspline::MAXP;
+    let high = format!("degree above {}", bspline::MAXP - 1);
+    for (i, e) in brep.edges.iter().enumerate() {
+        if let cad_kernel::brep::Curve::BSpline(c) = &e.curve
+            && too_high(c.degree)
         {
-            return Err(TessError(format!("face {}: degree above {}", f.id, bspline::MAXP - 1)));
+            return Err(TessError(format!("edge {i}: {high}")));
         }
     }
-    let angle = opts.angle.clamp(1f64.to_radians(), 60f64.to_radians());
-    let ep = edges::discretise(brep, opts.tol, angle);
-    let (mut lo, mut hi) = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
-    for p in &ep.points {
-        lo = lo.min(*p);
-        hi = hi.max(*p);
+    for f in brep.faces() {
+        use cad_kernel::brep::Surface as S;
+        let d = match &f.surface {
+            S::BSpline(s) => s.degree_u.max(s.degree_v),
+            S::Revolution { curve, .. } | S::Extrusion { curve, .. } => curve.degree,
+            _ => 0,
+        };
+        if too_high(d) {
+            return Err(TessError(format!("face {}: {high}", f.id)));
+        }
     }
-    let size = if lo.x.is_finite() { (hi - lo).length() } else { 1.0 };
+    let size = model_size(brep);
+    let tol = opts.tol.max(MIN_REL_TOL * size);
+    let angle = opts.angle.clamp(1f64.to_radians(), 60f64.to_radians());
+    let ep = edges::discretise(brep, tol, angle);
     let eps = (1e-7 * size).max(1e-9);
-    let params =
-        face::Params { tol: opts.tol, angle, max_passes: opts.max_passes, max_triangles: opts.max_face_triangles };
+    let mut params = face::Params { tol, angle, max_passes: opts.max_passes, max_triangles: opts.max_face_triangles };
     let mut mesh = Mesh::default();
-    let mut stats = Stats::default();
+    let mut stats = Stats { tol, ..Default::default() };
     let mut next_id = ep.points.len() as u32;
     let mut splits = Vec::new();
     // boundary point id of each mesh vertex
@@ -154,11 +197,23 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
                 continue;
             }
         };
+        // what is left of the whole mesh's budget
+        params.max_triangles = opts.max_face_triangles.min(opts.max_triangles.saturating_sub(mesh.indices.len() / 3));
         let fm = face::mesh_face(&g, loops, &ep.points, &params, orient, &mut next_id);
         splits.extend_from_slice(&fm.splits);
         stats.refined += fm.refined;
         stats.lost_constraints += fm.lost_constraints;
         stats.max_deviation = stats.max_deviation.max(fm.deviation);
+        if let Some(n) = fm.too_fine {
+            // no use meshing the other faces
+            return Err(TessError(format!(
+                "face {}: tolerance {tol} mm too fine: more than {n} triangles (at most {} per face, {} in all)",
+                f.id, opts.max_face_triangles, opts.max_triangles
+            )));
+        }
+        if fm.deviation > tol {
+            stats.unconverged.push((f.id, fm.deviation));
+        }
         if fm.tris.is_empty() {
             stats.failed_faces.push((f.id, "no triangles".into()));
             continue;
@@ -202,6 +257,7 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
     }
     apply_splits(&mut mesh, &mut vid, &splits);
     fill_missing_normals(&mut mesh);
+    turn_normals_against(&mut mesh);
     for (i, ids) in ep.edges.iter().enumerate() {
         for w in ids.windows(2) {
             for id in w {
@@ -274,9 +330,53 @@ fn apply_splits(m: &mut Mesh, vid: &mut Vec<Option<u32>>, splits: &[face::Split]
     }
 }
 
+/// Diagonal of the box of the vertices and of a few points per edge (1 for an empty B-rep).
+fn model_size(brep: &Brep) -> f64 {
+    let (mut lo, mut hi) = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
+    let mut add = |p: DVec3| {
+        if p.is_finite() {
+            lo = lo.min(p);
+            hi = hi.max(p);
+        }
+    };
+    brep.vertices.iter().for_each(|p| add(*p));
+    for e in &brep.edges {
+        let (a, b) = (brep.vertices[e.start as usize], brep.vertices[e.end as usize]);
+        cad_kernel::brep::sample_edge(&e.curve, a, b, 9).into_iter().for_each(&mut add);
+    }
+    let d = if lo.x.is_finite() { (hi - lo).length() } else { 0.0 };
+    if d > 0.0 { d } else { 1.0 }
+}
+
 /// `a > b`; `false` if either is NaN (spelled out where a negation keeps NaN out).
 pub(crate) fn gt(a: f64, b: f64) -> bool {
     a > b
+}
+
+/// A vertex normal that points against the mean of its triangles (area-weighted) becomes that
+/// mean: at a collapsed corner of a B-spline (a variable fillet's end) the surface's limit
+/// normal depends on the direction of approach and can face away from the triangles there.
+fn turn_normals_against(m: &mut Mesh) {
+    let pos = |m: &Mesh, i: u32| {
+        let k = 3 * i as usize;
+        DVec3::new(m.positions[k] as f64, m.positions[k + 1] as f64, m.positions[k + 2] as f64)
+    };
+    let mut sum = vec![DVec3::ZERO; m.normals.len() / 3];
+    for t in m.indices.chunks_exact(3) {
+        let n = (pos(m, t[1]) - pos(m, t[0])).cross(pos(m, t[2]) - pos(m, t[0]));
+        for &v in t {
+            sum[v as usize] += n;
+        }
+    }
+    for (v, s) in sum.iter().enumerate() {
+        let k = 3 * v;
+        let n = DVec3::new(m.normals[k] as f64, m.normals[k + 1] as f64, m.normals[k + 2] as f64);
+        if let Some(s) = s.try_normalize()
+            && n.dot(s) < 0.0
+        {
+            m.normals[k..k + 3].copy_from_slice(&[s.x as f32, s.y as f32, s.z as f32]);
+        }
+    }
 }
 
 /// Vertices whose surface normal was undefined get the normal of a triangle using them.
@@ -297,5 +397,57 @@ fn fill_missing_normals(m: &mut Mesh) {
                 m.normals[k..k + 3].copy_from_slice(&[n.x as f32, n.y as f32, n.z as f32]);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cad_kernel::brep::*;
+
+    /// A half disc bounded by a line and a B-spline edge of the given degree.
+    fn half_disc(deg: u32) -> Brep {
+        let (a, b) = (DVec3::ZERO, DVec3::new(10.0, 0.0, 0.0));
+        let points: Vec<DVec3> = (0..=deg)
+            .map(|i| {
+                let t = i as f64 / deg as f64;
+                DVec3::new(10.0 - 10.0 * t, 5.0 * (std::f64::consts::PI * t).sin(), 0.0)
+            })
+            .collect();
+        let mut knots = vec![0.0; deg as usize + 1];
+        knots.extend(vec![1.0; deg as usize + 1]);
+        let c = BSplineCurve { degree: deg, knots, points, weights: None };
+        let frame = Frame::new(DVec3::ZERO, DVec3::Z, DVec3::X).unwrap();
+        let oe = |edge| OrientedEdge { edge, forward: true };
+        let face = Face {
+            id: 0,
+            tag: 1,
+            surface: Surface::Plane { frame },
+            same_sense: true,
+            loops: vec![Loop::Edges(vec![oe(0), oe(1)])],
+            approximated: false,
+        };
+        Brep {
+            vertices: vec![a, b],
+            edges: vec![
+                Edge { start: 0, end: 1, curve: Curve::Line { origin: a, dir: DVec3::X }, approximated: false },
+                Edge { start: 1, end: 0, curve: Curve::BSpline(c), approximated: false },
+            ],
+            bodies: vec![Body::Sheet { shells: vec![Shell { faces: vec![face] }] }],
+        }
+    }
+
+    /// A curve degree beyond the evaluation is an error, not a panic; tolerances below the
+    /// model's resolution are raised to it; one that needs too many triangles is an error.
+    #[test]
+    fn limits() {
+        assert!(tessellate(&half_disc(5), 0.05).is_ok_and(|m| m.triangle_count() > 0));
+        let e = tessellate(&half_disc(10), 0.05).unwrap_err();
+        assert!(e.0.contains("degree above"), "{e}");
+        let t = tessellate_with(&half_disc(5), &Options::new(1e-300)).unwrap();
+        assert!(t.stats.tol >= MIN_REL_TOL * 10.0, "{:?}", t.stats);
+        let few = Options { max_face_triangles: 50, ..Options::new(1e-3) };
+        let e = tessellate_with(&half_disc(5), &few).unwrap_err();
+        assert!(e.0.contains("too fine"), "{e}");
     }
 }

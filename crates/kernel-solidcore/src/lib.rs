@@ -2101,19 +2101,16 @@ mod imp {
         }
 
         /// The neutral B-rep meshed by `cad-tess` (solidcore has no tessellator, plan 2.8). A
-        /// face that cannot be meshed, or an open mesh of closed solids, is an error, never a
-        /// mesh with holes.
+        /// face that cannot be meshed, a tolerance too fine for the triangle budget, a face far
+        /// above the tolerance after the refinement, or an open mesh of closed solids is an
+        /// error, never a mesh with holes.
         pub fn tessellate(&mut self, s: &Shape, tol: f64) -> KResult<Mesh> {
             const OP: &str = "tessellate";
             let (b, _) = self.brep(s)?;
             let t = cad_tess::tessellate_with(&b, &cad_tess::Options::new(tol))
                 .map_err(|e| KernelError::failed(format!("solidcore: {e}")))?;
-            if let Some((id, why)) = t.stats.failed_faces.first() {
-                let n = t.stats.failed_faces.len();
-                return Err(KernelError::failed(format!(
-                    "solidcore: {OP}: face {id} cannot be meshed ({why}; {n} faces failed)"
-                )));
-            }
+            // a failed face, or one far above the tolerance (cad-tess's `strict`)
+            t.strict().map_err(|e| KernelError::failed(format!("solidcore: {e}")))?;
             let closed = b.bodies.iter().all(|b| matches!(b, cad_kernel::brep::Body::Solid { .. }));
             if closed && !t.mesh.is_empty() {
                 let c = cad_tess::check(&t.mesh);

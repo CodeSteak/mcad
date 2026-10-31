@@ -1110,7 +1110,11 @@ fn check(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     j["asserts"] = json!(asserts);
     let mut text = m.diagnostics_text();
     if !asserts.is_empty() {
-        let checked = asserts.iter().filter(|a| a.checked).count();
+        // an assertion with a pair that could not be checked (a failed Boolean or mesh) counts
+        // apart: it is neither checked nor violated
+        let undecided = |a: &p::AssertResult| a.pairs.iter().any(|p| p.problem.as_deref() == Some("unchecked"));
+        let unchecked = asserts.iter().filter(|a| a.checked && a.ok && undecided(a)).count();
+        let checked = asserts.iter().filter(|a| a.checked).count() - unchecked;
         let bad = asserts.iter().filter(|a| !a.ok).count();
         let tail = if bad > 0 {
             tr!(
@@ -1121,9 +1125,14 @@ fn check(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         } else {
             String::new()
         };
+        let open = if unchecked > 0 {
+            tr!(", {unchecked} nicht prüfbar", ", {unchecked} could not be checked")
+        } else {
+            String::new()
+        };
         text.push_str(&tr!(
-            "Asserts: {checked} von {} geprüft, {bad} verletzt{tail}\n",
-            "Asserts: {checked} of {} checked, {bad} violated{tail}\n",
+            "Asserts: {checked} von {} geprüft, {bad} verletzt{open}{tail}\n",
+            "Asserts: {checked} of {} checked, {bad} violated{open}{tail}\n",
             asserts.len()
         ));
     }

@@ -55,8 +55,11 @@ pub(crate) struct FaceMesh {
     pub splits: Vec<Split>,
     /// Points inserted by the refinement.
     pub refined: usize,
-    /// Largest deviation measured in the last refinement pass.
+    /// Largest deviation measured on the final mesh.
     pub deviation: f64,
+    /// The tolerance needs more triangles than allowed (`Params::max_triangles`): about this
+    /// many when it stopped.
+    pub too_fine: Option<usize>,
 }
 
 pub(crate) struct Params {
@@ -630,7 +633,12 @@ pub(crate) fn mesh_face(
             segs.push((x, y));
         }
     }
-    // grid
+    // grid (none if it alone is beyond the budget)
+    let estimate = 2 * (lines[0].len() + 1) * (lines[1].len() + 1);
+    if estimate > p.max_triangles {
+        fm.too_fine = Some(estimate);
+        return fm;
+    }
     if !g.is_plane() {
         let step = |ls: &[f64], a: f64, c: f64| {
             if ls.is_empty() { (c - a).max(0.0) } else { (c - a) / (ls.len() + 1) as f64 }
@@ -640,19 +648,23 @@ pub(crate) fn mesh_face(
             b.interior(uv);
         }
     }
+    if b.cdt.num_inner_faces() > p.max_triangles {
+        fm.too_fine = Some(b.cdt.num_inner_faces());
+        return fm;
+    }
     // refinement
     let mut inside = b.inside();
     if !g.is_plane() {
         let mut checked = Checked::default();
-        for _ in 0..p.max_passes {
-            if b.cdt.num_inner_faces() > p.max_triangles {
-                break;
-            }
+        // each pass measures the mesh as it is; the last one only measures
+        let mut passes = 0;
+        loop {
             let (add, worst) = refine_pass(&b, &inside, p.tol, &mut checked);
             fm.deviation = worst;
-            if add.is_empty() {
+            if add.is_empty() || passes == p.max_passes {
                 break;
             }
+            passes += 1;
             // only points inside the face and off its boundary (a point on a boundary edge
             // would not be on the neighbour's side of it)
             // and none within `tol / 20` of a vertex or of another new point
@@ -668,7 +680,7 @@ pub(crate) fn mesh_face(
                     for dx in -1..=1 {
                         for dy in -1..=1 {
                             for dz in -1..=1 {
-                                let k = key + glam::I64Vec3::new(dx, dy, dz);
+                                let k = key.saturating_add(glam::I64Vec3::new(dx, dy, dz));
                                 near |= seen.get(&k).is_some_and(|v| v.iter().any(|o| (*o - q).length() <= cell));
                             }
                         }
@@ -687,6 +699,10 @@ pub(crate) fn mesh_face(
                 break;
             }
             for uv in &ok {
+                if b.cdt.num_inner_faces() > p.max_triangles {
+                    fm.too_fine = Some(b.cdt.num_inner_faces());
+                    return fm;
+                }
                 if b.interior(*uv).is_some() {
                     fm.refined += 1;
                 }
@@ -782,7 +798,19 @@ fn refine_pass(b: &Builder, inside: &[bool], tol: f64, ok: &mut Checked) -> (Vec
         let n = n / area2;
         let uvc = (a.uv + c.uv + d.uv) / 3.0;
         let (lo, hi) = (a.uv.min(c.uv).min(d.uv), a.uv.max(c.uv).max(d.uv));
-        let (foot, dev) = b.foot((a.p + c.p + d.p) / 3.0, uvc, (lo, hi), n);
+        let (mut foot, mut dev) = b.foot((a.p + c.p + d.p) / 3.0, uvc, (lo, hi), n);
+        // near the tolerance also three inner points towards the corners (on a twisted
+        // surface the largest deviation need not be at the centroid)
+        if dev > tol / 3.0 && dev <= tol {
+            for w in [[4.0, 1.0, 1.0], [1.0, 4.0, 1.0], [1.0, 1.0, 4.0]] {
+                let q = (a.p * w[0] + c.p * w[1] + d.p * w[2]) / 6.0;
+                let quv = (a.uv * w[0] + c.uv * w[1] + d.uv * w[2]) / 6.0;
+                let (fq, dq) = b.foot(q, quv, (lo, hi), n);
+                if dq > dev {
+                    (foot, dev) = (fq, dq);
+                }
+            }
+        }
         worst = worst.max(dev);
         // a triangle on the boundary may face against the surface where the boundary's chord
         // sags more than the face is wide (a narrow fillet at a coarse tolerance): no point

@@ -298,10 +298,12 @@ impl Geom {
         let mid = (bounds.0 + bounds.1) * 0.5;
         let uv = uv + (mid - uv) * 1e-9;
         let d = self.ders(uv);
+        // at a pole σu or σv is round-off (the relative test below passes it): the limit
+        let at_pole = !self.poles.is_empty() && self.pole(self.eval(uv)).is_some();
         if let Some(n) = d[1]
             .cross(d[2])
             .try_normalize()
-            .filter(|_| d[1].cross(d[2]).length() > 1e-12 * (d[1].length() * d[2].length()).max(1e-300))
+            .filter(|_| !at_pole && d[1].cross(d[2]).length() > 1e-12 * (d[1].length() * d[2].length()).max(1e-300))
         {
             return Some(n);
         }
