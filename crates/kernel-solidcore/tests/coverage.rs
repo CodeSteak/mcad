@@ -173,3 +173,54 @@ fn queries_in_place_are_stable() {
     // one for the transform, two for the boolean operands; none for the queries
     assert_eq!(copies, 3, "{copies}");
 }
+
+/// Rigid and similarity transforms of curved solids pass the check of `transform` (vertices,
+/// curve points and surfaces follow the matrix): bounds and centroid move, the volume scales by
+/// |det|. The mass properties of a transform follow from its source's; with the source gone
+/// they are integrated, with the same result.
+#[cfg(feature = "solidcore")]
+#[test]
+fn transforms_of_curved_solids() {
+    use std::f64::consts::PI;
+    let mut k = SolidcoreKernel::new();
+    let r = DMat4::from_translation(DVec3::new(3.0, -2.0, 7.0))
+        * DMat4::from_axis_angle(DVec3::new(1.0, 2.0, 3.0).normalize(), 0.7);
+    let make = |k: &mut SolidcoreKernel, name: &str| match name {
+        "sphere" => k.make_sphere(5.0, 1).unwrap(),
+        "cylinder" => k.make_cylinder(10.0, 5.0, 5.0, 1).unwrap(),
+        "cone" => k.make_cylinder(10.0, 5.0, 2.0, 1).unwrap(),
+        _ => k.make_torus(8.0, 2.0, 1).unwrap(),
+    };
+    let cases = [
+        ("sphere", 4.0 / 3.0 * PI * 125.0),
+        ("cylinder", PI * 250.0),
+        ("cone", PI * 10.0 / 3.0 * (25.0 + 10.0 + 4.0)),
+        ("torus", 2.0 * PI * PI * 8.0 * 4.0),
+    ];
+    let mats = [
+        ("rigid", r),
+        ("mirror", r * DMat4::from_scale(DVec3::new(1.0, -1.0, 1.0))),
+        ("scaled", DMat4::from_scale(DVec3::splat(1.5)) * r),
+    ];
+    for (name, exact) in cases {
+        let s = make(&mut k, name);
+        let m0 = k.mass_props(&s).unwrap();
+        for (mname, m) in &mats {
+            let t = k.transform(&s, m).unwrap_or_else(|e| panic!("{name} {mname}: {e}"));
+            let det = m.determinant().abs();
+            let mt = k.mass_props(&t).unwrap();
+            assert!((mt.volume - exact * det).abs() < 1e-5 * exact * det, "{name} {mname}: {mt:?}");
+            assert!((mt.centroid - m.transform_point3(m0.centroid)).length() < 1e-9, "{name} {mname}: {mt:?}");
+            // the source gone: integrated on the transformed body
+            let fresh = make(&mut k, name);
+            let u = k.transform(&fresh, m).unwrap();
+            drop(fresh);
+            let mu = k.mass_props(&u).unwrap();
+            assert!((mu.volume - mt.volume).abs() < 1e-5 * mt.volume, "{name} {mname}: {mu:?} {mt:?}");
+            assert!((mu.area - mt.area).abs() < 1e-5 * mt.area, "{name} {mname}: {mu:?} {mt:?}");
+            assert!((mu.centroid - mt.centroid).length() < 1e-5, "{name} {mname}: {mu:?} {mt:?}");
+            let (lo, hi) = k.bounds(&u).unwrap().unwrap();
+            assert!(lo.cmple(mu.centroid).all() && mu.centroid.cmple(hi).all(), "{name} {mname}: {lo} {hi}");
+        }
+    }
+}

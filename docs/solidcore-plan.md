@@ -27,8 +27,10 @@ As of 2026-10-30, solidcore pin `bba8d87`. Status and measurements: `docs/solidc
 
 Done 2026-10-31: all six items; results in `docs/solidcore-migration.md` (comparison table, "Pin
 routine", "Performance", "Acceptance"). Measured for 0.6: `Inner::copy` was cheap, the gain came
-from keeping solidcore's caches and the mass properties; the next performance item is the
-volume check in the adapter's `transform` (two integrations per transform).
+from keeping solidcore's caches and the mass properties; the next performance item was the
+volume check in the adapter's `transform` (two integrations per transform). Done 2026-10-31: a
+cheap check of vertices, curve points and surfaces (`docs/solidcore-migration.md`, "Transform
+check"); evaluation of the 101 files 95.4 → 65.8 s, same 2280 → 2299, unsupported 102 → 92.
 
 | # | Task | Where | Done when |
 | --- | --- | --- | --- |

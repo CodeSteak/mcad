@@ -112,6 +112,7 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, spline profiles (plan 1.2) | 101 | 2604 | 2233 | 128 | 211 | 32 | 0 |
 | `bba8d87`, sweeps (plan 1.4) | 101 | 2604 | 2262 | 108 | 184 | 50 | 0 |
 | `bba8d87`, twist/scale and loft (plan 1.5) | 101 | 2604 | **2280** | 102 | 172 | 50 | 0 |
+| `bba8d87`, cheap `transform` check | 101 | 2604 | **2299** | 92 | 160 | 53 | 0 |
 
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
@@ -206,9 +207,9 @@ nodes are explained:
 | 2 | the same in `tests/everyday/bugs/f04`, `f15`, where SMLib's fillet fails (`SMLib fails, solidcore not`) |
 | 1 | `sketch_cable_duct`: the union of three extrusions loses faces (63 vs 47; Booleans, phase 3) |
 
-Other findings: the adapter's `transform` check rejects a few rigid transforms of curved solids
-whose centroid moves by 1e-6 (`wall_hook`, `f09b`, `knob_mirror`'s mirror): the tolerance of the
-check is tighter than the volume integration. SMLib's skins are less accurate than solidcore's
+Other findings: the adapter's `transform` check rejected a few rigid transforms of curved solids
+whose centroid moved by 1e-6 (`wall_hook`, `f09b`, `knob_mirror`'s mirror): the tolerance of the
+check was tighter than the volume integration (fixed since, see "Transform check"). SMLib's skins are less accurate than solidcore's
 (twisted square bar 8 × 8 × 20, exact 1280: SMLib +1.5e-5, solidcore +6e-7 relative).
 
 ## Performance (plan 0.5)
@@ -265,12 +266,39 @@ Findings:
   lost every time. Querying in place halves the query time (23.0 → 10.7 s on the comparable
   files) and takes 14 % off the evaluation; the bodies keep their caches, so the heap grows
   (56 → 84 MB on the largest file).
-- `transform` checks its result with two volume integrations (`mass_props` before and after,
+- `transform` checked its result with two volume integrations (`mass_props` before and after,
   see the adapter): `sphere(5)` takes 6 ms in both kernels, `translate(…) sphere(5)` 7 ms in SMLib
   and 460 ms in solidcore (one volume integration of a sphere: about 230 ms). With many
   transforms of curved solids (`knob_mirror`, `hull_minkowski`, `02_sphere_variants`) that
-  dominates. Now that `transform` is correct at `bba8d87`, a cheaper check (or none) is the
-  largest single gain left.
+  dominated; replaced by a cheap check (next section).
+
+### Transform check
+
+`transform` (`transform_independent_object`) is correct at `bba8d87` on bodies copied with
+`SmApiBrepCopy`; the adapter still checks each result, because solidcore moved only the vertices
+up to `c9de85d` (and still does on a `Brep::clone`). The check follows probes through the
+transform: every vertex, three points of every edge curve (a quarter, half and three quarters of
+its interval; same normalised parameter, else the closest point on the curve) and the middle point
+of each edge on the surfaces of its faces (`surface_closest_point`), all within 1e-7 of the body's
+size. Only where a probe cannot decide (a closest-point solve fails) volume and centroid are
+compared, within the accuracy of the integration (1e-5); over the corpus that never happens. The
+mass properties of a similarity transform follow from its source's (one integration per chain of
+transforms instead of one per node).
+
+| Measure (debug build, dependencies `opt-level = 2`) | before | after |
+| --- | ---: | ---: |
+| `translate([1, 2, 3]) sphere(5)`, solidcore evaluation (ms) | 488 | 7 |
+| 8 files with many transforms of curved solids (`knob_mirror`, `hull_minkowski`, `02_sphere_variants`, `wall_hook`, `f09b`, `pipe_clamp`, `26_if_else_variants`, the sphere), evaluation (s) | 17.4 | 4.0 |
+| all 101 files, solidcore evaluation (s) | 95.4 | 65.8 |
+| all 101 files, solidcore queries (s) | 40.9 | 57.9 |
+
+The queries take longer because more nodes are evaluated now (and their volumes are integrated
+when queried instead of during the transform). Nodes: same 2280 → 2299, unsupported 102 → 92,
+blocked 172 → 160, differ 50 → 53: the 10 rejected transforms pass (`wall_hook`, `door_stop`,
+`pillow_block`, `pipe_clamp`, `05_nested_booleans`, `28_cable_clip`, `knob_mirror`, `f09b`); the
+new `differ` are `knob_mirror`'s mirror and the group above it (the mirrored knob with the
+`difference(fillet = 0.5)` that finds no new edges, plan 1.9) and `f09b`'s union (SMLib fails,
+solidcore not).
 
 ## What is missing (in solidcore or here)
 

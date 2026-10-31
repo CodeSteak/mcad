@@ -9,8 +9,9 @@
 //!   names the upstream function and the solidcore unit that blocks it),
 //! * every operation solidcore has no entry point for, or that is not wired here →
 //!   `Unsupported("solidcore: <op> (…)")`,
-//! * entry points that answer but give wrong results at the pinned commit (transform, point
-//!   classification) → `Unsupported` too: `transform` checks volume and centroid of its result,
+//! * entry points that answered but gave wrong results at earlier pins (transform, point
+//!   classification) → `Unsupported` if they still do: `transform` checks that vertices, curve
+//!   points and surfaces followed the matrix (volume and centroid where that cannot decide),
 //!   `classify` runs a self-test on a box once,
 //! * other solidcore errors → [`KernelError::Failed`] / [`KernelError::InvalidInput`].
 //!
@@ -54,13 +55,22 @@ pub struct ShapeData {
     /// Mass properties, once computed (the shape never changes).
     #[cfg(feature = "solidcore")]
     mass: std::cell::Cell<Option<MassProps>>,
+    /// The shape this one is a similarity transform of, and the matrix: its mass properties
+    /// follow from the source's, if those are known by then (no second integration).
+    #[cfg(feature = "solidcore")]
+    derived: std::cell::RefCell<Option<(std::rc::Weak<ShapeData>, DMat4)>>,
     pub tag: Tag,
 }
 
 impl ShapeData {
     #[cfg(feature = "solidcore")]
     fn new(brep: solidcore::Brep, tag: Tag) -> Shape {
-        Rc::new(ShapeData { brep: std::cell::RefCell::new(brep), mass: std::cell::Cell::new(None), tag })
+        Rc::new(ShapeData {
+            brep: std::cell::RefCell::new(brep),
+            mass: std::cell::Cell::new(None),
+            derived: std::cell::RefCell::new(None),
+            tag,
+        })
     }
 }
 
@@ -122,6 +132,13 @@ mod imp {
 
     pub fn dv(p: solidcore::Point3) -> DVec3 {
         DVec3::new(p.x, p.y, p.z)
+    }
+
+    /// What [`Inner::transform`] follows through the transform: vertices with their points,
+    /// edges with three interior curve points and their faces.
+    struct Probes {
+        vertices: Vec<(solidcore::VertexId, DVec3)>,
+        edges: Vec<(solidcore::EdgeId, [DVec3; 3], Vec<solidcore::FaceId>)>,
     }
 
     pub struct Inner {
@@ -548,30 +565,130 @@ mod imp {
             if b.face_list().is_empty() {
                 return Ok(ShapeData::new(b, s.tag));
             }
-            let before = self.mass_props(s).map_err(|e| check_err("transform", e))?;
+            let probes = self.probes(&b)?;
             transform_independent_object(&mut self.k, Some(TransformObject::Brep(&mut b)), &pl, scale)
                 .map_err(|e| err("transform", e))?;
             let t = ShapeData::new(b, s.tag);
             // solidcore @ c9de85d returned success but moved only the vertices (on a
             // `Brep::clone`, whose geometry has no owner, it still does). Hand out only a result
-            // whose volume and centroid moved with the matrix.
-            let after = self.mass_props(&t).map_err(|e| match e {
+            // whose vertices, curves and surfaces moved with the matrix: the probes first (cheap),
+            // where they cannot decide (a closest-point solve fails) volume and centroid.
+            if let Err(why) = self.probes_moved(&t, &probes, m) {
+                self.transform_check_volume(s, &t, m, &why)?;
+            }
+            if similar(m) {
+                *t.derived.borrow_mut() = Some((Rc::downgrade(s), *m));
+            }
+            Ok(t)
+        }
+
+        /// Points to follow through a transform: every vertex, and per edge three interior
+        /// points of its curve (at a quarter, half and three quarters of its interval) with
+        /// the faces they lie on.
+        fn probes(&self, b: &solidcore::Brep) -> KResult<Probes> {
+            let op = "transform (check)";
+            let mut vertices = Vec::with_capacity(b.vertex_list().len());
+            for &v in b.vertex_list() {
+                vertices.push((v, dv(q::vertex_get_point(b, v).map_err(|e| err(op, e))?)));
+            }
+            let mut edges = Vec::with_capacity(b.edge_list().len());
+            for &e in b.edge_list() {
+                let ed = b.edge(e).map_err(|e| err(op, e))?;
+                let Some(curve) = ed.curve.as_ref() else { continue };
+                let iv = ed.interval;
+                let mut pts = [DVec3::ZERO; 3];
+                for (j, p) in pts.iter_mut().enumerate() {
+                    let t = iv.min() + (iv.max() - iv.min()) * (j + 1) as f64 / 4.0;
+                    *p = dv(curve.evaluate_point(&self.k, t).map_err(|e| err(op, e))?);
+                }
+                let faces = edge::faces(b, e, None).map_err(|e| err(op, e))?;
+                edges.push((e, pts, faces));
+            }
+            Ok(Probes { vertices, edges })
+        }
+
+        /// Did `probes` (taken before the transform) move with `m` to `t`? Vertices and curve
+        /// points at the same normalised parameter, else the closest point on the curve; the
+        /// middle point of each edge on the surfaces of its faces. `Err` names the first point
+        /// that did not, or the solve that failed.
+        fn probes_moved(&self, t: &Shape, p: &Probes, m: &DMat4) -> Result<(), String> {
+            let b = t.brep.borrow();
+            let b = &*b;
+            let pts = p.vertices.iter().map(|v| m.transform_point3(v.1));
+            let (lo, hi) =
+                pts.fold((DVec3::splat(f64::MAX), DVec3::splat(f64::MIN)), |(lo, hi), q| (lo.min(q), hi.max(q)));
+            let size = if lo.x <= hi.x { (hi - lo).length() } else { 1.0 };
+            // far below any misplaced geometry, above the solvers' tolerances
+            let tol = 1e-7 * size.max(1.0);
+            for &(v, before) in &p.vertices {
+                let want = m.transform_point3(before);
+                let got = q::vertex_get_point(b, v).map(dv).map_err(|e| format!("vertex: {e}"))?;
+                if (got - want).length() > tol {
+                    return Err(format!("vertex at {got:.6?}, expected {want:.6?}"));
+                }
+            }
+            let mut face_done = Vec::new();
+            for (e, before, faces) in &p.edges {
+                let ed = b.edge(*e).map_err(|e| format!("edge: {e}"))?;
+                let curve = ed.curve.as_ref().ok_or("edge without curve")?;
+                let iv = ed.interval;
+                for (j, &p0) in before.iter().enumerate() {
+                    let want = m.transform_point3(p0);
+                    let t = iv.min() + (iv.max() - iv.min()) * (j + 1) as f64 / 4.0;
+                    let got = curve.evaluate_point(&self.k, t).map(dv).map_err(|e| format!("curve: {e}"))?;
+                    if (got - want).length() > tol {
+                        let d = q::edge_closest_point(&self.k, b, *e, pt(want))
+                            .map_err(|e| format!("closest point on an edge: {e}"))?
+                            .closest
+                            .distance;
+                        if d > tol {
+                            return Err(format!("edge point {want:.6?} is {d:.2e} off its curve"));
+                        }
+                    }
+                }
+                let want = m.transform_point3(before[1]);
+                for &f in faces {
+                    if face_done.contains(&f) {
+                        continue;
+                    }
+                    face_done.push(f);
+                    let srf = solidcore::topology::face::p2::surface(b, f)
+                        .map_err(|e| format!("face: {e}"))?
+                        .ok_or("face without surface")?;
+                    let d = q::surface_closest_point(&self.k, srf, pt(want))
+                        .map_err(|e| format!("closest point on a surface: {e}"))?
+                        .closest
+                        .distance;
+                    if d > tol {
+                        return Err(format!("edge point {want:.6?} is {d:.2e} off the surface of its face"));
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        /// The fallback check of [`Inner::transform`]: volume and centroid of `t` against those of
+        /// `s` mapped by `m`, within the accuracy of the volume integration.
+        fn transform_check_volume(&mut self, s: &Shape, t: &Shape, m: &DMat4, why: &str) -> KResult<()> {
+            let before = self.mass_props(s).map_err(|e| check_err("transform", e))?;
+            let after = self.mass_props(t).map_err(|e| match e {
                 KernelError::Unsupported(_) => check_err("transform", e),
                 e => unsupported(&format!("transform: the result fails the check ({e})")),
             })?;
             let want_c = m.transform_point3(before.centroid);
             let want_v = before.volume * m.determinant().abs();
-            let tol = 1e-6 * (1.0 + want_c.length() + want_v.abs().cbrt());
-            if (after.centroid - want_c).length() > tol
-                || (after.volume - want_v).abs() > tol * tol.max(want_v.abs().cbrt())
-            {
+            // the integration is accurate to about 1e-6 relative (mass_props asks for 1e-6):
+            // the centroid within that of the body's size, the volume within that of itself
+            let size = want_v.abs().cbrt().max(1e-9);
+            let tol_c = 1e-5 * (size + 1e-3 * want_c.length());
+            if (after.centroid - want_c).length() > tol_c || (after.volume - want_v).abs() > 1e-5 * want_v.abs() {
                 return Err(unsupported(&format!(
-                    "transform: SmBrep::Transform (unit topology.brep_p5) moved the vertices but not the \
-                     curves and surfaces (centroid {:.6?}, expected {:.6?})",
+                    "transform: SmBrep::Transform (unit topology.brep_p5) did not move the body with the \
+                     matrix ({why}; centroid {:.6?}, expected {:.6?})",
                     after.centroid, want_c
                 )));
             }
-            Ok(t)
+            Ok(())
         }
 
         /// The closed loop as solidcore curves, its points mapped by `frame` (a circle is
@@ -1165,6 +1282,9 @@ mod imp {
             if let Some(m) = s.mass.get() {
                 return Ok(m);
             }
+            if let Some(m) = self.derived_mass(s)? {
+                return Ok(m);
+            }
             let store = solidcore::geom::attribute::AttributeStore::new();
             let key_of = |_e: solidcore::EntityRef| solidcore::geom::attribute::ObjectKey(0);
             let attrs = mp::PropertyAttributes { store: &store, key_of: &key_of };
@@ -1176,6 +1296,23 @@ mod imp {
             let m = MassProps { volume: m.properties.volume, area, centroid: DVec3::new(c.x, c.y, c.z) };
             s.mass.set(Some(m));
             Ok(m)
+        }
+
+        /// The mass properties of `s` from those of the shape it is a similarity transform of
+        /// (along a chain of transforms, computed once at its start), while that shape lives.
+        fn derived_mass(&mut self, s: &ShapeData) -> KResult<Option<MassProps>> {
+            let derived = s.derived.borrow_mut().take();
+            let Some((src, f)) = derived else { return Ok(None) };
+            let Some(src) = src.upgrade() else { return Ok(None) };
+            let m = self.mass_props(&src)?;
+            let det = f.determinant().abs();
+            let m = MassProps {
+                volume: m.volume * det,
+                area: m.area * det.powf(2.0 / 3.0),
+                centroid: f.transform_point3(m.centroid),
+            };
+            s.mass.set(Some(m));
+            Ok(Some(m))
         }
 
         pub fn bounds(&mut self, s: &Shape) -> KResult<Option<(DVec3, DVec3)>> {
