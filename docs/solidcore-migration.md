@@ -2,7 +2,7 @@
 
 Work plan up to the switch: [`solidcore-plan.md`](solidcore-plan.md).
 
-As of: 2026-10-31 (phase 0 of the plan done; phase 1: 1.1, 1.2, 1.4, 1.5 done) · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
+As of: 2026-10-31 (phase 0 of the plan done; phase 1: 1.1–1.5, 1.9, 1.10 and a cheap transform check done) · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
 
 ## Status
 
@@ -84,8 +84,8 @@ same curve, see "Profiles and sweeps"),
 
 Error mapping: `SolidError::Unported` → `KernelError::Unsupported("solidcore: <op>: …")`
 with upstream function and blocking unit, `SolidError::InvalidInput` → `InvalidInput`,
-otherwise `Failed`. For now faces carry the tag of the generating operation (attribute propagation
-for provenance is not wired up yet). The checks for `transform` and `classify`
+otherwise `Failed`. (At `c9de85d` faces carried the tag of the generating operation only; face
+tags are attributes since plan 1.10/1.9.) The checks for `transform` and `classify`
 unlock themselves as soon as solidcore computes correctly.
 
 ## Comparison over the examples (`mcad diff-kernels`)
@@ -115,6 +115,7 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, cheap `transform` check | 101 | 2604 | **2299** | 92 | 160 | 53 | 0 |
 | `bba8d87`, face tags and edge information (plan 1.10) | 101 | 2604 | 2299 | 128 | 171 | 6 | 0 |
 | `bba8d87`, fillets and chamfers (plan 1.3) | 101 | 2604 | **2523** | 26 | 47 | 8 | 0 |
+| `bba8d87`, tags resolved after Booleans (plan 1.9), tester findings of task B | 101 | 2604 | **2523** | 26 | 47 | 8 | 0 |
 
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
@@ -232,6 +233,16 @@ counted as Booleans losing faces (`hole_plate`, `vent_grille`, `gear`, `grip_she
 or `blocked` now (fillet not wired yet, plan 1.3); nodes: unsupported 92 → 128, blocked 160 →
 171, differ 53 → 6. Left `differ`: `sketch_cable_duct` (the union loses faces), `angle_anchor`,
 `project-housing` (2) and `f08c` (2), all from before.
+
+Provenance (plan 1.9): after a Boolean, a face without a tag gets the tag of the operand face it
+lies on (an interior point on the face's surface, within its box), else the Boolean's, as the
+facade's `resolve_tags`; solidcore leaves none untagged in the corpus, so nothing changed
+(2523 same). After a fillet or chamfer every face is verified that way (plan 1.3). Checked: the
+fillet-on-Boolean nodes, `mcad measure --colors` (38 cases, same volumes per colour), zones and
+asserts (`asserts`, `fillet_zones`, `multicolor`, `f07_torus_zone`: all nodes `same`); a union of
+a plate and a bar keeps 10 split plate faces with the plate's tag, `union(fillet = 0.5)` of it
+matches SMLib (`tests/provenance.rs`). Not checkable yet: display colours, 3MF and STEP colours
+(`tessellate` and `brep`, plan 1.11 and phase 2).
 
 ## Fillets and chamfers (plan 1.3)
 
@@ -387,9 +398,10 @@ solidcore not).
 2. ~~A transformation that carries curves and faces along~~ (works at `bba8d87`); still missing:
    the 4×4 matrix variant (shear, e.g. `multmatrix`).
 3. Booleans that keep all faces (see "State at `bba8d87`"); ~~point classification~~ (works).
-4. ~~Public fillet/chamfer API~~ (exists at `bba8d87`); wire it up here.
+4. ~~Public fillet/chamfer API~~ (exists at `bba8d87`; wired here, plan 1.3); still missing: a
+   public per-edge radius law in `FilletSession` (the executive has `var_rad_laws` per edge).
 5. Here: ~~sketch profiles for `extrude`; wire up `create_skin` (loft, extrusion with twist),
-   sweeps~~ (plan 1.1–1.5, see "Profiles and sweeps"); offset/shell; attributes for face tags (provenance);
+   sweeps~~ (plan 1.1–1.5, see "Profiles and sweeps"); offset/shell; ~~attributes for face tags (provenance)~~ (plan 1.9/1.10);
    `Kernel::brep` and STEP export via `step-brep`/`step-export`; Wasm build in the same module
    (stack 8 MiB, see solidcore README).
 6. **Own tessellator** (not in solidcore, see below).

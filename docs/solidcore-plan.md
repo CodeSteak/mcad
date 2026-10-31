@@ -1,6 +1,6 @@
 # Plan: switch to solidcore, no C++ in the build
 
-As of 2026-10-30, solidcore pin `bba8d87`. Status and measurements: `docs/solidcore-migration.md`.
+As of 2026-10-31, solidcore pin `bba8d87`. Status and measurements: `docs/solidcore-migration.md`.
 
 ## Goal
 
@@ -55,7 +55,7 @@ Nodes = unsupported nodes in `diff-kernels` at `bba8d87` (1438 nodes in 64 model
 | 1.6 | `nurbs_surface`, `thicken`, `shell`, `offset` | B-spline surface constructor, `offset::offset_executive::p2::{api_offset_brep_full, api_shell_brep_full}` | 2 + blocked | 3–5 d | `shell` stopped in `topology.brep_p3` at `c9de85d`; test again |
 | 1.7 | `make_polyhedron` (also `hull`, `minkowski`, STL as B-rep) | planar faces + `heal` (`SmApiStitchIntoSolid`), or `step_brep` from a planar `step_import::Model`; face loops from `cad_kernel::trimesh` | 8 + hull/minkowski | 2–3 d | SmApiPoly* is out of scope; planar faces are enough |
 | 1.8 | `transform` with shear/non-uniform matrix (`multmatrix`) | not ported (4×4 `SmBrep::Transform`) | 2 | open | options: surfaces to NURBS and map control points (exact for affine maps); or a clear error. Count uses first |
-| 1.9 | Provenance: face tags through booleans, fillets, sweeps | solidcore attributes (`geom::attribute::AttributeStore`, `Brep::add_attribute`) | – | 3–5 d | colours (3MF per colour), zones and `assert_*` depend on it. Check: `tests/color-review`, volume per colour |
+| 1.9 | Provenance: face tags through booleans, fillets, sweeps | solidcore attributes (`geom::attribute::AttributeStore`, `Brep::add_attribute`) | – | 3–5 d | colours (3MF per colour), zones and `assert_*` depend on it. Check: `tests/color-review`, volume per colour. **Done 2026-10-31**: tags as attributes (1.10) on every new body (primitives, extrusions, revolutions, sweeps, skins), carried by solidcore through copies, transforms and Booleans (solidcore#1462: split pieces keep the tag, merged faces the survivor's); after a Boolean a face without one gets the operand face's tag by position, after a fillet every face is verified (facade `resolve_tags`). All fillet-on-Boolean nodes `same` (1.3); `measure --colors` the same in all 38 colour cases; zones and asserts (`asserts`, `fillet_zones`, `multicolor`, `f07`) same. Display colours, 3MF and STEP colours need `tessellate`/`brep` (1.11, phase 2) |
 | 1.10 | `EdgeInfo::smooth` (seam, pole, tangent-continuous), `face_tags` of edges | edge uses, face normals at the edge | – | 1–2 d | fillet/zone selection. **Done 2026-10-31**: tags as solidcore attributes (`SC_TAG_ATTR_ID`, copy behaviour) on every new face, carried by copies, transforms and Booleans; `smooth` from `GetBlendEdgeuse` as SMLib, face tags per edge as `sc_edges`. The fillet-on-Boolean nodes find their edges: unsupported 92 → 128, blocked 160 → 171, differ 53 → 6 (25 of the "Booleans that lose faces" were skipped chamfers/fillets) |
 | 1.11 | `Kernel::brep` (neutral `brep::Brep`) | own mapping of solidcore topology/geometry; `step_brep::brep_to_model` as reference | – | 3–4 d | unlocks measuring (`cad-measure`), STEP (`cad-step`) and the tessellator; conventions as in `crates/kernel-smlib/src/brep.rs` |
 | 1.12 | `shape_bytes`, `set_draft`, `export` | – | – | 1 d | |

@@ -27,7 +27,8 @@
 //! shape's own body ([`ShapeData`]); before an operation changes a body it is copied with
 //! `SmApiBrepCopy` ([`Inner::copy`]), never with `Brep::clone`, whose geometry has no owner.
 //! Face tags (provenance) are solidcore attributes as in the facade (`TAG_ATTR`): set on every
-//! face of a new body, carried by solidcore through copies, transforms and Booleans. `edges`
+//! face of a new body, carried by solidcore through copies, transforms and Booleans (a face
+//! left without one gets the tag of the operand face it lies on, as `resolve_tags`). `edges`
 //! reports the tags of an edge's faces and marks as `smooth` what SMLib cannot blend. Fillets
 //! and chamfers follow the facade's `do_fillet_like` (`SmApiFilletEdges`, equal-distance chamfer
 //! with bevelled corners, radius laws as B-splines at the Greville stations, the same checks of
@@ -1371,6 +1372,9 @@ mod imp {
                     .map_err(|e| err("boolean", e))?;
                 acc = out.result;
             }
+            // solidcore carries the tags (split pieces keep theirs); a face without one gets
+            // the tag of the operand face it lies on, else the Boolean's
+            self.resolve_tags(&mut acc, shapes, tag, false)?;
             Ok(ShapeData::new(acc, tag))
         }
 
