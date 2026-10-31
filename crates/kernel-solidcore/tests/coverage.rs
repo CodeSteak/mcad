@@ -138,3 +138,38 @@ fn box_queries_and_transform() {
         }
     }
 }
+
+/// Queries work on the shape's own body (no copy per call): faces and edges keep their ids and
+/// order across other queries, the shape answers after it was an operand, and the volume is
+/// cached.
+#[cfg(feature = "solidcore")]
+#[test]
+fn queries_in_place_are_stable() {
+    let mut k = SolidcoreKernel::new();
+    let c = k.make_cylinder(10.0, 5.0, 5.0, 1).unwrap();
+    let s = k.transform(&c, &DMat4::from_translation(DVec3::new(1.0, 2.0, 3.0))).unwrap();
+    let f0 = k.faces(&s, 0).unwrap();
+    let e0 = k.edges(&s, 2).unwrap();
+    let m0 = k.mass_props(&s).unwrap();
+    k.classify(&s, &[DVec3::new(1.0, 2.0, 8.0)]).unwrap();
+    let b = k.make_box(DVec3::ZERO, DVec3::splat(4.0), 2).unwrap();
+    k.boolean(BoolOp::Difference, &[s.clone(), b], 3).unwrap();
+    let f1 = k.faces(&s, 0).unwrap();
+    let e1 = k.edges(&s, 2).unwrap();
+    assert_eq!(f0.len(), f1.len());
+    for (a, b) in f0.iter().zip(&f1) {
+        assert_eq!(a.id, b.id);
+        assert!(a.points.iter().zip(&b.points).all(|(p, q)| close(*p, *q)), "{a:?} {b:?}");
+    }
+    assert_eq!(e0.len(), e1.len());
+    for (a, b) in e0.iter().zip(&e1) {
+        assert_eq!(a.id, b.id);
+        assert!(a.points.iter().zip(&b.points).all(|(p, q)| close(*p, *q)), "{a:?} {b:?}");
+    }
+    assert_eq!(k.mass_props(&s).unwrap(), m0);
+    let exact = std::f64::consts::PI * 25.0 * 10.0;
+    assert!((m0.volume - exact).abs() < 1e-5 * exact, "{}", m0.volume);
+    let (copies, _) = k.copy_stats();
+    // one for the transform, two for the boolean operands; none for the queries
+    assert_eq!(copies, 3, "{copies}");
+}

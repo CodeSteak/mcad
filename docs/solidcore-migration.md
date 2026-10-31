@@ -156,8 +156,8 @@ Changes in `kernel-solidcore`:
 | Problem | Fix |
 | --- | --- |
 | `Brep::clone` gives curves and surfaces without owner: `transform` of the clone moves only the vertices, `face_internal_point` fails (status 1001) | copies with `SmApiBrepCopy` (`api_brep_copy`, caller keys per copy, `Inner::copy`) |
-| face ids of a copy differ from the original (`face N not found`) | `faces` queries the copy only |
-| `BrepClassifier` with `BrepIdentity::default()` puts every point outside | `BrepQuery::of_brep(..).point_3d_classify` on a copy; the self-test passes |
+| face ids of a copy differ from the original (`face N not found`) | `faces` queried the copy only; since plan 0.6 every query (`faces`, `edges`, `classify`, `mass_props`, `bounds`) works on the shape's own body (`RefCell<Brep>` in `ShapeData`), so ids agree between all queries |
+| `BrepClassifier` with `BrepIdentity::default()` puts every point outside | `BrepQuery::of_brep(..).point_3d_classify` (on the shape's own body since plan 0.6); the self-test passes |
 
 Remaining nodes:
 
@@ -184,41 +184,48 @@ Release build (`cargo build --release -p cad-cli --no-default-features --feature
 
 Totals over all files say little: where solidcore stops at an unsupported operation (fillets,
 sketch profiles, sweeps) it skips the most expensive work. The fair comparison is the 38 files
-where every node is `same` or `differ` (nothing unsupported or blocked):
+where every node is `same` or `differ` (nothing unsupported or blocked). "Before" is the adapter
+with a copy per query (plan 0.5), "after" queries the shape's own body and caches its mass
+properties (plan 0.6); the verdicts of all 2604 nodes are the same in both.
 
-| Measure | SMLib | solidcore | solidcore / SMLib |
-| --- | ---: | ---: | ---: |
-| evaluation, 38 comparable files (s) | 12.6 | 16.0 | 1.27 |
-| queries, 38 comparable files (s) | 9.4 | 23.0 | 2.45 |
-| `Inner::copy`, 38 comparable files | – | 2329 copies, 0.93 s | 2.4 % of eval + queries |
-| evaluation, all 101 files (s) | 103.6 | 57.2 | 0.55 (solidcore skips unsupported work) |
-| `Inner::copy`, all 101 files | – | 6429 copies, 1.78 s | 1.5 % |
-| heap after evaluation, largest file (MB) | 140 | 56 | |
-| peak RSS per process, largest file (MB) | 165 | 82 | 0.50 |
-| peak RSS per process, median file (MB) | 24 | 25 | 1.07 |
+| Measure | SMLib | solidcore before 0.6 | solidcore after 0.6 | after / SMLib |
+| --- | ---: | ---: | ---: | ---: |
+| evaluation, 38 comparable files (s) | 12.3–12.6 | 16.0 | 13.7 | 1.12 |
+| queries, 38 comparable files (s) | 9.2–9.4 | 23.0 | 10.7 | 1.17 |
+| `Inner::copy`, 38 comparable files | – | 2329 copies, 0.93 s (2.4 %) | 552 copies, 0.20 s (0.8 %) | |
+| evaluation, all 101 files (s) | 103.6–104.0 | 57.2 | 48.9 | 0.47 (solidcore skips unsupported work) |
+| queries, all 101 files (s) | 49.7–50.4 | 59.4 | 23.2 | 0.46 |
+| `Inner::copy`, all 101 files | – | 6429 copies, 1.78 s | 1549 copies, 0.39 s | |
+| heap after evaluation and queries, largest file (MB) | 140 | 56 | 84 | 0.60 |
+| `mcad eval` per process, wall time, sum over 101 files (s) | 105.6–106.5 | 59.8 | 50.7 | 0.48 |
+| peak RSS per process, largest file (MB) | 165–167 | 82 | 85 | 0.51 |
+| peak RSS per process, median file (MB) | 24–25 | 25 | 27 | 1.09 |
 
-Slowest files (solidcore evaluation, `diff-kernels`, ms):
+Slowest files (solidcore evaluation in `diff-kernels`, ms, before → after 0.6):
 
-| File | SMLib eval | solidcore eval | SMLib queries | solidcore queries | copies (ms) |
+| File | SMLib eval | solidcore eval | SMLib queries | solidcore queries | copies |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `spec/hull_minkowski.mcad` (8 unsupported) | 709 | 6441 | 1231 | 6219 | 140 (22) |
-| `spec/knob_mirror.mcad` (2 unsupported) | 596 | 5912 | 1260 | 5418 | 46 (4) |
-| `everyday/gear.mcad` | 5019 | 3485 | 1834 | 1778 | 126 (414) |
-| `everyday/key_rack/key_rack.mcad` (8 unsupported) | 5829 | 3198 | 5420 | 2334 | 190 (37) |
-| `openscad-compat/02_sphere_variants.scad` | 17 | 1187 | 394 | 1778 | 28 (2) |
-| `openscad-compat/26_if_else_variants.scad` | 81 | 674 | 453 | 1515 | 91 (14) |
+| `spec/hull_minkowski.mcad` (8 unsupported) | 709 | 6441 → 4474 | 1231 | 6219 → 1110 | 140 → 37 |
+| `spec/knob_mirror.mcad` (2 unsupported) | 596 | 5912 → 4422 | 1260 | 5418 → 395 | 46 → 8 |
+| `everyday/gear.mcad` | 5019 | 3485 → 3124 | 1834 | 1778 → 784 | 126 → 28 |
+| `everyday/key_rack/key_rack.mcad` (8 unsupported) | 5829 | 3198 → 2758 | 5420 | 2334 → 1290 | 190 → 52 |
+| `openscad-compat/02_sphere_variants.scad` | 17 | 1187 | 394 | 1778 | 28 |
+| `openscad-compat/26_if_else_variants.scad` | 81 | 674 | 453 | 1515 | 91 |
 
 Findings:
 
-- Copies are not the main cost (1.5–2.4 % of solidcore's time; the largest share in `gear`, big
-  B-reps, 8 %). The cost is in the queries themselves: `faces` (interior point per face) and
-  `mass_props` (exact integration over the faces) are 2.5× slower than SMLib's.
+- Copies themselves were cheap (1.5–2.4 % of solidcore's time; most in `gear`, big B-reps,
+  8 %). What 0.6 saved is mostly repeated work: each query ran on a fresh copy, so the caches
+  solidcore keeps in the body (and the mass properties computed for the `transform` check) were
+  lost every time. Querying in place halves the query time (23.0 → 10.7 s on the comparable
+  files) and takes 14 % off the evaluation; the bodies keep their caches, so the heap grows
+  (56 → 84 MB on the largest file).
 - `transform` checks its result with two volume integrations (`mass_props` before and after,
   see the adapter): `sphere(5)` takes 6 ms in both kernels, `translate(…) sphere(5)` 7 ms in SMLib
-  and 460 ms in solidcore. With many transforms of curved solids (`knob_mirror`,
-  `hull_minkowski`, `02_sphere_variants`) that dominates. Now that `transform` is correct at
-  `bba8d87`, a cheaper check (or none) is the largest single gain.
-- Memory is no concern: solidcore's B-reps are smaller than SMLib's.
+  and 460 ms in solidcore (one volume integration of a sphere: about 230 ms). With many
+  transforms of curved solids (`knob_mirror`, `hull_minkowski`, `02_sphere_variants`) that
+  dominates. Now that `transform` is correct at `bba8d87`, a cheaper check (or none) is the
+  largest single gain left.
 
 ## What is missing (in solidcore or here)
 

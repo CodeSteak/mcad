@@ -17,8 +17,10 @@
 //! So `mcad diff-kernels` can report which operations already work ("coverage"); at bba8d87:
 //! primitives, rigid transforms, `extrude` of polygons and circles, `revolve`, `classify`,
 //! `faces`, `edges`, `bounds`, `mass_props`, `is_solid`; booleans mostly (some results lose faces);
-//! curved solids have volumes about 1e-5 off. Shapes are copied with `SmApiBrepCopy`
-//! ([`Inner::copy`]), never with `Brep::clone`, whose geometry has no owner. Faces carry the tag
+//! curved solids have volumes closer to the exact value than SMLib's. Queries work on the
+//! shape's own body ([`ShapeData`]); before an operation changes a body it is copied with
+//! `SmApiBrepCopy` ([`Inner::copy`]), never with `Brep::clone`, whose geometry has no owner.
+//! Faces carry the tag
 //! of the operation that made the shape (solidcore's attribute plumbing for provenance is not
 //! wired here yet).
 //!
@@ -36,11 +38,26 @@ use glam::{DMat4, DVec2, DVec3};
 use std::rc::Rc;
 
 /// One solidcore B-rep and the tag of the operation that made it.
+///
+/// The body is owned by the shape and queried in place: solidcore's read-only queries
+/// (`face_internal_point`, mass properties, classification) take `&mut Brep` only for their
+/// caches, hence the `RefCell`. Operations that change a body (transform, boolean operands)
+/// work on a copy ([`Inner::copy`]); face and edge ids always refer to this body.
 #[derive(Debug)]
 pub struct ShapeData {
     #[cfg(feature = "solidcore")]
-    pub brep: solidcore::Brep,
+    pub brep: std::cell::RefCell<solidcore::Brep>,
+    /// Mass properties, once computed (the shape never changes).
+    #[cfg(feature = "solidcore")]
+    mass: std::cell::Cell<Option<MassProps>>,
     pub tag: Tag,
+}
+
+impl ShapeData {
+    #[cfg(feature = "solidcore")]
+    fn new(brep: solidcore::Brep, tag: Tag) -> Shape {
+        Rc::new(ShapeData { brep: std::cell::RefCell::new(brep), mass: std::cell::Cell::new(None), tag })
+    }
 }
 
 pub type Shape = Rc<ShapeData>;
@@ -155,7 +172,7 @@ mod imp {
         }
 
         fn wrap(r: Result<solidcore::Brep, SolidError>, op: &str, tag: Tag) -> KResult<Shape> {
-            r.map(|brep| Rc::new(ShapeData { brep, tag })).map_err(|e| err(op, e))
+            r.map(|brep| ShapeData::new(brep, tag)).map_err(|e| err(op, e))
         }
 
         pub fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Shape> {
@@ -230,14 +247,14 @@ mod imp {
             let Some((pl, scale)) = Self::placement(m)? else {
                 return Ok(s.clone());
             };
-            let mut b = self.copy(&s.brep)?;
+            let mut b = self.copy(&s.brep.borrow())?;
             if b.face_list().is_empty() {
-                return Ok(Rc::new(ShapeData { brep: b, tag: s.tag }));
+                return Ok(ShapeData::new(b, s.tag));
             }
             let before = self.mass_props(s).map_err(|e| check_err("transform", e))?;
             transform_independent_object(&mut self.k, Some(TransformObject::Brep(&mut b)), &pl, scale)
                 .map_err(|e| err("transform", e))?;
-            let t = Rc::new(ShapeData { brep: b, tag: s.tag });
+            let t = ShapeData::new(b, s.tag);
             // solidcore @ c9de85d returned success but moved only the vertices (on a
             // `Brep::clone`, whose geometry has no owner, it still does). Hand out only a result
             // whose volume and centroid moved with the matrix.
@@ -310,7 +327,7 @@ mod imp {
             let refs: Vec<Option<&Curve>> = curves.iter().map(Some).collect();
             let b = sw::create_linear_sweep(&mut self.k, &refs, Vec3::new(0.0, 0.0, h.signum()), h.abs(), true)
                 .map_err(|e| err("extrude", e))?;
-            let s = Rc::new(ShapeData { brep: b, tag });
+            let s = ShapeData::new(b, tag);
             self.transform(&s, &p.frame)
         }
 
@@ -330,7 +347,7 @@ mod imp {
                 true,
             )
             .map_err(|e| err("revolve", e))?;
-            Ok(Rc::new(ShapeData { brep: b, tag }))
+            Ok(ShapeData::new(b, tag))
         }
 
         /// Point classification, once a self-test on a box passed: at c9de85d
@@ -363,15 +380,16 @@ mod imp {
         }
 
         fn classify_unchecked(&mut self, s: &Shape, pts: &[DVec3]) -> KResult<Vec<Class>> {
-            if s.brep.face_list().is_empty() {
+            let mut b = s.brep.borrow_mut();
+            let b = &mut *b;
+            if b.face_list().is_empty() {
                 return Ok(vec![Class::Outside; pts.len()]);
             }
             let tol = zone_tol_3d(&self.k, SmallTopoType::NormalSize);
-            let mut b = self.copy(&s.brep)?;
             let mut out = Vec::with_capacity(pts.len());
             for p in pts {
-                let pc = BrepQuery::of_brep(&b)
-                    .point_3d_classify(&self.k, &mut b, pt(*p), tol, true)
+                let pc = BrepQuery::of_brep(b)
+                    .point_3d_classify(&self.k, b, pt(*p), tol, true)
                     .map_err(|e| err("classify", e))?;
                 out.push(match pc.point_class() {
                     // as the SMLib facade: inside a region that is not void (`IsVoid` 0)
@@ -397,36 +415,36 @@ mod imp {
             };
             let mut it = shapes.iter();
             let first = it.next().ok_or_else(|| KernelError::InvalidInput("boolean without operands".into()))?;
-            let mut acc = self.copy(&first.brep)?;
+            // the boolean consumes its operands: copies, the shapes stay as they are
+            let mut acc = self.copy(&first.brep.borrow())?;
             for s in it {
-                let other = self.copy(&s.brep)?;
+                let other = self.copy(&s.brep.borrow())?;
                 let out = solidcore::boolean::api_brep::boolean(&mut self.k, acc, other, op_sc)
                     .map_err(|e| err("boolean", e))?;
                 acc = out.result;
             }
-            Ok(Rc::new(ShapeData { brep: acc, tag }))
+            Ok(ShapeData::new(acc, tag))
         }
 
         /// Sample points: an interior point (`SmApiFaceInternalPoint`) and the vertices of the
         /// boundary loops; only the vertices while the interior point is not ported.
         pub fn faces(&mut self, s: &Shape) -> KResult<Vec<FaceInfo>> {
-            // the copy owns its geometry (face_internal_point needs that) and numbers its own
-            // faces, so every query goes to it
-            let mut b = self.copy(&s.brep)?;
-            let fs = q::get_faces(&b).map_err(|e| err("faces", e))?;
+            let mut b = s.brep.borrow_mut();
+            let b = &mut *b;
+            let fs = q::get_faces(b).map_err(|e| err("faces", e))?;
             let mut out = Vec::with_capacity(fs.len());
             for (i, f) in fs.into_iter().enumerate() {
                 let mut points = Vec::new();
-                match q::face_internal_point(&self.k, &mut b, f) {
+                match q::face_internal_point(&self.k, b, f) {
                     Ok(p) => points.push(dv(p)),
                     Err(e) if e.is_unported() => {}
                     Err(e) => return Err(err("faces", e)),
                 }
-                let loops = q::face_get_boundary_loops(&b, f).map_err(|e| err("faces", e))?;
+                let loops = q::face_get_boundary_loops(b, f).map_err(|e| err("faces", e))?;
                 for e in loops.edges {
-                    for v in [edge::start_vertex(&b, e), edge::end_vertex(&b, e)] {
+                    for v in [edge::start_vertex(b, e), edge::end_vertex(b, e)] {
                         if let Some(v) = v.map_err(|e| err("faces", e))? {
-                            let p = dv(q::vertex_get_point(&b, v).map_err(|e| err("faces", e))?);
+                            let p = dv(q::vertex_get_point(b, v).map_err(|e| err("faces", e))?);
                             if !points.contains(&p) {
                                 points.push(p);
                             }
@@ -443,47 +461,55 @@ mod imp {
 
         /// Start point, `samples` interior points of the curve, end point.
         pub fn edges(&mut self, s: &Shape, samples: u32) -> KResult<Vec<EdgeInfo>> {
-            let es = q::get_edges(&s.brep).map_err(|e| err("edges", e))?;
+            let b = s.brep.borrow();
+            let b = &*b;
+            let es = q::get_edges(b).map_err(|e| err("edges", e))?;
             let mut out = Vec::with_capacity(es.len());
             for (i, e) in es.into_iter().enumerate() {
-                let ed = s.brep.edge(e).map_err(|e| err("edges", e))?;
+                let ed = b.edge(e).map_err(|e| err("edges", e))?;
                 let curve =
                     ed.curve.as_ref().ok_or_else(|| KernelError::failed("solidcore: edges: edge without curve"))?;
                 let (t0, t1) = (ed.interval.min(), ed.interval.max());
                 let at = |t: f64| curve.evaluate_point(&self.k, t).map(dv).map_err(|e| err("edges", e));
                 let end = |v: Result<Option<solidcore::VertexId>, SolidError>, t: f64| -> KResult<DVec3> {
                     match v.map_err(|e| err("edges", e))? {
-                        Some(v) => Ok(dv(q::vertex_get_point(&s.brep, v).map_err(|e| err("edges", e))?)),
+                        Some(v) => Ok(dv(q::vertex_get_point(b, v).map_err(|e| err("edges", e))?)),
                         None => at(t),
                     }
                 };
-                let mut points = vec![end(edge::start_vertex(&s.brep, e), t0)?];
+                let mut points = vec![end(edge::start_vertex(b, e), t0)?];
                 for j in 1..=samples {
                     points.push(at(t0 + (t1 - t0) * f64::from(j) / f64::from(samples + 1))?);
                 }
-                points.push(end(edge::end_vertex(&s.brep, e), t1)?);
+                points.push(end(edge::end_vertex(b, e), t1)?);
                 out.push(EdgeInfo { id: i as u32, points, face_tags: vec![s.tag, s.tag], smooth: false });
             }
             Ok(out)
         }
 
         pub fn mass_props(&mut self, s: &Shape) -> KResult<MassProps> {
+            if let Some(m) = s.mass.get() {
+                return Ok(m);
+            }
             let store = solidcore::geom::attribute::AttributeStore::new();
             let key_of = |_e: solidcore::EntityRef| solidcore::geom::attribute::ObjectKey(0);
             let attrs = mp::PropertyAttributes { store: &store, key_of: &key_of };
-            let mut b = self.copy(&s.brep)?;
+            let mut b = s.brep.borrow_mut();
             let m = mp::brep_mass_properties(&self.k, &mut b, 1e-6, 1.0, pt(DVec3::ZERO), &attrs)
                 .map_err(|e| err("mass_props", e))?;
             let area = mp::brep_area(&self.k, &mut b, 1e-6).map_err(|e| err("mass_props (area)", e))?;
             let c = m.centroid;
-            Ok(MassProps { volume: m.properties.volume, area, centroid: DVec3::new(c.x, c.y, c.z) })
+            let m = MassProps { volume: m.properties.volume, area, centroid: DVec3::new(c.x, c.y, c.z) };
+            s.mass.set(Some(m));
+            Ok(m)
         }
 
         pub fn bounds(&mut self, s: &Shape) -> KResult<Option<(DVec3, DVec3)>> {
-            if s.brep.face_list().is_empty() {
+            let b = s.brep.borrow();
+            if b.face_list().is_empty() {
                 return Ok(None);
             }
-            let b = q::brep_bounding_box(&self.k, &s.brep, true).map_err(|e| err("bounds", e))?;
+            let b = q::brep_bounding_box(&self.k, &b, true).map_err(|e| err("bounds", e))?;
             Ok(Some((
                 DVec3::new(b.min_at(0), b.min_at(1), b.min_at(2)),
                 DVec3::new(b.max_at(0), b.max_at(1), b.max_at(2)),
@@ -491,11 +517,12 @@ mod imp {
         }
 
         pub fn is_solid(&mut self, s: &Shape) -> bool {
-            !s.brep.face_list().is_empty() && q::brep_is_manifold_solid(&s.brep).unwrap_or(false)
+            let b = s.brep.borrow();
+            !b.face_list().is_empty() && q::brep_is_manifold_solid(&b).unwrap_or(false)
         }
 
         pub fn is_empty(&mut self, s: &Shape) -> bool {
-            s.brep.face_list().is_empty()
+            s.brep.borrow().face_list().is_empty()
         }
     }
 }
