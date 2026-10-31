@@ -65,6 +65,8 @@ pub enum StmtKind {
         dir: Option<Expr>,
     },
     Grid(Rc<GridDecl>),
+    /// `render { … }`: studio look of the file (lights, materials, environment …).
+    Render(Rc<RenderDecl>),
     /// `name: call;` or `name[index]: call;` (in loops).
     Named {
         name: Ident,
@@ -168,6 +170,52 @@ pub struct PlaneDef {
     pub name: Ident,
     pub value: Expr,
     pub span: Span,
+}
+
+/// `render { name = value; light NAME { … } material SEL { … } }`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RenderDecl {
+    pub items: Vec<RenderItem>,
+    /// From `{` to `}` (inclusive).
+    pub body: Span,
+    pub span: Span,
+}
+
+/// `name = value;` in a render block (or in a light/material entry).
+#[derive(Debug, Clone, PartialEq)]
+pub struct RenderSetting {
+    pub name: Ident,
+    pub value: Expr,
+    /// The whole setting with its `;`.
+    pub span: Span,
+}
+
+/// What a `material` entry applies to.
+#[derive(Debug, Clone, PartialEq)]
+pub enum RenderTarget {
+    /// `material "red" { … }`: a colour (palette name, `#rrggbb`, `default` = uncoloured).
+    Color(String, Span),
+    /// `material lid { … }`: a part.
+    Part(Ident),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum RenderItem {
+    Setting(RenderSetting),
+    /// `light NAME { settings }`.
+    Light {
+        name: Ident,
+        settings: Vec<RenderSetting>,
+        body: Span,
+        span: Span,
+    },
+    /// `material SEL { settings }`.
+    Material {
+        target: RenderTarget,
+        settings: Vec<RenderSetting>,
+        body: Span,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -105,6 +105,68 @@ fn params_text(params: &[Param], src: &dyn Fn(cad_syntax::Span) -> String) -> Ve
         .collect()
 }
 
+/// One line about the file's render block: what it sets.
+fn render_block_text(r: &p::RenderBlock) -> String {
+    let on = |b: bool| if b { "on" } else { "off" };
+    let mut parts: Vec<String> = Vec::new();
+    parts.push(format!("style {}", r.style.as_deref().unwrap_or("studio")));
+    let sw = [
+        ("edges", r.edges),
+        ("shadows", r.shadows),
+        ("ao", r.ao),
+        ("ground", r.ground),
+        ("reflections", r.reflections),
+    ];
+    parts.extend(sw.iter().filter_map(|(k, v)| v.map(|v| format!("{k} {}", on(v)))));
+    let nums = [
+        ("ambient", r.ambient),
+        ("light_intensity", r.light_intensity),
+        ("shadow_softness", r.shadow_softness),
+        ("ao_radius", r.ao_radius),
+        ("ao_strength", r.ao_strength),
+        ("ground_reflection", r.ground_reflection),
+        ("ground_roughness", r.ground_roughness),
+    ];
+    parts.extend(nums.iter().filter_map(|(k, v)| v.map(|v| format!("{k} {}", num(v)))));
+    if let Some(e) = &r.environment {
+        parts.push(format!("environment {e}"));
+    }
+    if let Some(c) = &r.ground_color {
+        parts.push(format!("ground_color {c}"));
+    }
+    if let Some(b) = &r.background {
+        parts.push(format!("background {}", b.join(",")));
+    }
+    let mut t = tr!("Render-Block (Zeile {}): {}\n", "Render block (line {}): {}\n", r.range.line, parts.join(", "));
+    for l in &r.lights {
+        t.push_str(&tr!(
+            "  Licht {}: Azimut {}°, Höhe {}°, Stärke {}, {}\n",
+            "  light {}: azimuth {}°, elevation {}°, intensity {}, {}\n",
+            l.name,
+            num(l.azimuth),
+            num(l.elevation),
+            num(l.intensity),
+            l.color
+        ));
+    }
+    for m in &r.materials {
+        let target = match &m.target {
+            p::RenderTarget::Color { color } => format!("\"{color}\""),
+            p::RenderTarget::Part { part } => tr!("Bauteil {part}", "part {part}"),
+        };
+        let mut v: Vec<String> = m.preset.iter().cloned().collect();
+        let vals = [
+            ("metalness", m.metalness),
+            ("roughness", m.roughness),
+            ("clearcoat", m.clearcoat),
+            ("anisotropy", m.anisotropy),
+        ];
+        v.extend(vals.iter().filter_map(|(k, x)| x.map(|x| format!("{k} {}", num(x)))));
+        t.push_str(&tr!("  Material {target}: {}\n", "  material {target}: {}\n", v.join(", ")));
+    }
+    t
+}
+
 pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     if c.module.is_some() {
         return Err(Fail::Usage(tr!(
@@ -431,6 +493,9 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
         t.push_str(&tr!("Anker: {}\n", "Anchors: {}\n", a.join(", ")));
     }
     t.push_str(&colors_text);
+    if let Some(r) = &sc.render {
+        t.push_str(&render_block_text(r));
+    }
     if let Some(root) = sc.root.and_then(|r| sc.nodes.get(r as usize))
         && let Some(b) = &root.bounds
     {
@@ -467,6 +532,7 @@ pub(crate) fn command(c: &Common, kernel: bool) -> Result<Outcome, Fail> {
     j["parts"] = json!(parts);
     j["colors"] = colors;
     j["color_regions"] = color_regions;
+    j["render"] = json!(sc.render);
     j["counts"] = json!({ "errors": errors, "warnings": warnings, "nodes": sc.nodes.len(),
                           "modules": sc.modules.len(), "parts": sc.parts.len(), "colors": sc.colors.len() });
     j["kernel"] = json!(kernel);

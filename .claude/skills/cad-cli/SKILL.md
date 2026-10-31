@@ -190,6 +190,8 @@ file context.
 | `--theme dark` | dark colour scheme (as in the UI; palette colours in the dark variant) |
 | `--show regions` / `--show faces` | colour regions (body per colour as exported; default for models with colours) or colour per face (faster, inaccurate with overlap/fillets) |
 | `--size BxH`, `--no-axes`, `--whole-file` | image size, without axis cross, file context |
+| `--style studio` | realistic look: key light relative to the camera (`--light AZ,EL`, default `-40,50`), `--light-intensity`, `--ambient`, soft shadows (`--shadows on\|off`, `--shadow-softness 0…1`), ambient occlusion (`--ao on\|off`, `--ao-radius MM`, `--ao-strength 0…2`), ground plane (`--ground on\|off`, `--ground-color C`), `--edges on\|off`, physically based materials (`--material red=chrome`, `default=rubber`, `part:lid=aluminium,roughness=0.3`; presets plastic, plastic_glossy, rubber, aluminium, metal_brushed, chrome), `--environment studio\|overcast\|none` (reflections); about +1 s per 1024x768 image; for looking at form and contacts, `standard` for checking geometry. A file with a `render { … }` block (lights, materials per colour/part; `mcad usage render-block`) renders studio by default — `--style standard` for checking geometry |
+| `--background C[,C]` | background colour or top,bottom gradient (`#rrggbb`, `rrggbb`, palette name) |
 
 **Section convention (same in the UI):** plane through point `p` with normal `n`; the half
 `n` points into is removed, `(q − p) · n ≤ 0` remains. `x=10` means `p = (10,0,0)`,
@@ -295,7 +297,8 @@ offsets UTF-16). `Bounds = { min, max, size }`. Complete schema: header of
   camera: {projection, fov_deg, azimuth, elevation, dir, up, right, target, eye,
   scale_px_per_mm, width_mm, height_mm}, lines, highlighted, visible_nodes: [{idx, label,
   instance, role, line}], triangles, show, overlays: {grids, grid_points, anchors, handles,
-  labels}, section: {point, normal, keeps, method}|null, xray, bounds, notes, timings }`
+  labels}, section: {point, normal, keeps, method}|null, xray, theme, style, studio: {settings, lights, environment, materials, render_block}|null,
+  background: [hex…], bounds, notes, timings }`; `views[].studio: {light_dir, light_dirs, ground_z, ao_radius_mm, shadow_map}|null`
 - `measure`: `+ { between?: {a: {ref, kind: anchor|grid_point|coordinate, point}, b, delta, distance}, bounds?: {target,
   bounds}, volume?: {target, volume}, area?: {target, area}, interference?: {parts, pairs,
   collisions: [{a, b, volume}]}, clearance?: {a, b, distance, point_a, point_b, collision,

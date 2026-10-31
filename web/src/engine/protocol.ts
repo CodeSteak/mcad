@@ -76,7 +76,7 @@ volume: number | null, };
 /**
  * Message from the UI to the engine.
  */
-export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetLang", lang: string, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, colors?: boolean, } | { "type": "RequestColorRegions", meshes: boolean, coarse?: boolean, version?: number, } | { "type": "SetFilament", color: string, filament?: number, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, } | { "type": "Sketch" } & SketchRequest | { "type": "Measure" } & MeasureRequest;
+export type ToEngine = { "type": "SetSource", text: string, version: number, } | { "type": "SetFiles", files: { [key in string]: string }, main?: string, } | { "type": "SetFile", path: string, text?: string, } | { "type": "SetContext", module?: string, overrides: { [key in string]: Value }, } | { "type": "RequestMeshes", nodes: Array<number>, coarse?: boolean, version?: number, } | { "type": "DragStart", handle: number, } | { "type": "Drag", handle: number, target: DragTarget, } | { "type": "DragEnd", handle: number, target?: DragTarget, } | { "type": "SnapTargets", handle: number, } | { "type": "SetDragOptions", step_mm: number, step_deg: number, } | { "type": "SetLang", lang: string, } | { "type": "SetDefault", module: string, param: string, value: Value, } | { "type": "Export", format: ExportFormat, parts?: Array<string>, zip?: boolean, colors?: boolean, } | { "type": "RequestColorRegions", meshes: boolean, coarse?: boolean, version?: number, } | { "type": "SetFilament", color: string, filament?: number, } | { "type": "SetRender", changes: Array<RenderChange>, } | { "type": "Cancel" } | { "type": "BlockKeys", keys: Array<string>, } | { "type": "Sketch" } & SketchRequest | { "type": "Measure" } & MeasureRequest;
 
 /**
  * Tools of the sketch editor.
@@ -848,7 +848,63 @@ aborted: boolean, stats: Stats,
 /**
  * Results of the geometric assertions (empty until checked, see `FromEngine.Asserts`).
  */
-asserts: Array<AssertResult>, };
+asserts: Array<AssertResult>, 
+/**
+ * The main file's `render { … }` block (studio look of the file; `None`: none).
+ */
+render?: RenderBlock, };
+
+/**
+ * `render { … }` of the main file: the values given (`None`: not set, the default applies).
+ */
+export type RenderBlock = { range: SrcRange, 
+/**
+ * `studio` or `standard`.
+ */
+style: string | null, edges: boolean | null, 
+/**
+ * `studio`, `overcast` or `none`.
+ */
+environment: string | null, ambient: number | null, light_intensity: number | null, shadows: boolean | null, shadow_softness: number | null, ao: boolean | null, ao_radius: number | null, ao_strength: number | null, ground: boolean | null, 
+/**
+ * `#rrggbb`.
+ */
+ground_color: string | null, 
+/**
+ * Mirror image of the model in the ground, 0..1.
+ */
+ground_reflection: number | null, 
+/**
+ * Blur of the ground reflection, 0..1.
+ */
+ground_roughness: number | null, 
+/**
+ * Ray-traced reflections of the model in itself (CLI renderer).
+ */
+reflections: boolean | null, 
+/**
+ * One or two (top, bottom) `#rrggbb`.
+ */
+background: Array<string> | null, lights: Array<RenderLight>, materials: Array<RenderMaterial>, };
+
+/**
+ * One change of the render block (`SetRender`); `value: null` removes the setting.
+ */
+export type RenderChange = { "kind": "set", key: string, value: Value, } | { "kind": "light", name: string, key: string, value: Value, } | { "kind": "remove_light", name: string, } | { "kind": "material", target: RenderTarget, key: string, value: Value, } | { "kind": "remove_material", target: RenderTarget, };
+
+export type RenderLight = { name: string, azimuth: number, elevation: number, intensity: number, 
+/**
+ * `#rrggbb`.
+ */
+color: string, range: SrcRange, };
+
+/**
+ * What a material entry applies to: a colour as written (`red`, `#rrggbb`, `default` =
+ * uncoloured material) or a part.
+ */
+export type RenderTarget = { color: string, } | { part: string, };
+
+export type RenderMaterial = { target: RenderTarget, preset: string | null, metalness: number | null, roughness: number | null, clearcoat: number | null, anisotropy: number | null, range: SrcRange, };
 
 export type NodeStatus = "ok" | "warning" | "error" | "skipped" | "pending";
 

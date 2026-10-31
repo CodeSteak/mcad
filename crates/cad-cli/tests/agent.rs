@@ -377,6 +377,383 @@ fn render_xray() {
     assert!(png(&a).differing(&png(&b)) > 2000);
 }
 
+#[test]
+fn render_studio_style() {
+    let dir = tempfile::tempdir().unwrap();
+    let g = data("housing.mcad");
+    let p = |n: &str| dir.path().join(n).display().to_string();
+    let std_v = json(&["render", &g, "-o", &p("a.png"), "--size", "400x300"], 0);
+    assert_eq!(std_v["style"], "standard");
+    assert_eq!(std_v["studio"], Value::Null);
+    assert_eq!(std_v["background"], serde_json::json!(["#f5f5f7"]));
+    let v = json(&["render", &g, "-o", &p("b.png"), "--size", "400x300", "--style", "studio"], 0);
+    assert_eq!(v["style"], "studio");
+    // defaults
+    let s = &v["studio"];
+    assert_eq!((f(&s["light_azimuth"]), f(&s["light_elevation"])), (-40.0, 50.0));
+    assert_eq!((f(&s["light_intensity"]), f(&s["ambient"])), (1.0, 0.4));
+    assert_eq!((s["shadows"].as_bool(), f(&s["shadow_softness"])), (Some(true), 0.35));
+    assert_eq!((s["ao"].as_bool(), &s["ao_radius"], f(&s["ao_strength"])), (Some(true), &Value::Null, 1.0));
+    assert_eq!((s["ground"].as_bool(), s["ground_color"].as_str()), (Some(true), Some("#e6e8ec")));
+    assert_eq!(v["background"], serde_json::json!(["#f8f9fb", "#d9dde3"]));
+    assert_eq!(s["edges"], true);
+    assert_eq!(s["environment"], "studio");
+    assert_eq!(
+        s["lights"],
+        serde_json::json!([{"azimuth": -40.0, "elevation": 50.0, "intensity": 1.0, "color": "#ffffff"}])
+    );
+    assert_eq!(s["materials"], serde_json::json!([]));
+    assert_eq!(s["render_block"], Value::Null);
+    assert_eq!((f(&s["ground_reflection"]), f(&s["ground_roughness"])), (0.2, 0.3));
+    assert_eq!((s["reflections"].as_bool(), s["quality"].as_str()), (Some(true), Some("normal")));
+    let vs = &v["views"][0]["studio"];
+    assert_eq!(vs["rays"], serde_json::json!({"surfaces": 4, "ground": 4}));
+    assert!(f(&vs["ao_radius_mm"]) > 0.0);
+    assert_eq!(vs["shadow_map"], 2048);
+    assert!(vs["ground_z"].is_number());
+    assert!(f(&vs["light_dir"][2]) > 0.7);
+    let (a, b) = (png(&dir.path().join("a.png")), png(&dir.path().join("b.png")));
+    assert!(a.differing(&b) > 20000, "{}", a.differing(&b));
+    // shadows, AO and ground change the image; settings appear in the JSON
+    let v = json(
+        &[
+            "render",
+            &g,
+            "-o",
+            &p("c.png"),
+            "--size",
+            "400x300",
+            "--style",
+            "studio",
+            "--shadows",
+            "off",
+            "--ao",
+            "off",
+            "--ground",
+            "off",
+            "--light",
+            "30,70",
+            "--light-intensity",
+            "1.5",
+            "--ambient",
+            "0.2",
+            "--ao-radius",
+            "3",
+            "--ao-strength",
+            "2",
+            "--shadow-softness",
+            "0",
+            "--ground-color",
+            "#808080",
+            "--background",
+            "white,silver",
+        ],
+        0,
+    );
+    let s = &v["studio"];
+    assert_eq!(
+        (s["shadows"].as_bool(), s["ao"].as_bool(), s["ground"].as_bool()),
+        (Some(false), Some(false), Some(false))
+    );
+    assert_eq!((f(&s["light_azimuth"]), f(&s["light_elevation"]), f(&s["ao_radius"])), (30.0, 70.0, 3.0));
+    assert_eq!(s["ground_color"], "#808080");
+    assert_eq!(v["background"], serde_json::json!(["#f4f3f0", "#abaeb2"]));
+    assert_eq!(v["views"][0]["studio"]["shadow_map"], Value::Null);
+    assert_eq!(v["views"][0]["studio"]["ao_radius_mm"], Value::Null);
+    assert_eq!(v["views"][0]["studio"]["ground_z"], Value::Null);
+    assert!(png(&dir.path().join("c.png")).differing(&b) > 2000);
+    // ray tracing off: no rays, a different image
+    let v = json(
+        &[
+            "render",
+            &g,
+            "-o",
+            &p("r.png"),
+            "--size",
+            "400x300",
+            "--style",
+            "studio",
+            "--quality",
+            "draft",
+            "--reflections",
+            "off",
+            "--ground-reflection",
+            "0",
+            "--ground-roughness",
+            "0.5",
+            "--material",
+            "default=metal_brushed,anisotropy=0.5",
+        ],
+        0,
+    );
+    let s = &v["studio"];
+    assert_eq!((s["quality"].as_str(), s["reflections"].as_bool()), (Some("draft"), Some(false)));
+    assert_eq!((f(&s["ground_reflection"]), f(&s["ground_roughness"])), (0.0, 0.5));
+    assert_eq!(f(&s["materials"][0]["anisotropy"]), 0.5);
+    assert_eq!(s["materials"][0]["color"], serde_json::json!([0.913, 0.922, 0.924]));
+    assert_eq!(v["views"][0]["studio"]["rays"], Value::Null);
+    // edges off: only the edge lines go
+    let v = json(&["render", &g, "-o", &p("n.png"), "--size", "400x300", "--style", "studio", "--edges", "off"], 0);
+    assert_eq!(v["studio"]["edges"], false);
+    let n = png(&dir.path().join("n.png"));
+    let d = n.differing(&b);
+    assert!(d > 300 && d < 20000, "{d}");
+    // materials and environment
+    let v = json(
+        &[
+            "render",
+            &g,
+            "-o",
+            &p("m.png"),
+            "--size",
+            "400x300",
+            "--style",
+            "studio",
+            "--material",
+            "default=chrome",
+            "--material",
+            "part:k=plastic,roughness=0.3",
+            "--environment",
+            "overcast",
+        ],
+        0,
+    );
+    assert_eq!(v["studio"]["environment"], "overcast");
+    let mats = v["studio"]["materials"].as_array().unwrap();
+    assert_eq!(mats.len(), 2);
+    assert_eq!(
+        (mats[0]["target"].as_str(), f(&mats[0]["metalness"]), f(&mats[0]["roughness"])),
+        (Some("default"), 1.0, 0.04)
+    );
+    assert_eq!(mats[1]["target"], "part:k");
+    close(f(&mats[1]["roughness"]), 0.3, 1e-6);
+    assert!(png(&dir.path().join("m.png")).differing(&b) > 2000);
+    // contact sheet, dark theme, section, perspective together
+    let v = json(
+        &[
+            "render",
+            &g,
+            "-o",
+            &p("d.png"),
+            "--views",
+            "all",
+            "--size",
+            "800x600",
+            "--style",
+            "studio",
+            "--theme",
+            "dark",
+            "--section",
+            "z=10",
+            "--perspective",
+        ],
+        0,
+    );
+    assert_eq!(v["views"].as_array().unwrap().len(), 4);
+    assert_eq!(v["background"], serde_json::json!(["#2b3038", "#111317"]));
+    // gradient background without studio
+    let v = json(&["render", &g, "-o", &p("e.png"), "--size", "200x150", "--background", "#ffffff,#000000"], 0);
+    assert_eq!(v["background"], serde_json::json!(["#ffffff", "#000000"]));
+    let e = png(&dir.path().join("e.png"));
+    assert_eq!(&e.rgba[0..3], &[255, 255, 255]);
+    let last = ((e.h - 1) * e.w * 4) as usize;
+    assert_eq!(&e.rgba[last..last + 3], &[0, 0, 0]);
+    // text line
+    let t = text(&["render", &g, "-o", &p("f.png"), "--size", "200x150", "--style", "studio"], 0);
+    assert!(t.contains("Studio"), "{t}");
+    // usage errors
+    for bad in [
+        &["--ao", "off"][..],
+        &["--style", "fancy"],
+        &["--style", "studio", "--shadows", "maybe"],
+        &["--style", "studio", "--light", "10"],
+        &["--style", "studio", "--light", "10,0"],
+        &["--style", "studio", "--ambient", "1.5"],
+        &["--style", "studio", "--ao-radius", "0"],
+        &["--style", "studio", "--ground-color", "notacolour"],
+        &["--style", "studio", "--edges", "maybe"],
+        &["--edges", "off"],
+        &["--material", "red=chrome"],
+        &["--style", "studio", "--material", "red=unobtainium"],
+        &["--style", "studio", "--quality", "fast"],
+        &["--style", "studio", "--ground-reflection", "2"],
+        &["--style", "studio", "--ground-roughness", "1.5"],
+        &["--style", "studio", "--reflections", "maybe"],
+        &["--reflections", "off"],
+        &["--style", "studio", "--material", "nocolour=chrome"],
+        &["--style", "studio", "--material", "red"],
+        &["--style", "studio", "--material", "red=chrome,shine=1"],
+        &["--style", "studio", "--material", "red=roughness=2"],
+        &["--style", "studio", "--environment", "beach"],
+        &["--background", "#12"],
+        &["--background", "red,green,blue"],
+    ] {
+        let mut args = vec!["render", g.as_str(), "-o", "/dev/null"];
+        args.extend_from_slice(bad);
+        let v = json(&args, 2);
+        assert!(v["error"].as_str().is_some_and(|e| !e.is_empty()), "{bad:?}: {v}");
+    }
+}
+
+#[test]
+fn render_block_of_the_file() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("torch.mcad");
+    std::fs::write(
+        &file,
+        r##"color("silver") cylinder(h = 30, r = 8);
+color("red") translate([0, 0, 30]) sphere(6);
+lid: cube_lid();
+module cube_lid() translate([20, 0, 0]) cube(8);
+render {
+    edges = false;
+    ambient = 0.3;
+    environment = "overcast";
+    background = "#ffffff";
+    light key { azimuth = 20; elevation = 60; }
+    light rim { azimuth = 160; intensity = 0.5; color = "#ffe0c0"; }
+    material "silver" { preset = "chrome"; }
+    material lid { preset = "rubber"; }
+}
+"##,
+    )
+    .unwrap();
+    let g = file.display().to_string();
+    let p = |n: &str| dir.path().join(n).display().to_string();
+    // the block makes the studio look the default and sets its values
+    let v = json(&["render", &g, "-o", &p("a.png"), "--size", "320x240"], 0);
+    assert_eq!(v["style"], "studio");
+    let s = &v["studio"];
+    assert_eq!(s["render_block"]["line"], 5);
+    assert_eq!(
+        (s["edges"].as_bool(), f(&s["ambient"]), s["environment"].as_str()),
+        (Some(false), 0.3, Some("overcast"))
+    );
+    assert_eq!(s["lights"].as_array().unwrap().len(), 2);
+    assert_eq!((f(&s["lights"][0]["azimuth"]), f(&s["lights"][0]["elevation"])), (20.0, 60.0));
+    assert_eq!((s["lights"][1]["color"].as_str(), f(&s["lights"][1]["elevation"])), (Some("#ffe0c0"), 50.0));
+    assert_eq!(v["background"], serde_json::json!(["#ffffff"]));
+    let mats = s["materials"].as_array().unwrap();
+    assert_eq!((mats[0]["target"].as_str(), f(&mats[0]["metalness"])), (Some("#abaeb2"), 1.0));
+    close(f(&mats[1]["roughness"]), 0.85, 1e-6);
+    assert_eq!(mats[1]["target"], "part:lid");
+    // options override the block (the first light, materials after the block's)
+    let v = json(
+        &[
+            "render",
+            &g,
+            "-o",
+            &p("b.png"),
+            "--size",
+            "320x240",
+            "--light",
+            "-60,30",
+            "--edges",
+            "on",
+            "--material",
+            "silver=plastic",
+            "--environment",
+            "studio",
+        ],
+        0,
+    );
+    let s = &v["studio"];
+    assert_eq!((f(&s["lights"][0]["azimuth"]), f(&s["lights"][0]["elevation"])), (-60.0, 30.0));
+    assert_eq!(s["lights"].as_array().unwrap().len(), 2);
+    assert_eq!((s["edges"].as_bool(), s["environment"].as_str()), (Some(true), Some("studio")));
+    assert_eq!(s["materials"].as_array().unwrap().last().unwrap()["metalness"], 0.0);
+    assert!(png(&dir.path().join("a.png")).differing(&png(&dir.path().join("b.png"))) > 1000);
+    // --style standard ignores the block; studio options then need --style studio
+    let v = json(&["render", &g, "-o", &p("c.png"), "--size", "320x240", "--style", "standard"], 0);
+    assert_eq!((v["style"].as_str(), &v["studio"]), (Some("standard"), &Value::Null));
+    let v = json(&["render", &g, "-o", &p("d.png"), "--style", "standard", "--ao", "off"], 2);
+    assert!(v["error"].as_str().unwrap().contains("--ao"));
+    // `style = "standard"` in the block: standard unless --style studio
+    std::fs::write(&file, "cube(5);\nrender { style = \"standard\"; edges = false; }\n").unwrap();
+    assert_eq!(json(&["render", &g, "-o", &p("e.png"), "--size", "160x120"], 0)["style"], "standard");
+    let v = json(&["render", &g, "-o", &p("e.png"), "--size", "160x120", "--style", "studio"], 0);
+    assert_eq!(v["studio"]["edges"], false);
+    // outline shows the block
+    std::fs::write(
+        &file,
+        "cube(5);\nrender { edges = false; light key { azimuth = 10; } material \"red\" { preset = \"chrome\"; } }\n",
+    )
+    .unwrap();
+    let o = json(&["outline", &g], 0);
+    assert_eq!(o["render"]["edges"], false);
+    assert_eq!(o["render"]["range"]["line"], 2);
+    assert_eq!(o["render"]["lights"][0]["name"], "key");
+    assert_eq!(o["render"]["materials"][0]["target"], serde_json::json!({"color": "red"}));
+    let t = mcad().env("MCAD_LANG", "en").args(["outline", &g]).output().unwrap();
+    let t = String::from_utf8_lossy(&t.stdout);
+    assert!(t.contains("Render block (line 2): style studio, edges off"), "{t}");
+    assert!(t.contains("material \"red\": chrome"), "{t}");
+    // a bad value: warning with its line, the rest of the block applies
+    std::fs::write(&file, "cube(5);\nrender {\n  ambient = 7;\n  edges = false;\n}\n").unwrap();
+    let c = json(&["check", &g], 0);
+    let d = &c["diagnostics"][0];
+    assert_eq!((d["severity"].as_str(), d["range"]["line"].as_u64()), (Some("warning"), Some(3)));
+    assert!(d["message"].as_str().unwrap().contains("ambient"), "{d}");
+}
+
+#[test]
+fn set_render_values() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("m.mcad");
+    let src = "// model\ncolor(\"red\") cube(5);\n";
+    std::fs::write(&file, src).unwrap();
+    let g = file.display().to_string();
+    // a new block at the end; bare words of string settings are quoted
+    let v = json(
+        &[
+            "set",
+            &g,
+            "--render",
+            "edges=false",
+            "--render",
+            "light.key.azimuth=30",
+            "--render",
+            "material.red.preset=chrome",
+            "--render",
+            "environment=overcast",
+        ],
+        0,
+    );
+    assert_eq!(v["written"].as_array().map(|a| a.len()), Some(1));
+    let t = std::fs::read_to_string(&file).unwrap();
+    assert_eq!(
+        t,
+        "// model\ncolor(\"red\") cube(5);\n\nrender {\n    edges = false;\n    environment = \"overcast\";\n    light key { azimuth = 30; }\n    material \"red\" { preset = \"chrome\"; }\n}\n"
+    );
+    // in place, removal, part material; the render JSON follows
+    json(
+        &[
+            "set",
+            &g,
+            "--render",
+            "light.key.azimuth=-60",
+            "--render",
+            "edges=",
+            "--render",
+            "material.part:lid.roughness=0.4",
+        ],
+        0,
+    );
+    let t = std::fs::read_to_string(&file).unwrap();
+    assert!(t.contains("light key { azimuth = -60; }") && !t.contains("edges"), "{t}");
+    assert!(t.contains("material lid { roughness = 0.4; }"), "{t}");
+    let v = json(&["render", &g, "-o", &dir.path().join("a.png").display().to_string(), "--size", "160x120"], 0);
+    assert_eq!((v["style"].as_str(), f(&v["studio"]["lights"][0]["azimuth"])), (Some("studio"), -60.0));
+    // dry run writes nothing; bad specs are usage errors
+    let before = std::fs::read_to_string(&file).unwrap();
+    let v = json(&["set", &g, "--render", "ambient=0.2", "--dry-run"], 0);
+    assert!(v["diff"].as_str().unwrap().contains("+    ambient = 0.2;"), "{v}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
+    for bad in ["shine=1", "light.key.height=3", "nothing", "material.red=x=1"] {
+        json(&["set", &g, "--render", bad], 2);
+    }
+}
+
 // ------------------------------------------------------------------------------------------
 // measure
 // ------------------------------------------------------------------------------------------

@@ -1,0 +1,47 @@
+// 09 – Studio look stored in the file: a `render` block with lights and materials.
+// Aluminium body, chrome bezel, rubber grip and tail cap, glossy plastic switch; the
+// materials go by colour. `mcad render` uses the block (style studio), options override it.
+// Try: mcad render 09-flashlight.mcad -o torch.png
+//      mcad render 09-flashlight.mcad -o plain.png --style standard
+//      mcad render 09-flashlight.mcad -o steel.png --material silver=stainless --edges on
+
+len    = 120;  // overall length
+r      = 13;   // body radius
+head_r = 18;   // bezel radius
+head   = 26;   // length of the head
+grips  = 5;    // rubber rings on the body
+
+module torch() {
+    color("silver") {
+        cylinder(h = len - head, r = r);                                  // body
+        translate([0, 0, len - head]) cylinder(h = head - 6, r1 = r, r2 = head_r);  // head
+    }
+    // bezel ring with the lens recess
+    color("white") translate([0, 0, len - 6]) difference() {
+        cylinder(h = 6, r = head_r);
+        translate([0, 0, 2]) cylinder(h = 6, r = head_r - 3);
+    }
+    color("#3a6ea5") translate([0, 0, len - 4]) cylinder(h = 1, r = head_r - 3);  // lens
+    color("black") {
+        for (k = [0 : grips - 1]) translate([0, 0, 18 + k * 10]) torus(r, 1.4);
+        translate([0, 0, -8]) cylinder(h = 9, r = r + 0.6);                // tail cap
+    }
+    // switch (on top once the torch lies on the ground)
+    color("red") translate([-r - 2, 0, len - head - 22]) rotate([0, 90, 0]) cylinder(h = 3, r = 4);
+}
+
+// lying on the ground, the switch up
+translate([8, 0, head_r]) rotate([0, 90, 0]) torch();
+
+render {
+    edges = false;
+    ambient = 0.45;
+    light key { azimuth = -35; elevation = 45; }
+    light rim { azimuth = 150; elevation = 25; intensity = 0.6; color = "#dfe8ff"; }
+    ground_reflection = 0.3;
+    material "silver" { preset = "aluminium"; }
+    material "white" { preset = "chrome"; }
+    material "black" { preset = "rubber"; }
+    material "red" { preset = "plastic_glossy"; }
+    material "#3a6ea5" { metalness = 0; roughness = 0.05; clearcoat = 1; }
+}

@@ -17,6 +17,22 @@
 | exit 2 "--kernel solidcore needs solidcore: build mcad with `--features solidcore` …" (or `MCAD_KERNEL=solidcore …`) | this `mcad` was built without solidcore: `cargo build -p cad-cli --features solidcore`, or use SMLib (default; unset `MCAD_KERNEL`) |
 | exit 2 "MCAD_KERNEL: unknown kernel `x` (smlib or solidcore)" | wrong value in the environment variable |
 | "not supported by this kernel: solidcore: …" (kernel error, `render`/`export` exit 3) | the operation is not wired to solidcore yet (fillet, sketch profiles, tessellation, …): use the default kernel SMLib |
+| "--ao only applies with --style studio" (also `--light`, `--shadows`, `--ground`, `--edges` …) | studio settings need `--style studio` |
+| "--ground-color X: expected #rrggbb or a palette colour name" (also `--background`) | quote `#` in the shell (`'#e0e0e0'`) or drop it (`e0e0e0`); names: `mcad usage colors` |
+| studio render: no ground / no ground shadow | the camera looks from below or horizontally (`front`, `right`, `bottom`): the ground is only drawn from above |
+| studio render: no shadow of a part | transparent bodies (x-ray, dimmed rest with `--line`, alpha) cast none; only the first light casts shadows |
+| "--material red=silver: unknown material silver (known: plastic, …)" | presets: `mcad usage render`; or give values: `red=metalness=1,roughness=0.3` |
+| "--quality fast: expected draft, normal, high" / "--ground-reflection 2: allowed 0…1" | `mcad usage render` (studio options) |
+| "--material x=chrome: x: expected a colour, default or part:NAME" | colour name (`mcad usage colors`), `#rrggbb`, `default` (uncoloured material) or `part:NAME` |
+| warning "render: unknown setting `x` (known: …)" (also in `light`/`material`) | typo in the render block; names: `mcad usage render-block`; the value is ignored |
+| warning "render: ambient = 3 is outside 0…1 – ignored" / "expects true or false" / "expects a colour" | value of the wrong type or range; the default applies |
+| warning "render: material \"x\": unknown colour" / "material lid: no part `lid` (parts: …)" | colour as in `color()` (palette name, `#rrggbb`, `default`); part names: `mcad outline` |
+| warning "render { … } applies only at the top level of the main file" / "only the first render block applies" | move the block to the top level of the main file; keep one |
+| "--render x: expected key=value, light.NAME.key=value or material.SEL.key=value" / "--render: render: unknown setting `x`" | `mcad set --render` path or name wrong: `mcad usage render-block` |
+| `mcad render` draws the studio look without `--style` | the file has a render block; `--style standard` for the CAD look |
+| studio render: metal looks dark or flat | metals show their surroundings: keep `--environment studio`, raise `--ambient`; flat faces in an orthographic view reflect one direction (uniform colour): use `--perspective` or curved faces; `chrome` is dark by nature (dark walls), `aluminium`/`stainless` are brighter |
+| studio render: grainy glossy reflections | `--quality high` (more rays); rough surfaces (≥ 0.6) use no rays |
+| studio render: slow | `--quality draft` (no rays for surfaces), `--reflections off`, `--ground-reflection 0`, `--ao off` |
 | `mcad` exits 2 "no graphical session" | no `DISPLAY`/`WAYLAND_DISPLAY`; use the commands |
 | UI dies with "Error 71 (Protokollfehler) dispatching to Wayland display" | WebKitGTK DMA-BUF renderer; `mcad` sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` on Wayland unless the variable is set |
 | "Engine not responding for 20 min (kernel hangs)", line red | one kernel call ran 20 min: node blocked until its line changes; simplify it (fewer `$fn`, separate text) |

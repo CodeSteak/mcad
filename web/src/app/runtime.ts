@@ -40,9 +40,11 @@ import { VersionMapper, mapRange } from "../logic/positions";
 import { isOff } from "../logic/sceneIndex";
 import { bridge } from "../state/bridge";
 import { type DirHandle, project } from "../state/project";
-import { colorsVisible, type ExportChoice, type SideTab, resolveTheme, setExportChoice, setLangPref, setSideTab, setThemePref, store } from "../state/store";
+import { colorsVisible, type ExportChoice, type SideTab, resolveTheme, setExportChoice, setLangPref, setSideTab, setStudio, setThemePref, store } from "../state/store";
 import { MeshCache } from "../view/meshCache";
 import type { Viewer } from "../view/viewer";
+import { studioPartMaterials } from "../logic/studio";
+import { initRenderBlock } from "./renderBlock";
 import { DragController } from "./drag";
 import { SketchController } from "./sketch";
 import { MeasureController } from "./measure";
@@ -155,6 +157,7 @@ export function switchFile(path: string, pos?: number): boolean {
 
 /** Handle drags (Spec: Griffe und Rückschreiben). */
 export const drag = new DragController(client, () => sendNow(), { target: editTarget, fileOf: editFile, active: () => project.active });
+initRenderBlock(client);
 
 /** Sketch editor (Plan 17.12). */
 export const sketch = new SketchController(client, () => sendNow());
@@ -690,10 +693,12 @@ function syncRegions(): void {
   const s = store.getState();
   const c = s.complete;
   // the list needs volumes; the view draws the regions of a model with colours (Bericht 12)
-  const want = c !== null && ((colorsVisible(s) && (c.colors ?? []).length > 0) || (s.showRegions && hasFaceColors(c)));
+  // the view draws the regions of a model with colours, and per part with studio part materials
+  const draw = c !== null && s.showRegions && (hasFaceColors(c) || studioPartMaterials(s.studio));
+  const want = c !== null && ((colorsVisible(s) && (c.colors ?? []).length > 0) || draw);
   if (!want || !c) return;
   // meshes only where the view draws them (a model with colours): none for uncoloured models
-  const meshes = s.showRegions && hasFaceColors(c);
+  const meshes = draw;
   const key = `${c.version}|${meshes}`;
   if (key === regionsAsked) return;
   if (s.regions && s.regions.version === c.version && (s.regions.meshes || !meshes)) return;
@@ -708,7 +713,7 @@ function syncRegions(): void {
 }
 
 store.subscribe((s, p) => {
-  if (s.complete !== p.complete || colorsVisible(s) !== colorsVisible(p) || s.showRegions !== p.showRegions) syncRegions();
+  if (s.complete !== p.complete || colorsVisible(s) !== colorsVisible(p) || s.showRegions !== p.showRegions || studioPartMaterials(s.studio) !== studioPartMaterials(p.studio)) syncRegions();
 });
 
 /** File name of a part (`k[2]` → `k_2.stl`, as the engine names ZIP entries). */
@@ -1156,6 +1161,29 @@ window.__cad = {
     if (!viewer) return null;
     const c = viewer.camera.position;
     return { eye: [c.x, c.y, c.z], dir: viewer.viewDir() };
+  },
+  /** Studio look: settings and what the last frame drew. */
+  studioInfo() {
+    return { settings: store.getState().studio, drawn: viewer?.lastStudioDraw ?? null };
+  },
+  setStudio(patch: Partial<import("../logic/studio").StudioSettings>) {
+    setStudio(patch);
+  },
+  /** Mean time per frame (ms) of `frames` synchronous renders of the view (benchmark). */
+  renderBenchmark(frames: number) {
+    if (!viewer) return null;
+    const gl = viewer.renderer.getContext();
+    const px = new Uint8Array(4);
+    // reading a pixel waits for the frame (finish() alone may return early)
+    const sync = () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    viewer.render();
+    sync();
+    const t0 = performance.now();
+    for (let i = 0; i < frames; i++) {
+      viewer.render();
+      sync();
+    }
+    return (performance.now() - t0) / Math.max(1, frames);
   },
   /** Section view as drawn. */
   sectionInfo() {

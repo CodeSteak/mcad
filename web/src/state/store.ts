@@ -8,6 +8,7 @@ import { type LangPref, loadLangPref, resolveLang, saveLangPref, setLang, t } fr
 import { MODEL_EXT } from "../logic/files";
 import type { ParamOverrides } from "../logic/params";
 import { SECTION_OFF, type SectionState } from "../logic/section";
+import { type StudioSettings, sanitizeStudio } from "../logic/studio";
 
 export type Theme = "light" | "dark";
 /** Choice in the toolbar: follow the system (`prefers-color-scheme`) or fixed. */
@@ -248,6 +249,8 @@ export interface CadState {
   asserts: { version: number; items: AssertResult[] } | null;
   /** Keep-out volumes (`assert_keepout`) shown in the view (kept in localStorage). */
   showKeepout: boolean;
+  /** Studio look of the view (lights, shadows, ambient occlusion, ground; kept in localStorage). */
+  studio: StudioSettings;
   /** Violated assertion the user jumped to (framed in the view). */
   assertFocus: { version: number; node: number; pair: number } | null;
   /** Export asked while assertions are violated: "Trotzdem exportieren?" */
@@ -374,6 +377,23 @@ export function setShowKeepout(on: boolean): void {
   store.setState({ showKeepout: on });
 }
 
+function initialStudio(): StudioSettings {
+  try {
+    const raw = localStorage.getItem("cad-studio");
+    if (raw) return sanitizeStudio(JSON.parse(raw));
+  } catch {
+    /* no storage or bad JSON */
+  }
+  return sanitizeStudio(null);
+}
+
+/** Changes the studio look (kept in localStorage `cad-studio`). */
+export function setStudio(patch: Partial<StudioSettings>): void {
+  const s = sanitizeStudio({ ...store.getState().studio, ...patch });
+  keep("cad-studio", JSON.stringify(s));
+  store.setState({ studio: s });
+}
+
 export function setExportChoice(c: ExportChoice): void {
   keep("cad-export", c);
   store.setState({ exportChoice: c });
@@ -433,6 +453,7 @@ export const store = createStore<CadState>(() => ({
   measureSelected: null,
   asserts: null,
   showKeepout: stored("cad-keepout", ["0", "1"], "1") === "1",
+  studio: initialStudio(),
   assertFocus: null,
   exportConfirm: null,
 }));

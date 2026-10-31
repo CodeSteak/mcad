@@ -4,6 +4,88 @@
 import * as THREE from "three";
 import { LineMaterial } from "three/addons/lines/LineMaterial.js";
 import type { Mode } from "../logic/display";
+import { DEFAULT_PBR, LIGHT_SPREAD, type Pbr } from "../logic/studio";
+
+/** Replaces `find` in `text` (must be there: a three.js update that changes the chunk fails
+ *  loudly in the tests instead of silently dropping the patch). */
+function must(text: string, find: string, by: string): string {
+  if (!text.includes(find)) throw new Error(`three.js shader chunk changed: ${find}`);
+  return text.split(find).join(by);
+}
+
+/**
+ * The physical lighting chunk of three.js the way `cad_render::studio` shades:
+ * - the environment's diffuse light is normalised (a white face facing up gets `ambient`), its
+ *   reflections are not; three.js scales both by the environment intensity, `envDiffuse`
+ *   corrects the diffuse part only (the multiple-scattering term keeps the real irradiance);
+ * - the lights act like round area lights of about 10° in reflections (`LIGHT_SPREAD`: the
+ *   GGX lobe widened, energy kept).
+ */
+function physicalChunk(): string {
+  let c = THREE.ShaderChunk.lights_physical_pars_fragment;
+  c = must(c, "vec3 indirectDiffuse = diffuse * cosineWeightedIrradiance;", "vec3 indirectDiffuse = diffuse * cosineWeightedIrradiance * envDiffuse;");
+  c = must(c, "float D = D_GGX( alpha, dotNH );", `float alphaW = min( 1.0, alpha + ${LIGHT_SPREAD.toFixed(4)} );\n\t\tfloat D = D_GGX( alphaW, dotNH ) * pow2( alpha / alphaW );`);
+  c = must(
+    c,
+    "float D = D_GGX_Anisotropic( material.alphaT, alpha, dotNH, dotTH, dotBH );",
+    `float atW = min( 1.0, material.alphaT + ${LIGHT_SPREAD.toFixed(4)} );\n\t\tfloat abW = min( 1.0, alpha + ${LIGHT_SPREAD.toFixed(4)} );\n\t\tfloat D = D_GGX_Anisotropic( atW, abW, dotNH, dotTH, dotBH ) * ( material.alphaT * alpha ) / ( atW * abW );`,
+  );
+  return c;
+}
+
+/**
+ * Brushed metal: the tangent frame of three.js' anisotropy from the body's z axis (no UVs, no
+ * tangent attribute): the brushing runs around the axis, the highlight stretches across it —
+ * the same rule as `cad_render::studio::brush_stretch`.
+ */
+const BRUSH_FRAME = `
+varying vec3 vBrushAxis;
+varying vec3 vBrushOrigin;
+mat3 brushFrame( const in vec3 n ) {
+	vec3 a = normalize( vBrushAxis );
+	vec3 r = - vViewPosition - vBrushOrigin;
+	vec3 radial = r - a * dot( r, a );
+	float rl = length( radial );
+	radial = rl > 1e-6 ? radial / rl : vec3( 0.0 );
+	vec3 g = cross( a, n ) + cross( a, radial ) * 0.25;
+	g -= n * dot( g, n );
+	float gl = length( g );
+	g = gl > 1e-5 ? g / gl : normalize( cross( n, abs( n.x ) < 0.9 ? vec3( 1.0, 0.0, 0.0 ) : vec3( 0.0, 1.0, 0.0 ) ) );
+	vec3 t = cross( n, g );
+	return mat3( t, cross( n, t ), n );
+}
+`;
+
+/** Studio patches of a physical material (see `physicalChunk`, `BRUSH_FRAME`). */
+function patchStudio(m: THREE.MeshStandardMaterial, factor: number, brushed: boolean, extra?: (sh: THREE.WebGLProgramParametersWithUniforms) => void): void {
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.envDiffuse = { value: factor };
+    let f = must(sh.fragmentShader, "#include <common>", "#include <common>\nuniform float envDiffuse;");
+    f = must(f, "#include <lights_physical_pars_fragment>", physicalChunk());
+    if (brushed) {
+      f = must(f, "#include <normal_pars_fragment>", `#include <normal_pars_fragment>\n${BRUSH_FRAME}`);
+      const nb = THREE.ShaderChunk.normal_fragment_begin.replace(/mat3 tbn = getTangentFrame\([\s\S]*?\);/, "mat3 tbn = brushFrame( normal );");
+      f = must(f, "#include <normal_fragment_begin>", nb);
+      sh.vertexShader = must(sh.vertexShader, "#include <common>", "#include <common>\nvarying vec3 vBrushAxis;\nvarying vec3 vBrushOrigin;");
+      sh.vertexShader = must(
+        sh.vertexShader,
+        "#include <project_vertex>",
+        "#include <project_vertex>\n\tvBrushAxis = normalize( ( modelViewMatrix * vec4( 0.0, 0.0, 1.0, 0.0 ) ).xyz );\n\tvBrushOrigin = ( modelViewMatrix * vec4( 0.0, 0.0, 0.0, 1.0 ) ).xyz;",
+      );
+    }
+    sh.fragmentShader = f;
+    extra?.(sh);
+  };
+  m.customProgramCacheKey = () => `studio-${m.type}-${brushed ? "brushed" : "plain"}${extra ? "-ground" : ""}`;
+}
+
+/** Ground and other matte studio surfaces with the environment's diffuse correction;
+ *  `extra` patches the shader further (fade, reflection). */
+export function studioGroundMaterial(color: string, envDiffuse: number, extra?: (sh: THREE.WebGLProgramParametersWithUniforms) => void): THREE.MeshStandardMaterial {
+  const m = new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0, transparent: true, depthWrite: false });
+  patchStudio(m, envDiffuse, false, extra);
+  return m;
+}
 
 export interface Palette {
   background: string;
@@ -79,6 +161,9 @@ export function readPalette(el: HTMLElement = document.documentElement): Palette
   };
 }
 
+/** Cache key of a surface. */
+const pbrKey = (p: Pbr) => `${p.metalness},${p.roughness},${p.clearcoat},${p.anisotropy},${p.color?.join(":") ?? ""}`;
+
 export interface ModeStyle {
   surface: THREE.Material | null;
   edges: THREE.LineBasicMaterial | null;
@@ -92,21 +177,33 @@ export class Materials {
   private styles = new Map<string, ModeStyle>();
   private fullByColor = new Map<string, THREE.Material>();
   private fatLines: LineMaterial[] = [];
+  /** Studio look: glossier surfaces (highlights of the key light), lighter edges. */
+  readonly studio: boolean;
+  /** Studio look: edge lines of opaque bodies (`false`: none). */
+  readonly studioEdges: boolean;
+  /** Studio look: factor on the environment's diffuse light (see `patchEnvDiffuse`). */
+  readonly envDiffuse: number;
 
-  constructor(palette: Palette) {
+  constructor(palette: Palette, studio = false, studioEdges = true, envDiffuse = 1) {
     this.palette = palette;
+    this.studio = studio;
+    this.studioEdges = studioEdges;
+    this.envDiffuse = envDiffuse;
   }
 
-  private solid(color: string): THREE.MeshStandardMaterial {
-    return new THREE.MeshStandardMaterial({
-      color,
-      roughness: 0.78,
-      metalness: 0.0,
-      polygonOffset: true,
-      polygonOffsetFactor: 1,
-      polygonOffsetUnits: 1,
-      side: THREE.DoubleSide,
-    });
+  /** Opaque surface; in the studio look physically based (`pbr`, default plastic; a real
+   *  metal brings its own colour). */
+  private solid(color: string, pbr: Pbr | null = null): THREE.MeshStandardMaterial {
+    const common = { color, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1, side: THREE.DoubleSide };
+    if (!this.studio) return new THREE.MeshStandardMaterial({ ...common, roughness: 0.78, metalness: 0.0 });
+    const p = pbr ?? DEFAULT_PBR;
+    const m =
+      p.clearcoat > 0 || p.anisotropy > 0
+        ? new THREE.MeshPhysicalMaterial({ ...common, roughness: p.roughness, metalness: p.metalness, clearcoat: p.clearcoat, clearcoatRoughness: 0.05, anisotropy: p.anisotropy })
+        : new THREE.MeshStandardMaterial({ ...common, roughness: p.roughness, metalness: p.metalness });
+    if (p.color) m.color.setRGB(p.color[0], p.color[1], p.color[2], THREE.LinearSRGBColorSpace);
+    patchStudio(m, this.envDiffuse, p.anisotropy > 0);
+    return m;
   }
 
   private transparent(color: string, opacity: number, opts: Partial<THREE.MeshStandardMaterialParameters> = {}): THREE.MeshStandardMaterial {
@@ -123,15 +220,17 @@ export class Materials {
   }
 
   private lines(color: string, opacity = 1, depthTest = true): THREE.LineBasicMaterial {
-    return new THREE.LineBasicMaterial({ color, transparent: opacity < 1 || !depthTest, opacity, depthTest });
+    // lines keep their colour under the studio look's tone mapping
+    return new THREE.LineBasicMaterial({ color, transparent: opacity < 1 || !depthTest, opacity, depthTest, toneMapped: false });
   }
 
   /**
    * Surface/edge materials of a mode; `flat` for 2D nodes, `color` from `color()`,
    * `faceColors`: the geometry has per-vertex colours (colours per face).
    */
-  style(mode: Mode, flat: boolean, color: [number, number, number, number] | null, faceColors = false): ModeStyle {
-    const key = `${mode}|${flat}|${color?.join(",") ?? ""}|${faceColors}`;
+  style(mode: Mode, flat: boolean, color: [number, number, number, number] | null, faceColors = false, pbr: Pbr | null = null): ModeStyle {
+    const pk = this.studio && pbr ? pbrKey(pbr) : "";
+    const key = `${mode}|${flat}|${color?.join(",") ?? ""}|${faceColors}|${pk}`;
     const c = this.styles.get(key);
     if (c) return c;
     const p = this.palette;
@@ -139,7 +238,13 @@ export class Materials {
     switch (mode) {
       case "full":
         if (flat) s = { surface: this.transparent(p.flat, 0.18, { polygonOffset: true, polygonOffsetFactor: 1 }), edges: this.lines(p.flat), renderOrder: 1, pickable: true };
-        else s = { surface: faceColors ? this.vertexColorMaterial() : this.fullMaterial(color), edges: this.lines(p.edge, 0.9), renderOrder: 0, pickable: true };
+        else
+          s = {
+            surface: faceColors ? this.vertexColorMaterial(pbr) : this.fullMaterial(color, pbr),
+            edges: this.studio && !this.studioEdges ? null : this.lines(p.edge, this.studio ? 0.35 : 0.9),
+            renderOrder: 0,
+            pickable: true,
+          };
         break;
       case "dim":
         s = {
@@ -210,30 +315,32 @@ export class Materials {
     return m;
   }
 
-  private vertexColorMaterial(): THREE.Material {
-    let m = this.fullByColor.get("vertex");
+  private vertexColorMaterial(pbr: Pbr | null): THREE.Material {
+    const key = `vertex|${pbr ? pbrKey(pbr) : ""}`;
+    let m = this.fullByColor.get(key);
     if (!m) {
-      const mm = this.solid("#ffffff");
-      mm.vertexColors = true;
+      const mm = this.solid("#ffffff", pbr);
+      // a real metal's own colour replaces the colours of the faces
+      mm.vertexColors = !(this.studio && pbr?.color);
       m = mm;
-      this.fullByColor.set("vertex", m);
+      this.fullByColor.set(key, m);
     }
     return m;
   }
 
-  private fullMaterial(color: [number, number, number, number] | null): THREE.Material {
-    const key = color?.join(",") ?? "";
+  private fullMaterial(color: [number, number, number, number] | null, pbr: Pbr | null): THREE.Material {
+    const key = `${color?.join(",") ?? ""}|${pbr ? pbrKey(pbr) : ""}`;
     let m = this.fullByColor.get(key);
     if (!m) {
       if (color) {
         const c = new THREE.Color(color[0], color[1], color[2]);
-        const mm = this.solid(`#${c.getHexString()}`);
+        const mm = this.solid(`#${c.getHexString()}`, pbr);
         if (color[3] < 1) {
           mm.transparent = true;
           mm.opacity = color[3];
         }
         m = mm;
-      } else m = this.solid(this.palette.model);
+      } else m = this.solid(this.palette.model, pbr);
       this.fullByColor.set(key, m);
     }
     return m;

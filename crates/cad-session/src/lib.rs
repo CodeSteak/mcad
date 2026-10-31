@@ -462,6 +462,20 @@ where
                 Vec::new()
             }
             ToEngine::SetFilament { color, filament } => self.filament_edits(&color, filament),
+            ToEngine::SetRender { changes } => {
+                let proj = self.load_project(&self.text);
+                let edits: Vec<cad_eval::RenderEdit> = changes.iter().map(convert::render_edit).collect();
+                let src = Source::from_project(&proj);
+                match cad_eval::render_edits(&proj, &edits) {
+                    Ok(e) => vec![FromEngine::Edits {
+                        version: self.version,
+                        edits: e.iter().map(|x| src.edit(x)).collect(),
+                    }],
+                    Err(m) => {
+                        vec![FromEngine::Edits { version: self.version, edits: Vec::new() }, self.error(&m, None)]
+                    }
+                }
+            }
             ToEngine::Cancel => {
                 self.running = None;
                 self.mesh_queue.clear();

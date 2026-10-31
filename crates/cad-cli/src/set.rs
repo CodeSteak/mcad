@@ -5,6 +5,8 @@
 //! * `--literal [datei:]zeile:spalte=wert`: replaces the editable literal at that position
 //!   (the literals the UI edits: values of variables, handle components, grid planes,
 //!   parameter defaults), in the main file or a project file.
+//! * `--render key=value`, `light.NAME.key=value`, `material.SEL.key=value`: a value of the
+//!   main file's `render { … }` block (the edits of the UI's studio panel; empty value removes).
 //!
 //! The changed project is evaluated again (language only) before anything is written; if it
 //! has more errors than before, nothing is written (exit 1) unless `--force`. Files are
@@ -37,6 +39,11 @@ pub(crate) struct SetArgs {
     /// `file:line:col=value`; column as in `mcad check`, anywhere inside the literal.
     #[arg(long, value_name = "[FILE:]LINE:COL=VALUE", allow_hyphen_values = true)]
     pub literal: Vec<String>,
+    /// A value of the render block: `key=value`, `light.NAME.key=value`,
+    /// `material.SEL.key=value` (SEL: colour such as `red`/`#rrggbb`/`default`, or `part:NAME`);
+    /// an empty value removes it, `light.NAME=` / `material.SEL=` remove the entry; repeatable.
+    #[arg(long, value_name = "KEY=VALUE", allow_hyphen_values = true)]
+    pub render: Vec<String>,
     /// Only show the diff, write nothing.
     #[arg(long)]
     pub dry_run: bool,
@@ -73,15 +80,62 @@ fn offset_of(text: &str, line: u32, col: u32) -> Option<usize> {
     (u >= col).then_some(start + l.len())
 }
 
+/// Keys whose values are strings: a bare word is quoted (`preset=chrome` → `"chrome"`).
+const STRING_KEYS: [&str; 6] = ["style", "environment", "preset", "ground_color", "color", "background"];
+
+/// `--render key=value`, `light.NAME.key=value`, `material.SEL.key=value`.
+fn render_spec(spec: &str) -> Result<cad_eval::RenderEdit, Fail> {
+    use cad_eval::{EditTarget, RenderEdit as E};
+    let bad = || {
+        Fail::Usage(tr!(
+            "--render {spec}: erwartet schlüssel=wert, light.NAME.schlüssel=wert oder material.AUSWAHL.schlüssel=wert",
+            "--render {spec}: expected key=value, light.NAME.key=value or material.SEL.key=value"
+        ))
+    };
+    let (path, value) = spec.split_once('=').ok_or_else(bad)?;
+    let value = value.trim();
+    let key_of = |p: &str| p.rsplit('.').next().unwrap_or("").trim().to_string();
+    let val = |k: &str| {
+        if value.is_empty() {
+            None
+        } else if STRING_KEYS.contains(&k)
+            && !value.starts_with('"')
+            && !value.starts_with('[')
+            && value.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '#')
+        {
+            Some(format!("\"{value}\""))
+        } else {
+            Some(value.to_string())
+        }
+    };
+    let target = |s: &str| match s.strip_prefix("part:") {
+        Some(p) => EditTarget::Part(p.to_string()),
+        None => EditTarget::Color(s.to_string()),
+    };
+    let parts: Vec<&str> = path.trim().split('.').collect();
+    Ok(match parts.as_slice() {
+        [k] if !k.is_empty() => E::Set { key: k.to_string(), value: val(k) },
+        ["light", name] if value.is_empty() => E::RemoveLight { name: name.to_string() },
+        ["light", name, k] => E::Light { name: name.to_string(), key: key_of(k), value: val(k) },
+        ["material", sel] if value.is_empty() => E::RemoveMaterial { target: target(sel) },
+        ["material", sel @ .., k] if !sel.is_empty() => {
+            // `#rrggbb` and `part:x` have no dots; a colour may not either
+            let sel = sel.join(".");
+            E::Material { target: target(&sel), key: key_of(k), value: val(k) }
+        }
+        _ => return Err(bad()),
+    })
+}
+
 fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
     crate::host::write_atomic(path, text.as_bytes())
 }
 
 pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
-    if a.param.is_empty() && a.literal.is_empty() {
+    if a.param.is_empty() && a.literal.is_empty() && a.render.is_empty() {
         return Err(Fail::Usage(tr!(
-            "nichts zu ändern: --param modul.param=wert oder --literal zeile:spalte=wert",
-            "nothing to change: --param module.param=value or --literal line:col=value"
+            "nichts zu ändern: --param modul.param=wert, --literal zeile:spalte=wert oder --render schlüssel=wert",
+            "nothing to change: --param module.param=value, --literal line:col=value or --render key=value"
         )));
     }
     if a.file.as_os_str() == "-" {
@@ -231,6 +285,22 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
             to,
             text: value.trim().to_string(),
         });
+    }
+
+    if !a.render.is_empty() {
+        let edits: Vec<cad_eval::RenderEdit> = a.render.iter().map(|s| render_spec(s)).collect::<Result<_, _>>()?;
+        let te = cad_eval::render_edits(&proj, &edits).map_err(|e| Fail::Usage(format!("--render: {e}")))?;
+        for e in te {
+            let l = e.span.local();
+            changes.push(Change {
+                kind: "render",
+                spec: a.render.join(" "),
+                file: 0,
+                from: l.start as usize,
+                to: l.end as usize,
+                text: e.text,
+            });
+        }
     }
 
     // apply per file (back to front), refuse overlapping edits

@@ -512,6 +512,8 @@ impl<'a> Parser<'a> {
             "grid" if matches!(self.peek_at(1), Tok::Ident(_)) && self.peek_at(2) == &Tok::LBrace => {
                 StmtKind::Grid(Rc::new(self.grid_decl()?))
             }
+            // `render { … }` (OpenSCAD's `render()` has an argument list).
+            "render" if self.peek_at(1) == &Tok::LBrace => StmtKind::Render(Rc::new(self.render_decl()?)),
             // `sketch { … }` / `hole { … }`: block without an argument list.
             "sketch" | "hole" if self.peek_at(1) == &Tok::LBrace => {
                 let name = self.ident()?;
@@ -554,6 +556,122 @@ impl<'a> Parser<'a> {
             }
             _ => self.instantiation(),
         }
+    }
+
+    /// `render { … }` after the keyword.
+    fn render_decl(&mut self) -> PResult<RenderDecl> {
+        let start = self.bump().span.start;
+        let (items, body) = self.render_body(true)?;
+        Ok(RenderDecl { items, body, span: self.span_from(start) })
+    }
+
+    /// `{ items }` of a render block (`top`) or of a light/material entry (settings only).
+    fn render_body(&mut self, top: bool) -> PResult<(Vec<RenderItem>, Span)> {
+        let open = self.expect(&Tok::LBrace, "`{`")?;
+        let mut items = Vec::new();
+        loop {
+            match self.peek().clone() {
+                Tok::RBrace => {
+                    self.bump();
+                    break;
+                }
+                Tok::Eof => {
+                    self.error(open, trs!("render-Block nicht geschlossen", "render block not closed"));
+                    return Err(());
+                }
+                Tok::Semi => {
+                    self.bump();
+                }
+                Tok::Ident(w) if top && w == "light" && matches!(self.peek_at(1), Tok::Ident(_)) => {
+                    let start = self.bump().span.start;
+                    let name = self.ident()?;
+                    let (settings, body) = self.render_settings()?;
+                    items.push(RenderItem::Light { name, settings, body, span: self.span_from(start) });
+                }
+                Tok::Ident(w) if top && w == "material" && matches!(self.peek_at(1), Tok::Ident(_) | Tok::Str(_)) => {
+                    let start = self.bump().span.start;
+                    let target = match self.peek().clone() {
+                        Tok::Str(s) => RenderTarget::Color(s, self.bump().span),
+                        _ => RenderTarget::Part(self.ident()?),
+                    };
+                    let (settings, body) = self.render_settings()?;
+                    items.push(RenderItem::Material { target, settings, body, span: self.span_from(start) });
+                }
+                Tok::Ident(_) if self.peek_at(1) == &Tok::Assign => {
+                    let start = self.span().start;
+                    let name = self.ident()?;
+                    self.bump();
+                    match self.expr() {
+                        Ok(value) => {
+                            if self.expect(&Tok::Semi, "`;`").is_err() {
+                                self.recover();
+                            }
+                            items.push(RenderItem::Setting(RenderSetting { name, value, span: self.span_from(start) }));
+                        }
+                        Err(()) => self.recover(),
+                    }
+                }
+                other => {
+                    let sp = self.span();
+                    let msg = if top {
+                        tr!(
+                            "`Name = Wert;`, `light NAME {{ … }}` oder `material AUSWAHL {{ … }}` erwartet, gefunden: {}",
+                            "expected `name = value;`, `light NAME {{ … }}` or `material SEL {{ … }}`, found {}",
+                            describe(&other)
+                        )
+                    } else {
+                        tr!(
+                            "`Name = Wert;` erwartet, gefunden: {}",
+                            "expected `name = value;`, found {}",
+                            describe(&other)
+                        )
+                    };
+                    self.error(sp, msg);
+                    self.skip_render_item();
+                }
+            }
+        }
+        Ok((items, Span { start: open.start, end: self.prev_end() }))
+    }
+
+    /// Skips an unreadable entry of a render block: up to and including the next `;` or a
+    /// `{ … }` group at this level, or up to (not past) the closing `}`.
+    fn skip_render_item(&mut self) {
+        let mut depth = 0i32;
+        loop {
+            match self.peek() {
+                Tok::Eof => return,
+                Tok::RBrace if depth == 0 => return,
+                Tok::Semi if depth == 0 => {
+                    self.bump();
+                    return;
+                }
+                Tok::LBrace | Tok::LParen | Tok::LBracket => depth += 1,
+                Tok::RBrace | Tok::RParen | Tok::RBracket => {
+                    depth -= 1;
+                    if depth == 0 && self.peek() == &Tok::RBrace {
+                        self.bump();
+                        return;
+                    }
+                }
+                _ => {}
+            }
+            self.bump();
+        }
+    }
+
+    /// `{ name = value; … }` of a light or material entry.
+    fn render_settings(&mut self) -> PResult<(Vec<RenderSetting>, Span)> {
+        let (items, body) = self.render_body(false)?;
+        let settings = items
+            .into_iter()
+            .filter_map(|i| match i {
+                RenderItem::Setting(s) => Some(s),
+                _ => None,
+            })
+            .collect();
+        self.eat(&Tok::Semi);
+        Ok((settings, body))
     }
 
     fn grid_decl(&mut self) -> PResult<GridDecl> {

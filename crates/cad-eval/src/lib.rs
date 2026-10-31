@@ -26,6 +26,8 @@ mod output;
 pub mod palette;
 mod print;
 pub mod project;
+pub mod render_block;
+mod render_edit;
 mod sig;
 mod sketch;
 pub mod sketch_edit;
@@ -42,6 +44,7 @@ pub use project::{
     Project, SourceFile, SourceText, data_url, decode_data_url, is_model_file, normalize_path, resolve_path,
     strip_model_extension,
 };
+pub use render_edit::{EditTarget, RenderEdit, render_edits};
 pub use value::{Origin, PValue, fmt_literal, fmt_num};
 
 /// Evaluates a parsed single file without other project files (`include`/`use` report a

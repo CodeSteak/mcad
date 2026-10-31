@@ -21,7 +21,7 @@ export const scadParser = parser.configure({
       "DefName GridName AnchorName": t.definition(t.variableName),
       "ModuleDef/DefName FunctionDef/DefName": t.function(t.definition(t.variableName)),
       CallName: t.function(t.variableName),
-      Label: t.labelName,
+      "Label EntryName": t.labelName,
       AxisName: t.keyword,
       PlaneName: t.attributeName,
       PropertyName: t.propertyName,

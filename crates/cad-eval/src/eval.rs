@@ -189,6 +189,10 @@ pub(crate) struct Ev<'a> {
     /// The `sketch { … }` being evaluated (its segment statements append to it).
     pub sketch: Option<crate::sketch::SketchBuild<'a>>,
     pub sketches: Vec<SketchInfo>,
+    /// The evaluated `render { … }` block of the main file.
+    pub render: Option<cad_ir::RenderDecl>,
+    /// Its statement (the normal pass skips it).
+    pub render_span: Option<Span>,
 }
 
 #[inline(never)]
@@ -283,6 +287,8 @@ impl<'a> Ev<'a> {
             decl_spans: Vec::new(),
             sketch: None,
             sketches: Vec::new(),
+            render: None,
+            render_span: None,
         }
     }
 
@@ -594,6 +600,7 @@ impl<'a> Ev<'a> {
         let dy = self.file_overrides(overrides, &env, dy);
         let ctx = self.root_ctx(env, dy, end, key);
         self.filament_pass(&ctx)?;
+        self.render_pass(&ctx)?;
         for s in &self.file.stmts {
             self.stmt(s, &ctx)?;
         }
@@ -726,6 +733,8 @@ impl<'a> Ev<'a> {
                 // the slot table of the file applies to its modules too
                 let c = self.root_ctx(main_root.clone(), dy.clone(), 0, 0);
                 self.filament_pass(&c)?;
+                // the file's render block holds for its modules too (`mcad render --module`)
+                self.render_pass(&c)?;
                 (main_root, dy)
             }
             Some(i) => {
@@ -820,6 +829,7 @@ impl<'a> Ev<'a> {
     }
 
     fn finish(mut self, modules: Vec<ModuleSig>, context: ContextInfo) -> EvalOutput {
+        self.check_render_parts();
         for w in self.captured.drain(..) {
             Env::clear_weak(&w);
         }
@@ -835,7 +845,13 @@ impl<'a> Ev<'a> {
             .collect();
         let root = if self.nodes.is_empty() { None } else { Some(self.root_mod.unwrap_or(0)) };
         EvalOutput {
-            tree: Tree { nodes: self.nodes, root, filaments: self.filament_decls, asserts: self.asserts },
+            tree: Tree {
+                nodes: self.nodes,
+                root,
+                filaments: self.filament_decls,
+                asserts: self.asserts,
+                render: self.render,
+            },
             diagnostics: self.diags,
             hints,
             parts: self.parts,
@@ -880,6 +896,10 @@ impl<'a> Ev<'a> {
             StmtKind::Block(stmts) => self.block_stmt(s, stmts, ctx),
             StmtKind::Anchor { name, point, dir } => self.anchor_stmt(s, name, point, dir.as_ref(), ctx),
             StmtKind::Grid(g) => self.grid_stmt(s, g, ctx),
+            StmtKind::Render(_) => {
+                self.render_stmt(s);
+                Ok(())
+            }
             StmtKind::Named { name, index, inst } => self.named_stmt(s, name, index.as_ref(), inst, ctx),
 
             StmtKind::Call { name, args, children, .. } => {
