@@ -36,6 +36,9 @@
 //! = { verdict: "same"|"differ"|"unsupported", notes }`, `Metrics.brep` (counts per kind,
 //! conventions not met), `summary.brep`: nodes per verdict. The B-rep check does not change the
 //! node's verdict.
+//! With `--mesh` also the meshes of each file's result from both kernels (`diff/mesh.rs`, plan
+//! 2.7): `files[].mesh = { tol, verdict: "ok"|"differ"|"failed"|"skipped", smlib, solidcore,
+//! to_smlib, from_smlib, hausdorff, notes }`, `summary.mesh`; they do not change the exit code.
 //! Exit code 0 if every node of every file is the same, 1 otherwise, 2 usage error.
 
 use std::collections::BTreeMap;
@@ -54,6 +57,7 @@ use crate::{Fail, Outcome};
 
 mod brep;
 mod exact;
+mod mesh;
 
 use exact::Exact;
 
@@ -155,6 +159,8 @@ struct Run {
     nodes: Vec<NodeRow>,
     metrics: Vec<Metrics>,
     cost: Cost,
+    /// The meshes of the root's parts (`--mesh`).
+    mesh: Option<mesh::Parts>,
 }
 
 /// Cost of one evaluation (plan 0.5).
@@ -212,6 +218,7 @@ fn evaluate<K: Kernel + 'static>(
     file: &Path,
     copies: fn(&K) -> (u64, std::time::Duration),
     with_brep: bool,
+    mesh_tol: Option<f64>,
 ) -> Run
 where
     K::Shape: 'static,
@@ -229,7 +236,7 @@ where
     s.run_to_idle();
     let mut cost = Cost { eval_ms: ms(t0.elapsed()), ..Default::default() };
     let t1 = std::time::Instant::now();
-    let Some(d) = s.done() else { return Run { nodes: Vec::new(), metrics: Vec::new(), cost } };
+    let Some(d) = s.done() else { return Run { nodes: Vec::new(), metrics: Vec::new(), cost, mesh: None } };
     let scene = d.scene.clone();
     let mut nodes = Vec::new();
     let mut out = Vec::new();
@@ -330,7 +337,16 @@ where
     let (n, t) = copies(&s.engine_mut().kernel_mut().0);
     (cost.copies, cost.copy_ms) = (n, ms(t));
     cost.heap_bytes = crate::daemon::heap_in_use().zip(heap0).map(|(a, b)| a.saturating_sub(b));
-    Run { nodes, metrics: out, cost }
+    let mesh = mesh_tol.map(|tol| {
+        let root = s.done().and_then(|d| d.ev.root());
+        let shapes: Vec<_> = s
+            .done()
+            .zip(root)
+            .map(|(d, r)| d.ev.parts(r).iter().map(|p| (p.shape.clone(), p.solid)).collect())
+            .unwrap_or_default();
+        mesh::mesh_parts(s.engine_mut().kernel_mut(), root, &shapes, tol)
+    });
+    Run { nodes, metrics: out, cost, mesh }
 }
 
 /// Compares the volumes `x` (SMLib) and `y` (solidcore). `budget`: summed deviation of both
@@ -525,6 +541,54 @@ fn same_polyline(x: &[[f64; 3]], y: &[[f64; 3]], tol: f64) -> bool {
     near(&x, &y) && near(&y, &x)
 }
 
+/// Sums of the mesh comparisons (`--mesh`) over the files.
+#[derive(Debug, Clone, Default, Serialize)]
+struct MeshTotals {
+    files: usize,
+    verdicts: BTreeMap<&'static str, usize>,
+    smlib: MeshSums,
+    solidcore: MeshSums,
+    hausdorff_max: f64,
+}
+
+#[derive(Debug, Clone, Default, Serialize)]
+struct MeshSums {
+    /// Files whose solid parts all meshed watertight.
+    watertight: usize,
+    triangles: usize,
+    ms: f64,
+    brep_ms: f64,
+    surface_max: f64,
+    chord_max: f64,
+    /// Largest `|V − exact| / (tol · area)`.
+    volume_ratio_max: f64,
+}
+
+impl MeshSums {
+    fn add(&mut self, m: &mesh::Metrics) {
+        self.watertight += usize::from(m.watertight && m.error.is_none());
+        self.triangles += m.triangles;
+        self.ms += m.ms;
+        self.brep_ms += m.brep_ms;
+        self.surface_max = self.surface_max.max(m.surface.map_or(0.0, |s| s.max));
+        self.chord_max = self.chord_max.max(m.chord.map_or(0.0, |s| s.max));
+        self.volume_ratio_max = self.volume_ratio_max.max(m.volume_ratio.unwrap_or(0.0));
+    }
+}
+
+impl MeshTotals {
+    fn add(&mut self, c: &mesh::Comparison) {
+        *self.verdicts.entry(c.verdict).or_insert(0) += 1;
+        if c.verdict == "skipped" {
+            return;
+        }
+        self.files += 1;
+        self.smlib.add(&c.smlib);
+        self.solidcore.add(&c.solidcore);
+        self.hausdorff_max = self.hausdorff_max.max(c.hausdorff.unwrap_or(0.0));
+    }
+}
+
 fn compare(
     a: &Metrics,
     b: &Metrics,
@@ -599,9 +663,15 @@ fn compare_metrics(
     if notes.is_empty() { "same" } else { "differ" }
 }
 
-pub fn command(files: &[PathBuf], brep: bool) -> Result<Outcome, Fail> {
+pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>) -> Result<Outcome, Fail> {
     if files.is_empty() {
         return Err(Fail::Usage(tr!("diff-kernels: keine Dateien", "diff-kernels: no files")));
+    }
+    if let Some(t) = mesh_tol.filter(|t| !(*t > 0.0 && t.is_finite())) {
+        return Err(Fail::Usage(tr!(
+            "diff-kernels: --mesh-tol {t} muss > 0 sein",
+            "diff-kernels: --mesh-tol {t} must be > 0"
+        )));
     }
     let mut out_files = Vec::new();
     let mut coverage: BTreeMap<String, BTreeMap<&'static str, usize>> = BTreeMap::new();
@@ -613,6 +683,7 @@ pub fn command(files: &[PathBuf], brep: bool) -> Result<Outcome, Fail> {
     // B-rep comparison of the same nodes, per verdict
     let mut brep_counts: BTreeMap<&'static str, usize> = BTreeMap::new();
     let (mut cost_a, mut cost_b) = (Cost::default(), Cost::default());
+    let mut meshes = MeshTotals::default();
     if !SolidcoreKernel::available() {
         return Err(Fail::Usage(tr!(
             "diff-kernels braucht solidcore: mcad mit `--features solidcore` bauen \
@@ -623,9 +694,9 @@ pub fn command(files: &[PathBuf], brep: bool) -> Result<Outcome, Fail> {
     }
     for f in files {
         let src = std::fs::read_to_string(f).map_err(|e| Fail::Usage(format!("{}: {e}", f.display())))?;
-        let ra = evaluate(SmlibKernel::new(), &src, f, |_| (0, std::time::Duration::ZERO), brep);
+        let ra = evaluate(SmlibKernel::new(), &src, f, |_| (0, std::time::Duration::ZERO), brep, mesh_tol);
         let solid = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            evaluate(SolidcoreKernel::new(), &src, f, SolidcoreKernel::copy_stats, brep)
+            evaluate(SolidcoreKernel::new(), &src, f, SolidcoreKernel::copy_stats, brep, mesh_tol)
         }));
         let rb = solid.ok();
         let (nodes, a) = (&ra.nodes, &ra.metrics);
@@ -759,6 +830,24 @@ pub fn command(files: &[PathBuf], brep: bool) -> Result<Outcome, Fail> {
                 ));
             }
         }
+        let mesh_check = mesh_tol.map(|tol| match (&ra.mesh, rb.as_ref().and_then(|r| r.mesh.as_ref())) {
+            (Some(a), Some(b)) => {
+                let same = diffs.iter().any(|d| Some(d.idx) == a.root && d.verdict == "same");
+                mesh::compare(a, b, tol, same)
+            }
+            _ => mesh::Comparison {
+                tol,
+                verdict: "failed",
+                notes: vec!["solidcore: evaluation aborted".into()],
+                ..Default::default()
+            },
+        });
+        if let Some(c) = &mesh_check {
+            meshes.add(c);
+            if !matches!(c.verdict, "ok" | "skipped") || !c.notes.is_empty() {
+                text.push_str(&tr!("  Netz [{}]: {}\n", "  mesh [{}]: {}\n", c.verdict, c.notes.join("; ")));
+            }
+        }
         let cb = rb.as_ref().map(|r| r.cost);
         cost_a.add(&ra.cost);
         if let Some(c) = &cb {
@@ -769,6 +858,7 @@ pub fn command(files: &[PathBuf], brep: bool) -> Result<Outcome, Fail> {
             "smlib_cost": ra.cost,
             "solidcore_cost": cb,
             "nodes": diffs,
+            "mesh": mesh_check,
             "same": counts.get("same").unwrap_or(&0),
             "unsupported": counts.get("unsupported").unwrap_or(&0),
             "blocked": counts.get("blocked").unwrap_or(&0),
@@ -824,6 +914,33 @@ pub fn command(files: &[PathBuf], brep: bool) -> Result<Outcome, Fail> {
         ));
     }
     let ratio = |a: f64, b: f64| if a > 0.0 { b / a } else { 0.0 };
+    if let Some(tol) = mesh_tol {
+        let m = &meshes;
+        let g = |k: &str| m.verdicts.get(k).copied().unwrap_or(0);
+        text.push_str(&tr!(
+            "Netze (tol {}): ok {}, abweichend {}, gescheitert {}; wasserdicht SMLib {}, solidcore {} von {}; \
+             Sehnenfehler max SMLib {} mm, solidcore {} mm; Hausdorff max {} mm; Dreiecke SMLib {}, \
+             solidcore {}; Zeit SMLib {} ms, solidcore {} ms (davon B-Rep {} ms)\n",
+            "Meshes (tol {}): ok {}, differ {}, failed {}; watertight SMLib {}, solidcore {} of {}; \
+             chord error max SMLib {} mm, solidcore {} mm; Hausdorff max {} mm; triangles SMLib {}, \
+             solidcore {}; time SMLib {} ms, solidcore {} ms (B-rep {} ms of it)\n",
+            crate::num(tol),
+            g("ok"),
+            g("differ"),
+            g("failed"),
+            m.smlib.watertight,
+            m.solidcore.watertight,
+            m.files,
+            crate::num(m.smlib.chord_max),
+            crate::num(m.solidcore.chord_max),
+            crate::num(m.hausdorff_max),
+            m.smlib.triangles,
+            m.solidcore.triangles,
+            crate::num(m.smlib.ms),
+            crate::num(m.solidcore.ms),
+            crate::num(m.solidcore.brep_ms)
+        ));
+    }
     text.push_str(&tr!(
         "Zeit: SMLib Auswertung {} ms, Abfragen {} ms; solidcore Auswertung {} ms ({}×), Abfragen {} ms ({}×), \
          {} Kopien in {} ms\n",
@@ -854,6 +971,7 @@ pub fn command(files: &[PathBuf], brep: bool) -> Result<Outcome, Fail> {
                      "failed": totals.get("failed").unwrap_or(&0),
                      "volume_rules": rules,
                      "brep": brep_counts,
+                     "mesh": mesh_tol.map(|_| &meshes),
                      "smlib_cost": cost_a, "solidcore_cost": cost_b,
                      "eval_ratio": ratio(cost_a.eval_ms, cost_b.eval_ms),
                      "query_ratio": ratio(cost_a.query_ms, cost_b.query_ms) },

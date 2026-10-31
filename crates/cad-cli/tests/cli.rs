@@ -394,6 +394,42 @@ fn diff_kernels_brep() {
     assert!(b.get("differ").is_none() && b.get("unsupported").is_none(), "{b}");
 }
 
+/// `diff-kernels --mesh` (plan 2.7): solidcore's meshes watertight, within the tolerance of the
+/// exact surfaces and as close to SMLib's as both are to the surfaces.
+#[cfg(feature = "solidcore")]
+#[test]
+fn diff_kernels_mesh() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut args =
+        vec!["diff-kernels".to_string(), "--mesh".into(), "--mesh-tol".into(), "0.05".into(), "--json".into()];
+    for f in [
+        "tests/models/openscad-compat/02_sphere_variants.scad",
+        "tests/models/openscad-compat/12_linear_extrude_twist.scad",
+        "tests/models/spec/fillet_zones.mcad",
+    ] {
+        args.push(root.join(f).display().to_string());
+    }
+    let out = mcad().args(&args).output().unwrap();
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let m = &v["summary"]["mesh"];
+    assert_eq!(m["verdicts"]["ok"], 3, "{m}");
+    assert_eq!((m["files"].as_u64(), m["solidcore"]["watertight"].as_u64()), (Some(3), Some(3)), "{m}");
+    assert!(m["solidcore"]["chord_max"].as_f64().unwrap() <= 0.055, "{m}");
+    assert!(m["solidcore"]["volume_ratio_max"].as_f64().unwrap() <= 1.0, "{m}");
+    // SMLib's mesh misses the tolerance in triangle centres (its chord error here 0.24 mm on the
+    // twisted extrusion): the meshes are as far apart as both are from the surfaces
+    let (hs, sa, sb) =
+        (m["hausdorff_max"].as_f64(), m["smlib"]["surface_max"].as_f64(), m["solidcore"]["surface_max"].as_f64());
+    assert!(hs.unwrap() <= sa.unwrap() + sb.unwrap() + 1e-3, "{m}");
+    for f in v["files"].as_array().unwrap() {
+        let s = &f["mesh"]["solidcore"];
+        assert!(s["triangles"].as_u64().unwrap() > 0 && s["error"].is_null(), "{f}");
+    }
+    // the tolerance must be positive
+    let out = mcad().args(["diff-kernels", "--mesh", "--mesh-tol", "0", &args[5]]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+}
+
 /// `diff-kernels` over all examples (solidcore nearly complete at the end of phase 1); it must
 /// answer for every file and node without crashing (exit 1 = not all nodes the same). Only with
 /// the feature `solidcore` (`cargo test -p cad-cli --features solidcore`).

@@ -14,7 +14,7 @@
 | `mcad ui status\|show\|screenshot` | running desktop UI (`mcad usage ui`) |
 | `mcad daemon status\|stop\|serve` | cache process (`mcad usage daemon`) |
 | `mcad usage [TOPIC…] [--all\|--list]` | this manual |
-| `mcad diff-kernels FILE… [--brep]` | SMLib ↔ solidcore (development, `--features solidcore`); `--brep` also compares the neutral B-reps of the same nodes (kinds, positions, orientation, tags; about twice as long) |
+| `mcad diff-kernels FILE… [--brep] [--mesh [--mesh-tol MM]]` | SMLib ↔ solidcore (development, `--features solidcore`); `--brep` also compares the neutral B-reps of the same nodes (kinds, positions, orientation, tags; about twice as long); `--mesh` meshes each file's result with both kernels (tolerance `--mesh-tol`, default 0.05): watertight, volume against the exact one, chord error against the exact surfaces, Hausdorff distance between the meshes, triangles, time; verdict per file `ok`/`differ`/`failed`/`skipped` (no B-rep part) judged on solidcore's mesh, not on the exit code |
 
 ## Common options
 

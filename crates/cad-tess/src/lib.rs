@@ -11,7 +11,9 @@
 //!    `same_sense`), triangles counter-clockwise seen from outside, face tag and id per
 //!    triangle, every edge's polyline with its id.
 //!
-//! [`check`] measures a mesh (watertightness, orientation, degenerate triangles, volume).
+//! [`check`] measures a mesh (watertightness, orientation, degenerate triangles, volume),
+//! [`surface_distance`] and [`mesh_distance`] its distance to the exact surfaces and to another
+//! mesh (plan 2.7).
 //!
 //! ```
 //! # use cad_kernel::brep::Brep;
@@ -30,12 +32,14 @@ use glam::DVec3;
 
 mod bspline;
 mod check;
+mod compare;
 mod edges;
 mod face;
 mod surface;
 mod uv;
 
 pub use check::{MeshCheck, check};
+pub use compare::{Distance, SurfaceDistance, mesh_distance, surface_distance};
 
 /// Settings of a tessellation.
 #[derive(Debug, Clone, Copy, PartialEq)]

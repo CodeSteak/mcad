@@ -332,6 +332,13 @@ pub(crate) enum Cmd {
         /// kinds, positions, orientation, tags (takes about twice as long).
         #[arg(long)]
         brep: bool,
+        /// Also mesh each file's result with both kernels and compare the meshes: watertight,
+        /// volume, distance to the exact surfaces and to each other, triangles, time.
+        #[arg(long)]
+        mesh: bool,
+        /// Chordal tolerance of `--mesh` in mm.
+        #[arg(long, value_name = "MM", default_value_t = 0.05, requires = "mesh")]
+        mesh_tol: f64,
     },
     /// Query and control the running desktop UI (status, show, screenshot).
     Ui {
@@ -671,7 +678,7 @@ pub(crate) fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
                 export(c, output, format.as_deref(), schema, (!*single_color).then_some(pkg), *merge, *ignore_asserts)
             }
         }
-        Cmd::DiffKernels { files, brep, .. } => diff::command(files, *brep),
+        Cmd::DiffKernels { files, brep, mesh, mesh_tol, .. } => diff::command(files, *brep, mesh.then_some(*mesh_tol)),
         Cmd::External(_) | Cmd::Ui { .. } | Cmd::Daemon { .. } | Cmd::Usage { .. } | Cmd::EngineHost => {
             unreachable!("handled in main")
         }
