@@ -457,7 +457,7 @@ fn diff_kernels_on_examples() {
     }
     files.push(root.join("tests/models/project-housing/housing.mcad").display().to_string());
     assert!(files.len() >= 100, "{}", files.len());
-    let mut args = vec!["diff-kernels"];
+    let mut args = vec!["diff-kernels", "--mesh"];
     args.extend(files.iter().map(|s| s.as_str()));
     let out = mcad().args(&args).arg("--json").output().unwrap();
     let code = out.status.code().unwrap();
@@ -492,6 +492,13 @@ fn diff_kernels_on_examples() {
         // checks' retries)
         let copies = s["solidcore_cost"]["copies"].as_u64().unwrap();
         assert!(copies > 0 && copies < 3000, "{copies}");
+        // every result meshes watertight with solidcore (cad-tess, plan 2.8) within the
+        // tolerance of 0.05 of the exact surfaces; one file has no B-rep result (skipped)
+        let m = &s["mesh"];
+        assert_eq!(m["verdicts"]["ok"].as_u64().unwrap() + 1, files.len() as u64, "{m}");
+        assert_eq!(m["solidcore"]["watertight"], m["files"], "{m}");
+        assert!(m["solidcore"]["chord_max"].as_f64().unwrap() <= 0.051, "{m}");
+        assert!(m["solidcore"]["volume_ratio_max"].as_f64().unwrap() <= 1.0, "{m}");
         for f in v["files"].as_array().unwrap() {
             for n in f["nodes"].as_array().unwrap() {
                 if n["verdict"] == "differ" {

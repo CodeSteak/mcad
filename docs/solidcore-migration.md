@@ -2,7 +2,7 @@
 
 Work plan up to the switch: [`solidcore-plan.md`](solidcore-plan.md).
 
-As of: 2026-10-31 (phase 0 of the plan done; phase 1 done except a variable fillet with several radius laws, see the plan) · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
+As of: 2026-10-31 (phase 0 of the plan done; phase 1 done except a variable fillet with several radius laws; phase 2, the own tessellator `cad-tess`, done; see the plan) · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
 
 ## Status
 
@@ -572,7 +572,7 @@ solidcore not).
    sweeps~~ (plan 1.1–1.5, see "Profiles and sweeps"); offset/shell; ~~attributes for face tags (provenance)~~ (plan 1.9/1.10);
    `Kernel::brep` and STEP export via `step-brep`/`step-export`; Wasm build in the same module
    (stack 8 MiB, see solidcore README).
-6. **Own tessellator** (not in solidcore, see below).
+6. ~~**Own tessellator**~~ (not in solidcore; `cad-tess`, plan 2.1–2.8, see below).
 7. Where SMLib succeeds and solidcore fails loudly (task D's tester): a polyhedron of two cubes
    sharing an edge (SMLib 16 mm³; solidcore "every edge must belong to exactly two faces");
    `shell(1) cube(10, $fillet = 2)` (SMLib 414.97; solidcore's offset reports self-overlap,
@@ -632,14 +632,18 @@ predicates (`robust`), ear clipping for the planar case. `make_polyhedron` would
 own construction from planar faces and stitching (`SmApiStitchIntoSolid` is in scope, but
 untested).
 
-## Tessellator `cad-tess` (plan 2.1–2.6)
+## Tessellator `cad-tess` (plan 2.1–2.8)
 
 `crates/cad-tess` meshes the neutral B-rep (`cad_kernel::brep::Brep`) into a `cad_kernel::Mesh`:
 pure Rust (dependency `spade` 2.15, MIT/Apache-2.0, pure Rust without OS dependencies, built
 with `default-features = false`; Wasm size not measured here, no wasm32 target: spade's code is
-about 100–200 KB of a release module by its size), no kernel code. The wiring into
-`kernel-solidcore::tessellate` (2.8) is `cad_tess::tessellate(&brep, tol).map_err(Into::into)`
-(`TessError` converts into `KernelError::Failed`).
+about 100–200 KB of a release module by its size), no kernel code. `kernel-solidcore::tessellate`
+(2.8) is `brep()` + `cad_tess::tessellate_with`: a face that cannot be meshed, or a mesh of
+closed solids that is not watertight, is `KernelError::Failed` ("solidcore: tessellate: …",
+exit 3), never a mesh with holes. So render, STL/3MF, section view, asserts and `measure` work
+with `--kernel solidcore`. A switch to mesh SMLib's B-rep with `cad-tess` in the app was not
+built (the daemon and the cache keys would need a kernel id per tessellator); the corpus example
+and `diff-kernels --mesh` compare it instead.
 
 | Step | How |
 | --- | --- |
@@ -647,7 +651,7 @@ about 100–200 KB of a release module by its size), no kernel code. The wiring 
 | 2.2 surfaces | point, first and second derivatives, unit normal for plane, cylinder, cone, sphere, torus (closed form, STEP parameterisation), revolution, extrusion, B-spline (Piegl & Tiller with rational derivatives); inversion closed form or Newton (Gauss-Newton where the Hessian is not positive), seeds from the previous point of a loop, else local minima of dense curve samples refined by golden section (both branches at a seam corner) or a surface grid; periods (analytic, closed curves, coinciding boundary rows) and poles (sphere poles, cone apex, revolution profile on the axis, collapsed B-spline rows) |
 | UV loops | boundary points inverted, periodic parameters unwrapped along the loop (a seam used twice lands on both sides), a pole traversed on the face's side (the free parameter from the arriving to the leaving value, the direction from the face's orientation), inner loops shifted into the widest loop's period; a loop that wraps a period without a seam is an error (neither kernel writes one) |
 | 2.3 planar faces | the loops projected into the plane, constrained Delaunay (spade) without inner points |
-| 2.4 curved faces | grid lines by chord error and angle (analytic: from the radii; else from the normal part of the second derivative sampled per knot span, spread over the cumulated need), straight directions only near boundary runs across the grid; grid points inside the loops (even-odd per row, a margin from the boundary); CDT in (u, v) mapped to the arc length along each parameter; inside by the parity of constraint edges crossed (winding number where loops cross); refinement up to 12 passes: the foot of a triangle centroid or inner edge midpoint on the surface farther than `tol` → the midpoint of the triangle's longest splittable edge or the foot, never on a boundary edge, never within `tol / 20` of a vertex. Loops that cross in (u, v) (polylines of tangent edges at a cusp) are split at the crossing and the neighbour's triangle on that segment as well (watertight) |
+| 2.4 curved faces | grid lines by chord error and angle (analytic: from the radii; else from the normal part of the second derivative sampled per knot span, spread over the cumulated need; where a direction is straight over part of the face only, lines there at most 4 × the other direction's spacing, never denser than on its curved pieces), straight directions only near boundary runs across the grid; grid points inside the loops (even-odd per row, a margin from the boundary); CDT in (u, v) mapped to the arc length along each parameter, a straight direction squashed by 4 (Delaunay joins points along it, not across the curved one); inside by the parity of constraint edges crossed (winding number where loops cross); refinement while it adds points, at most 40 passes, each measuring only the triangles and inner edges that are new: the foot of a triangle centroid or inner edge midpoint on the surface farther than `tol` → the midpoint of the triangle's longest splittable edge or the foot (second choice where the first lands on the boundary), an inner triangle facing against the surface → its centroid; never on or within 1e-6 (CDT coordinates) of a boundary edge, never within `tol / 20` of a vertex. Loops that cross in (u, v) (polylines of tangent edges at a cusp) are split at the crossing and the neighbour's triangle on that segment as well (watertight) |
 | 2.5 output | positions (shared edge points: identical), normals from the surface (`same_sense`; a hair inside the face at a seam with a crease; a pole: the limit from the inside), seam copies one vertex unless the normals differ, `tri_tags`, `tri_faces` (the B-rep's face ids), every edge's polyline as `edge_segments`/`edge_ids` (the B-rep's edge index = `EdgeId`) |
 | 2.6 checks | `cad_tess::check(&mesh)`: vertices welded by position, every edge used twice in opposite directions (boundary, non-manifold, misoriented counts), degenerate triangles, volume and area; `MeshCheck::volume_ok(exact, tol)`: \|V − exact\| ≤ tol · area |
 
@@ -657,26 +661,61 @@ volume within tolerance, every face and edge present) and unit tests per module.
 
 Acceptance run: `cargo run -p cad-tess --example corpus [--features solidcore] -- --kernel both
 [--tol t]` meshes every root part of the `diff-kernels` corpus (101 files) from each kernel's
-B-rep and compares with SMLib's own `tessellate` (debug build, cad-tess at opt-level 2):
+B-rep and compares with SMLib's own `tessellate` (debug build, cad-tess at opt-level 2; SMLib's
+own time measured in the same run). Tolerances the app uses: 0.05 display (`DEFAULT_TOL`, or
+the node's `$tol`), 10 × that while dragging (`coarse_factor`), 0.01 STL/3MF and part export,
+`clamp(2e-4 · size, 0.001, 0.02)` for the assert checks, the display tolerance for `measure`.
 
-| tol | kernel | watertight | \|V − exact\| / (tol · area): median, worst | largest measured deviation | triangles (SMLib's own) | time (SMLib's own) |
+| tol | kernel | watertight | \|V − exact\| / (tol · area): median, worst | largest deviation (refinement's measure) | triangles (SMLib's own) | time (SMLib's own) |
 | --- | --- | --- | --- | --- | --- | --- |
-| 0.05 | SMLib B-rep | 101 / 101 | 0.039, 0.49 (`02_sphere_variants`) | 0.050 | 255 k (272 k) | 7.5 s (11.9 s) |
-| 0.05 | solidcore B-rep | 101 / 101 | 0.037, 0.49 | 0.050 | 251 k | 7.2 s |
-| 0.01 | SMLib B-rep | 101 / 101 | 0.037, 0.59 | 0.148 (11 files above 0.01) | 996 k (708 k) | 63 s (25 s) |
+| 0.5 | SMLib B-rep | 101 / 101 | 0.007, 0.28 (`bottle`) | 0.50 | 102 k (150 k) | 1.6 s (7.5 s) |
+| 0.5 | solidcore B-rep | 101 / 101 | 0.007, 0.28 | 0.50 | 100 k | 1.5 s |
+| 0.05 | SMLib B-rep | 101 / 101 | 0.039, 0.49 (`02_sphere_variants`) | 0.050 | 232 k (272 k) | 4.7 s (14.0 s) |
+| 0.05 | solidcore B-rep | 101 / 101 | 0.034, 0.49 | 0.050 | 229 k | 4.5 s |
+| 0.01 | SMLib B-rep | 101 / 101 | 0.040, 0.59 (`f11`) | 0.010 | 849 k (708 k) | 22.4 s (27.9 s) |
+| 0.01 | solidcore B-rep | 101 / 101 | 0.035, 0.49 | 0.010 | 837 k | 21.8 s |
 
-SMLib's own meshes are not watertight by position for 3 files (`asserts`, `variable_radius`,
-`f02`), and hold the tolerance only along triangle edges (see plan 2.7). Fewer triangles than
-SMLib in 78 of 101 files at 0.05; more where the tolerance is held inside long triangles on
-fillets and mitres (`f13_shell_fillet` 7.6 ×, `heat_sink` 3 ×) and on revolutions and NURBS
-sweeps (`planter` 2.6 ×). Slowest: `planter` 1.4 s, `mug` 1.3 s (SMLib 1.5 s, 0.4 s).
+The times vary with the load of the machine by up to 1.5 × between runs (the same code measured
+14.7 s against SMLib's 25.6 s at 0.01 in a quieter run); compare within a row. Since task E's
+findings the triangles near the tolerance are measured at three more points (a little slower).
 
-Open: at 0.01 the refinement of some revolution and NURBS faces needs more than 12 passes
-(11 files keep triangles above the tolerance, worst `mug`'s body where the handle meets its
-seam, 0.15 mm; `planter` 23 s): lines along a revolution's profile did not help, the
-arc-length CDT coordinates a little (`planter` converges now); a refinement by edge length in
-arc-length coordinates and a better grid near boundaries across the grid are the next step.
-The timings are of a debug build (cad-tess at opt-level 2, SMLib's library optimised).
+Before the fine-tolerance work (2.4 above, task F): at 0.05 255 k triangles in 7.5 s; at 0.01
+11 files kept triangles above the tolerance (worst 0.148 mm on `mug`), 996 k triangles in 63 s.
+The cause was the refinement in bands of ruled surfaces (a revolution with a straight profile,
+a cylinder between holes): a point put into such a band was joined by Delaunay to neighbours
+far along it, so each fix made the next long edge; the passes ran out. Squashing the straight
+direction in the CDT, the grid floor and passes that measure only what changed fixed it.
+Independently checked by sampling (`cad_tess::surface_distance`, 7 points per triangle, the
+chord error without the B-rep's own vertex gap): the 14 files that had problems (the 11 above,
+`planter`, `heat_sink`, `02_sphere_variants`) hold 0.5, 0.05, 0.02 and 0.01 everywhere, 5 of them
+also 0.002 (the assert tolerance of small models). SMLib's own meshes are not watertight by position for 6, 4 and
+6 files at 0.5, 0.05 and 0.01 (`asserts`, `variable_radius`, `f02`, …) and hold the tolerance
+only along triangle edges (plan 2.7). Fewer triangles than SMLib in 77 / 67 / 59 of 101 files at
+0.5 / 0.05 / 0.01; more where the tolerance is held inside long triangles on fillets, tori and
+mitres (`f13_shell_fillet` 6 × at 0.01, `f08` tori 3.9 ×, `heat_sink` 2.8 ×) and on revolutions
+(`planter` 2.8 ×). Slowest at 0.01: `mug` 2.8 s, `planter` 2.5 s (debug).
+
+### Mesh comparison (plan 2.7)
+
+`mcad diff-kernels --mesh [--mesh-tol MM]` (`crates/cad-cli/src/diff/mesh.rs`) meshes each file's
+result with both kernels' `tessellate` and measures per kernel the triangles, watertightness,
+`|V − exact| / (tol · area)` against `mass_props`, the distance to the exact surfaces of the
+kernel's own B-rep (`cad_tess::surface_distance`: 7 points per triangle projected onto the
+surface of its face; the chord error is that distance minus the triangle corners' own distance,
+which is the B-rep's: `f02`'s fitted sweep end lies up to 0.53 mm off its cap edge) and the time;
+between the kernels the sampled distance in both directions (`cad_tess::mesh_distance`, a grid
+of triangles) and the Hausdorff distance. The verdict per file looks at solidcore's mesh against
+the exact surface (watertight, volume within `tol · area`, chord error ≤ 1.1 · tol), not at the
+distance to SMLib, whose mesh misses the tolerance inside its triangles.
+
+Corpus (`scripts/ci/solidcore.sh`, tol 0.05, debug build): 100 results `ok`, 1 without a B-rep
+result; watertight SMLib 97, solidcore 100; chord error max SMLib 0.241 mm (11 files above
+0.055: `door_stop` 0.19, `f12` 0.14, `loft_sweep` 0.13, …), solidcore 0.050; triangles SMLib
+272 k, solidcore 229 k; time SMLib 14.1 s, solidcore 18.8 s of which 13.8 s are `brep` (the
+conversion runs unoptimised in a debug build: `kernel-solidcore` is a workspace crate; `cad-tess`
+itself 5 s). Hausdorff distance at most 0.22 mm where the root nodes are the same (`door_stop`:
+SMLib's chord error 0.19 explains it); 3.07 mm in `variable_radius` and 2.6 mm in `f11`, whose
+roots differ (unsupported fillet; SMLib fails).
 
 ## Pin routine (bumping solidcore)
 
@@ -744,20 +783,22 @@ Exit code 0 only if all nodes of all files are `same`. The switch happens only w
 `diff-kernels` ends with 0 over all examples (`tests/models/openscad-compat`, `tests/models/spec`,
 `tests/models/everyday`, `tests/models/project-housing`, `tests/everyday/bugs`);
 in addition, `tests/openscad-compat/compare.py` and `tests/step/verify.py` must still pass with solidcore
-(for this `kernel-solidcore` still needs `tessellate`; `brep` exists since plan 1.11).
+(`tessellate` exists since plan 2.8, `brep` since plan 1.11).
 
 The test `diff_kernels_on_examples` (`crates/cad-cli/tests/cli.rs`, only with `--features
 solidcore`) checks that the comparison runs over all 101 examples without a crash, that at
 least 2585 nodes are the same, at most 5 unsupported, at most 5 differ and none fails, that
 no node differs in its volume alone, that every volume rule is used (exact ≥ 110, operands ≥ 45,
-curved ≤ 40, blend 40 to 100) and that the queries need few copies (< 3000); without the feature
+curved ≤ 40, blend 40 to 100), that the queries need few copies (< 3000) and, with `--mesh`
+(plan 2.7), that every result with a B-rep meshes with solidcore watertight, with a chord error
+of at most 0.051 mm at tol 0.05 and a volume within `tol · area`; without the feature
 `diff_kernels_needs_the_feature` checks the build hint. `crates/kernel-solidcore/tests/coverage.rs`
 checks each operation individually (box: volume, area, centroid, bounds; transformation
 and classification correct or `Unsupported`).
 
 `scripts/ci/solidcore.sh` (by hand; there is no CI workflow) builds `mcad` with `--features
-solidcore` against the latest solidcore `main` instead of the pin and runs `diff-kernels` over
-the same examples; the figures go to `summary.md` (total and per operation) and
+solidcore` against the latest solidcore `main` instead of the pin and runs `diff-kernels --mesh`
+over the same examples; the figures go to `summary.md` (total, meshes and per operation) and
 `diff-kernels.json` in the output directory. The script fails only if the build (API change in
 solidcore) or `diff-kernels` itself fails, not because nodes are unsupported, blocked or differ: `SMLIB_PREBUILT=smlib/build-native
 scripts/ci/solidcore.sh` (changes the pin in the working tree, afterwards `git checkout --

@@ -89,12 +89,14 @@ B-rep. So the tessellator works for both kernels and can be developed and compar
 before phase 1 is done. The neutral B-rep has no UV trim curves, so (u, v) of boundary points
 comes from point inversion.
 
-Done 2026-10-31: 2.1–2.6 in `crates/cad-tess` (results in `docs/solidcore-migration.md`,
-"Tessellator `cad-tess`"): over the 101 corpus files at tol 0.05 every mesh is watertight from
-both kernels' B-reps, volume within tol · area (worst 0.49 of it), largest measured deviation
-0.050, 255 k triangles against SMLib's 272 k, 7.5 s against 11.9 s (debug build). Open: at tol
-0.01 some revolution and NURBS faces do not converge within 12 refinement passes. Next: 2.7
-(`diff-kernels --mesh`), 2.8 (`kernel-solidcore::tessellate`).
+Done 2026-10-31: 2.1–2.8 (results in `docs/solidcore-migration.md`, "Tessellator `cad-tess`").
+Over the 101 corpus files every mesh is watertight from both kernels' B-reps at 0.5, 0.05 and 0.01
+(the tolerances of dragging, display and export), the tolerance held everywhere (at 0.01 too
+since task F: squashed straight directions in the CDT, passes that measure only what changed),
+fewer triangles than SMLib at 0.05 (229 k against 272 k), more at 0.01 (837 k against 708 k,
+where SMLib misses the tolerance inside its triangles), faster than SMLib's own tessellation at
+all three tolerances (debug build). `kernel-solidcore::tessellate` = `brep` + `cad-tess`: render, STL/3MF, section view,
+asserts and `measure` work with `--kernel solidcore`. `diff-kernels --mesh` compares the meshes.
 
 | # | Step | Content | Effort |
 | --- | --- | --- | --- |
@@ -109,6 +111,19 @@ both kernels' B-reps, volume within tol · area (worst 0.49 of it), largest meas
 
 Done when: all models mesh watertight; `tests/openscad-compat/compare.py`, `tests/everyday/check.sh`,
 STL/3MF export, section view and render snapshots pass with `--kernel solidcore`.
+
+Status 2026-10-31 (task F, `MCAD_KERNEL=solidcore`, debug build), check by check:
+
+| Check | Result |
+| --- | --- |
+| all models mesh watertight | met: 101 / 101 corpus files at 0.5, 0.05 and 0.01 from both kernels' B-reps (`cad-tess` example `corpus`); `diff-kernels --mesh` over the corpus: 100 results `ok` (watertight, volume within `tol · area`, chord error ≤ 0.050 at 0.05), 1 without a B-rep result |
+| `tests/openscad-compat/compare.py` | met: 36 / 36 (as SMLib); it needs no OpenSCAD, the references are in `reference.json` |
+| `tests/everyday/check.sh` | met: 19 models, 0 with problems (warnings, STEP part volumes, STL and STEP export); `--bugs` (report only): 8 fixed, 9 open against SMLib's 9 and 8: `f11` fixed (SMLib's Boolean fails, solidcore's not), `f09b` and `f13` open (solidcore fails there too, but without the message the target state expects: "cannot blend the corner", "radius of a convex rounding") |
+| STL/3MF export | met: STL through the two checks above; 3MF of the 37 colour-review cases, `multicolor` and `asserts`: the same objects as SMLib, closed where SMLib's are, volumes within 1.1e-3; 3 cases end the same in both kernels (`r_touch`, `r_touch3`: bodies touching along an edge give a non-manifold object; `xf`: a model error) |
+| section view | met: `mcad render --section z=<middle>` of the 88 files both kernels render: 87 like SMLib (at most 0.72 % of the pixels differ), `variable_radius` is unsupported (1.8) |
+| render snapshots | there are no stored reference images (the `cad-render` tests render SMLib in process); compared instead: iso renders of all 101 files with both kernels, 88 rendered by both without model errors, pixels differing median 0.06 %, at most 0.75 %; differing outcome only in `variable_radius` (unsupported) and `f11` (SMLib fails) |
+
+So phase 2 is done except what phase 1 left (`variable_radius`).
 
 ## Phase 3: booleans (depends on upstream)
 

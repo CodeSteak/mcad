@@ -4,7 +4,8 @@
 # crates/kernel-solidcore/Cargo.toml) and runs `mcad diff-kernels` over the examples
 # (tests/models/openscad-compat, tests/models/spec, tests/models/everyday with the main file of each
 # assembly folder, tests/models/project-housing/housing.mcad, tests/everyday/bugs; the same list as
-# `diff_kernels_on_examples` in crates/cad-cli/tests/cli.rs). Reports the numbers only: unsupported, blocked
+# `diff_kernels_on_examples` in crates/cad-cli/tests/cli.rs), with `--mesh` (meshes of each result,
+# plan 2.7). Reports the numbers only: unsupported, blocked
 # or differing nodes do not fail the run (the pin is guarded by `diff_kernels_on_examples`);
 # a build failure or a crash of diff-kernels does.
 #
@@ -57,7 +58,7 @@ for d in tests/models/everyday/*/; do
 done
 files+=(tests/models/project-housing/housing.mcad tests/everyday/bugs/*.mcad)
 code=0
-MCAD_NO_DAEMON=1 "${CARGO_TARGET_DIR:-target}/debug/mcad" diff-kernels "${files[@]}" --json >"$OUT/diff-kernels.json" || code=$?
+MCAD_NO_DAEMON=1 "${CARGO_TARGET_DIR:-target}/debug/mcad" diff-kernels "${files[@]}" --mesh --json >"$OUT/diff-kernels.json" || code=$?
 # 0: every node the same, 1: not (expected for now), anything else: usage error or crash
 if [ "$code" -gt 1 ]; then
   echo "mcad diff-kernels ended with exit code $code" >&2
@@ -77,6 +78,14 @@ print(f"`mcad diff-kernels` over {len(v['files'])} examples, {s['nodes']} nodes.
 print("| " + " | ".join(keys) + " |")
 print("|" + " ---: |" * len(keys))
 print("| " + " | ".join(str(s[k]) for k in keys) + " |\n")
+m = s.get("mesh")
+if m:
+    a, b = m["smlib"], m["solidcore"]
+    print(f"Meshes (`--mesh`, tol 0.05) of {m['files']} results: verdicts {m['verdicts']}; watertight SMLib "
+          f"{a['watertight']}, solidcore {b['watertight']}; chord error max SMLib {a['chord_max']:.4f} mm, "
+          f"solidcore {b['chord_max']:.4f} mm; Hausdorff max {m['hausdorff_max']:.4f} mm; triangles SMLib "
+          f"{a['triangles']}, solidcore {b['triangles']}; time SMLib {a['ms']:.0f} ms, solidcore {b['ms']:.0f} ms "
+          f"(B-rep {b['brep_ms']:.0f} ms of it)\n")
 print("<details><summary>per operation</summary>\n")
 print("| operation | nodes | " + " | ".join(keys) + " |")
 print("| --- | ---: |" + " ---: |" * len(keys))
