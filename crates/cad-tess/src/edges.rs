@@ -114,19 +114,46 @@ pub(crate) fn discretise(brep: &Brep, tol: f64, angle: f64) -> EdgePolys {
 }
 
 /// Interior parameters (increasing, ends excluded) of an adaptive polyline of `f` (point,
-/// tangent) over `breaks` (increasing, at least two values; the breaks are kept).
+/// tangent) over `breaks` (increasing, at least two values): bisection at half the tolerance
+/// from every break, then the points thinned out again as long as the chord stays within `tol`
+/// of the dense ones and the tangent turns less than `angle` (dense knots need no points).
 fn adaptive(f: &dyn Fn(f64) -> (DVec3, DVec3), breaks: &[f64], tol: f64, angle: f64) -> Vec<f64> {
-    let mut out = Vec::new();
+    let mut ts = vec![breaks[0]];
     let cos_max = angle.cos();
-    let first = f(breaks[0]);
-    let mut prev = first;
-    for (k, w) in breaks.windows(2).enumerate() {
+    let mut prev = f(breaks[0]);
+    for w in breaks.windows(2) {
         let end = f(w[1]);
-        split(f, w[0], w[1], prev, end, tol, cos_max, 0, &mut out);
-        if k + 2 < breaks.len() {
-            out.push(w[1]);
-        }
+        split(f, w[0], w[1], prev, end, 0.5 * tol, cos_max, 0, &mut ts);
+        ts.push(w[1]);
         prev = end;
+    }
+    let pts: Vec<(DVec3, DVec3)> = ts.iter().map(|t| f(*t)).collect();
+    let dist = |a: DVec3, b: DVec3, p: DVec3| {
+        let ab = b - a;
+        let l2 = ab.length_squared();
+        let s = if l2 > 0.0 { ((p - a).dot(ab) / l2).clamp(0.0, 1.0) } else { 0.0 };
+        (a + ab * s - p).length()
+    };
+    let turned = |a: DVec3, b: DVec3| match (a.try_normalize(), b.try_normalize()) {
+        (Some(x), Some(y)) => x.dot(y) < cos_max,
+        _ => false,
+    };
+    let mut out = Vec::new();
+    let mut a = 0;
+    while a + 1 < ts.len() {
+        let mut j = a + 1;
+        while j + 1 < ts.len() {
+            let c = j + 1;
+            let ok = !turned(pts[a].1, pts[c].1) && (a + 1..c).all(|k| dist(pts[a].0, pts[c].0, pts[k].0) <= 0.5 * tol);
+            if !ok {
+                break;
+            }
+            j = c;
+        }
+        if j + 1 < ts.len() {
+            out.push(ts[j]);
+        }
+        a = j;
     }
     out
 }

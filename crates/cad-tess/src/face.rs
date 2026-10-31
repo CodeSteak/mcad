@@ -204,7 +204,8 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
         // lines needed per unit of the parameter on each piece
         let mut density = Vec::with_capacity(pieces.len());
         for w in pieces.windows(2) {
-            // samples of |σ''| and of the turn rate in direction i over this piece
+            // samples of the normal part of σ'' (the sag of a chord off the surface; the
+            // tangential part only changes the speed) and of the normal's turn rate
             let mut d2: f64 = 0.0;
             let mut turn: f64 = 0.0;
             for si in 0..=4 {
@@ -213,13 +214,12 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
                     let s = c + (d - c) * sj as f64 / 6.0;
                     let uv = if i == 0 { DVec2::new(t, s) } else { DVec2::new(s, t) };
                     let ds = g.ders(uv);
+                    let Some(n) = ds[1].cross(ds[2]).try_normalize() else { continue };
                     let (d1, dd) = if i == 0 { (ds[1], ds[3]) } else { (ds[2], ds[5]) };
-                    if dd.length() <= 1e-12 * d1.length() {
-                        continue;
-                    }
-                    d2 = d2.max(dd.length());
+                    let k = dd.dot(n).abs();
+                    d2 = d2.max(k);
                     if d1.length() > 1e-12 {
-                        turn = turn.max(dd.reject_from(d1).length() / d1.length());
+                        turn = turn.max(k / d1.length());
                     }
                 }
             }
@@ -243,6 +243,57 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
         *lines = all.into_iter().filter(|t| *t > a && *t < b).collect();
     }
     out
+}
+
+/// A straight direction (cylinder, cone and extrusion along v) needs no lines for the chord, but
+/// where the boundary runs across the grid (a mitre, a hole), Delaunay fans long triangles from
+/// it over the face. Lines then at twice the other direction's spacing over the span of such a
+/// run (a run of boundary segments that change both parameters and span more than two grid
+/// steps along the straight direction) and a little beyond, at sixteen times elsewhere.
+fn straight_lines(loops: &[Vec<UvPt>], lines: &mut [Vec<f64>; 2], (lo, hi): (DVec2, DVec2), sc: DVec2) {
+    for i in 0..2 {
+        let o = 1 - i;
+        if !lines[i].is_empty() || lines[o].is_empty() {
+            continue;
+        }
+        let pick = |v: DVec2, k: usize| if k == 0 { v.x } else { v.y };
+        let step3 = (pick(hi, o) - pick(lo, o)) * pick(sc, o) / (lines[o].len() + 1) as f64;
+        // spans (in parameter i) of the runs across
+        let mut spans: Vec<(f64, f64)> = Vec::new();
+        for l in loops {
+            let mut run: Option<(f64, f64, f64)> = None;
+            for k in 0..=l.len() {
+                let (a, b) = (l[k % l.len()].uv, l[(k + 1) % l.len()].uv);
+                let d = (b - a) * sc;
+                let len = d.length();
+                if k < l.len() && d.x.abs() > 1e-6 * len && d.y.abs() > 1e-6 * len {
+                    let r = run.get_or_insert((pick(a, i), pick(a, i), 0.0));
+                    r.0 = r.0.min(pick(b, i));
+                    r.1 = r.1.max(pick(b, i));
+                    r.2 += pick(d, i).abs();
+                } else if let Some((x, y, total)) = run.take()
+                    && total > 2.0 * step3
+                {
+                    spans.push((x, y));
+                }
+            }
+        }
+        let (a, b) = (pick(lo, i), pick(hi, i));
+        if spans.is_empty() || !crate::gt(b, a) {
+            continue;
+        }
+        let fine = 2.0 * step3 / pick(sc, i);
+        let mut out = Vec::new();
+        let mut t = a;
+        while t < b {
+            let near = spans.iter().any(|(x, y)| t >= x - 4.0 * fine && t <= y + 4.0 * fine);
+            t += if near { fine } else { 8.0 * fine };
+            if t < b - 0.5 * fine {
+                out.push(t);
+            }
+        }
+        lines[i] = out;
+    }
 }
 
 /// Crossings of the loops with the line `v = const` (u values, sorted).
@@ -404,9 +455,10 @@ pub(crate) fn mesh_face(
         hi = hi.max(q.uv);
     }
     let bounds = (lo, hi);
-    let lines = grid_lines(g, bounds, p);
-    split_poles(&mut loops, &lines);
+    let mut lines = grid_lines(g, bounds, p);
     let sc = scale(g, bounds);
+    straight_lines(&loops, &mut lines, bounds, sc);
+    split_poles(&mut loops, &lines);
     let mut b = Builder { g, cdt: Cdt::new(), info: Vec::new(), scale: sc, bounds };
     let mut fm = FaceMesh { bounds, ..Default::default() };
     // boundary
