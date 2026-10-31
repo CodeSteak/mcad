@@ -14,13 +14,14 @@
 //! from their triangles' centres), so the verdict looks at solidcore's distance to the exact
 //! surface, not at the distance to SMLib's mesh: `ok` if solidcore's mesh is watertight, its
 //! volume within `tol · area`, its chord error (the distance to the surface beyond that of
-//! the triangles' corners) within [`SURFACE_SLACK`] · `tol`, and its vertices on their faces:
-//! those inside a face within `tol` of its surface, those on the face's boundary (points of the
-//! B-rep's edges, which may lie off the face: the fitted end of a sweep) within SMLib's largest
-//! such gap plus `tol` where the root node is `same`. There (both B-reps describe the same
-//! body) the Hausdorff distance to SMLib's mesh must also stay within SMLib's own distance to
-//! its surfaces (at least `tol`) plus [`SURFACE_SLACK`] · `tol` plus [`KERNEL_SLACK`] of the
-//! size: only SMLib's distance counts, solidcore's would grow with any error of its mesh.
+//! the triangles' corners) within [`SURFACE_SLACK`] · `tol`, and its vertices on their faces
+//! within `tol` plus, where the root node is `same`, SMLib's largest such gap (separately for
+//! the vertices inside a face and all: points of the B-rep's edges may lie off the face, the
+//! fitted end of a sweep, and loops crossing at a cusp are split on their chords). There
+//! (both B-reps describe the same body) the Hausdorff distance to SMLib's mesh must also stay
+//! within SMLib's own distance to its surfaces (at least `tol`) plus [`SURFACE_SLACK`] · `tol`
+//! plus [`KERNEL_SLACK`] of the size: only SMLib's distance counts, solidcore's would grow
+//! with any error of its mesh.
 
 use std::time::Instant;
 
@@ -238,15 +239,24 @@ pub fn compare(a: &Parts, b: &Parts, tol: f64, same: bool) -> Comparison {
         if let Some(s) = mb.chord.filter(|s| s.max > SURFACE_SLACK * tol) {
             c.notes.push(format!("solidcore: chord {:.4} mm off the surface at {:?}", s.max, s.at));
         }
-        if mb.inner_vertex_gap > tol {
-            c.notes.push(format!("solidcore: a vertex inside a face {:.4} mm off its surface", mb.inner_vertex_gap));
+        // SMLib's gaps count where both B-reps describe the same body: an edge off its face (a
+        // fitted sweep end), loops crossing at a cusp split on their chords (`f02`)
+        let smlib = same && ma.error.is_none() && ma.triangles > 0;
+        let inner = if smlib { ma.inner_vertex_gap } else { 0.0 };
+        if mb.inner_vertex_gap > inner + tol {
+            c.notes.push(format!(
+                "solidcore: a vertex inside a face {:.4} mm off its surface (SMLib: {:.4})",
+                mb.inner_vertex_gap, ma.inner_vertex_gap
+            ));
         }
-        let smlib_meshed = ma.error.is_none() && ma.triangles > 0;
-        if same && smlib_meshed && mb.vertex_gap > ma.vertex_gap + tol {
+        if smlib && mb.vertex_gap > ma.vertex_gap + tol {
             c.notes.push(format!(
                 "solidcore: a vertex {:.4} mm off its face (SMLib: {:.4})",
                 mb.vertex_gap, ma.vertex_gap
             ));
+        }
+        if !c.notes.is_empty() {
+            c.verdict = "differ";
         }
     }
     if !mesh_a.indices.is_empty() && !mesh_b.indices.is_empty() {
@@ -324,5 +334,6 @@ mod tests {
         let c = compare(&p, &one, tol, true);
         assert_eq!(c.verdict, "differ", "{:?}", c.notes);
         assert!(c.solidcore.vertex_gap > 0.25, "{}", c.solidcore.vertex_gap);
+        assert!(c.notes.iter().any(|n| n.contains("vertex")), "{:?}", c.notes);
     }
 }

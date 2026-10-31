@@ -84,9 +84,10 @@ pub struct SurfaceDistance {
     pub chord: Distance,
     /// Largest distance of a mesh vertex from the surface of its face.
     pub vertex_gap: f64,
-    /// The same for the vertices inside their face (not on an edge of its triangles that no
-    /// other triangle of the face shares): they are surface points, while a boundary vertex is a
-    /// point of the B-rep's edge, which may lie off the face (see `chord`).
+    /// The same for the vertices inside their face (neither on an edge of its triangles that no
+    /// other triangle of the face shares nor a point of an edge polyline, `edge_segments`: a
+    /// seam): they are surface points, while a boundary vertex is a point of the B-rep's edge,
+    /// which may lie off the face (see `chord`).
     pub inner_vertex_gap: f64,
 }
 
@@ -114,6 +115,14 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
     }
     let boundary: std::collections::HashSet<(u32, u32)> =
         uses.iter().filter(|(_, n)| **n == 1).flat_map(|((f, a, b), _)| [(*f, *a), (*f, *b)]).collect();
+    // points of the B-rep's edges (also a seam inside a face's triangles)
+    let edge_points: std::collections::HashSet<[u32; 3]> =
+        mesh.edge_segments.chunks_exact(3).map(|p| [p[0].to_bits(), p[1].to_bits(), p[2].to_bits()]).collect();
+    let on_edge = |v: u32| {
+        let k = 3 * v as usize;
+        let p = &mesh.positions[k..k + 3];
+        edge_points.contains(&[p[0].to_bits(), p[1].to_bits(), p[2].to_bits()])
+    };
     let mut out = SurfaceDistance::default();
     for t in 0..mesh.indices.len() / 3 {
         let Some(g) = mesh.tri_faces.get(t).and_then(|f| geoms.get(f)) else { continue };
@@ -130,7 +139,8 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
             .collect();
         for (k, c) in cs.iter().enumerate() {
             out.vertex_gap = out.vertex_gap.max(c.1);
-            if !boundary.contains(&(face, mesh.indices[3 * t + k])) {
+            let v = mesh.indices[3 * t + k];
+            if !boundary.contains(&(face, v)) && !on_edge(v) {
                 out.inner_vertex_gap = out.inner_vertex_gap.max(c.1);
             }
         }
