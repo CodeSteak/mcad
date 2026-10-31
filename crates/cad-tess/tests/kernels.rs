@@ -250,3 +250,113 @@ fn errors() {
     assert!(cad_tess::tessellate(&b, f64::NAN).is_err());
     assert!(cad_tess::tessellate(&b, 0.1).unwrap().is_empty());
 }
+
+/// A mesh within `tol` of the B-rep of `s`: strict (no face above the tolerance), watertight,
+/// the exact volume within `tol · area`.
+fn holds<K: Kernel>(k: &mut K, s: &K::Shape, tol: f64, what: &str) -> usize {
+    let brep = k.brep(s).unwrap();
+    let t = cad_tess::tessellate_with(&brep, &cad_tess::Options::new(tol)).unwrap();
+    if let Err(e) = t.strict() {
+        panic!("{what}: {e}");
+    }
+    let c = cad_tess::check(&t.mesh);
+    let exact = k.mass_props(s).unwrap().volume;
+    assert!(c.watertight() && c.degenerate == 0, "{what}: {c:?}");
+    assert!(c.volume_ok(exact, tol), "{what}: volume {} against {exact}", c.volume);
+    assert!(t.stats.max_deviation <= tol * 1.0001, "{what}: deviation {}", t.stats.max_deviation);
+    c.triangles
+}
+
+/// Ruled bands (a revolved straight line, a cone, a cylinder) cut by Booleans at several
+/// scales: the case of the mug's wall where the handle joins it (straight along the profile,
+/// rows of the grid only near the holes), whose refinement did not converge at 0.01 once the
+/// mug was scaled by 2 (0.057 mm left after 40 passes).
+fn ruled_bands<K: Kernel>(mut k: K, kernel: &str) {
+    let xz = DMat4::from_cols(DVec3::X.extend(0.0), DVec3::Z.extend(0.0), DVec3::NEG_Y.extend(0.0), DVec4::W);
+    for (s, tols) in [(1.0, &[0.01, 0.005][..]), (2.0, &[0.01][..]), (4.0, &[0.01][..])] {
+        let profile = Loop::Polygon(vec![
+            DVec2::new(0.0, 0.0),
+            DVec2::new(36.0 * s, 0.0),
+            DVec2::new(41.0 * s, 95.0 * s),
+            DVec2::new(0.0, 95.0 * s),
+        ]);
+        let walls = [
+            ("revolved line", k.revolve(&PlacedLoop { lp: profile, frame: xz }, TAU, 1).unwrap()),
+            ("cone", k.make_cylinder(95.0 * s, 36.0 * s, 41.0 * s, 1).unwrap()),
+            ("cylinder", k.make_cylinder(95.0 * s, 38.0 * s, 38.0 * s, 1).unwrap()),
+        ];
+        for (name, wall) in walls {
+            // two stubs into the wall at an angle (a handle's ends) and a hole through it
+            let stub = |k: &mut K, z: f64, tilt: f64| {
+                let c = k.make_cylinder(30.0 * s, 4.5 * s, 4.5 * s, 2).unwrap();
+                let m = DMat4::from_translation(DVec3::new(-38.0 * s - 20.0 * s, 0.0, z * s))
+                    * DMat4::from_rotation_y(FRAC_PI_2 + tilt);
+                k.transform(&c, &m).unwrap()
+            };
+            let (a, b) = (stub(&mut k, 22.0, 0.15), stub(&mut k, 77.0, -0.15));
+            let body = k.boolean(BoolOp::Union, &[wall, a, b], 3).unwrap();
+            let hole = k.make_cylinder(100.0 * s, 6.0 * s, 6.0 * s, 4).unwrap();
+            let hole = k
+                .transform(
+                    &hole,
+                    &(DMat4::from_translation(DVec3::new(0.0, 50.0 * s, 50.0 * s)) * DMat4::from_rotation_x(FRAC_PI_2)),
+                )
+                .unwrap();
+            let body = k.boolean(BoolOp::Difference, &[body, hole], 3).unwrap();
+            for &tol in tols {
+                let n = holds(&mut k, &body, tol, &format!("{kernel}: {name} ×{s} at {tol}"));
+                eprintln!("{kernel}: {name} ×{s} at {tol}: {n} triangles");
+            }
+        }
+    }
+}
+
+#[test]
+fn ruled_bands_smlib() {
+    ruled_bands(kernel_smlib::SmlibKernel::new(), "smlib");
+}
+
+#[cfg(feature = "solidcore")]
+#[test]
+fn ruled_bands_solidcore() {
+    ruled_bands(kernel_solidcore::SolidcoreKernel::new(), "solidcore");
+}
+
+/// The mug of the corpus scaled by 2 at 0.01 (its conical wall, see `ruled_bands`), and at
+/// 0.005 unscaled.
+fn scaled_mug<K: Kernel + 'static>(k: K, kernel: &str)
+where
+    K::Shape: 'static,
+{
+    use cad_session::protocol::ToEngine;
+    use cad_session::{Session, SessionOptions, std_clock};
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/models/everyday");
+    let text = std::fs::read_to_string(root.join("mug.mcad")).unwrap();
+    assert!(text.contains("\nb: mug();"));
+    let opts = SessionOptions { auto_root_mesh: false, ..Default::default() };
+    let mut s = Session::new(k, opts, std_clock());
+    s.set_resolver(Box::new(cad_session::FsResolver { root }), "mug.mcad");
+    for (version, (inst, tol)) in [("scale(2) mug();", 0.01), ("mug();", 0.005)].into_iter().enumerate() {
+        let version = version as u64 + 1;
+        s.post(ToEngine::SetSource { text: text.replace("\nb: mug();", &format!("\n{inst}")), version });
+        s.run_to_idle();
+        let d = s.done().unwrap();
+        let r = d.ev.root().unwrap();
+        let parts: Vec<_> = d.ev.parts(r).iter().map(|p| p.shape.clone()).collect();
+        assert_eq!(parts.len(), 1, "{kernel}: {inst}");
+        let k = s.engine_mut().kernel_mut();
+        let n = holds(k, &parts[0], tol, &format!("{kernel}: {inst} at {tol}"));
+        eprintln!("{kernel}: {inst} at {tol}: {n} triangles");
+    }
+}
+
+#[test]
+fn scaled_mug_smlib() {
+    scaled_mug(kernel_smlib::SmlibKernel::new(), "smlib");
+}
+
+#[cfg(feature = "solidcore")]
+#[test]
+fn scaled_mug_solidcore() {
+    scaled_mug(kernel_solidcore::SolidcoreKernel::new(), "solidcore");
+}

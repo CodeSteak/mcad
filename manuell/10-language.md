@@ -6,7 +6,9 @@ transforms, booleans, modifiers `# % ! *`, extrusions, `include`/`use`). Files: 
 `.scad` works the same, also in `include <lib.scad>`/`use <lib.mcad>` (the path names the file,
 extensions are not added or swapped). Differences:
 
-- Exact geometry; `$fn/$fa/$fs` only affect display (except `$fn` = 3…12 at a call: polygon).
+- Exact geometry; `$fn/$fa/$fs` only affect display (except `$fn` = 3…12 at a call: polygon);
+  `$tol` (mm) is a node's chordal tolerance in the UI's display meshes only (`render` 0.05,
+  `export` 0.01 mm).
 - `color()` defines print colours (`mcad usage colors`).
 - `hull`, `minkowski`: exact special cases only (below); otherwise warning, children shown
   unchanged.

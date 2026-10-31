@@ -2,17 +2,20 @@
 //! `spade`) of the boundary loops, with grid points inside for curved faces, refined where the
 //! triangles leave the surface.
 //!
-//! 1. **Grid.** Lines in u and v whose step keeps the chord within `tol` and the turn within
-//!    the angle: analytic surfaces from their radii (straight directions get no lines),
-//!    revolutions and extrusions from their curve, B-splines per knot span from the second
-//!    derivatives; where one direction is straight over part of the face only, lines there at
-//!    most four times the other direction's spacing. Grid points inside the loops (even-odd per
-//!    row) and not too near them are inserted.
-//! 2. **CDT** in (u, v) mapped to the arc length along each parameter (so that Delaunay in the
-//!    plane is roughly Delaunay on the surface), a straight direction squashed by four (Delaunay
-//!    then joins points along it, not across the curved one), the loops as constraint edges.
-//!    Triangles inside are those an odd number of constraint edges away from the outside
-//!    (nested loops).
+//! 1. **Grid.** Lines in u and v whose step keeps the chord within `tol` (half of it in each
+//!    direction where both are curved) and the turn within the angle: analytic surfaces from
+//!    their radii (straight directions get no lines), revolutions and extrusions from their
+//!    curve, B-splines per knot span from the second derivatives; where one direction is
+//!    straight over part of the face only, lines there at most four times the other
+//!    direction's spacing; a straight direction gets rows only where the boundary runs across
+//!    the grid. Grid points inside the loops (even-odd per row) and not too near them are
+//!    inserted.
+//! 2. **CDT** in (u, v) mapped to grid steps (`Warp`: a step of either direction is the same
+//!    length, so Delaunay triangles are round for the chord error, long along a gently curved
+//!    direction and short across a tightly curved one), a straight direction squashed by four
+//!    (Delaunay then joins points along it, not across the curved one), the loops as
+//!    constraint edges. Triangles inside are those an odd number of constraint edges away from
+//!    the outside (nested loops).
 //! 3. **Refinement.** A triangle whose centroid lies farther than `tol` from the surface gets
 //!    the midpoint of its longest inner edge (or the centroid's foot), an inner edge whose
 //!    midpoint lies farther than `tol` the foot of its midpoint, and a triangle facing against
@@ -194,6 +197,16 @@ impl Builder<'_> {
 /// Factor by which a straight direction is squashed in the CDT's coordinates (see `Warp`).
 const SQUASH: f64 = 4.0;
 
+/// Rows of a straight direction near a boundary that runs across the grid: this many steps of
+/// the other direction apart (see `straight_lines`).
+const NEAR: f64 = 2.0;
+
+/// A surface curved in both directions gets grid steps for `tol / DOUBLE` in each: the chord
+/// of a cell's diagonal sags by the sum of the two directions' sags, so a grid for the full
+/// tolerance in each direction would leave every diagonal at about twice the tolerance, and
+/// the refinement would have to split every cell.
+const DOUBLE: f64 = 2.0;
+
 /// Lines of parameter `dir` strictly inside `(lo, hi)`.
 fn uniform(lo: f64, hi: f64, step: f64) -> Vec<f64> {
     let n = steps(hi - lo, step);
@@ -207,18 +220,22 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
         return [Vec::new(), Vec::new()];
     }
     if let Some(radii) = g.radii(bounds) {
+        // doubly curved: half the tolerance each (see `DOUBLE`)
+        let tol = if radii.iter().all(Option::is_some) { p.tol / DOUBLE } else { p.tol };
         let mut out = [Vec::new(), Vec::new()];
         for i in 0..2 {
             if let Some(r) = radii[i] {
                 let (a, b) = if i == 0 { (lo.x, hi.x) } else { (lo.y, hi.y) };
-                out[i] = uniform(a, b, step_angle(r, p.tol, p.angle));
+                out[i] = uniform(a, b, step_angle(r, tol, p.angle));
             }
         }
         return out;
     }
     // general: lines from the derivatives sampled over the bounds
     let mut pieces: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
-    let mut need: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
+    // lines per piece for the chord and for the turn
+    let mut chord: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
+    let mut turns: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
     for i in 0..2 {
         let (a, b) = if i == 0 { (lo.x, hi.x) } else { (lo.y, hi.y) };
         if !crate::gt(b, a) {
@@ -247,9 +264,14 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
                     }
                 }
             }
-            need[i].push((w[1] - w[0]) * (d2 / (8.0 * p.tol)).sqrt().max(turn / p.angle));
+            chord[i].push((w[1] - w[0]) * (d2 / (8.0 * p.tol)).sqrt());
+            turns[i].push((w[1] - w[0]) * turn / p.angle);
         }
     }
+    // curved in both directions (at least a line each): half the tolerance each
+    let f = if chord.iter().all(|c| c.iter().sum::<f64>() >= 1.0) { DOUBLE.sqrt() } else { 1.0 };
+    let mut need: [Vec<f64>; 2] =
+        [0, 1].map(|i| chord[i].iter().zip(&turns[i]).map(|(c, t)| (c * f).max(*t)).collect());
     // a direction that is straight over part of the face (a revolution's profile with a
     // straight piece) gets lines there as well, at most ASPECT times the other direction's
     // spacing (by arc length) and no denser than on its curved pieces: else the grid leaves a
@@ -306,7 +328,8 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
 /// where the boundary runs across the grid (a mitre, a hole), Delaunay fans long triangles from
 /// it over the face. Lines then at twice the other direction's spacing over the span of such a
 /// run (a run of boundary segments that change both parameters and span more than two grid
-/// steps along the straight direction) and a little beyond, at sixteen times elsewhere.
+/// steps along the straight direction) and a little beyond, at sixteen times elsewhere. (In
+/// the CDT's coordinates all rows are half a step apart, see `Warp`.)
 fn straight_lines(loops: &[Vec<UvPt>], lines: &mut [Vec<f64>; 2], (lo, hi): (DVec2, DVec2), sc: DVec2) {
     for i in 0..2 {
         let o = 1 - i;
@@ -339,7 +362,7 @@ fn straight_lines(loops: &[Vec<UvPt>], lines: &mut [Vec<f64>; 2], (lo, hi): (DVe
         if spans.is_empty() || !crate::gt(b, a) {
             continue;
         }
-        let fine = 2.0 * step3 / pick(sc, i);
+        let fine = NEAR * step3 / pick(sc, i);
         let mut out = Vec::new();
         let mut t = a;
         while t < b {
@@ -411,10 +434,29 @@ fn scale(g: &Geom, (lo, hi): (DVec2, DVec2)) -> DVec2 {
     DVec2::new(ok(a), ok(b))
 }
 
-/// The CDT's coordinates: each parameter mapped to the arc length along it (its speed `|σu|`,
-/// `|σv|`, the median across the other parameter, integrated over 64 steps of the bounds), so
-/// that Delaunay in the plane is roughly Delaunay on the surface also where the parameter
-/// speed varies (dense knots at the ends of a sweep). Linear beyond the bounds.
+/// The CDT's coordinates, in which Delaunay triangles are well shaped for the chord error:
+///
+/// - a direction with grid lines for the chord in *grid steps*: the bounds and the lines at
+///   0, 1, 2, …, and between two of them by the arc length along the parameter (its speed
+///   `|σu|`, `|σv|`, the median across the other parameter, integrated over 64 steps of the
+///   bounds: dense knots at the ends of a sweep). A step keeps the chord within the tolerance
+///   in each direction, so a triangle that is round in these coordinates is within it in every
+///   direction: a torus with a large major radius gets long triangles along its circle and
+///   short ones across, not the isotropic ones of the arc length (many times the triangles);
+/// - a straight direction (no lines for the chord where the other one has some) with rows
+///   (`straight_lines`) in rows: each band between two rows `NEAR / SQUASH` (half a step)
+///   high, as the rows near a run across are by arc length squashed by `SQUASH`. The rows
+///   away from such runs, sixteen steps of the other direction apart, would otherwise be four
+///   steps apart in these coordinates and leave bands in which a point the refinement inserts
+///   is joined to row points several steps away across the curved direction, whose chords are
+///   then off by several times the tolerance, and so on along the band (a cone between a
+///   fillet and the holes of a handle: the refinement did not converge);
+/// - a straight direction without rows by its arc length in units of `SQUASH` times the other
+///   direction's mean step: Delaunay then joins points along it rather than across the curved
+///   one, whose extent alone makes the chord error;
+/// - otherwise (no lines either way) the arc length.
+///
+/// Linear beyond the bounds.
 #[derive(Debug, Clone)]
 struct Warp {
     t: [Vec<f64>; 2],
@@ -422,7 +464,9 @@ struct Warp {
 }
 
 impl Warp {
-    fn new(g: &Geom, (lo, hi): (DVec2, DVec2), sc: DVec2, squash: [f64; 2]) -> Warp {
+    /// `chord`: the grid lines for the chord (`grid_lines`), `lines`: with the rows of a
+    /// straight direction (`straight_lines`).
+    fn new(g: &Geom, (lo, hi): (DVec2, DVec2), sc: DVec2, chord: &[Vec<f64>; 2], lines: &[Vec<f64>; 2]) -> Warp {
         const N: usize = 64;
         let mut w = Warp { t: [Vec::new(), Vec::new()], s: [Vec::new(), Vec::new()] };
         for i in 0..2 {
@@ -458,10 +502,58 @@ impl Warp {
             w.t[i] = ts;
             w.s[i] = ss;
         }
-        for (s, f) in w.s.iter_mut().zip(squash) {
-            s.iter_mut().for_each(|x| *x *= f);
+        let has = [0, 1].map(|i| !chord[i].is_empty());
+        if g.is_plane() || !(has[0] || has[1]) {
+            return w;
+        }
+        // mean step by arc length
+        let step = [0, 1].map(|i| {
+            let s = &w.s[i];
+            (s[s.len() - 1] - s[0]) / (chord[i].len() + 1) as f64
+        });
+        for i in 0..2 {
+            if has[i] {
+                w.in_steps(i, chord[i].as_slice());
+            } else if !lines[i].is_empty() {
+                w.in_steps(i, lines[i].as_slice());
+                w.s[i].iter_mut().for_each(|x| *x *= NEAR / SQUASH);
+            } else {
+                let unit = SQUASH * step[1 - i];
+                if crate::gt(unit, 0.0) {
+                    w.s[i].iter_mut().for_each(|x| *x /= unit);
+                }
+            }
         }
         w
+    }
+
+    /// Direction `i` in grid steps: the bounds and `lines` (increasing, inside the bounds) at
+    /// 0, 1, 2, …, the arc length in between.
+    fn in_steps(&mut self, i: usize, lines: &[f64]) {
+        let (a, b) = (self.t[i][0], self.t[i][self.t[i].len() - 1]);
+        let mut knots = Vec::with_capacity(lines.len() + 2);
+        knots.push(a);
+        knots.extend(lines.iter().copied().filter(|t| *t > a && *t < b));
+        knots.push(b);
+        let arc: Vec<f64> = knots.iter().map(|t| self.map1(i, *t)).collect();
+        let mut ts: Vec<f64> = self.t[i].iter().chain(&knots).copied().collect();
+        ts.sort_by(f64::total_cmp);
+        ts.dedup();
+        let ss = ts
+            .iter()
+            .map(|&t| {
+                let j = knots.partition_point(|k| *k <= t).clamp(1, knots.len() - 1) - 1;
+                let (s0, s1) = (arc[j], arc[j + 1]);
+                let f = if s1 > s0 {
+                    (self.map1(i, t) - s0) / (s1 - s0)
+                } else {
+                    (t - knots[j]) / (knots[j + 1] - knots[j])
+                };
+                j as f64 + f.clamp(0.0, 1.0)
+            })
+            .collect();
+        self.t[i] = ts;
+        self.s[i] = ss;
     }
 
     fn map1(&self, i: usize, x: f64) -> f64 {
@@ -593,13 +685,11 @@ pub(crate) fn mesh_face(
     let bounds = (lo, hi);
     let mut lines = grid_lines(g, bounds, p);
     let sc = scale(g, bounds);
-    // a straight direction (no lines for the chord where the other one has some) is squashed
-    // in the CDT: Delaunay then joins points along it rather than across the curved one, whose
-    // extent alone makes the chord error
-    let squash = [0, 1].map(|i| if lines[i].is_empty() && !lines[1 - i].is_empty() { 1.0 / SQUASH } else { 1.0 });
+    let chord = lines.clone();
     straight_lines(&loops, &mut lines, bounds, sc);
     split_poles(&mut loops, &lines);
-    let mut b = Builder { g, cdt: Cdt::new(), info: Vec::new(), warp: Warp::new(g, bounds, sc, squash), bounds };
+    let mut b =
+        Builder { g, cdt: Cdt::new(), info: Vec::new(), warp: Warp::new(g, bounds, sc, &chord, &lines), bounds };
     let mut fm = FaceMesh { bounds, ..Default::default() };
     // boundary
     let mut handles: Vec<Vec<Option<FixedVertexHandle>>> = Vec::new();

@@ -107,7 +107,7 @@ Units mm and degrees, Z up.
 | math | `abs sign sin cos tan asin acos atan atan2 floor ceil round ln log exp sqrt pow min max norm cross` |
 | lists, strings | `len concat lookup search str chr ord rands` |
 | types | `is_undef is_bool is_num is_string is_list is_function` |
-| other | `version() version_num() dir(anchor)`; `$fn $fa $fs` only affect display (except `$fn` = 3…12 at a call: polygon) |
+| other | `version() version_num() dir(anchor)`; `$fn $fa $fs` only affect display (except `$fn` = 3…12 at a call: polygon); `$tol` display tolerance of a node in the UI |
 
 ## CLI
 

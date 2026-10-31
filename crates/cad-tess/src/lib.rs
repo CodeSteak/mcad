@@ -53,10 +53,15 @@ pub struct Options {
     pub max_passes: usize,
     /// Most triangles of one face and of the whole mesh: a face that would need more (from
     /// its grid, or during the refinement) fails with "tolerance too fine" instead of running
-    /// out of time and memory.
+    /// out of time and memory. A guard, not a quality limit: the default of [`MAX_TRIANGLES`]
+    /// for both is a binary STL of 100 MB, far beyond what a realistic part needs at 0.01 mm
+    /// (a sphere of radius 300: 300 000).
     pub max_face_triangles: usize,
     pub max_triangles: usize,
 }
+
+/// Default of [`Options::max_triangles`] and [`Options::max_face_triangles`].
+pub const MAX_TRIANGLES: usize = 2_000_000;
 
 /// The tolerance is at least this fraction of the model size: finer is below the resolution of
 /// the mesh's `f32` positions (about 6e-8 of a coordinate) and would only cost time.
@@ -68,7 +73,13 @@ pub const MAX_MISS: f64 = 2.0;
 
 impl Options {
     pub fn new(tol: f64) -> Options {
-        Options { tol, angle: 20f64.to_radians(), max_passes: 40, max_face_triangles: 300_000, max_triangles: 500_000 }
+        Options {
+            tol,
+            angle: 20f64.to_radians(),
+            max_passes: 40,
+            max_face_triangles: MAX_TRIANGLES,
+            max_triangles: MAX_TRIANGLES,
+        }
     }
 }
 
@@ -198,7 +209,8 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
             }
         };
         // what is left of the whole mesh's budget
-        params.max_triangles = opts.max_face_triangles.min(opts.max_triangles.saturating_sub(mesh.indices.len() / 3));
+        let left = opts.max_triangles.saturating_sub(mesh.indices.len() / 3);
+        params.max_triangles = opts.max_face_triangles.min(left);
         let fm = face::mesh_face(&g, loops, &ep.points, &params, orient, &mut next_id);
         splits.extend_from_slice(&fm.splits);
         stats.refined += fm.refined;
@@ -206,9 +218,14 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
         stats.max_deviation = stats.max_deviation.max(fm.deviation);
         if let Some(n) = fm.too_fine {
             // no use meshing the other faces
+            let limit = if left < opts.max_face_triangles {
+                format!("at most {left} left of {} in all", opts.max_triangles)
+            } else {
+                format!("at most {} per face", opts.max_face_triangles)
+            };
             return Err(TessError(format!(
-                "face {}: tolerance {tol} mm too fine: more than {n} triangles (at most {} per face, {} in all)",
-                f.id, opts.max_face_triangles, opts.max_triangles
+                "face {}: tolerance {tol} mm too fine: more than {n} triangles ({limit})",
+                f.id
             )));
         }
         if fm.deviation > tol {
@@ -448,6 +465,9 @@ mod tests {
         assert!(t.stats.tol >= MIN_REL_TOL * 10.0, "{:?}", t.stats);
         let few = Options { max_face_triangles: 50, ..Options::new(1e-3) };
         let e = tessellate_with(&half_disc(5), &few).unwrap_err();
-        assert!(e.0.contains("too fine"), "{e}");
+        assert!(e.0.contains("too fine") && e.0.contains("at most 50 per face"), "{e}");
+        let few = Options { max_triangles: 40, ..Options::new(1e-3) };
+        let e = tessellate_with(&half_disc(5), &few).unwrap_err();
+        assert!(e.0.contains("at most 40 left of 40 in all"), "{e}");
     }
 }
