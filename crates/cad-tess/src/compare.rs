@@ -84,6 +84,10 @@ pub struct SurfaceDistance {
     pub chord: Distance,
     /// Largest distance of a mesh vertex from the surface of its face.
     pub vertex_gap: f64,
+    /// The same for the vertices inside their face (not on an edge of its triangles that no
+    /// other triangle of the face shares): they are surface points, while a boundary vertex is a
+    /// point of the B-rep's edge, which may lie off the face (see `chord`).
+    pub inner_vertex_gap: f64,
 }
 
 /// Distance of `mesh` to the surfaces of `brep`: per triangle the sample points projected onto
@@ -99,6 +103,17 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
     // parameters of each corner on the surface of the face (a vertex may be shared by faces)
     // and its distance from it
     let mut corner: HashMap<(u32, u32), (DVec2, f64)> = HashMap::new();
+    // triangle edges per face (lower vertex, higher vertex) and how often they are used
+    let mut uses: HashMap<(u32, u32, u32), u32> = HashMap::new();
+    for t in 0..mesh.indices.len() / 3 {
+        let Some(&face) = mesh.tri_faces.get(t) else { continue };
+        for k in 0..3 {
+            let (a, b) = (mesh.indices[3 * t + k], mesh.indices[3 * t + (k + 1) % 3]);
+            *uses.entry((face, a.min(b), a.max(b))).or_default() += 1;
+        }
+    }
+    let boundary: std::collections::HashSet<(u32, u32)> =
+        uses.iter().filter(|(_, n)| **n == 1).flat_map(|((f, a, b), _)| [(*f, *a), (*f, *b)]).collect();
     let mut out = SurfaceDistance::default();
     for t in 0..mesh.indices.len() / 3 {
         let Some(g) = mesh.tri_faces.get(t).and_then(|f| geoms.get(f)) else { continue };
@@ -113,8 +128,11 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
                 })
             })
             .collect();
-        for c in &cs {
+        for (k, c) in cs.iter().enumerate() {
             out.vertex_gap = out.vertex_gap.max(c.1);
+            if !boundary.contains(&(face, mesh.indices[3 * t + k])) {
+                out.inner_vertex_gap = out.inner_vertex_gap.max(c.1);
+            }
         }
         for w in &SAMPLES {
             let p = at(&tri, w);
@@ -136,77 +154,114 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
     out
 }
 
-/// Uniform grid of the triangles of a mesh (nearest-triangle queries).
-struct Grid<'a> {
+/// Bounding-volume hierarchy of the triangles of a mesh (nearest-triangle queries): boxes split
+/// at the median of their longest axis down to a few triangles. A query visits the nearer child
+/// first and skips every box farther than the best triangle so far, so a point far from the
+/// mesh costs about as much as one on it (a uniform grid searched in growing shells of cells
+/// took a minute for a mesh shifted by 50 mm).
+struct Bvh<'a> {
     mesh: &'a Mesh,
-    lo: DVec3,
-    cell: f64,
-    n: [i64; 3],
-    cells: HashMap<[i64; 3], Vec<u32>>,
+    nodes: Vec<Node>,
+    /// Triangle indices; a leaf owns a range of them.
+    tris: Vec<u32>,
 }
 
-impl<'a> Grid<'a> {
-    fn new(mesh: &'a Mesh) -> Option<Grid<'a>> {
-        let (lo, hi) = mesh.bounds()?;
-        let (lo, hi) = (lo - DVec3::splat(1e-9), hi + DVec3::splat(1e-9));
-        let ext = hi - lo;
-        let tris = (mesh.indices.len() / 3).max(1) as f64;
-        // about two triangles per cell over the surface: cells of the size of the mean triangle
-        let area: f64 = (0..mesh.indices.len() / 3)
+#[derive(Debug, Clone, Copy)]
+struct Node {
+    lo: DVec3,
+    hi: DVec3,
+    /// Leaf: `tris[first..first + count]`; inner node: children `first` and `first + 1`.
+    first: u32,
+    count: u32,
+}
+
+/// Most triangles of a leaf.
+const LEAF: usize = 4;
+
+impl<'a> Bvh<'a> {
+    fn new(mesh: &'a Mesh) -> Option<Bvh<'a>> {
+        let n = mesh.indices.len() / 3;
+        if n == 0 {
+            return None;
+        }
+        let boxes: Vec<(DVec3, DVec3)> = (0..n)
             .map(|t| {
                 let [a, b, c] = triangle(mesh, t);
-                0.5 * (b - a).cross(c - a).length()
+                (a.min(b).min(c), a.max(b).max(c))
             })
-            .sum();
-        let cell = (2.0 * area / tris).sqrt().max(ext.max_element() / 512.0).max(1e-6);
-        let n = [0, 1, 2].map(|i| ((ext[i] / cell).ceil() as i64).max(1));
-        let mut cells: HashMap<[i64; 3], Vec<u32>> = HashMap::new();
-        for t in 0..mesh.indices.len() / 3 {
-            let [a, b, c] = triangle(mesh, t);
-            let (tl, th) = (a.min(b).min(c), a.max(b).max(c));
-            let (il, ih) = (Self::index(lo, cell, n, tl), Self::index(lo, cell, n, th));
-            for x in il[0]..=ih[0] {
-                for y in il[1]..=ih[1] {
-                    for z in il[2]..=ih[2] {
-                        cells.entry([x, y, z]).or_default().push(t as u32);
-                    }
-                }
+            .collect();
+        let mut bvh = Bvh { mesh, nodes: Vec::with_capacity(2 * n / LEAF + 1), tris: (0..n as u32).collect() };
+        bvh.nodes.push(Node { lo: DVec3::ZERO, hi: DVec3::ZERO, first: 0, count: n as u32 });
+        // nodes to split: (node, start, end)
+        let mut todo = vec![(0usize, 0usize, n)];
+        while let Some((i, s, e)) = todo.pop() {
+            let (mut lo, mut hi) = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
+            for &t in &bvh.tris[s..e] {
+                lo = lo.min(boxes[t as usize].0);
+                hi = hi.max(boxes[t as usize].1);
             }
+            bvh.nodes[i].lo = lo;
+            bvh.nodes[i].hi = hi;
+            if e - s <= LEAF {
+                bvh.nodes[i].first = s as u32;
+                bvh.nodes[i].count = (e - s) as u32;
+                continue;
+            }
+            let ext = hi - lo;
+            let axis = if ext.x >= ext.y && ext.x >= ext.z {
+                0
+            } else if ext.y >= ext.z {
+                1
+            } else {
+                2
+            };
+            let mid = (s + e) / 2;
+            let key = |t: &u32| {
+                let (a, b) = boxes[*t as usize];
+                a[axis] + b[axis]
+            };
+            bvh.tris[s..e].select_nth_unstable_by(mid - s, |x, y| key(x).total_cmp(&key(y)));
+            let c = bvh.nodes.len();
+            bvh.nodes[i].first = c as u32;
+            bvh.nodes[i].count = 0;
+            bvh.nodes.push(Node { lo, hi, first: 0, count: 0 });
+            bvh.nodes.push(Node { lo, hi, first: 0, count: 0 });
+            todo.push((c, s, mid));
+            todo.push((c + 1, mid, e));
         }
-        Some(Grid { mesh, lo, cell, n, cells })
+        Some(bvh)
     }
 
-    fn index(lo: DVec3, cell: f64, n: [i64; 3], p: DVec3) -> [i64; 3] {
-        let q = (p - lo) / cell;
-        [0, 1, 2].map(|i| (q[i].floor() as i64).clamp(0, n[i] - 1))
+    /// Distance from `p` to the box of node `i` (0 inside).
+    fn box_distance(&self, i: usize, p: DVec3) -> f64 {
+        let n = &self.nodes[i];
+        (n.lo - p).max(p - n.hi).max(DVec3::ZERO).length()
     }
 
-    /// Distance from `p` to the nearest triangle: shells of cells around `p` until no closer
-    /// triangle can lie farther out.
+    /// Distance from `p` to the nearest triangle.
     fn distance(&self, p: DVec3) -> f64 {
-        let c = Self::index(self.lo, self.cell, self.n, p);
-        // distance of p outside the grid box
-        let hi = self.lo + DVec3::new(self.n[0] as f64, self.n[1] as f64, self.n[2] as f64) * self.cell;
-        let out = (self.lo - p).max(p - hi).max(DVec3::ZERO).length();
         let mut best = f64::INFINITY;
-        let rmax = self.n.iter().copied().max().unwrap_or(1);
-        for r in 0..=rmax {
-            // cells r rings out are at least (r − 1) cells away (and `out` for a point outside)
-            if best <= out.max((r as f64 - 1.0) * self.cell) {
-                break;
+        let mut stack = vec![(0usize, self.box_distance(0, p))];
+        while let Some((i, d)) = stack.pop() {
+            if d >= best {
+                continue;
             }
-            for x in (c[0] - r).max(0)..=(c[0] + r).min(self.n[0] - 1) {
-                for y in (c[1] - r).max(0)..=(c[1] + r).min(self.n[1] - 1) {
-                    for z in (c[2] - r).max(0)..=(c[2] + r).min(self.n[2] - 1) {
-                        // the shell only
-                        if (x - c[0]).abs() != r && (y - c[1]).abs() != r && (z - c[2]).abs() != r {
-                            continue;
-                        }
-                        for &t in self.cells.get(&[x, y, z]).map_or(&[][..], |v| &v[..]) {
-                            best = best.min(point_triangle(p, &triangle(self.mesh, t as usize)));
-                        }
-                    }
+            let n = self.nodes[i];
+            if n.count > 0 {
+                for &t in &self.tris[n.first as usize..(n.first + n.count) as usize] {
+                    best = best.min(point_triangle(p, &triangle(self.mesh, t as usize)));
                 }
+                continue;
+            }
+            let (a, b) = (n.first as usize, n.first as usize + 1);
+            let (da, db) = (self.box_distance(a, p), self.box_distance(b, p));
+            // the nearer child on top of the stack
+            if da <= db {
+                stack.push((b, db));
+                stack.push((a, da));
+            } else {
+                stack.push((a, da));
+                stack.push((b, db));
             }
         }
         best
@@ -267,7 +322,7 @@ fn point_triangle(p: DVec3, t: &[DVec3; 3]) -> f64 {
 /// the nearest triangle of `to`.
 pub fn mesh_distance(from: &Mesh, to: &Mesh) -> Distance {
     let mut d = Distance::default();
-    let Some(g) = Grid::new(to) else { return d };
+    let Some(g) = Bvh::new(to) else { return d };
     for i in 0..(from.positions.len() / 3) as u32 {
         let p = pos(from, i);
         d.add(g.distance(p), p);
@@ -304,5 +359,36 @@ mod tests {
         assert!((point_triangle(DVec3::new(2.0, 0.0, 0.0), &t) - 1.0).abs() < 1e-12);
         assert!((point_triangle(DVec3::new(0.2, 0.2, 3.0), &t) - 3.0).abs() < 1e-12);
         assert!((point_triangle(DVec3::new(1.0, 1.0, 0.0), &t) - 0.5f64.sqrt()).abs() < 1e-12);
+        // far from the mesh: the same distance, found quickly
+        let d = mesh_distance(&quad(50.0), &quad(0.0));
+        assert!((d.max - 50.0).abs() < 1e-6 && (d.mean - 50.0).abs() < 1e-6, "{d:?}");
+    }
+
+    /// The hierarchy finds the nearest triangle of a larger mesh (against a brute-force search).
+    #[test]
+    fn nearest_triangle() {
+        let mut m = Mesh::default();
+        let n = 30;
+        for i in 0..=n {
+            for j in 0..=n {
+                let (x, y) = (i as f32 / n as f32 * 10.0, j as f32 / n as f32 * 10.0);
+                m.positions.extend_from_slice(&[x, y, (x * 0.7).sin() * (y * 0.4).cos()]);
+            }
+        }
+        for i in 0..n {
+            for j in 0..n {
+                let a = (i * (n + 1) + j) as u32;
+                let (b, c, d) = (a + 1, a + n as u32 + 1, a + n as u32 + 2);
+                m.indices.extend_from_slice(&[a, c, d, a, d, b]);
+            }
+        }
+        let bvh = Bvh::new(&m).unwrap();
+        for k in 0..200 {
+            let f = k as f64;
+            let p = DVec3::new((f * 0.37).sin() * 14.0 + 5.0, (f * 0.91).cos() * 14.0 + 5.0, (f * 0.13).sin() * 6.0);
+            let brute =
+                (0..m.indices.len() / 3).map(|t| point_triangle(p, &triangle(&m, t))).fold(f64::INFINITY, f64::min);
+            assert!((bvh.distance(p) - brute).abs() < 1e-12, "{p}");
+        }
     }
 }

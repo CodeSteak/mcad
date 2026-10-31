@@ -2112,12 +2112,24 @@ mod imp {
             // a failed face, or one far above the tolerance (cad-tess's `strict`)
             t.strict().map_err(|e| KernelError::failed(format!("solidcore: {e}")))?;
             let closed = b.bodies.iter().all(|b| matches!(b, cad_kernel::brep::Body::Solid { .. }));
-            if closed && !t.mesh.is_empty() {
+            if !t.mesh.is_empty() {
                 let c = cad_tess::check(&t.mesh);
-                if c.boundary_edges + c.misoriented_edges > 0 {
+                if c.non_finite > 0 {
+                    return Err(KernelError::failed(format!(
+                        "solidcore: {OP}: {} mesh positions are not finite numbers",
+                        c.non_finite
+                    )));
+                }
+                if closed && c.boundary_edges + c.misoriented_edges > 0 {
                     return Err(KernelError::failed(format!(
                         "solidcore: {OP}: the mesh of a closed solid is not watertight ({} open, {} misoriented edges)",
                         c.boundary_edges, c.misoriented_edges
+                    )));
+                }
+                if closed && c.inside_out {
+                    return Err(KernelError::failed(format!(
+                        "solidcore: {OP}: the mesh of a closed solid faces inwards (volume {:.6} mm³)",
+                        c.volume
                     )));
                 }
             }

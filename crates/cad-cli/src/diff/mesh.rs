@@ -2,7 +2,8 @@
 //! part) from both kernels' `tessellate` (SMLib: its own tessellator; solidcore: `cad-tess` on
 //! its B-rep), compared with tolerance `tol`:
 //!
-//! * per kernel: triangles, watertight (every edge used twice in opposite directions),
+//! * per kernel: triangles, watertight (every edge used twice in opposite directions, facing
+//!   outwards, finite positions),
 //!   volume against the exact one (`mass_props`) as `|V − exact| / (tol · area)` (≤ 1 passes),
 //!   distance to the exact surfaces of the kernel's own B-rep (sampled per triangle, see
 //!   `cad_tess::surface_distance`), time of `tessellate`;
@@ -12,11 +13,14 @@
 //! SMLib holds the tolerance only along triangle edges (twisted free-form faces bulge away
 //! from their triangles' centres), so the verdict looks at solidcore's distance to the exact
 //! surface, not at the distance to SMLib's mesh: `ok` if solidcore's mesh is watertight, its
-//! volume within `tol · area` and its chord error (the distance to the surface beyond that of
-//! the triangles' corners, which is the B-rep's) within [`SURFACE_SLACK`] · `tol`;
-//! the Hausdorff distance to SMLib is expected within both kernels' surface distances plus
-//! [`KERNEL_SLACK`] of the size where the root node is `same` (both B-reps describe the same
-//! body; a note otherwise).
+//! volume within `tol · area`, its chord error (the distance to the surface beyond that of
+//! the triangles' corners) within [`SURFACE_SLACK`] · `tol`, and its vertices on their faces:
+//! those inside a face within `tol` of its surface, those on the face's boundary (points of the
+//! B-rep's edges, which may lie off the face: the fitted end of a sweep) within SMLib's largest
+//! such gap plus `tol` where the root node is `same`. There (both B-reps describe the same
+//! body) the Hausdorff distance to SMLib's mesh must also stay within SMLib's own distance to
+//! its surfaces (at least `tol`) plus [`SURFACE_SLACK`] · `tol` plus [`KERNEL_SLACK`] of the
+//! size: only SMLib's distance counts, solidcore's would grow with any error of its mesh.
 
 use std::time::Instant;
 
@@ -87,6 +91,10 @@ pub struct Metrics {
     pub watertight: bool,
     pub boundary_edges: usize,
     pub misoriented_edges: usize,
+    /// Closed solid parts whose mesh faces inwards (negative volume).
+    pub inside_out: usize,
+    /// Positions with a NaN or infinite coordinate.
+    pub non_finite: usize,
     pub volume: f64,
     pub exact_volume: Option<f64>,
     /// `|volume − exact| / (tol · area)`, solid parts.
@@ -99,6 +107,8 @@ pub struct Metrics {
     /// Largest distance of a mesh vertex from the surface of its face (an edge of the B-rep
     /// off its face, e.g. at the fitted end of a sweep).
     pub vertex_gap: f64,
+    /// The same for the vertices inside their face (surface points: about 0).
+    pub inner_vertex_gap: f64,
     /// `tessellate`, ms (solidcore: with `brep`).
     pub ms: f64,
     /// `brep` alone, ms.
@@ -147,12 +157,15 @@ fn metrics(p: &Parts, tol: f64) -> (Metrics, Mesh) {
         };
         let c = cad_tess::check(mesh);
         m.triangles += c.triangles;
+        m.non_finite += c.non_finite;
+        m.watertight &= c.non_finite == 0;
         m.volume += c.volume;
         let closed = part.brep.as_ref().is_none_or(|b| b.bodies.iter().all(|b| matches!(b, Body::Solid { .. })));
         if part.solid && closed {
             m.boundary_edges += c.boundary_edges;
             m.misoriented_edges += c.misoriented_edges;
-            m.watertight &= c.boundary_edges + c.misoriented_edges == 0;
+            m.inside_out += usize::from(c.inside_out);
+            m.watertight &= c.boundary_edges + c.misoriented_edges == 0 && !c.inside_out;
             match part.exact {
                 Some(e) => {
                     exact += e;
@@ -165,6 +178,7 @@ fn metrics(p: &Parts, tol: f64) -> (Metrics, Mesh) {
         if let Some(b) = &part.brep {
             let d = cad_tess::surface_distance(b, mesh);
             m.vertex_gap = m.vertex_gap.max(d.vertex_gap);
+            m.inner_vertex_gap = m.inner_vertex_gap.max(d.inner_vertex_gap);
             surface = Some(match surface {
                 Some((s, c)) => (Distance::max_of(s, d.distance), Distance::max_of(c, d.chord)),
                 None => (d.distance, d.chord),
@@ -179,6 +193,12 @@ fn metrics(p: &Parts, tol: f64) -> (Metrics, Mesh) {
     m.surface = surface.map(|s| s.0.into());
     m.chord = surface.map(|s| s.1.into());
     (m, all)
+}
+
+/// `e` with `who: ` in front, unless it already starts with it (kernel errors name their kernel).
+fn prefixed(who: &str, e: &str) -> String {
+    let lower = e.to_lowercase();
+    if lower.starts_with(&format!("{}:", who.to_lowercase())) { e.to_string() } else { format!("{who}: {e}") }
 }
 
 fn append(all: &mut Mesh, m: &Mesh) {
@@ -200,16 +220,16 @@ pub fn compare(a: &Parts, b: &Parts, tol: f64, same: bool) -> Comparison {
     }
     if let Some(e) = &mb.error {
         c.verdict = "failed";
-        c.notes.push(format!("solidcore: {e}"));
+        c.notes.push(prefixed("solidcore", e));
     }
-    if ma.error.is_some() {
-        c.notes.push(format!("SMLib: {}", ma.error.clone().unwrap_or_default()));
+    if let Some(e) = &ma.error {
+        c.notes.push(prefixed("SMLib", e));
     }
     if c.verdict == "ok" {
         if !mb.watertight {
             c.notes.push(format!(
-                "solidcore: not watertight ({} open, {} misoriented edges)",
-                mb.boundary_edges, mb.misoriented_edges
+                "solidcore: not watertight ({} open, {} misoriented edges, {} parts inside out, {} non-finite positions)",
+                mb.boundary_edges, mb.misoriented_edges, mb.inside_out, mb.non_finite
             ));
         }
         if let Some(r) = mb.volume_ratio.filter(|r| *r > 1.0) {
@@ -218,8 +238,15 @@ pub fn compare(a: &Parts, b: &Parts, tol: f64, same: bool) -> Comparison {
         if let Some(s) = mb.chord.filter(|s| s.max > SURFACE_SLACK * tol) {
             c.notes.push(format!("solidcore: chord {:.4} mm off the surface at {:?}", s.max, s.at));
         }
-        if !c.notes.is_empty() {
-            c.verdict = "differ";
+        if mb.inner_vertex_gap > tol {
+            c.notes.push(format!("solidcore: a vertex inside a face {:.4} mm off its surface", mb.inner_vertex_gap));
+        }
+        let smlib_meshed = ma.error.is_none() && ma.triangles > 0;
+        if same && smlib_meshed && mb.vertex_gap > ma.vertex_gap + tol {
+            c.notes.push(format!(
+                "solidcore: a vertex {:.4} mm off its face (SMLib: {:.4})",
+                mb.vertex_gap, ma.vertex_gap
+            ));
         }
     }
     if !mesh_a.indices.is_empty() && !mesh_b.indices.is_empty() {
@@ -227,14 +254,75 @@ pub fn compare(a: &Parts, b: &Parts, tol: f64, same: bool) -> Comparison {
         let from = cad_tess::mesh_distance(&mesh_a, &mesh_b);
         let h = to.max.max(from.max);
         let size = mesh_a.bounds().map_or(0.0, |(lo, hi)| (hi - lo).length());
-        let lim = ma.surface.map_or(tol, |s| s.max.max(tol)) + mb.surface.map_or(tol, |s| s.max.max(tol));
-        if same && h > lim + KERNEL_SLACK * size {
+        let lim = ma.surface.map_or(tol, |s| s.max.max(tol)) + SURFACE_SLACK * tol + KERNEL_SLACK * size;
+        if same && h > lim {
             let w = if to.max >= from.max { to } else { from };
             c.notes.push(format!("{h:.4} mm from SMLib's mesh at {:?} (expected ≤ {:.4})", w.at.to_array(), lim));
+            if c.verdict == "ok" {
+                c.verdict = "differ";
+            }
         }
         (c.to_smlib, c.from_smlib, c.hausdorff) = (Some(to.into()), Some(from.into()), Some(h));
     }
     c.smlib = ma;
     c.solidcore = mb;
     c
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use kernel_smlib::SmlibKernel;
+
+    /// SMLib's meshes of a cylinder and a sphere, as both sides of a comparison.
+    fn parts(tol: f64) -> Parts {
+        let mut k = SmlibKernel::new();
+        let shapes = vec![(k.make_cylinder(10.0, 5.0, 5.0, 1).unwrap(), true), (k.make_sphere(4.0, 2).unwrap(), true)];
+        let shapes: Vec<_> = shapes
+            .into_iter()
+            .enumerate()
+            .map(|(i, (s, solid))| {
+                let m = glam::DMat4::from_translation(glam::DVec3::new(20.0 * i as f64, 0.0, 0.0));
+                (k.transform(&s, &m).unwrap(), solid)
+            })
+            .collect();
+        mesh_parts(&mut k, Some(0), &shapes, tol)
+    }
+
+    fn moved(mut p: Parts, f: impl Fn(usize, &mut [f32])) -> Parts {
+        for part in &mut p.parts {
+            if let Ok(m) = &mut part.mesh {
+                for (i, v) in m.positions.chunks_exact_mut(3).enumerate() {
+                    f(i, v);
+                }
+            }
+        }
+        p
+    }
+
+    /// A displaced mesh is no longer `ok`: all vertices shifted (the Hausdorff distance, the
+    /// vertices off their faces), one inner vertex moved off its surface.
+    #[test]
+    fn displaced_meshes_differ() {
+        let tol = 0.05;
+        let c = compare(&parts(tol), &parts(tol), tol, true);
+        assert_eq!(c.verdict, "ok", "{:?}", c.notes);
+        let shifted = moved(parts(tol), |_, v| v[2] += 50.0);
+        let c = compare(&parts(tol), &shifted, tol, true);
+        assert_eq!(c.verdict, "differ", "{:?}", c.notes);
+        assert!(c.hausdorff.is_some_and(|h| h > 49.0), "{:?}", c.hausdorff);
+        assert!(c.notes.iter().any(|n| n.contains("from SMLib's mesh")), "{:?}", c.notes);
+        // one vertex of the sphere (in the middle of its vertex list) 0.3 mm outwards
+        let mut one = parts(tol);
+        if let Ok(m) = &mut one.parts[1].mesh {
+            let k = 3 * (m.positions.len() / 6);
+            let p = glam::Vec3::from_slice(&m.positions[k..k + 3]);
+            let q = p + (p - glam::Vec3::new(20.0, 0.0, 0.0)).normalize() * 0.3;
+            m.positions[k..k + 3].copy_from_slice(&q.to_array());
+        }
+        let p = parts(tol);
+        let c = compare(&p, &one, tol, true);
+        assert_eq!(c.verdict, "differ", "{:?}", c.notes);
+        assert!(c.solidcore.vertex_gap > 0.25, "{}", c.solidcore.vertex_gap);
+    }
 }

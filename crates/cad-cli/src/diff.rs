@@ -663,15 +663,28 @@ fn compare_metrics(
     if notes.is_empty() { "same" } else { "differ" }
 }
 
+/// Smallest `--mesh-tol` (as `measure --mesh-tol`): SMLib's tessellator ran out of memory at 1e-9.
+pub const MIN_MESH_TOL: f64 = 1e-4;
+
 pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>) -> Result<Outcome, Fail> {
     if files.is_empty() {
         return Err(Fail::Usage(tr!("diff-kernels: keine Dateien", "diff-kernels: no files")));
     }
-    if let Some(t) = mesh_tol.filter(|t| !(*t > 0.0 && t.is_finite())) {
-        return Err(Fail::Usage(tr!(
-            "diff-kernels: --mesh-tol {t} muss > 0 sein",
-            "diff-kernels: --mesh-tol {t} must be > 0"
-        )));
+    if let Some(t) = mesh_tol {
+        if !t.is_finite() {
+            return Err(Fail::Usage(tr!(
+                "diff-kernels: --mesh-tol {t} ist keine endliche Zahl",
+                "diff-kernels: --mesh-tol {t} is not a finite number"
+            )));
+        }
+        if t < MIN_MESH_TOL {
+            return Err(Fail::Usage(tr!(
+                "diff-kernels: --mesh-tol {t} ist kleiner als {MIN_MESH_TOL} mm (feiner rechnet SMLibs \
+                 Tessellator Minuten und belegt Gigabytes)",
+                "diff-kernels: --mesh-tol {t} is below {MIN_MESH_TOL} mm (finer, SMLib's tessellator \
+                 takes minutes and gigabytes)"
+            )));
+        }
     }
     let mut out_files = Vec::new();
     let mut coverage: BTreeMap<String, BTreeMap<&'static str, usize>> = BTreeMap::new();

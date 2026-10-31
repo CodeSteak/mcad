@@ -1,6 +1,7 @@
 //! Checks of a mesh (plan 2.6), usable for any [`Mesh`] (also SMLib's): vertices welded by
 //! position, then every edge must be used by exactly two triangles in opposite directions
-//! (watertight, consistently oriented), no triangle may be degenerate, and the enclosed volume
+//! (watertight, consistently oriented), the enclosed volume must be positive (normals
+//! outwards), every position finite, no triangle may be degenerate, and the enclosed volume
 //! must match the exact one within `tol · area`.
 
 use std::collections::HashMap;
@@ -27,10 +28,16 @@ pub struct MeshCheck {
     pub area: f64,
     /// Triangles with an index beyond the vertices (skipped).
     pub bad_indices: usize,
+    /// Positions with a NaN or infinite coordinate.
+    pub non_finite: usize,
+    /// Closed and consistently oriented, but the enclosed volume is negative: the triangles
+    /// face inwards.
+    pub inside_out: bool,
 }
 
 impl MeshCheck {
-    /// Closed, manifold, consistently oriented and not empty. A crack closed by a zero-area
+    /// Closed, manifold, consistently oriented outwards, with finite positions and not empty.
+    /// A crack closed by a zero-area
     /// triangle (a T-junction) leaves no gap and counts as closed; `degenerate` reports such
     /// triangles (also slivers whose height is below the `f32` resolution of the positions, at
     /// tolerances near [`crate::MIN_REL_TOL`]). Not detected: self-intersections and fins of two
@@ -41,6 +48,8 @@ impl MeshCheck {
             && self.nonmanifold_edges == 0
             && self.misoriented_edges == 0
             && self.bad_indices == 0
+            && self.non_finite == 0
+            && !self.inside_out
     }
 
     /// `|volume − exact| ≤ tol · area`: a mesh within `tol` of the surface encloses about
@@ -73,6 +82,7 @@ pub fn check(mesh: &Mesh) -> MeshCheck {
     }
     let size2 = if lo.x.is_finite() { (hi - lo).length_squared() } else { 0.0 };
     let mut out = MeshCheck { triangles: mesh.indices.len() / 3, vertices: weld.len(), ..Default::default() };
+    out.non_finite = mesh.positions.chunks_exact(3).filter(|p| !p.iter().all(|x| x.is_finite())).count();
     // per undirected edge: uses in direction (lo → hi) and (hi → lo)
     let mut uses: HashMap<(u32, u32), (u32, u32)> = HashMap::new();
     let nv = ids.len();
@@ -106,6 +116,9 @@ pub fn check(mesh: &Mesh) -> MeshCheck {
             _ => out.nonmanifold_edges += 1,
         }
     }
+    out.inside_out = out.triangles > 0
+        && out.boundary_edges + out.nonmanifold_edges + out.misoriented_edges == 0
+        && out.volume < 0.0;
     out
 }
 
@@ -130,6 +143,17 @@ mod tests {
         assert!(c.volume_ok(1.0 / 6.0, 1e-6));
         let c = check(&tetra(true));
         assert_eq!(c.misoriented_edges, 3);
+        // inside out: closed and consistent, but facing inwards
+        let mut m = tetra(false);
+        m.indices.chunks_exact_mut(3).for_each(|t| t.swap(1, 2));
+        let c = check(&m);
+        assert!(c.inside_out && c.volume < 0.0 && !c.watertight(), "{c:?}");
+        // a NaN position
+        let mut m = tetra(false);
+        m.positions[4] = f32::NAN;
+        let c = check(&m);
+        assert_eq!(c.non_finite, 1);
+        assert!(!c.watertight(), "{c:?}");
         let mut m = tetra(false);
         m.indices.truncate(9);
         assert_eq!(check(&m).boundary_edges, 3);
