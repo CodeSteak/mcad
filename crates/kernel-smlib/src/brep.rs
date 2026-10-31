@@ -10,7 +10,7 @@
 //!   reports for the written side (out of the material) at an interior sample point.
 
 use cad_kernel::brep::{
-    BSplineCurve, BSplineSurface, Body, Brep, Edge, Face, Frame, Loop, OrientedEdge, Shell, Surface, recognise_curve,
+    BSplineCurve, BSplineSurface, Body, Brep, Edge, Face, Frame, Loop, OrientedEdge, Shell, Surface, edge_curve,
 };
 use cad_kernel::{KResult, KernelError};
 use glam::DVec3;
@@ -172,18 +172,9 @@ pub fn parse(d: &[f64]) -> KResult<(Brep, BrepStats)> {
         if start >= nv || end >= nv {
             return Err(bad("vertex index out of range"));
         }
-        let (a, b) = (vertices[start], vertices[end]);
-        let (lo, hi) = c.domain();
-        let (t0, t1) = (t0.max(lo), t1.min(hi));
-        let mut tc = if t1 > t0 { c.trimmed(t0, t1) } else { c.clone() };
-        let (ca, cb) = (tc.eval(tc.domain().0), tc.eval(tc.domain().1));
-        if start != end && (ca - b).length() + (cb - a).length() < (ca - a).length() + (cb - b).length() {
-            tc = tc.reversed();
-            st.edges_reversed += 1;
-        }
-        let (ca, cb) = (tc.eval(tc.domain().0), tc.eval(tc.domain().1));
-        st.max_vertex_gap = st.max_vertex_gap.max((ca - a).length()).max((cb - b).length());
-        let curve = recognise_curve(&tc, a, b, tol_rec);
+        let (curve, reversed, gap) = edge_curve(&c, t0, t1, vertices[start], vertices[end], start == end, tol_rec);
+        st.edges_reversed += usize::from(reversed);
+        st.max_vertex_gap = st.max_vertex_gap.max(gap);
         edges.push(Edge { start: start as u32, end: end as u32, curve, approximated });
     }
 

@@ -29,6 +29,10 @@
 //! Cost per file (`smlib_cost`, `solidcore_cost`) and in the summary (sums; heap: maximum; plus
 //! `eval_ratio`, `query_ratio` solidcore / SMLib): `{ eval_ms, query_ms, heap_bytes, copies,
 //! copy_ms }` (plan 0.5).
+//! With `--brep` also the neutral B-reps of the same nodes (`diff/brep.rs`): `NodeDiff.brep_check
+//! = { verdict: "same"|"differ"|"unsupported", notes }`, `Metrics.brep` (counts per kind,
+//! conventions not met), `summary.brep`: nodes per verdict. The B-rep check does not change the
+//! node's verdict.
 //! Exit code 0 if every node of every file is the same, 1 otherwise, 2 usage error.
 
 use std::collections::BTreeMap;
@@ -45,6 +49,7 @@ use serde_json::json;
 
 use crate::{Fail, Outcome};
 
+mod brep;
 mod exact;
 
 use exact::Exact;
@@ -63,8 +68,18 @@ pub struct Metrics {
     pub edges: Option<usize>,
     pub selected_edges: Vec<Vec<[f64; 3]>>,
     pub message: Option<String>,
+    /// The neutral B-rep of the node's parts (`Kernel::brep`), `None` without parts or for a mesh.
+    pub brep: Option<brep::Summary>,
     #[serde(skip)]
     pub unsupported: bool,
+}
+
+/// The comparison of the neutral B-reps of a `same` node (`diff/brep.rs`).
+#[derive(Debug, Clone, Serialize)]
+pub struct BrepCheck {
+    /// `same`, `differ` or `unsupported` (solidcore's `Kernel::brep` is not supported there).
+    pub verdict: &'static str,
+    pub notes: Vec<String>,
 }
 
 /// How the volumes of a node were compared (see [`volume_check`]).
@@ -94,6 +109,8 @@ pub struct NodeDiff {
     pub solidcore: Metrics,
     /// Present when both kernels gave a volume.
     pub volume_check: Option<VolumeCheck>,
+    /// Present for `same` nodes whose B-reps both kernels were asked for.
+    pub brep_check: Option<BrepCheck>,
     pub notes: Vec<String>,
 }
 
@@ -174,6 +191,7 @@ fn evaluate<K: Kernel + 'static>(
     text: &str,
     file: &Path,
     copies: fn(&K) -> (u64, std::time::Duration),
+    with_brep: bool,
 ) -> Run
 where
     K::Shape: 'static,
@@ -254,6 +272,20 @@ where
             if ok && !parts.is_empty() {
                 m.faces = Some(faces);
                 m.edges = Some(edges);
+            }
+            if with_brep && !meshes && !parts.is_empty() {
+                let mut sum = brep::Summary::default();
+                for part in &parts {
+                    match k.brep(&part.shape) {
+                        Ok(b) => sum.add(&b),
+                        Err(e) => {
+                            sum.unsupported = matches!(e, cad_kernel::KernelError::Unsupported(_));
+                            sum.error = Some(e.to_string());
+                            break;
+                        }
+                    }
+                }
+                m.brep = Some(sum);
             }
             match s.mass_props(n.idx) {
                 Ok(mp) => m.volume = Some(mp.volume),
@@ -469,7 +501,7 @@ fn compare_metrics(
     if notes.is_empty() { "same" } else { "differ" }
 }
 
-pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
+pub fn command(files: &[PathBuf], brep: bool) -> Result<Outcome, Fail> {
     if files.is_empty() {
         return Err(Fail::Usage(tr!("diff-kernels: keine Dateien", "diff-kernels: no files")));
     }
@@ -480,6 +512,8 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     let mut totals: BTreeMap<&'static str, usize> = BTreeMap::new();
     // same nodes per volume rule
     let mut rules: BTreeMap<&'static str, usize> = BTreeMap::new();
+    // B-rep comparison of the same nodes, per verdict
+    let mut brep_counts: BTreeMap<&'static str, usize> = BTreeMap::new();
     let (mut cost_a, mut cost_b) = (Cost::default(), Cost::default());
     if !SolidcoreKernel::available() {
         return Err(Fail::Usage(tr!(
@@ -491,9 +525,9 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     }
     for f in files {
         let src = std::fs::read_to_string(f).map_err(|e| Fail::Usage(format!("{}: {e}", f.display())))?;
-        let ra = evaluate(SmlibKernel::new(), &src, f, |_| (0, std::time::Duration::ZERO));
+        let ra = evaluate(SmlibKernel::new(), &src, f, |_| (0, std::time::Duration::ZERO), brep);
         let solid = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            evaluate(SolidcoreKernel::new(), &src, f, SolidcoreKernel::copy_stats)
+            evaluate(SolidcoreKernel::new(), &src, f, SolidcoreKernel::copy_stats, brep)
         }));
         let rb = solid.ok();
         let (nodes, a) = (&ra.nodes, &ra.metrics);
@@ -551,6 +585,18 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
             } else {
                 (verdict, notes)
             };
+            let brep_check = match (&a[i].brep, &mb.brep) {
+                (Some(x), Some(y)) if verdict == "same" && x.error.is_none() => Some(if let Some(e) = &y.error {
+                    BrepCheck { verdict: if y.unsupported { "unsupported" } else { "differ" }, notes: vec![e.clone()] }
+                } else {
+                    let n = brep::compare(x, y);
+                    BrepCheck { verdict: if n.is_empty() { "same" } else { "differ" }, notes: n }
+                }),
+                _ => None,
+            };
+            if let Some(c) = &brep_check {
+                *brep_counts.entry(c.verdict).or_insert(0) += 1;
+            }
             if verdict != "skipped" {
                 *counts.entry(verdict).or_insert(0) += 1;
                 *totals.entry(verdict).or_insert(0) += 1;
@@ -574,6 +620,7 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
                 smlib: a[i].clone(),
                 solidcore: mb,
                 volume_check,
+                brep_check,
                 notes,
             });
         }
@@ -597,6 +644,17 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
                 d.verdict,
                 d.notes.join("; ")
             ));
+        }
+        for d in diffs.iter() {
+            if let Some(c) = d.brep_check.as_ref().filter(|c| c.verdict == "differ") {
+                text.push_str(&tr!(
+                    "  Zeile {} {} [B-Rep]: {}\n",
+                    "  line {} {} [B-rep]: {}\n",
+                    d.line,
+                    d.label,
+                    c.notes.join("; ")
+                ));
+            }
         }
         let cb = rb.as_ref().map(|r| r.cost);
         cost_a.add(&ra.cost);
@@ -652,6 +710,16 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
         g("curved"),
         g("blend")
     ));
+    let gb = |k: &str| brep_counts.get(k).copied().unwrap_or(0);
+    if brep {
+        text.push_str(&tr!(
+            "B-Rep der gleichen Knoten: gleich {}, abweichend {}, unsupported {}\n",
+            "B-rep of the same nodes: same {}, differ {}, unsupported {}\n",
+            gb("same"),
+            gb("differ"),
+            gb("unsupported")
+        ));
+    }
     let ratio = |a: f64, b: f64| if a > 0.0 { b / a } else { 0.0 };
     text.push_str(&tr!(
         "Zeit: SMLib Auswertung {} ms, Abfragen {} ms; solidcore Auswertung {} ms ({}×), Abfragen {} ms ({}×), \
@@ -682,6 +750,7 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
                      "differ": totals.get("differ").unwrap_or(&0),
                      "failed": totals.get("failed").unwrap_or(&0),
                      "volume_rules": rules,
+                     "brep": brep_counts,
                      "smlib_cost": cost_a, "solidcore_cost": cost_b,
                      "eval_ratio": ratio(cost_a.eval_ms, cost_b.eval_ms),
                      "query_ratio": ratio(cost_a.query_ms, cost_b.query_ms) },

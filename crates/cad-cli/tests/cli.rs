@@ -353,16 +353,45 @@ fn kernel_solidcore_evaluates() {
     // a failed command still names its kernel
     let v = json(&["render", &f, "-o", &png, "--kernel", "solidcore"], 3);
     assert!(v["kernel_id"].as_str().unwrap().starts_with("solidcore-"), "{v}");
-    // no exact B-rep in solidcore yet: exact measures and STEP are kernel errors that name it
+    // exact measures need the tessellation too (plan phase 2): a kernel error that names it
     let v = json(&["measure", &f, "--at", "[10,10,30]", "--kernel", "solidcore"], 3);
     let e = v["error"].as_str().unwrap();
-    assert!(e.contains("solidcore: brep"), "{v}");
+    assert!(e.contains("solidcore: tessellate"), "{v}");
     // a wrong reference is a usage error before the kernel is asked
     json(&["measure", &f, "--at", "bogus", "--kernel", "solidcore"], 2);
     json(&["measure", &f, "--distance", "corner@[0,0,0]", "[1,1,1]", "--kernel", "solidcore"], 2);
     let step = dir.path().join("b.step").display().to_string();
-    let v = json(&["export", &f, "-o", &step, "--kernel", "solidcore"], 3);
-    assert!(v["error"].as_str().unwrap().contains("solidcore: brep"), "{v}");
+    // STEP from the neutral B-rep (plan 1.11): the same faces and volume as with SMLib
+    let v = json(&["export", &f, "-o", &step, "--kernel", "solidcore"], 0);
+    let w = json(&["export", &f, "-o", &step], 0);
+    assert_eq!(v["step"]["faces"], 9, "{v}");
+    assert_eq!(v["step"]["surfaces"], w["step"]["surfaces"], "{v} {w}");
+    assert_eq!(v["step"]["curves"], w["step"]["curves"], "{v} {w}");
+    assert!((v["volume"].as_f64().unwrap() - exact).abs() < 1e-6 * exact, "{v}");
+}
+
+/// `diff-kernels --brep`: the neutral B-reps of both kernels agree (kinds, positions,
+/// orientation, tags) on primitives, transforms, Booleans and fillets.
+#[cfg(feature = "solidcore")]
+#[test]
+fn diff_kernels_brep() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut args = vec!["diff-kernels".to_string(), "--brep".into(), "--json".into()];
+    for f in [
+        "tests/models/openscad-compat/02_sphere_variants.scad",
+        "tests/models/openscad-compat/03_cylinder_variants.scad",
+        "tests/models/openscad-compat/04_cone_variants.scad",
+        "tests/models/openscad-compat/05_nested_booleans.scad",
+        "tests/models/spec/hole_plate.mcad",
+        "tests/models/spec/fillet_zones.mcad",
+    ] {
+        args.push(root.join(f).display().to_string());
+    }
+    let out = mcad().args(&args).output().unwrap();
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let b = &v["summary"]["brep"];
+    assert!(b["same"].as_u64().unwrap() > 50, "{b}");
+    assert!(b.get("differ").is_none() && b.get("unsupported").is_none(), "{b}");
 }
 
 /// `diff-kernels` over all examples: still mostly `Unsupported` on the solidcore side; it must

@@ -244,6 +244,44 @@ a plate and a bar keeps 10 split plate faces with the plate's tag, `union(fillet
 matches SMLib (`tests/provenance.rs`). Not checkable yet: display colours, 3MF and STEP colours
 (`tessellate` and `brep`, plan 1.11 and phase 2).
 
+## Neutral B-rep (plan 1.11)
+
+`Kernel::brep` (`crates/kernel-solidcore/src/brep.rs`) maps the solidcore B-rep to
+`cad_kernel::brep::Brep` step by step as the SMLib facade's `sc_brep` stream and kernel-smlib's
+`brep.rs` do, so both kernels hand the same B-rep to STEP export, measuring and the tessellator:
+
+| Part | solidcore |
+| --- | --- |
+| order | vertices of the vertex list, edges and faces as `edges`/`faces` (`Face::id`), tags as `faces` |
+| edge curves | the curve's NURB (B-spline, line, ellipse, parabola, hyperbola), trimmed to the edge interval, reversed if needed, lines and circles recognised (`cad_kernel::brep::edge_curve`, shared with kernel-smlib); other curves (intersection curves, curves on surfaces) `approximate_curve` to half the largest zone tolerance, flagged |
+| surfaces | plane, cylinder, cone, sphere, torus, revolution, extrusion from their canonical data, accepted if 9 × 9 points of the face's UV domain lie on them (1e-6 of the size), else the NURB; B-splines as they are; others `approximate_surface`, flagged |
+| bodies | per solid region (not infinite, not void) its face-use shells, inner shells as voids (`is_inner_shell`); the written face uses are the mates (outside the material); no solid region: one sheet of the upward face uses |
+| loops | the face use's loop uses: vertex loops as `Loop::Vertex`, edge uses in solidcore's CCW order, `forward` = edge use `Same` |
+| `same_sense` | as the facade's `face_sample`: the grid point (7 × 7, else 23 × 23) nearest the UV centre that lies in the face (`face_classify_uv`), else the interior point; solidcore's normal there (`evaluate_surface_normal`, flipped for an opposite face use) against the STEP normal of the neutral surface. (The interior point alone landed on the pole of a hemisphere, where the STEP normal is undefined: a wrong orientation, found by the comparison below.) |
+
+Checks: `Brep::convention_problems` (kernel-independent: `validate`, curve ends at their
+vertices, edges on their faces' surfaces, planar loops counter-clockwise about the face normal),
+unit tests `crates/kernel-solidcore/tests/brep.rs` (kinds per primitive, seams, holes, voids,
+every face normal points out: a point along it is outside, against it inside), and
+`mcad diff-kernels --brep`, which compares the B-reps of both kernels per `same` node (counts
+per surface and curve kind, loops, bodies; edges matched by kind and the point at half their
+length; faces by kind and those points, with the oriented normals there and the tags).
+
+Result over the 101 files: 2056 of the 2081 compared nodes agree. The 25 others are differences
+of the kernels, not of the mapping:
+
+| Nodes | Cause |
+| ---: | --- |
+| 9 | `mirror` (`09_rotate_mirror`, `21_angle_bracket`, `knob_mirror`, `pipe_clamp`): solidcore's `SmBrep::Transform` turns every surface into a B-spline under a negative scale (`turn_to_nurbs`); SMLib's 4 × 4 overload keeps planes and cylinders |
+| 6 | `phone_stand`: solidcore's fillet of an edge around a hole makes a B-spline surface (SMLib a surface of revolution) and B-spline edges instead of circles |
+| 13 | tags of faces merged by a union of coplanar faces (`multicolor` letters, `rib_bracket`): the kernels keep another operand's tag |
+
+STEP export goes through the neutral B-rep and works with solidcore: `tests/step/verify.py`
+(OCCT reads, checks validity, closed shells, solids, faces, volume, area, bounds) passes 61 of
+64 models with `MCAD_KERNEL=solidcore` (SMLib 64): `17_polyhedron` and `19_hex_nut` need
+polyhedra (1.7), `asserts` stops at its asserts, which need the tessellation (phase 2).
+`mcad measure` needs the tessellation as well (`MeasurePart.mesh`).
+
 ## Fillets and chamfers (plan 1.3)
 
 `fillet`, `chamfer`, `law_stations` and `fillet_variable` follow the facade's `do_fillet_like`

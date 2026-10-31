@@ -328,6 +328,10 @@ pub(crate) enum Cmd {
         /// Output as JSON.
         #[arg(long)]
         json: bool,
+        /// Also compare the neutral B-reps (`Kernel::brep`) of the same nodes: surface and curve
+        /// kinds, positions, orientation, tags (takes about twice as long).
+        #[arg(long)]
+        brep: bool,
     },
     /// Query and control the running desktop UI (status, show, screenshot).
     Ui {
@@ -667,7 +671,7 @@ pub(crate) fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
                 export(c, output, format.as_deref(), schema, (!*single_color).then_some(pkg), *merge, *ignore_asserts)
             }
         }
-        Cmd::DiffKernels { files, .. } => diff::command(files),
+        Cmd::DiffKernels { files, brep, .. } => diff::command(files, *brep),
         Cmd::External(_) | Cmd::Ui { .. } | Cmd::Daemon { .. } | Cmd::Usage { .. } | Cmd::EngineHost => {
             unreachable!("handled in main")
         }

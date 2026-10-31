@@ -319,6 +319,78 @@ impl Brep {
         }
         Ok(())
     }
+
+    /// `n + 1` points of the oriented edge `oe` in the direction it is traversed.
+    pub fn edge_points(&self, oe: OrientedEdge, n: usize) -> Vec<DVec3> {
+        let e = &self.edges[oe.edge as usize];
+        let (a, b) = (self.vertices[e.start as usize], self.vertices[e.end as usize]);
+        let mut p = sample_edge(&e.curve, a, b, n);
+        if !oe.forward {
+            p.reverse();
+        }
+        p
+    }
+
+    /// Checks of the geometric conventions (module doc), independent of the kernel; returns
+    /// the problems found (at most a few per kind), empty if none. `tol`: distance tolerance.
+    /// * [`Brep::validate`];
+    /// * every edge curve ends at its vertices;
+    /// * 5 points of every edge lie on the surfaces of its faces (analytic surfaces);
+    /// * planar faces: the first loop runs counter-clockwise about the face normal, the others
+    ///   clockwise (Newell normal of the sampled loop).
+    pub fn convention_problems(&self, tol: f64) -> Vec<String> {
+        let mut out = Vec::new();
+        if let Err(e) = self.validate() {
+            out.push(e);
+            return out;
+        }
+        let mut push = |kind: &str, m: String| {
+            if out.iter().filter(|o: &&String| o.starts_with(kind)).count() < 3 {
+                out.push(format!("{kind}: {m}"));
+            }
+        };
+        for (i, e) in self.edges.iter().enumerate() {
+            let (a, b) = (self.vertices[e.start as usize], self.vertices[e.end as usize]);
+            if let Curve::BSpline(c) = &e.curve {
+                let (t0, t1) = c.domain();
+                let gap = (c.eval(t0) - a).length().max((c.eval(t1) - b).length());
+                if gap > tol {
+                    push("vertex", format!("edge {i} ends {gap:.2e} from its vertices"));
+                }
+            }
+        }
+        for f in self.faces() {
+            for l in &f.loops {
+                let Loop::Edges(es) = l else { continue };
+                for oe in es {
+                    for p in self.edge_points(*oe, 4) {
+                        if let Some(d) = f.surface.distance(p).filter(|d| *d > tol) {
+                            push(
+                                "surface",
+                                format!("edge {} is {d:.2e} off face {} ({})", oe.edge, f.id, f.surface.kind()),
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
+            let Surface::Plane { frame } = &f.surface else { continue };
+            let n = if f.same_sense { frame.z } else { -frame.z };
+            for (k, l) in f.loops.iter().enumerate() {
+                let Loop::Edges(es) = l else { continue };
+                let pts: Vec<DVec3> = es.iter().flat_map(|oe| self.edge_points(*oe, 8).into_iter().skip(1)).collect();
+                let mut newell = DVec3::ZERO;
+                for (j, p) in pts.iter().enumerate() {
+                    newell += p.cross(pts[(j + 1) % pts.len()]);
+                }
+                let s = newell.dot(n);
+                if (k == 0) != (s > 0.0) {
+                    push("loop", format!("loop {k} of face {} runs the wrong way about its normal", f.id));
+                }
+            }
+        }
+        out
+    }
 }
 
 // ------------------------------------------------------------------------------------------
@@ -787,6 +859,33 @@ pub fn recognise_curve(c: &BSplineCurve, a: DVec3, b: DVec3, tol: f64) -> Curve 
         }
     }
     Curve::BSpline(c.clone())
+}
+
+/// The curve of an edge from `a` to `b` (`closed`: the same vertex) as kernels hand it over:
+/// the exact B-spline `c` of the edge's curve and the interval `[t0, t1]` of it the edge uses.
+/// `c` is trimmed to the interval (clamped to its domain), reversed if it runs from `b` to `a`,
+/// then recognised as a line or circle ([`recognise_curve`], `tol`). Returns the curve, whether
+/// it was reversed and the larger distance between its ends and the vertices.
+pub fn edge_curve(
+    c: &BSplineCurve,
+    t0: f64,
+    t1: f64,
+    a: DVec3,
+    b: DVec3,
+    closed: bool,
+    tol: f64,
+) -> (Curve, bool, f64) {
+    let (lo, hi) = c.domain();
+    let (t0, t1) = (t0.max(lo), t1.min(hi));
+    let mut tc = if t1 > t0 { c.trimmed(t0, t1) } else { c.clone() };
+    let (ca, cb) = (tc.eval(tc.domain().0), tc.eval(tc.domain().1));
+    let reversed = !closed && (ca - b).length() + (cb - a).length() < (ca - a).length() + (cb - b).length();
+    if reversed {
+        tc = tc.reversed();
+    }
+    let (ca, cb) = (tc.eval(tc.domain().0), tc.eval(tc.domain().1));
+    let gap = (ca - a).length().max((cb - b).length());
+    (recognise_curve(&tc, a, b, tol), reversed, gap)
 }
 
 /// Centre, unit normal and radius of the circle through three points.

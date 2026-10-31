@@ -94,6 +94,11 @@ fn unsupported(op: &str) -> KernelError {
 }
 
 #[cfg(feature = "solidcore")]
+mod brep;
+#[cfg(feature = "solidcore")]
+pub use brep::BrepStats;
+
+#[cfg(feature = "solidcore")]
 mod imp {
     use super::*;
     use solidcore::blend::fillet_executive::api::fillet_edges;
@@ -150,7 +155,7 @@ mod imp {
     /// SMLib's default attribute handlers).
     const TAG_ATTR: u64 = solidcore::geom::attribute::ids::USER_1 + 77;
 
-    fn face_tag(b: &solidcore::Brep, f: solidcore::FaceId) -> Option<Tag> {
+    pub(crate) fn face_tag(b: &solidcore::Brep, f: solidcore::FaceId) -> Option<Tag> {
         let v = b.find_attribute(EntityRef::Face(f), TAG_ATTR)?.long_value()?;
         Tag::try_from(v).ok()
     }
@@ -1753,6 +1758,10 @@ mod imp {
         pub fn is_empty(&mut self, s: &Shape) -> bool {
             s.brep.borrow().face_list().is_empty()
         }
+
+        pub fn brep(&mut self, s: &Shape) -> KResult<(cad_kernel::brep::Brep, crate::BrepStats)> {
+            crate::brep::convert(&mut self.k, &mut s.brep.borrow_mut(), s.tag)
+        }
     }
 }
 
@@ -1780,6 +1789,12 @@ impl SolidcoreKernel {
             #[cfg(feature = "solidcore")]
             inner: imp::Inner::new(),
         }
+    }
+
+    /// [`Kernel::brep`] with conversion statistics.
+    #[cfg(feature = "solidcore")]
+    pub fn brep_with_stats(&mut self, s: &Shape) -> KResult<(cad_kernel::brep::Brep, BrepStats)> {
+        self.inner.brep(s)
     }
 
     /// `true` if built with solidcore (feature `solidcore`).
@@ -1925,8 +1940,9 @@ impl Kernel for SolidcoreKernel {
         Err(unsupported("tessellate (outside solidcore's scope: SmApiTessellate, plan/closure.md)"))
     }
 
-    fn brep(&mut self, _s: &Shape) -> KResult<cad_kernel::brep::Brep> {
-        Err(unsupported("brep (solidcore's B-rep is not mapped to the neutral one yet, plan 1.11)"))
+    fn brep(&mut self, s: &Shape) -> KResult<cad_kernel::brep::Brep> {
+        let _ = s;
+        with_sc!(self, "brep", |i| i.brep(s).map(|(b, _)| b))
     }
 
     fn export(&mut self, _shapes: &[Shape], _fmt: cad_kernel::ExportFormat) -> KResult<Vec<u8>> {
