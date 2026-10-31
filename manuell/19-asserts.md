@@ -33,7 +33,9 @@ assert_touches(tol = 0.001, contact = "face") { lid(); housing(); }      // touc
 
 Tolerances (L = diagonal of the bounds of the pair): ε = 10⁻⁹·L³ mm³ (`eps_volume`), contact
 area > 10⁻⁹·L² mm², mesh tol = clamp(2·10⁻⁴·L, 0.001, 0.02) mm. A failing boolean (faces lying
-on each other are a SMLib borderline case) is an info "overlap could not be checked", no error.
+on each other are a SMLib borderline case) is an info "overlap could not be checked", no error;
+a failing tessellation (no distance) the same for `assert_intersect` and, as "contact could not
+be checked", for `assert_touches`: neither "do not intersect" nor "does not touch".
 
 | Command | Behaviour |
 | --- | --- |

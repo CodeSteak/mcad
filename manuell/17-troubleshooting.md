@@ -73,6 +73,7 @@
 | "assert_touches: a and b overlap (V mm³)" | overlap instead of contact |
 | "assert_touches: a touches b only with line contact (non-manifold, hard to print …)" | cylinder on a plane, edge on a face: the union is non-manifold; give it a flat, or `contact = "any"` |
 | "… overlap could not be checked (…)" (info) | the kernel boolean failed (faces lying on each other); result undecided, not a violation |
+| "assert_touches: a and b: contact could not be checked (…)" (info) | the tessellation of a body failed (no distance), or the boolean failed with the bodies within the mesh accuracy; undecided, not a violation |
 | "kind of contact determined on the mesh only" | freeform faces: contact found on the mesh only |
 | "`assert_disjoint()` needs at least two children (a for loop counts as one child)" | put the bodies as separate statements |
 | `mcad export` exit 4 "export stopped: n assert violation(s)" | fix the model, or `--ignore-asserts` |
@@ -125,7 +126,7 @@ German locale) – glossary:
 | berührt (nicht), Spalt | touches (does not touch), gap |
 | Flächenkontakt, Linienkontakt, Punktkontakt, Kontaktart | face contact, line contact, point contact, kind of contact |
 | nicht-mannigfaltig, schlecht druckbar | non-manifold, hard to print |
-| Überlappung nicht prüfbar | overlap could not be checked |
+| Überlappung nicht prüfbar, Berührung nicht prüfbar | overlap could not be checked, contact could not be checked |
 | Asserts: n von m geprüft, k verletzt; Assert-Verletzung; VERLETZT | Asserts: n of m checked, k violated; assert violation; VIOLATED |
 | Export abgebrochen, nichts geschrieben, trotzdem exportiert | export stopped, nothing written, exported despite … |
 | beim Ziehen übersprungen, nicht geprüft | skipped while dragging, not checked |

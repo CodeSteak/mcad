@@ -246,3 +246,121 @@ fn warnings_of_the_statement() {
     assert!(all.iter().any(|m| m.contains("`contact` muss")), "{all:?}");
     assert!(all.iter().any(|m| m.contains("`tol` muss > 0")), "{all:?}");
 }
+
+/// SMLib with a failing tessellation (as solidcore before its tessellator).
+struct NoMesh(SmlibKernel);
+
+mod no_mesh {
+    use cad_kernel::*;
+    use glam::{DMat4, DVec2, DVec3};
+    use kernel_smlib::Shape;
+
+    impl Kernel for super::NoMesh {
+        type Shape = Shape;
+        fn id(&self) -> &'static str {
+            "no-mesh"
+        }
+        fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Shape> {
+            self.0.make_box(min, max, tag)
+        }
+        fn make_sphere(&mut self, r: f64, tag: Tag) -> KResult<Shape> {
+            self.0.make_sphere(r, tag)
+        }
+        fn make_cylinder(&mut self, h: f64, r1: f64, r2: f64, tag: Tag) -> KResult<Shape> {
+            self.0.make_cylinder(h, r1, r2, tag)
+        }
+        fn make_torus(&mut self, big_r: f64, r: f64, tag: Tag) -> KResult<Shape> {
+            self.0.make_torus(big_r, r, tag)
+        }
+        fn make_polyhedron(&mut self, points: &[DVec3], faces: &[Vec<u32>], tag: Tag) -> KResult<Shape> {
+            self.0.make_polyhedron(points, faces, tag)
+        }
+        fn transform(&mut self, s: &Shape, m: &DMat4) -> KResult<Shape> {
+            self.0.transform(s, m)
+        }
+        fn boolean(&mut self, op: BoolOp, shapes: &[Shape], tag: Tag) -> KResult<Shape> {
+            self.0.boolean(op, shapes, tag)
+        }
+        fn fillet(&mut self, s: &Shape, edges: &[EdgeId], r: f64, tag: Tag) -> KResult<Shape> {
+            self.0.fillet(s, edges, r, tag)
+        }
+        fn chamfer(&mut self, s: &Shape, edges: &[EdgeId], d: f64, tag: Tag) -> KResult<Shape> {
+            self.0.chamfer(s, edges, d, tag)
+        }
+        fn extrude(&mut self, p: &PlacedLoop, h: f64, twist: f64, scale: DVec2, tag: Tag) -> KResult<Shape> {
+            self.0.extrude(p, h, twist, scale, tag)
+        }
+        fn revolve(&mut self, p: &PlacedLoop, angle: f64, tag: Tag) -> KResult<Shape> {
+            self.0.revolve(p, angle, tag)
+        }
+        fn loft(&mut self, sections: &[PlacedLoop], ruled: bool, tag: Tag) -> KResult<Shape> {
+            self.0.loft(sections, ruled, tag)
+        }
+        fn sweep(&mut self, p: &Loop, path: &[DVec3], interp: PathInterp, tag: Tag) -> KResult<Shape> {
+            self.0.sweep(p, path, interp, tag)
+        }
+        fn nurbs_surface(&mut self, rows: &[Vec<DVec3>], tag: Tag) -> KResult<Shape> {
+            self.0.nurbs_surface(rows, tag)
+        }
+        fn thicken(&mut self, s: &Shape, t: f64, tag: Tag) -> KResult<Shape> {
+            self.0.thicken(s, t, tag)
+        }
+        fn shell(&mut self, s: &Shape, t: f64, open: &[FaceId], tag: Tag) -> KResult<Shape> {
+            self.0.shell(s, t, open, tag)
+        }
+        fn edges(&mut self, s: &Shape, samples: u32) -> KResult<Vec<EdgeInfo>> {
+            self.0.edges(s, samples)
+        }
+        fn faces(&mut self, s: &Shape, samples: u32) -> KResult<Vec<FaceInfo>> {
+            self.0.faces(s, samples)
+        }
+        fn classify(&mut self, s: &Shape, pts: &[DVec3]) -> KResult<Vec<Class>> {
+            self.0.classify(s, pts)
+        }
+        fn tessellate(&mut self, _: &Shape, _: f64) -> KResult<Mesh> {
+            Err(KernelError::Unsupported("tessellate".into()))
+        }
+        fn mass_props(&mut self, s: &Shape) -> KResult<MassProps> {
+            self.0.mass_props(s)
+        }
+        fn bounds(&mut self, s: &Shape) -> KResult<Option<(DVec3, DVec3)>> {
+            self.0.bounds(s)
+        }
+        fn is_empty(&mut self, s: &Shape) -> bool {
+            self.0.is_empty(s)
+        }
+        fn is_solid(&mut self, s: &Shape) -> bool {
+            self.0.is_solid(s)
+        }
+    }
+}
+
+#[test]
+fn failing_tessellation_leaves_contact_and_intersection_unchecked() {
+    let _en = cad_i18n::scoped(cad_i18n::Lang::En);
+    let mut s = Session::new(NoMesh(SmlibKernel::new()), SessionOptions::default(), std_clock());
+    let mut msgs = s.post(ToEngine::SetSource {
+        text: "assert_touches() { cube(10); translate([10, 0, 0]) cube(10); }\n\
+               assert_intersect() { cube(10); translate([10, 0, 0]) cube(10); }\n"
+            .into(),
+        version: 1,
+    });
+    msgs.extend(s.run_to_idle());
+    let r = msgs
+        .iter()
+        .rev()
+        .find_map(|m| match m {
+            FromEngine::Asserts { items, .. } => Some(items.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(r.len(), 2);
+    for a in &r {
+        let p = &a.pairs[0];
+        assert!(a.ok && p.ok, "{a:?}");
+        assert_eq!(p.problem.as_deref(), Some("unchecked"), "{p:?}");
+        assert!(p.message.contains("could not be checked") && p.message.contains("tessellate"), "{}", p.message);
+    }
+    assert!(r[0].pairs[0].message.contains("contact could not be checked"));
+    assert!(warnings(&msgs).is_empty(), "{:?}", warnings(&msgs));
+}

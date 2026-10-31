@@ -1090,6 +1090,9 @@ where
             let an = pr.a.label.clone();
             let bn = pr.b.label.clone();
             let overlap = dd.overlaps(t.eps_volume);
+            // a failure (boolean, tessellation) before the distance was known: neither apart
+            // nor in contact is decided (a distance beyond the accuracy decides "apart")
+            let unchecked = dd.bool_failed.as_ref().filter(|_| dd.distance.is_none_or(|x| x.0 <= acc));
             let vol_text = |v: f64| format!("{} mm³", num(v));
             let ov_text = if dd.volume > t.eps_volume {
                 tr!("Schnittvolumen {}", "intersection volume {}", vol_text(dd.volume))
@@ -1148,7 +1151,13 @@ where
                 }
                 AssertKind::Intersect => {
                     // decided below over the connected groups
-                    pr.message = if overlap {
+                    pr.message = if !overlap && let Some(e) = unchecked {
+                        pr.problem = Some("unchecked".into());
+                        tr!(
+                            "{an} und {bn}: Überlappung nicht prüfbar ({e})",
+                            "{an} and {bn}: overlap could not be checked ({e})"
+                        )
+                    } else if overlap {
                         tr!("{an} und {bn} schneiden sich ({ov_text})", "{an} and {bn} intersect ({ov_text})")
                     } else {
                         let dist = dd
@@ -1163,7 +1172,13 @@ where
                 }
                 AssertKind::Touches => {
                     let gap = if overlap { 0.0 } else { dd.distance.map(|x| x.0).unwrap_or(f64::INFINITY) };
-                    if gap > decl.tol + acc {
+                    if !overlap && let Some(e) = unchecked {
+                        pr.problem = Some("unchecked".into());
+                        pr.message = tr!(
+                            "{an} und {bn}: Berührung nicht prüfbar ({e})",
+                            "{an} and {bn}: contact could not be checked ({e})"
+                        );
+                    } else if gap > decl.tol + acc {
                         pr.ok = false;
                         pr.problem = Some("gap".into());
                         pr.message = match dd.distance {
@@ -1317,7 +1332,15 @@ fn intersect_groups(n: usize, checked: &[Checked], pairs: &mut [p::AssertPair]) 
             groups.push(g);
         }
     }
-    for g in groups {
+    // a group with an undecided pair (its check failed) may be connected: no violation
+    let mut undecided: Vec<usize> = Vec::new();
+    for (pi, c) in checked.iter().enumerate() {
+        if pairs[pi].problem.as_deref() == Some("unchecked") {
+            undecided.push(find(&mut parent, c.a));
+            undecided.push(find(&mut parent, c.b));
+        }
+    }
+    for g in groups.into_iter().filter(|g| !undecided.contains(g)) {
         // closest pair between the main group and group g
         let mut best: Option<(f64, usize)> = None;
         for (pi, c) in checked.iter().enumerate() {
