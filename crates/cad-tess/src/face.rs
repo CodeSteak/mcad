@@ -328,8 +328,10 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
 /// where the boundary runs across the grid (a mitre, a hole), Delaunay fans long triangles from
 /// it over the face. Lines then at twice the other direction's spacing over the span of such a
 /// run (a run of boundary segments that change both parameters and span more than two grid
-/// steps along the straight direction) and a little beyond, at sixteen times elsewhere. (In
-/// the CDT's coordinates all rows are half a step apart, see `Warp`.)
+/// steps along the straight direction) and one row beyond, at 32 times elsewhere (in the CDT's
+/// coordinates all rows are half a step apart, see `Warp`: a band between rows far apart costs
+/// no more points than one between rows near each other; the rows away from the runs only stop
+/// Delaunay fans along the whole face).
 fn straight_lines(loops: &[Vec<UvPt>], lines: &mut [Vec<f64>; 2], (lo, hi): (DVec2, DVec2), sc: DVec2) {
     for i in 0..2 {
         let o = 1 - i;
@@ -366,8 +368,8 @@ fn straight_lines(loops: &[Vec<UvPt>], lines: &mut [Vec<f64>; 2], (lo, hi): (DVe
         let mut out = Vec::new();
         let mut t = a;
         while t < b {
-            let near = spans.iter().any(|(x, y)| t >= x - 4.0 * fine && t <= y + 4.0 * fine);
-            t += if near { fine } else { 8.0 * fine };
+            let near = spans.iter().any(|(x, y)| t >= x - fine && t <= y + fine);
+            t += if near { fine } else { 16.0 * fine };
             if t < b - 0.5 * fine {
                 out.push(t);
             }
@@ -446,7 +448,7 @@ fn scale(g: &Geom, (lo, hi): (DVec2, DVec2)) -> DVec2 {
 /// - a straight direction (no lines for the chord where the other one has some) with rows
 ///   (`straight_lines`) in rows: each band between two rows `NEAR / SQUASH` (half a step)
 ///   high, as the rows near a run across are by arc length squashed by `SQUASH`. The rows
-///   away from such runs, sixteen steps of the other direction apart, would otherwise be four
+///   away from such runs, 32 steps of the other direction apart, would otherwise be eight
 ///   steps apart in these coordinates and leave bands in which a point the refinement inserts
 ///   is joined to row points several steps away across the curved direction, whose chords are
 ///   then off by several times the tolerance, and so on along the band (a cone between a

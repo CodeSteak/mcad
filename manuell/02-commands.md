@@ -36,7 +36,7 @@ mcad measure teil.mcad -D w=40 --volume all   # teil.mcad: w = 20; d = w / 2; h 
 mcad check box.mcad --kernel solidcore
 #   box.mcad: 0 errors, 0 warnings     (without --features solidcore: exit 2 "--kernel solidcore needs solidcore: build mcad with `--features solidcore` …")
 mcad export box.mcad -o box.stl --kernel solidcore
-#   box.stl: 1788 triangles, 89484 bytes, volume 17476.4001 mm³     (SMLib: 1904 triangles, 17476.4008 mm³)
+#   box.stl: 1356 triangles, 67884 bytes, volume 17476.4001 mm³     (SMLib: 1904 triangles, 17476.4008 mm³)
 ```
 
 ```sh

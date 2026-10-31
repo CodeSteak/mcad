@@ -258,8 +258,12 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
         }
         for t in &fm.tris {
             let [a, b, c] = t.map(|k| fm.verts[k as usize]);
-            // collapsed at a pole, or two copies of one boundary point
-            if a.p == b.p || b.p == c.p || c.p == a.p {
+            // collapsed at a pole, two copies of one boundary point, or two points that are
+            // one at the `f32` resolution of the output (a crossing of loops split right at a
+            // boundary point): welded by position, such a triangle would use its other edge
+            // twice (a non-manifold edge), and its neighbours close the surface without it
+            let [pa, pb, pc] = [a.p, b.p, c.p].map(|p| p.as_vec3());
+            if pa == pb || pb == pc || pc == pa {
                 continue;
             }
             let [ia, ib, ic] = t.map(|k| index[k as usize]);
