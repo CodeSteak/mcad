@@ -105,8 +105,10 @@ mod imp {
         pub k: solidcore::Kernel,
         /// Result of the classification self-test ([`Inner::classify`]), once run.
         classify_check: Option<Result<(), String>>,
-        /// Last caller key domain handed to a copy ([`Inner::copy`]).
+        /// Last caller key domain handed to a copy ([`Inner::copy`]); also the number of copies.
         copies: u64,
+        /// Time spent in [`Inner::copy`].
+        copy_time: std::time::Duration,
     }
 
     /// Caller identity of `e` in a B-rep copied under `domain` (bits 36 and up; the low
@@ -121,13 +123,19 @@ mod imp {
 
     impl Inner {
         pub fn new() -> Self {
-            Inner { k: solidcore::Kernel::default(), classify_check: None, copies: 0 }
+            Inner {
+                k: solidcore::Kernel::default(),
+                classify_check: None,
+                copies: 0,
+                copy_time: std::time::Duration::ZERO,
+            }
         }
 
         /// An independent copy (`SmApiBrepCopy`): `Brep::clone` leaves the curves and surfaces
         /// without owner, so transforms and face queries of the clone miss its geometry.
         pub fn copy(&mut self, b: &solidcore::Brep) -> KResult<solidcore::Brep> {
             use solidcore::topology::brep::{p2, p3};
+            let t0 = std::time::Instant::now();
             self.copies += 1;
             let domain = self.copies;
             let src = b.key().0;
@@ -136,7 +144,14 @@ mod imp {
             let mut env = state.env(None);
             let key_of = |e| copy_key(e, domain);
             env.key_of = &key_of;
-            p3::api_brep_copy(&mut self.k, &mut env, Some(b), &|e| copy_key(e, src_domain)).map_err(|e| err("copy", e))
+            let r = p3::api_brep_copy(&mut self.k, &mut env, Some(b), &|e| copy_key(e, src_domain))
+                .map_err(|e| err("copy", e));
+            self.copy_time += t0.elapsed();
+            r
+        }
+
+        pub fn copy_stats(&self) -> (u64, std::time::Duration) {
+            (self.copies, self.copy_time)
         }
 
         fn wrap(r: Result<solidcore::Brep, SolidError>, op: &str, tag: Tag) -> KResult<Shape> {
@@ -514,6 +529,19 @@ impl SolidcoreKernel {
     /// `true` if built with solidcore (feature `solidcore`).
     pub fn available() -> bool {
         cfg!(feature = "solidcore")
+    }
+
+    /// Number of B-rep copies (`SmApiBrepCopy`) so far and the time they took (performance
+    /// measurements of `mcad diff-kernels`).
+    pub fn copy_stats(&self) -> (u64, std::time::Duration) {
+        #[cfg(feature = "solidcore")]
+        {
+            self.inner.copy_stats()
+        }
+        #[cfg(not(feature = "solidcore"))]
+        {
+            (0, std::time::Duration::ZERO)
+        }
     }
 }
 

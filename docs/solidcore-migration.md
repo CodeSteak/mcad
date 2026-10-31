@@ -170,6 +170,56 @@ Remaining nodes:
 | unsupported: polyhedron | 8 | out of scope of solidcore |
 | unsupported: sweep, skin (twist/scale), shell, spline revolve, shear | 17 | not wired here or not ported |
 
+## Performance (plan 0.5)
+
+Release build (`cargo build --release -p cad-cli --no-default-features --features solidcore`),
+4 cores, 101 files of the `diff-kernels` corpus, solidcore `bba8d87`. Two measurements:
+
+- `mcad diff-kernels --json`: per file and kernel `eval_ms` (evaluation: language and kernel
+  operations), `query_ms` (faces, edges and volume of every node: the queries of `diff-kernels`,
+  which go through the same paths as zones, measuring and `inspect`), `heap_bytes` (heap held
+  after both, glibc `mallinfo2`), `copies`/`copy_ms` (`Inner::copy`, `SmApiBrepCopy`).
+- `scripts/ci/kernel-perf.py target/release/mcad`: one `mcad eval` process per file and
+  kernel, wall time and peak RSS (`wait4`).
+
+Totals over all files say little: where solidcore stops at an unsupported operation (fillets,
+sketch profiles, sweeps) it skips the most expensive work. The fair comparison is the 38 files
+where every node is `same` or `differ` (nothing unsupported or blocked):
+
+| Measure | SMLib | solidcore | solidcore / SMLib |
+| --- | ---: | ---: | ---: |
+| evaluation, 38 comparable files (s) | 12.6 | 16.0 | 1.27 |
+| queries, 38 comparable files (s) | 9.4 | 23.0 | 2.45 |
+| `Inner::copy`, 38 comparable files | – | 2329 copies, 0.93 s | 2.4 % of eval + queries |
+| evaluation, all 101 files (s) | 103.6 | 57.2 | 0.55 (solidcore skips unsupported work) |
+| `Inner::copy`, all 101 files | – | 6429 copies, 1.78 s | 1.5 % |
+| heap after evaluation, largest file (MB) | 140 | 56 | |
+| peak RSS per process, largest file (MB) | 165 | 82 | 0.50 |
+| peak RSS per process, median file (MB) | 24 | 25 | 1.07 |
+
+Slowest files (solidcore evaluation, `diff-kernels`, ms):
+
+| File | SMLib eval | solidcore eval | SMLib queries | solidcore queries | copies (ms) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `spec/hull_minkowski.mcad` (8 unsupported) | 709 | 6441 | 1231 | 6219 | 140 (22) |
+| `spec/knob_mirror.mcad` (2 unsupported) | 596 | 5912 | 1260 | 5418 | 46 (4) |
+| `everyday/gear.mcad` | 5019 | 3485 | 1834 | 1778 | 126 (414) |
+| `everyday/key_rack/key_rack.mcad` (8 unsupported) | 5829 | 3198 | 5420 | 2334 | 190 (37) |
+| `openscad-compat/02_sphere_variants.scad` | 17 | 1187 | 394 | 1778 | 28 (2) |
+| `openscad-compat/26_if_else_variants.scad` | 81 | 674 | 453 | 1515 | 91 (14) |
+
+Findings:
+
+- Copies are not the main cost (1.5–2.4 % of solidcore's time; the largest share in `gear`, big
+  B-reps, 8 %). The cost is in the queries themselves: `faces` (interior point per face) and
+  `mass_props` (exact integration over the faces) are 2.5× slower than SMLib's.
+- `transform` checks its result with two volume integrations (`mass_props` before and after,
+  see the adapter): `sphere(5)` takes 6 ms in both kernels, `translate(…) sphere(5)` 7 ms in SMLib
+  and 460 ms in solidcore. With many transforms of curved solids (`knob_mirror`,
+  `hull_minkowski`, `02_sphere_variants`) that dominates. Now that `transform` is correct at
+  `bba8d87`, a cheaper check (or none) is the largest single gain.
+- Memory is no concern: solidcore's B-reps are smaller than SMLib's.
+
 ## What is missing (in solidcore or here)
 
 1. ~~Primitives other than the box~~ (works at `bba8d87`).

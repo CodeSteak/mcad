@@ -23,6 +23,9 @@
 //! `Metrics = { status, volume, exact_volume, curved, faces, edges, selected_edges, message }`,
 //! `VolumeCheck = { rule: "relative"|"exact"|"operands"|"curved"|"none", tolerance, difference,
 //!   exact, smlib_error, solidcore_error }`; `summary.volume_rules`: same nodes per rule.
+//! Cost per file (`smlib_cost`, `solidcore_cost`) and in the summary (sums; heap: maximum; plus
+//! `eval_ratio`, `query_ratio` solidcore / SMLib): `{ eval_ms, query_ms, heap_bytes, copies,
+//! copy_ms }` (plan 0.5).
 //! Exit code 0 if every node of every file is the same, 1 otherwise, 2 usage error.
 
 use std::collections::BTreeMap;
@@ -103,6 +106,39 @@ const REL_VOLUME_CURVED: f64 = 1e-4;
 struct Run {
     nodes: Vec<NodeRow>,
     metrics: Vec<Metrics>,
+    cost: Cost,
+}
+
+/// Cost of one evaluation (plan 0.5).
+#[derive(Debug, Clone, Copy, Default, Serialize)]
+struct Cost {
+    /// Evaluation of the file (language and kernel operations), ms.
+    eval_ms: f64,
+    /// The queries of `diff-kernels` itself (faces, edges, volume of every node), ms.
+    query_ms: f64,
+    /// Heap held after the evaluation and the queries (glibc `mallinfo2`, both kernels allocate
+    /// with malloc), bytes; `null` elsewhere.
+    heap_bytes: Option<usize>,
+    /// B-rep copies of the kernel (solidcore: `SmApiBrepCopy`) and their time in ms.
+    copies: u64,
+    copy_ms: f64,
+}
+
+impl Cost {
+    fn add(&mut self, o: &Cost) {
+        self.eval_ms += o.eval_ms;
+        self.query_ms += o.query_ms;
+        self.copies += o.copies;
+        self.copy_ms += o.copy_ms;
+        self.heap_bytes = match (self.heap_bytes, o.heap_bytes) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, b) => a.or(b),
+        };
+    }
+}
+
+fn ms(d: std::time::Duration) -> f64 {
+    d.as_secs_f64() * 1e3
 }
 
 /// Whether the sample points of an edge lie on one line (within 1e-9 of its length).
@@ -120,11 +156,18 @@ fn straight(pts: &[glam::DVec3]) -> bool {
 /// (index, label, line, children) per scene node.
 type NodeRow = (u32, String, u32, Vec<u32>);
 
-/// Evaluates `text` with `kernel` and measures every node.
-fn evaluate<K: Kernel + 'static>(kernel: K, text: &str, file: &Path) -> Run
+/// Evaluates `text` with `kernel` and measures every node; `copies` reads the copy statistics
+/// of the kernel.
+fn evaluate<K: Kernel + 'static>(
+    kernel: K,
+    text: &str,
+    file: &Path,
+    copies: fn(&K) -> (u64, std::time::Duration),
+) -> Run
 where
     K::Shape: 'static,
 {
+    let heap0 = crate::daemon::heap_in_use();
     let mut opts = SessionOptions { auto_root_mesh: false, ..Default::default() };
     opts.eval.max_stack_bytes = 192 << 20;
     let mut s = Session::new(Exact(kernel), opts, std_clock());
@@ -132,9 +175,12 @@ where
     let root = file.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let main = file.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
     s.set_resolver(Box::new(cad_session::FsResolver { root: root.to_path_buf() }), &main);
+    let t0 = std::time::Instant::now();
     s.post(ToEngine::SetSource { text: text.to_string(), version: 1 });
     s.run_to_idle();
-    let Some(d) = s.done() else { return Run { nodes: Vec::new(), metrics: Vec::new() } };
+    let mut cost = Cost { eval_ms: ms(t0.elapsed()), ..Default::default() };
+    let t1 = std::time::Instant::now();
+    let Some(d) = s.done() else { return Run { nodes: Vec::new(), metrics: Vec::new(), cost } };
     let scene = d.scene.clone();
     let mut nodes = Vec::new();
     let mut out = Vec::new();
@@ -214,7 +260,11 @@ where
         }
         out.push(m);
     }
-    Run { nodes, metrics: out }
+    cost.query_ms = ms(t1.elapsed());
+    let (n, t) = copies(&s.engine_mut().kernel_mut().0);
+    (cost.copies, cost.copy_ms) = (n, ms(t));
+    cost.heap_bytes = crate::daemon::heap_in_use().zip(heap0).map(|(a, b)| a.saturating_sub(b));
+    Run { nodes, metrics: out, cost }
 }
 
 /// Compares the volumes `x` (SMLib) and `y` (solidcore). `budget`: summed deviation of both
@@ -386,6 +436,7 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     let mut totals: BTreeMap<&'static str, usize> = BTreeMap::new();
     // same nodes per volume rule
     let mut rules: BTreeMap<&'static str, usize> = BTreeMap::new();
+    let (mut cost_a, mut cost_b) = (Cost::default(), Cost::default());
     if !SolidcoreKernel::available() {
         return Err(Fail::Usage(tr!(
             "diff-kernels braucht solidcore: mcad mit `--features solidcore` bauen \
@@ -396,9 +447,10 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     }
     for f in files {
         let src = std::fs::read_to_string(f).map_err(|e| Fail::Usage(format!("{}: {e}", f.display())))?;
-        let ra = evaluate(SmlibKernel::new(), &src, f);
-        let solid =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| evaluate(SolidcoreKernel::new(), &src, f)));
+        let ra = evaluate(SmlibKernel::new(), &src, f, |_| (0, std::time::Duration::ZERO));
+        let solid = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            evaluate(SolidcoreKernel::new(), &src, f, SolidcoreKernel::copy_stats)
+        }));
         let rb = solid.ok();
         let (nodes, a) = (&ra.nodes, &ra.metrics);
         let mut diffs = Vec::new();
@@ -501,8 +553,15 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
                 d.notes.join("; ")
             ));
         }
+        let cb = rb.as_ref().map(|r| r.cost);
+        cost_a.add(&ra.cost);
+        if let Some(c) = &cb {
+            cost_b.add(c);
+        }
         out_files.push(json!({
             "file": name,
+            "smlib_cost": ra.cost,
+            "solidcore_cost": cb,
             "nodes": diffs,
             "same": counts.get("same").unwrap_or(&0),
             "unsupported": counts.get("unsupported").unwrap_or(&0),
@@ -546,6 +605,21 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
         g("operands"),
         g("curved")
     ));
+    let ratio = |a: f64, b: f64| if a > 0.0 { b / a } else { 0.0 };
+    text.push_str(&tr!(
+        "Zeit: SMLib Auswertung {} ms, Abfragen {} ms; solidcore Auswertung {} ms ({}×), Abfragen {} ms ({}×), \
+         {} Kopien in {} ms\n",
+        "Time: SMLib evaluation {} ms, queries {} ms; solidcore evaluation {} ms ({}×), queries {} ms ({}×), \
+         {} copies in {} ms\n",
+        crate::num(cost_a.eval_ms),
+        crate::num(cost_a.query_ms),
+        crate::num(cost_b.eval_ms),
+        crate::num(ratio(cost_a.eval_ms, cost_b.eval_ms)),
+        crate::num(cost_b.query_ms),
+        crate::num(ratio(cost_a.query_ms, cost_b.query_ms)),
+        cost_b.copies,
+        crate::num(cost_b.copy_ms)
+    ));
     let j = json!({
         "schema_version": PROTOCOL_VERSION,
         "command": "diff-kernels",
@@ -560,7 +634,10 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
                      "blocked": totals.get("blocked").unwrap_or(&0),
                      "differ": totals.get("differ").unwrap_or(&0),
                      "failed": totals.get("failed").unwrap_or(&0),
-                     "volume_rules": rules },
+                     "volume_rules": rules,
+                     "smlib_cost": cost_a, "solidcore_cost": cost_b,
+                     "eval_ratio": ratio(cost_a.eval_ms, cost_b.eval_ms),
+                     "query_ratio": ratio(cost_a.query_ms, cost_b.query_ms) },
     });
     Ok(Outcome { json: j, text, errors: !all_same, exit: None })
 }
