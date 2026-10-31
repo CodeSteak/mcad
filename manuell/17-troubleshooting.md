@@ -82,7 +82,7 @@
 | "assert_intersect: a and b do not intersect (distance d mm)" | the children are not one connected piece; touching faces are no intersection – let them overlap or use `assert_touches` |
 | "assert_touches: a does not touch b, gap X mm" | gap above `tol` (+ mesh accuracy); close it or raise `tol` |
 | "assert_touches: a and b overlap (V mm³)" | overlap instead of contact |
-| "assert_touches: a touches b only with line contact (non-manifold, hard to print …)" | cylinder on a plane, edge on a face: the union is non-manifold; give it a flat, or `contact = "any"` |
+| "assert_touches: a touches b only with line contact (non-manifold, hard to print …)" | cylinder on a plane, edge on a face, a torus or two cylinders side by side within `tol`: the union is non-manifold; give it a flat, or `contact = "any"`. Analytic surfaces that cannot lie on each other over an area always give line/point contact (before, SMLib's mesh could report a tiny "face contact … (mesh-based)" there) |
 | "… overlap could not be checked (…)" (info) | the kernel boolean failed (faces lying on each other); result undecided, not a violation |
 | "assert_touches: a and b: contact could not be checked (…)" (info) | the tessellation of a body failed (no distance), or the boolean failed with the bodies within the mesh accuracy; undecided, not a violation (counted in `Asserts: … N could not be checked`) |
 | "kind of contact determined on the mesh only" | freeform faces: contact found on the mesh only |

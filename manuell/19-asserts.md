@@ -29,7 +29,7 @@ assert_touches(tol = 0.001, contact = "face") { lid(); housing(); }      // touc
 | intersection, B-rep | kernel boolean per solid pair whose boxes meet, volume from mass properties | exact |
 | intersection with a mesh (`import(…, as = "mesh")`) | mesh test (surfaces cross or inside), yes/no, no volume | the meshes |
 | distance, gap, clearance | smallest triangle–triangle distance with foot points | ± 2 · mesh tol (planar faces exact) |
-| contact | opposite coplanar planes → face contact, area = intersection of both outlines (`region2`, exact for lines/arcs); cylinder/sphere on plane, cylinder on cylinder → line/point; other surfaces on the mesh (`contact_exact: false`) | exact / mesh |
+| contact | opposite coplanar planes → face contact, area = intersection of both outlines (`region2`, exact for lines/arcs); cylinder/sphere on plane, cylinder on cylinder → line/point; other surfaces on the mesh (`contact_exact: false`), where surfaces that cannot lie on each other over an area (analytic ones of different kinds: torus or cone on a plane, cylinder on a sphere …; planes at an angle; cylinders not coaxial with equal radius) give line/point contact only, never the area of the band of triangles within the tolerance (that area depends on the mesher: torus(20, 2) on a plate 92 mm² with SMLib's, 22 mm² with solidcore's mesh) | exact / mesh |
 
 Tolerances (L = diagonal of the bounds of the pair): ε = 10⁻⁹·L³ mm³ (`eps_volume`), contact
 area > 10⁻⁹·L² mm², mesh tol = clamp(2·10⁻⁴·L, 0.001, 0.02) mm. A failing boolean (faces lying

@@ -177,6 +177,20 @@ fn touches_line_and_point_contact() {
     assert_eq!(r[0].pairs[0].problem.as_deref(), Some("point_contact"), "{:?}", r[0].pairs[0]);
 }
 
+/// Surfaces that cannot lie on each other over an area touch along a line, however wide the
+/// band of triangles within the tolerance: a torus on a plate (true contact a circle) and two
+/// cylinders side by side 0.005 apart (SMLib's mesh gave a "face contact" of 0.002 mm² between
+/// a cap's rim and the other side).
+#[test]
+fn touches_curved_surfaces_by_their_kind() {
+    let r = check("assert_touches() { torus(20, 2); translate([-30, -30, 2]) cube([60, 60, 1]); }\n");
+    assert_eq!(r[0].pairs[0].problem.as_deref(), Some("line_contact"), "{:?}", r[0].pairs[0]);
+    let r = check(
+        "assert_touches(tol = 0.01) { cylinder(r = 5, h = 10); translate([10.005, 0, 0]) cylinder(r = 5, h = 10); }\n",
+    );
+    assert_eq!(r[0].pairs[0].problem.as_deref(), Some("line_contact"), "{:?}", r[0].pairs[0]);
+}
+
 #[test]
 fn touches_gap_and_overlap() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);

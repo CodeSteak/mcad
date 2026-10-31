@@ -15,7 +15,10 @@
 //! * **Contact** (`assert_touches`): face pairs near each other on the exact B-rep
 //!   ([`cad_measure::Body`]): opposite coplanar planes → face contact, area of the intersection
 //!   of both face outlines with `region2` (exact for lines and arcs); cylinder/sphere on a
-//!   plane, cylinder on cylinder → line or point contact; other surfaces only on the mesh.
+//!   plane, cylinder on cylinder → line or point contact; other surfaces on the mesh, where
+//!   two surfaces that cannot lie on each other over an area (analytic ones of different
+//!   kinds, cylinders that are not coaxial with the same radius: [`can_coincide`]) give a line
+//!   or a point contact only, whatever the area of the triangles within the tolerance.
 //! * **Tolerances**, relative to the size `L` (diagonal of the bounds of both bodies):
 //!   intersection volume counts above `ε_V = 1e-9 · L³` (at least 1e-9 mm³), contact area above
 //!   `1e-9 · L²`; tessellation tolerance `clamp(2e-4 · L, 0.001, 0.02)` mm.
@@ -557,6 +560,28 @@ fn analytic_contact(sa: &Surface, sb: &Surface, tol: f64) -> Option<&'static str
     }
 }
 
+/// Whether two surfaces can lie on each other over an area (face contact). Two analytic
+/// surfaces of different kinds cannot (a plane is nowhere curved, a cylinder nowhere doubly
+/// curved, …), nor two cylinders that are not coaxial with the same radius: their contact is a
+/// line or a point however wide the band of triangles within the tolerance (a torus on a plate
+/// has a band of about `2·√(2·r·tol)`, a different area for every mesher). Free-form
+/// surfaces (B-spline, revolution, extrusion) and analytic surfaces of one kind are left to
+/// the mesh.
+fn can_coincide(sa: &Surface, sb: &Surface, tol: f64) -> bool {
+    use Surface::*;
+    let analytic =
+        |s: &Surface| matches!(s, Plane { .. } | Cylinder { .. } | Cone { .. } | Sphere { .. } | Torus { .. });
+    if !(analytic(sa) && analytic(sb)) {
+        return true;
+    }
+    match (sa, sb) {
+        (Cylinder { frame: a, r: ra }, Cylinder { frame: b, r: rb }) => {
+            a.z.cross(b.z).length() < 1e-6 && line_dist(b.origin, a.origin, a.z) <= tol && (ra - rb).abs() <= tol
+        }
+        _ => std::mem::discriminant(sa) == std::mem::discriminant(sb),
+    }
+}
+
 /// Contact analysis of two body sets that are within `tol` of each other.
 fn contact<K: Kernel>(
     k: &mut K,
@@ -607,7 +632,8 @@ fn contact<K: Kernel>(
                                 } else if na.dot(nb) > 1.0 - 1e-9 {
                                     "" // same side: no contact of these faces
                                 } else {
-                                    mesh_contact(&fa.tris, &fb.tris, lim, &mut c, t.eps_area, line_len)
+                                    // planes at an angle (or apart): an edge on a face at most
+                                    mesh_contact(&fa.tris, &fb.tris, lim, &mut c, f64::INFINITY, line_len)
                                 }
                             }
                             _ => match analytic_contact(&fa.surface, &fb.surface, tol + t.eps_len) {
@@ -620,7 +646,13 @@ fn contact<K: Kernel>(
                                 }
                                 None => {
                                     c.exact = false;
-                                    mesh_contact(&fa.tris, &fb.tris, lim, &mut c, t.eps_area, line_len)
+                                    // no area where the surfaces cannot coincide: line or point
+                                    let eps_area = if can_coincide(&fa.surface, &fb.surface, tol + t.eps_len) {
+                                        t.eps_area
+                                    } else {
+                                        f64::INFINITY
+                                    };
+                                    mesh_contact(&fa.tris, &fb.tris, lim, &mut c, eps_area, line_len)
                                 }
                             },
                         };
