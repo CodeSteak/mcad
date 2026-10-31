@@ -357,17 +357,25 @@ fn kernel_solidcore_evaluates() {
 fn diff_kernels_on_examples() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let mut files: Vec<String> = Vec::new();
-    for d in ["tests/models/openscad-compat", "tests/models/spec"] {
-        let mut v: Vec<String> = std::fs::read_dir(root.join(d))
-            .unwrap()
-            .map(|e| e.unwrap().path())
-            .filter(|p| cad_eval::is_model_file(&p.to_string_lossy()))
-            .map(|p| p.display().to_string())
-            .collect();
+    // the same list as scripts/ci/solidcore.sh: model files of each directory, of an assembly
+    // folder only the main file named after the folder (the others are include/use)
+    for d in ["tests/models/openscad-compat", "tests/models/spec", "tests/models/everyday", "tests/everyday/bugs"] {
+        let mut v: Vec<PathBuf> = Vec::new();
+        for p in std::fs::read_dir(root.join(d)).unwrap().map(|e| e.unwrap().path()) {
+            if p.is_dir() {
+                let main = p.join(p.file_name().unwrap()).with_extension("mcad");
+                if main.is_file() {
+                    v.push(main);
+                }
+            } else if cad_eval::is_model_file(&p.to_string_lossy()) {
+                v.push(p);
+            }
+        }
         v.sort();
-        files.extend(v);
+        files.extend(v.iter().map(|p| p.display().to_string()));
     }
-    assert!(files.len() >= 41, "{}", files.len());
+    files.push(root.join("tests/models/project-housing/housing.mcad").display().to_string());
+    assert!(files.len() >= 100, "{}", files.len());
     let mut args = vec!["diff-kernels"];
     args.extend(files.iter().map(|s| s.as_str()));
     let out = mcad().args(&args).arg("--json").output().unwrap();

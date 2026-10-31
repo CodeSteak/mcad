@@ -2,7 +2,9 @@
 # solidcore coverage: builds `mcad` with
 # `--features solidcore` against the newest solidcore `main` (instead of the commit pinned in
 # crates/kernel-solidcore/Cargo.toml) and runs `mcad diff-kernels` over the examples
-# (tests/models/openscad-compat, tests/models/spec). Reports the numbers only: unsupported, blocked
+# (tests/models/openscad-compat, tests/models/spec, tests/models/everyday with the main file of each
+# assembly folder, tests/models/project-housing/housing.mcad, tests/everyday/bugs; the same list as
+# `diff_kernels_on_examples` in crates/cad-cli/tests/cli.rs). Reports the numbers only: unsupported, blocked
 # or differing nodes do not fail the run (the pin is guarded by `diff_kernels_on_examples`);
 # a build failure or a crash of diff-kernels does.
 #
@@ -46,7 +48,13 @@ sed -i "s/SOLIDCORE_REV: &str = \"$PINNED\"/SOLIDCORE_REV: \&str = \"$REV\"/" "$
 cargo build -p cad-cli --no-default-features --features solidcore
 
 mkdir -p "$OUT"
-files=(tests/models/openscad-compat/*.scad tests/models/spec/*.mcad)
+files=(tests/models/openscad-compat/*.scad tests/models/spec/*.mcad tests/models/everyday/*.mcad)
+# assembly folders: only the main file named after the folder (the others are include/use)
+for d in tests/models/everyday/*/; do
+  n="$(basename "$d")"
+  if [ -f "$d$n.mcad" ]; then files+=("$d$n.mcad"); fi
+done
+files+=(tests/models/project-housing/housing.mcad tests/everyday/bugs/*.mcad)
 code=0
 MCAD_NO_DAEMON=1 "${CARGO_TARGET_DIR:-target}/debug/mcad" diff-kernels "${files[@]}" --json >"$OUT/diff-kernels.json" || code=$?
 # 0: every node the same, 1: not (expected for now), anything else: usage error or crash

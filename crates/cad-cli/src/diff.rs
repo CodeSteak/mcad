@@ -1,11 +1,12 @@
 //! `mcad diff-kernels <files…> [--json]`: evaluates each file with SMLib and with solidcore and
 //! compares every node (plan sections 2.3 and 8, acceptance test of the switch to solidcore).
 //!
+//! Files are evaluated like the other commands do (`include`/`use`/`import` relative to the file).
 //! Per node evaluated by SMLib: status, volume (relative 1e-6), number of faces and edges of its
 //! result, and the edges selected by fillet/chamfer (count and points, 1e-6 of the size).
 //! "Coverage" counts per operation (node label) how many nodes solidcore evaluated like SMLib.
 //! Verdicts: `same`; `unsupported` (solidcore reports the operation, or a query of its result —
-//! faces, edges, volume —, as not supported);
+//! faces, edges, volume —, as not supported, also in a warning such as "B-rep from the mesh failed");
 //! `blocked` (differs only because an input node is unsupported or failed); `differ`; `failed`
 //! (solidcore fails where SMLib succeeds); `skipped` (not evaluated by SMLib either).
 //!
@@ -19,7 +20,7 @@
 //! Exit code 0 if every node of every file is the same, 1 otherwise, 2 usage error.
 
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use cad_i18n::{tr, trs};
 use cad_kernel::Kernel;
@@ -61,13 +62,17 @@ const UNSUPPORTED: &str = "not supported by this kernel";
 /// (index, label, line, children) per scene node.
 type NodeRow = (u32, String, u32, Vec<u32>);
 
-fn evaluate<K: Kernel + 'static>(kernel: K, text: &str) -> (Vec<NodeRow>, Vec<Metrics>)
+fn evaluate<K: Kernel + 'static>(kernel: K, text: &str, file: &Path) -> (Vec<NodeRow>, Vec<Metrics>)
 where
     K::Shape: 'static,
 {
     let mut opts = SessionOptions { auto_root_mesh: false, ..Default::default() };
     opts.eval.max_stack_bytes = 192 << 20;
     let mut s = Session::new(kernel, opts, std_clock());
+    // `include`/`use` relative to the file, as in the other commands
+    let root = file.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let main = file.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
+    s.set_resolver(Box::new(cad_session::FsResolver { root: root.to_path_buf() }), &main);
     s.post(ToEngine::SetSource { text: text.to_string(), version: 1 });
     s.run_to_idle();
     let Some(d) = s.done() else { return (Vec::new(), Vec::new()) };
@@ -83,7 +88,16 @@ where
             p::NodeStatus::Skipped => "skipped",
             p::NodeStatus::Pending => "pending",
         };
-        let message = n.messages.iter().find(|m| m.severity == p::Severity::Error).map(|m| m.message.clone());
+        // an error, else a warning that names an unsupported operation (e.g. STL import: "B-rep
+        // from the mesh failed (… not supported …): continuing as a mesh")
+        let message = n
+            .messages
+            .iter()
+            .find(|m| m.severity == p::Severity::Error)
+            .or_else(|| {
+                n.messages.iter().find(|m| m.severity == p::Severity::Warning && m.message.contains(UNSUPPORTED))
+            })
+            .map(|m| m.message.clone());
         let unsupported = message.as_deref().is_some_and(|m| m.contains(UNSUPPORTED));
         let mut m = Metrics {
             status: status.into(),
@@ -210,8 +224,9 @@ pub fn command(files: &[PathBuf]) -> Result<Outcome, Fail> {
     }
     for f in files {
         let src = std::fs::read_to_string(f).map_err(|e| Fail::Usage(format!("{}: {e}", f.display())))?;
-        let (nodes, a) = evaluate(SmlibKernel::new(), &src);
-        let solid = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| evaluate(SolidcoreKernel::new(), &src)));
+        let (nodes, a) = evaluate(SmlibKernel::new(), &src, f);
+        let solid =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| evaluate(SolidcoreKernel::new(), &src, f)));
         let (nodes_b, b) = solid.unwrap_or_default();
         let mut diffs = Vec::new();
         let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();

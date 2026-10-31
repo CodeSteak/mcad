@@ -88,7 +88,9 @@ unlock themselves as soon as solidcore computes correctly.
 
 ## Comparison over the examples (`mcad diff-kernels`)
 
-`tests/models/openscad-compat` and `tests/models/spec`:
+`tests/models/openscad-compat` and `tests/models/spec`; from 0.2 of the plan also
+`tests/models/everyday` (15 files and the main file of each of the 4 assembly folders),
+`tests/models/project-housing/housing.mcad` and `tests/everyday/bugs` (17), 101 files:
 
 | State | Files | Nodes | same | unsupported | blocked | differ | failed |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -99,6 +101,15 @@ unlock themselves as soon as solidcore computes correctly.
 | `d4940b6` (2026-10-25) | 64 | 1436 | **516** | 354 | 360 | 206 | 0 |
 | `bba8d87`, `kernel-solidcore` only builds | 64 | 1438 | 369 | 352 | 362 | 355 | 0 |
 | `bba8d87` (2026-10-30, pin), `kernel-solidcore` adapted | 64 | 1438 | **1187** | 84 | 116 | 51 | 0 |
+| `bba8d87`, `include`/`use`/`import` resolved, unsupported warnings count (64 files as before) | 64 | 1462 | 1190 | 90 | 131 | 51 | 0 |
+| `bba8d87`, corpus extended (plan 0.2) | 101 | 2604 | **1927** | 175 | 290 | 212 | 0 |
+
+- Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
+  `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
+  it now resolves them relative to the file like the other commands. A node whose warning
+  names an unsupported operation counts as `unsupported` (STL import: solidcore has no
+  polyhedron, the mesh stays a mesh and the following `difference` failed). New per corpus
+  (same / nodes): `everyday` 621 / 947, `project-housing` 20 / 33, `everyday/bugs` 96 / 162.
 
 - @ `d4940b6`: cylinders, cones, spheres, tori and `revolve` deliver results with the face and
   edge counts of SMLib, but the volumes deviate by about 1e-5 (sphere r 5: 523.6048 instead of
@@ -209,7 +220,8 @@ untested).
 ## Acceptance
 
 `mcad diff-kernels <dateien…> [--json]` (`crates/cad-cli/src/diff.rs`) evaluates each file with
-SMLib and with solidcore and compares every node evaluated by SMLib:
+SMLib and with solidcore (`include`/`use`/`import` relative to the file) and compares every
+node evaluated by SMLib:
 
 - status, volume (relative 1e-6), number of faces and edges of the node result,
   selected edges (fillet/chamfer: count and end points, 1e-6 of the model size);
@@ -220,7 +232,8 @@ SMLib and with solidcore and compares every node evaluated by SMLib:
 - "Abdeckung" (coverage): per operation (node label) same / nodes, unsupported, blocked, differ.
 
 Exit code 0 only if all nodes of all files are `same`. The switch happens only when
-`diff-kernels` ends with 0 over all examples (`tests/models/openscad-compat`, `tests/models/spec`);
+`diff-kernels` ends with 0 over all examples (`tests/models/openscad-compat`, `tests/models/spec`,
+`tests/models/everyday`, `tests/models/project-housing`, `tests/everyday/bugs`);
 in addition, `tests/openscad-compat/compare.py` and `tests/step/verify.py` must still pass with solidcore
 (for this `kernel-solidcore` still needs `tessellate` and `brep`).
 
