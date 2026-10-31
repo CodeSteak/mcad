@@ -11,7 +11,7 @@ use kernel_solidcore::{Shape, SolidcoreKernel};
 /// Surface kinds, curve kinds (sorted) and the problems of the conventions.
 fn kinds(k: &mut SolidcoreKernel, s: &Shape) -> (Brep, Vec<&'static str>, Vec<&'static str>) {
     let (b, st) = k.brep_with_stats(s).unwrap();
-    println!("{st:?}");
+    assert_eq!((st.analytic_rejected, st.orientation_fallback, st.edges_reversed), (0, 0, 0), "{st:?}");
     let problems = b.convention_problems(1e-6);
     assert!(problems.is_empty(), "{problems:?}");
     let mut sk: Vec<_> = b.faces().map(|f| f.surface.kind()).collect();
@@ -109,7 +109,7 @@ fn transformed_booleans_and_fillets() {
     let edges: Vec<u32> = (0..12).collect();
     let f = k.fillet(&a, &edges, 1.0, 5).unwrap();
     let (b, sk, _) = kinds(&mut k, &f);
-    println!("fillet: {sk:?}");
+    assert_eq!(sk, [vec!["cylinder"; 12], vec!["plane"; 6], vec!["sphere"; 8]].concat());
     assert_eq!(b.faces().count(), 26);
     assert!(b.faces().filter(|f| f.surface.kind() == "plane").all(|f| f.tag == 1));
 }
@@ -120,23 +120,22 @@ fn extrusions_and_revolutions() {
     let lp = PlacedLoop { lp: Profile::Circle { center: DVec2::new(10.0, 0.0), r: 2.0 }, frame: DMat4::IDENTITY };
     let e = k.extrude(&lp, 5.0, 0.0, DVec2::ONE, 1).unwrap();
     let (b, sk, _) = kinds(&mut k, &e);
-    println!("extruded circle: {sk:?}");
+    assert_eq!(sk, ["cylinder", "plane", "plane"]);
     normals_point_out(&mut k, &e, &b);
     let rf = DMat4::from_rotation_x(std::f64::consts::FRAC_PI_2);
     let r = k.revolve(&PlacedLoop { frame: rf, ..lp.clone() }, std::f64::consts::TAU, 1).unwrap();
     let (b, sk, _) = kinds(&mut k, &r);
-    println!("revolved circle: {sk:?}");
+    assert_eq!(sk, ["torus"]);
     normals_point_out(&mut k, &r, &b);
     let poly = Profile::Polygon(vec![DVec2::new(2.0, 0.0), DVec2::new(6.0, 0.0), DVec2::new(4.0, 5.0)]);
     let r = k.revolve(&PlacedLoop { lp: poly, frame: rf }, 1.5, 1).unwrap();
     let (b, sk, _) = kinds(&mut k, &r);
-    println!("revolved triangle: {sk:?}");
+    assert_eq!(sk, ["cone", "cone", "plane", "plane", "plane"]);
     normals_point_out(&mut k, &r, &b);
     let sp =
         Profile::Spline(vec![DVec2::new(0.0, 0.0), DVec2::new(8.0, 1.0), DVec2::new(6.0, 6.0), DVec2::new(1.0, 5.0)]);
     let e = k.extrude(&PlacedLoop { lp: sp, frame: DMat4::IDENTITY }, 3.0, 0.0, DVec2::ONE, 1).unwrap();
     let (b, sk, _) = kinds(&mut k, &e);
-    println!("extruded spline: {sk:?}");
     assert!(sk.iter().all(|s| matches!(*s, "plane" | "extrusion" | "bspline")), "{sk:?}");
     normals_point_out(&mut k, &e, &b);
     let _ = Surface::kind;

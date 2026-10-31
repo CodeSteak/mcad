@@ -43,12 +43,10 @@ fn smooth_edges_are_seams_poles_and_tangent_edges() {
     let e = k.edges(&c, 1).unwrap();
     // two rims to blend, the seam not
     let sharp = e.iter().filter(|e| !e.smooth).count();
-    println!("cylinder edges: {:?}", e.iter().map(|e| (e.smooth, e.face_tags.clone())).collect::<Vec<_>>());
     assert_eq!(sharp, 2, "{e:?}");
     assert!(e.iter().all(|e| e.face_tags.len() == 2), "{e:?}");
     let s = k.make_sphere(5.0, 1).unwrap();
     let e = k.edges(&s, 1).unwrap();
-    println!("sphere edges: {:?}", e.iter().map(|e| (e.smooth, e.face_tags.clone())).collect::<Vec<_>>());
     assert!(e.iter().all(|e| e.smooth), "{e:?}");
     let b = k.make_box(DVec3::ZERO, DVec3::splat(10.0), 1).unwrap();
     assert!(k.edges(&b, 0).unwrap().iter().all(|e| !e.smooth));
@@ -120,7 +118,6 @@ fn tags_of_new_bodies_and_split_faces() {
     assert_eq!(new.len(), 8, "{es:?}");
     let f = k.fillet(&u, &new, 0.5, 9).unwrap();
     let tf = tags(&mut k, &f);
-    println!("fillet: {tf:?}");
     assert_eq!(tf.iter().filter(|&&x| x == 1).count(), 10, "{tf:?}");
     assert_eq!(tf.iter().filter(|&&x| x == 2).count(), 6, "{tf:?}");
     assert!(tf.iter().filter(|&&x| x == 9).count() >= 8, "{tf:?}");

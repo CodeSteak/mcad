@@ -116,6 +116,7 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, face tags and edge information (plan 1.10) | 101 | 2604 | 2299 | 128 | 171 | 6 | 0 |
 | `bba8d87`, fillets and chamfers (plan 1.3) | 101 | 2604 | **2523** | 26 | 47 | 8 | 0 |
 | `bba8d87`, tags resolved after Booleans (plan 1.9), tester findings of task B | 101 | 2604 | **2523** | 26 | 47 | 8 | 0 |
+| `bba8d87`, neutral B-rep (plan 1.11), tester findings of task C | 101 | 2604 | **2523** | 26 | 47 | 8 | 0 |
 
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
@@ -238,7 +239,8 @@ Provenance (plan 1.9): after a Boolean, a face without a tag gets the tag of the
 lies on (an interior point on the face's surface, within its box), else the Boolean's, as the
 facade's `resolve_tags`; solidcore leaves none untagged in the corpus, so nothing changed
 (2523 same). After a fillet or chamfer every face is verified that way (plan 1.3). Checked: the
-fillet-on-Boolean nodes, `mcad measure --colors` (38 cases, same volumes per colour), zones and
+fillet-on-Boolean nodes, `mcad measure --colors` (38 cases, same volumes per colour; it splits the
+colours with kernel Booleans, not by face tags, so it checks the Booleans, not the provenance), zones and
 asserts (`asserts`, `fillet_zones`, `multicolor`, `f07_torus_zone`: all nodes `same`); a union of
 a plate and a bar keeps 10 split plate faces with the plate's tag, `union(fillet = 0.5)` of it
 matches SMLib (`tests/provenance.rs`). Not checkable yet: display colours, 3MF and STEP colours
@@ -296,8 +298,8 @@ and `blend_core` step by step:
 | checks: no faces left, open result of a solid, volume change beyond what a blend of that size can make (20 r² per length + 10 r³ per edge + 2 %), no new face ("unchanged, size too large?") → `Failed` with the edges | as the facade |
 | tags: every face of the result checked against the input (`resolve_tags` with verification): a face on an input face keeps that face's tag, the others are new and get the operation's tag | `face_internal_point`, `surface_closest_point` |
 
-Not ported: the facade's retry chain by chain when the blend of all edges fails, and its check for
-self-overlapping faces. Unit tests: `crates/kernel-solidcore/tests/fillets.rs` (box edge: fillet
+Not ported: the facade's retry chain by chain when the blend of all edges fails. The check for
+self-overlapping faces (`invalid_faces`) is ported since the tester findings on task C. Unit tests: `crates/kernel-solidcore/tests/fillets.rs` (box edge: fillet
 box − (1 − π/4) r² l, chamfer box − d²/2 l; all edges of a box with the corner balls; a linear
 radius law; new edges of a union; seams skipped; bad input).
 
@@ -315,7 +317,7 @@ changes to `diff-kernels`:
   solidcore 43.03, SMLib 42.91 (2.3e-5, the union above it 3.5e-5). Elsewhere both are close:
   cylinder rim chamfer SMLib −1.2e-6, solidcore −5.7e-6 of the exact volume; tube rim chamfer
   SMLib +8.2e-6, solidcore −1.2e-6; cylinder rim fillet both 3e-7. 8 nodes use the rule; the
-  blended nodes within 3e-5 count as `curved` (24 → 73).
+  blended nodes within 3e-5 count as `curved` (24 → 72).
 
 Left `differ` (8): `sketch_cable_duct` (the union loses faces), `angle_anchor`, `project-housing`
 (2), `f09a` (results that are no manifold solid, Booleans), `f08c` (2) and `f11` (SMLib fails,
@@ -325,6 +327,25 @@ volume per colour with both kernels for all 37 cases of `tests/color-review/case
 `tests/models/spec/multicolor.mcad`. Evaluation of all 101 files: SMLib 112 s, solidcore 109 s
 (debug build, dependencies `opt-level = 2`); solidcore is slower on `key_rack` (12.8 s vs 5.8 s),
 `mug`, `pen_box` and `wall_hook` (2×), faster on `text_sign` and `f11`.
+
+## Tester findings on task C (fillets, tags, transforms)
+
+| Finding | Fix |
+| --- | --- |
+| oversize fillet accepted (`cube(10, $fillet = 6)`, `5.5`: SMLib "the result overlaps itself", solidcore a body whose volume grew with the radius; `union(fillet = 0.8)` with a twisted extrusion) | the facade's `invalid_faces` ported: a closed result whose face samples (as `face_sample`) are not a boundary between inside and outside (a point 1e-4 of the size along the outward normal outside, against it inside) is `Failed` "the result overlaps itself", with the selected edges within 3 r of those faces (`edges_near_faces`); only faces whose box meets the boxes of the blended edges grown by 4 r are checked (the facade checks all: two point classifications per face, `gear` 13.2 → 8.8 s); unit test `oversize_fillet_overlaps_itself` |
+| `faces` failed on the tiny faces left by a fillet of almost half the box (`face_internal_point`: status 1001) | a sample as the facade's `face_sample` instead |
+| transformed tori and revolved circles: Booleans returned the whole body or nothing after a mirror, a point reflection or a uniform scale with a rotation (`difference` of a scaled, turned torus and a half-space: 2327.49 instead of 1163.74; a top-level union of five bodies with one: 484 instead of 4915 mm³), while vertices, curves and volume looked right | the cause: `transform_independent_object` (`SmApiTransform`) rescales the tolerances from the box of the vertices whenever there is a scale (also −1 of a mirror); a torus has a single vertex, so every tolerance became 0 (and the context's model size changed). The adapter calls `SmBrep::Transform` without that, as the facade's `apply_matrix`, and gives a scaled body tolerances from its full box. The transform check also follows face normals now (outward normal at a point of each face against the inverse transpose of the matrix). Regression test `tests/transforms.rs`: 7 primitives × 8 transforms (rotation, mirrors in x, z and a skew plane after a rotation, uniform scale before and after a rotation, point reflection, scale 0.3), each cut by a half-space: the halves add up to the exact volume (12 failures before, none after) |
+| empty Boolean results: `faces`, `edges`, `mass_props` failed (`SmApiGetFaces` refuses an empty body) | empty lists and zero mass properties |
+| rule `blend` scaled with the whole node, up to the top-level group | 1e-4 of the volume of the nearest blend nodes at or below the node (summed), not of the node |
+| closed selected edges matched by their first point only | all sample points, either direction, a closed edge from any start point |
+| leftover `println!` in tests; "curved 73" (72); `measure --colors` described as a test of the tags (it splits colours with kernel Booleans) | removed, corrected |
+
+Not changed: a revolve profile 1e-10 across the axis passes the pre-check in both kernels (the
+facade's tolerance, 1e-9 of the frame's scale) and solidcore then fails loudly ("did not produce
+a closed solid"); `mcad check` of that model with SMLib ends in a segmentation fault.
+In the tester's matrix the remaining `differ` nodes are edge counts after a mirror (solidcore's
+B-spline surfaces after `turn_to_nurbs` split differently: 3 edges instead of 2) and volumes of
+groups where solidcore is the exact one; no volume is wrong.
 
 ## Tester findings on task B (profiles and sweeps)
 

@@ -4,6 +4,7 @@
 | --- | --- |
 | warning "0 edges" | zone selects no edges: check zone position with `mcad render --line N`; try `select = "touch"` |
 | kernel error on fillet | radius too large for the adjacent faces; the body stays unfilleted |
+| "fillet failed: … the result overlaps itself (size r too large for the adjacent faces?)" (both kernels) | the blends cross each other (e.g. `cube(10, $fillet = 6)`: more than half the edge length); the edges named are those near the overlap |
 | "union/difference/intersection failed: line 12 (dom) and line 30 (rippe) touch tangentially at [x, y, z] (and n more places): the result is not a closed solid …" | the two operands touch along a line or tangentially while overlapping elsewhere: no manifold result. Let them overlap a little or keep a gap at that place (`mcad render` marks it red, JSON `at`) |
 | "linear_extrude failed: extrude did not produce a closed solid (self-intersecting or open profile?)" | the 2D profile crosses itself (e.g. a bowtie polygon) or is not closed: fix the points |
 | "rotate_extrude failed: invalid input: revolve: the profile crosses the axis (x < 0 after its frame)" | part of the profile lies at x < 0: move it to x ≥ 0 |

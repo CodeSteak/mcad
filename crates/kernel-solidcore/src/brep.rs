@@ -254,6 +254,87 @@ fn uv_domain(
     srf.natural_uv_domain_with_nurb(k).map_err(sc)
 }
 
+/// A point of face `f` and its (u, v), as the facade's `face_sample`: the grid point (7 × 7, else
+/// 23 × 23 cells of the UV domain `fd`) nearest the domain's centre that lies in the face, else
+/// the interior point (a pole or a seam, where the STEP normal is not defined, is no cell centre).
+fn sample_point(
+    k: &solidcore::Kernel,
+    b: &mut solidcore::Brep,
+    f: solidcore::FaceId,
+    fd: &solidcore::geom::extent2d::Extent2d,
+) -> Option<(DVec3, Point2)> {
+    let mut uv = None;
+    for m in [7u32, 23] {
+        let mut cells: Vec<(f64, f64)> = (0..m * m)
+            .map(|c| ((f64::from(c / m) + 0.5) / f64::from(m), (f64::from(c % m) + 0.5) / f64::from(m)))
+            .collect();
+        cells.sort_by(|x, y| ((x.0 - 0.5).hypot(x.1 - 0.5)).total_cmp(&(y.0 - 0.5).hypot(y.1 - 0.5)));
+        uv = cells
+            .into_iter()
+            .map(|(s, t)| {
+                Point2::new(fd.u_min() + s * (fd.u_max() - fd.u_min()), fd.v_min() + t * (fd.v_max() - fd.v_min()))
+            })
+            .find(|&uv| q::face_classify_uv(k, b, f, uv).is_ok_and(|c| c == PointClassType::Face));
+        if uv.is_some() {
+            break;
+        }
+    }
+    match uv {
+        Some(uv) => b
+            .face(f)
+            .ok()
+            .and_then(|x| x.surface.as_ref())
+            .and_then(|srf| Some((dv(srf.evaluate_point(k, uv).ok()?), uv))),
+        None => q::face_internal_point(k, b, f).ok().and_then(|p| {
+            let srf = b.face(f).ok()?.surface.as_ref()?;
+            Some((dv(p), *q::surface_closest_point(k, srf, p).ok()?.uvs.first()?))
+        }),
+    }
+}
+
+/// Whether the upward face use of `f` lies in a solid region (then the surface normal points
+/// into the material).
+fn upward_in_material(b: &solidcore::Brep, f: solidcore::FaceId) -> Option<bool> {
+    let fu = b.face(f).ok()?.faceuse?;
+    let region = b.faceuse(fu).ok()?.shell.and_then(|s| b.shell(s).ok()?.region);
+    Some(region.is_some_and(|r| b.region(r).is_ok_and(|x| !x.is_infinite_region(b, r) && x.is_void() == 0)))
+}
+
+/// The unit normal of the surface of `f` at `uv`, out of the material.
+fn outward(k: &solidcore::Kernel, b: &solidcore::Brep, f: solidcore::FaceId, uv: Point2) -> Option<DVec3> {
+    let srf = b.face(f).ok()?.surface.as_ref()?;
+    let n = solidcore::query::brep::evaluate_surface_normal(k, Some(srf), uv).ok()?;
+    let n = DVec3::new(n.x, n.y, n.z).try_normalize()?;
+    Some(if upward_in_material(b, f)? { -n } else { n })
+}
+
+/// The normal of face `f` out of the material at the point of its surface closest to `p`.
+pub(crate) fn outward_normal(
+    k: &solidcore::Kernel,
+    b: &solidcore::Brep,
+    f: solidcore::FaceId,
+    p: DVec3,
+) -> Option<DVec3> {
+    let srf = b.face(f).ok()?.surface.as_ref()?;
+    let c = q::surface_closest_point(k, srf, solidcore::Point3::new(p.x, p.y, p.z)).ok()?;
+    outward(k, b, f, *c.uvs.first()?)
+}
+
+/// A point of face `f` and the face's unit normal there, out of the material (the facade's
+/// `face_sample`: the surface normal, flipped where the upward face use lies in a solid region).
+pub(crate) fn face_sample(
+    k: &solidcore::Kernel,
+    b: &mut solidcore::Brep,
+    f: solidcore::FaceId,
+) -> Option<(DVec3, DVec3)> {
+    let fd = {
+        let face = b.face(f).ok()?;
+        uv_domain(k, face, face.surface.as_ref()?).ok()?
+    };
+    let (p, uv) = sample_point(k, b, f, &fd)?;
+    Some((p, outward(k, b, f, uv)?))
+}
+
 struct Ctx {
     vix: std::collections::HashMap<solidcore::VertexId, u32>,
     eix: std::collections::HashMap<solidcore::EdgeId, u32>,
@@ -314,36 +395,7 @@ fn face(k: &solidcore::Kernel, b: &mut solidcore::Brep, cx: &Ctx, st: &mut BrepS
         Surface::BSpline(n) if (n.eval(uv.x, uv.y) - p).length() <= 1e-6 * (1.0 + p.length()) => Some((uv.x, uv.y)),
         _ => None,
     };
-    // as the facade's `face_sample`: the grid point (7 × 7, else 23 × 23 cells of the UV domain)
-    // nearest the domain's centre that lies in the face, else the interior point (a pole or
-    // a seam, where the STEP normal is not defined, is no cell centre)
-    let mut uv = None;
-    for m in [7u32, 23] {
-        let mut cells: Vec<(f64, f64)> = (0..m * m)
-            .map(|c| ((f64::from(c / m) + 0.5) / f64::from(m), (f64::from(c % m) + 0.5) / f64::from(m)))
-            .collect();
-        cells.sort_by(|x, y| ((x.0 - 0.5).hypot(x.1 - 0.5)).total_cmp(&(y.0 - 0.5).hypot(y.1 - 0.5)));
-        uv = cells
-            .into_iter()
-            .map(|(s, t)| {
-                Point2::new(fd.u_min() + s * (fd.u_max() - fd.u_min()), fd.v_min() + t * (fd.v_max() - fd.v_min()))
-            })
-            .find(|&uv| q::face_classify_uv(k, b, f, uv).is_ok_and(|c| c == PointClassType::Face));
-        if uv.is_some() {
-            break;
-        }
-    }
-    let sample = match uv {
-        Some(uv) => b
-            .face(f)
-            .ok()
-            .and_then(|x| x.surface.as_ref())
-            .and_then(|srf| Some((dv(srf.evaluate_point(k, uv).ok()?), uv))),
-        None => q::face_internal_point(k, b, f).ok().and_then(|p| {
-            let srf = b.face(f).ok()?.surface.as_ref()?;
-            Some((dv(p), *q::surface_closest_point(k, srf, p).ok()?.uvs.first()?))
-        }),
-    };
+    let sample = sample_point(k, b, f, &fd);
     let sense = sample.and_then(|(p, uv)| {
         let n = srf_normal(b.face(f).ok()?.surface.as_ref()?, uv)?;
         surface.normal_at(p, bspline_uv(p, uv)).map(|ns| ns.dot(n) > 0.0)

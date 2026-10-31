@@ -9,8 +9,10 @@
 //! deviations of both kernels from the exact volumes of the operands; else, for curved results,
 //! 3e-5 (both integrate over curved faces, and SMLib fits skins and sweeps less closely: its
 //! sphere r 5 is 7.9e-7 below the exact volume, its twisted bar 1.5e-5 above); else, for a
-//! result with a fillet or chamfer at or below the node, 1e-4 (both fit the blend surfaces).
-//! Selected edges match in any order.
+//! result with a fillet or chamfer at or below the node, 1e-4 of the blended bodies (both fit the
+//! blend surfaces): of the volume of the nearest blend nodes at or below it, not of the node.
+//! Selected edges match in any order, by all their sample points (either direction; another
+//! parameterisation or start point within the chordal sag of the other's samples).
 //! "Coverage" counts per operation (node label) how many nodes solidcore evaluated like SMLib.
 //! Verdicts: `same`; `unsupported` (solidcore reports the operation, or a query of its result —
 //! faces, edges, volume —, as not supported, also in a warning such as "B-rep from the mesh failed");
@@ -127,7 +129,9 @@ const REL_VOLUME_CURVED: f64 = 3e-5;
 /// Results with a fillet or chamfer at or below the node, relative: both kernels fit the blend
 /// surfaces, SMLib less closely (`pillow_block`: its chamfers of 19 edges remove 39.15 mm³, by
 /// Pappus 41.40, solidcore 41.39; a cylinder rim chamfer: SMLib −1.2e-6, solidcore −5.7e-6 of the
-/// exact volume). Largest difference in the corpus: 6.5e-5 (`pillow_block`).
+/// exact volume). Largest difference in the corpus: 6.5e-5 (`pillow_block`). Relative to the
+/// volume of the blend nodes (the nearest at or below a node, summed), so that unblended bodies
+/// beside them in a group do not widen it ([`blends`]).
 const REL_VOLUME_BLEND: f64 = 1e-4;
 
 /// One evaluation: (index, label, line, children) and metrics per scene node.
@@ -315,8 +319,9 @@ where
 /// `relative` (1e-6), `exact` (solidcore at most as far from the exact volume as SMLib, at least
 /// 1e-6), `operands` (no exact value, difference ≤ budget + 1e-6), `curved` (curved faces:
 /// difference ≤ 3e-5, and solidcore within 3e-5 of an exact value), `blend` (a fillet or chamfer
-/// at or below the node: difference ≤ 1e-4); else `none`.
-fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>, blend: bool) -> VolumeCheck {
+/// at or below the node: difference ≤ `blend`, 1e-4 of the blended bodies, see [`blends`]);
+/// else `none`.
+fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>, blend: Option<f64>) -> VolumeCheck {
     let difference = (x - y).abs();
     let rel = REL_VOLUME * x.abs().max(1e-9);
     let exact = a.exact_volume.filter(|e| *e > 0.0);
@@ -355,9 +360,11 @@ fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>, blend: bool) -
         c.tolerance = REL_VOLUME_CURVED * x.abs();
         return c;
     }
-    if blend && difference <= REL_VOLUME_BLEND * x.abs() {
+    if let Some(t) = blend
+        && difference <= t
+    {
         c.rule = "blend";
-        c.tolerance = REL_VOLUME_BLEND * x.abs();
+        c.tolerance = t;
         return c;
     }
     c.rule = "none";
@@ -398,22 +405,31 @@ fn budgets(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics], b: &[Me
     (0..nodes.len()).map(|i| go(i, nodes, pos, a, b, &mut memo)).collect()
 }
 
-/// Per node: does SMLib blend edges (fillet, chamfer) at the node or below it?
-fn blends(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics]) -> Vec<bool> {
+/// Per node where SMLib blends edges (fillet, chamfer) at the node or below it: the volume
+/// tolerance of rule `blend`, 1e-4 of the volume of the blend nodes (the node itself if it
+/// blends, else the sum over its children); `None` without a blend.
+fn blends(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics]) -> Vec<Option<f64>> {
     fn go(
         i: usize,
         nodes: &[NodeRow],
         pos: &BTreeMap<u32, usize>,
         a: &[Metrics],
-        memo: &mut Vec<Option<bool>>,
-    ) -> bool {
+        memo: &mut Vec<Option<Option<f64>>>,
+    ) -> Option<f64> {
         if let Some(v) = memo[i] {
             return v;
         }
-        let mut v = !a[i].selected_edges.is_empty();
-        for c in nodes[i].3.iter().filter_map(|c| pos.get(c)) {
-            v |= go(*c, nodes, pos, a, memo);
-        }
+        let v = if a[i].selected_edges.is_empty() {
+            let mut sum = None;
+            for c in nodes[i].3.iter().filter_map(|c| pos.get(c)) {
+                if let Some(t) = go(*c, nodes, pos, a, memo) {
+                    *sum.get_or_insert(0.0) += t;
+                }
+            }
+            sum
+        } else {
+            Some(REL_VOLUME_BLEND * a[i].volume.unwrap_or(0.0).abs())
+        };
         memo[i] = Some(v);
         v
     }
@@ -421,11 +437,67 @@ fn blends(nodes: &[NodeRow], pos: &BTreeMap<u32, usize>, a: &[Metrics]) -> Vec<b
     (0..nodes.len()).map(|i| go(i, nodes, pos, a, &mut memo)).collect()
 }
 
+/// The same edge, sampled: every point within `tol`, in order or reversed; else (another
+/// parameterisation of the same curve, e.g. a B-spline for a circle, or a closed edge from
+/// another start point) every point of each within `tol` plus twice the chordal sag of the other's
+/// polyline (estimated from its points) of that polyline, and the ends equal unless both are closed.
+fn same_polyline(x: &[[f64; 3]], y: &[[f64; 3]], tol: f64) -> bool {
+    use glam::DVec3;
+    let (x, y): (Vec<DVec3>, Vec<DVec3>) =
+        (x.iter().map(|p| DVec3::from(*p)).collect(), y.iter().map(|p| DVec3::from(*p)).collect());
+    if x.is_empty() || y.is_empty() {
+        return x.len() == y.len();
+    }
+    let d = |p: DVec3, q: DVec3| (p - q).abs().max_element();
+    let n = x.len();
+    if n == y.len() && ((0..n).all(|i| d(x[i], y[i]) <= tol) || (0..n).all(|i| d(x[i], y[n - 1 - i]) <= tol)) {
+        return true;
+    }
+    let closed = |p: &[DVec3]| d(p[0], p[p.len() - 1]) <= tol;
+    let ends = |p: &[DVec3], q: &[DVec3]| {
+        (d(p[0], q[0]) <= tol && d(p[p.len() - 1], q[q.len() - 1]) <= tol)
+            || (d(p[0], q[q.len() - 1]) <= tol && d(p[p.len() - 1], q[0]) <= tol)
+    };
+    if !(closed(&x) && closed(&y)) && !ends(&x, &y) {
+        return false;
+    }
+    // sag of a polyline: a quarter of the largest deviation of a point from its neighbours' chord
+    let sag = |p: &[DVec3]| {
+        p.windows(3)
+            .map(|w| {
+                let (a, b, c) = (w[0], w[1], w[2]);
+                let ac = c - a;
+                let t = if ac.length_squared() > 0.0 {
+                    ((b - a).dot(ac) / ac.length_squared()).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                (b - (a + ac * t)).length() / 4.0
+            })
+            .fold(0.0, f64::max)
+    };
+    let near = |p: &[DVec3], q: &[DVec3]| {
+        let lim = tol + 2.0 * sag(q);
+        p.iter().all(|&a| {
+            q.windows(2).any(|w| {
+                let ab = w[1] - w[0];
+                let t = if ab.length_squared() > 0.0 {
+                    ((a - w[0]).dot(ab) / ab.length_squared()).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                (a - (w[0] + ab * t)).length() <= lim
+            })
+        })
+    };
+    near(&x, &y) && near(&y, &x)
+}
+
 fn compare(
     a: &Metrics,
     b: &Metrics,
     budget: Option<f64>,
-    blend: bool,
+    blend: Option<f64>,
     notes: &mut Vec<String>,
 ) -> (&'static str, Option<VolumeCheck>) {
     let mut vc = None;
@@ -437,7 +509,7 @@ fn compare_metrics(
     a: &Metrics,
     b: &Metrics,
     budget: Option<f64>,
-    blend: bool,
+    blend: Option<f64>,
     vc: &mut Option<VolumeCheck>,
     notes: &mut Vec<String>,
 ) -> &'static str {
@@ -481,18 +553,11 @@ fn compare_metrics(
     } else {
         let size = a.selected_edges.iter().flatten().flat_map(|p| p.iter().map(|x| x.abs())).fold(1.0f64, f64::max);
         // in any order (the kernels list a Boolean's edges in different orders), either direction
-        let d = |p: &[f64; 3], q: &[f64; 3]| p.iter().zip(q).map(|(u, v)| (u - v).abs()).fold(0.0, f64::max);
         let tol = 1e-6 * size;
-        let ends = |x: &Vec<[f64; 3]>| x.first().zip(x.last()).map(|(p, q)| (*p, *q));
-        let mut free: Vec<Option<([f64; 3], [f64; 3])>> = b.selected_edges.iter().map(ends).collect();
+        let mut free: Vec<bool> = vec![true; b.selected_edges.len()];
         let close = a.selected_edges.iter().all(|x| {
-            let Some((a0, a1)) = ends(x) else { return true };
-            let hit = free.iter().position(|y| {
-                y.is_some_and(|(b0, b1)| {
-                    (d(&a0, &b0) <= tol && d(&a1, &b1) <= tol) || (d(&a0, &b1) <= tol && d(&a1, &b0) <= tol)
-                })
-            });
-            hit.map(|i| free[i] = None).is_some()
+            let hit = (0..free.len()).find(|&j| free[j] && same_polyline(x, &b.selected_edges[j], tol));
+            hit.map(|j| free[j] = false).is_some()
         });
         if !close {
             notes.push("selected edges at other positions".into());

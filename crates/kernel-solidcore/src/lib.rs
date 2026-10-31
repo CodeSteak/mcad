@@ -32,8 +32,9 @@
 //! reports the tags of an edge's faces and marks as `smooth` what SMLib cannot blend. Fillets
 //! and chamfers follow the facade's `do_fillet_like` (`SmApiFilletEdges`, equal-distance chamfer
 //! with bevelled corners, radius laws as B-splines at the Greville stations, the same checks of
-//! the result, tags resolved as `resolve_tags`); the facade's retry chain by chain after a
-//! failed fillet is not ported.
+//! the result, self-overlap as `invalid_faces`, tags resolved as `resolve_tags`); the facade's
+//! retry chain by chain after a failed fillet is not ported. `brep` maps the B-rep to the
+//! neutral one as the facade's `sc_brep` (`brep.rs`).
 //!
 //! Feature `solidcore` (opt-in): link solidcore (git dependency pinned to a commit). Without
 //! it the crate compiles without solidcore and every operation is `Unsupported`.
@@ -318,6 +319,9 @@ mod imp {
     struct Probes {
         vertices: Vec<(solidcore::VertexId, DVec3)>,
         edges: Vec<(solidcore::EdgeId, [DVec3; 3], Vec<solidcore::FaceId>)>,
+        /// Per face: the middle point of its first edge and the face's normal there, out of
+        /// the material (`None` where it cannot be evaluated).
+        faces: Vec<(solidcore::FaceId, DVec3, Option<DVec3>)>,
     }
 
     pub struct Inner {
@@ -706,8 +710,7 @@ mod imp {
                 return Ok(ShapeData::new(b, s.tag));
             }
             let probes = self.probes(&b)?;
-            transform_independent_object(&mut self.k, Some(TransformObject::Brep(&mut b)), &pl, scale)
-                .map_err(|e| err("transform", e))?;
+            self.transform_brep(&mut b, &pl, scale)?;
             let t = ShapeData::new(b, s.tag);
             // solidcore @ c9de85d returned success but moved only the vertices (on a
             // `Brep::clone`, whose geometry has no owner, it still does). Hand out only a result
@@ -720,6 +723,38 @@ mod imp {
                 *t.derived.borrow_mut() = Some((Rc::downgrade(s), *m));
             }
             Ok(t)
+        }
+
+        /// `SmBrep::Transform` of `b` as the facade's `apply_matrix`: without the tolerance
+        /// scaling of `SmApiTransform` (`transform_independent_object` re-derives the model
+        /// size from the box of the vertices: a torus or a revolved circle has a single vertex,
+        /// so every tolerance became 0, and the context's model size changed too; later
+        /// Booleans with the body missed their intersections and returned the operand
+        /// unchanged or no manifold solid). A scaled body gets its tolerances from its full
+        /// box; the context keeps its model size.
+        fn transform_brep(&mut self, b: &mut solidcore::Brep, pl: &Axis2Placement, scale: Option<Vec3>) -> KResult<()> {
+            use solidcore::geom::tol;
+            use solidcore::topology::{face, vertex};
+            solidcore::topology::brep::p5::transform(&mut self.k, b, pl, scale, false)
+                .map_err(|e| err("transform", e))?;
+            if scale.is_none() {
+                return Ok(());
+            }
+            let size = model_diag(&self.k, b);
+            let context = tol::context_model_size_estimate(&self.k, &self.k.context);
+            let zone = b.set_this_model_size_estimate(&mut self.k, size);
+            tol::set_context_model_size_estimate(&mut self.k.context, context);
+            let op = "transform (tolerances)";
+            for v in b.vertex_list().to_vec() {
+                vertex::set_tolerance(b, v, zone, false, false).map_err(|e| err(op, e))?;
+            }
+            for e in b.edge_list().to_vec() {
+                edge::set_tolerance(b, e, zone, false, false).map_err(|e| err(op, e))?;
+            }
+            for f in b.face_list().to_vec() {
+                face::p3::set_tolerance(b, f, zone, false, false).map_err(|e| err(op, e))?;
+            }
+            Ok(())
         }
 
         /// Points to follow through a transform: every vertex, and per edge three interior
@@ -744,13 +779,23 @@ mod imp {
                 let faces = edge::faces(b, e, None).map_err(|e| err(op, e))?;
                 edges.push((e, pts, faces));
             }
-            Ok(Probes { vertices, edges })
+            let mut faces: Vec<(solidcore::FaceId, DVec3, Option<DVec3>)> = Vec::new();
+            for (_, pts, fs) in &edges {
+                for &f in fs {
+                    if faces.iter().all(|x| x.0 != f) {
+                        faces.push((f, pts[1], crate::brep::outward_normal(&self.k, b, f, pts[1])));
+                    }
+                }
+            }
+            Ok(Probes { vertices, edges, faces })
         }
 
         /// Did `probes` (taken before the transform) move with `m` to `t`? Vertices and curve
-        /// points at the same normalised parameter, else the closest point on the curve; the
-        /// middle point of each edge on the surfaces of its faces. `Err` names the first point
-        /// that did not, or the solve that failed.
+        /// points at the same normalised parameter, else the closest point on the curve; per
+        /// face the middle point of an edge on its surface, and the face's normal there (out of
+        /// the material) as the inverse transpose maps it: geometry that moved but lost its
+        /// orientation or its frame fails. `Err` names the first point that did not, or the
+        /// solve that failed.
         fn probes_moved(&self, t: &Shape, p: &Probes, m: &DMat4) -> Result<(), String> {
             let b = t.brep.borrow();
             let b = &*b;
@@ -767,8 +812,7 @@ mod imp {
                     return Err(format!("vertex at {got:.6?}, expected {want:.6?}"));
                 }
             }
-            let mut face_done = Vec::new();
-            for (e, before, faces) in &p.edges {
+            for (e, before, _) in &p.edges {
                 let ed = b.edge(*e).map_err(|e| format!("edge: {e}"))?;
                 let curve = ed.curve.as_ref().ok_or("edge without curve")?;
                 let iv = ed.interval;
@@ -786,22 +830,27 @@ mod imp {
                         }
                     }
                 }
-                let want = m.transform_point3(before[1]);
-                for &f in faces {
-                    if face_done.contains(&f) {
-                        continue;
-                    }
-                    face_done.push(f);
-                    let srf = solidcore::topology::face::p2::surface(b, f)
-                        .map_err(|e| format!("face: {e}"))?
-                        .ok_or("face without surface")?;
-                    let d = q::surface_closest_point(&self.k, srf, pt(want))
-                        .map_err(|e| format!("closest point on a surface: {e}"))?
-                        .closest
-                        .distance;
-                    if d > tol {
-                        return Err(format!("edge point {want:.6?} is {d:.2e} off the surface of its face"));
-                    }
+            }
+            // each face: the point on its surface and its outward normal moved with the matrix
+            // (normals with the inverse transpose: also the orientation after a mirror)
+            let cof = glam::DMat3::from_mat4(*m).inverse().transpose();
+            for &(f, p0, n0) in &p.faces {
+                let want = m.transform_point3(p0);
+                let srf = solidcore::topology::face::p2::surface(b, f)
+                    .map_err(|e| format!("face: {e}"))?
+                    .ok_or("face without surface")?;
+                let d = q::surface_closest_point(&self.k, srf, pt(want))
+                    .map_err(|e| format!("closest point on a surface: {e}"))?
+                    .closest
+                    .distance;
+                if d > tol {
+                    return Err(format!("edge point {want:.6?} is {d:.2e} off the surface of its face"));
+                }
+                let Some(n0) = n0 else { continue };
+                let n_want = (cof * n0).normalize();
+                let n = crate::brep::outward_normal(&self.k, b, f, want).ok_or("face normal not evaluated")?;
+                if n.distance(n_want) > 1e-6 {
+                    return Err(format!("face normal {n:.6?} at {want:.6?}, expected {n_want:.6?}"));
                 }
             }
             Ok(())
@@ -1593,6 +1642,43 @@ mod imp {
                 return Err(failed("removed all faces".into(), kept));
             }
             let t = ShapeData::new(b, tag);
+            // only faces near the blended edges can overlap (within 4 r of their boxes): the
+            // facade checks every face, which costs two point classifications per face
+            let near: Vec<(DVec3, DVec3)> = {
+                let b0 = s.brep.borrow();
+                let all = q::get_edges(&b0).map_err(|e| err(what, e))?;
+                kept.iter()
+                    .filter_map(|&i| q::edge_bounding_box(&self.k, &b0, all[i as usize], false).ok())
+                    .map(|x| {
+                        let (lo, hi) = (
+                            DVec3::new(x.min_at(0), x.min_at(1), x.min_at(2)),
+                            DVec3::new(x.max_at(0), x.max_at(1), x.max_at(2)),
+                        );
+                        (lo - DVec3::splat(4.0 * r), hi + DVec3::splat(4.0 * r))
+                    })
+                    .collect()
+            };
+            let bad = self.invalid_faces(&t, (near.len() == kept.len()).then_some(&near[..]))?;
+            if !bad.is_empty() {
+                // the selected edges near the faces that fail, else all (as the facade's
+                // `edges_near_faces` with a reach of 3 r)
+                let b0 = s.brep.borrow();
+                let all = q::get_edges(&b0).map_err(|e| err(what, e))?;
+                let near: Vec<u32> = kept
+                    .iter()
+                    .copied()
+                    .filter(|&i| {
+                        bad.iter().any(|p| {
+                            q::edge_closest_point(&self.k, &b0, all[i as usize], pt(*p))
+                                .is_ok_and(|c| c.closest.distance <= 3.0 * r + 1e-6)
+                        })
+                    })
+                    .collect();
+                return Err(failed(
+                    format!("the result overlaps itself (size {r} too large for the adjacent faces?)"),
+                    if near.is_empty() { kept } else { near },
+                ));
+            }
             if self.is_solid(s) {
                 if !self.is_solid(&t) {
                     return Err(failed(
@@ -1630,11 +1716,52 @@ mod imp {
             Ok(t)
         }
 
+        /// The sample points of the faces of a closed solid that are not boundaries between
+        /// inside and outside (the facade's `invalid_faces`: a point a little along the
+        /// outward normal, 1e-4 of the model size, is not outside, or one against it not
+        /// inside): the result overlaps itself. Empty for open bodies; faces without a sample
+        /// or whose points cannot be classified are skipped. `near`: only faces whose box meets
+        /// one of these boxes (all faces if `None`).
+        fn invalid_faces(&mut self, t: &Shape, near: Option<&[(DVec3, DVec3)]>) -> KResult<Vec<DVec3>> {
+            if !self.is_solid(t) {
+                return Ok(Vec::new());
+            }
+            let samples: Vec<(DVec3, DVec3)> = {
+                let mut b = t.brep.borrow_mut();
+                let fs = q::get_faces(&b).map_err(|e| err("fillet (check)", e))?;
+                let meets = |b: &solidcore::Brep, f| {
+                    let Some(near) = near else { return true };
+                    let Ok(x) = q::face_bounding_box(&self.k, b, f, false) else { return true };
+                    let (lo, hi) = (
+                        DVec3::new(x.min_at(0), x.min_at(1), x.min_at(2)),
+                        DVec3::new(x.max_at(0), x.max_at(1), x.max_at(2)),
+                    );
+                    near.iter().any(|(a, z)| lo.cmple(*z).all() && hi.cmpge(*a).all())
+                };
+                let fs: Vec<_> = fs.into_iter().filter(|&f| meets(&b, f)).collect();
+                fs.into_iter().filter_map(|f| crate::brep::face_sample(&self.k, &mut b, f)).collect()
+            };
+            let eps = 1e-4 * model_diag(&self.k, &t.brep.borrow());
+            let mut bad = Vec::new();
+            for (p, n) in samples {
+                if let Ok(c) = self.classify(t, &[p + n * eps, p - n * eps])
+                    && c != [Class::Outside, Class::Inside]
+                {
+                    bad.push(p);
+                }
+            }
+            Ok(bad)
+        }
+
         /// Sample points: an interior point (`SmApiFaceInternalPoint`) and the vertices of the
         /// boundary loops; only the vertices while the interior point is not ported.
         pub fn faces(&mut self, s: &Shape) -> KResult<Vec<FaceInfo>> {
             let mut b = s.brep.borrow_mut();
             let b = &mut *b;
+            // (`SmApiGetFaces` fails on an empty body: the empty result of a Boolean)
+            if b.face_list().is_empty() {
+                return Ok(Vec::new());
+            }
             let fs = q::get_faces(b).map_err(|e| err("faces", e))?;
             let mut out = Vec::with_capacity(fs.len());
             for (i, f) in fs.into_iter().enumerate() {
@@ -1642,7 +1769,12 @@ mod imp {
                 match q::face_internal_point(&self.k, b, f) {
                     Ok(p) => points.push(dv(p)),
                     Err(e) if e.is_unported() => {}
-                    Err(e) => return Err(err("faces", e)),
+                    // (fails on tiny faces, e.g. what is left of a box face between fillets
+                    // of almost half its width): a sample as the facade's `face_sample`
+                    Err(e) => match crate::brep::face_sample(&self.k, b, f) {
+                        Some((p, _)) => points.push(p),
+                        None => return Err(err("faces", e)),
+                    },
                 }
                 let loops = q::face_get_boundary_loops(b, f).map_err(|e| err("faces", e))?;
                 for e in loops.edges {
@@ -1670,6 +1802,9 @@ mod imp {
         pub fn edges(&mut self, s: &Shape, samples: u32) -> KResult<Vec<EdgeInfo>> {
             let mut b = s.brep.borrow_mut();
             let b = &mut *b;
+            if b.face_list().is_empty() {
+                return Ok(Vec::new());
+            }
             let es = q::get_edges(b).map_err(|e| err("edges", e))?;
             let mut out = Vec::with_capacity(es.len());
             for (i, e) in es.into_iter().enumerate() {
@@ -1707,6 +1842,9 @@ mod imp {
             }
             if let Some(m) = self.derived_mass(s)? {
                 return Ok(m);
+            }
+            if self.is_empty(s) {
+                return Ok(MassProps { volume: 0.0, area: 0.0, centroid: DVec3::ZERO });
             }
             let store = solidcore::geom::attribute::AttributeStore::new();
             let key_of = |_e: solidcore::EntityRef| solidcore::geom::attribute::ObjectKey(0);

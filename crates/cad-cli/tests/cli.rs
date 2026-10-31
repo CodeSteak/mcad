@@ -447,7 +447,7 @@ fn diff_kernels_on_examples() {
         assert!(s["same"].as_u64().unwrap() >= 2510, "{s}");
         assert!(s["differ"].as_u64().unwrap() <= 10, "{s}");
         assert_eq!(s["failed"].as_u64().unwrap(), 0, "{s}");
-        // every rule is in use; curved 73 (with fillets and chamfers), blend 8
+        // every rule is in use; curved 72 (with fillets and chamfers), blend 8
         let r = &s["volume_rules"];
         assert!(r["exact"].as_u64().unwrap() >= 110 && r["operands"].as_u64().unwrap() >= 45, "{r}");
         assert!(r["curved"].as_u64().unwrap() <= 85, "{r}");

@@ -136,3 +136,29 @@ fn bad_input() {
     // much too large: an error, never the unchanged shape
     assert!(k.fillet(&b, &[0], 50.0, 9).is_err());
 }
+
+/// A fillet too large for the faces between the edges overlaps itself: `Failed` as the facade's
+/// `invalid_faces` (tester finding: `cube(10, $fillet = 6)` and `5.5` were accepted, with a
+/// volume that grew with the radius); 4.9 still works and its tiny faces answer `faces`.
+#[test]
+fn oversize_fillet_overlaps_itself() {
+    let mut k = SolidcoreKernel::new();
+    let b = k.make_box(DVec3::ZERO, DVec3::splat(10.0), 1).unwrap();
+    let all: Vec<u32> = (0..12).collect();
+    for r in [6.0, 5.5] {
+        match k.fillet(&b, &all, r, 2) {
+            Err(KernelError::Failed { msg, edges, .. }) => {
+                assert!(msg.contains("overlaps itself"), "{msg}");
+                assert!(!edges.is_empty());
+            }
+            other => panic!("r {r}: {other:?}"),
+        }
+    }
+    let f = k.fillet(&b, &all, 4.9, 2).unwrap();
+    assert_eq!(k.faces(&f, 0).unwrap().len(), 26);
+    // the exact volume: box minus edges (1 - π/4) r² per length, plus the corner balls
+    let r: f64 = 4.9;
+    let exact = 1000.0 - 12.0 * (1.0 - PI / 4.0) * r * r * (10.0 - 2.0 * r) - 8.0 * r.powi(3) * (1.0 - PI / 6.0);
+    let v = k.mass_props(&f).unwrap().volume;
+    assert!((v - exact).abs() < 1e-4 * exact, "{v} vs {exact}");
+}
