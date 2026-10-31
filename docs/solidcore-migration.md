@@ -572,6 +572,9 @@ weeks, fillets, sweeps and shell in 6–10 weeks.
 
 ## Tessellation: own tessellator for M8
 
+The outline below was the plan; what was built is in "Tessellator `cad-tess`".
+
+
 Tessellation and polyhedra are explicitly out of scope of solidcore
 (`plan/closure.md`). For M8 (display, STL/3MF, section view, `compare.py`) we therefore need
 our own tessellator in Rust on top of the solidcore B-Rep, or SMLib (`NL_Tessellate`,
@@ -611,6 +614,52 @@ our side: a CDT (own or e.g. the crate `spade`, MIT/Apache) with robust
 predicates (`robust`), ear clipping for the planar case. `make_polyhedron` would need its
 own construction from planar faces and stitching (`SmApiStitchIntoSolid` is in scope, but
 untested).
+
+## Tessellator `cad-tess` (plan 2.1–2.6)
+
+`crates/cad-tess` meshes the neutral B-rep (`cad_kernel::brep::Brep`) into a `cad_kernel::Mesh`:
+pure Rust (dependency `spade` 2.15, MIT/Apache-2.0, pure Rust without OS dependencies, built
+with `default-features = false`; Wasm size not measured here, no wasm32 target: spade's code is
+about 100–200 KB of a release module by its size), no kernel code. The wiring into
+`kernel-solidcore::tessellate` (2.8) is `cad_tess::tessellate(&brep, tol).map_err(Into::into)`
+(`TessError` converts into `KernelError::Failed`).
+
+| Step | How |
+| --- | --- |
+| 2.1 edges | each edge once, shared by both faces: line 1 segment; circle uniform, `θ = min(2·acos(1 − tol/r), 20°)`; ellipse and B-spline: bisection at half the tolerance from the knot spans (chord at ¼, ½, ¾ and tangent turn), then thinned while the chord stays within the tolerance of the dense points (dense knots of a fitted sweep need no points) |
+| 2.2 surfaces | point, first and second derivatives, unit normal for plane, cylinder, cone, sphere, torus (closed form, STEP parameterisation), revolution, extrusion, B-spline (Piegl & Tiller with rational derivatives); inversion closed form or Newton (Gauss-Newton where the Hessian is not positive), seeds from the previous point of a loop, else local minima of dense curve samples refined by golden section (both branches at a seam corner) or a surface grid; periods (analytic, closed curves, coinciding boundary rows) and poles (sphere poles, cone apex, revolution profile on the axis, collapsed B-spline rows) |
+| UV loops | boundary points inverted, periodic parameters unwrapped along the loop (a seam used twice lands on both sides), a pole traversed on the face's side (the free parameter from the arriving to the leaving value, the direction from the face's orientation), inner loops shifted into the widest loop's period; a loop that wraps a period without a seam is an error (neither kernel writes one) |
+| 2.3 planar faces | the loops projected into the plane, constrained Delaunay (spade) without inner points |
+| 2.4 curved faces | grid lines by chord error and angle (analytic: from the radii; else from the normal part of the second derivative sampled per knot span, spread over the cumulated need), straight directions only near boundary runs across the grid; grid points inside the loops (even-odd per row, a margin from the boundary); CDT in (u, v) mapped to the arc length along each parameter; inside by the parity of constraint edges crossed (winding number where loops cross); refinement up to 12 passes: the foot of a triangle centroid or inner edge midpoint on the surface farther than `tol` → the midpoint of the triangle's longest splittable edge or the foot, never on a boundary edge, never within `tol / 20` of a vertex. Loops that cross in (u, v) (polylines of tangent edges at a cusp) are split at the crossing and the neighbour's triangle on that segment as well (watertight) |
+| 2.5 output | positions (shared edge points: identical), normals from the surface (`same_sense`; a hair inside the face at a seam with a crease; a pole: the limit from the inside), seam copies one vertex unless the normals differ, `tri_tags`, `tri_faces` (the B-rep's face ids), every edge's polyline as `edge_segments`/`edge_ids` (the B-rep's edge index = `EdgeId`) |
+| 2.6 checks | `cad_tess::check(&mesh)`: vertices welded by position, every edge used twice in opposite directions (boundary, non-manifold, misoriented counts), degenerate triangles, volume and area; `MeshCheck::volume_ok(exact, tol)`: \|V − exact\| ≤ tol · area |
+
+Tests: `crates/cad-tess/tests/kernels.rs` (one case per surface kind and tricky situation from
+SMLib's and, with `--features solidcore`, solidcore's B-rep: watertight, outward, deviation and
+volume within tolerance, every face and edge present) and unit tests per module.
+
+Acceptance run: `cargo run -p cad-tess --example corpus [--features solidcore] -- --kernel both
+[--tol t]` meshes every root part of the `diff-kernels` corpus (101 files) from each kernel's
+B-rep and compares with SMLib's own `tessellate` (debug build, cad-tess at opt-level 2):
+
+| tol | kernel | watertight | \|V − exact\| / (tol · area): median, worst | largest measured deviation | triangles (SMLib's own) | time (SMLib's own) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0.05 | SMLib B-rep | 101 / 101 | 0.039, 0.49 (`02_sphere_variants`) | 0.050 | 255 k (272 k) | 7.5 s (11.9 s) |
+| 0.05 | solidcore B-rep | 101 / 101 | 0.037, 0.49 | 0.050 | 251 k | 7.2 s |
+| 0.01 | SMLib B-rep | 101 / 101 | 0.037, 0.59 | 0.148 (11 files above 0.01) | 996 k (708 k) | 63 s (25 s) |
+
+SMLib's own meshes are not watertight by position for 3 files (`asserts`, `variable_radius`,
+`f02`), and hold the tolerance only along triangle edges (see plan 2.7). Fewer triangles than
+SMLib in 78 of 101 files at 0.05; more where the tolerance is held inside long triangles on
+fillets and mitres (`f13_shell_fillet` 7.6 ×, `heat_sink` 3 ×) and on revolutions and NURBS
+sweeps (`planter` 2.6 ×). Slowest: `planter` 1.4 s, `mug` 1.3 s (SMLib 1.5 s, 0.4 s).
+
+Open: at 0.01 the refinement of some revolution and NURBS faces needs more than 12 passes
+(11 files keep triangles above the tolerance, worst `mug`'s body where the handle meets its
+seam, 0.15 mm; `planter` 23 s): lines along a revolution's profile did not help, the
+arc-length CDT coordinates a little (`planter` converges now); a refinement by edge length in
+arc-length coordinates and a better grid near boundaries across the grid are the next step.
+The timings are of a debug build (cad-tess at opt-level 2, SMLib's library optimised).
 
 ## Pin routine (bumping solidcore)
 

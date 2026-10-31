@@ -7,7 +7,7 @@
 //!    revolutions and extrusions from their curve, B-splines per knot span from the second
 //!    derivatives. Grid points inside the loops (even-odd per row) and not too near them are
 //!    inserted.
-//! 2. **CDT** in (u, v) scaled by the mean lengths of `σu` and `σv` (so that Delaunay in the
+//! 2. **CDT** in (u, v) mapped to the arc length along each parameter (so that Delaunay in the
 //!    plane is roughly Delaunay on the surface), the loops as constraint edges. Triangles inside
 //!    are those an odd number of constraint edges away from the outside (nested loops).
 //! 3. **Refinement.** A triangle whose centroid lies farther than `tol` from its plane gets the
@@ -66,7 +66,7 @@ struct Builder<'a> {
     g: &'a Geom,
     cdt: Cdt,
     info: Vec<FVert>,
-    scale: DVec2,
+    warp: Warp,
     bounds: (DVec2, DVec2),
 }
 
@@ -84,7 +84,8 @@ impl Builder<'_> {
     fn point(&self, uv: DVec2) -> Point2<f64> {
         // spade rejects magnitudes below 2^-142 (other than zero)
         let snap = |x: f64| if x.abs() < 1e-30 { 0.0 } else { x };
-        Point2::new(snap(uv.x * self.scale.x), snap(uv.y * self.scale.y))
+        let q = self.warp.map(uv);
+        Point2::new(snap(q.x), snap(q.y))
     }
 
     /// `uv` lies in an inner triangle or on an inner edge between two (not on the boundary).
@@ -354,6 +355,82 @@ fn scale(g: &Geom, (lo, hi): (DVec2, DVec2)) -> DVec2 {
     DVec2::new(ok(a), ok(b))
 }
 
+/// The CDT's coordinates: each parameter mapped to the arc length along it (its speed `|σu|`,
+/// `|σv|`, the median across the other parameter, integrated over 64 steps of the bounds), so
+/// that Delaunay in the plane is roughly Delaunay on the surface also where the parameter
+/// speed varies (dense knots at the ends of a sweep). Linear beyond the bounds.
+#[derive(Debug, Clone)]
+struct Warp {
+    t: [Vec<f64>; 2],
+    s: [Vec<f64>; 2],
+}
+
+impl Warp {
+    fn new(g: &Geom, (lo, hi): (DVec2, DVec2), sc: DVec2) -> Warp {
+        const N: usize = 64;
+        let mut w = Warp { t: [Vec::new(), Vec::new()], s: [Vec::new(), Vec::new()] };
+        for i in 0..2 {
+            let (a, b) = if i == 0 { (lo.x, hi.x) } else { (lo.y, hi.y) };
+            let (c, d) = if i == 0 { (lo.y, hi.y) } else { (lo.x, hi.x) };
+            let mean = if i == 0 { sc.x } else { sc.y };
+            if g.is_plane() || !crate::gt(b, a) {
+                w.t[i] = vec![a, a + 1.0];
+                w.s[i] = vec![a * mean, (a + 1.0) * mean];
+                continue;
+            }
+            let speed = |t: f64| {
+                let mut v: Vec<f64> = (0..5)
+                    .map(|k| {
+                        let o = c + (d - c) * (k as f64 + 0.5) / 5.0;
+                        let uv = if i == 0 { DVec2::new(t, o) } else { DVec2::new(o, t) };
+                        let ds = g.ders(uv);
+                        if i == 0 { ds[1].length() } else { ds[2].length() }
+                    })
+                    .collect();
+                v.sort_by(f64::total_cmp);
+                // never below a tenth of the mean (a pole row stays apart from its neighbours)
+                v[2].max(0.1 * mean)
+            };
+            let ts: Vec<f64> = (0..=N).map(|k| a + (b - a) * k as f64 / N as f64).collect();
+            let sp: Vec<f64> = ts.iter().map(|t| speed(*t)).collect();
+            let mut acc = a * mean;
+            let mut ss = vec![acc];
+            for k in 1..=N {
+                acc += 0.5 * (sp[k - 1] + sp[k]) * (ts[k] - ts[k - 1]);
+                ss.push(acc);
+            }
+            w.t[i] = ts;
+            w.s[i] = ss;
+        }
+        w
+    }
+
+    fn map1(&self, i: usize, x: f64) -> f64 {
+        let (t, s) = (&self.t[i], &self.s[i]);
+        let n = t.len();
+        let k = t.partition_point(|v| *v <= x).clamp(1, n - 1);
+        let f = (x - t[k - 1]) / (t[k] - t[k - 1]);
+        s[k - 1] + (s[k] - s[k - 1]) * f
+    }
+
+    fn inv1(&self, i: usize, y: f64) -> f64 {
+        let (t, s) = (&self.t[i], &self.s[i]);
+        let n = s.len();
+        let k = s.partition_point(|v| *v <= y).clamp(1, n - 1);
+        let ds = s[k] - s[k - 1];
+        let f = if ds > 0.0 { (y - s[k - 1]) / ds } else { 0.0 };
+        t[k - 1] + (t[k] - t[k - 1]) * f
+    }
+
+    fn map(&self, uv: DVec2) -> DVec2 {
+        DVec2::new(self.map1(0, uv.x), self.map1(1, uv.y))
+    }
+
+    fn inv(&self, q: DVec2) -> DVec2 {
+        DVec2::new(self.inv1(0, q.x), self.inv1(1, q.y))
+    }
+}
+
 /// Inserts pole copies at the grid lines of the free parameter between two copies of a pole.
 fn split_poles(loops: &mut [Vec<UvPt>], lines: &[Vec<f64>; 2]) {
     for l in loops.iter_mut() {
@@ -396,7 +473,7 @@ fn split_vertex(
     let q = DVec2::new(pos.x, pos.y);
     let uv_of = |h: FixedVertexHandle| {
         let v = b.info[h.index()];
-        DVec2::new(v.uv.x * b.scale.x, v.uv.y * b.scale.y)
+        b.warp.map(v.uv)
     };
     let on = |s: (FixedVertexHandle, FixedVertexHandle)| {
         let (a, c) = (uv_of(s.0), uv_of(s.1));
@@ -414,7 +491,7 @@ fn split_vertex(
     p /= hits.len() as f64;
     let id = *next_id;
     *next_id += 1;
-    let uv = DVec2::new(q.x / b.scale.x, q.y / b.scale.y);
+    let uv = b.warp.inv(q);
     let v = FVert { uv, p, id: Some(id), pole: false };
     if i >= b.info.len() {
         b.info.resize(i + 1, v);
@@ -459,7 +536,7 @@ pub(crate) fn mesh_face(
     let sc = scale(g, bounds);
     straight_lines(&loops, &mut lines, bounds, sc);
     split_poles(&mut loops, &lines);
-    let mut b = Builder { g, cdt: Cdt::new(), info: Vec::new(), scale: sc, bounds };
+    let mut b = Builder { g, cdt: Cdt::new(), info: Vec::new(), warp: Warp::new(g, bounds, sc), bounds };
     let mut fm = FaceMesh { bounds, ..Default::default() };
     // boundary
     let mut handles: Vec<Vec<Option<FixedVertexHandle>>> = Vec::new();

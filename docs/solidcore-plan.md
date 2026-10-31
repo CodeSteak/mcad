@@ -89,14 +89,21 @@ B-rep. So the tessellator works for both kernels and can be developed and compar
 before phase 1 is done. The neutral B-rep has no UV trim curves, so (u, v) of boundary points
 comes from point inversion.
 
+Done 2026-10-31: 2.1–2.6 in `crates/cad-tess` (results in `docs/solidcore-migration.md`,
+"Tessellator `cad-tess`"): over the 101 corpus files at tol 0.05 every mesh is watertight from
+both kernels' B-reps, volume within tol · area (worst 0.49 of it), largest measured deviation
+0.050, 255 k triangles against SMLib's 272 k, 7.5 s against 11.9 s (debug build). Open: at tol
+0.01 some revolution and NURBS faces do not converge within 12 refinement passes. Next: 2.7
+(`diff-kernels --mesh`), 2.8 (`kernel-solidcore::tessellate`).
+
 | # | Step | Content | Effort |
 | --- | --- | --- | --- |
-| 2.1 | Edges | Each edge discretised once, shared by both faces (watertight). Line: 1 segment; circle/ellipse: step `θ = 2·acos(1 − tol/r)`; B-spline: adaptive bisection on chord error and tangent angle | 3 d |
-| 2.2 | Surface evaluation and inversion | Point, derivatives, normal for `Plane`, `Cylinder`, `Cone`, `Sphere`, `Torus` (closed form), `Revolution`, `Extrusion`, `BSpline` (de Boor, Newton with a grid start). Periodic seams, poles (`Loop::Vertex`, sphere/cone apex) | 4–5 d |
-| 2.3 | Planar faces | Project the loops, polygon with holes: ear clipping with hole bridges, or CDT (crate `spade` + `robust`, MIT/Apache; check licence and Wasm size) | 2–3 d |
-| 2.4 | Curved faces | UV grid by chord error (analytic: from the radii; NURBS: second derivatives / control net), trim against the UV loops, CDT with the edge points as constrained edges, refine where the 3D deviation at triangle/edge midpoints exceeds `tol`, anisotropic scaling of u/v. Dense NURBS faces: `nurbs-grid-mesh` | 8–10 d |
-| 2.5 | Output | `Mesh`: normals exact from the surface (orientation by `same_sense`), `tri_tags`, `tri_faces`, `edge_segments`, `edge_ids`; coarse/fine by `tol` (plan 7.2) | 2 d |
-| 2.6 | Checks | Every inner edge used twice, consistent orientation, no degenerate triangles; mesh volume against exact volume (`mass_props`) within `tol · area` | 2 d |
+| 2.1 | Edges | Each edge discretised once, shared by both faces (watertight). Line: 1 segment; circle/ellipse: step `θ = 2·acos(1 − tol/r)`; B-spline: adaptive bisection on chord error and tangent angle **Done** (`edges.rs`) | 3 d |
+| 2.2 | Surface evaluation and inversion | Point, derivatives, normal for `Plane`, `Cylinder`, `Cone`, `Sphere`, `Torus` (closed form), `Revolution`, `Extrusion`, `BSpline` (de Boor, Newton with a grid start). Periodic seams, poles (`Loop::Vertex`, sphere/cone apex) **Done** (`surface.rs`, `uv.rs`; seams by unwrapping, poles traversed on the face's side) | 4–5 d |
+| 2.3 | Planar faces | Project the loops, polygon with holes: ear clipping with hole bridges, or CDT (crate `spade` + `robust`, MIT/Apache; check licence and Wasm size) **Done**: CDT with `spade` 2.15 (MIT/Apache, pure Rust, `default-features = false`) | 2–3 d |
+| 2.4 | Curved faces | UV grid by chord error (analytic: from the radii; NURBS: second derivatives / control net), trim against the UV loops, CDT with the edge points as constrained edges, refine where the 3D deviation at triangle/edge midpoints exceeds `tol`, anisotropic scaling of u/v. Dense NURBS faces: `nurbs-grid-mesh` **Done** (`face.rs`; CDT in arc-length coordinates, refinement by the foot on the surface; crossing loops split on both sides; `nurbs-grid-mesh` not used) | 8–10 d |
+| 2.5 | Output | `Mesh`: normals exact from the surface (orientation by `same_sense`), `tri_tags`, `tri_faces`, `edge_segments`, `edge_ids`; coarse/fine by `tol` (plan 7.2) **Done** (`lib.rs`; coarse/fine is the caller's `tol`) | 2 d |
+| 2.6 | Checks | Every inner edge used twice, consistent orientation, no degenerate triangles; mesh volume against exact volume (`mass_props`) within `tol · area` **Done** (`check.rs`, `cad_tess::check`, `MeshCheck::volume_ok`; `tests/kernels.rs`, `examples/corpus.rs`) | 2 d |
 | 2.7 | Comparison with SMLib | `diff-kernels --mesh` or a test: mesh volume, Hausdorff distance to the SMLib mesh, watertightness, triangle count, time. SMLib's mesh misses the tolerance in triangle centres on twisted free-form faces (comment in `sc_tessellate`): compare against the exact surface, not only against SMLib | 3 d |
 | 2.8 | Integration | `kernel-solidcore::tessellate` = `brep()` + `cad-tess`. Optional: `kernel-smlib` with `cad-tess` behind a switch, for a direct comparison in the UI | 1–2 d |
 
