@@ -1,6 +1,6 @@
 # Plan: switch to solidcore, no C++ in the build
 
-As of 2026-10-31, solidcore pin `bba8d87`. Status and measurements: `docs/solidcore-migration.md`.
+As of 2026-11-01 (phases 0 and 2 done, phase 1 except one upstream item), solidcore pin `bba8d87`. Status and measurements: `docs/solidcore-migration.md`.
 
 ## Goal
 
@@ -135,6 +135,33 @@ per direction on doubly curved faces; `torus(50, 5)` at 0.05 7.1 k triangles aga
 analytic surfaces that cannot coincide independently of the mesher; `check` rejects inside-out
 meshes and NaN positions; solidcore's fillet and shell failures of `f09b` and `f13` say why.
 
+Tester findings on tasks G and H (`docs/solidcore-migration.md`), fixed: no folded triangles
+(rows over every run of a ruled band, a fold check after the refinement with repair by edge
+flips, folds left an error), rings about poles, no fins at grazing cusps; vertices checked
+against solidcore's own B-rep in `diff-kernels --mesh`; contact within the tolerance over the
+common extent; then (task H, 2026-11-01) the edge flips keep the chord tolerance (`f12` at 0.01:
+0.0136 → 0.0100 mm), planes at an angle meeting at a rim are line contact (was "face contact
+20 mm²"), B-rep edges sampled by chord sag in `surface_distance` (a false `differ` on a 762 mm
+helical seam), `check().inside_out` per piece only against the pieces around it (4.4 → 0.56 s
+for a cube minus 125 balls).
+
+**Phase 2 closed 2026-11-01** (after task H, `MCAD_KERNEL=solidcore`, debug build), "Done when"
+check by check:
+
+| Check | Result |
+| --- | --- |
+| all models mesh watertight | met: `diff-kernels --mesh` over the 101 corpus files: at 0.05 100 `ok`, 1 without a B-rep result (`f03`), solidcore watertight 100 / 100, chord max 0.0500 mm, 175 k triangles (SMLib 272 k, watertight 97); at 0.01 99 `ok`, 1 `differ` (`f02`: 0.0311 mm from SMLib's mesh beyond SMLib's own distance where 0.0291 is allowed, on its sweep that folds over itself; solidcore's chord there within 0.010), watertight 100 / 100, chord max 0.0100 mm, 608 k triangles (SMLib 708 k, watertight 95). Nodes: same 2596, unsupported 3, blocked 3, differ 2, failed 0 (unchanged since the end of phase 1) |
+| `tests/openscad-compat/compare.py` | met: 36 / 36 files match (re-run 2026-11-01) |
+| `tests/everyday/check.sh` | met: 19 models, 0 with problems (check, STEP part volumes, STL and STEP export; re-run 2026-11-01, 211 s) |
+| STL/3MF export | met at task F (see the status above), not re-run; the STL export of every everyday model is part of `check.sh` |
+| section view | met at task F (87 of 88 like SMLib, `variable_radius` unsupported), not re-run |
+| render snapshots | no stored reference images; compared at task F (pixels differing median 0.06 %, at most 0.75 %), not re-run |
+
+So phase 2 is done; what stays open (the inner-vertex excuse near an edge, `f02` at 0.01,
+staircase line contacts, `twist_many` at 0.05, performance, the SMLib-only items) is listed in
+`docs/solidcore-migration.md`, "Known points for phase 5". To resume the work without the history
+of these rounds: `docs/solidcore-handover.md`.
+
 ## Phase 3: booleans (depends on upstream)
 
 24 nodes differ in topology and volume (0.1 % to 95 %) without an error: `hole_plate`, `vent_grille`,
@@ -157,6 +184,9 @@ meshes and NaN positions; solidcore's fillet and shell failures of `f09b` and `f
 | 4.4 | Desktop app with kernel selection | `crates/cad-desktop` |
 
 ## Phase 5: switch and removal (about 1 week)
+
+Open points carried over from phases 1 and 2: `docs/solidcore-migration.md`, "Known points for
+phase 5".
 
 **Gate** (all of them):
 

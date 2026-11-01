@@ -1,6 +1,7 @@
 # Migration to solidcore (plan 2.3, M8)
 
-Work plan up to the switch: [`solidcore-plan.md`](solidcore-plan.md).
+Work plan up to the switch: [`solidcore-plan.md`](solidcore-plan.md). Handover (state, how to build
+and test, open points, next steps): [`solidcore-handover.md`](solidcore-handover.md).
 
 As of: 2026-11-01 (phase 0 of the plan done; phase 1 done except a variable fillet with several radius laws; phase 2, the own tessellator `cad-tess`, done; see the plan) · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
 
@@ -381,6 +382,21 @@ volume per colour with both kernels for all 37 cases of `tests/color-review/case
 `tests/models/spec/multicolor.mcad`. Evaluation of all 101 files: SMLib 112 s, solidcore 109 s
 (debug build, dependencies `opt-level = 2`); solidcore is slower on `key_rack` (12.8 s vs 5.8 s),
 `mug`, `pen_box` and `wall_hook` (2×), faster on `text_sign` and `f11`.
+
+## Tester findings on task H (e66d726)
+
+The tester passed task H (`e66d726`, the fixes for task G) and found:
+
+| Finding | Fix |
+| --- | --- |
+| edge flips of the fold repair broke the chord tolerance, silently: a flip was taken if the new triangles faced the surface and had better angles, without measuring their distance from it, and `Stats` kept the deviation measured before the flips. `f12_shell_loft_square_circle` at 0.01: chord 0.0136 mm (0.0100 with flips off), `diff-kernels --mesh` `differ`; a twisted bar (`linear_extrude(height = 30, twist = 360) square([60, 2], center = true)`) at 0.05: 0.0496 → 0.0521 | a flip is rejected where the new triangles (centroid, and the three inner points near the tolerance) or the new edge's midpoint leave the surface by more than `tol` (or than the old pair did); after any flip the face's deviation is measured again on the final mesh. `f12` 0.0100, the twisted bar 0.0496 (test from both kernels' B-reps, chord sampled independently by `surface_distance`) |
+| false face contact of planes at an angle meeting at a rim (from `cc6f651`): `common_gap` sampled mesh vertices only, and for planar faces only the shared edge's vertices lie over the other face, so the gap was 0 and the projected overlap counted: a cube tilted 30° on a plate's rim "face contact 20 mm²", ok, both kernels (also 45°, 60°, 80°; 10° right) | the gap along the normal from one plane to the other is measured over the whole intersection of the outlines `plane_contact` computes (linear in the plane: its outline points suffice); beyond `tol` anywhere there it is line contact. Tests for 10° to 80° (SMLib) and 30° with both kernels; the plate tilted 0.005°, the cone in its hole and the ball in its seat stay face contact |
+| `diff-kernels --mesh` false `differ` on long free-form edges: `edge_vertex_gap` against 512 segments per free-form edge, 0.0608 mm on the 762 mm helical seam of `linear_extrude(height = 100, twist = 3600, scale = 0.2) circle(20)` at 0.05 (0.0000 against the exact curve) | ellipses and B-splines sampled as the tessellator's edges to a chord sag of 1e-4 mm (circles were already): 1.0e-4 mm, `ok` (test) |
+| `check().inside_out` quadratic in the pieces: `cube(60)` minus 125 balls 3.6 s on every solidcore tessellation | only pieces whose bounding box holds the test point are summed (a closed piece has winding number 0 outside its box): 4.4 → 0.56 s for that mesh (373 k triangles) |
+| documentation: the forced-fold rule "height < 2 · sag" is not limited to coarse tolerances; `--mesh-tol` range missing in `diff-kernels --help` | manual 17 says what the code does; the help text gives 0.0001 to 10 |
+
+Left open (see "Known points for phase 5"): the inner-vertex excuse near an edge, staircase line
+contacts, `f02`'s Hausdorff excess at 0.01 and the SMLib-only items.
 
 ## Tester findings on task G (d943031)
 
@@ -784,6 +800,31 @@ solidcore 15.7 s of which 13.2 s are `brep` (the conversion runs unoptimised in 
 `kernel-solidcore` is a workspace crate; `cad-tess` itself about 2.5 s). Hausdorff distance
 3.07 mm in `variable_radius` and 2.6 mm in `f11`, whose roots differ (unsupported fillet; SMLib
 fails); where the roots are the same, within the limit everywhere.
+
+After the findings on task H (2026-11-01, same corpus, debug build): at 0.05 the same figures
+(100 `ok`, chord max 0.0500, 175 k triangles; time SMLib 13.3 s, solidcore 16.3 s of which
+14.1 s `brep`); at 0.01 (`--mesh-tol 0.01`) 99 `ok`, 1 `differ` (`f02`, see "Known points for
+phase 5"), 1 without a B-rep result; watertight SMLib 95, solidcore 100; chord error max SMLib
+0.045 mm, solidcore 0.0100 (was 0.0136 in `f12` before the flips kept the tolerance); triangles
+SMLib 708 k, solidcore 608 k; time SMLib 24.9 s, solidcore 26.0 s (14.5 s `brep`).
+
+## Known points for phase 5
+
+Open at the end of phase 2 (2026-11-01, after the findings on task H). None is a silent wrong
+result in the corpus; each is a limitation, a check that could be stricter, or an SMLib weakness
+that goes away with SMLib.
+
+| Point | State |
+| --- | --- |
+| variable-radius fillet with different radius laws on several edges (`variable_radius`: the 3 `unsupported` and 3 `blocked` nodes) | upstream: solidcore's `FilletSession` takes one law for all edges, the executive's per-edge laws (`var_rad_laws`) are not public. `Unsupported`, never wrong |
+| the 2 `differ` nodes | `sketch_cable_duct`: solidcore's union of three extrusions loses faces (phase 3, Booleans upstream); `f11`: SMLib's Boolean fails, solidcore's not (a gain) |
+| `f02_union_cylinder_sweep` at 0.01: `diff-kernels --mesh` `differ`, distance to SMLib's mesh beyond SMLib's own 0.0311 mm against the limit 0.0291 (at 0.05 `ok`) | its sweep folds over itself; solidcore's mesh is within the tolerance of its own surfaces (chord ≤ 0.010), the excess is measured against SMLib's mesh on the folding part. Not fixed: needs a closer look at which mesh is off there, or a local allowance where a surface turns over |
+| a vertex inside a face that lies off its surface is excused up to its distance from the face's B-rep edges (`compare.rs`, `inner_vertex_gap`: a vertex on the chord between edge points where loops cross at a cusp) | a vertex displaced near an edge passes `diff-kernels --mesh` (tester H finding 4). Stricter: excuse only vertices that are split points of crossing loops (`FaceMesh::splits`, not in the output mesh today) |
+| line contacts of staircase-like outlines (tester H finding 6) | contact kind and contact curve come from the mesh there; not analysed further in this round |
+| forced folds: a fold on a boundary edge whose chord sags more than half the triangle's height is kept (`Stats::forced_folds`) at any tolerance, not only at coarse ones | at 0.05 and 0.01 none in the corpus, at 0.5 `planter` 24; manual 17 states the rule as the code applies it |
+| SMLib only (gone with SMLib, phase 5.3): an island in a void meshed inside out; a ball in a seat 0.05 larger reported as line contact at distance 0 (solidcore: gap); a wall below one ulp | nothing to do in mcad |
+| `linear_extrude(height = 300, twist = 7200) square([30, 2], center = true)` (`twist_many`): `render` with solidcore fails loudly at 0.05 ("face 1: tolerance 0.05 mm not reached (3.186e-1 mm after the refinement)", exit 3), export at 0.01 works (0.0095 mm) | the refinement from the coarse grid of 0.05 does not converge on that strongly twisted B-spline within its passes; loud, never a wrong mesh; to look at: grid lines from the turn of the surface normal as well as from the chord |
+| performance: evaluation about 1.5–1.8 × SMLib in a debug build (the adapter's Boolean checks, plan 3.4); in `diff-kernels --mesh` the B-rep conversion is most of solidcore's mesh time (14.1 of 16.3 s at 0.05: `kernel-solidcore` is a workspace crate and runs unoptimised in a debug build; `cad-tess` itself about 2.5 s) | measure again in a release build for the phase 5 gate (performance factor) |
 
 ## Pin routine (bumping solidcore)
 

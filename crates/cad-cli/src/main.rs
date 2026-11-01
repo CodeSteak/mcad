@@ -336,7 +336,7 @@ pub(crate) enum Cmd {
         /// volume, distance to the exact surfaces and to each other, triangles, time.
         #[arg(long)]
         mesh: bool,
-        /// Chordal tolerance of `--mesh` in mm.
+        /// Chordal tolerance of `--mesh` in mm (0.0001 to 10).
         #[arg(long, value_name = "MM", default_value_t = 0.05, requires = "mesh")]
         mesh_tol: f64,
     },
