@@ -180,19 +180,43 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
     let mut on_edges: HashMap<u32, f64> = HashMap::new();
     let mut inner_seen: std::collections::HashSet<u32> = Default::default();
     let mut out = SurfaceDistance { per_triangle: vec![0.0; mesh.indices.len() / 3], ..Default::default() };
+    // the corners on their surfaces; a corner off the surface is seeded from its neighbours'
+    // parameters as well (on a surface that folds over itself the unseeded inversion can land
+    // on another branch), twice over the triangles
+    for round in 0..3 {
+        for t in 0..mesh.indices.len() / 3 {
+            let Some(g) = mesh.tri_faces.get(t).and_then(|f| geoms.get(f)) else { continue };
+            let face = mesh.tri_faces[t];
+            let tri = triangle(mesh, t);
+            let vs = [0, 1, 2].map(|k| mesh.indices[3 * t + k]);
+            if round == 0 {
+                for k in 0..3 {
+                    corner.entry((face, vs[k])).or_insert_with(|| {
+                        let uv = g.invert(tri[k], None);
+                        (uv, (g.eval(uv) - tri[k]).length())
+                    });
+                }
+                continue;
+            }
+            for k in 0..3 {
+                if corner[&(face, vs[k])].1 <= eps {
+                    continue;
+                }
+                for j in (0..3).filter(|j| *j != k) {
+                    let uv = g.project(tri[k], corner[&(face, vs[j])].0);
+                    let d = (g.eval(uv) - tri[k]).length();
+                    if d < corner[&(face, vs[k])].1 {
+                        corner.insert((face, vs[k]), (uv, d));
+                    }
+                }
+            }
+        }
+    }
     for t in 0..mesh.indices.len() / 3 {
         let Some(g) = mesh.tri_faces.get(t).and_then(|f| geoms.get(f)) else { continue };
         let face = mesh.tri_faces[t];
         let tri = triangle(mesh, t);
-        let cs: Vec<(DVec2, f64)> = (0..3)
-            .map(|k| {
-                let v = mesh.indices[3 * t + k];
-                *corner.entry((face, v)).or_insert_with(|| {
-                    let uv = g.invert(tri[k], None);
-                    (uv, (g.eval(uv) - tri[k]).length())
-                })
-            })
-            .collect();
+        let cs: Vec<(DVec2, f64)> = (0..3).map(|k| corner[&(face, mesh.indices[3 * t + k])]).collect();
         for (k, c) in cs.iter().enumerate() {
             out.vertex_gap = out.vertex_gap.max(c.1);
             let v = mesh.indices[3 * t + k];
