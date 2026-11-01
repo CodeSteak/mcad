@@ -96,10 +96,6 @@ pub struct SurfaceDistance {
     /// face in the B-rep: such a vertex is a point of an edge (or of a chord between two, where loops cross
     /// at a cusp), however far that edge lies off the face's surface (`vertex_gap`).
     pub edge_vertex_gap: f64,
-    /// The vertices inside their face that `inner_vertex_gap` finds off the surface (more than
-    /// 1e-6 of the size), with that distance: another mesh's local gap may excuse them
-    /// ([`local_allowance`]).
-    pub inner_off: Vec<(DVec3, f64)>,
     /// Per triangle (in the mesh's order) the largest sampled distance to the surface (0 for
     /// triangles of a face missing in the B-rep): the local allowance of another mesh's
     /// distance to this one ([`mesh_excess`]).
@@ -191,7 +187,6 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
     let edges = Bvh::new(&segs);
     // per (face, vertex): the distance from the face's own edges
     let mut on_edges: HashMap<(u32, u32), f64> = HashMap::new();
-    let mut inner_seen: std::collections::HashSet<u32> = Default::default();
     let mut out = SurfaceDistance { per_triangle: vec![0.0; mesh.indices.len() / 3], ..Default::default() };
     // the corners on their surfaces; a corner off the surface is seeded from its neighbours'
     // parameters as well (on a surface that folds over itself the unseeded inversion can land
@@ -247,9 +242,6 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
                 // cusp are split there, inside the face's triangles): the edge's gap
                 let d = if c.1 > eps { c.1.min(to_edges()) } else { c.1 };
                 out.inner_vertex_gap = out.inner_vertex_gap.max(d);
-                if d > 10.0 * eps && inner_seen.insert(v) {
-                    out.inner_off.push((tri[k], d));
-                }
             } else {
                 let d = to_edges();
                 if d.is_finite() {
@@ -476,19 +468,6 @@ pub fn mesh_distance(from: &Mesh, to: &Mesh) -> Distance {
         }
     }
     d.finish()
-}
-
-/// Per point the allowance (one per triangle of `to`, in mesh order; missing ones count 0) of
-/// the nearest triangle of `to`, and the distance to it.
-pub fn local_allowance(points: &[DVec3], to: &Mesh, to_allow: &[f64]) -> Vec<(f64, f64)> {
-    let Some(g) = Bvh::new(to) else { return vec![(0.0, f64::INFINITY); points.len()] };
-    points
-        .iter()
-        .map(|p| {
-            let (d, t) = g.nearest(*p);
-            (to_allow.get(t).copied().unwrap_or(0.0), d)
-        })
-        .collect()
 }
 
 /// Like [`mesh_distance`], less what the meshes may lie apart where they are: at each sample

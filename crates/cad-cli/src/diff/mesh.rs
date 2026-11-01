@@ -16,10 +16,10 @@
 //! volume within `tol · area`, its chord error (the distance to the surface beyond that of
 //! the triangles' corners) within [`SURFACE_SLACK`] · `tol`, and its vertices where its own
 //! B-rep puts them, within `tol`: inside a face on the face's surface, on a face's boundary on
-//! the B-rep's edges (which may lie off the face: the fitted end of a sweep; loops crossing at
-//! a cusp are split on the chords between edge points; where the bodies are the same, a
-//! vertex inside a face may be off by as much as SMLib's mesh is next to it: such a split
-//! between edges that lie apart). Where the root node is `same` (both
+//! the B-rep's edges of its face (which may lie off the face; loops crossing at a cusp are
+//! split on the chords between edge points), whatever the root node's verdict and without
+//! SMLib's gaps (whose chord error would excuse displaced vertices). Where the root node is
+//! `same` (both
 //! B-reps describe the same body) the distance to SMLib's mesh, less SMLib's own distance to
 //! its surfaces where each sample is (`cad_tess::mesh_excess`), must also stay within
 //! (1 + [`SURFACE_SLACK`]) · `tol` plus [`KERNEL_SLACK`] of the size: only SMLib's distance
@@ -155,12 +155,10 @@ pub const KERNEL_SLACK: f64 = 1e-4;
 
 /// The metrics of one kernel's parts, all their meshes in one, and per triangle of it the
 /// sampled distance to the kernel's exact surfaces (0 without a B-rep).
-fn metrics(p: &Parts, tol: f64) -> (Metrics, Mesh, Vec<f64>, Vec<(glam::DVec3, f64)>) {
+fn metrics(p: &Parts, tol: f64) -> (Metrics, Mesh, Vec<f64>) {
     let mut m = Metrics { parts: p.parts.len(), watertight: true, ..Default::default() };
     let mut all = Mesh::default();
     let mut gaps: Vec<f64> = Vec::new();
-    // vertices inside a face off its surface, and how far
-    let mut inner_off = Vec::new();
     let (mut exact, mut solid_vol, mut solid_area) = (0.0, 0.0, 0.0);
     let mut have_exact = true;
     let mut surface: Option<(Distance, Distance)> = None;
@@ -206,7 +204,6 @@ fn metrics(p: &Parts, tol: f64) -> (Metrics, Mesh, Vec<f64>, Vec<(glam::DVec3, f
                 None => (d.distance, d.chord),
             });
             gaps.extend_from_slice(&d.per_triangle);
-            inner_off.extend_from_slice(&d.inner_off);
         } else {
             gaps.resize(gaps.len() + mesh.indices.len() / 3, 0.0);
         }
@@ -218,7 +215,7 @@ fn metrics(p: &Parts, tol: f64) -> (Metrics, Mesh, Vec<f64>, Vec<(glam::DVec3, f
     }
     m.surface = surface.map(|s| s.0.into());
     m.chord = surface.map(|s| s.1.into());
-    (m, all, gaps, inner_off)
+    (m, all, gaps)
 }
 
 /// `e` with `who: ` in front, unless it already starts with it (kernel errors name their kernel).
@@ -236,8 +233,8 @@ fn append(all: &mut Mesh, m: &Mesh) {
 /// Compares the meshes of both kernels (see the module docs). `same`: the root node's verdict
 /// is `same` (else the bodies differ and so may the meshes: no note on the Hausdorff distance).
 pub fn compare(a: &Parts, b: &Parts, tol: f64, same: bool) -> Comparison {
-    let (ma, mesh_a, gaps_a, _) = metrics(a, tol);
-    let (mb, mesh_b, _, off_b) = metrics(b, tol);
+    let (ma, mesh_a, gaps_a) = metrics(a, tol);
+    let (mb, mesh_b, _) = metrics(b, tol);
     let mut c = Comparison { tol, verdict: "ok", ..Default::default() };
     if a.parts.is_empty() && b.parts.is_empty() {
         // no B-rep parts (2D result, a mesh)
@@ -270,23 +267,9 @@ pub fn compare(a: &Parts, b: &Parts, tol: f64, same: bool) -> Comparison {
             c.notes.push(format!("solidcore: chord {:.4} mm off the surface at {:?}", s.max, s.at));
         }
         // the vertices against solidcore's own B-rep: inside a face on its surface, on a
-        // face's boundary on the B-rep's edges (which may lie off the face: a fitted sweep end)
-        // where both B-reps describe the same body, SMLib's own gap next to such a vertex
-        // excuses it there (loops crossing at a cusp split on chords between edges that lie
-        // apart: `f02`, 0.46 mm in solidcore's mesh, 0.57 mm in SMLib's)
-        let smlib = same && ma.error.is_none() && !mesh_a.indices.is_empty();
-        let pts: Vec<glam::DVec3> = off_b.iter().map(|(p, _)| *p).collect();
-        let allow = if smlib { cad_tess::local_allowance(&pts, &mesh_a, &gaps_a) } else { Vec::new() };
-        let inner = off_b
-            .iter()
-            .enumerate()
-            .map(|(i, (_, d))| match allow.get(i) {
-                Some((a, dist)) if *dist <= a + tol => d - a,
-                _ => *d,
-            })
-            .fold(0.0, f64::max);
-        if inner > tol {
-            c.notes.push(format!("solidcore: a vertex inside a face {inner:.4} mm off its surface"));
+        // face's boundary on its edges (which may lie off the face)
+        if mb.inner_vertex_gap > tol {
+            c.notes.push(format!("solidcore: a vertex inside a face {:.4} mm off its surface", mb.inner_vertex_gap));
         }
         if mb.edge_vertex_gap > tol {
             c.notes.push(format!(

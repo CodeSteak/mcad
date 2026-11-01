@@ -39,7 +39,7 @@ mod surface;
 mod uv;
 
 pub use check::{MeshCheck, check};
-pub use compare::{Distance, SurfaceDistance, local_allowance, mesh_distance, mesh_excess, surface_distance};
+pub use compare::{Distance, SurfaceDistance, mesh_distance, mesh_excess, surface_distance};
 
 /// Settings of a tessellation.
 #[derive(Debug, Clone, Copy, PartialEq)]
