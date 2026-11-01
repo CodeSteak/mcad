@@ -394,6 +394,31 @@ fn diff_kernels_brep() {
     assert!(b.get("differ").is_none() && b.get("unsupported").is_none(), "{b}");
 }
 
+/// Contact kinds with both kernels: a ball in its seat (concentric spheres) and a cone in a hole
+/// of nearly its radius touch over an area, a torus on a plate along a line.
+#[cfg(feature = "solidcore")]
+#[test]
+fn contact_kinds_with_both_kernels() {
+    let dir = tempfile::tempdir().unwrap();
+    for (src, want) in [
+        ("assert_touches(tol = 0.01) { difference() { cube(20, center = true); sphere(5); } sphere(5); }\n", "face"),
+        (
+            "assert_touches(tol = 0.01) { difference() { cylinder(r = 10, h = 20); translate([0, 0, -1]) cylinder(r = 5.002, h = 22); } cylinder(r1 = 5, r2 = 5.002, h = 20); }\n",
+            "face",
+        ),
+        ("assert_touches(contact = \"any\") { torus(20, 2); translate([-30, -30, 2]) cube([60, 60, 1]); }\n", "line"),
+    ] {
+        let f = dir.path().join("touch.mcad");
+        std::fs::write(&f, src).unwrap();
+        let f = f.display().to_string();
+        for k in ["smlib", "solidcore"] {
+            let v = json(&["check", &f, "--kernel", k], 0);
+            let p = &v["asserts"][0]["pairs"][0];
+            assert_eq!(p["contact"], want, "{k}: {src}: {p}");
+        }
+    }
+}
+
 /// `diff-kernels --mesh` (plan 2.7): solidcore's meshes watertight, within the tolerance of the
 /// exact surfaces and as close to SMLib's as both are to the surfaces.
 #[cfg(feature = "solidcore")]
