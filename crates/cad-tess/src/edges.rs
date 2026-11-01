@@ -43,64 +43,7 @@ pub(crate) fn discretise(brep: &Brep, tol: f64, angle: f64) -> EdgePolys {
     let mut out = EdgePolys { points: brep.vertices.clone(), edges: Vec::with_capacity(brep.edges.len()) };
     for e in &brep.edges {
         let (a, b) = (brep.vertices[e.start as usize], brep.vertices[e.end as usize]);
-        let inner: Vec<DVec3> = match &e.curve {
-            Curve::Line { .. } => Vec::new(),
-            Curve::Circle { frame, r } => {
-                let (x, y) = (frame.x, frame.y());
-                let ang = |p: DVec3| {
-                    let d = p - frame.origin;
-                    d.dot(y).atan2(d.dot(x))
-                };
-                let a0 = ang(a);
-                let mut a1 = ang(b);
-                while a1 <= a0 + 1e-12 {
-                    a1 += TAU;
-                }
-                let n = steps(a1 - a0, step_angle(*r, tol, angle)).max(if e.start == e.end { 3 } else { 1 });
-                (1..n)
-                    .map(|i| {
-                        let t = a0 + (a1 - a0) * i as f64 / n as f64;
-                        frame.origin + (x * t.cos() + y * t.sin()) * *r
-                    })
-                    .collect()
-            }
-            Curve::Ellipse { frame, r1, r2 } => {
-                let (x, y) = (frame.x, frame.y());
-                let ang = |p: DVec3| {
-                    let d = p - frame.origin;
-                    (d.dot(y) / r2).atan2(d.dot(x) / r1)
-                };
-                let a0 = ang(a);
-                let mut a1 = ang(b);
-                while a1 <= a0 + 1e-12 {
-                    a1 += TAU;
-                }
-                let f = |t: f64| {
-                    let (s, c) = t.sin_cos();
-                    (frame.origin + x * (c * r1) + y * (s * r2), y * (c * r2) - x * (s * r1))
-                };
-                let n = steps(a1 - a0, std::f64::consts::FRAC_PI_4);
-                let breaks: Vec<f64> = (0..=n).map(|i| a0 + (a1 - a0) * i as f64 / n as f64).collect();
-                adaptive(&f, &breaks, tol, angle).into_iter().map(|t| f(t).0).collect()
-            }
-            Curve::BSpline(c) => {
-                let cv = bspline::Curve::new(c);
-                let f = |t: f64| {
-                    let d = cv.eval_d(t);
-                    (d[0], d[1])
-                };
-                // each knot span in `degree` pieces at first (an S within a span)
-                let br = cv.breaks();
-                let mut breaks = vec![br[0]];
-                for w in br.windows(2) {
-                    let k = cv.degree.max(1);
-                    for i in 1..=k {
-                        breaks.push(w[0] + (w[1] - w[0]) * i as f64 / k as f64);
-                    }
-                }
-                adaptive(&f, &breaks, tol, angle).into_iter().map(|t| f(t).0).collect()
-            }
-        };
+        let inner = inner_points(&e.curve, a, b, e.start == e.end, tol, angle);
         let mut ids = Vec::with_capacity(inner.len() + 2);
         ids.push(e.start);
         for p in inner {
@@ -111,6 +54,69 @@ pub(crate) fn discretise(brep: &Brep, tol: f64, angle: f64) -> EdgePolys {
         out.edges.push(ids);
     }
     out
+}
+
+/// The points strictly between `a` and `b` of the polyline of `curve` within `tol` (a closed
+/// edge, `a == b`, gets at least three pieces).
+pub(crate) fn inner_points(curve: &Curve, a: DVec3, b: DVec3, closed: bool, tol: f64, angle: f64) -> Vec<DVec3> {
+    match curve {
+        Curve::Line { .. } => Vec::new(),
+        Curve::Circle { frame, r } => {
+            let (x, y) = (frame.x, frame.y());
+            let ang = |p: DVec3| {
+                let d = p - frame.origin;
+                d.dot(y).atan2(d.dot(x))
+            };
+            let a0 = ang(a);
+            let mut a1 = ang(b);
+            while a1 <= a0 + 1e-12 {
+                a1 += TAU;
+            }
+            let n = steps(a1 - a0, step_angle(*r, tol, angle)).max(if closed { 3 } else { 1 });
+            (1..n)
+                .map(|i| {
+                    let t = a0 + (a1 - a0) * i as f64 / n as f64;
+                    frame.origin + (x * t.cos() + y * t.sin()) * *r
+                })
+                .collect()
+        }
+        Curve::Ellipse { frame, r1, r2 } => {
+            let (x, y) = (frame.x, frame.y());
+            let ang = |p: DVec3| {
+                let d = p - frame.origin;
+                (d.dot(y) / r2).atan2(d.dot(x) / r1)
+            };
+            let a0 = ang(a);
+            let mut a1 = ang(b);
+            while a1 <= a0 + 1e-12 {
+                a1 += TAU;
+            }
+            let f = |t: f64| {
+                let (s, c) = t.sin_cos();
+                (frame.origin + x * (c * r1) + y * (s * r2), y * (c * r2) - x * (s * r1))
+            };
+            let n = steps(a1 - a0, std::f64::consts::FRAC_PI_4);
+            let breaks: Vec<f64> = (0..=n).map(|i| a0 + (a1 - a0) * i as f64 / n as f64).collect();
+            adaptive(&f, &breaks, tol, angle).into_iter().map(|t| f(t).0).collect()
+        }
+        Curve::BSpline(c) => {
+            let cv = bspline::Curve::new(c);
+            let f = |t: f64| {
+                let d = cv.eval_d(t);
+                (d[0], d[1])
+            };
+            // each knot span in `degree` pieces at first (an S within a span)
+            let br = cv.breaks();
+            let mut breaks = vec![br[0]];
+            for w in br.windows(2) {
+                let k = cv.degree.max(1);
+                for i in 1..=k {
+                    breaks.push(w[0] + (w[1] - w[0]) * i as f64 / k as f64);
+                }
+            }
+            adaptive(&f, &breaks, tol, angle).into_iter().map(|t| f(t).0).collect()
+        }
+    }
 }
 
 /// Interior parameters (increasing, ends excluded) of an adaptive polyline of `f` (point,

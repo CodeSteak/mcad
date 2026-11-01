@@ -102,12 +102,14 @@ pub struct SurfaceDistance {
     pub per_triangle: Vec<f64>,
 }
 
-/// Segments per free-form edge for [`SurfaceDistance::edge_vertex_gap`].
-const EDGE_SAMPLES: usize = 512;
+/// Chord sag of the B-rep's edges sampled for [`SurfaceDistance::edge_vertex_gap`], mm: far
+/// below any tolerance (a fixed count per free-form edge, 512, was 0.06 mm off a helical seam
+/// of 762 mm, a false gap at 0.05).
+const EDGE_SAG: f64 = 1e-4;
 
-/// Segments of a full turn of radius `r` with a chord sag of 1e-4 mm.
+/// Segments of a full turn of radius `r` with a chord sag of [`EDGE_SAG`].
 fn arc_samples(r: f64) -> usize {
-    let step = 2.0 * (1.0 - 1e-4 / r.max(1e-4)).clamp(-1.0, 1.0).acos();
+    let step = 2.0 * (1.0 - EDGE_SAG / r.max(EDGE_SAG)).clamp(-1.0, 1.0).acos();
     ((std::f64::consts::TAU / step.max(1e-6)).ceil() as usize).clamp(16, 16384)
 }
 
@@ -167,14 +169,16 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
     for (ei, e) in brep.edges.iter().enumerate() {
         let (a, b) = (brep.vertices[e.start as usize], brep.vertices[e.end as usize]);
         use cad_kernel::brep::Curve;
-        // circles and ellipses: a chord sag of 1e-4 mm (a full circle of radius 300: 3900)
-        let n = match &e.curve {
-            Curve::Line { .. } => 1,
-            Curve::Circle { r, .. } => arc_samples(*r),
-            Curve::Ellipse { r1, r2, .. } => arc_samples(r1.max(*r2)),
-            _ => EDGE_SAMPLES,
+        // a chord sag of `EDGE_SAG` (a full circle of radius 300: 3900 segments; ellipses and
+        // B-splines adaptively, as the tessellator's edges)
+        let pts = match &e.curve {
+            Curve::Line { .. } => vec![a, b],
+            Curve::Circle { r, .. } => cad_kernel::brep::sample_edge(&e.curve, a, b, arc_samples(*r)),
+            _ => {
+                let inner = crate::edges::inner_points(&e.curve, a, b, e.start == e.end, 2.0 * EDGE_SAG, 0.1);
+                std::iter::once(a).chain(inner).chain(std::iter::once(b)).collect()
+            }
         };
-        let pts = cad_kernel::brep::sample_edge(&e.curve, a, b, n);
         for w in pts.windows(2) {
             let k = (segs.positions.len() / 3) as u32;
             for p in [w[0], w[1]] {

@@ -521,3 +521,17 @@ fn flips_keep_the_tolerance_smlib() {
 fn flips_keep_the_tolerance_solidcore() {
     flips_keep_the_tolerance(kernel_solidcore::SolidcoreKernel::new, "solidcore");
 }
+
+/// The B-rep's edges are sampled by their chord sag for `edge_vertex_gap`, not by a fixed
+/// count: the helical seam of a twisted extrusion (10 turns, 762 mm) against 512 segments was
+/// 0.061 mm from the mesh's own vertices on it, a false gap at 0.05.
+#[test]
+fn long_free_form_edges_are_sampled_finely() {
+    let src = "linear_extrude(height = 100, twist = 3600, scale = 0.2) circle(20);\n";
+    with_part(kernel_smlib::SmlibKernel::new(), "spec/helix.mcad", Some(src), |k, s| {
+        let brep = k.brep(s).unwrap();
+        let m = cad_tess::tessellate(&brep, 0.05).unwrap();
+        let d = cad_tess::surface_distance(&brep, &m);
+        assert!(d.edge_vertex_gap <= 1e-3, "edge vertex gap {}", d.edge_vertex_gap);
+    });
+}
