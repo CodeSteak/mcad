@@ -160,25 +160,40 @@ fn inverted_piece(tris: &[[u32; 3]], ids: &[u32], pos: &impl Fn(u32) -> DVec3) -
             }
         }
     }
-    let piece: Vec<u32> = tris.iter().map(|t| find(&mut parent, ids[t[0] as usize])).collect();
-    let mut volume: HashMap<u32, f64> = HashMap::new();
-    for (t, p) in tris.iter().zip(&piece) {
-        let [a, b, c] = t.map(pos);
-        *volume.entry(*p).or_default() += a.dot(b.cross(c)) / 6.0;
+    // per piece its volume, bounding box and triangles
+    struct Piece {
+        volume: f64,
+        lo: DVec3,
+        hi: DVec3,
+        tris: Vec<usize>,
     }
-    if volume.len() < 2 {
+    let mut pieces: HashMap<u32, Piece> = HashMap::new();
+    for (k, t) in tris.iter().enumerate() {
+        let id = find(&mut parent, ids[t[0] as usize]);
+        let [a, b, c] = t.map(pos);
+        let p = pieces.entry(id).or_insert(Piece {
+            volume: 0.0,
+            lo: DVec3::splat(f64::INFINITY),
+            hi: DVec3::splat(f64::NEG_INFINITY),
+            tris: Vec::new(),
+        });
+        p.volume += a.dot(b.cross(c)) / 6.0;
+        p.lo = p.lo.min(a).min(b).min(c);
+        p.hi = p.hi.max(a).max(b).max(c);
+        p.tris.push(k);
+    }
+    if pieces.len() < 2 {
         return false;
     }
-    volume.iter().filter(|(_, v)| **v < 0.0).any(|(id, _)| {
-        let Some(k) = piece.iter().position(|p| p == id) else { return false };
-        let [a, b, c] = tris[k].map(pos);
+    pieces.iter().filter(|(_, p)| p.volume < 0.0).any(|(id, piece)| {
+        let [a, b, c] = tris[piece.tris[0]].map(pos);
         let q = (a + b + c) / 3.0;
-        // winding number of the other pieces (solid angles, Van Oosterom & Strackee)
+        // winding number of the other pieces (solid angles, Van Oosterom & Strackee); a closed
+        // piece whose box does not hold `q` adds nothing (a cube minus 125 balls: 3.6 s without
+        // this filter)
         let mut w = 0.0;
-        for (t, p) in tris.iter().zip(&piece) {
-            if p == id {
-                continue;
-            }
+        let around = pieces.iter().filter(|(o, p)| *o != id && q.cmpge(p.lo).all() && q.cmple(p.hi).all());
+        for t in around.flat_map(|(_, p)| p.tris.iter().map(|k| tris[*k])) {
             let [x, y, z] = t.map(|i| pos(i) - q);
             let (lx, ly, lz) = (x.length(), y.length(), z.length());
             let num = x.dot(y.cross(z));
