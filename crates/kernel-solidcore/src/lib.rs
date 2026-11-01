@@ -2136,8 +2136,10 @@ mod imp {
 
         /// The neutral B-rep meshed by `cad-tess` (solidcore has no tessellator, plan 2.8). A
         /// face that cannot be meshed, a tolerance too fine for the triangle budget, a face far
-        /// above the tolerance after the refinement, or an open mesh of closed solids is an
-        /// error, never a mesh with holes.
+        /// above the tolerance after the refinement, folded triangles, or a mesh of closed
+        /// solids that is not watertight (`MeshCheck::watertight`: open, non-manifold or
+        /// misoriented edges, duplicate triangles, inside out) is an error, never a mesh with
+        /// holes.
         pub fn tessellate(&mut self, s: &Shape, tol: f64) -> KResult<Mesh> {
             const OP: &str = "tessellate";
             let (b, _) = self.brep(s)?;
@@ -2154,16 +2156,16 @@ mod imp {
                         c.non_finite
                     )));
                 }
-                if closed && c.boundary_edges + c.misoriented_edges > 0 {
-                    return Err(KernelError::failed(format!(
-                        "solidcore: {OP}: the mesh of a closed solid is not watertight ({} open, {} misoriented edges)",
-                        c.boundary_edges, c.misoriented_edges
-                    )));
-                }
                 if closed && c.inside_out {
                     return Err(KernelError::failed(format!(
                         "solidcore: {OP}: the mesh of a closed solid faces inwards (volume {:.6} mm³)",
                         c.volume
+                    )));
+                }
+                if closed && !c.watertight() {
+                    return Err(KernelError::failed(format!(
+                        "solidcore: {OP}: the mesh of a closed solid is not watertight ({} open, {} non-manifold, {} misoriented edges, {} duplicate triangles)",
+                        c.boundary_edges, c.nonmanifold_edges, c.misoriented_edges, c.duplicate_triangles
                     )));
                 }
             }

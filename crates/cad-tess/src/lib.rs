@@ -104,6 +104,9 @@ pub struct Stats {
     pub unconverged: Vec<(FaceId, f64)>,
     /// The tolerance used: the requested one, at least [`MIN_REL_TOL`] of the model size.
     pub tol: f64,
+    /// Faces with triangles that face against their surface (folds) after the repair, and how
+    /// many; [`tessellate`] fails on any.
+    pub folded: Vec<(FaceId, usize)>,
 }
 
 #[derive(Debug, Clone)]
@@ -138,8 +141,8 @@ pub fn tessellate(brep: &Brep, tol: f64) -> Result<Mesh, TessError> {
 }
 
 impl Tessellation {
-    /// An error for the first failed face, or for a face whose deviation stayed above
-    /// [`MAX_MISS`] times the tolerance.
+    /// An error for the first failed face, for a face whose deviation stayed above
+    /// [`MAX_MISS`] times the tolerance, or for a face with folded triangles.
     pub fn strict(&self) -> Result<(), TessError> {
         if let Some((id, why)) = self.stats.failed_faces.first() {
             let n = self.stats.failed_faces.len();
@@ -148,7 +151,16 @@ impl Tessellation {
         }
         let t = self.stats.tol;
         if let Some((id, d)) = self.stats.unconverged.iter().find(|(_, d)| *d > MAX_MISS * t) {
-            return Err(TessError(format!("face {id}: tolerance {t} not reached ({d:.3e} mm after the refinement)")));
+            return Err(TessError(format!(
+                "face {id}: tolerance {} mm not reached ({d:.3e} mm after the refinement)",
+                mm(t)
+            )));
+        }
+        if let Some((id, n)) = self.stats.folded.first() {
+            return Err(TessError(format!(
+                "face {id}: {n} triangles facing against the surface at tolerance {} mm",
+                mm(t)
+            )));
         }
         Ok(())
     }
@@ -224,12 +236,16 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
                 format!("at most {} per face", opts.max_face_triangles)
             };
             return Err(TessError(format!(
-                "face {}: tolerance {tol} mm too fine: more than {n} triangles ({limit})",
-                f.id
+                "face {}: tolerance {} mm too fine: more than {n} triangles ({limit})",
+                f.id,
+                mm(tol)
             )));
         }
         if fm.deviation > tol {
             stats.unconverged.push((f.id, fm.deviation));
+        }
+        if fm.folds > 0 {
+            stats.folded.push((f.id, fm.folds));
         }
         if fm.tris.is_empty() {
             stats.failed_faces.push((f.id, "no triangles".into()));
@@ -277,6 +293,7 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
         }
     }
     apply_splits(&mut mesh, &mut vid, &splits);
+    drop_fins(&mut mesh);
     fill_missing_normals(&mut mesh);
     turn_normals_against(&mut mesh);
     for (i, ids) in ep.edges.iter().enumerate() {
@@ -351,6 +368,46 @@ fn apply_splits(m: &mut Mesh, vid: &mut Vec<Option<u32>>, splits: &[face::Split]
     }
 }
 
+/// Removes triangles that coincide with another one at the `f32` positions of the output: a
+/// pair facing each other is a fin (two faces each meshing the sliver between loops that cross
+/// at a cusp, where both faces end in one line: a crescent whose arcs touch), and taking both
+/// away leaves every edge with as many uses in each direction as before; a copy facing the
+/// same way goes alone.
+fn drop_fins(m: &mut Mesh) {
+    let n = m.indices.len() / 3;
+    let key = |m: &Mesh, i: u32| {
+        let k = 3 * i as usize;
+        [m.positions[k].to_bits(), m.positions[k + 1].to_bits(), m.positions[k + 2].to_bits()]
+    };
+    // corners by position, rotated to start at the smallest: equal for the same orientation
+    let mut by: HashMap<[[u32; 3]; 3], Vec<usize>> = HashMap::new();
+    for t in 0..n {
+        let c = [0, 1, 2].map(|k| key(m, m.indices[3 * t + k]));
+        let r = (0..3).min_by_key(|k| c[*k]).unwrap_or(0);
+        by.entry([c[r], c[(r + 1) % 3], c[(r + 2) % 3]]).or_default().push(t);
+    }
+    let mut drop = vec![false; n];
+    let empty = Vec::new();
+    for (k, ts) in &by {
+        let rev = [k[0], k[2], k[1]];
+        let os = by.get(&rev).unwrap_or(&empty);
+        if os.len() > ts.len() || (os.len() == ts.len() && rev < *k) {
+            continue; // the pair is handled from the other side
+        }
+        // pairs facing each other, then the copies facing the same way beyond the first
+        for t in os.iter().chain(&ts[..os.len()]).chain(ts.iter().skip(os.len() + 1)) {
+            drop[*t] = true;
+        }
+    }
+    if !drop.iter().any(|d| *d) {
+        return;
+    }
+    let keep: Vec<usize> = (0..n).filter(|t| !drop[*t]).collect();
+    m.indices = keep.iter().flat_map(|t| m.indices[3 * t..3 * t + 3].to_vec()).collect();
+    m.tri_tags = keep.iter().map(|t| m.tri_tags[*t]).collect();
+    m.tri_faces = keep.iter().map(|t| m.tri_faces[*t]).collect();
+}
+
 /// Diagonal of the box of the vertices and of a few points per edge (1 for an empty B-rep).
 fn model_size(brep: &Brep) -> f64 {
     let (mut lo, mut hi) = (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY));
@@ -367,6 +424,17 @@ fn model_size(brep: &Brep) -> f64 {
     }
     let d = if lo.x.is_finite() { (hi - lo).length() } else { 0.0 };
     if d > 0.0 { d } else { 1.0 }
+}
+
+/// A length in mm for messages: four significant digits (the tolerance raised to
+/// [`MIN_REL_TOL`] of the model size has many).
+fn mm(x: f64) -> String {
+    if !(x.is_finite() && x != 0.0) {
+        return format!("{x}");
+    }
+    let e = x.abs().log10().floor() as i32;
+    let s = 10f64.powi(3 - e);
+    format!("{}", (x * s).round() / s)
 }
 
 /// `a > b`; `false` if either is NaN (spelled out where a negation keeps NaN out).

@@ -8,8 +8,9 @@
 //!    curve, B-splines per knot span from the second derivatives; where one direction is
 //!    straight over part of the face only, lines there at most four times the other
 //!    direction's spacing; a straight direction gets rows only where the boundary runs across
-//!    the grid. Grid points inside the loops (even-odd per row) and not too near them are
-//!    inserted.
+//!    the grid; no ring about a pole nearer to it than the boundary's first point on a run
+//!    along the rings (`clear_poles`). Grid points inside the loops (even-odd per row) and not
+//!    too near them are inserted.
 //! 2. **CDT** in (u, v) mapped to grid steps (`Warp`: a step of either direction is the same
 //!    length, so Delaunay triangles are round for the chord error, long along a gently curved
 //!    direction and short across a tightly curved one), a straight direction squashed by four
@@ -23,6 +24,9 @@
 //!    second choice. Passes repeat while they add points (at most `max_passes`); each measures
 //!    only the triangles and edges that are new since the last. Boundary edges are never split
 //!    (their points are the edges', shared with the neighbour).
+//! 4. **Folds.** Every triangle is checked against the surface normal at its centroid, and one
+//!    facing against it (a fold) or more than 60° off the normal at a corner is repaired by
+//!    flipping an inner edge (`repair_folds`); folds left make `tessellate` fail.
 //!
 //! Planar faces take only the first two steps without grid (`σ` is affine, nothing to refine).
 
@@ -63,6 +67,8 @@ pub(crate) struct FaceMesh {
     /// The tolerance needs more triangles than allowed (`Params::max_triangles`): about this
     /// many when it stopped.
     pub too_fine: Option<usize>,
+    /// Triangles still facing against the surface after `repair_folds`.
+    pub folds: usize,
 }
 
 pub(crate) struct Params {
@@ -194,6 +200,10 @@ impl Builder<'_> {
     }
 }
 
+/// cos 60°: a triangle farther than this off the surface normal at one of its corners is
+/// refined (and straightened by flips after the refinement, see `repair_folds`).
+const SKEW_COS: f64 = 0.5;
+
 /// Factor by which a straight direction is squashed in the CDT's coordinates (see `Warp`).
 const SQUASH: f64 = 4.0;
 
@@ -324,6 +334,51 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
     out
 }
 
+/// No ring about a pole (a line of the parameter that is not the pole's free one) nearer the
+/// pole than the nearest point of a boundary run along the rings' direction (a corner blend's
+/// meridian edge): a triangle from the pole to that point and to a ring point at another
+/// height nearly contains the axis where the blend tapers to a needle, and faces up to 90° off
+/// the surface. The first ring goes through that point instead, so the fan from the pole
+/// reaches points of one height.
+fn clear_poles(loops: &[Vec<UvPt>], lines: &mut [Vec<f64>; 2], (lo, hi): (DVec2, DVec2)) {
+    for o in 0..2 {
+        let i = 1 - o;
+        let pick = |v: DVec2, k: usize| if k == 0 { v.x } else { v.y };
+        let span = (pick(hi, o) - pick(lo, o)).abs().max(1e-300);
+        // the poles the face's loops pass through (the surface's others are not the face's)
+        let mut poles: Vec<f64> =
+            loops.iter().flatten().filter_map(|q| q.pole.filter(|p| p.free == o)).map(|p| p.value).collect();
+        poles.sort_by(f64::total_cmp);
+        poles.dedup();
+        for pole in poles {
+            // the nearest point of a run along direction i (the other parameter constant)
+            let mut nearest = f64::INFINITY;
+            for l in loops {
+                for k in 0..l.len() {
+                    let (p, q) = (l[k], l[(k + 1) % l.len()]);
+                    if p.pole.is_some() || q.pole.is_some() || (pick(p.uv, o) - pick(q.uv, o)).abs() > 1e-9 * span {
+                        continue;
+                    }
+                    for t in [pick(p.uv, i), pick(q.uv, i)] {
+                        if (t - pole).abs() < (nearest - pole).abs() {
+                            nearest = t;
+                        }
+                    }
+                }
+            }
+            let (a, b) = (pick(lo, i), pick(hi, i));
+            if nearest.is_finite() && nearest > a && nearest < b {
+                let (x, y) = (pole.min(nearest), pole.max(nearest));
+                let eps = 1e-6 * (b - a);
+                lines[i].retain(|t| !(*t > x - eps && *t < y + eps));
+                // the first ring through that point
+                lines[i].push(nearest);
+                lines[i].sort_by(f64::total_cmp);
+            }
+        }
+    }
+}
+
 /// A straight direction (cylinder, cone and extrusion along v) needs no lines for the chord, but
 /// where the boundary runs across the grid (a mitre, a hole), Delaunay fans long triangles from
 /// it over the face. Lines then at twice the other direction's spacing over the span of such a
@@ -369,7 +424,14 @@ fn straight_lines(loops: &[Vec<UvPt>], lines: &mut [Vec<f64>; 2], (lo, hi): (DVe
         let mut t = a;
         while t < b {
             let near = spans.iter().any(|(x, y)| t >= x - fine && t <= y + fine);
-            t += if near { fine } else { 16.0 * fine };
+            t += if near {
+                fine
+            } else {
+                // far rows, but never past the start of the next run's rows (a far step longer
+                // than a run and its margins would skip it)
+                let next = spans.iter().map(|(x, _)| x - fine).filter(|x| *x > t).fold(f64::INFINITY, f64::min);
+                (16.0 * fine).min(next - t)
+            };
             if t < b - 0.5 * fine {
                 out.push(t);
             }
@@ -686,6 +748,7 @@ pub(crate) fn mesh_face(
     }
     let bounds = (lo, hi);
     let mut lines = grid_lines(g, bounds, p);
+    clear_poles(&loops, &mut lines, bounds);
     let sc = scale(g, bounds);
     let chord = lines.clone();
     straight_lines(&loops, &mut lines, bounds, sc);
@@ -808,8 +871,11 @@ pub(crate) fn mesh_face(
     // other way (a fold of the polylines near a cusp) kept with its triangles reversed, so its
     // edges still meet the neighbours' in opposite directions
     let crossed = !fm.splits.is_empty();
+    // triangles kept reversed by design (see above): not checked for folds
+    let mut reversed = Vec::new();
     for f in b.cdt.inner_faces() {
         let mut vs = f.vertices();
+        let mut rev = false;
         if crossed {
             let c = vs.iter().map(|v| b.info[v.fix().index()].uv).sum::<DVec2>() / 3.0;
             let w = winding(&loops, c);
@@ -818,6 +884,7 @@ pub(crate) fn mesh_face(
             }
             if (w > 0) != (orient > 0.0) {
                 vs.swap(1, 2);
+                rev = true;
             }
         } else if !inside[f.fix().index()] {
             continue;
@@ -832,8 +899,161 @@ pub(crate) fn mesh_face(
             t[k] = map[i];
         }
         fm.tris.push(t);
+        reversed.push(rev);
+    }
+    if !g.is_plane() {
+        let fixed: std::collections::HashSet<[u32; 2]> = b
+            .cdt
+            .undirected_edges()
+            .filter(|e| e.is_constraint_edge())
+            .filter_map(|e| {
+                let [x, y] = e.vertices().map(|v| map[v.fix().index()]);
+                (x != u32::MAX && y != u32::MAX).then(|| [x.min(y), x.max(y)])
+            })
+            .collect();
+        fm.folds = repair_folds(g, &mut fm, &fixed, &reversed);
     }
     fm
+}
+
+/// How well triangle `t` (counter-clockwise in (u, v)) of `fm` faces along the surface: the
+/// cosine between its normal and the surface normal at its centroid, negative for a fold;
+/// `None` for a triangle without area (a pole, a sliver at the `f64` resolution), where the
+/// surface normal is undefined, or where the surface turns over under the triangle.
+fn facing(g: &Geom, fm: &FaceMesh, t: [u32; 3]) -> Option<f64> {
+    let [a, b, c] = t.map(|i| fm.verts[i as usize]);
+    let n = (b.p - a.p).cross(c.p - a.p);
+    let scale2 = (b.p - a.p).length_squared().max((c.p - a.p).length_squared()).max((c.p - b.p).length_squared());
+    if !crate::gt(n.length(), 1e-12 * scale2) {
+        return None;
+    }
+    let m = g.normal((a.uv + b.uv + c.uv) / 3.0, fm.bounds)?;
+    // the surface itself turns over under the triangle (its normal at a corner against the
+    // centroid's: a sweep whose profile folds near its end): no direction to face
+    let corners = [a, b, c].map(|v| g.normal(v.uv, fm.bounds));
+    if corners.iter().any(|k| k.is_some_and(|k| k.dot(m) < 0.0)) {
+        return None;
+    }
+    Some(m.dot(n.normalize()))
+}
+
+/// Folded triangles (facing against the surface, see `facing`) after the refinement: a
+/// triangle of the CDT is counter-clockwise in its warped coordinates, which are not an affine
+/// image of (u, v) (rows of a straight direction far apart), and a thin one along a curved
+/// boundary can turn over in 3D. The same pass straightens triangles more than 60° off the
+/// surface normal at a corner (`SKEW_COS`; Delaunay in grid steps near a pole, where a step of the
+/// pole's free parameter is far shorter on the surface than one of the other). Each is
+/// repaired by flipping an inner edge with a neighbour where neither new triangle folds and
+/// the worse of the two lies better along the surface than before. Returns the folds left
+/// (`tessellate` fails on them, never exporting folds silently). `fixed`: boundary edges
+/// (never flipped), `skip`: triangles reversed by design (crossing loops).
+fn repair_folds(g: &Geom, fm: &mut FaceMesh, fixed: &std::collections::HashSet<[u32; 2]>, skip: &[bool]) -> usize {
+    use std::collections::HashMap;
+    // vertices by their output position (seam and pole copies are one point there): edges and
+    // degenerate triangles as the welded mesh will see them
+    let mut by_pos: HashMap<[u32; 3], u32> = HashMap::new();
+    let canon: Vec<u32> = fm
+        .verts
+        .iter()
+        .enumerate()
+        .map(|(i, v)| *by_pos.entry(v.p.as_vec3().to_array().map(f32::to_bits)).or_insert(i as u32))
+        .collect();
+    let key = |x: u32, y: u32| {
+        let (x, y) = (canon[x as usize], canon[y as usize]);
+        [x.min(y), x.max(y)]
+    };
+    let fixed: std::collections::HashSet<[u32; 2]> = fixed.iter().map(|e| key(e[0], e[1])).collect();
+    let normals: Vec<Option<DVec3>> = fm.verts.iter().map(|v| g.normal(v.uv, fm.bounds)).collect();
+    let folded = |fm: &FaceMesh, t: [u32; 3]| facing(g, fm, t).is_some_and(|d| d < 0.0);
+    // the smallest cosine between the triangle's normal and its corners' surface normals
+    let worst = |fm: &FaceMesh, t: [u32; 3]| {
+        let [a, b, c] = t.map(|i| fm.verts[i as usize].p);
+        let Some(n) = (b - a).cross(c - a).try_normalize() else { return 1.0 };
+        t.iter().filter_map(|i| normals[*i as usize]).map(|m| m.dot(n)).fold(1.0, f64::min)
+    };
+    let bad = |fm: &FaceMesh, t: usize| !skip[t] && (folded(fm, fm.tris[t]) || worst(fm, fm.tris[t]) < SKEW_COS);
+    let mut todo: Vec<usize> = (0..fm.tris.len()).filter(|t| bad(fm, *t)).collect();
+    if todo.is_empty() {
+        return 0;
+    }
+    let mut edges: HashMap<[u32; 2], Vec<usize>> = HashMap::new();
+    for (i, t) in fm.tris.iter().enumerate() {
+        for k in 0..3 {
+            edges.entry(key(t[k], t[(k + 1) % 3])).or_default().push(i);
+        }
+    }
+    for _ in 0..8 {
+        let mut left = Vec::new();
+        for &t in &todo {
+            if !bad(fm, t) {
+                continue;
+            }
+            let tri = fm.tris[t];
+            let mut done = false;
+            for k in 0..3 {
+                let (a, b, c) = (tri[k], tri[(k + 1) % 3], tri[(k + 2) % 3]);
+                let e = key(a, b);
+                if fixed.contains(&e) {
+                    continue;
+                }
+                let Some(&o) = edges.get(&e).and_then(|v| v.iter().find(|x| **x != t)) else { continue };
+                if skip[o] {
+                    continue;
+                }
+                let ot = fm.tris[o];
+                let Some(d) = ot.iter().copied().find(|v| key(*v, *v) != key(a, a) && key(*v, *v) != key(b, b)) else {
+                    continue;
+                };
+                if edges.get(&key(c, d)).is_some_and(|v| !v.is_empty()) {
+                    continue; // the new edge exists already
+                }
+                // (a, b, c) and (b, a, d) become (a, d, c) and (d, b, c)
+                let (n1, n2) = ([a, d, c], [d, b, c]);
+                if canon[c as usize] == canon[d as usize] {
+                    continue;
+                }
+                if [n1, n2].iter().any(|n| facing(g, fm, *n).is_none_or(|x| x <= 0.0)) {
+                    continue;
+                }
+                let before = if folded(fm, tri) || folded(fm, ot) { -2.0 } else { worst(fm, tri).min(worst(fm, ot)) };
+                if worst(fm, n1).min(worst(fm, n2)) <= before + 1e-9 {
+                    continue;
+                }
+                for (x, y) in [(a, b), (b, c), (c, a)] {
+                    if let Some(v) = edges.get_mut(&key(x, y)) {
+                        v.retain(|i| *i != t);
+                    }
+                }
+                for (x, y) in [(b, a), (a, d), (d, b)] {
+                    if let Some(v) = edges.get_mut(&key(x, y)) {
+                        v.retain(|i| *i != o);
+                    }
+                }
+                fm.tris[t] = n1;
+                fm.tris[o] = n2;
+                for (i, n) in [(t, n1), (o, n2)] {
+                    for k in 0..3 {
+                        edges.entry(key(n[k], n[(k + 1) % 3])).or_default().push(i);
+                    }
+                }
+                done = true;
+                // the neighbour may need another flip
+                left.push(o);
+                break;
+            }
+            if !done || bad(fm, t) {
+                left.push(t);
+            }
+        }
+        left.sort_unstable();
+        left.dedup();
+        let changed = left != todo;
+        todo = left;
+        if !changed {
+            break;
+        }
+    }
+    (0..fm.tris.len()).filter(|t| !skip[*t] && folded(fm, fm.tris[*t])).count()
 }
 
 /// Winding number of the loops about `q`.
@@ -909,10 +1129,11 @@ fn refine_pass(b: &Builder, inside: &[bool], tol: f64, ok: &mut Checked) -> (Vec
         // inside changes that chord, so only inner triangles count as flipped
         let on_boundary = f.adjacent_edges().iter().any(|e| e.is_constraint_edge());
         let flipped = !on_boundary && b.g.normal(uvc, b.bounds).is_some_and(|m| m.dot(n) < 0.0);
-        if !(dev > tol || flipped) {
+        let split = dev > tol || flipped;
+        if !split {
             ok.tris.insert(key, dev);
         }
-        if dev > tol || flipped {
+        if split {
             // the midpoint of the longest edge that may be split, else the centroid
             let es = f.adjacent_edges();
             let best = es

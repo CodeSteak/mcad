@@ -30,18 +30,21 @@ pub struct MeshCheck {
     pub bad_indices: usize,
     /// Positions with a NaN or infinite coordinate.
     pub non_finite: usize,
-    /// Closed and consistently oriented, but the enclosed volume is negative: the triangles
-    /// face inwards.
+    /// Closed and consistently oriented, but a connected piece encloses a negative volume
+    /// without lying inside another piece (a void lies inside its body and faces inwards by
+    /// design): its triangles face inwards.
     pub inside_out: bool,
+    /// Triangles with the same three corners as another one (either orientation; a fin of
+    /// two triangles facing each other closes its own edges).
+    pub duplicate_triangles: usize,
 }
 
 impl MeshCheck {
-    /// Closed, manifold, consistently oriented outwards, with finite positions and not empty.
-    /// A crack closed by a zero-area
+    /// Closed, manifold, consistently oriented outwards, without duplicate triangles, with
+    /// finite positions and not empty. A crack closed by a zero-area
     /// triangle (a T-junction) leaves no gap and counts as closed; `degenerate` reports such
     /// triangles (also slivers whose height is below the `f32` resolution of the positions, at
-    /// tolerances near [`crate::MIN_REL_TOL`]). Not detected: self-intersections and fins of two
-    /// coinciding triangles facing each other.
+    /// tolerances near [`crate::MIN_REL_TOL`]). Not detected: self-intersections.
     pub fn watertight(&self) -> bool {
         self.triangles > 0
             && self.boundary_edges == 0
@@ -49,6 +52,7 @@ impl MeshCheck {
             && self.misoriented_edges == 0
             && self.bad_indices == 0
             && self.non_finite == 0
+            && self.duplicate_triangles == 0
             && !self.inside_out
     }
 
@@ -85,6 +89,9 @@ pub fn check(mesh: &Mesh) -> MeshCheck {
     out.non_finite = mesh.positions.chunks_exact(3).filter(|p| !p.iter().all(|x| x.is_finite())).count();
     // per undirected edge: uses in direction (lo → hi) and (hi → lo)
     let mut uses: HashMap<(u32, u32), (u32, u32)> = HashMap::new();
+    // welded triangles (sorted corners) and the triangles kept
+    let mut tris: HashMap<[u32; 3], u32> = HashMap::new();
+    let mut kept: Vec<[u32; 3]> = Vec::new();
     let nv = ids.len();
     for t in mesh.indices.chunks_exact(3) {
         if t.iter().any(|i| *i as usize >= nv) {
@@ -98,7 +105,16 @@ pub fn check(mesh: &Mesh) -> MeshCheck {
         let w = [ids[t[0] as usize], ids[t[1] as usize], ids[t[2] as usize]];
         if w[0] == w[1] || w[1] == w[2] || w[2] == w[0] || cr.length() <= 1e-14 * size2 {
             out.degenerate += 1;
+        } else {
+            let mut key = w;
+            key.sort_unstable();
+            let n = tris.entry(key).or_default();
+            *n += 1;
+            if *n > 1 {
+                out.duplicate_triangles += 1;
+            }
         }
+        kept.push([t[0], t[1], t[2]]);
         for k in 0..3 {
             let (x, y) = (w[k], w[(k + 1) % 3]);
             if x == y {
@@ -116,10 +132,61 @@ pub fn check(mesh: &Mesh) -> MeshCheck {
             _ => out.nonmanifold_edges += 1,
         }
     }
-    out.inside_out = out.triangles > 0
-        && out.boundary_edges + out.nonmanifold_edges + out.misoriented_edges == 0
-        && out.volume < 0.0;
+    let closed = out.triangles > 0 && out.boundary_edges + out.nonmanifold_edges + out.misoriented_edges == 0;
+    out.inside_out = closed && (out.volume < 0.0 || inverted_piece(&kept, &ids, &pos));
     out
+}
+
+/// A connected piece of a closed mesh that encloses a negative volume and does not lie inside
+/// the others (winding number of the other pieces at one of its points below one half): a void
+/// lies inside its body, an inverted body does not.
+fn inverted_piece(tris: &[[u32; 3]], ids: &[u32], pos: &impl Fn(u32) -> DVec3) -> bool {
+    // pieces: union of the welded corners
+    let n = ids.iter().map(|i| *i as usize + 1).max().unwrap_or(0);
+    let mut parent: Vec<u32> = (0..n as u32).collect();
+    fn find(p: &mut [u32], mut x: u32) -> u32 {
+        while p[x as usize] != x {
+            p[x as usize] = p[p[x as usize] as usize];
+            x = p[x as usize];
+        }
+        x
+    }
+    for t in tris {
+        let w = t.map(|i| ids[i as usize]);
+        for k in 1..3 {
+            let (a, b) = (find(&mut parent, w[0]), find(&mut parent, w[k]));
+            if a != b {
+                parent[a as usize] = b;
+            }
+        }
+    }
+    let piece: Vec<u32> = tris.iter().map(|t| find(&mut parent, ids[t[0] as usize])).collect();
+    let mut volume: HashMap<u32, f64> = HashMap::new();
+    for (t, p) in tris.iter().zip(&piece) {
+        let [a, b, c] = t.map(pos);
+        *volume.entry(*p).or_default() += a.dot(b.cross(c)) / 6.0;
+    }
+    if volume.len() < 2 {
+        return false;
+    }
+    volume.iter().filter(|(_, v)| **v < 0.0).any(|(id, _)| {
+        let Some(k) = piece.iter().position(|p| p == id) else { return false };
+        let [a, b, c] = tris[k].map(pos);
+        let q = (a + b + c) / 3.0;
+        // winding number of the other pieces (solid angles, Van Oosterom & Strackee)
+        let mut w = 0.0;
+        for (t, p) in tris.iter().zip(&piece) {
+            if p == id {
+                continue;
+            }
+            let [x, y, z] = t.map(|i| pos(i) - q);
+            let (lx, ly, lz) = (x.length(), y.length(), z.length());
+            let num = x.dot(y.cross(z));
+            let den = lx * ly * lz + x.dot(y) * lz + y.dot(z) * lx + z.dot(x) * ly;
+            w += 2.0 * num.atan2(den);
+        }
+        w / (4.0 * std::f64::consts::PI) < 0.5
+    })
 }
 
 #[cfg(test)]
@@ -175,5 +242,41 @@ mod tests {
         assert_eq!((c.boundary_edges, c.misoriented_edges, c.nonmanifold_edges), (0, 0, 0), "{c:?}");
         assert_eq!(c.degenerate, 1);
         assert!(c.watertight());
+        // a duplicate triangle, a fin of two triangles facing each other (closed by itself)
+        let mut m = tetra(false);
+        m.indices.extend_from_slice(&[0, 2, 1]);
+        let c = check(&m);
+        assert!(c.duplicate_triangles == 1 && !c.watertight(), "{c:?}");
+        let mut m = tetra(false);
+        m.positions.extend_from_slice(&[5.0, 0.0, 0.0, 6.0, 0.0, 0.0, 5.0, 1.0, 0.0]);
+        m.indices.extend_from_slice(&[4, 5, 6, 4, 6, 5]);
+        let c = check(&m);
+        assert_eq!((c.boundary_edges, c.nonmanifold_edges, c.misoriented_edges), (0, 0, 0), "{c:?}");
+        assert!(c.duplicate_triangles == 1 && !c.watertight(), "{c:?}");
+    }
+
+    /// Two tetrahedra: one inverted beside the other is inside out though the net volume is
+    /// positive; an inverted small one inside a large one is a void.
+    #[test]
+    fn inside_out_per_piece() {
+        let piece = |m: &mut Mesh, s: f32, o: f32, flip: bool| {
+            let t = tetra(false);
+            let base = (m.positions.len() / 3) as u32;
+            m.positions.extend(t.positions.iter().map(|x| x * s + o));
+            for tri in t.indices.chunks_exact(3) {
+                let tri = if flip { [tri[0], tri[2], tri[1]] } else { [tri[0], tri[1], tri[2]] };
+                m.indices.extend(tri.iter().map(|i| i + base));
+            }
+        };
+        let mut m = Mesh::default();
+        piece(&mut m, 2.0, 0.0, false);
+        piece(&mut m, 1.0, 5.0, true);
+        let c = check(&m);
+        assert!(c.volume > 0.0 && c.inside_out && !c.watertight(), "{c:?}");
+        let mut m = Mesh::default();
+        piece(&mut m, 4.0, 0.0, false);
+        piece(&mut m, 1.0, 0.3, true);
+        let c = check(&m);
+        assert!(!c.inside_out && c.watertight(), "{c:?}");
     }
 }

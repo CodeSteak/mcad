@@ -2,8 +2,8 @@
 //! part) from both kernels' `tessellate` (SMLib: its own tessellator; solidcore: `cad-tess` on
 //! its B-rep), compared with tolerance `tol`:
 //!
-//! * per kernel: triangles, watertight (every edge used twice in opposite directions, facing
-//!   outwards, finite positions),
+//! * per kernel: triangles, watertight (`cad_tess::MeshCheck::watertight`: every edge used
+//!   twice in opposite directions, no duplicate triangles, facing outwards, finite positions),
 //!   volume against the exact one (`mass_props`) as `|V − exact| / (tol · area)` (≤ 1 passes),
 //!   distance to the exact surfaces of the kernel's own B-rep (sampled per triangle, see
 //!   `cad_tess::surface_distance`), time of `tessellate`;
@@ -91,7 +91,11 @@ pub struct Metrics {
     pub triangles: usize,
     pub watertight: bool,
     pub boundary_edges: usize,
+    /// Edges used by more than two triangles (a fin).
+    pub nonmanifold_edges: usize,
     pub misoriented_edges: usize,
+    /// Triangles with the same corners as another one.
+    pub duplicate_triangles: usize,
     /// Closed solid parts whose mesh faces inwards (negative volume).
     pub inside_out: usize,
     /// Positions with a NaN or infinite coordinate.
@@ -164,9 +168,11 @@ fn metrics(p: &Parts, tol: f64) -> (Metrics, Mesh) {
         let closed = part.brep.as_ref().is_none_or(|b| b.bodies.iter().all(|b| matches!(b, Body::Solid { .. })));
         if part.solid && closed {
             m.boundary_edges += c.boundary_edges;
+            m.nonmanifold_edges += c.nonmanifold_edges;
             m.misoriented_edges += c.misoriented_edges;
+            m.duplicate_triangles += c.duplicate_triangles;
             m.inside_out += usize::from(c.inside_out);
-            m.watertight &= c.boundary_edges + c.misoriented_edges == 0 && !c.inside_out;
+            m.watertight &= c.watertight();
             match part.exact {
                 Some(e) => {
                     exact += e;
@@ -229,8 +235,13 @@ pub fn compare(a: &Parts, b: &Parts, tol: f64, same: bool) -> Comparison {
     if c.verdict == "ok" {
         if !mb.watertight {
             c.notes.push(format!(
-                "solidcore: not watertight ({} open, {} misoriented edges, {} parts inside out, {} non-finite positions)",
-                mb.boundary_edges, mb.misoriented_edges, mb.inside_out, mb.non_finite
+                "solidcore: not watertight ({} open, {} non-manifold, {} misoriented edges, {} duplicate triangles, {} parts inside out, {} non-finite positions)",
+                mb.boundary_edges,
+                mb.nonmanifold_edges,
+                mb.misoriented_edges,
+                mb.duplicate_triangles,
+                mb.inside_out,
+                mb.non_finite
             ));
         }
         if let Some(r) = mb.volume_ratio.filter(|r| *r > 1.0) {

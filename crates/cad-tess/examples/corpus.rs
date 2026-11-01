@@ -87,6 +87,9 @@ fn part<K: Kernel>(k: &mut K, s: &K::Shape, solid: bool, tol: f64, own: bool) ->
         "faces": t.stats.faces,
         "failed_faces": t.stats.failed_faces.iter().map(|(id, w)| format!("{id}: {w}")).collect::<Vec<_>>(),
         "lost_constraints": t.stats.lost_constraints,
+        // faces with triangles facing against the surface after the repair (`strict` fails)
+        "folded": t.stats.folded.iter().map(|(id, n)| format!("{id}: {n}")).collect::<Vec<_>>(),
+        "strict": t.strict().err().map(|e| e.to_string()),
         "refined": t.stats.refined,
         "max_deviation": t.stats.max_deviation,
         "triangles": c.triangles,
@@ -179,9 +182,11 @@ fn main() {
                 }
             }))
             .unwrap_or_else(|_| vec![json!({ "error": "panic" })]);
-            let ok = parts
-                .iter()
-                .all(|p| p["watertight"] == true && p["failed_faces"].as_array().is_some_and(|a| a.is_empty()));
+            let ok = parts.iter().all(|p| {
+                p["watertight"] == true
+                    && p["strict"].is_null()
+                    && p["failed_faces"].as_array().is_some_and(|a| a.is_empty())
+            });
             let tris: u64 = parts.iter().filter_map(|p| p["triangles"].as_u64()).sum();
             let own: u64 = parts.iter().filter_map(|p| p["own"]["triangles"].as_u64()).sum();
             let ratio = parts.iter().filter_map(|p| p["volume_ratio"].as_f64()).fold(0.0, f64::max);
@@ -195,6 +200,7 @@ fn main() {
                         .as_str()
                         .map(String::from)
                         .or_else(|| p["failed_faces"].as_array().filter(|a| !a.is_empty()).map(|a| format!("{a:?}")))
+                        .or_else(|| p["strict"].as_str().map(String::from))
                 })
                 .collect();
             eprintln!(

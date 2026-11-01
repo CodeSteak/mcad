@@ -360,3 +360,132 @@ fn scaled_mug_smlib() {
 fn scaled_mug_solidcore() {
     scaled_mug(kernel_solidcore::SolidcoreKernel::new(), "solidcore");
 }
+
+/// Triangles facing against the mean of their vertex normals (the surface's: folds) and the
+/// largest angle between a triangle and the normal at one of its corners, degrees.
+fn folds(m: &cad_kernel::Mesh) -> (usize, f64) {
+    let n = |i: u32| {
+        let k = 3 * i as usize;
+        DVec3::new(m.normals[k] as f64, m.normals[k + 1] as f64, m.normals[k + 2] as f64)
+    };
+    let (mut folds, mut worst) = (0, 0f64);
+    for t in m.indices.chunks_exact(3) {
+        let Some(tn) = (pos(m, t[1]) - pos(m, t[0])).cross(pos(m, t[2]) - pos(m, t[0])).try_normalize() else {
+            continue;
+        };
+        if (n(t[0]) + n(t[1]) + n(t[2])).normalize_or_zero().dot(tn) < 0.0 {
+            folds += 1;
+        }
+        for &i in t {
+            if let Some(v) = n(i).try_normalize() {
+                worst = worst.max(v.dot(tn).clamp(-1.0, 1.0).acos().to_degrees());
+            }
+        }
+    }
+    (folds, worst)
+}
+
+/// A ruled band with many holes (a cone between two radii, 7 rings of 18 radial holes): the
+/// rows of the straight direction stepped over most of the rings, and the CDT, in coordinates
+/// that are not affine there, made triangles that faced against the surface at the holes' rims
+/// (24 at 0.01, exported). Zero folds at 0.01 and 0.005.
+fn band_holes<K: Kernel>(mut k: K, kernel: &str) {
+    let outer = k.make_cylinder(100.0, 40.0, 45.0, 1).unwrap();
+    let inner = k.make_cylinder(100.0, 37.0, 42.0, 1).unwrap();
+    let inner = k.transform(&inner, &DMat4::from_translation(DVec3::new(0.0, 0.0, 3.0))).unwrap();
+    let mut ops = vec![outer, inner];
+    for z in (10..=58).step_by(8) {
+        for a in (0..=340).step_by(20) {
+            let c = k.make_cylinder(20.0, 2.5, 2.5, 2).unwrap();
+            let m = DMat4::from_rotation_z(((a + z) as f64).to_radians())
+                * DMat4::from_translation(DVec3::new(40.0, 0.0, z as f64))
+                * DMat4::from_rotation_y(FRAC_PI_2)
+                * DMat4::from_translation(DVec3::new(0.0, 0.0, -10.0));
+            ops.push(k.transform(&c, &m).unwrap());
+        }
+    }
+    let body = k.boolean(BoolOp::Difference, &ops, 3).unwrap();
+    for tol in [0.01, 0.005] {
+        let what = format!("{kernel}: band with holes at {tol}");
+        holds(&mut k, &body, tol, &what);
+        let m = cad_tess::tessellate(&k.brep(&body).unwrap(), tol).unwrap();
+        let (f, worst) = folds(&m);
+        assert_eq!(f, 0, "{what}: {f} folds");
+        assert!(worst < 60.0, "{what}: a triangle {worst:.1}° off a corner's normal");
+    }
+}
+
+#[test]
+fn band_holes_smlib() {
+    band_holes(kernel_smlib::SmlibKernel::new(), "smlib");
+}
+
+#[cfg(feature = "solidcore")]
+#[test]
+fn band_holes_solidcore() {
+    band_holes(kernel_solidcore::SolidcoreKernel::new(), "solidcore");
+}
+
+/// `f` on the kernel and the evaluated root part of a model file of the corpus
+/// (`tests/models/…`), or of `src` in its place.
+fn with_part<K: Kernel + 'static, R>(k: K, file: &str, src: Option<&str>, f: impl FnOnce(&mut K, &K::Shape) -> R) -> R
+where
+    K::Shape: 'static,
+{
+    use cad_session::protocol::ToEngine;
+    use cad_session::{Session, SessionOptions, std_clock};
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/models").join(file);
+    let text = match src {
+        Some(s) => s.to_string(),
+        None => std::fs::read_to_string(&path).unwrap(),
+    };
+    let opts = SessionOptions { auto_root_mesh: false, ..Default::default() };
+    let mut s = Session::new(k, opts, std_clock());
+    let main = path.file_name().unwrap().to_string_lossy().into_owned();
+    s.set_resolver(Box::new(cad_session::FsResolver { root: path.parent().unwrap().to_path_buf() }), &main);
+    s.post(ToEngine::SetSource { text, version: 1 });
+    s.run_to_idle();
+    let d = s.done().unwrap();
+    let r = d.ev.root().unwrap();
+    let parts: Vec<_> = d.ev.parts(r).iter().map(|p| p.shape.clone()).collect();
+    assert_eq!(parts.len(), 1, "{file}");
+    f(s.engine_mut().kernel_mut(), &parts[0])
+}
+
+/// Corner blends that taper to a needle at a pole (`pillow_block`, `soap_dish` at 0.01): a ring
+/// of grid points nearer the pole than the boundary's first point left triangles from the pole
+/// to points of two heights, up to 86° off the surface. Now within 60° of every corner.
+/// A crescent whose arcs touch (`graze2` of the tester: a cylinder minus one shifted by 0.02):
+/// both faces at the cusp meshed the same sliver, a fin of two triangles facing each other
+/// (an edge used four times). Watertight, no duplicate triangles.
+fn tapered_and_grazing<K: Kernel + 'static, F: Fn() -> K>(new: F, kernel: &str)
+where
+    K::Shape: 'static,
+{
+    for file in ["everyday/pillow_block.mcad", "everyday/soap_dish.mcad"] {
+        with_part(new(), file, None, |k, s| {
+            holds(k, s, 0.01, &format!("{kernel}: {file}"));
+            let (f, worst) = folds(&cad_tess::tessellate(&k.brep(s).unwrap(), 0.01).unwrap());
+            assert!(f == 0 && worst < 60.0, "{kernel}: {file}: {f} folds, {worst:.1}°");
+        });
+    }
+    let src = "difference() { cylinder(r = 30, h = 60); translate([0, 0.02, 0]) cylinder(r = 30, h = 30); }\n";
+    with_part(new(), "spec/graze.mcad", Some(src), |k, s| {
+        for tol in [0.05, 0.01] {
+            let m = cad_tess::tessellate(&k.brep(s).unwrap(), tol).unwrap();
+            let c = cad_tess::check(&m);
+            assert!(c.watertight() && c.duplicate_triangles == 0, "{kernel}: graze at {tol}: {c:?}");
+        }
+    });
+}
+
+#[test]
+fn tapered_and_grazing_smlib() {
+    tapered_and_grazing(kernel_smlib::SmlibKernel::new, "smlib");
+}
+
+#[cfg(feature = "solidcore")]
+#[test]
+fn tapered_and_grazing_solidcore() {
+    tapered_and_grazing(kernel_solidcore::SolidcoreKernel::new, "solidcore");
+}
