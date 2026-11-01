@@ -489,3 +489,35 @@ fn tapered_and_grazing_smlib() {
 fn tapered_and_grazing_solidcore() {
     tapered_and_grazing(kernel_solidcore::SolidcoreKernel::new, "solidcore");
 }
+
+/// Flips that repair folds or skewed triangles keep the tolerance: `f12`'s twisted loft at 0.01
+/// (a flip across the curved surface put the new edge 0.0136 mm off it) and a twisted bar at
+/// 0.05 (0.0521), measured independently of the tessellator's own figures by sampling.
+fn flips_keep_the_tolerance<K: Kernel + 'static, F: Fn() -> K>(new: F, kernel: &str)
+where
+    K::Shape: 'static,
+{
+    let twist = "linear_extrude(height = 30, twist = 360) square([60, 2], center = true);\n";
+    for (file, src, tol) in
+        [("../everyday/bugs/f12_shell_loft_square_circle.mcad", None, 0.01), ("spec/twist.mcad", Some(twist), 0.05)]
+    {
+        with_part(new(), file, src, |k, s| {
+            holds(k, s, tol, &format!("{kernel}: {file} at {tol}"));
+            let brep = k.brep(s).unwrap();
+            let m = cad_tess::tessellate(&brep, tol).unwrap();
+            let d = cad_tess::surface_distance(&brep, &m);
+            assert!(d.chord.max <= tol * 1.001, "{kernel}: {file} at {tol}: chord {} at {}", d.chord.max, d.chord.at);
+        });
+    }
+}
+
+#[test]
+fn flips_keep_the_tolerance_smlib() {
+    flips_keep_the_tolerance(kernel_smlib::SmlibKernel::new, "smlib");
+}
+
+#[cfg(feature = "solidcore")]
+#[test]
+fn flips_keep_the_tolerance_solidcore() {
+    flips_keep_the_tolerance(kernel_solidcore::SolidcoreKernel::new, "solidcore");
+}

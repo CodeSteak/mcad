@@ -26,7 +26,8 @@
 //!    (their points are the edges', shared with the neighbour).
 //! 4. **Folds.** Every triangle is checked against the surface normal at its centroid, and one
 //!    facing against it (a fold) or more than 60° off the normal at a corner is repaired by
-//!    flipping an inner edge (`repair_folds`); folds left make `tessellate` fail.
+//!    flipping an inner edge where the new triangles stay within `tol` of the surface
+//!    (`repair_folds`); folds left make `tessellate` fail.
 //!
 //! Planar faces take only the first two steps without grid (`σ` is affine, nothing to refine).
 
@@ -91,6 +92,67 @@ struct Builder<'a> {
     bounds: (DVec2, DVec2),
 }
 
+/// Foot of `q` (a point of the mesh near `seed`) on the surface and its distance. A foot
+/// outside the box `near` (grown by its size) is another part of the surface: then the seed,
+/// and the distance of `σ(seed)` from the plane through `q` with normal `n` (from `q` if `n` is
+/// zero).
+fn foot(g: &Geom, q: DVec3, seed: DVec2, near: (DVec2, DVec2), n: DVec3) -> (DVec2, f64) {
+    let mut uv = g.project(q, seed);
+    for i in 0..2 {
+        if let Some(per) = g.period[i] {
+            let (t, s) = if i == 0 { (&mut uv.x, seed.x) } else { (&mut uv.y, seed.y) };
+            *t += per * ((s - *t) / per).round();
+        }
+    }
+    let grow = (near.1 - near.0).max(DVec2::splat(1e-12));
+    if uv.cmpge(near.0 - grow).all() && uv.cmple(near.1 + grow).all() {
+        return (uv, (g.eval(uv) - q).length());
+    }
+    let s = g.eval(seed);
+    let d = if n == DVec3::ZERO { (s - q).length() } else { (s - q).dot(n).abs() };
+    (seed, d)
+}
+
+/// Deviation of the triangle with corners `[a, c, d]` from the surface as the refinement
+/// measures it: the foot of its centroid and, where that is off by more than a third of `tol`
+/// but within it, of three inner points towards the corners (on a twisted surface the largest
+/// deviation need not be at the centroid). `None` for a triangle without area (a pole, a
+/// sliver) or one smaller than a tenth of `tol`: nothing to measure. With the foot of the
+/// worst point and the triangle's unit normal.
+fn tri_deviation(g: &Geom, [a, c, d]: [FVert; 3], tol: f64) -> Option<(DVec2, f64, DVec3)> {
+    let n = (c.p - a.p).cross(d.p - a.p);
+    let area2 = n.length();
+    let scale2 = (c.p - a.p).length_squared().max((d.p - a.p).length_squared());
+    if !crate::gt(area2, 1e-14 * scale2) || scale2.max((d.p - c.p).length_squared()) < (0.1 * tol).powi(2) {
+        return None;
+    }
+    let n = n / area2;
+    let uvc = (a.uv + c.uv + d.uv) / 3.0;
+    let (lo, hi) = (a.uv.min(c.uv).min(d.uv), a.uv.max(c.uv).max(d.uv));
+    let (mut at, mut dev) = foot(g, (a.p + c.p + d.p) / 3.0, uvc, (lo, hi), n);
+    if dev > tol / 3.0 && dev <= tol {
+        for w in [[4.0, 1.0, 1.0], [1.0, 4.0, 1.0], [1.0, 1.0, 4.0]] {
+            let q = (a.p * w[0] + c.p * w[1] + d.p * w[2]) / 6.0;
+            let quv = (a.uv * w[0] + c.uv * w[1] + d.uv * w[2]) / 6.0;
+            let (fq, dq) = foot(g, q, quv, (lo, hi), n);
+            if dq > dev {
+                (at, dev) = (fq, dq);
+            }
+        }
+    }
+    Some((at, dev, n))
+}
+
+/// Deviation of an inner edge's midpoint from the surface (0 for an edge shorter than a tenth
+/// of `tol`), with its foot.
+fn edge_deviation(g: &Geom, v0: FVert, v1: FVert, tol: f64) -> (DVec2, f64) {
+    let mid = (v0.uv + v1.uv) * 0.5;
+    if (v1.p - v0.p).length_squared() < (0.1 * tol).powi(2) {
+        return (mid, 0.0);
+    }
+    foot(g, (v0.p + v1.p) * 0.5, mid, (v0.uv.min(v1.uv), v0.uv.max(v1.uv)), DVec3::ZERO)
+}
+
 impl Builder<'_> {
     fn insert(&mut self, v: FVert) -> Option<FixedVertexHandle> {
         let q = self.point(v.uv);
@@ -140,27 +202,6 @@ impl Builder<'_> {
             }
             _ => false,
         }
-    }
-
-    /// Foot of `q` (a point of the mesh near `seed`) on the surface and its distance. A foot
-    /// outside the box `near` (grown by its size) is another part of the surface: then the
-    /// seed, and the distance of `σ(seed)` from the plane through `q` with normal `n` (from
-    /// `q` if `n` is zero).
-    fn foot(&self, q: DVec3, seed: DVec2, near: (DVec2, DVec2), n: DVec3) -> (DVec2, f64) {
-        let mut uv = self.g.project(q, seed);
-        for i in 0..2 {
-            if let Some(per) = self.g.period[i] {
-                let (t, s) = if i == 0 { (&mut uv.x, seed.x) } else { (&mut uv.y, seed.y) };
-                *t += per * ((s - *t) / per).round();
-            }
-        }
-        let grow = (near.1 - near.0).max(DVec2::splat(1e-12));
-        if uv.cmpge(near.0 - grow).all() && uv.cmple(near.1 + grow).all() {
-            return (uv, (self.g.eval(uv) - q).length());
-        }
-        let s = self.g.eval(seed);
-        let d = if n == DVec3::ZERO { (s - q).length() } else { (s - q).dot(n).abs() };
-        (seed, d)
     }
 
     fn interior(&mut self, uv: DVec2) -> Option<FixedVertexHandle> {
@@ -914,7 +955,7 @@ pub(crate) fn mesh_face(
                 (x != u32::MAX && y != u32::MAX).then(|| [x.min(y), x.max(y)])
             })
             .collect();
-        (fm.folds, fm.forced_folds) = repair_folds(g, &mut fm, &fixed, &reversed);
+        (fm.folds, fm.forced_folds) = repair_folds(g, &mut fm, &fixed, &reversed, p.tol);
     }
     fm
 }
@@ -946,8 +987,12 @@ fn facing(g: &Geom, fm: &FaceMesh, t: [u32; 3]) -> Option<f64> {
 /// boundary can turn over in 3D. The same pass straightens triangles more than 60° off the
 /// surface normal at a corner (`SKEW_COS`; Delaunay in grid steps near a pole, where a step of the
 /// pole's free parameter is far shorter on the surface than one of the other). Each is
-/// repaired by flipping an inner edge with a neighbour where neither new triangle folds and
-/// the worse of the two lies better along the surface than before. Returns the folds left and
+/// repaired by flipping an inner edge with a neighbour where neither new triangle folds, the
+/// worse of the two lies better along the surface than before, and neither the new triangles
+/// nor the new edge leave the surface by more than `tol` (or than the old pair did, where that
+/// was more): a flip across a curved surface can put the new edge's midpoint far off it (`f12`'s
+/// twisted loft at 0.01: 0.0136 mm). If any edge was flipped, `fm.deviation` is measured again
+/// on the final triangles and inner edges. Returns the folds left and
 /// how many of them are forced (on the boundary, whose chord sags more than half the
 /// triangle's height above it: a feature narrower than a coarse tolerance, which no point
 /// inside changes); `tessellate` fails on the others, never exporting them silently. `fixed`: boundary edges
@@ -957,6 +1002,7 @@ fn repair_folds(
     fm: &mut FaceMesh,
     fixed: &std::collections::HashSet<[u32; 2]>,
     skip: &[bool],
+    tol: f64,
 ) -> (usize, usize) {
     use std::collections::HashMap;
     // vertices by their output position (seam and pole copies are one point there): edges and
@@ -982,6 +1028,11 @@ fn repair_folds(
         t.iter().filter_map(|i| normals[*i as usize]).map(|m| m.dot(n)).fold(1.0, f64::min)
     };
     let bad = |fm: &FaceMesh, t: usize| !skip[t] && (folded(fm, fm.tris[t]) || worst(fm, fm.tris[t]) < SKEW_COS);
+    // distance from the surface, as the refinement measures it
+    let tri_dev =
+        |fm: &FaceMesh, t: [u32; 3]| tri_deviation(g, t.map(|i| fm.verts[i as usize]), tol).map_or(0.0, |x| x.1);
+    let edge_dev = |fm: &FaceMesh, x: u32, y: u32| edge_deviation(g, fm.verts[x as usize], fm.verts[y as usize], tol).1;
+    let mut flipped = false;
     let mut todo: Vec<usize> = (0..fm.tris.len()).filter(|t| bad(fm, *t)).collect();
     if todo.is_empty() {
         return (0, 0);
@@ -1029,6 +1080,10 @@ fn repair_folds(
                 if worst(fm, n1).min(worst(fm, n2)) <= before + 1e-9 {
                     continue;
                 }
+                let limit = tol.max(tri_dev(fm, tri)).max(tri_dev(fm, ot)).max(edge_dev(fm, a, b));
+                if tri_dev(fm, n1).max(tri_dev(fm, n2)).max(edge_dev(fm, c, d)) > limit {
+                    continue;
+                }
                 for (x, y) in [(a, b), (b, c), (c, a)] {
                     if let Some(v) = edges.get_mut(&key(x, y)) {
                         v.retain(|i| *i != t);
@@ -1047,6 +1102,7 @@ fn repair_folds(
                     }
                 }
                 done = true;
+                flipped = true;
                 // the neighbour may need another flip
                 left.push(o);
                 break;
@@ -1062,6 +1118,22 @@ fn repair_folds(
         if !changed {
             break;
         }
+    }
+    if flipped {
+        // the deviation of the final mesh (the refinement measured the triangles before)
+        let mut dev: f64 = 0.0;
+        let mut seen = std::collections::HashSet::new();
+        for t in &fm.tris {
+            dev = dev.max(tri_dev(fm, *t));
+            for k in 0..3 {
+                let (x, y) = (t[k], t[(k + 1) % 3]);
+                let e = key(x, y);
+                if !fixed.contains(&e) && seen.insert(e) {
+                    dev = dev.max(edge_dev(fm, x, y));
+                }
+            }
+        }
+        fm.deviation = dev;
     }
     let left: Vec<usize> = (0..fm.tris.len()).filter(|t| !skip[*t] && folded(fm, fm.tris[*t])).collect();
     // on the boundary where its chord sags more than half the triangle's height above it
@@ -1128,30 +1200,13 @@ fn refine_pass(b: &Builder, inside: &[bool], tol: f64, ok: &mut Checked) -> (Vec
             worst = worst.max(*d);
             continue;
         }
-        let [a, c, d] = f.vertices().map(info);
-        let n = (c.p - a.p).cross(d.p - a.p);
-        let area2 = n.length();
-        let scale2 = (c.p - a.p).length_squared().max((d.p - a.p).length_squared());
-        if !crate::gt(area2, 1e-14 * scale2) || scale2.max((d.p - c.p).length_squared()) < (0.1 * tol).powi(2) {
+        let corners = f.vertices().map(info);
+        let Some((foot, dev, n)) = tri_deviation(b.g, corners, tol) else {
             ok.tris.insert(key, 0.0);
             continue; // a pole triangle, a sliver or a tiny one: nothing to measure
-        }
-        let n = n / area2;
+        };
+        let [a, c, d] = corners;
         let uvc = (a.uv + c.uv + d.uv) / 3.0;
-        let (lo, hi) = (a.uv.min(c.uv).min(d.uv), a.uv.max(c.uv).max(d.uv));
-        let (mut foot, mut dev) = b.foot((a.p + c.p + d.p) / 3.0, uvc, (lo, hi), n);
-        // near the tolerance also three inner points towards the corners (on a twisted
-        // surface the largest deviation need not be at the centroid)
-        if dev > tol / 3.0 && dev <= tol {
-            for w in [[4.0, 1.0, 1.0], [1.0, 4.0, 1.0], [1.0, 1.0, 4.0]] {
-                let q = (a.p * w[0] + c.p * w[1] + d.p * w[2]) / 6.0;
-                let quv = (a.uv * w[0] + c.uv * w[1] + d.uv * w[2]) / 6.0;
-                let (fq, dq) = b.foot(q, quv, (lo, hi), n);
-                if dq > dev {
-                    (foot, dev) = (fq, dq);
-                }
-            }
-        }
         worst = worst.max(dev);
         // a triangle on the boundary may face against the surface where the boundary's chord
         // sags more than the face is wide (a narrow fillet at a coarse tolerance): no point
@@ -1201,13 +1256,7 @@ fn refine_pass(b: &Builder, inside: &[bool], tol: f64, ok: &mut Checked) -> (Vec
         }
         let [v0, v1] = e.vertices().map(info);
         let mid = (v0.uv + v1.uv) * 0.5;
-        let ab = v1.p - v0.p;
-        if ab.length_squared() < (0.1 * tol).powi(2) {
-            ok.edges.insert(key, 0.0);
-            continue;
-        }
-        let (lo, hi) = (v0.uv.min(v1.uv), v0.uv.max(v1.uv));
-        let (foot, dev) = b.foot((v0.p + v1.p) * 0.5, mid, (lo, hi), DVec3::ZERO);
+        let (foot, dev) = edge_deviation(b.g, v0, v1, tol);
         worst = worst.max(dev);
         if dev > tol {
             add.push([foot, mid]);
