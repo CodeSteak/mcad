@@ -191,6 +191,45 @@ fn touches_curved_surfaces_by_their_kind() {
     assert_eq!(r[0].pairs[0].problem.as_deref(), Some("line_contact"), "{:?}", r[0].pairs[0]);
 }
 
+/// Surfaces of different kinds (or planes at an angle) whose gap stays within the tolerance over
+/// their whole common extent touch over an area: a plate tilted by 0.005° (gap ≤ 0.0017 over
+/// 20 mm), a cone of radius 5 → 5.002 in a hole of radius 5.002; a ball in its seat (concentric
+/// spheres of equal radius, also 0.005 larger: within the tolerance).
+#[test]
+fn touches_within_the_tolerance_over_the_extent() {
+    for src in [
+        "assert_touches(tol = 0.01) { translate([-20, -20, -2]) cube([40, 40, 2]); rotate([0.005, 0, 0]) translate([-10, -10, 0.001]) cube(20); }\n",
+        "assert_touches(tol = 0.01) { difference() { cylinder(r = 10, h = 20); translate([0, 0, -1]) cylinder(r = 5.002, h = 22); } cylinder(r1 = 5, r2 = 5.002, h = 20); }\n",
+        "assert_touches(tol = 0.01) { difference() { cube(20, center = true); sphere(5); } sphere(5); }\n",
+        "assert_touches(tol = 0.01) { difference() { translate([0, 0, -5]) cube([20, 20, 10], center = true); sphere(5.005); } sphere(5); }\n",
+    ] {
+        let r = check(src);
+        let p = &r[0].pairs[0];
+        assert!(p.ok && p.contact.as_deref() == Some("face"), "{src}: {p:?}");
+    }
+    // tilted by 1°: a line (an edge on the face)
+    let r = check(
+        "assert_touches(tol = 0.01) { translate([-20, -20, -2]) cube([40, 40, 2]); rotate([1, 0, 0]) translate([-10, 0, 0]) cube(20); }\n",
+    );
+    assert_eq!(r[0].pairs[0].contact.as_deref(), Some("line"), "{:?}", r[0].pairs[0]);
+}
+
+/// A line contact is drawn along the contact curve: the circle of radius 20 of a torus on a
+/// plate as one closed polyline, not a chord between two extreme vertices.
+#[test]
+fn line_contact_follows_the_curve() {
+    let r = check("assert_touches(contact = \"any\") { torus(20, 2); translate([-30, -30, 2]) cube([60, 60, 1]); }\n");
+    let p = &r[0].pairs[0];
+    assert_eq!(p.contact.as_deref(), Some("line"), "{p:?}");
+    assert_eq!(p.contact_lines.len(), 1, "{:?}", p.contact_lines.iter().map(|l| l.len()).collect::<Vec<_>>());
+    let l = &p.contact_lines[0];
+    assert!(l.len() > 50 && l[0] == l[l.len() - 1], "{}", l.len());
+    for q in l {
+        let r = q.0[0].hypot(q.0[1]);
+        assert!((r - 20.0).abs() < 0.5 && (q.0[2] - 2.0).abs() < 0.05, "{q:?}");
+    }
+}
+
 #[test]
 fn touches_gap_and_overlap() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);

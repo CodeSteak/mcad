@@ -40,7 +40,7 @@ use cad_kernel::curve2::Segment;
 use cad_kernel::region2::{self, Fill, Operand};
 use cad_kernel::{BoolOp, Kernel, Mesh};
 use cad_measure::dist::{self, Tri};
-use cad_measure::{Body, EdgeCurve};
+use cad_measure::{Body, EdgeCurve, FaceGeom};
 use glam::{DMat4, DVec2, DVec3};
 
 use cad_i18n::{tr, trs};
@@ -452,14 +452,59 @@ fn point_dist(q: DVec3, tris: &[Tri]) -> f64 {
     tris.iter().map(|t| dist::closest_on_tri(q, t).distance(q)).fold(f64::INFINITY, f64::min)
 }
 
+/// Triangles in a uniform grid for "within `lim` of the triangles" queries: each triangle is
+/// in every cell its box grown by `lim` meets, so a query looks at one cell.
+struct Near<'a> {
+    tris: &'a [Tri],
+    h: f64,
+    lim: f64,
+    cells: std::collections::HashMap<[i64; 3], Vec<u32>>,
+    /// Triangles far larger than the cells (a big planar facet): looked at by every query.
+    big: Vec<u32>,
+}
+
+impl<'a> Near<'a> {
+    fn new(tris: &'a [Tri], lim: f64) -> Near<'a> {
+        let edge = tris.iter().map(|t| (t[1] - t[0]).length().max((t[2] - t[1]).length())).sum::<f64>()
+            / tris.len().max(1) as f64;
+        let h = edge.max(2.0 * lim).max(1e-9);
+        let mut near = Near { tris, h, lim, cells: Default::default(), big: Vec::new() };
+        for (i, t) in tris.iter().enumerate() {
+            let lo = ((t[0].min(t[1]).min(t[2]) - lim) / h).floor().as_i64vec3();
+            let hi = ((t[0].max(t[1]).max(t[2]) + lim) / h).floor().as_i64vec3();
+            if (hi - lo).max_element() > 64 {
+                near.big.push(i as u32);
+                continue;
+            }
+            for x in lo.x..=hi.x {
+                for y in lo.y..=hi.y {
+                    for z in lo.z..=hi.z {
+                        near.cells.entry([x, y, z]).or_default().push(i as u32);
+                    }
+                }
+            }
+        }
+        near
+    }
+
+    /// `q` within `lim` of a triangle.
+    fn near(&self, q: DVec3) -> bool {
+        let k = (q / self.h).floor().as_i64vec3().to_array();
+        let hit =
+            |ids: &[u32]| ids.iter().any(|i| dist::closest_on_tri(q, &self.tris[*i as usize]).distance(q) <= self.lim);
+        self.cells.get(&k).is_some_and(|v| hit(v)) || hit(&self.big)
+    }
+}
+
 /// Contact of two close faces on the meshes: area of the triangles of `a` lying on `b`
 /// (within `lim`), else the near vertices (their extent decides line or point).
 fn mesh_contact(ta: &[Tri], tb: &[Tri], lim: f64, c: &mut ContactData, eps_area: f64, line_len: f64) -> &'static str {
+    let (na, nb) = (Near::new(ta, lim), Near::new(tb, lim));
     let mut area = 0.0;
     let mut near: Vec<DVec3> = Vec::new();
     let mut on = Vec::new();
     for t in ta {
-        let d: Vec<bool> = t.iter().map(|q| point_dist(*q, tb) <= lim).collect();
+        let d: Vec<bool> = t.iter().map(|q| nb.near(*q)).collect();
         if d.iter().all(|x| *x) {
             area += tri_area(t);
             on.push(*t);
@@ -473,7 +518,7 @@ fn mesh_contact(ta: &[Tri], tb: &[Tri], lim: f64, c: &mut ContactData, eps_area:
     // vertices of b near a (a cylinder's generator on a large planar face of a)
     for t in tb {
         for q in t {
-            if point_dist(*q, ta) <= lim {
+            if na.near(*q) {
                 near.push(*q);
             }
         }
@@ -486,16 +531,85 @@ fn mesh_contact(ta: &[Tri], tb: &[Tri], lim: f64, c: &mut ContactData, eps_area:
     }
     let Some(bb) = near.iter().fold(None, |b, q| merge(b, (*q, *q))) else { return "mesh" };
     if (bb.1 - bb.0).length() > line_len {
-        // the two farthest near vertices along the box diagonal
-        let dir = (bb.1 - bb.0).normalize();
-        let lo = near.iter().copied().min_by(|p, q| p.dot(dir).total_cmp(&q.dot(dir))).unwrap_or(bb.0);
-        let hi = near.iter().copied().max_by(|p, q| p.dot(dir).total_cmp(&q.dot(dir))).unwrap_or(bb.1);
-        c.lines.push(vec![lo, hi]);
+        let on = |q: DVec3| na.near(q) && nb.near(q);
+        c.lines.extend(contact_curves(&near, (bb.1 - bb.0).length(), line_len, &on));
         "line"
     } else {
         c.lines.push(vec![bb.0.lerp(bb.1, 0.5)]);
         "point"
     }
+}
+
+/// The contact curve through the near vertices of a line contact (a circle for a torus on a
+/// plate, a generator for a cylinder): the vertices averaged in cells of a 200th of the extent
+/// (at least `line_len`), the cells chained to their nearest neighbour, a chain broken at a
+/// jump of more than five times the usual spacing (the median edge of their minimum spanning
+/// tree, at least a cell) unless the jump lies on both faces (`on` at its quarter points: the
+/// vertices of a cylinder's generator are only at its ends), closed where it ends within such
+/// a spacing of its start.
+fn contact_curves(near: &[DVec3], extent: f64, line_len: f64, on: &dyn Fn(DVec3) -> bool) -> Vec<Vec<DVec3>> {
+    use std::collections::HashMap;
+    let cell = (extent / 200.0).max(line_len);
+    let mut cells: HashMap<[i64; 3], (DVec3, f64)> = HashMap::new();
+    for q in near {
+        let k = (*q / cell).floor().as_i64vec3().to_array();
+        let e = cells.entry(k).or_insert((DVec3::ZERO, 0.0));
+        e.0 += *q;
+        e.1 += 1.0;
+    }
+    let mut keys: Vec<[i64; 3]> = cells.keys().copied().collect();
+    keys.sort_unstable();
+    let mut pts: Vec<DVec3> = keys.iter().map(|k| cells[k].0 / cells[k].1).collect();
+    // the usual spacing: the median edge of the minimum spanning tree (Prim; nearest-neighbour
+    // distances would be those across a band of vertices, not along it)
+    let mut tree: Vec<f64> = Vec::new();
+    if pts.len() > 1 {
+        let mut dist: Vec<f64> = pts.iter().map(|q| q.distance(pts[0])).collect();
+        let mut done = vec![false; pts.len()];
+        done[0] = true;
+        for _ in 1..pts.len() {
+            let Some(k) = (0..pts.len()).filter(|k| !done[*k]).min_by(|a, b| dist[*a].total_cmp(&dist[*b])) else {
+                break;
+            };
+            done[k] = true;
+            tree.push(dist[k]);
+            for j in 0..pts.len() {
+                if !done[j] {
+                    dist[j] = dist[j].min(pts[j].distance(pts[k]));
+                }
+            }
+        }
+    }
+    tree.sort_by(f64::total_cmp);
+    let jump = 5.0 * tree.get(tree.len() / 2).copied().unwrap_or(cell).max(cell);
+    // start at an end of the extent (the farthest point from the centre)
+    let mid = pts.iter().copied().sum::<DVec3>() / pts.len().max(1) as f64;
+    let mut out = Vec::new();
+    while !pts.is_empty() {
+        let start = (0..pts.len()).max_by(|a, b| pts[*a].distance(mid).total_cmp(&pts[*b].distance(mid))).unwrap_or(0);
+        let mut chain = vec![pts.swap_remove(start)];
+        loop {
+            let last = chain[chain.len() - 1];
+            let Some((k, d)) =
+                pts.iter().enumerate().map(|(k, q)| (k, q.distance(last))).min_by(|a, b| a.1.total_cmp(&b.1))
+            else {
+                break;
+            };
+            let q = pts[k];
+            if d > jump && ![0.25, 0.5, 0.75].iter().all(|f| on(last.lerp(q, *f))) {
+                break;
+            }
+            chain.push(pts.swap_remove(k));
+        }
+        if chain.len() > 2 && chain[0].distance(chain[chain.len() - 1]) <= jump {
+            chain.push(chain[0]);
+        }
+        if chain.len() == 1 {
+            chain.push(chain[0]);
+        }
+        out.push(chain);
+    }
+    out
 }
 
 fn rank(kind: &str) -> u8 {
@@ -549,7 +663,11 @@ fn analytic_contact(sa: &Surface, sb: &Surface, tol: f64) -> Option<&'static str
         }
         (Sphere { frame: a, r: ra }, Sphere { frame: b, r: rb }) => {
             let d = a.origin.distance(b.origin);
-            ((d - (ra + rb)).abs() <= tol || (d - (ra - rb).abs()).abs() <= tol).then_some("point")
+            if d <= tol && (ra - rb).abs() <= tol {
+                None // concentric, equal radius (a ball in its seat): area contact (mesh estimate)
+            } else {
+                ((d - (ra + rb)).abs() <= tol || (d - (ra - rb).abs()).abs() <= tol).then_some("point")
+            }
         }
         (Sphere { frame: s, r }, Cylinder { frame: c, r: rc })
         | (Cylinder { frame: c, r: rc }, Sphere { frame: s, r }) => {
@@ -560,26 +678,55 @@ fn analytic_contact(sa: &Surface, sb: &Surface, tol: f64) -> Option<&'static str
     }
 }
 
-/// Whether two surfaces can lie on each other over an area (face contact). Two analytic
-/// surfaces of different kinds cannot (a plane is nowhere curved, a cylinder nowhere doubly
-/// curved, …), nor two cylinders that are not coaxial with the same radius: their contact is a
-/// line or a point however wide the band of triangles within the tolerance (a torus on a plate
-/// has a band of about `2·√(2·r·tol)`, a different area for every mesher). Free-form
+/// Whether two faces can lie on each other over an area (face contact). Two analytic surfaces
+/// of different kinds cannot (a plane is nowhere curved, a cylinder nowhere doubly curved, …),
+/// nor two cylinders or spheres that are not coaxial (concentric) with the same radius: their
+/// contact is a line or a point however wide the band of triangles within the tolerance (a
+/// torus on a plate has a band of about `2·√(2·r·tol)`, a different area for every mesher)
+/// — unless the gap between them stays within `tol` over all of their common extent
+/// ([`common_gap`]: a plate tilted by a hair, a cone in a hole of nearly its radius). Free-form
 /// surfaces (B-spline, revolution, extrusion) and analytic surfaces of one kind are left to
 /// the mesh.
-fn can_coincide(sa: &Surface, sb: &Surface, tol: f64) -> bool {
+fn can_coincide(fa: &FaceGeom, fb: &FaceGeom, tol: f64, slack: f64) -> bool {
     use Surface::*;
+    let (sa, sb) = (&fa.surface, &fb.surface);
     let analytic =
         |s: &Surface| matches!(s, Plane { .. } | Cylinder { .. } | Cone { .. } | Sphere { .. } | Torus { .. });
     if !(analytic(sa) && analytic(sb)) {
         return true;
     }
-    match (sa, sb) {
+    let exact = match (sa, sb) {
         (Cylinder { frame: a, r: ra }, Cylinder { frame: b, r: rb }) => {
             a.z.cross(b.z).length() < 1e-6 && line_dist(b.origin, a.origin, a.z) <= tol && (ra - rb).abs() <= tol
         }
+        (Sphere { frame: a, r: ra }, Sphere { frame: b, r: rb }) => {
+            a.origin.distance(b.origin) <= tol && (ra - rb).abs() <= tol
+        }
         _ => std::mem::discriminant(sa) == std::mem::discriminant(sb),
+    };
+    exact || common_gap(fa, fb, slack).is_some_and(|g| g <= tol)
+}
+
+/// Largest gap between two faces over their common extent: the exact distance of each mesh
+/// vertex of one face from the other's surface, over the vertices that lie over the other face
+/// (its triangles no farther than its surface plus `slack`: a vertex beyond the other face's
+/// rim is nearer to its surface than to its triangles), at most about 300 triangles' corners of
+/// each face. `None` without a closed-form distance (B-spline) or without a common extent.
+fn common_gap(fa: &FaceGeom, fb: &FaceGeom, slack: f64) -> Option<f64> {
+    let mut gap: Option<f64> = None;
+    for (x, y) in [(fa, fb), (fb, fa)] {
+        // at most about 300 triangles' corners (the gap of two smooth surfaces varies slowly)
+        let every = (x.tris.len() / 300).max(1);
+        for t in x.tris.iter().step_by(every) {
+            for q in t {
+                let d = y.surface.distance(*q)?;
+                if point_dist(*q, &y.tris) <= d + slack {
+                    gap = Some(gap.map_or(d, |g| g.max(d)));
+                }
+            }
+        }
     }
+    gap
 }
 
 /// Contact analysis of two body sets that are within `tol` of each other.
@@ -631,6 +778,14 @@ fn contact<K: Kernel>(
                                     }
                                 } else if na.dot(nb) > 1.0 - 1e-9 {
                                     "" // same side: no contact of these faces
+                                } else if na.dot(nb) < 0.0
+                                    && common_gap(fa, fb, lim).is_some_and(|g| g <= tol + t.eps_len)
+                                    && plane_contact((x, fi), (y, fj), oa, na, &mut c, t.eps_area)
+                                {
+                                    // at an angle by a hair: within the tolerance all over
+                                    // their common outline
+                                    c.exact = false;
+                                    "face"
                                 } else {
                                     // planes at an angle (or apart): an edge on a face at most
                                     mesh_contact(&fa.tris, &fb.tris, lim, &mut c, f64::INFINITY, line_len)
@@ -647,7 +802,7 @@ fn contact<K: Kernel>(
                                 None => {
                                     c.exact = false;
                                     // no area where the surfaces cannot coincide: line or point
-                                    let eps_area = if can_coincide(&fa.surface, &fb.surface, tol + t.eps_len) {
+                                    let eps_area = if can_coincide(fa, fb, tol + t.eps_len, lim) {
                                         t.eps_area
                                     } else {
                                         f64::INFINITY
