@@ -92,8 +92,8 @@ pub struct SurfaceDistance {
     /// `chord`).
     pub inner_vertex_gap: f64,
     /// Largest distance of a boundary vertex (on an edge of its face's triangles that no other
-    /// triangle of the face shares, or a point of an edge polyline) from the nearest edge of the
-    /// B-rep: such a vertex is a point of an edge (or of a chord between two, where loops cross
+    /// triangle of the face shares, or a point of an edge polyline) from the nearest edge of its
+    /// face in the B-rep: such a vertex is a point of an edge (or of a chord between two, where loops cross
     /// at a cusp), however far that edge lies off the face's surface (`vertex_gap`).
     pub edge_vertex_gap: f64,
     /// The vertices inside their face that `inner_vertex_gap` finds off the surface (more than
@@ -157,7 +157,18 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
     };
     // the B-rep's edges, densely sampled, as degenerate triangles (segments) for the search
     let mut segs = Mesh::default();
-    for e in &brep.edges {
+    // the edge of each segment and the edges of each face
+    let mut seg_edge: Vec<u32> = Vec::new();
+    let mut face_edges: HashMap<u32, std::collections::HashSet<u32>> = HashMap::new();
+    for f in brep.faces() {
+        let es = face_edges.entry(f.id).or_default();
+        for l in &f.loops {
+            if let cad_kernel::brep::Loop::Edges(oes) = l {
+                es.extend(oes.iter().map(|oe| oe.edge));
+            }
+        }
+    }
+    for (ei, e) in brep.edges.iter().enumerate() {
         let (a, b) = (brep.vertices[e.start as usize], brep.vertices[e.end as usize]);
         use cad_kernel::brep::Curve;
         // circles and ellipses: a chord sag of 1e-4 mm (a full circle of radius 300: 3900)
@@ -174,10 +185,12 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
                 segs.positions.extend_from_slice(&[p.x as f32, p.y as f32, p.z as f32]);
             }
             segs.indices.extend_from_slice(&[k, k + 1, k + 1]);
+            seg_edge.push(ei as u32);
         }
     }
     let edges = Bvh::new(&segs);
-    let mut on_edges: HashMap<u32, f64> = HashMap::new();
+    // per (face, vertex): the distance from the face's own edges
+    let mut on_edges: HashMap<(u32, u32), f64> = HashMap::new();
     let mut inner_seen: std::collections::HashSet<u32> = Default::default();
     let mut out = SurfaceDistance { per_triangle: vec![0.0; mesh.indices.len() / 3], ..Default::default() };
     // the corners on their surfaces; a corner off the surface is seeded from its neighbours'
@@ -220,8 +233,15 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
         for (k, c) in cs.iter().enumerate() {
             out.vertex_gap = out.vertex_gap.max(c.1);
             let v = mesh.indices[3 * t + k];
-            let mut to_edges =
-                || edges.as_ref().map_or(f64::INFINITY, |e| *on_edges.entry(v).or_insert_with(|| e.distance(tri[k])));
+            // from the edges of this face (a box corner moved along a neighbour's edge is off)
+            let mut to_edges = || {
+                let own = face_edges.get(&face);
+                edges.as_ref().map_or(f64::INFINITY, |e| {
+                    *on_edges
+                        .entry((face, v))
+                        .or_insert_with(|| e.nearest_where(tri[k], |t| own.is_some_and(|o| o.contains(&seg_edge[t]))).0)
+                })
+            };
             if !boundary.contains(&(face, welded[v as usize])) && !on_edge(v) {
                 // off the surface, but on a chord between edge points (loops that cross at a
                 // cusp are split there, inside the face's triangles): the edge's gap
@@ -349,6 +369,11 @@ impl<'a> Bvh<'a> {
 
     /// Distance from `p` to the nearest triangle and its index.
     fn nearest(&self, p: DVec3) -> (f64, usize) {
+        self.nearest_where(p, |_| true)
+    }
+
+    /// The same among the triangles `keep` accepts (an infinite distance if none).
+    fn nearest_where(&self, p: DVec3, keep: impl Fn(usize) -> bool) -> (f64, usize) {
         let mut best = f64::INFINITY;
         let mut which = 0;
         let mut stack = vec![(0usize, self.box_distance(0, p))];
@@ -359,6 +384,9 @@ impl<'a> Bvh<'a> {
             let n = self.nodes[i];
             if n.count > 0 {
                 for &t in &self.tris[n.first as usize..(n.first + n.count) as usize] {
+                    if !keep(t as usize) {
+                        continue;
+                    }
                     let d = point_triangle(p, &triangle(self.mesh, t as usize));
                     if d < best {
                         (best, which) = (d, t as usize);

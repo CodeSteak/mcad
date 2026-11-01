@@ -404,5 +404,20 @@ mod tests {
             assert_eq!(c.verdict, "differ", "{what}: {:?}", c.notes);
         }
         assert_eq!(compare(&parts(tol), &parts(tol), tol, false).verdict, "ok");
+        // a box corner moved along one of its edges: on the B-rep's edges, but off the edges of
+        // the faces whose corner it is
+        let boxed = || {
+            let mut k = SmlibKernel::new();
+            let b = k.make_box(glam::DVec3::ZERO, glam::DVec3::new(10.0, 8.0, 6.0), 1).unwrap();
+            mesh_parts(&mut k, Some(0), &[(b, true)], tol)
+        };
+        let corner = moved(boxed(), |_, v| {
+            if v.iter().all(|x| *x == 0.0) {
+                v[2] += 0.3;
+            }
+        });
+        let c = compare(&boxed(), &corner, tol, false);
+        assert_eq!(c.verdict, "differ", "{:?}", c.notes);
+        assert!(c.solidcore.edge_vertex_gap > 0.25, "{}", c.solidcore.edge_vertex_gap);
     }
 }
