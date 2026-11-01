@@ -14,14 +14,17 @@
 //! from their triangles' centres), so the verdict looks at solidcore's distance to the exact
 //! surface, not at the distance to SMLib's mesh: `ok` if solidcore's mesh is watertight, its
 //! volume within `tol · area`, its chord error (the distance to the surface beyond that of
-//! the triangles' corners) within [`SURFACE_SLACK`] · `tol`, and its vertices on their faces
-//! within `tol` plus, where the root node is `same`, SMLib's largest such gap (separately for
-//! the vertices inside a face and all: points of the B-rep's edges may lie off the face, the
-//! fitted end of a sweep, and loops crossing at a cusp are split on their chords). There
-//! (both B-reps describe the same body) the Hausdorff distance to SMLib's mesh must also stay
-//! within SMLib's own distance to its surfaces (at least `tol`) plus [`SURFACE_SLACK`] · `tol`
-//! plus [`KERNEL_SLACK`] of the size: only SMLib's distance counts, solidcore's would grow
-//! with any error of its mesh.
+//! the triangles' corners) within [`SURFACE_SLACK`] · `tol`, and its vertices where its own
+//! B-rep puts them, within `tol`: inside a face on the face's surface, on a face's boundary on
+//! the B-rep's edges (which may lie off the face: the fitted end of a sweep; loops crossing at
+//! a cusp are split on the chords between edge points; where the bodies are the same, a
+//! vertex inside a face may be off by as much as SMLib's mesh is next to it: such a split
+//! between edges that lie apart). Where the root node is `same` (both
+//! B-reps describe the same body) the distance to SMLib's mesh, less SMLib's own distance to
+//! its surfaces where each sample is (`cad_tess::mesh_excess`), must also stay within
+//! (1 + [`SURFACE_SLACK`]) · `tol` plus [`KERNEL_SLACK`] of the size: only SMLib's distance
+//! counts (solidcore's would grow with any error of its mesh), and only locally (`f02`'s sweep
+//! end, 0.57 mm off its cap in SMLib's mesh, excuses nothing elsewhere).
 
 use std::time::Instant;
 
@@ -114,6 +117,9 @@ pub struct Metrics {
     pub vertex_gap: f64,
     /// The same for the vertices inside their face (surface points: about 0).
     pub inner_vertex_gap: f64,
+    /// Largest distance of a vertex on a face's boundary from the B-rep's edges (edge points:
+    /// about 0, however far the edge lies off the face).
+    pub edge_vertex_gap: f64,
     /// `tessellate`, ms (solidcore: with `brep`).
     pub ms: f64,
     /// `brep` alone, ms.
@@ -134,6 +140,9 @@ pub struct Comparison {
     pub to_smlib: Option<Dist>,
     pub from_smlib: Option<Dist>,
     pub hausdorff: Option<f64>,
+    /// Where the bodies are the same: the Hausdorff distance less SMLib's own distance to its
+    /// surfaces at each sample (`cad_tess::mesh_excess`).
+    pub hausdorff_excess: Option<f64>,
     pub notes: Vec<String>,
 }
 
@@ -144,9 +153,14 @@ pub const SURFACE_SLACK: f64 = 1.1;
 /// kernels fit blends and sweeps a little differently.
 pub const KERNEL_SLACK: f64 = 1e-4;
 
-fn metrics(p: &Parts, tol: f64) -> (Metrics, Mesh) {
+/// The metrics of one kernel's parts, all their meshes in one, and per triangle of it the
+/// sampled distance to the kernel's exact surfaces (0 without a B-rep).
+fn metrics(p: &Parts, tol: f64) -> (Metrics, Mesh, Vec<f64>, Vec<(glam::DVec3, f64)>) {
     let mut m = Metrics { parts: p.parts.len(), watertight: true, ..Default::default() };
     let mut all = Mesh::default();
+    let mut gaps: Vec<f64> = Vec::new();
+    // vertices inside a face off its surface, and how far
+    let mut inner_off = Vec::new();
     let (mut exact, mut solid_vol, mut solid_area) = (0.0, 0.0, 0.0);
     let mut have_exact = true;
     let mut surface: Option<(Distance, Distance)> = None;
@@ -186,10 +200,15 @@ fn metrics(p: &Parts, tol: f64) -> (Metrics, Mesh) {
             let d = cad_tess::surface_distance(b, mesh);
             m.vertex_gap = m.vertex_gap.max(d.vertex_gap);
             m.inner_vertex_gap = m.inner_vertex_gap.max(d.inner_vertex_gap);
+            m.edge_vertex_gap = m.edge_vertex_gap.max(d.edge_vertex_gap);
             surface = Some(match surface {
                 Some((s, c)) => (Distance::max_of(s, d.distance), Distance::max_of(c, d.chord)),
                 None => (d.distance, d.chord),
             });
+            gaps.extend_from_slice(&d.per_triangle);
+            inner_off.extend_from_slice(&d.inner_off);
+        } else {
+            gaps.resize(gaps.len() + mesh.indices.len() / 3, 0.0);
         }
         append(&mut all, mesh);
     }
@@ -199,7 +218,7 @@ fn metrics(p: &Parts, tol: f64) -> (Metrics, Mesh) {
     }
     m.surface = surface.map(|s| s.0.into());
     m.chord = surface.map(|s| s.1.into());
-    (m, all)
+    (m, all, gaps, inner_off)
 }
 
 /// `e` with `who: ` in front, unless it already starts with it (kernel errors name their kernel).
@@ -217,8 +236,8 @@ fn append(all: &mut Mesh, m: &Mesh) {
 /// Compares the meshes of both kernels (see the module docs). `same`: the root node's verdict
 /// is `same` (else the bodies differ and so may the meshes: no note on the Hausdorff distance).
 pub fn compare(a: &Parts, b: &Parts, tol: f64, same: bool) -> Comparison {
-    let (ma, mesh_a) = metrics(a, tol);
-    let (mb, mesh_b) = metrics(b, tol);
+    let (ma, mesh_a, gaps_a, _) = metrics(a, tol);
+    let (mb, mesh_b, _, off_b) = metrics(b, tol);
     let mut c = Comparison { tol, verdict: "ok", ..Default::default() };
     if a.parts.is_empty() && b.parts.is_empty() {
         // no B-rep parts (2D result, a mesh)
@@ -250,20 +269,29 @@ pub fn compare(a: &Parts, b: &Parts, tol: f64, same: bool) -> Comparison {
         if let Some(s) = mb.chord.filter(|s| s.max > SURFACE_SLACK * tol) {
             c.notes.push(format!("solidcore: chord {:.4} mm off the surface at {:?}", s.max, s.at));
         }
-        // SMLib's gaps count where both B-reps describe the same body: an edge off its face (a
-        // fitted sweep end), loops crossing at a cusp split on their chords (`f02`)
-        let smlib = same && ma.error.is_none() && ma.triangles > 0;
-        let inner = if smlib { ma.inner_vertex_gap } else { 0.0 };
-        if mb.inner_vertex_gap > inner + tol {
-            c.notes.push(format!(
-                "solidcore: a vertex inside a face {:.4} mm off its surface (SMLib: {:.4})",
-                mb.inner_vertex_gap, ma.inner_vertex_gap
-            ));
+        // the vertices against solidcore's own B-rep: inside a face on its surface, on a
+        // face's boundary on the B-rep's edges (which may lie off the face: a fitted sweep end)
+        // where both B-reps describe the same body, SMLib's own gap next to such a vertex
+        // excuses it there (loops crossing at a cusp split on chords between edges that lie
+        // apart: `f02`, 0.46 mm in solidcore's mesh, 0.57 mm in SMLib's)
+        let smlib = same && ma.error.is_none() && !mesh_a.indices.is_empty();
+        let pts: Vec<glam::DVec3> = off_b.iter().map(|(p, _)| *p).collect();
+        let allow = if smlib { cad_tess::local_allowance(&pts, &mesh_a, &gaps_a) } else { Vec::new() };
+        let inner = off_b
+            .iter()
+            .enumerate()
+            .map(|(i, (_, d))| match allow.get(i) {
+                Some((a, dist)) if *dist <= a + tol => d - a,
+                _ => *d,
+            })
+            .fold(0.0, f64::max);
+        if inner > tol {
+            c.notes.push(format!("solidcore: a vertex inside a face {inner:.4} mm off its surface"));
         }
-        if smlib && mb.vertex_gap > ma.vertex_gap + tol {
+        if mb.edge_vertex_gap > tol {
             c.notes.push(format!(
-                "solidcore: a vertex {:.4} mm off its face (SMLib: {:.4})",
-                mb.vertex_gap, ma.vertex_gap
+                "solidcore: a vertex on a face's boundary {:.4} mm off the B-rep's edges",
+                mb.edge_vertex_gap
             ));
         }
         if !c.notes.is_empty() {
@@ -274,13 +302,25 @@ pub fn compare(a: &Parts, b: &Parts, tol: f64, same: bool) -> Comparison {
         let to = cad_tess::mesh_distance(&mesh_b, &mesh_a);
         let from = cad_tess::mesh_distance(&mesh_a, &mesh_b);
         let h = to.max.max(from.max);
-        let size = mesh_a.bounds().map_or(0.0, |(lo, hi)| (hi - lo).length());
-        let lim = ma.surface.map_or(tol, |s| s.max.max(tol)) + SURFACE_SLACK * tol + KERNEL_SLACK * size;
-        if same && h > lim {
-            let w = if to.max >= from.max { to } else { from };
-            c.notes.push(format!("{h:.4} mm from SMLib's mesh at {:?} (expected ≤ {:.4})", w.at.to_array(), lim));
-            if c.verdict == "ok" {
-                c.verdict = "differ";
+        if same {
+            // beyond SMLib's own distance to its surfaces where the samples are (its fitted
+            // sweep end off the cap is excused there only)
+            let ex_to = cad_tess::mesh_excess(&mesh_b, &mesh_a, &[], &gaps_a);
+            let ex_from = cad_tess::mesh_excess(&mesh_a, &mesh_b, &gaps_a, &[]);
+            let ex = if ex_to.max >= ex_from.max { ex_to } else { ex_from };
+            let size = mesh_a.bounds().map_or(0.0, |(lo, hi)| (hi - lo).length());
+            let lim = (1.0 + SURFACE_SLACK) * tol + KERNEL_SLACK * size;
+            c.hausdorff_excess = Some(ex.max);
+            if ex.max > lim {
+                c.notes.push(format!(
+                    "{:.4} mm from SMLib's mesh beyond SMLib's own distance to its surfaces at {:?} (expected ≤ {:.4})",
+                    ex.max,
+                    ex.at.to_array(),
+                    lim
+                ));
+                if c.verdict == "ok" {
+                    c.verdict = "differ";
+                }
             }
         }
         (c.to_smlib, c.from_smlib, c.hausdorff) = (Some(to.into()), Some(from.into()), Some(h));
@@ -346,5 +386,23 @@ mod tests {
         assert_eq!(c.verdict, "differ", "{:?}", c.notes);
         assert!(c.solidcore.vertex_gap > 0.25, "{}", c.solidcore.vertex_gap);
         assert!(c.notes.iter().any(|n| n.contains("vertex")), "{:?}", c.notes);
+        // where the bodies differ (no Hausdorff check): shifted by 0.3, shrunk by 1 %, a vertex
+        // on an edge moved off it, all against the B-rep alone
+        for (what, f) in [
+            ("shift", Box::new(|_: usize, v: &mut [f32]| v[2] += 0.3) as Box<dyn Fn(usize, &mut [f32])>),
+            ("shrink", Box::new(|_: usize, v: &mut [f32]| v.iter_mut().for_each(|x| *x *= 0.99))),
+            (
+                "first",
+                Box::new(|i: usize, v: &mut [f32]| {
+                    if i == 0 {
+                        v[0] += 0.3
+                    }
+                }),
+            ),
+        ] {
+            let c = compare(&parts(tol), &moved(parts(tol), f), tol, false);
+            assert_eq!(c.verdict, "differ", "{what}: {:?}", c.notes);
+        }
+        assert_eq!(compare(&parts(tol), &parts(tol), tol, false).verdict, "ok");
     }
 }

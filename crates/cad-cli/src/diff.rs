@@ -665,24 +665,35 @@ fn compare_metrics(
 
 /// Smallest `--mesh-tol` (as `measure --mesh-tol`): SMLib's tessellator ran out of memory at 1e-9.
 pub const MIN_MESH_TOL: f64 = 1e-4;
+/// Largest `--mesh-tol`: coarser meshes are a few triangles per face, their comparison says
+/// nothing about the tessellators.
+pub const MAX_MESH_TOL: f64 = 10.0;
 
 pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>) -> Result<Outcome, Fail> {
     if files.is_empty() {
-        return Err(Fail::Usage(tr!("diff-kernels: keine Dateien", "diff-kernels: no files")));
+        return Err(Fail::Usage(tr!("keine Dateien", "no files")));
     }
     if let Some(t) = mesh_tol {
         if !t.is_finite() {
             return Err(Fail::Usage(tr!(
-                "diff-kernels: --mesh-tol {t} ist keine endliche Zahl",
-                "diff-kernels: --mesh-tol {t} is not a finite number"
+                "--mesh-tol {t} ist keine endliche Zahl",
+                "--mesh-tol {t} is not a finite number"
             )));
         }
         if t < MIN_MESH_TOL {
             return Err(Fail::Usage(tr!(
-                "diff-kernels: --mesh-tol {t} ist kleiner als {MIN_MESH_TOL} mm (feiner rechnet SMLibs \
+                "--mesh-tol {t} ist kleiner als {MIN_MESH_TOL} mm (feiner rechnet SMLibs \
                  Tessellator Minuten und belegt Gigabytes)",
-                "diff-kernels: --mesh-tol {t} is below {MIN_MESH_TOL} mm (finer, SMLib's tessellator \
+                "--mesh-tol {t} is below {MIN_MESH_TOL} mm (finer, SMLib's tessellator \
                  takes minutes and gigabytes)"
+            )));
+        }
+        if t > MAX_MESH_TOL {
+            return Err(Fail::Usage(tr!(
+                "--mesh-tol {t} ist größer als {MAX_MESH_TOL} mm (gröbere Netze sind wenige Dreiecke je \
+                 Fläche, ihr Vergleich sagt nichts)",
+                "--mesh-tol {t} is above {MAX_MESH_TOL} mm (coarser meshes are a few triangles per \
+                 face, their comparison says nothing)"
             )));
         }
     }
