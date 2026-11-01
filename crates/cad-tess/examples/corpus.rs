@@ -89,6 +89,8 @@ fn part<K: Kernel>(k: &mut K, s: &K::Shape, solid: bool, tol: f64, own: bool) ->
         "lost_constraints": t.stats.lost_constraints,
         // faces with triangles facing against the surface after the repair (`strict` fails)
         "folded": t.stats.folded.iter().map(|(id, n)| format!("{id}: {n}")).collect::<Vec<_>>(),
+        // folds the boundary forces (a feature narrower than the tolerance)
+        "forced_folds": t.stats.forced_folds,
         "strict": t.strict().err().map(|e| e.to_string()),
         "refined": t.stats.refined,
         "max_deviation": t.stats.max_deviation,

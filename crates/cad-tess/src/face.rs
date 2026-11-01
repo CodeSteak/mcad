@@ -69,6 +69,9 @@ pub(crate) struct FaceMesh {
     pub too_fine: Option<usize>,
     /// Triangles still facing against the surface after `repair_folds`.
     pub folds: usize,
+    /// Of those, the ones on the boundary where its chord sags more than the triangle is high
+    /// (a feature narrower than a coarse tolerance: no point inside changes that chord).
+    pub forced_folds: usize,
 }
 
 pub(crate) struct Params {
@@ -911,7 +914,7 @@ pub(crate) fn mesh_face(
                 (x != u32::MAX && y != u32::MAX).then(|| [x.min(y), x.max(y)])
             })
             .collect();
-        fm.folds = repair_folds(g, &mut fm, &fixed, &reversed);
+        (fm.folds, fm.forced_folds) = repair_folds(g, &mut fm, &fixed, &reversed);
     }
     fm
 }
@@ -944,10 +947,17 @@ fn facing(g: &Geom, fm: &FaceMesh, t: [u32; 3]) -> Option<f64> {
 /// surface normal at a corner (`SKEW_COS`; Delaunay in grid steps near a pole, where a step of the
 /// pole's free parameter is far shorter on the surface than one of the other). Each is
 /// repaired by flipping an inner edge with a neighbour where neither new triangle folds and
-/// the worse of the two lies better along the surface than before. Returns the folds left
-/// (`tessellate` fails on them, never exporting folds silently). `fixed`: boundary edges
+/// the worse of the two lies better along the surface than before. Returns the folds left and
+/// how many of them are forced (on the boundary, whose chord sags more than half the
+/// triangle's height above it: a feature narrower than a coarse tolerance, which no point
+/// inside changes); `tessellate` fails on the others, never exporting them silently. `fixed`: boundary edges
 /// (never flipped), `skip`: triangles reversed by design (crossing loops).
-fn repair_folds(g: &Geom, fm: &mut FaceMesh, fixed: &std::collections::HashSet<[u32; 2]>, skip: &[bool]) -> usize {
+fn repair_folds(
+    g: &Geom,
+    fm: &mut FaceMesh,
+    fixed: &std::collections::HashSet<[u32; 2]>,
+    skip: &[bool],
+) -> (usize, usize) {
     use std::collections::HashMap;
     // vertices by their output position (seam and pole copies are one point there): edges and
     // degenerate triangles as the welded mesh will see them
@@ -974,7 +984,7 @@ fn repair_folds(g: &Geom, fm: &mut FaceMesh, fixed: &std::collections::HashSet<[
     let bad = |fm: &FaceMesh, t: usize| !skip[t] && (folded(fm, fm.tris[t]) || worst(fm, fm.tris[t]) < SKEW_COS);
     let mut todo: Vec<usize> = (0..fm.tris.len()).filter(|t| bad(fm, *t)).collect();
     if todo.is_empty() {
-        return 0;
+        return (0, 0);
     }
     let mut edges: HashMap<[u32; 2], Vec<usize>> = HashMap::new();
     for (i, t) in fm.tris.iter().enumerate() {
@@ -1053,7 +1063,26 @@ fn repair_folds(g: &Geom, fm: &mut FaceMesh, fixed: &std::collections::HashSet<[
             break;
         }
     }
-    (0..fm.tris.len()).filter(|t| !skip[*t] && folded(fm, fm.tris[*t])).count()
+    let left: Vec<usize> = (0..fm.tris.len()).filter(|t| !skip[*t] && folded(fm, fm.tris[*t])).collect();
+    // on the boundary where its chord sags more than half the triangle's height above it
+    let forced = |t: usize| {
+        let tri = fm.tris[t];
+        (0..3).any(|k| {
+            let (a, b, c) = (tri[k], tri[(k + 1) % 3], tri[(k + 2) % 3]);
+            if !fixed.contains(&key(a, b)) {
+                return false;
+            }
+            let [pa, pb, pc] = [a, b, c].map(|i| fm.verts[i as usize]);
+            let ab = pb.p - pa.p;
+            let s = ((pc.p - pa.p).dot(ab) / ab.length_squared().max(1e-300)).clamp(0.0, 1.0);
+            let height = (pa.p + ab * s - pc.p).length();
+            let mid = (pa.p + pb.p) * 0.5;
+            let sag = (g.eval(g.project(mid, (pa.uv + pb.uv) * 0.5)) - mid).length();
+            height < 2.0 * sag
+        })
+    };
+    let n = left.iter().filter(|t| forced(**t)).count();
+    (left.len(), n)
 }
 
 /// Winding number of the loops about `q`.

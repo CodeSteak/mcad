@@ -107,6 +107,10 @@ pub struct Stats {
     /// Faces with triangles that face against their surface (folds) after the repair, and how
     /// many; [`tessellate`] fails on any.
     pub folded: Vec<(FaceId, usize)>,
+    /// Folds kept because the boundary forces them: on a boundary edge whose chord sags more
+    /// than half the triangle's height above it (a feature narrower than the tolerance, e.g. a
+    /// rim or a thin tube at 0.5 mm; no point inside changes that chord).
+    pub forced_folds: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -244,8 +248,9 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
         if fm.deviation > tol {
             stats.unconverged.push((f.id, fm.deviation));
         }
-        if fm.folds > 0 {
-            stats.folded.push((f.id, fm.folds));
+        stats.forced_folds += fm.forced_folds;
+        if fm.folds > fm.forced_folds {
+            stats.folded.push((f.id, fm.folds - fm.forced_folds));
         }
         if fm.tris.is_empty() {
             stats.failed_faces.push((f.id, "no triangles".into()));
