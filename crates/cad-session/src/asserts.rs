@@ -387,12 +387,17 @@ fn seg_points(s: &Segment, n: usize) -> Vec<DVec2> {
 }
 
 /// Contact of two coincident opposite planar faces: area and outline of the intersection of
-/// both outlines (`region2`, exact for lines and arcs).
+/// both outlines (`region2`, exact for lines and arcs), projected into the plane of `fa` (origin
+/// `o`, normal `n`). `apart`: the plane of `fb` (origin, normal) where it is at an angle to
+/// `fa`'s, and the tolerance: face contact only if the gap between the planes along `n` stays
+/// within it over the whole intersection (the gap is linear in the plane, so at its outline the
+/// largest); planes at an angle meeting at a rim are near each other along a line only.
 fn plane_contact(
     fa: (&Body, usize),
     fb: (&Body, usize),
     o: DVec3,
     n: DVec3,
+    apart: Option<(DVec3, DVec3, f64)>,
     c: &mut ContactData,
     eps_area: f64,
 ) -> bool {
@@ -420,9 +425,19 @@ fn plane_contact(
             pts.extend(sp.into_iter().skip(skip));
         }
         if pts.len() >= 3 {
-            c.lines.push(pts.iter().map(|q| to3(*q)).chain(std::iter::once(to3(pts[0]))).collect());
             polys2.push(pts);
         }
+    }
+    if let Some((ob, nb, tol)) = apart {
+        // the gap along `n` from the plane of `fa` to that of `fb` at each outline point
+        let cos = n.dot(nb);
+        let gap = |q: DVec2| if cos.abs() < 1e-12 { f64::INFINITY } else { ((to3(q) - ob).dot(nb) / cos).abs() };
+        if !polys2.iter().flatten().all(|q| gap(*q) <= tol) {
+            return false;
+        }
+    }
+    for pts in &polys2 {
+        c.lines.push(pts.iter().map(|q| to3(*q)).chain(std::iter::once(to3(pts[0]))).collect());
     }
     let (pts, idx) = cad_engine::fill_loops(&polys2);
     for t in idx.chunks_exact(3) {
@@ -771,7 +786,7 @@ fn contact<K: Kernel>(
                         match (plane_normal(&fa.surface, fa.same_sense), plane_normal(&fb.surface, fb.same_sense)) {
                             (Some((oa, na)), Some((ob, nb))) => {
                                 if na.dot(nb) < -1.0 + 1e-9 && (ob - oa).dot(na).abs() <= tol + t.eps_len {
-                                    if plane_contact((x, fi), (y, fj), oa, na, &mut c, t.eps_area) {
+                                    if plane_contact((x, fi), (y, fj), oa, na, None, &mut c, t.eps_area) {
                                         "face"
                                     } else {
                                         ""
@@ -780,10 +795,20 @@ fn contact<K: Kernel>(
                                     "" // same side: no contact of these faces
                                 } else if na.dot(nb) < 0.0
                                     && common_gap(fa, fb, lim).is_some_and(|g| g <= tol + t.eps_len)
-                                    && plane_contact((x, fi), (y, fj), oa, na, &mut c, t.eps_area)
+                                    && plane_contact(
+                                        (x, fi),
+                                        (y, fj),
+                                        oa,
+                                        na,
+                                        Some((ob, nb, tol + t.eps_len)),
+                                        &mut c,
+                                        t.eps_area,
+                                    )
                                 {
                                     // at an angle by a hair: within the tolerance all over
-                                    // their common outline
+                                    // their common outline (the mesh vertices of `common_gap`
+                                    // are a quick test only: at a rim they are on the shared
+                                    // edge alone)
                                     c.exact = false;
                                     "face"
                                 } else {

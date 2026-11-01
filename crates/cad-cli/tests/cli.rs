@@ -395,7 +395,8 @@ fn diff_kernels_brep() {
 }
 
 /// Contact kinds with both kernels: a ball in its seat (concentric spheres) and a cone in a hole
-/// of nearly its radius touch over an area, a torus on a plate along a line.
+/// of nearly its radius touch over an area, a torus on a plate and a cube tilted by 30° on a
+/// plate's rim along a line.
 #[cfg(feature = "solidcore")]
 #[test]
 fn contact_kinds_with_both_kernels() {
@@ -407,6 +408,10 @@ fn contact_kinds_with_both_kernels() {
             "face",
         ),
         ("assert_touches(contact = \"any\") { torus(20, 2); translate([-30, -30, 2]) cube([60, 60, 1]); }\n", "line"),
+        (
+            "assert_touches(tol = 0.01) { translate([-20, -20, -2]) cube([40, 40, 2]); translate([-5, 20, 0]) rotate([-30, 0, 0]) cube(10); }\n",
+            "line",
+        ),
     ] {
         let f = dir.path().join("touch.mcad");
         std::fs::write(&f, src).unwrap();

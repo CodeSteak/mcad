@@ -214,6 +214,23 @@ fn touches_within_the_tolerance_over_the_extent() {
     assert_eq!(r[0].pairs[0].contact.as_deref(), Some("line"), "{:?}", r[0].pairs[0]);
 }
 
+/// Planes at an angle that meet at a rim touch along a line: the cube's front face and the
+/// plate's side face are near each other only at the shared edge (only there were mesh
+/// vertices of either face near the other, so their projected overlap of 20 mm² counted as
+/// face contact at 30°, 45°, 60° and 80°).
+#[test]
+fn touches_planes_meeting_at_a_rim() {
+    for angle in [10, 30, 45, 60, 80] {
+        let src = format!(
+            "assert_touches(tol = 0.01) {{ translate([-20, -20, -2]) cube([40, 40, 2]); translate([-5, 20, 0]) rotate([-{angle}, 0, 0]) cube(10); }}\n"
+        );
+        let r = check(&src);
+        let p = &r[0].pairs[0];
+        assert!(!r[0].ok && p.contact.as_deref() == Some("line"), "{angle}°: {p:?}");
+        assert_eq!(p.problem.as_deref(), Some("line_contact"), "{angle}°: {p:?}");
+    }
+}
+
 /// A line contact is drawn along the contact curve: the circle of radius 20 of a torus on a
 /// plate as one closed polyline, not a chord between two extreme vertices.
 #[test]
