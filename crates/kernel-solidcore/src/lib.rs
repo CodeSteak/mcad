@@ -1726,11 +1726,6 @@ mod imp {
             Ok(out)
         }
 
-        /// Fillet (`chamfer`: equal-distance chamfer, corners bevelled) of the edges `ids` (indices
-        /// of [`Inner::edges`]) with size `r`, or with a radius law per edge (`laws`, the values at
-        /// the stations of [`Inner::law_stations`]), as the facade's `do_fillet_like`: edges with
-        /// nothing to blend are skipped, the result is checked (closed if the input is, a volume
-        /// change a blend of that size can make, new faces) and its faces get their tags.
         /// Whether the constant-radius fillet of the edges `kept` of `s` meets a filleted vertex
         /// for which no corner type exists (solidcore's `CornerUnsupported`, recorded only with
         /// `fixes.fillet_vertex_error_diagnostics`): the corners of a fresh session on a copy.
@@ -1751,6 +1746,11 @@ mod imp {
             found == Some(true)
         }
 
+        /// Fillet (`chamfer`: equal-distance chamfer, corners bevelled) of the edges `ids` (indices
+        /// of [`Inner::edges`]) with size `r`, or with a radius law per edge (`laws`, the values at
+        /// the stations of [`Inner::law_stations`]), as the facade's `do_fillet_like`: edges with
+        /// nothing to blend are skipped, the result is checked (closed if the input is, a volume
+        /// change a blend of that size can make, new faces) and its faces get their tags.
         pub fn fillet_like(
             &mut self,
             s: &Shape,
