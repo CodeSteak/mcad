@@ -3,19 +3,35 @@
 use glam::DVec3;
 
 /// Minimises `f` over `[a, b]`: `n` samples, then golden-section search around the best one.
-/// Returns `(t, f(t))`.
+/// Returns `(t, f(t))`. Where the samples at both ends tie for the best (a closed curve whose
+/// seam is at `a` and `b`), both ends are searched: the minimum may lie on either side of the
+/// seam.
 pub fn minimise(a: f64, b: f64, n: usize, f: impl Fn(f64) -> f64) -> (f64, f64) {
     let n = n.max(4);
-    let mut best = (a, f(a));
-    for i in 1..=n {
-        let t = a + (b - a) * i as f64 / n as f64;
-        let v = f(t);
-        if v < best.1 {
-            best = (t, v);
+    let at = |i: usize| a + (b - a) * i as f64 / n as f64;
+    let vals: Vec<f64> = (0..=n).map(|i| f(at(i))).collect();
+    let mut k = 0;
+    for (i, v) in vals.iter().enumerate() {
+        if *v < vals[k] {
+            k = i;
         }
     }
     let h = (b - a) / n as f64;
-    let (mut lo, mut hi) = ((best.0 - h).max(a.min(b)), (best.0 + h).min(a.max(b)));
+    let mut best = golden(&f, (at(k) - h).max(a.min(b)), (at(k) + h).min(a.max(b)), (at(k), vals[k]));
+    let tie = |v: f64| v <= vals[k] + 1e-12 * (1.0 + vals[k].abs());
+    for e in [0, n] {
+        if e != k && tie(vals[e]) {
+            let o = golden(&f, (at(e) - h).max(a.min(b)), (at(e) + h).min(a.max(b)), (at(e), vals[e]));
+            if o.1 < best.1 {
+                best = o;
+            }
+        }
+    }
+    best
+}
+
+/// Golden-section search of `f` over `[lo, hi]`; `start` if nothing there is lower.
+fn golden(f: &impl Fn(f64) -> f64, mut lo: f64, mut hi: f64, start: (f64, f64)) -> (f64, f64) {
     let g = 0.5 * (5f64.sqrt() - 1.0);
     let (mut x1, mut x2) = (hi - g * (hi - lo), lo + g * (hi - lo));
     let (mut f1, mut f2) = (f(x1), f(x2));
@@ -39,7 +55,7 @@ pub fn minimise(a: f64, b: f64, n: usize, f: impl Fn(f64) -> f64) -> (f64, f64) 
     }
     let t = 0.5 * (lo + hi);
     let v = f(t);
-    if v < best.1 { (t, v) } else { best }
+    if v < start.1 { (t, v) } else { start }
 }
 
 /// 8-point Gauss–Legendre nodes on [-1, 1] and weights.
@@ -102,6 +118,9 @@ mod tests {
         assert!((v - 2.0).abs() < 1e-13, "{v}");
         let (t, f) = minimise(-3.0, 5.0, 32, |x| (x - 1.25) * (x - 1.25) + 0.5);
         assert!((t - 1.25).abs() < 1e-7 && (f - 0.5).abs() < 1e-13, "{t} {f}");
+        // a closed curve: the samples at both ends tie, the minimum is just before the end
+        let (t, f) = minimise(0.0, 1.0, 96, |t| if t < 0.5 { (t + 0.005).powi(2) } else { (t - 0.995).powi(2) });
+        assert!((t - 0.995).abs() < 1e-6 && f < 1e-12, "{t} {f}");
         assert_eq!(clean(1e-14), 0.0);
         assert_eq!(clean(2.999_999_999_999_9), 3.0);
         assert!((angle_between(DVec3::X, DVec3::Y) - std::f64::consts::FRAC_PI_2).abs() < 1e-15);

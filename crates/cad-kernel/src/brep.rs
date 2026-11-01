@@ -678,18 +678,34 @@ impl BSplineSurface {
 // ------------------------------------------------------------------------------------------
 
 /// Minimises `f` over `[a, b]`: dense samples, then golden-section search around the best.
+/// Where the samples at both ends tie for the best (a closed profile whose seam is at `a` and
+/// `b`), both ends are searched: the minimum may lie on either side of the seam.
 fn minimise(a: f64, b: f64, f: impl Fn(f64) -> f64) -> (f64, f64) {
     const N: usize = 96;
-    let mut best = (a, f(a));
-    for i in 1..=N {
-        let t = a + (b - a) * i as f64 / N as f64;
-        let v = f(t);
-        if v < best.1 {
-            best = (t, v);
+    let at = |i: usize| a + (b - a) * i as f64 / N as f64;
+    let vals: Vec<f64> = (0..=N).map(|i| f(at(i))).collect();
+    let mut k = 0;
+    for (i, v) in vals.iter().enumerate() {
+        if *v < vals[k] {
+            k = i;
         }
     }
     let h = (b - a) / N as f64;
-    let (mut lo, mut hi) = ((best.0 - h).max(a), (best.0 + h).min(b));
+    let mut best = golden(&f, (at(k) - h).max(a), (at(k) + h).min(b), (at(k), vals[k]));
+    let tie = |v: f64| v <= vals[k] + 1e-12 * (1.0 + vals[k].abs());
+    for e in [0, N] {
+        if e != k && tie(vals[e]) {
+            let o = golden(&f, (at(e) - h).max(a), (at(e) + h).min(b), (at(e), vals[e]));
+            if o.1 < best.1 {
+                best = o;
+            }
+        }
+    }
+    best
+}
+
+/// Golden-section search of `f` over `[lo, hi]`; `start` if nothing there is lower.
+fn golden(f: &impl Fn(f64) -> f64, mut lo: f64, mut hi: f64, start: (f64, f64)) -> (f64, f64) {
     let g = 0.5 * (5f64.sqrt() - 1.0);
     let (mut x1, mut x2) = (hi - g * (hi - lo), lo + g * (hi - lo));
     let (mut f1, mut f2) = (f(x1), f(x2));
@@ -710,7 +726,7 @@ fn minimise(a: f64, b: f64, f: impl Fn(f64) -> f64) -> (f64, f64) {
     }
     let t = 0.5 * (lo + hi);
     let v = f(t);
-    if v < best.1 { (t, v) } else { best }
+    if v < start.1 { (t, v) } else { start }
 }
 
 fn rotate_about(v: DVec3, axis: DVec3, angle: f64) -> DVec3 {
@@ -970,6 +986,21 @@ mod tests {
             points: pts.iter().map(|(x, y)| DVec3::new(*x, *y, 0.0)).collect(),
             weights: Some((0..9).map(|i| if i % 2 == 1 { s } else { 1.0 }).collect()),
         }
+    }
+
+    /// The minimum next to the seam of a closed profile (samples at both ends tie): a torus as
+    /// the revolution of a full circle, a point just before the seam.
+    #[test]
+    fn distance_next_to_the_seam() {
+        let mut c = quarter_circles();
+        c.points.iter_mut().for_each(|p| *p += DVec3::new(3.0, 0.0, 0.0));
+        let s = Surface::Revolution { curve: c, axis_origin: DVec3::ZERO, axis_dir: DVec3::Y };
+        let a = -1f64.to_radians();
+        let p = DVec3::new(3.0 + 1.02 * a.cos(), 1.02 * a.sin(), 0.0);
+        let d = s.distance(p).unwrap();
+        assert!((d - 0.02).abs() < 1e-6, "{d}");
+        let (t, v) = minimise(0.0, 1.0, |t| if t < 0.5 { (t + 0.005).powi(2) } else { (t - 0.995).powi(2) });
+        assert!((t - 0.995).abs() < 1e-6 && v < 1e-12, "{t} {v}");
     }
 
     #[test]
