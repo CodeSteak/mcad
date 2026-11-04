@@ -633,3 +633,41 @@ fn inner_vertices_near_an_edge_off_the_surface() {
         }
     });
 }
+
+/// The meshes of a sweep that folds over itself (`f02`: a tube of radius 3 along a bend
+/// tighter than that) cover the surface: SMLib's mesh, whose triangles lie on the same surface
+/// (the B-reps agree to 1e-13), is within the tolerance of ours beyond SMLib's own distance to
+/// it. The refinement measured each triangle against the nearest surface point only, so a
+/// triangle across a fold was near its base and missed its tip: 0.031 mm at 0.01. It now also
+/// measures the surface point at the triangle's (and inner edge's) parameters.
+fn folding_sweep<K: Kernel + 'static, F: Fn() -> K>(new: F, kernel: &str)
+where
+    K::Shape: 'static,
+{
+    let src = "sweep(path = [[19, 0, 30], [35, 0, 25], [19, 0, 10]]) circle(3);\n";
+    let tol = 0.01;
+    let (smlib_mesh, smlib_gaps) = with_part(kernel_smlib::SmlibKernel::new(), "spec/sweep.mcad", Some(src), |k, s| {
+        let m = k.tessellate(s, tol).unwrap();
+        let gaps = cad_tess::surface_distance(&k.brep(s).unwrap(), &m).per_triangle;
+        (m, gaps)
+    });
+    with_part(new(), "spec/sweep.mcad", Some(src), |k, s| {
+        let brep = k.brep(s).unwrap();
+        let m = cad_tess::tessellate(&brep, tol).unwrap();
+        let ex = cad_tess::mesh_excess(&smlib_mesh, &m, &smlib_gaps, &[]);
+        assert!(ex.max <= 1.5 * tol, "{kernel}: SMLib's mesh {} from ours beyond its own gap at {}", ex.max, ex.at);
+        let d = cad_tess::surface_distance(&brep, &m);
+        assert!(d.chord.max <= tol * 1.001, "{kernel}: chord {}", d.chord.max);
+    });
+}
+
+#[test]
+fn folding_sweep_smlib() {
+    folding_sweep(kernel_smlib::SmlibKernel::new, "smlib");
+}
+
+#[cfg(feature = "solidcore")]
+#[test]
+fn folding_sweep_solidcore() {
+    folding_sweep(kernel_solidcore::SolidcoreKernel::new, "solidcore");
+}

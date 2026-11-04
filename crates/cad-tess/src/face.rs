@@ -18,7 +18,8 @@
 //!    (Delaunay then joins points along it, not across the curved one), the loops as
 //!    constraint edges. Triangles inside are those an odd number of constraint edges away from
 //!    the outside (nested loops).
-//! 3. **Refinement.** A triangle whose centroid lies farther than `tol` from the surface gets
+//! 3. **Refinement.** A triangle whose centroid lies farther than `tol` from the surface (its
+//!    foot, or the surface point at its parameters off the triangle's plane: a fold) gets
 //!    the midpoint of its longest inner edge (or the centroid's foot), an inner edge whose
 //!    midpoint lies farther than `tol` the foot of its midpoint, and a triangle facing against
 //!    the surface its centroid; a point that would land on the boundary is replaced by the
@@ -117,7 +118,9 @@ fn foot(g: &Geom, q: DVec3, seed: DVec2, near: (DVec2, DVec2), n: DVec3) -> (DVe
 /// Deviation of the triangle with corners `[a, c, d]` from the surface as the refinement
 /// measures it: the foot of its centroid and, where that is off by more than a third of `tol`
 /// but within it, of three inner points towards the corners (on a twisted surface the largest
-/// deviation need not be at the centroid). `None` for a triangle without area (a pole, a
+/// deviation need not be at the centroid); at each point also the distance of the surface
+/// point at its parameters from the triangle's plane (a fold of the surface under the
+/// triangle, which the foot does not see). `None` for a triangle without area (a pole, a
 /// sliver) or one smaller than a tenth of `tol`: nothing to measure. With the foot of the
 /// worst point and the triangle's unit normal.
 fn tri_deviation(g: &Geom, [a, c, d]: [FVert; 3], tol: f64) -> Option<(DVec2, f64, DVec3)> {
@@ -131,6 +134,20 @@ fn tri_deviation(g: &Geom, [a, c, d]: [FVert; 3], tol: f64) -> Option<(DVec2, f6
     let uvc = (a.uv + c.uv + d.uv) / 3.0;
     let (lo, hi) = (a.uv.min(c.uv).min(d.uv), a.uv.max(c.uv).max(d.uv));
     let (mut at, mut dev) = foot(g, (a.p + c.p + d.p) / 3.0, uvc, (lo, hi), n);
+    // where the surface folds under the triangle (its normal at a corner turned against the one
+    // at the centroid's parameters: a sweep whose profile turns over), also the surface at the
+    // same parameters from the triangle's plane: the foot measures the triangle against the
+    // nearest surface point only, so a triangle across the fold is near its base and misses
+    // its tip
+    let fold = g
+        .normal(uvc, (lo, hi))
+        .is_some_and(|m| [a, c, d].iter().any(|v| g.normal(v.uv, (lo, hi)).is_some_and(|k| k.dot(m) < FOLD_COS)));
+    if fold {
+        let pd = (g.eval(uvc) - (a.p + c.p + d.p) / 3.0).dot(n).abs();
+        if pd > dev {
+            (at, dev) = (uvc, pd);
+        }
+    }
     if dev > tol / 3.0 && dev <= tol {
         for w in [[4.0, 1.0, 1.0], [1.0, 4.0, 1.0], [1.0, 1.0, 4.0]] {
             let q = (a.p * w[0] + c.p * w[1] + d.p * w[2]) / 6.0;
@@ -139,20 +156,45 @@ fn tri_deviation(g: &Geom, [a, c, d]: [FVert; 3], tol: f64) -> Option<(DVec2, f6
             if dq > dev {
                 (at, dev) = (fq, dq);
             }
+            if fold {
+                let pd = (g.eval(quv) - q).dot(n).abs();
+                if pd > dev {
+                    (at, dev) = (quv, pd);
+                }
+            }
         }
     }
     Some((at, dev, n))
 }
 
 /// Deviation of an inner edge's midpoint from the surface (0 for an edge shorter than a tenth
-/// of `tol`), with its foot.
+/// of `tol`), with its foot; or the distance of the surface point at the midpoint's parameters
+/// along the ends' mean normal, if larger.
 fn edge_deviation(g: &Geom, v0: FVert, v1: FVert, tol: f64) -> (DVec2, f64) {
     let mid = (v0.uv + v1.uv) * 0.5;
     if (v1.p - v0.p).length_squared() < (0.1 * tol).powi(2) {
         return (mid, 0.0);
     }
-    foot(g, (v0.p + v1.p) * 0.5, mid, (v0.uv.min(v1.uv), v0.uv.max(v1.uv)), DVec3::ZERO)
+    let near = (v0.uv.min(v1.uv), v0.uv.max(v1.uv));
+    let q = (v0.p + v1.p) * 0.5;
+    let r = foot(g, q, mid, near, DVec3::ZERO);
+    // the surface at the midpoint's parameters along the mean normal of the ends (see
+    // `tri_deviation`: a fold between them)
+    if let (Some(n0), Some(n1), Some(m)) = (g.normal(v0.uv, near), g.normal(v1.uv, near), g.normal(mid, near))
+        && (n0.dot(m) < FOLD_COS || n1.dot(m) < FOLD_COS)
+        && let Some(n) = (n0 + n1).try_normalize()
+    {
+        let pd = (g.eval(mid) - q).dot(n).abs();
+        if pd > r.1 {
+            return (mid, pd);
+        }
+    }
+    r
 }
+
+/// A surface folds under a triangle or edge where its normal at a corner turns against (beyond
+/// this cosine) the one at the parameters of its middle.
+const FOLD_COS: f64 = 0.0;
 
 impl Builder<'_> {
     fn insert(&mut self, v: FVert) -> Option<FixedVertexHandle> {
