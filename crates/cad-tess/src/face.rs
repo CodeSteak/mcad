@@ -426,11 +426,18 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
     let mut f = if chord.iter().all(|c| c.iter().sum::<f64>() >= 1.0) { DOUBLE.sqrt() } else { 1.0 };
     // a ruled face (straight in one direction by its curvature) whose curved direction's
     // curvature outweighs its share of the twist (a loft between a superellipse and a circle):
-    // the curved direction keeps its own lines for half the tolerance, the straight one gets as
-    // many as keep 2·M·hs·hc within the other half (hc that direction's step). Its cells are
-    // long along the rulings, where the twist adds no sag (`planter`: 10.6 k triangles at 0.05,
-    // 14.7 k with the twist shared out as on a doubly curved face, 12.0 k without the twist).
-    // Where the twist dominates (the sides of a twisted bar) the shares above fit better
+    // the curved direction keeps its own lines for half the tolerance (N·hc² / 8 ≤ tol / 2), the
+    // straight one gets as many as keep the twist's part of a cell's diagonal sag, 2·M·hs·hc / 8,
+    // within the whole tolerance (hc that direction's step): `hs ≤ 4·tol / (M·hc)`. The grid's
+    // bound is then 1.5 · tol where the largest curvature and the largest twist meet in one
+    // cell with the same sign on its diagonal, and the refinement, which measures every
+    // triangle and inner edge, splits such cells; deliberately, by the numbers: within the half
+    // of the tolerance (`hs ≤ 2·tol / (M·hc)`) `planter` takes 12.3 k / 53.7 k triangles at
+    // 0.05 / 0.01 instead of 10.6 k / 45.0 k, both within the tolerance (sampled chord 0.0500 /
+    // 0.0100), the other ruled faces of the corpus and the twisted extrusions unchanged. Its
+    // cells are long along the rulings, where the twist adds no sag (`planter` 14.7 k at 0.05
+    // with the twist shared out as on a doubly curved face, 12.0 k without the twist). Where the
+    // twist dominates (the sides of a twisted bar) the shares above fit better
     let total = |c: &[f64]| c.iter().sum::<f64>();
     let straight = [0, 1].map(|i| total(&chord_k[i]) < 1.0);
     if straight[0] != straight[1] && !pieces[0].is_empty() && !pieces[1].is_empty() {
