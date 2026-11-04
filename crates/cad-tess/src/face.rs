@@ -50,6 +50,9 @@ pub(crate) struct FVert {
     pub id: Option<u32>,
     /// On a pole (its `uv` matters for the normal only).
     pub pole: bool,
+    /// The surface normal, on a surface that can fold (`Geom::can_fold`; the fold test of
+    /// `tri_deviation`), else `None`.
+    pub n: Option<DVec3>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -142,9 +145,8 @@ fn tri_deviation(g: &Geom, [a, c, d]: [FVert; 3], tol: f64) -> Option<(DVec2, f6
     // same parameters from the triangle's plane: the foot measures the triangle against the
     // nearest surface point only, so a triangle across the fold is near its base and misses
     // its tip
-    let fold = g
-        .normal(uvc, (lo, hi))
-        .is_some_and(|m| [a, c, d].iter().any(|v| g.normal(v.uv, (lo, hi)).is_some_and(|k| k.dot(m) < FOLD_COS)));
+    let fold = g.can_fold()
+        && g.normal(uvc, (lo, hi)).is_some_and(|m| [a, c, d].iter().any(|v| v.n.is_some_and(|k| k.dot(m) < FOLD_COS)));
     if fold {
         let pd = (g.eval(uvc) - (a.p + c.p + d.p) / 3.0).dot(n).abs();
         if pd > dev {
@@ -183,7 +185,8 @@ fn edge_deviation(g: &Geom, v0: FVert, v1: FVert, tol: f64) -> (DVec2, f64) {
     let r = foot(g, q, mid, near, DVec3::ZERO);
     // the surface at the midpoint's parameters along the mean normal of the ends (see
     // `tri_deviation`: a fold between them)
-    if let (Some(n0), Some(n1), Some(m)) = (g.normal(v0.uv, near), g.normal(v1.uv, near), g.normal(mid, near))
+    if let (Some(n0), Some(n1)) = (v0.n, v1.n)
+        && let Some(m) = g.normal(mid, near)
         && (n0.dot(m) < FOLD_COS || n1.dot(m) < FOLD_COS)
         && let Some(n) = (n0 + n1).try_normalize()
     {
@@ -200,7 +203,10 @@ fn edge_deviation(g: &Geom, v0: FVert, v1: FVert, tol: f64) -> (DVec2, f64) {
 const FOLD_COS: f64 = 0.0;
 
 impl Builder<'_> {
-    fn insert(&mut self, v: FVert) -> Option<FixedVertexHandle> {
+    fn insert(&mut self, mut v: FVert) -> Option<FixedVertexHandle> {
+        if self.g.can_fold() {
+            v.n = self.g.normal(v.uv, self.bounds);
+        }
         let q = self.point(v.uv);
         let h = self.cdt.insert(q).ok()?;
         if h.index() >= self.info.len() {
@@ -252,7 +258,7 @@ impl Builder<'_> {
 
     fn interior(&mut self, uv: DVec2) -> Option<FixedVertexHandle> {
         let p = self.g.eval(uv);
-        self.insert(FVert { uv, p, id: None, pole: false })
+        self.insert(FVert { uv, p, id: None, pole: false, n: None })
     }
 
     /// Inner faces (odd number of constraint edges from the outside), by fixed face index.
@@ -827,7 +833,8 @@ fn split_vertex(
     let id = *next_id;
     *next_id += 1;
     let uv = b.warp.inv(q);
-    let v = FVert { uv, p, id: Some(id), pole: false };
+    let n = if b.g.can_fold() { b.g.normal(uv, b.bounds) } else { None };
+    let v = FVert { uv, p, id: Some(id), pole: false, n };
     if i >= b.info.len() {
         b.info.resize(i + 1, v);
     }
@@ -881,7 +888,10 @@ pub(crate) fn mesh_face(
     for l in &loops {
         let hs = l
             .iter()
-            .map(|q| b.insert(FVert { uv: q.uv, p: points[q.id as usize], id: Some(q.id), pole: q.pole.is_some() }))
+            .map(|q| {
+                let v = FVert { uv: q.uv, p: points[q.id as usize], id: Some(q.id), pole: q.pole.is_some(), n: None };
+                b.insert(v)
+            })
             .collect();
         handles.push(hs);
     }
@@ -1097,7 +1107,7 @@ fn repair_folds(
         [x.min(y), x.max(y)]
     };
     let fixed: std::collections::HashSet<[u32; 2]> = fixed.iter().map(|e| key(e[0], e[1])).collect();
-    let normals: Vec<Option<DVec3>> = fm.verts.iter().map(|v| g.normal(v.uv, fm.bounds)).collect();
+    let normals: Vec<Option<DVec3>> = fm.verts.iter().map(|v| v.n.or_else(|| g.normal(v.uv, fm.bounds))).collect();
     let folded = |fm: &FaceMesh, t: [u32; 3]| facing(g, fm, t).is_some_and(|d| d < 0.0);
     // the smallest cosine between the triangle's normal and its corners' surface normals
     let worst = |fm: &FaceMesh, t: [u32; 3]| {

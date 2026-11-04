@@ -194,6 +194,13 @@ impl Geom {
         matches!(self.kind, Kind::Plane)
     }
 
+    /// Whether the surface can fold over itself under a triangle of the mesh: B-splines and the
+    /// surfaces of a curve (a sweep whose profile turns over, a profile with a cusp), not the
+    /// analytic ones, whose normal turns at most by the grid's angle step per cell.
+    pub fn can_fold(&self) -> bool {
+        matches!(self.kind, Kind::BSpline(_) | Kind::Revolution { .. } | Kind::Extrusion { .. })
+    }
+
     /// The pole at `p`, if `p` is one.
     pub fn pole(&self, p: DVec3) -> Option<Pole> {
         self.poles.iter().find(|(q, _)| (*q - p).length() <= self.eps).map(|(_, pl)| *pl)

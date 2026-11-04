@@ -355,7 +355,7 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
         let mut index = Vec::with_capacity(fm.verts.len());
         for v in &fm.verts {
             let shared = v.id.filter(|_| !v.pole);
-            let n = g.normal(v.uv, fm.bounds).map_or(DVec3::ZERO, |n| n * orient);
+            let n = v.n.or_else(|| g.normal(v.uv, fm.bounds)).map_or(DVec3::ZERO, |n| n * orient);
             let same = shared.and_then(|id| by_id.get(&id)).and_then(|c| c.iter().find(|(_, m)| m.dot(n) > 0.9));
             if let Some((i, _)) = same {
                 index.push(*i);
