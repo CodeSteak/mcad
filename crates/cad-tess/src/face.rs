@@ -313,6 +313,10 @@ const NEAR: f64 = 2.0;
 /// the refinement would have to split every cell.
 const DOUBLE: f64 = 2.0;
 
+/// A refinement point nearer than this times the tolerance to a vertex of the face is not
+/// inserted (see `mesh_face`).
+const NEAR_TOL: f64 = 1e-3;
+
 /// Fewest pieces per direction over which the general grid samples curvature and twist (see
 /// `grid_lines`).
 const MIN_PIECES: usize = 8;
@@ -941,6 +945,26 @@ pub(crate) fn mesh_face(
     let mut inside = b.inside();
     if !g.is_plane() {
         let mut checked = Checked::default();
+        // every vertex by its position (cells of `NEAR_TOL` · tol): a point within that of one
+        // is not inserted, also where they are far apart in (u, v) (two sheets of a surface
+        // that folds over itself, `f02`'s sweep end: at the `f32` resolution of the output the
+        // points coincide and four triangles share an edge)
+        let hcell = NEAR_TOL * p.tol;
+        let mut occupied: std::collections::HashMap<glam::I64Vec3, Vec<DVec3>> = Default::default();
+        for v in &b.info {
+            occupied.entry((v.p / hcell).floor().as_i64vec3()).or_default().push(v.p);
+        }
+        let taken = |occ: &std::collections::HashMap<glam::I64Vec3, Vec<DVec3>>, q: DVec3| {
+            let key = (q / hcell).floor().as_i64vec3();
+            (-1..=1).any(|dx| {
+                (-1..=1).any(|dy| {
+                    (-1..=1).any(|dz| {
+                        occ.get(&key.saturating_add(glam::I64Vec3::new(dx, dy, dz)))
+                            .is_some_and(|v| v.iter().any(|o| (*o - q).length() <= hcell))
+                    })
+                })
+            })
+        };
         // each pass measures the mesh as it is; the last one only measures
         let mut passes = 0;
         loop {
@@ -973,7 +997,7 @@ pub(crate) fn mesh_face(
                     if near {
                         continue 'cands;
                     }
-                    if b.inside_point(uv, q, cell, &inside) {
+                    if !taken(&occupied, q) && b.inside_point(uv, q, cell, &inside) {
                         seen.entry(key).or_default().push(q);
                         ok.push(uv);
                         continue 'cands;
@@ -988,8 +1012,10 @@ pub(crate) fn mesh_face(
                     fm.too_fine = Some(b.cdt.num_inner_faces());
                     return fm;
                 }
-                if b.interior(*uv).is_some() {
+                if let Some(h) = b.interior(*uv) {
                     fm.refined += 1;
+                    let q = b.info[h.index()].p;
+                    occupied.entry((q / hcell).floor().as_i64vec3()).or_default().push(q);
                 }
             }
             inside = b.inside();
