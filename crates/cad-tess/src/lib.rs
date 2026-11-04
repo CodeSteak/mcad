@@ -60,6 +60,11 @@ pub struct Options {
     pub max_triangles: usize,
 }
 
+/// Rounds in which the edges under forced folds ([`Stats::forced_folds`]) are discretised with
+/// half the tolerance again and the mesh made anew (a rim narrower than a coarse tolerance:
+/// `planter` at 0.5).
+const FORCED_ROUNDS: u32 = 3;
+
 /// Default of [`Options::max_triangles`] and [`Options::max_face_triangles`].
 pub const MAX_TRIANGLES: usize = 2_000_000;
 
@@ -109,7 +114,8 @@ pub struct Stats {
     pub folded: Vec<(FaceId, usize)>,
     /// Folds kept because the boundary forces them: on a boundary edge whose chord sags more
     /// than half the triangle's height above it (a feature narrower than the tolerance, e.g. a
-    /// rim or a thin tube at 0.5 mm; no point inside changes that chord).
+    /// rim or a thin tube at 0.5 mm; no point inside changes that chord), left after such
+    /// edges were discretised with half the tolerance up to `FORCED_ROUNDS` times.
     pub forced_folds: usize,
 }
 
@@ -201,7 +207,83 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
     let tol = opts.tol.max(MIN_REL_TOL * size);
     let angle = opts.angle.clamp(1f64.to_radians(), 60f64.to_radians());
     let eps = (1e-7 * size).max(1e-9);
-    let mut ep = edges::discretise(brep, tol, angle);
+    // per edge: how often its tolerance was halved for a forced fold on it
+    let mut finer = vec![0u32; brep.edges.len()];
+    let mut round = 0;
+    let Round { ep, mut mesh, stats, splits, mut vid, .. } = loop {
+        let r = mesh_faces(brep, opts, (tol, angle, eps), &finer)?;
+        if r.forced_segments.is_empty() || round == FORCED_ROUNDS {
+            break r;
+        }
+        // a fold forced by a boundary edge whose chord sags more than half the triangle's height:
+        // that edge again with half the tolerance (both faces get its new points: watertight), at
+        // most `FORCED_ROUNDS` times
+        let mut edge_of: HashMap<(u32, u32), usize> = HashMap::new();
+        for (i, ids) in r.ep.edges.iter().enumerate() {
+            for w in ids.windows(2) {
+                edge_of.insert((w[0].min(w[1]), w[0].max(w[1])), i);
+            }
+        }
+        let mut more = false;
+        for [a, b] in &r.forced_segments {
+            if let Some(&i) = edge_of.get(&(*a.min(b), *a.max(b))) {
+                more |= finer[i] == round;
+                finer[i] = round + 1;
+            }
+        }
+        if !more {
+            break r;
+        }
+        round += 1;
+    };
+    let by_seg = split_segments(&splits);
+    apply_splits(&mut mesh, &mut vid, &by_seg);
+    drop_fins(&mut mesh);
+    fill_missing_normals(&mut mesh);
+    turn_normals_against(&mut mesh);
+    // the edges' polylines as the triangles use them: with the points where a face split a
+    // segment (loops crossing at a cusp), so a split point counts as a point of the edge (on
+    // the chord between two of its points), not as a point inside the face
+    for (i, ids) in ep.edges.iter().enumerate() {
+        for w in ids.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            let mut chain = vec![ep.points[a as usize]];
+            if let Some(pts) = by_seg.get(&(a.min(b), a.max(b))) {
+                let mid = pts.iter().map(|(_, s)| s.p);
+                if a < b { chain.extend(mid) } else { chain.extend(mid.rev()) }
+            }
+            chain.push(ep.points[b as usize]);
+            for s in chain.windows(2) {
+                for p in s {
+                    mesh.edge_segments.extend_from_slice(&[p.x as f32, p.y as f32, p.z as f32]);
+                }
+                mesh.edge_ids.push(i as u32);
+            }
+        }
+    }
+    Ok(Tessellation { mesh, stats })
+}
+
+/// One meshing of every face (see [`tessellate_with`]) with the edges discretised as `finer`
+/// says.
+struct Round {
+    ep: edges::EdgePolys,
+    mesh: Mesh,
+    stats: Stats,
+    splits: Vec<face::Split>,
+    /// Boundary point id of each mesh vertex.
+    vid: Vec<Option<u32>>,
+    /// The boundary segments of the forced folds.
+    forced_segments: Vec<[u32; 2]>,
+}
+
+fn mesh_faces(
+    brep: &Brep,
+    opts: &Options,
+    (tol, angle, eps): (f64, f64, f64),
+    finer: &[u32],
+) -> Result<Round, TessError> {
+    let mut ep = edges::discretise(brep, tol, angle, finer);
     turn_lines(brep, &mut ep, angle, eps);
     let mut params = face::Params { tol, angle, max_passes: opts.max_passes, max_triangles: opts.max_face_triangles };
     let mut mesh = Mesh::default();
@@ -210,6 +292,7 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
     let mut splits = Vec::new();
     // boundary point id of each mesh vertex
     let mut vid: Vec<Option<u32>> = Vec::new();
+    let mut forced_segments: Vec<[u32; 2]> = Vec::new();
     for f in brep.faces() {
         stats.faces += 1;
         let g = surface::Geom::new(&f.surface, eps);
@@ -250,6 +333,7 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
             stats.unconverged.push((f.id, fm.deviation));
         }
         stats.forced_folds += fm.forced_folds;
+        forced_segments.extend_from_slice(&fm.forced_segments);
         if fm.folds > fm.forced_folds {
             stats.folded.push((f.id, fm.folds - fm.forced_folds));
         }
@@ -298,32 +382,7 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
             mesh.tri_faces.push(f.id);
         }
     }
-    let by_seg = split_segments(&splits);
-    apply_splits(&mut mesh, &mut vid, &by_seg);
-    drop_fins(&mut mesh);
-    fill_missing_normals(&mut mesh);
-    turn_normals_against(&mut mesh);
-    // the edges' polylines as the triangles use them: with the points where a face split a
-    // segment (loops crossing at a cusp), so a split point counts as a point of the edge (on
-    // the chord between two of its points), not as a point inside the face
-    for (i, ids) in ep.edges.iter().enumerate() {
-        for w in ids.windows(2) {
-            let (a, b) = (w[0], w[1]);
-            let mut chain = vec![ep.points[a as usize]];
-            if let Some(pts) = by_seg.get(&(a.min(b), a.max(b))) {
-                let mid = pts.iter().map(|(_, s)| s.p);
-                if a < b { chain.extend(mid) } else { chain.extend(mid.rev()) }
-            }
-            chain.push(ep.points[b as usize]);
-            for s in chain.windows(2) {
-                for p in s {
-                    mesh.edge_segments.extend_from_slice(&[p.x as f32, p.y as f32, p.z as f32]);
-                }
-                mesh.edge_ids.push(i as u32);
-            }
-        }
-    }
-    Ok(Tessellation { mesh, stats })
+    Ok(Round { ep, mesh, stats, splits, vid, forced_segments })
 }
 
 /// Points on straight edges along which a face's normal turns (a ruling of a twisted loft or

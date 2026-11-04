@@ -671,3 +671,30 @@ fn folding_sweep_smlib() {
 fn folding_sweep_solidcore() {
     folding_sweep(kernel_solidcore::SolidcoreKernel::new, "solidcore");
 }
+
+/// A fold forced by a boundary edge whose chord sags more than half the triangle's height (the
+/// rim of `planter` at 0.5: 24 such folds) is gone: that edge is discretised again with half
+/// the tolerance and the faces meshed anew, so the mesh stays watertight.
+fn no_forced_folds<K: Kernel + 'static, F: Fn() -> K>(new: F, kernel: &str)
+where
+    K::Shape: 'static,
+{
+    with_part(new(), "everyday/planter/planter.mcad", None, |k, s| {
+        let t = cad_tess::tessellate_with(&k.brep(s).unwrap(), &cad_tess::Options::new(0.5)).unwrap();
+        assert_eq!(t.stats.forced_folds, 0, "{kernel}: {:?}", t.stats);
+        t.strict().unwrap();
+        let c = cad_tess::check(&t.mesh);
+        assert!(c.watertight(), "{kernel}: {c:?}");
+    });
+}
+
+#[test]
+fn no_forced_folds_smlib() {
+    no_forced_folds(kernel_smlib::SmlibKernel::new, "smlib");
+}
+
+#[cfg(feature = "solidcore")]
+#[test]
+fn no_forced_folds_solidcore() {
+    no_forced_folds(kernel_solidcore::SolidcoreKernel::new, "solidcore");
+}
