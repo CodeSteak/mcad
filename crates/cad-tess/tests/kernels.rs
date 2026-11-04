@@ -522,6 +522,40 @@ fn flips_keep_the_tolerance_solidcore() {
     flips_keep_the_tolerance(kernel_solidcore::SolidcoreKernel::new, "solidcore");
 }
 
+/// A strongly twisted extrusion holds the tolerance, measured by sampling (`surface_distance`):
+/// 20 turns of a 30 × 2 bar over 300 mm. Its ruled sides are straight across but twisted
+/// (`σuv · n`); the grid took that direction for straight (rows only, squashed in the CDT), so
+/// Delaunay joined points across bands 7.5 mm wide whose chords the twist puts off the surface
+/// and the refinement cycled ("tolerance 0.05 mm not reached", 0.32 mm after 40 passes); now the
+/// twist counts as curvature in both directions.
+fn twisted_extrusions<K: Kernel + 'static, F: Fn() -> K>(new: F, kernel: &str)
+where
+    K::Shape: 'static,
+{
+    let bar = "linear_extrude(height = 300, twist = 7200) square([30, 2], center = true);\n";
+    for (name, src, max_tris) in [("bar", bar, 100_000)] {
+        with_part(new(), "spec/twist.mcad", Some(src), |k, s| {
+            let n = holds(k, s, TOL, &format!("{kernel}: {name}"));
+            assert!(n < max_tris, "{kernel}: {name}: {n} triangles");
+            let brep = k.brep(s).unwrap();
+            let m = cad_tess::tessellate(&brep, TOL).unwrap();
+            let d = cad_tess::surface_distance(&brep, &m);
+            assert!(d.chord.max <= TOL, "{kernel}: {name}: chord {} at {}", d.chord.max, d.chord.at);
+        });
+    }
+}
+
+#[test]
+fn twisted_extrusions_smlib() {
+    twisted_extrusions(kernel_smlib::SmlibKernel::new, "smlib");
+}
+
+#[cfg(feature = "solidcore")]
+#[test]
+fn twisted_extrusions_solidcore() {
+    twisted_extrusions(kernel_solidcore::SolidcoreKernel::new, "solidcore");
+}
+
 /// The B-rep's edges are sampled by their chord sag for `edge_vertex_gap`, not by a fixed
 /// count: the helical seam of a twisted extrusion (10 turns, 762 mm) against 512 segments was
 /// 0.061 mm from the mesh's own vertices on it, a false gap at 0.05.

@@ -200,8 +200,9 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
     let size = model_size(brep);
     let tol = opts.tol.max(MIN_REL_TOL * size);
     let angle = opts.angle.clamp(1f64.to_radians(), 60f64.to_radians());
-    let ep = edges::discretise(brep, tol, angle);
     let eps = (1e-7 * size).max(1e-9);
+    let mut ep = edges::discretise(brep, tol, angle);
+    turn_lines(brep, &mut ep, angle, eps);
     let mut params = face::Params { tol, angle, max_passes: opts.max_passes, max_triangles: opts.max_face_triangles };
     let mut mesh = Mesh::default();
     let mut stats = Stats { tol, ..Default::default() };
@@ -311,6 +312,82 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
         }
     }
     Ok(Tessellation { mesh, stats })
+}
+
+/// Points on straight edges along which a face's normal turns (a ruling of a twisted loft or
+/// ruled band: the normal turns up to 180° along it while the line has only its two ends): as
+/// many as keep the turn between two points within `angle` on every face of the edge, at equal
+/// turns. Without them the face's triangles along the edge span the whole turn (they cannot
+/// split a boundary edge) and face against the surface there.
+fn turn_lines(brep: &Brep, ep: &mut edges::EdgePolys, angle: f64, eps: f64) {
+    const N: usize = 32;
+    let mut faces_of: Vec<Vec<usize>> = vec![Vec::new(); brep.edges.len()];
+    let faces: Vec<&cad_kernel::brep::Face> = brep.faces().collect();
+    for (fi, f) in faces.iter().enumerate() {
+        for l in &f.loops {
+            if let cad_kernel::brep::Loop::Edges(oes) = l {
+                for oe in oes {
+                    if let Some(v) = faces_of.get_mut(oe.edge as usize)
+                        && !v.contains(&fi)
+                    {
+                        v.push(fi);
+                    }
+                }
+            }
+        }
+    }
+    let mut geoms: HashMap<usize, surface::Geom> = HashMap::new();
+    for (ei, e) in brep.edges.iter().enumerate() {
+        if !matches!(e.curve, cad_kernel::brep::Curve::Line { .. }) || ep.edges[ei].len() != 2 {
+            continue;
+        }
+        let (a, b) = (brep.vertices[e.start as usize], brep.vertices[e.end as usize]);
+        // cumulated turn at the samples, the largest over the edge's faces
+        let mut turn = vec![0.0f64; N + 1];
+        for &fi in &faces_of[ei] {
+            let g = geoms.entry(fi).or_insert_with(|| surface::Geom::new(&faces[fi].surface, eps));
+            if g.is_plane() {
+                continue;
+            }
+            let mut hint = None;
+            let mut prev: Option<DVec3> = None;
+            let mut acc = 0.0;
+            let mut cum = vec![0.0f64; N + 1];
+            for (k, c) in cum.iter_mut().enumerate() {
+                let p = a.lerp(b, k as f64 / N as f64);
+                let uv = g.invert(p, hint);
+                hint = Some(uv);
+                let n = g.normal(uv, (uv, uv));
+                if let (Some(m), Some(n)) = (prev, n) {
+                    acc += m.dot(n).clamp(-1.0, 1.0).acos();
+                }
+                prev = n.or(prev);
+                *c = acc;
+            }
+            if cum[N] > turn[N] {
+                turn = cum;
+            }
+        }
+        let n = (turn[N] / angle).ceil() as usize;
+        if n < 2 {
+            continue;
+        }
+        let mut ids = vec![e.start];
+        let mut k = 0;
+        for j in 1..n {
+            let want = turn[N] * j as f64 / n as f64;
+            while k + 1 < N && turn[k + 1] < want {
+                k += 1;
+            }
+            let f =
+                if turn[k + 1] > turn[k] { ((want - turn[k]) / (turn[k + 1] - turn[k])).clamp(0.0, 1.0) } else { 0.0 };
+            let t = (k as f64 + f) / N as f64;
+            ids.push(ep.points.len() as u32);
+            ep.points.push(a.lerp(b, t));
+        }
+        ids.push(e.end);
+        ep.edges[ei] = ids;
+    }
 }
 
 /// Splits the triangles of the other side of each boundary segment a face split where its

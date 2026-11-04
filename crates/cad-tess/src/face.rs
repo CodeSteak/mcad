@@ -5,8 +5,9 @@
 //! 1. **Grid.** Lines in u and v whose step keeps the chord within `tol` (half of it in each
 //!    direction where both are curved) and the turn within the angle: analytic surfaces from
 //!    their radii (straight directions get no lines), revolutions and extrusions from their
-//!    curve, B-splines per knot span from the second derivatives; where one direction is
-//!    straight over part of the face only, lines there at most four times the other
+//!    curve, B-splines per knot span (at least 8 pieces per direction) from the second
+//!    derivatives, the twist `σuv · n` counting as curvature in both directions; where one
+//!    direction is straight over part of the face only, lines there at most four times the other
 //!    direction's spacing; a straight direction gets rows only where the boundary runs across
 //!    the grid; no ring about a pole nearer to it than the boundary's first point on a run
 //!    along the rings (`clear_poles`). Grid points inside the loops (even-odd per row) and not
@@ -261,6 +262,10 @@ const NEAR: f64 = 2.0;
 /// the refinement would have to split every cell.
 const DOUBLE: f64 = 2.0;
 
+/// Fewest pieces per direction over which the general grid samples curvature and twist (see
+/// `grid_lines`).
+const MIN_PIECES: usize = 8;
+
 /// Lines of parameter `dir` strictly inside `(lo, hi)`.
 fn uniform(lo: f64, hi: f64, step: f64) -> Vec<f64> {
     let n = steps(hi - lo, step);
@@ -286,6 +291,8 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
         return out;
     }
     // general: lines from the derivatives sampled over the bounds
+    let sc = scale(g, bounds);
+    let rho = [sc.x / sc.y, sc.y / sc.x];
     let mut pieces: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
     // lines per piece for the chord and for the turn
     let mut chord: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
@@ -297,6 +304,20 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
         }
         let (c, d) = if i == 0 { (lo.y, hi.y) } else { (lo.x, hi.x) };
         pieces[i] = g.breaks(i, a, b);
+        // at least `MIN_PIECES` pieces: the need follows the curvature and twist across a span
+        // without inner knots (a ruled band's straight direction: its twist is largest at the
+        // axis, several times smaller at the rim)
+        let n = pieces[i].len() - 1;
+        if n < MIN_PIECES {
+            let k = MIN_PIECES.div_ceil(n);
+            pieces[i] = (0..n * k)
+                .map(|j| {
+                    let (x, y) = (pieces[i][j / k], pieces[i][j / k + 1]);
+                    x + (y - x) * (j % k) as f64 / k as f64
+                })
+                .chain(std::iter::once(b))
+                .collect();
+        }
         // lines needed on each piece
         for w in pieces[i].windows(2) {
             // samples of the normal part of σ'' (the sag of a chord off the surface; the
@@ -312,7 +333,18 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
                     let Some(n) = ds[1].cross(ds[2]).try_normalize() else { continue };
                     let (d1, dd) = if i == 0 { (ds[1], ds[3]) } else { (ds[2], ds[5]) };
                     let k = dd.dot(n).abs();
-                    d2 = d2.max(k);
+                    // the twist (σuv · n): a cell's diagonal sags by (L·hu² + 2·M·hu·hv +
+                    // N·hv²) / 8, and 2·M·hu·hv ≤ M·ρ·hu² + M·hv² / ρ with ρ the ratio of the
+                    // face's median speeds |σu| / |σv| (a cell as long as it is wide on the
+                    // surface; local speeds would blow up at a pole): each direction counts its
+                    // share of the twist as curvature where it is larger. A direction straight but twisted
+                    // (the sides of a strongly twisted extrusion, a loft's rulings) gets lines
+                    // then, else it is "straight": rows only near runs across and squashed in
+                    // the CDT's coordinates (`Warp`), so Delaunay joins points across bands
+                    // many millimetres wide whose chords the twist puts off the surface, and
+                    // the refinement cycles (`twist = 7200` over 300 mm: 0.32 mm after 40 passes)
+                    let twist = ds[4].dot(n).abs() * rho[i];
+                    d2 = d2.max(k.max(twist));
                     if d1.length() > 1e-12 {
                         turn = turn.max(k / d1.length());
                     }
@@ -332,7 +364,6 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
     // band of long thin triangles, and every point the refinement puts into it is joined to
     // its neighbours along the band
     const ASPECT: f64 = 4.0;
-    let sc = scale(g, bounds);
     let total = |n: &[f64]| n.iter().sum::<f64>();
     let spacing: [f64; 2] = [0, 1].map(|i| {
         let span = if i == 0 { hi.x - lo.x } else { hi.y - lo.y };
