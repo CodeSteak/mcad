@@ -3,16 +3,20 @@
 Work plan up to the switch: [`solidcore-plan.md`](solidcore-plan.md). Handover (state, how to build
 and test, open points, next steps): [`solidcore-handover.md`](solidcore-handover.md).
 
-As of: 2026-11-01 (phase 0 of the plan done; phase 1 done except a variable fillet with several radius laws; phase 2, the own tessellator `cad-tess`, done; see the plan) · solidcore `main` @ `bba8d87` (2026-10-30 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6` and `bba8d87` are in the comparison over the examples and in "State at `bba8d87`".
+As of: 2026-11-04 (phase 0 of the plan done; phase 1 done except a variable fillet with several radius laws; phase 2, the own tessellator `cad-tess`, done; see the plan) · solidcore `main` @ `f4f05b1` (2026-11-04 05:18 UTC, crate version 1.0.1, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6`, `bba8d87` and `f4f05b1` are in the comparison over the examples and in "State at `bba8d87`".
 
 ## Status
 
 - **Crate `kernel-solidcore`** implements `cad_kernel::Kernel` via the public API of
   solidcore. The dependency is a git entry with a fixed commit
   (`crates/kernel-solidcore/Cargo.toml`, constant `SOLIDCORE_REV`, kernel ID
-  `solidcore-bba8d87`). Previous pins: `3a6a50b` (2026-10-22), `c9de85d` (2026-10-23),
-  `d4940b6` (2026-10-25). From `d4940b6` to `bba8d87` (3101 commits) `face_internal_point` takes
-  `&mut Brep`. From
+  `solidcore-f4f05b1`). Previous pins: `3a6a50b` (2026-10-22), `c9de85d` (2026-10-23),
+  `d4940b6` (2026-10-25), `bba8d87` (2026-10-30). From `bba8d87` to `f4f05b1` (2969 commits,
+  crate version 1.0.1) no API break for this crate: it builds unchanged (named public paths
+  such as `topology::brep::faces` were added next to the numbered `p1`, `p2` modules, which stay
+  public), and the corpus gives the same verdicts node by node; `FilletSession` still takes one
+  radius law for all edges (`prepare_variable_radius_edges`). From `d4940b6` to `bba8d87` (3101
+  commits) `face_internal_point` takes `&mut Brep`. From
   `c9de85d` to `d4940b6` (2026-10-25, a little over 1200 commits) the API of the
   mass properties changed (`brep_mass_properties`, `brep_area` take `&mut Brep`); the weekly
   run against `main` would have failed at the build.
@@ -122,7 +126,15 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, offset, shell, thicken, NURBS surface (plan 1.6) | 101 | 2604 | **2581** | 5 | 6 | 12 | 0 |
 | `bba8d87`, shear (plan 1.8), set_draft/shape_bytes/export (1.12), rule `blend` with offsets: end of phase 1 | 101 | 2604 | **2589** | 3 | 3 | 9 | 0 |
 | `bba8d87`, re-test of task C: checked Booleans, rule `blend` from the changed volume | 101 | 2604 | **2596** | 3 | 3 | 2 | 0 |
+| `f4f05b1` (2026-11-04, pin), `kernel-solidcore` unchanged | 101 | 2604 | **2596** | 3 | 3 | 2 | 0 |
 
+- `f4f05b1` (pin bump from `bba8d87`, `scripts/ci/solidcore.sh`): every node has the verdict it
+  had; the 2 `differ` are the same (`sketch_cable_duct`: 63 against 47 faces, 180 against 132
+  edges; `f11`: SMLib fails), the 3 `unsupported` and 3 `blocked` are `variable_radius`; volume
+  rules relative 2293, exact 129, operands 67, curved 25, blend 70; meshes at 0.05: 100 `ok`,
+  1 without a B-rep result, solidcore watertight 100, chord max 0.0500 mm, 175 k triangles (as
+  at `bba8d87`). Still failing where SMLib succeeds (item 7 of "What is missing"): the
+  polyhedron of two cubes sharing an edge, `shell(1) cube(10, $fillet = 2)`.
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
   it now resolves them relative to the file like the other commands. A node whose warning

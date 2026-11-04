@@ -15,7 +15,8 @@
 //!   `classify` runs a self-test on a box once,
 //! * other solidcore errors → [`KernelError::Failed`] / [`KernelError::InvalidInput`].
 //!
-//! So `mcad diff-kernels` can report which operations already work ("coverage"); at bba8d87:
+//! So `mcad diff-kernels` can report which operations already work ("coverage"); at f4f05b1 (as at
+//! bba8d87):
 //! primitives, rigid transforms, `extrude` (also with twist and scale), `revolve`, `loft`,
 //! `sweep` and `sweep_path` of polygons, circles, closed interpolating splines and sketch
 //! profiles (lines, arcs and B-splines), `fillet`, `chamfer`, `fillet_variable` (one radius law
@@ -91,11 +92,11 @@ impl ShapeData {
 pub type Shape = Rc<ShapeData>;
 
 /// The commit of solidcore this crate is built against.
-pub const SOLIDCORE_REV: &str = "bba8d8798122e9e5adc69c9ba153b8411dca24be";
+pub const SOLIDCORE_REV: &str = "f4f05b147551201e2a7b44a34fbc41ddc0fc6578";
 
 /// [`Kernel::id`] of [`SolidcoreKernel`] (part of every cache key): `solidcore-` and the short
 /// [`SOLIDCORE_REV`].
-pub const KERNEL_ID: &str = "solidcore-bba8d87";
+pub const KERNEL_ID: &str = "solidcore-f4f05b1";
 
 fn unsupported(op: &str) -> KernelError {
     KernelError::Unsupported(format!("solidcore: {op}"))

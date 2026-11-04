@@ -1,6 +1,6 @@
 # Plan: switch to solidcore, no C++ in the build
 
-As of 2026-11-01 (phases 0 and 2 done, phase 1 except one upstream item), solidcore pin `bba8d87`. Status and measurements: `docs/solidcore-migration.md`.
+As of 2026-11-04 (phases 0 and 2 done, phase 1 except one upstream item), solidcore pin `f4f05b1` (was `bba8d87`; per-edge radius laws in `FilletSession` still not public). Status and measurements: `docs/solidcore-migration.md`.
 
 ## Goal
 

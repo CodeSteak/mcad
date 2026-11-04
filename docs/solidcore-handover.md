@@ -11,7 +11,7 @@ comparison).
 | --- | --- |
 | Branch | `feature/solidcore-phase0-2` (pushed to `origin`; no pull request) |
 | Head at handover | the commit that adds this file; the last code commits are `2280207` (flips keep the tolerance), `e2dc0b6` (rim contact), `d13c7d5` (edge sampling), `0a89606` (inside-out speed) on top of `e66d726` (end of tester round H) |
-| solidcore pin | `bba8d8798122e9e5adc69c9ba153b8411dca24be` (2026-10-30), `crates/kernel-solidcore/Cargo.toml`, `SOLIDCORE_REV` / `KERNEL_ID` in `crates/kernel-solidcore/src/lib.rs` |
+| solidcore pin | `f4f05b147551201e2a7b44a34fbc41ddc0fc6578` (2026-11-04, crate 1.0.1; was `bba8d87` of 2026-10-30, bumped without API changes and with the same verdicts), `crates/kernel-solidcore/Cargo.toml`, `SOLIDCORE_REV` / `KERNEL_ID` in `crates/kernel-solidcore/src/lib.rs` |
 | Goal | replace SMLib (C++, `crates/kernel-smlib`, facade `smlib/facade/sc_facade.cpp`) by solidcore (Rust) and drop all C++ from the build |
 
 ## What phases 0–2 delivered
@@ -65,8 +65,8 @@ None is a silent wrong result in the corpus. Severity: how much it matters for t
 
 | # | Severity | Point | Where | Repro / state |
 | --- | --- | --- | --- | --- |
-| 1 | medium (blocks phase 1 "Done when") | variable-radius fillet with different radius laws on several edges: `Unsupported` (the 3 unsupported and 3 blocked nodes) | `kernel-solidcore` fillet path; upstream `FilletSession` takes one law, the executive's per-edge `var_rad_laws` are not public | `tests/models/spec/variable_radius.mcad`; needs a solidcore API, then bump the pin |
-| 2 | medium (phase 3) | `sketch_cable_duct`: solidcore's union of three extrusions loses faces (`differ`) | solidcore Booleans | `mcad diff-kernels tests/models/spec/sketch_cable_duct.mcad`; plan 3.1–3.3 (reproducer, issue upstream) |
+| 1 | medium (blocks phase 1 "Done when") | variable-radius fillet with different radius laws on several edges: `Unsupported` (the 3 unsupported and 3 blocked nodes) | `kernel-solidcore` fillet path; upstream `FilletSession` takes one law, the executive's per-edge `var_rad_laws` are not public | `tests/models/spec/variable_radius.mcad`; needs a solidcore API, then bump the pin. Still so at `f4f05b1` (`prepare_variable_radius_edges` takes one `FilletLaw`; `FilletParameters::var_rad_laws` is per edge, but the executive is private to the session) |
+| 2 | medium (phase 3) | `sketch_cable_duct`: solidcore's union of three extrusions loses faces (`differ`) | solidcore Booleans | `mcad diff-kernels tests/models/spec/sketch_cable_duct.mcad`; plan 3.1–3.3 (reproducer, issue upstream); unchanged at `f4f05b1` (63 against 47 faces) |
 | 3 | none | `f11`: SMLib's Boolean fails, solidcore's not (`differ`) | – | a gain; stays `differ` until SMLib is gone |
 | 4 | low | `f02_union_cylinder_sweep` at 0.01: `differ`, 0.0311 mm from SMLib's mesh beyond SMLib's own distance (limit 0.0291); `ok` at 0.05 | `crates/cad-cli/src/diff/mesh.rs` (Hausdorff excess) | `mcad diff-kernels tests/everyday/bugs/f02_union_cylinder_sweep.mcad --mesh --mesh-tol 0.01`; solidcore's chord there ≤ 0.010; the sweep folds over itself. Find out which mesh is off, or allow locally where a surface turns over |
 | 5 | low (check too lenient) | a vertex inside a face that lies off its surface is excused up to its distance from the face's B-rep edges (tester H finding 4) | `crates/cad-tess/src/compare.rs:244-248` (`inner_vertex_gap`) | a vertex displaced near an edge passes `diff-kernels --mesh`; excuse only split points of crossing loops (`FaceMesh::splits`, not in the output mesh today) |
@@ -76,7 +76,7 @@ None is a silent wrong result in the corpus. Severity: how much it matters for t
 | 9 | low | strongly twisted extrusions slightly above the tolerance but within the verdict's 1.1 · tol: `linear_extrude(height = 100, twist = 3600, scale = 0.2) circle(20)` chord 0.0529 at 0.05 | `crates/cad-tess/src/face.rs` (refinement) | `mcad diff-kernels <file> --mesh` → `ok` |
 | 10 | medium (phase 5 gate) | performance: evaluation about 1.5–1.8 × SMLib in debug (the adapter's Boolean checks); the B-rep conversion is most of solidcore's mesh time (14.1 of 16.3 s at 0.05; `kernel-solidcore` runs unoptimised as a workspace crate in debug) | `crates/kernel-solidcore/src/{boolean,brep}.rs` | measure in a release build (plan 0.5 / 4.3) before deciding |
 | 11 | none (SMLib only) | an island in a void meshed inside out; a ball in a seat 0.05 larger reported as line contact at distance 0 (solidcore: gap); a wall below one ulp | SMLib | goes away with SMLib (phase 5.3) |
-| 12 | low | solidcore fails where SMLib succeeds: a polyhedron of two cubes sharing an edge, `shell(1) cube(10, $fillet = 2)` (offset self-overlap), a root union of many slivers, an operand below ~1e-4 of the pair on a face | adapter / upstream | `docs/solidcore-migration.md`, "What is missing", item 7 |
+| 12 | low | solidcore fails where SMLib succeeds: a polyhedron of two cubes sharing an edge, `shell(1) cube(10, $fillet = 2)` (offset self-overlap), a root union of many slivers, an operand below ~1e-4 of the pair on a face | adapter / upstream | `docs/solidcore-migration.md`, "What is missing", item 7; the polyhedron and the shell still fail at `f4f05b1` |
 
 Fixed in the last round (tester H findings 1–3, performance item; commits above): edge flips
 keep the chord tolerance and the face's deviation is measured again after flips (`f12` at 0.01

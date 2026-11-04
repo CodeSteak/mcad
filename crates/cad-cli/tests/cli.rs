@@ -504,7 +504,7 @@ fn diff_kernels_on_examples() {
         }
     }
     if v["solidcore_available"] == true {
-        // solidcore @ bba8d87 over 101 files (2604 nodes): 2596 same, 3 unsupported (a
+        // solidcore @ f4f05b1 (as at bba8d87) over 101 files (2604 nodes): 2596 same, 3 unsupported (a
         // variable fillet with several laws), 3 blocked, 2 differ, nothing fails. Curved solids
         // are compared against their exact volume (solidcore is the more accurate one), blends
         // and offsets within 8 % of the volume they changed: no node differs in its volume alone;
@@ -518,7 +518,7 @@ fn diff_kernels_on_examples() {
         assert!(r["exact"].as_u64().unwrap() >= 110 && r["operands"].as_u64().unwrap() >= 45, "{r}");
         assert!(r["curved"].as_u64().unwrap() <= 40, "{r}");
         assert!((40..=100).contains(&r["blend"].as_u64().unwrap_or(0)), "{r}");
-        // queries work on the shape's own body: few copies (2420 at bba8d87 with the Boolean
+        // queries work on the shape's own body: few copies (2427 at f4f05b1 with the Boolean
         // checks' retries)
         let copies = s["solidcore_cost"]["copies"].as_u64().unwrap();
         assert!(copies > 0 && copies < 3000, "{copies}");
