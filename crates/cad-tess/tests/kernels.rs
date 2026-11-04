@@ -536,7 +536,7 @@ where
 {
     let bar = "linear_extrude(height = 300, twist = 7200) square([30, 2], center = true);\n";
     let helix = "linear_extrude(height = 100, twist = 3600, scale = 0.2) circle(20);\n";
-    for (name, src, max_tris) in [("bar", bar, 100_000), ("helix", helix, 200_000)] {
+    for (name, src, max_tris) in [("bar", bar, 80_000), ("helix", helix, 130_000)] {
         with_part(new(), "spec/twist.mcad", Some(src), |k, s| {
             let n = holds(k, s, TOL, &format!("{kernel}: {name}"));
             assert!(n < max_tris, "{kernel}: {name}: {n} triangles");

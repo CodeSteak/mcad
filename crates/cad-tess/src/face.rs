@@ -6,7 +6,7 @@
 //!    direction where both are curved) and the turn within the angle: analytic surfaces from
 //!    their radii (straight directions get no lines), revolutions and extrusions from their
 //!    curve, B-splines per knot span (at least 8 pieces per direction) from the second
-//!    derivatives, the twist `σuv · n` counting as curvature in both directions; where one
+//!    derivatives plus each direction's share of the twist `σuv · n`; where one
 //!    direction is straight over part of the face only, lines there at most four times the other
 //!    direction's spacing; a straight direction gets rows only where the boundary runs across
 //!    the grid; no ring about a pole nearer to it than the boundary's first point on a run
@@ -388,18 +388,21 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
                     let Some(n) = ds[1].cross(ds[2]).try_normalize() else { continue };
                     let (d1, dd) = if i == 0 { (ds[1], ds[3]) } else { (ds[2], ds[5]) };
                     let k = dd.dot(n).abs();
-                    // the twist (σuv · n): a cell's diagonal sags by (L·hu² + 2·M·hu·hv +
-                    // N·hv²) / 8, and 2·M·hu·hv ≤ M·ρ·hu² + M·hv² / ρ with ρ the ratio of the
-                    // face's median speeds |σu| / |σv| (a cell as long as it is wide on the
-                    // surface; local speeds would blow up at a pole): each direction counts its
-                    // share of the twist as curvature where it is larger. A direction straight but twisted
-                    // (the sides of a strongly twisted extrusion, a loft's rulings) gets lines
-                    // then, else it is "straight": rows only near runs across and squashed in
-                    // the CDT's coordinates (`Warp`), so Delaunay joins points across bands
-                    // many millimetres wide whose chords the twist puts off the surface, and
-                    // the refinement cycles (`twist = 7200` over 300 mm: 0.32 mm after 40 passes)
-                    let twist = ds[4].dot(n).abs() * rho[i];
-                    d2 = d2.max(k.max(twist));
+                    // the twist M = σuv · n: a cell's diagonal sags by (L·hu² + 2·M·hu·hv +
+                    // N·hv²) / 8 ≤ ((L + M·ρ)·hu² + (N + M / ρ)·hv²) / 8 for any ρ > 0 (taken as
+                    // the ratio of the face's median speeds |σu| / |σv|: a cell as long as it is
+                    // wide on the surface; local speeds blow up at a pole), so each direction
+                    // counts its share of the twist with its curvature. Without it a direction
+                    // straight but twisted (the sides of a strongly twisted extrusion) is
+                    // "straight": rows only near runs across and squashed in the CDT's
+                    // coordinates (`Warp`), Delaunay joins points across bands many millimetres
+                    // wide whose chords the twist puts off the surface, and the refinement
+                    // cycles (`twist = 7200` over 300 mm: 0.32 mm after 40 passes); with the
+                    // larger of the two instead of the sum the grid misses the bound by up to
+                    // twice and the refinement fills in (the helix of `twist = 3600`: 49 k
+                    // points, 164 k triangles at 0.05; with the sum 42 points, 113 k)
+                    let m = ds[4].dot(n).abs();
+                    d2 = d2.max(k + m * rho[i]);
                     if d1.length() > 1e-12 {
                         turn = turn.max(k / d1.length());
                     }
