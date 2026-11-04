@@ -79,7 +79,7 @@ None is a silent wrong result in the corpus. Severity: how much it matters for t
 | 7 | done | forced folds: a fold on a boundary edge whose chord sags more than half the triangle's height was kept (`planter` 24 at 0.5) | `crates/cad-tess/src/lib.rs` (`tessellate_with`, `FORCED_ROUNDS`), `edges.rs`, `face.rs` (`repair_folds`) | **fixed 2026-11-04**: the edges under forced folds are discretised again with half the tolerance and the faces using them meshed anew (both faces of an edge use its new points: watertight; the others keep their meshes), up to 3 rounds; a fold left after that still counts as forced. `planter` at 0.5: 0 (+20 triangles); mesh time there 35 ms before, 68 ms with every face meshed again per round, 41 ms with only the faces of the refined edges (debug, cad-tess at opt-level 2); test `no_forced_folds_*` |
 | 8 | done | `linear_extrude(height = 300, twist = 7200) square([30, 2], center = true)` failed at 0.05 ("tolerance 0.05 mm not reached (3.186e-1 mm …)") | `crates/cad-tess/src/face.rs` (`grid_lines`), `lib.rs` (`turn_lines`) | **fixed 2026-11-04**: the ruled sides are straight across but twisted (`σuv · n`); the grid took that direction for straight (rows only, squashed by 4 in the CDT), so Delaunay joined points across bands 7.5 mm wide whose chords the twist puts off the surface, and the refinement cycled (105 points a pass, worst 0.3186 / 0.3401 alternating, 40 passes). The twist now counts as curvature in both directions: each direction adds its share (by the face's median speeds) to its curvature, as the bound L·hu² + 2·M·hu·hv + N·hv² ≤ (L + M·ρ)·hu² + (N + M/ρ)·hv² gives (first, in `1c7762e`, the larger of the two: up to twice the bound, the refinement filled in, the helix of open point 9 164 k triangles with 49 k refinement points; with the sum 113 k and 42), sampled over at least 8 pieces per direction; straight edges along which a face's normal turns (a loft's rulings) get points by that turn. 0.05: 67.9 k triangles, chord 0.0437 sampled (test `twisted_extrusions_*`, both B-reps); 0.01: 344 k triangles, 0.0100 (was 305 k, 0.0095). Review round: the twist share is added to the curvature (the bound's sum, not the larger of the two), and a ruled face whose curved direction outweighs the twist keeps that direction's lines and gets lines along its rulings by the twist alone: bar 65.6 k / 327 k, helix 113 k / 563 k (SMLib 59 k for the bar at 0.01, chord 0.043, and 66 k / 296 k for the helix, chord 0.14 at 0.05: it misses the tolerance, not like for like). On ruled faces the rulings' lines keep the twist's part of the diagonal sag within the whole tolerance, the curved direction within half (up to 1.5 · tol on the grid, the refinement splits those cells): within half for both, `planter` takes 12.3 k / 53.7 k instead of 10.6 k / 45.0 k, the same tolerance held |
 | 9 | done | `linear_extrude(height = 100, twist = 3600, scale = 0.2) circle(20)`: chord 0.0529 at 0.05 | `crates/cad-tess/src/surface.rs` (`newton`) | **fixed 2026-11-04**: a measuring error, not the mesh: the foot of a point beyond the end of the twisted surface (a rim chord's midpoint) took the coupled Newton step's share in the free parameter while the other one was clamped, and stopped at 0.0529 instead of 0.049. A parameter held at its end now leaves the step to the other alone. Chord 0.0500 at 0.05 (0.04998), 0.0100 at 0.01 (test `twisted_extrusions_*`) |
-| 10 | medium (phase 5 gate) | performance: evaluation about 1.5–1.8 × SMLib in debug (the adapter's Boolean checks); the B-rep conversion is most of solidcore's mesh time (14.1 of 16.3 s at 0.05; `kernel-solidcore` runs unoptimised as a workspace crate in debug) | `crates/kernel-solidcore/src/{boolean,brep}.rs` | measure in a release build (plan 0.5 / 4.3) before deciding |
+| 10 | low (phase 5 gate) | performance: evaluation 1.48–1.51 × SMLib, queries 0.87 ×, meshing 2–3 × faster than SMLib's (corpus, release build at `ae2e06d`: evaluation 128.6 s against 86.9 s; meshes at 0.05 2.95 s against 8.1 s, B-rep conversion 1.27 s of it; at 0.01 7.0 s against 14.6 s). The debug figures were close already (`[profile.dev.package."*"] opt-level = 2`). Twisted extrusions mesh slower (helix at 0.01 9.2 s against 5.0 s, but SMLib misses the tolerance there) | `crates/kernel-solidcore/src/{boolean,brep}.rs` | agree the factor for the gate; the adapter's Boolean checks are the first place to look |
 | 11 | none (SMLib only) | an island in a void meshed inside out; a ball in a seat 0.05 larger reported as line contact at distance 0 (solidcore: gap); a wall below one ulp | SMLib | goes away with SMLib (phase 5.3) |
 | 12 | low | solidcore fails where SMLib succeeds: a polyhedron of two cubes sharing an edge, `shell(1) cube(10, $fillet = 2)` (offset self-overlap), a root union of many slivers, an operand below ~1e-4 of the pair on a face | adapter / upstream | `docs/solidcore-migration.md`, "What is missing", item 7; the polyhedron and the shell still fail at `f4f05b1` |
 
@@ -100,6 +100,18 @@ keep the chord tolerance and the face's deviation is measured again after flips 
 chord sag in `surface_distance` (helical seam 0.061 → 1e-4 mm); `check().inside_out` 4.4 → 0.56 s
 on a cube minus 125 balls; `diff-kernels --help` gives the `--mesh-tol` range.
 
+## Removing C++: state at `f4f05b1` (2026-11-04)
+
+| Area | State | Blocks removal |
+| --- | --- | --- |
+| Booleans (phase 3) | 2596 of 2604 nodes `same`; `differ` 2 (`sketch_cable_duct`, `f11` a gain); open point 12 | `sketch_cable_duct` (upstream) |
+| Variable-radius fillet | 3 `unsupported` + 3 `blocked` (open point 1) | yes: upstream API |
+| Meshes | 100 of 100 `ok` and watertight at 0.05 and 0.01, chord within tol (SMLib: 95–97 watertight, chord 0.24 / 0.045) | no |
+| Gate scripts with solidcore | `compare.py` 36/36, `check.sh` 19 / 0 problems, `tests/step/verify.py` 64/64; `tests/color-review` not run | no |
+| Performance | open point 10: evaluation 1.5 ×, meshing faster | a factor to agree |
+| Wasm (phase 4) | builds for wasm32; module 5 × today's (Brotli) | the worker and size work |
+| Code still on SMLib | `crates/kernel-smlib` (`build.rs`: cc + cmake), `smlib/` (facade 4052 lines C++, Emscripten `smlib.wasm`), `cad-wasm`, `web/src/engine/{worker,transport}.ts`, the daemon (`daemon.rs`, `client.rs`: SMLib only), `diff-kernels`; dev-dependency of `cad-session`, `cad-engine`, `cad-measure`, `cad-render`, `cad-tess`, `cad-desktop` | phase 5 work |
+
 ## Next steps
 
 From [`solidcore-plan.md`](solidcore-plan.md):
@@ -111,7 +123,11 @@ From [`solidcore-plan.md`](solidcore-plan.md):
 2. Ask upstream for per-edge radius laws in `FilletSession` (open point 1), then wire them.
 3. **Phase 4, Wasm and UI:** `cad-wasm` over `kernel-solidcore` (`wasm32-unknown-unknown`, 8 MiB
    stack), the web worker without `smlib.wasm`, module size and browser timing, desktop app with
-   kernel selection. Not possible in this container (no wasm32 target, no WebKitGTK).
+   kernel selection. Measured 2026-11-04 (`f4f05b1`): solidcore and `cad-wasm` over
+   `kernel-solidcore` build for wasm32 (release 7 min); the module is 39.3 MiB raw, 6.2 MiB Brotli
+   (`wasm-opt -O3`/`-Oz`: 29.5–29.8 MiB, 6.6 MiB Brotli), against 1.2 MiB + `smlib.wasm` 4.85 MiB
+   (1.24 MiB Brotli) today. Next: a wasm profile (`opt-level = "z"`, LTO, `codegen-units = 1`),
+   browser timing. No WebKitGTK here (desktop app).
 4. **Phase 5, switch:** gate (no topology `differ`, no `failed`, `compare.py`, `check.sh`,
    `tests/step/verify.py`, `tests/color-review` with solidcore, performance factor agreed, browser
    build), default kernel solidcore, freeze SMLib reference data (`tests/kernel-reference.json`),
