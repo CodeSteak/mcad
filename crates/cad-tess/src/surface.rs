@@ -488,6 +488,18 @@ impl Geom {
                 }
                 DVec2::new(-f, -g) / gl
             };
+            // a parameter at the end of its domain that the step pushes beyond it stays there:
+            // the other one alone (the coupled step's share of it is wrong where σu and σv are
+            // not orthogonal: a twisted sweep's end, 0.0529 instead of 0.049 mm)
+            let held = |i: usize, t: f64, s: f64| {
+                self.period[i].is_none() && ((t <= self.domain[i].0 && s < 0.0) || (t >= self.domain[i].1 && s > 0.0))
+            };
+            let step = match (held(0, uv.x, step.x), held(1, uv.y, step.y)) {
+                (true, false) if j11 > 1e-300 => DVec2::new(0.0, -g / j11),
+                (false, true) if j00 > 1e-300 => DVec2::new(-f / j00, 0.0),
+                (true, true) => break,
+                _ => step,
+            };
             if !step.is_finite() {
                 break;
             }

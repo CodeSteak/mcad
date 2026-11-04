@@ -522,18 +522,21 @@ fn flips_keep_the_tolerance_solidcore() {
     flips_keep_the_tolerance(kernel_solidcore::SolidcoreKernel::new, "solidcore");
 }
 
-/// A strongly twisted extrusion holds the tolerance, measured by sampling (`surface_distance`):
-/// 20 turns of a 30 × 2 bar over 300 mm. Its ruled sides are straight across but twisted
+/// Strongly twisted extrusions hold the tolerance, measured by sampling (`surface_distance`).
+/// 20 turns of a 30 × 2 bar over 300 mm: its ruled sides are straight across but twisted
 /// (`σuv · n`); the grid took that direction for straight (rows only, squashed in the CDT), so
 /// Delaunay joined points across bands 7.5 mm wide whose chords the twist puts off the surface
 /// and the refinement cycled ("tolerance 0.05 mm not reached", 0.32 mm after 40 passes); now the
-/// twist counts as curvature in both directions.
+/// twist counts as curvature in both directions. A circle of 10 turns scaled to 0.2, whose
+/// chord at the rim measured 0.0529 at 0.05: the foot of a point beyond the end of the twisted
+/// surface took the coupled Newton step's share in the free parameter (0.049).
 fn twisted_extrusions<K: Kernel + 'static, F: Fn() -> K>(new: F, kernel: &str)
 where
     K::Shape: 'static,
 {
     let bar = "linear_extrude(height = 300, twist = 7200) square([30, 2], center = true);\n";
-    for (name, src, max_tris) in [("bar", bar, 100_000)] {
+    let helix = "linear_extrude(height = 100, twist = 3600, scale = 0.2) circle(20);\n";
+    for (name, src, max_tris) in [("bar", bar, 100_000), ("helix", helix, 200_000)] {
         with_part(new(), "spec/twist.mcad", Some(src), |k, s| {
             let n = holds(k, s, TOL, &format!("{kernel}: {name}"));
             assert!(n < max_tris, "{kernel}: {name}: {n} triangles");
