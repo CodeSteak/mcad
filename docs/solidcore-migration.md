@@ -820,10 +820,22 @@ phase 5"), 1 without a B-rep result; watertight SMLib 95, solidcore 100; chord e
 0.045 mm, solidcore 0.0100 (was 0.0136 in `f12` before the flips kept the tolerance); triangles
 SMLib 708 k, solidcore 608 k; time SMLib 24.9 s, solidcore 26.0 s (14.5 s `brep`).
 
+After the open points of the handover (2026-11-04, pin `f4f05b1`, another machine with 4
+cores; in brackets the same corpus with the tessellator before these fixes, measured there):
+at 0.05 100 `ok`, solidcore watertight 100, chord max 0.0500, 177.0 k triangles (175.0 k),
+Hausdorff excess max 0.0499 (0.0657), time SMLib 7.9 s, solidcore 8.8 s (8.6 s) of which 6.8 s
+`brep`; at 0.01 100 `ok` (99, `f02` `differ`), watertight SMLib 95, solidcore 100, chord max
+0.0100, 609.0 k triangles (607.5 k), Hausdorff excess max 0.0100 (0.0311), time SMLib 14.8 s,
+solidcore 13.9 s (13.1 s). The fixes: the grid counts a surface's twist (`twist = 7200` at
+0.05), straight edges get points where a face's normal turns along them, Newton's foot at the
+end of a domain, inner vertices without excuse near edges (split points in the edge polylines),
+folds of the surface measured by the refinement (`f02`), edges under forced folds discretised
+again (`planter` at 0.5: 24 → 0); see "Known points for phase 5".
+
 ## Known points for phase 5
 
-Open at the end of phase 2 (2026-11-01, after the findings on task H). None is a silent wrong
-result in the corpus; each is a limitation, a check that could be stricter, or an SMLib weakness
+Open at the end of phase 2 (2026-11-01, after the findings on task H; rows marked fixed on
+2026-11-04). None is a silent wrong result in the corpus; each is a limitation, a check that could be stricter, or an SMLib weakness
 that goes away with SMLib.
 
 | Point | State |

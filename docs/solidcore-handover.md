@@ -1,6 +1,7 @@
 # Handover: solidcore migration, phases 0–2
 
-State on 2026-11-01. Read this first to resume the work; details and history are in
+State on 2026-11-04 (pin bump and the tessellator's open points 4, 5, 7, 8, 9; the state of
+2026-11-01 otherwise). Read this first to resume the work; details and history are in
 [`solidcore-plan.md`](solidcore-plan.md) (work plan, status per item) and
 [`solidcore-migration.md`](solidcore-migration.md) (measurements, tester findings, rules of the
 comparison).
@@ -10,7 +11,7 @@ comparison).
 | What | Value |
 | --- | --- |
 | Branch | `feature/solidcore-phase0-2` (pushed to `origin`; no pull request) |
-| Head at handover | the commit that adds this file; the last code commits are `2280207` (flips keep the tolerance), `e2dc0b6` (rim contact), `d13c7d5` (edge sampling), `0a89606` (inside-out speed) on top of `e66d726` (end of tester round H) |
+| Head at handover | the commit that adds this file; the last code commits are `2280207` (flips keep the tolerance), `e2dc0b6` (rim contact), `d13c7d5` (edge sampling), `0a89606` (inside-out speed) on top of `e66d726` (end of tester round H). 2026-11-04 on branch `claude/tessellierung-subagent-hngono`: pin bump `a921b75`, then `1c7762e` (#8), `a5ceafd` (#9), `4c51fd3` (#5), `56ca505` (#4), `c6c23cf` (#7) |
 | solidcore pin | `f4f05b147551201e2a7b44a34fbc41ddc0fc6578` (2026-11-04, crate 1.0.1; was `bba8d87` of 2026-10-30, bumped without API changes and with the same verdicts), `crates/kernel-solidcore/Cargo.toml`, `SOLIDCORE_REV` / `KERNEL_ID` in `crates/kernel-solidcore/src/lib.rs` |
 | Goal | replace SMLib (C++, `crates/kernel-smlib`, facade `smlib/facade/sc_facade.cpp`) by solidcore (Rust) and drop all C++ from the build |
 
@@ -28,13 +29,16 @@ comparison).
 ## Numbers
 
 Re-measured 2026-11-01 at the handover head (debug build, `MCAD_KERNEL=solidcore` where it
-applies). Tester round H measured the same node figures at `e66d726`.
+applies). Tester round H measured the same node figures at `e66d726`. The mesh rows: 2026-11-04
+after the tessellator fixes, on another machine (4 cores; times not comparable with the
+earlier ones, so the state before the fixes, measured there at the new pin, is given in
+brackets).
 
 | Measurement | Result |
 | --- | --- |
 | `diff-kernels` nodes (101 files, 2604 nodes; `scripts/ci/solidcore.sh`) | same 2596, unsupported 3, blocked 3, differ 2, failed 0 |
-| meshes at 0.05 (`--mesh`) | 100 `ok`, 1 skipped (`f03`, no B-rep part); solidcore watertight 100, chord max 0.0500 mm, 175 k triangles; SMLib watertight 97, chord max 0.242, 272 k; time SMLib 13.3 s, solidcore 16.3 s (14.1 s B-rep conversion) |
-| meshes at 0.01 (`--mesh --mesh-tol 0.01`) | 99 `ok`, 1 `differ` (`f02`), 1 skipped; solidcore watertight 100, chord max 0.0100 (tester H at `e66d726`: 98 `ok`, `f12` 0.0136); 608 k triangles (SMLib 708 k); time SMLib 24.9 s, solidcore 26.0 s |
+| meshes at 0.05 (`--mesh`) | 100 `ok`, 1 skipped (`f03`, no B-rep part); solidcore watertight 100, chord max 0.0500 mm, 177.0 k triangles (175.0 k); SMLib watertight 97, chord max 0.242, 272 k; largest Hausdorff excess where the roots are `same` 0.0499 (0.0657); time SMLib 7.9 s, solidcore 8.8 s (8.6 s), 6.8 s of it the B-rep conversion |
+| meshes at 0.01 (`--mesh --mesh-tol 0.01`) | 100 `ok` (99, `f02` `differ`), 1 skipped; solidcore watertight 100, chord max 0.0100; 609.0 k triangles (607.5 k; SMLib 708 k, watertight 95); largest Hausdorff excess 0.0100 (0.0311, `f02`); time SMLib 14.8 s, solidcore 13.9 s (13.1 s) |
 | `tests/openscad-compat/compare.py` | 36 / 36 |
 | `tests/everyday/check.sh` | 19 models, 0 with problems |
 | STL/3MF, section view, render snapshots | met at task F (`docs/solidcore-plan.md`, phase 2 status), not re-run |
@@ -78,7 +82,14 @@ None is a silent wrong result in the corpus. Severity: how much it matters for t
 | 11 | none (SMLib only) | an island in a void meshed inside out; a ball in a seat 0.05 larger reported as line contact at distance 0 (solidcore: gap); a wall below one ulp | SMLib | goes away with SMLib (phase 5.3) |
 | 12 | low | solidcore fails where SMLib succeeds: a polyhedron of two cubes sharing an edge, `shell(1) cube(10, $fillet = 2)` (offset self-overlap), a root union of many slivers, an operand below ~1e-4 of the pair on a face | adapter / upstream | `docs/solidcore-migration.md`, "What is missing", item 7; the polyhedron and the shell still fail at `f4f05b1` |
 
-Fixed in the last round (tester H findings 1–3, performance item; commits above): edge flips
+Fixed on 2026-11-04 (open points 4, 5, 7, 8, 9; commits above): see the table; corpus changes in
+triangles at 0.05 / 0.01: `planter` +21 % / +15 % (its B-spline faces; which of the grid changes, not analysed),
+`12_linear_extrude_twist` +13 % / +39 %, the lofts `f12`, `loft_sweep`, `freeform_lid` +4 to
++7 %; `knob_mirror` −6 % / −13 %, `door_stop` −18 % / −24 %, `f01_sweep_spline_profile` −25 % /
+−11 %; inner vertices are off their surfaces by at most 7.6e-6 mm, boundary vertices off the
+B-rep's edges by at most 1.1e-4 mm.
+
+Fixed in the round before (tester H findings 1–3, performance item; commits above): edge flips
 keep the chord tolerance and the face's deviation is measured again after flips (`f12` at 0.01
 0.0136 → 0.0100); planes at an angle meeting at a rim are line contact; B-rep edges sampled by
 chord sag in `surface_distance` (helical seam 0.061 → 1e-4 mm); `check().inside_out` 4.4 → 0.56 s
@@ -100,4 +111,4 @@ From [`solidcore-plan.md`](solidcore-plan.md):
    `tests/step/verify.py`, `tests/color-review` with solidcore, performance factor agreed, browser
    build), default kernel solidcore, freeze SMLib reference data (`tests/kernel-reference.json`),
    remove SMLib and its build steps, update the docs and `CLAUDE.md`.
-5. The low points above (4–9) when convenient; none blocks the switch.
+5. The low point 6 (staircase line contacts) when convenient; it does not block the switch.
