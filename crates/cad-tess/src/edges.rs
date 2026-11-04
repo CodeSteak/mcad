@@ -39,13 +39,11 @@ pub(crate) fn steps(span: f64, step: f64) -> usize {
     ((span / step - 1e-9).ceil() as usize).clamp(1, 1 << 16)
 }
 
-/// `finer[i]`: edge `i` with the tolerance halved that many times (missing: 0).
-pub(crate) fn discretise(brep: &Brep, tol: f64, angle: f64, finer: &[u32]) -> EdgePolys {
+pub(crate) fn discretise(brep: &Brep, tol: f64, angle: f64) -> EdgePolys {
     let mut out = EdgePolys { points: brep.vertices.clone(), edges: Vec::with_capacity(brep.edges.len()) };
-    for (i, e) in brep.edges.iter().enumerate() {
+    for e in &brep.edges {
         let (a, b) = (brep.vertices[e.start as usize], brep.vertices[e.end as usize]);
-        let t = tol / f64::from(1u32 << finer.get(i).copied().unwrap_or(0).min(16));
-        let inner = inner_points(&e.curve, a, b, e.start == e.end, t, angle);
+        let inner = inner_points(&e.curve, a, b, e.start == e.end, tol, angle);
         let mut ids = Vec::with_capacity(inner.len() + 2);
         ids.push(e.start);
         for p in inner {
@@ -239,7 +237,7 @@ mod tests {
         let a = DVec3::new(10.0, 0.0, 0.0);
         for tol in [0.1, 0.01, 0.001] {
             let b = brep(Curve::Circle { frame: f, r: 10.0 }, a, a);
-            let e = discretise(&b, tol, 0.35, &[]);
+            let e = discretise(&b, tol, 0.35);
             let ids = &e.edges[0];
             assert_eq!((ids[0], *ids.last().unwrap()), (0, 0));
             let pts: Vec<DVec3> = ids.iter().map(|i| e.points[*i as usize]).collect();
@@ -252,7 +250,7 @@ mod tests {
         }
         // a half circle from a to -a, counter-clockwise about z: through +y
         let b = brep(Curve::Circle { frame: f, r: 10.0 }, a, -a);
-        let e = discretise(&b, 0.01, 0.35, &[]);
+        let e = discretise(&b, 0.01, 0.35);
         assert!(e.points[e.edges[0][e.edges[0].len() / 2] as usize].y > 9.9);
     }
 
@@ -272,7 +270,7 @@ mod tests {
         };
         let (a, b) = (c.eval(0.0), c.eval(2.0));
         let br = brep(Curve::BSpline(c.clone()), a, b);
-        let e = discretise(&br, 0.01, 0.35, &[]);
+        let e = discretise(&br, 0.01, 0.35);
         let pts: Vec<DVec3> = e.edges[0].iter().map(|i| e.points[*i as usize]).collect();
         // deviation: distance of dense curve samples from the polyline
         let dense = c.eval_many(&(0..=2000).map(|i| i as f64 / 1000.0).collect::<Vec<_>>());
@@ -291,7 +289,7 @@ mod tests {
         let (r1, r2) = (20.0, 5.0);
         let a = DVec3::new(20.0, 0.0, 0.0);
         let br = brep(Curve::Ellipse { frame: f, r1, r2 }, a, a);
-        let e = discretise(&br, 0.01, 0.35, &[]);
+        let e = discretise(&br, 0.01, 0.35);
         let pts: Vec<DVec3> = e.edges[0].iter().map(|i| e.points[*i as usize]).collect();
         for p in &pts {
             assert!(((p.x / r1).powi(2) + (p.y / r2).powi(2) - 1.0).abs() < 1e-9);
