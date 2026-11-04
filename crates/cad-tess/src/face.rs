@@ -6,7 +6,8 @@
 //!    direction where both are curved) and the turn within the angle: analytic surfaces from
 //!    their radii (straight directions get no lines), revolutions and extrusions from their
 //!    curve, B-splines per knot span (at least 8 pieces per direction) from the second
-//!    derivatives plus each direction's share of the twist `σuv · n`; where one
+//!    derivatives plus each direction's share of the twist `σuv · n` (a ruled face whose curved
+//!    direction outweighs the twist: that one by its curvature, the rulings by the twist); where one
 //!    direction is straight over part of the face only, lines there at most four times the other
 //!    direction's spacing; a straight direction gets rows only where the boundary runs across
 //!    the grid; no ring about a pole nearer to it than the boundary's first point on a run
@@ -349,9 +350,12 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
     let sc = scale(g, bounds);
     let rho = [sc.x / sc.y, sc.y / sc.x];
     let mut pieces: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
-    // lines per piece for the chord and for the turn
+    // lines per piece for the chord and for the turn; for the curvature alone, and the
+    // largest twist
     let mut chord: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
     let mut turns: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
+    let mut chord_k: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
+    let mut twist_m: [Vec<f64>; 2] = [Vec::new(), Vec::new()];
     for i in 0..2 {
         let (a, b) = if i == 0 { (lo.x, hi.x) } else { (lo.y, hi.y) };
         if !crate::gt(b, a) {
@@ -378,6 +382,8 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
             // samples of the normal part of σ'' (the sag of a chord off the surface; the
             // tangential part only changes the speed) and of the normal's turn rate
             let mut d2: f64 = 0.0;
+            let mut dk: f64 = 0.0;
+            let mut mm: f64 = 0.0;
             let mut turn: f64 = 0.0;
             for si in 0..=4 {
                 for sj in 0..=6 {
@@ -403,17 +409,45 @@ fn grid_lines(g: &Geom, bounds: (DVec2, DVec2), p: &Params) -> [Vec<f64>; 2] {
                     // points, 164 k triangles at 0.05; with the sum 42 points, 113 k)
                     let m = ds[4].dot(n).abs();
                     d2 = d2.max(k + m * rho[i]);
+                    dk = dk.max(k);
+                    mm = mm.max(m);
                     if d1.length() > 1e-12 {
                         turn = turn.max(k / d1.length());
                     }
                 }
             }
             chord[i].push((w[1] - w[0]) * (d2 / (8.0 * p.tol)).sqrt());
+            chord_k[i].push((w[1] - w[0]) * (dk / (8.0 * p.tol)).sqrt());
+            twist_m[i].push(mm);
             turns[i].push((w[1] - w[0]) * turn / p.angle);
         }
     }
     // curved in both directions (at least a line each): half the tolerance each
-    let f = if chord.iter().all(|c| c.iter().sum::<f64>() >= 1.0) { DOUBLE.sqrt() } else { 1.0 };
+    let mut f = if chord.iter().all(|c| c.iter().sum::<f64>() >= 1.0) { DOUBLE.sqrt() } else { 1.0 };
+    // a ruled face (straight in one direction by its curvature) whose curved direction's
+    // curvature outweighs its share of the twist (a loft between a superellipse and a circle):
+    // the curved direction keeps its own lines for half the tolerance, the straight one gets as
+    // many as keep 2·M·hs·hc within the other half (hc that direction's step). Its cells are
+    // long along the rulings, where the twist adds no sag (`planter`: 10.6 k triangles at 0.05,
+    // 14.7 k with the twist shared out as on a doubly curved face, 12.0 k without the twist).
+    // Where the twist dominates (the sides of a twisted bar) the shares above fit better
+    let total = |c: &[f64]| c.iter().sum::<f64>();
+    let straight = [0, 1].map(|i| total(&chord_k[i]) < 1.0);
+    if straight[0] != straight[1] && !pieces[0].is_empty() && !pieces[1].is_empty() {
+        let (s, c) = if straight[0] { (0, 1) } else { (1, 0) };
+        let curved: Vec<f64> = chord_k[c].iter().map(|x| x * DOUBLE.sqrt()).collect();
+        let span = if c == 0 { hi.x - lo.x } else { hi.y - lo.y };
+        let hc = span / (total(&curved).ceil() + 1.0);
+        let rulings: Vec<f64> =
+            pieces[s].windows(2).zip(&twist_m[s]).map(|(w, m)| (w[1] - w[0]) * m * hc / (4.0 * p.tol)).collect();
+        // not where the rulings need no line (a face of revolution, whose twist is 0, keeps the
+        // whole tolerance for its curved direction: `mug`'s wall)
+        if total(&rulings) >= 1.0 && total(&chord[c]) <= DOUBLE.sqrt() * total(&chord_k[c]) {
+            chord[c] = curved;
+            chord[s] = rulings;
+            f = 1.0;
+        }
+    }
     let mut need: [Vec<f64>; 2] =
         [0, 1].map(|i| chord[i].iter().zip(&turns[i]).map(|(c, t)| (c * f).max(*t)).collect());
     // a direction that is straight over part of the face (a revolution's profile with a

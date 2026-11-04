@@ -11,7 +11,7 @@ comparison).
 | What | Value |
 | --- | --- |
 | Branch | `feature/solidcore-phase0-2` (pushed to `origin`; no pull request) |
-| Head at handover | the commit that adds this file; the last code commits are `2280207` (flips keep the tolerance), `e2dc0b6` (rim contact), `d13c7d5` (edge sampling), `0a89606` (inside-out speed) on top of `e66d726` (end of tester round H). 2026-11-04 on branch `claude/tessellierung-subagent-hngono`: pin bump `a921b75`, then `1c7762e` (#8), `a5ceafd` (#9), `4c51fd3` (#5), `56ca505` (#4), `c6c23cf` (#7) |
+| Head at handover | the commit that adds this file; the last code commits are `2280207` (flips keep the tolerance), `e2dc0b6` (rim contact), `d13c7d5` (edge sampling), `0a89606` (inside-out speed) on top of `e66d726` (end of tester round H). 2026-11-04 on branch `claude/tessellierung-subagent-hngono`: pin bump `a921b75`, then `1c7762e` (#8), `a5ceafd` (#9), `4c51fd3` (#5), `56ca505` (#4), `c6c23cf` (#7); review round `058acf3` (#7 cost), `a4afa5c` (#4 cost), `b8eab5f` (fold sheets), `bcf9a36` (twist sum), then ruled faces |
 | solidcore pin | `f4f05b147551201e2a7b44a34fbc41ddc0fc6578` (2026-11-04, crate 1.0.1; was `bba8d87` of 2026-10-30, bumped without API changes and with the same verdicts), `crates/kernel-solidcore/Cargo.toml`, `SOLIDCORE_REV` / `KERNEL_ID` in `crates/kernel-solidcore/src/lib.rs` |
 | Goal | replace SMLib (C++, `crates/kernel-smlib`, facade `smlib/facade/sc_facade.cpp`) by solidcore (Rust) and drop all C++ from the build |
 
@@ -30,15 +30,16 @@ comparison).
 
 Re-measured 2026-11-01 at the handover head (debug build, `MCAD_KERNEL=solidcore` where it
 applies). Tester round H measured the same node figures at `e66d726`. The mesh rows: 2026-11-04
-after the tessellator fixes, on another machine (4 cores; times not comparable with the
-earlier ones, so the state before the fixes, measured there at the new pin, is given in
-brackets).
+after the tessellator fixes and the review round (`058acf3`, `a4afa5c`, `b8eab5f`, `bcf9a36` and
+the ruled-face commit after them), on another machine (4 cores; times not comparable with the earlier ones, so the state
+before the fixes, measured there at the new pin, is given in brackets; "tessellation" is
+solidcore's mesh time less the B-rep conversion).
 
 | Measurement | Result |
 | --- | --- |
 | `diff-kernels` nodes (101 files, 2604 nodes; `scripts/ci/solidcore.sh`) | same 2596, unsupported 3, blocked 3, differ 2, failed 0 |
-| meshes at 0.05 (`--mesh`) | 100 `ok`, 1 skipped (`f03`, no B-rep part); solidcore watertight 100, chord max 0.0500 mm, 177.0 k triangles (175.0 k); SMLib watertight 97, chord max 0.242, 272 k; largest Hausdorff excess where the roots are `same` 0.0499 (0.0657); time SMLib 7.9 s, solidcore 8.8 s (8.6 s), 6.8 s of it the B-rep conversion |
-| meshes at 0.01 (`--mesh --mesh-tol 0.01`) | 100 `ok` (99, `f02` `differ`), 1 skipped; solidcore watertight 100, chord max 0.0100; 609.0 k triangles (607.5 k; SMLib 708 k, watertight 95); largest Hausdorff excess 0.0100 (0.0311, `f02`); time SMLib 14.8 s, solidcore 13.9 s (13.1 s) |
+| meshes at 0.05 (`--mesh`) | 100 `ok`, 1 skipped (`f03`, no B-rep part); solidcore watertight 100, chord max 0.0500 mm, 172.9 k triangles (175.0 k); SMLib watertight 97, chord max 0.242, 272 k; largest Hausdorff excess where the roots are `same` 0.0499 (0.0657); time SMLib 7.9 s, solidcore 8.8 s, tessellation 1.7 s (1.8 s) |
+| meshes at 0.01 (`--mesh --mesh-tol 0.01`) | 100 `ok` (99, `f02` `differ`), 1 skipped; solidcore watertight 100, chord max 0.0100; 587.4 k triangles (607.5 k; SMLib 708 k, watertight 95); largest Hausdorff excess 0.0101 (0.0311, `f02`); time SMLib 14.4 s, solidcore 12.9 s, tessellation 6.1 s (6.2 s; 7.1 s before the review round) |
 | `tests/openscad-compat/compare.py` | 36 / 36 |
 | `tests/everyday/check.sh` | 19 models, 0 with problems |
 | STL/3MF, section view, render snapshots | met at task F (`docs/solidcore-plan.md`, phase 2 status), not re-run |
@@ -76,18 +77,22 @@ None is a silent wrong result in the corpus. Severity: how much it matters for t
 | 5 | done | a vertex inside a face off its surface was excused up to its distance from the face's B-rep edges (tester H finding 4) | `crates/cad-tess/src/compare.rs` (`inner_vertex_gap`), `lib.rs` (edge polylines) | **fixed 2026-11-04**: no excuse any more; the split points of crossing loops are written into the edge polylines (`edge_segments`, where the triangles of both faces use them), so they are checked as points of the edge (`edge_vertex_gap`). The stricter check showed inversion misses on a B-spline of many turns (seed net coarser than a turn: 7.08 mm on `twist = 7200` at 0.01): corners are now seeded from a corner of the same triangle on the surface first, and re-seeded from neighbours until nothing improves. Test `inner_vertices_near_an_edge_off_the_surface` (a cylinder 0.3 mm outside its edges, an inner vertex moved onto the edge: caught, was 9e-5) |
 | 6 | low | line contacts of staircase-like outlines (tester H finding 6) | `crates/cad-session/src/asserts.rs` (`mesh_contact`, contact curves) | contact kind and curve come from the mesh there; not analysed further |
 | 7 | done | forced folds: a fold on a boundary edge whose chord sags more than half the triangle's height was kept (`planter` 24 at 0.5) | `crates/cad-tess/src/lib.rs` (`tessellate_with`, `FORCED_ROUNDS`), `edges.rs`, `face.rs` (`repair_folds`) | **fixed 2026-11-04**: the edges under forced folds are discretised again with half the tolerance and the faces using them meshed anew (both faces of an edge use its new points: watertight; the others keep their meshes), up to 3 rounds; a fold left after that still counts as forced. `planter` at 0.5: 0 (+20 triangles); mesh time there 35 ms before, 68 ms with every face meshed again per round, 41 ms with only the faces of the refined edges (debug, cad-tess at opt-level 2); test `no_forced_folds_*` |
-| 8 | done | `linear_extrude(height = 300, twist = 7200) square([30, 2], center = true)` failed at 0.05 ("tolerance 0.05 mm not reached (3.186e-1 mm …)") | `crates/cad-tess/src/face.rs` (`grid_lines`), `lib.rs` (`turn_lines`) | **fixed 2026-11-04**: the ruled sides are straight across but twisted (`σuv · n`); the grid took that direction for straight (rows only, squashed by 4 in the CDT), so Delaunay joined points across bands 7.5 mm wide whose chords the twist puts off the surface, and the refinement cycled (105 points a pass, worst 0.3186 / 0.3401 alternating, 40 passes). The twist now counts as curvature in both directions: each direction adds its share (by the face's median speeds) to its curvature, as the bound L·hu² + 2·M·hu·hv + N·hv² ≤ (L + M·ρ)·hu² + (N + M/ρ)·hv² gives (first, in `1c7762e`, the larger of the two: up to twice the bound, the refinement filled in, the helix of open point 9 164 k triangles with 49 k refinement points; with the sum 113 k and 42), sampled over at least 8 pieces per direction; straight edges along which a face's normal turns (a loft's rulings) get points by that turn. 0.05: 67.9 k triangles, chord 0.0437 sampled (test `twisted_extrusions_*`, both B-reps); 0.01: 344 k triangles, 0.0100 (was 305 k, 0.0095) |
+| 8 | done | `linear_extrude(height = 300, twist = 7200) square([30, 2], center = true)` failed at 0.05 ("tolerance 0.05 mm not reached (3.186e-1 mm …)") | `crates/cad-tess/src/face.rs` (`grid_lines`), `lib.rs` (`turn_lines`) | **fixed 2026-11-04**: the ruled sides are straight across but twisted (`σuv · n`); the grid took that direction for straight (rows only, squashed by 4 in the CDT), so Delaunay joined points across bands 7.5 mm wide whose chords the twist puts off the surface, and the refinement cycled (105 points a pass, worst 0.3186 / 0.3401 alternating, 40 passes). The twist now counts as curvature in both directions: each direction adds its share (by the face's median speeds) to its curvature, as the bound L·hu² + 2·M·hu·hv + N·hv² ≤ (L + M·ρ)·hu² + (N + M/ρ)·hv² gives (first, in `1c7762e`, the larger of the two: up to twice the bound, the refinement filled in, the helix of open point 9 164 k triangles with 49 k refinement points; with the sum 113 k and 42), sampled over at least 8 pieces per direction; straight edges along which a face's normal turns (a loft's rulings) get points by that turn. 0.05: 67.9 k triangles, chord 0.0437 sampled (test `twisted_extrusions_*`, both B-reps); 0.01: 344 k triangles, 0.0100 (was 305 k, 0.0095). Review round: the twist share is added to the curvature (the bound's sum, not the larger of the two), and a ruled face whose curved direction outweighs the twist keeps that direction's lines and gets lines along its rulings by the twist alone: bar 65.6 k / 327 k, helix 113 k / 563 k |
 | 9 | done | `linear_extrude(height = 100, twist = 3600, scale = 0.2) circle(20)`: chord 0.0529 at 0.05 | `crates/cad-tess/src/surface.rs` (`newton`) | **fixed 2026-11-04**: a measuring error, not the mesh: the foot of a point beyond the end of the twisted surface (a rim chord's midpoint) took the coupled Newton step's share in the free parameter while the other one was clamped, and stopped at 0.0529 instead of 0.049. A parameter held at its end now leaves the step to the other alone. Chord 0.0500 at 0.05 (0.04998), 0.0100 at 0.01 (test `twisted_extrusions_*`) |
 | 10 | medium (phase 5 gate) | performance: evaluation about 1.5–1.8 × SMLib in debug (the adapter's Boolean checks); the B-rep conversion is most of solidcore's mesh time (14.1 of 16.3 s at 0.05; `kernel-solidcore` runs unoptimised as a workspace crate in debug) | `crates/kernel-solidcore/src/{boolean,brep}.rs` | measure in a release build (plan 0.5 / 4.3) before deciding |
 | 11 | none (SMLib only) | an island in a void meshed inside out; a ball in a seat 0.05 larger reported as line contact at distance 0 (solidcore: gap); a wall below one ulp | SMLib | goes away with SMLib (phase 5.3) |
 | 12 | low | solidcore fails where SMLib succeeds: a polyhedron of two cubes sharing an edge, `shell(1) cube(10, $fillet = 2)` (offset self-overlap), a root union of many slivers, an operand below ~1e-4 of the pair on a face | adapter / upstream | `docs/solidcore-migration.md`, "What is missing", item 7; the polyhedron and the shell still fail at `f4f05b1` |
 
-Fixed on 2026-11-04 (open points 4, 5, 7, 8, 9; commits above): see the table; corpus changes in
-triangles at 0.05 / 0.01: `planter` +21 % / +15 % (its B-spline faces; which of the grid changes, not analysed),
-`12_linear_extrude_twist` +13 % / +39 %, the lofts `f12`, `loft_sweep`, `freeform_lid` +4 to
-+7 %; `knob_mirror` −6 % / −13 %, `door_stop` −18 % / −24 %, `f01_sweep_spline_profile` −25 % /
-−11 %; inner vertices are off their surfaces by at most 7.6e-6 mm, boundary vertices off the
-B-rep's edges by at most 1.1e-4 mm.
+Fixed on 2026-11-04 (open points 4, 5, 7, 8, 9; commits above): see the table. Corpus changes in
+triangles at 0.05 / 0.01 against the state before: `planter` −12 % / −19 %, `f12` −21 % / −20 %,
+`knob_mirror` −6 % / −13 %, `door_stop` −18 % / −22 %, `f01_sweep_spline_profile` −25 % / −11 %;
+more on `loft_sweep` +30 % / +34 % (its four rational loft patches circle → square → circle:
+501 → 739 triangles each at 0.05, half of them below tol/4; the twist bound is not sharp there,
+see the migration doc), `freeform_lid` +10 % / +10 %, `12_linear_extrude_twist` −3 % / +10 %,
+`mug` +1 % / −1 %. Outside the corpus the helix of open point 9 needs 113 k / 563 k triangles
+(160 k / 807 k before, SMLib 66 k / 296 k missing the tolerance), the bar of open point 8 65.6 k /
+327 k (failed / 305 k). Inner vertices are off their surfaces by at most 7.7e-6 mm, boundary
+vertices off the B-rep's edges by at most 1.1e-4 mm.
 
 Fixed in the round before (tester H findings 1–3, performance item; commits above): edge flips
 keep the chord tolerance and the face's deviation is measured again after flips (`f12` at 0.01
