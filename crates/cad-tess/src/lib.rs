@@ -298,17 +298,29 @@ pub fn tessellate_with(brep: &Brep, opts: &Options) -> Result<Tessellation, Tess
             mesh.tri_faces.push(f.id);
         }
     }
-    apply_splits(&mut mesh, &mut vid, &splits);
+    let by_seg = split_segments(&splits);
+    apply_splits(&mut mesh, &mut vid, &by_seg);
     drop_fins(&mut mesh);
     fill_missing_normals(&mut mesh);
     turn_normals_against(&mut mesh);
+    // the edges' polylines as the triangles use them: with the points where a face split a
+    // segment (loops crossing at a cusp), so a split point counts as a point of the edge (on
+    // the chord between two of its points), not as a point inside the face
     for (i, ids) in ep.edges.iter().enumerate() {
         for w in ids.windows(2) {
-            for id in w {
-                let p = ep.points[*id as usize];
-                mesh.edge_segments.extend_from_slice(&[p.x as f32, p.y as f32, p.z as f32]);
+            let (a, b) = (w[0], w[1]);
+            let mut chain = vec![ep.points[a as usize]];
+            if let Some(pts) = by_seg.get(&(a.min(b), a.max(b))) {
+                let mid = pts.iter().map(|(_, s)| s.p);
+                if a < b { chain.extend(mid) } else { chain.extend(mid.rev()) }
             }
-            mesh.edge_ids.push(i as u32);
+            chain.push(ep.points[b as usize]);
+            for s in chain.windows(2) {
+                for p in s {
+                    mesh.edge_segments.extend_from_slice(&[p.x as f32, p.y as f32, p.z as f32]);
+                }
+                mesh.edge_ids.push(i as u32);
+            }
         }
     }
     Ok(Tessellation { mesh, stats })
@@ -390,14 +402,11 @@ fn turn_lines(brep: &Brep, ep: &mut edges::EdgePolys, angle: f64, eps: f64) {
     }
 }
 
-/// Splits the triangles of the other side of each boundary segment a face split where its
-/// loops crossed (see `face::Split`), so the mesh stays watertight.
-fn apply_splits(m: &mut Mesh, vid: &mut Vec<Option<u32>>, splits: &[face::Split]) {
-    if splits.is_empty() {
-        return;
-    }
-    // per segment (lower id, higher id): the points from the lower end
-    let mut by_seg: HashMap<(u32, u32), Vec<(f64, face::Split)>> = HashMap::new();
+/// Split points per boundary segment (lower point id, higher id), sorted from the lower end.
+type SegSplits = HashMap<(u32, u32), Vec<(f64, face::Split)>>;
+
+fn split_segments(splits: &[face::Split]) -> SegSplits {
+    let mut by_seg: SegSplits = HashMap::new();
     for s in splits {
         let (key, t) = if s.a < s.b { ((s.a, s.b), s.t) } else { ((s.b, s.a), 1.0 - s.t) };
         let v = by_seg.entry(key).or_default();
@@ -407,6 +416,15 @@ fn apply_splits(m: &mut Mesh, vid: &mut Vec<Option<u32>>, splits: &[face::Split]
     }
     for v in by_seg.values_mut() {
         v.sort_by(|x, y| x.0.total_cmp(&y.0));
+    }
+    by_seg
+}
+
+/// Splits the triangles of the other side of each boundary segment a face split where its
+/// loops crossed (see `face::Split`), so the mesh stays watertight.
+fn apply_splits(m: &mut Mesh, vid: &mut Vec<Option<u32>>, by_seg: &SegSplits) {
+    if by_seg.is_empty() {
+        return;
     }
     let mut t = 0;
     while t < m.indices.len() / 3 {

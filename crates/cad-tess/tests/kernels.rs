@@ -544,6 +544,7 @@ where
             let m = cad_tess::tessellate(&brep, TOL).unwrap();
             let d = cad_tess::surface_distance(&brep, &m);
             assert!(d.chord.max <= TOL, "{kernel}: {name}: chord {} at {}", d.chord.max, d.chord.at);
+            assert!(d.inner_vertex_gap <= 1e-4, "{kernel}: {name}: inner vertex gap {}", d.inner_vertex_gap);
         });
     }
 }
@@ -570,5 +571,65 @@ fn long_free_form_edges_are_sampled_finely() {
         let m = cad_tess::tessellate(&brep, 0.05).unwrap();
         let d = cad_tess::surface_distance(&brep, &m);
         assert!(d.edge_vertex_gap <= 1e-3, "edge vertex gap {}", d.edge_vertex_gap);
+    });
+}
+
+/// A vertex inside a face is a point of its surface, also near an edge that lies off the
+/// surface (tester H finding 4): a cylinder whose surface is 0.3 mm outside its edges (as a
+/// fitted sweep end is off its cap), one inner vertex next to the top edge moved onto that
+/// edge. Up to now it was excused by its distance from the edge (0); it is 0.3 off the surface.
+/// The points where crossing loops are split are points of the edge polylines (`graze`), not
+/// inner vertices.
+#[test]
+fn inner_vertices_near_an_edge_off_the_surface() {
+    let mut k = kernel_smlib::SmlibKernel::new();
+    let c = k.make_cylinder(10.0, 10.0, 10.0, 1).unwrap();
+    let mut brep = k.brep(&c).unwrap();
+    let mut wall = None;
+    for b in &mut brep.bodies {
+        let cad_kernel::brep::Body::Solid { outer, .. } = b else { continue };
+        for f in &mut outer.faces {
+            if let Surface::Cylinder { r, .. } = &mut f.surface {
+                *r += 0.3;
+                wall = Some(f.id);
+            }
+        }
+    }
+    let wall = wall.expect("a cylindrical face");
+    let mut m = cad_tess::tessellate_with(&brep, &cad_tess::Options::new(0.05)).unwrap().mesh;
+    let d = cad_tess::surface_distance(&brep, &m);
+    assert!(d.inner_vertex_gap < 1e-4, "inner vertices on the surface: {}", d.inner_vertex_gap);
+    // the inner vertex of the wall nearest the top edge (z = 10, radius 10)
+    let edge_points: std::collections::HashSet<[u32; 3]> =
+        m.edge_segments.chunks_exact(3).map(|p| [p[0].to_bits(), p[1].to_bits(), p[2].to_bits()]).collect();
+    let mut wall_verts: Vec<u32> = (0..m.triangle_count())
+        .filter(|t| m.tri_faces[*t] == wall)
+        .flat_map(|t| m.indices[3 * t..3 * t + 3].to_vec())
+        .collect();
+    wall_verts.sort_unstable();
+    wall_verts.dedup();
+    let v = wall_verts
+        .into_iter()
+        .filter(|v| {
+            let p = &m.positions[3 * *v as usize..3 * *v as usize + 3];
+            !edge_points.contains(&[p[0].to_bits(), p[1].to_bits(), p[2].to_bits()])
+        })
+        .max_by(|a, b| m.positions[3 * *a as usize + 2].total_cmp(&m.positions[3 * *b as usize + 2]))
+        .expect("an inner vertex");
+    let p = pos(&m, v);
+    let on_edge = DVec3::new(p.x, p.y, 0.0).normalize() * 10.0 + DVec3::new(0.0, 0.0, 10.0);
+    assert!((on_edge - p).length() < 5.0, "{p} is not near the top edge");
+    m.positions[3 * v as usize..3 * v as usize + 3].copy_from_slice(&on_edge.as_vec3().to_array());
+    let d = cad_tess::surface_distance(&brep, &m);
+    assert!(d.inner_vertex_gap > 0.29, "displaced vertex excused: {}", d.inner_vertex_gap);
+    // crossing loops at a cusp: the split points lie on the chords of the edge polylines
+    let src = "difference() { cylinder(r = 30, h = 60); translate([0, 0.02, 0]) cylinder(r = 30, h = 30); }\n";
+    with_part(kernel_smlib::SmlibKernel::new(), "spec/graze.mcad", Some(src), |k, s| {
+        let brep = k.brep(s).unwrap();
+        for tol in [0.05, 0.01] {
+            let m = cad_tess::tessellate(&brep, tol).unwrap();
+            let d = cad_tess::surface_distance(&brep, &m);
+            assert!(d.inner_vertex_gap <= tol && d.edge_vertex_gap <= tol, "graze at {tol}: {d:?}");
+        }
     });
 }

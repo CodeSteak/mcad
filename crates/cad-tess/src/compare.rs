@@ -86,10 +86,10 @@ pub struct SurfaceDistance {
     pub vertex_gap: f64,
     /// The same for the vertices inside their face (neither on an edge of its triangles that no
     /// other triangle of the face shares nor a point of an edge polyline, `edge_segments`: a
-    /// seam), or their distance from the B-rep's edges if smaller (a point where loops that
-    /// cross at a cusp were split, on the chord between edge points): they are surface points,
-    /// while a boundary vertex is a point of the B-rep's edge, which may lie off the face (see
-    /// `chord`).
+    /// seam, or a point where loops that cross at a cusp were split, which the tessellator
+    /// puts into the polylines): they are surface points, while a boundary vertex is a point of
+    /// the B-rep's edge, which may lie off the face (see `chord`). No excuse near an edge: a
+    /// vertex inside a face displaced towards an edge that lies off the face is off.
     pub inner_vertex_gap: f64,
     /// Largest distance of a boundary vertex (on an edge of its face's triangles that no other
     /// triangle of the face shares, or a point of an edge polyline) from the nearest edge of its
@@ -192,24 +192,49 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
     // per (face, vertex): the distance from the face's own edges
     let mut on_edges: HashMap<(u32, u32), f64> = HashMap::new();
     let mut out = SurfaceDistance { per_triangle: vec![0.0; mesh.indices.len() / 3], ..Default::default() };
-    // the corners on their surfaces; a corner off the surface is seeded from its neighbours'
-    // parameters as well (on a surface that folds over itself the unseeded inversion can land
-    // on another branch), twice over the triangles
-    for round in 0..3 {
-        for t in 0..mesh.indices.len() / 3 {
-            let Some(g) = mesh.tri_faces.get(t).and_then(|f| geoms.get(f)) else { continue };
-            let face = mesh.tri_faces[t];
-            let tri = triangle(mesh, t);
-            let vs = [0, 1, 2].map(|k| mesh.indices[3 * t + k]);
-            if round == 0 {
-                for k in 0..3 {
-                    corner.entry((face, vs[k])).or_insert_with(|| {
-                        let uv = g.invert(tri[k], None);
-                        (uv, (g.eval(uv) - tri[k]).length())
-                    });
-                }
+    // the corners on their surfaces: first from the parameters of a corner of the same triangle
+    // that lies on the surface, else (or if that misses) by the global inversion; a corner
+    // still off the surface is seeded again from its neighbours' parameters until nothing
+    // improves (on a surface that folds over itself, or a B-spline of many turns whose seed net
+    // is coarser than a turn, the unseeded inversion can land on another branch)
+    for t in 0..mesh.indices.len() / 3 {
+        let Some(g) = mesh.tri_faces.get(t).and_then(|f| geoms.get(f)) else { continue };
+        let face = mesh.tri_faces[t];
+        let tri = triangle(mesh, t);
+        let vs = [0, 1, 2].map(|k| mesh.indices[3 * t + k]);
+        for k in 0..3 {
+            if corner.contains_key(&(face, vs[k])) {
                 continue;
             }
+            let seed = (0..3).filter(|j| *j != k).find_map(|j| corner.get(&(face, vs[j])).filter(|c| c.1 <= eps));
+            let mut best = (DVec2::ZERO, f64::INFINITY);
+            if let Some(&(s, _)) = seed {
+                let uv = g.project(tri[k], s);
+                best = (uv, (g.eval(uv) - tri[k]).length());
+            }
+            if best.1 > eps {
+                let uv = g.invert(tri[k], None);
+                let d = (g.eval(uv) - tri[k]).length();
+                if d < best.1 {
+                    best = (uv, d);
+                }
+            }
+            corner.insert((face, vs[k]), best);
+        }
+    }
+    let mut todo: Vec<usize> = (0..mesh.indices.len() / 3)
+        .filter(|t| {
+            mesh.tri_faces.get(*t).is_some_and(|f| geoms.contains_key(f))
+                && (0..3).any(|k| corner[&(mesh.tri_faces[*t], mesh.indices[3 * t + k])].1 > eps)
+        })
+        .collect();
+    for _ in 0..64 {
+        let mut improved = false;
+        for &t in &todo {
+            let face = mesh.tri_faces[t];
+            let g = &geoms[&face];
+            let tri = triangle(mesh, t);
+            let vs = [0, 1, 2].map(|k| mesh.indices[3 * t + k]);
             for k in 0..3 {
                 if corner[&(face, vs[k])].1 <= eps {
                     continue;
@@ -219,9 +244,14 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
                     let d = (g.eval(uv) - tri[k]).length();
                     if d < corner[&(face, vs[k])].1 {
                         corner.insert((face, vs[k]), (uv, d));
+                        improved = true;
                     }
                 }
             }
+        }
+        todo.retain(|t| (0..3).any(|k| corner[&(mesh.tri_faces[*t], mesh.indices[3 * t + k])].1 > eps));
+        if !improved || todo.is_empty() {
+            break;
         }
     }
     for t in 0..mesh.indices.len() / 3 {
@@ -242,10 +272,9 @@ pub fn surface_distance(brep: &Brep, mesh: &Mesh) -> SurfaceDistance {
                 })
             };
             if !boundary.contains(&(face, welded[v as usize])) && !on_edge(v) {
-                // off the surface, but on a chord between edge points (loops that cross at a
-                // cusp are split there, inside the face's triangles): the edge's gap
-                let d = if c.1 > eps { c.1.min(to_edges()) } else { c.1 };
-                out.inner_vertex_gap = out.inner_vertex_gap.max(d);
+                // a surface point (a split where loops cross at a cusp lies inside the face's
+                // triangles, but is a point of the edge polylines: `on_edge`)
+                out.inner_vertex_gap = out.inner_vertex_gap.max(c.1);
             } else {
                 let d = to_edges();
                 if d.is_finite() {
