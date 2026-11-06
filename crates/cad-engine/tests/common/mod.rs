@@ -6,13 +6,13 @@ use cad_engine::{CountingKernel, Engine, Evaluation, Severity, Status};
 use cad_ir::NodeIdx;
 use cad_kernel::Mesh;
 use glam::DVec3;
-use kernel_smlib::{Shape, SmlibKernel};
+use kernel_solidcore::{Shape, SolidcoreKernel};
 
-pub type E = Engine<CountingKernel<SmlibKernel>>;
+pub type E = Engine<CountingKernel<SolidcoreKernel>>;
 pub type Ev = Evaluation<Shape>;
 
 pub fn engine() -> E {
-    Engine::new(CountingKernel::new(SmlibKernel::new()))
+    Engine::new(CountingKernel::new(SolidcoreKernel::new()))
 }
 
 pub fn v(x: f64, y: f64, z: f64) -> DVec3 {

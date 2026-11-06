@@ -1,4 +1,43 @@
-# Handover: solidcore migration, phases 0–2
+# Handover: solidcore migration, phases 0–2 and the switch (phase A)
+
+**2026-11-06, phase A: solidcore is the only kernel.** SMLib (C++, `crates/kernel-smlib`,
+`smlib/` with the facade, patches, CMake/Emscripten scripts, `third_party/smlib`,
+`SMLIB_*`, `scripts/ci/smlib-*.sh`, `emsdk.sh`, `kernel-perf.py`) is removed; nothing in the
+build compiles C or C++ for mcad any more. What replaced what:
+
+| Before | Now |
+| --- | --- |
+| `--kernel smlib\|solidcore`, `MCAD_KERNEL`, feature `solidcore` | gone: solidcore always (`kernel-solidcore` without features; `cad-cli/src/kernel.rs` is a type alias) |
+| daemon and desktop engine process on SMLib | on solidcore |
+| browser: `cad_wasm_bg.wasm` + Emscripten `smlib.wasm` and a JS bridge | one module, `cad-wasm` over `kernel-solidcore` (wasm32-unknown-unknown, profile `wasm`) |
+| `mcad diff-kernels FILE…` (both kernels live) | `mcad diff-reference tests/kernel-reference.json [FILE…] [--mesh]`: solidcore against SMLib's per-node results, frozen with the last SMLib build (same rules; verdicts, rules and notes identical to the live comparison when frozen) |
+| `diff_kernels_on_examples` | `solidcore_against_the_reference` (`crates/cad-cli/tests/cli.rs`): the 8 known differences are listed (`REFERENCE_EXCEPTIONS`); a new one fails, and so does one that goes away |
+| tests on `SmlibKernel` (cad-session, cad-engine, cad-measure, cad-render, cad-tess, cad-desktop) | on `SolidcoreKernel` |
+| variable radius with different laws on several edges: "not supported by this kernel: solidcore: fillet_variable: …" | the engine's diagnostic "variable radius is not supported: fillet of N edges with different radius laws (A–B mm); use a constant radius" (`cad-engine/src/eval.rs`), body unfilleted; one law shared by all edges and constant radii per edge work |
+
+Found on the way (not in the corpus): solidcore's union of bodies that do not overlap can
+return one of them a second time inside out as a void (stencil glyph "c" of Allerta Stencil:
+3 solids + 1 void, volume 2.02 instead of 7.30, all checks passed). `boolean.rs` now refuses a
+union whose result has more shells than its operands with two shells alike, and merges the
+bodies instead (as the facade's `disjoint_union`). And: where a Boolean fails because operands
+touch tangentially, solidcore's unstitched result often has only open edges, so the places (the
+diagnostic's lines and point, `render`'s marks) were missing; they are now the result's edges on
+which both operands lie with tangent surfaces (`tangent_places`; `boss_rib`, `f09a`, `f08c`
+name both operands and the place as with SMLib). `minkowski` of a tetrahedron and a sphere,
+which SMLib only approximated ("offset is not exact"), solidcore builds at the distance.
+
+Measured 2026-11-06 (debug build unless noted, pin `f4f05b1`):
+
+| Measurement | Result |
+| --- | --- |
+| `diff-reference` (101 files, 2604 nodes) | same 2596, unsupported 3, blocked 3, differ 2, failed 0; volume rules relative 2293, exact 129, operands 67, curved 25, blend 70; meshes at 0.05: ok 100, skipped 1, watertight 100, chord max 0.0500 mm |
+| live comparison at the freeze (last SMLib build) | the same verdict, volume rule and notes for every node as the reference mode |
+| `compare.py --eval` / `check.sh` / `tests/step/verify.py` | 36 / 36; 19 models, 0 problems (bugs: 10 fixed, 7 open); 64 / 64 |
+| Wasm module (profile `wasm`: opt-level 3, fat LTO, one codegen unit; wasm-bindgen 0.2.129) | build 13.5 min (4 cores); 34.3 MB raw, 10.8 MB gzip -9, 6.66 MB Brotli q11. With opt-level "z": 9.5 min, 37.1 MB raw, 7.9 MB gzip, 4.97 MB Brotli, but 2.4 × slower (`dump-scene.mjs examples/08-macropad.mcad` 85 s against 36 s; the e2e tests S04/S06 time out on it); `wasm-opt -Oz` (binaryen 123, 11 min) on the "z" module: 22.3 MB raw, 5.1 MB Brotli. Release profile before (handover 2026-11-04): 39.3 MiB, 6.2 MiB Brotli |
+| browser engine in Node (`smoke-node.mjs`) | load 138 ms, housing scene 219 ms, root mesh 237 ms, warm 31 ms |
+
+The sections below are the state before the switch (2026-11-04), kept as history; their
+commands with `--kernel`, `diff-kernels`, `SMLIB_PREBUILT` no longer exist.
 
 State on 2026-11-04 (pin bump and the tessellator's open points 4, 5, 7, 8, 9; the state of
 2026-11-01 otherwise). Read this first to resume the work; details and history are in
@@ -52,17 +91,16 @@ for `variable_radius` (upstream API).
 
 | Topic | How |
 | --- | --- |
-| SMLib (reference kernel, still needed) | `export SMLIB_PREBUILT=$PWD/smlib/build-native` (prebuilt); without it build from `third_party/smlib` (`SMLIB_SRC`, `Makefile`, `smlib/fetch.sh`) |
-| headless (no WebKitGTK) | `cargo build -p cad-cli --no-default-features --features solidcore`; workspace commands with `--exclude cad-app --exclude cad-desktop` |
-| feature `solidcore` | opt-in on `kernel-solidcore` and `cad-cli`; without it every solidcore operation is `Unsupported` and `diff-kernels` exits 2. From an empty target dir about 10–15 min, then incremental |
-| adapter tests | `cargo test -p kernel-solidcore --features solidcore` |
-| tessellator tests | `cargo test -p cad-tess --features solidcore` (about 10 min in debug; both kernels' B-reps) |
-| CLI tests | `cargo test -p cad-cli --no-default-features --features solidcore` (`diff_kernels_on_examples` guards the numbers, about 15 min); `cargo test -p cad-cli usage` checks the manual |
-| corpus run | `SOLIDCORE_REV=<full hash>\|main SMLIB_PREBUILT=smlib/build-native scripts/ci/solidcore.sh <out>` → `diff-kernels.json`, `summary.md` (rewrites the pin in the working tree: `git checkout -- crates/kernel-solidcore Cargo.lock` afterwards unless bumping; pin routine in the migration doc) |
-| tessellator corpus | `cargo run -p cad-tess --example corpus [--features solidcore] -- --kernel both [--tol t]` |
-| one file | `mcad diff-kernels FILE --mesh --mesh-tol 0.01 --json`; `mcad check/render/export FILE --kernel solidcore` |
-| disk | about 24 GB were free at the start; keep ≥ 8 GB, delete stale test binaries in `target/debug/deps`, `CARGO_INCREMENTAL=0` when short; never `cargo clean` the main target dir |
-| pitfalls | `solidcore::Brep::clone()` is not an independent copy (use `Inner::copy`); face/edge ids of a copy differ; classification through `BrepQuery::of_brep(..).point_3d_classify`; error mapping `Unported` → `Unsupported`, `InvalidInput` → `InvalidInput`, else `Failed` |
+| headless (no WebKitGTK) | `cargo build -p cad-cli --no-default-features`; workspace commands with `--exclude cad-app --exclude cad-cli`, cad-cli with `--no-default-features` (its default feature `gui` links WebKitGTK); `cad-desktop` builds and tests without it |
+| from an empty target dir | about 10–15 min (debug), then incremental; every test binary links solidcore with debug info (about 500 MB each): run crate by crate and delete them when the disk is short |
+| adapter tests | `cargo test -p kernel-solidcore` |
+| tessellator tests | `cargo test -p cad-tess` |
+| CLI tests | `cargo test -p cad-cli --no-default-features` (`solidcore_against_the_reference` about 5 min); `cargo test -p cad-cli usage` checks the manual |
+| reference run | `mcad diff-reference tests/kernel-reference.json --mesh [--json]`; pin bump: `SOLIDCORE_REV=<full hash>\|main scripts/ci/solidcore.sh <out>` → `diff-reference.json`, `summary.md` (rewrites the pin in the working tree: `git checkout -- crates/kernel-solidcore Cargo.lock` afterwards unless bumping) |
+| tessellator corpus | `cargo run -p cad-tess --example corpus -- [--tol t]` |
+| one file | `mcad diff-reference tests/kernel-reference.json FILE --mesh --mesh-tol 0.01 --json` (FILE one of the reference's) |
+| browser | `web/scripts/build-wasm.sh` (profile `wasm`: fat LTO, one codegen unit; wasm-opt -Oz if on PATH), `node web/scripts/smoke-node.mjs`, `cd web && pnpm build && pnpm test` |
+| pitfalls | `solidcore::Brep::clone()` is not an independent copy (use `Inner::copy`); face/edge ids of a copy differ; classification through `BrepQuery::of_brep(..).point_3d_classify`; error mapping `Unported` → `Unsupported`, `InvalidInput` → `InvalidInput`, else `Failed`; `Instant::now` panics on wasm32 (no clock there: the copy timing is skipped) |
 
 ## Open points
 
@@ -100,17 +138,15 @@ keep the chord tolerance and the face's deviation is measured again after flips 
 chord sag in `surface_distance` (helical seam 0.061 → 1e-4 mm); `check().inside_out` 4.4 → 0.56 s
 on a cube minus 125 balls; `diff-kernels --help` gives the `--mesh-tol` range.
 
-## Removing C++: state at `f4f05b1` (2026-11-04)
+## Removing C++: done 2026-11-06
 
-| Area | State | Blocks removal |
-| --- | --- | --- |
-| Booleans (phase 3) | 2596 of 2604 nodes `same`; `differ` 2 (`sketch_cable_duct`, `f11` a gain); open point 12 | `sketch_cable_duct` (upstream) |
-| Variable-radius fillet | 3 `unsupported` + 3 `blocked` (open point 1) | yes: upstream API |
-| Meshes | 100 of 100 `ok` and watertight at 0.05 and 0.01, chord within tol (SMLib: 95–97 watertight, chord 0.24 / 0.045) | no |
-| Gate scripts with solidcore | `compare.py` 36/36, `check.sh` 19 / 0 problems, `tests/step/verify.py` 64/64; `tests/color-review` not run | no |
-| Performance | open point 10: evaluation 1.5 ×, meshing faster | a factor to agree |
-| Wasm (phase 4) | builds for wasm32; module 5 × today's (Brotli) | the worker and size work |
-| Code still on SMLib | `crates/kernel-smlib` (`build.rs`: cc + cmake), `smlib/` (facade 4052 lines C++, Emscripten `smlib.wasm`), `cad-wasm`, `web/src/engine/{worker,transport}.ts`, the daemon (`daemon.rs`, `client.rs`: SMLib only), `diff-kernels`; dev-dependency of `cad-session`, `cad-engine`, `cad-measure`, `cad-render`, `cad-tess`, `cad-desktop` | phase 5 work |
+| Area | State |
+| --- | --- |
+| Booleans (phase 3) | 2596 of 2604 nodes `same` against the reference; `differ` 2 (`sketch_cable_duct`, `f11` a gain); open point 12 |
+| Variable-radius fillet | 3 `unsupported` + 3 `blocked` (open point 1): reported as not supported (diagnostic above) |
+| Meshes | 100 of 100 `ok` and watertight at 0.05 |
+| Performance | open point 10 (evaluation about 1.5 × SMLib's, meshing faster); no longer measurable against SMLib. Debug renders of the examples (studio, 900 × 675, measured 2026-11-06 against the last SMLib binary): `07-mug` 17.8 s → 25.7 s (the item to look at), `09-flashlight` 32.4 → 22.0 s, the others within ±10 %; images: under 0.21 % of the pixels differ by more than 40/255 |
+| Code on SMLib | none |
 
 ## Next steps
 

@@ -1,4 +1,4 @@
-//! Source → `cad_eval` → engine (native SMLib): shells of rounded bodies, surfaces from few
+//! Source → `cad_eval` → engine (solidcore): shells of rounded bodies, surfaces from few
 //! points, seam/pole/tangent edges, and the variable radius (`fillet(r = function (p) …)`).
 
 mod common;
@@ -197,7 +197,7 @@ fn coplanar_merged_faces_keep_old_edges_old() {
 // ---------------------------------------------------------------- variable radius
 
 /// Radius of the round on the top front edge (y = 0, z = 20) at x: where the top face begins.
-fn probe_radius(e: &mut E, shape: &kernel_smlib::Shape, x: f64) -> f64 {
+fn probe_radius(e: &mut E, shape: &kernel_solidcore::Shape, x: f64) -> f64 {
     let (mut lo, mut hi) = (0.0, 10.0);
     for _ in 0..40 {
         let mid = 0.5 * (lo + hi);
@@ -238,8 +238,13 @@ fillet(r = function (p) 1 + p.x / 15) {
     }
 }
 
+/// A step law over the 12 edges of a box: below the middle 2, above 4, so the vertical edges go
+/// from 2 to 4 next to edges of a constant 2 or 4. solidcore takes one radius law for all edges
+/// of a fillet: different laws on several edges are not supported (with SMLib the volume lay
+/// between those of r = 2 and r = 4); the body stays unfilleted with the diagnostic.
 #[test]
 fn variable_radius_step_law_between_constant_radii() {
+    let _de = cad_i18n::scoped(cad_i18n::Lang::De);
     let body = "box([0, 0, 0], [30, 30, 20]);";
     let mut e = engine();
     let mut vol = |src: String, hint: Option<&str>| {
@@ -254,14 +259,34 @@ fn variable_radius_step_law_between_constant_radii() {
     };
     let v2 = vol(format!("fillet(2) {{ {body} }}"), None);
     let v4 = vol(format!("fillet(4) {{ {body} }}"), None);
-    let vv = vol(format!("fillet(r = function (p) p.z < 10 ? 2 : 4) {{ {body} }}"), Some("r 2–4"));
     assert_approx("r = 2", v2, rounded_box(30.0, 30.0, 20.0, 2.0), 1e-6);
     assert_approx("r = 4", v4, rounded_box(30.0, 30.0, 20.0, 4.0), 1e-6);
-    println!("volumes r2={v2:.3} law={vv:.3} r4={v4:.3}");
-    assert!(v4 < vv && vv < v2, "{v4} < {vv} < {v2}");
     // a constant function is the constant fillet
     let vc = vol(format!("fillet(r = function (p) 2) {{ {body} }}"), Some("r 2"));
     assert_approx("constant law", vc, v2, 1e-9);
+    // the step law: not supported, body unchanged
+    let ev = e.evaluate(tree(&format!("fillet(r = function (p) p.z < 10 ? 2 : 4) {{ {body} }}")));
+    let errs = errors(&ev);
+    assert_eq!(errs.len(), 1, "{errs:?}");
+    assert!(
+        errs[0].starts_with(
+            "variabler Radius wird nicht unterstützt: Verrundung von 12 Kanten mit verschiedenen \
+             Radiusverläufen (2–4 mm)"
+        ),
+        "{errs:?}"
+    );
+    let f = find(&ev.tree, |o| matches!(o, Op::Blend { .. }));
+    assert!(ev.report(f).hints.contains(&"r 2–4".to_string()), "{:?}", ev.report(f).hints);
+    assert_eq!(ev.report(f).selected_edges.len(), 12);
+    assert_approx("unchanged", volume(&mut e, &ev, f), 30.0 * 30.0 * 20.0, 1e-9);
+    // in English
+    let _en = cad_i18n::scoped(cad_i18n::Lang::En);
+    let ev = e.evaluate(tree(&format!("fillet(r = function (p) p.z < 10 ? 2 : 4) {{ {body} }}")));
+    assert!(
+        errors(&ev)[0].starts_with("variable radius is not supported: fillet of 12 edges with different radius laws"),
+        "{:?}",
+        errors(&ev)
+    );
 }
 
 #[test]
@@ -280,22 +305,17 @@ pocket(function (p) let(s = slope(p.x)) lo + s);
 "#;
     let mut e = engine();
     let ev = e.evaluate(tree(src));
-    assert_clean(&ev);
     let d = find(&ev.tree, |o| matches!(o, Op::Boolean { fillet_law: Some(_), .. }));
+    // the law with its captured value and user function is evaluated at every edge (hints) …
     assert!(ev.report(d).hints.contains(&"4 Kanten".to_string()), "{:?}", ev.report(d).hints);
     assert!(ev.report(d).hints.contains(&"r 1.125–1.875".to_string()), "{:?}", ev.report(d).hints);
-    let vv = volume(&mut e, &ev, d);
-    let vol_const = |e: &mut E, r: f64| {
-        let ev = e.evaluate(tree(&format!(
-            "difference(fillet = {r}) {{ cube([40, 30, 10]); translate([5, 8, 4]) cube([30, 14, 10]); }}"
-        )));
-        assert_clean(&ev);
-        let d = find(&ev.tree, |o| matches!(o, Op::Boolean { .. }));
-        volume(e, &ev, d)
-    };
-    let (vmin, vmax) = (vol_const(&mut e, 1.875), vol_const(&mut e, 1.125));
-    println!("pocket r1.875={vmin:.3} law={vv:.3} r1.125={vmax:.3}");
-    assert!(vmin < vv && vv < vmax, "{vmin} < {vv} < {vmax}");
+    // … but it differs between the rim's edges (along x it grows, along y it is constant at
+    // each end): not supported with solidcore (with SMLib the volume lay between those of the
+    // constant radii 1.875 and 1.125); the difference stays unfilleted
+    let errs = errors(&ev);
+    assert_eq!(errs.len(), 1, "{errs:?}");
+    assert!(errs[0].starts_with("variabler Radius wird nicht unterstützt: Verrundung von 4 Kanten"), "{errs:?}");
+    assert_approx("unfilleted", volume(&mut e, &ev, d), 40.0 * 30.0 * 10.0 - 30.0 * 14.0 * 6.0, 1e-9);
 }
 
 #[test]
@@ -310,11 +330,13 @@ fn variable_radius_errors_like_constant_radius() {
     let f = find(&ev.tree, |o| matches!(o, Op::Blend { .. }));
     assert_approx("unchanged", volume(&mut e, &ev, f), 8000.0, 1e-9);
     assert_eq!(ev.report(f).status, cad_engine::Status::Error);
-    // too large: the kernel's error, body unchanged
-    let ev = e.evaluate(tree("fillet(r = function (p) 8 + p.z / 2) { cube(20); }"));
+    // too large on one edge (one law): the kernel's error, body unchanged
+    let ev = e.evaluate(tree(
+        "fillet(r = function (p) 21 + p.x / 2) { cube(20); translate([-1, -1, 19]) cube([22, 2, 2]); }",
+    ));
     let errs = errors(&ev);
     assert_eq!(errs.len(), 1, "{errs:?}");
-    assert!(errs[0].starts_with("Verrundung gescheitert (8–18 mm)"), "{errs:?}");
+    assert!(errs[0].starts_with("Verrundung gescheitert (21–31 mm)"), "{errs:?}");
     let f = find(&ev.tree, |o| matches!(o, Op::Blend { .. }));
     assert_approx("unchanged", volume(&mut e, &ev, f), 8000.0, 1e-9);
     // not a number

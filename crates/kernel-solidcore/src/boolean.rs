@@ -21,9 +21,10 @@
 //!   operand's); if nothing passes, `Failed` with the facade's wording.
 //!
 //! A union of bodies that only touch is one solid with a shell per body (`SmBrep::MergeBrep`, the
-//! facade's `touching_union`). Not ported: the facade's union of bodies whose boxes are apart
-//! (`disjoint_union`, solidcore unites those correctly) and its reordering of the operands of a
-//! chain when a step fails. In draft
+//! facade's `touching_union`); so is a union whose result repeats an operand inside out as a
+//! void (more shells than both operands, two of them alike: solidcore does that with bodies
+//! that do not overlap, the pieces of a stencil glyph), as the facade's `disjoint_union` did
+//! for SMLib. Not ported: the facade's reordering of the operands of a chain when a step fails. In draft
 //! mode a step's result is taken unchecked when it is closed or empty, as the facade.
 
 use cad_kernel::{BoolOp, Class, KResult, KernelError, Tag};
@@ -54,6 +55,9 @@ enum Plausible {
     /// Two closed solids gave a body that is not closed.
     Open,
     Wrong(String),
+    /// A union of bodies whose interiors do not overlap lost volume to a shell the operands do
+    /// not have (a body repeated inside out as a void).
+    Doubled(String),
 }
 
 fn boxes_overlap(a: (DVec3, DVec3), b: (DVec3, DVec3), eps: f64) -> bool {
@@ -83,7 +87,7 @@ impl Inner {
         for s in &shapes[1..] {
             acc = self.checked_boolean(op, &acc, s, tag)?;
         }
-        let mut b = if shapes.len() == 1 || std::rc::Rc::ptr_eq(&acc, first) {
+        let mut b = if shapes.len() == 1 || std::sync::Arc::ptr_eq(&acc, first) {
             self.copy(&acc.brep.borrow())?
         } else {
             std::mem::replace(&mut *acc.brep.borrow_mut(), solidcore::Brep::new())
@@ -184,6 +188,12 @@ impl Inner {
         let pl = self.plausible(op, x, y, &r)?;
         match pl {
             Plausible::Ok => Ok(Some(r)),
+            Plausible::Doubled(w) => {
+                // the bodies only touch or lie apart: one solid with a shell per body
+                st.touching = true;
+                st.why.get_or_insert(w);
+                Ok(None)
+            }
             Plausible::Open => {
                 // bodies that only touch: x ∪ y one solid with a shell per body (the facade's
                 // `touching_union`), x − y = x, x ∩ y = empty
@@ -208,6 +218,11 @@ impl Inner {
                 {
                     st.places = es.into_iter().filter(|e| e.face_tags.len() == 1).map(|e| e.points).take(32).collect();
                 }
+                if st.places.is_empty() {
+                    // every edge of an unstitched result has one face: the places where the
+                    // operands touch are the edges on which both lie tangentially
+                    st.places = self.tangent_places(x, y, &r);
+                }
                 Ok(None)
             }
             Plausible::Wrong(w) => {
@@ -216,6 +231,52 @@ impl Inner {
                 Ok(None)
             }
         }
+    }
+
+    /// Shells (outer shells and voids) of the solid regions of `s`.
+    fn shell_count(&self, s: &Shape) -> usize {
+        let b = s.brep.borrow();
+        let Ok(regions) = solidcore::topology::brep::p1::regions(&b, None) else { return 0 };
+        regions
+            .into_iter()
+            .filter_map(|r| b.region(r).ok().filter(|x| !x.is_infinite_region(&b, r) && x.is_void() == 0))
+            .map(|x| {
+                x.shells
+                    .iter()
+                    .filter(|&&sh| b.shell(sh).is_ok_and(solidcore::topology::Shell::is_faceuse_shell))
+                    .count()
+            })
+            .sum()
+    }
+
+    /// Faces count and box of each shell of the solid regions of `s`.
+    fn shell_boxes(&self, s: &Shape) -> Vec<(usize, DVec3, DVec3)> {
+        let b = s.brep.borrow();
+        let Ok(regions) = solidcore::topology::brep::p1::regions(&b, None) else { return Vec::new() };
+        let mut out = Vec::new();
+        for r in regions {
+            let Ok(x) = b.region(r) else { continue };
+            if x.is_infinite_region(&b, r) || x.is_void() != 0 {
+                continue;
+            }
+            for &sh in &x.shells {
+                let Ok(shell) = b.shell(sh) else { continue };
+                if !shell.is_faceuse_shell() {
+                    continue;
+                }
+                let Ok(fus) = shell.get_faceuses() else { continue };
+                let (mut lo, mut hi) = (DVec3::splat(f64::MAX), DVec3::splat(f64::MIN));
+                for fu in &fus {
+                    let Some(f) = b.faceuse(*fu).ok().and_then(|u| u.face) else { continue };
+                    if let Ok(bx) = q::face_bounding_box(&self.k, &b, f, false) {
+                        lo = lo.min(DVec3::new(bx.min_at(0), bx.min_at(1), bx.min_at(2)));
+                        hi = hi.max(DVec3::new(bx.max_at(0), bx.max_at(1), bx.max_at(2)));
+                    }
+                }
+                out.push((fus.len(), lo, hi));
+            }
+        }
+        out
     }
 
     /// The volume for the plausibility check, coarse as the facade's `solid_volume` (accuracy
@@ -340,6 +401,24 @@ impl Inner {
         }
         let (Some(ba), Some(bb)) = (self.bounds(a)?, self.bounds(b)?) else { return Ok(Plausible::Ok) };
         let eps = self.pair_eps(ba, bb);
+        // solidcore's union of bodies that do not overlap (the pieces of a stencil glyph, also
+        // with boxes apart) can return one of them a second time, inside out, as a void: the
+        // volume checks above and the point checks below pass (the void's faces face the wrong
+        // way), the volume is short by that body. Seen as more shells than both operands have
+        // together, two of them with the same faces count and box (a void that closes a cavity
+        // of the union lies inside an outer shell, never on one).
+        if op == BoolOp::Union && !r_empty && self.shell_count(r) > self.shell_count(a) + self.shell_count(b) {
+            let boxes = self.shell_boxes(r);
+
+            let same = |x: &(usize, DVec3, DVec3), y: &(usize, DVec3, DVec3)| {
+                x.0 == y.0 && (x.1 - y.1).abs().max_element() <= eps && (x.2 - y.2).abs().max_element() <= eps
+            };
+            if boxes.iter().enumerate().any(|(i, x)| boxes[i + 1..].iter().any(|y| same(x, y))) {
+                return Ok(Plausible::Doubled(
+                    "solidcore returned a wrong result (a body twice, once as a void)".into(),
+                ));
+            }
+        }
         if !boxes_overlap(ba, bb, eps) {
             return Ok(Plausible::Ok);
         }
@@ -444,6 +523,61 @@ impl Inner {
             }
         }
         best.map(|(_, foot, n)| (p - foot).dot(n) < 0.0)
+    }
+
+    /// The edges of `r` (an unclosed result of `a op b`) along which `a` and `b` touch: the
+    /// edge's middle lies on the boundary of both (within the pair's offset) and their surfaces
+    /// there are tangent (normals parallel within 1e-6); an edge where the operands' faces cross
+    /// at an angle is an ordinary intersection edge. At most 32, sampled.
+    fn tangent_places(&mut self, a: &Shape, b: &Shape, r: &Shape) -> Vec<Vec<DVec3>> {
+        let (Ok(Some(ba)), Ok(Some(bb))) = (self.bounds(a), self.bounds(b)) else { return Vec::new() };
+        let eps = self.pair_eps(ba, bb);
+        let Ok(es) = self.edges(r, 9) else { return Vec::new() };
+        let mut out = Vec::new();
+        for e in es {
+            let m = e.points[e.points.len() / 2];
+            let (Some((da, na)), Some((db, nb))) = (self.nearest_normal(a, m), self.nearest_normal(b, m)) else {
+                continue;
+            };
+            if da <= eps && db <= eps && na.dot(nb).abs() >= 1.0 - 1e-6 {
+                out.push(e.points);
+                if out.len() == 32 {
+                    break;
+                }
+            }
+        }
+        out
+    }
+
+    /// The distance from `p` to the nearest face of `s` (its foot inside the face) and the
+    /// outward normal there.
+    fn nearest_normal(&mut self, s: &Shape, p: DVec3) -> Option<(f64, DVec3)> {
+        let mut b = s.brep.borrow_mut();
+        let mut best: Option<(f64, DVec3)> = None;
+        for f in b.face_list().to_vec() {
+            let Ok(Some(srf)) = solidcore::topology::face::p2::surface(&b, f) else { continue };
+            let Ok(c) = q::surface_closest_point(&self.k, srf, crate::imp::pt(p)) else { continue };
+            if best.is_some_and(|x| x.0 <= c.closest.distance) {
+                continue;
+            }
+            let in_face = c.uvs.iter().any(|&uv| {
+                q::face_classify_uv(&self.k, &mut b, f, uv).is_ok_and(|x| {
+                    matches!(
+                        x,
+                        solidcore::intersect::point_class::PointClassType::Face
+                            | solidcore::intersect::point_class::PointClassType::Edge
+                    )
+                })
+            });
+            if !in_face {
+                continue;
+            }
+            let foot = crate::imp::dv(c.closest.point);
+            if let Some(n) = crate::brep::outward_normal(&self.k, &b, f, foot) {
+                best = Some((c.closest.distance, n));
+            }
+        }
+        best
     }
 
     /// Do the interiors of `a` and `b` overlap (the facade's `interiors_overlap`)? A point just

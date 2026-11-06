@@ -1,4 +1,4 @@
-//! Engine integration tests with the native SMLib kernel and hand-built trees.
+//! Engine integration tests with the kernel solidcore and hand-built trees.
 
 mod common;
 
@@ -287,7 +287,7 @@ fn cache_hits_on_second_evaluation() {
 #[test]
 fn cache_limit_evicts() {
     let mut e = Engine::with_config(
-        cad_engine::CountingKernel::new(kernel_smlib::SmlibKernel::new()),
+        cad_engine::CountingKernel::new(kernel_solidcore::SolidcoreKernel::new()),
         cad_engine::EngineConfig { cache_entries: 2, ..Default::default() },
     );
     let (t, ..) = box_minus_cyl(None);

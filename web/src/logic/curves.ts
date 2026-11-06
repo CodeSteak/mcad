@@ -1,5 +1,5 @@
 // Path curves of `sweep` (Spec: Profiloperationen, "Pfad als Kurve") and the frame the kernel
-// places the profile in at the path start. Mirrors the SMLib facade (sc_sweep): duplicate
+// places the profile in at the path start. Mirrors the kernel (kernel-solidcore's sweep): duplicate
 // points dropped, a collinear path becomes a line, `interp = "spline"` is a cubic B-spline
 // interpolating the points with chord-length parameters (Piegl & Tiller A9.1, averaging
 // knots); three points get two extra points on the parabola through them first.

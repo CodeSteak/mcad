@@ -1,5 +1,5 @@
-// Node smoke test of the browser engine: smlib.wasm + cad-wasm (wasm-bindgen, --target web)
-// in one process, driven through the protocol like the worker does.
+// Node smoke test of the browser engine: cad-wasm (wasm-bindgen, --target web, kernel
+// solidcore) in one process, driven through the protocol like the worker does.
 //
 //   web/scripts/build-wasm.sh && node web/scripts/smoke-node.mjs [--json]
 //
@@ -50,17 +50,11 @@ const timings = {};
 
 // ---- load
 let t0 = performance.now();
-const { default: createSmlib } = await import(pathToFileURL(join(pkg, "smlib.js")).href);
-const { initSmlib } = await import(pathToFileURL(join(pkg, "smlib-bridge.js")).href);
-await initSmlib(createSmlib, { wasmBinary: readFileSync(join(pkg, "smlib.wasm")) });
-timings.load_smlib_ms = ms(performance.now() - t0);
-
-t0 = performance.now();
 const cad = await import(pathToFileURL(join(pkg, "cad_wasm.js")).href);
 await cad.default({ module_or_path: readFileSync(join(pkg, "cad_wasm_bg.wasm")) });
 const session = new cad.Session();
 timings.load_cad_wasm_ms = ms(performance.now() - t0);
-assert.equal(cad.Session.protocolVersion(), 2);
+assert.equal(cad.Session.protocolVersion(), 3); // PROTOCOL_VERSION in web/src/engine/protocol.ts
 
 /** Runs steps with a 16 ms budget until idle; calls `on(msg, tMs)` for every message. */
 function runSteps(t0, on) {
@@ -217,7 +211,7 @@ const report = {
   triangles_root: tris,
   nodes: scene.nodes.length,
   timings,
-  sizes: { cad_wasm: size("cad_wasm_bg.wasm"), smlib: size("smlib.wasm") },
+  sizes: { cad_wasm: size("cad_wasm_bg.wasm") },
 };
 if (asJson) console.log(JSON.stringify(report, null, 2));
 else {

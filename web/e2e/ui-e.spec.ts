@@ -1,6 +1,7 @@
-// End-to-end tests of the browser UI, Phase E (test report 7): variable fillet radius
-// (`fillet(r = function (p) …)`, `difference(fillet = function (p) …)`) with its inline hint,
-// errors of a radius law, shells of rounded bodies, seams and poles that are no edges, and
+// End-to-end tests of the browser UI, Phase E (test report 7): fillet radius laws
+// (`fillet(r = function (p) …)`, `difference(fillet = function (p) …)`) with their inline hint
+// (different laws on several edges are not supported by the kernel solidcore: an error with the
+// selected edges), errors of a radius law, shells of rounded bodies, seams and poles that are no edges, and
 // surfaces from 2 x 2 / 3 x 3 points. Checks run on the UI state (`window.__cad`) and on canvas
 // pixels; each scenario records screenshots and the code excerpt for the report.
 
@@ -36,36 +37,39 @@ async function cursorOn(page: Page, l: number, col: number, context: string | nu
   return waitView(page, `(s) => s.view.selection.line === ${l} && (${pred})(s)`);
 }
 
-test("E01 variable radius: hint “r 2–4”, edges orange, result rounded", async ({ page }) => {
+test("E01 variable radius: hint “r 2–4”, the edges, “not supported” with different laws per edge", async ({ page }) => {
   await openApp(page);
   let s = await openExample(page, "spec/variable_radius.mcad");
-  expect(s.diagnostics.filter((d) => d.severity !== "info")).toEqual([]);
+  // solidcore's fillet takes one radius law for all edges: each of the three blocks has edges
+  // with different laws and is reported as not supported (body unfilleted)
+  const errs = s.diagnostics.filter((d) => d.severity === "error");
+  expect(errs.length).toBe(3);
+  expect(errs.every((d) => d.message.startsWith("variabler Radius wird nicht unterstützt"))).toBe(true);
   const src = await text(page);
-  // step law on all twelve edges of the box
-  s = await cursorOn(page, 11, 3, null, "(s) => s.view.edgeKinds.selected > 0");
+  // step law on all twelve edges of the box: the law is evaluated at every edge (hint), the
+  // edges are drawn as the error's
+  s = await cursorOn(page, 11, 3, null, "(s) => s.view.edgeKinds.error > 0");
   const [f] = (await nodesOnLine(page, 11)).filter((x) => x.label === "fillet");
-  expect(f.status).toBe("ok");
+  expect(f.status).toBe("error");
   expect(f.hints).toEqual(["12 Kanten", "r 2–4"]);
-  expect(view(s).edgeKinds.selected).toBe(12);
-  await expect(lineHint(page, 11)).toContainText("12 Kanten · r 2–4");
-  // a rounded result: far more triangles than the 12 of a box
-  expect(f.triangles ?? 0).toBeGreaterThan(200);
-  const orange = (await layerPixels(page, "edge:selected")).changed;
-  expect(orange).toBeGreaterThan(300);
+  expect(f.messages[0].edges).toBe(12);
+  expect(f.triangles).toBe(12);
+  await expect(lineEl(page, 11)).toHaveClass(/cm-l-error/);
+  await expect(lineHint(page, 11)).toContainText("variabler Radius wird nicht unterstützt");
   await screenshotE(page, "e01-stufe");
   // difference(fillet = function): the four new rim edges, r from 1.125 to 1.875
-  s = await cursorOn(page, 16, 30, null, "(s) => s.view.edgeKinds.selected > 0");
+  s = await cursorOn(page, 16, 30, null, "(s) => s.view.edgeKinds.error > 0");
   const [d] = (await nodesOnLine(page, 16)).filter((x) => x.label === "difference");
-  expect(d.status).toBe("ok");
+  expect(d.status).toBe("error");
   expect(d.hints).toEqual(["4 Kanten", "r 1.125–1.875"]);
-  expect(view(s).edgeKinds.selected).toBe(4);
-  await expect(lineHint(page, 16)).toContainText("r 1.125–1.875");
+  expect(d.messages[0].edges).toBe(4);
+  await expect(lineHint(page, 16)).toContainText("variabler Radius wird nicht unterstützt");
   await screenshotE(page, "e01-tasche");
   // zone block with a lookup law: the four top edges, zone blue as with a constant radius
-  s = await cursorOn(page, 22, 30, null, "(s) => s.view.edgeKinds.selected > 0");
+  s = await cursorOn(page, 22, 30, null, "(s) => s.view.edgeKinds.error > 0");
   const [z] = (await nodesOnLine(page, 22)).filter((x) => x.label === "fillet");
   expect(z.hints).toEqual(["1 Zone", "4 Kanten", "r 1.5–3.9"]);
-  expect(view(s).edgeKinds.selected).toBe(4);
+  expect(z.messages[0].edges).toBe(4);
   expect(view(s).plan.items.some((i) => i.mode === "blue" && i.line === 24)).toBe(true);
   await screenshotE(page, "e01-lookup");
   recordE({
@@ -78,18 +82,19 @@ test("E01 variable radius: hint “r 2–4”, edges orange, result rounded", as
     ],
     code: lines(src, 10, 25),
     caption:
-      "variable_radius.mcad: the radius is a function of the position. The line end shows the edge count and the radius range of the evaluated stations (“12 Kanten · r 2–4”, “4 Kanten · r 1.125–1.875”, “1 Zone · 4 Kanten · r 1.5–3.9”); selected edges orange, zone blue as with a constant radius.",
+      "variable_radius.mcad: the radius is a function of the position. The hints give the edge count and the radius range of the evaluated stations (“12 Kanten · r 2–4”, “4 Kanten · r 1.125–1.875”, “1 Zone · 4 Kanten · r 1.5–3.9”); with different laws on several edges the kernel solidcore does not fillet: “variabler Radius wird nicht unterstützt”, the edges drawn as the error's, zone blue as with a constant radius.",
     checks: [
-      `status ok, hints ${JSON.stringify(f.hints)}, ${JSON.stringify(d.hints)}, ${JSON.stringify(z.hints)}`,
-      `drawn selected edges 12 / 4 / 4, pixels of the orange edges (step): ${orange}`,
-      `triangles of the rounded box: ${f.triangles}`,
+      `status error, hints ${JSON.stringify(f.hints)}, ${JSON.stringify(d.hints)}, ${JSON.stringify(z.hints)}`,
+      `error edges 12 / 4 / 4, triangles of the unfilleted box: ${f.triangles}`,
     ],
   });
 });
 
 test("E02 variable radius: radius ≤ 0 and a radius too large as with a constant radius", async ({ page }) => {
   await openApp(page);
-  const src = "fillet(r = function (p) p.x - 5) {\n    cube(20);\n}\ntranslate([40, 0, 0]) fillet(r = function (p) 8 + p.z / 2) {\n    cube(20);\n}\n";
+  // the second block: one edge (in the zone) with one law, too large for the cube
+  const src =
+    "fillet(r = function (p) p.x - 5) {\n    cube(20);\n}\ntranslate([40, 0, 0]) fillet(r = function (p) 21 + p.x / 2) {\n    cube(20);\n    translate([-1, -1, 19]) cube([22, 2, 2]);\n}\n";
   await loadText(page, src);
   let s = await cursorOn(page, 1, 3, null, "(s) => s.view.edgeKinds.error > 0");
   await expect(lineEl(page, 1)).toHaveClass(/cm-l-error/);
@@ -103,7 +108,7 @@ test("E02 variable radius: radius ≤ 0 and a radius too large as with a constan
   await screenshotE(page, "e02-negativ");
   s = await cursorOn(page, 4, 30, null, "(s) => s.view.edgeKinds.error > 0");
   await expect(lineEl(page, 4)).toHaveClass(/cm-l-error/);
-  await expect(lineHint(page, 4)).toContainText("Verrundung gescheitert (8–18 mm)");
+  await expect(lineHint(page, 4)).toContainText("Verrundung gescheitert (21–31 mm)");
   const [b] = (await nodesOnLine(page, 4)).filter((x) => x.label === "fillet");
   expect(b.status).toBe("error");
   expect(b.triangles).toBe(12);
@@ -113,7 +118,7 @@ test("E02 variable radius: radius ≤ 0 and a radius too large as with a constan
     title: "Error cases of the variable radius",
     images: [
       { name: "e02-negativ", label: "radius ≤ 0 at an edge" },
-      { name: "e02-zu-gross", label: "radius 8–18 at a 20 mm cube" },
+      { name: "e02-zu-gross", label: "radius 21–31 at an edge of a 20 mm cube" },
     ],
     code: src.trim(),
     caption:

@@ -1,10 +1,10 @@
-//! `mcad`: command line interface for the CAD language (native SMLib kernel; solidcore with
-//! `--kernel solidcore` in a build with the feature `solidcore`, see `kernel.rs`), made for
-//! agents that develop and check models without the UI.
+//! `mcad`: command line interface for the CAD language (kernel solidcore, see `kernel.rs`), made
+//! for agents that develop and check models without the UI.
 //!
 //! Commands (Plan section 8): `check`, `outline`, `eval`, `inspect --line n`,
 //! `render -o bild.png`, `measure`, `watch`, `set`, `export -o teil.stl|teil.3mf|teil.step`,
-//! `diff-kernels <files…>` (SMLib ↔ solidcore, see `diff.rs`). Every command prints readable
+//! `diff-reference <reference> [files…]` (solidcore against SMLib's frozen results, see
+//! `diff.rs`). Every command prints readable
 //! text, or with `--json` one JSON object (`watch`: one object per line). The evaluation runs
 //! in a thread with a 256 MiB stack.
 //!
@@ -139,7 +139,6 @@ use cad_session::protocol::{self as p, FromEngine, ToEngine};
 use cad_session::{PROTOCOL_VERSION, SessionOptions};
 use clap::{Args, Parser, Subcommand};
 use glam::{DMat4, DVec3};
-use kernel_smlib::SmlibKernel;
 use serde_json::{Value as Json, json};
 
 /// Stack of the thread that runs a command (CLI and daemon).
@@ -182,11 +181,11 @@ pub(crate) struct Cli {
     /// else the locale (LC_ALL, LC_MESSAGES, LANG): German for `de*`, otherwise English.
     #[arg(long, global = true, value_name = "en|de", value_parser = ["en", "de"])]
     lang: Option<String>,
-    /// Kernel of the commands that evaluate models: `smlib` (default) or `solidcore` (needs a
-    /// build with the cargo feature `solidcore`; runs without the daemon). Default: MCAD_KERNEL,
-    /// else smlib. `diff-kernels` always uses both.
-    #[arg(long, global = true, value_name = "smlib|solidcore", value_parser = ["smlib", "solidcore"])]
-    pub(crate) kernel: Option<String>,
+    /// Threads that evaluate independent parts of a model at once (the children of a Boolean,
+    /// a group, hull …): 1 to 256, 1 is sequential; the result is the same for every value.
+    /// Default: MCAD_JOBS, else the number of CPUs.
+    #[arg(long, global = true, value_name = "N", value_parser = clap::value_parser!(u32).range(1..=256))]
+    pub(crate) jobs: Option<u32>,
 }
 
 #[derive(Args, Clone)]
@@ -319,21 +318,20 @@ pub(crate) enum Cmd {
         #[arg(long)]
         ignore_asserts: bool,
     },
-    /// Compare SMLib ↔ solidcore per node (volume, faces, edges, selected edges) and coverage of
-    /// solidcore (development only).
-    DiffKernels {
-        /// Source files.
-        #[arg(required = true, value_name = "FILES")]
+    /// Compare solidcore per node (volume, faces, edges, selected edges) against the frozen
+    /// results of the former reference kernel SMLib (development only).
+    DiffReference {
+        /// Reference file (`tests/kernel-reference.json`).
+        #[arg(value_name = "REFERENCE")]
+        reference: PathBuf,
+        /// Source files of the reference to compare (default: all of them).
+        #[arg(value_name = "FILES")]
         files: Vec<PathBuf>,
         /// Output as JSON.
         #[arg(long)]
         json: bool,
-        /// Also compare the neutral B-reps (`Kernel::brep`) of the same nodes: surface and curve
-        /// kinds, positions, orientation, tags (takes about twice as long).
-        #[arg(long)]
-        brep: bool,
-        /// Also mesh each file's result with both kernels and compare the meshes: watertight,
-        /// volume, distance to the exact surfaces and to each other, triangles, time.
+        /// Also mesh each file's result and check the mesh: watertight, volume, distance to the
+        /// exact surfaces, triangles, time.
         #[arg(long)]
         mesh: bool,
         /// Chordal tolerance of `--mesh` in mm (0.0001 to 10).
@@ -365,7 +363,7 @@ pub(crate) enum Cmd {
 
 /// Names of the subcommands (messages for `mcad DATEI` and unknown commands).
 const COMMANDS: &str =
-    "check, outline, eval, inspect, render, measure, watch, set, export, ui, daemon, usage, diff-kernels";
+    "check, outline, eval, inspect, render, measure, watch, set, export, ui, daemon, usage, diff-reference";
 
 /// Failure that ends a command without a regular result.
 pub(crate) enum Fail {
@@ -426,8 +424,11 @@ fn main() -> ExitCode {
         Cmd::Daemon { cmd } => return daemon::command(cmd),
         Cmd::Usage { a } => return usage::command(a),
         Cmd::EngineHost => {
-            let code = cad_desktop::engine::host_main(
-                SmlibKernel::new,
+            // (an invalid MCAD_JOBS: sequential, the app has no place to show the message)
+            let jobs = kernel::resolve_jobs(cli.jobs).unwrap_or(1);
+            let code = cad_desktop::engine::host_main_jobs(
+                kernel::new_kernel,
+                jobs,
                 std::io::stdin(),
                 cad_desktop::engine::protocol_stdout(),
             );
@@ -462,19 +463,22 @@ fn main() -> ExitCode {
     }
     let json_mode = json_mode(&cmd);
     let name = command_name(&cmd);
-    if evaluates_models(&cmd) {
-        match kernel::resolve(cli.kernel.as_deref()) {
-            Ok(k) => kernel::select(k),
-            Err(m) => {
-                kernel::select_failed();
-                return finish(name, json_mode, Err(Fail::Usage(m)), None).emit();
-            }
+    match kernel::resolve_jobs(cli.jobs) {
+        Ok(n) => kernel::set_jobs(n),
+        Err(m) if evaluates_command(name) || name == "diff-reference" => {
+            return finish(name, json_mode, Err(Fail::Usage(m)), None).emit();
         }
+        Err(_) => {}
     }
     let mut info = None;
     if daemon::eligible(&cmd) {
-        let argv: Vec<OsString> = std::env::args_os().skip(1).collect();
-        match client::run(&argv, uses_stdin(&cmd), cli.no_daemon, cli.verbose, lang, kernel::selected()) {
+        let mut argv: Vec<OsString> = std::env::args_os().skip(1).collect();
+        if cli.jobs.is_none() && std::env::var_os("MCAD_JOBS").is_some_and(|v| !v.is_empty()) {
+            // the daemon has its own environment: MCAD_JOBS of this call as the option
+            argv.push("--jobs".into());
+            argv.push(kernel::jobs().to_string().into());
+        }
+        match client::run(&argv, uses_stdin(&cmd), cli.no_daemon, cli.verbose, lang) {
             client::Attempt::Done(out) => return out.emit(),
             client::Attempt::Local(i) => info = Some(i),
         }
@@ -519,14 +523,9 @@ pub(crate) fn json_mode(cmd: &Cmd) -> bool {
         | Cmd::Watch { c, .. }
         | Cmd::Export { c, .. } => c.json,
         Cmd::Set { a } => a.json,
-        Cmd::DiffKernels { json, .. } => *json,
+        Cmd::DiffReference { json, .. } => *json,
         Cmd::External(_) | Cmd::Ui { .. } | Cmd::Daemon { .. } | Cmd::Usage { .. } | Cmd::EngineHost => false,
     }
-}
-
-/// The command evaluates models with the selected kernel (`--kernel`, `MCAD_KERNEL`).
-fn evaluates_models(cmd: &Cmd) -> bool {
-    daemon::eligible(cmd) || matches!(cmd, Cmd::Watch { .. })
 }
 
 /// The command reads its source from stdin (`-`).
@@ -566,7 +565,7 @@ pub(crate) fn finish(
                 if let Some(d) = daemon_json {
                     j["daemon"] = d;
                 }
-                if evaluates_command(name) && kernel::known() {
+                if evaluates_command(name) {
                     j["kernel_id"] = json!(kernel_id());
                 }
                 stdout.push_str(&serde_json::to_string_pretty(&j).unwrap());
@@ -592,7 +591,7 @@ pub(crate) fn finish(
                 if let Some(d) = daemon_json {
                     j["daemon"] = d;
                 }
-                if evaluates_command(name) && kernel::known() {
+                if evaluates_command(name) {
                     j["kernel_id"] = json!(kernel_id());
                 }
                 let j = if name == "watch" { serde_json::to_string(&j) } else { serde_json::to_string_pretty(&j) };
@@ -612,9 +611,9 @@ fn evaluates_command(name: &str) -> bool {
     matches!(name, "check" | "outline" | "eval" | "inspect" | "render" | "measure" | "watch" | "set" | "export")
 }
 
-/// Id of the kernel the commands of this process use (the daemon never selects: SMLib).
+/// Id of the kernel the commands use.
 pub(crate) fn kernel_id() -> &'static str {
-    kernel::selected().id()
+    kernel::id()
 }
 
 pub(crate) fn command_name(c: &Cmd) -> &'static str {
@@ -628,7 +627,7 @@ pub(crate) fn command_name(c: &Cmd) -> &'static str {
         Cmd::Watch { .. } => "watch",
         Cmd::Set { .. } => "set",
         Cmd::Export { .. } => "export",
-        Cmd::DiffKernels { .. } => "diff-kernels",
+        Cmd::DiffReference { .. } => "diff-reference",
         Cmd::Ui { .. } => "ui",
         Cmd::Daemon { .. } => "daemon",
         Cmd::Usage { .. } => "usage",
@@ -678,7 +677,9 @@ pub(crate) fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
                 export(c, output, format.as_deref(), schema, (!*single_color).then_some(pkg), *merge, *ignore_asserts)
             }
         }
-        Cmd::DiffKernels { files, brep, mesh, mesh_tol, .. } => diff::command(files, *brep, mesh.then_some(*mesh_tol)),
+        Cmd::DiffReference { reference, files, mesh, mesh_tol, .. } => {
+            diff::command(reference, files, mesh.then_some(*mesh_tol))
+        }
         Cmd::External(_) | Cmd::Ui { .. } | Cmd::Daemon { .. } | Cmd::Usage { .. } | Cmd::EngineHost => {
             unreachable!("handled in main")
         }

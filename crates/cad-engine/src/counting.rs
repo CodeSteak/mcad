@@ -1,5 +1,6 @@
 //! Kernel wrapper that counts calls (cache tests, CLI statistics) and, with a clock, sums the
-//! time spent per method (profiling).
+//! time spent per method (profiling); a hook sees every call start and end (tests of the
+//! worker threads).
 
 use std::collections::BTreeMap;
 
@@ -11,6 +12,9 @@ use glam::{DMat4, DVec2, DVec3};
 
 use crate::Clock;
 
+/// Called with a method name before (`true`) and after (`false`) each delegated call.
+pub type CallHook = std::sync::Arc<dyn Fn(&'static str, bool) + Send + Sync>;
+
 /// Delegates to `inner` and counts every call by method name.
 pub struct CountingKernel<K> {
     pub inner: K,
@@ -18,11 +22,17 @@ pub struct CountingKernel<K> {
     /// Milliseconds per method name (only with [`CountingKernel::with_clock`]).
     pub times: BTreeMap<&'static str, f64>,
     clock: Option<Clock>,
+    hook: Option<CallHook>,
 }
 
 impl<K> CountingKernel<K> {
     pub fn new(inner: K) -> Self {
-        CountingKernel { inner, counts: BTreeMap::new(), times: BTreeMap::new(), clock: None }
+        CountingKernel { inner, counts: BTreeMap::new(), times: BTreeMap::new(), clock: None, hook: None }
+    }
+
+    /// Also calls `hook` around every call.
+    pub fn with_hook(inner: K, hook: CallHook) -> Self {
+        CountingKernel { hook: Some(hook), ..Self::new(inner) }
     }
 
     /// Also measures the time per method with `clock` (milliseconds).
@@ -45,10 +55,16 @@ impl<K> CountingKernel<K> {
 
     fn hit(&mut self, name: &'static str) -> f64 {
         *self.counts.entry(name).or_default() += 1;
+        if let Some(h) = &self.hook {
+            h(name, true);
+        }
         self.clock.as_ref().map_or(0.0, |c| c())
     }
 
     fn done<T>(&mut self, name: &'static str, t0: f64, r: T) -> T {
+        if let Some(h) = &self.hook {
+            h(name, false);
+        }
         if let Some(c) = &self.clock {
             *self.times.entry(name).or_default() += c() - t0;
         }
@@ -220,6 +236,9 @@ impl<K: Kernel> Kernel for CountingKernel<K> {
     }
     fn set_draft(&mut self, draft: bool) {
         self.inner.set_draft(draft)
+    }
+    fn begin_node(&mut self, seed: u64) {
+        self.inner.begin_node(seed)
     }
     fn shape_bytes(&mut self, s: &Self::Shape) -> usize {
         self.inner.shape_bytes(s)

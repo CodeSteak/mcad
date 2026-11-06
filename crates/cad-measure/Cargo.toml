@@ -13,4 +13,4 @@ glam.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
-kernel-smlib.workspace = true
+kernel-solidcore.workspace = true

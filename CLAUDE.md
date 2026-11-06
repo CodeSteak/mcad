@@ -31,5 +31,8 @@ command (`mcad <name>`) appears in the manual.
 
 ## Building
 
-Without `third_party/smlib`: set `SMLIB_SRC` and `SMLIB_PREBUILT` (see `Makefile`,
-`smlib/fetch.sh`).
+Pure Rust, no C/C++ toolchain: the kernel solidcore is a git dependency
+(`crates/kernel-solidcore`). Headless (no WebKitGTK): `cargo build -p cad-cli --no-default-features`;
+workspace commands with `--exclude cad-app`. A debug build from scratch takes 10–15 min.
+Kernel regressions: `mcad diff-reference tests/kernel-reference.json` (SMLib's frozen results;
+test `solidcore_against_the_reference`).

@@ -87,7 +87,7 @@ impl<K: Kernel> Run<'_, K> {
 pub(crate) struct Ctx<'a, S> {
     pub tree: &'a Tree,
     pub tags: &'a [Tag],
-    pub outputs: &'a [Option<Rc<NodeOutput<S>>>],
+    pub outputs: &'a [std::sync::OnceLock<std::sync::Arc<NodeOutput<S>>>],
     pub config: &'a EngineConfig,
     /// Per node: leave the blend out (draft evaluation while dragging, see `Engine::start`).
     pub skip: &'a [bool],
@@ -363,12 +363,12 @@ where
     // Tags this result can carry: own tag plus contributing children.
     let mut tags: Vec<Tag> = vec![ev.tag];
     for c in tree.solid_children(idx) {
-        if let Some(o) = &ctx.outputs[c as usize] {
+        if let Some(o) = ctx.outputs[c as usize].get() {
             tags.extend_from_slice(&o.tags);
         }
     }
     if let (Op::Blend { .. } | Op::Shell { .. }, Some(&b)) = (&node.op, node.children.first())
-        && let Some(o) = &ctx.outputs[b as usize]
+        && let Some(o) = ctx.outputs[b as usize].get()
     {
         tags.extend_from_slice(&o.tags);
     }
@@ -532,8 +532,8 @@ where
         self.ctx.tree
     }
 
-    fn output(&self, c: NodeIdx) -> Option<&Rc<NodeOutput<K::Shape>>> {
-        self.ctx.outputs[c as usize].as_ref()
+    fn output(&self, c: NodeIdx) -> Option<&std::sync::Arc<NodeOutput<K::Shape>>> {
+        self.ctx.outputs[c as usize].get()
     }
 
     /// Parts of a child in this node's system.
@@ -917,10 +917,22 @@ where
                     }
                     _ => sel.iter().map(|x| x.points.clone()).collect(),
                 };
-                self.error_edges(
-                    tr!("Verrundung gescheitert ({} mm): {e}", "fillet failed ({} mm): {e}", radius_range(lo, hi)),
-                    bad,
-                );
+                // the kernel takes one radius law for all edges of a fillet (solidcore): edges with
+                // different laws are not supported
+                let several_laws = radii.iter().any(|l| l != &radii[0]);
+                let msg = if matches!(e, KernelError::Unsupported(_)) && several_laws {
+                    tr!(
+                        "variabler Radius wird nicht unterstützt: Verrundung von {} Kanten mit verschiedenen \
+                         Radiusverläufen ({} mm); einen konstanten Radius verwenden",
+                        "variable radius is not supported: fillet of {} edges with different radius laws \
+                         ({} mm); use a constant radius",
+                        ids.len(),
+                        radius_range(lo, hi)
+                    )
+                } else {
+                    tr!("Verrundung gescheitert ({} mm): {e}", "fillet failed ({} mm): {e}", radius_range(lo, hi))
+                };
+                self.error_edges(msg, bad);
                 Ok(part.clone())
             }
         }
@@ -1409,7 +1421,8 @@ where
         r: f64,
         law: Option<&Law>,
     ) -> R<Vec<Part<K::Shape>>> {
-        let sets: Vec<Rc<[Tag]>> = kids.iter().filter_map(|&c| self.output(c).map(|o| o.tags.clone())).collect();
+        let sets: Vec<std::sync::Arc<[Tag]>> =
+            kids.iter().filter_map(|&c| self.output(c).map(|o| o.tags.clone())).collect();
         let part = &parts[0];
         let samples = self.ctx.config.edge_samples;
         let edges = match self.run.call(|k| k.edges(&part.shape, samples))? {
@@ -2096,5 +2109,21 @@ fn find_open_sketch(tree: &cad_ir::Tree, idx: NodeIdx, m: DMat4) -> Option<(Node
             find_open_sketch(tree, kids[0], m * tree.node(kids[0]).local)
         }
         _ => None,
+    }
+}
+
+/// A node that needs no kernel work worth a worker thread (a parallel evaluation runs it on
+/// the dispatching thread): 2D nodes, empty nodes, primitives without blends (one cheap
+/// kernel call; an imported mesh builds a B-rep and is not cheap).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn is_cheap(tree: &Tree, idx: NodeIdx) -> bool {
+    let n = tree.node(idx);
+    if tree.dim(idx) == Some(Dim::Two) && !is_profile_op(&n.op) {
+        return true;
+    }
+    match &n.op {
+        Op::Empty => true,
+        Op::Prim { prim, .. } => n.blend.is_none() && !matches!(prim, Prim::Mesh { .. }),
+        _ => false,
     }
 }

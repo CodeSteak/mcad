@@ -1,4 +1,4 @@
-//! The desktop engine: a separate engine process (native SMLib) and its supervisor in the app.
+//! The desktop engine: a separate engine process (kernel solidcore) and its supervisor in the app.
 //!
 //! **Engine process** ([`host_main`], started as `mcad engine-host`): reads [`cad_ipc`] frames
 //! from stdin (event `post` with an array of `ToEngine` messages, `debug_hang {ms}`), runs a
@@ -17,10 +17,9 @@
 //! gets `BlockKeys` with every key that hung so far, then the project files, the last
 //! `SetContext` and, with a newly blocked node, the last `SetSource`.
 //!
-//! Why a process and not only a thread: SMLib and its C facade keep global state (handle
-//! table, messages); a hanging call cannot be stopped, and a second engine thread next to it
-//! would share that state. Killing the process is the native counterpart of
-//! `Worker.terminate()`. Inside the process the engine is a thread with a large stack.
+//! Why a process and not only a thread: a hanging kernel call cannot be stopped, and its
+//! memory is only given back with the process. Killing the process is the native counterpart
+//! of `Worker.terminate()`. Inside the process the engine is a thread with a large stack.
 //! [`ThreadLauncher`] runs the same engine in a thread of the current process (tests).
 
 use std::collections::BTreeMap;
@@ -122,6 +121,39 @@ where
     K::Shape: 'static,
     F: FnOnce() -> K + Send + 'static,
 {
+    host_main_with(make_kernel, |_| {}, input, output)
+}
+
+/// [`host_main`] whose engine evaluates independent nodes on `jobs` threads
+/// (`cad_engine::Engine::set_workers`, kernels from `make_kernel`).
+pub fn host_main_jobs<K, F>(
+    make_kernel: F,
+    jobs: usize,
+    input: impl Read + Send + 'static,
+    output: impl Write + Send + 'static,
+) -> i32
+where
+    K: Kernel + 'static,
+    K::Shape: Send + Sync + 'static,
+    F: Fn() -> K + Send + Sync + 'static,
+{
+    let make: std::sync::Arc<dyn Fn() -> K + Send + Sync> = std::sync::Arc::new(make_kernel);
+    let first = make.clone();
+    host_main_with(move || first(), move |s: &mut Session<K>| s.engine_mut().set_workers(jobs, make), input, output)
+}
+
+fn host_main_with<K, F, C>(
+    make_kernel: F,
+    configure: C,
+    input: impl Read + Send + 'static,
+    output: impl Write + Send + 'static,
+) -> i32
+where
+    K: Kernel,
+    K::Shape: 'static,
+    F: FnOnce() -> K + Send + 'static,
+    C: FnOnce(&mut Session<K>) + Send + 'static,
+{
     // One channel message per frame: a batch (e.g. `SetSource` + `__debugHang` in one tick of
     // the webview) reaches the engine loop as a whole, never split between two loop passes.
     let (tx, rx) = channel::<Vec<Input>>();
@@ -161,7 +193,8 @@ where
     let engine = std::thread::Builder::new().name("cad-engine".into()).stack_size(ENGINE_STACK).spawn(move || {
         cad_i18n::set_lang(lang);
         let mut output = output;
-        let session = Session::new(make_kernel(), session_options(), std_clock());
+        let mut session = Session::new(make_kernel(), session_options(), std_clock());
+        configure(&mut session);
         if write_frame(&mut output, &Frame::event("ready", json!({ "protocol": cad_session::PROTOCOL_VERSION })))
             .is_err()
         {

@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
-// Engine worker: loads smlib.wasm (SMLib kernel, Emscripten) and cad-wasm (Rust session),
-// then runs the loop
+// Engine worker: loads cad-wasm (Rust session with the kernel solidcore, one module), then runs
+// the loop
 //
 //   messages from the UI → Session.post → answers
 //   while busy: Session.step(~16 ms) → answers, then yield to the event loop (MessageChannel)
@@ -11,9 +11,6 @@
 
 import initCad, { Session } from "../wasm-pkg/cad_wasm.js";
 import cadWasmUrl from "../wasm-pkg/cad_wasm_bg.wasm?url";
-import createSmlib from "../wasm-pkg/smlib.js";
-import smlibWasmUrl from "../wasm-pkg/smlib.wasm?url";
-import { initSmlib } from "../wasm-pkg/smlib-bridge.js";
 import type { FromEngine, ToEngine } from "./protocol";
 import type { WorkerOut } from "./transport";
 
@@ -110,7 +107,6 @@ self.onmessage = (e: MessageEvent<ToEngine | { type: "__debugHang"; ms: number }
 };
 
 async function init(): Promise<void> {
-  await initSmlib(createSmlib, { locateFile: (p: string) => (p.endsWith(".wasm") ? smlibWasmUrl : p) });
   await initCad({ module_or_path: cadWasmUrl });
   session = new Session();
   send({ kind: "ready" });

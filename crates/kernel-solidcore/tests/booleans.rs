@@ -1,7 +1,5 @@
 //! Booleans with the facade's result checks (re-test of task C): no silent wrong results.
 
-#![cfg(feature = "solidcore")]
-
 use cad_kernel::{BoolOp, Kernel, KernelError};
 use glam::{DMat4, DVec3};
 use kernel_solidcore::SolidcoreKernel;

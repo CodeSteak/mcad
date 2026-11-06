@@ -335,10 +335,11 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
         files.insert(f.path.clone(), texts.get(&f.id).cloned().unwrap_or_else(|| f.text.clone()));
     }
     let mut s = Session::new(
-        crate::kernel::selected().new_kernel(),
+        crate::kernel::new_kernel(),
         SessionOptions { auto_root_mesh: false, ..Default::default() },
         std_clock(),
     );
+    crate::kernel::use_jobs(s.engine_mut(), crate::kernel::jobs());
     s.post(ToEngine::SetFiles { files, main: Some(proj.files[0].path.clone()) });
     let msgs = s.post(ToEngine::SetSource { text: new_main, version: 1 });
     s.post(ToEngine::Cancel);

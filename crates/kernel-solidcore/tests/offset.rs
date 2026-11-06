@@ -1,7 +1,5 @@
 //! `nurbs_surface`, `thicken`, `shell`, `offset` over solidcore (plan 1.6), against exact volumes.
 
-#![cfg(feature = "solidcore")]
-
 use cad_kernel::{Kernel, KernelError};
 use glam::DVec3;
 use kernel_solidcore::SolidcoreKernel;

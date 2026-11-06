@@ -1,8 +1,8 @@
 # mcad – usage manual
 
 Parametric CAD in an OpenSCAD-style language (files `*.mcad`) with grids, anchors, named
-parts, fillet zones and sketches. Exact B-rep kernel: measurements and STEP are exact, `$fn` only
-affects display. Units mm and degrees, Z up.
+parts, fillet zones and sketches. Exact B-rep kernel (solidcore, Rust; meshes from mcad's own
+tessellator `cad-tess`): measurements and STEP are exact, `$fn` only affects display. Units mm and degrees, Z up.
 
 Headless commands are all an agent needs; `mcad`/`mcad FILE` without a command opens the
 desktop UI for the human.

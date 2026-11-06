@@ -11,7 +11,8 @@ desktop/browser UI for humans.
 
 I like OpenSCAD, but some features are missing: fillets on arbitrary edges, exact geometry,
 named references instead of repeated coordinates, STEP export. mcad keeps the OpenSCAD syntax
-and uses a B-rep kernel ([SMLib](https://github.com/tangency-labs/smlib)). That gives:
+and uses a B-rep kernel ([solidcore](https://github.com/tangency-labs/solidcore), a Rust port of
+SMLib). That gives:
 
 - fillets, chamfers, shells, lofts, sweeps on exact surfaces
 - exact measurements (radius, wall thickness, volume) and STEP with real cylinders and arcs
@@ -125,16 +126,17 @@ part per colour for Bambu Studio/OrcaSlicer. `text()` with bundled fonts.
 
 ![Macro pad from the back](docs/img/readme/macropad-colors.png)
 
-**Also:** sketch editor, section view and measuring in the UI; `loft`, `sweep`, variable
-fillet radius; SVG and STL import; STL/3MF/STEP export per part; `.scad` files open unchanged
+**Also:** sketch editor, section view and measuring in the UI; `loft`, `sweep`, fillet radius
+as a function of the position (per edge; a radius varying along several edges is not supported
+yet); SVG and STL import; STL/3MF/STEP export per part; `.scad` files open unchanged
 (36 models compared against OpenSCAD 2021.01). UI in English and German.
 
 ## Build
 
-Needs Rust, a C++17 compiler, CMake ≥ 3.20, Node 22 + pnpm 10 (UI), emsdk (browser only).
+Pure Rust: needs Rust 1.97 (target `wasm32-unknown-unknown` for the browser), Node 22 + pnpm 10
+(UI). The first build fetches and compiles the kernel solidcore (10–15 min).
 
 ```sh
-smlib/fetch.sh          # SMLib sources -> third_party/smlib
 make cli                # target/release/mcad, headless
 make app                # with desktop UI (Tauri 2, WebKitGTK)
 make web                # browser app -> web/dist
@@ -159,5 +161,5 @@ make test
 
 ## License
 
-[MIT](LICENSE). SMLib: Apache-2.0 (fetched at build time). Bundled fonts: SIL OFL 1.1. Details:
+[MIT](LICENSE). solidcore: Apache-2.0 (fetched at build time). Bundled fonts: SIL OFL 1.1. Details:
 [`packaging/linux/NOTICE`](packaging/linux/NOTICE).

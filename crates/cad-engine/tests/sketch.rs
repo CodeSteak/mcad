@@ -1,4 +1,4 @@
-//! Sketches (Plan 17.1) through the engine with native SMLib: exact volumes of extrusions,
+//! Sketches (Plan 17.1) through the engine with solidcore: exact volumes of extrusions,
 //! revolutions, sweeps and lofts of mixed contours, holes by winding rule and `hole { … }`,
 //! STEP with exact lines and circles.
 

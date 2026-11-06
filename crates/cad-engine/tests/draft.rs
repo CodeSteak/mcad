@@ -1,4 +1,4 @@
-//! Draft mode (drag: slow blends left out) and blocked keys (watchdog), native SMLib.
+//! Draft mode (drag: slow blends left out) and blocked keys (watchdog), solidcore.
 
 mod common;
 
@@ -11,7 +11,7 @@ use cad_engine::{
 use cad_eval::{EvalOptions, eval_source};
 use cad_ir::{NodeIdx, Op, Tree};
 use common::*;
-use kernel_smlib::SmlibKernel;
+use kernel_solidcore::SolidcoreKernel;
 
 /// Plate with four bores, `difference(fillet = 1)` (like `tests/models/spec/hole_plate.mcad`).
 fn plate(t: f64) -> Tree {
@@ -37,7 +37,7 @@ fn blend_node(tree: &Tree) -> NodeIdx {
 }
 
 fn engine_with(cfg: EngineConfig) -> E {
-    let mut e = Engine::with_config(CountingKernel::new(SmlibKernel::new()), cfg);
+    let mut e = Engine::with_config(CountingKernel::new(SolidcoreKernel::new()), cfg);
     e.set_clock(std_clock());
     e
 }
@@ -110,7 +110,7 @@ fn blocked_key_is_not_computed_until_it_changes() {
     let key = ev.report(n).key;
     // watchdog restart: a new engine gets the key with its configuration
     let mut e = Engine::with_config(
-        CountingKernel::new(SmlibKernel::new()),
+        CountingKernel::new(SolidcoreKernel::new()),
         EngineConfig { blocked_keys: vec![key], ..Default::default() },
     );
     let ev = e.evaluate(plate(4.0));

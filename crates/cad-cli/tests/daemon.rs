@@ -148,7 +148,7 @@ fn used(out: &Output) -> bool {
 #[test]
 fn autostart_then_cache_hits_and_faster() {
     let env = Env::new();
-    let f = ex("spec/variable_radius.mcad");
+    let f = ex("spec/fillet_zones.mcad");
     assert_eq!(env.status()["running"], false);
     let t0 = Instant::now();
     let a = env.run(&["eval", &f, "--json"]);
@@ -768,24 +768,16 @@ fn language_switch_in_one_daemon() {
     assert!(text(&d.stdout).contains(" errors, "), "{}", text(&d.stdout));
 }
 
-/// The daemon keeps one SMLib engine: a command with the kernel solidcore computes in the CLI
-/// process and starts no daemon.
-#[cfg(feature = "solidcore")]
+/// The daemon computes with solidcore, the only kernel: the same `kernel_id` with and without
+/// it.
 #[test]
-fn solidcore_runs_without_the_daemon() {
+fn daemon_computes_with_solidcore() {
     let env = Env::new();
     let f = data("plate.mcad");
-    for out in [env.run(&["check", &f, "--json", "--kernel", "solidcore"]), {
-        env.cmd().env("MCAD_KERNEL", "solidcore").args(["check", &f, "--json"]).output().unwrap()
-    }] {
-        let v = json(&out);
-        assert_eq!(v["daemon"]["used"], false, "{v}");
-        assert!(v["daemon"]["reason"].as_str().unwrap().contains("solidcore"), "{v}");
-        assert!(v["kernel_id"].as_str().unwrap().starts_with("solidcore-"), "{v}");
-    }
-    assert_eq!(env.status()["running"], false);
-    // SMLib still goes through the daemon
-    let v = json(&env.run(&["check", &f, "--json", "--kernel", "smlib"]));
+    let v = json(&env.run(&["check", &f, "--json"]));
     assert_eq!(v["daemon"]["used"], true, "{v}");
-    assert!(v["kernel_id"].as_str().unwrap().starts_with("smlib-"), "{v}");
+    assert!(v["kernel_id"].as_str().unwrap().starts_with("solidcore-"), "{v}");
+    let w = json(&env.run(&["check", &f, "--json", "--no-daemon"]));
+    assert_eq!(w["daemon"]["used"], false, "{w}");
+    assert_eq!(v["kernel_id"], w["kernel_id"], "{v} {w}");
 }

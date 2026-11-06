@@ -74,8 +74,8 @@ Limits: spheres, cylinders, cones and arcs need rigid transforms and uniform sca
 groups, `color`, nested `hull` are looked through; `$fillet`/`$chamfer` on a primitive,
 `difference`, `rotate_extrude`, `torus` are no special case (`minkowski` with a sphere still
 takes any closed body). The offset (`minkowski` with a sphere, equal spheres) is exact for
-boxes, cylinders, spheres, rounded bodies and concave edges; at corners whose faces meet at other
-than right angles (tetrahedron, 45° wedge) SMLib only approximates: warning `offset is not exact`.
+boxes, cylinders, spheres, rounded bodies, concave edges and corners whose faces meet at other than
+right angles (a tetrahedron); where the kernel's offset leaves the distance: warning `offset is not exact`.
 
 ```
 hull() for (x = [0, 20], y = [0, 10], z = [0, 5]) translate([x, y, z]) sphere(2);  // rounded box

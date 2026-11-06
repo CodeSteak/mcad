@@ -1,4 +1,4 @@
-//! Renders engine results (native SMLib) and writes example images to `tests/out/`.
+//! Renders engine results (solidcore) and writes example images to `tests/out/`.
 
 use std::path::PathBuf;
 
@@ -7,7 +7,7 @@ use cad_engine::builder::*;
 use cad_ir::Select;
 use cad_render::{Item, Polyline, RenderOptions, Scene, View, render, to_u8};
 use glam::DVec3;
-use kernel_smlib::SmlibKernel;
+use kernel_solidcore::SolidcoreKernel;
 
 fn out_dir() -> PathBuf {
     let d = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/out");
@@ -25,7 +25,7 @@ const BLUE: [f32; 4] = [0.2, 0.45, 0.95, 0.3];
 
 #[test]
 fn renders_difference_with_subtracted_body() {
-    let mut e = Engine::new(SmlibKernel::new());
+    let mut e = Engine::new(SolidcoreKernel::new());
     let mut b = TreeBuilder::new();
     let d = b.root(difference_fillet(1.0));
     b.child(d, cube(20.0));
@@ -81,7 +81,7 @@ fn renders_difference_with_subtracted_body() {
 
 #[test]
 fn renders_zone_block_and_profile() {
-    let mut e = Engine::new(SmlibKernel::new());
+    let mut e = Engine::new(SolidcoreKernel::new());
     let mut b = TreeBuilder::new();
     let f = b.root(fillet(2.0, Select::Inside));
     b.child(f, cube(20.0));

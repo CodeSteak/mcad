@@ -1,10 +1,10 @@
-//! Session over the native SMLib kernel: protocol flow end to end.
+//! Session over the kernel solidcore: protocol flow end to end.
 
 use std::collections::BTreeMap;
 
 use cad_session::protocol::*;
 use cad_session::{Session, SessionOptions, std_clock};
-use kernel_smlib::SmlibKernel;
+use kernel_solidcore::SolidcoreKernel;
 
 const HOUSING: &str = r#"module housing(w = 40, d = 30, h = 20, t = 3) {
     grid g {
@@ -27,8 +27,8 @@ k: housing(w = 60);
 translate(k.corner) lid();
 "#;
 
-fn session() -> Session<SmlibKernel> {
-    Session::new(SmlibKernel::new(), SessionOptions::default(), std_clock())
+fn session() -> Session<SolidcoreKernel> {
+    Session::new(SolidcoreKernel::new(), SessionOptions::default(), std_clock())
 }
 
 fn scenes(msgs: &[FromEngine]) -> Vec<&Scene> {
@@ -81,7 +81,7 @@ fn apply(src: &str, edits: &[Edit]) -> String {
     String::from_utf16(&u).unwrap()
 }
 
-fn set_source(s: &mut Session<SmlibKernel>, text: &str, version: u64) -> Vec<FromEngine> {
+fn set_source(s: &mut Session<SolidcoreKernel>, text: &str, version: u64) -> Vec<FromEngine> {
     let mut msgs = s.post(ToEngine::SetSource { text: text.into(), version });
     msgs.extend(s.run_to_idle());
     msgs

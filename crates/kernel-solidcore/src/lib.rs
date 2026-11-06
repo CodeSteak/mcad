@@ -15,16 +15,17 @@
 //!   `classify` runs a self-test on a box once,
 //! * other solidcore errors → [`KernelError::Failed`] / [`KernelError::InvalidInput`].
 //!
-//! So `mcad diff-kernels` can report which operations already work ("coverage"); at f4f05b1 (as at
-//! bba8d87):
+//! So `mcad diff-reference` can report which operations work ("coverage", against SMLib's frozen
+//! results); at f4f05b1 (as at bba8d87):
 //! primitives, rigid transforms, `extrude` (also with twist and scale), `revolve`, `loft`,
 //! `sweep` and `sweep_path` of polygons, circles, closed interpolating splines and sketch
 //! profiles (lines, arcs and B-splines), `fillet`, `chamfer`, `fillet_variable` (one radius law
 //! for all edges), `make_polyhedron` (planar faces through solidcore's STEP builder), `classify`,
 //! `faces`, `edges`, `brep`, `tessellate`, `bounds`, `mass_props`, `is_solid`; booleans
 //! mostly (some results lose faces); curved solids have volumes closer to
-//! the exact value than SMLib's. Profiles and sweeps follow the SMLib facade
-//! (`smlib/facade/sc_facade.cpp`, `sc_sketch.cpp`) step by step: the same curves, sections,
+//! the exact value than SMLib's. Profiles and sweeps follow the SMLib facade of the former
+//! kernel-smlib (`smlib/facade/sc_facade.cpp`, `sc_sketch.cpp`; removed with SMLib on
+//! 2026-11-06, see the git history; "the facade" below means that code) step by step: the same curves, sections,
 //! frames and refusals, so faces and edges come out as SMLib's. Queries work on the
 //! shape's own body ([`ShapeData`]); before an operation changes a body it is copied with
 //! `SmApiBrepCopy` ([`Inner::copy`]), never with `Brep::clone`, whose geometry has no owner.
@@ -40,56 +41,65 @@
 //! neutral one as the facade's `sc_brep` (`brep.rs`); `tessellate` meshes that B-rep with
 //! `cad-tess` (solidcore has no tessellator).
 //!
-//! Feature `solidcore` (opt-in): link solidcore (git dependency pinned to a commit). Without
-//! it the crate compiles without solidcore and every operation is `Unsupported`.
-
-// without solidcore the operations ignore their arguments
-#![cfg_attr(not(feature = "solidcore"), allow(unused_variables))]
+//! solidcore is a git dependency pinned to a commit (`Cargo.toml`, [`SOLIDCORE_REV`]).
 
 use cad_kernel::{
     BoolOp, Class, EdgeInfo, FaceId, FaceInfo, KResult, Kernel, KernelError, Loop, MassProps, Mesh, PathInterp,
     PlacedLoop, PlacedPath, Tag,
 };
 use glam::{DMat4, DVec2, DVec3};
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+
+mod cell;
+use cell::ShapeCell;
 
 /// One solidcore B-rep and the tag of the operation that made it.
 ///
 /// The body is owned by the shape and queried in place: solidcore's read-only queries
 /// (`face_internal_point`, mass properties, classification) take `&mut Brep` only for their
-/// caches, hence the `RefCell`. Operations that change a body (transform, boolean operands)
-/// work on a copy ([`Inner::copy`]); face and edge ids always refer to this body.
+/// caches, hence the cell ([`ShapeCell`]: a `RefCell` the engine's worker threads can share).
+/// Operations that change a body (transform, boolean operands) work on a copy
+/// ([`Inner::copy`]); face and edge ids always refer to this body. Shapes are `Send + Sync`.
 #[derive(Debug)]
 pub struct ShapeData {
-    #[cfg(feature = "solidcore")]
-    pub brep: std::cell::RefCell<solidcore::Brep>,
+    pub brep: ShapeCell<solidcore::Brep>,
     /// Mass properties, once computed (the shape never changes).
-    #[cfg(feature = "solidcore")]
-    pub(crate) mass: std::cell::Cell<Option<MassProps>>,
+    pub(crate) mass: Memo<MassProps>,
     /// The shape this one is a similarity transform of, and the matrix: its mass properties
     /// follow from the source's, if those are known by then (no second integration).
-    #[cfg(feature = "solidcore")]
-    derived: std::cell::RefCell<Option<(std::rc::Weak<ShapeData>, DMat4)>>,
+    derived: Mutex<Option<(std::sync::Weak<ShapeData>, DMat4)>>,
     /// Bounding box, once computed (point classification skips points outside it).
-    #[cfg(feature = "solidcore")]
-    pub(crate) bbox: std::cell::Cell<Option<Option<(DVec3, DVec3)>>>,
+    pub(crate) bbox: Memo<Option<(DVec3, DVec3)>>,
     pub tag: Tag,
 }
 
+/// A value computed once (`get`/`set` as a `Cell`, shareable between threads).
+#[derive(Debug, Default)]
+pub(crate) struct Memo<T: Copy>(Mutex<Option<T>>);
+
+impl<T: Copy> Memo<T> {
+    pub(crate) fn get(&self) -> Option<T> {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub(crate) fn set(&self, v: Option<T>) {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = v;
+    }
+}
+
 impl ShapeData {
-    #[cfg(feature = "solidcore")]
     fn new(brep: solidcore::Brep, tag: Tag) -> Shape {
-        Rc::new(ShapeData {
-            brep: std::cell::RefCell::new(brep),
-            mass: std::cell::Cell::new(None),
-            derived: std::cell::RefCell::new(None),
-            bbox: std::cell::Cell::new(None),
+        Arc::new(ShapeData {
+            brep: ShapeCell::new(brep),
+            mass: Memo(Mutex::new(None)),
+            derived: Mutex::new(None),
+            bbox: Memo(Mutex::new(None)),
             tag,
         })
     }
 }
 
-pub type Shape = Rc<ShapeData>;
+pub type Shape = Arc<ShapeData>;
 
 /// The commit of solidcore this crate is built against.
 pub const SOLIDCORE_REV: &str = "f4f05b147551201e2a7b44a34fbc41ddc0fc6578";
@@ -102,18 +112,12 @@ fn unsupported(op: &str) -> KernelError {
     KernelError::Unsupported(format!("solidcore: {op}"))
 }
 
-#[cfg(feature = "solidcore")]
 mod boolean;
-#[cfg(feature = "solidcore")]
 mod brep;
-#[cfg(feature = "solidcore")]
 mod offset;
-#[cfg(feature = "solidcore")]
 mod polyhedron;
-#[cfg(feature = "solidcore")]
 pub use brep::BrepStats;
 
-#[cfg(feature = "solidcore")]
 mod imp {
     use super::*;
     use solidcore::blend::fillet_executive::api::fillet_edges;
@@ -364,14 +368,20 @@ mod imp {
         pub k: solidcore::Kernel,
         /// Result of the classification self-test ([`Inner::classify`]), once run.
         classify_check: Option<Result<(), String>>,
-        /// Last caller key domain handed to a copy ([`Inner::copy`]); also the number of copies.
+        /// Number of copies ([`Inner::copy`]).
         copies: u64,
+        /// Last caller key domain handed to a copy (below 2^27: the key's bits 36 to 62; bit 63
+        /// marks the kernel's reserved keys).
+        domain: u64,
         /// Time spent in [`Inner::copy`].
         copy_time: std::time::Duration,
         /// Draft mode ([`Kernel::set_draft`]): fillets skip the self-overlap and volume checks,
         /// as the facade's `g_draft`.
         pub(crate) draft: bool,
     }
+
+    /// Copy key domains stay below 2^27 ([`copy_key`]).
+    const DOMAIN_MASK: u64 = (1 << 27) - 1;
 
     /// Caller identity of `e` in a B-rep copied under `domain` (bits 36 and up; the low
     /// 36 bits are kind and index as in the kernel's own topology keys).
@@ -702,6 +712,7 @@ mod imp {
                 k: solidcore::Kernel::default(),
                 classify_check: None,
                 copies: 0,
+                domain: 0,
                 copy_time: std::time::Duration::ZERO,
                 draft: false,
             }
@@ -711,9 +722,12 @@ mod imp {
         /// without owner, so transforms and face queries of the clone miss its geometry.
         pub fn copy(&mut self, b: &solidcore::Brep) -> KResult<solidcore::Brep> {
             use solidcore::topology::brep::{p2, p3};
+            // no clock on wasm32-unknown-unknown (`Instant::now` panics there)
+            #[cfg(not(target_arch = "wasm32"))]
             let t0 = std::time::Instant::now();
             self.copies += 1;
-            let domain = self.copies;
+            self.domain = ((self.domain + 1) & DOMAIN_MASK).max(1);
+            let domain = self.domain;
             let src = b.key().0;
             let src_domain = if solidcore::geom::context::is_reserved_key(b.key()) { 0 } else { src >> 36 };
             let mut state = p2::ArenaNotifyState::new(&solidcore::Brep::new());
@@ -722,7 +736,10 @@ mod imp {
             env.key_of = &key_of;
             let r = p3::api_brep_copy(&mut self.k, &mut env, Some(b), &|e| copy_key(e, src_domain))
                 .map_err(|e| err("copy", e));
-            self.copy_time += t0.elapsed();
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                self.copy_time += t0.elapsed();
+            }
             r
         }
 
@@ -731,7 +748,8 @@ mod imp {
         pub(crate) fn merge_into(&mut self, m: &mut solidcore::Brep, other: &solidcore::Brep) -> KResult<()> {
             use solidcore::topology::brep::{p2, p3};
             self.copies += 1;
-            let domain = self.copies;
+            self.domain = ((self.domain + 1) & DOMAIN_MASK).max(1);
+            let domain = self.domain;
             let src = other.key().0;
             let src_domain = if solidcore::geom::context::is_reserved_key(other.key()) { 0 } else { src >> 36 };
             let mut state = p2::ArenaNotifyState::new(m);
@@ -747,6 +765,12 @@ mod imp {
 
         pub fn copy_stats(&self) -> (u64, std::time::Duration) {
             (self.copies, self.copy_time)
+        }
+
+        /// See [`Kernel::begin_node`] of [`SolidcoreKernel`].
+        pub fn begin_node(&mut self, seed: u64) {
+            self.k = solidcore::Kernel::default();
+            self.domain = ((seed >> 49) & 0x7FFF) << 12;
         }
 
         fn wrap(r: Result<solidcore::Brep, SolidError>, op: &str, tag: Tag) -> KResult<Shape> {
@@ -878,7 +902,7 @@ mod imp {
                 self.transform_check_volume(s, &t, m, &why)?;
             }
             if similar(m) {
-                *t.derived.borrow_mut() = Some((Rc::downgrade(s), *m));
+                *t.derived.lock().unwrap_or_else(|e| e.into_inner()) = Some((Arc::downgrade(s), *m));
             }
             Ok(t)
         }
@@ -2090,7 +2114,7 @@ mod imp {
         /// The mass properties of `s` from those of the shape it is a similarity transform of
         /// (along a chain of transforms, computed once at its start), while that shape lives.
         fn derived_mass(&mut self, s: &ShapeData) -> KResult<Option<MassProps>> {
-            let derived = s.derived.borrow_mut().take();
+            let derived = s.derived.lock().unwrap_or_else(|e| e.into_inner()).take();
             let Some((src, f)) = derived else { return Ok(None) };
             let Some(src) = src.upgrade() else { return Ok(None) };
             let m = self.mass_props(&src)?;
@@ -2177,7 +2201,6 @@ mod imp {
 
 /// Kernel over solidcore.
 pub struct SolidcoreKernel {
-    #[cfg(feature = "solidcore")]
     inner: imp::Inner,
 }
 
@@ -2195,50 +2218,19 @@ impl Default for SolidcoreKernel {
 
 impl SolidcoreKernel {
     pub fn new() -> Self {
-        SolidcoreKernel {
-            #[cfg(feature = "solidcore")]
-            inner: imp::Inner::new(),
-        }
+        SolidcoreKernel { inner: imp::Inner::new() }
     }
 
     /// [`Kernel::brep`] with conversion statistics.
-    #[cfg(feature = "solidcore")]
     pub fn brep_with_stats(&mut self, s: &Shape) -> KResult<(cad_kernel::brep::Brep, BrepStats)> {
         self.inner.brep(s)
     }
 
-    /// `true` if built with solidcore (feature `solidcore`).
-    pub fn available() -> bool {
-        cfg!(feature = "solidcore")
-    }
-
     /// Number of B-rep copies (`SmApiBrepCopy`) so far and the time they took (performance
-    /// measurements of `mcad diff-kernels`).
+    /// measurements of `mcad diff-reference`; the time is 0 on wasm32, which has no clock).
     pub fn copy_stats(&self) -> (u64, std::time::Duration) {
-        #[cfg(feature = "solidcore")]
-        {
-            self.inner.copy_stats()
-        }
-        #[cfg(not(feature = "solidcore"))]
-        {
-            (0, std::time::Duration::ZERO)
-        }
+        self.inner.copy_stats()
     }
-}
-
-/// Dispatches to `imp` with feature `solidcore`, else `Unsupported`.
-macro_rules! with_sc {
-    ($self:ident, $op:literal, |$i:ident| $body:expr) => {{
-        #[cfg(feature = "solidcore")]
-        {
-            let $i = &mut $self.inner;
-            $body
-        }
-        #[cfg(not(feature = "solidcore"))]
-        {
-            Err(unsupported(concat!($op, " (built without feature `solidcore`)")))
-        }
-    }};
 }
 
 impl Kernel for SolidcoreKernel {
@@ -2249,180 +2241,150 @@ impl Kernel for SolidcoreKernel {
     }
 
     fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "make_box", |i| i.make_box(min, max, tag))
+        self.inner.make_box(min, max, tag)
     }
 
     fn make_sphere(&mut self, r: f64, tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "make_sphere", |i| i.make_sphere(r, tag))
+        self.inner.make_sphere(r, tag)
     }
 
     fn make_cylinder(&mut self, h: f64, r1: f64, r2: f64, tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "make_cylinder", |i| i.make_cylinder(h, r1, r2, tag))
+        self.inner.make_cylinder(h, r1, r2, tag)
     }
 
     fn make_torus(&mut self, big_r: f64, r: f64, tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "make_torus", |i| i.make_torus(big_r, r, tag))
+        self.inner.make_torus(big_r, r, tag)
     }
 
     fn make_polyhedron(&mut self, points: &[DVec3], faces: &[Vec<u32>], tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "make_polyhedron", |i| i.make_polyhedron(points, faces, tag))
+        self.inner.make_polyhedron(points, faces, tag)
     }
 
     fn transform(&mut self, s: &Shape, m: &DMat4) -> KResult<Shape> {
-        with_sc!(self, "transform", |i| i.transform(s, m))
+        self.inner.transform(s, m)
     }
 
     fn boolean(&mut self, op: BoolOp, shapes: &[Shape], tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "boolean", |i| i.boolean(op, shapes, tag))
+        self.inner.boolean(op, shapes, tag)
     }
 
     fn fillet(&mut self, s: &Shape, edges: &[u32], r: f64, tag: Tag) -> KResult<Shape> {
-        let _ = (s, edges, r, tag);
-        with_sc!(self, "fillet", |i| i.fillet_like(s, edges, r, tag, false, None))
+        self.inner.fillet_like(s, edges, r, tag, false, None)
     }
 
     fn chamfer(&mut self, s: &Shape, edges: &[u32], d: f64, tag: Tag) -> KResult<Shape> {
-        let _ = (s, edges, d, tag);
-        with_sc!(self, "chamfer", |i| i.fillet_like(s, edges, d, tag, true, None))
+        self.inner.fillet_like(s, edges, d, tag, true, None)
     }
 
     fn law_stations(&mut self, s: &Shape, edges: &[u32], counts: &[u32]) -> KResult<Vec<Vec<DVec3>>> {
-        let _ = (s, edges, counts);
-        with_sc!(self, "law_stations", |i| i.law_stations(s, edges, counts))
+        self.inner.law_stations(s, edges, counts)
     }
 
     fn fillet_variable(&mut self, s: &Shape, edges: &[u32], radii: &[Vec<f64>], tag: Tag) -> KResult<Shape> {
-        let _ = (s, edges, radii, tag);
-        with_sc!(self, "fillet_variable", |i| i.fillet_like(s, edges, 1.0, tag, false, Some(radii)))
+        self.inner.fillet_like(s, edges, 1.0, tag, false, Some(radii))
     }
 
     fn extrude(&mut self, p: &PlacedLoop, h: f64, twist: f64, scale: DVec2, tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "extrude", |i| i.extrude(p, h, twist, scale, tag))
+        self.inner.extrude(p, h, twist, scale, tag)
     }
 
     fn revolve(&mut self, p: &PlacedLoop, angle: f64, tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "revolve", |i| i.revolve(p, angle, tag))
+        self.inner.revolve(p, angle, tag)
     }
 
     fn loft(&mut self, sections: &[PlacedLoop], ruled: bool, tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "loft", |i| i.loft(sections, ruled, tag))
+        self.inner.loft(sections, ruled, tag)
     }
 
     fn sweep(&mut self, p: &Loop, path: &[DVec3], interp: PathInterp, tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "sweep", |i| i.sweep(p, path, interp, tag))
+        self.inner.sweep(p, path, interp, tag)
     }
 
     fn sweep_path(&mut self, p: &Loop, path: &PlacedPath, tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "sweep_path", |i| i.sweep_path(p, path, tag))
+        self.inner.sweep_path(p, path, tag)
     }
 
     fn nurbs_surface(&mut self, rows: &[Vec<DVec3>], tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "nurbs_surface", |i| i.nurbs_surface(rows, tag))
+        self.inner.nurbs_surface(rows, tag)
     }
 
     fn thicken(&mut self, s: &Shape, t: f64, tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "thicken", |i| i.thicken(s, t, tag))
+        self.inner.thicken(s, t, tag)
     }
 
     fn shell(&mut self, s: &Shape, t: f64, open: &[FaceId], tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "shell", |i| i.shell(s, t, open, tag))
+        self.inner.shell(s, t, open, tag)
     }
 
     fn offset(&mut self, s: &Shape, d: f64, tag: Tag) -> KResult<Shape> {
-        with_sc!(self, "offset", |i| i.offset(s, d, tag))
+        self.inner.offset(s, d, tag)
     }
 
     fn edges(&mut self, s: &Shape, samples: u32) -> KResult<Vec<EdgeInfo>> {
-        let _ = (s, samples);
-        with_sc!(self, "edges", |i| i.edges(s, samples))
+        self.inner.edges(s, samples)
     }
 
     fn faces(&mut self, s: &Shape, _samples: u32) -> KResult<Vec<FaceInfo>> {
-        let _ = s;
-        with_sc!(self, "faces", |i| i.faces(s))
+        self.inner.faces(s)
     }
 
     fn classify(&mut self, s: &Shape, pts: &[DVec3]) -> KResult<Vec<Class>> {
-        with_sc!(self, "classify", |i| i.classify(s, pts))
+        self.inner.classify(s, pts)
     }
 
     /// `cad-tess` on [`Kernel::brep`]: tessellation is outside solidcore's scope
     /// (`SmApiTessellate`, plan/closure.md).
     fn tessellate(&mut self, s: &Shape, tol: f64) -> KResult<Mesh> {
-        let _ = (s, tol);
-        with_sc!(self, "tessellate", |i| i.tessellate(s, tol))
+        self.inner.tessellate(s, tol)
     }
 
     fn brep(&mut self, s: &Shape) -> KResult<cad_kernel::brep::Brep> {
-        let _ = s;
-        with_sc!(self, "brep", |i| i.brep(s).map(|(b, _)| b))
+        self.inner.brep(s).map(|(b, _)| b)
     }
 
-    /// As kernel-smlib: no kernel export, STEP is written from [`Kernel::brep`] (`cad-step`).
+    /// No kernel export: STEP is written from [`Kernel::brep`] (`cad-step`).
     fn export(&mut self, _shapes: &[Shape], _fmt: cad_kernel::ExportFormat) -> KResult<Vec<u8>> {
         Err(KernelError::Unsupported("export".into()))
     }
 
-    /// An estimate from the topology as kernel-smlib's (a fixed part, a part per face and per
-    /// edge), with its constants scaled by the heap solidcore holds against SMLib (0.6 on the
+    /// An estimate from the topology (a fixed part, a part per face and per edge; the former
+    /// kernel-smlib's constants scaled by the heap solidcore holds against SMLib, 0.6 on the
     /// largest example, plan 0.5).
     fn shape_bytes(&mut self, s: &Shape) -> usize {
-        #[cfg(feature = "solidcore")]
-        {
-            let b = s.brep.borrow();
-            (8 << 10) + b.face_list().len() * (20 << 10) + b.edge_list().len() * (600)
-        }
-        #[cfg(not(feature = "solidcore"))]
-        {
-            let _ = s;
-            16 << 10
-        }
+        let b = s.brep.borrow();
+        (8 << 10) + b.face_list().len() * (20 << 10) + b.edge_list().len() * (600)
     }
 
     fn set_draft(&mut self, draft: bool) {
-        #[cfg(feature = "solidcore")]
-        {
-            self.inner.draft = draft;
-        }
-        let _ = draft;
+        self.inner.draft = draft;
+    }
+
+    /// A fresh solidcore kernel (its random numbers, the latched fillet step, the context's
+    /// model size estimate and marks start anew; the memo caches never change a result) and
+    /// copy key domains from `seed` (bits 12–26 of the domain; the copies of one node count up
+    /// from there).
+    fn begin_node(&mut self, seed: u64) {
+        self.inner.begin_node(seed);
     }
 
     fn mass_props(&mut self, s: &Shape) -> KResult<MassProps> {
-        let _ = s;
-        with_sc!(self, "mass_props", |i| i.mass_props(s))
+        self.inner.mass_props(s)
     }
 
     fn bounds(&mut self, s: &Shape) -> KResult<Option<(DVec3, DVec3)>> {
-        let _ = s;
-        with_sc!(self, "bounds", |i| i.bounds(s))
+        self.inner.bounds(s)
     }
 
     fn is_empty(&mut self, s: &Shape) -> bool {
-        #[cfg(feature = "solidcore")]
-        {
-            self.inner.is_empty(s)
-        }
-        #[cfg(not(feature = "solidcore"))]
-        {
-            let _ = s;
-            true
-        }
+        self.inner.is_empty(s)
     }
 
     fn is_solid(&mut self, s: &Shape) -> bool {
-        #[cfg(feature = "solidcore")]
-        {
-            self.inner.is_solid(s)
-        }
-        #[cfg(not(feature = "solidcore"))]
-        {
-            let _ = s;
-            false
-        }
+        self.inner.is_solid(s)
     }
 }
 
-#[cfg(all(test, feature = "solidcore"))]
+#[cfg(test)]
 mod tests {
     use super::imp::*;
     use glam::{DVec2, DVec3};

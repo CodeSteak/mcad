@@ -18,11 +18,15 @@ fillet(2) {
     translate([15, 10, 15]) sphere(6);     // any volume
 }
 fillet(1.5, select = "touch") { … }        // edges touching a zone (default "inside": fully inside)
-fillet(r = function (p) p.z < 10 ? 2 : 4) { … }   // variable radius over position p
+fillet(r = function (p) p.z < 10 ? 2 : 4) { … }   // radius over position p
 ```
 
-- Variable radius: pure expressions of `p` (no geometry); not for `chamfer` and `$fillet`.
-  Hint "r 2–4".
+- Radius law `function (p) …`: pure expressions of `p` (no geometry); not for `chamfer` and
+  `$fillet`. Hint "r 2–4". Evaluated along each selected edge: works where each edge gets a
+  constant radius (a different one per edge is fine) or where all edges share the same law.
+  A radius that varies along an edge next to edges with other radii (variable radius) is not
+  supported for now: error "variable radius is not supported: fillet of N edges with different
+  radius laws (A–B mm); use a constant radius", body unfilleted.
 - Seam/pole edges of cylinders and spheres and tangent edges never count.
 - Empty selection → warning "0 edges"; radius too large → kernel error, body stays
   unfilleted.

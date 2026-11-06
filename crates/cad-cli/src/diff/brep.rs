@@ -1,6 +1,7 @@
-//! The neutral B-reps of both kernels (`Kernel::brep`, plan 1.11), compared per node:
-//! [`Summary`] counts what one kernel's B-rep holds and checks its conventions
-//! ([`Brep::convention_problems`]); [`compare`] matches the B-reps of SMLib and solidcore.
+//! The neutral B-reps (`Kernel::brep`, plan 1.11) of the reference and of solidcore, compared
+//! per blended node: [`Summary`] counts what a B-rep holds and checks its conventions
+//! ([`Brep::convention_problems`]); [`compare`] matches the reference's B-rep (frozen in the
+//! reference file with its [`Shape`]) and solidcore's.
 //!
 //! * counts: vertices, loops, vertex loops, solids, voids, sheets, faces per surface kind and
 //!   edges per curve kind (`kind()` of the neutral types) must agree;
@@ -16,16 +17,17 @@
 //!   must agree.
 //!
 //! [`Comparison::positions_agree`]: counts, edge and face positions and orientation agree (the
-//! tags and kinds may differ); `diff-kernels` uses it in its verdict on blended nodes.
+//! tags and kinds may differ); `diff-reference` uses it in its verdict on blended nodes.
 
 use std::collections::BTreeMap;
 
 use cad_kernel::brep::{Brep, Loop, Surface};
 use glam::DVec3;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-/// Counts and conventions of one kernel's B-rep of a node (all parts together).
-#[derive(Debug, Clone, Default, Serialize)]
+/// Counts and conventions of the B-rep of a node (all parts together).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Summary {
     pub vertices: usize,
     pub loops: usize,
@@ -33,8 +35,8 @@ pub struct Summary {
     pub solids: usize,
     pub voids: usize,
     pub sheets: usize,
-    pub surfaces: BTreeMap<&'static str, usize>,
-    pub curves: BTreeMap<&'static str, usize>,
+    pub surfaces: BTreeMap<String, usize>,
+    pub curves: BTreeMap<String, usize>,
     pub approximated_faces: usize,
     pub approximated_edges: usize,
     /// Conventions not met ([`Brep::convention_problems`]).
@@ -43,19 +45,20 @@ pub struct Summary {
     pub error: Option<String>,
     #[serde(skip)]
     pub unsupported: bool,
+    /// Not in the JSON output; in the reference file next to the summary.
     #[serde(skip)]
-    shape: Shape,
+    pub shape: Shape,
 }
 
 /// A face as [`compare`] matches it: surface kind, tag, points with the oriented normal there.
-type FaceKey = (&'static str, u32, Vec<(DVec3, Option<DVec3>)>);
+type FaceKey = (String, u32, Vec<(DVec3, Option<DVec3>)>);
 
 /// What [`compare`] matches: per edge (kind, point at half length), per face (kind, tag,
 /// points with the oriented normal there).
-#[derive(Debug, Clone, Default)]
-struct Shape {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Shape {
     size: f64,
-    edges: Vec<(&'static str, DVec3)>,
+    edges: Vec<(String, DVec3)>,
     faces: Vec<FaceKey>,
 }
 
@@ -100,12 +103,12 @@ impl Summary {
             .map(|i| half_length(&b.edge_points(cad_kernel::brep::OrientedEdge { edge: i as u32, forward: true }, 256)))
             .collect();
         for (e, m) in b.edges.iter().zip(&mid) {
-            *self.curves.entry(e.curve.kind()).or_insert(0) += 1;
+            *self.curves.entry(e.curve.kind().to_string()).or_insert(0) += 1;
             self.approximated_edges += usize::from(e.approximated);
-            self.shape.edges.push((e.curve.kind(), *m));
+            self.shape.edges.push((e.curve.kind().to_string(), *m));
         }
         for f in b.faces() {
-            *self.surfaces.entry(f.surface.kind()).or_insert(0) += 1;
+            *self.surfaces.entry(f.surface.kind().to_string()).or_insert(0) += 1;
             self.approximated_faces += usize::from(f.approximated);
             let mut pts = Vec::new();
             for l in &f.loops {
@@ -124,7 +127,7 @@ impl Summary {
                     }
                 }
             }
-            self.shape.faces.push((f.surface.kind(), f.tag, pts));
+            self.shape.faces.push((f.surface.kind().to_string(), f.tag, pts));
         }
     }
 }
@@ -140,7 +143,7 @@ pub struct Comparison {
     pub positions_agree: bool,
 }
 
-/// Compares the B-reps of SMLib (`a`) and solidcore (`b`).
+/// Compares the B-reps of the reference (`a`) and solidcore (`b`).
 pub fn compare(a: &Summary, b: &Summary) -> Comparison {
     let mut notes = Vec::new();
     let mut counts_agree = true;

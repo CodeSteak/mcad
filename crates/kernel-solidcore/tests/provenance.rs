@@ -2,8 +2,6 @@
 //! SMLib facade carries them (`smlib/facade/sc_facade.cpp`, "Provenance"), `smooth` edges as
 //! SMLib's `GetBlendEdgeuse`.
 
-#![cfg(feature = "solidcore")]
-
 use cad_kernel::{BoolOp, Kernel, Loop, PlacedLoop, Segment, Tag};
 use glam::{DMat4, DVec2, DVec3};
 use kernel_solidcore::{Shape, SolidcoreKernel};

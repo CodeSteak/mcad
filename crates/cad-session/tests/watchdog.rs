@@ -1,8 +1,8 @@
-//! Watchdog (`BlockKeys`, `Progress.current.key`) and draft mode while dragging, native SMLib.
+//! Watchdog (`BlockKeys`, `Progress.current.key`) and draft mode while dragging, solidcore.
 
 use cad_session::protocol::*;
 use cad_session::{Session, SessionOptions, std_clock};
-use kernel_smlib::SmlibKernel;
+use kernel_solidcore::SolidcoreKernel;
 
 fn plate(t: f64) -> String {
     format!(
@@ -10,8 +10,8 @@ fn plate(t: f64) -> String {
     )
 }
 
-fn session(opts: SessionOptions) -> Session<SmlibKernel> {
-    Session::new(SmlibKernel::new(), opts, std_clock())
+fn session(opts: SessionOptions) -> Session<SolidcoreKernel> {
+    Session::new(SolidcoreKernel::new(), opts, std_clock())
 }
 
 fn last_scene(msgs: &[FromEngine]) -> Option<&Scene> {

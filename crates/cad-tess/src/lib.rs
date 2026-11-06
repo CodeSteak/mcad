@@ -47,7 +47,7 @@ pub struct Options {
     /// Largest distance between the mesh and the surface (chord height), mm.
     pub tol: f64,
     /// Largest turn of an edge's tangent between two of its points and largest angle step on
-    /// curved surfaces, radians (as SMLib's 20°).
+    /// curved surfaces, radians (20°, as SMLib's tessellator had).
     pub angle: f64,
     /// Refinement passes per face (each measures only what the last one changed).
     pub max_passes: usize,
@@ -88,7 +88,7 @@ impl Options {
     }
 }
 
-/// Figures of a tessellation (tests, `diff-kernels`).
+/// Figures of a tessellation (tests, `diff-reference --mesh`).
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Stats {
     pub faces: usize,

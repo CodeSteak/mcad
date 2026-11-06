@@ -10,9 +10,10 @@
 use std::collections::HashSet;
 use std::path::Path;
 
+use cad_kernel::Kernel;
 use cad_session::protocol::ToEngine;
 use cad_session::{FsResolver, Session, SessionOptions, std_clock};
-use kernel_smlib::SmlibKernel;
+use kernel_solidcore::SolidcoreKernel;
 
 fn heap() -> usize {
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
@@ -36,9 +37,12 @@ struct Row {
 
 fn run(path: &Path, probe: bool) -> Option<Row> {
     let text = std::fs::read_to_string(path).ok()?;
-    let k = SmlibKernel::new();
-    let mut s =
-        Session::new(SmlibKernel::new(), SessionOptions { auto_root_mesh: false, ..Default::default() }, std_clock());
+    let mut k = SolidcoreKernel::new();
+    let mut s = Session::new(
+        SolidcoreKernel::new(),
+        SessionOptions { auto_root_mesh: false, ..Default::default() },
+        std_clock(),
+    );
     if probe {
         s.engine_mut().set_heap_probe(Some(Box::new(heap)));
     }
@@ -51,10 +55,10 @@ fn run(path: &Path, probe: bool) -> Option<Row> {
     let mut seen = HashSet::new();
     for n in 0..d.ev.tree.nodes.len() as u32 {
         for p in d.ev.parts(n) {
-            if seen.insert(p.shape.raw()) {
+            if seen.insert(std::sync::Arc::as_ptr(&p.shape) as usize) {
                 breps += 1;
-                faces += k.face_count(&p.shape);
-                edges += k.edge_count(&p.shape);
+                faces += k.faces(&p.shape, 0).map_or(0, |f| f.len());
+                edges += k.edges(&p.shape, 0).map_or(0, |e| e.len());
             }
         }
     }
@@ -71,7 +75,7 @@ fn main() {
     let _ = std::thread::Builder::new()
         .stack_size(256 << 20)
         .spawn(move || {
-            // initialise SMLib's global state first (not part of any model)
+            // warm up first (not part of any model)
             let _ = run(Path::new(&files[0]), false);
             let mut tot = [0usize; 6];
             let mut n = 0;

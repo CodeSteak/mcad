@@ -1,5 +1,5 @@
 //! „cad stencil mono“, the default font of `text()` (Plan 17.4, Bericht 17), through the
-//! engine with native SMLib: every glyph rendered to a profile has no holes, extrusions have
+//! engine with solidcore: every glyph rendered to a profile has no holes, extrusions have
 //! the area of the layout times the height, a typical sign text builds about as fast as with
 //! Allerta Stencil.
 

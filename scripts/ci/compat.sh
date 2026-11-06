@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # OpenSCAD comparison and STEP check.
 #
-#   scripts/ci/compat.sh cli         # cargo build --release -p cad-cli --no-default-features (headless, needs SMLIB_PREBUILT)
+#   scripts/ci/compat.sh cli         # cargo build --release -p cad-cli --no-default-features (headless)
 #   scripts/ci/compat.sh reference   # OpenSCAD 2021.01: regenerate the reference into target/,
 #                                    # compare with the checked-in reference.json, self-test of compare.py
 #   scripts/ci/compat.sh projects    # include/use projects against a live OpenSCAD run (Rust test)

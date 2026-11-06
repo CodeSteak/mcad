@@ -56,6 +56,8 @@ mod hull3d;
 pub mod key;
 mod op2d;
 pub mod parts;
+#[cfg(not(target_arch = "wasm32"))]
+mod pool;
 mod profile;
 
 pub use profile::fill_loops;
@@ -65,6 +67,7 @@ pub use cad_step::{Schema as StepSchema, StepOptions, StepStats};
 use std::any::Any;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
+use std::sync::{Arc, OnceLock};
 
 use cad_ir::{Dim, NodeIdx, Op, Tree};
 use cad_kernel::{Kernel, MassProps, Mesh, Tag};
@@ -86,6 +89,11 @@ pub const BLOCKED_MESSAGE: &str = "Zeitüberschreitung, Knoten gesperrt bis zur 
 pub const BLOCKED_MESSAGE_EN: &str = "timeout, node blocked until the next change";
 
 /// [`BLOCKED_MESSAGE`] in the current language.
+/// The seed of [`Kernel::begin_node`] for a node: the first 8 bytes of its cache key.
+fn node_seed(key: &CacheKey) -> u64 {
+    u64::from_le_bytes(key.0[..8].try_into().expect("32-byte key"))
+}
+
 pub fn blocked_message() -> &'static str {
     if cad_i18n::is_de() { BLOCKED_MESSAGE } else { BLOCKED_MESSAGE_EN }
 }
@@ -141,7 +149,7 @@ impl Slot {
 }
 
 enum Cached<S> {
-    Node(Rc<NodeOutput<S>>),
+    Node(Arc<NodeOutput<S>>),
     Mesh(Rc<Mesh>),
     Mass(MassProps),
     Brep(Rc<cad_kernel::brep::Brep>),
@@ -382,7 +390,7 @@ pub(crate) struct NodeOutput<S> {
     /// Meshes without B-rep (after `parts` in meshes, face ids and measuring).
     pub meshes: Vec<MeshPart>,
     /// Sorted tags that faces of `parts` can carry.
-    pub tags: Rc<[Tag]>,
+    pub tags: Arc<[Tag]>,
     pub dim: Option<Dim>,
     pub bounds: Option<(DVec3, DVec3)>,
     pub diags: Vec<Diag>,
@@ -462,7 +470,7 @@ pub struct EvalStats {
 
 /// Finished evaluation of one tree.
 pub struct Evaluation<S> {
-    pub tree: Rc<Tree>,
+    pub tree: Arc<Tree>,
     /// Indexed by [`NodeIdx`].
     pub reports: Vec<NodeReport>,
     /// Tag → nodes of this tree whose key the tag was interned for.
@@ -470,7 +478,7 @@ pub struct Evaluation<S> {
     pub stats: EvalStats,
     /// Evaluated in draft mode ([`Engine::set_draft`]).
     pub draft: bool,
-    outputs: Vec<Option<Rc<NodeOutput<S>>>>,
+    outputs: Vec<Option<Arc<NodeOutput<S>>>>,
 }
 
 impl<S> Evaluation<S> {
@@ -559,6 +567,9 @@ pub struct Engine<K: Kernel> {
     heap_probe: Option<HeapProbe>,
     /// Language of the texts in the cached node results (see [`Engine::start`]).
     lang: cad_i18n::Lang,
+    /// Worker threads for independent nodes ([`Engine::set_workers`]); `None`: sequential.
+    #[cfg(not(target_arch = "wasm32"))]
+    pool: Option<pool::Pool<K>>,
 }
 
 /// Bytes in use on the heap (e.g. glibc `mallinfo2`), see [`Engine::set_heap_probe`].
@@ -566,23 +577,60 @@ pub type HeapProbe = Box<dyn Fn() -> usize>;
 
 /// An evaluation in progress. Owns its tree; drop it to abort.
 pub struct Job<S> {
-    tree: Rc<Tree>,
+    tree: Arc<Tree>,
     keys: Vec<CacheKey>,
-    tags: Vec<Tag>,
+    tags: Arc<[Tag]>,
     order: Vec<NodeIdx>,
     pos: usize,
-    outputs: Vec<Option<Rc<NodeOutput<S>>>>,
+    /// Results per node, set once (worker threads read the children's).
+    outputs: Arc<[OnceLock<Arc<NodeOutput<S>>>]>,
     cached: Vec<bool>,
     /// Kernel results of the interrupted node, replayed in call order.
     replay: Vec<Rc<dyn Any>>,
     stats: EvalStats,
     draft: bool,
     /// Per node: blend left out (draft mode).
-    skip: Vec<bool>,
+    skip: Arc<[bool]>,
     /// Per node: draft result (a skipped blend in its subtree); evaluated with
     /// `Kernel::set_draft(true)`.
     tainted: Vec<bool>,
     blocked: Vec<bool>,
+    /// State of a parallel evaluation (set at the first step with worker threads).
+    #[cfg(not(target_arch = "wasm32"))]
+    par: Option<Par<S>>,
+}
+
+/// Bookkeeping of a parallel evaluation ([`Job::step_parallel`]).
+#[cfg(not(target_arch = "wasm32"))]
+struct Par<S> {
+    shared: pool::Shared<S>,
+    rx: std::sync::mpsc::Receiver<pool::Done<S>>,
+    /// Node → its position in `order` (`usize::MAX`: not evaluated).
+    pos_of: Vec<usize>,
+    /// Inputs not finished yet: the children in `order`, and for a zone the body of its block
+    /// (a zone is limited to the body's bounds, [`eval::zone_block`]).
+    remaining: Vec<u32>,
+    /// Zones waiting for a node (their block's body).
+    zones_of: HashMap<NodeIdx, Vec<NodeIdx>>,
+    /// Positions of nodes whose children are finished, smallest first.
+    ready: std::collections::BinaryHeap<std::cmp::Reverse<usize>>,
+    /// Positions of the nodes on the workers.
+    running: std::collections::BTreeSet<usize>,
+    /// Keys on the workers → their node; a node of the same key waits ([`Par::waiters`]) and
+    /// takes that result as a cache hit, as the sequential order would.
+    in_flight: HashMap<CacheKey, NodeIdx>,
+    waiters: HashMap<CacheKey, Vec<NodeIdx>>,
+    finished: usize,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+impl<S> Drop for Job<S> {
+    fn drop(&mut self) {
+        // tasks of this job that have not started are skipped
+        if let Some(p) = &self.par {
+            p.shared.cancelled.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
 }
 
 impl<S> Job<S> {
@@ -591,11 +639,20 @@ impl<S> Job<S> {
     }
 
     pub fn done(&self) -> usize {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(p) = &self.par {
+            return p.finished;
+        }
         self.pos
     }
 
-    /// Node currently being evaluated (for a watchdog), if any.
+    /// Node currently being evaluated (for a watchdog), if any; with worker threads the first
+    /// in evaluation order of those running.
     pub fn current(&self) -> Option<NodeIdx> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(p) = &self.par {
+            return p.running.first().map(|&i| self.order[i]);
+        }
         self.order.get(self.pos).copied()
     }
 
@@ -632,13 +689,17 @@ impl<S: Clone + 'static> Job<S> {
             (Some(ms), Some(c)) => Some(c() + ms),
             _ => None,
         };
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.par.is_some() || (e.pool.is_some() && budget.max_ops.is_none() && self.pos == 0) {
+            return self.step_parallel(e, deadline);
+        }
         let mut ops: u64 = 0;
         while self.pos < self.order.len() {
             let idx = self.order[self.pos];
             let key = self.keys[idx as usize];
             if self.replay.is_empty() && e.blocked.contains(&key) {
                 self.blocked[idx as usize] = true;
-                self.outputs[idx as usize] = Some(Rc::new(self.blocked_output(idx)));
+                let _ = self.outputs[idx as usize].set(Arc::new(self.blocked_output(idx)));
                 self.stats.blocked += 1;
                 self.stats.nodes += 1;
                 self.pos += 1;
@@ -647,7 +708,7 @@ impl<S: Clone + 'static> Job<S> {
             if self.replay.is_empty()
                 && let Some(o) = e.cached_node(&key)
             {
-                self.outputs[idx as usize] = Some(o);
+                let _ = self.outputs[idx as usize].set(o);
                 self.cached[idx as usize] = true;
                 self.stats.cache_hits += 1;
                 self.stats.nodes += 1;
@@ -656,6 +717,10 @@ impl<S: Clone + 'static> Job<S> {
             }
             // heap in use before a fresh node evaluation (not for a replayed one)
             let heap0 = if self.replay.is_empty() { e.heap_probe.as_ref().map(|p| p()) } else { None };
+            if self.replay.is_empty() {
+                // (a resumed node continues with the kernel state its replayed calls left)
+                e.kernel.begin_node(node_seed(&key));
+            }
             let res = {
                 let mut run = eval::Run {
                     k: &mut e.kernel,
@@ -691,7 +756,7 @@ impl<S: Clone + 'static> Job<S> {
                     if out.suspended {
                         self.stats.suspended_blends += 1;
                     }
-                    let o = Rc::new(out);
+                    let o = Arc::new(out);
                     // What the node kept on the heap (its new shapes), if measured: the
                     // topology estimate can be off by a factor of 10 for freeform geometry.
                     let measured = heap0.and_then(|h0| e.heap_probe.as_ref().map(|p| p().saturating_sub(h0)));
@@ -701,7 +766,7 @@ impl<S: Clone + 'static> Job<S> {
                         None => e.output_bytes(&o),
                     };
                     e.cache.insert(Slot::Node(key), Cached::Node(o.clone()), cost);
-                    self.outputs[idx as usize] = Some(o);
+                    let _ = self.outputs[idx as usize].set(o);
                     self.replay.clear();
                     self.stats.nodes += 1;
                     self.pos += 1;
@@ -721,6 +786,237 @@ impl<S: Clone + 'static> Job<S> {
         self.stats.kernel_calls += ops;
         e.kernel_calls += ops;
         Step::Done(self.finish())
+    }
+
+    /// A parallel step: dispatches the ready nodes (in evaluation order; blocked and cached
+    /// ones and cheap ones on this thread), then waits for results until the deadline has
+    /// passed and at least one node finished (as a sequential step makes progress), or the
+    /// evaluation is complete. Nodes still on the workers when it returns go on there.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn step_parallel<K: Kernel<Shape = S>>(&mut self, e: &mut Engine<K>, deadline: Option<f64>) -> Step<S> {
+        if self.par.is_none() {
+            self.par = Some(self.start_parallel(e));
+        }
+        loop {
+            self.dispatch(e);
+            let total = self.order.len();
+            let par = self.par.as_mut().expect("parallel");
+            if par.finished == total {
+                return Step::Done(self.finish());
+            }
+            assert!(!par.running.is_empty(), "parallel evaluation: no node ready or running");
+            // at least one result, then whatever else has arrived
+            let first = par.rx.recv().expect("worker threads gone");
+            let mut got = vec![first];
+            while let Ok(d) = par.rx.try_recv() {
+                got.push(d);
+            }
+            for d in got {
+                self.collect(e, d);
+            }
+            if self.par.as_ref().is_some_and(|p| p.finished < total)
+                && let (Some(d), Some(c)) = (deadline, &e.clock)
+                && c() >= d
+            {
+                let done = self.par.as_ref().map_or(0, |p| p.finished);
+                return Step::Pending { done, total };
+            }
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn start_parallel<K: Kernel<Shape = S>>(&mut self, e: &Engine<K>) -> Par<S> {
+        let n = self.tree.nodes.len();
+        let mut pos_of = vec![usize::MAX; n];
+        for (p, &i) in self.order.iter().enumerate() {
+            pos_of[i as usize] = p;
+        }
+        let mut remaining = vec![0u32; n];
+        let mut zones_of: HashMap<NodeIdx, Vec<NodeIdx>> = HashMap::new();
+        let mut ready = std::collections::BinaryHeap::new();
+        for (p, &i) in self.order.iter().enumerate() {
+            let mut k = self.tree.node(i).children.iter().filter(|&&c| pos_of[c as usize] != usize::MAX).count();
+            if matches!(self.tree.node(i).op, Op::Zone(_))
+                && let Some((_, body, _)) = eval::zone_block(&self.tree, i)
+                && pos_of[body as usize] != usize::MAX
+            {
+                k += 1;
+                zones_of.entry(body).or_default().push(i);
+            }
+            remaining[i as usize] = k as u32;
+            if k == 0 {
+                ready.push(std::cmp::Reverse(p));
+            }
+        }
+        let (results, rx) = pool::results();
+        Par {
+            shared: pool::Shared {
+                tree: self.tree.clone(),
+                tags: self.tags.clone(),
+                outputs: self.outputs.clone(),
+                config: Arc::new(e.config.clone()),
+                skip: self.skip.clone(),
+                lang: e.lang,
+                timed: e.clock.is_some(),
+                cancelled: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+                results,
+            },
+            rx,
+            pos_of,
+            remaining,
+            zones_of,
+            ready,
+            running: std::collections::BTreeSet::new(),
+            in_flight: HashMap::new(),
+            waiters: HashMap::new(),
+            finished: 0,
+        }
+    }
+
+    /// Records a finished node and makes its parent ready when it was the last child.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn finish_node(&mut self, idx: NodeIdx, o: Arc<NodeOutput<S>>, cached: bool) {
+        let _ = self.outputs[idx as usize].set(o);
+        self.stats.nodes += 1;
+        if cached {
+            self.cached[idx as usize] = true;
+            self.stats.cache_hits += 1;
+        }
+        let par = self.par.as_mut().expect("parallel");
+        par.finished += 1;
+        let parent = self.tree.node(idx).parent.filter(|&p| par.pos_of[p as usize] != usize::MAX);
+        let zones = par.zones_of.remove(&idx).unwrap_or_default();
+        for d in parent.into_iter().chain(zones) {
+            let r = &mut par.remaining[d as usize];
+            *r -= 1;
+            if *r == 0 {
+                par.ready.push(std::cmp::Reverse(par.pos_of[d as usize]));
+            }
+        }
+    }
+
+    /// Hands the ready nodes to the workers, in evaluation order.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn dispatch<K: Kernel<Shape = S>>(&mut self, e: &mut Engine<K>) {
+        loop {
+            let Some(std::cmp::Reverse(p)) = self.par.as_mut().and_then(|x| x.ready.pop()) else { return };
+            let idx = self.order[p];
+            let key = self.keys[idx as usize];
+            if e.blocked.contains(&key) {
+                self.blocked[idx as usize] = true;
+                self.stats.blocked += 1;
+                let o = Arc::new(self.blocked_output(idx));
+                self.finish_node(idx, o, false);
+                continue;
+            }
+            if let Some(o) = e.cached_node(&key) {
+                self.finish_node(idx, o, true);
+                continue;
+            }
+            let par = self.par.as_mut().expect("parallel");
+            if par.in_flight.contains_key(&key) {
+                par.waiters.entry(key).or_default().push(idx);
+                continue;
+            }
+            if eval::is_cheap(&self.tree, idx) {
+                let o = self.eval_here(e, idx);
+                self.finish_node(idx, o, false);
+                continue;
+            }
+            par.in_flight.insert(key, idx);
+            par.running.insert(p);
+            let task = pool::Task {
+                shared: par.shared.clone(),
+                idx,
+                tainted: self.tainted[idx as usize],
+                seed: node_seed(&key),
+            };
+            e.pool.as_ref().expect("worker threads").submit(task);
+        }
+    }
+
+    /// A node evaluated on this thread with the engine's kernel, without budget.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn eval_here<K: Kernel<Shape = S>>(&mut self, e: &mut Engine<K>, idx: NodeIdx) -> Arc<NodeOutput<S>> {
+        let key = self.keys[idx as usize];
+        let mut ops = 0u64;
+        let mut replay = Vec::new();
+        let out = {
+            let mut run = eval::Run {
+                k: &mut e.kernel,
+                replay: &mut replay,
+                cursor: 0,
+                ops: &mut ops,
+                max_ops: None,
+                deadline: None,
+                clock: e.clock.as_deref(),
+            };
+            let ctx = eval::Ctx {
+                tree: &self.tree,
+                tags: &self.tags,
+                outputs: &self.outputs,
+                config: &e.config,
+                skip: &self.skip,
+            };
+            let tainted = self.tainted[idx as usize];
+            if tainted {
+                run.k.set_draft(true);
+            }
+            run.k.begin_node(node_seed(&key));
+            let r = eval::eval_node(&mut run, &ctx, idx);
+            if tainted {
+                run.k.set_draft(false);
+            }
+            r.unwrap_or_else(|_| unreachable!("no budget, no interrupt"))
+        };
+        self.stats.kernel_calls += ops;
+        e.kernel_calls += ops;
+        self.store(e, idx, out)
+    }
+
+    /// A node's fresh result into the cache (and the engine's blend times).
+    #[cfg(not(target_arch = "wasm32"))]
+    fn store<K: Kernel<Shape = S>>(
+        &mut self,
+        e: &mut Engine<K>,
+        idx: NodeIdx,
+        out: NodeOutput<S>,
+    ) -> Arc<NodeOutput<S>> {
+        if out.blend_ms > 0.0 {
+            e.blend_ms.insert(self.tree.node(idx).inst_key, out.blend_ms);
+        }
+        if out.suspended {
+            self.stats.suspended_blends += 1;
+        }
+        let o = Arc::new(out);
+        // (no heap probe: other threads allocate at the same time)
+        let cost = e.output_bytes(&o);
+        e.cache.insert(Slot::Node(self.keys[idx as usize]), Cached::Node(o.clone()), cost);
+        o
+    }
+
+    /// A result from a worker.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn collect<K: Kernel<Shape = S>>(&mut self, e: &mut Engine<K>, d: pool::Done<S>) {
+        let idx = d.idx;
+        let key = self.keys[idx as usize];
+        let out = match d.out {
+            Ok(o) => o,
+            Err(panic) => std::panic::resume_unwind(panic),
+        };
+        self.stats.kernel_calls += d.ops;
+        e.kernel_calls += d.ops;
+        let o = self.store(e, idx, out);
+        let par = self.par.as_mut().expect("parallel");
+        par.running.remove(&par.pos_of[idx as usize]);
+        par.in_flight.remove(&key);
+        let waiters = par.waiters.remove(&key).unwrap_or_default();
+        self.finish_node(idx, o.clone(), false);
+        for w in waiters {
+            // as a sequential evaluation finds the result in the cache
+            let hit = e.cached_node(&key).unwrap_or_else(|| o.clone());
+            self.finish_node(w, hit, true);
+        }
     }
 
     fn blocked_output(&self, idx: NodeIdx) -> NodeOutput<S> {
@@ -750,7 +1046,7 @@ impl<S: Clone + 'static> Job<S> {
         let mut tag_nodes: BTreeMap<Tag, Vec<NodeRef>> = BTreeMap::new();
         for (i, n) in tree.nodes.iter().enumerate() {
             let idx = i as NodeIdx;
-            let out = self.outputs[i].as_ref();
+            let out = self.outputs[i].get();
             let mut status = if out.is_some() { Status::Ok } else { Status::Skipped };
             let mut diagnostics = Vec::new();
             if let Some(o) = out {
@@ -821,7 +1117,7 @@ impl<S: Clone + 'static> Job<S> {
             tag_nodes,
             stats: self.stats,
             draft: self.draft,
-            outputs: self.outputs.clone(),
+            outputs: self.outputs.iter().map(|o| o.get().cloned()).collect(),
         }
     }
 }
@@ -847,7 +1143,36 @@ where
             blend_ms: HashMap::new(),
             heap_probe: None,
             lang: cad_i18n::lang(),
+            #[cfg(not(target_arch = "wasm32"))]
+            pool: None,
         }
+    }
+
+    /// Evaluates independent nodes on `jobs` worker threads, each with a kernel from `make`;
+    /// the caller's thread dispatches, collects and evaluates the cheap nodes with this engine's
+    /// kernel (it mostly waits). `jobs <= 1`: sequential, as without a call.
+    /// Results, tags, diagnostics and cache keys are the same for every `jobs`: every node
+    /// starts with [`Kernel::begin_node`] and reads only its children's results. A budget in
+    /// kernel calls ([`Budget::ops`]) always runs sequentially. Not on wasm32 (no threads).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_workers(&mut self, jobs: usize, make: Arc<dyn Fn() -> K + Send + Sync>)
+    where
+        K: 'static,
+        K::Shape: Send + Sync,
+    {
+        self.pool = None;
+        if jobs > 1 {
+            self.pool = Some(pool::Pool::new(jobs, make));
+        }
+    }
+
+    /// Threads that evaluate nodes (1: sequential).
+    pub fn jobs(&self) -> usize {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(p) = &self.pool {
+            return p.workers();
+        }
+        1
     }
 
     /// Draft mode for evaluations started from now on (see the crate docs). Needs a clock
@@ -963,7 +1288,7 @@ where
         before - self.cache.len()
     }
 
-    fn cached_node(&mut self, key: &CacheKey) -> Option<Rc<NodeOutput<K::Shape>>> {
+    fn cached_node(&mut self, key: &CacheKey) -> Option<Arc<NodeOutput<K::Shape>>> {
         match self.cache.get(&Slot::Node(*key)) {
             Some(Cached::Node(o)) => Some(o),
             _ => None,
@@ -1009,7 +1334,7 @@ where
             self.lang = lang;
             self.cache.retain(|k, _| matches!(k, Slot::Mesh(..) | Slot::Mass(_) | Slot::Brep(..)));
         }
-        let tree = Rc::new(tree);
+        let tree = Arc::new(tree);
         let n = tree.nodes.len();
         let order = eval::post_order(&tree);
         let mut keys = eval::compute_keys(&tree, self.kernel.id(), &[]);
@@ -1036,21 +1361,23 @@ where
                 tainted[i as usize] = t;
             }
         }
-        let tags = keys.iter().map(|&k| self.tags.intern(k)).collect();
+        let tags: Arc<[Tag]> = keys.iter().map(|&k| self.tags.intern(k)).collect();
         Job {
             tree,
             keys,
             tags,
             order,
             pos: 0,
-            outputs: vec![None; n],
+            outputs: (0..n).map(|_| OnceLock::new()).collect(),
             cached: vec![false; n],
             replay: Vec::new(),
             stats: EvalStats::default(),
             draft: self.draft,
-            skip,
+            skip: skip.into(),
             tainted,
             blocked: vec![false; n],
+            #[cfg(not(target_arch = "wasm32"))]
+            par: None,
         }
     }
 

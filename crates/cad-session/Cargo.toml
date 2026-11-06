@@ -19,5 +19,5 @@ serde.workspace = true
 ts-rs = { version = "12", default-features = false, features = ["serde-compat"] }
 
 [dev-dependencies]
-kernel-smlib.workspace = true
+kernel-solidcore.workspace = true
 serde_json.workspace = true

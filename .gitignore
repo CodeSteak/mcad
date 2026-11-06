@@ -2,10 +2,6 @@
 node_modules
 /web/dist
 /web/src/wasm-pkg
-/smlib/build*/
-/web/public/smlib/*
-!/web/public/smlib/.gitkeep
-/third_party
 *.log
 /reports/tmp
 /.claude/worktrees
@@ -17,7 +13,6 @@ __pycache__/
 # Arch-Paket: make arch-pkg baut in target/arch; makepkg direkt in packaging/arch legt das hier an
 /packaging/arch/src/
 /packaging/arch/pkg/
-/packaging/arch/smlib/
 /packaging/arch/*.pkg.tar*
 /packaging/arch/*.tar.gz
 /packaging/arch/namcap.txt

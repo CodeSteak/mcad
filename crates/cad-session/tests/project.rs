@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use cad_session::protocol::*;
 use cad_session::{Session, SessionOptions, std_clock};
-use kernel_smlib::SmlibKernel;
+use kernel_solidcore::SolidcoreKernel;
 
 const MAIN: &str = "include <consts.scad>\nuse <lib/parts.mcad>\n\
                     housing: housing(w = width);\ntranslate([0, 50, 0]) lid: lid(w = width);\n";
@@ -13,8 +13,8 @@ const CONSTS: &str = "// Dimensions\nwidth = 40;\n";
 const PARTS: &str = "module housing(w = 30, h = 12) {\n    difference() {\n        cube([w, 20, h]);\n        \
                      translate([2, 2, 2]) cube([w - 4, 16, h]);\n    }\n}\nmodule lid(w = 30) cube([w, 20, 2]);\n";
 
-fn session() -> Session<SmlibKernel> {
-    Session::new(SmlibKernel::new(), SessionOptions::default(), std_clock())
+fn session() -> Session<SolidcoreKernel> {
+    Session::new(SolidcoreKernel::new(), SessionOptions::default(), std_clock())
 }
 
 fn files() -> BTreeMap<String, String> {
@@ -38,7 +38,7 @@ fn last_diags(msgs: &[FromEngine]) -> Vec<Diagnostic> {
         .unwrap_or_default()
 }
 
-fn start(s: &mut Session<SmlibKernel>) -> Scene {
+fn start(s: &mut Session<SolidcoreKernel>) -> Scene {
     s.post(ToEngine::SetFiles { files: files(), main: Some("main.scad".into()) });
     let mut m = s.post(ToEngine::SetSource { text: MAIN.into(), version: 1 });
     m.extend(s.run_to_idle());

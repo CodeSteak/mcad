@@ -4,7 +4,7 @@
 //! mcad (app process)                                  mcad engine-host (engine process)
 //!   main thread: Tauri event loop, webview (React UI)    engine thread (256 MiB stack):
 //!   commands  engine_post ──── frames on stdin ────────▶   Session::post / step(16 ms)
-//!   channel   ◀── binary batches (wire.rs) ── stdout ───   SMLib native
+//!   channel   ◀── binary batches (wire.rs) ── stdout ───   kernel solidcore
 //!   cad-watchdog: 20 min without answer → kill + restart engine, BlockKeys (cad_desktop::engine)
 //!   cad-watch: file watcher (notify) → events file-changed / file-removed
 //!   cad-ui-ipc: socket ui-<pid> (cad_ipc) ← `mcad ui status|show|screenshot`
@@ -383,7 +383,7 @@ pub fn run(opts: LaunchOptions) -> i32 {
     let out = Arc::new(Mutex::new(EngineOut { channel: None, buffered: Vec::new() }));
     let o2 = out.clone();
     let sink: cad_desktop::engine::Sink = Arc::new(move |f| send_out(&o2, cad_desktop::wire::frame_bytes(&f)));
-    // The engine process starts right away (SMLib initialisation overlaps the webview start).
+    // The engine process starts right away (its start overlaps the webview start).
     let watchdog = cad_ipc::env_var("WATCHDOG_MS")
         .and_then(|v| v.parse().ok())
         .map(Duration::from_millis)

@@ -7,10 +7,10 @@ use cad_measure::section::SectionPlane;
 use cad_session::protocol::*;
 use cad_session::{Session, SessionOptions, std_clock};
 use glam::DVec3;
-use kernel_smlib::SmlibKernel;
+use kernel_solidcore::SolidcoreKernel;
 
-fn session(text: &str) -> Session<SmlibKernel> {
-    let mut s = Session::new(SmlibKernel::new(), SessionOptions::default(), std_clock());
+fn session(text: &str) -> Session<SolidcoreKernel> {
+    let mut s = Session::new(SolidcoreKernel::new(), SessionOptions::default(), std_clock());
     s.post(ToEngine::SetSource { text: text.into(), version: 1 });
     s.run_to_idle();
     s
@@ -20,12 +20,12 @@ fn example(name: &str) -> String {
     std::fs::read_to_string(format!("{}/../../tests/models/spec/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
 }
 
-fn root(s: &Session<SmlibKernel>) -> u32 {
+fn root(s: &Session<SolidcoreKernel>) -> u32 {
     s.done().unwrap().scene.root.unwrap()
 }
 
 /// Ray cast on the root's display mesh: the hit as the UI sends it.
-fn hit(s: &mut Session<SmlibKernel>, o: DVec3, d: DVec3) -> Option<MeasureHit> {
+fn hit(s: &mut Session<SolidcoreKernel>, o: DVec3, d: DVec3) -> Option<MeasureHit> {
     let r = root(s);
     let mesh = s.mesh(r, false).unwrap();
     let p = |i: u32| {
@@ -68,7 +68,7 @@ fn answer(msgs: Vec<FromEngine>) -> MeasureAnswer {
 
 /// Mouse over `(x, y)` from above (100 mm away: with these settings the snap radius is 1 mm).
 fn over(
-    s: &mut Session<SmlibKernel>,
+    s: &mut Session<SolidcoreKernel>,
     kind: MeasureKind,
     picks: Vec<MeasurePick>,
     o: DVec3,
@@ -109,7 +109,12 @@ fn parse_point(t: &str) -> Result<DVec3, String> {
 }
 
 /// A measurement from `mcad measure` references (as the CLI does it).
-fn by_refs(s: &mut Session<SmlibKernel>, kind: MeasureKind, refs: &[&str], plane: Option<SectionPlane>) -> Measurement {
+fn by_refs(
+    s: &mut Session<SolidcoreKernel>,
+    kind: MeasureKind,
+    refs: &[&str],
+    plane: Option<SectionPlane>,
+) -> Measurement {
     let r = root(s);
     let m = s.measure_model(r).unwrap();
     let sec = plane.map(|p| s.measure_section(r, &p));

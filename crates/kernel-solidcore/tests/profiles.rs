@@ -1,7 +1,6 @@
 //! Profiles and sweeps over solidcore (plan 1.1, 1.2, 1.4, 1.5): face and edge counts as the
-//! SMLib facade builds them (checked with `mcad diff-kernels`), volumes against the exact value.
-
-#![cfg(feature = "solidcore")]
+//! SMLib facade builds them (checked with `mcad diff-kernels` while SMLib was there, now frozen
+//! in `tests/kernel-reference.json`), volumes against the exact value.
 
 use cad_kernel::{BoolOp, Kernel, Loop, PlacedLoop, Segment};
 use glam::{DMat4, DVec2, DVec3};
