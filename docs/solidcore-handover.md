@@ -33,8 +33,8 @@ Measured 2026-11-06 (debug build unless noted, pin `f4f05b1`):
 | `diff-reference` (101 files, 2604 nodes) | same 2596, unsupported 3, blocked 3, differ 2, failed 0; volume rules relative 2293, exact 129, operands 67, curved 25, blend 70; meshes at 0.05: ok 100, skipped 1, watertight 100, chord max 0.0500 mm |
 | live comparison at the freeze (last SMLib build) | the same verdict, volume rule and notes for every node as the reference mode |
 | `compare.py --eval` / `check.sh` / `tests/step/verify.py` | 36 / 36; 19 models, 0 problems (bugs: 10 fixed, 7 open); 64 / 64 |
-| Wasm module (profile `wasm`, wasm-bindgen 0.2.129) | build 9.5 min (4 cores); 37.1 MB raw, 7.9 MB gzip -9, 4.97 MB Brotli q11; after `wasm-opt -Oz` (binaryen 123, 11 min) 22.3 MB raw, 7.7 MB gzip, 5.1 MB Brotli (release profile before: 39.3 MiB, 6.2 MiB Brotli) |
-| browser engine in Node (`smoke-node.mjs`, unoptimised module) | load 137 ms, housing scene 211 ms, root mesh 225 ms, warm 61 ms |
+| Wasm module (profile `wasm`: opt-level 3, fat LTO, one codegen unit; wasm-bindgen 0.2.129) | build 13.5 min (4 cores); 34.3 MB raw, 10.8 MB gzip -9, 6.66 MB Brotli q11. With opt-level "z": 9.5 min, 37.1 MB raw, 7.9 MB gzip, 4.97 MB Brotli, but 2.4 × slower (`dump-scene.mjs examples/08-macropad.mcad` 85 s against 36 s; the e2e tests S04/S06 time out on it); `wasm-opt -Oz` (binaryen 123, 11 min) on the "z" module: 22.3 MB raw, 5.1 MB Brotli. Release profile before (handover 2026-11-04): 39.3 MiB, 6.2 MiB Brotli |
+| browser engine in Node (`smoke-node.mjs`) | load 138 ms, housing scene 219 ms, root mesh 237 ms, warm 31 ms |
 
 The sections below are the state before the switch (2026-11-04), kept as history; their
 commands with `--kernel`, `diff-kernels`, `SMLIB_PREBUILT` no longer exist.
@@ -99,7 +99,7 @@ for `variable_radius` (upstream API).
 | reference run | `mcad diff-reference tests/kernel-reference.json --mesh [--json]`; pin bump: `SOLIDCORE_REV=<full hash>\|main scripts/ci/solidcore.sh <out>` → `diff-reference.json`, `summary.md` (rewrites the pin in the working tree: `git checkout -- crates/kernel-solidcore Cargo.lock` afterwards unless bumping) |
 | tessellator corpus | `cargo run -p cad-tess --example corpus -- [--tol t]` |
 | one file | `mcad diff-reference tests/kernel-reference.json FILE --mesh --mesh-tol 0.01 --json` (FILE one of the reference's) |
-| browser | `web/scripts/build-wasm.sh` (profile `wasm`: opt-level z, fat LTO, one codegen unit; wasm-opt -Oz if on PATH), `node web/scripts/smoke-node.mjs`, `cd web && pnpm build && pnpm test` |
+| browser | `web/scripts/build-wasm.sh` (profile `wasm`: fat LTO, one codegen unit; wasm-opt -Oz if on PATH), `node web/scripts/smoke-node.mjs`, `cd web && pnpm build && pnpm test` |
 | pitfalls | `solidcore::Brep::clone()` is not an independent copy (use `Inner::copy`); face/edge ids of a copy differ; classification through `BrepQuery::of_brep(..).point_3d_classify`; error mapping `Unported` → `Unsupported`, `InvalidInput` → `InvalidInput`, else `Failed`; `Instant::now` panics on wasm32 (no clock there: the copy timing is skipped) |
 
 ## Open points

@@ -5,7 +5,7 @@
 #
 #   web/scripts/build-wasm.sh [--debug] [--no-opt]
 #
-# * Profile `wasm` (Cargo.toml: release with opt-level "z", fat LTO, one codegen unit);
+# * Profile `wasm` (Cargo.toml: release with fat LTO, one codegen unit);
 #   --debug: the dev profile.
 # * wasm-bindgen-cli is installed in the version of the `wasm-bindgen` crate in Cargo.lock
 #   if the installed one differs (scripts/ci/wasm-bindgen.sh).

@@ -33,10 +33,12 @@ kernel-solidcore = { path = "crates/kernel-solidcore" }
 opt-level = 3
 debug = false
 
-# The browser module (`web/scripts/build-wasm.sh`, cad-wasm with solidcore): small over fast.
+# The browser module (`web/scripts/build-wasm.sh`, cad-wasm with solidcore): release with fat
+# LTO and one codegen unit (34.3 MB, 6.7 MB Brotli). opt-level "z" is 25 % smaller in Brotli
+# (5.0 MB) but evaluates 2.4 times slower (macropad 85 s instead of 36 s in Node).
 [profile.wasm]
 inherits = "release"
-opt-level = "z"
+opt-level = 3
 lto = "fat"
 codegen-units = 1
 
