@@ -1,17 +1,17 @@
-//! Geometric assertions (Plan 21 C) over the native SMLib kernel: values against formulas.
+//! Geometric assertions (Plan 21 C) over the kernel solidcore: values against formulas.
 
 use std::f64::consts::PI;
 
 use cad_session::protocol::*;
 use cad_session::{Session, SessionOptions, std_clock};
-use kernel_smlib::SmlibKernel;
+use kernel_solidcore::SolidcoreKernel;
 
-fn session() -> Session<SmlibKernel> {
-    Session::new(SmlibKernel::new(), SessionOptions::default(), std_clock())
+fn session() -> Session<SolidcoreKernel> {
+    Session::new(SolidcoreKernel::new(), SessionOptions::default(), std_clock())
 }
 
 /// Evaluates `src` and returns the assertion results and all messages.
-fn run(s: &mut Session<SmlibKernel>, src: &str, version: u64) -> (Vec<AssertResult>, Vec<FromEngine>) {
+fn run(s: &mut Session<SolidcoreKernel>, src: &str, version: u64) -> (Vec<AssertResult>, Vec<FromEngine>) {
     let mut msgs = s.post(ToEngine::SetSource { text: src.into(), version });
     msgs.extend(s.run_to_idle());
     let res = msgs
@@ -317,13 +317,13 @@ fn warnings_of_the_statement() {
     assert!(all.iter().any(|m| m.contains("`tol` muss > 0")), "{all:?}");
 }
 
-/// SMLib with a failing tessellation (as solidcore before its tessellator).
-struct NoMesh(SmlibKernel);
+/// The kernel with a failing tessellation (as solidcore before its tessellator).
+struct NoMesh(SolidcoreKernel);
 
 mod no_mesh {
     use cad_kernel::*;
     use glam::{DMat4, DVec2, DVec3};
-    use kernel_smlib::Shape;
+    use kernel_solidcore::Shape;
 
     impl Kernel for super::NoMesh {
         type Shape = Shape;
@@ -408,7 +408,7 @@ mod no_mesh {
 #[test]
 fn failing_tessellation_leaves_contact_and_intersection_unchecked() {
     let _en = cad_i18n::scoped(cad_i18n::Lang::En);
-    let mut s = Session::new(NoMesh(SmlibKernel::new()), SessionOptions::default(), std_clock());
+    let mut s = Session::new(NoMesh(SolidcoreKernel::new()), SessionOptions::default(), std_clock());
     let mut msgs = s.post(ToEngine::SetSource {
         text: "assert_touches() { cube(10); translate([10, 0, 0]) cube(10); }\n\
                assert_intersect() { cube(10); translate([10, 0, 0]) cube(10); }\n"

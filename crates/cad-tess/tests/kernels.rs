@@ -1,4 +1,4 @@
-//! The tessellator on B-reps of both kernels (plan 2.1–2.6): one case per surface kind and per
+//! The tessellator on solidcore's B-reps (plan 2.1–2.6): one case per surface kind and per
 //! tricky situation. Every mesh must be watertight and consistently oriented outwards, hold the
 //! tolerance (measured deviation), enclose the kernel's exact volume within `tol · area`, and
 //! carry every face and edge of the B-rep.
@@ -192,12 +192,6 @@ fn run<K: Kernel>(mut k: K, kernel: &str) {
 }
 
 #[test]
-fn smlib_breps() {
-    run(kernel_smlib::SmlibKernel::new(), "smlib");
-}
-
-#[cfg(feature = "solidcore")]
-#[test]
 fn solidcore_breps() {
     run(kernel_solidcore::SolidcoreKernel::new(), "solidcore");
 }
@@ -205,7 +199,7 @@ fn solidcore_breps() {
 /// Coarse and fine: the triangle count follows the tolerance, both hold it.
 #[test]
 fn tolerance_steers_the_density() {
-    let mut k = kernel_smlib::SmlibKernel::new();
+    let mut k = kernel_solidcore::SolidcoreKernel::new();
     let s = k.make_sphere(10.0, 1).unwrap();
     let b = k.brep(&s).unwrap();
     let exact = 4.0 / 3.0 * PI * 1000.0;
@@ -223,7 +217,7 @@ fn tolerance_steers_the_density() {
 /// Planar faces: projected and triangulated without inner points; holes stay open.
 #[test]
 fn planar_faces_with_holes() {
-    let mut k = kernel_smlib::SmlibKernel::new();
+    let mut k = kernel_solidcore::SolidcoreKernel::new();
     let a = k.make_box(DVec3::ZERO, DVec3::new(30.0, 20.0, 5.0), 1).unwrap();
     let h = k.make_box(DVec3::new(5.0, 5.0, -1.0), DVec3::new(10.0, 10.0, 6.0), 2).unwrap();
     let h2 = k.make_box(DVec3::new(15.0, 5.0, -1.0), DVec3::new(25.0, 15.0, 6.0), 2).unwrap();
@@ -312,12 +306,6 @@ fn ruled_bands<K: Kernel>(mut k: K, kernel: &str) {
 }
 
 #[test]
-fn ruled_bands_smlib() {
-    ruled_bands(kernel_smlib::SmlibKernel::new(), "smlib");
-}
-
-#[cfg(feature = "solidcore")]
-#[test]
 fn ruled_bands_solidcore() {
     ruled_bands(kernel_solidcore::SolidcoreKernel::new(), "solidcore");
 }
@@ -350,12 +338,6 @@ where
     }
 }
 
-#[test]
-fn scaled_mug_smlib() {
-    scaled_mug(kernel_smlib::SmlibKernel::new(), "smlib");
-}
-
-#[cfg(feature = "solidcore")]
 #[test]
 fn scaled_mug_solidcore() {
     scaled_mug(kernel_solidcore::SolidcoreKernel::new(), "solidcore");
@@ -416,12 +398,6 @@ fn band_holes<K: Kernel>(mut k: K, kernel: &str) {
 }
 
 #[test]
-fn band_holes_smlib() {
-    band_holes(kernel_smlib::SmlibKernel::new(), "smlib");
-}
-
-#[cfg(feature = "solidcore")]
-#[test]
 fn band_holes_solidcore() {
     band_holes(kernel_solidcore::SolidcoreKernel::new(), "solidcore");
 }
@@ -480,12 +456,6 @@ where
 }
 
 #[test]
-fn tapered_and_grazing_smlib() {
-    tapered_and_grazing(kernel_smlib::SmlibKernel::new, "smlib");
-}
-
-#[cfg(feature = "solidcore")]
-#[test]
 fn tapered_and_grazing_solidcore() {
     tapered_and_grazing(kernel_solidcore::SolidcoreKernel::new, "solidcore");
 }
@@ -511,12 +481,6 @@ where
     }
 }
 
-#[test]
-fn flips_keep_the_tolerance_smlib() {
-    flips_keep_the_tolerance(kernel_smlib::SmlibKernel::new, "smlib");
-}
-
-#[cfg(feature = "solidcore")]
 #[test]
 fn flips_keep_the_tolerance_solidcore() {
     flips_keep_the_tolerance(kernel_solidcore::SolidcoreKernel::new, "solidcore");
@@ -550,12 +514,6 @@ where
 }
 
 #[test]
-fn twisted_extrusions_smlib() {
-    twisted_extrusions(kernel_smlib::SmlibKernel::new, "smlib");
-}
-
-#[cfg(feature = "solidcore")]
-#[test]
 fn twisted_extrusions_solidcore() {
     twisted_extrusions(kernel_solidcore::SolidcoreKernel::new, "solidcore");
 }
@@ -566,7 +524,7 @@ fn twisted_extrusions_solidcore() {
 #[test]
 fn long_free_form_edges_are_sampled_finely() {
     let src = "linear_extrude(height = 100, twist = 3600, scale = 0.2) circle(20);\n";
-    with_part(kernel_smlib::SmlibKernel::new(), "spec/helix.mcad", Some(src), |k, s| {
+    with_part(kernel_solidcore::SolidcoreKernel::new(), "spec/helix.mcad", Some(src), |k, s| {
         let brep = k.brep(s).unwrap();
         let m = cad_tess::tessellate(&brep, 0.05).unwrap();
         let d = cad_tess::surface_distance(&brep, &m);
@@ -582,7 +540,7 @@ fn long_free_form_edges_are_sampled_finely() {
 /// inner vertices.
 #[test]
 fn inner_vertices_near_an_edge_off_the_surface() {
-    let mut k = kernel_smlib::SmlibKernel::new();
+    let mut k = kernel_solidcore::SolidcoreKernel::new();
     let c = k.make_cylinder(10.0, 10.0, 10.0, 1).unwrap();
     let mut brep = k.brep(&c).unwrap();
     let mut wall = None;
@@ -624,7 +582,7 @@ fn inner_vertices_near_an_edge_off_the_surface() {
     assert!(d.inner_vertex_gap > 0.29, "displaced vertex excused: {}", d.inner_vertex_gap);
     // crossing loops at a cusp: the split points lie on the chords of the edge polylines
     let src = "difference() { cylinder(r = 30, h = 60); translate([0, 0.02, 0]) cylinder(r = 30, h = 30); }\n";
-    with_part(kernel_smlib::SmlibKernel::new(), "spec/graze.mcad", Some(src), |k, s| {
+    with_part(kernel_solidcore::SolidcoreKernel::new(), "spec/graze.mcad", Some(src), |k, s| {
         let brep = k.brep(s).unwrap();
         for tol in [0.05, 0.01] {
             let m = cad_tess::tessellate(&brep, tol).unwrap();
@@ -635,38 +593,30 @@ fn inner_vertices_near_an_edge_off_the_surface() {
 }
 
 /// The meshes of a sweep that folds over itself (`f02`: a tube of radius 3 along a bend
-/// tighter than that) cover the surface: SMLib's mesh, whose triangles lie on the same surface
-/// (the B-reps agree to 1e-13), is within the tolerance of ours beyond SMLib's own distance to
-/// it. The refinement measured each triangle against the nearest surface point only, so a
-/// triangle across a fold was near its base and missed its tip: 0.031 mm at 0.01. It now also
-/// measures the surface point at the triangle's (and inner edge's) parameters.
+/// tighter than that) cover the surface: a mesh of a quarter of the tolerance (whose triangles
+/// lie on the same surface) is within the tolerance of ours beyond its own distance to it (this
+/// was checked against SMLib's mesh while that kernel was there; the B-reps agreed to 1e-13).
+/// The refinement measured each triangle against the nearest surface point only, so a triangle
+/// across a fold was near its base and missed its tip: 0.031 mm at 0.01. It now also measures
+/// the surface point at the triangle's (and inner edge's) parameters.
 fn folding_sweep<K: Kernel + 'static, F: Fn() -> K>(new: F, kernel: &str)
 where
     K::Shape: 'static,
 {
     let src = "sweep(path = [[19, 0, 30], [35, 0, 25], [19, 0, 10]]) circle(3);\n";
     let tol = 0.01;
-    let (smlib_mesh, smlib_gaps) = with_part(kernel_smlib::SmlibKernel::new(), "spec/sweep.mcad", Some(src), |k, s| {
-        let m = k.tessellate(s, tol).unwrap();
-        let gaps = cad_tess::surface_distance(&k.brep(s).unwrap(), &m).per_triangle;
-        (m, gaps)
-    });
     with_part(new(), "spec/sweep.mcad", Some(src), |k, s| {
         let brep = k.brep(s).unwrap();
+        let fine = cad_tess::tessellate(&brep, tol / 4.0).unwrap();
+        let fine_gaps = cad_tess::surface_distance(&brep, &fine).per_triangle;
         let m = cad_tess::tessellate(&brep, tol).unwrap();
-        let ex = cad_tess::mesh_excess(&smlib_mesh, &m, &smlib_gaps, &[]);
-        assert!(ex.max <= 1.5 * tol, "{kernel}: SMLib's mesh {} from ours beyond its own gap at {}", ex.max, ex.at);
+        let ex = cad_tess::mesh_excess(&fine, &m, &fine_gaps, &[]);
+        assert!(ex.max <= 1.5 * tol, "{kernel}: the fine mesh {} from ours beyond its own gap at {}", ex.max, ex.at);
         let d = cad_tess::surface_distance(&brep, &m);
         assert!(d.chord.max <= tol * 1.001, "{kernel}: chord {}", d.chord.max);
     });
 }
 
-#[test]
-fn folding_sweep_smlib() {
-    folding_sweep(kernel_smlib::SmlibKernel::new, "smlib");
-}
-
-#[cfg(feature = "solidcore")]
 #[test]
 fn folding_sweep_solidcore() {
     folding_sweep(kernel_solidcore::SolidcoreKernel::new, "solidcore");
@@ -688,12 +638,6 @@ where
     });
 }
 
-#[test]
-fn no_forced_folds_smlib() {
-    no_forced_folds(kernel_smlib::SmlibKernel::new, "smlib");
-}
-
-#[cfg(feature = "solidcore")]
 #[test]
 fn no_forced_folds_solidcore() {
     no_forced_folds(kernel_solidcore::SolidcoreKernel::new, "solidcore");

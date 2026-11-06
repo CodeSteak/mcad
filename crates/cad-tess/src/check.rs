@@ -1,4 +1,4 @@
-//! Checks of a mesh (plan 2.6), usable for any [`Mesh`] (also SMLib's): vertices welded by
+//! Checks of a mesh (plan 2.6), usable for any [`Mesh`] (any kernel's): vertices welded by
 //! position, then every edge must be used by exactly two triangles in opposite directions
 //! (watertight, consistently oriented), the enclosed volume must be positive (normals
 //! outwards), every position finite, no triangle may be degenerate, and the enclosed volume

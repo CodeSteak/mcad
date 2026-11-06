@@ -1,4 +1,4 @@
-//! 2D operations (Plan 17.3, Testbericht 15) through the engine with native SMLib: `corner`,
+//! 2D operations (Plan 17.3, Testbericht 15) through the engine with solidcore: `corner`,
 //! `fillet2d`/`chamfer2d`, `offset`, `stroke` against closed formulas (extruded by 1, the
 //! volume is the area), errors, hints, STEP with exact lines and circles.
 

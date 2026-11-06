@@ -917,10 +917,22 @@ where
                     }
                     _ => sel.iter().map(|x| x.points.clone()).collect(),
                 };
-                self.error_edges(
-                    tr!("Verrundung gescheitert ({} mm): {e}", "fillet failed ({} mm): {e}", radius_range(lo, hi)),
-                    bad,
-                );
+                // the kernel takes one radius law for all edges of a fillet (solidcore): edges with
+                // different laws are not supported
+                let several_laws = radii.iter().any(|l| l != &radii[0]);
+                let msg = if matches!(e, KernelError::Unsupported(_)) && several_laws {
+                    tr!(
+                        "variabler Radius wird nicht unterstützt: Verrundung von {} Kanten mit verschiedenen \
+                         Radiusverläufen ({} mm); einen konstanten Radius verwenden",
+                        "variable radius is not supported: fillet of {} edges with different radius laws \
+                         ({} mm); use a constant radius",
+                        ids.len(),
+                        radius_range(lo, hi)
+                    )
+                } else {
+                    tr!("Verrundung gescheitert ({} mm): {e}", "fillet failed ({} mm): {e}", radius_range(lo, hi))
+                };
+                self.error_edges(msg, bad);
                 Ok(part.clone())
             }
         }

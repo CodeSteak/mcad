@@ -1,23 +1,28 @@
-//! Measurements on SMLib shapes against analytic values: radii and areas of cylinders,
+//! Measurements on solidcore shapes against analytic values: radii and areas of cylinders,
 //! cones, spheres and tori, fillet and chamfer geometry, distances, angles, sections
 //! through bores and wall thickness.
 
 use std::f64::consts::PI;
 use std::rc::Rc;
 
-use cad_kernel::{BoolOp, Kernel};
+use cad_kernel::{BoolOp, KResult, Kernel};
 use cad_measure::section::{SectionPlane, cut_contours};
 use cad_measure::{Body, Geo, Radius, Section, angle, distance, face_area, radius};
 use glam::{DMat4, DVec3};
-use kernel_smlib::{Shape, SmlibKernel};
+use kernel_solidcore::{Shape, SolidcoreKernel};
 
 const TOL: f64 = 0.01;
 
-fn k() -> SmlibKernel {
-    SmlibKernel::new()
+fn k() -> SolidcoreKernel {
+    SolidcoreKernel::new()
 }
 
-fn body(k: &mut SmlibKernel, s: &Shape) -> Body {
+/// The ids of the edges of `s` that `pred` accepts (sampled with 3 inner points).
+fn edges_where(k: &mut SolidcoreKernel, s: &Shape, pred: impl Fn(&cad_kernel::EdgeInfo) -> bool) -> KResult<Vec<u32>> {
+    Ok(k.edges(s, 3)?.into_iter().filter(|e| pred(e)).map(|e| e.id).collect())
+}
+
+fn body(k: &mut SolidcoreKernel, s: &Shape) -> Body {
     let brep = k.brep(s).unwrap();
     let mesh = k.tessellate(s, TOL).unwrap();
     Body::new(Rc::new(brep), &mesh, &DMat4::IDENTITY, TOL, true)
@@ -164,7 +169,7 @@ fn fillet_and_chamfer() {
     }
     // fillet along the top circle of a cylinder: torus with minor radius 1
     let cyl = k.make_cylinder(10.0, 5.0, 5.0, 3).unwrap();
-    let top = k.edges_where(&cyl, |e| e.points.iter().all(|q| (q.z - 10.0).abs() < 1e-6)).unwrap();
+    let top = edges_where(&mut k, &cyl, |e| e.points.iter().all(|q| (q.z - 10.0).abs() < 1e-6)).unwrap();
     let fc = k.fillet(&cyl, &top, 1.0, 4).unwrap();
     let b = body(&mut k, &fc);
     let q = DVec3::new(4.0 + (PI / 4.0).cos(), 0.0, 9.0 + (PI / 4.0).sin());
@@ -174,7 +179,7 @@ fn fillet_and_chamfer() {
     }
 
     // chamfer 2 mm on the top edges: chamfer face 45° to the top and to the sides
-    let topb = k.edges_where(&bx, |e| e.points.iter().all(|q| (q.z - 8.0).abs() < 1e-6)).unwrap();
+    let topb = edges_where(&mut k, &bx, |e| e.points.iter().all(|q| (q.z - 8.0).abs() < 1e-6)).unwrap();
     let ch = k.chamfer(&bx, &topb, 2.0, 5).unwrap();
     let b = body(&mut k, &ch);
     let cf = DVec3::new(19.0, 5.0, 7.0);
@@ -234,7 +239,7 @@ fn distances() {
     assert!(close(d.distance, want, 1e-7), "{} {want}", d.distance);
 }
 
-fn section_of(k: &mut SmlibKernel, s: &Shape, p: DVec3, n: DVec3) -> Section {
+fn section_of(k: &mut SolidcoreKernel, s: &Shape, p: DVec3, n: DVec3) -> Section {
     let plane = SectionPlane::new(p, n);
     let x = n.any_orthonormal_vector();
     let y = n.cross(x);

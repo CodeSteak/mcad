@@ -1,8 +1,6 @@
 //! `make_polyhedron` over solidcore (plan 1.7): one planar face per polygon as SMLib's
 //! `sc_make_polyhedron`, oriented outward whatever the input orientation.
 
-#![cfg(feature = "solidcore")]
-
 use cad_kernel::{Kernel, KernelError};
 use glam::DVec3;
 use kernel_solidcore::SolidcoreKernel;

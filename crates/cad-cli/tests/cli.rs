@@ -111,7 +111,7 @@ fn inspect_line() {
     let n = &v["nodes"][0];
     assert_eq!(n["label"], "fillet");
     assert_eq!(n["selected_edge_count"], 2);
-    // the edges themselves: polylines in world coordinates, as in `diff-kernels` and the scene
+    // the edges themselves: polylines in world coordinates, as in `diff-reference` and the scene
     let edges = n["selected_edges"].as_array().unwrap();
     assert_eq!(edges.len(), 2);
     assert!(edges.iter().all(|e| e.as_array().unwrap().len() >= 2 && e[0].as_array().unwrap().len() == 3), "{edges:?}");
@@ -247,159 +247,48 @@ fn text_of(args: &[&str]) -> String {
     text(args, 0)
 }
 
-/// Without the feature `solidcore`, `diff-kernels` is a usage error with a build hint.
-#[cfg(not(feature = "solidcore"))]
+/// solidcore, the kernel of every command: volumes of curved solids within 1e-6 of the exact
+/// ones, render, measure, STL and STEP from its B-rep (meshes by cad-tess, plan 2.8).
 #[test]
-fn diff_kernels_needs_the_feature() {
-    let v = json(&["diff-kernels", &data("plate.mcad")], 2);
-    assert!(v["error"].as_str().unwrap().contains("--features solidcore"), "{v}");
-}
-
-/// `--kernel` (global option) and `MCAD_KERNEL`: the option wins, unknown names are usage
-/// errors, the JSON reports the kernel used (`kernel_id`).
-#[test]
-fn kernel_option_and_env() {
-    let f = data("plate.mcad");
-    let v = json(&["check", &f], 0);
-    assert!(v["kernel_id"].as_str().unwrap().starts_with("smlib-"), "{v}");
-    let v = json(&["check", "--kernel", "smlib", &f], 0);
-    assert!(v["kernel_id"].as_str().unwrap().starts_with("smlib-"), "{v}");
-    // the option is global: also after the file
-    let v = json(&["eval", &f, "--kernel", "smlib"], 0);
-    assert!(v["kernel_id"].as_str().unwrap().starts_with("smlib-"), "{v}");
-    // the option wins over the variable
-    let out =
-        mcad().env("MCAD_KERNEL", "solidcore").args(["check", "--kernel", "smlib", &f, "--json"]).output().unwrap();
-    assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stdout));
-    let out = mcad().env("MCAD_KERNEL", "SMLib").args(["check", &f, "--json"]).output().unwrap();
-    assert_eq!(out.status.code(), Some(0));
-    // unknown names: clap for the option, our message for the variable
-    let out = mcad().args(["check", "--kernel", "occt", &f]).output().unwrap();
-    assert_eq!(out.status.code(), Some(2));
-    let out = mcad().env("MCAD_KERNEL", "occt").args(["check", &f, "--json"]).output().unwrap();
-    assert_eq!(out.status.code(), Some(2));
-    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert!(
-        v["error"].as_str().unwrap().contains("MCAD_KERNEL") && v["error"].as_str().unwrap().contains("occt"),
-        "{v}"
-    );
-    // no kernel was selected: the output names none
-    assert!(v.get("kernel_id").is_none(), "{v}");
-    // commands that evaluate nothing ignore the variable
-    let out = mcad().env("MCAD_KERNEL", "occt").args(["usage", "--list"]).output().unwrap();
-    assert_eq!(out.status.code(), Some(0));
-}
-
-/// Without the feature `solidcore`, `--kernel solidcore` and `MCAD_KERNEL=solidcore` are usage
-/// errors with a build hint.
-#[cfg(not(feature = "solidcore"))]
-#[test]
-fn kernel_solidcore_needs_the_feature() {
-    let f = data("plate.mcad");
-    for args in [vec!["check", "--kernel", "solidcore", &f], vec!["render", &f, "-o", "x.png", "--kernel", "solidcore"]]
-    {
-        let v = json(&args, 2);
-        assert!(v.get("kernel_id").is_none(), "{v}");
-        let e = v["error"].as_str().unwrap();
-        assert!(e.contains("--kernel solidcore") && e.contains("--features solidcore"), "{v}");
-    }
-    let out = mcad().env("MCAD_KERNEL", "solidcore").args(["eval", &f]).output().unwrap();
-    assert_eq!(out.status.code(), Some(2));
-    let e = String::from_utf8_lossy(&out.stderr);
-    assert!(e.contains("MCAD_KERNEL=solidcore") && e.contains("--features solidcore"), "{e}");
-}
-
-/// With the feature `solidcore`: the commands evaluate with solidcore, volumes as with SMLib
-/// (box exact, cylinder within the accuracy of SMLib's integration).
-#[cfg(feature = "solidcore")]
-#[test]
-fn kernel_solidcore_evaluates() {
+fn solidcore_evaluates() {
     let dir = tempfile::tempdir().unwrap();
     let f = dir.path().join("box.mcad");
     std::fs::write(&f, "cube([10, 20, 30]);\ntranslate([20, 0, 0]) cylinder(h = 10, r = 5);\n").unwrap();
     let f = f.display().to_string();
-    let v = json(&["eval", "--kernel", "solidcore", &f], 0);
+    let v = json(&["eval", &f], 0);
     assert!(v["kernel_id"].as_str().unwrap().starts_with("solidcore-"), "{v}");
-    assert_eq!(v["daemon"]["used"], false);
-    let volume = |extra: &[&str], env: Option<&str>| {
-        let mut c = mcad();
-        if let Some(k) = env {
-            c.env("MCAD_KERNEL", k);
-        }
-        let out = c.args(["measure", &f, "--volume", "--json"]).args(extra).output().unwrap();
-        assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stdout));
-        let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-        (v["volume"]["volume"].as_f64().unwrap(), v["kernel_id"].as_str().unwrap().to_string())
-    };
-    let (a, ka) = volume(&[], None);
-    let (b, kb) = volume(&["--kernel", "solidcore"], None);
-    let (c, kc) = volume(&[], Some("solidcore"));
-    assert!(ka.starts_with("smlib-") && kb.starts_with("solidcore-") && kc == kb, "{ka} {kb} {kc}");
+    let v = json(&["measure", &f, "--volume"], 0);
     let exact = 6000.0 + std::f64::consts::PI * 25.0 * 10.0;
-    assert_eq!(b, c);
-    assert!(
-        (a - exact).abs() < 2e-4 * exact && (b - exact).abs() < 1e-6 * exact,
-        "smlib {a}, solidcore {b}, exact {exact}"
-    );
-    // the cube alone agrees exactly
-    let out = mcad().args(["inspect", &f, "--line", "1", "--json", "--kernel", "solidcore"]).output().unwrap();
+    let vol = v["volume"]["volume"].as_f64().unwrap();
+    assert!((vol - exact).abs() < 1e-6 * exact, "{vol} exact {exact}");
+    // the cube alone is exact
+    let out = mcad().args(["inspect", &f, "--line", "1", "--json"]).output().unwrap();
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert!((v["nodes"][0]["volume"].as_f64().unwrap() - 6000.0).abs() < 1e-9, "{v}");
-    // tessellation by cad-tess on solidcore's B-rep (plan 2.8): render, exact measures, STL
     let png = dir.path().join("b.png").display().to_string();
-    let v = json(&["render", &f, "-o", &png, "--kernel", "solidcore"], 0);
-    assert!(v["kernel_id"].as_str().unwrap().starts_with("solidcore-"), "{v}");
-    let v = json(&["measure", &f, "--at", "[10,10,30]", "--kernel", "solidcore"], 0);
-    let w = json(&["measure", &f, "--at", "[10,10,30]"], 0);
-    assert_eq!(v["at"][0]["elements"][0]["reference"], w["at"][0]["elements"][0]["reference"], "{v} {w}");
+    json(&["render", &f, "-o", &png], 0);
+    let v = json(&["measure", &f, "--at", "[10,10,30]"], 0);
+    assert!(v["at"][0]["elements"].as_array().unwrap().iter().any(|e| e["kind"] == "face"), "{v}");
     let stl = dir.path().join("b.stl").display().to_string();
-    let v = json(&["export", &f, "-o", &stl, "--kernel", "solidcore"], 0);
+    let v = json(&["export", &f, "-o", &stl], 0);
     // the mesh encloses the exact volume within tol · area (0.01 mm)
     let (vol, area) = (v["volume"].as_f64().unwrap(), v["area"].as_f64().unwrap());
     assert!((vol - exact).abs() <= 0.01 * area && v["triangles"].as_u64().unwrap() > 0, "{v}");
     // a wrong reference is a usage error before the kernel is asked
-    json(&["measure", &f, "--at", "bogus", "--kernel", "solidcore"], 2);
-    json(&["measure", &f, "--distance", "corner@[0,0,0]", "[1,1,1]", "--kernel", "solidcore"], 2);
+    json(&["measure", &f, "--at", "bogus"], 2);
+    json(&["measure", &f, "--distance", "corner@[0,0,0]", "[1,1,1]"], 2);
+    // STEP from the neutral B-rep (plan 1.11)
     let step = dir.path().join("b.step").display().to_string();
-    // STEP from the neutral B-rep (plan 1.11): the same faces and volume as with SMLib
-    let v = json(&["export", &f, "-o", &step, "--kernel", "solidcore"], 0);
-    let w = json(&["export", &f, "-o", &step], 0);
+    let v = json(&["export", &f, "-o", &step], 0);
     assert_eq!(v["step"]["faces"], 9, "{v}");
-    assert_eq!(v["step"]["surfaces"], w["step"]["surfaces"], "{v} {w}");
-    assert_eq!(v["step"]["curves"], w["step"]["curves"], "{v} {w}");
     assert!((v["volume"].as_f64().unwrap() - exact).abs() < 1e-6 * exact, "{v}");
 }
 
-/// `diff-kernels --brep`: the neutral B-reps of both kernels agree (kinds, positions,
-/// orientation, tags) on primitives, transforms, Booleans and fillets.
-#[cfg(feature = "solidcore")]
+/// Contact kinds: a ball in its seat (concentric spheres) and a cone in a hole of nearly its
+/// radius touch over an area, a torus on a plate and a cube tilted by 30° on a plate's rim along
+/// a line.
 #[test]
-fn diff_kernels_brep() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut args = vec!["diff-kernels".to_string(), "--brep".into(), "--json".into()];
-    for f in [
-        "tests/models/openscad-compat/02_sphere_variants.scad",
-        "tests/models/openscad-compat/03_cylinder_variants.scad",
-        "tests/models/openscad-compat/04_cone_variants.scad",
-        "tests/models/openscad-compat/05_nested_booleans.scad",
-        "tests/models/spec/hole_plate.mcad",
-        "tests/models/spec/fillet_zones.mcad",
-    ] {
-        args.push(root.join(f).display().to_string());
-    }
-    let out = mcad().args(&args).output().unwrap();
-    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-    let b = &v["summary"]["brep"];
-    assert!(b["same"].as_u64().unwrap() > 50, "{b}");
-    assert!(b.get("differ").is_none() && b.get("unsupported").is_none(), "{b}");
-}
-
-/// Contact kinds with both kernels: a ball in its seat (concentric spheres) and a cone in a hole
-/// of nearly its radius touch over an area, a torus on a plate and a cube tilted by 30° on a
-/// plate's rim along a line.
-#[cfg(feature = "solidcore")]
-#[test]
-fn contact_kinds_with_both_kernels() {
+fn contact_kinds() {
     let dir = tempfile::tempdir().unwrap();
     for (src, want) in [
         ("assert_touches(tol = 0.01) { difference() { cube(20, center = true); sphere(5); } sphere(5); }\n", "face"),
@@ -416,22 +305,31 @@ fn contact_kinds_with_both_kernels() {
         let f = dir.path().join("touch.mcad");
         std::fs::write(&f, src).unwrap();
         let f = f.display().to_string();
-        for k in ["smlib", "solidcore"] {
-            let v = json(&["check", &f, "--kernel", k], 0);
-            let p = &v["asserts"][0]["pairs"][0];
-            assert_eq!(p["contact"], want, "{k}: {src}: {p}");
-        }
+        let v = json(&["check", &f], 0);
+        let p = &v["asserts"][0]["pairs"][0];
+        assert_eq!(p["contact"], want, "{src}: {p}");
     }
 }
 
-/// `diff-kernels --mesh` (plan 2.7): solidcore's meshes watertight, within the tolerance of the
-/// exact surfaces and as close to SMLib's as both are to the surfaces.
-#[cfg(feature = "solidcore")]
+fn reference() -> String {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/kernel-reference.json").display().to_string()
+}
+
+/// `diff-reference --mesh` (plan 2.7) on a few files of the reference: solidcore's meshes
+/// watertight and within the tolerance of the exact surfaces; files outside the reference and
+/// bad tolerances are usage errors.
 #[test]
-fn diff_kernels_mesh() {
+fn diff_reference_mesh() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut args =
-        vec!["diff-kernels".to_string(), "--mesh".into(), "--mesh-tol".into(), "0.02".into(), "--json".into()];
+    let r = reference();
+    let mut args = vec![
+        "diff-reference".to_string(),
+        r.clone(),
+        "--mesh".into(),
+        "--mesh-tol".into(),
+        "0.02".into(),
+        "--json".into(),
+    ];
     for f in [
         "tests/models/openscad-compat/02_sphere_variants.scad",
         "tests/models/openscad-compat/12_linear_extrude_twist.scad",
@@ -440,120 +338,34 @@ fn diff_kernels_mesh() {
         args.push(root.join(f).display().to_string());
     }
     let out = mcad().args(&args).output().unwrap();
+    assert_eq!(out.status.code(), Some(0), "{}", String::from_utf8_lossy(&out.stderr));
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(v["command"], "diff-reference");
+    assert!(v["reference_kernel"].as_str().unwrap().starts_with("smlib-"), "{}", v["reference_kernel"]);
+    assert_eq!(v["files"].as_array().unwrap().len(), 3);
+    assert_eq!(v["summary"]["same"], v["summary"]["nodes"], "{}", v["summary"]);
     let m = &v["summary"]["mesh"];
     assert_eq!(m["verdicts"]["ok"], 3, "{m}");
-    assert_eq!((m["files"].as_u64(), m["solidcore"]["watertight"].as_u64()), (Some(3), Some(3)), "{m}");
-    assert!(m["solidcore"]["chord_max"].as_f64().unwrap() <= 0.022, "{m}");
-    assert!(m["solidcore"]["volume_ratio_max"].as_f64().unwrap() <= 1.0, "{m}");
-    // SMLib's mesh misses the tolerance in triangle centres (its chord error here 0.24 mm on the
-    // twisted extrusion): the meshes are as far apart as both are from the surfaces
-    let (hs, sa, sb) =
-        (m["hausdorff_max"].as_f64(), m["smlib"]["surface_max"].as_f64(), m["solidcore"]["surface_max"].as_f64());
-    assert!(hs.unwrap() <= sa.unwrap() + sb.unwrap() + 1e-3, "{m}");
+    assert_eq!((m["files"].as_u64(), m["watertight"].as_u64()), (Some(3), Some(3)), "{m}");
+    assert!(m["chord_max"].as_f64().unwrap() <= 0.022, "{m}");
+    assert!(m["volume_ratio_max"].as_f64().unwrap() <= 1.0, "{m}");
     for f in v["files"].as_array().unwrap() {
-        let s = &f["mesh"]["solidcore"];
+        let s = &f["mesh"];
         assert!(s["triangles"].as_u64().unwrap() > 0 && s["error"].is_null(), "{f}");
     }
     // the tolerance must be positive
-    let out = mcad().args(["diff-kernels", "--mesh", "--mesh-tol", "0", &args[5]]).output().unwrap();
+    let out = mcad().args(["diff-reference", &r, "--mesh", "--mesh-tol", "0", &args[6]]).output().unwrap();
     assert_eq!(out.status.code(), Some(2));
-}
-
-/// `diff-kernels` over all examples (solidcore nearly complete at the end of phase 1); it must
-/// answer for every file and node without crashing (exit 1 = not all nodes the same). Only with
-/// the feature `solidcore` (`cargo test -p cad-cli --features solidcore`).
-#[cfg(feature = "solidcore")]
-#[test]
-fn diff_kernels_on_examples() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut files: Vec<String> = Vec::new();
-    // the same list as scripts/ci/solidcore.sh: model files of each directory, of an assembly
-    // folder only the main file named after the folder (the others are include/use)
-    for d in ["tests/models/openscad-compat", "tests/models/spec", "tests/models/everyday", "tests/everyday/bugs"] {
-        let mut v: Vec<PathBuf> = Vec::new();
-        for p in std::fs::read_dir(root.join(d)).unwrap().map(|e| e.unwrap().path()) {
-            if p.is_dir() {
-                let main = p.join(p.file_name().unwrap()).with_extension("mcad");
-                if main.is_file() {
-                    v.push(main);
-                }
-            } else if cad_eval::is_model_file(&p.to_string_lossy()) {
-                v.push(p);
-            }
-        }
-        v.sort();
-        files.extend(v.iter().map(|p| p.display().to_string()));
-    }
-    files.push(root.join("tests/models/project-housing/housing.mcad").display().to_string());
-    assert!(files.len() >= 100, "{}", files.len());
-    let mut args = vec!["diff-kernels", "--mesh"];
-    args.extend(files.iter().map(|s| s.as_str()));
-    let out = mcad().args(&args).arg("--json").output().unwrap();
-    let code = out.status.code().unwrap();
-    assert!(code == 0 || code == 1, "exit {code}: {}", String::from_utf8_lossy(&out.stderr));
-    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(v["command"], "diff-kernels");
-    assert_eq!(v["files"].as_array().unwrap().len(), files.len());
-    let s = &v["summary"];
-    assert!(s["nodes"].as_u64().unwrap() > 500);
-    for f in v["files"].as_array().unwrap() {
-        for n in f["nodes"].as_array().unwrap() {
-            let verdict = n["verdict"].as_str().unwrap();
-            assert!(["same", "unsupported", "blocked", "differ", "failed", "skipped"].contains(&verdict), "{verdict}");
-        }
-    }
-    if v["solidcore_available"] == true {
-        // solidcore @ f4f05b1 (as at bba8d87) over 101 files (2604 nodes): 2596 same, 3 unsupported (a
-        // variable fillet with several laws), 3 blocked, 2 differ, nothing fails. Curved solids
-        // are compared against their exact volume (solidcore is the more accurate one), blends
-        // and offsets within 8 % of the volume they changed: no node differs in its volume alone;
-        // the differences are a Boolean that loses faces and one that SMLib fails
-        assert!(s["unsupported"].as_u64().unwrap() <= 5, "{s}");
-        assert!(s["same"].as_u64().unwrap() >= 2585, "{s}");
-        assert!(s["differ"].as_u64().unwrap() <= 5, "{s}");
-        assert_eq!(s["failed"].as_u64().unwrap(), 0, "{s}");
-        // every rule is in use; curved 25 (blended results use rule blend), blend 70
-        let r = &s["volume_rules"];
-        assert!(r["exact"].as_u64().unwrap() >= 110 && r["operands"].as_u64().unwrap() >= 45, "{r}");
-        assert!(r["curved"].as_u64().unwrap() <= 40, "{r}");
-        assert!((40..=100).contains(&r["blend"].as_u64().unwrap_or(0)), "{r}");
-        // queries work on the shape's own body: few copies (2427 at f4f05b1 with the Boolean
-        // checks' retries)
-        let copies = s["solidcore_cost"]["copies"].as_u64().unwrap();
-        assert!(copies > 0 && copies < 3000, "{copies}");
-        // every result meshes watertight with solidcore (cad-tess, plan 2.8) within the
-        // tolerance of 0.05 of the exact surfaces; one file has no B-rep result (skipped)
-        let m = &s["mesh"];
-        assert_eq!(m["verdicts"]["ok"].as_u64().unwrap() + 1, files.len() as u64, "{m}");
-        assert_eq!(m["solidcore"]["watertight"], m["files"], "{m}");
-        assert!(m["solidcore"]["chord_max"].as_f64().unwrap() <= 0.051, "{m}");
-        assert!(m["solidcore"]["volume_ratio_max"].as_f64().unwrap() <= 1.0, "{m}");
-        for f in v["files"].as_array().unwrap() {
-            for n in f["nodes"].as_array().unwrap() {
-                if n["verdict"] == "differ" {
-                    let notes = n["notes"].as_array().unwrap();
-                    assert!(!notes.iter().all(|x| x.as_str().unwrap().starts_with("volume")), "volume only: {n}");
-                }
-                // a box is exact in both kernels
-                if n["verdict"] == "same" && n["label"] == "box" {
-                    assert_eq!(n["volume_check"]["rule"], "relative", "{n}");
-                }
-                // with an exact value, solidcore is the closer one (or within 1e-6)
-                if n["verdict"] == "same" && n["volume_check"]["rule"] == "exact" {
-                    let c = &n["volume_check"];
-                    let (a, b) = (c["smlib_error"].as_f64().unwrap(), c["solidcore_error"].as_f64().unwrap());
-                    assert!(b <= a.max(1e-6), "{n}");
-                }
-            }
-        }
-    }
-    // 2D nodes need no kernel and agree
-    assert!(s["same"].as_u64().unwrap() > 0, "{s}");
+    // a file the reference does not hold
+    let v = json(&["diff-reference", &r, &data("plate.mcad")], 2);
+    assert!(v["error"].as_str().unwrap().contains("plate.mcad"), "{v}");
+    // not a reference file
+    let v = json(&["diff-reference", &data("plate.mcad")], 2);
+    assert!(v["error"].as_str().unwrap().contains("plate.mcad"), "{v}");
 }
 
 /// The nodes of the corpus where solidcore does not give SMLib's result, as (file, line, label,
-/// verdict) of `diff-kernels --reference`: a variable radius with different laws on several
+/// verdict) of `diff-reference`: a variable radius with different laws on several
 /// edges (unsupported, and the nodes above it blocked), a union of three extrusions where
 /// solidcore loses faces (`sketch_cable_duct`, upstream), a Boolean SMLib fails and solidcore
 /// does not (`f11`, a gain).
@@ -568,17 +380,15 @@ const REFERENCE_EXCEPTIONS: &[(&str, u32, &str, &str)] = &[
     ("models/spec/variable_radius.mcad", 22, "translate", "blocked"),
 ];
 
-/// solidcore against the frozen SMLib results (`tests/kernel-reference.json`, the corpus of
-/// `diff_kernels_on_examples`): every node is the same by the rules of `diff-kernels` but the
+/// solidcore against the frozen SMLib results (`tests/kernel-reference.json`, 101 files of
+/// `tests/models` and `tests/everyday/bugs`): every node is the same by the rules of
+/// `diff-reference` (as `diff-kernels` compared both kernels before SMLib was removed) but the
 /// known exceptions ([`REFERENCE_EXCEPTIONS`]; a new difference fails, and so does an exception
 /// that went away, so the list stays exact), and every result meshes watertight within the
 /// tolerance.
-#[cfg(feature = "solidcore")]
 #[test]
 fn solidcore_against_the_reference() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let reference = root.join("tests/kernel-reference.json").display().to_string();
-    let out = mcad().args(["diff-kernels", "--reference", &reference, "--mesh", "--json"]).output().unwrap();
+    let out = mcad().args(["diff-reference", &reference(), "--mesh", "--json"]).output().unwrap();
     let code = out.status.code().unwrap();
     assert!(code == 0 || code == 1, "exit {code}: {}", String::from_utf8_lossy(&out.stderr));
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
@@ -624,9 +434,13 @@ fn solidcore_against_the_reference() {
     // surfaces; one file has no B-rep result (skipped)
     let m = &s["mesh"];
     assert_eq!(m["verdicts"]["ok"].as_u64().unwrap() + 1, files.len() as u64, "{m}");
-    assert_eq!(m["solidcore"]["watertight"], m["files"], "{m}");
-    assert!(m["solidcore"]["chord_max"].as_f64().unwrap() <= 0.051, "{m}");
-    assert!(m["solidcore"]["volume_ratio_max"].as_f64().unwrap() <= 1.0, "{m}");
+    assert_eq!(m["watertight"], m["files"], "{m}");
+    assert!(m["chord_max"].as_f64().unwrap() <= 0.051, "{m}");
+    assert!(m["volume_ratio_max"].as_f64().unwrap() <= 1.0, "{m}");
+    // queries work on the shape's own body: few copies (2427 at f4f05b1 with the Boolean
+    // checks' retries)
+    let copies = s["cost"]["copies"].as_u64().unwrap();
+    assert!(copies > 0 && copies < 3000, "{copies}");
 }
 
 #[test]

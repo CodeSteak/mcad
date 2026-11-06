@@ -13,4 +13,4 @@ png = "0.17"
 [dev-dependencies]
 cad-engine.workspace = true
 cad-ir.workspace = true
-kernel-smlib.workspace = true
+kernel-solidcore.workspace = true

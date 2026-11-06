@@ -129,5 +129,5 @@ Units mm and degrees, Z up.
 | `mcad usage [topic]` | this manual |
 
 All commands: `--json`. Model commands (`check` … `export`, not `set`): `-D name=value`
-(override parameters), `-m/--module NAME` (module context). Kernel: `--kernel smlib|solidcore` or
-`MCAD_KERNEL` (default SMLib; solidcore needs `--features solidcore`).
+(override parameters), `-m/--module NAME` (module context). Kernel: solidcore (Rust), meshes
+from mcad's tessellator `cad-tess`.

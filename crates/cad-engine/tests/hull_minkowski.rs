@@ -1,4 +1,4 @@
-//! `hull()` and `minkowski()` (Plan 21, phase A) through the engine with native SMLib: the exact
+//! `hull()` and `minkowski()` (Plan 21, phase A) through the engine with solidcore: the exact
 //! special cases against closed formulas, surfaces in STEP, face tags of the operation, and the
 //! warning with its reason where no special case applies.
 
@@ -322,20 +322,32 @@ fn minkowski_3d_extrusion_and_cylinder() {
 #[test]
 fn minkowski_3d_unsupported_warns_with_reason() {
     let _de = cad_i18n::scoped(cad_i18n::Lang::De);
-    let cases = [
-        ("minkowski() { cube(5); cube(3); rotate([0, 0, 45]) cube(2); }", "exakt nur"),
-        (
-            "minkowski() { polyhedron([[0, 0, 0], [10, 0, 0], [0, 10, 0], [0, 0, 10]], [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]]); sphere(1); }",
-            "not exact",
-        ),
-    ];
-    for (src, why) in cases {
-        let mut e = engine();
-        let ev = e.evaluate(tree(src));
-        let w = warnings(&ev);
-        assert!(w.iter().any(|m| m.starts_with("minkowski: ") && m.contains(why)), "{src}: {w:?}");
-        assert!(errors(&ev).is_empty(), "{src}: {:?}", errors(&ev));
-    }
+    let mut e = engine();
+    let ev = e.evaluate(tree("minkowski() { cube(5); cube(3); rotate([0, 0, 45]) cube(2); }"));
+    let w = warnings(&ev);
+    assert!(w.iter().any(|m| m.starts_with("minkowski: ") && m.contains("exakt nur")), "{w:?}");
+    assert!(errors(&ev).is_empty(), "{:?}", errors(&ev));
+}
+
+/// A body whose faces do not meet at right angles (a tetrahedron) plus a sphere: SMLib only
+/// approximated the corner blends there and warned "offset is not exact"; solidcore builds the
+/// offset at the distance (its boundary at 1 from the body within 1e-6, checked by the
+/// adapter). The volume by Steiner's formula V + S r + Σ L θ / 2 r² + 4/3 π r³ (θ the angle
+/// between the normals at an edge): 477.398; solidcore's integral over the blends is 5e-4 above.
+#[test]
+fn minkowski_tetrahedron_and_sphere_is_exact() {
+    let mut e = engine();
+    let ev = e.evaluate(tree(
+        "minkowski() { polyhedron([[0, 0, 0], [10, 0, 0], [0, 10, 0], [0, 0, 10]], [[0, 2, 1], [0, 1, 3], [0, 3, 2], [1, 2, 3]]); sphere(1); }",
+    ));
+    assert!(warnings(&ev).is_empty() && errors(&ev).is_empty(), "{:?} {:?}", warnings(&ev), errors(&ev));
+    let (s3, s2) = (3f64.sqrt(), 2f64.sqrt());
+    // faces: three right triangles of 50 and one equilateral of side 10√2; edges: three of 10
+    // at 90° between the outward normals, three of 10√2 at acos(-1/√3)
+    let area = 150.0 + s3 / 4.0 * 200.0;
+    let edges = 3.0 * 10.0 * PI / 2.0 + 3.0 * 10.0 * s2 * (-1.0 / s3).acos();
+    let exact = 1000.0 / 6.0 + area + edges / 2.0 + 4.0 / 3.0 * PI;
+    assert_approx("tetrahedron ⊕ sphere", root_volume(&mut e, &ev), exact, 1e-3);
 }
 
 #[test]

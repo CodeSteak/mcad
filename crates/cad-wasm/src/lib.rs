@@ -1,8 +1,7 @@
 //! wasm-bindgen entry for the browser worker (`web/src/engine/worker.ts`).
 //!
-//! [`Session`] wraps `cad_session::Session` over `kernel-smlib` (feature `wasm`): smlib.wasm
-//! must have been loaded with `initSmlib(createSmlib)` from the kernel's JS bridge before the
-//! first `new Session()`.
+//! [`Session`] wraps `cad_session::Session` over `kernel-solidcore` (pure Rust: the whole kernel
+//! is in this module, nothing else to load).
 //!
 //! * `post(msg)`: one `ToEngine` message (plain JS object) → array of `FromEngine` messages.
 //! * `step(budget_ms)`: kernel work for about `budget_ms` milliseconds (clock:
@@ -23,7 +22,7 @@ use std::rc::Rc;
 use cad_session::protocol::{FromEngine, MeshData, ToEngine};
 use cad_session::{PROTOCOL_VERSION, SessionOptions};
 use js_sys::{Array, Float32Array, Object, Reflect, Uint8Array, Uint32Array};
-use kernel_smlib::SmlibKernel;
+use kernel_solidcore::SolidcoreKernel;
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -38,7 +37,7 @@ extern "C" {
 
 #[wasm_bindgen]
 pub struct Session {
-    inner: cad_session::Session<SmlibKernel>,
+    inner: cad_session::Session<SolidcoreKernel>,
 }
 
 fn serializer() -> serde_wasm_bindgen::Serializer {
@@ -140,13 +139,13 @@ fn to_js(msgs: Vec<FromEngine>) -> Result<Array, JsValue> {
 
 #[wasm_bindgen]
 impl Session {
-    /// Creates a session. smlib.wasm must be initialised (`initSmlib`).
+    /// Creates a session.
     #[wasm_bindgen(constructor)]
     pub fn new() -> Session {
         let mut opts = SessionOptions::default();
         opts.eval.max_stack_bytes = MAX_STACK_BYTES;
         let clock: cad_session::SharedClock = Rc::new(performance_now);
-        Session { inner: cad_session::Session::new(SmlibKernel::new(), opts, clock) }
+        Session { inner: cad_session::Session::new(SolidcoreKernel::new(), opts, clock) }
     }
 
     /// Handles one `ToEngine` message; returns `FromEngine[]`.

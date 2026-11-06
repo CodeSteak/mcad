@@ -1,7 +1,7 @@
 //! Distances of a mesh (plan 2.7): to the exact surfaces of its B-rep (each triangle sampled and
 //! its sample points projected onto the surface of its face) and to another mesh (sample points
 //! to the nearest triangle, one direction; the Hausdorff distance is the larger of both).
-//! Usable for any mesh whose `tri_faces` are the B-rep's face ids (also SMLib's own).
+//! Usable for any mesh whose `tri_faces` are the B-rep's face ids.
 
 use std::collections::HashMap;
 

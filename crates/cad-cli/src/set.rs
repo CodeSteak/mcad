@@ -335,7 +335,7 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
         files.insert(f.path.clone(), texts.get(&f.id).cloned().unwrap_or_else(|| f.text.clone()));
     }
     let mut s = Session::new(
-        crate::kernel::selected().new_kernel(),
+        crate::kernel::new_kernel(),
         SessionOptions { auto_root_mesh: false, ..Default::default() },
         std_clock(),
     );

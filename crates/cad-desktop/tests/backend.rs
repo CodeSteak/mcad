@@ -1,5 +1,5 @@
 //! Backend of the desktop app without Tauri: files, watcher, git markers, wire format, engine
-//! supervisor with watchdog (engine in a thread, native SMLib).
+//! supervisor with watchdog (engine in a thread, solidcore).
 
 use std::path::Path;
 use std::sync::mpsc::{Receiver, channel};
@@ -12,7 +12,7 @@ use cad_desktop::git::{Base, GitBases, HunkKind, diff_hunks, head_base};
 use cad_desktop::watcher::{FileWatcher, WatchEvent};
 use cad_desktop::wire::{decode_batch, encode_batch};
 use cad_session::protocol::{FromEngine, MeshData, ToEngine};
-use kernel_smlib::SmlibKernel;
+use kernel_solidcore::SolidcoreKernel;
 use serde_json::Value as Json;
 
 // ---------------------------------------------------------------------------------- files
@@ -310,7 +310,7 @@ fn supervisor(watchdog_ms: u64) -> (Arc<Supervisor>, Got) {
         }
     });
     let s = Supervisor::start(
-        Arc::new(ThreadLauncher { make_kernel: SmlibKernel::new }),
+        Arc::new(ThreadLauncher { make_kernel: SolidcoreKernel::new }),
         sink,
         SupervisorOptions { watchdog: Duration::from_millis(watchdog_ms), startup: Duration::from_secs(30) },
     );

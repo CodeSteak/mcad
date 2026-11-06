@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use cad_engine::CountingKernel;
 use cad_session::protocol::{FromEngine, ToEngine};
 use cad_session::{Session, SessionOptions, std_clock};
-use kernel_smlib::SmlibKernel;
+use kernel_solidcore::SolidcoreKernel;
 
 fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
@@ -29,7 +29,7 @@ fn main() {
 
     let clock = std_clock();
     let c2 = clock.clone();
-    let kernel = CountingKernel::with_clock(SmlibKernel::new(), Box::new(move || c2()));
+    let kernel = CountingKernel::with_clock(SolidcoreKernel::new(), Box::new(move || c2()));
     let mut opts = SessionOptions::default();
     if mode == "nodraft" {
         opts.engine.drag_blend_budget_ms = None;

@@ -3,8 +3,6 @@
 //! halves add up to the exact volume of the transformed solid (a Boolean that misses the
 //! intersection returns the whole body or none).
 
-#![cfg(feature = "solidcore")]
-
 use cad_kernel::{BoolOp, Kernel, KernelError, Loop, PlacedLoop};
 use glam::{DMat4, DVec2, DVec3, DVec4};
 use kernel_solidcore::{Shape, SolidcoreKernel};

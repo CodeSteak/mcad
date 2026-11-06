@@ -1,7 +1,6 @@
 //! Fillets and chamfers over solidcore (plan 1.3): face and edge counts as SMLib's (checked with
-//! `mcad diff-kernels`), volumes against the exact value, tags of the new faces.
-
-#![cfg(feature = "solidcore")]
+//! `mcad diff-kernels` while SMLib was there, now frozen in `tests/kernel-reference.json`),
+//! volumes against the exact value, tags of the new faces.
 
 use cad_kernel::{BoolOp, EdgeInfo, Kernel, KernelError, Tag};
 use glam::DVec3;

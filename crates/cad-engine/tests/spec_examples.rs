@@ -1,4 +1,4 @@
-//! Source → `cad_eval` → engine (native SMLib) on the spec examples.
+//! Source → `cad_eval` → engine (solidcore) on the spec examples.
 
 mod common;
 

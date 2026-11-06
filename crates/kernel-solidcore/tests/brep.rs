@@ -1,8 +1,6 @@
 //! `Kernel::brep` over solidcore (plan 1.11): the neutral B-rep with the conventions of
 //! kernel-smlib (surface and curve kinds, orientation, loops, seams, tags).
 
-#![cfg(feature = "solidcore")]
-
 use cad_kernel::brep::{Body, Brep, Curve, Loop, Surface};
 use cad_kernel::{BoolOp, Kernel, Loop as Profile, PlacedLoop};
 use glam::{DMat4, DVec2, DVec3};

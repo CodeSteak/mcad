@@ -1,44 +1,44 @@
-//! `mcad diff-kernels <files…> [--json]`: evaluates each file with SMLib and with solidcore and
-//! compares every node (plan sections 2.3 and 8, acceptance test of the switch to solidcore).
+//! `mcad diff-reference REFERENCE [files…] [--json]`: evaluates each file of a reference file
+//! (`tests/kernel-reference.json`: the per-node results SMLib, the former reference kernel, gave
+//! before it was removed) with solidcore and compares every node against the frozen results
+//! (plan sections 2.3 and 8, phase 5.2).
 //!
 //! Files are evaluated like the other commands do (`include`/`use`/`import` relative to the file).
-//! Per node evaluated by SMLib: status, volume, number of faces and edges of its result (exactly
+//! Per node of the reference: status, volume, number of faces and edges of its result (exactly
 //! equal), and the edges selected by fillet/chamfer (count and points, 1e-6 of the size).
-//! Volumes ([`volume_check`]): relative 1e-6; else, where the exact volume is known
-//! (`diff/exact.rs`), solidcore at most as far from it as SMLib; else within the summed
-//! deviations of both kernels from the exact volumes of the operands; else, for curved results,
-//! 3e-5 (both integrate over curved faces, and SMLib fits skins and sweeps less closely: its
-//! sphere r 5 is 7.9e-7 below the exact volume, its twisted bar 1.5e-5 above); else, for a
-//! result with a fillet, chamfer, thicken, shell or offset in its history, 8 % of the volume
-//! those operations changed plus 4e-6 of the node (both fit the blend and offset surfaces; the
-//! `curved` rule does not apply there).
+//! Volumes ([`volume_check`]): relative 1e-6; else, where the exact volume is known (recorded
+//! with the reference from the parameters of the operations: primitives, plain extrusions,
+//! revolutions and their affine images), solidcore at most as far from it as the reference; else
+//! within the summed deviations of both from the exact volumes of the operands; else, for curved
+//! results, 3e-5 (both integrate over curved faces, and SMLib fitted skins and sweeps less
+//! closely: its sphere r 5 is 7.9e-7 below the exact volume, its twisted bar 1.5e-5 above); else,
+//! for a result with a fillet, chamfer, thicken, shell or offset in its history, 8 % of the
+//! volume those operations changed plus 4e-6 of the node (both fit the blend and offset
+//! surfaces; the `curved` rule does not apply there), where the B-reps' kinds agree only if
+//! their edge and face positions agree as well (the reference holds the B-rep of every blended
+//! node).
 //! Selected edges match in any order, by all their sample points (either direction; another
 //! parameterisation or start point within the chordal sag of the other's samples).
-//! "Coverage" counts per operation (node label) how many nodes solidcore evaluated like SMLib.
-//! Verdicts: `same`; `unsupported` (solidcore reports the operation, or a query of its result —
-//! faces, edges, volume —, as not supported, also in a warning such as "B-rep from the mesh failed");
-//! `blocked` (differs only because an input node is unsupported or failed); `differ`; `failed`
-//! (solidcore fails where SMLib succeeds); `skipped` (not evaluated by SMLib either).
+//! "Coverage" counts per operation (node label) how many nodes solidcore evaluated like the
+//! reference. Verdicts: `same`; `unsupported` (solidcore reports the operation, or a query of its
+//! result — faces, edges, volume —, as not supported, also in a warning such as "B-rep from the
+//! mesh failed", or a variable radius it cannot build); `blocked` (differs only because an input
+//! node is unsupported or failed); `differ`; `failed` (solidcore fails where the reference
+//! succeeds); `skipped` (not evaluated in the reference either).
 //!
-//! JSON: `{ schema_version, command: "diff-kernels", ok, exit_code, solidcore_rev,
-//!   files: [{ file, nodes: [NodeDiff], same, smlib_ok, solidcore_ok, unsupported, differ }],
-//!   coverage: { label: { nodes, same, unsupported, differ, failed } }, summary }`
+//! JSON: `{ schema_version, command: "diff-reference", ok, exit_code, reference, reference_kernel,
+//!   solidcore_rev, files: [{ file, nodes: [NodeDiff], same, unsupported, blocked, differ,
+//!   failed, cost, mesh }], coverage: { label: { nodes, same, unsupported, … } }, summary }`
 //! with `NodeDiff = { idx, label, line,
 //!   verdict: "same"|"unsupported"|"blocked"|"differ"|"failed"|"skipped",
-//!   smlib: Metrics, solidcore: Metrics, volume_check: VolumeCheck|null, notes: [string] }`,
-//! `Metrics = { status, volume, exact_volume, curved, faces, edges, selected_edges, message, blend_change }`,
-//! `VolumeCheck = { rule: "relative"|"exact"|"operands"|"curved"|"blend"|"none", tolerance, difference,
-//!   exact, smlib_error, solidcore_error }`; `summary.volume_rules`: same nodes per rule.
-//! Cost per file (`smlib_cost`, `solidcore_cost`) and in the summary (sums; heap: maximum; plus
-//! `eval_ratio`, `query_ratio` solidcore / SMLib): `{ eval_ms, query_ms, heap_bytes, copies,
-//! copy_ms }` (plan 0.5).
-//! With `--brep` also the neutral B-reps of the same nodes (`diff/brep.rs`): `NodeDiff.brep_check
-//! = { verdict: "same"|"differ"|"unsupported", notes }`, `Metrics.brep` (counts per kind,
-//! conventions not met), `summary.brep`: nodes per verdict. The B-rep check does not change the
-//! node's verdict.
-//! With `--mesh` also the meshes of each file's result from both kernels (`diff/mesh.rs`, plan
-//! 2.7): `files[].mesh = { tol, verdict: "ok"|"differ"|"failed"|"skipped", smlib, solidcore,
-//! to_smlib, from_smlib, hausdorff, notes }`, `summary.mesh`; they do not change the exit code.
+//!   reference: Metrics, solidcore: Metrics, volume_check: VolumeCheck|null, notes: [string] }`,
+//! `Metrics = { status, volume, exact_volume, curved, faces, edges, selected_edges, message,
+//! blend_change, brep }`, `VolumeCheck = { rule: "relative"|"exact"|"operands"|"curved"|"blend"|"none",
+//! tolerance, difference, exact, reference_error, solidcore_error }`; `summary.volume_rules`:
+//! same nodes per rule. Cost per file and in the summary (sums; heap: maximum): `{ eval_ms,
+//! query_ms, heap_bytes, copies, copy_ms }` (plan 0.5).
+//! With `--mesh` also the mesh of each file's result (`diff/mesh.rs`, plan 2.7): `files[].mesh`,
+//! `summary.mesh`; they do not change the exit code.
 //! Exit code 0 if every node of every file is the same, 1 otherwise, 2 usage error.
 
 use std::collections::BTreeMap;
@@ -48,7 +48,6 @@ use cad_i18n::{tr, trs};
 use cad_kernel::Kernel;
 use cad_session::protocol::{self as p, ToEngine};
 use cad_session::{PROTOCOL_VERSION, Session, SessionOptions, std_clock};
-use kernel_smlib::SmlibKernel;
 use kernel_solidcore::SolidcoreKernel;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -56,17 +55,14 @@ use serde_json::json;
 use crate::{Fail, Outcome};
 
 mod brep;
-mod exact;
 mod mesh;
-
-use exact::Exact;
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Metrics {
     pub status: String,
     pub volume: Option<f64>,
     /// Exact volume from the parameters (primitives, plain extrusions, revolutions and their
-    /// affine images; `exact.rs`), `None` where unknown.
+    /// affine images), `None` where unknown; recorded with the reference.
     pub exact_volume: Option<f64>,
     /// Some edge of the result is not straight (so some face is curved and its volume integral
     /// is approximate).
@@ -76,36 +72,30 @@ pub struct Metrics {
     pub selected_edges: Vec<Vec<[f64; 3]>>,
     pub message: Option<String>,
     /// The volume the blends and offsets in the history of the node's shapes changed (rule
-    /// `blend`; NaN where a volume failed).
+    /// `blend`; NaN where a volume failed); recorded with the reference.
     pub blend_change: f64,
-    /// The neutral B-rep of the node's parts (`Kernel::brep`), `None` without parts or for a mesh.
+    /// The neutral B-rep of the node's parts (`Kernel::brep`) where the reference has one (the
+    /// blended nodes).
     pub brep: Option<brep::Summary>,
     #[serde(skip)]
     pub unsupported: bool,
 }
 
-/// The comparison of the neutral B-reps of a `same` node (`diff/brep.rs`).
-#[derive(Debug, Clone, Serialize)]
-pub struct BrepCheck {
-    /// `same`, `differ` or `unsupported` (solidcore's `Kernel::brep` is not supported there).
-    pub verdict: &'static str,
-    pub notes: Vec<String>,
-}
-
 /// How the volumes of a node were compared (see [`volume_check`]).
 #[derive(Debug, Clone, Serialize)]
 pub struct VolumeCheck {
-    /// `relative`: |smlib − solidcore| ≤ 1e-6 |smlib|; `exact`: solidcore at most as far from
-    /// the exact volume as SMLib (or within 1e-6 of it); `operands`: the difference is within the
-    /// summed deviations of both kernels from the exact volumes of the operands; `curved`: curved
-    /// faces, within 3e-5 (of SMLib and of an exact value); `none`: none of them.
+    /// `relative`: |reference − solidcore| ≤ 1e-6 |reference|; `exact`: solidcore at most as
+    /// far from the exact volume as the reference (or within 1e-6 of it); `operands`: the
+    /// difference is within the summed deviations of both from the exact volumes of the
+    /// operands; `curved`: curved faces, within 3e-5 (of the reference and of an exact value);
+    /// `blend`: within the share of the volume the blends changed; `none`: none of them.
     pub rule: &'static str,
     /// Allowed difference (absolute, mm³) of the rule that applied, or of `relative`.
     pub tolerance: f64,
     pub difference: f64,
     pub exact: Option<f64>,
     /// |volume − exact| / exact.
-    pub smlib_error: Option<f64>,
+    pub reference_error: Option<f64>,
     pub solidcore_error: Option<f64>,
 }
 
@@ -115,19 +105,17 @@ pub struct NodeDiff {
     pub label: String,
     pub line: u32,
     pub verdict: &'static str,
-    pub smlib: Metrics,
+    pub reference: Metrics,
     pub solidcore: Metrics,
-    /// Present when both kernels gave a volume.
+    /// Present when both gave a volume.
     pub volume_check: Option<VolumeCheck>,
-    /// Present for `same` nodes whose B-reps both kernels were asked for.
-    pub brep_check: Option<BrepCheck>,
     pub notes: Vec<String>,
 }
 
-/// The frozen per-node results of the reference kernel (`tests/kernel-reference.json`,
-/// written by `--write-reference`, read by `--reference`): the [`Metrics`] `diff-kernels`
-/// compares, per node of each file, file paths relative to the reference file's directory.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// The frozen per-node results of the reference kernel (`tests/kernel-reference.json`): the
+/// [`Metrics`] `diff-reference` compares, per node of each file, file paths relative to the
+/// reference file's directory, one node per line.
+#[derive(Debug, Clone, Deserialize)]
 pub struct Reference {
     pub schema: u32,
     /// Kernel the results come from.
@@ -135,86 +123,55 @@ pub struct Reference {
     pub files: Vec<RefFile>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RefFile {
     pub file: String,
     pub nodes: Vec<RefNode>,
 }
 
 /// One node: its place in the tree and the reference kernel's metrics.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RefNode {
     pub idx: u32,
     pub label: String,
     pub line: u32,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub children: Vec<u32>,
     pub status: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub volume: Option<f64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub exact_volume: Option<f64>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default)]
     pub curved: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub faces: Option<usize>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub edges: Option<usize>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[serde(default)]
     pub selected_edges: Vec<Vec<[f64; 3]>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub message: Option<String>,
     /// [`Metrics::blend_change`]; `null` for NaN (a volume of the history failed).
-    #[serde(default, skip_serializing_if = "is_zero", with = "nan_as_null")]
+    #[serde(default, deserialize_with = "nan_as_null")]
     pub blend_change: f64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub brep: Option<RefBrep>,
 }
 
 /// A B-rep summary with what [`brep::compare`] matches.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RefBrep {
     #[serde(flatten)]
     pub summary: brep::Summary,
     pub shape: brep::Shape,
 }
 
-fn is_zero(x: &f64) -> bool {
-    *x == 0.0
-}
-
-mod nan_as_null {
-    use serde::{Deserialize, Deserializer, Serializer};
-
-    pub fn serialize<S: Serializer>(x: &f64, s: S) -> Result<S::Ok, S::Error> {
-        if x.is_nan() { s.serialize_none() } else { s.serialize_f64(*x) }
-    }
-
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
-        Ok(Option::<f64>::deserialize(d)?.unwrap_or(f64::NAN))
-    }
+fn nan_as_null<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
+    Ok(Option::<f64>::deserialize(d)?.unwrap_or(f64::NAN))
 }
 
 impl RefNode {
-    fn new(n: &NodeRow, m: &Metrics) -> RefNode {
-        RefNode {
-            idx: n.0,
-            label: n.1.clone(),
-            line: n.2,
-            children: n.3.clone(),
-            status: m.status.clone(),
-            volume: m.volume,
-            exact_volume: m.exact_volume,
-            curved: m.curved,
-            faces: m.faces,
-            edges: m.edges,
-            selected_edges: m.selected_edges.clone(),
-            message: m.message.clone(),
-            blend_change: m.blend_change,
-            brep: m.brep.clone().map(|b| RefBrep { shape: b.shape.clone(), summary: b }),
-        }
-    }
-
     fn row(&self) -> NodeRow {
         (self.idx, self.label.clone(), self.line, self.children.clone())
     }
@@ -236,26 +193,6 @@ impl RefNode {
     }
 }
 
-/// The reference as JSON text: one line per node (readable diffs of the checked-in file).
-fn reference_text(r: &Reference) -> String {
-    let mut out = format!(
-        "{{\n  \"schema\": {},\n  \"kernel_id\": {},\n  \"files\": [",
-        r.schema,
-        serde_json::to_string(&r.kernel_id).unwrap_or_default()
-    );
-    for (i, f) in r.files.iter().enumerate() {
-        out.push_str(if i == 0 { "\n" } else { ",\n" });
-        out.push_str(&format!("    {{\"file\": {}, \"nodes\": [", serde_json::to_string(&f.file).unwrap_or_default()));
-        for (j, n) in f.nodes.iter().enumerate() {
-            out.push_str(if j == 0 { "\n      " } else { ",\n      " });
-            out.push_str(&serde_json::to_string(n).unwrap_or_default());
-        }
-        out.push_str("\n    ]}");
-    }
-    out.push_str("\n  ]\n}\n");
-    out
-}
-
 /// `file` relative to `dir` (both made absolute; `/` as separator).
 fn relative_to(file: &Path, dir: &Path) -> Result<String, Fail> {
     let abs = |p: &Path| std::fs::canonicalize(p).map_err(|e| Fail::Usage(format!("{}: {e}", p.display())));
@@ -274,8 +211,18 @@ fn relative_to(file: &Path, dir: &Path) -> Result<String, Fail> {
 /// Reads a reference file.
 pub fn read_reference(path: &Path) -> Result<Reference, Fail> {
     let text = std::fs::read_to_string(path).map_err(|e| Fail::Usage(format!("{}: {e}", path.display())))?;
-    serde_json::from_str(&text)
-        .map_err(|e| Fail::Usage(tr!("{}: keine Referenzdatei: {e}", "{}: not a reference file: {e}", path.display())))
+    let r: Reference = serde_json::from_str(&text).map_err(|e| {
+        Fail::Usage(tr!("{}: keine Referenzdatei: {e}", "{}: not a reference file: {e}", path.display()))
+    })?;
+    if r.schema != 1 {
+        return Err(Fail::Usage(tr!(
+            "{}: Referenzdatei mit Schema {}, erwartet 1",
+            "{}: reference file of schema {}, expected 1",
+            path.display(),
+            r.schema
+        )));
+    }
+    Ok(r)
 }
 
 /// A kernel message naming an operation the kernel cannot do (verdict `unsupported`): the
@@ -300,8 +247,8 @@ const REL_VOLUME_CURVED: f64 = 3e-5;
 /// Results with a fillet, chamfer, thicken, shell or offset at or below the node: both kernels
 /// fit the blend and offset surfaces, SMLib less closely (`pillow_block`: its chamfers of 19 edges
 /// remove 39.15 mm³, by Pappus 41.40, solidcore 41.39: 5.4 % of the change). The tolerance is
-/// relative to the volume those operations changed (`Exact`'s third field, summed over the
-/// node's history), not to the node; plus [`REL_VOLUME_BLEND_REST`] of a curved node for the
+/// relative to the volume those operations changed (recorded with the reference, summed over
+/// the node's history), not to the node; plus [`REL_VOLUME_BLEND_REST`] of a curved node for the
 /// integration of the rest. A wrong radius changes the volume by less than that (a cube with
 /// `$fillet = 1` at × 1.05): where both B-reps have the same kinds, their edge and face positions
 /// must agree as well (they do to 1e-12, OCCT: both kernels build the same blend surfaces; × 1.02
@@ -331,12 +278,12 @@ struct Run {
 struct Cost {
     /// Evaluation of the file (language and kernel operations), ms.
     eval_ms: f64,
-    /// The queries of `diff-kernels` itself (faces, edges, volume of every node), ms.
+    /// The queries of `diff-reference` itself (faces, edges, volume of every node), ms.
     query_ms: f64,
-    /// Heap held after the evaluation and the queries (glibc `mallinfo2`, both kernels allocate
-    /// with malloc), bytes; `null` elsewhere.
+    /// Heap held after the evaluation and the queries (glibc `mallinfo2`), bytes; `null`
+    /// elsewhere.
     heap_bytes: Option<usize>,
-    /// B-rep copies of the kernel (solidcore: `SmApiBrepCopy`) and their time in ms.
+    /// B-rep copies of the kernel (`SmApiBrepCopy`) and their time in ms.
     copies: u64,
     copy_ms: f64,
 }
@@ -373,23 +320,13 @@ fn straight(pts: &[glam::DVec3]) -> bool {
 /// (index, label, line, children) per scene node.
 type NodeRow = (u32, String, u32, Vec<u32>);
 
-/// Evaluates `text` with `kernel` and measures every node; `copies` reads the copy statistics
-/// of the kernel.
-fn evaluate<K: Kernel + 'static>(
-    kernel: K,
-    text: &str,
-    file: &Path,
-    copies: fn(&K) -> (u64, std::time::Duration),
-    with_brep: bool,
-    mesh_tol: Option<f64>,
-) -> Run
-where
-    K::Shape: 'static,
-{
+/// Evaluates `text` with solidcore and measures every node; the B-rep of the node at position
+/// `i` of the scene where `with_brep[i]` (the blended nodes of the reference).
+fn evaluate(text: &str, file: &Path, with_brep: &[bool], mesh_tol: Option<f64>) -> Run {
     let heap0 = crate::daemon::heap_in_use();
     let mut opts = SessionOptions { auto_root_mesh: false, ..Default::default() };
     opts.eval.max_stack_bytes = 192 << 20;
-    let mut s = Session::new(Exact(kernel), opts, std_clock());
+    let mut s = Session::new(SolidcoreKernel::new(), opts, std_clock());
     // `include`/`use` relative to the file, as in the other commands
     let root = file.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let main = file.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();
@@ -403,7 +340,7 @@ where
     let scene = d.scene.clone();
     let mut nodes = Vec::new();
     let mut out = Vec::new();
-    for n in &scene.nodes {
+    for (i, n) in scene.nodes.iter().enumerate() {
         nodes.push((n.idx, n.label.clone(), n.range.line, n.children.clone()));
         let status = match n.status {
             p::NodeStatus::Ok => "ok",
@@ -435,10 +372,6 @@ where
         if matches!(n.status, p::NodeStatus::Ok | p::NodeStatus::Warning) {
             let parts: Vec<_> = s.done().map(|d| d.ev.parts(n.idx).to_vec()).unwrap_or_default();
             let meshes = s.done().is_some_and(|d| !d.ev.meshes(n.idx).is_empty());
-            if !meshes && !parts.is_empty() {
-                m.exact_volume = parts.iter().map(|p| p.shape.1).sum();
-                m.blend_change = parts.iter().map(|p| p.shape.2).sum();
-            }
             let k = s.engine_mut().kernel_mut();
             let mut faces = 0;
             let mut edges = 0;
@@ -462,9 +395,8 @@ where
                 m.faces = Some(faces);
                 m.edges = Some(edges);
             }
-            // blended nodes always: their verdict compares the positions (see `volume_check`)
-            let blended = m.blend_change.is_finite() && m.blend_change > 0.0;
-            if (with_brep || blended) && !meshes && !parts.is_empty() {
+            // blended nodes: their verdict compares the positions (see `blend_tolerance`)
+            if with_brep.get(i).copied().unwrap_or(false) && !meshes && !parts.is_empty() {
                 let mut sum = brep::Summary::default();
                 for part in &parts {
                     match k.brep(&part.shape) {
@@ -495,7 +427,7 @@ where
         out.push(m);
     }
     cost.query_ms = ms(t1.elapsed());
-    let (n, t) = copies(&s.engine_mut().kernel_mut().0);
+    let (n, t) = s.engine_mut().kernel_mut().copy_stats();
     (cost.copies, cost.copy_ms) = (n, ms(t));
     cost.heap_bytes = crate::daemon::heap_in_use().zip(heap0).map(|(a, b)| a.saturating_sub(b));
     let mesh = mesh_tol.map(|tol| {
@@ -505,12 +437,12 @@ where
             .zip(root)
             .map(|(d, r)| d.ev.parts(r).iter().map(|p| (p.shape.clone(), p.solid)).collect())
             .unwrap_or_default();
-        mesh::mesh_parts(s.engine_mut().kernel_mut(), root, &shapes, tol)
+        mesh::mesh_parts(s.engine_mut().kernel_mut(), &shapes, tol)
     });
     Run { nodes, metrics: out, cost, mesh }
 }
 
-/// Compares the volumes `x` (SMLib) and `y` (solidcore). `budget`: summed deviation of both
+/// Compares the volumes `x` (reference) and `y` (solidcore). `budget`: summed deviation of both
 /// kernels from the exact volumes of the operands (see `command`). The rules in order:
 /// `relative` (1e-6), `exact` (solidcore at most as far from the exact volume as SMLib, at least
 /// 1e-6), `operands` (no exact value, difference ≤ budget, at most 1e-4 of the volume, + 1e-6),
@@ -528,13 +460,13 @@ fn volume_check(x: f64, y: f64, a: &Metrics, budget: Option<f64>, blend: Option<
         tolerance: rel,
         difference,
         exact,
-        smlib_error: err(x),
+        reference_error: err(x),
         solidcore_error: err(y),
     };
     if difference <= rel {
         return c;
     }
-    if let (Some(e), Some(ea), Some(eb)) = (exact, c.smlib_error, c.solidcore_error) {
+    if let (Some(e), Some(ea), Some(eb)) = (exact, c.reference_error, c.solidcore_error) {
         let allowed = ea.max(REL_VOLUME);
         if eb <= allowed {
             c.rule = "exact";
@@ -702,18 +634,11 @@ fn same_polyline(x: &[[f64; 3]], y: &[[f64; 3]], tol: f64) -> bool {
     near(&x, &y) && near(&y, &x)
 }
 
-/// Sums of the mesh comparisons (`--mesh`) over the files.
+/// Sums of the mesh checks (`--mesh`) over the files.
 #[derive(Debug, Clone, Default, Serialize)]
 struct MeshTotals {
     files: usize,
     verdicts: BTreeMap<&'static str, usize>,
-    smlib: MeshSums,
-    solidcore: MeshSums,
-    hausdorff_max: f64,
-}
-
-#[derive(Debug, Clone, Default, Serialize)]
-struct MeshSums {
     /// Files whose solid parts all meshed watertight.
     watertight: usize,
     triangles: usize,
@@ -725,8 +650,14 @@ struct MeshSums {
     volume_ratio_max: f64,
 }
 
-impl MeshSums {
-    fn add(&mut self, m: &mesh::Metrics) {
+impl MeshTotals {
+    fn add(&mut self, c: &mesh::Check) {
+        *self.verdicts.entry(c.verdict).or_insert(0) += 1;
+        if c.verdict == "skipped" {
+            return;
+        }
+        let m = &c.metrics;
+        self.files += 1;
         self.watertight += usize::from(m.watertight && m.error.is_none());
         self.triangles += m.triangles;
         self.ms += m.ms;
@@ -734,19 +665,6 @@ impl MeshSums {
         self.surface_max = self.surface_max.max(m.surface.map_or(0.0, |s| s.max));
         self.chord_max = self.chord_max.max(m.chord.map_or(0.0, |s| s.max));
         self.volume_ratio_max = self.volume_ratio_max.max(m.volume_ratio.unwrap_or(0.0));
-    }
-}
-
-impl MeshTotals {
-    fn add(&mut self, c: &mesh::Comparison) {
-        *self.verdicts.entry(c.verdict).or_insert(0) += 1;
-        if c.verdict == "skipped" {
-            return;
-        }
-        self.files += 1;
-        self.smlib.add(&c.smlib);
-        self.solidcore.add(&c.solidcore);
-        self.hausdorff_max = self.hausdorff_max.max(c.hausdorff.unwrap_or(0.0));
     }
 }
 
@@ -784,7 +702,7 @@ fn compare_metrics(
         return "failed";
     }
     if a.status == "error" {
-        notes.push("SMLib fails, solidcore not".into());
+        notes.push("the reference fails, solidcore not".into());
         return "differ";
     }
     match (a.volume, b.volume) {
@@ -824,54 +742,13 @@ fn compare_metrics(
     if notes.is_empty() { "same" } else { "differ" }
 }
 
-/// Smallest `--mesh-tol` (as `measure --mesh-tol`): SMLib's tessellator ran out of memory at 1e-9.
+/// Smallest `--mesh-tol` (as `measure --mesh-tol`).
 pub const MIN_MESH_TOL: f64 = 1e-4;
-/// Largest `--mesh-tol`: coarser meshes are a few triangles per face, their comparison says
-/// nothing about the tessellators.
+/// Largest `--mesh-tol`: coarser meshes are a few triangles per face, their check says
+/// nothing about the tessellator.
 pub const MAX_MESH_TOL: f64 = 10.0;
 
-/// Where the results solidcore is compared against come from.
-pub enum Against<'a> {
-    /// SMLib, evaluated here; with a path the results are also written there as a reference.
-    Smlib { write: Option<&'a Path> },
-    /// A reference file ([`Reference`]).
-    Reference(&'a Path),
-}
-
-pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>, against: Against) -> Result<Outcome, Fail> {
-    // with a reference: its files (or those of `files`, which it must hold), its nodes
-    let reference = match &against {
-        Against::Reference(path) => Some((*path, read_reference(path)?)),
-        Against::Smlib { .. } => None,
-    };
-    let ref_dir =
-        |path: &Path| path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new(".")).to_path_buf();
-    let mut chosen: Vec<(PathBuf, Option<&RefFile>)> = Vec::new();
-    match &reference {
-        Some((path, r)) => {
-            let dir = ref_dir(path);
-            if files.is_empty() {
-                chosen.extend(r.files.iter().map(|f| (dir.join(&f.file), Some(f))));
-            }
-            for f in files {
-                let rel = relative_to(f, &dir)?;
-                let Some(rf) = r.files.iter().find(|x| x.file == rel) else {
-                    return Err(Fail::Usage(tr!(
-                        "{}: nicht in der Referenzdatei {}",
-                        "{}: not in the reference file {}",
-                        f.display(),
-                        path.display()
-                    )));
-                };
-                chosen.push((f.clone(), Some(rf)));
-            }
-        }
-        None => chosen.extend(files.iter().map(|f| (f.clone(), None))),
-    }
-    if chosen.is_empty() {
-        return Err(Fail::Usage(tr!("keine Dateien", "no files")));
-    }
-    let mut written: Vec<RefFile> = Vec::new();
+pub fn command(reference: &Path, files: &[PathBuf], mesh_tol: Option<f64>) -> Result<Outcome, Fail> {
     if let Some(t) = mesh_tol {
         if !t.is_finite() {
             return Err(Fail::Usage(tr!(
@@ -881,20 +758,40 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>, against: Ag
         }
         if t < MIN_MESH_TOL {
             return Err(Fail::Usage(tr!(
-                "--mesh-tol {t} ist kleiner als {MIN_MESH_TOL} mm (feiner rechnet SMLibs \
-                 Tessellator Minuten und belegt Gigabytes)",
-                "--mesh-tol {t} is below {MIN_MESH_TOL} mm (finer, SMLib's tessellator \
-                 takes minutes and gigabytes)"
+                "--mesh-tol {t} ist kleiner als {MIN_MESH_TOL} mm",
+                "--mesh-tol {t} is below {MIN_MESH_TOL} mm"
             )));
         }
         if t > MAX_MESH_TOL {
             return Err(Fail::Usage(tr!(
                 "--mesh-tol {t} ist größer als {MAX_MESH_TOL} mm (gröbere Netze sind wenige Dreiecke je \
-                 Fläche, ihr Vergleich sagt nichts)",
+                 Fläche, ihre Prüfung sagt nichts)",
                 "--mesh-tol {t} is above {MAX_MESH_TOL} mm (coarser meshes are a few triangles per \
-                 face, their comparison says nothing)"
+                 face, their check says nothing)"
             )));
         }
+    }
+    let r = read_reference(reference)?;
+    let dir = reference.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new(".")).to_path_buf();
+    // the reference's files, or those of `files` (which it must hold)
+    let mut chosen: Vec<(PathBuf, &RefFile)> = Vec::new();
+    if files.is_empty() {
+        chosen.extend(r.files.iter().map(|f| (dir.join(&f.file), f)));
+    }
+    for f in files {
+        let rel = relative_to(f, &dir)?;
+        let Some(rf) = r.files.iter().find(|x| x.file == rel) else {
+            return Err(Fail::Usage(tr!(
+                "{}: nicht in der Referenzdatei {}",
+                "{}: not in the reference file {}",
+                f.display(),
+                reference.display()
+            )));
+        };
+        chosen.push((f.clone(), rf));
+    }
+    if chosen.is_empty() {
+        return Err(Fail::Usage(tr!("keine Dateien in {}", "no files in {}", reference.display())));
     }
     let mut out_files = Vec::new();
     let mut coverage: BTreeMap<String, BTreeMap<&'static str, usize>> = BTreeMap::new();
@@ -903,42 +800,19 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>, against: Ag
     let mut totals: BTreeMap<&'static str, usize> = BTreeMap::new();
     // same nodes per volume rule
     let mut rules: BTreeMap<&'static str, usize> = BTreeMap::new();
-    // B-rep comparison of the same nodes, per verdict
-    let mut brep_counts: BTreeMap<&'static str, usize> = BTreeMap::new();
-    let (mut cost_a, mut cost_b) = (Cost::default(), Cost::default());
+    let mut cost = Cost::default();
     let mut meshes = MeshTotals::default();
-    if !SolidcoreKernel::available() {
-        return Err(Fail::Usage(tr!(
-            "diff-kernels braucht solidcore: mcad mit `--features solidcore` bauen \
-             (cargo build -p cad-cli --features solidcore)",
-            "diff-kernels needs solidcore: build mcad with `--features solidcore` \
-             (cargo build -p cad-cli --features solidcore)"
-        )));
-    }
     for (f, rf) in &chosen {
         let src = std::fs::read_to_string(f).map_err(|e| Fail::Usage(format!("{}: {e}", f.display())))?;
-        let ra = match rf {
-            Some(rf) => Run {
-                nodes: rf.nodes.iter().map(RefNode::row).collect(),
-                metrics: rf.nodes.iter().map(RefNode::metrics).collect(),
-                cost: Cost::default(),
-                mesh: None,
-            },
-            None => evaluate(SmlibKernel::new(), &src, f, |_| (0, std::time::Duration::ZERO), brep, mesh_tol),
-        };
-        if let Against::Smlib { write: Some(path) } = &against {
-            let nodes = ra.nodes.iter().zip(&ra.metrics).map(|(n, m)| RefNode::new(n, m)).collect();
-            written.push(RefFile { file: relative_to(f, &ref_dir(path))?, nodes });
-        }
-        let solid = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            evaluate(SolidcoreKernel::new(), &src, f, SolidcoreKernel::copy_stats, brep, mesh_tol)
-        }));
+        let nodes: Vec<NodeRow> = rf.nodes.iter().map(RefNode::row).collect();
+        let a: Vec<Metrics> = rf.nodes.iter().map(RefNode::metrics).collect();
+        let with_brep: Vec<bool> = a.iter().map(|m| m.brep.is_some()).collect();
+        let solid = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| evaluate(&src, f, &with_brep, mesh_tol)));
         let rb = solid.ok();
-        let (nodes, a) = (&ra.nodes, &ra.metrics);
         let mut diffs = Vec::new();
         let mut counts: BTreeMap<&'static str, usize> = BTreeMap::new();
         let pos: BTreeMap<u32, usize> = nodes.iter().enumerate().map(|(i, n)| (n.0, i)).collect();
-        // solidcore's metrics per node of the SMLib tree
+        // solidcore's metrics per node of the reference's tree
         let aborted: Vec<bool> = (0..nodes.len())
             .map(|i| {
                 !rb.as_ref().is_some_and(|r| r.nodes.get(i).is_some_and(|n| n.0 == nodes[i].0 && n.1 == nodes[i].1))
@@ -950,8 +824,8 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>, against: Ag
                 _ => Metrics { status: "error".into(), ..Default::default() },
             })
             .collect();
-        let budget = budgets(nodes, &pos, a, &b);
-        let blend = blends(a);
+        let budget = budgets(&nodes, &pos, &a, &b);
+        let blend = blends(&a);
         // own verdict per node, then "blocked" where a descendant is unsupported or failed
         let mut own = Vec::with_capacity(nodes.len());
         for i in 0..nodes.len() {
@@ -980,7 +854,7 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>, against: Ag
         let blocked: Vec<bool> = (0..nodes.len())
             .map(|i| {
                 let scope = if nodes[i].1 == "zone" { parent.get(&nodes[i].0).copied().unwrap_or(i) } else { i };
-                matches!(own[i].0, "differ" | "failed") && broken(scope, nodes, &pos, &own)
+                matches!(own[i].0, "differ" | "failed") && broken(scope, &nodes, &pos, &own)
             })
             .collect();
         for (i, ((idx, label, line, _), (verdict, mb, notes, volume_check))) in nodes.iter().zip(own).enumerate() {
@@ -989,23 +863,6 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>, against: Ag
             } else {
                 (verdict, notes)
             };
-            let brep_check = match (&a[i].brep, &mb.brep) {
-                (Some(x), Some(y)) if brep && verdict == "same" && x.error.is_none() => {
-                    Some(if let Some(e) = &y.error {
-                        BrepCheck {
-                            verdict: if y.unsupported { "unsupported" } else { "differ" },
-                            notes: vec![e.clone()],
-                        }
-                    } else {
-                        let n = brep::compare(x, y).notes;
-                        BrepCheck { verdict: if n.is_empty() { "same" } else { "differ" }, notes: n }
-                    })
-                }
-                _ => None,
-            };
-            if let Some(c) = &brep_check {
-                *brep_counts.entry(c.verdict).or_insert(0) += 1;
-            }
             if verdict != "skipped" {
                 *counts.entry(verdict).or_insert(0) += 1;
                 *totals.entry(verdict).or_insert(0) += 1;
@@ -1026,10 +883,9 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>, against: Ag
                 label: label.clone(),
                 line: *line,
                 verdict,
-                smlib: a[i].clone(),
+                reference: a[i].clone(),
                 solidcore: mb,
                 volume_check,
-                brep_check,
                 notes,
             });
         }
@@ -1054,23 +910,9 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>, against: Ag
                 d.notes.join("; ")
             ));
         }
-        for d in diffs.iter() {
-            if let Some(c) = d.brep_check.as_ref().filter(|c| c.verdict == "differ") {
-                text.push_str(&tr!(
-                    "  Zeile {} {} [B-Rep]: {}\n",
-                    "  line {} {} [B-rep]: {}\n",
-                    d.line,
-                    d.label,
-                    c.notes.join("; ")
-                ));
-            }
-        }
-        let mesh_check = mesh_tol.map(|tol| match (&ra.mesh, rb.as_ref().and_then(|r| r.mesh.as_ref())) {
-            (a, Some(b)) if a.is_some() || rf.is_some() => {
-                let same = diffs.iter().any(|d| Some(d.idx) == b.root && d.verdict == "same");
-                mesh::compare(a.as_ref(), b, tol, same)
-            }
-            _ => mesh::Comparison {
+        let mesh_check = mesh_tol.map(|tol| match rb.as_ref().and_then(|r| r.mesh.as_ref()) {
+            Some(b) => mesh::check(b, tol),
+            None => mesh::Check {
                 tol,
                 verdict: "failed",
                 notes: vec!["solidcore: evaluation aborted".into()],
@@ -1084,14 +926,12 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>, against: Ag
             }
         }
         let cb = rb.as_ref().map(|r| r.cost);
-        cost_a.add(&ra.cost);
         if let Some(c) = &cb {
-            cost_b.add(c);
+            cost.add(c);
         }
         out_files.push(json!({
             "file": name,
-            "smlib_cost": ra.cost,
-            "solidcore_cost": cb,
+            "cost": cb,
             "nodes": diffs,
             "mesh": mesh_check,
             "same": counts.get("same").unwrap_or(&0),
@@ -1138,70 +978,42 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>, against: Ag
         g("curved"),
         g("blend")
     ));
-    let gb = |k: &str| brep_counts.get(k).copied().unwrap_or(0);
-    if brep {
-        text.push_str(&tr!(
-            "B-Rep der gleichen Knoten: gleich {}, abweichend {}, unsupported {}\n",
-            "B-rep of the same nodes: same {}, differ {}, unsupported {}\n",
-            gb("same"),
-            gb("differ"),
-            gb("unsupported")
-        ));
-    }
-    let ratio = |a: f64, b: f64| if a > 0.0 { b / a } else { 0.0 };
     if let Some(tol) = mesh_tol {
         let m = &meshes;
         let g = |k: &str| m.verdicts.get(k).copied().unwrap_or(0);
         text.push_str(&tr!(
-            "Netze (tol {}): ok {}, abweichend {}, gescheitert {}; wasserdicht SMLib {}, solidcore {} von {}; \
-             Sehnenfehler max SMLib {} mm, solidcore {} mm; Hausdorff max {} mm; Dreiecke SMLib {}, \
-             solidcore {}; Zeit SMLib {} ms, solidcore {} ms (davon B-Rep {} ms)\n",
-            "Meshes (tol {}): ok {}, differ {}, failed {}; watertight SMLib {}, solidcore {} of {}; \
-             chord error max SMLib {} mm, solidcore {} mm; Hausdorff max {} mm; triangles SMLib {}, \
-             solidcore {}; time SMLib {} ms, solidcore {} ms (B-rep {} ms of it)\n",
+            "Netze (tol {}): ok {}, abweichend {}, gescheitert {}; wasserdicht {} von {}; Sehnenfehler max {} mm; \
+             Dreiecke {}; Zeit {} ms (davon B-Rep {} ms)\n",
+            "Meshes (tol {}): ok {}, differ {}, failed {}; watertight {} of {}; chord error max {} mm; \
+             triangles {}; time {} ms (B-rep {} ms of it)\n",
             crate::num(tol),
             g("ok"),
             g("differ"),
             g("failed"),
-            m.smlib.watertight,
-            m.solidcore.watertight,
+            m.watertight,
             m.files,
-            crate::num(m.smlib.chord_max),
-            crate::num(m.solidcore.chord_max),
-            crate::num(m.hausdorff_max),
-            m.smlib.triangles,
-            m.solidcore.triangles,
-            crate::num(m.smlib.ms),
-            crate::num(m.solidcore.ms),
-            crate::num(m.solidcore.brep_ms)
+            crate::num(m.chord_max),
+            m.triangles,
+            crate::num(m.ms),
+            crate::num(m.brep_ms)
         ));
     }
     text.push_str(&tr!(
-        "Zeit: SMLib Auswertung {} ms, Abfragen {} ms; solidcore Auswertung {} ms ({}×), Abfragen {} ms ({}×), \
-         {} Kopien in {} ms\n",
-        "Time: SMLib evaluation {} ms, queries {} ms; solidcore evaluation {} ms ({}×), queries {} ms ({}×), \
-         {} copies in {} ms\n",
-        crate::num(cost_a.eval_ms),
-        crate::num(cost_a.query_ms),
-        crate::num(cost_b.eval_ms),
-        crate::num(ratio(cost_a.eval_ms, cost_b.eval_ms)),
-        crate::num(cost_b.query_ms),
-        crate::num(ratio(cost_a.query_ms, cost_b.query_ms)),
-        cost_b.copies,
-        crate::num(cost_b.copy_ms)
+        "Zeit: Auswertung {} ms, Abfragen {} ms, {} Kopien in {} ms\n",
+        "Time: evaluation {} ms, queries {} ms, {} copies in {} ms\n",
+        crate::num(cost.eval_ms),
+        crate::num(cost.query_ms),
+        cost.copies,
+        crate::num(cost.copy_ms)
     ));
-    if let Against::Smlib { write: Some(path) } = &against {
-        let r = Reference { schema: 1, kernel_id: SmlibKernel::new().id().to_string(), files: written };
-        crate::host::write_file(path, reference_text(&r).as_bytes())
-            .map_err(|e| Fail::Usage(format!("{}: {e}", path.display())))?;
-    }
     let j = json!({
         "schema_version": PROTOCOL_VERSION,
-        "command": "diff-kernels",
+        "command": "diff-reference",
         "ok": all_same,
         "exit_code": 0,
+        "reference": reference.display().to_string(),
+        "reference_kernel": r.kernel_id,
         "solidcore_rev": kernel_solidcore::SOLIDCORE_REV,
-        "solidcore_available": SolidcoreKernel::available(),
         "files": out_files,
         "coverage": coverage,
         "summary": { "nodes": n, "same": totals.get("same").unwrap_or(&0),
@@ -1210,11 +1022,8 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>, against: Ag
                      "differ": totals.get("differ").unwrap_or(&0),
                      "failed": totals.get("failed").unwrap_or(&0),
                      "volume_rules": rules,
-                     "brep": brep_counts,
                      "mesh": mesh_tol.map(|_| &meshes),
-                     "smlib_cost": cost_a, "solidcore_cost": cost_b,
-                     "eval_ratio": ratio(cost_a.eval_ms, cost_b.eval_ms),
-                     "query_ratio": ratio(cost_a.query_ms, cost_b.query_ms) },
+                     "cost": cost },
     });
     Ok(Outcome { json: j, text, errors: !all_same, exit: None })
 }

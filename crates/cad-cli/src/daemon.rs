@@ -14,13 +14,12 @@
 //! data part), `status`, `stop`. Nothing else is processed; `run` only accepts the commands
 //! above (parsed with the CLI's own parser).
 //!
-//! **Execution.** One worker thread (256 MiB stack, like the CLI) owns one SMLib engine
-//! (`Engine<AnyKernel>`) for all projects (content keys do not depend on the project) and runs
+//! **Execution.** One worker thread (256 MiB stack, like the CLI) owns one engine
+//! (`Engine<CliKernel>`, solidcore) for all projects (content keys do not depend on the project) and runs
 //! the requests one after another with the CLI's command code (`host.rs`: sessions on the
 //! shared engine, stdin from the client, file writes recorded for the client); before each
 //! request it changes to the client's working directory, so paths and messages are the same
-//! as in the CLI. Only SMLib: a command with the kernel solidcore (`--kernel`, `MCAD_KERNEL`)
-//! runs without the daemon (`client.rs`), and `run` refuses `--kernel solidcore`.
+//! as in the CLI.
 //!
 //! **Limits.** Cache: `cache_mb` (512) MiB estimated for node results + meshes and
 //! `cache_entries` entries (LRU of the engine); `max_projects` (8): the keys touched per
@@ -51,7 +50,7 @@ use serde_json::{Value as Json, json};
 
 use crate::config::DaemonConfig;
 use crate::host::{self, Ctx, FileOp};
-use crate::kernel::{AnyKernel, Choice};
+use crate::kernel::CliKernel;
 use crate::{Cli, DaemonInfo, Output};
 
 /// Version of the requests between client and daemon (besides the frame version).
@@ -714,10 +713,10 @@ pub fn heap_in_use() -> Option<usize> {
     None
 }
 
-fn new_engine(cfg: &DaemonConfig) -> Engine<AnyKernel> {
+fn new_engine(cfg: &DaemonConfig) -> Engine<CliKernel> {
     let config =
         EngineConfig { cache_bytes: cfg.cache_bytes(), cache_entries: cfg.cache_entries, ..Default::default() };
-    let mut e = Engine::with_config(Choice::Smlib.new_kernel(), config);
+    let mut e = Engine::with_config(crate::kernel::new_kernel(), config);
     // Cost of a node result: what its evaluation kept on the heap (at least the estimate).
     if heap_in_use().is_some() {
         e.set_heap_probe(Some(Box::new(|| heap_in_use().unwrap_or(0))));
@@ -878,11 +877,11 @@ fn finish_job(_s: &Shared, mut st: std::sync::MutexGuard<'_, State>) {
 
 type Executed = (Reply, Ctx, Option<String>, bool);
 /// A request [`execute`] refused: the reason and the engine, unused.
-type Refused = Box<(String, Engine<AnyKernel>)>;
+type Refused = Box<(String, Engine<CliKernel>)>;
 
 /// Runs one request with the CLI's command code (in the client's working directory and
 /// language). A refused request hands the engine back with the reason (its cache stays).
-fn execute(job: &Job, engine: Engine<AnyKernel>) -> Result<Executed, Refused> {
+fn execute(job: &Job, engine: Engine<CliKernel>) -> Result<Executed, Refused> {
     let _lang = cad_i18n::scoped(job.lang);
     let cli = match Cli::try_parse_from(std::iter::once("mcad".to_string()).chain(job.argv.iter().cloned())) {
         Ok(c) => c,
@@ -893,9 +892,6 @@ fn execute(job: &Job, engine: Engine<AnyKernel>) -> Result<Executed, Refused> {
         let msg =
             tr!("`mcad {}` läuft nicht im Daemon", "`mcad {}` does not run in the daemon", crate::command_name(&cmd));
         return Err(Box::new((msg, engine)));
-    }
-    if cli.kernel.as_deref().and_then(Choice::parse).is_some_and(|k| k != Choice::Smlib) {
-        return Err(Box::new((tr!("der Daemon rechnet nur mit SMLib", "the daemon computes with SMLib only"), engine)));
     }
     if let Err(e) = std::env::set_current_dir(&job.cwd) {
         return Err(Box::new((format!("{}: {e}", job.cwd.display()), engine)));

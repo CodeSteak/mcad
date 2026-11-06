@@ -1,7 +1,7 @@
 //! What solidcore can do today: every kernel operation either works or reports
 //! `Unsupported("solidcore: …")` naming what blocks it; nothing panics. With `--nocapture`
-//! the test prints the answer of every operation (`cargo test -p kernel-solidcore --features
-//! solidcore -- --nocapture`).
+//! the test prints the answer of every operation (`cargo test -p kernel-solidcore --test coverage --
+//! --nocapture`).
 
 use cad_kernel::{BoolOp, Kernel, KernelError, Loop, PlacedLoop};
 use glam::{DMat4, DVec2, DVec3};
@@ -24,7 +24,6 @@ fn answers<T>(name: &str, r: &Result<T, KernelError>) -> bool {
     }
 }
 
-#[cfg(feature = "solidcore")]
 fn close(a: DVec3, b: DVec3) -> bool {
     (a - b).abs().max_element() < 1e-6
 }
@@ -73,8 +72,7 @@ fn every_operation_answers_without_panicking() {
     }
     let shear =
         DMat4::from_cols_array(&[1.0, 0.0, 0.0, 0.0, 0.5, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0]);
-    // without the feature even the box is unsupported
-    let Ok(b) = bx else { return };
+    let b = bx.unwrap();
     for (n, ok) in [
         ("transform (identity)", answers("transform (identity)", &k.transform(&b, &DMat4::IDENTITY))),
         ("transform (shear)", answers("transform (shear)", &k.transform(&b, &shear))),
@@ -95,7 +93,6 @@ fn every_operation_answers_without_panicking() {
 }
 
 /// What already works agrees with the SMLib results for the same input.
-#[cfg(feature = "solidcore")]
 #[test]
 fn box_queries_and_transform() {
     use cad_kernel::Class;
@@ -144,7 +141,6 @@ fn box_queries_and_transform() {
 /// Queries work on the shape's own body (no copy per call): faces and edges keep their ids and
 /// order across other queries, the shape answers after it was an operand, and the volume is
 /// cached.
-#[cfg(feature = "solidcore")]
 #[test]
 fn queries_in_place_are_stable() {
     let mut k = SolidcoreKernel::new();
@@ -180,7 +176,6 @@ fn queries_in_place_are_stable() {
 /// curve points and surfaces follow the matrix): bounds and centroid move, the volume scales by
 /// |det|. The mass properties of a transform follow from its source's; with the source gone
 /// they are integrated, with the same result.
-#[cfg(feature = "solidcore")]
 #[test]
 fn transforms_of_curved_solids() {
     use std::f64::consts::PI;

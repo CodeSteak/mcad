@@ -17,7 +17,7 @@ blake3.workspace = true
 i_triangle = "0.50"
 
 [dev-dependencies]
-kernel-smlib.workspace = true
+kernel-solidcore.workspace = true
 cad-eval.workspace = true
 cad-font = { path = "../cad-font" }
 cad-outline = { path = "../cad-outline" }

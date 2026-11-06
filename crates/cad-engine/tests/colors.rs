@@ -1,4 +1,4 @@
-//! Colour regions, filament slots and multi-colour exports (Plan 16) with the native SMLib
+//! Colour regions, filament slots and multi-colour exports (Plan 16) with the solidcore
 //! kernel: source → `cad_eval` → engine.
 
 mod common;

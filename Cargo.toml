@@ -20,7 +20,6 @@ cad-eval = { path = "crates/cad-eval" }
 cad-ir = { path = "crates/cad-ir" }
 cad-kernel = { path = "crates/cad-kernel" }
 kernel-mock = { path = "crates/kernel-mock" }
-kernel-smlib = { path = "crates/kernel-smlib" }
 cad-engine = { path = "crates/cad-engine" }
 cad-render = { path = "crates/cad-render" }
 cad-session = { path = "crates/cad-session" }
@@ -28,7 +27,7 @@ cad-measure = { path = "crates/cad-measure" }
 cad-step = { path = "crates/cad-step" }
 cad-i18n = { path = "crates/cad-i18n" }
 cad-tess = { path = "crates/cad-tess" }
-kernel-solidcore = { path = "crates/kernel-solidcore", default-features = false }
+kernel-solidcore = { path = "crates/kernel-solidcore" }
 
 [profile.release]
 opt-level = 3

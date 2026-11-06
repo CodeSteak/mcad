@@ -1,5 +1,5 @@
 //! Findings from the everyday models (tests/models/everyday, Testbericht 13): the minimal examples
-//! of tests/everyday/bugs through `cad_eval` and the engine with native SMLib. Each test checks
+//! of tests/everyday/bugs through `cad_eval` and the engine with solidcore. Each test checks
 //! the corrected result, or the clear error where no correct result exists.
 
 mod common;

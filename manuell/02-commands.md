@@ -14,7 +14,7 @@
 | `mcad ui status\|show\|screenshot` | running desktop UI (`mcad usage ui`) |
 | `mcad daemon status\|stop\|serve` | cache process (`mcad usage daemon`) |
 | `mcad usage [TOPIC…] [--all\|--list]` | this manual |
-| `mcad diff-kernels FILE… [--brep] [--mesh [--mesh-tol MM]] [--reference REF.json \| --write-reference REF.json]` | SMLib ↔ solidcore (development, `--features solidcore`); `--reference` compares solidcore against SMLib's frozen results in a reference file instead of evaluating SMLib (`tests/kernel-reference.json`; FILEs optional, default all files of the reference, others are a usage error; `--mesh` then judges solidcore's mesh alone, `--brep` covers only the blended nodes, whose B-reps the reference holds), `--write-reference` writes SMLib's results as such a file (paths relative to its directory); `--brep` also compares the neutral B-reps of the same nodes (kinds, positions, orientation, tags; about twice as long); `--mesh` meshes each file's result with both kernels (tolerance `--mesh-tol`, default 0.05, 0.0001 to 10): watertight, volume against the exact one, chord error against the exact surfaces, Hausdorff distance between the meshes, triangles, time; verdict per file `ok`/`differ`/`failed`/`skipped` (no B-rep part) judged on solidcore's mesh (watertight and outwards, volume, chord error, vertices where solidcore's B-rep puts them, distance to SMLib's mesh beyond SMLib's own local distance to its surfaces where the bodies are the same), not on the exit code |
+| `mcad diff-reference REF.json [FILE…] [--mesh [--mesh-tol MM]]` | development: solidcore against the frozen per-node results of the former kernel SMLib (`tests/kernel-reference.json`, 101 files): status, volume (rules relative, exact, operands, curved, blend), faces, edges, selected edges; verdict per node `same`/`unsupported`/`blocked`/`differ`/`failed`/`skipped`, coverage per operation. FILEs: a subset of the reference's files (default all; another file → exit 2). `--mesh` meshes each file's result (tolerance `--mesh-tol`, default 0.05, 0.0001 to 10): watertight, volume against the exact one, chord error against the exact surfaces, vertices where the B-rep puts them, triangles, time; verdict per file `ok`/`differ`/`failed`/`skipped` (no B-rep part), not in the exit code. Exit 0 all nodes the same, 1 otherwise |
 
 ## Common options
 
@@ -25,18 +25,10 @@
 | `-D NAME=VALUE` | with a module context: override a parameter of that module; without: override a top-level assignment of the main file (like `openscad -D`: the last assignment of the name takes the value, variables computed from it follow; `$fn` etc. need no assignment; unknown name → warning). JSON value (`-D w=60`, `-D p=[1,2]`), else string. Repeatable, the last `-D` of a name wins |
 | `--no-daemon`, `--verbose` | compute locally / daemon info on stderr |
 | `--lang en\|de` | language of the text output and JSON display texts; default `MCAD_LANG`, else locale (`LC_ALL`, `LC_MESSAGES`, `LANG`): `de*` → German, else English. Other value → exit 2 |
-| `--kernel smlib\|solidcore` | kernel of `check` … `export`, `watch`, `set`; default `MCAD_KERNEL`, else `smlib`. `solidcore` needs a build with `--features solidcore` (else exit 2), runs without the daemon, and reports what it cannot do yet as a kernel error (`not supported by this kernel: solidcore: …`, exit 3). Meshes (`render`, `measure`, STL/3MF, asserts) come from mcad's own tessellator `cad-tess` on solidcore's B-rep: other triangles than SMLib's, same tolerance; a face it cannot mesh is a kernel error, never a mesh with holes. JSON: `kernel_id`. `diff-kernels` always uses both |
 
 ```sh
 mcad measure teil.mcad -D w=40 --volume all   # teil.mcad: w = 20; d = w / 2; h = 8; cube([w, d, h]);
 #   Volume all: 6400 mm³                      (40 × 20 × 8: d follows w)
-```
-
-```sh
-mcad check box.mcad --kernel solidcore
-#   box.mcad: 0 errors, 0 warnings     (without --features solidcore: exit 2 "--kernel solidcore needs solidcore: build mcad with `--features solidcore` …")
-mcad export box.mcad -o box.stl --kernel solidcore
-#   box.stl: 1356 triangles, 67884 bytes, volume 17476.4001 mm³     (SMLib: 1904 triangles, 17476.4008 mm³)
 ```
 
 ```sh

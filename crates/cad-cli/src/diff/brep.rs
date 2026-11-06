@@ -1,6 +1,7 @@
-//! The neutral B-reps of both kernels (`Kernel::brep`, plan 1.11), compared per node:
-//! [`Summary`] counts what one kernel's B-rep holds and checks its conventions
-//! ([`Brep::convention_problems`]); [`compare`] matches the B-reps of SMLib and solidcore.
+//! The neutral B-reps (`Kernel::brep`, plan 1.11) of the reference and of solidcore, compared
+//! per blended node: [`Summary`] counts what a B-rep holds and checks its conventions
+//! ([`Brep::convention_problems`]); [`compare`] matches the reference's B-rep (frozen in the
+//! reference file with its [`Shape`]) and solidcore's.
 //!
 //! * counts: vertices, loops, vertex loops, solids, voids, sheets, faces per surface kind and
 //!   edges per curve kind (`kind()` of the neutral types) must agree;
@@ -16,7 +17,7 @@
 //!   must agree.
 //!
 //! [`Comparison::positions_agree`]: counts, edge and face positions and orientation agree (the
-//! tags and kinds may differ); `diff-kernels` uses it in its verdict on blended nodes.
+//! tags and kinds may differ); `diff-reference` uses it in its verdict on blended nodes.
 
 use std::collections::BTreeMap;
 
@@ -24,7 +25,7 @@ use cad_kernel::brep::{Brep, Loop, Surface};
 use glam::DVec3;
 use serde::{Deserialize, Serialize};
 
-/// Counts and conventions of one kernel's B-rep of a node (all parts together).
+/// Counts and conventions of the B-rep of a node (all parts together).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Summary {
@@ -142,7 +143,7 @@ pub struct Comparison {
     pub positions_agree: bool,
 }
 
-/// Compares the B-reps of SMLib (`a`) and solidcore (`b`).
+/// Compares the B-reps of the reference (`a`) and solidcore (`b`).
 pub fn compare(a: &Summary, b: &Summary) -> Comparison {
     let mut notes = Vec::new();
     let mut counts_agree = true;
