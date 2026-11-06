@@ -1,0 +1,35 @@
+  @page { size: A4; margin: 15mm 13mm 16mm 13mm; }
+  :root { --text: #1f2328; --muted: #5d646e; --border: #d5d9df; --ok: #1a7f37; --bad: #c9302c; --head: #f2f4f7; }
+  * { box-sizing: border-box; }
+  body { font: 9.6pt/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); margin: 0; background: #fff; }
+  main { max-width: 184mm; margin: 0 auto; padding: 0 0 4mm; }
+  h1 { font-size: 18pt; margin: 0 0 2mm; }
+  h2 { font-size: 13pt; margin: 7mm 0 3mm; border-bottom: 1px solid var(--border); padding-bottom: 1mm; break-after: avoid; }
+  h3 { font-size: 10.5pt; margin: 4mm 0 1.5mm; break-after: avoid; }
+  p { margin: 1.5mm 0; }
+  .meta { color: var(--muted); margin-bottom: 4mm; }
+  .summary { display: flex; flex-wrap: wrap; gap: 2.5mm; margin: 3mm 0; }
+  .summary div { flex: 1 1 40mm; border: 1px solid var(--border); border-radius: 2mm; padding: 2mm; font-size: 8.4pt; }
+  .summary b { display: block; font-size: 12pt; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0; font-size: 8.2pt; }
+  th, td { border: 1px solid var(--border); padding: 1.1mm 1.8mm; text-align: left; vertical-align: top; }
+  th { background: var(--head); font-weight: 600; }
+  td.n, th.n { text-align: right; } td.n { white-space: nowrap; }
+  code, pre { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 7.6pt; }
+  pre { margin: 0 0 1.5mm; padding: 1.4mm 2mm; background: #f6f8fa; border: 1px solid var(--border); border-radius: 1mm; white-space: pre-wrap; word-break: break-word; }
+  pre.term { background: #16191d; color: #e6e9ed; border-color: #32373e; }
+  thead { display: table-header-group; }
+  .small { font-size: 7.6pt; color: var(--muted); }
+  ul { margin: 1mm 0 2mm 5mm; padding: 0; }
+  li { margin: 0.5mm 0; }
+  tr, figure, pre { break-inside: avoid; }
+  .ok { color: var(--ok); font-weight: 600; } .bad { color: var(--bad); font-weight: 600; }
+  figure { margin: 0 0 2mm; }
+  figure img { max-width: 100%; max-height: 110mm; border: 1px solid var(--border); border-radius: 1mm; background: #fff; display: block; }
+  figcaption { font-size: 7.8pt; color: var(--muted); margin-top: 0.6mm; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 3mm; align-items: start; }
+  .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2.5mm; align-items: start; }
+  .four { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2mm; align-items: start; }
+  .four figcaption, .three figcaption { font-size: 7pt; }
+  tr.sum td { background: #f6f8fa; font-weight: 600; }
+  svg { display: block; margin: 2mm 0 0; }
