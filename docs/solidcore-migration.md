@@ -1,8 +1,71 @@
 # Migration to solidcore (plan 2.3, M8)
 
-As of: 2026-10-25 · solidcore `main` @ `d4940b6` (2026-10-25 18:31 UTC, tangency-labs/solidcore, Apache-2.0); the operation tables below come from the run with `c9de85d`, the figures for `d4940b6` are in the comparison over the examples.
+As of: 2026-11-06 · solidcore `main` @ `513e6fc` (2026-11-06 04:28 UTC, tangency-labs/solidcore, Apache-2.0). The sections from "Public entry points" to "What is missing" describe the state up to `d4940b6` (2026-10-25) and are kept as history.
 
-## Status
+## Status 2026-11-06 (pin `513e6fc`)
+
+- **Pin** `d4940b6` → `513e6fc` (6796 commits). `kernel-solidcore` needed two changes:
+  `Brep` is no longer `Clone` (copies via `topology::brep::p3::brep_copy`),
+  `face_internal_point` takes `&mut Brep` (runs on a copy). Kernel ID `solidcore-513e6fc`.
+- **`diff-kernels`** over the 64 examples: **1186 of 1438 nodes same** (before 516), 82
+  unsupported, 110 blocked, 60 differ, 0 failed.
+  - 36 of the 60 "differ" are curved solids (sphere, cone, revolution) with the same faces and
+    edges and a volume difference of 1e-6 to 4e-6. **solidcore is the exact one**: sphere r 3
+    exact 113.097336, solidcore 113.097336, SMLib 113.097452. The tolerance 1e-6 in
+    `diff-kernels` is tighter than SMLib's integration.
+  - 23 come from operations not wired in `kernel-solidcore`, where the evaluation falls back
+    with a warning: `difference(fillet = …)` and chamfer zones give the body without blend;
+    `hull`/`minkowski` need tessellation or polyhedra.
+  - 1 volume query fails (`angle_anchor.mcad`, `mass_props`).
+- **Unsupported** (all not wired in `kernel-solidcore`, none missing in solidcore except
+  polyhedra): composite sketch profiles in `extrude` (42), `make_polyhedron` (8), point
+  classification for zones (9: the low-level `BrepClassifier` still fails its self-test,
+  `solidcore_ops::Body::classify_point` is correct), `sweep` (6), fillet/chamfer (6),
+  twist/scale extrude and `loft` (4), shear (2), spline and sketch profiles in `revolve` (3), NURBS surface (1),
+  variable-radius fillet (1).
+- **New in solidcore since `d4940b6`**: an ops layer `solidcore-ops` (the modelling API of
+  SolidCraft: primitives, 4×4 transform including shear, booleans, `blend` for fillets and
+  chamfers, `fillet_variable`, `extrude` with draft, `revolve`, `loft`, `sweep_placed`,
+  `screw_sweep`, `shell`, `thicken`, `offset_faces`, measurements, point classification,
+  stitching, `.smb` files), a mesher `solidcore-tess` (structured grids per face in (u, v),
+  constrained Delaunay as fallback, edges shared between faces), a record type
+  `solidcore-record`, and STEP crates (`step-import`, `step-export`; export of planar bodies and
+  faceted B-Reps only). Tessellation is no longer out of scope (owner decision 2026-11-02 in
+  solidcore `docs/layers.md`: "Meshing is solidcore's"). The crates are being merged and
+  renamed; the API is 0.0.x.
+- **Probe of the ops layer** (`crates/kernel-solidcore/examples/ops_probe.rs`,
+  `cargo run -p kernel-solidcore --features ops-probe --example ops_probe`): all 21 cases match
+  the exact volume to 1e-6 (box, cylinder, cone, sphere, torus; rotation, non-uniform scale,
+  shear; box − cylinder, box ∪ box, box − sphere, sphere ∩ cylinder; fillet of all 12 box
+  edges, one edge, the cylinder rims; chamfer; extrude of rectangle and circle; revolve; ruled
+  loft; shell with an open face). Point classification inside/outside/on is correct.
+  Tessellation of cylinder, sphere and torus at chord 0.01: closed meshes, no refused faces,
+  16–580 ms (debug build).
+- **Toolchain:** solidcore pins Rust 1.98; it builds with our 1.97. Debug build of
+  `cad-cli --features solidcore` from an empty target directory about 10 min (4 cores).
+
+### Can we drop SMLib (C++)?
+
+Not yet with `kernel-solidcore` as it is; technically yes with a rewrite on top of
+`solidcore-ops`/`solidcore-tess`. What it takes:
+
+| Step | Size | Notes |
+| --- | --- | --- |
+| Rewrite `kernel-solidcore` on `solidcore-ops` instead of the low-level modules | medium | the facade `smlib/facade/sc_facade.cpp` (3700 lines) holds logic that has to move to Rust: profile loops from sketches, checked booleans (plausibility, touching/disjoint union), shell fallback over booleans, face tags for zones and provenance, edge selection, law stations for variable fillets |
+| Tessellation via `solidcore-tess` (`Body::to_record` → `plan` → `evaluate`) | small | per-triangle face index is there (`tri_face`); chord/angle tolerance via `MeshTolerance` |
+| `Kernel::brep` for STEP export | medium | from `Body::to_record` (record has analytic and NURBS geometry); `step-export` writes only planar/faceted bodies |
+| Polyhedra | small–medium | `sweep::planar_faces` + stitching, or a record built from the faces |
+| Face tags (zones, colours, `edges_where`) | medium | `solidcore-ops::provenance`; must reproduce what the facade does with attributes |
+| Wasm build (`cad-wasm`, browser) | unknown | solidcore targets `wasm32-unknown-unknown` with no `unsafe`; not tried here; replaces `smlib.wasm` (Emscripten) |
+| Acceptance | – | `diff-kernels` with exit 0 (volume tolerance adapted to SMLib's integration error), `compare.py`, `tests/step/verify.py`, the CLI and e2e test suites |
+
+Risks: the API changes quickly (crates merged, renamed; this pin needed changes after 12 days);
+known solidcore limits listed in `plan/STATUS.md` (deferred cases, partial units); speed not
+measured on large models yet. Recommendation: build the ops-based adapter next to the
+SMLib kernel, compare with `diff-kernels` until exit 0, then switch the default and remove
+`kernel-smlib`, `smlib/` and the Emscripten build.
+
+## Status up to 2026-10-25 (pin `d4940b6`)
 
 - **Crate `kernel-solidcore`** implements `cad_kernel::Kernel` via the public API of
   solidcore. The dependency is a git entry with a fixed commit
@@ -87,7 +150,8 @@ unlock themselves as soon as solidcore computes correctly.
 | `169dbc4`, `kernel-solidcore` unchanged | 48 | 942 | 102 | 287 | 431 | 122 | 0 |
 | `169dbc4` and `c9de85d`, `kernel-solidcore` adapted | 48 | 942 | **241** | 288 | 413 | **0** | 0 |
 | `3688a8b` (2026-10-24) | 61 | 1339 | 482 | 332 | 336 | 189 | 0 |
-| `d4940b6` (2026-10-25, pin) | 64 | 1436 | **516** | 354 | 360 | 206 | 0 |
+| `d4940b6` (2026-10-25) | 64 | 1436 | **516** | 354 | 360 | 206 | 0 |
+| `513e6fc` (2026-11-06, pin) | 64 | 1438 | **1186** | 82 | 110 | 60 | 0 |
 
 - @ `d4940b6`: cylinders, cones, spheres, tori and `revolve` deliver results with the face and
   edge counts of SMLib, but the volumes deviate by about 1e-5 (sphere r 5: 523.6048 instead of
