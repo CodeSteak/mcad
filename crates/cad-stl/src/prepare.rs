@@ -405,7 +405,8 @@ fn boundary_loop(
             }
         }
     }
-    let start = *next.keys().next()?;
+    // the smallest vertex: a `HashMap`'s first key differs from run to run
+    let start = *next.keys().min()?;
     let mut l = vec![start];
     let mut v = next[&start];
     while v != start {
