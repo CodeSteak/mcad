@@ -22,9 +22,8 @@ function desktop(mode: string): Plugin[] {
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), lezer(), ...desktop(mode)],
-  // smlib.wasm and cad_wasm_bg.wasm come only from src/wasm-pkg (imported with `?url` in the
-  // worker, hashed assets). public/smlib is the input of scripts/build-wasm.sh and must not be
-  // copied into the build a second time.
+  // cad_wasm_bg.wasm comes only from src/wasm-pkg (imported with `?url` in the worker, hashed
+  // asset); nothing is copied from public/.
   publicDir: false,
   base: "./",
   worker: { format: "es" },

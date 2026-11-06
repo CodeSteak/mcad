@@ -27,7 +27,7 @@ export type WorkerOut =
 
 /** Default watchdog: one kernel call may take this long (like crates/cad-desktop/src/engine.rs). */
 export const WATCHDOG_MS = 20 * 60_000;
-/** Time allowed for loading smlib.wasm + cad-wasm. */
+/** Time allowed for loading cad-wasm. */
 const STARTUP_MS = 3 * 60_000;
 
 /** "90 s", "20 min". */
@@ -133,7 +133,7 @@ export class WorkerTransport implements EngineTransport {
       e.preventDefault();
       this.restart(`${t("engine.error")}: ${e.message}`);
     };
-    // Loading smlib.wasm + cad-wasm can take a while: watch it too.
+    // Loading cad-wasm can take a while: watch it too.
     this.busy = true;
     this.arm(Math.max(this.watchdogMs, STARTUP_MS));
   }

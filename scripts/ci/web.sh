@@ -2,11 +2,10 @@
 # Browser build and tests (from the repository root).
 #
 #   scripts/ci/web.sh wasm        # cad-wasm + wasm-bindgen + wasm-opt -> web/src/wasm-pkg/
-#                                 # (needs web/public/smlib/smlib.{js,wasm}: scripts/ci/smlib-wasm.sh)
 #   scripts/ci/web.sh install     # pnpm install --frozen-lockfile
 #   scripts/ci/web.sh typecheck   # tsc --noEmit
 #   scripts/ci/web.sh unit        # vitest
-#   scripts/ci/web.sh node        # Node tests: smlib.wasm via the bridge, engine smoke test, transport
+#   scripts/ci/web.sh node        # Node tests: engine smoke test, transport
 #   scripts/ci/web.sh build       # vite build -> web/dist
 #   scripts/ci/web.sh e2e         # Playwright (Chromium from PLAYWRIGHT_BROWSERS_PATH or `playwright install`)
 #
@@ -24,7 +23,6 @@ step() {
     typecheck) (cd "$WEB" && "$PNPM" typecheck) ;;
     unit) (cd "$WEB" && "$PNPM" test) ;;
     node)
-      node "$ROOT/crates/kernel-smlib/js/test-node.mjs" "$WEB/public/smlib"
       node "$WEB/scripts/smoke-node.mjs"
       node "$WEB/scripts/test-transport.mjs"
       ;;

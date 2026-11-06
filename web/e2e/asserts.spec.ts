@@ -1,9 +1,8 @@
 // End-to-end tests of the collision asserts (Plan 21, Phase C) in Chromium against the
 // production build: keep-out volume display and toggle, violations (red intersection body,
 // status bar, jump and framing), export dialog "Trotzdem exportieren", assert_touches (contact
-// face, gap), plus one scenario each for hull/minkowski (Phase A, needs `sc_offset` in
-// smlib.wasm) and the STL import (Phase B). Screenshots for the report in
-// reports/tmp/report21/phase-c/img.
+// face, gap), plus one scenario each for hull/minkowski (Phase A) and the STL import (Phase B).
+// Screenshots for the report in reports/tmp/report21/phase-c/img.
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
