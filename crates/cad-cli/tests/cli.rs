@@ -552,6 +552,83 @@ fn diff_kernels_on_examples() {
     assert!(s["same"].as_u64().unwrap() > 0, "{s}");
 }
 
+/// The nodes of the corpus where solidcore does not give SMLib's result, as (file, line, label,
+/// verdict) of `diff-kernels --reference`: a variable radius with different laws on several
+/// edges (unsupported, and the nodes above it blocked), a union of three extrusions where
+/// solidcore loses faces (`sketch_cable_duct`, upstream), a Boolean SMLib fails and solidcore
+/// does not (`f11`, a gain).
+const REFERENCE_EXCEPTIONS: &[(&str, u32, &str, &str)] = &[
+    ("everyday/bugs/f11_pin_coincident.mcad", 1, "group", "differ"),
+    ("models/spec/sketch_cable_duct.mcad", 1, "group", "differ"),
+    ("models/spec/variable_radius.mcad", 1, "group", "blocked"),
+    ("models/spec/variable_radius.mcad", 11, "fillet", "unsupported"),
+    ("models/spec/variable_radius.mcad", 16, "difference", "unsupported"),
+    ("models/spec/variable_radius.mcad", 16, "translate", "blocked"),
+    ("models/spec/variable_radius.mcad", 22, "fillet", "unsupported"),
+    ("models/spec/variable_radius.mcad", 22, "translate", "blocked"),
+];
+
+/// solidcore against the frozen SMLib results (`tests/kernel-reference.json`, the corpus of
+/// `diff_kernels_on_examples`): every node is the same by the rules of `diff-kernels` but the
+/// known exceptions ([`REFERENCE_EXCEPTIONS`]; a new difference fails, and so does an exception
+/// that went away, so the list stays exact), and every result meshes watertight within the
+/// tolerance.
+#[cfg(feature = "solidcore")]
+#[test]
+fn solidcore_against_the_reference() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let reference = root.join("tests/kernel-reference.json").display().to_string();
+    let out = mcad().args(["diff-kernels", "--reference", &reference, "--mesh", "--json"]).output().unwrap();
+    let code = out.status.code().unwrap();
+    assert!(code == 0 || code == 1, "exit {code}: {}", String::from_utf8_lossy(&out.stderr));
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let files = v["files"].as_array().unwrap();
+    assert_eq!(files.len(), 101);
+    let mut found: Vec<(String, u32, String, String)> = Vec::new();
+    for f in files {
+        let name = f["file"].as_str().unwrap().replace('\\', "/");
+        let short = name.rsplit("tests/").next().unwrap().to_string();
+        for n in f["nodes"].as_array().unwrap() {
+            let verdict = n["verdict"].as_str().unwrap();
+            if verdict != "same" && verdict != "skipped" {
+                found.push((
+                    short.clone(),
+                    n["line"].as_u64().unwrap() as u32,
+                    n["label"].as_str().unwrap().into(),
+                    verdict.into(),
+                ));
+            }
+        }
+    }
+    found.sort();
+    let mut want: Vec<(String, u32, String, String)> =
+        REFERENCE_EXCEPTIONS.iter().map(|(f, l, n, v)| (f.to_string(), *l, n.to_string(), v.to_string())).collect();
+    want.sort();
+    assert_eq!(found, want, "nodes that differ from the reference (left) against the known exceptions (right)");
+    let s = &v["summary"];
+    assert!(s["nodes"].as_u64().unwrap() > 2500, "{s}");
+    // every rule is in use (curved: blended results use rule blend)
+    let r = &s["volume_rules"];
+    assert!(r["exact"].as_u64().unwrap() >= 110 && r["operands"].as_u64().unwrap() >= 45, "{r}");
+    assert!(r["curved"].as_u64().unwrap() <= 40, "{r}");
+    assert!((40..=100).contains(&r["blend"].as_u64().unwrap_or(0)), "{r}");
+    for f in files {
+        for n in f["nodes"].as_array().unwrap() {
+            // a box is exact in both kernels
+            if n["verdict"] == "same" && n["label"] == "box" {
+                assert_eq!(n["volume_check"]["rule"], "relative", "{n}");
+            }
+        }
+    }
+    // every result meshes watertight with solidcore within the tolerance of 0.05 of the exact
+    // surfaces; one file has no B-rep result (skipped)
+    let m = &s["mesh"];
+    assert_eq!(m["verdicts"]["ok"].as_u64().unwrap() + 1, files.len() as u64, "{m}");
+    assert_eq!(m["solidcore"]["watertight"], m["files"], "{m}");
+    assert!(m["solidcore"]["chord_max"].as_f64().unwrap() <= 0.051, "{m}");
+    assert!(m["solidcore"]["volume_ratio_max"].as_f64().unwrap() <= 1.0, "{m}");
+}
+
 #[test]
 fn usage_errors() {
     json(&["check", "/nonexistent/file.scad"], 2);

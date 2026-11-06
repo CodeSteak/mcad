@@ -322,9 +322,16 @@ pub(crate) enum Cmd {
     /// Compare SMLib ↔ solidcore per node (volume, faces, edges, selected edges) and coverage of
     /// solidcore (development only).
     DiffKernels {
-        /// Source files.
-        #[arg(required = true, value_name = "FILES")]
+        /// Source files (with `--reference`: default all files of the reference).
+        #[arg(value_name = "FILES", required_unless_present = "reference")]
         files: Vec<PathBuf>,
+        /// Compare solidcore against the frozen results of a reference file
+        /// (`tests/kernel-reference.json`) instead of evaluating SMLib.
+        #[arg(long, value_name = "FILE", conflicts_with = "write_reference")]
+        reference: Option<PathBuf>,
+        /// Also write SMLib's results as a reference file (paths relative to its directory).
+        #[arg(long, value_name = "FILE")]
+        write_reference: Option<PathBuf>,
         /// Output as JSON.
         #[arg(long)]
         json: bool,
@@ -678,7 +685,13 @@ pub(crate) fn run(cmd: &Cmd) -> Result<Outcome, Fail> {
                 export(c, output, format.as_deref(), schema, (!*single_color).then_some(pkg), *merge, *ignore_asserts)
             }
         }
-        Cmd::DiffKernels { files, brep, mesh, mesh_tol, .. } => diff::command(files, *brep, mesh.then_some(*mesh_tol)),
+        Cmd::DiffKernels { files, brep, mesh, mesh_tol, reference, write_reference, .. } => {
+            let against = match reference {
+                Some(r) => diff::Against::Reference(r),
+                None => diff::Against::Smlib { write: write_reference.as_deref() },
+            };
+            diff::command(files, *brep, mesh.then_some(*mesh_tol), against)
+        }
         Cmd::External(_) | Cmd::Ui { .. } | Cmd::Daemon { .. } | Cmd::Usage { .. } | Cmd::EngineHost => {
             unreachable!("handled in main")
         }

@@ -232,7 +232,10 @@ fn append(all: &mut Mesh, m: &Mesh) {
 
 /// Compares the meshes of both kernels (see the module docs). `same`: the root node's verdict
 /// is `same` (else the bodies differ and so may the meshes: no note on the Hausdorff distance).
-pub fn compare(a: &Parts, b: &Parts, tol: f64, same: bool) -> Comparison {
+/// Without `a` (a reference file instead of SMLib) solidcore's mesh alone.
+pub fn compare(a: Option<&Parts>, b: &Parts, tol: f64, same: bool) -> Comparison {
+    let none = Parts { root: None, parts: Vec::new() };
+    let a = a.unwrap_or(&none);
     let (ma, mesh_a, gaps_a) = metrics(a, tol);
     let (mb, mesh_b, _) = metrics(b, tol);
     let mut c = Comparison { tol, verdict: "ok", ..Default::default() };
@@ -349,10 +352,10 @@ mod tests {
     #[test]
     fn displaced_meshes_differ() {
         let tol = 0.05;
-        let c = compare(&parts(tol), &parts(tol), tol, true);
+        let c = compare(Some(&parts(tol)), &parts(tol), tol, true);
         assert_eq!(c.verdict, "ok", "{:?}", c.notes);
         let shifted = moved(parts(tol), |_, v| v[2] += 50.0);
-        let c = compare(&parts(tol), &shifted, tol, true);
+        let c = compare(Some(&parts(tol)), &shifted, tol, true);
         assert_eq!(c.verdict, "differ", "{:?}", c.notes);
         assert!(c.hausdorff.is_some_and(|h| h > 49.0), "{:?}", c.hausdorff);
         assert!(c.notes.iter().any(|n| n.contains("from SMLib's mesh")), "{:?}", c.notes);
@@ -365,7 +368,7 @@ mod tests {
             m.positions[k..k + 3].copy_from_slice(&q.to_array());
         }
         let p = parts(tol);
-        let c = compare(&p, &one, tol, true);
+        let c = compare(Some(&p), &one, tol, true);
         assert_eq!(c.verdict, "differ", "{:?}", c.notes);
         assert!(c.solidcore.vertex_gap > 0.25, "{}", c.solidcore.vertex_gap);
         assert!(c.notes.iter().any(|n| n.contains("vertex")), "{:?}", c.notes);
@@ -383,10 +386,10 @@ mod tests {
                 }),
             ),
         ] {
-            let c = compare(&parts(tol), &moved(parts(tol), f), tol, false);
+            let c = compare(Some(&parts(tol)), &moved(parts(tol), f), tol, false);
             assert_eq!(c.verdict, "differ", "{what}: {:?}", c.notes);
         }
-        assert_eq!(compare(&parts(tol), &parts(tol), tol, false).verdict, "ok");
+        assert_eq!(compare(Some(&parts(tol)), &parts(tol), tol, false).verdict, "ok");
         // a box corner moved along one of its edges: on the B-rep's edges, but off the edges of
         // the faces whose corner it is
         let boxed = || {
@@ -399,7 +402,7 @@ mod tests {
                 v[2] += 0.3;
             }
         });
-        let c = compare(&boxed(), &corner, tol, false);
+        let c = compare(Some(&boxed()), &corner, tol, false);
         assert_eq!(c.verdict, "differ", "{:?}", c.notes);
         assert!(c.solidcore.edge_vertex_gap > 0.25, "{}", c.solidcore.edge_vertex_gap);
     }

@@ -50,7 +50,7 @@ use cad_session::protocol::{self as p, ToEngine};
 use cad_session::{PROTOCOL_VERSION, Session, SessionOptions, std_clock};
 use kernel_smlib::SmlibKernel;
 use kernel_solidcore::SolidcoreKernel;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::{Fail, Outcome};
@@ -122,6 +122,169 @@ pub struct NodeDiff {
     /// Present for `same` nodes whose B-reps both kernels were asked for.
     pub brep_check: Option<BrepCheck>,
     pub notes: Vec<String>,
+}
+
+/// The frozen per-node results of the reference kernel (`tests/kernel-reference.json`,
+/// written by `--write-reference`, read by `--reference`): the [`Metrics`] `diff-kernels`
+/// compares, per node of each file, file paths relative to the reference file's directory.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Reference {
+    pub schema: u32,
+    /// Kernel the results come from.
+    pub kernel_id: String,
+    pub files: Vec<RefFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefFile {
+    pub file: String,
+    pub nodes: Vec<RefNode>,
+}
+
+/// One node: its place in the tree and the reference kernel's metrics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefNode {
+    pub idx: u32,
+    pub label: String,
+    pub line: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub children: Vec<u32>,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub volume: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_volume: Option<f64>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub curved: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub faces: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edges: Option<usize>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selected_edges: Vec<Vec<[f64; 3]>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    /// [`Metrics::blend_change`]; `null` for NaN (a volume of the history failed).
+    #[serde(default, skip_serializing_if = "is_zero", with = "nan_as_null")]
+    pub blend_change: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub brep: Option<RefBrep>,
+}
+
+/// A B-rep summary with what [`brep::compare`] matches.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefBrep {
+    #[serde(flatten)]
+    pub summary: brep::Summary,
+    pub shape: brep::Shape,
+}
+
+fn is_zero(x: &f64) -> bool {
+    *x == 0.0
+}
+
+mod nan_as_null {
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S: Serializer>(x: &f64, s: S) -> Result<S::Ok, S::Error> {
+        if x.is_nan() { s.serialize_none() } else { s.serialize_f64(*x) }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
+        Ok(Option::<f64>::deserialize(d)?.unwrap_or(f64::NAN))
+    }
+}
+
+impl RefNode {
+    fn new(n: &NodeRow, m: &Metrics) -> RefNode {
+        RefNode {
+            idx: n.0,
+            label: n.1.clone(),
+            line: n.2,
+            children: n.3.clone(),
+            status: m.status.clone(),
+            volume: m.volume,
+            exact_volume: m.exact_volume,
+            curved: m.curved,
+            faces: m.faces,
+            edges: m.edges,
+            selected_edges: m.selected_edges.clone(),
+            message: m.message.clone(),
+            blend_change: m.blend_change,
+            brep: m.brep.clone().map(|b| RefBrep { shape: b.shape.clone(), summary: b }),
+        }
+    }
+
+    fn row(&self) -> NodeRow {
+        (self.idx, self.label.clone(), self.line, self.children.clone())
+    }
+
+    fn metrics(&self) -> Metrics {
+        Metrics {
+            status: self.status.clone(),
+            volume: self.volume,
+            exact_volume: self.exact_volume,
+            curved: self.curved,
+            faces: self.faces,
+            edges: self.edges,
+            selected_edges: self.selected_edges.clone(),
+            message: self.message.clone(),
+            blend_change: self.blend_change,
+            brep: self.brep.clone().map(|b| brep::Summary { shape: b.shape, ..b.summary }),
+            unsupported: self.message.as_deref().is_some_and(is_unsupported),
+        }
+    }
+}
+
+/// The reference as JSON text: one line per node (readable diffs of the checked-in file).
+fn reference_text(r: &Reference) -> String {
+    let mut out = format!(
+        "{{\n  \"schema\": {},\n  \"kernel_id\": {},\n  \"files\": [",
+        r.schema,
+        serde_json::to_string(&r.kernel_id).unwrap_or_default()
+    );
+    for (i, f) in r.files.iter().enumerate() {
+        out.push_str(if i == 0 { "\n" } else { ",\n" });
+        out.push_str(&format!("    {{\"file\": {}, \"nodes\": [", serde_json::to_string(&f.file).unwrap_or_default()));
+        for (j, n) in f.nodes.iter().enumerate() {
+            out.push_str(if j == 0 { "\n      " } else { ",\n      " });
+            out.push_str(&serde_json::to_string(n).unwrap_or_default());
+        }
+        out.push_str("\n    ]}");
+    }
+    out.push_str("\n  ]\n}\n");
+    out
+}
+
+/// `file` relative to `dir` (both made absolute; `/` as separator).
+fn relative_to(file: &Path, dir: &Path) -> Result<String, Fail> {
+    let abs = |p: &Path| std::fs::canonicalize(p).map_err(|e| Fail::Usage(format!("{}: {e}", p.display())));
+    let (f, d) = (abs(file)?, abs(dir)?);
+    let rel = f.strip_prefix(&d).map_err(|_| {
+        Fail::Usage(tr!(
+            "{}: liegt nicht unter dem Verzeichnis der Referenzdatei {}",
+            "{}: not below the directory of the reference file {}",
+            file.display(),
+            dir.display()
+        ))
+    })?;
+    Ok(rel.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/"))
+}
+
+/// Reads a reference file.
+pub fn read_reference(path: &Path) -> Result<Reference, Fail> {
+    let text = std::fs::read_to_string(path).map_err(|e| Fail::Usage(format!("{}: {e}", path.display())))?;
+    serde_json::from_str(&text)
+        .map_err(|e| Fail::Usage(tr!("{}: keine Referenzdatei: {e}", "{}: not a reference file: {e}", path.display())))
+}
+
+/// A kernel message naming an operation the kernel cannot do (verdict `unsupported`): the
+/// kernel's `Unsupported` error, or the engine's diagnostic for a variable radius it cannot
+/// build (both languages).
+fn is_unsupported(m: &str) -> bool {
+    m.contains(UNSUPPORTED)
+        || m.contains("variable radius is not supported")
+        || m.contains("variabler Radius wird nicht unterstützt")
 }
 
 const UNSUPPORTED: &str = "not supported by this kernel";
@@ -255,11 +418,9 @@ where
             .messages
             .iter()
             .find(|m| m.severity == p::Severity::Error)
-            .or_else(|| {
-                n.messages.iter().find(|m| m.severity == p::Severity::Warning && m.message.contains(UNSUPPORTED))
-            })
+            .or_else(|| n.messages.iter().find(|m| m.severity == p::Severity::Warning && is_unsupported(&m.message)))
             .map(|m| m.message.clone());
-        let unsupported = message.as_deref().is_some_and(|m| m.contains(UNSUPPORTED));
+        let unsupported = message.as_deref().is_some_and(is_unsupported);
         let mut m = Metrics {
             status: status.into(),
             message,
@@ -327,7 +488,7 @@ where
             if let Some(e) = query_err
                 && m.message.is_none()
             {
-                m.unsupported = e.contains(UNSUPPORTED);
+                m.unsupported = is_unsupported(&e);
                 m.message = Some(e);
             }
         }
@@ -669,10 +830,48 @@ pub const MIN_MESH_TOL: f64 = 1e-4;
 /// nothing about the tessellators.
 pub const MAX_MESH_TOL: f64 = 10.0;
 
-pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>) -> Result<Outcome, Fail> {
-    if files.is_empty() {
+/// Where the results solidcore is compared against come from.
+pub enum Against<'a> {
+    /// SMLib, evaluated here; with a path the results are also written there as a reference.
+    Smlib { write: Option<&'a Path> },
+    /// A reference file ([`Reference`]).
+    Reference(&'a Path),
+}
+
+pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>, against: Against) -> Result<Outcome, Fail> {
+    // with a reference: its files (or those of `files`, which it must hold), its nodes
+    let reference = match &against {
+        Against::Reference(path) => Some((*path, read_reference(path)?)),
+        Against::Smlib { .. } => None,
+    };
+    let ref_dir =
+        |path: &Path| path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new(".")).to_path_buf();
+    let mut chosen: Vec<(PathBuf, Option<&RefFile>)> = Vec::new();
+    match &reference {
+        Some((path, r)) => {
+            let dir = ref_dir(path);
+            if files.is_empty() {
+                chosen.extend(r.files.iter().map(|f| (dir.join(&f.file), Some(f))));
+            }
+            for f in files {
+                let rel = relative_to(f, &dir)?;
+                let Some(rf) = r.files.iter().find(|x| x.file == rel) else {
+                    return Err(Fail::Usage(tr!(
+                        "{}: nicht in der Referenzdatei {}",
+                        "{}: not in the reference file {}",
+                        f.display(),
+                        path.display()
+                    )));
+                };
+                chosen.push((f.clone(), Some(rf)));
+            }
+        }
+        None => chosen.extend(files.iter().map(|f| (f.clone(), None))),
+    }
+    if chosen.is_empty() {
         return Err(Fail::Usage(tr!("keine Dateien", "no files")));
     }
+    let mut written: Vec<RefFile> = Vec::new();
     if let Some(t) = mesh_tol {
         if !t.is_finite() {
             return Err(Fail::Usage(tr!(
@@ -716,9 +915,21 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>) -> Result<O
              (cargo build -p cad-cli --features solidcore)"
         )));
     }
-    for f in files {
+    for (f, rf) in &chosen {
         let src = std::fs::read_to_string(f).map_err(|e| Fail::Usage(format!("{}: {e}", f.display())))?;
-        let ra = evaluate(SmlibKernel::new(), &src, f, |_| (0, std::time::Duration::ZERO), brep, mesh_tol);
+        let ra = match rf {
+            Some(rf) => Run {
+                nodes: rf.nodes.iter().map(RefNode::row).collect(),
+                metrics: rf.nodes.iter().map(RefNode::metrics).collect(),
+                cost: Cost::default(),
+                mesh: None,
+            },
+            None => evaluate(SmlibKernel::new(), &src, f, |_| (0, std::time::Duration::ZERO), brep, mesh_tol),
+        };
+        if let Against::Smlib { write: Some(path) } = &against {
+            let nodes = ra.nodes.iter().zip(&ra.metrics).map(|(n, m)| RefNode::new(n, m)).collect();
+            written.push(RefFile { file: relative_to(f, &ref_dir(path))?, nodes });
+        }
         let solid = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             evaluate(SolidcoreKernel::new(), &src, f, SolidcoreKernel::copy_stats, brep, mesh_tol)
         }));
@@ -855,9 +1066,9 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>) -> Result<O
             }
         }
         let mesh_check = mesh_tol.map(|tol| match (&ra.mesh, rb.as_ref().and_then(|r| r.mesh.as_ref())) {
-            (Some(a), Some(b)) => {
-                let same = diffs.iter().any(|d| Some(d.idx) == a.root && d.verdict == "same");
-                mesh::compare(a, b, tol, same)
+            (a, Some(b)) if a.is_some() || rf.is_some() => {
+                let same = diffs.iter().any(|d| Some(d.idx) == b.root && d.verdict == "same");
+                mesh::compare(a.as_ref(), b, tol, same)
             }
             _ => mesh::Comparison {
                 tol,
@@ -979,6 +1190,11 @@ pub fn command(files: &[PathBuf], brep: bool, mesh_tol: Option<f64>) -> Result<O
         cost_b.copies,
         crate::num(cost_b.copy_ms)
     ));
+    if let Against::Smlib { write: Some(path) } = &against {
+        let r = Reference { schema: 1, kernel_id: SmlibKernel::new().id().to_string(), files: written };
+        crate::host::write_file(path, reference_text(&r).as_bytes())
+            .map_err(|e| Fail::Usage(format!("{}: {e}", path.display())))?;
+    }
     let j = json!({
         "schema_version": PROTOCOL_VERSION,
         "command": "diff-kernels",
