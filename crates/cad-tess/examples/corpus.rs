@@ -81,7 +81,7 @@ fn part<K: Kernel>(k: &mut K, s: &K::Shape, solid: bool, tol: f64) -> Value {
     let tess_ms = ms(t1);
     let c = cad_tess::check(&t.mesh);
     let exact = if solid { k.mass_props(s).ok().map(|m| m.volume) } else { None };
-    let mut v = json!({
+    let v = json!({
         "faces": t.stats.faces,
         "failed_faces": t.stats.failed_faces.iter().map(|(id, w)| format!("{id}: {w}")).collect::<Vec<_>>(),
         "lost_constraints": t.stats.lost_constraints,
