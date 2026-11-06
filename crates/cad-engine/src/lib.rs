@@ -1148,9 +1148,9 @@ where
         }
     }
 
-    /// Evaluates independent nodes on `jobs` threads: `jobs - 1` worker threads, each with a
-    /// kernel from `make`, next to the caller's thread (which dispatches, collects and evaluates
-    /// the cheap nodes with this engine's kernel). `jobs <= 1`: sequential, as without a call.
+    /// Evaluates independent nodes on `jobs` worker threads, each with a kernel from `make`;
+    /// the caller's thread dispatches, collects and evaluates the cheap nodes with this engine's
+    /// kernel (it mostly waits). `jobs <= 1`: sequential, as without a call.
     /// Results, tags, diagnostics and cache keys are the same for every `jobs`: every node
     /// starts with [`Kernel::begin_node`] and reads only its children's results. A budget in
     /// kernel calls ([`Budget::ops`]) always runs sequentially. Not on wasm32 (no threads).
@@ -1162,7 +1162,7 @@ where
     {
         self.pool = None;
         if jobs > 1 {
-            self.pool = Some(pool::Pool::new(jobs - 1, make));
+            self.pool = Some(pool::Pool::new(jobs, make));
         }
     }
 
@@ -1170,7 +1170,7 @@ where
     pub fn jobs(&self) -> usize {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(p) = &self.pool {
-            return p.workers() + 1;
+            return p.workers();
         }
         1
     }
