@@ -87,7 +87,7 @@ impl Inner {
         for s in &shapes[1..] {
             acc = self.checked_boolean(op, &acc, s, tag)?;
         }
-        let mut b = if shapes.len() == 1 || std::rc::Rc::ptr_eq(&acc, first) {
+        let mut b = if shapes.len() == 1 || std::sync::Arc::ptr_eq(&acc, first) {
             self.copy(&acc.brep.borrow())?
         } else {
             std::mem::replace(&mut *acc.brep.borrow_mut(), solidcore::Brep::new())

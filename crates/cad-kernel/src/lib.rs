@@ -351,4 +351,13 @@ pub trait Kernel {
     fn set_draft(&mut self, draft: bool) {
         let _ = draft;
     }
+
+    /// The engine starts evaluating a node (`seed`: derived from the node's cache key). A
+    /// kernel whose results can depend on state left by earlier calls (random numbers, latched
+    /// solver steps, a model size from the last transform) resets it here, so that a node's
+    /// result depends on the node alone, whatever was evaluated before it and on which
+    /// kernel instance (the engine's worker threads each have one). Default: nothing.
+    fn begin_node(&mut self, seed: u64) {
+        let _ = seed;
+    }
 }

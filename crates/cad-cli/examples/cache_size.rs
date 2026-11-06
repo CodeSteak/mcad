@@ -55,7 +55,7 @@ fn run(path: &Path, probe: bool) -> Option<Row> {
     let mut seen = HashSet::new();
     for n in 0..d.ev.tree.nodes.len() as u32 {
         for p in d.ev.parts(n) {
-            if seen.insert(std::rc::Rc::as_ptr(&p.shape) as usize) {
+            if seen.insert(std::sync::Arc::as_ptr(&p.shape) as usize) {
                 breps += 1;
                 faces += k.faces(&p.shape, 0).map_or(0, |f| f.len());
                 edges += k.edges(&p.shape, 0).map_or(0, |e| e.len());

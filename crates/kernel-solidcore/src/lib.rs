@@ -48,40 +48,58 @@ use cad_kernel::{
     PlacedLoop, PlacedPath, Tag,
 };
 use glam::{DMat4, DVec2, DVec3};
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
+
+mod cell;
+use cell::ShapeCell;
 
 /// One solidcore B-rep and the tag of the operation that made it.
 ///
 /// The body is owned by the shape and queried in place: solidcore's read-only queries
 /// (`face_internal_point`, mass properties, classification) take `&mut Brep` only for their
-/// caches, hence the `RefCell`. Operations that change a body (transform, boolean operands)
-/// work on a copy ([`Inner::copy`]); face and edge ids always refer to this body.
+/// caches, hence the cell ([`ShapeCell`]: a `RefCell` the engine's worker threads can share).
+/// Operations that change a body (transform, boolean operands) work on a copy
+/// ([`Inner::copy`]); face and edge ids always refer to this body. Shapes are `Send + Sync`.
 #[derive(Debug)]
 pub struct ShapeData {
-    pub brep: std::cell::RefCell<solidcore::Brep>,
+    pub brep: ShapeCell<solidcore::Brep>,
     /// Mass properties, once computed (the shape never changes).
-    pub(crate) mass: std::cell::Cell<Option<MassProps>>,
+    pub(crate) mass: Memo<MassProps>,
     /// The shape this one is a similarity transform of, and the matrix: its mass properties
     /// follow from the source's, if those are known by then (no second integration).
-    derived: std::cell::RefCell<Option<(std::rc::Weak<ShapeData>, DMat4)>>,
+    derived: Mutex<Option<(std::sync::Weak<ShapeData>, DMat4)>>,
     /// Bounding box, once computed (point classification skips points outside it).
-    pub(crate) bbox: std::cell::Cell<Option<Option<(DVec3, DVec3)>>>,
+    pub(crate) bbox: Memo<Option<(DVec3, DVec3)>>,
     pub tag: Tag,
+}
+
+/// A value computed once (`get`/`set` as a `Cell`, shareable between threads).
+#[derive(Debug, Default)]
+pub(crate) struct Memo<T: Copy>(Mutex<Option<T>>);
+
+impl<T: Copy> Memo<T> {
+    pub(crate) fn get(&self) -> Option<T> {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub(crate) fn set(&self, v: Option<T>) {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = v;
+    }
 }
 
 impl ShapeData {
     fn new(brep: solidcore::Brep, tag: Tag) -> Shape {
-        Rc::new(ShapeData {
-            brep: std::cell::RefCell::new(brep),
-            mass: std::cell::Cell::new(None),
-            derived: std::cell::RefCell::new(None),
-            bbox: std::cell::Cell::new(None),
+        Arc::new(ShapeData {
+            brep: ShapeCell::new(brep),
+            mass: Memo(Mutex::new(None)),
+            derived: Mutex::new(None),
+            bbox: Memo(Mutex::new(None)),
             tag,
         })
     }
 }
 
-pub type Shape = Rc<ShapeData>;
+pub type Shape = Arc<ShapeData>;
 
 /// The commit of solidcore this crate is built against.
 pub const SOLIDCORE_REV: &str = "f4f05b147551201e2a7b44a34fbc41ddc0fc6578";
@@ -350,14 +368,20 @@ mod imp {
         pub k: solidcore::Kernel,
         /// Result of the classification self-test ([`Inner::classify`]), once run.
         classify_check: Option<Result<(), String>>,
-        /// Last caller key domain handed to a copy ([`Inner::copy`]); also the number of copies.
+        /// Number of copies ([`Inner::copy`]).
         copies: u64,
+        /// Last caller key domain handed to a copy (below 2^27: the key's bits 36 to 62; bit 63
+        /// marks the kernel's reserved keys).
+        domain: u64,
         /// Time spent in [`Inner::copy`].
         copy_time: std::time::Duration,
         /// Draft mode ([`Kernel::set_draft`]): fillets skip the self-overlap and volume checks,
         /// as the facade's `g_draft`.
         pub(crate) draft: bool,
     }
+
+    /// Copy key domains stay below 2^27 ([`copy_key`]).
+    const DOMAIN_MASK: u64 = (1 << 27) - 1;
 
     /// Caller identity of `e` in a B-rep copied under `domain` (bits 36 and up; the low
     /// 36 bits are kind and index as in the kernel's own topology keys).
@@ -688,6 +712,7 @@ mod imp {
                 k: solidcore::Kernel::default(),
                 classify_check: None,
                 copies: 0,
+                domain: 0,
                 copy_time: std::time::Duration::ZERO,
                 draft: false,
             }
@@ -701,7 +726,8 @@ mod imp {
             #[cfg(not(target_arch = "wasm32"))]
             let t0 = std::time::Instant::now();
             self.copies += 1;
-            let domain = self.copies;
+            self.domain = ((self.domain + 1) & DOMAIN_MASK).max(1);
+            let domain = self.domain;
             let src = b.key().0;
             let src_domain = if solidcore::geom::context::is_reserved_key(b.key()) { 0 } else { src >> 36 };
             let mut state = p2::ArenaNotifyState::new(&solidcore::Brep::new());
@@ -722,7 +748,8 @@ mod imp {
         pub(crate) fn merge_into(&mut self, m: &mut solidcore::Brep, other: &solidcore::Brep) -> KResult<()> {
             use solidcore::topology::brep::{p2, p3};
             self.copies += 1;
-            let domain = self.copies;
+            self.domain = ((self.domain + 1) & DOMAIN_MASK).max(1);
+            let domain = self.domain;
             let src = other.key().0;
             let src_domain = if solidcore::geom::context::is_reserved_key(other.key()) { 0 } else { src >> 36 };
             let mut state = p2::ArenaNotifyState::new(m);
@@ -738,6 +765,12 @@ mod imp {
 
         pub fn copy_stats(&self) -> (u64, std::time::Duration) {
             (self.copies, self.copy_time)
+        }
+
+        /// See [`Kernel::begin_node`] of [`SolidcoreKernel`].
+        pub fn begin_node(&mut self, seed: u64) {
+            self.k = solidcore::Kernel::default();
+            self.domain = ((seed >> 49) & 0x7FFF) << 12;
         }
 
         fn wrap(r: Result<solidcore::Brep, SolidError>, op: &str, tag: Tag) -> KResult<Shape> {
@@ -869,7 +902,7 @@ mod imp {
                 self.transform_check_volume(s, &t, m, &why)?;
             }
             if similar(m) {
-                *t.derived.borrow_mut() = Some((Rc::downgrade(s), *m));
+                *t.derived.lock().unwrap_or_else(|e| e.into_inner()) = Some((Arc::downgrade(s), *m));
             }
             Ok(t)
         }
@@ -2081,7 +2114,7 @@ mod imp {
         /// The mass properties of `s` from those of the shape it is a similarity transform of
         /// (along a chain of transforms, computed once at its start), while that shape lives.
         fn derived_mass(&mut self, s: &ShapeData) -> KResult<Option<MassProps>> {
-            let derived = s.derived.borrow_mut().take();
+            let derived = s.derived.lock().unwrap_or_else(|e| e.into_inner()).take();
             let Some((src, f)) = derived else { return Ok(None) };
             let Some(src) = src.upgrade() else { return Ok(None) };
             let m = self.mass_props(&src)?;
@@ -2324,6 +2357,14 @@ impl Kernel for SolidcoreKernel {
 
     fn set_draft(&mut self, draft: bool) {
         self.inner.draft = draft;
+    }
+
+    /// A fresh solidcore kernel (its random numbers, the latched fillet step, the context's
+    /// model size estimate and marks start anew; the memo caches never change a result) and
+    /// copy key domains from `seed` (bits 12–26 of the domain; the copies of one node count up
+    /// from there).
+    fn begin_node(&mut self, seed: u64) {
+        self.inner.begin_node(seed);
     }
 
     fn mass_props(&mut self, s: &Shape) -> KResult<MassProps> {

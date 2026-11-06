@@ -330,6 +330,9 @@ mod no_mesh {
         fn id(&self) -> &'static str {
             "no-mesh"
         }
+        fn begin_node(&mut self, seed: u64) {
+            self.0.begin_node(seed)
+        }
         fn make_box(&mut self, min: DVec3, max: DVec3, tag: Tag) -> KResult<Shape> {
             self.0.make_box(min, max, tag)
         }
