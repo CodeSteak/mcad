@@ -6,7 +6,7 @@ description: Develop and check models in the parametric CAD language (OpenSCAD s
 # CAD CLI `mcad`
 
 The CLI evaluates a source file with the same crates as the UI (parser, evaluation,
-engine, native SMLib kernel) and shows the result as text, JSON or image. This makes it possible
+engine, the Rust kernel solidcore) and shows the result as text, JSON or image. This makes it possible
 to build and check a model entirely headless – also in parallel with a human who
 edits the same files in the UI (`mcad watch` notices every save).
 
@@ -18,10 +18,8 @@ extensions are not added). Up to 0.2 the program was called `cad`; the old envir
 ## Building and running
 
 ```sh
-# SMLib native: prebuilt libraries (fast) or build via CMake (~3 min the first time)
-export SMLIB_PREBUILT=/home/user/controller-cad/smlib/build-native   # if present
-smlib/fetch.sh                                                         # sources (tangency-labs/smlib @ 7eba8aa), if missing
-cargo build --release -p cad-cli
+# pure Rust (solidcore is a git dependency); the first build takes 10–15 min
+cargo build --release -p cad-cli        # headless only: --no-default-features
 target/release/mcad --help              # help (without arguments: desktop UI)
 target/release/mcad usage               # manual for agents (topics: mcad usage --list)
 ```
@@ -154,7 +152,7 @@ and checks with the CLI. The UI watches the file and all included files:
 | `mcad export DATEI --per-color [--part NAME]… -o farben.zip` | ZIP with one STL per colour (and part): `F<slot>_<farbe>.stl`, all in the same coordinate system (extension `.zip` required) |
 | `mcad export DATEI --part NAME [--part NAME2] -o …` | only these parts (named instances at top level, e.g. `lid`, `k[2]`) |
 | `mcad export DATEI --all-parts -o ordner/ [--format stl\|3mf\|step]` | each part as a separate file (`lid.stl`, `k_2.step`) |
-| `mcad diff-kernels DATEI…` | comparison SMLib ↔ solidcore (development only, `--features solidcore`) |
+| `mcad diff-reference tests/kernel-reference.json [DATEI…]` | solidcore against the frozen results of the former kernel SMLib (development only) |
 
 Common options: `--json`, `--module m` (module as context, nested `outer.inner`;
 with arguments as in the code `-m 'holder(30, h = 5)'`, `-m 'parts.screw(d = 3)'` – expressions
@@ -163,6 +161,8 @@ see variables and functions of the file, can be combined with `-D` for other par
 `-D p=[1,2,3]`). Without a module context, `-D` sets top-level assignments of the main file
 (like `openscad -D`: the last assignment of the name gets the value, dependent variables
 use it, `$fn` etc. also without an assignment; unknown name → warning).
+`--jobs N` (threads for independent parts of the model; default `MCAD_JOBS`, else the number of
+CPUs; the result is the same for every value).
 
 **Context as in the editor:** if `--line` lies in a module definition, `inspect` and
 `render` show only this module with its default values (and `-D`). `--whole-file` keeps the
