@@ -76,6 +76,9 @@ impl From<Distance> for Dist {
 pub struct Metrics {
     pub parts: usize,
     pub triangles: usize,
+    /// Hash of the meshes' positions and indices (hex): the same meshes, bit for bit, have the
+    /// same hash (e.g. with any `--jobs`).
+    pub hash: String,
     pub watertight: bool,
     pub boundary_edges: usize,
     /// Edges used by more than two triangles (a fin).
@@ -131,6 +134,7 @@ pub const SURFACE_SLACK: f64 = 1.1;
 fn metrics(p: &Parts, tol: f64) -> Metrics {
     let mut m = Metrics { parts: p.parts.len(), watertight: true, ..Default::default() };
     let (mut exact, mut solid_vol, mut solid_area) = (0.0, 0.0, 0.0);
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
     let mut have_exact = true;
     let mut surface: Option<(Distance, Distance)> = None;
     for part in &p.parts {
@@ -145,6 +149,15 @@ fn metrics(p: &Parts, tol: f64) -> Metrics {
         };
         let c = cad_tess::check(mesh);
         m.triangles += c.triangles;
+        {
+            use std::hash::Hasher;
+            for x in &mesh.positions {
+                hasher.write_u32(x.to_bits());
+            }
+            for i in &mesh.indices {
+                hasher.write_u32(*i);
+            }
+        }
         m.non_finite += c.non_finite;
         m.watertight &= c.non_finite == 0;
         m.volume += c.volume;
@@ -180,6 +193,7 @@ fn metrics(p: &Parts, tol: f64) -> Metrics {
         m.exact_volume = Some(exact);
         m.volume_ratio = Some((solid_vol - exact).abs() / (tol * solid_area));
     }
+    m.hash = format!("{:016x}", std::hash::Hasher::finish(&hasher));
     m.surface = surface.map(|s| s.0.into());
     m.chord = surface.map(|s| s.1.into());
     m

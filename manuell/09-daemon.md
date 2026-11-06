@@ -4,7 +4,8 @@
 background process that keeps the kernel cache. Started by the first such call, exits after
 15 min idle. Output is identical; JSON adds `daemon: {used, reason}`. The daemon answers in the
 language of each call (`--lang`, `MCAD_LANG`, locale of the client), cached results included. The cache is
-content-based – results are never stale.
+content-based – results are never stale. It evaluates with the threads of each call (`--jobs`,
+`MCAD_JOBS` of the client), else with its own default (the number of CPUs).
 
 | Command / setting | Effect |
 | --- | --- |

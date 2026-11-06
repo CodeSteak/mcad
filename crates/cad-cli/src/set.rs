@@ -339,6 +339,7 @@ pub(crate) fn command(a: &SetArgs) -> Result<Outcome, Fail> {
         SessionOptions { auto_root_mesh: false, ..Default::default() },
         std_clock(),
     );
+    crate::kernel::use_jobs(s.engine_mut(), crate::kernel::jobs());
     s.post(ToEngine::SetFiles { files, main: Some(proj.files[0].path.clone()) });
     let msgs = s.post(ToEngine::SetSource { text: new_main, version: 1 });
     s.post(ToEngine::Cancel);

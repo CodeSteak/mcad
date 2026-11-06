@@ -24,6 +24,7 @@
 | `-m 'NAME(args)'` | same, with arguments as in a call: positional then named, expressions see the file's variables and functions (`-m 'holder(30, h = 5)'`, `-m 'parts.screw(d = 3)'`); combines with `-D` for other parameters. Exit 2: unknown module/parameter, too many positional arguments, a parameter twice or also in `-D`, an argument that fails or warns |
 | `-D NAME=VALUE` | with a module context: override a parameter of that module; without: override a top-level assignment of the main file (like `openscad -D`: the last assignment of the name takes the value, variables computed from it follow; `$fn` etc. need no assignment; unknown name → warning). JSON value (`-D w=60`, `-D p=[1,2]`), else string. Repeatable, the last `-D` of a name wins |
 | `--no-daemon`, `--verbose` | compute locally / daemon info on stderr |
+| `--jobs N` | threads that evaluate independent parts of a model at once (children of `union`/`difference`/`intersection`/`hull`/`minkowski`, groups, separate instances), 1 to 256; default `MCAD_JOBS`, else the number of CPUs; `--jobs 1` sequential. The result is the same for every N (geometry, face tags, diagnostics and their order, cache keys); only the time changes. A chain (each step needs the one before) does not get faster. Bad `MCAD_JOBS` → exit 2 |
 | `--lang en\|de` | language of the text output and JSON display texts; default `MCAD_LANG`, else locale (`LC_ALL`, `LC_MESSAGES`, `LANG`): `de*` → German, else English. Other value → exit 2 |
 
 ```sh

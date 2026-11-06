@@ -327,6 +327,7 @@ fn evaluate(text: &str, file: &Path, with_brep: &[bool], mesh_tol: Option<f64>) 
     let mut opts = SessionOptions { auto_root_mesh: false, ..Default::default() };
     opts.eval.max_stack_bytes = 192 << 20;
     let mut s = Session::new(SolidcoreKernel::new(), opts, std_clock());
+    crate::kernel::use_jobs(s.engine_mut(), crate::kernel::jobs());
     // `include`/`use` relative to the file, as in the other commands
     let root = file.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
     let main = file.file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_default();

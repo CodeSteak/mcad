@@ -145,7 +145,7 @@ on a cube minus 125 balls; `diff-kernels --help` gives the `--mesh-tol` range.
 | Booleans (phase 3) | 2596 of 2604 nodes `same` against the reference; `differ` 2 (`sketch_cable_duct`, `f11` a gain); open point 12 |
 | Variable-radius fillet | 3 `unsupported` + 3 `blocked` (open point 1): reported as not supported (diagnostic above) |
 | Meshes | 100 of 100 `ok` and watertight at 0.05 |
-| Performance | open point 10 (evaluation about 1.5 × SMLib's, meshing faster); no longer measurable against SMLib |
+| Performance | open point 10 (evaluation about 1.5 × SMLib's, meshing faster); no longer measurable against SMLib. Debug renders of the examples (studio, 900 × 675, measured 2026-11-06 against the last SMLib binary): `07-mug` 17.8 s → 25.7 s (the item to look at), `09-flashlight` 32.4 → 22.0 s, the others within ±10 %; images: under 0.21 % of the pixels differ by more than 40/255 |
 | Code on SMLib | none |
 
 ## Next steps

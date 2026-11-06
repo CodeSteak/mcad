@@ -684,3 +684,73 @@ fn tangent_contact_place_in_diagnostics_and_render() {
     assert!(m["message"].as_str().unwrap().contains("berühren sich tangential"), "{m}");
     assert!(!m["edges"].as_array().unwrap().is_empty());
 }
+
+/// `v` without what measures time (`cost`, `ms`, `brep_ms`, `timings`, the daemon's note).
+fn without_times(v: &mut Value) {
+    match v {
+        Value::Object(m) => {
+            for k in ["cost", "ms", "brep_ms", "timings", "daemon", "eval_ms", "kernel_ms"] {
+                m.remove(k);
+            }
+            m.values_mut().for_each(without_times);
+        }
+        Value::Array(a) => a.iter_mut().for_each(without_times),
+        _ => {}
+    }
+}
+
+/// Evaluation on several threads gives what one thread gives, over the whole corpus of the
+/// reference: every node's status, message, volume, faces, edges and selected edges, and every
+/// result's mesh (hash of positions and indices); `--jobs 4` twice (races would show as a
+/// difference between the runs). `eval --json` of the heaviest examples (diagnostics, hints,
+/// bounds, statistics of every node): the same for 1, 2 and 4 threads.
+#[test]
+fn parallel_evaluation_is_deterministic() {
+    let run = |jobs: &str| {
+        let out = mcad().args(["diff-reference", &reference(), "--mesh", "--json", "--jobs", jobs]).output().unwrap();
+        let mut v: Value = serde_json::from_slice(&out.stdout).unwrap();
+        without_times(&mut v);
+        v
+    };
+    let one = run("1");
+    assert_eq!(one["files"].as_array().unwrap().len(), 101);
+    for round in 0..2 {
+        let four = run("4");
+        if four != one {
+            for (a, b) in one["files"].as_array().unwrap().iter().zip(four["files"].as_array().unwrap()) {
+                assert_eq!(a, b, "round {round}: {} differs with --jobs 4", a["file"]);
+            }
+            assert_eq!(one, four, "round {round}");
+        }
+    }
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for f in [
+        "examples/08-macropad.mcad",
+        "examples/09-flashlight.mcad",
+        "examples/07-mug.mcad",
+        "tests/models/everyday/key_rack/key_rack.mcad",
+        "tests/models/spec/hull_minkowski.mcad",
+        "tests/models/project-housing/housing.mcad",
+    ] {
+        let f = root.join(f).display().to_string();
+        let eval = |jobs: &str| {
+            let out = mcad().args(["eval", &f, "--json", "--jobs", jobs]).output().unwrap();
+            let mut v: Value = serde_json::from_slice(&out.stdout).unwrap();
+            without_times(&mut v);
+            v
+        };
+        let want = eval("1");
+        for jobs in ["2", "4"] {
+            assert_eq!(eval(jobs), want, "{f} with --jobs {jobs}");
+        }
+    }
+    // the option and the variable: bad values are usage errors
+    let out = mcad().args(["check", &data("plate.mcad"), "--jobs", "0"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let out = mcad().env("MCAD_JOBS", "many").args(["check", &data("plate.mcad"), "--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let v: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert!(v["error"].as_str().unwrap().contains("MCAD_JOBS"), "{v}");
+    let out = mcad().env("MCAD_JOBS", "2").args(["check", &data("plate.mcad"), "--json"]).output().unwrap();
+    assert_eq!(out.status.code(), Some(0));
+}

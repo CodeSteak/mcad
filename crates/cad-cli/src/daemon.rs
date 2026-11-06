@@ -717,6 +717,7 @@ fn new_engine(cfg: &DaemonConfig) -> Engine<CliKernel> {
     let config =
         EngineConfig { cache_bytes: cfg.cache_bytes(), cache_entries: cfg.cache_entries, ..Default::default() };
     let mut e = Engine::with_config(crate::kernel::new_kernel(), config);
+    crate::kernel::use_jobs(&mut e, crate::kernel::resolve_jobs(None).unwrap_or(1));
     // Cost of a node result: what its evaluation kept on the heap (at least the estimate).
     if heap_in_use().is_some() {
         e.set_heap_probe(Some(Box::new(|| heap_in_use().unwrap_or(0))));
@@ -896,6 +897,10 @@ fn execute(job: &Job, engine: Engine<CliKernel>) -> Result<Executed, Refused> {
     if let Err(e) = std::env::set_current_dir(&job.cwd) {
         return Err(Box::new((format!("{}: {e}", job.cwd.display()), engine)));
     }
+    // threads: the call's `--jobs` (the client turns its MCAD_JOBS into it), else the daemon's
+    let mut engine = engine;
+    let jobs = cli.jobs.map_or_else(|| crate::kernel::resolve_jobs(None).unwrap_or(1), |n| n as usize);
+    crate::kernel::use_jobs(&mut engine, jobs);
     let project = project_id(&cmd, &job.cwd);
     let ctx = Ctx { stdin: job.stdin.clone(), engine: Some(engine), ..Default::default() };
     let name = crate::command_name(&cmd);

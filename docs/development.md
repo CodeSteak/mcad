@@ -50,7 +50,10 @@ Language: cad-syntax (parser) → cad-eval (values with provenance, grids, ancho
   (`cad-step`) from the exact B-Rep. 3MF is multi-colour: one object per part, inside it one part
   per colour (colour regions via kernel Booleans, cached) with filament slot in
   `Metadata/model_settings.config` (Bambu Studio, OrcaSlicer); in addition "one STL per colour" as ZIP.
-- No COOP/COEP headers needed (no threads, no `SharedArrayBuffer`).
+- Native evaluation runs independent nodes (children of Booleans, groups, `hull` …) on a thread
+  pool, `--jobs N` / `MCAD_JOBS` (default: the number of CPUs), with the same results for every
+  N ([`technical-plan.md`](technical-plan.md), section 22). The browser evaluates on one thread.
+- No COOP/COEP headers needed (no threads in the browser, no `SharedArrayBuffer`).
 - CLI daemon: `check`, `eval`, `inspect`, `render`, `export`, `outline`, `measure`, `set`
   run in a background process with one engine for all projects (starts on the first
   call, exits after 15 min without a request; limits 512 MiB cache, 8 projects, watchdog 30 min).

@@ -172,7 +172,11 @@ pub fn new_session(opts: SessionOptions) -> Pooled {
     let engine = CTX.with(|c| c.borrow_mut().as_mut().and_then(|ctx| ctx.engine.take()));
     let s = match engine {
         Some(e) => Session::with_engine(e, opts, std_clock()),
-        None => Session::new(crate::kernel::new_kernel(), opts, std_clock()),
+        None => {
+            let mut s = Session::new(crate::kernel::new_kernel(), opts, std_clock());
+            crate::kernel::use_jobs(s.engine_mut(), crate::kernel::jobs());
+            s
+        }
     };
     Pooled(Some(s))
 }

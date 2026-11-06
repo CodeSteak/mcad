@@ -130,4 +130,5 @@ Units mm and degrees, Z up.
 
 All commands: `--json`. Model commands (`check` … `export`, not `set`): `-D name=value`
 (override parameters), `-m/--module NAME` (module context). Kernel: solidcore (Rust), meshes
-from mcad's tessellator `cad-tess`.
+from mcad's tessellator `cad-tess`. Threads: `--jobs N` / `MCAD_JOBS` (default: CPUs; same result
+for every N).

@@ -181,6 +181,11 @@ pub(crate) struct Cli {
     /// else the locale (LC_ALL, LC_MESSAGES, LANG): German for `de*`, otherwise English.
     #[arg(long, global = true, value_name = "en|de", value_parser = ["en", "de"])]
     lang: Option<String>,
+    /// Threads that evaluate independent parts of a model at once (the children of a Boolean,
+    /// a group, hull …): 1 to 256, 1 is sequential; the result is the same for every value.
+    /// Default: MCAD_JOBS, else the number of CPUs.
+    #[arg(long, global = true, value_name = "N", value_parser = clap::value_parser!(u32).range(1..=256))]
+    pub(crate) jobs: Option<u32>,
 }
 
 #[derive(Args, Clone)]
@@ -419,8 +424,11 @@ fn main() -> ExitCode {
         Cmd::Daemon { cmd } => return daemon::command(cmd),
         Cmd::Usage { a } => return usage::command(a),
         Cmd::EngineHost => {
-            let code = cad_desktop::engine::host_main(
+            // (an invalid MCAD_JOBS: sequential, the app has no place to show the message)
+            let jobs = kernel::resolve_jobs(cli.jobs).unwrap_or(1);
+            let code = cad_desktop::engine::host_main_jobs(
                 kernel::new_kernel,
+                jobs,
                 std::io::stdin(),
                 cad_desktop::engine::protocol_stdout(),
             );
@@ -455,9 +463,21 @@ fn main() -> ExitCode {
     }
     let json_mode = json_mode(&cmd);
     let name = command_name(&cmd);
+    match kernel::resolve_jobs(cli.jobs) {
+        Ok(n) => kernel::set_jobs(n),
+        Err(m) if evaluates_command(name) || name == "diff-reference" => {
+            return finish(name, json_mode, Err(Fail::Usage(m)), None).emit();
+        }
+        Err(_) => {}
+    }
     let mut info = None;
     if daemon::eligible(&cmd) {
-        let argv: Vec<OsString> = std::env::args_os().skip(1).collect();
+        let mut argv: Vec<OsString> = std::env::args_os().skip(1).collect();
+        if cli.jobs.is_none() && std::env::var_os("MCAD_JOBS").is_some_and(|v| !v.is_empty()) {
+            // the daemon has its own environment: MCAD_JOBS of this call as the option
+            argv.push("--jobs".into());
+            argv.push(kernel::jobs().to_string().into());
+        }
         match client::run(&argv, uses_stdin(&cmd), cli.no_daemon, cli.verbose, lang) {
             client::Attempt::Done(out) => return out.emit(),
             client::Attempt::Local(i) => info = Some(i),

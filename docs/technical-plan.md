@@ -1609,3 +1609,51 @@ User decision: violation = warning; `mcad export` aborts (exit 4), except with
 - Limitations: contact area on curved coincident faces (pin in bore) only estimated
   on the mesh; mesh intersection without volume and without intersection body; the check blocks the
   worker for the duration of the booleans (cached; skipped while dragging).
+
+## 22. Parallel evaluation (phase B, 2026-11-06)
+
+Independent nodes of the geometry tree (the children of a Boolean, group, `hull`, `minkowski`,
+instances side by side) are evaluated at the same time on native targets; wasm32 stays
+sequential. `--jobs N` / `MCAD_JOBS` (default: the number of CPUs) for every command, the
+daemon (per call) and the desktop engine process; `Engine::set_workers(jobs, make_kernel)` in
+the engine, default sequential.
+
+| Part | Design |
+| --- | --- |
+| Determinism | every node starts with `Kernel::begin_node(seed)`, seed from its cache key; solidcore takes a fresh `solidcore::Kernel` (random numbers, the latched fillet step, the context's model size estimate, which a transform sets and later operations read, marks) and copy key domains from the seed (bits 12–26, below the reserved bit 63). So a node's result depends on its inputs alone, not on what ran before on that kernel; `--jobs 1` (the old loop, plus `begin_node`) gives the same results as before on the corpus. Tags come from cache keys at `start`, diagnostics are collected in tree order at `finish`: neither depends on the order of evaluation |
+| Kernels | `jobs` worker threads, each with its own kernel made by the factory in that thread (the kernel need not be `Send`); the dispatching thread mostly waits, keeps the engine's kernel for cheap nodes and for every query after the evaluation |
+| Shapes | `kernel-solidcore`: `Arc<ShapeData>`, the B-rep in a `ShapeCell` (a `RefCell` shared between threads: the borrowing thread owns it until its last borrow ends, nested borrows on one thread behave as before), memos (mass, box, source of a transform) behind mutexes; `Send + Sync` |
+| Node results | `Arc<NodeOutput>` in `OnceLock` slots shared with the workers; the tree and tags as `Arc`. Caches of meshes, B-reps, colour regions and caller data stay `Rc` on the dispatching thread |
+| Scheduling (`Job::step_parallel`) | readiness: all children in the evaluation order finished, and for a `zone` the body of its block (a zone is limited to the body's bounds); ready nodes are dispatched in post-order position. Blocked and cached nodes, 2D nodes, empty nodes and primitives without blends run on the dispatching thread; a node whose key is already on a worker waits and takes that result as a cache hit (as the sequential order finds it in the cache): the same statistics (nodes, cache hits, kernel calls) as sequential |
+| Budget | a step dispatches, then waits until at least one node finished and the deadline has passed, or the evaluation is complete; nodes still running go on in the background. A hanging kernel call blocks the step as before (the desktop watchdog still sees no answers); `Job::current` is the first running node in evaluation order. A budget in kernel calls (`Budget::ops`, tests) runs sequentially |
+| Results from workers | inserted into the LRU on the dispatching thread with the topology estimate (no heap probe: other threads allocate at the same time); a panic in a worker is resumed on the dispatching thread; tasks of a dropped job that have not started are skipped |
+| Granularity | one task per node with kernel work worth a thread; a chain (each node needs the one before) runs one node after the other on whichever thread |
+
+Tests: `cad-engine/tests/parallel.rs` (four slow Booleans under a union: more than one runs at
+a time; identical subtrees are cache hits; the examples and spec models with 1 and 4 threads,
+twice: the same reports, keys, volumes to the bit, statistics) and `cad-cli/tests/cli.rs`
+`parallel_evaluation_is_deterministic` (`diff-reference --mesh` over the 101 files of the
+reference with `--jobs 1` and twice `--jobs 4`: identical per-node results and mesh hashes;
+`eval --json` of the heaviest models with 1, 2 and 4 threads: identical).
+
+Timings (release, 4 cores, cold process `MCAD_NO_DAEMON=1 mcad eval FILE --json --jobs N`,
+median of 3; engine time = `stats.kernel_ms`):
+
+| Model | `--jobs 1` | `--jobs 2` | `--jobs 4` | engine × (4 threads) |
+| --- | ---: | ---: | ---: | ---: |
+| `examples/08-macropad` | 24.4 s | 18.9 s | 19.1 s | 1.29 |
+| `examples/07-mug` | 11.1 s | 10.2 s | 10.3 s | 1.07 |
+| `examples/09-flashlight` | 1.39 s | 1.22 s | 1.12 s | 1.25 |
+| `examples/05-box-lid` | 1.26 s | 0.89 s | 1.00 s | 1.30 |
+| `spec/text_sign` | 21.5 s | 19.8 s | 19.9 s | 1.08 |
+| `everyday/key_rack` | 19.9 s | 16.5 s | 17.2 s | 1.18 |
+| `everyday/trivet` | 12.0 s | 12.0 s | 11.6 s | 1.04 |
+| `everyday/gear` | 7.6 s | 6.5 s | 6.4 s | 1.19 |
+| `everyday/housing` | 7.6 s | 5.9 s | 5.3 s | 1.48 |
+| 16 files (examples 01–09 and 7 heavy ones) | 122.4 s | 107.0 s | 106.7 s | 1.15 |
+
+The gain is bounded by the longest chain of dependent nodes: in these models one or two
+expensive nodes at the top (macropad: Boolean 8.5 s → fillet 6.0 s → Boolean 2.1 s; mug:
+shell → union with fillet; text_sign: one Boolean of 13.3 s) follow each other, and only the
+cheaper branches below them overlap. Two threads get nearly all of it. More needs parallelism
+inside a kernel call (solidcore). The small examples (under 1.5 s) stay within noise.
