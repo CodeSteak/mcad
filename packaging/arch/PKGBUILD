@@ -7,16 +7,16 @@
 # file there and sets pkgver (<Cargo version>.r<commits>.g<hash>) and _srcsum.
 # Directly with makepkg: first `make dist`, then set pkgver/_srcsum as above.
 #
-# SMLib (Apache-2.0) comes as a Git source (fork tangency-labs/smlib, fixed commit as in
-# smlib/fetch.sh) with the patches from smlib/patches; other location: SMLIB_URL=… make arch-pkg.
+# The kernel solidcore (Apache-2.0, Rust) is a git dependency of crates/kernel-solidcore,
+# fetched by `cargo fetch` in prepare().
 
 pkgname=mcad
 pkgver=0.3.0
 pkgrel=1
-pkgdesc='Parametric CAD in an OpenSCAD dialect with exact B-rep (SMLib): CLI mcad and desktop UI'
+pkgdesc='Parametric CAD in an OpenSCAD dialect with exact B-rep (solidcore): CLI mcad and desktop UI'
 arch=('x86_64')
 url='https://github.com/CodeSteak/controller-cad'
-# Project: MIT; SMLib: Apache-2.0; fonts: OFL-1.1; crates/UI: MIT, Apache-2.0
+# Project: MIT; solidcore: Apache-2.0; fonts: OFL-1.1; crates/UI: MIT, Apache-2.0
 # up to 0.2.x the package and program were called controller-cad and cad
 provides=('controller-cad')
 conflicts=('controller-cad')
@@ -32,40 +32,25 @@ depends=(
   'hicolor-icon-theme'
   'libgcc'
   'libsoup3'
-  'libstdc++'
   'shared-mime-info'
   'webkit2gtk-4.1'
 )
 makedepends=(
   'cargo'
-  'cmake'
   'git'
-  'ninja'
   'nodejs'
   'pnpm'
 )
-# lto: makepkg would build SMLib (static C++ libraries) as GCC LTO objects that rustc
-# cannot resolve when linking. debug: debug info of the Tauri/WebKit bindings costs several GB.
+# lto: C objects of crates' build scripts as GCC LTO objects cannot be resolved by rustc when
+# linking. debug: debug info of the Tauri/WebKit bindings costs several GB.
 options=('!lto' '!debug')
-_smlib_commit=7eba8aa8086777c9cb220c0eb2726112a2a5a2b4
 _srcsum=SKIP
-source=("$pkgname-$pkgver.tar.gz"
-        "smlib::git+${SMLIB_URL:-https://github.com/tangency-labs/smlib.git}#commit=$_smlib_commit")
-sha256sums=("$_srcsum"
-            'SKIP')
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=("$_srcsum")
 
 prepare() {
   cd "$pkgname-$pkgver"
-  # SMLib sources where smlib/fetch.sh and build.rs expect them, apply the patches once
-  mkdir -p third_party
-  ln -sfn "$srcdir/smlib" third_party/smlib
-  local p
-  for p in smlib/patches/*.patch; do
-    if ! git -C "$srcdir/smlib" apply --reverse --check "$PWD/$p" 2>/dev/null; then
-      git -C "$srcdir/smlib" apply "$PWD/$p"
-    fi
-  done
-  # Network access only here: crates and pnpm packages
+  # Network access only here: crates (solidcore from git) and pnpm packages
   export RUSTUP_TOOLCHAIN=stable
   cargo fetch --locked --target "$(rustc -vV | sed -n 's/^host: //p')"
   (cd web && pnpm install --frozen-lockfile)
@@ -76,13 +61,7 @@ build() {
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR="$PWD/target"
   export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$srcdir=/usr/src/$pkgname"
-  # SMLib is only tested without libstdc++ assertions (as in CI and the test reports)
-  export CXXFLAGS="${CXXFLAGS//-Wp,-D_GLIBCXX_ASSERTIONS/}"
-  # __FILE__ in SMLib messages without $srcdir
-  CFLAGS+=" -ffile-prefix-map=$srcdir=/usr/src/$pkgname"
-  CXXFLAGS+=" -ffile-prefix-map=$srcdir=/usr/src/$pkgname"
-  export JOBS="${JOBS:-$(nproc)}"
-  make app SMLIB_SRC="$srcdir/smlib" SMLIB_PREBUILT="$srcdir/smlib-native" CARGO_FLAGS=--frozen
+  make app CARGO_FLAGS=--frozen
 }
 
 check() {
@@ -103,5 +82,5 @@ check() {
 
 package() {
   cd "$pkgname-$pkgver"
-  make install DESTDIR="$pkgdir" PREFIX=/usr SMLIB_SRC="$srcdir/smlib"
+  make install DESTDIR="$pkgdir" PREFIX=/usr
 }

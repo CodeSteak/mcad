@@ -2,6 +2,8 @@
 
 As of: 2026-10-23, current state after test report 11 (first version 2026-10-22) · Basis: `Spec: Parametrische CAD-Sprache mit Rastern` (2026-10-22)
 
+**2026-11-06, M8 done:** the kernel is solidcore (Rust, `kernel-solidcore`) everywhere: CLI, daemon, desktop engine process and browser worker (one Wasm module); SMLib (C++), its facade, `smlib/`, CMake/cc/Emscripten and `diff-kernels` are removed. SMLib's last per-node results are frozen in `tests/kernel-reference.json` (`mcad diff-reference`, test `solidcore_against_the_reference`). Rows below that describe SMLib are history; the current state of the switch: `docs/solidcore-handover.md`.
+
 Section 0 summarises what has changed since the first version; sections 1–14 describe the implemented state, section 13 the status of the milestones, section 15 the known limitations, section 16 colours, filaments and theme, section 17 sketches, text and the sketch editor, section 18 measuring. Test reports: `docs/reports/` (B1 … B11 = report 1 … 11, overview in `docs/reports/README.md`).
 
 Goal: the application runs entirely in the browser, desktop only, for small hobby projects. Language, evaluation, cache and write-back are in Rust (Wasm), the UI in TypeScript/React. In addition there is a CLI (also for use by Claude Code) and a desktop version (Tauri 2, B9) with a native kernel, real files, a file watcher and Git markers.
@@ -10,7 +12,7 @@ Fixed constraints:
 
 | Topic | Decision |
 | --- | --- |
-| Kernel | Until release: SMLib (C++, upstream of solidcore) as Wasm, from the fork `tangency-labs/smlib` (`capi-tess` @ `7eba8aa`) with `smlib/patches/0001`. Before release: switch to solidcore (M8, open). |
+| Kernel | solidcore (Rust port of SMLib, `tangency-labs/solidcore`, pinned commit) through `kernel-solidcore` (M8, done 2026-11-06). Until then SMLib (C++) from the fork `tangency-labs/smlib` (`capi-tess` @ `7eba8aa`) as Wasm and native. |
 | Platform | Desktop browser; no touch input |
 | Storage | Browser only; no backend |
 | Headers | No cross-origin isolation (COOP/COEP) as long as it is not needed. Hence also no `SharedArrayBuffer` and no threads. |
@@ -40,7 +42,7 @@ Fixed constraints:
 | Parts | open point 2 | named instances at the top level of the main file; export per part (STL/3MF/STEP), all as ZIP or as 3MF with one object per part; CLI `export --part`, `--all-parts` | B6 |
 | Named instances in loops | not defined | `k[i]: …` with integer index (`k[2].anker`, snap writes `k[2].ecke`); `k: …` in `for` remains an error | B6 (P08) |
 | Variable radius | stretch goal | `fillet(r = function (p) …)` and `difference/union/intersection(fillet = function (p) …)`: cad-eval translates the function literal into a radius law `cad_ir::Law` (pure expression over `p`, part of the tree and of the cache key) instead of a callback; the engine evaluates it at sample points per edge, the facade (`sc_fillet_var`) builds a B-spline law from them | B7 |
-| solidcore | `kernel-solidcore` from the switch | `kernel-solidcore` and `mcad diff-kernels` exist, opt-in (feature `solidcore`), pin `bba8d87`: 1187 of 1438 nodes identical to SMLib (primitives, transformation, most booleans); tessellation not in solidcore's scope (custom tessellator needed), M8 waits; work plan `docs/solidcore-plan.md` | B5, B6, `docs/solidcore-migration.md` |
+| solidcore | `kernel-solidcore` from the switch | the only kernel since 2026-11-06 (M8); before, opt-in next to SMLib and compared with `mcad diff-kernels` (pin `bba8d87`: 1187 of 1438 nodes identical, later 2596 of 2604); own tessellator `cad-tess`; work plan `docs/solidcore-plan.md` | B5, B6, `docs/solidcore-migration.md`, `docs/solidcore-handover.md` |
 | UI libraries | react-three-fiber, `three-mesh-bvh`, `Line2` | three.js directly (raycaster, lines as `LineSegments`), without r3f and BVH; TS protocol types generated from Rust with `ts-rs` | B2 |
 | CI | GitHub Actions, cached SMLib builds | no hosted CI (workflows removed 2026-10-30); check scripts in `scripts/ci/`, run locally (section 11) | B9 |
 | Tauri version | "later, optional" | `crates/cad-app` (Tauri 2) in the `mcad` binary (feature `gui`, default): `mcad` / `mcad datei.mcad` / `mcad ordner/` starts the UI. Engine in a separate process (`mcad engine-host`, engine thread with 256 MiB stack, stepwise as in the worker), because SMLib has global state and a hanging call can only be stopped by ending the process; responses are sent in binary over a Tauri channel (`cad-desktop/src/wire.rs`). Files on disk, file watcher (`notify`), Git gutter against `HEAD` (`git` call + `similar`), control via `mcad ui status/show/screenshot` over local IPC (`cad-ipc`) | B9 |
@@ -67,9 +69,9 @@ Fixed constraints:
 │  cad-syntax → cad-eval → cad-ir → cad-engine (cache, zones, provenance, handles)│
 │                                         │ trait Kernel                          │
 │               ┌─────────────────────────┼──────────────────────────┐            │
-│        kernel-smlib (interim)     kernel-solidcore (target)   kernel-mock (tests)│
-│               │                                                                 │
-│        smlib.wasm (C++, Emscripten) or linked natively                          │
+│                        kernel-solidcore (solidcore)      kernel-mock (tests)   │
+│                                │                                                │
+│                 solidcore (Rust; in the Wasm module or native)                  │
 └─────────────────────────────────────────────────────────────────────────────────┘
       Entry points:  cad-wasm (browser worker) · cad-cli (native) · cad-app/cad-desktop (Tauri, native)
 
@@ -78,7 +80,7 @@ Desktop (Tauri 2, B9):
                      file watcher, Git base, control socket ui-<pid> (cad-ipc)
      │ stdin: frames `post` [ToEngine…]            ▲ stdout: binary response batches (wire.rs)
      ▼                                              │
-  mcad engine-host (engine process): engine thread 256 MiB, Session::post/step(16 ms), SMLib native
+  mcad engine-host (engine process): engine thread 256 MiB, Session::post/step(16 ms), solidcore
   mcad ui status|show|screenshot (CLI) ──── Unix socket in the user directory ────▶ app
 ```
 
@@ -373,7 +375,7 @@ A native program `mcad` (crate `cad-cli`; up to 0.2 the binary was called `cad`)
 | `watch <datei> [--render bild.png …]` | watches the file and project files (`notify`), re-evaluates in the same session (cache stays), one JSON line per run |
 | `set <datei> --param m.p=wert \| --literal [datei:]z:s=wert` | change code through the engine (default value, literal), checks before writing, atomic, `--dry-run` |
 | `export <datei> -o teil.stl\|.3mf\|.step [-D …] [--schema ap214] [--part name] [--all-parts]` | export file (STEP: exact B-rep, AP242), single or all parts |
-| `diff-kernels <datei…>` | comparison SMLib ↔ solidcore (development only, `docs/solidcore-migration.md`) |
+| `diff-reference <referenz> [datei…]` | solidcore against SMLib's frozen per-node results (development only, `docs/solidcore-handover.md`) |
 
 - Every command has `--json` with a fixed, versioned schema (`schema_version`) and defined exit codes (0 ok, 1 model error, 2 invocation, 3 kernel). Without `--json` there is readable text.
 - `mcad` without arguments starts the desktop UI, `mcad datei.mcad` or `mcad ordner/` with this file or folder as the project (feature `gui`, default; `--no-default-features` builds a CLI without UI). Without a graphical session (no `DISPLAY`/`WAYLAND_DISPLAY`) or without `gui`: message listing the headless commands, exit 2. `mcad --help` explains both.
@@ -422,8 +424,8 @@ crates/
   cad-ir/           geometry tree, CacheKey, radius law (Law)
   cad-kernel/       trait Kernel, shared types (P3, Mat4, Mesh, Tag …), neutral B-rep
   kernel-mock/      test kernel in Rust
-  kernel-smlib/     kernel via the SMLib facade (features: wasm | native)
-  kernel-solidcore/ kernel via solidcore (opt-in, feature solidcore)
+  kernel-solidcore/ the kernel: cad_kernel::Kernel over solidcore
+  cad-tess/         tessellator of the neutral B-rep
   cad-engine/       cache, provenance, zones, parts, export STL/3MF/STEP
   cad-step/         STEP writer (AP242/AP214)
   cad-measure/      measuring on the exact B-rep (distance, radius, angle, length, area, section, wall thickness)
@@ -435,10 +437,6 @@ crates/
   cad-app/          Tauri 2 app (commands, channel, windows, control socket)
   cad-cli/          CLI (starts the UI when given no command)
   compat-tests/     OpenSCAD comparison stage 1
-smlib/
-  fetch.sh          sources: tangency-labs/smlib @ 7eba8aa (= usd-brep c9c5979 + fixes) + patches/
-  facade/           C++ facade; CMakeLists.txt, build-native.sh, build-wasm.sh
-third_party/smlib/  SMLib sources (not checked in)
 web/
   src/app/  src/editor/  src/view/  src/engine/  src/logic/  src/files/  src/state/  src/platform/  e2e/  e2e-tauri/  scripts/
 examples/           example files (also test cases): spec/, openscad-compat/, project-housing/
@@ -457,7 +455,7 @@ docs/               plan, solidcore migration, test reports (reports/)
 | Parser | `cargo test`, `insta` | AST snapshot, error recovery, fuzzing (`cargo-fuzz`) |
 | Evaluation | `kernel-mock` | values, origin, grids, anchors, visibility, diagnostics |
 | Write-back | Rust | handle → TextEdit → re-parse → expected value |
-| Kernel | `kernel-smlib` native | volume, face count, edge selection, provenance after booleans and fillets |
+| Kernel | `kernel-solidcore`; `mcad diff-reference` against SMLib's frozen results | volume, face count, edge selection, provenance after booleans and fillets |
 | Examples | CLI `eval --json`, `render` | golden values (volume, bounding box, edge count) and reference images per file |
 | OpenSCAD corpus | CLI | share that parses / evaluates / produces geometry |
 | UI | Vitest, Playwright | editor ↔ view, dragging, undo, snapping |
@@ -468,10 +466,10 @@ Checks: no hosted CI (the GitHub workflows were removed on 2026-10-30). Each ste
 | Script | Content |
 | --- | --- |
 | `rust.sh` | Tauri system packages (apt, `scripts/ci/desktop.sh deps`: the workspace contains `cad-app`), `cargo fmt --check`, `cargo clippy --workspace --all-targets -D warnings` (native and `cad-wasm` for wasm32), `cargo test --workspace`, `cargo check -p cad-wasm --target wasm32-unknown-unknown` |
-| `web.sh` | emsdk 6.0.13, `smlib/build-wasm.sh`, `web/scripts/build-wasm.sh`, `pnpm install --frozen-lockfile`, `typecheck`, Vitest, Node tests (smlib.wasm, engine, transport), `pnpm build`, Playwright |
+| `web.sh` | `web/scripts/build-wasm.sh`, `pnpm install --frozen-lockfile`, `typecheck`, Vitest, Node tests (engine, transport), `pnpm build`, Playwright |
 | `compat.sh` | OpenSCAD 2021.01 (apt): regenerate the reference and compare with `reference.json`, self-test of `compare.py`, `include`/`use` against OpenSCAD, `compare.py --eval` with the release CLI; STEP check with `cadquery-ocp==8.0.1.1.0` |
-| `desktop.sh` | Tauri packages (apt), SMLib native, `pnpm build:tauri`, `cargo build --release -p cad-cli`, Tauri E2E with `tauri-driver` + WebKitWebDriver under Xvfb (`web/e2e-tauri/desktop.e2e.mjs`) |
-| `solidcore.sh` | `mcad diff-kernels` against solidcore `main` (`docs/solidcore-migration.md`) |
+| `desktop.sh` | Tauri packages (apt), `pnpm build:tauri`, `cargo build --release -p cad-cli`, Tauri E2E with `tauri-driver` + WebKitWebDriver under Xvfb (`web/e2e-tauri/desktop.e2e.mjs`) |
+| `solidcore.sh` | `mcad diff-reference` with solidcore `main` (pin bump, `docs/solidcore-migration.md`) |
 
 ---
 
@@ -505,7 +503,7 @@ Each milestone ends with a working state in the browser and in the CLI.
 | M5 | Fillet and chamfer: `$fillet`, `fillet =` on booleans, zone blocks, `select`, error display | fillets as in the spec | done (B4, B7) |
 | M6 | 2D and profile operations: profiles, `linear_extrude`, `rotate_extrude`, `loft`, `sweep`, `surface`, `thicken`, `shell` | free-form shapes | done (B4, B7) |
 | M7 | Files, 3MF, OpenSCAD corpus, examples, performance | first complete version | done (B1, B6; performance in B1–B4) |
-| M8 | Switch to solidcore: `kernel-solidcore`, comparison via `diff-kernels`, custom tessellator (not in solidcore's scope), remove SMLib Wasm | ready for release | open: waiting for solidcore (pin `c9de85d`: 241 of 942 nodes equal, 0 different; box and simple extrusion work, other primitives, transformation, booleans, fillets do not); estimate from the research (uncertain): all primitives 1–2 weeks, booleans 2–4, fillets/sweeps/shell 6–10 weeks; tessellator separate work; `kernel-solidcore` and `diff-kernels` exist |
+| M8 | Switch to solidcore: `kernel-solidcore`, comparison via `diff-kernels`, custom tessellator (not in solidcore's scope), remove SMLib | ready for release | done 2026-11-06: solidcore the only kernel, SMLib and all C++ removed, its results frozen in `tests/kernel-reference.json` (2596 of 2604 nodes the same; variable radius with different laws on several edges not supported) |
 | later | STEP export, variable radius, multiple parts, `include`/`use` | | done (B5, B6, B7) |
 | later | Tauri version (`TauriTransport`), file watcher, Git gutter, `mcad ui`, section view | | done (B9) |
 | later | CLI daemon | | done (B10) |

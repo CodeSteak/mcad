@@ -1,8 +1,8 @@
 # controller-cad: build, test, install, Arch package.
 #
-# The targets call the check and build scripts (scripts/ci/*.sh, smlib/*.sh,
-# web/scripts/build-wasm.sh); `make help` lists them. Variables can be overridden:
-#   make app SMLIB_PREBUILT=/path/build-native
+# The targets call the check and build scripts (scripts/ci/*.sh, web/scripts/build-wasm.sh);
+# `make help` lists them. Pure Rust (the kernel solidcore is a git dependency). Variables can be
+# overridden:
 #   make install PREFIX=/usr DESTDIR=/tmp/pkg
 #   make arch-pkg ARCH_BUILD=docker
 #
@@ -24,12 +24,6 @@ MAKEPKG ?= makepkg
 INSTALL ?= install
 
 # --- Paths -----------------------------------------------------------------------------
-# Prebuilt SMLib (libSMLib.a, libSM_API.a in $(SMLIB_PREBUILT)/lib; scripts/ci/smlib-native.sh)
-SMLIB_PREBUILT ?= $(CURDIR)/smlib/build-native
-# SMLib sources (smlib/fetch.sh puts them in third_party/smlib; build.rs needs the headers)
-SMLIB_SRC      ?= $(CURDIR)/third_party/smlib
-# Emscripten SDK for smlib.wasm (empty: emcc from PATH, else the default of smlib/build-wasm.sh)
-EMSDK          ?=
 CARGO_TARGET_DIR ?= $(CURDIR)/target
 CARGO_FLAGS    ?= --locked
 
@@ -56,16 +50,10 @@ ARCH_DOCKER_NETWORK ?= host
 ARCH_CA_BUNDLE      ?=
 ARCH_CACHE_VOLUME   ?= controller-cad-arch-cache
 
-export SMLIB_PREBUILT SMLIB_SRC CARGO PNPM CARGO_TARGET_DIR
-ifneq ($(EMSDK),)
-export EMSDK
-endif
+export CARGO PNPM CARGO_TARGET_DIR
 
 # --- derived values --------------------------------------------------------------------
 MCAD_BIN     := $(CARGO_TARGET_DIR)/release/mcad
-SMLIB_HEADER := $(SMLIB_SRC)/source/SMLib/inc/SmSmlibAll.h
-SMLIB_LIBS   := $(SMLIB_PREBUILT)/lib/libSMLib.a
-SMLIB_WASM   := web/public/smlib/smlib.wasm
 WEB_DEPS     := web/node_modules/.modules.yaml
 WASM_PKG     := web/src/wasm-pkg/cad_wasm.js
 UI_DIST      := web/dist-tauri/index.html
@@ -93,8 +81,6 @@ NEED_CARGO = $(call need,$(CARGO),install Rust 1.97: https://rustup.rs (or make 
 NEED_PNPM  = $(call need,$(PNPM),install pnpm 10.28: corepack enable or npm i -g pnpm@10.28.0 (or make PNPM=…))
 NEED_NODE  = $(call need,$(NODE),install Node.js 22.18 or newer)
 NEED_GIT   = $(call need,$(GIT),install git)
-NEED_CMAKE = $(call need,cmake,install CMake 3.20 or newer (Ninja optional))
-NEED_CXX   = $(call need,$${CXX:-c++},install a C++17 compiler (g++ 13 or clang))
 
 ##@ Help
 .PHONY: help
@@ -105,52 +91,20 @@ help: ## This overview (default target)
 	  /^##@/ { printf "\n%s\n", substr($$0, 5); next } \
 	  /^[a-zA-Z0-9_.-]+:.*## / { printf "  %-14s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 	@echo
-	@echo "Variables (excerpt): CARGO=$(CARGO) PNPM=$(PNPM) SMLIB_PREBUILT=$(SMLIB_PREBUILT)"
-	@echo "  SMLIB_SRC=$(SMLIB_SRC) EMSDK=$(or $(EMSDK),<PATH/default>) CARGO_TARGET_DIR=$(CARGO_TARGET_DIR)"
+	@echo "Variables (excerpt): CARGO=$(CARGO) PNPM=$(PNPM) CARGO_TARGET_DIR=$(CARGO_TARGET_DIR)"
 	@echo "  PREFIX=$(PREFIX) DESTDIR=$(DESTDIR) ARCH_BUILD=$(ARCH_BUILD) ARCH_OUT=$(ARCH_OUT)"
 
 ##@ Dependencies
-.PHONY: deps smlib smlib-fetch smlib-native smlib-wasm emsdk web-deps sysdeps
-deps: smlib web-deps ## SMLib (native + Wasm) and pnpm packages
-
-smlib: smlib-native smlib-wasm ## SMLib native (-> SMLIB_PREBUILT) and as Wasm (-> web/public/smlib)
-
-smlib-fetch: ## SMLib sources (fork + patches) into third_party/smlib
-	@$(NEED_GIT)
-	smlib/fetch.sh
-
-smlib-native: ## Build SMLib natively if the libraries are missing (scripts/ci/smlib-native.sh)
-	@$(NEED_GIT); $(NEED_CMAKE); $(NEED_CXX)
-	scripts/ci/smlib-native.sh "$(SMLIB_PREBUILT)"
-
-smlib-wasm: ## Build smlib.wasm if it is missing (needs emcc: make emsdk)
-	@$(NEED_GIT); $(NEED_CMAKE)
-	@command -v emcc >/dev/null 2>&1 || [ -x "$${EMSDK:-/opt/tools/emsdk}/upstream/emscripten/emcc" ] || \
-	  { echo "make: emcc not found – make emsdk EMSDK=~/emsdk, then make … EMSDK=~/emsdk" >&2; exit 127; }
-	scripts/ci/smlib-wasm.sh
-
-emsdk: ## Install Emscripten 6.0.13 into EMSDK (default ~/emsdk) (scripts/ci/emsdk.sh)
-	@$(NEED_GIT)
-	scripts/ci/emsdk.sh
+.PHONY: deps web-deps sysdeps
+deps: web-deps ## pnpm packages (the Rust crates come with cargo)
 
 web-deps: $(WEB_DEPS) ## pnpm install --frozen-lockfile (only if package.json/lockfile is newer)
 
-sysdeps: ## System packages for Tauri/SMLib via apt (Debian/Ubuntu, scripts/ci/desktop.sh deps)
+sysdeps: ## System packages for Tauri via apt (Debian/Ubuntu, scripts/ci/desktop.sh deps)
 	@command -v apt-get >/dev/null 2>&1 || { echo "make: sysdeps needs apt-get; Arch: see packaging/arch/PKGBUILD (depends/makedepends)" >&2; exit 127; }
 	scripts/ci/desktop.sh deps
 
 # File targets: build only what is missing (the scripts check this themselves as well)
-$(SMLIB_HEADER):
-	@$(NEED_GIT)
-	smlib/fetch.sh
-
-$(SMLIB_LIBS): | $(SMLIB_HEADER)
-	@$(NEED_CMAKE); $(NEED_CXX)
-	scripts/ci/smlib-native.sh "$(SMLIB_PREBUILT)"
-
-$(SMLIB_WASM): | $(SMLIB_HEADER)
-	@$(MAKE) --no-print-directory smlib-wasm
-
 $(WEB_DEPS): web/package.json web/pnpm-lock.yaml
 	@$(NEED_NODE); $(NEED_PNPM)
 	scripts/ci/web.sh install
@@ -158,7 +112,7 @@ $(WEB_DEPS): web/package.json web/pnpm-lock.yaml
 
 ##@ Build
 .PHONY: wasm web ui cli app build
-wasm: $(SMLIB_WASM) ## cad-wasm + wasm-bindgen + wasm-opt -> web/src/wasm-pkg (scripts/ci/web.sh wasm)
+wasm: ## cad-wasm + wasm-bindgen + wasm-opt -> web/src/wasm-pkg (scripts/ci/web.sh wasm)
 	@$(NEED_CARGO)
 	scripts/ci/wasm-bindgen.sh
 	scripts/ci/web.sh wasm
@@ -180,30 +134,30 @@ endif
 $(UI_DIST): $(UI_SOURCES) $(WEB_DEPS)
 	scripts/ci/desktop.sh ui
 
-cli: $(SMLIB_LIBS) ## mcad without desktop UI (headless, without WebKitGTK) -> target/release/mcad
+cli: ## mcad without desktop UI (headless, without WebKitGTK) -> target/release/mcad
 	@$(NEED_CARGO)
 	$(CARGO) build --release $(CARGO_FLAGS) -p cad-cli --no-default-features
 	@ls -l "$(MCAD_BIN)"
 
-app: $(SMLIB_LIBS) $(UI_DIST) ## mcad with desktop UI (Tauri 2, embedded UI) -> target/release/mcad
+app: $(UI_DIST) ## mcad with desktop UI (Tauri 2, embedded UI) -> target/release/mcad
 	@$(NEED_CARGO)
 	$(CARGO) build --release $(CARGO_FLAGS) -p cad-cli
 	@ls -l "$(MCAD_BIN)"
 
-build: smlib web app ## Everything: SMLib native + Wasm, browser app, desktop app
+build: web app ## Everything: browser app, desktop app
 
 ##@ Test
 .PHONY: test test-rust test-web test-node e2e e2e-desktop lint fmt fmt-check clippy typecheck
 test: test-rust test-web ## Rust tests (workspace) and Vitest
 
-test-rust: $(SMLIB_LIBS) ## cargo test --workspace (scripts/ci/rust.sh test)
+test-rust: ## cargo test --workspace (scripts/ci/rust.sh test)
 	@$(NEED_CARGO)
 	scripts/ci/rust.sh test
 
 test-web: $(WEB_DEPS) ## Vitest (scripts/ci/web.sh unit)
 	scripts/ci/web.sh unit
 
-test-node: $(WASM_PKG) ## Node tests: smlib.wasm via the bridge, engine smoke test, transport
+test-node: $(WASM_PKG) ## Node tests: engine smoke test, transport
 	@$(NEED_NODE)
 	scripts/ci/web.sh node
 
@@ -224,7 +178,7 @@ fmt-check: ## cargo fmt --all --check
 	@$(NEED_CARGO)
 	scripts/ci/rust.sh fmt
 
-clippy: $(SMLIB_LIBS) ## cargo clippy -D warnings, native and cad-wasm (wasm32)
+clippy: ## cargo clippy -D warnings, native and cad-wasm (wasm32)
 	@$(NEED_CARGO)
 	scripts/ci/rust.sh clippy clippy-wasm
 
@@ -244,11 +198,15 @@ install: ## mcad, desktop file, icons, licenses, examples into DESTDIR+PREFIX (m
 	$(INSTALL) -Dm644 assets/icon/cad.svg "$(DESTDIR)$(ICONDIR)/scalable/apps/mcad.svg"
 	$(INSTALL) -Dm644 -t "$(DESTDIR)$(LICENSEDIR)" LICENSE packaging/linux/NOTICE crates/cad-font/fonts/OFL-*.txt
 	$(INSTALL) -Dm644 crates/cad-font/fonts/README.md "$(DESTDIR)$(LICENSEDIR)/fonts-README.md"
-	@if [ -f "$(SMLIB_SRC)/LICENSE" ]; then \
-	  echo "$(INSTALL) -Dm644 $(SMLIB_SRC)/LICENSE $(DESTDIR)$(LICENSEDIR)/SMLib-LICENSE"; \
-	  $(INSTALL) -Dm644 "$(SMLIB_SRC)/LICENSE" "$(DESTDIR)$(LICENSEDIR)/SMLib-LICENSE"; \
-	  $(INSTALL) -Dm644 "$(SMLIB_SRC)/THIRD_PARTY_NOTICES.md" "$(DESTDIR)$(LICENSEDIR)/SMLib-THIRD_PARTY_NOTICES.md"; \
-	else echo "make: warning: $(SMLIB_SRC)/LICENSE missing, SMLib license not installed (make smlib-fetch)" >&2; fi
+	@d=$$($(CARGO) metadata --format-version 1 --offline 2>/dev/null \
+	  | grep -o '"manifest_path":"[^"]*/crates/solidcore/Cargo.toml"' | head -n 1 \
+	  | sed -e 's/^"manifest_path":"//' -e 's#/crates/solidcore/Cargo.toml"$$##'); \
+	if [ -n "$$d" ] && [ -f "$$d/LICENSE" ] && [ -f "$$d/NOTICE" ]; then \
+	  echo "$(INSTALL) -Dm644 $$d/LICENSE $(DESTDIR)$(LICENSEDIR)/solidcore-LICENSE (+ NOTICE, ATTRIBUTION.md)"; \
+	  $(INSTALL) -Dm644 "$$d/LICENSE" "$(DESTDIR)$(LICENSEDIR)/solidcore-LICENSE"; \
+	  $(INSTALL) -Dm644 "$$d/NOTICE" "$(DESTDIR)$(LICENSEDIR)/solidcore-NOTICE"; \
+	  if [ -f "$$d/ATTRIBUTION.md" ]; then $(INSTALL) -Dm644 "$$d/ATTRIBUTION.md" "$(DESTDIR)$(LICENSEDIR)/solidcore-ATTRIBUTION.md"; fi; \
+	else echo "make: warning: solidcore checkout not found (cargo fetch), its license not installed" >&2; fi
 	$(INSTALL) -Dm644 README.md "$(DESTDIR)$(DOCDIR)/README.md"
 	$(INSTALL) -Dm644 .claude/skills/cad-cli/SKILL.md "$(DESTDIR)$(DOCDIR)/cad-cli.md"
 	@cd examples && find . -type f | while read -r f; do \
@@ -309,6 +267,5 @@ clean: ## Build outputs: cargo clean, web/dist, web/dist-tauri, web/src/wasm-pkg
 	-$(CARGO) clean
 	rm -rf web/dist web/dist-tauri web/src/wasm-pkg "$(ARCH_OUT)"
 
-distclean: clean ## additionally node_modules, smlib/build-native, web/public/smlib (sources stay)
-	rm -rf web/node_modules smlib/build-native smlib/build-wasm
-	find web/public/smlib -mindepth 1 -not -name .gitkeep -delete 2>/dev/null || true
+distclean: clean ## additionally node_modules (sources stay)
+	rm -rf web/node_modules

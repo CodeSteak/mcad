@@ -3,27 +3,20 @@
 #
 #   scripts/ci/rust.sh fmt | clippy | clippy-wasm | test | wasm-check | all
 #
-# clippy and test link the native SMLib: set SMLIB_PREBUILT (scripts/ci/smlib-native.sh);
-# without it crates/kernel-smlib/build.rs builds SMLib itself (several minutes).
+# Pure Rust (the kernel solidcore is a git dependency): no system libraries beyond the
+# desktop app's (WebKitGTK for cad-app, scripts/ci/desktop.sh deps).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 CARGO="${CARGO:-cargo}"   # overridable, as in the Makefile (make CARGO=/path/to/cargo)
 
-need_smlib() {
-  if [ -z "${SMLIB_PREBUILT:-}" ]; then
-    echo "note: SMLIB_PREBUILT is not set; build.rs builds SMLib with CMake" >&2
-  fi
-}
-
 step() {
   case "$1" in
     fmt) "$CARGO" fmt --all --check ;;
-    clippy) need_smlib; "$CARGO" clippy --workspace --all-targets --locked -- -D warnings ;;
+    clippy) "$CARGO" clippy --workspace --all-targets --locked -- -D warnings ;;
     clippy-wasm) "$CARGO" clippy -p cad-wasm --target wasm32-unknown-unknown --locked -- -D warnings ;;
     test)
-      need_smlib
       "$CARGO" test --workspace --locked
       # tests/daemon.rs stops its daemons: none may be left (checked in CI only, a local
       # daemon of the developer would count too)

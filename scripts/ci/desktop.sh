@@ -2,13 +2,13 @@
 # Desktop app (Tauri 2) and the Linux deps of the Rust checks (the workspace contains crates/cad-app, so `cargo test --workspace` links
 # WebKitGTK).
 #
-#   scripts/ci/desktop.sh deps      # apt: WebKitGTK 4.1, libsoup 3, … (+ ninja); with `e2e-deps` also Xvfb, WebKitWebDriver
+#   scripts/ci/desktop.sh deps      # apt: WebKitGTK 4.1, libsoup 3, …; with `e2e-deps` also Xvfb, WebKitWebDriver
 #   scripts/ci/desktop.sh e2e-deps  # apt: xvfb, webkit2gtk-driver; cargo install tauri-driver
 #   scripts/ci/desktop.sh ui        # pnpm build:tauri -> web/dist-tauri (embedded into mcad)
 #   scripts/ci/desktop.sh build     # cargo build --release -p cad-cli (feature gui) -> target/release/mcad
 #   scripts/ci/desktop.sh e2e       # node web/e2e-tauri/desktop.e2e.mjs (tauri-driver, Xvfb when no display)
 #
-# Locally: scripts/ci/smlib-native.sh && SMLIB_PREBUILT=smlib/build-native scripts/ci/desktop.sh ui build e2e
+# Locally: scripts/ci/desktop.sh ui build e2e
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -23,7 +23,7 @@ step() {
   case "$1" in
     deps)
       $SUDO apt-get update
-      $SUDO apt-get install -y --no-install-recommends ninja-build pkg-config \
+      $SUDO apt-get install -y --no-install-recommends pkg-config \
         libwebkit2gtk-4.1-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
         libayatana-appindicator3-dev librsvg2-dev libxdo-dev
       ;;

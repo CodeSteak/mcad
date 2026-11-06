@@ -3,7 +3,7 @@
 
 For every model: `mcad export <model> -o <x>.step --merge --json` writes the STEP file (the
 root as one fused body, so that it compares with the root) and reports the kernel's volume,
-area and bounds (SMLib `mass_props`/`bounds` of the root) and what the writer wrote. With
+area and bounds (`mass_props`/`bounds` of the root) and what the writer wrote. With
 `--bodies` the default export is checked instead (one body per part / top-level object): read,
 valid, closed, solids, faces and bounds as below, the volume unless overlapping bodies had to be
 written apart (note "getrennt geschrieben" from `mcad export`; overlapping bodies are otherwise
@@ -16,8 +16,7 @@ fused into one), the area not (touching bodies keep their contact faces). The fi
   faces     number of faces equals the writer's
   volume    |V_occ - V_kernel| <= 1e-4 * V_kernel       (solids only; OCCT integrates
             adaptively to 1e-9, its default Gauss rule is off by up to 1e-4 on B-spline faces)
-  area      |A_occ - A_kernel| <= 5e-4 * A_kernel  (SMLib's own area is only ~1e-4 accurate,
-            see AREA_REL)
+  area      |A_occ - A_kernel| <= 5e-4 * A_kernel  (see AREA_REL)
   bounds    every coordinate of OCCT's optimal box within 1e-4 * diagonal of the kernel's
 
 Surface types are counted from OCCT's adaptor (GeomAbs_*) for the table.
@@ -41,9 +40,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 REL = 1e-4
-# SMLib integrates areas to about 1e-4 only (SmApiBrepComputeArea clamps its accuracy to
-# [1e-4, 1e-1]); measured: freiformdeckel kernel 6659.89, OCCT adaptive 6658.641, OCCT mesh
-# (0.002 mm) 6658.656, i.e. the kernel's area is the one that is off (1.9e-4).
+# Set for SMLib, the former kernel, which integrated areas to about 1e-4 only (freiformdeckel:
+# kernel 6659.89, OCCT adaptive 6658.641, OCCT mesh (0.002 mm) 6658.656, 1.9e-4 off); solidcore
+# integrates them to 1e-6, the bound stays as the check's slack.
 AREA_REL = 5e-4
 OCC_EPS = 1e-9
 
