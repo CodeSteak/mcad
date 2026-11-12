@@ -2265,8 +2265,6 @@ dependencies = [
  "cad-tess",
  "glam",
  "solidcore",
- "step-brep",
- "step-import",
 ]
 
 [[package]]
@@ -3649,7 +3647,7 @@ dependencies = [
 [[package]]
 name = "solidcore"
 version = "1.0.1"
-source = "git+https://github.com/tangency-labs/solidcore?rev=f4f05b147551201e2a7b44a34fbc41ddc0fc6578#f4f05b147551201e2a7b44a34fbc41ddc0fc6578"
+source = "git+https://github.com/tangency-labs/solidcore?rev=55d0e7638b9e1ebbf91ab8c10657e595c114ecda#55d0e7638b9e1ebbf91ab8c10657e595c114ecda"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
@@ -3704,20 +3702,6 @@ name = "static_vcruntime"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff7589a1859b09232522bb9edf076ca7fcf14ded96685d3fa629db73023ffbb7"
-
-[[package]]
-name = "step-brep"
-version = "0.1.0"
-source = "git+https://github.com/tangency-labs/solidcore?rev=f4f05b147551201e2a7b44a34fbc41ddc0fc6578#f4f05b147551201e2a7b44a34fbc41ddc0fc6578"
-dependencies = [
- "solidcore",
- "step-import",
-]
-
-[[package]]
-name = "step-import"
-version = "0.1.0"
-source = "git+https://github.com/tangency-labs/solidcore?rev=f4f05b147551201e2a7b44a34fbc41ddc0fc6578#f4f05b147551201e2a7b44a34fbc41ddc0fc6578"
 
 [[package]]
 name = "string_cache"

@@ -1,24 +1,56 @@
 //! `make_polyhedron` (plan 1.7): a solid of planar polygonal faces, one face per polygon as the
 //! SMLib facade's `sc_make_polyhedron` (`SmPolyBrep::CreatePoly` per face, then
 //! `SmBrep::CreateFromPolyBrep`; no coplanar faces merged). solidcore has no poly B-reps
-//! (`SmApiPoly*` is outside its scope), so the faces go through its STEP builder
-//! (`step_brep::build`: one planar face per polygon with line edges, then
-//! `SmApiStitchIntoSolid`). As SMLib's poly B-rep, points closer than its tolerance
-//! (`max(1e-9, 1e-9 · diagonal)`) are one vertex; the faces are oriented consistently and
-//! outward first (SMLib's `OrientTrimmedSurfaces`).
+//! (`SmApiPoly*` is outside its scope), so the faces are built topology first with solidcore's
+//! `BrepConstructor` (`SmBrepConstructor`): one planar face per polygon, each line edge and
+//! vertex made once and shared by its faces, then every face gets its UV trim curves. These are
+//! the calls the STEP builder `step_brep::build` made for such a body up to solidcore `f4f05b1`
+//! (upstream deleted `step-brep` and `step-import` in #14038 and #14194; the STEP reader that
+//! replaced them, `solidcore-step`, reads files into records and has no builder for this). As
+//! SMLib's poly B-rep, points closer than its tolerance (`max(1e-9, 1e-9 · diagonal)`) are one
+//! vertex; the faces are oriented consistently and outward first (SMLib's
+//! `OrientTrimmedSurfaces`).
 
 use std::collections::{BTreeMap, HashMap};
 
 use cad_kernel::{KResult, KernelError};
 use glam::DVec3;
-use step_import::model as sm;
+use solidcore::curve::curve::Curve;
+use solidcore::curve::line::{BoundedLineOptions, Line};
+use solidcore::geom::axis2_placement::Axis2Placement;
+use solidcore::geom::extent1d::Extent1d;
+use solidcore::geom::extent2d::Extent2d;
+use solidcore::nurbs::b_spline_surface_n_lib::p2::OrientType;
+use solidcore::surface::plane::Plane;
+use solidcore::surface::surface::Surface;
+use solidcore::topology::brep_constructor::{BrepConstructor, VertexNode};
+use solidcore::topology::trimming_tools;
+use solidcore::{Brep, EdgeId, Kernel, Point3, SolidError, Vec3, VertexId};
 
 fn invalid(m: impl std::fmt::Display) -> KernelError {
     KernelError::InvalidInput(format!("solidcore: make_polyhedron: {m}"))
 }
 
-/// The neutral STEP body of the polyhedron (faces oriented outward).
-pub(crate) fn body(points: &[DVec3], faces: &[Vec<u32>]) -> KResult<sm::Body> {
+/// A planar face: its plane (origin, x and y axis; the normal points out of the material) and
+/// its one loop, counter-clockwise about the normal, as edges with the direction the loop runs
+/// along each (true: from the edge's start vertex to its end vertex).
+pub(crate) struct PlanarFace {
+    pub origin: DVec3,
+    pub x: DVec3,
+    pub y: DVec3,
+    pub uses: Vec<(usize, bool)>,
+}
+
+/// A closed polyhedral body: welded vertices, line edges (start, end vertex) and planar faces
+/// oriented outward.
+pub(crate) struct Body {
+    pub vertices: Vec<DVec3>,
+    pub edges: Vec<(u32, u32)>,
+    pub faces: Vec<PlanarFace>,
+}
+
+/// The body of the polyhedron (faces oriented outward).
+pub(crate) fn body(points: &[DVec3], faces: &[Vec<u32>]) -> KResult<Body> {
     if points.len() < 4 || faces.len() < 4 {
         return Err(invalid("a polyhedron needs at least 4 points and 4 faces"));
     }
@@ -128,8 +160,7 @@ pub(crate) fn body(points: &[DVec3], faces: &[Vec<u32>]) -> KResult<sm::Body> {
         polys.iter_mut().for_each(|q| q.reverse());
     }
 
-    let a3 = |p: DVec3| [p.x, p.y, p.z];
-    let mut edges: Vec<sm::Edge> = Vec::new();
+    let mut edges: Vec<(u32, u32)> = Vec::new();
     let mut eix: HashMap<(u32, u32), usize> = HashMap::new();
     let mut out_faces = Vec::with_capacity(polys.len());
     for (fi, q) in polys.iter().enumerate() {
@@ -146,42 +177,131 @@ pub(crate) fn body(points: &[DVec3], faces: &[Vec<u32>]) -> KResult<sm::Body> {
             )));
         }
         let x = (p[1] - p[0]).reject_from(n).try_normalize().unwrap_or_else(|| n.any_orthonormal_vector());
-        let frame = sm::Frame { origin: a3(p[0]), x: a3(x), y: a3(n.cross(x)), z: a3(n) };
         let mut oriented = Vec::with_capacity(q.len());
         for k in 0..q.len() {
             let (a, b) = (q[k], q[(k + 1) % q.len()]);
             let key = (a.min(b), a.max(b));
             let e = *eix.entry(key).or_insert_with(|| {
-                let (s, t) = (verts[key.0 as usize], verts[key.1 as usize]);
-                edges.push(sm::Edge {
-                    step_id: edges.len() as u64 + 1,
-                    start: key.0 as usize,
-                    end: key.1 as usize,
-                    curve: sm::Curve::Line { origin: a3(s), dir: a3((t - s).normalize()), magnitude: 1.0 },
-                    same_sense: true,
-                    t_start: 0.0,
-                    t_end: s.distance(t),
-                });
+                edges.push(key);
                 edges.len() - 1
             });
-            oriented.push(sm::OrientedEdge { edge: e, forward: a == key.0 });
+            oriented.push((e, a == key.0));
         }
-        out_faces.push(sm::Face {
-            step_id: fi as u64 + 1,
-            surface: sm::Surface::Plane { frame },
-            same_sense: true,
-            loops: vec![sm::Loop { outer: true, orientation: true, bound: sm::Bound::Edges(oriented) }],
-        });
+        out_faces.push(PlanarFace { origin: p[0], x, y: n.cross(x), uses: oriented });
     }
-    Ok(sm::Body {
-        step_id: 1,
-        name: None,
-        kind: sm::BodyKind::ManifoldSolid,
-        unit_mm: 1.0,
-        uncertainty_mm: None,
-        shells: vec![sm::Shell { step_id: 1, closed: true, orientation: true, faces: (0..out_faces.len()).collect() }],
-        faces: out_faces,
-        edges,
-        vertices: verts.iter().enumerate().map(|(i, p)| sm::Vertex { step_id: i as u64 + 1, point: a3(*p) }).collect(),
-    })
+    Ok(Body { vertices: verts, edges, faces: out_faces })
+}
+
+fn point(p: DVec3) -> Point3 {
+    Point3::new(p.x, p.y, p.z)
+}
+
+fn vec3(p: DVec3) -> Vec3 {
+    Vec3::new(p.x, p.y, p.z)
+}
+
+fn orient(same: bool) -> OrientType {
+    if same { OrientType::Same } else { OrientType::Opposite }
+}
+
+/// `what` failed with `e`.
+fn call(what: &'static str) -> impl Fn(SolidError) -> String {
+    move |e| format!("{what}: {e}")
+}
+
+/// Builds `body` in `k` as one closed shell around one solid region, its faces with their UV
+/// trim curves (the tessellator and the mass integration read them).
+///
+/// # Errors
+///
+/// The failing constructor call and its error.
+pub(crate) fn build(k: &mut Kernel, body: &Body) -> Result<Brep, String> {
+    let mut c = BrepConstructor::new();
+    c.start_brep(k, solidcore::geom::tol::USE_DEFAULT).map_err(call("StartBrep"))?;
+    c.start_region(true, None).map_err(call("StartRegion"))?;
+    c.start_shell().map_err(call("StartShell"))?;
+    let mut edges: Vec<Option<EdgeId>> = vec![None; body.edges.len()];
+    let mut vertices: Vec<Option<VertexId>> = vec![None; body.vertices.len()];
+    for (fi, face) in body.faces.iter().enumerate() {
+        face_calls(k, &mut c, body, face, &mut edges, &mut vertices).map_err(|e| format!("face {fi}: {e}"))?;
+    }
+    c.end_shell(k, false).map_err(call("EndShell"))?;
+    c.end_region().map_err(call("EndRegion"))?;
+    let mut brep = c.end_brep().map_err(call("EndBrep"))?;
+    for f in brep.face_list().to_vec() {
+        let present = trimming_tools::face_uv_curves_present(&brep, f).map_err(call("UV trims"))?;
+        if !present {
+            trimming_tools::create_uv_trim_curves(k, &mut brep, f).map_err(call("UV trims"))?;
+        }
+    }
+    Ok(brep)
+}
+
+/// The calls of one face: its plane over the box of its vertices, its loop, each edge made at
+/// its first use (a line between its vertices) and joined at its second.
+fn face_calls(
+    k: &mut Kernel,
+    c: &mut BrepConstructor,
+    body: &Body,
+    face: &PlanarFace,
+    edges: &mut [Option<EdgeId>],
+    vertices: &mut [Option<VertexId>],
+) -> Result<(), String> {
+    let at = |v: u32| body.vertices.get(v as usize).copied().unwrap_or(DVec3::ZERO);
+    let mut surface = Surface::from(
+        Plane::create_canonical(&Axis2Placement::new(point(face.origin), vec3(face.x), vec3(face.y)))
+            .map_err(call("face surface"))?,
+    );
+    // the face's parameter box: its vertices in the plane's (u, v)
+    let (mut u0, mut v0, mut u1, mut v1) = (f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for &(e, _) in &face.uses {
+        let (a, b) = body.edges.get(e).copied().unwrap_or_default();
+        for p in [at(a), at(b)] {
+            let (u, v) = ((p - face.origin).dot(face.x), (p - face.origin).dot(face.y));
+            (u0, v0, u1, v1) = (u0.min(u), v0.min(v), u1.max(u), v1.max(v));
+        }
+    }
+    surface.adjust_step_uv_domain(k, &Extent2d::from_bounds(u0, v0, u1, v1)).map_err(call("AdjustSTEPUVDomain"))?;
+    // the face normal is the plane's: it points out of the material
+    c.start_face(OrientType::Same).map_err(call("StartFace"))?;
+    let domain = surface.natural_uv_domain_with_nurb(k).map_err(call("GetNaturalUVDomain"))?;
+    c.set_face_surface(surface, &domain).map_err(call("SetFaceSurface"))?;
+    // the loop runs counter-clockwise about the face's normal
+    c.start_loop(OrientType::Same).map_err(call("StartLoop"))?;
+    for &(ei, forward) in &face.uses {
+        let Some(&(a, b)) = body.edges.get(ei) else { continue };
+        if let Some(existing) = edges.get(ei).copied().flatten() {
+            c.start_edge(k, orient(forward), Some(existing), None, None).map_err(call("StartEdge"))?;
+            c.end_edge().map_err(call("EndEdge"))?;
+            continue;
+        }
+        let mut ends = [None, None];
+        for (slot, v) in ends.iter_mut().zip([a, b]) {
+            if let Some(id) = vertices.get_mut(v as usize) {
+                if id.is_none() {
+                    *id = Some(c.start_vertex_of_loop(point(at(v))).map_err(call("StartVertexOfLoop"))?);
+                }
+                *slot = *id;
+            }
+        }
+        let [start, end] = ends;
+        let id = c.start_edge(k, orient(forward), None, start, end).map_err(call("StartEdge"))?;
+        if let Some(slot) = edges.get_mut(ei) {
+            *slot = Some(id);
+        }
+        let (s, t) = (at(a), at(b));
+        let curve = Curve::from(Line::bounded(
+            point(s),
+            vec3((t - s).normalize()),
+            &Extent1d::from_min_max(0.0, s.distance(t)),
+            &BoundedLineOptions { scale: 1.0, dim: 3, ..BoundedLineOptions::default() },
+        ));
+        c.set_edge_curve(k, Some(curve), false).map_err(call("SetEdgeCurve"))?;
+        c.set_limits(k, &VertexNode::from_point(point(s)), &VertexNode::from_point(point(t)))
+            .map_err(call("SetLimits"))?;
+        c.end_edge().map_err(call("EndEdge"))?;
+    }
+    c.end_loop(k).map_err(call("EndLoop"))?;
+    c.end_face().map_err(call("EndFace"))?;
+    Ok(())
 }

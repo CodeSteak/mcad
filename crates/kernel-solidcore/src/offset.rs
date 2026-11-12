@@ -5,7 +5,9 @@
 //! shell (`shell_by_booleans`, a shell from an inward offset and Booleans) and its pre-check of
 //! opposite walls; the check of the offset's trim curves (`trim_gap`, SMLib's tessellation
 //! follows them, the neutral B-rep does not). Ported: the facade's diagnosis of a failed shell
-//! whose body has a convex rounding no larger than the wall (`min_convex_radius`).
+//! whose body has a convex rounding no larger than the wall (`min_convex_radius`). Not in the
+//! facade: a shell whose offsets solidcore fails to merge is tried once more without merging
+//! (`merge_results: false`) and taken if it passes the same checks.
 
 use cad_kernel::{FaceId, KResult, KernelError, Tag};
 use glam::DVec3;
@@ -106,8 +108,8 @@ impl Inner {
             }
             v
         };
-        let opts = ShellOptions {
-            offset: OffsetOptions { distance: -t, extend_convex_edges: true, merge_results: true },
+        let opts = |merge_results: bool| ShellOptions {
+            offset: OffsetOptions { distance: -t, extend_convex_edges: true, merge_results },
             create_offset_solid: false,
             merge_sheet_side_walls: false,
         };
@@ -124,24 +126,50 @@ impl Inner {
                 e.to_string().trim_start_matches("solidcore: ")
             ))
         };
-        let r = shell_brep_simple(&mut self.k, &s.brep.borrow(), opts, &faces);
-        let r = match r {
+        let first = shell_brep_simple(&mut self.k, &s.brep.borrow(), opts(true), &faces);
+        let r = match first {
             Ok(r) => r,
-            Err(e) => return Err(rounding(self, err(OP, e))),
+            Err(e) => {
+                // Where solidcore fails merging the offsets (`bDoSelfInt`, the facade's flag), the
+                // offsets stitched without merging can still give the shell: since solidcore
+                // `55d0e76` (#2769, a face's surface extended by its offset's reach) e.g. a box
+                // with `$fillet = 4` shelled by 1.5 fails in the merge (`can_shell`). Taken only
+                // if it passes every check below; otherwise the first error stands.
+                let first = rounding(self, err(OP, e));
+                let retry = shell_brep_simple(&mut self.k, &s.brep.borrow(), opts(false), &faces);
+                let Ok(r) = retry else { return Err(first) };
+                let r = crate::ShapeData::new(r, tag);
+                return match self.checked_shell(s, r, t, OP) {
+                    Ok(r) => Ok(r),
+                    Err(_) => Err(first),
+                };
+            }
         };
         let r = crate::ShapeData::new(r, tag);
         if self.is_empty(&r) || !self.is_solid(&r) {
             let e = failed(format!("shell: wall thickness {t} leaves no cavity (solidcore returned no closed solid)"));
             return Err(rounding(self, e));
         }
-        self.check_valid(&r, OP)?;
+        self.checked_shell(s, r, t, OP)
+    }
+
+    /// The checks of a shell `r` of `s` that is a closed solid: valid (no self-overlap), smaller
+    /// than the body; then its faces get their tags.
+    fn checked_shell(&mut self, s: &Shape, r: Shape, t: f64, op: &str) -> KResult<Shape> {
+        if self.is_empty(&r) || !self.is_solid(&r) {
+            return Err(failed(format!(
+                "shell: wall thickness {t} leaves no cavity (solidcore returned no closed solid)"
+            )));
+        }
+        self.check_valid(&r, op)?;
         let (v0, v1) = (
-            self.mass_props(s).map_err(|e| check_err(OP, e))?.volume,
-            self.mass_props(&r).map_err(|e| check_err(OP, e))?.volume,
+            self.mass_props(s).map_err(|e| check_err(op, e))?.volume,
+            self.mass_props(&r).map_err(|e| check_err(op, e))?.volume,
         );
         if v1.is_nan() || v1 <= 0.0 || v1 >= v0 {
             return Err(failed(format!("shell returned a wrong body (volume {v1}, body {v0})")));
         }
+        let tag = r.tag;
         self.retag(&r, s, tag)?;
         Ok(r)
     }

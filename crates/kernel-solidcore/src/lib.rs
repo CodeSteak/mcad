@@ -16,11 +16,12 @@
 //! * other solidcore errors → [`KernelError::Failed`] / [`KernelError::InvalidInput`].
 //!
 //! So `mcad diff-reference` can report which operations work ("coverage", against SMLib's frozen
-//! results); at f4f05b1 (as at bba8d87):
+//! results); at 55d0e76 (as at f4f05b1 and bba8d87, but one fillet that regressed upstream, see
+//! `docs/solidcore-migration.md`):
 //! primitives, rigid transforms, `extrude` (also with twist and scale), `revolve`, `loft`,
 //! `sweep` and `sweep_path` of polygons, circles, closed interpolating splines and sketch
 //! profiles (lines, arcs and B-splines), `fillet`, `chamfer`, `fillet_variable` (one radius law
-//! for all edges), `make_polyhedron` (planar faces through solidcore's STEP builder), `classify`,
+//! for all edges), `make_polyhedron` (planar faces through solidcore's `BrepConstructor`), `classify`,
 //! `faces`, `edges`, `brep`, `tessellate`, `bounds`, `mass_props`, `is_solid`; booleans
 //! mostly (some results lose faces); curved solids have volumes closer to
 //! the exact value than SMLib's. Profiles and sweeps follow the SMLib facade of the former
@@ -102,11 +103,11 @@ impl ShapeData {
 pub type Shape = Arc<ShapeData>;
 
 /// The commit of solidcore this crate is built against.
-pub const SOLIDCORE_REV: &str = "f4f05b147551201e2a7b44a34fbc41ddc0fc6578";
+pub const SOLIDCORE_REV: &str = "55d0e7638b9e1ebbf91ab8c10657e595c114ecda";
 
 /// [`Kernel::id`] of [`SolidcoreKernel`] (part of every cache key): `solidcore-` and the short
 /// [`SOLIDCORE_REV`].
-pub const KERNEL_ID: &str = "solidcore-f4f05b1";
+pub const KERNEL_ID: &str = "solidcore-55d0e76";
 
 fn unsupported(op: &str) -> KernelError {
     KernelError::Unsupported(format!("solidcore: {op}"))
@@ -146,16 +147,17 @@ mod imp {
             KernelError::Unsupported(format!("solidcore: {op}: {e}"))
         } else if matches!(e, SolidError::InvalidInput { .. }) {
             KernelError::InvalidInput(format!("solidcore: {op}: {e}"))
-        } else if let SolidError::Upstream { code, .. } = &e
-            && let Some(why) = status_reason(*code)
-        {
+        } else if let Some(why) = solidcore::error::upstream_status(&e).and_then(status_reason) {
             KernelError::failed(format!("solidcore: {op}: {why} ({e})"))
         } else {
             KernelError::failed(format!("solidcore: {op}: {e}"))
         }
     }
 
-    /// What an upstream `SmStatus` (`SmMessages.h`) means, for the message.
+    /// What an upstream `SmStatus` (`SmMessages.h`) means, for the message: the status of a bare
+    /// `SolidError::Upstream` or of the typed failure that replaced one (since solidcore
+    /// `55d0e76` most failures carry a typed reason, #13790; `upstream_status` gives the status
+    /// they stand for).
     fn status_reason(code: i32) -> Option<&'static str> {
         Some(match code {
             1001 => "the operation failed",
@@ -805,11 +807,9 @@ mod imp {
         pub fn make_polyhedron(&mut self, points: &[DVec3], faces: &[Vec<u32>], tag: Tag) -> KResult<Shape> {
             const OP: &str = "make_polyhedron";
             let body = crate::polyhedron::body(points, faces)?;
-            let built = step_brep::build(&body).map_err(|e| {
-                KernelError::failed(format!("solidcore: {OP}: planar faces not stitched into a solid ({e})"))
+            let b = crate::polyhedron::build(&mut self.k, &body).map_err(|e| {
+                KernelError::failed(format!("solidcore: {OP}: planar faces not built into a solid ({e})"))
             })?;
-            // made in the builder's own kernel: an independent copy in ours
-            let b = self.copy(&built)?;
             let s = made(b, tag)?;
             if !self.is_solid(&s) {
                 return Err(KernelError::failed(format!(

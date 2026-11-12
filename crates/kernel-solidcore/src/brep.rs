@@ -156,6 +156,7 @@ fn surface_nurbs(k: &solidcore::Kernel, s: &ScSurface, atol: f64) -> KResult<(BS
         SurfaceKind::Plane(p) => Some(nurbs_surface(&*p.base_with_nurb().map_err(sc)?)?),
         SurfaceKind::Cone(c) => Some(nurbs_surface(c.rev().base())?),
         SurfaceKind::Sphere(x) => Some(nurbs_surface(x.base().base())?),
+        SurfaceKind::BallPatch(bp) => Some(nurbs_surface(bp.net())?),
         SurfaceKind::Torus(t) => Some(nurbs_surface(t.base().base())?),
         SurfaceKind::SurfOfRevolution(r) => Some(nurbs_surface(r.base())?),
         SurfaceKind::SurfOfExtrusion(e) => Some(nurbs_surface(e.base())?),
@@ -206,6 +207,18 @@ fn analytic(k: &solidcore::Kernel, s: &ScSurface, atol: f64) -> KResult<Option<S
         }
         SurfaceKind::Sphere(x) => {
             frame(x.base().position()).filter(|_| pos(x.radius())).map(|f| Surface::Sphere { frame: f, r: x.radius() })
+        }
+        SurfaceKind::BallPatch(bp) => {
+            // a rational patch exactly on its sphere: since solidcore `55d0e76` (#2708, the blend
+            // corner always on) the corner of three equal rounds, where `f4f05b1` made a sphere.
+            // The sphere's x axis through the patch's middle keeps the patch off its poles and seam.
+            let (c, r) = (dv(bp.centre()), bp.radius());
+            if !pos(r) {
+                return Ok(None);
+            }
+            let mid = s.natural_uv_domain_with_nurb(k).ok().and_then(|d| s.evaluate_point(k, d.mid()).ok()).map(dv);
+            let x = mid.and_then(|m| (m - c).try_normalize()).unwrap_or(DVec3::X);
+            Frame::new(c, x.any_orthonormal_vector(), x).map(|frame| Surface::Sphere { frame, r })
         }
         SurfaceKind::Torus(t) => frame(t.base().position())
             .filter(|_| pos(t.major_radius()) && pos(t.minor_radius()))

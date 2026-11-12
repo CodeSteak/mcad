@@ -3,15 +3,46 @@
 Work plan up to the switch: [`solidcore-plan.md`](solidcore-plan.md). Handover (state, how to build
 and test, open points, next steps): [`solidcore-handover.md`](solidcore-handover.md).
 
-As of: 2026-11-04 (phase 0 of the plan done; phase 1 done except a variable fillet with several radius laws; phase 2, the own tessellator `cad-tess`, done; see the plan) · solidcore `main` @ `f4f05b1` (2026-11-04 05:18 UTC, crate version 1.0.1, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6`, `bba8d87` and `f4f05b1` are in the comparison over the examples and in "State at `bba8d87`".
+As of: 2026-11-04 (phase 0 of the plan done; phase 1 done except a variable fillet with several radius laws; phase 2, the own tessellator `cad-tess`, done; see the plan) · solidcore `main` @ `55d0e76` (2026-11-11 19:30 UTC, crate version 1.0.1, tangency-labs/solidcore, Apache-2.0; was `f4f05b1`, see "Status"); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6`, `bba8d87` and `f4f05b1` are in the comparison over the examples and in "State at `bba8d87`".
 
 ## Status
 
 - **Crate `kernel-solidcore`** implements `cad_kernel::Kernel` via the public API of
   solidcore. The dependency is a git entry with a fixed commit
   (`crates/kernel-solidcore/Cargo.toml`, constant `SOLIDCORE_REV`, kernel ID
-  `solidcore-f4f05b1`). Previous pins: `3a6a50b` (2026-10-22), `c9de85d` (2026-10-23),
-  `d4940b6` (2026-10-25), `bba8d87` (2026-10-30). From `bba8d87` to `f4f05b1` (2969 commits,
+  `solidcore-55d0e76`). Previous pins: `3a6a50b` (2026-10-22), `c9de85d` (2026-10-23),
+  `d4940b6` (2026-10-25), `bba8d87` (2026-10-30), `f4f05b1` (2026-11-04). From `f4f05b1` to
+  `55d0e76` (2026-11-11): upstream rewrote `main`'s history in between, so `f4f05b1` is no
+  ancestor of `55d0e76` (`git log f4f05b1..55d0e76` lists 2973 commits back to 2026-10-12); the
+  commit with `f4f05b1`'s tree in the new history is `823953ed6`, 527 commits before `55d0e76`
+  (323 of them in `crates/solidcore`). The crate builds with Rust 1.97 as before. Changes for
+  this crate: `step-brep` and `step-import` are gone (#14038, #14194; the STEP reader moved to
+  `solidcore-step`, which reads files into records and builds no body), so `make_polyhedron`
+  makes its planar faces with solidcore's `BrepConstructor` itself (`polyhedron.rs`, the calls
+  `step_brep::build` made); most failures carry a typed reason instead of a bare
+  `SolidError::Upstream` status (#13790 and its parts), so the error mapping reads the status a
+  typed failure stands for (`solidcore::error::upstream_status`) for its wording. No other API
+  break (`*Options` literals, `stitch_and_orient`, fillet, sweep, offset calls build unchanged).
+  `diff-reference`: two regressions, bisected on the new history with this crate built against
+  each commit: `shell` of `can_shell` (box with `$fillet = 4`, wall 1.5; 1 and 2 build) fails
+  in the offsets' merge since `31302718b` (#2769, a face's surface extended by its offset's
+  reach instead of 5 offsets), worked around here (`offset.rs`: the shell is tried once more
+  without merging the offsets, `merge_results: false`, and taken if it passes the same checks;
+  all 9 nodes `same`; it also builds `shell(1) cube(10, $fillet = 2)`, 414.96 mm³, SMLib 414.97,
+  item 7 of "What is missing"); the round of `wall_hook`'s `union(fillet = 2.5)` where the hook's
+  tube enters the knob overlaps itself since `2d382185b` (#2863, a fillet solver's guess from
+  the edge use's UV trim; reproducer: a spline sweep of `circle(d = 9)` ending in
+  `sphere(d = 14)`, `union(fillet = r)`: 2.25 builds, 2.5 to 3 fail), open (1 `failed`,
+  3 `blocked`). One gain: `f12_shell_loft_square_circle` (SMLib's shell fails) builds a hollow
+  loft with 2 mm walls (`differ` because SMLib fails, as `f11`). Further changes seen in the
+  tests: the corner where three equal rounds meet is a ball patch since `608cb820a` (#2708, the
+  blend corner always on; a rational patch on the exact sphere, `SurfaceKind::BallPatch`), which
+  `brep.rs` maps to the sphere it lies on (else 186 corner faces of the corpus came out as
+  approximated B-splines, `measure` found no sphere radius there and STEP wrote B-splines); the
+  shell of a rounded box comes out 2.5e-6 (r 5, t 1.6) to 3.3e-6 (`can_shell`) off the exact
+  volume (1e-8 at `f4f05b1`; `kernel_fixes` allows 5e-6 now); a `thicken` whose offset folds is
+  refused naming the largest wall that works (#14039); volumes differ in the last bits (a 5 mm
+  cube's colour region 124.99999999999999). From `bba8d87` to `f4f05b1` (2969 commits,
   crate version 1.0.1) no API break for this crate: it builds unchanged (named public paths
   such as `topology::brep::faces` were added next to the numbered `p1`, `p2` modules, which stay
   public), and the corpus gives the same verdicts node by node; `FilletSession` still takes one
@@ -127,6 +158,8 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, shear (plan 1.8), set_draft/shape_bytes/export (1.12), rule `blend` with offsets: end of phase 1 | 101 | 2604 | **2589** | 3 | 3 | 9 | 0 |
 | `bba8d87`, re-test of task C: checked Booleans, rule `blend` from the changed volume | 101 | 2604 | **2596** | 3 | 3 | 2 | 0 |
 | `f4f05b1` (2026-11-04, pin), `kernel-solidcore` unchanged | 101 | 2604 | **2596** | 3 | 3 | 2 | 0 |
+| `55d0e76` (2026-11-11), polyhedra through `BrepConstructor` | 101 | 2604 | 2587 | 3 | 8 | 4 | 2 |
+| `55d0e76` (2026-11-11, pin), shell retried without merging | 101 | 2604 | **2590** | 3 | 6 | 4 | 1 |
 
 - `f4f05b1` (pin bump from `bba8d87`, `scripts/ci/solidcore.sh`): every node has the verdict it
   had; the 2 `differ` are the same (`sketch_cable_duct`: 63 against 47 faces, 180 against 132
@@ -135,6 +168,13 @@ unlock themselves as soon as solidcore computes correctly.
   1 without a B-rep result, solidcore watertight 100, chord max 0.0500 mm, 175 k triangles (as
   at `bba8d87`). Still failing where SMLib succeeds (item 7 of "What is missing"): the
   polyhedron of two cubes sharing an edge, `shell(1) cube(10, $fillet = 2)`.
+- `55d0e76` (pin bump from `f4f05b1`, release build): the verdicts of `f4f05b1` except
+  `wall_hook` (`union` line 14 `failed`, 3 nodes above it `blocked`: upstream regression #2863,
+  see "Status") and `f12_shell_loft_square_circle` (group and `shell` `differ`: solidcore builds
+  the shell SMLib fails); volume rules relative 2285, exact 125, operands 70, curved 30, blend
+  69; 1431 nodes change their volume, the `same` ones by at most 5.6e-6 relative (`sketch_sweep`'s
+  sweep; 18 above 1e-6, 208 above 1e-7: mass integration and sweep changes upstream); meshes at 0.05: 100 `ok`, 1 without a B-rep result, watertight
+  100, chord max 0.0500 mm, 180 k triangles (13 files with other triangle counts).
 - Corpus (plan 0.2): up to then `diff-kernels` evaluated each file without a resolver, so
   `include`/`use` and `import("x.stl")` found nothing (an assembly gave 3 nodes instead of 60);
   it now resolves them relative to the file like the other commands. A node whose warning
@@ -339,10 +379,14 @@ shell (70568.87 against 70576.65, 1.1e-4).
 `make_polyhedron` (`polyhedron`, `hull`, `minkowski` of convex bodies, STL as B-rep) builds one
 planar face per polygon as the facade's `sc_make_polyhedron` (`SmPolyBrep::CreatePoly` per
 face, `SmBrep::CreateFromPolyBrep`; coplanar faces are not merged). solidcore has no poly B-reps,
-so `crates/kernel-solidcore/src/polyhedron.rs` writes the faces as a planar
-`step_import::model::Body` (line edges shared by their two faces, a plane per face from its
-Newell normal) and `step_brep::build` makes the faces and stitches them
-(`SmApiStitchIntoSolid`); the body is then copied into the adapter's kernel. As SMLib: points
+so `crates/kernel-solidcore/src/polyhedron.rs` builds the faces topology first with solidcore's
+`BrepConstructor` (`SmBrepConstructor`) in the adapter's kernel: a plane per face from its Newell
+normal over the box of its vertices, each line edge and vertex made once and shared by its two
+faces, then every face's UV trim curves (`trimming_tools::create_uv_trim_curves`). Up to
+`f4f05b1` it wrote the faces as a planar `step_import::model::Body` and `step_brep::build` made
+them with the same calls (topology first; its stitched fallback, `SmApiStitchIntoSolid`, was
+never needed for these bodies) in a kernel of its own, copied into the adapter's; upstream
+deleted both crates (#14038, #14194), the verdicts are unchanged. As SMLib: points
 within `max(1e-9, 1e-9 · diagonal)` are one vertex, every edge must belong to exactly two faces
 (else `Failed` "the faces do not form a closed manifold solid"), the faces are oriented
 consistently (neighbours run their edge opposite ways) and outward (positive signed volume,
@@ -641,8 +685,9 @@ solidcore not).
 6. ~~**Own tessellator**~~ (not in solidcore; `cad-tess`, plan 2.1–2.8, see below).
 7. Where SMLib succeeds and solidcore fails loudly (task D's tester): a polyhedron of two cubes
    sharing an edge (SMLib 16 mm³; solidcore "every edge must belong to exactly two faces");
-   `shell(1) cube(10, $fillet = 2)` (SMLib 414.97; solidcore's offset reports self-overlap,
-   status 1007, now with its meaning); a root union of many slivers (the facade reorders a
+   ~~`shell(1) cube(10, $fillet = 2)`~~ (SMLib 414.97; builds at `55d0e76` with the shell
+   retried without merging, 414.96; its STL export at 0.01 still fails: one triangle of face 30
+   faces against the surface); a root union of many slivers (the facade reorders a
    chain's operands when a step fails, not ported); a Boolean of an operand smaller than about
    1e-4 of the pair on a face of the other (solidcore's result is wrong; the adapter's retries
    move the operand by at most 1e-3 of its size, so it fails; SMLib's facade moves it by up to

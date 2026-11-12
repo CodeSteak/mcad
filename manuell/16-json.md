@@ -3,7 +3,7 @@
 Every answer: `{ schema_version: 3, command, file, ok, exit_code, context: string|null,
 diagnostics: Diagnostic[], error?: string, daemon?: {used, reason}, kernel_id? }` plus per command
 (`kernel_id`: kernel of a model command, `solidcore-` and the solidcore commit, e.g.
-`solidcore-f4f05b1`; also when it fails and in every `watch` line):
+`solidcore-55d0e76`; also when it fails and in every `watch` line):
 
 | Command | Additional fields |
 | --- | --- |

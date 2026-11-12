@@ -88,6 +88,12 @@ fn surface_and_thicken() {
     let s = k.nurbs_surface(&peak, 3).unwrap();
     match k.thicken(&s, 1.0, 4) {
         Ok(t) => assert!(k.is_solid(&t) && k.mass_props(&t).unwrap().volume > 0.0),
-        Err(e) => assert!(e.to_string().contains("not a closed solid"), "{e}"),
+        // since solidcore 55d0e76 the offset refuses the fold itself, naming the largest wall
+        // that works (0.83 here)
+        Err(e) => assert!(
+            e.to_string().contains("not a closed solid")
+                || (e.to_string().contains("folds") && e.to_string().contains("the largest wall that works")),
+            "{e}"
+        ),
     }
 }

@@ -368,9 +368,19 @@ fn diff_reference_mesh() {
 /// verdict) of `diff-reference`: a variable radius with different laws on several
 /// edges (unsupported, and the nodes above it blocked), a union of three extrusions where
 /// solidcore loses faces (`sketch_cable_duct`, upstream), a Boolean SMLib fails and solidcore
-/// does not (`f11`, a gain).
+/// does not (`f11`, a gain), a shell SMLib fails and solidcore builds since `55d0e76` (`f12`, a
+/// gain: walls 2 mm, the volume of the exact walls), and a regression of `55d0e76`: the round of
+/// `wall_hook`'s `union(fillet = 2.5)` where the hook's tube enters the knob overlaps itself
+/// (upstream #2863, a fillet solver's guess from the edge use's UV trim; 2.25 builds;
+/// `docs/solidcore-migration.md`, "Status").
 const REFERENCE_EXCEPTIONS: &[(&str, u32, &str, &str)] = &[
     ("everyday/bugs/f11_pin_coincident.mcad", 1, "group", "differ"),
+    ("everyday/bugs/f12_shell_loft_square_circle.mcad", 1, "group", "differ"),
+    ("everyday/bugs/f12_shell_loft_square_circle.mcad", 6, "shell", "differ"),
+    ("models/everyday/wall_hook.mcad", 1, "group", "blocked"),
+    ("models/everyday/wall_hook.mcad", 13, "difference", "blocked"),
+    ("models/everyday/wall_hook.mcad", 14, "union", "failed"),
+    ("models/everyday/wall_hook.mcad", 42, "wall_hook", "blocked"),
     ("models/spec/sketch_cable_duct.mcad", 1, "group", "differ"),
     ("models/spec/variable_radius.mcad", 1, "group", "blocked"),
     ("models/spec/variable_radius.mcad", 11, "fillet", "unsupported"),
