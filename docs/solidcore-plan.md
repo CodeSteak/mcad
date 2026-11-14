@@ -2,7 +2,7 @@
 
 **2026-11-06: phase 5 done in the form of phase A** (5.2 `tests/kernel-reference.json` with `mcad diff-reference` and the test `solidcore_against_the_reference`, 5.3 removal, 5.4 docs except `CLAUDE.md`; 5.1 without the transition feature `smlib`: SMLib is removed at once; variable radius with different laws per edge reported as not supported). State: `docs/solidcore-handover.md`.
 
-As of 2026-11-04 (phases 0 and 2 done, phase 1 except one upstream item), solidcore pin `f4f05b1` (was `bba8d87`; per-edge radius laws in `FilletSession` still not public). Status and measurements: `docs/solidcore-migration.md`.
+As of 2026-11-04 (phases 0 and 2 done, phase 1 except one upstream item), solidcore pin `f66ee7f` (2026-11-14; was `f4f05b1`, before that `bba8d87`; per-edge radius laws in `FilletSession` still not public). Status and measurements: `docs/solidcore-migration.md`.
 
 ## Goal
 

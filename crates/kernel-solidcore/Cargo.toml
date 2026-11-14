@@ -11,9 +11,10 @@ cad-kernel.workspace = true
 # tessellation of the neutral B-rep (plan 2.8)
 cad-tess.workspace = true
 glam.workspace = true
-# tangency-labs/solidcore main @ f4f05b1 (2026-11-04 05:18 UTC, crate 1.0.1), Apache-2.0. Builds with Rust 1.97
-# (solidcore pins 1.98 in its own rust-toolchain.toml, which does not apply to dependents).
-solidcore = { git = "https://github.com/tangency-labs/solidcore", rev = "f4f05b147551201e2a7b44a34fbc41ddc0fc6578" }
-# polyhedra (make_polyhedron) as planar faces through the STEP builder of the same commit
-step-brep = { git = "https://github.com/tangency-labs/solidcore", rev = "f4f05b147551201e2a7b44a34fbc41ddc0fc6578" }
-step-import = { git = "https://github.com/tangency-labs/solidcore", rev = "f4f05b147551201e2a7b44a34fbc41ddc0fc6578" }
+# tangency-labs/solidcore main @ f66ee7f (2026-11-14 02:25 UTC, crate 1.0.1), Apache-2.0. Builds with Rust 1.97
+# (solidcore pins 1.99.1 in its own rust-toolchain.toml, which does not apply to dependents).
+solidcore = { git = "https://github.com/tangency-labs/solidcore", rev = "f66ee7ff64b2f6eaffd98549fef96e8f8704e482" }
+# polyhedra (make_polyhedron) as a B-rep record of planar faces, built by the converter of the
+# same commit (step-brep's builder was removed upstream in ecd20d47c)
+solidcore-record = { git = "https://github.com/tangency-labs/solidcore", rev = "f66ee7ff64b2f6eaffd98549fef96e8f8704e482" }
+solidcore-convert = { git = "https://github.com/tangency-labs/solidcore", rev = "f66ee7ff64b2f6eaffd98549fef96e8f8704e482" }

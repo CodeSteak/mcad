@@ -1,9 +1,9 @@
 //! `make_polyhedron` (plan 1.7): a solid of planar polygonal faces, one face per polygon as the
 //! SMLib facade's `sc_make_polyhedron` (`SmPolyBrep::CreatePoly` per face, then
 //! `SmBrep::CreateFromPolyBrep`; no coplanar faces merged). solidcore has no poly B-reps
-//! (`SmApiPoly*` is outside its scope), so the faces go through its STEP builder
-//! (`step_brep::build`: one planar face per polygon with line edges, then
-//! `SmApiStitchIntoSolid`). As SMLib's poly B-rep, points closer than its tolerance
+//! (`SmApiPoly*` is outside its scope), so the faces go in as a B-rep record
+//! (`solidcore_record::brep`: one planar face per polygon with line edges, the shared edges
+//! already joined) built by `solidcore_convert::brep::to_kernel_body` with the healer on. As SMLib's poly B-rep, points closer than its tolerance
 //! (`max(1e-9, 1e-9 · diagonal)`) are one vertex; the faces are oriented consistently and
 //! outward first (SMLib's `OrientTrimmedSurfaces`).
 
@@ -11,14 +11,14 @@ use std::collections::{BTreeMap, HashMap};
 
 use cad_kernel::{KResult, KernelError};
 use glam::DVec3;
-use step_import::model as sm;
+use solidcore_record::brep as r;
 
 fn invalid(m: impl std::fmt::Display) -> KernelError {
     KernelError::InvalidInput(format!("solidcore: make_polyhedron: {m}"))
 }
 
-/// The neutral STEP body of the polyhedron (faces oriented outward).
-pub(crate) fn body(points: &[DVec3], faces: &[Vec<u32>]) -> KResult<sm::Body> {
+/// The B-rep record of the polyhedron (faces oriented outward).
+pub(crate) fn record(points: &[DVec3], faces: &[Vec<u32>]) -> KResult<r::Brep> {
     if points.len() < 4 || faces.len() < 4 {
         return Err(invalid("a polyhedron needs at least 4 points and 4 faces"));
     }
@@ -128,9 +128,13 @@ pub(crate) fn body(points: &[DVec3], faces: &[Vec<u32>]) -> KResult<sm::Body> {
         polys.iter_mut().for_each(|q| q.reverse());
     }
 
+    // the record: one region pair around one closed shell, every face forward (its plane's
+    // natural normal is the outward normal), edges and vertices in the record's canonical order
+    // (first appearance walking faces → loop → edges, then edges → start, end)
     let a3 = |p: DVec3| [p.x, p.y, p.z];
-    let mut edges: Vec<sm::Edge> = Vec::new();
-    let mut eix: HashMap<(u32, u32), usize> = HashMap::new();
+    let mut edge_ix: HashMap<(u32, u32), u32> = HashMap::new();
+    let mut edge_ends: Vec<(u32, u32)> = Vec::new();
+    let mut edge_uses: Vec<Vec<r::EdgeUseRef>> = Vec::new();
     let mut out_faces = Vec::with_capacity(polys.len());
     for (fi, q) in polys.iter().enumerate() {
         let p: Vec<DVec3> = q.iter().map(|&i| verts[i as usize]).collect();
@@ -146,42 +150,77 @@ pub(crate) fn body(points: &[DVec3], faces: &[Vec<u32>]) -> KResult<sm::Body> {
             )));
         }
         let x = (p[1] - p[0]).reject_from(n).try_normalize().unwrap_or_else(|| n.any_orthonormal_vector());
-        let frame = sm::Frame { origin: a3(p[0]), x: a3(x), y: a3(n.cross(x)), z: a3(n) };
+        let y = n.cross(x);
+        let uv = |v: u32| {
+            let d = verts[v as usize] - p[0];
+            [d.dot(x), d.dot(y)]
+        };
+        let (mut lo, mut hi) = ([f64::MAX; 2], [f64::MIN; 2]);
         let mut oriented = Vec::with_capacity(q.len());
         for k in 0..q.len() {
             let (a, b) = (q[k], q[(k + 1) % q.len()]);
-            let key = (a.min(b), a.max(b));
-            let e = *eix.entry(key).or_insert_with(|| {
-                let (s, t) = (verts[key.0 as usize], verts[key.1 as usize]);
-                edges.push(sm::Edge {
-                    step_id: edges.len() as u64 + 1,
-                    start: key.0 as usize,
-                    end: key.1 as usize,
-                    curve: sm::Curve::Line { origin: a3(s), dir: a3((t - s).normalize()), magnitude: 1.0 },
-                    same_sense: true,
-                    t_start: 0.0,
-                    t_end: s.distance(t),
-                });
-                edges.len() - 1
+            let next = edge_ends.len() as u32;
+            let e = *edge_ix.entry((a.min(b), a.max(b))).or_insert_with(|| {
+                // the edge runs as its first use walks it
+                edge_ends.push((a, b));
+                edge_uses.push(Vec::new());
+                next
             });
-            oriented.push(sm::OrientedEdge { edge: e, forward: a == key.0 });
+            let (s, t) = edge_ends[e as usize];
+            let forward = s == a;
+            edge_uses[e as usize].push(r::EdgeUseRef {
+                face: fi as u32,
+                r#loop: 0,
+                position: k as u32,
+                upper: !forward,
+            });
+            let (us, ut) = (uv(s), uv(t));
+            for c in [us, ut] {
+                lo = [lo[0].min(c[0]), lo[1].min(c[1])];
+                hi = [hi[0].max(c[0]), hi[1].max(c[1])];
+            }
+            oriented.push(r::OrientedEdge {
+                edge: e,
+                forward,
+                pcurve: r::Curve2::Spline { knots: vec![0.0, 0.0, 1.0, 1.0], points: vec![us, ut] },
+            });
         }
-        out_faces.push(sm::Face {
-            step_id: fi as u64 + 1,
-            surface: sm::Surface::Plane { frame },
-            same_sense: true,
-            loops: vec![sm::Loop { outer: true, orientation: true, bound: sm::Bound::Edges(oriented) }],
+        out_faces.push(r::Face {
+            surface: r::Surface::Plane { origin: a3(p[0]), u_axis: a3(x), v_axis: a3(y) },
+            nurbs: None,
+            domain: [[lo[0], hi[0]], [lo[1], hi[1]]],
+            loops: vec![r::Loop::Edges { edges: oriented }],
         });
     }
-    Ok(sm::Body {
-        step_id: 1,
-        name: None,
-        kind: sm::BodyKind::ManifoldSolid,
-        unit_mm: 1.0,
-        uncertainty_mm: None,
-        shells: vec![sm::Shell { step_id: 1, closed: true, orientation: true, faces: (0..out_faces.len()).collect() }],
+    let mut vert_ix: HashMap<u32, u32> = HashMap::new();
+    let mut vertices = Vec::new();
+    let mut vix = |v: u32| -> u32 {
+        *vert_ix.entry(v).or_insert_with(|| {
+            vertices.push(r::Vertex { point: a3(verts[v as usize]), tolerance: tol });
+            vertices.len() as u32 - 1
+        })
+    };
+    let edges: Vec<r::Edge> = edge_ends
+        .iter()
+        .zip(edge_uses)
+        .map(|(&(s, t), uses)| r::Edge {
+            curve: r::Curve::Line { start: a3(verts[s as usize]), end: a3(verts[t as usize]) },
+            nurbs: None,
+            interval: [0.0, 1.0],
+            vertices: [vix(s), vix(t)],
+            tolerance: tol,
+            uses,
+        })
+        .collect();
+    let faces: Vec<r::OrientedFace> =
+        (0..out_faces.len()).map(|f| r::OrientedFace { face: f as u32, forward: true }).collect();
+    Ok(r::Brep {
+        version: r::VERSION,
+        tolerance: tol,
+        regions: vec![r::Region { shells: vec![0], void: false }, r::Region { shells: vec![0], void: false }],
+        shells: vec![r::Shell::Faces { faces, wires: Vec::new() }],
         faces: out_faces,
         edges,
-        vertices: verts.iter().enumerate().map(|(i, p)| sm::Vertex { step_id: i as u64 + 1, point: a3(*p) }).collect(),
+        vertices,
     })
 }

@@ -124,7 +124,16 @@ impl Inner {
                 e.to_string().trim_start_matches("solidcore: ")
             ))
         };
-        let r = shell_brep_simple(&mut self.k, &s.brep.borrow(), opts, &faces);
+        let mut r = shell_brep_simple(&mut self.k, &s.brep.borrow(), opts, &faces);
+        if r.is_err() {
+            // since f66ee7f the merge of the offset faces fails on rounded boxes (ball-patch
+            // corners: "the related vertex is not an end of the edge use"); without the merge
+            // the shell builds
+            let opts = ShellOptions { offset: OffsetOptions { merge_results: false, ..opts.offset }, ..opts };
+            if let Ok(x) = shell_brep_simple(&mut self.k, &s.brep.borrow(), opts, &faces) {
+                r = Ok(x);
+            }
+        }
         let r = match r {
             Ok(r) => r,
             Err(e) => return Err(rounding(self, err(OP, e))),

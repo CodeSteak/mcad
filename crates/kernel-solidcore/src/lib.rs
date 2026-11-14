@@ -16,11 +16,12 @@
 //! * other solidcore errors → [`KernelError::Failed`] / [`KernelError::InvalidInput`].
 //!
 //! So `mcad diff-reference` can report which operations work ("coverage", against SMLib's frozen
-//! results); at f4f05b1 (as at bba8d87):
+//! results); at f66ee7f (as at f4f05b1 except an upstream regression, a fillet union whose
+//! result would be open, see `docs/solidcore-migration.md`):
 //! primitives, rigid transforms, `extrude` (also with twist and scale), `revolve`, `loft`,
 //! `sweep` and `sweep_path` of polygons, circles, closed interpolating splines and sketch
 //! profiles (lines, arcs and B-splines), `fillet`, `chamfer`, `fillet_variable` (one radius law
-//! for all edges), `make_polyhedron` (planar faces through solidcore's STEP builder), `classify`,
+//! for all edges), `make_polyhedron` (planar faces as a B-rep record through `solidcore-convert`), `classify`,
 //! `faces`, `edges`, `brep`, `tessellate`, `bounds`, `mass_props`, `is_solid`; booleans
 //! mostly (some results lose faces); curved solids have volumes closer to
 //! the exact value than SMLib's. Profiles and sweeps follow the SMLib facade of the former
@@ -102,11 +103,11 @@ impl ShapeData {
 pub type Shape = Arc<ShapeData>;
 
 /// The commit of solidcore this crate is built against.
-pub const SOLIDCORE_REV: &str = "f4f05b147551201e2a7b44a34fbc41ddc0fc6578";
+pub const SOLIDCORE_REV: &str = "f66ee7ff64b2f6eaffd98549fef96e8f8704e482";
 
 /// [`Kernel::id`] of [`SolidcoreKernel`] (part of every cache key): `solidcore-` and the short
 /// [`SOLIDCORE_REV`].
-pub const KERNEL_ID: &str = "solidcore-f4f05b1";
+pub const KERNEL_ID: &str = "solidcore-f66ee7f";
 
 fn unsupported(op: &str) -> KernelError {
     KernelError::Unsupported(format!("solidcore: {op}"))
@@ -804,12 +805,10 @@ mod imp {
         /// closed manifold solid of positive volume, else `Failed`.
         pub fn make_polyhedron(&mut self, points: &[DVec3], faces: &[Vec<u32>], tag: Tag) -> KResult<Shape> {
             const OP: &str = "make_polyhedron";
-            let body = crate::polyhedron::body(points, faces)?;
-            let built = step_brep::build(&body).map_err(|e| {
-                KernelError::failed(format!("solidcore: {OP}: planar faces not stitched into a solid ({e})"))
+            let record = crate::polyhedron::record(points, faces)?;
+            let b = solidcore_convert::brep::to_kernel_body(&mut self.k, &record, false).map_err(|e| {
+                KernelError::failed(format!("solidcore: {OP}: planar faces not built into a solid ({e})"))
             })?;
-            // made in the builder's own kernel: an independent copy in ours
-            let b = self.copy(&built)?;
             let s = made(b, tag)?;
             if !self.is_solid(&s) {
                 return Err(KernelError::failed(format!(

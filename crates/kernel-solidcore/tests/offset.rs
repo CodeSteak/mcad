@@ -75,7 +75,8 @@ fn surface_and_thicken() {
     let b = k.make_box(DVec3::ZERO, DVec3::ONE, 1).unwrap();
     assert!(matches!(k.thicken(&b, 1.0, 4), Err(KernelError::InvalidInput(_))));
     assert!(matches!(k.nurbs_surface(&rows[..1], 3), Err(KernelError::InvalidInput(_))));
-    // a peak of 30 over 10: solidcore's offset gives the sheet alone, which is no result
+    // a peak of 30 over 10: solidcore's offset gave the sheet alone, which is no result; since
+    // f66ee7f it refuses the fold beforehand and names the largest wall that works
     let peak: Vec<Vec<DVec3>> = (0..3)
         .map(|i| {
             (0..3)
@@ -88,6 +89,9 @@ fn surface_and_thicken() {
     let s = k.nurbs_surface(&peak, 3).unwrap();
     match k.thicken(&s, 1.0, 4) {
         Ok(t) => assert!(k.is_solid(&t) && k.mass_props(&t).unwrap().volume > 0.0),
-        Err(e) => assert!(e.to_string().contains("not a closed solid"), "{e}"),
+        Err(e) => {
+            let m = e.to_string();
+            assert!(m.contains("not a closed solid") || m.contains("largest wall that works"), "{m}")
+        }
     }
 }

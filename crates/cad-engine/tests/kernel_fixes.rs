@@ -51,7 +51,9 @@ fn shell_of_rounded_boxes() {
         assert_clean(&ev);
         let s = find(&ev.tree, |o| matches!(o, Op::Shell { .. }));
         assert!(ev.report(s).hints.contains(&"1 Fläche geöffnet".to_string()), "{:?}", ev.report(s).hints);
-        assert_approx(&format!("shell {a}x{b}x{c} r{r} t{t}"), volume(&mut e, &ev, s), open_shell(a, b, c, r, t), 1e-6);
+        // 1e-5: since solidcore f66ee7f the rounded corners are ball patches and the shell is
+        // built without merging its offset faces (2–3e-6 off, 1e-7 before)
+        assert_approx(&format!("shell {a}x{b}x{c} r{r} t{t}"), volume(&mut e, &ev, s), open_shell(a, b, c, r, t), 1e-5);
         let parts = ev.parts(s).to_vec();
         assert_eq!(parts.len(), 1);
         let k = e.kernel_mut();
@@ -79,7 +81,7 @@ fn can_shell_example_is_a_hollow_box() {
     let ev = e.evaluate(tree(&src));
     assert_clean(&ev);
     let s = find(&ev.tree, |o| matches!(o, Op::Shell { .. }));
-    assert_approx("can", volume(&mut e, &ev, s), open_shell(50.0, 35.0, 30.0, 4.0, 1.5), 1e-6);
+    assert_approx("can", volume(&mut e, &ev, s), open_shell(50.0, 35.0, 30.0, 4.0, 1.5), 1e-5);
 }
 
 #[test]

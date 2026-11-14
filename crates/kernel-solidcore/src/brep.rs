@@ -159,6 +159,7 @@ fn surface_nurbs(k: &solidcore::Kernel, s: &ScSurface, atol: f64) -> KResult<(BS
         SurfaceKind::Torus(t) => Some(nurbs_surface(t.base().base())?),
         SurfaceKind::SurfOfRevolution(r) => Some(nurbs_surface(r.base())?),
         SurfaceKind::SurfOfExtrusion(e) => Some(nurbs_surface(e.base())?),
+        SurfaceKind::BallPatch(b) => Some(nurbs_surface(b.net())?),
         _ => None,
     };
     if let Some(n) = exact {
@@ -206,6 +207,18 @@ fn analytic(k: &solidcore::Kernel, s: &ScSurface, atol: f64) -> KResult<Option<S
         }
         SurfaceKind::Sphere(x) => {
             frame(x.base().position()).filter(|_| pos(x.radius())).map(|f| Surface::Sphere { frame: f, r: x.radius() })
+        }
+        // a rational patch on a sphere (the corner of three equal rounds, since f66ee7f the
+        // kernel's default): the sphere, its seam and poles away from the patch (x opposite the
+        // net's mean direction from the centre, z across it)
+        SurfaceKind::BallPatch(b) => {
+            let (c, r) = (dv(b.centre()), b.radius());
+            let net = nurbs_surface(b.net())?;
+            let mean = net.points.iter().fold(DVec3::ZERO, |a, p| a + (*p - c)) / net.points.len().max(1) as f64;
+            mean.try_normalize()
+                .and_then(|m| Frame::new(c, m.any_orthonormal_vector(), -m))
+                .filter(|_| pos(r))
+                .map(|frame| Surface::Sphere { frame, r })
         }
         SurfaceKind::Torus(t) => frame(t.base().position())
             .filter(|_| pos(t.major_radius()) && pos(t.minor_radius()))

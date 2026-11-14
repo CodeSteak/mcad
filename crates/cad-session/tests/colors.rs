@@ -225,7 +225,9 @@ fn material_outside_parts_is_exported() {
     let mut s = session();
     run(&mut s, src);
     let regs = s.color_regions(false, false).unwrap();
-    let parts: Vec<(Option<&str>, f64)> = regs.iter().map(|r| (r.part.as_deref(), r.total)).collect();
+    // volumes to 1e-9 (solidcore f66ee7f gives 124.99999999999999 for the 5 mm cube)
+    let parts: Vec<(Option<&str>, f64)> =
+        regs.iter().map(|r| (r.part.as_deref(), (r.total * 1e9).round() / 1e9)).collect();
     assert_eq!(parts, [(Some("part"), 125.0), (Some("no part"), 64.0)]);
     s.post(ToEngine::Export { format: ExportFormat::ThreeMf, parts: None, zip: None, colors: None });
     let r = s.run_to_idle();

@@ -4,7 +4,7 @@ mcad (binary)
   mcad itself: MIT licence, licence text: LICENSE.
   Statically linked:
   - solidcore (tangency-labs/solidcore, the Rust port of SMLib/NVIDIA usd-brep, with its
-    crates step-brep and step-import): Apache-2.0, licence text: solidcore-LICENSE, notices:
+    crates solidcore-record and solidcore-convert): Apache-2.0, licence text: solidcore-LICENSE, notices:
     solidcore-NOTICE, solidcore-ATTRIBUTION.md.
   - Rust crates (including Tauri 2, wry, tao, serde, clap, rustybuzz, ttf-parser, roxmltree,
     notify, similar, spade): mostly MIT and/or Apache-2.0, see the information in Cargo.lock

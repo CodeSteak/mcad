@@ -3,15 +3,23 @@
 Work plan up to the switch: [`solidcore-plan.md`](solidcore-plan.md). Handover (state, how to build
 and test, open points, next steps): [`solidcore-handover.md`](solidcore-handover.md).
 
-As of: 2026-11-04 (phase 0 of the plan done; phase 1 done except a variable fillet with several radius laws; phase 2, the own tessellator `cad-tess`, done; see the plan) · solidcore `main` @ `f4f05b1` (2026-11-04 05:18 UTC, crate version 1.0.1, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6`, `bba8d87` and `f4f05b1` are in the comparison over the examples and in "State at `bba8d87`".
+As of: 2026-11-14 (pin `f66ee7f`; phase 0 of the plan done; phase 1 done except a variable fillet with several radius laws; phase 2, the own tessellator `cad-tess`, done; see the plan) · solidcore `main` @ `f66ee7f` (2026-11-14 02:25 UTC, crate version 1.0.1, tangency-labs/solidcore, Apache-2.0); the operation table "What works today" comes from the run with `c9de85d`, the figures for `d4940b6`, `bba8d87` `f4f05b1` and `f66ee7f` are in the comparison over the examples and in "State at `bba8d87`".
 
 ## Status
 
 - **Crate `kernel-solidcore`** implements `cad_kernel::Kernel` via the public API of
   solidcore. The dependency is a git entry with a fixed commit
   (`crates/kernel-solidcore/Cargo.toml`, constant `SOLIDCORE_REV`, kernel ID
-  `solidcore-f4f05b1`). Previous pins: `3a6a50b` (2026-10-22), `c9de85d` (2026-10-23),
-  `d4940b6` (2026-10-25), `bba8d87` (2026-10-30). From `bba8d87` to `f4f05b1` (2969 commits,
+  `solidcore-f66ee7f`). Previous pins: `3a6a50b` (2026-10-22), `c9de85d` (2026-10-23),
+  `d4940b6` (2026-10-25), `bba8d87` (2026-10-30), `f4f05b1` (2026-11-04). From `f4f05b1` to
+  `f66ee7f` (3145 commits, crate version still 1.0.1) the crates `step-brep` and `step-import`
+  are gone (upstream `ecd20d47c`: one STEP reader in `solidcore-step`); `make_polyhedron` now
+  writes a `solidcore_record::brep::Brep` and builds it with
+  `solidcore_convert::brep::to_kernel_body`; the corner of three equal rounds is now a
+  `SurfaceKind::BallPatch` (a rational patch on a sphere), which `Kernel::brep` writes as the
+  sphere; `shell` retries without merging the offset faces when the merge fails (rounded boxes:
+  "the related vertex is not an end of the edge use"; the volume is then 2–3e-6 off, 1e-7
+  before). One upstream regression and one gain, see the comparison over the examples. From `bba8d87` to `f4f05b1` (2969 commits,
   crate version 1.0.1) no API break for this crate: it builds unchanged (named public paths
   such as `topology::brep::faces` were added next to the numbered `p1`, `p2` modules, which stay
   public), and the corpus gives the same verdicts node by node; `FilletSession` still takes one
@@ -127,7 +135,18 @@ unlock themselves as soon as solidcore computes correctly.
 | `bba8d87`, shear (plan 1.8), set_draft/shape_bytes/export (1.12), rule `blend` with offsets: end of phase 1 | 101 | 2604 | **2589** | 3 | 3 | 9 | 0 |
 | `bba8d87`, re-test of task C: checked Booleans, rule `blend` from the changed volume | 101 | 2604 | **2596** | 3 | 3 | 2 | 0 |
 | `f4f05b1` (2026-11-04, pin), `kernel-solidcore` unchanged | 101 | 2604 | **2596** | 3 | 3 | 2 | 0 |
+| `f66ee7f` (2026-11-14, pin), `make_polyhedron` through the record, `shell` without merge as fallback | 101 | 2604 | **2590** | 3 | 6 | 4 | 1 |
 
+- `f66ee7f` (pin bump from `f4f05b1`, `diff-reference --mesh`): the polyhedra give the verdicts
+  they had through the new record path. Changed: `f12_shell_loft_square_circle` is a gain
+  (`differ`: SMLib's shell fails, solidcore's builds, 11 faces, volume 58217); `can_shell`
+  stays `same` only through the adapter's fallback (without it `shell(1.5) cube([50, 35, 30],
+  $fillet = 4)` fails in `boolean::merge::p2::make_faceuse`); `wall_hook` regresses upstream (`failed`: `union(fillet = 2.5)` of the plate, the
+  hook sweep and the knob is refused with "the result is not a closed manifold solid", since
+  upstream `bb1bb6d60` refuses an open fillet result by default; without the knob it builds; 3
+  nodes `blocked`). Volume rules relative 2285, exact 125, operands 70, curved 30, blend 69;
+  meshes at 0.05: 100 `ok`, 1 skipped, watertight 100, chord max 0.0500 mm, 179 k triangles;
+  copies 79 (2427 at `f4f05b1`); evaluation 151 s, queries 47 s (debug, 4 cores).
 - `f4f05b1` (pin bump from `bba8d87`, `scripts/ci/solidcore.sh`): every node has the verdict it
   had; the 2 `differ` are the same (`sketch_cable_duct`: 63 against 47 faces, 180 against 132
   edges; `f11`: SMLib fails), the 3 `unsupported` and 3 `blocked` are `variable_radius`; volume
@@ -339,10 +358,11 @@ shell (70568.87 against 70576.65, 1.1e-4).
 `make_polyhedron` (`polyhedron`, `hull`, `minkowski` of convex bodies, STL as B-rep) builds one
 planar face per polygon as the facade's `sc_make_polyhedron` (`SmPolyBrep::CreatePoly` per
 face, `SmBrep::CreateFromPolyBrep`; coplanar faces are not merged). solidcore has no poly B-reps,
-so `crates/kernel-solidcore/src/polyhedron.rs` writes the faces as a planar
-`step_import::model::Body` (line edges shared by their two faces, a plane per face from its
-Newell normal) and `step_brep::build` makes the faces and stitches them
-(`SmApiStitchIntoSolid`); the body is then copied into the adapter's kernel. As SMLib: points
+so `crates/kernel-solidcore/src/polyhedron.rs` writes the faces as a
+`solidcore_record::brep::Brep` (line edges shared by their two faces, a plane per face from its
+Newell normal, linear pcurves, canonical order) and `solidcore_convert::brep::to_kernel_body`
+builds it in the adapter's kernel with the healer on (since `f66ee7f`; before,
+`step_brep::build` stitched a planar `step_import::model::Body`, upstream removed both crates). As SMLib: points
 within `max(1e-9, 1e-9 · diagonal)` are one vertex, every edge must belong to exactly two faces
 (else `Failed` "the faces do not form a closed manifold solid"), the faces are oriented
 consistently (neighbours run their edge opposite ways) and outward (positive signed volume,

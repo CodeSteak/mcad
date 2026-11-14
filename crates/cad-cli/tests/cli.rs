@@ -371,6 +371,15 @@ fn diff_reference_mesh() {
 /// does not (`f11`, a gain).
 const REFERENCE_EXCEPTIONS: &[(&str, u32, &str, &str)] = &[
     ("everyday/bugs/f11_pin_coincident.mcad", 1, "group", "differ"),
+    // since f66ee7f a gain: SMLib's shell of the loft fails, solidcore's builds
+    ("everyday/bugs/f12_shell_loft_square_circle.mcad", 1, "group", "differ"),
+    ("everyday/bugs/f12_shell_loft_square_circle.mcad", 6, "shell", "differ"),
+    // since f66ee7f a regression upstream: union(fillet = 2.5) of plate, hook sweep and knob is
+    // refused as not closed (upstream bb1bb6d60 refuses an open fillet result by default)
+    ("models/everyday/wall_hook.mcad", 1, "group", "blocked"),
+    ("models/everyday/wall_hook.mcad", 13, "difference", "blocked"),
+    ("models/everyday/wall_hook.mcad", 14, "union", "failed"),
+    ("models/everyday/wall_hook.mcad", 42, "wall_hook", "blocked"),
     ("models/spec/sketch_cable_duct.mcad", 1, "group", "differ"),
     ("models/spec/variable_radius.mcad", 1, "group", "blocked"),
     ("models/spec/variable_radius.mcad", 11, "fillet", "unsupported"),
@@ -438,7 +447,7 @@ fn solidcore_against_the_reference() {
     assert!(m["chord_max"].as_f64().unwrap() <= 0.051, "{m}");
     assert!(m["volume_ratio_max"].as_f64().unwrap() <= 1.0, "{m}");
     // queries work on the shape's own body: few copies (2427 at f4f05b1 with the Boolean
-    // checks' retries)
+    // checks' retries, 79 at f66ee7f)
     let copies = s["cost"]["copies"].as_u64().unwrap();
     assert!(copies > 0 && copies < 3000, "{copies}");
 }

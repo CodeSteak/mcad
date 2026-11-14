@@ -41,7 +41,7 @@ echo "solidcore: pinned ${PINNED:0:7}, measuring ${REV:0:7} ($WANT)"
 sed -i "s/rev = \"$PINNED\"/rev = \"$REV\"/g" "$MANIFEST"
 sed -i "s/SOLIDCORE_REV: &str = \"$PINNED\"/SOLIDCORE_REV: \&str = \"$REV\"/" "$LIB"
 sed -i "s/KERNEL_ID: &str = \"solidcore-${PINNED:0:7}\"/KERNEL_ID: \&str = \"solidcore-${REV:0:7}\"/" "$LIB"
-# (step-brep and step-import come from the same repository and commit)
+# (solidcore-record and solidcore-convert come from the same repository and commit)
 
 # headless CLI: no Tauri/WebKitGTK needed; Cargo.lock follows the changed pin
 cargo build -p cad-cli --no-default-features
